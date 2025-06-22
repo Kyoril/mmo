@@ -651,7 +651,7 @@ namespace mmo
 		/// @param school The damage school type.
 		/// @param instigator The unit that caused the damage.
 		/// @param damageType The type of damage.
-		void Damage(uint32 damage, uint32 school, GameUnitS* instigator, DamageType damageType);
+		uint32 Damage(uint32 damage, uint32 school, GameUnitS* instigator, DamageType damageType);
 
 		/// Heals the unit.
 		/// @param amount The amount of healing to apply.

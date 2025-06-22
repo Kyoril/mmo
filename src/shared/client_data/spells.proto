@@ -114,6 +114,8 @@ message SpellEntry {
 	optional string description = 65;
 	optional string icon = 66;
 	optional string auratext = 67;
+	
+	optional float threat_multiplier = 68 [default = 1.0];
 }
 
 message Spells {

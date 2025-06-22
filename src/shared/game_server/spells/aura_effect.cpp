@@ -441,7 +441,15 @@ namespace mmo
 			});
 
 		// Update health
-		strongContainer->GetOwner().Damage(damage, school, strongContainer->GetCaster(), damage_type::Periodic);
+		if (strongContainer->GetOwner().Damage(damage, school, strongContainer->GetCaster(), damage_type::Periodic) > 0)
+		{
+			if (m_container.GetCaster())
+			{
+				float threat = static_cast<float>(damage) * m_container.GetSpell().threat_multiplier();
+				m_container.GetCaster()->ApplySpellMod(spell_mod_op::Threat, m_container.GetSpellId(), threat);
+				strongContainer->GetOwner().threatened(*m_container.GetCaster(), threat);
+			}	
+		}
 		
 		// Trigger proc events for periodic damage
 		if (strongContainer->GetCaster())

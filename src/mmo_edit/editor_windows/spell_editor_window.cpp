@@ -501,6 +501,9 @@ namespace mmo
 				// TODO: Open popup
 			}
 
+			SLIDER_FLOAT_PROP(threat_multiplier, "Threat Multiplier", 0.0f, 100000.0f);
+
+			ImGui::Separator();
 			ImGui::Text("Facing flags");
 
 			CHECKBOX_FLAG_PROP(facing, "Target Must be Infront of Caster", spell_facing_flags::TargetInFront);

@@ -624,12 +624,12 @@ namespace mmo
 		m_spellCast->StopCast(reason, interruptCooldown);
 	}
 
-	void GameUnitS::Damage(const uint32 damage, uint32 school, GameUnitS* instigator, DamageType damageType)
+	uint32 GameUnitS::Damage(uint32 damage, uint32 school, GameUnitS* instigator, DamageType damageType)
 	{
 		uint32 health = Get<uint32>(object_fields::Health);
 		if (health < 1)
 		{
-			return;
+			return 0;
 		}
 
 		if (IsPlayer() && instigator && instigator->IsPlayer())
@@ -639,10 +639,10 @@ namespace mmo
 		}
 
 		RaiseTrigger(trigger_event::OnDamaged, instigator);
-		threatened(*instigator, damage);
 
 		if (health < damage)
 		{
+			damage = health;
 			health = 0;
 		}
 		else
@@ -678,6 +678,8 @@ namespace mmo
 				instigator->TriggerProcEvent(spell_proc_flags::Kill, this, damage, 0, school, false, 0);
 			}
 		}
+
+		return damage;
 	}
 
 	int32 GameUnitS::Heal(uint32 amount, GameUnitS* instigator)
@@ -2397,7 +2399,10 @@ namespace mmo
 		// Damage events
 		if (hit && totalDamage > 0)
 		{
-			victim->Damage(totalDamage, spell_school::Normal, this, damage_type::AttackSwing);
+			if (victim->Damage(totalDamage, spell_school::Normal, this, damage_type::AttackSwing))
+			{
+				victim->threatened(*this, totalDamage);
+			}
 		}
 
 		// Trigger defense events

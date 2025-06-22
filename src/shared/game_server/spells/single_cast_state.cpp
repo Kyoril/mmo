@@ -869,7 +869,14 @@ namespace mmo
 			if (spellDamage > 0.0f && effect.powerbonusfactor() > 0.0f)
 			{
 				damageAmount += static_cast<uint32>(spellDamage * effect.powerbonusfactor());
-			}			unitTarget.Damage(damageAmount, m_spell.spellschool(), &m_cast.GetExecuter(), damage_type::MagicalAbility);
+			}
+
+			if (unitTarget.Damage(damageAmount, m_spell.spellschool(), &m_cast.GetExecuter(), damage_type::MagicalAbility) > 0)
+			{
+				float threat = static_cast<float>(damageAmount) * m_spell.threat_multiplier();
+				m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Threat, m_spell.id(), threat);
+				unitTarget.threatened(m_cast.GetExecuter(), threat);
+			}
 
 			// Log spell damage to client
 			m_cast.GetExecuter().SpellDamageLog(unitTarget.GetGuid(), damageAmount, m_spell.spellschool(), DamageFlags::None, m_spell);
@@ -1877,7 +1884,12 @@ namespace mmo
 		}
 
 		// Log spell damage to client
-		unitTarget->Damage(totalDamage, school, &m_cast.GetExecuter(), damage_type::PhysicalAbility);
+		if (unitTarget->Damage(totalDamage, school, &m_cast.GetExecuter(), damage_type::PhysicalAbility) > 0)
+		{
+			float threat = static_cast<float>(totalDamage) * m_spell.threat_multiplier();
+			m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Threat, m_spell.id(), threat);
+			unitTarget->threatened(m_cast.GetExecuter(), threat);
+		}
 		m_cast.GetExecuter().SpellDamageLog(unitTarget->GetGuid(), totalDamage, school, isCrit ? DamageFlags::Crit : DamageFlags::None, m_spell);
 
 		// Trigger proc events for spell damage
