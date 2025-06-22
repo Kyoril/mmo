@@ -1781,6 +1781,16 @@ namespace mmo
 		PlayOneShotAnimation(m_damageHitState);
 	}
 
+	void GameUnitC::SetWeaponProficiency(const uint32 mask)
+	{
+		m_weaponProficiency = mask;
+	}
+
+	void GameUnitC::SetArmorProficiency(const uint32 mask)
+	{
+		m_armorProficiency = mask;
+	}
+
 	bool GameUnitC::IsFriendlyTo(const GameUnitC& other) const
 	{
 		if (m_factionTemplate == nullptr || other.m_factionTemplate == nullptr)

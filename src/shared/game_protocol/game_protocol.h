@@ -404,6 +404,7 @@ namespace mmo
                 GameTimeInfo,
 
 				SpellSuperceeded,
+				SetProficiency,
 
 				/// Counter constant
 				Count_,

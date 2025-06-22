@@ -329,6 +329,14 @@ namespace mmo
 
 		void NotifyHitEvent();
 
+		void SetWeaponProficiency(uint32 mask);
+
+		void SetArmorProficiency(uint32 mask);
+
+		uint32 GetWeaponProficiency() const { return m_weaponProficiency; }
+
+		uint32 GetArmorProficiency() const { return m_armorProficiency; }
+
 	public:
 		/// @brief Returns the current movement information of this unit.
 		[[nodiscard]] const MovementInfo& GetMovementInfo() const { return m_movementInfo; }
@@ -403,6 +411,9 @@ namespace mmo
 		std::vector<std::unique_ptr<GameAuraC>> m_auras;
 
 		std::shared_ptr<CustomizableAvatarDefinition> m_customizationDefinition;
+
+		uint32 m_weaponProficiency = 0;
+		uint32 m_armorProficiency = 0;
 
 	protected:
 		// Animation stuff

@@ -2016,11 +2016,29 @@ namespace mmo
 	void Player::OnWeaponProficiencyChanged(const uint32 weaponProficiency)
 	{
 		DLOG("Player " << m_character->GetName() << " changed weapon proficiency to " << log_hex_digit(weaponProficiency));
+
+		SendPacket([weaponProficiency](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::SetProficiency);
+				packet
+					<< io::write<uint8>(item_class::Weapon)
+					<< io::write<uint32>(weaponProficiency);
+				packet.Finish();
+			});
 	}
 
 	void Player::OnArmorProficiencyChanged(const uint32 armorProficiency)
 	{
 		DLOG("Player " << m_character->GetName() << " changed armor proficiency to " << log_hex_digit(armorProficiency));
+
+		SendPacket([armorProficiency](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::SetProficiency);
+				packet
+					<< io::write<uint8>(item_class::Armor)
+					<< io::write<uint32>(armorProficiency);
+				packet.Finish();
+			});
 	}
 
 	void Player::SendGameTimeInfo() const

@@ -313,12 +313,15 @@ namespace mmo
 		PacketParseResult OnLogoutResponse(game::IncomingPacket& packet);
 
 		PacketParseResult OnMessageOfTheDay(game::IncomingPacket& packet);
+
 		PacketParseResult OnMoveRoot(game::IncomingPacket& packet);
 
 		/// @brief Handles the GameTimeInfo packet.
 		/// @param packet The incoming packet.
 		/// @return The packet parse result.
 		PacketParseResult OnGameTimeInfo(game::IncomingPacket& packet);
+
+		PacketParseResult OnSetProficiency(game::IncomingPacket& packet);
 
 	private:
 

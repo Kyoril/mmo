@@ -861,6 +861,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MessageOfTheDay, *this, &WorldState::OnMessageOfTheDay);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveRoot, *this, &WorldState::OnMoveRoot);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &WorldState::OnGameTimeInfo);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetProficiency, *this, &WorldState::OnSetProficiency);
 		
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
@@ -3794,6 +3795,36 @@ namespace mmo
 			m_gameTime.GetMinute(),
 			m_gameTime.GetSecond(),
 			m_gameTime.GetTimeSpeed());
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnSetProficiency(game::IncomingPacket& packet)
+	{
+		uint8 itemclass;
+		uint32 mask;
+
+		if (!(packet >> io::read<uint8>(itemclass)
+			>> io::read<uint32>(mask)))
+		{
+			ELOG("Failed to read SetProficiency packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		auto player = ObjectMgr::GetActivePlayer();
+		ASSERT(player);
+
+		if (itemclass == item_class::Weapon)
+		{
+			player->SetWeaponProficiency(mask);
+		}
+		else if (itemclass == item_class::Armor)
+		{
+			player->SetArmorProficiency(mask);
+		}
+
+		// Log proficiency for character
+		ILOG("Proficiency in item class " << static_cast<uint32>(itemclass) << " set to " << log_hex_digit(mask));
 
 		return PacketParseResult::Pass;
 	}
