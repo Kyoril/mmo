@@ -2013,6 +2013,16 @@ namespace mmo
 			});
 	}
 
+	void Player::OnWeaponProficiencyChanged(const uint32 weaponProficiency)
+	{
+		DLOG("Player " << m_character->GetName() << " changed weapon proficiency to " << log_hex_digit(weaponProficiency));
+	}
+
+	void Player::OnArmorProficiencyChanged(const uint32 armorProficiency)
+	{
+		DLOG("Player " << m_character->GetName() << " changed armor proficiency to " << log_hex_digit(armorProficiency));
+	}
+
 	void Player::SendGameTimeInfo() const
 	{
 		if (!m_worldInstance)

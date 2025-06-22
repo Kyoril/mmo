@@ -827,6 +827,8 @@ namespace mmo
 
 			ResetTalents,
 
+			Proficiency,
+
 			Count_,
 			Invalid_ = 0
 		};

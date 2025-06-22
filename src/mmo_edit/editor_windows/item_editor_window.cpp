@@ -164,7 +164,22 @@ namespace mmo
 		ImColor(1.0f, 0.5f, 0.0f)
 	};
 
-	static const std::vector<String> s_itemClassStrings = {
+	static const std::vector<String> s_itemSubclassConsumableStrings = {
+		"Consumable",
+		"Potion",
+		"Elixir",
+		"Flask",
+		"Scroll",
+		"Food",
+		"Item Enhancement",
+		"Bandage"
+	};
+
+	static const std::vector<String> s_itemSubclassContainerStrings = {
+		"Container"
+	};
+
+	std::vector<String> s_itemClassStrings = {
 		"Consumable",
 		"Container",
 		"Weapon",
@@ -183,22 +198,7 @@ namespace mmo
 		"Junk"
 	};
 
-	static const std::vector<String> s_itemSubclassConsumableStrings = {
-		"Consumable",
-		"Potion",
-		"Elixir",
-		"Flask",
-		"Scroll",
-		"Food",
-		"Item Enhancement",
-		"Bandage"
-	};
-
-	static const std::vector<String> s_itemSubclassContainerStrings = {
-		"Container"
-	};
-
-	static const std::vector<String> s_itemSubclassWeaponStrings = {
+	std::vector<String> s_itemSubclassWeaponStrings = {
 		"One Handed Axe",
 		"Two Handed Axe",
 		"Bow",
@@ -218,17 +218,7 @@ namespace mmo
 		"Fishing Pole"
 	};
 
-	static const std::vector<String> s_itemSubclassGemStrings = {
-		"Red",
-		"Blue",
-		"Yellow",
-		"Purple",
-		"Green",
-		"Orange",
-		"Prismatic"
-	};
-
-	static const std::vector<String> s_itemSubclassArmorStrings = {
+	std::vector<String> s_itemSubclassArmorStrings = {
 		"Misc",
 		"Cloth",
 		"Leather",
@@ -239,6 +229,16 @@ namespace mmo
 		"Libram",
 		"Idol",
 		"Totem"
+	};
+
+	static const std::vector<String> s_itemSubclassGemStrings = {
+		"Red",
+		"Blue",
+		"Yellow",
+		"Purple",
+		"Green",
+		"Orange",
+		"Prismatic"
 	};
 
 	static const std::vector<String> s_itemSubclassProjectileStrings = {

@@ -451,6 +451,10 @@ namespace mmo
 
 		void OnRootChanged(bool applied, uint32 ackId) override;
 
+		void OnWeaponProficiencyChanged(uint32 weaponProficiency) override;
+
+		void OnArmorProficiencyChanged(uint32 armorProficiency) override;
+
 	private:
 		PlayerManager& m_manager;
 		RealmConnector& m_connector;

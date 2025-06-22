@@ -7,6 +7,7 @@
 
 #include "assets/asset_registry.h"
 #include "game/aura.h"
+#include "game/item.h"
 #include "game/spell.h"
 #include "game_server/spells/spell_cast.h"
 #include "graphics/texture_mgr.h"
@@ -14,6 +15,12 @@
 
 namespace mmo
 {
+	extern std::vector<String> s_itemClassStrings;
+
+	extern std::vector<String> s_itemSubclassWeaponStrings;
+
+	extern std::vector<String> s_itemSubclassArmorStrings;
+
 	static String s_powerTypes[] = {
 		"Mana",
 		"Rage",
@@ -82,7 +89,8 @@ namespace mmo
 		"Charge",
 		"Apply Area Aura",
 		"Interrupt Spell Cast",
-		"Reset Talents"
+		"Reset Talents",
+		"Proficiency"
 	};
 
 	static_assert(std::size(s_spellEffectNames) == spell_effects::Count_, "Each spell effect must have a string representation!");
@@ -553,6 +561,186 @@ namespace mmo
 			}
 		}
 
+		if (ImGui::CollapsingHeader("Items", ImGuiTreeNodeFlags_None))
+		{
+			// Create an imgui dropdown for itemclass field (enum: item_class::Type)
+			int currentItemClass = currentEntry.itemclass();
+			if (ImGui::Combo("Item Class", &currentItemClass, [](void*, int idx, const char** out_text)
+				{
+					if (idx < 0 || idx >= s_itemClassStrings.size())
+					{
+						return false;
+					}
+					*out_text = s_itemClassStrings[idx].c_str();
+					return true;
+				}, nullptr, s_itemClassStrings.size(), -1))
+			{
+				currentEntry.set_itemclass(currentItemClass);
+			}
+
+			// Subclass mask (imgui 32 bit hex edit input field for currentEntry.itemsubclassmask())
+			uint32 itemSubclassMask = currentEntry.itemsubclassmask();
+
+			// For each subclass, create a checkbox to toggle it's flag. The flag count depends on the item class. We only support weapon and armor subclass flags for now
+			if (currentItemClass == item_class::Weapon)
+			{
+				if (ImGui::BeginTable("weaponSubclassMask", 4, ImGuiTableFlags_None))
+				{
+					for (uint32 i = 0; i < s_itemSubclassWeaponStrings.size(); ++i)
+					{
+						ImGui::TableNextColumn();
+						bool subclassIncluded = (itemSubclassMask & (1 << i)) != 0;
+						if (ImGui::Checkbox(s_itemSubclassWeaponStrings[i].c_str(), &subclassIncluded))
+						{
+							if (subclassIncluded)
+								itemSubclassMask |= (1 << i);
+							else
+								itemSubclassMask &= ~(1 << i);
+
+							currentEntry.set_itemsubclassmask(itemSubclassMask); // Update the mask in the entry
+						}
+					}
+					ImGui::EndTable();
+				}
+			}
+			else if (currentItemClass == item_class::Armor)
+			{
+				if (ImGui::BeginTable("armorSubclassMask", 4, ImGuiTableFlags_None))
+				{
+					for (uint32 i = 0; i < s_itemSubclassArmorStrings.size(); ++i)
+					{
+						ImGui::TableNextColumn();
+						bool subclassIncluded = (itemSubclassMask & (1 << i)) != 0;
+						if (ImGui::Checkbox(s_itemSubclassArmorStrings[i].c_str(), &subclassIncluded))
+						{
+							if (subclassIncluded)
+								itemSubclassMask |= (1 << i);
+							else
+								itemSubclassMask &= ~(1 << i);
+
+							currentEntry.set_itemsubclassmask(itemSubclassMask); // Update the mask in the entry
+						}
+					}
+					ImGui::EndTable();
+				}
+			}
+
+			if (ImGui::Button("Add Reagent"))
+			{
+				// Open a popup to select an item from the item registry
+				ImGui::OpenPopup("Select Reagent Item");
+			}
+
+			// Popup for selecting a reagent item
+			if (ImGui::BeginPopup("Select Reagent Item"))
+			{
+				// Allow item filtering by name
+				static char filter[128] = "";
+				ImGui::InputText("Filter", filter, sizeof(filter));
+				ImGui::Separator();
+				ImGui::Text("Available Items:");
+				ImGui::Separator();
+
+				// Iterate through all items in the item registry
+				// and display them as selectable items
+				// If the item name contains the filter string, display it
+				// If the item is already in the reagents list, skip it
+				for (const auto& item : m_project.items.getTemplates().entry())
+				{
+					if (std::string(filter).empty() || item.name().find(filter) != std::string::npos)
+					{
+						bool alreadyExists = false;
+						for (const auto& reagent : currentEntry.reagents())
+						{
+							if (reagent.item() == item.id())
+							{
+								alreadyExists = true;
+								break;
+							}
+						}
+						if (!alreadyExists)
+						{
+							ImGui::PushID(item.id());
+							if (ImGui::Selectable(item.name().c_str()))
+							{
+								auto* reagent = currentEntry.add_reagents();
+								reagent->set_item(item.id());
+								reagent->set_count(1); // Default count
+								ImGui::CloseCurrentPopup();
+							}
+							ImGui::PopID();
+						}
+					}
+				}
+				if (ImGui::Button("Close"))
+				{
+					ImGui::CloseCurrentPopup();
+				}
+
+				ImGui::SameLine();
+
+				if (ImGui::Button("Clear Filter"))
+				{
+					filter[0] = '\0'; // Clear the filter
+				}
+
+				ImGui::SameLine();
+
+				if (ImGui::Button("Reset Reagents"))
+				{
+					currentEntry.clear_reagents();
+				}
+
+				ImGui::EndPopup();
+			}
+
+			// Add a list of required reagents (items) and count. Present as a table with two columns: Item and Count
+			// Allow adding new reagents by clicking a button that opens a popup with a list of items
+			if (ImGui::BeginTable("Required Reagents", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+			{
+				ImGui::TableSetupColumn("Item", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Count", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+				ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+				ImGui::TableHeadersRow();
+
+				for (int i = 0; i < currentEntry.reagents_size(); ++i)
+				{
+					ImGui::PushID(i);
+					const auto& reagent = currentEntry.mutable_reagents(i);
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					if (proto::ItemEntry* item = m_project.items.getById(reagent->item()))
+					{
+						ImGui::Text("%s (%d)", item->name().c_str(), reagent->count());
+					}
+					else
+					{
+						ImGui::Text("Unknown Item (%d)", reagent->item());
+					}
+					ImGui::TableSetColumnIndex(1);
+
+					int count = reagent->count();
+					if (ImGui::InputInt("##count", &count, 1, 100, ImGuiInputTextFlags_CharsDecimal))
+					{
+						reagent->set_count(count);
+					}
+
+					ImGui::TableSetColumnIndex(2);
+					if (ImGui::Button("Remove"))
+					{
+						currentEntry.mutable_reagents()->erase(currentEntry.mutable_reagents()->begin() + i);
+						// Break the loop to avoid invalidating the iterator
+						ImGui::PopID();
+						break;
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndTable();
+			}
+		}
+
 		if (ImGui::CollapsingHeader("Spell Proc", ImGuiTreeNodeFlags_None))
 		{
 			SLIDER_UINT32_PROP(procchance, "Chance %", 0, 100);
@@ -580,8 +768,8 @@ namespace mmo
 				currentEntry.set_procschool(currentSchool);
 			}
 
-			CHECKBOX_FLAG_PROP(procflags, "When Unit Was Killed", spell_proc_flags::Killed);
-			CHECKBOX_FLAG_PROP(procflags, "When Unit Killed Other Unit", spell_proc_flags::Kill);
+			CHECKBOX_FLAG_PROP(procflags, "When Owner Was Killed", spell_proc_flags::Killed);
+			CHECKBOX_FLAG_PROP(procflags, "When Owner Killed Other Unit", spell_proc_flags::Kill);
 			CHECKBOX_FLAG_PROP(procflags, "On Melee Attack Swing Done", spell_proc_flags::DoneMeleeAutoAttack);
 			CHECKBOX_FLAG_PROP(procflags, "On Melee Attack Swing Taken", spell_proc_flags::TakenMeleeAutoAttack);
 			CHECKBOX_FLAG_PROP(procflags, "DoneSpellMeleeDmgClass", spell_proc_flags::DoneSpellMeleeDmgClass);
@@ -1049,6 +1237,12 @@ namespace mmo
 				}
 			}
 
+			float radius = effect.radius();
+			if (ImGui::InputFloat("Radius", &radius))
+			{
+				effect.set_radius(radius);
+			}
+
 			ImGui::Text("Points");
 
 			if (ImGui::BeginChildFrame(ImGui::GetID("effectPoints"), ImVec2(-1, 200), ImGuiWindowFlags_AlwaysUseWindowPadding))
@@ -1217,12 +1411,6 @@ namespace mmo
 			}
 		}
 		break;
-		}
-
-		float radius = effect.radius();
-		if (ImGui::InputFloat("Radius", &radius))
-		{
-			effect.set_radius(radius);
 		}
 	}
 }

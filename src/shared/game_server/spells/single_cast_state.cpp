@@ -542,6 +542,42 @@ namespace mmo
 			return true;
 		}
 
+		if (m_tookReagents && delayed)
+		{
+			return true;
+		}
+		
+		if (m_cast.GetExecuter().IsPlayer())
+		{
+			auto& character = m_cast.GetExecuter().AsPlayer();
+			for (const auto& reagent : m_spell.reagents())
+			{
+				if (character.GetInventory().GetItemCount(reagent.item()) < reagent.count())
+				{
+					WLOG("Not enough items in inventory!");
+					return false;
+				}
+			}
+
+			// Now consume all reagents
+			for (const auto& reagent : m_spell.reagents())
+			{
+				const auto* item = character.GetProject().items.getById(reagent.item());
+				if (!item)
+				{
+					return false;
+				}
+
+				auto result = character.GetInventory().RemoveItems(*item, reagent.count());
+				if (result != inventory_change_failure::Okay)
+				{
+					ELOG("Could not consume reagents: " << result);
+					return false;
+				}
+			}
+		}
+
+		m_tookReagents = true;
 		return true;
 	}
 
@@ -670,7 +706,8 @@ namespace mmo
 			{se::AddExtraAttacks,			std::bind(&SingleCastState::SpellEffectAddExtraAttacks, this, std::placeholders::_1)},
 			{se::Charge,					std::bind(&SingleCastState::SpellEffectCharge, this, std::placeholders::_1)},
 			{se::InterruptSpellCast,		std::bind(&SingleCastState::SpellEffectInterruptSpellCast, this, std::placeholders::_1)},
-			{se::ResetTalents,			std::bind(&SingleCastState::SpellEffectResetTalents, this, std::placeholders::_1)}
+			{se::ResetTalents,			std::bind(&SingleCastState::SpellEffectResetTalents, this, std::placeholders::_1)},
+			{se::Proficiency,				std::bind(&SingleCastState::SpellEffectProficiency, this, std::placeholders::_1)}
 		};
 
 		// Make sure that the executer exists after all effects have been executed
@@ -1224,6 +1261,39 @@ namespace mmo
 
 	void SingleCastState::SpellEffectProficiency(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> effectTargets;
+		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
+		{
+			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
+			return;
+		}
+
+		const uint32 mask = m_spell.itemsubclassmask();
+
+		for (auto* targetObject : effectTargets)
+		{
+			if (!targetObject->IsUnit())
+			{
+				continue;
+			}
+
+			m_affectedTargets.insert(targetObject->shared_from_this());
+			auto& unitTarget = targetObject->AsUnit();
+
+			if (m_spell.itemclass() == item_class::Weapon)
+			{
+				unitTarget.AddWeaponProficiency(mask);
+			}
+			else if (m_spell.itemclass() == item_class::Armor)
+			{
+				unitTarget.AddArmorProficiency(mask);
+			}
+			else
+			{
+				WLOG("Unknown item class for spell " << m_spell.id() << ": " << m_spell.itemclass());
+				return;
+			}
+		}
 	}
 
 	void SingleCastState::SpellEffectPowerBurn(const proto::SpellEffect& effect)

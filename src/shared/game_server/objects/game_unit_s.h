@@ -297,6 +297,10 @@ namespace mmo
 		virtual void OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff, int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints) = 0;
 
 		virtual void OnSpellModChanged(SpellModType type, uint8 effectIndex, SpellModOp op, int32 value) = 0;
+
+		virtual void OnWeaponProficiencyChanged(uint32 weaponProficiency) = 0;
+
+		virtual void OnArmorProficiencyChanged(uint32 armorProficiency) = 0;
 	};
 
 	/// Enumerates possible movement changes which need to be acknowledged by the client.
@@ -810,6 +814,92 @@ namespace mmo
 		/// Called when a proc event occurs to check if any auras should proc
 		void TriggerProcEvent(SpellProcFlags eventFlags, GameUnitS* target = nullptr, uint32 damage = 0, uint32 procEx = 0, uint8 school = 0, bool isProc = false, uint64 familyFlags = 0);
 
+		/// Gets the weapon proficiency mask of this character (which weapons can be
+		/// wielded)
+		uint32 GetWeaponProficiency() const { return m_weaponProficiency; }
+
+		/// Gets the armor proficiency mask of this character (which armor types
+		/// can be wielded: Cloth, Leather, Mail, Plate etc.)
+		uint32 GetArmorProficiency() const {
+			return m_armorProficiency;
+		}
+
+		/// Adds a new weapon proficiency to the mask.
+		void AddWeaponProficiency(uint32 mask) {
+			if ((m_weaponProficiency & mask) == mask)
+			{
+				return;
+			}
+
+			m_weaponProficiency |= mask;
+
+			if (m_netUnitWatcher)
+			{
+				m_netUnitWatcher->OnWeaponProficiencyChanged(m_weaponProficiency);
+			}
+			else
+			{
+				WLOG("No unit watcher notified weapon prof change");
+			}
+		}
+
+		/// Adds a new armor proficiency to the mask.
+		void AddArmorProficiency(uint32 mask) {
+			if ((m_armorProficiency & mask) == mask)
+			{
+				return;
+			}
+
+			m_armorProficiency |= mask;
+
+			if (m_netUnitWatcher)
+			{
+				m_netUnitWatcher->OnArmorProficiencyChanged(m_armorProficiency);
+			}
+			else
+			{
+				WLOG("No unit watcher notified armor prof change");
+			}
+		}
+
+		/// Removes a weapon proficiency from the mask.
+		void RemoveWeaponProficiency(uint32 mask) {
+			if ((m_weaponProficiency & mask) == 0)
+			{
+				return;
+			}
+
+			m_weaponProficiency &= ~mask;
+
+			if (m_netUnitWatcher)
+			{
+				m_netUnitWatcher->OnWeaponProficiencyChanged(m_armorProficiency);
+			}
+			else
+			{
+				WLOG("No unit watcher notified weapon prof change");
+			}
+		}
+
+		/// Removes an armor proficiency from the mask.
+		void RemoveArmorProficiency(uint32 mask) {
+			if ((m_armorProficiency & mask) == 0)
+			{
+				return;
+			}
+
+			m_armorProficiency &= ~mask;
+
+			if (m_netUnitWatcher)
+			{
+				m_netUnitWatcher->OnArmorProficiencyChanged(m_armorProficiency);
+			}
+			else
+			{
+				WLOG("No unit watcher notified armor prof change");
+			}
+		}
+
 	protected:
 		/// Sends a local chat message from the unit.
 		/// @param type The type of chat message.
@@ -1194,6 +1284,9 @@ namespace mmo
 
 		Countdown m_pvpCombatCountdown;
 		uint32 m_state = 0;
+
+		uint32 m_weaponProficiency = 0; ///< Weapon proficiency mask (which weapons can be wielded)
+		uint32 m_armorProficiency = 0; ///< Armor proficiency mask (which armor types can be wielded: Cloth, Leather, Mail, Plate etc.)
 
 	private:
 		/// Serializes a GameUnitS object to a Writer for binary serialization.
