@@ -3277,10 +3277,12 @@ namespace mmo
 		{
 			if (wasLooted)
 			{
-				DLOG("You looted item " << itemInfo.name << " x" << amount);
+				FrameManager::Get().TriggerLuaEvent("LOOT_ITEM_RECEIVED", itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
+				DLOG("You receive loot: " << itemInfo.name << " x" << amount);
 			}
 			else
 			{
+				FrameManager::Get().TriggerLuaEvent("ITEM_RECEIVED", itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
 				DLOG("You received item " << itemInfo.name << " x" << amount);
 			}
 		}
@@ -3291,10 +3293,12 @@ namespace mmo
 
 			if (wasLooted)
 			{
+				FrameManager::Get().TriggerLuaEvent("MEMBER_LOOT_ITEM_RECEIVED", unit->GetName().c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
 				DLOG(unit->GetName() << " looted item " << itemInfo.name << " x" << amount);
 			}
 			else
 			{
+				FrameManager::Get().TriggerLuaEvent("MEMBER_ITEM_RECEIVED", unit->GetName().c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
 				DLOG(unit->GetName() << " received item " << itemInfo.name << " x" << amount);
 			}
 		}

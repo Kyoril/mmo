@@ -341,7 +341,9 @@ namespace mmo
 
 	void MySQLDatabase::DeleteCharacter(const uint64 characterGuid)
 	{
-		if (!m_connection.Execute("UPDATE characters SET deleted_account = account_id, account_id = NULL, deleted_at = NOW() WHERE id = " + std::to_string(characterGuid) + " AND account_id IS NOT NULL LIMIT 1;"))
+		// We do not delete a character for real, we just mark it as deleted. In order to free the character name, we also replace it with a random unique id value
+		// so that there are no conflicts in the database when trying to delete a character.
+		if (!m_connection.Execute("UPDATE `characters` SET `deleted_account` = `account_id`, `account_id` = `NULL`, `deleted_name` = `name`, `name` = HEX(UUID_SHORT()), `deleted_at` = NOW() WHERE `id` = " + std::to_string(characterGuid) + " AND `account_id` IS NOT NULL LIMIT 1;"))
 		{
 			PrintDatabaseError();
 			throw mysql::Exception("Could not update characters table");
@@ -350,6 +352,19 @@ namespace mmo
 
 	std::optional<CharCreateResult> MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, uint32 characterClass, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy, std::map<uint8, ActionButton> actionButtons, const AvatarConfiguration& configuration)
 	{
+		// We check if the character name is already in use by another account. Character names are tied to accounts even after the account deleted that character
+		const String escapedName = m_connection.EscapeString(characterName);
+		mysql::Select select(m_connection, "SELECT 1 FROM `characters` WHERE `name` = '" + escapedName + "' OR (`deleted_name` = '" + escapedName + "' AND `deleted_account` != '" + std::to_string(accountId) + "') LIMIT 1");
+		if (select.Success())
+		{
+			mysql::Row row(select);
+			if (row)
+			{
+				// Character name is either already actively in use or was used by another account before
+				return CharCreateResult::NameAlreadyInUse;
+			}
+		}
+
 		mysql::Transaction transaction(m_connection);
 
 		if (!m_connection.Execute("INSERT INTO characters (account_id, name, map, level, race, class, gender, hp, x, y, z, o, bind_x, bind_y, bind_z, bind_o , mana, rage, energy) VALUES (" +

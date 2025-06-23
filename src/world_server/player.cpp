@@ -594,8 +594,11 @@ namespace mmo
 		// Ensure the inventory is initialized
 		objects.clear();
 		m_character->GetInventory().ConstructFromRealmData(objects);
-		NotifyObjectsSpawned(objects);
-
+		if (!objects.empty())
+		{
+			NotifyObjectsSpawned(objects);
+		}
+		
 		// Once again update health and power values after constructing inventory
 		m_character->Set<uint32>(object_fields::Health, Clamp(m_characterData.hp, 0u, m_character->Get<uint32>(object_fields::MaxHealth)));
 		m_character->Set<uint32>(object_fields::Mana, Clamp(m_characterData.mana, 0u, m_character->Get<uint32>(object_fields::MaxMana)));
