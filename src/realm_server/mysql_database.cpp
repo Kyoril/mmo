@@ -343,7 +343,8 @@ namespace mmo
 	{
 		// We do not delete a character for real, we just mark it as deleted. In order to free the character name, we also replace it with a random unique id value
 		// so that there are no conflicts in the database when trying to delete a character.
-		if (!m_connection.Execute("UPDATE `characters` SET `deleted_account` = `account_id`, `account_id` = `NULL`, `deleted_name` = `name`, `name` = HEX(UUID_SHORT()), `deleted_at` = NOW() WHERE `id` = " + std::to_string(characterGuid) + " AND `account_id` IS NOT NULL LIMIT 1;"))
+		const String query = "UPDATE `characters` SET `deleted_account` = `account_id`, `account_id` = NULL, `deleted_name` = `name`, `name` = HEX(UUID_SHORT()), `deleted_at` = NOW() WHERE `id` = " + std::to_string(characterGuid) + " AND `account_id` IS NOT NULL LIMIT 1;";
+		if (!m_connection.Execute(query))
 		{
 			PrintDatabaseError();
 			throw mysql::Exception("Could not update characters table");
