@@ -99,14 +99,13 @@ namespace mmo
 			std::string defaultValue;
 			ConsoleVar** outputVar = nullptr;
 		};
-
 		/// A list of automatically registered and unregistered console variables that are also
 		/// serialized when the games config file is serialized.
 		const std::vector<GxCVarHelper> s_gxCVars = 
 		{
 			{"gxApi",			"Which graphics api should be used.",					"",			&s_gxApiCVar },
-			{"gxResolution",	"The resolution of the primary output window.",			"1280x720",	&s_gxResolutionCVar },
-			{"gxWindow",		"Whether the application will run in windowed mode.",	"1",		&s_gxWindowedCVar },
+			{"gxResolution",	"The resolution of the primary output window.",			"",			&s_gxResolutionCVar },
+			{"gxWindow",		"Whether the application will run in windowed mode.",	"0",		&s_gxWindowedCVar },
 			{"gxVSync",			"Whether the application will run with vsync enabled.",	"1",		&s_gxVSyncCVar },
 
 			{ "perf", "Toggles whether performance counters are visible", "0", &s_gxPerfCVar },
@@ -120,13 +119,20 @@ namespace mmo
 		{
 			// TODO: Set pending graphics changes so that they can be submitted all at once.
 		}
-		
 		/// Registers the automatically managed gx cvars from the table above.
 		void RegisterGraphicsCVars()
 		{
-			// Register console variables from the table
+			// Register console variables from the table, we'll set the resolution dynamically after device creation
 			std::for_each(s_gxCVars.cbegin(), s_gxCVars.cend(), [](const GxCVarHelper& x) {
-				ConsoleVar* output = ConsoleVarMgr::RegisterConsoleVar(x.name, x.description, x.defaultValue);
+				std::string actualDefaultValue = x.defaultValue;
+				
+				// For gxResolution, use fallback if empty - will be updated after device creation
+				if (x.name == "gxResolution" && actualDefaultValue.empty())
+				{
+					actualDefaultValue = "1920x1080";  // Fallback, will be updated later
+				}
+				
+				ConsoleVar* output = ConsoleVarMgr::RegisterConsoleVar(x.name, x.description, actualDefaultValue);
 
 				if (x.outputVar != nullptr)
 				{
@@ -147,7 +153,6 @@ namespace mmo
 			});
 		}
 	}
-
 
 	// Console helpers
 	namespace
@@ -262,11 +267,17 @@ namespace mmo
 		{
 			api = GraphicsApi::OpenGL;
 		}
-		
 		GraphicsDeviceDesc desc;
 		ExtractResolution(s_gxResolutionCVar->GetStringValue(), desc.width, desc.height);
 		desc.windowed = s_gxWindowedCVar->GetBoolValue();
 		desc.vsync = s_gxVSyncCVar->GetBoolValue();
+
+		// Validate fullscreen resolution and adjust if necessary
+		if (!desc.windowed)
+		{
+			// We need to create a temporary graphics device to get monitor info
+			// For now, we'll do this validation after device creation
+		}
 		
 		switch (api)
 		{
@@ -288,9 +299,34 @@ namespace mmo
 		default:
 			throw std::runtime_error("Unsupported graphics API value used!");
 		}
-		
 		auto& device = GraphicsDevice::Get();
 		device.GetAutoCreatedWindow()->SetTitle("MMORPG");
+
+		// Now that we have a graphics device, update the resolution if it wasn't set properly
+		if (s_gxResolutionCVar->GetStringValue() == "1920x1080" || s_gxResolutionCVar->GetStringValue().empty())
+		{
+			const std::string monitorRes = device.GetPrimaryMonitorResolution();
+			s_gxResolutionCVar->Set(monitorRes);
+			ILOG("Set default resolution to monitor resolution: " << monitorRes);
+		}
+		
+		// Validate fullscreen resolution now that we have a graphics device
+		if (!desc.windowed)
+		{
+			if (!device.ValidateFullscreenResolution(desc.width, desc.height))
+			{
+				// Use monitor resolution for fullscreen if validation fails
+				const std::string monitorRes = device.GetPrimaryMonitorResolution();
+				uint16 newWidth, newHeight;
+				ExtractResolution(monitorRes, newWidth, newHeight);
+				if (newWidth != desc.width || newHeight != desc.height)
+				{
+					ILOG("Adjusted fullscreen resolution from " << desc.width << "x" << desc.height << 
+						 " to monitor resolution: " << newWidth << "x" << newHeight);
+					s_gxResolutionCVar->Set(monitorRes);
+				}
+			}
+		}
 		
 		device.GetAutoCreatedWindow()->Closed.connect([]() 
 		{

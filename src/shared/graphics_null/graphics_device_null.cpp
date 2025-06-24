@@ -268,9 +268,20 @@ namespace mmo
 	void GraphicsDeviceNull::SetHardwareCursor(void* osCursorData)
 	{
 	}
-
 	void* GraphicsDeviceNull::GetHardwareCursor()
 	{
 		return nullptr;
+	}
+
+	std::string GraphicsDeviceNull::GetPrimaryMonitorResolution() const
+	{
+		// Fallback resolution for null device
+		return "1920x1080";
+	}
+
+	bool GraphicsDeviceNull::ValidateFullscreenResolution(uint16 width, uint16 height) const
+	{
+		// Null device accepts any resolution
+		return true;
 	}
 }

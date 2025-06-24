@@ -310,6 +310,16 @@ namespace mmo
 
 		virtual uint64 GetBatchCount() const = 0;
 
+		/// Gets the primary monitor resolution as a string in "widthxheight" format.
+		/// @return A string containing the monitor resolution (e.g., "1920x1080").
+		virtual std::string GetPrimaryMonitorResolution() const = 0;
+
+		/// Validates if the given resolution is supported for fullscreen mode.
+		/// @param width The desired width in pixels.
+		/// @param height The desired height in pixels.
+		/// @return True if the resolution is supported, false otherwise.
+		virtual bool ValidateFullscreenResolution(uint16 width, uint16 height) const = 0;
+
 	public:
 		RenderWindowPtr GetAutoCreatedWindow() const { return m_autoCreatedWindow; }
 

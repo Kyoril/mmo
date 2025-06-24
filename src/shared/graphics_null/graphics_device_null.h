@@ -95,6 +95,10 @@ namespace mmo
 		void* GetHardwareCursor() override;
 
 		uint64 GetBatchCount() const override { return 0; }
+
+		std::string GetPrimaryMonitorResolution() const override;
+
+		bool ValidateFullscreenResolution(uint16 width, uint16 height) const override;
 		// ~ End GraphicsDevice
 	};
 }

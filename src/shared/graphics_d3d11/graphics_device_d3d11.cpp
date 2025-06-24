@@ -1268,9 +1268,41 @@ namespace mmo
 	{
 		m_hardwareCursor = static_cast<HCURSOR>(osCursorData);
 	}
-
 	void* GraphicsDeviceD3D11::GetHardwareCursor()
 	{
 		return m_hardwareCursor;
+	}
+
+	std::string GraphicsDeviceD3D11::GetPrimaryMonitorResolution() const
+	{
+		const int width = GetSystemMetrics(SM_CXSCREEN);
+		const int height = GetSystemMetrics(SM_CYSCREEN);
+		return std::to_string(width) + "x" + std::to_string(height);
+	}
+
+	bool GraphicsDeviceD3D11::ValidateFullscreenResolution(uint16 width, uint16 height) const
+	{
+		// Get primary monitor resolution
+		const int maxWidth = GetSystemMetrics(SM_CXSCREEN);
+		const int maxHeight = GetSystemMetrics(SM_CYSCREEN);
+		
+		// Check if requested resolution is within monitor bounds
+		if (width > maxWidth || height > maxHeight)
+		{
+			WLOG("Requested fullscreen resolution " << width << "x" << height << 
+				 " exceeds monitor resolution " << maxWidth << "x" << maxHeight << 
+				 ". Using monitor resolution instead.");
+			return false;
+		}
+		
+		// For fullscreen, we should use exact monitor resolution for best performance
+		if (width != maxWidth || height != maxHeight)
+		{
+			WLOG("Fullscreen resolution " << width << "x" << height << 
+				 " differs from monitor resolution " << maxWidth << "x" << maxHeight << 
+				 ". Consider using monitor resolution for optimal performance.");
+		}
+		
+		return true;
 	}
 }

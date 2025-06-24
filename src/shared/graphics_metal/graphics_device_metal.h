@@ -102,8 +102,12 @@ namespace mmo
         /// @param count Number of render targets.
         /// @param depthStencilRT The render texture to use as depth stencil buffer.
         void SetRenderTargetsWithDepthStencil(RenderTexturePtr* renderTargets, uint32 count, RenderTexturePtr depthStencilRT) override;
-
+		
 		uint64 GetBatchCount() const override { return 0; }
+
+		std::string GetPrimaryMonitorResolution() const override;
+
+		bool ValidateFullscreenResolution(uint16 width, uint16 height) const override;
 		// ~ End GraphicsDevice
         
     public:
