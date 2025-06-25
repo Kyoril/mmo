@@ -61,6 +61,8 @@
 #include "discord.h"
 #include "loading_screen.h"
 
+#include "ui/minimap.h"
+
 namespace mmo
 {
 	const std::string WorldState::Name = "world";
@@ -164,7 +166,7 @@ namespace mmo
 
 	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers, LootClient& lootClient, VendorClient& vendorClient,
 		ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharSelect& charSelect, GuildClient& guildClient, ICacheProvider& cache, Discord& discord,
-		GameTimeComponent& gameTime, TalentClient& talentClient)
+		GameTimeComponent& gameTime, TalentClient& talentClient, Minimap& minimap)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
 		, m_audio(audio)
@@ -183,6 +185,7 @@ namespace mmo
 		, m_discord(discord)
 		, m_gameTime(gameTime)
 		, m_talentClient(talentClient)
+		, m_minimap(minimap)
 	{
 		// TODO: Do we want to put these asset references in some sort of config setting or something?
 		ObjectMgr::SetUnitNameFontSettings(FontManager::Get().CreateOrRetrieve("Fonts/FRIZQT__.TTF", 24.0f, 1.0f), MaterialManager::Get().Load("Models/UnitNameFont.hmat"));
@@ -289,7 +292,6 @@ namespace mmo
 				race ? race->name() : "UNKNOWN"
 			);
 		}
-
 	}
 
 	void WorldState::OnLeave()
@@ -557,7 +559,9 @@ namespace mmo
 		}
 
 		return true;
-	}	void WorldState::OnIdle(const float deltaSeconds, GameTime timestamp)
+	}
+
+	void WorldState::OnIdle(const float deltaSeconds, GameTime timestamp)
 	{
 		PROFILE_BEGIN_FRAME();
 
@@ -590,9 +594,14 @@ namespace mmo
 		}
 		
 		m_playerController->Update(deltaSeconds);
-
 		ObjectMgr::UpdateObjects(deltaSeconds);
 
+		// Update minimap
+		if (const auto& controlled = m_playerController->GetControlledUnit())
+		{
+			m_minimap.UpdatePlayerPosition(controlled->GetPosition(), controlled->GetFacing());
+		}
+		
 		// Update projectiles
 		auto it = m_spellProjectiles.begin();
 		while(it != m_spellProjectiles.end())
@@ -3216,6 +3225,9 @@ namespace mmo
 			ELOG("Failed to read world '" << assetPath << ".hwld'!");
 			return false;
 		}
+
+		// Minimap!
+		m_minimap.NotifyWorldChanged(map->directory());
 
 		return true;
 	}

@@ -59,6 +59,8 @@
 #include "systems/guild_client.h"
 #include "systems/talent_client.h"
 
+#include "ui/minimap.h"
+
 #include "char_creation/char_create_info.h"
 #include "char_creation/char_select.h"
 #include "base/create_process.h"
@@ -68,6 +70,7 @@
 #include "luabind/luabind.hpp"
 #include "luabind/iterator_policy.hpp"
 #include "luabind/out_value_policy.hpp"
+#include "ui/minimap_frame.h"
 
 
 ////////////////////////////////////////////////////////////////
@@ -154,6 +157,7 @@ namespace mmo
 	static scoped_connection_container s_frameUiConnections;
 	static std::unique_ptr<GameScript> s_gameScript;
 	static Localization s_localization;
+	static std::unique_ptr<Minimap> s_minimap;
 
 	extern Cursor g_cursor;
 
@@ -188,6 +192,9 @@ namespace mmo
 		});
 		FrameManager::Get().RegisterFrameFactory("UnitModel", [](const std::string& name) {
 			return std::make_shared<UnitModelFrame>(name);
+			});
+		FrameManager::Get().RegisterFrameFactory("Minimap", [](const std::string& name) {
+			return std::make_shared<MinimapFrame>(name, *s_minimap);
 			});
 
 		// Setup cursor graphics
@@ -377,6 +384,9 @@ namespace mmo
 		s_discord = std::make_unique<Discord>();
 		s_discord->Initialize();
 
+		// Setup minimap
+		s_minimap = std::make_unique<Minimap>(256);
+
 		s_charCreateInfo = std::make_unique<CharCreateInfo>(s_project, *s_realmConnector);
 		s_charSelect = std::make_unique<CharSelect>(s_project, *s_realmConnector);
 
@@ -399,7 +409,8 @@ namespace mmo
 		gameStateMgr.AddGameState(loginState);
 
 		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, 
-			*s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charSelect, *s_guildClient, *s_clientCache, *s_discord, s_gameTime, *s_talentClient);
+			*s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charSelect, *s_guildClient, *s_clientCache, *s_discord, s_gameTime, *s_talentClient,
+			*s_minimap);
 		gameStateMgr.AddGameState(worldState);
 		
 		// Initialize the game script instance
@@ -431,6 +442,7 @@ namespace mmo
 	/// Destroys the global game systems.
 	void DestroyGlobal()
 	{
+		s_minimap.reset();
 		s_timerConnection.disconnect();
 
 		// Remove all registered game states and also leave the current game state.

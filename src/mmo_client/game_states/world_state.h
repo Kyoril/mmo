@@ -80,6 +80,7 @@ namespace mmo
 	class GuildClient;
 	class TalentClient;
 	class Discord;
+	class Minimap;
 
 	/// This class represents the initial game state where the player is asked to enter
 	/// his credentials in order to authenticate.
@@ -112,7 +113,8 @@ namespace mmo
 			ICacheProvider& cache,
 			Discord& discord,
 			GameTimeComponent& gameTime,
-			TalentClient& talentClient);
+			TalentClient& talentClient,
+			Minimap& minimap);
 
 	public:
 		/// @brief The default name of the world state
@@ -455,6 +457,8 @@ namespace mmo
 		std::unique_ptr<DebugPathVisualizer> m_debugPathVisualizer;
 
 		TalentClient& m_talentClient;
+
+		Minimap& m_minimap;
 
 	private:
 		static IInputControl* s_inputControl;

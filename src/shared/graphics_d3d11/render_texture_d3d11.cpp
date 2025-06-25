@@ -19,7 +19,11 @@ namespace mmo
 	{
 		ASSERT(width > 0);
 		ASSERT(height > 0);
-		
+
+		// BULLSHIT
+		m_header.width = width;
+		m_header.height = height;
+
 		CreateResources();
 	}
 

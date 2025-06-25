@@ -1835,7 +1835,7 @@ namespace mmo
 
 					// Generate filename with encoded coordinates
 					const uint16 pageIndex = BuildPageIndex(static_cast<uint8>(pageX), static_cast<uint8>(pageY));
-					const String minimapFilename = "minimaps/" + m_assetPath.filename().replace_extension().string() + "/" + std::to_string(pageIndex) + ".htex";
+					const String minimapFilename = "Textures/Minimaps/" + m_assetPath.filename().replace_extension().string() + "/" + std::to_string(pageIndex) + ".htex";
 
 					// Save texture to AssetRegistry
 					try

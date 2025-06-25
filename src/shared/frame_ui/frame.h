@@ -468,6 +468,7 @@ namespace mmo
 		void BufferGeometry();
 
 		void QueueGeometry();
+
 		/// Allows for custom geometry buffer population for custom frame classes.
 		virtual void PopulateGeometryBuffer() {}
 
