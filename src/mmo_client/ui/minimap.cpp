@@ -1,4 +1,3 @@
-
 #include "minimap.h"
 #include "graphics/graphics_device.h"
 #include "assets/asset_registry.h"
@@ -112,32 +111,47 @@ namespace mmo
 		m_minimapRenderTexture->Activate();
 		m_minimapRenderTexture->Clear(ClearFlags::All);
 
-		// Calculate zoom factor and visible tile range
+		// Calculate zoom factor and world coverage
 		const float zoomFactor = GetZoomFactor();
 		constexpr float tileSize = terrain::constants::PageSize;
-		const float scaledTileSize = tileSize * zoomFactor;
 		
-		// Calculate how many tiles to render based on minimap size and zoom
-		const int32 visibleTileRange = static_cast<int32>((m_minimapSize * 0.5f) / scaledTileSize) + 1;
+		// Calculate world area that the minimap covers based on zoom
+		// Base coverage is the minimap size in world units, scaled by zoom
+		const float worldCoverage = static_cast<float>(m_minimapSize) / zoomFactor;
+		const float halfCoverage = worldCoverage * 0.5f;
+
+		// Set up orthographic projection that maps from world coordinates to screen coordinates
+		// Left/Right: player position +/- half coverage in X
+		// Top/Bottom: player position +/- half coverage in Z (using Z as Y for top-down view)
+		const float left = m_playerPosition.x - halfCoverage;
+		const float right = m_playerPosition.x + halfCoverage;
+		const float top = m_playerPosition.z + halfCoverage;    // Top of screen = +Z
+		const float bottom = m_playerPosition.z - halfCoverage; // Bottom of screen = -Z
 
 		gx.SetTransformMatrix(World, Matrix4::Identity);
 		gx.SetTransformMatrix(View, Matrix4::Identity);
-		gx.SetTransformMatrix(Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, scaledTileSize, scaledTileSize, 0.1f, 1000.0f));
+		gx.SetTransformMatrix(Projection, gx.MakeOrthographicMatrix(left, top, right, bottom, 0.1f, 1000.0f));
 
-		// Render tiles around player position
-		for (int32 x = m_currentTileX - visibleTileRange; x <= m_currentTileX + visibleTileRange; ++x)
+		// Calculate which tiles are visible in this world area
+		const int32 minTileX = static_cast<int32>(std::floor(left / tileSize)) + 32;
+		const int32 maxTileX = static_cast<int32>(std::ceil(right / tileSize)) + 32;
+		const int32 minTileY = static_cast<int32>(std::floor(bottom / tileSize)) + 32;
+		const int32 maxTileY = static_cast<int32>(std::ceil(top / tileSize)) + 32;
+
+		// Render tiles in the visible area
+		for (int32 x = minTileX; x <= maxTileX; ++x)
 		{
-			for (int32 y = m_currentTileY - visibleTileRange; y <= m_currentTileY + visibleTileRange; ++y)
+			for (int32 y = minTileY; y <= maxTileY; ++y)
 			{
 				uint64 tileKey = static_cast<uint64>(x) + (static_cast<uint64>(y) * 65536);
 				if (auto it = m_loadedTextures.find(tileKey); it != m_loadedTextures.end() && it->second)
 				{
-					// Calculate world position for this tile
-					float worldX = static_cast<float>(x - 32) * tileSize;
-					float worldY = static_cast<float>(y - 32) * tileSize;
+					// Calculate world position for this tile (center of tile)
+					const float worldX = (static_cast<float>(x) - 32.0f) * tileSize;
+					const float worldY = (static_cast<float>(y) - 32.0f) * tileSize;
 					
 					// Add a textured quad for this tile
-					AddTileQuad(m_geometryBuffer, it->second, worldX, worldY, scaledTileSize);
+					AddTileQuad(m_geometryBuffer, it->second, worldX, worldY, tileSize);
 				}
 			}
 		}
@@ -183,27 +197,16 @@ namespace mmo
 		outTileX = static_cast<int32>(std::floor(worldPosition.x / tileSize)) + 32;
 		outTileY = static_cast<int32>(std::floor(worldPosition.z / tileSize)) + 32; // Using Z as Y for top-down view
 		
-		// Basic bounds checking - for now assume tiles can be in reasonable range
-		// In a real implementation, you might want to check against actual terrain bounds
-		const int32 maxTileRange = 1000; // Arbitrary large range
-		
-		return (outTileX >= -maxTileRange && outTileX <= maxTileRange &&
-		        outTileY >= -maxTileRange && outTileY <= maxTileRange);
+		return (outTileX >= 0 && outTileX < 64 &&
+		        outTileY >= 0 && outTileY < 64);
 	}
 
 	TexturePtr Minimap::LoadMinimapTexture(const int32 tileX, const int32 tileY)
 	{
 		const String filename = GetMinimapTextureFilename(tileX, tileY);
-		DLOG("[Minimap] Loading (" << tileX << ", " << tileY << "): " << filename);
-		
+
 		// Use asset registry to load the texture
-		TexturePtr texture = TextureManager::Get().CreateOrRetrieve(filename);
-		if (!texture)
-		{
-			// If specific tile texture doesn't exist, could fall back to a default/empty tile texture
-			DLOG("Minimap texture not found: " << filename);
-		}
-		
+		TexturePtr texture = TextureManager::Get().CreateOrRetrieve(filename);		
 		return texture;
 	}
 
@@ -249,40 +252,31 @@ namespace mmo
 			return;
 		}
 
-		// Calculate screen coordinates relative to player position
-		float relativeX = worldX - m_playerPosition.x;
-		float relativeY = worldY - m_playerPosition.z; // Using Z as Y for top-down view
+		// Since we're using an orthographic projection that maps world coordinates directly,
+		// we can define our quad vertices in world space
+		const float halfTile = tileSize * 0.5f;
 		
-		// Center on minimap
-		float centerX = m_minimapSize * 0.5f;
-		float centerY = m_minimapSize * 0.5f;
+		// Define quad vertices in world coordinates (centered on worldX, worldY)
+		const float left = worldX - halfTile;
+		const float right = worldX + halfTile;
+		const float top = worldY + halfTile;
+		const float bottom = worldY - halfTile;
 		
-		// Convert to screen coordinates
-		float screenX = centerX + relativeX;
-		float screenY = centerY - relativeY; // Flip Y for screen coordinates
-		
-		// Define quad vertices (screen coordinates)
-		float left = screenX - tileSize * 0.5f;
-		float right = screenX + tileSize * 0.5f;
-		float top = screenY - tileSize * 0.5f;
-		float bottom = screenY + tileSize * 0.5f;
-		
-		// Only render if quad is within minimap bounds (with some tolerance)
-		const float tolerance = tileSize;
-		if (right < -tolerance || left > m_minimapSize + tolerance ||
-		    bottom < -tolerance || top > m_minimapSize + tolerance)
-		{
-			return;
-		}
-		
-		// Add textured quad to geometry buffer
-		// Texture coordinates: (0,0) top-left, (1,1) bottom-right
+		// Add textured quad to geometry buffer using world coordinates
+		// The orthographic projection will handle the conversion to screen space
 		geometryBuffer.SetActiveTexture(texture);
 		GeometryHelper::CreateRect(geometryBuffer,
 			Color::White,
 			Rect(left, top, right, bottom),
-			Rect(0.0f, 0.0f, 1.0, 1.0f),
+			Rect(0.0f, 0.0f, texture->GetWidth(), texture->GetHeight()),
 			texture->GetWidth(),
 			texture->GetHeight());
+	}
+
+	uint16 Minimap::BuildPageIndex(uint8 x, const uint8 y)
+	{
+		// Pack X and Y coordinates into a 16-bit page index
+		// X in lower 8 bits, Y in upper 8 bits
+		return static_cast<uint16>(x) | (static_cast<uint16>(y) << 8);
 	}
 }

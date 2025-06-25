@@ -104,10 +104,7 @@ namespace mmo
 		void AddTileQuad(GeometryBuffer& geometryBuffer, TexturePtr texture, 
 		                 float worldX, float worldY, float tileSize);
 
-		static uint16 BuildPageIndex(uint8 x, const uint8 y)
-		{
-			return (x << 8) | y;
-		}
+		static uint16 BuildPageIndex(uint8 x, uint8 y);
 
 	private:
 		/// @brief The size of the minimap render texture (width and height).

@@ -14,8 +14,6 @@ namespace mmo
 
 	void MinimapFrame::PopulateGeometryBuffer()
 	{
-		m_minimap.RenderMinimap();
-
 		TexturePtr texture = m_minimap.GetMinimapTexture();
 		m_geometryBuffer.SetActiveTexture(texture);
 
