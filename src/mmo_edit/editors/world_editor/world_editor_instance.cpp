@@ -26,6 +26,11 @@
 #include "terrain/page.h"
 #include "terrain/tile.h"
 #include "edit_modes/navigation_edit_mode.h"
+#include "stream_sink.h"
+#include "tex_v1_0/header_save.h"
+#include "graphics/render_texture.h"
+
+#include "stb_dxt.h"
 
 namespace mmo
 {
@@ -671,7 +676,7 @@ namespace mmo
 		
 		if (ImGui::Button("Toggle Grid"))
 		{
-			m_worldGrid->SetVisible(!m_worldGrid->IsVisible());
+		 m_worldGrid->SetVisible(!m_worldGrid->IsVisible());
 		}
 		ImGui::SameLine();
 		ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
@@ -686,6 +691,17 @@ namespace mmo
 		if (m_gridSnap)
 		{
 			DrawSnapSettings();
+		}
+
+		// Add separator before minimap button
+		ImGui::SameLine();
+		ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+		ImGui::SameLine();
+
+		// Minimap generation button
+		if (ImGui::Button("Generate Minimaps"))
+		{
+			GenerateMinimaps();
 		}
 
 		// Transform mode buttons
@@ -1549,7 +1565,7 @@ namespace mmo
 			WLOG("Spawn point of non-existant object " << spawn.objectentry() << " found");
 		}
 
-		const String uniqueId = "ObjectSpawn_" + std::to_string(m_objectSpawnIdGenerator.GenerateId());
+		const String uniqueId = "ObjectSpawn_" + std::to_string(m_unitSpawnIdGenerator.GenerateId());
 		Entity* entity = m_scene.CreateEntity(uniqueId, meshFile);
 		if (entity)
 		{
@@ -1718,10 +1734,7 @@ namespace mmo
 
 		SceneNode* node = m_scene.GetRootSceneNode().CreateChildSceneNode(Vector3(spawn.location().positionx(), spawn.location().positiony(), spawn.location().positionz()));
 		node->SetOrientation(Quaternion(spawn.location().rotationw(), spawn.location().rotationx(), spawn.location().rotationy(), spawn.location().rotationz()));
-		if (object->scale() != 0.0f)
-		{
-			node->SetScale(Vector3::UnitScale * object->scale());
-		}
+		node->SetScale(Vector3::UnitScale);
 
 		Quaternion rotationOffset;
 		rotationOffset.FromAngleAxis(Degree(90), Vector3::UnitY);
@@ -1729,6 +1742,161 @@ namespace mmo
 		entityOffsetNode->AttachObject(*entity);
 		m_spawnNodes.push_back(entityOffsetNode);
 		m_spawnNodes.push_back(node);
+	}
+
+	void WorldEditorInstance::DrawSceneOutlinePanel(const String& sceneOutlineId)
+	{
+		// Update the scene outline window regularly, especially when selection changes
+		if (m_sceneOutlineWindow) 
+		{
+			m_sceneOutlineWindow->Draw(sceneOutlineId.c_str());
+		}
+	}
+
+	void WorldEditorInstance::GenerateMinimaps()
+	{
+		if (!m_terrain || !m_hasTerrain)
+		{
+			ELOG("Cannot generate minimaps: no terrain available");
+			return;
+		}
+
+		// Minimap configuration
+		const uint32 minimapSize = 256; // 512x512 pixels per minimap
+		const float pageSize = terrain::constants::PageSize;
+
+		auto& gx = GraphicsDevice::Get();
+		gx.CaptureState();
+
+		Camera* renderCam = m_scene.CreateCamera("MinimapCamera");
+		renderCam->SetProjectionType(ProjectionType::Orthographic);
+		renderCam->SetOrthoWindow(pageSize, pageSize);
+		SceneNode* camNode = m_scene.GetRootSceneNode().CreateChildSceneNode("MinimapCameraNode");
+		camNode->AttachObject(*renderCam);
+		
+		// Create render texture for minimap generation
+		RenderTexturePtr minimapRT = gx.CreateRenderTexture("MinimapGeneration", minimapSize, minimapSize, 
+			RenderTextureFlags::HasColorBuffer | RenderTextureFlags::HasDepthBuffer, 
+			PixelFormat::R8G8B8A8, PixelFormat::D32F);
+		
+		if (!minimapRT)
+		{
+			ELOG("Failed to create render texture for minimap generation");
+		}
+		else
+		{
+			// Set camera orientation to look straight down
+			const Quaternion topDownOrientation = Quaternion(Degree(-90.0f), Vector3::UnitX);
+
+			// Iterate through all terrain pages
+			uint32 processedPages = 0;
+
+			for (uint32 pageX = 0; pageX < m_terrain->GetWidth(); ++pageX)
+			{
+				for (uint32 pageY = 0; pageY < m_terrain->GetHeight(); ++pageY)
+				{
+					// Get the terrain page
+					terrain::Page* page = m_terrain->GetPage(pageX, pageY);
+					// Ensure page is loaded for rendering
+					if (!page->IsLoaded())
+					{
+						continue;
+					}
+
+					// Calculate world position for page centers
+					const float worldX = page->GetSceneNode()->GetDerivedPosition().x + pageSize * 0.5f;
+					const float worldZ = page->GetSceneNode()->GetDerivedPosition().z + pageSize * 0.5f;
+
+					// Get terrain height at page center for camera positioning
+					float terrainHeight = page->GetBoundingBox().GetExtents().y;
+
+					// Position camera above the page center
+					const Vector3 cameraPos(worldX, terrainHeight + 150.0f, worldZ);
+					renderCam->GetParentSceneNode()->SetPosition(cameraPos);
+					renderCam->GetParentSceneNode()->SetOrientation(topDownOrientation);
+					renderCam->InvalidateFrustum();
+
+					// Setup render target and projection
+					minimapRT->Activate();
+					minimapRT->Clear(ClearFlags::All);
+
+					// Render the scene (terrain and objects in this page)
+					m_scene.SetFogRange(10000.0f, 100000.0f);
+					m_scene.Render(*renderCam, PixelShaderType::Forward);
+					minimapRT->Update();
+
+					// Create texture from render target
+					TexturePtr minimapTexture = minimapRT->StoreToTexture();
+					if (!minimapTexture)
+					{
+						WLOG("Failed to store minimap texture for page (" << pageX << ", " << pageY << ")");
+						continue;
+					}
+
+					// Generate filename with encoded coordinates
+					const uint16 pageIndex = BuildPageIndex(static_cast<uint8>(pageX), static_cast<uint8>(pageY));
+					const String minimapFilename = "minimaps/" + m_assetPath.filename().replace_extension().string() + "/" + std::to_string(pageIndex) + ".htex";
+
+					// Save texture to AssetRegistry
+					try
+					{
+						std::unique_ptr<std::ostream> outStream = AssetRegistry::CreateNewFile(minimapFilename);
+						if (outStream)
+						{
+							// Save texture using the engine's texture format
+							io::StreamSink sink(*outStream);
+							tex::v1_0::Header header(tex::Version_1_0);
+							header.width = minimapSize;
+							header.height = minimapSize;
+							header.format = tex::v1_0::DXT1;
+							header.hasMips = false;
+
+							tex::v1_0::HeaderSaver saver(sink, header);
+
+							header.mipmapOffsets[0] = static_cast<uint32>(sink.Position());
+
+							// Copy pixel data from render texture
+							const uint32 pixelDataSize = minimapSize * minimapSize * 4; // RGBA
+
+							// Apply compression
+							const size_t compressedSize = pixelDataSize / 8;
+
+							std::vector<uint8> pixelData(pixelDataSize);
+							minimapTexture->CopyPixelDataTo(pixelData.data());
+
+							// Allocate buffer for compression
+							std::vector<uint8> buffer;
+							buffer.resize(compressedSize);
+
+							// Apply compression
+							rygCompress(buffer.data(), pixelData.data(), minimapSize, minimapSize, false);
+							header.mipmapLengths[0] = static_cast<uint32>(buffer.size());
+							sink.Write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
+							saver.finish();
+
+							processedPages++;
+							ILOG("Generated minimap for page (" << pageX << ", " << pageY << ") -> " << minimapFilename);
+						}
+						else
+						{
+							WLOG("Failed to create file for minimap: " << minimapFilename);
+						}
+					}
+					catch (const std::exception& e)
+					{
+						ELOG("Error saving minimap for page (" << pageX << ", " << pageY << "): " << e.what());
+					}
+				}
+			}
+
+			ILOG("Minimap generation completed. Processed " << processedPages << " terrain pages.");
+		}
+
+		// Cleanup
+		m_scene.DestroyCamera(*renderCam);
+		m_scene.DestroySceneNode(*camNode);
+
+		gx.RestoreState();
 	}
 
 	Camera& WorldEditorInstance::GetCamera() const
@@ -2449,14 +2617,5 @@ namespace mmo
 	{
 		m_debugBoundingBox->SetVisible(false);
 		m_selection.Clear();
-	}
-
-	void WorldEditorInstance::DrawSceneOutlinePanel(const String& sceneOutlineId)
-	{
-		// Update the scene outline window regularly, especially when selection changes
-		if (m_sceneOutlineWindow) 
-		{
-			m_sceneOutlineWindow->Draw(sceneOutlineId.c_str());
-		}
 	}
 }

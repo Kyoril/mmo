@@ -285,6 +285,12 @@ namespace mmo
 	public:
 		const std::filesystem::path GetWorldPath() const override { return m_assetPath; }
 
+		/// @brief Generates minimap images for all terrain pages and saves them to the AssetRegistry.
+		/// This method renders each terrain page from above using an orthographic camera and 
+		/// render-to-texture, then saves the result as a texture file in the "minimaps" folder.
+		/// Filenames are encoded using page coordinates: (x << 8) | y.
+		void GenerateMinimaps();
+
 	private:
 		WorldEditor& m_editor;
 		scoped_connection m_renderConnection;
