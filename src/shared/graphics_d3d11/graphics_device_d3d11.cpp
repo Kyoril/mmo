@@ -658,7 +658,7 @@ namespace mmo
 		// Rasterizer state
 		UpdateCurrentRasterizerState();
 		UpdateDepthStencilState();
-	
+
 		// Warning: By default we have no active render target nor any viewport set. This needs to be done afterwards
 	}
 

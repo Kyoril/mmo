@@ -112,7 +112,12 @@ namespace mmo
 		///	       expression at all.
 		/// @param expression Index of the base color expression to use or IndexNone to not use a base color expression at all.
 		virtual void SetBaseColorExpression(ExpressionIndex expression);
-		
+
+		/// @brief Sets the index of the material's emissive color expression or IndexNone to not use a custom base color
+		///	       expression at all.
+		/// @param expression Index of the emissive color expression to use or IndexNone to not use a emissive color expression at all.
+		virtual void SetEmissiveExpression(ExpressionIndex expression);
+
 		/// @brief Sets the index of the material's metallic expression or IndexNone to not use a custom metallic
 		///	       expression at all.
 		/// @param expression Index of the metallic expression to use or IndexNone to not use a metallic expression at all.
@@ -293,6 +298,7 @@ namespace mmo
 		std::vector<ExpressionType> m_expressionTypes;
 
 		ExpressionIndex m_baseColorExpression { IndexNone };			// Float3
+		ExpressionIndex m_emissiveExpression { IndexNone };				// Float3
 		ExpressionIndex m_normalExpression { IndexNone };				// Float3 (Tangent Space)
 		ExpressionIndex m_roughnessExpression { IndexNone };			// Float1 (0-1)
 		ExpressionIndex m_specularExpression{ IndexNone };			// Float1 (0-1)
@@ -302,7 +308,7 @@ namespace mmo
 
 		Material* m_material { nullptr };
 		String m_vertexShaderCode;
-		String m_pixelShaderCode[3];
+		String m_pixelShaderCode[4];
 		//std::ostringstream m_vertexShaderStream;
 		std::ostringstream m_pixelShaderStream;
 

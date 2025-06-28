@@ -673,7 +673,7 @@ namespace mmo
 			<< "\tfloat4 pos : SV_POSITION;\n"
 			<< "\tfloat4 color : COLOR;\n";
 
-		if (m_lit)
+		if (m_lit && type != PixelShaderType::UI)
 		{
 			m_pixelShaderStream
 				<< "\tfloat3 normal : NORMAL;\n"
@@ -713,7 +713,7 @@ namespace mmo
 			}
 		}
 
-		if (m_lit)
+		if (m_lit && type != PixelShaderType::UI)
 		{
 			m_pixelShaderStream
 				<< "float3 GetWorldNormal(float3 tangentSpaceNormal, float3 N, float3 T, float3 B)\n"
@@ -802,14 +802,14 @@ namespace mmo
 				<< "\tfloat4 outputColor = float4(1, 1, 1, 1);\n\n";
 		}
 
-		if (m_lit)
+		if (m_lit && type != PixelShaderType::UI)
 		{
 			m_pixelShaderStream << "\tfloat3 N = normalize(input.normal);\n\n";
 		}
 
 		m_pixelShaderStream << "\tfloat3 V = normalize(input.viewDir);\n\n";
 
-		if (m_lit)
+		if (m_lit && type != PixelShaderType::UI)
 		{
 			m_pixelShaderStream
 				<< "\tfloat3 B = normalize(input.binormal);\n"
@@ -822,7 +822,7 @@ namespace mmo
 			m_pixelShaderStream << "\t" << code;
 		}
 
-		if (type != PixelShaderType::ShadowMap)
+		if (type != PixelShaderType::ShadowMap && type != PixelShaderType::UI)
 		{
 			if (m_lit)
 			{
@@ -924,24 +924,49 @@ namespace mmo
 
 		if (type != PixelShaderType::ShadowMap)
 		{
-			// BaseColor base
-			m_pixelShaderStream << "\tfloat3 baseColor = float3(1.0, 1.0, 1.0);\n\n";
-			if (m_baseColorExpression != IndexNone)
+			if (type != PixelShaderType::UI)
 			{
-				const auto expressionType = GetExpressionType(m_baseColorExpression);
+				// BaseColor base
+				m_pixelShaderStream << "\tfloat3 baseColor = float3(1.0, 1.0, 1.0);\n\n";
+				if (m_baseColorExpression != IndexNone)
+				{
+					const auto expressionType = GetExpressionType(m_baseColorExpression);
+					if (expressionType == ExpressionType::Float_1 || expressionType == ExpressionType::Float_3)
+					{
+						m_pixelShaderStream << "\tbaseColor = expr_" << m_baseColorExpression << ";\n\n";
+					}
+					else
+					{
+						if (expressionType == ExpressionType::Float_2)
+						{
+							m_pixelShaderStream << "\tbaseColor = float3(expr_" << m_baseColorExpression << ", 1.0);\n\n";
+						}
+						else if (expressionType == ExpressionType::Float_4)
+						{
+							m_pixelShaderStream << "\tbaseColor = expr_" << m_baseColorExpression << ".rgb;\n\n";
+						}
+					}
+				}
+			}
+
+			// Emissive color
+			m_pixelShaderStream << "\tfloat3 emissiveColor = float3(1.0, 1.0, 1.0);\n\n";
+			if (m_emissiveExpression != IndexNone)
+			{
+				const auto expressionType = GetExpressionType(m_emissiveExpression);
 				if (expressionType == ExpressionType::Float_1 || expressionType == ExpressionType::Float_3)
 				{
-					m_pixelShaderStream << "\tbaseColor = expr_" << m_baseColorExpression << ";\n\n";
+					m_pixelShaderStream << "\temissiveColor = expr_" << m_emissiveExpression << ";\n\n";
 				}
 				else
 				{
 					if (expressionType == ExpressionType::Float_2)
 					{
-						m_pixelShaderStream << "\tbaseColor = float3(expr_" << m_baseColorExpression << ", 1.0);\n\n";
+						m_pixelShaderStream << "\tbaseColor = float3(expr_" << m_emissiveExpression << ", 1.0);\n\n";
 					}
 					else if (expressionType == ExpressionType::Float_4)
 					{
-						m_pixelShaderStream << "\tbaseColor = expr_" << m_baseColorExpression << ".rgb;\n\n";
+						m_pixelShaderStream << "\tbaseColor = expr_" << m_emissiveExpression << ".rgb;\n\n";
 					}
 				}
 			}
@@ -959,7 +984,18 @@ namespace mmo
 				<< "\tif (opacity < 0.333) discard;\n";
 		}
 
-		if (type != PixelShaderType::ShadowMap)
+		if (type == PixelShaderType::UI)
+		{
+			m_pixelShaderStream
+				<< "\toutputColor = float4(emissiveColor, opacity);\n";
+
+			// End of main function
+			m_pixelShaderStream
+				<< "\treturn outputColor;\n"
+				<< "}"
+				<< std::endl;
+		}
+		else if (type != PixelShaderType::ShadowMap)
 		{
 			if (type != PixelShaderType::GBuffer)
 			{
@@ -1125,7 +1161,7 @@ namespace mmo
 #if 0
 #	ifdef _DEBUG
 		// Write shader output to asset registry for debug
-		if (const auto filePtr = AssetRegistry::CreateNewFile(type == PixelShaderType::Forward ? "PSForward.hlsl" : type == PixelShaderType::GBuffer ? "PSDeferred.hlsl" : "PSShadow.hlsl"))
+		if (const auto filePtr = AssetRegistry::CreateNewFile(type == PixelShaderType::Forward ? "PSForward.hlsl" : type == PixelShaderType::GBuffer ? "PSDeferred.hlsl" : type == PixelShaderType::ShadowMap ? "PSShadow.hlsl" : "PSUI.hlsl"))
 		{
 			io::StreamSink sink(*filePtr);
 			io::TextWriter<char> writer(sink);
@@ -1247,12 +1283,19 @@ namespace mmo
 			<< "struct VertexIn\n"
 			<< "{\n"
 			<< "\tfloat3 pos : POSITION;\n"
-			<< "\tfloat4 color : COLOR;\n"
-			<< "\tfloat3 normal : NORMAL;\n"
-			<< "\tfloat3 binormal : BINORMAL;\n"
-			<< "\tfloat3 tangent : TANGENT;\n";
+			<< "\tfloat4 color : COLOR;\n";
 
-		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
+		if (type != VertexShaderType::UI)
+		{
+			vertexShaderStream
+				<< "\tfloat3 normal : NORMAL;\n"
+				<< "\tfloat3 binormal : BINORMAL;\n"
+				<< "\tfloat3 tangent : TANGENT;\n";
+		}
+
+		const uint32 numTexCoords = (type == VertexShaderType::UI) ? 1u : m_numTexCoordinates;
+
+		for (uint32 i = 0; i < numTexCoords; ++i)
 		{
 			vertexShaderStream
 				<< "\tfloat2 uv" << i << " : TEXCOORD" << i << ";\n";
@@ -1275,7 +1318,7 @@ namespace mmo
 			<< "\tfloat4 pos : SV_POSITION;\n"
 			<< "\tfloat4 color : COLOR;\n";
 
-		if (m_lit)
+		if (m_lit && type != VertexShaderType::UI)
 		{
 			vertexShaderStream
 				<< "\tfloat3 normal : NORMAL;\n"
@@ -1283,15 +1326,16 @@ namespace mmo
 				<< "\tfloat3 tangent : TANGENT;\n";
 		}
 
-		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
+		for (uint32 i = 0; i < numTexCoords; ++i)
 		{
 			vertexShaderStream
 				<< "\tfloat2 uv" << i << " : TEXCOORD" << i << ";\n";
 		}
+
 		vertexShaderStream
-			<< "\tfloat3 worldPos : TEXCOORD" << m_numTexCoordinates << ";\n"
-			<< "\tfloat3 viewDir : TEXCOORD" << m_numTexCoordinates + 1 << ";\n"
-			<< "\tfloat3 viewPos : TEXCOORD" << m_numTexCoordinates + 2 << ";\n";
+			<< "\tfloat3 worldPos : TEXCOORD" << numTexCoords << ";\n"
+			<< "\tfloat3 viewDir : TEXCOORD" << numTexCoords + 1 << ";\n"
+			<< "\tfloat3 viewPos : TEXCOORD" << numTexCoords + 2 << ";\n";
 
 		vertexShaderStream
 			<< "};\n\n";
@@ -1333,8 +1377,7 @@ namespace mmo
 			<< "{\n"
 			<< "\tVertexOut output;\n\n";
 
-		const bool withSkinning = (type != VertexShaderType::Default);
-		if (withSkinning)
+		if (const bool withSkinning = (type == VertexShaderType::SkinnedLow || type == VertexShaderType::SkinnedMedium || type == VertexShaderType::SkinnedHigh))
 		{
 			vertexShaderStream
 				<< "\tmatrix boneMatrix = matBone[input.boneIndices[0]-1] * input.boneWeights[0];\n"
@@ -1356,7 +1399,7 @@ namespace mmo
 			vertexShaderStream
 				<< "\tfloat4 transformedPos = float4(input.pos.xyz, 1.0);\n";
 
-			if (m_lit)
+			if (m_lit && type != VertexShaderType::UI)
 			{
 				vertexShaderStream
 					<< "\tfloat3 transformedNormal = input.normal;\n"
@@ -1381,7 +1424,7 @@ namespace mmo
 				<< "\toutput.uv" << i << " = input.uv" << i << ";\n";
 		}
 
-		if (m_lit)
+		if (m_lit && type != VertexShaderType::UI)
 		{
 			vertexShaderStream
 				<< "\toutput.binormal = normalize(mul(normalize(transformedBinormal), (float3x3)matWorld));\n"

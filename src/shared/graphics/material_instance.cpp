@@ -146,20 +146,33 @@ namespace mmo
 
 	void MaterialInstance::Apply(GraphicsDevice& device, MaterialDomain domain, PixelShaderType pixelShaderType)
 	{
-		// Bind shaders from the material
-		if (m_parent->GetVertexShader(VertexShaderType::Default)) m_parent->GetVertexShader(VertexShaderType::Default)->Set();
-		if (m_parent->GetPixelShader(pixelShaderType)) m_parent->GetPixelShader(pixelShaderType)->Set();
+		switch (domain)
+		{
+		case MaterialDomain::UserInterface:
+			pixelShaderType = PixelShaderType::UI; // UI always uses the UI pixel shader
+			ASSERT(m_parent->GetVertexShader(VertexShaderType::UI));
+			if (m_parent->GetVertexShader(VertexShaderType::UI)) m_parent->GetVertexShader(VertexShaderType::UI)->Set();
+			ASSERT(m_parent->GetPixelShader(pixelShaderType));
+			if (m_parent->GetPixelShader(pixelShaderType)) m_parent->GetPixelShader(pixelShaderType)->Set();
+			break;
+		default:
+			ASSERT(m_parent->GetVertexShader(VertexShaderType::Default));
+			if (m_parent->GetVertexShader(VertexShaderType::Default)) m_parent->GetVertexShader(VertexShaderType::Default)->Set();
+			ASSERT(m_parent->GetPixelShader(pixelShaderType));
+			if (m_parent->GetPixelShader(pixelShaderType)) m_parent->GetPixelShader(pixelShaderType)->Set();
+			break;
+		}
 
 		// Bind base material static textures
 		auto baseMaterial = GetBaseMaterial();
 
-			baseMaterial->BindTextures(device);
-			// Bind texture parameter override textures
-			uint32 shaderSlot = baseMaterial->GetTextureFiles().size();
-			for (auto& param : m_textureParameters)
-			{
-				device.BindTexture(m_textureParamTextures[param.name], ShaderType::PixelShader, shaderSlot++);
-			}
+		baseMaterial->BindTextures(device);
+		// Bind texture parameter override textures
+		uint32 shaderSlot = baseMaterial->GetTextureFiles().size();
+		for (auto& param : m_textureParameters)
+		{
+			device.BindTexture(m_textureParamTextures[param.name], ShaderType::PixelShader, shaderSlot++);
+		}
 
 		if (pixelShaderType != PixelShaderType::ShadowMap)
 		{

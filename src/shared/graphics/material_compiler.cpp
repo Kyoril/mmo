@@ -45,7 +45,7 @@ namespace mmo
 		material.SetDepthTestEnabled(m_depthTest);
 		material.SetTwoSided(m_twoSided);
 
-		for (uint32 i = 0; i < 4; ++i)
+		for (uint32 i = 0; i < 5; ++i)
 		{
 			m_vertexShaderCode.clear();
 			GenerateVertexShaderCode(static_cast<VertexShaderType>(i));
@@ -106,7 +106,7 @@ namespace mmo
 			material.SetPixelShaderCode(PixelShaderType::GBuffer, {pixelOutput.code.data });
 		}
 
-		// Generate GBuffer pixel shader
+		// Generate Shadowmap pixel shader
 		GeneratePixelShaderCode(PixelShaderType::ShadowMap);
 
 		pixelInput.shaderCode = m_pixelShaderCode[(int)PixelShaderType::ShadowMap];
@@ -122,6 +122,24 @@ namespace mmo
 			DLOG("Successfully compiled ShadowMap pixel shader. Size: " << pixelOutput.code.data.size());
 			// Add shader code to the material
 			material.SetPixelShaderCode(PixelShaderType::ShadowMap, { pixelOutput.code.data });
+		}
+
+		// Generate UI pixel shader
+		GeneratePixelShaderCode(PixelShaderType::UI);
+
+		pixelInput.shaderCode = m_pixelShaderCode[(int)PixelShaderType::UI];
+		pixelInput.shaderType = ShaderType::PixelShader;
+		shaderCompiler.Compile(pixelInput, pixelOutput);
+
+		if (!pixelOutput.succeeded)
+		{
+			ELOG("Error compiling UI pixel shader: " << pixelOutput.errorMessage);
+		}
+		else
+		{
+			DLOG("Successfully compiled UI pixel shader. Size: " << pixelOutput.code.data.size());
+			// Add shader code to the material
+			material.SetPixelShaderCode(PixelShaderType::UI, { pixelOutput.code.data });
 		}
 
 		// Set material textures
@@ -147,6 +165,11 @@ namespace mmo
 	void MaterialCompiler::SetBaseColorExpression(ExpressionIndex expression)
 	{
 		m_baseColorExpression = expression;
+	}
+
+	void MaterialCompiler::SetEmissiveExpression(ExpressionIndex expression)
+	{
+		m_emissiveExpression = expression;
 	}
 
 	void MaterialCompiler::SetMetallicExpression(ExpressionIndex expression)

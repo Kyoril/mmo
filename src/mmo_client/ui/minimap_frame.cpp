@@ -3,6 +3,8 @@
 
 #include "minimap.h"
 #include "frame_ui/geometry_helper.h"
+#include "graphics/material_instance.h"
+#include "scene_graph/material_manager.h"
 
 namespace mmo
 {
@@ -10,6 +12,19 @@ namespace mmo
 		: Frame("Minimap", name)
 		, m_minimap(minimap)
 	{
+		// We reset our buffer manually (actually we don't even use it!)
+		m_flags |= static_cast<uint32>(FrameFlags::ManualResetBuffer);
+
+		// Ensure the material instance is created so we can use it to inject the actual minimap texture into it
+		m_material = std::make_shared<MaterialInstance>("MinimapMaterialInstance",
+			MaterialManager::Get().Load("Interface/MinimapFrame.hmat"));
+		if (m_material)
+		{
+			// Bind the minimap texture to this material instance
+			m_material->SetTextureParameter("Minimap", m_minimap.GetMinimapTexture());
+		}
+
+		m_hwBuffer = GraphicsDevice::Get().CreateVertexBuffer(6, sizeof(POS_COL_TEX_VERTEX), BufferUsage::DynamicWriteOnlyDiscardable, nullptr);
 	}
 
 	void MinimapFrame::DrawSelf()
@@ -18,25 +33,37 @@ namespace mmo
 		{
 			m_minimap.RenderMinimap();
 		}
-		
-		Frame::DrawSelf();
+
+		// Trigger recreation of geometry buffer if needed
+		BufferGeometry();
+
+		// Render minimap using material instance
+		m_material->Apply(GraphicsDevice::Get(), MaterialDomain::UserInterface, PixelShaderType::UI);
+
+		m_hwBuffer->Set(0);
+		GraphicsDevice::Get().Draw(m_hwBuffer->GetVertexCount(), 0);
 	}
 
 	void MinimapFrame::PopulateGeometryBuffer()
 	{
-		TexturePtr texture = m_minimap.GetMinimapTexture();
-		m_geometryBuffer.SetActiveTexture(texture);
+		// First, we request the current hw buffer capacity
+		size_t size = m_hwBuffer->GetVertexCount();
 
 		const Rect frameRect = GetAbsoluteFrameRect();
 
-		// Default source rect encapsulates the whole image area
-		Rect srcRect{ 0.0f, 0.0f, static_cast<float>(texture->GetWidth()), static_cast<float>(texture->GetHeight()) };
+		// Vertex buffer
+		const POS_COL_TEX_VERTEX vertices[] = {
+			{ Vector3{frameRect.left, frameRect.bottom, 0.0f }, Color::White, { 0.0f, 1.0f }},
+			{ Vector3{frameRect.left, frameRect.top, 0.0f }, Color::White, { 0.0f, 0.0f }},
+			{ Vector3{frameRect.right, frameRect.top, 0.0f }, Color::White, { 1.0f, 0.0f }},
 
-		// Create the rectangle
-		GeometryHelper::CreateRect(m_geometryBuffer,
-			m_color,
-			frameRect,
-			srcRect,
-			texture->GetWidth(), texture->GetHeight());
+			{ Vector3{frameRect.right, frameRect.top, 0.0f }, Color::White, { 1.0f, 0.0f }},
+			{ Vector3{frameRect.right, frameRect.bottom, 0.0f }, Color::White, { 1.0f, 1.0f }},
+			{ Vector3{frameRect.left, frameRect.bottom, 0.0f }, Color::White, { 0.0f, 1.0f }}
+		};
+
+		// Update buffer
+		std::memcpy(m_hwBuffer->Map(LockOptions::Discard), vertices, sizeof(POS_COL_TEX_VERTEX) * std::size(vertices));
+		m_hwBuffer->Unmap();
 	}
 }

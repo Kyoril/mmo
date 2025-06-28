@@ -18,5 +18,10 @@ namespace mmo
 
 	private:
 		Minimap& m_minimap;
+
+		MaterialPtr m_material;
+
+		/// The hardware (gpu) vertex buffer
+		VertexBufferPtr m_hwBuffer;
 	};
 }

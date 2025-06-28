@@ -16,6 +16,8 @@ namespace mmo
         GBuffer,
 
         ShadowMap,
+
+        UI
     };
 
     /// @brief Enumerates available vertex shader types.
@@ -31,6 +33,8 @@ namespace mmo
         SkinnedMedium,
 
         /// @brief Skinning profile with high amount of bones (128)
-        SkinnedHigh
+        SkinnedHigh,
+
+        UI,
     };
 }

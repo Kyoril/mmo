@@ -514,7 +514,13 @@ namespace mmo
 			const ExpressionIndex baseColorExpression = m_baseColor.GetLink()->GetNode()->Compile(compiler, m_baseColor.GetLink());
 			compiler.SetBaseColorExpression(baseColorExpression);
 		}
-		
+
+		if (m_emissive.IsLinked())
+		{
+			const ExpressionIndex emissiveExpression = m_emissive.GetLink()->GetNode()->Compile(compiler, m_emissive.GetLink());
+			compiler.SetEmissiveExpression(emissiveExpression);
+		}
+
 		if (m_normal.IsLinked())
 		{
 			const ExpressionIndex normalExpression = m_normal.GetLink()->GetNode()->Compile(compiler, m_normal.GetLink());

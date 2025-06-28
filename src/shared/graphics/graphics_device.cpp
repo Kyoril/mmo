@@ -159,7 +159,7 @@ namespace mmo
 
 		if (m_restoreDepthWrite != m_depthWrite)
 		{
-			SetDepthWriteEnabled(m_restoreDepthEnable);
+			SetDepthWriteEnabled(m_restoreDepthWrite);
 		}
 		
 		if (m_restoreDepthComparison != m_depthComparison)

@@ -293,7 +293,7 @@ namespace mmo
 			m_vertexShaderChanged = false;
 		}
 
-		for (uint32 i = 0; i < 3; ++i)
+		for (uint32 i = 0; i < 4; ++i)
 		{
 			if (m_pixelShaderChanged[i])
 			{
@@ -316,7 +316,7 @@ namespace mmo
 		compiler.Compile(*this, shaderCompiler);
 
 		// Compile vertex shader
-		for (uint32 i = 0; i < 4; ++i)
+		for (uint32 i = 0; i < 5; ++i)
 		{
 			ShaderCompileResult vertexOutput;
 			ShaderCompileInput vertexInput{ compiler.GetVertexShaderCode(), ShaderType::VertexShader };
@@ -333,7 +333,6 @@ namespace mmo
 			}
 		}
 		
-
 		// Compile pixel shader (forward rendering)
 		ShaderCompileResult pixelOutput;
 		ShaderCompileInput pixelInput { compiler.GetPixelShaderCode(PixelShaderType::Forward), ShaderType::PixelShader };
@@ -356,8 +355,24 @@ namespace mmo
 	{
 		// TODO: Determine what vertex shader type we need to bind based on the rendering context or from outside
 		// Apply
-		if (m_vertexShader[0]) m_vertexShader[0]->Set();
-		if (m_pixelShader[static_cast<uint32_t>(pixelShaderType)]) m_pixelShader[static_cast<uint32_t>(pixelShaderType)]->Set();
+
+		switch (domain)
+		{
+		case MaterialDomain::UserInterface:
+			pixelShaderType = PixelShaderType::UI;	// Force UI pixel shader type for UI domain
+			ASSERT(m_vertexShader[static_cast<uint32>(VertexShaderType::UI)]);
+			if (m_vertexShader[static_cast<uint32>(VertexShaderType::UI)]) m_vertexShader[static_cast<uint32>(VertexShaderType::UI)]->Set();
+			ASSERT(m_pixelShader[static_cast<uint32_t>(pixelShaderType)]);
+			if (m_pixelShader[static_cast<uint32_t>(pixelShaderType)]) m_pixelShader[static_cast<uint32_t>(pixelShaderType)]->Set();
+			break;
+		default:
+			ASSERT(m_vertexShader[0]);
+			if (m_vertexShader[0]) m_vertexShader[0]->Set();
+
+			ASSERT(m_pixelShader[static_cast<uint32_t>(pixelShaderType)]);
+			if (m_pixelShader[static_cast<uint32_t>(pixelShaderType)]) m_pixelShader[static_cast<uint32_t>(pixelShaderType)]->Set();
+			break;
+		}
 
 		BindTextures(device);
 		
@@ -370,6 +385,7 @@ namespace mmo
 
 		if (pixelShaderType != PixelShaderType::ShadowMap)
 		{
+			device.SetDepthEnabled(m_depthTest);
 			device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
 			device.SetDepthWriteEnabled(m_depthWrite);
 		}
@@ -377,6 +393,7 @@ namespace mmo
 		{
 			device.SetDepthEnabled(true);
 			device.SetDepthWriteEnabled(true);
+			device.SetDepthTestComparison(DepthTestMethod::LessEqual);
 		}
 
 		if (m_type == MaterialType::Translucent || m_type == MaterialType::Masked)
