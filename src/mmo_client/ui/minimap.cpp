@@ -6,6 +6,8 @@
 #include "terrain/terrain.h"
 #include "log/default_log_levels.h"
 
+#include "luabind_lambda.h"
+
 namespace mmo
 {
 	Minimap::Minimap(uint32 minimapSize)
@@ -44,6 +46,17 @@ namespace mmo
 		ILOG("Minimap destroyed");
 	}
 
+	void Minimap::RegisterScriptFunctions(lua_State* luaState)
+	{
+		luabind::module(luaState)
+		[
+			luabind::def_lambda("GetMinimapZoomLevel", [this]() { return GetZoomLevel(); }),
+			luabind::def_lambda("GetMinimapMinZoomLevel", [this]() { return 0; }),
+			luabind::def_lambda("GetMinimapMaxZoomLevel", [this]() { return GetMaxZoomLevel(); }),
+			luabind::def_lambda("SetMinimapZoomLevel", [this](int32 zoomLevel) { SetZoomLevel(zoomLevel); })
+		];
+	}
+
 	void Minimap::UpdatePlayerPosition(const Vector3& playerPosition, const Radian& playerOrientation)
 	{
 		if (!m_initialized)
@@ -65,8 +78,6 @@ namespace mmo
 		// Check if we've moved to a different tile
 		if (const bool tileChanged = newTileX != m_currentTileX || newTileY != m_currentTileY)
 		{
-			ILOG("[Minimap] Player moved to tile (" << newTileX << ", " << newTileY << ")");
-			
 			// Update tile coordinates
 			m_previousTileX = m_currentTileX;
 			m_previousTileY = m_currentTileY;
@@ -78,12 +89,12 @@ namespace mmo
 			{
 				for (int32 y = newTileY - s_maxLoadDistance; y <= newTileY + s_maxLoadDistance; ++y)
 				{
-					uint64 tileKey = static_cast<uint64>(x) + static_cast<uint64>(y) * 65536;
+					const uint64 tileKey = static_cast<uint64>(x) + static_cast<uint64>(y) * 65536;
 					
 					// Only load if not already loaded
-					if (m_loadedTextures.find(tileKey) == m_loadedTextures.end())
+					if (!m_loadedTextures.contains(tileKey))
 					{
-						if (TexturePtr texture = LoadMinimapTexture(x, y))
+						if (const TexturePtr texture = LoadMinimapTexture(x, y))
 						{
 							m_loadedTextures[tileKey] = texture;
 						}
@@ -125,8 +136,8 @@ namespace mmo
 		// Top/Bottom: player position +/- half coverage in Z (using Z as Y for top-down view)
 		const float left = m_playerPosition.x - halfCoverage;
 		const float right = m_playerPosition.x + halfCoverage;
-		const float top = m_playerPosition.z + halfCoverage;    // Top of screen = +Z
-		const float bottom = m_playerPosition.z - halfCoverage; // Bottom of screen = -Z
+		const float top = m_playerPosition.z - halfCoverage;
+		const float bottom = m_playerPosition.z + halfCoverage;
 
 		gx.SetTransformMatrix(World, Matrix4::Identity);
 		gx.SetTransformMatrix(View, Matrix4::Identity);
@@ -135,20 +146,20 @@ namespace mmo
 		// Calculate which tiles are visible in this world area
 		const int32 minTileX = static_cast<int32>(std::floor(left / tileSize)) + 32;
 		const int32 maxTileX = static_cast<int32>(std::ceil(right / tileSize)) + 32;
-		const int32 minTileY = static_cast<int32>(std::floor(bottom / tileSize)) + 32;
-		const int32 maxTileY = static_cast<int32>(std::ceil(top / tileSize)) + 32;
+		const int32 minTileY = static_cast<int32>(std::floor(top / tileSize)) + 32;
+		const int32 maxTileY = static_cast<int32>(std::ceil(bottom / tileSize)) + 32;
 
 		// Render tiles in the visible area
 		for (int32 x = minTileX; x <= maxTileX; ++x)
 		{
 			for (int32 y = minTileY; y <= maxTileY; ++y)
 			{
-				uint64 tileKey = static_cast<uint64>(x) + (static_cast<uint64>(y) * 65536);
+				uint64 tileKey = static_cast<uint64>(x) + static_cast<uint64>(y) * 65536;
 				if (auto it = m_loadedTextures.find(tileKey); it != m_loadedTextures.end() && it->second)
 				{
 					// Calculate world position for this tile (center of tile)
-					const float worldX = (static_cast<float>(x) - 32.0f) * tileSize;
-					const float worldY = (static_cast<float>(y) - 32.0f) * tileSize;
+					const float worldX = x * tileSize - 32 * tileSize; // Offset by 32 tiles to center around (0,0)
+					const float worldY = y * tileSize - 32 * tileSize; // Offset by 32 tiles to center around (0,0)
 					
 					// Add a textured quad for this tile
 					AddTileQuad(m_geometryBuffer, it->second, worldX, worldY, tileSize);
@@ -161,7 +172,7 @@ namespace mmo
 		gx.RestoreState();
 	}
 
-	void Minimap::SetZoomLevel(int32 zoomLevel)
+	void Minimap::SetZoomLevel(const int32 zoomLevel)
 	{
 		m_zoomLevel = std::clamp(zoomLevel, 0, GetMaxZoomLevel());
 	}
@@ -189,7 +200,7 @@ namespace mmo
 		UpdatePlayerPosition(m_playerPosition, m_playerOrientation);
 	}
 
-	bool Minimap::GetTileCoordinates(const Vector3& worldPosition, int32& outTileX, int32& outTileY) const
+	bool Minimap::GetTileCoordinates(const Vector3& worldPosition, int32& outTileX, int32& outTileY)
 	{
 		const double tileSize = terrain::constants::PageSize;
 		
@@ -201,16 +212,20 @@ namespace mmo
 		        outTileY >= 0 && outTileY < 64);
 	}
 
-	TexturePtr Minimap::LoadMinimapTexture(const int32 tileX, const int32 tileY)
+	TexturePtr Minimap::LoadMinimapTexture(const int32 tileX, const int32 tileY) const
 	{
 		const String filename = GetMinimapTextureFilename(tileX, tileY);
 
 		// Use asset registry to load the texture
-		TexturePtr texture = TextureManager::Get().CreateOrRetrieve(filename);		
+		TexturePtr texture = TextureManager::Get().CreateOrRetrieve(filename);
+		if (texture)
+		{
+			texture->SetTextureAddressMode(TextureAddressMode::Clamp);
+		}
 		return texture;
 	}
 
-	void Minimap::UnloadDistantTextures(int32 currentTileX, int32 currentTileY)
+	void Minimap::UnloadDistantTextures(const int32 currentTileX, const int32 currentTileY)
 	{
 		const int32 unloadDistance = s_maxLoadDistance + 2; // Keep a buffer beyond max load distance
 		
@@ -245,38 +260,41 @@ namespace mmo
 		return "Textures/Minimaps/" + m_worldName + "/" + std::to_string(pageIndex) + ".htex";
 	}
 
-	void Minimap::AddTileQuad(GeometryBuffer& geometryBuffer, TexturePtr texture, float worldX, float worldY, float tileSize)
+	void Minimap::AddTileQuad(GeometryBuffer& geometryBuffer, const TexturePtr& texture, const float worldX, const float worldY, const float tileSize)
 	{
 		if (!texture)
 		{
 			return;
 		}
 
-		// Since we're using an orthographic projection that maps world coordinates directly,
-		// we can define our quad vertices in world space
-		const float halfTile = tileSize * 0.5f;
-		
 		// Define quad vertices in world coordinates (centered on worldX, worldY)
-		const float left = worldX - halfTile;
-		const float right = worldX + halfTile;
-		const float top = worldY + halfTile;
-		const float bottom = worldY - halfTile;
+		const float left = worldX;
+		const float right = worldX + tileSize;
+		const float top = worldY;
+		const float bottom = worldY + tileSize;
 		
-		// Add textured quad to geometry buffer using world coordinates
-		// The orthographic projection will handle the conversion to screen space
+		// Set the active texture
 		geometryBuffer.SetActiveTexture(texture);
-		GeometryHelper::CreateRect(geometryBuffer,
-			Color::White,
-			Rect(left, top, right, bottom),
-			Rect(0.0f, 0.0f, texture->GetWidth(), texture->GetHeight()),
-			texture->GetWidth(),
-			texture->GetHeight());
+		
+		const GeometryBuffer::Vertex vertices[6]{
+			// First triangle: bottom-left, top-left, top-right
+			{ { left,	bottom,	0.0f }, Color::White.GetABGR(), { 0.0f, 1.0f } },  // World (-X,-Z) -> UV left,bottom
+			{ { left,	top,	0.0f }, Color::White.GetABGR(), { 0.0f, 0.0f } },  // World (-X,+Z) -> UV left,top
+			{ { right,	top,	0.0f }, Color::White.GetABGR(), { 1.0f, 0.0f } },  // World (+X,+Z) -> UV right,top
+			// Second triangle: top-right, bottom-right, bottom-left
+			{ { right,	top,	0.0f }, Color::White.GetABGR(), { 1.0f, 0.0f } },  // World (+X,+Z) -> UV right,top
+			{ { right,	bottom,	0.0f }, Color::White.GetABGR(), { 1.0f, 1.0f } },  // World (+X,-Z) -> UV right,bottom
+			{ { left,	bottom,	0.0f }, Color::White.GetABGR(), { 0.0f, 1.0f } }   // World (-X,-Z) -> UV left,bottom
+		};
+		
+		// Append the custom vertices
+		geometryBuffer.AppendGeometry(vertices, 6);
 	}
 
-	uint16 Minimap::BuildPageIndex(uint8 x, const uint8 y)
+	uint16 Minimap::BuildPageIndex(const uint8 x, const uint8 y)
 	{
 		// Pack X and Y coordinates into a 16-bit page index
 		// X in lower 8 bits, Y in upper 8 bits
-		return static_cast<uint16>(x) | (static_cast<uint16>(y) << 8);
+		return (static_cast<uint16>(x) << 8) | static_cast<uint16>(y);
 	}
 }

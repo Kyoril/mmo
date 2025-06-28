@@ -16,6 +16,7 @@ namespace mmo
 		: m_type(type)
 	{
 		SetCastShadows(false);
+		SetQueryFlags(0);
 	}
 
 	Light::Light(const String& name, LightType type)

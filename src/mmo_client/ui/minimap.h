@@ -13,6 +13,8 @@
 #include <map>
 #include <memory>
 
+struct lua_State;
+
 namespace mmo
 {
 	/// @brief This class manages the minimap rendering functionality in the game.
@@ -26,6 +28,8 @@ namespace mmo
 
 		/// @brief Destructor.
 		~Minimap();
+
+		void RegisterScriptFunctions(lua_State* luaState);
 
 	public:
 		/// @brief Updates the minimap based on the player's current position and orientation.
@@ -76,13 +80,13 @@ namespace mmo
 		/// @param outTileX The output tile X coordinate.
 		/// @param outTileY The output tile Y coordinate.
 		/// @return True if the position is within valid tile bounds.
-		bool GetTileCoordinates(const Vector3& worldPosition, int32& outTileX, int32& outTileY) const;
+		static bool GetTileCoordinates(const Vector3& worldPosition, int32& outTileX, int32& outTileY);
 
 		/// @brief Loads a minimap texture for the specified tile coordinates.
 		/// @param tileX The tile X coordinate.
 		/// @param tileY The tile Y coordinate.
 		/// @return The loaded texture, or nullptr if loading failed.
-		TexturePtr LoadMinimapTexture(int32 tileX, int32 tileY);
+		TexturePtr LoadMinimapTexture(int32 tileX, int32 tileY) const;
 
 		/// @brief Unloads minimap textures that are no longer needed.
 		/// @param currentTileX The current player tile X coordinate.
@@ -101,8 +105,8 @@ namespace mmo
 		/// @param worldX The world X position of the tile.
 		/// @param worldY The world Y position of the tile.
 		/// @param tileSize The size of the tile in world units.
-		void AddTileQuad(GeometryBuffer& geometryBuffer, TexturePtr texture, 
-		                 float worldX, float worldY, float tileSize);
+		static void AddTileQuad(GeometryBuffer& geometryBuffer, const TexturePtr& texture, 
+		                        float worldX, float worldY, float tileSize);
 
 		static uint16 BuildPageIndex(uint8 x, uint8 y);
 
@@ -137,7 +141,7 @@ namespace mmo
 		std::map<uint64, TexturePtr> m_loadedTextures;
 
 		/// @brief The maximum distance (in tiles) for loading textures around the player.
-		static constexpr int32 s_maxLoadDistance = 3;
+		static constexpr int32 s_maxLoadDistance = 2;
 
 		String m_worldName;
 

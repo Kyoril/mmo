@@ -415,7 +415,8 @@ namespace mmo
 		
 		// Initialize the game script instance
 		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project, *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charCreateInfo, *s_charSelect, *s_guildClient, s_gameTime, *s_talentClient);
-		
+		s_minimap->RegisterScriptFunctions(&s_gameScript->GetLuaState());
+
 		// Setup FrameUI library
 		if (!InitializeFrameUi())
 		{
