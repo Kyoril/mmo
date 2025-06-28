@@ -26,7 +26,18 @@ namespace mmo
 		GraphicsDevice& gx = GraphicsDevice::Get();
 		m_minimapRenderTexture = gx.CreateRenderTexture("Minimap", m_minimapSize, m_minimapSize, RenderTextureFlags::HasColorBuffer | RenderTextureFlags::HasDepthBuffer | RenderTextureFlags::ShaderResourceView,
 			R8G8B8A8, D32F);
-		
+
+		m_playerArrowTexture = TextureManager::Get().CreateOrRetrieve("Interface/Icons/fg4_iconsBrown_left_result.htex");
+		if (m_playerArrowTexture)
+		{
+			m_playerArrowTexture->SetTextureAddressMode(TextureAddressMode::Clamp);
+			m_playerGeom.SetActiveTexture(m_playerArrowTexture);
+			GeometryHelper::CreateRect(m_playerGeom, Color::White,
+				Rect(-16.0f, -16.0f, 16.0f, 16.0f),
+				Rect(1.0f, 1.0f, 0.0f, 0.0f), 
+				1, 1);
+		}
+
 		if (m_minimapRenderTexture)
 		{
 			m_initialized = true;
@@ -168,6 +179,18 @@ namespace mmo
 		}
 
 		m_geometryBuffer.Draw();
+
+		if (m_playerArrowTexture)
+		{
+			// Apply player rotation (TODO)
+			Matrix4 world = Matrix4::Identity;
+			world = world * Matrix4::GetTrans(Vector3(m_playerPosition.x, m_playerPosition.z, 0.0f));
+			world = world * Quaternion(m_playerOrientation, Vector3::NegativeUnitZ);
+			world = world * Matrix4::GetScale(Vector3(1.0f / GetZoomFactor(), 1.0f / GetZoomFactor(), 1.0f));
+			gx.SetTransformMatrix(World, world);
+			m_playerGeom.Draw();
+		}
+		
 		m_minimapRenderTexture->Update();
 		gx.RestoreState();
 	}

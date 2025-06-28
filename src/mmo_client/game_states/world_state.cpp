@@ -655,8 +655,6 @@ namespace mmo
 
 	void WorldState::OnPaint()
 	{
-		m_minimap.RenderMinimap();
-
 		FrameManager::Get().Draw();
 
 		// Draw world text frames

@@ -12,6 +12,8 @@ namespace mmo
 		MinimapFrame(const String& name, Minimap& minimap);
 
 	public:
+		void DrawSelf() override;
+
 		void PopulateGeometryBuffer() override;
 
 	private:

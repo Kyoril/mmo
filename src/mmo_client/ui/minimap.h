@@ -147,5 +147,8 @@ namespace mmo
 
 		/// @brief Whether the minimap has been initialized.
 		bool m_initialized;
+
+		TexturePtr m_playerArrowTexture;
+		GeometryBuffer m_playerGeom;
 	};
 }

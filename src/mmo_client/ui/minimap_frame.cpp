@@ -12,6 +12,16 @@ namespace mmo
 	{
 	}
 
+	void MinimapFrame::DrawSelf()
+	{
+		if (IsVisible(false))
+		{
+			m_minimap.RenderMinimap();
+		}
+		
+		Frame::DrawSelf();
+	}
+
 	void MinimapFrame::PopulateGeometryBuffer()
 	{
 		TexturePtr texture = m_minimap.GetMinimapTexture();
