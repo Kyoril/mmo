@@ -38,6 +38,12 @@ namespace mmo
 				1, 1);
 		}
 
+		m_partyMemberTexture = TextureManager::Get().CreateOrRetrieve("Interface/Icons/fg4_iconsFlat_bullet_result.htex");
+		if (m_partyMemberTexture)
+		{
+			m_partyMemberTexture->SetTextureAddressMode(TextureAddressMode::Clamp);
+		}
+
 		if (m_minimapRenderTexture)
 		{
 			m_initialized = true;

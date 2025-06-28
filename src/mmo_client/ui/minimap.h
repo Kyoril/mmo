@@ -150,5 +150,8 @@ namespace mmo
 
 		TexturePtr m_playerArrowTexture;
 		GeometryBuffer m_playerGeom;
+
+		TexturePtr m_partyMemberTexture;
+		GeometryBuffer m_partyMemberGeom;
 	};
 }
