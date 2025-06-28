@@ -37,11 +37,17 @@ namespace mmo
 		// Trigger recreation of geometry buffer if needed
 		BufferGeometry();
 
+		// Capture graphics state before applying UI material
+		GraphicsDevice::Get().CaptureState();
+
 		// Render minimap using material instance
 		m_material->Apply(GraphicsDevice::Get(), MaterialDomain::UserInterface, PixelShaderType::UI);
 
 		m_hwBuffer->Set(0);
 		GraphicsDevice::Get().Draw(m_hwBuffer->GetVertexCount(), 0);
+
+		// Restore graphics state after UI rendering
+		GraphicsDevice::Get().RestoreState();
 	}
 
 	void MinimapFrame::PopulateGeometryBuffer()

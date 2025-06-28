@@ -314,7 +314,7 @@ namespace mmo
 		std::vector<uint8> m_vertexShaderCode[5];
 		bool m_vertexShaderChanged { true };
 		std::vector<uint8> m_pixelShaderCode[4]; // Forward, GBuffer and ShadowMap
-		bool m_pixelShaderChanged[3] { true, true, true };
+		bool m_pixelShaderChanged[4] { true, true, true, true };
 		bool m_depthWrite { true };
 		bool m_depthTest { true };
 

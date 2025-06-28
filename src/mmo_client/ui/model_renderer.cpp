@@ -68,11 +68,11 @@ namespace mmo
 			m_frame->GetGeometryBuffer().AppendGeometry(vertices, 6);
 		}
 
+		// Capture the old graphics state (including the render target)
+		gx.CaptureState();
+
 		if (shouldRenderScene)
 		{
-			// Capture the old graphics state (including the render target)
-			gx.CaptureState();
-
 			// Activate render target
 			m_renderTexture->Activate();
 			m_renderTexture->Clear(mmo::ClearFlags::All);

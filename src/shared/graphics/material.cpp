@@ -385,9 +385,13 @@ namespace mmo
 
 		if (pixelShaderType != PixelShaderType::ShadowMap)
 		{
-			device.SetDepthEnabled(m_depthTest);
-			device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
-			device.SetDepthWriteEnabled(m_depthWrite);
+			// Only set depth state for non-UI domains to avoid interfering with 3D rendering
+			if (domain != MaterialDomain::UserInterface)
+			{
+				device.SetDepthEnabled(m_depthTest);
+				device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
+				device.SetDepthWriteEnabled(m_depthWrite);
+			}
 		}
 		else
 		{
