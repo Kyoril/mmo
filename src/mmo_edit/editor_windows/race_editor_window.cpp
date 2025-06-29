@@ -209,6 +209,120 @@ namespace mmo
 				ImGui::EndCombo();
 			}
 		}
+
+		if (ImGui::CollapsingHeader("Initial Items", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			static const char* s_itemNone = "<None>";
+
+			if (ImGui::BeginTable("initialItemsTable", 1, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+			{
+				ImGui::TableSetupColumn("Class & Items", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableHeadersRow();
+
+				// Iterate through all available classes
+				for (int classIndex = 0; classIndex < m_project.classes.count(); classIndex++)
+				{
+					const auto& classEntry = m_project.classes.getTemplates().entry(classIndex);
+					uint32 classId = classEntry.id();
+
+					ImGui::TableNextRow();
+					ImGui::TableNextColumn();
+
+					// Create a unique ID for this class section
+					ImGui::PushID(classId);
+
+					// Class header with expand/collapse
+					bool classNodeOpen = ImGui::TreeNodeEx(classEntry.name().c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+					
+					if (classNodeOpen)
+					{
+						// Get or create initial items for this class
+						auto* initialItems = currentEntry.mutable_initialitems();
+						auto itemsIt = initialItems->find(classId);
+						if (itemsIt == initialItems->end())
+						{
+							// Create new entry for this class
+							(*initialItems)[classId] = proto::InitialItems();
+							itemsIt = initialItems->find(classId);
+						}
+
+						auto& classInitialItems = itemsIt->second;
+
+						// Display current items for this class
+						auto& itemsList = *classInitialItems.mutable_items();
+						
+						// Show existing items
+						for (int itemIndex = 0; itemIndex < itemsList.size(); itemIndex++)
+						{
+							ImGui::PushID(itemIndex);
+							
+							uint32 itemId = itemsList[itemIndex];
+							const auto* itemEntry = m_project.items.getById(itemId);
+							
+							ImGui::Indent();
+							
+							// Item combo box
+							if (ImGui::BeginCombo("##item", itemEntry != nullptr ? itemEntry->name().c_str() : s_itemNone, ImGuiComboFlags_None))
+							{
+								// Allow selecting "None" to remove item
+								if (ImGui::Selectable(s_itemNone, itemId == 0))
+								{
+									itemsList.erase(itemsList.begin() + itemIndex);
+									ImGui::EndCombo();
+									ImGui::Unindent();
+									ImGui::PopID();
+									break; // Break to avoid iterator invalidation
+								}
+
+								for (int i = 0; i < m_project.items.count(); i++)
+								{
+									ImGui::PushID(i);
+									const bool item_selected = m_project.items.getTemplates().entry(i).id() == itemId;
+									const char* item_text = m_project.items.getTemplates().entry(i).name().c_str();
+									if (ImGui::Selectable(item_text, item_selected))
+									{
+										itemsList[itemIndex] = m_project.items.getTemplates().entry(i).id();
+									}
+									if (item_selected)
+									{
+										ImGui::SetItemDefaultFocus();
+									}
+									ImGui::PopID();
+								}
+								ImGui::EndCombo();
+							}
+
+							// Remove button
+							ImGui::SameLine();
+							if (ImGui::Button("Remove"))
+							{
+								itemsList.erase(itemsList.begin() + itemIndex);
+								ImGui::Unindent();
+								ImGui::PopID();
+								break; // Break to avoid iterator invalidation
+							}
+							
+							ImGui::Unindent();
+							ImGui::PopID();
+						}
+
+						// Add new item button
+						ImGui::Indent();
+						if (ImGui::Button("Add Item"))
+						{
+							itemsList.Add(0); // Add a placeholder item that can be configured
+						}
+						ImGui::Unindent();
+
+						ImGui::TreePop();
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndTable();
+			}
+		}
 	}
 
 	void RaceEditorWindow::OnNewEntry(proto::TemplateManager<proto::Races, proto::RaceEntry>::EntryType& entry)
