@@ -159,7 +159,9 @@ namespace mmo
 		///	@param race The character race.
 		///	@param position Position of the character on the map.
 		///	@param orientation Facing of the character in the world.
-		virtual std::optional<CharCreateResult> CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, uint32 characterClass, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy, std::map<uint8, ActionButton> actionButtons, const AvatarConfiguration& configuration) = 0;
+		///	@param items Initial items of the character.
+		virtual std::optional<CharCreateResult> CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, uint32 characterClass, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy, std::map<uint8, ActionButton> actionButtons, const AvatarConfiguration& configuration,
+			const std::vector<ItemData>& items) = 0;
 
 		/// Loads character data of a character who wants to enter a world.
 		///	@param characterId Unique id of the character to load.

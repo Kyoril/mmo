@@ -435,6 +435,121 @@ namespace mmo
 		const uint32 rage = 0;
 		const uint32 energy = player.Get<uint32>(object_fields::MaxEnergy);
 
+		// Item data
+		uint8 bagSlot = 0;
+		std::vector<ItemData> items;
+		std::set<uint16> usedSlots;
+
+		// Add initial items
+		auto it1 = raceEntry->initialitems().find(classInstance->id());
+		if (it1 != raceEntry->initialitems().end())
+		{
+			for (int i = 0; i < it1->second.items_size(); ++i)
+			{
+				const auto* item = m_project.items.getById(it1->second.items(i));
+				if (!item)
+				{
+					continue;
+				}
+
+				// Get slot for this item
+				uint16 slot = 0xffff;
+				switch (item->inventorytype())
+				{
+				case inventory_type::Head:
+					slot = player_equipment_slots::Head;
+					break;
+				case inventory_type::Neck:
+					slot = player_equipment_slots::Neck;
+					break;
+				case inventory_type::Shoulders:
+					slot = player_equipment_slots::Shoulders;
+					break;
+				case inventory_type::Body:
+					slot = player_equipment_slots::Body;
+					break;
+				case inventory_type::Chest:
+				case inventory_type::Robe:
+					slot = player_equipment_slots::Chest;
+					break;
+				case inventory_type::Waist:
+					slot = player_equipment_slots::Waist;
+					break;
+				case inventory_type::Legs:
+					slot = player_equipment_slots::Legs;
+					break;
+				case inventory_type::Feet:
+					slot = player_equipment_slots::Feet;
+					break;
+				case inventory_type::Wrists:
+					slot = player_equipment_slots::Wrists;
+					break;
+				case inventory_type::Hands:
+					slot = player_equipment_slots::Hands;
+					break;
+				case inventory_type::Finger:
+					slot = player_equipment_slots::Finger1;
+					break;
+				case inventory_type::Trinket:
+					slot = player_equipment_slots::Trinket1;
+					break;
+				case inventory_type::Weapon:
+				case inventory_type::TwoHandedWeapon:
+				case inventory_type::MainHandWeapon:
+					slot = player_equipment_slots::Mainhand;
+					break;
+				case inventory_type::Shield:
+				case inventory_type::OffHandWeapon:
+				case inventory_type::Holdable:
+					slot = player_equipment_slots::Offhand;
+					break;
+				case inventory_type::Ranged:
+				case inventory_type::Thrown:
+					slot = player_equipment_slots::Ranged;
+					break;
+				case inventory_type::Cloak:
+					slot = player_equipment_slots::Back;
+					break;
+				case inventory_type::Tabard:
+					slot = player_equipment_slots::Tabard;
+					break;
+
+				default:
+				{
+					if (bagSlot < player_inventory_pack_slots::Count_)
+					{
+						slot = player_inventory_pack_slots::Start + (bagSlot++);
+					}
+					break;
+				}
+				}
+
+				if (slot != 0xffff)
+				{
+					if (usedSlots.contains(slot))
+					{
+						if (bagSlot < player_inventory_pack_slots::Count_)
+						{
+							slot = player_inventory_pack_slots::Start + (bagSlot++);
+						}
+						else
+						{
+							WLOG("Skipped creating item " << item->id() << " because there is not enough space to create this item!");
+							continue;
+						}
+					}
+
+					ItemData itemData;
+					itemData.entry = item->id();
+					itemData.durability = item->durability();
+					itemData.slot = slot | 0xFF00;
+					itemData.stackCount = 1;
+					items.emplace_back(itemData);
+				}
+			}
+		}
+
+
 		std::map<uint8, ActionButton> actionButtons;
 
 		std::vector<uint32> spellIds;
@@ -462,7 +577,7 @@ namespace mmo
 		// Each spell which isn't a passive should (for now) be placed on the action bar
 		DLOG("Creating new character named '" << characterName << "' for account 0x" << std::hex << m_accountId << " (Race: " << raceEntry->id() << "; Class: " << classInstance->id() << "; Gender: " << (uint16)gender << ")...");
 		m_database.asyncRequest(std::move(handler), &IDatabase::CreateCharacter, characterName, this->m_accountId, map, level, hp, gender, race, characterClass, position, rotation,
-			spellIds, mana, rage, energy, actionButtons, configuration);
+			spellIds, mana, rage, energy, actionButtons, configuration, items);
 		
 		return PacketParseResult::Pass;
 	}
@@ -481,8 +596,7 @@ namespace mmo
 		std::scoped_lock<std::mutex> lock{ m_charViewMutex };
 		
 		// Check if such a character exists
-		const auto charIt = m_characterViews.find(charGuid);
-		if (charIt == m_characterViews.end())
+		if (const auto charIt = m_characterViews.find(charGuid); charIt == m_characterViews.end())
 		{
 			WLOG("Tried to delete character 0x" << std::hex << charGuid << " which doesn't exist or belong to the players account!");
 			return PacketParseResult::Disconnect;
@@ -490,17 +604,15 @@ namespace mmo
 
 		// Database callback handler
 		std::weak_ptr weakThis{ shared_from_this() };
-		auto handler = [weakThis](bool success) {
-			if (auto strongThis = weakThis.lock())
+		auto handler = [weakThis](const bool success) {
+			if (const auto strongThis = weakThis.lock())
 			{
-				if (success)
-				{
-					strongThis->DoCharEnum();
-				}
-				else
+				if (!success)
 				{
 					ELOG("Failed to delete character!");
 				}
+
+				strongThis->DoCharEnum();
 			}
 		};
 		

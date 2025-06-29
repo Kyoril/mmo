@@ -351,7 +351,7 @@ namespace mmo
 		}
 	}
 
-	std::optional<CharCreateResult> MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, uint32 characterClass, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy, std::map<uint8, ActionButton> actionButtons, const AvatarConfiguration& configuration)
+	std::optional<CharCreateResult> MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, uint32 characterClass, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy, std::map<uint8, ActionButton> actionButtons, const AvatarConfiguration& configuration, const std::vector<ItemData>& items)
 	{
 		// We check if the character name is already in use by another account. Character names are tied to accounts even after the account deleted that character
 		const String escapedName = m_connection.EscapeString(characterName);
@@ -409,6 +409,39 @@ namespace mmo
 			const String query = customizationQuery.str();
 			if (!m_connection.Execute(query))
 			{
+				PrintDatabaseError();
+				return CharCreateResult::Error;
+			}
+		}
+
+		if (!items.empty())
+		{
+			std::ostringstream fmtStrm;
+			fmtStrm << "INSERT INTO `character_items` (`owner`, `entry`, `slot`, `count`, `durability`) VALUES ";
+
+			// Add items
+			bool isFirstEntry = true;
+			for (const auto& item : items)
+			{
+				if (item.stackCount == 0)
+					continue;;
+
+				if (isFirstEntry)
+				{
+					isFirstEntry = false;
+				}
+				else
+				{
+					fmtStrm << ",";
+				}
+
+				fmtStrm << "(" << characterId << "," << item.entry << "," << item.slot << "," << static_cast<uint16>(item.stackCount) << "," << item.durability << ")";
+			}
+
+			// Now, learn all initial spells
+			if (!m_connection.Execute(fmtStrm.str()))
+			{
+				// Could not learn initial spells
 				PrintDatabaseError();
 				return CharCreateResult::Error;
 			}
