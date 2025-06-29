@@ -1785,9 +1785,6 @@ namespace mmo
 		}
 		else
 		{
-			// Set camera orientation to look straight down
-			const Quaternion topDownOrientation = Quaternion(Degree(-90.0f), Vector3::UnitX);
-
 			// Iterate through all terrain pages
 			uint32 processedPages = 0;
 
@@ -1797,6 +1794,7 @@ namespace mmo
 				{
 					// Get the terrain page
 					terrain::Page* page = m_terrain->GetPage(pageX, pageY);
+
 					// Ensure page is loaded for rendering
 					if (!page->IsLoaded())
 					{
@@ -1811,10 +1809,12 @@ namespace mmo
 					float terrainHeight = page->GetBoundingBox().GetExtents().y;
 
 					// Position camera above the page center
-					const Vector3 cameraPos(worldX, terrainHeight + 150.0f, worldZ);
+					const Vector3 cameraPos(worldX, terrainHeight + 5.0f, worldZ);
 					renderCam->GetParentSceneNode()->SetPosition(cameraPos);
-					renderCam->GetParentSceneNode()->SetOrientation(topDownOrientation);
+					renderCam->GetParentSceneNode()->SetOrientation(Quaternion::Identity);
+					renderCam->GetParentSceneNode()->Pitch(Degree(-89.999f)); // Look straight down
 					renderCam->InvalidateFrustum();
+					renderCam->InvalidateView();
 
 					// Setup render target and projection
 					minimapRT->Activate();

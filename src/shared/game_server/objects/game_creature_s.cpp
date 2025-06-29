@@ -19,6 +19,26 @@ namespace mmo
 	{
 	}
 
+	GameCreatureS::~GameCreatureS()
+	{
+		// Clear AI before destruction to prevent callbacks during destruction
+		if (m_ai)
+		{
+			m_ai.reset();
+		}
+
+		// Clear connections and combat participants
+		m_onSpawned.disconnect();
+		m_combatParticipantGuids.clear();
+		m_lootRecipients.clear();
+
+		// Clear the loot to ensure proper cleanup
+		if (m_loot)
+		{
+			m_loot.reset();
+		}
+	}
+
 	void GameCreatureS::Initialize()
 	{
 		GameUnitS::Initialize();
@@ -41,8 +61,10 @@ namespace mmo
 	{
 		GameUnitS::Relocate(position, facing);
 
-		ASSERT(m_ai);
-		m_ai->OnControlledMoved();
+		if (m_ai)
+		{
+			m_ai->OnControlledMoved();
+		}
 	}
 
 	void GameCreatureS::SetEntry(const proto::UnitEntry& entry)
@@ -173,6 +195,12 @@ namespace mmo
 	QuestgiverStatus GameCreatureS::GetQuestGiverStatus(const GamePlayerS& player) const
 	{
 		QuestgiverStatus result = questgiver_status::None;
+
+		// No quests available for enemy players
+		if (UnitIsEnemy(player))
+		{
+			return result;
+		}
 
 		for (const auto& quest : GetEntry().end_quests())
 		{
@@ -306,7 +334,10 @@ namespace mmo
 		if (m_movement != movementType)
 		{
 			m_movement = movementType;
-			m_ai->OnCreatureMovementChanged();
+			if (m_ai)
+			{
+				m_ai->OnCreatureMovementChanged();
+			}
 		}
 	}
 	void GameCreatureS::RefreshStats()

@@ -55,6 +55,9 @@ namespace mmo
 			TimerQueue& timers,
 			const proto::UnitEntry& entry);
 
+		/// Destructor - properly cleans up AI and connections
+		virtual ~GameCreatureS() override;
+
 		virtual void Initialize() override;
 
 		ObjectTypeId GetTypeId() const override {
@@ -120,9 +123,12 @@ namespace mmo
 
 			for (auto& guid : m_lootRecipients)
 			{
-				if (std::shared_ptr<GamePlayerS> character = std::dynamic_pointer_cast<GamePlayerS>(GetWorldInstance()->FindObjectByGuid(guid)->shared_from_this()))
+				if (auto object = GetWorldInstance()->FindObjectByGuid(guid))
 				{
-					callback(character);
+					if (std::shared_ptr<GamePlayerS> character = std::dynamic_pointer_cast<GamePlayerS>(object->shared_from_this()))
+					{
+						callback(character);
+					}
 				}
 			}
 		}
@@ -144,7 +150,7 @@ namespace mmo
 
 		void RefreshStats() override;
 
-		/// Executes a callback function for every valid loot recipient.
+		/// Executes a callback function for every valid combat participant.
 		template<typename OnParticipant>
 		void ForEachCombatParticipant(OnParticipant callback)
 		{
@@ -155,9 +161,12 @@ namespace mmo
 
 			for (auto& guid : m_combatParticipantGuids)
 			{
-				if (auto character = dynamic_cast<GamePlayerS*>(GetWorldInstance()->FindObjectByGuid(guid)))
+				if (auto object = GetWorldInstance()->FindObjectByGuid(guid))
 				{
-					callback(*character);
+					if (auto character = dynamic_cast<GamePlayerS*>(object))
+					{
+						callback(*character);
+					}
 				}
 			}
 		}
