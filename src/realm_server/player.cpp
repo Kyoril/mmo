@@ -489,9 +489,17 @@ namespace mmo
 					break;
 				case inventory_type::Finger:
 					slot = player_equipment_slots::Finger1;
+					if (usedSlots.contains(slot))
+					{
+						slot = player_equipment_slots::Finger2;
+					}
 					break;
 				case inventory_type::Trinket:
 					slot = player_equipment_slots::Trinket1;
+					if (usedSlots.contains(slot))
+					{
+						slot = player_equipment_slots::Trinket2;
+					}
 					break;
 				case inventory_type::Weapon:
 				case inventory_type::TwoHandedWeapon:
@@ -538,6 +546,9 @@ namespace mmo
 							continue;
 						}
 					}
+
+					// Mark slot as used
+					usedSlots.emplace(slot);
 
 					ItemData itemData;
 					itemData.entry = item->id();
