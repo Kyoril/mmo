@@ -321,9 +321,9 @@ namespace mmo
 		return ms_project->models.getById(displayId);
 	}
 
-	void ObjectMgr::OnItemStackCountChanged(uint64 itemGuid)
+	void ObjectMgr::OnItemStackCountChanged(const uint64 itemGuid)
 	{
-		auto item = Get<GameItemC>(itemGuid);
+		const auto item = Get<GameItemC>(itemGuid);
 		ASSERT(item);
 
 		if (item->Get<uint64>(object_fields::ItemOwner) != ms_activePlayerGuid)
@@ -332,11 +332,18 @@ namespace mmo
 		}
 
 		// Reset counter
+		const uint32 affectedEntry = item->Get<uint32>(object_fields::Entry);
 		ms_itemCount[item->Get<uint32>(object_fields::Entry)] = 0;
 
-		ForEachObject<GameItemC>([](const std::shared_ptr<GameItemC>& object)
+		ForEachObject<GameItemC>([affectedEntry](const std::shared_ptr<GameItemC>& object)
 			{
 				if (object->Get<uint64>(object_fields::ItemOwner) != ms_activePlayerGuid)
+				{
+					return;
+				}
+
+				// This is a different entry, skip it
+				if (object->Get<uint32>(object_fields::Entry) != affectedEntry)
 				{
 					return;
 				}

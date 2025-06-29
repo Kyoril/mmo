@@ -306,6 +306,21 @@ namespace mmo
 			return;
 		}
 
+		// Does this spell require reagents?
+		if (spell->reagents_size() > 0)
+		{
+			for (const auto& reagent : spell->reagents())
+			{
+				ASSERT(reagent.item() != 0);
+				ASSERT(reagent.count() > 0);
+				if (ObjectMgr::GetItemCount(reagent.item()) < reagent.count())
+				{
+					FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "SPELL_CAST_FAILED_REAGENTS");
+					return;
+				}
+			}
+		}
+
 		// Send network packet to start casting the spell
 		m_spellCastId = spellId;
 		m_connector.CastSpell(spellId, targetMap);

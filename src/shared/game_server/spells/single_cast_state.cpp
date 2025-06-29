@@ -292,6 +292,16 @@ namespace mmo
 				SendEndCast(spell_cast_result::FailedError);
 				return false;
 			}
+
+			for (const auto& reagent : m_spell.reagents())
+			{
+				if (playerCaster.GetInventory().GetItemCount(reagent.item()) < reagent.count())
+				{
+					WLOG("Not enough items in inventory!");
+					SendEndCast(spell_cast_result::FailedReagents);
+					return false;
+				}
+			}
 		}
 
 		// Caster either has to be alive or spell has to be castable while dead
@@ -555,6 +565,7 @@ namespace mmo
 				if (character.GetInventory().GetItemCount(reagent.item()) < reagent.count())
 				{
 					WLOG("Not enough items in inventory!");
+					SendEndCast(spell_cast_result::FailedReagents);
 					return false;
 				}
 			}
@@ -565,6 +576,7 @@ namespace mmo
 				const auto* item = character.GetProject().items.getById(reagent.item());
 				if (!item)
 				{
+					SendEndCast(spell_cast_result::FailedReagents);
 					return false;
 				}
 
@@ -572,6 +584,7 @@ namespace mmo
 				if (result != inventory_change_failure::Okay)
 				{
 					ELOG("Could not consume reagents: " << result);
+					SendEndCast(spell_cast_result::FailedReagents);
 					return false;
 				}
 			}
