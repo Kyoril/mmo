@@ -440,17 +440,6 @@ namespace mmo
 			return quest_status::Unavailable;
 		}
 
-		// Check if the quest is available for us
-		if (entry->minlevel() > 0 && GetLevel() < entry->minlevel())
-		{
-			if (GetLevel() == entry->minlevel() - 1)
-			{
-				return quest_status::AvailableNextLevel;
-			}
-
-			return quest_status::Unavailable;
-		}
-
 		if (entry->maxlevel() > 0 && GetLevel() > entry->maxlevel())
 		{
 			return quest_status::Unavailable;
@@ -481,6 +470,17 @@ namespace mmo
 			{
 				return quest_status::Unavailable;
 			}
+		}
+
+		// Check if the quest is available for us
+		if (entry->minlevel() > 0 && GetLevel() < entry->minlevel())
+		{
+			if (GetLevel() == entry->minlevel() - 1)
+			{
+				return quest_status::AvailableNextLevel;
+			}
+
+			return quest_status::Unavailable;
 		}
 
 		return quest_status::Available;
