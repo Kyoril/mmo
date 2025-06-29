@@ -10,6 +10,7 @@
 #include <windowsx.h>
 
 #include <thread>
+#include <string>
 
 
 namespace mmo
@@ -72,7 +73,13 @@ namespace mmo
 			case WM_KEYDOWN:
 				{
 					const bool wasKeyPreviouslyDown = (msg.lParam & (1 << 30)) != 0;
-					KeyDown(static_cast<int32>(msg.wParam), wasKeyPreviouslyDown);
+					const bool isExtendedKey = (msg.lParam & (1 << 24)) != 0;
+					const uint16 scanCode = (msg.lParam >> 16) & 0xFF;
+					
+					// Get the virtual key code
+					int32 virtualKey = static_cast<int32>(msg.wParam);
+					
+					KeyDown(virtualKey, wasKeyPreviouslyDown);
 					break;
 				}
 			case WM_CHAR:

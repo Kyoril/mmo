@@ -116,12 +116,6 @@ namespace mmo
 				return String(1, static_cast<char>(keyCode));
 			}
 
-			// Convert lowercase to uppercase for simplicity
-			if (keyCode >= 'a' && keyCode <= 'z')
-			{
-				return String(1, static_cast<char>(keyCode - 'a' + 'A'));
-			}
-
 			if (keyCode >= 0x60 && keyCode <= 0x69)
 			{
 				return String("NUM-") + String(1, static_cast<char>(keyCode - 0x60 + '0'));
@@ -156,6 +150,12 @@ namespace mmo
 			case 0x13:		return "PAUSE";
 			default:
 				break;
+			}
+
+			// Convert lowercase to uppercase for simplicity
+			if (keyCode >= 'a' && keyCode <= 'z')
+			{
+				return String(1, static_cast<char>(keyCode - 'a' + 'A'));
 			}
 
 			return {};
