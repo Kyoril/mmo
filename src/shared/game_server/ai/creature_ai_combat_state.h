@@ -7,12 +7,82 @@
 #include "base/countdown.h"
 #include "objects/game_unit_s.h"
 #include "math/vector3.h"
+#include "game/spell_target_map.h"
 
 namespace mmo
-{	/// Handle the combat state of a creature AI. In this state, the unit manages
-	/// threat, victim selection, and combat movement against hostile units.
+{
+	/**
+	 * @brief Handles the combat state of a creature AI with intelligent behavior types.
+	 * 
+	 * This class implements a sophisticated combat AI system that supports three distinct
+	 * behavior types based on the creature's spell configuration:
+	 * 
+	 * **Combat Behavior Types:**
+	 * - **Melee**: Traditional close-combat behavior with auto-attacks and melee spells
+	 * - **Caster**: Ranged spellcaster that maintains distance and prioritizes spell casting
+	 * - **Ranged**: Similar to caster but focuses on ranged attacks and abilities
+	 * 
+	 * **Key Features:**
+	 * - **Automatic Behavior Detection**: Analyzes creature spells to determine optimal behavior
+	 * - **Intelligent Range Management**: Maintains appropriate distance based on behavior type
+	 * - **Spell Priority System**: Prioritizes spells by configured priority values
+	 * - **Power Management**: Tracks mana/energy and falls back to melee when depleted
+	 * - **Cooldown Management**: Tracks and respects spell cooldowns
+	 * - **Dynamic Positioning**: Moves to optimal range for spell casting or melee combat
+	 * 
+	 * **Behavior Logic:**
+	 * - Casters and ranged units maintain distance and cast spells as primary actions
+	 * - Melee units chase targets and use spells as supplementary abilities
+	 * - All units fall back to melee combat when out of power or suitable spells
+	 * - Movement is optimized to reduce unnecessary path recalculation
+	 * 
+	 * The system integrates seamlessly with existing threat management, victim selection,
+	 * and combat movement systems while adding intelligent spell-based combat behaviors.
+	 */
 	class CreatureAICombatState : public CreatureAIState
 	{
+	public:
+		/// Defines the combat behavior type of a creature.
+		enum class CombatBehavior
+		{
+			/// Default melee combat behavior - moves to melee range and auto-attacks
+			Melee,
+			/// Caster behavior - maintains range and prioritizes spell casting
+			Caster,
+			/// Ranged behavior - similar to caster but focuses on ranged attacks
+			Ranged
+		};
+
+		/// Represents a spell that a creature can cast in combat.
+		struct CreatureSpell
+		{
+			const proto::SpellEntry* spell;
+			GameTime lastCastTime;
+			GameTime cooldownEnd;
+			float minRange;
+			float maxRange;
+			uint32 priority;
+			bool canCast;
+
+			/**
+			 * @brief Constructs a new creature spell entry.
+			 * @param spellEntry The spell entry.
+			 * @param minRange Minimum casting range.
+			 * @param maxRange Maximum casting range.
+			 * @param priority Spell priority (higher = more important).
+			 */
+			explicit CreatureSpell(const proto::SpellEntry* spellEntry, float minRange = 0.0f, float maxRange = 30.0f, uint32 priority = 100)
+				: spell(spellEntry)
+				, lastCastTime(0)
+				, cooldownEnd(0)
+				, minRange(minRange)
+				, maxRange(maxRange)
+				, priority(priority)
+				, canCast(true)
+			{
+			}
+		};
+
 	private:
 		/// Represents an entry in the threat list of this unit.
 		struct ThreatEntry
@@ -118,6 +188,12 @@ namespace mmo
 		 */
 		void OnControlledMoved() override;
 
+		/**
+		 * @brief Executed when a spell cast ends for the controlled unit.
+		 * @param succeeded Whether the spell cast succeeded.
+		 */
+		void OnSpellCastEnded(bool succeeded);
+
 	private:
 		// === Threat Management ===
 
@@ -198,6 +274,52 @@ namespace mmo
 		// === Combat Logic ===
 
 		/**
+		 * @brief Determines the combat behavior type based on available spells and creature configuration.
+		 * @return The combat behavior type for this creature.
+		 */
+		CombatBehavior DetermineCombatBehavior() const;
+
+		/**
+		 * @brief Checks if the creature can cast spells (has mana/power and available spells).
+		 * @return True if the creature can cast spells.
+		 */
+		bool CanCastSpells() const;
+
+		/**
+		 * @brief Selects the best spell to cast based on current situation.
+		 * @param target The current target.
+		 * @return Pointer to the best spell, or nullptr if no suitable spell.
+		 */
+		const CreatureSpell* SelectBestSpell(const GameUnitS& target) const;
+
+		/**
+		 * @brief Attempts to cast a spell at the target.
+		 * @param spell The spell to cast.
+		 * @param target The target to cast at.
+		 * @return True if spell casting was initiated successfully.
+		 */
+		bool CastSpell(const CreatureSpell& spell, GameUnitS& target);
+
+		/**
+		 * @brief Updates spell cooldowns and availability.
+		 */
+		void UpdateSpellCooldowns();
+
+		/**
+		 * @brief Checks if the creature is in optimal range for its behavior type.
+		 * @param target The target to check range for.
+		 * @return True if in optimal range.
+		 */
+		bool IsInOptimalRange(const GameUnitS& target) const;
+
+		/**
+		 * @brief Moves to optimal range based on combat behavior.
+		 * @param target The target to position for.
+		 * @return True if movement was initiated successfully.
+		 */
+		bool MoveToOptimalRange(GameUnitS& target);
+
+		/**
 		 * @brief Determines the next action to execute.
 		 */
 		void ChooseNextAction();
@@ -210,6 +332,11 @@ namespace mmo
 		bool ShouldResetAI(const GameUnitS* victim) const;
 
 		// === Initialization Helpers ===
+
+		/**
+		 * @brief Initializes the available spells from creature entry.
+		 */
+		void InitializeSpells();
 
 		/**
 		 * @brief Sets up event connections for the combat state.
@@ -232,6 +359,11 @@ namespace mmo
 		ThreatList m_threat;
 		MovementState m_movementState;
 		
+		// === Spell Management ===
+		std::vector<CreatureSpell> m_availableSpells;
+		CombatBehavior m_combatBehavior;
+		GameTime m_lastSpellCastTime;
+		
 		// === Timing and Counters ===
 		GameTime m_lastThreatTime;
 		Countdown m_nextActionCountdown;
@@ -253,6 +385,10 @@ namespace mmo
 		scoped_connection m_getTopThreatener;
 		scoped_connection m_onUnitStateChanged;
 		scoped_connection m_onAutoAttackDone;
+		scoped_connection m_onSpellCastStarted;
+		
+		// === Casting Timeout ===
+		GameTime m_castingTimeoutEnd;
 				// === Constants ===
 		static constexpr float RESET_DISTANCE_SQ = 60.0f * 60.0f;
 		static constexpr uint32 RESET_TIMEOUT_MS = 10000;  // 10 seconds
@@ -260,5 +396,11 @@ namespace mmo
 		static constexpr uint32 ACTION_INTERVAL_MS = 500;
 		/// Movement target range factor (0.75 = move to 75% of attack range to ensure we're close enough)
 		static constexpr float COMBAT_RANGE_FACTOR = 0.75f;
+		/// Optimal caster range (distance to maintain from target)
+		static constexpr float CASTER_OPTIMAL_RANGE = 20.0f;
+		/// Minimum distance to maintain from target for casters
+		static constexpr float CASTER_MIN_RANGE = 8.0f;
+		/// Maximum spell casting range
+		static constexpr float MAX_SPELL_RANGE = 30.0f;
 	};
 }
