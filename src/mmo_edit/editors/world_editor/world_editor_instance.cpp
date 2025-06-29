@@ -13,6 +13,7 @@
 #include "log/default_log_levels.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/material_manager.h"
+#include "scene_graph/render_queue.h"
 #include "scene_graph/scene_node.h"
 #include "selected_map_entity.h"
 #include "stream_sink.h"
@@ -1771,6 +1772,13 @@ namespace mmo
 		Camera* renderCam = m_scene.CreateCamera("MinimapCamera");
 		renderCam->SetProjectionType(ProjectionType::Orthographic);
 		renderCam->SetOrthoWindow(pageSize, pageSize);
+		
+		// Set appropriate clip distances for top-down orthographic view
+		// Near plane should be close to capture terrain details
+		renderCam->SetNearClipDistance(0.1f);
+		// Far plane should be generous to capture tall entities
+		renderCam->SetFarClipDistance(500.0f);
+		
 		SceneNode* camNode = m_scene.GetRootSceneNode().CreateChildSceneNode("MinimapCameraNode");
 		camNode->AttachObject(*renderCam);
 		
@@ -1807,23 +1815,85 @@ namespace mmo
 
 					// Get terrain height at page center for camera positioning
 					float terrainHeight = page->GetBoundingBox().GetExtents().y;
+					
+					// Get the maximum height in this page to ensure we capture all entities
+					float maxHeight = terrainHeight;
+					
+					// Check all map entities in this page to find the maximum height
+					for (const auto& mapEntity : m_mapEntities)
+					{
+						if (mapEntity && &mapEntity->GetSceneNode())
+						{
+							const Vector3& entityPos = mapEntity->GetSceneNode().GetDerivedPosition();
+							
+							// Check if this entity is within the current page bounds
+							if (entityPos.x >= page->GetSceneNode()->GetDerivedPosition().x &&
+								entityPos.x < page->GetSceneNode()->GetDerivedPosition().x + pageSize &&
+								entityPos.z >= page->GetSceneNode()->GetDerivedPosition().z &&
+								entityPos.z < page->GetSceneNode()->GetDerivedPosition().z + pageSize)
+							{
+								// Get the entity's bounding box to determine its height
+								Entity& entity = mapEntity->GetEntity();
+								const AABB& entityBounds = entity.GetBoundingBox();
+								if (!entityBounds.IsNull())
+								{
+									const Vector3 entityWorldPos = mapEntity->GetSceneNode().GetDerivedPosition();
+									const Vector3 entityScale = mapEntity->GetSceneNode().GetDerivedScale();
+									
+									// Calculate the actual world-space top of the entity
+									float entityTop = entityWorldPos.y + (entityBounds.max.y * entityScale.y);
+									maxHeight = std::max(maxHeight, entityTop);
+								}
+							}
+						}
+					}
 
-					// Position camera above the page center
-					const Vector3 cameraPos(worldX, terrainHeight + 5.0f, worldZ);
+					// Position camera high enough above the highest object in the page
+					// Add extra margin to ensure we capture everything
+					const Vector3 cameraPos(worldX, maxHeight + 50.0f, worldZ);
 					renderCam->GetParentSceneNode()->SetPosition(cameraPos);
-					renderCam->GetParentSceneNode()->SetOrientation(Quaternion::Identity);
-					renderCam->GetParentSceneNode()->Pitch(Degree(-89.999f)); // Look straight down
+					
+					// Set up camera to look straight down (negative Y direction)
+					// Camera's default forward is -Z, so we need to rotate 90 degrees around X to look down -Y
+					// This creates a top-down orthographic view where the camera looks down at the XZ terrain plane
+					const Quaternion topDownOrientation = Quaternion(Degree(-90.0f), Vector3::UnitX);
+					renderCam->GetParentSceneNode()->SetOrientation(topDownOrientation);
 					renderCam->InvalidateFrustum();
 					renderCam->InvalidateView();
 
 					// Setup render target and projection
 					minimapRT->Activate();
 					minimapRT->Clear(ClearFlags::All);
+					
+					// Temporarily change entity render queue groups to match terrain for consistent rendering
+					std::vector<std::pair<Entity*, uint8>> originalRenderQueues;
+					for (const auto& mapEntity : m_mapEntities)
+					{
+						if (mapEntity && &mapEntity->GetSceneNode())
+						{
+							const Vector3& entityPos = mapEntity->GetSceneNode().GetDerivedPosition();
+							if (entityPos.x >= page->GetSceneNode()->GetDerivedPosition().x &&
+								entityPos.x < page->GetSceneNode()->GetDerivedPosition().x + pageSize &&
+								entityPos.z >= page->GetSceneNode()->GetDerivedPosition().z &&
+								entityPos.z < page->GetSceneNode()->GetDerivedPosition().z + pageSize)
+							{
+								Entity& entity = mapEntity->GetEntity();
+								originalRenderQueues.emplace_back(&entity, entity.GetRenderQueueGroup());
+								entity.SetRenderQueueGroup(WorldGeometry1); // Same as terrain
+							}
+						}
+					}
 
 					// Render the scene (terrain and objects in this page)
 					m_scene.SetFogRange(10000.0f, 100000.0f);
 					m_scene.Render(*renderCam, PixelShaderType::Forward);
 					minimapRT->Update();
+
+					// Restore original render queue groups
+					for (const auto& [entity, originalQueue] : originalRenderQueues)
+					{
+						entity->SetRenderQueueGroup(originalQueue);
+					}
 
 					// Create texture from render target
 					TexturePtr minimapTexture = minimapRT->StoreToTexture();
