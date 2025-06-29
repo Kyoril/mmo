@@ -275,7 +275,9 @@ namespace mmo
 		auto it = m_soundCache.find(cacheKey);
 		if (it != m_soundCache.end())
 		{
-			return it->second;
+			// Update last used time
+			it->second.lastUsedTime = m_currentTime;
+			return it->second.soundIndex;
 		}
 
 		FMOD_RESULT result;
@@ -337,7 +339,10 @@ namespace mmo
 		newSoundInstance->SetFMODSound(sound);
 
 		// Add to cache
-		m_soundCache[cacheKey] = soundIndex;
+		SoundCacheEntry cacheEntry;
+		cacheEntry.soundIndex = m_nextSoundInstanceIndex;
+		cacheEntry.lastUsedTime = m_currentTime;
+		m_soundCache[cacheKey] = cacheEntry;
 
 		return m_nextSoundInstanceIndex;
 	}
@@ -351,6 +356,16 @@ namespace mmo
 
 		// Increment time for channel tracking
 		m_currentTime++;
+
+		// Update last used time for this sound in cache
+		for (auto& pair : m_soundCache)
+		{
+			if (pair.second.soundIndex == sound)
+			{
+				pair.second.lastUsedTime = m_currentTime;
+				break;
+			}
+		}
 
 		// Find a suitable channel
 		ChannelIndex channelIndexTemp;
@@ -700,6 +715,14 @@ namespace mmo
 	{
 		if (index != InvalidSound && index < m_soundInstanceVector.capacity())
 		{
+			// Release the FMOD sound object before clearing
+			FMODSoundInstance& instance = m_soundInstanceVector[index];
+			FMOD::Sound* sound = instance.GetFMODSound();
+			if (sound)
+			{
+				sound->release();
+			}
+			
 			m_soundInstanceVector[index].Clear();
 			m_freeSoundIndices.push_back(index);
 		}
@@ -708,38 +731,55 @@ namespace mmo
 	void FMODAudio::CleanupUnusedSounds(bool forceCleanup)
 	{
 		if (!forceCleanup && (m_currentTime - m_lastCleanupTime < CleanupInterval))
+		{
 			return;
+		}
 
 		m_lastCleanupTime = m_currentTime;
 
-		// Check which sounds are not being used by any channel
+		// Check which sounds are currently being used by active channels
 		std::unordered_set<SoundIndex> activeSounds;
 
 		for (int i = 0; i < MaximumSoundChannels; i++)
 		{
 			if (m_channelArray[i].IsPlaying())
 			{
-				// Determine which sound this channel is playing
-				// This would require tracking the sound index in the channel
-				// For now, we'll skip this optimization
+				SoundIndex soundIndex = m_channelArray[i].GetSoundIndex();
+				if (soundIndex != InvalidSound)
+				{
+					activeSounds.insert(soundIndex);
+				}
 			}
 		}
 
 		// For cached sounds that haven't been used recently, release them
 		std::vector<String> soundsToRemove;
+		const uint64_t unusedTimeThreshold = 5000; // Remove sounds not used for 5000 updates
+
 		for (const auto& pair : m_soundCache)
 		{
-			// If sound is not active and hasn't been played recently, remove it
-			// You'd need additional tracking for "last used time"
-			// For now, we'll keep this as a placeholder
+			const SoundCacheEntry& entry = pair.second;
+			
+			// Skip if sound is currently active
+			if (activeSounds.find(entry.soundIndex) != activeSounds.end())
+			{
+				continue;
+			}
+
+			// Check if sound hasn't been used recently
+			if (m_currentTime - entry.lastUsedTime > unusedTimeThreshold)
+			{
+				soundsToRemove.push_back(pair.first);
+			}
 		}
 
+		// Remove unused sounds from cache and release their indices
 		for (const auto& soundName : soundsToRemove)
 		{
 			auto it = m_soundCache.find(soundName);
 			if (it != m_soundCache.end())
 			{
-				ReleaseSoundIndex(it->second);
+				ReleaseSoundIndex(it->second.soundIndex);
 				m_soundCache.erase(it);
 			}
 		}

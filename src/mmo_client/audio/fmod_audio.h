@@ -1,4 +1,3 @@
-
 #pragma once
 #include <unordered_map>
 
@@ -155,7 +154,13 @@ namespace mmo
 		uint64_t m_currentTime; // For tracking playing times
 
 	private:
-		std::unordered_map<String, SoundIndex> m_soundCache;
+		struct SoundCacheEntry
+		{
+			SoundIndex soundIndex;
+			uint64_t lastUsedTime;
+		};
+
+		std::unordered_map<String, SoundCacheEntry> m_soundCache;
 		std::vector<SoundIndex> m_freeSoundIndices;
 
 		SoundIndex AllocateSoundIndex();
