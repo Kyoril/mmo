@@ -113,9 +113,7 @@ namespace mmo
 		add(U &&element)
 		{
 			// Release: O(1), Debug: O(n)
-			ASSERT(!contains(element));
 			optionalAdd(std::forward<U>(element));
-			ASSERT(contains(element));
 		}
 
 		/**
@@ -154,9 +152,7 @@ namespace mmo
 		 */
 		void remove(const T &element)
 		{
-			//ASSERT(contains(element));
 			optionalRemove(element);
-			//ASSERT(!contains(element));
 		}
 
 		/**

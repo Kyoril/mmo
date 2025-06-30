@@ -53,6 +53,21 @@ namespace mmo
 		if (controlled.IsAlive())
 		{
 			controlled.Set<uint32>(object_fields::Health, controlled.GetMaxHealth());
+
+			// Also restore full mana / energy if applicable
+			if (controlled.GetPowerType() == power_type::Mana)
+			{
+				controlled.Set<uint32>(object_fields::Mana, controlled.GetMaxPower());
+			}
+			else if (controlled.GetPowerType() == power_type::Energy)
+			{
+				controlled.Set<uint32>(object_fields::Energy, controlled.GetMaxPower());
+			}
+			else if (controlled.GetPowerType() == power_type::Rage)
+			{
+				// Rage is reset to 0 on reset
+				controlled.Set<uint32>(object_fields::Rage, 0);
+			}
 		}
 
 		CreatureAIState::OnLeave();

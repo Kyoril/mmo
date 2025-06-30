@@ -112,6 +112,9 @@ namespace mmo
 			}
 		});
 
+		// Start regeneration in combat
+		controlled.StartRegeneration();
+
 		// Raise OnAggro triggers
 		if (initiator)
 		{
@@ -137,6 +140,9 @@ namespace mmo
 
 		auto& controlled = GetControlled();
 		controlled.SetInCombat(false, false);
+
+		// Stop regeneration out of combat
+		controlled.StopRegeneration();
 
 		// Stop movement and reset movement state
 		controlled.GetMover().StopMovement();

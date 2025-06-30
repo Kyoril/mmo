@@ -570,6 +570,13 @@ namespace mmo
 
 			Set<uint32>(object_fields::PowerType, gamePowerType);
 		}
+
+		if (unitClass->spiritpermanaregen() != 0.0f)
+		{
+			m_manaRegenPerTick = (static_cast<float>(Get<uint32>(object_fields::StatSpirit)) / unitClass->spiritpermanaregen());
+		}
+		m_manaRegenPerTick += unitClass->basemanaregenpertick();
+		m_manaRegenPerTick = std::max(m_manaRegenPerTick, 0.0f);
 	}
 
 	const String& GameCreatureS::GetName() const
