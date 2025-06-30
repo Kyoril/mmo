@@ -1094,6 +1094,7 @@ namespace mmo
 		}
 
 		auto result = PacketParseResult::Disconnect;
+		bool hasItemUpdates = false;
 		for (auto i = 0; i < numObjectUpdates; ++i)
 		{
 			result = PacketParseResult::Disconnect;
@@ -1251,6 +1252,13 @@ namespace mmo
 					return PacketParseResult::Disconnect;
 				}
 
+				// Check if this was an item update for the active player
+				if ((obj->GetTypeId() == ObjectTypeId::Item || obj->GetTypeId() == ObjectTypeId::Container) &&
+					obj->Get<uint64>(object_fields::ItemOwner) == ObjectMgr::GetActivePlayerGuid())
+				{
+					hasItemUpdates = true;
+				}
+
 				if (obj->Get<uint32>(object_fields::Type) == static_cast<uint32>(ObjectTypeId::Unit))
 				{
 					if (obj->GetGuid() != ObjectMgr::GetActivePlayerGuid())
@@ -1265,6 +1273,12 @@ namespace mmo
 			}
 			
 			result = PacketParseResult::Pass;
+		}
+		
+		// If we had item updates for the active player, trigger UI refresh
+		if (hasItemUpdates)
+		{
+			FrameManager::Get().TriggerLuaEvent("ITEM_COUNT_CHANGED");
 		}
 		
 		return result;
@@ -1306,7 +1320,24 @@ namespace mmo
 				m_playerController->SetControlledUnit(nullptr);
 			}
 			
+			// Check if this is an item owned by the active player before removing it
+			bool shouldTriggerItemEvent = false;
+			if (const auto object = ObjectMgr::Get<GameObjectC>(id))
+			{
+				if ((object->GetTypeId() == ObjectTypeId::Item || object->GetTypeId() == ObjectTypeId::Container) &&
+					object->Get<uint64>(object_fields::ItemOwner) == ObjectMgr::GetActivePlayerGuid())
+				{
+					shouldTriggerItemEvent = true;
+				}
+			}
+			
 			ObjectMgr::RemoveObject(id);
+			
+			// Trigger UI event after the object has been removed from ObjectMgr
+			if (shouldTriggerItemEvent)
+			{
+				FrameManager::Get().TriggerLuaEvent("ITEM_COUNT_CHANGED");
+			}
 		}
 		
 		return PacketParseResult::Pass;

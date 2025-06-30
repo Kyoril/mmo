@@ -76,7 +76,7 @@ namespace mmo
 					ms_itemCount[itemId] = stackCount;
 				}
 
-				ms_itemConnections[itemId] = object->RegisterMirrorHandler(object_fields::StackCount, 1, &ObjectMgr::OnItemStackCountChanged);
+				ms_itemConnections[object->GetGuid()] = object->RegisterMirrorHandler(object_fields::StackCount, 1, &ObjectMgr::OnItemStackCountChanged);
 			}
 		}
 	}
@@ -93,15 +93,20 @@ namespace mmo
 				{
 					const uint32 itemId = it->second->Get<uint32>(object_fields::Entry);
 					const uint32 stackCount = it->second->Get<uint32>(object_fields::StackCount);
-
+					
 					ASSERT(ms_itemCount.contains(itemId));
 					ms_itemCount[itemId] -= stackCount;
+
+					// Remove the connection for this specific item instance
+					ms_itemConnections.erase(guid);
+
+					// If this was the last item of this type, remove the item count entry
+					if (ms_itemCount[itemId] == 0)
+					{
+						ms_itemCount.erase(itemId);
+					}
 				}
 			}
-
-			// No longer watch for item field changes
-			const uint32 itemId = it->second->Get<uint32>(object_fields::Entry);
-			ms_itemConnections.erase(itemId);
 
 			ms_objectyByGuid.erase(it);
 		}
@@ -350,6 +355,5 @@ namespace mmo
 
 				ms_itemCount[object->Get<uint32>(object_fields::Entry)] += object->Get<uint32>(object_fields::StackCount);
 			});
-
 	}
 }
