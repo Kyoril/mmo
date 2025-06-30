@@ -4,6 +4,7 @@
 #include "geometry_buffer.h"
 #include "frame.h"
 #include "font_mgr.h"
+#include "hyperlink.h"
 
 #include "base/utilities.h"
 
@@ -17,6 +18,18 @@ namespace mmo
 	TextComponent::TextComponent(Frame& frame)
 		: FrameComponent(frame)
 	{
+		// Connect hyperlink clicked signal to frame event system
+		HyperlinkClicked.connect([this](const std::string& type, const std::string& payload)
+		{
+			// Trigger a generic hyperlink event that can be handled in Lua
+			m_frame->TriggerEvent("HYPERLINK_CLICKED", type, payload);
+		});
+
+		// Connect to frame's mouse down event to handle hyperlink clicks
+		m_frame->MouseDown.connect([this](const MouseEventArgs& args)
+		{
+			OnMouseClick(Point(static_cast<float>(args.GetX()), static_cast<float>(args.GetY())));
+		});
 	}
 
 	std::unique_ptr<FrameComponent> TextComponent::Copy() const
@@ -185,18 +198,22 @@ namespace mmo
 		// Gets the text that should be displayed for this frame.
 		const std::string& text = m_frame->GetVisualText();
 
-		// Now, split the text in lines depending on formatting
+		// Parse the text for hyperlinks and color formatting
+		m_parsedText = ParseTextMarkup(text, m_color);
+
+		// Now, split the parsed plain text in lines depending on formatting
+		const std::string& plainText = m_parsedText.plainText;
 		std::string::size_type pos = 0;
 		std::string::size_type prev = 0;
-		while ((pos = text.find('\n', prev)) != std::string::npos)
+		while ((pos = plainText.find('\n', prev)) != std::string::npos)
 		{
 			// Capture the line
-			m_lineCache.push_back(text.substr(prev, pos - prev));
+			m_lineCache.push_back(plainText.substr(prev, pos - prev));
 			prev = pos + 1;
 		}
 
 		// Append last line remaining
-		m_lineCache.push_back(text.substr(prev));
+		m_lineCache.push_back(plainText.substr(prev));
 
 		// Apply wrapping to each line and eventually split the lines into even more lines by doing so
 		ApplyWrapping(area);
@@ -289,35 +306,31 @@ namespace mmo
 				position.y += frameRect.GetHeight() - font->GetHeight(textScale);
 			}
 
-			// Now, render each line of text, separately
-			for (const auto& line : m_lineCache)
+			// Now, render the parsed text with hyperlink support
+			// Apply color multiplication
+			Color c = color;
+			c *= m_color;
+
+			// Use hyperlink-aware text rendering for the entire parsed text
+			font->DrawTextWithHyperlinks(m_parsedText, position, m_frame->GetGeometryBuffer(), textScale, c.GetARGB());
+		}
+	}
+
+	void TextComponent::OnMouseClick(const Point& position)
+	{
+		// Check if any hyperlink was clicked
+		for (const auto& hyperlink : m_parsedText.hyperlinks)
+		{
+			if (hyperlink.bounds.IsPointInRect(position))
 			{
-				// Calculate the text width and cache it for later use
-				const float width = font->GetTextWidth(line, textScale);
-
-				// Apply horizontal alignment
-				position.x = frameRect.GetPosition().x;
-				if (m_horzAlignment == HorizontalAlignment::Center)
-				{
-					position.x += frameRect.GetWidth() * 0.5f - width * 0.5f;
-				}
-				else if (m_horzAlignment == HorizontalAlignment::Right)
-				{
-					position.x += frameRect.GetWidth() - width;
-				}
-
-				// Apply color multiplication
-				Color c = color;
-				c *= m_color;
-
-				// Determine the position to render the font at
-				font->DrawText(line, position, m_frame->GetGeometryBuffer(), textScale, c);
-				position.y += font->GetHeight(textScale);
+				// Fire the hyperlink clicked signal
+				HyperlinkClicked(hyperlink.type, hyperlink.payload);
+				break;
 			}
 		}
 	}
 
-	VerticalAlignment VerticalAlignmentByName(const std::string & name)
+	VerticalAlignment VerticalAlignmentByName(const std::string& name)
 	{
 		if (_stricmp(name.c_str(), "CENTER") == 0)
 		{

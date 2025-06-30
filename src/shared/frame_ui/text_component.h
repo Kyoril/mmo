@@ -5,6 +5,7 @@
 #include "frame_component.h"
 #include "font.h"
 #include "base/signal.h"
+#include "hyperlink.h"
 
 #include "base/typedefs.h"
 
@@ -48,6 +49,10 @@ namespace mmo
 		: public FrameComponent
 	{
 	public:
+		/// Signal fired when a hyperlink is clicked, passing type and payload
+		signal<void(const std::string& type, const std::string& payload)> HyperlinkClicked;
+
+	public:
 		/// Creates a frame font string object which can be used to draw a text.
 		explicit TextComponent(Frame& frame);
 
@@ -84,6 +89,9 @@ namespace mmo
 
 		void OnFrameChanged() override;
 
+		/// Handles mouse click events to check for hyperlink clicks
+		void OnMouseClick(const Point& position);
+
 	private:
 		/// This function caches some values required for rendering the text using this component's properites.
 		void CacheText(const Rect& area);
@@ -103,6 +111,9 @@ namespace mmo
 		VerticalAlignment m_vertAlignment = VerticalAlignment::Top;
 		/// A cache for text lines with wrapping applied.
 		std::vector<std::string> m_lineCache;
+
+		/// Cache for parsed text including hyperlinks
+		ParsedText m_parsedText;
 
 		std::string m_horzAlignPropertyName;
 

@@ -1,7 +1,7 @@
-﻿
-#include "scrolling_message_frame.h"
+﻿#include "scrolling_message_frame.h"
 #include "frame_mgr.h"
 #include "frame_ui/inline_color.h"
+#include "hyperlink.h"
 
 #include <algorithm>
 
@@ -155,10 +155,39 @@ namespace mmo
 		const float textScale = FrameManager::Get().GetUIScale().y;
 		const float lineHeight = GetFont()->GetHeight(textScale);
 
-		int linesRendered = GetFont()->DrawText(line.line, frameRect + Rect(0.0f, 0.0f, 1024.0f, 0.0), &m_geometryBuffer, textScale, Color(line.message->r, line.message->g, line.message->b, 1.0f));
-		frameRect.top += lineHeight * linesRendered;
+		// Store the render position for this line
+		Point renderPos = frameRect.GetPosition();
+		const_cast<LineInfo&>(line).renderPosition = renderPos;
 
-		return linesRendered;
+		// Use hyperlink-aware text rendering if we have hyperlinks
+		if (!line.parsedText.hyperlinks.empty())
+		{
+			// Make a mutable copy for bounds calculation
+			ParsedText mutableParsedText = line.parsedText;
+			try 
+			{
+				GetFont()->DrawTextWithHyperlinks(mutableParsedText, renderPos, m_geometryBuffer, textScale, 
+												  Color(line.message->r, line.message->g, line.message->b, 1.0f).GetARGB());
+				
+				// Update the original line's hyperlinks with calculated bounds
+				const_cast<LineInfo&>(line).parsedText = mutableParsedText;
+			}
+			catch (...)
+			{
+				// Fallback to regular text rendering if hyperlink rendering fails
+				GetFont()->DrawText(line.parsedText.plainText, renderPos, m_geometryBuffer, textScale, 
+								   Color(line.message->r, line.message->g, line.message->b, 1.0f).GetARGB());
+			}
+		}
+		else
+		{
+			// No hyperlinks, use regular text rendering
+			GetFont()->DrawText(line.parsedText.plainText, renderPos, m_geometryBuffer, textScale, 
+							   Color(line.message->r, line.message->g, line.message->b, 1.0f).GetARGB());
+		}
+
+		frameRect.top += lineHeight;
+		return 1; // Always render as single line since we're handling wrapping ourselves
 	}
 
 	void ScrollingMessageFrame::OnMessagesChanged()
@@ -176,66 +205,87 @@ namespace mmo
 
 			for (const auto& message : m_messages)
 			{
-				float      glyphPos = position.x;
-				std::string line;
+				// Parse the entire message for hyperlinks and colors
+				ParsedText parsedMessage = ParseTextMarkup(message.message, Color(message.r, message.g, message.b, 1.0f).GetARGB());
+				
+				// For simplicity, create line breaks based on text width
+				// Split the parsed plain text into lines that fit within the frame width
+				std::vector<std::string> wrappedLines;
+				std::string currentLine;
+				float currentWidth = 0.0f;
+				const float maxWidth = contentRect.GetWidth();
 
-				argb_t      dummyColor = 0;  // not needed for width calc
-				argb_t      currentColor = dummyColor;
-				std::string currentTag;        // active |c... token (empty => default)
-
-				for (std::size_t c = 0; c < message.message.length(); /* inc. in loop */)
+				for (std::size_t i = 0; i < parsedMessage.plainText.length(); ++i)
 				{
-					const std::size_t tokenStart = c;
-					if (ConsumeColourTag(message.message, c, currentColor, dummyColor))
+					char c = parsedMessage.plainText[i];
+					
+					if (c == '\n')
 					{
-						// copy the whole colour token verbatim
-						line.append(message.message, tokenStart, c - tokenStart);
-
-						// remember current colour so we can continue it after wraps
-						if (message.message[tokenStart + 1] == 'c' || message.message[tokenStart + 1] == 'C')
-							currentTag = message.message.substr(tokenStart, 10);
-						else
-							currentTag.clear(); // |r
-
+						// Forced line break
+						wrappedLines.push_back(currentLine);
+						currentLine.clear();
+						currentWidth = 0.0f;
 						continue;
 					}
 
-					std::size_t iterations = 1;
-					char g = message.message[c++];
-
-					if (g == '\t')
+					if (const FontGlyph* glyph = font->GetGlyphData(c))
 					{
-						g = ' ';
-						iterations = 4;
-					}
-
-					if (const FontGlyph* glyph = font->GetGlyphData(g))
-					{
-						glyphPos += glyph->GetAdvance(textScale) * iterations;
-
-						if (glyphPos >= contentRect.right)
+						float charWidth = glyph->GetAdvance(textScale);
+						
+						if (currentWidth + charWidth > maxWidth && !currentLine.empty())
 						{
-							// push finished line
-							m_lineCache.push_back({ .line= line, .message= &message});
-
-							// start new line with current colour
-							line.clear();
-							if (!currentTag.empty())
-								line += currentTag;
-							line.push_back(g);
-
-							glyphPos = position.x;
+							// Line would be too long, break here
+							wrappedLines.push_back(currentLine);
+							currentLine = c;
+							currentWidth = charWidth;
 						}
 						else
 						{
-							line.push_back(g);
+							currentLine += c;
+							currentWidth += charWidth;
 						}
+					}
+					else
+					{
+						currentLine += c;
 					}
 				}
 
-				if (!line.empty())
+				if (!currentLine.empty())
 				{
-					m_lineCache.push_back({ .line = line, .message = &message });
+					wrappedLines.push_back(currentLine);
+				}
+
+				// Create LineInfo for each wrapped line
+				// For now, hyperlinks will only work if they don't span multiple lines
+				for (const auto& lineText : wrappedLines)
+				{
+					LineInfo lineInfo;
+					lineInfo.line = lineText;
+					lineInfo.message = &message;
+					
+					// Create ParsedText for this line by filtering hyperlinks that are contained within it
+					lineInfo.parsedText.plainText = lineText;
+					lineInfo.parsedText.colorChanges.push_back({0, Color(message.r, message.g, message.b, 1.0f).GetARGB()});
+					
+					// Find hyperlinks that are completely contained in this line
+					std::size_t lineStartInOriginal = parsedMessage.plainText.find(lineText);
+					if (lineStartInOriginal != std::string::npos)
+					{
+						for (const auto& hyperlink : parsedMessage.hyperlinks)
+						{
+							// Simple check: if the hyperlink display text is contained in this line
+							std::size_t hyperlinkPos = lineText.find(hyperlink.displayText);
+							if (hyperlinkPos != std::string::npos)
+							{
+								Hyperlink lineHyperlink = hyperlink;
+								// Adjust the hyperlink position relative to the line start
+								lineInfo.parsedText.hyperlinks.push_back(lineHyperlink);
+							}
+						}
+					}
+					
+					m_lineCache.push_back(lineInfo);
 				}
 			}
 		}
@@ -246,5 +296,54 @@ namespace mmo
 		}
 
 		Invalidate(false);
+	}
+
+	void ScrollingMessageFrame::OnMouseDown(MouseButton button, int32 buttons, const Point& position)
+	{
+		// Call parent implementation first
+		Frame::OnMouseDown(button, buttons, position);
+
+		// Convert position to relative coordinates within the frame
+		Rect frameRect = GetAbsoluteFrameRect();
+		Point relativePos = position - frameRect.GetPosition();
+
+		// Check if any hyperlink was clicked
+		const float textScale = FrameManager::Get().GetUIScale().y;
+		const float lineHeight = GetFont() ? GetFont()->GetHeight(textScale) : 16.0f;
+		
+		for (int i = m_linePosition; i < static_cast<int>(m_lineCache.size()) && i < m_linePosition + m_visibleLineCount; ++i)
+		{
+			if (i < 0 || i >= static_cast<int>(m_lineCache.size()))
+				continue;
+				
+			const auto& line = m_lineCache[i];
+			
+			// Calculate the line's Y position relative to the frame
+			int lineIndex = i - m_linePosition;
+			float lineY = lineIndex * lineHeight;
+			
+			// Check if click is within this line's Y range
+			if (relativePos.y < lineY || relativePos.y > lineY + lineHeight)
+				continue;
+				
+			for (const auto& hyperlink : line.parsedText.hyperlinks)
+			{
+				// Check if bounds are valid
+				if (hyperlink.bounds.GetWidth() <= 0 || hyperlink.bounds.GetHeight() <= 0)
+					continue;
+					
+				// Convert hyperlink bounds from render coordinates to frame-relative coordinates
+				Rect adjustedBounds = hyperlink.bounds;
+				adjustedBounds.top = lineY;
+				adjustedBounds.bottom = lineY + lineHeight;
+				
+				if (adjustedBounds.IsPointInRect(relativePos))
+				{
+					// Trigger hyperlink click event
+					TriggerEvent("HYPERLINK_CLICKED", this, hyperlink.type, hyperlink.payload);
+					return;
+				}
+			}
+		}
 	}
 }

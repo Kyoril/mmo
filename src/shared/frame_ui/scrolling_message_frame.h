@@ -1,6 +1,7 @@
 #pragma once
 
 #include "frame.h"
+#include "hyperlink.h"
 
 namespace mmo
 {
@@ -44,14 +45,19 @@ namespace mmo
 
 		const Message& GetMessageAt(size_t index) const;
 
+		/// Handles mouse click events to check for hyperlink clicks
+		virtual void OnMouseDown(MouseButton button, int32 buttons, const Point& position) override;
+
 	private:
 		void PopulateGeometryBuffer() override;
 
 
 		struct LineInfo
 		{
-			String line;
+			std::string line;
 			const Message* message;
+			ParsedText parsedText;
+			Point renderPosition;
 		};
 
 		int RenderLine(const LineInfo& line, Rect& frameRect);

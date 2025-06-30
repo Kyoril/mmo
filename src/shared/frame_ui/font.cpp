@@ -813,4 +813,144 @@ namespace mmo
 
 		return lineCount;
 	}
+
+	void Font::DrawTextWithHyperlinks(ParsedText& parsedText, const Point& position, GeometryBuffer& buffer, float scale, argb_t color)
+	{
+		const float baseline = position.y + GetBaseline(scale);
+		Point glyphPos(position);
+
+		argb_t currentColour = color;
+		std::size_t colorChangeIndex = 0;
+
+		// Track hyperlinks by their position in the plain text
+		std::vector<std::pair<std::size_t, std::size_t>> hyperlinkRanges; // start, end positions
+		
+		// Use the stored plainText positions instead of searching
+		for (const auto& hyperlink : parsedText.hyperlinks)
+		{
+			hyperlinkRanges.push_back({hyperlink.plainTextStart, hyperlink.plainTextEnd});
+		}
+
+		// Track current hyperlink bounds
+		std::size_t currentHyperlinkIndex = 0;
+		Point hyperlinkStartPos;
+		bool inHyperlink = false;
+
+		for (std::size_t plainIndex = 0; plainIndex < parsedText.plainText.length(); /* increment inside loop */)
+		{
+			// Check for color changes at this position
+			while (colorChangeIndex < parsedText.colorChanges.size() && 
+				   parsedText.colorChanges[colorChangeIndex].first == plainIndex)
+			{
+				currentColour = parsedText.colorChanges[colorChangeIndex].second;
+				++colorChangeIndex;
+			}
+
+			// Check if we're starting a hyperlink
+			if (!inHyperlink && currentHyperlinkIndex < hyperlinkRanges.size())
+			{
+				if (hyperlinkRanges[currentHyperlinkIndex].first == plainIndex)
+				{
+					inHyperlink = true;
+					hyperlinkStartPos = glyphPos;
+				}
+			}
+
+			std::size_t iterations = 1;
+			uint32 codepoint;
+			
+			// Handle special ASCII control characters
+			if (plainIndex >= parsedText.plainText.length())
+			{
+				break; // Safety check
+			}
+			
+			if (parsedText.plainText[plainIndex] == '\t')
+			{
+				codepoint = ' ';
+				iterations = 4;
+				plainIndex++;
+			}
+			else if (parsedText.plainText[plainIndex] == '\n')
+			{
+				glyphPos.x = position.x;
+				glyphPos.y = (glyphPos.y - baseline) + GetHeight(scale) + baseline;
+				plainIndex++;
+				
+				// End current hyperlink if we hit a newline
+				if (inHyperlink && currentHyperlinkIndex < parsedText.hyperlinks.size())
+				{
+					parsedText.hyperlinks[currentHyperlinkIndex].bounds = 
+						Rect(hyperlinkStartPos.x, hyperlinkStartPos.y, glyphPos.x, hyperlinkStartPos.y + GetHeight(scale));
+					inHyperlink = false;
+					++currentHyperlinkIndex;
+				}
+				continue;
+			}
+			else
+			{
+				// Process UTF-8 character
+				size_t startPos = plainIndex;
+				codepoint = utf8::next_codepoint(parsedText.plainText, plainIndex);
+				
+				// If we couldn't decode a valid codepoint, skip this byte
+				if (codepoint == 0 && startPos < plainIndex)
+				{
+					continue;
+				}
+				
+				// Safety check for index overflow
+				if (plainIndex > parsedText.plainText.length())
+				{
+					plainIndex = parsedText.plainText.length();
+					break;
+				}
+			}
+
+			if (const FontGlyph* glyph = GetGlyphData(codepoint))
+			{
+				const FontImage* img = glyph->GetImage();
+				if (img != nullptr)
+				{
+					const Point drawPos = {
+						glyphPos.x,
+						baseline - (img->GetOffsetY() - img->GetOffsetY() * scale) + 4.0f
+					};
+
+					if (m_shadowX != 0.0f || m_shadowY != 0.0f)
+					{
+						img->Draw(drawPos + Point(m_shadowX, m_shadowY), img->GetSize() * scale, buffer,
+							Color(0.0f, 0.0f, 0.0f, Color(currentColour).GetAlpha()));
+					}
+
+					img->Draw(drawPos, img->GetSize() * scale, buffer, currentColour);
+
+					glyphPos.x += glyph->GetAdvance(scale) * iterations;
+				}
+
+				// Check if we're ending a hyperlink
+				if (inHyperlink && currentHyperlinkIndex < hyperlinkRanges.size())
+				{
+					if (plainIndex >= hyperlinkRanges[currentHyperlinkIndex].second)
+					{
+						// End the hyperlink bounds
+						if (currentHyperlinkIndex < parsedText.hyperlinks.size())
+						{
+							parsedText.hyperlinks[currentHyperlinkIndex].bounds = 
+								Rect(hyperlinkStartPos.x, hyperlinkStartPos.y, glyphPos.x, hyperlinkStartPos.y + GetHeight(scale));
+						}
+						inHyperlink = false;
+						++currentHyperlinkIndex;
+					}
+				}
+			}
+		}
+
+		// Handle case where text ends while still in a hyperlink
+		if (inHyperlink && currentHyperlinkIndex < parsedText.hyperlinks.size())
+		{
+			parsedText.hyperlinks[currentHyperlinkIndex].bounds = 
+				Rect(hyperlinkStartPos.x, hyperlinkStartPos.y, glyphPos.x, hyperlinkStartPos.y + GetHeight(scale));
+		}
+	}
 }
