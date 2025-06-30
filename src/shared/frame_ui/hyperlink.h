@@ -35,10 +35,10 @@ namespace mmo
 		/// The end index in the original text (including markup)
 		std::size_t endIndex;
 		
-		/// The start position in the plain text (without markup)
+		/// The start position in the plain text (for bounds calculation)
 		std::size_t plainTextStart;
 		
-		/// The end position in the plain text (without markup)
+		/// The end position in the plain text (for bounds calculation)
 		std::size_t plainTextEnd;
 
 		/// Constructor

@@ -293,27 +293,110 @@ namespace mmo
 			// to have the area as a member variable and change it if needed.
 			CacheText(frameRect);
 
-			// Calculate final text position in component
-			Point position = frameRect.GetPosition();
-
-			// Apply vertical alignment formatting
-			if (m_vertAlignment == VerticalAlignment::Center)
-			{
-				position.y += frameRect.GetHeight() * 0.5f - font->GetHeight(textScale) * 0.5f;
-			}
-			else if (m_vertAlignment == VerticalAlignment::Bottom)
-			{
-				position.y += frameRect.GetHeight() - font->GetHeight(textScale);
-			}
-
-			// Now, render the parsed text with hyperlink support
 			// Apply color multiplication
 			Color c = color;
 			c *= m_color;
 
-			// Use hyperlink-aware text rendering for the entire parsed text
-			font->DrawTextWithHyperlinks(m_parsedText, position, m_frame->GetGeometryBuffer(), textScale, c.GetARGB());
+			// Handle rendering based on whether we have hyperlinks
+			if (!m_parsedText.hyperlinks.empty())
+			{
+				// We have hyperlinks - use hyperlink-aware rendering but still respect alignment
+				RenderWithHyperlinks(frameRect, c, textScale);
+			}
+			else
+			{
+				// No hyperlinks - use traditional rendering with full alignment support
+				RenderTraditional(frameRect, c, textScale);
+			}
 		}
+	}
+
+	void TextComponent::RenderTraditional(const Rect& area, const Color& color, float textScale)
+	{
+		FontPtr font = m_frame->GetFont();
+		if (!font)
+			return;
+
+		// Calculate the total height of all lines
+		const float lineHeight = font->GetHeight(textScale);
+		const float totalTextHeight = lineHeight * m_lineCache.size();
+
+		// Calculate vertical offset based on alignment
+		float yOffset = 0.0f;
+		if (m_vertAlignment == VerticalAlignment::Center)
+		{
+			yOffset = (area.GetHeight() - totalTextHeight) * 0.5f;
+		}
+		else if (m_vertAlignment == VerticalAlignment::Bottom)
+		{
+			yOffset = area.GetHeight() - totalTextHeight;
+		}
+
+		// Render each line with proper alignment
+		for (size_t lineIndex = 0; lineIndex < m_lineCache.size(); ++lineIndex)
+		{
+			const auto& line = m_lineCache[lineIndex];
+			if (line.empty())
+				continue;
+
+			// Calculate horizontal position based on alignment
+			float xOffset = 0.0f;
+			if (m_horzAlignment == HorizontalAlignment::Center)
+			{
+				const float lineWidth = font->GetTextWidth(line, textScale);
+				xOffset = (area.GetWidth() - lineWidth) * 0.5f;
+			}
+			else if (m_horzAlignment == HorizontalAlignment::Right)
+			{
+				const float lineWidth = font->GetTextWidth(line, textScale);
+				xOffset = area.GetWidth() - lineWidth;
+			}
+
+			// Calculate final position for this line
+			Point linePosition(
+				area.left + xOffset,
+				area.top + yOffset + lineIndex * lineHeight
+			);
+
+			// Render the line
+			font->DrawText(line, linePosition, m_frame->GetGeometryBuffer(), textScale, color.GetARGB());
+		}
+	}
+
+	void TextComponent::RenderWithHyperlinks(const Rect& area, const Color& color, float textScale)
+	{
+		FontPtr font = m_frame->GetFont();
+		if (!font)
+			return;
+
+		// For now, hyperlink rendering only supports simple alignment
+		// This is a limitation but ensures hyperlinks work correctly
+		Point position = area.GetPosition();
+
+		// Apply simple vertical alignment (top/center/bottom)
+		if (m_vertAlignment == VerticalAlignment::Center)
+		{
+			position.y += area.GetHeight() * 0.5f - font->GetHeight(textScale) * 0.5f;
+		}
+		else if (m_vertAlignment == VerticalAlignment::Bottom)
+		{
+			position.y += area.GetHeight() - font->GetHeight(textScale);
+		}
+
+		// Apply simple horizontal alignment for the entire text block
+		if (m_horzAlignment == HorizontalAlignment::Center)
+		{
+			const float textWidth = font->GetTextWidth(m_parsedText.plainText, textScale);
+			position.x += (area.GetWidth() - textWidth) * 0.5f;
+		}
+		else if (m_horzAlignment == HorizontalAlignment::Right)
+		{
+			const float textWidth = font->GetTextWidth(m_parsedText.plainText, textScale);
+			position.x += area.GetWidth() - textWidth;
+		}
+
+		// Use hyperlink-aware text rendering
+		font->DrawTextWithHyperlinks(m_parsedText, position, m_frame->GetGeometryBuffer(), textScale, color.GetARGB());
 	}
 
 	void TextComponent::OnMouseClick(const Point& position)

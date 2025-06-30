@@ -92,44 +92,59 @@ namespace mmo
 					// Move past the |h
 					idx = payloadEnd + 2;
 					
-					// Find the display text [text] - include the brackets in the display
-					if (idx >= text.length() || text[idx] != '[')
+					// Check if we have bracketed format [text] or simple format text
+					std::string displayText;
+					if (idx < text.length() && text[idx] == '[')
 					{
-						// Invalid format, treat as normal text
-						result.plainText += text[hyperlinkStart];
-						plainTextPos++;
-						idx = hyperlinkStart + 1;
-						continue;
+						// Bracketed format: |Htype:payload|h[text]|h
+						std::size_t displayTextStart = idx; // Include the opening bracket
+						
+						// Find the closing ]
+						std::size_t displayTextEnd = text.find(']', idx + 1);
+						if (displayTextEnd == std::string::npos)
+						{
+							// Invalid format, treat as normal text
+							result.plainText += text[hyperlinkStart];
+							plainTextPos++;
+							idx = hyperlinkStart + 1;
+							continue;
+						}
+						
+						// Include the closing bracket in the display text
+						displayText = text.substr(displayTextStart, displayTextEnd - displayTextStart + 1);
+						idx = displayTextEnd + 1; // Move past ]
+						
+						// Expect |h to close the hyperlink
+						if (idx + 1 >= text.length() || text.substr(idx, 2) != "|h")
+						{
+							// Invalid format, treat as normal text
+							result.plainText += text[hyperlinkStart];
+							plainTextPos++;
+							idx = hyperlinkStart + 1;
+							continue;
+						}
+						
+						idx += 2; // Skip |h
 					}
-					
-					std::size_t displayTextStart = idx; // Include the opening bracket
-					
-					// Find the closing ]
-					std::size_t displayTextEnd = text.find(']', idx + 1);
-					if (displayTextEnd == std::string::npos)
+					else
 					{
-						// Invalid format, treat as normal text
-						result.plainText += text[hyperlinkStart];
-						plainTextPos++;
-						idx = hyperlinkStart + 1;
-						continue;
+						// Simple format: |Htype:payload|htext|h
+						std::size_t displayTextStart = idx;
+						std::size_t displayTextEnd = text.find("|h", idx);
+						
+						if (displayTextEnd == std::string::npos)
+						{
+							// Invalid format, treat as normal text
+							result.plainText += text[hyperlinkStart];
+							plainTextPos++;
+							idx = hyperlinkStart + 1;
+							continue;
+						}
+						
+						// Extract the display text (without brackets)
+						displayText = text.substr(displayTextStart, displayTextEnd - displayTextStart);
+						idx = displayTextEnd + 2; // Skip |h
 					}
-					
-					// Include the closing bracket in the display text
-					std::string displayText = text.substr(displayTextStart, displayTextEnd - displayTextStart + 1);
-					idx = displayTextEnd + 1; // Move past ]
-					
-					// Expect |h to close the hyperlink
-					if (idx + 1 >= text.length() || text.substr(idx, 2) != "|h")
-					{
-						// Invalid format, treat as normal text
-						result.plainText += text[hyperlinkStart];
-						plainTextPos++;
-						idx = hyperlinkStart + 1;
-						continue;
-					}
-					
-					idx += 2; // Skip |h
 							// Create the hyperlink
 					Hyperlink hyperlink(std::move(linkType), std::move(linkPayload), displayText, currentColor);
 					hyperlink.startIndex = hyperlinkStart;

@@ -97,6 +97,10 @@ namespace mmo
 		void CacheText(const Rect& area);
 		/// Applies text wrapping to the line cache.
 		void ApplyWrapping(const Rect& frameRect);
+		/// Renders text using traditional alignment (no hyperlinks)
+		void RenderTraditional(const Rect& area, const Color& color, float textScale);
+		/// Renders text with hyperlink support (limited alignment)
+		void RenderWithHyperlinks(const Rect& area, const Color& color, float textScale);
 
 	public:
 		// FrameComponent overrides

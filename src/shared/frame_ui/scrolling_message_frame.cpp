@@ -159,8 +159,8 @@ namespace mmo
 		Point renderPos = frameRect.GetPosition();
 		const_cast<LineInfo&>(line).renderPosition = renderPos;
 
-		// Use hyperlink-aware text rendering if we have hyperlinks
-		if (!line.parsedText.hyperlinks.empty())
+		// Use hyperlink-aware text rendering if we have hyperlinks OR color changes
+		if (!line.parsedText.hyperlinks.empty() || line.parsedText.colorChanges.size() > 1)
 		{
 			// Make a mutable copy for bounds calculation
 			ParsedText mutableParsedText = line.parsedText;
@@ -181,7 +181,7 @@ namespace mmo
 		}
 		else
 		{
-			// No hyperlinks, use regular text rendering
+			// No hyperlinks or color changes, use regular text rendering
 			GetFont()->DrawText(line.parsedText.plainText, renderPos, m_geometryBuffer, textScale, 
 							   Color(line.message->r, line.message->g, line.message->b, 1.0f).GetARGB());
 		}
@@ -210,10 +210,12 @@ namespace mmo
 				
 				// For simplicity, create line breaks based on text width
 				// Split the parsed plain text into lines that fit within the frame width
-				std::vector<std::string> wrappedLines;
+				std::vector<std::pair<std::string, std::pair<std::size_t, std::size_t>>> wrappedLinesWithPositions;
 				std::string currentLine;
 				float currentWidth = 0.0f;
 				const float maxWidth = contentRect.GetWidth();
+				std::size_t currentOriginalPos = 0;
+				std::size_t lineStartPos = 0;
 
 				for (std::size_t i = 0; i < parsedMessage.plainText.length(); ++i)
 				{
@@ -222,9 +224,11 @@ namespace mmo
 					if (c == '\n')
 					{
 						// Forced line break
-						wrappedLines.push_back(currentLine);
+						wrappedLinesWithPositions.push_back({currentLine, {lineStartPos, currentOriginalPos}});
 						currentLine.clear();
 						currentWidth = 0.0f;
+						currentOriginalPos++;
+						lineStartPos = currentOriginalPos;
 						continue;
 					}
 
@@ -235,9 +239,10 @@ namespace mmo
 						if (currentWidth + charWidth > maxWidth && !currentLine.empty())
 						{
 							// Line would be too long, break here
-							wrappedLines.push_back(currentLine);
+							wrappedLinesWithPositions.push_back({currentLine, {lineStartPos, currentOriginalPos}});
 							currentLine = c;
 							currentWidth = charWidth;
+							lineStartPos = currentOriginalPos;
 						}
 						else
 						{
@@ -249,40 +254,98 @@ namespace mmo
 					{
 						currentLine += c;
 					}
+					currentOriginalPos++;
 				}
 
 				if (!currentLine.empty())
 				{
-					wrappedLines.push_back(currentLine);
+					wrappedLinesWithPositions.push_back({currentLine, {lineStartPos, currentOriginalPos}});
 				}
 
-				// Create LineInfo for each wrapped line
-				// For now, hyperlinks will only work if they don't span multiple lines
-				for (const auto& lineText : wrappedLines)
+				// Create LineInfo for each wrapped line with proper hyperlink and color mapping
+				uint32 currentColor = Color(message.r, message.g, message.b, 1.0f).GetARGB(); // Track current color state
+				
+				for (const auto& lineData : wrappedLinesWithPositions)
 				{
+					const std::string& lineText = lineData.first;
+					std::size_t lineStartInOriginal = lineData.second.first;
+					std::size_t lineEndInOriginal = lineData.second.second;
+					
 					LineInfo lineInfo;
 					lineInfo.line = lineText;
 					lineInfo.message = &message;
-					
-					// Create ParsedText for this line by filtering hyperlinks that are contained within it
 					lineInfo.parsedText.plainText = lineText;
-					lineInfo.parsedText.colorChanges.push_back({0, Color(message.r, message.g, message.b, 1.0f).GetARGB()});
 					
-					// Find hyperlinks that are completely contained in this line
-					std::size_t lineStartInOriginal = parsedMessage.plainText.find(lineText);
-					if (lineStartInOriginal != std::string::npos)
+					// Start this line with the current color state
+					lineInfo.parsedText.colorChanges.push_back({0, currentColor});
+					
+					// Copy relevant color changes for this line
+					for (const auto& colorChange : parsedMessage.colorChanges)
 					{
-						for (const auto& hyperlink : parsedMessage.hyperlinks)
+						std::size_t colorPos = colorChange.first;
+						// If color change is within this line's range
+						if (colorPos >= lineStartInOriginal && colorPos < lineEndInOriginal)
 						{
-							// Simple check: if the hyperlink display text is contained in this line
-							std::size_t hyperlinkPos = lineText.find(hyperlink.displayText);
-							if (hyperlinkPos != std::string::npos)
+							// Adjust position relative to line start
+							std::size_t relativePos = colorPos - lineStartInOriginal;
+							lineInfo.parsedText.colorChanges.push_back({relativePos, colorChange.second});
+						}
+					}
+					
+					// Update current color based on color changes that occur at or before the END of this line
+					// This ensures next line inherits the correct color state
+					for (const auto& colorChange : parsedMessage.colorChanges)
+					{
+						if (colorChange.first < lineEndInOriginal)
+						{
+							currentColor = colorChange.second;
+						}
+					}
+					
+					// Copy hyperlinks that intersect with this line (including partial hyperlinks)
+					for (const auto& hyperlink : parsedMessage.hyperlinks)
+					{
+						// Check if hyperlink intersects with this line's range
+						if (hyperlink.plainTextStart < lineEndInOriginal && 
+							hyperlink.plainTextEnd > lineStartInOriginal)
+						{
+							Hyperlink lineHyperlink = hyperlink;
+							
+							// Calculate the portion of the hyperlink that appears in this line
+							std::size_t hyperlinkStartInLine = 0;
+							std::size_t hyperlinkEndInLine = lineText.length();
+							
+							if (hyperlink.plainTextStart >= lineStartInOriginal)
 							{
-								Hyperlink lineHyperlink = hyperlink;
-								// Adjust the hyperlink position relative to the line start
+								// Hyperlink starts within this line
+								hyperlinkStartInLine = hyperlink.plainTextStart - lineStartInOriginal;
+							}
+							
+							if (hyperlink.plainTextEnd <= lineEndInOriginal)
+							{
+								// Hyperlink ends within this line
+								hyperlinkEndInLine = hyperlink.plainTextEnd - lineStartInOriginal;
+							}
+							
+							// Only add if there's actually some text in this line
+							if (hyperlinkStartInLine < hyperlinkEndInLine)
+							{
+								// Adjust positions relative to line start
+								lineHyperlink.plainTextStart = hyperlinkStartInLine;
+								lineHyperlink.plainTextEnd = hyperlinkEndInLine;
+								
+								// For multi-line hyperlinks, adjust the display text to show only the portion in this line
+								lineHyperlink.displayText = lineText.substr(hyperlinkStartInLine, hyperlinkEndInLine - hyperlinkStartInLine);
+								
 								lineInfo.parsedText.hyperlinks.push_back(lineHyperlink);
 							}
 						}
+					}
+					
+					// If no color changes were added beyond the initial one, remove the initial one to avoid duplicates
+					if (lineInfo.parsedText.colorChanges.size() == 1)
+					{
+						// Keep the initial color
 					}
 					
 					m_lineCache.push_back(lineInfo);
@@ -328,16 +391,33 @@ namespace mmo
 				
 			for (const auto& hyperlink : line.parsedText.hyperlinks)
 			{
-				// Check if bounds are valid
-				if (hyperlink.bounds.GetWidth() <= 0 || hyperlink.bounds.GetHeight() <= 0)
-					continue;
-					
-				// Convert hyperlink bounds from render coordinates to frame-relative coordinates
-				Rect adjustedBounds = hyperlink.bounds;
-				adjustedBounds.top = lineY;
-				adjustedBounds.bottom = lineY + lineHeight;
+				// For multi-line hyperlinks, we need to check the X bounds more carefully
+				// Since bounds might not be set correctly, use text positions as fallback
 				
-				if (adjustedBounds.IsPointInRect(relativePos))
+				// Calculate expected X position based on text position
+				float expectedStartX = 0.0f;
+				if (hyperlink.plainTextStart > 0 && GetFont())
+				{
+					std::string textBefore = line.parsedText.plainText.substr(0, hyperlink.plainTextStart);
+					expectedStartX = GetFont()->GetTextWidth(textBefore, textScale);
+				}
+				
+				float expectedEndX = expectedStartX;
+				if (GetFont())
+				{
+					std::string hyperlinkText = line.parsedText.plainText.substr(hyperlink.plainTextStart, 
+						hyperlink.plainTextEnd - hyperlink.plainTextStart);
+					expectedEndX = expectedStartX + GetFont()->GetTextWidth(hyperlinkText, textScale);
+				}
+				
+				// Create bounds for this hyperlink portion
+				Rect hyperlinkBounds;
+				hyperlinkBounds.left = expectedStartX;
+				hyperlinkBounds.right = expectedEndX;
+				hyperlinkBounds.top = lineY;
+				hyperlinkBounds.bottom = lineY + lineHeight;
+				
+				if (hyperlinkBounds.IsPointInRect(relativePos))
 				{
 					// Trigger hyperlink click event
 					TriggerEvent("HYPERLINK_CLICKED", this, hyperlink.type, hyperlink.payload);

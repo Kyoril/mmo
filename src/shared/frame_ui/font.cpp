@@ -835,6 +835,7 @@ namespace mmo
 		std::size_t currentHyperlinkIndex = 0;
 		Point hyperlinkStartPos;
 		bool inHyperlink = false;
+		argb_t hyperlinkColor = currentColour;
 
 		for (std::size_t plainIndex = 0; plainIndex < parsedText.plainText.length(); /* increment inside loop */)
 		{
@@ -853,6 +854,11 @@ namespace mmo
 				{
 					inHyperlink = true;
 					hyperlinkStartPos = glyphPos;
+					// Use the hyperlink's color
+					if (currentHyperlinkIndex < parsedText.hyperlinks.size())
+					{
+						hyperlinkColor = parsedText.hyperlinks[currentHyperlinkIndex].color;
+					}
 				}
 			}
 
@@ -940,6 +946,7 @@ namespace mmo
 								Rect(hyperlinkStartPos.x, hyperlinkStartPos.y, glyphPos.x, hyperlinkStartPos.y + GetHeight(scale));
 						}
 						inHyperlink = false;
+						hyperlinkColor = currentColour; // Reset to current text color
 						++currentHyperlinkIndex;
 					}
 				}
