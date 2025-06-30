@@ -1399,8 +1399,16 @@ namespace mmo
 		}
 		else
 		{
-			// Loot item from slot
-			m_realmConnector.AutoStoreLootItem(slot - 1);
+			// Map UI slot to server slot
+			int32 serverSlot = MapUISlotToServerSlot(slot);
+			if (serverSlot < 0)
+			{
+				ELOG("Unable to loot: Invalid server slot mapping for UI slot " << slot);
+				return;
+			}
+			
+			// Loot item from server slot
+			m_realmConnector.AutoStoreLootItem(serverSlot);
 		}
 
 		// TODO
@@ -1408,7 +1416,24 @@ namespace mmo
 
 	int32 GameScript::GetNumLootItems() const
 	{
-		return m_lootClient.GetNumLootSlots();
+		// Count money slot if present
+		int32 count = 0;
+		if (m_lootClient.HasMoney())
+		{
+			count = 1;
+		}
+		
+		// Count non-looted items
+		for (uint32 i = 0; i < m_lootClient.GetNumLootItems(); ++i)
+		{
+			const LootClient::LootItem* item = m_lootClient.GetLootItem(i);
+			if (item && item->itemInfo && item->count > 0) // Non-looted item
+			{
+				count++;
+			}
+		}
+		
+		return count;
 	}
 
 	bool GameScript::LootSlotIsItem(const uint32 slot) const
@@ -1425,10 +1450,12 @@ namespace mmo
 				return false;
 			}
 
-			return slot - 1 <= m_lootClient.GetNumLootItems();
+			// Check if there's a valid (non-looted) item at this slot
+			return GetLootSlotItem(slot) != nullptr;
 		}
 
-		return slot <= m_lootClient.GetNumLootItems();
+		// Check if there's a valid (non-looted) item at this slot
+		return GetLootSlotItem(slot) != nullptr;
 	}
 
 	bool GameScript::LootSlotIsCoin(const uint32 slot) const
@@ -1448,7 +1475,7 @@ namespace mmo
 
 	void GameScript::GetLootSlotInfo(uint32 slot, String& out_icon, String& out_text, int32& out_count) const
 	{
-		if (slot < 1 || slot > m_lootClient.GetNumLootSlots())
+		if (slot < 1 || static_cast<int32>(slot) > GetNumLootItems())
 		{
 			out_icon = "";
 			out_text = "";
@@ -1464,11 +1491,18 @@ namespace mmo
 			return;
 		}
 
-		// Get item from slot
-		if (m_lootClient.HasMoney()) slot--;
+		// Map UI slot to server slot
+		int32 serverSlot = MapUISlotToServerSlot(slot);
+		if (serverSlot < 0)
+		{
+			out_icon = "";
+			out_text = "";
+			out_count = 0;
+			return;
+		}
 
-		LootClient::LootItem* item = m_lootClient.GetLootItem(slot - 1);
-		if (!item || !item->itemInfo)
+		LootClient::LootItem* item = m_lootClient.GetLootItem(serverSlot);
+		if (!item || !item->itemInfo || item->count == 0)
 		{
 			out_icon = "";
 			out_text = "";
@@ -1491,7 +1525,7 @@ namespace mmo
 
 	const ItemInfo* GameScript::GetLootSlotItem(uint32 slot) const
 	{
-		if (slot < 1 || slot > m_lootClient.GetNumLootSlots())
+		if (slot < 1 || static_cast<int32>(slot) > GetNumLootItems())
 		{
 			return nullptr;
 		}
@@ -1501,11 +1535,15 @@ namespace mmo
 			return nullptr;
 		}
 
-		// Get item from slot
-		if (m_lootClient.HasMoney()) slot--;
+		// Map UI slot to server slot
+		int32 serverSlot = MapUISlotToServerSlot(slot);
+		if (serverSlot < 0)
+		{
+			return nullptr;
+		}
 
-		LootClient::LootItem* item = m_lootClient.GetLootItem(slot - 1);
-		if (!item || !item->itemInfo)
+		LootClient::LootItem* item = m_lootClient.GetLootItem(serverSlot);
+		if (!item || !item->itemInfo || item->count == 0)
 		{
 			return nullptr;
 		}
@@ -1607,5 +1645,36 @@ namespace mmo
 	void GameScript::Script_ReviveMe() const
 	{
 		m_realmConnector.SendReviveRequest();
+	}
+
+	// Helper function to map from UI slot (compact, 1-based) to server item slot (0-based with gaps)
+	int32 GameScript::MapUISlotToServerSlot(int32 uiSlot) const
+	{
+		// Account for money slot
+		if (m_lootClient.HasMoney())
+		{
+			if (uiSlot == 1)
+			{
+				return -1; // Money slot, not an item
+			}
+			uiSlot--; // Remove money slot offset
+		}
+		
+		// Now find the uiSlot-th non-looted item
+		int32 nonLootedCount = 0;
+		for (uint32 serverSlot = 0; serverSlot < m_lootClient.GetNumLootItems(); ++serverSlot)
+		{
+			const LootClient::LootItem* item = m_lootClient.GetLootItem(serverSlot);
+			if (item && item->itemInfo && item->count > 0) // Non-looted item
+			{
+				nonLootedCount++;
+				if (nonLootedCount == uiSlot)
+				{
+					return static_cast<int32>(serverSlot);
+				}
+			}
+		}
+		
+		return -1; // Slot not found
 	}
 }

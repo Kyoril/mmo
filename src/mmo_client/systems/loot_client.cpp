@@ -185,18 +185,47 @@ namespace mmo
 
 	PacketParseResult LootClient::OnLootRemoved(game::IncomingPacket& packet)
 	{
-		DLOG("Received SMSG_LOOT_REMOVED");
+		uint8 slot;
+		if (!(packet >> io::read<uint8>(slot)))
+		{
+			return PacketParseResult::Disconnect;
+		}
 
-		// TODO: UI events
+		DLOG("Received SMSG_LOOT_REMOVED for slot " << static_cast<uint32>(slot));
+
+		// Mark the item as looted in our local cache (keep it in the vector to maintain server sync)
+		if (slot < m_lootItems.size())
+		{
+			m_lootItems[slot].count = 0; // Mark as empty/looted
+			m_lootItems[slot].itemInfo = nullptr; // Clear item info to indicate it's looted
+		}
+
+		// Calculate absolute slot (1-based for Lua, accounting for money slot)
+		uint32 absoluteSlot = slot + 1;
+		if (m_lootMoney > 0)
+		{
+			absoluteSlot += 1; // Account for money slot being first
+		}
+
+		// Trigger UI event to update the loot frame
+		FrameManager::Get().TriggerLuaEvent("LOOT_SLOT_CLEARED", absoluteSlot);
 
 		return PacketParseResult::Pass;
 	}
 
 	PacketParseResult LootClient::OnLootMoneyNotify(game::IncomingPacket& packet)
 	{
-		DLOG("Received SMSG_LOOT_MONEY_NOTIFY");
+		uint32 receivedGold;
+		if (!(packet >> io::read<uint32>(receivedGold)))
+		{
+			return PacketParseResult::Disconnect;
+		}
 
-		// TODO: UI events
+		DLOG("Received SMSG_LOOT_MONEY_NOTIFY with " << receivedGold << " gold");
+
+		// This is sent when multiple players are looting and someone else got gold
+		// We don't need to update our local state, just show notification
+		// TODO: Could show a notification that someone else looted gold
 
 		return PacketParseResult::Pass;
 	}
@@ -205,7 +234,9 @@ namespace mmo
 	{
 		DLOG("Received SMSG_LOOT_ITEM_NOTIFY");
 
-		// TODO: UI events
+		// This packet is likely sent to notify other players that someone looted an item
+		// For now, we'll just log it since the actual item removal is handled by LootRemoved
+		// TODO: Could show a notification that someone else looted an item
 
 		return PacketParseResult::Pass;
 	}
@@ -214,9 +245,12 @@ namespace mmo
 	{
 		DLOG("Received SMSG_LOOT_CLEAR_MONEY");
 
+		// Clear the money from our local state
 		m_lootMoney = 0;
+		m_lootMoneyString.clear();
 
-		// TODO: UI events?
+		// Trigger UI event to update the loot frame - money slot is always slot 1 when present
+		FrameManager::Get().TriggerLuaEvent("LOOT_SLOT_CLEARED", 1);
 
 		return PacketParseResult::Pass;
 	}

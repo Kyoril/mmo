@@ -97,6 +97,9 @@ namespace mmo
 
 		int32 GetNumLootItems() const;
 
+		// Helper function to map from UI slot (compact, 1-based) to server item slot (0-based with gaps)
+		int32 MapUISlotToServerSlot(int32 uiSlot) const;
+
 		bool LootSlotIsItem(uint32 slot) const;
 
 		bool LootSlotIsCoin(uint32 slot) const;
