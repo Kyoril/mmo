@@ -63,8 +63,12 @@ namespace mmo
 
 		const float textScale = FrameManager::Get().GetUIScale().y;
 
-			// Get the text field
+		// Get the text field
 		const auto* textField = dynamic_cast<TextField*>(m_frame);
+		if (!textField)
+		{
+			return;
+		}
 
 		const auto& textAreaOffsets = textField->GetTextAreaOffset();
 
@@ -81,51 +85,65 @@ namespace mmo
 		const FontPtr font = m_frame->GetFont();
 		if (font)
 		{
-			// We got a font, now draw the text
-			const std::string& text = m_frame->GetVisualText();
-
-			// Calculate the width for formatting
-			const float textWidth = font->GetTextWidth(text, textScale);
-			const float textHeight = font->GetHeight(textScale);
-
-			// Calculate final text position in component
-			Point position = frameRect.GetPosition();
-
-			// Apply horizontal alignment
-			if (textField->GetHorzAlignmnet() == HorizontalAlignment::Center)
+			// Get the appropriate text to render
+			const std::string* textToRender;
+			std::string maskedText;
+			
+			if (textField->IsTextMasked())
 			{
-				position.x += frameRect.GetWidth() * 0.5f - textWidth * 0.5f;
+				// Use masked text
+				maskedText = textField->GetVisualText();
+				textToRender = &maskedText;
 			}
-			else if (textField->GetHorzAlignmnet() == HorizontalAlignment::Right)
+			else
 			{
-				position.x += frameRect.GetWidth() - textWidth;
+				// Use parsed plain text (hyperlinks show as display text only)
+				textToRender = &textField->GetParsedPlainText();
 			}
 
+			// Create a clipping area that accounts for scroll offset
+			Rect textArea = frameRect;
+			textArea.left -= textField->GetScrollOffset(); // Move the text start position left by scroll amount
+			
 			// Apply vertical alignment formatting
+			const float textHeight = font->GetHeight(textScale);
 			if (textField->GetVertAlignment() == VerticalAlignment::Center)
 			{
-				position.y += frameRect.GetHeight() * 0.5f - textHeight * 0.5f;
+				textArea.top += frameRect.GetHeight() * 0.5f - textHeight * 0.5f;
 			}
 			else if (textField->GetVertAlignment() == VerticalAlignment::Bottom)
 			{
-				position.y += frameRect.GetHeight() - textHeight;
+				textArea.top += frameRect.GetHeight() - textHeight;
 			}
 
-			// Draw the text
-			font->DrawText(text, position, m_frame->GetGeometryBuffer(), textScale, 
-				textField->IsEnabled(false) ? textField->GetEnabledTextColor() : textField->GetDisabledTextColor());
+			// Draw the text with clipping to the frame rectangle
+			argb_t textColor = textField->IsEnabled(false) ? 
+				textField->GetEnabledTextColor().GetARGB() : 
+				textField->GetDisabledTextColor().GetARGB();
+				
+			// Use the position-based DrawText since area-based doesn't handle horizontal scrolling well
+			Point textPos = textArea.GetPosition();
+			font->DrawText(*textToRender, textPos, m_frame->GetGeometryBuffer(), textScale, textColor);
 		}
 
 		// If the frame has captured user input...
 		if (m_showCaret && m_frame->HasInputCaptured())
 		{
-			// TODO: Render the cursor
+			// Render the cursor with scroll offset
 			const StateImagery* caretImagery = m_frame->GetStateImageryByName("Caret");
 			if (caretImagery)
 			{
-				Rect caretRect{ 0.0f, 0.0f, 2.0f, frameRect.GetHeight()};
-				caretRect.Offset(m_frame->GetAbsoluteFrameRect().GetPosition() + Point(textField->GetCursorOffset(), textField->GetTextAreaOffset().top * scale.height));
-				caretImagery->Render(caretRect, Color(1.0f, 1.0f, 1.0f, 0.75f));
+				// Calculate cursor position accounting for scroll offset
+				float cursorX = textField->GetCursorOffset() - textField->GetScrollOffset();
+				
+				// Only show cursor if it's within the visible area
+				if (cursorX >= 0 && cursorX <= frameRect.GetWidth())
+				{
+					Rect caretRect{ 0.0f, 0.0f, 2.0f, frameRect.GetHeight()};
+					caretRect.Offset(m_frame->GetAbsoluteFrameRect().GetPosition() + 
+						Point(cursorX + textAreaOffsets.left * scale.height, textAreaOffsets.top * scale.height));
+					caretImagery->Render(caretRect, Color(1.0f, 1.0f, 1.0f, 0.75f));
+				}
 			}
 		}
 	}

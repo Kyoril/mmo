@@ -929,6 +929,7 @@ namespace mmo
 				
 			luabind::scope(
 				luabind::class_<ItemHandle>("ItemHandle")
+				.def("GetId", &ItemHandle::GetId)
 				.def("GetName", &ItemHandle::GetName)
 				.def("GetDescription", &ItemHandle::GetDescription)
 				.def("GetClass", &ItemHandle::GetItemClass)

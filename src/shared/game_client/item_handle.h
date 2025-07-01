@@ -17,6 +17,8 @@ namespace mmo
 		virtual ~ItemHandle() override = default;
 
 	public:
+		[[nodiscard]] uint32 GetId() const;
+
 		[[nodiscard]] int32 GetStackCount() const;
 
 		[[nodiscard]] bool IsBag() const;

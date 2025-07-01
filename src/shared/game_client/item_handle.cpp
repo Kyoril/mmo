@@ -13,6 +13,17 @@ namespace mmo
 
 	ItemHandle::ItemHandle() = default;
 
+	uint32 ItemHandle::GetId() const
+	{
+		if (!CheckNonNull()) return 0;
+		if (const auto* entry = Get()->GetEntry())
+		{
+			return entry->id;
+		}
+
+		return 0;
+	}
+
 	int32 ItemHandle::GetStackCount() const
 	{
 		if (!CheckNonNull()) return 0;

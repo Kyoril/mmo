@@ -5,6 +5,7 @@
 #include "frame.h"
 
 #include "text_component.h"
+#include "hyperlink.h"
 
 
 namespace mmo
@@ -28,6 +29,9 @@ namespace mmo
 
 		/// Sets whether the text should be masked.
 		void SetTextMasked(bool value);
+
+		/// Override SetText to reset scroll offset when text changes
+		virtual void SetText(std::string text) override;
 
 		/// Sets whether the text field accepts tabs as text input.
 		void SetAcceptsTab(bool value) { m_acceptsTab = value; }
@@ -63,6 +67,17 @@ namespace mmo
 		const Rect& GetTextAreaOffset() const { return m_textAreaOffset; }
 		float GetCursorOffset() const;
 
+		/// Sets the horizontal scroll offset for text display
+		void SetScrollOffset(float offset);
+		/// Gets the current horizontal scroll offset
+		float GetScrollOffset() const { return m_scrollOffset; }
+		/// Ensures the cursor is visible by adjusting scroll offset
+		void EnsureCursorVisible();
+		/// Gets the visible width available for text
+		float GetVisibleTextWidth() const;
+		/// Gets the parsed plain text (hyperlinks show as display text only)
+		const std::string& GetParsedPlainText() const;
+
 
 	public:
 		virtual void OnMouseDown(MouseButton button, int32 buttons, const Point& position) override;
@@ -76,6 +91,8 @@ namespace mmo
 	protected:
 		/// Executed when the text was changed.
 		virtual void OnTextChanged() override;
+		/// Override to handle hyperlink rendering and clipping
+		virtual void PopulateGeometryBuffer() override;
 
 	private:
 		/// 
@@ -83,6 +100,19 @@ namespace mmo
 		void OnAcceptTabChanged(const Property& property);
 		void OnEnabledTextColorChanged(const Property& property);
 		void OnDisabledTextColorChanged(const Property& property);
+
+		/// Finds the hyperlink token at the given cursor position
+		int FindHyperlinkAtPosition(std::size_t cursorPos);
+		/// Deletes the hyperlink at the given index
+		void DeleteHyperlink(int hyperlinkIndex);
+		/// Updates the parsed text and hyperlinks
+		void UpdateParsedText();
+		/// Maps a plain text position to a raw text position
+		std::size_t MapPlainToRawPosition(std::size_t plainPos);
+		/// Rebuilds the raw text to contain only the first N plain text characters
+		std::string RebuildTextForPlainLength(std::size_t targetPlainLength);
+		/// Rebuilds the raw text from the given plain text position to the end
+		std::string RebuildTextFromPlainPosition(std::size_t fromPlainPos);
 
 	private:
 		/// Whether the text of this textfield should be masked.
@@ -107,5 +137,12 @@ namespace mmo
 
 		bool m_acceptsTab;
 		std::size_t m_caretIndex{ 0 };  // logical cursor index in m_editBuffer
+
+		/// Horizontal scroll offset for text display
+		float m_scrollOffset;
+		/// Parsed text with hyperlinks and colors
+		ParsedText m_parsedText;
+		/// Whether the parsed text needs updating
+		mutable bool m_parsedTextDirty;
 	};
 }

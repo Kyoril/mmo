@@ -189,7 +189,7 @@ namespace mmo
 		virtual const std::string& GetVisualText() const { return m_text; }
 
 		/// Sets the text of this frame.
-		void SetText(std::string text);
+		virtual void SetText(std::string text);
 
 		/// Determines whether the frame is currently visible.
 		/// @param localOnly If set to true, the parent frame's visibility setting is ignored.
