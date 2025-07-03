@@ -252,8 +252,10 @@ namespace mmo
 		// Prevent double initialization
 		ASSERT(m_handle == nullptr);
 		
-		// Create the actual window
-		const DWORD ws = m_fullScreen ? WS_POPUP : WS_OVERLAPPEDWINDOW;
+		// Always create the window with borders and let DXGI handle fullscreen transitions
+		// As per Microsoft documentation: "DXGI now handles much of this style changing on its own.
+		// Manual setting of window styles can interfere with DXGI, and this can cause unexpected behavior."
+		const DWORD ws = WS_OVERLAPPEDWINDOW;
 
 		// Calculate the real window size needed to make the client area the requestes size
 		RECT r = { 0, 0, static_cast<LONG>(m_width), static_cast<LONG>(m_height) };
