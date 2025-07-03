@@ -108,10 +108,6 @@ namespace mmo
 		const bool isFullScreenState = (dxgiIsFullscreenState == TRUE);
 		if (isFullScreenState != m_prevFullScreenState)
 		{
-			// Restore proper window style when transitioning between fullscreen and windowed modes
-			const DWORD targetStyle = isFullScreenState ? WS_POPUP : WS_OVERLAPPEDWINDOW;
-			SetWindowLong(m_handle, GWL_STYLE, targetStyle);
-			
 			// Get the actual current window client area dimensions when fullscreen state changes
 			RECT clientRect;
 			if (GetClientRect(m_handle, &clientRect))
@@ -136,30 +132,6 @@ namespace mmo
 				// Fall back to current size if GetClientRect fails
 				m_pendingWidth = m_width;
 				m_pendingHeight = m_height;
-			}
-			
-			// When transitioning to windowed mode, position and size the window properly
-			if (!isFullScreenState)
-			{
-				// Calculate the real window size needed to make the client area the requested size
-				RECT r = { 0, 0, static_cast<LONG>(m_pendingWidth), static_cast<LONG>(m_pendingHeight) };
-				AdjustWindowRect(&r, targetStyle, FALSE);
-				
-				// Center the window on screen
-				const UINT sx = GetSystemMetrics(SM_CXSCREEN);
-				const UINT sy = GetSystemMetrics(SM_CYSCREEN);
-				const UINT x = sx / 2 - (r.right - r.left) / 2;
-				const UINT y = sy / 2 - (r.bottom - r.top) / 2;
-				
-				// Apply the new window style, position and size
-				SetWindowPos(m_handle, nullptr, x, y, r.right - r.left, r.bottom - r.top, 
-					SWP_NOZORDER | SWP_FRAMECHANGED);
-			}
-			else
-			{
-				// For fullscreen transition, just apply the style change
-				SetWindowPos(m_handle, nullptr, 0, 0, 0, 0, 
-					SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
 			}
 			
 			ApplyInternalResize();
