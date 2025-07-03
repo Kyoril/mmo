@@ -108,12 +108,32 @@ namespace mmo
 		const bool isFullScreenState = (dxgiIsFullscreenState == TRUE);
 		if (isFullScreenState != m_prevFullScreenState)
 		{
-			// Apply pending resize
-			if (m_pendingWidth == 0 || m_pendingHeight == 0)
+			// Get the actual current window client area dimensions when fullscreen state changes
+			RECT clientRect;
+			if (GetClientRect(m_handle, &clientRect))
 			{
+				const uint16 actualWidth = static_cast<uint16>(clientRect.right - clientRect.left);
+				const uint16 actualHeight = static_cast<uint16>(clientRect.bottom - clientRect.top);
+				
+				// Use actual dimensions if they are valid, otherwise fall back to current size
+				if (actualWidth > 0 && actualHeight > 0)
+				{
+					m_pendingWidth = actualWidth;
+					m_pendingHeight = actualHeight;
+				}
+				else
+				{
+					m_pendingWidth = m_width;
+					m_pendingHeight = m_height;
+				}
+			}
+			else
+			{
+				// Fall back to current size if GetClientRect fails
 				m_pendingWidth = m_width;
 				m_pendingHeight = m_height;
 			}
+			
 			ApplyInternalResize();
 			m_resizePending = false;
 			m_prevFullScreenState = isFullScreenState;
