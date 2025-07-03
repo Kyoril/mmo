@@ -3595,16 +3595,23 @@ namespace mmo
 
 	bool WorldState::GetHeightAt(const Vector3& position, float range, float& out_height)
 	{
-		float closestHeight = -10000.0f;
+		float bestHeight = -10000.0f;
+		bool foundAnyHeight = false;
 
-		// Do check against terrain?
+		// Check terrain height first
 		if (m_worldInstance->HasTerrain())
 		{
 			const float terrainHeight = m_worldInstance->GetTerrain()->GetSmoothHeightAt(position.x, position.z);
-			closestHeight = std::max(terrainHeight, closestHeight);
+			
+			// Only consider terrain height if it's within our search range
+			if (position.y - terrainHeight <= range)
+			{
+				bestHeight = std::max(terrainHeight, bestHeight);
+				foundAnyHeight = true;
+			}
 		}
 
-		// TODO: Do raycast against world entity collision geometry instead of just assuming an invisible plane at height 0.0f
+		// Perform raycast against entity collision geometry
 		Ray groundDetectionRay(position, position + Vector3::NegativeUnitY * range);
 		m_rayQuery->ClearResult();
 		m_rayQuery->SetRay(groundDetectionRay);
@@ -3613,9 +3620,9 @@ namespace mmo
 
 		if (!result.empty())
 		{
-			// Reset hit distance to the maximum range we are interested in
-			groundDetectionRay.hitDistance = range;
-			for(const auto& entry : result)
+			float bestHitDistance = range;
+			
+			for (const auto& entry : result)
 			{
 				Entity* entity = dynamic_cast<Entity*>(entry.movable);
 				if (!entity || !entity->GetMesh())
@@ -3638,21 +3645,36 @@ namespace mmo
 
 				if (collisionTree.IntersectRay(transformedRay, nullptr))
 				{
-					const Vector3 hitPoint = groundDetectionRay.origin.Lerp(groundDetectionRay.destination, transformedRay.hitDistance);
-					ASSERT(hitPoint.y <= position.y);
-
-					closestHeight = std::max(hitPoint.y, closestHeight);
+					// Only consider this hit if it's closer than previous hits
+					if (transformedRay.hitDistance < bestHitDistance)
+					{
+						bestHitDistance = transformedRay.hitDistance;
+						const Vector3 hitPoint = groundDetectionRay.origin.Lerp(groundDetectionRay.destination, transformedRay.hitDistance);
+						
+						// Ensure the hit point is below or at the query position
+						if (hitPoint.y <= position.y)
+						{
+							bestHeight = std::max(hitPoint.y, bestHeight);
+							foundAnyHeight = true;
+						}
+					}
 				}
 			}
 		}
 		
-		// Did we hit something in the range we were interested in?
-		if (position.y - closestHeight > range)
+		// Return the result
+		if (!foundAnyHeight)
 		{
 			return false;
 		}
 
-		out_height = closestHeight;
+		// Final check: ensure the found height is within our search range
+		if (position.y - bestHeight > range)
+		{
+			return false;
+		}
+
+		out_height = bestHeight;
 		return true;
 	}
 

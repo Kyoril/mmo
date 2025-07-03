@@ -1,5 +1,7 @@
 #include "game_unit_c.h"
 
+#include <algorithm>
+
 #include "net_client.h"
 #include "object_mgr.h"
 #include "base/clock.h"
@@ -613,9 +615,7 @@ namespace mmo
 
 								// Get current slide speed or initialize it
 								float currentSpeed = m_movementInfo.jumpXZSpeed;
-								if (currentSpeed < baseSlideSpeed) {
-									currentSpeed = baseSlideSpeed;
-								}
+								currentSpeed = std::max(currentSpeed, baseSlideSpeed);
 
 								// Apply acceleration to current speed with smoother transition
 								float targetSpeed = currentSpeed + accelerationFactor * deltaTime;
@@ -1999,8 +1999,8 @@ namespace mmo
 		constexpr float halfHeight = 0.5f;
 
 		m_collider.pointA = GetPosition() + Vector3(0.0f, 1.0f, 0.0f);
-		m_collider.pointB = GetPosition() + Vector3(0.0f, halfHeight * 2.0f, 0.0f);
-		m_collider.radius = 0.5f;
+		m_collider.pointB = GetPosition() + Vector3(0.0f, 1.0f + halfHeight * 2.0f, 0.0f);
+		m_collider.radius = 0.25f;
 	}
 
 	void GameUnitC::PerformGroundCheck()

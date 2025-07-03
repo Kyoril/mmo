@@ -477,6 +477,18 @@ namespace mmo
 
 		void GetItemData(uint64 guid, std::weak_ptr<GamePlayerC> player) override;
 
+		/**
+		 * @brief Gets the height of the ground at a specific world position.
+		 * 
+		 * This method performs a raycast downward from the given position to find the highest
+		 * ground surface within the specified range. It considers both terrain height and
+		 * entity collision geometry to determine the most accurate ground height.
+		 * 
+		 * @param position The world position to query from (typically with Y above ground).
+		 * @param range The maximum distance to search downward from the position.
+		 * @param out_height Reference to store the found ground height if successful.
+		 * @return True if ground was found within range, false otherwise.
+		 */
 		bool GetHeightAt(const Vector3& position, float range, float& out_height) override;
 
 		void GetCollisionTrees(const AABB& aabb, std::vector<const Entity*>& out_potentialEntities) override;
