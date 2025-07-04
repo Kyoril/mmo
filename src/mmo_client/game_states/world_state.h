@@ -43,6 +43,7 @@
 #include "mmo_client/systems/spell_cast.h"
 #include "game_client/net_client.h"
 #include "debug_path_visualizer.h"
+#include "movement.h"
 #include "graphics/color_curve.h"
 #include "graphics/material_instance.h"
 
@@ -154,8 +155,6 @@ namespace mmo
 		void OnPlayerStatsChanged(uint64 monitoredGuid);
 
 		void OnDisplayIdChanged(uint64 monitoredGuid);
-
-		void MovementIdleMoveUnits();
 
 		void OnCombatModeChanged(uint64 monitoredGuid);
 
@@ -459,6 +458,8 @@ namespace mmo
 		TalentClient& m_talentClient;
 
 		Minimap& m_minimap;
+
+		Movement m_movement;
 
 	private:
 		static IInputControl* s_inputControl;

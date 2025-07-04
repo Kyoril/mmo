@@ -1197,24 +1197,24 @@ namespace mmo
 
 		std::vector<std::shared_ptr<GameUnitC>> units;
 
-		ObjectMgr::ForEachUnit([&units, &player](const std::shared_ptr<GameUnitC> unit)
+		ObjectMgr::ForEachUnit([&units, &player](GameUnitC& unit)
 			{
-				if (!unit->IsAlive())
+				if (!unit.IsAlive())
 				{
 					return;
 				}
 
-				if (unit->GetGuid() == ObjectMgr::GetActivePlayerGuid())
+				if (unit.GetGuid() == ObjectMgr::GetActivePlayerGuid())
 				{
 					return;
 				}
 
-				if (player->IsFriendlyTo(*unit))
+				if (player->IsFriendlyTo(unit))
 				{
 					return;
 				}
 
-				units.push_back(unit);
+				units.push_back(std::static_pointer_cast<GameUnitC>(unit.shared_from_this()));
 			}
 		);
 

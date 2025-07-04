@@ -292,10 +292,14 @@ namespace mmo
 				race ? race->name() : "UNKNOWN"
 			);
 		}
+
+		m_movement.Initialize();
 	}
 
 	void WorldState::OnLeave()
 	{
+		m_movement.Terminate();
+
 		m_debugPathVisualizer.reset();
 
 		m_audio.StopSound(&m_backgroundMusicChannel);
@@ -451,46 +455,6 @@ namespace mmo
 	{
 		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
 		FrameManager::Get().TriggerLuaEvent("PLAYER_MODEL_CHANGED");
-	}
-
-	void WorldState::MovementIdleMoveUnits()
-	{
-		const GameTime timeNow = GetAsyncTimeMs();
-
-		MovementGlobals& globals = ObjectMgr::GetMovementGlobals();
-		GameTime timeDiff = timeNow - globals.m_lastUpdateTime;
-
-		// If local mover is set or any movers on the list
-		if (true)
-		{
-			ASSERT(timeDiff > 0);
-
-			// Move units in steps of 1000 ms
-			do
-			{
-				GameTime v14 = globals.m_lastUpdateTime;
-				if (timeDiff <= 1000)
-				{
-					timeDiff = 0;
-					Movement::MoveUnits();
-				}
-				else
-				{
-					globals.m_lastUpdateTime = v14 + 1000;
-					timeDiff -= 1000;
-				}
-
-				//if (globals.m_localMover)
-				{
-					// MoveLocalPlayer();
-				}
-			} while (timeDiff > 0);
-		}
-		else
-		{
-			// We just processed the update right now
-			globals.m_lastUpdateTime = timeNow;
-		}
 	}
 
 	void WorldState::OnCombatModeChanged(uint64 monitoredGuid)

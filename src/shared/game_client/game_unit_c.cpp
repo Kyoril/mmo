@@ -281,7 +281,7 @@ namespace mmo
 	
 	void GameUnitC::UpdateNormalMovement(const float deltaTime)
 	{
-		ApplyLocalMovement(deltaTime);
+		//ApplyLocalMovement(deltaTime);
 
 		// Update target tracking for NPCs
 		UpdateTargetTracking();
@@ -313,7 +313,7 @@ namespace mmo
 	
 	void GameUnitC::UpdateMovementBasedAnimation()
 	{
-			// Handle jumping animations first
+		// Handle jumping animations first
 		if (m_movementInfo.movementFlags & movement_flags::Falling)
 		{
 			// If the jumping velocity is positive, we're in the jump up phase
@@ -528,8 +528,8 @@ namespace mmo
 				const float sinAngle = m_movementInfo.jumpSinAngle;
 				const float cosAngle = m_movementInfo.jumpCosAngle;
 
-					// Apply some air drag to horizontal movement
-					m_movementInfo.jumpXZSpeed = std::max(0.0f, m_movementInfo.jumpXZSpeed - 0.5f * deltaTime);
+				// Apply some air drag to horizontal movement
+				m_movementInfo.jumpXZSpeed = std::max(0.0f, m_movementInfo.jumpXZSpeed - 0.5f * deltaTime);
 
 				// Calculate horizontal movement
 				totalMovement.x = cosAngle * m_movementInfo.jumpXZSpeed * deltaTime;

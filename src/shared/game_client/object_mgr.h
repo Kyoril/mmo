@@ -76,8 +76,6 @@ namespace mmo
 
 		static const proto_client::ModelDataEntry* GetModelData(uint32 displayId);
 
-		static MovementGlobals& GetMovementGlobals() { return ms_movementGlobals; }
-
 		static std::shared_ptr<UnitHandle> GetUnitHandleByName(const std::string& unitName);
 
 		static bool FindItem(uint32 entryId, uint8& out_bag, uint8& out_slot, uint64& out_guid);
@@ -92,10 +90,8 @@ namespace mmo
 					continue;
 				}
 
-				if (std::shared_ptr<GameUnitC> unit = std::dynamic_pointer_cast<GameUnitC>(object))
-				{
-					callback(unit);
-				}
+				GameUnitC& unit = object->AsUnit();
+				callback(unit);
 			}
 		}
 
@@ -125,8 +121,6 @@ namespace mmo
 
 		static std::map<uint32, uint32> ms_itemCount;
 		static std::map<uint64, scoped_connection> ms_itemConnections;
-
-		static MovementGlobals ms_movementGlobals;
 
 		static PartyInfo* ms_partyInfo;
 

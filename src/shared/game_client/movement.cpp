@@ -3,8 +3,4 @@
 
 namespace mmo
 {
-	void Movement::MoveUnits()
-	{
-
-	}
 }

@@ -41,19 +41,4 @@ namespace mmo
 		PlayerMoveEventType eventType;
 		Radian facing;
 	};
-
-	class MovementGlobals
-	{
-	public:
-		GameTime m_lastUpdateTime{ };
-	};
-
-	class Movement
-	{
-	public:
-
-		static void MoveUnits();
-
-		
-	};
 }
