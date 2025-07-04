@@ -334,6 +334,7 @@ namespace mmo
 		InventoryChangeFailure ValidateBagConstraints(std::shared_ptr<GameItemS> srcItem, uint16 slotB) const;
 		
 		/// Helper method to perform the actual item swap
+		/// Automatically moves offhand items to inventory when equipping 2-handed weapons
 		void PerformItemSwap(std::shared_ptr<GameItemS> srcItem, std::shared_ptr<GameItemS> dstItem, uint16 slotA, uint16 slotB);
 		
 		/// Helper method to update slot contents
