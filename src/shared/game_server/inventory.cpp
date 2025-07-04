@@ -1713,6 +1713,45 @@ namespace mmo
 	// Helper method to perform the actual item swap
 	void Inventory::PerformItemSwap(std::shared_ptr<GameItemS> srcItem, std::shared_ptr<GameItemS> dstItem, uint16 slotA, uint16 slotB)
 	{
+		// Handle 2-handed weapon equipping in mainhand slot
+		if (IsEquipmentSlot(slotB) && (slotB & 0xFF) == player_equipment_slots::Mainhand && 
+			srcItem && srcItem->GetEntry().inventorytype() == inventory_type::TwoHandedWeapon)
+		{
+			auto offhandSlot = GetAbsoluteSlot(player_inventory_slots::Bag_0, player_equipment_slots::Offhand);
+			auto offhandItem = GetItemAtSlot(offhandSlot);
+			
+			if (offhandItem)
+			{
+				// Find an empty inventory slot for the offhand item
+				uint16 emptySlot = FindEmptySlot();
+				if (emptySlot != 0)
+				{
+					// Move offhand item to inventory
+					UpdateSlotContents(offhandSlot, nullptr);
+					UpdateSlotContents(emptySlot, offhandItem);
+					
+					// Update internal map
+					m_itemsBySlot.erase(offhandSlot);
+					m_itemsBySlot[emptySlot] = offhandItem;
+					
+					// Update free slot count
+					m_freeSlots--;
+					
+					// Apply equipment effects for unequipping offhand
+					ApplyEquipmentEffects(offhandItem, nullptr, offhandSlot, emptySlot);
+					
+					// Notify about the offhand item move
+					itemInstanceUpdated(offhandItem, emptySlot);
+				}
+				else
+				{
+					// This should not happen as IsValidSlot should have prevented this,
+					// but adding a safeguard just in case
+					ELOG("Failed to find empty slot for offhand item when equipping 2-handed weapon");
+				}
+			}
+		}
+
 		// Update slot A with destination item
 		UpdateSlotContents(slotA, dstItem);
 		
