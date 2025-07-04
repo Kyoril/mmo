@@ -192,6 +192,8 @@ namespace mmo
 
 		virtual bool IsInteractable(const GameUnitS& interactor) const { return false; };
 
+		virtual void OnDespawn();
+
 		template<class T>
 		void Set(ObjectFieldMap::FieldIndexType index, T value, bool notify = true)
 		{

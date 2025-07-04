@@ -68,12 +68,6 @@ namespace mmo
 
 	GameUnitS::~GameUnitS()
 	{
-		// First misapply all auras before deleting them
-		for (auto& aura : m_auras)
-		{
-			aura->SetApplied(false);
-		}
-
 		m_auras.clear();
 	}
 
@@ -299,6 +293,13 @@ namespace mmo
 	void GameUnitS::RaiseTrigger(trigger_event::Type e, const std::vector<uint32>& data, GameUnitS* triggeringUnit)
 	{
 		WLOG("RaiseTrigger not implemented for unit " << log_hex_digit(GetGuid()));
+	}
+
+	void GameUnitS::OnDespawn()
+	{
+		m_auras.clear();
+
+		GameObjectS::OnDespawn();
 	}
 
 	void GameUnitS::SetLevel(uint32 newLevel)

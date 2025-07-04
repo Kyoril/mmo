@@ -345,8 +345,15 @@ namespace mmo
 
 	void AuraEffect::HandleModRoot(bool apply) const
 	{
-		std::weak_ptr weakOwner = std::static_pointer_cast<GameUnitS>(m_container.GetOwner().shared_from_this());
-		m_container.GetOwner().GetWorldInstance()->GetUniverse().Post([weakOwner]()
+		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
+			m_container.GetOwner().shared_from_this());
+		if (!owner || !owner->GetWorldInstance())
+		{
+			return;
+		}
+
+		std::weak_ptr weakOwner = owner;
+		owner->GetWorldInstance()->GetUniverse().Post([weakOwner]()
 			{
 				if (const auto owner = weakOwner.lock())
 				{
@@ -357,8 +364,15 @@ namespace mmo
 
 	void AuraEffect::HandleModStun(bool apply) const
 	{
-		std::weak_ptr weakOwner = std::static_pointer_cast<GameUnitS>(m_container.GetOwner().shared_from_this());
-		m_container.GetOwner().GetWorldInstance()->GetUniverse().Post([weakOwner]()
+		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
+			m_container.GetOwner().shared_from_this());
+		if (!owner || !owner->GetWorldInstance())
+		{
+			return;
+		}
+
+		std::weak_ptr weakOwner = owner;
+		owner->GetWorldInstance()->GetUniverse().Post([weakOwner]()
 			{
 				if (const auto owner = weakOwner.lock())
 				{
@@ -369,8 +383,15 @@ namespace mmo
 
 	void AuraEffect::HandleModFear(bool apply) const
 	{
-		std::weak_ptr weakOwner = std::static_pointer_cast<GameUnitS>(m_container.GetOwner().shared_from_this());
-		m_container.GetOwner().GetWorldInstance()->GetUniverse().Post([weakOwner]()
+		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
+			m_container.GetOwner().shared_from_this());
+		if (!owner || !owner->GetWorldInstance())
+		{
+			return;
+		}
+
+		std::weak_ptr weakOwner = owner;
+		owner->GetWorldInstance()->GetUniverse().Post([weakOwner]()
 			{
 				if (const auto owner = weakOwner.lock())
 				{
@@ -381,8 +402,15 @@ namespace mmo
 
 	void AuraEffect::HandleModSleep(bool apply) const
 	{
-		std::weak_ptr weakOwner = std::static_pointer_cast<GameUnitS>(m_container.GetOwner().shared_from_this());
-		m_container.GetOwner().GetWorldInstance()->GetUniverse().Post([weakOwner]()
+		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
+			m_container.GetOwner().shared_from_this());
+		if (!owner || !owner->GetWorldInstance())
+		{
+			return;
+		}
+
+		std::weak_ptr weakOwner = owner;
+		owner->GetWorldInstance()->GetUniverse().Post([weakOwner]()
 			{
 				if (const auto owner = weakOwner.lock())
 				{
@@ -393,8 +421,15 @@ namespace mmo
 
 	void AuraEffect::HandleModVisibility(bool apply) const
 	{
-		std::weak_ptr weakOwner = std::static_pointer_cast<GameUnitS>(m_container.GetOwner().shared_from_this());
-		m_container.GetOwner().GetWorldInstance()->GetUniverse().Post([weakOwner]()
+		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
+			m_container.GetOwner().shared_from_this());
+		if (!owner || !owner->GetWorldInstance())
+		{
+			return;
+		}
+
+		std::weak_ptr weakOwner = owner;
+		owner->GetWorldInstance()->GetUniverse().Post([weakOwner]()
 			{
 				if (const auto owner = weakOwner.lock())
 				{

@@ -559,6 +559,8 @@ namespace mmo
 		/// @returns The maximum amount of power as a uint32.
 		uint32 GetMaxPower() const { return Get<uint32>(object_fields::MaxMana + GetPowerType()); }
 
+		virtual void OnDespawn() override;
+
 	public:
 		/// Sets the level of the unit.
 		/// @param newLevel The new level to set.

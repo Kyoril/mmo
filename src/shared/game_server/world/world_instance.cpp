@@ -190,17 +190,26 @@ namespace mmo
 			m_lastTimeUpdateBroadcast = update.GetTimestamp();
 		}
 
-		for (const auto& object : m_objectUpdates)
+		// Create a copy of object updates to iterate over safely
+		auto objectsToUpdate = m_objectUpdates;
+		for (const auto& object : objectsToUpdate)
 		{
-			UpdateObject(*object);
+			// Ensure the object is still alive and in this world instance
+			if (object &&
+				object->GetWorldInstance() == this)
+			{
+				UpdateObject(*object);
+			}
 		}
 		
 		m_updating = false;
 		m_objectUpdates = m_queuedObjectUpdates;
+		m_queuedObjectUpdates.clear();
 	}
 
 	void WorldInstance::AddGameObject(GameObjectS& added)
 	{
+		ASSERT(!m_updating);
 		m_objectsByGuid.emplace(added.GetGuid(), &added);
 
 		// No need for visibility updates for item objects
@@ -262,6 +271,8 @@ namespace mmo
 
 	void WorldInstance::RemoveGameObject(GameObjectS& remove)
 	{
+		ASSERT(!m_updating);
+
 		if (GameUnitS* removedUnit = dynamic_cast<GameUnitS*>(&remove))
 		{
 			m_unitFinder->RemoveUnit(*removedUnit);
@@ -273,16 +284,18 @@ namespace mmo
 			return;
 		}
 
+		// Keep the object alive for this call
+		auto strong = remove.shared_from_this();
 		m_objectsByGuid.erase(it);
 
 		// Clear update
-		if (m_queuedObjectUpdates.contains(&remove))
+		if (m_queuedObjectUpdates.contains(strong.get()))
 		{
-			m_queuedObjectUpdates.erase(&remove);
+			m_queuedObjectUpdates.erase(strong.get());
 		}
-		if (m_objectUpdates.contains(&remove))
+		if (m_objectUpdates.contains(strong.get()))
 		{
-			m_objectUpdates.erase(&remove);
+			m_objectUpdates.erase(strong.get());
 		}
 
 		// No need for visibility updates for item objects
@@ -303,9 +316,7 @@ namespace mmo
 			}
 
 			tile->GetGameObjects().remove(&remove);
-
-			remove.SetWorldInstance(nullptr);
-			remove.despawned(remove);
+			remove.OnDespawn();
 
 			ForEachTileInSight(
 				*m_visibilityGrid,

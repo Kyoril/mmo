@@ -86,7 +86,8 @@ namespace mmo
 
 		// Does this aura expire?
 		if (apply)
-		{			// Start ticking area auras
+		{
+			// Start ticking area auras
 			if (IsAreaAura())
 			{
 				// Do an initial tick
@@ -134,7 +135,8 @@ namespace mmo
 				m_expiration = GetAsyncTimeMs() + m_duration;
 				m_expirationCountdown.SetEnd(m_expiration);
 			}
-		}		else
+		}
+		else
 		{
 			m_ownerEventConnections.disconnect();
 			m_expirationCountdown.Cancel();

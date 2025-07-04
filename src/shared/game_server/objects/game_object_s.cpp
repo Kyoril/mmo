@@ -70,6 +70,14 @@ namespace mmo
 		return *static_cast<GameWorldObjectS*>(this);
 	}
 
+	void GameObjectS::OnDespawn()
+	{
+		ASSERT(m_worldInstance);
+
+		SetWorldInstance(nullptr);
+		despawned(*this);
+	}
+
 	uint32 GameObjectS::GetMapId() const
 	{
 		if (!m_worldInstance)
