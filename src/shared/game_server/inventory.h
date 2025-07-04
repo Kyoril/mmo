@@ -5,6 +5,7 @@
 #include "base/typedefs.h"
 #include "base/signal.h"
 #include "game/item.h"
+#include "base/linear_set.h"
 
 #include <memory>
 #include <map>
@@ -272,6 +273,95 @@ namespace mmo
 
 		/// The next buyback slot to be used.
 		uint8 m_nextBuyBackSlot;
+
+		/// Helper structure for organizing slot information during item creation
+		struct ItemSlotInfo
+		{
+			LinearSet<uint16> emptySlots;
+			LinearSet<uint16> usedCapableSlots;
+			uint16 availableStacks = 0;
+		};
+
+		/// Helper method to validate item count limits
+		InventoryChangeFailure ValidateItemLimits(const proto::ItemEntry& entry, uint16 amount) const;
+		
+		/// Helper method to find available slots for item creation
+		InventoryChangeFailure FindAvailableSlots(const proto::ItemEntry& entry, uint16 amount, ItemSlotInfo& slotInfo) const;
+		
+		/// Helper method to add items to existing stacks
+		uint16 AddToExistingStacks(const proto::ItemEntry& entry, uint16 amount, const LinearSet<uint16>& usedCapableSlots, std::map<uint16, uint16>* out_addedBySlot);
+		
+		/// Helper method to update item stack and notify systems
+		void UpdateItemStack(const proto::ItemEntry& entry, std::shared_ptr<GameItemS> item, uint16 slot, uint16 added, std::map<uint16, uint16>* out_addedBySlot);
+		
+		/// Helper method to notify about slot updates
+		void NotifySlotUpdate(uint16 slot);
+		
+		/// Helper method to create new item instances
+		uint16 CreateNewItems(const proto::ItemEntry& entry, uint16 amount, const LinearSet<uint16>& emptySlots, std::map<uint16, uint16>* out_addedBySlot);
+		
+		/// Helper method to create a single item instance
+		std::shared_ptr<GameItemS> CreateSingleItem(const proto::ItemEntry& entry, uint16 slot);
+		
+		/// Helper method to setup a newly created item
+		void SetupNewItem(std::shared_ptr<GameItemS> item, const proto::ItemEntry& entry, uint16 slot);
+		
+		/// Helper method to add an item to a specific slot and update all related systems
+		void AddItemToSlot(std::shared_ptr<GameItemS> item, uint16 slot);
+		
+		/// Helper method to update player fields when adding a new item
+		void UpdatePlayerFieldsForNewItem(std::shared_ptr<GameItemS> item, uint16 slot);
+		
+		/// Helper method to update equipment visuals
+		void UpdateEquipmentVisuals(std::shared_ptr<GameItemS> item, uint8 subslot);
+		
+		/// Helper method to update bag slot
+		void UpdateBagSlot(std::shared_ptr<GameItemS> item, uint8 bag, uint8 subslot);
+
+		/// Helper method to validate swap prerequisites
+		InventoryChangeFailure ValidateSwapPrerequisites(std::shared_ptr<GameItemS> srcItem, std::shared_ptr<GameItemS> dstItem, uint16 slotA, uint16 slotB);
+		
+		/// Helper method to check if two items can be merged
+		bool CanMergeItems(std::shared_ptr<GameItemS> srcItem, std::shared_ptr<GameItemS> dstItem) const;
+		
+		/// Helper method to merge item stacks
+		InventoryChangeFailure MergeItemStacks(std::shared_ptr<GameItemS> srcItem, std::shared_ptr<GameItemS> dstItem, uint16 slotA, uint16 slotB);
+		
+		/// Helper method to remove an item from a slot
+		void RemoveItemFromSlot(uint16 slot);
+		
+		/// Helper method to validate bag constraints
+		InventoryChangeFailure ValidateBagConstraints(std::shared_ptr<GameItemS> srcItem, uint16 slotB) const;
+		
+		/// Helper method to perform the actual item swap
+		void PerformItemSwap(std::shared_ptr<GameItemS> srcItem, std::shared_ptr<GameItemS> dstItem, uint16 slotA, uint16 slotB);
+		
+		/// Helper method to update slot contents
+		void UpdateSlotContents(uint16 slot, std::shared_ptr<GameItemS> item);
+		
+		/// Helper method to update bag slot counts
+		void UpdateBagSlotCounts(std::shared_ptr<GameItemS> srcItem, std::shared_ptr<GameItemS> dstItem, uint16 slotA, uint16 slotB);
+		
+		/// Helper method to update free slot count
+		void UpdateFreeSlotCount(uint16 slotA, uint16 slotB, bool dstItemExists);
+		
+		/// Helper method to apply swap effects (stats, visuals, bonding)
+		void ApplySwapEffects(std::shared_ptr<GameItemS> srcItem, std::shared_ptr<GameItemS> dstItem, uint16 slotA, uint16 slotB);
+		
+		/// Helper method to apply equipment effects
+		void ApplyEquipmentEffects(std::shared_ptr<GameItemS> srcItem, std::shared_ptr<GameItemS> dstItem, uint16 slotA, uint16 slotB);
+		
+		/// Helper method to handle item set effects
+		void HandleItemSetEffects(std::shared_ptr<GameItemS> item, bool equipped);
+		
+		/// Helper method to find an empty slot
+		uint16 FindEmptySlot() const;
+		
+		/// Helper method to setup properties for an existing item
+		void SetupExistingItem(std::shared_ptr<GameItemS> item, const proto::ItemEntry& entry, uint16 targetSlot);
+		
+		/// Helper method to add an existing item to a slot
+		void AddExistingItemToSlot(std::shared_ptr<GameItemS> item, uint16 targetSlot, uint16* out_slot);
 	};
 
 	/// Serializes this inventory.
