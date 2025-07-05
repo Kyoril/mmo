@@ -134,7 +134,7 @@ namespace mmo
 		if (s_loginConnector)
 		{
 			s_loginConnector->resetListener();
-		 s_loginConnector->close();
+			s_loginConnector->close();
 		}
 
 		// Destroy the work object that keeps the worker busy so that
@@ -401,15 +401,6 @@ namespace mmo
 		s_partyInfo = std::make_unique<PartyInfo>(*s_realmConnector, s_clientCache->GetNameCache());
 		s_guildClient = std::make_unique<GuildClient>(*s_realmConnector, s_clientCache->GetGuildCache(), s_project.races, s_project.classes);
 
-		// Initialize client systems
-		s_lootClient->Initialize();
-		s_vendorClient->Initialize();
-		s_trainerClient->Initialize();
-		s_inventoryClient->Initialize();
-		s_questClient->Initialize();
-		s_partyInfo->Initialize();
-		s_guildClient->Initialize();
-
 		s_spellCast = std::make_unique<SpellCast>(*s_realmConnector, s_project.spells, s_project.ranges);
 		s_actionBar = std::make_unique<ActionBar>(*s_realmConnector, s_project.spells, s_clientCache->GetItemCache(), *s_spellCast);
 		s_talentClient = std::make_unique<TalentClient>(s_project.talentTabs, s_project.talents, s_project.spells, *s_realmConnector);
@@ -422,7 +413,7 @@ namespace mmo
 
 		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient, 
 			*s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charSelect, *s_guildClient, *s_clientCache, *s_discord, s_gameTime, *s_talentClient,
-			*s_minimap);
+			*s_minimap, *s_inventoryClient);
 		gameStateMgr.AddGameState(worldState);
 		
 		// Initialize the game script instance
