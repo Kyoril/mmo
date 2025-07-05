@@ -604,14 +604,21 @@ namespace mmo
 		}
 
 		// Lock around m_characterViews
-		std::scoped_lock<std::mutex> lock{ m_charViewMutex };
+		std::scoped_lock lock{ m_charViewMutex };
 		
 		// Check if such a character exists
-		if (const auto charIt = m_characterViews.find(charGuid); charIt == m_characterViews.end())
+		const auto charIt = m_characterViews.find(charGuid);
+		if (charIt == m_characterViews.end())
 		{
 			WLOG("Tried to delete character 0x" << std::hex << charGuid << " which doesn't exist or belong to the players account!");
 			return PacketParseResult::Disconnect;
 		}
+
+		// Handle guild membership before deletion
+		HandleCharacterGuildOnDelete(charGuid);
+		
+		// Handle group membership before deletion
+		HandleCharacterGroupOnDelete(charGuid);
 
 		// Database callback handler
 		std::weak_ptr weakThis{ shared_from_this() };
@@ -3164,5 +3171,122 @@ namespace mmo
 				packet << io::write_dynamic_range<uint16>(motd);
 				packet.Finish();
 			});
+	}
+
+	void Player::HandleCharacterGuildOnDelete(uint64 charGuid)
+	{
+		// First, we need to get the character's guild information from the database
+		// Since this character might not be the currently logged-in character,
+		// we need to make an async database request to get their guild membership
+		std::weak_ptr weakThis{ shared_from_this() };
+		auto handler = [weakThis, charGuid](const std::optional<CharacterData>& characterData)
+		{
+			const auto strongThis = weakThis.lock();
+			if (!strongThis)
+			{
+				return;
+			}
+
+			if (!characterData || characterData->guildId == 0)
+			{
+				// Character is not in a guild, nothing to do
+				return;
+			}
+
+			const uint64 guildId = characterData->guildId;
+			Guild* guild = strongThis->m_guildMgr.GetGuild(guildId);
+			if (!guild)
+			{
+				WLOG("Character " << charGuid << " is in guild " << guildId << " which could not be found");
+				return;
+			}
+
+			// Check if the character is the guild leader
+			if (guild->GetLeaderGuid() == charGuid)
+			{
+				DLOG("Deleting character " << charGuid << " who is the leader of guild " << guildId << ". Disbanding guild.");
+				
+				// Character is the guild leader, disband the guild
+				if (!strongThis->m_guildMgr.DisbandGuild(guildId))
+				{
+					ELOG("Failed to disband guild " << guildId << " when deleting guild leader character " << charGuid);
+				}
+			}
+			else
+			{
+				DLOG("Removing character " << charGuid << " from guild " << guildId);
+				
+				// Character is a regular member, just remove them from the guild
+				if (!guild->RemoveMember(charGuid))
+				{
+					ELOG("Failed to remove character " << charGuid << " from guild " << guildId);
+				}
+				else
+				{
+					// Broadcast that the member left (they were removed due to character deletion)
+					guild->BroadcastEvent(guild_event::Left, charGuid, characterData->name.c_str());
+				}
+			}
+		};
+
+		// Request character data to check guild membership
+		m_database.asyncRequest(std::move(handler), &IDatabase::CharacterEnterWorld, charGuid, m_accountId);
+	}
+
+	void Player::HandleCharacterGroupOnDelete(uint64 charGuid)
+	{
+		// Check if the character is in any group by searching through all groups
+		// Since the character might not be currently online, we need to check the database
+		std::weak_ptr weakThis{ shared_from_this() };
+		auto handler = [weakThis, charGuid](const std::optional<CharacterData>& characterData)
+		{
+			const auto strongThis = weakThis.lock();
+			if (!strongThis)
+			{
+				return;
+			}
+
+			if (!characterData || characterData->groupId == 0)
+			{
+				// Character is not in a group, nothing to do
+				return;
+			}
+
+			const uint64 groupId = characterData->groupId;
+			
+			// Find the group
+			auto groupIt = PlayerGroup::ms_groupsById.find(groupId);
+			if (groupIt == PlayerGroup::ms_groupsById.end())
+			{
+				WLOG("Character " << charGuid << " is in group " << groupId << " which could not be found");
+				return;
+			}
+
+			std::shared_ptr<PlayerGroup> group = groupIt->second;
+			if (!group->IsMember(charGuid))
+			{
+				WLOG("Character " << charGuid << " is not actually a member of group " << groupId);
+				return;
+			}
+
+			// Check if the character is the group leader
+			if (group->GetLeader() == charGuid)
+			{
+				DLOG("Deleting character " << charGuid << " who is the leader of group " << groupId << ". Disbanding group.");
+				
+				// Character is the group leader, disband the group
+				group->Disband(false);
+			}
+			else
+			{
+				DLOG("Removing character " << charGuid << " from group " << groupId);
+				
+				// Character is a regular member, just remove them from the group
+				group->RemoveMember(charGuid);
+			}
+		};
+
+		// Request character data to check group membership
+		m_database.asyncRequest(std::move(handler), &IDatabase::CharacterEnterWorld, charGuid, m_accountId);
 	}
 }

@@ -407,6 +407,11 @@ namespace mmo
 		PacketParseResult OnGuildDecline(game::IncomingPacket& packet);
 		PacketParseResult OnGuildRoster(game::IncomingPacket& packet);
 
+	private:
+		// Helper methods for character deletion
+		void HandleCharacterGuildOnDelete(uint64 charGuid);
+		void HandleCharacterGroupOnDelete(uint64 charGuid);
+
 #ifdef MMO_WITH_DEV_COMMANDS
 		PacketParseResult OnCheatTeleportToPlayer(game::IncomingPacket& packet);
 		PacketParseResult OnCheatSummon(game::IncomingPacket& packet);
