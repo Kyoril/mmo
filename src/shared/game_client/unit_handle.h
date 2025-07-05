@@ -45,6 +45,7 @@ namespace mmo
 		[[nodiscard]] virtual int32 GetHealth() const;
 		[[nodiscard]] virtual int32 GetMaxHealth() const;
 		[[nodiscard]] virtual int32 GetLevel() const;
+		[[nodiscard]] virtual const char* GetClass() const;
 		[[nodiscard]] virtual int32 GetPower(int32 powerType) const;
 		[[nodiscard]] virtual int32 GetMaxPower(int32 powerType) const;
 		[[nodiscard]] virtual uint32 GetAuraCount() const;
@@ -66,6 +67,11 @@ namespace mmo
 		[[nodiscard]] virtual bool IsFriendly() const;
 		[[nodiscard]] virtual bool IsHostile() const;
 		[[nodiscard]] virtual const char* GetType() const;
+
+		[[nodiscard]] virtual int32 GetHealthFromStat(int32 statId) const;
+		[[nodiscard]] virtual int32 GetManaFromStat(int32 statId) const;
+		[[nodiscard]] virtual int32 GetAttackPowerFromStat(int32 statId) const;
+
 
 	private:
 		[[nodiscard]] bool CheckNonNull() const;

@@ -6,6 +6,11 @@
 
 namespace mmo
 {
+	namespace proto_client
+	{
+		class ClassEntry;
+	}
+
 	struct GuildInfo;
 }
 
@@ -52,6 +57,7 @@ namespace mmo
 			return Get<uint32>(object_fields::TalentPoints);
 		}
 
+		const proto_client::ClassEntry* GetClass() const;
 
 	protected:
 		virtual void SetupSceneObjects() override;

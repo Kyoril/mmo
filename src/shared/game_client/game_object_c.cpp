@@ -1,6 +1,7 @@
 
 #include "game_object_c.h"
 
+#include "game_player_c.h"
 #include "game/movement_info.h"
 #include "game/object_type_id.h"
 
@@ -47,6 +48,20 @@ namespace mmo
 		ASSERT(IsUnit());
 
 		const auto unit = static_cast<const GameUnitC*>(this);
+		return *unit;
+	}
+
+	GamePlayerC& GameObjectC::AsPlayer()
+	{
+		ASSERT(IsPlayer());
+		return static_cast<GamePlayerC&>(*this);
+	}
+
+	const GamePlayerC& GameObjectC::AsPlayer() const
+	{
+		ASSERT(IsPlayer());
+
+		const auto unit = static_cast<const GamePlayerC*>(this);
 		return *unit;
 	}
 

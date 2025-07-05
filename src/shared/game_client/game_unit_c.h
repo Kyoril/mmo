@@ -261,6 +261,12 @@ namespace mmo
 		/// This function is only used for UI display. All calculation is done on the server!
 		float GetArmorReductionFactor() const;
 
+		int32 GetHealthFromStat(int32 statId) const;
+
+		int32 GetManaFromStat(int32 statId) const;
+
+		int32 GetAttackPowerFromStat(int32 statId) const;
+
 		GameAuraC* GetAura(uint32 index) const;
 
 		/// @brief Returns whether the unit is currently alive.

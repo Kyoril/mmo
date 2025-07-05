@@ -1,8 +1,11 @@
 
 #include "unit_handle.h"
+
+#include "game_player_c.h"
 #include "game_unit_c.h"
 #include "base/clock.h"
 #include "log/default_log_levels.h"
+#include "shared/client_data/proto_client/classes.pb.h"
 
 namespace mmo
 {
@@ -85,6 +88,24 @@ namespace mmo
 	{
 		if (!CheckNonNull()) return 0;
 		return Get()->GetLevel();
+	}
+
+	const char* UnitHandle::GetClass() const
+	{
+		if (!CheckNonNull()) return nullptr;
+
+		if (Get()->IsPlayer())
+		{
+			const auto* classEntry = Get()->AsPlayer().GetClass();
+			if (!classEntry)
+			{
+				return nullptr;
+			}
+
+			return classEntry->name().c_str();
+		}
+
+		return nullptr;
 	}
 
 	int32 UnitHandle::GetPower(const int32 powerType) const
@@ -230,6 +251,24 @@ namespace mmo
 		}
 
 		return s_unitTypeStrings[0];
+	}
+
+	int32 UnitHandle::GetHealthFromStat(int32 statId) const
+	{
+		if (!CheckNonNull()) return 0;
+		return Get()->GetHealthFromStat(statId);
+	}
+
+	int32 UnitHandle::GetManaFromStat(int32 statId) const
+	{
+		if (!CheckNonNull()) return 0;
+		return Get()->GetManaFromStat(statId);
+	}
+
+	int32 UnitHandle::GetAttackPowerFromStat(int32 statId) const
+	{
+		if (!CheckNonNull()) return 0;
+		return Get()->GetAttackPowerFromStat(statId);
 	}
 
 	bool UnitHandle::CheckNonNull() const

@@ -900,6 +900,7 @@ namespace mmo
 				.def("GetPower", &UnitHandle::GetPower)
 				.def("GetMaxPower", &UnitHandle::GetMaxPower)
 				.def("GetLevel", &UnitHandle::GetLevel)
+				.def("GetClass", &UnitHandle::GetClass)
 				.def("GetAuraCount", &UnitHandle::GetAuraCount)
 				.def("GetAura", &UnitHandle::GetAura)
 				.def("GetName", &UnitHandle::GetName)
@@ -918,7 +919,10 @@ namespace mmo
 				.def("IsAlive", &UnitHandle::IsAlive)
 				.def("GetType", &UnitHandle::GetType)
 				.def("IsFriendly", &UnitHandle::IsFriendly)
-				.def("IsHostile", &UnitHandle::IsHostile)),
+				.def("IsHostile", &UnitHandle::IsHostile)
+				.def("GetAttackPowerFromStat", &UnitHandle::GetAttackPowerFromStat)
+				.def("GetHealthFromStat", &UnitHandle::GetHealthFromStat)
+				.def("GetManaFromStat", &UnitHandle::GetManaFromStat)),
 
 			luabind::scope(
 				luabind::class_<AuraHandle>("AuraHandle")

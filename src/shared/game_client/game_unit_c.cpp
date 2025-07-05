@@ -1558,6 +1558,81 @@ namespace mmo
 		return Clamp(factor, 0.0f, 0.75f);
 	}
 
+	int32 GameUnitC::GetHealthFromStat(const int32 statId) const
+	{
+		int32 stat = 0;
+
+		if (IsPlayer())
+		{
+			// 20 is the base value
+			const int32 statValue = GetStat(statId) - 20;
+
+			const auto* classEntry = AsPlayer().GetClass();
+			if (classEntry)
+			{
+				for (const auto& source : classEntry->healthstatsources())
+				{
+					if (source.statid() == statId)
+					{
+						stat += static_cast<int32>(source.factor() * static_cast<float>(statValue));
+					}
+				}
+			}
+		}
+
+		return stat;
+	}
+
+	int32 GameUnitC::GetManaFromStat(int32 statId) const
+	{
+		int32 stat = 0;
+
+		if (IsPlayer())
+		{
+			// 20 is the base value
+			const int32 statValue = GetStat(statId) - 20;
+
+			const auto* classEntry = AsPlayer().GetClass();
+			if (classEntry)
+			{
+				for (const auto& source : classEntry->manastatsources())
+				{
+					if (source.statid() == statId)
+					{
+						stat += static_cast<int32>(source.factor() * static_cast<float>(statValue));
+					}
+				}
+			}
+		}
+
+		return stat;
+	}
+
+	int32 GameUnitC::GetAttackPowerFromStat(int32 statId) const
+	{
+		int32 stat = 0;
+
+		if (IsPlayer())
+		{
+			// 20 is the base value
+			const int32 statValue = GetStat(statId) - 20;
+
+			const auto* classEntry = AsPlayer().GetClass();
+			if (classEntry)
+			{
+				for (const auto& source : classEntry->attackpowerstatsources())
+				{
+					if (source.statid() == statId)
+					{
+						stat += static_cast<int32>(source.factor() * static_cast<float>(statValue));
+					}
+				}
+			}
+		}
+
+		return stat;
+	}
+
 	GameAuraC* GameUnitC::GetAura(uint32 index) const
 	{
 		if (index < m_auras.size())

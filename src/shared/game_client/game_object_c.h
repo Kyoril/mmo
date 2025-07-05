@@ -8,6 +8,11 @@
 
 #include <memory>
 
+namespace mmo
+{
+	class GamePlayerC;
+}
+
 namespace io
 {
 	class Reader;
@@ -50,6 +55,10 @@ namespace mmo
 		GameUnitC& AsUnit();
 
 		const GameUnitC& AsUnit() const;
+
+		GamePlayerC& AsPlayer();
+
+		const GamePlayerC& AsPlayer() const;
 
 		virtual ObjectTypeId GetTypeId() const
 		{

@@ -1,10 +1,75 @@
 syntax = "proto2";
 package mmo.proto_client;
 
+message ClassBaseValues {
+	required uint32 health = 1;
+	required uint32 mana = 2;
+	required uint32 stamina = 3;
+	required uint32 strength = 4;
+	required uint32 agility = 5;
+	required uint32 intellect = 6;
+	required uint32 spirit = 7;
+	optional uint32 attributePoints = 8;
+	optional uint32 talentPoints = 9;
+}
+
+message ClassSpell {
+	required uint32 level = 1;
+	required uint32 spell = 2;
+}
+
+message AttackPowerStatSource {
+	required uint32 statId = 1;
+	required float factor = 2;
+}
+
+message HealthStatSource {
+	required uint32 statId = 1;
+	required float factor = 2;
+}
+
+message ManaStatSource {
+	required uint32 statId = 1;
+	required float factor = 2;
+}
+
+message ArmorStatSource {
+	required uint32 statId = 1;
+	required float factor = 2;
+}
+
 message ClassEntry {
 	required uint32 id = 1;
+	
 	required string name = 2;
+
+	required string internalName = 3;
+	
 	optional uint32 flags = 6;
+
+	optional float attackPowerPerLevel = 9;
+
+	optional float attackPowerOffset = 10;
+
+	repeated AttackPowerStatSource attackPowerStatSources = 11;
+
+	// How much mana is regenerated per tick. If this value is 10, then 10 mana is regenerated every tick (+ spirit).
+	optional float baseManaRegenPerTick = 12;
+
+	// How much spirit is converted to 1 mana per tick. If this value is 5, then 10 spirit will regenerate 2 mana per regen tick.
+	optional float spiritPerManaRegen = 13;
+
+	// How much health is regnerated per tick.
+	optional float healthRegenPerTick = 14;
+
+	// How much spirit is converted to 1 health per tick.
+	optional float spiritPerHealthRegen = 15;
+	
+	repeated AttackPowerStatSource armorStatSources = 16;
+
+	repeated HealthStatSource healthStatSources = 18;
+	
+	repeated ManaStatSource manaStatSources = 19;
 }
 
 message Classes {
