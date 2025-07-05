@@ -271,6 +271,12 @@ namespace mmo
 		return Get()->GetAttackPowerFromStat(statId);
 	}
 
+	uint8 UnitHandle::GetAttributeCost(uint32 attribute) const
+	{
+		if (!CheckNonNull()) return 0;
+		return Get()->GetAttributeCost(attribute);
+	}
+
 	bool UnitHandle::CheckNonNull() const
 	{
 		if (Get())

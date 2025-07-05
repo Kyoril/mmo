@@ -71,6 +71,7 @@ namespace mmo
 		[[nodiscard]] virtual int32 GetHealthFromStat(int32 statId) const;
 		[[nodiscard]] virtual int32 GetManaFromStat(int32 statId) const;
 		[[nodiscard]] virtual int32 GetAttackPowerFromStat(int32 statId) const;
+		[[nodiscard]] virtual uint8 GetAttributeCost(uint32 attribute) const;
 
 
 	private:

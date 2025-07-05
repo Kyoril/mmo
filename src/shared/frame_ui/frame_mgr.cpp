@@ -412,6 +412,7 @@ namespace mmo
 					.def("Disable", &Frame::Disable)
 					.def("RegisterEvent", &Frame::RegisterEvent)
 					.def("GetName", &Frame::GetName)
+					.def("IsHovered", &Frame::IsHovered)
 					.def("IsVisible", &Frame::Lua_IsVisible)
 					.def("RemoveAllChildren", &Frame::RemoveAllChildren)
 					.def("Clone", &Frame::Clone)

@@ -922,7 +922,8 @@ namespace mmo
 				.def("IsHostile", &UnitHandle::IsHostile)
 				.def("GetAttackPowerFromStat", &UnitHandle::GetAttackPowerFromStat)
 				.def("GetHealthFromStat", &UnitHandle::GetHealthFromStat)
-				.def("GetManaFromStat", &UnitHandle::GetManaFromStat)),
+				.def("GetManaFromStat", &UnitHandle::GetManaFromStat)
+				.def("GetAttributeCost", &UnitHandle::GetAttributeCost)),
 
 			luabind::scope(
 				luabind::class_<AuraHandle>("AuraHandle")

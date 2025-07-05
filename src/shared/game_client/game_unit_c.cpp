@@ -1615,7 +1615,7 @@ namespace mmo
 		if (IsPlayer())
 		{
 			// 20 is the base value
-			const int32 statValue = GetStat(statId) - 20;
+			const int32 statValue = GetStat(statId);
 
 			const auto* classEntry = AsPlayer().GetClass();
 			if (classEntry)
@@ -1631,6 +1631,11 @@ namespace mmo
 		}
 
 		return stat;
+	}
+
+	uint8 GameUnitC::GetAttributeCost(uint32 attribute) const
+	{
+		return 0;
 	}
 
 	GameAuraC* GameUnitC::GetAura(uint32 index) const

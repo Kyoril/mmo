@@ -267,6 +267,8 @@ namespace mmo
 
 		int32 GetAttackPowerFromStat(int32 statId) const;
 
+		virtual uint8 GetAttributeCost(uint32 attribute) const;
+
 		GameAuraC* GetAura(uint32 index) const;
 
 		/// @brief Returns whether the unit is currently alive.

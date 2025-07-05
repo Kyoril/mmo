@@ -41,7 +41,7 @@ namespace mmo
 
 		void SetName(const String& name);
 
-		uint8 GetAttributeCost(uint32 attribute) const;
+		uint8 GetAttributeCost(uint32 attribute) const override;
 
 		void NotifyItemData(const ItemInfo& data);
 
