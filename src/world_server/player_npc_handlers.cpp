@@ -488,7 +488,7 @@ namespace mmo
 		GameCreatureS* vendor = m_character->GetWorldInstance()->FindByGuid<GameCreatureS>(vendorGuid);
 		if (!vendor)
 		{
-			ELOG("Can't find vendor!");
+			WLOG("Can't find vendor!");
 			return;
 		}
 
@@ -501,7 +501,7 @@ namespace mmo
 		uint16 itemSlot = 0;
 		if (!m_character->GetInventory().FindItemByGUID(itemGuid, itemSlot))
 		{
-			ELOG("Can't find item!");
+			WLOG("Can't find item!");
 			return;
 		}
 
@@ -509,7 +509,7 @@ namespace mmo
 		auto item = m_character->GetInventory().GetItemAtSlot(itemSlot);
 		if (!item)
 		{
-			ELOG("Can't find item at slot!");
+			WLOG("Can't find item at slot!");
 			return;
 		}
 
@@ -517,7 +517,7 @@ namespace mmo
 		uint32 money = stack * item->GetEntry().sellprice();
 		if (money == 0)
 		{
-			ELOG("Can't sell item!");
+			WLOG("Can't sell item!");
 			return;
 		}
 
@@ -541,7 +541,8 @@ namespace mmo
 
 		if (!m_character->IsAlive())
 		{
-			ELOG("Can't buy items while character is dead!");
+			WLOG("Can't buy items while character is dead!");
+			SendInventoryError(inventory_change_failure::YouAreDead);
 			return;
 		}
 
@@ -549,7 +550,8 @@ namespace mmo
 		const proto::ItemEntry* itemEntry = m_project.items.getById(item);
 		if (itemEntry == nullptr)
 		{
-			ELOG("Player wants to buy unknown item!");
+			WLOG("Player wants to buy unknown item!");
+			SendInventoryError(inventory_change_failure::ItemNotFound);
 			return;
 		}
 
@@ -562,7 +564,8 @@ namespace mmo
 		const GameCreatureS* vendor = m_character->GetWorldInstance()->FindByGuid<GameCreatureS>(vendorGuid);
 		if (!vendor)
 		{
-			ELOG("Unable to find vendor npc!");
+			WLOG("Unable to find vendor npc!");
+			SendInventoryError(inventory_change_failure::ItemNotFound);
 			return;
 		}
 
@@ -575,7 +578,8 @@ namespace mmo
 		const auto* vendorEntry = m_project.vendors.getById(vendor->GetEntry().vendorentry());
 		if (vendorEntry == nullptr || vendorEntry->items_size() <= 0)
 		{
-			ELOG("Npc has no vendor entry assigned and thus does not sell anything!");
+			WLOG("Npc has no vendor entry assigned and thus does not sell anything!");
+			SendInventoryError(inventory_change_failure::ItemNotFound);
 			return;
 		}
 
@@ -584,7 +588,8 @@ namespace mmo
 				return vendorItem.item() == item;
 			}); vendorItemEntryIt == vendorEntry->items().end())
 		{
-			ELOG("Vendor does not sell item!");
+			WLOG("Vendor does not sell item!");
+			SendInventoryError(inventory_change_failure::ItemNotFound);
 			return;
 		}
 
@@ -593,15 +598,16 @@ namespace mmo
 		uint32 money = m_character->Get<uint32>(object_fields::Money);
 		if (money < price)
 		{
-			ELOG("Not enough money to buy item from vendor");
+			WLOG("Not enough money to buy item from vendor");
+			SendInventoryError(inventory_change_failure::NotEnoughMoney);
 			return;
 		}
 
 		std::map<uint16, uint16> addedBySlot;
 		if (auto result = m_character->GetInventory().CreateItems(*itemEntry, totalCount, &addedBySlot); result != inventory_change_failure::Okay)
 		{
-			ELOG("Failed to create items in inventory!");
-			//m_character->inventoryChangeFailure(result, nullptr, nullptr);
+			WLOG("Failed to create items in inventory!");
+			SendInventoryError(inventory_change_failure::InventoryFull);
 			return;
 		}
 

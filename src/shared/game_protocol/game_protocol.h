@@ -392,6 +392,9 @@ namespace mmo
 				ObjectQueryResult,
 
 				ItemPushResult,
+				
+				/// Inventory error message sent to the client
+				InventoryError,
 
 				LogoutResponse,
 				GuildRoster,

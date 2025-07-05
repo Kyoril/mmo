@@ -58,6 +58,7 @@
 #include "systems/party_info.h"
 #include "systems/guild_client.h"
 #include "systems/talent_client.h"
+#include "systems/inventory_client.h"
 
 #include "ui/minimap.h"
 
@@ -133,7 +134,7 @@ namespace mmo
 		if (s_loginConnector)
 		{
 			s_loginConnector->resetListener();
-			s_loginConnector->close();
+		 s_loginConnector->close();
 		}
 
 		// Destroy the work object that keeps the worker busy so that
@@ -295,6 +296,7 @@ namespace mmo
 	std::unique_ptr<LootClient> s_lootClient;
 	std::unique_ptr<VendorClient> s_vendorClient;
 	std::unique_ptr<TrainerClient> s_trainerClient;
+	std::unique_ptr<InventoryClient> s_inventoryClient;
 
 	std::unique_ptr<ClientCache> s_clientCache;
 
@@ -394,9 +396,19 @@ namespace mmo
 		s_lootClient = std::make_unique<LootClient>(*s_realmConnector, s_clientCache->GetItemCache());
 		s_vendorClient = std::make_unique<VendorClient>(*s_realmConnector, s_clientCache->GetItemCache());
 		s_trainerClient = std::make_unique<TrainerClient>(*s_realmConnector, s_project.spells);
+		s_inventoryClient = std::make_unique<InventoryClient>(*s_realmConnector);
 		s_questClient = std::make_unique<QuestClient>(*s_realmConnector, s_clientCache->GetQuestCache(), s_project.spells, s_clientCache->GetItemCache(), s_clientCache->GetCreatureCache(), s_localization);
 		s_partyInfo = std::make_unique<PartyInfo>(*s_realmConnector, s_clientCache->GetNameCache());
 		s_guildClient = std::make_unique<GuildClient>(*s_realmConnector, s_clientCache->GetGuildCache(), s_project.races, s_project.classes);
+
+		// Initialize client systems
+		s_lootClient->Initialize();
+		s_vendorClient->Initialize();
+		s_trainerClient->Initialize();
+		s_inventoryClient->Initialize();
+		s_questClient->Initialize();
+		s_partyInfo->Initialize();
+		s_guildClient->Initialize();
 
 		s_spellCast = std::make_unique<SpellCast>(*s_realmConnector, s_project.spells, s_project.ranges);
 		s_actionBar = std::make_unique<ActionBar>(*s_realmConnector, s_project.spells, s_clientCache->GetItemCache(), *s_spellCast);
@@ -449,8 +461,19 @@ namespace mmo
 		// Remove all registered game states and also leave the current game state.
 		GameStateMgr::Get().RemoveAllGameStates();
 
+		// Shutdown client systems
+		if (s_lootClient) s_lootClient->Shutdown();
+		if (s_vendorClient) s_vendorClient->Shutdown();
+		if (s_trainerClient) s_trainerClient->Shutdown();
+		if (s_inventoryClient) s_inventoryClient->Shutdown();
+		if (s_questClient) s_questClient->Shutdown();
+		if (s_partyInfo) s_partyInfo->Shutdown();
+		if (s_guildClient) s_guildClient->Shutdown();
+
 		s_vendorClient.reset();
 		s_lootClient.reset();
+		s_trainerClient.reset();
+		s_inventoryClient.reset();
 
 		DestroyFrameUI();
 

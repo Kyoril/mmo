@@ -93,6 +93,10 @@ namespace mmo
 		/// @brief Sends the current game time information to the client.
 		void SendGameTimeInfo() const;
 
+		/// @brief Sends an inventory error message to the client.
+		/// @param error The inventory error code to send.
+		void SendInventoryError(InventoryChangeFailure error) const;
+
 		void UpdateCharacterGroup(uint64 groupId);
 
 		void UpdateCharacterGuild(uint64 guildId);

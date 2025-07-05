@@ -2070,4 +2070,14 @@ namespace mmo
 		
 		DLOG("Sent game time to player: " << gameTime.GetTimeString() << " (speed: " << gameTime.GetTimeSpeed() << "x)");
 	}
+
+	void Player::SendInventoryError(InventoryChangeFailure error) const
+	{
+		SendPacket([error](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::InventoryError);
+			packet << io::write<uint8>(static_cast<uint8>(error));
+			packet.Finish();
+		});
+	}
 }

@@ -82,6 +82,7 @@ namespace mmo
 	class TalentClient;
 	class Discord;
 	class Minimap;
+	class InventoryClient;
 
 	/// This class represents the initial game state where the player is asked to enter
 	/// his credentials in order to authenticate.
@@ -115,7 +116,8 @@ namespace mmo
 			Discord& discord,
 			GameTimeComponent& gameTime,
 			TalentClient& talentClient,
-			Minimap& minimap);
+			Minimap& minimap,
+			InventoryClient& inventoryClient);
 
 	public:
 		/// @brief The default name of the world state
@@ -460,6 +462,8 @@ namespace mmo
 		Minimap& m_minimap;
 
 		Movement m_movement;
+
+		InventoryClient& m_inventoryClient;
 
 	private:
 		static IInputControl* s_inputControl;

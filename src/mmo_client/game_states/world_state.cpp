@@ -60,6 +60,7 @@
 
 #include "discord.h"
 #include "loading_screen.h"
+#include "systems/inventory_client.h"
 
 #include "ui/minimap.h"
 
@@ -166,7 +167,7 @@ namespace mmo
 
 	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers, LootClient& lootClient, VendorClient& vendorClient,
 		ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharSelect& charSelect, GuildClient& guildClient, ICacheProvider& cache, Discord& discord,
-		GameTimeComponent& gameTime, TalentClient& talentClient, Minimap& minimap)
+		GameTimeComponent& gameTime, TalentClient& talentClient, Minimap& minimap, InventoryClient& inventoryClient)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
 		, m_audio(audio)
@@ -186,6 +187,7 @@ namespace mmo
 		, m_gameTime(gameTime)
 		, m_talentClient(talentClient)
 		, m_minimap(minimap)
+		, m_inventoryClient(inventoryClient)
 	{
 		// TODO: Do we want to put these asset references in some sort of config setting or something?
 		ObjectMgr::SetUnitNameFontSettings(FontManager::Get().CreateOrRetrieve("Fonts/FRIZQT__.TTF", 24.0f, 1.0f), MaterialManager::Get().Load("Models/UnitNameFont.hmat"));
@@ -843,6 +845,7 @@ namespace mmo
 		m_partyInfo.Initialize();
 		m_guildClient.Initialize();
 		m_talentClient.Initialize();
+		m_inventoryClient.Initialize();
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("createmonster", [this](const std::string& cmd, const std::string& args) { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
@@ -877,6 +880,7 @@ namespace mmo
 		Console::UnregisterCommand("speed");
 #endif
 
+		m_inventoryClient.Shutdown();
 		m_talentClient.Shutdown();
 		m_guildClient.Shutdown();
 		m_partyInfo.Shutdown();

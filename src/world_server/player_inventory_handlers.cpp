@@ -69,6 +69,7 @@ namespace mmo
 		if (result != inventory_change_failure::Okay)
 		{
 			ELOG("Failed to add item to inventory: " << result);
+			SendInventoryError(result);
 			return;
 		}
 
@@ -204,7 +205,7 @@ namespace mmo
 
 				if (targetSlot == 0xFF)
 				{
-					//m_character->inventoryChangeFailure(game::inventory_change_failure::NoEquipmentSlotAvailable, item.get(), nullptr);
+					SendInventoryError(inventory_change_failure::NoEquipmentSlotAvailable);
 					return;
 				}
 			}
@@ -230,7 +231,7 @@ namespace mmo
 		if (!Inventory::IsEquipmentSlot(absDstSlot) && !Inventory::IsBagPackSlot(absDstSlot))
 		{
 			ELOG("Invalid target slot: " << targetSlot);
-			//m_character->inventoryChangeFailure(game::inventory_change_failure::ItemCantBeEquipped, item.get(), nullptr);
+			SendInventoryError(inventory_change_failure::ItemDoesNotGoToSlot);
 			return;
 		}
 
@@ -238,7 +239,8 @@ namespace mmo
 		if (auto result = inv.SwapItems(absSrcSlot, absDstSlot); result != inventory_change_failure::Okay)
 		{
 			// Something went wrong
-			ELOG("ERROR: " << result);
+			ELOG("Failed to equip item: " << result);
+			SendInventoryError(result);
 		}
 	}
 
@@ -267,9 +269,10 @@ namespace mmo
 		auto result = inv.SwapItems(
 			Inventory::GetAbsoluteSlot(srcBag, srcSlot),
 			Inventory::GetAbsoluteSlot(dstBag, dstSlot));
-		if (result)
+		if (result != inventory_change_failure::Okay)
 		{
-			ELOG("ERRROR: " << result);
+			ELOG("Failed to swap items: " << result);
+			SendInventoryError(result);
 		}
 	}
 
@@ -286,9 +289,10 @@ namespace mmo
 		auto result = inv.SwapItems(
 			Inventory::GetAbsoluteSlot(player_inventory_slots::Bag_0, srcSlot),
 			Inventory::GetAbsoluteSlot(player_inventory_slots::Bag_0, dstSlot));
-		if (result)
+		if (result != inventory_change_failure::Okay)
 		{
-			ELOG("ERRROR: " << result);
+			ELOG("Failed to swap inventory items: " << result);
+			SendInventoryError(result);
 		}
 	}
 
@@ -319,10 +323,10 @@ namespace mmo
 		}
 
 		auto result = m_character->GetInventory().RemoveItem(Inventory::GetAbsoluteSlot(bag, slot), count);
-		if (!result)
+		if (result != inventory_change_failure::Okay)
 		{
-			// TODO:
-			ELOG("ERRROR: " << result);
+			ELOG("Failed to remove item: " << result);
+			SendInventoryError(result);
 		}
 	}
 
