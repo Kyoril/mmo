@@ -78,6 +78,16 @@ namespace mmo
 		return info->GetItemSubClassName();
 	}
 
+	uint32 ItemHandle::GetProficiency() const
+	{
+		if (!CheckNonNull()) return 0;
+
+		const ItemInfo* info = Get()->GetEntry();
+		if (!info) return 0;
+
+		return 1 << info->itemSubclass;
+	}
+
 	const char* ItemHandle::GetInventoryType() const
 	{
 		if (!CheckNonNull()) return nullptr;

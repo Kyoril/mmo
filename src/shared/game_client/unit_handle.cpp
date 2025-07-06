@@ -277,6 +277,27 @@ namespace mmo
 		return Get()->GetAttributeCost(attribute);
 	}
 
+	bool UnitHandle::HasProficiency(const int32 type, const uint32 proficiency) const
+	{
+		// No requirement?
+		if (proficiency == 0)
+		{
+			return true;
+		}
+
+		if (!CheckNonNull()) return false;
+
+		switch (type)
+		{
+		case proficiency_type::Weapon:
+			return (Get()->GetWeaponProficiency() & proficiency) != 0;
+		case proficiency_type::Armor:
+			return (Get()->GetArmorProficiency() & proficiency) != 0;
+		}
+
+		return false;
+	}
+
 	bool UnitHandle::CheckNonNull() const
 	{
 		if (Get())

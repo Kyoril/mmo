@@ -707,6 +707,8 @@ namespace mmo
 
 		const char* GetItemSubClassName() const;
 
+		uint32 GetProficiency() const;
+
 		const char* GetItemInventoryTypeName() const;
 
 		const char* GetIcon() const;

@@ -13,6 +13,15 @@ namespace mmo
 	class GameUnitC;
 	class GameAuraC;
 
+	namespace proficiency_type
+	{
+		enum Type
+		{
+			Weapon = 0,
+			Armor = 1
+		};
+	}
+
 	class AuraHandle final : public WeakHandle<GameAuraC>
 	{
 	public:
@@ -72,6 +81,8 @@ namespace mmo
 		[[nodiscard]] virtual int32 GetManaFromStat(int32 statId) const;
 		[[nodiscard]] virtual int32 GetAttackPowerFromStat(int32 statId) const;
 		[[nodiscard]] virtual uint8 GetAttributeCost(uint32 attribute) const;
+
+		[[nodiscard]] virtual bool HasProficiency(int32 type, uint32 proficiency) const;
 
 
 	private:

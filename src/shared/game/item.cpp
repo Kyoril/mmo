@@ -147,6 +147,11 @@ namespace mmo
 		return nullptr;
 	}
 
+	uint32 ItemInfo::GetProficiency() const
+	{
+		return 1 << itemSubclass;
+	}
+
 	const char* ItemInfo::GetItemInventoryTypeName() const
 	{
 		static const char* s_inventoryTypeStrings[] = {

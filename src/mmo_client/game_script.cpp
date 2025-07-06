@@ -884,6 +884,7 @@ namespace mmo
 				.def_readonly("maxDurability", &ItemInfo::maxdurability)
 				.def_readonly("class", &ItemInfo::GetItemClassName)
 				.def_readonly("subClass", &ItemInfo::GetItemSubClassName)
+				.def_readonly("proficiency", &ItemInfo::GetProficiency)
 				.def_readonly("inventoryType", &ItemInfo::GetItemInventoryTypeName)
 				.def<std::function<const char* (const ItemInfo*)>>("GetIcon", [this](const ItemInfo* self) -> const char* { return this->m_project.itemDisplays.getById(self->displayId)->icon().c_str(); })
 				.def_readonly("sellPrice", &ItemInfo::sellPrice)
@@ -923,7 +924,8 @@ namespace mmo
 				.def("GetAttackPowerFromStat", &UnitHandle::GetAttackPowerFromStat)
 				.def("GetHealthFromStat", &UnitHandle::GetHealthFromStat)
 				.def("GetManaFromStat", &UnitHandle::GetManaFromStat)
-				.def("GetAttributeCost", &UnitHandle::GetAttributeCost)),
+				.def("GetAttributeCost", &UnitHandle::GetAttributeCost)
+				.def("HasProficiency", &UnitHandle::HasProficiency)),
 
 			luabind::scope(
 				luabind::class_<AuraHandle>("AuraHandle")
@@ -940,6 +942,7 @@ namespace mmo
 				.def("GetClass", &ItemHandle::GetItemClass)
 				.def("GetInventoryType", &ItemHandle::GetInventoryType)
 				.def("GetSubClass", &ItemHandle::GetItemSubClass)
+				.def("GetProficiency", &ItemHandle::GetProficiency)
 				.def("GetStackCount", &ItemHandle::GetStackCount)
 				.def("GetBagSlots", &ItemHandle::GetBagSlots)
 				.def("GetMinDamage", &ItemHandle::GetMinDamage)

@@ -33,6 +33,8 @@ namespace mmo
 
 		[[nodiscard]] const char* GetItemSubClass() const;
 
+		[[nodiscard]] uint32 GetProficiency() const;
+
 		[[nodiscard]] const char* GetInventoryType() const;
 
 		[[nodiscard]] const char* GetIcon() const;
