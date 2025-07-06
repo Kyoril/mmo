@@ -70,18 +70,22 @@ namespace mmo
 
 		virtual void RefreshUnitName() override;
 
+		void ClearAllAttachments();
+
 	protected:
 		String m_name;
-
-		TagPoint* m_shieldAttachment{ nullptr };
-		Entity* m_shieldEntity{ nullptr };
-
-		TagPoint* m_weaponAttachment{ nullptr };
-		Entity* m_weaponEntity{ nullptr };
 
 		scoped_connection m_equipmentChangedHandler;
 		scoped_connection m_guildChangedHandler;
 
 		const GuildInfo* m_guild{ nullptr };
+
+		struct ItemAttachment
+		{
+			Entity* entity{ nullptr };
+			TagPoint* attachment{ nullptr };
+		};
+
+		std::unordered_map<uint32, ItemAttachment> m_itemAttachments;
 	};
 }

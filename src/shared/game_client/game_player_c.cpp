@@ -16,26 +16,7 @@ namespace mmo
 {
 	GamePlayerC::~GamePlayerC()
 	{
-		/*
-		if (m_shieldEntity)
-		{
-			m_entity->DetachObjectFromBone(*m_shieldEntity);
-			m_shieldAttachment = nullptr;
-
-			m_scene.DestroyEntity(*m_shieldEntity);
-			m_shieldEntity = nullptr;
-		}
-
-
-		if (m_weaponEntity)
-		{
-			m_entity->DetachObjectFromBone(*m_weaponEntity);
-			m_weaponAttachment = nullptr;
-
-			m_scene.DestroyEntity(*m_weaponEntity);
-			m_weaponEntity = nullptr;
-		}
-		*/
+		ClearAllAttachments();
 	}
 
 	void GamePlayerC::Deserialize(io::Reader& reader, bool complete)
@@ -189,6 +170,22 @@ namespace mmo
 
 				sub->SetMaterial(mat);
 			}
+
+			// Do we already have that item display applied?
+			if (!m_itemAttachments.contains(data.displayId))
+			{
+				if (variant.has_mesh() && !variant.mesh().empty())
+				{
+					if (m_entity->GetSkeleton()->HasBone(variant.attached_bone_default().bone_name()))
+					{
+						ItemAttachment attachment;
+						attachment.entity = m_scene.CreateEntity(m_entity->GetName() + "_ITEM_" + std::to_string(data.displayId), variant.mesh());
+						attachment.attachment = m_entity->AttachObjectToBone(variant.attached_bone_default().bone_name(), *attachment.entity);
+						attachment.attachment->SetScale(Vector3(variant.attached_bone_default().scale_x(), variant.attached_bone_default().scale_y(), variant.attached_bone_default().scale_z()));
+						m_itemAttachments[data.displayId] = attachment;
+					}
+				}
+			}
 		}
 	}
 
@@ -283,6 +280,20 @@ namespace mmo
 		m_nameComponent->SetText(strm.str());
 	}
 
+	void GamePlayerC::ClearAllAttachments()
+	{
+		for (const auto& attachment : m_itemAttachments)
+		{
+			if (attachment.second.entity)
+			{
+				m_entity->DetachObjectFromBone(*attachment.second.entity);
+				m_scene.DestroyEntity(*attachment.second.entity);
+			}
+		}
+
+		m_itemAttachments.clear();
+	}
+
 	void GamePlayerC::OnEquipmentChanged(uint64)
 	{
 		// First ensure customization options are applied to properly display the character
@@ -293,6 +304,8 @@ namespace mmo
 
 		// Reset entity to default configuration
 		m_entity->ResetSubEntities();
+
+		ClearAllAttachments();
 
 		m_configuration.Apply(*this, *m_customizationDefinition);
 
