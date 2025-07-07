@@ -616,6 +616,9 @@ namespace mmo
 
 		// Send current game time to player
 		SendGameTimeInfo();
+
+		// Lets track the session start time		
+    	m_sessionStartTime = std::chrono::steady_clock::now();
 		m_spawned = true;
 	}
 
@@ -705,7 +708,8 @@ namespace mmo
 			return;
 		}
 
-		m_connector.SendCharacterData(m_worldInstance->GetMapId(), m_worldInstance->GetId(), *m_character);
+		DLOG("Time played: " << GetTimePlayed() << " seconds");
+		m_connector.SendCharacterData(m_worldInstance->GetMapId(), m_worldInstance->GetId(), GetTimePlayed(), *m_character);
 	}
 
 	void Player::OpenLootDialog(std::shared_ptr<LootInstance> lootInstance, std::shared_ptr<GameObjectS> source)
@@ -1732,6 +1736,24 @@ namespace mmo
 
 				packet.Finish();
 			});
+	}
+
+	uint32 Player::GetTimePlayed() const
+	{
+		// Return stored time played plus current session duration
+		return m_characterData.timePlayed + GetCurrentSessionDuration();
+	}
+
+	uint32 Player::GetCurrentSessionDuration() const
+	{
+		if (m_sessionStartTime == std::chrono::steady_clock::time_point{})
+		{
+			return 0;
+		}
+
+		const auto now = std::chrono::steady_clock::now();
+		const auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - m_sessionStartTime);
+		return static_cast<uint32>(duration.count());
 	}
 
 	void Player::OnAttackSwingEvent(AttackSwingEvent attackSwingEvent)

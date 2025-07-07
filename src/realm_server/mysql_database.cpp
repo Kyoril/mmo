@@ -494,7 +494,7 @@ namespace mmo
 	{
 		const GameTime startTime = GetAsyncTimeMs();
 
-		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy, money, bind_map, bind_x, bind_y, bind_z, bind_o, attr_0, attr_1, attr_2, attr_3, attr_4, last_group FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
+		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy, timePlayed, money, bind_map, bind_x, bind_y, bind_z, bind_o, attr_0, attr_1, attr_2, attr_3, attr_4, last_group FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
 		if (select.Success())
 		{
 			if (const mysql::Row row(select); row)
@@ -528,6 +528,7 @@ namespace mmo
 				row.GetField(index++, result.mana);
 				row.GetField(index++, result.rage);
 				row.GetField(index++, result.energy);
+				row.GetField(index++, result.timePlayed);
 				row.GetField(index++, result.money);
 
 				// Load bind position and rotation
@@ -770,8 +771,8 @@ namespace mmo
 		}
 	}
 	
-	void MySQLDatabase::UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position,		const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money, const std::vector<ItemData>& items,
-		uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing, std::array<uint32, 5> attributePointsSpent, const std::vector<uint32>& spellIds, const std::unordered_map<uint32, uint32>& talentRanks)
+	void MySQLDatabase::UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position, const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money, const std::vector<ItemData>& items,
+		uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing, std::array<uint32, 5> attributePointsSpent, const std::vector<uint32>& spellIds, const std::unordered_map<uint32, uint32>& talentRanks, uint32 timePlayed)
 	{
 		mysql::Transaction transaction(m_connection);
 
@@ -787,6 +788,7 @@ namespace mmo
 			+ ", mana = " + std::to_string(mana)
 			+ ", rage = " + std::to_string(rage)
 			+ ", energy = " + std::to_string(energy)
+			+ ", timePlayed = " + std::to_string(timePlayed)
 			+ ", money = " + std::to_string(money)
 			+ ", bind_map = " + std::to_string(bindMap)
 			+ ", bind_x = " + std::to_string(bindPosition.x)
@@ -798,7 +800,7 @@ namespace mmo
 			+ ", attr_2 = " + std::to_string(attributePointsSpent[2])
 			+ ", attr_3 = " + std::to_string(attributePointsSpent[3])
 			+ ", attr_4 = " + std::to_string(attributePointsSpent[4])
-			+ " WHERE id = '" + std::to_string(characterId) + "'"))
+			+ " WHERE id = '" + std::to_string(characterId) + "' LIMIT 1"))
 		{
 			PrintDatabaseError();
 			throw mysql::Exception("Could not update character data!");

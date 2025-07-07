@@ -86,6 +86,8 @@ namespace mmo
 
 		uint64 guildId = 0;
 		bool isGameMaster = false;
+
+		uint32 timePlayed = 0;
 	};
 
 	inline io::Reader& operator>>(io::Reader& reader, CharacterData& data)
@@ -120,7 +122,8 @@ namespace mmo
 			>> io::read<uint64>(data.groupId)
 			>> io::read<uint64>(data.guildId)
 			>> data.configuration
-			>> io::read<uint8>(data.isGameMaster)))
+			>> io::read<uint8>(data.isGameMaster)
+			>> io::read<uint32>(data.timePlayed)))
 		{
 			return reader;
 		}
@@ -196,7 +199,8 @@ namespace mmo
 			<< io::write<uint64>(data.groupId)
 			<< io::write<uint64>(data.guildId)
 			<< data.configuration
-			<< io::write<uint8>(data.isGameMaster);
+			<< io::write<uint8>(data.isGameMaster)
+			<< io::write<uint32>(data.timePlayed);
 
 		writer << io::write<uint16>(data.questStatus.size());
 		for (auto const& [questId, questData] : data.questStatus)

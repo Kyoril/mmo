@@ -642,6 +642,7 @@ namespace mmo
 		uint64 characterGuid = 0;
 		uint32 mapId = 0;
 		InstanceId instanceId;
+		uint32 timePlayed = 0;
 
 		GamePlayerS player(m_project, m_timerQueue);
 		player.Initialize();
@@ -650,6 +651,7 @@ namespace mmo
 			>> io::read<uint64>(characterGuid)
 			>> io::read<uint32>(mapId)
 			>> instanceId
+			>> io::read<uint32>(timePlayed)
 			>> player
 			))
 		{
@@ -657,6 +659,7 @@ namespace mmo
 		}
 
 		DLOG("Received character data for character " << log_hex_digit(characterGuid) << ", persisting character data...");
+		DLOG("Time played: " << timePlayed << " seconds");
 
 		std::array<uint32, 5> attributePoints;
 		for (uint32 i = 0; i < attributePoints.size(); ++i)
@@ -708,7 +711,8 @@ namespace mmo
 			player.GetBindFacing(),
 			attributePoints,
 			spellIds,
-			player.GetTalents()
+			player.GetTalents(),
+			timePlayed
 			);
 
 		return PacketParseResult::Pass;

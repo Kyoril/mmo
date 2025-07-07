@@ -425,6 +425,12 @@ namespace mmo
 
 		void SendTrainerList(const proto::TrainerEntry& trainer, const GameCreatureS& trainerUnit);
 
+		/// Gets the total time played for the current character in seconds
+		uint32 GetTimePlayed() const;
+		
+		/// Gets the current session duration in seconds
+		uint32 GetCurrentSessionDuration() const;
+		
 	public:
 		void OnAttackSwingEvent(AttackSwingEvent attackSwingEvent) override;
 
@@ -479,5 +485,7 @@ namespace mmo
 		ConditionMgr& m_conditionMgr;
 
 		bool m_spawned{ false };
+
+		std::chrono::steady_clock::time_point m_sessionStartTime;
 	};
 }
