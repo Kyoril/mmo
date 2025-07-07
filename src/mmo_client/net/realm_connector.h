@@ -426,6 +426,8 @@ namespace mmo
 		/// Gets the id of the realm.
 		uint32 GetRealmId() const { return m_realmId; }
 
+		void SendTimePlayedRequest();
+
 	public:
 		/// Gets a constant list of character views.
 		const std::vector<CharacterView>& GetCharacterViews() const { return m_characterViews; }

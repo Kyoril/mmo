@@ -212,6 +212,8 @@ namespace mmo
 
 				LearnTalent,
 
+				TimePlayedRequest,
+
 				/// Counter constant
 				Count_,
 			};
@@ -408,6 +410,9 @@ namespace mmo
 
 				SpellSuperceeded,
 				SetProficiency,
+
+				/// Time played response packet sent to the client
+				TimePlayedResponse,
 
 				/// Counter constant
 				Count_,

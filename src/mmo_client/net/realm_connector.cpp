@@ -874,4 +874,13 @@ namespace mmo
 				packet.Finish();
 			});
 	}
+
+	void RealmConnector::SendTimePlayedRequest()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::TimePlayedRequest);
+				packet.Finish();
+			});
+	}
 }

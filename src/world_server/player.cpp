@@ -469,6 +469,9 @@ namespace mmo
 		case game::client_realm_packet::LearnTalent:
 			OnLearnTalent(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::TimePlayedRequest:
+			OnTimePlayedRequest(opCode, buffer.size(), reader);
+			break;
 
 		case game::client_realm_packet::MoveStartForward:
 		case game::client_realm_packet::MoveStartBackward:
@@ -2101,5 +2104,21 @@ namespace mmo
 			packet << io::write<uint8>(static_cast<uint8>(error));
 			packet.Finish();
 		});
+	}
+
+	void Player::OnTimePlayedRequest(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		// Get the current time played in seconds
+		const uint32 timePlayed = GetTimePlayed();
+		
+		// Send the response back to the client
+		SendPacket([timePlayed](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::TimePlayedResponse);
+			packet << io::write<uint32>(timePlayed);
+			packet.Finish();
+		});
+		
+		DLOG("Sent time played to player: " << timePlayed << " seconds");
 	}
 }

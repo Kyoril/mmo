@@ -1116,7 +1116,9 @@ namespace mmo
 			luabind::def<std::function<void()>>("AcceptGroup", [this]() { m_realmConnector.AcceptGroup(); }),
 			luabind::def<std::function<void()>>("DeclineGroup", [this]() { m_realmConnector.DeclineGroup(); }),
 			luabind::def<std::function<void(const String&)>>("InviteByName", [this](const String& playerName) { m_realmConnector.InviteByName(playerName); }),
-			luabind::def<std::function<void(const String&)>>("UninviteByName", [this](const String& playerName) { m_realmConnector.UninviteByName(playerName); })
+			luabind::def<std::function<void(const String&)>>("UninviteByName", [this](const String& playerName) { m_realmConnector.UninviteByName(playerName); }),
+
+			luabind::def<std::function<void()>>("RequestTimePlayed", [this]() { m_realmConnector.SendTimePlayedRequest(); })
 		];
 
 		m_charSelect.RegisterScriptFunctions(m_luaState.get());

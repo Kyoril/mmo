@@ -326,6 +326,8 @@ namespace mmo
 
 		PacketParseResult OnSetProficiency(game::IncomingPacket& packet);
 
+		PacketParseResult OnTimePlayedResponse(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS

@@ -838,6 +838,8 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &WorldState::OnGameTimeInfo);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetProficiency, *this, &WorldState::OnSetProficiency);
 		
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TimePlayedResponse, *this, &WorldState::OnTimePlayedResponse);
+		
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
 		m_trainerClient.Initialize();
@@ -1741,6 +1743,7 @@ namespace mmo
 		{
 			m_playerController->GetControlledUnit()->UnlearnSpell(spellId);
 			
+						
 			// Update talent information for unlearned spell
 			m_talentClient.OnSpellUnlearned(spellId);
 			
@@ -1916,7 +1919,6 @@ namespace mmo
 			"SPELL_CAST_FAILED_NOT_WHILE_GHOST",
 			"SPELL_CAST_FAILED_NO_AMMO",
 			"SPELL_CAST_FAILED_NO_CHARGES_REMAIN",
-			"SPELL_CAST_FAILED_NO_CHAMPION",
 			"SPELL_CAST_FAILED_NO_COMBO_POINTS",
 			"SPELL_CAST_FAILED_NO_DUELING",
 			"SPELL_CAST_FAILED_NO_ENDURANCE",
@@ -2887,6 +2889,7 @@ namespace mmo
 		m_realmConnector.LearnSpell(entry);
 	}
 #endif
+
 
 #ifdef MMO_WITH_DEV_COMMANDS
 	void WorldState::Command_CreateMonster(const std::string& cmd, const std::string& args) const
@@ -3862,6 +3865,21 @@ namespace mmo
 
 		// Log proficiency for character
 		ILOG("Proficiency in item class " << static_cast<uint32>(itemclass) << " set to " << log_hex_digit(mask));
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnTimePlayedResponse(game::IncomingPacket& packet)
+	{
+		uint32 timePlayed;
+		if (!(packet >> io::read<uint32>(timePlayed)))
+		{
+			ELOG("Failed to read TimePlayedResponse packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Update the UI or perform any necessary actions with the received time played value
+		FrameManager::Get().TriggerLuaEvent("TIME_PLAYED_UPDATED", timePlayed);
 
 		return PacketParseResult::Pass;
 	}

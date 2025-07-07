@@ -344,6 +344,12 @@ namespace mmo
 
 		void OnLearnTalent(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// Handles the client's request to get the current time played on this character.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnTimePlayedRequest(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 	private:
 		const proto::GossipMenuEntry* GetActiveGossipMenuFromNpc(const GameCreatureS& npc) const;
 
