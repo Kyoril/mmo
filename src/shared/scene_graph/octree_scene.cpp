@@ -1,6 +1,7 @@
 #include "octree_scene.h"
 #include "octree_node.h"
 #include "camera.h"
+#include "log/default_log_levels.h"
 
 namespace mmo
 {
@@ -184,18 +185,37 @@ namespace mmo
 
 		node.SetOctant(nullptr);
 	}
-
 	void OctreeScene::AddOctreeNode(OctreeNode& node, Octree& octant, size_t depth)
 	{
 		if (!m_octree)
 		{
 			return;
 		}
-		
+
 		const AABB& bx = node.GetWorldAABB();
 
-		// if the octree is twice as big as the scene node, we will add it to a child.
+		// Check if the entity spans multiple child octants
+		// If so, place it at the current level instead of pushing it down
+		bool spansMultipleOctants = false;
+
 		if (depth < m_maxDepth && octant.IsTwiceSize(bx))
+		{
+			// Calculate which octants the entity would occupy
+			const Vector3& octantMin = octant.m_box.min;
+			const Vector3& octantMax = octant.m_box.max;
+			const Vector3 octantCenter = (octantMin + octantMax) * 0.5f;
+
+			// Check if entity spans across the center dividing planes
+			const bool spansX = (bx.min.x < octantCenter.x) && (bx.max.x > octantCenter.x);
+			const bool spansY = (bx.min.y < octantCenter.y) && (bx.max.y > octantCenter.y);
+			const bool spansZ = (bx.min.z < octantCenter.z) && (bx.max.z > octantCenter.z);
+
+			spansMultipleOctants = spansX || spansY || spansZ;
+		}
+
+		// If the octree is twice as big as the scene node AND the node doesn't span multiple octants,
+		// add it to a child octant
+		if (depth < m_maxDepth && octant.IsTwiceSize(bx) && !spansMultipleOctants)
 		{
 			int x, y, z;
 			octant.GetChildIndices(bx, &x, &y, &z);
@@ -213,7 +233,6 @@ namespace mmo
 					min.x = octantMin.x;
 					max.x = (octantMin.x + octantMax.x) / 2.0f;
 				}
-
 				else
 				{
 					min.x = (octantMin.x + octantMax.x) / 2.0f;
@@ -225,7 +244,6 @@ namespace mmo
 					min.y = octantMin.y;
 					max.y = (octantMin.y + octantMax.y) / 2.0f;
 				}
-
 				else
 				{
 					min.y = (octantMin.y + octantMax.y) / 2.0f;
@@ -237,7 +255,6 @@ namespace mmo
 					min.z = octantMin.z;
 					max.z = (octantMin.z + octantMax.z) / 2.0f;
 				}
-
 				else
 				{
 					min.z = (octantMin.z + octantMax.z) / 2.0f;
@@ -253,6 +270,8 @@ namespace mmo
 		}
 		else
 		{
+			// Place the entity at this level (either because it's too large for children
+			// or because it spans multiple octants)
 			octant.AddNode(node);
 		}
 	}
@@ -374,9 +393,22 @@ namespace mmo
 		return query;
 	}
 
+	std::unique_ptr<OctreeAABBSceneQuery> OctreeScene::CreateOctreeAABBQuery(const AABB& box)
+	{
+		auto query = std::make_unique<OctreeAABBSceneQuery>(*this);
+		query->SetBox(box);
+
+		return query;
+	}
+
 	std::unique_ptr<RaySceneQuery> OctreeScene::CreateRayQuery(const Ray& ray)
 	{
 		return CreateOctreeRayQuery(ray);
+	}
+
+	std::unique_ptr<AABBSceneQuery> OctreeScene::CreateAABBQuery(const AABB& box)
+	{
+		return CreateOctreeAABBQuery(box);
 	}
 
 	// Implementation of OctreeRaySceneQuery
@@ -487,5 +519,90 @@ namespace mmo
 		}
 
 		return true; // Continue processing
+	}
+
+	// Implementation of OctreeAABBSceneQuery
+	OctreeAABBSceneQuery::OctreeAABBSceneQuery(OctreeScene& scene)
+		: AABBSceneQuery(scene)
+		, m_octreeScene(scene)
+	{
+	}
+
+	void OctreeAABBSceneQuery::Execute(SceneQueryListener& listener)
+	{
+		if (!m_octreeScene.m_octree)
+		{
+			return;
+		}
+
+		// Start the recursive octree traversal from the root
+		WalkOctreeForAABB(listener, *m_octreeScene.m_octree, GetBox());
+	}
+
+	void OctreeAABBSceneQuery::WalkOctreeForAABB(SceneQueryListener& listener, Octree& octant, const AABB& queryAABB)
+	{
+		// Early exit if this octant has no nodes
+		if (octant.GetNumNodes() == 0)
+		{
+			return;
+		}
+
+		// Test if the query AABB intersects this octant's bounding box
+		if (!queryAABB.Intersects(octant.m_box))
+		{
+			return; // No intersection with this octant, skip it
+		}
+
+		// Test all nodes directly attached to this octant
+		for (OctreeNode* node : octant.m_nodes)
+		{
+			// Check all MovableObjects attached to this scene node
+			const uint32 numObjects = node->GetNumAttachedObjects();
+			for (uint32 i = 0; i < numObjects; ++i)
+			{
+				MovableObject* movableObj = node->GetAttachedObject(i);
+				if (!movableObj)
+				{
+					continue;
+				}
+
+				// Apply type and query mask filters
+				if ((movableObj->GetTypeFlags() & GetQueryTypeMask()) == 0)
+				{
+					continue;
+				}
+
+				if ((movableObj->GetQueryFlags() & GetQueryMask()) == 0)
+				{
+					continue;
+				}
+
+				const AABB& worldBounds = movableObj->GetWorldBoundingBox(true);
+
+				// Test intersection with the object's world bounding box
+				if (!queryAABB.Intersects(worldBounds))
+				{
+					continue;
+				}
+
+				// Report the hit to the listener
+				listener.QueryResult(*movableObj);
+			}
+		}
+
+		// Recursively process child octants
+		for (int x = 0; x < 2; ++x)
+		{
+			for (int y = 0; y < 2; ++y)
+			{
+				for (int z = 0; z < 2; ++z)
+				{
+					if (Octree* child = octant.m_children[x][y][z].get())
+					{
+						WalkOctreeForAABB(listener, *child, queryAABB);
+					}
+				}
+			}
+		}
 	}
 }

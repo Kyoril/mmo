@@ -65,13 +65,12 @@ namespace mmo
 
 	void Minimap::RegisterScriptFunctions(lua_State* luaState)
 	{
-		luabind::module(luaState)
-		[
+		LUABIND_MODULE(luaState,
 			luabind::def_lambda("GetMinimapZoomLevel", [this]() { return GetZoomLevel(); }),
 			luabind::def_lambda("GetMinimapMinZoomLevel", [this]() { return 0; }),
 			luabind::def_lambda("GetMinimapMaxZoomLevel", [this]() { return GetMaxZoomLevel(); }),
 			luabind::def_lambda("SetMinimapZoomLevel", [this](int32 zoomLevel) { SetZoomLevel(zoomLevel); })
-		];
+		);
 	}
 
 	void Minimap::UpdatePlayerPosition(const Vector3& playerPosition, const Radian& playerOrientation)

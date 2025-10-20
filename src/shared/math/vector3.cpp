@@ -45,4 +45,29 @@ namespace mmo
         q.Normalize();
         return q;
 	}
+
+	Vector3 Vector3::VectorPlaneProject(const Vector3& v, const Vector3& planeNormal)
+	{
+        return v - v.ProjectOnToNormal(planeNormal);
+	}
+
+	bool Vector3::IsNearlyZero(float tolerance) const
+	{
+		return
+			std::abs(x) <= tolerance
+			&& std::abs(y) <= tolerance
+			&& std::abs(z) <= tolerance;
+	}
+
+	float Vector3::PointPlaneDist(const Vector3& point, const Vector3& planeOrigin, const Vector3& planeNormal)
+	{
+		return (point - planeOrigin) | planeNormal;
+	}
+
+	Vector3 Vector3::PointPlaneProject(const Vector3& point, const Vector3& planeOrigin, const Vector3& planeNormal)
+	{
+		//Find the distance of X from the plane
+		//Add the distance back along the normal from the point
+		return point - planeNormal * PointPlaneDist(point, planeOrigin, planeNormal);
+	}
 }

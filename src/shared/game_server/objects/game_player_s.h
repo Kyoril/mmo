@@ -236,6 +236,10 @@ namespace mmo
 
 		void SetIsGameMaster(bool isGameMaster);
 
+		/// @brief Applies movement information and performs height safety checks.
+		/// @param info The movement information to apply.
+		void ApplyMovementInfo(const MovementInfo& info) override;
+
 	protected:
 		void UpdateStat(int32 stat);
 

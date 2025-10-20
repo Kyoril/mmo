@@ -24,6 +24,7 @@ namespace mmo
 		, m_type(type)
 	{
 		SetCastShadows(false);
+		SetQueryFlags(0);
 	}
 
 	void Light::Update() const

@@ -1,6 +1,7 @@
 
 #include "unit_handle.h"
 
+#include "game_aura_c.h"
 #include "game_player_c.h"
 #include "game_unit_c.h"
 #include "base/clock.h"

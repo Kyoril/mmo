@@ -428,6 +428,8 @@ namespace mmo
 
 		void SendTimePlayedRequest();
 
+		void SendTimeSyncResponse(uint32 syncIndex, GameTime clientTimestamp);
+
 	public:
 		/// Gets a constant list of character views.
 		const std::vector<CharacterView>& GetCharacterViews() const { return m_characterViews; }

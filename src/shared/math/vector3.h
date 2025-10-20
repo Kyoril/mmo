@@ -11,6 +11,7 @@
 #include <limits>
 #include <cfloat>
 #include <ostream>
+#include <sstream>
 
 #include "clamp.h"
 #include "math_utils.h"
@@ -382,7 +383,37 @@ namespace mmo
 			ASSERT(target.z == target.z);
 			return *this + (target - *this) * t;
 		}
+
+		float operator|(const Vector3& v) const;
+		Vector3 GetClampedToMaxSize(float maxSize) const;
+
+		Vector3 ProjectOnToNormal(const Vector3& normal) const;
+
+		static Vector3 VectorPlaneProject(const Vector3& v, const Vector3& planeNormal);
+
+		bool IsZero() const
+		{
+			return x == 0.f && y == 0.f && z == 0.f;
+		}
+
+		bool IsNearlyZero(float tolerance = 1.e-4f) const;
+
+		static float PointPlaneDist(const Vector3& point, const Vector3& planeOrigin, const Vector3& planeNormal);
+
+		static Vector3 PointPlaneProject(const Vector3& point, const Vector3& planeOrigin, const Vector3& planeNormal);
+
+		[[nodiscard]] std::string ToString() const
+		{
+			std::ostringstream oss;
+			oss << "(" << x << ", " << y << ", " << z << ")";
+			return oss.str();
+		}
 	};
+
+	inline Vector3 Vector3::ProjectOnToNormal(const Vector3& normal) const
+	{
+		return (normal * (*this | normal));
+	}
 
 	inline std::ostream& operator<<(std::ostream& o, const mmo::Vector3& b)
 	{
@@ -435,5 +466,27 @@ namespace mmo
 		const Vector3& v1, const Vector3& v2, const Vector3& v3)
 	{
 		return (v2 - v1).Cross(v3 - v1);
+	}
+
+	inline float Vector3::operator|(const Vector3& v) const
+	{
+		return x * v.x + y * v.y + z * v.z;
+	}
+
+	inline Vector3 Vector3::GetClampedToMaxSize(const float maxSize) const
+	{
+		if (maxSize < 1e-4f)
+		{
+			return Zero;
+		}
+
+		const float squaredLength = GetSquaredLength();
+		if (squaredLength > sqrtf(maxSize))
+		{
+			const float scale = maxSize * (1.0f / sqrtf(squaredLength));
+			return { x * scale,  y * scale, z * scale };
+		}
+
+		return *this;
 	}
 }

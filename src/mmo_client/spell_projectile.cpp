@@ -3,6 +3,7 @@
 
 #include "log/default_log_levels.h"
 #include "scene_graph/scene.h"
+#include "systems/spell_cast.h"
 
 namespace mmo
 {

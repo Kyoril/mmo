@@ -1,4 +1,3 @@
-
 #include "quest_client.h"
 
 #include "frame_ui/frame_mgr.h"
@@ -45,32 +44,35 @@ namespace mmo
 
 	void QuestClient::RegisterScriptFunctions(lua_State* luaState)
 	{
-		luabind::module(luaState)
-		[
+		LUABIND_MODULE(luaState,
 			luabind::scope(
 				luabind::class_<QuestListEntry>("QuestListEntry")
 				.def_readonly("id", &QuestListEntry::questId)
 				.def_readonly("title", &QuestListEntry::questTitle)
 				.def_readonly("icon", &QuestListEntry::menuIcon)
-				.def_readonly("isActive", &QuestListEntry::isActive)),
+				.def_readonly("isActive", &QuestListEntry::isActive)
+			),
 
 			luabind::scope(
 				luabind::class_<QuestInfo>("Quest")
 				.def_readonly("id", &QuestInfo::id)
 				.def_readonly("title", &QuestInfo::title)
-				.def_readonly("rewardMoney", &QuestInfo::rewardMoney)),
+				.def_readonly("rewardMoney", &QuestInfo::rewardMoney)
+			),
 
 			luabind::scope(
 				luabind::class_<QuestLogEntry>("QuestLogEntry")
 				.def_readonly("id", &QuestLogEntry::questId)
 				.def_readonly("quest", &QuestLogEntry::quest)
-				.def_readonly("status", &QuestLogEntry::status)),
+				.def_readonly("status", &QuestLogEntry::status)
+			),
 
 			luabind::scope(
 				luabind::class_<GossipMenuAction>("GossipMenuAction")
 				.def_readonly("id", &GossipMenuAction::id)
 				.def_readonly("text", &GossipMenuAction::text)
-				.def_readonly("icon", &GossipMenuAction::icon)),
+				.def_readonly("icon", &GossipMenuAction::icon)
+			),
 
 			luabind::scope(
 				luabind::class_<QuestDetails>("QuestDetails")
@@ -82,7 +84,8 @@ namespace mmo
 				.def_readonly("requestItems", &QuestDetails::questRequestItemsText)
 				.def_readonly("rewardedXp", &QuestDetails::rewardXp)
 				.def_readonly("rewardedMoney", &QuestDetails::rewardMoney)
-				.def_readonly("rewardedSpell", &QuestDetails::rewardSpell)),
+				.def_readonly("rewardedSpell", &QuestDetails::rewardSpell)
+			),
 
 			luabind::def_lambda("GetGreetingText", [this]() { return GetGreetingText(); }),
 			luabind::def_lambda("GetNumAvailableQuests", [this]() { return GetNumAvailableQuests(); }),
@@ -103,8 +106,7 @@ namespace mmo
 			luabind::def_lambda("GossipAction", [this](int32 index) { return ExecuteGossipAction(index); }),
 			luabind::def_lambda("GetQuestDetailsText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->description; ProcessQuestText(questText); return questText; }),
 			luabind::def_lambda("GetQuestObjectivesText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->summary; ProcessQuestText(questText); return questText; })
-
-		];
+		);
 	}
 
 	void QuestClient::CloseQuest()

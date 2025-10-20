@@ -57,6 +57,8 @@ namespace mmo
 
 		virtual void ConvertToSubmesh(SubMesh& subMesh) = 0;
 
+		virtual bool IsReady() const { return m_vertexData != nullptr; }
+
 	protected:
 		GraphicsDevice& m_device;
 		ManualRenderObject& m_parent;
@@ -196,7 +198,10 @@ namespace mmo
 		/// @copydoc ManualRenderOperation::Finish
 		void Finish() override
 		{
-			ASSERT(!m_lines.empty() && "At least one line has to be added!");
+			if (m_lines.empty())
+			{
+				return;
+			}
 			
 			std::vector<POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX> vertices;
 			vertices.reserve(m_lines.size() * 2);
@@ -443,7 +448,7 @@ namespace mmo
 		[[nodiscard]] const String& GetMovableType() const override;
 
 		/// @copydoc MovableObject::GetBoundingBox
-		[[nodiscard]] const AABB& GetBoundingBox() const override { return m_worldAABB; }
+		[[nodiscard]] const AABB& GetBoundingBox() const override { return m_boundingBox; }
 		
 		/// @copydoc MovableObject::GetBoundingRadius
 		[[nodiscard]] float GetBoundingRadius() const override { return m_boundingRadius; }
@@ -460,7 +465,7 @@ namespace mmo
 	private:
 		GraphicsDevice& m_device;
 		std::vector<std::unique_ptr<ManualRenderOperation>> m_operations;
-		AABB m_worldAABB;
+		AABB m_boundingBox;
 		float m_boundingRadius { 0.0f };
 	};
 }

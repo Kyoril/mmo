@@ -5,6 +5,7 @@
 #include <ranges>
 
 #include "camera.h"
+#include "debug_geometry.h"
 #include "material_manager.h"
 #include "mesh_manager.h"
 #include "render_operation.h"
@@ -42,7 +43,6 @@ namespace mmo
 	Scene::Scene()
 	{
 		m_renderQueue = std::make_unique<RenderQueue>();
-
 		m_psCameraBuffer = GraphicsDevice::Get().CreateConstantBuffer(sizeof(PsCameraConstantBuffer), nullptr);
 	}
 
@@ -56,6 +56,16 @@ namespace mmo
 
 		m_sceneNodes.clear();
 		m_rootNode = nullptr;
+	}
+
+	IDebugGeometry& Scene::GetDebugGeometry()
+	{
+		if (!m_debugGeometry)
+		{
+			m_debugGeometry = std::make_unique<DebugGeometry>(*this);
+		}
+
+		return *m_debugGeometry;
 	}
 
 	Camera* Scene::CreateCamera(const String& name)

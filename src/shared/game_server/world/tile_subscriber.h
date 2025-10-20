@@ -22,6 +22,12 @@ namespace mmo
 
 		virtual void NotifyObjectsDespawned(const std::vector<GameObjectS*>& objects) = 0;
 
+		virtual GameTime ClientToServerTime(GameTime clientTimestamp) const = 0;
+
+		virtual GameTime ServerToClientTime(GameTime serverTimestamp) const = 0;
+
+		virtual bool HasReceivedTimeSyncResponse() const = 0;
+
 		virtual void SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer, bool flush = true) = 0;
 	};
 }

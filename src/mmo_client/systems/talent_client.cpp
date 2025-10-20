@@ -1,4 +1,3 @@
-
 #include "talent_client.h"
 
 #include "luabind_lambda.h"
@@ -28,8 +27,7 @@ namespace mmo
 
 	void TalentClient::RegisterScriptFunctions(lua_State* luaState)
 	{
-		luabind::module(luaState)
-		[
+		LUABIND_MODULE(luaState,
 			luabind::scope(
 				luabind::class_<TalentInfo>("TalentInfo")
 				.def_readonly("id", &TalentInfo::id)
@@ -42,14 +40,16 @@ namespace mmo
 				.def_readonly("nextRankSpell", &TalentInfo::nextRankSpell)
 				.def_readonly("tabId", &TalentInfo::tabId)
 				.def_readonly("tier", &TalentInfo::tier)
-				.def_readonly("column", &TalentInfo::column)),
+				.def_readonly("column", &TalentInfo::column)
+			),
 				
 			luabind::def_lambda("GetNumTalentTabs", [this]() { return GetNumTalentTabs(); }),
-			luabind::def_lambda("GetTalentTabName", [this](int32 index) { return GetTalentTabName(index); }),			luabind::def_lambda("GetNumTalents", [this](int32 tabIndex) { return GetNumTalents(tabIndex); }),
+			luabind::def_lambda("GetTalentTabName", [this](int32 index) { return GetTalentTabName(index); }),
+			luabind::def_lambda("GetNumTalents", [this](int32 tabIndex) { return GetNumTalents(tabIndex); }),
 			luabind::def_lambda("GetTalentInfo", [this](int32 tabIndex, int32 talentIndex) { return GetTalentInfo(tabIndex, talentIndex); }),
 			luabind::def_lambda("GetTalentPointsSpentInTab", [this](int32 tabIndex) { return GetTalentPointsSpentInTabByIndex(tabIndex); }),
 			luabind::def_lambda("LearnTalent", [this](int32 tabIndex, int32 talentIndex) { return LearnTalent(tabIndex, talentIndex); })
-		];
+		);
 	}
 	
 	void TalentClient::NotifyCharacterClassChanged()

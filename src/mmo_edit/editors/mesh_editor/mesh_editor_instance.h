@@ -104,5 +104,9 @@ namespace mmo
 		typedef std::map<String, Matrix4> NodeTransformMap;
 		NodeTransformMap mNodeDerivedTransformByName;
 		String m_importSubmeshFile;
+
+		Vector3 m_importOffset = Vector3::Zero;
+		Vector3 m_importScale = Vector3::UnitScale;;
+		Quaternion m_importRotation = Quaternion::Identity;
 	};
 }

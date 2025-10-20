@@ -7,6 +7,12 @@
 #include "scene_graph/scene_node.h"
 #include "skeleton_instance.h"
 #include "tag_point.h"
+#include "math/capsule.h"
+#include "math/collision.h"
+
+#include <algorithm>
+
+#include "math/ray.h"
 
 namespace mmo
 {
@@ -351,6 +357,9 @@ namespace mmo
 	const AABB& Entity::GetBoundingBox() const
 	{
 		ASSERT(m_mesh);
+		
+		// TODO: For now, return mesh bounds. This needs to be fixed to handle transforms properly
+		// The real issue is that scaled entities need world-space bounds for proper octree queries
 		return m_mesh->GetBounds();
 	}
 
@@ -366,5 +375,274 @@ namespace mmo
 		{
 			visitor.Visit(*subEntity, 0, false);
 		}
+	}
+
+	bool Entity::TestCapsuleCollision(const Capsule& capsule, std::vector<CollisionResult>& results) const
+	{
+		ASSERT(IsCollidable());
+
+		const auto& collisionTree = m_mesh->GetCollisionTree();
+		if (collisionTree.IsEmpty())
+		{
+			return false;
+		}
+
+		// For non-uniform scaling, it's more accurate to transform mesh vertices to world space
+		// rather than trying to handle ellipsoid-shaped capsules in local space
+		const Matrix4 worldTransform = GetParentNodeFullTransform();
+		
+		// Keep capsule in world space - no transformation needed
+
+		// Use stack-based traversal for optimal performance
+		struct StackEntry
+		{
+			uint32 nodeIndex;
+		};
+
+		constexpr int maxStackSize = 64;
+		StackEntry stack[maxStackSize];
+		int stackCount = 1;
+		stack[0] = { 0 }; // Start with root node
+
+		bool foundCollision = false;
+
+		const auto& nodes = collisionTree.GetNodes();
+		const auto& vertices = collisionTree.GetVertices();
+		const auto& indices = collisionTree.GetIndices();
+
+		while (stackCount > 0 && stackCount < maxStackSize)
+		{
+			// Pop node from stack
+			const StackEntry current = stack[--stackCount];
+			
+			if (current.nodeIndex >= nodes.size())
+			{
+				continue;
+			}
+
+			const auto& node = nodes[current.nodeIndex];
+
+			// Transform node bounds to world space for AABB test
+			// For non-uniform scaling, we need to transform all 8 corners and rebuild the AABB
+			const Vector3& localMin = node.bounds.min;
+			const Vector3& localMax = node.bounds.max;
+			
+			// Transform all 8 corners of the local AABB
+			Vector3 corners[8] = {
+				worldTransform * Vector3(localMin.x, localMin.y, localMin.z),
+				worldTransform * Vector3(localMax.x, localMin.y, localMin.z),
+				worldTransform * Vector3(localMin.x, localMax.y, localMin.z),
+				worldTransform * Vector3(localMax.x, localMax.y, localMin.z),
+				worldTransform * Vector3(localMin.x, localMin.y, localMax.z),
+				worldTransform * Vector3(localMax.x, localMin.y, localMax.z),
+				worldTransform * Vector3(localMin.x, localMax.y, localMax.z),
+				worldTransform * Vector3(localMax.x, localMax.y, localMax.z)
+			};
+			
+			// Find the world space AABB that contains all transformed corners
+			AABB worldBounds;
+			worldBounds.min = corners[0];
+			worldBounds.max = corners[0];
+			for (int i = 1; i < 8; ++i)
+			{
+				worldBounds.min.x = std::min(worldBounds.min.x, corners[i].x);
+				worldBounds.min.y = std::min(worldBounds.min.y, corners[i].y);
+				worldBounds.min.z = std::min(worldBounds.min.z, corners[i].z);
+				worldBounds.max.x = std::max(worldBounds.max.x, corners[i].x);
+				worldBounds.max.y = std::max(worldBounds.max.y, corners[i].y);
+				worldBounds.max.z = std::max(worldBounds.max.z, corners[i].z);
+			}
+
+			// Test capsule against transformed node AABB - skip if no intersection
+			if (!capsule.GetBounds().Intersects(worldBounds))
+			{
+				continue;
+			}
+
+			if (node.numFaces > 0)
+			{
+				// Leaf node - test against triangles
+				for (uint32 i = 0; i < node.numFaces; ++i)
+				{
+					const uint32 faceIndex = node.startFace + i;
+					if (faceIndex * 3 + 2 >= indices.size())
+					{
+						continue;
+					}
+
+					// Get triangle vertices
+					const uint32 i0 = indices[faceIndex * 3 + 0];
+					const uint32 i1 = indices[faceIndex * 3 + 1];
+					const uint32 i2 = indices[faceIndex * 3 + 2];
+
+					if (i0 >= vertices.size() || i1 >= vertices.size() || i2 >= vertices.size())
+					{
+						continue;
+					}
+
+					const auto localV0 = Vector3(vertices[i0].x, vertices[i0].y, vertices[i0].z);
+					const auto localV1 = Vector3(vertices[i1].x, vertices[i1].y, vertices[i1].z);
+					const auto localV2 = Vector3(vertices[i2].x, vertices[i2].y, vertices[i2].z);
+
+					// Transform triangle vertices to world space
+					const Vector3 worldV0 = worldTransform * localV0;
+					const Vector3 worldV1 = worldTransform * localV1;
+					const Vector3 worldV2 = worldTransform * localV2;
+
+					// Test capsule against triangle
+					Vector3 contactPoint, contactNormal;
+					float penetrationDepth;
+					float distance;
+
+					if (CapsuleTriangleIntersection(capsule, worldV0, worldV1, worldV2, contactPoint, contactNormal, penetrationDepth, distance))
+					{
+						results.emplace_back(true, contactPoint, contactNormal, worldV0, worldV1, worldV2, penetrationDepth, distance);
+						foundCollision = true;
+					}
+				}
+			}
+			else
+			{
+				// Internal node - add children to stack if they exist and we have space
+				if (stackCount < maxStackSize - 2 && node.children < nodes.size() - 1)
+				{
+					stack[stackCount++] = { node.children };     // Left child
+					stack[stackCount++] = { node.children + 1 }; // Right child
+				}
+			}
+		}
+
+		return foundCollision;
+	}
+
+	bool Entity::TestRayCollision(const Ray& ray, CollisionResult& result) const
+	{
+		ASSERT(IsCollidable());
+
+		const auto& collisionTree = m_mesh->GetCollisionTree();
+		if (collisionTree.IsEmpty())
+		{
+			return false;
+		}
+
+		// Transform ray from world space to local space
+		const Matrix4 worldTransform = GetParentNodeFullTransform();
+		const Matrix4 invWorldTransform = worldTransform.Inverse();
+
+		const Vector3 localOrigin = invWorldTransform * ray.origin;
+		Vector3 localDirection = invWorldTransform * (ray.origin + ray.GetDirection()) - localOrigin;
+		localDirection.Normalize();
+
+		const Ray localRay(localOrigin, localOrigin + localDirection);
+
+		// Use stack-based traversal for optimal performance
+		struct StackEntry
+		{
+			uint32 nodeIndex;
+		};
+
+		constexpr int maxStackSize = 64;
+		StackEntry stack[maxStackSize];
+		int stackCount = 1;
+		stack[0] = { 0 }; // Start with root node
+
+		bool foundCollision = false;
+		float closestDistance = std::numeric_limits<float>::max();
+		Vector3 closestContactPoint;
+		Vector3 closestContactNormal;
+
+		const auto& nodes = collisionTree.GetNodes();
+		const auto& vertices = collisionTree.GetVertices();
+		const auto& indices = collisionTree.GetIndices();
+
+		while (stackCount > 0 && stackCount < maxStackSize)
+		{
+			// Pop node from stack
+			const StackEntry current = stack[--stackCount];
+
+			if (current.nodeIndex >= nodes.size())
+			{
+				continue;
+			}
+
+			const auto& node = nodes[current.nodeIndex];
+
+			// Test ray against node AABB in local space
+			auto [intersects, distance] = localRay.IntersectsAABB(node.bounds);
+			if (!intersects || distance > closestDistance)
+			{
+				continue;
+			}
+
+			if (node.numFaces > 0)
+			{
+				// Leaf node - test against triangles
+				for (uint32 i = 0; i < node.numFaces; ++i)
+				{
+					const uint32 faceIndex = node.startFace + i;
+					if (faceIndex * 3 + 2 >= indices.size())
+					{
+						continue;
+					}
+
+					// Get triangle vertices
+					const uint32 i0 = indices[faceIndex * 3 + 0];
+					const uint32 i1 = indices[faceIndex * 3 + 1];
+					const uint32 i2 = indices[faceIndex * 3 + 2];
+
+					if (i0 >= vertices.size() || i1 >= vertices.size() || i2 >= vertices.size())
+					{
+						continue;
+					}
+
+					const auto v0 = Vector3(vertices[i0].x, vertices[i0].y, vertices[i0].z);
+					const auto v1 = Vector3(vertices[i1].x, vertices[i1].y, vertices[i1].z);
+					const auto v2 = Vector3(vertices[i2].x, vertices[i2].y, vertices[i2].z);
+
+					// Test ray against triangle in local space
+					auto [hitTriangle, hitDistance] = localRay.IntersectsTriangle(v0, v1, v2);
+
+					if (hitTriangle && hitDistance < closestDistance)
+					{
+						closestDistance = hitDistance;
+
+						// Calculate hit point in local space
+						Vector3 localHitPoint = localRay.origin + localRay.GetDirection() * hitDistance;
+
+						// Calculate triangle normal in local space
+						Vector3 edge1 = v1 - v0;
+						Vector3 edge2 = v2 - v0;
+						Vector3 localNormal = edge1.Cross(edge2);
+						localNormal.Normalize();
+
+						// Transform hit point and normal to world space
+						closestContactPoint = worldTransform * localHitPoint;
+						closestContactNormal = worldTransform * localNormal - worldTransform * Vector3::Zero;
+						closestContactNormal.Normalize();
+
+						foundCollision = true;
+					}
+				}
+			}
+			else
+			{
+				// Internal node - add children to stack if they exist and we have space
+				if (stackCount < maxStackSize - 2 && node.children < nodes.size() - 1)
+				{
+					stack[stackCount++] = { node.children };     // Left child
+					stack[stackCount++] = { node.children + 1 }; // Right child
+				}
+			}
+		}
+
+		if (foundCollision)
+		{
+			result.hasCollision = true;
+			result.contactPoint = closestContactPoint;
+			result.contactNormal = closestContactNormal;
+			result.penetrationDepth = closestDistance; // Distance along ray to hit point
+		}
+
+		return foundCollision;
 	}
 }

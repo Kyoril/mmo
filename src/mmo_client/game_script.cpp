@@ -464,6 +464,12 @@ namespace mmo
 			WorldState::GetInputControl()->Jump();
 		}
 
+		void Script_StopJump()
+		{
+			if (!WorldState::GetInputControl()) return;
+			WorldState::GetInputControl()->StopJump();
+		}
+		
 		void CalculateEffectBasePoints(const proto_client::SpellEffect& effect, const proto_client::SpellEntry& spell, int32 casterLevel, int32& minBasePoints, int32& maxBasePoints)
 		{
 			if (casterLevel > spell.maxlevel() && spell.maxlevel() > 0)
@@ -830,12 +836,12 @@ namespace mmo
 		ASSERT(!m_globalFunctionsRegistered);
 
 		// Register common functions
-		luabind::module(m_luaState.get())
-		[
+		LUABIND_MODULE(m_luaState.get(),
 			luabind::scope(
 				luabind::class_<mmo::RealmData>("RealmData")
 				.def_readonly("id", &mmo::RealmData::id)
-				.def_readonly("name", &mmo::RealmData::name)),
+				.def_readonly("name", &mmo::RealmData::name)
+			),
 
 			luabind::scope(
 				luabind::class_<mmo::CharacterView>("CharacterView")
@@ -845,28 +851,33 @@ namespace mmo
 				.def_readonly("dead", &mmo::CharacterView::IsDead)
 				.def_readonly("raceId", &mmo::CharacterView::GetRaceId)
 				.def_readonly("classId", &mmo::CharacterView::GetClassId)
-				.def_readonly("map", &mmo::CharacterView::GetMapId)),
+				.def_readonly("map", &mmo::CharacterView::GetMapId)
+			),
 
 			luabind::scope(
 				luabind::class_<LoginConnector>("LoginConnector")
 				.def("GetRealms", &LoginConnector::GetRealms, luabind::return_stl_iterator())
-				.def("IsConnected", &LoginConnector::IsConnected)),
+				.def("IsConnected", &LoginConnector::IsConnected)
+			),
 
 			luabind::scope(
 				luabind::class_<proto_client::Project>("Project")
 				.def_readonly("spells", &mmo::proto_client::Project::spells)
-				.def_readonly("models", &mmo::proto_client::Project::models)),
+				.def_readonly("models", &mmo::proto_client::Project::models)
+			),
 
 			luabind::scope(
 				luabind::class_<proto_client::SpellManager>("SpellManager")
-				.def_const<const proto_client::SpellEntry*, proto_client::SpellManager, uint32>("GetById", &mmo::proto_client::SpellManager::getById)),
+				.def_const<const proto_client::SpellEntry*, proto_client::SpellManager, uint32>("GetById", &mmo::proto_client::SpellManager::getById)
+			),
 
 			luabind::scope(
 				luabind::class_<RealmConnector>("RealmConnector")
 	               .def("ConnectToRealm", &RealmConnector::ConnectToRealm)
 					.def("IsConnected", &RealmConnector::IsConnected)
 	               .def("GetRealmName", &RealmConnector::GetRealmName)
-	               .def("DeleteCharacter", &RealmConnector::DeleteCharacter)),
+	               .def("DeleteCharacter", &RealmConnector::DeleteCharacter)
+			),
 
 			luabind::scope(
 				luabind::class_<ItemInfo>("Item")
@@ -892,7 +903,8 @@ namespace mmo
 				.def("GetStatType", &ItemInfo::GetStatType)
 				.def("GetStatValue", &ItemInfo::GetStatValue)
 				.def("GetSpellId", &ItemInfo::GetSpellId)
-				.def("GetSpellTriggerType", &ItemInfo::GetSpellTriggerType)),
+				.def("GetSpellTriggerType", &ItemInfo::GetSpellTriggerType)
+			),
 
 			luabind::scope(
 				luabind::class_<UnitHandle>("UnitHandle")
@@ -925,14 +937,16 @@ namespace mmo
 				.def("GetHealthFromStat", &UnitHandle::GetHealthFromStat)
 				.def("GetManaFromStat", &UnitHandle::GetManaFromStat)
 				.def("GetAttributeCost", &UnitHandle::GetAttributeCost)
-				.def("HasProficiency", &UnitHandle::HasProficiency)),
+				.def("HasProficiency", &UnitHandle::HasProficiency)
+			),
 
 			luabind::scope(
 				luabind::class_<AuraHandle>("AuraHandle")
 				.def("IsExpired", &AuraHandle::IsExpired)
 				.def("CanExpire", &AuraHandle::CanExpire)
 				.def("GetDuration", &AuraHandle::GetDuration)
-				.def("GetSpell", &AuraHandle::GetSpell)),
+				.def("GetSpell", &AuraHandle::GetSpell)
+			),
 				
 			luabind::scope(
 				luabind::class_<ItemHandle>("ItemHandle")
@@ -973,8 +987,9 @@ namespace mmo
 				.def_readonly("powertype", &proto_client::SpellEntry::powertype)
 				.def_readonly("level", &proto_client::SpellEntry::spelllevel)
 				.def_readonly("casttime", &proto_client::SpellEntry::casttime)
-				.def_readonly("icon", &proto_client::SpellEntry::icon)),
-				
+				.def_readonly("icon", &proto_client::SpellEntry::icon)
+			),
+			
 			luabind::def("Quit", &Script_Quit),
 			luabind::def<std::function<void()>>("Logout", [this]() { OnLogout(); }),
 
@@ -1038,6 +1053,7 @@ namespace mmo
 			luabind::def("ToggleAutoRun", &Script_ToggleAutoRun),
 			
 			luabind::def("Jump", &Script_Jump),
+			luabind::def("StopJump", &Script_StopJump),
 
 			luabind::def("GetZoneText", &Script_GetZoneName),
 			luabind::def("GetSubZoneText", &Script_GetSubZoneName),
@@ -1119,7 +1135,7 @@ namespace mmo
 			luabind::def<std::function<void(const String&)>>("UninviteByName", [this](const String& playerName) { m_realmConnector.UninviteByName(playerName); }),
 
 			luabind::def<std::function<void()>>("RequestTimePlayed", [this]() { m_realmConnector.SendTimePlayedRequest(); })
-		];
+		);
 
 		m_charSelect.RegisterScriptFunctions(m_luaState.get());
 		m_charCreateInfo.RegisterScriptFunctions(m_luaState.get());

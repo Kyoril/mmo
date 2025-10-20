@@ -18,7 +18,6 @@
 #include "game_client/game_object_c.h"
 #include "game_protocol/game_protocol.h"
 #include "scene_graph/axis_display.h"
-#include "scene_graph/light.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/world_grid.h"
 #include "spell_projectile.h"
@@ -27,25 +26,16 @@
 #include "world_deserializer.h"
 #include "client_data/project.h"
 #include "frame_ui/frame.h"
-#include "game/action_button.h"
 #include "game/auto_attack.h"
 #include "paging/loaded_page_section.h"
 #include "paging/page_loader_listener.h"
 #include "paging/page_pov_partitioner.h"
 #include "paging/world_page_loader.h"
-#include "proto_data/proto_template.h"
-#include "terrain/terrain.h"
 #include "ui/binding.h"
 #include "ui/world_text_frame.h"
-#include "game/creature_data.h"
-#include "game/quest_info.h"
 
-#include "mmo_client/systems/spell_cast.h"
 #include "game_client/net_client.h"
 #include "debug_path_visualizer.h"
-#include "movement.h"
-#include "graphics/color_curve.h"
-#include "graphics/material_instance.h"
 
 namespace mmo
 {
@@ -90,7 +80,6 @@ namespace mmo
 		: public GameState
 		, public NetClient
 		, public IPageLoaderListener
-		, public ICollisionProvider
 	{
 	public:
 		/// @brief Creates a new instance of the WorldState class and initializes it.
@@ -328,6 +317,8 @@ namespace mmo
 
 		PacketParseResult OnTimePlayedResponse(game::IncomingPacket& packet);
 
+		PacketParseResult OnTimeSyncRequest(game::IncomingPacket& packet);
+
 	private:
 
 #ifdef MMO_WITH_DEV_COMMANDS
@@ -463,9 +454,11 @@ namespace mmo
 
 		Minimap& m_minimap;
 
-		Movement m_movement;
-
 		InventoryClient& m_inventoryClient;
+
+		bool m_worldLoaded = false;
+
+		bool m_timeSyncResponseSent = false;
 
 	private:
 		static IInputControl* s_inputControl;
@@ -484,31 +477,11 @@ namespace mmo
 
 		void GetItemData(uint64 guid, std::weak_ptr<GamePlayerC> player) override;
 
-		/**
-		 * @brief Gets the height of the ground at a specific world position.
-		 * 
-		 * This method performs a raycast downward from the given position to find the highest
-		 * ground surface within the specified range. It considers both terrain height and
-		 * entity collision geometry to determine the most accurate ground height.
-		 * 
-		 * @param position The world position to query from (typically with Y above ground).
-		 * @param range The maximum distance to search downward from the position.
-		 * @param out_height Reference to store the found ground height if successful.
-		 * @return True if ground was found within range, false otherwise.
-		 */
-		bool GetHeightAt(const Vector3& position, float range, float& out_height) override;
-
-		void GetCollisionTrees(const AABB& aabb, std::vector<const Entity*>& out_potentialEntities) override;
-
-		void OnMoveFallLand(GameUnitC& unit) override;
-
-		void OnMoveFall(GameUnitC& unit) override;
+		void OnMoveEvent(GameUnitC& unit, const MovementEvent& moveEvent) override;
 
 		void SetSelectedTarget(uint64 guid) override;
 
 		void OnGuildChanged(std::weak_ptr<GamePlayerC> player, uint64 guildGuid) override;
-
-		bool GetGroundNormalAt(const Vector3& position, float range, Vector3& out_normal) override;
 
 		void GetObjectData(uint64 guid, std::weak_ptr<GameWorldObjectC> object) override;
 	};

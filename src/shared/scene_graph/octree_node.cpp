@@ -96,7 +96,8 @@ namespace mmo
 			AABB bx = i->second->GetBoundingBox();
 			m_localBounds.Combine(bx);
 
-			m_worldAABB.Combine(i->second->GetWorldBoundingBox(true));
+			const AABB& worldBB = i->second->GetWorldBoundingBox(true);
+			m_worldAABB.Combine(worldBB);
 			++i;
 		}
 

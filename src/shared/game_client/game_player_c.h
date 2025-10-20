@@ -3,6 +3,7 @@
 #include "game_object_c.h"
 #include "game_unit_c.h"
 #include "game/movement_info.h"
+#include "scene_graph/manual_render_object.h"
 
 namespace mmo
 {
@@ -19,8 +20,8 @@ namespace mmo
 	class GamePlayerC : public GameUnitC
 	{
 	public:
-		explicit GamePlayerC(Scene& scene, NetClient& netDriver, ICollisionProvider& collisionProvider, const proto_client::Project& project, uint32 map)
-			: GameUnitC(scene, netDriver, collisionProvider, project, map)
+		explicit GamePlayerC(Scene& scene, NetClient& netDriver, const proto_client::Project& project, uint32 map)
+			: GameUnitC(scene, netDriver, project, map)
 		{
 		}
 
@@ -71,6 +72,9 @@ namespace mmo
 		virtual void RefreshUnitName() override;
 
 		void ClearAllAttachments();
+
+	private:
+
 
 	protected:
 		String m_name;

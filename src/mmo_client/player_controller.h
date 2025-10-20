@@ -19,6 +19,7 @@ namespace mmo
 	class Camera;
 	class RealmConnector;
 	class SpellCast;
+	class Movement;
 
 	/// @brief This class controls a player entity.
 	class PlayerController final : public IInputControl
@@ -49,10 +50,6 @@ namespace mmo
 
 		[[nodiscard]] SceneNode* GetRootNode() const { return m_controlledUnit ? m_controlledUnit->GetSceneNode() : nullptr; }
 
-		void OnMoveFallLand();
-
-		void OnMoveFall();
-
 	private:
 		void SetupCamera();
 
@@ -64,16 +61,10 @@ namespace mmo
 
 		void TurnPlayer();
 
-		void ApplyLocalMovement(float deltaSeconds) const;
-		
 		void SendMovementUpdate(uint16 opCode) const;
 
-		void StartHeartbeatTimer();
+		void SendMovementUpdateWithInfo(uint16 opCode, const MovementInfo& movementInfo) const;
 
-		void StopHeartbeatTimer();
-
-		void UpdateHeartbeat();
-		
 		void NotifyCameraZoomChanged();
 
 		void ClampCameraPitch();
@@ -89,7 +80,11 @@ namespace mmo
 
 		void Jump() override;
 
+		void StopJump() override;
+
 		void OnHoveredObjectChanged(GameObjectC* previousHoveredUnit);
+
+		void ProcessMovementEvent(const MovementEvent& movementEvent);
 
 	private:
 		Scene& m_scene;

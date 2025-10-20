@@ -12,6 +12,7 @@ namespace mmo
 		, max(max_)
 	{
 	}
+
 	void AABB::Transform(const Matrix4 & matrix)
 	{
 		const Vector3 c = (min + max) * 0.5f;

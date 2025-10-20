@@ -3,6 +3,8 @@
 #include "aabb.h"
 #include "vector3.h"
 
+#include <vector>
+
 namespace mmo
 {
     struct Capsule;
@@ -13,7 +15,17 @@ namespace mmo
 
     float ClosestSegmentSegment(const Vector3& p1, const Vector3& q1, const Vector3& p2, const Vector3& q2, Vector3& outSegmentPoint1, Vector3& outSegmentPoint2);
 
-	/// Determines whether a point is inside a triangle in 3D space.
+
+	// Project vector onto plane defined by normal
+	inline Vector3 ProjectVectorOntoPlane(const Vector3& vector, const Vector3& normal)
+	{
+		return vector - normal * vector.Dot(normal);
+	}
+
+    // Project movement considering multiple surfaces (original function for walkable surfaces)
+    Vector3 ProjectMovementAlongSurfaces(const Vector3& movement, const std::vector<Vector3>& normals);
+
+    /// Determines whether a point is inside a triangle in 3D space.
 	///	@param p The point to test.
 	///	@param a The first point of the triangle.
 	///	@param b The second point of the triangle.
@@ -50,8 +62,5 @@ namespace mmo
 	///	@param collisionNormal Output parameter which contains the normal of the collision.
 	///	@param penetrationDepth Output parameter which contains the penetration depth.
 	///	@returns True if the capsule intersects with the triangle, false otherwise.
-    bool CapsuleTriangleIntersection(const Capsule& capsule, const Vector3& a, const Vector3& b, const Vector3& c, Vector3& collisionPoint, Vector3& collisionNormal, float& penetrationDepth);
-
-	/// Calculates the AABB surrounding a capsule.
-	AABB CapsuleToAABB(const Capsule& capsule);
+    bool CapsuleTriangleIntersection(const Capsule& capsule, const Vector3& a, const Vector3& b, const Vector3& c, Vector3& collisionPoint, Vector3& collisionNormal, float& penetrationDepth, float& distance);
 }

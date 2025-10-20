@@ -273,6 +273,7 @@ namespace mmo
 			[[nodiscard]] float GetHeightAtGridPoint(int gridX, int gridZ) const;
 
 		private:
+			friend class Tile;
 
 			typedef Grid<std::unique_ptr<Page>> Pages;
 

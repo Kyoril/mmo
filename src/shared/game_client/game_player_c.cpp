@@ -218,30 +218,8 @@ namespace mmo
 		// TODO: For now we attach a shield to all player characters. This should be done based on the player's equipment though.
 		ASSERT(m_entity);
 
-		/*
-		if (m_shieldEntity)
-		{
-			m_entity->DetachObjectFromBone(*m_shieldEntity);
-			m_shieldAttachment = nullptr;
-
-			m_scene.DestroyEntity(*m_shieldEntity);
-			m_shieldEntity = nullptr;
-		}
-
-		if (m_entity->GetSkeleton()->HasBone("Back_M"))
-		{
-			m_shieldEntity = m_scene.CreateEntity(m_entity->GetName() + "_SHIELD", "Models/Character/Items/Weapons/Shield_Newbie_02.hmsh");
-			m_shieldAttachment = m_entity->AttachObjectToBone("Back_M", *m_shieldEntity);
-			m_shieldAttachment->SetScale(Vector3::UnitScale * 0.75f);
-		}
-
-		if (m_entity->GetSkeleton()->HasBone("Hip_L"))
-		{
-			m_weaponEntity = m_scene.CreateEntity(m_entity->GetName() + "_WEAPON", "Models/Character/Items/Weapons/Sword_1H_Newbie_01.hmsh");
-			m_weaponAttachment = m_entity->AttachObjectToBone("Hip_L", *m_weaponEntity);
-			m_weaponAttachment->SetScale(Vector3::UnitScale * 1.0f);
-		}
-		*/
+	   // Refresh collider
+	   UpdateCollider();
 	}
 
 	void GamePlayerC::RefreshDisplay()

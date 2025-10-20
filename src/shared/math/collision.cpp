@@ -174,6 +174,39 @@ namespace mmo
         return (outSegmentPoint1 - outSegmentPoint2).GetSquaredLength();
 	}
 
+	Vector3 ProjectMovementAlongSurfaces(const Vector3& movement, const std::vector<Vector3>& normals)
+	{
+		if (normals.empty()) 
+		{
+			return movement;
+		}
+
+		constexpr float EPSILON = 0.001f;
+
+		// Single surface - simple plane projection
+		if (normals.size() == 1) {
+			return ProjectVectorOntoPlane(movement, normals[0]);
+		}
+
+		// Multiple surfaces - handle corner/edge cases
+		if (normals.size() == 2) {
+			// Two surfaces - project along the edge (intersection line)
+			const Vector3 edge = normals[0].Cross(normals[1]).NormalizedCopy();
+
+			// Check if edge is valid (surfaces aren't parallel)
+			if (edge.GetSquaredLength() > EPSILON * EPSILON) {
+				const float edgeProjection = movement.Dot(edge);
+				return edge * edgeProjection;
+			}
+
+			// Surfaces are parallel - stop movement
+			return {0, 0, 0};
+		}
+
+		// Three or more surfaces - likely in a corner, stop movement
+		return {0, 0, 0};
+	}
+
 	bool PointInTriangle(const Vector3& p, const Vector3& a, const Vector3& b, const Vector3& c, Vector3& barycentricCoords)
 	{
         // Compute vectors
@@ -190,16 +223,19 @@ namespace mmo
 
         // Compute barycentric coordinates
         const float denom = dot00 * dot11 - dot01 * dot01;
-        if (denom == 0.0f) {
+        if (std::abs(denom) < 0.0001f) 
+        {
             // Triangle is degenerate
             return false;
         }
+        
         const float invDenom = 1.0f / denom;
         const float u = (dot11 * dot02 - dot01 * dot12) * invDenom;
         const float v = (dot00 * dot12 - dot01 * dot02) * invDenom;
 
-        // Check if point is in triangle
-        if (u >= 0.0f && v >= 0.0f && (u + v) <= 1.0f)
+        // Check if point is in triangle (with small epsilon for numerical stability)
+        constexpr float epsilon = 0.0001f;
+        if (u >= -epsilon && v >= -epsilon && (u + v) <= (1.0f + epsilon))
         {
             barycentricCoords = Vector3(1.0f - u - v, v, u);
             return true;
@@ -234,22 +270,26 @@ namespace mmo
         const float distB = (segB - triA).Dot(normal);
 
         // If the segment crosses the plane
-        if (distA * distB <= 0.f) 
+        if (distA * distB <= 0.0f) 
         {
             // Line segment intersects the plane of the triangle
             // Find intersection point
-            const float t = distA / (distA - distB);
-            const Vector3 pointOnPlane = segA + (segB - segA) * t;
-
-            // Check if the intersection point is inside the triangle
-            Vector3 barycentricCoords;
-            if (bool inside = PointInTriangle(pointOnPlane, triA, triB, triC, barycentricCoords))
+            const float denom = distA - distB;
+            if (std::abs(denom) > 0.0001f)
             {
-                // Closest point on segment is pointOnPlane
-                // Closest point on triangle is pointOnPlane
-                closestPointSegment = pointOnPlane;
-                closestPointTriangle = pointOnPlane;
-                return 0.f; // Distance squared is zero
+                const float t = distA / denom;
+                const Vector3 pointOnPlane = segA + (segB - segA) * t;
+
+                // Check if the intersection point is inside the triangle
+                Vector3 barycentricCoords;
+                if (PointInTriangle(pointOnPlane, triA, triB, triC, barycentricCoords))
+                {
+                    // Closest point on segment is pointOnPlane
+                    // Closest point on triangle is pointOnPlane
+                    closestPointSegment = pointOnPlane;
+                    closestPointTriangle = pointOnPlane;
+                    return 0.0f; // Distance squared is zero
+                }
             }
         }
 
@@ -329,31 +369,63 @@ namespace mmo
         return minDistSquared;
 	}
 
-	bool CapsuleTriangleIntersection(const Capsule& capsule, const Vector3& a, const Vector3& b, const Vector3& c, Vector3& collisionPoint,
-		Vector3& collisionNormal, float& penetrationDepth)
+	bool CapsuleTriangleIntersection(const Capsule& capsule, const Vector3& a, const Vector3& b, const Vector3& c, Vector3& collisionPoint, Vector3& collisionNormal, float& penetrationDepth, float& distance)
 	{
 		Vector3 closestPointCapsule, closestPointTriangle;
 
-		if (const float sqDistance = ClosestSegmentTriangle(
-			capsule.pointA, capsule.pointB,
+		const float sqDistance = ClosestSegmentTriangle(
+			capsule.GetPointA(), capsule.GetPointB(),
 			a, b, c,
 			closestPointCapsule, closestPointTriangle
-		); sqDistance <= capsule.radius * capsule.radius)
+		);
+
+		if (sqDistance <= capsule.GetRadius() * capsule.GetRadius())
 		{
-			const float distance = sqrtf(sqDistance);
-			penetrationDepth = capsule.radius - distance;
-			collisionNormal = (closestPointCapsule - closestPointTriangle).NormalizedCopy();
-			collisionPoint = closestPointCapsule - collisionNormal * (capsule.radius - penetrationDepth);
+			distance = sqrtf(sqDistance);
+			penetrationDepth = capsule.GetRadius() - distance;
+			
+			// Calculate collision normal
+			if (distance > 0.0001f)
+			{
+				// Normal points from triangle surface to capsule center
+				collisionNormal = (closestPointCapsule - closestPointTriangle).NormalizedCopy();
+			}
+			else
+			{
+				// Points are coincident, use triangle normal
+				const Vector3 edge1 = b - a;
+				const Vector3 edge2 = c - a;
+				Vector3 triangleNormal = edge1.Cross(edge2);
+				
+				const float normalLength = triangleNormal.GetLength();
+				if (normalLength > 0.0001f)
+				{
+					triangleNormal = triangleNormal / normalLength;
+					
+					// Ensure normal points away from capsule center
+					const Vector3 capsuleCenter = (capsule.GetPointA() + capsule.GetPointB()) * 0.5f;
+					const Vector3 triangleCenter = (a + b + c) / 3.0f;
+					const Vector3 towardsCapsule = capsuleCenter - triangleCenter;
+					
+					if (triangleNormal.Dot(towardsCapsule) < 0.0f)
+					{
+						triangleNormal = -triangleNormal;
+					}
+					
+					collisionNormal = triangleNormal;
+				}
+				else
+				{
+					// Degenerate triangle, use up vector as fallback
+					collisionNormal = Vector3(0.0f, 1.0f, 0.0f);
+				}
+			}
+			
+			// Collision point is on the triangle surface
+			collisionPoint = closestPointTriangle;
 			return true;
 		}
 
 		return false;
-	}
-
-	AABB CapsuleToAABB(const Capsule& capsule)
-	{
-		Vector3 minPoint = TakeMinimum(capsule.pointA, capsule.pointB) - Vector3(capsule.radius, capsule.radius, capsule.radius);
-		Vector3 maxPoint = TakeMaximum(capsule.pointA, capsule.pointB) + Vector3(capsule.radius, capsule.radius, capsule.radius);
-        return { minPoint, maxPoint };
 	}
 }

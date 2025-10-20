@@ -28,6 +28,7 @@ namespace mmo
 		, m_project(project)
 		, m_groupUpdate(instance.GetUniverse().GetTimers())
 		, m_conditionMgr(conditionMgr)
+		, m_timeSyncTimer(instance.GetUniverse().GetTimers())
 	{
 		m_character->SetNetUnitWatcher(this);
 		m_character->SetPlayerWatcher(this);
@@ -89,6 +90,13 @@ namespace mmo
 
 
 		m_character->SetInitialSpells(m_characterData.spellIds);
+
+		// Setup time sync timer
+		m_timeSyncTimer.ended.connect([this]() {
+			SendTimeSyncRequest();
+			// Reschedule next time sync request (every 2 minutes)
+			m_timeSyncTimer.SetEnd(GetAsyncTimeMs() + constants::OneMinute * 2);
+		});
 	}
 
 	Player::~Player()
@@ -473,6 +481,10 @@ namespace mmo
 			OnTimePlayedRequest(opCode, buffer.size(), reader);
 			break;
 
+		case game::client_realm_packet::TimeSyncResponse:
+			OnTimeSyncResponse(opCode, buffer.size(), reader);
+			break;
+
 		case game::client_realm_packet::MoveStartForward:
 		case game::client_realm_packet::MoveStartBackward:
 		case game::client_realm_packet::MoveStop:
@@ -619,6 +631,9 @@ namespace mmo
 
 		// Send current game time to player
 		SendGameTimeInfo();
+
+		// Send initial time sync request
+		SendTimeSyncRequest();
 
 		// Lets track the session start time		
     	m_sessionStartTime = std::chrono::steady_clock::now();
@@ -1028,6 +1043,12 @@ namespace mmo
 
 	void Player::OnMovement(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
+		if (!HasReceivedTimeSyncResponse())
+		{
+			ELOG("Failed to process movement packet: No time sync response received yet");
+			return;
+		}
+
 		uint64 characterGuid;
 		MovementInfo info;
 		if (!(contentReader >> io::read<uint64>(characterGuid) >> info))
@@ -1035,6 +1056,35 @@ namespace mmo
 			ELOG("Failed to read movement packet")
 			return;
 		}
+
+		const GameTime serverTimestamp = ClientToServerTime(info.timestamp);
+		info.timestamp = serverTimestamp;
+
+		// TODO: Change false to true if you want movement packets to be logged in debug builds
+#if defined(_DEBUG) && false
+		String movementPacketName = "UNKNOWN";
+		switch (opCode)
+		{
+        case game::client_realm_packet::MoveStartForward: movementPacketName = "MOVE_START_FORWARD"; break;
+        case game::client_realm_packet::MoveStartBackward: movementPacketName = "MOVE_START_BACKWARD"; break;
+        case game::client_realm_packet::MoveStop: movementPacketName = "MOVE_STOP"; break;
+        case game::client_realm_packet::MoveStartStrafeLeft: movementPacketName = "MOVE_START_STRAFE_LEFT"; break;
+        case game::client_realm_packet::MoveStartStrafeRight: movementPacketName = "MOVE_START_STRAFE_RIGHT"; break;
+        case game::client_realm_packet::MoveStopStrafe: movementPacketName = "MOVE_STOP_STRAFE"; break;
+        case game::client_realm_packet::MoveStartTurnLeft: movementPacketName = "MOVE_START_TURN_LEFT"; break;
+        case game::client_realm_packet::MoveStartTurnRight: movementPacketName = "MOVE_START_TURN_RIGHT"; break;
+        case game::client_realm_packet::MoveStopTurn: movementPacketName = "MOVE_STOP_TURN"; break;
+        case game::client_realm_packet::MoveHeartBeat: movementPacketName = "MOVE_HEART_BEAT"; break;
+        case game::client_realm_packet::MoveSetFacing: movementPacketName = "MOVE_SET_FACING"; break;
+        case game::client_realm_packet::MoveJump: movementPacketName = "MOVE_JUMP"; break;
+        case game::client_realm_packet::MoveFallLand: movementPacketName = "MOVE_FALL_LAND"; break;
+        case game::client_realm_packet::MoveEnded: movementPacketName = "MOVE_ENDED"; break;
+        case game::client_realm_packet::MoveSplineDone: movementPacketName = "MOVE_SPLINE_DONE"; break;
+		default: break;
+		}
+
+		DLOG("[MOVE] " << movementPacketName << ": Pos " << info.position << "; Rot: " << info.facing.GetValueDegrees() << "; t: " << info.timestamp << "; Flags: " << log_hex_digit(info.movementFlags));
+#endif
 
 		const MovementInfo prevMovementInfo = m_character->GetMovementInfo();
 		if (characterGuid != m_character->GetGuid())
@@ -1047,7 +1097,7 @@ namespace mmo
 			(info.movementFlags & movement_flags::Rooted) == 0)
 		{
 			ELOG("Player tried to remove roots!");
-			Kick();
+			//Kick();
 			return;
 		}
 
@@ -1055,7 +1105,7 @@ namespace mmo
 			!prevMovementInfo.position.IsNearlyEqual(info.position))
 		{
 			ELOG("Player tried to move while being rooted!");
-			Kick();
+			//Kick();
 			return;
 		}
 
@@ -1069,7 +1119,7 @@ namespace mmo
 		if (m_character->HasTimedOutPendingMovementChange())
 		{
 			ELOG("Player probably tried to skip or delay an ack packet");
-			Kick();
+			//Kick();
 			return;
 		}
 
@@ -1077,6 +1127,7 @@ namespace mmo
 		if (m_character->GetMover().IsMoving())
 		{
 			// Just ignore this movement op code for now
+			WLOG("Player is currently moving, ignoring move packet");
 			return;
 		}
 
@@ -1084,14 +1135,14 @@ namespace mmo
 		if (info.IsFalling() && !prevMovementInfo.IsFalling() && opCode != game::client_realm_packet::MoveJump)
 		{
 			ELOG("Client tried to apply FALLING flag in non-jump packet!");
-			Kick();
+			//Kick();
 			return;
 		}
 		// Did the client try to remove a FALLING flag without sending a landing packet?
 		if (!info.IsFalling() && prevMovementInfo.IsFalling() && (opCode != game::client_realm_packet::MoveFallLand && opCode != game::client_realm_packet::MoveEnded))
 		{
 			ELOG("Client tried to remove FALLING flag in non-jump packet!");
-			Kick();
+			//Kick();
 			return;
 		}
 
@@ -1100,7 +1151,7 @@ namespace mmo
 			if (prevMovementInfo.IsFalling() || !info.IsFalling())
 			{
 				ELOG("Jump packet did not add FALLING movement flag or was executed while already falling");
-				Kick();
+				//Kick();
 				return;
 			}
 		}
@@ -1109,7 +1160,7 @@ namespace mmo
 			if (!prevMovementInfo.IsFalling() || info.IsFalling())
 			{
 				ELOG("Landing packet did not remove FALLING movement flag or was executed while not falling")
-				Kick();
+				//Kick();
 				return;
 			}
 		}
@@ -1145,18 +1196,20 @@ namespace mmo
 			if (std::abs(target.x - info.position.x) > FLT_EPSILON || std::abs(target.z - info.position.z) > FLT_EPSILON || std::abs(target.y - info.position.y) > 3.1f)
 			{
 				ELOG("Player ended movement but target position was different from expected location: Received " << info.position << ", expected " << m_character->GetMover().GetTarget());
-				//return;
+				return;
 			}
 		}
 		else if (!prevMovementInfo.IsChangingPosition() && opCode != game::realm_client_packet::MoveSplineDone)
 		{
-			if (info.position != m_character->GetPosition())
-			{
-				ELOG("[OPCode " << opCode << "] Pos changed on client while it should not be able to do so based on server info");
-				ELOG("\tS: " << m_character->GetPosition());
-				ELOG("\tC: " << info.position);
-				//return;
-			}
+			const float positionTolerance = 0.01f; // Small tolerance for floating point precision
+            if (!info.position.IsNearlyEqual(m_character->GetPosition(), positionTolerance))
+            {
+                ELOG("[OPCode " << opCode << "] Pos changed on client while it should not be able to do so based on server info");
+                ELOG("\tS: " << m_character->GetPosition());
+                ELOG("\tC: " << info.position);
+                ELOG("\tDistance: " << (info.position - m_character->GetPosition()).GetLength());
+                //return;
+            }
 		}
 
 		if (opCode == game::realm_client_packet::MoveStartForward)
@@ -1186,24 +1239,35 @@ namespace mmo
 
 		m_character->ApplyMovementInfo(info);
 
-		std::vector<char> buffer;
-		io::VectorSink sink { buffer };
-		game::OutgoingPacket movementPacket { sink };
-		movementPacket.Start(opCode);
-		movementPacket << io::write<uint64>(characterGuid) << info;
-		movementPacket.Finish();
-
 		ForEachTileInSight(
 			m_worldInstance->GetGrid(),
 			tile.GetPosition(),
-			[characterGuid, &buffer, &movementPacket](VisibilityTile &tile)
+			[characterGuid, opCode, info](VisibilityTile &tile)
 		{
+			MovementInfo copy = info;
+
 			for (const auto& watcher : tile.GetWatchers())
 			{
 				if (watcher->GetGameUnit().GetGuid() == characterGuid)
 				{
 					continue;
 				}
+
+				// Watcher not synched yet, skip it
+				if (!watcher->HasReceivedTimeSyncResponse())
+				{
+					continue;
+				}
+
+				// Info is a copy here so we can modify it per watcher without any issues
+				copy.timestamp = watcher->ServerToClientTime(info.timestamp);
+
+				std::vector<char> buffer;
+				io::VectorSink sink{ buffer };
+				game::OutgoingPacket movementPacket{ sink };
+				movementPacket.Start(opCode);
+				movementPacket << io::write<uint64>(characterGuid) << info;
+				movementPacket.Finish();
 
 				watcher->SendPacket(movementPacket, buffer);
 			}
@@ -2120,5 +2184,83 @@ namespace mmo
 		});
 		
 		DLOG("Sent time played to player: " << timePlayed << " seconds");
+	}
+
+	void Player::SendTimeSyncRequest()
+	{
+		// Increment the time sync index
+		++m_timeSyncIndex;
+
+		// Send the time sync request packet to the client
+		SendPacket([this](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::TimeSyncRequest);
+			packet << io::write<uint32>(m_timeSyncIndex);
+			packet.Finish();
+		});
+
+		DLOG("Sent time sync request to player with index: " << m_timeSyncIndex);
+	}
+
+	void Player::OnTimeSyncResponse(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 syncIndex;
+		GameTime clientTimestamp;
+
+		if (!(contentReader >> io::read<uint32>(syncIndex) >> io::read<GameTime>(clientTimestamp)))
+		{
+			ELOG("Failed to read TimeSyncResponse packet!");
+			return;
+		}
+
+		// Verify that this response matches our current request
+		if (syncIndex != m_timeSyncIndex)
+		{
+			WLOG("Received TimeSyncResponse with wrong index. Expected: " << m_timeSyncIndex << ", Received: " << syncIndex);
+			return;
+		}
+
+		// Record the server timestamp when we received this response
+		const GameTime serverTimestamp = GetAsyncTimeMs();
+
+		// Calculate the time offset: client time - server time
+		m_timeOffset = static_cast<int64>(clientTimestamp) - static_cast<int64>(serverTimestamp);
+
+		// Store the timestamps
+		m_clientTimestamp = clientTimestamp;
+		m_serverTimestamp = serverTimestamp;
+		m_hasReceivedTimeSyncResponse = true;
+
+		DLOG("Received TimeSyncResponse - Index: " << syncIndex 
+			<< ", Client Time: " << clientTimestamp 
+			<< ", Server Time: " << serverTimestamp 
+			<< ", Offset: " << m_timeOffset);
+
+		// Schedule the next time sync request (every 2 minutes)
+		m_timeSyncTimer.SetEnd(GetAsyncTimeMs() + constants::OneMinute * 2);
+	}
+
+	GameTime Player::ClientToServerTime(GameTime clientTimestamp) const
+	{
+		if (!m_hasReceivedTimeSyncResponse)
+		{
+			// If we haven't received a time sync response yet, just return the client timestamp as-is
+			return clientTimestamp;
+		}
+
+		// Convert client time to server time: client_time - offset = server_time
+		return clientTimestamp - m_timeOffset;
+	}
+
+	GameTime Player::ServerToClientTime(GameTime serverTimestamp) const
+	{
+		if (!m_hasReceivedTimeSyncResponse)
+		{
+			// If we haven't received a time sync response yet, just return the server timestamp as-is
+			return serverTimestamp;
+		}
+
+		// Convert server time to client time: server_time + offset = client_time
+		return serverTimestamp + m_timeOffset;
 	}
 }

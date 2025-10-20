@@ -583,6 +583,45 @@ namespace mmo
 
 			
 			ImGui::InputText("Mesh", &m_importSubmeshFile);
+
+			if (ImGui::CollapsingHeader("Submesh Import Settings"))
+			{
+				ImGui::InputFloat3("Offset", m_importOffset.Ptr(), "%.3f");
+				ImGui::InputFloat3("Scale", m_importScale.Ptr(), "%.3f");
+
+				Matrix3 rot;
+				m_importRotation.ToRotationMatrix(rot);
+
+				// Compute Pitch
+				float pitchRad = std::asin(-rot[0][2]);
+				float cosPitch = std::cos(pitchRad);
+				float yawRad, rollRad;
+
+				if (std::abs(cosPitch) > std::numeric_limits<float>::epsilon())
+				{
+					// Compute Yaw
+					yawRad = std::atan2(rot[0][1], rot[0][0]);
+					// Compute Roll
+					rollRad = std::atan2(rot[1][2], rot[2][2]);
+				}
+				else
+				{
+					// Gimbal lock case
+					yawRad = 0.0f;
+					rollRad = std::atan2(-rot[2][1], rot[1][1]);
+				}
+
+				float rotation[3] = { Radian(rollRad).GetValueDegrees(), Radian(yawRad).GetValueDegrees(), Radian(pitchRad).GetValueDegrees() };
+				if (ImGui::InputFloat3("Rotation (Roll, Yaw, Pitch)", rotation, "%.3f"))
+				{
+					Quaternion qRoll(Degree(rotation[0]), Vector3(1, 0, 0));
+					Quaternion qPitch(Degree(rotation[2]), Vector3(0, 0, 1));
+					Quaternion qYaw(Degree(rotation[1]), Vector3(0, 1, 0));
+					m_importRotation = (qYaw * qPitch * qRoll);
+					m_importRotation.Normalize();
+				}
+			}
+
 			if (ImGui::Button("Import Additional Submesh"))
 			{
 				ImportAdditionalSubmeshes(m_importSubmeshFile);
@@ -602,7 +641,7 @@ namespace mmo
 					{
 						const auto files = AssetRegistry::ListFiles();
 
-						for (uint16 i = 0; i < m_entity->GetNumSubEntities(); ++i)
+						for (int32 i = 0; i < m_entity->GetNumSubEntities(); ++i)
 						{
 							ImGui::PushID(i); // Use field index as identifier.
 							ImGui::TableNextRow();
@@ -723,6 +762,13 @@ namespace mmo
 									}
 
 									ImGui::TreePop();
+								}
+
+								if (ImGui::Button("Delete"))
+								{
+									m_entity->GetMesh()->DestroySubMesh(i);
+									m_entity->SetMesh(m_entity->GetMesh());
+									i--;
 								}
 
 								ImGui::TableSetColumnIndex(1);
@@ -1182,7 +1228,10 @@ namespace mmo
 	void MeshEditorInstance::ImportAdditionalSubmeshes(const std::filesystem::path& path)
 	{
 		// Build transform matrix
-		const Matrix4 importTransform = Matrix4::Identity;
+		const Matrix4 importTransform =
+			Matrix4::GetScale(m_importScale) *
+			Matrix4(m_importRotation) *
+			Matrix4::GetTrans(m_importOffset);
 
 		Assimp::Importer importer;
 

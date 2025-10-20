@@ -423,7 +423,7 @@ namespace mmo
 			entry);
 
 		spawned->ApplyMovementInfo(
-			{ movement_flags::None, GetAsyncTimeMs(), position, Radian(o), Radian(0), 0, 0.0f, 0.0, 0.0f, 0.0f });
+			{ movement_flags::None, GetAsyncTimeMs(), position, Radian(o), Radian(0), 0, Vector3::Zero });
 		spawned->Initialize();
 		spawned->Set<uint64>(object_fields::Guid, CreateEntryGUID(m_objectIdGenerator.GenerateId(), entry.id(), GuidType::Unit));
 		
@@ -439,7 +439,7 @@ namespace mmo
 		// Create the object
 		auto spawned = std::make_shared<GameWorldObjectS>(m_project, entry);
 		spawned->ApplyMovementInfo(
-			{ movement_flags::None, GetAsyncTimeMs(), position, Radian(0.0f), Radian(0), 0, 0.0f, 0.0, 0.0f, 0.0f });
+			{ movement_flags::None, GetAsyncTimeMs(), position, Radian(0.0f), Radian(0), 0, Vector3::Zero });
 
 		spawned->Initialize();
 		spawned->Set<uint64>(object_fields::Guid, CreateEntryGUID(m_objectIdGenerator.GenerateId(), entry.id(), GuidType::Object));

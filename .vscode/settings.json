@@ -108,5 +108,6 @@
         "*.inc": "cpp",
         "*.ipp": "cpp",
         "typeindex": "cpp"
-    }
+    },
+    "C_Cpp.errorSquiggles": "disabled"
 }

@@ -25,6 +25,7 @@ namespace mmo
 		class Tile final
 			: public MovableObject
 			, public Renderable
+			, public ICollidable
 		{
 		public:
 
@@ -66,6 +67,10 @@ namespace mmo
 
 			void UpdateCoverageMap();
 
+			ICollidable* GetCollidable() override { return this; }
+
+			const ICollidable* GetCollidable() const override { return this; }
+
 		private:
 			void CreateVertexData(size_t startX, size_t startZ);
 
@@ -82,6 +87,19 @@ namespace mmo
 			};
 
 			uint32 StitchEdge(Direction direction, uint32 hiLOD, uint32 loLOD, bool omitFirstTri, bool omitLastTri, uint16** ppIdx);
+
+		public:
+			/// @brief Tests collision between a capsule and this terrain tile.
+			///        Uses spatial culling to optimize performance by only testing triangles
+			///        that could potentially intersect with the capsule's bounding box.
+			/// @param capsule The capsule to test collision against in world space
+			/// @param results Vector to store collision results
+			/// @return True if any collision was detected, false otherwise
+			bool TestCapsuleCollision(const Capsule& capsule, std::vector<CollisionResult>& results) const override;
+
+			bool IsCollidable() const override { return true; }
+
+			bool TestRayCollision(const Ray& ray, CollisionResult& result) const override;
 
 		private:
 			Page& m_page;

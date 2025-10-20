@@ -11,12 +11,45 @@
 
 namespace mmo
 {
+	struct Ray;
+	struct Capsule;
 	class RenderQueue;
 	class MovableObjectFactory;
 	class SceneNode;
 	class Scene;
 	class Camera;
 	class Node;
+
+	/// @brief Result of a collision test against collidable geometry
+	struct CollisionResult
+	{
+		bool hasCollision = false;    ///< Whether collision was detected
+		Vector3 contactPoint;         ///< Point where collision occurred
+		Vector3 contactNormal;        ///< Surface normal at collision point
+		Vector3 a, b, c;				/// Vertices of the triangle (if applicable)
+		float penetrationDepth = 0.0f;///< How deep the capsule penetrates
+		float distance;
+	};
+
+	/// @brief Interface for objects that can perform collision tests
+	class ICollidable
+	{
+	public:
+		/// @brief Virtual destructor
+		virtual ~ICollidable() = default;
+
+		/// @brief Test if a capsule collides with this object's geometry
+		/// @param capsule The capsule to test (in world space)
+		/// @param result Output collision information
+		/// @return True if collision detected, false otherwise
+		virtual bool TestCapsuleCollision(const Capsule& capsule, std::vector<CollisionResult>& results) const = 0;
+
+		virtual bool TestRayCollision(const Ray& ray, CollisionResult& result) const = 0;
+
+		/// @brief Check if this object supports collision testing
+		/// @return True if collision testing is available
+		virtual bool IsCollidable() const = 0;
+	};
 
 	/// Base class of an object in a scene which is movable, so it has a node which it is attached to.
 	class MovableObject
@@ -146,5 +179,19 @@ namespace mmo
 		void SetCastShadows(bool enable) { m_castShadows = enable; }
 
 		[[nodiscard]] bool IsCastingShadows() const { return m_castShadows; }
+
+		/// @brief Get collidable interface if this object supports collision
+		/// @return Pointer to collidable interface or nullptr if not supported
+		virtual ICollidable* GetCollidable()
+		{
+			return nullptr;
+		}
+
+		/// @brief Get const collidable interface if this object supports collision
+		/// @return Pointer to collidable interface or nullptr if not supported
+		virtual const ICollidable* GetCollidable() const
+		{
+			return nullptr;
+		}
 	};
 }

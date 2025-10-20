@@ -1,6 +1,9 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "render_window_d3d11.h"
+
+#include <dwmapi.h>
+
 #include "graphics_device_d3d11.h"
 
 #include "base/macros.h"
@@ -8,6 +11,8 @@
 #include <utility>
 
 #include "log/default_log_levels.h"
+
+#pragma comment(lib, "Dwmapi.lib")
 
 
 namespace mmo
@@ -271,6 +276,16 @@ namespace mmo
 			ws, x, y, r.right - r.left, r.bottom - r.top, nullptr, nullptr,
 			GetModuleHandle(nullptr), this)));
 		m_ownHandle = true;
+
+		// Enable Mica
+		DWM_SYSTEMBACKDROP_TYPE backdrop = DWMSBT_MAINWINDOW; // 2 = Mica (on Windows 11)
+		DwmSetWindowAttribute(m_handle, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
+
+		BOOL supportDarkMode = TRUE;
+		DwmSetWindowAttribute(m_handle, DWMWA_USE_IMMERSIVE_DARK_MODE, &supportDarkMode, sizeof(supportDarkMode));
+
+		DWM_WINDOW_CORNER_PREFERENCE pref = DWMWCP_ROUND;
+		DwmSetWindowAttribute(m_handle, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof(pref));
 
 		// Make the window visible on screen
 		ShowWindow(m_handle, SW_SHOWNORMAL);

@@ -1748,6 +1748,20 @@ namespace mmo
 		}
 	}
 
+	void GamePlayerS::ApplyMovementInfo(const MovementInfo& info)
+	{
+		// Call parent implementation first
+		GameUnitS::ApplyMovementInfo(info);
+
+		// Height safety check - kill player if they fall below the death threshold
+		constexpr float DeathHeight = -50.0f;
+		if (info.position.y < DeathHeight)
+		{
+			// Player has fallen out of the world, kill them to prevent getting stuck
+			Kill(nullptr);
+		}
+	}
+
 	io::Writer& operator<<(io::Writer& w, GamePlayerS const& object)
 	{
 		// Write super class data

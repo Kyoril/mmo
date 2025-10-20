@@ -7,22 +7,20 @@
 #include "vector_sink.h"
 #include "net/realm_connector.h"
 #include "console/console_var.h"
-#include "log/default_log_levels.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/scene_node.h"
 #include "mmo_client/systems/loot_client.h"
 #include "mmo_client/systems/trainer_client.h"
+#include "game_client/movement_event.h"
 
 #include "platform.h"
 #include "mmo_client/systems/spell_cast.h"
 #include "mmo_client/systems/vendor_client.h"
-#include "base/profiler.h"
-#include "console/console.h"
 #include "frame_ui/frame_mgr.h"
 #include "game/loot.h"
 #include "game_client/object_mgr.h"
-#include "math/collision.h"
+#include "terrain/tile.h"
 
 namespace mmo
 {
@@ -34,6 +32,7 @@ namespace mmo
 
 	static ConsoleVar* s_resetCameraYawCVar = nullptr;
 	static ConsoleVar* s_resetCameraPitchCVar = nullptr;
+	static ConsoleVar* s_showPlayerCollisionCVar = nullptr;
 
 	extern Cursor g_cursor;
 
@@ -54,6 +53,8 @@ namespace mmo
 
 			s_resetCameraYawCVar = ConsoleVarMgr::RegisterConsoleVar("ResetCameraHorizontally", "Gets or sets whether the camera yaw will be reset while moving.", "1");
 			s_resetCameraPitchCVar = ConsoleVarMgr::RegisterConsoleVar("ResetCameraVertically", "Gets or sets whether the camera pitch will be reset while moving.", "1");
+
+			s_showPlayerCollisionCVar = ConsoleVarMgr::RegisterConsoleVar("ShowPlayerCollision", "Gets or sets whether the player collision should be visible.", "0");
 		}
 
 		m_cvarConnections += {
@@ -61,9 +62,18 @@ namespace mmo
 				{
 					NotifyCameraZoomChanged();
 				},
-				s_cameraZoomCVar->Changed += [this](ConsoleVar&, const std::string&)
+			s_cameraZoomCVar->Changed += [this](ConsoleVar&, const std::string&)
 				{
 					NotifyCameraZoomChanged();
+				},
+			s_showPlayerCollisionCVar->Changed += [this](ConsoleVar& var, const std::string&)
+				{
+					if (!m_controlledUnit)
+					{
+						return;
+					}
+
+					m_controlledUnit->SetCollisionVisibility(var.GetBoolValue());
 				}
 		};
 
@@ -137,16 +147,15 @@ namespace mmo
 
 		if (movementDirection != 0)
 		{
+			const bool forward = movementDirection > 0;
+
 			if (m_controlFlags & ControlFlags::MoveSent)
 			{
 				return;
 			}
 
-			const bool forward = movementDirection > 0;
 			m_controlledUnit->StartMove(forward);
-			SendMovementUpdate(forward ? game::client_realm_packet::MoveStartForward : game::client_realm_packet::MoveStartBackward);
-			StartHeartbeatTimer();
-			
+
 			SetControlBit(ControlFlags::MoveSent, true);
 			return;
 		}
@@ -154,9 +163,7 @@ namespace mmo
 		if((m_controlFlags & ControlFlags::MoveSent) != 0)
 		{
 			m_controlledUnit->StopMove();
-			SendMovementUpdate(game::client_realm_packet::MoveStop);
-			StopHeartbeatTimer();
-
+			
 			SetControlBit(ControlFlags::MoveSent, false);
 		}
 	}
@@ -187,16 +194,15 @@ namespace mmo
 
 		if (direction != 0)
 		{
+			const bool left = direction > 0;
+
 			if ((m_controlFlags & ControlFlags::StrafeSent) != 0)
 			{
 				return;
 			}
 
-			const bool left = direction > 0;
 			m_controlledUnit->StartStrafe(left);
-			SendMovementUpdate(left ? game::client_realm_packet::MoveStartStrafeLeft : game::client_realm_packet::MoveStartStrafeRight);
-			StartHeartbeatTimer();
-
+			
 			SetControlBit(ControlFlags::StrafeSent, true);
 			return;
 		}
@@ -225,6 +231,8 @@ namespace mmo
 
 			if (direction != 0)
 			{
+				//m_controlledUnit->AddYawInput(Radian(m_controlledUnit->GetSpeed(movement_type::Turn)) * direction);
+
 				if ((m_controlFlags & ControlFlags::TurnSent))
 				{
 					return;
@@ -232,36 +240,28 @@ namespace mmo
 				
 				const bool left = direction > 0;
 				m_controlledUnit->StartTurn(left);
-				SendMovementUpdate(left ? game::client_realm_packet::MoveStartTurnLeft : game::client_realm_packet::MoveStartTurnRight);
+				
+				// Generate movement event instead of sending packet directly
+				const MovementInfo& movementInfo = m_controlledUnit->GetMovementInfo();
+				//m_movement.QueueMovementEvent(
+				//	left ? MovementEventType::StartTurnLeft : MovementEventType::StartTurnRight,
+				//	GetAsyncTimeMs(),
+				//	movementInfo
+				//);
+				
 				SetControlBit(ControlFlags::TurnSent, true);
 			}
 			else if (m_controlFlags & ControlFlags::TurnSent)
 			{
 				m_controlledUnit->StopTurn();
-				SendMovementUpdate(game::client_realm_packet::MoveStopTurn);
+				
+				// Generate movement event instead of sending packet directly
+				//const MovementInfo& movementInfo = m_controlledUnit->GetMovementInfo();
+				//m_movement.QueueMovementEvent(MovementEventType::StopTurn, GetAsyncTimeMs(), movementInfo);
+				
 				SetControlBit(ControlFlags::TurnSent, false);
 			}
 		}
-	}
-
-	void PlayerController::ApplyLocalMovement(const float deltaSeconds) const
-	{
-		if (m_controlledUnit->IsBeingMoved())
-		{
-			return;
-		}
-
-		PROFILE_SCOPE("Local Player Collision");
-
-		// Apply gravity to jump velocity
-		MovementInfo info = m_controlledUnit->GetMovementInfo();
-
-		// Are we somehow moving at all?
-		if ((info.movementFlags & movement_flags::PositionChanging) == 0)
-		{
-			return;
-		}
-
 	}
 
 	void PlayerController::SendMovementUpdate(const uint16 opCode) const
@@ -275,34 +275,10 @@ namespace mmo
 		m_connector.SendMovementUpdate(m_controlledUnit->GetGuid(), opCode, info);
 	}
 
-	void PlayerController::StartHeartbeatTimer()
+	void PlayerController::SendMovementUpdateWithInfo(const uint16 opCode, const MovementInfo& movementInfo) const
 	{
-		if (m_lastHeartbeat != 0)
-		{
-			return;
-		}
-
-		m_lastHeartbeat = GetAsyncTimeMs();
-	}
-
-	void PlayerController::StopHeartbeatTimer()
-	{
-		m_lastHeartbeat = 0;
-	}
-
-	void PlayerController::UpdateHeartbeat()
-	{
-		if (m_lastHeartbeat == 0)
-		{
-			return;
-		}
-
-		const auto now = GetAsyncTimeMs();
-		if (now - m_lastHeartbeat >= 500)
-		{
-			SendMovementUpdate(game::client_realm_packet::MoveHeartBeat);
-			m_lastHeartbeat = now;
-		}
+		// Use the exact MovementInfo from the event to prevent position desync
+		m_connector.SendMovementUpdate(m_controlledUnit->GetGuid(), opCode, movementInfo);
 	}
 
 	void PlayerController::NotifyCameraZoomChanged()
@@ -333,6 +309,8 @@ namespace mmo
 
 	void PlayerController::OnMovementCompleted(GameUnitC& unit, const MovementInfo& movementInfo)
 	{
+		// This handles automated movement completion (e.g., pathfinding)
+		// Keep as direct packet for now since it's not user-initiated movement
 		SendMovementUpdate(game::client_realm_packet::MoveEnded);
 	}
 
@@ -350,37 +328,36 @@ namespace mmo
 		// Camera raycast
 		m_selectionSceneQuery->ClearResult();
 		m_selectionSceneQuery->SetSortByDistance(true);
-		m_selectionSceneQuery->SetQueryMask(0xffffffff);
-		Ray cameraRay(m_cameraAnchorNode->GetDerivedPosition(), m_cameraNode->GetDerivedPosition());
+		m_selectionSceneQuery->SetQueryMask(1 << 6);
+		const Ray cameraRay(m_cameraAnchorNode->GetDerivedPosition(), m_cameraNode->GetDerivedPosition());
 		m_selectionSceneQuery->SetRay(cameraRay);
 		m_selectionSceneQuery->Execute();
 
 		const auto& cameraHitResult = m_selectionSceneQuery->GetLastResult();
 		for (auto& result : cameraHitResult)
 		{
-			if (const Entity* entity = static_cast<Entity*>(result.movable))
+			// Check if the movable object is collidable
+			const ICollidable* collidable = result.movable->GetCollidable();
+			if (!collidable || !collidable->IsCollidable())
 			{
-				const auto& tree = entity->GetMesh()->GetCollisionTree();
-				if (tree.IsEmpty())
+				continue;
+			}
+
+			CollisionResult collisionResult;
+			if (collidable->TestRayCollision(cameraRay, collisionResult))
+			{
+				// The penetrationDepth field contains the distance along the ray to the hit point
+				const float hitDistance = collisionResult.penetrationDepth;
+
+				// If the current zoom is greater than the hit distance, adjust the zoom to place
+				// the camera just in front of the collision point with a small offset
+				if (zoom > hitDistance)
 				{
-					continue;
+					const float safetyOffset = 0.1f; // Small offset to prevent clipping
+					zoom = std::max(0.0f, hitDistance - safetyOffset);
 				}
 
-				const Matrix4 inverse = entity->GetParentNodeFullTransform().Inverse();
-				Ray localRay = Ray(inverse * cameraRay.origin, inverse * cameraRay.destination);
-				localRay.hitDistance = std::numeric_limits<float>::max();
-
-				if (tree.IntersectRay(localRay, nullptr, raycast_flags::EarlyExit))
-				{
-					const float dist = localRay.hitDistance * localRay.GetLength() * 0.9f;
-					if (zoom > dist)
-					{
-						zoom = std::max(0.0f, dist);
-					}
-
-					break;
-				}
-
+				break;
 			}
 		}
 
@@ -425,67 +402,17 @@ namespace mmo
 			return;
 		}
 
-		// Are we still falling? Then we can't jump!
-		MovementInfo movementInfo = m_controlledUnit->GetMovementInfo();
-		if ((movementInfo.movementFlags & movement_flags::Falling) || (movementInfo.movementFlags & movement_flags::FallingFar))
+		m_controlledUnit->Jump();
+	}
+
+	void PlayerController::StopJump()
+	{
+		if (!m_controlledUnit)
 		{
 			return;
 		}
 
-		// Set jump velocity
-		movementInfo.jumpVelocity += 7.9555473f;
-		movementInfo.movementFlags |= movement_flags::Falling;
-		
-		// Calculate jump velocity and direction
-		Vector3 movementVector = Vector3::Zero;
-		if (movementInfo.IsMoving() || movementInfo.IsStrafing())
-		{
-			if (movementInfo.movementFlags & movement_flags::Forward)
-			{
-				movementVector.x += 1.0f;
-			}
-			if (movementInfo.movementFlags & movement_flags::Backward)
-			{
-				movementVector.x -= 1.0f;
-			}
-			if (movementInfo.movementFlags & movement_flags::StrafeLeft)
-			{
-				movementVector.z -= 1.0f;
-			}
-			if (movementInfo.movementFlags & movement_flags::StrafeRight)
-			{
-				movementVector.z += 1.0f;
-			}
-
-			MovementType movementType = movement_type::Run;
-			if (movementVector.x < 0.0)
-			{
-				movementType = movement_type::Backwards;
-			}
-
-			// Only calculate angles if there's actual movement
-			if (!movementVector.IsNearlyEqual(Vector3::Zero))
-			{
-				// Normalize the movement vector
-				movementVector.Normalize();
-
-				// Calculate the angle in world space, taking into account the player's facing
-				const Radian facing = m_controlledUnit->GetMovementInfo().facing;
-				const float sinFacing = std::sin(facing.GetValueRadians());
-				const float cosFacing = std::cos(facing.GetValueRadians());
-				
-				// Store the sin and cos of the jump angle
-				movementInfo.jumpSinAngle = movementVector.z * cosFacing - movementVector.x * sinFacing;
-				movementInfo.jumpCosAngle = movementVector.x * cosFacing + movementVector.z * sinFacing;
-
-				// Set the jump XZ speed
-				movementInfo.jumpXZSpeed = m_controlledUnit->GetSpeed(movementType);
-			}
-		}
-
-		m_controlledUnit->ApplyMovementInfo(movementInfo);
-		SendMovementUpdate(game::client_realm_packet::MoveJump);
-		StartHeartbeatTimer();
+		m_controlledUnit->StopJumping();
 	}
 
 	void PlayerController::OnHoveredObjectChanged(GameObjectC* previousHoveredUnit)
@@ -540,6 +467,56 @@ namespace mmo
 		}
 	}
 
+	void PlayerController::ProcessMovementEvent(const MovementEvent& movementEvent)
+	{
+		switch (movementEvent.eventType)
+		{
+		case MovementEventType::Heartbeat:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveHeartBeat, movementEvent.movementInfo);
+			break;
+		case MovementEventType::Land:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveFallLand, movementEvent.movementInfo);
+			break;
+		case MovementEventType::StartMoveForward:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStartForward, movementEvent.movementInfo);
+			break;
+		case MovementEventType::StartMoveBackward:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStartBackward, movementEvent.movementInfo);
+			break;
+		case MovementEventType::StopMove:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStop, movementEvent.movementInfo);
+			break;
+		case MovementEventType::StartStrafeLeft:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStartStrafeLeft, movementEvent.movementInfo);
+			break;
+		case MovementEventType::StartStrafeRight:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStartStrafeRight, movementEvent.movementInfo);
+			break;
+		case MovementEventType::StopStrafe:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStopStrafe, movementEvent.movementInfo);
+			break;
+		case MovementEventType::StartTurnLeft:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStartTurnLeft, movementEvent.movementInfo);
+			break;
+		case MovementEventType::StartTurnRight:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStartTurnRight, movementEvent.movementInfo);
+			break;
+		case MovementEventType::StopTurn:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStopTurn, movementEvent.movementInfo);
+			break;
+		case MovementEventType::Fall:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveJump, movementEvent.movementInfo);
+			break;
+		case MovementEventType::SetFacing:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveSetFacing, movementEvent.movementInfo);
+			break;
+		default:
+			// Unknown event type
+			WLOG("Unsupported movement event type: " << static_cast<int>(movementEvent.eventType));
+			break;
+		}
+	}
+
 	void PlayerController::Update(const float deltaSeconds)
 	{
 		if (!m_controlledUnit)
@@ -557,11 +534,7 @@ namespace mmo
 		{
 			MovePlayer();
 			StrafePlayer();
-
 			TurnPlayer();
-
-			ApplyLocalMovement(deltaSeconds);
-			UpdateHeartbeat();
 		}
 
 		if (!(m_controlFlags & ControlFlags::TurnCamera) && !(m_controlFlags & ControlFlags::TurnPlayer))
@@ -631,8 +604,6 @@ namespace mmo
 			static_cast<float>(m_x) / static_cast<float>(w),
 			static_cast<float>(m_y) / static_cast<float>(h), 1000.0f));
 		m_selectionSceneQuery->Execute();
-
-		const uint64 previousSelectedUnit = m_controlledUnit->Get<uint64>(object_fields::TargetUnit);
 
 		GameObjectC* newHoveredObject = nullptr;
 
@@ -843,21 +814,21 @@ namespace mmo
 			ClampCameraPitch();
 		}
 
-		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0 && m_controlledUnit->IsAlive() && !m_controlledUnit->IsBeingMoved())
+		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0 && m_controlledUnit->IsAlive() && !m_controlledUnit->IsBeingMoved() && std::abs(deltaX) > 0)
 		{
 			const Radian facing = (m_controlledUnit->GetSceneNode()->GetOrientation() * m_cameraAnchorNode->GetOrientation()).GetYaw();
 			m_controlledUnit->GetSceneNode()->SetOrientation(Quaternion(facing, Vector3::UnitY));
 			m_cameraAnchorNode->SetOrientation(Quaternion::Identity);
-
 			m_controlledUnit->SetFacing(facing);
 
 			// Limit to 10 per second
 			if (GetAsyncTimeMs() >= m_nextSetFacing)
 			{
-				SendMovementUpdate(game::client_realm_packet::MoveSetFacing);
+				// Generate movement event instead of sending packet directly
+				const MovementInfo& movementInfo = m_controlledUnit->GetMovementInfo();
+				//m_movement.QueueMovementEvent(MovementEventType::SetFacing, GetAsyncTimeMs(), movementInfo);
 				m_nextSetFacing = GetAsyncTimeMs() + 100;
 			}
-			
 		}
 	}
 
@@ -892,27 +863,14 @@ namespace mmo
 		{
 			ASSERT(m_controlledUnit->GetSceneNode());
 			m_controlledUnit->GetSceneNode()->AddChild(*m_cameraOffsetNode);
+			m_cameraOffsetNode->SetPosition(Vector3::UnitY * 0.65f);
 
 			// Not selectable via clicking when controlled
 			m_controlledUnit->SetQueryMask(0);
 
 			m_moveCompleted = m_controlledUnit->movementEnded.connect(this, &PlayerController::OnMovementCompleted);
+			m_controlledUnit->SetCollisionVisibility(s_showPlayerCollisionCVar->GetBoolValue());
 		}
-	}
-
-	void PlayerController::OnMoveFallLand()
-	{
-		SendMovementUpdate(game::client_realm_packet::MoveFallLand);
-
-		if ((m_controlFlags & ControlFlags::MoveSent) == 0)
-		{
-			StopHeartbeatTimer();
-		}
-	}
-
-	void PlayerController::OnMoveFall()
-	{
-		SendMovementUpdate(game::client_realm_packet::MoveJump);
 	}
 
 	void PlayerController::SetupCamera()

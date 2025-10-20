@@ -12,6 +12,8 @@
 #include "game_server/world/tile_index.h"
 #include "game_server/world/tile_subscriber.h"
 #include "game_protocol/game_protocol.h"
+#include "base/countdown.h"
+#include "base/clock.h"
 
 namespace mmo
 {
@@ -493,5 +495,37 @@ namespace mmo
 		bool m_spawned{ false };
 
 		std::chrono::steady_clock::time_point m_sessionStartTime;
+
+		// Time sync related members
+		uint32 m_timeSyncIndex{ 0 };
+		bool m_hasReceivedTimeSyncResponse{ false };
+		GameTime m_clientTimestamp{ 0 };
+		GameTime m_serverTimestamp{ 0 };
+		int64 m_timeOffset{ 0 };  // Client timestamp - Server timestamp
+		Countdown m_timeSyncTimer;
+
+	public:
+		/// @brief Sends a time sync request to the client with incremented index.
+		void SendTimeSyncRequest();
+
+		/// @brief Handles the client's time sync response.
+		/// @param opCode The op code of the packet.
+		/// @param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnTimeSyncResponse(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// @brief Converts a client timestamp to server timestamp.
+		/// @param clientTimestamp The client timestamp to convert.
+		/// @return The equivalent server timestamp.
+		[[nodiscard]] GameTime ClientToServerTime(GameTime clientTimestamp) const override;
+
+		/// @brief Converts a server timestamp to client timestamp.
+		/// @param serverTimestamp The server timestamp to convert.
+		/// @return The equivalent client timestamp.
+		[[nodiscard]] GameTime ServerToClientTime(GameTime serverTimestamp) const override;
+
+		/// @brief Checks if the player has received a time sync response.
+		/// @return True if the player has responded to at least one time sync request.
+		[[nodiscard]] bool HasReceivedTimeSyncResponse() const override { return m_hasReceivedTimeSyncResponse; }
 	};
 }

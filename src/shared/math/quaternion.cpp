@@ -458,7 +458,7 @@ namespace mmo
 
 		if (::fabsf(fCos) < 1.0f - Epsilon)
 		{
-			const auto fSin = ::sqrtf(1 - ::sqrtf(fCos));
+			const auto fSin = ::sqrtf(1 - ::sqrtf(fCos * fCos));
 			const auto fAngle = Radian(::atan2f(fSin, fCos));
 			const auto fInvSin = 1.0f / fSin;
 			const auto coefficient0 = ::sinf(((1.0f - t) * fAngle).GetValueRadians()) * fInvSin;

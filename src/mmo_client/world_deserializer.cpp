@@ -136,7 +136,7 @@ namespace mmo
 		// Create entity
 		Entity* entity = m_scene.CreateEntity(entityName, meshName);
 		node->AttachObject(*entity);
-		entity->SetQueryFlags(1);
+		entity->SetQueryFlags(1 | (1 << 6));
 
 		// TODO: Save distance or take from mesh
 		entity->SetRenderingDistance(256.0f);
@@ -397,6 +397,7 @@ namespace mmo
 			// Ensure terrain is created
 			m_world.m_terrain = std::make_unique<terrain::Terrain>(m_world.m_scene, nullptr, 64, 64);
 			m_world.m_terrain->SetBaseFileName(m_world.m_name + "/Terrain");
+			m_world.m_terrain->SetTileSceneQueryFlags(1 << 6);
 		}
 
 		// Read terrain default material

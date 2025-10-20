@@ -1,6 +1,7 @@
 
 #include "object_mgr.h"
 
+#include "game_bag_c.h"
 #include "game_item_c.h"
 #include "unit_handle.h"
 #include "base/macros.h"

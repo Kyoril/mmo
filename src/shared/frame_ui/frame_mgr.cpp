@@ -372,34 +372,17 @@ namespace mmo
 		s_frameMgr->m_luaState = luaState;
 
 		// Expose classes and methods to the lua state
-		luabind::module(luaState)
-		[
+		LUABIND_MODULE(luaState,
 			luabind::def("Localize", &LuaLocalize),
-				luabind::def("getglobal", &FrameManager::GetGlobal),
+			luabind::def("getglobal", &FrameManager::GetGlobal),
 
 			luabind::scope(
 				luabind::class_<AnchorPoint>("AnchorPoint")
-					.enum_("type")
-					[
-						luabind::value("NONE", 0),
-
-						luabind::value("TOP", 1),
-						luabind::value("RIGHT", 2),
-						luabind::value("BOTTOM", 3),
-						luabind::value("LEFT", 4),
-
-						luabind::value("H_CENTER", 5),
-						luabind::value("V_CENTER", 6)
-					]),
+			),
 
 			luabind::scope(
 				luabind::class_<ButtonState>("ButtonState")
-				.enum_("type")
-				[
-					luabind::value("NORMAL", 0),
-					luabind::value("HOVERED", 1),
-					luabind::value("PUSHED", 2)
-				]),
+			),
 
 			luabind::scope(
 				luabind::class_<Frame>("Frame")
@@ -444,7 +427,7 @@ namespace mmo
 					.def("SetOpacity", &Frame::SetOpacity)
 					.def("GetOpacity", &Frame::GetOpacity)
 					.def("__eq", &Frame::IsEqualTo)
-				),
+			),
 
 			luabind::scope(
 				luabind::class_<Button, Frame>("Button")
@@ -454,7 +437,8 @@ namespace mmo
 					.def("SetCheckable", &Button::SetCheckable)
 					.def("SetClickedHandler", &Button::SetOnClick)
 					.def("SetButtonState", &Button::SetButtonState)
-					.def("GetButtonState", &Button::GetButtonState)),
+					.def("GetButtonState", &Button::GetButtonState)
+			),
 
 			luabind::scope(
 				luabind::class_<Point>("Point")
@@ -463,7 +447,8 @@ namespace mmo
 				.def(luabind::constructor<const Point&>())
 				.property("x", &Point::x, &Point::x)
 				.property("y", &Point::y, &Point::y)
-				.def("__eq", &Point::operator==)),
+				.def("__eq", &Point::operator==)
+			),
 
 			luabind::scope(
 				luabind::class_<Rect>("Rect")
@@ -472,7 +457,8 @@ namespace mmo
 					.property("bottom", &Rect::bottom, &Rect::bottom)
 					.property("left", &Rect::left, &Rect::left)
 					.property("top", &Rect::top, &Rect::top)
-					.property("right", &Rect::right, &Rect::right)),
+					.property("right", &Rect::right, &Rect::right)
+			),
 
 			luabind::scope(
 				luabind::class_<TextField, Frame>("TextField")
@@ -480,15 +466,18 @@ namespace mmo
 					.def("AcceptsTab", &TextField::AcceptsTab)
 					.def("SetTextMasked", &TextField::SetTextMasked)
 					.def("SetTextAreaOffset", &TextField::SetTextAreaOffset)
-					.def("GetTextAreaOffset", &TextField::GetTextAreaOffset)),
+					.def("GetTextAreaOffset", &TextField::GetTextAreaOffset)
+			),
 
 			luabind::scope(
-				luabind::class_<Thumb, Button>("Thumb")),
+				luabind::class_<Thumb, Button>("Thumb")
+			),
 
 			luabind::scope(
 				luabind::class_<ProgressBar, Frame>("ProgressBar")
 					.def("SetProgress", &ProgressBar::SetProgress)
-					.def("GetProgress", &ProgressBar::GetProgress)),
+					.def("GetProgress", &ProgressBar::GetProgress)
+			),
 
 			luabind::scope(
 				luabind::class_<ScrollBar, Frame>("ScrollBar")
@@ -500,7 +489,8 @@ namespace mmo
 				.def("GetMaximum", &ScrollBar::GetMaximumValue)
 				.def("GetStep", &ScrollBar::GetStep)
 				.def("SetStep", &ScrollBar::SetStep)
-				.def("SetOnValueChangedHandler", &ScrollBar::SetOnValueChangedHandler)),
+				.def("SetOnValueChangedHandler", &ScrollBar::SetOnValueChangedHandler)
+			),
 
 			luabind::scope(
 				luabind::class_<ScrollingMessageFrame, Frame>("ScrollingMessageFrame")
@@ -511,8 +501,24 @@ namespace mmo
 					.def("IsAtTop", &ScrollingMessageFrame::IsAtTop)
 					.def("IsAtBottom", &ScrollingMessageFrame::IsAtBottom)
 					.def("ScrollToTop", &ScrollingMessageFrame::ScrollToTop)
-					.def("ScrollToBottom", &ScrollingMessageFrame::ScrollToBottom))
-		];
+					.def("ScrollToBottom", &ScrollingMessageFrame::ScrollToBottom)
+			)
+		);
+
+		// Manually set enum constants as global variables in Lua to preserve API
+		luabind::globals(luaState)["AnchorPoint"] = luabind::newtable(luaState);
+		luabind::globals(luaState)["AnchorPoint"]["NONE"] = 0;
+		luabind::globals(luaState)["AnchorPoint"]["TOP"] = 1;
+		luabind::globals(luaState)["AnchorPoint"]["RIGHT"] = 2;
+		luabind::globals(luaState)["AnchorPoint"]["BOTTOM"] = 3;
+		luabind::globals(luaState)["AnchorPoint"]["LEFT"] = 4;
+		luabind::globals(luaState)["AnchorPoint"]["H_CENTER"] = 5;
+		luabind::globals(luaState)["AnchorPoint"]["V_CENTER"] = 6;
+
+		luabind::globals(luaState)["ButtonState"] = luabind::newtable(luaState);
+		luabind::globals(luaState)["ButtonState"]["NORMAL"] = 0;
+		luabind::globals(luaState)["ButtonState"]["HOVERED"] = 1;
+		luabind::globals(luaState)["ButtonState"]["PUSHED"] = 2;
 	
 		// Register default frame renderer factory methods
 		RegisterDefaultRenderers();
@@ -596,7 +602,7 @@ namespace mmo
 		return it->second(name);
 	}
 
-	FramePtr FrameManager::Create(const std::string& type, const std::string & name, bool isCopy)
+	FramePtr FrameManager::Create(const std::string& type, const std::string& name, bool isCopy)
 	{
 		if (!name.empty())
 		{

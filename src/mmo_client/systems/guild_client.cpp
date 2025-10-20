@@ -1,4 +1,3 @@
-
 #include "guild_client.h"
 
 #include "console/console.h"
@@ -61,8 +60,7 @@ namespace mmo
 #pragma warning(disable: 28)  // Suppress IntelliSense warning about operator[]
 #endif
 		// Register common functions
-		luabind::module(lua)
-		[
+		LUABIND_MODULE(lua,
 			luabind::scope(
 				luabind::class_<GuildMemberInfo>("GuildMemberInfo")
 				.def_readonly("name", &GuildMemberInfo::name)
@@ -71,7 +69,8 @@ namespace mmo
 				.def_readonly("className", &GuildMemberInfo::className)
 				.def_readonly("raceName", &GuildMemberInfo::raceName)
 				.def_readonly("level", &GuildMemberInfo::level)
-				.def_readonly("online", &GuildMemberInfo::online)),
+				.def_readonly("online", &GuildMemberInfo::online)
+			),
 
 			luabind::def_lambda("GuildInviteByName", [this](const String& name) { return GuildInviteByName(name); }),
 			luabind::def_lambda("GuildUninviteByName", [this](const String& name) { return GuildUninviteByName(name); }),
@@ -97,7 +96,7 @@ namespace mmo
 			luabind::def_lambda("GuildRoster", [this]() { GuildRoster(); }),
 			luabind::def_lambda("GetGuildName", [this]() { return GetGuildName().c_str(); }),
 			luabind::def_lambda("GetGuildMOTD", [this]() { return GetGuildMOTD().c_str(); })
-		];
+		);
 #ifdef __INTELLISENSE__
 #pragma warning(default: 28)  // Restore IntelliSense warning
 #endif

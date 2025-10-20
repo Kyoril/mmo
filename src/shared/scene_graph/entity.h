@@ -15,7 +15,7 @@ namespace mmo
 	class AnimationState;
 	class RenderQueue;
 
-	class Entity : public MovableObject
+	class Entity : public MovableObject, public ICollidable
 	{
 		friend class SubEntity;
 
@@ -52,6 +52,10 @@ namespace mmo
 		AnimationStateSet* GetAllAnimationStates() const;
 
 		void SetMesh(MeshPtr mesh);
+
+		ICollidable* GetCollidable() override { return this; }
+
+		const ICollidable* GetCollidable() const override { return this; }
 
 	public:
 		/// @copydoc MovableObject::SetCurrentCamera
@@ -140,7 +144,19 @@ namespace mmo
 		[[nodiscard]] float GetBoundingRadius() const override;
 		void VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables) override;
 
+		bool TestCapsuleCollision(const Capsule& capsule, std::vector<CollisionResult>& results) const override;
+
+		bool IsCollidable() const override { return m_mesh && !m_mesh->GetCollisionTree().IsEmpty(); }
+
+		bool TestRayCollision(const Ray& ray, CollisionResult& result) const override;
+
 	private:
 		ConstantBufferPtr m_boneMatrixBuffer;
+		
+		/// @brief Cached world-space bounding box for entities with transforms
+		mutable AABB m_worldBounds{};
+		
+		/// @brief Flag to track if world bounds need recalculation
+		mutable bool m_worldBoundsDirty{ true };
 	};
 }

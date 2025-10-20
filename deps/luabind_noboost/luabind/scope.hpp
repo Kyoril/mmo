@@ -99,6 +99,23 @@ namespace luabind {
 		return module_(L, name);
 	}
 
+	// VS2026 compatibility helpers
+	namespace detail {
+		// Helper function to work around VS2026 operator resolution issues
+		template<typename T>
+		inline void register_with_module(lua_State* L, T&& scopeExpr)
+		{
+			module(L)[std::forward<T>(scopeExpr)];
+		}
+	}
+
+	// Compatibility macro for VS2026 - use this instead of module(L)[...];
+	#define LUABIND_MODULE(L, ...) \
+		do { \
+			auto _scope = (__VA_ARGS__); \
+			luabind::module(L)[_scope]; \
+		} while(0)
+
 } // namespace luabind
 
 #endif // NEW_SCOPE_040211_HPP

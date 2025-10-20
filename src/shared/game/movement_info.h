@@ -131,16 +131,7 @@ namespace mmo
 		GameTime fallTime { 0 };
 
 		/// @brief The unit's current jump velocity (velocity upwards the Y axis, reduced over time by gravity).
-		float jumpVelocity { 0.0f };
-
-		/// @brief The units sin angle.
-		float jumpSinAngle { 0.0f };
-
-		/// @brief The units cos angle.
-		float jumpCosAngle { 0.0f };
-
-		/// @brief The units horizontal jump speed in units per seconds.
-		float jumpXZSpeed { 0.0f };
+		Vector3 jumpVelocity { };
 
 	public:
 		bool IsChangingPosition() const { return (movementFlags & movement_flags::PositionChanging) != 0; }
@@ -174,10 +165,9 @@ namespace mmo
 		if (info.movementFlags & movement_flags::Falling)
 		{
 			writer
-				<< io::write<float>(info.jumpVelocity)
-				<< io::write<float>(info.jumpSinAngle)
-				<< io::write<float>(info.jumpCosAngle)
-				<< io::write<float>(info.jumpXZSpeed);
+				<< io::write<float>(info.jumpVelocity.x)
+				<< io::write<float>(info.jumpVelocity.y)
+				<< io::write<float>(info.jumpVelocity.z);
 		}
 
 		return writer;
@@ -201,10 +191,9 @@ namespace mmo
 		if (info.movementFlags & movement_flags::Falling)
 		{
 			reader
-				>> io::read<float>(info.jumpVelocity)
-				>> io::read<float>(info.jumpSinAngle)
-				>> io::read<float>(info.jumpCosAngle)
-				>> io::read<float>(info.jumpXZSpeed);
+				>> io::read<float>(info.jumpVelocity.x)
+				>> io::read<float>(info.jumpVelocity.y)
+				>> io::read<float>(info.jumpVelocity.z);
 		}
 
 		return reader;

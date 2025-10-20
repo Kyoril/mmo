@@ -5,6 +5,7 @@
 #include "spell_cast.h"
 #include "frame_ui/frame_mgr.h"
 #include "game/spell_target_map.h"
+#include "game_client/game_bag_c.h"
 #include "game_client/object_mgr.h"
 
 namespace mmo

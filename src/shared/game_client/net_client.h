@@ -11,6 +11,7 @@ namespace mmo
 	class GameUnitC;
 	class GameItemC;
 	class GameWorldObjectC;
+	struct MovementEvent;
 
 	/// @brief An interface for handling client network events related to units.
 	class NetClient : public NonCopyable
@@ -35,9 +36,7 @@ namespace mmo
 
 		virtual void GetObjectData(uint64 guid, std::weak_ptr<GameWorldObjectC> object) = 0;
 
-		virtual void OnMoveFallLand(GameUnitC& unit) = 0;
-
-		virtual void OnMoveFall(GameUnitC& unit) = 0;
+		virtual void OnMoveEvent(GameUnitC& unit, const MovementEvent& moveEvent) = 0;
 
 		virtual void SetSelectedTarget(uint64 guid) = 0;
 

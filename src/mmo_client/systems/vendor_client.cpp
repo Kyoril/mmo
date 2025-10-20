@@ -1,4 +1,3 @@
-
 #include "vendor_client.h"
 
 #include "frame_ui/frame_mgr.h"
@@ -32,11 +31,10 @@ namespace mmo
 
 	void VendorClient::RegisterScriptFunctions(lua_State* lua)
 	{
-		luabind::module(lua)
-		[
+		LUABIND_MODULE(lua,
 			luabind::def_lambda("GetVendorNumItems", [this]() { return GetNumVendorItems(); }),
 			luabind::def_lambda("CloseVendor", [this]() { CloseVendor(); })
-		];
+		);
 	}
 
 	void VendorClient::SellItem(uint64 itemGuid) const

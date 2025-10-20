@@ -20,6 +20,8 @@
 #include <memory>
 #include <vector>
 
+#include "debug_geometry_interface.h"
+
 
 namespace mmo
 {
@@ -336,6 +338,8 @@ namespace mmo
 
 		void RefreshCameraBuffer(const Camera& camera);
 
+		IDebugGeometry& GetDebugGeometry();
+
 	protected:
 		virtual std::unique_ptr<SceneNode> CreateSceneNodeImpl();
 
@@ -490,5 +494,7 @@ namespace mmo
 		PixelShaderType m_pixelShaderType = PixelShaderType::Forward;
 
 		Vector3 m_ambientColor = Vector3(0.04f, 0.035f, 0.03f);
+
+		std::unique_ptr<IDebugGeometry> m_debugGeometry;
 	};
 }

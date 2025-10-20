@@ -1,4 +1,3 @@
-
 #include "tile.h"
 
 #include "page.h"
@@ -7,6 +6,8 @@
 #include "terrain.h"
 #include "graphics/material_instance.h"
 #include "graphics/texture_mgr.h"
+#include "math/capsule.h"
+#include "math/collision.h"
 #include "scene_graph/mesh_manager.h"
 #include "scene_graph/scene.h"
 
@@ -497,6 +498,179 @@ namespace mmo
 			*ppIdx = pIdx;
 
 			return numIndexes;
+		}
+
+		bool Tile::TestCapsuleCollision(const Capsule& capsule, std::vector<CollisionResult>& results) const
+		{
+			// Transform capsule to tile's local space
+			const Matrix4 worldTransform = GetParentNodeFullTransform();
+			const Matrix4 localTransform = worldTransform.Inverse();
+
+			const Vector3 localPointA = localTransform * capsule.GetPointA();
+			const Vector3 localPointB = localTransform * capsule.GetPointB();
+			const Capsule localCapsule(localPointA, localPointB, capsule.GetRadius());
+
+			// Get the bounding box of the capsule in local space
+			const AABB capsuleBounds = localCapsule.GetBounds();
+
+			// Test against terrain triangles
+			constexpr float scale = static_cast<float>(constants::TileSize / static_cast<double>(constants::VerticesPerTile - 1));
+
+			// Calculate the range of grid cells that could potentially intersect with the capsule
+			const float invScale = 1.0f / scale;
+			const int32 minI = std::max(0, static_cast<int32>(std::floor((capsuleBounds.min.x * invScale) - m_startX)));
+			const int32 maxI = std::min(static_cast<int32>(constants::VerticesPerTile - 1), static_cast<int32>(std::ceil((capsuleBounds.max.x * invScale) - m_startX)));
+			const int32 minJ = std::max(0, static_cast<int32>(std::floor((capsuleBounds.min.z * invScale) - m_startZ)));
+			const int32 maxJ = std::min(static_cast<int32>(constants::VerticesPerTile - 1), static_cast<int32>(std::ceil((capsuleBounds.max.z * invScale) - m_startZ)));
+
+			bool hasCollision = false;
+
+			// Iterate only through terrain triangles that could potentially intersect
+			for (int32 j = minJ; j < maxJ; ++j)
+			{
+				for (int32 i = minI; i < maxI; ++i)
+				{
+					// Get the four vertices of this terrain quad
+					const float x1 = scale * (m_startX + i);
+					const float z1 = scale * (m_startZ + j);
+					const float x2 = scale * (m_startX + i + 1);
+					const float z2 = scale * (m_startZ + j + 1);
+
+					const float h1 = m_page.GetHeightAt(m_startX + i, m_startZ + j);
+					const float h2 = m_page.GetHeightAt(m_startX + i + 1, m_startZ + j);
+					const float h3 = m_page.GetHeightAt(m_startX + i, m_startZ + j + 1);
+					const float h4 = m_page.GetHeightAt(m_startX + i + 1, m_startZ + j + 1);
+
+					// Create AABB for this quad to do additional culling
+					const float minHeight = std::min(std::min(h1, h2), std::min(h3, h4));
+					const float maxHeight = std::max(std::max(h1, h2), std::max(h3, h4));
+					const AABB quadBounds(Vector3(x1, minHeight, z1), Vector3(x2, maxHeight, z2));
+
+					// Skip this quad if the capsule doesn't intersect with its bounding box
+					if (!capsuleBounds.Intersects(quadBounds))
+					{
+						continue;
+					}
+
+					// Create the two triangles for this quad
+					const Vector3 v1(x1, h1, z1);
+					const Vector3 v2(x2, h2, z1);
+					const Vector3 v3(x1, h3, z2);
+					const Vector3 v4(x2, h4, z2);
+
+					// Test first triangle (v1, v2, v3)
+					Vector3 contactPoint, contactNormal;
+					float penetration, distance;
+					if (CapsuleTriangleIntersection(localCapsule, v1, v2, v3, contactPoint, contactNormal, penetration, distance))
+					{
+						results.emplace_back(true, contactPoint, contactNormal, v1, v2, v3, penetration, distance);
+						hasCollision = true;
+					}
+
+					// Test second triangle (v2, v4, v3)
+					if (CapsuleTriangleIntersection(localCapsule, v2, v4, v3, contactPoint, contactNormal, penetration, distance))
+					{
+						results.emplace_back(true, contactPoint, contactNormal, v2, v4, v3, penetration, distance);
+						hasCollision = true;
+					}
+				}
+			}
+
+			return hasCollision;
+		}
+
+		bool Tile::TestRayCollision(const Ray& ray, CollisionResult& result) const
+		{
+			// Transform ray to tile's local space
+			const Matrix4 worldTransform = GetParentNodeFullTransform();
+			const Matrix4 localTransform = worldTransform.Inverse();
+
+			const Vector3 localOrigin = localTransform * ray.origin;
+			Vector3 localDirection = localTransform * (ray.origin + ray.GetDirection()) - localOrigin;
+			localDirection.Normalize();
+			
+			// Calculate the ray length in local space
+			const float rayLength = ray.GetLength();
+			const Ray localRay(localOrigin, localDirection, rayLength);
+
+			// Test against terrain triangles
+			constexpr float scale = static_cast<float>(constants::TileSize / static_cast<double>(constants::VerticesPerTile - 1));
+
+			bool hasCollision = false;
+			float closestDistance = std::numeric_limits<float>::max();
+			Vector3 closestIntersectionPoint;
+
+			// Iterate through all terrain triangles
+			for (size_t j = 0; j < constants::VerticesPerTile - 1; ++j)
+			{
+				for (size_t i = 0; i < constants::VerticesPerTile - 1; ++i)
+				{
+					// Get the four vertices of this terrain quad
+					const float x1 = scale * (m_startX + i);
+					const float z1 = scale * (m_startZ + j);
+					const float x2 = scale * (m_startX + i + 1);
+					const float z2 = scale * (m_startZ + j + 1);
+
+					const float h1 = m_page.GetHeightAt(m_startX + i, m_startZ + j);
+					const float h2 = m_page.GetHeightAt(m_startX + i + 1, m_startZ + j);
+					const float h3 = m_page.GetHeightAt(m_startX + i, m_startZ + j + 1);
+					const float h4 = m_page.GetHeightAt(m_startX + i + 1, m_startZ + j + 1);
+
+					// Create the two triangles for this quad
+					const Vector3 v1(x1, h1, z1);
+					const Vector3 v2(x2, h2, z1);
+					const Vector3 v3(x1, h3, z2);
+					const Vector3 v4(x2, h4, z2);
+
+					// Test first triangle (v1, v2, v3)
+					float t;
+					Vector3 intersectionPoint;
+					if (Terrain::RayTriangleIntersection(localRay, v1, v2, v3, t, intersectionPoint))
+					{
+						if (t >= 0.0f && t < closestDistance)
+						{
+							closestDistance = t;
+							closestIntersectionPoint = intersectionPoint;
+							hasCollision = true;
+						}
+					}
+
+					// Test second triangle (v2, v4, v3)
+					if (Terrain::RayTriangleIntersection(localRay, v2, v4, v3, t, intersectionPoint))
+					{
+						if (t >= 0.0f && t < closestDistance)
+						{
+							closestDistance = t;
+							closestIntersectionPoint = intersectionPoint;
+							hasCollision = true;
+						}
+					}
+				}
+			}
+
+			if (hasCollision)
+			{
+				// Transform intersection point back to world space
+				result.hasCollision = true;
+				result.contactPoint = worldTransform * closestIntersectionPoint;
+
+				// Calculate normal at intersection point by interpolating vertex normals
+				// For simplicity, we'll use the terrain normal at the closest grid point
+				const float invScale = 1.0f / scale;
+				const size_t gridX = static_cast<size_t>((closestIntersectionPoint.x * invScale) - m_startX + 0.5f);
+				const size_t gridZ = static_cast<size_t>((closestIntersectionPoint.z * invScale) - m_startZ + 0.5f);
+
+				const size_t clampedX = std::min(gridX, static_cast<size_t>(constants::VerticesPerTile - 1));
+				const size_t clampedZ = std::min(gridZ, static_cast<size_t>(constants::VerticesPerTile - 1));
+
+				const Vector3 localNormal = m_page.GetNormalAt(m_startX + clampedX, m_startZ + clampedZ);
+				result.contactNormal = (worldTransform * Vector4(localNormal, 0.0f)).Ptr();
+				result.contactNormal.Normalize();
+
+				result.penetrationDepth = closestDistance;
+			}
+
+			return hasCollision;
 		}
 	}
 }

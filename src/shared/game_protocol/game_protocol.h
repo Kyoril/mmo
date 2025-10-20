@@ -214,6 +214,8 @@ namespace mmo
 
 				TimePlayedRequest,
 
+				TimeSyncResponse,
+
 				/// Counter constant
 				Count_,
 			};
@@ -413,6 +415,9 @@ namespace mmo
 
 				/// Time played response packet sent to the client
 				TimePlayedResponse,
+
+				/// Time sync request packet sent to the client
+				TimeSyncRequest,
 
 				/// Counter constant
 				Count_,

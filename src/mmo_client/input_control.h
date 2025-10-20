@@ -44,5 +44,7 @@ namespace mmo
 		virtual void ToggleControlBit(const ControlFlags::Type flag) = 0;
 
 		virtual void Jump() = 0;
+
+		virtual void StopJump() = 0;
 	};
 }

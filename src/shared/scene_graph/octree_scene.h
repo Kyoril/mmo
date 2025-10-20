@@ -74,10 +74,39 @@ namespace mmo
 		bool WalkOctreeForRay(RaySceneQueryListener& listener, Octree& octant, const Ray& ray);
 	};
 
+	/// @brief Optimized AABB scene query that uses octree spatial acceleration
+	/// 
+	/// This class provides efficient AABB queries for finding all MovableObjects
+	/// whose bounding boxes intersect with a query AABB. It uses the octree
+	/// spatial structure to only test objects in relevant octree nodes.
+	class OctreeAABBSceneQuery : public AABBSceneQuery
+	{
+	private:
+		OctreeScene& m_octreeScene;
+
+	public:
+		/// @brief Creates an octree-optimized AABB scene query
+		/// @param scene The octree scene to query against
+		explicit OctreeAABBSceneQuery(OctreeScene& scene);
+
+	public:
+		/// @brief Executes the AABB query using octree acceleration
+		/// @param listener The listener to call on hit results
+		void Execute(SceneQueryListener& listener) override;
+
+	private:
+		/// @brief Recursively walks the octree to find AABB intersections
+		/// @param listener The listener to call on hit results
+		/// @param octant The current octree node being processed
+		/// @param queryAABB The AABB being tested
+		void WalkOctreeForAABB(SceneQueryListener& listener, Octree& octant, const AABB& queryAABB);
+	};
+
 	class OctreeScene : public Scene
 	{
-		// Allow OctreeRaySceneQuery to access protected members
+		// Allow queries to access protected members
 		friend class OctreeRaySceneQuery;
+		friend class OctreeAABBSceneQuery;
 
 	public:
 		OctreeScene();
@@ -105,14 +134,20 @@ namespace mmo
 		/// @return Unique pointer to the optimized ray query
 		std::unique_ptr<OctreeRaySceneQuery> CreateOctreeRayQuery(const Ray& ray);
 
+		/// @brief Creates an optimized AABB query that uses octree acceleration
+		/// @param box The AABB for the query
+		/// @return Unique pointer to the optimized AABB query
+		std::unique_ptr<OctreeAABBSceneQuery> CreateOctreeAABBQuery(const AABB& box);
+
 		/// @brief Overrides base Scene method to return octree-optimized ray query
 		/// @param ray The ray for the query
 		/// @return Unique pointer to the optimized ray query
 		std::unique_ptr<RaySceneQuery> CreateRayQuery(const Ray& ray) override;
 
-		/// @brief Check if this scene supports optimized spatial queries
-		/// @return Always returns true for OctreeScene
-		bool SupportsOptimizedQueries() const { return true; }
+		/// @brief Overrides base Scene method to return octree-optimized AABB query
+		/// @param box The AABB for the query
+		/// @return Unique pointer to the optimized AABB query
+		std::unique_ptr<AABBSceneQuery> CreateAABBQuery(const AABB& box) override;
 
 	protected:
 		void FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds, bool onlyShadowCasters) override;

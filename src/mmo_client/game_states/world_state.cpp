@@ -15,7 +15,6 @@
 #include "assets/asset_registry.h"
 #include "frame_ui/frame_mgr.h"
 #include "game/object_type_id.h"
-#include "scene_graph/entity.h"
 
 #include <algorithm>
 #include <zstr/zstr.hpp>
@@ -39,7 +38,6 @@
 #include "game/spell_target_map.h"
 #include "game_client/game_item_c.h"
 #include "ui/world_text_frame.h"
-#include "game/loot.h"
 #include "game/quest.h"
 #include "game_client/game_bag_c.h"
 #include "terrain/page.h"
@@ -294,14 +292,10 @@ namespace mmo
 				race ? race->name() : "UNKNOWN"
 			);
 		}
-
-		m_movement.Initialize();
 	}
 
 	void WorldState::OnLeave()
 	{
-		m_movement.Terminate();
-
 		m_debugPathVisualizer.reset();
 
 		m_audio.StopSound(&m_backgroundMusicChannel);
@@ -558,10 +552,14 @@ namespace mmo
 		{
 			m_audio.Update(m_playerController->GetControlledUnit()->GetPosition(), deltaSeconds);
 		}
-		
-		m_playerController->Update(deltaSeconds);
-		ObjectMgr::UpdateObjects(deltaSeconds);
 
+		// Only update when world loading is ready
+		if (m_worldLoaded && m_timeSyncResponseSent)
+		{
+			m_playerController->Update(deltaSeconds);
+			ObjectMgr::UpdateObjects(deltaSeconds);
+		}
+		
 		// Update minimap
 		if (const auto& controlled = m_playerController->GetControlledUnit())
 		{
@@ -839,6 +837,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetProficiency, *this, &WorldState::OnSetProficiency);
 		
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TimePlayedResponse, *this, &WorldState::OnTimePlayedResponse);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TimeSyncRequest, *this, &WorldState::OnTimeSyncRequest);
 		
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
@@ -1050,8 +1049,27 @@ namespace mmo
 			}
 		);
 
-		// Hide loading screen
-		LoadingScreen::Hide();
+		size_t dispatched = 0;
+		while (m_dispatcher.poll_one())
+		{
+			dispatched++;
+		}
+
+		// Poll one time
+		size_t jobsDone = 0;
+		while (m_workQueue.poll_one())
+		{
+			jobsDone++;
+		}
+
+		m_dispatcher.post([this, jobsDone, dispatched]()
+			{
+				m_worldLoaded = true;
+				ILOG("World loading finished. Dispatched: " << dispatched << ", Jobs done: " << jobsDone);
+
+				// Hide loading screen
+				LoadingScreen::Hide();
+			});	
 	}
 
 	PacketParseResult WorldState::OnUpdateObject(game::IncomingPacket& packet)
@@ -1087,10 +1105,10 @@ namespace mmo
 				switch(typeId)
 				{
 				case ObjectTypeId::Unit:
-					object = std::make_shared<GameUnitC>(*m_scene, *this, *this, m_project, g_mapId);
+					object = std::make_shared<GameUnitC>(*m_scene, *this, m_project, g_mapId);
 					break;
 				case ObjectTypeId::Player:
-					object = std::make_shared<GamePlayerC>(*m_scene, *this, *this, m_project, g_mapId);
+					object = std::make_shared<GamePlayerC>(*m_scene, *this, m_project, g_mapId);
 					break;
 				case ObjectTypeId::Item:
 					object = std::make_shared<GameItemC>(*m_scene, *this, m_project);
@@ -1329,7 +1347,12 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		unitPtr->ApplyMovementInfo(movementInfo);
+		// Apply movement packet
+		if (ObjectMgr::GetActivePlayerGuid() != characterGuid)
+		{
+			unitPtr->QueueMovementEvent(movement_event_type::Fall, GetAsyncTimeMs(), movementInfo);
+			//unitPtr->ApplyMovementInfo(movementInfo);
+		}
 
 		return PacketParseResult::Pass;
 	}
@@ -2581,7 +2604,7 @@ namespace mmo
 		std::shared_ptr<GameUnitC> questgiverUnit = ObjectMgr::Get<GameUnitC>(questgiverGuid);
 		if (questgiverUnit)
 		{
-			questgiverUnit->SetQuestgiverStatus(status);
+			questgiverUnit->SetQuestGiverStatus(status);
 		}
 
 		return PacketParseResult::Pass;
@@ -3203,6 +3226,9 @@ namespace mmo
 	{
 		m_worldInstance.reset();
 
+		m_worldLoaded = false;
+		m_timeSyncResponseSent = false;
+
 		const proto_client::MapEntry* map = m_project.maps.getById(g_mapId);
 		ASSERT(map);
 
@@ -3564,140 +3590,14 @@ namespace mmo
 			});
 	}
 
-	bool WorldState::GetHeightAt(const Vector3& position, float range, float& out_height)
+	void WorldState::OnMoveEvent(GameUnitC& unit, const MovementEvent& moveEvent)
 	{
-		float bestHeight = -10000.0f;
-		bool foundAnyHeight = false;
-
-		// Check terrain height first
-		if (m_worldInstance->HasTerrain())
-		{
-			const float terrainHeight = m_worldInstance->GetTerrain()->GetSmoothHeightAt(position.x, position.z);
-			
-			// Only consider terrain height if it's within our search range
-			if (position.y - terrainHeight <= range)
-			{
-				bestHeight = std::max(terrainHeight, bestHeight);
-				foundAnyHeight = true;
-			}
-		}
-
-		// Perform raycast against entity collision geometry
-		Ray groundDetectionRay(position, position + Vector3::NegativeUnitY * range);
-		m_rayQuery->ClearResult();
-		m_rayQuery->SetRay(groundDetectionRay);
-		m_rayQuery->SetQueryMask(1);
-		const RaySceneQueryResult& result = m_rayQuery->Execute();
-
-		if (!result.empty())
-		{
-			float bestHitDistance = range;
-			
-			for (const auto& entry : result)
-			{
-				Entity* entity = dynamic_cast<Entity*>(entry.movable);
-				if (!entity || !entity->GetMesh())
-				{
-					continue;
-				}
-
-				const AABBTree& collisionTree = entity->GetMesh()->GetCollisionTree();
-				if (collisionTree.IsEmpty())
-				{
-					continue;
-				}
-
-				// Transform ray into local space of the entity
-				const Matrix4 inverse = entity->GetParentNodeFullTransform().Inverse();
-				Ray transformedRay(
-					inverse * groundDetectionRay.origin,
-					inverse * groundDetectionRay.destination);
-				transformedRay.hitDistance = range;
-
-				if (collisionTree.IntersectRay(transformedRay, nullptr))
-				{
-					// Only consider this hit if it's closer than previous hits
-					if (transformedRay.hitDistance < bestHitDistance)
-					{
-						bestHitDistance = transformedRay.hitDistance;
-						const Vector3 hitPoint = groundDetectionRay.origin.Lerp(groundDetectionRay.destination, transformedRay.hitDistance);
-						
-						// Ensure the hit point is below or at the query position
-						if (hitPoint.y <= position.y)
-						{
-							bestHeight = std::max(hitPoint.y, bestHeight);
-							foundAnyHeight = true;
-						}
-					}
-				}
-			}
-		}
-		
-		// Return the result
-		if (!foundAnyHeight)
-		{
-			return false;
-		}
-
-		// Final check: ensure the found height is within our search range
-		if (position.y - bestHeight > range)
-		{
-			return false;
-		}
-
-		out_height = bestHeight;
-		return true;
-	}
-
-	void WorldState::GetCollisionTrees(const AABB& aabb, std::vector<const Entity*>& out_potentialEntities)
-	{
-			// TODO: Do check against terrain?
-
-		// TODO: Make more performant check
-		for (const Entity* entity : m_scene->GetAllEntities())
-		{
-			if ((entity->GetQueryFlags() & 1) == 0)
-			{
-				continue;
-			}
-
-			if (!entity->GetMesh() || entity->GetMesh()->GetCollisionTree().IsEmpty())
-			{
-				continue;
-			}
-
-			const AABB& entityAABB = entity->GetWorldBoundingBox();
-			if (!entityAABB.Intersects(aabb))
-			{
-				continue;
-			}
-
-			out_potentialEntities.push_back(entity);
-		}
-	}
-
-	void WorldState::OnMoveFallLand(GameUnitC& unit)
-	{
-		ASSERT(m_playerController);
-
 		if (&unit != m_playerController->GetControlledUnit().get())
 		{
 			return;
 		}
 
-		m_playerController->OnMoveFallLand();
-	}
-
-	void WorldState::OnMoveFall(GameUnitC& unit)
-	{
-		ASSERT(m_playerController);
-
-		if (&unit != m_playerController->GetControlledUnit().get())
-		{
-			return;
-		}
-
-		m_playerController->OnMoveFall();
+		m_playerController->ProcessMovementEvent(moveEvent);
 	}
 
 	void WorldState::SetSelectedTarget(uint64 guid)
@@ -3734,67 +3634,6 @@ namespace mmo
 					strong->NotifyGuildInfo(&info);
 				}
 			});
-	}
-
-	bool WorldState::GetGroundNormalAt(const Vector3& position, float range, Vector3& out_normal)
-	{
-		// First, check if terrain is present and provides a normal.
-		if (m_worldInstance->HasTerrain())
-		{
-			// Assuming your terrain has a method GetNormalAt(x, z).
-			out_normal = m_worldInstance->GetTerrain()->GetSmoothNormalAt(position.x, position.z);
-			return true;
-		}
-
-		// Otherwise, use a ray query similar to GetHeightAt.
-		Ray groundDetectionRay(position, position + Vector3::NegativeUnitY * range);
-		m_rayQuery->ClearResult();
-		m_rayQuery->SetRay(groundDetectionRay);
-		m_rayQuery->SetQueryMask(1);
-		const RaySceneQueryResult& result = m_rayQuery->Execute();
-
-		bool foundIntersection = false;
-		Vector3 bestNormal;
-		float bestHitDistance = range;
-
-		for (const auto& entry : result)
-		{
-			Entity* entity = dynamic_cast<Entity*>(entry.movable);
-			if (!entity || !entity->GetMesh())
-				continue;
-
-			const AABBTree& collisionTree = entity->GetMesh()->GetCollisionTree();
-			if (collisionTree.IsEmpty())
-				continue;
-
-			// Transform ray into the entity's local space.
-			Matrix4 inverse = entity->GetParentNodeFullTransform().Inverse();
-			Ray transformedRay(inverse * groundDetectionRay.origin,
-				inverse * groundDetectionRay.destination);
-			transformedRay.hitDistance = range;
-
-			Vector3 localHitNormal;
-			// Call the extended intersection function that outputs the hit normal.
-			if (collisionTree.IntersectRay(transformedRay, nullptr, raycast_flags::EarlyExit, &localHitNormal))
-			{
-				float hitDistance = transformedRay.hitDistance;
-				if (hitDistance < bestHitDistance)
-				{
-					bestHitDistance = hitDistance;
-					// Transform the hit normal back to world space.
-					bestNormal = entity->GetParentNodeFullTransform() * localHitNormal;
-					foundIntersection = true;
-				}
-			}
-		}
-
-		if (foundIntersection)
-		{
-			out_normal = bestNormal.NormalizedCopy();
-			return true;
-		}
-
-		return false;
 	}
 
 	void WorldState::GetObjectData(uint64 guid, std::weak_ptr<GameWorldObjectC> object)
@@ -3880,6 +3719,27 @@ namespace mmo
 
 		// Update the UI or perform any necessary actions with the received time played value
 		FrameManager::Get().TriggerLuaEvent("TIME_PLAYED_UPDATED", timePlayed);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnTimeSyncRequest(game::IncomingPacket& packet)
+	{
+		uint32 syncIndex;
+		if (!(packet >> io::read<uint32>(syncIndex)))
+		{
+			ELOG("Failed to read TimeSyncRequest packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Get the current client timestamp
+		const GameTime clientTimestamp = GetAsyncTimeMs();
+
+		// Send the response back to the server with the sync index and client timestamp
+		m_realmConnector.SendTimeSyncResponse(syncIndex, clientTimestamp);
+
+		DLOG("Received TimeSyncRequest with index: " << syncIndex << ", responding with client time: " << clientTimestamp);
+		m_timeSyncResponseSent = true;
 
 		return PacketParseResult::Pass;
 	}

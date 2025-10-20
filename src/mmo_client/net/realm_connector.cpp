@@ -883,4 +883,14 @@ namespace mmo
 				packet.Finish();
 			});
 	}
+
+	void RealmConnector::SendTimeSyncResponse(uint32 syncIndex, GameTime clientTimestamp)
+	{
+		sendSinglePacket([syncIndex, clientTimestamp](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::TimeSyncResponse);
+				packet << io::write<uint32>(syncIndex) << io::write<uint64>(clientTimestamp);
+				packet.Finish();
+			});
+	}
 }

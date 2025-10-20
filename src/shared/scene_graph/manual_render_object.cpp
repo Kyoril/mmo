@@ -109,7 +109,7 @@ namespace mmo
 	{
 		m_operations.clear();
 
-		m_worldAABB.SetNull();
+		m_boundingBox.SetNull();
 		m_boundingRadius = 0.0f;
 		m_worldAABBDirty = true;
 	}
@@ -127,7 +127,7 @@ namespace mmo
 			operation->ConvertToSubmesh(subMesh);
 		}
 
-		m->SetBounds(m_worldAABB);
+		m->SetBounds(m_boundingBox);
 
 		return m;
 	}
@@ -156,17 +156,24 @@ namespace mmo
 	{
 		for(auto& operation : m_operations)
 		{
+			if (!operation->IsReady())
+			{
+				continue;
+			}
+
 			queue.AddRenderable(*operation, m_renderQueueId, m_renderQueuePriority);
 		}
 	}
 
 	void ManualRenderObject::NotifyOperationUpdated()
 	{
-		m_worldAABB.SetNull();
-		
-		for(const auto& operation : m_operations)
+		m_worldAABBDirty = true;
+
+
+		m_boundingBox.SetNull();
+		for (const auto& operation : m_operations)
 		{
-			m_worldAABB.Combine(operation->GetBoundingBox());
+			m_boundingBox.Combine(operation->GetBoundingBox());
 		}
 	}
 }
