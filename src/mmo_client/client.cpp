@@ -240,8 +240,8 @@ namespace mmo
 		});
 
 		// Expose model frame methods to lua
-		luabind::module(&s_gameScript->GetLuaState())
-		[
+
+		LUABIND_MODULE(&s_gameScript->GetLuaState(),
 			luabind::scope(
 				luabind::class_<ModelFrame, Frame>("ModelFrame")
 				.def("SetModelFile", &ModelFrame::SetModelFile)
@@ -256,7 +256,7 @@ namespace mmo
 			luabind::scope(
 				luabind::class_<UnitModelFrame, ModelFrame>("UnitModelFrame")
 				.def("SetUnit", &UnitModelFrame::SetUnit))
-		];
+		);
 
 		return true;
 	}

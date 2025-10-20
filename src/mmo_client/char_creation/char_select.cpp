@@ -21,13 +21,12 @@ namespace mmo
 
 	void CharSelect::RegisterScriptFunctions(lua_State* lua)
 	{
-		luabind::module(lua)
-		[
+		LUABIND_MODULE(lua,
 			luabind::def_lambda("SetCharSelectModelFrame", [this](Frame* frame) { SetModelFrame(frame); }),
 			luabind::def_lambda("GetNumCharacters", [this]() { return GetNumCharacters(); }),
 			luabind::def_lambda("GetCharacterInfo", [this](int32 index) { return GetCharacterView(index); }),
 			luabind::def_lambda("SelectCharacter", [this](int32 index) { return SelectCharacter(index); })
-		];
+		);
 	}
 
 	void CharSelect::SetModelFrame(Frame* frame)

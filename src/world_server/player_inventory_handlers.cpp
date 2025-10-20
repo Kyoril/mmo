@@ -14,7 +14,6 @@
 
 namespace mmo
 {
-
 	void Player::OnAutoStoreLootItem(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		uint8 lootSlot;

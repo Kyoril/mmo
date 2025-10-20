@@ -1592,6 +1592,26 @@ namespace mmo
 			return inventory_change_failure::YouAreDead;
 		}
 
+		// TODO: QOL improvement: When swapping one bag with another bag, we can try to merge the bags if possible
+
+		// If source slot is a bag slot and bag is not empty
+		if (srcItem && srcItem->IsContainer())
+		{
+			if (!std::static_pointer_cast<GameBagS>(srcItem)->IsEmpty())
+			{
+				return inventory_change_failure::CanOnlyDoWithEmptyBags;
+			}
+		}
+
+		// Destination bag must be empty as well
+		if (dstItem && dstItem->IsContainer())
+		{
+			if (!std::static_pointer_cast<GameBagS>(dstItem)->IsEmpty())
+			{
+				return inventory_change_failure::CanOnlyDoWithEmptyBags;
+			}
+		}
+
 		// Can't change equipment while in combat (except weapons)
 		if (m_owner.IsInCombat() && IsEquipmentSlot(slotA))
 		{

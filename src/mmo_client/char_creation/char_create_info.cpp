@@ -21,8 +21,7 @@ namespace mmo
 
 	void CharCreateInfo::RegisterScriptFunctions(lua_State* lua)
 	{
-		luabind::module(lua)
-		[
+		LUABIND_MODULE(lua,
 			luabind::def_lambda("CreateCharacter", [this](const String& name) { CreateCharacter(name); }),
 			luabind::def_lambda("SetCharCustomizeFrame", [this](Frame* frame) { SetCharacterCreationFrame(frame); }),
 			luabind::def_lambda("SetCharacterClass", [this](int32 classId) { SetSelectedClass(classId); }),
@@ -45,7 +44,7 @@ namespace mmo
 
 					return names[index].c_str();
 				})
-		];
+		);
 	}
 
 	void CharCreateInfo::ResetCharacterCreation()
