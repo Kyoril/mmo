@@ -6,6 +6,7 @@
 #include "game_server/objects/game_item_s.h"
 #include "game_server/objects/game_player_s.h"
 #include "base/linear_set.h"
+#include "base/utilities.h"
 #include "binary_io/reader.h"
 #include "binary_io/vector_sink.h"
 #include "binary_io/writer.h"
@@ -1609,6 +1610,17 @@ namespace mmo
 			if (!std::static_pointer_cast<GameBagS>(dstItem)->IsEmpty())
 			{
 				return inventory_change_failure::CanOnlyDoWithEmptyBags;
+			}
+		}
+
+		// Trying to put an equipped bag out of the bag bar slots?
+		if (IsBagBarSlot(slotA) && !IsBagBarSlot(slotB))
+		{
+			// Check that the new slot is not inside the bag itself
+			const auto& bag = GetBagAtSlot(slotB);
+			if (bag && bag == srcItem)
+			{
+				return inventory_change_failure::BagsCantBeWrapped;
 			}
 		}
 
