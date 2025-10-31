@@ -18,7 +18,7 @@ namespace mmo
 
     std::shared_ptr<GameItemS> ItemFactory::CreateItem(
         const proto::ItemEntry& entry,
-        uint16 slot,
+        InventorySlot slot,
         uint16 stackCount) const noexcept
     {
         ASSERT(stackCount >= 1);
@@ -63,7 +63,7 @@ namespace mmo
 	void ItemFactory::InitializeItemFields(
 		std::shared_ptr<GameItemS>& item,
 		const proto::ItemEntry& entry,
-		uint16 slot) const noexcept
+		InventorySlot slot) const noexcept
 	{
 		// Generate and assign unique GUID
 		const uint64 newItemId = m_context.GenerateItemId();
@@ -75,14 +75,13 @@ namespace mmo
 		item->Set<uint64>(object_fields::ItemOwner, ownerGuid);
 
 		// Assign container (parent bag or owner)
-		const InventorySlot invSlot = InventorySlot::FromAbsolute(slot);
 		uint64 containerGuid = ownerGuid;
 
-		if (invSlot.IsBag())
+		if (slot.IsBag())
 		{
 			// Item is in an equipped bag - derive bag equip slot from bag ID
 			// Bag ID (19-22) maps to bag equip slot in main inventory
-			const uint8 bagId = invSlot.GetBag();
+			const uint8 bagId = slot.GetBag();
 			const uint16 bagEquipSlot = InventorySlot::FromRelative(
 				player_inventory_slots::Bag_0,
 				bagId

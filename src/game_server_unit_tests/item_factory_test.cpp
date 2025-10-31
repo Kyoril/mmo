@@ -138,7 +138,7 @@ TEST_CASE("ItemFactory - Basic item creation", "[item_factory]")
 		const auto slot = InventorySlot::FromRelative(
 			player_inventory_slots::Bag_0,
 			player_inventory_pack_slots::Start
-		).GetAbsolute();
+		);
 
 		auto item = factory.CreateItem(entry, slot);
 
@@ -156,7 +156,7 @@ TEST_CASE("ItemFactory - Basic item creation", "[item_factory]")
 		const auto slot = InventorySlot::FromRelative(
 			player_inventory_slots::Bag_0,
 			player_inventory_pack_slots::Start
-		).GetAbsolute();
+		);
 
 		auto item = factory.CreateItem(entry, slot, 15);
 
@@ -173,7 +173,7 @@ TEST_CASE("ItemFactory - Basic item creation", "[item_factory]")
 		const auto slot = InventorySlot::FromRelative(
 			player_inventory_slots::Bag_0,
 			player_inventory_pack_slots::Start
-		).GetAbsolute();
+		);
 
 		auto item = factory.CreateItem(entry, slot, 20);
 
@@ -197,7 +197,7 @@ TEST_CASE("ItemFactory - Container creation", "[item_factory]")
 		const auto slot = InventorySlot::FromRelative(
 			player_inventory_slots::Bag_0,
 			player_inventory_slots::Start
-		).GetAbsolute();
+		);
 
 		auto item = factory.CreateItem(entry, slot);
 
@@ -219,7 +219,7 @@ TEST_CASE("ItemFactory - Container creation", "[item_factory]")
 		const auto slot = InventorySlot::FromRelative(
 			player_inventory_slots::Bag_0,
 			player_inventory_slots::Start + 1
-		).GetAbsolute();
+		);
 
 		auto item = factory.CreateItem(entry, slot);
 
@@ -244,7 +244,7 @@ TEST_CASE("ItemFactory - GUID assignment", "[item_factory]")
 		const auto slot = InventorySlot::FromRelative(
 			player_inventory_slots::Bag_0,
 			player_inventory_pack_slots::Start
-		).GetAbsolute();
+		);
 
 		auto item1 = factory.CreateItem(entry, slot);
 		auto item2 = factory.CreateItem(entry, slot);
@@ -263,7 +263,7 @@ TEST_CASE("ItemFactory - GUID assignment", "[item_factory]")
 		const auto slot = InventorySlot::FromRelative(
 			player_inventory_slots::Bag_0,
 			player_inventory_pack_slots::Start
-		).GetAbsolute();
+		);
 
 		auto item = factory.CreateItem(entry, slot);
 
@@ -289,7 +289,7 @@ TEST_CASE("ItemFactory - Owner assignment", "[item_factory]")
 		const auto slot = InventorySlot::FromRelative(
 			player_inventory_slots::Bag_0,
 			player_inventory_pack_slots::Start
-		).GetAbsolute();
+		);
 
 		auto item = factory.CreateItem(entry, slot);
 
@@ -311,7 +311,7 @@ TEST_CASE("ItemFactory - Container assignment", "[item_factory]")
 		const auto slot = InventorySlot::FromRelative(
 			player_inventory_slots::Bag_0,
 			player_inventory_pack_slots::Start
-		).GetAbsolute();
+		);
 
 		auto item = factory.CreateItem(entry, slot);
 
@@ -332,21 +332,21 @@ TEST_CASE("ItemFactory - Container assignment", "[item_factory]")
 		const auto bagSlot = InventorySlot::FromRelative(
 			player_inventory_slots::Bag_0,
 			player_inventory_slots::Start
-		).GetAbsolute();
+		);
 
 		auto bag = factory.CreateItem(bagEntry, bagSlot);
 		auto bagInstance = std::dynamic_pointer_cast<GameBagS>(bag);
 		REQUIRE(bagInstance != nullptr);
 
 		// Register bag in context
-		context.AddBagAtSlot(bagSlot, bagInstance);
+		context.AddBagAtSlot(bagSlot.GetAbsolute(), bagInstance);
 
 		// Create item in the bag
 		const auto itemEntry = ItemEntryBuilder().Build();
 		const auto itemSlot = InventorySlot::FromRelative(
 			player_inventory_slots::Start,
 			0
-		).GetAbsolute();
+		);
 
 		auto item = factory.CreateItem(itemEntry, itemSlot);
 
@@ -363,7 +363,7 @@ TEST_CASE("ItemFactory - Container assignment", "[item_factory]")
 		const auto slot = InventorySlot::FromRelative(
 			player_inventory_slots::Start,
 			5
-		).GetAbsolute();
+		);
 
 		auto item = factory.CreateItem(entry, slot);
 
@@ -386,7 +386,7 @@ TEST_CASE("ItemFactory - Binding rules", "[item_factory]")
 		const auto slot = InventorySlot::FromRelative(
 			player_inventory_slots::Bag_0,
 			player_inventory_pack_slots::Start
-		).GetAbsolute();
+		);
 
 		auto item = factory.CreateItem(entry, slot);
 
@@ -403,7 +403,7 @@ TEST_CASE("ItemFactory - Binding rules", "[item_factory]")
 		const auto slot = InventorySlot::FromRelative(
 			player_inventory_slots::Bag_0,
 			player_inventory_pack_slots::Start
-		).GetAbsolute();
+		);
 
 		auto item = factory.CreateItem(entry, slot);
 
@@ -420,7 +420,7 @@ TEST_CASE("ItemFactory - Binding rules", "[item_factory]")
 		const auto slot = InventorySlot::FromRelative(
 			player_inventory_slots::Bag_0,
 			player_inventory_pack_slots::Start
-		).GetAbsolute();
+		);
 
 		auto item = factory.CreateItem(entry, slot);
 
@@ -440,7 +440,7 @@ TEST_CASE("ItemFactory - Field initialization", "[item_factory]")
 		const auto slot = InventorySlot::FromRelative(
 			player_inventory_slots::Bag_0,
 			player_inventory_pack_slots::Start
-		).GetAbsolute();
+		);
 
 		auto item = factory.CreateItem(entry, slot);
 

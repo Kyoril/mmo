@@ -22,6 +22,7 @@ namespace mmo
 	namespace proto { class ItemEntry; }
 	class GameItemS;
 	class GameBagS;
+	class InventorySlot;
 
 	/**
 	 * @brief Domain service responsible for item instance creation.
@@ -62,7 +63,7 @@ namespace mmo
 		 */
 		[[nodiscard]] std::shared_ptr<GameItemS> CreateItem(
 			const proto::ItemEntry& entry,
-			uint16 slot,
+			InventorySlot slot,
 			uint16 stackCount = 1) const noexcept;
 
 	private:
@@ -83,7 +84,7 @@ namespace mmo
 		void InitializeItemFields(
 			std::shared_ptr<GameItemS>& item,
 			const proto::ItemEntry& entry,
-			uint16 slot) const noexcept;
+			InventorySlot slot) const noexcept;
 
 		/**
 		 * @brief Applies item binding rules based on entry properties.
