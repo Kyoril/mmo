@@ -16,10 +16,10 @@
 #include "base/typedefs.h"
 #include "game/item.h"
 #include "inventory_types.h"
+#include "i_player_validator_context.h"
 
 namespace mmo
 {
-	class GamePlayerS;
 	class GameItemS;
 	
 	namespace proto
@@ -47,7 +47,7 @@ namespace mmo
 		 * @brief Constructs an item validator for a specific player.
 		 * @param player The player whose constraints will be validated against.
 		 */
-		explicit ItemValidator(const GamePlayerS& player);
+		explicit ItemValidator(const IPlayerValidatorContext& player);
 
 		/**
 		 * @brief Validates if player can use/equip this item.
@@ -135,7 +135,7 @@ namespace mmo
 			const GameItemS* itemB) const;
 
 	private:
-		const GamePlayerS& m_player;
+		const IPlayerValidatorContext& m_player;
 
 		/**
 		 * @brief Checks if player has required weapon proficiency.

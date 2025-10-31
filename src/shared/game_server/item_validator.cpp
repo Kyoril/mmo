@@ -4,12 +4,11 @@
 
 #include "game_server/objects/game_item_s.h"
 #include "game_server/objects/game_bag_s.h"
-#include "game_server/objects/game_player_s.h"
 #include "shared/proto_data/items.pb.h"
 
 namespace mmo
 {
-	ItemValidator::ItemValidator(const GamePlayerS& player)
+	ItemValidator::ItemValidator(const IPlayerValidatorContext& player)
 		: m_player(player)
 	{
 	}
@@ -190,7 +189,7 @@ namespace mmo
 		const weapon_prof::Type requiredProf = GetWeaponProficiency(entry.subclass());
 		const uint32 playerProf = m_player.GetWeaponProficiency();
 		
-		return (playerProf & (1 << requiredProf)) != 0;
+		return (playerProf & requiredProf) != 0;
 	}
 
 	bool ItemValidator::HasArmorProficiency(const proto::ItemEntry& entry) const
@@ -198,7 +197,7 @@ namespace mmo
 		const armor_prof::Type requiredProf = GetArmorProficiency(entry.subclass());
 		const uint32 playerProf = m_player.GetArmorProficiency();
 		
-		return (playerProf & (1 << requiredProf)) != 0;
+		return (playerProf & requiredProf) != 0;
 	}
 
 	InventoryResult<void> ItemValidator::ValidateEquipmentSlot(
