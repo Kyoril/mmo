@@ -45,7 +45,7 @@ namespace mmo
 		template<class T>
 		[[nodiscard]] T GetFieldValue(FieldIndexType index) const
 		{
-			ASSERT(index <= m_data.size());
+			ASSERT(index < m_data.size());
 			ASSERT(index * sizeof(TFieldBase) + sizeof(T) <= m_data.size() * sizeof(TFieldBase));
 			
 			return *reinterpret_cast<const T*>(&m_data[index]);
