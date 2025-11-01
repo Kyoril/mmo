@@ -1,21 +1,39 @@
 ﻿// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "world_server_inventory_repository.h"
-
-// TODO: Include actual RealmConnector when integrating
-// #include "realm_connector.h"
+#include "world_server/realm_connector.h"
+#include "inventory.h"  // For ItemData
 
 namespace mmo
 {
-    // Forward declare to avoid include for now
-    class RealmConnector
+    // Helper functions to convert between InventoryItemData (domain) and ItemData (DTO)
+    static ItemData ToItemData(const InventoryItemData& item)
     {
-    public:
-        // Stub methods - will be replaced with actual implementation
-        bool SendInventorySavePacket(uint64 characterId, const std::vector<InventoryItemData> &items) { return true; }
-        bool SendInventoryDeletePacket(uint64 characterId, uint16 slot) { return true; }
-        std::vector<InventoryItemData> RequestInventoryLoad(uint64 characterId) { return {}; }
-    };
+        ItemData data;
+        data.entry = item.entry;
+        data.slot = item.slot;
+        data.stackCount = static_cast<uint8>(item.stackCount);  // Narrowing conversion
+        data.creator = item.creator;
+        data.contained = item.contained;
+        data.durability = static_cast<uint16>(item.durability);  // Narrowing conversion
+        data.randomPropertyIndex = static_cast<uint16>(item.randomPropertyIndex);
+        data.randomSuffixIndex = static_cast<uint16>(item.randomSuffixIndex);
+        return data;
+    }
+
+    static InventoryItemData ToInventoryItemData(const ItemData& data)
+    {
+        InventoryItemData item;
+        item.entry = data.entry;
+        item.slot = data.slot;
+        item.stackCount = data.stackCount;
+        item.creator = data.creator;
+        item.contained = data.contained;
+        item.durability = data.durability;
+        item.randomPropertyIndex = data.randomPropertyIndex;
+        item.randomSuffixIndex = data.randomSuffixIndex;
+        return item;
+    }
 
     WorldServerInventoryRepository::WorldServerInventoryRepository(
         RealmConnector &realmConnector,
@@ -26,9 +44,10 @@ namespace mmo
 
     std::vector<InventoryItemData> WorldServerInventoryRepository::LoadItems(uint64 characterId)
     {
-        // Send load request to realm server
-        // This is typically done once when character logs in
-        return m_realmConnector.RequestInventoryLoad(characterId);
+        // Note: Inventory loading happens via CharacterData.items during PlayerCharacterJoin
+        // This method would only be called if we need to reload inventory mid-session
+        // For now, return empty vector as loading is handled by the existing architecture
+        return {};
     }
 
     bool WorldServerInventoryRepository::SaveItem(uint64 characterId, const InventoryItemData &item)
@@ -87,8 +106,7 @@ namespace mmo
     bool WorldServerInventoryRepository::DeleteAllItems(uint64 characterId)
     {
         // This is a rare operation (character deletion)
-        // Send directly to realm server
-        // TODO: Implement actual packet sending
+        // For now, not implemented as it's not used during normal gameplay
         return true;
     }
 
@@ -146,17 +164,28 @@ namespace mmo
     bool WorldServerInventoryRepository::SendSaveItemPacket(uint64 characterId, const InventoryItemData &item)
     {
         // Create packet with single item
-        std::vector<InventoryItemData> items;
-        items.push_back(item);
+        std::vector<ItemData> items;
+        items.push_back(ToItemData(item));
 
-        // Send to realm server
-        return m_realmConnector.SendInventorySavePacket(characterId, items);
+        // Generate operation ID (for now, use 0 - will be enhanced with proper tracking)
+        const uint32 operationId = 0;
+
+        // Send to realm server via RealmConnector
+        m_realmConnector.SendSaveInventoryItems(characterId, operationId, items);
+        return true;
     }
 
     bool WorldServerInventoryRepository::SendDeleteItemPacket(uint64 characterId, uint16 slot)
     {
+        // Generate operation ID (for now, use 0 - will be enhanced with proper tracking)
+        const uint32 operationId = 0;
+
         // Send delete packet to realm server
-        return m_realmConnector.SendInventoryDeletePacket(characterId, slot);
+        std::vector<uint16> slots;
+        slots.push_back(slot);
+
+        m_realmConnector.SendDeleteInventoryItems(characterId, operationId, slots);
+        return true;
     }
 
     bool WorldServerInventoryRepository::SendBatchOperationsPacket(
@@ -169,14 +198,14 @@ namespace mmo
         }
 
         // Separate saves and deletes
-        std::vector<InventoryItemData> itemsToSave;
+        std::vector<ItemData> itemsToSave;
         std::vector<uint16> slotsToDelete;
 
         for (const auto &op : operations)
         {
             if (op.type == OperationType::Save)
             {
-                itemsToSave.push_back(op.itemData);
+                itemsToSave.push_back(ToItemData(op.itemData));
             }
             else if (op.type == OperationType::Delete)
             {
@@ -184,22 +213,19 @@ namespace mmo
             }
         }
 
+        // Generate operation ID (for now, use 0 - will be enhanced with proper tracking)
+        const uint32 operationId = 0;
+
         // Send batch save packet if any saves
         if (!itemsToSave.empty())
         {
-            if (!m_realmConnector.SendInventorySavePacket(characterId, itemsToSave))
-            {
-                return false;
-            }
+            m_realmConnector.SendSaveInventoryItems(characterId, operationId, itemsToSave);
         }
 
-        // Send delete packets if any deletes
-        for (uint16 slot : slotsToDelete)
+        // Send batch delete packet if any deletes
+        if (!slotsToDelete.empty())
         {
-            if (!m_realmConnector.SendInventoryDeletePacket(characterId, slot))
-            {
-                return false;
-            }
+            m_realmConnector.SendDeleteInventoryItems(characterId, operationId, slotsToDelete);
         }
 
         return true;
