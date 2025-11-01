@@ -28,6 +28,7 @@ namespace mmo
 	class GameBagS;
 	class GameItemS;
 	class GamePlayerS;
+	class IInventoryRepository;
 
 	/// Contains item data.
 	struct ItemData
@@ -232,6 +233,25 @@ namespace mmo
 		/// Constructs actual items from realm data and actually "spawns" the items objects.
 		void ConstructFromRealmData(std::vector<GameObjectS*>& out_items);
 
+	public:
+
+		/// Sets the inventory repository for persistence operations.
+		/// Should be called after construction on World Server.
+		/// @param repository The repository to use for persistence.
+		void SetRepository(IInventoryRepository* repository) noexcept;
+
+		/// Saves current inventory state to the repository.
+		/// Uses a transaction to ensure atomicity.
+		/// @return True if save succeeded, false otherwise.
+		bool SaveToRepository();
+
+		/// Marks inventory as dirty (needs saving).
+		void MarkDirty() noexcept;
+
+		/// Checks if inventory has unsaved changes.
+		/// @return True if inventory needs saving.
+		bool IsDirty() const noexcept;
+
 	private:
 
 		/// Parameters: Bag-ID, Start-Slot, End-Slot
@@ -273,6 +293,12 @@ namespace mmo
 
 		/// The next buyback slot to be used.
 		uint8 m_nextBuyBackSlot;
+
+		/// Repository for inventory persistence (nullable, World Server only).
+		IInventoryRepository* m_repository;
+
+		/// Tracks whether inventory has unsaved changes.
+		bool m_isDirty;
 
 		/// Helper structure for organizing slot information during item creation
 		struct ItemSlotInfo

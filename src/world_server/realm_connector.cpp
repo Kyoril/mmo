@@ -17,6 +17,7 @@
 #include "game/chat_type.h"
 #include "game_server/objects/game_player_s.h"
 #include "game_protocol/game_protocol.h"
+#include "game_server/world_server_inventory_repository.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"
 
@@ -654,6 +655,10 @@ namespace mmo
 		// Create a new player object
 		auto player = std::make_shared<Player>(m_playerManager, *this, characterObject, characterData, m_project, *instance, m_conditionMgr);
 		m_playerManager.AddPlayer(player);
+
+		// Set up inventory persistence (World Server)
+		auto inventoryRepo = std::make_shared<WorldServerInventoryRepository>(*this, characterData.characterId);
+		player->SetInventoryRepository(inventoryRepo);
 
 		// Enter the world using the character object
 		instance->AddGameObject(*characterObject);

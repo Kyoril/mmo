@@ -135,6 +135,10 @@ namespace mmo
 		/// @brief Gets the character guid.
 		[[nodiscard]] uint64 GetCharacterGuid() const { return m_character->GetGuid(); }
 
+		/// @brief Sets the inventory repository for persistence.
+		/// @param repo The inventory repository instance.
+		void SetInventoryRepository(std::shared_ptr<IInventoryRepository> repo);
+
 	private:
 		// Client Network Handlers, Implemented in player.cpp
 
@@ -503,6 +507,12 @@ namespace mmo
 		GameTime m_serverTimestamp{ 0 };
 		int64 m_timeOffset{ 0 };  // Client timestamp - Server timestamp
 		Countdown m_timeSyncTimer;
+
+		// Inventory persistence repository (World Server only)
+		std::shared_ptr<IInventoryRepository> m_inventoryRepo{ nullptr };
+
+		// Inventory auto-save timer (every 5 minutes)
+		Countdown m_inventoryAutoSaveTimer;
 
 	public:
 		/// @brief Sends a time sync request to the client with incremented index.

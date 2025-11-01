@@ -5,6 +5,7 @@
 #include "game_server/objects/game_bag_s.h"
 #include "game_server/objects/game_item_s.h"
 #include "game_server/objects/game_player_s.h"
+#include "inventory_repository.h"
 #include "base/linear_set.h"
 #include "base/utilities.h"
 #include "binary_io/reader.h"
@@ -33,7 +34,21 @@ namespace mmo
 		: m_owner(owner)
 		, m_freeSlots(player_inventory_pack_slots::End - player_inventory_pack_slots::Start)	// Default slot count with only a backpack
 		, m_nextBuyBackSlot(player_buy_back_slots::Start)
+		, m_repository(nullptr)
+		, m_isDirty(false)
 	{
+		// Connect to item change signals to automatically mark inventory as dirty
+		itemInstanceCreated.connect([this](std::shared_ptr<GameItemS>, uint16) {
+			MarkDirty();
+		});
+
+		itemInstanceUpdated.connect([this](std::shared_ptr<GameItemS>, uint16) {
+			MarkDirty();
+		});
+
+		itemInstanceDestroyed.connect([this](std::shared_ptr<GameItemS>, uint16) {
+			MarkDirty();
+		});
 	}
 
 
@@ -1983,5 +1998,92 @@ namespace mmo
 				OnSetItemUnequipped(item->GetEntry().itemset());
 			}
 		}
+	}
+
+	void Inventory::SetRepository(IInventoryRepository* repository) noexcept
+	{
+		m_repository = repository;
+	}
+
+	bool Inventory::SaveToRepository()
+	{
+		if (!m_repository)
+		{
+			// No repository configured - this is normal on Realm Server
+			return false;
+		}
+
+		if (!m_isDirty)
+		{
+			// No changes to save
+			return true;
+		}
+
+		// Convert current inventory state to InventoryItemData
+		std::vector<InventoryItemData> items;
+		items.reserve(m_itemsBySlot.size());
+
+		for (const auto& [slot, item] : m_itemsBySlot)
+		{
+			// Skip buyback slots - these are temporary
+			if (IsBuyBackSlot(slot))
+			{
+				continue;
+			}
+
+			InventoryItemData data;
+			data.entry = item->GetEntry().id();
+			data.slot = slot;
+			data.stackCount = static_cast<uint16>(item->Get<int32>(object_fields::StackCount));
+			data.creator = item->Get<uint64>(object_fields::Creator);
+			data.contained = item->Get<uint64>(object_fields::Contained);
+			data.durability = item->Get<uint32>(object_fields::Durability);
+			data.randomPropertyIndex = 0;  // TODO: Implement if needed
+			data.randomSuffixIndex = 0;    // TODO: Implement if needed
+
+			items.push_back(data);
+		}
+
+		// Use transaction for atomicity
+		if (!m_repository->BeginTransaction())
+		{
+			ELOG("Failed to begin inventory transaction");
+			return false;
+		}
+
+		// Save all items
+		const bool success = m_repository->SaveAllItems(m_owner.GetGuid(), items);
+
+		if (success)
+		{
+			// Commit transaction
+			if (!m_repository->Commit())
+			{
+				ELOG("Failed to commit inventory transaction");
+				return false;
+			}
+
+			// Clear dirty flag
+			m_isDirty = false;
+			DLOG("Saved " << items.size() << " inventory items for character " << log_hex_digit(m_owner.GetGuid()));
+			return true;
+		}
+		else
+		{
+			// Rollback on failure
+			m_repository->Rollback();
+			ELOG("Failed to save inventory items");
+			return false;
+		}
+	}
+
+	void Inventory::MarkDirty() noexcept
+	{
+		m_isDirty = true;
+	}
+
+	bool Inventory::IsDirty() const noexcept
+	{
+		return m_isDirty;
 	}
 }

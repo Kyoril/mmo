@@ -29,6 +29,7 @@ namespace mmo
 		, m_groupUpdate(instance.GetUniverse().GetTimers())
 		, m_conditionMgr(conditionMgr)
 		, m_timeSyncTimer(instance.GetUniverse().GetTimers())
+		, m_inventoryAutoSaveTimer(instance.GetUniverse().GetTimers())
 	{
 		m_character->SetNetUnitWatcher(this);
 		m_character->SetPlayerWatcher(this);
@@ -92,15 +93,41 @@ namespace mmo
 		m_character->SetInitialSpells(m_characterData.spellIds);
 
 		// Setup time sync timer
-		m_timeSyncTimer.ended.connect([this]() {
-			SendTimeSyncRequest();
-			// Reschedule next time sync request (every 2 minutes)
-			m_timeSyncTimer.SetEnd(GetAsyncTimeMs() + constants::OneMinute * 2);
-		});
+		m_timeSyncTimer.ended.connect([this]()
+			{
+				SendTimeSyncRequest();
+				// Reschedule next time sync request (every 2 minutes)
+				m_timeSyncTimer.SetEnd(GetAsyncTimeMs() + constants::OneMinute * 2);
+			});
+
+		// Setup inventory auto-save timer
+		m_inventoryAutoSaveTimer.ended.connect([this]()
+			{
+				if (m_character)
+				{
+					auto& inventory = m_character->GetInventory();
+					if (inventory.IsDirty())
+					{
+						inventory.SaveToRepository();
+					}
+				}
+				// Reschedule next auto-save (every 5 minutes)
+				m_inventoryAutoSaveTimer.SetEnd(GetAsyncTimeMs() + constants::OneMinute * 5);
+			});
 	}
 
 	Player::~Player()
 	{
+		// Save inventory on logout if dirty
+		if (m_character && m_inventoryRepo)
+		{
+			auto& inventory = m_character->GetInventory();
+			if (inventory.IsDirty())
+			{
+				inventory.SaveToRepository();
+			}
+		}
+
 		if (m_character)
 		{
 			m_character->SetNetUnitWatcher(nullptr);
@@ -111,6 +138,18 @@ namespace mmo
 			VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
 			tile.GetWatchers().optionalRemove(this);
 			m_worldInstance->RemoveGameObject(*m_character);
+		}
+	}
+
+	void Player::SetInventoryRepository(std::shared_ptr<IInventoryRepository> repo)
+	{
+		m_inventoryRepo = std::move(repo);
+		if (m_inventoryRepo && m_character)
+		{
+			m_character->GetInventory().SetRepository(m_inventoryRepo.get());
+
+			// Start the auto-save timer (save every 5 minutes)
+			m_inventoryAutoSaveTimer.SetEnd(GetAsyncTimeMs() + constants::OneMinute * 5);
 		}
 	}
 
@@ -1945,12 +1984,23 @@ namespace mmo
 		}
 		else
 		{
+			// Save inventory before teleporting to a different map
+			if (m_inventoryRepo)
+			{
+				auto& inventory = m_character->GetInventory();
+				if (inventory.IsDirty())
+				{
+					inventory.SaveToRepository();
+				}
+			}
+
 			// Send transfer pending state. This will show up the loading screen at the client side and will
 			// tell the realm where our character should be sent to
-			SendPacket([mapId](game::OutgoingPacket& packet) {
-				packet.Start(game::realm_client_packet::TransferPending);
-				packet << io::write<uint32>(mapId);
-				packet.Finish();
+			SendPacket([mapId](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::TransferPending);
+					packet << io::write<uint32>(mapId);
+					packet.Finish();
 				});
 
 			// Initialize teleport request at realm
