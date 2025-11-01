@@ -131,6 +131,9 @@ namespace mmo
 				PlayerGroupChanged,
 
 				PlayerGuildChanged,
+
+				/// Sent as response to inventory operation requests (save/delete).
+				InventoryOperationResult,
 			};
 		}
 
@@ -170,7 +173,13 @@ namespace mmo
 
 				CharacterLocationResponse,
 
-				PlayerGroupUpdate
+				PlayerGroupUpdate,
+
+				/// Batch save inventory items in single transaction.
+				SaveInventoryItems,
+
+				/// Delete specific inventory items by slot.
+				DeleteInventoryItems,
 			};
 		}
 

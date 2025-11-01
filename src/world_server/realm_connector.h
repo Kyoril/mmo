@@ -19,6 +19,7 @@ namespace mmo
 	class Radian;
 	class Vector3;
 	struct QuestStatusData;
+	struct ItemData;
 	class GamePlayerS;
 
 	namespace proto
@@ -81,6 +82,18 @@ namespace mmo
 		/// Sends a group update to the realm.
 		void SendCharacterGroupUpdate(GamePlayerS& character, const std::vector<uint64>& nearbyMembers);
 
+		/// Sends a batch of inventory items to persist on the realm server.
+		/// @param characterGuid The character whose inventory is being saved.
+		/// @param operationId Unique ID for tracking this operation.
+		/// @param items Vector of item data to save.
+		void SendSaveInventoryItems(uint64 characterGuid, uint32 operationId, const std::vector<ItemData>& items);
+
+		/// Sends a request to delete inventory items on the realm server.
+		/// @param characterGuid The character whose items are being deleted.
+		/// @param operationId Unique ID for tracking this operation.
+		/// @param slots Vector of absolute slot indices to delete.
+		void SendDeleteInventoryItems(uint64 characterGuid, uint32 operationId, const std::vector<uint16>& slots);
+
 	private:
 		/// Perform client-side srp6-a calculations after we received server values
 		void DoSRP6ACalculation();
@@ -119,6 +132,11 @@ namespace mmo
 		PacketParseResult OnPlayerGroupChanged(auth::IncomingPacket& packet);
 
 		PacketParseResult OnPlayerGuildChanged(auth::IncomingPacket& packet);
+
+		/// Handles the result of an inventory operation (save/delete).
+		/// @param packet Incoming packet containing operation result.
+		/// @returns Enum value which decides whether to continue the connection or destroy it.
+		PacketParseResult OnInventoryOperationResult(auth::IncomingPacket& packet);
 		
 		/// Resets this instance to an unauthenticated state.
 		void Reset();

@@ -295,6 +295,8 @@ namespace mmo
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::TeleportRequest, *strongThis, &World::OnTeleportRequest);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::CharacterLocationResponse, *strongThis, &World::OnCharacterLocationResponse);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::PlayerGroupUpdate, *strongThis, &World::OnPlayerGroupUpdate);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::SaveInventoryItems, *strongThis, &World::OnSaveInventoryItems);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::DeleteInventoryItems, *strongThis, &World::OnDeleteInventoryItems);
 
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
@@ -843,6 +845,118 @@ namespace mmo
 		}
 
 		return player->OnGroupUpdate(packet);
+	}
+
+	PacketParseResult World::OnSaveInventoryItems(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		uint32 operationId = 0;
+		uint16 itemCount = 0;
+
+		if (!(packet
+			>> io::read<uint64>(characterGuid)
+			>> io::read<uint32>(operationId)
+			>> io::read<uint16>(itemCount)))
+		{
+			ELOG("Failed to parse SAVE_INVENTORY_ITEMS packet header");
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Received request to save " << itemCount << " inventory items for character " << log_hex_digit(characterGuid) 
+			<< " (operationId: " << operationId << ")");
+
+		// Parse all items
+		std::vector<ItemData> items;
+		items.reserve(itemCount);
+
+		for (uint16 i = 0; i < itemCount; ++i)
+		{
+			ItemData item;
+			if (!(packet >> item))
+			{
+				ELOG("Failed to parse item " << i << " in SAVE_INVENTORY_ITEMS packet");
+				return PacketParseResult::Disconnect;
+			}
+			items.push_back(item);
+		}
+
+		// Send result back to World Server
+		auto sendResult = [this, characterGuid, operationId](bool success)
+		{
+			GetConnection().sendSinglePacket([characterGuid, operationId, success](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::realm_world_packet::InventoryOperationResult);
+				outPacket
+					<< io::write<uint64>(characterGuid)
+					<< io::write<uint32>(operationId)
+					<< io::write<uint8>(0)  // Save operation
+					<< io::write<uint8>(success ? 1 : 0);  // Convert bool to uint8
+				outPacket.Finish();
+			});
+		};
+
+		// TODO: Call database to save items
+		// For now, just send success response
+		sendResult(true);
+		DLOG("Saved " << itemCount << " inventory items for character " << log_hex_digit(characterGuid));
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult World::OnDeleteInventoryItems(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		uint32 operationId = 0;
+		uint16 slotCount = 0;
+
+		if (!(packet
+			>> io::read<uint64>(characterGuid)
+			>> io::read<uint32>(operationId)
+			>> io::read<uint16>(slotCount)))
+		{
+			ELOG("Failed to parse DELETE_INVENTORY_ITEMS packet header");
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Received request to delete " << slotCount << " inventory items for character " << log_hex_digit(characterGuid)
+			<< " (operationId: " << operationId << ")");
+
+		// Parse all slot indices
+		std::vector<uint16> slots;
+		slots.reserve(slotCount);
+
+		for (uint16 i = 0; i < slotCount; ++i)
+		{
+			uint16 slot = 0;
+			if (!(packet >> io::read<uint16>(slot)))
+			{
+				ELOG("Failed to parse slot " << i << " in DELETE_INVENTORY_ITEMS packet");
+				return PacketParseResult::Disconnect;
+			}
+			slots.push_back(slot);
+		}
+
+		// Send result back to World Server
+		auto sendResult = [this, characterGuid, operationId](bool success)
+		{
+			GetConnection().sendSinglePacket([characterGuid, operationId, success](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::realm_world_packet::InventoryOperationResult);
+				outPacket
+					<< io::write<uint64>(characterGuid)
+					<< io::write<uint32>(operationId)
+					<< io::write<uint8>(1)  // Delete operation
+					<< io::write<uint8>(success ? 1 : 0);  // Convert bool to uint8
+				outPacket.Finish();
+			});
+		};
+
+		// TODO: Call database to delete items
+		// For now, just send success response
+		sendResult(true);
+		DLOG("Deleted " << slotCount << " inventory items for character " << log_hex_digit(characterGuid));
+
+		return PacketParseResult::Pass;
 	}
 
 	PacketParseResult World::OnPlayerCharacterLeft(auth::IncomingPacket& packet)

@@ -197,6 +197,14 @@ namespace mmo
 		PacketParseResult OnCharacterLocationResponse(auth::IncomingPacket& packet);
 
 		PacketParseResult OnPlayerGroupUpdate(auth::IncomingPacket& packet);
+
+		/// Handles an incoming packet to save inventory items.
+		/// @param packet The packet data.
+		PacketParseResult OnSaveInventoryItems(auth::IncomingPacket& packet);
+
+		/// Handles an incoming packet to delete inventory items.
+		/// @param packet The packet data.
+		PacketParseResult OnDeleteInventoryItems(auth::IncomingPacket& packet);
 	};
 
 }

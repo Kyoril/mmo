@@ -13,6 +13,7 @@
 #include "base/constants.h"
 #include "base/timer_queue.h"
 #include "game_server/character_data.h"
+#include "game_server/inventory.h"
 #include "game/chat_type.h"
 #include "game_server/objects/game_player_s.h"
 #include "game_protocol/game_protocol.h"
@@ -415,6 +416,44 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::SendSaveInventoryItems(uint64 characterGuid, uint32 operationId, const std::vector<ItemData>& items)
+	{
+		sendSinglePacket([characterGuid, operationId, &items](auth::OutgoingPacket& outPacket)
+		{
+			outPacket.Start(auth::world_realm_packet::SaveInventoryItems);
+			outPacket
+				<< io::write<uint64>(characterGuid)
+				<< io::write<uint32>(operationId)
+				<< io::write<uint16>(static_cast<uint16>(items.size()));
+
+			for (const auto& item : items)
+			{
+				outPacket << item;
+			}
+
+			outPacket.Finish();
+		});
+	}
+
+	void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 operationId, const std::vector<uint16>& slots)
+	{
+		sendSinglePacket([characterGuid, operationId, &slots](auth::OutgoingPacket& outPacket)
+		{
+			outPacket.Start(auth::world_realm_packet::DeleteInventoryItems);
+			outPacket
+				<< io::write<uint64>(characterGuid)
+				<< io::write<uint32>(operationId)
+				<< io::write<uint16>(static_cast<uint16>(slots.size()));
+
+			for (const auto slot : slots)
+			{
+				outPacket << io::write<uint16>(slot);
+			}
+
+			outPacket.Finish();
+		});
+	}
+
 	PacketParseResult RealmConnector::OnLogonProof(auth::IncomingPacket& packet)
 	{
 		ClearPacketHandler(auth::realm_world_packet::LogonProof);
@@ -442,6 +481,7 @@ namespace mmo
 				RegisterPacketHandler(auth::realm_world_packet::TeleportRequest, *this, &RealmConnector::OnTeleportRequest);
 				RegisterPacketHandler(auth::realm_world_packet::PlayerGroupChanged, *this, &RealmConnector::OnPlayerGroupChanged);
 				RegisterPacketHandler(auth::realm_world_packet::PlayerGuildChanged, *this, &RealmConnector::OnPlayerGuildChanged);
+				RegisterPacketHandler(auth::realm_world_packet::InventoryOperationResult, *this, &RealmConnector::OnInventoryOperationResult);
 				
 				PropagateHostedMapIds();
 			}
@@ -851,6 +891,43 @@ namespace mmo
 		}
 
 		player->UpdateCharacterGuild(guildId);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnInventoryOperationResult(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		uint32 operationId = 0;
+		uint8 operationType = 0;
+		uint8 successValue = 0;
+
+		if (!(packet
+			>> io::read<uint64>(characterGuid)
+			>> io::read<uint32>(operationId)
+			>> io::read<uint8>(operationType)
+			>> io::read<uint8>(successValue)))
+		{
+			ELOG("Failed to read INVENTORY_OPERATION_RESULT packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		bool success = (successValue != 0);
+		const char* operationName = (operationType == 0) ? "Save" : "Delete";
+		
+		if (success)
+		{
+			DLOG("Inventory operation " << operationName << " succeeded for character " << log_hex_digit(characterGuid) 
+				<< " (operationId: " << operationId << ")");
+		}
+		else
+		{
+			WLOG("Inventory operation " << operationName << " FAILED for character " << log_hex_digit(characterGuid)
+				<< " (operationId: " << operationId << ")");
+		}
+
+		// TODO: Notify WorldServerInventoryRepository via callback/signal
+		// For now, we just log the result
+
 		return PacketParseResult::Pass;
 	}
 
