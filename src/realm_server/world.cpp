@@ -895,10 +895,8 @@ namespace mmo
 			});
 		};
 
-		// TODO: Call database to save items
-		// For now, just send success response
-		sendResult(true);
-		DLOG("Saved " << itemCount << " inventory items for character " << log_hex_digit(characterGuid));
+		// Call database to save items asynchronously
+		m_database.asyncRequest(std::move(sendResult), &IDatabase::SaveInventoryItems, characterGuid, std::cref(items));
 
 		return PacketParseResult::Pass;
 	}
@@ -951,10 +949,8 @@ namespace mmo
 			});
 		};
 
-		// TODO: Call database to delete items
-		// For now, just send success response
-		sendResult(true);
-		DLOG("Deleted " << slotCount << " inventory items for character " << log_hex_digit(characterGuid));
+		// Call database to delete items asynchronously
+		m_database.asyncRequest(std::move(sendResult), &IDatabase::DeleteInventoryItems, characterGuid, std::cref(slots));
 
 		return PacketParseResult::Pass;
 	}

@@ -222,6 +222,16 @@ namespace mmo
 		/// Sets a new Message of the Day.
 		/// @param motd The new Message of the Day text.
 		virtual void SetMessageOfTheDay(const std::string& motd) = 0;
+
+		/// Saves multiple inventory items for a character.
+		/// @param characterId The character whose items to save.
+		/// @param items Vector of items to save (will be inserted or updated).
+		virtual void SaveInventoryItems(uint64 characterId, const std::vector<ItemData>& items) = 0;
+
+		/// Deletes multiple inventory items for a character by slot indices.
+		/// @param characterId The character whose items to delete.
+		/// @param slots Vector of slot indices to delete.
+		virtual void DeleteInventoryItems(uint64 characterId, const std::vector<uint16>& slots) = 0;
 	};
 
 

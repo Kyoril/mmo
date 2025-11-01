@@ -1539,6 +1539,120 @@ namespace mmo
 		}
 	}
 
+	void MySQLDatabase::SaveInventoryItems(uint64 characterId, const std::vector<ItemData>& items)
+	{
+		if (items.empty())
+		{
+			return;
+		}
+
+		try
+		{
+			mysql::Transaction transaction(m_connection);
+
+			// Use REPLACE INTO to update existing items or insert new ones
+			// REPLACE INTO works like INSERT but deletes any existing row with the same primary key first
+			std::ostringstream strm;
+			strm << "REPLACE INTO `character_items` (`owner`, `slot`, `entry`, `creator`, `count`, `durability`) VALUES ";
+
+			bool isFirstItem = true;
+			for (const auto& item : items)
+			{
+				// Don't save buyback slots into the database!
+				if (Inventory::IsBuyBackSlot(item.slot))
+				{
+					continue;
+				}
+
+				if (!isFirstItem)
+				{
+					strm << ",";
+				}
+				else
+				{
+					isFirstItem = false;
+				}
+
+				strm << "(" << characterId << "," << item.slot << "," << item.entry << ",";
+				if (item.creator == 0)
+				{
+					strm << "NULL";
+				}
+				else
+				{
+					strm << item.creator;
+				}
+				strm << "," << static_cast<uint16>(item.stackCount) << "," << item.durability << ")";
+			}
+
+			strm << ";";
+
+			// Only execute if we have items to save (after filtering buyback slots)
+			if (!isFirstItem)
+			{
+				if (!m_connection.Execute(strm.str()))
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not save inventory items!");
+				}
+			}
+
+			transaction.Commit();
+		}
+		catch (const mysql::Exception& e)
+		{
+			ELOG("Failed to save inventory items for character " << characterId << ": " << e.what());
+			throw;
+		}
+	}
+
+	void MySQLDatabase::DeleteInventoryItems(uint64 characterId, const std::vector<uint16>& slots)
+	{
+		if (slots.empty())
+		{
+			return;
+		}
+
+		try
+		{
+			mysql::Transaction transaction(m_connection);
+
+			// Build DELETE query with IN clause for bulk deletion
+			std::ostringstream strm;
+			strm << "DELETE FROM `character_items` WHERE `owner` = " << characterId << " AND `slot` IN (";
+
+			bool isFirstSlot = true;
+			for (const auto slot : slots)
+			{
+				if (!isFirstSlot)
+				{
+					strm << ",";
+				}
+				else
+				{
+					isFirstSlot = false;
+				}
+
+				strm << slot;
+			}
+
+			strm << ");";
+
+			if (!m_connection.Execute(strm.str()))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception("Could not delete inventory items!");
+			}
+
+			transaction.Commit();
+		}
+		catch (const mysql::Exception& e)
+		{
+			ELOG("Failed to delete inventory items for character " << characterId << ": " << e.what());
+			throw;
+		}
+	}
+
 	void MySQLDatabase::PrintDatabaseError()
 	{
 		ELOG("Realm database error: " << m_connection.GetErrorCode() << " - " << m_connection.GetErrorMessage());

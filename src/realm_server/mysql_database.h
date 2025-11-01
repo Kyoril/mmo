@@ -100,6 +100,10 @@ namespace mmo
 
 		void SetMessageOfTheDay(const std::string& motd) override;
 
+		void SaveInventoryItems(uint64 characterId, const std::vector<ItemData>& items) override;
+
+		void DeleteInventoryItems(uint64 characterId, const std::vector<uint16>& slots) override;
+
 	private:
 		void PrintDatabaseError();
 
