@@ -271,6 +271,11 @@ public:
 	bool SplitStack(uint16 sourceSlot, uint16 destSlot, uint16 count) override;
 	bool MergeStacks(uint16 sourceSlot, uint16 destSlot) override;
 
+	/// Gets the command factory for creating inventory commands.
+	/// @return Reference to the inventory command factory.
+	[[nodiscard]] InventoryCommandFactory& GetCommandFactory() noexcept;
+	[[nodiscard]] const InventoryCommandFactory& GetCommandFactory() const noexcept;
+
 private:
 
 	/// Parameters: Bag-ID, Start-Slot, End-Slot

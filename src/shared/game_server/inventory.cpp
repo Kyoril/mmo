@@ -2118,6 +2118,16 @@ namespace mmo
 		return *m_slotManager;
 	}
 
+	InventoryCommandFactory &Inventory::GetCommandFactory() noexcept
+	{
+		return *m_commandFactory;
+	}
+
+	const InventoryCommandFactory &Inventory::GetCommandFactory() const noexcept
+	{
+		return *m_commandFactory;
+	}
+
 	// Note: AddItemToSlot is already implemented as a private helper method
 	// and is now public with override keyword
 
