@@ -173,6 +173,11 @@ namespace mmo
 
 		virtual void ChatMessage(uint64 characterId, uint16 type, String message) = 0;
 
+		/// Updates character data in the database.
+		/// @param characterId The character's database ID.
+		/// @param items DEPRECATED: Pass empty vector. Use SaveInventoryItems/DeleteInventoryItems instead.
+		/// @note The items parameter is deprecated and will be removed in a future version.
+		///       Use SaveInventoryItems() and DeleteInventoryItems() for inventory persistence.
 		virtual void UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position, const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money, const std::vector<ItemData>& items, uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing, std::array<uint32, 5> attributePointsSpent, const std::vector<uint32>& spellIds, const std::unordered_map<uint32, uint32>& talentRanks, uint32 timePlayed) = 0;
 
 		virtual std::optional<ActionButtons> GetActionButtons(uint64 characterId) = 0;

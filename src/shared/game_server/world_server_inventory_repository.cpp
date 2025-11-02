@@ -65,30 +65,32 @@ namespace mmo
         }
     }
 
-    bool WorldServerInventoryRepository::SaveAllItems(uint64 characterId, const std::vector<InventoryItemData> &items)
+bool WorldServerInventoryRepository::SaveAllItems(uint64 characterId, const std::vector<InventoryItemData> &items)
+{
+    DLOG("WorldServerInventoryRepository::SaveAllItems called with " << items.size() << " items, inTransaction=" << m_inTransaction);
+    
+    if (m_inTransaction)
     {
-        if (m_inTransaction)
+        // Buffer all items
+        for (const auto &item : items)
         {
-            // Buffer all items
-            for (const auto &item : items)
-            {
-                m_pendingOperations.emplace_back(OperationType::Save, item);
-            }
-            return true;
+            m_pendingOperations.emplace_back(OperationType::Save, item);
         }
-        else
-        {
-            // Send batch immediately
-            std::vector<PendingOperation> ops;
-            for (const auto &item : items)
-            {
-                ops.emplace_back(OperationType::Save, item);
-            }
-            return SendBatchOperationsPacket(characterId, ops);
-        }
+        DLOG("Buffered " << items.size() << " items for transaction");
+        return true;
     }
-
-    bool WorldServerInventoryRepository::DeleteItem(uint64 characterId, uint16 slot)
+    else
+    {
+        // Send batch immediately
+        std::vector<PendingOperation> ops;
+        for (const auto &item : items)
+        {
+            ops.emplace_back(OperationType::Save, item);
+        }
+        DLOG("Sending " << ops.size() << " operations immediately");
+        return SendBatchOperationsPacket(characterId, ops);
+    }
+}    bool WorldServerInventoryRepository::DeleteItem(uint64 characterId, uint16 slot)
     {
         if (m_inTransaction)
         {
@@ -122,23 +124,24 @@ namespace mmo
         return true;
     }
 
-    bool WorldServerInventoryRepository::Commit()
+bool WorldServerInventoryRepository::Commit()
+{
+    if (!m_inTransaction)
     {
-        if (!m_inTransaction)
-        {
-            return false;
-        }
-
-        // Send all buffered operations to realm server
-        const bool success = SendBatchOperationsPacket(m_characterId, m_pendingOperations);
-
-        m_inTransaction = false;
-        m_pendingOperations.clear();
-
-        return success;
+        WLOG("Commit called but not in transaction");
+        return false;
     }
 
-    bool WorldServerInventoryRepository::Rollback()
+    DLOG("Committing transaction with " << m_pendingOperations.size() << " pending operations");
+
+    // Send all buffered operations to realm server
+    const bool success = SendBatchOperationsPacket(m_characterId, m_pendingOperations);
+
+    m_inTransaction = false;
+    m_pendingOperations.clear();
+
+    return success;
+}    bool WorldServerInventoryRepository::Rollback()
     {
         if (!m_inTransaction)
         {

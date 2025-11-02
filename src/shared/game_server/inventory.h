@@ -291,6 +291,8 @@ namespace mmo
 
 		std::map<uint32, uint8> m_setItems;
 
+		scoped_connection_container m_inventoryConnections;
+
 		/// The next buyback slot to be used.
 		uint8 m_nextBuyBackSlot;
 

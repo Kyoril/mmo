@@ -699,6 +699,11 @@ namespace mmo
 				return;
 			}
 		};
+		
+		// NOTE: Inventory is now persisted via the new SaveInventoryItems/DeleteInventoryItems methods
+		// Pass empty vector to UpdateCharacter for backward compatibility during refactoring
+		std::vector<ItemData> emptyInventory;
+		
 		m_database.asyncRequest(std::move(handler), &IDatabase::UpdateCharacter, characterGuid, mapId, player.GetMovementInfo().position,
 			player.GetMovementInfo().facing, player.Get<uint32>(object_fields::Level),
 			player.Get<uint32>(object_fields::Xp), 
@@ -707,7 +712,7 @@ namespace mmo
 			player.Get<uint32>(object_fields::Rage), 
 			player.Get<uint32>(object_fields::Energy),
 			player.Get<uint32>(object_fields::Money),
-			player.GetInventory().GetItemData(),
+			emptyInventory,
 			player.GetBindMap(),
 			player.GetBindPosition(),
 			player.GetBindFacing(),
@@ -896,7 +901,8 @@ namespace mmo
 		};
 
 		// Call database to save items asynchronously
-		m_database.asyncRequest(std::move(sendResult), &IDatabase::SaveInventoryItems, characterGuid, std::cref(items));
+		// CRITICAL: Pass items by value (copy) to ensure they persist through async operation
+		m_database.asyncRequest(std::move(sendResult), &IDatabase::SaveInventoryItems, characterGuid, items);
 
 		return PacketParseResult::Pass;
 	}
@@ -950,7 +956,8 @@ namespace mmo
 		};
 
 		// Call database to delete items asynchronously
-		m_database.asyncRequest(std::move(sendResult), &IDatabase::DeleteInventoryItems, characterGuid, std::cref(slots));
+		// CRITICAL: Pass slots by value (copy) to ensure they persist through async operation
+		m_database.asyncRequest(std::move(sendResult), &IDatabase::DeleteInventoryItems, characterGuid, slots);
 
 		return PacketParseResult::Pass;
 	}

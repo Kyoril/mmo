@@ -417,28 +417,33 @@ namespace mmo
 			});
 	}
 
-	void RealmConnector::SendSaveInventoryItems(uint64 characterGuid, uint32 operationId, const std::vector<ItemData>& items)
+void RealmConnector::SendSaveInventoryItems(uint64 characterGuid, uint32 operationId, const std::vector<ItemData>& items)
+{
+	ILOG("RealmConnector::SendSaveInventoryItems called: characterGuid=" << log_hex_digit(characterGuid) 
+		<< ", operationId=" << operationId << ", items.size()=" << items.size());
+	
+	// CRITICAL: Capture items by value to ensure they're not destroyed before async send
+	sendSinglePacket([characterGuid, operationId, items](auth::OutgoingPacket& outPacket)
 	{
-		sendSinglePacket([characterGuid, operationId, &items](auth::OutgoingPacket& outPacket)
+		outPacket.Start(auth::world_realm_packet::SaveInventoryItems);
+		outPacket
+			<< io::write<uint64>(characterGuid)
+			<< io::write<uint32>(operationId)
+			<< io::write<uint16>(static_cast<uint16>(items.size()));
+
+		for (const auto& item : items)
 		{
-			outPacket.Start(auth::world_realm_packet::SaveInventoryItems);
-			outPacket
-				<< io::write<uint64>(characterGuid)
-				<< io::write<uint32>(operationId)
-				<< io::write<uint16>(static_cast<uint16>(items.size()));
+			outPacket << item;
+		}
 
-			for (const auto& item : items)
-			{
-				outPacket << item;
-			}
-
-			outPacket.Finish();
-		});
-	}
-
-	void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 operationId, const std::vector<uint16>& slots)
+		outPacket.Finish();
+	});
+	
+	DLOG("Packet sent successfully");
+}	void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 operationId, const std::vector<uint16>& slots)
 	{
-		sendSinglePacket([characterGuid, operationId, &slots](auth::OutgoingPacket& outPacket)
+		// CRITICAL: Capture slots by value to ensure they're not destroyed before async send
+		sendSinglePacket([characterGuid, operationId, slots](auth::OutgoingPacket& outPacket)
 		{
 			outPacket.Start(auth::world_realm_packet::DeleteInventoryItems);
 			outPacket

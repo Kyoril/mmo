@@ -103,12 +103,18 @@ namespace mmo
 		// Setup inventory auto-save timer
 		m_inventoryAutoSaveTimer.ended.connect([this]()
 			{
+				DLOG("Inventory auto-save timer triggered");
 				if (m_character)
 				{
 					auto& inventory = m_character->GetInventory();
 					if (inventory.IsDirty())
 					{
+						ILOG("Saving dirty inventory for character " << log_hex_digit(m_character->GetGuid()));
 						inventory.SaveToRepository();
+					}
+					else
+					{
+						DLOG("Inventory is not dirty, skipping save");
 					}
 				}
 				// Reschedule next auto-save (every 5 minutes)
@@ -146,10 +152,16 @@ namespace mmo
 		m_inventoryRepo = std::move(repo);
 		if (m_inventoryRepo && m_character)
 		{
+			DLOG("Setting inventory repository for character " << log_hex_digit(m_character->GetGuid()));
 			m_character->GetInventory().SetRepository(m_inventoryRepo.get());
 
 			// Start the auto-save timer (save every 5 minutes)
+			DLOG("Starting inventory auto-save timer (5 minute interval)");
 			m_inventoryAutoSaveTimer.SetEnd(GetAsyncTimeMs() + constants::OneMinute * 5);
+		}
+		else
+		{
+			WLOG("Failed to set inventory repository - repo or character is null");
 		}
 	}
 
@@ -157,18 +169,36 @@ namespace mmo
 	{
 		const std::vector<GameObjectS*> objects{ item.get() };
 		NotifyObjectsSpawned(objects);
+		
+		// Mark inventory as dirty for persistence
+		if (m_character)
+		{
+			m_character->GetInventory().MarkDirty();
+		}
 	}
 
 	void Player::OnItemUpdated(std::shared_ptr<GameItemS> item, uint16 slot)
 	{
 		const std::vector<GameObjectS*> objects{ item.get() };
 		NotifyObjectsUpdated(objects);
+		
+		// Mark inventory as dirty for persistence
+		if (m_character)
+		{
+			m_character->GetInventory().MarkDirty();
+		}
 	}
 
 	void Player::OnItemDestroyed(std::shared_ptr<GameItemS> item, uint16 slot)
 	{
 		const std::vector<GameObjectS*> objects{ item.get() };
 		NotifyObjectsDespawned(objects);
+		
+		// Mark inventory as dirty for persistence
+		if (m_character)
+		{
+			m_character->GetInventory().MarkDirty();
+		}
 	}
 
 	void Player::UpdateCharacterGroup(uint64 groupId)

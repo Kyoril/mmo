@@ -38,20 +38,21 @@ namespace mmo
 		, m_isDirty(false)
 	{
 		// Connect to item change signals to automatically mark inventory as dirty
-		itemInstanceCreated.connect([this](std::shared_ptr<GameItemS>, uint16) {
+		m_inventoryConnections += itemInstanceCreated.connect([this](std::shared_ptr<GameItemS>, uint16 slot) {
+			DLOG("Item created at slot " << slot << " - marking inventory dirty");
 			MarkDirty();
 		});
 
-		itemInstanceUpdated.connect([this](std::shared_ptr<GameItemS>, uint16) {
+		m_inventoryConnections += itemInstanceUpdated.connect([this](std::shared_ptr<GameItemS>, uint16 slot) {
+			DLOG("Item updated at slot " << slot << " - marking inventory dirty");
 			MarkDirty();
 		});
 
-		itemInstanceDestroyed.connect([this](std::shared_ptr<GameItemS>, uint16) {
+		m_inventoryConnections += itemInstanceDestroyed.connect([this](std::shared_ptr<GameItemS>, uint16 slot) {
+			DLOG("Item destroyed at slot " << slot << " - marking inventory dirty");
 			MarkDirty();
 		});
 	}
-
-
 
 	// Helper method to validate item count limits
 	InventoryChangeFailure Inventory::ValidateItemLimits(const proto::ItemEntry& entry, uint16 amount) const
@@ -282,14 +283,13 @@ namespace mmo
 		m_itemsBySlot[slot] = item;
 		m_freeSlots--;
 
-		// Setup despawn signal watching
-		m_itemDespawnSignals[item->GetGuid()] = item->despawned.connect(
-			std::bind(&Inventory::OnItemDespawned, this, std::placeholders::_1));
+	// Setup despawn signal watching
+	m_itemDespawnSignals[item->GetGuid()] = item->despawned.connect(
+		std::bind(&Inventory::OnItemDespawned, this, std::placeholders::_1));
 
-		// Notify about item creation
-		itemInstanceCreated(item, slot);
-
-		// Update player fields based on slot type
+	// Notify about item creation
+	DLOG("FIRING itemInstanceCreated signal for slot " << slot);
+	itemInstanceCreated(item, slot);		// Update player fields based on slot type
 		UpdatePlayerFieldsForNewItem(item, slot);
 	}
 
@@ -630,17 +630,26 @@ namespace mmo
 			}
 
 			// Notify about destruction
+			// Note: Even if sold=true (moved to buyback), we fire the signal to mark inventory dirty
 			if (!sold)
 			{
+				DLOG("FIRING itemInstanceDestroyed signal for slot " << absoluteSlot);
 				itemInstanceDestroyed(item, absoluteSlot);
+			}
+			else
+			{
+				// Item was sold and moved to buyback - still an inventory change that needs saving
+				DLOG("FIRING itemInstanceUpdated signal for sold item at slot " << absoluteSlot << " (moved to buyback)");
+				itemInstanceUpdated(item, absoluteSlot);
 			}
 		}
 		else
 		{
 			item->Set<uint32>(object_fields::StackCount, stackCount - stacks);
+			DLOG("FIRING itemInstanceUpdated signal for slot " << absoluteSlot);
 			itemInstanceUpdated(it->second, absoluteSlot);
 		}
-
+		
 		// If the item has been sold...
 		if (sold)
 		{
@@ -1369,6 +1378,7 @@ namespace mmo
 				}
 
 				// Add this item to the inventory slot
+				ASSERT(!m_itemsBySlot.contains(data.slot) && "Item slot already in use by another item - duplicate slot assignment!");
 				m_itemsBySlot[data.slot] = item;
 
 				// Determine slot
@@ -1799,30 +1809,40 @@ namespace mmo
 			}
 		}
 
-		// Update slot A with destination item
-		UpdateSlotContents(slotA, dstItem);
-		
-		// Update slot B with source item  
-		UpdateSlotContents(slotB, srcItem);
+	// Update slot A with destination item
+	UpdateSlotContents(slotA, dstItem);
+	
+	// Update slot B with source item  
+	UpdateSlotContents(slotB, srcItem);
 
-		// Update bag slot counts
-		UpdateBagSlotCounts(srcItem, dstItem, slotA, slotB);
+	// Update bag slot counts
+	UpdateBagSlotCounts(srcItem, dstItem, slotA, slotB);
 
-		// Swap items in internal map
-		std::swap(m_itemsBySlot[slotA], m_itemsBySlot[slotB]);
-		
-		// Handle empty slot case
-		if (!dstItem)
-		{
-			m_itemsBySlot.erase(slotA);
-			UpdateFreeSlotCount(slotA, slotB, false);
-		}
-
-		// Apply item stats and visuals
-		ApplySwapEffects(srcItem, dstItem, slotA, slotB);
+	// Swap items in internal map
+	std::swap(m_itemsBySlot[slotA], m_itemsBySlot[slotB]);
+	
+	// Handle empty slot case
+	if (!dstItem)
+	{
+		m_itemsBySlot.erase(slotA);
+		UpdateFreeSlotCount(slotA, slotB, false);
 	}
 
-	// Helper method to update slot contents
+	// Apply item stats and visuals
+	ApplySwapEffects(srcItem, dstItem, slotA, slotB);
+	
+	// Fire signals for the swap - these need to fire unconditionally
+	// UpdateSlotContents only fires if container ownership changes, which isn't always the case
+	DLOG("FIRING itemInstanceUpdated signals for swap: slotA=" << slotA << ", slotB=" << slotB);
+	if (srcItem)
+	{
+		itemInstanceUpdated(srcItem, slotB);
+	}
+	if (dstItem)
+	{
+		itemInstanceUpdated(dstItem, slotA);
+	}
+}	// Helper method to update slot contents
 	void Inventory::UpdateSlotContents(uint16 slot, std::shared_ptr<GameItemS> item)
 	{
 		if (IsEquipmentSlot(slot) || IsInventorySlot(slot) || IsBagPackSlot(slot))
@@ -2003,6 +2023,7 @@ namespace mmo
 	void Inventory::SetRepository(IInventoryRepository* repository) noexcept
 	{
 		m_repository = repository;
+		DLOG("Inventory repository set: " << (repository ? "valid" : "null"));
 	}
 
 	bool Inventory::SaveToRepository()
@@ -2010,51 +2031,57 @@ namespace mmo
 		if (!m_repository)
 		{
 			// No repository configured - this is normal on Realm Server
+			DLOG("Cannot save inventory: repository is not set (normal on Realm Server)");
 			return false;
 		}
 
 		if (!m_isDirty)
 		{
 			// No changes to save
+			DLOG("Inventory is not dirty, skipping save");
 			return true;
 		}
 
-		// Convert current inventory state to InventoryItemData
-		std::vector<InventoryItemData> items;
-		items.reserve(m_itemsBySlot.size());
+	ILOG("Saving inventory to repository (dirty flag set)");
+	DLOG("Current inventory has " << m_itemsBySlot.size() << " items in m_itemsBySlot");
 
-		for (const auto& [slot, item] : m_itemsBySlot)
+	// Convert current inventory state to InventoryItemData
+	std::vector<InventoryItemData> items;
+	items.reserve(m_itemsBySlot.size());
+
+	for (const auto& [slot, item] : m_itemsBySlot)
+	{
+		// Skip buyback slots - these are temporary
+		if (IsBuyBackSlot(slot))
 		{
-			// Skip buyback slots - these are temporary
-			if (IsBuyBackSlot(slot))
-			{
-				continue;
-			}
-
-			InventoryItemData data;
+			DLOG("Skipping buyback slot " << slot);
+			continue;
+		}
+		
+		DLOG("Adding item to save: slot=" << slot << ", entry=" << item->GetEntry().id());			InventoryItemData data;
 			data.entry = item->GetEntry().id();
 			data.slot = slot;
 			data.stackCount = static_cast<uint16>(item->Get<int32>(object_fields::StackCount));
 			data.creator = item->Get<uint64>(object_fields::Creator);
-			data.contained = item->Get<uint64>(object_fields::Contained);
-			data.durability = item->Get<uint32>(object_fields::Durability);
-			data.randomPropertyIndex = 0;  // TODO: Implement if needed
-			data.randomSuffixIndex = 0;    // TODO: Implement if needed
+		data.contained = item->Get<uint64>(object_fields::Contained);
+		data.durability = item->Get<uint32>(object_fields::Durability);
+		data.randomPropertyIndex = 0;  // TODO: Implement if needed
+		data.randomSuffixIndex = 0;    // TODO: Implement if needed
 
-			items.push_back(data);
-		}
+		items.push_back(data);
+	}
+	
+	ILOG("Prepared " << items.size() << " items to save (filtered from " << m_itemsBySlot.size() << " total slots)");
 
-		// Use transaction for atomicity
-		if (!m_repository->BeginTransaction())
-		{
-			ELOG("Failed to begin inventory transaction");
-			return false;
-		}
+	// Use transaction for atomicity
+	if (!m_repository->BeginTransaction())
+	{
+		ELOG("Failed to begin inventory transaction");
+		return false;
+	}
 
-		// Save all items
-		const bool success = m_repository->SaveAllItems(m_owner.GetGuid(), items);
-
-		if (success)
+	// Save all items (Realm Server will delete-then-insert for clean state)
+	const bool success = m_repository->SaveAllItems(m_owner.GetGuid(), items);		if (success)
 		{
 			// Commit transaction
 			if (!m_repository->Commit())
@@ -2079,6 +2106,10 @@ namespace mmo
 
 	void Inventory::MarkDirty() noexcept
 	{
+		if (!m_isDirty)
+		{
+			DLOG("Inventory marked as dirty");
+		}
 		m_isDirty = true;
 	}
 

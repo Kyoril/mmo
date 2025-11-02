@@ -114,6 +114,7 @@ namespace mmo
 		}
 
 		auto& inv = m_character->GetInventory();
+
 		auto absSrcSlot = Inventory::GetAbsoluteSlot(srcBag, srcSlot);
 		auto item = inv.GetItemAtSlot(absSrcSlot);
 		if (!item)

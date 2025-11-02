@@ -1685,7 +1685,8 @@ namespace mmo
 		m_characterData->bindMap = character.GetBindMap();
 		m_characterData->bindPosition = character.GetBindPosition();
 		m_characterData->bindFacing = character.GetBindFacing();
-		m_characterData->items = character.GetInventory().GetItemData();
+		// NOTE: Inventory is no longer cached here - it's persisted via new SaveInventoryItems/DeleteInventoryItems
+		m_characterData->items.clear();
 		m_characterData->isGameMaster = (m_gmLevel > 0);
 	}
 
