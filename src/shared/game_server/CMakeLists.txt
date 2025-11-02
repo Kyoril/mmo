@@ -3,7 +3,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 # Add shared graphics library
 add_lib_recurse(game_server)
-target_link_libraries(game_server base log game proto_data nav_mesh)
+target_link_libraries(game_server base log game proto_data nav_mesh game_protocol)
 
 if (APPLE)
     target_link_libraries(game_server "-framework CoreFoundation")

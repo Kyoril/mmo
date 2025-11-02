@@ -28,9 +28,9 @@ namespace mmo
 		virtual ~NetPlayerWatcher() = default;
 
 	public:
-		virtual void OnQuestKillCredit(const proto::QuestEntry&, uint64 guid, uint32 entry, uint32 count, uint32 maxCount) = 0;
+		virtual void OnQuestKillCredit(const proto::QuestEntry &, uint64 guid, uint32 entry, uint32 count, uint32 maxCount) = 0;
 
-		virtual void OnQuestDataChanged(uint32 questId, const QuestStatusData& data) = 0;
+		virtual void OnQuestDataChanged(uint32 questId, const QuestStatusData &data) = 0;
 
 		virtual void OnQuestCompleted(uint64 questgiverGuid, uint32 questId, uint32 rewardedXp, uint32 rewardMoney) = 0;
 
@@ -40,27 +40,27 @@ namespace mmo
 	};
 
 	/// @brief Represents a playable character in the game world.
-	class GamePlayerS final : public GameUnitS
+	class GamePlayerS final
+		: public GameUnitS
 	{
 	public:
-
-		signal<void(GameUnitS&, const proto::SpellEntry&)> spellLearned;
-		signal<void(GameUnitS&, const proto::SpellEntry&)> spellUnlearned;
+		signal<void(GameUnitS &, const proto::SpellEntry &)> spellLearned;
+		signal<void(GameUnitS &, const proto::SpellEntry &)> spellUnlearned;
 
 	public:
-		GamePlayerS(const proto::Project& project, TimerQueue& timerQueue);
+		GamePlayerS(const proto::Project &project, TimerQueue &timerQueue);
 
 		~GamePlayerS() override = default;
 
 		virtual void Initialize() override;
 
-		void SetConfiguration(const AvatarConfiguration& configuration);
+		void SetConfiguration(const AvatarConfiguration &configuration);
 
-		void SetPlayerWatcher(NetPlayerWatcher* watcher);
+		void SetPlayerWatcher(NetPlayerWatcher *watcher);
 
-		void SetClass(const proto::ClassEntry& classEntry);
+		void SetClass(const proto::ClassEntry &classEntry);
 
-		void SetRace(const proto::RaceEntry& raceEntry);
+		void SetRace(const proto::RaceEntry &raceEntry);
 
 		void SetGender(uint8 gender);
 
@@ -73,16 +73,16 @@ namespace mmo
 		ObjectTypeId GetTypeId() const override { return ObjectTypeId::Player; }
 
 		/// Applies or removes item stats for this character.
-		void ApplyItemStats(const GameItemS& item, bool apply);
+		void ApplyItemStats(const GameItemS &item, bool apply);
 
 		/// Gets a reference to the characters inventory component.
-		Inventory& GetInventory() { return m_inventory; }
+		Inventory &GetInventory() { return m_inventory; }
 
-		const Inventory& GetInventory() const { return m_inventory; }
+		const Inventory &GetInventory() const { return m_inventory; }
 
-		const proto::ClassEntry* GetClassEntry() const { return m_classEntry; }
+		const proto::ClassEntry *GetClassEntry() const { return m_classEntry; }
 
-		const proto::RaceEntry* GetRaceEntry() const { return m_raceEntry; }
+		const proto::RaceEntry *GetRaceEntry() const { return m_raceEntry; }
 
 		bool AddAttributePoint(uint32 attribute);
 
@@ -101,21 +101,19 @@ namespace mmo
 
 		/// Sets the characters group id.
 		void SetGroupId(uint64 groupId) { m_groupId = groupId; }
+		void WriteObjectUpdateBlock(io::Writer &writer, bool creation = true) const override;
 
-		void WriteObjectUpdateBlock(io::Writer& writer, bool creation = true) const override;
+		void RaiseTrigger(trigger_event::Type e, const std::vector<uint32> &data, GameUnitS *triggeringUnit) override;
 
-		void RaiseTrigger(trigger_event::Type e, const std::vector<uint32>& data, GameUnitS* triggeringUnit) override;
-
-		void RaiseTrigger(trigger_event::Type e, GameUnitS* triggeringUnit) override;
+		void RaiseTrigger(trigger_event::Type e, GameUnitS *triggeringUnit) override;
 
 		void OnItemAdded(uint16 slot, uint16 amount, bool wasLooted, bool wasCreated);
 
 		void LootObject(std::weak_ptr<GameObjectS> lootObject);
 
-		void InitializeTalents(const std::map<uint32, uint8>& talentRanks);
+		void InitializeTalents(const std::map<uint32, uint8> &talentRanks);
 
 	public:
-
 		/// Gets the current status of a given quest by its id.
 		/// @returns Quest status.
 		QuestStatus GetQuestStatus(uint32 quest) const;
@@ -139,10 +137,10 @@ namespace mmo
 		bool RewardQuest(uint64 questgiverGuid, uint32 quest, uint8 rewardChoice);
 
 		/// Called when a quest-related creature was killed.
-		void OnQuestKillCredit(uint64 unitGuid, const proto::UnitEntry& entry);
+		void OnQuestKillCredit(uint64 unitGuid, const proto::UnitEntry &entry);
 
 		/// Determines whether the character fulfulls all requirements of the given quests.
-		bool FulfillsQuestRequirements(const proto::QuestEntry& entry) const;
+		bool FulfillsQuestRequirements(const proto::QuestEntry &entry) const;
 
 		/// Determines whether the players questlog is full.
 		bool IsQuestlogFull() const;
@@ -151,20 +149,20 @@ namespace mmo
 		void OnQuestExploration(uint32 questId);
 
 		/// Called when a quest item was added to the inventory.
-		void OnQuestItemAddedCredit(const proto::ItemEntry& entry, uint32 amount);
+		void OnQuestItemAddedCredit(const proto::ItemEntry &entry, uint32 amount);
 
 		/// Called when a quest item was removed from the inventory.
-		void OnQuestItemRemovedCredit(const proto::ItemEntry& entry, uint32 amount);
+		void OnQuestItemRemovedCredit(const proto::ItemEntry &entry, uint32 amount);
 
 		/// Called when a quest item was removed from the inventory.
-		void OnQuestSpellCastCredit(uint32 spellId, GameObjectS& target);
+		void OnQuestSpellCastCredit(uint32 spellId, GameObjectS &target);
 
 		/// Determines if the player needs a specific item for a quest.
 		bool NeedsQuestItem(uint32 itemId) const;
 
 		void NotifyQuestRewarded(uint32 questId);
 
-		void SetQuestData(uint32 questId, const QuestStatusData& data);
+		void SetQuestData(uint32 questId, const QuestStatusData &data);
 
 		/// Tries to learn a given rank of a talent.
 		///
@@ -203,10 +201,9 @@ namespace mmo
 		/// Gets the complete talent map for serialization.
 		///
 		/// @return Reference to the talent map containing talent IDs and their ranks.
-		const std::unordered_map<uint32, uint32>& GetTalents() const { return m_talents; }
+		const std::unordered_map<uint32, uint32> &GetTalents() const { return m_talents; }
 
 	protected:
-
 		float GetUnitMissChance() const override;
 
 		bool HasOffhandWeapon() const override;
@@ -226,9 +223,13 @@ namespace mmo
 
 		void UpdateTalentPoints();
 
-		uint32 GetAttributePointsByAttribute(const uint32 attribute) const { ASSERT(attribute < 5); return m_attributePointEnhancements[attribute]; }
+		uint32 GetAttributePointsByAttribute(const uint32 attribute) const
+		{
+			ASSERT(attribute < 5);
+			return m_attributePointEnhancements[attribute];
+		}
 
-		const String& GetName() const override;
+		const String &GetName() const override;
 
 		std::shared_ptr<GameObjectS> GetLootObject() const { return m_lootObject.lock(); }
 
@@ -238,7 +239,7 @@ namespace mmo
 
 		/// @brief Applies movement information and performs height safety checks.
 		/// @param info The movement information to apply.
-		void ApplyMovementInfo(const MovementInfo& info) override;
+		void ApplyMovementInfo(const MovementInfo &info) override;
 
 	protected:
 		void UpdateStat(int32 stat);
@@ -246,12 +247,12 @@ namespace mmo
 		void RecalculateTotalAttributePointsConsumed(const uint32 attribute);
 
 	protected:
-		void OnSpellLearned(const proto::SpellEntry& spell) override
+		void OnSpellLearned(const proto::SpellEntry &spell) override
 		{
 			spellLearned(*this, spell);
 		}
 
-		void OnSpellUnlearned(const proto::SpellEntry& spell) override
+		void OnSpellUnlearned(const proto::SpellEntry &spell) override
 		{
 			spellUnlearned(*this, spell);
 		}
@@ -264,15 +265,15 @@ namespace mmo
 
 	private:
 		Inventory m_inventory;
-		const proto::ClassEntry* m_classEntry;
-		const proto::RaceEntry* m_raceEntry;
+		const proto::ClassEntry *m_classEntry;
+		const proto::RaceEntry *m_raceEntry;
 		std::array<uint32, 5> m_attributePointEnhancements;
 		std::array<uint32, 5> m_attributePointsSpent;
 		uint32 m_totalAvailablePointsAtLevel;
 		uint32 m_totalTalentPointsAtLevel;
 		std::map<uint32, QuestStatusData> m_quests;
 		std::set<uint32> m_rewardedQuestIds;
-		NetPlayerWatcher* m_netPlayerWatcher = nullptr;
+		NetPlayerWatcher *m_netPlayerWatcher = nullptr;
 		uint64 m_groupId = 0;
 		AvatarConfiguration m_configuration;
 		std::weak_ptr<GameObjectS> m_lootObject;
@@ -280,11 +281,11 @@ namespace mmo
 		std::unordered_map<uint32, uint32> m_talents;
 
 	private:
-		friend io::Writer& operator << (io::Writer& w, GamePlayerS const& object);
-		friend io::Reader& operator >> (io::Reader& r, GamePlayerS& object);
+		friend io::Writer &operator<<(io::Writer &w, GamePlayerS const &object);
+		friend io::Reader &operator>>(io::Reader &r, GamePlayerS &object);
 	};
 
-	io::Writer& operator<<(io::Writer& w, GamePlayerS const& object);
+	io::Writer &operator<<(io::Writer &w, GamePlayerS const &object);
 
-	io::Reader& operator>> (io::Reader& r, GamePlayerS& object);
+	io::Reader &operator>>(io::Reader &r, GamePlayerS &object);
 }

@@ -46,13 +46,8 @@ namespace mmo
 		timestamp = 0;
 	}
 
-	GameUnitS::GameUnitS(const proto::Project& project, TimerQueue& timers)
-		: GameObjectS(project)
-		, m_timers(timers)
-		, m_despawnCountdown(timers)
-		, m_attackSwingCountdown(timers)
-		, m_regenCountdown(timers)
-		, m_pvpCombatCountdown(timers)
+	GameUnitS::GameUnitS(const proto::Project &project, TimerQueue &timers)
+		: GameObjectS(project), m_timers(timers), m_despawnCountdown(timers), m_attackSwingCountdown(timers), m_regenCountdown(timers), m_pvpCombatCountdown(timers)
 	{
 		// Setup unit mover
 		m_mover = make_unique<UnitMover>(*this);
@@ -99,7 +94,7 @@ namespace mmo
 		Set(object_fields::MaxHealth, 60u);
 
 		Set(object_fields::Mana, 100);
-		Set(object_fields::Rage, 0);	
+		Set(object_fields::Rage, 0);
 		Set(object_fields::Energy, 100);
 
 		Set(object_fields::MaxMana, 100);
@@ -119,7 +114,7 @@ namespace mmo
 		m_despawnCountdown.SetEnd(GetAsyncTimeMs() + despawnDelay);
 	}
 
-	void GameUnitS::WriteObjectUpdateBlock(io::Writer& writer, bool creation) const
+	void GameUnitS::WriteObjectUpdateBlock(io::Writer &writer, bool creation) const
 	{
 		GameObjectS::WriteObjectUpdateBlock(writer, creation);
 
@@ -135,7 +130,7 @@ namespace mmo
 			<< io::write<float>(GetSpeed(movement_type::Turn));
 	}
 
-	void GameUnitS::WriteValueUpdateBlock(io::Writer& writer, bool creation) const
+	void GameUnitS::WriteValueUpdateBlock(io::Writer &writer, bool creation) const
 	{
 		GameObjectS::WriteValueUpdateBlock(writer, creation);
 	}
@@ -144,7 +139,7 @@ namespace mmo
 	{
 	}
 
-	const Vector3& GameUnitS::GetPosition() const
+	const Vector3 &GameUnitS::GetPosition() const
 	{
 		m_lastPosition = m_mover->GetCurrentLocation();
 		return m_lastPosition;
@@ -189,7 +184,8 @@ namespace mmo
 		case unit_mod_type::BasePct:
 		case unit_mod_type::TotalPct:
 		{
-			if (amount == -100.0f) {
+			if (amount == -100.0f)
+			{
 				amount = -99.99f;
 			}
 			m_unitMods[mod][type] *= (apply ? (100.0f + amount) / 100.0f : 100.0f / (100.0f + amount));
@@ -238,7 +234,7 @@ namespace mmo
 		return (timeout <= now);
 	}
 
-	bool GameUnitS::IsInteractable(const GameUnitS& interactor) const
+	bool GameUnitS::IsInteractable(const GameUnitS &interactor) const
 	{
 		// Check visibility first
 		if (!CanBeSeenBy(interactor))
@@ -285,12 +281,12 @@ namespace mmo
 		return 5.0f;
 	}
 
-	void GameUnitS::RaiseTrigger(trigger_event::Type e, GameUnitS* triggeringUnit)
+	void GameUnitS::RaiseTrigger(trigger_event::Type e, GameUnitS *triggeringUnit)
 	{
 		WLOG("RaiseTrigger not implemented for unit " << log_hex_digit(GetGuid()));
 	}
 
-	void GameUnitS::RaiseTrigger(trigger_event::Type e, const std::vector<uint32>& data, GameUnitS* triggeringUnit)
+	void GameUnitS::RaiseTrigger(trigger_event::Type e, const std::vector<uint32> &data, GameUnitS *triggeringUnit)
 	{
 		WLOG("RaiseTrigger not implemented for unit " << log_hex_digit(GetGuid()));
 	}
@@ -314,7 +310,7 @@ namespace mmo
 		Set(object_fields::Energy, Get<uint32>(object_fields::MaxEnergy));
 	}
 
-	void GameUnitS::Relocate(const Vector3& position, const Radian& facing)
+	void GameUnitS::Relocate(const Vector3 &position, const Radian &facing)
 	{
 		if (m_movementInfo.IsChangingPosition())
 		{
@@ -324,11 +320,11 @@ namespace mmo
 		GameObjectS::Relocate(position, facing);
 	}
 
-	void GameUnitS::ApplyMovementInfo(const MovementInfo& info)
+	void GameUnitS::ApplyMovementInfo(const MovementInfo &info)
 	{
 		if (info.IsChangingPosition())
 		{
-			for (const auto& aura : m_auras)
+			for (const auto &aura : m_auras)
 			{
 				aura->NotifyOwnerMoved();
 			}
@@ -339,12 +335,12 @@ namespace mmo
 		GameObjectS::ApplyMovementInfo(info);
 	}
 
-	bool GameUnitS::CanBeSeenBy(const GameUnitS& other) const
+	bool GameUnitS::CanBeSeenBy(const GameUnitS &other) const
 	{
 		// Can always see yourself!
 		if (&other == this)
 		{
-			return true; 
+			return true;
 		}
 
 		switch (m_visibility)
@@ -428,17 +424,18 @@ namespace mmo
 
 	bool GameUnitS::HasSpell(uint32 spellId) const
 	{
-		return std::find_if(m_spells.begin(), m_spells.end(), [spellId](const auto& spell) { return spell->id() == spellId; }) != m_spells.end();
+		return std::find_if(m_spells.begin(), m_spells.end(), [spellId](const auto &spell)
+							{ return spell->id() == spellId; }) != m_spells.end();
 	}
 
-	void GameUnitS::SetInitialSpells(const std::vector<uint32>& spellIds)
+	void GameUnitS::SetInitialSpells(const std::vector<uint32> &spellIds)
 	{
 		ASSERT(m_spells.empty());
 		m_spells.clear();
 
-		for (const auto& spellId : spellIds)
+		for (const auto &spellId : spellIds)
 		{
-			const auto* spell = m_project.spells.getById(spellId);
+			const auto *spell = m_project.spells.getById(spellId);
 			if (!spell)
 			{
 				WLOG("Unknown spell " << spellId << " in list of initial spells for unit " << log_hex_digit(GetGuid()));
@@ -448,7 +445,7 @@ namespace mmo
 			// Check race requirement
 			if (IsPlayer())
 			{
-				GamePlayerS& playerCaster = AsPlayer();
+				GamePlayerS &playerCaster = AsPlayer();
 				if (spell->racemask() != 0 && !(spell->racemask() & (1 << (playerCaster.GetRaceEntry()->id() - 1))))
 				{
 					WLOG("Spell " << spellId << " is not usable by the players race");
@@ -463,14 +460,13 @@ namespace mmo
 				}
 			}
 
-
 			m_spells.insert(spell);
 		}
 	}
 
 	void GameUnitS::AddSpell(const uint32 spellId)
 	{
-		const auto* spell = m_project.spells.getById(spellId);
+		const auto *spell = m_project.spells.getById(spellId);
 		if (!spell)
 		{
 			WLOG("Unable to add unknown spell " << spellId << " to unit " << log_hex_digit(GetGuid()));
@@ -485,7 +481,7 @@ namespace mmo
 		// Check race requirement
 		if (IsPlayer())
 		{
-			GamePlayerS& playerCaster = AsPlayer();
+			GamePlayerS &playerCaster = AsPlayer();
 			if (spell->racemask() != 0 && !(spell->racemask() & (1 << (playerCaster.GetRaceEntry()->id() - 1))))
 			{
 				WLOG("Spell " << spellId << " is not usable by the players race");
@@ -520,7 +516,7 @@ namespace mmo
 
 	void GameUnitS::RemoveSpell(const uint32 spellId)
 	{
-		const auto* spell = m_project.spells.getById(spellId);
+		const auto *spell = m_project.spells.getById(spellId);
 		if (!spell)
 		{
 			WLOG("Unable to remove unknown spell " << spellId << " from unit " << log_hex_digit(GetGuid()));
@@ -536,9 +532,9 @@ namespace mmo
 		RemoveAllAurasFromCaster(GetGuid(), spellId);
 
 		// Parry, dodge & block update
-		for (const auto& effect : spell->effects())
+		for (const auto &effect : spell->effects())
 		{
-			switch(effect.type())
+			switch (effect.type())
 			{
 			case spell_effects::Block:
 				NotifyCanBlock(false);
@@ -555,7 +551,7 @@ namespace mmo
 		OnSpellUnlearned(*spell);
 	}
 
-	const std::unordered_set<const proto::SpellEntry*>& GameUnitS::GetSpells() const
+	const std::unordered_set<const proto::SpellEntry *> &GameUnitS::GetSpells() const
 	{
 		return m_spells;
 	}
@@ -584,7 +580,7 @@ namespace mmo
 		}
 	}
 
-	SpellCastResult GameUnitS::CastSpell(const SpellTargetMap& target, const proto::SpellEntry& spell, const uint32 castTimeMs, bool isProc, uint64 itemGuid)
+	SpellCastResult GameUnitS::CastSpell(const SpellTargetMap &target, const proto::SpellEntry &spell, const uint32 castTimeMs, bool isProc, uint64 itemGuid)
 	{
 		if (!isProc && itemGuid == 0 && !HasSpell(spell.id()))
 		{
@@ -625,7 +621,7 @@ namespace mmo
 		m_spellCast->StopCast(reason, interruptCooldown);
 	}
 
-	uint32 GameUnitS::Damage(uint32 damage, uint32 school, GameUnitS* instigator, DamageType damageType)
+	uint32 GameUnitS::Damage(uint32 damage, uint32 school, GameUnitS *instigator, DamageType damageType)
 	{
 		uint32 health = Get<uint32>(object_fields::Health);
 		if (health < 1)
@@ -660,16 +656,16 @@ namespace mmo
 
 		// Notify health dropped below
 		const uint32 healthPercent = static_cast<int32>(static_cast<float>(health) / static_cast<float>(GetMaxHealth()) * 100.0f);
-		RaiseTrigger(trigger_event::OnHealthDroppedBelow, { healthPercent }, instigator);
+		RaiseTrigger(trigger_event::OnHealthDroppedBelow, {healthPercent}, instigator);
 
 		// Generate rage when taking damage if rage is the power type
-		if(Get<uint32>(object_fields::PowerType) == power_type::Rage)
+		if (Get<uint32>(object_fields::PowerType) == power_type::Rage)
 		{
 			const float rageConversion = static_cast<float>((0.0091107836 * GetLevel() * GetLevel()) + 3.225598133 * GetLevel()) + 4.2652911f;
 			const float addRage = (static_cast<float>(damage) / rageConversion) * 2.5f;
 			AddPower(power_type::Rage, addRage);
 		}
-		
+
 		// Kill event
 		if (health < 1)
 		{
@@ -683,7 +679,7 @@ namespace mmo
 		return damage;
 	}
 
-	int32 GameUnitS::Heal(uint32 amount, GameUnitS* instigator)
+	int32 GameUnitS::Heal(uint32 amount, GameUnitS *instigator)
 	{
 		uint32 health = Get<uint32>(object_fields::Health);
 		if (health < 1)
@@ -710,7 +706,7 @@ namespace mmo
 	}
 
 	void GameUnitS::SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags,
-	                               const proto::SpellEntry& spell)
+								   const proto::SpellEntry &spell)
 	{
 		if (!m_netUnitWatcher)
 		{
@@ -720,7 +716,7 @@ namespace mmo
 		m_netUnitWatcher->OnSpellDamageLog(targetGuid, amount, school, flags, spell);
 	}
 
-	void GameUnitS::Kill(GameUnitS* killer)
+	void GameUnitS::Kill(GameUnitS *killer)
 	{
 		Set<uint32>(object_fields::Health, 0);
 		OnKilled(killer);
@@ -741,14 +737,14 @@ namespace mmo
 		m_regenCountdown.Cancel();
 	}
 
-	void GameUnitS::ApplyAura(std::shared_ptr<AuraContainer>&& aura)
+	void GameUnitS::ApplyAura(std::shared_ptr<AuraContainer> &&aura)
 	{
 		ASSERT(aura);
 
 		// Remove existing auras first
 		for (auto it = m_auras.begin(); it != m_auras.end();)
 		{
-			if (auto& existingAura = *it; aura->ShouldOverwriteAura(*existingAura))
+			if (auto &existingAura = *it; aura->ShouldOverwriteAura(*existingAura))
 			{
 				// Check if aura is same base spell but lower rank
 				if (aura->HasSameBaseSpellId(existingAura->GetSpell()) && aura->GetSpellRank() < existingAura->GetSpellRank())
@@ -780,7 +776,7 @@ namespace mmo
 		// Remove existing auras first
 		for (auto it = m_auras.begin(); it != m_auras.end();)
 		{
-			if (auto& existingAura = *it; existingAura->IsApplied() && existingAura->GetItemGuid() == itemGuid)
+			if (auto &existingAura = *it; existingAura->IsApplied() && existingAura->GetItemGuid() == itemGuid)
 			{
 				it = m_auras.erase(it);
 			}
@@ -805,7 +801,7 @@ namespace mmo
 				continue;
 			}
 
-			if (auto& existingAura = *it; existingAura->IsApplied() && existingAura->GetCasterId() == casterGuid)
+			if (auto &existingAura = *it; existingAura->IsApplied() && existingAura->GetCasterId() == casterGuid)
 			{
 				it = m_auras.erase(it);
 			}
@@ -816,14 +812,14 @@ namespace mmo
 		}
 	}
 
-	void GameUnitS::RemoveAura(const std::shared_ptr<AuraContainer>& aura)
+	void GameUnitS::RemoveAura(const std::shared_ptr<AuraContainer> &aura)
 	{
 		ASSERT(aura);
 
 		// Remove existing auras first
 		for (auto it = m_auras.begin(); it != m_auras.end();)
 		{
-			if (auto& existingAura = *it; existingAura == aura)
+			if (auto &existingAura = *it; existingAura == aura)
 			{
 				it = m_auras.erase(it);
 				return;
@@ -839,7 +835,7 @@ namespace mmo
 	{
 		for (auto it = m_auras.begin(); it != m_auras.end(); ++it)
 		{
-			if (auto& existingAura = *it; existingAura->GetCasterId() == casterId && existingAura->GetSpellId() == spellId)
+			if (auto &existingAura = *it; existingAura->GetCasterId() == casterId && existingAura->GetSpellId() == spellId)
 			{
 				return true;
 			}
@@ -848,7 +844,7 @@ namespace mmo
 		return false;
 	}
 
-	void GameUnitS::BuildAuraPacket(io::Writer& writer) const
+	void GameUnitS::BuildAuraPacket(io::Writer &writer) const
 	{
 		writer << io::write_packed_guid(GetGuid());
 
@@ -857,7 +853,7 @@ namespace mmo
 		writer << io::write<uint32>(visibleAuraCount);
 
 		// Iterate through visible auras
-		for (const auto& aura : m_auras)
+		for (const auto &aura : m_auras)
 		{
 			if (aura->IsVisible())
 			{
@@ -867,7 +863,7 @@ namespace mmo
 		}
 
 		// Write actual visible aura count
-		writer.Sink().Overwrite(countPos, reinterpret_cast<const char*>(&visibleAuraCount), sizeof(uint32));
+		writer.Sink().Overwrite(countPos, reinterpret_cast<const char *>(&visibleAuraCount), sizeof(uint32));
 	}
 
 	void GameUnitS::NotifyManaUsed()
@@ -897,7 +893,7 @@ namespace mmo
 		{
 			m_lastMainHand = idealLastMainHand;
 		}
-		
+
 		// Do the next swing
 		TriggerNextAutoAttack();
 	}
@@ -912,7 +908,7 @@ namespace mmo
 		// Nothing to see here
 	}
 
-	void GameUnitS::TeleportOnMap(const Vector3& position, const Radian& facing)
+	void GameUnitS::TeleportOnMap(const Vector3 &position, const Radian &facing)
 	{
 		// Update position and facing
 		Relocate(position, facing);
@@ -924,7 +920,7 @@ namespace mmo
 		}
 	}
 
-	void GameUnitS::Teleport(uint32 mapId, const Vector3& position, const Radian& facing)
+	void GameUnitS::Teleport(uint32 mapId, const Vector3 &position, const Radian &facing)
 	{
 		if (mapId == m_worldInstance->GetMapId())
 		{
@@ -943,7 +939,7 @@ namespace mmo
 		}
 	}
 
-	void GameUnitS::ModifySpellMod(const SpellModifier& mod, const bool apply)
+	void GameUnitS::ModifySpellMod(const SpellModifier &mod, const bool apply)
 	{
 		for (uint8 eff = 0; eff < 64; ++eff)
 		{
@@ -978,8 +974,7 @@ namespace mmo
 				if (it->mask == mod.mask &&
 					it->value == mod.value &&
 					it->type == mod.type &&
-					it->op == mod.op
-					)
+					it->op == mod.op)
 				{
 					it = m_spellModsByOp[mod.op].erase(it);
 					break;
@@ -1003,12 +998,12 @@ namespace mmo
 
 	int32 GameUnitS::GetTotalSpellMods(const SpellModType type, const SpellModOp op, const uint32 spellId) const
 	{
-		const auto* spell = GetProject().spells.getById(spellId);
+		const auto *spell = GetProject().spells.getById(spellId);
 		if (!spell)
 		{
 			return 0;
 		}
-		
+
 		// Get spell modifier by op list
 		const auto list = m_spellModsByOp.find(op);
 		if (list == m_spellModsByOp.end())
@@ -1017,7 +1012,7 @@ namespace mmo
 		}
 
 		int32 total = 0;
-		for (const auto& mod : list->second)
+		for (const auto &mod : list->second)
 		{
 			if (mod.type != type)
 			{
@@ -1033,12 +1028,12 @@ namespace mmo
 		return total;
 	}
 
-	void GameUnitS::ChatSay(const String& message)
+	void GameUnitS::ChatSay(const String &message)
 	{
 		DoLocalChatMessage(IsPlayer() ? ChatType::Say : ChatType::UnitSay, message);
 	}
 
-	void GameUnitS::ChatYell(const String& message)
+	void GameUnitS::ChatYell(const String &message)
 	{
 		DoLocalChatMessage(IsPlayer() ? ChatType::Yell : ChatType::UnitYell, message);
 	}
@@ -1124,7 +1119,7 @@ namespace mmo
 		return true;
 	}
 
-	void GameUnitS::DoLocalChatMessage(ChatType type, const String& message)
+	void GameUnitS::DoLocalChatMessage(ChatType type, const String &message)
 	{
 		auto position = GetPosition();
 		float chatDistance = 0.0f;
@@ -1149,7 +1144,7 @@ namespace mmo
 		constexpr uint8 flags = 0;
 
 		std::vector<char> buffer;
-		io::VectorSink sink{ buffer };
+		io::VectorSink sink{buffer};
 		game::OutgoingPacket outPacket(sink);
 		outPacket.Start(game::realm_client_packet::ChatMessage);
 		outPacket
@@ -1169,9 +1164,9 @@ namespace mmo
 
 		// Spawn tile objects
 		ForEachSubscriberInSight(
-			[&position, chatDistance, &outPacket, &buffer](TileSubscriber& subscriber)
+			[&position, chatDistance, &outPacket, &buffer](TileSubscriber &subscriber)
 			{
-				auto& unit = subscriber.GetGameUnit();
+				auto &unit = subscriber.GetGameUnit();
 				const float distanceSquared = (unit.GetPosition() - position).GetSquaredLength();
 				if (distanceSquared > chatDistance * chatDistance)
 				{
@@ -1182,7 +1177,7 @@ namespace mmo
 			});
 	}
 
-	void GameUnitS::SetVictim(const std::shared_ptr<GameUnitS>& victim)
+	void GameUnitS::SetVictim(const std::shared_ptr<GameUnitS> &victim)
 	{
 		m_victimSignals.disconnect();
 
@@ -1192,24 +1187,24 @@ namespace mmo
 		{
 			m_victimSignals += {
 				victim->killed.connect(this, &GameUnitS::VictimKilled),
-					victim->despawned.connect(this, &GameUnitS::VictimDespawned),
+				victim->despawned.connect(this, &GameUnitS::VictimDespawned),
 			};
 		}
 	}
 
-	void GameUnitS::VictimKilled(GameUnitS* killer)
+	void GameUnitS::VictimKilled(GameUnitS *killer)
 	{
 		StopAttack();
 	}
 
-	void GameUnitS::VictimDespawned(GameObjectS&)
+	void GameUnitS::VictimDespawned(GameObjectS &)
 	{
 		StopAttack();
 	}
 
-	float GameUnitS::MeleeMissChance(const GameUnitS& victim, weapon_attack::Type attackType, int32 skillDiff, uint32 spellId) const
-	{	
-		const proto::SpellEntry* spell = spellId ? m_project.spells.getById(spellId) : nullptr;
+	float GameUnitS::MeleeMissChance(const GameUnitS &victim, weapon_attack::Type attackType, int32 skillDiff, uint32 spellId) const
+	{
+		const proto::SpellEntry *spell = spellId ? m_project.spells.getById(spellId) : nullptr;
 		// TODO: Check for can't miss attribute on spell and if if it can't miss, return 0.0f
 
 		float missChance = victim.GetUnitMissChance();
@@ -1236,80 +1231,83 @@ namespace mmo
 		{
 			missChance += 19.0f;
 		}
-			
+
 		// Apply hit rating bonus (reduces miss chance)
 		// TODO: Implement hit rating from gear
 		float hitRatingBonus = 0.0f;
 		missChance -= hitRatingBonus;
-			
+
 		return std::min(std::max(missChance, 0.0f), 100.0f);
 	}
 
-	float GameUnitS::CriticalHitChance(const GameUnitS& victim, weapon_attack::Type attackType) const
+	float GameUnitS::CriticalHitChance(const GameUnitS &victim, weapon_attack::Type attackType) const
 	{
 		// Base crit chance from agility and weapon skill
-		float critChance = 5.0f;  // Base 5%
-    
+		float critChance = 5.0f; // Base 5%
+
 		// Add agility contribution - formula approximates classic wow
 		// For most classes: 20 agi = 1% crit
 		float agiContribution = GetCalculatedModifierValue(unit_mods::StatAgility) / 20.0f;
 		critChance += agiContribution;
-		
+
 		// Add weapon skill contribution if applicable
 		// TODO: Add weapon skill bonuses when equipment system is implemented
-		
+
 		// Level difference penalty (lower chance to crit higher level targets)
 		int32 levelDiff = static_cast<int32>(victim.GetLevel()) - static_cast<int32>(GetLevel());
 		if (levelDiff > 0)
 		{
 			critChance -= levelDiff * 0.2f;
 		}
-		
+
 		// Apply crit chance modifiers from talents/buffs
 		critChance += GetTotalSpellMods(spell_mod_type::Flat, spell_mod_op::CritChance, 0);
 		critChance *= (1.0f + GetTotalSpellMods(spell_mod_type::Pct, spell_mod_op::CritChance, 0) / 100.0f);
-		
+
 		return std::max(0.0f, std::min(critChance, 100.0f));
 	}
 
 	float GameUnitS::DodgeChance() const
 	{
-		if (!CanDodge()) return 0.0f;
+		if (!CanDodge())
+			return 0.0f;
 
 		// Base dodge chance
 		float dodgeChance = 5.0f;
-		
+
 		// Add agility contribution - approximately 20 agility = 1% dodge
 		float agiContribution = GetCalculatedModifierValue(unit_mods::StatAgility) / 20.0f;
 		dodgeChance += agiContribution;
-		
+
 		// Add dodge rating when equipment system is implemented
 		// TODO: Add equipment dodge rating
-		
+
 		return std::max(0.0f, std::min(dodgeChance, 100.0f));
 	}
 
 	float GameUnitS::ParryChance() const
 	{
-		if (!CanParry()) return 0.0f;
+		if (!CanParry())
+			return 0.0f;
 
 		// Base parry chance (only available with certain weapon types)
 		float parryChance = 5.0f;
-		
+
 		// TODO: Apply parry rating from equipment when implemented
-		
+
 		return std::max(0.0f, std::min(parryChance, 100.0f));
 	}
 
 	float GameUnitS::BlockChance() const
 	{
-		if (!CanBlock()) return 0.0f;
+		if (!CanBlock())
+			return 0.0f;
 
 		// Base block chance (only available when equipped with a shield)
 		float blockChance = 5.0f;
-		
+
 		// TODO: Apply block rating from shield when equipment system is implemented
-		
+
 		return std::max(0.0f, std::min(blockChance, 100.0f));
 	}
 
@@ -1383,7 +1381,7 @@ namespace mmo
 		{
 			// TODO: Add miss chance from defense rating when implemented
 		}
-		
+
 		return miss_chance;
 	}
 
@@ -1392,17 +1390,17 @@ namespace mmo
 		return false;
 	}
 
-	bool GameUnitS::CanDualWield() const
+	bool GameUnitS::CanDualWield() const noexcept
 	{
 		return m_canDualWield;
 	}
-
+	
 	int32 GameUnitS::GetMaxSkillValueForLevel(uint32 level) const
 	{
 		return 5 * level;
 	}
 
-	MeleeAttackOutcome GameUnitS::RollMeleeOutcomeAgainst(GameUnitS& victim, const WeaponAttack attackType) const
+	MeleeAttackOutcome GameUnitS::RollMeleeOutcomeAgainst(GameUnitS &victim, const WeaponAttack attackType) const
 	{
 		// TODO: Add check for melee immunity
 
@@ -1425,84 +1423,84 @@ namespace mmo
 		// 6. Critical strike
 		// 7. Crushing blow (only happens when attacking lower level mobs)
 		// 8. Normal hit
-		
+
 		std::uniform_real_distribution chanceDistribution(0.0f, 100.0f);
 		const float roll = chanceDistribution(randomGenerator);
 		float chance = missChance;
-		
+
 		// Check for miss
 		if (roll < chance)
 		{
 			return MeleeAttackOutcome::Miss;
 		}
-			
+
 		// Check for dodge (only if target is facing attacker)
 		if (victim.IsFacingTowards(*this))
 		{
 			const float dodgeChance = victim.DodgeChance();
 			chance += dodgeChance;
-			
+
 			if (roll < chance)
 			{
 				return MeleeAttackOutcome::Dodge;
 			}
 		}
-			
+
 		// Check for parry (only if target is facing attacker and has a weapon)
 		if (victim.IsFacingTowards(*this) && victim.CanParry())
 		{
 			const float parryChance = victim.ParryChance();
 			chance += parryChance;
-			
+
 			if (roll < chance)
 			{
 				return MeleeAttackOutcome::Parry;
 			}
 		}
-			
+
 		// Check for glancing blow (only happens when attacking higher level targets)
 		if (GetLevel() <= victim.GetLevel())
 		{
 			// Glancing blow chance formula (approximation)
 			float glancingChance = 10.0f + (victim.GetLevel() - GetLevel()) * 5.0f;
 			glancingChance = std::min(glancingChance, 40.0f);
-			
+
 			chance += glancingChance;
 			if (roll < chance)
 			{
 				return MeleeAttackOutcome::Glancing;
 			}
 		}
-			
+
 		// Check for critical strike
 		const float critChance = CriticalHitChance(victim, attackType);
 		chance += critChance;
-		
+
 		if (roll < chance)
 		{
 			return MeleeAttackOutcome::Crit;
 		}
-			
+
 		// Check for crushing blow (only happens when attacking lower level targets)
 		if (GetLevel() >= victim.GetLevel() + 4)
 		{
 			// Crushing blow chance (approximation)
 			float crushingChance = 15.0f + (GetLevel() - victim.GetLevel() - 3) * 2.0f;
 			crushingChance = std::min(crushingChance, 25.0f);
-			
+
 			chance += crushingChance;
 			if (roll < chance)
 			{
 				return MeleeAttackOutcome::Crushing;
 			}
 		}
-		
+
 		return MeleeAttackOutcome::Normal;
 	}
 
 	bool GameUnitS::HasAuraEffect(const AuraType type) const
 	{
-		for (const std::shared_ptr<AuraContainer>& aura : m_auras)
+		for (const std::shared_ptr<AuraContainer> &aura : m_auras)
 		{
 			if (!aura->IsApplied())
 			{
@@ -1520,7 +1518,7 @@ namespace mmo
 
 	bool GameUnitS::HasSpellEffect(const SpellEffect type) const
 	{
-		for (const auto& spell : m_spells)
+		for (const auto &spell : m_spells)
 		{
 			if (SpellHasEffect(*spell, type))
 			{
@@ -1531,7 +1529,7 @@ namespace mmo
 		return false;
 	}
 
-	void GameUnitS::StartAttack(const std::shared_ptr<GameUnitS>& victim)
+	void GameUnitS::StartAttack(const std::shared_ptr<GameUnitS> &victim)
 	{
 		ASSERT(victim);
 
@@ -1566,10 +1564,8 @@ namespace mmo
 		packet.Finish();
 
 		// Notify all subscribers
-		ForEachSubscriberInSight([&packet, &buffer](TileSubscriber& subscriber)
-			{
-				subscriber.SendPacket(packet, buffer);
-			});
+		ForEachSubscriberInSight([&packet, &buffer](TileSubscriber &subscriber)
+								 { subscriber.SendPacket(packet, buffer); });
 
 		// Attacking
 		AddFlag<uint32>(object_fields::Flags, unit_flags::Attacking);
@@ -1596,10 +1592,8 @@ namespace mmo
 		packet.Finish();
 
 		// Notify all subscribers
-		ForEachSubscriberInSight([&packet, &buffer](TileSubscriber & subscriber)
-		{
-			subscriber.SendPacket(packet, buffer);
-		});
+		ForEachSubscriberInSight([&packet, &buffer](TileSubscriber &subscriber)
+								 { subscriber.SendPacket(packet, buffer); });
 	}
 
 	void GameUnitS::SetTarget(uint64 targetGuid)
@@ -1620,7 +1614,7 @@ namespace mmo
 			return;
 		}
 
-		GameObjectS* object = GetWorldInstance()->FindObjectByGuid(targetGuid);
+		GameObjectS *object = GetWorldInstance()->FindObjectByGuid(targetGuid);
 		if (!object || !object->IsUnit())
 		{
 			StopAttack();
@@ -1634,7 +1628,7 @@ namespace mmo
 		else
 		{
 			if (IsAttacking())
-			{	
+			{
 				SetVictim(std::dynamic_pointer_cast<GameUnitS>(object->shared_from_this()));
 			}
 		}
@@ -1658,24 +1652,24 @@ namespace mmo
 		}
 	}
 
-    float GameUnitS::GetMeleeReach() const
-    {
+	float GameUnitS::GetMeleeReach() const
+	{
 		// Base melee range is 2.0 yards
 		float reach = 2.0f;
-		
+
 		// Add unit's bounding radius (approximated from unit scale)
 		reach += Get<float>(object_fields::Scale) * 0.5f;
-		
-		return reach;
-    }
 
-    void GameUnitS::AddAttackingUnit(const GameUnitS& attacker)
+		return reach;
+	}
+
+	void GameUnitS::AddAttackingUnit(const GameUnitS &attacker)
 	{
 		m_attackingUnits.add(&attacker);
 		SetInCombat(true, attacker.IsPlayer());
 	}
 
-	void GameUnitS::RemoveAttackingUnit(const GameUnitS& attacker)
+	void GameUnitS::RemoveAttackingUnit(const GameUnitS &attacker)
 	{
 		m_attackingUnits.remove(&attacker);
 		if (m_attackingUnits.empty())
@@ -1811,7 +1805,7 @@ namespace mmo
 			}
 		}
 
-		//if (oldBonus != speed)
+		// if (oldBonus != speed)
 		{
 			// If there is a watcher, we need to notify him about this change first, and he needs
 			// to send an ack packet before we finally apply the speed change. If there is no
@@ -1862,8 +1856,7 @@ namespace mmo
 				game::realm_client_packet::MoveSetSwimBackSpeed,
 				game::realm_client_packet::MoveSetTurnRate,
 				game::realm_client_packet::SetFlightSpeed,
-				game::realm_client_packet::SetFlightBackSpeed
-			};
+				game::realm_client_packet::SetFlightBackSpeed};
 
 			packet.Start(moveOpCodes[type]);
 			packet
@@ -1873,7 +1866,7 @@ namespace mmo
 			packet.Finish();
 
 			ForEachSubscriberInSight(
-				[&packet, &buffer, this](TileSubscriber& subscriber)
+				[&packet, &buffer, this](TileSubscriber &subscriber)
 				{
 					if (&subscriber.GetGameUnit() != this)
 					{
@@ -1889,16 +1882,16 @@ namespace mmo
 	uint32 GameUnitS::CalculateArmorReducedDamage(const uint32 attackerLevel, const uint32 damage) const
 	{
 		float armor = static_cast<float>(Get<uint32>(object_fields::Armor));
-			
+
 		// Apply armor penetration effects
 		float armorPenetrationPct = 0.0f;
 		// TODO: Get armor penetration from attacker's auras/talents
-		
+
 		if (armorPenetrationPct > 0.0f)
 		{
 			armor *= (1.0f - std::min(armorPenetrationPct, 100.0f) / 100.0f);
 		}
-		
+
 		if (armor < 0.0f)
 		{
 			armor = 0.0f;
@@ -1908,16 +1901,16 @@ namespace mmo
 		// Maximum damage reduction from armor is 75%
 		float armorFactor = armor / (armor + 400.0f + 85.0f * attackerLevel);
 		armorFactor = Clamp(armorFactor, 0.0f, 0.75f);
-		
+
 		// Apply the damage reduction
 		uint32 reducedDamage = damage - static_cast<uint32>(damage * armorFactor);
 		return reducedDamage;
 	}
 
-	bool GameUnitS::UnitIsEnemy(const GameUnitS& other) const
+	bool GameUnitS::UnitIsEnemy(const GameUnitS &other) const
 	{
-		const proto::FactionTemplateEntry* faction = GetFactionTemplate();
-		const proto::FactionTemplateEntry* otherFaction = other.GetFactionTemplate();
+		const proto::FactionTemplateEntry *faction = GetFactionTemplate();
+		const proto::FactionTemplateEntry *otherFaction = other.GetFactionTemplate();
 
 		if (!faction || !otherFaction)
 		{
@@ -1932,7 +1925,7 @@ namespace mmo
 
 		for (int i = 0; i < faction->enemies_size(); ++i)
 		{
-			const auto& enemy = faction->enemies(i);
+			const auto &enemy = faction->enemies(i);
 			if (enemy == otherFaction->faction())
 			{
 				return true;
@@ -1941,14 +1934,14 @@ namespace mmo
 
 		for (int i = 0; i < faction->friends_size(); ++i)
 		{
-			const auto& friendly = faction->friends(i);
+			const auto &friendly = faction->friends(i);
 			if (friendly == otherFaction->faction())
 			{
 				return false;
 			}
 		}
 
-		if (faction->enemymask() != 0 &&(faction->enemymask() & otherFaction->selfmask()) != 0)
+		if (faction->enemymask() != 0 && (faction->enemymask() & otherFaction->selfmask()) != 0)
 		{
 			return true;
 		}
@@ -1956,10 +1949,10 @@ namespace mmo
 		return false;
 	}
 
-	bool GameUnitS::UnitIsFriendly(const GameUnitS& other) const
+	bool GameUnitS::UnitIsFriendly(const GameUnitS &other) const
 	{
-		const proto::FactionTemplateEntry* faction = GetFactionTemplate();
-		const proto::FactionTemplateEntry* otherFaction = other.GetFactionTemplate();
+		const proto::FactionTemplateEntry *faction = GetFactionTemplate();
+		const proto::FactionTemplateEntry *otherFaction = other.GetFactionTemplate();
 
 		if (!faction || !otherFaction)
 		{
@@ -1974,7 +1967,7 @@ namespace mmo
 
 		for (int i = 0; i < faction->enemies_size(); ++i)
 		{
-			const auto& enemy = faction->enemies(i);
+			const auto &enemy = faction->enemies(i);
 			if (enemy == otherFaction->faction())
 			{
 				return false;
@@ -1983,7 +1976,7 @@ namespace mmo
 
 		for (int i = 0; i < faction->friends_size(); ++i)
 		{
-			const auto& friendly = faction->friends(i);
+			const auto &friendly = faction->friends(i);
 			if (friendly == otherFaction->faction())
 			{
 				return true;
@@ -1993,7 +1986,7 @@ namespace mmo
 		return (faction->friendmask() & otherFaction->selfmask()) != 0;
 	}
 
-	const proto::FactionTemplateEntry* GameUnitS::GetFactionTemplate() const
+	const proto::FactionTemplateEntry *GameUnitS::GetFactionTemplate() const
 	{
 		// Do we have a cache?
 		if (m_cachedFactionTemplate)
@@ -2011,14 +2004,14 @@ namespace mmo
 		return m_cachedFactionTemplate;
 	}
 
-	void GameUnitS::SetBinding(uint32 mapId, const Vector3& position, const Radian& facing)
+	void GameUnitS::SetBinding(uint32 mapId, const Vector3 &position, const Radian &facing)
 	{
 		m_bindMap = mapId;
 		m_bindPosition = position;
 		m_bindFacing = facing;
 	}
 
-	void GameUnitS::OnKilled(GameUnitS* killer)
+	void GameUnitS::OnKilled(GameUnitS *killer)
 	{
 		TriggerProcEvent(spell_proc_flags::Death, this, 0, 0, 0, false, 0);
 		TriggerProcEvent(spell_proc_flags::Killed, killer, 0, 0, 0, false, 0);
@@ -2035,7 +2028,7 @@ namespace mmo
 		killed(killer);
 
 		// For now, remove all auras
-		for (auto& aura : m_auras)
+		for (auto &aura : m_auras)
 		{
 			aura->SetApplied(false);
 		}
@@ -2092,7 +2085,8 @@ namespace mmo
 		uint32 health = GetHealth();
 
 		health += m_healthRegenPerTick;
-		if (health > maxHealth) health = maxHealth;
+		if (health > maxHealth)
+			health = maxHealth;
 
 		Set<uint32>(object_fields::Health, health);
 	}
@@ -2112,7 +2106,7 @@ namespace mmo
 		ASSERT(static_cast<uint8>(powerType) < static_cast<uint8>(power_type::Count_));
 
 		int32 amount = 0;
-		switch(powerType)
+		switch (powerType)
 		{
 		case power_type::Rage:
 			amount -= 3;
@@ -2142,8 +2136,10 @@ namespace mmo
 
 		power += amount;
 
-		if (power < 0) power = 0;
-		if (power > maxPower) power = maxPower;
+		if (power < 0)
+			power = 0;
+		if (power > maxPower)
+			power = maxPower;
 
 		Set<int32>(object_fields::Mana + static_cast<uint8>(powerType), power);
 	}
@@ -2162,9 +2158,10 @@ namespace mmo
 	{
 		int32 threshold = 0;
 
-		for (auto& aura : m_auras)
+		for (auto &aura : m_auras)
 		{
-			if (!aura) continue;
+			if (!aura)
+				continue;
 
 			if (!aura->IsApplied())
 			{
@@ -2185,9 +2182,10 @@ namespace mmo
 	{
 		int32 threshold = 0;
 
-		for (auto& aura : m_auras)
+		for (auto &aura : m_auras)
 		{
-			if (!aura) continue;
+			if (!aura)
+				continue;
 
 			if (!aura->IsApplied())
 			{
@@ -2208,9 +2206,10 @@ namespace mmo
 	{
 		float multiplier = 1.0f;
 
-		for (auto& aura : m_auras)
+		for (auto &aura : m_auras)
 		{
-			if (!aura) continue;
+			if (!aura)
+				continue;
 
 			if (!aura->IsApplied())
 			{
@@ -2318,57 +2317,57 @@ namespace mmo
 		uint32 victimState = VictimState::Normal;
 
 		bool hit = true;
-		
-		switch(outcome)
+
+		switch (outcome)
 		{
-			case MeleeAttackOutcome::Crit:
-				hitInfo |= hit_info::CriticalHit;
-				// crits are 2x damage before armor
-				totalDamage *= 2;
-				break;
-				
-			case MeleeAttackOutcome::Crushing:
-				hitInfo |= hit_info::Crushing;
-				// Crushing blows do 150% damage
-				totalDamage = static_cast<uint32>(totalDamage * 1.5f);
-				break;
-				
-			case MeleeAttackOutcome::Glancing:
-				hitInfo |= hit_info::Glancing;
-				// Glancing blows do 70%-85% damage based on skill difference
-				{
-					const int32 skillDiff = victim->GetMaxSkillValueForLevel(victim->GetLevel()) - GetMaxSkillValueForLevel(GetLevel());
-					// Normalize to 30% reduction at maximum skill diff
-					float damageReduction = std::min(30.0f, static_cast<float>(skillDiff) * 0.6f);
-					float glancingMod = 1.0f - (damageReduction / 100.0f);
-					totalDamage = static_cast<uint32>(totalDamage * glancingMod);
-				}
-				break;
-				
-			case MeleeAttackOutcome::Miss:
-				hitInfo |= hit_info::Miss;
-				victimState = victim_state::Normal;
-				hit = false;
-				totalDamage = 0;
-				break;
-				
-			case MeleeAttackOutcome::Parry:
-				hitInfo |= hit_info::Miss;
-				victimState = victim_state::Parry;
-				hit = false;
-				totalDamage = 0;
-				break;
-				
-			case MeleeAttackOutcome::Dodge:
-				hitInfo |= hit_info::Miss;
-				victimState = victim_state::Dodge;
-				hit = false;
-				totalDamage = 0;
-				break;
-				
-			case MeleeAttackOutcome::Normal:
-				// Normal hit, no special flags needed
-				break;
+		case MeleeAttackOutcome::Crit:
+			hitInfo |= hit_info::CriticalHit;
+			// crits are 2x damage before armor
+			totalDamage *= 2;
+			break;
+
+		case MeleeAttackOutcome::Crushing:
+			hitInfo |= hit_info::Crushing;
+			// Crushing blows do 150% damage
+			totalDamage = static_cast<uint32>(totalDamage * 1.5f);
+			break;
+
+		case MeleeAttackOutcome::Glancing:
+			hitInfo |= hit_info::Glancing;
+			// Glancing blows do 70%-85% damage based on skill difference
+			{
+				const int32 skillDiff = victim->GetMaxSkillValueForLevel(victim->GetLevel()) - GetMaxSkillValueForLevel(GetLevel());
+				// Normalize to 30% reduction at maximum skill diff
+				float damageReduction = std::min(30.0f, static_cast<float>(skillDiff) * 0.6f);
+				float glancingMod = 1.0f - (damageReduction / 100.0f);
+				totalDamage = static_cast<uint32>(totalDamage * glancingMod);
+			}
+			break;
+
+		case MeleeAttackOutcome::Miss:
+			hitInfo |= hit_info::Miss;
+			victimState = victim_state::Normal;
+			hit = false;
+			totalDamage = 0;
+			break;
+
+		case MeleeAttackOutcome::Parry:
+			hitInfo |= hit_info::Miss;
+			victimState = victim_state::Parry;
+			hit = false;
+			totalDamage = 0;
+			break;
+
+		case MeleeAttackOutcome::Dodge:
+			hitInfo |= hit_info::Miss;
+			victimState = victim_state::Dodge;
+			hit = false;
+			totalDamage = 0;
+			break;
+
+		case MeleeAttackOutcome::Normal:
+			// Normal hit, no special flags needed
+			break;
 		}
 
 		// Check for block (in Classic, block applies after hit determination)
@@ -2383,26 +2382,26 @@ namespace mmo
 				uint32 blockValue = 30; // Default block value, replace with actual shield block value
 				blockedDamage = std::min(blockValue, totalDamage);
 				totalDamage -= blockedDamage;
-				
+
 				hitInfo |= hit_info::Block;
 				victimState = victim_state::Blocks;
-				
+
 				// Notify block event
 				victim->OnBlock();
 			}
 		}
-			
+
 		// Apply armor reduction
 		if (hit && totalDamage > 0)
 		{
 			totalDamage = victim->CalculateArmorReducedDamage(GetLevel(), totalDamage);
 		}
-			
+
 		// Apply damage absorb effects
 		uint32 absorbedDamage = 0;
 		// TODO: Implement damage absorption from auras
 		totalDamage -= absorbedDamage;
-			
+
 		// Damage events
 		if (hit && totalDamage > 0)
 		{
@@ -2417,11 +2416,11 @@ namespace mmo
 		{
 			victim->OnParry();
 		}
-		else if(outcome == melee_attack_outcome::Dodge)
+		else if (outcome == melee_attack_outcome::Dodge)
 		{
 			victim->OnDodge();
 		}
-			
+
 		// Notify all subscribers
 		std::vector<char> buffer;
 		io::VectorSink sink(buffer);
@@ -2434,12 +2433,12 @@ namespace mmo
 			<< io::write<uint32>(victimState)
 			<< io::write<uint32>(totalDamage)
 			<< io::write<uint32>(spell_school::Normal)
-			<< io::write<uint32>(absorbedDamage)	// Absorbed damage
-			<< io::write<uint32>(0)	// Resisted damage
-			<< io::write<uint32>(blockedDamage);	// Blocked damage
+			<< io::write<uint32>(absorbedDamage) // Absorbed damage
+			<< io::write<uint32>(0)				 // Resisted damage
+			<< io::write<uint32>(blockedDamage); // Blocked damage
 		packet.Finish();
 		ForEachSubscriberInSight(
-			[&packet, &buffer](TileSubscriber& subscriber)
+			[&packet, &buffer](TileSubscriber &subscriber)
 			{
 				subscriber.SendPacket(packet, buffer);
 			});
@@ -2454,7 +2453,7 @@ namespace mmo
 
 		// In case of success, we also want to trigger an event to potentially reset error states from previous attempts
 		OnAttackSwingEvent(AttackSwingEvent::Success);
-    	TriggerNextAutoAttack();
+		TriggerNextAutoAttack();
 
 		// Trigger proc events
 		if (hit)
@@ -2469,7 +2468,7 @@ namespace mmo
 			{
 				procEx |= proc_ex_flags::NormalHit;
 			}
-			
+
 			// Check for specific victim states
 			if (victimState == victim_state::Dodge)
 			{
@@ -2483,10 +2482,10 @@ namespace mmo
 			{
 				procEx |= proc_ex_flags::Block;
 			}
-			
+
 			// Trigger attacker procs
 			TriggerProcEvent(spell_proc_flags::DoneMeleeAutoAttack, victim.get(), totalDamage, procEx, spell_school::Normal, false);
-			
+
 			// Trigger victim procs
 			victim->TriggerProcEvent(spell_proc_flags::TakenMeleeAutoAttack, this, totalDamage, procEx, spell_school::Normal, false);
 		}
@@ -2518,7 +2517,7 @@ namespace mmo
 	void GameUnitS::UpdateVisibilityAndView()
 	{
 		// Get current world instance and verify it exists
-		auto* worldInstance = GetWorldInstance();
+		auto *worldInstance = GetWorldInstance();
 		if (!worldInstance)
 		{
 			return;
@@ -2527,12 +2526,12 @@ namespace mmo
 		// Signal visibility change to world instance
 		// This will force an update of which clients can see this unit
 		bool isVisible = (m_visibility == unit_visibility::On);
-		
+
 		// Build visibility list based on current visibility state
-		std::vector<TileSubscriber*> visibleTo;
-		std::vector<TileSubscriber*> notVisibleTo;
-		ForEachSubscriberInSight([this, &visibleTo, &notVisibleTo](TileSubscriber& subscriber)
-		{
+		std::vector<TileSubscriber *> visibleTo;
+		std::vector<TileSubscriber *> notVisibleTo;
+		ForEachSubscriberInSight([this, &visibleTo, &notVisibleTo](TileSubscriber &subscriber)
+								 {
 			if (CanBeSeenBy(subscriber.GetGameUnit()))
 			{
 				// And prevent self respawn
@@ -2544,10 +2543,9 @@ namespace mmo
 			else
 			{
 				notVisibleTo.push_back(&subscriber);
-			}
-		});
+			} });
 
-		std::vector<GameObjectS*> objects { 1, this };
+		std::vector<GameObjectS *> objects{1, this};
 
 		// Find subscribers who previously saw this unit but shouldn't anymore
 		// and remove this unit from their visible objects
@@ -2555,22 +2553,22 @@ namespace mmo
 		{
 			// This subscriber should no longer see this unit
 			// Send despawn packet
-			TileSubscriber* subscriber = *it;
+			TileSubscriber *subscriber = *it;
 			subscriber->NotifyObjectsDespawned(objects);
 		}
-		
+
 		// Add this unit to new subscribers' visible objects
-		for (auto* subscriber : visibleTo)
+		for (auto *subscriber : visibleTo)
 		{
 			// Send spawn packet to new subscriber
-			std::vector<GameObjectS*> objects = { this };
+			std::vector<GameObjectS *> objects = {this};
 			subscriber->NotifyObjectsSpawned(objects);
 		}
-		
+
 		// TODO: Stop attacking units from attacking
 	}
 
-	void GameUnitS::TriggerProcEvent(SpellProcFlags eventFlags, GameUnitS* target, uint32 damage, uint32 procEx, uint8 school, bool isProc, uint64 familyFlags)
+	void GameUnitS::TriggerProcEvent(SpellProcFlags eventFlags, GameUnitS *target, uint32 damage, uint32 procEx, uint8 school, bool isProc, uint64 familyFlags)
 	{
 		// Don't process procs from proc events to avoid infinite loops
 		if (isProc)
@@ -2585,7 +2583,7 @@ namespace mmo
 		}
 
 		// Check all applied auras to see if they can proc
-		for (const auto& aura : m_auras)
+		for (const auto &aura : m_auras)
 		{
 			if (!aura->IsApplied() || !aura->CanProc())
 			{
@@ -2597,9 +2595,9 @@ namespace mmo
 		}
 	}
 
-	io::Writer& operator<<(io::Writer& w, GameUnitS const& object)
+	io::Writer &operator<<(io::Writer &w, GameUnitS const &object)
 	{
-		w << reinterpret_cast<GameObjectS const&>(object);
+		w << reinterpret_cast<GameObjectS const &>(object);
 		w
 			<< io::write<uint32>(object.m_bindMap)
 			<< io::write<float>(object.m_bindPosition.x)
@@ -2610,18 +2608,13 @@ namespace mmo
 		return w;
 	}
 
-	io::Reader& operator>>(io::Reader& r, GameUnitS& object)
+	io::Reader &operator>>(io::Reader &r, GameUnitS &object)
 	{
 		// Read values
-		r >> reinterpret_cast<GameObjectS&>(object);
+		r >> reinterpret_cast<GameObjectS &>(object);
 
 		float facing;
-		r
-			>> io::read<uint32>(object.m_bindMap)
-			>> io::read<float>(object.m_bindPosition.x)
-			>> io::read<float>(object.m_bindPosition.y)
-			>> io::read<float>(object.m_bindPosition.z)
-			>> io::read<float>(facing);
+		r >> io::read<uint32>(object.m_bindMap) >> io::read<float>(object.m_bindPosition.x) >> io::read<float>(object.m_bindPosition.y) >> io::read<float>(object.m_bindPosition.z) >> io::read<float>(facing);
 		if (r)
 		{
 			object.m_bindFacing = Radian(facing);

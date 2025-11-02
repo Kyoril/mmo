@@ -8,6 +8,7 @@
 #include "game_server/spells/aura_container.h"
 #include "game/auto_attack.h"
 #include "game_object_s.h"
+#include "game_server/i_player_validator_context.h"
 #include "game_server/spells/spell_cast.h"
 #include "game/spell_target_map.h"
 #include "game_server/unit_mover.h"
@@ -201,26 +202,26 @@ namespace mmo
 	{
 		enum Type
 		{
-			None             = 0x0000,      // No flags
-			
+			None = 0x0000, // No flags
+
 			// Types of damage
-			NormalHit        = 0x0001,      // Normal hit
-			CriticalHit      = 0x0002,      // Critical hit
-			MissHit          = 0x0004,      // Miss
-			Absorb           = 0x0008,      // Absorbed damage
-			Resist           = 0x0010,      // Resisted damage
-			Dodge            = 0x0020,      // Dodged attack
-			Parry            = 0x0040,      // Parried attack
-			Block            = 0x0080,      // Blocked attack
-			Evade            = 0x0100,      // Evaded attack
-			Immune           = 0x0200,      // Immune to damage
-			Reflect          = 0x0400,      // Reflected damage
-			Interrupt        = 0x0800,      // Interrupt cast
-			
+			NormalHit = 0x0001,	  // Normal hit
+			CriticalHit = 0x0002, // Critical hit
+			MissHit = 0x0004,	  // Miss
+			Absorb = 0x0008,	  // Absorbed damage
+			Resist = 0x0010,	  // Resisted damage
+			Dodge = 0x0020,		  // Dodged attack
+			Parry = 0x0040,		  // Parried attack
+			Block = 0x0080,		  // Blocked attack
+			Evade = 0x0100,		  // Evaded attack
+			Immune = 0x0200,	  // Immune to damage
+			Reflect = 0x0400,	  // Reflected damage
+			Interrupt = 0x0800,	  // Interrupt cast
+
 			// Result masks
-			SuccessHit       = NormalHit | CriticalHit,
-			AvoidAttack      = MissHit | Dodge | Parry | Evade,
-			ReduceDamage     = Absorb | Resist | Block
+			SuccessHit = NormalHit | CriticalHit,
+			AvoidAttack = MissHit | Dodge | Parry | Evade,
+			ReduceDamage = Absorb | Resist | Block
 		};
 	}
 
@@ -280,13 +281,13 @@ namespace mmo
 		virtual ~NetUnitWatcherS() = default;
 
 	public:
-		virtual void OnTeleport(uint32 mapId, const Vector3& position, const Radian& facing) = 0;
+		virtual void OnTeleport(uint32 mapId, const Vector3 &position, const Radian &facing) = 0;
 
 		virtual void OnAttackSwingEvent(AttackSwingEvent error) = 0;
 
 		virtual void OnXpLog(uint32 amount) = 0;
 
-		virtual void OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell) = 0;
+		virtual void OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry &spell) = 0;
 
 		virtual void OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags) = 0;
 
@@ -412,43 +413,45 @@ namespace mmo
 
 	/// Represents a living object (unit) in the game world.
 	/// Units can move, cast spells, fight, and interact with other objects.
-	class GameUnitS : public GameObjectS
+	class GameUnitS
+		: public GameObjectS
+		, public IPlayerValidatorContext
 	{
 	public:
 		/// Signal fired when this unit is killed.
 		/// @param killer The unit that killed this unit (may be nullptr).
-		signal<void(GameUnitS*)> killed;
+		signal<void(GameUnitS *)> killed;
 		/// Signal fired when this unit is threatened by another unit.
 		/// @param threatSource The unit that is threatening this unit.
 		/// @param threatAmount The amount of threat generated.
-		signal<void(GameUnitS&, float)> threatened;
+		signal<void(GameUnitS &, float)> threatened;
 		/// Signal fired when this unit takes damage.
 		/// @param attacker The unit that caused the damage (may be nullptr).
 		/// @param school The damage school type.
 		/// @param damageType The type of damage taken.
-		signal<void(GameUnitS*, uint32, DamageType)> takenDamage;
+		signal<void(GameUnitS *, uint32, DamageType)> takenDamage;
 		/// Signal fired when this unit deals damage to another unit.
 		/// @param victim The unit that received damage from this unit.
 		/// @param school The damage school type.
 		/// @param damageType The type of damage dealt.
-		signal<void(GameUnitS&, uint32, DamageType)> doneDamage;
+		signal<void(GameUnitS &, uint32, DamageType)> doneDamage;
 		/// Signal fired when this unit begins casting a spell.
 		/// @param spell The spell entry being cast.
-		signal<void(const proto::SpellEntry&)> startedCasting;
+		signal<void(const proto::SpellEntry &)> startedCasting;
 		/// Signal fired when a unit trigger should be executed.
 		/// @param trigger The trigger entry to be executed.
 		/// @param unit The unit that is affected by the trigger.
 		/// @param source The unit that caused the trigger (may be nullptr).
-		signal<void(const proto::TriggerEntry&, GameUnitS&, GameUnitS*)> unitTrigger;
+		signal<void(const proto::TriggerEntry &, GameUnitS &, GameUnitS *)> unitTrigger;
 		/// Signal fired when this unit completes a melee attack.
 		/// @param victim The unit that was attacked.
-		signal<void(GameUnitS&)> meleeAttackDone;
+		signal<void(GameUnitS &)> meleeAttackDone;
 
 	public:
 		/// Constructs a new unit object.
 		/// @param project The project containing game configuration.
 		/// @param timers The timer queue for scheduling timed events.
-		GameUnitS(const proto::Project& project, TimerQueue& timers);
+		GameUnitS(const proto::Project &project, TimerQueue &timers);
 
 		/// Destructor. Removes all auras before destroying the unit.
 		virtual ~GameUnitS() override;
@@ -463,12 +466,12 @@ namespace mmo
 		/// Writes object update information to the provided writer for network transmission.
 		/// @param writer The writer to write the update information to.
 		/// @param creation Whether this is an update for object creation.
-		virtual void WriteObjectUpdateBlock(io::Writer& writer, bool creation = true) const override;
+		virtual void WriteObjectUpdateBlock(io::Writer &writer, bool creation = true) const override;
 
 		/// Writes value update information to the provided writer for network transmission.
 		/// @param writer The writer to write the update information to.
 		/// @param creation Whether this is an update for object creation.
-		virtual void WriteValueUpdateBlock(io::Writer& writer, bool creation = true) const override;
+		virtual void WriteValueUpdateBlock(io::Writer &writer, bool creation = true) const override;
 
 		/// Determines if this unit has movement information.
 		/// @returns Always true for units, as they can move.
@@ -479,11 +482,11 @@ namespace mmo
 
 		/// Sets the network unit watcher for this unit.
 		/// @param watcher Pointer to the network unit watcher.
-		void SetNetUnitWatcher(NetUnitWatcherS* watcher) { m_netUnitWatcher = watcher; }
+		void SetNetUnitWatcher(NetUnitWatcherS *watcher) { m_netUnitWatcher = watcher; }
 
 		/// Gets the current position of the unit.
 		/// @returns The position vector of the unit.
-		const Vector3& GetPosition() const override;
+		const Vector3 &GetPosition() const override;
 
 		/// Gets the specified unit modifier value.
 		/// @param mod The unit modifier to retrieve.
@@ -528,7 +531,7 @@ namespace mmo
 		/// Checks if this unit can be interacted with by the specified unit.
 		/// @param interactor The unit attempting to interact with this unit.
 		/// @returns true if interaction is possible, false otherwise.
-		virtual bool IsInteractable(const GameUnitS& interactor) const override;
+		virtual bool IsInteractable(const GameUnitS &interactor) const override;
 
 		/// Gets the maximum distance at which this unit can be interacted with.
 		/// @returns The interaction distance as a float.
@@ -538,14 +541,14 @@ namespace mmo
 		/// Raises a trigger event for this unit.
 		/// @param e The type of trigger event.
 		/// @param triggeringUnit The unit that triggered the event (may be nullptr).
-		virtual void RaiseTrigger(trigger_event::Type e, GameUnitS* triggeringUnit = nullptr);
+		virtual void RaiseTrigger(trigger_event::Type e, GameUnitS *triggeringUnit = nullptr);
 
 		///
 		/// Raises a trigger event with additional data for this unit.
 		/// @param e The type of trigger event.
 		/// @param data Additional data for the trigger event.
 		/// @param triggeringUnit The unit that triggered the event (may be nullptr).
-		virtual void RaiseTrigger(trigger_event::Type e, const std::vector<uint32>& data, GameUnitS* triggeringUnit = nullptr);
+		virtual void RaiseTrigger(trigger_event::Type e, const std::vector<uint32> &data, GameUnitS *triggeringUnit = nullptr);
 
 		/// Gets the current power type of this unit (mana, rage, energy, etc.).
 		/// @returns The power type as a uint32.
@@ -569,17 +572,17 @@ namespace mmo
 		/// Relocates the unit to a new position and facing direction.
 		/// @param position The new position vector.
 		/// @param facing The new facing direction.
-		virtual void Relocate(const Vector3& position, const Radian& facing) override;
+		virtual void Relocate(const Vector3 &position, const Radian &facing) override;
 
 		/// Applies movement information to the unit.
 		/// @param info The movement information to apply.
-		virtual void ApplyMovementInfo(const MovementInfo& info) override;
+		virtual void ApplyMovementInfo(const MovementInfo &info) override;
 
 		/// Determines if this unit is a game master.
 		/// @returns true if the unit is a game master, false otherwise.
-		virtual bool IsGameMaster() const { return false;}
+		virtual bool IsGameMaster() const { return false; }
 
-		bool CanBeSeenBy(const GameUnitS& other) const;
+		bool CanBeSeenBy(const GameUnitS &other) const;
 
 	public:
 		/// Gets the power type associated with a unit modifier.
@@ -610,7 +613,7 @@ namespace mmo
 
 		/// Sets the initial spells for the unit.
 		/// @param spellIds A vector of spell IDs to set.
-		void SetInitialSpells(const std::vector<uint32>& spellIds);
+		void SetInitialSpells(const std::vector<uint32> &spellIds);
 
 		/// Adds a spell to the unit.
 		/// @param spellId The ID of the spell to add.
@@ -622,7 +625,7 @@ namespace mmo
 
 		/// Gets the set of spells known by the unit.
 		/// @returns A set of pointers to spell entries.
-		const std::unordered_set<const proto::SpellEntry*>& GetSpells() const;
+		const std::unordered_set<const proto::SpellEntry *> &GetSpells() const;
 
 		/// Sets the cooldown for a spell.
 		/// @param spellId The ID of the spell.
@@ -641,7 +644,7 @@ namespace mmo
 		/// @param isProc Whether the spell is a proc.
 		/// @param itemGuid The GUID of the item used to cast the spell (optional).
 		/// @returns The result of the spell cast.
-		SpellCastResult CastSpell(const SpellTargetMap& target, const proto::SpellEntry& spell, uint32 castTimeMs, bool isProc = false, uint64 itemGuid = 0);
+		SpellCastResult CastSpell(const SpellTargetMap &target, const proto::SpellEntry &spell, uint32 castTimeMs, bool isProc = false, uint64 itemGuid = 0);
 
 		/// Cancels the current spell cast.
 		/// @param reason The reason for the interruption.
@@ -653,13 +656,13 @@ namespace mmo
 		/// @param school The damage school type.
 		/// @param instigator The unit that caused the damage.
 		/// @param damageType The type of damage.
-		uint32 Damage(uint32 damage, uint32 school, GameUnitS* instigator, DamageType damageType);
+		uint32 Damage(uint32 damage, uint32 school, GameUnitS *instigator, DamageType damageType);
 
 		/// Heals the unit.
 		/// @param amount The amount of healing to apply.
 		/// @param instigator The unit that caused the healing.
 		/// @returns The actual amount of healing applied.
-		int32 Heal(uint32 amount, GameUnitS* instigator);
+		int32 Heal(uint32 amount, GameUnitS *instigator);
 
 		/// Logs spell damage dealt by the unit.
 		/// @param targetGuid The GUID of the target unit.
@@ -667,11 +670,11 @@ namespace mmo
 		/// @param school The damage school type.
 		/// @param flags The damage flags.
 		/// @param spell The spell entry used to deal the damage.
-		void SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell);
+		void SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry &spell);
 
 		/// Kills the unit.
 		/// @param killer The unit that killed this unit.
-		void Kill(GameUnitS* killer);
+		void Kill(GameUnitS *killer);
 
 		/// Gets the current health of the unit.
 		/// @returns The current health as a uint32.
@@ -683,9 +686,7 @@ namespace mmo
 
 		/// Checks if the unit is alive.
 		/// @returns true if the unit is alive, false otherwise.
-		bool IsAlive() const { return GetHealth() > 0; }
-
-		/// Starts the regeneration countdown.
+		bool IsAlive() const noexcept { return GetHealth() > 0; } /// Starts the regeneration countdown.
 		void StartRegeneration() const;
 
 		/// Stops the regeneration countdown.
@@ -693,7 +694,7 @@ namespace mmo
 
 		/// Applies an aura to the unit.
 		/// @param aura The aura container to apply.
-		void ApplyAura(std::shared_ptr<AuraContainer>&& aura);
+		void ApplyAura(std::shared_ptr<AuraContainer> &&aura);
 
 		/// Removes all auras applied by a specific item.
 		/// @param itemGuid The GUID of the item.
@@ -706,7 +707,7 @@ namespace mmo
 
 		/// Removes a specific aura from the unit.
 		/// @param aura The aura container to remove.
-		void RemoveAura(const std::shared_ptr<AuraContainer>& aura);
+		void RemoveAura(const std::shared_ptr<AuraContainer> &aura);
 
 		/// Checks if the unit has an aura from a specific caster.
 		/// @param spellId The ID of the spell.
@@ -716,7 +717,7 @@ namespace mmo
 
 		/// Builds an aura packet for network transmission.
 		/// @param writer The writer to write the packet to.
-		void BuildAuraPacket(io::Writer& writer) const;
+		void BuildAuraPacket(io::Writer &writer) const;
 
 		/// Notifies that mana has been used.
 		void NotifyManaUsed();
@@ -749,18 +750,18 @@ namespace mmo
 		/// Teleports the unit to a new location on the same map.
 		/// @param position The new position vector.
 		/// @param facing The new facing direction.
-		void TeleportOnMap(const Vector3& position, const Radian& facing);
+		void TeleportOnMap(const Vector3 &position, const Radian &facing);
 
 		/// Teleports the unit to a new location on a different map.
 		/// @param mapId The ID of the new map.
 		/// @param position The new position vector.
 		/// @param facing The new facing direction.
-		virtual void Teleport(uint32 mapId, const Vector3& position, const Radian& facing);
+		virtual void Teleport(uint32 mapId, const Vector3 &position, const Radian &facing);
 
 		/// Modifies the character spell modifiers by applying or misapplying a new mod.
 		/// @param mod The spell modifier to apply or misapply.
 		/// @param apply Whether to apply or misapply the spell mod.
-		void ModifySpellMod(const SpellModifier& mod, bool apply);
+		void ModifySpellMod(const SpellModifier &mod, bool apply);
 
 		void NotifyVisibilityChanged();
 
@@ -776,8 +777,8 @@ namespace mmo
 		/// @param spellId Id of the spell, to know which modifiers do match.
 		/// @param ref_value Reference of the base value, which will be modified by this method.
 		/// @returns Delta value or 0 if ref_value didn't change.
-		template<class T>
-		T ApplySpellMod(SpellModOp op, uint32 spellId, T& ref_value) const
+		template <class T>
+		T ApplySpellMod(SpellModOp op, uint32 spellId, T &ref_value) const
 		{
 			float totalPct = 1.0f;
 			int32 totalFlat = 0;
@@ -793,11 +794,11 @@ namespace mmo
 
 		/// Sends a chat message of type "say" from the unit.
 		/// @param message The message to send.
-		void ChatSay(const String& message);
+		void ChatSay(const String &message);
 
 		/// Sends a chat message of type "yell" from the unit.
 		/// @param message The message to send.
-		void ChatYell(const String& message);
+		void ChatYell(const String &message);
 
 		void NotifyRootChanged();
 
@@ -811,23 +812,23 @@ namespace mmo
 		bool IsRooted() const
 		{
 			return (m_movementInfo.movementFlags & movement_flags::Rooted) != 0;
-			}
+		}
 
 		/// Called when a proc event occurs to check if any auras should proc
-		void TriggerProcEvent(SpellProcFlags eventFlags, GameUnitS* target = nullptr, uint32 damage = 0, uint32 procEx = 0, uint8 school = 0, bool isProc = false, uint64 familyFlags = 0);
+		void TriggerProcEvent(SpellProcFlags eventFlags, GameUnitS *target = nullptr, uint32 damage = 0, uint32 procEx = 0, uint8 school = 0, bool isProc = false, uint64 familyFlags = 0);
 
 		/// Gets the weapon proficiency mask of this character (which weapons can be
 		/// wielded)
-		uint32 GetWeaponProficiency() const { return m_weaponProficiency; }
+		uint32 GetWeaponProficiency() const noexcept { return m_weaponProficiency; }
 
 		/// Gets the armor proficiency mask of this character (which armor types
 		/// can be wielded: Cloth, Leather, Mail, Plate etc.)
-		uint32 GetArmorProficiency() const {
+		uint32 GetArmorProficiency() const noexcept
+		{
 			return m_armorProficiency;
-		}
-
-		/// Adds a new weapon proficiency to the mask.
-		void AddWeaponProficiency(uint32 mask) {
+		} /// Adds a new weapon proficiency to the mask.
+		void AddWeaponProficiency(uint32 mask)
+		{
 			if ((m_weaponProficiency & mask) == mask)
 			{
 				return;
@@ -846,7 +847,8 @@ namespace mmo
 		}
 
 		/// Adds a new armor proficiency to the mask.
-		void AddArmorProficiency(uint32 mask) {
+		void AddArmorProficiency(uint32 mask)
+		{
 			if ((m_armorProficiency & mask) == mask)
 			{
 				return;
@@ -865,7 +867,8 @@ namespace mmo
 		}
 
 		/// Removes a weapon proficiency from the mask.
-		void RemoveWeaponProficiency(uint32 mask) {
+		void RemoveWeaponProficiency(uint32 mask)
+		{
 			if ((m_weaponProficiency & mask) == 0)
 			{
 				return;
@@ -884,7 +887,8 @@ namespace mmo
 		}
 
 		/// Removes an armor proficiency from the mask.
-		void RemoveArmorProficiency(uint32 mask) {
+		void RemoveArmorProficiency(uint32 mask)
+		{
 			if ((m_armorProficiency & mask) == 0)
 			{
 				return;
@@ -908,20 +912,20 @@ namespace mmo
 		/// Sends a local chat message from the unit.
 		/// @param type The type of chat message.
 		/// @param message The message to send.
-		virtual void DoLocalChatMessage(ChatType type, const String& message);
+		virtual void DoLocalChatMessage(ChatType type, const String &message);
 
 	private:
 		/// Sets the current victim of the unit.
 		/// @param victim The new victim.
-		void SetVictim(const std::shared_ptr<GameUnitS>& victim);
+		void SetVictim(const std::shared_ptr<GameUnitS> &victim);
 
 		/// Called when the current victim is killed.
 		/// @param killer The unit that killed the victim.
-		void VictimKilled(GameUnitS* killer);
+		void VictimKilled(GameUnitS *killer);
 
 		/// Called when the current victim despawns.
 		/// @param victim The victim that despawned.
-		void VictimDespawned(GameObjectS&);
+		void VictimDespawned(GameObjectS &);
 
 	protected:
 		/// Gets the miss chance for the unit.
@@ -941,26 +945,24 @@ namespace mmo
 		/// @param victim The victim of the attack.
 		/// @param attackType The type of weapon attack.
 		/// @returns The outcome of the melee attack.
-		MeleeAttackOutcome RollMeleeOutcomeAgainst(GameUnitS& victim, WeaponAttack attackType) const;
+		MeleeAttackOutcome RollMeleeOutcomeAgainst(GameUnitS &victim, WeaponAttack attackType) const;
 
-	public:
-		/// Checks if the unit can dual wield weapons.
-		/// @returns true if the unit can dual wield, false otherwise.
-		bool CanDualWield() const;
-
-		/// Gets the miss chance for a melee attack against a victim.
+public:
+	/// Checks if the unit can dual wield weapons.
+	/// @returns true if the unit can dual wield, false otherwise.
+	bool CanDualWield() const noexcept;		/// Gets the miss chance for a melee attack against a victim.
 		/// @param victim The victim of the attack.
 		/// @param attackType The type of weapon attack.
 		/// @param skillDiff The skill difference between the attacker and the victim.
 		/// @param spellId The ID of the spell used in the attack.
 		/// @returns The miss chance as a float.
-		float MeleeMissChance(const GameUnitS& victim, weapon_attack::Type attackType, int32 skillDiff, uint32 spellId) const;
+		float MeleeMissChance(const GameUnitS &victim, weapon_attack::Type attackType, int32 skillDiff, uint32 spellId) const;
 
 		/// Gets the critical hit chance for a melee attack against a victim.
 		/// @param victim The victim of the attack.
 		/// @param attackType The type of weapon attack.
 		/// @returns The critical hit chance as a float.
-		float CriticalHitChance(const GameUnitS& victim, weapon_attack::Type attackType) const;
+		float CriticalHitChance(const GameUnitS &victim, weapon_attack::Type attackType) const;
 
 		/// Returns the dodge chance in percent, ranging from 0 to 100.0f. If the unit can't dodge at all, this will always return 0.
 		float DodgeChance() const;
@@ -1006,7 +1008,7 @@ namespace mmo
 		/// Checks if the unit is currently attacking a specific victim.
 		/// @param victim The victim to check.
 		/// @returns true if the unit is attacking the victim, false otherwise.
-		bool IsAttacking(const std::shared_ptr<GameUnitS>& victim) const { return m_victim.lock() == victim; }
+		bool IsAttacking(const std::shared_ptr<GameUnitS> &victim) const { return m_victim.lock() == victim; }
 
 		/// Checks if the unit is currently attacking any victim.
 		/// @returns true if the unit is attacking, false otherwise.
@@ -1014,11 +1016,11 @@ namespace mmo
 
 		/// Gets the current victim of the unit.
 		/// @returns A pointer to the current victim.
-		GameUnitS* GetVictim() const { return m_victim.lock().get(); }
+		GameUnitS *GetVictim() const { return m_victim.lock().get(); }
 
 		/// Starts attacking a specific victim.
 		/// @param victim The victim to attack.
-		void StartAttack(const std::shared_ptr<GameUnitS>& victim);
+		void StartAttack(const std::shared_ptr<GameUnitS> &victim);
 
 		/// Stops attacking the current victim.
 		void StopAttack();
@@ -1029,9 +1031,7 @@ namespace mmo
 
 		/// Checks if the unit is in combat.
 		/// @returns true if the unit is in combat, false otherwise.
-		bool IsInCombat() const { return (Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0; }
-
-		/// Sets the combat state of the unit.
+		bool IsInCombat() const noexcept { return (Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0; } /// Sets the combat state of the unit.
 		/// @param inCombat true to set the unit in combat, false to set it out of combat.
 		void SetInCombat(bool inCombat, bool pvp);
 
@@ -1041,11 +1041,11 @@ namespace mmo
 
 		/// Adds an attacking unit to the list of attackers.
 		/// @param attacker The unit that is attacking.
-		void AddAttackingUnit(const GameUnitS& attacker);
+		void AddAttackingUnit(const GameUnitS &attacker);
 
 		/// Removes an attacking unit from the list of attackers.
 		/// @param attacker The unit to remove.
-		void RemoveAttackingUnit(const GameUnitS& attacker);
+		void RemoveAttackingUnit(const GameUnitS &attacker);
 
 		/// Removes all attacking units from the list of attackers.
 		void RemoveAllAttackingUnits();
@@ -1087,20 +1087,20 @@ namespace mmo
 		/// Checks if another unit is an enemy.
 		/// @param other The other unit to check.
 		/// @returns true if the other unit is an enemy, false otherwise.
-		bool UnitIsEnemy(const GameUnitS& other) const;
+		bool UnitIsEnemy(const GameUnitS &other) const;
 
 		/// Checks if another unit is friendly.
 		/// @param other The other unit to check.
 		/// @returns true if the other unit is friendly, false otherwise.
-		bool UnitIsFriendly(const GameUnitS& other) const;
+		bool UnitIsFriendly(const GameUnitS &other) const;
 
 		/// Gets the faction template of the unit.
 		/// @returns A pointer to the faction template entry.
-		const proto::FactionTemplateEntry* GetFactionTemplate() const;
+		const proto::FactionTemplateEntry *GetFactionTemplate() const;
 
 		/// Gets the level of the unit.
 		/// @returns The level as uint32.
-		uint32 GetLevel() const { return Get<uint32>(object_fields::Level); }
+		uint32 GetLevel() const noexcept override { return Get<uint32>(object_fields::Level); }
 
 		/// Gets the max level of the unit.
 		/// @returns The max level as uint32.
@@ -1114,7 +1114,7 @@ namespace mmo
 		/// @param mapId The ID of the map.
 		/// @param position The position vector.
 		/// @param facing The facing direction.
-		void SetBinding(uint32 mapId, const Vector3& position, const Radian& facing);
+		void SetBinding(uint32 mapId, const Vector3 &position, const Radian &facing);
 
 		/// Gets the map ID of the binding location.
 		/// @returns The map ID as a uint32.
@@ -1122,24 +1122,24 @@ namespace mmo
 
 		/// Gets the position of the binding location.
 		/// @returns The position vector.
-		const Vector3& GetBindPosition() const { return m_bindPosition; }
+		const Vector3 &GetBindPosition() const { return m_bindPosition; }
 
 		/// Gets the facing direction of the binding location.
 		/// @returns The facing direction.
-		const Radian& GetBindFacing() const { return m_bindFacing; }
+		const Radian &GetBindFacing() const { return m_bindFacing; }
 
 	protected:
 		/// Called when the unit is killed.
 		/// @param killer The unit that killed this unit.
-		virtual void OnKilled(GameUnitS* killer);
+		virtual void OnKilled(GameUnitS *killer);
 
 		/// Called when a spell is learned by the unit.
 		/// @param spell The spell entry that was learned.
-		virtual void OnSpellLearned(const proto::SpellEntry& spell) {}
+		virtual void OnSpellLearned(const proto::SpellEntry &spell) {}
 
 		/// Called when a spell is unlearned by the unit.
 		/// @param spell The spell entry that was unlearned.
-		virtual void OnSpellUnlearned(const proto::SpellEntry& spell) {}
+		virtual void OnSpellUnlearned(const proto::SpellEntry &spell) {}
 
 		/// Called when a spell cast ends.
 		/// @param succeeded Whether the spell cast succeeded.
@@ -1221,20 +1221,20 @@ namespace mmo
 	public:
 		/// Gets the timer queue for the unit.
 		/// @returns A reference to the timer queue.
-		TimerQueue& GetTimers() const { return m_timers; }
+		TimerQueue &GetTimers() const { return m_timers; }
 
 		/// Gets the unit mover for the unit.
 		/// @returns A reference to the unit mover.
-		UnitMover& GetMover() const { return *m_mover; }
+		UnitMover &GetMover() const { return *m_mover; }
 
 		/// Generates the next client ack ID for the unit.
 		/// @returns The next client ack ID as a uint32.
 		inline uint32 GenerateAckId() { return m_ackGenerator.GenerateId(); }
 
 	protected:
-		typedef LinearSet<const GameUnitS*> AttackingUnitSet;
+		typedef LinearSet<const GameUnitS *> AttackingUnitSet;
 
-		TimerQueue& m_timers;
+		TimerQueue &m_timers;
 		Countdown m_despawnCountdown;
 		std::unique_ptr<UnitMover> m_mover;
 		Countdown m_attackSwingCountdown;
@@ -1244,7 +1244,7 @@ namespace mmo
 
 		std::weak_ptr<GameUnitS> m_victim;
 
-		std::unordered_set<const proto::SpellEntry*> m_spells;
+		std::unordered_set<const proto::SpellEntry *> m_spells;
 		std::unique_ptr<SpellCast> m_spellCast;
 
 		std::map<uint32, GameTime> m_spellCooldowns;
@@ -1252,7 +1252,7 @@ namespace mmo
 
 		AttackingUnitSet m_attackingUnits;
 
-		NetUnitWatcherS* m_netUnitWatcher = nullptr;
+		NetUnitWatcherS *m_netUnitWatcher = nullptr;
 		mutable Vector3 m_lastPosition;
 
 		stable_list<std::shared_ptr<AuraContainer>> m_auras;
@@ -1268,7 +1268,7 @@ namespace mmo
 		float m_manaRegenPerTick = 0.0f;
 		float m_healthRegenPerTick = 0.0f;
 
-		mutable const proto::FactionTemplateEntry* m_cachedFactionTemplate = nullptr;
+		mutable const proto::FactionTemplateEntry *m_cachedFactionTemplate = nullptr;
 		scoped_connection_container m_victimSignals;
 
 		uint32 m_bindMap;
@@ -1290,7 +1290,7 @@ namespace mmo
 		uint32 m_state = 0;
 
 		uint32 m_weaponProficiency = 0; ///< Weapon proficiency mask (which weapons can be wielded)
-		uint32 m_armorProficiency = 0; ///< Armor proficiency mask (which armor types can be wielded: Cloth, Leather, Mail, Plate etc.)
+		uint32 m_armorProficiency = 0;	///< Armor proficiency mask (which armor types can be wielded: Cloth, Leather, Mail, Plate etc.)
 
 	private:
 		/// Serializes a GameUnitS object to a Writer for binary serialization.
@@ -1298,16 +1298,16 @@ namespace mmo
 		/// @param w The Writer to write to.
 		/// @param object The GameUnitS object to serialize.
 		/// @returns Reference to the Writer for chaining.
-		friend io::Writer& operator << (io::Writer& w, GameUnitS const& object);
+		friend io::Writer &operator<<(io::Writer &w, GameUnitS const &object);
 
 		/// Deserializes a GameUnitS object from a Reader during binary deserialization.
 		/// Used to reconstruct the object state from a binary format after storage or network transmission.
 		/// @param r The Reader to read from.
 		/// @param object The GameUnitS object to deserialize into.
 		/// @returns Reference to the Reader for chaining.
-		friend io::Reader& operator >> (io::Reader& r, GameUnitS& object);
+		friend io::Reader &operator>>(io::Reader &r, GameUnitS &object);
 	};
 
-	io::Writer& operator << (io::Writer& w, GameUnitS const& object);
-	io::Reader& operator >> (io::Reader& r, GameUnitS& object);
+	io::Writer &operator<<(io::Writer &w, GameUnitS const &object);
+	io::Reader &operator>>(io::Reader &r, GameUnitS &object);
 }

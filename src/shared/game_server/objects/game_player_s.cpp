@@ -12,28 +12,22 @@
 
 namespace mmo
 {
-	io::Writer& operator<<(io::Writer& w, const QuestStatusData& object)
+	io::Writer &operator<<(io::Writer &w, const QuestStatusData &object)
 	{
 		return w
-			<< io::write<uint8>(object.status)
-			<< io::write<uint8>(object.explored)
-			<< io::write<uint32>(object.expiration)
-			<< io::write_range(object.creatures);
-
+			   << io::write<uint8>(object.status)
+			   << io::write<uint8>(object.explored)
+			   << io::write<uint32>(object.expiration)
+			   << io::write_range(object.creatures);
 	}
 
-	io::Reader& operator>>(io::Reader& r, QuestStatusData& object)
+	io::Reader &operator>>(io::Reader &r, QuestStatusData &object)
 	{
-		return r
-			>> io::read<uint8>(object.status)
-			>> io::read<uint8>(object.explored)
-			>> io::read<uint32>(object.expiration)
-			>> io::read_range(object.creatures);
+		return r >> io::read<uint8>(object.status) >> io::read<uint8>(object.explored) >> io::read<uint32>(object.expiration) >> io::read_range(object.creatures);
 	}
 
-	GamePlayerS::GamePlayerS(const proto::Project& project, TimerQueue& timerQueue)
-		: GameUnitS(project, timerQueue)
-		, m_inventory(*this)
+	GamePlayerS::GamePlayerS(const proto::Project &project, TimerQueue &timerQueue)
+		: GameUnitS(project, timerQueue), m_inventory(*this)
 	{
 	}
 
@@ -61,7 +55,7 @@ namespace mmo
 		Set<uint32>(object_fields::AvailableAttributePoints, 0, false);
 	}
 
-	void GamePlayerS::WriteObjectUpdateBlock(io::Writer& writer, bool creation) const
+	void GamePlayerS::WriteObjectUpdateBlock(io::Writer &writer, bool creation) const
 	{
 		GameUnitS::WriteObjectUpdateBlock(writer, creation);
 
@@ -72,12 +66,12 @@ namespace mmo
 		}
 	}
 
-	void GamePlayerS::RaiseTrigger(trigger_event::Type e, const std::vector<uint32>& data, GameUnitS* triggeringUnit)
+	void GamePlayerS::RaiseTrigger(trigger_event::Type e, const std::vector<uint32> &data, GameUnitS *triggeringUnit)
 	{
 		// TODO
 	}
 
-	void GamePlayerS::RaiseTrigger(trigger_event::Type e, GameUnitS* triggeringUnit)
+	void GamePlayerS::RaiseTrigger(trigger_event::Type e, GameUnitS *triggeringUnit)
 	{
 		// TODO
 	}
@@ -95,14 +89,14 @@ namespace mmo
 	void GamePlayerS::LootObject(std::weak_ptr<GameObjectS> lootObject)
 	{
 		m_lootObject = lootObject;
-		
+
 		if (m_netPlayerWatcher)
 		{
 			m_netPlayerWatcher->OnObjectLoot();
 		}
 	}
 
-	void GamePlayerS::InitializeTalents(const std::map<uint32, uint8>& talentRanks)
+	void GamePlayerS::InitializeTalents(const std::map<uint32, uint8> &talentRanks)
 	{
 		// Ensure we start fresh
 		ASSERT(m_talents.empty());
@@ -115,18 +109,18 @@ namespace mmo
 		// Sort talents by row first
 		std::vector<std::pair<uint32, uint8>> sortedTalents(talentRanks.begin(), talentRanks.end());
 		std::sort(sortedTalents.begin(), sortedTalents.end(),
-			[this](const std::pair<uint32, uint8>& a, const std::pair<uint32, uint8>& b)
-			{
-				const auto& talentA = m_project.talents.getById(a.first);
-				const auto& talentB = m_project.talents.getById(b.first);
-				if (!talentA || !talentB)
-				{
-					return false; // If either talent is invalid, do not sort
-				}
-				return talentA->row() < talentB->row();
-			});
+				  [this](const std::pair<uint32, uint8> &a, const std::pair<uint32, uint8> &b)
+				  {
+					  const auto &talentA = m_project.talents.getById(a.first);
+					  const auto &talentB = m_project.talents.getById(b.first);
+					  if (!talentA || !talentB)
+					  {
+						  return false; // If either talent is invalid, do not sort
+					  }
+					  return talentA->row() < talentB->row();
+				  });
 
-		for (const auto& [talentId, rank] : sortedTalents)
+		for (const auto &[talentId, rank] : sortedTalents)
 		{
 			// Ensure this talent exists
 			if (!m_project.talents.getById(talentId))
@@ -160,17 +154,17 @@ namespace mmo
 		DLOG("Initialize talents. Talent points spent: " << (m_totalTalentPointsAtLevel - talentPoints) << " / " << m_totalTalentPointsAtLevel);
 	}
 
-	void GamePlayerS::SetConfiguration(const AvatarConfiguration& configuration)
+	void GamePlayerS::SetConfiguration(const AvatarConfiguration &configuration)
 	{
 		m_configuration = configuration;
 	}
 
-	void GamePlayerS::SetPlayerWatcher(NetPlayerWatcher* watcher)
+	void GamePlayerS::SetPlayerWatcher(NetPlayerWatcher *watcher)
 	{
 		m_netPlayerWatcher = watcher;
 	}
 
-	void GamePlayerS::SetClass(const proto::ClassEntry& classEntry)
+	void GamePlayerS::SetClass(const proto::ClassEntry &classEntry)
 	{
 		m_classEntry = &classEntry;
 
@@ -180,7 +174,7 @@ namespace mmo
 		RefreshStats();
 	}
 
-	void GamePlayerS::SetRace(const proto::RaceEntry& raceEntry)
+	void GamePlayerS::SetRace(const proto::RaceEntry &raceEntry)
 	{
 		m_raceEntry = &raceEntry;
 
@@ -193,7 +187,7 @@ namespace mmo
 		uint32 bytes = Get<uint32>(object_fields::Bytes);
 
 		// Clear the first byte (gender) and then set the new gender
-		bytes &= 0xffffff00; // Clear the first byte (mask with 0s in the gender byte and 1s elsewhere)
+		bytes &= 0xffffff00;				  // Clear the first byte (mask with 0s in the gender byte and 1s elsewhere)
 		bytes |= static_cast<uint32>(gender); // Set the new gender
 
 		Set<uint32>(object_fields::Bytes, bytes);
@@ -219,7 +213,7 @@ namespace mmo
 
 		// Clear the 8-bit segment at the specified index and set the new cost
 		attributeCostPacked &= ~(static_cast<uint64>(0xFF) << (attribute * 8)); // Clear the 8-bit slot
-		attributeCostPacked |= static_cast<uint64>(cost) << (attribute * 8);    // Set the 8-bit value
+		attributeCostPacked |= static_cast<uint64>(cost) << (attribute * 8);	// Set the 8-bit value
 
 		Set<uint64>(object_fields::AttributePointCost, attributeCostPacked);
 	}
@@ -232,9 +226,9 @@ namespace mmo
 		return (attributeCostPacked >> (attribute * 8)) & 0xFF;
 	}
 
-	void GamePlayerS::ApplyItemStats(const GameItemS& item, const bool apply)
+	void GamePlayerS::ApplyItemStats(const GameItemS &item, const bool apply)
 	{
-		const auto& itemEntry = item.GetEntry();
+		const auto &itemEntry = item.GetEntry();
 
 		// Check if item is usable
 		if (item.GetEntry().itemclass() == item_class::Weapon)
@@ -259,7 +253,7 @@ namespace mmo
 			// Apply values
 			for (int i = 0; i < itemEntry.stats_size(); ++i)
 			{
-				const auto& stat = itemEntry.stats(i);
+				const auto &stat = itemEntry.stats(i);
 				if (stat.value() != 0)
 				{
 					switch (stat.type())
@@ -336,12 +330,12 @@ namespace mmo
 				targetMap.SetUnitTarget(GetGuid());
 				targetMap.SetTargetMap(spell_cast_target_flags::Self);
 
-				for (auto& spell : item.GetEntry().spells())
+				for (auto &spell : item.GetEntry().spells())
 				{
 					// Trigger == onEquip?
 					if (spell.trigger() == item_spell_trigger::OnEquip)
 					{
-						if (const auto* spellEntry = m_project.spells.getById(spell.spell()))
+						if (const auto *spellEntry = m_project.spells.getById(spell.spell()))
 						{
 							CastSpell(targetMap, *spellEntry, 0, true, item.GetGuid());
 						}
@@ -370,7 +364,7 @@ namespace mmo
 		// Remove all talent spells
 		for (int i = 0; i < m_project.talents.count(); ++i)
 		{
-			const auto& talent = m_project.talents.getTemplates().entry(i);
+			const auto &talent = m_project.talents.getTemplates().entry(i);
 
 			// Unlearn all ranks of this talent
 			for (int rank = 0; rank < talent.ranks_size(); ++rank)
@@ -426,14 +420,14 @@ namespace mmo
 		if (const auto it = m_quests.find(quest); it != m_quests.end())
 		{
 			if (it->second.status != quest_status::Available &&
-				it->second.status != quest_status::Unavailable) 
+				it->second.status != quest_status::Unavailable)
 			{
 				return it->second.status;
 			}
 		}
 
 		// We don't have that quest cached, make a lookup
-		const auto* entry = GetProject().quests.getById(quest);
+		const auto *entry = GetProject().quests.getById(quest);
 		if (!entry)
 		{
 			WLOG("Could not find quest " << quest);
@@ -446,7 +440,7 @@ namespace mmo
 		}
 
 		// TODO: Check skill
-		
+
 		// Race/Class check
 		ASSERT(m_raceEntry);
 		ASSERT(m_classEntry);
@@ -494,13 +488,13 @@ namespace mmo
 			return false;
 		}
 
-		const auto* questEntry = GetProject().quests.getById(quest);
+		const auto *questEntry = GetProject().quests.getById(quest);
 		if (!questEntry)
 		{
 			return false;
 		}
 
-		const proto::ItemEntry* srcItem = nullptr;
+		const proto::ItemEntry *srcItem = nullptr;
 		if (questEntry->srcitemid())
 		{
 			if ((srcItem = GetProject().items.getById(questEntry->srcitemid())) == nullptr)
@@ -521,24 +515,24 @@ namespace mmo
 					std::map<uint16, uint16> addedBySlot;
 					if (auto result = m_inventory.CreateItems(*srcItem, questEntry->srcitemcount(), &addedBySlot); result != inventory_change_failure::Okay)
 					{
-						//inventoryChangeFailure(result, nullptr, nullptr);
+						// inventoryChangeFailure(result, nullptr, nullptr);
 						return false;
 					}
 
 					// Notify the player about this
-					for (auto& pair : addedBySlot)
+					for (auto &pair : addedBySlot)
 					{
-						//itemAdded(pair.first, pair.second, false, false);
+						// itemAdded(pair.first, pair.second, false, false);
 					}
 				}
 
 				// Take that quest
-				auto& data = m_quests[quest];
+				auto &data = m_quests[quest];
 				data.status = quest_status::Incomplete;
 
 				if (questEntry->srcspell())
 				{
-					if (const auto* spell = GetProject().spells.getById(questEntry->srcspell()))
+					if (const auto *spell = GetProject().spells.getById(questEntry->srcspell()))
 					{
 						// TODO: Maybe we should make the quest giver cast the spell, if it's a unit
 						SpellTargetMap targetMap;
@@ -571,7 +565,8 @@ namespace mmo
 
 				// Update quest log field value
 				Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
-				if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestDataChanged(quest, data);
+				if (m_netPlayerWatcher)
+					m_netPlayerWatcher->OnQuestDataChanged(quest, data);
 
 				return true;
 			}
@@ -593,7 +588,8 @@ namespace mmo
 
 				// Reset quest log
 				Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), QuestField());
-				if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestDataChanged(quest, QuestStatusData());
+				if (m_netPlayerWatcher)
+					m_netPlayerWatcher->OnQuestDataChanged(quest, QuestStatusData());
 
 				return true;
 			}
@@ -622,7 +618,7 @@ namespace mmo
 				continue;
 
 			// Find quest
-			const auto* quest = GetProject().quests.getById(field.questId);
+			const auto *quest = GetProject().quests.getById(field.questId);
 			if (!quest)
 				continue;
 
@@ -636,7 +632,7 @@ namespace mmo
 
 			// Counter needed so that the right field is used
 			uint8 reqIndex = 0;
-			for (const auto& req : quest->requirements())
+			for (const auto &req : quest->requirements())
 			{
 				if (req.creatureid() != 0)
 				{
@@ -668,7 +664,8 @@ namespace mmo
 
 			// Save quest progress
 			Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
-			if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestDataChanged(field.questId, it->second);
+			if (m_netPlayerWatcher)
+				m_netPlayerWatcher->OnQuestDataChanged(field.questId, it->second);
 
 			return true;
 		}
@@ -686,7 +683,7 @@ namespace mmo
 	bool GamePlayerS::RewardQuest(uint64 questgiverGuid, uint32 quest, uint8 rewardChoice)
 	{
 		// Reward experience
-		const auto* entry = m_project.quests.getById(quest);
+		const auto *entry = m_project.quests.getById(quest);
 		if (!entry)
 		{
 			return false;
@@ -703,7 +700,7 @@ namespace mmo
 		}
 
 		// Gather all rewarded items
-		std::map<const proto::ItemEntry*, uint16> rewardedItems;
+		std::map<const proto::ItemEntry *, uint16> rewardedItems;
 		{
 			if (entry->rewarditemschoice_size() > 0)
 			{
@@ -713,7 +710,7 @@ namespace mmo
 					return false;
 				}
 
-				const auto* item = GetProject().items.getById(
+				const auto *item = GetProject().items.getById(
 					entry->rewarditemschoice(rewardChoice).itemid());
 				if (!item)
 				{
@@ -723,9 +720,9 @@ namespace mmo
 				// Check if the player can store the item
 				rewardedItems[item] += entry->rewarditemschoice(rewardChoice).count();
 			}
-			for (auto& rew : entry->rewarditems())
+			for (auto &rew : entry->rewarditems())
 			{
-				const auto* item = GetProject().items.getById(rew.itemid());
+				const auto *item = GetProject().items.getById(rew.itemid());
 				if (!item)
 				{
 					return false;
@@ -736,22 +733,22 @@ namespace mmo
 		}
 
 		// First loop to check if the items can be stored
-		for (auto& pair : rewardedItems)
+		for (auto &pair : rewardedItems)
 		{
 			const auto result = m_inventory.CanStoreItems(*pair.first, pair.second);
 			if (result != inventory_change_failure::Okay)
 			{
-				//inventoryChangeFailure(result, nullptr, nullptr);
+				// inventoryChangeFailure(result, nullptr, nullptr);
 				return false;
 			}
 		}
 
 		// Try to remove all required quest items
-		for (const auto& req : entry->requirements())
+		for (const auto &req : entry->requirements())
 		{
 			if (req.itemid())
 			{
-				const auto* itemEntry = m_project.items.getById(req.itemid());
+				const auto *itemEntry = m_project.items.getById(req.itemid());
 				if (!itemEntry)
 				{
 					return false;
@@ -760,26 +757,26 @@ namespace mmo
 				const auto result = m_inventory.RemoveItems(*itemEntry, req.itemcount());
 				if (result != inventory_change_failure::Okay)
 				{
-					//inventoryChangeFailure(result, nullptr, nullptr);
+					// inventoryChangeFailure(result, nullptr, nullptr);
 					return false;
 				}
 			}
 		}
 
 		// Second loop needed to actually create the items
-		for (auto& pair : rewardedItems)
+		for (auto &pair : rewardedItems)
 		{
 			std::map<uint16, uint16> addedBySlot;
 			auto result = m_inventory.CreateItems(*pair.first, pair.second, &addedBySlot);
 			if (result != inventory_change_failure::Okay)
 			{
-				//inventoryChangeFailure(result, nullptr, nullptr);
+				// inventoryChangeFailure(result, nullptr, nullptr);
 				return false;
 			}
 
 			if (m_netPlayerWatcher)
 			{
-				for (auto& slot : addedBySlot)
+				for (auto &slot : addedBySlot)
 				{
 					m_netPlayerWatcher->OnItemAdded(slot.first, slot.second, false, false);
 				}
@@ -788,22 +785,28 @@ namespace mmo
 
 		float xpFactor;
 		const int32 playerLevel = static_cast<int32>(GetLevel());
-		if (playerLevel <= entry->questlevel() + 5) {
+		if (playerLevel <= entry->questlevel() + 5)
+		{
 			xpFactor = 1.0f;
 		}
-		else if (playerLevel == entry->questlevel() + 6) {
+		else if (playerLevel == entry->questlevel() + 6)
+		{
 			xpFactor = 0.8f;
 		}
-		else if (playerLevel == entry->questlevel() + 7) {
+		else if (playerLevel == entry->questlevel() + 7)
+		{
 			xpFactor = 0.6f;
 		}
-		else if (playerLevel == entry->questlevel() + 8) {
+		else if (playerLevel == entry->questlevel() + 8)
+		{
 			xpFactor = 0.4f;
 		}
-		else if (playerLevel == entry->questlevel() + 9) {
+		else if (playerLevel == entry->questlevel() + 9)
+		{
 			xpFactor = 0.2f;
 		}
-		else {
+		else
+		{
 			xpFactor = 0.1f;
 		}
 
@@ -812,7 +815,7 @@ namespace mmo
 		{
 			RewardExperience(rewardXp);
 		}
-		
+
 		uint32 money = entry->rewardmoney();
 		if (money > 0)
 		{
@@ -822,7 +825,7 @@ namespace mmo
 		// Remove source items of this quest (if any)
 		if (entry->srcitemid())
 		{
-			if (const auto* itemEntry = GetProject().items.getById(entry->srcitemid()))
+			if (const auto *itemEntry = GetProject().items.getById(entry->srcitemid()))
 			{
 				// 0 means: remove ALL of this item
 				m_inventory.RemoveItems(*itemEntry, 0);
@@ -841,17 +844,19 @@ namespace mmo
 
 		// Quest was rewarded
 		it->second.status = quest_status::Rewarded;
-		if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestDataChanged(quest, it->second);
+		if (m_netPlayerWatcher)
+			m_netPlayerWatcher->OnQuestDataChanged(quest, it->second);
 
 		m_rewardedQuestIds.insert(entry->id());
 		it = m_quests.erase(it);
 
-		if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestCompleted(questgiverGuid, quest, rewardXp, money);
+		if (m_netPlayerWatcher)
+			m_netPlayerWatcher->OnQuestCompleted(questgiverGuid, quest, rewardXp, money);
 
 		return true;
 	}
 
-	void GamePlayerS::OnQuestKillCredit(const uint64 unitGuid, const proto::UnitEntry& entry)
+	void GamePlayerS::OnQuestKillCredit(const uint64 unitGuid, const proto::UnitEntry &entry)
 	{
 		const uint32 creditEntry = (entry.killcredit() != 0) ? entry.killcredit() : entry.id();
 
@@ -859,33 +864,33 @@ namespace mmo
 		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
 		{
 			QuestField field = Get<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)));
-			if (field.questId == 0) 
+			if (field.questId == 0)
 			{
 				continue;
 			}
 
 			// Verify quest state
 			auto it = m_quests.find(field.questId);
-			if (it == m_quests.end()) 
+			if (it == m_quests.end())
 			{
 				continue;
 			}
 
-			if (it->second.status != quest_status::Incomplete) 
+			if (it->second.status != quest_status::Incomplete)
 			{
 				continue;
 			}
 
 			// Find quest
-			const auto* quest = GetProject().quests.getById(field.questId);
-			if (!quest) 
+			const auto *quest = GetProject().quests.getById(field.questId);
+			if (!quest)
 			{
 				continue;
 			}
 
 			// Counter needed so that the right field is used
 			uint8 reqIndex = 0;
-			for (const auto& req : quest->requirements())
+			for (const auto &req : quest->requirements())
 			{
 				if (req.creatureid() == creditEntry)
 				{
@@ -898,7 +903,8 @@ namespace mmo
 						it->second.creatures[reqIndex]++;
 
 						// Fire signal to update UI
-						if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestKillCredit(*quest, unitGuid, creditEntry, it->second.creatures[reqIndex], req.creaturecount());
+						if (m_netPlayerWatcher)
+							m_netPlayerWatcher->OnQuestKillCredit(*quest, unitGuid, creditEntry, it->second.creatures[reqIndex], req.creaturecount());
 
 						// Check if this completed the quest
 						if (FulfillsQuestRequirements(*quest))
@@ -910,7 +916,8 @@ namespace mmo
 
 						// Save quest progress
 						Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
-						if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestDataChanged(field.questId, it->second);
+						if (m_netPlayerWatcher)
+							m_netPlayerWatcher->OnQuestDataChanged(field.questId, it->second);
 					}
 
 					// Continue with next quest, as multiple quests could require the same
@@ -923,7 +930,7 @@ namespace mmo
 		}
 	}
 
-	bool GamePlayerS::FulfillsQuestRequirements(const proto::QuestEntry& entry) const
+	bool GamePlayerS::FulfillsQuestRequirements(const proto::QuestEntry &entry) const
 	{
 		// Check if the character has this quest entry
 		auto it = m_quests.find(entry.id());
@@ -948,12 +955,13 @@ namespace mmo
 
 		// Now check all available quest requirements
 		uint32 counter = 0;
-		for (const auto& req : entry.requirements())
+		for (const auto &req : entry.requirements())
 		{
 			// Creature kill / spell cast required
 			if (req.creatureid() != 0)
 			{
-				if (it->second.creatures[counter] < req.creaturecount()) {
+				if (it->second.creatures[counter] < req.creaturecount())
+				{
 					return false;
 				}
 			}
@@ -996,7 +1004,7 @@ namespace mmo
 		// TODO
 	}
 
-	void GamePlayerS::OnQuestItemAddedCredit(const proto::ItemEntry& entry, uint32 amount)
+	void GamePlayerS::OnQuestItemAddedCredit(const proto::ItemEntry &entry, uint32 amount)
 	{
 		// If this is set to true, all nearby objects will be updated
 		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
@@ -1015,13 +1023,13 @@ namespace mmo
 			}
 
 			// Check if the quest was already completed
-			if (it->second.status != quest_status::Incomplete) 
+			if (it->second.status != quest_status::Incomplete)
 			{
 				continue;
 			}
 
 			// Get quest template entry
-			const auto* quest = GetProject().quests.getById(field.questId);
+			const auto *quest = GetProject().quests.getById(field.questId);
 			if (!quest)
 			{
 				continue;
@@ -1033,7 +1041,7 @@ namespace mmo
 			bool validateQuest = false;
 
 			// Check every quest entry requirement
-			for (const auto& req : quest->requirements())
+			for (const auto &req : quest->requirements())
 			{
 				if (req.itemid() == entry.id())
 				{
@@ -1059,7 +1067,8 @@ namespace mmo
 				{
 					it->second.status = quest_status::Complete;
 					field.status = quest_status::Complete;
-					if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestDataChanged(field.questId, it->second);
+					if (m_netPlayerWatcher)
+						m_netPlayerWatcher->OnQuestDataChanged(field.questId, it->second);
 				}
 
 				Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
@@ -1067,7 +1076,7 @@ namespace mmo
 		}
 	}
 
-	void GamePlayerS::OnQuestItemRemovedCredit(const proto::ItemEntry& entry, uint32 amount)
+	void GamePlayerS::OnQuestItemRemovedCredit(const proto::ItemEntry &entry, uint32 amount)
 	{
 		// If this is set to true, all nearby objects will be updated
 		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
@@ -1092,7 +1101,7 @@ namespace mmo
 			}
 
 			// Get quest template entry
-			const auto* quest = GetProject().quests.getById(field.questId);
+			const auto *quest = GetProject().quests.getById(field.questId);
 			if (!quest)
 			{
 				continue;
@@ -1104,7 +1113,7 @@ namespace mmo
 			bool validateQuest = false;
 
 			// Check every quest entry requirement
-			for (const auto& req : quest->requirements())
+			for (const auto &req : quest->requirements())
 			{
 				if (req.itemid() == entry.id())
 				{
@@ -1130,7 +1139,8 @@ namespace mmo
 				{
 					it->second.status = quest_status::Incomplete;
 					field.status = quest_status::Incomplete;
-					if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestDataChanged(field.questId, it->second);
+					if (m_netPlayerWatcher)
+						m_netPlayerWatcher->OnQuestDataChanged(field.questId, it->second);
 				}
 
 				Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
@@ -1138,7 +1148,7 @@ namespace mmo
 		}
 	}
 
-	void GamePlayerS::OnQuestSpellCastCredit(uint32 spellId, GameObjectS& target)
+	void GamePlayerS::OnQuestSpellCastCredit(uint32 spellId, GameObjectS &target)
 	{
 		// TODO
 	}
@@ -1181,10 +1191,11 @@ namespace mmo
 		// Persist in database
 		QuestStatusData completed;
 		completed.status = quest_status::Rewarded;
-		if (m_netPlayerWatcher) m_netPlayerWatcher->OnQuestDataChanged(questId, completed);
+		if (m_netPlayerWatcher)
+			m_netPlayerWatcher->OnQuestDataChanged(questId, completed);
 	}
 
-	void GamePlayerS::SetQuestData(uint32 questId, const QuestStatusData& data)
+	void GamePlayerS::SetQuestData(uint32 questId, const QuestStatusData &data)
 	{
 		m_quests[questId] = data;
 
@@ -1208,7 +1219,7 @@ namespace mmo
 
 	bool GamePlayerS::LearnTalent(uint32 talentId, uint32 rank)
 	{
-		const auto* talentEntry = m_project.talents.getById(talentId);
+		const auto *talentEntry = m_project.talents.getById(talentId);
 		if (!talentEntry)
 		{
 			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn non existing talent " << talentId);
@@ -1216,7 +1227,7 @@ namespace mmo
 		}
 
 		// Check if we may even learn this talent at all
-		const auto* talentTab = m_project.talentTabs.getById(talentEntry->tab());
+		const auto *talentTab = m_project.talentTabs.getById(talentEntry->tab());
 		if (!talentTab)
 		{
 			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " but it refers to non existing tab " << talentEntry->tab());
@@ -1257,9 +1268,9 @@ namespace mmo
 			uint32 pointsSpentInTab = 0;
 
 			// Count points spent in this talent tab
-			for (const auto& [learnedTalentId, learnedRank] : m_talents)
+			for (const auto &[learnedTalentId, learnedRank] : m_talents)
 			{
-				const auto* learnedTalentEntry = m_project.talents.getById(learnedTalentId);
+				const auto *learnedTalentEntry = m_project.talents.getById(learnedTalentId);
 				if (learnedTalentEntry && learnedTalentEntry->tab() == talentEntry->tab())
 				{
 					pointsSpentInTab += (learnedRank + 1); // Rank 0 costs 1 point, rank 1 costs 2 points total, etc.
@@ -1310,7 +1321,7 @@ namespace mmo
 		// TODO: Maybe we should cache this value
 		uint32 pointsSpent = 0;
 
-		for (const auto& it : m_talents)
+		for (const auto &it : m_talents)
 		{
 			// Remember: First rank is 0, but it still costs 1 Talent Point to learn this rank
 			pointsSpent += (it.second + 1);
@@ -1382,27 +1393,26 @@ namespace mmo
 		currentXp += xp;
 
 		// Levelup as often as required
-		while(currentXp >= Get<uint32>(object_fields::NextLevelXp))
+		while (currentXp >= Get<uint32>(object_fields::NextLevelXp))
 		{
 			if (GetLevel() < GetMaxLevel())
 			{
 				if (m_netUnitWatcher)
 				{
-					const auto& levelStats = m_classEntry->levelbasevalues(GetLevel() - 1);
-					const auto& nextLevelStats = m_classEntry->levelbasevalues(GetLevel());
+					const auto &levelStats = m_classEntry->levelbasevalues(GetLevel() - 1);
+					const auto &nextLevelStats = m_classEntry->levelbasevalues(GetLevel());
 					m_netUnitWatcher->OnLevelUp(GetLevel() + 1,
-						static_cast<int32>(nextLevelStats.health()) - static_cast<int32>(levelStats.health()),
-						static_cast<int32>(nextLevelStats.mana()) - static_cast<int32>(levelStats.mana()),
-						static_cast<int32>(nextLevelStats.stamina()) - static_cast<int32>(levelStats.stamina()),
-						static_cast<int32>(nextLevelStats.strength()) - static_cast<int32>(levelStats.strength()),
-						static_cast<int32>(nextLevelStats.agility()) - static_cast<int32>(levelStats.agility()),
-						static_cast<int32>(nextLevelStats.intellect()) - static_cast<int32>(levelStats.intellect()),
-						static_cast<int32>(nextLevelStats.spirit()) - static_cast<int32>(levelStats.spirit()),
-						nextLevelStats.talentpoints(),
-						nextLevelStats.attributepoints()
-					);
+												static_cast<int32>(nextLevelStats.health()) - static_cast<int32>(levelStats.health()),
+												static_cast<int32>(nextLevelStats.mana()) - static_cast<int32>(levelStats.mana()),
+												static_cast<int32>(nextLevelStats.stamina()) - static_cast<int32>(levelStats.stamina()),
+												static_cast<int32>(nextLevelStats.strength()) - static_cast<int32>(levelStats.strength()),
+												static_cast<int32>(nextLevelStats.agility()) - static_cast<int32>(levelStats.agility()),
+												static_cast<int32>(nextLevelStats.intellect()) - static_cast<int32>(levelStats.intellect()),
+												static_cast<int32>(nextLevelStats.spirit()) - static_cast<int32>(levelStats.spirit()),
+												nextLevelStats.talentpoints(),
+												nextLevelStats.attributepoints());
 				}
-				
+
 				currentXp -= GetNextLevelXp();
 				SetLevel(GetLevel() + 1);
 			}
@@ -1432,7 +1442,7 @@ namespace mmo
 		UpdateAttributePoints();
 		UpdateTalentPoints();
 
-		const auto* levelStats = &m_classEntry->levelbasevalues(level - 1);
+		const auto *levelStats = &m_classEntry->levelbasevalues(level - 1);
 		SetModifierValue(GetUnitModByStat(0), unit_mod_type::BaseValue, levelStats->stamina() + m_attributePointEnhancements[0]);
 		SetModifierValue(GetUnitModByStat(1), unit_mod_type::BaseValue, levelStats->strength() + m_attributePointEnhancements[1]);
 		SetModifierValue(GetUnitModByStat(2), unit_mod_type::BaseValue, levelStats->agility() + m_attributePointEnhancements[2]);
@@ -1455,7 +1465,7 @@ namespace mmo
 		{
 			for (int i = 0; i < m_classEntry->healthstatsources_size(); ++i)
 			{
-				const auto& statSource = m_classEntry->healthstatsources(i);
+				const auto &statSource = m_classEntry->healthstatsources(i);
 				if (statSource.statid() < 5)
 				{
 					maxHealth += UnitStats::DeriveFromBaseWithFactor(Get<uint32>(object_fields::StatStamina + statSource.statid()), 20, statSource.factor());
@@ -1464,7 +1474,7 @@ namespace mmo
 
 			for (int i = 0; i < m_classEntry->manastatsources_size(); ++i)
 			{
-				const auto& statSource = m_classEntry->manastatsources(i);
+				const auto &statSource = m_classEntry->manastatsources(i);
 				if (statSource.statid() < 5)
 				{
 					maxMana += UnitStats::DeriveFromBaseWithFactor(Get<uint32>(object_fields::StatStamina + statSource.statid()), 20, statSource.factor());
@@ -1539,7 +1549,7 @@ namespace mmo
 		GameUnitS::SetLevel(newLevel);
 
 		// Update next level xp
-		uint32 xpToNextLevel = 400 * newLevel;		// Dummy default value
+		uint32 xpToNextLevel = 400 * newLevel; // Dummy default value
 		if (static_cast<int32>(newLevel) - 1 >= m_classEntry->xptonextlevel_size())
 		{
 			if (m_classEntry->xptonextlevel_size() == 0)
@@ -1563,7 +1573,7 @@ namespace mmo
 	void GamePlayerS::UpdateDamage()
 	{
 		uint32 attackSpeed = 2000;
-		float minDamage= 1.0f;
+		float minDamage = 1.0f;
 		float maxDamage = 2.0f;
 
 		// Derive min and max damage from wielded weapon if any
@@ -1595,9 +1605,9 @@ namespace mmo
 			baseValue = static_cast<float>(Get<uint32>(object_fields::Level)) * m_classEntry->attackpowerperlevel();
 
 			// Apply stat values
-			for(int i = 0; i < m_classEntry->attackpowerstatsources_size(); ++i)
+			for (int i = 0; i < m_classEntry->attackpowerstatsources_size(); ++i)
 			{
-				const auto& statSource = m_classEntry->attackpowerstatsources(i);
+				const auto &statSource = m_classEntry->attackpowerstatsources(i);
 				if (statSource.statid() < 5)
 				{
 					baseValue += static_cast<float>(Get<uint32>(object_fields::StatStamina + statSource.statid())) * statSource.factor();
@@ -1628,7 +1638,7 @@ namespace mmo
 			// Apply stat values
 			for (int i = 0; i < m_classEntry->armorstatsources_size(); ++i)
 			{
-				const auto& statSource = m_classEntry->armorstatsources(i);
+				const auto &statSource = m_classEntry->armorstatsources(i);
 				if (statSource.statid() < 5)
 				{
 					armor += static_cast<float>(Get<uint32>(object_fields::StatStamina + statSource.statid())) * statSource.factor();
@@ -1639,7 +1649,7 @@ namespace mmo
 		const int32 totalArmor = static_cast<int32>(GetModifierValue(unit_mods::Armor, unit_mod_type::TotalValue) * GetModifierValue(unit_mods::Armor, unit_mod_type::TotalPct));
 
 		Set<int32>(object_fields::Armor, armor);
-		Set<int32>(object_fields::PosStatArmor, totalArmor > 0 ? totalArmor : 0);	// TODO
+		Set<int32>(object_fields::PosStatArmor, totalArmor > 0 ? totalArmor : 0); // TODO
 		Set<int32>(object_fields::NegStatArmor, totalArmor < 0 ? totalArmor : 0);
 	}
 
@@ -1680,7 +1690,7 @@ namespace mmo
 
 		// Calculate points spent in talents
 		uint32 spentPoints = 0;
-		for (const auto& [talentId, rank] : m_talents)
+		for (const auto &[talentId, rank] : m_talents)
 		{
 			spentPoints += rank + 1;
 		}
@@ -1697,7 +1707,7 @@ namespace mmo
 		Set<uint32>(object_fields::TalentPoints, availableTalentPoints - spentPoints);
 	}
 
-	const String& GamePlayerS::GetName() const
+	const String &GamePlayerS::GetName() const
 	{
 		// TODO!
 		static const String unknown = "Unknown";
@@ -1748,7 +1758,7 @@ namespace mmo
 		}
 	}
 
-	void GamePlayerS::ApplyMovementInfo(const MovementInfo& info)
+	void GamePlayerS::ApplyMovementInfo(const MovementInfo &info)
 	{
 		// Call parent implementation first
 		GameUnitS::ApplyMovementInfo(info);
@@ -1762,23 +1772,23 @@ namespace mmo
 		}
 	}
 
-	io::Writer& operator<<(io::Writer& w, GamePlayerS const& object)
+	io::Writer &operator<<(io::Writer &w, GamePlayerS const &object)
 	{
 		// Write super class data
-		w << reinterpret_cast<GameUnitS const&>(object);
+		w << reinterpret_cast<GameUnitS const &>(object);
 		w << object.m_inventory;
 		w << io::write_range(object.m_attributePointEnhancements);
 
 		// Write known spell ids
 		w << io::write<uint32>(object.m_spells.size());
-		for (const auto& spell : object.m_spells)
+		for (const auto &spell : object.m_spells)
 		{
 			w << io::write<uint32>(spell->id());
 		}
 
 		// Write talent data
 		w << io::write<uint32>(object.m_talents.size());
-		for (const auto& [talentId, rank] : object.m_talents)
+		for (const auto &[talentId, rank] : object.m_talents)
 		{
 			w << io::write<uint32>(talentId);
 			w << io::write<uint8>(rank);
@@ -1787,10 +1797,10 @@ namespace mmo
 		return w;
 	}
 
-	io::Reader& operator>>(io::Reader& r, GamePlayerS& object)
+	io::Reader &operator>>(io::Reader &r, GamePlayerS &object)
 	{
 		// Read super class data
-		r >> reinterpret_cast<GameUnitS&>(object);
+		r >> reinterpret_cast<GameUnitS &>(object);
 		r >> object.m_inventory;
 		r >> io::read_range(object.m_attributePointEnhancements);
 		// Read spells
@@ -1802,7 +1812,7 @@ namespace mmo
 			uint32 spellId;
 			r >> io::read<uint32>(spellId);
 
-			const auto* spell = object.GetProject().spells.getById(spellId);
+			const auto *spell = object.GetProject().spells.getById(spellId);
 			if (spell)
 			{
 				object.m_spells.emplace(spell);
