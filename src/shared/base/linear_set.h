@@ -12,8 +12,10 @@
 
 #pragma once
 
-#include <vector>
 #include "macros.h"
+
+#include <vector>
+#include <algorithm>
 
 namespace mmo
 {
