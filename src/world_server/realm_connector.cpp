@@ -419,9 +419,6 @@ namespace mmo
 
 void RealmConnector::SendSaveInventoryItems(uint64 characterGuid, uint32 operationId, const std::vector<ItemData>& items)
 {
-	ILOG("RealmConnector::SendSaveInventoryItems called: characterGuid=" << log_hex_digit(characterGuid) 
-		<< ", operationId=" << operationId << ", items.size()=" << items.size());
-	
 	// CRITICAL: Capture items by value to ensure they're not destroyed before async send
 	sendSinglePacket([characterGuid, operationId, items](auth::OutgoingPacket& outPacket)
 	{
@@ -438,10 +435,10 @@ void RealmConnector::SendSaveInventoryItems(uint64 characterGuid, uint32 operati
 
 		outPacket.Finish();
 	});
-	
-	DLOG("Packet sent successfully");
-}	void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 operationId, const std::vector<uint16>& slots)
-	{
+}
+
+void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 operationId, const std::vector<uint16>& slots)
+{
 		// CRITICAL: Capture slots by value to ensure they're not destroyed before async send
 		sendSinglePacket([characterGuid, operationId, slots](auth::OutgoingPacket& outPacket)
 		{

@@ -771,7 +771,7 @@ namespace mmo
 		}
 	}
 	
-	void MySQLDatabase::UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position, const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money, const std::vector<ItemData>& items,
+	void MySQLDatabase::UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position, const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money,
 		uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing, std::array<uint32, 5> attributePointsSpent, const std::vector<uint32>& spellIds, const std::unordered_map<uint32, uint32>& talentRanks, uint32 timePlayed)
 	{
 		mysql::Transaction transaction(m_connection);
@@ -806,60 +806,7 @@ namespace mmo
 			throw mysql::Exception("Could not update character data!");
 		}
 
-		// NOTE: Inventory persistence has been moved to SaveInventoryItems/DeleteInventoryItems
-		// This old code path is kept for backward compatibility but will be removed eventually
-		// Only process if items vector is not empty (legacy callers)
-		if (!items.empty())
-		{
-			WLOG("UpdateCharacter called with inventory data - this is deprecated! Use SaveInventoryItems/DeleteInventoryItems instead");
-			
-			// Delete character items
-			if (!m_connection.Execute("DELETE FROM `character_items` WHERE `owner`=" + std::to_string(characterId) + ";"))
-			{
-				// There was an error
-				PrintDatabaseError();
-				throw mysql::Exception("Could not update character inventory data!");
-			}
-
-			// Save character items
-			std::ostringstream strm;
-			strm << "INSERT INTO `character_items` (`owner`, `entry`, `slot`, `creator`, `count`, `durability`) VALUES ";
-			bool isFirstItem = true;
-			for (auto& item : items)
-			{
-				// Don't save buyback slots into the database!
-				if (Inventory::IsBuyBackSlot(item.slot))
-					continue;
-
-				if (!isFirstItem) strm << ",";
-				else
-				{
-					isFirstItem = false;
-				}
-
-				strm << "(" << characterId << "," << item.entry << "," << item.slot << ",";
-				if (item.creator == 0)
-				{
-					strm << "NULL";
-				}
-				else
-				{
-					strm << item.creator;
-				}
-				strm << "," << static_cast<uint16>(item.stackCount) << "," << item.durability << ")";
-			}
-			strm << ";";
-
-			if (!isFirstItem)
-			{
-				if (!m_connection.Execute(strm.str()))
-				{
-					// There was an error
-					PrintDatabaseError();
-					throw mysql::Exception("Could not update character inventory data!");
-				}
-			}
-		}
+		// NOTE: Inventory is now persisted separately via SaveInventoryItems/DeleteInventoryItems
 
 		// Save character spells
 		if (!m_connection.Execute(std::format(
@@ -1546,8 +1493,6 @@ namespace mmo
 
 void MySQLDatabase::SaveInventoryItems(uint64 characterId, const std::vector<ItemData>& items)
 {
-	DLOG("SaveInventoryItems: Saving " << items.size() << " items for character " << characterId);
-
 	try
 	{
 		mysql::Transaction transaction(m_connection);
@@ -1558,7 +1503,6 @@ void MySQLDatabase::SaveInventoryItems(uint64 characterId, const std::vector<Ite
 		std::ostringstream deleteStrm;
 		deleteStrm << "DELETE FROM `character_items` WHERE `owner` = " << characterId << ";";
 		
-		DLOG("Executing SQL: " << deleteStrm.str());
 		if (!m_connection.Execute(deleteStrm.str()))
 		{
 			PrintDatabaseError();
@@ -1568,7 +1512,6 @@ void MySQLDatabase::SaveInventoryItems(uint64 characterId, const std::vector<Ite
 		// If no items to save (empty inventory), we're done after deletion
 		if (items.empty())
 		{
-			DLOG("No items to save after deletion for character " << characterId);
 			transaction.Commit();
 			return;
 		}
@@ -1584,7 +1527,6 @@ void MySQLDatabase::SaveInventoryItems(uint64 characterId, const std::vector<Ite
 			// Don't save buyback slots into the database!
 			if (Inventory::IsBuyBackSlot(item.slot))
 			{
-				DLOG("Skipping buyback slot " << item.slot);
 				continue;
 			}
 
@@ -1614,17 +1556,12 @@ void MySQLDatabase::SaveInventoryItems(uint64 characterId, const std::vector<Ite
 		// Only execute if we have items to save (after filtering buyback slots)
 		if (!isFirstItem)
 		{
-			DLOG("Executing SQL: " << insertStrm.str());
 			if (!m_connection.Execute(insertStrm.str()))
 			{
 				PrintDatabaseError();
 				throw mysql::Exception("Could not save inventory items!");
 			}
 			ILOG("Successfully saved inventory items for character " << characterId);
-		}
-		else
-		{
-			DLOG("All items were buyback slots, nothing to insert for character " << characterId);
 		}
 
 		transaction.Commit();

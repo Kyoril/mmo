@@ -700,9 +700,7 @@ namespace mmo
 			}
 		};
 		
-		// NOTE: Inventory is now persisted via the new SaveInventoryItems/DeleteInventoryItems methods
-		// Pass empty vector to UpdateCharacter for backward compatibility during refactoring
-		std::vector<ItemData> emptyInventory;
+		// NOTE: Inventory is persisted separately via SaveInventoryItems/DeleteInventoryItems
 		
 		m_database.asyncRequest(std::move(handler), &IDatabase::UpdateCharacter, characterGuid, mapId, player.GetMovementInfo().position,
 			player.GetMovementInfo().facing, player.Get<uint32>(object_fields::Level),
@@ -712,7 +710,6 @@ namespace mmo
 			player.Get<uint32>(object_fields::Rage), 
 			player.Get<uint32>(object_fields::Energy),
 			player.Get<uint32>(object_fields::Money),
-			emptyInventory,
 			player.GetBindMap(),
 			player.GetBindPosition(),
 			player.GetBindFacing(),

@@ -38,18 +38,15 @@ namespace mmo
 		, m_isDirty(false)
 	{
 		// Connect to item change signals to automatically mark inventory as dirty
-		m_inventoryConnections += itemInstanceCreated.connect([this](std::shared_ptr<GameItemS>, uint16 slot) {
-			DLOG("Item created at slot " << slot << " - marking inventory dirty");
+		m_inventoryConnections += itemInstanceCreated.connect([this](std::shared_ptr<GameItemS>, uint16) {
 			MarkDirty();
 		});
 
-		m_inventoryConnections += itemInstanceUpdated.connect([this](std::shared_ptr<GameItemS>, uint16 slot) {
-			DLOG("Item updated at slot " << slot << " - marking inventory dirty");
+		m_inventoryConnections += itemInstanceUpdated.connect([this](std::shared_ptr<GameItemS>, uint16) {
 			MarkDirty();
 		});
 
-		m_inventoryConnections += itemInstanceDestroyed.connect([this](std::shared_ptr<GameItemS>, uint16 slot) {
-			DLOG("Item destroyed at slot " << slot << " - marking inventory dirty");
+		m_inventoryConnections += itemInstanceDestroyed.connect([this](std::shared_ptr<GameItemS>, uint16) {
 			MarkDirty();
 		});
 	}
@@ -288,10 +285,11 @@ namespace mmo
 		std::bind(&Inventory::OnItemDespawned, this, std::placeholders::_1));
 
 	// Notify about item creation
-	DLOG("FIRING itemInstanceCreated signal for slot " << slot);
-	itemInstanceCreated(item, slot);		// Update player fields based on slot type
-		UpdatePlayerFieldsForNewItem(item, slot);
-	}
+	itemInstanceCreated(item, slot);
+
+	// Update player fields based on slot type
+	UpdatePlayerFieldsForNewItem(item, slot);
+}
 
 	// Helper method to update player fields when adding a new item
 	void Inventory::UpdatePlayerFieldsForNewItem(std::shared_ptr<GameItemS> item, uint16 slot)
@@ -629,28 +627,23 @@ namespace mmo
 				}
 			}
 
-			// Notify about destruction
-			// Note: Even if sold=true (moved to buyback), we fire the signal to mark inventory dirty
-			if (!sold)
-			{
-				DLOG("FIRING itemInstanceDestroyed signal for slot " << absoluteSlot);
-				itemInstanceDestroyed(item, absoluteSlot);
-			}
-			else
-			{
-				// Item was sold and moved to buyback - still an inventory change that needs saving
-				DLOG("FIRING itemInstanceUpdated signal for sold item at slot " << absoluteSlot << " (moved to buyback)");
-				itemInstanceUpdated(item, absoluteSlot);
-			}
+		// Notify about destruction
+		// Note: Even if sold=true (moved to buyback), we fire the signal to mark inventory dirty
+		if (!sold)
+		{
+			itemInstanceDestroyed(item, absoluteSlot);
 		}
 		else
 		{
-			item->Set<uint32>(object_fields::StackCount, stackCount - stacks);
-			DLOG("FIRING itemInstanceUpdated signal for slot " << absoluteSlot);
-			itemInstanceUpdated(it->second, absoluteSlot);
+			// Item was sold and moved to buyback - still an inventory change that needs saving
+			itemInstanceUpdated(item, absoluteSlot);
 		}
-		
-		// If the item has been sold...
+	}
+	else
+	{
+		item->Set<uint32>(object_fields::StackCount, stackCount - stacks);
+		itemInstanceUpdated(it->second, absoluteSlot);
+	}		// If the item has been sold...
 		if (sold)
 		{
 			// Find the next free buyback slot
@@ -1833,7 +1826,6 @@ namespace mmo
 	
 	// Fire signals for the swap - these need to fire unconditionally
 	// UpdateSlotContents only fires if container ownership changes, which isn't always the case
-	DLOG("FIRING itemInstanceUpdated signals for swap: slotA=" << slotA << ", slotB=" << slotB);
 	if (srcItem)
 	{
 		itemInstanceUpdated(srcItem, slotB);
@@ -2017,34 +2009,29 @@ namespace mmo
 			{
 				OnSetItemUnequipped(item->GetEntry().itemset());
 			}
-		}
+	}
+}
+
+void Inventory::SetRepository(IInventoryRepository* repository) noexcept
+{
+	m_repository = repository;
+}
+
+bool Inventory::SaveToRepository()
+{
+	if (!m_repository)
+	{
+		// No repository configured - this is normal on Realm Server
+		return false;
 	}
 
-	void Inventory::SetRepository(IInventoryRepository* repository) noexcept
+	if (!m_isDirty)
 	{
-		m_repository = repository;
-		DLOG("Inventory repository set: " << (repository ? "valid" : "null"));
+		// No changes to save
+		return true;
 	}
-
-	bool Inventory::SaveToRepository()
-	{
-		if (!m_repository)
-		{
-			// No repository configured - this is normal on Realm Server
-			DLOG("Cannot save inventory: repository is not set (normal on Realm Server)");
-			return false;
-		}
-
-		if (!m_isDirty)
-		{
-			// No changes to save
-			DLOG("Inventory is not dirty, skipping save");
-			return true;
-		}
 
 	ILOG("Saving inventory to repository (dirty flag set)");
-	DLOG("Current inventory has " << m_itemsBySlot.size() << " items in m_itemsBySlot");
-
 	// Convert current inventory state to InventoryItemData
 	std::vector<InventoryItemData> items;
 	items.reserve(m_itemsBySlot.size());
@@ -2054,15 +2041,14 @@ namespace mmo
 		// Skip buyback slots - these are temporary
 		if (IsBuyBackSlot(slot))
 		{
-			DLOG("Skipping buyback slot " << slot);
 			continue;
 		}
 		
-		DLOG("Adding item to save: slot=" << slot << ", entry=" << item->GetEntry().id());			InventoryItemData data;
-			data.entry = item->GetEntry().id();
-			data.slot = slot;
-			data.stackCount = static_cast<uint16>(item->Get<int32>(object_fields::StackCount));
-			data.creator = item->Get<uint64>(object_fields::Creator);
+		InventoryItemData data;
+		data.entry = item->GetEntry().id();
+		data.slot = slot;
+		data.stackCount = static_cast<uint16>(item->Get<int32>(object_fields::StackCount));
+		data.creator = item->Get<uint64>(object_fields::Creator);
 		data.contained = item->Get<uint64>(object_fields::Contained);
 		data.durability = item->Get<uint32>(object_fields::Durability);
 		data.randomPropertyIndex = 0;  // TODO: Implement if needed
@@ -2081,37 +2067,33 @@ namespace mmo
 	}
 
 	// Save all items (Realm Server will delete-then-insert for clean state)
-	const bool success = m_repository->SaveAllItems(m_owner.GetGuid(), items);		if (success)
+	const bool success = m_repository->SaveAllItems(m_owner.GetGuid(), items);
+	if (success)
+	{
+		// Commit transaction
+		if (!m_repository->Commit())
 		{
-			// Commit transaction
-			if (!m_repository->Commit())
-			{
-				ELOG("Failed to commit inventory transaction");
-				return false;
-			}
-
-			// Clear dirty flag
-			m_isDirty = false;
-			DLOG("Saved " << items.size() << " inventory items for character " << log_hex_digit(m_owner.GetGuid()));
-			return true;
-		}
-		else
-		{
-			// Rollback on failure
-			m_repository->Rollback();
-			ELOG("Failed to save inventory items");
+			ELOG("Failed to commit inventory transaction");
 			return false;
 		}
-	}
 
-	void Inventory::MarkDirty() noexcept
-	{
-		if (!m_isDirty)
-		{
-			DLOG("Inventory marked as dirty");
-		}
-		m_isDirty = true;
+		// Clear dirty flag
+		m_isDirty = false;
+		return true;
 	}
+	else
+	{
+		// Rollback on failure
+		m_repository->Rollback();
+		ELOG("Failed to save inventory items");
+		return false;
+	}
+}
+
+void Inventory::MarkDirty() noexcept
+{
+	m_isDirty = true;
+}
 
 	bool Inventory::IsDirty() const noexcept
 	{
