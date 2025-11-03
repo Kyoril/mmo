@@ -2270,4 +2270,14 @@ namespace mmo
 
 		return true;
 	}
+
+	bool Inventory::IsOwnerAlive() const
+	{
+		return m_owner.IsAlive();
+	}
+
+	bool Inventory::IsOwnerInCombat() const
+	{
+		return m_owner.IsInCombat();
+	}
 }

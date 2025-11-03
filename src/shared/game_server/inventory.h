@@ -270,6 +270,8 @@ public:
 	void SwapItemSlots(uint16 slot1, uint16 slot2) override;
 	bool SplitStack(uint16 sourceSlot, uint16 destSlot, uint16 count) override;
 	bool MergeStacks(uint16 sourceSlot, uint16 destSlot) override;
+	bool IsOwnerAlive() const override;
+	bool IsOwnerInCombat() const override;
 
 	/// Gets the command factory for creating inventory commands.
 	/// @return Reference to the inventory command factory.

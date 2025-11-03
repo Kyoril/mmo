@@ -81,22 +81,23 @@ namespace mmo
 			if (m_character->GetGroupId() != 0)
 			{
 				m_character->ForEachSubscriberInSight([&slot, this](TileSubscriber &subscriber)
-													  {
-						if (subscriber.GetGameUnit().GetGuid() == m_character->GetGuid())
-						{
-							return;
-						}
+				{
+					if (subscriber.GetGameUnit().GetGuid() == m_character->GetGuid())
+					{
+						return;
+					}
 
-						if (!subscriber.GetGameUnit().IsPlayer())
-						{
-							return;
-						}
+					if (!subscriber.GetGameUnit().IsPlayer())
+					{
+						return;
+					}
 
-						auto& player = subscriber.GetGameUnit().AsPlayer();
-						if (player.GetGroupId() == m_character->GetGroupId())
-						{
-							player.OnItemAdded(slot.first, slot.second, true, false);
-						} });
+					auto& player = subscriber.GetGameUnit().AsPlayer();
+					if (player.GetGroupId() == m_character->GetGroupId())
+					{
+						player.OnItemAdded(slot.first, slot.second, true, false);
+					}
+				});
 			}
 		}
 
@@ -272,19 +273,18 @@ namespace mmo
 			return;
 		}
 
-		auto &inv = m_character->GetInventory();
-		auto &factory = inv.GetCommandFactory();
+		const InventoryCommandFactory& factory = m_character->GetInventory().GetCommandFactory();
 
-		auto command = factory.CreateSwapItems(
+		const std::unique_ptr<IInventoryCommand> command = factory.CreateSwapItems(
 			InventorySlot::FromRelative(srcBag, srcSlot),
 			InventorySlot::FromRelative(dstBag, dstSlot));
 
-		auto result = command->Execute();
-		if (result.IsFailure())
-		{
-			ELOG("Failed to swap items: " << result);
-			SendInventoryError(result);
-		}
+		command->Execute()
+			.OnFailure([this](const InventoryChangeFailure error)
+				{
+					ELOG("Failed to swap items: " << error);
+					SendInventoryError(error);
+				});
 	}
 
 	void Player::OnSwapInvItem(uint16 opCode, uint32 size, io::Reader &contentReader)
@@ -296,19 +296,17 @@ namespace mmo
 			return;
 		}
 
-		auto &inv = m_character->GetInventory();
-		auto &factory = inv.GetCommandFactory();
-
-		auto command = factory.CreateSwapItems(
+		const InventoryCommandFactory& factory = m_character->GetInventory().GetCommandFactory();
+		const auto command = factory.CreateSwapItems(
 			InventorySlot::FromRelative(player_inventory_slots::Bag_0, srcSlot),
 			InventorySlot::FromRelative(player_inventory_slots::Bag_0, dstSlot));
 
-		auto result = command->Execute();
-		if (result.IsFailure())
-		{
-			ELOG("Failed to swap inventory items: " << result);
-			SendInventoryError(result);
-		}
+		command->Execute()
+			.OnFailure([this](const InventoryChangeFailure error)
+				{
+					ELOG("Failed to swap inventory items: " << error);
+					SendInventoryError(error);
+				});
 	}
 
 	void Player::OnSplitItem(uint16 opCode, uint32 size, io::Reader &contentReader)

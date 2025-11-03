@@ -21,8 +21,8 @@
 - Transaction-wrapped for consistency
 
 #### 3. Realm Server Handlers (src/realm_server/world.cpp)
-- OnSaveInventoryItems: Connected to database via syncRequest
-- OnDeleteInventoryItems: Connected to database via syncRequest
+- OnSaveInventoryItems: Connected to database via syncRequest
+- OnDeleteInventoryItems: Connected to database via syncRequest
 - Both send InventoryOperationResult response after DB completion
 
 ### SQL Patterns:

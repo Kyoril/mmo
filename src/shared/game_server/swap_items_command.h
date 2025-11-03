@@ -10,6 +10,12 @@
 namespace mmo
 {
     class GameItemS;
+    class GameBagS;
+
+    namespace proto
+    {
+        class ItemEntry;
+    }
 
     /**
      * @brief Context interface for swap items command execution.
@@ -30,6 +36,33 @@ namespace mmo
          * @return The item at the slot, or nullptr if slot is empty.
          */
         virtual std::shared_ptr<GameItemS> GetItemAtSlot(uint16 slot) const = 0;
+
+        /**
+         * @brief Gets the bag at a specific slot.
+         * @param slot The absolute slot index to query.
+         * @return The bag at the slot, or nullptr if slot is empty or not a bag.
+         */
+        virtual std::shared_ptr<GameBagS> GetBagAtSlot(uint16 slot) const = 0;
+
+        /**
+         * @brief Validates if an item can be placed in a specific slot.
+         * @param slot The absolute slot index to validate.
+         * @param entry The item entry to validate.
+         * @return Okay if valid, error code otherwise.
+         */
+        virtual InventoryChangeFailure IsValidSlot(uint16 slot, const proto::ItemEntry& entry) const = 0;
+
+        /**
+         * @brief Checks if the owner is alive.
+         * @return True if owner is alive, false otherwise.
+         */
+        virtual bool IsOwnerAlive() const = 0;
+
+        /**
+         * @brief Checks if the owner is in combat.
+         * @return True if owner is in combat, false otherwise.
+         */
+        virtual bool IsOwnerInCombat() const = 0;
 
         /**
          * @brief Swaps items between two slots.

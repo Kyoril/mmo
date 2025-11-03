@@ -2,6 +2,8 @@
 
 #include "swap_items_command.h"
 #include "game_server/objects/game_item_s.h"
+#include "game_server/objects/game_bag_s.h"
+#include "game_server/inventory.h"
 
 namespace mmo
 {
@@ -97,6 +99,13 @@ namespace mmo
                 inventory_change_failure::ItemNotFound);
         }
 
+        // Check if owner is alive
+        if (!m_context.IsOwnerAlive())
+        {
+            return InventoryResult<void>::Failure(
+                inventory_change_failure::YouAreDead);
+        }
+
         // Check destination item (may be null)
         auto destItem = m_context.GetItemAtSlot(m_destSlot.GetAbsolute());
 
@@ -110,31 +119,100 @@ namespace mmo
                     inventory_change_failure::InventoryFull);
             }
 
-			// Check source has enough stacks
-			const uint32 sourceStacks = sourceItem->Get<uint32>(object_fields::StackCount);
-			if (m_splitCount >= sourceStacks)
-			{
-				return InventoryResult<void>::Failure(
-					inventory_change_failure::TriedToSplitMoreThanCount);
-			}            return InventoryResult<void>::Success();
+            // Check source has enough stacks
+            const uint32 sourceStacks = sourceItem->Get<uint32>(object_fields::StackCount);
+            if (m_splitCount >= sourceStacks)
+            {
+                return InventoryResult<void>::Failure(
+                    inventory_change_failure::TriedToSplitMoreThanCount);
+            }
+
+            return InventoryResult<void>::Success();
         }
 
-		// Validate stack merge
-		if (destItem && CanMergeStacks())
-		{
-			const uint32 maxStack = sourceItem->GetEntry().maxstack();
-			const uint32 destStacks = destItem->Get<uint32>(object_fields::StackCount);
-			
-			// Check if destination has room
-			if (destStacks >= maxStack)
-			{
-				return InventoryResult<void>::Failure(
-					inventory_change_failure::ItemCantStack);
-			}
-		}
+        // If source slot is a bag and bag is not empty
+        if (sourceItem->IsContainer())
+        {
+            auto sourceBag = std::static_pointer_cast<GameBagS>(sourceItem);
+            if (!sourceBag->IsEmpty())
+            {
+                return InventoryResult<void>::Failure(
+                    inventory_change_failure::CanOnlyDoWithEmptyBags);
+            }
+        }
 
-		// For simple swap, source and dest must be different
-        if (m_sourceSlot.GetAbsolute() == m_destSlot.GetAbsolute())
+        // Destination bag must be empty as well
+        if (destItem && destItem->IsContainer())
+        {
+            auto destBag = std::static_pointer_cast<GameBagS>(destItem);
+            if (!destBag->IsEmpty())
+            {
+                return InventoryResult<void>::Failure(
+                    inventory_change_failure::CanOnlyDoWithEmptyBags);
+            }
+        }
+
+        // Trying to put an equipped bag out of the bag bar slots?
+        const uint16 srcAbsSlot = m_sourceSlot.GetAbsolute();
+        const uint16 dstAbsSlot = m_destSlot.GetAbsolute();
+
+        if (Inventory::IsBagBarSlot(srcAbsSlot) && !Inventory::IsBagBarSlot(dstAbsSlot))
+        {
+            // Check that the new slot is not inside the bag itself
+            auto bag = m_context.GetBagAtSlot(dstAbsSlot);
+            if (bag && bag == sourceItem)
+            {
+                return InventoryResult<void>::Failure(
+                    inventory_change_failure::BagsCantBeWrapped);
+            }
+        }
+
+        // Can't change equipment while in combat (except weapons)
+        if (m_context.IsOwnerInCombat() && Inventory::IsEquipmentSlot(srcAbsSlot))
+        {
+            const uint8 equipSlot = srcAbsSlot & 0xFF;
+            if (equipSlot != player_equipment_slots::Mainhand &&
+                equipSlot != player_equipment_slots::Offhand &&
+                equipSlot != player_equipment_slots::Ranged)
+            {
+                return InventoryResult<void>::Failure(
+                    inventory_change_failure::NotInCombat);
+            }
+        }
+
+        // Verify destination slot for source item
+        auto result = m_context.IsValidSlot(dstAbsSlot, sourceItem->GetEntry());
+        if (result != inventory_change_failure::Okay)
+        {
+            return InventoryResult<void>::Failure(result);
+        }
+
+        // If there is an item in the destination slot, also verify the source slot
+        if (destItem)
+        {
+            result = m_context.IsValidSlot(srcAbsSlot, destItem->GetEntry());
+            if (result != inventory_change_failure::Okay)
+            {
+                return InventoryResult<void>::Failure(result);
+            }
+        }
+
+        // Validate stack merge
+        if (destItem && CanMergeStacks())
+        {
+            const uint32 maxStack = sourceItem->GetEntry().maxstack();
+            const uint32 destStacks = destItem->Get<uint32>(object_fields::StackCount);
+
+            // Check if destination has room
+            if (destStacks >= maxStack)
+            {
+                return InventoryResult<void>::Failure(
+                    inventory_change_failure::ItemCantStack);
+            }
+        }
+
+        // For simple swap, source and dest must be different
+        if (srcAbsSlot == dstAbsSlot)
         {
             return InventoryResult<void>::Failure(
                 inventory_change_failure::ItemNotFound);
