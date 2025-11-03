@@ -169,36 +169,18 @@ namespace mmo
 	{
 		const std::vector<GameObjectS*> objects{ item.get() };
 		NotifyObjectsSpawned(objects);
-		
-		// Mark inventory as dirty for persistence
-		if (m_character)
-		{
-			m_character->GetInventory().MarkDirty();
-		}
 	}
 
 	void Player::OnItemUpdated(std::shared_ptr<GameItemS> item, uint16 slot)
 	{
 		const std::vector<GameObjectS*> objects{ item.get() };
 		NotifyObjectsUpdated(objects);
-		
-		// Mark inventory as dirty for persistence
-		if (m_character)
-		{
-			m_character->GetInventory().MarkDirty();
-		}
 	}
 
 	void Player::OnItemDestroyed(std::shared_ptr<GameItemS> item, uint16 slot)
 	{
 		const std::vector<GameObjectS*> objects{ item.get() };
 		NotifyObjectsDespawned(objects);
-		
-		// Mark inventory as dirty for persistence
-		if (m_character)
-		{
-			m_character->GetInventory().MarkDirty();
-		}
 	}
 
 	void Player::UpdateCharacterGroup(uint64 groupId)

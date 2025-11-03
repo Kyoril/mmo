@@ -704,34 +704,6 @@ namespace mmo
 		return RemoveItem(slot, stacks);
 	}
 
-	InventoryChangeFailure Inventory::SwapItems(uint16 slotA, uint16 slotB)
-	{
-		auto srcItem = GetItemAtSlot(slotA);
-		auto dstItem = GetItemAtSlot(slotB);
-
-		// Validate swap prerequisites
-		if (auto result = ValidateSwapPrerequisites(srcItem, dstItem, slotA, slotB); result != inventory_change_failure::Okay)
-		{
-			return result;
-		}
-
-		// Try to merge stacks if possible
-		if (dstItem && CanMergeItems(srcItem, dstItem))
-		{
-			return MergeItemStacks(srcItem, dstItem, slotA, slotB);
-		}
-
-		// Validate bag constraints
-		if (auto result = ValidateBagConstraints(srcItem, slotB); result != inventory_change_failure::Okay)
-		{
-			return result;
-		}
-
-		// Perform the actual swap
-		PerformItemSwap(srcItem, dstItem, slotA, slotB);
-		return inventory_change_failure::Okay;
-	}
-
 	namespace
 	{
 		weapon_prof::Type weaponProficiency(uint32 subclass)
@@ -1150,7 +1122,7 @@ namespace mmo
 		return nullptr;
 	}
 
-	std::shared_ptr<GameItemS> Inventory::GetWeaponByAttackType(WeaponAttack attackType, bool nonbroken, bool useable) const
+	std::shared_ptr<GameItemS> Inventory::GetWeaponByAttackType(WeaponAttack attackType, bool nonbroken, bool usable) const
 	{
 		uint8 slot;
 
@@ -1184,7 +1156,7 @@ namespace mmo
 			return nullptr;
 		}
 
-		if (useable && !m_owner.CanUseWeapon(attackType))
+		if (usable && !m_owner.CanUseWeapon(attackType))
 		{
 			return nullptr;
 		}
@@ -2085,13 +2057,13 @@ namespace mmo
 			m_isDirty = false;
 			return true;
 		}
-		else
-		{
-			// Rollback on failure
-			m_repository->Rollback();
-			ELOG("Failed to save inventory items");
-			return false;
-		}
+
+		// Rollback on failure
+		m_repository->Rollback();
+
+		ELOG("Failed to save inventory items");
+
+		return false;
 	}
 
 	void Inventory::MarkDirty() noexcept
@@ -2147,10 +2119,20 @@ namespace mmo
 	// ISwapItemsCommandContext Implementation
 	// ============================================================================
 
-	void Inventory::SwapItemSlots(uint16 slot1, uint16 slot2)
+	void Inventory::SwapItemSlots(const uint16 slot1, const uint16 slot2)
 	{
-		// Delegate to existing SwapItems method
-		SwapItems(slot1, slot2);
+		const auto srcItem = GetItemAtSlot(slot1);
+		const auto dstItem = GetItemAtSlot(slot2);
+
+		// Try to merge stacks if possible
+		if (dstItem && CanMergeItems(srcItem, dstItem))
+		{
+			MergeItemStacks(srcItem, dstItem, slot1, slot2);
+			return;
+		}
+
+		// Perform the actual swap
+		PerformItemSwap(srcItem, dstItem, slot1, slot2);
 	}
 
 	bool Inventory::SplitStack(uint16 sourceSlot, uint16 destSlot, uint16 count)

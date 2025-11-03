@@ -480,7 +480,6 @@ namespace mmo
 		uint64 vendorGuid, itemGuid;
 		if (!(contentReader >> io::read<uint64>(vendorGuid) >> io::read<uint64>(itemGuid)))
 		{
-			WLOG("Failed to read vendor guid and item guid");
 			return;
 		}
 
@@ -488,7 +487,6 @@ namespace mmo
 		GameCreatureS* vendor = m_character->GetWorldInstance()->FindByGuid<GameCreatureS>(vendorGuid);
 		if (!vendor)
 		{
-			WLOG("Can't find vendor!");
 			return;
 		}
 
@@ -501,29 +499,39 @@ namespace mmo
 		uint16 itemSlot = 0;
 		if (!m_character->GetInventory().FindItemByGUID(itemGuid, itemSlot))
 		{
-			WLOG("Can't find item!");
+			SendInventoryError(inventory_change_failure::ItemNotFound);
 			return;
 		}
 
 		// Find the item by it's guid
-		auto item = m_character->GetInventory().GetItemAtSlot(itemSlot);
+		const auto item = m_character->GetInventory().GetItemAtSlot(itemSlot);
 		if (!item)
 		{
-			WLOG("Can't find item at slot!");
+			SendInventoryError(inventory_change_failure::ItemNotFound);
 			return;
 		}
 
-		uint32 stack = item->GetStackCount();
-		uint32 money = stack * item->GetEntry().sellprice();
+		const uint16 stack = static_cast<uint16>(item->GetStackCount());
+		const uint32 money = stack * item->GetEntry().sellprice();
 		if (money == 0)
 		{
-			WLOG("Can't sell item!");
+			SendInventoryError(inventory_change_failure::CannotTradeThat);
 			return;
 		}
 
-		// TODO: Overflow protection!
-		m_character->GetInventory().RemoveItem(itemSlot, stack, true);
-		m_character->Set<uint32>(object_fields::Money, m_character->Get<uint32>(object_fields::Money) + money);
+		const InventoryCommandFactory& factory = m_character->GetInventory().GetCommandFactory();
+
+		const std::unique_ptr<IInventoryCommand> command = factory.CreateRemoveItem(InventorySlot::FromAbsolute(itemSlot), stack);
+		command->Execute()
+			.OnSuccess([this, money]()
+				{
+					m_character->Set<uint32>(object_fields::Money, m_character->Get<uint32>(object_fields::Money) + money);
+				})
+			.OnFailure([this](const InventoryChangeFailure error)
+				{
+					SendInventoryError(error);
+				});
+		
 	}
 
 	void Player::OnBuyItem(uint16 opCode, uint32 size, io::Reader& contentReader)

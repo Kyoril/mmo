@@ -138,13 +138,6 @@ namespace mmo
 		/// @returns game::inventory_change_failure::Okay if succeeded.
 		InventoryChangeFailure RemoveItemByGUID(uint64 guid, uint16 stacks = 0);
 
-		/// Tries to swap two slots. Can also be used to move items, if one of the slots is
-		/// empty.
-		/// @param slotA The first (source) slot.
-		/// @param slotB The second (destination) slot.
-		/// @returns game::inventory_change_failure::Okay if succeeded.
-		InventoryChangeFailure SwapItems(uint16 slotA, uint16 slotB);
-
 		/// Determines whether a slot is valid for the given item entry and this character.
 		/// This also validates equipment slots and bags.
 		/// @param slot The absolute slot index to check.
@@ -156,19 +149,23 @@ namespace mmo
 		InventoryChangeFailure CanStoreItems(const proto::ItemEntry& entry, uint16 amount = 1) const;
 		
 		/// Gets a reference of the owner of this inventory.
-		GamePlayerS& GetOwner() {
+		GamePlayerS& GetOwner()
+		{
 			return m_owner;
 		}
 
-	/// Gets the total amount of a specific item in the inventory. This method uses a cache,
-	/// so you don't need to worry about performance too much here.
-	/// @param itemId The entry id of the searched item.
-	/// @returns Number of items that the player has.
-	uint16 GetItemCount(uint32 itemId) const noexcept override;		/// Determines whether the player has an item in his inventory. This method is merely
+		/// Gets the total amount of a specific item in the inventory. This method uses a cache,
+		/// so you don't need to worry about performance too much here.
+		/// @param itemId The entry id of the searched item.
+		/// @returns Number of items that the player has.
+		uint16 GetItemCount(uint32 itemId) const noexcept override;
+
+		/// Determines whether the player has an item in his inventory. This method is merely
 		/// syntactic sugar, it simply checks if getItemCount(itemId) is greater that 0.
 		/// @param itemid The entry id of the searched item.
 		/// @returns true if the player has the item.
-		bool HasItem(uint32 itemId) const {
+		bool HasItem(uint32 itemId) const
+		{
 			return GetItemCount(itemId) > 0;
 		}
 
@@ -184,17 +181,20 @@ namespace mmo
 		/// Splits an absolute slot into a bag index and a bag slot.
 		static bool GetRelativeSlots(uint16 absoluteSlot, uint8& out_bag, uint8& out_slot);
 
-	/// Gets the amount of free inventory slots.
-	uint16 GetFreeSlotCount() const {
-		return m_freeSlots;
-	}
+		/// Gets the amount of free inventory slots.
+		uint16 GetFreeSlotCount() const
+		{
+			return m_freeSlots;
+		}
 
-	/// Returns an item at a specified absolute slot.
-	std::shared_ptr<GameItemS> GetItemAtSlot(uint16 absoluteSlot) const noexcept override;
+		/// Returns an item at a specified absolute slot.
+		std::shared_ptr<GameItemS> GetItemAtSlot(uint16 absoluteSlot) const noexcept override;
 
-	/// Returns a bag at a specified absolute slot.
-	std::shared_ptr<GameBagS> GetBagAtSlot(uint16 absolute_slot) const noexcept override;		/// Returns the weapon at a specified slot.
-		std::shared_ptr<GameItemS> GetWeaponByAttackType(WeaponAttack attackType, bool nonbroken, bool useable) const;
+		/// Returns a bag at a specified absolute slot.
+		std::shared_ptr<GameBagS> GetBagAtSlot(uint16 absolute_slot) const noexcept override;
+
+		/// Returns the weapon at a specified slot.
+		std::shared_ptr<GameItemS> GetWeaponByAttackType(WeaponAttack attackType, bool nonbroken, bool usable) const;
 
 		/// Finds an item by it's guid.
 		/// @param guid The GUID of the searched item.
@@ -253,35 +253,37 @@ namespace mmo
 		/// @return True if save succeeded, false otherwise.
 		bool SaveToRepository();
 
+		/// Checks if inventory has unsaved changes.
+		/// @return True if inventory needs saving.
+		bool IsDirty() const noexcept;
+
+	private:
 		/// Marks inventory as dirty (needs saving).
 		void MarkDirty() noexcept;
 
-	/// Checks if inventory has unsaved changes.
-	/// @return True if inventory needs saving.
-	bool IsDirty() const noexcept;
+	public:
+		// IAddItemCommandContext / IRemoveItemCommandContext / ISwapItemsCommandContext implementations
+		// Note: AddItemToSlot and GetItemAtSlot already exist in the class, we just mark them as override
+		void AddItemToSlot(std::shared_ptr<GameItemS> item, uint16 slot) override;
+		[[nodiscard]] ItemValidator& GetValidator() override;
+		[[nodiscard]] SlotManager& GetSlotManager() override;
+		void RemoveItemFromSlot(uint16 slot, uint16 stacks) override;
+		void SwapItemSlots(uint16 slot1, uint16 slot2) override;
+		bool SplitStack(uint16 sourceSlot, uint16 destSlot, uint16 count) override;
+		bool MergeStacks(uint16 sourceSlot, uint16 destSlot) override;
+		bool IsOwnerAlive() const override;
+		bool IsOwnerInCombat() const override;
 
-public:
-	// IAddItemCommandContext / IRemoveItemCommandContext / ISwapItemsCommandContext implementations
-	// Note: AddItemToSlot and GetItemAtSlot already exist in the class, we just mark them as override
-	void AddItemToSlot(std::shared_ptr<GameItemS> item, uint16 slot) override;
-	[[nodiscard]] ItemValidator& GetValidator() override;
-	[[nodiscard]] SlotManager& GetSlotManager() override;
-	void RemoveItemFromSlot(uint16 slot, uint16 stacks) override;
-	void SwapItemSlots(uint16 slot1, uint16 slot2) override;
-	bool SplitStack(uint16 sourceSlot, uint16 destSlot, uint16 count) override;
-	bool MergeStacks(uint16 sourceSlot, uint16 destSlot) override;
-	bool IsOwnerAlive() const override;
-	bool IsOwnerInCombat() const override;
+		/// Gets the command factory for creating inventory commands.
+		/// @return Reference to the inventory command factory.
+		[[nodiscard]] InventoryCommandFactory& GetCommandFactory() noexcept;
+		[[nodiscard]] const InventoryCommandFactory& GetCommandFactory() const noexcept;
 
-	/// Gets the command factory for creating inventory commands.
-	/// @return Reference to the inventory command factory.
-	[[nodiscard]] InventoryCommandFactory& GetCommandFactory() noexcept;
-	[[nodiscard]] const InventoryCommandFactory& GetCommandFactory() const noexcept;
+	private:
 
-private:
+		/// Parameters: Bag-ID, Start-Slot, End-Slot
+		typedef std::function<bool(uint8, uint8, uint8)> BagCallbackFunc;
 
-	/// Parameters: Bag-ID, Start-Slot, End-Slot
-	typedef std::function<bool(uint8, uint8, uint8)> BagCallbackFunc;
 		/// Executes a callback function for every bag the player has (including the default bag).
 		void ForEachBag(const BagCallbackFunc& callback) const;
 
@@ -321,28 +323,29 @@ private:
 		/// The next buyback slot to be used.
 		uint8 m_nextBuyBackSlot;
 
-	/// Repository for inventory persistence (nullable, World Server only).
-	IInventoryRepository* m_repository;
+		/// Repository for inventory persistence (nullable, World Server only).
+		IInventoryRepository* m_repository;
 
-	/// Tracks whether inventory has unsaved changes.
-	bool m_isDirty;
+		/// Tracks whether inventory has unsaved changes.
+		bool m_isDirty;
 
-	/// Command infrastructure for extensible operations
-	std::unique_ptr<ItemValidator> m_validator;
-	std::unique_ptr<SlotManager> m_slotManager;
-	std::unique_ptr<InventoryCommandFactory> m_commandFactory;
-	std::unique_ptr<InventoryCommandLogger> m_commandLogger;
+		/// Command infrastructure for extensible operations
+		std::unique_ptr<ItemValidator> m_validator;
+		std::unique_ptr<SlotManager> m_slotManager;
+		std::unique_ptr<InventoryCommandFactory> m_commandFactory;
+		std::unique_ptr<InventoryCommandLogger> m_commandLogger;
 
-	/// Helper structure for organizing slot information during item creation
-	struct ItemSlotInfo
-	{
-		LinearSet<uint16> emptySlots;
-		LinearSet<uint16> usedCapableSlots;
-		uint16 availableStacks = 0;
-	};
+		/// Helper structure for organizing slot information during item creation
+		struct ItemSlotInfo
+		{
+			LinearSet<uint16> emptySlots;
+			LinearSet<uint16> usedCapableSlots;
+			uint16 availableStacks = 0;
+		};
 
-	/// Helper method to validate item count limits
-	InventoryChangeFailure ValidateItemLimits(const proto::ItemEntry& entry, uint16 amount) const;
+		/// Helper method to validate item count limits
+		InventoryChangeFailure ValidateItemLimits(const proto::ItemEntry& entry, uint16 amount) const;
+
 		/// Helper method to find available slots for item creation
 		InventoryChangeFailure FindAvailableSlots(const proto::ItemEntry& entry, uint16 amount, ItemSlotInfo& slotInfo) const;
 		
@@ -357,15 +360,17 @@ private:
 		
 		/// Helper method to create new item instances
 		uint16 CreateNewItems(const proto::ItemEntry& entry, uint16 amount, const LinearSet<uint16>& emptySlots, std::map<uint16, uint16>* out_addedBySlot);
+			
+		/// Helper method to create a single item instance
+		std::shared_ptr<GameItemS> CreateSingleItem(const proto::ItemEntry& entry, uint16 slot);
 		
-	/// Helper method to create a single item instance
-	std::shared_ptr<GameItemS> CreateSingleItem(const proto::ItemEntry& entry, uint16 slot);
-	
-	/// Helper method to setup a newly created item
-	void SetupNewItem(std::shared_ptr<GameItemS> item, const proto::ItemEntry& entry, uint16 slot);
-	
-	/// Helper method to update player fields when adding a new item
-	void UpdatePlayerFieldsForNewItem(std::shared_ptr<GameItemS> item, uint16 slot);		/// Helper method to update equipment visuals
+		/// Helper method to setup a newly created item
+		void SetupNewItem(std::shared_ptr<GameItemS> item, const proto::ItemEntry& entry, uint16 slot);
+		
+		/// Helper method to update player fields when adding a new item
+		void UpdatePlayerFieldsForNewItem(std::shared_ptr<GameItemS> item, uint16 slot);
+
+		/// Helper method to update equipment visuals
 		void UpdateEquipmentVisuals(std::shared_ptr<GameItemS> item, uint8 subslot);
 		
 		/// Helper method to update bag slot
