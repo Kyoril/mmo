@@ -217,10 +217,13 @@ namespace mmo
 		if (targetSlot == player_equipment_slots::Finger1 ||
 			targetSlot == player_equipment_slots::Trinket1)
 		{
-			const auto itemAtTargetSlot = inv.GetItemAtSlot(Inventory::GetAbsoluteSlot(player_inventory_slots::Bag_0, targetSlot));
+			const InventorySlot targetInvSlot = InventorySlot::FromRelative(player_inventory_slots::Bag_0, targetSlot);
+			const InventorySlot secondInvSlot = InventorySlot::FromRelative(player_inventory_slots::Bag_0, targetSlot + 1);
+			
+			const auto itemAtTargetSlot = inv.GetItemAtSlot(targetInvSlot.GetAbsolute());
 			if (itemAtTargetSlot)
 			{
-				const auto itemAtSecondSlot = inv.GetItemAtSlot(Inventory::GetAbsoluteSlot(player_inventory_slots::Bag_0, targetSlot + 1));
+				const auto itemAtSecondSlot = inv.GetItemAtSlot(secondInvSlot.GetAbsolute());
 				if (!itemAtSecondSlot)
 				{
 					targetSlot++;
@@ -490,7 +493,8 @@ namespace mmo
 		}
 
 		// Get item
-		auto item = m_character->GetInventory().GetItemAtSlot(Inventory::GetAbsoluteSlot(bagId, slotId));
+		const InventorySlot invSlot = InventorySlot::FromRelative(bagId, slotId);
+		auto item = m_character->GetInventory().GetItemAtSlot(invSlot.GetAbsolute());
 		if (!item)
 		{
 			WLOG("Item not found! Bag: " << uint16(bagId) << "; Slot: " << uint16(slotId));

@@ -1,4 +1,4 @@
-﻿// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "game_server/bag_manager.h"
 #include "game_server/inventory_types.h"
@@ -117,7 +117,7 @@ TEST_CASE("BagManager - Get bag from slot", "[bag_manager]")
 		auto bag = CreateMockBag(1000, 16);
 		
 		// Bag pack slot format: 0xFFBB where BB is bag slot (0-4)
-		const uint16 bagPackSlot = (255 << 8) | 1;  // Bag_1
+		const uint16 bagPackSlot = InventorySlot::FromRelative(255, 1).GetAbsolute();  // Bag_1
 		const auto slot = InventorySlot::FromAbsolute(bagPackSlot);
 		
 		context.SetItemAtSlot(bagPackSlot, bag);
@@ -129,7 +129,7 @@ TEST_CASE("BagManager - Get bag from slot", "[bag_manager]")
 		REQUIRE(result->GetSlotCount() == 16);
 	}	SECTION("Returns nullptr when slot is empty")
 	{
-		const uint16 bagPackSlot = (255 << 8) | 2;  // Bag_2
+		const uint16 bagPackSlot = InventorySlot::FromRelative(255, 2).GetAbsolute();  // Bag_2
 		const auto slot = InventorySlot::FromAbsolute(bagPackSlot);
 
 		const auto result = manager.GetBag(slot);
@@ -141,7 +141,7 @@ TEST_CASE("BagManager - Get bag from slot", "[bag_manager]")
 	{
 		auto item = CreateMockItem(2000);
 
-		const uint16 bagPackSlot = (255 << 8) | 3;  // Bag_3
+		const uint16 bagPackSlot = InventorySlot::FromRelative(255, 3).GetAbsolute();  // Bag_3
 		const auto slot = InventorySlot::FromAbsolute(bagPackSlot);
 
 		context.SetItemAtSlot(bagPackSlot, item);
@@ -156,8 +156,8 @@ TEST_CASE("BagManager - Get bag from slot", "[bag_manager]")
 		auto bag = CreateMockBag(3000, 20);
 
 		// Test with bag slot format (0xBBSS) - should convert to bag pack (0xFFBB)
-		const uint16 bagSlot = (1 << 8) | 5;  // Bag 1, subslot 5
-		const uint16 expectedBagPackSlot = (255 << 8) | 1;  // Converts to Bag_1
+		const uint16 bagSlot = InventorySlot::FromRelative(1, 5).GetAbsolute();  // Bag 1, subslot 5
+		const uint16 expectedBagPackSlot = InventorySlot::FromRelative(255, 1).GetAbsolute();  // Converts to Bag_1
 
 		context.SetItemAtSlot(expectedBagPackSlot, bag);
 
@@ -179,7 +179,7 @@ TEST_CASE("BagManager - Update bag slot", "[bag_manager]")
 		auto bag = CreateMockBag(1000, 16);
 		auto item = CreateMockItem(2000);
 
-		const uint16 bagPackSlot = (255 << 8) | 2;  // Bag_2
+		const uint16 bagPackSlot = InventorySlot::FromRelative(255, 2).GetAbsolute();  // Bag_2
 		context.SetItemAtSlot(bagPackSlot, bag);
 
 		manager.UpdateBagSlot(item, 2, 5);  // Bag 2, item slot 5
@@ -200,7 +200,7 @@ TEST_CASE("BagManager - Update bag slot", "[bag_manager]")
 		auto item2 = CreateMockItem(2002);
 		auto item3 = CreateMockItem(2003);
 
-		const uint16 bagPackSlot = (255 << 8) | 1;  // Bag_1
+		const uint16 bagPackSlot = InventorySlot::FromRelative(255, 1).GetAbsolute();  // Bag_1
 		context.SetItemAtSlot(bagPackSlot, bag);
 
 		manager.UpdateBagSlot(item1, 1, 0);
@@ -228,7 +228,7 @@ TEST_CASE("BagManager - Update bag slot", "[bag_manager]")
 		auto regularItem = CreateMockItem(1500);
 		auto itemToAdd = CreateMockItem(2000);
 
-		const uint16 bagPackSlot = (255 << 8) | 4;  // Bag_4
+		const uint16 bagPackSlot = InventorySlot::FromRelative(255, 4).GetAbsolute();  // Bag_4
 		context.SetItemAtSlot(bagPackSlot, regularItem);
 
 		manager.UpdateBagSlot(itemToAdd, 4, 0);
@@ -372,9 +372,9 @@ TEST_CASE("BagManager - Bag pack slot detection", "[bag_manager]")
 
 	SECTION("Recognizes bag pack slot format (0xFFxx)")
 	{
-		const uint16 bagPackSlot1 = (255 << 8) | 0;
-		const uint16 bagPackSlot2 = (255 << 8) | 1;
-		const uint16 bagPackSlot3 = (255 << 8) | 4;
+		const uint16 bagPackSlot1 = InventorySlot::FromRelative(255, 0).GetAbsolute();
+		const uint16 bagPackSlot2 = InventorySlot::FromRelative(255, 1).GetAbsolute();
+		const uint16 bagPackSlot3 = InventorySlot::FromRelative(255, 4).GetAbsolute();
 
 		const auto slot1 = InventorySlot::FromAbsolute(bagPackSlot1);
 		const auto slot2 = InventorySlot::FromAbsolute(bagPackSlot2);

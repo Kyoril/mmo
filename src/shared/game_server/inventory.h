@@ -165,25 +165,17 @@ namespace mmo
 		/// Determines whether the character has equipped a quiver. This is useful because
 		/// players can only equip one quiver at a time, so this check might be used at multiple
 		/// locations.
-		/// @returns true if the player has equipped a quiver.
-		bool HasEquippedQuiver() const;
+	/// @returns true if the player has equipped a quiver.
+	bool HasEquippedQuiver() const;
 
-		/// Gets an absolute slot position from a bag index and a bag slot.
-		static uint16 GetAbsoluteSlot(uint8 bag, uint8 slot);
+	/// Gets the amount of free inventory slots.
+	uint16 GetFreeSlotCount() const
+	{
+		return m_freeSlots;
+	}
 
-		/// Splits an absolute slot into a bag index and a bag slot.
-		static bool GetRelativeSlots(uint16 absoluteSlot, uint8 &out_bag, uint8 &out_slot);
-
-		/// Gets the amount of free inventory slots.
-		uint16 GetFreeSlotCount() const
-		{
-			return m_freeSlots;
-		}
-
-		/// Returns an item at a specified absolute slot.
-		std::shared_ptr<GameItemS> GetItemAtSlot(uint16 absoluteSlot) const noexcept override;
-
-		/// Returns a bag at a specified absolute slot.
+	/// Returns an item at a specified absolute slot.
+	std::shared_ptr<GameItemS> GetItemAtSlot(uint16 absoluteSlot) const noexcept override;		/// Returns a bag at a specified absolute slot.
 		std::shared_ptr<GameBagS> GetBagAtSlot(uint16 absolute_slot) const noexcept override;
 
 		/// Returns the weapon at a specified slot.

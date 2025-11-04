@@ -2107,8 +2107,9 @@ namespace mmo
 	{
 		if (std::shared_ptr<GameItemS> inst = m_character->GetInventory().GetItemAtSlot(slot))
 		{
-			uint8 bag = 0, subslot = 0;
-			Inventory::GetRelativeSlots(slot, bag, subslot);
+			const InventorySlot invSlot = InventorySlot::FromAbsolute(slot);
+			const uint8 bag = invSlot.GetBag();
+			const uint8 subslot = invSlot.GetSlot();
 			const auto totalCount = m_character->GetInventory().GetItemCount(inst->GetEntry().id());
 
 			SendPacket([bag, subslot, amount, totalCount, &inst, wasLooted, wasCreated, this](game::OutgoingPacket& packet) {

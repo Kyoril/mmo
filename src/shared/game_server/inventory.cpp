@@ -211,10 +211,9 @@ namespace mmo
 	// Helper method to update player fields when adding a new item
 	void Inventory::UpdatePlayerFieldsForNewItem(std::shared_ptr<GameItemS> item, uint16 slot)
 	{
-		uint8 bag = 0, subslot = 0;
-		GetRelativeSlots(slot, bag, subslot);
-		
 		const InventorySlot invSlot = InventorySlot::FromAbsolute(slot);
+		const uint8 bag = invSlot.GetBag();
+		const uint8 subslot = invSlot.GetSlot();
 
 		if (bag == player_inventory_slots::Bag_0)
 		{
@@ -323,7 +322,7 @@ namespace mmo
 				   {
 				for (uint8 slot = slotStart; slot < slotEnd; ++slot)
 				{
-					const uint16 absoluteSlot = GetAbsoluteSlot(bag, slot);
+					const uint16 absoluteSlot = InventorySlot::FromRelative(bag, slot).GetAbsolute();
 
 					// Check if this slot is empty
 					auto it = m_itemsBySlot.find(absoluteSlot);
@@ -385,10 +384,9 @@ namespace mmo
 	// Helper method to cleanup equipment when removing an item
 	void Inventory::CleanupRemovedEquipment(std::shared_ptr<GameItemS> item, uint16 absoluteSlot)
 	{
-		uint8 bag = 0, subslot = 0;
-		GetRelativeSlots(absoluteSlot, bag, subslot);
-		
 		const InventorySlot invSlot = InventorySlot::FromAbsolute(absoluteSlot);
+		const uint8 bag = invSlot.GetBag();
+		const uint8 subslot = invSlot.GetSlot();
 
 		if (bag == player_inventory_slots::Bag_0)
 		{
@@ -409,7 +407,7 @@ namespace mmo
 		}
 		else if (invSlot.IsBag())
 		{
-			auto packSlot = GetAbsoluteSlot(player_inventory_slots::Bag_0, bag);
+			auto packSlot = InventorySlot::FromRelative(player_inventory_slots::Bag_0, bag).GetAbsolute();
 			auto bagInst = GetBagAtSlot(packSlot);
 			if (bagInst)
 			{
@@ -597,114 +595,105 @@ namespace mmo
 		}
 	}
 
-	InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntry &entry) const
+InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntry &entry) const
+{
+	const InventorySlot invSlot = InventorySlot::FromAbsolute(slot);
+
+	// Delegate equipment slot validation to EquipmentManager
+	if (invSlot.IsEquipment())
 	{
-		// Split the absolute slot
-		uint8 bag = 0, subslot = 0;
-		if (!GetRelativeSlots(slot, bag, subslot))
+		auto result = m_equipmentManager->ValidateEquipment(entry, invSlot);
+		if (result.IsFailure())
 		{
-			return inventory_change_failure::InternalBagError;
+			return result.GetError();
 		}
 
-		const InventorySlot invSlot = InventorySlot::FromAbsolute(slot);
-
-		// Delegate equipment slot validation to EquipmentManager
-		if (invSlot.IsEquipment())
+		// Additional check for two-handed weapons needing to store offhand
+		if (invSlot.GetSlot() == player_equipment_slots::Mainhand &&
+			entry.inventorytype() == inventory_type::TwoHandedWeapon)
 		{
-			auto result = m_equipmentManager->ValidateEquipment(entry, invSlot);
-			if (result.IsFailure())
+			auto offhand = GetItemAtSlot(InventorySlot::FromRelative(player_inventory_slots::Bag_0, player_equipment_slots::Offhand).GetAbsolute());
+			if (offhand)
 			{
-				return result.GetError();
-			}
-
-			// Additional check for two-handed weapons needing to store offhand
-			if (subslot == player_equipment_slots::Mainhand &&
-				entry.inventorytype() == inventory_type::TwoHandedWeapon)
-			{
-				auto offhand = GetItemAtSlot(GetAbsoluteSlot(player_inventory_slots::Bag_0, player_equipment_slots::Offhand));
-				if (offhand)
+				// We need to be able to store the offhand weapon in the inventory
+				auto storeResult = CanStoreItems(offhand->GetEntry());
+				if (storeResult != inventory_change_failure::Okay)
 				{
-					// We need to be able to store the offhand weapon in the inventory
-					auto storeResult = CanStoreItems(offhand->GetEntry());
-					if (storeResult != inventory_change_failure::Okay)
-					{
-						return storeResult;
-					}
+					return storeResult;
 				}
 			}
-
-			return inventory_change_failure::Okay;
 		}
 
-		if (invSlot.IsInventory())
+		return inventory_change_failure::Okay;
+	}
+
+	if (invSlot.IsInventory())
+	{
+		// Inventory slots accept most items
+		return inventory_change_failure::Okay;
+	}
+
+	if (invSlot.IsBag())
+	{
+		// Validate bag
+		auto bag = GetBagAtSlot(slot);
+		if (!bag)
 		{
-			// Inventory slots accept most items
-			return inventory_change_failure::Okay;
+			return inventory_change_failure::ItemDoesNotGoToSlot;
 		}
 
-		if (invSlot.IsBag())
+		if (invSlot.GetSlot() >= bag->GetSlotCount())
 		{
-			// Validate bag
-			auto bag = GetBagAtSlot(slot);
-			if (!bag)
-			{
-				return inventory_change_failure::ItemDoesNotGoToSlot;
-			}
-
-			if (subslot >= bag->GetSlotCount())
-			{
-				return inventory_change_failure::ItemDoesNotGoToSlot;
-			}
-
-			if (bag->GetEntry().itemclass() == item_class::Quiver &&
-				entry.inventorytype() != inventory_type::Ammo)
-			{
-				return inventory_change_failure::OnlyAmmoCanGoHere;
-			}
-
-			return inventory_change_failure::Okay;
+			return inventory_change_failure::ItemDoesNotGoToSlot;
 		}
 
-		if (invSlot.IsBagPack())
+		if (bag->GetEntry().itemclass() == item_class::Quiver &&
+			entry.inventorytype() != inventory_type::Ammo)
 		{
-			if (entry.itemclass() != item_class::Container &&
-				entry.itemclass() != item_class::Quiver)
+			return inventory_change_failure::OnlyAmmoCanGoHere;
+		}
+
+		return inventory_change_failure::Okay;
+	}
+
+	if (invSlot.IsBagPack())
+	{
+		if (entry.itemclass() != item_class::Container &&
+			entry.itemclass() != item_class::Quiver)
+		{
+			return inventory_change_failure::NotABag;
+		}
+
+		// Make sure that we have only up to one quiver equipped at a time
+		if (entry.itemclass() == item_class::Quiver)
+		{
+			if (HasEquippedQuiver())
+				return inventory_change_failure::CanEquipOnlyOneQuiver;
+		}
+
+		auto bagItem = GetItemAtSlot(slot);
+		if (bagItem)
+		{
+			if (bagItem->GetTypeId() != ObjectTypeId::Container)
 			{
+				// Return code valid? ...
 				return inventory_change_failure::NotABag;
 			}
 
-			// Make sure that we have only up to one quiver equipped at a time
-			if (entry.itemclass() == item_class::Quiver)
+			auto castedBag = std::static_pointer_cast<GameBagS>(bagItem);
+			ASSERT(castedBag);
+
+			if (!castedBag->IsEmpty())
 			{
-				if (HasEquippedQuiver())
-					return inventory_change_failure::CanEquipOnlyOneQuiver;
+				return inventory_change_failure::CanOnlyDoWithEmptyBags;
 			}
-
-			auto bagItem = GetItemAtSlot(slot);
-			if (bagItem)
-			{
-				if (bagItem->GetTypeId() != ObjectTypeId::Container)
-				{
-					// Return code valid? ...
-					return inventory_change_failure::NotABag;
-				}
-
-				auto castedBag = std::static_pointer_cast<GameBagS>(bagItem);
-				ASSERT(castedBag);
-
-				if (!castedBag->IsEmpty())
-				{
-					return inventory_change_failure::CanOnlyDoWithEmptyBags;
-				}
-			}
-
-			return inventory_change_failure::Okay;
 		}
 
-		return inventory_change_failure::InternalBagError;
+		return inventory_change_failure::Okay;
 	}
 
-	InventoryChangeFailure Inventory::CanStoreItems(const proto::ItemEntry &entry, uint16 amount) const
+	return inventory_change_failure::InternalBagError;
+}	InventoryChangeFailure Inventory::CanStoreItems(const proto::ItemEntry &entry, uint16 amount) const
 	{
 		// Delegate to ValidateItemLimits which does the same checks
 		return ValidateItemLimits(entry, amount == 0 ? 1 : amount);
@@ -720,36 +709,22 @@ namespace mmo
 	{
 		for (uint8 slot = player_inventory_slots::Start; slot < player_inventory_slots::End; ++slot)
 		{
-			const auto testBag = GetItemAtSlot(GetAbsoluteSlot(player_inventory_slots::Bag_0, slot));
+			const auto testBag = GetItemAtSlot(InventorySlot::FromRelative(player_inventory_slots::Bag_0, slot).GetAbsolute());
 			if (testBag && testBag->GetEntry().itemclass() == item_class::Quiver)
 			{
 				return true;
 			}
 		}
 
-		return false;
-	}
+	return false;
+}
 
-	uint16 Inventory::GetAbsoluteSlot(uint8 bag, uint8 slot)
+std::shared_ptr<GameItemS> Inventory::GetItemAtSlot(uint16 absoluteSlot) const noexcept
+{
+	if (const auto it = m_itemsBySlot.find(absoluteSlot); it != m_itemsBySlot.end())
 	{
-		return (bag << 8) | slot;
-	}
-
-	bool Inventory::GetRelativeSlots(uint16 absoluteSlot, uint8 &out_bag, uint8 &out_slot)
-	{
-		out_bag = static_cast<uint8>(absoluteSlot >> 8);
-		out_slot = static_cast<uint8>(absoluteSlot & 0xFF);
-		return true;
-	}
-
-	std::shared_ptr<GameItemS> Inventory::GetItemAtSlot(uint16 absoluteSlot) const noexcept
-	{
-		if (const auto it = m_itemsBySlot.find(absoluteSlot); it != m_itemsBySlot.end())
-		{
-			return it->second;
-		}
-
-		return nullptr;
+		return it->second;
+	}		return nullptr;
 	}
 
 	std::shared_ptr<GameBagS> Inventory::GetBagAtSlot(uint16 absolute_slot) const noexcept
@@ -757,7 +732,7 @@ namespace mmo
 		if (!InventorySlot::FromAbsolute(absolute_slot).IsBagPack())
 		{
 			// Convert bag slot to bag pack slot which is 0xFFXX where XX is the bag slot id
-			absolute_slot = GetAbsoluteSlot(player_inventory_slots::Bag_0, static_cast<uint8>(absolute_slot >> 8));
+			absolute_slot = InventorySlot::FromRelative(player_inventory_slots::Bag_0, static_cast<uint8>(absolute_slot >> 8)).GetAbsolute();
 		}
 
 		auto it = m_itemsBySlot.find(absolute_slot);
@@ -784,16 +759,14 @@ namespace mmo
 		case weapon_attack::RangedAttack:
 			slot = player_equipment_slots::Ranged;
 			break;
-		}
+	}
 
-		std::shared_ptr<GameItemS> item = GetItemAtSlot(GetAbsoluteSlot(player_inventory_slots::Bag_0, slot));
+	std::shared_ptr<GameItemS> item = GetItemAtSlot(InventorySlot::FromRelative(player_inventory_slots::Bag_0, slot).GetAbsolute());
 
-		if (!item || item->GetEntry().itemclass() != item_class::Weapon)
-		{
-			return nullptr;
-		}
-
-		if ((m_owner.GetWeaponProficiency() & (1 << item->GetEntry().subclass())) == 0)
+	if (!item || item->GetEntry().itemclass() != item_class::Weapon)
+	{
+		return nullptr;
+	}		if ((m_owner.GetWeaponProficiency() & (1 << item->GetEntry().subclass())) == 0)
 		{
 			return nullptr; // No proficiency for this weapon type
 		}
@@ -832,13 +805,13 @@ namespace mmo
 		// Repair everything equipped and in main bag
 		for (uint8 slot = player_equipment_slots::Start; slot < player_inventory_pack_slots::End; ++slot)
 		{
-			totalCost += RepairItem(GetAbsoluteSlot(player_inventory_slots::Bag_0, slot));
+			totalCost += RepairItem(InventorySlot::FromRelative(player_inventory_slots::Bag_0, slot).GetAbsolute());
 		}
 
 		// Also check equipped bag contents
 		for (uint8 bagSlot = player_inventory_slots::Start; bagSlot < player_inventory_slots::End; ++bagSlot)
 		{
-			const uint16 absoluteBagSlot = GetAbsoluteSlot(player_inventory_slots::Bag_0, bagSlot);
+			const uint16 absoluteBagSlot = InventorySlot::FromRelative(player_inventory_slots::Bag_0, bagSlot).GetAbsolute();
 
 			// Check if bag exists
 			auto bag = std::static_pointer_cast<GameBagS>(GetItemAtSlot(absoluteBagSlot));
@@ -850,7 +823,7 @@ namespace mmo
 			// Iterate bag items
 			for (uint8 bagItemSlot = 0; bagItemSlot < static_cast<uint8>(bag->GetSlotCount()); ++bagItemSlot)
 			{
-				totalCost += RepairItem(GetAbsoluteSlot(bagSlot, bagItemSlot));
+				totalCost += RepairItem(InventorySlot::FromRelative(bagSlot, bagItemSlot).GetAbsolute());
 			}
 		}
 
@@ -957,8 +930,11 @@ namespace mmo
 				m_itemsBySlot[data.slot] = item;
 
 				// Determine slot
-				uint8 bag = 0, subslot = 0;
-				GetRelativeSlots(data.slot, bag, subslot);
+				const InventorySlot invSlot = InventorySlot::FromAbsolute(data.slot);
+
+				const uint8 bag = invSlot.GetBag();
+				const uint8 subslot = invSlot.GetSlot();
+
 				if (bag == player_inventory_slots::Bag_0)
 				{
 					if (InventorySlot::FromAbsolute(data.slot).IsBagPack())
@@ -1037,7 +1013,7 @@ namespace mmo
 			// Store items in bags
 			for (auto &pair : bagItems)
 			{
-				auto bag = GetBagAtSlot(GetAbsoluteSlot(player_inventory_slots::Bag_0, pair.first >> 8));
+				auto bag = GetBagAtSlot(InventorySlot::FromRelative(player_inventory_slots::Bag_0, pair.first >> 8).GetAbsolute());
 				if (!bag)
 				{
 					ELOG("Could not find bag at slot " << pair.first << ": Maybe this bag is sent after the item");
@@ -1073,7 +1049,7 @@ namespace mmo
 			}
 			else
 			{
-				auto bagInst = GetBagAtSlot(GetAbsoluteSlot(player_inventory_slots::Bag_0, bag));
+				auto bagInst = GetBagAtSlot(InventorySlot::FromRelative(player_inventory_slots::Bag_0, bag).GetAbsolute());
 				if (!bagInst)
 				{
 					// Skip this bag
@@ -1337,7 +1313,7 @@ namespace mmo
 		if (InventorySlot::FromAbsolute(slotB).IsEquipment() && (slotB & 0xFF) == player_equipment_slots::Mainhand &&
 			srcItem && srcItem->GetEntry().inventorytype() == inventory_type::TwoHandedWeapon)
 		{
-			auto offhandSlot = GetAbsoluteSlot(player_inventory_slots::Bag_0, player_equipment_slots::Offhand);
+			auto offhandSlot = InventorySlot::FromRelative(player_inventory_slots::Bag_0, player_equipment_slots::Offhand).GetAbsolute();
 			auto offhandItem = GetItemAtSlot(offhandSlot);
 
 			if (offhandItem)
@@ -1432,7 +1408,7 @@ namespace mmo
 			if (bag)
 			{
 				bag->Set<uint64>(object_fields::Slot_1 + (slot & 0xFF) * 2, item ? item->GetGuid() : 0);
-				itemInstanceUpdated(bag, GetAbsoluteSlot(player_inventory_slots::Bag_0, slot >> 8));
+				itemInstanceUpdated(bag, InventorySlot::FromRelative(player_inventory_slots::Bag_0, slot >> 8).GetAbsolute());
 				UpdateItemContained(item, bag->GetGuid(), slot);
 			}
 		}
@@ -1932,4 +1908,3 @@ namespace mmo
 		itemInstanceUpdated(item, slot);
 	}
 }
-
