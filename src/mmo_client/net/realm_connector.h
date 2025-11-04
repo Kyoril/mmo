@@ -281,16 +281,11 @@ namespace mmo
 
 		void AutoEquipItem(uint8 srcBag, uint8 srcSlot);
 
-		void AutoStoreBagItem(uint8 srcBag, uint8 srcSlot, uint8 dstBag);
-
 		void SwapItem(uint8 srcBag, uint8 srcSlot, uint8 dstBag, uint8 dstSlot);
 
 		void SwapInvItem(uint8 srcSlot, uint8 dstSlot);
 
 		void SplitItem(uint8 srcBag, uint8 srcSlot, uint8 dstBag, uint8 dstSlot, uint8 count);
-
-		/// Sends a packet to the server to automatically equip a specific item to a specific destination slot.
-		void AutoEquipItemSlot(uint64 itemGUID, uint8 dstSlot);
 
 		/// Sends a packet to the server to destroy a specific item from the players inventory.
 		void DestroyItem(uint8 bag, uint8 slot, uint8 count);

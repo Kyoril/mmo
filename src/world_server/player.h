@@ -205,8 +205,6 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnAutoEquipItem(uint16 opCode, uint32 size, io::Reader& contentReader);
 
-		void OnAutoStoreBagItem(uint16 opCode, uint32 size, io::Reader& contentReader);
-
 		/// Handles the client's request to swap two items in his inventory.
 		///	@param opCode The op code of the packet.
 		///	@param size The size of the packet content in bytes, excluding the packet header.
@@ -220,8 +218,6 @@ namespace mmo
 		///	@param size The size of the packet content in bytes, excluding the packet header.
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnSplitItem(uint16 opCode, uint32 size, io::Reader& contentReader);
-
-		void OnAutoEquipItemSlot(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		/// Handles the client's request to destroy an item from his inventory.
 		///	@param opCode The op code of the packet.

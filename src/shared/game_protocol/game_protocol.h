@@ -51,7 +51,7 @@ namespace mmo
 			};
 		}
 
-		constexpr uint32 ProtocolVersion = 0x00000002;
+		constexpr uint32 ProtocolVersion = 0x00000003;
 
 		////////////////////////////////////////////////////////////////////////////////
 		// BEGIN: Client <-> Realm section
@@ -129,11 +129,9 @@ namespace mmo
 
 				AutoStoreLootItem,
 				AutoEquipItem,
-				AutoStoreBagItem,
 				SwapItem,
 				SwapInvItem,
 				SplitItem,
-				AutoEquipItemSlot,
 				DestroyItem,
 
 				Loot,

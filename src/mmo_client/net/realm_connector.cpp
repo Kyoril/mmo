@@ -475,18 +475,6 @@ namespace mmo
 			});
 	}
 
-	void RealmConnector::AutoStoreBagItem(uint8 srcBag, uint8 srcSlot, uint8 dstBag)
-	{
-		sendSinglePacket([srcBag, srcSlot, dstBag](game::OutgoingPacket& packet) {
-			packet.Start(game::client_realm_packet::AutoStoreBagItem);
-			packet
-				<< io::write<uint8>(srcBag)
-				<< io::write<uint8>(srcSlot)
-				<< io::write<uint8>(dstBag);
-			packet.Finish();
-			});
-	}
-
 	void RealmConnector::SwapItem(uint8 srcBag, uint8 srcSlot, uint8 dstBag, uint8 dstSlot)
 	{
 		sendSinglePacket([srcBag, srcSlot, dstBag, dstSlot](game::OutgoingPacket& packet) {
@@ -521,17 +509,6 @@ namespace mmo
 				<< io::write<uint8>(dstBag)
 				<< io::write<uint8>(dstSlot)
 				<< io::write<uint8>(count);
-			packet.Finish();
-			});
-	}
-
-	void RealmConnector::AutoEquipItemSlot(uint64 itemGUID, uint8 dstSlot)
-	{
-		sendSinglePacket([itemGUID, dstSlot](game::OutgoingPacket& packet) {
-			packet.Start(game::client_realm_packet::AutoEquipItemSlot);
-			packet
-				<< io::write_packed_guid(itemGUID)
-				<< io::write<uint8>(dstSlot);
 			packet.Finish();
 			});
 	}

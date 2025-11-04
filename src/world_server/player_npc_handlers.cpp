@@ -519,6 +519,13 @@ namespace mmo
 			return;
 		}
 
+		// Check for gold overflow and prevent sell if so
+		if (m_character->Get<uint32>(object_fields::Money) >= std::numeric_limits<uint32>::max() - money)
+		{
+			SendInventoryError(inventory_change_failure::TooMuchGold);
+			return;
+		}
+
 		const InventoryCommandFactory& factory = m_character->GetInventory().GetCommandFactory();
 
 		const std::unique_ptr<IInventoryCommand> command = factory.CreateRemoveItem(InventorySlot::FromAbsolute(itemSlot), stack);

@@ -444,17 +444,11 @@ namespace mmo
 		case game::client_realm_packet::AutoEquipItem:
 			OnAutoEquipItem(opCode, buffer.size(), reader);
 			break;
-		case game::client_realm_packet::AutoStoreBagItem:
-			OnAutoStoreBagItem(opCode, buffer.size(), reader);
-			break;
 		case game::client_realm_packet::SwapItem:
 			OnSwapItem(opCode, buffer.size(), reader);
 			break;
 		case game::client_realm_packet::SwapInvItem:
 			OnSwapInvItem(opCode, buffer.size(), reader);
-			break;
-		case game::client_realm_packet::AutoEquipItemSlot:
-			OnAutoEquipItemSlot(opCode, buffer.size(), reader);
 			break;
 		case game::client_realm_packet::DestroyItem:
 			OnDestroyItem(opCode, buffer.size(), reader);

@@ -252,18 +252,6 @@ namespace mmo
 		}
 	}
 
-	void Player::OnAutoStoreBagItem(uint16 opCode, uint32 size, io::Reader &contentReader)
-	{
-		uint8 srcBag, srcSlot, dstBag;
-		if (!(contentReader >> io::read<uint8>(srcBag) >> io::read<uint8>(srcSlot) >> io::read<uint8>(dstBag)))
-		{
-			WLOG("Failed to read source bag, source slot and destination bag");
-			return;
-		}
-
-		// TODO
-	}
-
 	void Player::OnSwapItem(uint16 opCode, uint32 size, io::Reader &contentReader)
 	{
 		uint8 srcBag, srcSlot, dstBag, dstSlot;
@@ -332,10 +320,6 @@ namespace mmo
 			ELOG("Failed to split item stack: " << result);
 			SendInventoryError(result);
 		}
-	}
-
-	void Player::OnAutoEquipItemSlot(uint16 opCode, uint32 size, io::Reader &contentReader)
-	{
 	}
 
 	void Player::OnDestroyItem(uint16 opCode, uint32 size, io::Reader &contentReader)
