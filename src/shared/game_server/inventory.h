@@ -212,9 +212,6 @@ namespace mmo
 		/// Determines whether the given slot is a slot in a bag (not the default bag).
 		static bool IsBagSlot(uint16 absoluteSlot);
 
-		/// Determines whether the given slot is a slot in a bag bar.
-		static bool IsBagBarSlot(uint16 absoluteSlot);
-
 		/// Determines whether the given slot is a buyback slot.
 		static bool IsBuyBackSlot(uint16 absoluteSlot);
 
@@ -438,6 +435,18 @@ namespace mmo
 
 		/// Helper method to add an existing item to a slot
 		void AddExistingItemToSlot(std::shared_ptr<GameItemS> item, uint16 targetSlot, uint16 *out_slot);
+
+		/// Helper method to cleanup equipment when removing an item
+		void CleanupRemovedEquipment(std::shared_ptr<GameItemS> item, uint16 absoluteSlot);
+
+		/// Helper method to find or create a buyback slot
+		uint16 FindOrCreateBuybackSlot();
+
+		/// Helper method to validate bag is empty
+		InventoryChangeFailure ValidateBagEmpty(std::shared_ptr<GameItemS> item) const;
+
+		/// Helper method to update item's contained GUID if needed
+		void UpdateItemContained(std::shared_ptr<GameItemS> item, uint64 containerGuid, uint16 slot);
 	};
 
 	/// Serializes this inventory.

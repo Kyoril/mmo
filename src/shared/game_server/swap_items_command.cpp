@@ -92,7 +92,7 @@ namespace mmo
     InventoryResult<void> SwapItemsCommand::ValidateSwap()
     {
         // Check if source has an item
-        auto sourceItem = m_context.GetItemAtSlot(m_sourceSlot.GetAbsolute());
+        const std::shared_ptr<GameItemS> sourceItem = m_context.GetItemAtSlot(m_sourceSlot.GetAbsolute());
         if (!sourceItem)
         {
             return InventoryResult<void>::Failure(
@@ -106,8 +106,8 @@ namespace mmo
                 inventory_change_failure::YouAreDead);
         }
 
-        // Check destination item (may be null)
-        auto destItem = m_context.GetItemAtSlot(m_destSlot.GetAbsolute());
+        // Check destination item (maybe null)
+        const std::shared_ptr<GameItemS> destItem = m_context.GetItemAtSlot(m_destSlot.GetAbsolute());
 
         // Validate stack split
         if (IsStackSplit())
@@ -152,14 +152,10 @@ namespace mmo
             }
         }
 
-        // Trying to put an equipped bag out of the bag bar slots?
-        const uint16 srcAbsSlot = m_sourceSlot.GetAbsolute();
-        const uint16 dstAbsSlot = m_destSlot.GetAbsolute();
-
-        if (Inventory::IsBagBarSlot(srcAbsSlot) && !Inventory::IsBagBarSlot(dstAbsSlot))
+        if (m_sourceSlot.IsBagBar() && !m_destSlot.IsBagBar())
         {
             // Check that the new slot is not inside the bag itself
-            auto bag = m_context.GetBagAtSlot(dstAbsSlot);
+            auto bag = m_context.GetBagAtSlot(m_destSlot.GetAbsolute());
             if (bag && bag == sourceItem)
             {
                 return InventoryResult<void>::Failure(
@@ -168,9 +164,9 @@ namespace mmo
         }
 
         // Can't change equipment while in combat (except weapons)
-        if (m_context.IsOwnerInCombat() && Inventory::IsEquipmentSlot(srcAbsSlot))
+        if (m_context.IsOwnerInCombat() && m_sourceSlot.IsEquipment())
         {
-            const uint8 equipSlot = srcAbsSlot & 0xFF;
+            const uint8 equipSlot = m_sourceSlot.GetSlot();
             if (equipSlot != player_equipment_slots::Mainhand &&
                 equipSlot != player_equipment_slots::Offhand &&
                 equipSlot != player_equipment_slots::Ranged)
@@ -181,7 +177,7 @@ namespace mmo
         }
 
         // Verify destination slot for source item
-        auto result = m_context.IsValidSlot(dstAbsSlot, sourceItem->GetEntry());
+        auto result = m_context.IsValidSlot(m_destSlot.GetAbsolute(), sourceItem->GetEntry());
         if (result != inventory_change_failure::Okay)
         {
             return InventoryResult<void>::Failure(result);
@@ -190,7 +186,7 @@ namespace mmo
         // If there is an item in the destination slot, also verify the source slot
         if (destItem)
         {
-            result = m_context.IsValidSlot(srcAbsSlot, destItem->GetEntry());
+            result = m_context.IsValidSlot(m_sourceSlot.GetAbsolute(), destItem->GetEntry());
             if (result != inventory_change_failure::Okay)
             {
                 return InventoryResult<void>::Failure(result);
@@ -212,7 +208,7 @@ namespace mmo
         }
 
         // For simple swap, source and dest must be different
-        if (srcAbsSlot == dstAbsSlot)
+        if (m_sourceSlot == m_destSlot)
         {
             return InventoryResult<void>::Failure(
                 inventory_change_failure::ItemNotFound);
@@ -223,8 +219,8 @@ namespace mmo
 
     bool SwapItemsCommand::CanMergeStacks() const
     {
-        auto sourceItem = m_context.GetItemAtSlot(m_sourceSlot.GetAbsolute());
-        auto destItem = m_context.GetItemAtSlot(m_destSlot.GetAbsolute());
+	    const std::shared_ptr<GameItemS> sourceItem = m_context.GetItemAtSlot(m_sourceSlot.GetAbsolute());
+	    const std::shared_ptr<GameItemS> destItem = m_context.GetItemAtSlot(m_destSlot.GetAbsolute());
 
         // Both slots must have items
         if (!sourceItem || !destItem)
