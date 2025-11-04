@@ -1525,7 +1525,7 @@ void MySQLDatabase::SaveInventoryItems(uint64 characterId, const std::vector<Ite
 		for (const auto& item : items)
 		{
 			// Don't save buyback slots into the database!
-			if (Inventory::IsBuyBackSlot(item.slot))
+			if (InventorySlot::FromAbsolute(item.slot).IsBuyBack())
 			{
 				continue;
 			}

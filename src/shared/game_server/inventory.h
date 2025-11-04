@@ -19,6 +19,7 @@
 #include "i_item_factory_context.h"
 #include "i_equipment_manager_context.h"
 #include "i_bag_manager_context.h"
+#include "inventory_types.h"
 
 #include <memory>
 #include <map>
@@ -109,12 +110,6 @@ namespace mmo
 		/// @returns game::inventory_change_failure::Okay if succeeded.
 		InventoryChangeFailure CreateItems(const proto::ItemEntry &entry, uint16 amount = 1, std::map<uint16, uint16> *out_addedBySlot = nullptr);
 
-		/// Tries to add multiple existing items of the same entry to the inventory.
-		/// @param entry The item template to be used for creating new items.
-		/// @param out_slot If not nullptr, a slot number that will be used by the item.
-		/// @returns game::inventory_change_failure::Okay if succeeded.
-		InventoryChangeFailure AddItem(std::shared_ptr<GameItemS> item, uint16 *out_slot = nullptr);
-
 		/// Tries to remove multiple items of the same entry.
 		/// @param entry The item template to delete.
 		/// @param amount The amount of items to delete. If 0, ALL items of that entry are deleted.
@@ -199,21 +194,6 @@ namespace mmo
 		/// @param out_slot The absolute item slot will be stored there.
 		/// @returns false if the item could not be found.
 		bool FindItemByGUID(uint64 guid, uint16 &out_slot) const;
-
-		/// Determines whether the given slot is an equipment slot.
-		static bool IsEquipmentSlot(uint16 absoluteSlot);
-
-		/// Determines whether the given slot is a custom bag slot (not in a bag, but a bag equipment slot).
-		static bool IsBagPackSlot(uint16 absoluteSlot);
-
-		/// Determines whether the given slot is a slot in the default bag.
-		static bool IsInventorySlot(uint16 absoluteSlot);
-
-		/// Determines whether the given slot is a slot in a bag (not the default bag).
-		static bool IsBagSlot(uint16 absoluteSlot);
-
-		/// Determines whether the given slot is a buyback slot.
-		static bool IsBuyBackSlot(uint16 absoluteSlot);
 
 		/// Tries to repair all items in the players bags and also consumes money from the owner.
 		/// @returns Repair cost that couldn't be consumed, so if this is greater than 0, there was an error.
@@ -402,9 +382,6 @@ namespace mmo
 		/// Helper method to remove an item from a slot
 		void RemoveItemFromSlot(uint16 slot);
 
-		/// Helper method to validate bag constraints
-		InventoryChangeFailure ValidateBagConstraints(std::shared_ptr<GameItemS> srcItem, uint16 slotB) const;
-
 		/// Helper method to perform the actual item swap
 		/// Automatically moves offhand items to inventory when equipping 2-handed weapons
 		void PerformItemSwap(std::shared_ptr<GameItemS> srcItem, std::shared_ptr<GameItemS> dstItem, uint16 slotA, uint16 slotB);
@@ -429,12 +406,6 @@ namespace mmo
 
 		/// Helper method to find an empty slot
 		uint16 FindEmptySlot() const;
-
-		/// Helper method to setup properties for an existing item
-		void SetupExistingItem(std::shared_ptr<GameItemS> item, const proto::ItemEntry &entry, uint16 targetSlot);
-
-		/// Helper method to add an existing item to a slot
-		void AddExistingItemToSlot(std::shared_ptr<GameItemS> item, uint16 targetSlot, uint16 *out_slot);
 
 		/// Helper method to cleanup equipment when removing an item
 		void CleanupRemovedEquipment(std::shared_ptr<GameItemS> item, uint16 absoluteSlot);

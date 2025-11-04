@@ -117,8 +117,8 @@ namespace mmo
 
 		auto &inv = m_character->GetInventory();
 
-		auto absSrcSlot = Inventory::GetAbsoluteSlot(srcBag, srcSlot);
-		auto item = inv.GetItemAtSlot(absSrcSlot);
+		const InventorySlot absSrcSlot = InventorySlot::FromRelative(srcBag, srcSlot);
+		auto item = inv.GetItemAtSlot(absSrcSlot.GetAbsolute());
 		if (!item)
 		{
 			ELOG("Item not found");
@@ -229,8 +229,8 @@ namespace mmo
 		}
 
 		// Check if valid slot found
-		auto absDstSlot = Inventory::GetAbsoluteSlot(player_inventory_slots::Bag_0, targetSlot);
-		if (!Inventory::IsEquipmentSlot(absDstSlot) && !Inventory::IsBagPackSlot(absDstSlot))
+		const InventorySlot absDstSlot = InventorySlot::FromRelative(player_inventory_slots::Bag_0, targetSlot);
+		if (!absDstSlot.IsEquipment() && !absDstSlot.IsBagPack())
 		{
 			ELOG("Invalid target slot: " << targetSlot);
 			SendInventoryError(inventory_change_failure::ItemDoesNotGoToSlot);
@@ -240,8 +240,8 @@ namespace mmo
 		// Equip the item using command pattern
 		auto &factory = inv.GetCommandFactory();
 		auto command = factory.CreateSwapItems(
-			InventorySlot::FromAbsolute(absSrcSlot),
-			InventorySlot::FromAbsolute(absDstSlot));
+			absSrcSlot,
+			absDstSlot);
 
 		auto result = command->Execute();
 		if (result.IsFailure())
