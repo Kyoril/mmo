@@ -272,7 +272,7 @@ namespace mmo
 		if (entry.itemclass() == item_class::Weapon)
 		{
 			const uint32 weaponProf = m_context.GetWeaponProficiency();
-			const uint32 requiredProf = entry.subclass();
+			const uint32 requiredProf = 1 << entry.subclass();
 
 			if ((weaponProf & requiredProf) == 0)
 			{
@@ -282,7 +282,7 @@ namespace mmo
 		else if (entry.itemclass() == item_class::Armor)
 		{
 			const uint32 armorProf = m_context.GetArmorProficiency();
-			const uint32 requiredProf = entry.subclass();
+			const uint32 requiredProf = (1 << entry.subclass());
 
 			if ((armorProf & requiredProf) == 0)
 			{

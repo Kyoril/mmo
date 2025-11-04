@@ -33,7 +33,7 @@ namespace mmo
 	Inventory::Inventory(GamePlayerS &owner)
 		: m_owner(owner), m_freeSlots(player_inventory_pack_slots::End - player_inventory_pack_slots::Start) // Default slot count with only a backpack
 		  ,
-		  m_nextBuyBackSlot(player_buy_back_slots::Start), m_repository(nullptr), m_isDirty(false), m_validator(std::make_unique<ItemValidator>(owner)), m_slotManager(std::make_unique<SlotManager>(*this)), m_commandFactory(std::make_unique<InventoryCommandFactory>(*this, *this, *this)), m_commandLogger(std::make_unique<InventoryCommandLogger>())
+		  m_nextBuyBackSlot(player_buy_back_slots::Start), m_repository(nullptr), m_isDirty(false), m_validator(std::make_unique<ItemValidator>(owner)), m_slotManager(std::make_unique<SlotManager>(*this)), m_commandFactory(std::make_unique<InventoryCommandFactory>(*this, *this, *this)), m_commandLogger(std::make_unique<InventoryCommandLogger>()), m_itemFactory(std::make_unique<ItemFactory>(*this)), m_equipmentManager(std::make_unique<EquipmentManager>(*this)), m_bagManager(std::make_unique<BagManager>(*this))
 	{
 		// Connect to item change signals to automatically mark inventory as dirty
 		m_inventoryConnections += itemInstanceCreated.connect([this](std::shared_ptr<GameItemS>, uint16)
@@ -68,55 +68,21 @@ namespace mmo
 	// Helper method to find available slots for item creation
 	InventoryChangeFailure Inventory::FindAvailableSlots(const proto::ItemEntry &entry, uint16 amount, ItemSlotInfo &slotInfo) const
 	{
-		const uint16 itemCount = GetItemCount(entry.id());
-		const uint16 requiredSlots = (amount - 1) / entry.maxstack() + 1;
-		uint16 itemsProcessed = 0;
+		// Delegate to SlotManager service which has the same logic
+		SlotAllocationResult result;
+		auto validationResult = m_slotManager->FindAvailableSlots(entry, amount, result);
 
-		ForEachBag([&](uint8 bag, uint8 slotStart, uint8 slotEnd) -> bool
-				   {
-			for (uint8 slot = slotStart; slot < slotEnd; ++slot)
-			{
-				const uint16 absoluteSlot = GetAbsoluteSlot(bag, slot);
-				auto it = m_itemsBySlot.find(absoluteSlot);
+		if (validationResult.IsFailure())
+		{
+			return validationResult.GetError();
+		}
 
-				if (it == m_itemsBySlot.end())
-				{
-					// Empty slot found
-					slotInfo.availableStacks += entry.maxstack();
-					slotInfo.emptySlots.add(absoluteSlot);
+		// Copy results to legacy structure
+		slotInfo.emptySlots = result.emptySlots;
+		slotInfo.usedCapableSlots = result.usedCapableSlots;
+		slotInfo.availableStacks = result.availableStacks;
 
-					if (itemsProcessed >= itemCount && slotInfo.emptySlots.size() >= requiredSlots)
-					{
-						break;
-					}
-					continue;
-				}
-
-				// Check if item matches entry
-				if (it->second->GetEntry().id() != entry.id())
-				{
-					continue;
-				}
-
-				const uint32 stackCount = it->second->GetStackCount();
-				itemsProcessed += stackCount;
-
-				// Check if stack can accept more items
-				if (stackCount < entry.maxstack())
-				{
-					slotInfo.availableStacks += (entry.maxstack() - stackCount);
-					slotInfo.usedCapableSlots.add(absoluteSlot);
-				}
-
-				if (itemsProcessed >= itemCount && slotInfo.emptySlots.size() >= requiredSlots)
-				{
-					break;
-				}
-			}
-
-			return itemsProcessed < itemCount || slotInfo.emptySlots.size() < requiredSlots; });
-
-		return amount > slotInfo.availableStacks ? inventory_change_failure::InventoryFull : inventory_change_failure::Okay;
+		return inventory_change_failure::Okay;
 	}
 
 	// Helper method to add items to existing stacks
@@ -185,26 +151,22 @@ namespace mmo
 
 		for (const auto &slot : emptySlots)
 		{
-			auto item = CreateSingleItem(entry, slot);
+			// Use ItemFactory to create item with proper initialization
+			const uint16 stacksToCreate = std::min(amountLeft, static_cast<uint16>(entry.maxstack()));
+			auto item = m_itemFactory->CreateItem(entry, InventorySlot::FromAbsolute(slot), stacksToCreate);
 			if (!item)
 			{
 				continue;
 			}
 
-			// One stack has been created by initializing the item
-			amountLeft--;
-
-			// Add additional stacks
-			const uint16 added = item->AddStacks(amountLeft);
-			amountLeft -= added;
+			amountLeft -= stacksToCreate;
 
 			// Update counters and tracking
-			const uint16 totalAdded = added + 1;
-			m_itemCounter[entry.id()] += totalAdded;
+			m_itemCounter[entry.id()] += stacksToCreate;
 
 			if (out_addedBySlot)
 			{
-				out_addedBySlot->insert(std::make_pair(slot, totalAdded));
+				out_addedBySlot->insert(std::make_pair(slot, stacksToCreate));
 			}
 
 			// Add to inventory
@@ -222,49 +184,8 @@ namespace mmo
 	// Helper method to create a single item instance
 	std::shared_ptr<GameItemS> Inventory::CreateSingleItem(const proto::ItemEntry &entry, uint16 slot)
 	{
-		// Create appropriate item type
-		std::shared_ptr<GameItemS> item;
-		if (entry.itemclass() == item_class::Container || entry.itemclass() == item_class::Quiver)
-		{
-			item = std::make_shared<GameBagS>(m_owner.GetProject(), entry);
-		}
-		else
-		{
-			item = std::make_shared<GameItemS>(m_owner.GetProject(), entry);
-		}
-
-		item->Initialize();
-		SetupNewItem(item, entry, slot);
-		return item;
-	}
-
-	// Helper method to setup a newly created item
-	void Inventory::SetupNewItem(std::shared_ptr<GameItemS> item, const proto::ItemEntry &entry, uint16 slot)
-	{
-		auto *world = m_owner.GetWorldInstance();
-		ASSERT(world);
-
-		// Generate new ID and setup basic properties
-		auto newItemId = world->GetItemIdGenerator().GenerateId();
-		item->Set<uint64>(object_fields::Guid, CreateEntryGUID(newItemId, entry.id(), GuidType::Item));
-		item->Set<uint64>(object_fields::ItemOwner, m_owner.GetGuid());
-
-		// Set container based on slot type
-		if (IsBagSlot(slot))
-		{
-			auto bagInst = GetBagAtSlot(slot);
-			item->Set<uint64>(object_fields::Contained, bagInst ? bagInst->GetGuid() : m_owner.GetGuid());
-		}
-		else
-		{
-			item->Set<uint64>(object_fields::Contained, m_owner.GetGuid());
-		}
-
-		// Apply binding
-		if (entry.bonding() == item_binding::BindWhenPickedUp)
-		{
-			item->AddFlag<uint32>(object_fields::ItemFlags, item_flags::Bound);
-		}
+		// Delegate to ItemFactory service
+		return m_itemFactory->CreateItem(entry, InventorySlot::FromAbsolute(slot), 1);
 	}
 
 	// Helper method to add an item to a specific slot and update all related systems
@@ -315,21 +236,15 @@ namespace mmo
 	// Helper method to update equipment visuals
 	void Inventory::UpdateEquipmentVisuals(std::shared_ptr<GameItemS> item, uint8 subslot)
 	{
-		constexpr uint32 slotSize = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
-		m_owner.Set<uint32>(object_fields::VisibleItem1_0 + (subslot * slotSize), item->GetEntry().id());
-		m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + (subslot * slotSize), item->Get<uint64>(object_fields::Creator));
+		// Delegate to context implementation which handles the actual update
+		UpdateEquipmentVisual(subslot, item->GetEntry().id(), item->Get<uint64>(object_fields::Creator));
 	}
 
 	// Helper method to update bag slot
 	void Inventory::UpdateBagSlot(std::shared_ptr<GameItemS> item, uint8 bag, uint8 subslot)
 	{
-		auto packSlot = GetAbsoluteSlot(player_inventory_slots::Bag_0, bag);
-		auto bagInst = GetBagAtSlot(packSlot);
-		if (bagInst)
-		{
-			bagInst->Set<uint64>(object_fields::Slot_1 + (subslot * 2), item->GetGuid());
-			itemInstanceUpdated(bagInst, packSlot);
-		}
+		// Delegate to BagManager service
+		m_bagManager->UpdateBagSlot(item, bag, subslot);
 	}
 
 	InventoryChangeFailure Inventory::CreateItems(const proto::ItemEntry &entry, uint16 amount /* = 1*/, std::map<uint16, uint16> *out_addedBySlot /* = nullptr*/)
@@ -410,27 +325,8 @@ namespace mmo
 	// Helper method to find an empty slot
 	uint16 Inventory::FindEmptySlot() const
 	{
-		uint16 targetSlot = 0;
-		ForEachBag([this, &targetSlot](uint8 bag, uint8 slotStart, uint8 slotEnd) -> bool
-				   {
-			for (uint8 slot = slotStart; slot < slotEnd; ++slot)
-			{
-				const uint16 absoluteSlot = GetAbsoluteSlot(bag, slot);
-
-				// Check if this slot is empty
-				auto it = m_itemsBySlot.find(absoluteSlot);
-				if (it == m_itemsBySlot.end())
-				{
-					// Slot is empty - use it!
-					targetSlot = absoluteSlot;
-					return false;
-				}
-			}
-
-			// Continue with the next bag
-			return true; });
-
-		return targetSlot;
+		// Delegate to SlotManager service
+		return m_slotManager->FindFirstEmptySlot();
 	}
 
 	// Helper method to setup properties for an existing item
@@ -777,189 +673,29 @@ namespace mmo
 			return inventory_change_failure::InternalBagError;
 		}
 
-		// Check if it is a special bag....
+		// Delegate equipment slot validation to EquipmentManager
 		if (IsEquipmentSlot(slot))
 		{
-			auto armorProf = m_owner.GetArmorProficiency();
-			auto weaponProf = m_owner.GetWeaponProficiency();
-
-			// Determine whether the provided inventory type can go into the slot
-			if (entry.itemclass() == item_class::Weapon)
+			auto result = m_equipmentManager->ValidateEquipment(entry, InventorySlot::FromAbsolute(slot));
+			if (result.IsFailure())
 			{
-				if ((weaponProf & (1 << entry.subclass())) == 0)
-				{
-					return inventory_change_failure::NoRequiredProficiency;
-				}
-			}
-			else if (entry.itemclass() == item_class::Armor)
-			{
-				if ((armorProf & (1 << entry.subclass())) == 0)
-				{
-					return inventory_change_failure::NoRequiredProficiency;
-				}
+				return result.GetError();
 			}
 
-			if (entry.requiredlevel() > 0 &&
-				entry.requiredlevel() > m_owner.GetLevel())
+			// Additional check for two-handed weapons needing to store offhand
+			if (subslot == player_equipment_slots::Mainhand &&
+				entry.inventorytype() == inventory_type::TwoHandedWeapon)
 			{
-				return inventory_change_failure::CantEquipLevel;
-			}
-
-			/*
-			if (entry.requiredskill() != 0 &&
-				!m_owner.HasSkill(entry.requiredskill()))
-			{
-				return inventory_change_failure::CantEquipSkill;
-			}
-			*/
-
-			// Validate equipment slots
-			auto srcInvType = entry.inventorytype();
-			switch (subslot)
-			{
-			case player_equipment_slots::Head:
-				if (srcInvType != inventory_type::Head)
+				auto offhand = GetItemAtSlot(GetAbsoluteSlot(player_inventory_slots::Bag_0, player_equipment_slots::Offhand));
+				if (offhand)
 				{
-					return inventory_change_failure::ItemDoesNotGoToSlot;
-				}
-				break;
-			case player_equipment_slots::Body:
-				if (srcInvType != inventory_type::Body)
-				{
-					return inventory_change_failure::ItemDoesNotGoToSlot;
-				}
-				break;
-			case player_equipment_slots::Chest:
-				if (srcInvType != inventory_type::Chest &&
-					srcInvType != inventory_type::Robe)
-				{
-					return inventory_change_failure::ItemDoesNotGoToSlot;
-				}
-				break;
-			case player_equipment_slots::Feet:
-				if (srcInvType != inventory_type::Feet)
-				{
-					return inventory_change_failure::ItemDoesNotGoToSlot;
-				}
-				break;
-			case player_equipment_slots::Neck:
-				if (srcInvType != inventory_type::Neck)
-				{
-					return inventory_change_failure::ItemDoesNotGoToSlot;
-				}
-				break;
-			case player_equipment_slots::Ranged:
-				if (srcInvType != inventory_type::Ranged &&
-					srcInvType != inventory_type::Thrown &&
-					srcInvType != inventory_type::RangedRight)
-				{
-					return inventory_change_failure::ItemDoesNotGoToSlot;
-				}
-				break;
-			case player_equipment_slots::Finger1:
-			case player_equipment_slots::Finger2:
-				if (srcInvType != inventory_type::Finger)
-				{
-					return inventory_change_failure::ItemDoesNotGoToSlot;
-				}
-				break;
-			case player_equipment_slots::Trinket1:
-			case player_equipment_slots::Trinket2:
-				if (srcInvType != inventory_type::Trinket)
-				{
-					return inventory_change_failure::ItemDoesNotGoToSlot;
-				}
-				break;
-			case player_equipment_slots::Hands:
-				if (srcInvType != inventory_type::Hands)
-				{
-					return inventory_change_failure::ItemDoesNotGoToSlot;
-				}
-				break;
-			case player_equipment_slots::Legs:
-				if (srcInvType != inventory_type::Legs)
-				{
-					return inventory_change_failure::ItemDoesNotGoToSlot;
-				}
-				break;
-			case player_equipment_slots::Mainhand:
-				if (srcInvType != inventory_type::MainHandWeapon &&
-					srcInvType != inventory_type::TwoHandedWeapon &&
-					srcInvType != inventory_type::Weapon)
-				{
-					return inventory_change_failure::ItemDoesNotGoToSlot;
-				}
-
-				if (srcInvType == inventory_type::TwoHandedWeapon)
-				{
-					auto offhand = GetItemAtSlot(GetAbsoluteSlot(player_inventory_slots::Bag_0, player_equipment_slots::Offhand));
-					if (offhand)
+					// We need to be able to store the offhand weapon in the inventory
+					auto storeResult = CanStoreItems(offhand->GetEntry());
+					if (storeResult != inventory_change_failure::Okay)
 					{
-						// We need to be able to store the offhand weapon in the inventory
-						auto result = CanStoreItems(offhand->GetEntry());
-						if (result != inventory_change_failure::Okay)
-						{
-							return result;
-						}
+						return storeResult;
 					}
 				}
-				break;
-			case player_equipment_slots::Offhand:
-			{
-				if (srcInvType != inventory_type::OffHandWeapon &&
-					srcInvType != inventory_type::Shield &&
-					srcInvType != inventory_type::Weapon &&
-					srcInvType != inventory_type::Holdable)
-				{
-					return inventory_change_failure::ItemDoesNotGoToSlot;
-				}
-				if (srcInvType != inventory_type::Shield &&
-					srcInvType != inventory_type::Holdable &&
-					!m_owner.CanDualWield())
-				{
-					return inventory_change_failure::CantDualWield;
-				}
-
-				const auto item = GetItemAtSlot(GetAbsoluteSlot(player_inventory_slots::Bag_0, player_equipment_slots::Mainhand));
-				if (item &&
-					item->GetEntry().inventorytype() == inventory_type::TwoHandedWeapon)
-				{
-					return inventory_change_failure::CantEquipWithTwoHanded;
-				}
-			}
-			break;
-			case player_equipment_slots::Shoulders:
-				if (srcInvType != inventory_type::Shoulders)
-				{
-					return inventory_change_failure::ItemDoesNotGoToSlot;
-				}
-				break;
-			case player_equipment_slots::Tabard:
-				if (srcInvType != inventory_type::Tabard)
-				{
-					return inventory_change_failure::ItemDoesNotGoToSlot;
-				}
-				break;
-			case player_equipment_slots::Waist:
-				if (srcInvType != inventory_type::Waist)
-				{
-					return inventory_change_failure::ItemDoesNotGoToSlot;
-				}
-				break;
-			case player_equipment_slots::Wrists:
-				if (srcInvType != inventory_type::Wrists)
-				{
-					return inventory_change_failure::ItemDoesNotGoToSlot;
-				}
-				break;
-			case player_equipment_slots::Back:
-				if (srcInvType != inventory_type::Cloak)
-				{
-					return inventory_change_failure::ItemDoesNotGoToSlot;
-				}
-				break;
-			default:
-				return inventory_change_failure::ItemDoesNotGoToSlot;
 			}
 
 			return inventory_change_failure::Okay;
@@ -967,8 +703,7 @@ namespace mmo
 
 		if (IsInventorySlot(slot))
 		{
-			// TODO: Inventory slot validation? However, isInventorySlot already
-			// performs some checks
+			// Inventory slots accept most items
 			return inventory_change_failure::Okay;
 		}
 
@@ -1036,31 +771,8 @@ namespace mmo
 
 	InventoryChangeFailure Inventory::CanStoreItems(const proto::ItemEntry &entry, uint16 amount) const
 	{
-		// Incorrect value used, so give at least one item
-		if (amount == 0)
-		{
-			amount = 1;
-		}
-
-		// Limit the total amount of items
-		const uint16 itemCount = GetItemCount(entry.id());
-		if (entry.maxcount() > 0 &&
-			uint32(itemCount + amount) > entry.maxcount())
-		{
-			return inventory_change_failure::CantCarryMoreOfThis;
-		}
-
-		// Quick check if there are enough free slots (only works if we don't have an item of this type yet)
-		const uint16 requiredSlots = (amount - 1) / entry.maxstack() + 1;
-		if ((itemCount == 0 || entry.maxstack() <= 1) &&
-			requiredSlots > m_freeSlots)
-		{
-			return inventory_change_failure::InventoryFull;
-		}
-
-		// TODO
-
-		return inventory_change_failure::Okay;
+		// Delegate to ValidateItemLimits which does the same checks
+		return ValidateItemLimits(entry, amount == 0 ? 1 : amount);
 	}
 
 	uint16 Inventory::GetItemCount(const uint32 itemId) const noexcept
@@ -1848,30 +1560,36 @@ namespace mmo
 
 		if (isBagPackA && !isBagPackB)
 		{
-			if (!dstItem && srcItem->GetTypeId() == ObjectTypeId::Container)
+			// Moving bag from bag pack slot - calculate slot change
+			if (srcItem->GetTypeId() == ObjectTypeId::Container)
 			{
-				m_freeSlots -= srcItem->Get<uint32>(object_fields::NumSlots);
+				auto srcBag = std::static_pointer_cast<GameBagS>(srcItem);
+				int32 slotChange = m_bagManager->CalculateUnequipBagSlotChange(*srcBag);
+				m_freeSlots += slotChange;
 			}
-			else if (dstItem &&
-					 dstItem->GetTypeId() == ObjectTypeId::Container &&
-					 srcItem->GetTypeId() == ObjectTypeId::Container)
+
+			if (dstItem && dstItem->GetTypeId() == ObjectTypeId::Container)
 			{
-				m_freeSlots -= srcItem->Get<uint32>(object_fields::NumSlots);
-				m_freeSlots += dstItem->Get<uint32>(object_fields::NumSlots);
+				auto dstBag = std::static_pointer_cast<GameBagS>(dstItem);
+				int32 slotChange = m_bagManager->CalculateEquipBagSlotChange(*dstBag);
+				m_freeSlots += slotChange;
 			}
 		}
 		else if (isBagPackB && !isBagPackA)
 		{
-			if (!dstItem && srcItem->GetTypeId() == ObjectTypeId::Container)
+			// Moving bag to bag pack slot - calculate slot change
+			if (srcItem->GetTypeId() == ObjectTypeId::Container)
 			{
-				m_freeSlots += srcItem->Get<uint32>(object_fields::NumSlots);
+				auto srcBag = std::static_pointer_cast<GameBagS>(srcItem);
+				int32 slotChange = m_bagManager->CalculateEquipBagSlotChange(*srcBag);
+				m_freeSlots += slotChange;
 			}
-			else if (dstItem &&
-					 dstItem->GetTypeId() == ObjectTypeId::Container &&
-					 srcItem->GetTypeId() == ObjectTypeId::Container)
+
+			if (dstItem && dstItem->GetTypeId() == ObjectTypeId::Container)
 			{
-				m_freeSlots -= dstItem->Get<uint32>(object_fields::NumSlots);
-				m_freeSlots += srcItem->Get<uint32>(object_fields::NumSlots);
+				auto dstBag = std::static_pointer_cast<GameBagS>(dstItem);
+				int32 slotChange = m_bagManager->CalculateUnequipBagSlotChange(*dstBag);
+				m_freeSlots += slotChange;
 			}
 		}
 	}
@@ -1922,43 +1640,27 @@ namespace mmo
 	// Helper method to apply equipment effects
 	void Inventory::ApplyEquipmentEffects(std::shared_ptr<GameItemS> srcItem, std::shared_ptr<GameItemS> dstItem, uint16 slotA, uint16 slotB)
 	{
-		constexpr uint32 slotSize = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
-
+		// Use EquipmentManager for equipment slots
 		if (IsEquipmentSlot(slotA))
 		{
-			const uint8 equipSlotA = slotA & 0xFF;
-			m_owner.Set<uint32>(object_fields::VisibleItem1_0 + (equipSlotA * slotSize), dstItem ? dstItem->GetEntry().id() : 0);
-			m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + (equipSlotA * slotSize), dstItem ? dstItem->Get<uint64>(object_fields::Creator) : 0);
+			// Removing from equipment slot A
+			m_equipmentManager->RemoveEquipmentEffects(srcItem, InventorySlot::FromAbsolute(slotA));
 
-			m_owner.ApplyItemStats(*srcItem, false);
-			HandleItemSetEffects(srcItem, false);
-
+			// Equipping into equipment slot A (if dstItem exists)
 			if (dstItem)
 			{
-				m_owner.ApplyItemStats(*dstItem, true);
-				HandleItemSetEffects(dstItem, true);
+				m_equipmentManager->ApplyEquipmentEffects(dstItem, nullptr, InventorySlot::FromAbsolute(slotA));
 			}
 		}
 
 		if (IsEquipmentSlot(slotB))
 		{
-			const uint8 equipSlotB = slotB & 0xFF;
-			m_owner.Set<uint32>(object_fields::VisibleItem1_0 + (equipSlotB * slotSize), srcItem->GetEntry().id());
-			m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + (equipSlotB * slotSize), srcItem->Get<uint64>(object_fields::Creator));
+			// Equipping into equipment slot B
+			m_equipmentManager->ApplyEquipmentEffects(srcItem, dstItem, InventorySlot::FromAbsolute(slotB));
 
-			m_owner.ApplyItemStats(*srcItem, true);
-			HandleItemSetEffects(srcItem, true);
-
-			if (dstItem)
-			{
-				m_owner.ApplyItemStats(*dstItem, false);
-				HandleItemSetEffects(dstItem, false);
-			}
-
-			// Handle binding when equipped
+			// Notify if binding was applied
 			if (srcItem->GetEntry().bonding() == item_binding::BindWhenEquipped)
 			{
-				srcItem->AddFlag<uint32>(object_fields::ItemFlags, item_flags::Bound);
 				itemInstanceUpdated(srcItem, slotB);
 			}
 		}
@@ -1975,16 +1677,10 @@ namespace mmo
 	// Helper method to handle item set effects
 	void Inventory::HandleItemSetEffects(std::shared_ptr<GameItemS> item, bool equipped)
 	{
+		// Delegate to context implementation
 		if (item->GetEntry().itemset() != 0)
 		{
-			if (equipped)
-			{
-				OnSetItemEquipped(item->GetEntry().itemset());
-			}
-			else
-			{
-				OnSetItemUnequipped(item->GetEntry().itemset());
-			}
+			HandleItemSetEffect(item->GetEntry().itemset(), equipped);
 		}
 	}
 
@@ -2261,5 +1957,83 @@ namespace mmo
 	bool Inventory::IsOwnerInCombat() const
 	{
 		return m_owner.IsInCombat();
+	}
+
+	// ============================================================================
+	// IItemFactoryContext Implementation
+	// ============================================================================
+
+	uint64 Inventory::GenerateItemId() const noexcept
+	{
+		auto *world = m_owner.GetWorldInstance();
+		ASSERT(world);
+		return world->GetItemIdGenerator().GenerateId();
+	}
+
+	uint64 Inventory::GetOwnerGuid() const noexcept
+	{
+		return m_owner.GetGuid();
+	}
+
+	const proto::Project &Inventory::GetProject() const noexcept
+	{
+		return m_owner.GetProject();
+	}
+
+	// ============================================================================
+	// IEquipmentManagerContext Implementation
+	// ============================================================================
+
+	uint32 Inventory::GetLevel() const noexcept
+	{
+		return m_owner.GetLevel();
+	}
+
+	uint32 Inventory::GetWeaponProficiency() const noexcept
+	{
+		return m_owner.GetWeaponProficiency();
+	}
+
+	uint32 Inventory::GetArmorProficiency() const noexcept
+	{
+		return m_owner.GetArmorProficiency();
+	}
+
+	bool Inventory::CanDualWield() const noexcept
+	{
+		return m_owner.CanDualWield();
+	}
+
+	void Inventory::ApplyItemStats(const GameItemS &item, bool apply) noexcept
+	{
+		m_owner.ApplyItemStats(item, apply);
+	}
+
+	void Inventory::UpdateEquipmentVisual(uint8 equipSlot, uint32 entryId, uint64 creatorGuid) noexcept
+	{
+		constexpr uint32 slotSize = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
+		m_owner.Set<uint32>(object_fields::VisibleItem1_0 + (equipSlot * slotSize), entryId);
+		m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + (equipSlot * slotSize), creatorGuid);
+	}
+
+	void Inventory::HandleItemSetEffect(uint32 itemSetId, bool equipped) noexcept
+	{
+		if (equipped)
+		{
+			OnSetItemEquipped(itemSetId);
+		}
+		else
+		{
+			OnSetItemUnequipped(itemSetId);
+		}
+	}
+
+	// ============================================================================
+	// IBagManagerContext Implementation
+	// ============================================================================
+
+	void Inventory::NotifyItemUpdated(std::shared_ptr<GameItemS> item, uint16 slot) noexcept
+	{
+		itemInstanceUpdated(item, slot);
 	}
 }

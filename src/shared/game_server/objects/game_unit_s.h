@@ -826,7 +826,9 @@ namespace mmo
 		uint32 GetArmorProficiency() const noexcept
 		{
 			return m_armorProficiency;
-		} /// Adds a new weapon proficiency to the mask.
+		}
+
+		/// Adds a new weapon proficiency to the mask.
 		void AddWeaponProficiency(uint32 mask)
 		{
 			if ((m_weaponProficiency & mask) == mask)
