@@ -26,6 +26,7 @@ namespace mmo
         m_loaded = true;
         ILOG("Friend system initialized (friendships loaded on-demand per player login) in " << (GetAsyncTimeMs() - startTime) << " ms");
     }
+
     bool FriendMgr::AreFriends(uint64 charId1, uint64 charId2) const
     {
         const auto it = m_friendshipsByCharacter.find(charId1);
