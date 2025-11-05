@@ -249,7 +249,7 @@ namespace mmo
 			worldManager.addKey("maxCount", maxWorlds);
 			worldManager.Finish();
 		}
-		
+
 		global.writer.newLine();
 
 		{
@@ -258,6 +258,15 @@ namespace mmo
 			log.addKey("fileName", logFileName);
 			log.addKey("buffering", isLogFileBuffering);
 			log.Finish();
+		}
+
+		global.writer.newLine();
+
+		{
+			sff::write::Table<Char> folders(global, "folders", sff::write::MultiLine);
+			folders.addKey("data", dataFolder);
+			folders.addKey("watchDataForChanges", watchDataForChanges);
+			folders.Finish();
 		}
 
 		return true;

@@ -1,0 +1,21 @@
+meta {
+  name: Create New Account
+  type: http
+  seq: 4
+}
+
+post {
+  url: http://localhost:8090/create-account
+  body: formUrlEncoded
+  auth: inherit
+}
+
+body:form-urlencoded {
+  id: KYORIL
+  password: SECRET
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

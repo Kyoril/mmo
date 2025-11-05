@@ -1,0 +1,21 @@
+meta {
+  name: Create New World Node
+  type: http
+  seq: 1
+}
+
+post {
+  url: http://localhost:8092/create-world
+  body: formUrlEncoded
+  auth: inherit
+}
+
+body:form-urlencoded {
+  id: DEVWORLD001
+  password: SECRET
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

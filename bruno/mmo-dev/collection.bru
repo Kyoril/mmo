@@ -1,0 +1,13 @@
+auth {
+  mode: basic
+}
+
+auth:basic {
+  username: {{auth_username}}
+  password: {{auth_password}}
+}
+
+vars:pre-request {
+  auth_username: mmo-dev
+  auth_password: test
+}

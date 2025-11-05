@@ -1,0 +1,21 @@
+meta {
+  name: Promote Account To GameMaster
+  type: http
+  seq: 5
+}
+
+post {
+  url: http://localhost:8090/gm-level
+  body: formUrlEncoded
+  auth: inherit
+}
+
+body:form-urlencoded {
+  account_name: KYORIL
+  gm_level: 3
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

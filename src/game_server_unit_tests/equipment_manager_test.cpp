@@ -356,17 +356,17 @@ TEST_CASE("EquipmentManager - Proficiency validation", "[equipment_manager]")
 
 	SECTION("Validates weapon proficiency")
 	{
-		context.SetWeaponProficiency(0x01);  // Only first weapon type
+		context.SetWeaponProficiency(1 << item_subclass_weapon::OneHandedAxe);  // Only first weapon type
 
 		const auto validEntry = ItemEntryBuilder()
 			.WithClass(item_class::Weapon)
-			.WithSubclass(0x01)  // Has proficiency
+			.WithSubclass(item_subclass_weapon::OneHandedAxe)  // Has proficiency
 			.WithInventoryType(inventory_type::MainHandWeapon)
 			.Build();
 
 		const auto invalidEntry = ItemEntryBuilder()
 			.WithClass(item_class::Weapon)
-			.WithSubclass(0x02)  // No proficiency
+			.WithSubclass(item_subclass_weapon::TwoHandedAxe)  // No proficiency
 			.WithInventoryType(inventory_type::MainHandWeapon)
 			.Build();
 
@@ -384,17 +384,17 @@ TEST_CASE("EquipmentManager - Proficiency validation", "[equipment_manager]")
 
 	SECTION("Validates armor proficiency")
 	{
-		context.SetArmorProficiency(0x01);  // Only first armor type
+		context.SetArmorProficiency((1 << item_subclass_armor::Cloth));  // Only first armor type
 
 		const auto validEntry = ItemEntryBuilder()
 			.WithClass(item_class::Armor)
-			.WithSubclass(0x01)  // Has proficiency
+			.WithSubclass(item_subclass_armor::Cloth)  // Has proficiency
 			.WithInventoryType(inventory_type::Chest)
 			.Build();
 
 		const auto invalidEntry = ItemEntryBuilder()
 			.WithClass(item_class::Armor)
-			.WithSubclass(0x02)  // No proficiency
+			.WithSubclass(item_subclass_armor::Leather)  // No proficiency
 			.WithInventoryType(inventory_type::Chest)
 			.Build();
 

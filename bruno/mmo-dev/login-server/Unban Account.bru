@@ -1,0 +1,20 @@
+meta {
+  name: Unban Account
+  type: http
+  seq: 6
+}
+
+post {
+  url: http://localhost:8090/unban-account
+  body: formUrlEncoded
+  auth: inherit
+}
+
+body:form-urlencoded {
+  account_name: KYORIL
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -1,0 +1,20 @@
+meta {
+  name: Get Account Level
+  type: http
+  seq: 8
+}
+
+get {
+  url: http://localhost:8090/gm-level?account_name=KYORIL
+  body: none
+  auth: inherit
+}
+
+params:query {
+  account_name: KYORIL
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
