@@ -1,0 +1,23 @@
+meta {
+  name: Create New Realm Server
+  type: http
+  seq: 1
+}
+
+post {
+  url: http://localhost:8090/create-realm
+  body: formUrlEncoded
+  auth: inherit
+}
+
+body:form-urlencoded {
+  id: DEMO
+  password: SECRET
+  address: 127.0.0.1
+  port: 8129
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

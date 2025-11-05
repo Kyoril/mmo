@@ -1,0 +1,44 @@
+meta {
+  name: Ban Account Permanently
+  type: http
+  seq: 3
+}
+
+post {
+  url: http://localhost:8090/ban-account
+  body: formUrlEncoded
+  auth: inherit
+}
+
+body:form-urlencoded {
+  account_name: KYORIL
+  reason: Permaban from Bruno
+}
+
+script:pre-request {
+  // Get the current local date and time
+  const now = new Date();
+  
+  // Add one hour
+  now.setHours(now.getHours() + 1);
+  
+  // Helper function to pad numbers with leading zeros
+  function pad(num) {
+    return num.toString().padStart(2, '0');
+  }
+  
+  // Format as "YYYY-MM-DD HH:MM:SS"
+  const formatted = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  
+  // Store in pre-request variable
+  bru.setVar('ban-expiration-timestamp', formatted);
+  
+  // Optionally log for debugging
+  console.log('ban-expiration-timestamp:', formatted);
+  
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

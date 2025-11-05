@@ -1,0 +1,16 @@
+meta {
+  name: Shutdown
+  type: http
+  seq: 9
+}
+
+post {
+  url: http://localhost:8090/shutdown
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

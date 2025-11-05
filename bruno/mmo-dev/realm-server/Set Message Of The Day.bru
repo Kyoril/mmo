@@ -1,0 +1,23 @@
+meta {
+  name: Set Message Of The Day
+  type: http
+  seq: 3
+}
+
+post {
+  url: http://localhost:8092/motd
+  body: formUrlEncoded
+  auth: inherit
+}
+
+body:form-urlencoded {
+  message: '''
+    Welcome to the Alestia Online Demo Realm!
+    If you need any assistance, please file a new ticket and our game masters will reach out to you.
+  '''
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
