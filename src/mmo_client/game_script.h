@@ -15,6 +15,7 @@
 namespace mmo
 {
 	class GuildClient;
+	class FriendClient;
 	class CharSelect;
 	class CharCreateInfo;
 	class TalentClient;
@@ -69,13 +70,12 @@ namespace mmo
 			QuestClient& questClient,
 			IAudio& audio,
 			PartyInfo& partyInfo,
-			CharCreateInfo& charCreateInfo,
-			CharSelect& charSelect,
-			GuildClient& guildClient,
-			GameTimeComponent& gameTime,
-			TalentClient& talentClient);
-
-	public:
+		CharCreateInfo& charCreateInfo,
+		CharSelect& charSelect,
+		GuildClient& guildClient,
+		FriendClient& friendClient,
+		GameTimeComponent& gameTime,
+		TalentClient& talentClient);	public:
 		/// Gets the current lua state
 		inline lua_State& GetLuaState() { ASSERT(m_luaState);  return *m_luaState; }
 
@@ -164,15 +164,15 @@ namespace mmo
 
 		CharCreateInfo& m_charCreateInfo;
 
-		CharSelect& m_charSelect;
+	CharSelect& m_charSelect;
 
-		GuildClient& m_guildClient;
+	GuildClient& m_guildClient;
 
-		GameTimeComponent& m_gameTime;
+	FriendClient& m_friendClient;
 
-		TalentClient& m_talentClient;
+	GameTimeComponent& m_gameTime;
 
-	private:
+	TalentClient& m_talentClient;	private:
 		void Script_ReviveMe() const;
 	};
 

@@ -42,6 +42,7 @@
 #include "game_client/game_bag_c.h"
 #include "terrain/page.h"
 #include "systems/guild_client.h"
+#include "systems/friend_client.h"
 #include "systems/talent_client.h"
 #include "game/object_info.h"
 #include "game/guild_info.h"
@@ -74,29 +75,32 @@ namespace mmo
 	// Console command names
 	namespace command_names
 	{
-		static const char* s_toggleAxis = "ToggleAxis";
-		static const char* s_toggleGrid = "ToggleGrid";
-		static const char* s_toggleWire = "ToggleWire";
-		static const char* s_freezeCulling = "ToggleCullingFreeze";
-		static const char* s_reload = "reload";
+		static const char *s_toggleAxis = "ToggleAxis";
+		static const char *s_toggleGrid = "ToggleGrid";
+		static const char *s_toggleWire = "ToggleWire";
+		static const char *s_freezeCulling = "ToggleCullingFreeze";
+		static const char *s_reload = "reload";
 	}
 
 	namespace
 	{
-		static ConsoleVar* s_debugOutputPathVar = nullptr;
+		static ConsoleVar *s_debugOutputPathVar = nullptr;
 
-		static ConsoleVar* s_renderShadowsVar = nullptr;
+		static ConsoleVar *s_renderShadowsVar = nullptr;
 
-		static ConsoleVar* s_depthBiasVar = nullptr;
-		static ConsoleVar* s_slopeDepthBiasVar = nullptr;
-		static ConsoleVar* s_clampDepthBiasVar = nullptr;
-		static ConsoleVar* s_shadowTextureSizeVar = nullptr;
+		static ConsoleVar *s_depthBiasVar = nullptr;
+		static ConsoleVar *s_slopeDepthBiasVar = nullptr;
+		static ConsoleVar *s_clampDepthBiasVar = nullptr;
+		static ConsoleVar *s_shadowTextureSizeVar = nullptr;
 
 		String MapMouseButton(const MouseButton button)
 		{
-			if ((button & MouseButton::Left) == MouseButton::Left) return "LMB";
-			if ((button & MouseButton::Right) == MouseButton::Right) return "RMB";
-			if ((button & MouseButton::Middle) == MouseButton::Middle) return "MMB";
+			if ((button & MouseButton::Left) == MouseButton::Left)
+				return "LMB";
+			if ((button & MouseButton::Right) == MouseButton::Right)
+				return "RMB";
+			if ((button & MouseButton::Middle) == MouseButton::Middle)
+				return "MMB";
 
 			return {};
 		}
@@ -120,33 +124,58 @@ namespace mmo
 				return String("NUM-") + String(1, static_cast<char>(keyCode - 0x60 + '0'));
 			}
 
-			switch(keyCode)
+			switch (keyCode)
 			{
-			case 0x20:		return "SPACE";
-			case 0x0D:		return "ENTER";
-			case 0x1B:		return "ESCAPE";
-			case 0x08:		return "BACKSPACE";
-			case 0x09:		return "TAB";
-			case 0x6B:		return "ADD";
-			case 0x6D:		return "SUBTRACT";
-			case 0x6A:		return "MULTIPLY";
-			case 0x6F:		return "DIVIDE";
-			case 0x1E:		return "ACCEPT";
-			case 0x2E:		return "DEL";
-			case 0x2D:		return "INSERT";
-			case 0x11:		return "CONTROL";
-			case 0x10:		return "SHIFT";
-			case 0x25:		return "LEFT";
-			case 0x27:		return "RIGHT";
-			case 0x26:		return "UP";
-			case 0x28:		return "DOWN";
-			case 0x21:		return "PAGEUP";
-			case 0x22:		return "PAGEDOWN";
-			case 0x23:		return "END";
-			case 0x24:		return "HOME";
-			case 0x2C:		return "PRINTSCREEN";
-			case 0x91:		return "SCROLLLOCK";
-			case 0x13:		return "PAUSE";
+			case 0x20:
+				return "SPACE";
+			case 0x0D:
+				return "ENTER";
+			case 0x1B:
+				return "ESCAPE";
+			case 0x08:
+				return "BACKSPACE";
+			case 0x09:
+				return "TAB";
+			case 0x6B:
+				return "ADD";
+			case 0x6D:
+				return "SUBTRACT";
+			case 0x6A:
+				return "MULTIPLY";
+			case 0x6F:
+				return "DIVIDE";
+			case 0x1E:
+				return "ACCEPT";
+			case 0x2E:
+				return "DEL";
+			case 0x2D:
+				return "INSERT";
+			case 0x11:
+				return "CONTROL";
+			case 0x10:
+				return "SHIFT";
+			case 0x25:
+				return "LEFT";
+			case 0x27:
+				return "RIGHT";
+			case 0x26:
+				return "UP";
+			case 0x28:
+				return "DOWN";
+			case 0x21:
+				return "PAGEUP";
+			case 0x22:
+				return "PAGEDOWN";
+			case 0x23:
+				return "END";
+			case 0x24:
+				return "HOME";
+			case 0x2C:
+				return "PRINTSCREEN";
+			case 0x91:
+				return "SCROLLLOCK";
+			case 0x13:
+				return "PAUSE";
 			default:
 				break;
 			}
@@ -161,31 +190,12 @@ namespace mmo
 		}
 	}
 
-	IInputControl* WorldState::s_inputControl = nullptr;
+	IInputControl *WorldState::s_inputControl = nullptr;
 
-	WorldState::WorldState(GameStateMgr& gameStateManager, RealmConnector& realmConnector, const proto_client::Project& project, TimerQueue& timers, LootClient& lootClient, VendorClient& vendorClient,
-		ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharSelect& charSelect, GuildClient& guildClient, ICacheProvider& cache, Discord& discord,
-		GameTimeComponent& gameTime, TalentClient& talentClient, Minimap& minimap, InventoryClient& inventoryClient)
-		: GameState(gameStateManager)
-		, m_realmConnector(realmConnector)
-		, m_audio(audio)
-		, m_cache(cache)
-		, m_project(project)
-		, m_timers(timers)
-		, m_lootClient(lootClient)
-		, m_vendorClient(vendorClient)
-		, m_actionBar(actionBar)
-		, m_spellCast(spellCast)
-		, m_trainerClient(trainerClient)
-		, m_questClient(questClient)
-		, m_partyInfo(partyInfo)
-		, m_charSelect(charSelect)
-		, m_guildClient(guildClient)
-		, m_discord(discord)
-		, m_gameTime(gameTime)
-		, m_talentClient(talentClient)
-		, m_minimap(minimap)
-		, m_inventoryClient(inventoryClient)
+	WorldState::WorldState(GameStateMgr &gameStateManager, RealmConnector &realmConnector, const proto_client::Project &project, TimerQueue &timers, LootClient &lootClient, VendorClient &vendorClient,
+						   ActionBar &actionBar, SpellCast &spellCast, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, PartyInfo &partyInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, ICacheProvider &cache, Discord &discord,
+						   GameTimeComponent &gameTime, TalentClient &talentClient, Minimap &minimap, InventoryClient &inventoryClient)
+		: GameState(gameStateManager), m_realmConnector(realmConnector), m_audio(audio), m_cache(cache), m_project(project), m_timers(timers), m_lootClient(lootClient), m_vendorClient(vendorClient), m_actionBar(actionBar), m_spellCast(spellCast), m_trainerClient(trainerClient), m_questClient(questClient), m_partyInfo(partyInfo), m_charSelect(charSelect), m_guildClient(guildClient), m_friendClient(friendClient), m_discord(discord), m_gameTime(gameTime), m_talentClient(talentClient), m_minimap(minimap), m_inventoryClient(inventoryClient)
 	{
 		// TODO: Do we want to put these asset references in some sort of config setting or something?
 		ObjectMgr::SetUnitNameFontSettings(FontManager::Get().CreateOrRetrieve("Fonts/FRIZQT__.TTF", 24.0f, 1.0f), MaterialManager::Get().Load("Models/UnitNameFont.hmat"));
@@ -202,18 +212,16 @@ namespace mmo
 		m_debugPathVisualizer = std::make_unique<DebugPathVisualizer>(*m_scene);
 
 		// Register world renderer
-		FrameManager::Get().RegisterFrameRenderer("WorldRenderer", [this](const std::string& name)
-			{
-				return std::make_unique<WorldRenderer>(name, *m_scene);
-			});
+		FrameManager::Get().RegisterFrameRenderer("WorldRenderer", [this](const std::string &name)
+												  { return std::make_unique<WorldRenderer>(name, *m_scene); });
 
 		// Register world frame type
-		FrameManager::Get().RegisterFrameFactory("World", [](const std::string& name) {
+		FrameManager::Get().RegisterFrameFactory("World", [](const std::string &name)
+												 {
 			auto worldFrame = std::make_shared<WorldFrame>(name);
 			worldFrame->SetAsCurrentWorldFrame();
-			return worldFrame;
-			});
-		
+			return worldFrame; });
+
 		ReloadUI();
 
 		// Load bindings
@@ -222,10 +230,9 @@ namespace mmo
 
 		m_realmConnections += {
 			m_realmConnector.EnterWorldFailed.connect(*this, &WorldState::OnEnterWorldFailed),
-			m_realmConnector.Disconnected.connect(*this, &WorldState::OnRealmDisconnected)
-		};
+			m_realmConnector.Disconnected.connect(*this, &WorldState::OnRealmDisconnected)};
 
-		const auto* selectedCharacter = m_charSelect.GetCharacterView(m_charSelect.GetSelectedCharacter());
+		const auto *selectedCharacter = m_charSelect.GetCharacterView(m_charSelect.GetSelectedCharacter());
 		ASSERT(selectedCharacter);
 
 		g_mapId = selectedCharacter->GetMapId();
@@ -233,21 +240,22 @@ namespace mmo
 		// Send enter world request to server
 		m_realmConnector.EnterWorld(*selectedCharacter);
 		m_realmConnector.VerifyNewWorld += [this](uint32 mapId, Vector3 position, float facing)
+		{
+			if (mapId != g_mapId)
 			{
-				if (mapId != g_mapId)
-				{
-					WLOG("Received different map id from server! Reloading world...");
-					g_mapId = mapId;
-					LoadMap();
-				}
-				else
-				{
-					DLOG("Map " << mapId << " verified");
-				}
-			};
+				WLOG("Received different map id from server! Reloading world...");
+				g_mapId = mapId;
+				LoadMap();
+			}
+			else
+			{
+				DLOG("Map " << mapId << " verified");
+			}
+		};
 
 		// Register drawing of the game ui
-		m_paintLayer = Screen::AddLayer([this] { OnPaint(); }, 1.0f, ScreenLayerFlags::IdentityTransform);
+		m_paintLayer = Screen::AddLayer([this]
+										{ OnPaint(); }, 1.0f, ScreenLayerFlags::IdentityTransform);
 
 		m_inputConnections += {
 			EventLoop::MouseDown.connect(this, &WorldState::OnMouseDown),
@@ -256,9 +264,8 @@ namespace mmo
 			EventLoop::KeyDown.connect(this, &WorldState::OnKeyDown),
 			EventLoop::MouseWheel.connect(this, &WorldState::OnMouseWheel),
 			EventLoop::KeyUp.connect(this, &WorldState::OnKeyUp),
-			EventLoop::Idle.connect(this, &WorldState::OnIdle)
-		};
-		
+			EventLoop::Idle.connect(this, &WorldState::OnIdle)};
+
 		RegisterGameplayCommands();
 
 		SetupPacketHandler();
@@ -279,18 +286,17 @@ namespace mmo
 		m_audio.PlaySound(m_ambienceSound, &m_ambienceChannel);
 
 		// Initialize rich presence
-		const mmo::CharacterView* character = m_charSelect.GetCharacterView(m_charSelect.GetSelectedCharacter());
+		const mmo::CharacterView *character = m_charSelect.GetCharacterView(m_charSelect.GetSelectedCharacter());
 		ASSERT(character);
 		if (character)
 		{
-			const proto_client::RaceEntry* race = m_project.races.getById(character->GetRaceId());
-			const proto_client::ClassEntry* classEntry = m_project.classes.getById(character->GetClassId());
+			const proto_client::RaceEntry *race = m_project.races.getById(character->GetRaceId());
+			const proto_client::ClassEntry *classEntry = m_project.classes.getById(character->GetClassId());
 			m_discord.NotifyCharacterData(
 				character->GetName(),
 				character->GetLevel(),
 				classEntry ? classEntry->name() : "UNKNOWN",
-				race ? race->name() : "UNKNOWN"
-			);
+				race ? race->name() : "UNKNOWN");
 		}
 	}
 
@@ -339,11 +345,11 @@ namespace mmo
 
 		// Reset the logo frame ui
 		FrameManager::Get().ResetTopFrame();
-		
+
 		// Remove world renderer
 		FrameManager::Get().RemoveFrameRenderer("WorldRenderer");
 		FrameManager::Get().UnregisterFrameFactory("World");
-		
+
 		// No longer draw current layer
 		Screen::RemoveLayer(m_paintLayer);
 
@@ -388,7 +394,7 @@ namespace mmo
 	{
 		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
 
-		//DLOG("Target changed to " << log_hex_digit(ObjectMgr::GetActivePlayer()->Get<uint64>(object_fields::TargetUnit)));
+		// DLOG("Target changed to " << log_hex_digit(ObjectMgr::GetActivePlayer()->Get<uint64>(object_fields::TargetUnit)));
 	}
 
 	void WorldState::OnMoneyChanged(uint64 monitoredGuid)
@@ -540,7 +546,7 @@ namespace mmo
 
 		// Update sky component (handles day/night cycle and lighting)
 		m_skyComponent->Update(deltaSeconds, timestamp);
-		
+
 		// Set the sky dome position to follow the player
 		if (m_playerController->GetRootNode())
 		{
@@ -559,24 +565,25 @@ namespace mmo
 			m_playerController->Update(deltaSeconds);
 			ObjectMgr::UpdateObjects(deltaSeconds);
 		}
-		
+
 		// Update minimap
-		if (const auto& controlled = m_playerController->GetControlledUnit())
+		if (const auto &controlled = m_playerController->GetControlledUnit())
 		{
 			m_minimap.UpdatePlayerPosition(controlled->GetPosition(), controlled->GetFacing());
 		}
-		
+
 		// Update projectiles
 		auto it = m_spellProjectiles.begin();
-		while(it != m_spellProjectiles.end())
+		while (it != m_spellProjectiles.end())
 		{
-			const auto& projectile = *it;
+			const auto &projectile = *it;
 			projectile->Update(deltaSeconds);
 
 			if (projectile->HasHit())
 			{
 				it = EraseByMove(m_spellProjectiles, it);
-			}			else
+			}
+			else
 			{
 				++it;
 			}
@@ -595,7 +602,7 @@ namespace mmo
 		CheckForZoneUpdate();
 
 		// Update world text frames
-		for (size_t i = 0; i < m_worldTextFrames.size(); )
+		for (size_t i = 0; i < m_worldTextFrames.size();)
 		{
 			m_worldTextFrames[i]->Update(deltaSeconds);
 
@@ -610,7 +617,7 @@ namespace mmo
 			}
 		}
 	}
-	
+
 	bool WorldState::OnMouseWheel(const int32 delta)
 	{
 		m_playerController->OnMouseWheel(delta);
@@ -622,7 +629,7 @@ namespace mmo
 		FrameManager::Get().Draw();
 
 		// Draw world text frames
-		for(const auto& textFrame : m_worldTextFrames)
+		for (const auto &textFrame : m_worldTextFrames)
 		{
 			textFrame->Render();
 		}
@@ -652,12 +659,12 @@ namespace mmo
 		{
 			s_zoneId = zoneId;
 
-			const proto_client::ZoneEntry* zone = m_project.zones.getById(s_zoneId);
+			const proto_client::ZoneEntry *zone = m_project.zones.getById(s_zoneId);
 			if (zone)
 			{
 				if (zone->parentzone() != 0)
 				{
-					const proto_client::ZoneEntry* parentZone = m_project.zones.getById(zone->parentzone());
+					const proto_client::ZoneEntry *parentZone = m_project.zones.getById(zone->parentzone());
 					if (parentZone)
 					{
 						s_zoneName = parentZone->name();
@@ -689,7 +696,7 @@ namespace mmo
 	{
 		m_scene = std::make_unique<OctreeScene>();
 		m_scene->SetFogRange(210.0f, 300.0f);
-		
+
 		// Create sky component to manage the sky dome and day/night cycle
 		m_skyComponent = std::make_unique<SkyComponent>(*m_scene, &m_gameTime);
 
@@ -714,21 +721,19 @@ namespace mmo
 		m_work = std::make_unique<asio::io_service::work>(m_workQueue);
 
 		// Setup background loading thread
-		auto& workQueue = m_workQueue;
-		auto& dispatcher = m_dispatcher;
+		auto &workQueue = m_workQueue;
+		auto &dispatcher = m_dispatcher;
 		m_backgroundLoader = std::thread([&workQueue]()
-			{
-				workQueue.run();
-			});
+										 { workQueue.run(); });
 
-		const auto addWork = [&workQueue](const WorldPageLoader::Work& work)
-			{
-				workQueue.post(work);
-			};
-		const auto synchronize = [&dispatcher](const WorldPageLoader::Work& work)
-			{
-				dispatcher.post(work);
-			};
+		const auto addWork = [&workQueue](const WorldPageLoader::Work &work)
+		{
+			workQueue.post(work);
+		};
+		const auto synchronize = [&dispatcher](const WorldPageLoader::Work &work)
+		{
+			dispatcher.post(work);
+		};
 
 		const PagePosition pos = GetPagePositionFromCamera();
 		m_visibleSection = std::make_unique<LoadedPageSection>(pos, 1, *this);
@@ -739,8 +744,7 @@ namespace mmo
 			worldSize,
 			2,
 			pos,
-			*m_pageLoader
-		);
+			*m_pageLoader);
 	}
 
 	void WorldState::SetupPacketHandler()
@@ -748,7 +752,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::UpdateObject, *this, &WorldState::OnUpdateObject);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CompressedUpdateObject, *this, &WorldState::OnCompressedUpdateObject);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::DestroyObjects, *this, &WorldState::OnDestroyObjects);
-		
+
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartForward, *this, &WorldState::OnMovement);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartBackward, *this, &WorldState::OnMovement);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStop, *this, &WorldState::OnMovement);
@@ -774,7 +778,7 @@ namespace mmo
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LearnedSpell, *this, &WorldState::OnSpellLearnedOrUnlearned);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::UnlearnedSpell, *this, &WorldState::OnSpellLearnedOrUnlearned);
-		
+
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellStart, *this, &WorldState::OnSpellStart);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellGo, *this, &WorldState::OnSpellGo);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellFailure, *this, &WorldState::OnSpellFailure);
@@ -790,7 +794,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CreatureQueryResult, *this, &WorldState::OnCreatureQueryResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ItemQueryResult, *this, &WorldState::OnItemQueryResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ObjectQueryResult, *this, &WorldState::OnObjectQueryResult);
-		
+
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetWalkSpeed, *this, &WorldState::OnForceMovementSpeedChange);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetRunSpeed, *this, &WorldState::OnForceMovementSpeedChange);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetRunBackSpeed, *this, &WorldState::OnForceMovementSpeedChange);
@@ -820,7 +824,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TransferPending, *this, &WorldState::OnTransferPending);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ItemPushResult, *this, &WorldState::OnItemPushResult);
-		
+
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PartyCommandResult, *this, &WorldState::OnPartyCommandResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupInvite, *this, &WorldState::OnGroupInvite);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupDecline, *this, &WorldState::OnGroupDecline);
@@ -835,32 +839,44 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveRoot, *this, &WorldState::OnMoveRoot);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &WorldState::OnGameTimeInfo);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetProficiency, *this, &WorldState::OnSetProficiency);
-		
+
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TimePlayedResponse, *this, &WorldState::OnTimePlayedResponse);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TimeSyncRequest, *this, &WorldState::OnTimeSyncRequest);
-		
+
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
 		m_trainerClient.Initialize();
 		m_questClient.Initialize();
 		m_partyInfo.Initialize();
 		m_guildClient.Initialize();
+		m_friendClient.Initialize();
 		m_talentClient.Initialize();
 		m_inventoryClient.Initialize();
-
 #ifdef MMO_WITH_DEV_COMMANDS
-		Console::RegisterCommand("createmonster", [this](const std::string& cmd, const std::string& args) { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
-		Console::RegisterCommand("destroymonster", [this](const std::string& cmd, const std::string& args) { Command_DestroyMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Destroys a spawned monster from a specific guid.");
-		Console::RegisterCommand("learnspell", [this](const std::string& cmd, const std::string& args) { Command_LearnSpell(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected player learn a given spell.");
-		Console::RegisterCommand("followme", [this](const std::string& cmd, const std::string& args) { Command_FollowMe(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected creature follow you.");
-		Console::RegisterCommand("faceme", [this](const std::string& cmd, const std::string& args) { Command_FaceMe(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected creature face towards you.");
-		Console::RegisterCommand("level", [this](const std::string& cmd, const std::string& args) { Command_LevelUp(cmd, args); }, ConsoleCommandCategory::Gm, "Increases the targets level if possible.");
-		Console::RegisterCommand("money", [this](const std::string& cmd, const std::string& args) { Command_GiveMoney(cmd, args); }, ConsoleCommandCategory::Gm, "Increases the targets money.");
-		Console::RegisterCommand("additem", [this](const std::string& cmd, const std::string& args) { Command_AddItem(cmd, args); }, ConsoleCommandCategory::Gm, "Adds an item to the target players inventory.");
-		Console::RegisterCommand("worldport", [this](const std::string& cmd, const std::string& args) { Command_WorldPort(cmd, args); }, ConsoleCommandCategory::Gm, "Teleports the player to the given map, optionally also changing the position.");
-		Console::RegisterCommand("port", [this](const std::string& cmd, const std::string& args) { Command_Port(cmd, args); }, ConsoleCommandCategory::Gm, "Teleports you to the named player if he exists.");
-		Console::RegisterCommand("summon", [this](const std::string& cmd, const std::string& args) { Command_Summon(cmd, args); }, ConsoleCommandCategory::Gm, "Summons the named player to your location if such a player exists.");
-		Console::RegisterCommand("speed", [this](const std::string& cmd, const std::string& args) { Command_Speed(cmd, args); }, ConsoleCommandCategory::Gm, "Sets your movement speed to the new value in meters per second.");
+			Console::RegisterCommand("createmonster", [this](const std::string &cmd, const std::string &args)
+									 { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
+		Console::RegisterCommand("destroymonster", [this](const std::string &cmd, const std::string &args)
+								 { Command_DestroyMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Destroys a spawned monster from a specific guid.");
+		Console::RegisterCommand("learnspell", [this](const std::string &cmd, const std::string &args)
+								 { Command_LearnSpell(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected player learn a given spell.");
+		Console::RegisterCommand("followme", [this](const std::string &cmd, const std::string &args)
+								 { Command_FollowMe(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected creature follow you.");
+		Console::RegisterCommand("faceme", [this](const std::string &cmd, const std::string &args)
+								 { Command_FaceMe(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected creature face towards you.");
+		Console::RegisterCommand("level", [this](const std::string &cmd, const std::string &args)
+								 { Command_LevelUp(cmd, args); }, ConsoleCommandCategory::Gm, "Increases the targets level if possible.");
+		Console::RegisterCommand("money", [this](const std::string &cmd, const std::string &args)
+								 { Command_GiveMoney(cmd, args); }, ConsoleCommandCategory::Gm, "Increases the targets money.");
+		Console::RegisterCommand("additem", [this](const std::string &cmd, const std::string &args)
+								 { Command_AddItem(cmd, args); }, ConsoleCommandCategory::Gm, "Adds an item to the target players inventory.");
+		Console::RegisterCommand("worldport", [this](const std::string &cmd, const std::string &args)
+								 { Command_WorldPort(cmd, args); }, ConsoleCommandCategory::Gm, "Teleports the player to the given map, optionally also changing the position.");
+		Console::RegisterCommand("port", [this](const std::string &cmd, const std::string &args)
+								 { Command_Port(cmd, args); }, ConsoleCommandCategory::Gm, "Teleports you to the named player if he exists.");
+		Console::RegisterCommand("summon", [this](const std::string &cmd, const std::string &args)
+								 { Command_Summon(cmd, args); }, ConsoleCommandCategory::Gm, "Summons the named player to your location if such a player exists.");
+		Console::RegisterCommand("speed", [this](const std::string &cmd, const std::string &args)
+								 { Command_Speed(cmd, args); }, ConsoleCommandCategory::Gm, "Sets your movement speed to the new value in meters per second.");
 #endif
 	}
 
@@ -924,36 +940,26 @@ namespace mmo
 		s_shadowTextureSizeVar = ConsoleVarMgr::RegisterConsoleVar("ShadowTextureSize", "", "1");
 		m_cvarChangedSignals += s_shadowTextureSizeVar->Changed.connect(this, &WorldState::OnShadowTextureSizeChanged);
 
-		Console::RegisterCommand(command_names::s_reload, [this](const std::string&, const std::string&)
-			{
-				ReloadUI();
-			}, ConsoleCommandCategory::Debug, "Reloads the user interface.");
+		Console::RegisterCommand(command_names::s_reload, [this](const std::string &, const std::string &)
+								 { ReloadUI(); }, ConsoleCommandCategory::Debug, "Reloads the user interface.");
 
-		Console::RegisterCommand(command_names::s_toggleAxis, [this](const std::string&, const std::string&)
-		{
-			ToggleAxisVisibility();
-		}, ConsoleCommandCategory::Debug, "Toggles visibility of the axis display.");
+		Console::RegisterCommand(command_names::s_toggleAxis, [this](const std::string &, const std::string &)
+								 { ToggleAxisVisibility(); }, ConsoleCommandCategory::Debug, "Toggles visibility of the axis display.");
 
-		Console::RegisterCommand(command_names::s_toggleGrid, [this](const std::string&, const std::string&)
-		{
-			ToggleGridVisibility();
-		}, ConsoleCommandCategory::Debug, "Toggles visibility of the world grid display.");
-		
-		Console::RegisterCommand(command_names::s_toggleWire, [this](const std::string&, const std::string&)
-		{
-			ToggleWireframe();
-		}, ConsoleCommandCategory::Debug, "Toggles wireframe render mode.");
+		Console::RegisterCommand(command_names::s_toggleGrid, [this](const std::string &, const std::string &)
+								 { ToggleGridVisibility(); }, ConsoleCommandCategory::Debug, "Toggles visibility of the world grid display.");
 
-		Console::RegisterCommand(command_names::s_freezeCulling, [this](const std::string&, const std::string&)
-			{
+		Console::RegisterCommand(command_names::s_toggleWire, [this](const std::string &, const std::string &)
+								 { ToggleWireframe(); }, ConsoleCommandCategory::Debug, "Toggles wireframe render mode.");
+
+		Console::RegisterCommand(command_names::s_freezeCulling, [this](const std::string &, const std::string &)
+								 {
 				// Ensure that the frustum planes are recalculated to immediately see the effect
 				m_playerController->GetCamera().InvalidateView();
 
 				// Toggle culling freeze and log current culling state
 				m_scene->FreezeRendering(!m_scene->IsRenderingFrozen());
-				ILOG(m_scene->IsRenderingFrozen() ? "Culling is now frozen" : "Culling is no longer frozen");
-			}, ConsoleCommandCategory::Debug, "Toggles culling.");
-
+				ILOG(m_scene->IsRenderingFrozen() ? "Culling is now frozen" : "Culling is no longer frozen"); }, ConsoleCommandCategory::Debug, "Toggles culling.");
 
 		OnShadowTextureSizeChanged(*s_shadowTextureSizeVar, "");
 		OnRenderShadowsChanged(*s_renderShadowsVar, "");
@@ -976,12 +982,11 @@ namespace mmo
 			command_names::s_toggleGrid,
 			command_names::s_toggleWire,
 			command_names::s_freezeCulling,
-			command_names::s_reload
-		};
+			command_names::s_reload};
 
-		for (const auto& command : commandsToRemove)
+		for (const auto &command : commandsToRemove)
 		{
-			Console::UnregisterCommand(command);	
+			Console::UnregisterCommand(command);
 		}
 	}
 
@@ -1013,7 +1018,7 @@ namespace mmo
 
 	void WorldState::ToggleWireframe() const
 	{
-		auto& camera = m_playerController->GetCamera();
+		auto &camera = m_playerController->GetCamera();
 		camera.SetFillMode(camera.GetFillMode() == FillMode::Solid ? FillMode::Wireframe : FillMode::Solid);
 		if (camera.GetFillMode() == FillMode::Wireframe)
 		{
@@ -1034,7 +1039,7 @@ namespace mmo
 		PagePosition worldSize(64, 64);
 		const auto pagePos = PagePosition(static_cast<uint32>(floor(position.x / terrain::constants::PageSize)) + 32, static_cast<uint32>(floor(position.z / terrain::constants::PageSize)) + 32);
 		ForEachPageInSquare(
-			worldSize, pagePos, 1, [this](const PagePosition& page)
+			worldSize, pagePos, 1, [this](const PagePosition &page)
 			{
 				terrain::Page* terrainPage = m_worldInstance->GetTerrain()->GetPage(page.x(), page.y());
 				if (terrainPage)
@@ -1045,9 +1050,7 @@ namespace mmo
 					}
 				}
 
-				m_worldInstance->LoadPageEntities(page.x(), page.y());
-			}
-		);
+				m_worldInstance->LoadPageEntities(page.x(), page.y()); });
 
 		size_t dispatched = 0;
 		while (m_dispatcher.poll_one())
@@ -1063,16 +1066,15 @@ namespace mmo
 		}
 
 		m_dispatcher.post([this, jobsDone, dispatched]()
-			{
+						  {
 				m_worldLoaded = true;
 				ILOG("World loading finished. Dispatched: " << dispatched << ", Jobs done: " << jobsDone);
 
 				// Hide loading screen
-				LoadingScreen::Hide();
-			});	
+				LoadingScreen::Hide(); });
 	}
 
-	PacketParseResult WorldState::OnUpdateObject(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnUpdateObject(game::IncomingPacket &packet)
 	{
 		uint16 numObjectUpdates;
 		if (!(packet >> io::read<uint16>(numObjectUpdates)))
@@ -1089,9 +1091,7 @@ namespace mmo
 
 			bool creation = false;
 			ObjectTypeId typeId;
-			if (!(packet 
-				>> io::read<uint8>(typeId)
-				>> io::read<uint8>(creation)))
+			if (!(packet >> io::read<uint8>(typeId) >> io::read<uint8>(creation)))
 			{
 				ELOG("Failed to read object update type");
 				return PacketParseResult::Disconnect;
@@ -1102,7 +1102,7 @@ namespace mmo
 				// Create game object from deserialization
 				std::shared_ptr<GameObjectC> object;
 
-				switch(typeId)
+				switch (typeId)
 				{
 				case ObjectTypeId::Unit:
 					object = std::make_shared<GameUnitC>(*m_scene, *this, m_project, g_mapId);
@@ -1120,7 +1120,7 @@ namespace mmo
 					object = std::make_shared<GameWorldObjectC>(*m_scene, m_project, *this, g_mapId);
 					break;
 				default:
-					ASSERT(!! "Unknown object type");
+					ASSERT(!!"Unknown object type");
 				}
 
 				ASSERT(object);
@@ -1147,7 +1147,7 @@ namespace mmo
 
 				if (object->GetTypeId() == ObjectTypeId::Player)
 				{
-					m_partyInfo.OnPlayerSpawned(static_cast<GamePlayerC&>(*object));
+					m_partyInfo.OnPlayerSpawned(static_cast<GamePlayerC &>(*object));
 				}
 
 				// TODO: Don't do it like this, add a special flag to the update object to tell that this is our controlled object!
@@ -1178,7 +1178,7 @@ namespace mmo
 
 					// Old handlers for now
 					m_playerObservers += object->fieldsChanged.connect([this](uint64 guid, uint16 fieldIndex, uint16 fieldCount)
-						{
+																	   {
 							if ((object_fields::PackSlot_1 > fieldIndex && object_fields::InvSlotHead <= fieldIndex + fieldCount))
 							{
 								FrameManager::Get().TriggerLuaEvent("EQUIPMENT_CHANGED");
@@ -1187,8 +1187,7 @@ namespace mmo
 							if ((object_fields::BankSlot_1 > fieldIndex && object_fields::InvSlotHead <= fieldIndex + fieldCount))
 							{
 								FrameManager::Get().TriggerLuaEvent("INVENTORY_CHANGED");
-							}
-						});
+							} });
 
 					m_playerController->SetControlledUnit(std::dynamic_pointer_cast<GameUnitC>(object));
 					FrameManager::Get().TriggerLuaEvent("PLAYER_ENTER_WORLD");
@@ -1256,36 +1255,36 @@ namespace mmo
 							const uint64 targetGuid = unit->Get<uint64>(object_fields::TargetUnit);
 							unit->SetTargetUnit(targetGuid ? ObjectMgr::Get<GameUnitC>(targetGuid) : nullptr);
 						}
-					}					
+					}
 				}
 			}
-			
+
 			result = PacketParseResult::Pass;
 		}
-		
+
 		// If we had item updates for the active player, trigger UI refresh
 		if (hasItemUpdates)
 		{
 			FrameManager::Get().TriggerLuaEvent("ITEM_COUNT_CHANGED");
 		}
-		
+
 		return result;
 	}
-	
-	PacketParseResult WorldState::OnCompressedUpdateObject(game::IncomingPacket& packet)
+
+	PacketParseResult WorldState::OnCompressedUpdateObject(game::IncomingPacket &packet)
 	{
 		TODO("Implement");
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnDestroyObjects(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnDestroyObjects(game::IncomingPacket &packet)
 	{
 		uint16 objectCount = 0;
 		if (!(packet >> io::read<uint16>(objectCount)))
 		{
 			return PacketParseResult::Disconnect;
 		}
-		
+
 		for (auto i = 0; i < objectCount; ++i)
 		{
 			ObjectGuid id;
@@ -1307,7 +1306,7 @@ namespace mmo
 				ELOG("Despawn of player controlled object!");
 				m_playerController->SetControlledUnit(nullptr);
 			}
-			
+
 			// Check if this is an item owned by the active player before removing it
 			bool shouldTriggerItemEvent = false;
 			if (const auto object = ObjectMgr::Get<GameObjectC>(id))
@@ -1318,20 +1317,20 @@ namespace mmo
 					shouldTriggerItemEvent = true;
 				}
 			}
-			
+
 			ObjectMgr::RemoveObject(id);
-			
+
 			// Trigger UI event after the object has been removed from ObjectMgr
 			if (shouldTriggerItemEvent)
 			{
 				FrameManager::Get().TriggerLuaEvent("ITEM_COUNT_CHANGED");
 			}
 		}
-		
+
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnMovement(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnMovement(game::IncomingPacket &packet)
 	{
 		uint64 characterGuid;
 		MovementInfo movementInfo;
@@ -1339,7 +1338,7 @@ namespace mmo
 		{
 			return PacketParseResult::Disconnect;
 		}
-		
+
 		const auto unitPtr = ObjectMgr::Get<GameUnitC>(characterGuid);
 		if (!unitPtr)
 		{
@@ -1351,23 +1350,19 @@ namespace mmo
 		if (ObjectMgr::GetActivePlayerGuid() != characterGuid)
 		{
 			unitPtr->QueueMovementEvent(movement_event_type::Fall, GetAsyncTimeMs(), movementInfo);
-			//unitPtr->ApplyMovementInfo(movementInfo);
+			// unitPtr->ApplyMovementInfo(movementInfo);
 		}
 
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnChatMessage(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnChatMessage(game::IncomingPacket &packet)
 	{
 		uint64 characterGuid;
 		ChatType type;
 		String message;
 		uint8 flags;
-		if (!(packet 
-			>> io::read_packed_guid(characterGuid)
-			>> io::read<uint8>(type)
-			>> io::read_limited_string<512>(message)
-			>> io::read<uint8>(flags)))
+		if (!(packet >> io::read_packed_guid(characterGuid) >> io::read<uint8>(type) >> io::read_limited_string<512>(message) >> io::read<uint8>(flags)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -1383,9 +1378,15 @@ namespace mmo
 			String chatMessageType;
 			switch (type)
 			{
-			case ChatType::UnitSay: chatMessageType = "UNIT_SAY"; break;
-			case ChatType::UnitYell: chatMessageType = "UNIT_YELL"; break;
-			case ChatType::UnitEmote: chatMessageType = "UNIT_EMOTE"; break;
+			case ChatType::UnitSay:
+				chatMessageType = "UNIT_SAY";
+				break;
+			case ChatType::UnitYell:
+				chatMessageType = "UNIT_YELL";
+				break;
+			case ChatType::UnitEmote:
+				chatMessageType = "UNIT_EMOTE";
+				break;
 			default:
 				UNREACHABLE();
 				break;
@@ -1395,8 +1396,8 @@ namespace mmo
 		}
 		else
 		{
-			m_cache.GetNameCache().Get(characterGuid, [this, type, message, flags](uint64, const String& name)
-				{
+			m_cache.GetNameCache().Get(characterGuid, [this, type, message, flags](uint64, const String &name)
+									   {
 					String chatMessageType = "SAY";
 					switch (type)
 					{
@@ -1408,21 +1409,18 @@ namespace mmo
 					case ChatType::Raid: chatMessageType = "RAID"; break;
 					}
 
-					FrameManager::Get().TriggerLuaEvent("CHAT_MSG_" + chatMessageType, name, message);
-				});
+					FrameManager::Get().TriggerLuaEvent("CHAT_MSG_" + chatMessageType, name, message); });
 		}
-		
+
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnNameQueryResult(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnNameQueryResult(game::IncomingPacket &packet)
 	{
 		uint64 guid;
 		bool succeeded;
 		String name;
-		if (!(packet
-			>> io::read_packed_guid(guid)
-			>> io::read<uint8>(succeeded)))
+		if (!(packet >> io::read_packed_guid(guid) >> io::read<uint8>(succeeded)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -1433,8 +1431,7 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		if (!(packet
-			>> io::read_string(name)))
+		if (!(packet >> io::read_string(name)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -1464,13 +1461,11 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnCreatureQueryResult(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnCreatureQueryResult(game::IncomingPacket &packet)
 	{
 		uint64 id;
 		bool succeeded;
-		if (!(packet
-			>> io::read_packed_guid(id)
-			>> io::read<uint8>(succeeded)))
+		if (!(packet >> io::read_packed_guid(id) >> io::read<uint8>(succeeded)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -1481,7 +1476,7 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		CreatureInfo entry{ id };
+		CreatureInfo entry{id};
 		if (!(packet >> io::read_string(entry.name) >> io::read_string(entry.subname)))
 		{
 			ELOG("Creature query for id " << log_hex_digit(id) << " failed");
@@ -1492,13 +1487,11 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnItemQueryResult(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnItemQueryResult(game::IncomingPacket &packet)
 	{
 		uint64 id;
 		bool succeeded;
-		if (!(packet
-			>> io::read_packed_guid(id)
-			>> io::read<uint8>(succeeded)))
+		if (!(packet >> io::read_packed_guid(id) >> io::read<uint8>(succeeded)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -1509,7 +1502,7 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		ItemInfo entry{ id };
+		ItemInfo entry{id};
 		if (!(packet >> entry))
 		{
 			ELOG("Failed to read item info!");
@@ -1520,13 +1513,11 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnObjectQueryResult(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnObjectQueryResult(game::IncomingPacket &packet)
 	{
 		uint64 id;
 		bool succeeded;
-		if (!(packet
-			>> io::read_packed_guid(id)
-			>> io::read<uint8>(succeeded)))
+		if (!(packet >> io::read_packed_guid(id) >> io::read<uint8>(succeeded)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -1537,7 +1528,7 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		ObjectInfo entry{ id };
+		ObjectInfo entry{id};
 		if (!(packet >> entry))
 		{
 			ELOG("Failed to read object info!");
@@ -1548,7 +1539,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnInitialSpells(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnInitialSpells(game::IncomingPacket &packet)
 	{
 		std::vector<uint32> spellIds;
 		if (!(packet >> io::read_container<uint16>(spellIds)))
@@ -1556,12 +1547,12 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		std::vector<const proto_client::SpellEntry*> spells;
+		std::vector<const proto_client::SpellEntry *> spells;
 		spells.reserve(spellIds.size());
 
-		for (const auto& spellId : spellIds)
+		for (const auto &spellId : spellIds)
 		{
-			const auto* spell = m_project.spells.getById(spellId);
+			const auto *spell = m_project.spells.getById(spellId);
 			if (spell)
 			{
 				spells.push_back(spell);
@@ -1581,27 +1572,30 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	Vector3 UnpackMovementVector(uint32 packed, const Vector3& mid)
+	Vector3 UnpackMovementVector(uint32 packed, const Vector3 &mid)
 	{
 		Vector3 p;
 
 		// Extract the x component
 		int x_diff = (packed & 0x7FF); // Extract lower 11 bits
-		if (x_diff > 0x3FF) { // Handle negative values
+		if (x_diff > 0x3FF)
+		{					  // Handle negative values
 			x_diff |= ~0x7FF; // Extend sign bit
 		}
 		p.x = mid.x - (x_diff * 0.25f);
 
 		// Extract the y component
 		int y_diff = ((packed >> 11) & 0x7FF); // Extract next 11 bits
-		if (y_diff > 0x3FF) { // Handle negative values
+		if (y_diff > 0x3FF)
+		{					  // Handle negative values
 			y_diff |= ~0x7FF; // Extend sign bit
 		}
 		p.y = mid.y - (y_diff * 0.25f);
 
 		// Extract the z component
 		int z_diff = ((packed >> 22) & 0x3FF); // Extract next 10 bits
-		if (z_diff > 0x1FF) { // Handle negative values
+		if (z_diff > 0x1FF)
+		{					  // Handle negative values
 			z_diff |= ~0x3FF; // Extend sign bit
 		}
 		p.z = mid.z - (z_diff * 0.25f);
@@ -1609,7 +1603,7 @@ namespace mmo
 		return p;
 	}
 
-	PacketParseResult WorldState::OnCreatureMove(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnCreatureMove(game::IncomingPacket &packet)
 	{
 		std::vector<Vector3> path;
 
@@ -1621,17 +1615,7 @@ namespace mmo
 		uint32 pathSize;
 		std::optional<Radian> targetRotation;
 
-		if (!(packet 
-			>> io::read_packed_guid(guid)
-			>> io::read<float>(startPosition.x)
-			>> io::read<float>(startPosition.y)
-			>> io::read<float>(startPosition.z)
-			>> io::read<GameTime>(startTime)
-			>> io::read<GameTime>(endTime)
-			>> io::read<uint32>(pathSize)
-			>> io::read<float>(endPosition.x)
-			>> io::read<float>(endPosition.y)
-			>> io::read<float>(endPosition.z)))
+		if (!(packet >> io::read_packed_guid(guid) >> io::read<float>(startPosition.x) >> io::read<float>(startPosition.y) >> io::read<float>(startPosition.z) >> io::read<GameTime>(startTime) >> io::read<GameTime>(endTime) >> io::read<uint32>(pathSize) >> io::read<float>(endPosition.x) >> io::read<float>(endPosition.y) >> io::read<float>(endPosition.z)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -1655,7 +1639,7 @@ namespace mmo
 
 		// Find unit by guid
 		const auto unitPtr = ObjectMgr::Get<GameUnitC>(guid);
-		if(!unitPtr)
+		if (!unitPtr)
 		{
 			// We don't know the unit
 			WLOG("Received movement packet for unknown unit id " << log_hex_digit(guid));
@@ -1696,13 +1680,13 @@ namespace mmo
 				}
 			}
 		}
-		
+
 		unitPtr->SetMovementPath(path, endTime - startTime, targetRotation);
 
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnSpellLearnedOrUnlearned(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnSpellLearnedOrUnlearned(game::IncomingPacket &packet)
 	{
 		uint32 spellId;
 		if (!(packet >> io::read<uint32>(spellId)))
@@ -1710,7 +1694,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		const auto* spell = m_project.spells.getById(spellId);
+		const auto *spell = m_project.spells.getById(spellId);
 		if (!spell)
 		{
 			WLOG("Unknown spell id " << spellId);
@@ -1737,7 +1721,7 @@ namespace mmo
 						emptySlot = i;
 					}
 
-					const auto* spellAtSlot = m_actionBar.GetActionButtonSpell(i);
+					const auto *spellAtSlot = m_actionBar.GetActionButtonSpell(i);
 					if (spellAtSlot != nullptr && spellAtSlot->id() == spellId)
 					{
 						// The spell is already on the action bar, stop processing and erase potential empty slot found
@@ -1749,13 +1733,13 @@ namespace mmo
 				// If we should set this button to the action bar, do it
 				if (emptySlot != -1)
 				{
-					m_actionBar.SetActionButton(emptySlot, { static_cast<uint16>(spellId), action_button_type::Spell });
+					m_actionBar.SetActionButton(emptySlot, {static_cast<uint16>(spellId), action_button_type::Spell});
 				}
 			}
-			
+
 			// Update possible trainer spell list
 			m_trainerClient.OnSpellLearned(spellId);
-			
+
 			// Update talent information
 			m_talentClient.OnSpellLearned(spellId);
 
@@ -1765,34 +1749,29 @@ namespace mmo
 		else
 		{
 			m_playerController->GetControlledUnit()->UnlearnSpell(spellId);
-			
-						
+
 			// Update talent information for unlearned spell
 			m_talentClient.OnSpellUnlearned(spellId);
-			
+
 			FrameManager::Get().TriggerLuaEvent("PLAYER_TALENT_UPDATE");
 		}
 
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnSpellStart(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnSpellStart(game::IncomingPacket &packet)
 	{
 		uint64 casterId;
 		uint32 spellId;
 		GameTime castTime;
 		SpellTargetMap targetMap;
 
-		if (!(packet 
-			>> io::read_packed_guid(casterId)
-			>> io::read<uint32>(spellId)
-			>> io::read<GameTime>(castTime)
-			>> targetMap))
+		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<GameTime>(castTime) >> targetMap))
 		{
 			return PacketParseResult::Disconnect;
 		}
 
-		const auto* spell = m_project.spells.getById(spellId);
+		const auto *spell = m_project.spells.getById(spellId);
 		ASSERT(spell);
 
 		if (const std::shared_ptr<GameUnitC> casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
@@ -1814,24 +1793,20 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnSpellGo(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnSpellGo(game::IncomingPacket &packet)
 	{
 		uint64 casterId;
 		uint32 spellId;
 		GameTime gameTime;
 		SpellTargetMap targetMap;
 
-		if (!(packet
-			>> io::read_packed_guid(casterId)
-			>> io::read<uint32>(spellId)
-			>> io::read<GameTime>(gameTime)
-			>> targetMap))
+		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<GameTime>(gameTime) >> targetMap))
 		{
 			return PacketParseResult::Disconnect;
 		}
 
 		// Get the spell
-		const auto* spell = m_project.spells.getById(spellId);
+		const auto *spell = m_project.spells.getById(spellId);
 		ASSERT(spell);
 
 		// TODO: Instead of hard coding the projectile stuff in here, make it more flexible by linking some dynamic visual data stuff to spells on the client side
@@ -1867,9 +1842,9 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnSpellFailure(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnSpellFailure(game::IncomingPacket &packet)
 	{
-		static const char* s_spellCastResultStrings[] = {
+		static const char *s_spellCastResultStrings[] = {
 			"SPELL_CAST_FAILED_AFFECTING_COMBAT",
 			"SPELL_CAST_FAILED_ALREADY_AT_FULL_HEALTH",
 			"SPELL_CAST_FAILED_ALREADY_AT_FULL_MANA",
@@ -2036,21 +2011,16 @@ namespace mmo
 			"SPELL_CAST_FAILED_NO_PLAY_TIME",
 			"SPELL_CAST_FAILED_NOT_IN_BATTLEGROUND",
 			"SPELL_CAST_FAILED_ONLY_IN_ARENA",
-			"SPELL_CAST_FAILED_TARGET_LOCKED_TO_RAID_INSTANCE"
-		};
+			"SPELL_CAST_FAILED_TARGET_LOCKED_TO_RAID_INSTANCE"};
 
-		static const char* s_unknown = "UNKNOWN";
+		static const char *s_unknown = "UNKNOWN";
 
 		uint64 casterId;
 		uint32 spellId;
 		GameTime gameTime;
 		uint8 result;
 
-		if (!(packet
-			>> io::read_packed_guid(casterId)
-			>> io::read<uint32>(spellId)
-			>> io::read<GameTime>(gameTime)
-			>> io::read<uint8>(result)))
+		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<GameTime>(gameTime) >> io::read<uint8>(result)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -2064,7 +2034,7 @@ namespace mmo
 		{
 			m_spellCast.OnSpellFailure(spellId);
 
-			const char* errorMessage = s_unknown;
+			const char *errorMessage = s_unknown;
 			if (result < std::size(s_spellCastResultStrings))
 			{
 				errorMessage = s_spellCastResultStrings[result];
@@ -2077,14 +2047,11 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnAttackStart(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnAttackStart(game::IncomingPacket &packet)
 	{
 		uint64 attackerGuid, victimGuid;
 		GameTime attackTime;
-		if (!(packet 
-			>> io::read_packed_guid(attackerGuid)
-			>> io::read_packed_guid(victimGuid)
-			>> io::read<GameTime>(attackTime)))
+		if (!(packet >> io::read_packed_guid(attackerGuid) >> io::read_packed_guid(victimGuid) >> io::read<GameTime>(attackTime)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -2092,13 +2059,11 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnAttackStop(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnAttackStop(game::IncomingPacket &packet)
 	{
 		uint64 attackerGuid;
 		GameTime attackTime;
-		if (!(packet
-			>> io::read_packed_guid(attackerGuid)
-			>> io::read<GameTime>(attackTime)))
+		if (!(packet >> io::read_packed_guid(attackerGuid) >> io::read<GameTime>(attackTime)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -2117,12 +2082,11 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnAttackSwingError(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnAttackSwingError(game::IncomingPacket &packet)
 	{
 		AttackSwingEvent attackSwingError;
 
-		if (!(packet
-			>> io::read<uint32>(attackSwingError)))
+		if (!(packet >> io::read<uint32>(attackSwingError)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -2133,7 +2097,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnXpLog(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnXpLog(game::IncomingPacket &packet)
 	{
 		uint32 xp;
 		if (!(packet >> io::read<uint32>(xp)))
@@ -2151,7 +2115,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnSpellDamageLog(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnSpellDamageLog(game::IncomingPacket &packet)
 	{
 		uint64 targetGuid;
 		uint32 amount;
@@ -2159,18 +2123,13 @@ namespace mmo
 		uint8 flags;
 		uint32 spellId;
 
-		if (!(packet
-			>> io::read_packed_guid(targetGuid)
-			>> io::read<uint32>(spellId)
-			>> io::read<uint32>(amount)
-			>> io::read<uint8>(school)
-			>> io::read<uint8>(flags)))
+		if (!(packet >> io::read_packed_guid(targetGuid) >> io::read<uint32>(spellId) >> io::read<uint32>(amount) >> io::read<uint8>(school) >> io::read<uint8>(flags)))
 		{
 			return PacketParseResult::Disconnect;
 		}
 
 		String spellName = "Unknown";
-		if (const auto* spell = m_project.spells.getById(spellId))
+		if (const auto *spell = m_project.spells.getById(spellId))
 		{
 			spellName = spell->name();
 			if (spell->rank() > 0)
@@ -2180,7 +2139,7 @@ namespace mmo
 		}
 
 		String damageSchoolNameString;
-		switch(school)
+		switch (school)
 		{
 		case SpellSchool::Arcane:
 			damageSchoolNameString = "Arcane";
@@ -2215,16 +2174,13 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnNonSpellDamageLog(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnNonSpellDamageLog(game::IncomingPacket &packet)
 	{
 		uint64 targetGuid;
 		uint32 amount;
 		DamageFlags flags;
 
-		if (!(packet
-			>> io::read_packed_guid(targetGuid)
-			>> io::read<uint32>(amount)
-			>> io::read<uint8>(flags)))
+		if (!(packet >> io::read_packed_guid(targetGuid) >> io::read<uint32>(amount) >> io::read<uint8>(flags)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -2244,22 +2200,13 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnAttackerStateUpdate(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnAttackerStateUpdate(game::IncomingPacket &packet)
 	{
 		uint64 attackerGuid, attackedGuid;
 		uint32 totalDamage, school, absorbedDamage, resistedDamage, blockedDamage;
 		VictimState victimState;
 		HitInfo hitInfo;
-		if (!(packet
-			>> io::read_packed_guid(attackerGuid)
-			>> io::read_packed_guid(attackedGuid)
-			>> io::read<uint32>(hitInfo)
-			>> io::read<uint32>(victimState)
-			>> io::read<uint32>(totalDamage)
-			>> io::read<uint32>(school)
-			>> io::read<uint32>(absorbedDamage)
-			>> io::read<uint32>(resistedDamage)
-			>> io::read<uint32>(blockedDamage)))
+		if (!(packet >> io::read_packed_guid(attackerGuid) >> io::read_packed_guid(attackedGuid) >> io::read<uint32>(hitInfo) >> io::read<uint32>(victimState) >> io::read<uint32>(totalDamage) >> io::read<uint32>(school) >> io::read<uint32>(absorbedDamage) >> io::read<uint32>(resistedDamage) >> io::read<uint32>(blockedDamage)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -2280,7 +2227,7 @@ namespace mmo
 				String damageText;
 				if (hitInfo & hit_info::Miss)
 				{
-					damageText = "MISSED";	// Localize
+					damageText = "MISSED"; // Localize
 				}
 				else if (victimState == victim_state::Parry)
 				{
@@ -2306,12 +2253,12 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnLogEnvironmentalDamage(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnLogEnvironmentalDamage(game::IncomingPacket &packet)
 	{
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnMovementSpeedChanged(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnMovementSpeedChanged(game::IncomingPacket &packet)
 	{
 		static MovementType typesByPacket[] = {
 			movement_type::Walk,
@@ -2321,14 +2268,12 @@ namespace mmo
 			movement_type::SwimBackwards,
 			movement_type::Turn,
 			movement_type::Flight,
-			movement_type::FlightBackwards
-		};
+			movement_type::FlightBackwards};
 
 		uint64 guid;
 		MovementInfo movementInfo;
 		float speed;
-		if (!(packet >> io::read_packed_guid(guid)
-			>> movementInfo >> io::read<float>(speed)))
+		if (!(packet >> io::read_packed_guid(guid) >> movementInfo >> io::read<float>(speed)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -2344,7 +2289,7 @@ namespace mmo
 		unit->GetSceneNode()->SetPosition(movementInfo.position);
 
 		MovementType type = movement_type::Run;
-		switch(packet.GetId())
+		switch (packet.GetId())
 		{
 		case game::realm_client_packet::MoveSetWalkSpeed:
 			type = movement_type::Walk;
@@ -2377,9 +2322,9 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnForceMovementSpeedChange(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnForceMovementSpeedChange(game::IncomingPacket &packet)
 	{
-		const std::shared_ptr<GameUnitC>& unit = m_playerController->GetControlledUnit();
+		const std::shared_ptr<GameUnitC> &unit = m_playerController->GetControlledUnit();
 		if (!unit)
 		{
 			WLOG("No controlled unit found!");
@@ -2418,8 +2363,7 @@ namespace mmo
 		uint32 ackId;
 		float speed;
 
-		if (!(packet >> io::read<uint32>(ackId)
-			>> io::read<float>(speed)))
+		if (!(packet >> io::read<uint32>(ackId) >> io::read<float>(speed)))
 		{
 			WLOG("Failed to read force movement speed change packet!");
 			return PacketParseResult::Disconnect;
@@ -2432,7 +2376,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnMoveTeleport(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnMoveTeleport(game::IncomingPacket &packet)
 	{
 		uint64 guid;
 		if (!(packet >> io::read_packed_guid(guid)))
@@ -2441,7 +2385,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		const std::shared_ptr<GameUnitC>& unit = m_playerController->GetControlledUnit();
+		const std::shared_ptr<GameUnitC> &unit = m_playerController->GetControlledUnit();
 		if (!unit || unit->GetGuid() != guid)
 		{
 			WLOG("Received teleport for unknown or non-controlled unit!");
@@ -2468,21 +2412,11 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnLevelUp(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnLevelUp(game::IncomingPacket &packet)
 	{
 		uint32 newLevel;
 		int32 healthDiff, manaDiff, staminaDiff, strengthDiff, agilityDiff, intDiff, spiritDiff, talentPoints, attributePoints;
-		if (!(packet
-			>> io::read<uint8>(newLevel)
-			>> io::read<int32>(healthDiff)
-			>> io::read<int32>(manaDiff)
-			>> io::read<int32>(staminaDiff)
-			>> io::read<int32>(strengthDiff)
-			>> io::read<int32>(agilityDiff)
-			>> io::read<int32>(intDiff)
-			>> io::read<int32>(spiritDiff)
-			>> io::read<int32>(talentPoints)
-			>> io::read<int32>(attributePoints)))
+		if (!(packet >> io::read<uint8>(newLevel) >> io::read<int32>(healthDiff) >> io::read<int32>(manaDiff) >> io::read<int32>(staminaDiff) >> io::read<int32>(strengthDiff) >> io::read<int32>(agilityDiff) >> io::read<int32>(intDiff) >> io::read<int32>(spiritDiff) >> io::read<int32>(talentPoints) >> io::read<int32>(attributePoints)))
 		{
 			ELOG("Failed to read levelup packet!");
 			return PacketParseResult::Disconnect;
@@ -2493,7 +2427,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnAuraUpdate(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnAuraUpdate(game::IncomingPacket &packet)
 	{
 		uint64 unitGuid;
 		if (!(packet >> io::read_packed_guid(unitGuid)))
@@ -2523,17 +2457,14 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnPeriodicAuraLog(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnPeriodicAuraLog(game::IncomingPacket &packet)
 	{
 		uint64 targetGuid;
 		uint64 casterGuid;
 		uint32 spellId;
 		uint32 auraType;
 
-		if (!(packet >> io::read_packed_guid(targetGuid)
-			>> io::read_packed_guid(casterGuid)
-			>> io::read<uint32>(spellId)
-			>> io::read<uint32>(auraType)))
+		if (!(packet >> io::read_packed_guid(targetGuid) >> io::read_packed_guid(casterGuid) >> io::read<uint32>(spellId) >> io::read<uint32>(auraType)))
 		{
 			ELOG("Failed to read PeriodicAuraLog packet!");
 			return PacketParseResult::Disconnect;
@@ -2571,7 +2502,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnActionButtons(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnActionButtons(game::IncomingPacket &packet)
 	{
 		// Read packet
 		m_actionBar.OnActionButtons(packet);
@@ -2585,7 +2516,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnQuestGiverStatus(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnQuestGiverStatus(game::IncomingPacket &packet)
 	{
 		// Read packet
 		uint64 questgiverGuid;
@@ -2610,15 +2541,11 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnSpellEnergizeLog(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnSpellEnergizeLog(game::IncomingPacket &packet)
 	{
 		uint64 targetGuid, casterGuid;
 		uint32 spellId, powerType, power;
-		if (!(packet >> io::read_packed_guid(targetGuid)
-			>> io::read_packed_guid(casterGuid)
-			>> io::read<uint32>(spellId)
-			>> io::read<uint32>(powerType)
-			>> io::read<uint32>(power)))
+		if (!(packet >> io::read_packed_guid(targetGuid) >> io::read_packed_guid(casterGuid) >> io::read<uint32>(spellId) >> io::read<uint32>(powerType) >> io::read<uint32>(power)))
 		{
 			ELOG("Failed to read SpellEnergizeLog packet!");
 			return PacketParseResult::Disconnect;
@@ -2629,7 +2556,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnTransferPending(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnTransferPending(game::IncomingPacket &packet)
 	{
 		uint32 mapId;
 		if (!(packet >> io::read<uint32>(mapId)))
@@ -2658,17 +2585,12 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnNewWorld(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnNewWorld(game::IncomingPacket &packet)
 	{
 		uint32 mapId;
 		Vector3 position;
 		float facingRadianVal;
-		if (!(packet
-			>> io::read<uint32>(mapId)
-			>> io::read<float>(position.x)
-			>> io::read<float>(position.y)
-			>> io::read<float>(position.z)
-			>> io::read<float>(facingRadianVal)))
+		if (!(packet >> io::read<uint32>(mapId) >> io::read<float>(position.x) >> io::read<float>(position.y) >> io::read<float>(position.z) >> io::read<float>(facingRadianVal)))
 		{
 			ELOG("Failed to read NewWorld packet!");
 			return PacketParseResult::Disconnect;
@@ -2688,7 +2610,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnGroupInvite(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnGroupInvite(game::IncomingPacket &packet)
 	{
 		String inviterName;
 		if (!(packet >> io::read_container<uint8>(inviterName)))
@@ -2703,7 +2625,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnGroupDecline(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnGroupDecline(game::IncomingPacket &packet)
 	{
 		String inviterName;
 		if (!(packet >> io::read_container<uint8>(inviterName)))
@@ -2719,15 +2641,12 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnPartyCommandResult(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnPartyCommandResult(game::IncomingPacket &packet)
 	{
 		PartyOperation command;
 		PartyResult result;
 		String playerName;
-		if (!(packet
-			>> io::read<uint8>(command)
-			>> io::read_container<uint8>(playerName)
-			>> io::read<uint8>(result)))
+		if (!(packet >> io::read<uint8>(command) >> io::read_container<uint8>(playerName) >> io::read<uint8>(result)))
 		{
 			ELOG("Failed to read PartyCommandResult packet!");
 			return PacketParseResult::Disconnect;
@@ -2753,7 +2672,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnRandomRollResult(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnRandomRollResult(game::IncomingPacket &packet)
 	{
 		uint64 playerGuid;
 		int32 min, max, result;
@@ -2763,27 +2682,20 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		m_cache.GetNameCache().Get(playerGuid, [result, min, max](uint64 guid, const String& playerName)
-			{
-				FrameManager::Get().TriggerLuaEvent("RANDOM_ROLL_RESULT", playerName.c_str(), min, max, result);
-			});
+		m_cache.GetNameCache().Get(playerGuid, [result, min, max](uint64 guid, const String &playerName)
+								   { FrameManager::Get().TriggerLuaEvent("RANDOM_ROLL_RESULT", playerName.c_str(), min, max, result); });
 
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnSpellHealLog(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnSpellHealLog(game::IncomingPacket &packet)
 	{
 		uint64 targetGuid, casterGuid;
 		uint32 amount;
 		bool crit;
 		uint32 spellId;
 
-		if (!(packet
-			>> io::read_packed_guid(targetGuid)
-			>> io::read_packed_guid(casterGuid)
-			>> io::read<uint32>(spellId)
-			>> io::read<uint32>(amount)
-			>> io::read<uint8>(crit)))
+		if (!(packet >> io::read_packed_guid(targetGuid) >> io::read_packed_guid(casterGuid) >> io::read<uint32>(spellId) >> io::read<uint32>(amount) >> io::read<uint8>(crit)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -2802,7 +2714,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnItemPushResult(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnItemPushResult(game::IncomingPacket &packet)
 	{
 		uint64 characterGuid;
 		bool wasLooted, wasCreated;
@@ -2810,30 +2722,20 @@ namespace mmo
 		uint32 itemId;
 		uint16 amount, totalCount;
 
-		if (!(packet
-			>> io::read<uint64>(characterGuid)
-			>> io::read<uint8>(wasLooted)
-			>> io::read<uint8>(wasCreated)
-			>> io::read<uint8>(bag)
-			>> io::read<uint8>(subslot)
-			>> io::read<uint32>(itemId)
-			>> io::read<uint16>(amount)
-			>> io::read<uint16>(totalCount)))
+		if (!(packet >> io::read<uint64>(characterGuid) >> io::read<uint8>(wasLooted) >> io::read<uint8>(wasCreated) >> io::read<uint8>(bag) >> io::read<uint8>(subslot) >> io::read<uint32>(itemId) >> io::read<uint16>(amount) >> io::read<uint16>(totalCount)))
 		{
 			ELOG("Failed to read ItemPushResult packet!");
 			return PacketParseResult::Disconnect;
 		}
 
 		// Ask for the item info
-		m_cache.GetItemCache().Get(itemId, [this, characterGuid, wasLooted, wasCreated, bag, subslot, amount, totalCount](uint64, const ItemInfo& itemInfo)
-		{
-			OnItemPushCallback(itemInfo, characterGuid, wasLooted, wasCreated, bag, subslot, amount, totalCount);
-		});
+		m_cache.GetItemCache().Get(itemId, [this, characterGuid, wasLooted, wasCreated, bag, subslot, amount, totalCount](uint64, const ItemInfo &itemInfo)
+								   { OnItemPushCallback(itemInfo, characterGuid, wasLooted, wasCreated, bag, subslot, amount, totalCount); });
 
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnLogoutResponse(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnLogoutResponse(game::IncomingPacket &packet)
 	{
 		ILOG("Successfully logged out of the game...");
 
@@ -2843,7 +2745,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnMessageOfTheDay(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnMessageOfTheDay(game::IncomingPacket &packet)
 	{
 		String motd;
 		if (!(packet >> io::read_container<uint16>(motd, 512)))
@@ -2857,7 +2759,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnMoveRoot(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnMoveRoot(game::IncomingPacket &packet)
 	{
 		uint32 ackId;
 		bool applied;
@@ -2888,7 +2790,7 @@ namespace mmo
 	}
 
 #ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_LearnSpell(const std::string& cmd, const std::string& args) const
+	void WorldState::Command_LearnSpell(const std::string &cmd, const std::string &args) const
 	{
 		std::istringstream iss(args);
 		std::vector<std::string> tokens;
@@ -2913,9 +2815,8 @@ namespace mmo
 	}
 #endif
 
-
 #ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_CreateMonster(const std::string& cmd, const std::string& args) const
+	void WorldState::Command_CreateMonster(const std::string &cmd, const std::string &args) const
 	{
 		std::istringstream iss(args);
 		std::vector<std::string> tokens;
@@ -2936,9 +2837,8 @@ namespace mmo
 	}
 #endif
 
-
 #ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_DestroyMonster(const std::string& cmd, const std::string& args) const
+	void WorldState::Command_DestroyMonster(const std::string &cmd, const std::string &args) const
 	{
 		std::istringstream iss(args);
 		std::vector<std::string> tokens;
@@ -2974,9 +2874,8 @@ namespace mmo
 	}
 #endif
 
-
 #ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_FaceMe(const std::string& cmd, const std::string& args) const
+	void WorldState::Command_FaceMe(const std::string &cmd, const std::string &args) const
 	{
 		std::istringstream iss(args);
 		std::vector<std::string> tokens;
@@ -2997,9 +2896,8 @@ namespace mmo
 	}
 #endif
 
-
 #ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_FollowMe(const std::string& cmd, const std::string& args) const
+	void WorldState::Command_FollowMe(const std::string &cmd, const std::string &args) const
 	{
 		std::istringstream iss(args);
 		std::vector<std::string> tokens;
@@ -3020,9 +2918,8 @@ namespace mmo
 	}
 #endif
 
-
 #ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_LevelUp(const std::string& cmd, const std::string& args) const
+	void WorldState::Command_LevelUp(const std::string &cmd, const std::string &args) const
 	{
 		std::istringstream iss(args);
 		std::vector<std::string> tokens;
@@ -3043,7 +2940,7 @@ namespace mmo
 #endif
 
 #ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_GiveMoney(const std::string& cmd, const std::string& args) const
+	void WorldState::Command_GiveMoney(const std::string &cmd, const std::string &args) const
 	{
 		std::istringstream iss(args);
 		std::vector<std::string> tokens;
@@ -3065,7 +2962,7 @@ namespace mmo
 #endif
 
 #ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_AddItem(const std::string& cmd, const std::string& args) const
+	void WorldState::Command_AddItem(const std::string &cmd, const std::string &args) const
 	{
 		std::istringstream iss(args);
 		std::vector<std::string> tokens;
@@ -3094,7 +2991,7 @@ namespace mmo
 #endif
 
 #ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_WorldPort(const std::string& cmd, const std::string& args) const
+	void WorldState::Command_WorldPort(const std::string &cmd, const std::string &args) const
 	{
 		std::istringstream iss(args);
 		std::vector<std::string> tokens;
@@ -3141,7 +3038,7 @@ namespace mmo
 #endif
 
 #ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_Speed(const std::string& cmd, const std::string& args) const
+	void WorldState::Command_Speed(const std::string &cmd, const std::string &args) const
 	{
 		std::istringstream iss(args);
 		std::vector<std::string> tokens;
@@ -3169,7 +3066,7 @@ namespace mmo
 #endif
 
 #ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_Summon(const std::string& cmd, const std::string& args) const
+	void WorldState::Command_Summon(const std::string &cmd, const std::string &args) const
 	{
 		std::istringstream iss(args);
 		std::vector<std::string> tokens;
@@ -3196,7 +3093,7 @@ namespace mmo
 #endif
 
 #ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_Port(const std::string& cmd, const std::string& args) const
+	void WorldState::Command_Port(const std::string &cmd, const std::string &args) const
 	{
 		std::istringstream iss(args);
 		std::vector<std::string> tokens;
@@ -3229,7 +3126,7 @@ namespace mmo
 		m_worldLoaded = false;
 		m_timeSyncResponseSent = false;
 
-		const proto_client::MapEntry* map = m_project.maps.getById(g_mapId);
+		const proto_client::MapEntry *map = m_project.maps.getById(g_mapId);
 		ASSERT(map);
 
 		const std::string assetPath = "Worlds/" + map->directory() + "/" + map->directory();
@@ -3244,10 +3141,10 @@ namespace mmo
 			return false;
 		}
 
-		io::StreamSource source{ *streamPtr };
-		io::Reader reader{ source };
+		io::StreamSource source{*streamPtr};
+		io::Reader reader{source};
 
-		ClientWorldInstanceDeserializer deserializer{ *m_worldInstance };
+		ClientWorldInstanceDeserializer deserializer{*m_worldInstance};
 		if (!deserializer.Read(reader))
 		{
 			ELOG("Failed to read world '" << assetPath << ".hwld'!");
@@ -3260,7 +3157,7 @@ namespace mmo
 		return true;
 	}
 
-	void WorldState::OnChatNameQueryCallback(uint64 guid, const String& name)
+	void WorldState::OnChatNameQueryCallback(uint64 guid, const String &name)
 	{
 		FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SAY", name);
 	}
@@ -3305,12 +3202,10 @@ namespace mmo
 	void WorldState::EnqueueNextAttackSwingTimer()
 	{
 		m_timers.AddEvent([this]()
-			{
-				OnAttackSwingErrorTimer();
-			}, GetAsyncTimeMs() + 500);
+						  { OnAttackSwingErrorTimer(); }, GetAsyncTimeMs() + 500);
 	}
 
-	void WorldState::OnItemPushCallback(const ItemInfo& itemInfo, uint64 characterGuid, bool wasLooted, bool wasCreated, uint8 bag, uint8 subslot, uint16 amount, uint16 totalCount)
+	void WorldState::OnItemPushCallback(const ItemInfo &itemInfo, uint64 characterGuid, bool wasLooted, bool wasCreated, uint8 bag, uint8 subslot, uint16 amount, uint16 totalCount)
 	{
 		// TODO: UI events for chat display
 		if (characterGuid == ObjectMgr::GetActivePlayerGuid())
@@ -3346,25 +3241,23 @@ namespace mmo
 
 	void WorldState::SendAttackStart(const uint64 victim, const GameTime timestamp)
 	{
-		m_realmConnector.sendSinglePacket([victim, timestamp](game::OutgoingPacket& packet)
-		{
+		m_realmConnector.sendSinglePacket([victim, timestamp](game::OutgoingPacket &packet)
+										  {
 			packet.Start(game::client_realm_packet::AttackSwing);
 			packet << io::write_packed_guid(victim) << io::write<GameTime>(timestamp);
-			packet.Finish();
-		});
+			packet.Finish(); });
 	}
 
 	void WorldState::SendAttackStop(const GameTime timestamp)
 	{
-		m_realmConnector.sendSinglePacket([timestamp](game::OutgoingPacket& packet)
-		{
+		m_realmConnector.sendSinglePacket([timestamp](game::OutgoingPacket &packet)
+										  {
 			packet.Start(game::client_realm_packet::AttackStop);
 			packet << io::write<GameTime>(timestamp);
-			packet.Finish();
-		});
+			packet.Finish(); });
 	}
 
-	void WorldState::AddWorldTextFrame(const Vector3& position, const String& text, const Color& color, float duration)
+	void WorldState::AddWorldTextFrame(const Vector3 &position, const String &text, const Color &color, float duration)
 	{
 		auto textFrame = std::make_unique<WorldTextFrame>(m_playerController->GetCamera(), position, duration);
 		textFrame->SetText(text);
@@ -3390,14 +3283,14 @@ namespace mmo
 			textFrame->AddStateImagery(normalState);
 			textFrame->SetRenderer("DefaultRenderer");
 		}
-		
+
 		m_worldTextFrames.push_back(std::move(textFrame));
 	}
 
-	void WorldState::OnPageAvailabilityChanged(const PageNeighborhood& page, bool isAvailable)
+	void WorldState::OnPageAvailabilityChanged(const PageNeighborhood &page, bool isAvailable)
 	{
-		const auto& mainPage = page.GetMainPage();
-		const PagePosition& pos = mainPage.GetPosition();
+		const auto &mainPage = page.GetMainPage();
+		const PagePosition &pos = mainPage.GetPosition();
 
 		if (isAvailable)
 		{
@@ -3410,7 +3303,7 @@ namespace mmo
 
 		if (m_worldInstance->HasTerrain())
 		{
-			auto* page = m_worldInstance->GetTerrain()->GetPage(pos.x(), pos.y());
+			auto *page = m_worldInstance->GetTerrain()->GetPage(pos.x(), pos.y());
 			if (!page)
 			{
 				return;
@@ -3432,15 +3325,16 @@ namespace mmo
 	{
 		ASSERT(m_playerController);
 
-		const auto& camPos = m_playerController->GetCamera().GetDerivedPosition();
+		const auto &camPos = m_playerController->GetCamera().GetDerivedPosition();
 		return PagePosition(static_cast<uint32>(
-			floor(camPos.x / terrain::constants::PageSize)) + 32,
-			static_cast<uint32>(floor(camPos.z / terrain::constants::PageSize)) + 32);
+								floor(camPos.x / terrain::constants::PageSize)) +
+								32,
+							static_cast<uint32>(floor(camPos.z / terrain::constants::PageSize)) + 32);
 	}
 
 	void WorldState::EnsurePageIsLoaded(PagePosition pos)
 	{
-		auto* page = m_worldInstance->GetTerrain()->GetPage(pos.x(), pos.y());
+		auto *page = m_worldInstance->GetTerrain()->GetPage(pos.x(), pos.y());
 		if (!page || !page->IsLoadable())
 		{
 			// Page not known, already loaded or not loadable yet
@@ -3451,9 +3345,7 @@ namespace mmo
 		if (!loaded)
 		{
 			m_dispatcher.post([pos, this]()
-				{
-					EnsurePageIsLoaded(pos);
-				});
+							  { EnsurePageIsLoaded(pos); });
 		}
 	}
 
@@ -3471,11 +3363,11 @@ namespace mmo
 	{
 		FrameManager::Get().TriggerLuaEvent("UNIT_LEVEL_UPDATED", "target");
 	}
-	void WorldState::OnRenderShadowsChanged(ConsoleVar& var, const std::string& oldValue)
+	void WorldState::OnRenderShadowsChanged(ConsoleVar &var, const std::string &oldValue)
 	{
 		if (m_skyComponent)
 		{
-			Light* sunLight = m_skyComponent->GetSunLight();
+			Light *sunLight = m_skyComponent->GetSunLight();
 			if (sunLight)
 			{
 				sunLight->SetCastShadows(var.GetBoolValue());
@@ -3483,23 +3375,23 @@ namespace mmo
 		}
 	}
 
-	void WorldState::OnShadowBiasChanged(ConsoleVar& var, const std::string& oldValue)
+	void WorldState::OnShadowBiasChanged(ConsoleVar &var, const std::string &oldValue)
 	{
-		WorldFrame* worldFrame = WorldFrame::GetWorldFrame();
+		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
 		if (!worldFrame)
 		{
 			WLOG("World frame not found");
 			return;
 		}
 
-		const WorldRenderer* renderer = reinterpret_cast<const WorldRenderer*>(worldFrame->GetRenderer());
+		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
 		if (!renderer)
 		{
 			WLOG("World frame has no renderer");
 			return;
 		}
 
-		DeferredRenderer* deferred = renderer->GetDeferredRenderer();
+		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
 		if (!deferred)
 		{
 			WLOG("Deferred renderer not initialized");
@@ -3508,27 +3400,27 @@ namespace mmo
 
 		DLOG("Updating depth bias values");
 		deferred->SetDepthBias(s_depthBiasVar->GetFloatValue(),
-			s_slopeDepthBiasVar->GetFloatValue(),
-			s_clampDepthBiasVar->GetFloatValue());
+							   s_slopeDepthBiasVar->GetFloatValue(),
+							   s_clampDepthBiasVar->GetFloatValue());
 	}
 
-	void WorldState::OnShadowTextureSizeChanged(ConsoleVar& var, const std::string& oldValue)
+	void WorldState::OnShadowTextureSizeChanged(ConsoleVar &var, const std::string &oldValue)
 	{
-		WorldFrame* worldFrame = WorldFrame::GetWorldFrame();
+		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
 		if (!worldFrame)
 		{
 			WLOG("World frame not found");
 			return;
 		}
 
-		const WorldRenderer* renderer = reinterpret_cast<const WorldRenderer*>(worldFrame->GetRenderer());
+		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
 		if (!renderer)
 		{
 			WLOG("World frame has no renderer");
 			return;
 		}
 
-		DeferredRenderer* deferred = renderer->GetDeferredRenderer();
+		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
 		if (!deferred)
 		{
 			WLOG("Deferred renderer not initialized");
@@ -3538,8 +3430,7 @@ namespace mmo
 		const uint16 s_shadowTexSizes[] = {
 			512,
 			1024,
-			2048
-		};
+			2048};
 
 		const uint16 shadowTextureSize = s_shadowTexSizes[Clamp(s_shadowTextureSizeVar->GetIntValue(), 0, 2)];
 		ILOG("Updating shadow texture size to " << shadowTextureSize << "x" << shadowTextureSize);
@@ -3548,49 +3439,45 @@ namespace mmo
 
 	void WorldState::GetPlayerName(uint64 guid, std::weak_ptr<GamePlayerC> player)
 	{
-		m_cache.GetNameCache().Get(guid, [player](uint64, const String& name)
-		{
+		m_cache.GetNameCache().Get(guid, [player](uint64, const String &name)
+								   {
 			if (const std::shared_ptr<GamePlayerC> strong = player.lock())
 			{
 				strong->SetName(name);
-			}
-		});
+			} });
 	}
 
 	void WorldState::GetCreatureData(uint64 guid, std::weak_ptr<GameUnitC> creature)
 	{
-		m_cache.GetCreatureCache().Get(guid, [creature](uint64, const CreatureInfo& data)
-		{
+		m_cache.GetCreatureCache().Get(guid, [creature](uint64, const CreatureInfo &data)
+									   {
 			if (const std::shared_ptr<GameUnitC> strong = creature.lock())
 			{
 				strong->SetCreatureInfo(data);
-			}
-		});
+			} });
 	}
 
 	void WorldState::GetItemData(uint64 guid, std::weak_ptr<GameItemC> item)
 	{
-		m_cache.GetItemCache().Get(guid, [item](uint64, const ItemInfo& data)
-			{
+		m_cache.GetItemCache().Get(guid, [item](uint64, const ItemInfo &data)
+								   {
 				if (const std::shared_ptr<GameItemC> strong = item.lock())
 				{
 					strong->NotifyItemData(data);
-				}
-			});
+				} });
 	}
 
 	void WorldState::GetItemData(uint64 guid, std::weak_ptr<GamePlayerC> player)
 	{
-		m_cache.GetItemCache().Get(guid, [player](uint64, const ItemInfo& data)
-			{
+		m_cache.GetItemCache().Get(guid, [player](uint64, const ItemInfo &data)
+								   {
 				if (const std::shared_ptr<GamePlayerC> strong = player.lock())
 				{
 					strong->NotifyItemData(data);
-				}
-			});
+				} });
 	}
 
-	void WorldState::OnMoveEvent(GameUnitC& unit, const MovementEvent& moveEvent)
+	void WorldState::OnMoveEvent(GameUnitC &unit, const MovementEvent &moveEvent)
 	{
 		if (&unit != m_playerController->GetControlledUnit().get())
 		{
@@ -3627,35 +3514,31 @@ namespace mmo
 			return;
 		}
 
-		m_cache.GetGuildCache().Get(guildGuid, [player, this](uint64, const GuildInfo& info)
-			{
+		m_cache.GetGuildCache().Get(guildGuid, [player, this](uint64, const GuildInfo &info)
+									{
 				if (const auto strong = player.lock())
 				{
 					strong->NotifyGuildInfo(&info);
-				}
-			});
+				} });
 	}
 
 	void WorldState::GetObjectData(uint64 guid, std::weak_ptr<GameWorldObjectC> object)
 	{
-		m_cache.GetObjectCache().Get(guid, [object](uint64, const ObjectInfo& data)
-			{
+		m_cache.GetObjectCache().Get(guid, [object](uint64, const ObjectInfo &data)
+									 {
 				if (const std::shared_ptr<GameWorldObjectC> strong = object.lock())
 				{
 					strong->NotifyObjectData(data);
-				}
-			});
+				} });
 	}
 
 	// Required implementation of OnGameTimeInfo packet handler for WorldState
-	PacketParseResult WorldState::OnGameTimeInfo(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnGameTimeInfo(game::IncomingPacket &packet)
 	{
 		GameTime gameTime;
 		float timeSpeed;
 
-		if (!(packet
-			>> io::read<uint64>(gameTime)
-			>> io::read<float>(timeSpeed)))
+		if (!(packet >> io::read<uint64>(gameTime) >> io::read<float>(timeSpeed)))
 		{
 			ELOG("Failed to read GameTimeInfo packet!");
 			return PacketParseResult::Disconnect;
@@ -3670,21 +3553,20 @@ namespace mmo
 
 		// Trigger a Lua event to notify the UI about the time change
 		FrameManager::Get().TriggerLuaEvent("GAME_TIME_UPDATED",
-			m_gameTime.GetHour(),
-			m_gameTime.GetMinute(),
-			m_gameTime.GetSecond(),
-			m_gameTime.GetTimeSpeed());
+											m_gameTime.GetHour(),
+											m_gameTime.GetMinute(),
+											m_gameTime.GetSecond(),
+											m_gameTime.GetTimeSpeed());
 
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnSetProficiency(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnSetProficiency(game::IncomingPacket &packet)
 	{
 		uint8 itemclass;
 		uint32 mask;
 
-		if (!(packet >> io::read<uint8>(itemclass)
-			>> io::read<uint32>(mask)))
+		if (!(packet >> io::read<uint8>(itemclass) >> io::read<uint32>(mask)))
 		{
 			ELOG("Failed to read SetProficiency packet!");
 			return PacketParseResult::Disconnect;
@@ -3708,7 +3590,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnTimePlayedResponse(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnTimePlayedResponse(game::IncomingPacket &packet)
 	{
 		uint32 timePlayed;
 		if (!(packet >> io::read<uint32>(timePlayed)))
@@ -3723,7 +3605,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnTimeSyncRequest(game::IncomingPacket& packet)
+	PacketParseResult WorldState::OnTimeSyncRequest(game::IncomingPacket &packet)
 	{
 		uint32 syncIndex;
 		if (!(packet >> io::read<uint32>(syncIndex)))

@@ -11,7 +11,6 @@
 #include "screen.h"
 #include "game_states/game_state.h"
 
-
 #include "base/signal.h"
 #include "game/game_time_component.h"
 #include "graphics/sky_component.h"
@@ -69,6 +68,7 @@ namespace mmo
 	class TrainerClient;
 	class PartyInfo;
 	class GuildClient;
+	class FriendClient;
 	class TalentClient;
 	class Discord;
 	class Minimap;
@@ -77,36 +77,37 @@ namespace mmo
 	/// This class represents the initial game state where the player is asked to enter
 	/// his credentials in order to authenticate.
 	class WorldState final
-		: public GameState
-		, public NetClient
-		, public IPageLoaderListener
+		: public GameState,
+		  public NetClient,
+		  public IPageLoaderListener
 	{
 	public:
 		/// @brief Creates a new instance of the WorldState class and initializes it.
 		/// @param gameStateManager The game state manager that this state belongs to.
 		/// @param realmConnector The connector which manages the connection to the realm server.
-		/// @param project 
+		/// @param project
 		explicit WorldState(
-			GameStateMgr& gameStateManager,
-			RealmConnector& realmConnector,
-			const proto_client::Project& project, 
-			TimerQueue& timers,
-			LootClient& lootClient,
-			VendorClient& vendorClient,
-			ActionBar& actionBar,
-			SpellCast& spellCast,
-			TrainerClient& trainerClient,
-			QuestClient& questClient,
-			IAudio& audio,
-			PartyInfo& partyInfo,
-			CharSelect& charSelect,
-			GuildClient& guildClient, 
-			ICacheProvider& cache,
-			Discord& discord,
-			GameTimeComponent& gameTime,
-			TalentClient& talentClient,
-			Minimap& minimap,
-			InventoryClient& inventoryClient);
+			GameStateMgr &gameStateManager,
+			RealmConnector &realmConnector,
+			const proto_client::Project &project,
+			TimerQueue &timers,
+			LootClient &lootClient,
+			VendorClient &vendorClient,
+			ActionBar &actionBar,
+			SpellCast &spellCast,
+			TrainerClient &trainerClient,
+			QuestClient &questClient,
+			IAudio &audio,
+			PartyInfo &partyInfo,
+			CharSelect &charSelect,
+			GuildClient &guildClient,
+			FriendClient &friendClient,
+			ICacheProvider &cache,
+			Discord &discord,
+			GameTimeComponent &gameTime,
+			TalentClient &talentClient,
+			Minimap &minimap,
+			InventoryClient &inventoryClient);
 
 	public:
 		/// @brief The default name of the world state
@@ -115,10 +116,10 @@ namespace mmo
 	public:
 		/// @copydoc GameState::OnEnter
 		void OnEnter() override;
-		
+
 		/// @copydoc GameState::OnLeave
 		void OnLeave() override;
-		
+
 		/// @copydoc GameState::GetName
 		[[nodiscard]] std::string_view GetName() const override;
 
@@ -160,15 +161,15 @@ namespace mmo
 
 		void OnTargetLevelChanged(uint64 monitoredGuid);
 
-		void OnRenderShadowsChanged(ConsoleVar& var, const std::string& oldValue);
+		void OnRenderShadowsChanged(ConsoleVar &var, const std::string &oldValue);
 
-		void OnShadowBiasChanged(ConsoleVar& var, const std::string& oldValue);
+		void OnShadowBiasChanged(ConsoleVar &var, const std::string &oldValue);
 
-		void OnShadowTextureSizeChanged(ConsoleVar& var, const std::string& oldValue);
+		void OnShadowTextureSizeChanged(ConsoleVar &var, const std::string &oldValue);
 
 	private:
 		// EventLoop connections
-		
+
 		bool OnMouseDown(MouseButton button, int32 x, int32 y);
 
 		bool OnMouseUp(MouseButton button, int32 x, int32 y);
@@ -176,9 +177,9 @@ namespace mmo
 		bool OnMouseMove(int32 x, int32 y);
 
 		bool OnMouseWheel(int32 delta);
-		
-		bool OnKeyDown(int32 key, bool repeat);	
-		
+
+		bool OnKeyDown(int32 key, bool repeat);
+
 		bool OnKeyUp(int32 key);
 
 		void OnIdle(float deltaSeconds, GameTime timestamp);
@@ -196,7 +197,7 @@ namespace mmo
 		void SetupPacketHandler();
 
 		void RemovePacketHandler();
-		
+
 	private:
 		//
 
@@ -222,142 +223,140 @@ namespace mmo
 	private:
 		// Network packet handlers
 
-		PacketParseResult OnUpdateObject(game::IncomingPacket& packet);
-		
-		PacketParseResult OnCompressedUpdateObject(game::IncomingPacket& packet);
+		PacketParseResult OnUpdateObject(game::IncomingPacket &packet);
 
-		PacketParseResult OnDestroyObjects(game::IncomingPacket& packet);
+		PacketParseResult OnCompressedUpdateObject(game::IncomingPacket &packet);
 
-		PacketParseResult OnMovement(game::IncomingPacket& packet);
+		PacketParseResult OnDestroyObjects(game::IncomingPacket &packet);
 
-		PacketParseResult OnChatMessage(game::IncomingPacket& packet);
+		PacketParseResult OnMovement(game::IncomingPacket &packet);
 
-		PacketParseResult OnNameQueryResult(game::IncomingPacket& packet);
+		PacketParseResult OnChatMessage(game::IncomingPacket &packet);
 
-		PacketParseResult OnCreatureQueryResult(game::IncomingPacket& packet);
+		PacketParseResult OnNameQueryResult(game::IncomingPacket &packet);
 
-		PacketParseResult OnItemQueryResult(game::IncomingPacket& packet);
+		PacketParseResult OnCreatureQueryResult(game::IncomingPacket &packet);
 
-		PacketParseResult OnObjectQueryResult(game::IncomingPacket& packet);
+		PacketParseResult OnItemQueryResult(game::IncomingPacket &packet);
 
-		PacketParseResult OnInitialSpells(game::IncomingPacket& packet);
+		PacketParseResult OnObjectQueryResult(game::IncomingPacket &packet);
 
-		PacketParseResult OnCreatureMove(game::IncomingPacket& packet);
+		PacketParseResult OnInitialSpells(game::IncomingPacket &packet);
 
-		PacketParseResult OnSpellLearnedOrUnlearned(game::IncomingPacket& packet);
+		PacketParseResult OnCreatureMove(game::IncomingPacket &packet);
 
-		PacketParseResult OnSpellStart(game::IncomingPacket& packet);
+		PacketParseResult OnSpellLearnedOrUnlearned(game::IncomingPacket &packet);
 
-		PacketParseResult OnSpellGo(game::IncomingPacket& packet);
+		PacketParseResult OnSpellStart(game::IncomingPacket &packet);
 
-		PacketParseResult OnSpellFailure(game::IncomingPacket& packet);
+		PacketParseResult OnSpellGo(game::IncomingPacket &packet);
 
-		PacketParseResult OnAttackStart(game::IncomingPacket& packet);
+		PacketParseResult OnSpellFailure(game::IncomingPacket &packet);
 
-		PacketParseResult OnAttackStop(game::IncomingPacket& packet);
+		PacketParseResult OnAttackStart(game::IncomingPacket &packet);
 
-		PacketParseResult OnAttackSwingError(game::IncomingPacket& packet);
+		PacketParseResult OnAttackStop(game::IncomingPacket &packet);
 
-		PacketParseResult OnXpLog(game::IncomingPacket& packet);
+		PacketParseResult OnAttackSwingError(game::IncomingPacket &packet);
 
-		PacketParseResult OnSpellDamageLog(game::IncomingPacket& packet);
+		PacketParseResult OnXpLog(game::IncomingPacket &packet);
 
-		PacketParseResult OnNonSpellDamageLog(game::IncomingPacket& packet);
+		PacketParseResult OnSpellDamageLog(game::IncomingPacket &packet);
 
-		PacketParseResult OnAttackerStateUpdate(game::IncomingPacket& packet);
+		PacketParseResult OnNonSpellDamageLog(game::IncomingPacket &packet);
 
-		PacketParseResult OnLogEnvironmentalDamage(game::IncomingPacket& packet);
+		PacketParseResult OnAttackerStateUpdate(game::IncomingPacket &packet);
 
-		PacketParseResult OnMovementSpeedChanged(game::IncomingPacket& packet);
+		PacketParseResult OnLogEnvironmentalDamage(game::IncomingPacket &packet);
 
-		PacketParseResult OnForceMovementSpeedChange(game::IncomingPacket& packet);
+		PacketParseResult OnMovementSpeedChanged(game::IncomingPacket &packet);
 
-		PacketParseResult OnMoveTeleport(game::IncomingPacket& packet);
+		PacketParseResult OnForceMovementSpeedChange(game::IncomingPacket &packet);
 
-		PacketParseResult OnLevelUp(game::IncomingPacket& packet);
+		PacketParseResult OnMoveTeleport(game::IncomingPacket &packet);
 
-		PacketParseResult OnAuraUpdate(game::IncomingPacket& packet);
+		PacketParseResult OnLevelUp(game::IncomingPacket &packet);
 
-		PacketParseResult OnPeriodicAuraLog(game::IncomingPacket& packet);
+		PacketParseResult OnAuraUpdate(game::IncomingPacket &packet);
 
-		PacketParseResult OnActionButtons(game::IncomingPacket& packet);
+		PacketParseResult OnPeriodicAuraLog(game::IncomingPacket &packet);
 
-		PacketParseResult OnQuestGiverStatus(game::IncomingPacket& packet);
+		PacketParseResult OnActionButtons(game::IncomingPacket &packet);
 
-		PacketParseResult OnSpellEnergizeLog(game::IncomingPacket& packet);
+		PacketParseResult OnQuestGiverStatus(game::IncomingPacket &packet);
 
-		PacketParseResult OnTransferPending(game::IncomingPacket& packet);
+		PacketParseResult OnSpellEnergizeLog(game::IncomingPacket &packet);
 
-		PacketParseResult OnNewWorld(game::IncomingPacket& packet);
+		PacketParseResult OnTransferPending(game::IncomingPacket &packet);
 
-		PacketParseResult OnGroupInvite(game::IncomingPacket& packet);
+		PacketParseResult OnNewWorld(game::IncomingPacket &packet);
 
-		PacketParseResult OnGroupDecline(game::IncomingPacket& packet);
+		PacketParseResult OnGroupInvite(game::IncomingPacket &packet);
 
-		PacketParseResult OnPartyCommandResult(game::IncomingPacket& packet);
+		PacketParseResult OnGroupDecline(game::IncomingPacket &packet);
 
-		PacketParseResult OnRandomRollResult(game::IncomingPacket& packet);
+		PacketParseResult OnPartyCommandResult(game::IncomingPacket &packet);
 
-		PacketParseResult OnSpellHealLog(game::IncomingPacket& packet);
+		PacketParseResult OnRandomRollResult(game::IncomingPacket &packet);
 
-		PacketParseResult OnItemPushResult(game::IncomingPacket& packet);
+		PacketParseResult OnSpellHealLog(game::IncomingPacket &packet);
 
-		PacketParseResult OnLogoutResponse(game::IncomingPacket& packet);
+		PacketParseResult OnItemPushResult(game::IncomingPacket &packet);
 
-		PacketParseResult OnMessageOfTheDay(game::IncomingPacket& packet);
+		PacketParseResult OnLogoutResponse(game::IncomingPacket &packet);
 
-		PacketParseResult OnMoveRoot(game::IncomingPacket& packet);
+		PacketParseResult OnMessageOfTheDay(game::IncomingPacket &packet);
+
+		PacketParseResult OnMoveRoot(game::IncomingPacket &packet);
 
 		/// @brief Handles the GameTimeInfo packet.
 		/// @param packet The incoming packet.
 		/// @return The packet parse result.
-		PacketParseResult OnGameTimeInfo(game::IncomingPacket& packet);
+		PacketParseResult OnGameTimeInfo(game::IncomingPacket &packet);
 
-		PacketParseResult OnSetProficiency(game::IncomingPacket& packet);
+		PacketParseResult OnSetProficiency(game::IncomingPacket &packet);
 
-		PacketParseResult OnTimePlayedResponse(game::IncomingPacket& packet);
+		PacketParseResult OnTimePlayedResponse(game::IncomingPacket &packet);
 
-		PacketParseResult OnTimeSyncRequest(game::IncomingPacket& packet);
+		PacketParseResult OnTimeSyncRequest(game::IncomingPacket &packet);
 
 	private:
-
 #ifdef MMO_WITH_DEV_COMMANDS
-		void Command_LearnSpell(const std::string& cmd, const std::string& args) const;
+		void Command_LearnSpell(const std::string &cmd, const std::string &args) const;
 
-		void Command_CreateMonster(const std::string& cmd, const std::string& args) const;
+		void Command_CreateMonster(const std::string &cmd, const std::string &args) const;
 
-		void Command_DestroyMonster(const std::string& cmd, const std::string& args) const;
+		void Command_DestroyMonster(const std::string &cmd, const std::string &args) const;
 
-		void Command_FaceMe(const std::string& cmd, const std::string& args) const;
+		void Command_FaceMe(const std::string &cmd, const std::string &args) const;
 
-		void Command_FollowMe(const std::string& cmd, const std::string& args) const;
+		void Command_FollowMe(const std::string &cmd, const std::string &args) const;
 
-		void Command_LevelUp(const std::string& cmd, const std::string& args) const;
+		void Command_LevelUp(const std::string &cmd, const std::string &args) const;
 
-		void Command_GiveMoney(const std::string& cmd, const std::string& args) const;
+		void Command_GiveMoney(const std::string &cmd, const std::string &args) const;
 
-		void Command_AddItem(const std::string& cmd, const std::string& args) const;
+		void Command_AddItem(const std::string &cmd, const std::string &args) const;
 
-		void Command_WorldPort(const std::string& cmd, const std::string& args) const;
+		void Command_WorldPort(const std::string &cmd, const std::string &args) const;
 
-		void Command_Speed(const std::string& cmd, const std::string& args) const;
+		void Command_Speed(const std::string &cmd, const std::string &args) const;
 
-		void Command_Summon(const std::string& cmd, const std::string& args) const;
+		void Command_Summon(const std::string &cmd, const std::string &args) const;
 
-		void Command_Port(const std::string& cmd, const std::string& args) const;
+		void Command_Port(const std::string &cmd, const std::string &args) const;
 #endif
 
 	private:
-
 		bool LoadMap();
 
-		void OnChatNameQueryCallback(uint64 guid, const String& name);
+		void OnChatNameQueryCallback(uint64 guid, const String &name);
 
 		void OnAttackSwingErrorTimer();
 
 		void EnqueueNextAttackSwingTimer();
 
-		void OnItemPushCallback(const ItemInfo& itemInfo, uint64 characterGuid, bool wasLooted, bool wasCreated, uint8 bag, uint8 subslot, uint16 amount, uint16 totalCount);
+		void OnItemPushCallback(const ItemInfo &itemInfo, uint64 characterGuid, bool wasLooted, bool wasCreated, uint8 bag, uint8 subslot, uint16 amount, uint16 totalCount);
 
 	public:
 		// Begin NetClient interface
@@ -368,48 +367,49 @@ namespace mmo
 
 	private:
 		/// Adds a floating world text UI element with a duration to the world.
-		void AddWorldTextFrame(const Vector3& position, const String& text, const Color& color, float duration);
+		void AddWorldTextFrame(const Vector3 &position, const String &text, const Color &color, float duration);
 
-		void OnPageAvailabilityChanged(const PageNeighborhood& page, bool isAvailable) override;
+		void OnPageAvailabilityChanged(const PageNeighborhood &page, bool isAvailable) override;
 
 		PagePosition GetPagePositionFromCamera() const;
 
 		void EnsurePageIsLoaded(PagePosition position);
 
 	private:
-		RealmConnector& m_realmConnector;
+		RealmConnector &m_realmConnector;
 		ScreenLayerIt m_paintLayer;
 		scoped_connection_container m_realmConnections;
 		scoped_connection_container m_inputConnections;
 		std::unique_ptr<Scene> m_scene;
 		std::unique_ptr<PlayerController> m_playerController;
-		std::unique_ptr<AxisDisplay> m_debugAxis;		std::unique_ptr<WorldGrid> m_worldGrid;
-		IdGenerator<uint64> m_objectIdGenerator{ 1 };
-		IAudio& m_audio;
+		std::unique_ptr<AxisDisplay> m_debugAxis;
+		std::unique_ptr<WorldGrid> m_worldGrid;
+		IdGenerator<uint64> m_objectIdGenerator{1};
+		IAudio &m_audio;
 
 		bool m_combatMode = false;
 
-		SceneNode* m_worldRootNode;
+		SceneNode *m_worldRootNode;
 		std::shared_ptr<ClientWorldInstance> m_worldInstance;
 
 		// Game time component for day/night cycle
-		GameTimeComponent& m_gameTime;
-		
+		GameTimeComponent &m_gameTime;
+
 		// Sky component for day/night cycle
 		std::unique_ptr<SkyComponent> m_skyComponent;
 
-		ICacheProvider& m_cache;
+		ICacheProvider &m_cache;
 
 		scoped_connection_container m_playerObservers;
 		scoped_connection_container m_targetObservers;
 
-		const proto_client::Project& m_project;
+		const proto_client::Project &m_project;
 
 		std::vector<std::unique_ptr<SpellProjectile>> m_spellProjectiles;
 
-		TimerQueue& m_timers;
+		TimerQueue &m_timers;
 
-		AttackSwingEvent m_lastAttackSwingEvent{ AttackSwingEvent::Unknown };
+		AttackSwingEvent m_lastAttackSwingEvent{AttackSwingEvent::Unknown};
 
 		Bindings m_bindings;
 
@@ -422,49 +422,50 @@ namespace mmo
 		std::unique_ptr<LoadedPageSection> m_visibleSection;
 		std::unique_ptr<WorldPageLoader> m_pageLoader;
 		std::unique_ptr<PagePOVPartitioner> m_memoryPointOfView;
-		LootClient& m_lootClient;
-		VendorClient& m_vendorClient;
+		LootClient &m_lootClient;
+		VendorClient &m_vendorClient;
 
 		std::unique_ptr<RaySceneQuery> m_rayQuery;
 
 		RealmConnector::PacketHandlerHandleContainer m_worldPacketHandlers;
 		RealmConnector::PacketHandlerHandleContainer m_worldChangeHandlers;
 
-		ActionBar& m_actionBar;
-		SpellCast& m_spellCast;
-		TrainerClient& m_trainerClient;
-		QuestClient& m_questClient;
-		PartyInfo& m_partyInfo;
+		ActionBar &m_actionBar;
+		SpellCast &m_spellCast;
+		TrainerClient &m_trainerClient;
+		QuestClient &m_questClient;
+		PartyInfo &m_partyInfo;
 
-		SoundIndex m_backgroundMusicSound{ InvalidSound };
-		ChannelIndex m_backgroundMusicChannel{ InvalidChannel };
+		SoundIndex m_backgroundMusicSound{InvalidSound};
+		ChannelIndex m_backgroundMusicChannel{InvalidChannel};
 
-		SoundIndex m_ambienceSound{ InvalidSound };
-		ChannelIndex m_ambienceChannel{ InvalidChannel };
+		SoundIndex m_ambienceSound{InvalidSound};
+		ChannelIndex m_ambienceChannel{InvalidChannel};
 
-		CharSelect& m_charSelect;
-		GuildClient& m_guildClient;
+		CharSelect &m_charSelect;
+		GuildClient &m_guildClient;
+		FriendClient &m_friendClient;
 
 		scoped_connection_container m_cvarChangedSignals;
-		Discord& m_discord;
+		Discord &m_discord;
 
 		std::unique_ptr<DebugPathVisualizer> m_debugPathVisualizer;
 
-		TalentClient& m_talentClient;
+		TalentClient &m_talentClient;
 
-		Minimap& m_minimap;
+		Minimap &m_minimap;
 
-		InventoryClient& m_inventoryClient;
+		InventoryClient &m_inventoryClient;
 
 		bool m_worldLoaded = false;
 
 		bool m_timeSyncResponseSent = false;
 
 	private:
-		static IInputControl* s_inputControl;
+		static IInputControl *s_inputControl;
 
 	public:
-		static IInputControl* GetInputControl()
+		static IInputControl *GetInputControl()
 		{
 			return s_inputControl;
 		}
@@ -477,7 +478,7 @@ namespace mmo
 
 		void GetItemData(uint64 guid, std::weak_ptr<GamePlayerC> player) override;
 
-		void OnMoveEvent(GameUnitC& unit, const MovementEvent& moveEvent) override;
+		void OnMoveEvent(GameUnitC &unit, const MovementEvent &moveEvent) override;
 
 		void SetSelectedTarget(uint64 guid) override;
 

@@ -20,6 +20,7 @@
 #include "event_loop.h"
 #include "loading_screen.h"
 #include "systems/guild_client.h"
+#include "systems/friend_client.h"
 #include "systems/loot_client.h"
 #include "luabind_lambda.h"
 #include "platform.h"
@@ -49,7 +50,7 @@ namespace luabind
 {
 	// A little helper to combine multiple policies
 	template <typename... T>
- 	using joined = typename luabind::meta::join<T...>::type;
+	using joined = typename luabind::meta::join<T...>::type;
 }
 
 namespace mmo
@@ -63,15 +64,15 @@ namespace mmo
 	namespace
 	{
 		/// Allows executing a console command from within lua.
-		void Script_RunConsoleCommand(const char* cmdLine)
+		void Script_RunConsoleCommand(const char *cmdLine)
 		{
 			ASSERT(cmdLine);
 			Console::ExecuteCommand(cmdLine);
 		}
-		
-		const char* Script_GetConsoleVar(const std::string& name)
+
+		const char *Script_GetConsoleVar(const std::string &name)
 		{
-			ConsoleVar* cvar = ConsoleVarMgr::FindConsoleVar(name);
+			ConsoleVar *cvar = ConsoleVarMgr::FindConsoleVar(name);
 			if (!cvar)
 			{
 				return nullptr;
@@ -94,12 +95,12 @@ namespace mmo
 			return false;
 		}
 
-		const char* Script_GetZoneName()
+		const char *Script_GetZoneName()
 		{
 			return s_zoneName.c_str();
 		}
 
-		const char* Script_GetSubZoneName()
+		const char *Script_GetSubZoneName()
 		{
 			if (s_subZoneName.empty())
 			{
@@ -109,12 +110,12 @@ namespace mmo
 			return s_subZoneName.c_str();
 		}
 
-		void Script_Print(const std::string& text)
+		void Script_Print(const std::string &text)
 		{
 			ILOG(text);
 		}
 
-		std::shared_ptr<GameUnitC> Script_GetUnitByName(const std::string& unitName)
+		std::shared_ptr<GameUnitC> Script_GetUnitByName(const std::string &unitName)
 		{
 			if (unitName == "player")
 			{
@@ -133,9 +134,9 @@ namespace mmo
 			return nullptr;
 		}
 
-		const proto_client::SpellEntry* Script_GetSpell(uint32 index)
+		const proto_client::SpellEntry *Script_GetSpell(uint32 index)
 		{
-			const GameUnitC* player = ObjectMgr::GetActivePlayer().get();
+			const GameUnitC *player = ObjectMgr::GetActivePlayer().get();
 			if (!player)
 			{
 				return nullptr;
@@ -144,7 +145,7 @@ namespace mmo
 			return player->GetVisibleSpell(index);
 		}
 
-		bool Script_UnitExists(const std::string& unitName)
+		bool Script_UnitExists(const std::string &unitName)
 		{
 			if (auto unit = Script_GetUnitByName(unitName))
 			{
@@ -154,7 +155,7 @@ namespace mmo
 			return false;
 		}
 
-		int32 Script_UnitAttributeCost(const std::string& unitName, uint32 attribute)
+		int32 Script_UnitAttributeCost(const std::string &unitName, uint32 attribute)
 		{
 			if (const auto unit = Script_GetUnitByName(unitName))
 			{
@@ -167,7 +168,7 @@ namespace mmo
 			return 0;
 		}
 
-		int32 Script_UnitDisplayId(const std::string& unitName)
+		int32 Script_UnitDisplayId(const std::string &unitName)
 		{
 			if (auto unit = Script_GetUnitByName(unitName))
 			{
@@ -191,8 +192,8 @@ namespace mmo
 		bool Script_IsBackpackSlot(int32 slotId)
 		{
 			return static_cast<uint16>(slotId >> 8) == player_inventory_slots::Bag_0 &&
-				static_cast<uint16>(slotId & 0xFF) >= player_inventory_pack_slots::Start &&
-				static_cast<uint16>(slotId & 0xFF) <= player_inventory_pack_slots::End;
+				   static_cast<uint16>(slotId & 0xFF) >= player_inventory_pack_slots::Start &&
+				   static_cast<uint16>(slotId & 0xFF) <= player_inventory_pack_slots::End;
 		}
 
 		int32 Script_GetBagSlot(int32 bagIndex, int32 slotId)
@@ -213,7 +214,7 @@ namespace mmo
 			return (static_cast<uint16>(player_inventory_slots::Start + bagIndex - 1) << 8) | static_cast<uint16>(slotId);
 		}
 
-		std::shared_ptr<GameItemC> GetItemFromSlot(const char* unitName, uint32 slotId)
+		std::shared_ptr<GameItemC> GetItemFromSlot(const char *unitName, uint32 slotId)
 		{
 			if (const auto unit = Script_GetUnitByName(unitName))
 			{
@@ -224,36 +225,36 @@ namespace mmo
 
 				// Backpack?
 				uint64 itemGuid = 0;
-				if ((static_cast<uint16>(slotId) >> 8) == player_inventory_slots::Bag_0 && 
-					(slotId & 0xFF) >= player_inventory_pack_slots::Start && 
+				if ((static_cast<uint16>(slotId) >> 8) == player_inventory_slots::Bag_0 &&
+					(slotId & 0xFF) >= player_inventory_pack_slots::Start &&
 					(slotId & 0xFF) < player_inventory_pack_slots::End)
 				{
 					const uint8 slotFieldOffset = (static_cast<uint8>(slotId & 0xFF) - player_inventory_slots::End) * 2;
 					itemGuid = unit->Get<uint64>(object_fields::PackSlot_1 + slotFieldOffset);
 				}
 				else if ((static_cast<uint16>(slotId) >> 8) == player_inventory_slots::Bag_0 &&
-					(slotId & 0xFF) >= player_equipment_slots::Start &&
-					(slotId & 0xFF) < player_equipment_slots::End)
+						 (slotId & 0xFF) >= player_equipment_slots::Start &&
+						 (slotId & 0xFF) < player_equipment_slots::End)
 				{
 					const uint8 slotFieldOffset = static_cast<uint8>(slotId & 0xFF) * 2;
 					itemGuid = unit->Get<uint64>(object_fields::InvSlotHead + slotFieldOffset);
 				}
 				else if ((static_cast<uint16>(slotId) >> 8) == player_inventory_slots::Bag_0 &&
-					(slotId & 0xFF) >= player_inventory_slots::Start &&
-					(slotId & 0xFF) < player_inventory_slots::End)
+						 (slotId & 0xFF) >= player_inventory_slots::Start &&
+						 (slotId & 0xFF) < player_inventory_slots::End)
 				{
 					const uint8 slotFieldOffset = static_cast<uint8>(slotId & 0xFF) * 2;
 					itemGuid = unit->Get<uint64>(object_fields::InvSlotHead + slotFieldOffset);
 				}
 				else if ((static_cast<uint16>(slotId) >> 8) == player_inventory_slots::Bag_0 &&
-					(slotId & 0xFF) >= player_inventory_slots::Start &&
-					(slotId & 0xFF) < player_inventory_slots::End)
+						 (slotId & 0xFF) >= player_inventory_slots::Start &&
+						 (slotId & 0xFF) < player_inventory_slots::End)
 				{
 					const uint8 slotFieldOffset = static_cast<uint8>(slotId & 0xFF) * 2;
 					itemGuid = unit->Get<uint64>(object_fields::InvSlotHead + slotFieldOffset);
 				}
 				else if (static_cast<uint16>(slotId) >> 8 >= player_inventory_slots::Start &&
-					static_cast<uint16>(slotId) >> 8 < player_inventory_slots::End)
+						 static_cast<uint16>(slotId) >> 8 < player_inventory_slots::End)
 				{
 					// Bag slots, get bag item first
 					const uint8 slotFieldOffset = (static_cast<uint16>(slotId) >> 8) * 2;
@@ -308,7 +309,7 @@ namespace mmo
 			return 0;
 		}
 
-		void Script_UnitAura(const std::string& unitName, uint32 id, const proto_client::SpellEntry*& out_spell, int32& out_duration)
+		void Script_UnitAura(const std::string &unitName, uint32 id, const proto_client::SpellEntry *&out_spell, int32 &out_duration)
 		{
 			out_duration = -1;
 			out_spell = nullptr;
@@ -320,11 +321,9 @@ namespace mmo
 			}
 
 			// TODO: Check unit auras
-
-
 		}
 
-		void Script_UnitStat(const std::string& unitName, uint32 statId, int32& out_base, int32& out_modifier)
+		void Script_UnitStat(const std::string &unitName, uint32 statId, int32 &out_base, int32 &out_modifier)
 		{
 			out_base = -1;
 			out_modifier = -1;
@@ -342,7 +341,7 @@ namespace mmo
 			}
 		}
 
-		void Script_UnitArmor(const std::string& unitName, int32& out_base, int32& out_modifier)
+		void Script_UnitArmor(const std::string &unitName, int32 &out_base, int32 &out_modifier)
 		{
 			out_base = -1;
 			out_modifier = -1;
@@ -355,7 +354,7 @@ namespace mmo
 			}
 		}
 
-		int32 Script_UnitMoney(const std::string& unitName)
+		int32 Script_UnitMoney(const std::string &unitName)
 		{
 			if (std::shared_ptr<GameUnitC> unit = nullptr; (unit = Script_GetUnitByName(unitName)) != nullptr && unit->GetTypeId() == ObjectTypeId::Player)
 			{
@@ -382,95 +381,110 @@ namespace mmo
 
 		void Script_ToggleAutoRun()
 		{
-			if (!WorldState::GetInputControl()) return;
+			if (!WorldState::GetInputControl())
+				return;
 			WorldState::GetInputControl()->ToggleControlBit(ControlFlags::Autorun);
 		}
 
 		void Script_MoveForwardStart()
 		{
-			if (!WorldState::GetInputControl()) return;
+			if (!WorldState::GetInputControl())
+				return;
 			WorldState::GetInputControl()->SetControlBit(ControlFlags::MoveForwardKey, true);
 		}
 
 		void Script_MoveForwardStop()
 		{
-			if (!WorldState::GetInputControl()) return;
+			if (!WorldState::GetInputControl())
+				return;
 			WorldState::GetInputControl()->SetControlBit(ControlFlags::MoveForwardKey, false);
 		}
 
 		void Script_MoveBackwardStart()
 		{
-			if (!WorldState::GetInputControl()) return;
+			if (!WorldState::GetInputControl())
+				return;
 			WorldState::GetInputControl()->SetControlBit(ControlFlags::MoveBackwardKey, true);
 		}
 
 		void Script_MoveBackwardStop()
 		{
-			if (!WorldState::GetInputControl()) return;
+			if (!WorldState::GetInputControl())
+				return;
 			WorldState::GetInputControl()->SetControlBit(ControlFlags::MoveBackwardKey, false);
 		}
 
 		void Script_TurnLeftStart()
 		{
-			if (!WorldState::GetInputControl()) return;
+			if (!WorldState::GetInputControl())
+				return;
 			WorldState::GetInputControl()->SetControlBit(ControlFlags::TurnLeftKey, true);
 		}
 
 		void Script_TurnLeftStop()
 		{
-			if (!WorldState::GetInputControl()) return;
+			if (!WorldState::GetInputControl())
+				return;
 			WorldState::GetInputControl()->SetControlBit(ControlFlags::TurnLeftKey, false);
 		}
 
 		void Script_TurnRightStart()
 		{
-			if (!WorldState::GetInputControl()) return;
+			if (!WorldState::GetInputControl())
+				return;
 			WorldState::GetInputControl()->SetControlBit(ControlFlags::TurnRightKey, true);
 		}
 
 		void Script_TurnRightStop()
 		{
-			if (!WorldState::GetInputControl()) return;
+			if (!WorldState::GetInputControl())
+				return;
 			WorldState::GetInputControl()->SetControlBit(ControlFlags::TurnRightKey, false);
 		}
 
 		void Script_StrafeLeftStart()
 		{
-			if (!WorldState::GetInputControl()) return;
+			if (!WorldState::GetInputControl())
+				return;
 			WorldState::GetInputControl()->SetControlBit(ControlFlags::StrafeLeftKey, true);
 		}
 
 		void Script_StrafeLeftStop()
 		{
-			if (!WorldState::GetInputControl()) return;
+			if (!WorldState::GetInputControl())
+				return;
 			WorldState::GetInputControl()->SetControlBit(ControlFlags::StrafeLeftKey, false);
 		}
 
 		void Script_StrafeRightStart()
 		{
-			if (!WorldState::GetInputControl()) return;
+			if (!WorldState::GetInputControl())
+				return;
 			WorldState::GetInputControl()->SetControlBit(ControlFlags::StrafeRightKey, true);
 		}
 
 		void Script_StrafeRightStop()
 		{
-			if (!WorldState::GetInputControl()) return;
+			if (!WorldState::GetInputControl())
+				return;
 			WorldState::GetInputControl()->SetControlBit(ControlFlags::StrafeRightKey, false);
 		}
 
 		void Script_Jump()
 		{
-			if (!WorldState::GetInputControl()) return;
+			if (!WorldState::GetInputControl())
+				return;
 			WorldState::GetInputControl()->Jump();
 		}
 
 		void Script_StopJump()
 		{
-			if (!WorldState::GetInputControl()) return;
+			if (!WorldState::GetInputControl())
+				return;
 			WorldState::GetInputControl()->StopJump();
 		}
-		
-		void CalculateEffectBasePoints(const proto_client::SpellEffect& effect, const proto_client::SpellEntry& spell, int32 casterLevel, int32& minBasePoints, int32& maxBasePoints)
+
+		void CalculateEffectBasePoints(const proto_client::SpellEffect &effect, const proto_client::SpellEntry &spell, int32 casterLevel, int32 &minBasePoints, int32 &maxBasePoints)
 		{
 			if (casterLevel > spell.maxlevel() && spell.maxlevel() > 0)
 			{
@@ -492,7 +506,7 @@ namespace mmo
 			maxBasePoints = basePoints + randomPoints;
 		}
 
-		void Spell_GetEffectPoints(const proto_client::SpellEntry& spell, int32 level, int effectIndex, bool includeTickCount, int& min, int& max)
+		void Spell_GetEffectPoints(const proto_client::SpellEntry &spell, int32 level, int effectIndex, bool includeTickCount, int &min, int &max)
 		{
 			min = 0;
 			max = 0;
@@ -508,9 +522,9 @@ namespace mmo
 			}
 
 			const bool isPeriodicEffect =
-				spell.effects(effectIndex).aura() == aura_type::PeriodicDamage || 
+				spell.effects(effectIndex).aura() == aura_type::PeriodicDamage ||
 				spell.effects(effectIndex).aura() == aura_type::PeriodicHeal ||
-				spell.effects(effectIndex).aura() == aura_type::PeriodicTriggerSpell || 
+				spell.effects(effectIndex).aura() == aura_type::PeriodicTriggerSpell ||
 				spell.effects(effectIndex).aura() == aura_type::PeriodicEnergize;
 
 			int32 tickCount = 1;
@@ -519,7 +533,7 @@ namespace mmo
 				tickCount = spell.duration() / spell.effects(effectIndex).amplitude();
 			}
 
-			const auto& effect = spell.effects(effectIndex);
+			const auto &effect = spell.effects(effectIndex);
 
 			int32 minPoints = 0, maxPoints = 0;
 			CalculateEffectBasePoints(effect, spell, level, minPoints, maxPoints);
@@ -534,7 +548,7 @@ namespace mmo
 			max = std::abs(maxPoints);
 		}
 
-		std::string FormatSpellText(const std::string& text, const proto_client::SpellEntry* spell)
+		std::string FormatSpellText(const std::string &text, const proto_client::SpellEntry *spell)
 		{
 			const std::shared_ptr<GameUnitC> player = ObjectMgr::GetActivePlayer();
 			ASSERT(player);
@@ -577,7 +591,7 @@ namespace mmo
 							formatTemplate += "_PRECISE";
 						}
 
-						auto* format = FrameManager::Get().GetLocalization().FindStringById(formatTemplate);
+						auto *format = FrameManager::Get().GetLocalization().FindStringById(formatTemplate);
 						if (format)
 						{
 							char buffer[128];
@@ -631,7 +645,7 @@ namespace mmo
 							formatTemplate += "_PRECISE";
 						}
 
-						auto* format = FrameManager::Get().GetLocalization().FindStringById(formatTemplate);
+						auto *format = FrameManager::Get().GetLocalization().FindStringById(formatTemplate);
 						if (format)
 						{
 							char buffer[128];
@@ -714,7 +728,7 @@ namespace mmo
 			return strm.str();
 		}
 
-		std::string Script_GetSpellAuraText(const proto_client::SpellEntry* spell)
+		std::string Script_GetSpellAuraText(const proto_client::SpellEntry *spell)
 		{
 			if (spell == nullptr)
 			{
@@ -724,7 +738,7 @@ namespace mmo
 			return FormatSpellText(spell->auratext(), spell);
 		}
 
-		std::string Script_GetSpellDescription(const proto_client::SpellEntry* spell)
+		std::string Script_GetSpellDescription(const proto_client::SpellEntry *spell)
 		{
 			if (spell == nullptr)
 			{
@@ -734,7 +748,7 @@ namespace mmo
 			return FormatSpellText(spell->description(), spell);
 		}
 
-		bool Script_IsPassiveSpell(const proto_client::SpellEntry* spell)
+		bool Script_IsPassiveSpell(const proto_client::SpellEntry *spell)
 		{
 			return (spell->attributes(0) & spell_attributes::Passive) != 0;
 		}
@@ -745,26 +759,9 @@ namespace mmo
 		}
 	}
 
-
-	GameScript::GameScript(LoginConnector& loginConnector, RealmConnector& realmConnector, LootClient& lootClient, VendorClient& vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project& project, ActionBar& actionBar, SpellCast& spellCast, TrainerClient& trainerClient, QuestClient& questClient, IAudio& audio, PartyInfo& partyInfo, CharCreateInfo& charCreateInfo, CharSelect& charSelect, GuildClient& guildClient, GameTimeComponent& gameTime,
-		TalentClient& talentClient)
-		: m_loginConnector(loginConnector)
-		, m_realmConnector(realmConnector)
-		, m_lootClient(lootClient)
-		, m_vendorClient(vendorClient)
-		, m_loginState(std::move(loginState))
-		, m_project(project)
-		, m_actionBar(actionBar)
-		, m_spellCast(spellCast)
-		, m_trainerClient(trainerClient)
-		, m_questClient(questClient)
-		, m_audio(audio)
-		, m_partyInfo(partyInfo)
-		, m_charCreateInfo(charCreateInfo)
-		, m_charSelect(charSelect)
-		, m_guildClient(guildClient)
-		, m_gameTime(gameTime)
-		, m_talentClient(talentClient)
+	GameScript::GameScript(LoginConnector &loginConnector, RealmConnector &realmConnector, LootClient &lootClient, VendorClient &vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project &project, ActionBar &actionBar, SpellCast &spellCast, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, PartyInfo &partyInfo, CharCreateInfo &charCreateInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, GameTimeComponent &gameTime,
+						   TalentClient &talentClient)
+		: m_loginConnector(loginConnector), m_realmConnector(realmConnector), m_lootClient(lootClient), m_vendorClient(vendorClient), m_loginState(std::move(loginState)), m_project(project), m_actionBar(actionBar), m_spellCast(spellCast), m_trainerClient(trainerClient), m_questClient(questClient), m_audio(audio), m_partyInfo(partyInfo), m_charCreateInfo(charCreateInfo), m_charSelect(charSelect), m_guildClient(guildClient), m_friendClient(friendClient), m_gameTime(gameTime), m_talentClient(talentClient)
 	{
 		// Initialize the cursor with project data for icon resolution
 		g_cursor.Initialize(m_project);
@@ -773,7 +770,7 @@ namespace mmo
 		m_luaState = LuaStatePtr(luaL_newstate());
 
 		luaL_openlibs(m_luaState.get());
-		
+
 		// Initialize luabind
 		luabind::open(m_luaState.get());
 
@@ -781,9 +778,9 @@ namespace mmo
 		RegisterGlobalFunctions();
 	}
 
-	void GameScript::GetVendorItemInfo(int32 slot, const ItemInfo*& outItem, String& outIcon, int32& outPrice, int32& outQuantity, int32& outNumAvailable, bool& outUsable) const
+	void GameScript::GetVendorItemInfo(int32 slot, const ItemInfo *&outItem, String &outIcon, int32 &outPrice, int32 &outQuantity, int32 &outNumAvailable, bool &outUsable) const
 	{
-		const auto& vendorItems = m_vendorClient.GetVendorItems();
+		const auto &vendorItems = m_vendorClient.GetVendorItems();
 		if (slot < 0 || slot >= vendorItems.size())
 		{
 			outItem = nullptr;
@@ -798,7 +795,7 @@ namespace mmo
 		ASSERT(vendorItems[slot].itemData);
 		outItem = vendorItems[slot].itemData;
 
-		const auto* displayData = m_project.itemDisplays.getById(vendorItems[slot].displayId);
+		const auto *displayData = m_project.itemDisplays.getById(vendorItems[slot].displayId);
 		if (displayData)
 		{
 			outIcon = displayData->icon().c_str();
@@ -809,9 +806,9 @@ namespace mmo
 		outUsable = false;
 	}
 
-	void GameScript::GetTrainerSpellInfo(int32 slot, int32& outSpellId, String& outName, String& outIcon, int32& outPrice, bool& outKnown) const
+	void GameScript::GetTrainerSpellInfo(int32 slot, int32 &outSpellId, String &outName, String &outIcon, int32 &outPrice, bool &outKnown) const
 	{
-		const auto& trainerSpells = m_trainerClient.GetTrainerSpells();
+		const auto &trainerSpells = m_trainerClient.GetTrainerSpells();
 		if (slot < 0 || slot >= trainerSpells.size())
 		{
 			outSpellId = -1;
@@ -837,173 +834,167 @@ namespace mmo
 
 		// Register common functions
 		LUABIND_MODULE(m_luaState.get(),
-			luabind::scope(
-				luabind::class_<mmo::RealmData>("RealmData")
-				.def_readonly("id", &mmo::RealmData::id)
-				.def_readonly("name", &mmo::RealmData::name)
-			),
+					   luabind::scope(
+						   luabind::class_<mmo::RealmData>("RealmData")
+							   .def_readonly("id", &mmo::RealmData::id)
+							   .def_readonly("name", &mmo::RealmData::name)),
 
-			luabind::scope(
-				luabind::class_<mmo::CharacterView>("CharacterView")
-				.def_readonly("guid", &mmo::CharacterView::GetGuid)
-				.def_readonly("name", &mmo::CharacterView::GetName)
-				.def_readonly("level", &mmo::CharacterView::GetLevel)
-				.def_readonly("dead", &mmo::CharacterView::IsDead)
-				.def_readonly("raceId", &mmo::CharacterView::GetRaceId)
-				.def_readonly("classId", &mmo::CharacterView::GetClassId)
-				.def_readonly("map", &mmo::CharacterView::GetMapId)
-			),
+					   luabind::scope(
+						   luabind::class_<mmo::CharacterView>("CharacterView")
+							   .def_readonly("guid", &mmo::CharacterView::GetGuid)
+							   .def_readonly("name", &mmo::CharacterView::GetName)
+							   .def_readonly("level", &mmo::CharacterView::GetLevel)
+							   .def_readonly("dead", &mmo::CharacterView::IsDead)
+							   .def_readonly("raceId", &mmo::CharacterView::GetRaceId)
+							   .def_readonly("classId", &mmo::CharacterView::GetClassId)
+							   .def_readonly("map", &mmo::CharacterView::GetMapId)),
 
-			luabind::scope(
-				luabind::class_<LoginConnector>("LoginConnector")
-				.def("GetRealms", &LoginConnector::GetRealms, luabind::return_stl_iterator())
-				.def("IsConnected", &LoginConnector::IsConnected)
-			),
+					   luabind::scope(
+						   luabind::class_<LoginConnector>("LoginConnector")
+							   .def("GetRealms", &LoginConnector::GetRealms, luabind::return_stl_iterator())
+							   .def("IsConnected", &LoginConnector::IsConnected)),
 
-			luabind::scope(
-				luabind::class_<proto_client::Project>("Project")
-				.def_readonly("spells", &mmo::proto_client::Project::spells)
-				.def_readonly("models", &mmo::proto_client::Project::models)
-			),
+					   luabind::scope(
+						   luabind::class_<proto_client::Project>("Project")
+							   .def_readonly("spells", &mmo::proto_client::Project::spells)
+							   .def_readonly("models", &mmo::proto_client::Project::models)),
 
-			luabind::scope(
-				luabind::class_<proto_client::SpellManager>("SpellManager")
-				.def_const<const proto_client::SpellEntry*, proto_client::SpellManager, uint32>("GetById", &mmo::proto_client::SpellManager::getById)
-			),
+					   luabind::scope(
+						   luabind::class_<proto_client::SpellManager>("SpellManager")
+							   .def_const<const proto_client::SpellEntry *, proto_client::SpellManager, uint32>("GetById", &mmo::proto_client::SpellManager::getById)),
 
-			luabind::scope(
-				luabind::class_<RealmConnector>("RealmConnector")
-	               .def("ConnectToRealm", &RealmConnector::ConnectToRealm)
-					.def("IsConnected", &RealmConnector::IsConnected)
-	               .def("GetRealmName", &RealmConnector::GetRealmName)
-	               .def("DeleteCharacter", &RealmConnector::DeleteCharacter)
-			),
+					   luabind::scope(
+						   luabind::class_<RealmConnector>("RealmConnector")
+							   .def("ConnectToRealm", &RealmConnector::ConnectToRealm)
+							   .def("IsConnected", &RealmConnector::IsConnected)
+							   .def("GetRealmName", &RealmConnector::GetRealmName)
+							   .def("DeleteCharacter", &RealmConnector::DeleteCharacter)),
 
-			luabind::scope(
-				luabind::class_<ItemInfo>("Item")
-				.def_readonly("id", &ItemInfo::id)
-				.def_readonly("name", &ItemInfo::name)
-				.def_readonly("description", &ItemInfo::description)
-				.def_readonly("quality", &ItemInfo::quality)
-				.def_readonly("armor", &ItemInfo::armor)
-				.def_readonly("block", &ItemInfo::block)
-				.def_readonly("minDamage", &ItemInfo::GetMinDamage)
-				.def_readonly("maxDamage", &ItemInfo::GetMaxDamage)
-				.def_readonly("dps", &ItemInfo::GetDps)
-				.def_readonly("attackTime", &ItemInfo::attackTime)
-				.def_readonly("bagSlots", &ItemInfo::containerslots)
-				.def_readonly("maxDurability", &ItemInfo::maxdurability)
-				.def_readonly("class", &ItemInfo::GetItemClassName)
-				.def_readonly("subClass", &ItemInfo::GetItemSubClassName)
-				.def_readonly("proficiency", &ItemInfo::GetProficiency)
-				.def_readonly("inventoryType", &ItemInfo::GetItemInventoryTypeName)
-				.def<std::function<const char* (const ItemInfo*)>>("GetIcon", [this](const ItemInfo* self) -> const char* { return this->m_project.itemDisplays.getById(self->displayId)->icon().c_str(); })
-				.def_readonly("sellPrice", &ItemInfo::sellPrice)
-				.def_readonly("attackSpeed", &ItemInfo::GetAttackSpeed)
-				.def("GetStatType", &ItemInfo::GetStatType)
-				.def("GetStatValue", &ItemInfo::GetStatValue)
-				.def("GetSpellId", &ItemInfo::GetSpellId)
-				.def("GetSpellTriggerType", &ItemInfo::GetSpellTriggerType)
-			),
+					   luabind::scope(
+						   luabind::class_<ItemInfo>("Item")
+							   .def_readonly("id", &ItemInfo::id)
+							   .def_readonly("name", &ItemInfo::name)
+							   .def_readonly("description", &ItemInfo::description)
+							   .def_readonly("quality", &ItemInfo::quality)
+							   .def_readonly("armor", &ItemInfo::armor)
+							   .def_readonly("block", &ItemInfo::block)
+							   .def_readonly("minDamage", &ItemInfo::GetMinDamage)
+							   .def_readonly("maxDamage", &ItemInfo::GetMaxDamage)
+							   .def_readonly("dps", &ItemInfo::GetDps)
+							   .def_readonly("attackTime", &ItemInfo::attackTime)
+							   .def_readonly("bagSlots", &ItemInfo::containerslots)
+							   .def_readonly("maxDurability", &ItemInfo::maxdurability)
+							   .def_readonly("class", &ItemInfo::GetItemClassName)
+							   .def_readonly("subClass", &ItemInfo::GetItemSubClassName)
+							   .def_readonly("proficiency", &ItemInfo::GetProficiency)
+							   .def_readonly("inventoryType", &ItemInfo::GetItemInventoryTypeName)
+							   .def<std::function<const char *(const ItemInfo *)>>("GetIcon", [this](const ItemInfo *self) -> const char *
+																				   { return this->m_project.itemDisplays.getById(self->displayId)->icon().c_str(); })
+							   .def_readonly("sellPrice", &ItemInfo::sellPrice)
+							   .def_readonly("attackSpeed", &ItemInfo::GetAttackSpeed)
+							   .def("GetStatType", &ItemInfo::GetStatType)
+							   .def("GetStatValue", &ItemInfo::GetStatValue)
+							   .def("GetSpellId", &ItemInfo::GetSpellId)
+							   .def("GetSpellTriggerType", &ItemInfo::GetSpellTriggerType)),
 
-			luabind::scope(
-				luabind::class_<UnitHandle>("UnitHandle")
-				.def("GetHealth", &UnitHandle::GetHealth)
-				.def("GetMaxHealth", &UnitHandle::GetMaxHealth)
-				.def("GetPower", &UnitHandle::GetPower)
-				.def("GetMaxPower", &UnitHandle::GetMaxPower)
-				.def("GetLevel", &UnitHandle::GetLevel)
-				.def("GetClass", &UnitHandle::GetClass)
-				.def("GetAuraCount", &UnitHandle::GetAuraCount)
-				.def("GetAura", &UnitHandle::GetAura)
-				.def("GetName", &UnitHandle::GetName)
-				.def("GetPowerType", &UnitHandle::GetPowerType)
-				.def("GetMinDamage", &UnitHandle::GetMinDamage)
-				.def("GetMaxDamage", &UnitHandle::GetMaxDamage)
-				.def("GetAttackTime", &UnitHandle::GetAttackTime)
-				.def("GetAttackPower", &UnitHandle::GetAttackPower)
-				.def("GetArmor", &UnitHandle::GetArmor)
-				.def("GetTalentPoints", &UnitHandle::GetTalentPoints)
-				.def("GetAvailableAttributePoints", &UnitHandle::GetAvailableAttributePoints)
-				.def("GetArmorReductionFactor", &UnitHandle::GetArmorReductionFactor)
-				.def("GetStat", &UnitHandle::GetStat)
-				.def("GetPosStat", &UnitHandle::GetPosStat)
-				.def("GetNegStat", &UnitHandle::GetNegStat)
-				.def("IsAlive", &UnitHandle::IsAlive)
-				.def("GetType", &UnitHandle::GetType)
-				.def("IsFriendly", &UnitHandle::IsFriendly)
-				.def("IsHostile", &UnitHandle::IsHostile)
-				.def("GetAttackPowerFromStat", &UnitHandle::GetAttackPowerFromStat)
-				.def("GetHealthFromStat", &UnitHandle::GetHealthFromStat)
-				.def("GetManaFromStat", &UnitHandle::GetManaFromStat)
-				.def("GetAttributeCost", &UnitHandle::GetAttributeCost)
-				.def("HasProficiency", &UnitHandle::HasProficiency)
-			),
+					   luabind::scope(
+						   luabind::class_<UnitHandle>("UnitHandle")
+							   .def("GetHealth", &UnitHandle::GetHealth)
+							   .def("GetMaxHealth", &UnitHandle::GetMaxHealth)
+							   .def("GetPower", &UnitHandle::GetPower)
+							   .def("GetMaxPower", &UnitHandle::GetMaxPower)
+							   .def("GetLevel", &UnitHandle::GetLevel)
+							   .def("GetClass", &UnitHandle::GetClass)
+							   .def("GetAuraCount", &UnitHandle::GetAuraCount)
+							   .def("GetAura", &UnitHandle::GetAura)
+							   .def("GetName", &UnitHandle::GetName)
+							   .def("GetPowerType", &UnitHandle::GetPowerType)
+							   .def("GetMinDamage", &UnitHandle::GetMinDamage)
+							   .def("GetMaxDamage", &UnitHandle::GetMaxDamage)
+							   .def("GetAttackTime", &UnitHandle::GetAttackTime)
+							   .def("GetAttackPower", &UnitHandle::GetAttackPower)
+							   .def("GetArmor", &UnitHandle::GetArmor)
+							   .def("GetTalentPoints", &UnitHandle::GetTalentPoints)
+							   .def("GetAvailableAttributePoints", &UnitHandle::GetAvailableAttributePoints)
+							   .def("GetArmorReductionFactor", &UnitHandle::GetArmorReductionFactor)
+							   .def("GetStat", &UnitHandle::GetStat)
+							   .def("GetPosStat", &UnitHandle::GetPosStat)
+							   .def("GetNegStat", &UnitHandle::GetNegStat)
+							   .def("IsAlive", &UnitHandle::IsAlive)
+							   .def("GetType", &UnitHandle::GetType)
+							   .def("IsFriendly", &UnitHandle::IsFriendly)
+							   .def("IsHostile", &UnitHandle::IsHostile)
+							   .def("GetAttackPowerFromStat", &UnitHandle::GetAttackPowerFromStat)
+							   .def("GetHealthFromStat", &UnitHandle::GetHealthFromStat)
+							   .def("GetManaFromStat", &UnitHandle::GetManaFromStat)
+							   .def("GetAttributeCost", &UnitHandle::GetAttributeCost)
+							   .def("HasProficiency", &UnitHandle::HasProficiency)),
 
-			luabind::scope(
-				luabind::class_<AuraHandle>("AuraHandle")
-				.def("IsExpired", &AuraHandle::IsExpired)
-				.def("CanExpire", &AuraHandle::CanExpire)
-				.def("GetDuration", &AuraHandle::GetDuration)
-				.def("GetSpell", &AuraHandle::GetSpell)
-			),
-				
-			luabind::scope(
-				luabind::class_<ItemHandle>("ItemHandle")
-				.def("GetId", &ItemHandle::GetId)
-				.def("GetName", &ItemHandle::GetName)
-				.def("GetDescription", &ItemHandle::GetDescription)
-				.def("GetClass", &ItemHandle::GetItemClass)
-				.def("GetInventoryType", &ItemHandle::GetInventoryType)
-				.def("GetSubClass", &ItemHandle::GetItemSubClass)
-				.def("GetProficiency", &ItemHandle::GetProficiency)
-				.def("GetStackCount", &ItemHandle::GetStackCount)
-				.def("GetBagSlots", &ItemHandle::GetBagSlots)
-				.def("GetMinDamage", &ItemHandle::GetMinDamage)
-				.def("GetMaxDamage", &ItemHandle::GetMaxDamage)
-				.def("GetAttackSpeed", &ItemHandle::GetAttackSpeed)
-				.def("GetDps", &ItemHandle::GetDps)
-				.def("GetQuality", &ItemHandle::GetQuality)
-				.def("GetArmor", &ItemHandle::GetArmor)
-				.def("GetBlock", &ItemHandle::GetBlock)
-				.def("GetDurability", &ItemHandle::GetDurability)
-				.def("GetMaxDurability", &ItemHandle::GetMaxDurability)
-				.def("GetSellPrice", &ItemHandle::GetSellPrice)
-				.def("GetIcon", &ItemHandle::GetIcon)
-				.def("GetEntry", &ItemHandle::GetEntry)
-				.def("GetSpell", &ItemHandle::GetSpell)
-				.def("GetSpellTriggerType", &ItemHandle::GetSpellTriggerType)
-				.def("GetStatType", &ItemHandle::GetStatType)
-				.def("GetStatValue", &ItemHandle::GetStatValue)
-			),
-			
-			luabind::scope(
-				luabind::class_<proto_client::SpellEntry>("Spell")
-				.def_readonly("id", &proto_client::SpellEntry::id)
-				.def_readonly("name", &proto_client::SpellEntry::name)
-				.def_readonly("rank", &proto_client::SpellEntry::rank)
-				.def_readonly("cost", &proto_client::SpellEntry::cost)
-				.def_readonly("cooldown", &proto_client::SpellEntry::cooldown)
-				.def_readonly("powertype", &proto_client::SpellEntry::powertype)
-				.def_readonly("level", &proto_client::SpellEntry::spelllevel)
-				.def_readonly("casttime", &proto_client::SpellEntry::casttime)
-				.def_readonly("icon", &proto_client::SpellEntry::icon)
-			),
-			
-			luabind::def("Quit", &Script_Quit),
-			luabind::def<std::function<void()>>("Logout", [this]() { OnLogout(); }),
+					   luabind::scope(
+						   luabind::class_<AuraHandle>("AuraHandle")
+							   .def("IsExpired", &AuraHandle::IsExpired)
+							   .def("CanExpire", &AuraHandle::CanExpire)
+							   .def("GetDuration", &AuraHandle::GetDuration)
+							   .def("GetSpell", &AuraHandle::GetSpell)),
 
-			luabind::def("GetUnit", &ObjectMgr::GetUnitHandleByName),
-			luabind::def<std::function<bool(int32)>>("HasPartyMember", [this](const int32 index) { return m_partyInfo.GetMemberGuid(index - 1) != 0; }),
-			luabind::def<std::function<int32()>>("GetPartySize", [this]() { return m_partyInfo.GetMemberCount(); }),
+					   luabind::scope(
+						   luabind::class_<ItemHandle>("ItemHandle")
+							   .def("GetId", &ItemHandle::GetId)
+							   .def("GetName", &ItemHandle::GetName)
+							   .def("GetDescription", &ItemHandle::GetDescription)
+							   .def("GetClass", &ItemHandle::GetItemClass)
+							   .def("GetInventoryType", &ItemHandle::GetInventoryType)
+							   .def("GetSubClass", &ItemHandle::GetItemSubClass)
+							   .def("GetProficiency", &ItemHandle::GetProficiency)
+							   .def("GetStackCount", &ItemHandle::GetStackCount)
+							   .def("GetBagSlots", &ItemHandle::GetBagSlots)
+							   .def("GetMinDamage", &ItemHandle::GetMinDamage)
+							   .def("GetMaxDamage", &ItemHandle::GetMaxDamage)
+							   .def("GetAttackSpeed", &ItemHandle::GetAttackSpeed)
+							   .def("GetDps", &ItemHandle::GetDps)
+							   .def("GetQuality", &ItemHandle::GetQuality)
+							   .def("GetArmor", &ItemHandle::GetArmor)
+							   .def("GetBlock", &ItemHandle::GetBlock)
+							   .def("GetDurability", &ItemHandle::GetDurability)
+							   .def("GetMaxDurability", &ItemHandle::GetMaxDurability)
+							   .def("GetSellPrice", &ItemHandle::GetSellPrice)
+							   .def("GetIcon", &ItemHandle::GetIcon)
+							   .def("GetEntry", &ItemHandle::GetEntry)
+							   .def("GetSpell", &ItemHandle::GetSpell)
+							   .def("GetSpellTriggerType", &ItemHandle::GetSpellTriggerType)
+							   .def("GetStatType", &ItemHandle::GetStatType)
+							   .def("GetStatValue", &ItemHandle::GetStatValue)),
 
-			luabind::def<std::function<void()>>("TargetNearestEnemy", [this]() { TargetNearestEnemy(); }),
+					   luabind::scope(
+						   luabind::class_<proto_client::SpellEntry>("Spell")
+							   .def_readonly("id", &proto_client::SpellEntry::id)
+							   .def_readonly("name", &proto_client::SpellEntry::name)
+							   .def_readonly("rank", &proto_client::SpellEntry::rank)
+							   .def_readonly("cost", &proto_client::SpellEntry::cost)
+							   .def_readonly("cooldown", &proto_client::SpellEntry::cooldown)
+							   .def_readonly("powertype", &proto_client::SpellEntry::powertype)
+							   .def_readonly("level", &proto_client::SpellEntry::spelllevel)
+							   .def_readonly("casttime", &proto_client::SpellEntry::casttime)
+							   .def_readonly("icon", &proto_client::SpellEntry::icon)),
 
-			luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
-			luabind::def("GetCVar", &Script_GetConsoleVar),
+					   luabind::def("Quit", &Script_Quit),
+					   luabind::def<std::function<void()>>("Logout", [this]()
+														   { OnLogout(); }),
 
-			luabind::def<std::function<void()>>("EnterWorld", [this]
-			{
+					   luabind::def("GetUnit", &ObjectMgr::GetUnitHandleByName),
+					   luabind::def<std::function<bool(int32)>>("HasPartyMember", [this](const int32 index)
+																{ return m_partyInfo.GetMemberGuid(index - 1) != 0; }),
+					   luabind::def<std::function<int32()>>("GetPartySize", [this]()
+															{ return m_partyInfo.GetMemberCount(); }),
+
+					   luabind::def<std::function<void()>>("TargetNearestEnemy", [this]()
+														   { TargetNearestEnemy(); }),
+
+					   luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
+					   luabind::def("GetCVar", &Script_GetConsoleVar),
+
+					   luabind::def<std::function<void()>>("EnterWorld", [this]
+														   {
 				// Ensure loading screen is visible before doing anything heavy
 				LoadingScreen::LoadingScreenShown.connect([]()
 				{
@@ -1011,139 +1002,180 @@ namespace mmo
 					GameStateMgr::Get().SetGameState(WorldState::Name);
 				});
 
-				LoadingScreen::Show();
-			}),
+				LoadingScreen::Show(); }),
 
-			luabind::def("print", &Script_Print),
+					   luabind::def("print", &Script_Print),
 
-			luabind::def("IsShiftKeyDown", Platform::IsShiftKeyDown),
+					   luabind::def("IsShiftKeyDown", Platform::IsShiftKeyDown),
 
-			luabind::def("UnitExists", &Script_UnitExists),
-			luabind::def("UnitAttributeCost", &Script_UnitAttributeCost),
-			luabind::def("UnitStat", &Script_UnitStat, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
-			luabind::def("UnitArmor", &Script_UnitArmor, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>>()),
-			luabind::def("UnitMoney", &Script_UnitMoney),
-			luabind::def("UnitDisplayId", &Script_UnitDisplayId),
-			luabind::def("PlayerXp", &Script_PlayerXp),
-			luabind::def("PlayerNextLevelXp", &Script_PlayerNextLevelXp),
-			luabind::def<std::function<void(const char*)>>("TargetUnit", [this](const char* unitName) { this->TargetUnit(unitName); }),
+					   luabind::def("UnitExists", &Script_UnitExists),
+					   luabind::def("UnitAttributeCost", &Script_UnitAttributeCost),
+					   luabind::def("UnitStat", &Script_UnitStat, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
+					   luabind::def("UnitArmor", &Script_UnitArmor, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>>()),
+					   luabind::def("UnitMoney", &Script_UnitMoney),
+					   luabind::def("UnitDisplayId", &Script_UnitDisplayId),
+					   luabind::def("PlayerXp", &Script_PlayerXp),
+					   luabind::def("PlayerNextLevelXp", &Script_PlayerNextLevelXp),
+					   luabind::def<std::function<void(const char *)>>("TargetUnit", [this](const char *unitName)
+																	   { this->TargetUnit(unitName); }),
 
-			luabind::def("GetSpell", &Script_GetSpell),
-			luabind::def<std::function<void(int32)>>("CastSpell", [this](int32 spellIndex) { if (const auto* spell = Script_GetSpell(spellIndex)) m_spellCast.CastSpell(spell->id()); }),
-			luabind::def<std::function<bool()>>("SpellStopCasting", [this]() -> bool { return m_spellCast.CancelCast(); }),
+					   luabind::def("GetSpell", &Script_GetSpell),
+					   luabind::def<std::function<void(int32)>>("CastSpell", [this](int32 spellIndex)
+																{ if (const auto* spell = Script_GetSpell(spellIndex)) m_spellCast.CastSpell(spell->id()); }),
+					   luabind::def<std::function<bool()>>("SpellStopCasting", [this]() -> bool
+														   { return m_spellCast.CancelCast(); }),
 
-			luabind::def("UnitAura", &Script_UnitAura, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
+					   luabind::def("UnitAura", &Script_UnitAura, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 
-			luabind::def("GetSpellDescription", &Script_GetSpellDescription),
-			luabind::def("GetSpellAuraText", &Script_GetSpellAuraText),
-			luabind::def("IsPassiveSpell", &Script_IsPassiveSpell),
+					   luabind::def("GetSpellDescription", &Script_GetSpellDescription),
+					   luabind::def("GetSpellAuraText", &Script_GetSpellAuraText),
+					   luabind::def("IsPassiveSpell", &Script_IsPassiveSpell),
 
-			luabind::def("MoveForwardStart", &Script_MoveForwardStart),
-			luabind::def("MoveForwardStop", &Script_MoveForwardStop),
-			luabind::def("MoveBackwardStart", &Script_MoveBackwardStart),
-			luabind::def("MoveBackwardStop", &Script_MoveBackwardStop),
-			luabind::def("TurnLeftStart", &Script_TurnLeftStart),
-			luabind::def("TurnLeftStop", &Script_TurnLeftStop),
-			luabind::def("TurnRightStart", &Script_TurnRightStart),
-			luabind::def("TurnRightStop", &Script_TurnRightStop),
-			luabind::def("StrafeLeftStart", &Script_StrafeLeftStart),
-			luabind::def("StrafeLeftStop", &Script_StrafeLeftStop),
-			luabind::def("StrafeRightStart", &Script_StrafeRightStart),
-			luabind::def("StrafeRightStop", &Script_StrafeRightStop),
-			luabind::def("ToggleAutoRun", &Script_ToggleAutoRun),
-			
-			luabind::def("Jump", &Script_Jump),
-			luabind::def("StopJump", &Script_StopJump),
+					   luabind::def("MoveForwardStart", &Script_MoveForwardStart),
+					   luabind::def("MoveForwardStop", &Script_MoveForwardStop),
+					   luabind::def("MoveBackwardStart", &Script_MoveBackwardStart),
+					   luabind::def("MoveBackwardStop", &Script_MoveBackwardStop),
+					   luabind::def("TurnLeftStart", &Script_TurnLeftStart),
+					   luabind::def("TurnLeftStop", &Script_TurnLeftStop),
+					   luabind::def("TurnRightStart", &Script_TurnRightStart),
+					   luabind::def("TurnRightStop", &Script_TurnRightStop),
+					   luabind::def("StrafeLeftStart", &Script_StrafeLeftStart),
+					   luabind::def("StrafeLeftStop", &Script_StrafeLeftStop),
+					   luabind::def("StrafeRightStart", &Script_StrafeRightStart),
+					   luabind::def("StrafeRightStop", &Script_StrafeRightStop),
+					   luabind::def("ToggleAutoRun", &Script_ToggleAutoRun),
 
-			luabind::def("GetZoneText", &Script_GetZoneName),
-			luabind::def("GetSubZoneText", &Script_GetSubZoneName),
+					   luabind::def("Jump", &Script_Jump),
+					   luabind::def("StopJump", &Script_StopJump),
 
-			luabind::def("ClearTarget", &Script_ClearTarget),
+					   luabind::def("GetZoneText", &Script_GetZoneName),
+					   luabind::def("GetSubZoneText", &Script_GetSubZoneName),
 
-			luabind::def("GetBackpackSlot", &Script_GetBackpackSlot),
-			luabind::def("IsBackpackSlot", &Script_IsBackpackSlot),
-			luabind::def("GetBagSlot", &Script_GetBagSlot),
+					   luabind::def("ClearTarget", &Script_ClearTarget),
 
-			luabind::def<std::function<std::shared_ptr<ItemHandle>(const char*, int32)>>("GetInventorySlotItem", [this](const char* unitName, int32 slotId)
-			{
+					   luabind::def("GetBackpackSlot", &Script_GetBackpackSlot),
+					   luabind::def("IsBackpackSlot", &Script_IsBackpackSlot),
+					   luabind::def("GetBagSlot", &Script_GetBagSlot),
+
+					   luabind::def<std::function<std::shared_ptr<ItemHandle>(const char *, int32)>>("GetInventorySlotItem", [this](const char *unitName, int32 slotId)
+																									 {
 				const std::shared_ptr<GameItemC> item = GetItemFromSlot(unitName, slotId);
 				if (!item)
 				{
 					return std::shared_ptr<ItemHandle>();
 				}
 
-				return std::make_shared<ItemHandle>(*item, m_project.spells);
-			}),
+				return std::make_shared<ItemHandle>(*item, m_project.spells); }),
 
-			luabind::def("GetTime", &GetAsyncTimeMs),
+					   luabind::def("GetTime", &GetAsyncTimeMs),
 
-			// Spellbook
-			luabind::def<std::function<void(uint32)>>("PickupSpell", [this](uint32 spell) { g_cursor.SetSpell(spell); }),
+					   // Spellbook
+					   luabind::def<std::function<void(uint32)>>("PickupSpell", [this](uint32 spell)
+																 { g_cursor.SetSpell(spell); }),
 
-			// ActionBar
-			luabind::def<std::function<void(int32)>>("UseActionButton", [this](int32 slot) { this->m_actionBar.UseActionButton(slot); }),
-			luabind::def<std::function<void(int32)>>("PickupActionButton", [this](int32 slot) { this->m_actionBar.PickupActionButton(slot); }),
-			luabind::def<std::function<bool(int32)>>("IsActionButtonUsable", [this](int32 slot) { return this->m_actionBar.IsActionButtonUsable(slot); }),
-			luabind::def<std::function<bool(int32)>>("IsActionButtonItem", [this](int32 slot) { return this->m_actionBar.IsActionButtonItem(slot); }),
-			luabind::def<std::function<bool(int32)>>("IsActionButtonSpell", [this](int32 slot) { return this->m_actionBar.IsActionButtonSpell(slot); }),
-			luabind::def<std::function<const proto_client::SpellEntry*(int32)>>("GetActionButtonSpell", [this](int32 slot) { return this->m_actionBar.GetActionButtonSpell(slot); }),
-			luabind::def<std::function<const ItemInfo*(int32)>>("GetActionButtonItem", [this](int32 slot) { return this->m_actionBar.GetActionButtonItem(slot); }),
+					   // ActionBar
+					   luabind::def<std::function<void(int32)>>("UseActionButton", [this](int32 slot)
+																{ this->m_actionBar.UseActionButton(slot); }),
+					   luabind::def<std::function<void(int32)>>("PickupActionButton", [this](int32 slot)
+																{ this->m_actionBar.PickupActionButton(slot); }),
+					   luabind::def<std::function<bool(int32)>>("IsActionButtonUsable", [this](int32 slot)
+																{ return this->m_actionBar.IsActionButtonUsable(slot); }),
+					   luabind::def<std::function<bool(int32)>>("IsActionButtonItem", [this](int32 slot)
+																{ return this->m_actionBar.IsActionButtonItem(slot); }),
+					   luabind::def<std::function<bool(int32)>>("IsActionButtonSpell", [this](int32 slot)
+																{ return this->m_actionBar.IsActionButtonSpell(slot); }),
+					   luabind::def<std::function<const proto_client::SpellEntry *(int32)>>("GetActionButtonSpell", [this](int32 slot)
+																							{ return this->m_actionBar.GetActionButtonSpell(slot); }),
+					   luabind::def<std::function<const ItemInfo *(int32)>>("GetActionButtonItem", [this](int32 slot)
+																			{ return this->m_actionBar.GetActionButtonItem(slot); }),
 
-			luabind::def<std::function<void(int32, const ItemInfo*&, String&, int32&, int32&, int32&, bool&)>>("GetVendorItemInfo", [this](int32 slot, const ItemInfo*& out_item, String& out_icon, int32& out_price, int32& out_quantity, int32& out_numAvailable, bool& out_usable) { return this->GetVendorItemInfo(slot, out_item, out_icon, out_price, out_quantity, out_numAvailable, out_usable); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>, luabind::pure_out_value<7>>()),
-			luabind::def_lambda("BuyVendorItem", [this](uint32 slot) { this->BuyVendorItem(slot, 1); }),
+					   luabind::def<std::function<void(int32, const ItemInfo *&, String &, int32 &, int32 &, int32 &, bool &)>>("GetVendorItemInfo", [this](int32 slot, const ItemInfo *&out_item, String &out_icon, int32 &out_price, int32 &out_quantity, int32 &out_numAvailable, bool &out_usable)
+																																{ return this->GetVendorItemInfo(slot, out_item, out_icon, out_price, out_quantity, out_numAvailable, out_usable); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>, luabind::pure_out_value<7>>()),
+					   luabind::def_lambda("BuyVendorItem", [this](uint32 slot)
+										   { this->BuyVendorItem(slot, 1); }),
 
-			// Trainer
-			luabind::def<std::function<uint32()>>("GetNumTrainerSpells", [this]() { return this->m_trainerClient.GetNumTrainerSpells(); }),
-			luabind::def<std::function<void(int32, int32&, String&, String&, int32&, bool&)>>("GetTrainerSpellInfo", [this](int32 slot, int32& out_spellId, String& out_name, String& out_icon, int32& out_price, bool& out_known) { return this->GetTrainerSpellInfo(slot, out_spellId, out_name, out_icon, out_price, out_known); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>>()),
-			luabind::def<std::function<void(uint32)>>("BuyTrainerSpell", [this](uint32 slot) { this->m_trainerClient.BuySpell(slot); }),
-			luabind::def<std::function<void()>>("CloseTrainer", [this]() { this->m_trainerClient.CloseTrainer(); }),
+					   // Trainer
+					   luabind::def<std::function<uint32()>>("GetNumTrainerSpells", [this]()
+															 { return this->m_trainerClient.GetNumTrainerSpells(); }),
+					   luabind::def<std::function<void(int32, int32 &, String &, String &, int32 &, bool &)>>("GetTrainerSpellInfo", [this](int32 slot, int32 &out_spellId, String &out_name, String &out_icon, int32 &out_price, bool &out_known)
+																											  { return this->GetTrainerSpellInfo(slot, out_spellId, out_name, out_icon, out_price, out_known); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>>()),
+					   luabind::def<std::function<void(uint32)>>("BuyTrainerSpell", [this](uint32 slot)
+																 { this->m_trainerClient.BuySpell(slot); }),
+					   luabind::def<std::function<void()>>("CloseTrainer", [this]()
+														   { this->m_trainerClient.CloseTrainer(); }),
 
-			luabind::def<std::function<const char* (const ItemInfo*, int32)>>("GetItemSpellTriggerType", [this](const ItemInfo* item, int32 index) { return this->GetItemSpellTriggerType(item, index); }),
-			luabind::def<std::function<const proto_client::SpellEntry* (const ItemInfo*, int32)>>("GetItemSpell", [this](const ItemInfo* item, int32 index) { return this->GetItemSpell(item, index); }),
+					   luabind::def<std::function<const char *(const ItemInfo *, int32)>>("GetItemSpellTriggerType", [this](const ItemInfo *item, int32 index)
+																						  { return this->GetItemSpellTriggerType(item, index); }),
+					   luabind::def<std::function<const proto_client::SpellEntry *(const ItemInfo *, int32)>>("GetItemSpell", [this](const ItemInfo *item, int32 index)
+																											  { return this->GetItemSpell(item, index); }),
 
-			luabind::def<std::function<void(uint32)>>("AddAttributePoint", [this](uint32 attributeId) { return this->AddAttributePoint(attributeId); }),
-			luabind::def<std::function<uint32(int32)>>("GetContainerNumSlots", [this](int32 slot) { return this->GetContainerNumSlots(slot); }),
-			luabind::def<std::function<void(uint32)>>("PickupContainerItem", [this](uint32 slot) { this->PickupContainerItem(slot); }),
+					   luabind::def<std::function<void(uint32)>>("AddAttributePoint", [this](uint32 attributeId)
+																 { return this->AddAttributePoint(attributeId); }),
+					   luabind::def<std::function<uint32(int32)>>("GetContainerNumSlots", [this](int32 slot)
+																  { return this->GetContainerNumSlots(slot); }),
+					   luabind::def<std::function<void(uint32)>>("PickupContainerItem", [this](uint32 slot)
+																 { this->PickupContainerItem(slot); }),
 
-			luabind::def<std::function<void(uint32)>>("UseContainerItem", [this](uint32 slot) { this->UseContainerItem(slot); }),
-			luabind::def<std::function<int32(uint32)>>("GetItemCount", [this](const uint32 id) -> int32 { return ObjectMgr::GetItemCount(id); }),
+					   luabind::def<std::function<void(uint32)>>("UseContainerItem", [this](uint32 slot)
+																 { this->UseContainerItem(slot); }),
+					   luabind::def<std::function<int32(uint32)>>("GetItemCount", [this](const uint32 id) -> int32
+																  { return ObjectMgr::GetItemCount(id); }),
 
-			luabind::def<std::function<int32()>>("GetNumLootItems", [this]() { return this->GetNumLootItems(); }),
-			luabind::def<std::function<void(int32, bool)>>("LootSlot", [this](int32 slot, bool force) { this->LootSlot(slot, force); }),
-			luabind::def<std::function<bool(int32)>>("LootSlotIsCoin", [this](int32 slot) { return this->LootSlotIsCoin(slot); }),
-			luabind::def<std::function<bool(int32)>>("LootSlotIsItem", [this](int32 slot) { return this->LootSlotIsItem(slot); }),
-			luabind::def<std::function<const ItemInfo*(int32)>>("GetLootSlotItem", [this](int32 slot) { return this->GetLootSlotItem(slot); }),
-			luabind::def<std::function<void()>>("CloseLoot", [this]() { this->CloseLoot(); }),
-			luabind::def<std::function<void(int32, String&, String&, int32&)>>("GetLootSlotInfo", [this](int32 slot, String& out_icon, String& out_text, int32& out_count) { return this->GetLootSlotInfo(slot, out_icon, out_text, out_count); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
-			
-			luabind::def<std::function<void(int32&, int32&)>>("GetGameTime", [this](int32& out_hour, int32& out_minute) { out_hour = m_gameTime.GetHour(); out_minute = m_gameTime.GetMinute(); }, luabind::joined<luabind::pure_out_value<1>, luabind::pure_out_value<2>>()),
+					   luabind::def<std::function<int32()>>("GetNumLootItems", [this]()
+															{ return this->GetNumLootItems(); }),
+					   luabind::def<std::function<void(int32, bool)>>("LootSlot", [this](int32 slot, bool force)
+																	  { this->LootSlot(slot, force); }),
+					   luabind::def<std::function<bool(int32)>>("LootSlotIsCoin", [this](int32 slot)
+																{ return this->LootSlotIsCoin(slot); }),
+					   luabind::def<std::function<bool(int32)>>("LootSlotIsItem", [this](int32 slot)
+																{ return this->LootSlotIsItem(slot); }),
+					   luabind::def<std::function<const ItemInfo *(int32)>>("GetLootSlotItem", [this](int32 slot)
+																			{ return this->GetLootSlotItem(slot); }),
+					   luabind::def<std::function<void()>>("CloseLoot", [this]()
+														   { this->CloseLoot(); }),
+					   luabind::def<std::function<void(int32, String &, String &, int32 &)>>("GetLootSlotInfo", [this](int32 slot, String &out_icon, String &out_text, int32 &out_count)
+																							 { return this->GetLootSlotInfo(slot, out_icon, out_text, out_count); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 
-			luabind::def<std::function<void()>>("ReviveMe", [this]() { m_realmConnector.SendReviveRequest(); }),
-			
-			luabind::def<std::function<void(const char*)>>("PlaySound", [this](const char* sound) { PlaySound(sound); }),
+					   luabind::def<std::function<void(int32 &, int32 &)>>("GetGameTime", [this](int32 &out_hour, int32 &out_minute)
+																		   { out_hour = m_gameTime.GetHour(); out_minute = m_gameTime.GetMinute(); }, luabind::joined<luabind::pure_out_value<1>, luabind::pure_out_value<2>>()),
 
-			luabind::def<std::function<void(int32, int32)>>("RandomRoll", [this](int32 min, int32 max) { m_realmConnector.RandomRoll(min, max); }),
-			luabind::def<std::function<int32()>>("GetPartyLeaderIndex", [this]() { return m_partyInfo.GetLeaderIndex(); }),
-			luabind::def<std::function<bool()>>("IsPartyLeader", [this]() { return m_partyInfo.GetLeaderGuid() == ObjectMgr::GetActivePlayerGuid(); }),
-				
-			luabind::def<std::function<void(const char*, const char*)>>("SendChatMessage", [this](const char* message, const char* type) { SendChatMessage(message, type, nullptr); }),
-			luabind::def<std::function<void(const char*, const char*, const char*)>>("SendChatMessage", [this](const char* message, const char* type, const char* target) { SendChatMessage(message, type, target); }),
+					   luabind::def<std::function<void()>>("ReviveMe", [this]()
+														   { m_realmConnector.SendReviveRequest(); }),
 
-			luabind::def<std::function<void()>>("AcceptGroup", [this]() { m_realmConnector.AcceptGroup(); }),
-			luabind::def<std::function<void()>>("DeclineGroup", [this]() { m_realmConnector.DeclineGroup(); }),
-			luabind::def<std::function<void(const String&)>>("InviteByName", [this](const String& playerName) { m_realmConnector.InviteByName(playerName); }),
-			luabind::def<std::function<void(const String&)>>("UninviteByName", [this](const String& playerName) { m_realmConnector.UninviteByName(playerName); }),
+					   luabind::def<std::function<void(const char *)>>("PlaySound", [this](const char *sound)
+																	   { PlaySound(sound); }),
 
-			luabind::def<std::function<void()>>("RequestTimePlayed", [this]() { m_realmConnector.SendTimePlayedRequest(); })
-		);
+					   luabind::def<std::function<void(int32, int32)>>("RandomRoll", [this](int32 min, int32 max)
+																	   { m_realmConnector.RandomRoll(min, max); }),
+					   luabind::def<std::function<int32()>>("GetPartyLeaderIndex", [this]()
+															{ return m_partyInfo.GetLeaderIndex(); }),
+					   luabind::def<std::function<bool()>>("IsPartyLeader", [this]()
+														   { return m_partyInfo.GetLeaderGuid() == ObjectMgr::GetActivePlayerGuid(); }),
+
+					   luabind::def<std::function<void(const char *, const char *)>>("SendChatMessage", [this](const char *message, const char *type)
+																					 { SendChatMessage(message, type, nullptr); }),
+					   luabind::def<std::function<void(const char *, const char *, const char *)>>("SendChatMessage", [this](const char *message, const char *type, const char *target)
+																								   { SendChatMessage(message, type, target); }),
+
+					   luabind::def<std::function<void()>>("AcceptGroup", [this]()
+														   { m_realmConnector.AcceptGroup(); }),
+					   luabind::def<std::function<void()>>("DeclineGroup", [this]()
+														   { m_realmConnector.DeclineGroup(); }),
+					   luabind::def<std::function<void(const String &)>>("InviteByName", [this](const String &playerName)
+																		 { m_realmConnector.InviteByName(playerName); }),
+					   luabind::def<std::function<void(const String &)>>("UninviteByName", [this](const String &playerName)
+																		 { m_realmConnector.UninviteByName(playerName); }),
+
+					   luabind::def<std::function<void()>>("RequestTimePlayed", [this]()
+														   { m_realmConnector.SendTimePlayedRequest(); }));
 
 		m_charSelect.RegisterScriptFunctions(m_luaState.get());
 		m_charCreateInfo.RegisterScriptFunctions(m_luaState.get());
 		m_vendorClient.RegisterScriptFunctions(m_luaState.get());
 		m_guildClient.RegisterScriptFunctions(m_luaState.get());
+		m_friendClient.RegisterScriptFunctions(m_luaState.get());
 		m_questClient.RegisterScriptFunctions(m_luaState.get());
 		m_talentClient.RegisterScriptFunctions(m_luaState.get());
-
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;
 		luabind::globals(m_luaState.get())["realmConnector"] = &m_realmConnector;
 		luabind::globals(m_luaState.get())["gameData"] = &m_project;
@@ -1152,7 +1184,7 @@ namespace mmo
 		m_globalFunctionsRegistered = true;
 	}
 
-	void GameScript::SendChatMessage(const char* message, const char* type, const char* target) const
+	void GameScript::SendChatMessage(const char *message, const char *type, const char *target) const
 	{
 		static const String s_emptyTarget;
 
@@ -1175,19 +1207,18 @@ namespace mmo
 		};
 
 		static const ChatMessageTypeString s_typeStrings[] = {
-			{ "WHISPER", ChatType::Whisper },
-			{ "SAY", ChatType::Say },
-			{ "YELL", ChatType::Yell },
-			{ "PARTY", ChatType::Group },
-			{ "WHISPER", ChatType::Whisper },
-			{ "GUILD", ChatType::Guild },
-			{ "CHANNEL", ChatType::Channel },
-			{ "EMOTE", ChatType::Emote }
-		};
+			{"WHISPER", ChatType::Whisper},
+			{"SAY", ChatType::Say},
+			{"YELL", ChatType::Yell},
+			{"PARTY", ChatType::Group},
+			{"WHISPER", ChatType::Whisper},
+			{"GUILD", ChatType::Guild},
+			{"CHANNEL", ChatType::Channel},
+			{"EMOTE", ChatType::Emote}};
 
 		const String typeString = type;
 		ChatType chatType = ChatType::Unknown;
-		for (const auto& element : s_typeStrings)
+		for (const auto &element : s_typeStrings)
 		{
 			if (element.typeString == typeString)
 			{
@@ -1223,8 +1254,8 @@ namespace mmo
 
 		std::vector<std::shared_ptr<GameUnitC>> units;
 
-		ObjectMgr::ForEachUnit([&units, &player](GameUnitC& unit)
-			{
+		ObjectMgr::ForEachUnit([&units, &player](GameUnitC &unit)
+							   {
 				if (!unit.IsAlive())
 				{
 					return;
@@ -1240,9 +1271,7 @@ namespace mmo
 					return;
 				}
 
-				units.push_back(std::static_pointer_cast<GameUnitC>(unit.shared_from_this()));
-			}
-		);
+				units.push_back(std::static_pointer_cast<GameUnitC>(unit.shared_from_this())); });
 
 		if (units.empty())
 		{
@@ -1251,10 +1280,10 @@ namespace mmo
 
 		const Vector3 playerPos = player->GetPosition();
 		std::sort(units.begin(), units.end(),
-			[&](const std::shared_ptr<GameUnitC>& a, const std::shared_ptr<GameUnitC>& b)
-			{
-				return (a->GetPosition().GetSquaredDistanceTo(playerPos) < b->GetPosition().GetSquaredDistanceTo(playerPos));
-			});
+				  [&](const std::shared_ptr<GameUnitC> &a, const std::shared_ptr<GameUnitC> &b)
+				  {
+					  return (a->GetPosition().GetSquaredDistanceTo(playerPos) < b->GetPosition().GetSquaredDistanceTo(playerPos));
+				  });
 
 		int currentIndex = -1;
 		for (int i = 0; i < units.size(); ++i)
@@ -1310,7 +1339,6 @@ namespace mmo
 					// Different bag
 					m_realmConnector.SwapItem(g_cursor.GetCursorItem() >> 8, g_cursor.GetCursorItem() & 0xFF, slot >> 8, slot & 0xFF);
 				}
-				
 			}
 
 			g_cursor.Clear();
@@ -1322,7 +1350,6 @@ namespace mmo
 
 			// Lock the old item slot
 		}
-
 	}
 
 	void GameScript::UseContainerItem(uint32 slot) const
@@ -1341,7 +1368,7 @@ namespace mmo
 		}
 
 		// Check if item has any usable spells
-		const auto* entry = item->GetEntry();
+		const auto *entry = item->GetEntry();
 		if (!entry)
 		{
 			ELOG("Unknown item entry!");
@@ -1356,10 +1383,10 @@ namespace mmo
 			return;
 		}
 
-		const proto_client::SpellEntry* spellToCheck = nullptr;
+		const proto_client::SpellEntry *spellToCheck = nullptr;
 
 		bool isUsable = false;
-		for (const ItemSpell& spell : entry->spells)
+		for (const ItemSpell &spell : entry->spells)
 		{
 			if (spell.triggertype == item_spell_trigger::OnUse)
 			{
@@ -1388,7 +1415,7 @@ namespace mmo
 		m_realmConnector.UseItem((slot >> 8) & 0xFF, slot & 0xFF, item->GetGuid(), targetMap);
 	}
 
-	void GameScript::TargetUnit(const char* name) const
+	void GameScript::TargetUnit(const char *name) const
 	{
 		if (!name || !*name)
 		{
@@ -1433,7 +1460,7 @@ namespace mmo
 				ELOG("Unable to loot: Invalid server slot mapping for UI slot " << slot);
 				return;
 			}
-			
+
 			// Loot item from server slot
 			m_realmConnector.AutoStoreLootItem(serverSlot);
 		}
@@ -1449,17 +1476,17 @@ namespace mmo
 		{
 			count = 1;
 		}
-		
+
 		// Count non-looted items
 		for (uint32 i = 0; i < m_lootClient.GetNumLootItems(); ++i)
 		{
-			const LootClient::LootItem* item = m_lootClient.GetLootItem(i);
+			const LootClient::LootItem *item = m_lootClient.GetLootItem(i);
 			if (item && item->itemInfo && item->count > 0) // Non-looted item
 			{
 				count++;
 			}
 		}
-		
+
 		return count;
 	}
 
@@ -1500,7 +1527,7 @@ namespace mmo
 		return true;
 	}
 
-	void GameScript::GetLootSlotInfo(uint32 slot, String& out_icon, String& out_text, int32& out_count) const
+	void GameScript::GetLootSlotInfo(uint32 slot, String &out_icon, String &out_text, int32 &out_count) const
 	{
 		if (slot < 1 || static_cast<int32>(slot) > GetNumLootItems())
 		{
@@ -1528,7 +1555,7 @@ namespace mmo
 			return;
 		}
 
-		LootClient::LootItem* item = m_lootClient.GetLootItem(serverSlot);
+		LootClient::LootItem *item = m_lootClient.GetLootItem(serverSlot);
 		if (!item || !item->itemInfo || item->count == 0)
 		{
 			out_icon = "";
@@ -1537,7 +1564,7 @@ namespace mmo
 			return;
 		}
 
-		if (const auto* displayData = m_project.itemDisplays.getById(item->itemInfo->displayId))
+		if (const auto *displayData = m_project.itemDisplays.getById(item->itemInfo->displayId))
 		{
 			out_icon = displayData->icon();
 		}
@@ -1545,12 +1572,12 @@ namespace mmo
 		{
 			out_icon = "";
 		}
-		
+
 		out_text = item->itemInfo->name;
 		out_count = item->count;
 	}
 
-	const ItemInfo* GameScript::GetLootSlotItem(uint32 slot) const
+	const ItemInfo *GameScript::GetLootSlotItem(uint32 slot) const
 	{
 		if (slot < 1 || static_cast<int32>(slot) > GetNumLootItems())
 		{
@@ -1569,7 +1596,7 @@ namespace mmo
 			return nullptr;
 		}
 
-		LootClient::LootItem* item = m_lootClient.GetLootItem(serverSlot);
+		LootClient::LootItem *item = m_lootClient.GetLootItem(serverSlot);
 		if (!item || !item->itemInfo || item->count == 0)
 		{
 			return nullptr;
@@ -1623,18 +1650,17 @@ namespace mmo
 		m_realmConnector.AddAttributePoint(attribute);
 	}
 
-	const char* GameScript::GetItemSpellTriggerType(const ItemInfo* item, int32 index)
+	const char *GameScript::GetItemSpellTriggerType(const ItemInfo *item, int32 index)
 	{
 		if (item == nullptr || index < 0 || index >= std::size(item->spells))
 		{
 			return nullptr;
 		}
 
-		static const char* s_triggerTypeNames[] = {
+		static const char *s_triggerTypeNames[] = {
 			"ON_USE",
 			"ON_EQUIP",
-			"HIT_CHANCE"
-		};
+			"HIT_CHANCE"};
 
 		if (item->spells[index].triggertype > std::size(s_triggerTypeNames))
 		{
@@ -1644,7 +1670,7 @@ namespace mmo
 		return s_triggerTypeNames[item->spells[index].triggertype];
 	}
 
-	const proto_client::SpellEntry* GameScript::GetItemSpell(const ItemInfo* item, int32 index)
+	const proto_client::SpellEntry *GameScript::GetItemSpell(const ItemInfo *item, int32 index)
 	{
 		if (item == nullptr || index < 0 || index >= std::size(item->spells))
 		{
@@ -1654,7 +1680,7 @@ namespace mmo
 		return m_project.spells.getById(item->spells[index].spellId);
 	}
 
-	void GameScript::PlaySound(const char* sound) const
+	void GameScript::PlaySound(const char *sound) const
 	{
 		if (!sound || !*sound)
 		{
@@ -1686,12 +1712,12 @@ namespace mmo
 			}
 			uiSlot--; // Remove money slot offset
 		}
-		
+
 		// Now find the uiSlot-th non-looted item
 		int32 nonLootedCount = 0;
 		for (uint32 serverSlot = 0; serverSlot < m_lootClient.GetNumLootItems(); ++serverSlot)
 		{
-			const LootClient::LootItem* item = m_lootClient.GetLootItem(serverSlot);
+			const LootClient::LootItem *item = m_lootClient.GetLootItem(serverSlot);
 			if (item && item->itemInfo && item->count > 0) // Non-looted item
 			{
 				nonLootedCount++;
@@ -1701,7 +1727,7 @@ namespace mmo
 				}
 			}
 		}
-		
+
 		return -1; // Slot not found
 	}
 }
