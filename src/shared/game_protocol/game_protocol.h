@@ -51,6 +51,23 @@ namespace mmo
 			};
 		}
 
+		namespace friend_command_result
+		{
+			enum Type
+			{
+				Success,
+				AlreadyFriends,
+				FriendListFull,
+				TargetFriendListFull,
+				PlayerNotFound,
+				CannotAddSelf,
+				InvitePending,
+				NotFriends
+			};
+		}
+
+		constexpr uint32 MAX_FRIENDS = 50;
+
 		constexpr uint32 ProtocolVersion = 0x00000003;
 
 		////////////////////////////////////////////////////////////////////////////////
@@ -204,18 +221,24 @@ namespace mmo
 
 				LogoutRequest,
 
-				GuildRoster,
+			GuildRoster,
 
-				MoveRootAck,
+			MoveRootAck,
 
-				LearnTalent,
+			LearnTalent,
 
-				TimePlayedRequest,
+			TimePlayedRequest,
 
-				TimeSyncResponse,
+			TimeSyncResponse,
 
-				/// Counter constant
-				Count_,
+			FriendInvite,
+			FriendAccept,
+			FriendDecline,
+			FriendRemove,
+			FriendListRequest,
+
+			/// Counter constant
+			Count_,
 			};
 		}
 
@@ -416,6 +439,11 @@ namespace mmo
 
 				/// Time sync request packet sent to the client
 				TimeSyncRequest,
+
+				FriendInvite,
+				FriendListUpdate,
+				FriendStatusChange,
+				FriendCommandResult,
 
 				/// Counter constant
 				Count_,

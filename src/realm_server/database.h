@@ -123,6 +123,20 @@ namespace mmo
 		std::vector<GuildMember> members;
 	};
 
+	/// Represents data of a friend relationship.
+	struct FriendData
+	{
+		uint64 guid;
+
+		String name;
+
+		uint32 level;
+
+		uint32 raceId;
+
+		uint32 classId;
+	};
+
 	/// Basic interface for a database system used by the login server.
 	struct IDatabase : public NonCopyable
 	{
@@ -217,6 +231,27 @@ namespace mmo
 		virtual void DisbandGuild(uint64 guildId) = 0;
 
 		virtual void SetGuildMemberRank(uint64 guildId, uint64 memberGuid, uint32 rank) = 0;
+
+		/// Adds a friend relationship between two characters.
+		/// @param characterId The character initiating the friendship.
+		/// @param friendId The character being added as a friend.
+		virtual void AddFriend(uint64 characterId, uint64 friendId) = 0;
+
+		/// Removes a friend relationship between two characters.
+		/// @param characterId The character removing the friend.
+		/// @param friendId The friend being removed.
+		virtual void RemoveFriend(uint64 characterId, uint64 friendId) = 0;
+
+		/// Loads the friend list for a character.
+		/// @param characterId The character whose friends to load.
+		/// @returns A vector of FriendData containing friend information.
+		virtual std::optional<std::vector<FriendData>> LoadFriendList(uint64 characterId) = 0;
+
+		/// Checks if two characters are friends.
+		/// @param characterId First character id.
+		/// @param friendId Second character id.
+		/// @returns True if they are friends, false otherwise.
+		virtual bool AreFriends(uint64 characterId, uint64 friendId) = 0;
 
 		/// Gets the current Message of the Day.
 		/// @returns The current MOTD string or default message if not set.

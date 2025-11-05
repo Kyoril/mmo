@@ -96,6 +96,18 @@ namespace mmo
 
 		void SetGuildMemberRank(uint64 guildId, uint64 memberGuid, uint32 rank) override;
 
+		/// @copydoc IDatabase::AddFriend
+		void AddFriend(uint64 characterId, uint64 friendId) override;
+
+		/// @copydoc IDatabase::RemoveFriend
+		void RemoveFriend(uint64 characterId, uint64 friendId) override;
+
+		/// @copydoc IDatabase::LoadFriendList
+		std::optional<std::vector<FriendData>> LoadFriendList(uint64 characterId) override;
+
+		/// @copydoc IDatabase::AreFriends
+		bool AreFriends(uint64 characterId, uint64 friendId) override;
+
 		std::optional<String> GetMessageOfTheDay() override;
 
 		void SetMessageOfTheDay(const std::string& motd) override;

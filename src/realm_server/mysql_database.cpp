@@ -1460,6 +1460,136 @@ namespace mmo
 		}
 	}
 
+	void MySQLDatabase::AddFriend(uint64 characterId, uint64 friendId)
+	{
+		try
+		{
+			mysql::Transaction transaction(m_connection);
+
+			// Ensure consistent ordering: character_id < friend_id
+			const uint64 minId = (characterId < friendId) ? characterId : friendId;
+			const uint64 maxId = (characterId < friendId) ? friendId : characterId;
+
+			if (!m_connection.Execute(std::format(
+				"INSERT INTO `friend_list` (`character_id`, `friend_id`) VALUES ('{0}', '{1}')"
+				, minId
+				, maxId
+			)))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			transaction.Commit();
+		}
+		catch (const mysql::Exception& e)
+		{
+			ELOG("Could not add friend: " << e.what());
+			throw;
+		}
+	}
+
+	void MySQLDatabase::RemoveFriend(uint64 characterId, uint64 friendId)
+	{
+		try
+		{
+			mysql::Transaction transaction(m_connection);
+
+			// Friendship can be stored in either direction due to CHECK constraint
+			// Try both orderings to ensure deletion regardless of storage order
+			const uint64 minId = (characterId < friendId) ? characterId : friendId;
+			const uint64 maxId = (characterId < friendId) ? friendId : characterId;
+
+			if (!m_connection.Execute(std::format(
+				"DELETE FROM `friend_list` WHERE `character_id` = '{0}' AND `friend_id` = '{1}' LIMIT 1"
+				, minId
+				, maxId
+			)))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			transaction.Commit();
+		}
+		catch (const mysql::Exception& e)
+		{
+			ELOG("Could not remove friend: " << e.what());
+			throw;
+		}
+	}
+
+	std::optional<std::vector<FriendData>> MySQLDatabase::LoadFriendList(uint64 characterId)
+	{
+		std::vector<FriendData> result;
+
+		// Query must handle bidirectional storage: character can be in either column
+		// Use UNION to get friends where character_id is in either position
+		mysql::Select select(m_connection, std::format(
+			"SELECT c.`id`, c.`name`, c.`level`, c.`race`, c.`class` "
+			"FROM `friend_list` fl "
+			"JOIN `characters` c ON c.`id` = fl.`friend_id` "
+			"WHERE fl.`character_id` = '{0}' "
+			"UNION "
+			"SELECT c.`id`, c.`name`, c.`level`, c.`race`, c.`class` "
+			"FROM `friend_list` fl "
+			"JOIN `characters` c ON c.`id` = fl.`character_id` "
+			"WHERE fl.`friend_id` = '{0}' "
+			"ORDER BY `name` ASC"
+			, characterId
+		));
+
+		if (select.Success())
+		{
+			mysql::Row row(select);
+			while (row)
+			{
+				FriendData friendData;
+				row.GetField(0, friendData.guid);
+				row.GetField(1, friendData.name);
+				row.GetField(2, friendData.level);
+				row.GetField(3, friendData.raceId);
+				row.GetField(4, friendData.classId);
+				result.emplace_back(std::move(friendData));
+
+				row = mysql::Row::Next(select);
+			}
+		}
+		else
+		{
+			// There was an error
+			PrintDatabaseError();
+			return {};
+		}
+
+		return result;
+	}
+
+	bool MySQLDatabase::AreFriends(uint64 characterId, uint64 friendId)
+	{
+		// Friendship stored bidirectionally with CHECK constraint ensuring character_id < friend_id
+		const uint64 minId = (characterId < friendId) ? characterId : friendId;
+		const uint64 maxId = (characterId < friendId) ? friendId : characterId;
+
+		mysql::Select select(m_connection, std::format(
+			"SELECT 1 FROM `friend_list` WHERE `character_id` = '{0}' AND `friend_id` = '{1}' LIMIT 1"
+			, minId
+			, maxId
+		));
+
+		if (select.Success())
+		{
+			mysql::Row row(select);
+			return row ? true : false;
+		}
+		else
+		{
+			PrintDatabaseError();
+		}
+
+		return false;
+	}
+
 	std::optional<String> MySQLDatabase::GetMessageOfTheDay()
 	{
 		mysql::Select select(m_connection, "SELECT `message` FROM `realm_motd` WHERE `id` = 1 LIMIT 1");
