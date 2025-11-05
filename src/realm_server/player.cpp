@@ -18,6 +18,7 @@
 #include <functional>
 
 #include "guild_mgr.h"
+#include "friend_mgr.h"
 #include "player_group.h"
 #include "base/utilities.h"
 #include "game/chat_type.h"
@@ -27,31 +28,21 @@
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "game_server/objects/game_player_s.h"
 
-
 namespace mmo
 {
 	Player::Player(
-		TimerQueue& timerQueue,
-		PlayerManager& playerManager,
-		WorldManager& worldManager,
+		TimerQueue &timerQueue,
+		PlayerManager &playerManager,
+		WorldManager &worldManager,
 		LoginConnector &loginConnector,
-		AsyncDatabase& database, 
+		AsyncDatabase &database,
 		std::shared_ptr<Client> connection,
 		String address,
-		const proto::Project& project,
-		IdGenerator<uint64>& groupIdGenerator,
-		GuildMgr& guildMgr)
-		: m_timerQueue(timerQueue)
-		, m_manager(playerManager)
-		, m_worldManager(worldManager)
-		, m_loginConnector(loginConnector)
-		, m_database(database)
-		, m_project(project)
-		, m_groupIdGenerator(groupIdGenerator)
-		, m_connection(std::move(connection))
-		, m_address(std::move(address))
-		, m_accountId(0)
-		, m_guildMgr(guildMgr)
+		const proto::Project &project,
+		IdGenerator<uint64> &groupIdGenerator,
+		GuildMgr &guildMgr,
+		FriendMgr &friendMgr)
+		: m_timerQueue(timerQueue), m_manager(playerManager), m_worldManager(worldManager), m_loginConnector(loginConnector), m_database(database), m_project(project), m_groupIdGenerator(groupIdGenerator), m_connection(std::move(connection)), m_address(std::move(address)), m_accountId(0), m_guildMgr(guildMgr), m_friendMgr(friendMgr)
 	{
 		// Generate random seed for packet header encryption & decryption
 		std::uniform_int_distribution<uint32> dist;
@@ -89,7 +80,7 @@ namespace mmo
 
 		if (m_characterData && m_characterData->guildId != 0)
 		{
-			if (Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId))
+			if (Guild *guild = m_guildMgr.GetGuild(m_characterData->guildId))
 			{
 				guild->BroadcastEvent(guild_event::LoggedOut, m_characterData->characterId, m_characterData->name.c_str());
 			}
@@ -97,6 +88,12 @@ namespace mmo
 			{
 				ELOG("Player " << log_hex_digit(m_characterData->characterId) << " is in guild " << log_hex_digit(m_characterData->guildId) << " which could not be found (not loaded from database?)");
 			}
+		}
+
+		// Notify friends that this player is going offline
+		if (m_characterData)
+		{
+			m_friendMgr.NotifyFriendStatusChange(m_characterData->characterId, false);
 		}
 
 		if (const auto strongWorld = m_world.lock())
@@ -117,20 +114,21 @@ namespace mmo
 	void Player::DoCharEnum()
 	{
 		// RequestHandler
-		std::weak_ptr weakThis{ shared_from_this() };
-		auto handler = [weakThis](std::optional<std::vector<CharacterView>> result) {
+		std::weak_ptr weakThis{shared_from_this()};
+		auto handler = [weakThis](std::optional<std::vector<CharacterView>> result)
+		{
 			if (auto strongThis = weakThis.lock())
 			{
 				// Lock around m_characterViews
 				{
-					std::scoped_lock lock{ strongThis->m_charViewMutex };
+					std::scoped_lock lock{strongThis->m_charViewMutex};
 
 					// Copy character view data
 					strongThis->m_characterViews.clear();
-					for (auto& charView : result.value())
+					for (auto &charView : result.value())
 					{
 						// Resolve display id from race/class (TODO: Maybe do this somewhere else or differently? This seems like a wrong place to do this, but it works :/)
-						if (const auto* raceEntry = strongThis->m_project.races.getById(charView.GetRaceId()))
+						if (const auto *raceEntry = strongThis->m_project.races.getById(charView.GetRaceId()))
 						{
 							charView.SetDisplayId(charView.GetGender() == Male ? raceEntry->malemodel() : raceEntry->femalemodel());
 						}
@@ -140,12 +138,11 @@ namespace mmo
 				}
 
 				// Send result data to requesting client
-				strongThis->GetConnection().sendSinglePacket([&result](game::OutgoingPacket& outPacket)
-					{
+				strongThis->GetConnection().sendSinglePacket([&result](game::OutgoingPacket &outPacket)
+															 {
 						outPacket.Start(game::realm_client_packet::CharEnum);
 						outPacket << io::write_dynamic_range<uint8>(*result);
-						outPacket.Finish();
-					});
+						outPacket.Finish(); });
 			}
 			else
 			{
@@ -161,7 +158,7 @@ namespace mmo
 		m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterViewsByAccountId, m_accountId);
 	}
 
-	void Player::OnGroupLoaded(PlayerGroup& group)
+	void Player::OnGroupLoaded(PlayerGroup &group)
 	{
 		m_onGroupLoaded.disconnect();
 
@@ -188,7 +185,7 @@ namespace mmo
 		Destroy();
 	}
 
-	PacketParseResult Player::connectionPacketReceived(game::IncomingPacket & packet)
+	PacketParseResult Player::connectionPacketReceived(game::IncomingPacket &packet)
 	{
 		const auto packetId = packet.GetId();
 		bool isValid = true;
@@ -197,7 +194,7 @@ namespace mmo
 
 		{
 			// Lock packet handler access
-			std::scoped_lock lock{ m_packetHandlerMutex };
+			std::scoped_lock lock{m_packetHandlerMutex};
 
 			// Check for packet handlers
 			const auto handlerIt = m_packetHandlers.find(packetId);
@@ -214,16 +211,12 @@ namespace mmo
 		return handler(packet);
 	}
 
-	PacketParseResult Player::OnAuthSession(game::IncomingPacket & packet)
+	PacketParseResult Player::OnAuthSession(game::IncomingPacket &packet)
 	{
 		ClearPacketHandler(game::client_realm_packet::AuthSession);
 
 		// Read packet data
-		if (!(packet
-			>> io::read<uint32>(m_build)
-			>> io::read_container<uint8>(m_accountName)
-			>> io::read<uint32>(m_clientSeed)
-			>> io::read_range(m_clientHash)))
+		if (!(packet >> io::read<uint32>(m_build) >> io::read_container<uint8>(m_accountName) >> io::read<uint32>(m_clientSeed) >> io::read_range(m_clientHash)))
 		{
 			ELOG("Could not read LogonChallenge packet from a game client");
 			return PacketParseResult::Disconnect;
@@ -241,8 +234,9 @@ namespace mmo
 		}
 
 		// Setup a weak callback handler
-		std::weak_ptr weakThis{ shared_from_this() };
-		auto callbackHandler = [weakThis](const bool succeeded, const uint64 accountId, const uint8 gmLevel, const BigNumber& sessionKey) {
+		std::weak_ptr weakThis{shared_from_this()};
+		auto callbackHandler = [weakThis](const bool succeeded, const uint64 accountId, const uint8 gmLevel, const BigNumber &sessionKey)
+		{
 			// Obtain strong reference to see if the client connection is still valid
 			if (const auto strongThis = weakThis.lock())
 			{
@@ -266,7 +260,7 @@ namespace mmo
 		// we need to ask the login server for verification.
 		if (!m_loginConnector.QueueClientAuthSession(m_accountName, m_clientSeed, m_seed, m_clientHash, callbackHandler))
 		{
-			// Could not queue session, there is probably something wrong with the login server 
+			// Could not queue session, there is probably something wrong with the login server
 			// connection, so we close the client connection at this point
 			return PacketParseResult::Disconnect;
 		}
@@ -276,14 +270,14 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnCharEnum(game::IncomingPacket & packet)
+	PacketParseResult Player::OnCharEnum(game::IncomingPacket &packet)
 	{
 		DoCharEnum();
 
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnEnterWorld(game::IncomingPacket & packet)
+	PacketParseResult Player::OnEnterWorld(game::IncomingPacket &packet)
 	{
 		EnableEnterWorldPacket(false);
 
@@ -294,9 +288,9 @@ namespace mmo
 		}
 
 		ILOG("Client wants to enter the world with character 0x" << std::hex << guid << "...");
-		
+
 		std::weak_ptr weakThis = shared_from_this();
-		auto handler = [weakThis](const std::optional<CharacterData>& characterData)
+		auto handler = [weakThis](const std::optional<CharacterData> &characterData)
 		{
 			if (const auto strongThis = weakThis.lock())
 			{
@@ -305,22 +299,16 @@ namespace mmo
 		};
 
 		m_database.asyncRequest(std::move(handler), &IDatabase::CharacterEnterWorld, guid, m_accountId);
-		
+
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnCreateChar(game::IncomingPacket& packet)
+	PacketParseResult Player::OnCreateChar(game::IncomingPacket &packet)
 	{
 		uint8 race = 0, characterClass = 0, gender = 0;
 		std::string characterName;
 		AvatarConfiguration configuration;
-		if (!(packet
-			>> io::read_container<uint8>(characterName)
-			>> io::read<uint8>(race)
-			>> io::read<uint8>(characterClass)
-			>> io::read<uint8>(gender)
-			>> configuration
-			))
+		if (!(packet >> io::read_container<uint8>(characterName) >> io::read<uint8>(race) >> io::read<uint8>(characterClass) >> io::read<uint8>(gender) >> configuration))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -328,73 +316,69 @@ namespace mmo
 		// Check input parameters for invalid values
 		if (characterName.empty() || characterName.size() > 12 || gender > 1)
 		{
-			GetConnection().sendSinglePacket([](game::OutgoingPacket& outPacket)
-				{
+			GetConnection().sendSinglePacket([](game::OutgoingPacket &outPacket)
+											 {
 					outPacket.Start(game::realm_client_packet::CharCreateResponse);
 					outPacket << io::write<uint8>(game::char_create_result::Error);
-					outPacket.Finish();
-				});
+					outPacket.Finish(); });
 			return PacketParseResult::Pass;
 		}
 
 		// Check if given character class exists
-		const auto* classInstance = m_project.classes.getById(characterClass);
+		const auto *classInstance = m_project.classes.getById(characterClass);
 		if (classInstance == nullptr)
 		{
 			ELOG("Unable to find character class " << log_hex_digit(characterClass));
-			GetConnection().sendSinglePacket([](game::OutgoingPacket& outPacket)
-				{
+			GetConnection().sendSinglePacket([](game::OutgoingPacket &outPacket)
+											 {
 					outPacket.Start(game::realm_client_packet::CharCreateResponse);
 					outPacket << io::write<uint8>(game::char_create_result::Error);
-					outPacket.Finish();
-				});
+					outPacket.Finish(); });
 			return PacketParseResult::Pass;
 		}
 
-		const auto* raceEntry = m_project.races.getById(race);
+		const auto *raceEntry = m_project.races.getById(race);
 		if (raceEntry == nullptr)
 		{
 			ELOG("Unable to find character race " << log_hex_digit(race));
-			GetConnection().sendSinglePacket([](game::OutgoingPacket& outPacket)
-				{
+			GetConnection().sendSinglePacket([](game::OutgoingPacket &outPacket)
+											 {
 					outPacket.Start(game::realm_client_packet::CharCreateResponse);
 					outPacket << io::write<uint8>(game::char_create_result::Error);
-					outPacket.Finish();
-				});
+					outPacket.Finish(); });
 			return PacketParseResult::Pass;
 		}
 
 		// Get model
 		const uint32 modelId = gender == 0 ? raceEntry->malemodel() : raceEntry->femalemodel();
-		const proto::ModelDataEntry* model = m_project.models.getById(modelId);
+		const proto::ModelDataEntry *model = m_project.models.getById(modelId);
 		if (!model)
 		{
 			ELOG("Unable to find model data for model " << log_hex_digit(modelId));
-			GetConnection().sendSinglePacket([](game::OutgoingPacket& outPacket)
-				{
+			GetConnection().sendSinglePacket([](game::OutgoingPacket &outPacket)
+											 {
 					outPacket.Start(game::realm_client_packet::CharCreateResponse);
 					outPacket << io::write<uint8>(game::char_create_result::Error);
-					outPacket.Finish();
-				});
+					outPacket.Finish(); });
 			return PacketParseResult::Pass;
 		}
 
 		// TODO: Load avatar definition and validate chosen property values
 
-		std::weak_ptr weakThis{ shared_from_this() };
-		auto handler = [weakThis](const std::optional<CharCreateResult>& result) {
+		std::weak_ptr weakThis{shared_from_this()};
+		auto handler = [weakThis](const std::optional<CharCreateResult> &result)
+		{
 			if (const auto strongThis = weakThis.lock())
 			{
 				if (!result)
 				{
 					ELOG("Character creation failed due to an exception!");
-					strongThis->GetConnection().sendSinglePacket([](game::OutgoingPacket& outPacket)
-						{
+					strongThis->GetConnection().sendSinglePacket([](game::OutgoingPacket &outPacket)
+																 {
 							// TODO: This is not correct because we don't know if NameInUse is really the exact error
 							outPacket.Start(game::realm_client_packet::CharCreateResponse);
 							outPacket << io::write<uint8>(game::char_create_result::NameInUse);
-							outPacket.Finish();
-						});
+							outPacket.Finish(); });
 					return;
 				}
 
@@ -404,14 +388,13 @@ namespace mmo
 					return;
 				}
 
-				strongThis->GetConnection().sendSinglePacket([&result](game::OutgoingPacket& outPacket)
-					{
+				strongThis->GetConnection().sendSinglePacket([&result](game::OutgoingPacket &outPacket)
+															 {
 						// TODO: This is not correct because we don't know if NameInUse is really the exact error
 						outPacket.Start(game::realm_client_packet::CharCreateResponse);
 						outPacket << io::write<uint8>(
 							result.value() == CharCreateResult::NameAlreadyInUse ? game::char_create_result::NameInUse : game::char_create_result::Error);
-						outPacket.Finish();
-					});
+						outPacket.Finish(); });
 			}
 		};
 
@@ -446,7 +429,7 @@ namespace mmo
 		{
 			for (int i = 0; i < it1->second.items_size(); ++i)
 			{
-				const auto* item = m_project.items.getById(it1->second.items(i));
+				const auto *item = m_project.items.getById(it1->second.items(i));
 				if (!item)
 				{
 					continue;
@@ -560,14 +543,13 @@ namespace mmo
 			}
 		}
 
-
 		std::map<uint8, ActionButton> actionButtons;
 
 		std::vector<uint32> spellIds;
 		spellIds.reserve(classInstance->spells().size());
-		for(const auto& spell : classInstance->spells())
+		for (const auto &spell : classInstance->spells())
 		{
-			const proto::SpellEntry* spellEntry = m_project.spells.getById(spell.spell());
+			const proto::SpellEntry *spellEntry = m_project.spells.getById(spell.spell());
 			if (spellEntry && actionButtons.size() < 12)
 			{
 				// Not a passive, not hidden and an ability? Put it in the action bar!
@@ -575,7 +557,7 @@ namespace mmo
 					(spellEntry->attributes(0) & spell_attributes::HiddenClientSide) == 0 &&
 					(spellEntry->attributes(0) & spell_attributes::Ability) != 0)
 				{
-					actionButtons[actionButtons.size()] = ActionButton{ static_cast<uint16>(spell.spell()), action_button_type::Spell };
+					actionButtons[actionButtons.size()] = ActionButton{static_cast<uint16>(spell.spell()), action_button_type::Spell};
 				}
 			}
 
@@ -588,15 +570,15 @@ namespace mmo
 		// Each spell which isn't a passive should (for now) be placed on the action bar
 		DLOG("Creating new character named '" << characterName << "' for account 0x" << std::hex << m_accountId << " (Race: " << raceEntry->id() << "; Class: " << classInstance->id() << "; Gender: " << (uint16)gender << ")...");
 		m_database.asyncRequest(std::move(handler), &IDatabase::CreateCharacter, characterName, this->m_accountId, map, level, hp, gender, race, characterClass, position, rotation,
-			spellIds, mana, rage, energy, actionButtons, configuration, items);
-		
+								spellIds, mana, rage, energy, actionButtons, configuration, items);
+
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnDeleteChar(game::IncomingPacket& packet)
+	PacketParseResult Player::OnDeleteChar(game::IncomingPacket &packet)
 	{
 		ASSERT(IsAuthenticated());
-		
+
 		uint64 charGuid = 0;
 		if (!(packet >> io::read<uint64>(charGuid)))
 		{
@@ -604,8 +586,8 @@ namespace mmo
 		}
 
 		// Lock around m_characterViews
-		std::scoped_lock lock{ m_charViewMutex };
-		
+		std::scoped_lock lock{m_charViewMutex};
+
 		// Check if such a character exists
 		const auto charIt = m_characterViews.find(charGuid);
 		if (charIt == m_characterViews.end())
@@ -616,13 +598,14 @@ namespace mmo
 
 		// Handle guild membership before deletion
 		HandleCharacterGuildOnDelete(charGuid);
-		
+
 		// Handle group membership before deletion
 		HandleCharacterGroupOnDelete(charGuid);
 
 		// Database callback handler
-		std::weak_ptr weakThis{ shared_from_this() };
-		auto handler = [weakThis](const bool success) {
+		std::weak_ptr weakThis{shared_from_this()};
+		auto handler = [weakThis](const bool success)
+		{
 			if (const auto strongThis = weakThis.lock())
 			{
 				if (!success)
@@ -633,14 +616,15 @@ namespace mmo
 				strongThis->DoCharEnum();
 			}
 		};
-		
+
 		DLOG("Deleting character 0x" << std::hex << charGuid << " from account 0x" << std::hex << m_accountId << "...");
-		m_database.asyncRequest<void>([charGuid](auto&& database) { database->DeleteCharacter(charGuid); }, std::move(handler));
+		m_database.asyncRequest<void>([charGuid](auto &&database)
+									  { database->DeleteCharacter(charGuid); }, std::move(handler));
 
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnProxyPacket(game::IncomingPacket& packet)
+	PacketParseResult Player::OnProxyPacket(game::IncomingPacket &packet)
 	{
 		const auto strongWorld = m_world.lock();
 		if (!strongWorld)
@@ -652,40 +636,40 @@ namespace mmo
 		// Check for GM commands that require specific GM levels
 #ifdef MMO_WITH_DEV_COMMANDS
 		// This is where we will restrict certain commands based on GM level
-		switch(packet.GetId())
+		switch (packet.GetId())
 		{
-			case game::client_realm_packet::CheatFaceMe:
-			case game::client_realm_packet::CheatFollowMe:
-			case game::client_realm_packet::CheatSpeed:
-			case game::client_realm_packet::CheatWorldPort:
-			case game::client_realm_packet::CheatTeleportToPlayer:
-				// Require GM level 1 (basic GM)
-				if (!HasGMLevel(1))
-				{
-					WLOG("Player " << m_characterData->name << " attempted to use a GM command without sufficient privileges");
-					return PacketParseResult::Pass;
-				}
-				break;
-			case game::client_realm_packet::CheatLearnSpell:
-			case game::client_realm_packet::CheatRecharge:
-			case game::client_realm_packet::CheatCreateMonster:
-			case game::client_realm_packet::CheatDestroyMonster:
-			case game::client_realm_packet::CheatLevelUp:
-			case game::client_realm_packet::CheatGiveMoney:
-			case game::client_realm_packet::CheatAddItem:
-				// Require GM level 2
-				if (!HasGMLevel(2))
-				{
-					WLOG("Player " << m_characterData->name << " attempted to use a teleport command without sufficient privileges");
-					return PacketParseResult::Pass;
-				}
-				break;
+		case game::client_realm_packet::CheatFaceMe:
+		case game::client_realm_packet::CheatFollowMe:
+		case game::client_realm_packet::CheatSpeed:
+		case game::client_realm_packet::CheatWorldPort:
+		case game::client_realm_packet::CheatTeleportToPlayer:
+			// Require GM level 1 (basic GM)
+			if (!HasGMLevel(1))
+			{
+				WLOG("Player " << m_characterData->name << " attempted to use a GM command without sufficient privileges");
+				return PacketParseResult::Pass;
+			}
+			break;
+		case game::client_realm_packet::CheatLearnSpell:
+		case game::client_realm_packet::CheatRecharge:
+		case game::client_realm_packet::CheatCreateMonster:
+		case game::client_realm_packet::CheatDestroyMonster:
+		case game::client_realm_packet::CheatLevelUp:
+		case game::client_realm_packet::CheatGiveMoney:
+		case game::client_realm_packet::CheatAddItem:
+			// Require GM level 2
+			if (!HasGMLevel(2))
+			{
+				WLOG("Player " << m_characterData->name << " attempted to use a teleport command without sufficient privileges");
+				return PacketParseResult::Pass;
+			}
+			break;
 		}
 #endif
 
 		const auto characterId = m_characterData->characterId;
-		strongWorld->GetConnection().sendSinglePacket([characterId, &packet](auth::OutgoingPacket& outPacket)
-		{
+		strongWorld->GetConnection().sendSinglePacket([characterId, &packet](auth::OutgoingPacket &outPacket)
+													  {
 			outPacket.Start(auth::realm_world_packet::ProxyPacket);
 			outPacket
 				<< io::write<uint64>(characterId)
@@ -700,21 +684,18 @@ namespace mmo
 				outPacket << io::write_range(buffer);
 			}
 			
-			outPacket.Finish();
-		});
+			outPacket.Finish(); });
 
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnChatMessage(game::IncomingPacket& packet)
+	PacketParseResult Player::OnChatMessage(game::IncomingPacket &packet)
 	{
 		ASSERT(HasCharacterGuid());
 
 		uint8 chatType;
 		std::string message;
-		if (!(packet
-			>> io::read<uint8>(chatType)
-			>> io::read_limited_string<512>(message)))
+		if (!(packet >> io::read<uint8>(chatType) >> io::read_limited_string<512>(message)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -738,8 +719,8 @@ namespace mmo
 				WLOG("Player tried to send group chat message without being in a group!");
 				break;
 			}
-			m_group->BroadcastPacket([this, &message, chatType](game::OutgoingPacket& outPacket)
-				{
+			m_group->BroadcastPacket([this, &message, chatType](game::OutgoingPacket &outPacket)
+									 {
 					outPacket.Start(game::realm_client_packet::ChatMessage);
 					outPacket
 						<< io::write_packed_guid(m_characterData->characterId)
@@ -747,45 +728,44 @@ namespace mmo
 						<< io::write_range(message)
 						<< io::write<uint8>(0)
 						<< io::write<uint8>(0);
-					outPacket.Finish();
-				});
+					outPacket.Finish(); });
 			break;
 
 		case ChatType::Guild:
 		case ChatType::GuildOfficer:
+		{
+			if (!m_characterData)
 			{
-				if (!m_characterData)
-				{
-					WLOG("Player tried to send guild chat message without having character data!");
-					break;
-				}
+				WLOG("Player tried to send guild chat message without having character data!");
+				break;
+			}
 
-				if (m_characterData->guildId == 0)
-				{
-					WLOG("Player tried to send guild chat message without being in a guild!");
-					break;
-				}
+			if (m_characterData->guildId == 0)
+			{
+				WLOG("Player tried to send guild chat message without being in a guild!");
+				break;
+			}
 
-				Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
-				if (!guild)
-				{
-					WLOG("Player tried to send guild chat message to a guild that doesn't exist!");
-					break;
-				}
+			Guild *guild = m_guildMgr.GetGuild(m_characterData->guildId);
+			if (!guild)
+			{
+				WLOG("Player tried to send guild chat message to a guild that doesn't exist!");
+				break;
+			}
 
-				// Check if the player has permission to write to guild chat
-				const uint32 requiredWritePermissions = (static_cast<ChatType>(chatType) == ChatType::GuildOfficer) ? guild_rank_permissions::WriteOfficerChat : guild_rank_permissions::WriteGuildChat;
-				if (!guild->HasPermission(m_characterData->characterId, requiredWritePermissions))
-				{
-					WLOG("Player tried to send guild chat message without having permission to write to guild chat!");
-					break;
-				}
+			// Check if the player has permission to write to guild chat
+			const uint32 requiredWritePermissions = (static_cast<ChatType>(chatType) == ChatType::GuildOfficer) ? guild_rank_permissions::WriteOfficerChat : guild_rank_permissions::WriteGuildChat;
+			if (!guild->HasPermission(m_characterData->characterId, requiredWritePermissions))
+			{
+				WLOG("Player tried to send guild chat message without having permission to write to guild chat!");
+				break;
+			}
 
-				const uint32 requiredReadPermissions = (static_cast<ChatType>(chatType) == ChatType::GuildOfficer) ? guild_rank_permissions::ReadOfficerChat : guild_rank_permissions::ReadGuildChat;
+			const uint32 requiredReadPermissions = (static_cast<ChatType>(chatType) == ChatType::GuildOfficer) ? guild_rank_permissions::ReadOfficerChat : guild_rank_permissions::ReadGuildChat;
 
-				// Send guild chat packet to all members with permission to read guild chat
-				guild->BroadcastPacketWithPermission([this, &message, chatType](game::OutgoingPacket& outPacket)
-					{
+			// Send guild chat packet to all members with permission to read guild chat
+			guild->BroadcastPacketWithPermission([this, &message, chatType](game::OutgoingPacket &outPacket)
+												 {
 						outPacket.Start(game::realm_client_packet::ChatMessage);
 						outPacket
 							<< io::write_packed_guid(m_characterData->characterId)
@@ -793,10 +773,9 @@ namespace mmo
 							<< io::write_range(message)
 							<< io::write<uint8>(0)  // Chat flags
 							<< io::write<uint8>(0); // Chat tag
-						outPacket.Finish();
-					}, requiredReadPermissions);
-			}
-			break;
+						outPacket.Finish(); }, requiredReadPermissions);
+		}
+		break;
 
 		case ChatType::Raid:
 			WLOG("Raid chat is not implemented yet!");
@@ -817,7 +796,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnNameQuery(game::IncomingPacket& packet)
+	PacketParseResult Player::OnNameQuery(game::IncomingPacket &packet)
 	{
 		uint64 guid;
 		if (!(packet >> io::read_packed_guid(guid)))
@@ -827,29 +806,29 @@ namespace mmo
 
 		DLOG("Received CMSG_NAME_QUERY for unit " << log_hex_digit(guid) << "...");
 
-		const Player* player = m_manager.GetPlayerByCharacterGuid(guid);
+		const Player *player = m_manager.GetPlayerByCharacterGuid(guid);
 		if (player != nullptr)
 		{
 			String name = player->GetCharacterName();
-			m_connection->sendSinglePacket([guid, &name](game::OutgoingPacket& packet)
-				{
+			m_connection->sendSinglePacket([guid, &name](game::OutgoingPacket &packet)
+										   {
 					packet.Start(game::realm_client_packet::NameQueryResult);
 					packet
 						<< io::write_packed_guid(guid)
 						<< io::write<uint8>(true)
 						<< io::write_range(name) << io::write<uint8>(0);
-					packet.Finish();
-				});
+					packet.Finish(); });
 		}
 		else
 		{
 			// We have to look up the player name in the database
 			std::weak_ptr weakThis = shared_from_this();
-			auto handler = [weakThis, guid](std::optional<String>& playerName) {
+			auto handler = [weakThis, guid](std::optional<String> &playerName)
+			{
 				if (const auto strongThis = weakThis.lock())
 				{
-					strongThis->m_connection->sendSinglePacket([guid, &playerName](game::OutgoingPacket& packet)
-						{
+					strongThis->m_connection->sendSinglePacket([guid, &playerName](game::OutgoingPacket &packet)
+															   {
 							packet.Start(game::realm_client_packet::NameQueryResult);
 							packet
 								<< io::write_packed_guid(guid)
@@ -859,8 +838,7 @@ namespace mmo
 									packet
 										<< io::write_range(*playerName) << io::write<uint8>(0);
 								}
-							packet.Finish();
-						});
+							packet.Finish(); });
 				}
 			};
 			m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterNameById, guid);
@@ -869,7 +847,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnGuildQuery(game::IncomingPacket& packet)
+	PacketParseResult Player::OnGuildQuery(game::IncomingPacket &packet)
 	{
 		uint64 guid;
 		if (!(packet >> io::read_packed_guid(guid)))
@@ -879,19 +857,18 @@ namespace mmo
 
 		DLOG("Received CMSG_GUILD_QUERY for unit " << log_hex_digit(guid) << "...");
 
-		Guild* guild = m_guildMgr.GetGuild(guid);
+		Guild *guild = m_guildMgr.GetGuild(guid);
 		if (!guild)
 		{
 			WLOG("Queried guild " << log_hex_digit(guid) << " does not exist!");
 
-			m_connection->sendSinglePacket([guid](game::OutgoingPacket& packet)
-				{
+			m_connection->sendSinglePacket([guid](game::OutgoingPacket &packet)
+										   {
 					packet.Start(game::realm_client_packet::GuildQueryResponse);
 					packet
 						<< io::write_packed_guid(guid)
 						<< io::write<uint8>(false);
-					packet.Finish();
-				});
+					packet.Finish(); });
 			return PacketParseResult::Pass;
 		}
 
@@ -899,20 +876,19 @@ namespace mmo
 		info.id = guild->GetId();
 		info.name = guild->GetName();
 
-		m_connection->sendSinglePacket([&info](game::OutgoingPacket& packet)
-			{
+		m_connection->sendSinglePacket([&info](game::OutgoingPacket &packet)
+									   {
 				packet.Start(game::realm_client_packet::GuildQueryResponse);
 				packet
 					<< io::write_packed_guid(info.id)
 					<< io::write<uint8>(true)
 					<< info;
-				packet.Finish();
-			});
+				packet.Finish(); });
 
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnDbQuery(game::IncomingPacket& packet)
+	PacketParseResult Player::OnDbQuery(game::IncomingPacket &packet)
 	{
 		uint64 guid;
 		if (!(packet >> io::read_packed_guid(guid)))
@@ -920,7 +896,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		switch(packet.GetId())
+		switch (packet.GetId())
 		{
 		case game::client_realm_packet::CreatureQuery:
 			OnQueryCreature(guid);
@@ -946,7 +922,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnSetActionBarButton(game::IncomingPacket& packet)
+	PacketParseResult Player::OnSetActionBarButton(game::IncomingPacket &packet)
 	{
 		uint8 slot;
 		if (!(packet >> io::read<uint8>(slot)))
@@ -972,7 +948,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnMoveWorldPortAck(game::IncomingPacket& packet)
+	PacketParseResult Player::OnMoveWorldPortAck(game::IncomingPacket &packet)
 	{
 		DLOG("Received MoveWorldPortAck from player " << log_hex_digit(m_characterData->characterId));
 
@@ -996,7 +972,7 @@ namespace mmo
 		std::weak_ptr weakThis = shared_from_this();
 		std::weak_ptr weakWorld = world;
 		world->Join(*m_characterData, [weakThis, weakWorld](const InstanceId instanceId, const bool success)
-			{
+					{
 				const auto strongThis = weakThis.lock();
 				if (!strongThis)
 				{
@@ -1019,13 +995,12 @@ namespace mmo
 				{
 					// TODO: Get exact reason
 					strongThis->OnWorldTransferAborted(game::transfer_abort_reason::NotFound);
-				}
-			});
+				} });
 
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnGroupInvite(game::IncomingPacket& packet)
+	PacketParseResult Player::OnGroupInvite(game::IncomingPacket &packet)
 	{
 		String playerName;
 		if (!(packet >> io::read_container<uint8>(playerName)))
@@ -1088,7 +1063,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnGroupUninvite(game::IncomingPacket& packet)
+	PacketParseResult Player::OnGroupUninvite(game::IncomingPacket &packet)
 	{
 		String playerName;
 		if (!(packet >> io::read_container<uint8>(playerName)))
@@ -1134,7 +1109,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnGroupAccept(game::IncomingPacket& packet)
+	PacketParseResult Player::OnGroupAccept(game::IncomingPacket &packet)
 	{
 		if (!m_group || m_inviterGuid == 0)
 		{
@@ -1161,14 +1136,14 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnGroupDecline(game::IncomingPacket& packet)
+	PacketParseResult Player::OnGroupDecline(game::IncomingPacket &packet)
 	{
 		DeclineGroupInvite();
 
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnLogoutRequest(game::IncomingPacket& packet)
+	PacketParseResult Player::OnLogoutRequest(game::IncomingPacket &packet)
 	{
 		if (!m_characterData)
 		{
@@ -1192,7 +1167,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnGuildAccept(game::IncomingPacket& packet)
+	PacketParseResult Player::OnGuildAccept(game::IncomingPacket &packet)
 	{
 		if (m_pendingGuildInvite == 0)
 		{
@@ -1201,7 +1176,7 @@ namespace mmo
 		}
 
 		// Get the guild
-		Guild* guild = m_guildMgr.GetGuild(m_pendingGuildInvite);
+		Guild *guild = m_guildMgr.GetGuild(m_pendingGuildInvite);
 		if (!guild)
 		{
 			ELOG("Player tried to accept guild invite to a guild that doesn't exist");
@@ -1220,7 +1195,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnGuildDecline(game::IncomingPacket& packet)
+	PacketParseResult Player::OnGuildDecline(game::IncomingPacket &packet)
 	{
 		if (m_pendingGuildInvite == 0)
 		{
@@ -1237,21 +1212,20 @@ namespace mmo
 		m_pendingGuildInvite = 0;
 		if (player)
 		{
-			const String& inviterName = GetCharacterName();
+			const String &inviterName = GetCharacterName();
 			player->SendPacket(
-				[&inviterName](game::OutgoingPacket& packet)
+				[&inviterName](game::OutgoingPacket &packet)
 				{
 					packet.Start(game::realm_client_packet::GuildDecline);
 					packet << io::write_dynamic_range<uint8>(inviterName);
 					packet.Finish();
-				}
-			);
+				});
 		}
 
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnGuildRoster(game::IncomingPacket& packet)
+	PacketParseResult Player::OnGuildRoster(game::IncomingPacket &packet)
 	{
 		if (!m_characterData || m_characterData->guildId == 0)
 		{
@@ -1259,26 +1233,359 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
+		Guild *guild = m_guildMgr.GetGuild(m_characterData->guildId);
 		if (!guild)
 		{
 			WLOG("Player requested guild roster for a guild that doesn't exist!");
 			return PacketParseResult::Pass;
 		}
 
-		SendPacket([guild](game::OutgoingPacket& packet)
-			{
+		SendPacket([guild](game::OutgoingPacket &packet)
+				   {
 				packet.Start(game::realm_client_packet::GuildRoster);
 				guild->WriteRoster(packet);
-				packet.Finish();
-			}
-		);
+				packet.Finish(); });
 
 		return PacketParseResult::Pass;
 	}
 
+	// Friend system implementations
+
+	void Player::LoadFriendList()
+	{
+		if (!m_characterData)
+		{
+			return;
+		}
+
+		m_friendMgr.LoadCharacterFriends(m_characterData->characterId, [this](const std::vector<FriendData> &friends)
+										 {
+				m_friendCache = friends;
+				SendFriendListUpdate(); });
+	}
+
+	void Player::SendFriendInvite(const String &targetName)
+	{
+		if (!m_characterData)
+		{
+			return;
+		}
+
+		// Check if target exists and is online
+		Player *targetPlayer = m_manager.GetPlayerByCharacterName(targetName);
+		if (!targetPlayer)
+		{
+			SendPacket([targetName](game::OutgoingPacket &packet)
+					   {
+					packet.Start(game::realm_client_packet::FriendCommandResult);
+					packet << io::write<uint8>(game::friend_command_result::PlayerNotFound);
+					packet << io::write_dynamic_range<uint8>(targetName);
+					packet.Finish(); });
+			return;
+		}
+
+		const uint64 targetGuid = targetPlayer->GetCharacterGuid();
+
+		// Check if trying to add self
+		if (targetGuid == m_characterData->characterId)
+		{
+			SendPacket([targetName](game::OutgoingPacket &packet)
+					   {
+					packet.Start(game::realm_client_packet::FriendCommandResult);
+					packet << io::write<uint8>(game::friend_command_result::CannotAddSelf);
+					packet << io::write_dynamic_range<uint8>(targetName);
+					packet.Finish(); });
+			return;
+		}
+
+		// Check if already friends
+		if (m_friendMgr.AreFriends(m_characterData->characterId, targetGuid))
+		{
+			SendPacket([targetName](game::OutgoingPacket &packet)
+					   {
+					packet.Start(game::realm_client_packet::FriendCommandResult);
+					packet << io::write<uint8>(game::friend_command_result::AlreadyFriends);
+					packet << io::write_dynamic_range<uint8>(targetName);
+					packet.Finish(); });
+			return;
+		}
+
+		// Check if sender's friend list is full
+		if (!m_friendMgr.CanAddFriend(m_characterData->characterId))
+		{
+			SendPacket([targetName](game::OutgoingPacket &packet)
+					   {
+					packet.Start(game::realm_client_packet::FriendCommandResult);
+					packet << io::write<uint8>(game::friend_command_result::FriendListFull);
+					packet << io::write_dynamic_range<uint8>(targetName);
+					packet.Finish(); });
+			return;
+		}
+
+		// Check if target's friend list is full
+		if (!m_friendMgr.CanAddFriend(targetGuid))
+		{
+			SendPacket([targetName](game::OutgoingPacket &packet)
+					   {
+					packet.Start(game::realm_client_packet::FriendCommandResult);
+					packet << io::write<uint8>(game::friend_command_result::TargetFriendListFull);
+					packet << io::write_dynamic_range<uint8>(targetName);
+					packet.Finish(); });
+			return;
+		}
+
+		// Check if target already has a pending invite
+		if (targetPlayer->m_pendingFriendInvite != 0)
+		{
+			SendPacket([targetName](game::OutgoingPacket &packet)
+					   {
+					packet.Start(game::realm_client_packet::FriendCommandResult);
+					packet << io::write<uint8>(game::friend_command_result::InvitePending);
+					packet << io::write_dynamic_range<uint8>(targetName);
+					packet.Finish(); });
+			return;
+		}
+
+		// Send invite packet to target
+		const String inviterName = m_characterData->name;
+		targetPlayer->SendPacket([inviterName](game::OutgoingPacket &packet)
+								 {
+				packet.Start(game::realm_client_packet::FriendInvite);
+				packet << io::write_dynamic_range<uint8>(inviterName);
+				packet.Finish(); });
+
+		// Set pending invite on target
+		targetPlayer->m_pendingFriendInvite = m_characterData->characterId;
+
+		DLOG("Player " << m_characterData->name << " sent friend invite to " << targetName);
+	}
+
+	void Player::AcceptFriendInvite()
+	{
+		if (!m_characterData)
+		{
+			return;
+		}
+
+		if (m_pendingFriendInvite == 0)
+		{
+			WLOG("Player " << m_characterData->name << " tried to accept friend invite but has none pending");
+			return;
+		}
+
+		const uint64 inviterGuid = m_pendingFriendInvite;
+		const uint64 myGuid = m_characterData->characterId;
+
+		// Add friendship to database
+		auto handler = [this, inviterGuid, myGuid](bool success)
+		{
+			if (!success)
+			{
+				ELOG("Failed to add friendship between " << myGuid << " and " << inviterGuid);
+				return;
+			}
+
+			// Reload both players' friend lists
+			m_friendMgr.LoadCharacterFriends(myGuid, [this](const std::vector<FriendData> &friends)
+											 {
+						m_friendCache = friends;
+						SendFriendListUpdate(); });
+
+			Player *inviterPlayer = m_manager.GetPlayerByCharacterGuid(inviterGuid);
+			if (inviterPlayer)
+			{
+				inviterPlayer->m_friendMgr.LoadCharacterFriends(inviterGuid, [inviterPlayer](const std::vector<FriendData> &friends)
+																{
+							inviterPlayer->m_friendCache = friends;
+							inviterPlayer->SendFriendListUpdate(); });
+
+				// Send success result to inviter
+				const String myName = m_characterData->name;
+				inviterPlayer->SendPacket([myName](game::OutgoingPacket &packet)
+										  {
+							packet.Start(game::realm_client_packet::FriendCommandResult);
+							packet << io::write<uint8>(game::friend_command_result::Success);
+							packet << io::write_dynamic_range<uint8>(myName);
+							packet.Finish(); });
+			}
+
+			ILOG("Friendship established between " << myGuid << " and " << inviterGuid);
+		};
+
+		m_database.asyncRequest(std::move(handler), &IDatabase::AddFriend, myGuid, inviterGuid);
+
+		// Clear pending invite
+		m_pendingFriendInvite = 0;
+	}
+
+	void Player::DeclineFriendInvite()
+	{
+		if (!m_characterData)
+		{
+			return;
+		}
+
+		if (m_pendingFriendInvite == 0)
+		{
+			return;
+		}
+
+		// Notify inviter of decline
+		Player *inviterPlayer = m_manager.GetPlayerByCharacterGuid(m_pendingFriendInvite);
+		if (inviterPlayer)
+		{
+			const String myName = m_characterData->name;
+			inviterPlayer->SendPacket([myName](game::OutgoingPacket &packet)
+									  {
+					packet.Start(game::realm_client_packet::FriendCommandResult);
+					packet << io::write<uint8>(game::friend_command_result::Success);  // Use Success for decline notification
+					packet << io::write_dynamic_range<uint8>(myName);
+					packet.Finish(); });
+		}
+
+		m_pendingFriendInvite = 0;
+		DLOG("Player " << m_characterData->name << " declined friend invite");
+	}
+
+	void Player::RemoveFriend(const String &friendName)
+	{
+		if (!m_characterData)
+		{
+			return;
+		}
+
+		// Find friend in cache
+		uint64 friendGuid = 0;
+		for (const auto &friendData : m_friendCache)
+		{
+			if (friendData.name == friendName)
+			{
+				friendGuid = friendData.guid;
+				break;
+			}
+		}
+
+		if (friendGuid == 0)
+		{
+			SendPacket([friendName](game::OutgoingPacket &packet)
+					   {
+					packet.Start(game::realm_client_packet::FriendCommandResult);
+					packet << io::write<uint8>(game::friend_command_result::NotFriends);
+					packet << io::write_dynamic_range<uint8>(friendName);
+					packet.Finish(); });
+			return;
+		}
+
+		const uint64 myGuid = m_characterData->characterId;
+
+		// Remove from database
+		auto handler = [this, friendGuid, myGuid, friendName](bool success)
+		{
+			if (!success)
+			{
+				ELOG("Failed to remove friendship between " << myGuid << " and " << friendGuid);
+				return;
+			}
+
+			// Reload both players' friend lists
+			m_friendMgr.LoadCharacterFriends(myGuid, [this](const std::vector<FriendData> &friends)
+											 {
+						m_friendCache = friends;
+						SendFriendListUpdate(); });
+
+			Player *friendPlayer = m_manager.GetPlayerByCharacterGuid(friendGuid);
+			if (friendPlayer)
+			{
+				friendPlayer->m_friendMgr.LoadCharacterFriends(friendGuid, [friendPlayer](const std::vector<FriendData> &friends)
+															   {
+							friendPlayer->m_friendCache = friends;
+							friendPlayer->SendFriendListUpdate(); });
+			}
+
+			// Send success result
+			SendPacket([friendName](game::OutgoingPacket &packet)
+					   {
+						packet.Start(game::realm_client_packet::FriendCommandResult);
+						packet << io::write<uint8>(game::friend_command_result::Success);
+						packet << io::write_dynamic_range<uint8>(friendName);
+						packet.Finish(); });
+
+			ILOG("Friendship removed between " << myGuid << " and " << friendGuid);
+		};
+
+		m_database.asyncRequest(std::move(handler), &IDatabase::RemoveFriend, myGuid, friendGuid);
+	}
+
+	void Player::SendFriendListUpdate()
+	{
+		SendPacket([this](game::OutgoingPacket &packet)
+				   {
+				packet.Start(game::realm_client_packet::FriendListUpdate);
+				packet << io::write<uint16>(static_cast<uint16>(m_friendCache.size()));
+
+				for (const auto& friendData : m_friendCache)
+				{
+					packet << io::write<uint64>(friendData.guid);
+					packet << io::write_dynamic_range<uint8>(friendData.name);
+					packet << io::write<uint32>(friendData.level);
+					packet << io::write<uint32>(friendData.raceId);
+					packet << io::write<uint32>(friendData.classId);
+
+					// Check if friend is online
+					Player* friendPlayer = m_manager.GetPlayerByCharacterGuid(friendData.guid);
+					const bool online = (friendPlayer != nullptr);
+					packet << io::write<uint8>(online ? 1 : 0);
+				}
+
+				packet.Finish(); });
+	}
+
+	// Friend packet handlers
+
+	PacketParseResult Player::OnFriendInvite(game::IncomingPacket &packet)
+	{
+		String targetName;
+		if (!(packet >> io::read_container<uint8>(targetName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		SendFriendInvite(targetName);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnFriendAccept(game::IncomingPacket &packet)
+	{
+		AcceptFriendInvite();
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnFriendDecline(game::IncomingPacket &packet)
+	{
+		DeclineFriendInvite();
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnFriendRemove(game::IncomingPacket &packet)
+	{
+		String friendName;
+		if (!(packet >> io::read_container<uint8>(friendName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		RemoveFriend(friendName);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnFriendListRequest(game::IncomingPacket &packet)
+	{
+		SendFriendListUpdate();
+		return PacketParseResult::Pass;
+	}
+
 #ifdef MMO_WITH_DEV_COMMANDS
-	PacketParseResult Player::OnCheatTeleportToPlayer(game::IncomingPacket& packet)
+	PacketParseResult Player::OnCheatTeleportToPlayer(game::IncomingPacket &packet)
 	{
 		// Require GM level 1 for teleport commands
 		if (!HasGMLevel(1))
@@ -1294,12 +1601,13 @@ namespace mmo
 		}
 
 		// Resolve player by name
-		Player* player = m_manager.GetPlayerByCharacterName(playerName);
+		Player *player = m_manager.GetPlayerByCharacterName(playerName);
 		if (!player)
 		{
 			// We could not find a player currently online with the given name, so we ask the database and teleport to the location the character logged out
-			std::weak_ptr weakThis{ shared_from_this() };
-			auto handler = [weakThis, playerName](const std::optional<CharacterLocationData>& result) {
+			std::weak_ptr weakThis{shared_from_this()};
+			auto handler = [weakThis, playerName](const std::optional<CharacterLocationData> &result)
+			{
 				if (auto strongThis = weakThis.lock())
 				{
 					if (!result)
@@ -1318,9 +1626,9 @@ namespace mmo
 		}
 
 		// Player is currently connected, so we need to get the players location data first by asking the world node the player is currently connected to
-		std::weak_ptr weakThis{ shared_from_this() };
+		std::weak_ptr weakThis{shared_from_this()};
 		player->FetchCharacterLocationAsync([weakThis](bool succeeded, uint32 mapId, Vector3 position, Radian facing)
-			{
+											{
 				auto strongThis = weakThis.lock();
 				if (!strongThis)
 				{
@@ -1335,15 +1643,14 @@ namespace mmo
 
 				// Teleport player to the location
 				DLOG("Teleporting player to map " << mapId << ", location " << position << "...");
-				strongThis->SendTeleportRequest(mapId, position, facing);
-			});
+				strongThis->SendTeleportRequest(mapId, position, facing); });
 
 		return PacketParseResult::Pass;
 	}
 #endif
 
 #ifdef MMO_WITH_DEV_COMMANDS
-	PacketParseResult Player::OnCheatSummon(game::IncomingPacket& packet)
+	PacketParseResult Player::OnCheatSummon(game::IncomingPacket &packet)
 	{
 		// Require GM level 2 for teleport commands
 		if (!HasGMLevel(2))
@@ -1358,9 +1665,9 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		std::weak_ptr weakThis{ shared_from_this() };
+		std::weak_ptr weakThis{shared_from_this()};
 		FetchCharacterLocationAsync([weakThis, playerName](bool succeeded, uint32 mapId, Vector3 position, Radian facing)
-			{
+									{
 				std::shared_ptr<Player> strongThis = weakThis.lock();
 				if (!strongThis)
 				{
@@ -1388,15 +1695,14 @@ namespace mmo
 				}
 
 				// Send teleport request
-				player->SendTeleportRequest(mapId, position, facing);
-			});
+				player->SendTeleportRequest(mapId, position, facing); });
 
 		return PacketParseResult::Pass;
 	}
 #endif
 
 #ifdef MMO_WITH_DEV_COMMANDS
-	PacketParseResult Player::OnGuildCreate(game::IncomingPacket& packet)
+	PacketParseResult Player::OnGuildCreate(game::IncomingPacket &packet)
 	{
 		String guildName;
 		if (!(packet >> io::read_container<uint8>(guildName)))
@@ -1426,26 +1732,26 @@ namespace mmo
 		}
 
 		std::weak_ptr weak = shared_from_this();
-		auto guildCreationHandler = [weak](Guild* guild)
+		auto guildCreationHandler = [weak](Guild *guild)
+		{
+			auto strong = weak.lock();
+			if (!strong)
 			{
-				auto strong = weak.lock();
-				if (!strong)
-				{
-					return;
-				}
+				return;
+			}
 
-				if (guild)
-				{
-					ILOG("Successfully created guild " << guild->GetName());
-					strong->GuildChange(guild->GetId());
-				}
-				else
-				{
-					ELOG("Guild creation failed");
-				}
-			};
+			if (guild)
+			{
+				ILOG("Successfully created guild " << guild->GetName());
+				strong->GuildChange(guild->GetId());
+			}
+			else
+			{
+				ELOG("Guild creation failed");
+			}
+		};
 
-		if (!m_guildMgr.CreateGuild(guildName, m_characterData->characterId, { m_characterData->characterId }, std::move(guildCreationHandler)))
+		if (!m_guildMgr.CreateGuild(guildName, m_characterData->characterId, {m_characterData->characterId}, std::move(guildCreationHandler)))
 		{
 			ELOG("Failed to create guild");
 			return PacketParseResult::Pass;
@@ -1455,7 +1761,7 @@ namespace mmo
 	}
 #endif
 
-	bool Player::InitializeTransfer(uint32 map, const Vector3& location, const float o, bool shouldLeaveNode)
+	bool Player::InitializeTransfer(uint32 map, const Vector3 &location, const float o, bool shouldLeaveNode)
 	{
 		const std::shared_ptr<World> world = m_worldManager.GetWorldByInstanceId(m_instanceId);
 		if (shouldLeaveNode && !world)
@@ -1470,11 +1776,11 @@ namespace mmo
 		if (shouldLeaveNode)
 		{
 			// Send transfer pending state. This will show up the loading screen at the client side
-			m_connection->sendSinglePacket([map](game::OutgoingPacket& packet) {
+			m_connection->sendSinglePacket([map](game::OutgoingPacket &packet)
+										   {
 				packet.Start(game::realm_client_packet::TransferPending);
 				packet << io::write<uint32>(map);
-				packet.Finish();
-				});
+				packet.Finish(); });
 			world->Leave(m_characterData->characterId, auth::world_left_reason::Teleport);
 		}
 
@@ -1491,7 +1797,8 @@ namespace mmo
 			return;
 		}
 
-		m_connection->sendSinglePacket([this](game::OutgoingPacket& packet) {
+		m_connection->sendSinglePacket([this](game::OutgoingPacket &packet)
+									   {
 			packet.Start(game::realm_client_packet::NewWorld);
 			packet
 				<< io::write<uint32>(m_transferMap)
@@ -1499,8 +1806,7 @@ namespace mmo
 				<< io::write<float>(m_transferPosition.y)
 				<< io::write<float>(m_transferPosition.z)
 				<< io::write<float>(m_transferFacing);
-			packet.Finish();
-			});
+			packet.Finish(); });
 
 		m_newWorldAckHandler += RegisterAutoPacketHandler(game::client_realm_packet::MoveWorldPortAck, *this, &Player::OnMoveWorldPortAck);
 	}
@@ -1510,14 +1816,13 @@ namespace mmo
 		m_inviterGuid = inviter;
 	}
 
-	void Player::SendPartyInvite(const String& inviterName)
+	void Player::SendPartyInvite(const String &inviterName)
 	{
-		m_connection->sendSinglePacket([&inviterName](game::OutgoingPacket& packet)
-			{
+		m_connection->sendSinglePacket([&inviterName](game::OutgoingPacket &packet)
+									   {
 				packet.Start(game::realm_client_packet::GroupInvite);
 				packet << io::write_dynamic_range<uint8>(inviterName);
-				packet.Finish();
-			});
+				packet.Finish(); });
 	}
 
 	void Player::DeclineGroupInvite()
@@ -1546,19 +1851,18 @@ namespace mmo
 		m_inviterGuid = 0;
 		if (player)
 		{
-			const String& inviterName = GetCharacterName();
+			const String &inviterName = GetCharacterName();
 			player->SendPacket(
-				[&inviterName](game::OutgoingPacket& packet)
+				[&inviterName](game::OutgoingPacket &packet)
 				{
 					packet.Start(game::realm_client_packet::GroupDecline);
 					packet << io::write_dynamic_range<uint8>(inviterName);
 					packet.Finish();
-				}
-			);
+				});
 		}
 	}
 
-	void Player::BuildPartyMemberStatsPacket(game::OutgoingPacket& packet, const uint32 groupUpdateFlags) const
+	void Player::BuildPartyMemberStatsPacket(game::OutgoingPacket &packet, const uint32 groupUpdateFlags) const
 	{
 		packet.Start(game::realm_client_packet::PartyMemberStats);
 		packet
@@ -1592,10 +1896,18 @@ namespace mmo
 		{
 			switch (powerType)
 			{
-			case power_type::Mana: packet << io::write<uint16>(m_characterData->mana); break;
-			case power_type::Rage: packet << io::write<uint16>(m_characterData->rage); break;
-			case power_type::Energy: packet << io::write<uint16>(m_characterData->energy); break;
-			default: packet << io::write<uint16>(0); break;
+			case power_type::Mana:
+				packet << io::write<uint16>(m_characterData->mana);
+				break;
+			case power_type::Rage:
+				packet << io::write<uint16>(m_characterData->rage);
+				break;
+			case power_type::Energy:
+				packet << io::write<uint16>(m_characterData->energy);
+				break;
+			default:
+				packet << io::write<uint16>(0);
+				break;
 			}
 		}
 
@@ -1603,10 +1915,18 @@ namespace mmo
 		{
 			switch (powerType)
 			{
-			case power_type::Mana: packet << io::write<uint16>(m_characterData->maxMana); break;
-			case power_type::Rage: packet << io::write<uint16>(m_characterData->maxRage); break;
-			case power_type::Energy: packet << io::write<uint16>(m_characterData->maxEnergy); break;
-			default: packet << io::write<uint16>(0); break;
+			case power_type::Mana:
+				packet << io::write<uint16>(m_characterData->maxMana);
+				break;
+			case power_type::Rage:
+				packet << io::write<uint16>(m_characterData->maxRage);
+				break;
+			case power_type::Energy:
+				packet << io::write<uint16>(m_characterData->maxEnergy);
+				break;
+			default:
+				packet << io::write<uint16>(0);
+				break;
 			}
 		}
 
@@ -1651,7 +1971,7 @@ namespace mmo
 		world->NotifyPlayerGuildChanged(m_characterData->characterId, guildId);
 	}
 
-	void Player::NotifyCharacterUpdate(uint32 mapId, InstanceId instanceId, const GamePlayerS& character)
+	void Player::NotifyCharacterUpdate(uint32 mapId, InstanceId instanceId, const GamePlayerS &character)
 	{
 		m_characterData->mapId = mapId;
 		m_characterData->instanceId = instanceId;
@@ -1662,7 +1982,7 @@ namespace mmo
 		m_characterData->mana = character.Get<uint32>(object_fields::Mana);
 		m_characterData->maxMana = character.Get<uint32>(object_fields::MaxMana);
 		m_characterData->rage = character.Get<uint32>(object_fields::Rage);
-		m_characterData->maxRage= character.Get<uint32>(object_fields::MaxRage);
+		m_characterData->maxRage = character.Get<uint32>(object_fields::MaxRage);
 		m_characterData->energy = character.Get<uint32>(object_fields::Energy);
 		m_characterData->maxEnergy = character.Get<uint32>(object_fields::MaxEnergy);
 		m_characterData->money = character.Get<uint32>(object_fields::Money);
@@ -1670,7 +1990,7 @@ namespace mmo
 		m_characterData->attributePointsSpent;
 
 		m_characterData->spellIds.clear();
-		for (const auto& spell : character.GetSpells())
+		for (const auto &spell : character.GetSpells())
 		{
 			if (!spell)
 			{
@@ -1696,14 +2016,14 @@ namespace mmo
 		RegisterPacketHandler(game::client_realm_packet::AuthSession, *this, &Player::OnAuthSession);
 
 		// Send the LogonChallenge packet to the client including our generated seed
-		m_connection->sendSinglePacket([this](game::OutgoingPacket& packet) {
+		m_connection->sendSinglePacket([this](game::OutgoingPacket &packet)
+									   {
 			packet.Start(game::realm_client_packet::AuthChallenge);
 			packet << io::write<uint32>(m_seed);
-			packet.Finish();
-		});
+			packet.Finish(); });
 	}
 
-	void Player::InitializeSession(const BigNumber & sessionKey)
+	void Player::InitializeSession(const BigNumber &sessionKey)
 	{
 		m_sessionKey = sessionKey;
 
@@ -1717,11 +2037,11 @@ namespace mmo
 		m_connection->GetCrypt().Init();
 
 		// Send the response to the client
-		m_connection->sendSinglePacket([](game::OutgoingPacket& packet) {
+		m_connection->sendSinglePacket([](game::OutgoingPacket &packet)
+									   {
 			packet.Start(game::realm_client_packet::AuthSessionResponse);
 			packet << io::write<uint8>(game::auth_result::Success);	// TODO: Write real packet content
-			packet.Finish();
-		});
+			packet.Finish(); });
 
 		// Enable CharEnum packets
 		RegisterPacketHandler(game::client_realm_packet::CharEnum, *this, &Player::OnCharEnum);
@@ -1730,12 +2050,12 @@ namespace mmo
 		RegisterPacketHandler(game::client_realm_packet::EnterWorld, *this, &Player::OnEnterWorld);
 	}
 
-	void Player::SendProxyPacket(uint16 packetId, const std::vector<char>& buffer)
+	void Player::SendProxyPacket(uint16 packetId, const std::vector<char> &buffer)
 	{
 		const auto bufferSize = buffer.size();
 		if (bufferSize == 0)
 		{
-			return;	
+			return;
 		}
 
 		// Write native packet
@@ -1750,8 +2070,8 @@ namespace mmo
 		packet
 			<< io::write_range(buffer);
 		packet.Finish();
-		
-		m_connection->GetCrypt().EncryptSend(reinterpret_cast<uint8*>(&sendBuffer[bufferPos]), game::Crypt::CryptedSendLength);
+
+		m_connection->GetCrypt().EncryptSend(reinterpret_cast<uint8 *>(&sendBuffer[bufferPos]), game::Crypt::CryptedSendLength);
 		m_connection->flush();
 	}
 
@@ -1845,7 +2165,7 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::LearnTalent, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TimePlayedRequest, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TimeSyncResponse, *this, &Player::OnProxyPacket);
-			
+
 			// Guild packet handlers
 			RegisterPacketHandler(game::client_realm_packet::GuildInvite, *this, &Player::OnGuildInvite);
 			RegisterPacketHandler(game::client_realm_packet::GuildRemove, *this, &Player::OnGuildRemove);
@@ -1857,7 +2177,14 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::GuildAccept, *this, &Player::OnGuildAccept);
 			RegisterPacketHandler(game::client_realm_packet::GuildDecline, *this, &Player::OnGuildDecline);
 			RegisterPacketHandler(game::client_realm_packet::GuildRoster, *this, &Player::OnGuildRoster);
-			
+
+			// Friend packet handlers
+			RegisterPacketHandler(game::client_realm_packet::FriendInvite, *this, &Player::OnFriendInvite);
+			RegisterPacketHandler(game::client_realm_packet::FriendAccept, *this, &Player::OnFriendAccept);
+			RegisterPacketHandler(game::client_realm_packet::FriendDecline, *this, &Player::OnFriendDecline);
+			RegisterPacketHandler(game::client_realm_packet::FriendRemove, *this, &Player::OnFriendRemove);
+			RegisterPacketHandler(game::client_realm_packet::FriendListRequest, *this, &Player::OnFriendListRequest);
+
 #if MMO_WITH_DEV_COMMANDS
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatLearnSpell, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatRecharge, *this, &Player::OnProxyPacket);
@@ -1928,16 +2255,15 @@ namespace mmo
 	{
 		if (const auto strongWorld = m_world.lock())
 		{
-			strongWorld->GetConnection().sendSinglePacket([](auth::OutgoingPacket& outPacket)
-			{
+			strongWorld->GetConnection().sendSinglePacket([](auth::OutgoingPacket &outPacket)
+														  {
 				outPacket.Start(auth::realm_world_packet::PlayerCharacterJoin);
 				outPacket << io::write<uint32>(0);
-				outPacket.Finish();
-			});	
+				outPacket.Finish(); });
 		}
 	}
 
-	void Player::OnWorldJoined(const std::shared_ptr<World>& world, const InstanceId instanceId)
+	void Player::OnWorldJoined(const std::shared_ptr<World> &world, const InstanceId instanceId)
 	{
 		DLOG("World join succeeded on instance id " << instanceId);
 
@@ -1950,8 +2276,8 @@ namespace mmo
 		ASSERT(m_characterData);
 		m_characterData->instanceId = instanceId;
 
-		m_connection->sendSinglePacket([&](game::OutgoingPacket& outPacket)
-		{
+		m_connection->sendSinglePacket([&](game::OutgoingPacket &outPacket)
+									   {
 			outPacket.Start(game::realm_client_packet::LoginVerifyWorld);
 			outPacket
 				<< io::write<uint64>(m_characterData->mapId)	
@@ -1960,8 +2286,7 @@ namespace mmo
 				<< io::write<float>(m_characterData->position.z)
 				<< io::write<float>(m_characterData->facing.GetValueRadians())
 			;
-			outPacket.Finish();
-			});
+			outPacket.Finish(); });
 
 		// Send Message of the Day to the player
 		String motd = GetManager().GetMessageOfTheDay();
@@ -1973,7 +2298,7 @@ namespace mmo
 		// Check if we are in a guild
 		if (m_characterData->guildId != 0)
 		{
-			if (Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId))
+			if (Guild *guild = m_guildMgr.GetGuild(m_characterData->guildId))
 			{
 				// TODO: MOTD guild packet
 
@@ -1984,6 +2309,10 @@ namespace mmo
 				ELOG("Player " << log_hex_digit(m_characterData->characterId) << " is in guild " << log_hex_digit(m_characterData->guildId) << " which could not be found (not loaded from database?)");
 			}
 		}
+
+		// Load friend list and notify friends of online status
+		LoadFriendList();
+		m_friendMgr.NotifyFriendStatusChange(m_characterData->characterId, true);
 
 		// If we have a group, either it is already loaded (in which case we just send the group data to all members) or we wait for it to load
 		if (m_group)
@@ -1999,18 +2328,18 @@ namespace mmo
 		}
 
 		std::weak_ptr weakThis = shared_from_this();
-		auto handler = [weakThis](const std::optional<ActionButtons>& actionButtons)
+		auto handler = [weakThis](const std::optional<ActionButtons> &actionButtons)
+		{
+			if (const auto strongThis = weakThis.lock())
 			{
-				if (const auto strongThis = weakThis.lock())
-				{
-					strongThis->OnActionButtons(*actionButtons);
-				}
-			};
+				strongThis->OnActionButtons(*actionButtons);
+			}
+		};
 
 		m_database.asyncRequest(std::move(handler), &IDatabase::GetActionButtons, m_characterData->characterId);
 	}
 
-	void Player::OnWorldChanged(const std::shared_ptr<World>& world, const InstanceId instanceId)
+	void Player::OnWorldChanged(const std::shared_ptr<World> &world, const InstanceId instanceId)
 	{
 		DLOG("World change succeeded on instance id " << instanceId);
 
@@ -2027,29 +2356,27 @@ namespace mmo
 		ELOG("World join failed");
 		m_characterData.reset();
 
-		m_connection->sendSinglePacket([response](game::OutgoingPacket& outPacket)
-		{
+		m_connection->sendSinglePacket([response](game::OutgoingPacket &outPacket)
+									   {
 			outPacket.Start(game::realm_client_packet::EnterWorldFailed);
 			outPacket << io::write<uint8>(response);
-			outPacket.Finish();
-		});
+			outPacket.Finish(); });
 	}
 
 	void Player::OnWorldTransferAborted(const game::TransferAbortReason reason)
 	{
 		ELOG("World transfer aborted: " << reason);
 
-		m_connection->sendSinglePacket([this, reason](game::OutgoingPacket& outPacket)
-			{
+		m_connection->sendSinglePacket([this, reason](game::OutgoingPacket &outPacket)
+									   {
 				outPacket.Start(game::realm_client_packet::TransferAborted);
 				outPacket
 					<< io::write<uint32>(m_transferMap)
 					<< io::write<uint8>(reason);
-				outPacket.Finish();
-			});
+				outPacket.Finish(); });
 	}
 
-	void Player::OnWorldLeft(const std::shared_ptr<World>& world, auth::WorldLeftReason reason)
+	void Player::OnWorldLeft(const std::shared_ptr<World> &world, auth::WorldLeftReason reason)
 	{
 		// We no longer care about the world node
 		m_worldDestroyed.disconnect();
@@ -2070,11 +2397,10 @@ namespace mmo
 			EnableEnterWorldPacket(true);
 			ILOG("Successfully logged out");
 
-			m_connection->sendSinglePacket([this, reason](game::OutgoingPacket& outPacket)
-				{
+			m_connection->sendSinglePacket([this, reason](game::OutgoingPacket &outPacket)
+										   {
 					outPacket.Start(game::realm_client_packet::LogoutResponse);
-					outPacket.Finish();
-				});
+					outPacket.Finish(); });
 
 			break;
 
@@ -2124,9 +2450,9 @@ namespace mmo
 
 		// Add potentially missing default spells from class data
 		std::set<uint32> spellsAdded;
-		if (const proto::ClassEntry* classEntry = m_project.classes.getById(m_characterData->classId))
+		if (const proto::ClassEntry *classEntry = m_project.classes.getById(m_characterData->classId))
 		{
-			for (const auto& classSpellEntry : classEntry->spells())
+			for (const auto &classSpellEntry : classEntry->spells())
 			{
 				if (m_characterData->level < classSpellEntry.level())
 				{
@@ -2134,9 +2460,7 @@ namespace mmo
 				}
 
 				if (std::find_if(m_characterData->spellIds.begin(), m_characterData->spellIds.end(), [&classSpellEntry](const uint32 spellId)
-					{
-						return spellId == classSpellEntry.spell();
-					}) == m_characterData->spellIds.end())
+								 { return spellId == classSpellEntry.spell(); }) == m_characterData->spellIds.end())
 				{
 					m_characterData->spellIds.push_back(classSpellEntry.spell());
 					spellsAdded.insert(classSpellEntry.spell());
@@ -2163,8 +2487,8 @@ namespace mmo
 		// Send join request
 		std::weak_ptr weakThis = shared_from_this();
 		std::weak_ptr weakWorld = world;
-		world->Join(*m_characterData, [weakThis, weakWorld] (const InstanceId instanceId, const bool success)
-		{
+		world->Join(*m_characterData, [weakThis, weakWorld](const InstanceId instanceId, const bool success)
+					{
 			const auto strongThis = weakThis.lock();
 			if (!strongThis)
 			{
@@ -2186,11 +2510,10 @@ namespace mmo
 			else
 			{
 				strongThis->OnWorldJoinFailed(game::player_login_response::NoWorldServer);
-			}
-		});
+			} });
 	}
 
-	void Player::OnWorldDestroyed(World& world)
+	void Player::OnWorldDestroyed(World &world)
 	{
 		EnableProxyPackets(false);
 
@@ -2200,7 +2523,7 @@ namespace mmo
 		connectionLost();
 	}
 
-	void Player::NotifyWorldNodeChanged(World* worldNode)
+	void Player::NotifyWorldNodeChanged(World *worldNode)
 	{
 		m_worldDestroyed.disconnect();
 
@@ -2214,31 +2537,29 @@ namespace mmo
 	{
 		DLOG("Querying for creature " << log_hex_digit(entry) << "...");
 
-		const proto::UnitEntry* unit = m_project.units.getById(entry);
+		const proto::UnitEntry *unit = m_project.units.getById(entry);
 		if (unit == nullptr)
 		{
 			WLOG("Could not find creature entry " << log_hex_digit(entry));
-			m_connection->sendSinglePacket([entry](game::OutgoingPacket& packet)
-				{
+			m_connection->sendSinglePacket([entry](game::OutgoingPacket &packet)
+										   {
 					packet.Start(game::realm_client_packet::CreatureQueryResult);
 					packet
 						<< io::write_packed_guid(entry)
 						<< io::write<uint8>(false);
-					packet.Finish();
-				});
+					packet.Finish(); });
 			return;
 		}
 
-		m_connection->sendSinglePacket([unit](game::OutgoingPacket& packet)
-			{
+		m_connection->sendSinglePacket([unit](game::OutgoingPacket &packet)
+									   {
 				packet.Start(game::realm_client_packet::CreatureQueryResult);
 				packet
 					<< io::write_packed_guid(unit->id())
 					<< io::write<uint8>(true)
 					<< io::write_range(unit->name()) << io::write<uint8>(0)
 					<< io::write_range(unit->subname()) << io::write<uint8>(0);
-				packet.Finish();
-			});
+				packet.Finish(); });
 	}
 
 	void Player::OnQueryQuest(uint64 entry)
@@ -2246,17 +2567,16 @@ namespace mmo
 		DLOG("Querying for quest " << log_hex_digit(entry) << "...");
 
 		// Check for existing quest entry
-		const proto::QuestEntry* questEntry = m_project.quests.getById(entry);
+		const proto::QuestEntry *questEntry = m_project.quests.getById(entry);
 		if (!questEntry)
 		{
-			m_connection->sendSinglePacket([entry](game::OutgoingPacket& packet)
-				{
+			m_connection->sendSinglePacket([entry](game::OutgoingPacket &packet)
+										   {
 					packet.Start(game::realm_client_packet::QuestQueryResult);
 					packet
 						<< io::write_packed_guid(entry)
 						<< io::write<uint8>(false);
-					packet.Finish();
-				});
+					packet.Finish(); });
 			return;
 		}
 
@@ -2271,55 +2591,53 @@ namespace mmo
 		quest.rewardMoney = questEntry->rewardmoney();
 		quest.rewardXp = questEntry->rewardxp();
 
-		for (const auto& requirement : questEntry->requirements())
+		for (const auto &requirement : questEntry->requirements())
 		{
 			if (requirement.itemid() != 0)
 			{
 				quest.requiredItems.emplace_back(requirement.itemid(), requirement.itemcount());
 			}
-			else if(requirement.creatureid() != 0)
+			else if (requirement.creatureid() != 0)
 			{
 				quest.requiredCreatures.emplace_back(requirement.creatureid(), requirement.creaturecount());
 			}
 		}
 
-		for (const auto& reward : questEntry->rewarditems())
+		for (const auto &reward : questEntry->rewarditems())
 		{
 			quest.rewardItems.emplace_back(reward.itemid(), reward.count());
 		}
 
-		for (const auto& reward : questEntry->rewarditemschoice())
+		for (const auto &reward : questEntry->rewarditemschoice())
 		{
 			quest.optionalItems.emplace_back(reward.itemid(), reward.count());
 		}
 
-		m_connection->sendSinglePacket([entry, &quest](game::OutgoingPacket& packet)
-			{
+		m_connection->sendSinglePacket([entry, &quest](game::OutgoingPacket &packet)
+									   {
 				packet.Start(game::realm_client_packet::QuestQueryResult);
 				packet
 					<< io::write_packed_guid(entry)
 					<< io::write<uint8>(true)
 					<< quest;
-				packet.Finish();
-			});
+				packet.Finish(); });
 	}
 
 	void Player::OnQueryItem(uint64 entry)
 	{
 		DLOG("Querying for item " << log_hex_digit(entry) << "...");
 
-		const proto::ItemEntry* itemEntry = m_project.items.getById(entry);
+		const proto::ItemEntry *itemEntry = m_project.items.getById(entry);
 		if (!itemEntry)
 		{
 			WLOG("Item with entry " << entry << " could not be found!");
-			m_connection->sendSinglePacket([entry](game::OutgoingPacket& packet)
-				{
+			m_connection->sendSinglePacket([entry](game::OutgoingPacket &packet)
+										   {
 					packet.Start(game::realm_client_packet::ItemQueryResult);
 					packet
 						<< io::write_packed_guid(entry)
 						<< io::write<uint8>(false);
-					packet.Finish();
-				});
+					packet.Finish(); });
 			return;
 		}
 
@@ -2362,7 +2680,7 @@ namespace mmo
 			}
 			else
 			{
-				const auto& stat = itemEntry->stats(i);
+				const auto &stat = itemEntry->stats(i);
 				info.stats[i].type = stat.type();
 				info.stats[i].value = stat.value();
 			}
@@ -2382,7 +2700,7 @@ namespace mmo
 			}
 			else
 			{
-				const auto& spell = itemEntry->spells(i);
+				const auto &spell = itemEntry->spells(i);
 				info.spells[i].spellId = spell.spell();
 				info.spells[i].triggertype = spell.trigger();
 			}
@@ -2411,33 +2729,31 @@ namespace mmo
 		info.startquestid = itemEntry->questentry();
 		info.skill = itemEntry->skill();
 
-		m_connection->sendSinglePacket([entry, &info](game::OutgoingPacket& packet)
-			{
+		m_connection->sendSinglePacket([entry, &info](game::OutgoingPacket &packet)
+									   {
 				packet.Start(game::realm_client_packet::ItemQueryResult);
 				packet
 					<< io::write_packed_guid(entry)
 					<< io::write<uint8>(true)
 					<< info;
-				packet.Finish();
-			});
+				packet.Finish(); });
 	}
 
 	void Player::OnQueryObject(uint64 entry)
 	{
 		DLOG("Querying for object " << log_hex_digit(entry) << "...");
 
-		const proto::ObjectEntry* object = m_project.objects.getById(entry);
+		const proto::ObjectEntry *object = m_project.objects.getById(entry);
 		if (object == nullptr)
 		{
 			WLOG("Could not find object entry " << log_hex_digit(entry));
-			m_connection->sendSinglePacket([entry](game::OutgoingPacket& packet)
-				{
+			m_connection->sendSinglePacket([entry](game::OutgoingPacket &packet)
+										   {
 					packet.Start(game::realm_client_packet::ObjectQueryResult);
 					packet
 						<< io::write_packed_guid(entry)
 						<< io::write<uint8>(false);
-					packet.Finish();
-				});
+					packet.Finish(); });
 			return;
 		}
 
@@ -2451,30 +2767,28 @@ namespace mmo
 			info.data[i] = object->data_size() <= i ? 0 : object->data(i);
 		}
 
-		m_connection->sendSinglePacket([&info](game::OutgoingPacket& packet)
-			{
+		m_connection->sendSinglePacket([&info](game::OutgoingPacket &packet)
+									   {
 				packet.Start(game::realm_client_packet::ObjectQueryResult);
 				packet
 					<< io::write_packed_guid(info.id)
 					<< io::write<uint8>(true)
 					<< info;
-				packet.Finish();
-			});
+				packet.Finish(); });
 	}
 
-	void Player::OnActionButtons(const ActionButtons& actionButtons)
+	void Player::OnActionButtons(const ActionButtons &actionButtons)
 	{
 		m_actionButtons = actionButtons;
 
-		m_connection->sendSinglePacket([&actionButtons](game::OutgoingPacket& packet)
-			{
+		m_connection->sendSinglePacket([&actionButtons](game::OutgoingPacket &packet)
+									   {
 				packet.Start(game::realm_client_packet::ActionButtons);
 				packet << io::write_range(actionButtons);
-				packet.Finish();
-			});
+				packet.Finish(); });
 	}
 
-	void Player::FetchCharacterLocationAsync(CharacterLocationAsyncCallback&& callback)
+	void Player::FetchCharacterLocationAsync(CharacterLocationAsyncCallback &&callback)
 	{
 		// Check if we are currently connected to a world node
 		std::shared_ptr<World> world = m_world.lock();
@@ -2492,7 +2806,7 @@ namespace mmo
 		world->SendFetchLocationRequestAsync(m_characterData->characterId, ackId);
 	}
 
-	void Player::CharacterLocationResponseNotification(const bool succeeded, const uint64 ackId, const uint32 mapId, const Vector3& position, const Radian& facing)
+	void Player::CharacterLocationResponseNotification(const bool succeeded, const uint64 ackId, const uint32 mapId, const Vector3 &position, const Radian &facing)
 	{
 		// Check if we have a callback
 		const auto it = m_characterLocationCallbacks.find(ackId);
@@ -2507,7 +2821,7 @@ namespace mmo
 		m_characterLocationCallbacks.erase(it);
 	}
 
-	void Player::NotifyQuestData(uint32 questId, const QuestStatusData& questData)
+	void Player::NotifyQuestData(uint32 questId, const QuestStatusData &questData)
 	{
 		if (!m_characterData)
 		{
@@ -2525,26 +2839,14 @@ namespace mmo
 		}
 	}
 
-	PacketParseResult Player::OnGroupUpdate(auth::IncomingPacket& packet)
+	PacketParseResult Player::OnGroupUpdate(auth::IncomingPacket &packet)
 	{
 		std::vector<uint64> nearbyMembers;
 		uint32 health, maxHealth, power, maxPower, mapId, zoneId;
 		uint8 powerType, level;
 		Vector3 location;
 
-		if (!(packet 
-			>> io::read_container<uint8>(nearbyMembers)
-			>> io::read<uint32>(health)
-			>> io::read<uint32>(maxHealth)
-			>> io::read<uint8>(powerType)
-			>> io::read<uint32>(power)
-			>> io::read<uint32>(maxPower)
-			>> io::read<uint8>(level)
-			>> io::read<uint32>(mapId)
-			>> io::read<uint32>(zoneId)
-			>> io::read<float>(location.x)
-			>> io::read<float>(location.y)
-			>> io::read<float>(location.z)))
+		if (!(packet >> io::read_container<uint8>(nearbyMembers) >> io::read<uint32>(health) >> io::read<uint32>(maxHealth) >> io::read<uint8>(powerType) >> io::read<uint32>(power) >> io::read<uint32>(maxPower) >> io::read<uint8>(level) >> io::read<uint32>(mapId) >> io::read<uint32>(zoneId) >> io::read<float>(location.x) >> io::read<float>(location.y) >> io::read<float>(location.z)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -2561,9 +2863,18 @@ namespace mmo
 
 		switch (powerType)
 		{
-		case power_type::Mana:		m_characterData->mana = power; m_characterData->maxMana = maxPower;		break;
-		case power_type::Rage:		m_characterData->rage = power; m_characterData->maxRage = maxPower;		break;
-		case power_type::Energy:	m_characterData->energy = power; m_characterData->maxEnergy= maxPower;	break;
+		case power_type::Mana:
+			m_characterData->mana = power;
+			m_characterData->maxMana = maxPower;
+			break;
+		case power_type::Rage:
+			m_characterData->rage = power;
+			m_characterData->maxRage = maxPower;
+			break;
+		case power_type::Energy:
+			m_characterData->energy = power;
+			m_characterData->maxEnergy = maxPower;
+			break;
 		}
 
 		m_characterData->level = level;
@@ -2573,15 +2884,13 @@ namespace mmo
 		nearbyMembers.push_back(m_characterData->characterId);
 
 		// Broadcast to far members
-		m_group->BroadcastPacket([&](game::OutgoingPacket& packet)
-		{
-			BuildPartyMemberStatsPacket(packet, group_update_flags::Full);
-		}, &nearbyMembers, m_characterData->characterId);
+		m_group->BroadcastPacket([&](game::OutgoingPacket &packet)
+								 { BuildPartyMemberStatsPacket(packet, group_update_flags::Full); }, &nearbyMembers, m_characterData->characterId);
 
 		return PacketParseResult::Pass;
 	}
 
-	void Player::SendTeleportRequest(uint32 mapId, const Vector3& position, const Radian& facing) const
+	void Player::SendTeleportRequest(uint32 mapId, const Vector3 &position, const Radian &facing) const
 	{
 		// Check if we are currently connected to a world node
 		std::shared_ptr<World> world = m_world.lock();
@@ -2594,35 +2903,33 @@ namespace mmo
 		world->SendTeleportRequest(m_characterData->characterId, mapId, position, facing);
 	}
 
-	void Player::SendPartyOperationResult(PartyOperation operation, PartyResult result, const String& playerName)
+	void Player::SendPartyOperationResult(PartyOperation operation, PartyResult result, const String &playerName)
 	{
-		m_connection->sendSinglePacket([operation, result, playerName](game::OutgoingPacket& packet)
-			{
+		m_connection->sendSinglePacket([operation, result, playerName](game::OutgoingPacket &packet)
+									   {
 				packet.Start(game::realm_client_packet::PartyCommandResult);
 				packet
 					<< io::write<uint8>(operation)
 					<< io::write_dynamic_range<uint8>(playerName)
 					<< io::write<uint8>(result);
-				packet.Finish();
-			});
+				packet.Finish(); });
 	}
 
-	void Player::SendGuildCommandResult(uint8 command, uint8 result, const String& playerName)
+	void Player::SendGuildCommandResult(uint8 command, uint8 result, const String &playerName)
 	{
-		m_connection->sendSinglePacket([command, result, playerName](game::OutgoingPacket& packet)
-			{
+		m_connection->sendSinglePacket([command, result, playerName](game::OutgoingPacket &packet)
+									   {
 				packet.Start(game::realm_client_packet::GuildCommandResult);
 				packet
 					<< io::write<uint8>(command)
 					<< io::write<uint8>(result)
 					<< io::write_dynamic_range<uint8>(playerName);
-				packet.Finish();
-			});
+				packet.Finish(); });
 	}
 
-	void Player::OnGuildRemoveCharacterIdResolve(DatabaseId characterId, const String& playerName)
+	void Player::OnGuildRemoveCharacterIdResolve(DatabaseId characterId, const String &playerName)
 	{
-		Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
+		Guild *guild = m_guildMgr.GetGuild(m_characterData->guildId);
 		if (!guild)
 		{
 			ELOG("Player tried to remove player from guild that doesn't exist");
@@ -2641,21 +2948,20 @@ namespace mmo
 		guild->BroadcastEvent(guild_event::Removed, characterId, playerName.c_str());
 
 		// Notify the player that they have been removed from the guild
-		if (Player* targetPlayer = m_manager.GetPlayerByCharacterGuid(characterId))
+		if (Player *targetPlayer = m_manager.GetPlayerByCharacterGuid(characterId))
 		{
 			targetPlayer->GuildChange(0);
-			targetPlayer->GetConnection().sendSinglePacket([&playerName](game::OutgoingPacket& packet) {
+			targetPlayer->GetConnection().sendSinglePacket([&playerName](game::OutgoingPacket &packet)
+														   {
 				packet.Start(game::realm_client_packet::GuildUninvite);
 				packet << io::write_dynamic_range<uint8>(playerName);
-				packet.Finish();
-				});
+				packet.Finish(); });
 		}
-
 	}
 
-	void Player::RegisterPacketHandler(uint16 opCode, PacketHandler && handler)
+	void Player::RegisterPacketHandler(uint16 opCode, PacketHandler &&handler)
 	{
-		std::scoped_lock lock{ m_packetHandlerMutex };
+		std::scoped_lock lock{m_packetHandlerMutex};
 
 		const auto it = m_packetHandlers.find(opCode);
 		if (it == m_packetHandlers.end())
@@ -2670,7 +2976,7 @@ namespace mmo
 
 	void Player::ClearPacketHandler(const uint16 opCode)
 	{
-		std::scoped_lock lock{ m_packetHandlerMutex };
+		std::scoped_lock lock{m_packetHandlerMutex};
 
 		if (auto it = m_packetHandlers.find(opCode); it != m_packetHandlers.end())
 		{
@@ -2678,7 +2984,7 @@ namespace mmo
 		}
 	}
 
-	PacketParseResult Player::OnGuildInvite(game::IncomingPacket& packet)
+	PacketParseResult Player::OnGuildInvite(game::IncomingPacket &packet)
 	{
 		String playerName;
 		if (!(packet >> io::read_container<uint8>(playerName)))
@@ -2701,7 +3007,7 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
+		Guild *guild = m_guildMgr.GetGuild(m_characterData->guildId);
 		if (!guild)
 		{
 			ELOG("Player tried to invite player to guild that doesn't exist");
@@ -2717,7 +3023,7 @@ namespace mmo
 		}
 
 		// Find the target player
-		Player* targetPlayer = m_manager.GetPlayerByCharacterName(playerName);
+		Player *targetPlayer = m_manager.GetPlayerByCharacterName(playerName);
 		if (!targetPlayer)
 		{
 			ELOG("Player tried to invite player to guild who is not online");
@@ -2751,21 +3057,20 @@ namespace mmo
 		targetPlayer->m_guildInviter = m_characterData->characterId;
 
 		// Send guild invite to target player
-		targetPlayer->GetConnection().sendSinglePacket([this, guild](game::OutgoingPacket& packet)
-			{
+		targetPlayer->GetConnection().sendSinglePacket([this, guild](game::OutgoingPacket &packet)
+													   {
 				packet.Start(game::realm_client_packet::GuildInvite);
 				packet
 					<< io::write_dynamic_range<uint8>(m_characterData->name)
 					<< io::write_dynamic_range<uint8>(guild->GetName());
-				packet.Finish();
-			});
+				packet.Finish(); });
 
 		// Success
 		SendGuildCommandResult(game::guild_command::Invite, game::guild_command_result::Ok, playerName);
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnGuildRemove(game::IncomingPacket& packet)
+	PacketParseResult Player::OnGuildRemove(game::IncomingPacket &packet)
 	{
 		String playerName;
 		if (!(packet >> io::read_container<uint8>(playerName)))
@@ -2786,8 +3091,8 @@ namespace mmo
 			SendGuildCommandResult(game::guild_command::Leave, game::guild_command_result::NotInGuild, "");
 			return PacketParseResult::Pass;
 		}
-		
-		Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
+
+		Guild *guild = m_guildMgr.GetGuild(m_characterData->guildId);
 		if (!guild)
 		{
 			ELOG("Player tried to remove player from guild that doesn't exist");
@@ -2812,28 +3117,28 @@ namespace mmo
 
 		// Okay, now we need to find the guid of the player by name
 		std::weak_ptr weakThis = shared_from_this();
-		auto handler = [weakThis, playerName](const std::optional<DatabaseId>& characterId)
+		auto handler = [weakThis, playerName](const std::optional<DatabaseId> &characterId)
+		{
+			auto strong = weakThis.lock();
+			if (!strong)
 			{
-				auto strong = weakThis.lock();
-				if (!strong)
-				{
-					return;
-				}
+				return;
+			}
 
-				if (!characterId)
-				{
-					strong->SendGuildCommandResult(game::guild_command::Uninvite, game::guild_command_result::PlayerNotFound, playerName);
-					return;
-				}
+			if (!characterId)
+			{
+				strong->SendGuildCommandResult(game::guild_command::Uninvite, game::guild_command_result::PlayerNotFound, playerName);
+				return;
+			}
 
-				strong->OnGuildRemoveCharacterIdResolve(*characterId, playerName);
-			};
+			strong->OnGuildRemoveCharacterIdResolve(*characterId, playerName);
+		};
 
 		m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterIdByName, playerName);
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnGuildPromote(game::IncomingPacket& packet)
+	PacketParseResult Player::OnGuildPromote(game::IncomingPacket &packet)
 	{
 		String playerName;
 		if (!(packet >> io::read_container<uint8>(playerName)))
@@ -2856,7 +3161,7 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
+		Guild *guild = m_guildMgr.GetGuild(m_characterData->guildId);
 		if (!guild)
 		{
 			ELOG("Player tried to promote player in guild that doesn't exist");
@@ -2873,7 +3178,7 @@ namespace mmo
 		}
 
 		std::weak_ptr weakThis = shared_from_this();
-		auto handler = [weakThis, playerName](const std::optional<CharacterLocationData>& data)
+		auto handler = [weakThis, playerName](const std::optional<CharacterLocationData> &data)
 		{
 			auto strong = weakThis.lock();
 			if (!strong)
@@ -2888,7 +3193,7 @@ namespace mmo
 				return;
 			}
 
-			Guild* guild = strong->m_guildMgr.GetGuild(strong->m_characterData->guildId);
+			Guild *guild = strong->m_guildMgr.GetGuild(strong->m_characterData->guildId);
 			if (!guild)
 			{
 				return;
@@ -2928,7 +3233,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnGuildDemote(game::IncomingPacket& packet)
+	PacketParseResult Player::OnGuildDemote(game::IncomingPacket &packet)
 	{
 		String playerName;
 		if (!(packet >> io::read_container<uint8>(playerName)))
@@ -2951,7 +3256,7 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
+		Guild *guild = m_guildMgr.GetGuild(m_characterData->guildId);
 		if (!guild)
 		{
 			ELOG("Player tried to demote player in guild that doesn't exist");
@@ -2968,66 +3273,66 @@ namespace mmo
 		}
 
 		std::weak_ptr weakThis = shared_from_this();
-		auto handler = [weakThis, playerName](const std::optional<CharacterLocationData>& data)
+		auto handler = [weakThis, playerName](const std::optional<CharacterLocationData> &data)
+		{
+			auto strong = weakThis.lock();
+			if (!strong)
 			{
-				auto strong = weakThis.lock();
-				if (!strong)
-				{
-					return;
-				}
+				return;
+			}
 
-				if (!data)
-				{
-					ELOG("Failed to find player " << playerName);
-					strong->SendGuildCommandResult(game::guild_command::Demote, game::guild_command_result::PlayerNotFound, playerName);
-					return;
-				}
+			if (!data)
+			{
+				ELOG("Failed to find player " << playerName);
+				strong->SendGuildCommandResult(game::guild_command::Demote, game::guild_command_result::PlayerNotFound, playerName);
+				return;
+			}
 
-				Guild* guild = strong->m_guildMgr.GetGuild(strong->m_characterData->guildId);
-				if (!guild)
-				{
-					return;
-				}
+			Guild *guild = strong->m_guildMgr.GetGuild(strong->m_characterData->guildId);
+			if (!guild)
+			{
+				return;
+			}
 
-				// Find the target player's GUID and current rank
-				if (!guild->IsMember(data->characterId))
-				{
-					ELOG("Failed to find player " << playerName << " in guild");
-					strong->SendGuildCommandResult(game::guild_command::Demote, game::guild_command_result::PlayerNotFound, playerName);
-					return;
-				}
+			// Find the target player's GUID and current rank
+			if (!guild->IsMember(data->characterId))
+			{
+				ELOG("Failed to find player " << playerName << " in guild");
+				strong->SendGuildCommandResult(game::guild_command::Demote, game::guild_command_result::PlayerNotFound, playerName);
+				return;
+			}
 
-				uint64 targetGuid = data->characterId;
-				uint32 targetRank = guild->GetMemberRank(targetGuid);
+			uint64 targetGuid = data->characterId;
+			uint32 targetRank = guild->GetMemberRank(targetGuid);
 
-				if (targetRank >= guild->GetLowestRank())
-				{
-					ELOG("Unable to demote player who is already on the lowest rank");
-					strong->SendGuildCommandResult(game::guild_command::Demote, game::guild_command_result::NotAllowed, playerName);
-					return;
-				}
+			if (targetRank >= guild->GetLowestRank())
+			{
+				ELOG("Unable to demote player who is already on the lowest rank");
+				strong->SendGuildCommandResult(game::guild_command::Demote, game::guild_command_result::NotAllowed, playerName);
+				return;
+			}
 
-				// Cannot demote a player with a higher or equal rank as the player
-				if (const uint32 ourRank = guild->GetMemberRank(strong->m_characterData->characterId); targetRank <= ourRank)
-				{
-					ELOG("Cannot demote a player with the same or a higher rank");
-					strong->SendGuildCommandResult(game::guild_command::Demote, game::guild_command_result::NotAllowed, "");
-					return;
-				}
+			// Cannot demote a player with a higher or equal rank as the player
+			if (const uint32 ourRank = guild->GetMemberRank(strong->m_characterData->characterId); targetRank <= ourRank)
+			{
+				ELOG("Cannot demote a player with the same or a higher rank");
+				strong->SendGuildCommandResult(game::guild_command::Demote, game::guild_command_result::NotAllowed, "");
+				return;
+			}
 
-				// Promote the player
-				if (!guild->DemoteMember(targetGuid, strong->m_characterData->name, playerName))
-				{
-					ELOG("Failed to demote player " << playerName << " in guild");
-				}
-			};
+			// Promote the player
+			if (!guild->DemoteMember(targetGuid, strong->m_characterData->name, playerName))
+			{
+				ELOG("Failed to demote player " << playerName << " in guild");
+			}
+		};
 
 		m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterLocationDataByName, playerName);
 
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnGuildLeave(game::IncomingPacket& packet)
+	PacketParseResult Player::OnGuildLeave(game::IncomingPacket &packet)
 	{
 		DLOG("Player wants to leave guild");
 
@@ -3044,7 +3349,7 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
+		Guild *guild = m_guildMgr.GetGuild(m_characterData->guildId);
 		if (!guild)
 		{
 			ELOG("Player tried to leave guild that doesn't exist");
@@ -3080,7 +3385,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnGuildDisband(game::IncomingPacket& packet)
+	PacketParseResult Player::OnGuildDisband(game::IncomingPacket &packet)
 	{
 		DLOG("Player wants to disband guild");
 
@@ -3096,7 +3401,7 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
+		Guild *guild = m_guildMgr.GetGuild(m_characterData->guildId);
 		if (!guild)
 		{
 			ELOG("Player tried to disband guild that doesn't exist");
@@ -3120,7 +3425,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult Player::OnGuildMotd(game::IncomingPacket& packet)
+	PacketParseResult Player::OnGuildMotd(game::IncomingPacket &packet)
 	{
 		String motd;
 		if (!(packet >> io::read_container<uint8>(motd)))
@@ -3142,7 +3447,7 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId);
+		Guild *guild = m_guildMgr.GetGuild(m_characterData->guildId);
 		if (!guild)
 		{
 			ELOG("Player tried to set MOTD for guild that doesn't exist");
@@ -3162,16 +3467,15 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	void Player::SendMessageOfTheDay(const std::string& motd)
+	void Player::SendMessageOfTheDay(const std::string &motd)
 	{
 		ASSERT(m_characterData);
 
-		SendPacket([&motd](game::OutgoingPacket& packet)
-			{
+		SendPacket([&motd](game::OutgoingPacket &packet)
+				   {
 				packet.Start(game::realm_client_packet::MessageOfTheDay);
 				packet << io::write_dynamic_range<uint16>(motd);
-				packet.Finish();
-			});
+				packet.Finish(); });
 	}
 
 	void Player::HandleCharacterGuildOnDelete(uint64 charGuid)
@@ -3179,8 +3483,8 @@ namespace mmo
 		// First, we need to get the character's guild information from the database
 		// Since this character might not be the currently logged-in character,
 		// we need to make an async database request to get their guild membership
-		std::weak_ptr weakThis{ shared_from_this() };
-		auto handler = [weakThis, charGuid](const std::optional<CharacterData>& characterData)
+		std::weak_ptr weakThis{shared_from_this()};
+		auto handler = [weakThis, charGuid](const std::optional<CharacterData> &characterData)
 		{
 			const auto strongThis = weakThis.lock();
 			if (!strongThis)
@@ -3195,7 +3499,7 @@ namespace mmo
 			}
 
 			const uint64 guildId = characterData->guildId;
-			Guild* guild = strongThis->m_guildMgr.GetGuild(guildId);
+			Guild *guild = strongThis->m_guildMgr.GetGuild(guildId);
 			if (!guild)
 			{
 				WLOG("Character " << charGuid << " is in guild " << guildId << " which could not be found");
@@ -3206,7 +3510,7 @@ namespace mmo
 			if (guild->GetLeaderGuid() == charGuid)
 			{
 				DLOG("Deleting character " << charGuid << " who is the leader of guild " << guildId << ". Disbanding guild.");
-				
+
 				// Character is the guild leader, disband the guild
 				if (!strongThis->m_guildMgr.DisbandGuild(guildId))
 				{
@@ -3216,7 +3520,7 @@ namespace mmo
 			else
 			{
 				DLOG("Removing character " << charGuid << " from guild " << guildId);
-				
+
 				// Character is a regular member, just remove them from the guild
 				if (!guild->RemoveMember(charGuid))
 				{
@@ -3238,8 +3542,8 @@ namespace mmo
 	{
 		// Check if the character is in any group by searching through all groups
 		// Since the character might not be currently online, we need to check the database
-		std::weak_ptr weakThis{ shared_from_this() };
-		auto handler = [weakThis, charGuid](const std::optional<CharacterData>& characterData)
+		std::weak_ptr weakThis{shared_from_this()};
+		auto handler = [weakThis, charGuid](const std::optional<CharacterData> &characterData)
 		{
 			const auto strongThis = weakThis.lock();
 			if (!strongThis)
@@ -3254,7 +3558,7 @@ namespace mmo
 			}
 
 			const uint64 groupId = characterData->groupId;
-			
+
 			// Find the group
 			auto groupIt = PlayerGroup::ms_groupsById.find(groupId);
 			if (groupIt == PlayerGroup::ms_groupsById.end())
@@ -3274,14 +3578,14 @@ namespace mmo
 			if (group->GetLeader() == charGuid)
 			{
 				DLOG("Deleting character " << charGuid << " who is the leader of group " << groupId << ". Disbanding group.");
-				
+
 				// Character is the group leader, disband the group
 				group->Disband(false);
 			}
 			else
 			{
 				DLOG("Removing character " << charGuid << " from group " << groupId);
-				
+
 				// Character is a regular member, just remove them from the group
 				group->RemoveMember(charGuid);
 			}

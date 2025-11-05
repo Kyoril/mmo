@@ -11,6 +11,7 @@
 #include "version.h"
 #include "web_service.h"
 #include "guild_mgr.h"
+#include "friend_mgr.h"
 #include "motd_manager.h"
 
 #include "asio.hpp"
@@ -235,6 +236,10 @@ namespace mmo
 		GuildMgr guildMgr{ asyncDatabase, playerManager };
 		guildMgr.LoadGuilds();
 
+		// Initialize friend manager
+		FriendMgr friendMgr{ asyncDatabase, playerManager };
+		friendMgr.LoadAllFriendships();
+
 		
 
 		// Wait for all guilds to load
@@ -279,7 +284,7 @@ namespace mmo
 		}
 
 		// Careful: Called by multiple threads!
-		const auto createPlayer = [&playerManager, &worldManager, &asyncDatabase, &loginConnector, &project, &timerQueue, &groupIdGenerator, &guildMgr](std::shared_ptr<Player::Client> connection)
+		const auto createPlayer = [&playerManager, &worldManager, &asyncDatabase, &loginConnector, &project, &timerQueue, &groupIdGenerator, &guildMgr, &friendMgr](std::shared_ptr<Player::Client> connection)
 		{
 			asio::ip::address address;
 
@@ -293,7 +298,7 @@ namespace mmo
 				return;
 			}
 
-			auto player = std::make_shared<Player>(timerQueue, playerManager, worldManager, *loginConnector, asyncDatabase, connection, address.to_string(), project, groupIdGenerator, guildMgr);
+			auto player = std::make_shared<Player>(timerQueue, playerManager, worldManager, *loginConnector, asyncDatabase, connection, address.to_string(), project, groupIdGenerator, guildMgr, friendMgr);
 			ILOG("Incoming player connection from " << address);
 			playerManager.AddPlayer(std::move(player));
 
