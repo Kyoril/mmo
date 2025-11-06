@@ -602,6 +602,9 @@ namespace mmo
 		// Handle group membership before deletion
 		HandleCharacterGroupOnDelete(charGuid);
 
+		// Handle friend relationships before deletion
+		HandleCharacterFriendsOnDelete(charGuid);
+
 		// Database callback handler
 		std::weak_ptr weakThis{shared_from_this()};
 		auto handler = [weakThis](const bool success)
@@ -1275,7 +1278,7 @@ namespace mmo
 
 		// First check if target is online
 		Player *targetPlayer = m_manager.GetPlayerByCharacterName(targetName);
-		
+
 		if (targetPlayer)
 		{
 			// Online player path - directly add friendship without requiring acceptance
@@ -1324,7 +1327,7 @@ namespace mmo
 				{
 					// Reload my friend list from database to update in-memory cache
 					m_friendMgr.LoadCharacterFriends(myGuid, [this](const std::vector<FriendData> &friends)
-													{
+													 {
 						m_friendCache = friends;
 						SendFriendListUpdate(); });
 
@@ -1408,7 +1411,7 @@ namespace mmo
 					{
 						// Reload my friend list from database to update in-memory cache
 						m_friendMgr.LoadCharacterFriends(myGuid, [this](const std::vector<FriendData> &friends)
-														{
+														 {
 							m_friendCache = friends;
 							SendFriendListUpdate(); });
 
@@ -3668,5 +3671,56 @@ namespace mmo
 
 		// Request character data to check group membership
 		m_database.asyncRequest(std::move(handler), &IDatabase::CharacterEnterWorld, charGuid, m_accountId);
+	}
+
+	void Player::HandleCharacterFriendsOnDelete(uint64 charGuid)
+	{
+		// Remove the character from all friend lists
+		// First, get all characters who have this character as a friend
+		std::weak_ptr weakThis{shared_from_this()};
+		auto handler = [weakThis, charGuid](const std::vector<uint64> &friendIds)
+		{
+			const auto strongThis = weakThis.lock();
+			if (!strongThis)
+			{
+				return;
+			}
+
+			if (friendIds.empty())
+			{
+				// No one has this character as a friend, nothing to do
+				return;
+			}
+
+			DLOG("Removing character " << charGuid << " from " << friendIds.size() << " friend lists");
+
+			// Remove the friendship from the database for each friend
+			for (const uint64 friendId : friendIds)
+			{
+				strongThis->m_database.asyncRequest<void>([charGuid, friendId](auto &&database)
+														  { database->RemoveFriend(friendId, charGuid); },
+														  [charGuid, friendId](const bool success)
+														  {
+															  if (!success)
+															  {
+																  ELOG("Failed to remove friendship between " << friendId << " and deleted character " << charGuid);
+															  }
+														  });
+
+				// If the friend is currently online, update their friend list
+				Player *friendPlayer = strongThis->m_manager.GetPlayerByCharacterGuid(friendId);
+				if (friendPlayer)
+				{
+					// Reload the friend's friend list from the database
+					strongThis->m_friendMgr.LoadCharacterFriends(friendId, [friendPlayer](const std::vector<FriendData> &friends)
+																 {
+						friendPlayer->m_friendCache = friends;
+						friendPlayer->SendFriendListUpdate(); });
+				}
+			}
+		};
+
+		// Get all characters who have this character as a friend
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetCharactersWithFriend, charGuid);
 	}
 }

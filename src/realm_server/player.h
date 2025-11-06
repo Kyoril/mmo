@@ -449,6 +449,7 @@ namespace mmo
 		// Helper methods for character deletion
 		void HandleCharacterGuildOnDelete(uint64 charGuid);
 		void HandleCharacterGroupOnDelete(uint64 charGuid);
+		void HandleCharacterFriendsOnDelete(uint64 charGuid);
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		PacketParseResult OnCheatTeleportToPlayer(game::IncomingPacket &packet);
