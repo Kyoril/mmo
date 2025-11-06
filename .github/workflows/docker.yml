@@ -4,52 +4,105 @@ on:
   push:
     branches:
       - master
+      - develop
+  workflow_run:
+    workflows: ["Linux Servers"]
+    types:
+      - completed
+    branches:
+      - develop
 
 env:
   IMAGE_NAME_LOGIN_SERVER: mmo_login_server
   IMAGE_NAME_REALM_SERVER: mmo_realm_server
   IMAGE_NAME_WORLD_SERVER: mmo_world_server
-  DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-  DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
 
 jobs:
   push_to_registry:
     name: Build and push Docker images
     runs-on: ubuntu-latest
-
+    # Only run if workflow was triggered by push to master, or if the test workflow succeeded on develop
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    environment: DockerHub
+    
     steps:
     - name: Check out the repo
       uses: actions/checkout@v3
       with:
         submodules: 'recursive'
 
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
     - name: Login to DockerHub
-      uses: docker/login-action@v1
+      uses: docker/login-action@v2
       with:
-        username: ${{ env.DOCKER_USERNAME }}
-        password: ${{ env.DOCKER_PASSWORD }}
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+    
+    - name: Generate Docker metadata for login_server
+      id: meta-login
+      uses: docker/metadata-action@v4
+      with:
+        images: ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME_LOGIN_SERVER }}
+        tags: |
+          type=ref,event=branch
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
   
     - name: Build and push login_server image
-      uses: docker/build-push-action@v2
+      uses: docker/build-push-action@v4
       with:
         context: .
         file: ./Dockerfile.login_server
         push: true
-        tags: ${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME_LOGIN_SERVER }}:latest
+        tags: ${{ steps.meta-login.outputs.tags }}
+        labels: ${{ steps.meta-login.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Generate Docker metadata for realm_server
+      id: meta-realm
+      uses: docker/metadata-action@v4
+      with:
+        images: ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME_REALM_SERVER }}
+        tags: |
+          type=ref,event=branch
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
 
     - name: Build and push realm_server image
-      uses: docker/build-push-action@v2
+      uses: docker/build-push-action@v4
       with:
         context: .
         file: ./Dockerfile.realm_server
         push: true
-        tags: ${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME_REALM_SERVER }}:latest
+        tags: ${{ steps.meta-realm.outputs.tags }}
+        labels: ${{ steps.meta-realm.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Generate Docker metadata for world_server
+      id: meta-world
+      uses: docker/metadata-action@v4
+      with:
+        images: ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME_WORLD_SERVER }}
+        tags: |
+          type=ref,event=branch
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
 
     - name: Build and push world_server image
-      uses: docker/build-push-action@v2
+      uses: docker/build-push-action@v4
       with:
         context: .
         file: ./Dockerfile.world_server
         push: true
-        tags: ${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME_WORLD_SERVER }}:latest
+        tags: ${{ steps.meta-world.outputs.tags }}
+        labels: ${{ steps.meta-world.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
   
