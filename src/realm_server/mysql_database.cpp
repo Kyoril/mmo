@@ -1466,14 +1466,12 @@ namespace mmo
 		{
 			mysql::Transaction transaction(m_connection);
 
-			// Ensure consistent ordering: character_id < friend_id
-			const uint64 minId = (characterId < friendId) ? characterId : friendId;
-			const uint64 maxId = (characterId < friendId) ? friendId : characterId;
-
+			// One-sided friendship: characterId adds friendId to their list
+			// No automatic reciprocal friendship
 			if (!m_connection.Execute(std::format(
 				"INSERT INTO `friend_list` (`character_id`, `friend_id`) VALUES ('{0}', '{1}')"
-				, minId
-				, maxId
+				, characterId
+				, friendId
 			)))
 			{
 				PrintDatabaseError();
@@ -1495,15 +1493,11 @@ namespace mmo
 		{
 			mysql::Transaction transaction(m_connection);
 
-			// Friendship can be stored in either direction due to CHECK constraint
-			// Try both orderings to ensure deletion regardless of storage order
-			const uint64 minId = (characterId < friendId) ? characterId : friendId;
-			const uint64 maxId = (characterId < friendId) ? friendId : characterId;
-
+			// One-sided friendship: only remove from characterId's list
 			if (!m_connection.Execute(std::format(
 				"DELETE FROM `friend_list` WHERE `character_id` = '{0}' AND `friend_id` = '{1}' LIMIT 1"
-				, minId
-				, maxId
+				, characterId
+				, friendId
 			)))
 			{
 				PrintDatabaseError();
@@ -1523,19 +1517,13 @@ namespace mmo
 	{
 		std::vector<FriendData> result;
 
-		// Query must handle bidirectional storage: character can be in either column
-		// Use UNION to get friends where character_id is in either position
+		// One-sided friendship: only load friends where characterId is the owner
 		mysql::Select select(m_connection, std::format(
 			"SELECT c.`id`, c.`name`, c.`level`, c.`race`, c.`class` "
 			"FROM `friend_list` fl "
 			"JOIN `characters` c ON c.`id` = fl.`friend_id` "
 			"WHERE fl.`character_id` = '{0}' "
-			"UNION "
-			"SELECT c.`id`, c.`name`, c.`level`, c.`race`, c.`class` "
-			"FROM `friend_list` fl "
-			"JOIN `characters` c ON c.`id` = fl.`character_id` "
-			"WHERE fl.`friend_id` = '{0}' "
-			"ORDER BY `name` ASC"
+			"ORDER BY c.`name` ASC"
 			, characterId
 		));
 
@@ -1565,16 +1553,43 @@ namespace mmo
 		return result;
 	}
 
+	std::vector<uint64> MySQLDatabase::GetCharactersWithFriend(uint64 characterId)
+	{
+		std::vector<uint64> result;
+
+		// Find all characters who have added characterId as a friend
+		mysql::Select select(m_connection, std::format(
+			"SELECT `character_id` FROM `friend_list` WHERE `friend_id` = '{0}'"
+			, characterId
+		));
+
+		if (select.Success())
+		{
+			mysql::Row row(select);
+			while (row)
+			{
+				uint64 admirerId;
+				row.GetField(0, admirerId);
+				result.push_back(admirerId);
+
+				row = mysql::Row::Next(select);
+			}
+		}
+		else
+		{
+			PrintDatabaseError();
+		}
+
+		return result;
+	}
+
 	bool MySQLDatabase::AreFriends(uint64 characterId, uint64 friendId)
 	{
-		// Friendship stored bidirectionally with CHECK constraint ensuring character_id < friend_id
-		const uint64 minId = (characterId < friendId) ? characterId : friendId;
-		const uint64 maxId = (characterId < friendId) ? friendId : characterId;
-
+		// One-sided friendship: check if characterId has friendId in their list
 		mysql::Select select(m_connection, std::format(
 			"SELECT 1 FROM `friend_list` WHERE `character_id` = '{0}' AND `friend_id` = '{1}' LIMIT 1"
-			, minId
-			, maxId
+			, characterId
+			, friendId
 		));
 
 		if (select.Success())

@@ -30,7 +30,8 @@ namespace mmo
         /// @return True if the characters are friends, false otherwise.
         bool AreFriends(uint64 charId1, uint64 charId2) const;
 
-        /// Notifies all online friends of a character about their status change.
+        /// Notifies all online players who have this character as a friend about their status change.
+        /// One-sided friendship: only players who added this character see the notification.
         /// @param characterGuid The character whose status changed.
         /// @param online True if the character is now online, false if offline.
         void NotifyFriendStatusChange(uint64 characterGuid, bool online);
@@ -60,8 +61,8 @@ namespace mmo
         PlayerManager &m_playerManager;
 
         /// Maps character guid to their list of friends.
-        /// Friendships are stored bidirectionally: if A and B are friends,
-        /// both m_friendshipsByCharacter[A] and [B] contain each other.
+        /// One-sided friendships: if A adds B, only m_friendshipsByCharacter[A] contains B.
+        /// B does not automatically have A in their list.
         std::map<uint64, std::vector<FriendData>> m_friendshipsByCharacter;
 
         /// Maps character guid to their friend count for fast capacity checks.

@@ -49,28 +49,28 @@ namespace mmo
 
     void FriendMgr::NotifyFriendStatusChange(uint64 characterGuid, bool online)
     {
-        // Find all friends of this character
-        const auto it = m_friendshipsByCharacter.find(characterGuid);
-        if (it == m_friendshipsByCharacter.end())
+        // Find all characters who have added this character as a friend (one-sided friendship)
+        // We need to query the database since our cache only stores who WE friended, not who friended US
+        auto admirerHandler = [this, characterGuid, online](std::vector<uint64> admirerIds)
         {
-            return;
-        }
-
-        // Send status change packet to each online friend
-        const auto &friends = it->second;
-        for (const auto &friendData : friends)
-        {
-            Player *friendPlayer = m_playerManager.GetPlayerByCharacterGuid(friendData.guid);
-            if (friendPlayer)
+            // Send status change packet to each online admirer
+            for (const auto admirerId : admirerIds)
             {
-                friendPlayer->SendPacket([characterGuid, online](game::OutgoingPacket &packet)
-                                         {
-packet.Start(game::realm_client_packet::FriendStatusChange);
-packet << io::write<uint64>(characterGuid);
-packet << io::write<uint8>(online ? 1 : 0);
-packet.Finish(); });
+                Player *admirerPlayer = m_playerManager.GetPlayerByCharacterGuid(admirerId);
+                if (admirerPlayer)
+                {
+                    admirerPlayer->SendPacket([characterGuid, online](game::OutgoingPacket &packet)
+                    {
+                        packet.Start(game::realm_client_packet::FriendStatusChange);
+                        packet << io::write<uint64>(characterGuid);
+                        packet << io::write<uint8>(online ? 1 : 0);
+                        packet.Finish();
+                    });
+                }
             }
-        }
+        };
+
+        m_asyncDatabase.asyncRequest(std::move(admirerHandler), &IDatabase::GetCharactersWithFriend, characterGuid);
     }
 
     bool FriendMgr::CanAddFriend(uint64 characterId) const

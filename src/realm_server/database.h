@@ -247,6 +247,11 @@ namespace mmo
 		/// @returns A vector of FriendData containing friend information.
 		virtual std::optional<std::vector<FriendData>> LoadFriendList(uint64 characterId) = 0;
 
+		/// Gets all character IDs who have added a specific character as a friend.
+		/// @param characterId The character to find admirers for.
+		/// @returns A vector of character IDs who have this character in their friend list.
+		virtual std::vector<uint64> GetCharactersWithFriend(uint64 characterId) = 0;
+
 		/// Checks if two characters are friends.
 		/// @param characterId First character id.
 		/// @param friendId Second character id.

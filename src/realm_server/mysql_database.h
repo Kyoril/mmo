@@ -105,6 +105,9 @@ namespace mmo
 		/// @copydoc IDatabase::LoadFriendList
 		std::optional<std::vector<FriendData>> LoadFriendList(uint64 characterId) override;
 
+		/// @copydoc IDatabase::GetCharactersWithFriend
+		std::vector<uint64> GetCharactersWithFriend(uint64 characterId) override;
+
 		/// @copydoc IDatabase::AreFriends
 		bool AreFriends(uint64 characterId, uint64 friendId) override;
 
