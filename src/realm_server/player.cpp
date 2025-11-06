@@ -1271,93 +1271,186 @@ namespace mmo
 			return;
 		}
 
-		// Check if target exists and is online
+		const uint64 myGuid = m_characterData->characterId;
+
+		// First check if target is online
 		Player *targetPlayer = m_manager.GetPlayerByCharacterName(targetName);
-		if (!targetPlayer)
+		
+		if (targetPlayer)
 		{
-			SendPacket([targetName](game::OutgoingPacket &packet)
-					   {
-					packet.Start(game::realm_client_packet::FriendCommandResult);
-					packet << io::write<uint8>(game::friend_command_result::PlayerNotFound);
-					packet << io::write_dynamic_range<uint8>(targetName);
-					packet.Finish(); });
-			return;
-		}
+			// Online player path
+			const uint64 targetGuid = targetPlayer->GetCharacterGuid();
 
-		const uint64 targetGuid = targetPlayer->GetCharacterGuid();
-
-		// Check if trying to add self
-		if (targetGuid == m_characterData->characterId)
-		{
-			SendPacket([targetName](game::OutgoingPacket &packet)
-					   {
+			// Check if trying to add self
+			if (targetGuid == myGuid)
+			{
+				SendPacket([targetName](game::OutgoingPacket &packet)
+						   {
 					packet.Start(game::realm_client_packet::FriendCommandResult);
 					packet << io::write<uint8>(game::friend_command_result::CannotAddSelf);
 					packet << io::write_dynamic_range<uint8>(targetName);
 					packet.Finish(); });
-			return;
-		}
+				return;
+			}
 
-		// Check if already friends
-		if (m_friendMgr.AreFriends(m_characterData->characterId, targetGuid))
-		{
-			SendPacket([targetName](game::OutgoingPacket &packet)
-					   {
+			// Check if already friends
+			if (m_friendMgr.AreFriends(myGuid, targetGuid))
+			{
+				SendPacket([targetName](game::OutgoingPacket &packet)
+						   {
 					packet.Start(game::realm_client_packet::FriendCommandResult);
 					packet << io::write<uint8>(game::friend_command_result::AlreadyFriends);
 					packet << io::write_dynamic_range<uint8>(targetName);
 					packet.Finish(); });
-			return;
-		}
+				return;
+			}
 
-		// Check if sender's friend list is full
-		if (!m_friendMgr.CanAddFriend(m_characterData->characterId))
-		{
-			SendPacket([targetName](game::OutgoingPacket &packet)
-					   {
+			// Check if sender's friend list is full
+			if (!m_friendMgr.CanAddFriend(myGuid))
+			{
+				SendPacket([targetName](game::OutgoingPacket &packet)
+						   {
 					packet.Start(game::realm_client_packet::FriendCommandResult);
 					packet << io::write<uint8>(game::friend_command_result::FriendListFull);
 					packet << io::write_dynamic_range<uint8>(targetName);
 					packet.Finish(); });
-			return;
-		}
+				return;
+			}
 
-		// Check if target's friend list is full
-		if (!m_friendMgr.CanAddFriend(targetGuid))
-		{
-			SendPacket([targetName](game::OutgoingPacket &packet)
-					   {
+			// Check if target's friend list is full
+			if (!m_friendMgr.CanAddFriend(targetGuid))
+			{
+				SendPacket([targetName](game::OutgoingPacket &packet)
+						   {
 					packet.Start(game::realm_client_packet::FriendCommandResult);
 					packet << io::write<uint8>(game::friend_command_result::TargetFriendListFull);
 					packet << io::write_dynamic_range<uint8>(targetName);
 					packet.Finish(); });
-			return;
-		}
+				return;
+			}
 
-		// Check if target already has a pending invite
-		if (targetPlayer->m_pendingFriendInvite != 0)
-		{
-			SendPacket([targetName](game::OutgoingPacket &packet)
-					   {
+			// Check if target already has a pending invite
+			if (targetPlayer->m_pendingFriendInvite != 0)
+			{
+				SendPacket([targetName](game::OutgoingPacket &packet)
+						   {
 					packet.Start(game::realm_client_packet::FriendCommandResult);
 					packet << io::write<uint8>(game::friend_command_result::InvitePending);
 					packet << io::write_dynamic_range<uint8>(targetName);
 					packet.Finish(); });
-			return;
-		}
+				return;
+			}
 
-		// Send invite packet to target
-		const String inviterName = m_characterData->name;
-		targetPlayer->SendPacket([inviterName](game::OutgoingPacket &packet)
-								 {
+			// Send invite packet to target (online)
+			targetPlayer->m_pendingFriendInvite = myGuid;
+			targetPlayer->SendPacket([myName = m_characterData->name](game::OutgoingPacket &packet)
+									 {
 				packet.Start(game::realm_client_packet::FriendInvite);
-				packet << io::write_dynamic_range<uint8>(inviterName);
+				packet << io::write_dynamic_range<uint8>(myName);
 				packet.Finish(); });
 
-		// Set pending invite on target
-		targetPlayer->m_pendingFriendInvite = m_characterData->characterId;
+			ILOG("Friend invite sent from " << myGuid << " to online player " << targetGuid);
+		}
+		else
+		{
+			// Offline player path - lookup in database
+			auto handler = [this, targetName, myGuid](std::optional<DatabaseId> targetGuidOpt)
+			{
+				if (!targetGuidOpt.has_value())
+				{
+					// Character doesn't exist
+					SendPacket([targetName](game::OutgoingPacket &packet)
+							   {
+						packet.Start(game::realm_client_packet::FriendCommandResult);
+						packet << io::write<uint8>(game::friend_command_result::PlayerNotFound);
+						packet << io::write_dynamic_range<uint8>(targetName);
+						packet.Finish(); });
+					return;
+				}
 
-		DLOG("Player " << m_characterData->name << " sent friend invite to " << targetName);
+				const uint64 targetGuid = targetGuidOpt.value();
+
+				// Check if trying to add self
+				if (targetGuid == myGuid)
+				{
+					SendPacket([targetName](game::OutgoingPacket &packet)
+							   {
+						packet.Start(game::realm_client_packet::FriendCommandResult);
+						packet << io::write<uint8>(game::friend_command_result::CannotAddSelf);
+						packet << io::write_dynamic_range<uint8>(targetName);
+						packet.Finish(); });
+					return;
+				}
+
+				// Check if already friends
+				if (m_friendMgr.AreFriends(myGuid, targetGuid))
+				{
+					SendPacket([targetName](game::OutgoingPacket &packet)
+							   {
+						packet.Start(game::realm_client_packet::FriendCommandResult);
+						packet << io::write<uint8>(game::friend_command_result::AlreadyFriends);
+						packet << io::write_dynamic_range<uint8>(targetName);
+						packet.Finish(); });
+					return;
+				}
+
+				// Check if sender's friend list is full
+				if (!m_friendMgr.CanAddFriend(myGuid))
+				{
+					SendPacket([targetName](game::OutgoingPacket &packet)
+							   {
+						packet.Start(game::realm_client_packet::FriendCommandResult);
+						packet << io::write<uint8>(game::friend_command_result::FriendListFull);
+						packet << io::write_dynamic_range<uint8>(targetName);
+						packet.Finish(); });
+					return;
+				}
+
+				// Check if target's friend list is full
+				if (!m_friendMgr.CanAddFriend(targetGuid))
+				{
+					SendPacket([targetName](game::OutgoingPacket &packet)
+							   {
+						packet.Start(game::realm_client_packet::FriendCommandResult);
+						packet << io::write<uint8>(game::friend_command_result::TargetFriendListFull);
+						packet << io::write_dynamic_range<uint8>(targetName);
+						packet.Finish(); });
+					return;
+				}
+
+				// For offline players, directly add the friendship without requiring acceptance
+				// This is a common approach in MMOs - offline players auto-accept friend requests
+				auto addFriendHandler = [this, targetGuid, targetName, myGuid](bool success)
+				{
+					if (success)
+					{
+						// Reload my friend list from database to update in-memory cache
+						m_friendMgr.LoadCharacterFriends(myGuid, [this](const std::vector<FriendData> &friends)
+														{
+							m_friendCache = friends;
+							SendFriendListUpdate(); });
+
+						// Send success result
+						SendPacket([targetName](game::OutgoingPacket &packet)
+								   {
+							packet.Start(game::realm_client_packet::FriendCommandResult);
+							packet << io::write<uint8>(game::friend_command_result::Success);
+							packet << io::write_dynamic_range<uint8>(targetName);
+							packet.Finish(); });
+
+						ILOG("Friendship established with offline player " << targetGuid);
+					}
+					else
+					{
+						ELOG("Failed to add offline friend to database");
+					}
+				};
+
+				m_database.asyncRequest(std::move(addFriendHandler), &IDatabase::AddFriend, myGuid, targetGuid);
+			};
+
+			m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterIdByName, targetName);
+		}
 	}
 
 	void Player::AcceptFriendInvite()
