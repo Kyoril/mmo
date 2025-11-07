@@ -1,0 +1,68 @@
+syntax = "proto2";
+package mmo.proto;
+
+// Spell lifecycle events that can trigger visualization kits
+enum SpellVisualEvent
+{
+    START_CAST = 0;
+    CANCEL_CAST = 1;
+    CASTING = 2;
+    CAST_SUCCEEDED = 3;
+    IMPACT = 4;
+    AURA_APPLIED = 5;
+    AURA_REMOVED = 6;
+    AURA_TICK = 7;
+    AURA_IDLE = 8;
+}
+
+// Scope defines which actor(s) the kit applies to
+enum KitScope
+{
+    CASTER = 0;
+    TARGET = 1;
+    PROJECTILE_IMPACT = 2;
+}
+
+// Color tint effect with RGBA values and duration
+message ColorTint
+{
+    optional float r = 1 [default = 1.0];
+    optional float g = 2 [default = 1.0];
+    optional float b = 3 [default = 1.0];
+    optional float a = 4 [default = 1.0];
+    optional uint32 duration_ms = 5;
+}
+
+// A visualization kit containing sounds, animation, and optional tint
+message SpellKit
+{
+    repeated string sounds = 1;
+    optional string animation_name = 2;
+    optional KitScope scope = 3 [default = CASTER];
+    optional bool loop = 4 [default = false];
+    optional uint32 duration_ms = 5;
+    optional ColorTint tint = 6;
+}
+
+// List of kits for a specific event
+message SpellKitList
+{
+    repeated SpellKit kits = 1;
+}
+
+// Main spell visualization entry
+message SpellVisualization
+{
+    required uint32 id = 1;
+    required string name = 2;
+    optional string icon = 3;
+
+    // Map from SpellVisualEvent enum value to list of kits
+    map<uint32, SpellKitList> kits_by_event = 4;
+}
+
+// Dataset containing all spell visualizations
+message SpellVisualizations
+{
+    repeated SpellVisualization entry = 1;
+}

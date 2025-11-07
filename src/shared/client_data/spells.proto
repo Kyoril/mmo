@@ -116,6 +116,10 @@ message SpellEntry {
 	optional string auratext = 67;
 	
 	optional float threat_multiplier = 68 [default = 1.0];
+	
+	// Optional reference to a SpellVisualization entry
+	// If set, the visualization's icon, sounds, and effects override the spell's icon
+	optional uint32 visualization_id = 69;
 }
 
 message Spells {
