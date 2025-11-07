@@ -1,7 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "spell_cast.h"
-#include "systems/spell_visualization_service.h"
+#include "shared/game_client/spell_visualization_service.h"
 
 #include "frame_ui/frame_mgr.h"
 #include "game/spell_target_map.h"
@@ -85,6 +85,12 @@ namespace mmo
 	{
 		// Visualization: start cast
 		SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::StartCast, spell, ObjectMgr::GetActivePlayer().get(), {});
+
+		// If there's a cast time, trigger CASTING event for looped visuals
+		if (castTime > 0)
+		{
+			SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Casting, spell, ObjectMgr::GetActivePlayer().get(), {});
+		}
 
 		m_spellCastId = spell.id();
 		FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_START", &spell, castTime);

@@ -35,6 +35,7 @@
 
 #include "game_client/net_client.h"
 #include "debug_path_visualizer.h"
+#include "mmo_client/audio/spell_audio_adapter.h"
 
 namespace mmo
 {
@@ -386,6 +387,7 @@ namespace mmo
 		std::unique_ptr<WorldGrid> m_worldGrid;
 		IdGenerator<uint64> m_objectIdGenerator{1};
 		IAudio &m_audio;
+		std::unique_ptr<SpellAudioAdapter> m_spellAudioAdapter;
 
 		bool m_combatMode = false;
 

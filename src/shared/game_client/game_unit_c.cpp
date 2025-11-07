@@ -1,7 +1,9 @@
 #include "game_unit_c.h"
 #include "game_aura_c.h"
+#include "spell_visualization_service.h"
 
 #include <algorithm>
+#include <set>
 
 #include "debug_interface.h"
 #include "net_client.h"
@@ -574,8 +576,19 @@ namespace mmo
 			return false;
 		}
 
+		// Track old auras for diffing (simple approach: remember spell ids)
+		std::set<uint32> oldAuraSpellIds;
+		for (const auto& aura : m_auras)
+		{
+			if (const auto* spell = aura->GetSpell())
+			{
+				oldAuraSpellIds.insert(spell->id());
+			}
+		}
+
 		m_auras.clear();
 
+		std::set<uint32> newAuraSpellIds;
 		for (uint32 i = 0; i < visibleAuraCount; ++i)
 		{
 			uint32 spellId, duration;
@@ -608,6 +621,31 @@ namespace mmo
 
 			// Add aura
 			m_auras.push_back(std::make_unique<GameAuraC>(*this, *spell, casterId, duration));
+			newAuraSpellIds.insert(spellId);
+		}
+
+		// Trigger visualization events for added/removed auras
+		for (uint32 spellId : newAuraSpellIds)
+		{
+			if (oldAuraSpellIds.find(spellId) == oldAuraSpellIds.end())
+			{
+				// Newly applied aura
+				if (const auto* spell = m_project.spells.getById(spellId))
+				{
+					NotifyAuraVisualizationApplied(*spell, this);
+				}
+			}
+		}
+		for (uint32 spellId : oldAuraSpellIds)
+		{
+			if (newAuraSpellIds.find(spellId) == newAuraSpellIds.end())
+			{
+				// Removed aura
+				if (const auto* spell = m_project.spells.getById(spellId))
+				{
+					NotifyAuraVisualizationRemoved(*spell, this);
+				}
+			}
 		}
 
 		return reader;

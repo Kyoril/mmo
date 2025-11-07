@@ -1,11 +1,9 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "spell_visualization_service.h"
-
-#include "shared/game_client/object_mgr.h"
-#include "shared/game_client/game_unit_c.h"
+#include "game_unit_c.h"
+#include "object_mgr.h"
 #include "log/default_log_levels.h"
-#include "audio/audio.h"
 
 namespace mmo
 {
@@ -15,10 +13,10 @@ namespace mmo
         return instance;
     }
 
-    void SpellVisualizationService::Initialize(const proto_client::Project& project, IAudio* audio)
+    void SpellVisualizationService::Initialize(const proto_client::Project& project, ISpellAudioPlayer* audioPlayer)
     {
         m_project = &project;
-        m_audio = audio;
+        m_audioPlayer = audioPlayer;
     }
 
     uint32 SpellVisualizationService::ToProtoEventValue(Event e)
@@ -79,7 +77,6 @@ namespace mmo
         // Resolve project
         if (m_project == nullptr)
         {
-            // As a fallback, try reading from ObjectMgr's project if available
             WLOG("SpellVisualizationService not initialized with a project; skipping visualization application.");
             return;
         }
@@ -122,7 +119,13 @@ namespace mmo
         for (const auto& kit : kitList.kits())
         {
             const proto_client::KitScope scope = kit.has_scope() ? kit.scope() : proto_client::CASTER;
-            auto applyToList = [&](GameUnitC* unit){ if(unit) { ApplyKitToActor(*vis, kit, *unit); } };
+            auto applyToList = [&](GameUnitC* unit)
+            {
+                if(unit)
+                {
+                    ApplyKitToActor(*vis, kit, *unit);
+                }
+            };
 
             if (scope == proto_client::CASTER)
             {
@@ -147,17 +150,21 @@ namespace mmo
             else if (event == Event::CancelCast)
             {
                 caster->NotifySpellCastCancelled();
+                // Stop any looped sound for this caster
+                StopLoopedSoundForActor(caster->GetGuid());
             }
             else if (event == Event::CastSucceeded)
             {
                 caster->NotifySpellCastSucceeded();
+                // Stop any looped sound for this caster
+                StopLoopedSoundForActor(caster->GetGuid());
             }
         }
     }
 
     void SpellVisualizationService::ApplyKitToActor(const proto_client::SpellVisualization& vis,
                                                      const proto_client::SpellKit& kit,
-                                                     GameUnitC& actor) const
+                                                     GameUnitC& actor)
     {
         // Minimal application logic:
         // - Trigger basic notify flags for casting loop/release
@@ -175,25 +182,74 @@ namespace mmo
             }
         }
 
-        // Play sounds (fire-and-forget 2D for now; could be extended to 3D positioning later)
-        if (m_audio && kit.sounds_size() > 0)
+        // Play sounds using the abstract audio player interface
+        if (m_audioPlayer && kit.sounds_size() > 0)
         {
+            const bool isLooped = kit.has_loop() && kit.loop();
             for (const auto& snd : kit.sounds())
             {
-                // Attempt to find existing sound first (looped vs normal decision could be encoded later)
-                auto soundIdx = m_audio->FindSound(snd, SoundType::Sound2D);
-                if (soundIdx == InvalidSound)
+                if (isLooped)
                 {
-                    soundIdx = m_audio->CreateSound(snd, SoundType::Sound2D);
+                    const uint64 guid = actor.GetGuid();
+                    // Stop any existing looped sound for this actor (only one loop per actor at a time)
+                    auto it = m_loopedSounds.find(guid);
+                    if (it != m_loopedSounds.end() && it->second.audioHandle != 0)
+                    {
+                        m_audioPlayer->StopLoopedSound(it->second.audioHandle);
+                    }
+                    
+                    // Start new looped sound
+                    uint64 handle = m_audioPlayer->PlayLoopedSound(snd);
+                    if (handle != 0)
+                    {
+                        LoopedSoundHandle loopHandle;
+                        loopHandle.audioHandle = handle;
+                        loopHandle.spellId = vis.id();
+                        loopHandle.event = Event::Casting;
+                        m_loopedSounds[guid] = loopHandle;
+                    }
                 }
-                if (soundIdx != InvalidSound)
+                else
                 {
-                    ChannelIndex ch = InvalidChannel;
-                    m_audio->PlaySound(soundIdx, &ch);
+                    m_audioPlayer->PlaySound(snd);
                 }
             }
         }
 
         // TODO: Apply tint (requires material/visual pipeline hook on GameUnitC)
+    }
+
+    void SpellVisualizationService::StopLoopedSoundForActor(uint64 actorGuid)
+    {
+        auto it = m_loopedSounds.find(actorGuid);
+        if (it != m_loopedSounds.end())
+        {
+            if (m_audioPlayer && it->second.audioHandle != 0)
+            {
+                m_audioPlayer->StopLoopedSound(it->second.audioHandle);
+            }
+            m_loopedSounds.erase(it);
+        }
+    }
+
+    // Free functions for aura visualization notifications
+    void NotifyAuraVisualizationApplied(const proto_client::SpellEntry& spell, GameUnitC* target)
+    {
+        if (target)
+        {
+            std::vector<GameUnitC*> targets { target };
+            SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::AuraApplied, spell, nullptr, targets);
+        }
+    }
+
+    void NotifyAuraVisualizationRemoved(const proto_client::SpellEntry& spell, GameUnitC* target)
+    {
+        if (target)
+        {
+            std::vector<GameUnitC*> targets { target };
+            SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::AuraRemoved, spell, nullptr, targets);
+            // Stop looped sounds for this target when aura is removed
+            SpellVisualizationService::Get().StopLoopedSoundForActor(target->GetGuid());
+        }
     }
 }

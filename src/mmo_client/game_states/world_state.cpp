@@ -49,7 +49,7 @@
 
 #include "audio/audio.h"
 #include "systems/party_info.h"
-#include "systems/spell_visualization_service.h"
+#include "shared/game_client/spell_visualization_service.h"
 #include "console/console_var.h"
 #include "frame_ui/font_mgr.h"
 #include "game/group.h"
@@ -207,8 +207,11 @@ namespace mmo
 		LoadingScreen::Show();
 
 		ObjectMgr::Initialize(m_project, m_partyInfo);
-        // Initialize spell visualization service with the loaded project & audio for dataset-driven lookups and sound playback
-        SpellVisualizationService::Get().Initialize(m_project, &m_audio);
+		
+		// Create audio adapter and initialize spell visualization service
+		m_spellAudioAdapter = std::make_unique<SpellAudioAdapter>(m_audio);
+		SpellVisualizationService::Get().Initialize(m_project, m_spellAudioAdapter.get());
+		
 		SetupWorldScene();
 
 		m_debugPathVisualizer = std::make_unique<DebugPathVisualizer>(*m_scene);
