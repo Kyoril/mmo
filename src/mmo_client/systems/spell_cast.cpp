@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "spell_cast.h"
+#include "systems/spell_visualization_service.h"
 
 #include "frame_ui/frame_mgr.h"
 #include "game/spell_target_map.h"
@@ -82,8 +83,10 @@ namespace mmo
 
 	void SpellCast::OnSpellStart(const proto_client::SpellEntry& spell, GameTime castTime)
 	{
-		m_spellCastId = spell.id();
+		// Visualization: start cast
+		SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::StartCast, spell, ObjectMgr::GetActivePlayer().get(), {});
 
+		m_spellCastId = spell.id();
 		FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_START", &spell, castTime);
 	}
 
@@ -92,6 +95,11 @@ namespace mmo
 		if (GetCastingSpellId() != spellId)
 		{
 			return;
+		}
+
+		if (const auto* spell = m_spells.getById(spellId))
+		{
+			SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::CastSucceeded, *spell, ObjectMgr::GetActivePlayer().get(), {});
 		}
 
 		FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", true);
@@ -103,6 +111,11 @@ namespace mmo
 		if (GetCastingSpellId() != spellId)
 		{
 			return;
+		}
+
+		if (const auto* spell = m_spells.getById(spellId))
+		{
+			SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::CancelCast, *spell, ObjectMgr::GetActivePlayer().get(), {});
 		}
 
 		m_spellCastId = 0;

@@ -27,6 +27,12 @@ namespace mmo
 
 		bool HasHit() const { return m_hit; }
 
+		/// \brief Access the spell entry driving this projectile.
+		const proto_client::SpellEntry& GetSpell() const { return m_spell; }
+
+		/// \brief Return a strong pointer to the target unit if still alive.
+		std::shared_ptr<GameUnitC> GetTargetUnit() const { return m_targetUnit.lock(); }
+
 	protected:
 		Scene& m_scene;
 		SceneNode* m_node;

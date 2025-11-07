@@ -24,6 +24,7 @@ file(GLOB srcFiles "*.cpp" "*.h")
 file(GLOB consoleSrcFiles "console/*.cpp" "console/*.h")
 file(GLOB netSrcFiles "net/*.cpp" "net/*.h")
 file(GLOB uiSrcFiles "ui/*.cpp" "ui/*.h")
+file(GLOB sysSrcFiles "systems/*.cpp" "systems/*.h")
 file(GLOB gsSrcFiles "game_states/*.cpp" "game_states/*.h")
 
 if (WIN32)
@@ -41,12 +42,14 @@ source_group(src\\console FILES ${consoleSrcFiles})
 source_group(src\\net FILES ${netSrcFiles})
 source_group(src\\ui FILES ${uiSrcFiles})
 source_group(src\\game_states FILES ${gsSrcFiles})
+source_group(src\\systems FILES ${sysSrcFiles})
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${PROJECT_BINARY_DIR})  # Include directory where version.h is generated
 
 # Add executable
 add_gui_exe_recurse(mmo_client ${imgui_src} ${imgui_platform_src})
+target_sources(mmo_client PRIVATE ${sysSrcFiles})
 
 IF(APPLE)
     SET_TARGET_PROPERTIES(mmo_client PROPERTIES MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/macos/Info-CMake.plist")

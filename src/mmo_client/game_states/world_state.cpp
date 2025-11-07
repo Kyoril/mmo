@@ -49,6 +49,7 @@
 
 #include "audio/audio.h"
 #include "systems/party_info.h"
+#include "systems/spell_visualization_service.h"
 #include "console/console_var.h"
 #include "frame_ui/font_mgr.h"
 #include "game/group.h"
@@ -206,7 +207,8 @@ namespace mmo
 		LoadingScreen::Show();
 
 		ObjectMgr::Initialize(m_project, m_partyInfo);
-
+        // Initialize spell visualization service with the loaded project & audio for dataset-driven lookups and sound playback
+        SpellVisualizationService::Get().Initialize(m_project, &m_audio);
 		SetupWorldScene();
 
 		m_debugPathVisualizer = std::make_unique<DebugPathVisualizer>(*m_scene);
@@ -581,6 +583,13 @@ namespace mmo
 
 			if (projectile->HasHit())
 			{
+				// Dispatch visualization impact event to targets
+				std::vector<GameUnitC*> targets;
+				if (auto target = projectile->GetTargetUnit())
+				{
+					targets.push_back(target.get());
+				}
+				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Impact, projectile->GetSpell(), nullptr, targets);
 				it = EraseByMove(m_spellProjectiles, it);
 			}
 			else
@@ -1826,6 +1835,19 @@ namespace mmo
 					auto projectile = std::make_unique<SpellProjectile>(*m_scene, *spell, casterUnit->GetSceneNode()->GetDerivedPosition(), targetUnit);
 					m_spellProjectiles.push_back(std::move(projectile));
 				}
+			}
+		}
+		else
+		{
+			// Instant spells: directly dispatch impact to unit targets if any
+			if (targetMap.HasUnitTarget())
+			{
+				std::vector<GameUnitC*> targets;
+				if (auto targetUnit = ObjectMgr::Get<GameUnitC>(targetMap.GetUnitTarget()))
+				{
+					targets.push_back(targetUnit.get());
+				}
+				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Impact, *spell, nullptr, targets);
 			}
 		}
 
