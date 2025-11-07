@@ -44,6 +44,7 @@
 #include "shared/proto_data/object_display.pb.h"
 #include "shared/proto_data/conditions.pb.h"
 #include "shared/proto_data/animations.pb.h"
+#include "shared/proto_data/spell_visualizations.pb.h"
 
 namespace mmo
 {
@@ -89,6 +90,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::ObjectDisplayData, mmo::proto::ObjectDisplayEntry> ObjectDisplayManager;
 		typedef TemplateManager<mmo::proto::Conditions, mmo::proto::Condition> ConditionManager;
 		typedef TemplateManager<mmo::proto::Animations, mmo::proto::AnimationEntry> AnimationManager;
+		typedef TemplateManager<mmo::proto::SpellVisualizations, mmo::proto::SpellVisualization> SpellVisualizationManager;
 
 		/// Determines whether a spell entry has a certain spell effect.
 		bool SpellHasEffect(const proto::SpellEntry& spell, mmo::SpellEffect type);
@@ -147,6 +149,7 @@ namespace mmo
 			ObjectDisplayManager objectDisplays;
 			ConditionManager conditions;
 			AnimationManager animations;
+			SpellVisualizationManager spellVisualizations;
 
 		private:
 
@@ -230,6 +233,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("object_displays", objectDisplays));
 				managers.push_back(ManagerEntry("conditions", conditions));
 				managers.push_back(ManagerEntry("animations", animations));
+				managers.push_back(ManagerEntry("spell_visualizations", spellVisualizations));
 
 				virtual_dir::FileSystemReader virtualDirectory(realmDataPath);
 				if (!RealmProjectLoader::load(
@@ -303,6 +307,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("object_displays", "object_displays", objectDisplays));
 				managers.push_back(ManagerEntry("conditions", "conditions", conditions));
 				managers.push_back(ManagerEntry("animations", "animations", animations));
+				managers.push_back(ManagerEntry("spell_visualizations", "spell_visualizations", spellVisualizations));
 
 				if (!RealmProjectSaver::save(realmDataPath, managers))
 				{

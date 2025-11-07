@@ -23,6 +23,7 @@
 #include "shared/client_data/proto_client/animations.pb.h"
 #include "shared/client_data/proto_client/talents.pb.h"
 #include "shared/client_data/proto_client/talent_tabs.pb.h"
+#include "shared/client_data/proto_client/spell_visualizations.pb.h"
 
 namespace mmo
 {
@@ -43,6 +44,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto_client::Animations, mmo::proto_client::AnimationEntry> AnimationManager;
 		typedef TemplateManager<mmo::proto_client::Talents, mmo::proto_client::TalentEntry> TalentManager;
 		typedef TemplateManager<mmo::proto_client::TalentTabs, mmo::proto_client::TalentTabEntry> TalentTabManager;
+		typedef TemplateManager<mmo::proto_client::SpellVisualizations, mmo::proto_client::SpellVisualization> SpellVisualizationManager;
 
 		/// This class contains contains all the static game data like item templates.
 		class Project final
@@ -73,6 +75,7 @@ namespace mmo
 			AnimationManager animations;
 			TalentManager talents;
 			TalentTabManager talentTabs;
+			SpellVisualizationManager spellVisualizations;
 
 		private:
 
@@ -131,6 +134,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("animations", animations));
 				managers.push_back(ManagerEntry("talents", talents));
 				managers.push_back(ManagerEntry("talent_tabs", talentTabs));
+				managers.push_back(ManagerEntry("spell_visualizations", spellVisualizations));
 
 				if (!ClientProjectLoader::load(
 				            directory,
@@ -175,6 +179,7 @@ namespace mmo
 				managers.emplace_back("animations", "animations", animations);
 				managers.emplace_back("talents", "talents", talents);
 				managers.emplace_back("talent_tabs", "talent_tabs", talentTabs);
+				managers.emplace_back("spell_visualizations", "spell_visualizations", spellVisualizations);
 
 				if (!ClientProjectSaver::save(realmDataPath, managers))
 				{
