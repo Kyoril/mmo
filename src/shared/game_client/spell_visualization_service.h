@@ -16,6 +16,7 @@
 namespace mmo
 {
     class GameUnitC;
+    class AnimationState;
 
     namespace proto_client
     {
@@ -73,9 +74,10 @@ namespace mmo
     private:
         void ApplyKitToActor(const proto_client::SpellVisualization& vis,
                              const proto_client::SpellKit& kit,
-                             GameUnitC& actor);
+                             GameUnitC& actor,
+                             uint32 spellId);
 
-        void ApplyAnimationToActor(const proto_client::SpellKit& kit, GameUnitC& actor);
+        void ApplyAnimationToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
 
         static uint32 ToProtoEventValue(Event e);
 
@@ -95,12 +97,28 @@ namespace mmo
             }
         };
 
+        /// \brief Structure to track active spell animations on an actor.
+        struct ActiveSpellAnimation
+        {
+            uint32 spellId;
+            AnimationState* animState;
+            
+            ActiveSpellAnimation()
+                : spellId(0)
+                , animState(nullptr)
+            {
+            }
+        };
+
         /// \brief Pointer to the loaded client project for dataset lookups. Set via Initialize.
         const proto_client::Project* m_project { nullptr };
         IAudio* m_audioPlayer { nullptr }; // not owned
 
         /// \brief Map actor guid -> looped sound handle for proper cleanup on cancel/success/aura removal.
         mutable std::map<uint64, LoopedSoundHandle> m_loopedSounds;
+        
+        /// \brief Map actor guid -> active spell animation for cancellation on same-spell events.
+        mutable std::map<uint64, ActiveSpellAnimation> m_activeSpellAnimations;
     };
 
     // Free functions for aura visualization notifications (avoid circular includes)

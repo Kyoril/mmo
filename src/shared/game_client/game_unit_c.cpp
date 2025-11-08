@@ -353,6 +353,13 @@ namespace mmo
 		}
 	}
 
+	void GameUnitC::RefreshMovementAnimation()
+	{
+		// Force refresh of movement-based animation state
+		// This is useful after canceling spell animations to return to idle/run state
+		UpdateMovementBasedAnimation();
+	}
+
 	void GameUnitC::UpdateAnimationStates(const float deltaTime, const bool isDead)
 	{
 		// Handle one-shot animations
@@ -1744,6 +1751,19 @@ namespace mmo
 		m_oneShotState->SetEnabled(true);
 		m_oneShotState->SetWeight(1.0f);
 		m_oneShotState->SetTimePosition(0.0f);
+	}
+
+	void GameUnitC::CancelOneShotAnimation()
+	{
+		if (m_oneShotState != nullptr)
+		{
+			m_oneShotState->SetEnabled(false);
+			m_oneShotState->SetWeight(0.0f);
+			m_oneShotState = nullptr;
+		}
+
+		// Refresh movement animation to ensure proper state
+		RefreshMovementAnimation();
 	}
 
 	void GameUnitC::NotifyAttackSwingEvent()

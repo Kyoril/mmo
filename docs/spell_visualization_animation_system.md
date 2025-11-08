@@ -82,7 +82,154 @@ duration_ms: 500
 - Plays as overlay via `PlayOneShotAnimation()`
 - Duration controls playback speed (animation scaled to fit duration)
 - Animation returns to previous state when complete
+- **Automatically canceled by subsequent events from the same spell**
 - Common for: CAST_SUCCEEDED, IMPACT, AURA_APPLIED events
+
+### Animation Interruption System
+
+**Problem Solved:**
+When a spell cast fails, the cast_start animation might still be playing and won't be interrupted. This looked wrong because characters continued their casting animation even after the spell was canceled.
+
+**Solution:**
+The system now tracks active one-shot animations per spell and automatically cancels them when a **terminating event** from the same spell occurs.
+
+**Terminating Events (stop animations):**
+- `CANCEL_CAST` - Spell was interrupted or canceled
+- `CAST_SUCCEEDED` - Spell completed successfully
+
+**Non-Terminating Events (allow animations to continue):**
+- `START_CAST` - Initial cast event
+- `CASTING` - Ongoing cast loop (allows cast_start to finish naturally)
+- `IMPACT`, `AURA_APPLIED`, etc. - These don't interrupt the main casting flow
+
+**How It Works:**
+
+1. **Per-Spell Tracking**: Each actor tracks which spell is currently playing a one-shot animation
+2. **Terminating Event Interruption**: `CANCEL_CAST` and `CAST_SUCCEEDED` stop active animations from the same spell
+3. **Progressive Events Coexist**: `cast_start` animation can play alongside `cast_loop` without interruption
+4. **Different-Spell Isolation**: Proc spells or simultaneous spells won't interfere with each other
+5. **Automatic Fallback**: If a terminating event has no animation kits, the system automatically returns to movement/idle animations
+
+**Example Flow (Normal Cast):**
+
+```
+START_CAST event → cast_start animation (one-shot, 800ms) starts
+  ↓ (100ms passes)
+CASTING event → cast_loop animation (looped) starts
+  ↓
+  cast_start continues playing as overlay (not canceled!)
+  cast_loop plays as base animation
+  ↓ (700ms passes, cast_start finishes naturally)
+  cast_loop continues
+  ↓ (cast completes after 2000ms total)
+CAST_SUCCEEDED event (has kits) → cast_start/cast_loop STOPPED, cast_release plays
+```
+
+**Example Flow (Canceled Cast - No Animation):**
+
+```
+START_CAST event → cast_start animation (800ms) stored in m_oneShotState
+  ↓ (300ms passes)
+CANCEL_CAST event (no kits defined) → CancelOneShotAnimation() called
+  ↓
+m_oneShotState cleared and disabled
+  ↓
+RefreshMovementAnimation() called automatically
+  ↓
+Character returns to idle/run animation (proper state management, no T-pose!)
+```
+
+**Example Flow (Canceled Cast - With Animation):**
+
+```
+START_CAST event → cast_start animation (800ms)
+  ↓ (300ms passes)
+CANCEL_CAST event (has cast_interrupt animation) → cast_start STOPPED, cast_interrupt plays
+  ↓
+cast_interrupt finishes
+  ↓
+Movement animations resume
+```
+
+**Benefits:**
+
+- ✅ Cast failures immediately stop casting animations and return to movement state
+- ✅ No T-pose issues - automatic fallback to idle/run animations
+- ✅ Cast success cleanly transitions to release animation
+- ✅ cast_start and cast_loop can play together naturally (overlay + base)
+- ✅ Proc spells don't interrupt the main spell's animation (different spell IDs)
+- ✅ No manual animation state management needed
+- ✅ Designers have full control: define cancel animation for custom interrupt, omit for instant return to movement
+
+**Configuration Example:**
+
+```protobuf
+# Frostbolt spell visualization
+kits_by_event {
+  key: 0  # START_CAST
+  value {
+    kits {
+      animation_name: "cast_start"
+      loop: false
+      duration_ms: 800
+    }
+  }
+}
+kits_by_event {
+  key: 2  # CASTING
+  value {
+    kits {
+      animation_name: "cast_loop"
+      loop: true
+    }
+  }
+}
+kits_by_event {
+  key: 1  # CANCEL_CAST - no animation (instant return to movement)
+  value {
+    # Empty - cast_start/cast_loop will be stopped, character returns to idle/run
+  }
+}
+kits_by_event {
+  key: 3  # CAST_SUCCEEDED
+  value {
+    kits {
+      animation_name: "cast_release"
+      loop: false
+      duration_ms: 500
+    }
+  }
+}
+```
+
+**Alternative: Cancel With Interrupt Animation**
+
+```protobuf
+kits_by_event {
+  key: 1  # CANCEL_CAST - with interrupt animation
+  value {
+    kits {
+      animation_name: "cast_interrupt"  # Stops cast_start/cast_loop, plays interrupt
+      loop: false
+      duration_ms: 300
+    }
+  }
+}
+```
+
+**What Happens:**
+
+1. **START_CAST**: `cast_start` animation plays for 800ms (one-shot overlay)
+2. **CASTING** (if spell has cast time): `cast_loop` starts as base animation, `cast_start` continues as overlay
+3. **CANCEL_CAST (no kits)**: `cast_start`/`cast_loop` stopped, system automatically returns to idle/run animation
+4. **CANCEL_CAST (with kits)**: `cast_start`/`cast_loop` stopped, `cast_interrupt` plays, then returns to idle/run
+5. **CAST_SUCCEEDED**: `cast_release` animation plays for 500ms AND stops any previous animations from this spell
+
+**Key Insights**: 
+- `cast_start` and `cast_loop` can play simultaneously! The one-shot `cast_start` overlays on top of the looped `cast_loop`.
+- Terminating events (`CANCEL_CAST`, `CAST_SUCCEEDED`) always stop active spell animations.
+- If no replacement animation is defined, `RefreshMovementAnimation()` is called to return to idle/run state.
+- This prevents T-pose issues while giving designers full control over interrupt behavior.
 
 ## Common Animation Names
 
@@ -90,8 +237,9 @@ These depend on your character skeletons, but typical examples:
 
 - `Idle` - Standing idle
 - `Run` - Running
-- `CastLoop` - Continuous casting animation
-- `CastRelease` - Spell release/finish animation
+- `cast_start` - Spell cast start (one-shot)
+- `cast_loop` - Continuous casting animation (looped)
+- `cast_release` - Spell release/finish animation (one-shot)
 - `Attack1H` - One-handed melee attack
 - `Attack2H` - Two-handed melee attack
 - `UnarmedAttack01` - Unarmed attack

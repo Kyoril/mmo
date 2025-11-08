@@ -4,6 +4,7 @@
 #include "game_unit_c.h"
 #include "object_mgr.h"
 #include "log/default_log_levels.h"
+#include "scene_graph/animation_state.h"
 
 namespace mmo
 {
@@ -92,17 +93,34 @@ namespace mmo
         const uint32 key = ToProtoEventValue(event);
         const auto& eventMap = vis->kits_by_event();
         const auto it = eventMap.find(key);
-        if (it == eventMap.end())
+        
+        const bool hasKits = (it != eventMap.end() && it->second.kits_size() > 0);
+        const bool isTerminatingEvent = (event == Event::CancelCast || event == Event::CastSucceeded);
+        
+        // Handle terminating events - stop active animations and clean up
+        if (caster != nullptr && isTerminatingEvent)
         {
-            // No kits for this event, but still handle cleanup for certain events
-            if (caster != nullptr)
+            const uint64 casterGuid = caster->GetGuid();
+            auto animIt = m_activeSpellAnimations.find(casterGuid);
+            if (animIt != m_activeSpellAnimations.end() && animIt->second.spellId == spell.id())
             {
-                if (event == Event::CancelCast || event == Event::CastSucceeded)
+                // Cancel the one-shot animation properly through GameUnitC
+                // This ensures proper state management and prevents T-pose
+                if (!hasKits)
                 {
-                    // Stop any looped sound for this caster
-                    StopLoopedSoundForActor(caster->GetGuid());
+                    caster->CancelOneShotAnimation();
                 }
+                
+                m_activeSpellAnimations.erase(animIt);
             }
+            
+            // Stop any looped sound for this caster
+            StopLoopedSoundForActor(caster->GetGuid());
+        }
+        
+        if (!hasKits)
+        {
+            // No kits to apply, we're done
             return;
         }
 
@@ -116,7 +134,7 @@ namespace mmo
             {
                 if(unit)
                 {
-                    ApplyKitToActor(*vis, kit, *unit);
+                    ApplyKitToActor(*vis, kit, *unit, spell.id());
                 }
             };
 
@@ -133,24 +151,16 @@ namespace mmo
             }
         }
 
-        // Stop looped sounds on cancel/success
-        if (caster != nullptr)
-        {
-            if (event == Event::CancelCast || event == Event::CastSucceeded)
-            {
-                StopLoopedSoundForActor(caster->GetGuid());
-            }
-        }
-
         // No legacy caster notifications - visualization is fully data-driven
     }
 
     void SpellVisualizationService::ApplyKitToActor(const proto_client::SpellVisualization& vis,
                                                      const proto_client::SpellKit& kit,
-                                                     GameUnitC& actor)
+                                                     GameUnitC& actor,
+                                                     uint32 spellId)
     {
         // Apply animation if specified
-        ApplyAnimationToActor(kit, actor);
+        ApplyAnimationToActor(kit, actor, spellId);
 
         // Play sounds using the audio interface
         if (m_audioPlayer && kit.sounds_size() > 0)
@@ -208,7 +218,7 @@ namespace mmo
         // TODO: Apply tint (requires material/visual pipeline hook on GameUnitC)
     }
 
-    void SpellVisualizationService::ApplyAnimationToActor(const proto_client::SpellKit& kit, GameUnitC& actor)
+    void SpellVisualizationService::ApplyAnimationToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId)
     {
         if (!kit.has_animation_name())
         {
@@ -260,8 +270,14 @@ namespace mmo
         }
         else
         {
-            // For one-shot animations, play as overlay
+            // For one-shot animations, play as overlay and track it for potential cancellation
             actor.PlayOneShotAnimation(animState);
+            
+            // Track this animation so it can be canceled by subsequent events from the same spell
+            const uint64 actorGuid = actor.GetGuid();
+            ActiveSpellAnimation& activeAnim = m_activeSpellAnimations[actorGuid];
+            activeAnim.spellId = spellId;
+            activeAnim.animState = animState;
         }
     }
 

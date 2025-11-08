@@ -373,6 +373,12 @@ namespace mmo
 
 		void PlayOneShotAnimation(AnimationState *animState);
 
+		/// @brief Cancel the currently playing one-shot animation and refresh movement state
+		void CancelOneShotAnimation();
+
+		/// @brief Force an update of movement-based animations (e.g., after canceling spell animations)
+		void RefreshMovementAnimation();
+
 		void NotifyAttackSwingEvent();
 
 		void NotifyHitEvent();
