@@ -13,9 +13,9 @@
 #include "log/default_log_levels.h"
 
 #ifdef _WIN32
-#include "mmo_client/audio/fmod_audio.h"
+#include "fmod_audio/fmod_audio.h"
 #else
-#include "mmo_client/audio/null_audio.h"
+#include "null_audio/null_audio.h"
 #endif
 
 #include "preview_providers/preview_provider_manager.h"

@@ -92,7 +92,9 @@ target_link_libraries(mmo_client
     deferred_shading)
 
 if (WIN32)
-	target_link_libraries(mmo_client "${CMAKE_SOURCE_DIR}/deps/fmod/lib/x64/fmod_vc.lib")
+	target_link_libraries(mmo_client fmod_audio)
+else()
+	target_link_libraries(mmo_client null_audio)
 endif()
 	
 target_link_libraries(mmo_client graphics_null)

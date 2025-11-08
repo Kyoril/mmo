@@ -30,9 +30,9 @@
 #include "ui/model_renderer.h"
 
 #ifdef _WIN32
-#include "audio/fmod_audio.h"
+#include "fmod_audio/fmod_audio.h"
 #else
-#include "audio/null_audio.h"
+#include "null_audio/null_audio.h"
 #endif
 
 #include <iostream>
