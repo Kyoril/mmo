@@ -8,6 +8,7 @@
 
 #include "assets/asset_registry.h"
 #include "preview_providers/preview_provider_manager.h"
+#include "shared/audio/audio.h"
 
 namespace mmo
 {
@@ -40,11 +41,15 @@ namespace mmo
 		std::string& currentAssetPath,
 		const std::set<String>& extensions,
 		PreviewProviderManager* previewManager,
+		IAudio* audioSystem,
 		float previewSize)
 	{
 		bool changed = false;
 		
 		ImGui::PushID(label);
+
+		// Check if we're dealing with audio files
+		const bool isAudio = extensions.count(".wav") || extensions.count(".ogg") || extensions.count(".mp3");
 
 		// Preview image (if available)
 		if (previewManager && !currentAssetPath.empty())
@@ -62,6 +67,26 @@ namespace mmo
 				if (const ImTextureID texId = provider->GetAssetPreview(currentAssetPath))
 				{
 					ImGui::Image(texId, ImVec2(previewSize, previewSize));
+				}
+			}
+		}
+
+		// Audio preview button (if audio system available and audio file selected)
+		if (audioSystem && isAudio && !currentAssetPath.empty())
+		{
+			ImGui::SameLine();
+			if (ImGui::Button("Preview"))
+			{
+				// Create and play sound
+				SoundIndex soundIdx = audioSystem->FindSound(currentAssetPath, SoundType::Sound2D);
+				if (soundIdx == InvalidSound)
+				{
+					soundIdx = audioSystem->CreateSound(currentAssetPath);
+				}
+				if (soundIdx != InvalidSound)
+				{
+					ChannelIndex channel = InvalidChannel;
+					audioSystem->PlaySound(soundIdx, &channel);
 				}
 			}
 		}

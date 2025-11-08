@@ -47,7 +47,7 @@
 #include "game/object_info.h"
 #include "game/guild_info.h"
 
-#include "audio/audio.h"
+#include "shared/audio/audio.h"
 #include "systems/party_info.h"
 #include "shared/game_client/spell_visualization_service.h"
 #include "console/console_var.h"
@@ -208,9 +208,8 @@ namespace mmo
 
 		ObjectMgr::Initialize(m_project, m_partyInfo);
 		
-		// Create audio adapter and initialize spell visualization service
-		m_spellAudioAdapter = std::make_unique<SpellAudioAdapter>(m_audio);
-		SpellVisualizationService::Get().Initialize(m_project, m_spellAudioAdapter.get());
+		// Initialize spell visualization service with direct audio access
+		SpellVisualizationService::Get().Initialize(m_project, &m_audio);
 		
 		SetupWorldScene();
 

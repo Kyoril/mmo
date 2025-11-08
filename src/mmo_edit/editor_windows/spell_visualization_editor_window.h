@@ -10,6 +10,7 @@
 namespace mmo
 {
 	class PreviewProviderManager;
+	class IAudio;
 
 	/// \brief Editor window for managing spell visualizations (data-driven visual effects).
 	///
@@ -21,14 +22,13 @@ namespace mmo
 		, public NonCopyable
 	{
 	public:
-		/// \brief Constructor.
-		/// \param name Window title.
-		/// \param project Proto data project containing the spell visualizations dataset.
-		/// \param host Editor host for additional UI services.
-		/// \param previewManager Preview provider manager for asset previews.
-		explicit SpellVisualizationEditorWindow(const String& name, proto::Project& project, EditorHost& host, PreviewProviderManager& previewManager);
-		
-		~SpellVisualizationEditorWindow() override = default;
+	/// \brief Constructor.
+	/// \param name Window title.
+	/// \param project Proto data project containing the spell visualizations dataset.
+	/// \param host Editor host for additional UI services.
+	/// \param previewManager Preview provider manager for asset previews.
+	/// \param audioSystem Audio system for sound previews (optional, may be null).
+	explicit SpellVisualizationEditorWindow(const String& name, proto::Project& project, EditorHost& host, PreviewProviderManager& previewManager, IAudio* audioSystem = nullptr);		~SpellVisualizationEditorWindow() override = default;
 
 	private:
 		/// \brief Draw the details panel for the selected visualization entry.
@@ -64,6 +64,7 @@ namespace mmo
 	private:
 		EditorHost& m_host;
 		PreviewProviderManager& m_previewManager;
+		IAudio* m_audioSystem;
 		
 		/// \brief Track which event sections are expanded in the UI.
 		std::map<uint32, bool> m_eventExpanded;

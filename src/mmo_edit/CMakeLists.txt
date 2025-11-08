@@ -47,12 +47,30 @@ endif()
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${ASSIMPSDK_INCLUDE_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/editors/material_editor/node_editor)
+if (WIN32)
+	include_directories("${PROJECT_SOURCE_DIR}/deps/fmod/inc")
+endif()
 
 source_group(src\\imgui FILES ${imgui_src})
 source_group(src\\imgui\\platform FILES ${imgui_platform_src})
 
+# Audio sources for sound preview
+if (WIN32)
+	file(GLOB audio_src
+		"${PROJECT_SOURCE_DIR}/src/mmo_client/audio/fmod_audio.cpp"
+		"${PROJECT_SOURCE_DIR}/src/mmo_client/audio/fmod_audio.h"
+	)
+	source_group(src\\audio FILES ${audio_src})
+else()
+	file(GLOB audio_src
+		"${PROJECT_SOURCE_DIR}/src/mmo_client/audio/null_audio.cpp"
+		"${PROJECT_SOURCE_DIR}/src/mmo_client/audio/null_audio.h"
+	)
+	source_group(src\\audio FILES ${audio_src})
+endif()
+
 # Add executable
-add_gui_exe_recurse(mmo_edit ${imgui_src} ${imgui_platform_src})
+add_gui_exe_recurse(mmo_edit ${imgui_src} ${imgui_platform_src} ${audio_src})
 
 IF(APPLE)
     SET_TARGET_PROPERTIES(mmo_edit PROPERTIES MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/macos/Info-CMake.plist")
@@ -98,6 +116,16 @@ target_link_libraries(mmo_edit nav_mesh Recast Detour DebugUtils)
 target_link_libraries(mmo_edit graphics_null)
 if (WIN32)
 	target_link_libraries(mmo_edit graphics_d3d11)
+	# Link FMOD for audio preview in editor
+	target_link_libraries(mmo_edit "${CMAKE_SOURCE_DIR}/deps/fmod/lib/x64/fmod_vc.lib")
+	
+	# Copy FMOD DLL to binary directory
+	add_custom_command(TARGET mmo_edit POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different
+		"${CMAKE_SOURCE_DIR}/deps/fmod/lib/x64/fmod.dll"
+		$<TARGET_FILE_DIR:mmo_edit>
+		COMMENT "Copying FMOD DLL to editor binary directory"
+	)
 endif()
 
 target_link_libraries(mmo_edit ${ASSIMPSDK_LIBRARIES})

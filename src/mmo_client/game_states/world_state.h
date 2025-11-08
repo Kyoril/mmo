@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "mmo_client/audio/audio.h"
+#include "shared/audio/audio.h"
 #include "mmo_client/char_creation//char_select.h"
 #include "mmo_client/data/client_cache.h"
 #include "connection.h"
@@ -35,7 +35,6 @@
 
 #include "game_client/net_client.h"
 #include "debug_path_visualizer.h"
-#include "mmo_client/audio/spell_audio_adapter.h"
 
 namespace mmo
 {
@@ -385,13 +384,10 @@ namespace mmo
 		std::unique_ptr<PlayerController> m_playerController;
 		std::unique_ptr<AxisDisplay> m_debugAxis;
 		std::unique_ptr<WorldGrid> m_worldGrid;
-		IdGenerator<uint64> m_objectIdGenerator{1};
-		IAudio &m_audio;
-		std::unique_ptr<SpellAudioAdapter> m_spellAudioAdapter;
+	IdGenerator<uint64> m_objectIdGenerator{1};
+	IAudio &m_audio;
 
-		bool m_combatMode = false;
-
-		SceneNode *m_worldRootNode;
+	bool m_combatMode = false;		SceneNode *m_worldRootNode;
 		std::shared_ptr<ClientWorldInstance> m_worldInstance;
 
 		// Game time component for day/night cycle

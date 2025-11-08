@@ -8,6 +8,15 @@
 #include "configuration.h"
 #include "mysql_database.h"
 #include "assets/asset_registry.h"
+#include "shared/audio/audio.h"
+#include "math/vector3.h"
+#include "log/default_log_levels.h"
+
+#ifdef _WIN32
+#include "mmo_client/audio/fmod_audio.h"
+#else
+#include "mmo_client/audio/null_audio.h"
+#endif
 
 #include "preview_providers/preview_provider_manager.h"
 #include "preview_providers/texture_preview_provider.h"
@@ -127,12 +136,21 @@ int main(int argc, char* arg[])
 	mmo::PreviewProviderManager previewProviderManager;
 	AddDefaultPreviewProviders(previewProviderManager, mainWindow);
 
+	// Create FMOD audio system for sound preview in editor
+#ifdef _WIN32
+	auto editorAudio = std::make_unique<mmo::FMODAudio>();
+#else
+	auto editorAudio = std::make_unique<mmo::NullAudio>();
+#endif
+	editorAudio->Create();
+	ILOG("Editor audio system initialized");
+
 	// Setup asset window
 	auto assetWindow = std::make_unique<mmo::AssetWindow>("Asset Browser", previewProviderManager, mainWindow);
 	mainWindow.AddEditorWindow(std::move(assetWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::RangeTypeEditorWindow>("Spell Range Type Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::SpellEditorWindow>("Spell Editor", project, mainWindow));
-	mainWindow.AddEditorWindow(std::make_unique<mmo::SpellVisualizationEditorWindow>("Spell Visualization Editor", project, mainWindow, previewProviderManager));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::SpellVisualizationEditorWindow>("Spell Visualization Editor", project, mainWindow, previewProviderManager, editorAudio.get()));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::QuestEditorWindow>("Quest Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::MapEditorWindow>("Map Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::CreatureEditorWindow>("Creature Editor", project, mainWindow));
@@ -200,8 +218,20 @@ int main(int argc, char* arg[])
 		DispatchMessage(&msg);
 
 		ioService.poll_one();
+		
+		// Update audio system
+		if (editorAudio)
+		{
+			editorAudio->Update(mmo::Vector3::Zero, 0.0f);
+		}
 	}
 #endif
+
+	// Cleanup audio system
+	if (editorAudio)
+	{
+		editorAudio->Destroy();
+	}
 
 	dbService.stop();
 	dbThread.join();

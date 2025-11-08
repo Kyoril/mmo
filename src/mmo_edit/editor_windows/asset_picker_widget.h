@@ -11,6 +11,7 @@
 namespace mmo
 {
 	class PreviewProviderManager;
+	class IAudio;
 
 	/// \brief Reusable ImGui widget for picking assets from the asset registry.
 	///
@@ -18,6 +19,7 @@ namespace mmo
 	/// - Filter by file extensions
 	/// - Search/filter by text
 	/// - Preview using PreviewProviderManager
+	/// - Audio preview button (requires IAudio instance)
 	/// - Drag & drop support from Asset Browser
 	/// - Combo box dropdown with asset list
 	class AssetPickerWidget
@@ -28,6 +30,7 @@ namespace mmo
 		/// \param currentAssetPath Current asset path (will be modified if user selects a new asset).
 		/// \param extensions Set of allowed file extensions (e.g., {".htex", ".blp"}).
 		/// \param previewManager Preview provider manager for showing asset previews (optional).
+		/// \param audioSystem Audio system for previewing sound files (optional).
 		/// \param previewSize Size of the preview image in pixels (default 64x64).
 		/// \return True if the asset path was changed.
 		static bool Draw(
@@ -35,6 +38,7 @@ namespace mmo
 			std::string& currentAssetPath,
 			const std::set<String>& extensions,
 			PreviewProviderManager* previewManager = nullptr,
+			IAudio* audioSystem = nullptr,
 			float previewSize = 64.0f);
 
 	private:

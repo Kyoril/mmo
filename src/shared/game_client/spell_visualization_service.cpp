@@ -13,7 +13,7 @@ namespace mmo
         return instance;
     }
 
-    void SpellVisualizationService::Initialize(const proto_client::Project& project, ISpellAudioPlayer* audioPlayer)
+    void SpellVisualizationService::Initialize(const proto_client::Project& project, IAudio* audioPlayer)
     {
         m_project = &project;
         m_audioPlayer = audioPlayer;
@@ -182,7 +182,7 @@ namespace mmo
             }
         }
 
-        // Play sounds using the abstract audio player interface
+        // Play sounds using the audio interface
         if (m_audioPlayer && kit.sounds_size() > 0)
         {
             const bool isLooped = kit.has_loop() && kit.loop();
@@ -193,25 +193,44 @@ namespace mmo
                     const uint64 guid = actor.GetGuid();
                     // Stop any existing looped sound for this actor (only one loop per actor at a time)
                     auto it = m_loopedSounds.find(guid);
-                    if (it != m_loopedSounds.end() && it->second.audioHandle != 0)
+                    if (it != m_loopedSounds.end() && it->second.audioHandle != InvalidChannel)
                     {
-                        m_audioPlayer->StopLoopedSound(it->second.audioHandle);
+                        m_audioPlayer->StopSound(&it->second.audioHandle);
                     }
                     
-                    // Start new looped sound
-                    uint64 handle = m_audioPlayer->PlayLoopedSound(snd);
-                    if (handle != 0)
+                    // Create looped sound
+                    SoundIndex soundIdx = m_audioPlayer->FindSound(snd, SoundType::SoundLooped2D);
+                    if (soundIdx == InvalidSound)
                     {
-                        LoopedSoundHandle loopHandle;
-                        loopHandle.audioHandle = handle;
-                        loopHandle.spellId = vis.id();
-                        loopHandle.event = Event::Casting;
-                        m_loopedSounds[guid] = loopHandle;
+                        soundIdx = m_audioPlayer->CreateLoopedSound(snd);
+                    }
+                    
+                    if (soundIdx != InvalidSound)
+                    {
+                        ChannelIndex channel = InvalidChannel;
+                        m_audioPlayer->PlaySound(soundIdx, &channel);
+                        if (channel != InvalidChannel)
+                        {
+                            LoopedSoundHandle loopHandle;
+                            loopHandle.audioHandle = channel;
+                            loopHandle.spellId = vis.id();
+                            loopHandle.event = Event::Casting;
+                            m_loopedSounds[guid] = loopHandle;
+                        }
                     }
                 }
                 else
                 {
-                    m_audioPlayer->PlaySound(snd);
+                    SoundIndex soundIdx = m_audioPlayer->FindSound(snd, SoundType::Sound2D);
+                    if (soundIdx == InvalidSound)
+                    {
+                        soundIdx = m_audioPlayer->CreateSound(snd);
+                    }
+                    if (soundIdx != InvalidSound)
+                    {
+                        ChannelIndex channel = InvalidChannel;
+                        m_audioPlayer->PlaySound(soundIdx, &channel);
+                    }
                 }
             }
         }
@@ -224,9 +243,9 @@ namespace mmo
         auto it = m_loopedSounds.find(actorGuid);
         if (it != m_loopedSounds.end())
         {
-            if (m_audioPlayer && it->second.audioHandle != 0)
+            if (m_audioPlayer && it->second.audioHandle != InvalidChannel)
             {
-                m_audioPlayer->StopLoopedSound(it->second.audioHandle);
+                m_audioPlayer->StopSound(&it->second.audioHandle);
             }
             m_loopedSounds.erase(it);
         }

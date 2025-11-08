@@ -31,10 +31,11 @@ namespace mmo
 		"Projectile Impact"
 	};
 
-	SpellVisualizationEditorWindow::SpellVisualizationEditorWindow(const String& name, proto::Project& project, EditorHost& host, PreviewProviderManager& previewManager)
+	SpellVisualizationEditorWindow::SpellVisualizationEditorWindow(const String& name, proto::Project& project, EditorHost& host, PreviewProviderManager& previewManager, IAudio* audioSystem)
 		: EditorEntryWindowBase<proto::SpellVisualizations, proto::SpellVisualization>(project, project.spellVisualizations, name)
 		, m_host(host)
 		, m_previewManager(previewManager)
+		, m_audioSystem(audioSystem)
 	{
 		m_hasToolbarButton = false;
 		
@@ -82,15 +83,13 @@ namespace mmo
 			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "(Required)");
 		}
 
-		// Icon path
-		std::string icon = currentEntry.icon();
-		static const std::set<String> iconExtensions = { ".htex", ".blp" };
-		if (AssetPickerWidget::Draw("Icon", icon, iconExtensions, &m_previewManager, 64.0f))
-		{
-			currentEntry.set_icon(icon);
-		}
-
-		ImGui::Spacing();
+	// Icon path
+	std::string icon = currentEntry.icon();
+	static const std::set<String> iconExtensions = { ".htex", ".blp" };
+	if (AssetPickerWidget::Draw("Icon", icon, iconExtensions, &m_previewManager, nullptr, 64.0f))
+	{
+		currentEntry.set_icon(icon);
+	}		ImGui::Spacing();
 		ImGui::Separator();
 		ImGui::Text("Visual Kits by Event");
 		ImGui::Separator();
@@ -241,13 +240,11 @@ namespace mmo
 					char soundLabel[32];
 					snprintf(soundLabel, sizeof(soundLabel), "Sound %d", i);
 					
-					// Use asset picker for sound selection
-					if (AssetPickerWidget::Draw(soundLabel, sound, soundExtensions, nullptr, 0.0f))
-					{
-						kit.set_sounds(i, sound);
-					}
-					
-					ImGui::SameLine();
+				// Use asset picker for sound selection
+				if (AssetPickerWidget::Draw(soundLabel, sound, soundExtensions, nullptr, m_audioSystem, 0.0f))
+				{
+					kit.set_sounds(i, sound);
+				}					ImGui::SameLine();
 					if (ImGui::SmallButton("Remove"))
 					{
 						soundsToRemove.push_back(i);

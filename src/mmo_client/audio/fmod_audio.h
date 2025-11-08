@@ -3,7 +3,7 @@
 
 #ifdef _WIN32
 
-#include "audio.h"
+#include "shared/audio/audio.h"
 
 #include <fmod/inc/fmod.hpp>
 #include <fmod/inc/fmod_errors.h>
