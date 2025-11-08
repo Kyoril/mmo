@@ -36,11 +36,11 @@ namespace mmo
 	class GameUnitC : public GameObjectC, public CustomizationPropertyGroupApplier
 	{
 	public:
-		signal<void(GameUnitC&, const MovementInfo&)> movementEnded;
+		signal<void(GameUnitC &, const MovementInfo &)> movementEnded;
 
 	public:
 		/// @brief Creates a instance of the GameUnitC class.
-		explicit GameUnitC(Scene& scene, NetClient& netDriver, const proto_client::Project& project, uint32 map);
+		explicit GameUnitC(Scene &scene, NetClient &netDriver, const proto_client::Project &project, uint32 map);
 
 		/// @brief Destroys the instance of the GameUnitC class.
 		virtual ~GameUnitC() override;
@@ -55,7 +55,7 @@ namespace mmo
 
 		/// Adds to the input vector which will be consumed the next time input is processed.
 		/// @param worldSpaceAcceleration The acceleration to add in world space.
-		void AddInputVector(const Vector3& worldSpaceAcceleration)
+		void AddInputVector(const Vector3 &worldSpaceAcceleration)
 		{
 			m_inputVector += worldSpaceAcceleration;
 		}
@@ -80,13 +80,13 @@ namespace mmo
 		/// @param eventType The type of event to queue
 		/// @param timestamp The timestamp of the event
 		/// @param movementInfo The movement info at the time of the event
-		void QueueMovementEvent(MovementEventType eventType, GameTime timestamp, const MovementInfo& movementInfo);
+		void QueueMovementEvent(MovementEventType eventType, GameTime timestamp, const MovementInfo &movementInfo);
 
-		const Vector3& GetInputVector() const { return m_inputVector; }
+		const Vector3 &GetInputVector() const { return m_inputVector; }
 
-		const Vector3& GetLastInputVector() const { return m_lastInputVector; }
+		const Vector3 &GetLastInputVector() const { return m_lastInputVector; }
 
-		void AddYawInput(const Radian& value);
+		void AddYawInput(const Radian &value);
 
 		void OnMovementModeChanged(MovementMode previousMovementMode, MovementMode newMovementMode);
 
@@ -97,55 +97,55 @@ namespace mmo
 		Vector3 GetUpVector() const;
 
 		/// @brief Deserializes the unit from the given reader.
-		virtual void Deserialize(io::Reader& reader, bool complete) override;
+		virtual void Deserialize(io::Reader &reader, bool complete) override;
 
 		/// @brief Updates the unit. Should be called once per frame per unit.
 		virtual void Update(float deltaTime) override;
-		
+
 		/// @brief Updates quest giver icon and unit name visuals
 		void UpdateQuestGiverAndNameVisuals(const float deltaTime);
-		
+
 		/// @brief Updates normal movement (not animation-based)
 		void UpdateNormalMovement(const float deltaTime);
-		
+
 		/// @brief Makes NPCs face their targets
 		void UpdateTargetTracking() const;
-		
+
 		/// @brief Updates animation based on movement state
 		void UpdateMovementBasedAnimation();
-		
+
 		/// @brief Updates animation states (transitions, blending, etc.)
 		void UpdateAnimationStates(const float deltaTime, const bool isDead);
-		
+
 		/// @brief Updates one-shot animations
 		void UpdateOneShotAnimation(const float deltaTime);
-		
+
 		/// @brief Handles transitions between animation states
 		void UpdateAnimationTransitions(const float deltaTime);
-		
+
 		/// @brief Updates animation timing
 		void AdvanceAnimationTimes(const float deltaTime) const;
 
-		virtual void ApplyMovementInfo(const MovementInfo& movementInfo);
+		virtual void ApplyMovementInfo(const MovementInfo &movementInfo);
 
 		/// @copydoc GameObjectC::InitializeFieldMap
 		virtual void InitializeFieldMap() override;
 
-		bool OnAuraUpdate(io::Reader& reader);
+		bool OnAuraUpdate(io::Reader &reader);
 
 		void SetQuestGiverStatus(QuestgiverStatus status);
 
 		bool IsBeingMoved() const { return !m_movementPath.empty() && !m_pathCompleted; }
 
-		const proto_client::ModelDataEntry* GetDisplayModel() const;
+		const proto_client::ModelDataEntry *GetDisplayModel() const;
 
-		const AvatarConfiguration& GetAvatarConfiguration() const { return m_configuration; }
+		const AvatarConfiguration &GetAvatarConfiguration() const { return m_configuration; }
 
-		const std::shared_ptr<CustomizableAvatarDefinition>& GetAvatarDefinition() const { return m_customizationDefinition; }
+		const std::shared_ptr<CustomizableAvatarDefinition> &GetAvatarDefinition() const { return m_customizationDefinition; }
 
 		unit_stand_state::Type GetStandState() const { return static_cast<unit_stand_state::Type>(Get<int32>(object_fields::StandState)); }
 
-		const proto_client::SpellEntry* GetOpenSpell() const;
+		const proto_client::SpellEntry *GetOpenSpell() const;
 
 		void OnLanded();
 
@@ -157,7 +157,7 @@ namespace mmo
 
 	protected:
 		/// @brief Manual render object for capsule visualization
-		ManualRenderObject* m_capsuleDebugObject{ nullptr };
+		ManualRenderObject *m_capsuleDebugObject{nullptr};
 
 		/// @brief Create and setup capsule debug visualization (if not already created)
 		void CreateCapsuleDebugVisualization();
@@ -174,7 +174,7 @@ namespace mmo
 
 		void OnFactionTemplateChanged();
 
-		void SetQuestGiverMesh(const String& meshName);
+		void SetQuestGiverMesh(const String &meshName);
 
 		virtual void RefreshUnitName();
 
@@ -198,7 +198,7 @@ namespace mmo
 		void StopTurn();
 
 		/// @brief Rotates the unit to face the specified direction.
-		void SetFacing(const Radian& facing);
+		void SetFacing(const Radian &facing);
 
 		void Jump();
 
@@ -225,7 +225,7 @@ namespace mmo
 		void SetJumpForceTimeRemining(float remaining) { m_jumpForceTimeRemaining = remaining; }
 
 		/// @brief Makes the unit follow a given path of points.
-		void SetMovementPath(const std::vector<Vector3>& points, GameTime moveTime, const std::optional<Radian>& targetRotation);
+		void SetMovementPath(const std::vector<Vector3> &points, GameTime moveTime, const std::optional<Radian> &targetRotation);
 
 		void SetSpeed(const movement_type::Type type, float speed) { m_unitSpeed[type] = speed; }
 
@@ -250,24 +250,24 @@ namespace mmo
 		/// @brief Gets the maximum health of this unit.
 		uint32 GetMaxHealth() const { return Get<uint32>(object_fields::MaxHealth); }
 
-		/// 
+		///
 		uint32 GetLevel() const { return Get<uint32>(object_fields::Level); }
 
-		/// 
+		///
 		uint32 GetMaxLevel() const { return Get<uint32>(object_fields::MaxLevel); }
 
-		/// 
+		///
 		uint32 GetXp() const { return Get<uint32>(object_fields::Xp); }
 
-		/// 
+		///
 		uint32 GetNextLevelXp() const { return Get<uint32>(object_fields::NextLevelXp); }
 
-		/// 
+		///
 		virtual uint32 GetAvailableAttributePoints() const
 		{
 			return 0;
-		} 
-		
+		}
+
 		virtual uint32 GetTalentPoints() const
 		{
 			return 0;
@@ -309,19 +309,19 @@ namespace mmo
 
 		virtual uint8 GetAttributeCost(uint32 attribute) const;
 
-		GameAuraC* GetAura(uint32 index) const;
+		GameAuraC *GetAura(uint32 index) const;
 
 		/// @brief Returns whether the unit is currently alive.
 		bool IsAlive() const { return GetHealth() > 0; }
 
-		void SetTargetUnit(const std::shared_ptr<GameUnitC>& targetUnit);
+		void SetTargetUnit(const std::shared_ptr<GameUnitC> &targetUnit);
 
 	public:
 		/// @brief Initializes the list of learned spells at once without notification for each single spell.
-		void SetInitialSpells(const std::vector<const proto_client::SpellEntry*>& spellIds);
+		void SetInitialSpells(const std::vector<const proto_client::SpellEntry *> &spellIds);
 
 		/// @brief Adds a spell to the list of learned spells. Does nothing if this spell is already known.
-		void LearnSpell(const proto_client::SpellEntry* spell);
+		void LearnSpell(const proto_client::SpellEntry *spell);
 
 		/// @brief Removes a spell from the list of learned spells. Does nothing if the spell is not known.
 		void UnlearnSpell(uint32 spellId);
@@ -332,10 +332,10 @@ namespace mmo
 		bool HasSpell(uint32 spellId) const;
 
 		/// @brief Returns the spell at the specified index of learned spells of this unit. Returns nullptr if index is out of bounds.
-		const proto_client::SpellEntry* GetSpell(uint32 index) const;
+		const proto_client::SpellEntry *GetSpell(uint32 index) const;
 
 		/// @brief Returns the spell at the specified index of learned spells of this unit. Returns nullptr if index is out of bounds.
-		const proto_client::SpellEntry* GetVisibleSpell(uint32 index) const;
+		const proto_client::SpellEntry *GetVisibleSpell(uint32 index) const;
 
 		/// @brief Returns the number of known spells of this unit.
 		uint32 GetSpellCount() const { return static_cast<uint32>(m_spells.size()); }
@@ -348,13 +348,13 @@ namespace mmo
 		bool IsAttacking() const { return m_victim != 0; }
 
 		/// @brief Returns whether the unit is currently attacking the specified unit.
-		bool IsAttacking(const GameUnitC& victim) const { return victim.GetGuid() == m_victim; }
+		bool IsAttacking(const GameUnitC &victim) const { return victim.GetGuid() == m_victim; }
 
 		/// @brief Returns whether the unit can attack right now at all.
 		bool CanAttack() const { return false; }
 
 		/// @brief Starts auto attacking the specified unit.
-		void Attack(GameUnitC& victim);
+		void Attack(GameUnitC &victim);
 
 		/// @brief Stops auto attacking.
 		void StopAttack();
@@ -365,13 +365,13 @@ namespace mmo
 
 		float GetSpeed(const movement_type::Type type) const { return m_unitSpeed[type]; }
 
-		void SetCreatureInfo(const CreatureInfo& creatureInfo);
+		void SetCreatureInfo(const CreatureInfo &creatureInfo);
 
-		const String& GetName() const override;
+		const String &GetName() const override;
 
-		void SetTargetAnimState(AnimationState* newTargetState);
+		void SetTargetAnimState(AnimationState *newTargetState);
 
-		void PlayOneShotAnimation(AnimationState* animState);
+		void PlayOneShotAnimation(AnimationState *animState);
 
 		void NotifyAttackSwingEvent();
 
@@ -406,24 +406,24 @@ namespace mmo
 			return Radian(Degree(55.0f));
 		}
 
-		ManualRenderObject* GetNormalDebugObject() const
+		ManualRenderObject *GetNormalDebugObject() const
 		{
 			return m_normalDebugObject;
 		}
 
 	public:
 		/// @brief Returns the current movement information of this unit.
-		[[nodiscard]] const MovementInfo& GetMovementInfo() const { return m_movementInfo; }
+		[[nodiscard]] const MovementInfo &GetMovementInfo() const { return m_movementInfo; }
 
-		const Capsule& GetCollider() const { return m_collider; }
+		const Capsule &GetCollider() const { return m_collider; }
 
-		const proto_client::FactionEntry* GetFaction() const { return m_faction; }
+		const proto_client::FactionEntry *GetFaction() const { return m_faction; }
 
-		const proto_client::FactionTemplateEntry* GetFactionTemplate() const { return m_factionTemplate; }
+		const proto_client::FactionTemplateEntry *GetFactionTemplate() const { return m_factionTemplate; }
 
-		bool IsFriendlyTo(const GameUnitC& other) const;
+		bool IsFriendlyTo(const GameUnitC &other) const;
 
-		bool IsHostileTo(const GameUnitC& other) const;
+		bool IsHostileTo(const GameUnitC &other) const;
 
 	protected:
 		void OnDisplayIdChanged();
@@ -435,13 +435,17 @@ namespace mmo
 		void UpdateMovementInfo();
 
 	public:
-		void Apply(const VisibilitySetPropertyGroup& group, const AvatarConfiguration& configuration) override;
-		void Apply(const MaterialOverridePropertyGroup& group, const AvatarConfiguration& configuration) override;
-		void Apply(const ScalarParameterPropertyGroup& group, const AvatarConfiguration& configuration) override;
+		void Apply(const VisibilitySetPropertyGroup &group, const AvatarConfiguration &configuration) override;
+		void Apply(const MaterialOverridePropertyGroup &group, const AvatarConfiguration &configuration) override;
+		void Apply(const ScalarParameterPropertyGroup &group, const AvatarConfiguration &configuration) override;
 
 		void SetUnitNameVisible(bool show);
 
-		UnitMovement* GetUnitMovement() const { ASSERT(m_unitMovement); return m_unitMovement.get(); }
+		UnitMovement *GetUnitMovement() const
+		{
+			ASSERT(m_unitMovement);
+			return m_unitMovement.get();
+		}
 
 	private:
 		/// Plays the landing animation when transitioning from falling to ground
@@ -449,18 +453,18 @@ namespace mmo
 
 		/// Updates path-based movement towards the next waypoint
 		void UpdatePathMovement(const float deltaTime);
-		
+
 		/// Returns true if the unit is currently following a movement path
 		bool IsFollowingPath() const { return !m_movementPath.empty() && !m_pathCompleted; }
-		
+
 		/// Calculates position along the path based on distance traveled
 		Vector3 CalculatePositionAlongPath(float distance) const;
-		
+
 		/// Returns true if this unit is controlled by the local player
 		bool IsControlledByLocalPlayer() const;
 
 	protected:
-		NetClient& m_netDriver;
+		NetClient &m_netDriver;
 		MovementInfo m_movementInfo;
 
 		float m_movementAnimationTime = 0.0f;
@@ -470,20 +474,20 @@ namespace mmo
 
 		// Path-based movement system (replaces animation-based movement)
 		std::vector<Vector3> m_movementPath;
-		Vector3 m_pathStartPosition;			// Where the unit was when path started
+		Vector3 m_pathStartPosition; // Where the unit was when path started
 		size_t m_currentPathIndex = 0;
 		std::optional<Radian> m_targetRotation;
 		bool m_pathCompleted = false;
-		GameTime m_pathStartTime = 0;		// When the path movement started
-		float m_pathTotalLength = 0.0f;	// Total length of all path segments
+		GameTime m_pathStartTime = 0;			 // When the path movement started
+		float m_pathTotalLength = 0.0f;			 // Total length of all path segments
 		std::vector<float> m_pathSegmentLengths; // Length of each segment for time calculation
-		
+
 		// Path gravity simulation
-		float m_pathVerticalVelocity = 0.0f;	// Current vertical velocity for gravity
-		bool m_pathOnGround = true;				// Whether unit is on ground during path movement
-		
-		std::vector<const proto_client::SpellEntry*> m_spells;
-		std::vector<const proto_client::SpellEntry*> m_spellBookSpells;
+		float m_pathVerticalVelocity = 0.0f; // Current vertical velocity for gravity
+		bool m_pathOnGround = true;			 // Whether unit is on ground during path movement
+
+		std::vector<const proto_client::SpellEntry *> m_spells;
+		std::vector<const proto_client::SpellEntry *> m_spellBookSpells;
 
 		uint64 m_victim = 0;
 
@@ -493,16 +497,13 @@ namespace mmo
 
 		CreatureInfo m_creatureInfo;
 
-		bool m_casting = false;
-
-		SceneNode* m_nameComponentNode{ nullptr };
+		SceneNode *m_nameComponentNode{nullptr};
 		std::unique_ptr<WorldTextComponent> m_nameComponent;
 
 		Capsule m_collider;
+		const proto_client::FactionEntry *m_faction = nullptr;
 
-		const proto_client::FactionEntry* m_faction = nullptr;
-
-		const proto_client::FactionTemplateEntry* m_factionTemplate = nullptr;
+		const proto_client::FactionTemplateEntry *m_factionTemplate = nullptr;
 
 		std::vector<std::unique_ptr<GameAuraC>> m_auras;
 
@@ -513,25 +514,25 @@ namespace mmo
 
 	protected:
 		// Animation stuff
-		AnimationState* m_idleAnimState{ nullptr };
-		AnimationState* m_readyAnimState{ nullptr };
-		AnimationState* m_runAnimState{ nullptr };
-		AnimationState* m_deathState{ nullptr };
-		AnimationState* m_unarmedAttackState{ nullptr };
-		AnimationState* m_castReleaseState{ nullptr };
-		AnimationState* m_castingState{ nullptr };
-		AnimationState* m_damageHitState{ nullptr };
+		AnimationState *m_idleAnimState{nullptr};
+		AnimationState *m_readyAnimState{nullptr};
+		AnimationState *m_runAnimState{nullptr};
+		AnimationState *m_deathState{nullptr};
+		AnimationState *m_unarmedAttackState{nullptr};
+		AnimationState *m_castReleaseState{nullptr};
+		AnimationState *m_castingState{nullptr};
+		AnimationState *m_damageHitState{nullptr};
 		// Jump animation states
-		AnimationState* m_jumpStartState{ nullptr };
-		AnimationState* m_fallingState{ nullptr };
-		AnimationState* m_landState{ nullptr };
+		AnimationState *m_jumpStartState{nullptr};
+		AnimationState *m_fallingState{nullptr};
+		AnimationState *m_landState{nullptr};
 
-		AnimationState* m_targetState = nullptr;
-		AnimationState* m_currentState = nullptr;
-		AnimationState* m_oneShotState = nullptr;
+		AnimationState *m_targetState = nullptr;
+		AnimationState *m_currentState = nullptr;
+		AnimationState *m_oneShotState = nullptr;
 
-		SceneNode* m_questGiverNode = nullptr;
-		Entity* m_questGiverEntity = nullptr;
+		SceneNode *m_questGiverNode = nullptr;
+		Entity *m_questGiverEntity = nullptr;
 
 		AvatarConfiguration m_configuration;
 
@@ -539,15 +540,15 @@ namespace mmo
 
 		float m_maxStepUpHeight = 0.35f;
 
-		ManualRenderObject* m_normalDebugObject = nullptr;
+		ManualRenderObject *m_normalDebugObject = nullptr;
 
 		Vector3 m_velocity;
 
 		Vector3 m_acceleration;
 
-		Vector3 m_inputVector{ 0.0f, 0.0f, 0.0f };
+		Vector3 m_inputVector{0.0f, 0.0f, 0.0f};
 
-		Vector3 m_lastInputVector{ 0.0f, 0.0f, 0.0f };
+		Vector3 m_lastInputVector{0.0f, 0.0f, 0.0f};
 
 		std::unique_ptr<UnitMovement> m_unitMovement;
 
@@ -567,7 +568,7 @@ namespace mmo
 
 		float m_jumpMaxHoldTime = 0.0f;
 
-		Radian m_yawInput{ 0.0f };
+		Radian m_yawInput{0.0f};
 
 		std::queue<MovementEvent> m_movementEventQueue;
 

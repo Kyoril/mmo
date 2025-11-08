@@ -26,8 +26,7 @@
 
 namespace mmo
 {
-	GameUnitC::GameUnitC(Scene& scene, NetClient& netDriver, const proto_client::Project& project, uint32 map): GameObjectC(scene, project, map)
-		, m_netDriver(netDriver), m_unitSpeed{ 0.0f }, m_creatureInfo()
+	GameUnitC::GameUnitC(Scene &scene, NetClient &netDriver, const proto_client::Project &project, uint32 map) : GameObjectC(scene, project, map), m_netDriver(netDriver), m_unitSpeed{0.0f}, m_creatureInfo()
 	{
 		m_unitMovement = std::make_unique<UnitMovement>(*this);
 	}
@@ -44,12 +43,12 @@ namespace mmo
 	}
 
 	void GameUnitC::QueueMovementEvent(MovementEventType eventType, GameTime timestamp,
-		const MovementInfo& movementInfo)
+									   const MovementInfo &movementInfo)
 	{
 		m_movementEventQueue.emplace(eventType, timestamp, movementInfo);
 	}
 
-	void GameUnitC::AddYawInput(const Radian& value)
+	void GameUnitC::AddYawInput(const Radian &value)
 	{
 		m_yawInput += value;
 	}
@@ -85,7 +84,7 @@ namespace mmo
 		return m_sceneNode->GetOrientation() * Vector3::UnitY;
 	}
 
-	void GameUnitC::Deserialize(io::Reader& reader, const bool complete)
+	void GameUnitC::Deserialize(io::Reader &reader, const bool complete)
 	{
 		uint32 updateFlags = 0;
 		if (!(reader >> io::read<uint32>(updateFlags)))
@@ -143,15 +142,7 @@ namespace mmo
 
 		m_fieldMap.MarkAllAsUnchanged();
 
-		reader
-			>> io::read<float>(m_unitSpeed[movement_type::Walk])
-			>> io::read<float>(m_unitSpeed[movement_type::Run])
-			>> io::read<float>(m_unitSpeed[movement_type::Backwards])
-			>> io::read<float>(m_unitSpeed[movement_type::Swim])
-			>> io::read<float>(m_unitSpeed[movement_type::SwimBackwards])
-			>> io::read<float>(m_unitSpeed[movement_type::Flight])
-			>> io::read<float>(m_unitSpeed[movement_type::FlightBackwards])
-			>> io::read<float>(m_unitSpeed[movement_type::Turn]);
+		reader >> io::read<float>(m_unitSpeed[movement_type::Walk]) >> io::read<float>(m_unitSpeed[movement_type::Run]) >> io::read<float>(m_unitSpeed[movement_type::Backwards]) >> io::read<float>(m_unitSpeed[movement_type::Swim]) >> io::read<float>(m_unitSpeed[movement_type::SwimBackwards]) >> io::read<float>(m_unitSpeed[movement_type::Flight]) >> io::read<float>(m_unitSpeed[movement_type::FlightBackwards]) >> io::read<float>(m_unitSpeed[movement_type::Turn]);
 
 		ASSERT(GetGuid() > 0);
 		if (complete)
@@ -175,7 +166,7 @@ namespace mmo
 		while (!m_movementEventQueue.empty())
 		{
 			// Get next event (we expect events are in order, so no future event is in front of a past event)
-			const auto& moveEvent = m_movementEventQueue.front();
+			const auto &moveEvent = m_movementEventQueue.front();
 			if (moveEvent.timestamp > now)
 			{
 				// Event is in the future, stop processing
@@ -245,7 +236,7 @@ namespace mmo
 
 		m_unitMovement->Tick(deltaTime);
 	}
-	
+
 	void GameUnitC::UpdateQuestGiverAndNameVisuals(const float deltaTime)
 	{
 		// Update quest giver icon
@@ -258,7 +249,7 @@ namespace mmo
 			}
 
 			// TODO: Get rotation to the current camera and yaw the icon to face it!
-			const Camera* cam = m_scene.GetCamera((uint32)0);
+			const Camera *cam = m_scene.GetCamera((uint32)0);
 			if (cam)
 			{
 				m_questGiverNode->SetFixedYawAxis(true);
@@ -269,7 +260,7 @@ namespace mmo
 		// Update name component to face camera
 		if (m_nameComponent && m_nameComponent->IsVisible())
 		{
-			const Camera* cam = m_scene.GetCamera((uint32)0);
+			const Camera *cam = m_scene.GetCamera((uint32)0);
 			if (cam)
 			{
 				m_nameComponentNode->SetFixedYawAxis(true);
@@ -277,7 +268,7 @@ namespace mmo
 			}
 		}
 	}
-	
+
 	void GameUnitC::UpdateNormalMovement(const float deltaTime)
 	{
 		// Update target tracking for NPCs
@@ -296,7 +287,7 @@ namespace mmo
 			UpdateMovementBasedAnimation();
 		}
 	}
-	
+
 	void GameUnitC::UpdateTargetTracking() const
 	{
 		// Check if we should track a target
@@ -309,12 +300,12 @@ namespace mmo
 
 			// Calculate the angle to face the target
 			const Radian yawToTarget = GetAngle(myPos.x, myPos.z, targetPos.x, targetPos.z);
-			
+
 			// Set orientation using only the yaw component
 			GetSceneNode()->SetOrientation(Quaternion(yawToTarget, Vector3::UnitY));
 		}
 	}
-	
+
 	void GameUnitC::UpdateMovementBasedAnimation()
 	{
 		if (!m_unitMovement)
@@ -351,17 +342,17 @@ namespace mmo
 		// Regular movement animations
 		if (m_unitMovement->IsMovingOnGround() && inputVector2DSize > 0.1f)
 		{
-			SetTargetAnimState(m_casting ? m_castingState : m_runAnimState);
+			SetTargetAnimState(m_runAnimState);
 		}
 		else
 		{
 			const bool isAttacking = (Get<uint32>(object_fields::Flags) & unit_flags::Attacking) != 0;
-			AnimationState* idleAnim = isAttacking ? m_readyAnimState : m_idleAnimState;
+			AnimationState *idleAnim = isAttacking ? m_readyAnimState : m_idleAnimState;
 
-			SetTargetAnimState(m_casting ? m_castingState : idleAnim);
+			SetTargetAnimState(idleAnim);
 		}
 	}
-	
+
 	void GameUnitC::UpdateAnimationStates(const float deltaTime, const bool isDead)
 	{
 		// Handle one-shot animations
@@ -397,12 +388,14 @@ namespace mmo
 		// Update animation time positions
 		AdvanceAnimationTimes(deltaTime);
 	}
-	
+
 	void GameUnitC::UpdateOneShotAnimation(const float deltaTime)
 	{
 		// Hide regular animations while one-shot is playing
-		if (m_currentState) m_currentState->SetWeight(0.0f);
-		if (m_targetState) m_targetState->SetWeight(0.0f);
+		if (m_currentState)
+			m_currentState->SetWeight(0.0f);
+		if (m_targetState)
+			m_targetState->SetWeight(0.0f);
 
 		// Handle transition back after one-shot animation has ended
 		if (m_oneShotState->HasEnded())
@@ -436,7 +429,7 @@ namespace mmo
 			}
 		}
 	}
-	
+
 	void GameUnitC::UpdateAnimationTransitions(const float deltaTime)
 	{
 		// Skip transitions if one-shot animation is playing
@@ -476,7 +469,7 @@ namespace mmo
 			}
 		}
 	}
-	
+
 	void GameUnitC::AdvanceAnimationTimes(const float deltaTime) const
 	{
 		// Update animation states
@@ -494,7 +487,7 @@ namespace mmo
 		}
 	}
 
-	void GameUnitC::ApplyMovementInfo(const MovementInfo& movementInfo)
+	void GameUnitC::ApplyMovementInfo(const MovementInfo &movementInfo)
 	{
 		m_movementInfo = movementInfo;
 
@@ -568,7 +561,7 @@ namespace mmo
 		}
 	}
 
-	bool GameUnitC::OnAuraUpdate(io::Reader& reader)
+	bool GameUnitC::OnAuraUpdate(io::Reader &reader)
 	{
 		uint32 visibleAuraCount = 0;
 		if (!(reader >> io::read<uint32>(visibleAuraCount)))
@@ -578,9 +571,9 @@ namespace mmo
 
 		// Track old auras for diffing (simple approach: remember spell ids)
 		std::set<uint32> oldAuraSpellIds;
-		for (const auto& aura : m_auras)
+		for (const auto &aura : m_auras)
 		{
-			if (const auto* spell = aura->GetSpell())
+			if (const auto *spell = aura->GetSpell())
 			{
 				oldAuraSpellIds.insert(spell->id());
 			}
@@ -595,10 +588,7 @@ namespace mmo
 			uint64 casterId;
 			uint8 auraTypeCount;
 
-			if (!(reader >> io::read<uint32>(spellId)
-				>> io::read<uint32>(duration)
-				>> io::read_packed_guid(casterId)
-				>> io::read<uint8>(auraTypeCount)))
+			if (!(reader >> io::read<uint32>(spellId) >> io::read<uint32>(duration) >> io::read_packed_guid(casterId) >> io::read<uint8>(auraTypeCount)))
 			{
 				ELOG("Failed to read aura data for unit " << log_hex_digit(GetGuid()));
 				return false;
@@ -612,7 +602,7 @@ namespace mmo
 				return false;
 			}
 
-			const proto_client::SpellEntry* spell = m_project.spells.getById(spellId);
+			const proto_client::SpellEntry *spell = m_project.spells.getById(spellId);
 			if (!spell)
 			{
 				ELOG("Failed to find spell for aura!");
@@ -630,7 +620,7 @@ namespace mmo
 			if (oldAuraSpellIds.find(spellId) == oldAuraSpellIds.end())
 			{
 				// Newly applied aura
-				if (const auto* spell = m_project.spells.getById(spellId))
+				if (const auto *spell = m_project.spells.getById(spellId))
 				{
 					NotifyAuraVisualizationApplied(*spell, this);
 				}
@@ -641,7 +631,7 @@ namespace mmo
 			if (newAuraSpellIds.find(spellId) == newAuraSpellIds.end())
 			{
 				// Removed aura
-				if (const auto* spell = m_project.spells.getById(spellId))
+				if (const auto *spell = m_project.spells.getById(spellId))
 				{
 					NotifyAuraVisualizationRemoved(*spell, this);
 				}
@@ -651,7 +641,7 @@ namespace mmo
 		return reader;
 	}
 
-	const proto_client::ModelDataEntry* GameUnitC::GetDisplayModel() const
+	const proto_client::ModelDataEntry *GameUnitC::GetDisplayModel() const
 	{
 		const uint32 displayId = Get<uint32>(object_fields::DisplayId);
 		if (!displayId)
@@ -720,7 +710,7 @@ namespace mmo
 		}
 	}
 
-	void GameUnitC::SetQuestGiverMesh(const String& meshName)
+	void GameUnitC::SetQuestGiverMesh(const String &meshName)
 	{
 		if (!m_questGiverEntity)
 		{
@@ -780,7 +770,7 @@ namespace mmo
 			m_nameComponent->SetText(strm.str());
 
 			// Set the text color based on the unit's relationship to the player
-			Color textColor = Color::White;  // Default color
+			Color textColor = Color::White; // Default color
 
 			// Check if this is a party member
 			bool isPartyMember = false;
@@ -915,7 +905,7 @@ namespace mmo
 		QueueMovementEvent(movement_event_type::StopTurn, m_movementInfo.timestamp, m_movementInfo);
 	}
 
-	void GameUnitC::SetFacing(const Radian& facing)
+	void GameUnitC::SetFacing(const Radian &facing)
 	{
 		m_movementInfo.facing = facing;
 
@@ -1039,14 +1029,14 @@ namespace mmo
 				// B) The jump limit has been met AND we were already jumping
 				const bool bJumpKeyHeld = (m_pressedJump && m_jumpKeyHoldTime < GetJumpMaxHoldTime());
 				jumpIsAllowed = bJumpKeyHeld &&
-					((m_jumpCurrentCount < m_jumpMaxCount) || (m_wasJumping && m_jumpCurrentCount == m_jumpMaxCount));
+								((m_jumpCurrentCount < m_jumpMaxCount) || (m_wasJumping && m_jumpCurrentCount == m_jumpMaxCount));
 			}
 		}
 
 		return jumpIsAllowed;
 	}
 
-	void GameUnitC::SetMovementPath(const std::vector<Vector3>& points, GameTime moveTime, const std::optional<Radian>& targetRotation)
+	void GameUnitC::SetMovementPath(const std::vector<Vector3> &points, GameTime moveTime, const std::optional<Radian> &targetRotation)
 	{
 		// Clear any existing animation-based movement
 		m_movementAnimationTime = 0.0f;
@@ -1068,7 +1058,7 @@ namespace mmo
 		const float distanceToNewStart = (newPathStart - currentPosition).GetLength();
 
 		constexpr float pathStartTolerance = 5.0f; // Allow 5 units tolerance for new path starts
-		
+
 		Vector3 actualStartPosition;
 		if (distanceToNewStart <= pathStartTolerance)
 		{
@@ -1096,9 +1086,9 @@ namespace mmo
 		// Calculate path segment lengths and total length for time-based movement
 		m_pathSegmentLengths.clear();
 		m_pathTotalLength = 0.0f;
-		
+
 		Vector3 currentPos = m_pathStartPosition; // Start from actual starting position
-		
+
 		for (size_t i = 0; i < m_movementPath.size(); ++i)
 		{
 			Vector3 segmentEnd = m_movementPath[i];
@@ -1144,14 +1134,14 @@ namespace mmo
 		// Calculate how far along the path we should be based on movement speed
 		const float runSpeed = GetSpeed(movement_type::Run);
 		const float targetDistance = runSpeed * elapsedTime;
-		
+
 		// Check if we're close enough to the final destination (ONLY distance-based completion)
 		const Vector3 currentPosition = m_sceneNode->GetDerivedPosition();
 		const Vector3 finalDestination = m_movementPath.back();
 		const float distanceToFinalDestination = (finalDestination - currentPosition).GetLength();
 
 		constexpr float arrivalThreshold = 1.0f; // Distance-based completion only
-		
+
 		// Complete path ONLY when we're actually close to destination (no time-based teleportation)
 		if (distanceToFinalDestination <= arrivalThreshold)
 		{
@@ -1169,7 +1159,7 @@ namespace mmo
 			m_movementInfo.movementFlags &= ~movement_flags::PositionChanging;
 
 			// Set idle animation for all units when path completes
-			if (m_idleAnimState && !m_casting)
+			if (m_idleAnimState)
 			{
 				SetTargetAnimState(m_idleAnimState);
 			}
@@ -1179,18 +1169,18 @@ namespace mmo
 			m_movementPath.clear();
 			m_pathSegmentLengths.clear();
 			m_currentPathIndex = 0;
-			
+
 			// Reset gravity variables
 			m_pathVerticalVelocity = 0.0f;
 			m_pathOnGround = true;
-			
+
 			return;
 		}
 
 		// Continue moving along path even if we're past the calculated time
 		// This allows units to finish paths naturally without teleportation
 		Vector3 targetPosition;
-		
+
 		if (targetDistance >= m_pathTotalLength)
 		{
 			// We're past the calculated end time, but move towards final destination naturally
@@ -1201,7 +1191,7 @@ namespace mmo
 			// Find which segment we should be on and calculate position along it
 			targetPosition = CalculatePositionAlongPath(targetDistance);
 		}
-		
+
 		// Move towards target position smoothly without large teleports
 		const Vector3 unitCurrentPosition = m_sceneNode->GetDerivedPosition();
 		Vector3 direction = targetPosition - unitCurrentPosition;
@@ -1211,7 +1201,7 @@ namespace mmo
 		if (distanceFromTarget > 0.01f)
 		{
 			Vector3 newPosition;
-			
+
 			if (distanceFromTarget <= maxMovePerFrame)
 			{
 				// Small distance - move directly to target
@@ -1223,11 +1213,11 @@ namespace mmo
 				direction.Normalize();
 				newPosition = unitCurrentPosition + direction * maxMovePerFrame;
 			}
-			
+
 			m_sceneNode->SetPosition(newPosition);
-			
+
 			// Set run animation for all units following paths
-			if (m_runAnimState && !m_casting)
+			if (m_runAnimState)
 			{
 				SetTargetAnimState(m_runAnimState);
 			}
@@ -1237,11 +1227,11 @@ namespace mmo
 		if (!m_movementPath.empty())
 		{
 			const Vector3 currentPos = m_sceneNode->GetDerivedPosition();
-			
+
 			// Find the next waypoint we're moving towards
 			size_t nextWaypointIndex = 0;
 			float accumulatedDistance = 0.0f;
-			
+
 			for (size_t i = 0; i < m_pathSegmentLengths.size(); ++i)
 			{
 				if (targetDistance <= accumulatedDistance + m_pathSegmentLengths[i])
@@ -1252,16 +1242,16 @@ namespace mmo
 				accumulatedDistance += m_pathSegmentLengths[i];
 				nextWaypointIndex = i + 1;
 			}
-			
+
 			// Update current path index for other systems
 			m_currentPathIndex = nextWaypointIndex;
-			
+
 			if (nextWaypointIndex < m_movementPath.size())
 			{
 				const Vector3 nextWaypoint = m_movementPath[nextWaypointIndex];
 				const Vector3 facingDirection = nextWaypoint - currentPos;
 
-				if ( facingDirection.GetLength() > 0.01f)
+				if (facingDirection.GetLength() > 0.01f)
 				{
 					const Radian targetYaw = GetAngle(currentPos.x, currentPos.z, nextWaypoint.x, nextWaypoint.z);
 					SetFacing(targetYaw);
@@ -1315,7 +1305,7 @@ namespace mmo
 		return activePlayer && activePlayer.get() == this;
 	}
 
-	static void SetQueryMask(SceneNode* node, const uint32 mask)
+	static void SetQueryMask(SceneNode *node, const uint32 mask)
 	{
 		for (uint32 i = 0; i < node->GetNumAttachedObjects(); ++i)
 		{
@@ -1324,7 +1314,7 @@ namespace mmo
 
 		for (uint32 i = 0; i < node->GetNumChildren(); ++i)
 		{
-			SetQueryMask(static_cast<SceneNode*>(node->GetChild(i)), mask);
+			SetQueryMask(static_cast<SceneNode *>(node->GetChild(i)), mask);
 		}
 	}
 
@@ -1341,26 +1331,17 @@ namespace mmo
 
 	void GameUnitC::NotifySpellCastStarted()
 	{
-		m_casting = true;
+		// Legacy method - now handled by SpellVisualizationService
 	}
 
 	void GameUnitC::NotifySpellCastCancelled()
 	{
-		// Interrupt the one shot state if there is any
-		if (m_oneShotState)
-		{
-			m_oneShotState->SetEnabled(false);
-			m_oneShotState->SetWeight(0.0f);
-			m_oneShotState = nullptr;
-		}
-
-		m_casting = false;
+		// Legacy method - now handled by SpellVisualizationService
 	}
 
 	void GameUnitC::NotifySpellCastSucceeded()
 	{
-		PlayOneShotAnimation(m_castReleaseState);
-		m_casting = false;
+		// Legacy method - now handled by SpellVisualizationService
 	}
 
 	bool GameUnitC::IsFriendly() const
@@ -1477,10 +1458,10 @@ namespace mmo
 			// 20 is the base value
 			const int32 statValue = GetStat(statId) - 20;
 
-			const auto* classEntry = AsPlayer().GetClass();
+			const auto *classEntry = AsPlayer().GetClass();
 			if (classEntry)
 			{
-				for (const auto& source : classEntry->healthstatsources())
+				for (const auto &source : classEntry->healthstatsources())
 				{
 					if (source.statid() == statId)
 					{
@@ -1502,10 +1483,10 @@ namespace mmo
 			// 20 is the base value
 			const int32 statValue = GetStat(statId) - 20;
 
-			const auto* classEntry = AsPlayer().GetClass();
+			const auto *classEntry = AsPlayer().GetClass();
 			if (classEntry)
 			{
-				for (const auto& source : classEntry->manastatsources())
+				for (const auto &source : classEntry->manastatsources())
 				{
 					if (source.statid() == statId)
 					{
@@ -1527,10 +1508,10 @@ namespace mmo
 			// 20 is the base value
 			const int32 statValue = GetStat(statId);
 
-			const auto* classEntry = AsPlayer().GetClass();
+			const auto *classEntry = AsPlayer().GetClass();
 			if (classEntry)
 			{
-				for (const auto& source : classEntry->attackpowerstatsources())
+				for (const auto &source : classEntry->attackpowerstatsources())
 				{
 					if (source.statid() == statId)
 					{
@@ -1548,7 +1529,7 @@ namespace mmo
 		return 0;
 	}
 
-	GameAuraC* GameUnitC::GetAura(uint32 index) const
+	GameAuraC *GameUnitC::GetAura(uint32 index) const
 	{
 		if (index < m_auras.size())
 		{
@@ -1558,7 +1539,7 @@ namespace mmo
 		return nullptr;
 	}
 
-	void GameUnitC::SetTargetUnit(const std::shared_ptr<GameUnitC>& targetUnit)
+	void GameUnitC::SetTargetUnit(const std::shared_ptr<GameUnitC> &targetUnit)
 	{
 		if (m_targetUnit.expired() && !targetUnit)
 		{
@@ -1583,12 +1564,12 @@ namespace mmo
 		}
 	}
 
-	void GameUnitC::SetInitialSpells(const std::vector<const proto_client::SpellEntry*>& spells)
+	void GameUnitC::SetInitialSpells(const std::vector<const proto_client::SpellEntry *> &spells)
 	{
 		m_spells = spells;
 
 		m_spellBookSpells.clear();
-		for (const auto* spell : m_spells)
+		for (const auto *spell : m_spells)
 		{
 			if ((spell->attributes(0) & static_cast<uint32>(spell_attributes::HiddenClientSide)) == 0)
 			{
@@ -1597,9 +1578,10 @@ namespace mmo
 		}
 	}
 
-	void GameUnitC::LearnSpell(const proto_client::SpellEntry* spell)
+	void GameUnitC::LearnSpell(const proto_client::SpellEntry *spell)
 	{
-		const auto it = std::find_if(m_spells.begin(), m_spells.end(), [spell](const proto_client::SpellEntry* entry) { return entry->id() == spell->id(); });
+		const auto it = std::find_if(m_spells.begin(), m_spells.end(), [spell](const proto_client::SpellEntry *entry)
+									 { return entry->id() == spell->id(); });
 		if (it == m_spells.end())
 		{
 			m_spells.push_back(spell);
@@ -1614,16 +1596,19 @@ namespace mmo
 
 	void GameUnitC::UnlearnSpell(const uint32 spellId)
 	{
-		std::erase_if(m_spells, [spellId](const proto_client::SpellEntry* entry) { return entry->id() == spellId; });
-		std::erase_if(m_spellBookSpells, [spellId](const proto_client::SpellEntry* entry) { return entry->id() == spellId; });
+		std::erase_if(m_spells, [spellId](const proto_client::SpellEntry *entry)
+					  { return entry->id() == spellId; });
+		std::erase_if(m_spellBookSpells, [spellId](const proto_client::SpellEntry *entry)
+					  { return entry->id() == spellId; });
 	}
 
 	bool GameUnitC::HasSpell(uint32 spellId) const
 	{
-		return std::find_if(m_spells.begin(), m_spells.end(), [spellId](const proto_client::SpellEntry* entry) { return entry->id() == spellId; }) != m_spells.end();
+		return std::find_if(m_spells.begin(), m_spells.end(), [spellId](const proto_client::SpellEntry *entry)
+							{ return entry->id() == spellId; }) != m_spells.end();
 	}
 
-	const proto_client::SpellEntry* GameUnitC::GetSpell(uint32 index) const
+	const proto_client::SpellEntry *GameUnitC::GetSpell(uint32 index) const
 	{
 		if (index < m_spells.size())
 		{
@@ -1633,7 +1618,7 @@ namespace mmo
 		return nullptr;
 	}
 
-	const proto_client::SpellEntry* GameUnitC::GetVisibleSpell(uint32 index) const
+	const proto_client::SpellEntry *GameUnitC::GetVisibleSpell(uint32 index) const
 	{
 		if (index < m_spellBookSpells.size())
 		{
@@ -1643,7 +1628,7 @@ namespace mmo
 		return nullptr;
 	}
 
-	void GameUnitC::Attack(GameUnitC& victim)
+	void GameUnitC::Attack(GameUnitC &victim)
 	{
 		// Don't do anything if the victim is already the current target
 		if (IsAttacking(victim))
@@ -1682,13 +1667,13 @@ namespace mmo
 		m_victim = 0;
 	}
 
-	void GameUnitC::SetCreatureInfo(const CreatureInfo& creatureInfo)
+	void GameUnitC::SetCreatureInfo(const CreatureInfo &creatureInfo)
 	{
 		m_creatureInfo = creatureInfo;
 		RefreshUnitName();
 	}
 
-	const String& GameUnitC::GetName() const
+	const String &GameUnitC::GetName() const
 	{
 		if (m_creatureInfo.name.empty())
 		{
@@ -1698,7 +1683,7 @@ namespace mmo
 		return m_creatureInfo.name;
 	}
 
-	void GameUnitC::SetTargetAnimState(AnimationState* newTargetState)
+	void GameUnitC::SetTargetAnimState(AnimationState *newTargetState)
 	{
 		if (m_targetState == newTargetState)
 		{
@@ -1736,7 +1721,7 @@ namespace mmo
 		}
 	}
 
-	void GameUnitC::PlayOneShotAnimation(AnimationState* animState)
+	void GameUnitC::PlayOneShotAnimation(AnimationState *animState)
 	{
 		if (!animState)
 		{
@@ -1781,7 +1766,7 @@ namespace mmo
 		m_armorProficiency = mask;
 	}
 
-	bool GameUnitC::IsFriendlyTo(const GameUnitC& other) const
+	bool GameUnitC::IsFriendlyTo(const GameUnitC &other) const
 	{
 		if (m_factionTemplate == nullptr || other.m_factionTemplate == nullptr)
 		{
@@ -1804,10 +1789,11 @@ namespace mmo
 			return true;
 		}
 
-		return std::find_if(m_factionTemplate->friends().begin(), m_factionTemplate->friends().end(), [&other](uint32 factionId) { return factionId == other.GetFaction()->id(); }) != m_factionTemplate->friends().end();
+		return std::find_if(m_factionTemplate->friends().begin(), m_factionTemplate->friends().end(), [&other](uint32 factionId)
+							{ return factionId == other.GetFaction()->id(); }) != m_factionTemplate->friends().end();
 	}
 
-	bool GameUnitC::IsHostileTo(const GameUnitC& other) const
+	bool GameUnitC::IsHostileTo(const GameUnitC &other) const
 	{
 		if (m_factionTemplate == nullptr || other.m_factionTemplate == nullptr)
 		{
@@ -1830,14 +1816,16 @@ namespace mmo
 			return false;
 		}
 
-		return std::find_if(m_factionTemplate->enemies().begin(), m_factionTemplate->enemies().end(), [&other](uint32 factionId) { return factionId == other.GetFaction()->id(); }) != m_factionTemplate->enemies().end();
+		return std::find_if(m_factionTemplate->enemies().begin(), m_factionTemplate->enemies().end(), [&other](uint32 factionId)
+							{ return factionId == other.GetFaction()->id(); }) != m_factionTemplate->enemies().end();
 	}
 
 	void GameUnitC::OnDisplayIdChanged()
 	{
 		const uint32 displayId = Get<uint32>(object_fields::DisplayId);
-		const proto_client::ModelDataEntry* modelEntry = ObjectMgr::GetModelData(displayId);
-		if (m_entity) m_entity->SetVisible(modelEntry != nullptr);
+		const proto_client::ModelDataEntry *modelEntry = ObjectMgr::GetModelData(displayId);
+		if (m_entity)
+			m_entity->SetVisible(modelEntry != nullptr);
 		if (!modelEntry)
 		{
 			return;
@@ -1876,7 +1864,7 @@ namespace mmo
 			{
 				m_configuration.chosenOptionPerGroup.clear();
 				m_configuration.scalarValues.clear();
-				for (const auto& kvp : modelEntry->customizationproperties())
+				for (const auto &kvp : modelEntry->customizationproperties())
 				{
 					m_configuration.chosenOptionPerGroup[kvp.first] = kvp.second;
 				}
@@ -1993,7 +1981,7 @@ namespace mmo
 		}
 
 		m_collider.Update(
-			GetPosition() + Vector3(0.0f, radius, 0.0f), 
+			GetPosition() + Vector3(0.0f, radius, 0.0f),
 			GetPosition() + Vector3(0.0f, radius + halfHeight * 2.0f, 0.0f), radius);
 	}
 
@@ -2029,7 +2017,6 @@ namespace mmo
 			m_movementInfo.movementFlags &= ~movement_flags::Falling;
 			m_movementInfo.fallTime = 0;
 			m_movementInfo.jumpVelocity = Vector3::Zero;
-			
 		}
 	}
 
@@ -2047,7 +2034,7 @@ namespace mmo
 		}
 	}
 
-	void GameUnitC::Apply(const VisibilitySetPropertyGroup& group, const AvatarConfiguration& configuration)
+	void GameUnitC::Apply(const VisibilitySetPropertyGroup &group, const AvatarConfiguration &configuration)
 	{
 		// First, hide all sub entities with the given visibility set tag
 		if (!group.subEntityTag.empty())
@@ -2056,15 +2043,14 @@ namespace mmo
 			{
 				ASSERT(m_entity->GetMesh()->GetSubMeshCount() == m_entity->GetNumSubEntities());
 
-				SubMesh& subMesh = m_entity->GetMesh()->GetSubMesh(i);
+				SubMesh &subMesh = m_entity->GetMesh()->GetSubMesh(i);
 				if (subMesh.HasTag(group.subEntityTag))
 				{
-					SubEntity* subEntity = m_entity->GetSubEntity(i);
+					SubEntity *subEntity = m_entity->GetSubEntity(i);
 					ASSERT(subEntity);
 					subEntity->SetVisible(false);
 				}
 			}
-
 		}
 
 		const auto it = configuration.chosenOptionPerGroup.find(group.GetId());
@@ -2075,13 +2061,13 @@ namespace mmo
 		}
 
 		// Now make each referenced sub entity visible
-		for (const auto& value : group.possibleValues)
+		for (const auto &value : group.possibleValues)
 		{
 			if (value.valueId == it->second)
 			{
-				for (const auto& subEntityName : value.visibleSubEntities)
+				for (const auto &subEntityName : value.visibleSubEntities)
 				{
-					if (SubEntity* subEntity = m_entity->GetSubEntity(subEntityName))
+					if (SubEntity *subEntity = m_entity->GetSubEntity(subEntityName))
 					{
 						subEntity->SetVisible(true);
 					}
@@ -2090,7 +2076,7 @@ namespace mmo
 		}
 	}
 
-	void GameUnitC::Apply(const MaterialOverridePropertyGroup& group, const AvatarConfiguration& configuration)
+	void GameUnitC::Apply(const MaterialOverridePropertyGroup &group, const AvatarConfiguration &configuration)
 	{
 		const auto it = configuration.chosenOptionPerGroup.find(group.GetId());
 		if (it == configuration.chosenOptionPerGroup.end())
@@ -2100,13 +2086,13 @@ namespace mmo
 		}
 
 		// Now make each referenced sub entity visible
-		for (const auto& value : group.possibleValues)
+		for (const auto &value : group.possibleValues)
 		{
 			if (value.valueId == it->second)
 			{
-				for (const auto& pair : value.subEntityToMaterial)
+				for (const auto &pair : value.subEntityToMaterial)
 				{
-					if (SubEntity* subEntity = m_entity->GetSubEntity(pair.first))
+					if (SubEntity *subEntity = m_entity->GetSubEntity(pair.first))
 					{
 						MaterialPtr material = MaterialManager::Get().Load(pair.second);
 						if (material)
@@ -2119,9 +2105,8 @@ namespace mmo
 		}
 	}
 
-	void GameUnitC::Apply(const ScalarParameterPropertyGroup& group, const AvatarConfiguration& configuration)
+	void GameUnitC::Apply(const ScalarParameterPropertyGroup &group, const AvatarConfiguration &configuration)
 	{
-
 	}
 	void GameUnitC::SetCollisionVisibility(bool show)
 	{
@@ -2153,7 +2138,7 @@ namespace mmo
 		}
 
 		// Get the unit's collision capsule
-		const Capsule& capsule = GetCollider();
+		const Capsule &capsule = GetCollider();
 
 		// Create manual render object
 		static uint64 s_counter = 0;
@@ -2167,8 +2152,8 @@ namespace mmo
 
 			// Capsule parameters
 			const float radius = capsule.GetRadius();
-			const Vector3 bottomHemisphereCenter = capsule.GetPointA();  // Center of bottom hemisphere
-			const Vector3 topHemisphereCenter = capsule.GetPointB();     // Center of top hemisphere
+			const Vector3 bottomHemisphereCenter = capsule.GetPointA(); // Center of bottom hemisphere
+			const Vector3 topHemisphereCenter = capsule.GetPointB();	// Center of top hemisphere
 
 			// Number of segments for circles and hemispheres
 			constexpr int segments = 8;
@@ -2185,7 +2170,6 @@ namespace mmo
 
 				lineOp->AddLine(topPoint, bottomPoint).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
 			}
-
 
 			// Draw horizontal circles at top and bottom of cylinder
 			for (int i = 0; i < segments; ++i)
@@ -2282,15 +2266,13 @@ namespace mmo
 					const float ringAngle2 = (ring + 1) * ringStep;
 
 					const Vector3 p1 = topHemisphereCenter + Vector3(
-						std::cos(angle) * std::cos(ringAngle1) * radius,
-						std::sin(ringAngle1) * radius,
-						std::sin(angle) * std::cos(ringAngle1) * radius
-					);
+																 std::cos(angle) * std::cos(ringAngle1) * radius,
+																 std::sin(ringAngle1) * radius,
+																 std::sin(angle) * std::cos(ringAngle1) * radius);
 					const Vector3 p2 = topHemisphereCenter + Vector3(
-						std::cos(angle) * std::cos(ringAngle2) * radius,
-						std::sin(ringAngle2) * radius,
-						std::sin(angle) * std::cos(ringAngle2) * radius
-					);
+																 std::cos(angle) * std::cos(ringAngle2) * radius,
+																 std::sin(ringAngle2) * radius,
+																 std::sin(angle) * std::cos(ringAngle2) * radius);
 
 					lineOp->AddLine(p1, p2).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
 				}
@@ -2302,15 +2284,13 @@ namespace mmo
 					const float ringAngle2 = (ring + 1) * ringStep;
 
 					const Vector3 p1 = bottomHemisphereCenter + Vector3(
-						std::cos(angle) * std::cos(ringAngle1) * radius,
-						-std::sin(ringAngle1) * radius,
-						std::sin(angle) * std::cos(ringAngle1) * radius
-					);
+																	std::cos(angle) * std::cos(ringAngle1) * radius,
+																	-std::sin(ringAngle1) * radius,
+																	std::sin(angle) * std::cos(ringAngle1) * radius);
 					const Vector3 p2 = bottomHemisphereCenter + Vector3(
-						std::cos(angle) * std::cos(ringAngle2) * radius,
-						-std::sin(ringAngle2) * radius,
-						std::sin(angle) * std::cos(ringAngle2) * radius
-					);
+																	std::cos(angle) * std::cos(ringAngle2) * radius,
+																	-std::sin(ringAngle2) * radius,
+																	std::sin(angle) * std::cos(ringAngle2) * radius);
 
 					lineOp->AddLine(p1, p2).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
 				}
@@ -2346,11 +2326,11 @@ namespace mmo
 		}
 	}
 
-	const proto_client::SpellEntry* GameUnitC::GetOpenSpell() const
+	const proto_client::SpellEntry *GameUnitC::GetOpenSpell() const
 	{
-		for (const auto* spell : m_spells)
+		for (const auto *spell : m_spells)
 		{
-			for (const auto& effect : spell->effects())
+			for (const auto &effect : spell->effects())
 			{
 				if (effect.type() == spell_effects::OpenLock)
 				{

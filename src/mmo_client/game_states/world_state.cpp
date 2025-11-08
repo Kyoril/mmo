@@ -207,10 +207,10 @@ namespace mmo
 		LoadingScreen::Show();
 
 		ObjectMgr::Initialize(m_project, m_partyInfo);
-		
+
 		// Initialize spell visualization service with direct audio access
 		SpellVisualizationService::Get().Initialize(m_project, &m_audio);
-		
+
 		SetupWorldScene();
 
 		m_debugPathVisualizer = std::make_unique<DebugPathVisualizer>(*m_scene);
@@ -586,7 +586,7 @@ namespace mmo
 			if (projectile->HasHit())
 			{
 				// Dispatch visualization impact event to targets
-				std::vector<GameUnitC*> targets;
+				std::vector<GameUnitC *> targets;
 				if (auto target = projectile->GetTargetUnit())
 				{
 					targets.push_back(target.get());
@@ -864,8 +864,8 @@ namespace mmo
 		m_talentClient.Initialize();
 		m_inventoryClient.Initialize();
 #ifdef MMO_WITH_DEV_COMMANDS
-			Console::RegisterCommand("createmonster", [this](const std::string &cmd, const std::string &args)
-									 { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
+		Console::RegisterCommand("createmonster", [this](const std::string &cmd, const std::string &args)
+								 { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
 		Console::RegisterCommand("destroymonster", [this](const std::string &cmd, const std::string &args)
 								 { Command_DestroyMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Destroys a spawned monster from a specific guid.");
 		Console::RegisterCommand("learnspell", [this](const std::string &cmd, const std::string &args)
@@ -1789,7 +1789,9 @@ namespace mmo
 		{
 			if (castTime > 0)
 			{
-				casterUnit->NotifySpellCastStarted();
+				// Trigger spell visualization for casting start
+				std::vector<GameUnitC *> targets;
+				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::StartCast, *spell, casterUnit.get(), targets);
 			}
 		}
 
@@ -1844,7 +1846,7 @@ namespace mmo
 			// Instant spells: directly dispatch impact to unit targets if any
 			if (targetMap.HasUnitTarget())
 			{
-				std::vector<GameUnitC*> targets;
+				std::vector<GameUnitC *> targets;
 				if (auto targetUnit = ObjectMgr::Get<GameUnitC>(targetMap.GetUnitTarget()))
 				{
 					targets.push_back(targetUnit.get());
@@ -1855,7 +1857,9 @@ namespace mmo
 
 		if (const std::shared_ptr<GameUnitC> casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
 		{
-			casterUnit->NotifySpellCastSucceeded();
+			// Trigger spell visualization for cast succeeded
+			std::vector<GameUnitC *> targets;
+			SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::CastSucceeded, *spell, casterUnit.get(), targets);
 		}
 
 		if (casterId == ObjectMgr::GetActivePlayerGuid())
@@ -2049,9 +2053,15 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		if (const std::shared_ptr<GameUnitC> casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
+		const auto *spell = m_project.spells.getById(spellId);
+		if (spell)
 		{
-			casterUnit->NotifySpellCastCancelled();
+			if (const std::shared_ptr<GameUnitC> casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
+			{
+				// Trigger spell visualization for cancel cast
+				std::vector<GameUnitC *> targets;
+				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::CancelCast, *spell, casterUnit.get(), targets);
+			}
 		}
 
 		if (casterId == ObjectMgr::GetActivePlayerGuid())
@@ -2063,7 +2073,6 @@ namespace mmo
 			{
 				errorMessage = s_spellCastResultStrings[result];
 			}
-
 			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", false);
 			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", errorMessage);
 		}

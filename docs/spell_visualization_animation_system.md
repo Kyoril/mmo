@@ -18,11 +18,14 @@ The spell visualization system provides fully data-driven animation playback for
 - **SpellVisualizationService**: Core service that resolves spell events to visualization kits
 - **SpellKit**: Data structure containing animation, sound, tint, and timing info
 - **GameUnitC**: Unit class that plays animations via `SetTargetAnimState()` or `PlayOneShotAnimation()`
+- **WorldState**: Network packet handler that triggers visualization events on spell start/go/failure
 
 ### Flow
 
 ```
-Spell Event Triggered
+Network Packet Received (SpellStart/SpellGo/SpellFailure)
+  ↓
+WorldState::OnSpellStart/OnSpellGo/OnSpellFailure
   ↓
 SpellVisualizationService::Apply()
   ↓
@@ -35,6 +38,17 @@ For each kit:
   - Play sounds (if specified)
   - Apply tint (TODO)
 ```
+
+### Legacy System Removed
+
+The old hardcoded animation system has been completely removed:
+- ❌ `GameUnitC::NotifySpellCastStarted()` - now empty (legacy compatibility)
+- ❌ `GameUnitC::NotifySpellCastCancelled()` - now empty (legacy compatibility)
+- ❌ `GameUnitC::NotifySpellCastSucceeded()` - now empty (legacy compatibility)
+- ❌ `GameUnitC::m_casting` flag - removed entirely
+- ❌ Hardcoded casting state checks in movement animations - removed
+
+All spell animations are now **100% data-driven** from spell visualization entries.
 
 ## Animation Playback Modes
 
