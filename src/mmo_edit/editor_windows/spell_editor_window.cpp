@@ -1007,6 +1007,57 @@ namespace mmo
 
 				ImGui::EndDragDropTarget();
 			}
+
+			ImGui::Spacing();
+			ImGui::Separator();
+			
+			// Visualization ID dropdown
+			int visualizationId = currentEntry.has_visualization_id() ? static_cast<int>(currentEntry.visualization_id()) : 0;
+			
+			if (ImGui::BeginCombo("Spell Visualization", visualizationId > 0 ? std::to_string(visualizationId).c_str() : "None (use icon)"))
+			{
+				// "None" option to clear visualization
+				if (ImGui::Selectable("None (use icon)", visualizationId == 0))
+				{
+					currentEntry.clear_visualization_id();
+				}
+				if (visualizationId == 0)
+				{
+					ImGui::SetItemDefaultFocus();
+				}
+				
+				// List all available visualizations
+				for (int i = 0; i < m_project.spellVisualizations.count(); ++i)
+				{
+					const auto& vis = m_project.spellVisualizations.getTemplates().entry().at(i);
+					ImGui::PushID(i);
+					
+					char label[256];
+					snprintf(label, sizeof(label), "%u: %s", vis.id(), vis.name().c_str());
+					
+					const bool item_selected = visualizationId == vis.id();
+					if (ImGui::Selectable(label, item_selected))
+					{
+						currentEntry.set_visualization_id(vis.id());
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+				
+				ImGui::EndCombo();
+			}
+			
+			if (currentEntry.has_visualization_id() && visualizationId > 0)
+			{
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Clear"))
+				{
+					currentEntry.clear_visualization_id();
+				}
+			}
 		}
 
 		if (ImGui::CollapsingHeader("Effects", ImGuiTreeNodeFlags_None))

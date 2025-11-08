@@ -19,6 +19,7 @@
 #include "editor_windows/asset_window.h"
 #include "editor_windows/log_window.h"
 #include "editor_windows/spell_editor_window.h"
+#include "editor_windows/spell_visualization_editor_window.h"
 #include "editor_windows/map_editor_window.h"
 #include "editor_windows/creature_editor_window.h"
 #include "editor_windows/object_editor_window.h"
@@ -131,6 +132,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::move(assetWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::RangeTypeEditorWindow>("Spell Range Type Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::SpellEditorWindow>("Spell Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::SpellVisualizationEditorWindow>("Spell Visualization Editor", project, mainWindow, previewProviderManager));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::QuestEditorWindow>("Quest Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::MapEditorWindow>("Map Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::CreatureEditorWindow>("Creature Editor", project, mainWindow));
