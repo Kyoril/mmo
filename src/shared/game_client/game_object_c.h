@@ -180,6 +180,8 @@ namespace mmo
 		
 		[[nodiscard]] SceneNode* GetSceneNode() const { return m_sceneNode; }
 
+		[[nodiscard]] Entity* GetEntity() const { return m_entity; }
+
 		virtual void Update(float deltaTime);
 
 		virtual bool CanBeLooted() const;

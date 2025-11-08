@@ -75,6 +75,8 @@ namespace mmo
                              const proto_client::SpellKit& kit,
                              GameUnitC& actor);
 
+        void ApplyAnimationToActor(const proto_client::SpellKit& kit, GameUnitC& actor);
+
         static uint32 ToProtoEventValue(Event e);
 
     private:

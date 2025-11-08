@@ -94,20 +94,13 @@ namespace mmo
         const auto it = eventMap.find(key);
         if (it == eventMap.end())
         {
-            // No kits for this event; but still trigger base unit notifications for key events
+            // No kits for this event, but still handle cleanup for certain events
             if (caster != nullptr)
             {
-                if (event == Event::StartCast)
+                if (event == Event::CancelCast || event == Event::CastSucceeded)
                 {
-                    caster->NotifySpellCastStarted();
-                }
-                else if (event == Event::CancelCast)
-                {
-                    caster->NotifySpellCastCancelled();
-                }
-                else if (event == Event::CastSucceeded)
-                {
-                    caster->NotifySpellCastSucceeded();
+                    // Stop any looped sound for this caster
+                    StopLoopedSoundForActor(caster->GetGuid());
                 }
             }
             return;
@@ -140,47 +133,24 @@ namespace mmo
             }
         }
 
-        // Keep legacy caster notifications for base animations when applicable
+        // Stop looped sounds on cancel/success
         if (caster != nullptr)
         {
-            if (event == Event::StartCast)
+            if (event == Event::CancelCast || event == Event::CastSucceeded)
             {
-                caster->NotifySpellCastStarted();
-            }
-            else if (event == Event::CancelCast)
-            {
-                caster->NotifySpellCastCancelled();
-                // Stop any looped sound for this caster
-                StopLoopedSoundForActor(caster->GetGuid());
-            }
-            else if (event == Event::CastSucceeded)
-            {
-                caster->NotifySpellCastSucceeded();
-                // Stop any looped sound for this caster
                 StopLoopedSoundForActor(caster->GetGuid());
             }
         }
+
+        // No legacy caster notifications - visualization is fully data-driven
     }
 
     void SpellVisualizationService::ApplyKitToActor(const proto_client::SpellVisualization& vis,
                                                      const proto_client::SpellKit& kit,
                                                      GameUnitC& actor)
     {
-        // Minimal application logic:
-        // - Trigger basic notify flags for casting loop/release
-        // - If an animation_name is provided, try to map known names to existing states
-        if (kit.has_animation_name())
-        {
-            const auto& name = kit.animation_name();
-            if (name == "CastLoop")
-            {
-                actor.NotifySpellCastStarted();
-            }
-            else if (name == "CastRelease")
-            {
-                actor.NotifySpellCastSucceeded();
-            }
-        }
+        // Apply animation if specified
+        ApplyAnimationToActor(kit, actor);
 
         // Play sounds using the audio interface
         if (m_audioPlayer && kit.sounds_size() > 0)
@@ -236,6 +206,63 @@ namespace mmo
         }
 
         // TODO: Apply tint (requires material/visual pipeline hook on GameUnitC)
+    }
+
+    void SpellVisualizationService::ApplyAnimationToActor(const proto_client::SpellKit& kit, GameUnitC& actor)
+    {
+        if (!kit.has_animation_name())
+        {
+            return;
+        }
+
+        const std::string& animName = kit.animation_name();
+        if (animName.empty())
+        {
+            return;
+        }
+
+        // Get the animation state from the entity
+        Entity* entity = actor.GetEntity();
+        if (!entity)
+        {
+            return;
+        }
+
+        AnimationState* animState = entity->GetAnimationState(animName);
+        if (!animState)
+        {
+            WLOG("Animation '" << animName << "' not found on entity");
+            return;
+        }
+
+        // Determine if this is a looped or one-shot animation
+        const bool isLooped = kit.has_loop() && kit.loop();
+        animState->SetLoop(isLooped);
+
+        // Apply duration if specified (for one-shot animations)
+        if (!isLooped && kit.has_duration_ms())
+        {
+            const float durationSeconds = static_cast<float>(kit.duration_ms()) / 1000.0f;
+            const float animLength = animState->GetLength();
+            if (animLength > 0.0f)
+            {
+                // Adjust playback speed to match desired duration
+                const float playRate = animLength / durationSeconds;
+                animState->SetPlayRate(playRate);
+            }
+        }
+
+        // Play the animation
+        if (isLooped)
+        {
+            // For looped animations, set as target state (replaces current animation)
+            actor.SetTargetAnimState(animState);
+        }
+        else
+        {
+            // For one-shot animations, play as overlay
+            actor.PlayOneShotAnimation(animState);
+        }
     }
 
     void SpellVisualizationService::StopLoopedSoundForActor(uint64 actorGuid)
