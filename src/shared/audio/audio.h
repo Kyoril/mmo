@@ -64,6 +64,7 @@ namespace mmo
 		virtual void StopAllSounds() = 0;
 		virtual SoundIndex FindSound(const String& fileName, SoundType type) = 0;
 		virtual void Set3DMinMaxDistance(ChannelIndex channelIndex, float minDistance, float maxDistance) = 0;
+		virtual void Set3DPosition(ChannelIndex channelIndex, const Vector3& position) = 0;
 		virtual float GetSoundLength(SoundIndex sound) = 0;
 		virtual ISoundInstance* GetSoundInstance(SoundIndex sound) = 0;
 		virtual IChannelInstance* GetChannelInstance(ChannelIndex channel) = 0;

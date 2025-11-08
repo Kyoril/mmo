@@ -130,6 +130,10 @@ namespace mmo
 	{
 	}
 
+	void NullAudio::Set3DPosition(ChannelIndex channelIndex, const Vector3& position)
+	{
+	}
+
 	float NullAudio::GetSoundLength(SoundIndex sound)
 	{
 		return 0.0f;

@@ -19,6 +19,7 @@ The spell visualization system provides fully data-driven animation playback for
 - **SpellKit**: Data structure containing animation, sound, tint, and timing info
 - **GameUnitC**: Unit class that plays animations via `SetTargetAnimState()` or `PlayOneShotAnimation()`
 - **WorldState**: Network packet handler that triggers visualization events on spell start/go/failure
+- **IAudio**: 3D positional audio system for spell sounds with distance attenuation
 
 ### Flow
 
@@ -35,9 +36,42 @@ Find kits for event (START_CAST, CASTING, CAST_SUCCEEDED, etc.)
   ↓
 For each kit:
   - ApplyAnimationToActor() → Play animation
-  - Play sounds (if specified)
+  - Play 3D positional sounds at actor position (if specified)
   - Apply tint (TODO)
 ```
+
+## Sound System
+
+### 3D Positional Audio
+
+All spell sounds use **3D positional audio** with distance attenuation:
+
+- **Sound Type**: `Sound3D` for one-shot, `SoundLooped3D` for looped
+- **Position**: Set to the actor's world position
+- **Attenuation**: 
+  - **Minimum distance**: 10 units (full volume)
+  - **Maximum distance**: 50 units (silent)
+  - Linear falloff between min and max
+- **Benefits**:
+  - Nearby spells are louder
+  - Distant spells are quieter or inaudible
+  - No audio clutter from many simultaneous casts
+  - Realistic spatial audio experience
+
+### Sound Configuration
+
+Sounds are defined in the `sounds` array of a SpellKit:
+
+```protobuf
+kits {
+  sounds: "Sound/Spells/Frostbolt_Cast.ogg"
+  sounds: "Sound/Spells/Frostbolt_Whoosh.ogg"  # Multiple sounds supported
+}
+```
+
+**Looped vs One-Shot:**
+- If `loop: true` → Sound loops continuously until terminating event
+- If `loop: false` → Sound plays once
 
 ### Legacy System Removed
 

@@ -94,6 +94,8 @@ namespace mmo
 
 		void Set3DMinMaxDistance(ChannelIndex channelIndex, float minDistance, float maxDistance) override;
 
+		void Set3DPosition(ChannelIndex channelIndex, const Vector3& position) override;
+
 		float GetSoundLength(SoundIndex sound) override;
 
 		ISoundInstance *GetSoundInstance(SoundIndex sound) override;

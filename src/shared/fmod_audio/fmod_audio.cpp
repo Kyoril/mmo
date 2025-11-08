@@ -526,6 +526,25 @@ namespace mmo
 		}
 	}
 
+	void FMODAudio::Set3DPosition(ChannelIndex channelIndex, const Vector3& position)
+	{
+		FMOD_RESULT    result;
+		FMOD::Channel *channel;
+
+		if (channelIndex == InvalidChannel)
+		{
+			return;
+		}
+
+		result = m_system->getChannel(channelIndex, &channel);
+		if (result == FMOD_OK)
+		{
+			FMOD_VECTOR fmodPos = { position.x, position.y, position.z };
+			FMOD_VECTOR fmodVel = { 0.0f, 0.0f, 0.0f };  // No velocity for now
+			channel->set3DAttributes(&fmodPos, &fmodVel);
+		}
+	}
+
 	float FMODAudio::GetSoundLength(SoundIndex sound)
 	{
 		if (sound == InvalidSound)

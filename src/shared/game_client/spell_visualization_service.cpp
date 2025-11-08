@@ -166,6 +166,8 @@ namespace mmo
         if (m_audioPlayer && kit.sounds_size() > 0)
         {
             const bool isLooped = kit.has_loop() && kit.loop();
+            const Vector3 actorPosition = actor.GetPosition();
+            
             for (const auto& snd : kit.sounds())
             {
                 if (isLooped)
@@ -178,11 +180,11 @@ namespace mmo
                         m_audioPlayer->StopSound(&it->second.audioHandle);
                     }
                     
-                    // Create looped sound
-                    SoundIndex soundIdx = m_audioPlayer->FindSound(snd, SoundType::SoundLooped2D);
+                    // Create looped 3D sound
+                    SoundIndex soundIdx = m_audioPlayer->FindSound(snd, SoundType::SoundLooped3D);
                     if (soundIdx == InvalidSound)
                     {
-                        soundIdx = m_audioPlayer->CreateLoopedSound(snd);
+                        soundIdx = m_audioPlayer->CreateSound(snd, SoundType::SoundLooped3D);
                     }
                     
                     if (soundIdx != InvalidSound)
@@ -191,6 +193,12 @@ namespace mmo
                         m_audioPlayer->PlaySound(soundIdx, &channel);
                         if (channel != InvalidChannel)
                         {
+                            // Set 3D position for the sound
+                            m_audioPlayer->Set3DPosition(channel, actorPosition);
+                            
+                            // Set reasonable attenuation distance (10 units min, 50 units max)
+                            m_audioPlayer->Set3DMinMaxDistance(channel, 10.0f, 50.0f);
+                            
                             LoopedSoundHandle loopHandle;
                             loopHandle.audioHandle = channel;
                             loopHandle.spellId = vis.id();
@@ -201,15 +209,24 @@ namespace mmo
                 }
                 else
                 {
-                    SoundIndex soundIdx = m_audioPlayer->FindSound(snd, SoundType::Sound2D);
+                    // Create one-shot 3D sound
+                    SoundIndex soundIdx = m_audioPlayer->FindSound(snd, SoundType::Sound3D);
                     if (soundIdx == InvalidSound)
                     {
-                        soundIdx = m_audioPlayer->CreateSound(snd);
+                        soundIdx = m_audioPlayer->CreateSound(snd, SoundType::Sound3D);
                     }
                     if (soundIdx != InvalidSound)
                     {
                         ChannelIndex channel = InvalidChannel;
                         m_audioPlayer->PlaySound(soundIdx, &channel);
+                        if (channel != InvalidChannel)
+                        {
+                            // Set 3D position for the sound
+                            m_audioPlayer->Set3DPosition(channel, actorPosition);
+                            
+                            // Set reasonable attenuation distance (5 units min, 30 units max)
+                            m_audioPlayer->Set3DMinMaxDistance(channel, 5.0f, 30.0f);
+                        }
                     }
                 }
             }
