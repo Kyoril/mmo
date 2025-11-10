@@ -524,40 +524,71 @@ namespace mmo
 			case EmitterShape::Point:
 				return Vector3::Zero;
 
-			case EmitterShape::Sphere:
+		case EmitterShape::Sphere:
+		{
+			// Random point in sphere using rejection sampling
+			// This method is more uniform than spherical coordinates
+			const float radius = m_parameters.shapeExtents.x;
+			Vector3 offset;
+			do
 			{
-				// Random point in sphere
-				const float radius = m_parameters.shapeExtents.x;
-				const float theta = RandomRange(0.0f, 2.0f * 3.14159265f);
-				const float phi = RandomRange(0.0f, 3.14159265f);
-				const float r = RandomRange(0.0f, radius);
-				
-				return Vector3(
-					r * std::sin(phi) * std::cos(theta),
-					r * std::sin(phi) * std::sin(theta),
-					r * std::cos(phi)
+				offset = Vector3(
+					RandomRange(-1.0f, 1.0f),
+					RandomRange(-1.0f, 1.0f),
+					RandomRange(-1.0f, 1.0f)
 				);
-			}
+			} while (offset.GetSquaredLength() > 1.0f);
+			
+			return offset * radius;
+		}
 
-			case EmitterShape::Box:
+		case EmitterShape::Box:
+		{
+			// Random point in box
+			// shapeExtents represents full box dimensions, so use half extents
+			const Vector3 halfExtents = m_parameters.shapeExtents * 0.5f;
+			return Vector3(
+				RandomRange(-halfExtents.x, halfExtents.x),
+				RandomRange(-halfExtents.y, halfExtents.y),
+				RandomRange(-halfExtents.z, halfExtents.z)
+			);
+		}
+
+		case EmitterShape::Cone:
+		{
+			// Random point in cone
+			// shapeExtents: x=angle (in radians), y=height, z=radius at base
+			const float angle = m_parameters.shapeExtents.x;
+			const float height = m_parameters.shapeExtents.y;
+			const float baseRadius = m_parameters.shapeExtents.z;
+			
+			// Random position along cone height (0 = tip, 1 = base)
+			const float t = RandomRange(0.0f, 1.0f);
+			const float currentHeight = height * t;
+			const float currentRadius = baseRadius * t;
+			
+			// Random angle around the cone axis
+			const float theta = RandomRange(0.0f, 2.0f * 3.14159265f);
+			
+			// Generate point in cone space (Y-up)
+			Vector3 offset(
+				currentRadius * std::cos(theta),
+				currentHeight,
+				currentRadius * std::sin(theta)
+			);
+			
+			// Apply parent node orientation if available
+			if (m_parentNode)
 			{
-				// Random point in box
-				return Vector3(
-					RandomRange(-m_parameters.shapeExtents.x, m_parameters.shapeExtents.x),
-					RandomRange(-m_parameters.shapeExtents.y, m_parameters.shapeExtents.y),
-					RandomRange(-m_parameters.shapeExtents.z, m_parameters.shapeExtents.z)
-				);
+				const Quaternion& rot = m_parentNode->GetDerivedOrientation();
+				return rot * offset;  // Rotate offset by node orientation
 			}
+			
+			return offset;
+		}
 
-			case EmitterShape::Cone:
-			{
-				// Random point in cone (will be implemented in Task 5)
-				// For now, just spawn from point
-				return Vector3::Zero;
-			}
-
-			default:
-				return Vector3::Zero;
+		default:
+			return Vector3::Zero;
 		}
 	}
 
