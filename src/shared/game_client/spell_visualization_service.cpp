@@ -116,6 +116,9 @@ namespace mmo
             
             // Stop any looped sound for this caster
             StopLoopedSoundForActor(caster->GetGuid());
+            
+            // Remove tints for this spell on the caster
+            RemoveTintFromActor(*caster, spell.id());
         }
         
         if (!hasKits)
@@ -232,7 +235,8 @@ namespace mmo
             }
         }
 
-        // TODO: Apply tint (requires material/visual pipeline hook on GameUnitC)
+        // Apply tint to the actor
+        ApplyTintToActor(kit, actor, spellId);
     }
 
     void SpellVisualizationService::ApplyAnimationToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId)
@@ -311,6 +315,26 @@ namespace mmo
         }
     }
 
+    void SpellVisualizationService::ApplyTintToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId)
+    {
+        if (!kit.has_tint())
+        {
+            return;
+        }
+
+        const auto& tintProto = kit.tint();
+        const Vector4 tintColor(tintProto.r(), tintProto.g(), tintProto.b(), tintProto.a());
+        
+        // Delegate to GameUnitC to manage tints
+        actor.AddSpellTint(spellId, tintColor);
+    }
+
+    void SpellVisualizationService::RemoveTintFromActor(GameUnitC& actor, uint32 spellId)
+    {
+        // Delegate to GameUnitC to manage tints
+        actor.RemoveSpellTint(spellId);
+    }
+
     // Free functions for aura visualization notifications
     void NotifyAuraVisualizationApplied(const proto_client::SpellEntry& spell, GameUnitC* target)
     {
@@ -329,6 +353,8 @@ namespace mmo
             SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::AuraRemoved, spell, nullptr, targets);
             // Stop looped sounds for this target when aura is removed
             SpellVisualizationService::Get().StopLoopedSoundForActor(target->GetGuid());
+            // Remove tints for this spell on the target
+            SpellVisualizationService::Get().RemoveTintFromActor(*target, spell.id());
         }
     }
 }

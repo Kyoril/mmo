@@ -253,6 +253,31 @@ namespace mmo
 		///
 		uint32 GetLevel() const { return Get<uint32>(object_fields::Level); }
 
+	public:
+		/// @brief Applies a tint color from a spell effect.
+		/// @param spellId The spell ID applying the tint.
+		/// @param tintColor The tint color (RGBA).
+		void AddSpellTint(uint32 spellId, const Vector4& tintColor);
+
+		/// @brief Removes a spell tint.
+		/// @param spellId The spell ID to remove the tint for.
+		void RemoveSpellTint(uint32 spellId);
+
+		/// @brief Gets the current blended tint color.
+		/// @return The blended tint color from all active spell tints.
+		Vector4 GetBlendedTint() const;
+
+	private:
+		/// @brief Recalculates the blended tint and updates all SubEntity materials.
+		void UpdateTintOnMaterials();
+
+		/// @brief Ensures MaterialInstances exist for all visible SubEntities when tinting.
+		void EnsureMaterialInstances();
+
+		/// @brief Restores original shared materials when no tints are active.
+		void RestoreOriginalMaterials();
+
+	public:
 		///
 		uint32 GetMaxLevel() const { return Get<uint32>(object_fields::MaxLevel); }
 
@@ -579,5 +604,18 @@ namespace mmo
 		std::queue<MovementEvent> m_movementEventQueue;
 
 		GameTime m_lastHeartbeat = 0;
+
+		/// @brief Map of active spell tints (spellId -> tint color).
+		std::map<uint32, Vector4> m_spellTints;
+
+		/// @brief Struct to track original materials and instances per SubEntity.
+		struct SubEntityMaterialState
+		{
+			std::shared_ptr<class MaterialInterface> originalMaterial; // Shared material before tinting
+			std::shared_ptr<class MaterialInstance> tintInstance; // Per-unit MaterialInstance for tinting
+		};
+
+		/// @brief Map of SubEntity -> material state (only populated when tinting is active).
+		std::map<class SubEntity*, SubEntityMaterialState> m_tintMaterialStates;
 	};
 }

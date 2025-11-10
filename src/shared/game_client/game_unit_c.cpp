@@ -19,6 +19,10 @@
 #include "scene_graph/material_manager.h"
 #include "scene_graph/mesh_manager.h"
 #include "scene_graph/scene.h"
+#include "scene_graph/sub_entity.h"
+#include "scene_graph/entity.h"
+#include "graphics/material.h"
+#include "graphics/material_instance.h"
 #include "shared/client_data/proto_client/factions.pb.h"
 #include "shared/client_data/proto_client/faction_templates.pb.h"
 #include "shared/client_data/proto_client/model_data.pb.h"
@@ -2399,6 +2403,152 @@ namespace mmo
 		if (m_jumpStartState)
 		{
 			m_jumpStartState->SetTimePosition(0.0f);
+		}
+	}
+
+	void GameUnitC::AddSpellTint(uint32 spellId, const Vector4& tintColor)
+	{
+		// Add or update the tint for this spell
+		m_spellTints[spellId] = tintColor;
+		
+		// Ensure we have MaterialInstances for tinting (creates them if first tint)
+		if (m_tintMaterialStates.empty())
+		{
+			EnsureMaterialInstances();
+		}
+		
+		// Update all SubEntity materials with the new blended tint
+		UpdateTintOnMaterials();
+	}
+
+	void GameUnitC::RemoveSpellTint(uint32 spellId)
+	{
+		// Remove the tint for this spell
+		auto it = m_spellTints.find(spellId);
+		if (it != m_spellTints.end())
+		{
+			m_spellTints.erase(it);
+			
+			// If no more tints, restore original shared materials
+			if (m_spellTints.empty())
+			{
+				RestoreOriginalMaterials();
+			}
+			else
+			{
+				// Update all SubEntity materials with the recalculated tint
+				UpdateTintOnMaterials();
+			}
+		}
+	}
+
+	Vector4 GameUnitC::GetBlendedTint() const
+	{
+		if (m_spellTints.empty())
+		{
+			// Default gray tint (no tinting)
+			return Vector4(0.5f, 0.5f, 0.5f, 1.0f);
+		}
+		
+		// Start with default gray
+		Vector4 result(0.5f, 0.5f, 0.5f, 1.0f);
+		
+		// Blend all active tints using multiplicative blending
+		for (const auto& pair : m_spellTints)
+		{
+			const Vector4& tint = pair.second;
+			
+			// Lerp between result and (result * tint.rgb) based on tint.a
+			// This allows the alpha to control tint strength
+			result.x = result.x * (1.0f - tint.w) + (result.x * tint.x) * tint.w;
+			result.y = result.y * (1.0f - tint.w) + (result.y * tint.y) * tint.w;
+			result.z = result.z * (1.0f - tint.w) + (result.z * tint.z) * tint.w;
+		}
+		
+		return result;
+	}
+
+	void GameUnitC::EnsureMaterialInstances()
+	{
+		if (!m_entity)
+		{
+			return;
+		}
+		
+		// Create MaterialInstances for all visible SubEntities
+		const uint32 subEntityCount = m_entity->GetNumSubEntities();
+		for (uint32 i = 0; i < subEntityCount; ++i)
+		{
+			SubEntity* subEntity = m_entity->GetSubEntity(static_cast<uint16>(i));
+			if (!subEntity || !subEntity->IsVisible())
+			{
+				continue;
+			}
+			
+			MaterialPtr currentMaterial = subEntity->GetMaterial();
+			if (!currentMaterial)
+			{
+				continue;
+			}
+			
+			// Create a MaterialInstance for this unit's SubEntity
+			const std::string instanceName = std::string(m_entity->GetName()) + "_TintInstance_" + std::to_string(i);
+			auto tintInstance = std::make_shared<MaterialInstance>(instanceName, currentMaterial);
+			
+			// Store original material and new instance
+			SubEntityMaterialState state;
+			state.originalMaterial = currentMaterial;
+			state.tintInstance = tintInstance;
+			m_tintMaterialStates[subEntity] = state;
+			
+			// Apply the MaterialInstance to the SubEntity (cast to MaterialPtr)
+			MaterialPtr materialPtr = std::static_pointer_cast<MaterialInterface>(tintInstance);
+			subEntity->SetMaterial(materialPtr);
+		}
+	}
+
+	void GameUnitC::RestoreOriginalMaterials()
+	{
+		if (!m_entity)
+		{
+			return;
+		}
+		
+		// Restore original shared materials for all SubEntities
+		for (const auto& pair : m_tintMaterialStates)
+		{
+			SubEntity* subEntity = pair.first;
+			const SubEntityMaterialState& state = pair.second;
+			
+			if (subEntity && state.originalMaterial)
+			{
+				subEntity->SetMaterial(state.originalMaterial);
+			}
+		}
+		
+		// Clear the material state tracking
+		m_tintMaterialStates.clear();
+	}
+
+	void GameUnitC::UpdateTintOnMaterials()
+	{
+		if (!m_entity)
+		{
+			return;
+		}
+		
+		const Vector4 blendedTint = GetBlendedTint();
+		
+		// Update tint parameter on all MaterialInstances
+		for (const auto& pair : m_tintMaterialStates)
+		{
+			const SubEntityMaterialState& state = pair.second;
+			
+			if (state.tintInstance)
+			{
+				// Set the tint parameter on this unit's MaterialInstance
+				state.tintInstance->SetVectorParameter("Tint", blendedTint);
+			}
 		}
 	}
 

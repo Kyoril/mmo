@@ -64,6 +64,9 @@ namespace mmo
         /// \brief Stop any looped sound currently playing for an actor (e.g., on cancel/success/death).
         void StopLoopedSoundForActor(uint64 actorGuid);
 
+        /// \brief Remove tint from an actor for a specific spell (public for aura removal).
+        void RemoveTintFromActor(GameUnitC& actor, uint32 spellId);
+
     private:
         SpellVisualizationService() = default;
         ~SpellVisualizationService() = default;
@@ -78,6 +81,8 @@ namespace mmo
                              uint32 spellId);
 
         void ApplyAnimationToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
+
+        void ApplyTintToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
 
         static uint32 ToProtoEventValue(Event e);
 
