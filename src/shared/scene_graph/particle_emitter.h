@@ -394,6 +394,13 @@ namespace mmo
 		 */
 		[[nodiscard]] Vector3 GetDerivedPosition() const;
 
+		/**
+		 * @brief Gets a default particle material.
+		 * @param additive If true, returns additive blend material; if false, returns alpha blend material.
+		 * @return Material pointer, or nullptr if material failed to load.
+		 */
+		[[nodiscard]] static MaterialPtr GetDefaultMaterial(bool additive = false);
+
 	private:
 		/**
 		 * @brief Spawns new particles based on spawn rate and deltaTime.

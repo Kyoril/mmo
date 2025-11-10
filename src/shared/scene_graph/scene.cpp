@@ -252,6 +252,12 @@ namespace mmo
 			ASSERT(visibleObjectsIt != m_camVisibleObjectsMap.end());
 			visibleObjectsIt->second.Reset();
 			FindVisibleObjects(camera, visibleObjectsIt->second, shaderType == PixelShaderType::ShadowMap);
+
+			// Add particle emitters to render queue
+			for (auto& [name, emitter] : m_particleEmitters)
+			{
+				emitter->PopulateRenderQueue(GetRenderQueue());
+			}
 		}
 		
 		// Clear current render target

@@ -13,6 +13,7 @@
 #include "log/default_log_levels.h"
 #include "log/log_entry.h"
 #include "scene_graph/material_manager.h"
+#include "scene_graph/particle_emitter.h"
 #include "terrain/page.h"
 #include "terrain/terrain.h"
 
@@ -28,6 +29,9 @@ namespace mmo
 
 	SceneNode* g_boarNode = nullptr;
 	Entity* g_boarEntity = nullptr;
+
+	SceneNode* g_particleNode = nullptr;
+	ParticleEmitter* g_particleEmitter = nullptr;
 
 	SceneNode* g_sunLightNode = nullptr;
 	Light* g_sunLight = nullptr;
@@ -165,6 +169,22 @@ namespace mmo
 				g_camera->SetOrthoWindow(1920.0f * 0.5f, 1080.0f * 0.5f);
 			}
 
+			if (key == 'T')
+			{
+				// Toggle particle emitter
+				if (g_particleEmitter)
+				{
+					if (g_particleEmitter->IsPlaying())
+					{
+						g_particleEmitter->Stop();
+					}
+					else
+					{
+						g_particleEmitter->Play();
+					}
+				}
+			}
+
         	return true;
         });
 
@@ -272,6 +292,44 @@ namespace mmo
 		ASSERT(g_lightDebugEnt);
 		g_pointLightNode->AttachObject(*g_lightDebugEnt);
 
+		// Create a sample particle emitter
+		g_particleEmitter = g_scene->CreateParticleEmitter("TestParticles");
+		g_particleNode = g_scene->GetRootSceneNode().CreateChildSceneNode("ParticleNode", Vector3(5.0f, 3.0f, 0.0f));
+		g_particleNode->AttachObject(*g_particleEmitter);
+
+		// Configure particle emitter parameters
+		ParticleEmitterParameters params;
+		params.spawnRate = 20.0f;              // 20 particles per second
+		params.maxParticles = 100;             // Max 100 particles alive at once
+		params.minLifetime = 2.0f;             // Particles live 2-4 seconds
+		params.maxLifetime = 4.0f;
+		params.startSize = 0.5f;               // Start at 0.5 units
+		params.endSize = 0.1f;                 // Fade to 0.1 units
+		params.minVelocity = Vector3(-1.0f, 2.0f, -1.0f);  // Upward fountain
+		params.maxVelocity = Vector3(1.0f, 4.0f, 1.0f);
+		params.gravity = Vector3(0.0f, -2.0f, 0.0f);       // Gravity pulls down
+		params.shape = EmitterShape::Sphere;               // Spawn in sphere
+		params.shapeExtents = Vector3(0.5f, 0.5f, 0.5f);   // Radius 0.5
+
+		// Create a color curve: white -> yellow -> orange -> transparent
+		params.colorOverLifetime.Clear();
+		params.colorOverLifetime.AddKey(0.0f, Vector4(1.0f, 1.0f, 1.0f, 1.0f));  // White
+		params.colorOverLifetime.AddKey(0.3f, Vector4(1.0f, 1.0f, 0.5f, 1.0f));  // Light yellow
+		params.colorOverLifetime.AddKey(0.6f, Vector4(1.0f, 0.6f, 0.2f, 0.8f));  // Orange
+		params.colorOverLifetime.AddKey(1.0f, Vector4(0.8f, 0.3f, 0.1f, 0.0f));  // Dark orange, transparent
+
+		g_particleEmitter->SetParameters(params);
+		
+		// Try to load a default material (will fall back gracefully if not found)
+		MaterialPtr particleMaterial = ParticleEmitter::GetDefaultMaterial(true); // Additive blending
+		if (particleMaterial)
+		{
+			g_particleEmitter->SetMaterial(particleMaterial);
+		}
+
+		// Start playing automatically
+		g_particleEmitter->Play();
+
 		// Create deferred renderer
 		g_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), *g_scene, desc.width, desc.height);
 
@@ -325,6 +383,17 @@ namespace mmo
 	void DestroyGlobal()
 	{
 		g_terrain.reset();
+
+		if (g_particleEmitter)
+		{
+			g_scene->DestroyParticleEmitter(*g_particleEmitter);
+			g_particleEmitter = nullptr;
+		}
+		if (g_particleNode)
+		{
+			g_scene->DestroySceneNode(*g_particleNode);
+			g_particleNode = nullptr;
+		}
 
 		if (g_lightDebugEnt)
 		{

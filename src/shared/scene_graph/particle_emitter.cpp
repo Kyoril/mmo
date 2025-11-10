@@ -3,6 +3,7 @@
 #include "particle_emitter.h"
 
 #include "camera.h"
+#include "material_manager.h"
 #include "movable_object.h"
 #include "node.h"
 #include "render_operation.h"
@@ -13,6 +14,7 @@
 #include "graphics/vertex_declaration.h"
 #include "math/matrix4.h"
 #include "base/random.h"
+#include "log/default_log_levels.h"
 
 #include <algorithm>
 #include <chrono>
@@ -75,8 +77,7 @@ namespace mmo
 	MaterialPtr ParticleRenderable::GetMaterial() const
 	{
 		// Material is managed by the parent emitter
-		// This will be implemented when ParticleEmitter class is created
-		return nullptr; // Placeholder - will be fixed in Task 3
+		return m_parent.GetMaterial();
 	}
 
 	void ParticleRenderable::RebuildBuffers(const std::vector<Particle>& particles, const Camera& camera)
@@ -301,26 +302,6 @@ namespace mmo
 		return m_boundingBox.GetExtents().GetLength();
 	}
 
-	void ParticleEmitter::PopulateRenderQueue(RenderQueue& queue)
-	{
-		// Update particles before rendering
-		Update();
-
-		// Only add to render queue if we have particles and a material
-		if (!m_particles.empty() && m_material && m_renderable->IsReady())
-		{
-			queue.AddRenderable(*m_renderable, GetRenderQueueGroup(), 0);
-		}
-	}
-
-	void ParticleEmitter::VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables)
-	{
-		if (m_renderable && m_renderable->IsReady())
-		{
-			visitor.Visit(*m_renderable, 0, false);
-		}
-	}
-
 	void ParticleEmitter::Update()
 	{
 		// Calculate deltaTime using self-timing
@@ -355,6 +336,23 @@ namespace mmo
 				// Rebuild GPU buffers
 				m_renderable->RebuildBuffers(m_particles, *camera);
 			}
+		}
+	}
+
+	void ParticleEmitter::PopulateRenderQueue(RenderQueue& queue)
+	{
+		// Only add to render queue if we have particles and a material
+		if (!m_particles.empty() && m_material && m_renderable->IsReady())
+		{
+			queue.AddRenderable(*m_renderable, GetRenderQueueGroup(), 0);
+		}
+	}
+
+	void ParticleEmitter::VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables)
+	{
+		if (m_renderable && m_renderable->IsReady())
+		{
+			visitor.Visit(*m_renderable, 0, false);
 		}
 	}
 
@@ -605,5 +603,41 @@ namespace mmo
 	{
 		std::uniform_real_distribution<float> dist(min, max);
 		return dist(RandomGenerator);
+	}
+
+	MaterialPtr ParticleEmitter::GetDefaultMaterial(bool additive)
+	{
+		// Static caching of default materials
+		static MaterialPtr s_additiveMaterial;
+		static MaterialPtr s_alphaMaterial;
+		static bool s_attempted = false;
+
+		if (!s_attempted)
+		{
+			s_attempted = true;
+
+			// Attempt to load default materials
+			// These should be created using the material editor
+			// See data/client/Particles/README.md for creation instructions
+			try
+			{
+				s_additiveMaterial = MaterialManager::Get().Load("Particles/Additive.hmat");
+			}
+			catch (...)
+			{
+				WLOG("Failed to load default additive particle material (Particles/Additive.hmat)");
+			}
+
+			try
+			{
+				s_alphaMaterial = MaterialManager::Get().Load("Particles/Alpha.hmat");
+			}
+			catch (...)
+			{
+				WLOG("Failed to load default alpha particle material (Particles/Alpha.hmat)");
+			}
+		}
+
+		return additive ? s_additiveMaterial : s_alphaMaterial;
 	}
 }
