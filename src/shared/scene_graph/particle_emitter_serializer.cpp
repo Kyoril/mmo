@@ -205,6 +205,7 @@ namespace mmo
 			return false;
 		}
 
-		return reader;
+		// All required chunks were read successfully
+		return true;
 	}
 }
