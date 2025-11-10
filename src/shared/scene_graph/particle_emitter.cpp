@@ -6,59 +6,22 @@
 #include "movable_object.h"
 #include "node.h"
 #include "render_operation.h"
+#include "render_queue.h"
+#include "scene.h"
 #include "graphics/graphics_device.h"
 #include "graphics/vertex_format.h"
 #include "graphics/vertex_declaration.h"
 #include "math/matrix4.h"
+#include "base/random.h"
 
 #include <algorithm>
-#include <cstring>
+#include <chrono>
+#include <random>
 
 namespace mmo
 {
-	// Temporary stub for ParticleEmitter until Task 3
-	// This allows ParticleRenderable to compile
-	class ParticleEmitter : public MovableObject
-	{
-	public:
-		explicit ParticleEmitter(const String& name) 
-		{ 
-			m_name = name; 
-		}
-		
-		MaterialPtr GetMaterial() const { return nullptr; }
-		
-		// Provide position for rendering calculations
-		Vector3 GetDerivedPosition() const 
-		{ 
-			if (m_parentNode)
-			{
-				return m_parentNode->GetDerivedPosition();
-			}
-			return Vector3::Zero;
-		}
-		
-		// Provide required MovableObject overrides
-		const String& GetMovableType() const override 
-		{ 
-			static const String type = "ParticleEmitter"; 
-			return type; 
-		}
-		
-		const AABB& GetBoundingBox() const override 
-		{ 
-			static const AABB box(Vector3::Zero, Vector3::Zero); 
-			return box; 
-		}
-		
-		float GetBoundingRadius() const override { return 0.0f; }
-		
-		void NotifyMoved() override {}
-		
-		void VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables = false) override {}
-		
-		void PopulateRenderQueue(RenderQueue& queue) override {}
-	};
+	// Static member initialization
+	const String ParticleEmitter::TYPE_NAME = "ParticleEmitter";
 
 	// ========================================================================
 	// ParticleRenderable Implementation
@@ -304,5 +267,312 @@ namespace mmo
 			m_indexBufferCapacity = newCapacity;
 			m_indexData->indexBuffer = m_indexBuffer;
 		}
+	}
+
+	// ========================================================================
+	// ParticleEmitter Implementation
+	// ========================================================================
+
+	ParticleEmitter::ParticleEmitter(const String& name, GraphicsDevice& device)
+		: m_device(device)
+	{
+		m_name = name;
+		m_boundingBox.min = Vector3::Zero;
+		m_boundingBox.max = Vector3::Zero;
+		m_renderable = std::make_unique<ParticleRenderable>(m_device, *this);
+		m_lastUpdateTime = std::chrono::high_resolution_clock::now();
+		
+		// Reserve space for particles to avoid frequent reallocations
+		m_particles.reserve(m_parameters.maxParticles);
+	}
+
+	const String& ParticleEmitter::GetMovableType() const
+	{
+		return TYPE_NAME;
+	}
+
+	const AABB& ParticleEmitter::GetBoundingBox() const
+	{
+		return m_boundingBox;
+	}
+
+	float ParticleEmitter::GetBoundingRadius() const
+	{
+		return m_boundingBox.GetExtents().GetLength();
+	}
+
+	void ParticleEmitter::PopulateRenderQueue(RenderQueue& queue)
+	{
+		// Update particles before rendering
+		Update();
+
+		// Only add to render queue if we have particles and a material
+		if (!m_particles.empty() && m_material && m_renderable->IsReady())
+		{
+			queue.AddRenderable(*m_renderable, GetRenderQueueGroup(), 0);
+		}
+	}
+
+	void ParticleEmitter::VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables)
+	{
+		if (m_renderable && m_renderable->IsReady())
+		{
+			visitor.Visit(*m_renderable, 0, false);
+		}
+	}
+
+	void ParticleEmitter::Update()
+	{
+		// Calculate deltaTime using self-timing
+		const auto currentTime = std::chrono::high_resolution_clock::now();
+		const auto duration = std::chrono::duration_cast<std::chrono::microseconds>(currentTime - m_lastUpdateTime);
+		const float deltaTime = duration.count() / 1000000.0f; // Convert to seconds
+		m_lastUpdateTime = currentTime;
+
+		// Clamp deltaTime to avoid huge jumps (e.g., during debugging or long frame hitches)
+		const float clampedDeltaTime = std::min(deltaTime, 0.1f);
+
+		// Update particle system
+		if (m_isPlaying)
+		{
+			SpawnParticles(clampedDeltaTime);
+		}
+
+		UpdateParticles(clampedDeltaTime);
+		UpdateBoundingBox();
+
+		// Update renderable buffers if we have particles and a camera
+		if (!m_particles.empty() && m_scene)
+		{
+			// Get the active camera from the scene (we'll use the first camera for now)
+			// In a real implementation, this would be the rendering camera
+			Camera* camera = m_scene->GetCamera(0);
+			if (camera)
+			{
+				// Sort particles for alpha blending
+				m_renderable->SortParticles(m_particles, *camera);
+
+				// Rebuild GPU buffers
+				m_renderable->RebuildBuffers(m_particles, *camera);
+			}
+		}
+	}
+
+	void ParticleEmitter::SetParameters(const ParticleEmitterParameters& params)
+	{
+		m_parameters = params;
+		
+		// Reserve appropriate particle capacity
+		m_particles.reserve(params.maxParticles);
+		
+		// Trim excess particles if maxParticles was reduced
+		if (m_particles.size() > params.maxParticles)
+		{
+			m_particles.resize(params.maxParticles);
+		}
+	}
+
+	void ParticleEmitter::Play()
+	{
+		m_isPlaying = true;
+	}
+
+	void ParticleEmitter::Stop()
+	{
+		m_isPlaying = false;
+	}
+
+	void ParticleEmitter::Reset()
+	{
+		m_particles.clear();
+		m_spawnAccumulator = 0.0f;
+		m_lastUpdateTime = std::chrono::high_resolution_clock::now();
+	}
+
+	Vector3 ParticleEmitter::GetDerivedPosition() const
+	{
+		if (m_parentNode)
+		{
+			return m_parentNode->GetDerivedPosition();
+		}
+		return Vector3::Zero;
+	}
+
+	void ParticleEmitter::SpawnParticles(float deltaTime)
+	{
+		// Accumulate fractional particles
+		m_spawnAccumulator += deltaTime * m_parameters.spawnRate;
+
+		// Spawn particles while we have accumulated enough and haven't hit the limit
+		while (m_spawnAccumulator >= 1.0f && m_particles.size() < m_parameters.maxParticles)
+		{
+			Particle particle;
+			
+			// Get emitter world position
+			const Vector3 emitterPos = GetDerivedPosition();
+			
+			// Set initial position (local spawn position + emitter world position)
+			particle.position = emitterPos + GetSpawnPosition();
+			
+			// Set initial velocity
+			particle.velocity = GetInitialVelocity();
+			
+			// Set lifetime
+			particle.lifetime = RandomRange(m_parameters.minLifetime, m_parameters.maxLifetime);
+			particle.age = 0.0f;
+			
+			// Set initial size
+			particle.size = m_parameters.startSize;
+			
+			// Set initial color (from curve at t=0)
+			const Vector4 startColor = m_parameters.colorOverLifetime.Evaluate(0.0f);
+			particle.color = startColor;
+			
+			// Set rotation
+			particle.rotation = 0.0f;
+			particle.angularVelocity = 0.0f; // Can be randomized later
+			
+			// Set sprite index
+			particle.spriteIndex = 0;
+			
+			// Add to particle list
+			m_particles.push_back(particle);
+			
+			// Decrease accumulator
+			m_spawnAccumulator -= 1.0f;
+		}
+	}
+
+	void ParticleEmitter::UpdateParticles(float deltaTime)
+	{
+		// Update each particle
+		for (auto& particle : m_particles)
+		{
+			// Age the particle
+			particle.age += deltaTime;
+			
+			// Skip dead particles (will be removed below)
+			if (particle.age >= particle.lifetime)
+			{
+				continue;
+			}
+			
+			// Update position
+			particle.position += particle.velocity * deltaTime;
+			
+			// Apply gravity
+			particle.velocity += m_parameters.gravity * deltaTime;
+			
+			// Update rotation
+			particle.rotation += particle.angularVelocity * deltaTime;
+			
+			// Interpolate size over lifetime
+			const float t = particle.age / particle.lifetime;
+			particle.size = m_parameters.startSize + (m_parameters.endSize - m_parameters.startSize) * t;
+			
+			// Update color from curve
+			particle.color = m_parameters.colorOverLifetime.Evaluate(t);
+			
+			// TODO: Update sprite index for sprite sheet animation (Task 5)
+		}
+		
+		// Remove dead particles (erase-remove idiom)
+		m_particles.erase(
+			std::remove_if(m_particles.begin(), m_particles.end(),
+				[](const Particle& p) { return p.age >= p.lifetime; }),
+			m_particles.end());
+	}
+
+	void ParticleEmitter::UpdateBoundingBox()
+	{
+		if (m_particles.empty())
+		{
+			m_boundingBox.min = Vector3::Zero;
+			m_boundingBox.max = Vector3::Zero;
+			return;
+		}
+
+		// Find min and max extents of all particles
+		Vector3 minPos = m_particles[0].position;
+		Vector3 maxPos = m_particles[0].position;
+
+		for (const auto& particle : m_particles)
+		{
+			// Account for particle size when calculating bounds
+			const Vector3 halfSize(particle.size * 0.5f, particle.size * 0.5f, particle.size * 0.5f);
+			
+			const Vector3 pMin = particle.position - halfSize;
+			const Vector3 pMax = particle.position + halfSize;
+			
+			minPos.x = std::min(minPos.x, pMin.x);
+			minPos.y = std::min(minPos.y, pMin.y);
+			minPos.z = std::min(minPos.z, pMin.z);
+			
+			maxPos.x = std::max(maxPos.x, pMax.x);
+			maxPos.y = std::max(maxPos.y, pMax.y);
+			maxPos.z = std::max(maxPos.z, pMax.z);
+		}
+
+		m_boundingBox.min = minPos;
+		m_boundingBox.max = maxPos;
+	}
+
+	Vector3 ParticleEmitter::GetSpawnPosition() const
+	{
+		switch (m_parameters.shape)
+		{
+			case EmitterShape::Point:
+				return Vector3::Zero;
+
+			case EmitterShape::Sphere:
+			{
+				// Random point in sphere
+				const float radius = m_parameters.shapeExtents.x;
+				const float theta = RandomRange(0.0f, 2.0f * 3.14159265f);
+				const float phi = RandomRange(0.0f, 3.14159265f);
+				const float r = RandomRange(0.0f, radius);
+				
+				return Vector3(
+					r * std::sin(phi) * std::cos(theta),
+					r * std::sin(phi) * std::sin(theta),
+					r * std::cos(phi)
+				);
+			}
+
+			case EmitterShape::Box:
+			{
+				// Random point in box
+				return Vector3(
+					RandomRange(-m_parameters.shapeExtents.x, m_parameters.shapeExtents.x),
+					RandomRange(-m_parameters.shapeExtents.y, m_parameters.shapeExtents.y),
+					RandomRange(-m_parameters.shapeExtents.z, m_parameters.shapeExtents.z)
+				);
+			}
+
+			case EmitterShape::Cone:
+			{
+				// Random point in cone (will be implemented in Task 5)
+				// For now, just spawn from point
+				return Vector3::Zero;
+			}
+
+			default:
+				return Vector3::Zero;
+		}
+	}
+
+	Vector3 ParticleEmitter::GetInitialVelocity() const
+	{
+		return Vector3(
+			RandomRange(m_parameters.minVelocity.x, m_parameters.maxVelocity.x),
+			RandomRange(m_parameters.minVelocity.y, m_parameters.maxVelocity.y),
+			RandomRange(m_parameters.minVelocity.z, m_parameters.maxVelocity.z)
+		);
+	}
+
+	float ParticleEmitter::RandomRange(float min, float max) const
+	{
+		std::uniform_real_distribution<float> dist(min, max);
+		return dist(RandomGenerator);
 	}
 }

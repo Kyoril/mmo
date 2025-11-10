@@ -15,10 +15,13 @@
 #include "base/typedefs.h"
 #include "math/vector3.h"
 #include "math/vector4.h"
+#include "math/aabb.h"
 #include "graphics/color_curve.h"
 #include "renderable.h"
 #include "graphics/vertex_index_data.h"
+#include "movable_object.h"
 
+#include <chrono>
 #include <cstddef>
 #include <vector>
 #include <memory>
@@ -28,6 +31,7 @@ namespace mmo
 	class Camera;
 	class GraphicsDevice;
 	class ParticleEmitter;
+	class RenderQueue;
 
 	/**
 	 * @struct Particle
@@ -269,5 +273,176 @@ namespace mmo
 		std::unique_ptr<VertexData> m_vertexData;    ///< Vertex data descriptor
 		std::unique_ptr<IndexData> m_indexData;      ///< Index data descriptor
 		size_t m_indexBufferCapacity { 0 };          ///< Current capacity of index buffer
+	};
+
+	/**
+	 * @class ParticleEmitter
+	 * @brief Main particle emitter class that manages particle lifecycle and rendering.
+	 *
+	 * This class inherits from MovableObject to integrate with the scene graph system.
+	 * It manages particle spawning, updating, and rendering using a self-timing mechanism
+	 * (since Scene::UpdateSceneGraph provides no deltaTime parameter).
+	 */
+	class ParticleEmitter final : public MovableObject
+	{
+	public:
+		/**
+		 * @brief Constructs a new particle emitter.
+		 * @param name Unique name for this emitter.
+		 * @param device Graphics device for creating GPU resources.
+		 */
+		explicit ParticleEmitter(const String& name, GraphicsDevice& device);
+
+		/**
+		 * @brief Destructor.
+		 */
+		~ParticleEmitter() override = default;
+
+	public:
+		// MovableObject interface implementation
+
+		/**
+		 * @brief Gets the type name of this movable object.
+		 * @return "ParticleEmitter"
+		 */
+		[[nodiscard]] const String& GetMovableType() const override;
+
+		/**
+		 * @brief Gets the local bounding box containing all particles.
+		 * @return The bounding box in local space.
+		 */
+		[[nodiscard]] const AABB& GetBoundingBox() const override;
+
+		/**
+		 * @brief Gets the bounding radius of all particles.
+		 * @return The bounding sphere radius.
+		 */
+		[[nodiscard]] float GetBoundingRadius() const override;
+
+		/**
+		 * @brief Adds this emitter's renderables to the render queue.
+		 * @param queue The render queue to populate.
+		 */
+		void PopulateRenderQueue(RenderQueue& queue) override;
+
+		/**
+		 * @brief Visits all renderables owned by this emitter.
+		 * @param visitor The visitor to accept.
+		 * @param debugRenderables Whether to include debug renderables.
+		 */
+		void VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables) override;
+
+	public:
+		// Particle system interface
+
+		/**
+		 * @brief Updates the particle system.
+		 *
+		 * Uses self-timing via std::chrono to calculate deltaTime since this is called
+		 * from Scene::UpdateSceneGraph which provides no deltaTime parameter.
+		 */
+		void Update();
+
+		/**
+		 * @brief Sets the emitter parameters.
+		 * @param params The new parameters to use.
+		 */
+		void SetParameters(const ParticleEmitterParameters& params);
+
+		/**
+		 * @brief Gets the current emitter parameters.
+		 * @return The emitter parameters.
+		 */
+		[[nodiscard]] const ParticleEmitterParameters& GetParameters() const { return m_parameters; }
+
+		/**
+		 * @brief Starts emitting particles.
+		 */
+		void Play();
+
+		/**
+		 * @brief Stops emitting new particles (existing particles continue to live).
+		 */
+		void Stop();
+
+		/**
+		 * @brief Resets the emitter, clearing all particles.
+		 */
+		void Reset();
+
+		/**
+		 * @brief Checks if the emitter is currently playing.
+		 * @return True if playing, false otherwise.
+		 */
+		[[nodiscard]] bool IsPlaying() const { return m_isPlaying; }
+
+		/**
+		 * @brief Sets the material to use for rendering particles.
+		 * @param material The material pointer.
+		 */
+		void SetMaterial(const MaterialPtr& material) { m_material = material; }
+
+		/**
+		 * @brief Gets the material used for rendering particles.
+		 * @return The material pointer.
+		 */
+		[[nodiscard]] MaterialPtr GetMaterial() const { return m_material; }
+
+		/**
+		 * @brief Gets the derived position for rendering calculations.
+		 * @return The world space position of the emitter.
+		 */
+		[[nodiscard]] Vector3 GetDerivedPosition() const;
+
+	private:
+		/**
+		 * @brief Spawns new particles based on spawn rate and deltaTime.
+		 * @param deltaTime Time elapsed since last spawn in seconds.
+		 */
+		void SpawnParticles(float deltaTime);
+
+		/**
+		 * @brief Updates all existing particles.
+		 * @param deltaTime Time elapsed since last update in seconds.
+		 */
+		void UpdateParticles(float deltaTime);
+
+		/**
+		 * @brief Updates the bounding box to contain all particles.
+		 */
+		void UpdateBoundingBox();
+
+		/**
+		 * @brief Gets a random spawn position based on emitter shape.
+		 * @return Position in local space.
+		 */
+		[[nodiscard]] Vector3 GetSpawnPosition() const;
+
+		/**
+		 * @brief Gets a random initial velocity within configured range.
+		 * @return Velocity vector.
+		 */
+		[[nodiscard]] Vector3 GetInitialVelocity() const;
+
+		/**
+		 * @brief Gets a random value between min and max.
+		 * @param min Minimum value.
+		 * @param max Maximum value.
+		 * @return Random value in range [min, max].
+		 */
+		[[nodiscard]] float RandomRange(float min, float max) const;
+
+	private:
+		GraphicsDevice& m_device;                                         ///< Graphics device for GPU resources
+		ParticleEmitterParameters m_parameters;                           ///< Emitter configuration
+		std::vector<Particle> m_particles;                                ///< Active particles
+		std::unique_ptr<ParticleRenderable> m_renderable;                 ///< Renderable for GPU rendering
+		MaterialPtr m_material;                                           ///< Material for rendering
+		float m_spawnAccumulator { 0.0f };                                ///< Accumulator for fractional particle spawning
+		bool m_isPlaying { false };                                       ///< Whether emitter is actively spawning
+		mutable AABB m_boundingBox;                                       ///< Bounding box containing all particles
+		std::chrono::high_resolution_clock::time_point m_lastUpdateTime;  ///< Last update timestamp for self-timing
+
+		static const String TYPE_NAME;                                    ///< "ParticleEmitter"
 	};
 }
