@@ -53,6 +53,7 @@ namespace mmo
 		m_entities.clear();
 		m_manualRenderObjects.clear();
 		m_lights.clear();
+		m_particleEmitters.clear();
 
 		m_sceneNodes.clear();
 		m_rootNode = nullptr;
@@ -136,6 +137,45 @@ namespace mmo
 		}
 	}
 
+	ParticleEmitter* Scene::CreateParticleEmitter(const String& name)
+	{
+		ASSERT(!name.empty());
+		ASSERT(m_particleEmitters.find(name) == m_particleEmitters.end());
+
+		auto emitter = std::make_unique<ParticleEmitter>(name, GraphicsDevice::Get());
+		emitter->SetScene(this);
+
+		auto [iterator, inserted] = m_particleEmitters.emplace(name, std::move(emitter));
+		return iterator->second.get();
+	}
+
+	void Scene::DestroyParticleEmitter(const ParticleEmitter& emitter)
+	{
+		DestroyParticleEmitter(emitter.GetName());
+	}
+
+	void Scene::DestroyParticleEmitter(const String& name)
+	{
+		const auto emitterIt = m_particleEmitters.find(name);
+		if (emitterIt != m_particleEmitters.end())
+		{
+			m_particleEmitters.erase(emitterIt);
+		}
+	}
+
+	std::vector<ParticleEmitter*> Scene::GetAllParticleEmitters() const
+	{
+		std::vector<ParticleEmitter*> emitters;
+		emitters.reserve(m_particleEmitters.size());
+
+		for (const auto& [name, emitter] : m_particleEmitters)
+		{
+			emitters.push_back(emitter.get());
+		}
+
+		return emitters;
+	}
+
 	bool Scene::HasEntity(const String& name) const
 	{
 		return m_entities.find(name) != m_entities.end();
@@ -197,6 +237,12 @@ namespace mmo
 		m_renderableVisitor.scissoring = false;
 
 		UpdateSceneGraph();
+
+		// Update particle emitters (self-timed)
+		for (auto& [name, emitter] : m_particleEmitters)
+		{
+			emitter->Update();
+		}
 
 		if (!m_frozen)
 		{

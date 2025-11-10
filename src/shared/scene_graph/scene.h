@@ -13,6 +13,7 @@
 #include "light.h"
 #include "manual_render_object.h"
 #include "movable_object.h"
+#include "particle_emitter.h"
 #include "scene_node.h"
 #include "math/ray.h"
 
@@ -397,6 +398,25 @@ namespace mmo
 		/// @return A vector of all lights in the scene.
 		std::vector<Light*> GetAllLights() const;
 
+		// Particle emitter management
+
+		/// Creates a new particle emitter using the specified name.
+		/// @param name Name of the emitter. Has to be unique to the scene.
+		/// @returns Pointer to the created emitter.
+		ParticleEmitter* CreateParticleEmitter(const String& name);
+
+		/// Destroys a given particle emitter.
+		/// @param emitter The emitter to remove.
+		void DestroyParticleEmitter(const ParticleEmitter& emitter);
+
+		/// Destroys a particle emitter using a specific name.
+		/// @param name Name of the emitter to remove.
+		void DestroyParticleEmitter(const String& name);
+
+		/// @brief Gets all particle emitters in the scene.
+		/// @return A vector of all particle emitters in the scene.
+		std::vector<ParticleEmitter*> GetAllParticleEmitters() const;
+
 		const Vector3& GetAmbientColor() const { return m_ambientColor; }
 
 		void SetAmbientColor(const Vector3& color)
@@ -466,6 +486,9 @@ namespace mmo
 
 		typedef std::map<String, std::unique_ptr<Light>> LightObjectMap;
 		LightObjectMap m_lights;
+
+		typedef std::map<String, std::unique_ptr<ParticleEmitter>> ParticleEmitterMap;
+		ParticleEmitterMap m_particleEmitters;
 		
 		SceneQueuedRenderableVisitor m_renderableVisitor;
 
