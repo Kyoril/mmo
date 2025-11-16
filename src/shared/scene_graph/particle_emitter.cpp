@@ -36,12 +36,18 @@ namespace mmo
 		// Create vertex data container
 		m_vertexData = std::make_unique<VertexData>(&m_device);
 		
-		// Set up vertex declaration for POS_COL_TEX_VERTEX format
+		// Set up vertex declaration for POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX format
 		size_t offset = 0;
 		offset += m_vertexData->vertexDeclaration->AddElement(
 			0, offset, VertexElementType::Float3, VertexElementSemantic::Position).GetSize();
 		offset += m_vertexData->vertexDeclaration->AddElement(
 			0, offset, VertexElementType::ColorArgb, VertexElementSemantic::Diffuse).GetSize();
+		offset += m_vertexData->vertexDeclaration->AddElement(
+			0, offset, VertexElementType::Float3, VertexElementSemantic::Normal).GetSize();
+		offset += m_vertexData->vertexDeclaration->AddElement(
+			0, offset, VertexElementType::Float3, VertexElementSemantic::Binormal).GetSize();
+		offset += m_vertexData->vertexDeclaration->AddElement(
+			0, offset, VertexElementType::Float3, VertexElementSemantic::Tangent).GetSize();
 		offset += m_vertexData->vertexDeclaration->AddElement(
 			0, offset, VertexElementType::Float2, VertexElementSemantic::TextureCoordinate).GetSize();
 
@@ -53,7 +59,7 @@ namespace mmo
 	{
 		// Set up render operation similar to ManualRenderObject pattern
 		operation.topology = TopologyType::TriangleList;
-		operation.vertexFormat = VertexFormat::PosColorTex1;
+		operation.vertexFormat = VertexFormat::PosColorNormalBinormalTangentTex1;
 		operation.vertexData = m_vertexData.get();
 		operation.indexData = m_indexData.get();
 	}
@@ -123,7 +129,7 @@ namespace mmo
 
 			m_vertexBuffer = m_device.CreateVertexBuffer(
 				newSize, 
-				sizeof(POS_COL_TEX_VERTEX), 
+				sizeof(POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX), 
 				BufferUsage::DynamicWriteOnlyDiscardable, 
 				nullptr);
 
@@ -132,7 +138,13 @@ namespace mmo
 		}
 
 		// Map vertex buffer and fill with billboard data
-		auto* vertices = static_cast<POS_COL_TEX_VERTEX*>(m_vertexBuffer->Map(LockOptions::Discard));
+		auto* vertices = static_cast<POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX*>(m_vertexBuffer->Map(LockOptions::Discard));
+
+		// For billboarded particles, the normal points towards the camera
+		// Tangent and binormal form the billboard plane
+		const Vector3 normal = -camera.GetDerivedOrientation() * Vector3::UnitZ;
+		const Vector3 tangent = right;     // Tangent points right
+		const Vector3 binormal = up;       // Binormal points up
 
 		for (size_t i = 0; i < particleCount; ++i)
 		{
@@ -164,24 +176,36 @@ namespace mmo
 			// Bottom-left
 			vertices[baseIndex + 0].pos = particle.position - rightOffset - upOffset;
 			vertices[baseIndex + 0].color = color;
+			vertices[baseIndex + 0].normal = normal;
+			vertices[baseIndex + 0].binormal = binormal;
+			vertices[baseIndex + 0].tangent = tangent;
 			vertices[baseIndex + 0].uv[0] = uMin;
 			vertices[baseIndex + 0].uv[1] = vMax;
 
 			// Bottom-right
 			vertices[baseIndex + 1].pos = particle.position + rightOffset - upOffset;
 			vertices[baseIndex + 1].color = color;
+			vertices[baseIndex + 1].normal = normal;
+			vertices[baseIndex + 1].binormal = binormal;
+			vertices[baseIndex + 1].tangent = tangent;
 			vertices[baseIndex + 1].uv[0] = uMax;
 			vertices[baseIndex + 1].uv[1] = vMax;
 
 			// Top-right
 			vertices[baseIndex + 2].pos = particle.position + rightOffset + upOffset;
 			vertices[baseIndex + 2].color = color;
+			vertices[baseIndex + 2].normal = normal;
+			vertices[baseIndex + 2].binormal = binormal;
+			vertices[baseIndex + 2].tangent = tangent;
 			vertices[baseIndex + 2].uv[0] = uMax;
 			vertices[baseIndex + 2].uv[1] = vMin;
 
 			// Top-left
 			vertices[baseIndex + 3].pos = particle.position - rightOffset + upOffset;
 			vertices[baseIndex + 3].color = color;
+			vertices[baseIndex + 3].normal = normal;
+			vertices[baseIndex + 3].binormal = binormal;
+			vertices[baseIndex + 3].tangent = tangent;
 			vertices[baseIndex + 3].uv[0] = uMin;
 			vertices[baseIndex + 3].uv[1] = vMin;
 		}
