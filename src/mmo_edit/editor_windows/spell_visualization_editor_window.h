@@ -47,6 +47,10 @@ namespace mmo
 		/// \return True if the kit should be removed.
 		bool DrawKit(proto::SpellKit& kit, int kitIndex);
 
+		/// \brief Draw the projectile configuration section.
+		/// \param currentEntry The visualization being edited.
+		void DrawProjectileConfig(proto::SpellVisualization& currentEntry);
+
 		/// \brief Initialize a new entry with default values.
 		void OnNewEntry(proto::TemplateManager<proto::SpellVisualizations, proto::SpellVisualization>::EntryType& entry) override;
 

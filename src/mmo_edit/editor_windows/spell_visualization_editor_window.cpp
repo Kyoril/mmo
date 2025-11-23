@@ -29,6 +29,13 @@ namespace mmo
 		"Target",
 		"Projectile Impact"};
 
+	// Motion type names matching proto::ProjectileMotion enum
+	static const char *s_motionTypeNames[] = {
+		"Linear",
+		"Arc",
+		"Homing",
+		"Sine Wave"};
+
 	SpellVisualizationEditorWindow::SpellVisualizationEditorWindow(const String &name, proto::Project &project, EditorHost &host, PreviewProviderManager &previewManager, IAudio *audioSystem)
 		: EditorEntryWindowBase<proto::SpellVisualizations, proto::SpellVisualization>(project, project.spellVisualizations, name), m_host(host), m_previewManager(previewManager), m_audioSystem(audioSystem)
 	{
@@ -85,7 +92,7 @@ namespace mmo
 		{
 			currentEntry.set_icon(icon);
 		}
-		
+
 		ImGui::Spacing();
 		ImGui::Separator();
 		ImGui::Text("Visual Kits by Event");
@@ -97,6 +104,15 @@ namespace mmo
 		{
 			DrawEventKits(currentEntry, eventIdx, s_eventNames[eventIdx]);
 		}
+
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Text("Projectile Configuration");
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		// Draw projectile configuration
+		DrawProjectileConfig(currentEntry);
 
 		ImGui::PopID();
 	}
@@ -308,5 +324,253 @@ namespace mmo
 
 		ImGui::PopID();
 		return shouldRemove;
+	}
+
+	void SpellVisualizationEditorWindow::DrawProjectileConfig(proto::SpellVisualization &currentEntry)
+	{
+		ImGui::PushID("ProjectileConfig");
+
+		// Check if projectile config exists
+		bool hasProjectile = currentEntry.has_projectile();
+
+		if (ImGui::Checkbox("Enable Projectile", &hasProjectile))
+		{
+			if (hasProjectile)
+			{
+				// Create projectile config with defaults
+				auto *projectile = currentEntry.mutable_projectile();
+				projectile->set_motion(proto::LINEAR);
+				projectile->set_scale(1.0f);
+				projectile->set_face_movement(true);
+			}
+			else
+			{
+				// Clear projectile config
+				currentEntry.clear_projectile();
+			}
+		}
+
+		if (!hasProjectile)
+		{
+			ImGui::PopID();
+			return;
+		}
+
+		ImGui::Indent();
+		auto *projectile = currentEntry.mutable_projectile();
+
+		// Movement section
+		if (ImGui::CollapsingHeader("Movement", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::Indent();
+
+			// Motion type
+			int motionType = projectile->has_motion() ? static_cast<int>(projectile->motion()) : 0;
+			if (ImGui::Combo("Motion Type", &motionType, s_motionTypeNames, IM_ARRAYSIZE(s_motionTypeNames)))
+			{
+				projectile->set_motion(static_cast<proto::ProjectileMotion>(motionType));
+			}
+
+			// Motion-specific parameters
+			switch (projectile->motion())
+			{
+			case proto::ARC:
+				{
+					float arcHeight = projectile->has_arc_height() ? projectile->arc_height() : 0.0f;
+					if (ImGui::DragFloat("Arc Height", &arcHeight, 0.1f, 0.0f, 50.0f))
+					{
+						projectile->set_arc_height(arcHeight);
+					}
+					ImGui::SameLine();
+					if (ImGui::SmallButton("?"))
+					{
+						ImGui::SetTooltip("Maximum height of the parabolic arc in world units");
+					}
+					break;
+				}
+			case proto::HOMING:
+				{
+					float homingStrength = projectile->has_homing_strength() ? projectile->homing_strength() : 5.0f;
+					if (ImGui::DragFloat("Homing Strength", &homingStrength, 0.1f, 0.1f, 20.0f))
+					{
+						projectile->set_homing_strength(homingStrength);
+					}
+					ImGui::SameLine();
+					if (ImGui::SmallButton("?"))
+					{
+						ImGui::SetTooltip("Turn rate - higher values make sharper turns");
+					}
+					break;
+				}
+			case proto::SINE_WAVE:
+				{
+					float frequency = projectile->has_wave_frequency() ? projectile->wave_frequency() : 1.0f;
+					if (ImGui::DragFloat("Wave Frequency", &frequency, 0.1f, 0.1f, 10.0f))
+					{
+						projectile->set_wave_frequency(frequency);
+					}
+
+					float amplitude = projectile->has_wave_amplitude() ? projectile->wave_amplitude() : 1.0f;
+					if (ImGui::DragFloat("Wave Amplitude", &amplitude, 0.1f, 0.0f, 10.0f))
+					{
+						projectile->set_wave_amplitude(amplitude);
+					}
+					ImGui::SameLine();
+					if (ImGui::SmallButton("?"))
+					{
+						ImGui::SetTooltip("Side-to-side oscillation distance");
+					}
+					break;
+				}
+			default:
+				break;
+			}
+
+			ImGui::Unindent();
+		}
+
+		// Visual representation section
+		if (ImGui::CollapsingHeader("Visual Representation", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::Indent();
+
+			// Mesh name
+			std::string meshName = projectile->has_mesh_name() ? projectile->mesh_name() : "";
+			static const std::set<String> meshExtensions = {".hmsh"};
+			if (AssetPickerWidget::Draw("Mesh", meshName, meshExtensions, &m_previewManager, nullptr, 64.0f))
+			{
+				projectile->set_mesh_name(meshName);
+			}
+			ImGui::SameLine();
+			if (ImGui::SmallButton("?##mesh"))
+			{
+				ImGui::SetTooltip("3D mesh for the projectile (e.g., arrow, fireball)");
+			}
+
+			// Material name
+			std::string materialName = projectile->has_material_name() ? projectile->material_name() : "";
+			static const std::set<String> materialExtensions = {".hmat"};
+			if (AssetPickerWidget::Draw("Material", materialName, materialExtensions, nullptr, nullptr, 0.0f))
+			{
+				projectile->set_material_name(materialName);
+			}
+
+			// Trail particle
+			std::string trailParticle = projectile->has_trail_particle() ? projectile->trail_particle() : "";
+			if (ImGui::InputText("Trail Particle", &trailParticle))
+			{
+				projectile->set_trail_particle(trailParticle);
+			}
+			ImGui::SameLine();
+			if (ImGui::SmallButton("?##trail"))
+			{
+				ImGui::SetTooltip("Particle system name for trailing effect");
+			}
+
+			// Scale
+			float scale = projectile->has_scale() ? projectile->scale() : 1.0f;
+			if (ImGui::DragFloat("Scale", &scale, 0.01f, 0.1f, 10.0f))
+			{
+				projectile->set_scale(scale);
+			}
+
+			ImGui::Unindent();
+		}
+
+		// Rotation section
+		if (ImGui::CollapsingHeader("Rotation"))
+		{
+			ImGui::Indent();
+
+			// Face movement
+			bool faceMovement = projectile->has_face_movement() ? projectile->face_movement() : true;
+			if (ImGui::Checkbox("Face Movement Direction", &faceMovement))
+			{
+				projectile->set_face_movement(faceMovement);
+			}
+			ImGui::SameLine();
+			if (ImGui::SmallButton("?##face"))
+			{
+				ImGui::SetTooltip("Automatically orient projectile along velocity vector");
+			}
+
+			// Spin rate
+			float spinRate = projectile->has_spin_rate() ? projectile->spin_rate() : 0.0f;
+			if (ImGui::DragFloat("Spin Rate (deg/sec)", &spinRate, 1.0f, -720.0f, 720.0f))
+			{
+				projectile->set_spin_rate(spinRate);
+			}
+			ImGui::SameLine();
+			if (ImGui::SmallButton("?##spin"))
+			{
+				ImGui::SetTooltip("Rotation around forward axis in degrees per second");
+			}
+
+			ImGui::Unindent();
+		}
+
+		// Effects section
+		if (ImGui::CollapsingHeader("Effects"))
+		{
+			ImGui::Indent();
+
+			// Flight sounds
+			if (ImGui::TreeNode("Flight Sounds"))
+			{
+				if (ImGui::Button("Add Sound"))
+				{
+					projectile->add_sounds("Sound/Spells/Projectile.wav");
+				}
+
+				static const std::set<String> soundExtensions = {".wav", ".ogg", ".mp3"};
+				std::vector<int> soundsToRemove;
+
+				for (int i = 0; i < projectile->sounds_size(); ++i)
+				{
+					ImGui::PushID(i);
+
+					std::string sound = projectile->sounds(i);
+					char soundLabel[32];
+					snprintf(soundLabel, sizeof(soundLabel), "Sound %d", i);
+
+					if (AssetPickerWidget::Draw(soundLabel, sound, soundExtensions, nullptr, m_audioSystem, 0.0f))
+					{
+						projectile->set_sounds(i, sound);
+					}
+					ImGui::SameLine();
+					if (ImGui::SmallButton("Remove"))
+					{
+						soundsToRemove.push_back(i);
+					}
+
+					ImGui::PopID();
+				}
+
+				// Remove sounds in reverse order
+				for (auto it = soundsToRemove.rbegin(); it != soundsToRemove.rend(); ++it)
+				{
+					projectile->mutable_sounds()->erase(projectile->mutable_sounds()->begin() + *it);
+				}
+
+				ImGui::TreePop();
+			}
+
+			// Impact particle
+			std::string impactParticle = projectile->has_impact_particle() ? projectile->impact_particle() : "";
+			if (ImGui::InputText("Impact Particle", &impactParticle))
+			{
+				projectile->set_impact_particle(impactParticle);
+			}
+			ImGui::SameLine();
+			if (ImGui::SmallButton("?##impact"))
+			{
+				ImGui::SetTooltip("Particle burst effect on impact (not yet implemented)");
+			}
+
+			ImGui::Unindent();
+		}
+
+		ImGui::Unindent();
+		ImGui::PopID();
 	}
 }
