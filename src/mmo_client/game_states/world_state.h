@@ -19,7 +19,7 @@
 #include "scene_graph/axis_display.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/world_grid.h"
-#include "spell_projectile.h"
+#include "game_client/projectile_manager.h"
 
 #include "base/id_generator.h"
 #include "world_deserializer.h"
@@ -384,10 +384,11 @@ namespace mmo
 		std::unique_ptr<PlayerController> m_playerController;
 		std::unique_ptr<AxisDisplay> m_debugAxis;
 		std::unique_ptr<WorldGrid> m_worldGrid;
-	IdGenerator<uint64> m_objectIdGenerator{1};
-	IAudio &m_audio;
+		IdGenerator<uint64> m_objectIdGenerator{1};
+		IAudio &m_audio;
 
-	bool m_combatMode = false;		SceneNode *m_worldRootNode;
+		bool m_combatMode = false;
+		SceneNode *m_worldRootNode;
 		std::shared_ptr<ClientWorldInstance> m_worldInstance;
 
 		// Game time component for day/night cycle
@@ -403,10 +404,9 @@ namespace mmo
 
 		const proto_client::Project &m_project;
 
-		std::vector<std::unique_ptr<SpellProjectile>> m_spellProjectiles;
+		std::unique_ptr<ProjectileManager> m_projectileManager;
 
 		TimerQueue &m_timers;
-
 		AttackSwingEvent m_lastAttackSwingEvent{AttackSwingEvent::Unknown};
 
 		Bindings m_bindings;

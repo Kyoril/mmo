@@ -12,7 +12,7 @@
 namespace mmo
 {
 	// Event names matching proto::SpellVisualEvent enum
-	static const char* s_eventNames[] = {
+	static const char *s_eventNames[] = {
 		"Start Cast",
 		"Cancel Cast",
 		"Casting",
@@ -21,24 +21,19 @@ namespace mmo
 		"Aura Applied",
 		"Aura Removed",
 		"Aura Tick",
-		"Aura Idle"
-	};
+		"Aura Idle"};
 
 	// Scope names matching proto::KitScope enum
-	static const char* s_scopeNames[] = {
+	static const char *s_scopeNames[] = {
 		"Caster",
 		"Target",
-		"Projectile Impact"
-	};
+		"Projectile Impact"};
 
-	SpellVisualizationEditorWindow::SpellVisualizationEditorWindow(const String& name, proto::Project& project, EditorHost& host, PreviewProviderManager& previewManager, IAudio* audioSystem)
-		: EditorEntryWindowBase<proto::SpellVisualizations, proto::SpellVisualization>(project, project.spellVisualizations, name)
-		, m_host(host)
-		, m_previewManager(previewManager)
-		, m_audioSystem(audioSystem)
+	SpellVisualizationEditorWindow::SpellVisualizationEditorWindow(const String &name, proto::Project &project, EditorHost &host, PreviewProviderManager &previewManager, IAudio *audioSystem)
+		: EditorEntryWindowBase<proto::SpellVisualizations, proto::SpellVisualization>(project, project.spellVisualizations, name), m_host(host), m_previewManager(previewManager), m_audioSystem(audioSystem)
 	{
 		m_hasToolbarButton = false;
-		
+
 		// Initialize all event sections as collapsed
 		for (int i = 0; i < 9; ++i)
 		{
@@ -47,7 +42,7 @@ namespace mmo
 	}
 
 	void SpellVisualizationEditorWindow::OnNewEntry(
-		proto::TemplateManager<proto::SpellVisualizations, proto::SpellVisualization>::EntryType& entry)
+		proto::TemplateManager<proto::SpellVisualizations, proto::SpellVisualization>::EntryType &entry)
 	{
 		EditorEntryWindowBase<proto::SpellVisualizations, proto::SpellVisualization>::OnNewEntry(entry);
 
@@ -56,7 +51,7 @@ namespace mmo
 		entry.set_icon("");
 	}
 
-	void SpellVisualizationEditorWindow::DrawDetailsImpl(proto::SpellVisualization& currentEntry)
+	void SpellVisualizationEditorWindow::DrawDetailsImpl(proto::SpellVisualization &currentEntry)
 	{
 		// Basic fields
 		ImGui::PushID(&currentEntry);
@@ -83,13 +78,15 @@ namespace mmo
 			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "(Required)");
 		}
 
-	// Icon path
-	std::string icon = currentEntry.icon();
-	static const std::set<String> iconExtensions = { ".htex", ".blp" };
-	if (AssetPickerWidget::Draw("Icon", icon, iconExtensions, &m_previewManager, nullptr, 64.0f))
-	{
-		currentEntry.set_icon(icon);
-	}		ImGui::Spacing();
+		// Icon path
+		std::string icon = currentEntry.icon();
+		static const std::set<String> iconExtensions = {".htex", ".blp"};
+		if (AssetPickerWidget::Draw("Icon", icon, iconExtensions, &m_previewManager, nullptr, 64.0f))
+		{
+			currentEntry.set_icon(icon);
+		}
+		
+		ImGui::Spacing();
 		ImGui::Separator();
 		ImGui::Text("Visual Kits by Event");
 		ImGui::Separator();
@@ -104,13 +101,13 @@ namespace mmo
 		ImGui::PopID();
 	}
 
-	void SpellVisualizationEditorWindow::DrawEventKits(proto::SpellVisualization& currentEntry, uint32 eventValue, const char* eventName)
+	void SpellVisualizationEditorWindow::DrawEventKits(proto::SpellVisualization &currentEntry, uint32 eventValue, const char *eventName)
 	{
 		ImGui::PushID(eventValue);
 
 		// Get or create the kit list for this event
-		auto& kitsMap = *currentEntry.mutable_kits_by_event();
-		
+		auto &kitsMap = *currentEntry.mutable_kits_by_event();
+
 		// Check if we have kits for this event
 		bool hasKits = kitsMap.find(eventValue) != kitsMap.end();
 		const int kitCount = hasKits ? kitsMap[eventValue].kits_size() : 0;
@@ -118,7 +115,7 @@ namespace mmo
 		// Collapsing header with kit count
 		char headerLabel[128];
 		snprintf(headerLabel, sizeof(headerLabel), "%s (%d kits)###Event%u", eventName, kitCount, eventValue);
-		
+
 		if (ImGui::CollapsingHeader(headerLabel, ImGuiTreeNodeFlags_None))
 		{
 			ImGui::Indent();
@@ -129,7 +126,7 @@ namespace mmo
 			if (ImGui::Button(addButtonLabel))
 			{
 				// Create or get the kit list
-				auto* newKit = kitsMap[eventValue].add_kits();
+				auto *newKit = kitsMap[eventValue].add_kits();
 				newKit->set_scope(proto::CASTER);
 				newKit->set_loop(false);
 			}
@@ -137,12 +134,12 @@ namespace mmo
 			// Draw existing kits (re-fetch the list after potential add)
 			if (kitsMap.find(eventValue) != kitsMap.end())
 			{
-				auto& kitList = kitsMap[eventValue];
+				auto &kitList = kitsMap[eventValue];
 				std::vector<int> kitsToRemove;
-				
+
 				for (int i = 0; i < kitList.kits_size(); ++i)
 				{
-					auto* kit = kitList.mutable_kits(i);
+					auto *kit = kitList.mutable_kits(i);
 					if (DrawKit(*kit, i))
 					{
 						kitsToRemove.push_back(i);
@@ -168,7 +165,7 @@ namespace mmo
 		ImGui::PopID();
 	}
 
-	bool SpellVisualizationEditorWindow::DrawKit(proto::SpellKit& kit, int kitIndex)
+	bool SpellVisualizationEditorWindow::DrawKit(proto::SpellKit &kit, int kitIndex)
 	{
 		bool shouldRemove = false;
 
@@ -177,7 +174,7 @@ namespace mmo
 
 		char kitLabel[64];
 		snprintf(kitLabel, sizeof(kitLabel), "Kit %d", kitIndex + 1);
-		
+
 		if (ImGui::TreeNode(kitLabel))
 		{
 			// Scope dropdown
@@ -229,27 +226,28 @@ namespace mmo
 				}
 
 				// Draw existing sounds
-				static const std::set<String> soundExtensions = { ".wav", ".ogg", ".mp3" };
+				static const std::set<String> soundExtensions = {".wav", ".ogg", ".mp3"};
 				std::vector<int> soundsToRemove;
-				
+
 				for (int i = 0; i < kit.sounds_size(); ++i)
 				{
 					ImGui::PushID(i);
-					
+
 					std::string sound = kit.sounds(i);
 					char soundLabel[32];
 					snprintf(soundLabel, sizeof(soundLabel), "Sound %d", i);
-					
-				// Use asset picker for sound selection
-				if (AssetPickerWidget::Draw(soundLabel, sound, soundExtensions, nullptr, m_audioSystem, 0.0f))
-				{
-					kit.set_sounds(i, sound);
-				}					ImGui::SameLine();
+
+					// Use asset picker for sound selection
+					if (AssetPickerWidget::Draw(soundLabel, sound, soundExtensions, nullptr, m_audioSystem, 0.0f))
+					{
+						kit.set_sounds(i, sound);
+					}
+					ImGui::SameLine();
 					if (ImGui::SmallButton("Remove"))
 					{
 						soundsToRemove.push_back(i);
 					}
-					
+
 					ImGui::PopID();
 				}
 
@@ -266,15 +264,14 @@ namespace mmo
 			ImGui::Spacing();
 			if (ImGui::TreeNode("Tint Color"))
 			{
-				auto* tint = kit.mutable_tint();
-				
+				auto *tint = kit.mutable_tint();
+
 				float color[4] = {
 					tint->has_r() ? tint->r() : 1.0f,
 					tint->has_g() ? tint->g() : 1.0f,
 					tint->has_b() ? tint->b() : 1.0f,
-					tint->has_a() ? tint->a() : 1.0f
-				};
-				
+					tint->has_a() ? tint->a() : 1.0f};
+
 				if (ImGui::ColorEdit4("RGBA", color))
 				{
 					tint->set_r(color[0]);
@@ -305,7 +302,7 @@ namespace mmo
 		{
 			// Draw compact view when collapsed
 			ImGui::SameLine();
-			const char* scopeName = kit.has_scope() ? s_scopeNames[kit.scope()] : "Caster";
+			const char *scopeName = kit.has_scope() ? s_scopeNames[kit.scope()] : "Caster";
 			ImGui::TextDisabled("(%s, %d sounds)", scopeName, kit.sounds_size());
 		}
 

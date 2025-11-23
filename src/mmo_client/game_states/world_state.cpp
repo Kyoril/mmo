@@ -22,7 +22,6 @@
 #include "systems/action_bar.h"
 #include "systems/quest_client.h"
 #include "game_client/object_mgr.h"
-#include "spell_projectile.h"
 #include "systems/trainer_client.h"
 #include "systems/vendor_client.h"
 #include "world_deserializer.h"
@@ -213,6 +212,19 @@ namespace mmo
 
 		SetupWorldScene();
 
+		// Create projectile manager
+		m_projectileManager = std::make_unique<ProjectileManager>(*m_scene, &m_audio);
+
+		// Connect projectile impact signal to visualization service
+		m_projectileManager->projectileImpact.connect([](const proto_client::SpellEntry &spell, GameUnitC *target)
+													  {
+				std::vector<GameUnitC*> targets;
+				if (target)
+				{
+					targets.push_back(target);
+				}
+				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Impact, spell, nullptr, targets); });
+
 		m_debugPathVisualizer = std::make_unique<DebugPathVisualizer>(*m_scene);
 
 		// Register world renderer
@@ -327,12 +339,15 @@ namespace mmo
 		m_workQueue.reset();
 		m_dispatcher.reset();
 
-		m_spellProjectiles.clear();
+		if (m_projectileManager)
+		{
+			m_projectileManager->Clear();
+			m_projectileManager.reset();
+		}
 
 		ObjectMgr::Initialize(m_project, m_partyInfo);
 
 		m_worldInstance.reset();
-
 		RemovePacketHandler();
 
 		RemoveGameplayCommands();
@@ -577,29 +592,10 @@ namespace mmo
 		}
 
 		// Update projectiles
-		auto it = m_spellProjectiles.begin();
-		while (it != m_spellProjectiles.end())
+		if (m_projectileManager)
 		{
-			const auto &projectile = *it;
-			projectile->Update(deltaSeconds);
-
-			if (projectile->HasHit())
-			{
-				// Dispatch visualization impact event to targets
-				std::vector<GameUnitC *> targets;
-				if (auto target = projectile->GetTargetUnit())
-				{
-					targets.push_back(target.get());
-				}
-				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Impact, projectile->GetSpell(), nullptr, targets);
-				it = EraseByMove(m_spellProjectiles, it);
-			}
-			else
-			{
-				++it;
-			}
+			m_projectileManager->Update(deltaSeconds);
 		}
-
 		// Position the sky dome to follow the player
 		if (m_skyComponent && m_playerController->GetRootNode())
 		{
@@ -1822,22 +1818,26 @@ namespace mmo
 		const auto *spell = m_project.spells.getById(spellId);
 		ASSERT(spell);
 
-		// TODO: Instead of hard coding the projectile stuff in here, make it more flexible by linking some dynamic visual data stuff to spells on the client side
+		// Get spell visualization for projectile config
+		const proto_client::SpellVisualization *visualization = nullptr;
+		if (spell->has_visualization_id())
+		{
+			visualization = m_project.spellVisualizations.getById(spell->visualization_id());
+		}
+
+		// Handle projectile vs instant spells
 		if (spell->speed() > 0.0f)
 		{
-			// For each target in the target map
+			// Projectile spell: spawn projectile if we have a unit target
 			if (targetMap.HasUnitTarget())
 			{
 				auto casterUnit = ObjectMgr::Get<GameUnitC>(casterId);
-
 				const uint64 unitTargetGuid = targetMap.GetUnitTarget();
 				auto targetUnit = ObjectMgr::Get<GameUnitC>(unitTargetGuid);
 
-				if (casterUnit && targetUnit)
+				if (casterUnit && targetUnit && m_projectileManager)
 				{
-					// Spawn projectile
-					auto projectile = std::make_unique<SpellProjectile>(*m_scene, *spell, casterUnit->GetSceneNode()->GetDerivedPosition(), targetUnit);
-					m_spellProjectiles.push_back(std::move(projectile));
+					m_projectileManager->SpawnProjectile(*spell, visualization, casterUnit.get(), targetUnit.get());
 				}
 			}
 		}
@@ -1854,7 +1854,6 @@ namespace mmo
 				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Impact, *spell, nullptr, targets);
 			}
 		}
-
 		if (const std::shared_ptr<GameUnitC> casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
 		{
 			// Trigger spell visualization for cast succeeded

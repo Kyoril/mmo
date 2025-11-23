@@ -33,6 +33,40 @@ optional float a = 4 [default = 1.0];
 optional uint32 duration_ms = 5;
 }
 
+// Projectile movement type
+enum ProjectileMotion
+{
+	LINEAR = 0;          // Straight line to target
+	ARC = 1;            // Ballistic arc
+	HOMING = 2;         // Follows moving target
+	SINE_WAVE = 3;      // Oscillating side-to-side
+}
+
+// Projectile visual configuration
+message ProjectileVisual
+{
+	// Movement
+	optional ProjectileMotion motion = 1 [default = LINEAR];
+	optional float arc_height = 2 [default = 0.0];        // For ARC motion (world units)
+	optional float wave_frequency = 3 [default = 1.0];    // For SINE_WAVE motion
+	optional float wave_amplitude = 4 [default = 1.0];    // For SINE_WAVE motion
+	optional float homing_strength = 5 [default = 5.0];   // For HOMING motion (turn rate)
+
+	// Visual representation
+	optional string mesh_name = 6;                        // Mesh file (e.g., "Models/Arrow.hmsh")
+	optional string material_name = 7;                    // Material override
+	optional string trail_particle = 8;                   // Particle system for trail
+	optional float scale = 9 [default = 1.0];             // Visual scale multiplier
+
+	// Rotation
+	optional bool face_movement = 10 [default = true];    // Orient along velocity vector
+	optional float spin_rate = 11 [default = 0.0];        // Degrees per second around forward axis
+
+	// Effects
+	repeated string sounds = 12;                          // Looping sounds during flight
+	optional string impact_particle = 13;                 // Particle burst on impact
+}
+
 // A visualization kit containing sounds, animation, and optional tint
 message SpellKit
 {
@@ -59,6 +93,9 @@ optional string icon = 3;
 
 // Map from SpellVisualEvent enum value to list of kits
 map<uint32, SpellKitList> kits_by_event = 4;
+
+// Optional projectile configuration (if spell has speed > 0)
+optional ProjectileVisual projectile = 5;
 }
 
 // Dataset containing all spell visualizations
