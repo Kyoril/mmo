@@ -57,75 +57,31 @@ jobs:
         run: |
           cmake --build build --config Release --parallel 4
 
-      - name: Create source.txt manifest
-        shell: pwsh
-        run: |
-          # Create source.txt for the patch compiler
-          $sourceFile = "source.txt"
-          
-          @"
-          {
-            format sff
-            version 0
-            root
-            {
-              entry
-              {
-                type directory
-                name Data
-                entry
-                {
-                  type fs
-                  source Data
-                  name Data
-                }
-              }
-              entry
-              {
-                type fs
-                source mmo_client.exe
-                name mmo_client.exe
-              }
-              entry
-              {
-                type fs
-                source Launcher.exe
-                name Launcher.exe
-              }
-              entry
-              {
-                type directory
-                name Config
-                entry
-                {
-                  type fs
-                  source Config
-                  name Config
-                }
-              }
-            }
-          }
-          "@ | Out-File -FilePath $sourceFile -Encoding UTF8
-
       - name: Prepare client files for packaging
         shell: pwsh
         run: |
+          # Create patch_source directory structure matching source.txt expectations
           mkdir patch_source
           
-          # Copy client executable
+          # Copy executables (referenced by source.txt with from = ".")
           copy bin\Release\mmo_client.exe patch_source\
           copy bin\Release\Launcher.exe patch_source\
           
-          # Copy data directory
-          xcopy data\client patch_source\Data /E /I
-          
-          # Copy config if exists
-          if (Test-Path "data\client\Config") {
-            xcopy data\client\Config patch_source\Config /E /I
+          # Copy fmod.dll if exists
+          if (Test-Path "bin\Release\fmod.dll") {
+            copy bin\Release\fmod.dll patch_source\
           }
           
-          # Copy source.txt into the patch source directory
-          copy source.txt patch_source\
+          # Copy mmo_error.exe if exists
+          if (Test-Path "bin\Release\mmo_error.exe") {
+            copy bin\Release\mmo_error.exe patch_source\
+          }
+          
+          # Note: source.txt references ../../data/client from patch_source directory
+          # So we don't need to copy data to patch_source - it will be read from data/client
+          
+          # Copy the source.txt from repository (data/patch/source.txt)
+          copy data\patch\source.txt patch_source\
 
       - name: Generate patch files with compression
         shell: pwsh
