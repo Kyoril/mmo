@@ -64,6 +64,17 @@ namespace mmo
 				*connection << "GET " << escapePath(request.document) << " HTTP/1.0\r\n";
 				*connection << "Host: " << request.host << "\r\n";
 				*connection << "Accept: */*\r\n";
+				
+				// Add Range header if byte range is specified
+				if (request.byteRange)
+				{
+					*connection << "Range: bytes=" 
+					           << request.byteRange->first 
+					           << "-" 
+					           << request.byteRange->second 
+					           << "\r\n";
+				}
+				
 				*connection << "Connection: close\r\n";
 				*connection << "\r\n";
 

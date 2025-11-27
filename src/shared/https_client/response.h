@@ -20,6 +20,7 @@ namespace mmo
 				enum
 				{
 				    Ok = 200,
+				    PartialContent = 206,
 					BadRequest = 400,
 				    NotFound = 404,
 					InternalServerError = 500,

@@ -111,14 +111,23 @@ namespace mmo
 				ssl_stream->lowest_layer().set_option(asio::ip::tcp::no_delay(true));
 				ssl_stream->handshake(asio::ssl::stream_base::client);
 
-				std::ostringstream request_stream;
-				request_stream << "GET " << escapePath(request.document) << " HTTP/1.0\r\n";
-				request_stream << "Host: " << request.host << "\r\n";
-				request_stream << "Accept: */*\r\n";
-				request_stream << "Connection: close\r\n";
-				request_stream << "\r\n";
-
-				std::string request_str = request_stream.str();
+			std::ostringstream request_stream;
+			request_stream << "GET " << escapePath(request.document) << " HTTP/1.0\r\n";
+			request_stream << "Host: " << request.host << "\r\n";
+			request_stream << "Accept: */*\r\n";
+			
+			// Add Range header if byte range is specified
+			if (request.byteRange)
+			{
+				request_stream << "Range: bytes=" 
+				              << request.byteRange->first 
+				              << "-" 
+				              << request.byteRange->second 
+				              << "\r\n";
+			}
+			
+			request_stream << "Connection: close\r\n";
+			request_stream << "\r\n";				std::string request_str = request_stream.str();
 
 				asio::write(*ssl_stream, asio::buffer(request_str));
 

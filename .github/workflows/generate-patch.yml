@@ -1,0 +1,224 @@
+name: Generate Client Patch
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on version tags like v1.0.0, v1.2.3, etc.
+  workflow_dispatch:  # Allow manual trigger
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  generate-patch:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+
+      - name: Extract version number
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $VERSION = "${{ github.event.inputs.version }}"
+          } else {
+            # Extract version from tag (v1.2.3 -> 1.2.3)
+            $VERSION = "${{ github.ref_name }}" -replace '^v', ''
+          }
+          echo "VERSION=$VERSION" >> $env:GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: vcpkg build
+        uses: johnwason/vcpkg-action@v6
+        id: vcpkg
+        with:
+          pkgs: openssl:x64-windows-static mysql-connector-cpp
+          triplet: x64-windows-release
+          token: ${{ github.token }}
+          github-binarycache: true
+
+      - name: Configure CMake
+        shell: pwsh
+        run: |
+          cmake -S . -B build `
+            '-DCMAKE_POLICY_VERSION_MINIMUM=3.5' `
+            '-DMMO_BUILD_CLIENT=ON' `
+            '-DMMO_BUILD_LAUNCHER=ON' `
+            '-DMMO_BUILD_TOOLS=ON' `
+            "-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Build project
+        run: |
+          cmake --build build --config Release --parallel 4
+
+      - name: Create source.txt manifest
+        shell: pwsh
+        run: |
+          # Create source.txt for the patch compiler
+          $sourceFile = "source.txt"
+          
+          @"
+          {
+            format sff
+            version 0
+            root
+            {
+              entry
+              {
+                type directory
+                name Data
+                entry
+                {
+                  type fs
+                  source Data
+                  name Data
+                }
+              }
+              entry
+              {
+                type fs
+                source mmo_client.exe
+                name mmo_client.exe
+              }
+              entry
+              {
+                type fs
+                source Launcher.exe
+                name Launcher.exe
+              }
+              entry
+              {
+                type directory
+                name Config
+                entry
+                {
+                  type fs
+                  source Config
+                  name Config
+                }
+              }
+            }
+          }
+          "@ | Out-File -FilePath $sourceFile -Encoding UTF8
+
+      - name: Prepare client files for packaging
+        shell: pwsh
+        run: |
+          mkdir patch_source
+          
+          # Copy client executable
+          copy bin\Release\mmo_client.exe patch_source\
+          copy bin\Release\Launcher.exe patch_source\
+          
+          # Copy data directory
+          xcopy data\client patch_source\Data /E /I
+          
+          # Copy config if exists
+          if (Test-Path "data\client\Config") {
+            xcopy data\client\Config patch_source\Config /E /I
+          }
+          
+          # Copy source.txt into the patch source directory
+          copy source.txt patch_source\
+
+      - name: Generate patch files with compression
+        shell: pwsh
+        run: |
+          mkdir patch_output
+          
+          # Run update_compiler with zlib compression
+          .\bin\Release\update_compiler.exe `
+            --source patch_source `
+            --output patch_output `
+            --compression zlib
+          
+          # Verify list.txt was created
+          if (!(Test-Path "patch_output\list.txt")) {
+            Write-Error "Failed to generate list.txt"
+            exit 1
+          }
+
+      - name: Create versioned patch directory
+        shell: pwsh
+        run: |
+          $VERSION = "${{ steps.version.outputs.VERSION }}"
+          mkdir "patch_release\v$VERSION"
+          
+          # Copy all patch files to versioned directory
+          xcopy patch_output\* "patch_release\v$VERSION\" /E /I
+          
+          # Create latest symlink info file
+          @{
+            version = $VERSION
+            release_date = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+            git_commit = "${{ github.sha }}"
+            git_ref = "${{ github.ref }}"
+          } | ConvertTo-Json | Out-File -FilePath "patch_release\latest.json" -Encoding UTF8
+
+      - name: Upload patch artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: patch-v${{ steps.version.outputs.VERSION }}
+          path: patch_release/
+          retention-days: 90
+
+      - name: Create patch archive for release
+        shell: pwsh
+        run: |
+          $VERSION = "${{ steps.version.outputs.VERSION }}"
+          Compress-Archive -Path "patch_release\*" -DestinationPath "patch-v$VERSION.zip"
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name || format('v{0}', github.event.inputs.version) }}
+          release_name: Release v${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          body: |
+            ## Client Patch v${{ steps.version.outputs.VERSION }}
+            
+            This release contains the automated patch files for client version ${{ steps.version.outputs.VERSION }}.
+            
+            ### Installation
+            1. Download `patch-v${{ steps.version.outputs.VERSION }}.zip`
+            2. Extract to your patch server directory
+            3. Update your CDN/web server to point to `v${{ steps.version.outputs.VERSION }}/list.txt`
+            
+            ### Files Included
+            - Compressed client executables (zlib)
+            - Compressed game data files (zlib)
+            - `list.txt` manifest with SHA1 checksums
+            - Version metadata in `latest.json`
+            
+            **Git Commit:** ${{ github.sha }}
+
+      - name: Upload patch archive to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: patch-v${{ steps.version.outputs.VERSION }}.zip
+          asset_name: patch-v${{ steps.version.outputs.VERSION }}.zip
+          asset_content_type: application/zip
+
+      # Optional: Deploy to patch server via SSH/SFTP
+      # Uncomment and configure when ready to auto-deploy
+      # - name: Deploy to patch server
+      #   uses: easingthemes/ssh-deploy@main
+      #   env:
+      #     SSH_PRIVATE_KEY: ${{ secrets.PATCH_SERVER_SSH_KEY }}
+      #     REMOTE_HOST: ${{ secrets.PATCH_SERVER_HOST }}
+      #     REMOTE_USER: ${{ secrets.PATCH_SERVER_USER }}
+      #     SOURCE: "patch_release/"
+      #     TARGET: "/var/www/patches/"
