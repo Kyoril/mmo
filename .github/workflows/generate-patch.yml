@@ -132,11 +132,20 @@ jobs:
         run: |
           mkdir patch_output
           
-          # Run update_compiler with zlib compression
+          $VERSION = "${{ steps.version.outputs.VERSION }}"
+          $BUILD_DATE = (Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC")
+          $GIT_COMMIT = "${{ github.sha }}"
+          $GIT_BRANCH = "${{ github.ref_name }}"
+          
+          # Run update_compiler with zlib compression and version metadata
           .\bin\Release\update_compiler.exe `
             --source patch_source `
             --output patch_output `
-            --compression zlib
+            --compression zlib `
+            --patch-version $VERSION `
+            --build-date "$BUILD_DATE" `
+            --git-commit $GIT_COMMIT `
+            --git-branch $GIT_BRANCH
           
           # Verify list.txt was created
           if (!(Test-Path "patch_output\list.txt")) {

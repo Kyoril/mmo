@@ -383,7 +383,8 @@ namespace mmo
 		void compileDirectory(
 			virtual_dir::IReader &sourceDir,
 			virtual_dir::IWriter &destinationDir,
-		    bool isZLibCompressed
+		    bool isZLibCompressed,
+		    const PatchVersionMetadata* versionMetadata
 		)
 		{
 			// Try to find source.txt in source directoy and open it for reading
@@ -426,6 +427,27 @@ namespace mmo
 
 				// Add the current file format verison
 				listTable.addKey("version", 1);
+				
+				// Add version metadata if provided
+				if (versionMetadata)
+				{
+					TableWriter metadataTable(listTable, "metadata", sff::write::Comma);
+					metadataTable.addKey("patch_version", versionMetadata->version);
+					metadataTable.addKey("build_date", versionMetadata->buildDate);
+					metadataTable.addKey("git_commit", versionMetadata->gitCommit);
+					
+					if (versionMetadata->gitBranch)
+					{
+						metadataTable.addKey("git_branch", *versionMetadata->gitBranch);
+					}
+					
+					if (versionMetadata->releaseNotes)
+					{
+						metadataTable.addKey("release_notes", *versionMetadata->releaseNotes);
+					}
+					
+					metadataTable.Finish();
+				}
 
 				// Compile the first entry from the source list
 				TableWriter rootEntry(listTable, "root", sff::write::Comma);

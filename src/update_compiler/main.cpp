@@ -21,6 +21,7 @@ int main(int argc, char **argv)
 	// Paramaters parsed out of command line options
 	std::string sourceDir, outputDir;
 	std::string compression;
+	std::string patchVersion, buildDate, gitCommit, gitBranch, releaseNotes;
 
 	// Build command line options
 	cxxopts::Options options(VersionStr + ", available options");
@@ -30,6 +31,11 @@ int main(int argc, char **argv)
 		("s,source", "A directory containing source.txt", cxxopts::value(sourceDir))
 		("o,output", "Where to put the updater-compatible files", cxxopts::value(outputDir))
 		("c,compression", "Provide 'zlib' for compression", cxxopts::value(compression))
+		("patch-version", "Patch version number (e.g., 1.2.3)", cxxopts::value(patchVersion))
+		("build-date", "Build date/timestamp", cxxopts::value(buildDate))
+		("git-commit", "Git commit SHA", cxxopts::value(gitCommit))
+		("git-branch", "Git branch name", cxxopts::value(gitBranch))
+		("release-notes", "Release notes", cxxopts::value(releaseNotes))
 		;
 
 	// Support positional arguments
@@ -73,10 +79,31 @@ int main(int argc, char **argv)
 			virtual_dir::FileSystemReader sourceReader(sourceDir);
 			virtual_dir::FileSystemWriter outputWriter(outputDir);
 
+			// Create version metadata if provided
+			std::unique_ptr<mmo::updating::PatchVersionMetadata> versionMetadata;
+			if (!patchVersion.empty())
+			{
+				versionMetadata = std::make_unique<mmo::updating::PatchVersionMetadata>();
+				versionMetadata->version = patchVersion;
+				versionMetadata->buildDate = buildDate.empty() ? "Unknown" : buildDate;
+				versionMetadata->gitCommit = gitCommit.empty() ? "Unknown" : gitCommit;
+				
+				if (!gitBranch.empty())
+				{
+					versionMetadata->gitBranch = gitBranch;
+				}
+				
+				if (!releaseNotes.empty())
+				{
+					versionMetadata->releaseNotes = releaseNotes;
+				}
+			}
+
 			mmo::updating::compileDirectory(
 				sourceReader,
 				outputWriter,
-				isZLibCompressed
+				isZLibCompressed,
+				versionMetadata.get()
 			);
 		}
 		catch (const std::exception &e)
