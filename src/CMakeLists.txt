@@ -8,6 +8,9 @@ add_subdirectory(login_server)
 add_subdirectory(realm_server)
 add_subdirectory(world_server)
 
+# Add MCP content server
+add_subdirectory(mcp_content_server)
+
 
 if (MMO_BUILD_CLIENT)
 	add_subdirectory(mmo_client)
