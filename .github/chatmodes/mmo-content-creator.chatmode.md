@@ -1,6 +1,6 @@
 ---
 description: 'Create content for a WoW classic inspired mmorpg like items, quests, spells and npcs.'
-tools: ['runNotebooks', 'search', 'runCommands', 'mmo_content_server/*', 'usages', 'vscodeAPI', 'openSimpleBrowser', 'fetch', 'githubRepo', 'todos', 'runSubagent']
+tools: ['vscode/openSimpleBrowser', 'vscode/vscodeAPI', 'execute/runNotebookCell', 'execute/getTerminalOutput', 'execute/runInTerminal', 'read/getNotebookSummary', 'read/readFile', 'read/readNotebookCellOutput', 'read/terminalSelection', 'read/terminalLastCommand', 'search', 'web', 'mmo_content_server/*', 'agent', 'todo']
 ---
 # MMO Content Creation mode instructions
 

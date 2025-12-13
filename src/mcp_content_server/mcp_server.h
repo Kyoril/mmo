@@ -4,6 +4,7 @@
 
 #include "base/typedefs.h"
 #include "item_tools.h"
+#include "spell_tools.h"
 
 #include <nlohmann/json.hpp>
 #include <functional>
@@ -71,6 +72,7 @@ namespace mmo
     private:
         proto::Project &m_project;
         std::unique_ptr<ItemTools> m_itemTools;
+        std::unique_ptr<SpellTools> m_spellTools;
         std::map<String, ToolHandler> m_tools;
         bool m_initialized;
     };

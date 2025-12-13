@@ -2,7 +2,7 @@
 	"servers": {
 		"mmo_content_server": {
 			"type": "stdio",
-			"command": "F:\\mmo\\bin\\Debug\\mcp_content_server.exe",
+			"command": "./bin/Debug/mcp_content_server.exe",
 			"args": []
 		}
 	},

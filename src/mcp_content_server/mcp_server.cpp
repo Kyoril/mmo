@@ -10,7 +10,7 @@
 namespace mmo
 {
     McpServer::McpServer(proto::Project &project)
-        : m_project(project), m_itemTools(std::make_unique<ItemTools>(project)), m_initialized(false)
+        : m_project(project), m_itemTools(std::make_unique<ItemTools>(project)), m_spellTools(std::make_unique<SpellTools>(project)), m_initialized(false)
     {
         RegisterTools();
     }
@@ -166,6 +166,37 @@ namespace mmo
         {
             return m_itemTools->SearchItems(args);
         };
+
+        // Register spell management tools
+        m_tools["spells_list"] = [this](const nlohmann::json &args)
+        {
+            return m_spellTools->ListSpells(args);
+        };
+
+        m_tools["spells_get"] = [this](const nlohmann::json &args)
+        {
+            return m_spellTools->GetSpellDetails(args);
+        };
+
+        m_tools["spells_create"] = [this](const nlohmann::json &args)
+        {
+            return m_spellTools->CreateSpell(args);
+        };
+
+        m_tools["spells_update"] = [this](const nlohmann::json &args)
+        {
+            return m_spellTools->UpdateSpell(args);
+        };
+
+        m_tools["spells_delete"] = [this](const nlohmann::json &args)
+        {
+            return m_spellTools->DeleteSpell(args);
+        };
+
+        m_tools["spells_search"] = [this](const nlohmann::json &args)
+        {
+            return m_spellTools->SearchSpells(args);
+        };
     }
 
     nlohmann::json McpServer::HandleInitialize(const nlohmann::json &params)
@@ -219,6 +250,36 @@ namespace mmo
         // items_search tool
         tools.push_back({{"name", "items_search"},
                          {"description", "Searches for items by name or description"},
+                         {"inputSchema", {{"type", "object"}, {"properties", {{"query", {{"type", "string"}, {"description", "Search query string"}}}, {"limit", {{"type", "number"}, {"description", "Maximum number of results (default: 50)"}}}}}, {"required", nlohmann::json::array({"query"})}}}});
+
+        // spells_list tool
+        tools.push_back({{"name", "spells_list"},
+                         {"description", "Lists all spells with optional filtering by level, school, power type, etc."},
+                         {"inputSchema", {{"type", "object"}, {"properties", {{"minLevel", {{"type", "number"}, {"description", "Minimum spell level"}}}, {"maxLevel", {{"type", "number"}, {"description", "Maximum spell level"}}}, {"spellSchool", {{"type", "number"}, {"description", "Spell school filter (0=Physical, 1=Holy, 2=Fire, 3=Nature, 4=Frost, 5=Shadow, 6=Arcane)"}}}, {"powerType", {{"type", "number"}, {"description", "Power type (0=Mana, 1=Rage, 2=Energy, 3=Health)"}}}, {"limit", {{"type", "number"}, {"description", "Maximum number of spells to return (default: 100)"}}}, {"offset", {{"type", "number"}, {"description", "Number of spells to skip (for pagination)"}}}}}}}});
+
+        // spells_get tool
+        tools.push_back({{"name", "spells_get"},
+                         {"description", "Gets detailed information about a specific spell by ID"},
+                         {"inputSchema", {{"type", "object"}, {"properties", {{"id", {{"type", "number"}, {"description", "The spell ID"}}}}}, {"required", nlohmann::json::array({"id"})}}}});
+
+        // spells_create tool
+        tools.push_back({{"name", "spells_create"},
+                         {"description", "Creates a new spell with the specified properties"},
+                         {"inputSchema", {{"type", "object"}, {"properties", {{"name", {{"type", "string"}, {"description", "Spell name"}}}, {"description", {{"type", "string"}, {"description", "Spell description"}}}, {"spellSchool", {{"type", "number"}, {"description", "Spell school (0-6)"}}}, {"powerType", {{"type", "number"}, {"description", "Power type (0=Mana, 1=Rage, 2=Energy, 3=Health)"}}}, {"cost", {{"type", "number"}, {"description", "Spell cost"}}}, {"castTime", {{"type", "number"}, {"description", "Cast time in milliseconds"}}}, {"cooldown", {{"type", "number"}, {"description", "Cooldown in milliseconds"}}}, {"duration", {{"type", "number"}, {"description", "Duration in milliseconds"}}}, {"spellLevel", {{"type", "number"}, {"description", "Spell level"}}}, {"baseLevel", {{"type", "number"}, {"description", "Base level required"}}}, {"maxLevel", {{"type", "number"}, {"description", "Maximum level"}}}, {"rangeType", {{"type", "number"}, {"description", "Range type ID"}}}, {"effects", {{"type", "array"}, {"description", "Array of spell effects"}, {"items", {{"type", "object"}}}}}}}, {"required", nlohmann::json::array({"name"})}}}});
+
+        // spells_update tool
+        tools.push_back({{"name", "spells_update"},
+                         {"description", "Updates an existing spell's properties"},
+                         {"inputSchema", {{"type", "object"}, {"properties", {{"id", {{"type", "number"}, {"description", "The spell ID to update"}}}, {"name", {{"type", "string"}, {"description", "Spell name"}}}, {"description", {{"type", "string"}, {"description", "Spell description"}}}, {"cost", {{"type", "number"}, {"description", "Spell cost"}}}, {"castTime", {{"type", "number"}, {"description", "Cast time in milliseconds"}}}, {"cooldown", {{"type", "number"}, {"description", "Cooldown in milliseconds"}}}, {"duration", {{"type", "number"}, {"description", "Duration in milliseconds"}}}}}, {"required", nlohmann::json::array({"id"})}}}});
+
+        // spells_delete tool
+        tools.push_back({{"name", "spells_delete"},
+                         {"description", "Deletes a spell from the project"},
+                         {"inputSchema", {{"type", "object"}, {"properties", {{"id", {{"type", "number"}, {"description", "The spell ID to delete"}}}}}, {"required", nlohmann::json::array({"id"})}}}});
+
+        // spells_search tool
+        tools.push_back({{"name", "spells_search"},
+                         {"description", "Searches for spells by name or description"},
                          {"inputSchema", {{"type", "object"}, {"properties", {{"query", {{"type", "string"}, {"description", "Search query string"}}}, {"limit", {{"type", "number"}, {"description", "Maximum number of results (default: 50)"}}}}}, {"required", nlohmann::json::array({"query"})}}}});
 
         nlohmann::json result;
