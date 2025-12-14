@@ -530,13 +530,46 @@ namespace mmo
             {
                 damage->set_mindmg(json["damage"]["minDamage"]);
             }
-            if (json["damage"].contains("maxDamage"))
-            {
+            if (json["damage"].contains("maxDamage"))            {
                 damage->set_maxdmg(json["damage"]["maxDamage"]);
             }
             if (json["damage"].contains("type"))
             {
                 damage->set_type(json["damage"]["type"]);
+            }
+        }
+
+        // Handle spells
+        if (json.contains("spells"))
+        {
+            // Clear existing spells
+            entry.clear_spells();
+            
+            const auto& spellsArray = json["spells"];
+            for (const auto& spellJson : spellsArray)
+            {
+                auto* spell = entry.add_spells();
+                
+                if (spellJson.contains("spellId"))
+                {
+                    spell->set_spell(spellJson["spellId"]);
+                }
+                if (spellJson.contains("trigger"))
+                {
+                    spell->set_trigger(spellJson["trigger"]);
+                }
+                if (spellJson.contains("charges"))
+                {
+                    spell->set_charges(spellJson["charges"]);
+                }
+                if (spellJson.contains("procRate"))
+                {
+                    spell->set_procrate(spellJson["procRate"]);
+                }
+                if (spellJson.contains("cooldown"))
+                {
+                    spell->set_cooldown(spellJson["cooldown"]);
+                }
             }
         }
     }

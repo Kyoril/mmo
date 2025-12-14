@@ -10,7 +10,7 @@
 namespace mmo
 {
     McpServer::McpServer(proto::Project &project)
-        : m_project(project), m_itemTools(std::make_unique<ItemTools>(project)), m_spellTools(std::make_unique<SpellTools>(project)), m_initialized(false)
+        : m_project(project), m_itemTools(std::make_unique<ItemTools>(project)), m_spellTools(std::make_unique<SpellTools>(project)), m_classTools(std::make_unique<ClassTools>(project)), m_initialized(false)
     {
         RegisterTools();
     }
@@ -197,6 +197,47 @@ namespace mmo
         {
             return m_spellTools->SearchSpells(args);
         };
+
+        // Register class management tools
+        m_tools["classes_list"] = [this](const nlohmann::json &args)
+        {
+            return m_classTools->ListClasses(args);
+        };
+
+        m_tools["classes_get"] = [this](const nlohmann::json &args)
+        {
+            return m_classTools->GetClassDetails(args);
+        };
+
+        m_tools["classes_create"] = [this](const nlohmann::json &args)
+        {
+            return m_classTools->CreateClass(args);
+        };
+
+        m_tools["classes_update"] = [this](const nlohmann::json &args)
+        {
+            return m_classTools->UpdateClass(args);
+        };
+
+        m_tools["classes_delete"] = [this](const nlohmann::json &args)
+        {
+            return m_classTools->DeleteClass(args);
+        };
+
+        m_tools["classes_search"] = [this](const nlohmann::json &args)
+        {
+            return m_classTools->SearchClasses(args);
+        };
+
+        m_tools["classes_add_spell"] = [this](const nlohmann::json &args)
+        {
+            return m_classTools->AddClassSpell(args);
+        };
+
+        m_tools["classes_remove_spell"] = [this](const nlohmann::json &args)
+        {
+            return m_classTools->RemoveClassSpell(args);
+        };
     }
 
     nlohmann::json McpServer::HandleInitialize(const nlohmann::json &params)
@@ -240,7 +281,7 @@ namespace mmo
         // items_update tool
         tools.push_back({{"name", "items_update"},
                          {"description", "Updates an existing item's properties"},
-                         {"inputSchema", {{"type", "object"}, {"properties", {{"id", {{"type", "number"}, {"description", "The item ID to update"}}}, {"name", {{"type", "string"}, {"description", "Item name"}}}, {"description", {{"type", "string"}, {"description", "Item description"}}}, {"itemClass", {{"type", "number"}, {"description", "Item class"}}}, {"subClass", {{"type", "number"}, {"description", "Item subclass"}}}, {"quality", {{"type", "number"}, {"description", "Item quality"}}}, {"itemLevel", {{"type", "number"}, {"description", "Item level"}}}, {"requiredLevel", {{"type", "number"}, {"description", "Required level to use"}}}, {"buyPrice", {{"type", "number"}, {"description", "Vendor buy price in copper"}}}, {"sellPrice", {{"type", "number"}, {"description", "Vendor sell price in copper"}}}, {"maxStack", {{"type", "number"}, {"description", "Maximum stack size"}}}}}, {"required", nlohmann::json::array({"id"})}}}});
+                         {"inputSchema", {{"type", "object"}, {"properties", {{"id", {{"type", "number"}, {"description", "The item ID to update"}}}, {"name", {{"type", "string"}, {"description", "Item name"}}}, {"description", {{"type", "string"}, {"description", "Item description"}}}, {"itemClass", {{"type", "number"}, {"description", "Item class"}}}, {"subClass", {{"type", "number"}, {"description", "Item subclass"}}}, {"quality", {{"type", "number"}, {"description", "Item quality"}}}, {"itemLevel", {{"type", "number"}, {"description", "Item level"}}}, {"requiredLevel", {{"type", "number"}, {"description", "Required level to use"}}}, {"buyPrice", {{"type", "number"}, {"description", "Vendor buy price in copper"}}}, {"sellPrice", {{"type", "number"}, {"description", "Vendor sell price in copper"}}}, {"maxStack", {{"type", "number"}, {"description", "Maximum stack size"}}}, {"spells", {{"type", "array"}, {"description", "Array of spell effects for the item"}, {"items", {{"type", "object"}, {"properties", {{"spellId", {{"type", "number"}, {"description", "The spell ID"}}}, {"trigger", {{"type", "number"}, {"description", "Spell trigger type (0=OnUse, 1=OnEquip, 2=OnHit, etc.)"}}}, {"charges", {{"type", "number"}, {"description", "Number of charges (0=unlimited)"}}}, {"procRate", {{"type", "number"}, {"description", "Proc rate percentage"}}}, {"cooldown", {{"type", "number"}, {"description", "Cooldown in milliseconds"}}}}}}}}}}}, {"required", nlohmann::json::array({"id"})}}}});
 
         // items_delete tool
         tools.push_back({{"name", "items_delete"},
@@ -281,6 +322,46 @@ namespace mmo
         tools.push_back({{"name", "spells_search"},
                          {"description", "Searches for spells by name or description"},
                          {"inputSchema", {{"type", "object"}, {"properties", {{"query", {{"type", "string"}, {"description", "Search query string"}}}, {"limit", {{"type", "number"}, {"description", "Maximum number of results (default: 50)"}}}}}, {"required", nlohmann::json::array({"query"})}}}});
+
+        // classes_list tool
+        tools.push_back({{"name", "classes_list"},
+                         {"description", "Lists all character classes with optional filtering"},
+                         {"inputSchema", {{"type", "object"}, {"properties", {{"powerType", {{"type", "number"}, {"description", "Power type filter (0=Mana, 1=Rage, 2=Energy)"}}}, {"limit", {{"type", "number"}, {"description", "Maximum number of classes to return (default: 100)"}}}, {"offset", {{"type", "number"}, {"description", "Number of classes to skip (for pagination)"}}}}}}}});
+
+        // classes_get tool
+        tools.push_back({{"name", "classes_get"},
+                         {"description", "Gets detailed information about a specific class by ID"},
+                         {"inputSchema", {{"type", "object"}, {"properties", {{"id", {{"type", "number"}, {"description", "The class ID"}}}}}, {"required", nlohmann::json::array({"id"})}}}});
+
+        // classes_create tool
+        tools.push_back({{"name", "classes_create"},
+                         {"description", "Creates a new character class with the specified properties"},
+                         {"inputSchema", {{"type", "object"}, {"properties", {{"name", {{"type", "string"}, {"description", "Class name"}}}, {"internalName", {{"type", "string"}, {"description", "Internal class name"}}}, {"powerType", {{"type", "number"}, {"description", "Power type (0=Mana, 1=Rage, 2=Energy)"}}}, {"spellFamily", {{"type", "number"}, {"description", "Spell family ID"}}}, {"flags", {{"type", "number"}, {"description", "Class flags"}}}, {"attackPowerPerLevel", {{"type", "number"}, {"description", "Attack power gained per level"}}}, {"attackPowerOffset", {{"type", "number"}, {"description", "Base attack power offset"}}}}}, {"required", nlohmann::json::array({"name"})}}}});
+
+        // classes_update tool
+        tools.push_back({{"name", "classes_update"},
+                         {"description", "Updates an existing class's properties including stats, XP, and regen values"},
+                         {"inputSchema", {{"type", "object"}, {"properties", {{"id", {{"type", "number"}, {"description", "The class ID to update"}}}, {"name", {{"type", "string"}, {"description", "Class name"}}}, {"internalName", {{"type", "string"}, {"description", "Internal class name"}}}, {"powerType", {{"type", "number"}, {"description", "Power type"}}}, {"spellFamily", {{"type", "number"}, {"description", "Spell family ID"}}}, {"attackPowerPerLevel", {{"type", "number"}, {"description", "Attack power per level"}}}, {"attackPowerOffset", {{"type", "number"}, {"description", "Base attack power offset"}}}, {"baseManaRegenPerTick", {{"type", "number"}, {"description", "Base mana regen per tick"}}}, {"spiritPerManaRegen", {{"type", "number"}, {"description", "Spirit to mana regen conversion"}}}, {"healthRegenPerTick", {{"type", "number"}, {"description", "Health regen per tick"}}}, {"spiritPerHealthRegen", {{"type", "number"}, {"description", "Spirit to health regen conversion"}}}, {"updateBaseValues", {{"type", "object"}, {"description", "Update stats for a specific level (provide level and stat properties)"}}}, {"addBaseValues", {{"type", "object"}, {"description", "Add stats for a new level (provide stat properties)"}}}, {"updateXpToNextLevel", {{"type", "object"}, {"description", "Update XP for level (provide level and xp properties)"}}}, {"addXpToNextLevel", {{"type", "number"}, {"description", "Add XP requirement for new level"}}}}}, {"required", nlohmann::json::array({"id"})}}}});
+
+        // classes_delete tool
+        tools.push_back({{"name", "classes_delete"},
+                         {"description", "Deletes a class from the project"},
+                         {"inputSchema", {{"type", "object"}, {"properties", {{"id", {{"type", "number"}, {"description", "The class ID to delete"}}}}}, {"required", nlohmann::json::array({"id"})}}}});
+
+        // classes_search tool
+        tools.push_back({{"name", "classes_search"},
+                         {"description", "Searches for classes by name or internal name"},
+                         {"inputSchema", {{"type", "object"}, {"properties", {{"query", {{"type", "string"}, {"description", "Search query string"}}}, {"limit", {{"type", "number"}, {"description", "Maximum number of results (default: 50)"}}}}}, {"required", nlohmann::json::array({"query"})}}}});
+
+        // classes_add_spell tool
+        tools.push_back({{"name", "classes_add_spell"},
+                         {"description", "Adds a spell to a class at a specific level"},
+                         {"inputSchema", {{"type", "object"}, {"properties", {{"classId", {{"type", "number"}, {"description", "The class ID"}}}, {"spellId", {{"type", "number"}, {"description", "The spell ID to add"}}}, {"level", {{"type", "number"}, {"description", "Level at which the spell is learned"}}}}}, {"required", nlohmann::json::array({"classId", "spellId", "level"})}}}});
+
+        // classes_remove_spell tool
+        tools.push_back({{"name", "classes_remove_spell"},
+                         {"description", "Removes a spell from a class"},
+                         {"inputSchema", {{"type", "object"}, {"properties", {{"classId", {{"type", "number"}, {"description", "The class ID"}}}, {"spellId", {{"type", "number"}, {"description", "The spell ID to remove"}}}}}, {"required", nlohmann::json::array({"classId", "spellId"})}}}});
 
         nlohmann::json result;
         result["tools"] = tools;

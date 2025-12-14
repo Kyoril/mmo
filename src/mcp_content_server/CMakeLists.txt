@@ -12,6 +12,8 @@ set(MCP_CONTENT_SERVER_SOURCES
 	item_tools.h
 	spell_tools.cpp
 	spell_tools.h
+	class_tools.cpp
+	class_tools.h
 )
 
 # Create the executable

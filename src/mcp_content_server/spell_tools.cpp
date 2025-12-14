@@ -662,14 +662,26 @@ namespace mmo
 			for (const auto &effectJson : json["effects"])
 			{
 				auto *effect = entry.add_effects();
+				
+				// Set required fields with defaults if not provided
 				if (effectJson.contains("index"))
 				{
 					effect->set_index(effectJson["index"]);
 				}
+				else
+				{
+					effect->set_index(entry.effects_size() - 1); // Use current index as default
+				}
+				
 				if (effectJson.contains("type"))
 				{
 					effect->set_type(effectJson["type"]);
 				}
+				else
+				{
+					effect->set_type(0); // Default to type 0
+				}
+				
 				if (effectJson.contains("basePoints"))
 				{
 					effect->set_basepoints(effectJson["basePoints"]);
