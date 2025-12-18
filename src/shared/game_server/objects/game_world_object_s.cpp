@@ -140,4 +140,30 @@ namespace mmo
 
 		Set<uint32>(object_fields::ObjectFlags, flags);
 	}
+
+	uint32 GameWorldObjectS::GetDynamicFlags(const GamePlayerS& player) const
+	{
+		uint32 dynamicFlags = dynamic_world_object_flags::None;
+
+		// Determine if object is interactable for this specific player
+		if (IsUsable(player))
+		{
+			dynamicFlags |= dynamic_world_object_flags::Interactable;
+		}
+
+		return dynamicFlags;
+	}
+
+	void GameWorldObjectS::PrepareDynamicFieldsFor(const GamePlayerS& player)
+	{
+		// Compute and set dynamic flags for this specific player
+		const uint32 dynamicFlags = GetDynamicFlags(player);
+		Set<uint32>(object_fields::DynamicObjectFlags, dynamicFlags);
+	}
+
+	void GameWorldObjectS::ClearDynamicFields()
+	{
+		// Reset dynamic flags to default value
+		Set<uint32>(object_fields::DynamicObjectFlags, dynamic_world_object_flags::None);
+	}
 }

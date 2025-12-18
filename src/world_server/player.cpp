@@ -7,6 +7,7 @@
 #include "game_server/world/each_tile_in_region.h"
 #include "game_server/world/each_tile_in_sight.h"
 #include "game_server/objects/game_creature_s.h"
+#include "game_server/objects/game_world_object_s.h"
 #include "game_server/world/visibility_tile.h"
 #include "game_server/objects/game_object_s.h"
 #include "game_server/objects/game_player_s.h"
@@ -237,6 +238,19 @@ namespace mmo
 
 	void Player::NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects)
 	{
+		// Prepare dynamic fields for world objects
+		for (const auto& object : objects)
+		{
+			if (object->GetTypeId() == ObjectTypeId::Object)
+			{
+				GameWorldObjectS* worldObject = dynamic_cast<GameWorldObjectS*>(object);
+				if (worldObject)
+				{
+					worldObject->PrepareDynamicFieldsFor(*m_character);
+				}
+			}
+		}
+
 		// Handle object field updates if any
 		{
 			// Prepare update packet
@@ -270,6 +284,19 @@ namespace mmo
 			}
 		}
 		
+		// Clear dynamic fields for world objects
+		for (const auto& object : objects)
+		{
+			if (object->GetTypeId() == ObjectTypeId::Object)
+			{
+				GameWorldObjectS* worldObject = dynamic_cast<GameWorldObjectS*>(object);
+				if (worldObject)
+				{
+					worldObject->ClearDynamicFields();
+				}
+			}
+		}
+		
 		// Handle aura updates
 		for (auto& object : objects)
 		{
@@ -297,6 +324,19 @@ namespace mmo
 
 	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& objects)
 	{
+		// Prepare dynamic fields for world objects
+		for (const auto& object : objects)
+		{
+			if (object->GetTypeId() == ObjectTypeId::Object)
+			{
+				GameWorldObjectS* worldObject = dynamic_cast<GameWorldObjectS*>(object);
+				if (worldObject)
+				{
+					worldObject->PrepareDynamicFieldsFor(*m_character);
+				}
+			}
+		}
+
 		// Send spawn packet
 		SendPacket([&objects](game::OutgoingPacket& outPacket)
 		{
@@ -308,6 +348,19 @@ namespace mmo
 			}
 			outPacket.Finish();
 		}, true);
+
+		// Clear dynamic fields for world objects
+		for (const auto& object : objects)
+		{
+			if (object->GetTypeId() == ObjectTypeId::Object)
+			{
+				GameWorldObjectS* worldObject = dynamic_cast<GameWorldObjectS*>(object);
+				if (worldObject)
+				{
+					worldObject->ClearDynamicFields();
+				}
+			}
+		}
 
 		// Send aura update packets for spawned units
 		for (const auto& object : objects)

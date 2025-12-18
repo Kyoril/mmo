@@ -23,6 +23,18 @@ namespace mmo
 		};
 	}
 
+	/// @brief Per-player dynamic flags computed by server.
+	namespace dynamic_world_object_flags
+	{
+		enum Type : uint32
+		{
+			/// No special flags.
+			None = 0x00,
+			/// Object can be interacted with by this player.
+			Interactable = 0x01,
+		};
+	}
+
 	class GameWorldObjectC : public GameObjectC
 	{
 	public:

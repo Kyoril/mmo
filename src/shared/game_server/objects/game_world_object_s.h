@@ -20,6 +20,18 @@ namespace mmo
 		};
 	}
 
+	/// @brief Per-player dynamic flags computed by server.
+	namespace dynamic_world_object_flags
+	{
+		enum Type : uint32
+		{
+			/// No special flags.
+			None = 0x00,
+			/// Object can be interacted with by this player.
+			Interactable = 0x01,
+		};
+	}
+
 	class GameWorldObjectS : public GameObjectS
 	{
 	public:
@@ -46,6 +58,18 @@ namespace mmo
 		/// @brief Sets the quest requirement for using this object.
 		/// @param questId The quest ID required to use this object, or 0 to remove requirement.
 		void SetRequiredQuest(uint32 questId);
+
+		/// @brief Computes dynamic flags for a specific player.
+		/// @param player The player to compute flags for.
+		/// @return Dynamic flags value.
+		uint32 GetDynamicFlags(const GamePlayerS& player) const;
+
+		/// @brief Prepares per-player dynamic fields before serialization.
+		/// @param player The player who will receive the field data.
+		void PrepareDynamicFieldsFor(const GamePlayerS& player);
+
+		/// @brief Clears temporary dynamic field values after serialization.
+		void ClearDynamicFields();
 
 		void Use(GamePlayerS& player);
 

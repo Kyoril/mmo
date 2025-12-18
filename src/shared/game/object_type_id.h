@@ -381,7 +381,10 @@ namespace mmo
 
 			State,
 
-			WorldObjectFieldCount = State + 1,
+			/// @brief Per-player dynamic flags (e.g., Interactable based on quest status).
+			DynamicObjectFlags,
+
+			WorldObjectFieldCount = DynamicObjectFlags + 1
 		};
 	}
 }

@@ -446,8 +446,15 @@ namespace mmo
 				}
 				else if (m_hoveredObject->IsWorldObject())
 				{
-					// TODO: Check if object can be interacted with
-					g_cursor.SetCursorType(CursorType::Interact);
+					// Check if object is usable by the player
+					if (m_hoveredObject->IsUsable(m_controlledUnit->AsPlayer()))
+					{
+						g_cursor.SetCursorType(CursorType::Interact);
+					}
+					else
+					{
+						g_cursor.SetCursorType(CursorType::Pointer);
+					}
 				}
 				else 
 				{

@@ -40,6 +40,16 @@ namespace mmo
 		// Watch for threat events to enter combat
 		auto& ai = GetAI();
 		m_onThreatened = GetControlled().threatened.connect(std::bind(&CreatureAI::OnThreatened, &ai, std::placeholders::_1, std::placeholders::_2));
+
+		std::weak_ptr weakThis = std::static_pointer_cast<CreatureAIPrepareState>(shared_from_this());
+		ai.GetControlled().GetWorldInstance()->GetUniverse().Post([weakThis]()
+			{
+				if (const auto strongThis = weakThis.lock())
+				{
+					strongThis->GetControlled().RaiseTrigger(trigger_event::OnSpawn, &strongThis->GetControlled());
+				}
+			});
+
 	}
 
 	void CreatureAIPrepareState::OnLeave()

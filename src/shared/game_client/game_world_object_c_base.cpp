@@ -116,7 +116,9 @@ namespace mmo
 
 	bool GameWorldObjectC::IsUsable(const GamePlayerC& player) const
 	{
-		return GameObjectC::IsUsable(player);
+		// Check per-player dynamic flags set by server
+		const uint32 dynamicFlags = Get<uint32>(object_fields::DynamicObjectFlags);
+		return (dynamicFlags & dynamic_world_object_flags::Interactable) != 0;
 	}
 
 	void GameWorldObjectC::SetupSceneObjects()
