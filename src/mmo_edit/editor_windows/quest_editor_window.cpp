@@ -612,17 +612,30 @@ namespace mmo
 						ImGui::EndCombo();
 					}
 
-					// Item count
+					// Item/Creature count
 					ImGui::TableNextColumn();
-					ImGui::BeginDisabled(currentItem->itemid() == 0);
-					int32 count = currentItem->itemcount();
-					ImGui::SetNextItemWidth(-1);
-					if (ImGui::InputInt("##item_count", &count))
+					if (currentItem->itemid() != 0)
 					{
-						count = Clamp(count, 1, 255);
-						currentItem->set_itemcount(count);
+						// Item count input
+						int32 count = currentItem->itemcount();
+						ImGui::SetNextItemWidth(-1);
+						if (ImGui::InputInt("##item_count", &count))
+						{
+							count = Clamp(count, 1, 255);
+							currentItem->set_itemcount(count);
+						}
 					}
-					ImGui::EndDisabled();
+					else if (currentItem->creatureid() != 0)
+					{
+						// Creature count input
+						int32 count = currentItem->creaturecount();
+						ImGui::SetNextItemWidth(-1);
+						if (ImGui::InputInt("##creature_count", &count))
+						{
+							count = Clamp(count, 1, 255);
+							currentItem->set_creaturecount(count);
+						}
+					}
 
 					// Creature selection
 					ImGui::TableNextColumn();
