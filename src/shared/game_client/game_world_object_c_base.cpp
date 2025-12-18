@@ -8,6 +8,8 @@
 #include "client_data/project.h"
 #include "game/object_info.h"
 #include "scene_graph/mesh_manager.h"
+#include "game_player_c.h"
+#include "game/quest.h"
 
 namespace mmo
 {
@@ -54,7 +56,7 @@ namespace mmo
 				m_typeData = std::make_unique<GameWorldObjectC_Type_Chest>();
 				break;
 			case GameWorldObjectType::Door:
-				m_typeData = std::make_unique<GameWorldObjectC_Type_Chest>();
+				m_typeData = std::make_unique<GameWorldObjectC_Type_Door>();
 				break;
 			default:
 				ASSERT(false);

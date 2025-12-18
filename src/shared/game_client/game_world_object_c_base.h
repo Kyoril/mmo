@@ -7,6 +7,21 @@ namespace mmo
 {
 	struct ObjectInfo;
 	class NetClient;
+	class GamePlayerC;
+
+	/// @brief Object flags for world objects (stored in ObjectFlags field).
+	namespace world_object_flags
+	{
+		enum Type : uint32
+		{
+			/// No special flags.
+			None = 0x00,
+			/// Object can only be used when a specific quest is active.
+			RequiresQuest = 0x01,
+			/// Object is temporarily disabled (e.g., by server script).
+			Disabled = 0x02,
+		};
+	}
 
 	class GameWorldObjectC : public GameObjectC
 	{
@@ -22,12 +37,24 @@ namespace mmo
 
 		const ObjectInfo* GetEntry() const { return m_entry; }
 
+		/// @brief Checks if this object can be used by the given player.
+		/// @param player The player attempting to use the object.
+		/// @return true if the object is usable, false otherwise.
+		bool IsUsable(const GamePlayerC& player) const;
+
 	protected:
 		virtual void SetupSceneObjects();
 
 		virtual void OnDisplayIdChanged();
 
 		virtual void OnEntryChanged();
+
+		/// @brief Gets the quest ID required to use this object, if any.
+		/// @return Quest ID or 0 if no quest is required.
+		virtual uint32 GetRequiredQuestId() const
+		{
+			return 0;
+		}
 
 	public:
 		virtual GameWorldObjectType GetType() const { return static_cast<GameWorldObjectType>(Get<uint32>(object_fields::ObjectTypeId)); }

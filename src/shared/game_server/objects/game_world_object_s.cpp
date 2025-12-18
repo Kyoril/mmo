@@ -4,6 +4,7 @@
 
 #include "game_player_s.h"
 #include "shared/proto_data/objects.pb.h"
+#include "game/quest.h"
 
 namespace mmo
 {
@@ -22,9 +23,33 @@ namespace mmo
 		Set<uint32>(object_fields::ObjectTypeId, static_cast<uint32>(GameWorldObjectType::Chest));	// TODO
 	}
 
-	bool GameWorldObjectS::IsUsable() const
+	bool GameWorldObjectS::IsUsable(const GamePlayerS& player) const
 	{
-		// TODO
+		// Check if object is disabled by server
+		const uint32 flags = Get<uint32>(object_fields::ObjectFlags);
+		if (flags & world_object_flags::Disabled)
+		{
+			return false;
+		}
+
+		// Check if object requires a specific quest
+		if (flags & world_object_flags::RequiresQuest)
+		{
+			const uint32 requiredQuestId = GetRequiredQuestId();
+			if (requiredQuestId != 0)
+			{
+				// Player must have this quest active (incomplete status)
+				const QuestStatus status = player.GetQuestStatus(requiredQuestId);
+				if (status != quest_status::Incomplete)
+				{
+					return false;
+				}
+			}
+		}
+
+		// Type-specific checks could be added here if needed
+		// For example, checking if it's a chest type, door type, etc.
+
 		return true;
 	}
 
@@ -67,5 +92,39 @@ namespace mmo
 	{
 		// TODO: should we really despawn the entire object?
 		Despawn();
+	}
+
+	void GameWorldObjectS::SetEnabled(bool enabled)
+	{
+		uint32 flags = Get<uint32>(object_fields::ObjectFlags);
+
+		if (enabled)
+		{
+			flags &= ~world_object_flags::Disabled;
+		}
+		else
+		{
+			flags |= world_object_flags::Disabled;
+		}
+
+		Set<uint32>(object_fields::ObjectFlags, flags);
+	}
+
+	void GameWorldObjectS::SetRequiredQuest(uint32 questId)
+	{
+		m_requiredQuestId = questId;
+
+		uint32 flags = Get<uint32>(object_fields::ObjectFlags);
+
+		if (questId != 0)
+		{
+			flags |= world_object_flags::RequiresQuest;
+		}
+		else
+		{
+			flags &= ~world_object_flags::RequiresQuest;
+		}
+
+		Set<uint32>(object_fields::ObjectFlags, flags);
 	}
 }
