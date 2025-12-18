@@ -114,6 +114,11 @@ namespace mmo
 		OnDisplayIdChanged();
 	}
 
+	bool GameWorldObjectC::IsUsable(const GamePlayerC& player) const
+	{
+		return GameObjectC::IsUsable(player);
+	}
+
 	void GameWorldObjectC::SetupSceneObjects()
 	{
 		GameObjectC::SetupSceneObjects();

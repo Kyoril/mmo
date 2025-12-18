@@ -6,6 +6,7 @@
 #include "base/utilities.h"
 #include "game_server/objects/game_creature_s.h"
 #include "game_server/objects/game_object_s.h"
+#include "game_server/objects/game_world_object_s.h"
 #include "game_server/objects/game_player_s.h"
 #include "game/spell_target_map.h"
 #include "game_server/objects/game_bag_s.h"
@@ -364,6 +365,27 @@ namespace mmo
 		{
 			ELOG("Player tried to loot non existing object!");
 			return;
+		}
+
+		// Check if the object is a world object and validate usability
+		if (lootObject->IsWorldObject())
+		{
+			auto* worldObject = static_cast<GameWorldObjectS*>(lootObject);
+			if (!worldObject->IsUsable(*m_character))
+			{
+				WLOG("Player tried to use an object that is not usable!");
+				// Send error response
+				SendPacket([objectGuid](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::LootResponse);
+					packet
+						<< io::write<uint64>(objectGuid)
+						<< io::write<uint8>(loot_type::None)
+						<< io::write<uint8>(loot_error::Locked);
+					packet.Finish();
+				});
+				return;
+			}
 		}
 
 		m_character->CancelCast(spell_interrupt_flags::Any);

@@ -21,6 +21,12 @@ namespace mmo
 		Set<uint32>(object_fields::Entry, m_entry.id());
 		Set<uint32>(object_fields::ObjectDisplayId, m_entry.displayid());
 		Set<uint32>(object_fields::ObjectTypeId, static_cast<uint32>(GameWorldObjectType::Chest));	// TODO
+
+		// Apply quest requirement from proto data
+		if (m_entry.has_requiredquest() && m_entry.requiredquest() != 0)
+		{
+			SetRequiredQuest(m_entry.requiredquest());
+		}
 	}
 
 	bool GameWorldObjectS::IsUsable(const GamePlayerS& player) const
@@ -55,6 +61,13 @@ namespace mmo
 
 	void GameWorldObjectS::Use(GamePlayerS& player)
 	{
+		// Validate that the player can use this object
+		if (!IsUsable(player))
+		{
+			WLOG("Player tried to use object that is not usable");
+			return;
+		}
+
 		if (!m_loot)
 		{
 			ASSERT(m_worldInstance);

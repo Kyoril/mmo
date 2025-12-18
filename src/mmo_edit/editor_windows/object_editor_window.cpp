@@ -150,6 +150,50 @@ namespace mmo
 
 		if (ImGui::CollapsingHeader("Quests", ImGuiTreeNodeFlags_None))
 		{
+			// Required Quest for Usability
+			ImGui::Separator();
+			ImGui::Text("Usability");
+
+			uint32 requiredQuestId = currentEntry.has_requiredquest() ? currentEntry.requiredquest() : 0;
+			const auto* requiredQuestEntry = requiredQuestId != 0 ? m_project.quests.getById(requiredQuestId) : nullptr;
+
+			if (ImGui::BeginCombo("Required Quest", requiredQuestEntry != nullptr ? requiredQuestEntry->name().c_str() : s_noneEntryString, ImGuiComboFlags_None))
+			{
+				// None option
+				ImGui::PushID(-1);
+				if (ImGui::Selectable(s_noneEntryString, requiredQuestId == 0))
+				{
+					currentEntry.set_requiredquest(0);
+				}
+				ImGui::PopID();
+
+				for (int i = 0; i < m_project.quests.count(); i++)
+				{
+					ImGui::PushID(i);
+					const bool item_selected = m_project.quests.getTemplates().entry(i).id() == requiredQuestId;
+					const char* item_text = m_project.quests.getTemplates().entry(i).name().c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						currentEntry.set_requiredquest(m_project.quests.getTemplates().entry(i).id());
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+
+			if (requiredQuestId != 0)
+			{
+				ImGui::TextWrapped("This object can only be used by players who have this quest active.");
+			}
+
+			ImGui::Separator();
+			ImGui::Text("Quest Interactions");
+
 			ImGui::Text("Offers Quests");
 
 			// Add button

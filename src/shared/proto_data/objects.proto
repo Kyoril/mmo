@@ -20,6 +20,7 @@ message ObjectEntry {
 	optional uint32 objectlootentry = 14;
 	repeated uint32 triggers = 15;
 	repeated uint32 variables = 16;
+	optional uint32 requiredquest = 19 [default = 0];
 }
 
 message Objects {

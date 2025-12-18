@@ -70,7 +70,12 @@ namespace mmo
 		{
 			return m_fieldMap.GetFieldValue<T>(field);
 		}
-		
+
+		/// @brief Checks if this object can be used by the given player.
+		/// @param player The player attempting to use the object.
+		/// @return true if the object is usable, false otherwise.
+		virtual bool IsUsable(const GamePlayerC& player) const { return false; }
+
 		virtual void InitializeFieldMap();
 
 		/// Determines whether an object field in the synchronized field map was marked as changed. Useful in fieldsChanged callbacks or

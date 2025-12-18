@@ -742,7 +742,7 @@ namespace mmo
 							}
 						}
 					}
-					else if (m_hoveredObject->IsWorldObject())
+					else if (m_hoveredObject->IsWorldObject() && m_hoveredObject->IsUsable(m_controlledUnit->AsPlayer()))
 					{
 						const proto_client::SpellEntry* unlockSpell = m_controlledUnit->GetOpenSpell();
 						if (!unlockSpell)

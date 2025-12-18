@@ -3,7 +3,7 @@
 #pragma once
 
 #include "game_object_s.h"
-#include "loot_instance.h"
+#include "game_server/loot_instance.h"
 
 namespace mmo
 {
@@ -53,12 +53,15 @@ namespace mmo
 
 		bool HasMovementInfo() const override { return true; }
 
-	protected:
-		virtual uint32 GetRequiredQuestId() const
+	public:
+		/// @brief Gets the quest ID required to use this object.
+		/// @return Quest ID from proto data or dynamically set value.
+		uint32 GetRequiredQuestId() const
 		{
 			return m_requiredQuestId;
 		}
 
+	protected:
 		void PrepareFieldMap() override;
 
 		void OnLootClosed(uint64 lootGuid);

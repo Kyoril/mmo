@@ -40,7 +40,7 @@ namespace mmo
 		/// @brief Checks if this object can be used by the given player.
 		/// @param player The player attempting to use the object.
 		/// @return true if the object is usable, false otherwise.
-		bool IsUsable(const GamePlayerC& player) const;
+		bool IsUsable(const GamePlayerC& player) const override;
 
 	protected:
 		virtual void SetupSceneObjects();
