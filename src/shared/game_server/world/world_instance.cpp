@@ -130,7 +130,13 @@ namespace mmo
 			const auto& spawn = m_mapEntry->objectspawns(i);
 
 			const auto* objectEntry = m_project.objects.getById(spawn.objectentry());
-			ASSERT(objectEntry);
+			if (!objectEntry)
+			{
+#ifdef _DEBUG
+				WLOG("Unknown object spawn found in map " << m_mapId << ": Object entry " << spawn.objectentry() << " not found!");
+#endif
+				continue;
+			}
 
 			std::unique_ptr<WorldObjectSpawner> spawner(new WorldObjectSpawner(
 				*this,
@@ -156,7 +162,13 @@ namespace mmo
 			const auto& spawn = m_mapEntry->unitspawns(i);
 
 			const auto* unitEntry = m_project.units.getById(spawn.unitentry());
-			ASSERT(unitEntry);
+			if (!unitEntry)
+			{
+#ifdef _DEBUG
+				WLOG("Unknown unit spawn found in map " << m_mapId << ": Unit entry " << spawn.unitentry() << " not found!");
+#endif
+				continue;
+			}
 
 			auto spawner = std::make_unique<CreatureSpawner>(
 				*this,
