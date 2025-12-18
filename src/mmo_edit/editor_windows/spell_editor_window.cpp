@@ -15,6 +15,31 @@
 
 namespace mmo
 {
+	namespace
+	{
+		void DrawSectionHeader(const char* text)
+		{
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
+			ImGui::Text("%s", text);
+			ImGui::PopStyleColor();
+			ImGui::Separator();
+			ImGui::Spacing();
+		}
+
+		void DrawHelpMarker(const char* desc)
+		{
+			ImGui::TextDisabled("(?)");
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::BeginTooltip();
+				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+				ImGui::TextUnformatted(desc);
+				ImGui::PopTextWrapPos();
+				ImGui::EndTooltip();
+			}
+		}
+	}
+
 	extern std::vector<String> s_itemClassStrings;
 
 	extern std::vector<String> s_itemSubclassWeaponStrings;
@@ -260,7 +285,9 @@ namespace mmo
 
 	void SpellEditorWindow::DrawDetailsImpl(proto::SpellEntry& currentEntry)
 	{
-		if (ImGui::Button("New Rank"))
+		// Top toolbar with actions
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.6f, 0.9f, 0.8f));
+		if (ImGui::Button("New Rank", ImVec2(120, 0)))
 		{
 			if (!currentEntry.has_baseid() || currentEntry.baseid() == 0)
 			{
@@ -279,16 +306,28 @@ namespace mmo
 			copied->set_rank(currentEntry.rank() + 1);
 			copied->set_baseid(currentEntry.baseid());
 		}
+		ImGui::PopStyleColor();
+
+		ImGui::SameLine();
+		DrawHelpMarker("Create a new rank of this spell with incremented rank number");
 
 		ImGui::SameLine();
 
-		if (ImGui::Button("Duplicate Spell"))
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
+		if (ImGui::Button("Duplicate Spell", ImVec2(140, 0)))
 		{
 			proto::SpellEntry* copied = m_project.spells.add();
 			const uint32 newId = copied->id();
 			copied->CopyFrom(currentEntry);
 			copied->set_id(newId);
 		}
+		ImGui::PopStyleColor();
+
+		ImGui::SameLine();
+		DrawHelpMarker("Create a complete copy of this spell with a new ID");
+
+		ImGui::Separator();
+		ImGui::Spacing();
 
 #define SLIDER_UNSIGNED_PROP(name, label, datasize, min, max) \
 	{ \
@@ -352,47 +391,86 @@ namespace mmo
 
 		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			if (ImGui::BeginTable("table", 2, ImGuiTableFlags_None))
-			{
-				if (ImGui::TableNextColumn())
-				{
-					ImGui::InputText("Name", currentEntry.mutable_name());
-				}
+			ImGui::Indent();
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
 
-				if (ImGui::TableNextColumn())
-				{
-					ImGui::BeginDisabled(true);
-					String idString = std::to_string(currentEntry.id());
-					ImGui::InputText("ID", &idString);
-					ImGui::EndDisabled();
-				}
+			DrawSectionHeader("Spell Identity");
 
-				ImGui::EndTable();
-			}
+			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
+			ImGui::InputText("##SpellName", currentEntry.mutable_name());
+			ImGui::SameLine();
+			ImGui::Text("Spell Name");
+			ImGui::SameLine();
+			DrawHelpMarker("The display name of the spell");
+
+			ImGui::BeginDisabled(true);
+			String idString = std::to_string(currentEntry.id());
+			ImGui::SetNextItemWidth(100);
+			ImGui::InputText("##ID", &idString);
+			ImGui::SameLine();
+			ImGui::Text("Spell ID");
+			ImGui::EndDisabled();
+
+			ImGui::Spacing();
+			ImGui::Spacing();
+			DrawSectionHeader("Spell Hierarchy");
 
 			int32 rank = currentEntry.rank();
-			if (ImGui::InputInt("Rank", &rank))
+			ImGui::SetNextItemWidth(100);
+			if (ImGui::InputInt("##Rank", &rank))
 			{
 				currentEntry.set_rank(rank);
 			}
+			ImGui::SameLine();
+			ImGui::Text("Rank");
+			ImGui::SameLine();
+			DrawHelpMarker("Spell rank (0 for base rank)");
 
 			int32 baseId = currentEntry.baseid();
-			if (ImGui::InputInt("Base Spell", &baseId))
+			ImGui::SetNextItemWidth(100);
+			if (ImGui::InputInt("##BaseSpell", &baseId))
 			{
 				currentEntry.set_baseid(baseId);
 			}
+			ImGui::SameLine();
+			ImGui::Text("Base Spell ID");
+			ImGui::SameLine();
+			DrawHelpMarker("ID of the base spell this is a rank of");
 
 			uint64 familyFlags = currentEntry.familyflags();
-			if (ImGui::InputScalar("Family Flags", ImGuiDataType_U64, &familyFlags, nullptr, nullptr, "0x%016X"))
+			ImGui::SetNextItemWidth(200);
+			if (ImGui::InputScalar("##FamilyFlags", ImGuiDataType_U64, &familyFlags, nullptr, nullptr, "0x%016X"))
 			{
 				currentEntry.set_familyflags(familyFlags);
 			}
+			ImGui::SameLine();
+			ImGui::Text("Family Flags");
+			ImGui::SameLine();
+			DrawHelpMarker("Spell family flags for spell interactions");
 
-			ImGui::InputTextMultiline("Description", currentEntry.mutable_description());
-			ImGui::InputTextMultiline("Aura Text", currentEntry.mutable_auratext());
+			ImGui::Spacing();
+			ImGui::Spacing();
+			DrawSectionHeader("Descriptions");
+
+			ImGui::Text("Description");
+			ImGui::SameLine();
+			DrawHelpMarker("Spell description shown to players");
+			ImGui::InputTextMultiline("##Description", currentEntry.mutable_description(), ImVec2(-1, 60));
+
+			ImGui::Spacing();
+			ImGui::Text("Aura Text");
+			ImGui::SameLine();
+			DrawHelpMarker("Text displayed for aura effects");
+			ImGui::InputTextMultiline("##AuraText", currentEntry.mutable_auratext(), ImVec2(-1, 60));
+
+			ImGui::Spacing();
+			ImGui::Spacing();
+			DrawSectionHeader("Spell Classification");
 
 			int currentSchool = currentEntry.spellschool();
-			if (ImGui::Combo("Spell School", &currentSchool, [](void*, int idx, const char** out_text)
+			ImGui::SetNextItemWidth(200);
+			if (ImGui::Combo("##SpellSchool", &currentSchool, [](void*, int idx, const char** out_text)
 				{
 					if (idx < 0 || idx >= IM_ARRAYSIZE(s_spellSchoolNames))
 					{
@@ -405,9 +483,14 @@ namespace mmo
 			{
 				currentEntry.set_spellschool(currentSchool);
 			}
+			ImGui::SameLine();
+			ImGui::Text("Spell School");
+			ImGui::SameLine();
+			DrawHelpMarker("Damage/healing type of the spell");
 
 			int currentMechanic = currentEntry.mechanic();
-			if (ImGui::Combo("Spell Mechanic", &currentMechanic, [](void*, int idx, const char** out_text)
+			ImGui::SetNextItemWidth(200);
+			if (ImGui::Combo("##SpellMechanic", &currentMechanic, [](void*, int idx, const char** out_text)
 				{
 					if (idx < 0 || idx >= IM_ARRAYSIZE(s_spellMechanicNames))
 					{
@@ -420,14 +503,33 @@ namespace mmo
 			{
 				currentEntry.set_mechanic(currentMechanic);
 			}
+			ImGui::SameLine();
+			ImGui::Text("Spell Mechanic");
+			ImGui::SameLine();
+			DrawHelpMarker("Special mechanic type (CC, etc.)");
+
+			ImGui::PopStyleVar(2);
+			ImGui::Unindent();
 		}
 
 		if (ImGui::CollapsingHeader("Casting", ImGuiTreeNodeFlags_None))
 		{
-			SLIDER_UINT32_PROP(cost, "Cost", 0, 100000);
+			ImGui::Indent();
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+
+			DrawSectionHeader("Resource Cost");
+
+			ImGui::SetNextItemWidth(150);
+			SLIDER_UINT32_PROP(cost, "##Cost", 0, 100000);
+			ImGui::SameLine();
+			ImGui::Text("Cost");
+			ImGui::SameLine();
+			DrawHelpMarker("Resource cost to cast this spell");
 
 			int32 powerType = currentEntry.powertype();
-			if (ImGui::BeginCombo("Power Type", s_powerTypes[powerType].c_str(), ImGuiComboFlags_None))
+			ImGui::SetNextItemWidth(150);
+			if (ImGui::BeginCombo("##PowerType", s_powerTypes[powerType].c_str(), ImGuiComboFlags_None))
 			{
 				for (int i = 0; i < 3; i++)
 				{
@@ -447,22 +549,85 @@ namespace mmo
 
 				ImGui::EndCombo();
 			}
+			ImGui::SameLine();
+			ImGui::Text("Power Type");
+			ImGui::SameLine();
+			DrawHelpMarker("Type of resource consumed");
 
-			SLIDER_UINT32_PROP(baselevel, "Base Level", 0, 100);
-			SLIDER_UINT32_PROP(spelllevel, "Spell Level", 0, 100);
-			SLIDER_UINT32_PROP(maxlevel, "Max Level", 0, 100);
+			ImGui::Spacing();
+			ImGui::Spacing();
+			DrawSectionHeader("Level Requirements");
 
-			SLIDER_UINT64_PROP(cooldown, "Cooldown", 0, 1000000);
-			SLIDER_UINT32_PROP(casttime, "Cast Time (ms)", 0, 100000);
-			SLIDER_FLOAT_PROP(speed, "Speed (m/s)", 0, 1000);
-			SLIDER_UINT32_PROP(duration, "Duration (ms)", 0, 10000000);
-			SLIDER_UINT32_PROP(maxtargets, "Max Targets", 0, 100);
+			ImGui::SetNextItemWidth(100);
+			SLIDER_UINT32_PROP(baselevel, "##BaseLevel", 0, 100);
+			ImGui::SameLine();
+			ImGui::Text("Base Level");
+			ImGui::SameLine();
+			DrawHelpMarker("Base level for spell scaling");
+
+			ImGui::SetNextItemWidth(100);
+			SLIDER_UINT32_PROP(spelllevel, "##SpellLevel", 0, 100);
+			ImGui::SameLine();
+			ImGui::Text("Spell Level");
+			ImGui::SameLine();
+			DrawHelpMarker("Required character level to learn");
+
+			ImGui::SetNextItemWidth(100);
+			SLIDER_UINT32_PROP(maxlevel, "##MaxLevel", 0, 100);
+			ImGui::SameLine();
+			ImGui::Text("Max Level");
+			ImGui::SameLine();
+			DrawHelpMarker("Maximum level for scaling (0 = no cap)");
+
+			ImGui::Spacing();
+			ImGui::Spacing();
+			DrawSectionHeader("Casting Properties");
+
+			ImGui::SetNextItemWidth(150);
+			SLIDER_UINT64_PROP(cooldown, "##Cooldown", 0, 1000000);
+			ImGui::SameLine();
+			ImGui::Text("Cooldown (ms)");
+			ImGui::SameLine();
+			DrawHelpMarker("Time before spell can be cast again");
+
+			ImGui::SetNextItemWidth(150);
+			SLIDER_UINT32_PROP(casttime, "##CastTime", 0, 100000);
+			ImGui::SameLine();
+			ImGui::Text("Cast Time (ms)");
+			ImGui::SameLine();
+			DrawHelpMarker("Time required to cast the spell");
+
+			ImGui::SetNextItemWidth(150);
+			SLIDER_FLOAT_PROP(speed, "##Speed", 0, 1000);
+			ImGui::SameLine();
+			ImGui::Text("Speed (m/s)");
+			ImGui::SameLine();
+			DrawHelpMarker("Projectile speed for missile spells");
+
+			ImGui::SetNextItemWidth(150);
+			SLIDER_UINT32_PROP(duration, "##Duration", 0, 10000000);
+			ImGui::SameLine();
+			ImGui::Text("Duration (ms)");
+			ImGui::SameLine();
+			DrawHelpMarker("How long the spell effect lasts");
+
+			ImGui::SetNextItemWidth(100);
+			SLIDER_UINT32_PROP(maxtargets, "##MaxTargets", 0, 100);
+			ImGui::SameLine();
+			ImGui::Text("Max Targets");
+			ImGui::SameLine();
+			DrawHelpMarker("Maximum number of targets affected");
+
+			ImGui::Spacing();
+			ImGui::Spacing();
+			DrawSectionHeader("Range & Targeting");
 
 			const bool hasRange = currentEntry.has_rangetype();
 			const proto::RangeType* currentRange = hasRange ? m_project.ranges.getById(currentEntry.rangetype()) : nullptr;
 			const String rangePreview = currentRange ? currentRange->internalname() : "<None>";
 
-			if (ImGui::BeginCombo("Range", rangePreview.c_str(), ImGuiComboFlags_None))
+			ImGui::SetNextItemWidth(250);
+			if (ImGui::BeginCombo("##Range", rangePreview.c_str(), ImGuiComboFlags_None))
 			{
 				ImGui::PushID(-1);
 				if (ImGui::Selectable("<None>", !hasRange))
@@ -493,31 +658,57 @@ namespace mmo
 
 				ImGui::EndCombo();
 			}
+			ImGui::SameLine();
+			ImGui::Text("Range");
+			ImGui::SameLine();
+			DrawHelpMarker("Casting range configuration");
 
 			ImGui::SameLine();
 
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.6f, 0.7f, 0.8f));
 			if (ImGui::Button("Edit Ranges"))
 			{
 				// TODO: Open popup
 			}
+			ImGui::PopStyleColor();
 
-			SLIDER_FLOAT_PROP(threat_multiplier, "Threat Multiplier", 0.0f, 100000.0f);
-
-			ImGui::Separator();
-			ImGui::Text("Facing flags");
-
-			CHECKBOX_FLAG_PROP(facing, "Target Must be Infront of Caster", spell_facing_flags::TargetInFront);
+			ImGui::SetNextItemWidth(150);
+			SLIDER_FLOAT_PROP(threat_multiplier, "##ThreatMultiplier", 0.0f, 100000.0f);
 			ImGui::SameLine();
-			CHECKBOX_FLAG_PROP(facing, "Caster must be behind target", spell_facing_flags::BehindTarget);
+			ImGui::Text("Threat Multiplier");
+			ImGui::SameLine();
+			DrawHelpMarker("Threat generation modifier");
+
+			ImGui::Spacing();
+			ImGui::Spacing();
+			DrawSectionHeader("Facing Requirements");
+
+			CHECKBOX_FLAG_PROP(facing, "Target Must be In Front of Caster", spell_facing_flags::TargetInFront);
+			ImGui::SameLine();
+			DrawHelpMarker("Spell requires target to be in front");
+
+			CHECKBOX_FLAG_PROP(facing, "Caster Must be Behind Target", spell_facing_flags::BehindTarget);
+			ImGui::SameLine();
+			DrawHelpMarker("Spell requires caster behind target");
+
+			ImGui::PopStyleVar(2);
+			ImGui::Unindent();
 		}
 
 		if (ImGui::CollapsingHeader("Classes / Races", ImGuiTreeNodeFlags_None))
 		{
-			ImGui::Text("If none are checked, all races / classes are allowed.");
+			ImGui::Indent();
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
 
-			ImGui::Text("Required Races");
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+			ImGui::TextWrapped("If none are checked, all races and classes can use this spell.");
+			ImGui::PopStyleColor();
+			ImGui::Spacing();
 
-			if (ImGui::BeginTable("requiredRaces", 4, ImGuiTableFlags_None))
+			DrawSectionHeader("Required Races");
+
+			if (ImGui::BeginTable("requiredRaces", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg))
 			{
 				for (uint32 i = 0; i < 32; ++i)
 				{
@@ -539,9 +730,11 @@ namespace mmo
 				ImGui::EndTable();
 			}
 
-			ImGui::Text("Required Classes");
+			ImGui::Spacing();
+			ImGui::Spacing();
+			DrawSectionHeader("Required Classes");
 
-			if (ImGui::BeginTable("requiredClasses", 4, ImGuiTableFlags_None))
+			if (ImGui::BeginTable("requiredClasses", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg))
 			{
 				for (uint32 i = 0; i < 32; ++i)
 				{
@@ -562,6 +755,9 @@ namespace mmo
 
 				ImGui::EndTable();
 			}
+
+			ImGui::PopStyleVar(2);
+			ImGui::Unindent();
 		}
 
 		if (ImGui::CollapsingHeader("Items", ImGuiTreeNodeFlags_None))

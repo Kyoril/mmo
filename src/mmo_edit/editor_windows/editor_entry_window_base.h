@@ -69,17 +69,21 @@ namespace mmo
 
 			// First column - Entry list with controls
 			{
-				if (ImGui::Button("Add New", ImVec2(-1, 0)))
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
+				if (ImGui::Button("+ Add New", ImVec2(-1, 0)))
 				{
 					auto* entry = m_manager.add();
 					OnNewEntry(*entry);
 				}
+				ImGui::PopStyleColor();
 
 				ImGui::BeginDisabled(currentItem == -1 || currentItem >= m_project.spells.count());
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
 				if (ImGui::Button("Remove", ImVec2(-1, 0)))
 				{
 					m_manager.remove(m_manager.getTemplates().entry().at(currentItem).id());
 				}
+				ImGui::PopStyleColor();
 				ImGui::EndDisabled();
 
 				// Draw a search filter at the top
