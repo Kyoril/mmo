@@ -616,7 +616,7 @@ namespace mmo
 
 						uint32 amplitude = 0;
 						double displayValue = 0.0f;
-						if (effectIndex >= 0 || effectIndex < spell->effects_size())
+						if (effectIndex >= 0 && effectIndex < spell->effects_size())
 						{
 							if (spell->effects(effectIndex).amplitude() > 0)
 							{
