@@ -125,15 +125,20 @@ namespace mmo
 			if (currentEntry)
 			{
 				// Top toolbar with actions
+				const bool hasWorldFile = !currentEntry->directory().empty();
+				ImGui::BeginDisabled(!hasWorldFile);
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
 				if (ImGui::Button("Open in World Editor", ImVec2(180, 0)))
 				{
-					// TODO: Open world editor with this map
-					m_host.OpenWorldEditor(currentEntry->directory());
+					// Construct the world file path: Worlds/{name}/{name}.hwld
+					const String worldName = currentEntry->directory();
+					const String worldFilePath = "Worlds/" + worldName + "/" + worldName + ".hwld";
+					m_host.OpenAsset(worldFilePath);
 				}
 				ImGui::PopStyleColor();
+				ImGui::EndDisabled();
 				ImGui::SameLine();
-				DrawHelpMarker("Open this map's world file in the World Editor");
+				DrawHelpMarker(hasWorldFile ? "Open this map's world file in the World Editor" : "No world file path specified");
 
 				ImGui::Separator();
 				ImGui::Spacing();
