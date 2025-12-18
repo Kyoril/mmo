@@ -762,9 +762,16 @@ namespace mmo
 
 		if (ImGui::CollapsingHeader("Items", ImGuiTreeNodeFlags_None))
 		{
+			ImGui::Indent();
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+
+			DrawSectionHeader("Item Requirements");
+
 			// Create an imgui dropdown for itemclass field (enum: item_class::Type)
 			int currentItemClass = currentEntry.itemclass();
-			if (ImGui::Combo("Item Class", &currentItemClass, [](void*, int idx, const char** out_text)
+			ImGui::SetNextItemWidth(200);
+			if (ImGui::Combo("##ItemClass", &currentItemClass, [](void*, int idx, const char** out_text)
 				{
 					if (idx < 0 || idx >= s_itemClassStrings.size())
 					{
@@ -776,14 +783,22 @@ namespace mmo
 			{
 				currentEntry.set_itemclass(currentItemClass);
 			}
+			ImGui::SameLine();
+			ImGui::Text("Item Class");
+			ImGui::SameLine();
+			DrawHelpMarker("Required item class to cast this spell");
 
 			// Subclass mask (imgui 32 bit hex edit input field for currentEntry.itemsubclassmask())
 			uint32 itemSubclassMask = currentEntry.itemsubclassmask();
 
+			ImGui::Spacing();
+			ImGui::Spacing();
+
 			// For each subclass, create a checkbox to toggle it's flag. The flag count depends on the item class. We only support weapon and armor subclass flags for now
 			if (currentItemClass == item_class::Weapon)
 			{
-				if (ImGui::BeginTable("weaponSubclassMask", 4, ImGuiTableFlags_None))
+				DrawSectionHeader("Weapon Subclass Requirements");
+				if (ImGui::BeginTable("weaponSubclassMask", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg))
 				{
 					for (uint32 i = 0; i < s_itemSubclassWeaponStrings.size(); ++i)
 					{
@@ -804,7 +819,8 @@ namespace mmo
 			}
 			else if (currentItemClass == item_class::Armor)
 			{
-				if (ImGui::BeginTable("armorSubclassMask", 4, ImGuiTableFlags_None))
+				DrawSectionHeader("Armor Subclass Requirements");
+				if (ImGui::BeginTable("armorSubclassMask", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg))
 				{
 					for (uint32 i = 0; i < s_itemSubclassArmorStrings.size(); ++i)
 					{
@@ -871,31 +887,36 @@ namespace mmo
 						}
 					}
 				}
-				if (ImGui::Button("Close"))
+				ImGui::Spacing();
+				if (ImGui::Button("Close", ImVec2(80, 0)))
 				{
 					ImGui::CloseCurrentPopup();
 				}
 
 				ImGui::SameLine();
 
-				if (ImGui::Button("Clear Filter"))
+				if (ImGui::Button("Clear Filter", ImVec2(100, 0)))
 				{
 					filter[0] = '\0'; // Clear the filter
 				}
 
 				ImGui::SameLine();
 
-				if (ImGui::Button("Reset Reagents"))
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.3f, 0.2f, 0.8f));
+				if (ImGui::Button("Reset Reagents", ImVec2(120, 0)))
 				{
 					currentEntry.clear_reagents();
 				}
+				ImGui::PopStyleColor();
 
 				ImGui::EndPopup();
 			}
 
+			ImGui::Spacing();
+
 			// Add a list of required reagents (items) and count. Present as a table with two columns: Item and Count
 			// Allow adding new reagents by clicking a button that opens a popup with a list of items
-			if (ImGui::BeginTable("Required Reagents", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+			if (ImGui::BeginTable("Required Reagents", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
 			{
 				ImGui::TableSetupColumn("Item", ImGuiTableColumnFlags_WidthStretch);
 				ImGui::TableSetupColumn("Count", ImGuiTableColumnFlags_WidthFixed, 100.0f);
@@ -910,11 +931,13 @@ namespace mmo
 					ImGui::TableSetColumnIndex(0);
 					if (proto::ItemEntry* item = m_project.items.getById(reagent->item()))
 					{
-						ImGui::Text("%s (%d)", item->name().c_str(), reagent->count());
+						ImGui::Text("%s", item->name().c_str());
 					}
 					else
 					{
+						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
 						ImGui::Text("Unknown Item (%d)", reagent->item());
+						ImGui::PopStyleColor();
 					}
 					ImGui::TableSetColumnIndex(1);
 
@@ -925,35 +948,74 @@ namespace mmo
 					}
 
 					ImGui::TableSetColumnIndex(2);
-					if (ImGui::Button("Remove"))
+					ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
+					if (ImGui::Button("Remove", ImVec2(-1, 0)))
 					{
 						currentEntry.mutable_reagents()->erase(currentEntry.mutable_reagents()->begin() + i);
 						// Break the loop to avoid invalidating the iterator
+						ImGui::PopStyleColor();
 						ImGui::PopID();
 						break;
 					}
+					ImGui::PopStyleColor();
 
 					ImGui::PopID();
 				}
 
 				ImGui::EndTable();
 			}
+			else if (currentEntry.reagents_size() == 0)
+			{
+				ImGui::TextDisabled("No reagents required. Click 'Add Reagent' to add one.");
+			}
+
+			ImGui::PopStyleVar(2);
+			ImGui::Unindent();
 		}
 
 		if (ImGui::CollapsingHeader("Spell Proc", ImGuiTreeNodeFlags_None))
 		{
-			SLIDER_UINT32_PROP(procchance, "Chance %", 0, 100);
-			SLIDER_UINT32_PROP(proccharges, "Proc Charges", 0, 255);
-			SLIDER_UINT32_PROP(proccooldown, "Proc Cooldown (ms)", 0, std::numeric_limits<uint32>::max());
+			ImGui::Indent();
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+
+			DrawSectionHeader("Proc Configuration");
+
+			ImGui::SetNextItemWidth(100);
+			SLIDER_UINT32_PROP(procchance, "##ProcChance", 0, 100);
+			ImGui::SameLine();
+			ImGui::Text("Proc Chance %%");
+			ImGui::SameLine();
+			DrawHelpMarker("Percentage chance for the spell to proc");
+
+			ImGui::SetNextItemWidth(100);
+			SLIDER_UINT32_PROP(proccharges, "##ProcCharges", 0, 255);
+			ImGui::SameLine();
+			ImGui::Text("Proc Charges");
+			ImGui::SameLine();
+			DrawHelpMarker("Number of times the spell can proc before being consumed");
+
+			ImGui::SetNextItemWidth(150);
+			SLIDER_UINT32_PROP(proccooldown, "##ProcCooldown", 0, std::numeric_limits<uint32>::max());
+			ImGui::SameLine();
+			ImGui::Text("Proc Cooldown (ms)");
+			ImGui::SameLine();
+			DrawHelpMarker("Minimum time between procs");
 
 			uint64 procFamily = currentEntry.procfamily();
-			if (ImGui::InputScalar("Proc Family", ImGuiDataType_U64, &procFamily, nullptr, nullptr, "0x%016X"))
+			ImGui::SetNextItemWidth(200);
+			if (ImGui::InputScalar("##ProcFamily", ImGuiDataType_U64, &procFamily, nullptr, nullptr, "0x%016X"))
 			{
 				currentEntry.set_procfamily(procFamily);
 			}
+			ImGui::SameLine();
+			ImGui::Text("Proc Family");
+			ImGui::SameLine();
+			DrawHelpMarker("Spell family mask for proc triggers");
 
 			int currentSchool = currentEntry.procschool();
-			if (ImGui::Combo("Proc School", &currentSchool, [](void*, int idx, const char** out_text)
+			ImGui::SetNextItemWidth(150);
+			if (ImGui::Combo("##ProcSchool", &currentSchool, [](void*, int idx, const char** out_text)
 				{
 					if (idx < 0 || idx >= IM_ARRAYSIZE(s_spellSchoolNames))
 					{
@@ -966,6 +1028,14 @@ namespace mmo
 			{
 				currentEntry.set_procschool(currentSchool);
 			}
+			ImGui::SameLine();
+			ImGui::Text("Proc School");
+			ImGui::SameLine();
+			DrawHelpMarker("Spell school that triggers this proc");
+
+			ImGui::Spacing();
+			ImGui::Spacing();
+			DrawSectionHeader("Proc Trigger Conditions");
 
 			CHECKBOX_FLAG_PROP(procflags, "When Owner Was Killed", spell_proc_flags::Killed);
 			CHECKBOX_FLAG_PROP(procflags, "When Owner Killed Other Unit", spell_proc_flags::Kill);
@@ -992,9 +1062,9 @@ namespace mmo
 			CHECKBOX_FLAG_PROP(procflags, "When Off Hand Weapon Attack Performed", spell_proc_flags::DoneOffhandAttack);
 			CHECKBOX_FLAG_PROP(procflags, "On Death", spell_proc_flags::Death);
 
-			ImGui::Separator();
-			ImGui::Text("Additional Proc Flags");
-			ImGui::Separator();
+			ImGui::Spacing();
+			ImGui::Spacing();
+			DrawSectionHeader("Additional Proc Conditions");
 
 			CHECKBOX_FLAG_PROP(procexflags, "Normal Hit", spell_proc_flags_ex::NormalHit);
 			CHECKBOX_FLAG_PROP(procexflags, "Critical Hit", spell_proc_flags_ex::CriticalHit);
@@ -1009,19 +1079,51 @@ namespace mmo
 			CHECKBOX_FLAG_PROP(procexflags, "Parry", spell_proc_flags_ex::Parry);
 			CHECKBOX_FLAG_PROP(procexflags, "Reflect", spell_proc_flags_ex::Reflect);
 			CHECKBOX_FLAG_PROP(procexflags, "Resist", spell_proc_flags_ex::Resist);
+
+			ImGui::PopStyleVar(2);
+			ImGui::Unindent();
 		}
 
 		if (ImGui::CollapsingHeader("Interrupt##header", ImGuiTreeNodeFlags_None))
 		{
+			ImGui::Indent();
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+
+			DrawSectionHeader("Cast Interrupt Conditions");
+
 			CHECKBOX_FLAG_PROP(interruptflags, "Movement", spell_interrupt_flags::Movement);
+			ImGui::SameLine();
+			DrawHelpMarker("Spell is interrupted by movement");
+
 			CHECKBOX_FLAG_PROP(interruptflags, "Auto Attack", spell_interrupt_flags::AutoAttack);
+			ImGui::SameLine();
+			DrawHelpMarker("Spell is interrupted by auto-attacking");
+
 			CHECKBOX_FLAG_PROP(interruptflags, "Damage", spell_interrupt_flags::Damage);
+			ImGui::SameLine();
+			DrawHelpMarker("Spell is interrupted by taking damage");
+
 			CHECKBOX_FLAG_PROP(interruptflags, "Push Back", spell_interrupt_flags::PushBack);
+			ImGui::SameLine();
+			DrawHelpMarker("Spell casting can be pushed back");
+
 			CHECKBOX_FLAG_PROP(interruptflags, "Interrupt##flag", spell_interrupt_flags::Interrupt);
+			ImGui::SameLine();
+			DrawHelpMarker("Spell can be interrupted by interrupt effects");
+
+			ImGui::PopStyleVar(2);
+			ImGui::Unindent();
 		}
 
 		if (ImGui::CollapsingHeader("Aura Interrupt Flags", ImGuiTreeNodeFlags_None))
 		{
+			ImGui::Indent();
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+
+			DrawSectionHeader("Aura Removal Conditions");
+
 			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Hit By Spell", spell_aura_interrupt_flags::HitBySpell);
 			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Damaged By Any Damage", spell_aura_interrupt_flags::Damage);
 			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Crowd Controlled", spell_aura_interrupt_flags::CrowdControl);
@@ -1044,11 +1146,20 @@ namespace mmo
 			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Teleported", spell_aura_interrupt_flags::Teleported);
 			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Flagged For PvP", spell_aura_interrupt_flags::EnterPvPCombat);
 			CHECKBOX_FLAG_PROP(aurainterruptflags, "When Directly Damaged", spell_aura_interrupt_flags::DirectDamage);
+
+			ImGui::PopStyleVar(2);
+			ImGui::Unindent();
 		}
 
 		if (ImGui::CollapsingHeader("Attributes", ImGuiTreeNodeFlags_None))
 		{
-			if (ImGui::BeginTable("AttributesTable", 4, ImGuiTableFlags_None))
+			ImGui::Indent();
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+
+			DrawSectionHeader("Spell Attributes");
+
+			if (ImGui::BeginTable("AttributesTable", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg))
 			{
 				ImGui::TableNextColumn();
 				CHECKBOX_ATTR_PROP(0, "Channeled", spell_attributes::Channeled);
@@ -1154,11 +1265,20 @@ namespace mmo
 
 				ImGui::EndTable();
 			}
+
+			ImGui::PopStyleVar(2);
+			ImGui::Unindent();
 		}
 
 		static bool s_spellClientVisible = false;
 		if (ImGui::CollapsingHeader("Client Only", ImGuiTreeNodeFlags_None))
 		{
+			ImGui::Indent();
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+
+			DrawSectionHeader("Spell Icon");
+
 			if (!currentEntry.icon().empty())
 			{
 				if (!m_iconCache.contains(currentEntry.icon()))
@@ -1205,7 +1325,8 @@ namespace mmo
 			}
 
 			ImGui::Spacing();
-			ImGui::Separator();
+			ImGui::Spacing();
+			DrawSectionHeader("Spell Visualization");
 			
 			// Visualization ID dropdown
 			int visualizationId = currentEntry.has_visualization_id() ? static_cast<int>(currentEntry.visualization_id()) : 0;
@@ -1249,15 +1370,26 @@ namespace mmo
 			if (currentEntry.has_visualization_id() && visualizationId > 0)
 			{
 				ImGui::SameLine();
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.3f, 0.2f, 0.8f));
 				if (ImGui::SmallButton("Clear"))
 				{
 					currentEntry.clear_visualization_id();
 				}
+				ImGui::PopStyleColor();
 			}
+
+			ImGui::PopStyleVar(2);
+			ImGui::Unindent();
 		}
 
 		if (ImGui::CollapsingHeader("Effects", ImGuiTreeNodeFlags_None))
 		{
+			ImGui::Indent();
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+
+			DrawSectionHeader("Spell Effects");
+
 			ImGui::BeginChildFrame(ImGui::GetID("effectsBorder"), ImVec2(-1, 400), ImGuiWindowFlags_AlwaysUseWindowPadding);
 			for (int effectIndex = 0; effectIndex < currentEntry.effects_size(); ++effectIndex)
 			{
@@ -1279,19 +1411,24 @@ namespace mmo
 					currentEntry.mutable_effects(effectIndex)->set_type(currentEffect);
 				}
 				ImGui::SameLine();
-				if (ImGui::Button("Details"))
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.6f, 0.7f, 0.8f));
+				if (ImGui::Button("Details", ImVec2(80, 0)))
 				{
 					ImGui::OpenPopup("SpellEffectDetails");
 				}
+				ImGui::PopStyleColor();
 				ImGui::SameLine();
 
-				if (ImGui::Button("Remove"))
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
+				if (ImGui::Button("Remove", ImVec2(80, 0)))
 				{
 					currentEntry.mutable_effects()->DeleteSubrange(effectIndex, 1);
+					ImGui::PopStyleColor();
 					effectIndex--;
 				}
 				else
 				{
+					ImGui::PopStyleColor();
 					DrawEffectDialog(currentEntry, *currentEntry.mutable_effects(effectIndex), effectIndex);
 				}
 				
@@ -1299,12 +1436,17 @@ namespace mmo
 			}
 
 			// Add button
-			if (ImGui::Button("Add Effect", ImVec2(-1, 0)))
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
+			if (ImGui::Button("+ Add Effect", ImVec2(-1, 0)))
 			{
 				currentEntry.add_effects()->set_index(currentEntry.effects_size() - 1);
 			}
+			ImGui::PopStyleColor();
 
 			ImGui::EndChildFrame();
+
+			ImGui::PopStyleVar(2);
+			ImGui::Unindent();
 		}
 	}
 
