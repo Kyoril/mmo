@@ -89,10 +89,10 @@ namespace mmo
 		// Setup new entry
 		m_entry = &entry;
 
-		// Add all creature spells
+		// Add all creature spells (defer passive activation until spawned)
 		for (const auto& spell : m_entry->creaturespells())
 		{
-			AddSpell(spell.spellid());
+			AddSpell(spell.spellid(), false);
 		}
 
 		// Use base npc flags from entry

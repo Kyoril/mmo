@@ -464,7 +464,7 @@ namespace mmo
 		}
 	}
 
-	void GameUnitS::AddSpell(const uint32 spellId)
+	void GameUnitS::AddSpell(const uint32 spellId, bool activatePassiveImmediately)
 	{
 		const auto *spell = m_project.spells.getById(spellId);
 		if (!spell)
@@ -505,8 +505,8 @@ namespace mmo
 
 		OnSpellLearned(*spell);
 
-		// Activate passive spell
-		if (spell->attributes(0) & spell_attributes::Passive)
+		// Activate passive spell immediately if requested
+		if (activatePassiveImmediately && (spell->attributes(0) & spell_attributes::Passive))
 		{
 			SpellTargetMap targetMap;
 			targetMap.SetTargetMap(spell_cast_target_flags::Self);
@@ -549,6 +549,20 @@ namespace mmo
 		}
 
 		OnSpellUnlearned(*spell);
+	}
+
+	void GameUnitS::ActivatePassiveSpells()
+	{
+		// Iterate through all known spells and activate passive ones
+		for (const auto* spell : m_spells)
+		{
+			if (spell && (spell->attributes(0) & spell_attributes::Passive))
+			{
+				SpellTargetMap targetMap;
+				targetMap.SetTargetMap(spell_cast_target_flags::Self);
+				CastSpell(targetMap, *spell, 0, true, 0);
+			}
+		}
 	}
 
 	const std::unordered_set<const proto::SpellEntry *> &GameUnitS::GetSpells() const

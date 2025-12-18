@@ -27,7 +27,12 @@ namespace mmo
 
 		// Apply proc chance
 		m_procChance = m_spell.procchance();
-		GetCaster()->ApplySpellMod(spell_mod_op::ChanceOfSuccess, spell.id(), m_procChance);
+
+		const auto caster = GetCaster();
+		if (caster)
+		{
+			caster->ApplySpellMod(spell_mod_op::ChanceOfSuccess, spell.id(), m_procChance);
+		}
 
 		// Initialize proc charges if applicable
 		if (m_spell.proccharges() > 0)
@@ -454,7 +459,7 @@ namespace mmo
 
 	GameUnitS* AuraContainer::GetCaster() const
 	{
-		std::shared_ptr<GameUnitS> strongCaster = m_caster.lock();
+		const std::shared_ptr<GameUnitS> strongCaster = m_caster.lock();
 		if (!strongCaster)
 		{
 			if (!m_owner.GetWorldInstance())

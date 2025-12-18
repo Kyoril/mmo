@@ -232,37 +232,40 @@ namespace mmo
 		tile.GetGameObjects().add(&added);
 		added.SetWorldInstance(this);
 
-		added.spawned(*this);
-		
-		ForEachTileInSight(
-		    *m_visibilityGrid,
-		    tile.GetPosition(),
-		    [&added](VisibilityTile & tile)
+	added.spawned(*this);
+	
+	ForEachTileInSight(
+	    *m_visibilityGrid,
+	    tile.GetPosition(),
+	    [&added](VisibilityTile & tile)
+	{
+	    std::vector objects { &added };
+	    for (auto *subscriber : tile.GetWatchers())
 		{
-		    std::vector objects { &added };
-		    for (auto *subscriber : tile.GetWatchers())
+			if (subscriber->GetGameUnit().GetGuid() == added.GetGuid())
 			{
-				if (subscriber->GetGameUnit().GetGuid() == added.GetGuid())
-				{
-					continue;
-				}
-
-				if (added.IsUnit() && !added.AsUnit().CanBeSeenBy(subscriber->GetGameUnit()))
-				{
-					continue; // Skip subscribers that cannot see this unit
-				}
-
-				subscriber->NotifyObjectsSpawned(objects);
+				continue;
 			}
-		});
 
-		if (GameUnitS* addedUnit = dynamic_cast<GameUnitS*>(&added))
-		{
-			m_unitFinder->AddUnit(*addedUnit);
+			if (added.IsUnit() && !added.AsUnit().CanBeSeenBy(subscriber->GetGameUnit()))
+			{
+				continue; // Skip subscribers that cannot see this unit
+			}
+
+			subscriber->NotifyObjectsSpawned(objects);
 		}
+	});
 
-		if (added.IsUnit())
-		{
+	if (GameUnitS* addedUnit = dynamic_cast<GameUnitS*>(&added))
+	{
+		m_unitFinder->AddUnit(*addedUnit);
+	}
+
+	// Activate passive spells AFTER spawn notifications have been sent
+	// This ensures clients receive the spawn packet before any stat updates from passive effects
+	if (GameUnitS* unit = dynamic_cast<GameUnitS*>(&added))
+	{
+		unit->ActivatePassiveSpells();
 			added.AsUnit().unitTrigger.connect([this](const proto::TriggerEntry& trigger, GameUnitS& owner, GameUnitS* triggeringUnit) {
 				m_triggerHandler.ExecuteTrigger(trigger, TriggerContext(&owner, triggeringUnit), 0);
 				});

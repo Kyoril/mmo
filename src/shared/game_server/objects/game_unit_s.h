@@ -617,7 +617,12 @@ namespace mmo
 
 		/// Adds a spell to the unit.
 		/// @param spellId The ID of the spell to add.
-		void AddSpell(uint32 spellId);
+		/// @param activatePassiveImmediately If true and the spell is passive, it will be cast immediately. If false, passive activation is deferred.
+		void AddSpell(uint32 spellId, bool activatePassiveImmediately = true);
+
+		/// Activates all passive spells known by this unit.
+		/// This should be called when the unit is fully spawned into the world.
+		void ActivatePassiveSpells();
 
 		/// Removes a spell from the unit.
 		/// @param spellId The ID of the spell to remove.
