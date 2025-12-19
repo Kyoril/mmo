@@ -204,6 +204,12 @@ namespace mmo
 			[this]()
 			{ GenerateMinimaps(); });
 
+		// Load and set transform mode icons
+		static auto translateIcon = TextureManager::Get().CreateOrRetrieve("Editor/translate.htex");
+		static auto rotateIcon = TextureManager::Get().CreateOrRetrieve("Editor/rotate.htex");
+		static auto scaleIcon = TextureManager::Get().CreateOrRetrieve("Editor/scale.htex");
+		ViewportPanel::SetTransformIcons(translateIcon.get(), rotateIcon.get(), scaleIcon.get());
+
 		// Set up delete callback
 		m_sceneOutlineWindow->SetDeleteCallback([this](uint64 id)
 												{
