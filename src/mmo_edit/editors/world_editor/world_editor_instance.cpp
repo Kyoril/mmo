@@ -55,15 +55,6 @@ namespace mmo
 	static ChunkMagic WorldEntityVersionChunk = MakeChunkMagic('WVER');
 	static ChunkMagic WorldEntityMesh = MakeChunkMagic('WMSH');
 
-	// UI transform mode button styles
-	static const ImVec4 ButtonSelected = ImVec4(0.15f, 0.55f, 0.83f, 0.78f);
-	static const ImVec4 ButtonHovered = ImVec4(0.24f, 0.52f, 0.88f, 0.40f);
-	static const ImVec4 ButtonNormal = ImVec4(0.20f, 0.41f, 0.68f, 0.31f);
-
-	TexturePtr WorldEditorInstance::s_translateIcon;
-	TexturePtr WorldEditorInstance::s_rotateIcon;
-	TexturePtr WorldEditorInstance::s_scaleIcon;
-
 	struct MapEntityChunkContent
 	{
 		uint32 uniqueId;
@@ -76,19 +67,6 @@ namespace mmo
 	WorldEditorInstance::WorldEditorInstance(EditorHost &host, WorldEditor &editor, Path asset)
 		: EditorInstance(host, std::move(asset)), m_editor(editor), m_wireFrame(false)
 	{
-
-		if (!s_translateIcon)
-		{
-			s_translateIcon = TextureManager::Get().CreateOrRetrieve("Editor/translate.htex");
-		}
-		if (!s_rotateIcon)
-		{
-			s_rotateIcon = TextureManager::Get().CreateOrRetrieve("Editor/rotate.htex");
-		}
-		if (!s_scaleIcon)
-		{
-			s_scaleIcon = TextureManager::Get().CreateOrRetrieve("Editor/scale.htex");
-		}
 
 		m_cameraAnchor = &m_scene.CreateSceneNode("CameraAnchor");
 		m_cameraNode = &m_scene.CreateSceneNode("CameraNode");
@@ -204,6 +182,28 @@ namespace mmo
 			[this](WorldEditMode *mode)
 			{ SetEditMode(mode); });
 
+		// Initialize deferred renderer BEFORE viewport panel since viewport panel takes a reference to it
+		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), m_scene, 640, 480);
+
+		// Create viewport panel
+		m_viewportPanel = std::make_unique<ViewportPanel>(
+			*m_deferredRenderer,
+			*m_worldGrid,
+			*m_transformWidget,
+			m_gridSnapSettings,
+			m_selection,
+			*m_sceneOutlineWindow,
+			m_hovering,
+			m_leftButtonPressed,
+			m_rightButtonPressed,
+			m_cameraSpeed,
+			m_lastAvailViewportSize,
+			m_lastContentRectMin,
+			[this]()
+			{ Render(); },
+			[this]()
+			{ GenerateMinimaps(); });
+
 		// Set up delete callback
 		m_sceneOutlineWindow->SetDeleteCallback([this](uint64 id)
 												{
@@ -243,8 +243,6 @@ namespace mmo
 		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().units, m_editor.GetProject().objects);
 		m_skyEditMode = std::make_unique<SkyEditMode>(*this, *m_skyComponent);
 		m_editMode = nullptr;
-
-		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), m_scene, 640, 480);
 
 		// Add navigation edit mode
 		m_navigationEditMode = std::make_unique<NavigationEditMode>(*this);
@@ -412,7 +410,7 @@ namespace mmo
 			{ SetEditMode(mode); });
 
 		m_worldSettingsPanel->Draw(worldSettingsId);
-		DrawViewportPanel(viewportId);
+		m_viewportPanel->Draw(viewportId, m_editMode);
 		DrawSceneOutlinePanel(sceneOutlineId);
 
 		if (m_initDockLayout)
@@ -462,256 +460,7 @@ namespace mmo
 		}
 	}
 
-	void WorldEditorInstance::DrawViewportPanel(const String &viewportId)
-	{
-		if (ImGui::Begin(viewportId.c_str()))
-		{
-			// Determine the current viewport position
-			auto viewportPos = ImGui::GetWindowContentRegionMin();
-			viewportPos.x += ImGui::GetWindowPos().x;
-			viewportPos.y += ImGui::GetWindowPos().y;
 
-			// Determine the available size for the viewport window and either create the render target
-			// or resize it if needed
-			const auto availableSpace = ImGui::GetContentRegionAvail();
-
-			if (m_lastAvailViewportSize.x != availableSpace.x || m_lastAvailViewportSize.y != availableSpace.y)
-			{
-				m_deferredRenderer->Resize(availableSpace.x, availableSpace.y);
-				m_lastAvailViewportSize = availableSpace;
-
-				Render();
-			}
-
-			// Render the render target content into the window as image object
-			ImGui::Image(m_deferredRenderer->GetFinalRenderTarget()->GetTextureObject(), availableSpace);
-			ImGui::SetItemUsingMouseWheel();
-
-			HandleViewportDragDrop();
-
-			HandleViewportInteractions(availableSpace);
-			DrawViewportToolbar(availableSpace);
-		}
-		ImGui::End();
-	}
-
-	void WorldEditorInstance::HandleViewportInteractions(const ImVec2 &availableSpace)
-	{
-		m_hovering = ImGui::IsItemHovered();
-		if (m_hovering)
-		{
-			m_cameraSpeed = std::max(std::min(m_cameraSpeed + ImGui::GetIO().MouseWheel * 5.0f, 200.0f), 1.0f);
-
-			m_leftButtonPressed = ImGui::IsMouseDown(ImGuiMouseButton_Left);
-			m_rightButtonPressed = ImGui::IsMouseDown(ImGuiMouseButton_Right);
-
-			const auto mousePos = ImGui::GetMousePos();
-			const auto contentRectMin = ImGui::GetWindowPos();
-			m_lastContentRectMin = contentRectMin;
-			if (ImGui::IsKeyPressed(ImGuiKey_Delete))
-			{
-				if (!m_selection.IsEmpty())
-				{
-					for (auto &selected : m_selection.GetSelectedObjects())
-					{
-						selected->Remove();
-					}
-
-					m_selection.Clear();
-
-					// Update scene outline when objects are deleted
-					if (m_sceneOutlineWindow)
-					{
-						m_sceneOutlineWindow->Update();
-					}
-				}
-			}
-		}
-	}
-
-	void WorldEditorInstance::DrawViewportToolbar(const ImVec2 &availableSpace)
-	{
-		ImGui::SetItemAllowOverlap();
-		ImGui::SetCursorPos(ImVec2(16, 16));
-
-		if (ImGui::Button("Toggle Grid"))
-		{
-			m_worldGrid->SetVisible(!m_worldGrid->IsVisible());
-		}
-		ImGui::SameLine();
-		ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-		ImGui::SameLine();
-
-		bool snapEnabled = m_gridSnapSettings.IsEnabled();
-		if (ImGui::Checkbox("Snap", &snapEnabled))
-		{
-			m_gridSnapSettings.SetEnabled(snapEnabled);
-			m_transformWidget->SetSnapping(snapEnabled);
-		}
-		ImGui::SameLine();
-
-		if (m_gridSnapSettings.IsEnabled())
-		{
-			DrawSnapSettings();
-		}
-
-		// Add separator before minimap button
-		ImGui::SameLine();
-		ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-		ImGui::SameLine();
-
-		// Minimap generation button
-		if (ImGui::Button("Generate Minimaps"))
-		{
-			GenerateMinimaps();
-		}
-
-		// Transform mode buttons
-		DrawTransformButtons(availableSpace);
-	}
-
-	void WorldEditorInstance::DrawSnapSettings()
-	{
-		const auto &translateLabels = GridSnapSettings::GetTranslateSizeLabels();
-		const auto &rotateLabels = GridSnapSettings::GetRotateSizeLabels();
-
-		const char *previewValue = nullptr;
-
-		switch (m_transformWidget->GetTransformMode())
-		{
-		case TransformMode::Translate:
-		case TransformMode::Scale:
-			previewValue = translateLabels[m_gridSnapSettings.GetCurrentTranslateIndex()];
-			break;
-		case TransformMode::Rotate:
-			previewValue = rotateLabels[m_gridSnapSettings.GetCurrentRotateIndex()];
-			break;
-		}
-
-		ImGui::SetNextItemWidth(50.0f);
-
-		if (ImGui::BeginCombo("##snapSizes", previewValue, ImGuiComboFlags_None))
-		{
-			switch (m_transformWidget->GetTransformMode())
-			{
-			case TransformMode::Translate:
-			case TransformMode::Scale:
-				for (int i = 0; i < static_cast<int>(translateLabels.size()); ++i)
-				{
-					const bool isSelected = i == m_gridSnapSettings.GetCurrentTranslateIndex();
-					if (ImGui::Selectable(translateLabels[i], isSelected))
-					{
-						m_gridSnapSettings.SetCurrentTranslateIndex(i);
-						m_transformWidget->SetTranslateSnapSize(m_gridSnapSettings.GetCurrentTranslateSnap());
-					}
-					if (isSelected)
-					{
-						ImGui::SetItemDefaultFocus();
-					}
-				}
-				break;
-			case TransformMode::Rotate:
-				for (int i = 0; i < static_cast<int>(rotateLabels.size()); ++i)
-				{
-					const bool isSelected = i == m_gridSnapSettings.GetCurrentRotateIndex();
-					if (ImGui::Selectable(rotateLabels[i], isSelected))
-					{
-						m_gridSnapSettings.SetCurrentRotateIndex(i);
-						m_transformWidget->SetRotateSnapSize(m_gridSnapSettings.GetCurrentRotateSnap());
-					}
-					if (isSelected)
-					{
-						ImGui::SetItemDefaultFocus();
-					}
-				}
-			}
-
-			ImGui::EndCombo();
-		}
-	}
-
-	void WorldEditorInstance::DrawTransformButtons(const ImVec2 &availableSpace)
-	{
-		// Transform mode buttons
-		ImGui::SetCursorPos(ImVec2(availableSpace.x - 80, 16));
-		ImGui::PushStyleColor(ImGuiCol_Button, m_transformWidget->GetTransformMode() == TransformMode::Translate ? ButtonSelected : ButtonNormal);
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ButtonHovered);
-		if (ImGui::ImageButton(s_translateIcon ? s_translateIcon->GetTextureObject() : nullptr, ImVec2(16.0f, 16.0f)))
-		{
-			m_transformWidget->SetTransformMode(TransformMode::Translate);
-		}
-		if (ImGui::IsItemHovered())
-		{
-			ImGui::BeginTooltip();
-			ImGui::Text("Translate selected objects along X, Y and Z axis.");
-			ImGui::Text("Keyboard Shortcut:");
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-			ImGui::SameLine();
-			ImGui::Text("1");
-			ImGui::PopStyleColor();
-			ImGui::EndTooltip();
-		}
-
-		ImGui::PopStyleColor(2);
-		ImGui::SameLine(0, 0);
-
-		ImGui::PushStyleColor(ImGuiCol_Button, m_transformWidget->GetTransformMode() == TransformMode::Rotate ? ButtonSelected : ButtonNormal);
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ButtonHovered);
-		if (ImGui::ImageButton(s_rotateIcon ? s_rotateIcon->GetTextureObject() : nullptr, ImVec2(16.0f, 16.0f)))
-		{
-			m_transformWidget->SetTransformMode(TransformMode::Rotate);
-		}
-		if (ImGui::IsItemHovered())
-		{
-			ImGui::BeginTooltip();
-			ImGui::Text("Rotate selected objects.");
-			ImGui::Text("Keyboard Shortcut:");
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-			ImGui::SameLine();
-			ImGui::Text("2");
-			ImGui::PopStyleColor();
-			ImGui::EndTooltip();
-		}
-		ImGui::PopStyleColor(2);
-		ImGui::SameLine(0, 0);
-
-		ImGui::BeginDisabled(true);
-		ImGui::PushStyleColor(ImGuiCol_Button, m_transformWidget->GetTransformMode() == TransformMode::Scale ? ButtonSelected : ButtonNormal);
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ButtonHovered);
-		if (ImGui::ImageButton(s_scaleIcon ? s_scaleIcon->GetTextureObject() : nullptr, ImVec2(16.0f, 16.0f)))
-		{
-			// m_transformWidget->SetTransformMode(TransformMode::Scale);
-		}
-		if (ImGui::IsItemHovered())
-		{
-			ImGui::BeginTooltip();
-			ImGui::Text("Scale selected objects.");
-			ImGui::Text("Keyboard Shortcut:");
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-			ImGui::SameLine();
-			ImGui::Text("3");
-			ImGui::PopStyleColor();
-			ImGui::EndTooltip();
-		}
-		ImGui::PopStyleColor(2);
-		ImGui::EndDisabled();
-	}
-
-	void WorldEditorInstance::HandleViewportDragDrop()
-	{
-		if (m_editMode && m_editMode->SupportsViewportDrop())
-		{
-			if (ImGui::BeginDragDropTarget())
-			{
-				const ImVec2 mousePos = ImGui::GetMousePos();
-				const float x = (mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x;
-				const float y = (mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y;
-				m_editMode->OnViewportDrop(x, y);
-
-				ImGui::EndDragDropTarget();
-			}
-		}
-	}
 	void WorldEditorInstance::InitializeDockLayout(ImGuiID dockspaceId, const String &viewportId, const String &detailsId, const String &worldSettingsId)
 	{
 		ImGui::DockBuilderRemoveNode(dockspaceId);

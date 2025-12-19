@@ -36,6 +36,7 @@
 #include "grid_snap_settings.h"
 #include "details_panel.h"
 #include "world_settings_panel.h"
+#include "viewport_panel.h"
 
 namespace mmo
 {
@@ -191,13 +192,7 @@ namespace mmo
 	private:
 		// UI related methods
 		void HandleKeyboardShortcuts();
-		void DrawViewportPanel(const String &viewportId);
 		void DrawSceneOutlinePanel(const String &sceneOutlineId);
-		void HandleViewportInteractions(const ImVec2 &availableSpace);
-		void DrawViewportToolbar(const ImVec2 &availableSpace);
-		void DrawSnapSettings();
-		void DrawTransformButtons(const ImVec2 &availableSpace);
-		void HandleViewportDragDrop();
 		void InitializeDockLayout(ImGuiID dockspaceId, const String &viewportId, const String &detailsId, const String &worldSettingsId);
 
 		void UpdateDebugAABB(const AABB &aabb);
@@ -364,12 +359,10 @@ namespace mmo
 		uint32 m_worldFileVersion;
 
 		std::unique_ptr<DeferredRenderer> m_deferredRenderer;
-		static TexturePtr s_translateIcon;
-		static TexturePtr s_rotateIcon;
-		static TexturePtr s_scaleIcon;
 
 		std::unique_ptr<DetailsPanel> m_detailsPanel;
 		std::unique_ptr<WorldSettingsPanel> m_worldSettingsPanel;
+		std::unique_ptr<ViewportPanel> m_viewportPanel;
 		std::unique_ptr<SceneOutlineWindow> m_sceneOutlineWindow;
 	};
 }
