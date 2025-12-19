@@ -19,6 +19,8 @@ namespace mmo
 
 		void DrawDetails() override;
 
+		void OnActivate() override;
+
 		void OnDeactivate() override;
 
 		bool SupportsViewportDrop() const override { return m_mapEntry != nullptr; }
@@ -27,6 +29,11 @@ namespace mmo
 
 	public:
 		proto::MapEntry* GetMapEntry() const { return m_mapEntry; }
+
+	private:
+		void DetectMapEntry();
+		void CreateMapEntry(const String& worldName);
+		String ExtractWorldNameFromPath() const;
 
 	private:
 		proto::MapManager& m_maps;
