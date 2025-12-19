@@ -124,6 +124,7 @@ namespace mmo
         ImGui::SetItemAllowOverlap();
         ImGui::SetCursorPos(ImVec2(16, 16));
 
+        // Left side: Grid toggle, snap settings, minimap
         if (ImGui::Button("Toggle Grid"))
         {
             m_worldGrid.SetVisible(!m_worldGrid.IsVisible());
@@ -143,14 +144,12 @@ namespace mmo
         if (m_gridSnapSettings.IsEnabled())
         {
             DrawSnapSettings();
+            ImGui::SameLine();
         }
 
-        // Add separator before minimap button
-        ImGui::SameLine();
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
         ImGui::SameLine();
 
-        // Minimap generation button
         if (ImGui::Button("Generate Minimaps"))
         {
             if (m_generateMinimapsCallback)
@@ -159,7 +158,12 @@ namespace mmo
             }
         }
 
-        // Transform mode buttons
+        // Position transform buttons at the right edge with margin
+        const float buttonWidth = 16.0f * 3; // Three 16x16 buttons
+        const float rightMargin = 64.0f;
+        ImGui::SameLine(availableSpace.x - buttonWidth - rightMargin);
+
+        // Right side: Transform mode buttons
         DrawTransformButtons(availableSpace);
     }
 
@@ -225,10 +229,7 @@ namespace mmo
 
     void ViewportPanel::DrawTransformButtons(const ImVec2 &availableSpace)
     {
-        // Transform mode buttons - position at top-right with proper margin
-        const float buttonWidth = 16.0f * 3; // Three 16x16 buttons side by side
-        const float rightMargin = 16.0f;
-        ImGui::SetCursorPos(ImVec2(availableSpace.x - buttonWidth - rightMargin, 16));
+        // Transform mode buttons - now inline, no need for SetCursorPos
         ImGui::PushStyleColor(ImGuiCol_Button, m_transformWidget.GetTransformMode() == TransformMode::Translate ? ButtonSelected : ButtonNormal);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ButtonHovered);
         if (ImGui::ImageButton(s_translateIcon ? s_translateIcon->GetTextureObject() : nullptr, ImVec2(16.0f, 16.0f)))
