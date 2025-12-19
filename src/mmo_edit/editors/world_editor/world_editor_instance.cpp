@@ -1,6 +1,7 @@
 ﻿// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "world_editor_instance.h"
+#include "selection_raycaster.h"
 
 #include <DetourDebugDraw.h>
 #include <imgui_internal.h>
@@ -117,6 +118,15 @@ namespace mmo
 		m_debugBoundingBox->SetCastShadows(false);
 		m_scene.GetRootSceneNode().AttachObject(*m_debugBoundingBox);
 
+		m_selectionRaycaster = std::make_unique<SelectionRaycaster>(
+			*m_camera,
+			*m_raySceneQuery,
+			m_selection,
+			*m_debugBoundingBox,
+			nullptr, // terrain - will be set after terrain is created
+			m_editor,
+			nullptr); // spawn edit mode - will be set later
+
 		PagePosition worldSize(64, 64);
 		m_memoryPointOfView = std::make_unique<PagePOVPartitioner>(
 			worldSize,
@@ -144,6 +154,9 @@ namespace mmo
 		m_terrain = std::make_unique<terrain::Terrain>(m_scene, m_camera, 64, 64);
 		m_terrain->SetTileSceneQueryFlags(SceneQueryFlags_Tile);
 		m_terrain->SetWireframeMaterial(MaterialManager::Get().Load("Editor/Wireframe.hmat"));
+
+		// Update selection raycaster with terrain pointer
+		m_selectionRaycaster->SetTerrain(m_terrain.get());
 
 		// Replace all \ with /
 		String baseFileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Terrain").string();
@@ -466,7 +479,6 @@ namespace mmo
 		}
 	}
 
-
 	void WorldEditorInstance::InitializeDockLayout(ImGuiID dockspaceId, const String &viewportId, const String &detailsId, const String &worldSettingsId)
 	{
 		ImGui::DockBuilderRemoveNode(dockspaceId);
@@ -540,16 +552,17 @@ namespace mmo
 			{
 				if (!widgetWasActive && button == 0 && m_hovering)
 				{
-					PerformEntitySelectionRaycast(
+					m_selectionRaycaster->PerformEntitySelection(
 						(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
-						(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+						(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y,
+						ImGui::IsKeyPressed(ImGuiKey_LeftShift));
 				}
 			}
 			else if (m_editMode == m_spawnEditMode.get())
 			{
 				if (!widgetWasActive && button == 0 && m_hovering)
 				{
-					PerformSpawnSelectionRaycast(
+					m_selectionRaycaster->PerformSpawnSelection(
 						(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
 						(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
 				}
@@ -558,7 +571,7 @@ namespace mmo
 			{
 				if (m_terrainEditMode->GetTerrainEditType() == TerrainEditType::Select)
 				{
-					PerformTerrainSelectionRaycast(
+					m_selectionRaycaster->PerformTerrainSelection(
 						(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
 						(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
 				}
@@ -813,204 +826,6 @@ namespace mmo
 		return true;
 	}
 
-	void WorldEditorInstance::UpdateDebugAABB(const AABB &aabb)
-	{
-		m_debugBoundingBox->Clear();
-
-		auto lineListOp = m_debugBoundingBox->AddLineListOperation(MaterialManager::Get().Load("Models/Engine/WorldGrid.hmat"));
-
-		lineListOp->AddLine(Vector3(aabb.min.x, aabb.min.y, aabb.min.z), Vector3(aabb.max.x, aabb.min.y, aabb.min.z));
-		lineListOp->AddLine(Vector3(aabb.min.x, aabb.min.y, aabb.min.z), Vector3(aabb.min.x, aabb.max.y, aabb.min.z));
-		lineListOp->AddLine(Vector3(aabb.min.x, aabb.min.y, aabb.min.z), Vector3(aabb.min.x, aabb.min.y, aabb.max.z));
-
-		lineListOp->AddLine(Vector3(aabb.max.x, aabb.max.y, aabb.max.z), Vector3(aabb.min.x, aabb.max.y, aabb.max.z));
-		lineListOp->AddLine(Vector3(aabb.max.x, aabb.max.y, aabb.max.z), Vector3(aabb.max.x, aabb.min.y, aabb.max.z));
-		lineListOp->AddLine(Vector3(aabb.max.x, aabb.max.y, aabb.max.z), Vector3(aabb.max.x, aabb.max.y, aabb.min.z));
-
-		lineListOp->AddLine(Vector3(aabb.max.x, aabb.min.y, aabb.min.z), Vector3(aabb.max.x, aabb.min.y, aabb.max.z));
-		lineListOp->AddLine(Vector3(aabb.max.x, aabb.min.y, aabb.min.z), Vector3(aabb.max.x, aabb.max.y, aabb.min.z));
-
-		lineListOp->AddLine(Vector3(aabb.min.x, aabb.max.y, aabb.min.z), Vector3(aabb.min.x, aabb.max.y, aabb.max.z));
-		lineListOp->AddLine(Vector3(aabb.min.x, aabb.max.y, aabb.min.z), Vector3(aabb.max.x, aabb.max.y, aabb.min.z));
-
-		lineListOp->AddLine(Vector3(aabb.min.x, aabb.min.y, aabb.max.z), Vector3(aabb.max.x, aabb.min.y, aabb.max.z));
-		lineListOp->AddLine(Vector3(aabb.min.x, aabb.min.y, aabb.max.z), Vector3(aabb.min.x, aabb.max.y, aabb.max.z));
-
-		// TODO: Missing lines (6)
-	}
-
-	void WorldEditorInstance::PerformEntitySelectionRaycast(const float viewportX, const float viewportY)
-	{
-		const Ray ray = m_camera->GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
-		m_raySceneQuery->SetRay(ray);
-		m_raySceneQuery->SetSortByDistance(true);
-		m_raySceneQuery->SetQueryMask(SceneQueryFlags_Entity);
-		m_raySceneQuery->ClearResult();
-		m_raySceneQuery->Execute();
-
-		if (!ImGui::IsKeyPressed(ImGuiKey_LeftShift))
-		{
-			m_selection.Clear();
-		}
-
-		m_debugBoundingBox->Clear();
-
-		const auto &hitResult = m_raySceneQuery->GetLastResult();
-		if (!hitResult.empty())
-		{
-			Entity *entity = (Entity *)hitResult[0].movable;
-			if (entity)
-			{
-				MapEntity *mapEntity = entity->GetUserObject<MapEntity>();
-				if (mapEntity)
-				{
-					String asset = entity->GetMesh()->GetName().data();
-
-					m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*mapEntity, [this, asset](Selectable &selected)
-																				  {
-						SelectedMapEntity& selectedEntity = static_cast<SelectedMapEntity&>(selected);
-						Entity& originalSceneEntity = selectedEntity.GetEntity().GetEntity();
-
-						// Ensure all materials are applied to the duplicated entity
-						Entity* duplicated = CreateMapEntity(asset, selected.GetPosition(), selected.GetOrientation(), selected.GetScale(), GenerateUniqueId());
-						ASSERT(originalSceneEntity.GetNumSubEntities() == duplicated->GetNumSubEntities());
-						for (uint32 i = 0; i < originalSceneEntity.GetNumSubEntities(); ++i)
-						{
-							SubEntity* originalSub = originalSceneEntity.GetSubEntity(i);
-							ASSERT(originalSub);
-							SubEntity* duplicatedSub = duplicated->GetSubEntity(i);
-							ASSERT(duplicatedSub);
-
-							// Copy material from original sub entity to duplicated one
-							if (originalSub->GetMaterial())
-							{
-								duplicatedSub->SetMaterial(originalSub->GetMaterial());
-							}
-						} }));
-					UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
-
-					// Update scene outline when selection changes
-					if (m_sceneOutlineWindow)
-					{
-						m_sceneOutlineWindow->Update();
-					}
-				}
-			}
-		}
-	}
-
-	void WorldEditorInstance::PerformSpawnSelectionRaycast(float viewportX, float viewportY)
-	{
-		const Ray ray = m_camera->GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
-		m_raySceneQuery->SetRay(ray);
-		m_raySceneQuery->SetSortByDistance(true);
-		m_raySceneQuery->SetQueryMask(SceneQueryFlags_UnitSpawns | SceneQueryFlags_ObjectSpawns);
-		m_raySceneQuery->ClearResult();
-		m_raySceneQuery->Execute();
-
-		m_selection.Clear();
-		m_debugBoundingBox->Clear();
-
-		const auto &hitResult = m_raySceneQuery->GetLastResult();
-		if (!hitResult.empty())
-		{
-			Entity *entity = (Entity *)hitResult[0].movable;
-			if (entity)
-			{
-				if (entity->GetQueryFlags() & SceneQueryFlags_UnitSpawns)
-				{
-					proto::UnitSpawnEntry *unitSpawnEntry = entity->GetUserObject<proto::UnitSpawnEntry>();
-					if (unitSpawnEntry)
-					{
-						// TODO: Getting the proper scene node to move for this entity should not be GetParent()->GetParent(), this is a hack!
-						m_selection.AddSelectable(std::make_unique<SelectedUnitSpawn>(*unitSpawnEntry, m_editor.GetProject().units, m_editor.GetProject().models, *entity->GetParentSceneNode()->GetParentSceneNode(), *entity, [this, unitSpawnEntry](Selectable &selected)
-																					  {
-																						  // TODO: Implement
-																					  },
-																					  [this, entity](const proto::UnitSpawnEntry &spawn)
-																					  {
-									auto* map = m_spawnEditMode->GetMapEntry();
-									if (map)
-									{
-										const auto it = std::find_if(map->mutable_unitspawns()->begin(), map->mutable_unitspawns()->end(), [&spawn](const proto::UnitSpawnEntry& entry)
-											{
-												return &entry == &spawn;
-											});
-										if (it != map->mutable_unitspawns()->end())
-										{
-											map->mutable_unitspawns()->erase(it);
-										}
-
-										// Ensure it is removed from the scene
-										ASSERT(entity);
-										m_scene.DestroySceneNode(*entity->GetParentSceneNode());
-										m_scene.DestroyEntity(*entity);
-									} }));
-						UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
-						return;
-					}
-				}
-
-				if (entity->GetQueryFlags() & SceneQueryFlags_ObjectSpawns)
-				{
-					proto::ObjectSpawnEntry *objectSpawnEntry = entity->GetUserObject<proto::ObjectSpawnEntry>();
-					if (objectSpawnEntry)
-					{
-						// TODO: Getting the proper scene node is a hack, same as with unit spawns
-						m_selection.AddSelectable(std::make_unique<SelectedObjectSpawn>(*objectSpawnEntry, m_editor.GetProject().objects, m_editor.GetProject().objectDisplays, *entity->GetParentSceneNode()->GetParentSceneNode(), *entity, [this, objectSpawnEntry](Selectable &selected)
-																						{
-																							// TODO: Implement duplication
-																						},
-																						[this, entity](const proto::ObjectSpawnEntry &spawn)
-																						{
-									auto* map = m_spawnEditMode->GetMapEntry();
-									if (map)
-									{
-										const auto it = std::find_if(map->mutable_objectspawns()->begin(), map->mutable_objectspawns()->end(), [&spawn](const proto::ObjectSpawnEntry& entry)
-											{
-												return &entry == &spawn;
-											});
-										if (it != map->mutable_objectspawns()->end())
-										{
-											map->mutable_objectspawns()->erase(it);
-										}
-
-										// Ensure it is removed from the scene
-										ASSERT(entity);
-										m_scene.DestroySceneNode(*entity->GetParentSceneNode());
-										m_scene.DestroyEntity(*entity);
-									} }));
-						UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
-					}
-				}
-			}
-		}
-	}
-
-	void WorldEditorInstance::PerformTerrainSelectionRaycast(float viewportX, float viewportY)
-	{
-		const Ray ray = m_camera->GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
-
-		m_selection.Clear();
-		m_debugBoundingBox->Clear();
-
-		const auto hitResult = m_terrain->RayIntersects(ray);
-		if (!hitResult.first)
-		{
-			m_debugEntity->SetVisible(false);
-			return;
-		}
-
-		if (terrain::Tile *tile = hitResult.second.tile)
-		{
-			m_selection.AddSelectable(std::make_unique<SelectedTerrainTile>(*tile));
-			UpdateDebugAABB(tile->GetPage().GetBoundingBox());
-		}
-
-		m_debugNode->SetPosition(hitResult.second.position);
-		m_debugEntity->SetVisible(true);
-	}
-
 	void WorldEditorInstance::OnTerrainMouseMoved(const float viewportX, const float viewportY)
 	{
 		const Ray ray = m_camera->GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
@@ -1029,7 +844,7 @@ namespace mmo
 		m_terrainEditMode->SetBrushPosition(hitResult.second.position);
 		if (terrain::Tile *tile = hitResult.second.tile)
 		{
-			UpdateDebugAABB(tile->GetWorldBoundingBox(true));
+			m_selectionRaycaster->UpdateDebugAABB(tile->GetWorldBoundingBox(true));
 			m_debugBoundingBox->SetVisible(true);
 		}
 		else

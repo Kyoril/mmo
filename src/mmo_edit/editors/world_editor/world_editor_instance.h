@@ -21,6 +21,7 @@
 #include "scene_graph/world_grid.h"
 #include "transform_widget.h"
 #include "selection.h"
+#include "selection_raycaster.h"
 #include "nav_mesh/map.h"
 #include "terrain/terrain.h"
 #include "edit_modes/terrain_edit_mode.h"
@@ -195,14 +196,6 @@ namespace mmo
 		void DrawSceneOutlinePanel(const String &sceneOutlineId);
 		void InitializeDockLayout(ImGuiID dockspaceId, const String &viewportId, const String &detailsId, const String &worldSettingsId);
 
-		void UpdateDebugAABB(const AABB &aabb);
-
-		void PerformEntitySelectionRaycast(float viewportX, float viewportY);
-
-		void PerformSpawnSelectionRaycast(float viewportX, float viewportY);
-
-		void PerformTerrainSelectionRaycast(float viewportX, float viewportY);
-
 		void OnTerrainMouseMoved(float viewportX, float viewportY);
 
 		Entity *CreateMapEntity(const String &assetName, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale, uint64 objectId) override;
@@ -320,6 +313,7 @@ namespace mmo
 
 		Selection m_selection;
 		std::unique_ptr<TransformWidget> m_transformWidget;
+		std::unique_ptr<SelectionRaycaster> m_selectionRaycaster;
 
 		ManualRenderObject *m_debugBoundingBox;
 
