@@ -8,6 +8,10 @@
 #include "scene_graph/material_manager.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/scene_node.h"
+#include "scene_graph/mesh.h"
+#include "scene_graph/sub_mesh.h"
+#include "graphics/vertex_index_data.h"
+#include "graphics/vertex_declaration.h"
 #include "terrain/terrain.h"
 #include "terrain/tile.h"
 #include "terrain/page.h"
@@ -38,6 +42,147 @@ namespace mmo
     Ray SelectionRaycaster::CreateRayFromViewport(float viewportX, float viewportY) const
     {
         return m_camera.GetCameraToViewportRay(viewportX, viewportY, 10000.0f);
+    }
+
+    bool SelectionRaycaster::IntersectMeshGeometry(const Ray &ray, Entity *entity, float &outDistance) const
+    {
+        if (!entity)
+        {
+            return false;
+        }
+
+        const MeshPtr &mesh = entity->GetMesh();
+        if (!mesh)
+        {
+            return false;
+        }
+
+        // Get the entity's world transform
+        SceneNode *parentNode = entity->GetParentSceneNode();
+        if (!parentNode)
+        {
+            return false;
+        }
+
+        const Matrix4 &worldTransform = parentNode->GetFullTransform();
+        const Matrix4 invWorldTransform = worldTransform.Inverse();
+
+        // Transform ray to entity's local space
+        const Vector3 localOrigin = invWorldTransform.TransformAffine(ray.origin);
+        const Vector3 localDest = invWorldTransform.TransformAffine(ray.destination);
+        const Ray localRay(localOrigin, localDest);
+
+        float closestDistance = std::numeric_limits<float>::max();
+        bool hitFound = false;
+
+        // Iterate through all submeshes
+        const uint16 subMeshCount = mesh->GetSubMeshCount();
+        for (uint16 i = 0; i < subMeshCount; ++i)
+        {
+            SubMesh &subMesh = mesh->GetSubMesh(i);
+
+            // Skip if no vertex or index data
+            if (!subMesh.vertexData || !subMesh.indexData)
+            {
+                continue;
+            }
+
+            const VertexData *vertexData = subMesh.vertexData.get();
+            const IndexData *indexData = subMesh.indexData.get();
+
+            // Find position element
+            const VertexElement *posElem = vertexData->vertexDeclaration->FindElementBySemantic(VertexElementSemantic::Position);
+            if (!posElem)
+            {
+                continue;
+            }
+
+            // Get vertex buffer for positions
+            const VertexBufferBinding *binding = vertexData->vertexBufferBinding;
+            const VertexBufferPtr &vertexBuffer = binding->GetBuffer(posElem->GetSource());
+            if (!vertexBuffer)
+            {
+                continue;
+            }
+
+            // Lock vertex buffer for reading
+            void *vertexDataPtr = vertexBuffer->Map(LockOptions::ReadOnly);
+            if (!vertexDataPtr)
+            {
+                continue;
+            }
+
+            const uint32 vertexSize = vertexBuffer->GetVertexSize();
+            const uint32 posOffset = posElem->GetOffset();
+
+            // Get index buffer
+            const IndexBufferPtr &indexBuffer = indexData->indexBuffer;
+            if (!indexBuffer)
+            {
+                vertexBuffer->Unmap();
+                continue;
+            }
+
+            void *indexDataPtr = indexBuffer->Map(LockOptions::ReadOnly);
+            if (!indexDataPtr)
+            {
+                vertexBuffer->Unmap();
+                continue;
+            }
+
+            const bool use32BitIndices = (indexBuffer->GetIndexSize() == IndexBufferSize::Index_32);
+            const size_t indexCount = indexData->indexCount;
+
+            // Test each triangle
+            for (size_t triIdx = 0; triIdx < indexCount; triIdx += 3)
+            {
+                uint32 indices[3];
+
+                // Read indices
+                if (use32BitIndices)
+                {
+                    const uint32 *indexPtr = static_cast<const uint32 *>(indexDataPtr);
+                    indices[0] = indexPtr[triIdx + 0];
+                    indices[1] = indexPtr[triIdx + 1];
+                    indices[2] = indexPtr[triIdx + 2];
+                }
+                else
+                {
+                    const uint16 *indexPtr = static_cast<const uint16 *>(indexDataPtr);
+                    indices[0] = indexPtr[triIdx + 0];
+                    indices[1] = indexPtr[triIdx + 1];
+                    indices[2] = indexPtr[triIdx + 2];
+                }
+
+                // Read vertex positions
+                Vector3 vertices[3];
+                for (int v = 0; v < 3; ++v)
+                {
+                    const uint8 *vertexPtr = static_cast<const uint8 *>(vertexDataPtr) + (indices[v] * vertexSize) + posOffset;
+                    const float *posPtr = reinterpret_cast<const float *>(vertexPtr);
+                    vertices[v] = Vector3(posPtr[0], posPtr[1], posPtr[2]);
+                }
+
+                // Test ray against triangle
+                const auto [hit, distance] = localRay.IntersectsTriangle(vertices[0], vertices[1], vertices[2]);
+                if (hit && distance < closestDistance)
+                {
+                    closestDistance = distance;
+                    hitFound = true;
+                }
+            }
+
+            indexBuffer->Unmap();
+            vertexBuffer->Unmap();
+        }
+
+        if (hitFound)
+        {
+            outDistance = closestDistance;
+            return true;
+        }
+
+        return false;
     }
 
     void SelectionRaycaster::UpdateDebugAABB(const AABB &aabb)
@@ -83,16 +228,40 @@ namespace mmo
         const auto &hitResult = m_raySceneQuery.GetLastResult();
         if (!hitResult.empty())
         {
-            Entity *entity = (Entity *)hitResult[0].movable;
-            if (entity)
+            // Find the closest entity that actually intersects with the ray geometry
+            Entity *closestEntity = nullptr;
+            float closestDistance = std::numeric_limits<float>::max();
+
+            for (const auto &result : hitResult)
             {
-                MapEntity *mapEntity = entity->GetUserObject<MapEntity>();
+                Entity *entity = static_cast<Entity *>(result.movable);
+                if (!entity)
+                {
+                    continue;
+                }
+
+                // Test against actual mesh geometry
+                float hitDistance;
+                if (IntersectMeshGeometry(ray, entity, hitDistance))
+                {
+                    if (hitDistance < closestDistance)
+                    {
+                        closestDistance = hitDistance;
+                        closestEntity = entity;
+                    }
+                }
+            }
+
+            // Select the closest entity if we found one
+            if (closestEntity)
+            {
+                MapEntity *mapEntity = closestEntity->GetUserObject<MapEntity>();
                 if (mapEntity)
                 {
                     // Note: Duplication callback will be provided by WorldEditorInstance
                     // since it requires CreateMapEntity and GenerateUniqueId
                     m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*mapEntity, nullptr));
-                    UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
+                    UpdateDebugAABB(closestEntity->GetWorldBoundingBox());
                 }
             }
         }

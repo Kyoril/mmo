@@ -80,6 +80,13 @@ namespace mmo
         /// @return The created ray.
         Ray CreateRayFromViewport(float viewportX, float viewportY) const;
 
+        /// @brief Performs accurate ray-mesh intersection using triangle tests.
+        /// @param ray The ray in world space.
+        /// @param entity The entity to test against.
+        /// @param outDistance The distance to the closest hit point (if any).
+        /// @return True if the ray intersects the mesh geometry, false otherwise.
+        bool IntersectMeshGeometry(const Ray &ray, class Entity *entity, float &outDistance) const;
+
     private:
         Camera &m_camera;
         RaySceneQuery &m_raySceneQuery;
