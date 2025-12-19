@@ -195,6 +195,15 @@ namespace mmo
 			[this]()
 			{ Save(); });
 
+		// Create world settings panel
+		m_worldSettingsPanel = std::make_unique<WorldSettingsPanel>(
+			*m_terrain,
+			m_hasTerrain,
+			m_editMode,
+			m_terrainEditMode.get(),
+			[this](WorldEditMode *mode)
+			{ SetEditMode(mode); });
+
 		// Set up delete callback
 		m_sceneOutlineWindow->SetDeleteCallback([this](uint64 id)
 												{
@@ -402,7 +411,7 @@ namespace mmo
 			[this](WorldEditMode *mode)
 			{ SetEditMode(mode); });
 
-		DrawWorldSettingsPanel(worldSettingsId);
+		m_worldSettingsPanel->Draw(worldSettingsId);
 		DrawViewportPanel(viewportId);
 		DrawSceneOutlinePanel(sceneOutlineId);
 
@@ -451,72 +460,6 @@ namespace mmo
 		{
 			SetEditMode(m_skyEditMode.get());
 		}
-	}
-
-	void WorldEditorInstance::DrawWorldSettingsPanel(const String &worldSettingsId)
-	{
-		if (ImGui::Begin(worldSettingsId.c_str()))
-		{
-			if (ImGui::CollapsingHeader("World Settings", ImGuiTreeNodeFlags_DefaultOpen))
-			{
-				if (ImGui::Checkbox("Has Terrain", &m_hasTerrain))
-				{
-					m_terrain->SetVisible(m_hasTerrain);
-
-					// Ensure terrain mode is not selectable if there is no terrain
-					if (!m_hasTerrain && m_editMode == m_terrainEditMode.get())
-					{
-						SetEditMode(nullptr);
-					}
-				}
-
-				ImGui::BeginDisabled(!m_hasTerrain);
-
-				static const char *s_noMaterialPreview = "<None>";
-
-				const char *previewString = s_noMaterialPreview;
-				if (m_terrain->GetDefaultMaterial())
-				{
-					previewString = m_terrain->GetDefaultMaterial()->GetName().data();
-				}
-
-				if (ImGui::BeginCombo("Terrain Default Material", previewString))
-				{
-					ImGui::EndCombo();
-				}
-
-				if (m_terrain)
-				{
-					bool wireframe = m_terrain->IsWireframeVisible();
-					if (ImGui::Checkbox("Show Wireframe on Top", &wireframe))
-					{
-						m_terrain->SetWireframeVisible(wireframe);
-					}
-				}
-
-				if (m_hasTerrain)
-				{
-					if (ImGui::BeginDragDropTarget())
-					{
-						// We only accept mesh file drops
-						if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmat"))
-						{
-							m_terrain->SetDefaultMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
-						}
-
-						if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmi"))
-						{
-							m_terrain->SetDefaultMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
-						}
-
-						ImGui::EndDragDropTarget();
-					}
-				}
-
-				ImGui::EndDisabled();
-			}
-		}
-		ImGui::End();
 	}
 
 	void WorldEditorInstance::DrawViewportPanel(const String &viewportId)

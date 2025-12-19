@@ -35,6 +35,7 @@
 #include "scene_outline_window.h"
 #include "grid_snap_settings.h"
 #include "details_panel.h"
+#include "world_settings_panel.h"
 
 namespace mmo
 {
@@ -190,7 +191,6 @@ namespace mmo
 	private:
 		// UI related methods
 		void HandleKeyboardShortcuts();
-		void DrawWorldSettingsPanel(const String &worldSettingsId);
 		void DrawViewportPanel(const String &viewportId);
 		void DrawSceneOutlinePanel(const String &sceneOutlineId);
 		void HandleViewportInteractions(const ImVec2 &availableSpace);
@@ -369,6 +369,7 @@ namespace mmo
 		static TexturePtr s_scaleIcon;
 
 		std::unique_ptr<DetailsPanel> m_detailsPanel;
+		std::unique_ptr<WorldSettingsPanel> m_worldSettingsPanel;
 		std::unique_ptr<SceneOutlineWindow> m_sceneOutlineWindow;
 	};
 }
