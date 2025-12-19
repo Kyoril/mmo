@@ -62,6 +62,69 @@ namespace mmo
 		"Arcane"
 	};
 
+	struct SpellEffectInfo
+	{
+		const char* name;
+		const char* category;
+		const char* description;
+	};
+
+	static SpellEffectInfo s_spellEffectInfo[] = {
+		{ "None", "Utility", "No effect" },
+		{ "Instakill", "Damage", "Instantly kills the target" },
+		{ "School Damage", "Damage", "Deals damage of a specific school" },
+		{ "Dummy", "Utility", "Script-handled effect" },
+		{ "Portal Teleport", "Movement", "Creates a portal for teleportation" },
+		{ "Teleport Units", "Movement", "Teleports units to a location" },
+		{ "Apply Aura", "Buff/Debuff", "Applies an aura effect over time" },
+		{ "Environmental Damage", "Damage", "Deals environmental damage" },
+		{ "Power Drain", "Resource", "Drains mana/energy from target" },
+		{ "Health Leech", "Damage", "Steals health from target" },
+		{ "Heal", "Healing", "Restores health to target" },
+		{ "Bind", "Movement", "Binds player to current location" },
+		{ "Portal", "Movement", "Opens a portal" },
+		{ "Quest Complete", "Utility", "Marks quest as complete" },
+		{ "Weapon Damage + (noschool)", "Damage", "Weapon damage without school" },
+		{ "Resurrect", "Healing", "Brings target back to life" },
+		{ "Extra Attacks", "Combat", "Grants additional attacks" },
+		{ "Dodge", "Combat", "Forces target to dodge" },
+		{ "Evade", "Combat", "Makes target evade attacks" },
+		{ "Parry", "Combat", "Forces target to parry" },
+		{ "Block", "Combat", "Forces target to block" },
+		{ "Create Item", "Utility", "Creates an item in inventory" },
+		{ "Weapon", "Combat", "Weapon-based effect" },
+		{ "Defense", "Combat", "Modifies defense" },
+		{ "Persistent Area Aura", "Buff/Debuff", "Creates persistent area aura" },
+		{ "Summon", "Summon", "Summons a creature" },
+		{ "Leap", "Movement", "Makes unit leap to location" },
+		{ "Energize", "Resource", "Restores mana/energy" },
+		{ "Weapon % Dmg", "Damage", "Percentage of weapon damage" },
+		{ "Trigger Missile", "Combat", "Launches a missile" },
+		{ "Open Lock", "Utility", "Opens locked objects" },
+		{ "Learn Spell", "Utility", "Teaches a spell" },
+		{ "Spell Defense", "Combat", "Improves spell resistance" },
+		{ "Dispel", "Utility", "Removes auras from target" },
+		{ "Language", "Utility", "Teaches a language" },
+		{ "Dual Wield", "Combat", "Enables dual wielding" },
+		{ "Teleport Units Face Caster", "Movement", "Teleports target facing caster" },
+		{ "Skill Step", "Utility", "Increases skill level" },
+		{ "Spawn", "Summon", "Spawns an object/unit" },
+		{ "Trade Skill", "Utility", "Modifies trade skill" },
+		{ "Stealth", "Utility", "Puts unit in stealth" },
+		{ "Detect", "Utility", "Detects stealthed units" },
+		{ "Tame Creature", "Utility", "Tames a creature" },
+		{ "Summon Pet", "Summon", "Summons player's pet" },
+		{ "Learn Pet Spell", "Utility", "Teaches pet a spell" },
+		{ "Weapon Damage +", "Damage", "Weapon damage with bonus" },
+		{ "Reset Attribute Points", "Utility", "Resets character attributes" },
+		{ "Heal Percentage", "Healing", "Heals by percentage of max health" },
+		{ "Charge", "Movement", "Charges at target" },
+		{ "Apply Area Aura", "Buff/Debuff", "Applies aura in an area" },
+		{ "Interrupt Spell Cast", "Combat", "Interrupts spell casting" },
+		{ "Reset Talents", "Utility", "Resets talent points" },
+		{ "Proficiency", "Utility", "Grants weapon proficiency" }
+	};
+
 	static String s_spellEffectNames[] = {
 		"None",
 		"Instakill",
@@ -1396,20 +1459,68 @@ namespace mmo
 				// Effect frame
 				int currentEffect = currentEntry.effects(effectIndex).type();
 				ImGui::PushID(effectIndex);
-				if (ImGui::Combo("Effect", &currentEffect,
-					[](void* data, int idx, const char** out_text)
+
+				// Searchable effect dropdown
+				static char effectSearchBuffer[128] = "";
+				bool effectChanged = false;
+
+				ImGui::SetNextItemWidth(300);
+				if (ImGui::BeginCombo("Effect", s_spellEffectInfo[currentEffect].name, ImGuiComboFlags_HeightLarge))
+				{
+					ImGui::SetNextItemWidth(-1);
+					ImGui::InputText("##effectsearch", effectSearchBuffer, IM_ARRAYSIZE(effectSearchBuffer));
+					ImGui::Separator();
+
+					for (int idx = 0; idx < IM_ARRAYSIZE(s_spellEffectInfo); ++idx)
 					{
-						if (idx < 0 || idx >= IM_ARRAYSIZE(s_spellEffectNames))
+						// Filter based on search
+						if (effectSearchBuffer[0] != '\0')
 						{
-							return false;
+							String searchLower = effectSearchBuffer;
+							String nameLower = s_spellEffectInfo[idx].name;
+							String categoryLower = s_spellEffectInfo[idx].category;
+							std::transform(searchLower.begin(), searchLower.end(), searchLower.begin(), ::tolower);
+							std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
+							std::transform(categoryLower.begin(), categoryLower.end(), categoryLower.begin(), ::tolower);
+
+							if (nameLower.find(searchLower) == String::npos &&
+								categoryLower.find(searchLower) == String::npos)
+							{
+								continue;
+							}
 						}
 
-						*out_text = s_spellEffectNames[idx].c_str();
-						return true;
-					}, nullptr, IM_ARRAYSIZE(s_spellEffectNames)))
-				{
-					currentEntry.mutable_effects(effectIndex)->set_type(currentEffect);
+						const bool isSelected = (idx == currentEffect);
+						char label[256];
+						snprintf(label, sizeof(label), "[%s] %s", s_spellEffectInfo[idx].category, s_spellEffectInfo[idx].name);
+
+						if (ImGui::Selectable(label, isSelected))
+						{
+							currentEntry.mutable_effects(effectIndex)->set_type(idx);
+							effectChanged = true;
+							effectSearchBuffer[0] = '\0';
+						}
+
+						if (isSelected)
+						{
+							ImGui::SetItemDefaultFocus();
+						}
+
+						// Show description as tooltip
+						if (ImGui::IsItemHovered())
+						{
+							ImGui::BeginTooltip();
+							ImGui::Text("%s", s_spellEffectInfo[idx].description);
+							ImGui::EndTooltip();
+						}
+					}
+
+					ImGui::EndCombo();
 				}
+
+				// Show current effect description
+				ImGui::SameLine();
+				DrawHelpMarker(s_spellEffectInfo[currentEffect].description);
 				ImGui::SameLine();
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.6f, 0.7f, 0.8f));
 				if (ImGui::Button("Details", ImVec2(80, 0)))
@@ -1460,35 +1571,33 @@ namespace mmo
 	{
 		if (ImGui::BeginPopupModal("SpellEffectDetails", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking))
 		{
-			ImGui::Text("%s effect #%d", currentEntry.name().c_str(), effectIndex + 1);
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+
+			DrawSectionHeader("Effect Configuration");
+			ImGui::Text("Spell: %s (Effect #%d)", currentEntry.name().c_str(), effectIndex + 1);
+			ImGui::Spacing();
 
 			int currentEffectType = effect.type();
-			if (ImGui::Combo("Effect", &currentEffectType,
-				[](void* data, int idx, const char** out_text)
-				{
-					if (idx < 0 || idx >= IM_ARRAYSIZE(s_spellEffectNames))
-					{
-						return false;
-					}
 
-					*out_text = s_spellEffectNames[idx].c_str();
-					return true;
-				}, nullptr, IM_ARRAYSIZE(s_spellEffectNames)))
+			// Effect type info box
+			ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.2f, 0.25f, 0.5f));
+			if (ImGui::BeginChild("effectinfo", ImVec2(500, 60), true))
 			{
-				currentEntry.mutable_effects(effectIndex)->set_type(currentEffectType);
-			}
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
+				ImGui::Text("%s", s_spellEffectInfo[currentEffectType].name);
+				ImGui::PopStyleColor();
 
-			switch(currentEffectType)
-			{
-			case spell_effects::ApplyAura:
-			case spell_effects::ApplyAreaAura:
-			case spell_effects::PersistentAreaAura:
-				DrawSpellAuraEffectDetails(effect);
-				break;
-			default:
-				break;
+				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Category: %s", s_spellEffectInfo[currentEffectType].category);
+				ImGui::TextWrapped("%s", s_spellEffectInfo[currentEffectType].description);
+				ImGui::EndChild();
 			}
+			ImGui::PopStyleColor();
 
+			ImGui::Spacing();
+			DrawSectionHeader("Core Settings");
+
+			// Targeting
 			int effectTarget = effect.targeta();
 			if (ImGui::Combo("Target", &effectTarget, [](void*, int idx, const char** out_text)
 				{
@@ -1503,6 +1612,33 @@ namespace mmo
 			{
 				effect.set_targeta(effectTarget);
 			}
+
+			float radius = effect.radius();
+			if (ImGui::DragFloat("Radius", &radius, 0.5f, 0.0f, 1000.0f, "%.1f yards"))
+			{
+				effect.set_radius(radius);
+			}
+			ImGui::SameLine();
+			DrawHelpMarker("Area of effect radius in yards");
+
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+
+			// Aura configuration
+			if (currentEffectType == spell_effects::ApplyAura ||
+				currentEffectType == spell_effects::ApplyAreaAura ||
+				currentEffectType == spell_effects::PersistentAreaAura)
+			{
+				DrawSectionHeader("Aura Configuration");
+				DrawSpellAuraEffectDetails(effect);
+				ImGui::Spacing();
+				ImGui::Separator();
+				ImGui::Spacing();
+			}
+
+			// Type-specific settings
+			DrawSectionHeader("Type-Specific Settings");
 
 			switch (currentEffectType)
 			{
@@ -1629,15 +1765,12 @@ namespace mmo
 				}
 			}
 
-			float radius = effect.radius();
-			if (ImGui::InputFloat("Radius", &radius))
-			{
-				effect.set_radius(radius);
-			}
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+			DrawSectionHeader("Effect Power");
 
-			ImGui::Text("Points");
-
-			if (ImGui::BeginChildFrame(ImGui::GetID("effectPoints"), ImVec2(-1, 200), ImGuiWindowFlags_AlwaysUseWindowPadding))
+			if (ImGui::BeginChild("effectPoints", ImVec2(500, 280), true))
 			{
 				int basePoints = currentEntry.effects(effectIndex).basepoints();
 				if (ImGui::InputInt("Base Points", &basePoints))
@@ -1669,8 +1802,13 @@ namespace mmo
 					currentEntry.mutable_effects(effectIndex)->set_powerbonusfactor(spellPowerScaling);
 				}
 
+				ImGui::Spacing();
+				ImGui::Separator();
+				ImGui::Text("Power Preview");
+				ImGui::Spacing();
+
 				static int characterLevel = 1;
-				ImGui::SliderInt("Preview Level", &characterLevel, 1, 60);
+				ImGui::SliderInt("Character Level", &characterLevel, 1, 60);
 
 				// Calculate level scaling
 				int level = characterLevel;
@@ -1684,21 +1822,31 @@ namespace mmo
 				}
 				level -= currentEntry.baselevel();
 
-				ImGui::BeginDisabled(true);
 				int min = basePoints + level * currentEntry.effects(effectIndex).pointsperlevel() + std::min<int>(1, diceSides + level * currentEntry.effects(effectIndex).diceperlevel());
 				int max = basePoints + level * currentEntry.effects(effectIndex).pointsperlevel() + diceSides + level * currentEntry.effects(effectIndex).diceperlevel();
-				ImGui::InputInt("Min", &min);
-				ImGui::InputInt("Max", &max);
-				ImGui::EndDisabled();
 
-				ImGui::EndChildFrame();
+				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.2f, 0.3f, 0.25f, 0.5f));
+				ImGui::BeginDisabled(true);
+				ImGui::InputInt("Min Value", &min);
+				ImGui::InputInt("Max Value", &max);
+				ImGui::EndDisabled();
+				ImGui::PopStyleColor();
+
+				ImGui::EndChild();
 			}
 
-			if (ImGui::Button("Close"))
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.6f, 0.9f, 0.8f));
+			if (ImGui::Button("Close", ImVec2(120, 0)))
 			{
 				ImGui::CloseCurrentPopup();
 			}
+			ImGui::PopStyleColor();
 
+			ImGui::PopStyleVar(2);
 			ImGui::EndPopup();
 		}
 	}
