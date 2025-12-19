@@ -176,8 +176,12 @@ namespace mmo
 		// Setup edit modes
 		m_terrainEditMode = std::make_unique<TerrainEditMode>(*this, *m_terrain, m_editor.GetProject().zones, *m_camera);
 		m_entityEditMode = std::make_unique<EntityEditMode>(*this);
+
 		// Create scene outline window
 		m_sceneOutlineWindow = std::make_unique<SceneOutlineWindow>(m_selection, m_scene);
+
+		// Create entity factory
+		m_entityFactory = std::make_unique<EntityFactory>(m_scene, m_editor, m_mapEntities, m_sceneOutlineWindow.get());
 
 		// Create details panel
 		m_detailsPanel = std::make_unique<DetailsPanel>(
@@ -858,167 +862,16 @@ namespace mmo
 
 	Entity *WorldEditorInstance::CreateMapEntity(const String &assetName, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale, uint64 objectId)
 	{
-		if (objectId == 0)
-		{
-			objectId = GenerateUniqueId();
-		}
-
-		const String uniqueId = "Entity_" + std::to_string(objectId);
-
-		// Entity already exists? This is an error!
-		if (m_scene.HasEntity(uniqueId))
-		{
-			return m_scene.GetEntity(uniqueId);
-		}
-
-		Entity *entity = m_scene.CreateEntity(uniqueId, assetName);
+		Entity *entity = m_entityFactory->CreateMapEntity(assetName, position, orientation, scale, objectId);
 		if (entity)
 		{
-			entity->SetQueryFlags(SceneQueryFlags_Entity);
-
-			auto &node = m_scene.CreateSceneNode(uniqueId);
-			m_scene.GetRootSceneNode().AddChild(node);
-			node.AttachObject(*entity);
-			node.SetPosition(position);
-			node.SetOrientation(orientation);
-			node.SetScale(scale);
-
-			const auto &mapEntity = m_mapEntities.emplace_back(std::make_unique<MapEntity>(m_scene, node, *entity, objectId));
-			mapEntity->SetReferencePagePosition(
-				PagePosition(
-					static_cast<uint32>(floor(position.x / terrain::constants::PageSize)) + 32,
-					static_cast<uint32>(floor(position.z / terrain::constants::PageSize)) + 32));
-			mapEntity->remove.connect(this, &WorldEditorInstance::OnMapEntityRemoved);
-			mapEntity->MarkModified();
-			entity->SetUserObject(m_mapEntities.back().get());
-
-			// Update scene outline when a new entity is created
-			if (m_sceneOutlineWindow)
+			MapEntity *mapEntity = entity->GetUserObject<MapEntity>();
+			if (mapEntity)
 			{
-				m_sceneOutlineWindow->Update();
+				mapEntity->remove.connect(this, &WorldEditorInstance::OnMapEntityRemoved);
+				mapEntity->MarkModified();
 			}
 		}
-
-		return entity;
-	}
-
-	Entity *WorldEditorInstance::CreateUnitSpawnEntity(proto::UnitSpawnEntry &spawn)
-	{
-		proto::Project &project = m_editor.GetProject();
-
-		// TODO: Use different mesh file?
-		String meshFile = "Editor/Joint.hmsh";
-
-		if (const auto *unit = project.units.getById(spawn.unitentry()))
-		{
-			const uint32 modelId = unit->malemodel() ? unit->malemodel() : unit->femalemodel();
-
-			if (modelId == 0)
-			{
-				// TODO: Maybe spawn a dummy unit in editor later, so we can at least see, select and delete / modify the spawn
-				WLOG("No model id assigned!");
-			}
-			else if (const auto *model = project.models.getById(modelId))
-			{
-				if (model->flags() & model_data_flags::IsCustomizable)
-				{
-					auto definition = AvatarDefinitionManager::Get().Load(model->filename());
-					if (!definition)
-					{
-						ELOG("Unable to load avatar definition " << model->filename());
-					}
-					else
-					{
-						meshFile = definition->GetBaseMesh();
-
-						// TODO: Apply customization
-					}
-				}
-				else
-				{
-					meshFile = model->filename();
-				}
-			}
-			else
-			{
-				WLOG("Model " << modelId << " not found!");
-			}
-		}
-		else
-		{
-			WLOG("Spawn point of non-existant unit " << spawn.unitentry() << " found");
-		}
-
-		const String uniqueId = "UnitSpawn_" + std::to_string(m_unitSpawnIdGenerator.GenerateId());
-		Entity *entity = m_scene.CreateEntity(uniqueId, meshFile);
-		if (entity)
-		{
-			ASSERT(entity->GetMesh());
-			entity->SetQueryFlags(SceneQueryFlags_UnitSpawns);
-
-			auto &node = m_scene.CreateSceneNode(uniqueId);
-			m_scene.GetRootSceneNode().AddChild(node);
-			node.AttachObject(*entity);
-			node.SetPosition(Vector3(spawn.positionx(), spawn.positiony(), spawn.positionz()));
-			node.SetOrientation(Quaternion(Radian(spawn.rotation()), Vector3::UnitY));
-			node.SetScale(Vector3::UnitScale);
-
-			// TODO: Is this safe? Does protobuf move the object around in memory?
-			entity->SetUserObject(&spawn);
-		}
-
-		return entity;
-	}
-
-	Entity *WorldEditorInstance::CreateObjectSpawnEntity(proto::ObjectSpawnEntry &spawn)
-	{
-		proto::Project &project = m_editor.GetProject();
-
-		// TODO: Use different mesh file?
-		String meshFile = "Editor/Joint.hmsh";
-
-		if (const auto *object = project.objects.getById(spawn.objectentry()))
-		{
-			const uint32 modelId = object->displayid();
-
-			if (modelId == 0)
-			{
-				// TODO: Maybe spawn a dummy unit in editor later, so we can at least see, select and delete / modify the spawn
-				WLOG("No model id assigned!");
-			}
-			else if (const auto *model = project.objectDisplays.getById(modelId))
-			{
-				meshFile = model->filename();
-			}
-			else
-			{
-				WLOG("Model " << modelId << " not found!");
-			}
-		}
-		else
-		{
-			WLOG("Spawn point of non-existant object " << spawn.objectentry() << " found");
-		}
-
-		const String uniqueId = "ObjectSpawn_" + std::to_string(m_unitSpawnIdGenerator.GenerateId());
-		Entity *entity = m_scene.CreateEntity(uniqueId, meshFile);
-		if (entity)
-		{
-			ASSERT(entity->GetMesh());
-			entity->SetQueryFlags(SceneQueryFlags_ObjectSpawns);
-
-			auto &node = m_scene.CreateSceneNode(uniqueId);
-			m_scene.GetRootSceneNode().AddChild(node);
-			node.AttachObject(*entity);
-
-			node.SetPosition(Vector3(spawn.location().positionx(), spawn.location().positiony(), spawn.location().positionz()));
-			node.SetOrientation(Quaternion(spawn.location().rotationw(), spawn.location().rotationx(), spawn.location().rotationy(), spawn.location().rotationz()));
-			node.SetScale(Vector3::UnitScale);
-
-			// TODO: Is this safe? Does protobuf move the object around in memory?
-			entity->SetUserObject(&spawn);
-		}
-
 		return entity;
 	}
 
@@ -1113,7 +966,7 @@ namespace mmo
 			meshFile = model->filename();
 		}
 
-		const uint32 guid = m_unitSpawnIdGenerator.GenerateId();
+		const uint32 guid = m_entityFactory->GenerateUnitSpawnId();
 		Entity *entity = m_scene.CreateEntity("Spawn_" + std::to_string(guid), meshFile);
 		ASSERT(entity);
 
@@ -1155,7 +1008,7 @@ namespace mmo
 			return;
 		}
 
-		const uint32 guid = m_unitSpawnIdGenerator.GenerateId();
+		const uint32 guid = m_entityFactory->GenerateObjectSpawnId();
 		Entity *entity = m_scene.CreateEntity("ObjectSpawn_" + std::to_string(guid), model->filename());
 		ASSERT(entity);
 
@@ -1498,8 +1351,8 @@ namespace mmo
 
 		m_spawnNodes.clear();
 
-		m_unitSpawnIdGenerator.Reset();
-		m_objectSpawnIdGenerator.Reset();
+		m_entityFactory->ResetUnitSpawnIdGenerator();
+		m_entityFactory->ResetObjectSpawnIdGenerator();
 	}
 
 	void WorldEditorInstance::OnPageAvailabilityChanged(const PageNeighborhood &page, const bool isAvailable)
@@ -1947,11 +1800,11 @@ namespace mmo
 
 		if (content.uniqueId == 0)
 		{
-			content.uniqueId = m_objectIdGenerator.GenerateId();
+			content.uniqueId = m_entityFactory->GenerateUniqueId();
 		}
 		else
 		{
-			m_objectIdGenerator.NotifyId(content.uniqueId);
+			m_entityFactory->NotifyExistingId(content.uniqueId);
 		}
 
 		CreateMapEntity(m_meshNames[content.meshNameIndex], content.position, content.rotation, content.scale, content.uniqueId);
@@ -2013,11 +1866,11 @@ namespace mmo
 
 		if (uniqueId == 0)
 		{
-			uniqueId = m_objectIdGenerator.GenerateId();
+			uniqueId = m_entityFactory->GenerateUniqueId();
 		}
 		else
 		{
-			m_objectIdGenerator.NotifyId(uniqueId);
+			m_entityFactory->NotifyExistingId(uniqueId);
 		}
 
 		if (Entity *entity = CreateMapEntity(m_meshNames[meshNameIndex], position, rotation, scale, uniqueId))

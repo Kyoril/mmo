@@ -38,6 +38,7 @@
 #include "details_panel.h"
 #include "world_settings_panel.h"
 #include "viewport_panel.h"
+#include "entity_factory.h"
 
 namespace mmo
 {
@@ -200,10 +201,6 @@ namespace mmo
 
 		Entity *CreateMapEntity(const String &assetName, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale, uint64 objectId) override;
 
-		Entity *CreateUnitSpawnEntity(proto::UnitSpawnEntry &spawn);
-
-		Entity *CreateObjectSpawnEntity(proto::ObjectSpawnEntry &spawn);
-
 		void OnMapEntityRemoved(MapEntity &entity);
 
 		PagePosition GetPagePositionFromCamera() const;
@@ -314,13 +311,11 @@ namespace mmo
 		Selection m_selection;
 		std::unique_ptr<TransformWidget> m_transformWidget;
 		std::unique_ptr<SelectionRaycaster> m_selectionRaycaster;
+		std::unique_ptr<EntityFactory> m_entityFactory;
 
 		ManualRenderObject *m_debugBoundingBox;
 
 		float m_cameraSpeed{20.0f};
-		IdGenerator<uint64> m_objectIdGenerator{1};
-		IdGenerator<uint64> m_unitSpawnIdGenerator{1};
-		IdGenerator<uint64> m_objectSpawnIdGenerator{1};
 
 		std::vector<std::unique_ptr<MapEntity>> m_mapEntities;
 		struct DeletedEntityRef
