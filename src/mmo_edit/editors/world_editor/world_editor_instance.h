@@ -34,6 +34,7 @@
 #include "edit_modes/sky_edit_mode.h"
 #include "scene_outline_window.h"
 #include "grid_snap_settings.h"
+#include "details_panel.h"
 
 namespace mmo
 {
@@ -51,18 +52,15 @@ namespace mmo
 	class MapEntity final : public NonCopyable
 	{
 	public:
-		typedef signal<void(const MapEntity&)> TransformChangedSignal;
+		typedef signal<void(const MapEntity &)> TransformChangedSignal;
 		TransformChangedSignal transformChanged;
 
-		typedef signal<void(MapEntity&)> RemoveSignal;
+		typedef signal<void(MapEntity &)> RemoveSignal;
 		RemoveSignal remove;
 
 	public:
-		explicit MapEntity(Scene& scene, SceneNode& sceneNode, Entity& entity, uint32 uniqueId)
-			: m_scene(scene)
-			, m_sceneNode(sceneNode)
-			, m_entity(entity)
-			, m_uniqueId(uniqueId)
+		explicit MapEntity(Scene &scene, SceneNode &sceneNode, Entity &entity, uint32 uniqueId)
+			: m_scene(scene), m_sceneNode(sceneNode), m_entity(entity), m_uniqueId(uniqueId)
 		{
 		}
 
@@ -73,12 +71,12 @@ namespace mmo
 		}
 
 	public:
-		SceneNode& GetSceneNode() const
+		SceneNode &GetSceneNode() const
 		{
 			return m_sceneNode;
 		}
 
-		Entity& GetEntity() const
+		Entity &GetEntity() const
 		{
 			return m_entity;
 		}
@@ -93,12 +91,12 @@ namespace mmo
 			m_referencePagePosition.reset();
 		}
 
-		void SetReferencePagePosition(const PagePosition& position)
+		void SetReferencePagePosition(const PagePosition &position)
 		{
 			m_referencePagePosition = position;
 		}
 
-		const std::optional<PagePosition>& GetReferencePagePosition() const
+		const std::optional<PagePosition> &GetReferencePagePosition() const
 		{
 			return m_referencePagePosition;
 		}
@@ -118,42 +116,41 @@ namespace mmo
 			m_modified = false;
 		}
 
-		const String& GetDisplayName() const
+		const String &GetDisplayName() const
 		{
 			return m_name;
 		}
 
-		const String& GetCategory() const
+		const String &GetCategory() const
 		{
 			return m_category;
 		}
 
-		void SetDisplayName(const String& name)
+		void SetDisplayName(const String &name)
 		{
 			m_name = name;
 			m_modified = true;
 		}
 
-		void SetCategory(const String& category)
+		void SetCategory(const String &category)
 		{
 			m_category = category;
 			m_modified = true;
 		}
 
 	private:
-		Scene& m_scene;
-		SceneNode& m_sceneNode;
-		Entity& m_entity;
+		Scene &m_scene;
+		SceneNode &m_sceneNode;
+		Entity &m_entity;
 		uint64 m_uniqueId;
 		std::optional<PagePosition> m_referencePagePosition;
-		bool m_modified{ false };
+		bool m_modified{false};
 		String m_name;
 		String m_category;
 	};
 
 	struct WorldPage
 	{
-
 	};
 
 	class SelectableVisitor
@@ -161,19 +158,19 @@ namespace mmo
 	public:
 		virtual ~SelectableVisitor() = default;
 
-		virtual void Visit(SelectedMapEntity& selectable) = 0;
+		virtual void Visit(SelectedMapEntity &selectable) = 0;
 
-		virtual void Visit(SelectedTerrainTile& selectable) = 0;
+		virtual void Visit(SelectedTerrainTile &selectable) = 0;
 
-		virtual void Visit(SelectedUnitSpawn& selectable) = 0;
+		virtual void Visit(SelectedUnitSpawn &selectable) = 0;
 
-		virtual void Visit(SelectedObjectSpawn& selectable) = 0;
+		virtual void Visit(SelectedObjectSpawn &selectable) = 0;
 	};
 
 	class WorldEditorInstance final : public EditorInstance, public IPageLoaderListener, public SelectableVisitor, public ChunkReader, public IWorldEditor
 	{
 	public:
-		explicit WorldEditorInstance(EditorHost& host, WorldEditor& editor, Path asset);
+		explicit WorldEditorInstance(EditorHost &host, WorldEditor &editor, Path asset);
 		~WorldEditorInstance() override;
 
 	public:
@@ -181,7 +178,7 @@ namespace mmo
 		void Render();
 
 		void Draw() override;
-		
+
 		void OnMouseButtonDown(uint32 button, uint16 x, uint16 y) override;
 
 		void OnMouseButtonUp(uint32 button, uint16 x, uint16 y) override;
@@ -189,23 +186,21 @@ namespace mmo
 		void OnMouseMoved(uint16 x, uint16 y) override;
 
 		bool Save() override;
+
 	private:
 		// UI related methods
 		void HandleKeyboardShortcuts();
-		void DrawDetailsPanel(const String& detailsId);
-		void DrawEditModeSelector();
-		void DrawSelectionDetails();
-		void DrawWorldSettingsPanel(const String& worldSettingsId);
-		void DrawViewportPanel(const String& viewportId);
-		void DrawSceneOutlinePanel(const String& sceneOutlineId);
-		void HandleViewportInteractions(const ImVec2& availableSpace);
-		void DrawViewportToolbar(const ImVec2& availableSpace);
+		void DrawWorldSettingsPanel(const String &worldSettingsId);
+		void DrawViewportPanel(const String &viewportId);
+		void DrawSceneOutlinePanel(const String &sceneOutlineId);
+		void HandleViewportInteractions(const ImVec2 &availableSpace);
+		void DrawViewportToolbar(const ImVec2 &availableSpace);
 		void DrawSnapSettings();
-		void DrawTransformButtons(const ImVec2& availableSpace);
+		void DrawTransformButtons(const ImVec2 &availableSpace);
 		void HandleViewportDragDrop();
-		void InitializeDockLayout(ImGuiID dockspaceId, const String& viewportId, const String& detailsId, const String& worldSettingsId);
-		
-		void UpdateDebugAABB(const AABB& aabb);
+		void InitializeDockLayout(ImGuiID dockspaceId, const String &viewportId, const String &detailsId, const String &worldSettingsId);
+
+		void UpdateDebugAABB(const AABB &aabb);
 
 		void PerformEntitySelectionRaycast(float viewportX, float viewportY);
 
@@ -215,56 +210,56 @@ namespace mmo
 
 		void OnTerrainMouseMoved(float viewportX, float viewportY);
 
-		Entity* CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 objectId) override;
+		Entity *CreateMapEntity(const String &assetName, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale, uint64 objectId) override;
 
-		Entity* CreateUnitSpawnEntity(proto::UnitSpawnEntry& spawn);
+		Entity *CreateUnitSpawnEntity(proto::UnitSpawnEntry &spawn);
 
-		Entity* CreateObjectSpawnEntity(proto::ObjectSpawnEntry& spawn);
+		Entity *CreateObjectSpawnEntity(proto::ObjectSpawnEntry &spawn);
 
-		void OnMapEntityRemoved(MapEntity& entity);
+		void OnMapEntityRemoved(MapEntity &entity);
 
 		PagePosition GetPagePositionFromCamera() const;
 
-		void SetMapEntry(proto::MapEntry* entry);
+		void SetMapEntry(proto::MapEntry *entry);
 
 	public:
-		void OnPageAvailabilityChanged(const PageNeighborhood& page, bool isAvailable) override;
+		void OnPageAvailabilityChanged(const PageNeighborhood &page, bool isAvailable) override;
 
 		void EnsurePageIsLoaded(PagePosition pos);
 
-		void Visit(SelectedMapEntity& selectable) override;
+		void Visit(SelectedMapEntity &selectable) override;
 
-		void Visit(SelectedTerrainTile& selectable) override;
+		void Visit(SelectedTerrainTile &selectable) override;
 
-		void Visit(SelectedUnitSpawn& selectable) override;
+		void Visit(SelectedUnitSpawn &selectable) override;
 
-		void Visit(SelectedObjectSpawn& selectable) override;
+		void Visit(SelectedObjectSpawn &selectable) override;
 
 	private:
-		bool ReadMVERChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+		bool ReadMVERChunk(io::Reader &reader, uint32 chunkHeader, uint32 chunkSize);
 
-		bool ReadMeshChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+		bool ReadMeshChunk(io::Reader &reader, uint32 chunkHeader, uint32 chunkSize);
 
-		bool ReadEntityChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+		bool ReadEntityChunk(io::Reader &reader, uint32 chunkHeader, uint32 chunkSize);
 
-		bool ReadEntityChunkV2(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+		bool ReadEntityChunkV2(io::Reader &reader, uint32 chunkHeader, uint32 chunkSize);
 
-		bool ReadTerrainChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+		bool ReadTerrainChunk(io::Reader &reader, uint32 chunkHeader, uint32 chunkSize);
 
 		bool OnReadFinished() override;
 
-		void SetEditMode(WorldEditMode* editMode);
+		void SetEditMode(WorldEditMode *editMode);
 
 	public:
 		void ClearSelection() override;
 
 		void RemoveAllUnitSpawns() override;
 
-		void AddUnitSpawn(proto::UnitSpawnEntry& spawn, bool select) override;
+		void AddUnitSpawn(proto::UnitSpawnEntry &spawn, bool select) override;
 
-		void AddObjectSpawn(proto::ObjectSpawnEntry& spawn) override;
+		void AddObjectSpawn(proto::ObjectSpawnEntry &spawn) override;
 
-		Camera& GetCamera() const override;
+		Camera &GetCamera() const override;
 
 		bool IsGridSnapEnabled() const override { return m_gridSnapSettings.IsEnabled(); }
 
@@ -272,12 +267,12 @@ namespace mmo
 
 		bool HasTerrain() const override { return m_hasTerrain; }
 
-		terrain::Terrain* GetTerrain() const override { return m_terrain.get(); }
+		terrain::Terrain *GetTerrain() const override { return m_terrain.get(); }
 
 	private:
 		uint16 BuildPageIndex(uint8 x, uint8 y) const;
 
-		bool GetPageCoordinatesFromIndex(uint16 pageIndex, uint8& x, uint8& y) const;
+		bool GetPageCoordinatesFromIndex(uint16 pageIndex, uint8 &x, uint8 &y) const;
 
 		void LoadPageEntities(uint8 x, uint8 y);
 
@@ -287,35 +282,35 @@ namespace mmo
 		const std::filesystem::path GetWorldPath() const override { return m_assetPath; }
 
 		/// @brief Generates minimap images for all terrain pages and saves them to the AssetRegistry.
-		/// This method renders each terrain page from above using an orthographic camera and 
+		/// This method renders each terrain page from above using an orthographic camera and
 		/// render-to-texture, then saves the result as a texture file in the "minimaps" folder.
 		/// Filenames are encoded using page coordinates: (x << 8) | y.
 		void GenerateMinimaps();
 
 	private:
-		WorldEditor& m_editor;
+		WorldEditor &m_editor;
 		scoped_connection m_renderConnection;
 		ImVec2 m_lastAvailViewportSize;
 		bool m_wireFrame;
 		OctreeScene m_scene;
-		SceneNode* m_cameraAnchor { nullptr };
-		SceneNode* m_cameraNode { nullptr };
-		Entity* m_entity { nullptr };
-		Camera* m_camera { nullptr };
+		SceneNode *m_cameraAnchor{nullptr};
+		SceneNode *m_cameraNode{nullptr};
+		Entity *m_entity{nullptr};
+		Camera *m_camera{nullptr};
 		std::unique_ptr<WorldGrid> m_worldGrid;
-		int16 m_lastMouseX { 0 }, m_lastMouseY { 0 };
-		bool m_leftButtonPressed { false };
-		bool m_rightButtonPressed { false };
-		bool m_initDockLayout { true };
+		int16 m_lastMouseX{0}, m_lastMouseY{0};
+		bool m_leftButtonPressed{false};
+		bool m_rightButtonPressed{false};
+		bool m_initDockLayout{true};
 		MeshPtr m_mesh;
-		MeshEntry m_entry { };
+		MeshEntry m_entry{};
 		Vector3 m_cameraVelocity{};
-		bool m_hovering{ false };
+		bool m_hovering{false};
 
 		std::unique_ptr<terrain::Terrain> m_terrain;
 
 		GridSnapSettings m_gridSnapSettings;
-		
+
 		std::unique_ptr<asio::io_service::work> m_work;
 		asio::io_service m_workQueue;
 		asio::io_service m_dispatcher;
@@ -325,18 +320,18 @@ namespace mmo
 		std::unique_ptr<PagePOVPartitioner> m_memoryPointOfView;
 		std::unique_ptr<RaySceneQuery> m_raySceneQuery;
 
-		std::vector<SceneNode*> m_spawnNodes;
-		std::vector<Entity*> m_spawnEntities;
-			
+		std::vector<SceneNode *> m_spawnNodes;
+		std::vector<Entity *> m_spawnEntities;
+
 		Selection m_selection;
 		std::unique_ptr<TransformWidget> m_transformWidget;
 
-		ManualRenderObject* m_debugBoundingBox;
+		ManualRenderObject *m_debugBoundingBox;
 
-		float m_cameraSpeed { 20.0f };
-		IdGenerator<uint64> m_objectIdGenerator { 1 };
-		IdGenerator<uint64> m_unitSpawnIdGenerator{ 1 };
-		IdGenerator<uint64> m_objectSpawnIdGenerator{ 1 };
+		float m_cameraSpeed{20.0f};
+		IdGenerator<uint64> m_objectIdGenerator{1};
+		IdGenerator<uint64> m_unitSpawnIdGenerator{1};
+		IdGenerator<uint64> m_objectSpawnIdGenerator{1};
 
 		std::vector<std::unique_ptr<MapEntity>> m_mapEntities;
 		struct DeletedEntityRef
@@ -355,15 +350,15 @@ namespace mmo
 		std::unique_ptr<NavigationEditMode> m_navigationEditMode;
 		std::unique_ptr<SkyEditMode> m_skyEditMode;
 		std::unique_ptr<SkyComponent> m_skyComponent;
-		WorldEditMode* m_editMode{ nullptr };
+		WorldEditMode *m_editMode{nullptr};
 
 		// Spawn edit mode
-		proto::MapEntry* m_mapEntry { nullptr };
+		proto::MapEntry *m_mapEntry{nullptr};
 
-		Entity* m_debugEntity{ nullptr };
-		SceneNode* m_debugNode{ nullptr };
+		Entity *m_debugEntity{nullptr};
+		SceneNode *m_debugNode{nullptr};
 
-		bool m_hasTerrain{ true };
+		bool m_hasTerrain{true};
 		std::vector<String> m_meshNames;
 
 		uint32 m_worldFileVersion;
@@ -373,6 +368,7 @@ namespace mmo
 		static TexturePtr s_rotateIcon;
 		static TexturePtr s_scaleIcon;
 
+		std::unique_ptr<DetailsPanel> m_detailsPanel;
 		std::unique_ptr<SceneOutlineWindow> m_sceneOutlineWindow;
 	};
 }

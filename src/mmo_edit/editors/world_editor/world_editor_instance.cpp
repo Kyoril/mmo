@@ -73,10 +73,8 @@ namespace mmo
 		Vector3 scale;
 	};
 
-	WorldEditorInstance::WorldEditorInstance(EditorHost& host, WorldEditor& editor, Path asset)
-		: EditorInstance(host, std::move(asset))
-		, m_editor(editor)
-		, m_wireFrame(false)
+	WorldEditorInstance::WorldEditorInstance(EditorHost &host, WorldEditor &editor, Path asset)
+		: EditorInstance(host, std::move(asset)), m_editor(editor), m_wireFrame(false)
 	{
 
 		if (!s_translateIcon)
@@ -117,12 +115,10 @@ namespace mmo
 		m_work = std::make_unique<asio::io_service::work>(m_workQueue);
 
 		// Setup background loading thread
-		auto& workQueue = m_workQueue;
-		auto& dispatcher = m_dispatcher;
+		auto &workQueue = m_workQueue;
+		auto &dispatcher = m_dispatcher;
 		m_backgroundLoader = std::thread([&workQueue]()
-		{
-			workQueue.run();
-		});
+										 { workQueue.run(); });
 
 		const auto addWork = [&workQueue](const WorldPageLoader::Work &work)
 		{
@@ -136,7 +132,7 @@ namespace mmo
 		const PagePosition pos = GetPagePositionFromCamera();
 		m_visibleSection = std::make_unique<LoadedPageSection>(pos, 1, *this);
 		m_pageLoader = std::make_unique<WorldPageLoader>(*m_visibleSection, addWork, synchronize);
-		
+
 		m_raySceneQuery = m_scene.CreateRayQuery(Ray(Vector3::Zero, Vector3::UnitZ));
 		m_raySceneQuery->SetQueryMask(SceneQueryFlags_Entity);
 		m_debugBoundingBox = m_scene.CreateManualRenderObject("__DebugAABB__");
@@ -148,8 +144,7 @@ namespace mmo
 			worldSize,
 			2,
 			pos,
-			*m_pageLoader
-			);
+			*m_pageLoader);
 
 		m_transformWidget = std::make_unique<TransformWidget>(m_selection, m_scene, *m_camera);
 		m_transformWidget->SetTransformMode(TransformMode::Translate);
@@ -161,7 +156,7 @@ namespace mmo
 			}
 
 			// Copy selection
-			for(const auto& selected : m_selection.GetSelectedObjects())
+			for (const auto &selected : m_selection.GetSelectedObjects())
 			{
 				selected->Duplicate();
 			}
@@ -174,7 +169,8 @@ namespace mmo
 
 		// Replace all \ with /
 		String baseFileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Terrain").string();
-		std::transform(baseFileName.begin(), baseFileName.end(), baseFileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
+		std::transform(baseFileName.begin(), baseFileName.end(), baseFileName.begin(), [](char c)
+					   { return c == '\\' ? '/' : c; });
 		m_terrain->SetBaseFileName(baseFileName);
 
 		m_debugNode = m_scene.GetRootSceneNode().CreateChildSceneNode();
@@ -184,16 +180,24 @@ namespace mmo
 
 		// Setup sky component for day/night cycle control
 		m_skyComponent = std::make_unique<SkyComponent>(m_scene);
-		m_skyComponent->SetTimeSpeed(0.0f);  // Start with time paused in editor
+		m_skyComponent->SetTimeSpeed(0.0f); // Start with time paused in editor
 
 		// Setup edit modes
 		m_terrainEditMode = std::make_unique<TerrainEditMode>(*this, *m_terrain, m_editor.GetProject().zones, *m_camera);
 		m_entityEditMode = std::make_unique<EntityEditMode>(*this);
-				// Create scene outline window
+		// Create scene outline window
 		m_sceneOutlineWindow = std::make_unique<SceneOutlineWindow>(m_selection, m_scene);
-		
+
+		// Create details panel
+		m_detailsPanel = std::make_unique<DetailsPanel>(
+			m_selection,
+			*this,
+			[this]()
+			{ Save(); });
+
 		// Set up delete callback
-		m_sceneOutlineWindow->SetDeleteCallback([this](uint64 id) {
+		m_sceneOutlineWindow->SetDeleteCallback([this](uint64 id)
+												{
 			// Find and remove the entity with this ID
 			for (auto it = m_mapEntities.begin(); it != m_mapEntities.end(); ++it) {
 				if ((*it)->GetUniqueId() == id) {
@@ -202,11 +206,11 @@ namespace mmo
 				}
 			}
 			m_selection.Clear();
-			m_sceneOutlineWindow->Update();
-		});
-		
+			m_sceneOutlineWindow->Update(); });
+
 		// Set up rename callback
-		m_sceneOutlineWindow->SetRenameCallback([this](uint64 id, const std::string& newName) {
+		m_sceneOutlineWindow->SetRenameCallback([this](uint64 id, const std::string &newName)
+												{
 			// Find the entity with this ID and rename it
 			for (auto it = m_mapEntities.begin(); it != m_mapEntities.end(); ++it) {
 				if ((*it)->GetUniqueId() == id) {
@@ -214,11 +218,11 @@ namespace mmo
 					break;
 				}
 			}
-			m_sceneOutlineWindow->Update();
-		});
-		
+			m_sceneOutlineWindow->Update(); });
+
 		// Set up category change callback
-		m_sceneOutlineWindow->SetCategoryChangeCallback([this](uint64 id, const std::string& newCategory) {
+		m_sceneOutlineWindow->SetCategoryChangeCallback([this](uint64 id, const std::string &newCategory)
+														{
 			// Find the entity with this ID and change its category
 			for (auto it = m_mapEntities.begin(); it != m_mapEntities.end(); ++it) {
 				if ((*it)->GetUniqueId() == id) {
@@ -226,8 +230,7 @@ namespace mmo
 					break;
 				}
 			}
-			m_sceneOutlineWindow->Update();
-		});
+			m_sceneOutlineWindow->Update(); });
 		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().units, m_editor.GetProject().objects);
 		m_skyEditMode = std::make_unique<SkyEditMode>(*this, *m_skyComponent);
 		m_editMode = nullptr;
@@ -247,8 +250,8 @@ namespace mmo
 
 		AddChunkHandler(*versionChunk, true, *this, &WorldEditorInstance::ReadMVERChunk);
 
-		io::StreamSource source{ *streamPtr };
-		io::Reader reader{ source };
+		io::StreamSource source{*streamPtr};
+		io::Reader reader{source};
 		if (!Read(reader))
 		{
 			ELOG("Failed to read world file '" << GetAssetPath() << "'!");
@@ -277,7 +280,7 @@ namespace mmo
 		m_dispatcher.poll();
 
 		const float deltaTimeSeconds = ImGui::GetCurrentContext()->IO.DeltaTime;
-	
+
 		if (ImGui::IsKeyPressed(ImGuiKey_F))
 		{
 			if (m_selection.IsEmpty())
@@ -308,23 +311,23 @@ namespace mmo
 			{
 				direction.z = -1.0f;
 			}
-			if(ImGui::IsKeyDown(ImGuiKey_S))
+			if (ImGui::IsKeyDown(ImGuiKey_S))
 			{
 				direction.z = 1.0f;
 			}
-			if(ImGui::IsKeyDown(ImGuiKey_A))
+			if (ImGui::IsKeyDown(ImGuiKey_A))
 			{
 				direction.x = -1.0f;
 			}
-			if(ImGui::IsKeyDown(ImGuiKey_D))
+			if (ImGui::IsKeyDown(ImGuiKey_D))
 			{
 				direction.x = 1.0f;
 			}
-			if(ImGui::IsKeyDown(ImGuiKey_Q))
+			if (ImGui::IsKeyDown(ImGuiKey_Q))
 			{
 				direction.y = -1.0f;
 			}
-			if(ImGui::IsKeyDown(ImGuiKey_E))
+			if (ImGui::IsKeyDown(ImGuiKey_E))
 			{
 				direction.y = 1.0f;
 			}
@@ -348,16 +351,18 @@ namespace mmo
 		// Terrain deformation
 		if (m_hovering && ImGui::IsMouseDown(ImGuiMouseButton_Left))
 		{
-			if (m_editMode) m_editMode->OnMouseHold(deltaTimeSeconds);
+			if (m_editMode)
+				m_editMode->OnMouseHold(deltaTimeSeconds);
 		}
 
 		const auto pos = GetPagePositionFromCamera();
 		m_memoryPointOfView->UpdateCenter(pos);
 		m_visibleSection->UpdateCenter(pos);
-		
-		if (m_lastAvailViewportSize.x <= 0.0f || m_lastAvailViewportSize.y <= 0.0f) return;
 
-		auto& gx = GraphicsDevice::Get();
+		if (m_lastAvailViewportSize.x <= 0.0f || m_lastAvailViewportSize.y <= 0.0f)
+			return;
+
+		auto &gx = GraphicsDevice::Get();
 
 		gx.Reset();
 
@@ -382,11 +387,25 @@ namespace mmo
 		const String sceneOutlineId = "Scene Outline##" + GetAssetPath().string();
 
 		HandleKeyboardShortcuts();
-		DrawDetailsPanel(detailsId);
+
+		WorldEditMode *availableModes[] = {
+			m_entityEditMode.get(),
+			m_terrainEditMode.get(),
+			m_spawnEditMode.get(),
+			m_navigationEditMode.get(),
+			m_skyEditMode.get()};
+		m_detailsPanel->Draw(
+			detailsId,
+			m_editMode,
+			availableModes,
+			std::size(availableModes),
+			[this](WorldEditMode *mode)
+			{ SetEditMode(mode); });
+
 		DrawWorldSettingsPanel(worldSettingsId);
 		DrawViewportPanel(viewportId);
 		DrawSceneOutlinePanel(sceneOutlineId);
-		
+
 		if (m_initDockLayout)
 		{
 			InitializeDockLayout(dockspaceId, viewportId, detailsId, worldSettingsId);
@@ -434,111 +453,7 @@ namespace mmo
 		}
 	}
 
-	void WorldEditorInstance::DrawDetailsPanel(const String& detailsId)
-	{
-		if (ImGui::Begin(detailsId.c_str()))
-		{
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
-		    if (ImGui::BeginTable("split", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable))
-		    {
-		        ImGui::EndTable();
-		    }
-		    ImGui::PopStyleVar();
-
-			ImGui::Separator();
-
-			if (ImGui::Button("Save"))
-			{
-				Save();
-			}
-
-			ImGui::Separator();
-
-			DrawEditModeSelector();
-
-			if (m_editMode)
-			{
-				m_editMode->DrawDetails();
-			}
-
-			ImGui::Separator();
-
-			if (!m_selection.IsEmpty())
-			{
-				DrawSelectionDetails();
-			}
-		}
-		ImGui::End();
-	}
-
-	void WorldEditorInstance::DrawEditModeSelector()
-	{
-		const char* editModePreview = "None";
-		if (ImGui::BeginCombo("Mode", m_editMode ? m_editMode->GetName() : editModePreview, ImGuiComboFlags_None))
-		{
-			if (ImGui::Selectable("None", m_editMode == nullptr)) SetEditMode(nullptr);			WorldEditMode* modes[] = { 
-				m_entityEditMode.get(), 
-				m_terrainEditMode.get(), 
-				m_spawnEditMode.get(),
-				m_navigationEditMode.get(),
-                m_skyEditMode.get()
-			};
-			
-			for (size_t i = 0; i < std::size(modes); ++i)
-			{
-				if (ImGui::Selectable(modes[i]->GetName(), m_editMode == modes[i])) SetEditMode(modes[i]);
-			}
-
-			ImGui::EndCombo();
-		}
-	}
-
-	void WorldEditorInstance::DrawSelectionDetails()
-	{
-		Selectable* selected = m_selection.GetSelectedObjects().back().get();
-		selected->Visit(*this);
-
-		if (selected->SupportsTranslate() || selected->SupportsRotate() || selected->SupportsScale())
-		{
-			if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
-			{
-				if (selected->SupportsTranslate())
-				{
-					if (Vector3 position = selected->GetPosition(); ImGui::InputFloat3("Position", position.Ptr()))
-					{
-						selected->SetPosition(position);
-					}
-				}
-
-				if (selected->SupportsRotate())
-				{
-					Rotator rotation = selected->GetOrientation().ToRotator();
-					if (float angles[3] = { rotation.roll.GetValueDegrees(), rotation.yaw.GetValueDegrees(), rotation.pitch.GetValueDegrees() }; ImGui::InputFloat3("Rotation", angles, "%.3f"))
-					{
-						rotation.roll = angles[0];
-						rotation.pitch = angles[2];
-						rotation.yaw = angles[1];
-
-						Quaternion quaternion = Quaternion::FromRotator(rotation);
-						quaternion.Normalize();
-
-						selected->SetOrientation(quaternion);
-					}
-				}
-
-				if (selected->SupportsScale())
-				{
-					Vector3 scale = selected->GetScale();
-					if (ImGui::InputFloat3("Scale", scale.Ptr()))
-					{
-						selected->SetScale(scale);
-					}
-				}
-			}
-		}
-	}
-
-	void WorldEditorInstance::DrawWorldSettingsPanel(const String& worldSettingsId)
+	void WorldEditorInstance::DrawWorldSettingsPanel(const String &worldSettingsId)
 	{
 		if (ImGui::Begin(worldSettingsId.c_str()))
 		{
@@ -557,16 +472,16 @@ namespace mmo
 
 				ImGui::BeginDisabled(!m_hasTerrain);
 
-				static const char* s_noMaterialPreview = "<None>";
+				static const char *s_noMaterialPreview = "<None>";
 
-				const char* previewString = s_noMaterialPreview;
+				const char *previewString = s_noMaterialPreview;
 				if (m_terrain->GetDefaultMaterial())
 				{
 					previewString = m_terrain->GetDefaultMaterial()->GetName().data();
 				}
 
 				if (ImGui::BeginCombo("Terrain Default Material", previewString))
-							{
+				{
 					ImGui::EndCombo();
 				}
 
@@ -578,20 +493,20 @@ namespace mmo
 						m_terrain->SetWireframeVisible(wireframe);
 					}
 				}
-				
+
 				if (m_hasTerrain)
 				{
 					if (ImGui::BeginDragDropTarget())
 					{
 						// We only accept mesh file drops
-						if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmat"))
+						if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmat"))
 						{
-							m_terrain->SetDefaultMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
+							m_terrain->SetDefaultMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
 						}
 
-						if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmi"))
+						if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmi"))
 						{
-							m_terrain->SetDefaultMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
+							m_terrain->SetDefaultMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
 						}
 
 						ImGui::EndDragDropTarget();
@@ -604,7 +519,7 @@ namespace mmo
 		ImGui::End();
 	}
 
-	void WorldEditorInstance::DrawViewportPanel(const String& viewportId)
+	void WorldEditorInstance::DrawViewportPanel(const String &viewportId)
 	{
 		if (ImGui::Begin(viewportId.c_str()))
 		{
@@ -616,7 +531,7 @@ namespace mmo
 			// Determine the available size for the viewport window and either create the render target
 			// or resize it if needed
 			const auto availableSpace = ImGui::GetContentRegionAvail();
-			
+
 			if (m_lastAvailViewportSize.x != availableSpace.x || m_lastAvailViewportSize.y != availableSpace.y)
 			{
 				m_deferredRenderer->Resize(availableSpace.x, availableSpace.y);
@@ -637,7 +552,7 @@ namespace mmo
 		ImGui::End();
 	}
 
-	void WorldEditorInstance::HandleViewportInteractions(const ImVec2& availableSpace)
+	void WorldEditorInstance::HandleViewportInteractions(const ImVec2 &availableSpace)
 	{
 		m_hovering = ImGui::IsItemHovered();
 		if (m_hovering)
@@ -649,35 +564,36 @@ namespace mmo
 
 			const auto mousePos = ImGui::GetMousePos();
 			const auto contentRectMin = ImGui::GetWindowPos();
-			m_lastContentRectMin = contentRectMin;				if (ImGui::IsKeyPressed(ImGuiKey_Delete))
+			m_lastContentRectMin = contentRectMin;
+			if (ImGui::IsKeyPressed(ImGuiKey_Delete))
+			{
+				if (!m_selection.IsEmpty())
 				{
-					if (!m_selection.IsEmpty())
+					for (auto &selected : m_selection.GetSelectedObjects())
 					{
-						for (auto& selected : m_selection.GetSelectedObjects())
-						{
-							selected->Remove();
-						}
+						selected->Remove();
+					}
 
-						m_selection.Clear();
-						
-						// Update scene outline when objects are deleted
-						if (m_sceneOutlineWindow)
-						{
-							m_sceneOutlineWindow->Update();
-						}
+					m_selection.Clear();
+
+					// Update scene outline when objects are deleted
+					if (m_sceneOutlineWindow)
+					{
+						m_sceneOutlineWindow->Update();
 					}
 				}
+			}
 		}
 	}
 
-	void WorldEditorInstance::DrawViewportToolbar(const ImVec2& availableSpace)
+	void WorldEditorInstance::DrawViewportToolbar(const ImVec2 &availableSpace)
 	{
 		ImGui::SetItemAllowOverlap();
 		ImGui::SetCursorPos(ImVec2(16, 16));
-		
+
 		if (ImGui::Button("Toggle Grid"))
 		{
-		 m_worldGrid->SetVisible(!m_worldGrid->IsVisible());
+			m_worldGrid->SetVisible(!m_worldGrid->IsVisible());
 		}
 		ImGui::SameLine();
 		ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
@@ -713,10 +629,10 @@ namespace mmo
 
 	void WorldEditorInstance::DrawSnapSettings()
 	{
-		const auto& translateLabels = GridSnapSettings::GetTranslateSizeLabels();
-		const auto& rotateLabels = GridSnapSettings::GetRotateSizeLabels();
+		const auto &translateLabels = GridSnapSettings::GetTranslateSizeLabels();
+		const auto &rotateLabels = GridSnapSettings::GetRotateSizeLabels();
 
-		const char* previewValue = nullptr;
+		const char *previewValue = nullptr;
 
 		switch (m_transformWidget->GetTransformMode())
 		{
@@ -771,7 +687,7 @@ namespace mmo
 		}
 	}
 
-	void WorldEditorInstance::DrawTransformButtons(const ImVec2& availableSpace)
+	void WorldEditorInstance::DrawTransformButtons(const ImVec2 &availableSpace)
 	{
 		// Transform mode buttons
 		ImGui::SetCursorPos(ImVec2(availableSpace.x - 80, 16));
@@ -790,7 +706,7 @@ namespace mmo
 			ImGui::SameLine();
 			ImGui::Text("1");
 			ImGui::PopStyleColor();
-			ImGui::EndTooltip();	
+			ImGui::EndTooltip();
 		}
 
 		ImGui::PopStyleColor(2);
@@ -821,7 +737,7 @@ namespace mmo
 		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ButtonHovered);
 		if (ImGui::ImageButton(s_scaleIcon ? s_scaleIcon->GetTextureObject() : nullptr, ImVec2(16.0f, 16.0f)))
 		{
-			//m_transformWidget->SetTransformMode(TransformMode::Scale);
+			// m_transformWidget->SetTransformMode(TransformMode::Scale);
 		}
 		if (ImGui::IsItemHovered())
 		{
@@ -852,7 +768,8 @@ namespace mmo
 				ImGui::EndDragDropTarget();
 			}
 		}
-	}	void WorldEditorInstance::InitializeDockLayout(ImGuiID dockspaceId, const String& viewportId, const String& detailsId, const String& worldSettingsId)
+	}
+	void WorldEditorInstance::InitializeDockLayout(ImGuiID dockspaceId, const String &viewportId, const String &detailsId, const String &worldSettingsId)
 	{
 		ImGui::DockBuilderRemoveNode(dockspaceId);
 		ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace | ImGuiDockNodeFlags_AutoHideTabBar); // Add empty node
@@ -861,7 +778,7 @@ namespace mmo
 		auto mainId = dockspaceId;
 		ImGuiID sideId;
 		ImGui::DockBuilderSplitNode(mainId, ImGuiDir_Right, 400.0f / ImGui::GetMainViewport()->Size.x, &sideId, &mainId);
-		
+
 		// Split the side panel to create space for the scene outline above the details panel
 		ImGuiID sideTopId;
 		ImGui::DockBuilderSplitNode(sideId, ImGuiDir_Up, 0.3f, &sideTopId, &sideId);
@@ -873,14 +790,14 @@ namespace mmo
 		ImGui::DockBuilderDockWindow(sceneOutlineId.c_str(), sideTopId);
 		ImGui::DockBuilderDockWindow(detailsId.c_str(), sideId);
 		ImGui::DockBuilderDockWindow(worldSettingsId.c_str(), sideId);
-		
+
 		ImGui::DockBuilderFinish(dockspaceId);
 		m_initDockLayout = false;
-		
-		auto* wnd = ImGui::FindWindowByName(viewportId.c_str());
+
+		auto *wnd = ImGui::FindWindowByName(viewportId.c_str());
 		if (wnd)
 		{
-			ImGuiDockNode* node = wnd->DockNode;
+			ImGuiDockNode *node = wnd->DockNode;
 			node->WantHiddenTabBarToggle = true;
 		}
 	}
@@ -962,11 +879,10 @@ namespace mmo
 			const int16 deltaY = static_cast<int16>(y) - m_lastMouseY;
 
 			// TODO: Move this into edit modes handling of OnMouseMoved
-			if (m_rightButtonPressed || (m_leftButtonPressed && (m_editMode != m_terrainEditMode.get() || (
-				m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Deform && 
-				m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Paint &&
-				m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Area &&
-				m_terrainEditMode->GetTerrainEditType() != TerrainEditType::VertexShading))))
+			if (m_rightButtonPressed || (m_leftButtonPressed && (m_editMode != m_terrainEditMode.get() || (m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Deform &&
+																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Paint &&
+																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Area &&
+																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::VertexShading))))
 			{
 				m_cameraAnchor->Yaw(-Degree(deltaX), TransformSpace::World);
 				m_cameraAnchor->Pitch(-Degree(deltaY), TransformSpace::Local);
@@ -996,7 +912,7 @@ namespace mmo
 	{
 		// Build mesh name index map
 		std::map<String, uint32> entityNames;
-		for (const auto& mapEntity : m_mapEntities)
+		for (const auto &mapEntity : m_mapEntities)
 		{
 			const auto meshName = String(mapEntity->GetEntity().GetMesh()->GetName());
 			if (entityNames.contains(meshName))
@@ -1015,8 +931,8 @@ namespace mmo
 			return false;
 		}
 
-		io::StreamSink sink{ *streamPtr };
-		io::Writer writer{ sink };
+		io::StreamSink sink{*streamPtr};
+		io::Writer writer{sink};
 
 		// Start writing file
 		writer
@@ -1025,8 +941,8 @@ namespace mmo
 			<< io::write<uint32>(3);
 
 		uint32 meshSize = 0;
-		std::vector<const String*> sortedNames(entityNames.size());
-		for (auto& name : entityNames)
+		std::vector<const String *> sortedNames(entityNames.size());
+		for (auto &name : entityNames)
 		{
 			sortedNames[name.second] = &name.first;
 			meshSize += name.first.size() + 1;
@@ -1051,7 +967,7 @@ namespace mmo
 		writer
 			<< io::write<uint32>(*meshChunk)
 			<< io::write<uint32>(meshSize);
-		for (const auto& name : sortedNames)
+		for (const auto &name : sortedNames)
 		{
 			writer << io::write_range(*name) << io::write<uint8>(0);
 		}
@@ -1066,10 +982,11 @@ namespace mmo
 		};
 
 		// Delete all removed entities
-		for (const auto& ent : m_deletedEntities)
+		for (const auto &ent : m_deletedEntities)
 		{
 			String oldFilename = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Entities" / std::to_string(ent.pageId) / std::to_string(ent.entityId)).string() + ".wobj";
-			std::transform(oldFilename.begin(), oldFilename.end(), oldFilename.begin(), [](char c) { return c == '\\' ? '/' : c; });
+			std::transform(oldFilename.begin(), oldFilename.end(), oldFilename.begin(), [](char c)
+						   { return c == '\\' ? '/' : c; });
 			if (!AssetRegistry::RemoveFile(oldFilename))
 			{
 				ELOG("Failed to delete file " << oldFilename);
@@ -1079,7 +996,7 @@ namespace mmo
 		m_deletedEntities.clear();
 
 		// Save paged object locations as well
-		for (auto& ent : m_mapEntities)
+		for (auto &ent : m_mapEntities)
 		{
 			// Skip unmodified entities
 			if (!ent->IsModified())
@@ -1099,7 +1016,8 @@ namespace mmo
 				if (*refPos != pagePos)
 				{
 					String oldFilename = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Entities" / std::to_string(BuildPageIndex(refPos->x(), refPos->y())) / std::to_string(ent->GetUniqueId())).string() + ".wobj";
-					std::transform(oldFilename.begin(), oldFilename.end(), oldFilename.begin(), [](char c) { return c == '\\' ? '/' : c; });
+					std::transform(oldFilename.begin(), oldFilename.end(), oldFilename.begin(), [](char c)
+								   { return c == '\\' ? '/' : c; });
 					AssetRegistry::RemoveFile(oldFilename);
 				}
 			}
@@ -1109,7 +1027,8 @@ namespace mmo
 
 			// Create new file
 			String baseFileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Entities" / std::to_string(BuildPageIndex(pagePos.x(), pagePos.y()))).string();
-			std::transform(baseFileName.begin(), baseFileName.end(), baseFileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
+			std::transform(baseFileName.begin(), baseFileName.end(), baseFileName.begin(), [](char c)
+						   { return c == '\\' ? '/' : c; });
 
 			auto filePtr = AssetRegistry::CreateNewFile(baseFileName + "/" + std::to_string(ent->GetUniqueId()) + ".wobj");
 			if (!filePtr)
@@ -1118,8 +1037,8 @@ namespace mmo
 				continue;
 			}
 
-			io::StreamSink fileSink{ *filePtr };
-			io::Writer fileWriter{ fileSink };
+			io::StreamSink fileSink{*filePtr};
+			io::Writer fileWriter{fileSink};
 
 			{
 				ChunkWriter chunkWriter(WorldEntityVersionChunk, fileWriter);
@@ -1151,10 +1070,10 @@ namespace mmo
 				std::vector<MaterialOverride> materialOverrides;
 				for (uint8 i = 0; i < ent->GetEntity().GetNumSubEntities(); ++i)
 				{
-					SubEntity* sub = ent->GetEntity().GetSubEntity(i);
+					SubEntity *sub = ent->GetEntity().GetSubEntity(i);
 					ASSERT(sub);
 
-					SubMesh& submesh = ent->GetEntity().GetMesh()->GetSubMesh(i);
+					SubMesh &submesh = ent->GetEntity().GetMesh()->GetSubMesh(i);
 					if (const bool hasDifferentMaterial = sub->GetMaterial() && sub->GetMaterial() != submesh.GetMaterial())
 					{
 						materialOverrides.emplace_back(i, String(sub->GetMaterial()->GetName()));
@@ -1163,7 +1082,7 @@ namespace mmo
 
 				// Serialize material overrides
 				fileWriter << io::write<uint8>(materialOverrides.size());
-				for (auto& materialOverride : materialOverrides)
+				for (auto &materialOverride : materialOverrides)
 				{
 					fileWriter
 						<< io::write<uint8>(materialOverride.materialIndex)
@@ -1184,7 +1103,7 @@ namespace mmo
 		{
 			for (uint32 y = 0; y < 64; ++y)
 			{
-				terrain::Page* page = m_terrain->GetPage(x, y);
+				terrain::Page *page = m_terrain->GetPage(x, y);
 				if (page && page->IsPrepared() && page->IsChanged())
 				{
 					// Page was loaded, so save any changes
@@ -1196,7 +1115,7 @@ namespace mmo
 		return true;
 	}
 
-	void WorldEditorInstance::UpdateDebugAABB(const AABB& aabb)
+	void WorldEditorInstance::UpdateDebugAABB(const AABB &aabb)
 	{
 		m_debugBoundingBox->Clear();
 
@@ -1238,19 +1157,19 @@ namespace mmo
 
 		m_debugBoundingBox->Clear();
 
-		const auto& hitResult = m_raySceneQuery->GetLastResult();
+		const auto &hitResult = m_raySceneQuery->GetLastResult();
 		if (!hitResult.empty())
 		{
-			Entity* entity = (Entity*)hitResult[0].movable;
+			Entity *entity = (Entity *)hitResult[0].movable;
 			if (entity)
 			{
-				MapEntity* mapEntity = entity->GetUserObject<MapEntity>();
+				MapEntity *mapEntity = entity->GetUserObject<MapEntity>();
 				if (mapEntity)
 				{
 					String asset = entity->GetMesh()->GetName().data();
 
-					m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*mapEntity, [this, asset](Selectable& selected)
-					{
+					m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*mapEntity, [this, asset](Selectable &selected)
+																				  {
 						SelectedMapEntity& selectedEntity = static_cast<SelectedMapEntity&>(selected);
 						Entity& originalSceneEntity = selectedEntity.GetEntity().GetEntity();
 
@@ -1269,10 +1188,9 @@ namespace mmo
 							{
 								duplicatedSub->SetMaterial(originalSub->GetMaterial());
 							}
-						}
-					}));
+						} }));
 					UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
-					
+
 					// Update scene outline when selection changes
 					if (m_sceneOutlineWindow)
 					{
@@ -1295,23 +1213,24 @@ namespace mmo
 		m_selection.Clear();
 		m_debugBoundingBox->Clear();
 
-		const auto& hitResult = m_raySceneQuery->GetLastResult();
+		const auto &hitResult = m_raySceneQuery->GetLastResult();
 		if (!hitResult.empty())
 		{
-			Entity* entity = (Entity*)hitResult[0].movable;
+			Entity *entity = (Entity *)hitResult[0].movable;
 			if (entity)
 			{
 				if (entity->GetQueryFlags() & SceneQueryFlags_UnitSpawns)
 				{
-					proto::UnitSpawnEntry* unitSpawnEntry = entity->GetUserObject<proto::UnitSpawnEntry>();
+					proto::UnitSpawnEntry *unitSpawnEntry = entity->GetUserObject<proto::UnitSpawnEntry>();
 					if (unitSpawnEntry)
 					{
 						// TODO: Getting the proper scene node to move for this entity should not be GetParent()->GetParent(), this is a hack!
-						m_selection.AddSelectable(std::make_unique<SelectedUnitSpawn>(*unitSpawnEntry, m_editor.GetProject().units, m_editor.GetProject().models, *entity->GetParentSceneNode()->GetParentSceneNode(), *entity, [this, unitSpawnEntry](Selectable& selected)
-							{
-								// TODO: Implement
-							}, [this, entity](const proto::UnitSpawnEntry& spawn)
-								{
+						m_selection.AddSelectable(std::make_unique<SelectedUnitSpawn>(*unitSpawnEntry, m_editor.GetProject().units, m_editor.GetProject().models, *entity->GetParentSceneNode()->GetParentSceneNode(), *entity, [this, unitSpawnEntry](Selectable &selected)
+																					  {
+																						  // TODO: Implement
+																					  },
+																					  [this, entity](const proto::UnitSpawnEntry &spawn)
+																					  {
 									auto* map = m_spawnEditMode->GetMapEntry();
 									if (map)
 									{
@@ -1328,24 +1247,24 @@ namespace mmo
 										ASSERT(entity);
 										m_scene.DestroySceneNode(*entity->GetParentSceneNode());
 										m_scene.DestroyEntity(*entity);
-									}
-								}));
-							UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
-							return;
+									} }));
+						UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
+						return;
 					}
 				}
 
 				if (entity->GetQueryFlags() & SceneQueryFlags_ObjectSpawns)
 				{
-					proto::ObjectSpawnEntry* objectSpawnEntry = entity->GetUserObject<proto::ObjectSpawnEntry>();
+					proto::ObjectSpawnEntry *objectSpawnEntry = entity->GetUserObject<proto::ObjectSpawnEntry>();
 					if (objectSpawnEntry)
 					{
 						// TODO: Getting the proper scene node is a hack, same as with unit spawns
-						m_selection.AddSelectable(std::make_unique<SelectedObjectSpawn>(*objectSpawnEntry, m_editor.GetProject().objects, m_editor.GetProject().objectDisplays, *entity->GetParentSceneNode()->GetParentSceneNode(), *entity, [this, objectSpawnEntry](Selectable& selected)
-							{
-								// TODO: Implement duplication
-							}, [this, entity](const proto::ObjectSpawnEntry& spawn)
-								{
+						m_selection.AddSelectable(std::make_unique<SelectedObjectSpawn>(*objectSpawnEntry, m_editor.GetProject().objects, m_editor.GetProject().objectDisplays, *entity->GetParentSceneNode()->GetParentSceneNode(), *entity, [this, objectSpawnEntry](Selectable &selected)
+																						{
+																							// TODO: Implement duplication
+																						},
+																						[this, entity](const proto::ObjectSpawnEntry &spawn)
+																						{
 									auto* map = m_spawnEditMode->GetMapEntry();
 									if (map)
 									{
@@ -1362,9 +1281,8 @@ namespace mmo
 										ASSERT(entity);
 										m_scene.DestroySceneNode(*entity->GetParentSceneNode());
 										m_scene.DestroyEntity(*entity);
-									}
-								}));
-							UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
+									} }));
+						UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
 					}
 				}
 			}
@@ -1385,7 +1303,7 @@ namespace mmo
 			return;
 		}
 
-		if (terrain::Tile* tile = hitResult.second.tile)
+		if (terrain::Tile *tile = hitResult.second.tile)
 		{
 			m_selection.AddSelectable(std::make_unique<SelectedTerrainTile>(*tile));
 			UpdateDebugAABB(tile->GetPage().GetBoundingBox());
@@ -1411,7 +1329,7 @@ namespace mmo
 
 		// TODO: Move this whole method into the terrain edit mode3
 		m_terrainEditMode->SetBrushPosition(hitResult.second.position);
-		if (terrain::Tile* tile = hitResult.second.tile)
+		if (terrain::Tile *tile = hitResult.second.tile)
 		{
 			UpdateDebugAABB(tile->GetWorldBoundingBox(true));
 			m_debugBoundingBox->SetVisible(true);
@@ -1425,7 +1343,7 @@ namespace mmo
 		m_debugEntity->SetVisible(true);
 	}
 
-	Entity* WorldEditorInstance::CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 objectId)
+	Entity *WorldEditorInstance::CreateMapEntity(const String &assetName, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale, uint64 objectId)
 	{
 		if (objectId == 0)
 		{
@@ -1440,26 +1358,27 @@ namespace mmo
 			return m_scene.GetEntity(uniqueId);
 		}
 
-		Entity* entity = m_scene.CreateEntity(uniqueId, assetName);
+		Entity *entity = m_scene.CreateEntity(uniqueId, assetName);
 		if (entity)
 		{
 			entity->SetQueryFlags(SceneQueryFlags_Entity);
 
-			auto& node = m_scene.CreateSceneNode(uniqueId);
+			auto &node = m_scene.CreateSceneNode(uniqueId);
 			m_scene.GetRootSceneNode().AddChild(node);
 			node.AttachObject(*entity);
 			node.SetPosition(position);
 			node.SetOrientation(orientation);
 			node.SetScale(scale);
 
-			const auto& mapEntity = m_mapEntities.emplace_back(std::make_unique<MapEntity>(m_scene, node, *entity, objectId));
+			const auto &mapEntity = m_mapEntities.emplace_back(std::make_unique<MapEntity>(m_scene, node, *entity, objectId));
 			mapEntity->SetReferencePagePosition(
 				PagePosition(
 					static_cast<uint32>(floor(position.x / terrain::constants::PageSize)) + 32,
 					static_cast<uint32>(floor(position.z / terrain::constants::PageSize)) + 32));
-			mapEntity->remove.connect(this, &WorldEditorInstance::OnMapEntityRemoved);			mapEntity->MarkModified();
+			mapEntity->remove.connect(this, &WorldEditorInstance::OnMapEntityRemoved);
+			mapEntity->MarkModified();
 			entity->SetUserObject(m_mapEntities.back().get());
-			
+
 			// Update scene outline when a new entity is created
 			if (m_sceneOutlineWindow)
 			{
@@ -1470,14 +1389,14 @@ namespace mmo
 		return entity;
 	}
 
-	Entity* WorldEditorInstance::CreateUnitSpawnEntity(proto::UnitSpawnEntry& spawn)
+	Entity *WorldEditorInstance::CreateUnitSpawnEntity(proto::UnitSpawnEntry &spawn)
 	{
-		proto::Project& project = m_editor.GetProject();
+		proto::Project &project = m_editor.GetProject();
 
 		// TODO: Use different mesh file?
 		String meshFile = "Editor/Joint.hmsh";
 
-		if (const auto* unit = project.units.getById(spawn.unitentry()))
+		if (const auto *unit = project.units.getById(spawn.unitentry()))
 		{
 			const uint32 modelId = unit->malemodel() ? unit->malemodel() : unit->femalemodel();
 
@@ -1486,7 +1405,7 @@ namespace mmo
 				// TODO: Maybe spawn a dummy unit in editor later, so we can at least see, select and delete / modify the spawn
 				WLOG("No model id assigned!");
 			}
-			else if (const auto* model = project.models.getById(modelId))
+			else if (const auto *model = project.models.getById(modelId))
 			{
 				if (model->flags() & model_data_flags::IsCustomizable)
 				{
@@ -1518,13 +1437,13 @@ namespace mmo
 		}
 
 		const String uniqueId = "UnitSpawn_" + std::to_string(m_unitSpawnIdGenerator.GenerateId());
-		Entity* entity = m_scene.CreateEntity(uniqueId, meshFile);
+		Entity *entity = m_scene.CreateEntity(uniqueId, meshFile);
 		if (entity)
 		{
 			ASSERT(entity->GetMesh());
 			entity->SetQueryFlags(SceneQueryFlags_UnitSpawns);
 
-			auto& node = m_scene.CreateSceneNode(uniqueId);
+			auto &node = m_scene.CreateSceneNode(uniqueId);
 			m_scene.GetRootSceneNode().AddChild(node);
 			node.AttachObject(*entity);
 			node.SetPosition(Vector3(spawn.positionx(), spawn.positiony(), spawn.positionz()));
@@ -1538,14 +1457,14 @@ namespace mmo
 		return entity;
 	}
 
-	Entity* WorldEditorInstance::CreateObjectSpawnEntity(proto::ObjectSpawnEntry& spawn)
+	Entity *WorldEditorInstance::CreateObjectSpawnEntity(proto::ObjectSpawnEntry &spawn)
 	{
-		proto::Project& project = m_editor.GetProject();
+		proto::Project &project = m_editor.GetProject();
 
 		// TODO: Use different mesh file?
-	 String meshFile = "Editor/Joint.hmsh";
+		String meshFile = "Editor/Joint.hmsh";
 
-		if (const auto* object = project.objects.getById(spawn.objectentry()))
+		if (const auto *object = project.objects.getById(spawn.objectentry()))
 		{
 			const uint32 modelId = object->displayid();
 
@@ -1554,7 +1473,7 @@ namespace mmo
 				// TODO: Maybe spawn a dummy unit in editor later, so we can at least see, select and delete / modify the spawn
 				WLOG("No model id assigned!");
 			}
-			else if (const auto* model = project.objectDisplays.getById(modelId))
+			else if (const auto *model = project.objectDisplays.getById(modelId))
 			{
 				meshFile = model->filename();
 			}
@@ -1569,17 +1488,16 @@ namespace mmo
 		}
 
 		const String uniqueId = "ObjectSpawn_" + std::to_string(m_unitSpawnIdGenerator.GenerateId());
-		Entity* entity = m_scene.CreateEntity(uniqueId, meshFile);
+		Entity *entity = m_scene.CreateEntity(uniqueId, meshFile);
 		if (entity)
 		{
 			ASSERT(entity->GetMesh());
 			entity->SetQueryFlags(SceneQueryFlags_ObjectSpawns);
 
-			auto& node = m_scene.CreateSceneNode(uniqueId);
+			auto &node = m_scene.CreateSceneNode(uniqueId);
 			m_scene.GetRootSceneNode().AddChild(node);
 			node.AttachObject(*entity);
 
-			
 			node.SetPosition(Vector3(spawn.location().positionx(), spawn.location().positiony(), spawn.location().positionz()));
 			node.SetOrientation(Quaternion(spawn.location().rotationw(), spawn.location().rotationx(), spawn.location().rotationy(), spawn.location().rotationz()));
 			node.SetScale(Vector3::UnitScale);
@@ -1591,10 +1509,10 @@ namespace mmo
 		return entity;
 	}
 
-	void WorldEditorInstance::OnMapEntityRemoved(MapEntity& entity)
+	void WorldEditorInstance::OnMapEntityRemoved(MapEntity &entity)
 	{
-		std::erase_if(m_mapEntities, [&](const auto& mapEntity)
-		{
+		std::erase_if(m_mapEntities, [&](const auto &mapEntity)
+					  {
 			if (mapEntity.get() == &entity)
 			{
 				const Vector3 pos = entity.GetSceneNode().GetDerivedPosition();
@@ -1615,13 +1533,12 @@ namespace mmo
 				return true;
 			}
 
-			return false;
-		});
+			return false; });
 	}
 
 	PagePosition WorldEditorInstance::GetPagePositionFromCamera() const
 	{
-		const auto& camPos = m_camera->GetDerivedPosition();
+		const auto &camPos = m_camera->GetDerivedPosition();
 
 		const auto pagePos = PagePosition(
 			static_cast<uint32>(floor(camPos.x / terrain::constants::PageSize)) + 32,
@@ -1630,7 +1547,7 @@ namespace mmo
 		return pagePos;
 	}
 
-	void WorldEditorInstance::SetMapEntry(proto::MapEntry* entry)
+	void WorldEditorInstance::SetMapEntry(proto::MapEntry *entry)
 	{
 		if (m_mapEntry == entry)
 		{
@@ -1643,12 +1560,11 @@ namespace mmo
 
 		// Okay so we build up a grid of references to unit spawns per tile so that we can only display
 		// spawn objects which are relevant to the currently loaded pages and not simply ALL spawns that exist in total!
-
 	}
 
-	void WorldEditorInstance::AddUnitSpawn(proto::UnitSpawnEntry& spawn, bool select)
+	void WorldEditorInstance::AddUnitSpawn(proto::UnitSpawnEntry &spawn, bool select)
 	{
-		const auto* unit = m_editor.GetProject().units.getById(spawn.unitentry());
+		const auto *unit = m_editor.GetProject().units.getById(spawn.unitentry());
 		if (!unit)
 		{
 			WLOG("Spawn point of non-existant unit " << spawn.unitentry() << " found");
@@ -1657,7 +1573,7 @@ namespace mmo
 		ASSERT(unit);
 
 		// Load the model
-		const auto* model = m_editor.GetProject().models.getById(unit->malemodel() ? unit->malemodel() : unit->femalemodel());
+		const auto *model = m_editor.GetProject().models.getById(unit->malemodel() ? unit->malemodel() : unit->femalemodel());
 		if (!model)
 		{
 			WLOG("Spawn has no model");
@@ -1685,7 +1601,7 @@ namespace mmo
 		}
 
 		const uint32 guid = m_unitSpawnIdGenerator.GenerateId();
-		Entity* entity = m_scene.CreateEntity("Spawn_" + std::to_string(guid), meshFile);
+		Entity *entity = m_scene.CreateEntity("Spawn_" + std::to_string(guid), meshFile);
 		ASSERT(entity);
 
 		ASSERT(entity->GetMesh());
@@ -1693,7 +1609,7 @@ namespace mmo
 		entity->SetQueryFlags(SceneQueryFlags_UnitSpawns);
 		m_spawnEntities.push_back(entity);
 
-		SceneNode* node = m_scene.GetRootSceneNode().CreateChildSceneNode(Vector3(spawn.positionx(), spawn.positiony(), spawn.positionz()));
+		SceneNode *node = m_scene.GetRootSceneNode().CreateChildSceneNode(Vector3(spawn.positionx(), spawn.positiony(), spawn.positionz()));
 		node->SetOrientation(Quaternion(Radian(spawn.rotation()), Vector3::UnitY));
 		if (unit->scale() != 0.0f)
 		{
@@ -1702,15 +1618,15 @@ namespace mmo
 
 		Quaternion rotationOffset;
 		rotationOffset.FromAngleAxis(Degree(90), Vector3::UnitY);
-		SceneNode* entityOffsetNode = node->CreateChildSceneNode(Vector3::Zero, rotationOffset);
+		SceneNode *entityOffsetNode = node->CreateChildSceneNode(Vector3::Zero, rotationOffset);
 		entityOffsetNode->AttachObject(*entity);
 		m_spawnNodes.push_back(entityOffsetNode);
 		m_spawnNodes.push_back(node);
 	}
 
-	void WorldEditorInstance::AddObjectSpawn(proto::ObjectSpawnEntry& spawn)
+	void WorldEditorInstance::AddObjectSpawn(proto::ObjectSpawnEntry &spawn)
 	{
-		const auto* object = m_editor.GetProject().objects.getById(spawn.objectentry());
+		const auto *object = m_editor.GetProject().objects.getById(spawn.objectentry());
 		if (!object)
 		{
 			WLOG("Spawn point of non-existant unit " << spawn.objectentry() << " found");
@@ -1719,7 +1635,7 @@ namespace mmo
 		ASSERT(object);
 
 		// Load the model
-		const auto* model = m_editor.GetProject().objectDisplays.getById(object->displayid());
+		const auto *model = m_editor.GetProject().objectDisplays.getById(object->displayid());
 		if (!model)
 		{
 			WLOG("ObjectSpawn has no model");
@@ -1727,7 +1643,7 @@ namespace mmo
 		}
 
 		const uint32 guid = m_unitSpawnIdGenerator.GenerateId();
-		Entity* entity = m_scene.CreateEntity("ObjectSpawn_" + std::to_string(guid), model->filename());
+		Entity *entity = m_scene.CreateEntity("ObjectSpawn_" + std::to_string(guid), model->filename());
 		ASSERT(entity);
 
 		ASSERT(entity->GetMesh());
@@ -1735,22 +1651,22 @@ namespace mmo
 		entity->SetQueryFlags(SceneQueryFlags_ObjectSpawns);
 		m_spawnEntities.push_back(entity);
 
-		SceneNode* node = m_scene.GetRootSceneNode().CreateChildSceneNode(Vector3(spawn.location().positionx(), spawn.location().positiony(), spawn.location().positionz()));
+		SceneNode *node = m_scene.GetRootSceneNode().CreateChildSceneNode(Vector3(spawn.location().positionx(), spawn.location().positiony(), spawn.location().positionz()));
 		node->SetOrientation(Quaternion(spawn.location().rotationw(), spawn.location().rotationx(), spawn.location().rotationy(), spawn.location().rotationz()));
 		node->SetScale(Vector3::UnitScale);
 
 		Quaternion rotationOffset;
 		rotationOffset.FromAngleAxis(Degree(90), Vector3::UnitY);
-		SceneNode* entityOffsetNode = node->CreateChildSceneNode(Vector3::Zero, rotationOffset);
+		SceneNode *entityOffsetNode = node->CreateChildSceneNode(Vector3::Zero, rotationOffset);
 		entityOffsetNode->AttachObject(*entity);
 		m_spawnNodes.push_back(entityOffsetNode);
 		m_spawnNodes.push_back(node);
 	}
 
-	void WorldEditorInstance::DrawSceneOutlinePanel(const String& sceneOutlineId)
+	void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 	{
 		// Update the scene outline window regularly, especially when selection changes
-		if (m_sceneOutlineWindow) 
+		if (m_sceneOutlineWindow)
 		{
 			m_sceneOutlineWindow->Draw(sceneOutlineId.c_str());
 		}
@@ -1768,27 +1684,27 @@ namespace mmo
 		const uint32 minimapSize = 256; // 512x512 pixels per minimap
 		const float pageSize = terrain::constants::PageSize;
 
-		auto& gx = GraphicsDevice::Get();
+		auto &gx = GraphicsDevice::Get();
 		gx.CaptureState();
 
-		Camera* renderCam = m_scene.CreateCamera("MinimapCamera");
+		Camera *renderCam = m_scene.CreateCamera("MinimapCamera");
 		renderCam->SetProjectionType(ProjectionType::Orthographic);
 		renderCam->SetOrthoWindow(pageSize, pageSize);
-		
+
 		// Set appropriate clip distances for top-down orthographic view
 		// Near plane should be close to capture terrain details
 		renderCam->SetNearClipDistance(0.1f);
 		// Far plane should be generous to capture tall entities
 		renderCam->SetFarClipDistance(500.0f);
-		
-		SceneNode* camNode = m_scene.GetRootSceneNode().CreateChildSceneNode("MinimapCameraNode");
+
+		SceneNode *camNode = m_scene.GetRootSceneNode().CreateChildSceneNode("MinimapCameraNode");
 		camNode->AttachObject(*renderCam);
-		
+
 		// Create render texture for minimap generation
-		RenderTexturePtr minimapRT = gx.CreateRenderTexture("MinimapGeneration", minimapSize, minimapSize, 
-			RenderTextureFlags::HasColorBuffer | RenderTextureFlags::HasDepthBuffer, 
-			PixelFormat::R8G8B8A8, PixelFormat::D32F);
-		
+		RenderTexturePtr minimapRT = gx.CreateRenderTexture("MinimapGeneration", minimapSize, minimapSize,
+															RenderTextureFlags::HasColorBuffer | RenderTextureFlags::HasDepthBuffer,
+															PixelFormat::R8G8B8A8, PixelFormat::D32F);
+
 		if (!minimapRT)
 		{
 			ELOG("Failed to create render texture for minimap generation");
@@ -1803,7 +1719,7 @@ namespace mmo
 				for (uint32 pageY = 0; pageY < m_terrain->GetHeight(); ++pageY)
 				{
 					// Get the terrain page
-					terrain::Page* page = m_terrain->GetPage(pageX, pageY);
+					terrain::Page *page = m_terrain->GetPage(pageX, pageY);
 
 					// Ensure page is loaded for rendering
 					if (!page->IsLoaded())
@@ -1817,17 +1733,17 @@ namespace mmo
 
 					// Get terrain height at page center for camera positioning
 					float terrainHeight = page->GetBoundingBox().GetExtents().y;
-					
+
 					// Get the maximum height in this page to ensure we capture all entities
 					float maxHeight = terrainHeight;
-					
+
 					// Check all map entities in this page to find the maximum height
-					for (const auto& mapEntity : m_mapEntities)
+					for (const auto &mapEntity : m_mapEntities)
 					{
 						if (mapEntity && &mapEntity->GetSceneNode())
 						{
-							const Vector3& entityPos = mapEntity->GetSceneNode().GetDerivedPosition();
-							
+							const Vector3 &entityPos = mapEntity->GetSceneNode().GetDerivedPosition();
+
 							// Check if this entity is within the current page bounds
 							if (entityPos.x >= page->GetSceneNode()->GetDerivedPosition().x &&
 								entityPos.x < page->GetSceneNode()->GetDerivedPosition().x + pageSize &&
@@ -1835,13 +1751,13 @@ namespace mmo
 								entityPos.z < page->GetSceneNode()->GetDerivedPosition().z + pageSize)
 							{
 								// Get the entity's bounding box to determine its height
-								Entity& entity = mapEntity->GetEntity();
-								const AABB& entityBounds = entity.GetBoundingBox();
+								Entity &entity = mapEntity->GetEntity();
+								const AABB &entityBounds = entity.GetBoundingBox();
 								if (!entityBounds.IsNull())
 								{
 									const Vector3 entityWorldPos = mapEntity->GetSceneNode().GetDerivedPosition();
 									const Vector3 entityScale = mapEntity->GetSceneNode().GetDerivedScale();
-									
+
 									// Calculate the actual world-space top of the entity
 									float entityTop = entityWorldPos.y + (entityBounds.max.y * entityScale.y);
 									maxHeight = std::max(maxHeight, entityTop);
@@ -1854,7 +1770,7 @@ namespace mmo
 					// Add extra margin to ensure we capture everything
 					const Vector3 cameraPos(worldX, maxHeight + 50.0f, worldZ);
 					renderCam->GetParentSceneNode()->SetPosition(cameraPos);
-					
+
 					// Set up camera to look straight down (negative Y direction)
 					// Camera's default forward is -Z, so we need to rotate 90 degrees around X to look down -Y
 					// This creates a top-down orthographic view where the camera looks down at the XZ terrain plane
@@ -1866,20 +1782,20 @@ namespace mmo
 					// Setup render target and projection
 					minimapRT->Activate();
 					minimapRT->Clear(ClearFlags::All);
-					
+
 					// Temporarily change entity render queue groups to match terrain for consistent rendering
-					std::vector<std::pair<Entity*, uint8>> originalRenderQueues;
-					for (const auto& mapEntity : m_mapEntities)
+					std::vector<std::pair<Entity *, uint8>> originalRenderQueues;
+					for (const auto &mapEntity : m_mapEntities)
 					{
 						if (mapEntity && &mapEntity->GetSceneNode())
 						{
-							const Vector3& entityPos = mapEntity->GetSceneNode().GetDerivedPosition();
+							const Vector3 &entityPos = mapEntity->GetSceneNode().GetDerivedPosition();
 							if (entityPos.x >= page->GetSceneNode()->GetDerivedPosition().x &&
 								entityPos.x < page->GetSceneNode()->GetDerivedPosition().x + pageSize &&
 								entityPos.z >= page->GetSceneNode()->GetDerivedPosition().z &&
 								entityPos.z < page->GetSceneNode()->GetDerivedPosition().z + pageSize)
 							{
-								Entity& entity = mapEntity->GetEntity();
+								Entity &entity = mapEntity->GetEntity();
 								originalRenderQueues.emplace_back(&entity, entity.GetRenderQueueGroup());
 								entity.SetRenderQueueGroup(WorldGeometry1); // Same as terrain
 							}
@@ -1892,7 +1808,7 @@ namespace mmo
 					minimapRT->Update();
 
 					// Restore original render queue groups
-					for (const auto& [entity, originalQueue] : originalRenderQueues)
+					for (const auto &[entity, originalQueue] : originalRenderQueues)
 					{
 						entity->SetRenderQueueGroup(originalQueue);
 					}
@@ -1943,7 +1859,7 @@ namespace mmo
 							// Apply compression
 							rygCompress(buffer.data(), pixelData.data(), minimapSize, minimapSize, false);
 							header.mipmapLengths[0] = static_cast<uint32>(buffer.size());
-							sink.Write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
+							sink.Write(reinterpret_cast<const char *>(buffer.data()), buffer.size());
 							saver.finish();
 
 							processedPages++;
@@ -1954,7 +1870,7 @@ namespace mmo
 							WLOG("Failed to create file for minimap: " << minimapFilename);
 						}
 					}
-					catch (const std::exception& e)
+					catch (const std::exception &e)
 					{
 						ELOG("Error saving minimap for page (" << pageX << ", " << pageY << "): " << e.what());
 					}
@@ -1971,7 +1887,7 @@ namespace mmo
 		gx.RestoreState();
 	}
 
-	Camera& WorldEditorInstance::GetCamera() const
+	Camera &WorldEditorInstance::GetCamera() const
 	{
 		ASSERT(m_camera);
 		return *m_camera;
@@ -1982,7 +1898,7 @@ namespace mmo
 		return (x << 8) | y;
 	}
 
-	bool WorldEditorInstance::GetPageCoordinatesFromIndex(const uint16 pageIndex, uint8& x, uint8& y) const
+	bool WorldEditorInstance::GetPageCoordinatesFromIndex(const uint16 pageIndex, uint8 &x, uint8 &y) const
 	{
 		if (pageIndex > 0xFFFF)
 		{
@@ -1997,10 +1913,11 @@ namespace mmo
 	void WorldEditorInstance::LoadPageEntities(const uint8 x, const uint8 y)
 	{
 		String baseFileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Entities" / std::to_string(BuildPageIndex(x, y))).string();
-		std::transform(baseFileName.begin(), baseFileName.end(), baseFileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
+		std::transform(baseFileName.begin(), baseFileName.end(), baseFileName.begin(), [](char c)
+					   { return c == '\\' ? '/' : c; });
 
-		const auto& files = AssetRegistry::ListFiles(baseFileName, ".wobj");
-		for (const auto& file : files)
+		const auto &files = AssetRegistry::ListFiles(baseFileName, ".wobj");
+		for (const auto &file : files)
 		{
 			std::unique_ptr<std::istream> filePtr = AssetRegistry::OpenFile(file);
 			if (!filePtr)
@@ -2009,8 +1926,8 @@ namespace mmo
 				continue;
 			}
 
-			io::StreamSource source{ *filePtr };
-			io::Reader reader{ source };
+			io::StreamSource source{*filePtr};
+			io::Reader reader{source};
 			WorldEntityLoader loader;
 			if (!loader.Read(reader))
 			{
@@ -2018,24 +1935,23 @@ namespace mmo
 				continue;
 			}
 
-			const auto& entity = loader.GetEntity();
-			Entity* object = CreateMapEntity(
+			const auto &entity = loader.GetEntity();
+			Entity *object = CreateMapEntity(
 				entity.meshName,
 				entity.position,
 				entity.rotation,
 				entity.scale,
-				entity.uniqueId
-			);
+				entity.uniqueId);
 
 			// We just loaded the object - it has not been modified
-			MapEntity* mapEntity = object->GetUserObject<MapEntity>();
+			MapEntity *mapEntity = object->GetUserObject<MapEntity>();
 			ASSERT(mapEntity);
 			mapEntity->SetDisplayName(entity.name);
 			mapEntity->SetCategory(entity.category);
 			mapEntity->MarkAsUnmodified();
 
 			// Apply material overrides
-			for (const auto& materialOverride : entity.materialOverrides)
+			for (const auto &materialOverride : entity.materialOverrides)
 			{
 				if (materialOverride.materialIndex >= object->GetNumSubEntities())
 				{
@@ -2050,19 +1966,18 @@ namespace mmo
 
 	void WorldEditorInstance::UnloadPageEntities(uint8 x, uint8 y)
 	{
-
 	}
 
 	void WorldEditorInstance::RemoveAllUnitSpawns()
 	{
-		for (auto* entity : m_spawnEntities)
+		for (auto *entity : m_spawnEntities)
 		{
 			m_scene.DestroyEntity(*entity);
 		}
 
 		m_spawnEntities.clear();
 
-		for (auto* node : m_spawnNodes)
+		for (auto *node : m_spawnNodes)
 		{
 			m_scene.GetRootSceneNode().RemoveChild(*node);
 			m_scene.DestroySceneNode(*node);
@@ -2074,7 +1989,7 @@ namespace mmo
 		m_objectSpawnIdGenerator.Reset();
 	}
 
-	void WorldEditorInstance::OnPageAvailabilityChanged(const PageNeighborhood& page, const bool isAvailable)
+	void WorldEditorInstance::OnPageAvailabilityChanged(const PageNeighborhood &page, const bool isAvailable)
 	{
 		if (!m_terrain)
 		{
@@ -2084,7 +1999,7 @@ namespace mmo
 		const auto &mainPage = page.GetMainPage();
 		const PagePosition &pos = mainPage.GetPosition();
 
-		auto* terrainPage = m_terrain->GetPage(pos.x(), pos.y());
+		auto *terrainPage = m_terrain->GetPage(pos.x(), pos.y());
 		if (!terrainPage)
 		{
 			return;
@@ -2107,7 +2022,7 @@ namespace mmo
 
 	void WorldEditorInstance::EnsurePageIsLoaded(PagePosition pos)
 	{
-		auto* page = m_terrain->GetPage(pos.x(), pos.y());
+		auto *page = m_terrain->GetPage(pos.x(), pos.y());
 		if (!page || !page->IsLoadable())
 		{
 			return;
@@ -2116,19 +2031,16 @@ namespace mmo
 		if (!page->Load())
 		{
 			m_dispatcher.post([this, pos]()
-				{
-					EnsurePageIsLoaded(pos);
-				});
+							  { EnsurePageIsLoaded(pos); });
 		}
 	}
 
-	void WorldEditorInstance::Visit(SelectedMapEntity& selectable)
+	void WorldEditorInstance::Visit(SelectedMapEntity &selectable)
 	{
-		static const char* s_noMaterialPreview = "<None>";
+		static const char *s_noMaterialPreview = "<None>";
 
-		MapEntity& mapEntity = selectable.GetEntity();
-		Entity& entity = mapEntity.GetEntity();
-
+		MapEntity &mapEntity = selectable.GetEntity();
+		Entity &entity = mapEntity.GetEntity();
 
 		ImGui::Text("Unique Id: %u", mapEntity.GetUniqueId());
 
@@ -2149,24 +2061,24 @@ namespace mmo
 			if (ImGui::BeginDragDropTarget())
 			{
 				// We only accept mesh file drops
-				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
+				if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmsh"))
 				{
-					entity.SetMesh(MeshManager::Get().Load(*static_cast<String*>(payload->Data)));
+					entity.SetMesh(MeshManager::Get().Load(*static_cast<String *>(payload->Data)));
 					mapEntity.MarkModified();
 				}
 
 				ImGui::EndDragDropTarget();
 			}
 		}
-		
+
 		if (ImGui::CollapsingHeader("Materials"))
 		{
 			for (uint32 i = 0; i < entity.GetNumSubEntities(); ++i)
 			{
-				SubEntity* sub = entity.GetSubEntity(i);
+				SubEntity *sub = entity.GetSubEntity(i);
 				ASSERT(sub);
 
-				SubMesh& submesh = entity.GetMesh()->GetSubMesh(i);
+				SubMesh &submesh = entity.GetMesh()->GetSubMesh(i);
 
 				ImGui::PushID(i);
 
@@ -2178,7 +2090,7 @@ namespace mmo
 				}
 
 				// Build preview string
-				const char* previewString = s_noMaterialPreview;
+				const char *previewString = s_noMaterialPreview;
 				if (material)
 				{
 					previewString = material->GetName().data();
@@ -2207,15 +2119,15 @@ namespace mmo
 				if (ImGui::BeginDragDropTarget())
 				{
 					// We only accept mesh file drops
-					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmat"))
+					if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmat"))
 					{
-						sub->SetMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
+						sub->SetMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
 						mapEntity.MarkModified();
 					}
 
-					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmi"))
+					if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmi"))
 					{
-						sub->SetMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
+						sub->SetMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
 						mapEntity.MarkModified();
 					}
 
@@ -2227,13 +2139,13 @@ namespace mmo
 		}
 	}
 
-	void WorldEditorInstance::Visit(SelectedTerrainTile& selectable)
+	void WorldEditorInstance::Visit(SelectedTerrainTile &selectable)
 	{
 		if (ImGui::CollapsingHeader("Tile"))
 		{
-			static const char* s_noMaterialPreview = "<None>";
+			static const char *s_noMaterialPreview = "<None>";
 
-			terrain::Tile& tile = selectable.GetTile();
+			terrain::Tile &tile = selectable.GetTile();
 
 			ImGui::Text("Tile Grid: %d x %d", tile.GetX(), tile.GetY());
 			ImGui::Text("Page Grid: %d x %d", tile.GetPage().GetX(), tile.GetPage().GetY());
@@ -2242,7 +2154,7 @@ namespace mmo
 			MaterialPtr material = tile.GetMaterial();
 
 			// Build preview string
-			const char* previewString = s_noMaterialPreview;
+			const char *previewString = s_noMaterialPreview;
 			if (material)
 			{
 				previewString = material->GetName().data();
@@ -2256,14 +2168,14 @@ namespace mmo
 			if (ImGui::BeginDragDropTarget())
 			{
 				// We only accept mesh file drops
-				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmat"))
+				if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmat"))
 				{
-					tile.SetMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
+					tile.SetMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
 				}
 
-				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmi"))
+				if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmi"))
 				{
-					tile.SetMaterial(MaterialManager::Get().Load(*static_cast<String*>(payload->Data)));
+					tile.SetMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
 				}
 
 				ImGui::EndDragDropTarget();
@@ -2271,7 +2183,6 @@ namespace mmo
 
 			if (ImGui::Button("Set For Page"))
 			{
-
 			}
 
 			if (ImGui::IsItemHovered())
@@ -2281,14 +2192,14 @@ namespace mmo
 		}
 	}
 
-	void WorldEditorInstance::Visit(SelectedUnitSpawn& selectable)
+	void WorldEditorInstance::Visit(SelectedUnitSpawn &selectable)
 	{
 		if (ImGui::CollapsingHeader("Unit Spawn"))
 		{
-			proto::UnitEntry* selectedUnit = m_editor.GetProject().units.getById(selectable.GetEntry().unitentry());
+			proto::UnitEntry *selectedUnit = m_editor.GetProject().units.getById(selectable.GetEntry().unitentry());
 			if (ImGui::BeginCombo("Unit", selectedUnit ? selectedUnit->name().c_str() : "(None)"))
 			{
-				for (const auto& unit : m_editor.GetProject().units.getTemplates().entry())
+				for (const auto &unit : m_editor.GetProject().units.getTemplates().entry())
 				{
 					ImGui::PushID(unit.id());
 					if (ImGui::Selectable(unit.name().c_str(), &unit == selectedUnit))
@@ -2320,20 +2231,19 @@ namespace mmo
 				selectable.GetEntry().set_health_percent(healthPercent);
 			}
 
-			static const char* s_standStateStrings[] = {
+			static const char *s_standStateStrings[] = {
 				"Stand",
 				"Sit",
 				"Sleep",
 				"Dead",
-				"Kneel"
-			};
+				"Kneel"};
 
 			static_assert(std::size(s_standStateStrings) == unit_stand_state::Count_, "Size of stand state strings must match");
 
 			if (ImGui::BeginCombo("Stand State", s_standStateStrings[selectable.GetEntry().standstate()]))
 			{
 				uint32 index = 0;
-				for (const auto& mode : s_standStateStrings)
+				for (const auto &mode : s_standStateStrings)
 				{
 					if (ImGui::Selectable(mode, selectable.GetEntry().movement() == index))
 					{
@@ -2352,16 +2262,15 @@ namespace mmo
 				selectable.GetEntry().set_respawndelay(respawnDelay);
 			}
 
-			static const char* s_movementModeStrings[] = {
+			static const char *s_movementModeStrings[] = {
 				"Stationary",
 				"Patrol",
-				"Route"
-			};
+				"Route"};
 
 			if (ImGui::BeginCombo("Movement", s_movementModeStrings[selectable.GetEntry().movement()]))
 			{
 				uint32 index = 0;
-				for (const auto& mode : s_movementModeStrings)
+				for (const auto &mode : s_movementModeStrings)
 				{
 					if (ImGui::Selectable(mode, selectable.GetEntry().movement() == index))
 					{
@@ -2376,14 +2285,14 @@ namespace mmo
 		}
 	}
 
-	void WorldEditorInstance::Visit(SelectedObjectSpawn& selectable)
+	void WorldEditorInstance::Visit(SelectedObjectSpawn &selectable)
 	{
 		if (ImGui::CollapsingHeader("Object Spawn"))
 		{
-			proto::ObjectEntry* selectedObject = m_editor.GetProject().objects.getById(selectable.GetEntry().objectentry());
+			proto::ObjectEntry *selectedObject = m_editor.GetProject().objects.getById(selectable.GetEntry().objectentry());
 			if (ImGui::BeginCombo("Object", selectedObject ? selectedObject->name().c_str() : "(None)"))
 			{
-				for (const auto& object : m_editor.GetProject().objects.getTemplates().entry())
+				for (const auto &object : m_editor.GetProject().objects.getTemplates().entry())
 				{
 					ImGui::PushID(object.id());
 					if (ImGui::Selectable(object.name().c_str(), &object == selectedObject))
@@ -2426,17 +2335,17 @@ namespace mmo
 			{
 				selectable.GetEntry().set_state(state);
 			}
-			
+
 			// Allow editing animation progress
 			uint32 animProgress = selectable.GetEntry().animprogress();
-			if (ImGui::SliderInt("Animation Progress", (int*)&animProgress, 0, 100))
+			if (ImGui::SliderInt("Animation Progress", (int *)&animProgress, 0, 100))
 			{
 				selectable.GetEntry().set_animprogress(animProgress);
 			}
 		}
 	}
 
-	bool WorldEditorInstance::ReadMVERChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	bool WorldEditorInstance::ReadMVERChunk(io::Reader &reader, uint32 chunkHeader, uint32 chunkSize)
 	{
 		ASSERT(chunkHeader == *versionChunk);
 
@@ -2462,7 +2371,7 @@ namespace mmo
 		return reader;
 	}
 
-	bool WorldEditorInstance::ReadMeshChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	bool WorldEditorInstance::ReadMeshChunk(io::Reader &reader, uint32 chunkHeader, uint32 chunkSize)
 	{
 		ASSERT(chunkHeader == *meshChunk);
 
@@ -2484,9 +2393,9 @@ namespace mmo
 		{
 			const size_t contentStart = reader.getSource()->position();
 			while (reader.getSource()->position() - contentStart < chunkSize)
-					{
-			 String meshName;
-			 if (!(reader >> io::read_string(meshName)))
+			{
+				String meshName;
+				if (!(reader >> io::read_string(meshName)))
 				{
 					ELOG("Failed to read world file: Unexpected end of file");
 					return false;
@@ -2499,7 +2408,7 @@ namespace mmo
 		return reader;
 	}
 
-	bool WorldEditorInstance::ReadEntityChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	bool WorldEditorInstance::ReadEntityChunk(io::Reader &reader, uint32 chunkHeader, uint32 chunkSize)
 	{
 		ASSERT(chunkHeader == *entityChunk);
 
@@ -2537,7 +2446,7 @@ namespace mmo
 		return reader;
 	}
 
-	bool WorldEditorInstance::ReadEntityChunkV2(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	bool WorldEditorInstance::ReadEntityChunkV2(io::Reader &reader, uint32 chunkHeader, uint32 chunkSize)
 	{
 		ASSERT(chunkHeader == *entityChunk);
 
@@ -2552,20 +2461,7 @@ namespace mmo
 		Vector3 position;
 		Quaternion rotation;
 		Vector3 scale;
-		if (!(reader
-			>> io::read<uint32>(uniqueId)
-			>> io::read<uint32>(meshNameIndex)
-			>> io::read<float>(position.x)
-			>> io::read<float>(position.y)
-			>> io::read<float>(position.z)
-			>> io::read<float>(rotation.w)
-			>> io::read<float>(rotation.x)
-			>> io::read<float>(rotation.y)
-			>> io::read<float>(rotation.z)
-			>> io::read<float>(scale.x)
-			>> io::read<float>(scale.y)
-			>> io::read<float>(scale.z)
-			))
+		if (!(reader >> io::read<uint32>(uniqueId) >> io::read<uint32>(meshNameIndex) >> io::read<float>(position.x) >> io::read<float>(position.y) >> io::read<float>(position.z) >> io::read<float>(rotation.w) >> io::read<float>(rotation.x) >> io::read<float>(rotation.y) >> io::read<float>(rotation.z) >> io::read<float>(scale.x) >> io::read<float>(scale.y) >> io::read<float>(scale.z)))
 		{
 			ELOG("Failed to read map entity chunk content, unexpected end of file!");
 			return false;
@@ -2611,10 +2507,10 @@ namespace mmo
 			m_objectIdGenerator.NotifyId(uniqueId);
 		}
 
-		if (Entity* entity = CreateMapEntity(m_meshNames[meshNameIndex], position, rotation, scale, uniqueId))
+		if (Entity *entity = CreateMapEntity(m_meshNames[meshNameIndex], position, rotation, scale, uniqueId))
 		{
 			// Apply material overrides
-			for (const auto& materialOverride : materialOverrides)
+			for (const auto &materialOverride : materialOverrides)
 			{
 				if (materialOverride.materialIndex >= entity->GetNumSubEntities())
 				{
@@ -2629,7 +2525,7 @@ namespace mmo
 		return reader;
 	}
 
-	bool WorldEditorInstance::ReadTerrainChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	bool WorldEditorInstance::ReadTerrainChunk(io::Reader &reader, uint32 chunkHeader, uint32 chunkSize)
 	{
 		ASSERT(chunkHeader == *terrainChunk);
 
@@ -2637,9 +2533,7 @@ namespace mmo
 		RemoveChunkHandler(*terrainChunk);
 
 		String defaultTerrainMaterial;
-		reader
-			>> io::read<uint8>(m_hasTerrain)
-			>> io::read_container<uint16>(defaultTerrainMaterial);
+		reader >> io::read<uint8>(m_hasTerrain) >> io::read_container<uint16>(defaultTerrainMaterial);
 
 		if (!defaultTerrainMaterial.empty())
 		{
@@ -2665,7 +2559,7 @@ namespace mmo
 		return ChunkReader::OnReadFinished();
 	}
 
-	void WorldEditorInstance::SetEditMode(WorldEditMode* editMode)
+	void WorldEditorInstance::SetEditMode(WorldEditMode *editMode)
 	{
 		if (editMode == m_editMode)
 		{
