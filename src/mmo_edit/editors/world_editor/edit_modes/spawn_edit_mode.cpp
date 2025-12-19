@@ -77,8 +77,10 @@ namespace mmo
 				}
 				ImGui::PopStyleColor(3);
 				
-				ImGui::SameLine();
-				ImGui::TextDisabled("Create a map entry to enable spawning");
+				ImGui::Spacing();
+				ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+				ImGui::TextWrapped("Create a map entry to enable spawning");
+				ImGui::PopStyleColor();
 			}
 			
 			ImGui::Unindent();
@@ -96,7 +98,7 @@ namespace mmo
 			// Search filter
 			ImGui::SetNextItemWidth(-1);
 			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.18f, 1.0f));
-			ImGui::InputTextWithHint("##UnitSearch", "🔍 Search units...", &s_unitSearchFilter);
+			ImGui::InputTextWithHint("##UnitSearch", "Search units...", &s_unitSearchFilter);
 			ImGui::PopStyleColor();
 			
 			ImGui::Spacing();
@@ -177,7 +179,9 @@ namespace mmo
 			ImGui::PopStyleColor(4);
 			
 			ImGui::Spacing();
-			ImGui::TextDisabled("Drag units to the viewport to spawn them");
+			ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+			ImGui::TextWrapped("Drag units to the viewport to spawn them");
+			ImGui::PopStyleColor();
 			
 			ImGui::Unindent();
 		}
@@ -270,7 +274,9 @@ namespace mmo
 			ImGui::PopStyleColor(4);
 			
 			ImGui::Spacing();
-			ImGui::TextDisabled("Drag objects to the viewport to spawn them");
+			ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+			ImGui::TextWrapped("Drag objects to the viewport to spawn them");
+			ImGui::PopStyleColor();
 			
 			ImGui::Unindent();
 		}
