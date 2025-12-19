@@ -33,6 +33,7 @@
 #include "edit_modes/navigation_edit_mode.h"
 #include "edit_modes/sky_edit_mode.h"
 #include "scene_outline_window.h"
+#include "grid_snap_settings.h"
 
 namespace mmo
 {
@@ -265,9 +266,9 @@ namespace mmo
 
 		Camera& GetCamera() const override;
 
-		bool IsGridSnapEnabled() const override { return m_gridSnap; }
+		bool IsGridSnapEnabled() const override { return m_gridSnapSettings.IsEnabled(); }
 
-		float GetTranslateGridSnapSize() const override { return m_translateSnapSizes[m_currentTranslateSnapSize]; }
+		float GetTranslateGridSnapSize() const override { return m_gridSnapSettings.GetCurrentTranslateSnap(); }
 
 		bool HasTerrain() const override { return m_hasTerrain; }
 
@@ -313,11 +314,7 @@ namespace mmo
 
 		std::unique_ptr<terrain::Terrain> m_terrain;
 
-		bool m_gridSnap { true };
-		float m_translateSnapSizes[7] = { 0.1f, 0.25f, 0.5f, 1.0f, 1.5f, 2.0f, 4.0f };
-		float m_rotateSnapSizes[6] = { 1.0f, 5.0f, 10.0f, 15.0f, 45.0f, 90.0f };
-		int m_currentTranslateSnapSize { 3 };
-		int m_currentRotateSnapSize { 3 };
+		GridSnapSettings m_gridSnapSettings;
 		
 		std::unique_ptr<asio::io_service::work> m_work;
 		asio::io_service m_workQueue;

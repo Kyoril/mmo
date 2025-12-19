@@ -683,13 +683,15 @@ namespace mmo
 		ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
 		ImGui::SameLine();
 
-		if (ImGui::Checkbox("Snap", &m_gridSnap))
+		bool snapEnabled = m_gridSnapSettings.IsEnabled();
+		if (ImGui::Checkbox("Snap", &snapEnabled))
 		{
-			m_transformWidget->SetSnapping(m_gridSnap);
+			m_gridSnapSettings.SetEnabled(snapEnabled);
+			m_transformWidget->SetSnapping(snapEnabled);
 		}
 		ImGui::SameLine();
 
-		if (m_gridSnap)
+		if (m_gridSnapSettings.IsEnabled())
 		{
 			DrawSnapSettings();
 		}
@@ -711,8 +713,8 @@ namespace mmo
 
 	void WorldEditorInstance::DrawSnapSettings()
 	{
-		static const char* s_translategridSizes[] = { "0.1", "0.25", "0.5", "1.0", "1.5", "2.0", "4.0" };
-		static const char* s_rotateSnapSizes[] = { "1", "5", "10", "15", "45", "90" };
+		const auto& translateLabels = GridSnapSettings::GetTranslateSizeLabels();
+		const auto& rotateLabels = GridSnapSettings::GetRotateSizeLabels();
 
 		const char* previewValue = nullptr;
 
@@ -720,10 +722,10 @@ namespace mmo
 		{
 		case TransformMode::Translate:
 		case TransformMode::Scale:
-			previewValue = s_translategridSizes[m_currentTranslateSnapSize];
+			previewValue = translateLabels[m_gridSnapSettings.GetCurrentTranslateIndex()];
 			break;
 		case TransformMode::Rotate:
-			previewValue = s_rotateSnapSizes[m_currentRotateSnapSize];
+			previewValue = rotateLabels[m_gridSnapSettings.GetCurrentRotateIndex()];
 			break;
 		}
 
@@ -735,13 +737,13 @@ namespace mmo
 			{
 			case TransformMode::Translate:
 			case TransformMode::Scale:
-				for (int i = 0; i < std::size(s_translategridSizes); ++i)
+				for (int i = 0; i < static_cast<int>(translateLabels.size()); ++i)
 				{
-					const bool isSelected = i == m_currentTranslateSnapSize;
-					if (ImGui::Selectable(s_translategridSizes[i], isSelected))
+					const bool isSelected = i == m_gridSnapSettings.GetCurrentTranslateIndex();
+					if (ImGui::Selectable(translateLabels[i], isSelected))
 					{
-						m_currentTranslateSnapSize = i;
-						m_transformWidget->SetTranslateSnapSize(m_translateSnapSizes[m_currentTranslateSnapSize]);
+						m_gridSnapSettings.SetCurrentTranslateIndex(i);
+						m_transformWidget->SetTranslateSnapSize(m_gridSnapSettings.GetCurrentTranslateSnap());
 					}
 					if (isSelected)
 					{
@@ -750,13 +752,13 @@ namespace mmo
 				}
 				break;
 			case TransformMode::Rotate:
-				for (int i = 0; i < std::size(s_rotateSnapSizes); ++i)
+				for (int i = 0; i < static_cast<int>(rotateLabels.size()); ++i)
 				{
-					const bool isSelected = i == m_currentRotateSnapSize;
-					if (ImGui::Selectable(s_rotateSnapSizes[i], isSelected))
+					const bool isSelected = i == m_gridSnapSettings.GetCurrentRotateIndex();
+					if (ImGui::Selectable(rotateLabels[i], isSelected))
 					{
-						m_currentRotateSnapSize = i;
-						m_transformWidget->SetRotateSnapSize(m_rotateSnapSizes[m_currentRotateSnapSize]);
+						m_gridSnapSettings.SetCurrentRotateIndex(i);
+						m_transformWidget->SetRotateSnapSize(m_gridSnapSettings.GetCurrentRotateSnap());
 					}
 					if (isSelected)
 					{
