@@ -23,19 +23,22 @@ namespace ImGui
 	{
 		ImGui::BeginGroup();
 
-		auto cursorPos = ImGui::GetCursorScreenPos();
-		auto itemSpacing = ImGui::GetStyle().ItemSpacing;
+		const auto itemSpacing = ImGui::GetStyle().ItemSpacing;
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
 
-		auto frameHeight = ImGui::GetFrameHeight();
+		const auto frameHeight = ImGui::GetFrameHeight();
 		ImGui::BeginGroup();
 
 		ImVec2 effectiveSize = size;
 		if (size.x < 0.0f)
+		{
 			effectiveSize.x = ImGui::GetContentRegionAvail().x;
+		}
 		else
+		{
 			effectiveSize.x = size.x;
+		}
 		ImGui::Dummy(ImVec2(effectiveSize.x, 0.0f));
 
 		ImGui::Dummy(ImVec2(frameHeight * 0.5f, 0.0f));
@@ -43,7 +46,11 @@ namespace ImGui
 		ImGui::BeginGroup();
 		ImGui::Dummy(ImVec2(frameHeight * 0.5f, 0.0f));
 		ImGui::SameLine(0.0f, 0.0f);
-		ImGui::TextUnformatted(name);
+		if (name && *name)
+		{
+			ImGui::Text(name);
+		}
+		
 		auto labelMin = ImGui::GetItemRectMin();
 		auto labelMax = ImGui::GetItemRectMax();
 		ImGui::SameLine(0.0f, 0.0f);
@@ -71,12 +78,8 @@ namespace ImGui
 	{
 		ImGui::PopItemWidth();
 
-		auto itemSpacing = ImGui::GetStyle().ItemSpacing;
-
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
-		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
-
-		auto frameHeight = ImGui::GetFrameHeight();
+		const auto itemSpacing = ImGui::GetStyle().ItemSpacing;
+		const auto frameHeight = ImGui::GetFrameHeight();
 
 		ImGui::EndGroup();
 
@@ -127,8 +130,6 @@ namespace ImGui
 
 			ImGui::PopClipRect();
 		}
-
-		ImGui::PopStyleVar(2);
 
 #if IMGUI_VERSION_NUM >= 17301
 		ImGui::GetCurrentWindow()->ContentRegionRect.Max.x += frameHeight * 0.5f;
@@ -358,7 +359,7 @@ namespace mmo
 
 	void ItemEditorWindow::DrawDetailsImpl(EntryType &currentEntry)
 	{
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
 		if (ImGui::Button("Duplicate Item", ImVec2(140, 0)))
 		{
 			proto::ItemEntry *copied = m_project.items.add();
@@ -616,25 +617,33 @@ namespace mmo
 				SLIDER_UINT32_PROP(durability, "Durability", 0, 200);
 				ImGui::SameLine();
 				DrawHelpMarker("Maximum durability of this item");
-				ImGui::Spacing();
-				DrawSectionHeader("Weapon Properties");
 
-				ImGui::SetNextItemWidth(150);
-				SLIDER_UINT32_PROP(delay, "Attack Speed (ms)", 0, 100000000);
-				ImGui::SameLine();
-				DrawHelpMarker("Time between attacks in milliseconds (lower = faster)");
-
-				float damage[2] = {currentEntry.damage().mindmg(), currentEntry.damage().maxdmg()};
-				if (ImGui::InputFloat2("Min / Max Damage", damage))
+				// Only show weapon properties for weapons
+				if (currentItemClass == item_class::Weapon)
 				{
-					if (damage[1] < damage[0] || damage[0] > damage[1])
-						damage[1] = damage[0];
+					ImGui::Spacing();
+					DrawSectionHeader("Weapon Properties");
 
-					currentEntry.mutable_damage()->set_type(0);
-					currentEntry.mutable_damage()->set_mindmg(damage[0]);
-					currentEntry.mutable_damage()->set_maxdmg(damage[1]);
+					ImGui::SetNextItemWidth(150);
+					SLIDER_UINT32_PROP(delay, "Attack Speed (ms)", 0, 100000000);
+					ImGui::SameLine();
+					DrawHelpMarker("Time between attacks in milliseconds (lower = faster)");
+
+					float damage[2] = {currentEntry.damage().mindmg(), currentEntry.damage().maxdmg()};
+					if (ImGui::InputFloat2("Min / Max Damage", damage))
+					{
+						if (damage[1] < damage[0] || damage[0] > damage[1])
+							damage[1] = damage[0];
+
+						currentEntry.mutable_damage()->set_type(0);
+						currentEntry.mutable_damage()->set_mindmg(damage[0]);
+						currentEntry.mutable_damage()->set_maxdmg(damage[1]);
+					}
 				}
 			}
+
+			ImGui::Spacing();
+			DrawSectionHeader("Display Properties");
 
 			// Quality
 			int currentQuality = currentEntry.quality();
@@ -650,8 +659,13 @@ namespace mmo
 			{
 				currentEntry.set_quality(currentQuality);
 			}
+			ImGui::SameLine();
+			DrawHelpMarker("Visual quality of the item (affects text color in tooltip)");
 
-			ImGui::BeginGroupPanel("Tooltip Preview", ImVec2(0, -1));
+			ImGui::Spacing();
+			DrawSectionHeader("Tooltip Preview");
+
+			ImGui::BeginGroupPanel(nullptr, ImVec2(0, -1));
 			ImGui::TextColored(s_itemQualityColors[currentQuality].Value, currentEntry.name().c_str());
 
 			if (currentItemClass == item_class::Weapon || currentItemClass == item_class::Armor)
@@ -709,10 +723,10 @@ namespace mmo
 				MONEY_PROP_LABEL(sellprice);
 			}
 			ImGui::EndGroupPanel();
-		}
 
-		ImGui::PopStyleVar(2);
-		ImGui::Unindent();
+			ImGui::PopStyleVar(2);
+			ImGui::Unindent();
+		}
 
 		// Equippable items can have stats and spells
 		if (currentEntry.itemclass() == ItemClass::Armor || currentEntry.itemclass() == ItemClass::Weapon)
@@ -774,7 +788,7 @@ namespace mmo
 					ImGui::TextWrapped("No stat bonuses defined. Click 'Add Stat' to create one.");
 					ImGui::PopStyleColor();
 				}
-				else if (ImGui::BeginTable("statsTable", 6, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+				else if (ImGui::BeginTable("statsTable", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
 				{
 					ImGui::TableSetupColumn("Stat", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthStretch);
 					ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
@@ -994,7 +1008,7 @@ namespace mmo
 			ImGui::SetNextItemWidth(150);
 			SLIDER_UINT32_PROP(buycount, "Buy Count", 0, 100000000);
 			ImGui::SameLine();
-			DrawHelpMarker("How many items a vendor restocks at once");
+			DrawHelpMarker("When buying from a vendor, you are forced to buy this many items at a time");
 
 			ImGui::Spacing();
 
