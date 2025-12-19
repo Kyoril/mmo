@@ -2,6 +2,7 @@
 
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "item_editor_window.h"
+#include "item_display_editor_window.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -1064,6 +1065,31 @@ namespace mmo
 			ImGui::SameLine();
 			DrawHelpMarker("Visual appearance configuration for client rendering");
 
+			// Edit Display button - opens the item display editor with this display selected
+			ImGui::BeginDisabled(displayId == 0);
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
+			if (ImGui::Button("Edit Display", ImVec2(120, 0)))
+			{
+				// Find and open the item display editor window
+				for (size_t i = 0; i < m_host.GetWindowCount(); ++i)
+				{
+					EditorWindowBase* window = m_host.GetWindow(i);
+					if (window && window->GetName() == "Item Display Editor")
+					{
+						auto* displayEditor = dynamic_cast<ItemDisplayEditorWindow*>(window);
+						if (displayEditor)
+						{
+							displayEditor->SelectEntryById(displayId);
+						}
+						break;
+					}
+				}
+			}
+			ImGui::PopStyleColor();
+			ImGui::EndDisabled();
+			ImGui::SameLine();
+			DrawHelpMarker("Open the Item Display Editor to edit this item's visual appearance");
+
 			ImGui::Spacing();
 
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
@@ -1074,6 +1100,21 @@ namespace mmo
 				newDisplay->set_name(currentEntry.name());
 				newDisplay->set_id(newId);
 				currentEntry.set_displayid(newId);
+				
+				// Automatically open the item display editor with the newly created entry
+				for (size_t i = 0; i < m_host.GetWindowCount(); ++i)
+				{
+					EditorWindowBase* window = m_host.GetWindow(i);
+					if (window && window->GetName() == "Item Display Editor")
+					{
+						auto* displayEditor = dynamic_cast<ItemDisplayEditorWindow*>(window);
+						if (displayEditor)
+						{
+							displayEditor->SelectEntryById(newId);
+						}
+						break;
+					}
+				}
 			}
 			ImGui::PopStyleColor();
 			ImGui::SameLine();

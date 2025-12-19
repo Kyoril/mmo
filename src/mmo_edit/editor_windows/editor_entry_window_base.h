@@ -33,6 +33,10 @@ namespace mmo
 
 		virtual void DrawDetailsImpl(T2 &currentEntry) = 0;
 
+		/// @brief Selects an entry by its ID and opens the window.
+		/// @param entryId The ID of the entry to select.
+		void SelectEntryById(uint32 entryId);
+
 	protected:
 		virtual void OnNewEntry(proto::TemplateManager<T1, T2>::EntryType &entry) {}
 
@@ -41,6 +45,7 @@ namespace mmo
 	protected:
 		proto::Project &m_project;
 		proto::TemplateManager<T1, T2> &m_manager;
+		int m_currentItem = -1;
 	};
 
 	template <class T1, class T2>
@@ -63,8 +68,6 @@ namespace mmo
 				widthSet = true;
 			}
 
-			static int currentItem = -1;
-
 			// First column - Entry list with controls
 			{
 				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
@@ -76,16 +79,16 @@ namespace mmo
 					auto *entry = m_manager.add();
 					OnNewEntry(*entry);
 					// Select the newly added entry
-					currentItem = m_manager.count() - 1;
+				m_currentItem = m_manager.count() - 1;
 				}
 				ImGui::PopStyleColor();
 
-				ImGui::BeginDisabled(currentItem == -1 || currentItem >= m_project.spells.count());
+				ImGui::BeginDisabled(m_currentItem == -1 || m_currentItem >= m_project.spells.count());
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
 				if (ImGui::Button("Remove Selected", ImVec2(-1, 0)))
 				{
-					m_manager.remove(m_manager.getTemplates().entry().at(currentItem).id());
-					currentItem = -1;
+					m_manager.remove(m_manager.getTemplates().entry().at(m_currentItem).id());
+					m_currentItem = -1;
 				}
 				ImGui::PopStyleColor();
 				ImGui::EndDisabled();
@@ -212,11 +215,11 @@ namespace mmo
 
 				// Find the filtered index of the currently selected item
 				int filteredCurrentItem = -1;
-				if (currentItem != -1)
+				if (m_currentItem != -1)
 				{
 					for (int i = 0; i < filteredIndices.size(); ++i)
 					{
-						if (filteredIndices[i] == currentItem)
+						if (filteredIndices[i] == m_currentItem)
 						{
 							filteredCurrentItem = i;
 							break;
@@ -253,11 +256,11 @@ namespace mmo
 					// When selection changes, update the actual selected item
 					if (filteredCurrentItem >= 0 && filteredCurrentItem < filteredIndices.size())
 					{
-						currentItem = filteredIndices[filteredCurrentItem];
+						m_currentItem = filteredIndices[filteredCurrentItem];
 					}
 					else
 					{
-						currentItem = -1;
+						m_currentItem = -1;
 					}
 				}
 
@@ -270,9 +273,9 @@ namespace mmo
 			// Second column - Details view
 			{
 				T2 *currentEntry = nullptr;
-				if (currentItem != -1 && currentItem < m_manager.count())
+				if (m_currentItem != -1 && m_currentItem < m_manager.count())
 				{
-					currentEntry = &m_manager.getTemplates().mutable_entry()->at(currentItem);
+					currentEntry = &m_manager.getTemplates().mutable_entry()->at(m_currentItem);
 				}
 
 				// Create a child window for the scrollable details
@@ -295,5 +298,25 @@ namespace mmo
 		ImGui::End();
 
 		return false;
+	}
+
+	template <class T1, class T2>
+	void EditorEntryWindowBase<T1, T2>::SelectEntryById(uint32 entryId)
+	{
+		// Find the entry with the given ID
+		for (int i = 0; i < m_manager.count(); ++i)
+		{
+			if (m_manager.getTemplates().entry().at(i).id() == entryId)
+			{
+				// Select this entry
+				m_currentItem = i;
+				// Open the window
+				Open();
+				return;
+			}
+		}
+		
+		// Entry not found, just open the window
+		Open();
 	}
 }

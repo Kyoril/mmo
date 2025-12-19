@@ -31,6 +31,10 @@ namespace mmo
 
 		virtual void RemoveEditorWindow(const String& name) = 0;
 
+		virtual EditorWindowBase* GetWindow(size_t index) const = 0;
+
+		virtual size_t GetWindowCount() const = 0;
+
 		virtual void SetActiveEditorInstance(EditorInstance* instance) = 0;
 
 		virtual void EditorInstanceClosed(EditorInstance& instance) = 0;
