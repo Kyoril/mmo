@@ -6,39 +6,17 @@
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include "assets/asset_registry.h"
+#include "editor_imgui_helpers.h"
 #include "game/aura.h"
 #include "game/item.h"
 #include "game/spell.h"
 #include "game_server/spells/spell_cast.h"
 #include "graphics/texture_mgr.h"
 #include "log/default_log_levels.h"
+#include "editor_imgui_helpers.h"
 
 namespace mmo
 {
-	namespace
-	{
-		void DrawSectionHeader(const char* text)
-		{
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
-			ImGui::Text("%s", text);
-			ImGui::PopStyleColor();
-			ImGui::Separator();
-			ImGui::Spacing();
-		}
-
-		void DrawHelpMarker(const char* desc)
-		{
-			ImGui::TextDisabled("(?)");
-			if (ImGui::IsItemHovered())
-			{
-				ImGui::BeginTooltip();
-				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-				ImGui::TextUnformatted(desc);
-				ImGui::PopTextWrapPos();
-				ImGui::EndTooltip();
-			}
-		}
-	}
 
 	extern std::vector<String> s_itemClassStrings;
 

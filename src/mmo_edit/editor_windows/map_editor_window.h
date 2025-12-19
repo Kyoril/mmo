@@ -4,7 +4,7 @@
 
 #include "base/non_copyable.h"
 
-#include "editor_window_base.h"
+#include "editor_entry_window_base.h"
 
 #include "editor_host.h"
 #include "proto_data/project.h"
@@ -12,16 +12,15 @@
 namespace mmo
 {
 	class MapEditorWindow final
-		: public EditorWindowBase
+		: public EditorEntryWindowBase<proto::Maps, proto::MapEntry>
 		, public NonCopyable
 	{
 	public:
 		explicit MapEditorWindow(const String& name, proto::Project& project, EditorHost& host);
 		~MapEditorWindow() override = default;
 
-	public:
-		/// Draws the viewport window.
-		bool Draw() override;
+	private:
+		void DrawDetailsImpl(proto::MapEntry& currentEntry) override;
 
 	public:
 		bool IsDockable() const override { return true; }
@@ -30,6 +29,5 @@ namespace mmo
 
 	private:
 		EditorHost& m_host;
-		proto::Project& m_project;
 	};
 }

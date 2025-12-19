@@ -5,6 +5,7 @@
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
+#include "editor_imgui_helpers.h"
 #include "game/object_type_id.h"
 #include "game/quest.h"
 #include "log/default_log_levels.h"
@@ -16,38 +17,40 @@ namespace mmo
 	{
 		float GetBasePercent(const int32 questLevel)
 		{
-			if (questLevel <= 5) return 0.17f;
-			if (questLevel <= 10) return 0.13f;
-			if (questLevel <= 15) return 0.09f;
+			if (questLevel <= 5)
+				return 0.17f;
+			if (questLevel <= 10)
+				return 0.13f;
+			if (questLevel <= 15)
+				return 0.09f;
 			return 0.06f;
 		}
 
 		int32 GetXPToNextLevel(const int32 questLevel)
 		{
 			// TODO: Derive from table
-			int32 xpToNextLevel[] = 
-			{
-				400,
-				900,
-				1400,
-				2100,
-				2800,
-				3600,
-				4500,
-				5400,
-				6500,
-				7600,
-				8800,
-				10100,
-				11400,
-				12900,
-				14400,
-				16000,
-				17700,
-				19400,
-				21300,
-				23200
-			};
+			int32 xpToNextLevel[] =
+				{
+					400,
+					900,
+					1400,
+					2100,
+					2800,
+					3600,
+					4500,
+					5400,
+					6500,
+					7600,
+					8800,
+					10100,
+					11400,
+					12900,
+					14400,
+					16000,
+					17700,
+					19400,
+					21300,
+					23200};
 
 			if (questLevel < 0)
 			{
@@ -74,34 +77,10 @@ namespace mmo
 			const float baseReward = xpToNextLevel * basePercent * difficultyMultiplier;
 			return RoundToNearest5(baseReward);
 		}
-
-		void DrawSectionHeader(const char* text)
-		{
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
-			ImGui::Text("%s", text);
-			ImGui::PopStyleColor();
-			ImGui::Separator();
-			ImGui::Spacing();
-		}
-
-		void DrawHelpMarker(const char* desc)
-		{
-			ImGui::TextDisabled("(?)");
-			if (ImGui::IsItemHovered())
-			{
-				ImGui::BeginTooltip();
-				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-				ImGui::TextUnformatted(desc);
-				ImGui::PopTextWrapPos();
-				ImGui::EndTooltip();
-			}
-		}
-
 	}
 
-	QuestEditorWindow::QuestEditorWindow(const String& name, proto::Project& project, EditorHost& host)
-		: EditorEntryWindowBase(project, project.quests, name)
-		, m_host(host)
+	QuestEditorWindow::QuestEditorWindow(const String &name, proto::Project &project, EditorHost &host)
+		: EditorEntryWindowBase(project, project.quests, name), m_host(host)
 	{
 		EditorWindowBase::SetVisible(false);
 
@@ -109,74 +88,74 @@ namespace mmo
 		m_toolbarButtonText = "Quests";
 	}
 
-	void QuestEditorWindow::DrawDetailsImpl(proto::QuestEntry& currentEntry)
+	void QuestEditorWindow::DrawDetailsImpl(proto::QuestEntry &currentEntry)
 	{
 		// Top toolbar with actions
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
 		if (ImGui::Button("Duplicate Quest", ImVec2(120, 0)))
 		{
-			proto::QuestEntry* copied = m_project.quests.add();
+			proto::QuestEntry *copied = m_project.quests.add();
 			const uint32 newId = copied->id();
 			copied->CopyFrom(currentEntry);
 			copied->set_id(newId);
 		}
 		ImGui::PopStyleColor();
-		
+
 		ImGui::SameLine();
 		DrawHelpMarker("Create a copy of this quest with a new ID");
 
 		ImGui::Separator();
 		ImGui::Spacing();
 
-#define SLIDER_UNSIGNED_PROP(name, label, datasize, min, max) \
-	{ \
-		const char* format = "%d"; \
-		uint##datasize value = currentEntry.name(); \
+#define SLIDER_UNSIGNED_PROP(name, label, datasize, min, max)                               \
+	{                                                                                       \
+		const char *format = "%d";                                                          \
+		uint##datasize value = currentEntry.name();                                         \
 		if (ImGui::InputScalar(label, ImGuiDataType_U##datasize, &value, nullptr, nullptr)) \
-		{ \
-			if (value >= (min) && value <= (max)) \
-				currentEntry.set_##name(value); \
-		} \
+		{                                                                                   \
+			if (value >= (min) && value <= (max))                                           \
+				currentEntry.set_##name(value);                                             \
+		}                                                                                   \
 	}
-#define CHECKBOX_BOOL_PROP(name, label) \
-	{ \
-		bool value = currentEntry.name(); \
+#define CHECKBOX_BOOL_PROP(name, label)     \
+	{                                       \
+		bool value = currentEntry.name();   \
 		if (ImGui::Checkbox(label, &value)) \
-		{ \
+		{                                   \
 			currentEntry.set_##name(value); \
-		} \
+		}                                   \
 	}
-#define CHECKBOX_FLAG_PROP(property, label, flags) \
-	{ \
-		bool value = (currentEntry.property() & static_cast<uint32>(flags)) != 0; \
-		if (ImGui::Checkbox(label, &value)) \
-		{ \
-			if (value) \
-				currentEntry.set_##property(currentEntry.property() | static_cast<uint32>(flags)); \
-			else \
+#define CHECKBOX_FLAG_PROP(property, label, flags)                                                  \
+	{                                                                                               \
+		bool value = (currentEntry.property() & static_cast<uint32>(flags)) != 0;                   \
+		if (ImGui::Checkbox(label, &value))                                                         \
+		{                                                                                           \
+			if (value)                                                                              \
+				currentEntry.set_##property(currentEntry.property() | static_cast<uint32>(flags));  \
+			else                                                                                    \
 				currentEntry.set_##property(currentEntry.property() & ~static_cast<uint32>(flags)); \
-		} \
+		}                                                                                           \
 	}
-#define CHECKBOX_ATTR_PROP(index, label, flags) \
-	{ \
-		bool value = (currentEntry.attributes(index) & static_cast<uint32>(flags)) != 0; \
-		if (ImGui::Checkbox(label, &value)) \
-		{ \
-			if (value) \
-				currentEntry.mutable_attributes()->Set(index, currentEntry.attributes(index) | static_cast<uint32>(flags)); \
-			else \
+#define CHECKBOX_ATTR_PROP(index, label, flags)                                                                              \
+	{                                                                                                                        \
+		bool value = (currentEntry.attributes(index) & static_cast<uint32>(flags)) != 0;                                     \
+		if (ImGui::Checkbox(label, &value))                                                                                  \
+		{                                                                                                                    \
+			if (value)                                                                                                       \
+				currentEntry.mutable_attributes()->Set(index, currentEntry.attributes(index) | static_cast<uint32>(flags));  \
+			else                                                                                                             \
 				currentEntry.mutable_attributes()->Set(index, currentEntry.attributes(index) & ~static_cast<uint32>(flags)); \
-		} \
+		}                                                                                                                    \
 	}
-#define SLIDER_FLOAT_PROP(name, label, min, max) \
-	{ \
-		const char* format = "%.2f"; \
-		float value = currentEntry.name(); \
+#define SLIDER_FLOAT_PROP(name, label, min, max)                                      \
+	{                                                                                 \
+		const char *format = "%.2f";                                                  \
+		float value = currentEntry.name();                                            \
 		if (ImGui::InputScalar(label, ImGuiDataType_Float, &value, nullptr, nullptr)) \
-		{ \
-			if (value >= min && value <= max) \
-				currentEntry.set_##name(value); \
-		} \
+		{                                                                             \
+			if (value >= min && value <= max)                                         \
+				currentEntry.set_##name(value);                                       \
+		}                                                                             \
 	}
 #define SLIDER_UINT32_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 32, min, max)
 #define SLIDER_UINT64_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 64, min, max)
@@ -186,9 +165,9 @@ namespace mmo
 			ImGui::Indent();
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
 			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
-			
+
 			DrawSectionHeader("Basic Details");
-			
+
 			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
 			ImGui::InputText("##InternalName", currentEntry.mutable_internalname());
 			ImGui::SameLine();
@@ -242,7 +221,7 @@ namespace mmo
 			}
 			ImGui::SameLine();
 			DrawHelpMarker("Simple delivery quest");
-			
+
 			ImGui::SameLine(0, 20);
 			if (ImGui::RadioButton("Task", currentEntry.type() == 1))
 			{
@@ -250,7 +229,7 @@ namespace mmo
 			}
 			ImGui::SameLine();
 			DrawHelpMarker("Quest with specific tasks");
-			
+
 			ImGui::SameLine(0, 20);
 			if (ImGui::RadioButton("Quest", currentEntry.type() == 2))
 			{
@@ -295,8 +274,8 @@ namespace mmo
 			DrawSectionHeader("Quest Items & Prerequisites");
 
 			uint32 sourceItemId = currentEntry.srcitemid();
-			const auto* itemEntry = m_project.items.getById(sourceItemId);
-			
+			const auto *itemEntry = m_project.items.getById(sourceItemId);
+
 			ImGui::SetNextItemWidth(300);
 			if (ImGui::BeginCombo("##InitialItem", itemEntry != nullptr ? itemEntry->name().c_str() : "None", ImGuiComboFlags_None))
 			{
@@ -307,12 +286,12 @@ namespace mmo
 					sourceItemId = 0;
 				}
 				ImGui::PopID();
-			
+
 				for (int i = 0; i < m_project.items.count(); i++)
 				{
 					ImGui::PushID(i);
 					const bool item_selected = m_project.items.getTemplates().entry(i).id() == sourceItemId;
-					const char* item_text = m_project.items.getTemplates().entry(i).name().c_str();
+					const char *item_text = m_project.items.getTemplates().entry(i).name().c_str();
 					if (ImGui::Selectable(item_text, item_selected))
 					{
 						currentEntry.set_srcitemid(m_project.items.getTemplates().entry(i).id());
@@ -347,7 +326,7 @@ namespace mmo
 				prevQuestId = 0;
 			}
 
-			const auto* questEntry = m_project.quests.getById(prevQuestId);
+			const auto *questEntry = m_project.quests.getById(prevQuestId);
 			ImGui::SetNextItemWidth(300);
 			if (ImGui::BeginCombo("##PrevQuest", questEntry != nullptr ? questEntry->name().c_str() : "(None)", ImGuiComboFlags_None))
 			{
@@ -368,7 +347,7 @@ namespace mmo
 
 					ImGui::PushID(i);
 					const bool item_selected = m_project.quests.getTemplates().entry(i).id() == prevQuestId;
-					const char* item_text = m_project.quests.getTemplates().entry(i).name().c_str();
+					const char *item_text = m_project.quests.getTemplates().entry(i).name().c_str();
 					if (ImGui::Selectable(item_text, item_selected))
 					{
 						currentEntry.set_prevquestid(m_project.quests.getTemplates().entry(i).id());
@@ -414,7 +393,7 @@ namespace mmo
 			{
 				for (uint32 i = 0; i < 32; ++i)
 				{
-					if (proto::RaceEntry* race = m_project.races.getById(i))
+					if (proto::RaceEntry *race = m_project.races.getById(i))
 					{
 						ImGui::TableNextColumn();
 
@@ -440,7 +419,7 @@ namespace mmo
 			{
 				for (uint32 i = 0; i < 32; ++i)
 				{
-					if (proto::ClassEntry* classEntry = m_project.classes.getById(i))
+					if (proto::ClassEntry *classEntry = m_project.classes.getById(i))
 					{
 						ImGui::TableNextColumn();
 
@@ -514,11 +493,11 @@ namespace mmo
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
 			if (ImGui::Button("+ Add Objective", ImVec2(150, 30)))
 			{
-				auto* newEntry = currentEntry.add_requirements();
+				auto *newEntry = currentEntry.add_requirements();
 			}
 			ImGui::PopStyleColor();
 			ImGui::EndDisabled();
-			
+
 			ImGui::SameLine();
 			if (currentEntry.requirements_size() >= 4)
 			{
@@ -533,9 +512,9 @@ namespace mmo
 
 			ImGui::Spacing();
 
-			if (currentEntry.requirements_size() > 0 && ImGui::BeginTable("questRequirements", 6, 
-				ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | 
-				ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
+			if (currentEntry.requirements_size() > 0 && ImGui::BeginTable("questRequirements", 6,
+																		  ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV |
+																			  ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
 			{
 				ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 80);
 				ImGui::TableSetupColumn("Item", ImGuiTableColumnFlags_WidthStretch);
@@ -547,7 +526,7 @@ namespace mmo
 
 				for (int index = 0; index < currentEntry.requirements_size(); ++index)
 				{
-					auto* currentItem = currentEntry.mutable_requirements(index);
+					auto *currentItem = currentEntry.mutable_requirements(index);
 
 					ImGui::PushID(index);
 					ImGui::TableNextRow();
@@ -574,7 +553,7 @@ namespace mmo
 					// Item selection
 					ImGui::TableNextColumn();
 					uint32 item = currentItem->itemid();
-					const auto* itemEntry = m_project.items.getById(item);
+					const auto *itemEntry = m_project.items.getById(item);
 					if (ImGui::BeginCombo("##item", itemEntry != nullptr ? itemEntry->name().c_str() : "None", ImGuiComboFlags_None))
 					{
 						if (ImGui::Selectable("None"))
@@ -587,7 +566,7 @@ namespace mmo
 							{
 								ImGui::PushID(i);
 								const bool item_selected = m_project.items.getTemplates().entry(i).id() == item;
-								const char* item_text = m_project.items.getTemplates().entry(i).name().c_str();
+								const char *item_text = m_project.items.getTemplates().entry(i).name().c_str();
 								if (ImGui::Selectable(item_text, item_selected))
 								{
 									currentItem->set_itemid(m_project.items.getTemplates().entry(i).id());
@@ -608,7 +587,7 @@ namespace mmo
 								ImGui::PopID();
 							}
 						}
-						
+
 						ImGui::EndCombo();
 					}
 
@@ -640,7 +619,7 @@ namespace mmo
 					// Creature selection
 					ImGui::TableNextColumn();
 					uint32 creature = currentItem->creatureid();
-					const auto* creatureEntry = m_project.units.getById(creature);
+					const auto *creatureEntry = m_project.units.getById(creature);
 					if (ImGui::BeginCombo("##creature", creatureEntry != nullptr ? creatureEntry->name().c_str() : "None", ImGuiComboFlags_None))
 					{
 						if (ImGui::Selectable("None"))
@@ -653,7 +632,7 @@ namespace mmo
 							{
 								ImGui::PushID(i);
 								const bool item_selected = m_project.units.getTemplates().entry(i).id() == creature;
-								const char* item_text = m_project.units.getTemplates().entry(i).name().c_str();
+								const char *item_text = m_project.units.getTemplates().entry(i).name().c_str();
 								if (ImGui::Selectable(item_text, item_selected))
 								{
 									currentItem->set_creatureid(m_project.units.getTemplates().entry(i).id());
@@ -761,18 +740,18 @@ namespace mmo
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
 			if (ImGui::Button("+ Add Reward Item", ImVec2(150, 30)))
 			{
-				auto* newEntry = currentEntry.add_rewarditems();
+				auto *newEntry = currentEntry.add_rewarditems();
 			}
 			ImGui::PopStyleColor();
-			
+
 			ImGui::SameLine();
 			ImGui::TextDisabled("%d reward items", currentEntry.rewarditems_size());
 
 			ImGui::Spacing();
 
-			if (currentEntry.rewarditems_size() > 0 && ImGui::BeginTable("rewardItems", 4, 
-				ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | 
-				ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
+			if (currentEntry.rewarditems_size() > 0 && ImGui::BeginTable("rewardItems", 4,
+																		 ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV |
+																			 ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
 			{
 				ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, 30);
 				ImGui::TableSetupColumn("Item", ImGuiTableColumnFlags_WidthStretch);
@@ -782,7 +761,7 @@ namespace mmo
 
 				for (int index = 0; index < currentEntry.rewarditems_size(); ++index)
 				{
-					auto* currentItem = currentEntry.mutable_rewarditems(index);
+					auto *currentItem = currentEntry.mutable_rewarditems(index);
 
 					ImGui::PushID(index);
 					ImGui::TableNextRow();
@@ -792,7 +771,7 @@ namespace mmo
 
 					ImGui::TableNextColumn();
 					uint32 item = currentItem->itemid();
-					const auto* itemEntry = m_project.items.getById(item);
+					const auto *itemEntry = m_project.items.getById(item);
 					if (ImGui::BeginCombo("##rewardItem", itemEntry != nullptr ? itemEntry->name().c_str() : "None", ImGuiComboFlags_None))
 					{
 						if (ImGui::Selectable("None"))
@@ -805,7 +784,7 @@ namespace mmo
 							{
 								ImGui::PushID(i);
 								const bool item_selected = m_project.items.getTemplates().entry(i).id() == item;
-								const char* item_text = m_project.items.getTemplates().entry(i).name().c_str();
+								const char *item_text = m_project.items.getTemplates().entry(i).name().c_str();
 								if (ImGui::Selectable(item_text, item_selected))
 								{
 									currentItem->set_itemid(m_project.items.getTemplates().entry(i).id());
@@ -858,7 +837,7 @@ namespace mmo
 		}
 	}
 
-	void QuestEditorWindow::OnNewEntry(proto::TemplateManager<proto::Quests, proto::QuestEntry>::EntryType& entry)
+	void QuestEditorWindow::OnNewEntry(proto::TemplateManager<proto::Quests, proto::QuestEntry>::EntryType &entry)
 	{
 		EditorEntryWindowBase<proto::Quests, proto::QuestEntry>::OnNewEntry(entry);
 
