@@ -4,6 +4,7 @@
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
+#include <map>
 
 #include "assets/asset_registry.h"
 #include "editor_imgui_helpers.h"
@@ -1445,10 +1446,19 @@ namespace mmo
 				ImGui::SetNextItemWidth(300);
 				if (ImGui::BeginCombo("Effect", s_spellEffectInfo[currentEffect].name, ImGuiComboFlags_HeightLarge))
 				{
-					ImGui::SetNextItemWidth(-1);
-					ImGui::InputText("##effectsearch", effectSearchBuffer, IM_ARRAYSIZE(effectSearchBuffer));
-					ImGui::Separator();
+				// Fixed search bar at the top
+				ImGui::SetNextItemWidth(-1);
+				if (ImGui::InputText("##effectsearch", effectSearchBuffer, IM_ARRAYSIZE(effectSearchBuffer)))
+				{
+					// Auto-focus search on typing
+				}
+				ImGui::Separator();
 
+				// Scrollable region for the effect list
+				if (ImGui::BeginChild("##effectlist", ImVec2(0, 300), false))
+				{
+					// Collect items by category
+					std::map<String, std::vector<int>> categorizedEffects;
 					for (int idx = 0; idx < IM_ARRAYSIZE(s_spellEffectInfo); ++idx)
 					{
 						// Filter based on search
@@ -1468,58 +1478,83 @@ namespace mmo
 							}
 						}
 
-						const bool isSelected = (idx == currentEffect);
-						char label[256];
-						snprintf(label, sizeof(label), "[%s] %s", s_spellEffectInfo[idx].category, s_spellEffectInfo[idx].name);
-
-						if (ImGui::Selectable(label, isSelected))
-						{
-							currentEntry.mutable_effects(effectIndex)->set_type(idx);
-							effectChanged = true;
-							effectSearchBuffer[0] = '\0';
-						}
-
-						if (isSelected)
-						{
-							ImGui::SetItemDefaultFocus();
-						}
-
-						// Show description as tooltip
-						if (ImGui::IsItemHovered())
-						{
-							ImGui::BeginTooltip();
-							ImGui::Text("%s", s_spellEffectInfo[idx].description);
-							ImGui::EndTooltip();
-						}
+						categorizedEffects[s_spellEffectInfo[idx].category].push_back(idx);
 					}
 
-					ImGui::EndCombo();
-				}
+					// Draw effects grouped by category
+					for (auto& [category, indices] : categorizedEffects)
+					{
+						// When searching, expand all categories automatically
+						ImGuiTreeNodeFlags treeFlags = ImGuiTreeNodeFlags_DefaultOpen;
+						if (effectSearchBuffer[0] != '\0')
+						{
+							treeFlags |= ImGuiTreeNodeFlags_DefaultOpen;
+						}
 
-				// Show current effect description
-				ImGui::SameLine();
-				DrawHelpMarker(s_spellEffectInfo[currentEffect].description);
-				ImGui::SameLine();
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.6f, 0.7f, 0.8f));
-				if (ImGui::Button("Details", ImVec2(80, 0)))
-				{
-					ImGui::OpenPopup("SpellEffectDetails");
+						if (ImGui::TreeNodeEx(category.c_str(), treeFlags))
+						{
+							for (int idx : indices)
+							{
+								const bool isSelected = (idx == currentEffect);
+								
+								if (ImGui::Selectable(s_spellEffectInfo[idx].name, isSelected))
+								{
+									currentEntry.mutable_effects(effectIndex)->set_type(idx);
+									effectChanged = true;
+									effectSearchBuffer[0] = '\0';
+								}
+
+								if (isSelected)
+								{
+									ImGui::SetItemDefaultFocus();
+								}
+
+								// Show description as tooltip
+								if (ImGui::IsItemHovered())
+								{
+									ImGui::BeginTooltip();
+									ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+									ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "%s", s_spellEffectInfo[idx].name);
+									ImGui::Separator();
+									ImGui::TextWrapped("%s", s_spellEffectInfo[idx].description);
+									ImGui::PopTextWrapPos();
+									ImGui::EndTooltip();
+								}
+							}
+							
+							ImGui::TreePop();
+						}
+					}
 				}
+				ImGui::EndChild();
+
+				ImGui::EndCombo();
+			}
+
+			// Show current effect description
+			ImGui::SameLine();
+			DrawHelpMarker(s_spellEffectInfo[currentEffect].description);
+			ImGui::SameLine();
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.6f, 0.7f, 0.8f));
+			if (ImGui::Button("Details", ImVec2(80, 0)))
+			{
+				ImGui::OpenPopup("SpellEffectDetails");
+			}
+			ImGui::PopStyleColor();
+			ImGui::SameLine();
+
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
+			if (ImGui::Button("Remove", ImVec2(80, 0)))
+			{
+				currentEntry.mutable_effects()->DeleteSubrange(effectIndex, 1);
 				ImGui::PopStyleColor();
-				ImGui::SameLine();
-
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-				if (ImGui::Button("Remove", ImVec2(80, 0)))
-				{
-					currentEntry.mutable_effects()->DeleteSubrange(effectIndex, 1);
-					ImGui::PopStyleColor();
-					effectIndex--;
-				}
-				else
-				{
-					ImGui::PopStyleColor();
-					DrawEffectDialog(currentEntry, *currentEntry.mutable_effects(effectIndex), effectIndex);
-				}
+				effectIndex--;
+			}
+			else
+			{
+				ImGui::PopStyleColor();
+				DrawEffectDialog(currentEntry, *currentEntry.mutable_effects(effectIndex), effectIndex);
+			}
 				
 				ImGui::PopID();
 			}
