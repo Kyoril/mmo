@@ -22,11 +22,6 @@
 
 namespace mmo
 {
-    // Scene query flags for different object types
-    static constexpr uint32 SceneQueryFlags_Entity = 1 << 0;
-    static constexpr uint32 SceneQueryFlags_UnitSpawns = 1 << 2;
-    static constexpr uint32 SceneQueryFlags_ObjectSpawns = 1 << 3;
-
     SelectionRaycaster::SelectionRaycaster(
         Camera &camera,
         RaySceneQuery &raySceneQuery,
@@ -272,7 +267,7 @@ namespace mmo
         const Ray ray = CreateRayFromViewport(viewportX, viewportY);
         m_raySceneQuery.SetRay(ray);
         m_raySceneQuery.SetSortByDistance(true);
-        m_raySceneQuery.SetQueryMask(SceneQueryFlags_UnitSpawns | SceneQueryFlags_ObjectSpawns);
+        m_raySceneQuery.SetQueryMask(SceneQueryFlags_UnitSpawns | SceneQueryFlags_ObjectSpawns | SceneQueryFlags_AreaTriggers);
         m_raySceneQuery.ClearResult();
         m_raySceneQuery.Execute();
 

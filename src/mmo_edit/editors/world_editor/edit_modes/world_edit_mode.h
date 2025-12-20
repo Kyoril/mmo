@@ -22,6 +22,7 @@ namespace mmo
 	{
 		class ObjectSpawnEntry;
 		class UnitSpawnEntry;
+		class AreaTriggerEntry;
 	}
 
 	class IWorldEditor
@@ -39,6 +40,10 @@ namespace mmo
 		virtual void AddUnitSpawn(proto::UnitSpawnEntry& spawn, bool select) = 0;
 
 		virtual void AddObjectSpawn(proto::ObjectSpawnEntry& spawn) = 0;
+
+		virtual void AddAreaTrigger(proto::AreaTriggerEntry& trigger, bool select) = 0;
+
+		virtual void RemoveAllAreaTriggers() = 0;
 
 		virtual Camera& GetCamera() const = 0;
 

@@ -378,4 +378,150 @@ namespace mmo
 
         m_entity.SetMesh(mesh);
     }
+
+	SelectedAreaTrigger::SelectedAreaTrigger(proto::AreaTriggerEntry& entry, SceneNode& node, ManualRenderObject& renderObject,
+		const std::function<void(Selectable&)>& duplication, const std::function<void(const proto::AreaTriggerEntry&)>& removal)
+		: m_entry(entry)
+		, m_node(node)
+		, m_renderObject(renderObject)
+		, m_duplication(duplication)
+		, m_removal(removal)
+	{
+	}
+
+	void SelectedAreaTrigger::Visit(SelectableVisitor& visitor)
+	{
+		visitor.Visit(*this);
+	}
+
+	void SelectedAreaTrigger::Duplicate()
+	{
+		// Not supported for area triggers
+	}
+
+	void SelectedAreaTrigger::Translate(const Vector3& delta)
+	{
+		m_entry.set_x(m_entry.x() + delta.x);
+		m_entry.set_y(m_entry.y() + delta.y);
+		m_entry.set_z(m_entry.z() + delta.z);
+
+		m_node.SetPosition(Vector3(m_entry.x(), m_entry.y(), m_entry.z()));
+		positionChanged(*this);
+	}
+
+	void SelectedAreaTrigger::Rotate(const Quaternion& delta)
+	{
+		if (!m_entry.has_box_x())
+		{
+			return; // Sphere triggers don't rotate
+		}
+
+		// Update box orientation
+		Quaternion current = GetOrientation();
+		Quaternion newRotation = delta * current;
+		newRotation.Normalize();
+
+		// Convert to Euler angle for box_o field (rotation around Y axis)
+		Radian yaw = newRotation.GetYaw();
+		m_entry.set_box_o(yaw.GetValueRadians());
+
+		m_node.SetOrientation(newRotation);
+		RefreshVisual();
+		rotationChanged(*this);
+	}
+
+	void SelectedAreaTrigger::Scale(const Vector3& delta)
+	{
+		if (m_entry.has_radius())
+		{
+			// Sphere: use average scale
+			const float avgScale = (delta.x + delta.y + delta.z) / 3.0f;
+			m_entry.set_radius(m_entry.radius() * avgScale);
+		}
+		else
+		{
+			// Box: scale each dimension
+			m_entry.set_box_x(m_entry.box_x() * delta.x);
+			m_entry.set_box_y(m_entry.box_y() * delta.y);
+			m_entry.set_box_z(m_entry.box_z() * delta.z);
+		}
+
+		RefreshVisual();
+		scaleChanged(*this);
+	}
+
+	void SelectedAreaTrigger::Remove()
+	{
+		m_removal(m_entry);
+	}
+
+	void SelectedAreaTrigger::Deselect()
+	{
+		// Nothing special needed
+	}
+
+	void SelectedAreaTrigger::SetPosition(const Vector3& position) const
+	{
+		m_entry.set_x(position.x);
+		m_entry.set_y(position.y);
+		m_entry.set_z(position.z);
+		m_node.SetPosition(position);
+	}
+
+	void SelectedAreaTrigger::SetOrientation(const Quaternion& orientation) const
+	{
+		if (!m_entry.has_box_x())
+		{
+			return; // Sphere triggers don't rotate
+		}
+
+		Radian yaw = orientation.GetYaw();
+		m_entry.set_box_o(yaw.GetValueRadians());
+		m_node.SetOrientation(orientation);
+	}
+
+	void SelectedAreaTrigger::SetScale(const Vector3& scale) const
+	{
+		if (m_entry.has_radius())
+		{
+			const float avgScale = (scale.x + scale.y + scale.z) / 3.0f;
+			m_entry.set_radius(avgScale);
+		}
+		else
+		{
+			m_entry.set_box_x(scale.x);
+			m_entry.set_box_y(scale.y);
+			m_entry.set_box_z(scale.z);
+		}
+	}
+
+	Vector3 SelectedAreaTrigger::GetPosition() const
+	{
+		return Vector3(m_entry.x(), m_entry.y(), m_entry.z());
+	}
+
+	Quaternion SelectedAreaTrigger::GetOrientation() const
+	{
+		if (m_entry.has_box_x() && m_entry.has_box_o())
+		{
+			return Quaternion(Radian(m_entry.box_o()), Vector3::UnitY);
+		}
+		return Quaternion::Identity;
+	}
+
+	Vector3 SelectedAreaTrigger::GetScale() const
+	{
+		if (m_entry.has_radius())
+		{
+			const float r = m_entry.radius();
+			return Vector3(r, r, r);
+		}
+		return Vector3(m_entry.box_x(), m_entry.box_y(), m_entry.box_z());
+	}
+
+	void SelectedAreaTrigger::RefreshVisual()
+	{
+		// Visual refresh will be handled by WorldEditorInstance
+		// when it receives the change signals
+	}
 }

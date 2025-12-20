@@ -2,13 +2,28 @@
 
 #pragma once
 
+
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
 #include "math/ray.h"
 
 namespace mmo
 {
-    class Camera;
+	/// @brief Default value. Object will not be hit by any scene query.
+	static constexpr uint32 SceneQueryFlags_None = 0;
+
+	/// @brief Used for map entities.
+	static constexpr uint32 SceneQueryFlags_Entity = 1 << 0;
+
+	static constexpr uint32 SceneQueryFlags_Tile = 1 << 1;
+
+	static constexpr uint32 SceneQueryFlags_UnitSpawns = 1 << 2;
+
+	static constexpr uint32 SceneQueryFlags_ObjectSpawns = 1 << 3;
+
+	static constexpr uint32 SceneQueryFlags_AreaTriggers = 1 << 4;
+
+	class Camera;
     class RaySceneQuery;
     class Selection;
     class ManualRenderObject;

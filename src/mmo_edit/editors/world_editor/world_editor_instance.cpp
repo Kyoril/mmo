@@ -36,18 +36,6 @@
 
 namespace mmo
 {
-	/// @brief Default value. Object will not be hit by any scene query.
-	static constexpr uint32 SceneQueryFlags_None = 0;
-
-	/// @brief Used for map entities.
-	static constexpr uint32 SceneQueryFlags_Entity = 1 << 0;
-
-	static constexpr uint32 SceneQueryFlags_Tile = 1 << 1;
-
-	static constexpr uint32 SceneQueryFlags_UnitSpawns = 1 << 2;
-
-	static constexpr uint32 SceneQueryFlags_ObjectSpawns = 1 << 3;
-
 	static const ChunkMagic versionChunk = MakeChunkMagic('MVER');
 	static const ChunkMagic meshChunk = MakeChunkMagic('MESH');
 	static const ChunkMagic entityChunk = MakeChunkMagic('MENT');
@@ -1031,6 +1019,122 @@ namespace mmo
 		m_spawnNodes.push_back(node);
 	}
 
+	void WorldEditorInstance::AddAreaTrigger(proto::AreaTriggerEntry &trigger, bool select)
+	{
+		// Create manual render object for visualization
+		ManualRenderObject* renderObject = m_scene.CreateManualRenderObject("AreaTrigger_" + std::to_string(trigger.id()));
+		renderObject->SetCastShadows(false);
+		renderObject->SetQueryFlags(SceneQueryFlags_AreaTriggers);
+
+		// Create wireframe visualization
+		auto lineListOp = renderObject->AddLineListOperation(MaterialManager::Get().Load("Editor/Wireframe"));
+
+		const bool isSphere = trigger.has_radius();
+		if (isSphere)
+		{
+			// Draw sphere wireframe
+			const float radius = trigger.radius();
+			const int segments = 16;
+			const int rings = 8;
+
+			// Vertical circles
+			for (int i = 0; i < segments; ++i)
+			{
+				const float angle1 = (float)i / segments * 2.0f * Pi;
+				const float angle2 = (float)(i + 1) / segments * 2.0f * Pi;
+
+				for (int j = 0; j < rings; ++j)
+				{
+					const float ring1 = (float)j / rings * Pi - Pi / 2.0f;
+					const float ring2 = (float)(j + 1) / rings * Pi - Pi / 2.0f;
+
+					Vector3 p1(radius * cos(ring1) * cos(angle1), radius * sin(ring1), radius * cos(ring1) * sin(angle1));
+					Vector3 p2(radius * cos(ring2) * cos(angle1), radius * sin(ring2), radius * cos(ring2) * sin(angle1));
+					Vector3 p3(radius * cos(ring1) * cos(angle2), radius * sin(ring1), radius * cos(ring1) * sin(angle2));
+
+					lineListOp->AddLine(p1, p2);
+					lineListOp->AddLine(p1, p3);
+				}
+			}
+		}
+		else
+		{
+			// Draw box wireframe
+			const float hx = trigger.box_x() / 2.0f;
+			const float hy = trigger.box_y() / 2.0f;
+			const float hz = trigger.box_z() / 2.0f;
+
+			Vector3 corners[8] = {
+				Vector3(-hx, -hy, -hz), Vector3(hx, -hy, -hz),
+				Vector3(hx, -hy, hz), Vector3(-hx, -hy, hz),
+				Vector3(-hx, hy, -hz), Vector3(hx, hy, -hz),
+				Vector3(hx, hy, hz), Vector3(-hx, hy, hz)
+			};
+
+			// Bottom face
+			for (int i = 0; i < 4; ++i)
+			{
+				lineListOp->AddLine(corners[i], corners[(i + 1) % 4]);
+			}
+
+			// Top face
+			for (int i = 0; i < 4; ++i)
+			{
+				lineListOp->AddLine(corners[i + 4], corners[(i + 1) % 4 + 4]);
+			}
+
+			// Vertical edges
+			for (int i = 0; i < 4; ++i)
+			{
+				lineListOp->AddLine(corners[i], corners[i + 4]);
+			}
+		}
+
+		m_areaTriggerRenderObjects.push_back(renderObject);
+
+		// Create scene node
+		SceneNode* node = m_scene.GetRootSceneNode().CreateChildSceneNode(Vector3(trigger.x(), trigger.y(), trigger.z()));
+		if (!isSphere && trigger.has_box_o())
+		{
+			node->SetOrientation(Quaternion(Radian(trigger.box_o()), Vector3::UnitY));
+		}
+		node->AttachObject(*renderObject);
+		m_areaTriggerNodes.push_back(node);
+
+		// Add to selection if requested
+		if (select)
+		{
+			auto removal = [this](const proto::AreaTriggerEntry& entry)
+			{
+				// TODO: Implement trigger removal
+			};
+
+			auto duplication = [this](Selectable& selectable)
+			{
+				// Not supported
+			};
+
+			auto selectable = std::make_unique<SelectedAreaTrigger>(trigger, *node, *renderObject, duplication, removal);
+			m_selection.AddSelectable(std::move(selectable));
+		}
+	}
+
+	void WorldEditorInstance::RemoveAllAreaTriggers()
+	{
+		for (auto* renderObject : m_areaTriggerRenderObjects)
+		{
+			m_scene.DestroyManualRenderObject(*renderObject);
+		}
+		m_areaTriggerRenderObjects.clear();
+
+		for (auto* node : m_areaTriggerNodes)
+		{
+			m_scene.GetRootSceneNode().RemoveChild(*node);
+			m_scene.DestroySceneNode(*node);
+		}
+		m_areaTriggerNodes.clear();
+	}
+
 	void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 	{
 		// Update the scene outline window regularly, especially when selection changes
@@ -1709,6 +1813,104 @@ namespace mmo
 			if (ImGui::SliderInt("Animation Progress", (int *)&animProgress, 0, 100))
 			{
 				selectable.GetEntry().set_animprogress(animProgress);
+			}
+		}
+	}
+
+	void WorldEditorInstance::Visit(SelectedAreaTrigger &selectable)
+	{
+		if (ImGui::CollapsingHeader("Area Trigger", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			// Name
+			char nameBuf[256];
+			strncpy_s(nameBuf, selectable.GetEntry().name().c_str(), sizeof(nameBuf) - 1);
+			if (ImGui::InputText("Name", nameBuf, sizeof(nameBuf)))
+			{
+				selectable.GetEntry().set_name(nameBuf);
+			}
+
+			// ID (read-only)
+			uint32 id = selectable.GetEntry().id();
+			ImGui::BeginDisabled();
+			ImGui::InputScalar("ID", ImGuiDataType_U32, &id, nullptr, nullptr, "%u", ImGuiInputTextFlags_ReadOnly);
+			ImGui::EndDisabled();
+
+			// Map (read-only)
+			uint32 mapId = selectable.GetEntry().map();
+			ImGui::BeginDisabled();
+			ImGui::InputScalar("Map", ImGuiDataType_U32, &mapId, nullptr, nullptr, "%u", ImGuiInputTextFlags_ReadOnly);
+			ImGui::EndDisabled();
+
+			ImGui::Separator();
+
+			// Position
+			Vector3 pos = selectable.GetPosition();
+			if (ImGui::DragFloat3("Position", &pos.x, 0.1f))
+			{
+				selectable.SetPosition(pos);
+			}
+
+			// Type-specific properties
+			const bool isSphere = selectable.GetEntry().has_radius();
+			if (isSphere)
+			{
+				// Sphere properties
+				float radius = selectable.GetEntry().radius();
+				if (ImGui::DragFloat("Radius", &radius, 0.1f, 0.1f, 1000.0f))
+				{
+					selectable.GetEntry().set_radius(radius);
+					selectable.RefreshVisual();
+				}
+			}
+			else
+			{
+				// Box properties
+				float boxX = selectable.GetEntry().box_x();
+				float boxY = selectable.GetEntry().box_y();
+				float boxZ = selectable.GetEntry().box_z();
+
+				if (ImGui::DragFloat("Box Width (X)", &boxX, 0.1f, 0.1f, 1000.0f))
+				{
+					selectable.GetEntry().set_box_x(boxX);
+					selectable.RefreshVisual();
+				}
+				if (ImGui::DragFloat("Box Height (Y)", &boxY, 0.1f, 0.1f, 1000.0f))
+				{
+					selectable.GetEntry().set_box_y(boxY);
+					selectable.RefreshVisual();
+				}
+				if (ImGui::DragFloat("Box Depth (Z)", &boxZ, 0.1f, 0.1f, 1000.0f))
+				{
+					selectable.GetEntry().set_box_z(boxZ);
+					selectable.RefreshVisual();
+				}
+
+				// Orientation
+				float orientationDeg = selectable.GetEntry().has_box_o() ? Degree(Radian(selectable.GetEntry().box_o())).GetValueDegrees() : 0.0f;
+				if (ImGui::DragFloat("Orientation (Y)", &orientationDeg, 1.0f, 0.0f, 360.0f))
+				{
+					selectable.GetEntry().set_box_o(Degree(orientationDeg).GetValueRadians());
+					selectable.SetOrientation(Quaternion(Degree(orientationDeg), Vector3::UnitY));
+				}
+			}
+
+			ImGui::Separator();
+
+			// Script trigger
+			if (selectable.GetEntry().has_on_enter_trigger())
+			{
+				uint32 scriptId = selectable.GetEntry().on_enter_trigger();
+				if (ImGui::InputScalar("On Enter Script", ImGuiDataType_U32, &scriptId))
+				{
+					selectable.GetEntry().set_on_enter_trigger(scriptId);
+				}
+			}
+			else
+			{
+				if (ImGui::Button("Add On Enter Script"))
+				{
+					selectable.GetEntry().set_on_enter_trigger(0);
+				}
 			}
 		}
 	}

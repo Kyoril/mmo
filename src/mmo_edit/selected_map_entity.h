@@ -10,6 +10,7 @@ namespace mmo
 {
 	class Entity;
 	class SceneNode;
+	class ManualRenderObject;
 
 	namespace terrain
 	{
@@ -190,5 +191,51 @@ namespace mmo
 		Entity& m_entity;
 		std::function<void(Selectable&)> m_duplication;
 		std::function<void(const proto::ObjectSpawnEntry&)> m_removal;
+	};
+
+	class SelectedAreaTrigger final : public Selectable
+	{
+	public:
+		SelectedAreaTrigger(proto::AreaTriggerEntry& entry, SceneNode& node, ManualRenderObject& renderObject,
+			const std::function<void(Selectable&)>& duplication, const std::function<void(const proto::AreaTriggerEntry&)>& removal);
+
+		void Visit(SelectableVisitor& visitor) override;
+
+		void Duplicate() override;
+
+		void Translate(const Vector3& delta) override;
+
+		void Rotate(const Quaternion& delta) override;
+
+		void Scale(const Vector3& delta) override;
+
+		void Remove() override;
+
+		void Deselect() override;
+
+		void SetPosition(const Vector3& position) const override;
+
+		void SetOrientation(const Quaternion& orientation) const override;
+
+		void SetScale(const Vector3& scale) const override;
+
+		Vector3 GetPosition() const override;
+
+		Quaternion GetOrientation() const override;
+
+		Vector3 GetScale() const override;
+
+		bool SupportsDuplicate() const override { return false; }
+
+		void RefreshVisual();
+
+		proto::AreaTriggerEntry& GetEntry() const { return m_entry; }
+
+	private:
+		proto::AreaTriggerEntry& m_entry;
+		SceneNode& m_node;
+		ManualRenderObject& m_renderObject;
+		std::function<void(Selectable&)> m_duplication;
+		std::function<void(const proto::AreaTriggerEntry&)> m_removal;
 	};
 }

@@ -170,6 +170,8 @@ namespace mmo
 		virtual void Visit(SelectedUnitSpawn &selectable) = 0;
 
 		virtual void Visit(SelectedObjectSpawn &selectable) = 0;
+
+		virtual void Visit(SelectedAreaTrigger &selectable) = 0;
 	};
 
 	class WorldEditorInstance final : public EditorInstance, public IPageLoaderListener, public SelectableVisitor, public ChunkReader, public IWorldEditor
@@ -221,6 +223,8 @@ namespace mmo
 
 		void Visit(SelectedObjectSpawn &selectable) override;
 
+		void Visit(SelectedAreaTrigger &selectable) override;
+
 	private:
 		bool ReadMVERChunk(io::Reader &reader, uint32 chunkHeader, uint32 chunkSize);
 
@@ -244,6 +248,10 @@ namespace mmo
 		void AddUnitSpawn(proto::UnitSpawnEntry &spawn, bool select) override;
 
 		void AddObjectSpawn(proto::ObjectSpawnEntry &spawn) override;
+
+		void AddAreaTrigger(proto::AreaTriggerEntry &trigger, bool select = true);
+
+		void RemoveAllAreaTriggers();
 
 		Camera &GetCamera() const override;
 
@@ -308,6 +316,9 @@ namespace mmo
 
 		std::vector<SceneNode *> m_spawnNodes;
 		std::vector<Entity *> m_spawnEntities;
+
+		std::vector<SceneNode *> m_areaTriggerNodes;
+		std::vector<ManualRenderObject *> m_areaTriggerRenderObjects;
 
 		Selection m_selection;
 		std::unique_ptr<TransformWidget> m_transformWidget;

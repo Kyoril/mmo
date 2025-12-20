@@ -12,14 +12,10 @@
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "terrain/terrain.h"
 #include "log/default_log_levels.h"
+#include "selection_raycaster.h"
 
 namespace mmo
 {
-    // Scene query flags for different object types
-    static constexpr uint32 SceneQueryFlags_Entity = 1 << 0;
-    static constexpr uint32 SceneQueryFlags_UnitSpawns = 1 << 2;
-    static constexpr uint32 SceneQueryFlags_ObjectSpawns = 1 << 3;
-
     EntityFactory::EntityFactory(
         Scene &scene,
         WorldEditor &editor,
