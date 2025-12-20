@@ -265,6 +265,7 @@ namespace mmo
 			m_sceneOutlineWindow->Update(); });
 		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().units, m_editor.GetProject().objects);
 		m_skyEditMode = std::make_unique<SkyEditMode>(*this, *m_skyComponent);
+		m_areaTriggerEditMode = std::make_unique<AreaTriggerEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().areaTriggers);
 		m_editMode = nullptr;
 
 		// Add navigation edit mode
@@ -422,6 +423,7 @@ namespace mmo
 			m_entityEditMode.get(),
 			m_terrainEditMode.get(),
 			m_spawnEditMode.get(),
+			m_areaTriggerEditMode.get(),
 			m_navigationEditMode.get(),
 			m_skyEditMode.get()};
 		m_detailsPanel->Draw(

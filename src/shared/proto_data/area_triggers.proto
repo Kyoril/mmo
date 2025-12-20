@@ -13,13 +13,7 @@ message AreaTriggerEntry {
 	optional float box_y = 9;
 	optional float box_z = 10;
 	optional float box_o = 11;
-	required uint32 targetmap = 12;
-	required float target_x = 13;
-	required float target_y = 14;
-	required float target_z = 15;
-	required float target_o = 16;
-	optional uint32 questid = 17;
-	optional bool tavern = 18;
+	optional uint32 on_enter_trigger = 12;
 }
 
 message AreaTriggers {

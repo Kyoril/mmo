@@ -33,6 +33,7 @@
 #include "deferred_shading/deferred_renderer.h"
 #include "edit_modes/navigation_edit_mode.h"
 #include "edit_modes/sky_edit_mode.h"
+#include "edit_modes/area_trigger_edit_mode.h"
 #include "scene_outline_window.h"
 #include "grid_snap_settings.h"
 #include "details_panel.h"
@@ -333,6 +334,7 @@ namespace mmo
 		std::unique_ptr<SpawnEditMode> m_spawnEditMode;
 		std::unique_ptr<NavigationEditMode> m_navigationEditMode;
 		std::unique_ptr<SkyEditMode> m_skyEditMode;
+		std::unique_ptr<AreaTriggerEditMode> m_areaTriggerEditMode;
 		std::unique_ptr<SkyComponent> m_skyComponent;
 		WorldEditMode *m_editMode{nullptr};
 
