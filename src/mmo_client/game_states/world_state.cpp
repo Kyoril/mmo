@@ -195,7 +195,7 @@ namespace mmo
 	WorldState::WorldState(GameStateMgr &gameStateManager, RealmConnector &realmConnector, const proto_client::Project &project, TimerQueue &timers, LootClient &lootClient, VendorClient &vendorClient,
 						   ActionBar &actionBar, SpellCast &spellCast, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, PartyInfo &partyInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, ICacheProvider &cache, Discord &discord,
 						   GameTimeComponent &gameTime, TalentClient &talentClient, Minimap &minimap, InventoryClient &inventoryClient)
-		: GameState(gameStateManager), m_realmConnector(realmConnector), m_audio(audio), m_cache(cache), m_project(project), m_timers(timers), m_lootClient(lootClient), m_vendorClient(vendorClient), m_actionBar(actionBar), m_spellCast(spellCast), m_trainerClient(trainerClient), m_questClient(questClient), m_partyInfo(partyInfo), m_charSelect(charSelect), m_guildClient(guildClient), m_friendClient(friendClient), m_discord(discord), m_gameTime(gameTime), m_talentClient(talentClient), m_minimap(minimap), m_inventoryClient(inventoryClient)
+		: GameState(gameStateManager), m_realmConnector(realmConnector), m_audio(audio), m_gameTime(gameTime), m_cache(cache), m_project(project), m_timers(timers), m_lootClient(lootClient), m_vendorClient(vendorClient), m_actionBar(actionBar), m_spellCast(spellCast), m_trainerClient(trainerClient), m_questClient(questClient), m_partyInfo(partyInfo), m_charSelect(charSelect), m_guildClient(guildClient), m_friendClient(friendClient), m_discord(discord), m_talentClient(talentClient), m_minimap(minimap), m_inventoryClient(inventoryClient)
 	{
 		// TODO: Do we want to put these asset references in some sort of config setting or something?
 		ObjectMgr::SetUnitNameFontSettings(FontManager::Get().CreateOrRetrieve("Fonts/FRIZQT__.TTF", 24.0f, 1.0f), MaterialManager::Get().Load("Models/UnitNameFont.hmat"));
@@ -3186,6 +3186,9 @@ namespace mmo
 		// Minimap!
 		m_minimap.NotifyWorldChanged(map->directory());
 
+		// Load area triggers for this map
+		m_areaTriggerManager.LoadTriggersForMap(map->id(), m_project.areaTriggers);
+
 		return true;
 	}
 
@@ -3517,6 +3520,18 @@ namespace mmo
 		}
 
 		m_playerController->ProcessMovementEvent(moveEvent);
+
+		// Check for area trigger overlaps
+		const Vector3 playerPosition = unit.GetSceneNode()->GetDerivedPosition();
+		std::vector<uint32> newlyEnteredTriggers;
+		m_areaTriggerManager.CheckForTriggerOverlap(playerPosition, newlyEnteredTriggers);
+
+		// Send network packets for newly entered triggers
+		for (const uint32 triggerId : newlyEnteredTriggers)
+		{
+			m_realmConnector.SendAreaTriggerTriggered(triggerId);
+			DLOG("Player entered area trigger " << triggerId);
+		}
 	}
 
 	void WorldState::SetSelectedTarget(uint64 guid)

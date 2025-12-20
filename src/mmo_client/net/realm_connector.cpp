@@ -870,4 +870,14 @@ namespace mmo
 				packet.Finish();
 			});
 	}
+
+	void RealmConnector::SendAreaTriggerTriggered(const uint32 triggerId)
+	{
+		sendSinglePacket([triggerId](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::AreaTriggerTriggered);
+				packet << io::write<uint32>(triggerId);
+				packet.Finish();
+			});
+	}
 }

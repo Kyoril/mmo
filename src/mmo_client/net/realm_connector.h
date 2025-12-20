@@ -425,6 +425,10 @@ namespace mmo
 
 		void SendTimeSyncResponse(uint32 syncIndex, GameTime clientTimestamp);
 
+		/// Sends a packet to the server notifying it that the player has entered an area trigger.
+		/// @param triggerId The id of the area trigger that was entered.
+		void SendAreaTriggerTriggered(uint32 triggerId);
+
 	public:
 		/// Gets a constant list of character views.
 		const std::vector<CharacterView>& GetCharacterViews() const { return m_characterViews; }

@@ -7,6 +7,7 @@
 #include "mmo_client/data/client_cache.h"
 #include "connection.h"
 #include "mmo_client/data/db_cache.h"
+#include "mmo_client/area_trigger_manager.h"
 #include "player_controller.h"
 #include "screen.h"
 #include "game_states/game_state.h"
@@ -458,6 +459,8 @@ namespace mmo
 		bool m_worldLoaded = false;
 
 		bool m_timeSyncResponseSent = false;
+
+		AreaTriggerManager m_areaTriggerManager;
 
 	private:
 		static IInputControl *s_inputControl;

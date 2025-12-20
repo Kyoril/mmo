@@ -583,6 +583,10 @@ namespace mmo
 			OnTimeSyncResponse(opCode, buffer.size(), reader);
 			break;
 
+		case game::client_realm_packet::AreaTriggerTriggered:
+			OnAreaTriggerTriggered(opCode, buffer.size(), reader);
+			break;
+
 		case game::client_realm_packet::MoveStartForward:
 		case game::client_realm_packet::MoveStartBackward:
 		case game::client_realm_packet::MoveStop:
@@ -645,6 +649,98 @@ namespace mmo
 			m_character->GetPosition(), position[0], position[1]);
 
 		return position;
+	}
+
+	/// Tests if a point is inside a sphere trigger.
+	static bool IsPointInSphere(const Vector3& center, const float radius, const Vector3& point)
+	{
+		const Vector3 delta = point - center;
+		const float distanceSquared = delta.GetSquaredLength();
+		const float radiusSquared = radius * radius;
+		return distanceSquared <= radiusSquared;
+	}
+
+	/// Tests if a point is inside an oriented box trigger.
+	static bool IsPointInBox(const Vector3& center, const Vector3& halfExtents, const float orientation, const Vector3& point)
+	{
+		// Transform point to box local space
+		Vector3 localPoint = point - center;
+
+		// Apply inverse rotation if box is oriented
+		if (std::abs(orientation) > 1e-6f)
+		{
+			const float cosAngle = std::cos(-orientation);
+			const float sinAngle = std::sin(-orientation);
+
+			// Rotate around Y axis (assuming orientation is yaw)
+			const float rotatedX = localPoint.x * cosAngle - localPoint.z * sinAngle;
+			const float rotatedZ = localPoint.x * sinAngle + localPoint.z * cosAngle;
+
+			localPoint.x = rotatedX;
+			localPoint.z = rotatedZ;
+		}
+
+		// Check if point is within box bounds
+		return std::abs(localPoint.x) <= halfExtents.x &&
+			std::abs(localPoint.y) <= halfExtents.y &&
+			std::abs(localPoint.z) <= halfExtents.z;
+	}
+
+	/// Tests if a point is inside a specific area trigger.
+	static bool IsPointInTrigger(const proto::AreaTriggerEntry& trigger, const Vector3& position)
+	{
+		const Vector3 triggerCenter(trigger.x(), trigger.y(), trigger.z());
+
+		// Check if it's a sphere trigger
+		if (trigger.has_radius())
+		{
+			return IsPointInSphere(triggerCenter, trigger.radius(), position);
+		}
+
+		// Check if it's a box trigger
+		if (trigger.has_box_x() && trigger.has_box_y() && trigger.has_box_z())
+		{
+			const Vector3 halfExtents(trigger.box_x() * 0.5f, trigger.box_y() * 0.5f, trigger.box_z() * 0.5f);
+			const float orientation = trigger.has_box_o() ? trigger.box_o() : 0.0f;
+			return IsPointInBox(triggerCenter, halfExtents, orientation, position);
+		}
+
+		// Invalid trigger definition
+		WLOG("Area trigger " << trigger.id() << " has neither radius nor box dimensions defined");
+		return false;
+	}
+
+	void Player::OnAreaTriggerTriggered(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 triggerId = 0;
+		if (!(contentReader >> io::read<uint32>(triggerId)))
+		{
+			ELOG("Failed to read AreaTriggerTriggered packet!");
+			return;
+		}
+
+		DLOG("Player triggered area trigger " << triggerId);
+
+		// Get the area trigger from the project
+		const proto::AreaTriggerEntry* trigger = m_project.areaTriggers.getById(triggerId);
+		if (!trigger)
+		{
+			ELOG("Client sent area trigger id " << triggerId << " which does not exist in the project!");
+			return;
+		}
+
+		// Validate that the player is actually in the trigger area
+		const Vector3 playerPosition = m_character->GetPosition();
+		if (!IsPointInTrigger(*trigger, playerPosition))
+		{
+			ELOG("Client sent area trigger id " << triggerId << " but player is not in the trigger area!");
+			return;
+		}
+
+		// All validation passed
+		ILOG("Player successfully triggered area trigger " << triggerId);
+
+		// TODO: Execute trigger actions here
 	}
 
 	void Player::OnSpawned(WorldInstance& instance)

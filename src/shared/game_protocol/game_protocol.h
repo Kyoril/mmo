@@ -108,8 +108,8 @@ namespace mmo
 
 				SetSelection = 0x12,
 
-				CheatCreateMonster = 0x13,			// GAME MASTER
-				CheatDestroyMonster = 0x14,			// GAME MASTER
+				CheatCreateMonster = 0x13,	// GAME MASTER
+				CheatDestroyMonster = 0x14, // GAME MASTER
 
 				CastSpell = 0x15,
 				CancelCast = 0x16,
@@ -120,13 +120,13 @@ namespace mmo
 				AttackSwing = 0x1B,
 				AttackStop = 0x1C,
 
-				CheatLearnSpell = 0x1D,				// GAME MASTER
-				CheatRecharge = 0x1E,				// GAME MASTER
+				CheatLearnSpell = 0x1D, // GAME MASTER
+				CheatRecharge = 0x1E,	// GAME MASTER
 
 				UseItem = 0x1F,
 
-				CheatFollowMe = 0x20,			// GAME MASTER
-				CheatFaceMe = 0x21,				// GAME MASTER
+				CheatFollowMe = 0x20, // GAME MASTER
+				CheatFaceMe = 0x21,	  // GAME MASTER
 
 				CreatureQuery,
 				ItemQuery,
@@ -158,12 +158,12 @@ namespace mmo
 				MoveJump,
 				MoveFallLand,
 
-				CheatLevelUp,				// GAME MASTER
-				CheatGiveMoney,				// GAME MASTER
+				CheatLevelUp,	// GAME MASTER
+				CheatGiveMoney, // GAME MASTER
 
 				GossipHello,
 
-				CheatAddItem,				// GAME MASTER
+				CheatAddItem, // GAME MASTER
 
 				SellItem,
 				BuyItem,
@@ -186,13 +186,13 @@ namespace mmo
 
 				MoveEnded,
 
-				CheatWorldPort,				// GAME MASTER
+				CheatWorldPort, // GAME MASTER
 
 				MoveWorldPortAck,
 
-				CheatSpeed,					// GAME MASTER
-				CheatSummon,				// GAME MASTER
-				CheatTeleportToPlayer,		// GAME MASTER
+				CheatSpeed,			   // GAME MASTER
+				CheatSummon,		   // GAME MASTER
+				CheatTeleportToPlayer, // GAME MASTER
 
 				GroupInvite,
 				GroupUninvite,
@@ -221,24 +221,26 @@ namespace mmo
 
 				LogoutRequest,
 
-			GuildRoster,
+				GuildRoster,
 
-			MoveRootAck,
+				MoveRootAck,
 
-			LearnTalent,
+				LearnTalent,
 
-			TimePlayedRequest,
+				TimePlayedRequest,
 
-			TimeSyncResponse,
+				TimeSyncResponse,
 
-			FriendInvite,
-			FriendAccept,
-			FriendDecline,
-			FriendRemove,
-			FriendListRequest,
+				FriendInvite,
+				FriendAccept,
+				FriendDecline,
+				FriendRemove,
+				FriendListRequest,
 
-			/// Counter constant
-			Count_,
+				AreaTriggerTriggered,
+
+				/// Counter constant
+				Count_,
 			};
 		}
 
@@ -261,7 +263,7 @@ namespace mmo
 				LoginVerifyWorld = 0x05,
 				/// Entering the world failed.
 				EnterWorldFailed = 0x06,
-				
+
 				/// [PROXY] Update game objects.
 				UpdateObject,
 				/// [PROXY] Compressed update game objects.
@@ -270,7 +272,7 @@ namespace mmo
 				DestroyObjects,
 
 				// Movement Codes
-				
+
 				/// [PROXY]
 				MoveStartForward,
 				/// [PROXY]
@@ -417,19 +419,19 @@ namespace mmo
 				ObjectQueryResult,
 
 				ItemPushResult,
-				
+
 				/// Inventory error message sent to the client
 				InventoryError,
 
 				LogoutResponse,
 				GuildRoster,
-						/// Message of the day packet sent to the client
+				/// Message of the day packet sent to the client
 				MessageOfTheDay,
 
 				MoveRoot,
-                
-                /// Game time notification packet sent to the client
-                GameTimeInfo,
+
+				/// Game time notification packet sent to the client
+				GameTimeInfo,
 
 				SpellSuperceeded,
 				SetProficiency,
@@ -458,7 +460,6 @@ namespace mmo
 				NoCharacter,
 			};
 		};
-
 
 		////////////////////////////////////////////////////////////////////////////////
 		// Typedefs
@@ -517,7 +518,6 @@ namespace mmo
 		}
 
 		typedef char_create_result::Type CharCreateResult;
-
 
 		namespace transfer_abort_reason
 		{

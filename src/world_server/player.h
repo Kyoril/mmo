@@ -107,6 +107,8 @@ namespace mmo
 		TileIndex2D GetTileIndex() const;
 
 	private:
+		void OnAreaTriggerTriggered(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 		/// @brief Executed when the character spawned on a world instance.
 		/// @param instance The world instance that the character spawned in.
 		void OnSpawned(WorldInstance& instance);
