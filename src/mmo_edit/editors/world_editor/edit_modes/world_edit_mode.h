@@ -56,6 +56,8 @@ namespace mmo
 		virtual bool HasTerrain() const = 0;
 
 		virtual terrain::Terrain* GetTerrain() const = 0;
+
+		virtual bool IsTransforming() const = 0;
 	};
 
 	class WorldEditMode : public NonCopyable

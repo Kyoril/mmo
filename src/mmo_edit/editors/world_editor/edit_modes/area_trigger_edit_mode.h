@@ -22,7 +22,10 @@ namespace mmo
 
 		void OnDeactivate() override;
 
-	void OnMouseUp(float x, float y) override;
+	bool SupportsViewportDrop() const override { return true; }
+
+	void OnViewportDrop(float x, float y) override;
+
 		proto::MapEntry* GetMapEntry() const
 		{
 			return m_mapEntry;

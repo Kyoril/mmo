@@ -263,10 +263,14 @@ namespace mmo
 
 		terrain::Terrain *GetTerrain() const override { return m_terrain.get(); }
 
-	private:
-		uint16 BuildPageIndex(uint8 x, uint8 y) const;
+	bool IsTransforming() const override;
 
-		bool GetPageCoordinatesFromIndex(uint16 pageIndex, uint8 &x, uint8 &y) const;
+private:
+	uint16 BuildPageIndex(uint8 x, uint8 y) const;
+
+	bool GetPageCoordinatesFromIndex(uint16 pageIndex, uint8 &x, uint8 &y) const;
+
+
 
 		void LoadPageEntities(uint8 x, uint8 y);
 
@@ -319,6 +323,7 @@ namespace mmo
 
 		std::vector<SceneNode *> m_areaTriggerNodes;
 		std::vector<ManualRenderObject *> m_areaTriggerRenderObjects;
+		std::map<proto::AreaTriggerEntry*, std::pair<SceneNode*, ManualRenderObject*>> m_areaTriggerMap;
 
 		Selection m_selection;
 		std::unique_ptr<TransformWidget> m_transformWidget;
@@ -368,3 +373,4 @@ namespace mmo
 		std::unique_ptr<SceneOutlineWindow> m_sceneOutlineWindow;
 	};
 }
+

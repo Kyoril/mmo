@@ -1,6 +1,6 @@
 ---
 description: 'Provide expert C++ software engineering guidance using modern C++ and industry best practices.'
-tools: ['edit/editFiles', 'runNotebooks', 'search', 'new', 'runCommands', 'runTasks', 'shrimp-task-manager/*', 'context7/*', 'sequentialthinking/*', 'usages', 'vscodeAPI', 'problems', 'changes', 'testFailure', 'openSimpleBrowser', 'fetch', 'githubRepo', 'extensions', 'runTests']
+tools: ['vscode', 'execute', 'read', 'edit', 'search', 'web', 'context7/*', 'sequentialthinking/*', 'shrimp-task-manager/*', 'agent']
 ---
 # Expert C++ software engineer mode instructions
 

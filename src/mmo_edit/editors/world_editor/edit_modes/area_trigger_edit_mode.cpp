@@ -15,354 +15,388 @@
 
 namespace mmo
 {
-	AreaTriggerEditMode::AreaTriggerEditMode(IWorldEditor& worldEditor, proto::MapManager& maps, proto::AreaTriggerManager& areaTriggers)
-		: WorldEditMode(worldEditor)
-		, m_maps(maps)
-		, m_areaTriggers(areaTriggers)
-	{
-		DetectMapEntry();
-	}
+    AreaTriggerEditMode::AreaTriggerEditMode(IWorldEditor &worldEditor, proto::MapManager &maps, proto::AreaTriggerManager &areaTriggers)
+        : WorldEditMode(worldEditor), m_maps(maps), m_areaTriggers(areaTriggers)
+    {
+        DetectMapEntry();
+    }
 
-	const char* AreaTriggerEditMode::GetName() const
-	{
-		static const char* s_name = "Area Triggers";
-		return s_name;
-	}
+    const char *AreaTriggerEditMode::GetName() const
+    {
+        static const char *s_name = "Area Triggers";
+        return s_name;
+    }
 
-	void AreaTriggerEditMode::DrawDetails()
-	{
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
-		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+    void AreaTriggerEditMode::DrawDetails()
+    {
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
 
-		// Map Status Section
-		if (ImGui::CollapsingHeader("Map Information", ImGuiTreeNodeFlags_DefaultOpen))
-		{
-			ImGui::Indent();
-			
-			const String worldName = ExtractWorldNameFromPath();
-			
-			ImGui::Text("World:");
-			ImGui::SameLine();
-			ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "%s", worldName.c_str());
-			
-			ImGui::Spacing();
-			
-			if (m_mapEntry)
-			{
-				ImGui::Text("Map:");
-				ImGui::SameLine();
-				ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "%s", m_mapEntry->name().c_str());
-			}
-			else
-			{
-				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.7f, 0.3f, 1.0f));
-				ImGui::TextWrapped("No map entry found for this world file.");
-				ImGui::PopStyleColor();
-			}
-			
-			ImGui::Unindent();
-		}
+        // Map Status Section
+        if (ImGui::CollapsingHeader("Map Information", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent();
 
-		ImGui::Spacing();
-		ImGui::Separator();
-		ImGui::Spacing();
+            const String worldName = ExtractWorldNameFromPath();
 
-		// Trigger Creation Section
-		if (ImGui::CollapsingHeader("Create Area Trigger", ImGuiTreeNodeFlags_DefaultOpen))
-		{
-ImGui::Indent();
+            ImGui::Text("World:");
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "%s", worldName.c_str());
 
-if (!m_mapEntry)
-{
-ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-ImGui::TextWrapped("A map entry is required to create area triggers.");
-ImGui::PopStyleColor();
-}
-else
-{
-ImGui::Text("Trigger Type:");
-ImGui::Spacing();
+            ImGui::Spacing();
 
-if (ImGui::RadioButton("Sphere", m_selectedTriggerType == TriggerType::Sphere))
-{
-m_selectedTriggerType = TriggerType::Sphere;
-}
-ImGui::SameLine();
-if (ImGui::RadioButton("Box", m_selectedTriggerType == TriggerType::Box))
-{
-m_selectedTriggerType = TriggerType::Box;
-}
+            if (m_mapEntry)
+            {
+                ImGui::Text("Map:");
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "%s", m_mapEntry->name().c_str());
+            }
+            else
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.7f, 0.3f, 1.0f));
+                ImGui::TextWrapped("No map entry found for this world file.");
+                ImGui::PopStyleColor();
+            }
 
-ImGui::Spacing();
-ImGui::Separator();
-ImGui::Spacing();
+            ImGui::Unindent();
+        }
 
-ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-ImGui::TextWrapped("Click in the viewport to place a new area trigger.");
-ImGui::PopStyleColor();
-}
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
 
-ImGui::Unindent();
-}
+        // Trigger Creation Section
+        if (ImGui::CollapsingHeader("Create Area Trigger", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent();
 
-ImGui::Spacing();
-ImGui::Separator();
-ImGui::Spacing();
+            if (!m_mapEntry)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+                ImGui::TextWrapped("A map entry is required to create area triggers.");
+                ImGui::PopStyleColor();
+            }
+            else
+            {
+                ImGui::TextWrapped("Drag a trigger type into the viewport to create:");
+                ImGui::Spacing();
 
-// Existing Triggers Section
-if (ImGui::CollapsingHeader("Area Triggers", ImGuiTreeNodeFlags_DefaultOpen))
-{
-ImGui::Indent();
+                ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.15f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.3f, 0.5f, 0.7f, 0.5f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.4f, 0.6f, 0.8f, 0.7f));
 
-if (m_mapEntry)
-{
-int triggerCount = 0;
-for (const auto& trigger : m_areaTriggers.getTemplates().entry())
-{
-if (trigger.map() == m_mapEntry->id())
-{
-triggerCount++;
-}
-}
+                if (ImGui::BeginListBox("##triggerTypes", ImVec2(-1, 80)))
+                {
+                    // Sphere trigger type
+                    ImGui::PushID(0);
+                    ImGui::Selectable("Sphere Trigger", false);
+                    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
+                    {
+                        TriggerType type = TriggerType::Sphere;
+                        ImGui::SetDragDropPayload("TRIGGER_TYPE", &type, sizeof(TriggerType));
+                        ImGui::Text("Sphere Trigger");
+                        ImGui::EndDragDropSource();
+                    }
+                    ImGui::PopID();
 
-ImGui::TextDisabled("Triggers on this map: %d", triggerCount);
+                    // Box trigger type
+                    ImGui::PushID(1);
+                    ImGui::Selectable("Box Trigger", false);
+                    if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
+                    {
+                        TriggerType type = TriggerType::Box;
+                        ImGui::SetDragDropPayload("TRIGGER_TYPE", &type, sizeof(TriggerType));
+                        ImGui::Text("Box Trigger");
+                        ImGui::EndDragDropSource();
+                    }
+                    ImGui::PopID();
 
-ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.15f, 1.0f));
-ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.5f, 0.7f, 0.3f, 0.5f));
-ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.6f, 0.8f, 0.4f, 0.7f));
-ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.7f, 0.9f, 0.5f, 0.9f));
+                    ImGui::EndListBox();
+                }
 
-if (ImGui::BeginListBox("##triggers", ImVec2(-1, 250)))
-{
-for (const auto& trigger : m_areaTriggers.getTemplates().entry())
-{
-if (trigger.map() == m_mapEntry->id())
-{
-ImGui::PushID(trigger.id());
+                ImGui::PopStyleColor(3);
+            }
 
-std::ostringstream labelStream;
-labelStream << "#" << std::setw(6) << std::setfill('0') << trigger.id() << " - " << trigger.name();
+            ImGui::Unindent();
+        }
 
-ImGui::Selectable(labelStream.str().c_str());
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
 
-if (ImGui::IsItemHovered())
-{
-ImGui::BeginTooltip();
-ImGui::Text("ID: %u", trigger.id());
-ImGui::Text("Position: (%.2f, %.2f, %.2f)", trigger.x(), trigger.y(), trigger.z());
-if (trigger.has_radius())
-{
-ImGui::Text("Type: Sphere (radius: %.2f)", trigger.radius());
-}
-else
-{
-ImGui::Text("Type: Box (%.2f x %.2f x %.2f)", 
-trigger.box_x(), trigger.box_y(), trigger.box_z());
-}
-ImGui::EndTooltip();
-}
+        // Existing Triggers Section
+        if (ImGui::CollapsingHeader("Area Triggers", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent();
 
-ImGui::PopID();
-}
-}
+            if (m_mapEntry)
+            {
+                int triggerCount = 0;
+                for (const auto &trigger : m_areaTriggers.getTemplates().entry())
+                {
+                    if (trigger.map() == m_mapEntry->id())
+                    {
+                        triggerCount++;
+                    }
+                }
 
-ImGui::EndListBox();
-}
+                ImGui::TextDisabled("Triggers on this map: %d", triggerCount);
 
-ImGui::PopStyleColor(4);
-}
-else
-{
-ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-ImGui::TextWrapped("No map entry available.");
-ImGui::PopStyleColor();
-}
+                ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.15f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.5f, 0.7f, 0.3f, 0.5f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.6f, 0.8f, 0.4f, 0.7f));
+                ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.7f, 0.9f, 0.5f, 0.9f));
 
-ImGui::Unindent();
-}
+                if (ImGui::BeginListBox("##triggers", ImVec2(-1, 250)))
+                {
+                    for (const auto &trigger : m_areaTriggers.getTemplates().entry())
+                    {
+                        if (trigger.map() == m_mapEntry->id())
+                        {
+                            ImGui::PushID(trigger.id());
 
-ImGui::PopStyleVar(2);
-}
+                            std::ostringstream labelStream;
+                            labelStream << "#" << std::setw(6) << std::setfill('0') << trigger.id() << " - " << trigger.name();
 
-void AreaTriggerEditMode::OnActivate()
-{
-	WorldEditMode::OnActivate();
-	LoadAreaTriggersForMap();
-}
+                            ImGui::Selectable(labelStream.str().c_str());
 
-void AreaTriggerEditMode::OnDeactivate()
-{
-	WorldEditMode::OnDeactivate();
-	m_worldEditor.ClearSelection();
-	m_worldEditor.RemoveAllAreaTriggers();
-}
+                            if (ImGui::IsItemHovered())
+                            {
+                                ImGui::BeginTooltip();
+                                ImGui::Text("ID: %u", trigger.id());
+                                ImGui::Text("Position: (%.2f, %.2f, %.2f)", trigger.x(), trigger.y(), trigger.z());
+                                if (trigger.has_radius())
+                                {
+                                    ImGui::Text("Type: Sphere (radius: %.2f)", trigger.radius());
+                                }
+                                else
+                                {
+                                    ImGui::Text("Type: Box (%.2f x %.2f x %.2f)",
+                                                trigger.box_x(), trigger.box_y(), trigger.box_z());
+                                }
+                                ImGui::EndTooltip();
+                            }
 
-void AreaTriggerEditMode::OnMouseUp(float x, float y)
-{
-	WorldEditMode::OnMouseUp(x, y);
+                            ImGui::PopID();
+                        }
+                    }
 
-	if (!m_mapEntry)
-	{
-		return;
-	}
+                    ImGui::EndListBox();
+                }
 
-	// Calculate trigger position
-	Vector3 position;
-	bool hitFound = false;
+                ImGui::PopStyleColor(4);
+            }
+            else
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+                ImGui::TextWrapped("No map entry available.");
+                ImGui::PopStyleColor();
+            }
 
-	// Try raycast against scene geometry
-	Scene* scene = m_worldEditor.GetCamera().GetScene();
-	if (scene)
-	{
-		const Ray ray = m_worldEditor.GetCamera().GetCameraToViewportRay(x, y, 10000.0f);
-		auto query = scene->CreateRayQuery(ray);
-		query->SetSortByDistance(true);
-		query->Execute();
+            ImGui::Unindent();
+        }
 
-		const auto& results = query->GetLastResult();
-		float closestDist = std::numeric_limits<float>::max();
+        ImGui::PopStyleVar(2);
+    }
 
-		for (const auto& entry : results)
-		{
-			if (hitFound && entry.distance > closestDist)
-			{
-				break;
-			}
+    void AreaTriggerEditMode::OnActivate()
+    {
+        WorldEditMode::OnActivate();
+        LoadAreaTriggersForMap();
+    }
 
-			if (entry.movable)
-			{
-				const ICollidable* collidable = entry.movable->GetCollidable();
-				if (collidable)
-				{
-					CollisionResult hit;
-					if (collidable->IsCollidable() && collidable->TestRayCollision(ray, hit))
-					{
-						if (hit.distance < closestDist)
-						{
-							closestDist = hit.distance;
-							position = hit.contactPoint;
-							hitFound = true;
-						}
-					}
-				}
-			}
-		}
-	}
+    void AreaTriggerEditMode::OnDeactivate()
+    {
+        WorldEditMode::OnDeactivate();
+        m_worldEditor.ClearSelection();
+        m_worldEditor.RemoveAllAreaTriggers();
+    }
 
-	if (!hitFound)
-	{
-		const auto plane = Plane(Vector3::UnitY, Vector3::Zero);
-		const Ray ray = m_worldEditor.GetCamera().GetCameraToViewportRay(x, y, 10000.0f);
+    void AreaTriggerEditMode::OnViewportDrop(float x, float y)
+    {
+        if (!m_mapEntry)
+        {
+            return;
+        }
 
-		const auto hit = ray.Intersects(plane);
-		if (hit.first)
-		{
-			position = ray.GetPoint(hit.second);
-		}
-		else
-		{
-			position = ray.GetPoint(10.0f);
-		}
-	}
+        // Check if we're receiving a trigger type drag-drop
+        if (!ImGui::GetDragDropPayload())
+        {
+            return;
+        }
 
-	// Snap to grid?
-	if (m_worldEditor.IsGridSnapEnabled())
-	{
-		const float gridSize = m_worldEditor.GetTranslateGridSnapSize();
+        const ImGuiPayload *payload = ImGui::GetDragDropPayload();
+        if (!payload || !payload->IsDataType("TRIGGER_TYPE"))
+        {
+            return;
+        }
 
-		// Snap position to grid size
-		position.x = std::round(position.x / gridSize) * gridSize;
-		position.y = std::round(position.y / gridSize) * gridSize;
-		position.z = std::round(position.z / gridSize) * gridSize;
-	}
+        // Extract the trigger type from the payload
+        const TriggerType *droppedType = static_cast<const TriggerType *>(payload->Data);
+        if (!droppedType)
+        {
+            return;
+        }
 
-	// Generate unique ID
-	const uint32 triggerId = GenerateUniqueTriggerId();
+        m_selectedTriggerType = *droppedType;
 
-	// Create new area trigger entry
-	proto::AreaTriggerEntry* entry = m_areaTriggers.add(triggerId);
-	entry->set_name("New Area Trigger");
-	entry->set_map(m_mapEntry->id());
-	entry->set_x(position.x);
-	entry->set_y(position.y);
-	entry->set_z(position.z);
+        // Calculate trigger position
+        Vector3 position;
+        bool hitFound = false;
 
-	if (m_selectedTriggerType == TriggerType::Sphere)
-	{
-		entry->set_radius(5.0f);
-	}
-	else
-	{
-		entry->set_box_x(5.0f);
-		entry->set_box_y(5.0f);
-		entry->set_box_z(5.0f);
-		entry->set_box_o(0.0f);
-	}
+        // Try raycast against scene geometry
+        Scene *scene = m_worldEditor.GetCamera().GetScene();
+        if (scene)
+        {
+            const Ray ray = m_worldEditor.GetCamera().GetCameraToViewportRay(x, y, 10000.0f);
+            auto query = scene->CreateRayQuery(ray);
+            query->SetSortByDistance(true);
+            query->Execute();
 
-	// Add visual representation
-	m_worldEditor.AddAreaTrigger(*entry, true);
-}
+            const auto &results = query->GetLastResult();
+            float closestDist = std::numeric_limits<float>::max();
 
-String AreaTriggerEditMode::ExtractWorldNameFromPath() const
-{
-	const auto worldPath = m_worldEditor.GetWorldPath();
+            for (const auto &entry : results)
+            {
+                if (hitFound && entry.distance > closestDist)
+                {
+                    break;
+                }
 
-	// Expected format: Worlds/{name}/{name}.hwld
-	// Extract the directory name (second to last component)
-	if (worldPath.has_parent_path())
-	{
-		const auto parentPath = worldPath.parent_path();
-		if (parentPath.has_filename())
-		{
-			return parentPath.filename().string();
-		}
-	}
+                if (entry.movable)
+                {
+                    const ICollidable *collidable = entry.movable->GetCollidable();
+                    if (collidable)
+                    {
+                        CollisionResult hit;
+                        if (collidable->IsCollidable() && collidable->TestRayCollision(ray, hit))
+                        {
+                            if (hit.distance < closestDist)
+                            {
+                                closestDist = hit.distance;
+                                position = hit.contactPoint;
+                                hitFound = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
-	return "";
-}
+        if (!hitFound)
+        {
+            const auto plane = Plane(Vector3::UnitY, Vector3::Zero);
+            const Ray ray = m_worldEditor.GetCamera().GetCameraToViewportRay(x, y, 10000.0f);
 
-void AreaTriggerEditMode::LoadAreaTriggersForMap()
-{
-	if (!m_mapEntry)
-	{
-		return;
-	}
+            const auto hit = ray.Intersects(plane);
+            if (hit.first)
+            {
+                position = ray.GetPoint(hit.second);
+            }
+            else
+            {
+                position = ray.GetPoint(10.0f);
+            }
+        }
 
-	// Load all area triggers for this map
-	for (auto& trigger : *m_areaTriggers.getTemplates().mutable_entry())
-	{
-		if (trigger.map() == m_mapEntry->id())
-		{
-			m_worldEditor.AddAreaTrigger(trigger, false);
-		}
-	}
-}
+        // Snap to grid?
+        if (m_worldEditor.IsGridSnapEnabled())
+        {
+            const float gridSize = m_worldEditor.GetTranslateGridSnapSize();
 
-uint32 AreaTriggerEditMode::GenerateUniqueTriggerId()
-{
-	uint32 maxId = 0;
-	for (const auto& trigger : m_areaTriggers.getTemplates().entry())
-	{
-		if (trigger.id() > maxId)
-		{
-			maxId = trigger.id();
-		}
-	}
-	return maxId + 1;
-}
+            // Snap position to grid size
+            position.x = std::round(position.x / gridSize) * gridSize;
+            position.y = std::round(position.y / gridSize) * gridSize;
+            position.z = std::round(position.z / gridSize) * gridSize;
+        }
 
-void AreaTriggerEditMode::DetectMapEntry()
-{
-	const String worldName = ExtractWorldNameFromPath();
-	
-	// Find matching map entry
-	for (auto& mapEntry : *m_maps.getTemplates().mutable_entry())
-	{
-		if (mapEntry.directory() == worldName)
-		{
-			m_mapEntry = &mapEntry;
-			break;
-		}
-	}
-}
+        // Generate unique ID
+        const uint32 triggerId = GenerateUniqueTriggerId();
+
+        // Create new area trigger entry
+        proto::AreaTriggerEntry *entry = m_areaTriggers.add(triggerId);
+        entry->set_name("New Area Trigger");
+        entry->set_map(m_mapEntry->id());
+        entry->set_x(position.x);
+        entry->set_y(position.y);
+        entry->set_z(position.z);
+
+        if (m_selectedTriggerType == TriggerType::Sphere)
+        {
+            entry->set_radius(5.0f);
+        }
+        else
+        {
+            entry->set_box_x(5.0f);
+            entry->set_box_y(5.0f);
+            entry->set_box_z(5.0f);
+            entry->set_box_o(0.0f);
+        }
+
+        // Add visual representation
+        m_worldEditor.AddAreaTrigger(*entry, true);
+    }
+
+    String AreaTriggerEditMode::ExtractWorldNameFromPath() const
+    {
+        const auto worldPath = m_worldEditor.GetWorldPath();
+
+        // Expected format: Worlds/{name}/{name}.hwld
+        // Extract the directory name (second to last component)
+        if (worldPath.has_parent_path())
+        {
+            const auto parentPath = worldPath.parent_path();
+            if (parentPath.has_filename())
+            {
+                return parentPath.filename().string();
+            }
+        }
+
+        return "";
+    }
+
+    void AreaTriggerEditMode::LoadAreaTriggersForMap()
+    {
+        if (!m_mapEntry)
+        {
+            return;
+        }
+
+        // Load all area triggers for this map
+        for (auto &trigger : *m_areaTriggers.getTemplates().mutable_entry())
+        {
+            if (trigger.map() == m_mapEntry->id())
+            {
+                m_worldEditor.AddAreaTrigger(trigger, false);
+            }
+        }
+    }
+
+    uint32 AreaTriggerEditMode::GenerateUniqueTriggerId()
+    {
+        uint32 maxId = 0;
+        for (const auto &trigger : m_areaTriggers.getTemplates().entry())
+        {
+            if (trigger.id() > maxId)
+            {
+                maxId = trigger.id();
+            }
+        }
+        return maxId + 1;
+    }
+
+    void AreaTriggerEditMode::DetectMapEntry()
+    {
+        const String worldName = ExtractWorldNameFromPath();
+
+        // Find matching map entry
+        for (auto &mapEntry : *m_maps.getTemplates().mutable_entry())
+        {
+            if (mapEntry.directory() == worldName)
+            {
+                m_mapEntry = &mapEntry;
+                break;
+            }
+        }
+    }
 }

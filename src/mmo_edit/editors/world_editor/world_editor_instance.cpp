@@ -1,4 +1,4 @@
-﻿// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "world_editor_instance.h"
 #include "selection_raycaster.h"
@@ -1101,41 +1101,75 @@ namespace mmo
 		node->AttachObject(*renderObject);
 		m_areaTriggerNodes.push_back(node);
 
+		// Track this trigger for later lookup
+		m_areaTriggerMap[&trigger] = {node, renderObject};
+
 		// Add to selection if requested
 		if (select)
 		{
 			auto removal = [this](const proto::AreaTriggerEntry& entry)
 			{
-				// TODO: Implement trigger removal
-			};
+				// Find and remove the trigger's visual representation
+				auto it = m_areaTriggerMap.find(const_cast<proto::AreaTriggerEntry*>(&entry));
+				if (it != m_areaTriggerMap.end())
+				{
+					auto [node, renderObject] = it->second;
+					
+					// Remove from scene
+					m_scene.DestroyManualRenderObject(*renderObject);
+					m_scene.GetRootSceneNode().RemoveChild(*node);
+					m_scene.DestroySceneNode(*node);
+					
+					// Remove from tracking vectors
+					auto nodeIt = std::find(m_areaTriggerNodes.begin(), m_areaTriggerNodes.end(), node);
+					if (nodeIt != m_areaTriggerNodes.end())
+					{
+						m_areaTriggerNodes.erase(nodeIt);
+					}
+					
+					auto renderIt = std::find(m_areaTriggerRenderObjects.begin(), m_areaTriggerRenderObjects.end(), renderObject);
+					if (renderIt != m_areaTriggerRenderObjects.end())
+					{
+						m_areaTriggerRenderObjects.erase(renderIt);
+					}
+					
+					// Remove from map
+					m_areaTriggerMap.erase(it);
+				}
+			
+			// Remove from proto data so it doesn't reappear
+			m_editor.GetProject().areaTriggers.remove(entry.id());
+		};
 
-			auto duplication = [this](Selectable& selectable)
-			{
-				// Not supported
-			};
+		auto duplication = [this](Selectable& selectable)
+		{
+			// Not supported
+		};
 
-			auto selectable = std::make_unique<SelectedAreaTrigger>(trigger, *node, *renderObject, duplication, removal);
-			m_selection.AddSelectable(std::move(selectable));
-		}
+		auto selectable = std::make_unique<SelectedAreaTrigger>(trigger, *node, *renderObject, duplication, removal);
+		m_selection.AddSelectable(std::move(selectable));
 	}
+}
 
-	void WorldEditorInstance::RemoveAllAreaTriggers()
+void WorldEditorInstance::RemoveAllAreaTriggers()
+{
+	for (auto* renderObject : m_areaTriggerRenderObjects)
 	{
-		for (auto* renderObject : m_areaTriggerRenderObjects)
-		{
-			m_scene.DestroyManualRenderObject(*renderObject);
-		}
-		m_areaTriggerRenderObjects.clear();
-
-		for (auto* node : m_areaTriggerNodes)
-		{
-			m_scene.GetRootSceneNode().RemoveChild(*node);
-			m_scene.DestroySceneNode(*node);
-		}
-		m_areaTriggerNodes.clear();
+		m_scene.DestroyManualRenderObject(*renderObject);
 	}
+	m_areaTriggerRenderObjects.clear();
 
-	void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
+	for (auto* node : m_areaTriggerNodes)
+	{
+		m_scene.GetRootSceneNode().RemoveChild(*node);
+		m_scene.DestroySceneNode(*node);
+	}
+	m_areaTriggerNodes.clear();
+	
+	m_areaTriggerMap.clear();
+}
+
+void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 	{
 		// Update the scene outline window regularly, especially when selection changes
 		if (m_sceneOutlineWindow)
@@ -2153,5 +2187,10 @@ namespace mmo
 	{
 		m_debugBoundingBox->SetVisible(false);
 		m_selection.Clear();
+	}
+
+	bool WorldEditorInstance::IsTransforming() const
+	{
+		return m_transformWidget && m_transformWidget->IsActive();
 	}
 }

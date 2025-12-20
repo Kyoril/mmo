@@ -3,6 +3,9 @@
 #include "scene_graph/scene_node.h"
 #include "editors/world_editor/world_editor_instance.h"
 #include "scene_graph/mesh_manager.h"
+#include "scene_graph/manual_render_object.h"
+#include "scene_graph/material_manager.h"
+#include "math/math_utils.h"
 
 namespace mmo
 {
@@ -521,7 +524,71 @@ namespace mmo
 
 	void SelectedAreaTrigger::RefreshVisual()
 	{
-		// Visual refresh will be handled by WorldEditorInstance
-		// when it receives the change signals
+		// Clear existing geometry
+		m_renderObject.Clear();
+		
+		// Rebuild wireframe with updated dimensions
+		auto lineListOp = m_renderObject.AddLineListOperation(MaterialManager::Get().Load("Editor/Wireframe"));
+		
+		const bool isSphere = m_entry.has_radius();
+		if (isSphere)
+		{
+			// Draw sphere wireframe
+			const float radius = m_entry.radius();
+			const int segments = 16;
+			const int rings = 8;
+
+			// Vertical circles
+			for (int i = 0; i < segments; ++i)
+			{
+				const float angle1 = (float)i / segments * 2.0f * Pi;
+				const float angle2 = (float)(i + 1) / segments * 2.0f * Pi;
+
+				for (int j = 0; j < rings; ++j)
+				{
+					const float ring1 = (float)j / rings * Pi - Pi / 2.0f;
+					const float ring2 = (float)(j + 1) / rings * Pi - Pi / 2.0f;
+
+					Vector3 p1(radius * cos(ring1) * cos(angle1), radius * sin(ring1), radius * cos(ring1) * sin(angle1));
+					Vector3 p2(radius * cos(ring2) * cos(angle1), radius * sin(ring2), radius * cos(ring2) * sin(angle1));
+					Vector3 p3(radius * cos(ring1) * cos(angle2), radius * sin(ring1), radius * cos(ring1) * sin(angle2));
+
+					lineListOp->AddLine(p1, p2);
+					lineListOp->AddLine(p1, p3);
+				}
+			}
+		}
+		else
+		{
+			// Draw box wireframe
+			const float hx = m_entry.box_x() / 2.0f;
+			const float hy = m_entry.box_y() / 2.0f;
+			const float hz = m_entry.box_z() / 2.0f;
+
+			Vector3 corners[8] = {
+				Vector3(-hx, -hy, -hz), Vector3(hx, -hy, -hz),
+				Vector3(hx, -hy, hz), Vector3(-hx, -hy, hz),
+				Vector3(-hx, hy, -hz), Vector3(hx, hy, -hz),
+				Vector3(hx, hy, hz), Vector3(-hx, hy, hz)
+			};
+
+			// Bottom face
+			for (int i = 0; i < 4; ++i)
+			{
+				lineListOp->AddLine(corners[i], corners[(i + 1) % 4]);
+			}
+
+			// Top face
+			for (int i = 0; i < 4; ++i)
+			{
+				lineListOp->AddLine(corners[i + 4], corners[(i + 1) % 4 + 4]);
+			}
+
+			// Vertical edges
+			for (int i = 0; i < 4; ++i)
+			{
+				lineListOp->AddLine(corners[i], corners[i + 4]);
+			}
+		}
 	}
 }
