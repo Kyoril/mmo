@@ -1,0 +1,19 @@
+syntax = "proto2";
+package mmo.proto_client;
+
+message AreaTriggerEntry {
+	required uint32 id = 1;
+	required uint32 map = 3;
+	required float x = 4;
+	required float y = 5;
+	required float z = 6;
+	optional float radius = 7;
+	optional float box_x = 8;
+	optional float box_y = 9;
+	optional float box_z = 10;
+	optional float box_o = 11;
+}
+
+message AreaTriggers {
+	repeated AreaTriggerEntry entry = 1;
+}
