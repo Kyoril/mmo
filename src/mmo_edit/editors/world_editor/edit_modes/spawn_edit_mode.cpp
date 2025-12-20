@@ -9,6 +9,8 @@
 #include "math/plane.h"
 #include "math/ray.h"
 #include "scene_graph/camera.h"
+#include "scene_graph/scene.h"
+#include "scene_graph/movable_object.h"
 #include "terrain/terrain.h"
 
 namespace mmo
@@ -317,43 +319,79 @@ namespace mmo
 
 		WorldEditMode::OnViewportDrop(x, y);
 
-		// We only accept unitEntry drops
-		if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("UnitSpawn", ImGuiDragDropFlags_None))
-		{
-			Vector3 position;
+		// Calculate spawn position
+		Vector3 position;
+		bool hitFound = false;
 
+		// Try raycast against scene geometry
+		Scene* scene = m_worldEditor.GetCamera().GetScene();
+		if (scene)
+		{
+			const Ray ray = m_worldEditor.GetCamera().GetCameraToViewportRay(x, y, 10000.0f);
+			auto query = scene->CreateRayQuery(ray);
+			query->SetSortByDistance(true);
+			query->Execute();
+
+			const auto& results = query->GetLastResult();
+			float closestDist = std::numeric_limits<float>::max();
+
+			for (const auto& entry : results)
+			{
+				if (hitFound && entry.distance > closestDist)
+				{
+					break;
+				}
+
+				if (entry.movable)
+				{
+					const ICollidable* collidable = entry.movable->GetCollidable();
+					if (collidable)
+					{
+						CollisionResult hit;
+						if (collidable->IsCollidable() && collidable->TestRayCollision(ray, hit))
+						{
+							if (hit.distance < closestDist)
+							{
+								closestDist = hit.distance;
+								position = hit.contactPoint;
+								hitFound = true;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		if (!hitFound)
+		{
 			const auto plane = Plane(Vector3::UnitY, Vector3::Zero);
 			const Ray ray = m_worldEditor.GetCamera().GetCameraToViewportRay(x, y, 10000.0f);
 
-			const auto hitResult = m_worldEditor.GetTerrain()->RayIntersects(ray);
-			if (hitResult.first)
+			const auto hit = ray.Intersects(plane);
+			if (hit.first)
 			{
-				position = hitResult.second.position;
+				position = ray.GetPoint(hit.second);
 			}
 			else
 			{
-				const auto hit = ray.Intersects(plane);
-				if (hit.first)
-				{
-					position = ray.GetPoint(hit.second);
-				}
-				else
-				{
-					position = ray.GetPoint(10.0f);
-				}
+				position = ray.GetPoint(10.0f);
 			}
+		}
 
-			// Snap to grid?
-			if (m_worldEditor.IsGridSnapEnabled())
-			{
-				const float gridSize = m_worldEditor.GetTranslateGridSnapSize();
+		// Snap to grid?
+		if (m_worldEditor.IsGridSnapEnabled())
+		{
+			const float gridSize = m_worldEditor.GetTranslateGridSnapSize();
 
-				// Snap position to grid size
-				position.x = std::round(position.x / gridSize) * gridSize;
-				position.y = std::round(position.y / gridSize) * gridSize;
-				position.z = std::round(position.z / gridSize) * gridSize;
-			}
+			// Snap position to grid size
+			position.x = std::round(position.x / gridSize) * gridSize;
+			position.y = std::round(position.y / gridSize) * gridSize;
+			position.z = std::round(position.z / gridSize) * gridSize;
+		}
 
+		// We only accept unitEntry drops
+		if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("UnitSpawn", ImGuiDragDropFlags_None))
+		{
 			const uint32 unitId = *static_cast<uint32*>(payload->Data);
 			ASSERT(unitId != 0);
 
@@ -377,40 +415,6 @@ namespace mmo
 		}
 		else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ObjectSpawn", ImGuiDragDropFlags_None))
 		{
-			Vector3 position;
-
-			const auto plane = Plane(Vector3::UnitY, Vector3::Zero);
-			const Ray ray = m_worldEditor.GetCamera().GetCameraToViewportRay(x, y, 10000.0f);
-
-			const auto hitResult = m_worldEditor.GetTerrain()->RayIntersects(ray);
-			if (hitResult.first)
-			{
-				position = hitResult.second.position;
-			}
-			else
-			{
-				const auto hit = ray.Intersects(plane);
-				if (hit.first)
-				{
-					position = ray.GetPoint(hit.second);
-				}
-				else
-				{
-					position = ray.GetPoint(10.0f);
-				}
-			}
-
-			// Snap to grid?
-			if (m_worldEditor.IsGridSnapEnabled())
-			{
-				const float gridSize = m_worldEditor.GetTranslateGridSnapSize();
-
-				// Snap position to grid size
-				position.x = std::round(position.x / gridSize) * gridSize;
-				position.y = std::round(position.y / gridSize) * gridSize;
-				position.z = std::round(position.z / gridSize) * gridSize;
-			}
-
 			const uint32 objectId = *static_cast<uint32*>(payload->Data);
 			ASSERT(objectId != 0);
 
