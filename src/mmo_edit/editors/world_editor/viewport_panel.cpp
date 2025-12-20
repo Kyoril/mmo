@@ -299,10 +299,14 @@ namespace mmo
         {
             if (ImGui::BeginDragDropTarget())
             {
-                const ImVec2 mousePos = ImGui::GetMousePos();
-                const float x = (mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x;
-                const float y = (mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y;
-                currentEditMode->OnViewportDrop(x, y);
+                const ImGuiPayload* payload = ImGui::GetDragDropPayload();
+                if (payload && ImGui::AcceptDragDropPayload(payload->DataType))
+                {
+                    const ImVec2 mousePos = ImGui::GetMousePos();
+                    const float x = (mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x;
+                    const float y = (mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y;
+                    currentEditMode->OnViewportDrop(x, y);
+                }
 
                 ImGui::EndDragDropTarget();
             }
