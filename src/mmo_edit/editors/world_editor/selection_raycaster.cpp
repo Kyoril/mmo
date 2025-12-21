@@ -63,8 +63,8 @@ namespace mmo
         const Matrix4 invWorldTransform = worldTransform.Inverse();
 
         // Transform ray to entity's local space
-        const Vector3 localOrigin = invWorldTransform.TransformAffine(ray.origin);
-        const Vector3 localDest = invWorldTransform.TransformAffine(ray.destination);
+        const Vector3 localOrigin = invWorldTransform * ray.origin;
+        const Vector3 localDest = invWorldTransform * ray.destination;
         const Ray localRay(localOrigin, localDest);
 
         float closestDistance = std::numeric_limits<float>::max();
