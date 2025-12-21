@@ -49,5 +49,6 @@ namespace mmo
 		};
 		
 		TriggerType m_selectedTriggerType = TriggerType::Sphere;
+		char m_filterBuffer[256] = "";
 	};
 }

@@ -12,6 +12,7 @@
 #include "scene_graph/scene.h"
 #include "scene_graph/movable_object.h"
 #include "terrain/terrain.h"
+#include "editors/world_editor/world_editor_instance.h"
 
 namespace mmo
 {
@@ -32,38 +33,32 @@ namespace mmo
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
 
-        // Map Status Section
-        if (ImGui::CollapsingHeader("Map Information", ImGuiTreeNodeFlags_DefaultOpen))
+        // Map Status Section - Only show if map entry is missing
+        if (!m_mapEntry)
         {
-            ImGui::Indent();
+            if (ImGui::CollapsingHeader("Map Information", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                ImGui::Indent();
 
-            const String worldName = ExtractWorldNameFromPath();
+                const String worldName = ExtractWorldNameFromPath();
 
-            ImGui::Text("World:");
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "%s", worldName.c_str());
+                ImGui::Text("World:");
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "%s", worldName.c_str());
+
+                ImGui::Spacing();
+
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.7f, 0.3f, 1.0f));
+                ImGui::TextWrapped("No map entry found for this world file. Please create a map entry first.");
+                ImGui::PopStyleColor();
+
+                ImGui::Unindent();
+            }
 
             ImGui::Spacing();
-
-            if (m_mapEntry)
-            {
-                ImGui::Text("Map:");
-                ImGui::SameLine();
-                ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.3f, 1.0f), "%s", m_mapEntry->name().c_str());
-            }
-            else
-            {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.7f, 0.3f, 1.0f));
-                ImGui::TextWrapped("No map entry found for this world file.");
-                ImGui::PopStyleColor();
-            }
-
-            ImGui::Unindent();
+            ImGui::Separator();
+            ImGui::Spacing();
         }
-
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
 
         // Trigger Creation Section
         if (ImGui::CollapsingHeader("Create Area Trigger", ImGuiTreeNodeFlags_DefaultOpen))
@@ -131,6 +126,11 @@ namespace mmo
 
             if (m_mapEntry)
             {
+                // Filter input
+                ImGui::SetNextItemWidth(-1.0f);
+                ImGui::InputTextWithHint("##TriggerFilter", "Filter triggers...", m_filterBuffer, sizeof(m_filterBuffer));
+                ImGui::Spacing();
+
                 int triggerCount = 0;
                 for (const auto &trigger : m_areaTriggers.getTemplates().entry())
                 {
@@ -149,16 +149,43 @@ namespace mmo
 
                 if (ImGui::BeginListBox("##triggers", ImVec2(-1, 250)))
                 {
+                    const String filterStr = String(m_filterBuffer);
+                    const bool hasFilter = !filterStr.empty();
+
                     for (const auto &trigger : m_areaTriggers.getTemplates().entry())
                     {
                         if (trigger.map() == m_mapEntry->id())
                         {
-                            ImGui::PushID(trigger.id());
-
                             std::ostringstream labelStream;
                             labelStream << "#" << std::setw(6) << std::setfill('0') << trigger.id() << " - " << trigger.name();
+                            String displayName = labelStream.str();
 
-                            ImGui::Selectable(labelStream.str().c_str());
+                            // Apply filter
+                            if (hasFilter)
+                            {
+                                String lowerDisplay = displayName;
+                                String lowerFilter = filterStr;
+                                std::transform(lowerDisplay.begin(), lowerDisplay.end(), lowerDisplay.begin(), ::tolower);
+                                std::transform(lowerFilter.begin(), lowerFilter.end(), lowerFilter.begin(), ::tolower);
+
+                                if (lowerDisplay.find(lowerFilter) == String::npos)
+                                {
+                                    continue;
+                                }
+                            }
+
+                            ImGui::PushID(trigger.id());
+
+                        // Make trigger clickable to select it
+                        if (ImGui::Selectable(displayName.c_str(), false))
+                        {
+                            // Cast to WorldEditorInstance to access SelectAreaTrigger
+                            WorldEditorInstance* editorInstance = dynamic_cast<WorldEditorInstance*>(&m_worldEditor);
+                            if (editorInstance)
+                            {
+                                editorInstance->SelectAreaTrigger(const_cast<proto::AreaTriggerEntry&>(trigger));
+                            }
+                        }
 
                             if (ImGui::IsItemHovered())
                             {

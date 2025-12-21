@@ -253,15 +253,19 @@ namespace mmo
 
 		void RemoveAllAreaTriggers();
 
-		Camera &GetCamera() const override;
+	proto::AreaTriggerEntry* FindAreaTriggerByRenderObject(ManualRenderObject* renderObject);
 
-		bool IsGridSnapEnabled() const override { return m_gridSnapSettings.IsEnabled(); }
+	void SelectAreaTrigger(proto::AreaTriggerEntry& trigger);
 
-		float GetTranslateGridSnapSize() const override { return m_gridSnapSettings.GetCurrentTranslateSnap(); }
+	Camera &GetCamera() const override;
 
-		bool HasTerrain() const override { return m_hasTerrain; }
+	bool IsGridSnapEnabled() const override { return m_gridSnapSettings.IsEnabled(); }
 
-		terrain::Terrain *GetTerrain() const override { return m_terrain.get(); }
+	float GetTranslateGridSnapSize() const override { return m_gridSnapSettings.GetCurrentTranslateSnap(); }
+
+	bool HasTerrain() const override { return m_hasTerrain; }
+
+	terrain::Terrain *GetTerrain() const override { return m_terrain.get(); }
 
 	bool IsTransforming() const override;
 

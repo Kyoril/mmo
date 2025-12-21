@@ -1169,6 +1169,63 @@ void WorldEditorInstance::RemoveAllAreaTriggers()
 	m_areaTriggerMap.clear();
 }
 
+proto::AreaTriggerEntry* WorldEditorInstance::FindAreaTriggerByRenderObject(ManualRenderObject* renderObject)
+{
+	for (auto& [entry, pair] : m_areaTriggerMap)
+	{
+		if (pair.second == renderObject)
+		{
+			return entry;
+		}
+	}
+	return nullptr;
+}
+
+void WorldEditorInstance::SelectAreaTrigger(proto::AreaTriggerEntry& trigger)
+{
+	auto it = m_areaTriggerMap.find(&trigger);
+	if (it == m_areaTriggerMap.end())
+	{
+		return;
+	}
+
+	auto [node, renderObject] = it->second;
+
+	m_selection.Clear();
+
+	auto removal = [this](const proto::AreaTriggerEntry& entry)
+	{
+		auto it = m_areaTriggerMap.find(const_cast<proto::AreaTriggerEntry*>(&entry));
+		if (it != m_areaTriggerMap.end())
+		{
+			auto [node, renderObject] = it->second;
+			m_scene.DestroyManualRenderObject(*renderObject);
+			m_scene.GetRootSceneNode().RemoveChild(*node);
+			m_scene.DestroySceneNode(*node);
+			auto nodeIt = std::find(m_areaTriggerNodes.begin(), m_areaTriggerNodes.end(), node);
+			if (nodeIt != m_areaTriggerNodes.end())
+			{
+				m_areaTriggerNodes.erase(nodeIt);
+			}
+			auto renderIt = std::find(m_areaTriggerRenderObjects.begin(), m_areaTriggerRenderObjects.end(), renderObject);
+			if (renderIt != m_areaTriggerRenderObjects.end())
+			{
+				m_areaTriggerRenderObjects.erase(renderIt);
+			}
+			m_areaTriggerMap.erase(it);
+		}
+		m_editor.GetProject().areaTriggers.remove(entry.id());
+	};
+
+	auto duplication = [this](Selectable& selectable)
+	{
+		// Not supported
+	};
+
+	auto selectable = std::make_unique<SelectedAreaTrigger>(trigger, *node, *renderObject, duplication, removal);
+	m_selection.AddSelectable(std::move(selectable));
+}
+
 void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 	{
 		// Update the scene outline window regularly, especially when selection changes

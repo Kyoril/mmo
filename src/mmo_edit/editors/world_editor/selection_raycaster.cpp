@@ -277,10 +277,27 @@ namespace mmo
         const auto &hitResult = m_raySceneQuery.GetLastResult();
         if (!hitResult.empty())
         {
-            Entity *entity = (Entity *)hitResult[0].movable;
-            if (entity)
+            MovableObject* movable = hitResult[0].movable;
+            if (movable)
             {
-                if (entity->GetQueryFlags() & SceneQueryFlags_UnitSpawns)
+                // Check if this is an area trigger (ManualRenderObject)
+                if (movable->GetQueryFlags() & SceneQueryFlags_AreaTriggers)
+                {
+                    ManualRenderObject* renderObject = dynamic_cast<ManualRenderObject*>(movable);
+                    if (renderObject)
+                    {
+                        // Need to find the trigger entry through WorldEditorInstance
+                        // For now, just clear selection when clicking area triggers
+                        // TODO: Implement proper area trigger selection
+                        return;
+                    }
+                }
+
+                // For unit and object spawns, we need Entity
+                Entity *entity = dynamic_cast<Entity*>(movable);
+                if (entity)
+                {
+                    if (entity->GetQueryFlags() & SceneQueryFlags_UnitSpawns)
                 {
                     proto::UnitSpawnEntry *unitSpawnEntry = entity->GetUserObject<proto::UnitSpawnEntry>();
                     if (unitSpawnEntry)
@@ -313,11 +330,13 @@ namespace mmo
                             nullptr,   // Duplication not implemented
                             nullptr)); // Deletion will be set by WorldEditorInstance
                         UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
+                        return;
                     }
                 }
             }
         }
     }
+}
 
     void SelectionRaycaster::PerformTerrainSelection(float viewportX, float viewportY)
     {
