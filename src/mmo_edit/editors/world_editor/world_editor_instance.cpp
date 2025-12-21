@@ -1593,6 +1593,7 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 				entity.rotation,
 				entity.scale,
 				entity.uniqueId);
+			ASSERT(object);
 
 			// We just loaded the object - it has not been modified
 			MapEntity *mapEntity = object->GetUserObject<MapEntity>();

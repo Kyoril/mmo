@@ -27,7 +27,18 @@ namespace mmo
 
     uint64 EntityFactory::GenerateUniqueId()
     {
-        return m_objectIdGenerator.GenerateId();
+        // Get current time in milliseconds since epoch
+        const auto now = std::chrono::system_clock::now();
+        const uint64 timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+
+        // Mix with random bits
+        std::random_device rd;
+        std::mt19937_64 gen(rd());
+        std::uniform_int_distribution<uint64> dis;
+        const uint64 random = dis(gen) & 0x0000FFFFFFFFFFFF;
+
+        // Format: 16 bits from timestamp + 48 bits random
+        return (timestamp & 0xFFFF) << 48 | random;
     }
 
     void EntityFactory::NotifyExistingId(uint64 id)
@@ -35,7 +46,7 @@ namespace mmo
         m_objectIdGenerator.NotifyId(id);
     }
 
-    Entity *EntityFactory::CreateMapEntity(const String &assetName, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale, uint64 objectId)
+    Entity* EntityFactory::CreateMapEntity(const String &assetName, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale, uint64 objectId)
     {
         if (objectId == 0)
         {
