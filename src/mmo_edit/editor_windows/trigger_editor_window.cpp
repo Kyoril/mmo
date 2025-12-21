@@ -1047,7 +1047,7 @@ namespace mmo
 
 			ImGui::BeginChild("actionListScrollable", ImVec2(-1, 0));
 
-			// List of actions
+			// List of actions with drag & drop reordering
 			for (int idx = 0; idx < currentEntry.actions_size(); ++idx)
 			{
 				const auto& action = currentEntry.actions(idx);
@@ -1074,6 +1074,38 @@ namespace mmo
 				if (ImGui::Selectable(stream.str().c_str(), isSelected))
 				{
 					currentAction = idx;
+				}
+
+				// Drag & drop source
+				if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
+				{
+					ImGui::SetDragDropPayload("TRIGGER_ACTION", &idx, sizeof(idx));
+					ImGui::Text("Reorder to...");
+					ImGui::EndDragDropSource();
+				}
+
+				// Drag & drop target
+				if (ImGui::BeginDragDropTarget())
+				{
+					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("TRIGGER_ACTION"))
+					{
+						int* pSourceIdx = (int*)payload->Data;
+						int sourceIdx = *pSourceIdx;
+
+						if (sourceIdx != idx)
+						{
+							// Swap the actions
+							auto* actions = currentEntry.mutable_actions();
+							std::swap(*actions->Mutable(sourceIdx), *actions->Mutable(idx));
+
+							// Update selection if needed
+							if (currentAction == sourceIdx)
+								currentAction = idx;
+							else if (currentAction == idx)
+								currentAction = sourceIdx;
+						}
+					}
+					ImGui::EndDragDropTarget();
 				}
 
 				ImGui::PopID();
