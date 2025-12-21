@@ -29,6 +29,7 @@ namespace mmo
     class ManualRenderObject;
     class WorldEditor;
     class SpawnEditMode;
+    class WorldEditorInstance;
 
     namespace terrain
     {
@@ -48,6 +49,7 @@ namespace mmo
         /// @param terrain Pointer to the terrain (can be nullptr).
         /// @param editor Reference to the world editor for project access.
         /// @param spawnEditMode Pointer to the spawn edit mode (can be nullptr).
+        /// @param worldEditorInstance Pointer to the world editor instance for spawn removal.
         explicit SelectionRaycaster(
             Camera &camera,
             RaySceneQuery &raySceneQuery,
@@ -55,7 +57,8 @@ namespace mmo
             ManualRenderObject &debugBoundingBox,
             terrain::Terrain *terrain,
             WorldEditor &editor,
-            SpawnEditMode *spawnEditMode);
+            SpawnEditMode *spawnEditMode,
+            WorldEditorInstance *worldEditorInstance);
 
         ~SelectionRaycaster() override = default;
 
@@ -110,5 +113,6 @@ namespace mmo
         terrain::Terrain *m_terrain;
         WorldEditor &m_editor;
         SpawnEditMode *m_spawnEditMode;
+        WorldEditorInstance *m_worldEditorInstance;
     };
 }

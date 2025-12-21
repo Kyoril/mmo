@@ -159,6 +159,10 @@ namespace mmo
 			/// Targets: UNIT; Data: NONE; Texts: NONE;
 			Despawn = 21,
 
+			/// Teleports a player to a specific map and location.
+			/// Targets: PLAYER; Data: <MAP-ID>, <X>, <Y>, <Z>, [<FACING>]; Texts: NONE;
+			Teleport = 22,
+
 			Invalid,
 			Count_ = Invalid
 		};

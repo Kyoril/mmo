@@ -569,7 +569,8 @@ namespace mmo
                 entityName.find("Transform") != std::string::npos ||
                 entityName.find("Circle") != std::string::npos ||
                 entityName.find("Plane") != std::string::npos ||
-                entityName.find("Camera") != std::string::npos)
+                entityName.find("Camera") != std::string::npos ||
+                entityName.find("Spawn") != std::string::npos)
             {
                 continue;
             }

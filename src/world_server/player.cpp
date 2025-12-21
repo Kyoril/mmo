@@ -738,9 +738,17 @@ namespace mmo
 		}
 
 		// All validation passed
-		ILOG("Player successfully triggered area trigger " << triggerId);
+		const proto::TriggerEntry* triggerEntry = m_project.triggers.getById(trigger->on_enter_trigger());
+		if (!triggerEntry)
+		{
+			ELOG("Unable to trigger area trigger " << trigger->id() << ": Unable to find linked trigger entry " << trigger->on_enter_trigger());
+			return;
+		}
 
-		// TODO: Execute trigger actions here
+		ASSERT(m_character);
+
+		DLOG("Triggering trigger [" << triggerEntry->id() << "] " << triggerEntry->name() << " due to area trigger " << trigger->id() << " due to overlap of player " << log_hex_digit(m_character->GetGuid()));
+		m_character->unitTrigger(*triggerEntry, *m_character, m_character.get());
 	}
 
 	void Player::OnSpawned(WorldInstance& instance)

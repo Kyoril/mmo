@@ -41,6 +41,10 @@ namespace mmo
 
 		virtual void AddObjectSpawn(proto::ObjectSpawnEntry& spawn) = 0;
 
+		virtual void RemoveUnitSpawn(const proto::UnitSpawnEntry& spawn) = 0;
+
+		virtual void RemoveObjectSpawn(const proto::ObjectSpawnEntry& spawn) = 0;
+
 		virtual void AddAreaTrigger(proto::AreaTriggerEntry& trigger, bool select) = 0;
 
 		virtual void RemoveAllAreaTriggers() = 0;

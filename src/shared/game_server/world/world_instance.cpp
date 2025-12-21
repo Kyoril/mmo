@@ -251,7 +251,7 @@ namespace mmo
 	    tile.GetPosition(),
 	    [&added](VisibilityTile & tile)
 	{
-	    std::vector objects { &added };
+	    const std::vector objects { &added };
 	    for (auto *subscriber : tile.GetWatchers())
 		{
 			if (subscriber->GetGameUnit().GetGuid() == added.GetGuid())
@@ -268,19 +268,19 @@ namespace mmo
 		}
 	});
 
-	if (GameUnitS* addedUnit = dynamic_cast<GameUnitS*>(&added))
+	if (const auto addedUnit = dynamic_cast<GameUnitS*>(&added))
 	{
 		m_unitFinder->AddUnit(*addedUnit);
 	}
 
 	// Activate passive spells AFTER spawn notifications have been sent
 	// This ensures clients receive the spawn packet before any stat updates from passive effects
-	if (GameUnitS* unit = dynamic_cast<GameUnitS*>(&added))
+	if (const auto unit = dynamic_cast<GameUnitS*>(&added))
 	{
 		unit->ActivatePassiveSpells();
-			added.AsUnit().unitTrigger.connect([this](const proto::TriggerEntry& trigger, GameUnitS& owner, GameUnitS* triggeringUnit) {
-				m_triggerHandler.ExecuteTrigger(trigger, TriggerContext(&owner, triggeringUnit), 0);
-				});
+		added.AsUnit().unitTrigger.connect([this](const proto::TriggerEntry& trigger, GameUnitS& owner, GameUnitS* triggeringUnit) {
+			m_triggerHandler.ExecuteTrigger(trigger, TriggerContext(&owner, triggeringUnit), 0);
+			});
 		}
 	}
 
@@ -288,7 +288,7 @@ namespace mmo
 	{
 		ASSERT(!m_updating);
 
-		if (GameUnitS* removedUnit = dynamic_cast<GameUnitS*>(&remove))
+		if (const auto removedUnit = dynamic_cast<GameUnitS*>(&remove))
 		{
 			m_unitFinder->RemoveUnit(*removedUnit);
 		}

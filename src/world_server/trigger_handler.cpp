@@ -116,6 +116,7 @@ namespace mmo
 				MMO_HANDLE_TRIGGER_ACTION(Dismount)
 				MMO_HANDLE_TRIGGER_ACTION(SetMount)
 				MMO_HANDLE_TRIGGER_ACTION(Despawn)
+				MMO_HANDLE_TRIGGER_ACTION(Teleport)
 
 #undef MMO_HANDLE_TRIGGER_ACTION
 
@@ -692,6 +693,50 @@ namespace mmo
 				auto* world = strong->GetWorldInstance();
 				if (world)
 					world->RemoveGameObject(*strong);
+			}
+			});
+	}
+
+	void TriggerHandler::HandleTeleport(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		GameObjectS* target = GetActionTarget(action, context);
+		if (target == nullptr)
+		{
+			ELOG("TRIGGER_ACTION_TELEPORT: No target found, action will be ignored");
+			return;
+		}
+
+		if (!target->IsPlayer())
+		{
+			ELOG("TRIGGER_ACTION_TELEPORT: Target has to be a player");
+			return;
+		}
+
+		auto* world = target->GetWorldInstance();
+		if (!world)
+		{
+			ELOG("TRIGGER_ACTION_TELEPORT: Target isn't spawned right now");
+			return;
+		}
+
+		const uint32 map = GetActionData(action, 0);
+		const uint32 x = GetActionData(action, 1);
+		const uint32 y = GetActionData(action, 2);
+		const uint32 z = GetActionData(action, 3);
+		const Radian facing = Degree(static_cast<float>(GetActionData(action, 4)));
+
+		// Remove object in next world tick
+		auto strong = std::static_pointer_cast<GamePlayerS>(target->shared_from_this());
+		std::weak_ptr weak(strong);
+		world->GetUniverse().Post([weak, map, x, y, z, facing]() {
+			const auto strong = weak.lock();
+			if (strong)
+			{
+				auto* world = strong->GetWorldInstance();
+				if (world)
+				{
+					strong->Teleport(map, Vector3(x, y, z), facing);
+				}
 			}
 			});
 	}

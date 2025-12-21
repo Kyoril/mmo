@@ -106,15 +106,6 @@ namespace mmo
 		m_debugBoundingBox->SetCastShadows(false);
 		m_scene.GetRootSceneNode().AttachObject(*m_debugBoundingBox);
 
-		m_selectionRaycaster = std::make_unique<SelectionRaycaster>(
-			*m_camera,
-			*m_raySceneQuery,
-			m_selection,
-			*m_debugBoundingBox,
-			nullptr, // terrain - will be set after terrain is created
-			m_editor,
-			nullptr); // spawn edit mode - will be set later
-
 		PagePosition worldSize(64, 64);
 		m_memoryPointOfView = std::make_unique<PagePOVPartitioner>(
 			worldSize,
@@ -142,9 +133,6 @@ namespace mmo
 		m_terrain = std::make_unique<terrain::Terrain>(m_scene, m_camera, 64, 64);
 		m_terrain->SetTileSceneQueryFlags(SceneQueryFlags_Tile);
 		m_terrain->SetWireframeMaterial(MaterialManager::Get().Load("Editor/Wireframe.hmat"));
-
-		// Update selection raycaster with terrain pointer
-		m_selectionRaycaster->SetTerrain(m_terrain.get());
 
 		// Replace all \ with /
 		String baseFileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Terrain").string();
@@ -251,10 +239,24 @@ namespace mmo
 				}
 			}
 			m_sceneOutlineWindow->Update(); });
+
 		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().units, m_editor.GetProject().objects);
 		m_skyEditMode = std::make_unique<SkyEditMode>(*this, *m_skyComponent);
 		m_areaTriggerEditMode = std::make_unique<AreaTriggerEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().areaTriggers);
 		m_editMode = nullptr;
+
+		m_selectionRaycaster = std::make_unique<SelectionRaycaster>(
+			*m_camera,
+			*m_raySceneQuery,
+			m_selection,
+			*m_debugBoundingBox,
+			nullptr, // terrain - will be set after terrain is created
+			m_editor,
+			m_spawnEditMode.get(),
+			this); // spawn edit mode - will be set later
+
+		// Update selection raycaster with terrain pointer
+		m_selectionRaycaster->SetTerrain(m_terrain.get());
 
 		// Add navigation edit mode
 		m_navigationEditMode = std::make_unique<NavigationEditMode>(*this);
@@ -1017,6 +1019,92 @@ namespace mmo
 		entityOffsetNode->AttachObject(*entity);
 		m_spawnNodes.push_back(entityOffsetNode);
 		m_spawnNodes.push_back(node);
+	}
+
+	void WorldEditorInstance::RemoveUnitSpawn(const proto::UnitSpawnEntry& spawn)
+	{
+		auto* map = m_spawnEditMode->GetMapEntry();
+		if (map)
+		{
+			// Try to find the entity
+			const auto entityIt = std::find_if(m_spawnEntities.begin(), m_spawnEntities.end(), [&spawn](const Entity* entity)
+			{
+				return entity->GetUserObject<const proto::UnitSpawnEntry>() == &spawn;
+			});
+
+			if (entityIt != m_spawnEntities.end())
+			{
+				Entity* entity = *entityIt;
+
+				// Remove associated scene nodes
+				const auto nodeIt = std::find_if(m_spawnNodes.begin(), m_spawnNodes.end(), [entity](const SceneNode* node)
+				{
+						return node == entity->GetParentSceneNode();
+				});
+
+				if (nodeIt != m_spawnNodes.end())
+				{
+					m_scene.DestroySceneNode(**nodeIt);
+					m_spawnNodes.erase(nodeIt);
+				}
+
+				// Remove the entity
+				m_scene.DestroyEntity(*entity);
+				m_spawnEntities.erase(entityIt);
+			}
+
+			const auto it = std::find_if(map->mutable_unitspawns()->begin(), map->mutable_unitspawns()->end(), [&spawn](const proto::UnitSpawnEntry& entry)
+				{
+					return &entry == &spawn;
+				});
+			if (it != map->mutable_unitspawns()->end())
+			{
+				map->mutable_unitspawns()->erase(it);
+			}
+		}
+	}
+
+	void WorldEditorInstance::RemoveObjectSpawn(const proto::ObjectSpawnEntry& spawn)
+	{
+		auto* map = m_spawnEditMode->GetMapEntry();
+		if (map)
+		{
+			// Try to find the entity
+			const auto entityIt = std::find_if(m_spawnEntities.begin(), m_spawnEntities.end(), [&spawn](const Entity* entity)
+				{
+					return entity->GetUserObject<const proto::ObjectSpawnEntry>() == &spawn;
+				});
+
+			if (entityIt != m_spawnEntities.end())
+			{
+				Entity* entity = *entityIt;
+
+				// Remove associated scene nodes
+				const auto nodeIt = std::find_if(m_spawnNodes.begin(), m_spawnNodes.end(), [entity](const SceneNode* node)
+					{
+						return node == entity->GetParentSceneNode();
+					});
+
+				if (nodeIt != m_spawnNodes.end())
+				{
+					m_scene.DestroySceneNode(**nodeIt);
+					m_spawnNodes.erase(nodeIt);
+				}
+
+				// Remove the entity
+				m_scene.DestroyEntity(*entity);
+				m_spawnEntities.erase(entityIt);
+			}
+
+			const auto it = std::find_if(map->mutable_objectspawns()->begin(), map->mutable_objectspawns()->end(), [&spawn](const proto::ObjectSpawnEntry& entry)
+				{
+					return &entry == &spawn;
+				});
+			if (it != map->mutable_objectspawns()->end())
+			{
+				map->mutable_objectspawns()->erase(it);
+			}
+		}
 	}
 
 	void WorldEditorInstance::AddAreaTrigger(proto::AreaTriggerEntry &trigger, bool select)

@@ -2,6 +2,7 @@
 
 #include "selection_raycaster.h"
 
+#include "world_editor_instance.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/manual_render_object.h"
@@ -29,8 +30,9 @@ namespace mmo
         ManualRenderObject &debugBoundingBox,
         terrain::Terrain *terrain,
         WorldEditor &editor,
-        SpawnEditMode *spawnEditMode)
-        : m_camera(camera), m_raySceneQuery(raySceneQuery), m_selection(selection), m_debugBoundingBox(debugBoundingBox), m_terrain(terrain), m_editor(editor), m_spawnEditMode(spawnEditMode)
+        SpawnEditMode *spawnEditMode,
+        WorldEditorInstance *worldEditorInstance)
+        : m_camera(camera), m_raySceneQuery(raySceneQuery), m_selection(selection), m_debugBoundingBox(debugBoundingBox), m_terrain(terrain), m_editor(editor), m_spawnEditMode(spawnEditMode), m_worldEditorInstance(worldEditorInstance)
     {
     }
 
@@ -273,8 +275,8 @@ namespace mmo
 
         m_selection.Clear();
         m_debugBoundingBox.Clear();
-
-        const auto &hitResult = m_raySceneQuery.GetLastResult();
+        
+        const auto& hitResult = m_raySceneQuery.GetLastResult();
         if (!hitResult.empty())
         {
             MovableObject* movable = hitResult[0].movable;
@@ -294,49 +296,60 @@ namespace mmo
                 }
 
                 // For unit and object spawns, we need Entity
-                Entity *entity = dynamic_cast<Entity*>(movable);
+                Entity* entity = dynamic_cast<Entity*>(movable);
                 if (entity)
                 {
                     if (entity->GetQueryFlags() & SceneQueryFlags_UnitSpawns)
-                {
-                    proto::UnitSpawnEntry *unitSpawnEntry = entity->GetUserObject<proto::UnitSpawnEntry>();
-                    if (unitSpawnEntry)
                     {
-                        // Duplication and deletion callbacks provided by WorldEditorInstance
-                        m_selection.AddSelectable(std::make_unique<SelectedUnitSpawn>(
-                            *unitSpawnEntry,
-                            m_editor.GetProject().units,
-                            m_editor.GetProject().models,
-                            *entity->GetParentSceneNode()->GetParentSceneNode(),
-                            *entity,
-                            nullptr,   // Duplication not implemented
-                            nullptr)); // Deletion will be set by WorldEditorInstance
-                        UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
-                        return;
+                        proto::UnitSpawnEntry* unitSpawnEntry = entity->GetUserObject<proto::UnitSpawnEntry>();
+                        if (unitSpawnEntry)
+                        {
+                            // Create removal callback that removes the spawn from scene and proto data
+                            auto removalCallback = [this, entity](const proto::UnitSpawnEntry& spawn)
+                                {
+                                    m_worldEditorInstance->RemoveUnitSpawn(spawn);
+                                };
+                            
+                            m_selection.AddSelectable(std::make_unique<SelectedUnitSpawn>(
+                                *unitSpawnEntry,
+                                m_editor.GetProject().units,
+                                m_editor.GetProject().models,
+                                *entity->GetParentSceneNode()->GetParentSceneNode(),
+                                *entity,
+                                nullptr,
+                                removalCallback));
+                            UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
+                            return;
+                        }
                     }
-                }
 
-                if (entity->GetQueryFlags() & SceneQueryFlags_ObjectSpawns)
-                {
-                    proto::ObjectSpawnEntry *objectSpawnEntry = entity->GetUserObject<proto::ObjectSpawnEntry>();
-                    if (objectSpawnEntry)
+                    if (entity->GetQueryFlags() & SceneQueryFlags_ObjectSpawns)
                     {
-                        m_selection.AddSelectable(std::make_unique<SelectedObjectSpawn>(
-                            *objectSpawnEntry,
-                            m_editor.GetProject().objects,
-                            m_editor.GetProject().objectDisplays,
-                            *entity->GetParentSceneNode()->GetParentSceneNode(),
-                            *entity,
-                            nullptr,   // Duplication not implemented
-                            nullptr)); // Deletion will be set by WorldEditorInstance
-                        UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
-                        return;
+                        proto::ObjectSpawnEntry* objectSpawnEntry = entity->GetUserObject<proto::ObjectSpawnEntry>();
+                        if (objectSpawnEntry)
+                        {
+                            // Create removal callback that removes the spawn from scene and proto data
+                            auto removalCallback = [this, entity](const proto::ObjectSpawnEntry& spawn)
+                                {
+                                    m_worldEditorInstance->RemoveObjectSpawn(spawn);
+                                };
+
+                            m_selection.AddSelectable(std::make_unique<SelectedObjectSpawn>(
+                                *objectSpawnEntry,
+                                m_editor.GetProject().objects,
+                                m_editor.GetProject().objectDisplays,
+                                *entity->GetParentSceneNode()->GetParentSceneNode(),
+                                *entity,
+                                nullptr,
+                                removalCallback));
+                            UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
+                            return;
+                        }
                     }
                 }
             }
         }
     }
-}
 
     void SelectionRaycaster::PerformTerrainSelection(float viewportX, float viewportY)
     {

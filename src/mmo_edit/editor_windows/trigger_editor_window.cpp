@@ -331,7 +331,7 @@ namespace mmo
 				"SetRespawnState", "CastSpell", "Delay", "MoveTo", "SetCombatMovement",
 				"StopAutoAttack", "CancelCast", "SetStandState", "SetVirtualEquipmentSlot",
 				"SetPhase", "SetSpellCooldown", "QuestKillCredit", "QuestEventOrExploration",
-				"SetVariable", "Dismount", "SetMount", "Despawn"
+				"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player"
 			};
 
 			// Select the trigger action type.
@@ -349,22 +349,20 @@ namespace mmo
 
 			ImGui::Spacing();
 
-			/*
 			ImGui::SameLine();
 
 			// Reordering controls: simple Up/Down arrow buttons
-			if (i > 0 && ImGui::ArrowButton("Up", ImGuiDir_Up))
+			if (actionIndex > 0 && ImGui::ArrowButton("Up", ImGuiDir_Up))
 			{
-				auto* prevAction = currentEntry.mutable_actions(i - 1);
-				std::swap(*prevAction, *action);
+				auto* prevAction = currentEntry.mutable_actions(actionIndex - 1);
+				std::swap(*prevAction, action);
 			}
 			ImGui::SameLine();
-			if (i < currentEntry.actions_size() - 1 && ImGui::ArrowButton("Down", ImGuiDir_Down))
+			if (actionIndex < currentEntry.actions_size() - 1 && ImGui::ArrowButton("Down", ImGuiDir_Down))
 			{
-				auto* nextAction = currentEntry.mutable_actions(i + 1);
-				std::swap(*nextAction, *action);
+				auto* nextAction = currentEntry.mutable_actions(actionIndex + 1);
+				std::swap(*nextAction, action);
 			}
-			*/
 
 			static const char* s_actionTargetStrings[] = {
 				"None",
@@ -588,6 +586,64 @@ namespace mmo
 				}
 				ImGui::SameLine();
 				ImGui::Text("Position (X, Y, Z)");
+				break;
+			}
+			case trigger_actions::Teleport:
+			{
+				uint32 mapId = 0;
+				if (action.data_size() > 0)
+				{
+					mapId = static_cast<uint32>(action.data(0));
+				}
+				ImGui::SetNextItemWidth(150);
+				if (ImGui::InputInt("##MapId", reinterpret_cast<int*>(&mapId)))
+				{
+					if (action.data_size() > 0)
+						action.set_data(0, mapId);
+					else
+						action.add_data(mapId);
+				}
+				ImGui::SameLine();
+				ImGui::Text("Map ID");
+
+				// Data: <Map>, <X>, <Y>, <Z>, <Facing>
+				float pos[3] = { 0.0f, 0.0f, 0.0f };
+				if (action.data_size() >= 4)
+				{
+					pos[0] = static_cast<float>(action.data(1));
+					pos[1] = static_cast<float>(action.data(2));
+					pos[2] = static_cast<float>(action.data(3));
+				}
+				ImGui::SetNextItemWidth(300);
+				if (ImGui::InputFloat3("##Position", pos))
+				{
+					while (action.data_size() < 4)
+					{
+						action.add_data(0);
+					}
+					action.set_data(1, static_cast<int>(pos[0]));
+					action.set_data(2, static_cast<int>(pos[1]));
+					action.set_data(3, static_cast<int>(pos[2]));
+				}
+				ImGui::SameLine();
+				ImGui::Text("Position (X, Y, Z)");
+
+				float facing = 0.0f;
+				if (action.data_size() >= 5)
+				{
+					facing = static_cast<float>(action.data(4));
+				}
+				ImGui::SetNextItemWidth(150.0f);
+				if (ImGui::InputFloat("##Facing", &facing))
+				{
+					if (action.data_size() < 5)
+					{
+						action.add_data(0);
+					}
+					action.set_data(4, static_cast<int>(facing));
+				}
+				ImGui::SameLine();
+				ImGui::Text("Facing (Degree)");
 				break;
 			}
 			case trigger_actions::SetCombatMovement:
@@ -1061,7 +1117,7 @@ namespace mmo
 					"SetRespawnState", "CastSpell", "Delay", "MoveTo", "SetCombatMovement",
 					"StopAutoAttack", "CancelCast", "SetStandState", "SetVirtualEquipmentSlot",
 					"SetPhase", "SetSpellCooldown", "QuestKillCredit", "QuestEventOrExploration",
-					"SetVariable", "Dismount", "SetMount", "Despawn"
+					"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player"
 				};
 
 				const char* actionTypeName = (action.action() >= 0 && action.action() < static_cast<int>(std::size(s_actionTypeNames)))

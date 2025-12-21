@@ -172,6 +172,11 @@ namespace mmo
 		/// @param context The context in which the action is executed.
 		void HandleDespawn(const proto::TriggerAction& action, TriggerContext& context);
 
+		/// Handles teleporting an object.
+		/// @param action The trigger action to handle.
+		/// @param context The context in which the action is executed.
+		void HandleTeleport(const proto::TriggerAction& action, TriggerContext& context);
+
 	private:
 		/// Checks if the in-combat flag is set for a trigger entry.
 		/// @param entry The trigger entry to check.
