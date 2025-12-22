@@ -763,109 +763,145 @@ namespace mmo
 
 		void Terrain::Deform(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power)
 		{
-			// Calculate brush bounds for inner vertex update
-			const float halfTerrainWidth = (m_width * constants::PageSize) * 0.5f;
-			const float halfTerrainHeight = (m_height * constants::PageSize) * 0.5f;
-			constexpr float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::OuterVerticesPerPageSide - 1));
-			float globalCenterX = (brushCenterX + halfTerrainWidth) / scale;
-			float globalCenterZ = (brushCenterZ + halfTerrainHeight) / scale;
-			int minVertX = static_cast<int>(std::floor(globalCenterX - (outerRadius / scale)));
-			int maxVertX = static_cast<int>(std::ceil(globalCenterX + (outerRadius / scale)));
-			minVertX = std::max(0, minVertX);
-			maxVertX = std::min<int>(maxVertX, m_width * (constants::OuterVerticesPerPageSide - 1));
-			int minVertZ = static_cast<int>(std::floor(globalCenterZ - (outerRadius / scale)));
-			int maxVertZ = static_cast<int>(std::ceil(globalCenterZ + (outerRadius / scale)));
-			minVertZ = std::max(0, minVertZ);
-			maxVertZ = std::min<int>(maxVertZ, m_height * (constants::OuterVerticesPerPageSide - 1));
-
 			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, power](const int32 vx, const int32 vy, const float factor)
 				{
-					float height = GetHeightAt(vx, vy);
-					height += (power * factor);
-					SetHeightAt(vx, vy, height);
+					if (vx >= 0 && vy >= 0)
+					{
+						// Outer vertex
+						float height = GetHeightAt(vx, vy);
+						height += (power * factor);
+						SetHeightAt(vx, vy, height);
+					}
+					else
+					{
+						// Inner vertex (encoded as negative indices)
+						const int32 ix = -vx - 1;
+						const int32 iz = -vy - 1;
+						const uint32 pageX = ix / (constants::OuterVerticesPerPageSide - 1);
+						const uint32 pageZ = iz / (constants::OuterVerticesPerPageSide - 1);
+						const uint32 localInnerX = ix % (constants::OuterVerticesPerPageSide - 1);
+						const uint32 localInnerZ = iz % (constants::OuterVerticesPerPageSide - 1);
+						
+						Page* page = GetPage(pageX, pageZ);
+						if (page && page->IsPrepared())
+						{
+							float height = page->GetInnerHeightAt(localInnerX, localInnerZ);
+							height += (power * factor);
+							page->SetInnerHeightAt(localInnerX, localInnerZ, height);
+						}
+					}
 				});
-
-			// Update inner vertices based on modified outer vertices
-			UpdateInnerVertices(minVertX, minVertZ, maxVertX, maxVertZ);
 		}
 
 		void Terrain::Smooth(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power)
 		{
-			// Calculate brush bounds for inner vertex update
-			const float halfTerrainWidth = (m_width * constants::PageSize) * 0.5f;
-			const float halfTerrainHeight = (m_height * constants::PageSize) * 0.5f;
-			constexpr float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::OuterVerticesPerPageSide - 1));
-			float globalCenterX = (brushCenterX + halfTerrainWidth) / scale;
-			float globalCenterZ = (brushCenterZ + halfTerrainHeight) / scale;
-			int minVertX = static_cast<int>(std::floor(globalCenterX - (outerRadius / scale)));
-			int maxVertX = static_cast<int>(std::ceil(globalCenterX + (outerRadius / scale)));
-			minVertX = std::max(0, minVertX);
-			maxVertX = std::min<int>(maxVertX, m_width * (constants::OuterVerticesPerPageSide - 1));
-			int minVertZ = static_cast<int>(std::floor(globalCenterZ - (outerRadius / scale)));
-			int maxVertZ = static_cast<int>(std::ceil(globalCenterZ + (outerRadius / scale)));
-			minVertZ = std::max(0, minVertZ);
-			maxVertZ = std::min<int>(maxVertZ, m_height * (constants::OuterVerticesPerPageSide - 1));
-
 			// First collect average height value
 			float sumHeight = 0.0f;
 			uint32 heightCount = 0;
 			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, false, &GetBrushIntensityLinear, [this, &sumHeight, &heightCount](const int32 vx, const int32 vy, float)
 				{
-					float height = GetHeightAt(vx, vy);
-					sumHeight += height;
-					heightCount++;
+					if (vx >= 0 && vy >= 0)
+					{
+						// Outer vertex
+						float height = GetHeightAt(vx, vy);
+						sumHeight += height;
+						heightCount++;
+					}
+					else
+					{
+						// Inner vertex (encoded as negative indices)
+						const int32 ix = -vx - 1;
+						const int32 iz = -vy - 1;
+						const uint32 pageX = ix / (constants::OuterVerticesPerPageSide - 1);
+						const uint32 pageZ = iz / (constants::OuterVerticesPerPageSide - 1);
+						const uint32 localInnerX = ix % (constants::OuterVerticesPerPageSide - 1);
+						const uint32 localInnerZ = iz % (constants::OuterVerticesPerPageSide - 1);
+						
+						Page* page = GetPage(pageX, pageZ);
+						if (page && page->IsPrepared())
+						{
+							float height = page->GetInnerHeightAt(localInnerX, localInnerZ);
+							sumHeight += height;
+							heightCount++;
+						}
+					}
 				});
 
 			const float avgHeight = sumHeight / static_cast<float>(heightCount);
 			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, avgHeight, power](const int32 vx, const int32 vy, const float factor)
 				{
-					const float height = GetHeightAt(vx, vy);
-					float delta = height - avgHeight;
-					delta *= factor * power;
-					SetHeightAt(vx, vy, height - delta);
+					if (vx >= 0 && vy >= 0)
+					{
+						// Outer vertex
+						const float height = GetHeightAt(vx, vy);
+						float delta = height - avgHeight;
+						delta *= factor * power;
+						SetHeightAt(vx, vy, height - delta);
+					}
+					else
+					{
+						// Inner vertex (encoded as negative indices)
+						const int32 ix = -vx - 1;
+						const int32 iz = -vy - 1;
+						const uint32 pageX = ix / (constants::OuterVerticesPerPageSide - 1);
+						const uint32 pageZ = iz / (constants::OuterVerticesPerPageSide - 1);
+						const uint32 localInnerX = ix % (constants::OuterVerticesPerPageSide - 1);
+						const uint32 localInnerZ = iz % (constants::OuterVerticesPerPageSide - 1);
+						
+						Page* page = GetPage(pageX, pageZ);
+						if (page && page->IsPrepared())
+						{
+							const float height = page->GetInnerHeightAt(localInnerX, localInnerZ);
+							float delta = height - avgHeight;
+							delta *= factor * power;
+							page->SetInnerHeightAt(localInnerX, localInnerZ, height - delta);
+						}
+					}
 				});
-
-			// Update inner vertices based on modified outer vertices
-			UpdateInnerVertices(minVertX, minVertZ, maxVertX, maxVertZ);
 		}
 
 		void Terrain::Flatten(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power, float targetHeight)
 		{
-			// Calculate brush bounds for inner vertex update
-			const float halfTerrainWidth = (m_width * constants::PageSize) * 0.5f;
-			const float halfTerrainHeight = (m_height * constants::PageSize) * 0.5f;
-			constexpr float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::OuterVerticesPerPageSide - 1));
-			float globalCenterX = (brushCenterX + halfTerrainWidth) / scale;
-			float globalCenterZ = (brushCenterZ + halfTerrainHeight) / scale;
-			int minVertX = static_cast<int>(std::floor(globalCenterX - (outerRadius / scale)));
-			int maxVertX = static_cast<int>(std::ceil(globalCenterX + (outerRadius / scale)));
-			minVertX = std::max(0, minVertX);
-			maxVertX = std::min<int>(maxVertX, m_width * (constants::OuterVerticesPerPageSide - 1));
-			int minVertZ = static_cast<int>(std::floor(globalCenterZ - (outerRadius / scale)));
-			int maxVertZ = static_cast<int>(std::ceil(globalCenterZ + (outerRadius / scale)));
-			minVertZ = std::max(0, minVertZ);
-			maxVertZ = std::min<int>(maxVertZ, m_height * (constants::OuterVerticesPerPageSide - 1));
-
 			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, targetHeight, power](const int32 vx, const int32 vy, const float factor)
 				{
-					const float height = GetHeightAt(vx, vy);
-					float delta = height - targetHeight;
-					delta *= factor * power;
-					SetHeightAt(vx, vy, height - delta);
+					if (vx >= 0 && vy >= 0)
+					{
+						// Outer vertex
+						const float height = GetHeightAt(vx, vy);
+						float delta = height - targetHeight;
+						delta *= factor * power;
+						SetHeightAt(vx, vy, height - delta);
+					}
+					else
+					{
+						// Inner vertex (encoded as negative indices)
+						const int32 ix = -vx - 1;
+						const int32 iz = -vy - 1;
+						const uint32 pageX = ix / (constants::OuterVerticesPerPageSide - 1);
+						const uint32 pageZ = iz / (constants::OuterVerticesPerPageSide - 1);
+						const uint32 localInnerX = ix % (constants::OuterVerticesPerPageSide - 1);
+						const uint32 localInnerZ = iz % (constants::OuterVerticesPerPageSide - 1);
+						
+						Page* page = GetPage(pageX, pageZ);
+						if (page && page->IsPrepared())
+						{
+							const float height = page->GetInnerHeightAt(localInnerX, localInnerZ);
+							float delta = height - targetHeight;
+							delta *= factor * power;
+							page->SetInnerHeightAt(localInnerX, localInnerZ, height - delta);
+						}
+					}
 				});
+	}
 
-			// Update inner vertices based on modified outer vertices
-			UpdateInnerVertices(minVertX, minVertZ, maxVertX, maxVertZ);
-		}
+	void Terrain::Paint(const uint8 layer, const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, const float power)
+	{
+		Paint(layer, brushCenterX, brushCenterZ, innerRadius, outerRadius, power, 0.0f, 1.0f);
+	}
 
-		void Terrain::Paint(const uint8 layer, const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, const float power)
-		{
-			Paint(layer, brushCenterX, brushCenterZ, innerRadius, outerRadius, power, 0.0f, 1.0f);
-		}
-
-		void Terrain::Paint(uint8 layer, const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power, float, float)
-		{
-			TerrainPixelBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, layer, power](const int32 vx, const int32 vy, const float factor)
+	void Terrain::Paint(const uint8 layer, const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, const float power, const float minValue, const float maxValue)
+	{
+		TerrainPixelBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, layer, power](const int32 vx, const int32 vy, const float factor)
 				{
 					const uint32 layers = GetLayersAt(vx, vy);
 

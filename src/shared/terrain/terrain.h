@@ -175,7 +175,7 @@ namespace mmo
 				minVertZ = std::max(0, minVertZ);
 				maxVertZ = std::min<int>(maxVertZ, m_height * (constants::OuterVerticesPerPageSide - 1));
 
-				// Loop over each vertex that could be within the outer radius
+				// Loop over each outer vertex that could be within the outer radius
 				for (int vx = minVertX; vx <= maxVertX; vx++)
 				{
 					for (int vz = minVertZ; vz <= maxVertZ; vz++)
@@ -195,6 +195,51 @@ namespace mmo
 							// Compute a weight factor for the current terrain vertex based on the brush center, inner and outer radius and so on
 							const float factor = getBrushIntensity(dist, innerRadius, outerRadius);
 							vertexFunction(vx, vz, factor);
+						}
+					}
+				}
+
+				// Also process inner vertices (cell-centered between outer vertices)
+				// Inner vertices are at indices 0-127 in each dimension per page (not 0-128 like outer)
+				// In global space, inner vertex (ix, iz) is positioned between outer vertices (ix, iz) and (ix+1, iz+1)
+				const int minInnerX = std::max(0, minVertX - 1);
+				const int maxInnerX = std::min(static_cast<int>(m_width * (constants::OuterVerticesPerPageSide - 1) - 1), maxVertX);
+				const int minInnerZ = std::max(0, minVertZ - 1);
+				const int maxInnerZ = std::min(static_cast<int>(m_height * (constants::OuterVerticesPerPageSide - 1) - 1), maxVertZ);
+
+				for (int ix = minInnerX; ix < maxInnerX; ix++)
+				{
+					for (int iz = minInnerZ; iz < maxInnerZ; iz++)
+					{
+						// Inner vertex (ix, iz) is positioned at the center of the quad formed by
+						// outer vertices (ix, iz), (ix+1, iz), (ix, iz+1), (ix+1, iz+1)
+						float v0x, v0z, v1x, v1z, v2x, v2z, v3x, v3z;
+						GetGlobalVertexWorldPosition(ix, iz, &v0x, &v0z);
+						GetGlobalVertexWorldPosition(ix + 1, iz, &v1x, &v1z);
+						GetGlobalVertexWorldPosition(ix, iz + 1, &v2x, &v2z);
+						GetGlobalVertexWorldPosition(ix + 1, iz + 1, &v3x, &v3z);
+
+						// Compute inner vertex position as average of 4 surrounding outer vertices
+						float worldX = (v0x + v1x + v2x + v3x) * 0.25f;
+						float worldZ = (v0z + v1z + v2z + v3z) * 0.25f;
+
+						// Compute distance from brush center
+						float dx = worldX - brushCenterX;
+						float dz = worldZ - brushCenterZ;
+						float dist = sqrt(dx * dx + dz * dz);
+
+						// Determine if this inner vertex is within the brush area
+						if (dist <= outerRadius)
+						{
+							// Compute a weight factor for the current inner vertex
+							const float factor = getBrushIntensity(dist, innerRadius, outerRadius);
+							
+							// We need to encode inner vertices specially since they're not in the outer grid
+							// Use a sentinel value: negative indices indicate an inner vertex
+							// Inner vertex at (ix, iz) is encoded as (-(ix+1), -(iz+1))
+							const int32 innerVx = -(ix + 1);
+							const int32 innerVz = -(iz + 1);
+							vertexFunction(innerVx, innerVz, factor);
 						}
 					}
 				}
