@@ -544,7 +544,7 @@ namespace mmo
 						float tTmp;
 						Vector3 ip;
 						// Top
-						if (RayTriangleIntersection(ray, vC, vTL, vTR, tTmp, ip))
+						if (RayTriangleIntersection(ray, vC, vTR, vTL, tTmp, ip))
 						{
 							if (tTmp < coarseHitT)
 							{
@@ -555,7 +555,7 @@ namespace mmo
 							}
 						}
 						// Right
-						if (RayTriangleIntersection(ray, vC, vTR, vBR, tTmp, ip))
+						if (RayTriangleIntersection(ray, vC, vBR, vTR, tTmp, ip))
 						{
 							if (tTmp < coarseHitT)
 							{
@@ -566,7 +566,7 @@ namespace mmo
 							}
 						}
 						// Bottom
-						if (RayTriangleIntersection(ray, vC, vBR, vBL, tTmp, ip))
+						if (RayTriangleIntersection(ray, vC, vBL, vBR, tTmp, ip))
 						{
 							if (tTmp < coarseHitT)
 							{
@@ -577,7 +577,7 @@ namespace mmo
 							}
 						}
 						// Left
-						if (RayTriangleIntersection(ray, vC, vBL, vTL, tTmp, ip))
+						if (RayTriangleIntersection(ray, vC, vTL, vBL, tTmp, ip))
 						{
 							if (tTmp < coarseHitT)
 							{
@@ -628,7 +628,7 @@ namespace mmo
 
 							// Check four triangles around the center
 							Vector3 ip1;
-							if (float t1; RayTriangleIntersection(ray, vC, vTL, vTR, t1, ip1))
+							if (float t1; RayTriangleIntersection(ray, vC, vTR, vTL, t1, ip1))
 							{
 								if (t1 < closestHit)
 								{
@@ -640,7 +640,7 @@ namespace mmo
 
 							float t2;
 							Vector3 ip2;
-							if (RayTriangleIntersection(ray, vC, vTR, vBR, t2, ip2))
+							if (RayTriangleIntersection(ray, vC, vBR, vTR, t2, ip2))
 							{
 								if (t2 < closestHit)
 								{
@@ -652,7 +652,7 @@ namespace mmo
 
 							float t3;
 							Vector3 ip3;
-							if (RayTriangleIntersection(ray, vC, vBR, vBL, t3, ip3))
+							if (RayTriangleIntersection(ray, vC, vBL, vBR, t3, ip3))
 							{
 								if (t3 < closestHit)
 								{
@@ -664,7 +664,7 @@ namespace mmo
 
 							float t4;
 							Vector3 ip4;
-							if (RayTriangleIntersection(ray, vC, vBL, vTL, t4, ip4))
+							if (RayTriangleIntersection(ray, vC, vTL, vBL, t4, ip4))
 							{
 								if (t4 < closestHit)
 								{
@@ -877,7 +877,7 @@ namespace mmo
 		void Terrain::SetHeightAt(const int x, const int y, const float height) const
 		{
 			// Determine page
-			const uint32 TotalVertices = m_width * (constants::VerticesPerPage - 1) + 1;
+			const uint32 TotalVertices = m_width * (constants::OuterVerticesPerPageSide - 1) + 1;
 			if (static_cast<uint32>(x) >= TotalVertices || static_cast<uint32>(y) >= TotalVertices)
 			{
 				return;
@@ -905,7 +905,7 @@ namespace mmo
 				if (page &&
 					page->IsPrepared())
 				{
-					page->SetHeightAt(constants::VerticesPerPage - 1, localVertexY, height);
+					page->SetHeightAt(constants::OuterVerticesPerPageSide - 1, localVertexY, height);
 				}
 			}
 
@@ -916,7 +916,7 @@ namespace mmo
 				if (page &&
 					page->IsPrepared())
 				{
-					page->SetHeightAt(localVertexX, constants::VerticesPerPage - 1, height);
+					page->SetHeightAt(localVertexX, constants::OuterVerticesPerPageSide - 1, height);
 				}
 			}
 
@@ -927,7 +927,7 @@ namespace mmo
 				if (page &&
 					page->IsPrepared())
 				{
-					page->SetHeightAt(constants::VerticesPerPage - 1, constants::VerticesPerPage - 1, height);
+					page->SetHeightAt(constants::OuterVerticesPerPageSide - 1, constants::OuterVerticesPerPageSide - 1, height);
 				}
 			}
 		}
@@ -935,7 +935,7 @@ namespace mmo
 		void Terrain::SetColorAt(const int x, const int y, const uint32 color) const
 		{
 			// Determine page
-			const uint32 totalVertices = m_width * (constants::VerticesPerPage - 1) + 1;
+			const uint32 totalVertices = m_width * (constants::OuterVerticesPerPageSide - 1) + 1;
 			if (static_cast<uint32>(x) >= totalVertices || static_cast<uint32>(y) >= totalVertices)
 			{
 				return;
@@ -963,7 +963,7 @@ namespace mmo
 				if (page &&
 					page->IsPrepared())
 				{
-					page->SetColorAt(constants::VerticesPerPage - 1, localVertexY, color);
+					page->SetColorAt(constants::OuterVerticesPerPageSide - 1, localVertexY, color);
 				}
 			}
 
@@ -974,7 +974,7 @@ namespace mmo
 				if (page &&
 					page->IsPrepared())
 				{
-					page->SetColorAt(localVertexX, constants::VerticesPerPage - 1, color);
+					page->SetColorAt(localVertexX, constants::OuterVerticesPerPageSide - 1, color);
 				}
 			}
 
@@ -985,7 +985,7 @@ namespace mmo
 				if (page &&
 					page->IsPrepared())
 				{
-					page->SetColorAt(constants::VerticesPerPage - 1, constants::VerticesPerPage - 1, color);
+					page->SetColorAt(constants::OuterVerticesPerPageSide - 1, constants::OuterVerticesPerPageSide - 1, color);
 				}
 			}
 		}
@@ -1010,9 +1010,8 @@ namespace mmo
 				}
 
 				// Get page start vertex (X)
-				const int32 pageStartX = std::max<int32>(fromX - x * static_cast<int32>(constants::VerticesPerPage - 1), 0);
-				const int32 pageEndX = toX - x * static_cast<int32>(constants::VerticesPerPage - 1);
-
+			const int32 pageStartX = std::max<int32>(fromX - x * static_cast<int32>(constants::OuterVerticesPerPageSide - 1), 0);
+			const int32 pageEndX = toX - x * static_cast<int32>(constants::OuterVerticesPerPageSide - 1);
 				for (int32 z = static_cast<int32>(fromPageZ); z <= static_cast<int32>(toPageZ); z++)
 				{
 					// Invalid page
@@ -1022,9 +1021,8 @@ namespace mmo
 					}
 
 					// Get page start vertex (Z)
-					const int32 pageStartZ = std::max<int32>(fromZ - z * static_cast<int32>(constants::VerticesPerPage - 1), 0);
-					const int32 pageEndZ = toZ - z * static_cast<int32>(constants::VerticesPerPage - 1);
-
+				const int32 pageStartZ = std::max<int32>(fromZ - z * static_cast<int32>(constants::OuterVerticesPerPageSide - 1), 0);
+				const int32 pageEndZ = toZ - z * static_cast<int32>(constants::OuterVerticesPerPageSide - 1);
 					// Update the tiles if necessary
 					if (Page* page = GetPage(x, z); page != nullptr)
 					{
@@ -1172,9 +1170,8 @@ namespace mmo
 
 		void Terrain::GetGlobalVertexWorldPosition(const int x, const int y, float* out_x, float* out_z) const
 		{
-			constexpr float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::VerticesPerPage - 1));
-
-			if (out_x)
+		// Only outer vertices form an addressable grid
+		constexpr float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::OuterVerticesPerPageSide - 1));
 			{
 				const float worldCenterX = static_cast<float>(static_cast<double>(m_width) / 2.0 * constants::PageSize);
 				*out_x = static_cast<float>(x) * scale - worldCenterX;

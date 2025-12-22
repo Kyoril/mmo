@@ -150,13 +150,13 @@ namespace mmo
 			{
 				// Convert brush center from world space to *global* vertex indices
 				// We'll do it by shifting the range so that x=0 => left edge of the terrain
-				// and x = m_width*(VerticesPerPage-1)*scale => right edge.
+				// and x = m_width*(OuterVerticesPerPageSide-1)*scale => right edge.
 
 				const float halfTerrainWidth = (m_width * constants::PageSize) * 0.5f;
 				const float halfTerrainHeight = (m_height * constants::PageSize) * 0.5f;
 
-				// scale = pageSize / (VerticesPerPage - 1)
-				constexpr float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::VerticesPerPage - 1));
+// scale = pageSize / (OuterVerticesPerPageSide - 1)
+			constexpr float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::OuterVerticesPerPageSide - 1));
 
 				// Move brush center from [-halfTerrain, +halfTerrain] into [0, totalWidthInVertices]
 				float globalCenterX = (brushCenterX + halfTerrainWidth) / scale;
@@ -166,12 +166,12 @@ namespace mmo
 				int minVertX = static_cast<int>(std::floor(globalCenterX - (outerRadius / scale)));
 				int maxVertX = static_cast<int>(std::ceil(globalCenterX + (outerRadius / scale)));
 				minVertX = std::max(0, minVertX);
-				maxVertX = std::min<int>(maxVertX, m_width * (constants::VerticesPerPage - 1));
+				maxVertX = std::min<int>(maxVertX, m_width * (constants::OuterVerticesPerPageSide - 1));
 
 				int minVertZ = static_cast<int>(std::floor(globalCenterZ - (outerRadius / scale)));
 				int maxVertZ = static_cast<int>(std::ceil(globalCenterZ + (outerRadius / scale)));
 				minVertZ = std::max(0, minVertZ);
-				maxVertZ = std::min<int>(maxVertZ, m_height * (constants::VerticesPerPage - 1));
+				maxVertZ = std::min<int>(maxVertZ, m_height * (constants::OuterVerticesPerPageSide - 1));
 
 				// Loop over each vertex that could be within the outer radius
 				for (int vx = minVertX; vx <= maxVertX; vx++)

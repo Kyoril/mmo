@@ -685,8 +685,8 @@ namespace mmo
 					float t;
 					Vector3 intersectionPoint;
 
-					// Top triangle: Center - TL - TR
-					if (Terrain::RayTriangleIntersection(localRay, vCenter, vTL, vTR, t, intersectionPoint))
+				// Top triangle: Center - TR - TL
+				if (Terrain::RayTriangleIntersection(localRay, vCenter, vTR, vTL, t, intersectionPoint))
 					{
 						if (t >= 0.0f && t < closestDistance)
 						{
@@ -696,8 +696,8 @@ namespace mmo
 						}
 					}
 
-					// Right triangle: Center - TR - BR
-					if (Terrain::RayTriangleIntersection(localRay, vCenter, vTR, vBR, t, intersectionPoint))
+				// Right triangle: Center - BR - TR
+				if (Terrain::RayTriangleIntersection(localRay, vCenter, vBR, vTR, t, intersectionPoint))
 					{
 						if (t >= 0.0f && t < closestDistance)
 						{
@@ -707,8 +707,8 @@ namespace mmo
 						}
 					}
 
-					// Bottom triangle: Center - BR - BL
-					if (Terrain::RayTriangleIntersection(localRay, vCenter, vBR, vBL, t, intersectionPoint))
+				// Bottom triangle: Center - BL - BR
+				if (Terrain::RayTriangleIntersection(localRay, vCenter, vBL, vBR, t, intersectionPoint))
 					{
 						if (t >= 0.0f && t < closestDistance)
 						{
@@ -718,8 +718,8 @@ namespace mmo
 						}
 					}
 
-					// Left triangle: Center - BL - TL
-					if (Terrain::RayTriangleIntersection(localRay, vCenter, vBL, vTL, t, intersectionPoint))
+				// Left triangle: Center - TL - BL
+				if (Terrain::RayTriangleIntersection(localRay, vCenter, vTL, vBL, t, intersectionPoint))
 					{
 						if (t >= 0.0f && t < closestDistance)
 						{
