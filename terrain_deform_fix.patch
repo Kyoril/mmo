@@ -1,0 +1,11 @@
+This file documents the changes needed to fix terrain deformation after geometry rework.
+
+KEY ISSUES FIXED:
+1. Page::SetHeightAt and Page::SetColorAt using wrong constants (VerticesPerPage instead of OuterVerticesPerPageSide)
+2. Missing UpdateInnerVertices() function to interpolate inner vertices from outer vertices after deformation
+3. TerrainVertexBrush not calling UpdateInnerVertices before UpdateTiles
+
+FILES MODIFIED:
+- src/shared/terrain/page.cpp: Fix SetHeightAt/SetColorAt array indexing
+- src/shared/terrain/terrain.h: Add UpdateInnerVertices declaration
+- src/shared/terrain/terrain.cpp: Add UpdateInnerVertices implementation and call from TerrainVertexBrush

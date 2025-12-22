@@ -1044,23 +1044,23 @@ namespace mmo
 
 		void Page::SetHeightAt(const unsigned int x, const unsigned int z, const float value)
 		{
-			if (x >= constants::VerticesPerPage || z >= constants::VerticesPerPage)
+			if (x >= constants::OuterVerticesPerPageSide || z >= constants::OuterVerticesPerPageSide)
 			{
 				return;
 			}
 
-			m_heightmap[x + z * constants::VerticesPerPage] = value;
+			m_heightmap[x + z * constants::OuterVerticesPerPageSide] = value;
 			m_changed = true;
 		}
 
 		void Page::SetColorAt(size_t x, size_t y, uint32 color)
 		{
-			if (x >= constants::VerticesPerPage || y >= constants::VerticesPerPage)
+			if (x >= constants::OuterVerticesPerPageSide || y >= constants::OuterVerticesPerPageSide)
 			{
 				return;
 			}
 
-			m_colors[x + y * constants::VerticesPerPage] = color;
+			m_colors[x + y * constants::OuterVerticesPerPageSide] = color;
 			m_changed = true;
 		}
 

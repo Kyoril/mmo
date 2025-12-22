@@ -127,9 +127,7 @@ namespace mmo
 
 			void SetColorAt(int x, int y, uint32 color) const;
 
-			void UpdateTiles(int fromX, int fromZ, int toX, int toZ) const;
-
-			void UpdateTileCoverage(int fromX, int fromZ, int toX, int toZ) const;
+		void UpdateInnerVertices(int fromX, int fromZ, int toX, int toZ);
 
 			void SetArea(const Vector3& position, uint32 area) const;
 
@@ -144,6 +142,10 @@ namespace mmo
 			[[nodiscard]] const MaterialPtr& GetWireframeMaterial() const { return m_wireframeMaterial; }
 
 		private:
+
+			void UpdateTiles(int fromX, int fromZ, int toX, int toZ);
+
+			void UpdateTileCoverage(int fromX, int fromZ, int toX, int toZ) const;
 
 			template<typename GetBrushIntensity, typename VertexFunction>
 			void TerrainVertexBrush(const float brushCenterX, const float brushCenterZ, float innerRadius, float outerRadius, bool updateTiles, const GetBrushIntensity& getBrushIntensity, const VertexFunction& vertexFunction)

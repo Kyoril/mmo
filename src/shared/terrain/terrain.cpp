@@ -763,16 +763,49 @@ namespace mmo
 
 		void Terrain::Deform(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power)
 		{
+			// Calculate brush bounds for inner vertex update
+			const float halfTerrainWidth = (m_width * constants::PageSize) * 0.5f;
+			const float halfTerrainHeight = (m_height * constants::PageSize) * 0.5f;
+			constexpr float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::OuterVerticesPerPageSide - 1));
+			float globalCenterX = (brushCenterX + halfTerrainWidth) / scale;
+			float globalCenterZ = (brushCenterZ + halfTerrainHeight) / scale;
+			int minVertX = static_cast<int>(std::floor(globalCenterX - (outerRadius / scale)));
+			int maxVertX = static_cast<int>(std::ceil(globalCenterX + (outerRadius / scale)));
+			minVertX = std::max(0, minVertX);
+			maxVertX = std::min<int>(maxVertX, m_width * (constants::OuterVerticesPerPageSide - 1));
+			int minVertZ = static_cast<int>(std::floor(globalCenterZ - (outerRadius / scale)));
+			int maxVertZ = static_cast<int>(std::ceil(globalCenterZ + (outerRadius / scale)));
+			minVertZ = std::max(0, minVertZ);
+			maxVertZ = std::min<int>(maxVertZ, m_height * (constants::OuterVerticesPerPageSide - 1));
+
 			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, power](const int32 vx, const int32 vy, const float factor)
 				{
 					float height = GetHeightAt(vx, vy);
 					height += (power * factor);
 					SetHeightAt(vx, vy, height);
 				});
+
+			// Update inner vertices based on modified outer vertices
+			UpdateInnerVertices(minVertX, minVertZ, maxVertX, maxVertZ);
 		}
 
 		void Terrain::Smooth(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power)
 		{
+			// Calculate brush bounds for inner vertex update
+			const float halfTerrainWidth = (m_width * constants::PageSize) * 0.5f;
+			const float halfTerrainHeight = (m_height * constants::PageSize) * 0.5f;
+			constexpr float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::OuterVerticesPerPageSide - 1));
+			float globalCenterX = (brushCenterX + halfTerrainWidth) / scale;
+			float globalCenterZ = (brushCenterZ + halfTerrainHeight) / scale;
+			int minVertX = static_cast<int>(std::floor(globalCenterX - (outerRadius / scale)));
+			int maxVertX = static_cast<int>(std::ceil(globalCenterX + (outerRadius / scale)));
+			minVertX = std::max(0, minVertX);
+			maxVertX = std::min<int>(maxVertX, m_width * (constants::OuterVerticesPerPageSide - 1));
+			int minVertZ = static_cast<int>(std::floor(globalCenterZ - (outerRadius / scale)));
+			int maxVertZ = static_cast<int>(std::ceil(globalCenterZ + (outerRadius / scale)));
+			minVertZ = std::max(0, minVertZ);
+			maxVertZ = std::min<int>(maxVertZ, m_height * (constants::OuterVerticesPerPageSide - 1));
+
 			// First collect average height value
 			float sumHeight = 0.0f;
 			uint32 heightCount = 0;
@@ -791,10 +824,28 @@ namespace mmo
 					delta *= factor * power;
 					SetHeightAt(vx, vy, height - delta);
 				});
+
+			// Update inner vertices based on modified outer vertices
+			UpdateInnerVertices(minVertX, minVertZ, maxVertX, maxVertZ);
 		}
 
 		void Terrain::Flatten(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power, float targetHeight)
 		{
+			// Calculate brush bounds for inner vertex update
+			const float halfTerrainWidth = (m_width * constants::PageSize) * 0.5f;
+			const float halfTerrainHeight = (m_height * constants::PageSize) * 0.5f;
+			constexpr float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::OuterVerticesPerPageSide - 1));
+			float globalCenterX = (brushCenterX + halfTerrainWidth) / scale;
+			float globalCenterZ = (brushCenterZ + halfTerrainHeight) / scale;
+			int minVertX = static_cast<int>(std::floor(globalCenterX - (outerRadius / scale)));
+			int maxVertX = static_cast<int>(std::ceil(globalCenterX + (outerRadius / scale)));
+			minVertX = std::max(0, minVertX);
+			maxVertX = std::min<int>(maxVertX, m_width * (constants::OuterVerticesPerPageSide - 1));
+			int minVertZ = static_cast<int>(std::floor(globalCenterZ - (outerRadius / scale)));
+			int maxVertZ = static_cast<int>(std::ceil(globalCenterZ + (outerRadius / scale)));
+			minVertZ = std::max(0, minVertZ);
+			maxVertZ = std::min<int>(maxVertZ, m_height * (constants::OuterVerticesPerPageSide - 1));
+
 			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, targetHeight, power](const int32 vx, const int32 vy, const float factor)
 				{
 					const float height = GetHeightAt(vx, vy);
@@ -802,6 +853,9 @@ namespace mmo
 					delta *= factor * power;
 					SetHeightAt(vx, vy, height - delta);
 				});
+
+			// Update inner vertices based on modified outer vertices
+			UpdateInnerVertices(minVertX, minVertZ, maxVertX, maxVertZ);
 		}
 
 		void Terrain::Paint(const uint8 layer, const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, const float power)
@@ -990,50 +1044,87 @@ namespace mmo
 			}
 		}
 
-		void Terrain::UpdateTiles(const int fromX, const int fromZ, const int toX, const int toZ) const
+	void Terrain::UpdateInnerVertices(const int fromX, const int fromZ, const int toX, const int toZ)
+	{
+		// Inner vertices are cell-centered between outer vertices
+		// Interpolate inner vertex heights from 4 surrounding outer vertices
+		const int minInnerX = std::max(0, fromX);
+		const int minInnerZ = std::max(0, fromZ);
+		const int maxInnerX = std::min(toX, static_cast<int>(m_width * (constants::OuterVerticesPerPageSide - 1) - 1));
+		const int maxInnerZ = std::min(toZ, static_cast<int>(m_height * (constants::OuterVerticesPerPageSide - 1) - 1));
+
+		for (int ix = minInnerX; ix <= maxInnerX; ++ix)
 		{
-			uint32 fromPageX, fromPageZ, localVertexX, localVertexY;
-			GetPageAndLocalVertex(fromX, fromPageX, localVertexX);
-			GetPageAndLocalVertex(fromZ, fromPageZ, localVertexY);
+			for (int iz = minInnerZ; iz <= maxInnerZ; ++iz)
+			{
+				// Get the 4 surrounding outer vertices
+				const float h00 = GetHeightAt(ix, iz);
+				const float h10 = GetHeightAt(ix + 1, iz);
+				const float h01 = GetHeightAt(ix, iz + 1);
+				const float h11 = GetHeightAt(ix + 1, iz + 1);
 
-			uint32 toPageX, toPageZ, localVertexToX, localVertexToY;
-			GetPageAndLocalVertex(toX, toPageX, localVertexToX);
-			GetPageAndLocalVertex(toZ, toPageZ, localVertexToY);
+				// Interpolate to get inner vertex height (center of quad)
+				const float innerHeight = (h00 + h10 + h01 + h11) * 0.25f;
 
-			// Iterate through all pages in the area
-			for (int32 x = static_cast<int32>(fromPageX); x <= static_cast<int32>(toPageX); x++)
+				// Determine which page this inner vertex belongs to
+				const uint32 pageX = ix / (constants::OuterVerticesPerPageSide - 1);
+				const uint32 pageZ = iz / (constants::OuterVerticesPerPageSide - 1);
+				const uint32 localInnerX = ix % (constants::OuterVerticesPerPageSide - 1);
+				const uint32 localInnerZ = iz % (constants::OuterVerticesPerPageSide - 1);
+
+				Page* page = GetPage(pageX, pageZ);
+				if (page && page->IsPrepared())
+				{
+					page->SetInnerHeightAt(localInnerX, localInnerZ, innerHeight);
+				}
+			}
+		}
+	}
+
+	void Terrain::UpdateTiles(const int fromX, const int fromZ, const int toX, const int toZ)
+	{
+		uint32 fromPageX, fromPageZ, localVertexX, localVertexY;
+		GetPageAndLocalVertex(fromX, fromPageX, localVertexX);
+		GetPageAndLocalVertex(fromZ, fromPageZ, localVertexY);
+
+		uint32 toPageX, toPageZ, localVertexToX, localVertexToY;
+		GetPageAndLocalVertex(toX, toPageX, localVertexToX);
+		GetPageAndLocalVertex(toZ, toPageZ, localVertexToY);
+
+		// Iterate through all pages in the area
+		for (int32 x = static_cast<int32>(fromPageX); x <= static_cast<int32>(toPageX); x++)
+		{
+			// Invalid page
+			if (static_cast<uint32>(x) >= m_width)
+			{
+				continue;
+			}
+
+			// Get page start vertex (X)
+			const int32 pageStartX = std::max<int32>(fromX - x * static_cast<int32>(constants::OuterVerticesPerPageSide - 1), 0);
+			const int32 pageEndX = toX - x * static_cast<int32>(constants::OuterVerticesPerPageSide - 1);
+			for (int32 z = static_cast<int32>(fromPageZ); z <= static_cast<int32>(toPageZ); z++)
 			{
 				// Invalid page
-				if (static_cast<uint32>(x) >= m_width)
+				if (static_cast<uint32>(z) >= m_height)
 				{
 					continue;
 				}
 
-				// Get page start vertex (X)
-			const int32 pageStartX = std::max<int32>(fromX - x * static_cast<int32>(constants::OuterVerticesPerPageSide - 1), 0);
-			const int32 pageEndX = toX - x * static_cast<int32>(constants::OuterVerticesPerPageSide - 1);
-				for (int32 z = static_cast<int32>(fromPageZ); z <= static_cast<int32>(toPageZ); z++)
-				{
-					// Invalid page
-					if (static_cast<uint32>(z) >= m_height)
-					{
-						continue;
-					}
-
-					// Get page start vertex (Z)
+				// Get page start vertex (Z)
 				const int32 pageStartZ = std::max<int32>(fromZ - z * static_cast<int32>(constants::OuterVerticesPerPageSide - 1), 0);
 				const int32 pageEndZ = toZ - z * static_cast<int32>(constants::OuterVerticesPerPageSide - 1);
-					// Update the tiles if necessary
-					if (Page* page = GetPage(x, z); page != nullptr)
+				// Update the tiles if necessary
+				if (Page* page = GetPage(x, z); page != nullptr)
+				{
+					if (page->IsLoaded()) 
 					{
-						if (page->IsLoaded()) 
-						{
-							page->UpdateTiles(pageStartX, pageStartZ, pageEndX, pageEndZ, false);
-						}
+						page->UpdateTiles(pageStartX, pageStartZ, pageEndX, pageEndZ, false);
 					}
 				}
 			}
 		}
+	}
 
 		void Terrain::UpdateTileCoverage(const int fromX, const int fromZ, const int toX, const int toZ) const
 		{
