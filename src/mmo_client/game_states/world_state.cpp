@@ -383,6 +383,9 @@ namespace mmo
 
 		// Go back to realm list
 		m_discord.NotifyRealmChanged(m_realmConnector.GetRealmName());
+
+		// Ensure the loading screen is not visible anymore in any case
+		LoadingScreen::Hide();
 	}
 
 	std::string_view WorldState::GetName() const
@@ -1076,12 +1079,13 @@ namespace mmo
 		}
 
 		m_dispatcher.post([this, jobsDone, dispatched]()
-						  {
+			{
 				m_worldLoaded = true;
 				ILOG("World loading finished. Dispatched: " << dispatched << ", Jobs done: " << jobsDone);
 
 				// Hide loading screen
-				LoadingScreen::Hide(); });
+				LoadingScreen::Hide(); 
+			});
 	}
 
 	PacketParseResult WorldState::OnUpdateObject(game::IncomingPacket &packet)
