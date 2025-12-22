@@ -39,6 +39,7 @@ namespace mmo
 	SpellVisualizationEditorWindow::SpellVisualizationEditorWindow(const String &name, proto::Project &project, EditorHost &host, PreviewProviderManager &previewManager, IAudio *audioSystem)
 		: EditorEntryWindowBase<proto::SpellVisualizations, proto::SpellVisualization>(project, project.spellVisualizations, name), m_host(host), m_previewManager(previewManager), m_audioSystem(audioSystem)
 	{
+		m_visible = false;
 		m_hasToolbarButton = false;
 
 		// Initialize all event sections as collapsed

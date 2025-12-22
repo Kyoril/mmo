@@ -17,6 +17,7 @@ namespace mmo
         , m_draggedTalentId(0)
         , m_dragStartPos(0, 0)
     {
+		m_visible = false;
         // Register the window with the editor host
         m_hasToolbarButton = false;
     }
