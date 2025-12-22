@@ -22,6 +22,10 @@
 #	include "graphics_d3d11/graphics_device_d3d11.h"
 #	include "graphics_d3d11/render_texture_d3d11.h"
 
+#include <dwmapi.h>
+
+#pragma comment(lib, "Dwmapi.lib")
+
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 #endif
@@ -135,6 +139,16 @@ namespace mmo
 
 		// We accept file drops
 		DragAcceptFiles(m_windowHandle, TRUE);
+
+		// Enable Mica
+		DWM_SYSTEMBACKDROP_TYPE backdrop = DWMSBT_MAINWINDOW; // 2 = Mica (on Windows 11)
+		DwmSetWindowAttribute(m_windowHandle, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
+
+		BOOL supportDarkMode = TRUE;
+		DwmSetWindowAttribute(m_windowHandle, DWMWA_USE_IMMERSIVE_DARK_MODE, &supportDarkMode, sizeof(supportDarkMode));
+
+		DWM_WINDOW_CORNER_PREFERENCE pref = DWMWCP_ROUND;
+		DwmSetWindowAttribute(m_windowHandle, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof(pref));
 
 		ShowWindow(m_windowHandle, SW_SHOWNORMAL);
 		UpdateWindow(m_windowHandle);
