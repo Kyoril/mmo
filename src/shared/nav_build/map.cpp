@@ -23,9 +23,14 @@ namespace mmo
     static const ChunkMagic EntityChunkMagic = MakeChunkMagic('MENT');
     static const ChunkMagic TerrainChunkMagic = MakeChunkMagic('RRET');
 
-    static uint16 GetIndex(const size_t x, const size_t y)
+    static uint16 GetOuterIndex(const size_t x, const size_t y)
     {
-        return static_cast<uint16>(x + y * terrain::constants::VerticesPerTile);
+        return static_cast<uint16>(x + y * terrain::constants::OuterVerticesPerTileSide);
+    }
+
+    static uint16 GetInnerIndex(const size_t x, const size_t y)
+    {
+        return static_cast<uint16>(terrain::constants::OuterVerticesPerTile + (x + y * terrain::constants::InnerVerticesPerTileSide));
     }
 
     MapEntity::MapEntity(const std::string& path)
@@ -129,16 +134,17 @@ namespace mmo
                 m_chunks[y][x]->m_maxY = std::numeric_limits<float>::lowest();
                 m_chunks[y][x]->m_areaId = 0;
                 m_chunks[y][x]->m_zoneId = 0;
-                m_chunks[y][x]->m_terrainVertices.reserve(terrain::constants::VerticesPerTile * terrain::constants::VerticesPerTile);
-                m_chunks[y][x]->m_terrainIndices.reserve(terrain::constants::VerticesPerTile * terrain::constants::VerticesPerTile * 6);
+                m_chunks[y][x]->m_terrainVertices.reserve(terrain::constants::VerticesPerTile);
+                // 4 triangles per inner vertex -> 12 indices per inner
+                m_chunks[y][x]->m_terrainIndices.reserve(terrain::constants::InnerVerticesPerTile * 12);
 
                 // Fill the terrain chunk vertex, index and height data
-                const size_t startX = x * (terrain::constants::VerticesPerTile - 1);
-                const size_t startZ = y * (terrain::constants::VerticesPerTile - 1);
-                const size_t endX = startX + terrain::constants::VerticesPerTile;
-                const size_t endZ = startZ + terrain::constants::VerticesPerTile;
+                const size_t startX = x * (terrain::constants::OuterVerticesPerTileSide - 1);
+                const size_t startZ = y * (terrain::constants::OuterVerticesPerTileSide - 1);
+                const size_t endX = startX + terrain::constants::OuterVerticesPerTileSide;
+                const size_t endZ = startZ + terrain::constants::OuterVerticesPerTileSide;
 
-                constexpr float scale = terrain::constants::TileSize / (terrain::constants::VerticesPerTile - 1);
+                constexpr float scale = terrain::constants::TileSize / (terrain::constants::OuterVerticesPerTileSide - 1);
 
                 for (size_t j = startZ; j < endZ; ++j)
                 {
@@ -160,19 +166,55 @@ namespace mmo
 
                         // Save height and vertex
                         m_chunks[y][x]->m_terrainVertices.push_back(position);
-						m_chunks[y][x]->m_heights[(j - startZ) + (i - startX) * terrain::constants::VerticesPerTile] = height;
+						m_chunks[y][x]->m_heights[(j - startZ) + (i - startX) * terrain::constants::OuterVerticesPerTileSide] = height;
+                    }
+                }
 
-						if (j != endZ - 1 && i != endX - 1)
-						{
-                            // triangles
-                            m_chunks[y][x]->m_terrainIndices.push_back(GetIndex(i - startX, j - startZ));
-                            m_chunks[y][x]->m_terrainIndices.push_back(GetIndex(i - startX, j - startZ + 1));
-                            m_chunks[y][x]->m_terrainIndices.push_back(GetIndex(i - startX + 1, j - startZ));
+                // Create inner vertices (centers of each outer quad) and indices (4 triangles per inner)
+                for (size_t j = 0; j < terrain::constants::InnerVerticesPerTileSide; ++j)
+                {
+                    for (size_t i = 0; i < terrain::constants::InnerVerticesPerTileSide; ++i)
+                    {
+                        const size_t ox = startX + i;
+                        const size_t oz = startZ + j;
 
-                            m_chunks[y][x]->m_terrainIndices.push_back(GetIndex(i - startX, j - startZ + 1));
-                            m_chunks[y][x]->m_terrainIndices.push_back(GetIndex(i - startX + 1, j - startZ + 1));
-                            m_chunks[y][x]->m_terrainIndices.push_back(GetIndex(i - startX + 1, j - startZ));
-						}
+                        const float h00 = page->GetHeightAt(ox, oz);
+                        const float h10 = page->GetHeightAt(ox + 1, oz);
+                        const float h01 = page->GetHeightAt(ox, oz + 1);
+                        const float h11 = page->GetHeightAt(ox + 1, oz + 1);
+                        const float centerHeight = (h00 + h10 + h01 + h11) * 0.25f;
+
+                        Vector3 centerPos(scale * (ox + 0.5f), centerHeight, scale * (oz + 0.5f));
+                        centerPos.x += Bounds.min.x;
+                        centerPos.z += Bounds.min.z;
+
+                        const uint16 centerIdx = GetInnerIndex(i, j);
+                        m_chunks[y][x]->m_terrainVertices.push_back(centerPos);
+
+                        const uint16 tl = GetOuterIndex(i, j);
+                        const uint16 tr = GetOuterIndex(i + 1, j);
+                        const uint16 br = GetOuterIndex(i + 1, j + 1);
+                        const uint16 bl = GetOuterIndex(i, j + 1);
+
+                        // Center - TL - TR
+                        m_chunks[y][x]->m_terrainIndices.push_back(centerIdx);
+                        m_chunks[y][x]->m_terrainIndices.push_back(tl);
+                        m_chunks[y][x]->m_terrainIndices.push_back(tr);
+
+                        // Center - TR - BR
+                        m_chunks[y][x]->m_terrainIndices.push_back(centerIdx);
+                        m_chunks[y][x]->m_terrainIndices.push_back(tr);
+                        m_chunks[y][x]->m_terrainIndices.push_back(br);
+
+                        // Center - BR - BL
+                        m_chunks[y][x]->m_terrainIndices.push_back(centerIdx);
+                        m_chunks[y][x]->m_terrainIndices.push_back(br);
+                        m_chunks[y][x]->m_terrainIndices.push_back(bl);
+
+                        // Center - BL - TL
+                        m_chunks[y][x]->m_terrainIndices.push_back(centerIdx);
+                        m_chunks[y][x]->m_terrainIndices.push_back(bl);
+                        m_chunks[y][x]->m_terrainIndices.push_back(tl);
                     }
                 }
 

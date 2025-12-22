@@ -85,8 +85,8 @@ namespace mmo
 		{
 			void GetPageAndLocalVertex(const uint32 vertexIndex, uint32& pageIndex, uint32& localVertexIndex)
 			{
-				pageIndex = std::min(vertexIndex / (constants::VerticesPerPage - 1), 63u);
-				localVertexIndex = (vertexIndex - (pageIndex * (constants::VerticesPerPage - 1))) % constants::VerticesPerPage;
+				pageIndex = std::min(vertexIndex / (constants::OuterVerticesPerPageSide - 1), 63u);
+				localVertexIndex = (vertexIndex - (pageIndex * (constants::OuterVerticesPerPageSide - 1))) % constants::OuterVerticesPerPageSide;
 			}
 
 			void GetPageAndLocalPixel(const uint32 pixelIndex, uint32& pageIndex, uint32& localPixelIndex)
@@ -99,7 +99,7 @@ namespace mmo
 		float Terrain::GetAt(const uint32 x, const uint32 z)
 		{
 			// Validate indices
-			const uint32 totalVertices = m_width * (constants::VerticesPerPage - 1) + 1;
+			const uint32 totalVertices = m_width * (constants::OuterVerticesPerPageSide - 1) + 1;
 			if (x >= totalVertices || z >= totalVertices)
 			{
 				return 0.0f;
@@ -133,7 +133,7 @@ namespace mmo
 		uint32 Terrain::GetColorAt(uint32 x, uint32 z)
 		{
 			// Validate indices
-			const uint32 totalVertices = m_width * (constants::VerticesPerPage - 1) + 1;
+			const uint32 totalVertices = m_width * (constants::OuterVerticesPerPageSide - 1) + 1;
 			if (x >= totalVertices || z >= totalVertices)
 			{
 				return 0.0f;
@@ -509,18 +509,18 @@ namespace mmo
 				float coarseHitT = std::numeric_limits<float>::max();
 				unsigned int coarseHitX = 0, coarseHitZ = 0;
 
-				// Coarse pass - check every 4th vertex
-				for (unsigned int vx = 0; vx < constants::VerticesPerPage - 1; vx += coarse_step)
+				// Coarse pass - check every 4th cell (outer grid)
+				for (unsigned int vx = 0; vx < constants::OuterVerticesPerPageSide - 1; vx += coarse_step)
 				{
-					for (unsigned int vz = 0; vz < constants::VerticesPerPage - 1; vz += coarse_step)
+					for (unsigned int vz = 0; vz < constants::OuterVerticesPerPageSide - 1; vz += coarse_step)
 					{
 						// Ensure we don't go out of bounds
-						if (vx + coarse_step >= constants::VerticesPerPage || vz + coarse_step >= constants::VerticesPerPage)
+						if (vx + coarse_step >= constants::OuterVerticesPerPageSide || vz + coarse_step >= constants::OuterVerticesPerPageSide)
 							continue;
 
 						// Get the four corners of this quad
-						const uint32 globalVx = pageX * (constants::VerticesPerPage - 1) + vx;
-						const uint32 globalVz = pageY * (constants::VerticesPerPage - 1) + vz;
+						const uint32 globalVx = pageX * (constants::OuterVerticesPerPageSide - 1) + vx;
+						const uint32 globalVz = pageY * (constants::OuterVerticesPerPageSide - 1) + vz;
 
 						// Get world positions for the quad vertices
 						float wx1, wz1, wx2, wz2;
@@ -533,32 +533,55 @@ namespace mmo
 						const float h3 = GetHeightAt(globalVx, globalVz + coarse_step);
 						const float h4 = GetHeightAt(globalVx + coarse_step, globalVz + coarse_step);
 
-						// Create the four corner vertices
-						const Vector3 v1(wx1, h1, wz1);
-						const Vector3 v2(wx2, h2, wz1);
-						const Vector3 v3(wx1, h3, wz2);
-						const Vector3 v4(wx2, h4, wz2);
+						// Create the four corner vertices and center inner vertex
+						const Vector3 vTL(wx1, h1, wz1);
+						const Vector3 vTR(wx2, h2, wz1);
+						const Vector3 vBL(wx1, h3, wz2);
+						const Vector3 vBR(wx2, h4, wz2);
+						const Vector3 vC((wx1 + wx2) * 0.5f, (h1 + h2 + h3 + h4) * 0.25f, (wz1 + wz2) * 0.5f);
 
-						// Check first triangle (v1, v2, v3)
-						float t1;
-						if (Vector3 intersectionPoint1; RayTriangleIntersection(ray, v1, v2, v3, t1, intersectionPoint1))
+						// Check four triangles around the center
+						float tTmp;
+						Vector3 ip;
+						// Top
+						if (RayTriangleIntersection(ray, vC, vTL, vTR, tTmp, ip))
 						{
-							if (t1 < coarseHitT)
+							if (tTmp < coarseHitT)
 							{
-								coarseHitT = t1;
+								coarseHitT = tTmp;
 								coarseHitX = vx;
 								coarseHitZ = vz;
 								potentialHit = true;
 							}
 						}
-
-						// Check second triangle (v2, v4, v3)
-						float t2;
-						if (Vector3 intersectionPoint2; RayTriangleIntersection(ray, v2, v4, v3, t2, intersectionPoint2))
+						// Right
+						if (RayTriangleIntersection(ray, vC, vTR, vBR, tTmp, ip))
 						{
-							if (t2 < coarseHitT)
+							if (tTmp < coarseHitT)
 							{
-								coarseHitT = t2;
+								coarseHitT = tTmp;
+								coarseHitX = vx;
+								coarseHitZ = vz;
+								potentialHit = true;
+							}
+						}
+						// Bottom
+						if (RayTriangleIntersection(ray, vC, vBR, vBL, tTmp, ip))
+						{
+							if (tTmp < coarseHitT)
+							{
+								coarseHitT = tTmp;
+								coarseHitX = vx;
+								coarseHitZ = vz;
+								potentialHit = true;
+							}
+						}
+						// Left
+						if (RayTriangleIntersection(ray, vC, vBL, vTL, tTmp, ip))
+						{
+							if (tTmp < coarseHitT)
+							{
+								coarseHitT = tTmp;
 								coarseHitX = vx;
 								coarseHitZ = vz;
 								potentialHit = true;
@@ -573,8 +596,8 @@ namespace mmo
 					// Define the refinement area
 					unsigned int startX = (coarseHitX > coarse_step) ? (coarseHitX - coarse_step) : 0;
 					unsigned int startZ = (coarseHitZ > coarse_step) ? (coarseHitZ - coarse_step) : 0;
-					unsigned int endX = std::min(coarseHitX + coarse_step, constants::VerticesPerPage - 2);
-					unsigned int endZ = std::min(coarseHitZ + coarse_step, constants::VerticesPerPage - 2);
+					unsigned int endX = std::min(coarseHitX + coarse_step, constants::OuterVerticesPerPageSide - 2);
+					unsigned int endZ = std::min(coarseHitZ + coarse_step, constants::OuterVerticesPerPageSide - 2);
 
 					// Detailed pass - check every vertex in the refined area
 					for (unsigned int vx = startX; vx <= endX; vx++)
@@ -582,8 +605,8 @@ namespace mmo
 						for (unsigned int vz = startZ; vz <= endZ; vz++)
 						{
 							// Get the four corners of this quad
-							const uint32 globalVx = pageX * (constants::VerticesPerPage - 1) + vx;
-							const uint32 globalVz = pageY * (constants::VerticesPerPage - 1) + vz;
+							const uint32 globalVx = pageX * (constants::OuterVerticesPerPageSide - 1) + vx;
+							const uint32 globalVz = pageY * (constants::OuterVerticesPerPageSide - 1) + vz;
 
 							// Get world positions for the quad vertices
 							float wx1, wz1, wx2, wz2;
@@ -596,33 +619,57 @@ namespace mmo
 							const float h3 = GetHeightAt(globalVx, globalVz + 1);
 							const float h4 = GetHeightAt(globalVx + 1, globalVz + 1);
 
-							// Create the four corner vertices
-							const Vector3 v1(wx1, h1, wz1);
-							const Vector3 v2(wx2, h2, wz1);
-							const Vector3 v3(wx1, h3, wz2);
-							const Vector3 v4(wx2, h4, wz2);
+							// Create the four corner vertices and center inner vertex
+							const Vector3 vTL(wx1, h1, wz1);
+							const Vector3 vTR(wx2, h2, wz1);
+							const Vector3 vBL(wx1, h3, wz2);
+							const Vector3 vBR(wx2, h4, wz2);
+							const Vector3 vC((wx1 + wx2) * 0.5f, (h1 + h2 + h3 + h4) * 0.25f, (wz1 + wz2) * 0.5f);
 
-							// Check first triangle (v1, v2, v3)
-							Vector3 intersectionPoint1;
-							if (float t1; RayTriangleIntersection(ray, v1, v2, v3, t1, intersectionPoint1))
+							// Check four triangles around the center
+							Vector3 ip1;
+							if (float t1; RayTriangleIntersection(ray, vC, vTL, vTR, t1, ip1))
 							{
 								if (t1 < closestHit)
 								{
 									closestHit = t1;
-									hitPoint = intersectionPoint1;
+									hitPoint = ip1;
 									hitPage = page;
 								}
 							}
 
-							// Check second triangle (v2, v4, v3)
 							float t2;
-							Vector3 intersectionPoint2;
-							if (RayTriangleIntersection(ray, v2, v4, v3, t2, intersectionPoint2))
+							Vector3 ip2;
+							if (RayTriangleIntersection(ray, vC, vTR, vBR, t2, ip2))
 							{
 								if (t2 < closestHit)
 								{
 									closestHit = t2;
-									hitPoint = intersectionPoint2;
+									hitPoint = ip2;
+									hitPage = page;
+								}
+							}
+
+							float t3;
+							Vector3 ip3;
+							if (RayTriangleIntersection(ray, vC, vBR, vBL, t3, ip3))
+							{
+								if (t3 < closestHit)
+								{
+									closestHit = t3;
+									hitPoint = ip3;
+									hitPage = page;
+								}
+							}
+
+							float t4;
+							Vector3 ip4;
+							if (RayTriangleIntersection(ray, vC, vBL, vTL, t4, ip4))
+							{
+								if (t4 < closestHit)
+								{
+									closestHit = t4;
+									hitPoint = ip4;
 									hitPage = page;
 								}
 							}
@@ -672,10 +719,10 @@ namespace mmo
 			const float pageOriginZ = pageY * terrain::constants::PageSize;
 
 			// Now get the vertex scale of the page
-			const float scale = static_cast<float>(terrain::constants::PageSize / static_cast<double>(terrain::constants::VerticesPerPage - 1));
+			const float scale = static_cast<float>(terrain::constants::PageSize / static_cast<double>(terrain::constants::OuterVerticesPerPageSide - 1));
 
-			vertexX = static_cast<int32>((x - pageOriginX) / scale) + (pageX * constants::VerticesPerPage);
-			vertexZ = static_cast<int32>((z - pageOriginZ) / scale) + (pageY * constants::VerticesPerPage);
+			vertexX = static_cast<int32>((x - pageOriginX) / scale) + (pageX * constants::OuterVerticesPerPageSide);
+			vertexZ = static_cast<int32>((z - pageOriginZ) / scale) + (pageY * constants::OuterVerticesPerPageSide);
 		}
 
 		namespace

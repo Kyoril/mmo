@@ -76,7 +76,24 @@ namespace mmo
 
 			void CreateIndexData(uint32 lod, uint32 neighborState);
 
-			uint16 GetIndex(size_t x, size_t y) const;
+			// Helper methods for new vertex layout (outer + inner vertices)
+			/// @brief Gets the vertex index for an outer vertex at grid position (x, y)
+			/// @param x X coordinate in outer vertex grid (0-8)
+			/// @param y Y coordinate in outer vertex grid (0-8)
+			/// @return Vertex buffer index for the outer vertex
+			uint16 GetOuterVertexIndex(size_t x, size_t y) const;
+
+			/// @brief Gets the vertex index for an inner vertex at grid position (x, y)
+			/// @param x X coordinate in inner vertex grid (0-7)
+			/// @param y Y coordinate in inner vertex grid (0-7)
+			/// @return Vertex buffer index for the inner vertex
+			uint16 GetInnerVertexIndex(size_t x, size_t y) const;
+
+			/// @brief Determines if a grid cell is on the outer edge of the tile
+			/// @param x X coordinate in the grid
+			/// @param y Y coordinate in the grid
+			/// @return True if the cell is on the outer edge
+			bool IsOuterEdge(size_t x, size_t y) const;
 
 			enum class Direction : uint8
 			{

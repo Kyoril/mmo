@@ -77,6 +77,26 @@ namespace mmo
 			void UpdateTileCoverage(int fromX, int fromZ, int toX, int toZ);
 
 			Vector3 GetNormalAt(uint32 x, uint32 z) const;
+			/** \brief Get inner-vertex height at page-local inner grid coordinates.
+			 *
+			 * Inner grid is sized constants::InnerVerticesPerPageSide per side.
+			 */ 
+			float GetInnerHeightAt(size_t x, size_t y) const;
+
+			/** \brief Set inner-vertex height at page-local inner grid coordinates. */
+			void SetInnerHeightAt(size_t x, size_t y, float value);
+
+			/** \brief Get inner-vertex vertex color (ARGB) at page-local inner grid coordinates. */
+			uint32 GetInnerColorAt(size_t x, size_t y) const;
+
+			/** \brief Set inner-vertex vertex color (ARGB) at page-local inner grid coordinates. */
+			void SetInnerColorAt(size_t x, size_t y, uint32 color);
+
+			/** \brief Get inner-vertex normal (decoded) at page-local inner grid coordinates. */
+			Vector3 GetInnerNormalAt(size_t x, size_t y) const;
+
+			/** \brief Set inner-vertex normal (encoded) at page-local inner grid coordinates. */
+			void SetInnerNormalAt(size_t x, size_t y, const Vector3& normal);
 
 			Vector3 CalculateNormalAt(uint32 x, uint32 z);
 
@@ -124,6 +144,11 @@ namespace mmo
 
 			bool ReadMCVTChunk(io::Reader& reader, uint32 header, uint32 size);
 
+			// Legacy v1 readers (273x273 grid), will be converted to new outer grid
+			bool ReadMCVTChunkV1(io::Reader& reader, uint32 header, uint32 size);
+			bool ReadMCNMChunkV1(io::Reader& reader, uint32 header, uint32 size);
+			bool ReadMCVSChunkV1(io::Reader& reader, uint32 header, uint32 size);
+
 			bool ReadMCNMChunk(io::Reader& reader, uint32 header, uint32 size);
 
 			bool ReadMCLYChunk(io::Reader& reader, uint32 header, uint32 size);
@@ -135,6 +160,10 @@ namespace mmo
 			bool ReadMCVNSubChunk(io::Reader& reader, uint32 header, uint32 size);
 
 			bool ReadMCTNSubChunk(io::Reader& reader, uint32 header, uint32 size);
+			// V2 inner vertex chunks
+			bool ReadMCIVChunk(io::Reader& reader, uint32 header, uint32 size);
+			bool ReadMCINChunk(io::Reader& reader, uint32 header, uint32 size);
+			bool ReadMCISChunk(io::Reader& reader, uint32 header, uint32 size);
 
 			bool ReadMCARChunk(io::Reader& reader, uint32 header, uint32 size);
 
@@ -160,6 +189,10 @@ namespace mmo
 
 			std::vector<float> m_heightmap;
 			std::vector<EncodedNormal8> m_normals;
+						// Inner per-page vertex data for full editor precision
+						std::vector<float> m_innerHeightmap;
+						std::vector<EncodedNormal8> m_innerNormals;
+						std::vector<uint32> m_innerColors;
 			std::vector<MaterialPtr> m_materials;
 			std::vector<uint32> m_layers;
 			std::vector<uint16> m_tileZones;

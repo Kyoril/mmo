@@ -37,7 +37,8 @@ namespace mmo
 
     struct TerrainChunk
     {
-        float m_heights[terrain::constants::VerticesPerTile * terrain::constants::VerticesPerTile];
+        // Store only outer grid heights per tile (9x9)
+        float m_heights[terrain::constants::OuterVerticesPerTileSide * terrain::constants::OuterVerticesPerTileSide];
 
         std::vector<Vector3> m_terrainVertices;
         std::vector<int32> m_terrainIndices;

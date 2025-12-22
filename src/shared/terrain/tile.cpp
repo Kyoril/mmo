@@ -28,8 +28,9 @@ namespace mmo
 
 			SetCastShadows(false);
 
-			m_tileX = m_startX / (constants::VerticesPerTile - 1);
-			m_tileY = m_startZ / (constants::VerticesPerTile - 1);
+			// Calculate tile coordinates based on outer vertex spacing
+			m_tileX = m_startX / (constants::OuterVerticesPerTileSide - 1);
+			m_tileY = m_startZ / (constants::OuterVerticesPerTileSide - 1);
 
 			CreateVertexData(m_startX, m_startZ);
 			CreateIndexData(0, 0);
@@ -164,10 +165,7 @@ namespace mmo
 
 		void Tile::UpdateTerrain(size_t startx, size_t startz, size_t endx, size_t endz)
 		{
-			const size_t endX = m_startX + constants::VerticesPerTile;
-			const size_t endZ = m_startZ + constants::VerticesPerTile;
-
-			const float scale = static_cast<float>(constants::TileSize / static_cast<double>(constants::VerticesPerTile - 1));
+			constexpr float outerScale = static_cast<float>(constants::TileSize / static_cast<double>(constants::OuterVerticesPerTileSide - 1));
 
 			struct VertexStruct
 			{
@@ -183,29 +181,94 @@ namespace mmo
 			float maxHeight = std::numeric_limits<float>::lowest();
 
 			VertexStruct* vert = (VertexStruct*)m_mainBuffer->Map(LockOptions::Normal);
-			for (size_t j = m_startZ; j < endZ; ++j)
+
+			// Update outer vertices (9x9 = 81 vertices)
+			for (size_t j = 0; j < constants::OuterVerticesPerTileSide; ++j)
 			{
-				for (size_t i = m_startX; i < endX; ++i)
+				for (size_t i = 0; i < constants::OuterVerticesPerTileSide; ++i)
 				{
-					const float height = m_page.GetHeightAt(i, j);
-					if (height < minHeight) minHeight = height;
-					if (height > maxHeight) maxHeight = height;
+					const size_t globalX = m_startX + i;
+					const size_t globalZ = m_startZ + j;
 
-					vert->position = Vector3(scale * i, height, scale * j);
-					vert->normal = m_page.CalculateNormalAt(i, j);
+					const float height = m_page.GetHeightAt(globalX, globalZ);
+					
+					if (height < minHeight)
+					{
+						minHeight = height;
+					}
+					if (height > maxHeight)
+					{
+						maxHeight = height;
+					}
 
-					// Choose an arbitrary vector different from the normal
+					vert->position = Vector3(outerScale * globalX, height, outerScale * globalZ);
+					vert->normal = m_page.CalculateNormalAt(globalX, globalZ);
+
 					const Vector3 arbitrary = std::abs(vert->normal.y) < 0.99f ? Vector3(0, 1, 0) : Vector3(1, 0, 0);
 					vert->tangent = (arbitrary - vert->normal * vert->normal.Dot(arbitrary)).NormalizedCopy();
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
-					vert->color = Color(m_page.GetColorAt(i, j)).GetABGR();
-					vert->v = static_cast<float>(i - m_startX) / static_cast<float>(constants::VerticesPerTile);
-					vert->u = static_cast<float>(j - m_startZ) / static_cast<float>(constants::VerticesPerTile);
+					vert->color = Color(m_page.GetColorAt(globalX, globalZ)).GetABGR();
+					vert->u = static_cast<float>(i) / static_cast<float>(constants::OuterVerticesPerTileSide - 1);
+					vert->v = static_cast<float>(j) / static_cast<float>(constants::OuterVerticesPerTileSide - 1);
 
 					vert++;
 				}
 			}
+
+			// Update inner vertices (8x8 = 64 vertices)
+			for (size_t j = 0; j < constants::InnerVerticesPerTileSide; ++j)
+			{
+				for (size_t i = 0; i < constants::InnerVerticesPerTileSide; ++i)
+				{
+					const size_t globalX = m_startX + i;
+					const size_t globalZ = m_startZ + j;
+
+					// Use stored inner height for full editor precision
+					const size_t innerPageX = m_tileX * constants::InnerVerticesPerTileSide + i;
+					const size_t innerPageZ = m_tileY * constants::InnerVerticesPerTileSide + j;
+					const float height = m_page.GetInnerHeightAt(innerPageX, innerPageZ);
+
+					if (height < minHeight)
+					{
+						minHeight = height;
+					}
+					if (height > maxHeight)
+					{
+						maxHeight = height;
+					}
+
+					const float worldX = outerScale * (globalX + 0.5f);
+					const float worldZ = outerScale * (globalZ + 0.5f);
+
+					vert->position = Vector3(worldX, height, worldZ);
+
+					// Use stored inner normal (fallback: recompute from outer if needed)
+					Vector3 innerNormal = m_page.GetInnerNormalAt(innerPageX, innerPageZ);
+					if (innerNormal.IsZeroLength())
+					{
+						const Vector3 n00 = m_page.CalculateNormalAt(globalX, globalZ);
+						const Vector3 n10 = m_page.CalculateNormalAt(globalX + 1, globalZ);
+						const Vector3 n01 = m_page.CalculateNormalAt(globalX, globalZ + 1);
+						const Vector3 n11 = m_page.CalculateNormalAt(globalX + 1, globalZ + 1);
+						innerNormal = ((n00 + n10 + n01 + n11) * 0.25f).NormalizedCopy();
+					}
+					vert->normal = innerNormal;
+
+					const Vector3 arbitrary = std::abs(vert->normal.y) < 0.99f ? Vector3(0, 1, 0) : Vector3(1, 0, 0);
+					vert->tangent = (arbitrary - vert->normal * vert->normal.Dot(arbitrary)).NormalizedCopy();
+					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
+
+					// Use stored inner color
+					vert->color = Color(m_page.GetInnerColorAt(innerPageX, innerPageZ)).GetABGR();
+
+					vert->u = (static_cast<float>(i) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide);
+					vert->v = (static_cast<float>(j) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide);
+
+					vert++;
+				}
+			}
+
 			m_mainBuffer->Unmap();
 
 			m_bounds.min.y = minHeight;
@@ -245,7 +308,7 @@ namespace mmo
 		{
 			m_vertexData = std::make_unique<VertexData>();
 			m_vertexData->vertexStart = 0;
-			m_vertexData->vertexCount = constants::VerticesPerTile * constants::VerticesPerTile;
+			m_vertexData->vertexCount = constants::VerticesPerTile; // 145 vertices (81 outer + 64 inner)
 
 			VertexDeclaration* decl = m_vertexData->vertexDeclaration;
 			VertexBufferBinding* bind = m_vertexData->vertexBufferBinding;
@@ -258,13 +321,13 @@ namespace mmo
 			offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Tangent).GetSize();
 			offset += decl->AddElement(0, offset, VertexElementType::Float2, VertexElementSemantic::TextureCoordinate).GetSize();
 
-			const size_t endX = startX + constants::VerticesPerTile;
-			const size_t endZ = startZ + constants::VerticesPerTile;
-
 			float minHeight = m_page.GetHeightAt(0, 0);
 			float maxHeight = minHeight;
 
-			constexpr float scale = static_cast<float>(constants::TileSize / static_cast<double>(constants::VerticesPerTile - 1));
+			// Scale for outer vertices (9x9 grid)
+			constexpr float outerScale = static_cast<float>(constants::TileSize / static_cast<double>(constants::OuterVerticesPerTileSide - 1));
+			// Scale for inner vertices (positioned between outer vertices)
+			constexpr float innerScale = outerScale;
 
 			struct VertexStruct
 			{
@@ -279,22 +342,82 @@ namespace mmo
 			std::vector<VertexStruct> vertices(m_vertexData->vertexCount);
 			VertexStruct* vert = vertices.data();
 
-			for (size_t j = startZ; j < endZ; ++j)
+			// First, create all outer vertices (9x9 = 81 vertices)
+			for (size_t j = 0; j < constants::OuterVerticesPerTileSide; ++j)
 			{
-				for (size_t i = startX; i < endX; ++i)
+				for (size_t i = 0; i < constants::OuterVerticesPerTileSide; ++i)
 				{
-					const float height = m_page.GetHeightAt(i, j);
-					vert->position = Vector3(scale * i, height, scale * j);
-					vert->normal = m_page.GetNormalAt(i, j);
+					const size_t globalX = startX + i;
+					const size_t globalZ = startZ + j;
 
-					// Choose an arbitrary vector different from the normal
+					const float height = m_page.GetHeightAt(globalX, globalZ);
+					vert->position = Vector3(outerScale * globalX, height, outerScale * globalZ);
+					vert->normal = m_page.GetNormalAt(globalX, globalZ);
+
+					// Calculate tangent and binormal
 					const Vector3 arbitrary = std::abs(vert->normal.y) < 0.99f ? Vector3(0, 1, 0) : Vector3(1, 0, 0);
 					vert->tangent = (arbitrary - vert->normal * vert->normal.Dot(arbitrary)).NormalizedCopy();
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
-					vert->color = Color(m_page.GetColorAt(i, j)).GetABGR();
-					vert->v = static_cast<float>(i - startX) / static_cast<float>(constants::VerticesPerTile - 1);
-					vert->u = static_cast<float>(j - startZ) / static_cast<float>(constants::VerticesPerTile - 1);
+					vert->color = Color(m_page.GetColorAt(globalX, globalZ)).GetABGR();
+					vert->u = static_cast<float>(i) / static_cast<float>(constants::OuterVerticesPerTileSide - 1);
+					vert->v = static_cast<float>(j) / static_cast<float>(constants::OuterVerticesPerTileSide - 1);
+
+					minHeight = std::min(height, minHeight);
+					maxHeight = std::max(height, maxHeight);
+
+					vert++;
+				}
+			}
+
+			// Second, create all inner vertices (8x8 = 64 vertices)
+			// Inner vertices are positioned at the center of each quad formed by outer vertices
+			for (size_t j = 0; j < constants::InnerVerticesPerTileSide; ++j)
+			{
+				for (size_t i = 0; i < constants::InnerVerticesPerTileSide; ++i)
+				{
+					// Inner vertex is at the center of the quad formed by outer vertices
+					const float centerOffsetX = 0.5f;
+					const float centerOffsetZ = 0.5f;
+					const size_t globalX = startX + i;
+					const size_t globalZ = startZ + j;
+
+					// Sample height at the center position
+					// For now, we'll interpolate from the four surrounding outer vertices
+					const float h00 = m_page.GetHeightAt(globalX, globalZ);
+					const float h10 = m_page.GetHeightAt(globalX + 1, globalZ);
+					const float h01 = m_page.GetHeightAt(globalX, globalZ + 1);
+					const float h11 = m_page.GetHeightAt(globalX + 1, globalZ + 1);
+					const float height = (h00 + h10 + h01 + h11) * 0.25f;
+
+					const float worldX = outerScale * (globalX + centerOffsetX);
+					const float worldZ = outerScale * (globalZ + centerOffsetZ);
+
+					vert->position = Vector3(worldX, height, worldZ);
+
+					// Calculate normal by interpolating surrounding outer vertex normals
+					const Vector3 n00 = m_page.GetNormalAt(globalX, globalZ);
+					const Vector3 n10 = m_page.GetNormalAt(globalX + 1, globalZ);
+					const Vector3 n01 = m_page.GetNormalAt(globalX, globalZ + 1);
+					const Vector3 n11 = m_page.GetNormalAt(globalX + 1, globalZ + 1);
+					vert->normal = ((n00 + n10 + n01 + n11) * 0.25f).NormalizedCopy();
+
+					// Calculate tangent and binormal
+					const Vector3 arbitrary = std::abs(vert->normal.y) < 0.99f ? Vector3(0, 1, 0) : Vector3(1, 0, 0);
+					vert->tangent = (arbitrary - vert->normal * vert->normal.Dot(arbitrary)).NormalizedCopy();
+					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
+
+					// Interpolate color from surrounding vertices
+					const uint32 c00 = m_page.GetColorAt(globalX, globalZ);
+					const uint32 c10 = m_page.GetColorAt(globalX + 1, globalZ);
+					const uint32 c01 = m_page.GetColorAt(globalX, globalZ + 1);
+					const uint32 c11 = m_page.GetColorAt(globalX + 1, globalZ + 1);
+					const Color col00(c00), col10(c10), col01(c01), col11(c11);
+					const Color avgColor = (col00 + col10 + col01 + col11) * 0.25f;
+					vert->color = avgColor.GetABGR();
+
+					vert->u = (static_cast<float>(i) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide);
+					vert->v = (static_cast<float>(j) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide);
 
 					minHeight = std::min(height, minHeight);
 					maxHeight = std::max(height, maxHeight);
@@ -306,198 +429,99 @@ namespace mmo
 			m_mainBuffer = GraphicsDevice::Get().CreateVertexBuffer(m_vertexData->vertexCount, decl->GetVertexSize(0), BufferUsage::DynamicWriteOnly, vertices.data());
 			bind->SetBinding(0, m_mainBuffer);
 
-			if (minHeight == maxHeight) maxHeight = minHeight + 0.1f;
+			if (minHeight == maxHeight)
+			{
+				maxHeight = minHeight + 0.1f;
+			}
 
 			m_bounds = AABB(
-				Vector3(scale * startX, minHeight, scale * startZ),
-				Vector3(scale * (endX - 1), maxHeight, scale * (endZ - 1)));
+				Vector3(outerScale * startX, minHeight, outerScale * startZ),
+				Vector3(outerScale * (startX + constants::OuterVerticesPerTileSide - 1), maxHeight, outerScale * (startZ + constants::OuterVerticesPerTileSide - 1)));
 
 			m_center = m_bounds.GetCenter();
 
 			m_boundingRadius = (m_bounds.max - m_center).GetLength();
 		}
 
+		uint16 Tile::GetOuterVertexIndex(size_t x, size_t y) const
+		{
+			ASSERT(x < constants::OuterVerticesPerTileSide && y < constants::OuterVerticesPerTileSide);
+			return static_cast<uint16>(x + y * constants::OuterVerticesPerTileSide);
+		}
+
+		uint16 Tile::GetInnerVertexIndex(size_t x, size_t y) const
+		{
+			ASSERT(x < constants::InnerVerticesPerTileSide && y < constants::InnerVerticesPerTileSide);
+			// Inner vertices start after all outer vertices
+			return static_cast<uint16>(constants::OuterVerticesPerTile + x + y * constants::InnerVerticesPerTileSide);
+		}
+
+		bool Tile::IsOuterEdge(size_t x, size_t y) const
+		{
+			return x == 0 || y == 0 || x >= constants::OuterVerticesPerTileSide - 1 || y >= constants::OuterVerticesPerTileSide - 1;
+		}
+
 		void Tile::CreateIndexData(uint32 lod, uint32 neighborState)
 		{
-			const unsigned int step = 1 << lod;
+			// For the new structure, we'll create indices differently:
+			// Each inner vertex connects to 4 outer vertices to form 4 triangles
+			// Pattern for each quad (O = outer, I = inner):
+			//   O---O
+			//   |\I/|
+			//   | X |
+			//   |/I\|
+			//   O---O
+			
+			// Estimate index count: 
+			// - Each of 64 inner vertices creates 4 triangles = 256 triangles = 768 indices
+			// We'll allocate more for safety
+			std::vector<uint16> indices;
+			indices.reserve(800);
 
-			const unsigned int northLOD = neighborState >> 24;
-			const unsigned int eastLOD = (neighborState >> 16) & 0xFF;
-			const unsigned int southLOD = (neighborState >> 8) & 0xFF;
-			const unsigned int westLOD = neighborState & 0xFF;
-			const unsigned int north = northLOD ? step : 0;
-			const unsigned int east = eastLOD ? step : 0;
-			const unsigned int south = southLOD ? step : 0;
-			const unsigned int west = westLOD ? step : 0;
-
-			const size_t newLength = (constants::VerticesPerTile / step) * (constants::VerticesPerTile / step) * 2 * 2 * 2;
-			std::vector<uint16> indices(newLength);
-			uint16* pIdx = indices.data();
-
-			unsigned int numIndexes = 0;
-
-			// go over all vertices and combine them to triangles in trilist format.
-			// leave out the edges if we need to stitch those in case over lower LOD at the
-			// neighbour.
-			for (unsigned int j = north; j < constants::VerticesPerTile - 1 - south; j += step)
+			// For each inner vertex, create 4 triangles connecting to surrounding outer vertices
+			for (size_t j = 0; j < constants::InnerVerticesPerTileSide; ++j)
 			{
-				for (unsigned int i = west; i < constants::VerticesPerTile - 1 - east; i += step)
+				for (size_t i = 0; i < constants::InnerVerticesPerTileSide; ++i)
 				{
-					// triangles
-					*pIdx++ = GetIndex(i, j);
-					*pIdx++ = GetIndex(i, j + step);
-					*pIdx++ = GetIndex(i + step, j);
+					const uint16 innerIdx = GetInnerVertexIndex(i, j);
 
-					*pIdx++ = GetIndex(i, j + step);
-					*pIdx++ = GetIndex(i + step, j + step);
-					*pIdx++ = GetIndex(i + step, j);
+					// Get the 4 surrounding outer vertices
+					const uint16 outerTL = GetOuterVertexIndex(i, j);         // Top-left
+					const uint16 outerTR = GetOuterVertexIndex(i + 1, j);     // Top-right
+					const uint16 outerBL = GetOuterVertexIndex(i, j + 1);     // Bottom-left
+					const uint16 outerBR = GetOuterVertexIndex(i + 1, j + 1); // Bottom-right
 
-					numIndexes += 6;
+				// Create 4 triangles (counter-clockwise winding when viewed from above)
+				// Top triangle
+				indices.push_back(innerIdx);
+				indices.push_back(outerTR);
+				indices.push_back(outerTL);
+
+				// Right triangle
+				indices.push_back(innerIdx);
+				indices.push_back(outerBR);
+				indices.push_back(outerTR);
+
+				// Bottom triangle
+				indices.push_back(innerIdx);
+				indices.push_back(outerBL);
+				indices.push_back(outerBR);
+
+				// Left triangle
+				indices.push_back(innerIdx);
+				indices.push_back(outerTL);
+				indices.push_back(outerBL);
 				}
-			}
-
-			// stitching edges to neighbours where needed
-			if (northLOD) {
-				numIndexes += StitchEdge(Direction::North, lod, northLOD, westLOD > 0, eastLOD > 0, &pIdx);
-			}
-			if (eastLOD) {
-				numIndexes += StitchEdge(Direction::East, lod, eastLOD, northLOD > 0, southLOD > 0, &pIdx);
-			}
-			if (southLOD) {
-				numIndexes += StitchEdge(Direction::South, lod, southLOD, eastLOD > 0, westLOD > 0, &pIdx);
-			}
-			if (westLOD) {
-				numIndexes += StitchEdge(Direction::West, lod, westLOD, southLOD > 0, northLOD > 0, &pIdx);
 			}
 
 			m_indexData = std::make_unique<IndexData>();
-			m_indexData->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(numIndexes, IndexBufferSize::Index_16, BufferUsage::StaticWriteOnly, indices.data());
-			m_indexData->indexCount = numIndexes;
+			m_indexData->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(
+				static_cast<uint32>(indices.size()), 
+				IndexBufferSize::Index_16, 
+				BufferUsage::StaticWriteOnly, 
+				indices.data());
+			m_indexData->indexCount = static_cast<uint32>(indices.size());
 			m_indexData->indexStart = 0;
-		}
-
-		uint16 Tile::GetIndex(size_t x, size_t y) const
-		{
-			return static_cast<uint16>(x + y * constants::VerticesPerTile);
-		}
-
-		uint32 Tile::StitchEdge(Direction direction, uint32 hiLOD, uint32 loLOD, bool omitFirstTri, bool omitLastTri, uint16** ppIdx)
-		{
-			ASSERT(loLOD > hiLOD);
-
-			unsigned short* pIdx = *ppIdx;
-
-			int step = 1 << hiLOD;
-			int superstep = 1 << loLOD;
-			int halfsuperstep = superstep >> 1;
-			int rowstep = 0;
-			size_t startx = 0, starty = 0, endx = 0;
-			bool horizontal = false;
-
-			switch (direction)
-			{
-			case Direction::North:
-				startx = starty = 0;
-				endx = 17 - 1;
-				rowstep = step;
-				horizontal = true;
-				break;
-
-			case Direction::South:
-				startx = starty = 17 - 1;
-				endx = 0;
-				rowstep = -step;
-				step = -step;
-				superstep = -superstep;
-				halfsuperstep = -halfsuperstep;
-				horizontal = true;
-				break;
-
-			case Direction::East:
-				startx = 0;
-				endx = 17 - 1;
-				starty = 17 - 1;
-				rowstep = -step;
-				horizontal = false;
-				break;
-
-			case Direction::West:
-				startx = 17 - 1;
-				endx = 0;
-				starty = 0;
-				rowstep = step;
-				step = -step;
-				superstep = -superstep;
-				halfsuperstep = -halfsuperstep;
-				horizontal = false;
-				break;
-			}
-
-			unsigned int numIndexes = 0;
-
-			for (size_t j = startx; j != endx; j += superstep)
-			{
-				int k;
-				for (k = 0; k != halfsuperstep; k += step)
-				{
-					size_t jk = j + k;
-					if (j != startx || k != 0 || !omitFirstTri)
-					{
-						if (horizontal)
-						{
-							*pIdx++ = GetIndex(j, starty);
-							*pIdx++ = GetIndex(jk, starty + rowstep);
-							*pIdx++ = GetIndex(jk + step, starty + rowstep);
-						}
-						else
-						{
-							*pIdx++ = GetIndex(starty, j);
-							*pIdx++ = GetIndex(starty + rowstep, jk);
-							*pIdx++ = GetIndex(starty + rowstep, jk + step);
-						}
-						numIndexes += 3;
-					}
-				}
-
-				if (horizontal)
-				{
-					*pIdx++ = GetIndex(j, starty);
-					*pIdx++ = GetIndex(j + halfsuperstep, starty + rowstep);
-					*pIdx++ = GetIndex(j + superstep, starty);
-				}
-				else
-				{
-					*pIdx++ = GetIndex(starty, j);
-					*pIdx++ = GetIndex(starty + rowstep, j + halfsuperstep);
-					*pIdx++ = GetIndex(starty, j + superstep);
-				}
-				numIndexes += 3;
-
-				for (k = halfsuperstep; k != superstep; k += step)
-				{
-					size_t jk = j + k;
-					if (j != endx - superstep || k != superstep - step || !omitLastTri)
-					{
-						if (horizontal)
-						{
-							*pIdx++ = GetIndex(j + superstep, starty);
-							*pIdx++ = GetIndex(jk, starty + rowstep);
-							*pIdx++ = GetIndex(jk + step, starty + rowstep);
-						}
-						else
-						{
-							*pIdx++ = GetIndex(starty, j + superstep);
-							*pIdx++ = GetIndex(starty + rowstep, jk);
-							*pIdx++ = GetIndex(starty + rowstep, jk + step);
-						}
-						numIndexes += 3;
-					}
-				}
-			}
-
-			*ppIdx = pIdx;
-
-			return numIndexes;
 		}
 
 		bool Tile::TestCapsuleCollision(const Capsule& capsule, std::vector<CollisionResult>& results) const
@@ -514,63 +538,89 @@ namespace mmo
 			const AABB capsuleBounds = localCapsule.GetBounds();
 
 			// Test against terrain triangles
-			constexpr float scale = static_cast<float>(constants::TileSize / static_cast<double>(constants::VerticesPerTile - 1));
+			constexpr float scale = static_cast<float>(constants::TileSize / static_cast<double>(constants::OuterVerticesPerTileSide - 1));
 
-			// Calculate the range of grid cells that could potentially intersect with the capsule
+			// Calculate the range of cells that could potentially intersect with the capsule
 			const float invScale = 1.0f / scale;
 			const int32 minI = std::max(0, static_cast<int32>(std::floor((capsuleBounds.min.x * invScale) - m_startX)));
-			const int32 maxI = std::min(static_cast<int32>(constants::VerticesPerTile - 1), static_cast<int32>(std::ceil((capsuleBounds.max.x * invScale) - m_startX)));
+			const int32 maxI = std::min(static_cast<int32>(constants::InnerVerticesPerTileSide), static_cast<int32>(std::ceil((capsuleBounds.max.x * invScale) - m_startX)));
 			const int32 minJ = std::max(0, static_cast<int32>(std::floor((capsuleBounds.min.z * invScale) - m_startZ)));
-			const int32 maxJ = std::min(static_cast<int32>(constants::VerticesPerTile - 1), static_cast<int32>(std::ceil((capsuleBounds.max.z * invScale) - m_startZ)));
+			const int32 maxJ = std::min(static_cast<int32>(constants::InnerVerticesPerTileSide), static_cast<int32>(std::ceil((capsuleBounds.max.z * invScale) - m_startZ)));
 
 			bool hasCollision = false;
 
-			// Iterate only through terrain triangles that could potentially intersect
+			// Iterate through cells that could potentially intersect
+			// Each cell corresponds to one inner vertex with 4 surrounding triangles
 			for (int32 j = minJ; j < maxJ; ++j)
 			{
 				for (int32 i = minI; i < maxI; ++i)
 				{
-					// Get the four vertices of this terrain quad
-					const float x1 = scale * (m_startX + i);
-					const float z1 = scale * (m_startZ + j);
-					const float x2 = scale * (m_startX + i + 1);
-					const float z2 = scale * (m_startZ + j + 1);
+					// Get positions of the 4 outer vertices surrounding this cell
+					const size_t globalX = m_startX + i;
+					const size_t globalZ = m_startZ + j;
 
-					const float h1 = m_page.GetHeightAt(m_startX + i, m_startZ + j);
-					const float h2 = m_page.GetHeightAt(m_startX + i + 1, m_startZ + j);
-					const float h3 = m_page.GetHeightAt(m_startX + i, m_startZ + j + 1);
-					const float h4 = m_page.GetHeightAt(m_startX + i + 1, m_startZ + j + 1);
+					const float x1 = scale * globalX;
+					const float z1 = scale * globalZ;
+					const float x2 = scale * (globalX + 1);
+					const float z2 = scale * (globalZ + 1);
 
-					// Create AABB for this quad to do additional culling
-					const float minHeight = std::min(std::min(h1, h2), std::min(h3, h4));
-					const float maxHeight = std::max(std::max(h1, h2), std::max(h3, h4));
-					const AABB quadBounds(Vector3(x1, minHeight, z1), Vector3(x2, maxHeight, z2));
+					const float h00 = m_page.GetHeightAt(globalX, globalZ);
+					const float h10 = m_page.GetHeightAt(globalX + 1, globalZ);
+					const float h01 = m_page.GetHeightAt(globalX, globalZ + 1);
+					const float h11 = m_page.GetHeightAt(globalX + 1, globalZ + 1);
 
-					// Skip this quad if the capsule doesn't intersect with its bounding box
-					if (!capsuleBounds.Intersects(quadBounds))
+					// Calculate inner vertex position (center of quad)
+					const float centerX = (x1 + x2) * 0.5f;
+					const float centerZ = (z1 + z2) * 0.5f;
+					const float centerHeight = (h00 + h10 + h01 + h11) * 0.25f;
+
+					// Create bounding box for this cell
+					const float minHeight = std::min(std::min(h00, h10), std::min(h01, h11));
+					const float maxHeight = std::max(std::max(h00, h10), std::max(h01, h11));
+					const AABB cellBounds(Vector3(x1, minHeight, z1), Vector3(x2, maxHeight, z2));
+
+					// Skip if capsule doesn't intersect with this cell's bounds
+					if (!capsuleBounds.Intersects(cellBounds))
 					{
 						continue;
 					}
 
-					// Create the two triangles for this quad
-					const Vector3 v1(x1, h1, z1);
-					const Vector3 v2(x2, h2, z1);
-					const Vector3 v3(x1, h3, z2);
-					const Vector3 v4(x2, h4, z2);
+					// Define the vertices
+					const Vector3 vTL(x1, h00, z1);     // Top-left outer
+					const Vector3 vTR(x2, h10, z1);     // Top-right outer
+					const Vector3 vBL(x1, h01, z2);     // Bottom-left outer
+					const Vector3 vBR(x2, h11, z2);     // Bottom-right outer
+					const Vector3 vCenter(centerX, centerHeight, centerZ); // Center inner
 
-					// Test first triangle (v1, v2, v3)
+					// Test all 4 triangles formed by the inner vertex
 					Vector3 contactPoint, contactNormal;
 					float penetration, distance;
-					if (CapsuleTriangleIntersection(localCapsule, v1, v2, v3, contactPoint, contactNormal, penetration, distance))
+
+					// Top triangle: Center - TL - TR
+					if (CapsuleTriangleIntersection(localCapsule, vCenter, vTL, vTR, contactPoint, contactNormal, penetration, distance))
 					{
-						results.emplace_back(true, contactPoint, contactNormal, v1, v2, v3, penetration, distance);
+						results.emplace_back(true, contactPoint, contactNormal, vCenter, vTL, vTR, penetration, distance);
 						hasCollision = true;
 					}
 
-					// Test second triangle (v2, v4, v3)
-					if (CapsuleTriangleIntersection(localCapsule, v2, v4, v3, contactPoint, contactNormal, penetration, distance))
+					// Right triangle: Center - TR - BR
+					if (CapsuleTriangleIntersection(localCapsule, vCenter, vTR, vBR, contactPoint, contactNormal, penetration, distance))
 					{
-						results.emplace_back(true, contactPoint, contactNormal, v2, v4, v3, penetration, distance);
+						results.emplace_back(true, contactPoint, contactNormal, vCenter, vTR, vBR, penetration, distance);
+						hasCollision = true;
+					}
+
+					// Bottom triangle: Center - BR - BL
+					if (CapsuleTriangleIntersection(localCapsule, vCenter, vBR, vBL, contactPoint, contactNormal, penetration, distance))
+					{
+						results.emplace_back(true, contactPoint, contactNormal, vCenter, vBR, vBL, penetration, distance);
+						hasCollision = true;
+					}
+
+					// Left triangle: Center - BL - TL
+					if (CapsuleTriangleIntersection(localCapsule, vCenter, vBL, vTL, contactPoint, contactNormal, penetration, distance))
+					{
+						results.emplace_back(true, contactPoint, contactNormal, vCenter, vBL, vTL, penetration, distance);
 						hasCollision = true;
 					}
 				}
@@ -594,38 +644,49 @@ namespace mmo
 			const Ray localRay(localOrigin, localDirection, rayLength);
 
 			// Test against terrain triangles
-			constexpr float scale = static_cast<float>(constants::TileSize / static_cast<double>(constants::VerticesPerTile - 1));
+			constexpr float scale = static_cast<float>(constants::TileSize / static_cast<double>(constants::OuterVerticesPerTileSide - 1));
 
 			bool hasCollision = false;
 			float closestDistance = std::numeric_limits<float>::max();
 			Vector3 closestIntersectionPoint;
 
-			// Iterate through all terrain triangles
-			for (size_t j = 0; j < constants::VerticesPerTile - 1; ++j)
+			// Iterate through all cells (each cell has an inner vertex with 4 triangles)
+			for (size_t j = 0; j < constants::InnerVerticesPerTileSide; ++j)
 			{
-				for (size_t i = 0; i < constants::VerticesPerTile - 1; ++i)
+				for (size_t i = 0; i < constants::InnerVerticesPerTileSide; ++i)
 				{
-					// Get the four vertices of this terrain quad
-					const float x1 = scale * (m_startX + i);
-					const float z1 = scale * (m_startZ + j);
-					const float x2 = scale * (m_startX + i + 1);
-					const float z2 = scale * (m_startZ + j + 1);
+					// Get the 4 outer vertices and center inner vertex
+					const size_t globalX = m_startX + i;
+					const size_t globalZ = m_startZ + j;
 
-					const float h1 = m_page.GetHeightAt(m_startX + i, m_startZ + j);
-					const float h2 = m_page.GetHeightAt(m_startX + i + 1, m_startZ + j);
-					const float h3 = m_page.GetHeightAt(m_startX + i, m_startZ + j + 1);
-					const float h4 = m_page.GetHeightAt(m_startX + i + 1, m_startZ + j + 1);
+					const float x1 = scale * globalX;
+					const float z1 = scale * globalZ;
+					const float x2 = scale * (globalX + 1);
+					const float z2 = scale * (globalZ + 1);
 
-					// Create the two triangles for this quad
-					const Vector3 v1(x1, h1, z1);
-					const Vector3 v2(x2, h2, z1);
-					const Vector3 v3(x1, h3, z2);
-					const Vector3 v4(x2, h4, z2);
+					const float h00 = m_page.GetHeightAt(globalX, globalZ);
+					const float h10 = m_page.GetHeightAt(globalX + 1, globalZ);
+					const float h01 = m_page.GetHeightAt(globalX, globalZ + 1);
+					const float h11 = m_page.GetHeightAt(globalX + 1, globalZ + 1);
 
-					// Test first triangle (v1, v2, v3)
+					// Calculate inner vertex position
+					const float centerX = (x1 + x2) * 0.5f;
+					const float centerZ = (z1 + z2) * 0.5f;
+					const float centerHeight = (h00 + h10 + h01 + h11) * 0.25f;
+
+					// Define vertices
+					const Vector3 vTL(x1, h00, z1);
+					const Vector3 vTR(x2, h10, z1);
+					const Vector3 vBL(x1, h01, z2);
+					const Vector3 vBR(x2, h11, z2);
+					const Vector3 vCenter(centerX, centerHeight, centerZ);
+
+					// Test all 4 triangles
 					float t;
 					Vector3 intersectionPoint;
-					if (Terrain::RayTriangleIntersection(localRay, v1, v2, v3, t, intersectionPoint))
+
+					// Top triangle: Center - TL - TR
+					if (Terrain::RayTriangleIntersection(localRay, vCenter, vTL, vTR, t, intersectionPoint))
 					{
 						if (t >= 0.0f && t < closestDistance)
 						{
@@ -635,8 +696,30 @@ namespace mmo
 						}
 					}
 
-					// Test second triangle (v2, v4, v3)
-					if (Terrain::RayTriangleIntersection(localRay, v2, v4, v3, t, intersectionPoint))
+					// Right triangle: Center - TR - BR
+					if (Terrain::RayTriangleIntersection(localRay, vCenter, vTR, vBR, t, intersectionPoint))
+					{
+						if (t >= 0.0f && t < closestDistance)
+						{
+							closestDistance = t;
+							closestIntersectionPoint = intersectionPoint;
+							hasCollision = true;
+						}
+					}
+
+					// Bottom triangle: Center - BR - BL
+					if (Terrain::RayTriangleIntersection(localRay, vCenter, vBR, vBL, t, intersectionPoint))
+					{
+						if (t >= 0.0f && t < closestDistance)
+						{
+							closestDistance = t;
+							closestIntersectionPoint = intersectionPoint;
+							hasCollision = true;
+						}
+					}
+
+					// Left triangle: Center - BL - TL
+					if (Terrain::RayTriangleIntersection(localRay, vCenter, vBL, vTL, t, intersectionPoint))
 					{
 						if (t >= 0.0f && t < closestDistance)
 						{
@@ -655,13 +738,12 @@ namespace mmo
 				result.contactPoint = worldTransform * closestIntersectionPoint;
 
 				// Calculate normal at intersection point by interpolating vertex normals
-				// For simplicity, we'll use the terrain normal at the closest grid point
 				const float invScale = 1.0f / scale;
 				const size_t gridX = static_cast<size_t>((closestIntersectionPoint.x * invScale) - m_startX + 0.5f);
 				const size_t gridZ = static_cast<size_t>((closestIntersectionPoint.z * invScale) - m_startZ + 0.5f);
 
-				const size_t clampedX = std::min(gridX, static_cast<size_t>(constants::VerticesPerTile - 1));
-				const size_t clampedZ = std::min(gridZ, static_cast<size_t>(constants::VerticesPerTile - 1));
+				const size_t clampedX = std::min(gridX, static_cast<size_t>(constants::OuterVerticesPerTileSide - 1));
+				const size_t clampedZ = std::min(gridZ, static_cast<size_t>(constants::OuterVerticesPerTileSide - 1));
 
 				const Vector3 localNormal = m_page.GetNormalAt(m_startX + clampedX, m_startZ + clampedZ);
 				result.contactNormal = (worldTransform * Vector4(localNormal, 0.0f)).Ptr();

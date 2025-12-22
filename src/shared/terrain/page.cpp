@@ -29,6 +29,10 @@ namespace mmo
 			static const ChunkMagic LayerChunk = MakeChunkMagic('YLCM');
 			static const ChunkMagic AreaChunk = MakeChunkMagic('RACM');
 			static const ChunkMagic VertexShadingChunk = MakeChunkMagic('SVCM');
+				// New v2 chunks to persist inner-grid data for editor precision
+				static const ChunkMagic InnerVertexChunk = MakeChunkMagic('IVCM');
+				static const ChunkMagic InnerNormalChunk = MakeChunkMagic('INCM');
+				static const ChunkMagic InnerVertexShadingChunk = MakeChunkMagic('ISCM');
 		}
 
 		namespace
@@ -87,12 +91,21 @@ namespace mmo
 
 			m_preparing = true;
 
-			m_heightmap.resize(constants::VerticesPerPage * constants::VerticesPerPage);
-			m_normals.resize(constants::VerticesPerPage * constants::VerticesPerPage);
+			// Page stores only outer vertices (shared between tiles)
+			// Inner vertices are derived by tiles during rendering
+			const size_t outerVertexCount = constants::OuterVerticesPerPageSide * constants::OuterVerticesPerPageSide;
+			m_heightmap.resize(outerVertexCount);
+			m_normals.resize(outerVertexCount);
 			m_materials.resize(constants::TilesPerPage * constants::TilesPerPage, nullptr);
 			m_layers.resize(constants::PixelsPerPage * constants::PixelsPerPage, 0x000000FF);
 			m_tileZones.resize(constants::TilesPerPage * constants::TilesPerPage, 0);
-			m_colors.resize(constants::VerticesPerPage * constants::VerticesPerPage, 0xffffffff);
+			m_colors.resize(outerVertexCount, 0xffffffff);
+
+			// Allocate inner arrays for editor precision (8*TilesPerPage per side)
+			const size_t innerVertexCount = constants::InnerVerticesPerPageSide * constants::InnerVerticesPerPageSide;
+			m_innerHeightmap.resize(innerVertexCount);
+			m_innerNormals.resize(innerVertexCount);
+			m_innerColors.resize(innerVertexCount, 0xffffffff);
 
 			const String pageFileName = m_terrain.GetBaseFileName() + "/" + std::to_string(m_x) + "_" + std::to_string(m_z) + ".tile";
 			if (AssetRegistry::HasFile(pageFileName))
@@ -113,6 +126,41 @@ namespace mmo
 					ELOG("Failed to read page file '" << pageFileName << "'!");
 					m_preparing = false;
 					return false;
+				}
+
+				// If inner arrays were not provided (legacy v1), derive from outer grid
+				if (m_innerHeightmap.empty())
+				{
+					const uint32 newSide = constants::InnerVerticesPerPageSide;
+					for (uint32 j = 0; j < newSide; ++j)
+					{
+						for (uint32 i = 0; i < newSide; ++i)
+						{
+							const uint32 ox = i;
+							const uint32 oz = j;
+							const float h00 = GetHeightAt(ox, oz);
+							const float h10 = GetHeightAt(ox + 1, oz);
+							const float h01 = GetHeightAt(ox, oz + 1);
+							const float h11 = GetHeightAt(ox + 1, oz + 1);
+							m_innerHeightmap[i + j * newSide] = (h00 + h10 + h01 + h11) * 0.25f;
+
+							// Approximate inner normals from outer normals
+							Vector3 n00 = CalculateNormalAt(ox, oz);
+							Vector3 n10 = CalculateNormalAt(ox + 1, oz);
+							Vector3 n01 = CalculateNormalAt(ox, oz + 1);
+							Vector3 n11 = CalculateNormalAt(ox + 1, oz + 1);
+							Vector3 avg = ((n00 + n10 + n01 + n11) * 0.25f).NormalizedCopy();
+							m_innerNormals[i + j * newSide] = EncodeNormalSNorm8(avg.x, avg.y, avg.z);
+
+							// Average vertex colors
+							const Color c00(GetColorAt(ox, oz));
+							const Color c10(GetColorAt(ox + 1, oz));
+							const Color c01(GetColorAt(ox, oz + 1));
+							const Color c11(GetColorAt(ox + 1, oz + 1));
+							const Color avgColor = (c00 + c10 + c01 + c11) * 0.25f;
+							m_innerColors[i + j * newSide] = avgColor.GetARGB();
+						}
+					}
 				}
 
 				m_changed = true;
@@ -188,7 +236,7 @@ namespace mmo
 						continue;
 					}
 
-					tile = std::make_unique<Tile>(tileName, *this, i * (constants::VerticesPerTile - 1), j * (constants::VerticesPerTile - 1));
+					tile = std::make_unique<Tile>(tileName, *this, i * (constants::OuterVerticesPerTileSide - 1), j * (constants::OuterVerticesPerTileSide - 1));
 
 					// Setup tile material assignment
 					if (const int tileIndex = i + j * constants::TilesPerPage; tileIndex < m_materials.size())
@@ -316,13 +364,13 @@ namespace mmo
 				return 0.0f;
 			}
 
-			if (x >= constants::VerticesPerPage ||
-				y >= constants::VerticesPerPage)
+			if (x >= constants::OuterVerticesPerPageSide ||
+				y >= constants::OuterVerticesPerPageSide)
 			{
 				return 0.0f;
 			}
 
-			return m_heightmap[x + y * constants::VerticesPerPage];
+			return m_heightmap[x + y * constants::OuterVerticesPerPageSide];
 		}
 
 		uint32 Page::GetColorAt(size_t x, size_t y) const
@@ -332,13 +380,13 @@ namespace mmo
 				return 0xffffffff;
 			}
 
-			if (x >= constants::VerticesPerPage ||
-				y >= constants::VerticesPerPage)
+			if (x >= constants::OuterVerticesPerPageSide ||
+				y >= constants::OuterVerticesPerPageSide)
 			{
 				return 0xffffffff;
 			}
 
-			return m_colors[x + y * constants::VerticesPerPage];
+			return m_colors[x + y * constants::OuterVerticesPerPageSide];
 		}
 
 		uint32 Page::GetLayersAt(const size_t x, const size_t y) const
@@ -362,20 +410,20 @@ namespace mmo
 		float Page::GetSmoothHeightAt(float x, float y) const
 		{
 			// scale down
-			const float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::VerticesPerPage - 1));
+			const float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::OuterVerticesPerPageSide - 1));
 			x /= scale;
 			y /= scale;
 
 			// retrieve height from heightmap via bilinear interpolation
 			size_t xi = (size_t)x, zi = (size_t)y;
 			float xpct = x - xi, zpct = y - zi;
-			if (xi == constants::VerticesPerPage - 1)
+			if (xi == constants::OuterVerticesPerPageSide - 1)
 			{
 				// one too far
 				--xi;
 				xpct = 1.0f;
 			}
-			if (zi == constants::VerticesPerPage - 1)
+			if (zi == constants::OuterVerticesPerPageSide - 1)
 			{
 				--zi;
 				zpct = 1.0f;
@@ -402,20 +450,20 @@ namespace mmo
 		Vector3 Page::GetSmoothNormalAt(float x, float y) const
 		{
 			// scale down
-			const float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::VerticesPerPage - 1));
+			const float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::OuterVerticesPerPageSide - 1));
 			x /= scale;
 			y /= scale;
 
 			// retrieve height from heightmap via bilinear interpolation
 			size_t xi = (size_t)x, zi = (size_t)y;
 			float xpct = x - xi, zpct = y - zi;
-			if (xi == constants::VerticesPerPage - 1)
+			if (xi == constants::OuterVerticesPerPageSide - 1)
 			{
 				// one too far
 				--xi;
 				xpct = 1.0f;
 			}
-			if (zi == constants::VerticesPerPage - 1)
+			if (zi == constants::OuterVerticesPerPageSide - 1)
 			{
 				--zi;
 				zpct = 1.0f;
@@ -442,18 +490,24 @@ namespace mmo
 				return;
 			}
 
-			unsigned int fromTileX = fromX / (constants::VerticesPerTile - 1);
-			unsigned int fromTileZ = fromZ / (constants::VerticesPerTile - 1);
-			unsigned int toTileX = toX / (constants::VerticesPerTile - 1);
-			unsigned int toTileZ = toZ / (constants::VerticesPerTile - 1);
+			unsigned int fromTileX = fromX / (constants::OuterVerticesPerTileSide - 1);
+			unsigned int fromTileZ = fromZ / (constants::OuterVerticesPerTileSide - 1);
+			unsigned int toTileX = toX / (constants::OuterVerticesPerTileSide - 1);
+			unsigned int toTileZ = toZ / (constants::OuterVerticesPerTileSide - 1);
 
 			if (fromTileX >= constants::TilesPerPage || fromTileZ >= constants::TilesPerPage)
 			{
 				return;
 			}
 
-			if (toTileX >= constants::TilesPerPage) toTileX = constants::TilesPerPage - 1;
-			if (toTileZ >= constants::TilesPerPage) toTileZ = constants::TilesPerPage - 1;
+			if (toTileX >= constants::TilesPerPage)
+			{
+				toTileX = constants::TilesPerPage - 1;
+			}
+			if (toTileZ >= constants::TilesPerPage)
+			{
+				toTileZ = constants::TilesPerPage - 1;
+			}
 
 			for (unsigned int x = fromTileX; x <= toTileX; x++)
 			{
@@ -515,20 +569,61 @@ namespace mmo
 
 		Vector3 Page::GetNormalAt(const uint32 x, const uint32 z) const
 		{
-			ASSERT(x < constants::VerticesPerPage && z < constants::VerticesPerPage);
+			ASSERT(x < constants::OuterVerticesPerPageSide && z < constants::OuterVerticesPerPageSide);
 
 			Vector3 normal;
-			DecodeNormalSNorm8(m_normals[x + z * constants::VerticesPerPage], normal.x, normal.y, normal.z);
+			DecodeNormalSNorm8(m_normals[x + z * constants::OuterVerticesPerPageSide], normal.x, normal.y, normal.z);
 			return normal;
+		}
+
+		float Page::GetInnerHeightAt(size_t x, size_t y) const
+		{
+			ASSERT(x < constants::InnerVerticesPerPageSide && y < constants::InnerVerticesPerPageSide);
+			return m_innerHeightmap[x + y * constants::InnerVerticesPerPageSide];
+		}
+
+		void Page::SetInnerHeightAt(size_t x, size_t y, float value)
+		{
+			ASSERT(x < constants::InnerVerticesPerPageSide && y < constants::InnerVerticesPerPageSide);
+			m_innerHeightmap[x + y * constants::InnerVerticesPerPageSide] = value;
+			m_changed = true;
+		}
+
+		uint32 Page::GetInnerColorAt(size_t x, size_t y) const
+		{
+			ASSERT(x < constants::InnerVerticesPerPageSide && y < constants::InnerVerticesPerPageSide);
+			return m_innerColors[x + y * constants::InnerVerticesPerPageSide];
+		}
+
+		void Page::SetInnerColorAt(size_t x, size_t y, uint32 color)
+		{
+			ASSERT(x < constants::InnerVerticesPerPageSide && y < constants::InnerVerticesPerPageSide);
+			m_innerColors[x + y * constants::InnerVerticesPerPageSide] = color;
+			m_changed = true;
+		}
+
+		Vector3 Page::GetInnerNormalAt(size_t x, size_t y) const
+		{
+			ASSERT(x < constants::InnerVerticesPerPageSide && y < constants::InnerVerticesPerPageSide);
+			Vector3 normal;
+			DecodeNormalSNorm8(m_innerNormals[x + y * constants::InnerVerticesPerPageSide], normal.x, normal.y, normal.z);
+			return normal;
+		}
+
+		void Page::SetInnerNormalAt(size_t x, size_t y, const Vector3& normal)
+		{
+			ASSERT(x < constants::InnerVerticesPerPageSide && y < constants::InnerVerticesPerPageSide);
+			m_innerNormals[x + y * constants::InnerVerticesPerPageSide] = EncodeNormalSNorm8(normal.x, normal.y, normal.z);
+			m_changed = true;
 		}
 
 		Vector3 Page::CalculateNormalAt(const uint32 x, const uint32 z)
 		{
-			const float scaling = static_cast<float>(constants::PageSize / static_cast<double>(constants::VerticesPerPage));
+			const float scaling = static_cast<float>(constants::PageSize / static_cast<double>(constants::OuterVerticesPerPageSide));
 			float flip = 1.0f;
 
-			size_t offsX = m_x * (constants::VerticesPerPage - 1);
-			size_t offsY = m_z * (constants::VerticesPerPage - 1);
+			size_t offsX = m_x * (constants::OuterVerticesPerPageSide - 1);
+			size_t offsY = m_z * (constants::OuterVerticesPerPageSide - 1);
 
 			Vector3 here(static_cast<float>(x) * scaling, m_terrain.GetAt(offsX + x, offsY + z), static_cast<float>(z) * scaling);
 
@@ -627,7 +722,7 @@ namespace mmo
 			io::StreamSink sink(*file);
 			io::Writer writer(sink);
 
-			uint32 version = 0x01;
+			uint32 version = 0x02;
 
 			// File version chunk
 			{
@@ -654,14 +749,21 @@ namespace mmo
 				materialChunkWriter.Finish();
 			}
 
-			// Heightmap
+			// Heightmap (outer grid)
 			{
 				ChunkWriter heightmapChunk{ constants::VertexChunk, writer };
 				writer << io::write_range(m_heightmap);
 				heightmapChunk.Finish();
 			}
 
-			// (Encoded) Normals
+			// Inner heightmap (v2)
+			{
+				ChunkWriter innerHeightChunk{ constants::InnerVertexChunk, writer };
+				writer << io::write_range(m_innerHeightmap);
+				innerHeightChunk.Finish();
+			}
+
+			// (Encoded) Normals (outer grid)
 			{
 				ChunkWriter normalChunk{ constants::NormalChunk, writer };
 				for (const auto& normal : m_normals)
@@ -671,6 +773,16 @@ namespace mmo
 				normalChunk.Finish();
 			}
 
+			// Inner (encoded) normals (v2)
+			{
+				ChunkWriter innerNormalChunk{ constants::InnerNormalChunk, writer };
+				for (const auto& normal : m_innerNormals)
+				{
+					writer.WritePOD(normal);
+				}
+				innerNormalChunk.Finish();
+			}
+
 			// Layers
 			{
 				ChunkWriter layerChunk{ constants::LayerChunk, writer };
@@ -678,11 +790,18 @@ namespace mmo
 				layerChunk.Finish();
 			}
 
-			// Vertex shading
+			// Vertex shading (outer grid)
 			{
 				ChunkWriter colorsChunk{ constants::VertexShadingChunk, writer };
 				writer << io::write_range(m_colors);
 				colorsChunk.Finish();
+			}
+
+			// Inner vertex shading (v2)
+			{
+				ChunkWriter innerColorsChunk{ constants::InnerVertexShadingChunk, writer };
+				writer << io::write_range(m_innerColors);
+				innerColorsChunk.Finish();
 			}
 
 			// Zones
@@ -748,6 +867,121 @@ namespace mmo
 			}
 
 			return reader;
+		}
+
+		bool Page::ReadMCIVChunk(io::Reader& reader, uint32 header, uint32 size)
+		{
+			return reader >> io::read_range(m_innerHeightmap);
+		}
+
+		bool Page::ReadMCINChunk(io::Reader& reader, uint32 header, uint32 size)
+		{
+			for (auto& normal : m_innerNormals)
+			{
+				reader.readPOD(normal);
+				if (!reader)
+				{
+					ELOG("Failed to read inner normal from tile " << m_x << "x" << m_z << "!");
+					return false;
+				}
+			}
+			return true;
+		}
+
+		bool Page::ReadMCISChunk(io::Reader& reader, uint32 header, uint32 size)
+		{
+			return reader >> io::read_range(m_innerColors);
+		}
+
+		// Legacy v1 chunk readers and resampling helpers
+		namespace
+		{
+			constexpr uint32 kOldVerticesPerTileSide = 18;
+			constexpr uint32 kOldVerticesPerPageSide = (kOldVerticesPerTileSide - 1) * terrain::constants::TilesPerPage + 1; // 273
+
+			inline uint32 MapLegacyIndex(uint32 newIdx, uint32 newMax, uint32 oldMax)
+			{
+				if (newMax == 0)
+				{
+					return 0;
+				}
+				const double t = static_cast<double>(newIdx) / static_cast<double>(newMax);
+				const double mapped = t * static_cast<double>(oldMax) + 0.5;
+				const uint32 idx = static_cast<uint32>(mapped);
+				return idx > oldMax ? oldMax : idx;
+			}
+		}
+
+		bool Page::ReadMCVTChunkV1(io::Reader& reader, uint32 header, uint32 size)
+		{
+			std::vector<float> legacy;
+			legacy.resize(kOldVerticesPerPageSide * kOldVerticesPerPageSide);
+			if (!(reader >> io::read_range(legacy)))
+			{
+				ELOG("Failed to read legacy heightmap from tile " << m_x << "x" << m_z << "!");
+				return false;
+			}
+
+			const uint32 newSide = constants::OuterVerticesPerPageSide;
+			for (uint32 y = 0; y < newSide; ++y)
+			{
+				const uint32 oy = MapLegacyIndex(y, newSide - 1, kOldVerticesPerPageSide - 1);
+				for (uint32 x = 0; x < newSide; ++x)
+				{
+					const uint32 ox = MapLegacyIndex(x, newSide - 1, kOldVerticesPerPageSide - 1);
+					m_heightmap[x + y * newSide] = legacy[ox + oy * kOldVerticesPerPageSide];
+				}
+			}
+			return true;
+		}
+
+		bool Page::ReadMCNMChunkV1(io::Reader& reader, uint32 header, uint32 size)
+		{
+			std::vector<EncodedNormal8> legacy;
+			legacy.resize(kOldVerticesPerPageSide * kOldVerticesPerPageSide);
+			for (auto& n : legacy)
+			{
+				reader.readPOD(n);
+				if (!reader)
+				{
+					ELOG("Failed to read legacy normal from tile " << m_x << "x" << m_z << "!");
+					return false;
+				}
+			}
+
+			const uint32 newSide = constants::OuterVerticesPerPageSide;
+			for (uint32 y = 0; y < newSide; ++y)
+			{
+				const uint32 oy = MapLegacyIndex(y, newSide - 1, kOldVerticesPerPageSide - 1);
+				for (uint32 x = 0; x < newSide; ++x)
+				{
+					const uint32 ox = MapLegacyIndex(x, newSide - 1, kOldVerticesPerPageSide - 1);
+					m_normals[x + y * newSide] = legacy[ox + oy * kOldVerticesPerPageSide];
+				}
+			}
+			return true;
+		}
+
+		bool Page::ReadMCVSChunkV1(io::Reader& reader, uint32 header, uint32 size)
+		{
+			std::vector<uint32> legacy;
+			legacy.resize(kOldVerticesPerPageSide * kOldVerticesPerPageSide);
+			if (!(reader >> io::read_range(legacy)))
+			{
+				return false;
+			}
+
+			const uint32 newSide = constants::OuterVerticesPerPageSide;
+			for (uint32 y = 0; y < newSide; ++y)
+			{
+				const uint32 oy = MapLegacyIndex(y, newSide - 1, kOldVerticesPerPageSide - 1);
+				for (uint32 x = 0; x < newSide; ++x)
+				{
+					const uint32 ox = MapLegacyIndex(x, newSide - 1, kOldVerticesPerPageSide - 1);
+					m_colors[x + y * newSide] = legacy[ox + oy * kOldVerticesPerPageSide];
+				}
+			}
+			return true;
 		}
 
 		bool Page::ReadMCNMChunk(io::Reader& reader, uint32 header, uint32 size)
@@ -926,22 +1160,38 @@ namespace mmo
 				return false;
 			}
 
-			const uint32 expectedVersion = 0x01;
-			if (version != expectedVersion)
+			const uint32 versionV1 = 0x01;
+			const uint32 versionV2 = 0x02;
+			if (version != versionV1 && version != versionV2)
 			{
-				ELOG("Unsupported file format version detected (detected " << log_hex_digit(version) << ", expected " << log_hex_digit(expectedVersion) << " or lower");
+				ELOG("Unsupported file format version detected (detected " << log_hex_digit(version) << ", supported " << log_hex_digit(versionV1) << ", " << log_hex_digit(versionV2) << ")");
 				return false;
 			}
 
 			m_ignoreUnhandledChunks = true;
 
-			// Register new chunk readers
+			// Register chunk readers based on version
 			AddChunkHandler(*constants::MaterialChunk, false, *this, &Page::ReadMCMTChunk);
-			AddChunkHandler(*constants::VertexChunk, true, *this, &Page::ReadMCVTChunk);
-			AddChunkHandler(*constants::NormalChunk, true, *this, &Page::ReadMCNMChunk);
-			AddChunkHandler(*constants::LayerChunk, true, *this, &Page::ReadMCLYChunk);
-			AddChunkHandler(*constants::AreaChunk, false, *this, &Page::ReadMCARChunk);
-			AddChunkHandler(*constants::VertexShadingChunk, false, *this, &Page::ReadMCVSChunk);
+			if (version == versionV1)
+			{
+				AddChunkHandler(*constants::VertexChunk, true, *this, &Page::ReadMCVTChunkV1);
+				AddChunkHandler(*constants::NormalChunk, true, *this, &Page::ReadMCNMChunkV1);
+				AddChunkHandler(*constants::LayerChunk, true, *this, &Page::ReadMCLYChunk);
+				AddChunkHandler(*constants::AreaChunk, false, *this, &Page::ReadMCARChunk);
+				AddChunkHandler(*constants::VertexShadingChunk, false, *this, &Page::ReadMCVSChunkV1);
+			}
+			else
+			{
+				AddChunkHandler(*constants::VertexChunk, true, *this, &Page::ReadMCVTChunk);
+				AddChunkHandler(*constants::NormalChunk, true, *this, &Page::ReadMCNMChunk);
+				// Inner v2 chunks
+				AddChunkHandler(*constants::InnerVertexChunk, true, *this, &Page::ReadMCIVChunk);
+				AddChunkHandler(*constants::InnerNormalChunk, true, *this, &Page::ReadMCINChunk);
+				AddChunkHandler(*constants::InnerVertexShadingChunk, true, *this, &Page::ReadMCISChunk);
+				AddChunkHandler(*constants::LayerChunk, true, *this, &Page::ReadMCLYChunk);
+				AddChunkHandler(*constants::AreaChunk, false, *this, &Page::ReadMCARChunk);
+				AddChunkHandler(*constants::VertexShadingChunk, false, *this, &Page::ReadMCVSChunk);
+			}
 
 			return reader;
 		}
