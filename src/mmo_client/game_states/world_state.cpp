@@ -290,6 +290,9 @@ namespace mmo
 		WorldTextFrame frame(m_playerController->GetCamera(), Vector3::Zero, 0.0f);
 		frame.GetFont()->GetTextWidth("1");
 
+		// Ensure fog is enabled
+		m_scene->SetFogEnabled(true);
+
 		m_worldRootNode = m_scene->GetRootSceneNode().CreateChildSceneNode();
 		LoadMap();
 

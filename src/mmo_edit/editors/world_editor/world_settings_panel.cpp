@@ -7,6 +7,7 @@
 #include "edit_modes/world_edit_mode.h"
 #include "terrain/terrain.h"
 #include "scene_graph/material_manager.h"
+#include "scene_graph/scene.h"
 
 namespace mmo
 {
@@ -59,6 +60,13 @@ namespace mmo
                 if (ImGui::Checkbox("Show Wireframe on Top", &wireframe))
                 {
                     m_terrain.SetWireframeVisible(wireframe);
+                }
+
+                // TODO: Hack: Use terrain to get scene
+                bool showFog = m_terrain.GetScene().IsFogEnabled();
+                if (ImGui::Checkbox("Show Fog", &showFog))
+                {
+                    m_terrain.GetScene().SetFogEnabled(showFog);
                 }
 
                 if (m_hasTerrain)

@@ -583,8 +583,11 @@ namespace mmo
 	{
 		PsCameraConstantBuffer buffer;
 		buffer.cameraPosition = camera.GetDerivedPosition();
-		buffer.fogStart = m_fogStart;
-		buffer.fogEnd = m_fogEnd;
+
+		// TODO: This is a hack for now - we set fog start and end to a very high value when fog is disabled
+		buffer.fogStart = m_fogEnabled ? m_fogStart : 100000.0f;
+		buffer.fogEnd = m_fogEnabled ? m_fogEnd : 100000.0f;
+
 		buffer.fogColor = m_fogColor;
 		buffer.inverseViewMatrix = camera.GetViewMatrix().Inverse();
 		m_psCameraBuffer->Update(&buffer);

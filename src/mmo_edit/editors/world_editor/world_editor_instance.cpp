@@ -1835,6 +1835,18 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 			if (ImGui::Button("Set For Page"))
 			{
+				terrain::Page &page = tile.GetPage();
+				for (uint32 x = 0; x < terrain::constants::TilesPerPage; ++x)
+				{
+					for (uint32 y = 0; y < terrain::constants::TilesPerPage; ++y)
+					{
+						terrain::Tile*pageTile = page.GetTile(x, y);
+						if (pageTile)
+						{
+							pageTile->SetMaterial(tile.GetMaterial());
+						}
+					}
+				}
 			}
 
 			if (ImGui::IsItemHovered())

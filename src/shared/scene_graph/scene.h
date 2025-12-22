@@ -331,6 +331,10 @@ namespace mmo
 
 		virtual std::unique_ptr<RaySceneQuery> CreateRayQuery(const Ray& ray);
 
+		void SetFogEnabled(bool enable) { m_fogEnabled = enable; }
+
+		bool IsFogEnabled() const { return m_fogEnabled; }
+
 		void SetFogRange(float start, float end);
 
 		void SetFogColor(const Vector3& color);
@@ -470,6 +474,7 @@ namespace mmo
 		uint32 m_lightsDirtyCounter { 0 };
 
 	private:
+		bool m_fogEnabled = false;
 		Cameras m_cameras;
         SceneNodes m_sceneNodes;
 		SceneNode* m_rootNode { nullptr };
