@@ -33,39 +33,32 @@ namespace mmo
 			static const ChunkMagic InnerVertexChunk = MakeChunkMagic('IVCM');
 			static const ChunkMagic InnerNormalChunk = MakeChunkMagic('INCM');
 			static const ChunkMagic InnerVertexShadingChunk = MakeChunkMagic('ISCM');
+			static const ChunkMagic HoleChunk = MakeChunkMagic('LOHM');
 		}
 
 		namespace
 		{
-			inline uint32 CalculateARGB(const Vector4& val)
+			inline uint32 CalculateARGB(const Vector4 &val)
 			{
 				return (
 					static_cast<uint32>(val.w * 255) << 24 |
 					static_cast<uint32>(val.z * 255) << 16 |
 					static_cast<uint32>(val.y * 255) << 8 |
-					static_cast<uint32>(val.x * 255)
-					);
+					static_cast<uint32>(val.x * 255));
 			}
 		}
-		Page::Page(Terrain& terrain, const int32 x, const int32 z)
-			: m_terrain(terrain)
-			, m_x(x)
-			, m_z(z)
-			, m_preparing(false)
-			, m_prepared(false)
-			, m_loaded(false)
+		Page::Page(Terrain &terrain, const int32 x, const int32 z)
+			: m_terrain(terrain), m_x(x), m_z(z), m_preparing(false), m_prepared(false), m_loaded(false)
 		{
 			const auto offset = Vector3(
 				static_cast<float>(static_cast<double>(m_x - 32) * constants::PageSize),
 				0.0f,
-				static_cast<float>(static_cast<double>(m_z - 32) * constants::PageSize)
-			);
+				static_cast<float>(static_cast<double>(m_z - 32) * constants::PageSize));
 
 			// Bounding box
 			m_boundingBox = AABB(
 				offset,
-				offset + Vector3(constants::PageSize, 0.0f, constants::PageSize)
-			);
+				offset + Vector3(constants::PageSize, 0.0f, constants::PageSize));
 
 			m_pageNode = m_terrain.GetNode()->CreateChildSceneNode();
 			m_pageNode->SetPosition(offset);
@@ -100,6 +93,8 @@ namespace mmo
 			m_layers.resize(constants::PixelsPerPage * constants::PixelsPerPage, 0x000000FF);
 			m_tileZones.resize(constants::TilesPerPage * constants::TilesPerPage, 0);
 			m_colors.resize(outerVertexCount, 0xffffffff);
+			// Initialize hole map (one 64-bit value per tile, all zeros = no holes)
+			m_holeMap.resize(constants::TilesPerPage * constants::TilesPerPage, 0);
 
 			// Allocate inner arrays for editor precision (8*TilesPerPage per side)
 			const size_t innerVertexCount = constants::InnerVerticesPerPageSide * constants::InnerVerticesPerPageSide;
@@ -119,7 +114,7 @@ namespace mmo
 				// Register chunk handler
 				AddChunkHandler(*constants::VersionChunk, true, *this, &Page::ReadMCVRChunk);
 
-				io::StreamSource source{ *file };
+				io::StreamSource source{*file};
 				io::Reader reader{source};
 				if (!Read(reader))
 				{
@@ -228,7 +223,7 @@ namespace mmo
 				for (unsigned int j = 0; j < constants::TilesPerPage; j++)
 				{
 					String tileName = pageBaseName + "_Tile_" + std::to_string(i) + "_" + std::to_string(j);
-					auto& tile = m_Tiles(i, j);
+					auto &tile = m_Tiles(i, j);
 
 					// Tile already loaded?
 					if (tile)
@@ -263,7 +258,7 @@ namespace mmo
 			{
 				m_loaded = true;
 			}
-			
+
 			UpdateBoundingBox();
 			return m_loaded;
 		}
@@ -275,7 +270,7 @@ namespace mmo
 				m_unloadRequested = true;
 			}
 
-			for (const auto& tile : m_Tiles)
+			for (const auto &tile : m_Tiles)
 			{
 				if (!tile)
 				{
@@ -311,10 +306,10 @@ namespace mmo
 			m_preparing = false;
 		}
 
-		Tile* Page::GetTile(const uint32 x, const uint32 y)
+		Tile *Page::GetTile(const uint32 x, const uint32 y)
 		{
 			if (x >= m_Tiles.width() ||
-				y >= m_Tiles.height()) 
+				y >= m_Tiles.height())
 			{
 				return nullptr;
 			}
@@ -322,7 +317,7 @@ namespace mmo
 			return m_Tiles(x, y).get();
 		}
 
-		Tile* Page::GetTileAt(float x, float z)
+		Tile *Page::GetTileAt(float x, float z)
 		{
 			// Is the tile inside our bounds?
 			if (x <= m_boundingBox.min.x || x >= m_boundingBox.max.x ||
@@ -337,7 +332,7 @@ namespace mmo
 			return GetTile(static_cast<uint32>((x / constants::PageSize) * constants::TilesPerPage), static_cast<uint32>((z / constants::PageSize) * constants::TilesPerPage));
 		}
 
-		Terrain& Page::GetTerrain()
+		Terrain &Page::GetTerrain()
 		{
 			return m_terrain;
 		}
@@ -513,12 +508,12 @@ namespace mmo
 			{
 				for (unsigned int z = fromTileZ; z <= toTileZ; z++)
 				{
-					Tile* pTile = GetTile(x, z);
+					Tile *pTile = GetTile(x, z);
 					if (pTile != nullptr)
 					{
 						if (normalsOnly)
 						{
-							//pTile->UpdateVertexNormals();
+							// pTile->UpdateVertexNormals();
 						}
 						else
 						{
@@ -551,14 +546,16 @@ namespace mmo
 				return;
 			}
 
-			if (toTileX >= constants::TilesPerPage) toTileX = constants::TilesPerPage - 1;
-			if (toTileZ >= constants::TilesPerPage) toTileZ = constants::TilesPerPage - 1;
+			if (toTileX >= constants::TilesPerPage)
+				toTileX = constants::TilesPerPage - 1;
+			if (toTileZ >= constants::TilesPerPage)
+				toTileZ = constants::TilesPerPage - 1;
 
 			for (unsigned int x = fromTileX; x <= toTileX; x++)
 			{
 				for (unsigned int z = fromTileZ; z <= toTileZ; z++)
 				{
-					Tile* pTile = GetTile(x, z);
+					Tile *pTile = GetTile(x, z);
 					if (pTile != nullptr)
 					{
 						pTile->UpdateCoverageMap();
@@ -586,7 +583,7 @@ namespace mmo
 		{
 			ASSERT(x < constants::InnerVerticesPerPageSide && y < constants::InnerVerticesPerPageSide);
 			m_innerHeightmap[x + y * constants::InnerVerticesPerPageSide] = value;
-			
+
 			// Recalculate inner normal by averaging surrounding outer normals
 			// Inner vertex (x,y) corresponds to the center of outer quad (x,y) to (x+1,y+1)
 			const Vector3 n00 = GetNormalAt(x, y);
@@ -595,7 +592,7 @@ namespace mmo
 			const Vector3 n11 = GetNormalAt(x + 1, y + 1);
 			const Vector3 avgNormal = ((n00 + n10 + n01 + n11) * 0.25f).NormalizedCopy();
 			SetInnerNormalAt(x, y, avgNormal);
-			
+
 			m_changed = true;
 		}
 
@@ -620,7 +617,7 @@ namespace mmo
 			return normal;
 		}
 
-		void Page::SetInnerNormalAt(size_t x, size_t y, const Vector3& normal)
+		void Page::SetInnerNormalAt(size_t x, size_t y, const Vector3 &normal)
 		{
 			ASSERT(x < constants::InnerVerticesPerPageSide && y < constants::InnerVerticesPerPageSide);
 			m_innerNormals[x + y * constants::InnerVerticesPerPageSide] = EncodeNormalSNorm8(normal.x, normal.y, normal.z);
@@ -705,14 +702,14 @@ namespace mmo
 			return IsPrepared() && !IsLoaded();
 		}
 
-		const AABB& Page::GetBoundingBox() const
+		const AABB &Page::GetBoundingBox() const
 		{
 			return m_boundingBox;
 		}
 
 		void Page::UpdateTileSelectionQuery()
 		{
-			for (const auto& tile : m_Tiles)
+			for (const auto &tile : m_Tiles)
 			{
 				tile->SetQueryFlags(m_terrain.GetTileSceneQueryFlags());
 			}
@@ -734,16 +731,16 @@ namespace mmo
 
 			// File version chunk
 			{
-				ChunkWriter versionChunkWriter{ constants::VersionChunk, writer };
+				ChunkWriter versionChunkWriter{constants::VersionChunk, writer};
 				writer << io::write<uint32>(version);
 				versionChunkWriter.Finish();
 			}
 
 			// Materials
 			{
-				ChunkWriter materialChunkWriter{ constants::MaterialChunk, writer };
+				ChunkWriter materialChunkWriter{constants::MaterialChunk, writer};
 				writer << io::write<uint16>(m_materials.size());
-				for (auto& material : m_materials)
+				for (auto &material : m_materials)
 				{
 					if (material)
 					{
@@ -759,22 +756,22 @@ namespace mmo
 
 			// Heightmap (outer grid)
 			{
-				ChunkWriter heightmapChunk{ constants::VertexChunk, writer };
+				ChunkWriter heightmapChunk{constants::VertexChunk, writer};
 				writer << io::write_range(m_heightmap);
 				heightmapChunk.Finish();
 			}
 
 			// Inner heightmap (v2)
 			{
-				ChunkWriter innerHeightChunk{ constants::InnerVertexChunk, writer };
+				ChunkWriter innerHeightChunk{constants::InnerVertexChunk, writer};
 				writer << io::write_range(m_innerHeightmap);
 				innerHeightChunk.Finish();
 			}
 
 			// (Encoded) Normals (outer grid)
 			{
-				ChunkWriter normalChunk{ constants::NormalChunk, writer };
-				for (const auto& normal : m_normals)
+				ChunkWriter normalChunk{constants::NormalChunk, writer};
+				for (const auto &normal : m_normals)
 				{
 					writer.WritePOD(normal);
 				}
@@ -783,8 +780,8 @@ namespace mmo
 
 			// Inner (encoded) normals (v2)
 			{
-				ChunkWriter innerNormalChunk{ constants::InnerNormalChunk, writer };
-				for (const auto& normal : m_innerNormals)
+				ChunkWriter innerNormalChunk{constants::InnerNormalChunk, writer};
+				for (const auto &normal : m_innerNormals)
 				{
 					writer.WritePOD(normal);
 				}
@@ -793,29 +790,57 @@ namespace mmo
 
 			// Layers
 			{
-				ChunkWriter layerChunk{ constants::LayerChunk, writer };
+				ChunkWriter layerChunk{constants::LayerChunk, writer};
 				writer << io::write_range(m_layers);
 				layerChunk.Finish();
 			}
 
 			// Vertex shading (outer grid)
 			{
-				ChunkWriter colorsChunk{ constants::VertexShadingChunk, writer };
+				ChunkWriter colorsChunk{constants::VertexShadingChunk, writer};
 				writer << io::write_range(m_colors);
 				colorsChunk.Finish();
 			}
 
 			// Inner vertex shading (v2)
 			{
-				ChunkWriter innerColorsChunk{ constants::InnerVertexShadingChunk, writer };
+				ChunkWriter innerColorsChunk{constants::InnerVertexShadingChunk, writer};
 				writer << io::write_range(m_innerColors);
 				innerColorsChunk.Finish();
 			}
 
+			// Hole data (only save tiles with holes)
+			{
+				// Count tiles with holes
+				std::vector<std::pair<uint16, uint64>> tilesWithHoles;
+				for (uint16 i = 0; i < m_holeMap.size(); ++i)
+				{
+					if (m_holeMap[i] != 0)
+					{
+						tilesWithHoles.emplace_back(i, m_holeMap[i]);
+					}
+				}
+
+				// Only write chunk if there are any holes
+				if (!tilesWithHoles.empty())
+				{
+					ChunkWriter holeChunk{constants::HoleChunk, writer};
+					writer << io::write<uint16>(static_cast<uint16>(tilesWithHoles.size()));
+
+					for (const auto &tilePair : tilesWithHoles)
+					{
+						writer << io::write<uint16>(tilePair.first);
+						writer << io::write<uint64>(tilePair.second);
+					}
+
+					holeChunk.Finish();
+				}
+			}
+
 			// Zones
 			{
-				ChunkWriter areaChunk{ constants::AreaChunk, writer };
-				for (const auto& zone : m_tileZones)
+				ChunkWriter areaChunk{constants::AreaChunk, writer};
+				for (const auto &zone : m_tileZones)
 				{
 					writer << io::write<uint32>(zone);
 				}
@@ -829,7 +854,7 @@ namespace mmo
 			return false;
 		}
 
-		bool Page::ReadMCMTChunk(io::Reader& reader, uint32 header, uint32 size)
+		bool Page::ReadMCMTChunk(io::Reader &reader, uint32 header, uint32 size)
 		{
 			// Read number of materials used
 			uint16 numMaterials;
@@ -865,7 +890,7 @@ namespace mmo
 			return reader;
 		}
 
-		bool Page::ReadMCVTChunk(io::Reader& reader, uint32 header, uint32 size)
+		bool Page::ReadMCVTChunk(io::Reader &reader, uint32 header, uint32 size)
 		{
 			// Read heightmap data
 			if (!(reader >> io::read_range(m_heightmap)))
@@ -877,14 +902,14 @@ namespace mmo
 			return reader;
 		}
 
-		bool Page::ReadMCIVChunk(io::Reader& reader, uint32 header, uint32 size)
+		bool Page::ReadMCIVChunk(io::Reader &reader, uint32 header, uint32 size)
 		{
 			return reader >> io::read_range(m_innerHeightmap);
 		}
 
-		bool Page::ReadMCINChunk(io::Reader& reader, uint32 header, uint32 size)
+		bool Page::ReadMCINChunk(io::Reader &reader, uint32 header, uint32 size)
 		{
-			for (auto& normal : m_innerNormals)
+			for (auto &normal : m_innerNormals)
 			{
 				reader.readPOD(normal);
 				if (!reader)
@@ -896,9 +921,51 @@ namespace mmo
 			return true;
 		}
 
-		bool Page::ReadMCISChunk(io::Reader& reader, uint32 header, uint32 size)
+		bool Page::ReadMCISChunk(io::Reader &reader, uint32 header, uint32 size)
 		{
 			return reader >> io::read_range(m_innerColors);
+		}
+
+		bool Page::ReadMCHLChunk(io::Reader &reader, uint32 header, uint32 size)
+		{
+			// Read hole data: only non-zero hole maps are stored
+			// Format: uint16 count, then for each: uint16 tileIndex, uint64 holeMap
+			uint16 holeCount;
+			if (!(reader >> io::read<uint16>(holeCount)))
+			{
+				ELOG("Failed to read hole count from tile " << m_x << "x" << m_z << "!");
+				return false;
+			}
+
+			// Clear existing hole data
+			m_holeMap.clear();
+			m_holeMap.resize(constants::TilesPerPage * constants::TilesPerPage, 0);
+
+			// Read each tile's hole map
+			for (uint16 i = 0; i < holeCount; ++i)
+			{
+				uint16 tileIndex;
+				uint64 holeMap;
+
+				if (!(reader >> io::read<uint16>(tileIndex)))
+				{
+					ELOG("Failed to read hole tile index from tile " << m_x << "x" << m_z << "!");
+					return false;
+				}
+
+				if (!(reader >> io::read<uint64>(holeMap)))
+				{
+					ELOG("Failed to read hole map from tile " << m_x << "x" << m_z << "!");
+					return false;
+				}
+
+				if (tileIndex < m_holeMap.size())
+				{
+					m_holeMap[tileIndex] = holeMap;
+				}
+			}
+
+			return true;
 		}
 
 		// Legacy v1 chunk readers and resampling helpers
@@ -920,7 +987,7 @@ namespace mmo
 			}
 		}
 
-		bool Page::ReadMCVTChunkV1(io::Reader& reader, uint32 header, uint32 size)
+		bool Page::ReadMCVTChunkV1(io::Reader &reader, uint32 header, uint32 size)
 		{
 			std::vector<float> legacy;
 			legacy.resize(kOldVerticesPerPageSide * kOldVerticesPerPageSide);
@@ -943,11 +1010,11 @@ namespace mmo
 			return true;
 		}
 
-		bool Page::ReadMCNMChunkV1(io::Reader& reader, uint32 header, uint32 size)
+		bool Page::ReadMCNMChunkV1(io::Reader &reader, uint32 header, uint32 size)
 		{
 			std::vector<EncodedNormal8> legacy;
 			legacy.resize(kOldVerticesPerPageSide * kOldVerticesPerPageSide);
-			for (auto& n : legacy)
+			for (auto &n : legacy)
 			{
 				reader.readPOD(n);
 				if (!reader)
@@ -970,7 +1037,7 @@ namespace mmo
 			return true;
 		}
 
-		bool Page::ReadMCVSChunkV1(io::Reader& reader, uint32 header, uint32 size)
+		bool Page::ReadMCVSChunkV1(io::Reader &reader, uint32 header, uint32 size)
 		{
 			std::vector<uint32> legacy;
 			legacy.resize(kOldVerticesPerPageSide * kOldVerticesPerPageSide);
@@ -992,10 +1059,10 @@ namespace mmo
 			return true;
 		}
 
-		bool Page::ReadMCNMChunk(io::Reader& reader, uint32 header, uint32 size)
+		bool Page::ReadMCNMChunk(io::Reader &reader, uint32 header, uint32 size)
 		{
 			// Read heightmap data
-			for (auto& normal : m_normals)
+			for (auto &normal : m_normals)
 			{
 				reader.readPOD(normal);
 
@@ -1009,7 +1076,7 @@ namespace mmo
 			return reader;
 		}
 
-		bool Page::ReadMCLYChunk(io::Reader& reader, uint32 header, uint32 size)
+		bool Page::ReadMCLYChunk(io::Reader &reader, uint32 header, uint32 size)
 		{
 			// Read heightmap data
 			reader >> io::read_range(m_layers);
@@ -1058,10 +1125,10 @@ namespace mmo
 			}
 
 			m_heightmap[x + z * constants::OuterVerticesPerPageSide] = value;
-			
+
 			// Recalculate normal at this vertex since height changed
 			CalculateNormalAt(x, z);
-			
+
 			// Also recalculate normals for neighboring vertices as they depend on this vertex's height
 			// This ensures smooth normal transitions across terrain
 			if (x > 0)
@@ -1080,7 +1147,6 @@ namespace mmo
 			{
 				CalculateNormalAt(x, z + 1);
 			}
-			
 		}
 
 		void Page::SetColorAt(size_t x, size_t y, uint32 color)
@@ -1101,10 +1167,10 @@ namespace mmo
 				return;
 			}
 
-			uint32& layers = m_layers[x + z * constants::PixelsPerPage];
+			uint32 &layers = m_layers[x + z * constants::PixelsPerPage];
 
 			Vector4 v;
-			v.x = ((layers >> 0) & 0xFF) / 255.0f; 
+			v.x = ((layers >> 0) & 0xFF) / 255.0f;
 			v.y = ((layers >> 8) & 0xFF) / 255.0f;
 			v.z = ((layers >> 16) & 0xFF) / 255.0f;
 			v.w = ((layers >> 24) & 0xFF) / 255.0f;
@@ -1115,10 +1181,18 @@ namespace mmo
 			// Set the chosen channel to newValue
 			switch (layer)
 			{
-			case 0: v.x = value; break;
-			case 1: v.y = value; break;
-			case 2: v.z = value; break;
-			case 3: v.w = value; break;
+			case 0:
+				v.x = value;
+				break;
+			case 1:
+				v.y = value;
+				break;
+			case 2:
+				v.z = value;
+				break;
+			case 3:
+				v.w = value;
+				break;
 			default:
 				// Handle error, unknown channel
 				return;
@@ -1127,7 +1201,7 @@ namespace mmo
 			// Compute the sum of all four *after* setting the chosen channel
 			const float sumAfter = v.x + v.y + v.z + v.w;
 
-			// If the sum is 0 (or extremely close to 0), we can�t scale. 
+			// If the sum is 0 (or extremely close to 0), we can�t scale.
 			// Handle that case gracefully.
 			if (std::fabs(sumAfter) < 1e-6f)
 			{
@@ -1181,7 +1255,62 @@ namespace mmo
 			m_changed = true;
 		}
 
-		bool Page::ReadMCVRChunk(io::Reader& reader, uint32 header, uint32 size)
+		bool Page::IsHole(uint32 localTileX, uint32 localTileY, uint32 innerX, uint32 innerY) const
+		{
+			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage ||
+				innerX >= constants::InnerVerticesPerTileSide || innerY >= constants::InnerVerticesPerTileSide)
+			{
+				return false;
+			}
+
+			const uint32 tileIndex = localTileX + localTileY * constants::TilesPerPage;
+			const uint32 bitIndex = innerX + innerY * constants::InnerVerticesPerTileSide;
+			const uint64 holeMask = m_holeMap[tileIndex];
+
+			return (holeMask & (1ULL << bitIndex)) != 0;
+		}
+
+		void Page::SetHole(uint32 localTileX, uint32 localTileY, uint32 innerX, uint32 innerY, bool isHole)
+		{
+			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage ||
+				innerX >= constants::InnerVerticesPerTileSide || innerY >= constants::InnerVerticesPerTileSide)
+			{
+				return;
+			}
+
+			const uint32 tileIndex = localTileX + localTileY * constants::TilesPerPage;
+			const uint32 bitIndex = innerX + innerY * constants::InnerVerticesPerTileSide;
+			const uint64 bitMask = 1ULL << bitIndex;
+
+			if (isHole)
+			{
+				m_holeMap[tileIndex] |= bitMask;
+			}
+			else
+			{
+				m_holeMap[tileIndex] &= ~bitMask;
+			}
+
+			m_changed = true;
+
+			// Update the tile's index buffer to reflect the hole change
+			if (Tile *tile = GetTile(localTileX, localTileY))
+			{
+				tile->UpdateTerrain(0, 0, constants::OuterVerticesPerTileSide - 1, constants::OuterVerticesPerTileSide - 1);
+			}
+		}
+
+		uint64 Page::GetTileHoleMap(uint32 localTileX, uint32 localTileY) const
+		{
+			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
+			{
+				return 0;
+			}
+
+			return m_holeMap[localTileX + localTileY * constants::TilesPerPage];
+		}
+
+		bool Page::ReadMCVRChunk(io::Reader &reader, uint32 header, uint32 size)
 		{
 			uint32 version;
 			if (!(reader >> io::read<uint32>(version)))
@@ -1218,6 +1347,7 @@ namespace mmo
 				AddChunkHandler(*constants::InnerVertexChunk, true, *this, &Page::ReadMCIVChunk);
 				AddChunkHandler(*constants::InnerNormalChunk, true, *this, &Page::ReadMCINChunk);
 				AddChunkHandler(*constants::InnerVertexShadingChunk, true, *this, &Page::ReadMCISChunk);
+				AddChunkHandler(*constants::HoleChunk, false, *this, &Page::ReadMCHLChunk);
 				AddChunkHandler(*constants::LayerChunk, true, *this, &Page::ReadMCLYChunk);
 				AddChunkHandler(*constants::AreaChunk, false, *this, &Page::ReadMCARChunk);
 				AddChunkHandler(*constants::VertexShadingChunk, false, *this, &Page::ReadMCVSChunk);
@@ -1226,10 +1356,10 @@ namespace mmo
 			return reader;
 		}
 
-		bool Page::ReadMCARChunk(io::Reader& reader, uint32 header, uint32 size)
+		bool Page::ReadMCARChunk(io::Reader &reader, uint32 header, uint32 size)
 		{
 			// Read tile zones
-			for (auto& zone : m_tileZones)
+			for (auto &zone : m_tileZones)
 			{
 				reader >> io::read<uint32>(zone);
 				if (!reader)
@@ -1242,7 +1372,7 @@ namespace mmo
 			return reader;
 		}
 
-		bool Page::ReadMCVSChunk(io::Reader& reader, uint32 header, uint32 size)
+		bool Page::ReadMCVSChunk(io::Reader &reader, uint32 header, uint32 size)
 		{
 			reader >> io::read_range(m_colors);
 			return reader;
@@ -1253,16 +1383,14 @@ namespace mmo
 			const Vector3 offset = Vector3(
 				static_cast<float>(static_cast<double>(m_x - 32) * constants::PageSize),
 				0.0f,
-				static_cast<float>(static_cast<double>(m_z - 32) * constants::PageSize)
-			);
+				static_cast<float>(static_cast<double>(m_z - 32) * constants::PageSize));
 
 			// Bounding box
 			m_boundingBox = AABB(
 				offset,
-				offset + Vector3(constants::PageSize, 0.0f, constants::PageSize)
-			);
+				offset + Vector3(constants::PageSize, 0.0f, constants::PageSize));
 
-			for (auto& tile : m_Tiles)
+			for (auto &tile : m_Tiles)
 			{
 				if (!tile)
 				{
@@ -1276,7 +1404,6 @@ namespace mmo
 
 		void Page::UpdateMaterial()
 		{
-
 		}
 	}
 }

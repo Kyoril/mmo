@@ -17,12 +17,8 @@ namespace mmo
 	{
 		constexpr uint32 WireframeRenderGroupId = RenderQueueGroupId::Main + 1;
 
-		Tile::Tile(const String& name, Page& page, size_t startX, size_t startZ)
-			: MovableObject(name)
-			, Renderable()
-			, m_page(page)
-			, m_startX(startX)
-			, m_startZ(startZ)
+		Tile::Tile(const String &name, Page &page, size_t startX, size_t startZ)
+			: MovableObject(name), Renderable(), m_page(page), m_startX(startX), m_startZ(startZ)
 		{
 			SetRenderQueueGroup(WorldGeometry1);
 
@@ -45,7 +41,7 @@ namespace mmo
 			const size_t pixelStartY = m_tileY * (constants::PixelsPerTile - 1);
 			const size_t pixelEndY = pixelStartY + constants::PixelsPerTile;
 
-			auto& scene = m_page.GetTerrain().GetScene();
+			auto &scene = m_page.GetTerrain().GetScene();
 			for (size_t x = pixelStartX; x < pixelEndX; ++x)
 			{
 				for (size_t y = pixelStartY; y < pixelEndY; ++y)
@@ -67,7 +63,7 @@ namespace mmo
 
 		Tile::~Tile() = default;
 
-		void Tile::PrepareRenderOperation(RenderOperation& operation)
+		void Tile::PrepareRenderOperation(RenderOperation &operation)
 		{
 			operation.vertexData = m_vertexData.get();
 			operation.indexData = m_indexData.get();
@@ -84,12 +80,12 @@ namespace mmo
 			}
 		}
 
-		const Matrix4& Tile::GetWorldTransform() const
+		const Matrix4 &Tile::GetWorldTransform() const
 		{
 			return GetParentNodeFullTransform();
 		}
 
-		float Tile::GetSquaredViewDepth(const Camera& camera) const
+		float Tile::GetSquaredViewDepth(const Camera &camera) const
 		{
 			return GetParentSceneNode()->GetSquaredViewDepth(camera);
 		}
@@ -127,13 +123,13 @@ namespace mmo
 			m_page.NotifyTileMaterialChanged(m_tileX, m_tileY);
 		}
 
-		const String& Tile::GetMovableType() const
+		const String &Tile::GetMovableType() const
 		{
 			static const String type = "Tile";
 			return type;
 		}
 
-		const AABB& Tile::GetBoundingBox() const
+		const AABB &Tile::GetBoundingBox() const
 		{
 			return m_bounds;
 		}
@@ -143,12 +139,12 @@ namespace mmo
 			return m_boundingRadius;
 		}
 
-		void Tile::VisitRenderables(Visitor& visitor, bool debugRenderables)
+		void Tile::VisitRenderables(Visitor &visitor, bool debugRenderables)
 		{
 			visitor.Visit(*this, 0, false);
 		}
 
-		void Tile::PopulateRenderQueue(RenderQueue& queue)
+		void Tile::PopulateRenderQueue(RenderQueue &queue)
 		{
 			queue.AddRenderable(*this, m_renderQueueId);
 
@@ -158,7 +154,7 @@ namespace mmo
 			}
 		}
 
-		Terrain& Tile::GetTerrain() const
+		Terrain &Tile::GetTerrain() const
 		{
 			return m_page.GetTerrain();
 		}
@@ -180,7 +176,7 @@ namespace mmo
 			float minHeight = std::numeric_limits<float>::max();
 			float maxHeight = std::numeric_limits<float>::lowest();
 
-			VertexStruct* vert = (VertexStruct*)m_mainBuffer->Map(LockOptions::Normal);
+			VertexStruct *vert = (VertexStruct *)m_mainBuffer->Map(LockOptions::Normal);
 
 			// Update outer vertices (9x9 = 81 vertices)
 			for (size_t j = 0; j < constants::OuterVerticesPerTileSide; ++j)
@@ -191,7 +187,7 @@ namespace mmo
 					const size_t globalZ = m_startZ + j;
 
 					const float height = m_page.GetHeightAt(globalX, globalZ);
-					
+
 					if (height < minHeight)
 					{
 						minHeight = height;
@@ -310,8 +306,8 @@ namespace mmo
 			m_vertexData->vertexStart = 0;
 			m_vertexData->vertexCount = constants::VerticesPerTile; // 145 vertices (81 outer + 64 inner)
 
-			VertexDeclaration* decl = m_vertexData->vertexDeclaration;
-			VertexBufferBinding* bind = m_vertexData->vertexBufferBinding;
+			VertexDeclaration *decl = m_vertexData->vertexDeclaration;
+			VertexBufferBinding *bind = m_vertexData->vertexBufferBinding;
 
 			uint32 offset = 0;
 			offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Position).GetSize();
@@ -340,7 +336,7 @@ namespace mmo
 			};
 
 			std::vector<VertexStruct> vertices(m_vertexData->vertexCount);
-			VertexStruct* vert = vertices.data();
+			VertexStruct *vert = vertices.data();
 
 			// First, create all outer vertices (9x9 = 81 vertices)
 			for (size_t j = 0; j < constants::OuterVerticesPerTileSide; ++j)
@@ -471,60 +467,73 @@ namespace mmo
 			//   | X |
 			//   |/I\|
 			//   O---O
-			
-			// Estimate index count: 
+
+			// Estimate index count:
 			// - Each of 64 inner vertices creates 4 triangles = 256 triangles = 768 indices
 			// We'll allocate more for safety
 			std::vector<uint16> indices;
 			indices.reserve(800);
+
+			// Get the hole map for this tile
+			const uint64 holeMap = m_page.GetTileHoleMap(m_tileX, m_tileY);
 
 			// For each inner vertex, create 4 triangles connecting to surrounding outer vertices
 			for (size_t j = 0; j < constants::InnerVerticesPerTileSide; ++j)
 			{
 				for (size_t i = 0; i < constants::InnerVerticesPerTileSide; ++i)
 				{
+					// Check if this inner vertex is marked as a hole
+					const uint32 bitIndex = static_cast<uint32>(i + j * constants::InnerVerticesPerTileSide);
+					const bool isHole = (holeMap & (1ULL << bitIndex)) != 0;
+
+					// Skip triangles for holes
+					if (isHole)
+					{
+						continue;
+					}
+
 					const uint16 innerIdx = GetInnerVertexIndex(i, j);
 
 					// Get the 4 surrounding outer vertices
-					const uint16 outerTL = GetOuterVertexIndex(i, j);         // Top-left
-					const uint16 outerTR = GetOuterVertexIndex(i + 1, j);     // Top-right
-					const uint16 outerBL = GetOuterVertexIndex(i, j + 1);     // Bottom-left
+					const uint16 outerTL = GetOuterVertexIndex(i, j);		  // Top-left
+					const uint16 outerTR = GetOuterVertexIndex(i + 1, j);	  // Top-right
+					const uint16 outerBL = GetOuterVertexIndex(i, j + 1);	  // Bottom-left
 					const uint16 outerBR = GetOuterVertexIndex(i + 1, j + 1); // Bottom-right
 
-				// Create 4 triangles (counter-clockwise winding when viewed from above)
-				// Top triangle
-				indices.push_back(innerIdx);
-				indices.push_back(outerTR);
-				indices.push_back(outerTL);
+					// Create 4 triangles (counter-clockwise winding when viewed from above)
+					// Top triangle
+					indices.push_back(innerIdx);
+					indices.push_back(outerTR);
+					indices.push_back(outerTL);
 
-				// Right triangle
-				indices.push_back(innerIdx);
-				indices.push_back(outerBR);
-				indices.push_back(outerTR);
+					// Right triangle
+					indices.push_back(innerIdx);
+					indices.push_back(outerBR);
+					indices.push_back(outerTR);
 
-				// Bottom triangle
-				indices.push_back(innerIdx);
-				indices.push_back(outerBL);
-				indices.push_back(outerBR);
+					// Bottom triangle
+					indices.push_back(innerIdx);
+					indices.push_back(outerBL);
+					indices.push_back(outerBR);
 
-				// Left triangle
-				indices.push_back(innerIdx);
-				indices.push_back(outerTL);
-				indices.push_back(outerBL);
+					// Left triangle
+					indices.push_back(innerIdx);
+					indices.push_back(outerTL);
+					indices.push_back(outerBL);
 				}
 			}
 
 			m_indexData = std::make_unique<IndexData>();
 			m_indexData->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(
-				static_cast<uint32>(indices.size()), 
-				IndexBufferSize::Index_16, 
-				BufferUsage::StaticWriteOnly, 
+				static_cast<uint32>(indices.size()),
+				IndexBufferSize::Index_16,
+				BufferUsage::StaticWriteOnly,
 				indices.data());
 			m_indexData->indexCount = static_cast<uint32>(indices.size());
 			m_indexData->indexStart = 0;
 		}
 
-		bool Tile::TestCapsuleCollision(const Capsule& capsule, std::vector<CollisionResult>& results) const
+		bool Tile::TestCapsuleCollision(const Capsule &capsule, std::vector<CollisionResult> &results) const
 		{
 			// Transform capsule to tile's local space
 			const Matrix4 worldTransform = GetParentNodeFullTransform();
@@ -586,10 +595,10 @@ namespace mmo
 					}
 
 					// Define the vertices
-					const Vector3 vTL(x1, h00, z1);     // Top-left outer
-					const Vector3 vTR(x2, h10, z1);     // Top-right outer
-					const Vector3 vBL(x1, h01, z2);     // Bottom-left outer
-					const Vector3 vBR(x2, h11, z2);     // Bottom-right outer
+					const Vector3 vTL(x1, h00, z1);						   // Top-left outer
+					const Vector3 vTR(x2, h10, z1);						   // Top-right outer
+					const Vector3 vBL(x1, h01, z2);						   // Bottom-left outer
+					const Vector3 vBR(x2, h11, z2);						   // Bottom-right outer
 					const Vector3 vCenter(centerX, centerHeight, centerZ); // Center inner
 
 					// Test all 4 triangles formed by the inner vertex
@@ -629,7 +638,7 @@ namespace mmo
 			return hasCollision;
 		}
 
-		bool Tile::TestRayCollision(const Ray& ray, CollisionResult& result) const
+		bool Tile::TestRayCollision(const Ray &ray, CollisionResult &result) const
 		{
 			// Transform ray to tile's local space
 			const Matrix4 worldTransform = GetParentNodeFullTransform();
@@ -638,7 +647,7 @@ namespace mmo
 			const Vector3 localOrigin = localTransform * ray.origin;
 			Vector3 localDirection = localTransform * (ray.origin + ray.GetDirection()) - localOrigin;
 			localDirection.Normalize();
-			
+
 			// Calculate the ray length in local space
 			const float rayLength = ray.GetLength();
 			const Ray localRay(localOrigin, localDirection, rayLength);
@@ -685,8 +694,8 @@ namespace mmo
 					float t;
 					Vector3 intersectionPoint;
 
-				// Top triangle: Center - TR - TL
-				if (Terrain::RayTriangleIntersection(localRay, vCenter, vTR, vTL, t, intersectionPoint))
+					// Top triangle: Center - TR - TL
+					if (Terrain::RayTriangleIntersection(localRay, vCenter, vTR, vTL, t, intersectionPoint))
 					{
 						if (t >= 0.0f && t < closestDistance)
 						{
@@ -696,8 +705,8 @@ namespace mmo
 						}
 					}
 
-				// Right triangle: Center - BR - TR
-				if (Terrain::RayTriangleIntersection(localRay, vCenter, vBR, vTR, t, intersectionPoint))
+					// Right triangle: Center - BR - TR
+					if (Terrain::RayTriangleIntersection(localRay, vCenter, vBR, vTR, t, intersectionPoint))
 					{
 						if (t >= 0.0f && t < closestDistance)
 						{
@@ -707,8 +716,8 @@ namespace mmo
 						}
 					}
 
-				// Bottom triangle: Center - BL - BR
-				if (Terrain::RayTriangleIntersection(localRay, vCenter, vBL, vBR, t, intersectionPoint))
+					// Bottom triangle: Center - BL - BR
+					if (Terrain::RayTriangleIntersection(localRay, vCenter, vBL, vBR, t, intersectionPoint))
 					{
 						if (t >= 0.0f && t < closestDistance)
 						{
@@ -718,8 +727,8 @@ namespace mmo
 						}
 					}
 
-				// Left triangle: Center - TL - BL
-				if (Terrain::RayTriangleIntersection(localRay, vCenter, vTL, vBL, t, intersectionPoint))
+					// Left triangle: Center - TL - BL
+					if (Terrain::RayTriangleIntersection(localRay, vCenter, vTL, vBL, t, intersectionPoint))
 					{
 						if (t >= 0.0f && t < closestDistance)
 						{

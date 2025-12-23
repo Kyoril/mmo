@@ -26,7 +26,6 @@ namespace mmo
 		class Terrain;
 		class Tile;
 
-
 		class CoverageMap;
 
 		typedef uint32 TextureId;
@@ -34,11 +33,10 @@ namespace mmo
 		typedef std::unordered_map<TextureId, LayerId> TextureLayerMap;
 		typedef std::unordered_map<LayerId, TextureId> LayerTextureMap;
 
-
 		class Page final : public ChunkReader
 		{
 		public:
-			explicit Page(Terrain& terrain, int32 x, int32 z);
+			explicit Page(Terrain &terrain, int32 x, int32 z);
 			~Page();
 
 		public:
@@ -50,11 +48,11 @@ namespace mmo
 
 			void Destroy();
 
-			Tile* GetTile(uint32 x, uint32 y);
+			Tile *GetTile(uint32 x, uint32 y);
 
-			Tile* GetTileAt(float x, float z);
+			Tile *GetTileAt(float x, float z);
 
-			Terrain& GetTerrain();
+			Terrain &GetTerrain();
 
 			uint32 GetX() const;
 
@@ -80,7 +78,7 @@ namespace mmo
 			/** \brief Get inner-vertex height at page-local inner grid coordinates.
 			 *
 			 * Inner grid is sized constants::InnerVerticesPerPageSide per side.
-			 */ 
+			 */
 			float GetInnerHeightAt(size_t x, size_t y) const;
 
 			/** \brief Set inner-vertex height at page-local inner grid coordinates. */
@@ -96,7 +94,7 @@ namespace mmo
 			Vector3 GetInnerNormalAt(size_t x, size_t y) const;
 
 			/** \brief Set inner-vertex normal (encoded) at page-local inner grid coordinates. */
-			void SetInnerNormalAt(size_t x, size_t y, const Vector3& normal);
+			void SetInnerNormalAt(size_t x, size_t y, const Vector3 &normal);
 
 			Vector3 CalculateNormalAt(uint32 x, uint32 z);
 
@@ -112,7 +110,7 @@ namespace mmo
 
 			bool IsLoadable() const;
 
-			const AABB& GetBoundingBox() const;
+			const AABB &GetBoundingBox() const;
 
 			void UpdateTileSelectionQuery();
 
@@ -134,40 +132,63 @@ namespace mmo
 
 			void SetArea(uint32 localTileX, uint32 localTileY, uint32 area);
 
-			SceneNode* GetSceneNode() const { return m_pageNode; }
+			SceneNode *GetSceneNode() const { return m_pageNode; }
+
+			/// @brief Check if an inner vertex is marked as a hole
+			/// @param localTileX Tile X coordinate (0-15)
+			/// @param localTileY Tile Y coordinate (0-15)
+			/// @param innerX Inner vertex X within tile (0-7)
+			/// @param innerY Inner vertex Y within tile (0-7)
+			/// @return True if the vertex is a hole
+			bool IsHole(uint32 localTileX, uint32 localTileY, uint32 innerX, uint32 innerY) const;
+
+			/// @brief Set or clear the hole flag for an inner vertex
+			/// @param localTileX Tile X coordinate (0-15)
+			/// @param localTileY Tile Y coordinate (0-15)
+			/// @param innerX Inner vertex X within tile (0-7)
+			/// @param innerY Inner vertex Y within tile (0-7)
+			/// @param isHole True to mark as hole, false to mark as solid
+			void SetHole(uint32 localTileX, uint32 localTileY, uint32 innerX, uint32 innerY, bool isHole);
+
+			/// @brief Get the hole map for a specific tile
+			/// @param localTileX Tile X coordinate (0-15)
+			/// @param localTileY Tile Y coordinate (0-15)
+			/// @return 64-bit hole map where each bit represents an inner vertex
+			uint64 GetTileHoleMap(uint32 localTileX, uint32 localTileY) const;
 
 		private:
+			bool ReadMCVRChunk(io::Reader &reader, uint32 header, uint32 size);
 
-			bool ReadMCVRChunk(io::Reader& reader, uint32 header, uint32 size);
+			bool ReadMCMTChunk(io::Reader &reader, uint32 header, uint32 size);
 
-			bool ReadMCMTChunk(io::Reader& reader, uint32 header, uint32 size);
-
-			bool ReadMCVTChunk(io::Reader& reader, uint32 header, uint32 size);
+			bool ReadMCVTChunk(io::Reader &reader, uint32 header, uint32 size);
 
 			// Legacy v1 readers (273x273 grid), will be converted to new outer grid
-			bool ReadMCVTChunkV1(io::Reader& reader, uint32 header, uint32 size);
-			bool ReadMCNMChunkV1(io::Reader& reader, uint32 header, uint32 size);
-			bool ReadMCVSChunkV1(io::Reader& reader, uint32 header, uint32 size);
+			bool ReadMCVTChunkV1(io::Reader &reader, uint32 header, uint32 size);
+			bool ReadMCNMChunkV1(io::Reader &reader, uint32 header, uint32 size);
+			bool ReadMCVSChunkV1(io::Reader &reader, uint32 header, uint32 size);
 
-			bool ReadMCNMChunk(io::Reader& reader, uint32 header, uint32 size);
+			bool ReadMCNMChunk(io::Reader &reader, uint32 header, uint32 size);
 
-			bool ReadMCLYChunk(io::Reader& reader, uint32 header, uint32 size);
+			bool ReadMCLYChunk(io::Reader &reader, uint32 header, uint32 size);
 
-			bool ReadMCTIChunk(io::Reader& reader, uint32 header, uint32 size);
+			bool ReadMCTIChunk(io::Reader &reader, uint32 header, uint32 size);
 
-			bool ReadMCVTSubChunk(io::Reader& reader, uint32 header, uint32 size);
+			bool ReadMCVTSubChunk(io::Reader &reader, uint32 header, uint32 size);
 
-			bool ReadMCVNSubChunk(io::Reader& reader, uint32 header, uint32 size);
+			bool ReadMCVNSubChunk(io::Reader &reader, uint32 header, uint32 size);
 
-			bool ReadMCTNSubChunk(io::Reader& reader, uint32 header, uint32 size);
+			bool ReadMCTNSubChunk(io::Reader &reader, uint32 header, uint32 size);
 			// V2 inner vertex chunks
-			bool ReadMCIVChunk(io::Reader& reader, uint32 header, uint32 size);
-			bool ReadMCINChunk(io::Reader& reader, uint32 header, uint32 size);
-			bool ReadMCISChunk(io::Reader& reader, uint32 header, uint32 size);
+			bool ReadMCIVChunk(io::Reader &reader, uint32 header, uint32 size);
+			bool ReadMCINChunk(io::Reader &reader, uint32 header, uint32 size);
+			bool ReadMCISChunk(io::Reader &reader, uint32 header, uint32 size);
 
-			bool ReadMCARChunk(io::Reader& reader, uint32 header, uint32 size);
+			bool ReadMCHLChunk(io::Reader &reader, uint32 header, uint32 size);
 
-			bool ReadMCVSChunk(io::Reader& reader, uint32 header, uint32 size);
+			bool ReadMCARChunk(io::Reader &reader, uint32 header, uint32 size);
+
+			bool ReadMCVSChunk(io::Reader &reader, uint32 header, uint32 size);
 
 		private:
 			void UpdateBoundingBox();
@@ -182,8 +203,8 @@ namespace mmo
 		private:
 			typedef Grid<std::unique_ptr<Tile>> TileGrid;
 
-			Terrain& m_terrain;
-			SceneNode* m_pageNode;
+			Terrain &m_terrain;
+			SceneNode *m_pageNode;
 			MaterialPtr m_material;
 			TileGrid m_Tiles;
 
@@ -197,13 +218,16 @@ namespace mmo
 			std::vector<uint32> m_layers;
 			std::vector<uint16> m_tileZones;
 			std::vector<uint32> m_colors;
+			/// Hole data: one 64-bit value per tile (8x8 inner vertices)
+			/// Each bit represents one inner vertex (1 = hole, 0 = solid)
+			std::vector<uint64> m_holeMap;
 
 			int32 m_x;
 			int32 m_z;
 			bool m_preparing;
 			bool m_prepared;
 			bool m_loaded;
-			bool m_changed{ false };
+			bool m_changed{false};
 			bool m_unloadRequested = false;
 			AABB m_boundingBox;
 		};
