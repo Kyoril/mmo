@@ -884,7 +884,14 @@ namespace mmo
 
 		void Terrain::Flatten(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power, float targetHeight)
 		{
-			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, targetHeight, power](const int32 vx, const int32 vy, const float factor)
+			// Track affected area bounds for inner vertex and tile updates
+			int minX = std::numeric_limits<int>::max();
+			int minZ = std::numeric_limits<int>::max();
+			int maxX = std::numeric_limits<int>::min();
+			int maxZ = std::numeric_limits<int>::min();
+
+			// Only modify outer vertices; inner vertices will be interpolated afterward
+			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, targetHeight, power, &minX, &minZ, &maxX, &maxZ](const int32 vx, const int32 vy, const float factor)
 				{
 					if (vx >= 0 && vy >= 0)
 					{
@@ -893,27 +900,30 @@ namespace mmo
 						float delta = height - targetHeight;
 						delta *= factor * power;
 						SetHeightAt(vx, vy, height - delta);
+
+						// Track bounds
+						minX = std::min(minX, vx);
+						minZ = std::min(minZ, vy);
+						maxX = std::max(maxX, vx);
+						maxZ = std::max(maxZ, vy);
 					}
-					else
-					{
-						// Inner vertex (encoded as negative indices)
-						const int32 ix = -vx - 1;
-						const int32 iz = -vy - 1;
-						const uint32 pageX = ix / (constants::OuterVerticesPerPageSide - 1);
-						const uint32 pageZ = iz / (constants::OuterVerticesPerPageSide - 1);
-						const uint32 localInnerX = ix % (constants::OuterVerticesPerPageSide - 1);
-						const uint32 localInnerZ = iz % (constants::OuterVerticesPerPageSide - 1);
-						
-						Page* page = GetPage(pageX, pageZ);
-						if (page && page->IsPrepared())
-						{
-							const float height = page->GetInnerHeightAt(localInnerX, localInnerZ);
-							float delta = height - targetHeight;
-							delta *= factor * power;
-							page->SetInnerHeightAt(localInnerX, localInnerZ, height - delta);
-						}
-					}
+					// Skip inner vertices - they will be updated via interpolation
 				});
+
+			// Update inner vertices by interpolating from modified outer vertices
+			if (minX <= maxX && minZ <= maxZ)
+			{
+				// Inner vertices exist between outer vertices, so update range [minX, maxX-1] x [minZ, maxZ-1]
+				const int innerMinX = std::max(0, minX - 1);
+				const int innerMinZ = std::max(0, minZ - 1);
+				const int innerMaxX = maxX;
+				const int innerMaxZ = maxZ;
+
+				UpdateInnerVertices(innerMinX, innerMinZ, innerMaxX, innerMaxZ);
+
+				// Update tiles affected by the height changes
+				UpdateTiles(minX, minZ, maxX, maxZ);
+			}
 	}
 
 	void Terrain::Paint(const uint8 layer, const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, const float power)
