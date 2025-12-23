@@ -561,12 +561,25 @@ namespace mmo
 
 			bool hasCollision = false;
 
+			// Get the hole map for this tile
+			const uint64 holeMap = m_page.GetTileHoleMap(m_tileX, m_tileY);
+
 			// Iterate through cells that could potentially intersect
 			// Each cell corresponds to one inner vertex with 4 surrounding triangles
 			for (int32 j = minJ; j < maxJ; ++j)
 			{
 				for (int32 i = minI; i < maxI; ++i)
 				{
+					// Check if this inner vertex is marked as a hole
+					const uint32 bitIndex = static_cast<uint32>(i + j * constants::InnerVerticesPerTileSide);
+					const bool isHole = (holeMap & (1ULL << bitIndex)) != 0;
+
+					// Skip collision testing for holes
+					if (isHole)
+					{
+						continue;
+					}
+
 					// Get positions of the 4 outer vertices surrounding this cell
 					const size_t globalX = m_startX + i;
 					const size_t globalZ = m_startZ + j;
@@ -662,11 +675,24 @@ namespace mmo
 			float closestDistance = std::numeric_limits<float>::max();
 			Vector3 closestIntersectionPoint;
 
+			// Get the hole map for this tile
+			const uint64 holeMap = m_page.GetTileHoleMap(m_tileX, m_tileY);
+
 			// Iterate through all cells (each cell has an inner vertex with 4 triangles)
 			for (size_t j = 0; j < constants::InnerVerticesPerTileSide; ++j)
 			{
 				for (size_t i = 0; i < constants::InnerVerticesPerTileSide; ++i)
 				{
+					// Check if this inner vertex is marked as a hole
+					const uint32 bitIndex = static_cast<uint32>(i + j * constants::InnerVerticesPerTileSide);
+					const bool isHole = (holeMap & (1ULL << bitIndex)) != 0;
+
+					// Skip ray testing for holes
+					if (isHole)
+					{
+						continue;
+					}
+
 					// Get the 4 outer vertices and center inner vertex
 					const size_t globalX = m_startX + i;
 					const size_t globalZ = m_startZ + j;
