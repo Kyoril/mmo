@@ -31,9 +31,10 @@ namespace mmo
 		/// Allows you to assign area ids to terrain tiles by painting them.
 		Area,
 
-
 		VertexShading,
 
+		/// Allows you to create or remove holes in the terrain.
+		Holes,
 
 		/// The total number of terrain editing types. Always the last element!
 		Count_
@@ -70,6 +71,20 @@ namespace mmo
 		Count_
 	};
 
+	/// Enumerates the possible terrain hole modes.
+	enum class TerrainHoleMode : ::uint8
+	{
+		/// Add holes to the terrain.
+		Add,
+
+		/// Remove holes from the terrain (fill them in).
+		Remove,
+
+
+		/// The total number of terrain hole modes. Always the last element!
+		Count_
+	};
+
 
 	/// This class handles certain world editor operations while in terrain editing mode.
 	class TerrainEditMode final : public WorldEditMode
@@ -102,6 +117,10 @@ namespace mmo
 
 		[[nodiscard]] TerrainPaintMode GetPaintMode() const { return m_paintMode; }
 
+		void SetHoleMode(const TerrainHoleMode mode) { m_holeMode = mode; }
+
+		[[nodiscard]] TerrainHoleMode GetHoleMode() const { return m_holeMode; }
+
 		void SetBrushPosition(const Vector3& position);
 
 	private:
@@ -116,6 +135,8 @@ namespace mmo
 		TerrainDeformMode m_deformMode = TerrainDeformMode::Sculpt;
 
 		TerrainPaintMode m_paintMode = TerrainPaintMode::Paint;
+
+		TerrainHoleMode m_holeMode = TerrainHoleMode::Add;
 
 		float m_deformFlattenHeight = 0.0f;
 

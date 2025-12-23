@@ -589,7 +589,8 @@ namespace mmo
 			if (m_rightButtonPressed || (m_leftButtonPressed && (m_editMode != m_terrainEditMode.get() || (m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Deform &&
 																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Paint &&
 																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Area &&
-																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::VertexShading))))
+																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::VertexShading &&
+																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Holes))))
 			{
 				m_cameraAnchor->Yaw(-Degree(deltaX), TransformSpace::World);
 				m_cameraAnchor->Pitch(-Degree(deltaY), TransformSpace::Local);

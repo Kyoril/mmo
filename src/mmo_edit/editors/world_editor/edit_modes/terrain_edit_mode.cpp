@@ -15,7 +15,8 @@ namespace mmo
 		"Deform",
 		"Paint",
 		"Area",
-		"Vertex Shading"
+		"Vertex Shading",
+		"Holes"
 	};
 
 	static_assert(std::size(s_terrainEditModeStrings) == static_cast<uint32>(TerrainEditType::Count_), "There needs to be one string per enum value to display!");
@@ -27,6 +28,13 @@ namespace mmo
 	};
 
 	static_assert(std::size(s_terrainDeformModeStrings) == static_cast<uint32>(TerrainDeformMode::Count_), "There needs to be one string per enum value to display!");
+
+	static const char* s_terrainHoleModeStrings[] = {
+		"Add",
+		"Remove"
+	};
+
+	static_assert(std::size(s_terrainHoleModeStrings) == static_cast<uint32>(TerrainHoleMode::Count_), "There needs to be one string per enum value to display!");
 
 	TerrainEditMode::TerrainEditMode(IWorldEditor& worldEditor, terrain::Terrain& terrain, const proto::ZoneManager& zones, Camera& camera)
 		: WorldEditMode(worldEditor)
@@ -90,6 +98,23 @@ namespace mmo
 					if (ImGui::Selectable(s_layerNames[i], i == m_terrainPaintLayer))
 					{
 						m_terrainPaintLayer = i;
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+		}
+		else if (m_type == TerrainEditType::Holes)
+		{
+			if (ImGui::BeginCombo("Hole Mode", s_terrainHoleModeStrings[static_cast<uint32>(m_holeMode)], ImGuiComboFlags_None))
+			{
+				for (uint32 i = 0; i < static_cast<uint32>(TerrainHoleMode::Count_); ++i)
+				{
+					ImGui::PushID(i);
+					if (ImGui::Selectable(s_terrainHoleModeStrings[i], i == static_cast<uint32>(m_holeMode)))
+					{
+						m_holeMode = static_cast<TerrainHoleMode>(i);
 					}
 					ImGui::PopID();
 				}
@@ -188,6 +213,11 @@ namespace mmo
 		{
 			m_terrain.Color(m_brushPosition.x, m_brushPosition.z,
 				innerRadius, outerRadius, m_terrainBrushPower * factor * deltaSeconds, m_selectedColor);
+		}
+		else if (m_type == TerrainEditType::Holes)
+		{
+			const bool addHole = (m_holeMode == TerrainHoleMode::Add);
+			m_terrain.PaintHoles(m_brushPosition.x, m_brushPosition.z, outerRadius, addHole);
 		}
 	}
 
