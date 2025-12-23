@@ -175,6 +175,11 @@ namespace mmo
                 {
                     for (size_t i = 0; i < terrain::constants::InnerVerticesPerTileSide; ++i)
                     {
+                        // Check if this inner vertex is marked as a hole
+                        const uint64 holeMap = page->GetTileHoleMap(x, y);
+                        const uint32 bitIndex = static_cast<uint32>(i + j * terrain::constants::InnerVerticesPerTileSide);
+                        const bool isHole = (holeMap & (1ULL << bitIndex)) != 0;
+
                         const size_t ox = startX + i;
                         const size_t oz = startZ + j;
 
@@ -190,6 +195,12 @@ namespace mmo
 
                         const uint16 centerIdx = GetInnerIndex(i, j);
                         m_chunks[y][x]->m_terrainVertices.push_back(centerPos);
+
+                        // Skip triangle indices for holes
+                        if (isHole)
+                        {
+                            continue;
+                        }
 
                         const uint16 tl = GetOuterIndex(i, j);
                         const uint16 tr = GetOuterIndex(i + 1, j);
