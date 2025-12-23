@@ -189,10 +189,10 @@ namespace mmo
 
 			std::vector<float> m_heightmap;
 			std::vector<EncodedNormal8> m_normals;
-						// Inner per-page vertex data for full editor precision
-						std::vector<float> m_innerHeightmap;
-						std::vector<EncodedNormal8> m_innerNormals;
-						std::vector<uint32> m_innerColors;
+			// Inner per-page vertex data for full editor precision
+			std::vector<float> m_innerHeightmap;
+			std::vector<EncodedNormal8> m_innerNormals;
+			std::vector<uint32> m_innerColors;
 			std::vector<MaterialPtr> m_materials;
 			std::vector<uint32> m_layers;
 			std::vector<uint16> m_tileZones;

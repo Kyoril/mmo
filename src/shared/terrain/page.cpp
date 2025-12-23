@@ -29,10 +29,10 @@ namespace mmo
 			static const ChunkMagic LayerChunk = MakeChunkMagic('YLCM');
 			static const ChunkMagic AreaChunk = MakeChunkMagic('RACM');
 			static const ChunkMagic VertexShadingChunk = MakeChunkMagic('SVCM');
-				// New v2 chunks to persist inner-grid data for editor precision
-				static const ChunkMagic InnerVertexChunk = MakeChunkMagic('IVCM');
-				static const ChunkMagic InnerNormalChunk = MakeChunkMagic('INCM');
-				static const ChunkMagic InnerVertexShadingChunk = MakeChunkMagic('ISCM');
+			// New v2 chunks to persist inner-grid data for editor precision
+			static const ChunkMagic InnerVertexChunk = MakeChunkMagic('IVCM');
+			static const ChunkMagic InnerNormalChunk = MakeChunkMagic('INCM');
+			static const ChunkMagic InnerVertexShadingChunk = MakeChunkMagic('ISCM');
 		}
 
 		namespace
@@ -620,35 +620,31 @@ namespace mmo
 		Vector3 Page::CalculateNormalAt(const uint32 x, const uint32 z)
 		{
 			const float scaling = static_cast<float>(constants::PageSize / static_cast<double>(constants::OuterVerticesPerPageSide));
-			float flip = 1.0f;
 
-			size_t offsX = m_x * (constants::OuterVerticesPerPageSide - 1);
-			size_t offsY = m_z * (constants::OuterVerticesPerPageSide - 1);
+		size_t offsX = m_x * (constants::OuterVerticesPerPageSide - 1);
+		size_t offsY = m_z * (constants::OuterVerticesPerPageSide - 1);
 
-			Vector3 here(static_cast<float>(x) * scaling, m_terrain.GetAt(offsX + x, offsY + z), static_cast<float>(z) * scaling);
+		const size_t maxX = m_terrain.GetWidth() * (constants::OuterVerticesPerPageSide - 1);
+		const size_t maxZ = m_terrain.GetHeight() * (constants::OuterVerticesPerPageSide - 1);
 
-			Vector3 right(static_cast<float>(x + 1) * scaling, m_terrain.GetAt(offsX + x + 1, offsY + z), static_cast<float>(z * scaling));
-			if (x >= m_terrain.GetWidth() * (constants::OuterVerticesPerPageSide - 1) + 1)
-			{
-				right.y = here.y;
-				flip = -1.0f;
-			}
-
-			Vector3 down(static_cast<float>(x) * scaling, m_terrain.GetAt(offsX + x, offsY + z + 1), static_cast<float>(z + 1) * scaling);
-			if (z >= m_terrain.GetHeight() * (constants::OuterVerticesPerPageSide - 1) + 1)
-			{
-				down.z = here.y;
-				flip = -1.0f;
-			}
-
-			down -= here;
-			here -= right;
-
-			Vector3 norm = here.Cross(down);
-			norm.y *= flip;
-			norm.Normalize();
-
-			m_normals[x + z * constants::OuterVerticesPerPageSide] = EncodeNormalSNorm8(norm.x, norm.y, norm.z);
+		// Get heights at current position and neighbors
+		const float heightCenter = m_terrain.GetAt(offsX + x, offsY + z);
+		
+		// Sample all 8 neighbors for smooth normal calculation
+		// Handle boundary conditions by clamping to valid range
+		const float heightLeft = (x > 0) ? m_terrain.GetAt(offsX + x - 1, offsY + z) : heightCenter;
+		const float heightRight = (x < maxX) ? m_terrain.GetAt(offsX + x + 1, offsY + z) : heightCenter;
+		const float heightUp = (z > 0) ? m_terrain.GetAt(offsX + x, offsY + z - 1) : heightCenter;
+		const float heightDown = (z < maxZ) ? m_terrain.GetAt(offsX + x, offsY + z + 1) : heightCenter;
+		
+		// Calculate normal using central differences (smoother than single triangle)
+		// This averages the gradients from both sides
+		const float dx = (heightRight - heightLeft) / (2.0f * scaling);
+		const float dz = (heightDown - heightUp) / (2.0f * scaling);
+		
+		// Normal is perpendicular to the tangent plane
+		// Cross product of tangent vectors gives the normal
+		Vector3 norm(-dx, 1.0f, -dz);
 
 			return norm;
 		}
