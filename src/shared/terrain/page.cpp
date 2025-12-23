@@ -586,6 +586,16 @@ namespace mmo
 		{
 			ASSERT(x < constants::InnerVerticesPerPageSide && y < constants::InnerVerticesPerPageSide);
 			m_innerHeightmap[x + y * constants::InnerVerticesPerPageSide] = value;
+			
+			// Recalculate inner normal by averaging surrounding outer normals
+			// Inner vertex (x,y) corresponds to the center of outer quad (x,y) to (x+1,y+1)
+			const Vector3 n00 = GetNormalAt(x, y);
+			const Vector3 n10 = GetNormalAt(x + 1, y);
+			const Vector3 n01 = GetNormalAt(x, y + 1);
+			const Vector3 n11 = GetNormalAt(x + 1, y + 1);
+			const Vector3 avgNormal = ((n00 + n10 + n01 + n11) * 0.25f).NormalizedCopy();
+			SetInnerNormalAt(x, y, avgNormal);
+			
 			m_changed = true;
 		}
 
@@ -621,31 +631,33 @@ namespace mmo
 		{
 			const float scaling = static_cast<float>(constants::PageSize / static_cast<double>(constants::OuterVerticesPerPageSide));
 
-		size_t offsX = m_x * (constants::OuterVerticesPerPageSide - 1);
-		size_t offsY = m_z * (constants::OuterVerticesPerPageSide - 1);
+			size_t offsX = m_x * (constants::OuterVerticesPerPageSide - 1);
+			size_t offsY = m_z * (constants::OuterVerticesPerPageSide - 1);
 
-		const size_t maxX = m_terrain.GetWidth() * (constants::OuterVerticesPerPageSide - 1);
-		const size_t maxZ = m_terrain.GetHeight() * (constants::OuterVerticesPerPageSide - 1);
+			const size_t maxX = m_terrain.GetWidth() * (constants::OuterVerticesPerPageSide - 1);
+			const size_t maxZ = m_terrain.GetHeight() * (constants::OuterVerticesPerPageSide - 1);
 
-		// Get heights at current position and neighbors
-		const float heightCenter = m_terrain.GetAt(offsX + x, offsY + z);
-		
-		// Sample all 8 neighbors for smooth normal calculation
-		// Handle boundary conditions by clamping to valid range
-		const float heightLeft = (x > 0) ? m_terrain.GetAt(offsX + x - 1, offsY + z) : heightCenter;
-		const float heightRight = (x < maxX) ? m_terrain.GetAt(offsX + x + 1, offsY + z) : heightCenter;
-		const float heightUp = (z > 0) ? m_terrain.GetAt(offsX + x, offsY + z - 1) : heightCenter;
-		const float heightDown = (z < maxZ) ? m_terrain.GetAt(offsX + x, offsY + z + 1) : heightCenter;
-		
-		// Calculate normal using central differences (smoother than single triangle)
-		// This averages the gradients from both sides
-		const float dx = (heightRight - heightLeft) / (2.0f * scaling);
-		const float dz = (heightDown - heightUp) / (2.0f * scaling);
-		
-		// Normal is perpendicular to the tangent plane
-		// Cross product of tangent vectors gives the normal
-		Vector3 norm(-dx, 1.0f, -dz);
+			// Get heights at current position and neighbors
+			const float heightCenter = m_terrain.GetAt(offsX + x, offsY + z);
 
+			// Sample all 8 neighbors for smooth normal calculation
+			// Handle boundary conditions by clamping to valid range
+			const float heightLeft = (x > 0) ? m_terrain.GetAt(offsX + x - 1, offsY + z) : heightCenter;
+			const float heightRight = (x < maxX) ? m_terrain.GetAt(offsX + x + 1, offsY + z) : heightCenter;
+			const float heightUp = (z > 0) ? m_terrain.GetAt(offsX + x, offsY + z - 1) : heightCenter;
+			const float heightDown = (z < maxZ) ? m_terrain.GetAt(offsX + x, offsY + z + 1) : heightCenter;
+
+			// Calculate normal using central differences (smoother than single triangle)
+			// This averages the gradients from both sides
+			const float dx = (heightRight - heightLeft) / (2.0f * scaling);
+			const float dz = (heightDown - heightUp) / (2.0f * scaling);
+
+			// Normal is perpendicular to the tangent plane
+			// Cross product of tangent vectors gives the normal
+			Vector3 norm(-dx, 1.0f, -dz);
+			norm.Normalize();
+
+			m_normals[x + z * constants::OuterVerticesPerPageSide] = EncodeNormalSNorm8(norm.x, norm.y, norm.z);
 			return norm;
 		}
 
@@ -1046,7 +1058,29 @@ namespace mmo
 			}
 
 			m_heightmap[x + z * constants::OuterVerticesPerPageSide] = value;
-			m_changed = true;
+			
+			// Recalculate normal at this vertex since height changed
+			CalculateNormalAt(x, z);
+			
+			// Also recalculate normals for neighboring vertices as they depend on this vertex's height
+			// This ensures smooth normal transitions across terrain
+			if (x > 0)
+			{
+				CalculateNormalAt(x - 1, z);
+			}
+			if (x < constants::OuterVerticesPerPageSide - 1)
+			{
+				CalculateNormalAt(x + 1, z);
+			}
+			if (z > 0)
+			{
+				CalculateNormalAt(x, z - 1);
+			}
+			if (z < constants::OuterVerticesPerPageSide - 1)
+			{
+				CalculateNormalAt(x, z + 1);
+			}
+			
 		}
 
 		void Page::SetColorAt(size_t x, size_t y, uint32 color)
