@@ -130,24 +130,46 @@ namespace mmo
 			return GetAt(x, z);
 		}
 
-		uint32 Terrain::GetColorAt(uint32 x, uint32 z)
+		uint32 Terrain::GetColorAt(int x, int z)
 		{
-			// Validate indices
-			const uint32 totalVertices = m_width * (constants::OuterVerticesPerPageSide - 1) + 1;
-			if (x >= totalVertices || z >= totalVertices)
+			// Outer vertices use non-negative indices; inner vertices are encoded as negative: (-(ix+1), -(iz+1)).
+			if (x >= 0 && z >= 0)
 			{
-				return 0.0f;
+				// Validate outer vertex indices
+				const uint32 totalOuterVertices = m_width * (constants::OuterVerticesPerPageSide - 1) + 1;
+				if (static_cast<uint32>(x) >= totalOuterVertices || static_cast<uint32>(z) >= totalOuterVertices)
+				{
+					return 0U;
+				}
+
+				// Compute page and local outer vertex indices
+				uint32 pageX, pageY, localVertexX, localVertexY;
+				GetPageAndLocalVertex(static_cast<uint32>(x), pageX, localVertexX);
+				GetPageAndLocalVertex(static_cast<uint32>(z), pageY, localVertexY);
+
+				Page* page = GetPage(pageX, pageY);
+				return page ? page->GetColorAt(localVertexX, localVertexY) : 0U;
 			}
 
-			// Compute page and local vertex indices
-			uint32 pageX, pageY, localVertexX, localVertexY;
-			GetPageAndLocalVertex(x, pageX, localVertexX);
-			GetPageAndLocalVertex(z, pageY, localVertexY);
+			// Decode inner vertex indices
+			const int ix = -(x + 1);
+			const int iz = -(z + 1);
 
-			// Retrieve the page at (pageX, pageY)
-			Page* page = GetPage(pageX, pageY); // Implement GetPage accordingly
+			// Validate inner vertex indices (range: [0, width*(OuterVerticesPerPageSide-1) - 1])
+			const int maxInnerX = static_cast<int>(m_width * (constants::OuterVerticesPerPageSide - 1) - 1);
+			const int maxInnerZ = static_cast<int>(m_height * (constants::OuterVerticesPerPageSide - 1) - 1);
+			if (ix < 0 || iz < 0 || ix > maxInnerX || iz > maxInnerZ)
+			{
+				return 0U;
+			}
 
-			return page->GetColorAt(localVertexX, localVertexY);
+			const uint32 pageX = static_cast<uint32>(ix) / (constants::OuterVerticesPerPageSide - 1);
+			const uint32 pageZ = static_cast<uint32>(iz) / (constants::OuterVerticesPerPageSide - 1);
+			const uint32 localInnerX = static_cast<uint32>(ix) % (constants::OuterVerticesPerPageSide - 1);
+			const uint32 localInnerZ = static_cast<uint32>(iz) % (constants::OuterVerticesPerPageSide - 1);
+
+			Page* page = GetPage(pageX, pageZ);
+			return page ? page->GetInnerColorAt(localInnerX, localInnerZ) : 0U;
 		}
 
 		uint32 Terrain::GetLayersAt(const uint32 x, const uint32 z) const
@@ -1024,59 +1046,79 @@ namespace mmo
 
 		void Terrain::SetColorAt(const int x, const int y, const uint32 color) const
 		{
-			// Determine page
-			const uint32 totalVertices = m_width * (constants::OuterVerticesPerPageSide - 1) + 1;
-			if (static_cast<uint32>(x) >= totalVertices || static_cast<uint32>(y) >= totalVertices)
+			// Handle outer vs inner vertices. Outer use non-negative indices; inner are encoded as negative.
+			if (x >= 0 && y >= 0)
+			{
+				// Determine page for outer vertex
+				const uint32 totalOuterVertices = m_width * (constants::OuterVerticesPerPageSide - 1) + 1;
+				if (static_cast<uint32>(x) >= totalOuterVertices || static_cast<uint32>(y) >= totalOuterVertices)
+				{
+					return;
+				}
+
+				uint32 pageX, pageY, localVertexX, localVertexY;
+				GetPageAndLocalVertex(static_cast<uint32>(x), pageX, localVertexX);
+				GetPageAndLocalVertex(static_cast<uint32>(y), pageY, localVertexY);
+
+				const bool isLeftEdge = localVertexX == 0 && pageX > 0;
+				const bool isTopEdge = localVertexY == 0 && pageY > 0;
+
+				Page* page = GetPage(pageX, pageY);
+				if (page && page->IsPrepared())
+				{
+					page->SetColorAt(localVertexX, localVertexY, color);
+				}
+
+				// Mirror across page boundaries for shared outer vertices
+				if (isLeftEdge)
+				{
+					page = GetPage(pageX - 1, pageY);
+					if (page && page->IsPrepared())
+					{
+						page->SetColorAt(constants::OuterVerticesPerPageSide - 1, localVertexY, color);
+					}
+				}
+
+				if (isTopEdge)
+				{
+					page = GetPage(pageX, pageY - 1);
+					if (page && page->IsPrepared())
+					{
+						page->SetColorAt(localVertexX, constants::OuterVerticesPerPageSide - 1, color);
+					}
+				}
+
+				if (isLeftEdge && isTopEdge)
+				{
+					page = GetPage(pageX - 1, pageY - 1);
+					if (page && page->IsPrepared())
+					{
+						page->SetColorAt(constants::OuterVerticesPerPageSide - 1, constants::OuterVerticesPerPageSide - 1, color);
+					}
+				}
+				return;
+			}
+
+			// Inner vertex path
+			const int ix = -(x + 1);
+			const int iz = -(y + 1);
+
+			const int maxInnerX = static_cast<int>(m_width * (constants::OuterVerticesPerPageSide - 1) - 1);
+			const int maxInnerZ = static_cast<int>(m_height * (constants::OuterVerticesPerPageSide - 1) - 1);
+			if (ix < 0 || iz < 0 || ix > maxInnerX || iz > maxInnerZ)
 			{
 				return;
 			}
 
-			// Compute page and local vertex indices
-			uint32 pageX, pageY, localVertexX, localVertexY;
-			GetPageAndLocalVertex(x, pageX, localVertexX);
-			GetPageAndLocalVertex(y, pageY, localVertexY);
+			const uint32 pageX = static_cast<uint32>(ix) / (constants::OuterVerticesPerPageSide - 1);
+			const uint32 pageZ = static_cast<uint32>(iz) / (constants::OuterVerticesPerPageSide - 1);
+			const uint32 localInnerX = static_cast<uint32>(ix) % (constants::OuterVerticesPerPageSide - 1);
+			const uint32 localInnerZ = static_cast<uint32>(iz) % (constants::OuterVerticesPerPageSide - 1);
 
-			const bool isLeftEdge = localVertexX == 0 && pageX > 0;
-			const bool isTopEdge = localVertexY == 0 && pageY > 0;
-
-			Page* page = GetPage(pageX, pageY);
-			if (page &&
-				page->IsPrepared())
+			Page* page = GetPage(pageX, pageZ);
+			if (page && page->IsPrepared())
 			{
-				page->SetColorAt(localVertexX, localVertexY, color);
-			}
-
-			// Vertex on left edge
-			if (isLeftEdge)
-			{
-				page = GetPage(pageX - 1, pageY);
-				if (page &&
-					page->IsPrepared())
-				{
-					page->SetColorAt(constants::OuterVerticesPerPageSide - 1, localVertexY, color);
-				}
-			}
-
-			// Vertex on top edge
-			if (isTopEdge)
-			{
-				page = GetPage(pageX, pageY - 1);
-				if (page &&
-					page->IsPrepared())
-				{
-					page->SetColorAt(localVertexX, constants::OuterVerticesPerPageSide - 1, color);
-				}
-			}
-
-			// All four pages!
-			if (isLeftEdge && isTopEdge)
-			{
-				page = GetPage(pageX - 1, pageY - 1);
-				if (page &&
-					page->IsPrepared())
-				{
-					page->SetColorAt(constants::OuterVerticesPerPageSide - 1, constants::OuterVerticesPerPageSide - 1, color);
-				}
+				page->SetInnerColorAt(localInnerX, localInnerZ, color);
 			}
 		}
 

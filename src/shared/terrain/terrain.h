@@ -47,7 +47,7 @@ namespace mmo
 
 			float GetHeightAt(uint32 x, uint32 z);
 
-			uint32 GetColorAt(uint32 x, uint32 z);
+			uint32 GetColorAt(int x, int z);
 
 			uint32 GetLayersAt(uint32 x, uint32 z) const;
 
