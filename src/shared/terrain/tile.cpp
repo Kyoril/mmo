@@ -272,16 +272,19 @@ namespace mmo
 			m_center = m_bounds.GetCenter();
 			m_boundingRadius = (m_bounds.max - m_center).GetLength();
 			m_worldAABBDirty = true;
-		}
 
-		void Tile::UpdateCoverageMap()
-		{
-			ASSERT(m_coverageTexture);
+		// Regenerate index data in case holes have changed
+		CreateIndexData(0, 0);
+	}
 
-			std::vector<uint32> buffer(constants::PixelsPerTile * constants::PixelsPerTile);
+	void Tile::UpdateCoverageMap()
+	{
+		ASSERT(m_coverageTexture);
 
-			const size_t pixelStartX = m_tileX * (constants::PixelsPerTile - 1);
-			const size_t pixelEndX = pixelStartX + constants::PixelsPerTile;
+		std::vector<uint32> buffer(constants::PixelsPerTile * constants::PixelsPerTile);
+
+		const size_t pixelStartX = m_tileX * (constants::PixelsPerTile - 1);
+		const size_t pixelEndX = pixelStartX + constants::PixelsPerTile;
 			const size_t pixelStartY = m_tileY * (constants::PixelsPerTile - 1);
 			const size_t pixelEndY = pixelStartY + constants::PixelsPerTile;
 
