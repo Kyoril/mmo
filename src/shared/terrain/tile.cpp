@@ -360,8 +360,8 @@ namespace mmo
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
 					vert->color = Color(m_page.GetColorAt(globalX, globalZ)).GetABGR();
-					vert->u = static_cast<float>(i) / static_cast<float>(constants::OuterVerticesPerTileSide - 1);
-					vert->v = static_cast<float>(j) / static_cast<float>(constants::OuterVerticesPerTileSide - 1);
+					vert->u = static_cast<float>(j) / static_cast<float>(constants::OuterVerticesPerTileSide - 1);
+					vert->v = static_cast<float>(i) / static_cast<float>(constants::OuterVerticesPerTileSide - 1);
 
 					minHeight = std::min(height, minHeight);
 					maxHeight = std::max(height, maxHeight);
@@ -416,8 +416,8 @@ namespace mmo
 					const Color avgColor = (col00 + col10 + col01 + col11) * 0.25f;
 					vert->color = avgColor.GetABGR();
 
-					vert->u = (static_cast<float>(i) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide);
-					vert->v = (static_cast<float>(j) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide);
+					vert->u = (static_cast<float>(j) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide);
+					vert->v = (static_cast<float>(i) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide);
 
 					minHeight = std::min(height, minHeight);
 					maxHeight = std::max(height, maxHeight);
