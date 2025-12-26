@@ -7,8 +7,9 @@
 
 namespace mmo
 {
-	MeshEditor::MeshEditor(EditorHost& host)
+	MeshEditor::MeshEditor(EditorHost& host, PreviewProviderManager& previewManager)
 		: EditorBase(host)
+		, m_previewManager(previewManager)
 	{
 	}
 
@@ -33,7 +34,7 @@ namespace mmo
 			return it->second;
 		}
 
-		const auto instance = m_instances.emplace(asset, std::make_shared<MeshEditorInstance>(m_host, *this, asset));
+		const auto instance = m_instances.emplace(asset, std::make_shared<MeshEditorInstance>(m_host, *this, m_previewManager, asset));
 		if (!instance.second)
 		{
 			ELOG("Failed to open mesh editor instance");

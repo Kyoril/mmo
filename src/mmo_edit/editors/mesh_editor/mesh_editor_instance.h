@@ -17,6 +17,7 @@
 
 namespace mmo
 {
+	class PreviewProviderManager;
 	class MeshEditor;
 	class Entity;
 	class Camera;
@@ -25,7 +26,7 @@ namespace mmo
 	class MeshEditorInstance final : public EditorInstance
 	{
 	public:
-		explicit MeshEditorInstance(EditorHost& host, MeshEditor& editor, Path asset);
+		explicit MeshEditorInstance(EditorHost& host, MeshEditor& editor, PreviewProviderManager& previewManager, Path asset);
 		~MeshEditorInstance() override;
 
 	public:
@@ -69,6 +70,7 @@ namespace mmo
 
 	private:
 		MeshEditor& m_editor;
+		PreviewProviderManager& m_previewManager;
 		scoped_connection m_renderConnection;
 		ImVec2 m_lastAvailViewportSize;
 		RenderTexturePtr m_viewportRT;

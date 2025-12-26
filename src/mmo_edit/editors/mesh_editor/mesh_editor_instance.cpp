@@ -9,6 +9,7 @@
 #include "editor_host.h"
 #include "stream_sink.h"
 #include "assets/asset_registry.h"
+#include "editor_windows/asset_picker_widget.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/animation_state.h"
 #include "scene_graph/camera.h"
@@ -51,9 +52,10 @@ namespace mmo
 		}
 	}
 
-	MeshEditorInstance::MeshEditorInstance(EditorHost& host, MeshEditor& editor, Path asset)
+	MeshEditorInstance::MeshEditorInstance(EditorHost& host, MeshEditor& editor, PreviewProviderManager& previewManager, Path asset)
 		: EditorInstance(host, std::move(asset))
 		, m_editor(editor)
+		, m_previewManager(previewManager)
 		, m_wireFrame(false)
 	{
 		m_cameraAnchor = &m_scene.CreateSceneNode("CameraAnchor");
@@ -574,219 +576,268 @@ namespace mmo
 	{
 		if (ImGui::Begin(id.c_str()))
 		{
-			if (ImGui::Button("Save"))
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+
+			// Mesh Actions Section
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.4f, 0.9f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.9f, 0.5f, 1.0f));
+			if (ImGui::Button("Save Mesh", ImVec2(200, 0)))
 			{
 				Save();
 			}
+			ImGui::PopStyleColor(3);
 
-			ImGui::Separator();
+			ImGui::Spacing();
 
-			
-			ImGui::InputText("Mesh", &m_importSubmeshFile);
-
-			if (ImGui::CollapsingHeader("Submesh Import Settings"))
+			// Submesh Import Section
+			if (ImGui::CollapsingHeader("Import Submesh"))
 			{
-				ImGui::InputFloat3("Offset", m_importOffset.Ptr(), "%.3f");
-				ImGui::InputFloat3("Scale", m_importScale.Ptr(), "%.3f");
+				ImGui::Indent();
 
-				Matrix3 rot;
-				m_importRotation.ToRotationMatrix(rot);
+				ImGui::Text("Mesh File:");
+				ImGui::SetNextItemWidth(-1);
+				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.18f, 1.0f));
+				ImGui::InputText("##Mesh", &m_importSubmeshFile);
+				ImGui::PopStyleColor();
 
-				// Compute Pitch
-				float pitchRad = std::asin(-rot[0][2]);
-				float cosPitch = std::cos(pitchRad);
-				float yawRad, rollRad;
+				ImGui::Spacing();
 
-				if (std::abs(cosPitch) > std::numeric_limits<float>::epsilon())
+				if (ImGui::TreeNode("Import Settings"))
 				{
-					// Compute Yaw
-					yawRad = std::atan2(rot[0][1], rot[0][0]);
-					// Compute Roll
-					rollRad = std::atan2(rot[1][2], rot[2][2]);
+					ImGui::Spacing();
+					ImGui::Text("Transform:");
+					ImGui::InputFloat3("Offset", m_importOffset.Ptr(), "%.3f");
+					ImGui::InputFloat3("Scale", m_importScale.Ptr(), "%.3f");
+
+					Matrix3 rot;
+					m_importRotation.ToRotationMatrix(rot);
+
+					// Compute Pitch
+					float pitchRad = std::asin(-rot[0][2]);
+					float cosPitch = std::cos(pitchRad);
+					float yawRad, rollRad;
+
+					if (std::abs(cosPitch) > std::numeric_limits<float>::epsilon())
+					{
+						// Compute Yaw
+						yawRad = std::atan2(rot[0][1], rot[0][0]);
+						// Compute Roll
+						rollRad = std::atan2(rot[1][2], rot[2][2]);
+					}
+					else
+					{
+						// Gimbal lock case
+						yawRad = 0.0f;
+						rollRad = std::atan2(-rot[2][1], rot[1][1]);
+					}
+
+					float rotation[3] = { Radian(rollRad).GetValueDegrees(), Radian(yawRad).GetValueDegrees(), Radian(pitchRad).GetValueDegrees() };
+					if (ImGui::InputFloat3("Rotation (Roll, Yaw, Pitch)", rotation, "%.3f"))
+					{
+						Quaternion qRoll(Degree(rotation[0]), Vector3(1, 0, 0));
+						Quaternion qPitch(Degree(rotation[2]), Vector3(0, 0, 1));
+						Quaternion qYaw(Degree(rotation[1]), Vector3(0, 1, 0));
+						m_importRotation = (qYaw * qPitch * qRoll);
+						m_importRotation.Normalize();
+					}
+
+					ImGui::TreePop();
+				}
+
+				ImGui::Spacing();
+
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.5f, 0.8f, 0.8f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.5f, 0.6f, 0.9f, 0.9f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.6f, 0.7f, 1.0f, 1.0f));
+				if (ImGui::Button("Import Additional Submesh", ImVec2(-1, 0)))
+				{
+					ImportAdditionalSubmeshes(m_importSubmeshFile);
+					m_importSubmeshFile.clear();
+					m_entity->SetMesh(m_mesh);
+				}
+				ImGui::PopStyleColor(3);
+
+				ImGui::Unindent();
+			}
+
+			ImGui::Spacing();
+
+			// Material Slots Section
+			if (ImGui::CollapsingHeader("Sub Meshes", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				ImGui::Indent();
+
+				if (m_entity != nullptr)
+				{
+					ImGui::TextDisabled("Submeshes: %d", m_entity->GetNumSubEntities());
+					ImGui::Spacing();
+
+					static const std::set<String> s_materialExtensions = { ".hmat", ".hmi" };
+
+					for (int32 i = 0; i < m_entity->GetNumSubEntities(); ++i)
+					{
+						ImGui::PushID(i);
+
+						String name = "SubMesh " + std::to_string(i);
+						m_entity->GetMesh()->GetSubMeshName(i, name);
+
+						// Compact collapsible header with unique ID
+						ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.22f, 0.22f, 0.25f, 1.0f));
+						ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.27f, 0.27f, 0.3f, 1.0f));
+						ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.32f, 0.32f, 0.35f, 1.0f));
+						
+						String headerId = name + "##" + std::to_string(i);
+						const bool isOpen = ImGui::CollapsingHeader(headerId.c_str());
+						
+						ImGui::PopStyleColor(3);
+
+						if (isOpen)
+						{
+							ImGui::Indent();
+
+							// Name (compact, inline)
+							ImGui::AlignTextToFramePadding();
+							ImGui::Text("%d:", i);
+							ImGui::SameLine();
+							ImGui::SetNextItemWidth(150);
+							ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
+							if (ImGui::InputText("##name", &name))
+							{
+								m_entity->GetMesh()->NameSubMesh(i, name);
+							}
+							ImGui::PopStyleColor();
+
+							ImGui::SameLine();
+
+							// Visibility checkbox (compact)
+							bool visible = m_entity->GetMesh()->GetSubMesh(i).IsVisibleByDefault();
+							if (ImGui::Checkbox("Visible", &visible))
+							{
+								m_entity->GetMesh()->GetSubMesh(i).SetVisibleByDefault(visible);
+								m_entity->GetSubEntity(i)->SetVisible(visible);
+							}
+
+							ImGui::SameLine();
+
+							// Delete button (compact)
+							ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 0.6f));
+							ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.8f));
+							ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.4f, 0.4f, 1.0f));
+							if (ImGui::SmallButton("Delete"))
+							{
+								m_entity->GetMesh()->DestroySubMesh(i);
+								m_entity->SetMesh(m_entity->GetMesh());
+								i--;
+								ImGui::PopStyleColor(3);
+								ImGui::Unindent();
+								ImGui::PopID();
+								continue;
+							}
+							ImGui::PopStyleColor(3);
+
+							// Material picker (with preview)
+							ImGui::AlignTextToFramePadding();
+							ImGui::Text("Material:");
+
+							String materialPath;
+							if (m_entity->GetSubEntity(i)->GetMaterial())
+							{
+								materialPath = m_entity->GetSubEntity(i)->GetMaterial()->GetName();
+							}
+
+							if (AssetPickerWidget::Draw("##material", materialPath, s_materialExtensions, &m_previewManager, nullptr, 64.0f))
+							{
+								if (!materialPath.empty())
+								{
+									m_entity->GetSubEntity(i)->SetMaterial(MaterialManager::Get().Load(materialPath));
+									m_mesh->GetSubMesh(i).SetMaterial(m_entity->GetSubEntity(i)->GetMaterial());
+								}
+								else
+								{
+									m_entity->GetSubEntity(i)->SetMaterial(nullptr);
+									m_mesh->GetSubMesh(i).SetMaterial(nullptr);
+								}
+							}
+
+							ImGui::Separator();
+
+							// Tags
+							ImGui::AlignTextToFramePadding();
+							ImGui::Text("Tags");
+							ImGui::SameLine();
+							
+							ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.6f, 0.3f, 0.8f));
+							ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 0.7f, 0.4f, 0.9f));
+							ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.5f, 0.8f, 0.5f, 1.0f));
+							if (ImGui::SmallButton("+ Add"))
+							{
+								m_entity->GetMesh()->GetSubMesh(i).AddTag("New Tag");
+							}
+							ImGui::PopStyleColor(3);
+							
+							if (m_entity->GetMesh()->GetSubMesh(i).TagCount() > 0)
+							{
+								for (uint8 tagIndex = 0; tagIndex < m_entity->GetMesh()->GetSubMesh(i).TagCount(); ++tagIndex)
+								{
+									ImGui::PushID(tagIndex);
+									ImGui::SetNextItemWidth(-50);
+
+									String tag = m_entity->GetMesh()->GetSubMesh(i).GetTag(tagIndex);
+									ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
+									const bool tagChanged = ImGui::InputText("##tag", &tag, ImGuiInputTextFlags_EnterReturnsTrue);
+									ImGui::PopStyleColor();
+
+									ImGui::SameLine();
+									ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.3f, 0.3f, 0.8f));
+									ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.4f, 0.4f, 0.9f));
+									ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.0f, 0.5f, 0.5f, 1.0f));
+									const bool removeClicked = ImGui::Button("X", ImVec2(30, 0));
+									ImGui::PopStyleColor(3);
+
+									ImGui::PopID();
+
+									if (tagChanged)
+									{
+										m_entity->GetMesh()->GetSubMesh(i).RemoveTag(m_entity->GetMesh()->GetSubMesh(i).GetTag(tagIndex));
+										m_entity->GetMesh()->GetSubMesh(i).AddTag(tag);
+										break;
+									}
+
+									if (removeClicked)
+									{
+										m_entity->GetMesh()->GetSubMesh(i).RemoveTag(m_entity->GetMesh()->GetSubMesh(i).GetTag(tagIndex));
+										break;
+									}
+								}
+							}
+							else
+							{
+								ImGui::SameLine();
+								ImGui::TextDisabled("(none)");
+							}
+
+							ImGui::Unindent();
+						}
+
+						if (i < m_entity->GetNumSubEntities() - 1)
+						{
+							ImGui::Spacing();
+						}
+
+						ImGui::PopID();
+					}
 				}
 				else
 				{
-					// Gimbal lock case
-					yawRad = 0.0f;
-					rollRad = std::atan2(-rot[2][1], rot[1][1]);
+					ImGui::TextDisabled("No mesh loaded");
 				}
 
-				float rotation[3] = { Radian(rollRad).GetValueDegrees(), Radian(yawRad).GetValueDegrees(), Radian(pitchRad).GetValueDegrees() };
-				if (ImGui::InputFloat3("Rotation (Roll, Yaw, Pitch)", rotation, "%.3f"))
-				{
-					Quaternion qRoll(Degree(rotation[0]), Vector3(1, 0, 0));
-					Quaternion qPitch(Degree(rotation[2]), Vector3(0, 0, 1));
-					Quaternion qYaw(Degree(rotation[1]), Vector3(0, 1, 0));
-					m_importRotation = (qYaw * qPitch * qRoll);
-					m_importRotation.Normalize();
-				}
+				ImGui::Unindent();
 			}
 
-			if (ImGui::Button("Import Additional Submesh"))
-			{
-				ImportAdditionalSubmeshes(m_importSubmeshFile);
-				m_importSubmeshFile.clear();
-
-				m_entity->SetMesh(m_mesh);
-			}
-
-			ImGui::Separator();
-
-			if (ImGui::CollapsingHeader("Sub Meshes", ImGuiTreeNodeFlags_DefaultOpen))
-			{
-				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
-				if (ImGui::BeginTable("split", 2, ImGuiTableFlags_Resizable))
-				{
-					if (m_entity != nullptr)
-					{
-						const auto files = AssetRegistry::ListFiles();
-
-						for (int32 i = 0; i < m_entity->GetNumSubEntities(); ++i)
-						{
-							ImGui::PushID(i); // Use field index as identifier.
-							ImGui::TableNextRow();
-							ImGui::TableSetColumnIndex(0);
-							ImGui::AlignTextToFramePadding();
-
-							String name = "SubMesh " + std::to_string(i);
-							m_entity->GetMesh()->GetSubMeshName(i, name);
-
-							if (ImGui::TreeNode("Object", name.c_str()))
-							{
-								ImGui::TableNextRow();
-								ImGui::TableSetColumnIndex(0);
-								ImGui::AlignTextToFramePadding();
-								constexpr ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
-								ImGui::TreeNodeEx("Field_Name", flags, "Name");
-
-								ImGui::TableSetColumnIndex(1);
-								ImGui::SetNextItemWidth(-FLT_MIN);
-
-								if (ImGui::InputText("##name", &name))
-								{
-									m_entity->GetMesh()->NameSubMesh(i, name);
-								}
-
-								ImGui::NextColumn();
-
-								ImGui::TableNextRow();
-								ImGui::TableSetColumnIndex(0);
-								ImGui::AlignTextToFramePadding();
-								ImGui::TreeNodeEx("Field_Material", flags, "Material");
-
-								ImGui::TableSetColumnIndex(1);
-								ImGui::SetNextItemWidth(-FLT_MIN);
-
-								// Setup combo
-								String materialName = "(None)";
-								if (m_entity->GetSubEntity(i)->GetMaterial())
-								{
-									materialName = m_entity->GetSubEntity(i)->GetMaterial()->GetName();
-								}
-
-								ImGui::PushID(i);
-								if (ImGui::BeginCombo("material", materialName.c_str()))
-								{
-									// For each material
-									for (const auto& file : files)
-									{
-										if (!file.ends_with(".hmat") && !file.ends_with(".hmi")) continue;
-
-										if (ImGui::Selectable(file.c_str()))
-										{
-											m_entity->GetSubEntity(i)->SetMaterial(MaterialManager::Get().Load(file));
-											m_mesh->GetSubMesh(i).SetMaterial(m_entity->GetSubEntity(i)->GetMaterial());
-										}
-									}
-
-									ImGui::EndCombo();
-								}
-								ImGui::PopID();
-
-								ImGui::NextColumn();
-
-								ImGui::TableNextRow();
-								ImGui::TableSetColumnIndex(0);
-								ImGui::AlignTextToFramePadding();
-								ImGui::TreeNodeEx("Field_Visible", flags, "Visible");
-
-								ImGui::TableSetColumnIndex(1);
-								ImGui::SetNextItemWidth(-FLT_MIN);
-
-								bool visible = m_entity->GetMesh()->GetSubMesh(i).IsVisibleByDefault();
-								if (ImGui::Checkbox("##visibleByDefault", &visible))
-								{
-									m_entity->GetMesh()->GetSubMesh(i).SetVisibleByDefault(visible);
-									m_entity->GetSubEntity(i)->SetVisible(visible);
-								}
-
-								ImGui::NextColumn();
-
-								ImGui::TableNextRow();
-								ImGui::TableSetColumnIndex(0);
-								ImGui::AlignTextToFramePadding();
-								if (ImGui::TreeNode("Field_Tags", "Tags"))
-								{
-									ImGui::TableSetColumnIndex(1);
-
-									if (ImGui::Button("Add Tag"))
-									{
-										m_entity->GetMesh()->GetSubMesh(i).AddTag("New Tag");
-									}
-
-									ImGui::NextColumn();
-
-									for (uint8 tagIndex = 0; tagIndex < m_entity->GetMesh()->GetSubMesh(i).TagCount(); ++tagIndex)
-									{
-										ImGui::PushID(tagIndex);
-										ImGui::TableNextRow();
-										ImGui::TableSetColumnIndex(0);
-										ImGui::AlignTextToFramePadding();
-										ImGui::TreeNodeEx("Field", flags, "Tag");
-										ImGui::TableSetColumnIndex(1);
-										ImGui::SetNextItemWidth(-FLT_MIN);
-
-										String tag = m_entity->GetMesh()->GetSubMesh(i).GetTag(tagIndex);
-										const bool tagChanged = ImGui::InputText("##tag", &tag, ImGuiInputTextFlags_CallbackCompletion | ImGuiInputTextFlags_EnterReturnsTrue);
-										ImGui::NextColumn();
-										ImGui::PopID();
-
-										if (tagChanged)
-										{
-											m_entity->GetMesh()->GetSubMesh(i).RemoveTag(m_entity->GetMesh()->GetSubMesh(i).GetTag(tagIndex));
-											m_entity->GetMesh()->GetSubMesh(i).AddTag(tag);
-
-											// We break here because the tag list has changed and thus the index might no longer be valid
-											break;
-										}
-									}
-
-									ImGui::TreePop();
-								}
-
-								if (ImGui::Button("Delete"))
-								{
-									m_entity->GetMesh()->DestroySubMesh(i);
-									m_entity->SetMesh(m_entity->GetMesh());
-									i--;
-								}
-
-								ImGui::TableSetColumnIndex(1);
-								ImGui::SetNextItemWidth(-FLT_MIN);
-
-								ImGui::NextColumn();
-
-								ImGui::TreePop();
-							}
-							ImGui::PopID();
-						}
-					}
-
-					ImGui::EndTable();
-				}
-
-				ImGui::PopStyleVar();
-			}
+			ImGui::PopStyleVar(2);
 		}
 		ImGui::End();
 	}
@@ -1258,3 +1309,6 @@ namespace mmo
 
 	}
 }
+
+
+

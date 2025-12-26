@@ -69,12 +69,13 @@ namespace mmo
 					ImGui::Image(texId, ImVec2(previewSize, previewSize));
 				}
 			}
+
+			ImGui::SameLine();
 		}
 
 		// Audio preview button (if audio system available and audio file selected)
 		if (audioSystem && isAudio && !currentAssetPath.empty())
 		{
-			ImGui::SameLine();
 			if (ImGui::Button("Preview"))
 			{
 				// Create and play sound
@@ -89,6 +90,8 @@ namespace mmo
 					audioSystem->PlaySound(soundIdx, &channel);
 				}
 			}
+
+			ImGui::SameLine();
 		}
 
 		// Get filtered asset list

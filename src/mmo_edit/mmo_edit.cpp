@@ -200,7 +200,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddImport(std::make_unique<mmo::FbxImport>(mainWindow));
 
 	mainWindow.AddEditor(std::make_unique<mmo::TextureEditor>(mainWindow));
-	mainWindow.AddEditor(std::make_unique<mmo::MeshEditor>(mainWindow));
+	mainWindow.AddEditor(std::make_unique<mmo::MeshEditor>(mainWindow, previewProviderManager));
 	mainWindow.AddEditor(std::make_unique<mmo::CharacterEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::MaterialEditor>(mainWindow, previewProviderManager));	mainWindow.AddEditor(std::make_unique<mmo::MaterialInstanceEditor>(mainWindow, previewProviderManager));
 	mainWindow.AddEditor(std::make_unique<mmo::WorldEditor>(mainWindow, project));
