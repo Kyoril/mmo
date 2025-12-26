@@ -59,6 +59,13 @@ namespace mmo
 
 			void PopulateRenderQueue(RenderQueue& queue) override;
 
+			/// \brief Indicates whether this tile currently contains renderable terrain geometry.
+			/// \details When all inner cells of the tile are marked as holes, no triangles are generated
+			///          and the tile becomes non-renderable. In this case, index buffer creation is skipped
+			///          and the tile will not be added to the render queue.
+			/// \return True if geometry exists and the tile can be rendered; false if the tile is empty.
+			[[nodiscard]] bool HasRenderableGeometry() const;
+
 			Page& GetPage() const { return m_page; }
 
 			Terrain& GetTerrain() const;
@@ -130,6 +137,8 @@ namespace mmo
 			VertexBufferPtr m_mainBuffer;
 			std::shared_ptr<MaterialInstance> m_materialInstance;
 			TexturePtr m_coverageTexture;
+			/// \brief Flag indicating whether this tile has non-empty index data and can be rendered.
+			bool m_hasRenderableGeometry { true };
 		};
 	}
 }

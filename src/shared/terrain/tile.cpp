@@ -146,11 +146,14 @@ namespace mmo
 
 		void Tile::PopulateRenderQueue(RenderQueue &queue)
 		{
-			queue.AddRenderable(*this, m_renderQueueId);
-
-			if (m_page.GetTerrain().IsWireframeVisible())
+			if (HasRenderableGeometry())
 			{
-				queue.AddRenderable(*this, WireframeRenderGroupId);
+				queue.AddRenderable(*this, m_renderQueueId);
+
+				if (m_page.GetTerrain().IsWireframeVisible())
+				{
+					queue.AddRenderable(*this, WireframeRenderGroupId);
+				}
 			}
 		}
 
@@ -526,14 +529,29 @@ namespace mmo
 				}
 			}
 
-			m_indexData = std::make_unique<IndexData>();
-			m_indexData->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(
-				static_cast<uint32>(indices.size()),
-				IndexBufferSize::Index_16,
-				BufferUsage::StaticWriteOnly,
-				indices.data());
-			m_indexData->indexCount = static_cast<uint32>(indices.size());
-			m_indexData->indexStart = 0;
+			// If no indices were generated, mark tile as non-renderable and skip buffer creation
+			if (indices.empty())
+			{
+				m_indexData.reset();
+				m_hasRenderableGeometry = false;
+			}
+			else
+			{
+				m_indexData = std::make_unique<IndexData>();
+				m_indexData->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(
+					static_cast<uint32>(indices.size()),
+					IndexBufferSize::Index_16,
+					BufferUsage::StaticWriteOnly,
+					indices.data());
+				m_indexData->indexCount = static_cast<uint32>(indices.size());
+				m_indexData->indexStart = 0;
+				m_hasRenderableGeometry = true;
+			}
+		}
+
+		bool Tile::HasRenderableGeometry() const
+		{
+			return m_hasRenderableGeometry;
 		}
 
 		bool Tile::TestCapsuleCollision(const Capsule &capsule, std::vector<CollisionResult> &results) const
