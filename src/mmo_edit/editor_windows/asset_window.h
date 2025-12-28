@@ -92,5 +92,7 @@ namespace mmo
 		TexturePtr m_folderTexture;
 		const AssetEntry* m_selectedEntry { nullptr };
 		float m_columnWidth { 200.0f };
+		std::string m_assetPendingDelete;
+		bool m_showDeleteConfirmation { false };
 	};
 }

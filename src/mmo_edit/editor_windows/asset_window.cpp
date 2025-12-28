@@ -13,8 +13,10 @@ namespace mmo
 {
 	void AssetWindow::RebuildAssetList()
 	{
-		m_selectedEntry = nullptr;
+		// Store the current path before rebuilding
+		std::string currentPath = m_selectedEntry ? m_selectedEntry->fullPath : "";
 		m_assets.clear();
+		m_selectedEntry = nullptr;
 
 		// Gather a list of all assets in the registry
 		const auto assets = AssetRegistry::ListFiles();
@@ -51,6 +53,70 @@ namespace mmo
 					if (m_host.GetCurrentPath() == entryIt->second.fullPath)
 					{
 						m_selectedEntry = &entryIt->second;
+					}
+				}
+			}
+		}
+
+		// Restore the previous selection if possible
+		if (!currentPath.empty())
+		{
+			// For each top-level entry, try to find the path
+			bool found = false;
+			for (auto& [name, entry] : m_assets)
+			{
+				// Check this top level entry
+				if (entry.fullPath == currentPath)
+				{
+					m_selectedEntry = &entry;
+					m_host.SetCurrentPath(entry.fullPath);
+					found = true;
+					break;
+				}
+				
+				// Search recursively in children
+				if (SearchEntryByPath(entry, currentPath))
+				{
+					found = true;
+					break;
+				}
+			}
+			
+			// If the entry wasn't found but we had a selection, try to find the closest parent directory
+			if (!found && !currentPath.empty())
+			{
+				std::string parentPath = currentPath;
+				while (!parentPath.empty() && !found)
+				{
+					// Find the last slash and remove everything after it
+					size_t lastSlash = parentPath.find_last_of('/');
+					if (lastSlash != std::string::npos)
+					{
+						// Get the parent path
+						parentPath = parentPath.substr(0, lastSlash);
+						
+						// Look for this parent path
+						for (auto& [name, entry] : m_assets)
+						{
+							if (entry.fullPath == parentPath)
+							{
+								m_selectedEntry = &entry;
+								m_host.SetCurrentPath(entry.fullPath);
+								found = true;
+								break;
+							}
+							
+							if (SearchEntryByPath(entry, parentPath))
+							{
+								found = true;
+								break;
+							}
+						}
+					}
+					else
+					{
+						// No more slashes, can't go up any further
+						break;
 					}
 				}
 			}
@@ -484,6 +550,14 @@ namespace mmo
 								{
 									m_host.ShowAssetCreationContextMenu();
 									m_host.ShowAssetActionContextMenu(entry.fullPath);
+									
+									ImGui::Separator();
+									if (ImGui::MenuItem("Delete"))
+									{
+										m_assetPendingDelete = entry.fullPath;
+										m_showDeleteConfirmation = true;
+									}
+									
 									ImGui::EndPopup();
 								}
 
@@ -523,6 +597,62 @@ namespace mmo
 			ImGui::Columns(1);
 
 		}
+
+		// Handle delete confirmation dialog
+		if (m_showDeleteConfirmation)
+		{
+			ImGui::OpenPopup("Delete Asset##Confirmation");
+		}
+
+		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+		ImGui::SetNextWindowSize(ImVec2(400, 150), ImGuiCond_Appearing);
+
+		if (ImGui::BeginPopupModal("Delete Asset##Confirmation", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::Text("Are you sure you want to delete:");
+			ImGui::TextWrapped(m_assetPendingDelete.c_str());
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+
+			const float buttonWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2.0f;
+			
+			if (ImGui::Button("Delete", ImVec2(buttonWidth, 0)))
+			{
+				// Perform the deletion
+				if (AssetRegistry::RemoveFile(m_assetPendingDelete))
+				{
+					ILOG("Asset deleted: " << m_assetPendingDelete);
+					RebuildAssetList();
+				}
+				else
+				{
+					WLOG("Failed to delete asset: " << m_assetPendingDelete);
+				}
+				
+				m_showDeleteConfirmation = false;
+				m_assetPendingDelete.clear();
+				ImGui::CloseCurrentPopup();
+			}
+			
+			ImGui::SetItemDefaultFocus();
+			ImGui::SameLine();
+			
+			if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0)))
+			{
+				m_showDeleteConfirmation = false;
+				m_assetPendingDelete.clear();
+				ImGui::CloseCurrentPopup();
+			}
+			
+			ImGui::EndPopup();
+		}
+		else
+		{
+			m_showDeleteConfirmation = false;
+		}
+
 		ImGui::End();
 
 		return false;

@@ -195,7 +195,14 @@ namespace mmo
 			return false;
 		}
 
-		return it->second->RemoveFile(filename);
+		if (it->second->RemoveFile(filename))
+		{
+			// Remove from the file registry
+			s_files.erase(it);
+			return true;
+		}
+
+		return false;
 	}
 
 	std::unique_ptr<std::ostream> AssetRegistry::CreateNewFile(const std::string& filename)
