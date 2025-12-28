@@ -233,6 +233,17 @@ namespace mmo
 				m_selectedEntry = &entry;
 				m_host.SetCurrentPath(entry.fullPath);
 			}
+
+			// Add context menu for folder in tree view
+			if (ImGui::BeginPopupContextItem(entry.fullPath.c_str(), ImGuiPopupFlags_MouseButtonRight))
+			{
+				if (ImGui::MenuItem("Delete Folder"))
+				{
+					m_folderPendingDelete = entry.fullPath;
+					m_showFolderDeleteConfirmation = true;
+				}
+				ImGui::EndPopup();
+			}
 			
 			const auto childPath = path + "/" + name;
 			for(const auto& child : entry.children)
@@ -483,6 +494,16 @@ namespace mmo
 								m_selectedEntry = &entry;
 								m_host.SetCurrentPath(entry.fullPath);
 							}
+
+							if (ImGui::BeginPopupContextItem(entry.fullPath.c_str(), ImGuiPopupFlags_MouseButtonRight))
+							{
+								if (ImGui::MenuItem("Delete Folder"))
+								{
+									m_folderPendingDelete = entry.fullPath;
+									m_showFolderDeleteConfirmation = true;
+								}
+								ImGui::EndPopup();
+							}
 							
 							ImGui::TextWrapped(name.c_str());
 							ImGui::PopID();
@@ -526,6 +547,16 @@ namespace mmo
 								{
 									m_selectedEntry = &entry;
 									m_host.SetCurrentPath(entry.fullPath);
+								}
+
+								if (ImGui::BeginPopupContextItem(entry.fullPath.c_str(), ImGuiPopupFlags_MouseButtonRight))
+								{
+									if (ImGui::MenuItem("Delete Folder"))
+									{
+										m_folderPendingDelete = entry.fullPath;
+										m_showFolderDeleteConfirmation = true;
+									}
+									ImGui::EndPopup();
 								}
 								
 								ImGui::TextWrapped(name.c_str());
@@ -651,6 +682,129 @@ namespace mmo
 		else
 		{
 			m_showDeleteConfirmation = false;
+		}
+
+		// Handle folder delete confirmation dialog
+		if (m_showFolderDeleteConfirmation)
+		{
+			ImGui::OpenPopup("Delete Folder##Confirmation");
+		}
+
+		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+		ImGui::SetNextWindowSize(ImVec2(450, 180), ImGuiCond_Appearing);
+
+		if (ImGui::BeginPopupModal("Delete Folder##Confirmation", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::Text("Are you sure you want to delete this folder and all its contents:");
+			ImGui::TextWrapped(m_folderPendingDelete.c_str());
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+
+			const float buttonWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2.0f;
+			
+			if (ImGui::Button("Delete", ImVec2(buttonWidth, 0)))
+			{
+				// Gather all files to delete in this folder
+				const auto allFiles = AssetRegistry::ListFiles();
+				m_filesToDelete.clear();
+				m_filesDeletedCount = 0;
+
+				for (const auto& file : allFiles)
+				{
+					if (file.starts_with(m_folderPendingDelete + "/") || file == m_folderPendingDelete)
+					{
+						m_filesToDelete.push_back(file);
+					}
+				}
+
+				m_showFolderDeleteProgress = true;
+				m_showFolderDeleteConfirmation = false;
+				ImGui::CloseCurrentPopup();
+			}
+			
+			ImGui::SetItemDefaultFocus();
+			ImGui::SameLine();
+			
+			if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0)))
+			{
+				m_showFolderDeleteConfirmation = false;
+				m_folderPendingDelete.clear();
+				ImGui::CloseCurrentPopup();
+			}
+			
+			ImGui::EndPopup();
+		}
+		else
+		{
+			m_showFolderDeleteConfirmation = false;
+		}
+
+		// Handle folder delete progress dialog
+		if (m_showFolderDeleteProgress)
+		{
+			ImGui::OpenPopup("Deleting Folder##Progress");
+		}
+
+		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+		ImGui::SetNextWindowSize(ImVec2(450, 150), ImGuiCond_Appearing);
+
+		if (ImGui::BeginPopupModal("Deleting Folder##Progress", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
+		{
+			if (!m_filesToDelete.empty() && m_filesDeletedCount < m_filesToDelete.size())
+			{
+				// Delete one file per frame to show progress
+				if (AssetRegistry::RemoveFile(m_filesToDelete[m_filesDeletedCount]))
+				{
+					m_filesDeletedCount++;
+				}
+				else
+				{
+					// Skip this file if it couldn't be deleted
+					m_filesDeletedCount++;
+				}
+			}
+
+			float progress = m_filesToDelete.empty() ? 1.0f : static_cast<float>(m_filesDeletedCount) / static_cast<float>(m_filesToDelete.size());
+			ImGui::Text("Deleting folder contents...");
+			ImGui::ProgressBar(progress, ImVec2(-1, 0));
+			ImGui::Text("%zu / %zu files deleted", m_filesDeletedCount, m_filesToDelete.size());
+
+			if (m_filesDeletedCount >= m_filesToDelete.size())
+			{
+				ImGui::Spacing();
+				ImGui::Separator();
+				ImGui::Spacing();
+
+				if (ImGui::Button("Close", ImVec2(ImGui::GetContentRegionAvail().x, 0)))
+				{
+					// Check if we deleted the current folder
+					const std::string currentPath = m_selectedEntry ? m_selectedEntry->fullPath : "";
+					if (!currentPath.empty() && (currentPath == m_folderPendingDelete || 
+						currentPath.find(m_folderPendingDelete + "/") == 0))
+					{
+						// Reset to root if we deleted the current folder
+						m_selectedEntry = nullptr;
+						m_host.SetCurrentPath("");
+					}
+
+					ILOG("Folder deleted: " << m_folderPendingDelete << " (" << m_filesDeletedCount << " files)");
+					RebuildAssetList();
+					
+					m_showFolderDeleteProgress = false;
+					m_folderPendingDelete.clear();
+					m_filesToDelete.clear();
+					m_filesDeletedCount = 0;
+					ImGui::CloseCurrentPopup();
+				}
+			}
+
+			ImGui::EndPopup();
+		}
+		else if (!m_showFolderDeleteProgress)
+		{
+			m_filesToDelete.clear();
+			m_filesDeletedCount = 0;
 		}
 
 		ImGui::End();

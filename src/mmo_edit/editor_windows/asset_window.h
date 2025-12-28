@@ -94,5 +94,10 @@ namespace mmo
 		float m_columnWidth { 200.0f };
 		std::string m_assetPendingDelete;
 		bool m_showDeleteConfirmation { false };
+		std::string m_folderPendingDelete;
+		bool m_showFolderDeleteConfirmation { false };
+		bool m_showFolderDeleteProgress { false };
+		std::vector<std::string> m_filesToDelete;
+		size_t m_filesDeletedCount { 0 };
 	};
 }
