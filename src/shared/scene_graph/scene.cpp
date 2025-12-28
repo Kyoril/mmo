@@ -503,6 +503,7 @@ namespace mmo
         if (!mesh)
         {
             ELOG("Failed to load mesh " << meshName);
+			return nullptr;
         }
         
 		return CreateEntity(entityName, mesh);

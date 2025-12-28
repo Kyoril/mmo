@@ -1594,7 +1594,11 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 				entity.rotation,
 				entity.scale,
 				entity.uniqueId);
-			ASSERT(object);
+			if (!object)
+			{
+				ELOG("Failed to create entity from file " << file << "!");
+				continue;
+			}
 
 			// We just loaded the object - it has not been modified
 			MapEntity *mapEntity = object->GetUserObject<MapEntity>();
