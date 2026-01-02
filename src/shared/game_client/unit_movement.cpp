@@ -1459,16 +1459,19 @@ namespace mmo
 		MOVEMENT_LOG("StepUp: Swept up by " << stepTravelUpHeight << ", hit=" << sweepUpHit.bBlockingHit << ", time=" << sweepUpHit.Time);
 
 		// step fwd
-		// Ensure minimum forward movement to clear the step edge
-		// The delta might be very small if we hit the obstacle near the end of frame movement,
-		// but we need to move forward at least enough to get on top of the step.
+		// First try with original delta, but if that fails due to hitting the step's front face,
+		// we may need a slightly larger forward movement to clear the edge.
+		// We use a smaller boost (half radius) to avoid excessive speed on stairs.
 		Vector3 forwardDelta = delta;
 		const float deltaLength = delta.GetLength();
-		const float minForwardDist = pawnRadius;  // Need to move at least capsule radius to clear edge
+		const float minForwardDist = pawnRadius * 0.5f;  // Use half radius as minimum to balance step-up vs speed
+		bool didBoostForward = false;
+		
 		if (deltaLength > 1e-6f && deltaLength < minForwardDist)
 		{
 			// Scale up the delta to ensure minimum forward movement
 			forwardDelta = delta.NormalizedCopy() * minForwardDist;
+			didBoostForward = true;
 			MOVEMENT_LOG("StepUp: Boosting forward delta from " << deltaLength << " to " << minForwardDist);
 		}
 
