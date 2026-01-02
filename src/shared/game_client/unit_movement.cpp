@@ -34,7 +34,9 @@ namespace mmo
 	void FindFloorResult::SetFromSweep(const CollisionHitResult& hit, const float sweepFloorDistance,
 	                                   const bool isWalkableFloor)
 	{
-		bValidFloor = hit.IsValidBlockingHit();
+		// For valid floor detection, we accept either a valid blocking hit OR
+		// a penetrating hit that has a walkable surface (we can depenetrate from it)
+		bValidFloor = hit.IsValidBlockingHit() || (hit.bStartPenetrating && isWalkableFloor);
 		bWalkableFloor = isWalkableFloor;
 		bLineTrace = false;
 		FloorDistance = sweepFloorDistance;
@@ -535,6 +537,9 @@ namespace mmo
 			// See if we need to start falling.
 			if (!m_currentFloor.IsWalkableFloor() && !m_currentFloor.HitResult.bStartPenetrating)
 			{
+				DLOG("HandleWalking: Floor not walkable! bBlockingHit=" << m_currentFloor.HitResult.bBlockingHit 
+					<< ", normal=(" << m_currentFloor.HitResult.ImpactNormal.x << "," << m_currentFloor.HitResult.ImpactNormal.y << "," << m_currentFloor.HitResult.ImpactNormal.z << ")"
+					<< ", bLineTrace=" << m_currentFloor.bLineTrace << ", FloorDistance=" << m_currentFloor.FloorDistance);
 				const bool bMustJump = m_justTeleported || zeroDelta;
 				if ((bMustJump || !checkedFall) && CheckFall(delta, oldLocation, remainingTime, timeTick,
 				                                             iterations))
@@ -931,7 +936,12 @@ namespace mmo
 
 			if (hit.bStartPenetrating)
 			{
-				assert(false);
+				// Still stuck - try to resolve the penetration
+				const Vector3 requestedAdjustment = GetPenetrationAdjustment(hit);
+				if (!requestedAdjustment.IsZero())
+				{
+					ResolvePenetration(requestedAdjustment, hit, GetUpdatedNode().GetOrientation());
+				}
 				//OnCharacterStuckInGeometry(&Hit);
 			}
 		}
@@ -1680,6 +1690,7 @@ namespace mmo
 	{
 		if (!hit.bBlockingHit)
 		{
+			DLOG("IsValidLandingSpot: Failed - no blocking hit");
 			return false;
 		}
 
@@ -1689,6 +1700,7 @@ namespace mmo
 			// Reject unwalkable floor normals.
 			if (!IsWalkable(hit))
 			{
+				DLOG("IsValidLandingSpot: Failed - not walkable. ImpactNormal=(" << hit.ImpactNormal.x << "," << hit.ImpactNormal.y << "," << hit.ImpactNormal.z << "), walkableFloorY=" << m_walkableFloorY);
 				return false;
 			}
 
@@ -1699,12 +1711,14 @@ namespace mmo
 			const float lowerHemisphereCenterY = GetGravitySpaceY(hit.Location) + pawnRadius;
 			if (GetGravitySpaceY(hit.ImpactPoint) >= lowerHemisphereCenterY)
 			{
+				DLOG("IsValidLandingSpot: Failed - impact above lower hemisphere. impactY=" << GetGravitySpaceY(hit.ImpactPoint) << ", lowerHemisphereCenterY=" << lowerHemisphereCenterY);
 				return false;
 			}
 
 			// Reject hits that are barely on the cusp of the radius of the capsule
 			if (!IsWithinEdgeTolerance(hit.Location, hit.ImpactPoint, pawnRadius))
 			{
+				DLOG("IsValidLandingSpot: Failed - not within edge tolerance");
 				return false;
 			}
 		}
@@ -1723,9 +1737,11 @@ namespace mmo
 
 		if (!floorResult.IsWalkableFloor())
 		{
+			DLOG("IsValidLandingSpot: Failed - FindFloor returned non-walkable. bLineTrace=" << floorResult.bLineTrace << ", FloorDistance=" << floorResult.FloorDistance);
 			return false;
 		}
 
+		DLOG("IsValidLandingSpot: SUCCESS");
 		return true;
 	}
 
@@ -2351,6 +2367,7 @@ namespace mmo
 			constexpr bool bCheckRadius = true;
 			if (ShouldComputePerchResult(floorResult.HitResult, bCheckRadius))
 			{
+				DLOG("FindFloor: Checking perch result...");
 				float maxPerchFloorDist = std::max(MAX_FLOOR_DIST, m_maxStepHeight + heightCheckAdjust);
 				if (IsMovingOnGround())
 				{
@@ -2379,7 +2396,16 @@ namespace mmo
 				else
 				{
 					// We had no floor (or an invalid one because it was unwalkable), and couldn't perch here, so invalidate floor (which will cause us to start falling).
-					floorResult.bWalkableFloor = false;
+					// However, don't invalidate if the floor was already marked as walkable by ComputeFloorDist
+					if (!floorResult.bWalkableFloor)
+					{
+						DLOG("FindFloor: Perch failed, invalidating non-walkable floor");
+						floorResult.bWalkableFloor = false;
+					}
+					else
+					{
+						DLOG("FindFloor: Perch failed, but floor was already walkable - keeping it");
+					}
 				}
 			}
 		}
@@ -2451,15 +2477,33 @@ namespace mmo
 				const float maxPenetrationAdjust = std::max(MAX_FLOOR_DIST, pawnRadius);
 				const float sweepResult = std::max(-maxPenetrationAdjust, hit.Time * traceDist - shrinkHeight);
 
+				DLOG("ComputeFloorDist: bBlockingHit=1, hit.Time=" << hit.Time << ", traceDist=" << traceDist 
+					<< ", shrinkHeight=" << shrinkHeight << ", sweepResult=" << sweepResult
+					<< ", ImpactNormal=(" << hit.ImpactNormal.x << "," << hit.ImpactNormal.y << "," << hit.ImpactNormal.z << ")"
+					<< ", bStartPenetrating=" << static_cast<int32>(hit.bStartPenetrating));
+
 				outFloorResult.SetFromSweep(hit, sweepResult, false);
-				if (hit.IsValidBlockingHit() && IsWalkable(hit))
+				
+				// Check if walkable - for penetration cases (hit.Time == 0), we still want to 
+				// accept surfaces with walkable normals since we can depenetrate from them
+				const bool bIsWalkableNormal = IsWalkable(hit);
+				const bool bAcceptHit = hit.IsValidBlockingHit() || (hit.bStartPenetrating && bIsWalkableNormal);
+				
+				if (bAcceptHit && bIsWalkableNormal)
 				{
 					if (sweepResult <= sweepDistance)
 					{
 						// Hit within test distance.
 						outFloorResult.bWalkableFloor = true;
+						outFloorResult.bValidFloor = true;  // Also mark as valid floor
+						DLOG("ComputeFloorDist: Floor is WALKABLE (penetrating=" << static_cast<int32>(hit.bStartPenetrating) << ")");
 						return;
 					}
+					DLOG("ComputeFloorDist: sweepResult > sweepDistance (" << sweepResult << " > " << sweepDistance << ")");
+				}
+				else
+				{
+					DLOG("ComputeFloorDist: Not walkable - IsValidBlockingHit=" << hit.IsValidBlockingHit() << ", IsWalkable=" << bIsWalkableNormal << ", bAcceptHit=" << bAcceptHit);
 				}
 			}
 		}
@@ -2483,7 +2527,8 @@ namespace mmo
 
 	bool UnitMovement::IsWalkable(const CollisionHitResult& hit) const
 	{
-		if (!hit.IsValidBlockingHit())
+		// Check if we have a blocking hit (including penetration cases)
+		if (!hit.bBlockingHit)
 		{
 			return false;
 		}
