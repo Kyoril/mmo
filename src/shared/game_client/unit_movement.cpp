@@ -17,10 +17,14 @@ namespace mmo
 {
 	/// @brief Debug flag to enable detailed movement logging.
 	/// Set to true to see detailed logs for debugging movement issues.
-	static constexpr bool DEBUG_MOVEMENT_LOGS = false;
+	#define DEBUG_MOVEMENT_LOGS 0
 	
 	// Helper macro for movement debug logging - only logs when DEBUG_MOVEMENT_LOGS is true
-	#define MOVEMENT_LOG(msg) if (DEBUG_MOVEMENT_LOGS) { DLOG(msg); }
+	#if DEBUG_MOVEMENT_LOGS
+	#	define MOVEMENT_LOG(msg) if (DEBUG_MOVEMENT_LOGS) { DLOG(msg); }
+	#else
+	#	define MOVEMENT_LOG(msg)
+	#endif
 
 	constexpr float MIN_TICK_TIME = 1e-6f;
 	constexpr float MIN_FLOOR_DIST = 0.019f;
