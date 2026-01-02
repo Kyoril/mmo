@@ -88,11 +88,14 @@ namespace mmo
 			packet.Finish();
 		});
 
-		// Initialize connection encryption afterwards
+
+		// Initialize connection encryption afterward
 		HMACHash cryptKey;
-		GetCrypt().GenerateKey(cryptKey, m_sessionKey);
-		GetCrypt().SetKey(cryptKey.data(), cryptKey.size());
-		GetCrypt().Init();
+		game::Crypt::GenerateKey(cryptKey, m_sessionKey);
+
+		game::Crypt& crypt = GetCrypt();
+		crypt.SetKey(cryptKey.data(), cryptKey.size());
+		crypt.Init();
 
 		// Debug log
 		ILOG("[Realm] Handshaking...");

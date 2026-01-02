@@ -632,8 +632,8 @@ namespace mmo
 		const auto strongWorld = m_world.lock();
 		if (!strongWorld)
 		{
-			WLOG("Received proxy packet from character without a world!");
-			return PacketParseResult::Disconnect;
+			WLOG("Received proxy packet " << log_hex_digit(packet.GetId()) << " from character without a world!");
+			return PacketParseResult::Pass;
 		}
 
 		// Check for GM commands that require specific GM levels
