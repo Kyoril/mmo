@@ -956,6 +956,7 @@ namespace mmo
 				if (CanStepUp(hit))
 				{
 					// hit a barrier, try to step up
+					DLOG("MoveAlongFloor: Attempting StepUp, hit.ImpactPoint=(" << hit.ImpactPoint.x << "," << hit.ImpactPoint.y << "," << hit.ImpactPoint.z << "), hit.ImpactNormal=(" << hit.ImpactNormal.x << "," << hit.ImpactNormal.y << "," << hit.ImpactNormal.z << ")");
 					const Vector3 preStepUpLocation = GetUpdatedNode().GetPosition();
 					if (!StepUp(GetGravityDirection(), delta * (1.f - percentTimeApplied), hit, outStepDownResult))
 					{
@@ -1361,6 +1362,7 @@ namespace mmo
 	{
 		if (!CanStepUp(inHit) || m_maxStepHeight <= 0.f)
 		{
+			DLOG("StepUp: Failed - CanStepUp=" << CanStepUp(inHit) << ", maxStepHeight=" << m_maxStepHeight);
 			return false;
 		}
 
@@ -1376,11 +1378,13 @@ namespace mmo
 		// Check if impact is above the top of lower hemisphere (which starts at feetY + radius)
 		if (initialImpactY > oldLocationY + (pawnHalfHeight * 2.0f - pawnRadius))
 		{
+			DLOG("StepUp: Failed - impact above capsule top. impactY=" << initialImpactY << ", limit=" << (oldLocationY + pawnHalfHeight * 2.0f - pawnRadius));
 			return false;
 		}
 
 		if (gravDir.IsZero())
 		{
+			DLOG("StepUp: Failed - gravDir is zero");
 			return false;
 		}
 
@@ -1399,6 +1403,8 @@ namespace mmo
 			stepTravelUpHeight = std::max(stepTravelUpHeight - floorDist, 0.f);
 			stepTravelDownHeight = (m_maxStepHeight + MAX_FLOOR_DIST * 2.f);
 
+			DLOG("StepUp: floorDist=" << floorDist << ", stepTravelUpHeight=" << stepTravelUpHeight);
+
 			const bool bHitVerticalFace = !IsWithinEdgeTolerance(inHit.Location, inHit.ImpactPoint, pawnRadius);
 			if (!m_currentFloor.bLineTrace && !bHitVerticalFace)
 			{
@@ -1414,6 +1420,7 @@ namespace mmo
 		// Don't step up if the impact is below us, accounting for distance from floor.
 		if (initialImpactY <= initialFloorBaseY)
 		{
+			DLOG("StepUp: Failed - impact below floor. impactY=" << initialImpactY << ", floorBaseY=" << initialFloorBaseY);
 			return false;
 		}
 
@@ -1427,20 +1434,37 @@ namespace mmo
 
 		if (sweepUpHit.bStartPenetrating)
 		{
+			DLOG("StepUp: Failed - sweepUp started penetrating");
 			// Undo movement
 			scopedStepUpMovement.RevertMove();
 			return false;
 		}
+		DLOG("StepUp: Swept up by " << stepTravelUpHeight << ", hit=" << sweepUpHit.bBlockingHit << ", time=" << sweepUpHit.Time);
 
 		// step fwd
+		// Ensure minimum forward movement to clear the step edge
+		// The delta might be very small if we hit the obstacle near the end of frame movement,
+		// but we need to move forward at least enough to get on top of the step.
+		Vector3 forwardDelta = delta;
+		const float deltaLength = delta.GetLength();
+		const float minForwardDist = pawnRadius;  // Need to move at least capsule radius to clear edge
+		if (deltaLength > 1e-6f && deltaLength < minForwardDist)
+		{
+			// Scale up the delta to ensure minimum forward movement
+			forwardDelta = delta.NormalizedCopy() * minForwardDist;
+			DLOG("StepUp: Boosting forward delta from " << deltaLength << " to " << minForwardDist);
+		}
+
 		CollisionHitResult hit(1.f);
-		SafeMoveNode(delta, rotation, true, &hit);
+		SafeMoveNode(forwardDelta, rotation, true, &hit);
+		DLOG("StepUp: Forward move delta=(" << forwardDelta.x << "," << forwardDelta.y << "," << forwardDelta.z << "), hit=" << hit.bBlockingHit << ", time=" << hit.Time);
 
 		// Check result of forward movement
 		if (hit.bBlockingHit)
 		{
 			if (hit.bStartPenetrating)
 			{
+				DLOG("StepUp: Failed - forward move started penetrating");
 				// Undo movement
 				scopedStepUpMovement.RevertMove();
 				return false;
@@ -1463,7 +1487,7 @@ namespace mmo
 
 			// adjust and try again
 			const float forwardHitTime = hit.Time;
-			const float forwardSlideAmount = SlideAlongSurface(delta, 1.f - hit.Time, hit.Normal, hit, true);
+			const float forwardSlideAmount = SlideAlongSurface(forwardDelta, 1.f - hit.Time, hit.Normal, hit, true);
 
 			if (IsFalling())
 			{
@@ -1474,17 +1498,21 @@ namespace mmo
 			// If both the forward hit and the deflection got us nowhere, there is no point in this step up.
 			if (forwardHitTime == 0.f && forwardSlideAmount == 0.f)
 			{
+				DLOG("StepUp: Failed - no forward progress. forwardHitTime=" << forwardHitTime << ", forwardSlideAmount=" << forwardSlideAmount);
 				scopedStepUpMovement.RevertMove();
 				return false;
 			}
 		}
 
 		// Step down
+		DLOG("StepUp: About to step down by " << stepTravelDownHeight);
 		SafeMoveNode(gravDir * stepTravelDownHeight, GetUpdatedNode().GetOrientation(), true, &hit);
+		DLOG("StepUp: Step down hit=" << hit.bBlockingHit << ", time=" << hit.Time << ", penetrating=" << hit.bStartPenetrating);
 
 		// If step down was initially penetrating abort the step-up
 		if (hit.bStartPenetrating)
 		{
+			DLOG("StepUp: Failed - step down started penetrating");
 			scopedStepUpMovement.RevertMove();
 			return false;
 		}
@@ -1494,8 +1522,10 @@ namespace mmo
 		{
 			// See if this step sequence had allowed us to travel higher than our max step height allows.
 			const float deltaZ = (hit.ImpactPoint | -gravDir) - floorPointY;
+			DLOG("StepUp: deltaZ=" << deltaZ << ", impactPointY=" << (hit.ImpactPoint | -gravDir) << ", floorPointY=" << floorPointY);
 			if (deltaZ > m_maxStepHeight)
 			{
+				DLOG("StepUp: Failed - deltaZ > maxStepHeight (" << deltaZ << " > " << m_maxStepHeight << ")");
 				scopedStepUpMovement.RevertMove();
 				return false;
 			}
@@ -1503,10 +1533,12 @@ namespace mmo
 			// Reject unwalkable surface normals here.
 			if (!IsWalkable(hit))
 			{
+				DLOG("StepUp: Surface not walkable, normal=(" << hit.ImpactNormal.x << "," << hit.ImpactNormal.y << "," << hit.ImpactNormal.z << ")");
 				// Reject if normal opposes movement direction
 				const bool bNormalTowardsMe = (delta | hit.ImpactNormal) < 0.f;
 				if (bNormalTowardsMe)
 				{
+					DLOG("StepUp: Failed - unwalkable surface normal towards me");
 					scopedStepUpMovement.RevertMove();
 					return false;
 				}
@@ -1515,6 +1547,7 @@ namespace mmo
 				// It's fine to step down onto an unwalkable normal below us, we will just slide off. Rejecting those moves would prevent us from being able to walk off the edge.
 				if ((hit.Location | -gravDir) > oldLocationY)
 				{
+					DLOG("StepUp: Failed - unwalkable surface and ending higher than start");
 					scopedStepUpMovement.RevertMove();
 					return false;
 				}
@@ -1523,6 +1556,7 @@ namespace mmo
 			// Reject moves where the downward sweep hit something very close to the edge of the capsule. This maintains consistency with FindFloor as well.
 			if (!IsWithinEdgeTolerance(hit.Location, hit.ImpactPoint, pawnRadius))
 			{
+				DLOG("StepUp: Failed - not within edge tolerance");
 				scopedStepUpMovement.RevertMove();
 				return false;
 			}
@@ -1530,6 +1564,7 @@ namespace mmo
 			// Don't step up onto invalid surfaces if traveling higher.
 			if (deltaZ > 0.f && !CanStepUp(hit))
 			{
+				DLOG("StepUp: Failed - deltaZ>0 but CanStepUp=false");
 				scopedStepUpMovement.RevertMove();
 				return false;
 			}
@@ -1565,6 +1600,7 @@ namespace mmo
 		// Don't recalculate velocity based on this height adjustment, if considering vertical adjustments.
 		m_justTeleported |= !m_maintainHorizontalGroundVelocity;
 
+		DLOG("StepUp: SUCCESS!");
 		return true;
 	}
 
