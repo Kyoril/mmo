@@ -562,6 +562,15 @@ namespace mmo
 		/// @return True if a blocking hit was found
 		bool SweepSingleCast(const Vector3& start, const Vector3& end, CollisionHitResult& outHit, const CollisionParams& params = CollisionParams()) const;
 
+		/// @brief Sweeps a capsule with custom radius between two points
+		/// @param start Starting position for the sweep
+		/// @param end Ending position for the sweep
+		/// @param radius Custom capsule radius to use
+		/// @param outHit Output for the closest blocking hit
+		/// @param params Collision parameters for the sweep
+		/// @return True if a blocking hit was found
+		bool SweepSingleCastWithRadius(const Vector3& start, const Vector3& end, float radius, CollisionHitResult& outHit, const CollisionParams& params = CollisionParams()) const;
+
 		/// @brief Handles movement logic when the unit is in walking mode
 		/// @param deltaTime Time step for movement calculations
 		/// @param iterations Number of movement simulation iterations
@@ -803,6 +812,13 @@ namespace mmo
 		/// @param position The feet position to create the capsule at
 		/// @return Capsule collision shape
 		[[nodiscard]] Capsule CreateCapsuleAtPosition(const Vector3& position) const;
+
+		/// @brief Create a capsule with custom radius at a given position
+		/// @note The position represents the BOTTOM CENTER (feet) of the capsule, not the center.
+		/// @param position The feet position to create the capsule at
+		/// @param radius The custom radius to use for the capsule
+		/// @return Capsule collision shape
+		[[nodiscard]] Capsule CreateCapsuleAtPositionWithRadius(const Vector3& position, float radius) const;
 
 		/// @brief Convert CollisionResult to CollisionHitResult
 		/// @param collisionRes The collision result from the collision system

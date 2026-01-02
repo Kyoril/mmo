@@ -2075,6 +2075,79 @@ namespace mmo
 		return false;
 	}
 
+	bool UnitMovement::SweepSingleCastWithRadius(const Vector3& start, const Vector3& end, const float radius, CollisionHitResult& outHit, const CollisionParams& params) const
+	{
+		// Similar to SweepMultiCast but uses a custom capsule radius
+		Scene& scene = GetUpdatedNode().GetScene();
+
+		const Vector3 sweepVector = end - start;
+		const float sweepDistance = sweepVector.GetLength();
+
+		// Early exit for zero-distance sweeps
+		if (sweepDistance < 1e-6f)
+		{
+			outHit.Init(start, end);
+			return false;
+		}
+
+		// Create capsules with custom radius for the sweep
+		const Capsule startCapsule = CreateCapsuleAtPositionWithRadius(start, radius);
+		const Capsule endCapsule = CreateCapsuleAtPositionWithRadius(end, radius);
+
+		// Create a bounding box that encompasses the entire sweep
+		AABB sweepBounds = startCapsule.GetBounds();
+		sweepBounds.Combine(endCapsule.GetBounds());
+
+		std::vector<CollisionHitResult> hits;
+
+		// Query the scene for potential collision candidates
+		const auto query = scene.CreateAABBQuery(sweepBounds);
+		if (query)
+		{
+			query->SetQueryMask(params.QueryMask);
+			query->Execute(*query);
+
+			const auto& queryResult = query->GetLastResult();
+			for (const auto& movable : queryResult)
+			{
+				const ICollidable* collidable = movable->GetCollidable();
+				if (!collidable || !collidable->IsCollidable())
+				{
+					continue;
+				}
+
+				// Perform swept collision test against this collidable
+				std::vector<CollisionResult> collisionResults;
+				if (SweepCapsuleAgainstCollidable(startCapsule, endCapsule, collidable, collisionResults))
+				{
+					// Convert collision results to HitResults
+					for (const auto& collisionResult : collisionResults)
+					{
+						CollisionHitResult hitResult = ConvertCollisionToHitResult(
+							collisionResult, start, end, collisionResult.distance);
+						hits.push_back(hitResult);
+					}
+				}
+			}
+		}
+
+		if (!hits.empty())
+		{
+			// Sort by time and get first blocking hit
+			std::sort(hits.begin(), hits.end(), [](const CollisionHitResult& a, const CollisionHitResult& b)
+			{
+				return a.Time < b.Time;
+			});
+
+			const CollisionHitResult* blockingHit = CollisionHitResult::GetFirstBlockingHit(hits);
+			outHit = blockingHit ? *blockingHit : hits[0];
+			return true;
+		}
+
+		outHit.Init(start, end);
+		return false;
+	}
+
 	bool UnitMovement::DoJump()
 	{
 		if (m_movedUnit.CanJump())
@@ -2130,6 +2203,18 @@ namespace mmo
 		// NOTE: 'position' is the BOTTOM CENTER (feet) of the capsule, not the center.
 		// This differs from Unreal Engine which uses center-based positioning.
 		const float radius = GetCapsuleRadius();
+		constexpr float halfHeight = 0.65f; // From GameUnitC::UpdateCollider
+
+		return {
+			position + Vector3(0.0f, radius, 0.0f),
+			position + Vector3(0.0f, radius + halfHeight * 2.0f, 0.0f),
+			radius
+		};
+	}
+
+	Capsule UnitMovement::CreateCapsuleAtPositionWithRadius(const Vector3& position, const float radius) const
+	{
+		// NOTE: 'position' is the BOTTOM CENTER (feet) of the capsule, not the center.
 		constexpr float halfHeight = 0.65f; // From GameUnitC::UpdateCollider
 
 		return {
@@ -2516,9 +2601,37 @@ namespace mmo
 			return;
 		}
 
-		// Line trace
-		if (lineDistance > 0.f)
+		// Line trace - if the sweep hit an unwalkable surface, try a line trace to find walkable floor beneath
+		// This helps when the capsule sweep hits beveled edges of geometry but there's flat floor nearby
+		if (lineDistance > 0.f && outFloorResult.bValidFloor && !outFloorResult.bWalkableFloor)
 		{
+			// The sweep found an unwalkable surface. Try a sweep with a very small radius (like a line trace)
+			// straight down from the center of the capsule to check if there's walkable floor beneath.
+			// With feet-based positioning, trace from feet position + small offset down to lineDistance
+			const float traceStartOffset = MAX_FLOOR_DIST;  // Start just above feet
+			const Vector3 traceStart = capsuleLocation - GetGravityDirection() * traceStartOffset;
+			const Vector3 traceEnd = capsuleLocation + GetGravityDirection() * lineDistance;
+			
+			// Use a very small radius for line-like trace - this avoids hitting beveled edges
+			constexpr float lineTraceRadius = 0.05f;
+			
+			const float traceDist = (traceEnd - traceStart).GetLength();
+			
+			// Perform sweep with tiny radius
+			CollisionHitResult innerHit(1.f);
+			const bool bInnerHit = SweepSingleCastWithRadius(traceStart, traceEnd, lineTraceRadius, innerHit);
+			
+			if (bInnerHit && innerHit.bBlockingHit && IsWalkable(innerHit))
+			{
+				// Found walkable floor with line trace - use it
+				const float lineFloorDist = innerHit.Time * traceDist - traceStartOffset;
+				if (lineFloorDist <= lineDistance)
+				{
+					DLOG("ComputeFloorDist: Line trace found walkable floor at dist=" << lineFloorDist);
+					outFloorResult.SetFromLineTrace(innerHit, outFloorResult.FloorDistance, lineFloorDist, true);
+					return;
+				}
+			}
 		}
 
 		// No hits were acceptable.
