@@ -17,7 +17,7 @@ namespace mmo
 {
 	/// @brief Debug flag to enable detailed movement logging.
 	/// Set to true to see detailed logs for debugging movement issues.
-	static constexpr bool DEBUG_MOVEMENT_LOGS = true;
+	static constexpr bool DEBUG_MOVEMENT_LOGS = false;
 	
 	// Helper macro for movement debug logging - only logs when DEBUG_MOVEMENT_LOGS is true
 	#define MOVEMENT_LOG(msg) if (DEBUG_MOVEMENT_LOGS) { DLOG(msg); }
@@ -1723,9 +1723,17 @@ namespace mmo
 			}
 
 			// Reject hits that are barely on the cusp of the radius of the capsule
-			if (!IsWithinEdgeTolerance(hit.Location, hit.ImpactPoint, pawnRadius))
+			// Skip this check for nearly flat surfaces (normal pointing straight up) since
+			// terrain triangles may report impact points that are geometrically at triangle
+			// edges/vertices rather than directly below the capsule center
+			const float gravityNormalY = GetGravitySpaceY(hit.ImpactNormal);
+			const bool isNearlyFlatSurface = gravityNormalY > 0.99f;
+			
+			if (!isNearlyFlatSurface && !IsWithinEdgeTolerance(hit.Location, hit.ImpactPoint, pawnRadius))
 			{
-				MOVEMENT_LOG("IsValidLandingSpot: Failed - not within edge tolerance");
+				const float distFromCenterSq = ProjectToGravityFloor(hit.ImpactPoint - hit.Location).GetSquaredLength();
+				const float reducedRadius = std::max(SWEEP_EDGE_REJECT_DISTANCE + 1.e-4f, pawnRadius - SWEEP_EDGE_REJECT_DISTANCE);
+				MOVEMENT_LOG("IsValidLandingSpot: Failed - not within edge tolerance. distFromCenter=" << std::sqrt(distFromCenterSq) << ", reducedRadius=" << reducedRadius << ", pawnRadius=" << pawnRadius);
 				return false;
 			}
 		}
