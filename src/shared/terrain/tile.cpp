@@ -8,6 +8,7 @@
 #include "graphics/texture_mgr.h"
 #include "math/capsule.h"
 #include "math/collision.h"
+#include "math/matrix3.h"
 #include "scene_graph/mesh_manager.h"
 #include "scene_graph/scene.h"
 
@@ -582,6 +583,14 @@ namespace mmo
 			// Get the hole map for this tile
 			const uint64 holeMap = m_page.GetTileHoleMap(m_tileX, m_tileY);
 
+			// Extract rotation matrix for transforming normals (no translation, no scale)
+			// For normals, we need to use the inverse transpose of the upper 3x3 matrix
+			// But for orthogonal transforms (rotation only), this equals the rotation matrix
+			Matrix3 normalTransform;
+			normalTransform[0][0] = worldTransform[0][0]; normalTransform[0][1] = worldTransform[0][1]; normalTransform[0][2] = worldTransform[0][2];
+			normalTransform[1][0] = worldTransform[1][0]; normalTransform[1][1] = worldTransform[1][1]; normalTransform[1][2] = worldTransform[1][2];
+			normalTransform[2][0] = worldTransform[2][0]; normalTransform[2][1] = worldTransform[2][1]; normalTransform[2][2] = worldTransform[2][2];
+
 			// Iterate through cells that could potentially intersect
 			// Each cell corresponds to one inner vertex with 4 surrounding triangles
 			for (int32 j = minJ; j < maxJ; ++j)
@@ -628,7 +637,7 @@ namespace mmo
 						continue;
 					}
 
-					// Define the vertices
+					// Define the vertices (in local space)
 					const Vector3 vTL(x1, h00, z1);						   // Top-left outer
 					const Vector3 vTR(x2, h10, z1);						   // Top-right outer
 					const Vector3 vBL(x1, h01, z2);						   // Bottom-left outer
@@ -642,28 +651,52 @@ namespace mmo
 					// Top triangle: Center - TL - TR
 					if (CapsuleTriangleIntersection(localCapsule, vCenter, vTL, vTR, contactPoint, contactNormal, penetration, distance))
 					{
-						results.emplace_back(true, contactPoint, contactNormal, vCenter, vTL, vTR, penetration, distance);
+						// Transform contact point and normal back to world space
+						const Vector3 worldContactPoint = worldTransform * contactPoint;
+						const Vector3 worldContactNormal = (normalTransform * contactNormal).NormalizedCopy();
+						const Vector3 worldV0 = worldTransform * vCenter;
+						const Vector3 worldV1 = worldTransform * vTL;
+						const Vector3 worldV2 = worldTransform * vTR;
+						results.emplace_back(true, worldContactPoint, worldContactNormal, worldV0, worldV1, worldV2, penetration, distance);
 						hasCollision = true;
 					}
 
 					// Right triangle: Center - TR - BR
 					if (CapsuleTriangleIntersection(localCapsule, vCenter, vTR, vBR, contactPoint, contactNormal, penetration, distance))
 					{
-						results.emplace_back(true, contactPoint, contactNormal, vCenter, vTR, vBR, penetration, distance);
+						// Transform contact point and normal back to world space
+						const Vector3 worldContactPoint = worldTransform * contactPoint;
+						const Vector3 worldContactNormal = (normalTransform * contactNormal).NormalizedCopy();
+						const Vector3 worldV0 = worldTransform * vCenter;
+						const Vector3 worldV1 = worldTransform * vTR;
+						const Vector3 worldV2 = worldTransform * vBR;
+						results.emplace_back(true, worldContactPoint, worldContactNormal, worldV0, worldV1, worldV2, penetration, distance);
 						hasCollision = true;
 					}
 
 					// Bottom triangle: Center - BR - BL
 					if (CapsuleTriangleIntersection(localCapsule, vCenter, vBR, vBL, contactPoint, contactNormal, penetration, distance))
 					{
-						results.emplace_back(true, contactPoint, contactNormal, vCenter, vBR, vBL, penetration, distance);
+						// Transform contact point and normal back to world space
+						const Vector3 worldContactPoint = worldTransform * contactPoint;
+						const Vector3 worldContactNormal = (normalTransform * contactNormal).NormalizedCopy();
+						const Vector3 worldV0 = worldTransform * vCenter;
+						const Vector3 worldV1 = worldTransform * vBR;
+						const Vector3 worldV2 = worldTransform * vBL;
+						results.emplace_back(true, worldContactPoint, worldContactNormal, worldV0, worldV1, worldV2, penetration, distance);
 						hasCollision = true;
 					}
 
 					// Left triangle: Center - BL - TL
 					if (CapsuleTriangleIntersection(localCapsule, vCenter, vBL, vTL, contactPoint, contactNormal, penetration, distance))
 					{
-						results.emplace_back(true, contactPoint, contactNormal, vCenter, vBL, vTL, penetration, distance);
+						// Transform contact point and normal back to world space
+						const Vector3 worldContactPoint = worldTransform * contactPoint;
+						const Vector3 worldContactNormal = (normalTransform * contactNormal).NormalizedCopy();
+						const Vector3 worldV0 = worldTransform * vCenter;
+						const Vector3 worldV1 = worldTransform * vBL;
+						const Vector3 worldV2 = worldTransform * vTL;
+						results.emplace_back(true, worldContactPoint, worldContactNormal, worldV0, worldV1, worldV2, penetration, distance);
 						hasCollision = true;
 					}
 				}

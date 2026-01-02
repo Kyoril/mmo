@@ -1729,14 +1729,17 @@ namespace mmo
 				return false;
 			}
 
-			// Reject hits that are barely on the cusp of the radius of the capsule
-			// Skip this check for nearly flat surfaces (normal pointing straight up) since
-			// terrain triangles may report impact points that are geometrically at triangle
-			// edges/vertices rather than directly below the capsule center
+			// Reject hits that are barely on the cusp of the radius of the capsule.
+			// However, skip this check for walkable surfaces since:
+			// 1. Terrain triangles may report impact points that are geometrically at triangle
+			//    edges/vertices rather than directly below the capsule center
+			// 2. A walkable slope is not a thin ledge that we could perch on
+			// The edge tolerance check is specifically to prevent perching on thin ledges,
+			// which will have steep (non-walkable) normals anyway.
 			const float gravityNormalY = GetGravitySpaceY(hit.ImpactNormal);
-			const bool isNearlyFlatSurface = gravityNormalY > 0.99f;
+			const bool isWalkableSurface = gravityNormalY >= m_walkableFloorY;
 			
-			if (!isNearlyFlatSurface && !IsWithinEdgeTolerance(hit.Location, hit.ImpactPoint, pawnRadius))
+			if (!isWalkableSurface && !IsWithinEdgeTolerance(hit.Location, hit.ImpactPoint, pawnRadius))
 			{
 				const float distFromCenterSq = ProjectToGravityFloor(hit.ImpactPoint - hit.Location).GetSquaredLength();
 				const float reducedRadius = std::max(SWEEP_EDGE_REJECT_DISTANCE + 1.e-4f, pawnRadius - SWEEP_EDGE_REJECT_DISTANCE);
