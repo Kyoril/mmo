@@ -20,6 +20,14 @@ namespace mmo
 	constexpr float MAX_FLOOR_DIST = 0.024f;
 	constexpr float BRAKE_TO_STOP_VELOCITY = 0.1f;
 	constexpr float SWEEP_EDGE_REJECT_DISTANCE = 0.0015f;
+	
+	/// @brief Minimum time threshold for velocity computation after collision deflection.
+	/// If remaining time is smaller than this, we use this value to prevent velocity explosion.
+	constexpr float MIN_TIME_FOR_VELOCITY_COMPUTATION = 0.001f;
+	
+	/// @brief Maximum velocity boost factor allowed when computing deflection velocity.
+	/// This prevents extreme velocities when the remaining time is very small.
+	constexpr float MAX_VELOCITY_BOOST_FACTOR = 2.0f;
 
 	static const auto s_stringColor = Color(0.0f, 0.66f, 1.0f);
 
@@ -1170,9 +1178,23 @@ namespace mmo
 				Vector3 delta = ComputeSlideVector(adjusted, 1.f - hit.Time, oldHitNormal);
 
 				// Compute velocity after deflection (only gravity component for RootMotion)
+				// Use a safe minimum time to prevent velocity explosion when subTimeTickRemaining is very small
 				if (subTimeTickRemaining > 1.e-4f && !m_justTeleported)
 				{
-					const Vector3 newVelocity = (delta / subTimeTickRemaining);
+					const float safeTimeRemaining = std::max(subTimeTickRemaining, MIN_TIME_FOR_VELOCITY_COMPUTATION);
+					Vector3 newVelocity = delta / safeTimeRemaining;
+					
+					// Clamp velocity magnitude to prevent extreme values
+					// The new velocity should not exceed the original velocity by more than a reasonable factor
+					const float originalSpeed = oldVelocity.GetLength();
+					const float maxAllowedSpeed = std::max(originalSpeed * MAX_VELOCITY_BOOST_FACTOR, GetMaxSpeed());
+					const float newSpeed = newVelocity.GetLength();
+					
+					if (newSpeed > maxAllowedSpeed && newSpeed > 1.e-4f)
+					{
+						newVelocity = newVelocity * (maxAllowedSpeed / newSpeed);
+					}
+					
 					m_velocity = newVelocity;
 				}
 
@@ -1226,10 +1248,23 @@ namespace mmo
 						}
 
 						// Compute velocity after deflection (only gravity component for RootMotion)
+						// Use a safe minimum time to prevent velocity explosion when subTimeTickRemaining is very small
 						if (subTimeTickRemaining > 1.e-4f && !m_justTeleported)
 						{
-							const Vector3 NewVelocity = (delta / subTimeTickRemaining);
-							m_velocity = NewVelocity;
+							const float safeTimeRemaining = std::max(subTimeTickRemaining, MIN_TIME_FOR_VELOCITY_COMPUTATION);
+							Vector3 newVelocity = delta / safeTimeRemaining;
+							
+							// Clamp velocity magnitude to prevent extreme values
+							const float originalSpeed = oldVelocity.GetLength();
+							const float maxAllowedSpeed = std::max(originalSpeed * MAX_VELOCITY_BOOST_FACTOR, GetMaxSpeed());
+							const float newSpeed = newVelocity.GetLength();
+							
+							if (newSpeed > maxAllowedSpeed && newSpeed > 1.e-4f)
+							{
+								newVelocity = newVelocity * (maxAllowedSpeed / newSpeed);
+							}
+							
+							m_velocity = newVelocity;
 						}
 
 						// bDitch=true means that pawn is straddling two slopes, neither of which it can stand on
@@ -2070,10 +2105,23 @@ namespace mmo
 			return collidable->TestCapsuleCollision(startCapsule, collisionResults);
 		}
 
-		// Use binary search or continuous collision detection instead of fixed steps
+		// Use binary search to find the first contact point.
+		// We search for the smallest t where collision occurs.
 		float minT = 0.0f;
 		float maxT = 1.0f;
-		const int maxIterations = 20;
+		
+		// First, check if there's any collision at the end position
+		std::vector<CollisionResult> endResults;
+		const bool hasEndCollision = collidable->TestCapsuleCollision(endCapsule, endResults);
+		if (!hasEndCollision)
+		{
+			// No collision throughout the entire sweep
+			return false;
+		}
+
+		// Binary search for the first contact time
+		constexpr int maxIterations = 20;
+		constexpr float convergenceThreshold = 0.0005f;
 
 		for (int iter = 0; iter < maxIterations; ++iter)
 		{
@@ -2101,7 +2149,21 @@ namespace mmo
 				minT = midT;
 			}
 
-			if (maxT - minT < 0.001f) break;
+			if (maxT - minT < convergenceThreshold)
+			{
+				break;
+			}
+		}
+
+		// After binary search, the actual first contact is at maxT (or very close to it).
+		// Use the last valid collision results which were stored when we found a collision.
+		// Ensure the distance/time is set to the converged maxT value for accuracy.
+		if (!collisionResults.empty())
+		{
+			for (auto& result : collisionResults)
+			{
+				result.distance = maxT;
+			}
 		}
 
 		return !collisionResults.empty();
