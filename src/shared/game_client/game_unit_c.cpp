@@ -287,6 +287,13 @@ namespace mmo
 		{
 			UpdatePathMovement(deltaTime);
 		}
+		else if (!IsControlledByLocalPlayer() && m_unitMovement)
+		{
+			// For idle non-player units (NPCs), correct their ground height
+			// This fixes floating NPCs that spawn at server navmesh heights
+			// which may not match the client's detailed collision geometry
+			m_unitMovement->CorrectGroundHeight();
+		}
 
 		// Update animation state based on movement
 		// Skip normal animation system if following a path (path system handles animations manually)
@@ -1299,6 +1306,13 @@ namespace mmo
 			}
 
 			m_sceneNode->SetPosition(newPosition);
+
+			// Correct the height to match the client's ground geometry
+			// This is needed because the server's navmesh may not match the client's detailed collision
+			if (m_unitMovement)
+			{
+				m_unitMovement->CorrectGroundHeight();
+			}
 
 			// Set run animation for all units following paths
 			if (m_runAnimState)

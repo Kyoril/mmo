@@ -464,6 +464,13 @@ namespace mmo
 		/// @return Reference to the acceleration vector
 		[[nodiscard]] const Vector3& GetAcceleration() const { return m_acceleration; }
 
+		/// @brief Corrects the height of a non-locally-controlled unit (NPC) to match the ground.
+		/// This is used for remote units following server paths where the server's navmesh height
+		/// may not match the client's detailed collision geometry.
+		/// @param maxCorrectionDistance Maximum distance to search for ground (default 5.0 units)
+		/// @return True if ground was found and position was corrected, false otherwise
+		bool CorrectGroundHeight(float maxCorrectionDistance = 5.0f);
+
 	public:
 		/// @brief Calculates velocity based on input parameters and applies friction
 		/// @param deltaTime Time step for velocity calculation

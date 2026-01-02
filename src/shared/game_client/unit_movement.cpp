@@ -6,6 +6,7 @@
 #include "scene_graph/scene.h"
 #include "math/capsule.h"
 #include "math/aabb.h"
+#include "math/ray.h"
 
 #include <cmath>
 #include <cfloat>
@@ -2740,6 +2741,90 @@ namespace mmo
 			// Also avoid it if we moved out of penetration
 			m_justTeleported |= !m_maintainHorizontalGroundVelocity || (oldFloorDist < 0.f);
 		}
+	}
+
+	bool UnitMovement::CorrectGroundHeight(const float maxCorrectionDistance)
+	{
+		const Vector3 currentPosition = GetUpdatedNode().GetPosition();
+		Scene& scene = GetUpdatedNode().GetScene();
+
+		// Create a ray going straight down from current position
+		// Start slightly above current position to handle cases where we're already on or in the ground
+		const Vector3 rayStart = currentPosition + Vector3(0.0f, 1.0f, 0.0f);
+		const Vector3 rayEnd = currentPosition - Vector3(0.0f, maxCorrectionDistance + 1.0f, 0.0f);
+		const Ray ray(rayStart, rayEnd);
+
+		// Query the scene for collidable objects in the sweep path
+		const AABB sweepBounds(
+			Vector3(
+				currentPosition.x - 0.5f,
+				currentPosition.y - maxCorrectionDistance - 1.0f,
+				currentPosition.z - 0.5f),
+			Vector3(
+				currentPosition.x + 0.5f,
+				currentPosition.y + 2.0f,
+				currentPosition.z + 0.5f));
+
+		const auto query = scene.CreateAABBQuery(sweepBounds);
+		if (!query)
+		{
+			return false;
+		}
+
+		query->SetQueryMask(0xFFFFFFFF);
+		query->Execute(*query);
+
+		const auto& queryResult = query->GetLastResult();
+		
+		float closestHitY = currentPosition.y - maxCorrectionDistance - 1.0f;
+		bool foundGround = false;
+
+		for (const auto& movable : queryResult)
+		{
+			const ICollidable* collidable = movable->GetCollidable();
+			if (!collidable || !collidable->IsCollidable())
+			{
+				continue;
+			}
+
+			// Test ray collision against this collidable
+			CollisionResult result;
+			if (collidable->TestRayCollision(ray, result))
+			{
+				if (result.hasCollision && result.contactPoint.y > closestHitY)
+				{
+					// Check if the surface normal indicates walkable ground (mostly pointing up)
+					if (result.contactNormal.y > 0.5f)
+					{
+						closestHitY = result.contactPoint.y;
+						foundGround = true;
+					}
+				}
+			}
+		}
+
+		if (!foundGround)
+		{
+			return false;
+		}
+
+		// Calculate the target position (slightly above the ground)
+		constexpr float groundOffset = 0.02f;
+		const float targetY = closestHitY + groundOffset;
+
+		// Only adjust if the difference is significant
+		const float heightDiff = std::abs(currentPosition.y - targetY);
+		if (heightDiff < 0.01f)
+		{
+			return true; // Already close enough
+		}
+
+		// Apply the height correction
+		Vector3 newPosition = currentPosition;
+		newPosition.y = targetY;
+		GetUpdatedNode().SetPosition(newPosition);
+
+		return true;
 	}
 
 	SceneNode& UnitMovement::GetUpdatedNode() const
