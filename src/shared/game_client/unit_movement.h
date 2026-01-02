@@ -785,8 +785,22 @@ namespace mmo
 			return Vector3::VectorPlaneProject(vector, GetGravityDirection()); 
 		}
 
+		/// @brief Gets the capsule radius for collision
+		/// @return Capsule radius in world units
+		[[nodiscard]] float GetCapsuleRadius() const;
+
+		/// @brief Gets the capsule half-height (distance from center to top/bottom sphere centers)
+		/// @return Capsule half-height in world units
+		[[nodiscard]] float GetCapsuleHalfHeight() const;
+
+		/// @brief Gets the total capsule height from bottom to top
+		/// @return Total capsule height in world units
+		[[nodiscard]] float GetCapsuleTotalHeight() const;
+
 		/// @brief Create a capsule representing the unit's collision shape at a given position
-		/// @param position The position to create the capsule at
+		/// @note The position represents the BOTTOM CENTER (feet) of the capsule, not the center.
+		///       This differs from Unreal Engine which uses center-based positioning.
+		/// @param position The feet position to create the capsule at
 		/// @return Capsule collision shape
 		[[nodiscard]] Capsule CreateCapsuleAtPosition(const Vector3& position) const;
 

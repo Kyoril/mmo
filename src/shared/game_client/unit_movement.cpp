@@ -1365,12 +1365,16 @@ namespace mmo
 		}
 
 		const Vector3 oldLocation = GetUpdatedNode().GetPosition();
-		float pawnRadius = 0.35f, pawnHalfHeight = 1.0f;
+		const float pawnRadius = GetCapsuleRadius();
+		const float pawnHalfHeight = GetCapsuleHalfHeight();
 
 		// Don't bother stepping up if top of capsule is hitting something.
+		// With feet-based positioning: top of lower hemisphere = feetY + radius
+		// Top of capsule = feetY + totalHeight = feetY + 2*halfHeight
 		const float initialImpactY = inHit.ImpactPoint | -gravDir;
 		const float oldLocationY = oldLocation | -gravDir;
-		if (initialImpactY > oldLocationY + (pawnHalfHeight - pawnRadius))
+		// Check if impact is above the top of lower hemisphere (which starts at feetY + radius)
+		if (initialImpactY > oldLocationY + (pawnHalfHeight * 2.0f - pawnRadius))
 		{
 			return false;
 		}
@@ -1383,7 +1387,8 @@ namespace mmo
 		float stepTravelUpHeight = m_maxStepHeight;
 		float stepTravelDownHeight = stepTravelUpHeight;
 		const float stepSideY = -1.f * inHit.ImpactNormal.Dot(gravDir);
-		float initialFloorBaseY = oldLocationY - pawnHalfHeight;
+		// With feet-based positioning, the floor base IS the feet position (oldLocationY)
+		float initialFloorBaseY = oldLocationY;
 		float floorPointY = initialFloorBaseY;
 
 		if (IsMovingOnGround() && m_currentFloor.IsWalkableFloor())
@@ -1602,7 +1607,7 @@ namespace mmo
 		if (GetGravitySpaceY(hit.Normal) > 1.e-4f && !hit.Normal.IsNearlyEqual(hit.ImpactNormal))
 		{
 			const Vector3 pawnLocation = GetUpdatedNode().GetPosition();
-			if (IsWithinEdgeTolerance(pawnLocation, hit.ImpactPoint, 0.35f))
+			if (IsWithinEdgeTolerance(pawnLocation, hit.ImpactPoint, GetCapsuleRadius()))
 			{
 				return true;
 			}
@@ -1651,11 +1656,12 @@ namespace mmo
 				return false;
 			}
 
-			constexpr float pawnRadius = 0.35f;
+			const float pawnRadius = GetCapsuleRadius();
 
 			// Reject hits that are above our lower hemisphere (can happen when sliding down a vertical surface).
-			const float lowerHemisphereY = GetGravitySpaceY(hit.Location);
-			if (GetGravitySpaceY(hit.ImpactPoint) >= lowerHemisphereY)
+			// With feet-based positioning, the lower hemisphere center is at feetY + radius
+			const float lowerHemisphereCenterY = GetGravitySpaceY(hit.Location) + pawnRadius;
+			if (GetGravitySpaceY(hit.ImpactPoint) >= lowerHemisphereCenterY)
 			{
 				return false;
 			}
@@ -2046,9 +2052,32 @@ namespace mmo
 		m_walkableFloorY = std::cos(m_walkableFloorAngle.GetValueRadians());
 	}
 
+	float UnitMovement::GetCapsuleRadius() const
+	{
+		return m_movedUnit.GetCollider().GetRadius();
+	}
+
+	float UnitMovement::GetCapsuleHalfHeight() const
+	{
+		// Half-height is the distance from center to the sphere centers at top/bottom
+		// This matches Unreal's convention for capsule half-height
+		constexpr float lineHalfHeight = 0.65f; // From GameUnitC::UpdateCollider
+		return lineHalfHeight + GetCapsuleRadius();
+	}
+
+	float UnitMovement::GetCapsuleTotalHeight() const
+	{
+		// Total height = line segment length + diameter of sphere caps
+		constexpr float lineHalfHeight = 0.65f;
+		const float radius = GetCapsuleRadius();
+		return (lineHalfHeight * 2.0f) + (radius * 2.0f);
+	}
+
 	Capsule UnitMovement::CreateCapsuleAtPosition(const Vector3& position) const
 	{
-		const float radius = m_movedUnit.GetCollider().GetRadius();
+		// NOTE: 'position' is the BOTTOM CENTER (feet) of the capsule, not the center.
+		// This differs from Unreal Engine which uses center-based positioning.
+		const float radius = GetCapsuleRadius();
 		constexpr float halfHeight = 0.65f; // From GameUnitC::UpdateCollider
 
 		return {
@@ -2068,12 +2097,16 @@ namespace mmo
 		result.bStartPenetrating = collisionRes.distance == 0 && collisionRes.hasCollision;
 		result.Time = hitTime;
 		result.Distance = hitTime * (traceEnd - traceStart).GetLength();
+		result.PenetrationDepth = collisionRes.penetrationDepth;
 
 		if (collisionRes.hasCollision)
 		{
-			// Set hit location and impact point
+			// Set hit location (center of capsule at hit time)
 			result.Location = traceStart + (traceEnd - traceStart) * hitTime;
-			result.ImpactPoint = result.Location; //CollisionRes.contactPoint;
+			
+			// Set impact point to actual contact point on the surface
+			// This is critical for step-up logic to correctly determine impact height
+			result.ImpactPoint = collisionRes.contactPoint;
 
 			// Set normals
 			result.ImpactNormal = collisionRes.contactNormal;
@@ -2178,7 +2211,7 @@ namespace mmo
 
 	float UnitMovement::GetValidPerchRadius() const
 	{
-		constexpr float pawnRadius = 0.35f;
+		const float pawnRadius = GetCapsuleRadius();
 		return Clamp(pawnRadius - GetPerchRadiusThreshold(), 0.0011f, pawnRadius);
 	}
 
@@ -2231,13 +2264,14 @@ namespace mmo
 			return false;
 		}
 
-		constexpr float pawnRadius = 0.35f;
+		const float pawnRadius = GetCapsuleRadius();
 		// Sweep further than actual requested distance, because a reduced capsule radius means we could miss some hits that the normal radius would contact.
-		constexpr float pawnHalfHeight = 1.0f;
 		const Vector3 capsuleLocation = inHit.Location;
 
+		// With feet-based positioning, the impact point height above the base is simply the difference
+		// (no need to add pawnHalfHeight since capsuleLocation is already at the base)
 		const float inHitAboveBase = std::max<float>(
-			0.f, GetGravitySpaceY(inHit.ImpactPoint - capsuleLocation) + pawnHalfHeight);
+			0.f, GetGravitySpaceY(inHit.ImpactPoint - capsuleLocation));
 		const float perchLineDist = std::max(0.f, inMaxFloorDist - inHitAboveBase);
 		const float perchSweepDist = std::max(0.f, inMaxFloorDist);
 
@@ -2270,7 +2304,7 @@ namespace mmo
 		// Sweep floor
 		if (floorLineTraceDist > 0.f || floorSweepTraceDist > 0.f || m_justTeleported)
 		{
-			ComputeFloorDist(capsuleLocation, floorLineTraceDist, floorSweepTraceDist, floorResult, 0.35f,
+			ComputeFloorDist(capsuleLocation, floorLineTraceDist, floorSweepTraceDist, floorResult, GetCapsuleRadius(),
 			                 downwardSweepResult);
 		}
 
@@ -2321,8 +2355,8 @@ namespace mmo
 	{
 		outFloorResult.Clear();
 
-		constexpr float pawnRadius = 0.35f;
-		constexpr float pawnHalfHeight = 1.0f;
+		const float pawnRadius = GetCapsuleRadius();
+		const float pawnHalfHeight = GetCapsuleHalfHeight();
 
 		bool skipSweep = false;
 		if (downwardSweepResult != nullptr && downwardSweepResult->IsValidBlockingHit())
@@ -2366,8 +2400,9 @@ namespace mmo
 		{
 			// Use a shorter height to avoid sweeps giving weird results if we start on a surface.
 			// This also allows us to adjust out of penetrations.
+			// With feet-based positioning, the shrinkable portion is the line segment portion (halfHeight - radius)
 			constexpr float shrinkScale = 0.9f;
-			constexpr float shrinkHeight = (pawnHalfHeight - pawnRadius) * (1.f - shrinkScale);
+			const float shrinkHeight = (pawnHalfHeight - pawnRadius) * (1.f - shrinkScale);
 			const float traceDist = sweepDistance + shrinkHeight;
 
 			CollisionHitResult hit(1.f);
@@ -2377,7 +2412,7 @@ namespace mmo
 			{
 				// Reduce hit distance by ShrinkHeight because we shrank the capsule for the trace.
 				// We allow negative distances here, because this allows us to pull out of penetrations.
-				constexpr float maxPenetrationAdjust = std::max(MAX_FLOOR_DIST, pawnRadius);
+				const float maxPenetrationAdjust = std::max(MAX_FLOOR_DIST, pawnRadius);
 				const float sweepResult = std::max(-maxPenetrationAdjust, hit.Time * traceDist - shrinkHeight);
 
 				outFloorResult.SetFromSweep(hit, sweepResult, false);
