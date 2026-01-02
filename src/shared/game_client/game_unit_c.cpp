@@ -70,6 +70,10 @@ namespace mmo
 			m_movementInfo.movementFlags &= ~movement_flags::Falling;
 
 			m_netDriver.OnMoveEvent(*this, MovementEvent(movement_event_type::Land, m_movementInfo.timestamp, m_movementInfo));
+
+			// Lock the position so the next start packet uses the same position
+			// This prevents drift from physics adjustments between landing and next movement
+			LockPositionForSync();
 		}
 	}
 
@@ -838,6 +842,14 @@ namespace mmo
 			m_movementInfo.movementFlags &= ~movement_flags::Forward;
 		}
 
+		// If position was locked from a previous stop packet, use that position
+		// to maintain consistency with what the server expects
+		if (m_positionLocked)
+		{
+			m_sceneNode->SetPosition(m_syncedPosition);
+			m_positionLocked = false;
+		}
+
 		UpdateMovementInfo();
 		m_lastHeartbeat = m_movementInfo.timestamp;
 
@@ -857,6 +869,14 @@ namespace mmo
 			m_movementInfo.movementFlags &= ~movement_flags::StrafeLeft;
 		}
 
+		// If position was locked from a previous stop packet, use that position
+		// to maintain consistency with what the server expects
+		if (m_positionLocked)
+		{
+			m_sceneNode->SetPosition(m_syncedPosition);
+			m_positionLocked = false;
+		}
+
 		UpdateMovementInfo();
 		m_lastHeartbeat = m_movementInfo.timestamp;
 
@@ -872,6 +892,10 @@ namespace mmo
 		m_lastHeartbeat = m_movementInfo.timestamp;
 
 		QueueMovementEvent(movement_event_type::StopMove, m_movementInfo.timestamp, m_movementInfo);
+
+		// Lock the position so the next start packet uses the same position
+		// This prevents drift from physics adjustments between stop and start
+		LockPositionForSync();
 	}
 
 	void GameUnitC::StopStrafe()
@@ -883,6 +907,10 @@ namespace mmo
 		m_lastHeartbeat = m_movementInfo.timestamp;
 
 		QueueMovementEvent(movement_event_type::StopStrafe, m_movementInfo.timestamp, m_movementInfo);
+
+		// Lock the position so the next start packet uses the same position
+		// This prevents drift from physics adjustments between stop and start
+		LockPositionForSync();
 	}
 
 	void GameUnitC::StartTurn(const bool left)
@@ -964,6 +992,14 @@ namespace mmo
 	void GameUnitC::OnJumped()
 	{
 		const bool wasFalling = (m_movementInfo.movementFlags & movement_flags::Falling) != 0;
+
+		// If position was locked from a previous stop/land packet, use that position
+		// to maintain consistency with what the server expects
+		if (m_positionLocked)
+		{
+			m_sceneNode->SetPosition(m_syncedPosition);
+			m_positionLocked = false;
+		}
 
 		m_lastHeartbeat = GetAsyncTimeMs();
 		UpdateMovementInfo();
@@ -2022,6 +2058,28 @@ namespace mmo
 		}
 
 		return Vector3::UnitY * height;
+	}
+
+	void GameUnitC::LockPositionForSync()
+	{
+		m_syncedPosition = m_sceneNode->GetPosition();
+		m_positionLocked = true;
+	}
+
+	void GameUnitC::GetSyncedPositionForPacket(Vector3& outPosition)
+	{
+		if (m_positionLocked)
+		{
+			outPosition = m_syncedPosition;
+			m_positionLocked = false;
+			
+			// Also snap the scene node to the synced position to keep physics in sync
+			m_sceneNode->SetPosition(m_syncedPosition);
+		}
+		else
+		{
+			outPosition = m_sceneNode->GetPosition();
+		}
 	}
 
 	void GameUnitC::UpdateMovementInfo()

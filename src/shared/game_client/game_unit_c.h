@@ -179,6 +179,20 @@ namespace mmo
 		virtual void RefreshUnitName();
 
 	public:
+		/// @brief Locks the current position as the synced position.
+		/// Called after sending a movement-stopping packet to ensure the next start packet uses the same position.
+		void LockPositionForSync();
+
+		/// @brief Gets the synced position for the next movement packet.
+		/// If position is locked, returns the locked position and unlocks it.
+		/// Otherwise returns the current position.
+		/// @param outPosition The position to use for the movement packet.
+		void GetSyncedPositionForPacket(Vector3& outPosition);
+
+		/// @brief Returns true if position is currently locked for sync.
+		bool IsPositionLocked() const { return m_positionLocked; }
+
+	public:
 		/// @brief Starts moving the unit forward or backward.
 		void StartMove(bool forward);
 
@@ -604,6 +618,14 @@ namespace mmo
 		std::queue<MovementEvent> m_movementEventQueue;
 
 		GameTime m_lastHeartbeat = 0;
+
+		/// @brief Whether the position is currently locked due to a stop packet being sent.
+		/// When true, the next movement-starting packet must use m_syncedPosition.
+		bool m_positionLocked = false;
+
+		/// @brief The last position that was sent to the server.
+		/// Used to ensure position consistency between stop and start packets.
+		Vector3 m_syncedPosition;
 
 		/// @brief Map of active spell tints (spellId -> tint color).
 		std::map<uint32, Vector4> m_spellTints;

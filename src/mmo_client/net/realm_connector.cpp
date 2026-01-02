@@ -7,6 +7,7 @@
 #include "base/constants.h"
 #include "base/random.h"
 #include "base/sha1.h"
+#include "console/console_var.h"
 #include "game/spell_target_map.h"
 #include "game_states/login_state.h"
 #include "log/default_log_levels.h"
@@ -14,6 +15,32 @@
 
 namespace mmo
 {
+	/// @brief Console variable to enable debug logging of movement packets sent by the client.
+	static ConsoleVar* s_debugMovementPacketsCVar = nullptr;
+
+	/// @brief Helper function to get the name of a movement opcode for logging.
+	static const char* GetMovementOpCodeName(uint16 opCode)
+	{
+		switch (opCode)
+		{
+		case game::client_realm_packet::MoveStartForward: return "MOVE_START_FORWARD";
+		case game::client_realm_packet::MoveStartBackward: return "MOVE_START_BACKWARD";
+		case game::client_realm_packet::MoveStop: return "MOVE_STOP";
+		case game::client_realm_packet::MoveStartStrafeLeft: return "MOVE_START_STRAFE_LEFT";
+		case game::client_realm_packet::MoveStartStrafeRight: return "MOVE_START_STRAFE_RIGHT";
+		case game::client_realm_packet::MoveStopStrafe: return "MOVE_STOP_STRAFE";
+		case game::client_realm_packet::MoveJump: return "MOVE_JUMP";
+		case game::client_realm_packet::MoveStartTurnLeft: return "MOVE_START_TURN_LEFT";
+		case game::client_realm_packet::MoveStartTurnRight: return "MOVE_START_TURN_RIGHT";
+		case game::client_realm_packet::MoveStopTurn: return "MOVE_STOP_TURN";
+		case game::client_realm_packet::MoveFallLand: return "MOVE_FALL_LAND";
+		case game::client_realm_packet::MoveSetFacing: return "MOVE_SET_FACING";
+		case game::client_realm_packet::MoveHeartBeat: return "MOVE_HEARTBEAT";
+		case game::client_realm_packet::MoveEnded: return "MOVE_ENDED";
+		default: return "UNKNOWN";
+		}
+	}
+
 	RealmConnector::RealmConnector(asio::io_service & io)
 		: game::Connector(std::make_unique<asio::ip::tcp::socket>(io), nullptr)
 		, m_ioService(io)
@@ -22,6 +49,10 @@ namespace mmo
 		, m_clientSeed(0)
 		, m_realmId(0)
 	{
+		s_debugMovementPacketsCVar = ConsoleVarMgr::RegisterConsoleVar(
+			"debugMovementPackets",
+			"Enables debug logging of movement packets sent to the server (0=off, 1=on)",
+			"0");
 	}
 
 	PacketParseResult RealmConnector::OnAuthChallenge(game::IncomingPacket & packet)
@@ -272,6 +303,16 @@ namespace mmo
 
 	void RealmConnector::SendMovementUpdate(uint64 characterId, uint16 opCode, const MovementInfo& info)
 	{
+		// Log the movement packet if debug is enabled
+		if (s_debugMovementPacketsCVar && s_debugMovementPacketsCVar->GetBoolValue())
+		{
+			DLOG("[MOVE OUT] " << GetMovementOpCodeName(opCode) 
+				<< " pos=(" << info.position.x << ", " << info.position.y << ", " << info.position.z << ")"
+				<< " flags=" << info.movementFlags
+				<< " facing=" << info.facing.GetValueDegrees() << "°"
+				<< " ts=" << info.timestamp);
+		}
+
 		sendSinglePacket([characterId, opCode, &info](game::OutgoingPacket& packet) {
 			packet.Start(opCode);
 			packet << io::write<uint64>(characterId);

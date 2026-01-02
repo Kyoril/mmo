@@ -1,4 +1,3 @@
-
 #include "game_player_c.h"
 
 #include "net_client.h"
@@ -264,7 +263,8 @@ namespace mmo
 		{
 			if (attachment.second.entity)
 			{
-				m_entity->DetachObjectFromBone(*attachment.second.entity);
+				const String entityName = attachment.second.entity->GetName();
+				m_entity->DetachObjectFromBone(entityName);
 				m_scene.DestroyEntity(*attachment.second.entity);
 			}
 		}
