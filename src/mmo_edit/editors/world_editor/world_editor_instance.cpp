@@ -1848,7 +1848,7 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 						terrain::Tile*pageTile = page.GetTile(x, y);
 						if (pageTile)
 						{
-							pageTile->SetMaterial(tile.GetMaterial());
+							pageTile->SetMaterial(tile.GetBaseMaterial());
 						}
 					}
 				}
