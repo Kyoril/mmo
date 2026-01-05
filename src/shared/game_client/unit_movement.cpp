@@ -182,6 +182,25 @@ namespace mmo
 
 			// make sure we update our new floor/base on initial entry of the walking physics
 			FindFloor(GetUpdatedNode().GetPosition(), m_currentFloor, nullptr);
+			
+			// Handle initial penetration when switching to walking mode
+			// This helps when a character spawns slightly inside the ground
+			if (m_currentFloor.HitResult.bStartPenetrating && !m_currentFloor.IsWalkableFloor())
+			{
+				MOVEMENT_LOG("SetMovementMode: Starting in penetration, attempting to resolve");
+				CollisionHitResult hit(m_currentFloor.HitResult);
+				
+				// Try pushing upward to get out of the floor
+				const float penetrationDepth = hit.PenetrationDepth > 0.f ? hit.PenetrationDepth : 0.125f;
+				const Vector3 upwardAdjustment = -GetGravityDirection() * (penetrationDepth + 0.05f);
+				
+				if (ResolvePenetration(upwardAdjustment, hit, GetUpdatedNode().GetOrientation()))
+				{
+					// After resolving penetration, re-check the floor
+					FindFloor(GetUpdatedNode().GetPosition(), m_currentFloor, nullptr);
+				}
+			}
+			
 			AdjustFloorHeight();
 		}
 		else
@@ -527,15 +546,37 @@ namespace mmo
 			{
 				AdjustFloorHeight();
 			}
-			else if (m_currentFloor.HitResult.bStartPenetrating && remainingTime <= 0.f)
+			else if (m_currentFloor.HitResult.bStartPenetrating)
 			{
 				// The floor check failed because it started in penetration
 				// We do not want to try to move downward because the downward sweep failed, rather we'd like to try to pop out of the floor.
 				CollisionHitResult hit(m_currentFloor.HitResult);
 				hit.TraceEnd = hit.TraceStart + -GetGravityDirection() * MAX_FLOOR_DIST;
-				const Vector3 requestedAdjustment = GetPenetrationAdjustment(hit);
-				ResolvePenetration(requestedAdjustment, hit, GetUpdatedNode().GetOrientation());
-				//bForceNextFloorCheck = true;
+				
+				// For penetration, push upward (against gravity) to get out of the floor
+				Vector3 requestedAdjustment = GetPenetrationAdjustment(hit);
+				
+				// If the normal-based adjustment is too horizontal (which can happen when hitting terrain edges),
+				// try pushing directly upward instead
+				const float adjustmentUpwardComponent = GetGravitySpaceY(-requestedAdjustment);
+				if (adjustmentUpwardComponent < 0.01f && hit.bStartPenetrating)
+				{
+					// The adjustment is mostly horizontal - try pushing straight up instead
+					const float penetrationDepth = hit.PenetrationDepth > 0.f ? hit.PenetrationDepth : 0.125f;
+					requestedAdjustment = -GetGravityDirection() * (penetrationDepth + 0.01f);
+					MOVEMENT_LOG("HandleWalking: Penetration adjustment was horizontal, pushing up instead: " 
+						<< requestedAdjustment.x << ", " << requestedAdjustment.y << ", " << requestedAdjustment.z);
+				}
+				
+				if (ResolvePenetration(requestedAdjustment, hit, GetUpdatedNode().GetOrientation()))
+				{
+					// After resolving penetration, re-check the floor
+					FindFloor(GetUpdatedNode().GetPosition(), m_currentFloor, nullptr);
+					if (m_currentFloor.IsWalkableFloor())
+					{
+						AdjustFloorHeight();
+					}
+				}
 			}
 
 			// check if just entered water
@@ -2627,14 +2668,20 @@ namespace mmo
 			return;
 		}
 
-		// Line trace - if the sweep hit an unwalkable surface, try a line trace to find walkable floor beneath
-		// This helps when the capsule sweep hits beveled edges of geometry but there's flat floor nearby
-		if (lineDistance > 0.f && outFloorResult.bValidFloor && !outFloorResult.bWalkableFloor)
+		// Line trace - if the sweep hit an unwalkable surface OR if we started in penetration,
+		// try a line trace to find walkable floor beneath.
+		// This helps when the capsule sweep hits beveled edges of geometry but there's flat floor nearby,
+		// or when the character spawns slightly inside the ground.
+		const bool bShouldTryLineTrace = (outFloorResult.bValidFloor && !outFloorResult.bWalkableFloor) ||
+		                                  outFloorResult.HitResult.bStartPenetrating;
+		if (lineDistance > 0.f && bShouldTryLineTrace)
 		{
-			// The sweep found an unwalkable surface. Try a sweep with a very small radius (like a line trace)
-			// straight down from the center of the capsule to check if there's walkable floor beneath.
-			// With feet-based positioning, trace from feet position + small offset down to lineDistance
-			const float traceStartOffset = MAX_FLOOR_DIST;  // Start just above feet
+			// The sweep found an unwalkable surface or started in penetration. Try a sweep with a very small radius 
+			// (like a line trace) straight down from the center of the capsule to check if there's walkable floor beneath.
+			// With feet-based positioning, trace from feet position + small offset down to lineDistance.
+			// For penetration cases, start the trace from higher up to get clear of the penetrating geometry.
+			const float traceStartOffset = outFloorResult.HitResult.bStartPenetrating ? 
+			                               (pawnHalfHeight * 0.5f) : MAX_FLOOR_DIST;
 			const Vector3 traceStart = capsuleLocation - GetGravityDirection() * traceStartOffset;
 			const Vector3 traceEnd = capsuleLocation + GetGravityDirection() * lineDistance;
 			
@@ -2651,10 +2698,14 @@ namespace mmo
 			{
 				// Found walkable floor with line trace - use it
 				const float lineFloorDist = innerHit.Time * traceDist - traceStartOffset;
-				if (lineFloorDist <= lineDistance)
+				if (lineFloorDist <= lineDistance || outFloorResult.HitResult.bStartPenetrating)
 				{
-					MOVEMENT_LOG("ComputeFloorDist: Line trace found walkable floor at dist=" << lineFloorDist);
+					MOVEMENT_LOG("ComputeFloorDist: Line trace found walkable floor at dist=" << lineFloorDist 
+						<< " (penetrating=" << static_cast<int32>(outFloorResult.HitResult.bStartPenetrating) << ")");
+					
+					// For penetration cases, mark the floor as valid so we can try to depenetrate
 					outFloorResult.SetFromLineTrace(innerHit, outFloorResult.FloorDistance, lineFloorDist, true);
+					outFloorResult.bValidFloor = true;
 					return;
 				}
 			}
@@ -2717,7 +2768,60 @@ namespace mmo
 			const float initialY = GetGravitySpaceY(GetUpdatedNode().GetPosition());
 			constexpr float avgFloorDist = (MIN_FLOOR_DIST + MAX_FLOOR_DIST) * 0.5f;
 			const float moveDist = avgFloorDist - oldFloorDist;
+			
+			// If we're starting in penetration (negative floor distance indicates we're below the floor surface),
+			// we need to move without sweeping to get out, as a sweep will fail immediately.
+			// Check both the HitResult flag AND negative floor distance, since the line trace might have 
+			// replaced the HitResult with one that doesn't have bStartPenetrating set.
+			const bool bStartingInPenetration = m_currentFloor.HitResult.bStartPenetrating || oldFloorDist < 0.f;
+			if (bStartingInPenetration && moveDist > 0.f)
+			{
+				MOVEMENT_LOG("AdjustFloorHeight: Attempting penetration escape, oldFloorDist=" << oldFloorDist << ", moveDist=" << moveDist);
+				
+				// We're in penetration and need to move up - try without sweep first to escape
+				// Check if the destination is clear using an overlap test
+				const Vector3 targetPosition = GetUpdatedNode().GetPosition() - GetGravityDirection() * moveDist;
+				if (!OverlapTest(targetPosition, CollisionParams()))
+				{
+					// Destination is clear, teleport there
+					GetUpdatedNode().SetPosition(targetPosition);
+					m_currentFloor.FloorDistance = avgFloorDist;
+					m_justTeleported = true;
+					MOVEMENT_LOG("AdjustFloorHeight: Teleported up " << moveDist << " to escape penetration");
+					return;
+				}
+				else
+				{
+					// Try smaller increments to find a valid position
+					constexpr int maxSteps = 10;
+					const float stepSize = moveDist / maxSteps;
+					for (int i = maxSteps; i > 0; --i)
+					{
+						const float testDist = stepSize * i;
+						const Vector3 testPosition = GetUpdatedNode().GetPosition() - GetGravityDirection() * testDist;
+						if (!OverlapTest(testPosition, CollisionParams()))
+						{
+							GetUpdatedNode().SetPosition(testPosition);
+							m_currentFloor.FloorDistance = oldFloorDist + testDist;
+							m_justTeleported = true;
+							MOVEMENT_LOG("AdjustFloorHeight: Teleported up " << testDist << " (partial) to escape penetration");
+							return;
+						}
+					}
+					// Could not find clear space - this is problematic, but continue with normal logic
+					MOVEMENT_LOG("AdjustFloorHeight: Could not find clear space above to escape penetration");
+				}
+			}
+			
 			SafeMoveNode(-GetGravityDirection() * moveDist, GetUpdatedNode().GetOrientation(), true, &adjustHit);
+
+			// Check if we actually moved - bStartPenetrating means sweep failed at start
+			if (adjustHit.bStartPenetrating)
+			{
+				// Sweep started in penetration and couldn't move - don't update floor distance
+				MOVEMENT_LOG("AdjustFloorHeight: Sweep failed due to penetration, no movement");
+				return;
+			}
 
 			if (!adjustHit.IsValidBlockingHit())
 			{
