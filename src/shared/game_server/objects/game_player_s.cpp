@@ -1006,6 +1006,9 @@ namespace mmo
 
 	void GamePlayerS::OnQuestItemAddedCredit(const proto::ItemEntry &entry, uint32 amount)
 	{
+		const uint32 currentTotal = m_inventory.GetItemCount(entry.id());
+		const uint32 previousTotal = (currentTotal >= amount) ? (currentTotal - amount) : 0;
+
 		// If this is set to true, all nearby objects will be updated
 		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
 		{
@@ -1043,19 +1046,31 @@ namespace mmo
 			// Check every quest entry requirement
 			for (const auto &req : quest->requirements())
 			{
+				uint32 requiredCount = 0;
 				if (req.itemid() == entry.id())
 				{
-					if (m_inventory.GetItemCount(entry.id()) >= req.itemcount())
-					{
-						validateQuest = true;
-					}
+					requiredCount = req.itemcount();
 				}
 				else if (req.sourceid() == entry.id())
 				{
-					if (m_inventory.GetItemCount(entry.id()) >= req.sourcecount())
-					{
-						validateQuest = true;
-					}
+					requiredCount = req.sourcecount();
+				}
+				else
+				{
+					continue;
+				}
+
+				const uint32 previousCount = std::min(previousTotal, requiredCount);
+				const uint32 currentCount = std::min(currentTotal, requiredCount);
+
+				if (currentCount > previousCount && m_netPlayerWatcher)
+				{
+					m_netPlayerWatcher->OnQuestItemCredit(*quest, entry.id(), currentCount, requiredCount);
+				}
+
+				if (currentCount >= requiredCount)
+				{
+					validateQuest = true;
 				}
 			}
 

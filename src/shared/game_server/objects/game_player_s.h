@@ -30,6 +30,8 @@ namespace mmo
 	public:
 		virtual void OnQuestKillCredit(const proto::QuestEntry &, uint64 guid, uint32 entry, uint32 count, uint32 maxCount) = 0;
 
+		virtual void OnQuestItemCredit(const proto::QuestEntry &, uint32 entry, uint32 count, uint32 maxCount) = 0;
+
 		virtual void OnQuestDataChanged(uint32 questId, const QuestStatusData &data) = 0;
 
 		virtual void OnQuestCompleted(uint64 questgiverGuid, uint32 questId, uint32 rewardedXp, uint32 rewardMoney) = 0;

@@ -2227,6 +2227,19 @@ namespace mmo
 			});
 	}
 
+	void Player::OnQuestItemCredit(const proto::QuestEntry& quest, uint32 entry, uint32 count, uint32 maxCount)
+	{
+		SendPacket([&quest, entry, count, maxCount](game::OutgoingPacket& packet) {
+			packet.Start(game::realm_client_packet::QuestUpdateAddItem);
+			packet
+				<< io::write<uint32>(quest.id())
+				<< io::write<uint32>(entry)
+				<< io::write<uint32>(count)
+				<< io::write<uint32>(maxCount);
+			packet.Finish();
+			});
+	}
+
 	void Player::OnQuestDataChanged(uint32 questId, const QuestStatusData& data)
 	{
 		// Send quest data packet to realm server so that it will be persisted in the database

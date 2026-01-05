@@ -801,7 +801,24 @@ namespace mmo
 		switch(packet.GetId())
 		{
 		case game::realm_client_packet::QuestUpdateAddItem:
+		{
+			uint32 entry, count, maxCount;
+			if (!(packet >> io::read<uint32>(entry) >> io::read<uint32>(count) >> io::read<uint32>(maxCount)))
+			{
+				ELOG("Failed to read QuestUpdateAddItem packet");
+				return PacketParseResult::Disconnect;
+			}
 
+			static const String s_itemGatheredFormat = "QUEST_ITEMS_NEEDED";
+			const String* format = m_localization.FindStringById("QUEST_ITEMS_NEEDED");
+			if (!format) format = &s_itemGatheredFormat;
+
+			const ItemInfo* item = m_itemCache.Get(entry);
+
+			char buffer[512];
+			snprintf(buffer, 512, format->c_str(), item ? item->name.c_str() : "UNKNOWN", count, maxCount);
+			FrameManager::Get().TriggerLuaEvent("UI_INFO_MESSAGE", buffer);
+		}
 			break;
 		case game::realm_client_packet::QuestUpdateAddKill:
 		{
