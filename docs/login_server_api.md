@@ -89,7 +89,7 @@ Creates a new realm with authentication credentials and connection information.
 **Error Response Example:**
 ```json
 {
-  "status": "ACCOUNT_NAME_ALREADY_IN_USE", 
+  "status": "REALM_NAME_ALREADY_IN_USE", 
   "message": "Realm name already in use"
 }
 ```
