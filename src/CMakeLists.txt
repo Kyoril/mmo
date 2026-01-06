@@ -11,6 +11,7 @@ add_subdirectory(world_server)
 
 if (MMO_BUILD_CLIENT)
 	add_subdirectory(mmo_client)
+	add_subdirectory(mmo_bot)
 	add_subdirectory(graphics_test)
 endif()
 if (MMO_BUILD_EDITOR)
