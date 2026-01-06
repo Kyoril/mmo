@@ -7,3 +7,4 @@
 #include "bot_actions/chat_message_action.h"
 #include "bot_actions/wait_action.h"
 #include "bot_actions/move_to_position_action.h"
+#include "bot_actions/accept_party_invitation_action.h"

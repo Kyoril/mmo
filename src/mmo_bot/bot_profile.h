@@ -38,6 +38,14 @@ namespace mmo
 
 		/// Called when the profile is deactivated (bot leaves world or switches profile).
 		virtual void OnDeactivate(BotContext& context) = 0;
+
+		/// Called when another player invites this bot to a party.
+		/// The profile should decide whether to accept or reject the invitation.
+		/// @param context The bot context.
+		/// @param inviterName The name of the player who sent the invitation.
+		/// @return True to indicate interest in accepting (profile should queue accept action),
+		///         false to automatically decline the invitation.
+		virtual bool OnPartyInvitation(BotContext& context, const std::string& inviterName) = 0;
 	};
 
 	/// Base implementation of a bot profile that manages an action queue.
@@ -186,6 +194,15 @@ namespace mmo
 		size_t GetQueueSize() const
 		{
 			return m_actionQueue.size();
+		}
+
+		/// Default implementation for party invitation event handler.
+		/// By default, rejects all party invitations.
+		/// Derived classes can override this to implement custom logic.
+		bool OnPartyInvitation(BotContext& context, const std::string& inviterName) override
+		{
+			ILOG("Bot profile '" << GetName() << "' rejected party invitation from " << inviterName);
+			return false;
 		}
 
 	private:

@@ -114,4 +114,26 @@ namespace mmo
 	{
 		m_customState.erase(key);
 	}
+
+	void BotContext::AcceptPartyInvitation()
+	{
+		if (!m_realmConnector)
+		{
+			WLOG("Cannot accept party invitation: No realm connector available");
+			return;
+		}
+
+		m_realmConnector->AcceptPartyInvitation();
+	}
+
+	void BotContext::DeclinePartyInvitation()
+	{
+		if (!m_realmConnector)
+		{
+			WLOG("Cannot decline party invitation: No realm connector available");
+			return;
+		}
+
+		m_realmConnector->DeclinePartyInvitation();
+	}
 }

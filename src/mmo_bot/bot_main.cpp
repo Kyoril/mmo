@@ -402,6 +402,26 @@ namespace mmo
 					ELOG("Realm connection lost.");
 					m_stopRequested = true;
 				});
+
+			m_realm->PartyInvitationReceived.connect([this](const std::string& inviterName)
+				{
+					if (!m_profile || !m_profileActivated)
+					{
+						WLOG("Received party invitation from " << inviterName << " but profile not active yet");
+						m_realm->DeclinePartyInvitation();
+						return;
+					}
+
+					ILOG("Party invitation from " << inviterName << " - delegating to profile");
+					const bool shouldAccept = m_profile->OnPartyInvitation(*m_context, inviterName);
+					
+					if (!shouldAccept)
+					{
+						ILOG("Profile declined party invitation from " << inviterName);
+						m_realm->DeclinePartyInvitation();
+					}
+					// If profile returns true, it should queue an accept action for realistic delay
+				});
 		}
 
 	private:

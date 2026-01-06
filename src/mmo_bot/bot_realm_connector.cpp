@@ -327,6 +327,9 @@ namespace mmo
 			RegisterPacketHandler(game::realm_client_packet::ForceSetFlightSpeed, *this, &BotRealmConnector::OnForceMovementSpeedChange);
 			RegisterPacketHandler(game::realm_client_packet::ForceSetFlightBackSpeed, *this, &BotRealmConnector::OnForceMovementSpeedChange);
 
+			// Register party invitation handler
+			RegisterPacketHandler(game::realm_client_packet::GroupInvite, *this, &BotRealmConnector::OnGroupInvite);
+
 			// Register handlers for common packets that can be safely ignored by the bot
 			RegisterPacketHandler(game::realm_client_packet::UpdateObject, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::CompressedUpdateObject, *this, &BotRealmConnector::OnIgnoredPacket);
@@ -515,5 +518,46 @@ namespace mmo
 	{
 		// Silently ignore this packet - it's not important for the bot's functionality
 		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnGroupInvite(game::IncomingPacket& packet)
+	{
+		String inviterName;
+		if (!(packet >> io::read_container<uint8>(inviterName)))
+		{
+			ELOG("Failed to read GroupInvite packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		ILOG("Received party invitation from " << inviterName);
+
+		// Trigger the signal for the bot profile to handle
+		PartyInvitationReceived(inviterName);
+
+		return PacketParseResult::Pass;
+	}
+
+	void BotRealmConnector::AcceptPartyInvitation()
+	{
+		// Send GroupAccept packet to the server
+		sendSinglePacket([](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::GroupAccept);
+			packet.Finish();
+		});
+
+		ILOG("Accepted party invitation");
+	}
+
+	void BotRealmConnector::DeclinePartyInvitation()
+	{
+		// Send GroupDecline packet to the server
+		sendSinglePacket([](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::GroupDecline);
+			packet.Finish();
+		});
+
+		ILOG("Declined party invitation");
 	}
 }

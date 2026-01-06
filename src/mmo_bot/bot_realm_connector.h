@@ -28,6 +28,7 @@ namespace mmo
 		signal<void(game::player_login_response::Type)> EnterWorldFailed;
 		signal<void(uint32, Vector3, float)> VerifyNewWorld;
 		signal<void(game::CharCreateResult)> CharacterCreated;
+		signal<void(const std::string&)> PartyInvitationReceived;
 
 	private:
 		asio::io_service& m_ioService;
@@ -91,6 +92,10 @@ namespace mmo
 
 		uint64 GetSelectedGuid() const { return m_selectedCharacterGuid; }
 
+		void AcceptPartyInvitation();
+
+		void DeclinePartyInvitation();
+
 	private:
 		PacketParseResult OnAuthChallenge(game::IncomingPacket& packet);
 
@@ -115,5 +120,7 @@ namespace mmo
 		PacketParseResult OnForceMovementSpeedChange(game::IncomingPacket& packet);
 
 		PacketParseResult OnIgnoredPacket(game::IncomingPacket& packet);
+
+		PacketParseResult OnGroupInvite(game::IncomingPacket& packet);
 	};
 }

@@ -92,6 +92,12 @@ namespace mmo
 		/// Use with caution - prefer using the facade methods when possible.
 		std::shared_ptr<BotRealmConnector> GetRealmConnector() const { return m_realmConnector; }
 
+		/// Accepts a pending party invitation.
+		void AcceptPartyInvitation();
+
+		/// Declines a pending party invitation.
+		void DeclinePartyInvitation();
+
 	private:
 		std::shared_ptr<BotRealmConnector> m_realmConnector;
 		const BotConfig& m_config;
