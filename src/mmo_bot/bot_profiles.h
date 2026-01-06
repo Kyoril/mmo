@@ -186,10 +186,10 @@ namespace mmo
 			QueueAction(std::make_shared<MoveToPositionAction>(startPos + Vector3(5, 0, 0)));
 			QueueAction(std::make_shared<WaitAction>(500ms));
 			
-			QueueAction(std::make_shared<MoveToPositionAction>(startPos + Vector3(5, 5, 0)));
+			QueueAction(std::make_shared<MoveToPositionAction>(startPos + Vector3(5, 0, 5)));
 			QueueAction(std::make_shared<WaitAction>(500ms));
 			
-			QueueAction(std::make_shared<MoveToPositionAction>(startPos + Vector3(0, 5, 0)));
+			QueueAction(std::make_shared<MoveToPositionAction>(startPos + Vector3(0, 0, 5)));
 			QueueAction(std::make_shared<WaitAction>(500ms));
 			
 			QueueAction(std::make_shared<MoveToPositionAction>(startPos));

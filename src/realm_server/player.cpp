@@ -2371,7 +2371,7 @@ namespace mmo
 									   {
 			outPacket.Start(game::realm_client_packet::LoginVerifyWorld);
 			outPacket
-				<< io::write<uint64>(m_characterData->mapId)	
+				<< io::write<uint32>(m_characterData->mapId)
 				<< io::write<float>(m_characterData->position.x)
 				<< io::write<float>(m_characterData->position.y)
 				<< io::write<float>(m_characterData->position.z)
