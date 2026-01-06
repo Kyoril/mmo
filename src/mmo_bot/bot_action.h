@@ -65,6 +65,16 @@ namespace mmo
 			// By default, all actions can be executed
 			return true;
 		}
+
+		/// Checks if this action can be interrupted by urgent actions (e.g., event handlers).
+		/// Interruptible actions (like waiting) will be aborted when an urgent action is queued.
+		/// Non-interruptible actions (like sending a chat message) will complete first.
+		/// @return True if this action can be interrupted, false otherwise.
+		virtual bool IsInterruptible() const
+		{
+			// By default, actions are not interruptible to ensure atomic execution
+			return false;
+		}
 	};
 
 	/// Base class for bot actions providing common functionality.

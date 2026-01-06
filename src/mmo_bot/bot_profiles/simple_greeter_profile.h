@@ -56,18 +56,21 @@ namespace mmo
 		}
 
 		/// Example: Accept all party invitations with a 2-second delay to simulate human behavior.
-		/// Override this method to customize party invitation handling.
+		/// Uses QueueUrgentActions to interrupt the current wait action.
 		bool OnPartyInvitation(BotContext& context, const std::string& inviterName) override
 		{
 			ILOG("SimpleGreeter: Received party invitation from " << inviterName << " - accepting with delay");
 			
-			// Queue a wait action to simulate "thinking time"
-			QueueActionNext(std::make_shared<WaitAction>(2000ms));
+			// Create urgent actions: wait briefly then accept
+			// Using QueueUrgentActions will interrupt the 24-hour wait action
+			std::vector<BotActionPtr> urgentActions = {
+				std::make_shared<WaitAction>(2000ms),
+				std::make_shared<AcceptPartyInvitationAction>()
+			};
 			
-			// Then queue the accept action
-			QueueActionNext(std::make_shared<AcceptPartyInvitationAction>());
+			QueueUrgentActions(urgentActions, context);
 			
-			// Return true to indicate we want to accept (but not immediately)
+			// Return true to indicate we're handling this (don't auto-decline)
 			return true;
 		}
 

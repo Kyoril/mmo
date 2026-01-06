@@ -12,7 +12,7 @@ The bot framework now supports handling party invitations from other players. Th
 2. **BotRealmConnector**: Parses packet and fires `PartyInvitationReceived` signal
 3. **BotSession**: Receives signal and delegates to active profile
 4. **BotProfile**: `OnPartyInvitation()` event handler decides how to respond
-5. **Response**: Either auto-decline (return false) or queue accept action (return true)
+5. **Response**: Either auto-decline (return false) or queue urgent accept action (return true)
 
 ### Key Components
 
@@ -21,10 +21,27 @@ The bot framework now supports handling party invitations from other players. Th
 virtual bool OnPartyInvitation(BotContext& context, const std::string& inviterName) = 0;
 ```
 - Pure virtual method that all profiles must implement
-- Returns `true` to indicate interest in accepting (profile should queue action)
+- Returns `true` to indicate interest in accepting (profile should queue urgent action)
 - Returns `false` to automatically decline the invitation
 
-#### 2. BotContext Facade
+#### 2. Interruptible Actions
+```cpp
+virtual bool IsInterruptible() const { return false; }
+```
+- Actions can mark themselves as interruptible (e.g., `WaitAction`)
+- Non-interruptible actions (e.g., `ChatMessageAction`) complete atomically
+- Used by `QueueUrgentAction()` to determine if current action can be aborted
+
+#### 3. Urgent Action Queuing
+```cpp
+void QueueUrgentAction(BotActionPtr action, BotContext& context);
+void QueueUrgentActions(const std::vector<BotActionPtr>& actions, BotContext& context);
+```
+- Queues actions at the front of the queue
+- **Interrupts current action** if it's interruptible (e.g., aborts a 24-hour wait)
+- Perfect for event-driven responses that need immediate handling
+
+#### 4. BotContext Facade
 ```cpp
 void AcceptPartyInvitation();
 void DeclinePartyInvitation();
@@ -32,31 +49,27 @@ void DeclinePartyInvitation();
 - Clean API for profiles to interact with party system
 - Encapsulates protocol details from profile logic
 
-#### 3. AcceptPartyInvitationAction
+#### 5. AcceptPartyInvitationAction
 - Bot action that accepts a pending invitation
 - Can be queued with delays to simulate realistic human behavior
 - Validates bot is in world before executing
 
-#### 4. BotRealmConnector
-- Handles `GroupInvite` packet from server
-- Sends `GroupAccept` or `GroupDecline` packets to server
-- Fires `PartyInvitationReceived` signal for profiles
-
 ## Usage Examples
 
-### Example 1: Auto-Accept with Delay (Realistic Behavior)
+### Example 1: Auto-Accept with Delay (Recommended Pattern)
 ```cpp
 bool OnPartyInvitation(BotContext& context, const std::string& inviterName) override
 {
     ILOG("Received party invitation from " << inviterName);
     
-    // Simulate human "thinking time" (1-3 seconds)
-    std::uniform_int_distribution<int> dist(1000, 3000);
-    auto delay = std::chrono::milliseconds(dist(RandomGenerator));
+    // Create urgent actions: wait briefly then accept
+    // This will interrupt the current action if it's a wait
+    std::vector<BotActionPtr> urgentActions = {
+        std::make_shared<WaitAction>(2000ms),  // Simulate thinking time
+        std::make_shared<AcceptPartyInvitationAction>()
+    };
     
-    QueueActionNext(std::make_shared<WaitAction>(delay));
-    QueueActionNext(std::make_shared<AcceptPartyInvitationAction>());
-    
+    QueueUrgentActions(urgentActions, context);
     return true; // Don't auto-decline
 }
 ```
@@ -68,8 +81,7 @@ bool OnPartyInvitation(BotContext& context, const std::string& inviterName) over
     // Only accept invitations from specific players
     if (inviterName == "TrustedPlayer" || inviterName == "Admin")
     {
-        QueueActionNext(std::make_shared<WaitAction>(2000ms));
-        QueueActionNext(std::make_shared<AcceptPartyInvitationAction>());
+        QueueUrgentAction(std::make_shared<AcceptPartyInvitationAction>(), context);
         return true;
     }
     
@@ -78,7 +90,25 @@ bool OnPartyInvitation(BotContext& context, const std::string& inviterName) over
 }
 ```
 
-### Example 3: Always Decline (Default Behavior)
+### Example 3: Random Delay for Realism
+```cpp
+bool OnPartyInvitation(BotContext& context, const std::string& inviterName) override
+{
+    // Random delay between 1-5 seconds
+    std::uniform_int_distribution<int> dist(1000, 5000);
+    auto delay = std::chrono::milliseconds(dist(RandomGenerator));
+    
+    std::vector<BotActionPtr> urgentActions = {
+        std::make_shared<WaitAction>(delay),
+        std::make_shared<AcceptPartyInvitationAction>()
+    };
+    
+    QueueUrgentActions(urgentActions, context);
+    return true;
+}
+```
+
+### Example 4: Always Decline (Default Behavior)
 ```cpp
 bool OnPartyInvitation(BotContext& context, const std::string& inviterName) override
 {
@@ -87,15 +117,51 @@ bool OnPartyInvitation(BotContext& context, const std::string& inviterName) over
 }
 ```
 
-### Example 4: Immediate Acceptance (Not Recommended)
+## Interruptible Actions Design
+
+### Why Interruptible?
+
+The problem: Profiles often queue actions upfront, including long waits (e.g., 24 hours). Without interruptibility, event-triggered actions would wait hours to execute.
+
+The solution: Mark certain actions as interruptible so urgent actions can preempt them.
+
+### Which Actions Are Interruptible?
+
+| Action | Interruptible | Reason |
+|--------|---------------|--------|
+| `WaitAction` | ✅ Yes | Waiting can be safely aborted |
+| `ChatMessageAction` | ❌ No | Should complete atomically |
+| `MoveToPositionAction` | ❌ No | Should reach destination or fail |
+| `AcceptPartyInvitationAction` | ❌ No | Instant, non-interruptible |
+
+### Creating Custom Interruptible Actions
+
 ```cpp
-bool OnPartyInvitation(BotContext& context, const std::string& inviterName) override
+class MyInterruptibleAction : public BotAction
 {
-    // WARNING: This is unrealistic - no human accepts instantly
-    context.AcceptPartyInvitation();
-    return true;
-}
+public:
+    bool IsInterruptible() const override
+    {
+        return true; // Can be interrupted by urgent actions
+    }
+    
+    void OnAbort(BotContext& context) override
+    {
+        // Clean up when interrupted
+    }
+    
+    // ... other methods
+};
 ```
+
+## Queue Methods Comparison
+
+| Method | Where Queued | Interrupts Current? | Use Case |
+|--------|-------------|---------------------|----------|
+| `QueueAction()` | End | No | Normal workflow actions |
+| `QueueActionNext()` | Front | No | Priority but not urgent |
+| `QueueUrgentAction()` | Front | Yes (if interruptible) | Event responses |
+| `QueueUrgentActions()` | Front (in order) | Yes (if interruptible) | Multi-step event responses |
 
 ## Design Rationale
 
@@ -104,15 +170,15 @@ bool OnPartyInvitation(BotContext& context, const std::string& inviterName) over
 - **Flexibility**: Each profile can implement custom logic
 - **Testability**: Easy to mock events for testing
 
+### Why Interruptible Actions?
+- **Real-world Profiles**: Profiles queue actions upfront, including long waits
+- **Responsive Events**: Events need to be handled promptly, not after hours
+- **Selective Interruption**: Only idle-like actions should be interrupted
+
 ### Why Return Bool Instead of Auto-Accept?
 - **Flexibility**: Profile controls timing and conditions
 - **Realism**: Allows simulating human behavior with delays
 - **Control**: Profile might want to check state before accepting
-
-### Why Not Auto-Accept on True Return?
-- **Human Simulation**: Real humans don't instantly accept invitations
-- **Action Queue**: Leverages existing action system for timing control
-- **Flexibility**: Profile can add chat messages, delays, or other actions
 
 ## Protocol Details
 
@@ -151,4 +217,4 @@ Potential additional events that could follow this pattern:
 - `OnWhisperReceived()`
 - `OnCombatEntered()`
 
-Each would follow the same event-driven pattern established by the party invitation system.
+Each would follow the same event-driven pattern with urgent action queuing for responsive handling.

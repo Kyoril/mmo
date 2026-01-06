@@ -70,6 +70,12 @@ namespace mmo
 			m_startTime = 0;
 		}
 
+		/// Wait actions are interruptible - they can be aborted by urgent event handlers.
+		bool IsInterruptible() const override
+		{
+			return true;
+		}
+
 	private:
 		std::chrono::milliseconds m_duration;
 		GameTime m_startTime;

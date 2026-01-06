@@ -175,6 +175,46 @@ namespace mmo
 			m_actionQueue.push_front(std::move(action));
 		}
 
+		/// Queues an urgent action that should be executed as soon as possible.
+		/// If the current action is interruptible (e.g., waiting), it will be aborted
+		/// and the urgent action will start immediately on the next update.
+		/// Use this for event-driven responses that shouldn't wait for long-running actions.
+		/// @param action The action to queue urgently.
+		/// @param context The bot context (needed if we need to abort current action).
+		void QueueUrgentAction(BotActionPtr action, BotContext& context)
+		{
+			// Add to front of queue
+			m_actionQueue.push_front(std::move(action));
+			
+			// If current action is interruptible, abort it so we process urgent action next
+			if (m_currentAction && m_currentAction->IsInterruptible())
+			{
+				ILOG("Interrupting current action for urgent action");
+				m_currentAction->OnAbort(context);
+				m_currentAction.reset();
+			}
+		}
+
+		/// Queues multiple urgent actions in order (first action in vector executes first).
+		/// @param actions The actions to queue urgently.
+		/// @param context The bot context.
+		void QueueUrgentActions(const std::vector<BotActionPtr>& actions, BotContext& context)
+		{
+			// Insert in reverse order at front so they execute in correct order
+			for (auto it = actions.rbegin(); it != actions.rend(); ++it)
+			{
+				m_actionQueue.push_front(*it);
+			}
+			
+			// Interrupt current action if possible
+			if (m_currentAction && m_currentAction->IsInterruptible())
+			{
+				ILOG("Interrupting current action for urgent actions");
+				m_currentAction->OnAbort(context);
+				m_currentAction.reset();
+			}
+		}
+
 		/// Adds multiple actions to the queue.
 		void QueueActions(const std::vector<BotActionPtr>& actions)
 		{
