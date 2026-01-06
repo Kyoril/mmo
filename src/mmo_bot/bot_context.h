@@ -236,6 +236,25 @@ namespace mmo
 		/// @param callback The callback to invoke for each unit.
 		void ForEachUnit(const std::function<void(const BotUnit&)>& callback) const;
 
+		// ============================================================
+		// Combat Methods
+		// ============================================================
+
+		/// Starts auto-attack against a target.
+		/// @param targetGuid The GUID of the target to attack.
+		void StartAutoAttack(uint64 targetGuid);
+
+		/// Stops auto-attack.
+		void StopAutoAttack();
+
+		/// Checks if the bot is currently auto-attacking.
+		/// @return True if auto-attacking.
+		bool IsAutoAttacking() const;
+
+		/// Gets the GUID of the current auto-attack target.
+		/// @return The target GUID, or 0 if not attacking.
+		uint64 GetAutoAttackTarget() const;
+
 	private:
 		std::shared_ptr<BotRealmConnector> m_realmConnector;
 		const BotConfig& m_config;

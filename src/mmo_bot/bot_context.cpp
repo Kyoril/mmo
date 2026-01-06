@@ -435,4 +435,50 @@ namespace mmo
 
 		m_realmConnector->GetObjectManager().ForEachUnit(callback);
 	}
+
+	// ============================================================
+	// Combat Methods
+	// ============================================================
+
+	void BotContext::StartAutoAttack(uint64 targetGuid)
+	{
+		if (!m_realmConnector)
+		{
+			WLOG("Cannot start attack: No realm connector available");
+			return;
+		}
+
+		m_realmConnector->SendAttackStart(targetGuid);
+	}
+
+	void BotContext::StopAutoAttack()
+	{
+		if (!m_realmConnector)
+		{
+			WLOG("Cannot stop attack: No realm connector available");
+			return;
+		}
+
+		m_realmConnector->SendAttackStop();
+	}
+
+	bool BotContext::IsAutoAttacking() const
+	{
+		if (!m_realmConnector)
+		{
+			return false;
+		}
+
+		return m_realmConnector->IsAutoAttacking();
+	}
+
+	uint64 BotContext::GetAutoAttackTarget() const
+	{
+		if (!m_realmConnector)
+		{
+			return 0;
+		}
+
+		return m_realmConnector->GetAutoAttackTarget();
+	}
 }

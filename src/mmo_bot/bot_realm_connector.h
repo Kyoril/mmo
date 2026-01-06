@@ -12,6 +12,7 @@
 #include "game/movement_type.h"
 #include "game/movement_info.h"
 #include "game/chat_type.h"
+#include "game/auto_attack.h"
 
 #include "asio/io_service.hpp"
 
@@ -56,6 +57,37 @@ namespace mmo
 		/// @brief Emitted when a unit's data is updated.
 		signal<void(const BotUnit&)> UnitUpdated;
 
+		// ============================================================
+		// Combat Signals
+		// ============================================================
+
+		/// @brief Emitted when auto-attack starts (confirmed by server).
+		/// @param attackerGuid The GUID of the attacker.
+		/// @param victimGuid The GUID of the victim.
+		signal<void(uint64, uint64)> AttackStarted;
+
+		/// @brief Emitted when auto-attack stops (confirmed by server).
+		/// @param attackerGuid The GUID of the attacker.
+		signal<void(uint64)> AttackStopped;
+
+		/// @brief Emitted when an attack swing error occurs.
+		/// @param error The error code (see attack_swing_event).
+		signal<void(AttackSwingEvent)> AttackSwingError;
+
+		/// @brief Emitted when an attack hit occurs (attacker state update).
+		/// @param attackerGuid The GUID of the attacker.
+		/// @param victimGuid The GUID of the victim.
+		/// @param damage The total damage dealt.
+		/// @param hitInfo Hit flags (miss, crit, etc.).
+		/// @param victimState Victim state (dodge, parry, block, etc.).
+		signal<void(uint64, uint64, uint32, uint32, uint32)> AttackHit;
+
+		/// @brief Emitted when we take non-spell damage.
+		/// @param targetGuid Our GUID (the damage target).
+		/// @param damage The damage amount.
+		/// @param flags Damage flags (crit, crushing, etc.).
+		signal<void(uint64, uint32, uint8)> DamageReceived;
+
 	private:
 		asio::io_service& m_ioService;
 		std::string m_realmAddress;
@@ -77,6 +109,10 @@ namespace mmo
 
 		// Object management
 		BotObjectManager m_objectManager;
+
+		// Combat state
+		bool m_isAutoAttacking { false };
+		uint64 m_autoAttackTargetGuid { 0 };
 
 	public:
 		/// A list of character views.
@@ -175,6 +211,23 @@ namespace mmo
 		/// Gets the object manager containing all known units (const).
 		const BotObjectManager& GetObjectManager() const { return m_objectManager; }
 
+		// ============================================================
+		// Combat Methods
+		// ============================================================
+
+		/// Starts auto-attack against a target.
+		/// @param targetGuid The GUID of the target to attack.
+		void SendAttackStart(uint64 targetGuid);
+
+		/// Stops auto-attack.
+		void SendAttackStop();
+
+		/// Checks if the bot is currently auto-attacking.
+		bool IsAutoAttacking() const { return m_isAutoAttacking; }
+
+		/// Gets the GUID of the current auto-attack target.
+		uint64 GetAutoAttackTarget() const { return m_autoAttackTargetGuid; }
+
 	private:
 		PacketParseResult OnAuthChallenge(game::IncomingPacket& packet);
 
@@ -216,6 +269,25 @@ namespace mmo
 
 		/// @brief Handles movement packets from other units.
 		PacketParseResult OnMovementPacket(game::IncomingPacket& packet);
+
+		// ============================================================
+		// Combat Packet Handlers
+		// ============================================================
+
+		/// @brief Handles the AttackStart packet from server.
+		PacketParseResult OnAttackStart(game::IncomingPacket& packet);
+
+		/// @brief Handles the AttackStop packet from server.
+		PacketParseResult OnAttackStop(game::IncomingPacket& packet);
+
+		/// @brief Handles the AttackSwingError packet from server.
+		PacketParseResult OnAttackSwingError(game::IncomingPacket& packet);
+
+		/// @brief Handles the AttackerStateUpdate packet from server.
+		PacketParseResult OnAttackerStateUpdate(game::IncomingPacket& packet);
+
+		/// @brief Handles the NonSpellDamageLog packet from server.
+		PacketParseResult OnNonSpellDamageLog(game::IncomingPacket& packet);
 
 		/// @brief Parses a single object update from the packet stream.
 		/// @param packet The packet to read from.

@@ -269,6 +269,10 @@ namespace mmo
 			{
 				return std::make_shared<UnitAwarenessProfile>();
 			}
+			else if (m_config.profileName == "combat")
+			{
+				return std::make_shared<CombatProfile>();
+			}
 			else
 			{
 				WLOG("Unknown profile '" << m_config.profileName << "', using simple_greeter");
@@ -515,6 +519,51 @@ namespace mmo
 					m_profile->OnUnitDespawned(*m_context, guid);
 					
 					// Area watcher will automatically handle this via its own signal connection
+				});
+
+			// Combat signals
+			m_realm->AttackHit.connect([this](uint64 attackerGuid, uint64 victimGuid, uint32 damage, uint32 hitInfo, uint32 victimState)
+				{
+					if (!m_profile || !m_profileActivated)
+					{
+						return;
+					}
+
+					// Check if we are the attacker
+					if (attackerGuid == m_realm->GetSelectedGuid())
+					{
+						m_profile->OnAttackSwing(*m_context, victimGuid, damage, hitInfo, victimState);
+					}
+				});
+
+			m_realm->AttackSwingError.connect([this](AttackSwingEvent error)
+				{
+					if (!m_profile || !m_profileActivated)
+					{
+						return;
+					}
+
+					m_profile->OnAttackSwingError(*m_context, error);
+				});
+
+			m_realm->DamageReceived.connect([this](uint64 targetGuid, uint32 damage, uint8 flags)
+				{
+					if (!m_profile || !m_profileActivated)
+					{
+						return;
+					}
+
+					// Check if we are the target (we took damage)
+					if (targetGuid == m_realm->GetSelectedGuid())
+					{
+						m_profile->OnDamaged(*m_context, damage, flags);
+					}
+					else
+					{
+						// We dealt damage to someone
+						bool isCrit = (flags & 1) != 0; // damage_flags::Crit = 1
+						m_profile->OnDamagedUnit(*m_context, targetGuid, damage, isCrit);
+					}
 				});
 		}
 

@@ -366,14 +366,20 @@ namespace mmo
 			RegisterPacketHandler(game::realm_client_packet::MoveSetRunSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::MoveSetRunBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::MoveSetSwimSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveSetSwimBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);;
+			RegisterPacketHandler(game::realm_client_packet::MoveSetSwimBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::MoveSetTurnRate, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::SetFlightSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::AttackStart, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::SpellCooldown, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::CreatureMove, *this, &BotRealmConnector::OnIgnoredPacket);
+
+			// Combat packet handlers
+			RegisterPacketHandler(game::realm_client_packet::AttackStart, *this, &BotRealmConnector::OnAttackStart);
+			RegisterPacketHandler(game::realm_client_packet::AttackStop, *this, &BotRealmConnector::OnAttackStop);
+			RegisterPacketHandler(game::realm_client_packet::AttackSwingError, *this, &BotRealmConnector::OnAttackSwingError);
+			RegisterPacketHandler(game::realm_client_packet::AttackerStateUpdate, *this, &BotRealmConnector::OnAttackerStateUpdate);
+			RegisterPacketHandler(game::realm_client_packet::NonSpellDamageLog, *this, &BotRealmConnector::OnNonSpellDamageLog);
 
 			RequestCharEnum();
 		}
@@ -1074,6 +1080,140 @@ namespace mmo
 
 		// Emit update signal
 		UnitUpdated(*unit);
+
+		return PacketParseResult::Pass;
+	}
+
+	// ============================================================
+	// Combat Methods
+	// ============================================================
+
+	void BotRealmConnector::SendAttackStart(uint64 targetGuid)
+	{
+		const GameTime timestamp = GetAsyncTimeMs();
+
+		sendSinglePacket([targetGuid, timestamp](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::AttackSwing);
+				packet << io::write_packed_guid(targetGuid) << io::write<GameTime>(timestamp);
+				packet.Finish();
+			});
+
+		m_autoAttackTargetGuid = targetGuid;
+		// Note: m_isAutoAttacking will be set to true when we receive AttackStart from server
+	}
+
+	void BotRealmConnector::SendAttackStop()
+	{
+		const GameTime timestamp = GetAsyncTimeMs();
+
+		sendSinglePacket([timestamp](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::AttackStop);
+				packet << io::write<GameTime>(timestamp);
+				packet.Finish();
+			});
+
+		// Note: m_isAutoAttacking will be set to false when we receive AttackStop from server
+	}
+
+	// ============================================================
+	// Combat Packet Handlers
+	// ============================================================
+
+	PacketParseResult BotRealmConnector::OnAttackStart(game::IncomingPacket& packet)
+	{
+		uint64 attackerGuid, victimGuid;
+		GameTime attackTime;
+
+		if (!(packet >> io::read_packed_guid(attackerGuid) >> io::read_packed_guid(victimGuid) >> io::read<GameTime>(attackTime)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Check if this is our attack starting
+		if (attackerGuid == m_selectedCharacterGuid)
+		{
+			m_isAutoAttacking = true;
+			m_autoAttackTargetGuid = victimGuid;
+		}
+
+		AttackStarted(attackerGuid, victimGuid);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnAttackStop(game::IncomingPacket& packet)
+	{
+		uint64 attackerGuid;
+		GameTime attackTime;
+
+		if (!(packet >> io::read_packed_guid(attackerGuid) >> io::read<GameTime>(attackTime)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Check if this is our attack stopping
+		if (attackerGuid == m_selectedCharacterGuid)
+		{
+			m_isAutoAttacking = false;
+			m_autoAttackTargetGuid = 0;
+		}
+
+		AttackStopped(attackerGuid);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnAttackSwingError(game::IncomingPacket& packet)
+	{
+		AttackSwingEvent error;
+
+		if (!(packet >> io::read<uint32>(error)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		AttackSwingError(error);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnAttackerStateUpdate(game::IncomingPacket& packet)
+	{
+		uint64 attackerGuid, victimGuid;
+		uint32 hitInfo, victimState, totalDamage, school, absorbedDamage, resistedDamage, blockedDamage;
+
+		if (!(packet >> io::read_packed_guid(attackerGuid) 
+			>> io::read_packed_guid(victimGuid) 
+			>> io::read<uint32>(hitInfo) 
+			>> io::read<uint32>(victimState) 
+			>> io::read<uint32>(totalDamage) 
+			>> io::read<uint32>(school) 
+			>> io::read<uint32>(absorbedDamage) 
+			>> io::read<uint32>(resistedDamage) 
+			>> io::read<uint32>(blockedDamage)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		AttackHit(attackerGuid, victimGuid, totalDamage, hitInfo, victimState);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnNonSpellDamageLog(game::IncomingPacket& packet)
+	{
+		uint64 targetGuid;
+		uint32 amount;
+		uint8 flags;
+
+		if (!(packet >> io::read_packed_guid(targetGuid) >> io::read<uint32>(amount) >> io::read<uint8>(flags)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		DamageReceived(targetGuid, amount, flags);
 
 		return PacketParseResult::Pass;
 	}

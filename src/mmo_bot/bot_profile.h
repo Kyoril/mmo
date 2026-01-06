@@ -5,6 +5,8 @@
 #include "bot_action.h"
 #include "bot_context.h"
 
+#include "game/auto_attack.h"
+
 #include <deque>
 #include <memory>
 #include <string>
@@ -88,6 +90,36 @@ namespace mmo
 		/// @param context The bot context.
 		/// @param guid The GUID of the unit that left the area.
 		virtual void OnUnitLeftArea(BotContext& context, uint64 guid) = 0;
+
+		// ============================================================
+		// Combat Events
+		// ============================================================
+
+		/// Called when the bot successfully performs an attack swing against a target.
+		/// @param context The bot context.
+		/// @param targetGuid The GUID of the target that was hit.
+		/// @param damage The damage dealt.
+		/// @param hitInfo Hit flags (miss, crit, etc.).
+		/// @param victimState Victim state (dodge, parry, block, etc.).
+		virtual void OnAttackSwing(BotContext& context, uint64 targetGuid, uint32 damage, uint32 hitInfo, uint32 victimState) = 0;
+
+		/// Called when an attack swing error occurs (out of range, wrong facing, etc.).
+		/// @param context The bot context.
+		/// @param error The attack swing error code.
+		virtual void OnAttackSwingError(BotContext& context, AttackSwingEvent error) = 0;
+
+		/// Called when the bot deals damage to a target (melee or spell).
+		/// @param context The bot context.
+		/// @param targetGuid The GUID of the target that received damage.
+		/// @param damage The damage amount.
+		/// @param isCrit Whether this was a critical hit.
+		virtual void OnDamagedUnit(BotContext& context, uint64 targetGuid, uint32 damage, bool isCrit) = 0;
+
+		/// Called when the bot takes damage.
+		/// @param context The bot context.
+		/// @param damage The damage amount.
+		/// @param flags Damage flags (crit, crushing, etc.).
+		virtual void OnDamaged(BotContext& context, uint32 damage, uint8 flags) = 0;
 	};
 
 	/// Base implementation of a bot profile that manages an action queue.
@@ -329,6 +361,38 @@ namespace mmo
 		/// Default implementation for unit left area event.
 		/// Override to react when a unit leaves the bot's awareness area.
 		void OnUnitLeftArea(BotContext& context, uint64 guid) override
+		{
+			// Default: no action
+		}
+
+		// ============================================================
+		// Combat Event Default Implementations
+		// ============================================================
+
+		/// Default implementation for attack swing event.
+		/// Override to react when the bot successfully hits a target.
+		void OnAttackSwing(BotContext& context, uint64 targetGuid, uint32 damage, uint32 hitInfo, uint32 victimState) override
+		{
+			// Default: no action
+		}
+
+		/// Default implementation for attack swing error event.
+		/// Override to react to combat errors (out of range, wrong facing, etc.).
+		void OnAttackSwingError(BotContext& context, AttackSwingEvent error) override
+		{
+			// Default: no action
+		}
+
+		/// Default implementation for damaged unit event.
+		/// Override to react when the bot deals damage.
+		void OnDamagedUnit(BotContext& context, uint64 targetGuid, uint32 damage, bool isCrit) override
+		{
+			// Default: no action
+		}
+
+		/// Default implementation for damaged event.
+		/// Override to react when the bot takes damage.
+		void OnDamaged(BotContext& context, uint32 damage, uint8 flags) override
 		{
 			// Default: no action
 		}
