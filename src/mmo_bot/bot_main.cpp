@@ -5,6 +5,7 @@
 #include "bot_context.h"
 #include "bot_profile.h"
 #include "bot_profiles.h"
+#include "bot_unit_watcher.h"
 
 #include "base/clock.h"
 #include "base/typedefs.h"
@@ -211,6 +212,17 @@ namespace mmo
 						m_profileActivated = true;
 					}
 
+					// Update area watcher with bot's current position
+					if (m_areaWatcher)
+					{
+						auto* self = m_realm->GetObjectManager().GetSelf();
+						if (self)
+						{
+							m_areaWatcher->SetCenter(self->GetPosition());
+						}
+						m_areaWatcher->Update();
+					}
+
 					if (!m_profile->Update(*m_context))
 					{
 						ILOG("Bot profile completed execution");
@@ -398,6 +410,27 @@ namespace mmo
 					// Initialize cached movement info from realm connector
 					m_context->UpdateMovementInfo(m_realm->GetMovementInfo());
 					
+					// Create the area watcher centered on bot's position with 40 yard radius
+					auto& objectManager = m_realm->GetObjectManager();
+					m_areaWatcher = std::make_unique<BotUnitWatcher>(objectManager, position, 40.0f);
+					
+					// Wire up area watcher events to profile
+					m_areaWatcher->UnitEntered.connect([this](const BotUnit& unit)
+						{
+							if (m_profile && m_profileActivated)
+							{
+								m_profile->OnUnitEnteredArea(*m_context, unit);
+							}
+						});
+					
+					m_areaWatcher->UnitLeft.connect([this](uint64 guid)
+						{
+							if (m_profile && m_profileActivated)
+							{
+								m_profile->OnUnitLeftArea(*m_context, guid);
+							}
+						});
+					
 					m_worldReady = true;
 				});
 
@@ -446,6 +479,43 @@ namespace mmo
 
 					m_profile->OnPartyLeft(*m_context);
 				});
+
+			// Unit awareness signals from object manager
+			auto& objectManager = m_realm->GetObjectManager();
+			
+			objectManager.UnitSpawned.connect([this](const BotUnit& unit)
+				{
+					if (!m_profile || !m_profileActivated)
+					{
+						return;
+					}
+
+					m_profile->OnUnitSpawned(*m_context, unit);
+					
+					// Update the area watcher if it exists
+					if (m_areaWatcher)
+					{
+						// Reposition watcher to bot's current position
+						auto* self = m_realm->GetObjectManager().GetSelf();
+						if (self)
+						{
+							m_areaWatcher->SetCenter(self->GetPosition());
+						}
+						m_areaWatcher->Update();
+					}
+				});
+
+			objectManager.UnitDespawned.connect([this](uint64 guid)
+				{
+					if (!m_profile || !m_profileActivated)
+					{
+						return;
+					}
+
+					m_profile->OnUnitDespawned(*m_context, guid);
+					
+					// Area watcher will automatically handle this via its own signal connection
+				});
 		}
 
 	private:
@@ -455,6 +525,7 @@ namespace mmo
 		std::shared_ptr<BotRealmConnector> m_realm;
 		std::shared_ptr<BotContext> m_context;
 		BotProfilePtr m_profile;
+		std::unique_ptr<BotUnitWatcher> m_areaWatcher;
 		bool m_stopRequested { false };
 		bool m_worldReady { false };
 		bool m_profileActivated { false };

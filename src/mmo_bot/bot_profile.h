@@ -12,6 +12,9 @@
 
 namespace mmo
 {
+	// Forward declaration
+	class BotUnit;
+
 	/// Interface for bot behavior profiles.
 	/// A profile defines the behavior and actions a bot should perform.
 	/// Different profiles can implement different strategies (e.g., idle bot,
@@ -58,6 +61,33 @@ namespace mmo
 		/// This is triggered when the bot leaves voluntarily, is kicked, or the party is dissolved.
 		/// @param context The bot context.
 		virtual void OnPartyLeft(BotContext& context) = 0;
+
+		// ============================================================
+		// Unit Awareness Events
+		// ============================================================
+
+		/// Called when a new unit (player or creature) spawns in the world.
+		/// This is triggered for any unit that the server sends via UpdateObject.
+		/// @param context The bot context.
+		/// @param unit The unit that spawned.
+		virtual void OnUnitSpawned(BotContext& context, const BotUnit& unit) = 0;
+
+		/// Called when a unit despawns from the world.
+		/// This is triggered when the server sends DestroyObjects or unit goes out of range.
+		/// @param context The bot context.
+		/// @param guid The GUID of the unit that despawned.
+		virtual void OnUnitDespawned(BotContext& context, uint64 guid) = 0;
+
+		/// Called when a unit enters the bot's awareness area.
+		/// The awareness area is configurable per profile.
+		/// @param context The bot context.
+		/// @param unit The unit that entered the area.
+		virtual void OnUnitEnteredArea(BotContext& context, const BotUnit& unit) = 0;
+
+		/// Called when a unit leaves the bot's awareness area.
+		/// @param context The bot context.
+		/// @param guid The GUID of the unit that left the area.
+		virtual void OnUnitLeftArea(BotContext& context, uint64 guid) = 0;
 	};
 
 	/// Base implementation of a bot profile that manages an action queue.
@@ -269,6 +299,38 @@ namespace mmo
 		void OnPartyLeft(BotContext& context) override
 		{
 			ILOG("Bot profile '" << GetName() << "' left the party");
+		}
+
+		// ============================================================
+		// Unit Awareness Event Default Implementations
+		// ============================================================
+
+		/// Default implementation for unit spawned event.
+		/// Override to react when a new unit appears in the world.
+		void OnUnitSpawned(BotContext& context, const BotUnit& unit) override
+		{
+			// Default: no action
+		}
+
+		/// Default implementation for unit despawned event.
+		/// Override to react when a unit disappears from the world.
+		void OnUnitDespawned(BotContext& context, uint64 guid) override
+		{
+			// Default: no action
+		}
+
+		/// Default implementation for unit entered area event.
+		/// Override to react when a unit enters the bot's awareness area.
+		void OnUnitEnteredArea(BotContext& context, const BotUnit& unit) override
+		{
+			// Default: no action
+		}
+
+		/// Default implementation for unit left area event.
+		/// Override to react when a unit leaves the bot's awareness area.
+		void OnUnitLeftArea(BotContext& context, uint64 guid) override
+		{
+			// Default: no action
 		}
 
 	private:

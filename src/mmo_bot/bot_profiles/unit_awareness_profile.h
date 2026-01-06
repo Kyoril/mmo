@@ -17,8 +17,8 @@ namespace mmo
 {
 	/// @brief A demonstration profile that logs information about nearby units.
 	/// 
-	/// This profile periodically scans for nearby units and logs their information,
-	/// demonstrating the unit awareness system capabilities.
+	/// This profile demonstrates both periodic scanning and event-driven unit
+	/// awareness using the new profile hooks (OnUnitSpawned, OnUnitEnteredArea, etc.).
 	class UnitAwarenessProfile final : public BotProfile
 	{
 	public:
@@ -32,6 +32,58 @@ namespace mmo
 		std::string GetName() const override
 		{
 			return "UnitAwareness";
+		}
+
+		// ============================================================
+		// Unit Awareness Event Overrides
+		// ============================================================
+
+		/// Called when any unit spawns in the world.
+		void OnUnitSpawned(BotContext& context, const BotUnit& unit) override
+		{
+			ILOG("[EVENT] Unit spawned: " << (unit.IsPlayer() ? "Player" : "Creature")
+				<< " GUID: " << std::hex << unit.GetGuid() << std::dec
+				<< " Entry: " << unit.GetEntry()
+				<< " at (" << unit.GetPosition().x << ", " << unit.GetPosition().y << ", " << unit.GetPosition().z << ")");
+		}
+
+		/// Called when any unit despawns from the world.
+		void OnUnitDespawned(BotContext& context, uint64 guid) override
+		{
+			ILOG("[EVENT] Unit despawned: GUID " << std::hex << guid << std::dec);
+		}
+
+		/// Called when a unit enters our awareness area (40 yard radius).
+		void OnUnitEnteredArea(BotContext& context, const BotUnit& unit) override
+		{
+			const BotUnit* self = context.GetSelf();
+			if (!self || unit.GetGuid() == self->GetGuid())
+			{
+				return;  // Skip self
+			}
+
+			const float distance = unit.GetDistanceTo(self->GetPosition());
+			const bool isHostile = unit.IsHostileTo(*self);
+			
+			ILOG("[AREA] Unit ENTERED awareness area: " << (unit.IsPlayer() ? "Player" : "Creature")
+				<< " GUID: " << std::hex << unit.GetGuid() << std::dec
+				<< " Entry: " << unit.GetEntry()
+				<< " Level: " << unit.GetLevel()
+				<< " Distance: " << distance << "y"
+				<< " | " << (isHostile ? "HOSTILE" : "FRIENDLY"));
+
+			// Example: Log warning for hostile units
+			if (isHostile && !unit.IsPlayer())
+			{
+				WLOG("[ALERT] Hostile creature entered area! Entry: " << unit.GetEntry() 
+					<< " at " << distance << " yards");
+			}
+		}
+
+		/// Called when a unit leaves our awareness area.
+		void OnUnitLeftArea(BotContext& context, uint64 guid) override
+		{
+			ILOG("[AREA] Unit LEFT awareness area: GUID " << std::hex << guid << std::dec);
 		}
 
 	protected:
