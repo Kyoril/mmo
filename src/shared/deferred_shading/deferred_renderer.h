@@ -3,12 +3,15 @@
 #pragma once
 
 #include "shadow_camera_setup.h"
+#include "cascaded_shadow_camera_setup.h"
 #include "frame_ui/geometry_buffer.h"
 #include "graphics/material_compiler.h"
 #include "graphics/g_buffer.h"
 #include "graphics/material.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/light.h"
+
+#include <array>
 
 #ifdef _WIN32
 #   include <d3d11.h>
@@ -48,8 +51,28 @@ namespace mmo
 
         Camera* GetShadowCamera() const
         {
-            return m_shadowCamera;
-        }        void SetDepthBias(float bias, float slope, float clamp)
+            return m_shadowCameras[0];
+        }
+
+        /// @brief Gets the cascaded shadow camera setup.
+        [[nodiscard]] CascadedShadowCameraSetup* GetCascadedShadowSetup() const
+        {
+            return m_cascadedShadowSetup.get();
+        }
+
+        /// @brief Enables or disables cascaded shadow maps.
+        void SetCascadedShadowsEnabled(bool enabled) { m_useCascadedShadows = enabled; }
+
+        /// @brief Checks if cascaded shadow maps are enabled.
+        [[nodiscard]] bool IsCascadedShadowsEnabled() const { return m_useCascadedShadows; }
+
+        /// @brief Enables or disables cascade debug visualization.
+        void SetCascadeDebugVisualization(bool enabled) { m_debugCascades = enabled; }
+
+        /// @brief Checks if cascade debug visualization is enabled.
+        [[nodiscard]] bool IsCascadeDebugVisualizationEnabled() const { return m_debugCascades; }
+
+        void SetDepthBias(float bias, float slope, float clamp)
         {
 			m_depthBias = bias;
 			m_slopeScaledDepthBias = slope;
@@ -89,6 +112,8 @@ namespace mmo
 
 		void RenderShadowMap(Scene& scene, Camera& camera);
 
+        void RenderCascadedShadowMaps(Scene& scene, Camera& camera);
+
     public:
         /// @brief Maximum number of lights that can be processed in a single pass.
         static constexpr uint32 MAX_LIGHTS = 16;
@@ -117,26 +142,43 @@ namespace mmo
 
         Light* m_shadowCastingDirectionalLight;
 
+        /// @brief Shadow map render textures for each cascade.
+        std::array<RenderTexturePtr, NUM_SHADOW_CASCADES> m_cascadeShadowMaps;
+
+        /// @brief Legacy single shadow map (kept for compatibility).
         RenderTexturePtr m_shadowMapRT;
 
-		SceneNode* m_shadowCameraNode{ nullptr };
+        /// @brief Shadow camera nodes for each cascade.
+        std::array<SceneNode*, NUM_SHADOW_CASCADES> m_shadowCameraNodes{};
 
-        Camera* m_shadowCamera{ nullptr };
+        /// @brief Shadow cameras for each cascade.
+        std::array<Camera*, NUM_SHADOW_CASCADES> m_shadowCameras{};
 
 #ifdef _WIN32
 		ComPtr<ID3D11SamplerState> m_shadowSampler{ nullptr };
 #endif
+
+        /// @brief Cascaded shadow camera setup.
+        std::shared_ptr<CascadedShadowCameraSetup> m_cascadedShadowSetup = nullptr;
         
-        std::shared_ptr<ShadowCameraSetup> m_shadowCameraSetup = nullptr;        float m_depthBias = 250.0f;
-		float m_slopeScaledDepthBias = 1.0f;
+        std::shared_ptr<ShadowCameraSetup> m_shadowCameraSetup = nullptr;
+
+        /// @brief Whether to use cascaded shadow maps.
+        bool m_useCascadedShadows = false;  // Temporarily disabled for debugging
+
+        /// @brief Whether to show cascade debug colors.
+        bool m_debugCascades = false;
+
+        float m_depthBias = 100.0f;
+		float m_slopeScaledDepthBias = 2.0f;
 		float m_depthBiasClamp = 0.0f;
 
         // Advanced shadow parameters
-        float m_shadowBias = 0.0005f;         // Depth bias in shadow space
-        float m_normalBiasScale = 0.078125f;  // Normal-based bias scale factor        float m_shadowSoftness = 1.0f;        // Overall shadow softness
+        float m_shadowBias = 0.0001f;         // Depth bias in shadow space (reduced for less peter panning)
+        float m_normalBiasScale = 0.02f;      // Normal-based bias scale factor (reduced)
         float m_shadowSoftness = 1.0f;        // Overall shadow softness
-        float m_blockerSearchRadius = 0.02f;  // Search radius for blocker search phase
-        float m_lightSize = 0.0025f;          // Size of the virtual light
-        uint16 m_shadowMapSize = 1024;        // Size of the shadow map texture (default 1k)
+        float m_blockerSearchRadius = 0.005f; // Search radius for blocker search phase
+        float m_lightSize = 0.001f;           // Size of the virtual light (smaller = sharper shadows)
+        uint16 m_shadowMapSize = 2048;        // Size of the shadow map texture (increased for quality)
     };
 }

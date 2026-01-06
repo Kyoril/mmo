@@ -182,7 +182,7 @@ namespace mmo
 
 			VertexStruct *vert = (VertexStruct *)m_mainBuffer->Map(LockOptions::Normal);
 
-			// Update outer vertices (9x9 = 81 vertices)
+			// First, create all outer vertices (9x9 = 81 vertices)
 			for (size_t j = 0; j < constants::OuterVerticesPerTileSide; ++j)
 			{
 				for (size_t i = 0; i < constants::OuterVerticesPerTileSide; ++i)
@@ -191,79 +191,76 @@ namespace mmo
 					const size_t globalZ = m_startZ + j;
 
 					const float height = m_page.GetHeightAt(globalX, globalZ);
-
-					if (height < minHeight)
-					{
-						minHeight = height;
-					}
-					if (height > maxHeight)
-					{
-						maxHeight = height;
-					}
-
 					vert->position = Vector3(outerScale * globalX, height, outerScale * globalZ);
-					vert->normal = m_page.CalculateNormalAt(globalX, globalZ);
+					vert->normal = m_page.GetNormalAt(globalX, globalZ);
 
+					// Calculate tangent and binormal
 					const Vector3 arbitrary = std::abs(vert->normal.y) < 0.99f ? Vector3(0, 1, 0) : Vector3(1, 0, 0);
 					vert->tangent = (arbitrary - vert->normal * vert->normal.Dot(arbitrary)).NormalizedCopy();
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
 					vert->color = Color(m_page.GetColorAt(globalX, globalZ)).GetABGR();
-					vert->u = static_cast<float>(i) / static_cast<float>(constants::OuterVerticesPerTileSide - 1);
-					vert->v = static_cast<float>(j) / static_cast<float>(constants::OuterVerticesPerTileSide - 1);
+					vert->u = static_cast<float>(j) / static_cast<float>(constants::OuterVerticesPerTileSide - 1);
+					vert->v = static_cast<float>(i) / static_cast<float>(constants::OuterVerticesPerTileSide - 1);
+
+					minHeight = std::min(height, minHeight);
+					maxHeight = std::max(height, maxHeight);
 
 					vert++;
 				}
 			}
 
-			// Update inner vertices (8x8 = 64 vertices)
+			// Second, create all inner vertices (8x8 = 64 vertices)
+			// Inner vertices are positioned at the center of each quad formed by outer vertices
 			for (size_t j = 0; j < constants::InnerVerticesPerTileSide; ++j)
 			{
 				for (size_t i = 0; i < constants::InnerVerticesPerTileSide; ++i)
 				{
+					// Inner vertex is at the center of the quad formed by outer vertices
+					const float centerOffsetX = 0.5f;
+					const float centerOffsetZ = 0.5f;
 					const size_t globalX = m_startX + i;
 					const size_t globalZ = m_startZ + j;
 
-					// Use stored inner height for full editor precision
-					const size_t innerPageX = m_tileX * constants::InnerVerticesPerTileSide + i;
-					const size_t innerPageZ = m_tileY * constants::InnerVerticesPerTileSide + j;
-					const float height = m_page.GetInnerHeightAt(innerPageX, innerPageZ);
+					// Sample height at the center position
+					// For now, we'll interpolate from the four surrounding outer vertices
+					const float h00 = m_page.GetHeightAt(globalX, globalZ);
+					const float h10 = m_page.GetHeightAt(globalX + 1, globalZ);
+					const float h01 = m_page.GetHeightAt(globalX, globalZ + 1);
+					const float h11 = m_page.GetHeightAt(globalX + 1, globalZ + 1);
+					const float height = (h00 + h10 + h01 + h11) * 0.25f;
 
-					if (height < minHeight)
-					{
-						minHeight = height;
-					}
-					if (height > maxHeight)
-					{
-						maxHeight = height;
-					}
-
-					const float worldX = outerScale * (globalX + 0.5f);
-					const float worldZ = outerScale * (globalZ + 0.5f);
+					const float worldX = outerScale * (globalX + centerOffsetX);
+					const float worldZ = outerScale * (globalZ + centerOffsetZ);
 
 					vert->position = Vector3(worldX, height, worldZ);
 
-					// Use stored inner normal (fallback: recompute from outer if needed)
-					Vector3 innerNormal = m_page.GetInnerNormalAt(innerPageX, innerPageZ);
-					if (innerNormal.IsZeroLength())
-					{
-						const Vector3 n00 = m_page.CalculateNormalAt(globalX, globalZ);
-						const Vector3 n10 = m_page.CalculateNormalAt(globalX + 1, globalZ);
-						const Vector3 n01 = m_page.CalculateNormalAt(globalX, globalZ + 1);
-						const Vector3 n11 = m_page.CalculateNormalAt(globalX + 1, globalZ + 1);
-						innerNormal = ((n00 + n10 + n01 + n11) * 0.25f).NormalizedCopy();
-					}
-					vert->normal = innerNormal;
+					// Calculate normal by interpolating surrounding outer vertex normals
+					const Vector3 n00 = m_page.GetNormalAt(globalX, globalZ);
+					const Vector3 n10 = m_page.GetNormalAt(globalX + 1, globalZ);
+					const Vector3 n01 = m_page.GetNormalAt(globalX, globalZ + 1);
+					const Vector3 n11 = m_page.GetNormalAt(globalX + 1, globalZ + 1);
+					vert->normal = ((n00 + n10 + n01 + n11) * 0.25f).NormalizedCopy();
 
+					// Calculate tangent and binormal
 					const Vector3 arbitrary = std::abs(vert->normal.y) < 0.99f ? Vector3(0, 1, 0) : Vector3(1, 0, 0);
 					vert->tangent = (arbitrary - vert->normal * vert->normal.Dot(arbitrary)).NormalizedCopy();
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
-					// Use stored inner color
-					vert->color = Color(m_page.GetInnerColorAt(innerPageX, innerPageZ)).GetABGR();
+					// Interpolate color from surrounding vertices
+					const uint32 c00 = m_page.GetColorAt(globalX, globalZ);
+					const uint32 c10 = m_page.GetColorAt(globalX + 1, globalZ);
+					const uint32 c01 = m_page.GetColorAt(globalX, globalZ + 1);
+					const uint32 c11 = m_page.GetColorAt(globalX + 1, globalZ + 1);
+					const Color col00(c00), col10(c10), col01(c01), col11(c11);
+					const Color avgColor = (col00 + col10 + col01 + col11) * 0.25f;
+					vert->color = avgColor.GetABGR();
 
-					vert->u = (static_cast<float>(i) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide);
-					vert->v = (static_cast<float>(j) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide);
+					vert->u = (static_cast<float>(j) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide);
+					vert->v = (static_cast<float>(i) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide);
+
+					minHeight = std::min(height, minHeight);
+					maxHeight = std::max(height, maxHeight);
 
 					vert++;
 				}

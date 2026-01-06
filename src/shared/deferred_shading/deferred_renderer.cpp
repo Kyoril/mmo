@@ -1,7 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "deferred_renderer.h"
-
+#include "cascaded_shadow_camera_setup.h"
 
 #include "frame_ui/rect.h"
 #include "graphics/graphics_device.h"
@@ -35,13 +35,21 @@ namespace mmo
 
 	struct alignas(16) ShadowBuffer
     {
-        Matrix4 lightViewProjection;
+        // Cascade view-projection matrices
+        Matrix4 cascadeViewProjections[NUM_SHADOW_CASCADES];
+        
+        // Cascade split distances (in view space)
+        Vector4 cascadeSplitDistances;
+        
         float shadowBias;           // Depth bias to prevent shadow acne
         float normalBiasScale;      // Bias scale factor based on normal
         float shadowSoftness;       // Controls general softness of shadows  
         float blockerSearchRadius;  // Search radius for the blocker search phase
+        
         float lightSize;            // Controls the size of the virtual light (larger = softer shadows)
-        Vector3 padding;
+        uint32 cascadeCount;        // Number of active cascades
+        uint32 debugCascades;       // Whether to show cascade debug colors
+        float cascadeBlendFactor;   // Blend factor for cascade transitions
     };
 
     // Light buffer structure that matches the one in the shader
@@ -58,12 +66,21 @@ namespace mmo
         , m_gBuffer(device, width, height)
     {
         m_shadowCameraSetup = std::make_shared<DefaultShadowCameraSetup>();
+        m_cascadedShadowSetup = std::make_shared<CascadedShadowCameraSetup>();
+        
+        // Configure CSM defaults for high quality
+        auto& csmConfig = m_cascadedShadowSetup->GetConfig();
+        csmConfig.maxShadowDistance = 300.0f;
+        csmConfig.shadowMapSize = m_shadowMapSize;
+        csmConfig.splitLambda = 0.92f;  // Mostly logarithmic for better near-camera detail
+        csmConfig.stableCascades = true;
+        csmConfig.cascadeBlendFactor = 0.1f;
         
 #ifdef WIN32
 		m_deferredLightVs = m_device.CreateShader(ShaderType::VertexShader, g_VS_DeferredLighting, std::size(g_VS_DeferredLighting));
         m_deferredLightPs = m_device.CreateShader(ShaderType::PixelShader, g_PS_DeferredLighting, std::size(g_PS_DeferredLighting));
 #endif
-          // Create the light buffer
+        // Create the light buffer
         m_lightBuffer = m_device.CreateConstantBuffer(sizeof(LightBuffer), nullptr);
         m_shadowBuffer = m_device.CreateConstantBuffer(sizeof(ShadowBuffer), nullptr);
 
@@ -82,13 +99,27 @@ namespace mmo
         };
 
         m_quadBuffer = m_device.CreateVertexBuffer(6, sizeof(POS_COL_TEX_VERTEX), BufferUsage::StaticWriteOnly, vertices);
-		// Create a high-resolution shadow map for better detail
-		m_shadowMapRT = m_device.CreateRenderTexture("ShadowMap", m_shadowMapSize, m_shadowMapSize, RenderTextureFlags::HasDepthBuffer | RenderTextureFlags::ShaderResourceView);
+        
+		// Create shadow maps for each cascade
+        for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
+        {
+            m_cascadeShadowMaps[i] = m_device.CreateRenderTexture(
+                "ShadowMapCascade" + std::to_string(i), 
+                m_shadowMapSize, 
+                m_shadowMapSize, 
+                RenderTextureFlags::HasDepthBuffer | RenderTextureFlags::ShaderResourceView);
+        }
+        
+        // Keep a reference to the first cascade for legacy single-shadow-map code paths
+		m_shadowMapRT = m_cascadeShadowMaps[0];
 
-        // Setup shadow camera
-		m_shadowCameraNode = m_scene.GetRootSceneNode().CreateChildSceneNode("__ShadowCameraNode__");
-		m_shadowCamera = m_scene.CreateCamera("__DeferredShadowCamera__");
-		m_shadowCameraNode->AttachObject(*m_shadowCamera);
+        // Setup shadow cameras for each cascade
+        for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
+        {
+            m_shadowCameraNodes[i] = m_scene.GetRootSceneNode().CreateChildSceneNode("__ShadowCameraNode_" + std::to_string(i) + "__");
+            m_shadowCameras[i] = m_scene.CreateCamera("__DeferredShadowCamera_" + std::to_string(i) + "__");
+            m_shadowCameraNodes[i]->AttachObject(*m_shadowCameras[i]);
+        }
 
 #ifdef WIN32        // TODO: Fix me: Move me to graphicsd3d11
         D3D11_SAMPLER_DESC sampDesc = {};
@@ -118,16 +149,19 @@ namespace mmo
 
     DeferredRenderer::~DeferredRenderer()
     {
-        if (m_shadowCamera)
+        for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
         {
-            m_scene.DestroyCamera(*m_shadowCamera);
-            m_shadowCamera = nullptr;
-        }
+            if (m_shadowCameras[i])
+            {
+                m_scene.DestroyCamera(*m_shadowCameras[i]);
+                m_shadowCameras[i] = nullptr;
+            }
 
-        if (m_shadowCameraNode)
-        {
-            m_scene.DestroySceneNode(*m_shadowCameraNode);
-            m_shadowCameraNode = nullptr;
+            if (m_shadowCameraNodes[i])
+            {
+                m_scene.DestroySceneNode(*m_shadowCameraNodes[i]);
+                m_shadowCameraNodes[i] = nullptr;
+            }
         }
     }
 
@@ -145,8 +179,23 @@ namespace mmo
 
         if (m_shadowCastingDirectionalLight)
         {
-			// Render the shadow map for the directional light
-			RenderShadowMap(scene, camera);
+            if (m_useCascadedShadows)
+            {
+                // Render cascaded shadow maps
+                RenderCascadedShadowMaps(scene, camera);
+            }
+            else
+            {
+                // Render the legacy single shadow map for the directional light
+                RenderShadowMap(scene, camera);
+            }
+        }
+        else
+        {
+            // No shadow-casting light - ensure shadow buffer indicates no shadows
+            ShadowBuffer buffer{};
+            buffer.cascadeCount = 0;
+            m_shadowBuffer->Update(&buffer);
         }
 
         // Render the geometry pass
@@ -193,7 +242,12 @@ namespace mmo
         m_gBuffer.GetMaterialRT().Bind(ShaderType::PixelShader, 2);
         m_gBuffer.GetEmissiveRT().Bind(ShaderType::PixelShader, 3);
         m_gBuffer.GetViewRayRT().Bind(ShaderType::PixelShader, 4);
-        m_shadowMapRT->Bind(ShaderType::PixelShader, 5);
+        
+        // Bind all cascade shadow maps
+        for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
+        {
+            m_cascadeShadowMaps[i]->Bind(ShaderType::PixelShader, 5 + i);
+        }
 
         // Set the vertex format for the full-screen quad
         m_device.SetVertexFormat(VertexFormat::PosColorTex1);
@@ -311,28 +365,97 @@ namespace mmo
             return;
         }
 
-        m_shadowCameraSetup->SetupShadowCamera(scene, camera, *m_shadowCastingDirectionalLight, *m_shadowCamera);
+        m_shadowCameraSetup->SetupShadowCamera(scene, camera, *m_shadowCastingDirectionalLight, *m_shadowCameras[0]);
 
         // Setup some depth bias settings
         m_device.SetDepthBias(m_depthBias);
         m_device.SetSlopeScaledDepthBias(m_slopeScaledDepthBias);
-        m_device.SetDepthBiasClamp(m_depthBiasClamp);        // Update the shadow buffer with the light view-projection matrix and shadow parameters
-        ShadowBuffer buffer;
-        buffer.lightViewProjection = (m_shadowCamera->GetProjectionMatrix() * m_shadowCamera->GetViewMatrix());
+        m_device.SetDepthBiasClamp(m_depthBiasClamp);
+        
+        // Update the shadow buffer with legacy single cascade data
+        ShadowBuffer buffer{};
+        buffer.cascadeViewProjections[0] = (m_shadowCameras[0]->GetProjectionMatrix() * m_shadowCameras[0]->GetViewMatrix());
+        buffer.cascadeSplitDistances = Vector4(camera.GetFarClipDistance(), 0.0f, 0.0f, 0.0f);
         buffer.shadowBias = m_shadowBias;
         buffer.normalBiasScale = m_normalBiasScale;
         buffer.shadowSoftness = m_shadowSoftness;
         buffer.blockerSearchRadius = m_blockerSearchRadius;
         buffer.lightSize = m_lightSize;
+        buffer.cascadeCount = 1;
+        buffer.debugCascades = m_debugCascades ? 1 : 0;
+        buffer.cascadeBlendFactor = 0.0f;
         m_shadowBuffer->Update(&buffer);
 
         // Render the shadow map
-        m_shadowMapRT->Activate();
-        m_shadowMapRT->Clear(ClearFlags::Depth);
-        scene.Render(*m_shadowCamera, PixelShaderType::ShadowMap);
-        m_shadowMapRT->Update();
+        m_cascadeShadowMaps[0]->Activate();
+        m_cascadeShadowMaps[0]->Clear(ClearFlags::Depth);
+        scene.Render(*m_shadowCameras[0], PixelShaderType::ShadowMap);
+        m_cascadeShadowMaps[0]->Update();
 
         // Reset
+        m_device.SetDepthBias(0);
+        m_device.SetSlopeScaledDepthBias(0);
+        m_device.SetDepthBiasClamp(0);
+    }
+
+    void DeferredRenderer::RenderCascadedShadowMaps(Scene& scene, Camera& camera)
+    {
+        if (m_shadowCastingDirectionalLight == nullptr)
+        {
+            return;
+        }
+
+        // Setup all cascades
+        m_cascadedShadowSetup->SetupCascades(scene, camera, *m_shadowCastingDirectionalLight, m_shadowCameras);
+
+        // Get cascade data
+        const auto& cascades = m_cascadedShadowSetup->GetCascades();
+        const auto& config = m_cascadedShadowSetup->GetConfig();
+
+        // Setup depth bias
+        m_device.SetDepthBias(m_depthBias);
+        m_device.SetSlopeScaledDepthBias(m_slopeScaledDepthBias);
+        m_device.SetDepthBiasClamp(m_depthBiasClamp);
+
+        // Render each cascade
+        for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
+        {
+            if (!m_shadowCameras[i])
+            {
+                continue;
+            }
+
+            m_cascadeShadowMaps[i]->Activate();
+            m_cascadeShadowMaps[i]->Clear(ClearFlags::Depth);
+            scene.Render(*m_shadowCameras[i], PixelShaderType::ShadowMap);
+            m_cascadeShadowMaps[i]->Update();
+        }
+
+        // Update the shadow buffer with cascade data
+        // Use the actual shadow camera matrices (what we rendered with) instead of computed ones
+        ShadowBuffer buffer{};
+        for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
+        {
+            // Use the shadow camera's actual view-projection matrix
+            buffer.cascadeViewProjections[i] = m_shadowCameras[i]->GetProjectionMatrix() * m_shadowCameras[i]->GetViewMatrix();
+        }
+        buffer.cascadeSplitDistances = Vector4(
+            cascades[0].splitDistance,
+            cascades[1].splitDistance,
+            cascades[2].splitDistance,
+            cascades[3].splitDistance
+        );
+        buffer.shadowBias = m_shadowBias;
+        buffer.normalBiasScale = m_normalBiasScale;
+        buffer.shadowSoftness = m_shadowSoftness;
+        buffer.blockerSearchRadius = m_blockerSearchRadius;
+        buffer.lightSize = m_lightSize;
+        buffer.cascadeCount = NUM_SHADOW_CASCADES;
+        buffer.debugCascades = m_debugCascades ? 1 : 0;
+        buffer.cascadeBlendFactor = config.cascadeBlendFactor;
+        m_shadowBuffer->Update(&buffer);
+
+        // Reset depth bias
         m_device.SetDepthBias(0);
         m_device.SetSlopeScaledDepthBias(0);
         m_device.SetDepthBiasClamp(0);
@@ -351,7 +474,21 @@ namespace mmo
         }
 
         m_shadowMapSize = size;
-        m_shadowMapRT->Resize(m_shadowMapSize, m_shadowMapSize);
-        m_shadowMapRT->ApplyPendingResize();
+        
+        // Resize all cascade shadow maps
+        for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
+        {
+            if (m_cascadeShadowMaps[i])
+            {
+                m_cascadeShadowMaps[i]->Resize(m_shadowMapSize, m_shadowMapSize);
+                m_cascadeShadowMaps[i]->ApplyPendingResize();
+            }
+        }
+        
+        // Update CSM config
+        if (m_cascadedShadowSetup)
+        {
+            m_cascadedShadowSetup->GetConfig().shadowMapSize = size;
+        }
     }
 }
