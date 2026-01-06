@@ -217,18 +217,22 @@ namespace mmo
 				const GameTime now = context.GetServerTime();
 				if (now - m_lastHeartbeat >= 500)
 				{
-					// Calculate new position based on time elapsed and movement speed
-					// TODO: This is simplified - real implementation should use proper physics
-					const float elapsed = (now - m_lastHeartbeat) / 1000.0f; // Convert to seconds
-					const Vector3 direction = delta.NormalizedCopy();
-					const float stepDistance = std::min(m_moveSpeed * elapsed, distance);
-					currentMovement.position = currentPosition + (direction * stepDistance);
+					// Only calculate new position if movement flags indicate position CAN change
+					// Server validates that position only changes when flags like Forward/Backward/Falling are set
+					if (currentMovement.IsChangingPosition())
+					{
+						const float elapsed = (now - m_lastHeartbeat) / 1000.0f; // Convert to seconds
+						const Vector3 direction = delta.NormalizedCopy();
+						const float stepDistance = std::min(m_moveSpeed * elapsed, distance);
+						currentMovement.position = currentPosition + (direction * stepDistance);
+					}
+					// else: keep position unchanged if we're not moving/falling
 					
-					// Send heartbeat packet with updated position
+					// Send heartbeat packet
 					// IMPORTANT: Do NOT modify movement flags during heartbeat!
 					currentMovement.timestamp = now;
 					context.SendMovementUpdate(game::client_realm_packet::MoveHeartBeat, currentMovement);
-					context.UpdateMovementInfo(currentMovement);
+					context.UpdateMovementInfo(currentMovement); // Update local cache for next iteration
 					m_lastHeartbeat = now;
 				}
 			}

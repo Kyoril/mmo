@@ -31,12 +31,10 @@ namespace mmo
 
 	const MovementInfo& BotContext::GetMovementInfo() const
 	{
-		if (!m_realmConnector)
-		{
-			return m_cachedMovementInfo;
-		}
-
-		return m_realmConnector->GetMovementInfo();
+		// Return our cached movement info which is kept up-to-date after sending movement packets
+		// The realm connector's movement info is only updated by server (teleports, speed changes)
+		// and would be stale for client-initiated movement
+		return m_cachedMovementInfo;
 	}
 
 	void BotContext::SendChatMessage(const std::string& message, ChatType chatType, const std::string& target)

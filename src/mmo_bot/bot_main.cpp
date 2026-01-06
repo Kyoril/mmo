@@ -390,6 +390,10 @@ namespace mmo
 			m_realm->VerifyNewWorld.connect([this](uint32 mapId, Vector3 position, float facing)
 				{
 					ILOG("Entered world on map " << mapId << " at position (" << position.x << ", " << position.y << ", " << position.z << ").");
+					
+					// Initialize cached movement info from realm connector
+					m_context->UpdateMovementInfo(m_realm->GetMovementInfo());
+					
 					m_worldReady = true;
 				});
 
