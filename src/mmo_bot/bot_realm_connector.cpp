@@ -954,40 +954,69 @@ namespace mmo
 		// Check if unit already exists
 		const bool isNewUnit = !m_objectManager.HasUnit(guid);
 
-		// Create or update the bot unit
+		// Create or get the bot unit
 		BotUnit unit(guid, typeId);
 
-		// Extract relevant fields
-		unit.SetEntry(fieldMap.GetFieldValue<uint32>(object_fields::Entry));
-		unit.SetLevel(fieldMap.GetFieldValue<uint32>(object_fields::Level));
-		unit.SetHealth(fieldMap.GetFieldValue<uint32>(object_fields::Health));
-		unit.SetMaxHealth(fieldMap.GetFieldValue<uint32>(object_fields::MaxHealth));
-		unit.SetFactionTemplate(fieldMap.GetFieldValue<uint32>(object_fields::FactionTemplate));
-		unit.SetDisplayId(fieldMap.GetFieldValue<uint32>(object_fields::DisplayId));
-		unit.SetUnitFlags(fieldMap.GetFieldValue<uint32>(object_fields::Flags));
-		unit.SetNpcFlags(fieldMap.GetFieldValue<uint32>(object_fields::NpcFlags));
-		unit.SetTargetGuid(fieldMap.GetFieldValue<uint64>(object_fields::TargetUnit));
-
-		// Set position/movement
-		if (updateFlags & object_update_flags::HasMovementInfo)
-		{
-			unit.SetMovementInfo(movementInfo);
-		}
-
-		// Set speeds
-		unit.SetSpeeds(speeds);
-
-		// If updating existing unit, preserve the name
+		// If updating existing unit, start with existing data to preserve unchanged fields
 		if (!isNewUnit)
 		{
 			if (const BotUnit* existingUnit = m_objectManager.GetUnit(guid))
 			{
-				if (!existingUnit->GetName().empty())
-				{
-					unit.SetName(existingUnit->GetName());
-				}
+				unit = *existingUnit;  // Copy existing unit data
 			}
 		}
+
+		// Extract relevant fields from field map
+		// For creation, all fields are present; for updates, only changed fields are in the map
+		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Entry))
+		{
+			unit.SetEntry(fieldMap.GetFieldValue<uint32>(object_fields::Entry));
+		}
+		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Level))
+		{
+			unit.SetLevel(fieldMap.GetFieldValue<uint32>(object_fields::Level));
+		}
+		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Health))
+		{
+			unit.SetHealth(fieldMap.GetFieldValue<uint32>(object_fields::Health));
+		}
+		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::MaxHealth))
+		{
+			unit.SetMaxHealth(fieldMap.GetFieldValue<uint32>(object_fields::MaxHealth));
+		}
+		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::FactionTemplate))
+		{
+			unit.SetFactionTemplate(fieldMap.GetFieldValue<uint32>(object_fields::FactionTemplate));
+		}
+		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::DisplayId))
+		{
+			unit.SetDisplayId(fieldMap.GetFieldValue<uint32>(object_fields::DisplayId));
+		}
+		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Flags))
+		{
+			unit.SetUnitFlags(fieldMap.GetFieldValue<uint32>(object_fields::Flags));
+		}
+		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::NpcFlags))
+		{
+			unit.SetNpcFlags(fieldMap.GetFieldValue<uint32>(object_fields::NpcFlags));
+		}
+		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::TargetUnit))
+		{
+			unit.SetTargetGuid(fieldMap.GetFieldValue<uint64>(object_fields::TargetUnit));
+		}
+
+		// Set position/movement - this should always be present for creation
+		if (updateFlags & object_update_flags::HasMovementInfo)
+		{
+			unit.SetMovementInfo(movementInfo);
+			DLOG("Unit " << std::hex << guid << std::dec << " position: (" 
+				<< movementInfo.position.x << ", " 
+				<< movementInfo.position.y << ", " 
+				<< movementInfo.position.z << ")");
+		}
+
+		// Set speeds (always present for units in the packet)
+		unit.SetSpeeds(speeds);
 
 		// Add or update in object manager
 		m_objectManager.AddOrUpdateUnit(unit);
@@ -996,6 +1025,9 @@ namespace mmo
 		if (guid == m_selectedCharacterGuid)
 		{
 			m_objectManager.SetSelfGuid(guid);
+			ILOG("Set self GUID to " << std::hex << guid << std::dec 
+				<< " at position (" << unit.GetPosition().x << ", " 
+				<< unit.GetPosition().y << ", " << unit.GetPosition().z << ")");
 		}
 
 		// Emit signals
