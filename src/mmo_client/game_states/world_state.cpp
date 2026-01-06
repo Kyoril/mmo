@@ -3472,9 +3472,10 @@ namespace mmo
 		const uint16 s_shadowTexSizes[] = {
 			512,
 			1024,
-			2048};
+			2048,
+			4096 };
 
-		const uint16 shadowTextureSize = s_shadowTexSizes[Clamp(s_shadowTextureSizeVar->GetIntValue(), 0, 2)];
+		const uint16 shadowTextureSize = s_shadowTexSizes[Clamp(s_shadowTextureSizeVar->GetIntValue(), 0, 3)];
 		ILOG("Updating shadow texture size to " << shadowTextureSize << "x" << shadowTextureSize);
 		deferred->SetShadowMapSize(shadowTextureSize);
 	}

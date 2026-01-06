@@ -164,7 +164,7 @@ namespace mmo
         std::shared_ptr<ShadowCameraSetup> m_shadowCameraSetup = nullptr;
 
         /// @brief Whether to use cascaded shadow maps.
-        bool m_useCascadedShadows = false;  // Temporarily disabled for debugging
+        bool m_useCascadedShadows = true;
 
         /// @brief Whether to show cascade debug colors.
         bool m_debugCascades = false;
@@ -174,11 +174,11 @@ namespace mmo
 		float m_depthBiasClamp = 0.0f;
 
         // Advanced shadow parameters
-        float m_shadowBias = 0.0001f;         // Depth bias in shadow space (reduced for less peter panning)
-        float m_normalBiasScale = 0.02f;      // Normal-based bias scale factor (reduced)
-        float m_shadowSoftness = 1.0f;        // Overall shadow softness
+        float m_shadowBias = 0.00002f;         // Depth bias in shadow space (reduced for less peter panning)
+        float m_normalBiasScale = 0.07f;      // Normal-based bias scale factor (reduced)
+        float m_shadowSoftness = 0.25f;        // Overall shadow softness
         float m_blockerSearchRadius = 0.005f; // Search radius for blocker search phase
-        float m_lightSize = 0.001f;           // Size of the virtual light (smaller = sharper shadows)
+        float m_lightSize = 0.021f;           // Size of the virtual light (smaller = sharper shadows)
         uint16 m_shadowMapSize = 2048;        // Size of the shadow map texture (increased for quality)
     };
 }

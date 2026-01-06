@@ -285,6 +285,10 @@ namespace mmo
 	public:
 		const std::filesystem::path GetWorldPath() const override { return m_assetPath; }
 
+		/// @brief Gets the deferred renderer.
+		/// @return Pointer to the deferred renderer, or nullptr if not available.
+		DeferredRenderer* GetDeferredRenderer() const { return m_deferredRenderer.get(); }
+
 		/// @brief Generates minimap images for all terrain pages and saves them to the AssetRegistry.
 		/// This method renders each terrain page from above using an orthographic camera and
 		/// render-to-texture, then saves the result as a texture file in the "minimaps" folder.

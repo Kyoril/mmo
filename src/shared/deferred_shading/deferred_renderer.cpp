@@ -72,9 +72,9 @@ namespace mmo
         auto& csmConfig = m_cascadedShadowSetup->GetConfig();
         csmConfig.maxShadowDistance = 300.0f;
         csmConfig.shadowMapSize = m_shadowMapSize;
-        csmConfig.splitLambda = 0.92f;  // Mostly logarithmic for better near-camera detail
+        csmConfig.splitLambda = 0.72f;  // Mostly logarithmic for better near-camera detail
         csmConfig.stableCascades = true;
-        csmConfig.cascadeBlendFactor = 0.1f;
+        csmConfig.cascadeBlendFactor = 0.25f;
         
 #ifdef WIN32
 		m_deferredLightVs = m_device.CreateShader(ShaderType::VertexShader, g_VS_DeferredLighting, std::size(g_VS_DeferredLighting));
