@@ -214,6 +214,9 @@ namespace mmo
 
 		PacketParseResult OnNameQueryResult(game::IncomingPacket& packet);
 
+		/// @brief Handles movement packets from other units.
+		PacketParseResult OnMovementPacket(game::IncomingPacket& packet);
+
 		/// @brief Parses a single object update from the packet stream.
 		/// @param packet The packet to read from.
 		/// @param creation Whether this is a creation (new object) or update.

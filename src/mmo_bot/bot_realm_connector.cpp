@@ -342,9 +342,23 @@ namespace mmo
 			RegisterPacketHandler(game::realm_client_packet::CompressedUpdateObject, *this, &BotRealmConnector::OnIgnoredPacket);  // TODO: Implement compression
 			RegisterPacketHandler(game::realm_client_packet::DestroyObjects, *this, &BotRealmConnector::OnDestroyObjects);
 			RegisterPacketHandler(game::realm_client_packet::NameQueryResult, *this, &BotRealmConnector::OnNameQueryResult);
-			RegisterPacketHandler(game::realm_client_packet::MoveStop, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveStartTurnLeft, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveStartTurnRight, *this, &BotRealmConnector::OnIgnoredPacket);
+
+			// Movement packets - these contain position updates for other units
+			RegisterPacketHandler(game::realm_client_packet::MoveStartForward, *this, &BotRealmConnector::OnMovementPacket);
+			RegisterPacketHandler(game::realm_client_packet::MoveStartBackward, *this, &BotRealmConnector::OnMovementPacket);
+			RegisterPacketHandler(game::realm_client_packet::MoveStop, *this, &BotRealmConnector::OnMovementPacket);
+			RegisterPacketHandler(game::realm_client_packet::MoveStartStrafeLeft, *this, &BotRealmConnector::OnMovementPacket);
+			RegisterPacketHandler(game::realm_client_packet::MoveStartStrafeRight, *this, &BotRealmConnector::OnMovementPacket);
+			RegisterPacketHandler(game::realm_client_packet::MoveStopStrafe, *this, &BotRealmConnector::OnMovementPacket);
+			RegisterPacketHandler(game::realm_client_packet::MoveStartTurnLeft, *this, &BotRealmConnector::OnMovementPacket);
+			RegisterPacketHandler(game::realm_client_packet::MoveStartTurnRight, *this, &BotRealmConnector::OnMovementPacket);
+			RegisterPacketHandler(game::realm_client_packet::MoveStopTurn, *this, &BotRealmConnector::OnMovementPacket);
+			RegisterPacketHandler(game::realm_client_packet::MoveHeartBeat, *this, &BotRealmConnector::OnMovementPacket);
+			RegisterPacketHandler(game::realm_client_packet::MoveSetFacing, *this, &BotRealmConnector::OnMovementPacket);
+			RegisterPacketHandler(game::realm_client_packet::MoveJump, *this, &BotRealmConnector::OnMovementPacket);
+			RegisterPacketHandler(game::realm_client_packet::MoveFallLand, *this, &BotRealmConnector::OnMovementPacket);
+
+			// These packets can be safely ignored
 			RegisterPacketHandler(game::realm_client_packet::AuraUpdate, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::InitialSpells, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::ActionButtons, *this, &BotRealmConnector::OnIgnoredPacket);
@@ -352,7 +366,7 @@ namespace mmo
 			RegisterPacketHandler(game::realm_client_packet::MoveSetRunSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::MoveSetRunBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::MoveSetSwimSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveSetSwimBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
+			RegisterPacketHandler(game::realm_client_packet::MoveSetSwimBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);;
 			RegisterPacketHandler(game::realm_client_packet::MoveSetTurnRate, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::SetFlightSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
@@ -1009,10 +1023,6 @@ namespace mmo
 		if (updateFlags & object_update_flags::HasMovementInfo)
 		{
 			unit.SetMovementInfo(movementInfo);
-			DLOG("Unit " << std::hex << guid << std::dec << " position: (" 
-				<< movementInfo.position.x << ", " 
-				<< movementInfo.position.y << ", " 
-				<< movementInfo.position.z << ")");
 		}
 
 		// Set speeds (always present for units in the packet)
@@ -1025,9 +1035,6 @@ namespace mmo
 		if (guid == m_selectedCharacterGuid)
 		{
 			m_objectManager.SetSelfGuid(guid);
-			ILOG("Set self GUID to " << std::hex << guid << std::dec 
-				<< " at position (" << unit.GetPosition().x << ", " 
-				<< unit.GetPosition().y << ", " << unit.GetPosition().z << ")");
 		}
 
 		// Emit signals
@@ -1041,5 +1048,33 @@ namespace mmo
 		}
 
 		return true;
+	}
+
+	PacketParseResult BotRealmConnector::OnMovementPacket(game::IncomingPacket& packet)
+	{
+		uint64 guid;
+		MovementInfo movementInfo;
+
+		if (!(packet >> io::read<uint64>(guid) >> movementInfo))
+		{
+			ELOG("Failed to parse movement packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Get the unit from object manager
+		BotUnit* unit = m_objectManager.GetUnitMutable(guid);
+		if (!unit)
+		{
+			// Unit not yet known - this can happen if movement arrives before spawn
+			return PacketParseResult::Pass;
+		}
+
+		// Update the unit's movement info (which includes position)
+		unit->SetMovementInfo(movementInfo);
+
+		// Emit update signal
+		UnitUpdated(*unit);
+
+		return PacketParseResult::Pass;
 	}
 }
