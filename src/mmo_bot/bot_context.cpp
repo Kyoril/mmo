@@ -74,6 +74,18 @@ namespace mmo
 		m_cachedMovementInfo = info;
 	}
 
+	void BotContext::SendLandedPacket()
+	{
+		// Get current movement info and remove the FALLING flag
+		MovementInfo landedMovement = GetMovementInfo();
+		landedMovement.movementFlags &= ~movement_flags::Falling;
+		landedMovement.timestamp = GetServerTime();
+
+		// Send MoveFallLand packet
+		SendMovementUpdate(game::client_realm_packet::MoveFallLand, landedMovement);
+		UpdateMovementInfo(landedMovement);
+	}
+
 	GameTime BotContext::GetServerTime() const
 	{
 		return GetAsyncTimeMs();

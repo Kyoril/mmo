@@ -56,6 +56,11 @@ namespace mmo
 		/// @param info The movement information.
 		void SendMovementUpdate(uint16 opCode, const MovementInfo& info);
 
+		/// Sends a landed packet to clear the FALLING flag after spawn.
+		/// Characters spawn with the FALLING flag set and must send MoveFallLand
+		/// to properly remove it before other movement can occur.
+		void SendLandedPacket();
+
 		/// Updates the bot's local movement information.
 		/// @param info The new movement information.
 		void UpdateMovementInfo(const MovementInfo& info);

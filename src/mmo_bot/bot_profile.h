@@ -53,6 +53,8 @@ namespace mmo
 			m_actionQueue.clear();
 			m_currentAction.reset();
 			
+            context.SendLandedPacket();
+
 			// Let derived class initialize
 			OnActivateImpl(context);
 		}

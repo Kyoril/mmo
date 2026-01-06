@@ -165,6 +165,14 @@ namespace mmo
 			}
 
 			MovementInfo currentMovement = context.GetMovementInfo();
+			
+			// Check if we have the FALLING flag from spawn - clear it before movement
+			if (!m_isMoving && (currentMovement.movementFlags & movement_flags::Falling))
+			{
+				context.SendLandedPacket();
+				currentMovement = context.GetMovementInfo(); // Get updated movement info
+			}
+
 			const Vector3 currentPosition = currentMovement.position;
 
 			// Calculate distance to target

@@ -30,6 +30,12 @@ ActionResult result = action->Execute(context);
 
 Movement in the game follows a specific packet protocol:
 
+**Initial Spawn:**
+- Characters spawn with `Falling` flag set
+- Before any other movement, send `MoveFallLand` to clear the FALLING flag
+- Attempting to start movement with FALLING flag will cause server errors
+- `MoveToPositionAction` automatically handles this by detecting and clearing the flag
+
 **Starting Movement:**
 1. Send `MoveStartForward` (or other start packet)
 2. Add appropriate movement flag (e.g., `Forward`)
@@ -42,10 +48,6 @@ Movement in the game follows a specific packet protocol:
 **Stopping Movement:**
 6. Send `MoveStop` (or other stop packet)
 7. Remove movement flag
-
-**Initial Spawn:**
-- Characters spawn with `Falling` flag set
-- First packet should be either a heartbeat (while falling) or `MoveFallLand` (when landing)
 
 ### 2. **Bot Context** (`bot_context.h`, `bot_context.cpp`)
 The context acts as a **Facade**, providing actions with safe access to bot capabilities while hiding implementation details.
@@ -267,6 +269,13 @@ profile->QueueAction(std::make_shared<ChatMessageAction>("Test passed"));
 - Check that movement flags are only modified by appropriate packets (not during heartbeat)
 - Enable verbose logging to see movement packets
 - Verify MoveStop is sent when destination is reached
+
+**"Client tried to remove FALLING flag in non-jump packet" error:**
+- This occurs when the bot tries to move without first landing
+- Characters spawn with the FALLING flag set
+- The bot must send MoveFallLand packet before any other movement
+- MoveToPositionAction now automatically detects and clears the FALLING flag
+- The server only allows FALLING flag removal via MoveFallLand or MoveJump packets
 
 **Movement validation errors:**
 - Server validates movement strictly - check `OnMovement()` in world_server/player.cpp
