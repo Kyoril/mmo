@@ -3,7 +3,9 @@
 #include "bot_realm_connector.h"
 
 #include "version.h"
+#include "game/field_map.h"
 #include "game/movement_info.h"
+#include "game/object_type_id.h"
 
 #include "base/clock.h"
 #include "base/constants.h"
@@ -336,9 +338,10 @@ namespace mmo
 			RegisterPacketHandler(game::realm_client_packet::GroupSetLeader, *this, &BotRealmConnector::OnGroupSetLeader);
 
 			// Register handlers for common packets that can be safely ignored by the bot
-			RegisterPacketHandler(game::realm_client_packet::UpdateObject, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::CompressedUpdateObject, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::DestroyObjects, *this, &BotRealmConnector::OnIgnoredPacket);
+			RegisterPacketHandler(game::realm_client_packet::UpdateObject, *this, &BotRealmConnector::OnUpdateObject);
+			RegisterPacketHandler(game::realm_client_packet::CompressedUpdateObject, *this, &BotRealmConnector::OnIgnoredPacket);  // TODO: Implement compression
+			RegisterPacketHandler(game::realm_client_packet::DestroyObjects, *this, &BotRealmConnector::OnDestroyObjects);
+			RegisterPacketHandler(game::realm_client_packet::NameQueryResult, *this, &BotRealmConnector::OnNameQueryResult);
 			RegisterPacketHandler(game::realm_client_packet::MoveStop, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::MoveStartTurnLeft, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::MoveStartTurnRight, *this, &BotRealmConnector::OnIgnoredPacket);
@@ -354,7 +357,6 @@ namespace mmo
 			RegisterPacketHandler(game::realm_client_packet::SetFlightSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::NameQueryResult, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::AttackStart, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::SpellCooldown, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::CreatureMove, *this, &BotRealmConnector::OnIgnoredPacket);
@@ -734,5 +736,278 @@ namespace mmo
 		}
 
 		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnUpdateObject(game::IncomingPacket& packet)
+	{
+		uint16 numObjectUpdates;
+		if (!(packet >> io::read<uint16>(numObjectUpdates)))
+		{
+			ELOG("Failed to read UpdateObject count");
+			return PacketParseResult::Disconnect;
+		}
+
+		for (uint16 i = 0; i < numObjectUpdates; ++i)
+		{
+			ObjectTypeId typeId;
+			uint8 creation;
+			if (!(packet >> io::read<uint8>(typeId) >> io::read<uint8>(creation)))
+			{
+				ELOG("Failed to read object update header #" << i);
+				return PacketParseResult::Disconnect;
+			}
+
+			// Only process units and players - skip items, containers, world objects
+			if (typeId != ObjectTypeId::Unit && typeId != ObjectTypeId::Player)
+			{
+				// Skip this object - we need to read the data to advance the stream
+				// but we don't store non-unit types
+				if (!ParseObjectUpdate(packet, creation != 0, typeId))
+				{
+					ELOG("Failed to skip non-unit object #" << i << " (type: " << static_cast<int>(typeId) << ")");
+					return PacketParseResult::Disconnect;
+				}
+				continue;
+			}
+
+			if (!ParseObjectUpdate(packet, creation != 0, typeId))
+			{
+				ELOG("Failed to parse object update #" << i << " (type: " << static_cast<int>(typeId) << ")");
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnDestroyObjects(game::IncomingPacket& packet)
+	{
+		uint16 objectCount;
+		if (!(packet >> io::read<uint16>(objectCount)))
+		{
+			ELOG("Failed to read DestroyObjects count");
+			return PacketParseResult::Disconnect;
+		}
+
+		for (uint16 i = 0; i < objectCount; ++i)
+		{
+			uint64 guid;
+			if (!(packet >> io::read_packed_guid(guid)))
+			{
+				ELOG("Failed to read destroyed object GUID #" << i);
+				return PacketParseResult::Disconnect;
+			}
+
+			// Remove from object manager if it exists
+			if (m_objectManager.RemoveUnit(guid))
+			{
+				UnitDespawned(guid);
+			}
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnNameQueryResult(game::IncomingPacket& packet)
+	{
+		uint64 guid;
+		uint8 found;
+		if (!(packet >> io::read<uint64>(guid) >> io::read<uint8>(found)))
+		{
+			ELOG("Failed to read NameQueryResult header");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (found == 0)
+		{
+			// Player not found
+			return PacketParseResult::Pass;
+		}
+
+		String name;
+		if (!(packet >> io::read_container<uint8>(name)))
+		{
+			ELOG("Failed to read player name from NameQueryResult");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Update the unit's name if we have it
+		if (BotUnit* unit = m_objectManager.GetUnitMutable(guid))
+		{
+			unit->SetName(name);
+			UnitUpdated(*unit);
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	bool BotRealmConnector::ParseObjectUpdate(io::Reader& reader, const bool creation, const ObjectTypeId typeId)
+	{
+		uint64 guid = 0;
+
+		// For updates (not creation), read the GUID first
+		if (!creation)
+		{
+			if (!(reader >> io::read_packed_guid(guid)))
+			{
+				ELOG("Failed to read object GUID for update");
+				return false;
+			}
+		}
+
+		// Read update flags
+		uint32 updateFlags;
+		if (!(reader >> io::read<uint32>(updateFlags)))
+		{
+			ELOG("Failed to read update flags");
+			return false;
+		}
+
+		// Read movement info if present
+		MovementInfo movementInfo;
+		if (updateFlags & object_update_flags::HasMovementInfo)
+		{
+			if (!(reader >> movementInfo))
+			{
+				ELOG("Failed to read movement info");
+				return false;
+			}
+		}
+
+		// Determine field count based on type
+		size_t fieldCount = 0;
+		switch (typeId)
+		{
+		case ObjectTypeId::Object:
+			fieldCount = object_fields::WorldObjectFieldCount;
+			break;
+		case ObjectTypeId::Unit:
+			fieldCount = object_fields::UnitFieldCount;
+			break;
+		case ObjectTypeId::Player:
+			fieldCount = object_fields::PlayerFieldCount;
+			break;
+		case ObjectTypeId::Item:
+			fieldCount = object_fields::ItemFieldCount;
+			break;
+		case ObjectTypeId::Container:
+			fieldCount = object_fields::BagFieldCount;
+			break;
+		default:
+			fieldCount = object_fields::ObjectFieldCount;
+			break;
+		}
+
+		// Create a temporary field map for reading
+		FieldMap<uint32> fieldMap;
+		fieldMap.Initialize(fieldCount);
+
+		// Read field data
+		if (creation)
+		{
+			if (!(fieldMap.DeserializeComplete(reader)))
+			{
+				ELOG("Failed to deserialize complete field map");
+				return false;
+			}
+		}
+		else
+		{
+			if (!(fieldMap.DeserializeChanges(reader)))
+			{
+				ELOG("Failed to deserialize field map changes");
+				return false;
+			}
+		}
+
+		// For creation, the GUID is in the field map
+		if (creation)
+		{
+			guid = fieldMap.GetFieldValue<uint64>(object_fields::Guid);
+		}
+
+		// Read unit speeds (only for units and players)
+		std::array<float, static_cast<size_t>(MovementType::Count)> speeds = {};
+		if (typeId == ObjectTypeId::Unit || typeId == ObjectTypeId::Player)
+		{
+			if (!(reader 
+				>> io::read<float>(speeds[static_cast<size_t>(MovementType::Walk)])
+				>> io::read<float>(speeds[static_cast<size_t>(MovementType::Run)])
+				>> io::read<float>(speeds[static_cast<size_t>(MovementType::Backwards)])
+				>> io::read<float>(speeds[static_cast<size_t>(MovementType::Swim)])
+				>> io::read<float>(speeds[static_cast<size_t>(MovementType::SwimBackwards)])
+				>> io::read<float>(speeds[static_cast<size_t>(MovementType::Flight)])
+				>> io::read<float>(speeds[static_cast<size_t>(MovementType::FlightBackwards)])
+				>> io::read<float>(speeds[static_cast<size_t>(MovementType::Turn)])))
+			{
+				ELOG("Failed to read unit speeds");
+				return false;
+			}
+		}
+
+		// Only store units and players
+		if (typeId != ObjectTypeId::Unit && typeId != ObjectTypeId::Player)
+		{
+			return true;  // Successfully parsed but not stored
+		}
+
+		// Check if unit already exists
+		const bool isNewUnit = !m_objectManager.HasUnit(guid);
+
+		// Create or update the bot unit
+		BotUnit unit(guid, typeId);
+
+		// Extract relevant fields
+		unit.SetEntry(fieldMap.GetFieldValue<uint32>(object_fields::Entry));
+		unit.SetLevel(fieldMap.GetFieldValue<uint32>(object_fields::Level));
+		unit.SetHealth(fieldMap.GetFieldValue<uint32>(object_fields::Health));
+		unit.SetMaxHealth(fieldMap.GetFieldValue<uint32>(object_fields::MaxHealth));
+		unit.SetFactionTemplate(fieldMap.GetFieldValue<uint32>(object_fields::FactionTemplate));
+		unit.SetDisplayId(fieldMap.GetFieldValue<uint32>(object_fields::DisplayId));
+		unit.SetUnitFlags(fieldMap.GetFieldValue<uint32>(object_fields::Flags));
+		unit.SetNpcFlags(fieldMap.GetFieldValue<uint32>(object_fields::NpcFlags));
+		unit.SetTargetGuid(fieldMap.GetFieldValue<uint64>(object_fields::TargetUnit));
+
+		// Set position/movement
+		if (updateFlags & object_update_flags::HasMovementInfo)
+		{
+			unit.SetMovementInfo(movementInfo);
+		}
+
+		// Set speeds
+		unit.SetSpeeds(speeds);
+
+		// If updating existing unit, preserve the name
+		if (!isNewUnit)
+		{
+			if (const BotUnit* existingUnit = m_objectManager.GetUnit(guid))
+			{
+				if (!existingUnit->GetName().empty())
+				{
+					unit.SetName(existingUnit->GetName());
+				}
+			}
+		}
+
+		// Add or update in object manager
+		m_objectManager.AddOrUpdateUnit(unit);
+
+		// Set self guid if this is our character
+		if (guid == m_selectedCharacterGuid)
+		{
+			m_objectManager.SetSelfGuid(guid);
+		}
+
+		// Emit signals
+		if (isNewUnit)
+		{
+			UnitSpawned(unit);
+		}
+		else
+		{
+			UnitUpdated(unit);
+		}
+
+		return true;
 	}
 }

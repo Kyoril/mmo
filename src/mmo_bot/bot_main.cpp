@@ -253,6 +253,10 @@ namespace mmo
 			{
 				return std::make_shared<SequenceProfile>();
 			}
+			else if (m_config.profileName == "unit_awareness")
+			{
+				return std::make_shared<UnitAwarenessProfile>();
+			}
 			else
 			{
 				WLOG("Unknown profile '" << m_config.profileName << "', using simple_greeter");

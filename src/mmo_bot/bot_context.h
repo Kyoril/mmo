@@ -5,8 +5,10 @@
 #include "base/typedefs.h"
 #include "game/chat_type.h"
 #include "game/movement_info.h"
+#include "math/vector3.h"
 
 #include <chrono>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -16,6 +18,8 @@ namespace mmo
 {
 	// Forward declarations
 	class BotRealmConnector;
+	class BotObjectManager;
+	class BotUnit;
 	struct BotConfig;
 
 	/// Provides context and capabilities to bot actions.
@@ -148,6 +152,89 @@ namespace mmo
 		/// Invites a player to the party by name.
 		/// @param playerName The name of the player to invite.
 		void InviteToParty(const std::string& playerName);
+
+		// ============================================================
+		// Unit Awareness Methods
+		// ============================================================
+
+		/// Gets the object manager containing all known units.
+		/// @return Reference to the object manager.
+		BotObjectManager& GetObjectManager();
+
+		/// Gets the object manager containing all known units (const).
+		/// @return Const reference to the object manager.
+		const BotObjectManager& GetObjectManager() const;
+
+		/// Gets the bot's own unit data.
+		/// @return Pointer to the bot's unit, or nullptr if not yet spawned.
+		const BotUnit* GetSelf() const;
+
+		/// Gets the bot's current position.
+		/// @return The position, or zero vector if not spawned.
+		Vector3 GetPosition() const;
+
+		/// Gets all units within a radius of the bot.
+		/// @param radius The search radius (default 40 yards).
+		/// @return Vector of pointers to nearby units.
+		std::vector<const BotUnit*> GetNearbyUnits(float radius = 40.0f) const;
+
+		/// Gets all players within a radius of the bot.
+		/// @param radius The search radius (default 40 yards).
+		/// @return Vector of pointers to nearby players.
+		std::vector<const BotUnit*> GetNearbyPlayers(float radius = 40.0f) const;
+
+		/// Gets all creatures within a radius of the bot.
+		/// @param radius The search radius (default 40 yards).
+		/// @return Vector of pointers to nearby creatures.
+		std::vector<const BotUnit*> GetNearbyCreatures(float radius = 40.0f) const;
+
+		/// Gets the nearest hostile unit to the bot.
+		/// @param maxRange Maximum search range (default 40 yards).
+		/// @return Pointer to the nearest hostile, or nullptr if none.
+		const BotUnit* GetNearestHostile(float maxRange = 40.0f) const;
+
+		/// Gets the nearest friendly unit to the bot (excluding self).
+		/// @param maxRange Maximum search range (default 40 yards).
+		/// @return Pointer to the nearest friendly, or nullptr if none.
+		const BotUnit* GetNearestFriendly(float maxRange = 40.0f) const;
+
+		/// Gets the nearest friendly player to the bot (excluding self).
+		/// @param maxRange Maximum search range (default 40 yards).
+		/// @return Pointer to the nearest friendly player, or nullptr if none.
+		const BotUnit* GetNearestFriendlyPlayer(float maxRange = 40.0f) const;
+
+		/// Gets all hostile units within range of the bot.
+		/// @param maxRange Maximum search range (default 40 yards).
+		/// @return Vector of pointers to hostile units.
+		std::vector<const BotUnit*> GetHostilesInRange(float maxRange = 40.0f) const;
+
+		/// Gets all friendly players within range of the bot (excluding self).
+		/// @param maxRange Maximum search range (default 40 yards).
+		/// @return Vector of pointers to friendly players.
+		std::vector<const BotUnit*> GetFriendlyPlayersInRange(float maxRange = 40.0f) const;
+
+		/// Gets units that are targeting the bot.
+		/// @param maxRange Maximum search range (0 = unlimited).
+		/// @return Vector of pointers to units targeting the bot.
+		std::vector<const BotUnit*> GetUnitsTargetingSelf(float maxRange = 0.0f) const;
+
+		/// Gets a unit by GUID.
+		/// @param guid The GUID to look up.
+		/// @return Pointer to the unit, or nullptr if not found.
+		const BotUnit* GetUnit(uint64 guid) const;
+
+		/// Checks if a unit with the given GUID exists.
+		/// @param guid The GUID to check.
+		/// @return True if the unit exists.
+		bool HasUnit(uint64 guid) const;
+
+		/// Gets the count of known units.
+		/// @return The number of units in the object manager.
+		size_t GetUnitCount() const;
+
+		/// Iterates over all known units.
+		/// @param callback The callback to invoke for each unit.
+		void ForEachUnit(const std::function<void(const BotUnit&)>& callback) const;
 
 	private:
 		std::shared_ptr<BotRealmConnector> m_realmConnector;

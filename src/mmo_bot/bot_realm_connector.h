@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "bot_object_manager.h"
 #include "mmo_client/realm_data.h"
 
 #include "game_protocol/game_connector.h"
@@ -46,6 +47,15 @@ namespace mmo
 		/// @brief Emitted when the bot leaves or is removed from a party.
 		signal<void()> PartyLeft;
 
+		/// @brief Emitted when a new unit is spawned in the world.
+		signal<void(const BotUnit&)> UnitSpawned;
+
+		/// @brief Emitted when a unit is despawned from the world.
+		signal<void(uint64)> UnitDespawned;
+
+		/// @brief Emitted when a unit's data is updated.
+		signal<void(const BotUnit&)> UnitUpdated;
+
 	private:
 		asio::io_service& m_ioService;
 		std::string m_realmAddress;
@@ -64,6 +74,9 @@ namespace mmo
 		std::vector<BotPartyMember> m_partyMembers;
 		uint64 m_partyLeaderGuid { 0 };
 		bool m_inParty { false };
+
+		// Object management
+		BotObjectManager m_objectManager;
 
 	public:
 		/// A list of character views.
@@ -152,6 +165,16 @@ namespace mmo
 		/// Invites a player to the party by name.
 		void InviteToParty(const std::string& playerName);
 
+		// ============================================================
+		// Object Management Methods
+		// ============================================================
+
+		/// Gets the object manager containing all known units.
+		BotObjectManager& GetObjectManager() { return m_objectManager; }
+
+		/// Gets the object manager containing all known units (const).
+		const BotObjectManager& GetObjectManager() const { return m_objectManager; }
+
 	private:
 		PacketParseResult OnAuthChallenge(game::IncomingPacket& packet);
 
@@ -184,5 +207,18 @@ namespace mmo
 		PacketParseResult OnGroupDestroyed(game::IncomingPacket& packet);
 
 		PacketParseResult OnGroupSetLeader(game::IncomingPacket& packet);
+
+		PacketParseResult OnUpdateObject(game::IncomingPacket& packet);
+
+		PacketParseResult OnDestroyObjects(game::IncomingPacket& packet);
+
+		PacketParseResult OnNameQueryResult(game::IncomingPacket& packet);
+
+		/// @brief Parses a single object update from the packet stream.
+		/// @param packet The packet to read from.
+		/// @param creation Whether this is a creation (new object) or update.
+		/// @param typeId The type ID of the object.
+		/// @return True if parsing succeeded.
+		bool ParseObjectUpdate(io::Reader& reader, bool creation, ObjectTypeId typeId);
 	};
 }

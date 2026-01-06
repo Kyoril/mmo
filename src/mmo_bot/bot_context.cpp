@@ -2,6 +2,8 @@
 
 #include "bot_context.h"
 #include "bot_realm_connector.h"
+#include "bot_object_manager.h"
+#include "bot_unit.h"
 
 #include "base/clock.h"
 #include "log/default_log_levels.h"
@@ -248,5 +250,189 @@ namespace mmo
 		}
 
 		m_realmConnector->InviteToParty(playerName);
+	}
+
+	// ============================================================
+	// Unit Awareness Methods
+	// ============================================================
+
+	BotObjectManager& BotContext::GetObjectManager()
+	{
+		return m_realmConnector->GetObjectManager();
+	}
+
+	const BotObjectManager& BotContext::GetObjectManager() const
+	{
+		return m_realmConnector->GetObjectManager();
+	}
+
+	const BotUnit* BotContext::GetSelf() const
+	{
+		if (!m_realmConnector)
+		{
+			return nullptr;
+		}
+
+		return m_realmConnector->GetObjectManager().GetSelf();
+	}
+
+	Vector3 BotContext::GetPosition() const
+	{
+		const BotUnit* self = GetSelf();
+		if (self)
+		{
+			return self->GetPosition();
+		}
+
+		// Fall back to cached movement info if unit not yet available
+		return m_cachedMovementInfo.position;
+	}
+
+	std::vector<const BotUnit*> BotContext::GetNearbyUnits(float radius) const
+	{
+		if (!m_realmConnector)
+		{
+			return {};
+		}
+
+		const BotUnit* self = GetSelf();
+		if (!self)
+		{
+			return {};
+		}
+
+		return m_realmConnector->GetObjectManager().GetNearbyUnits(self->GetPosition(), radius);
+	}
+
+	std::vector<const BotUnit*> BotContext::GetNearbyPlayers(float radius) const
+	{
+		if (!m_realmConnector)
+		{
+			return {};
+		}
+
+		const BotUnit* self = GetSelf();
+		if (!self)
+		{
+			return {};
+		}
+
+		return m_realmConnector->GetObjectManager().GetNearbyPlayers(self->GetPosition(), radius);
+	}
+
+	std::vector<const BotUnit*> BotContext::GetNearbyCreatures(float radius) const
+	{
+		if (!m_realmConnector)
+		{
+			return {};
+		}
+
+		const BotUnit* self = GetSelf();
+		if (!self)
+		{
+			return {};
+		}
+
+		return m_realmConnector->GetObjectManager().GetNearbyCreatures(self->GetPosition(), radius);
+	}
+
+	const BotUnit* BotContext::GetNearestHostile(float maxRange) const
+	{
+		if (!m_realmConnector)
+		{
+			return nullptr;
+		}
+
+		return m_realmConnector->GetObjectManager().GetNearestHostile(maxRange);
+	}
+
+	const BotUnit* BotContext::GetNearestFriendly(float maxRange) const
+	{
+		if (!m_realmConnector)
+		{
+			return nullptr;
+		}
+
+		return m_realmConnector->GetObjectManager().GetNearestFriendly(maxRange);
+	}
+
+	const BotUnit* BotContext::GetNearestFriendlyPlayer(float maxRange) const
+	{
+		if (!m_realmConnector)
+		{
+			return nullptr;
+		}
+
+		return m_realmConnector->GetObjectManager().GetNearestFriendlyPlayer(maxRange);
+	}
+
+	std::vector<const BotUnit*> BotContext::GetHostilesInRange(float maxRange) const
+	{
+		if (!m_realmConnector)
+		{
+			return {};
+		}
+
+		return m_realmConnector->GetObjectManager().GetHostilesInRange(maxRange);
+	}
+
+	std::vector<const BotUnit*> BotContext::GetFriendlyPlayersInRange(float maxRange) const
+	{
+		if (!m_realmConnector)
+		{
+			return {};
+		}
+
+		return m_realmConnector->GetObjectManager().GetFriendlyPlayersInRange(maxRange);
+	}
+
+	std::vector<const BotUnit*> BotContext::GetUnitsTargetingSelf(float maxRange) const
+	{
+		if (!m_realmConnector)
+		{
+			return {};
+		}
+
+		return m_realmConnector->GetObjectManager().GetUnitsTargetingSelf(maxRange);
+	}
+
+	const BotUnit* BotContext::GetUnit(uint64 guid) const
+	{
+		if (!m_realmConnector)
+		{
+			return nullptr;
+		}
+
+		return m_realmConnector->GetObjectManager().GetUnit(guid);
+	}
+
+	bool BotContext::HasUnit(uint64 guid) const
+	{
+		if (!m_realmConnector)
+		{
+			return false;
+		}
+
+		return m_realmConnector->GetObjectManager().HasUnit(guid);
+	}
+
+	size_t BotContext::GetUnitCount() const
+	{
+		if (!m_realmConnector)
+		{
+			return 0;
+		}
+
+		return m_realmConnector->GetObjectManager().GetUnitCount();
+	}
+
+	void BotContext::ForEachUnit(const std::function<void(const BotUnit&)>& callback) const
+	{
+		if (!m_realmConnector)
+		{
+			return;
+		}
+
+		m_realmConnector->GetObjectManager().ForEachUnit(callback);
 	}
 }

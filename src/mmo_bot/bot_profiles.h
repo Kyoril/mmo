@@ -8,3 +8,4 @@
 #include "bot_profiles/chatter_profile.h"
 #include "bot_profiles/patrol_profile.h"
 #include "bot_profiles/sequence_profile.h"
+#include "bot_profiles/unit_awareness_profile.h"
