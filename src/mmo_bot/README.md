@@ -18,14 +18,34 @@ Actions follow the **Command Pattern**, encapsulating individual bot behaviors t
 **Built-in Actions:**
 - `ChatMessageAction`: Send chat messages
 - `WaitAction`: Wait for a specified duration  
-- `MoveToPositionAction`: Move to a target position
-- `HeartbeatAction`: Send heartbeat to keep connection alive
+- `MoveToPositionAction`: Move to a target position (sends MoveStartForward, periodic MoveHeartBeat packets, and MoveStop)
 
 **Example:**
 ```cpp
 auto action = std::make_shared<ChatMessageAction>("Hello!", ChatType::Say);
 ActionResult result = action->Execute(context);
 ```
+
+### Movement Protocol
+
+Movement in the game follows a specific packet protocol:
+
+**Starting Movement:**
+1. Send `MoveStartForward` (or other start packet)
+2. Add appropriate movement flag (e.g., `Forward`)
+
+**During Movement:**
+3. Every ~500ms, send `MoveHeartBeat` packet with updated position
+4. **IMPORTANT**: Do NOT modify movement flags during heartbeat packets
+5. Server validates position and broadcasts to nearby players
+
+**Stopping Movement:**
+6. Send `MoveStop` (or other stop packet)
+7. Remove movement flag
+
+**Initial Spawn:**
+- Characters spawn with `Falling` flag set
+- First packet should be either a heartbeat (while falling) or `MoveFallLand` (when landing)
 
 ### 2. **Bot Context** (`bot_context.h`, `bot_context.cpp`)
 The context acts as a **Facade**, providing actions with safe access to bot capabilities while hiding implementation details.
@@ -181,6 +201,9 @@ protected:
 - Pathfinding integration
 - Collision avoidance
 - Following waypoints from file
+- Proper physics simulation (gravity, acceleration, deceleration)
+- Handle all movement types (backward, strafe, turn, jump, fall)
+- Respect terrain height and nav mesh
 
 ### Advanced Combat
 - Target selection logic
@@ -238,9 +261,19 @@ profile->QueueAction(std::make_shared<ChatMessageAction>("Test passed"));
 ## Troubleshooting
 
 **Bot doesn't move:**
-- Check that movement packets are implemented correctly in BotRealmConnector
-- Verify MovementInfo is being updated properly
+- Check that MoveStartForward is sent before movement begins
+- Verify MovementInfo position is being calculated correctly based on speed and time
+- Ensure heartbeat packets are sent every ~500ms during movement
+- Check that movement flags are only modified by appropriate packets (not during heartbeat)
 - Enable verbose logging to see movement packets
+- Verify MoveStop is sent when destination is reached
+
+**Movement validation errors:**
+- Server validates movement strictly - check `OnMovement()` in world_server/player.cpp
+- Ensure movement flags match the packet type (e.g., Forward flag with MoveStartForward)
+- Don't modify flags during heartbeat packets
+- Position must be reasonable based on movement speed and elapsed time
+- Character must not move while rooted or dead
 
 **Actions not executing:**
 - Check `CanExecute()` validation

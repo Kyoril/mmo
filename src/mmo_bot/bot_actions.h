@@ -125,17 +125,25 @@ namespace mmo
 	};
 
 	/// Action that moves the bot to a target position.
+	/// Movement protocol:
+	/// 1. Send MoveStartForward with Forward flag added
+	/// 2. Send periodic MoveHeartBeat packets (every ~500ms) with updated position while moving
+	/// 3. Send MoveStop with Forward flag removed when destination reached
+	/// 
 	/// Note: This is a basic implementation. A more sophisticated version would:
 	/// - Use pathfinding to navigate around obstacles
 	/// - Handle collision detection
-	/// - Support different movement speeds
+	/// - Calculate actual position based on movement speed and elapsed time
+	/// - Support different movement types (backward, strafe, etc.)
 	class MoveToPositionAction final : public BotAction
 	{
 	public:
-		explicit MoveToPositionAction(Vector3 targetPosition, float acceptanceRadius = 1.0f)
+		explicit MoveToPositionAction(Vector3 targetPosition, float acceptanceRadius = 1.0f, float moveSpeed = 7.0f)
 			: m_targetPosition(targetPosition)
 			, m_acceptanceRadius(acceptanceRadius)
+			, m_moveSpeed(moveSpeed)
 			, m_isMoving(false)
+			, m_lastHeartbeat(0)
 		{
 		}
 
@@ -169,6 +177,7 @@ namespace mmo
 				// Stop movement if we were moving
 				if (m_isMoving)
 				{
+					// Send MoveStop packet (removes Forward flag)
 					currentMovement.movementFlags &= ~movement_flags::Forward;
 					currentMovement.timestamp = context.GetServerTime();
 					context.SendMovementUpdate(game::client_realm_packet::MoveStop, currentMovement);
@@ -186,20 +195,34 @@ namespace mmo
 			// Start moving forward if not already moving
 			if (!m_isMoving)
 			{
+				// Send MoveStartForward packet (adds Forward flag)
 				currentMovement.movementFlags |= movement_flags::Forward;
 				currentMovement.timestamp = context.GetServerTime();
 				context.SendMovementUpdate(game::client_realm_packet::MoveStartForward, currentMovement);
 				context.UpdateMovementInfo(currentMovement);
 				m_isMoving = true;
+				m_lastHeartbeat = context.GetServerTime();
 			}
 			else
 			{
-				// Update position and send heartbeat
-				// Note: In a real implementation, we'd calculate the new position based on
-				// movement speed and elapsed time. For now, we'll just update the facing.
-				currentMovement.timestamp = context.GetServerTime();
-				context.SendMovementUpdate(game::client_realm_packet::MoveHeartBeat, currentMovement);
-				context.UpdateMovementInfo(currentMovement);
+				// Send periodic heartbeat while moving (every 500ms)
+				const GameTime now = context.GetServerTime();
+				if (now - m_lastHeartbeat >= 500)
+				{
+					// Calculate new position based on time elapsed and movement speed
+					// TODO: This is simplified - real implementation should use proper physics
+					const float elapsed = (now - m_lastHeartbeat) / 1000.0f; // Convert to seconds
+					const Vector3 direction = delta.NormalizedCopy();
+					const float stepDistance = std::min(m_moveSpeed * elapsed, distance);
+					currentMovement.position = currentPosition + (direction * stepDistance);
+					
+					// Send heartbeat packet with updated position
+					// IMPORTANT: Do NOT modify movement flags during heartbeat!
+					currentMovement.timestamp = now;
+					context.SendMovementUpdate(game::client_realm_packet::MoveHeartBeat, currentMovement);
+					context.UpdateMovementInfo(currentMovement);
+					m_lastHeartbeat = now;
+				}
 			}
 
 			return ActionResult::InProgress;
@@ -233,54 +256,8 @@ namespace mmo
 	private:
 		Vector3 m_targetPosition;
 		float m_acceptanceRadius;
+		float m_moveSpeed;
 		bool m_isMoving;
-	};
-
-	/// Action that sends a heartbeat (movement update without changing position).
-	/// Useful for keeping the connection alive.
-	class HeartbeatAction final : public BotAction
-	{
-	public:
-		std::string GetDescription() const override
-		{
-			return "Send heartbeat";
-		}
-
-		ActionResult Execute(BotContext& context) override
-		{
-			if (!context.IsWorldReady())
-			{
-				return ActionResult::Failed;
-			}
-
-			const uint64 guid = context.GetSelectedCharacterGuid();
-			if (guid == 0)
-			{
-				return ActionResult::Failed;
-			}
-
-			MovementInfo info = context.GetMovementInfo();
-			info.timestamp = context.GetServerTime();
-			context.SendMovementUpdate(game::client_realm_packet::MoveHeartBeat, info);
-
-			return ActionResult::Success;
-		}
-
-		bool CanExecute(const BotContext& context, std::string& outReason) const override
-		{
-			if (!context.IsWorldReady())
-			{
-				outReason = "Bot is not in the world yet";
-				return false;
-			}
-
-			if (context.GetSelectedCharacterGuid() == 0)
-			{
-				outReason = "No character selected";
-				return false;
-			}
-
-			return true;
-		}
+		GameTime m_lastHeartbeat;
 	};
 }

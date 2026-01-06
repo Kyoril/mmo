@@ -15,6 +15,8 @@ namespace mmo
 {
 	/// A simple bot profile that sends a greeting message and then idles.
 	/// This replicates the original bot behavior.
+	/// Note: The bot doesn't need to send periodic "keep-alive" packets - the server
+	/// handles disconnection of idle clients through timeouts.
 	class SimpleGreeterProfile final : public BotProfile
 	{
 	public:
@@ -39,16 +41,14 @@ namespace mmo
 				QueueAction(std::make_shared<ChatMessageAction>(m_greetingMessage, ChatType::Say));
 			}
 
-			// Queue periodic heartbeats
-			QueueAction(std::make_shared<WaitAction>(5000ms));
-			QueueAction(std::make_shared<HeartbeatAction>());
+			// After greeting, just wait indefinitely (server will disconnect if needed)
+			QueueAction(std::make_shared<WaitAction>(std::chrono::hours(24)));
 		}
 
 		bool OnQueueEmpty(BotContext& context) override
 		{
-			// Queue more heartbeats
-			QueueAction(std::make_shared<WaitAction>(5000ms));
-			QueueAction(std::make_shared<HeartbeatAction>());
+			// Queue more waiting (effectively idle)
+			QueueAction(std::make_shared<WaitAction>(std::chrono::hours(24)));
 			return true;
 		}
 
@@ -87,16 +87,14 @@ namespace mmo
 				QueueAction(std::make_shared<ChatMessageAction>(m_messages[i], ChatType::Say));
 			}
 
-			// Add final heartbeat to keep alive
-			QueueAction(std::make_shared<WaitAction>(5000ms));
-			QueueAction(std::make_shared<HeartbeatAction>());
+			// After sending all messages, just idle
+			QueueAction(std::make_shared<WaitAction>(std::chrono::hours(1)));
 		}
 
 		bool OnQueueEmpty(BotContext& context) override
 		{
-			// Keep sending heartbeats
-			QueueAction(std::make_shared<WaitAction>(5000ms));
-			QueueAction(std::make_shared<HeartbeatAction>());
+			// Keep sending messages or just idle
+			QueueAction(std::make_shared<WaitAction>(std::chrono::hours(1)));
 			return true;
 		}
 
@@ -148,9 +146,8 @@ namespace mmo
 				return true;
 			}
 
-			// Done patrolling, just send heartbeats
-			QueueAction(std::make_shared<WaitAction>(5000ms));
-			QueueAction(std::make_shared<HeartbeatAction>());
+			// Done patrolling, just idle
+			QueueAction(std::make_shared<WaitAction>(std::chrono::hours(1)));
 			return true;
 		}
 
@@ -208,9 +205,8 @@ namespace mmo
 
 		bool OnQueueEmpty(BotContext& context) override
 		{
-			// After sequence completes, just maintain connection
-			QueueAction(std::make_shared<WaitAction>(5000ms));
-			QueueAction(std::make_shared<HeartbeatAction>());
+			// After sequence completes, just idle
+			QueueAction(std::make_shared<WaitAction>(std::chrono::hours(1)));
 			return true;
 		}
 	};
