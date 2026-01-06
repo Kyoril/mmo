@@ -181,6 +181,18 @@ namespace mmo
 		/// @return True if this unit is friendly to the other unit.
 		bool IsFriendlyTo(const BotUnit& other) const;
 
+		/// @brief Checks if this unit can be attacked by the specified unit.
+		/// 
+		/// This considers neutral creatures (like boars) as attackable even if
+		/// they are not actively hostile. A unit is attackable if:
+		/// - It is not the same unit
+		/// - It is alive
+		/// - It is a creature without NPC flags (vendor, quest giver, etc.)
+		/// 
+		/// @param attacker The unit that wants to attack this unit.
+		/// @return True if this unit can be attacked.
+		bool IsAttackableBy(const BotUnit& attacker) const;
+
 		// ============================================================
 		// Setters (for BotObjectManager to update)
 		// ============================================================

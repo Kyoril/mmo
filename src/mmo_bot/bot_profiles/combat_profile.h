@@ -8,6 +8,8 @@
 #include "bot_actions/wait_action.h"
 #include "bot_actions/start_attack_action.h"
 #include "bot_actions/stop_attack_action.h"
+#include "bot_actions/move_to_unit_action.h"
+#include "bot_actions/face_unit_action.h"
 
 #include "log/default_log_levels.h"
 
@@ -20,17 +22,19 @@ namespace mmo
 	/// @brief A demonstration profile that engages in melee combat.
 	/// 
 	/// This profile demonstrates the combat system:
-	/// - Finds and attacks nearest hostile creature
+	/// - Finds and attacks nearest attackable creature
+	/// - Moves to targets that are out of melee range
+	/// - Faces targets when needed
 	/// - Logs combat events (swings, errors, damage dealt/received)
 	/// - Automatically re-targets when current target dies
 	class CombatProfile final : public BotProfile
 	{
 	public:
 		/// @brief Constructs the combat profile.
-		/// @param searchRadius The radius to search for hostile creatures.
+		/// @param searchRadius The radius to search for attackable creatures (default 100 yards).
 		/// @param combatCheckInterval How often to check for new targets.
 		explicit CombatProfile(
-			float searchRadius = 30.0f,
+			float searchRadius = 100.0f,
 			std::chrono::milliseconds combatCheckInterval = 2000ms)
 			: m_searchRadius(searchRadius)
 			, m_combatCheckInterval(combatCheckInterval)
@@ -98,12 +102,24 @@ namespace mmo
 				break;
 			case attack_swing_event::OutOfRange:
 				errorName = "Out of Range";
+				// Move closer to target
+				if (m_currentTargetGuid != 0)
+				{
+					ILOG("[COMBAT] Target out of range - moving closer");
+					QueueAction(std::make_shared<MoveToUnitAction>(m_currentTargetGuid, m_meleeRange - 1.0f));
+				}
 				break;
 			case attack_swing_event::CantAttack:
 				errorName = "Can't Attack";
 				break;
 			case attack_swing_event::WrongFacing:
 				errorName = "Wrong Facing";
+				// Face the target
+				if (m_currentTargetGuid != 0)
+				{
+					ILOG("[COMBAT] Facing wrong direction - turning to target");
+					context.FaceUnit(m_currentTargetGuid);
+				}
 				break;
 			case attack_swing_event::TargetDead:
 				errorName = "Target Dead";
@@ -165,6 +181,7 @@ namespace mmo
 			const BotUnit* self = context.GetSelf();
 			if (!self)
 			{
+				WLOG("[COMBAT] No self unit!");
 				return;
 			}
 
@@ -187,10 +204,19 @@ namespace mmo
 				// Target still valid?
 				if (target && !target->IsDead())
 				{
-					// Check if we're already attacking
+					float distance = target->GetDistanceTo(self->GetPosition());
+
+					// If we're out of melee range, move closer
+					if (distance > m_meleeRange)
+					{
+						DLOG("[COMBAT] Target at " << distance << " yards - moving closer");
+						QueueAction(std::make_shared<MoveToUnitAction>(m_currentTargetGuid, m_meleeRange - 1.0f));
+						return;
+					}
+
+					// We're in range - make sure we're attacking
 					if (!context.IsAutoAttacking())
 					{
-						float distance = target->GetDistanceTo(self->GetPosition());
 						ILOG("[COMBAT] Re-engaging target at " << distance << " yards");
 						context.StartAutoAttack(m_currentTargetGuid);
 					}
@@ -202,28 +228,39 @@ namespace mmo
 				m_currentTargetGuid = 0;
 			}
 
-			// Find new target
-			const BotUnit* newTarget = context.GetNearestHostile(m_searchRadius);
+			// Find new target within our search radius
+			const BotUnit* newTarget = context.GetNearestAttackable(m_searchRadius);
 			if (newTarget && !newTarget->IsDead())
 			{
 				float distance = newTarget->GetDistanceTo(self->GetPosition());
-				ILOG("[COMBAT] Found hostile: Entry " << newTarget->GetEntry()
+				ILOG("[COMBAT] Found target: Entry " << newTarget->GetEntry()
 					<< " Level " << newTarget->GetLevel()
 					<< " at " << distance << " yards"
 					<< " (" << static_cast<int>(newTarget->GetHealthPercent() * 100) << "% HP)");
 
 				m_currentTargetGuid = newTarget->GetGuid();
-				context.StartAutoAttack(m_currentTargetGuid);
+
+				// If in range, attack immediately; otherwise queue movement
+				if (distance <= m_meleeRange)
+				{
+					context.StartAutoAttack(m_currentTargetGuid);
+				}
+				else
+				{
+					ILOG("[COMBAT] Moving to engage target");
+					QueueAction(std::make_shared<MoveToUnitAction>(m_currentTargetGuid, m_meleeRange - 1.0f));
+				}
 			}
 			else if (context.IsAutoAttacking())
 			{
-				ILOG("[COMBAT] No hostiles in range - stopping attack");
+				ILOG("[COMBAT] No targets in range - stopping attack");
 				context.StopAutoAttack();
 			}
 		}
 
 	private:
 		float m_searchRadius;
+		float m_meleeRange { 5.0f }; // Melee attack range in yards
 		std::chrono::milliseconds m_combatCheckInterval;
 		uint64 m_currentTargetGuid { 0 };
 	};

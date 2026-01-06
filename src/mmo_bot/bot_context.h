@@ -193,6 +193,12 @@ namespace mmo
 		/// @return Pointer to the nearest hostile, or nullptr if none.
 		const BotUnit* GetNearestHostile(float maxRange = 40.0f) const;
 
+		/// Gets the nearest attackable creature to the bot.
+		/// This includes neutral creatures that can be attacked but are not actively hostile.
+		/// @param maxRange Maximum search range (default 40 yards).
+		/// @return Pointer to the nearest attackable creature, or nullptr if none.
+		const BotUnit* GetNearestAttackable(float maxRange = 40.0f) const;
+
 		/// Gets the nearest friendly unit to the bot (excluding self).
 		/// @param maxRange Maximum search range (default 40 yards).
 		/// @return Pointer to the nearest friendly, or nullptr if none.
@@ -254,6 +260,44 @@ namespace mmo
 		/// Gets the GUID of the current auto-attack target.
 		/// @return The target GUID, or 0 if not attacking.
 		uint64 GetAutoAttackTarget() const;
+
+		// ============================================================
+		// Movement Methods
+		// ============================================================
+
+		/// Starts moving forward in the current facing direction.
+		void StartMovingForward();
+
+		/// Stops all movement.
+		void StopMoving();
+
+		/// Checks if the bot is currently moving.
+		/// @return True if the bot is moving.
+		bool IsMoving() const;
+
+		/// Sets the bot's facing direction towards a position.
+		/// Sends a MoveSetFacing packet to the server.
+		/// @param targetPosition The position to face towards.
+		void FacePosition(const Vector3& targetPosition);
+
+		/// Sets the bot's facing direction towards a unit.
+		/// @param targetGuid The GUID of the unit to face.
+		void FaceUnit(uint64 targetGuid);
+
+		/// Gets the distance to a position.
+		/// @param position The target position.
+		/// @return The distance in yards.
+		float GetDistanceTo(const Vector3& position) const;
+
+		/// Gets the distance to a unit.
+		/// @param guid The GUID of the unit.
+		/// @return The distance in yards, or a very large value if unit not found.
+		float GetDistanceToUnit(uint64 guid) const;
+
+		/// Calculates the angle from the bot to a target position.
+		/// @param targetPosition The target position.
+		/// @return The angle in radians.
+		Radian GetAngleTo(const Vector3& targetPosition) const;
 
 	private:
 		std::shared_ptr<BotRealmConnector> m_realmConnector;

@@ -174,6 +174,36 @@ namespace mmo
 		return !IsHostileTo(other);
 	}
 
+	bool BotUnit::IsAttackableBy(const BotUnit& attacker) const
+	{
+		// Cannot attack self
+		if (m_guid == attacker.m_guid)
+		{
+			return false;
+		}
+
+		// Cannot attack dead units
+		if (IsDead())
+		{
+			return false;
+		}
+
+		// Only creatures can be attacked by players in PvE
+		if (!IsCreature())
+		{
+			return false;
+		}
+
+		// Creatures with NPC flags (vendors, quest givers, trainers) are not attackable
+		if (m_npcFlags != 0)
+		{
+			return false;
+		}
+
+		// Any other creature without NPC flags is attackable (including neutral creatures)
+		return true;
+	}
+
 	void BotUnit::SetMovementInfo(const MovementInfo& info)
 	{
 		m_movementInfo = info;

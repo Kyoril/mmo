@@ -8,6 +8,8 @@
 #include "base/clock.h"
 #include "log/default_log_levels.h"
 
+#include <cmath>
+
 namespace mmo
 {
 	// Forward declaration of BotConfig (defined in bot_main.cpp)
@@ -346,6 +348,16 @@ namespace mmo
 		return m_realmConnector->GetObjectManager().GetNearestHostile(maxRange);
 	}
 
+	const BotUnit* BotContext::GetNearestAttackable(float maxRange) const
+	{
+		if (!m_realmConnector)
+		{
+			return nullptr;
+		}
+
+		return m_realmConnector->GetObjectManager().GetNearestAttackable(maxRange);
+	}
+
 	const BotUnit* BotContext::GetNearestFriendly(float maxRange) const
 	{
 		if (!m_realmConnector)
@@ -480,5 +492,99 @@ namespace mmo
 		}
 
 		return m_realmConnector->GetAutoAttackTarget();
+	}
+
+	// ============================================================
+	// Movement Methods
+	// ============================================================
+
+	void BotContext::StartMovingForward()
+	{
+		if (!m_realmConnector)
+		{
+			return;
+		}
+
+		MovementInfo info = GetMovementInfo();
+		info.movementFlags |= movement_flags::Forward;
+		info.timestamp = GetServerTime();
+		SendMovementUpdate(game::client_realm_packet::MoveStartForward, info);
+	}
+
+	void BotContext::StopMoving()
+	{
+		if (!m_realmConnector)
+		{
+			return;
+		}
+
+		MovementInfo info = GetMovementInfo();
+		info.movementFlags &= ~movement_flags::Moving;
+		info.timestamp = GetServerTime();
+		SendMovementUpdate(game::client_realm_packet::MoveStop, info);
+	}
+
+	bool BotContext::IsMoving() const
+	{
+		const MovementInfo& info = GetMovementInfo();
+		return (info.movementFlags & movement_flags::Moving) != 0;
+	}
+
+	void BotContext::FacePosition(const Vector3& targetPosition)
+	{
+		if (!m_realmConnector)
+		{
+			return;
+		}
+
+		// Calculate direction to target using our cached position
+		const Vector3 myPos = m_cachedMovementInfo.position;
+		const Vector3 direction = targetPosition - myPos;
+		
+		// Calculate yaw angle (facing direction in the XZ plane)
+		// atan2(x, z) gives the angle from the Z axis (forward)
+		const Radian newFacing(std::atan2(direction.x, direction.z));
+
+		MovementInfo info = GetMovementInfo();
+		info.facing = newFacing;
+		info.timestamp = GetServerTime();
+		SendMovementUpdate(game::client_realm_packet::MoveSetFacing, info);
+	}
+
+	void BotContext::FaceUnit(uint64 targetGuid)
+	{
+		const BotUnit* target = GetUnit(targetGuid);
+		if (target)
+		{
+			FacePosition(target->GetPosition());
+		}
+	}
+
+	float BotContext::GetDistanceTo(const Vector3& position) const
+	{
+		// Use cached movement info position (our simulated position)
+		// instead of the BotUnit position (last server update)
+		const Vector3 myPos = m_cachedMovementInfo.position;
+		const Vector3 diff = position - myPos;
+		return std::sqrt(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z);
+	}
+
+	float BotContext::GetDistanceToUnit(uint64 guid) const
+	{
+		const BotUnit* target = GetUnit(guid);
+		if (!target)
+		{
+			return 99999.0f;
+		}
+
+		return GetDistanceTo(target->GetPosition());
+	}
+
+	Radian BotContext::GetAngleTo(const Vector3& targetPosition) const
+	{
+		// Use cached movement info position
+		const Vector3 myPos = m_cachedMovementInfo.position;
+		const Vector3 direction = targetPosition - myPos;
+		return Radian(std::atan2(direction.x, direction.z));
 	}
 }

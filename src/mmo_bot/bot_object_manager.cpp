@@ -236,6 +236,30 @@ namespace mmo
 		});
 	}
 
+	const BotUnit* BotObjectManager::GetNearestAttackable(const float maxRange) const
+	{
+		const BotUnit* self = GetSelf();
+		if (!self)
+		{
+			return nullptr;
+		}
+
+		const Vector3& selfPos = self->GetPosition();
+		const float maxRangeSq = maxRange * maxRange;
+
+		return GetNearestUnit(selfPos, [this, self, maxRangeSq, &selfPos](const BotUnit& unit)
+		{
+			// Must be within range
+			if (unit.GetDistanceToSquared(selfPos) > maxRangeSq)
+			{
+				return false;
+			}
+
+			// Use the attackability check
+			return unit.IsAttackableBy(*self);
+		});
+	}
+
 	const BotUnit* BotObjectManager::GetNearestFriendly(const float maxRange) const
 	{
 		const BotUnit* self = GetSelf();

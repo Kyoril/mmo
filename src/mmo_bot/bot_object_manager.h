@@ -179,6 +179,16 @@ namespace mmo
 		/// @return Pointer to the nearest hostile unit, or nullptr if none.
 		const BotUnit* GetNearestHostile(float maxRange = 100.0f) const;
 
+		/// @brief Gets the nearest attackable creature to the bot.
+		/// 
+		/// Returns the nearest creature that can be attacked (any creature without
+		/// NPC flags like vendors or quest givers). This includes neutral creatures
+		/// like boars that are not actively hostile.
+		/// 
+		/// @param maxRange Maximum search range.
+		/// @return Pointer to the nearest attackable creature, or nullptr if none.
+		const BotUnit* GetNearestAttackable(float maxRange = 100.0f) const;
+
 		/// @brief Gets the nearest friendly unit to the bot.
 		/// 
 		/// Uses the bot's own position and faction to determine friendliness.
