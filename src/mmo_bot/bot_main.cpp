@@ -2,6 +2,9 @@
 
 #include "bot_login_connector.h"
 #include "bot_realm_connector.h"
+#include "bot_context.h"
+#include "bot_profile.h"
+#include "bot_profiles.h"
 
 #include "base/clock.h"
 #include "base/typedefs.h"
@@ -49,6 +52,9 @@ namespace mmo
 		std::string greeting { "Hi" };
 		bool randomMove { false };
 		uint32 heartbeatMs { 5000 };
+		
+		// Profile configuration
+		std::string profileName { "simple_greeter" };
 	};
 
 	bool LoadConfig(const fs::path& path, BotConfig& outConfig)
@@ -76,7 +82,8 @@ namespace mmo
 				{ "behavior", {
 					{ "greeting", outConfig.greeting },
 					{ "random_move", outConfig.randomMove },
-					{ "heartbeat_ms", outConfig.heartbeatMs }
+					{ "heartbeat_ms", outConfig.heartbeatMs },
+					{ "profile", outConfig.profileName }
 				}}
 			};
 
@@ -124,6 +131,7 @@ namespace mmo
 		outConfig.greeting = behavior.value("greeting", outConfig.greeting);
 		outConfig.randomMove = behavior.value("random_move", outConfig.randomMove);
 		outConfig.heartbeatMs = behavior.value("heartbeat_ms", outConfig.heartbeatMs);
+		outConfig.profileName = behavior.value("profile", outConfig.profileName);
 
 		return true;
 	}
@@ -168,6 +176,8 @@ namespace mmo
 			, m_io()
 			, m_login(std::make_shared<BotLoginConnector>(m_io, m_config.loginHost, m_config.loginPort))
 			, m_realm(std::make_shared<BotRealmConnector>(m_io))
+			, m_context(std::make_shared<BotContext>(m_realm, m_config))
+			, m_profile(CreateProfile())
 		{
 			BindSignals();
 		}
@@ -186,29 +196,34 @@ namespace mmo
 
 		void Run()
 		{
-			const auto heartbeatInterval = std::chrono::milliseconds(m_config.heartbeatMs);
 			while (!m_stopRequested)
 			{
 				m_io.poll();
 
-				if (m_worldReady && !m_sentGreeting && !m_config.greeting.empty())
+				// Update bot profile if world is ready
+				if (m_worldReady && m_profile)
 				{
-					m_realm->SendChatMessage(m_config.greeting, ChatType::Say, "");
-					m_sentGreeting = true;
-					m_lastHeartbeat = std::chrono::steady_clock::now();
-				}
-
-				if (m_worldReady && m_config.heartbeatMs > 0)
-				{
-					const auto now = std::chrono::steady_clock::now();
-					if (now - m_lastHeartbeat >= heartbeatInterval)
+					if (!m_profileActivated)
 					{
-						SendHeartbeat();
-						m_lastHeartbeat = now;
+						ILOG("Activating bot profile: " << m_profile->GetName());
+						m_context->SetWorldReady(true);
+						m_profile->OnActivate(*m_context);
+						m_profileActivated = true;
+					}
+
+					if (!m_profile->Update(*m_context))
+					{
+						ILOG("Bot profile completed execution");
+						// Profile finished, but keep connection alive
 					}
 				}
 
 				std::this_thread::sleep_for(50ms);
+			}
+
+			if (m_profile && m_profileActivated)
+			{
+				m_profile->OnDeactivate(*m_context);
 			}
 
 			m_realm->close();
@@ -216,6 +231,35 @@ namespace mmo
 		}
 
 	private:
+		BotProfilePtr CreateProfile()
+		{
+			// Create profile based on configuration
+			if (m_config.profileName == "simple_greeter")
+			{
+				return std::make_shared<SimpleGreeterProfile>(m_config.greeting);
+			}
+			else if (m_config.profileName == "chatter")
+			{
+				// Example: Create a chatter bot with some test messages
+				std::vector<std::string> messages = {
+					"Hello!",
+					"How is everyone doing?",
+					"I'm a test bot!",
+					"This is pretty cool!"
+				};
+				return std::make_shared<ChatterProfile>(messages, 3000ms);
+			}
+			else if (m_config.profileName == "sequence")
+			{
+				return std::make_shared<SequenceProfile>();
+			}
+			else
+			{
+				WLOG("Unknown profile '" << m_config.profileName << "', using simple_greeter");
+				return std::make_shared<SimpleGreeterProfile>(m_config.greeting);
+			}
+		}
+
 		void BindSignals()
 		{
 			m_login->AuthenticationResult.connect([this](auth::AuthResult result)
@@ -356,28 +400,17 @@ namespace mmo
 				});
 		}
 
-		void SendHeartbeat()
-		{
-			if (m_realm->GetSelectedGuid() == 0)
-			{
-				return;
-			}
-
-			MovementInfo info = m_realm->GetMovementInfo();
-			info.timestamp = GetAsyncTimeMs();
-			m_realm->SendMovementUpdate(m_realm->GetSelectedGuid(), game::client_realm_packet::MoveHeartBeat, info);
-		}
-
 	private:
 		BotConfig m_config;
 		asio::io_service m_io;
 		std::shared_ptr<BotLoginConnector> m_login;
 		std::shared_ptr<BotRealmConnector> m_realm;
+		std::shared_ptr<BotContext> m_context;
+		BotProfilePtr m_profile;
 		bool m_stopRequested { false };
 		bool m_worldReady { false };
-		bool m_sentGreeting { false };
+		bool m_profileActivated { false };
 		bool m_realmConnectionAttempted { false };
-		std::chrono::steady_clock::time_point m_lastHeartbeat { std::chrono::steady_clock::now() };
 	};
 }
 
