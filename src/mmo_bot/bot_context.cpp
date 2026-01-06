@@ -136,4 +136,117 @@ namespace mmo
 
 		m_realmConnector->DeclinePartyInvitation();
 	}
+
+	// ============================================================
+	// Party Information Methods
+	// ============================================================
+
+	bool BotContext::IsInParty() const
+	{
+		if (!m_realmConnector)
+		{
+			return false;
+		}
+
+		return m_realmConnector->IsInParty();
+	}
+
+	uint32 BotContext::GetPartyMemberCount() const
+	{
+		if (!m_realmConnector)
+		{
+			return 0;
+		}
+
+		return m_realmConnector->GetPartyMemberCount();
+	}
+
+	uint64 BotContext::GetPartyLeaderGuid() const
+	{
+		if (!m_realmConnector)
+		{
+			return 0;
+		}
+
+		return m_realmConnector->GetPartyLeaderGuid();
+	}
+
+	bool BotContext::IsPartyLeader() const
+	{
+		if (!m_realmConnector)
+		{
+			return false;
+		}
+
+		return m_realmConnector->IsPartyLeader();
+	}
+
+	uint64 BotContext::GetPartyMemberGuid(uint32 index) const
+	{
+		if (!m_realmConnector)
+		{
+			return 0;
+		}
+
+		const auto* member = m_realmConnector->GetPartyMember(index);
+		return member ? member->guid : 0;
+	}
+
+	std::string BotContext::GetPartyMemberName(uint32 index) const
+	{
+		if (!m_realmConnector)
+		{
+			return "";
+		}
+
+		const auto* member = m_realmConnector->GetPartyMember(index);
+		return member ? member->name : "";
+	}
+
+	std::vector<uint64> BotContext::GetPartyMemberGuids() const
+	{
+		if (!m_realmConnector)
+		{
+			return {};
+		}
+
+		return m_realmConnector->GetPartyMemberGuids();
+	}
+
+	// ============================================================
+	// Party Action Methods
+	// ============================================================
+
+	void BotContext::LeaveParty()
+	{
+		if (!m_realmConnector)
+		{
+			WLOG("Cannot leave party: No realm connector available");
+			return;
+		}
+
+		m_realmConnector->LeaveParty();
+	}
+
+	void BotContext::KickFromParty(const std::string& playerName)
+	{
+		if (!m_realmConnector)
+		{
+			WLOG("Cannot kick from party: No realm connector available");
+			return;
+		}
+
+		m_realmConnector->KickFromParty(playerName);
+	}
+
+	void BotContext::InviteToParty(const std::string& playerName)
+	{
+		if (!m_realmConnector)
+		{
+			WLOG("Cannot invite to party: No realm connector available");
+			return;
+		}
+
+		m_realmConnector->InviteToParty(playerName);
+	}
 }

@@ -422,6 +422,26 @@ namespace mmo
 					}
 					// If profile returns true, it should queue an accept action for realistic delay
 				});
+
+			m_realm->PartyJoined.connect([this](uint64 leaderGuid, uint32 memberCount)
+				{
+					if (!m_profile || !m_profileActivated)
+					{
+						return;
+					}
+
+					m_profile->OnPartyJoined(*m_context, leaderGuid, memberCount);
+				});
+
+			m_realm->PartyLeft.connect([this]()
+				{
+					if (!m_profile || !m_profileActivated)
+					{
+						return;
+					}
+
+					m_profile->OnPartyLeft(*m_context);
+				});
 		}
 
 	private:

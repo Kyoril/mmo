@@ -46,6 +46,18 @@ namespace mmo
 		/// @return True to indicate interest in accepting (profile should queue accept action),
 		///         false to automatically decline the invitation.
 		virtual bool OnPartyInvitation(BotContext& context, const std::string& inviterName) = 0;
+
+		/// Called when the bot has joined a party.
+		/// This is triggered after the server confirms party membership.
+		/// @param context The bot context.
+		/// @param partyLeaderGuid The GUID of the party leader.
+		/// @param memberCount The number of members in the party (including this bot).
+		virtual void OnPartyJoined(BotContext& context, uint64 partyLeaderGuid, uint32 memberCount) = 0;
+
+		/// Called when the bot has left or been removed from a party.
+		/// This is triggered when the bot leaves voluntarily, is kicked, or the party is dissolved.
+		/// @param context The bot context.
+		virtual void OnPartyLeft(BotContext& context) = 0;
 	};
 
 	/// Base implementation of a bot profile that manages an action queue.
@@ -243,6 +255,20 @@ namespace mmo
 		{
 			ILOG("Bot profile '" << GetName() << "' rejected party invitation from " << inviterName);
 			return false;
+		}
+
+		/// Default implementation for party joined event.
+		/// Derived classes can override to react when joining a party.
+		void OnPartyJoined(BotContext& context, uint64 partyLeaderGuid, uint32 memberCount) override
+		{
+			ILOG("Bot profile '" << GetName() << "' joined a party with " << memberCount << " members");
+		}
+
+		/// Default implementation for party left event.
+		/// Derived classes can override to react when leaving/being removed from a party.
+		void OnPartyLeft(BotContext& context) override
+		{
+			ILOG("Bot profile '" << GetName() << "' left the party");
 		}
 
 	private:

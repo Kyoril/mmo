@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace mmo
 {
@@ -97,6 +98,56 @@ namespace mmo
 
 		/// Declines a pending party invitation.
 		void DeclinePartyInvitation();
+
+		// ============================================================
+		// Party Information Methods
+		// ============================================================
+
+		/// Checks if the bot is currently in a party.
+		/// @return True if in a party, false otherwise.
+		bool IsInParty() const;
+
+		/// Gets the number of members in the party (including the bot).
+		/// @return The party member count, or 0 if not in a party.
+		uint32 GetPartyMemberCount() const;
+
+		/// Gets the GUID of the party leader.
+		/// @return The leader's GUID, or 0 if not in a party.
+		uint64 GetPartyLeaderGuid() const;
+
+		/// Checks if the bot is the party leader.
+		/// @return True if the bot is the leader, false otherwise.
+		bool IsPartyLeader() const;
+
+		/// Gets the GUID of a party member by index.
+		/// @param index The member index (0-based).
+		/// @return The member's GUID, or 0 if index is invalid.
+		uint64 GetPartyMemberGuid(uint32 index) const;
+
+		/// Gets the name of a party member by index.
+		/// @param index The member index (0-based).
+		/// @return The member's name, or empty string if index is invalid.
+		std::string GetPartyMemberName(uint32 index) const;
+
+		/// Gets all party member GUIDs.
+		/// @return Vector of party member GUIDs.
+		std::vector<uint64> GetPartyMemberGuids() const;
+
+		// ============================================================
+		// Party Action Methods
+		// ============================================================
+
+		/// Leaves the current party.
+		void LeaveParty();
+
+		/// Kicks a player from the party by name.
+		/// Only works if the bot is the party leader.
+		/// @param playerName The name of the player to kick.
+		void KickFromParty(const std::string& playerName);
+
+		/// Invites a player to the party by name.
+		/// @param playerName The name of the player to invite.
+		void InviteToParty(const std::string& playerName);
 
 	private:
 		std::shared_ptr<BotRealmConnector> m_realmConnector;

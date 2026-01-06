@@ -16,6 +16,16 @@
 
 namespace mmo
 {
+	/// Represents a party member for the bot.
+	struct BotPartyMember
+	{
+		uint64 guid { 0 };
+		std::string name;
+		uint8 group { 0 };
+		bool assistant { false };
+		uint32 status { 0 };
+	};
+
 	/// Minimal realm connector variant that tolerates unknown packets and exposes the hooks needed for the bot.
 	class BotRealmConnector final
 		: public game::Connector
@@ -29,6 +39,12 @@ namespace mmo
 		signal<void(uint32, Vector3, float)> VerifyNewWorld;
 		signal<void(game::CharCreateResult)> CharacterCreated;
 		signal<void(const std::string&)> PartyInvitationReceived;
+		/// @brief Emitted when the bot joins a party or receives an updated party list.
+		/// @param leaderGuid The GUID of the party leader.
+		/// @param memberCount The number of members in the party.
+		signal<void(uint64, uint32)> PartyJoined;
+		/// @brief Emitted when the bot leaves or is removed from a party.
+		signal<void()> PartyLeft;
 
 	private:
 		asio::io_service& m_ioService;
@@ -43,6 +59,11 @@ namespace mmo
 
 		uint64 m_selectedCharacterGuid { 0 };
 		MovementInfo m_movementInfo;
+
+		// Party state
+		std::vector<BotPartyMember> m_partyMembers;
+		uint64 m_partyLeaderGuid { 0 };
+		bool m_inParty { false };
 
 	public:
 		/// A list of character views.
@@ -96,6 +117,41 @@ namespace mmo
 
 		void DeclinePartyInvitation();
 
+		// ============================================================
+		// Party Information Methods
+		// ============================================================
+
+		/// Checks if the bot is currently in a party.
+		bool IsInParty() const { return m_inParty; }
+
+		/// Gets the number of members in the party (including the bot).
+		uint32 GetPartyMemberCount() const { return m_inParty ? static_cast<uint32>(m_partyMembers.size()) : 0; }
+
+		/// Gets the GUID of the party leader.
+		uint64 GetPartyLeaderGuid() const { return m_partyLeaderGuid; }
+
+		/// Checks if the bot is the party leader.
+		bool IsPartyLeader() const { return m_inParty && m_partyLeaderGuid == m_selectedCharacterGuid; }
+
+		/// Gets a party member by index.
+		const BotPartyMember* GetPartyMember(uint32 index) const;
+
+		/// Gets all party member GUIDs.
+		std::vector<uint64> GetPartyMemberGuids() const;
+
+		// ============================================================
+		// Party Action Methods
+		// ============================================================
+
+		/// Leaves the current party.
+		void LeaveParty();
+
+		/// Kicks a player from the party by name.
+		void KickFromParty(const std::string& playerName);
+
+		/// Invites a player to the party by name.
+		void InviteToParty(const std::string& playerName);
+
 	private:
 		PacketParseResult OnAuthChallenge(game::IncomingPacket& packet);
 
@@ -122,5 +178,11 @@ namespace mmo
 		PacketParseResult OnIgnoredPacket(game::IncomingPacket& packet);
 
 		PacketParseResult OnGroupInvite(game::IncomingPacket& packet);
+
+		PacketParseResult OnGroupList(game::IncomingPacket& packet);
+
+		PacketParseResult OnGroupDestroyed(game::IncomingPacket& packet);
+
+		PacketParseResult OnGroupSetLeader(game::IncomingPacket& packet);
 	};
 }

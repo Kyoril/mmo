@@ -330,6 +330,11 @@ namespace mmo
 			// Register party invitation handler
 			RegisterPacketHandler(game::realm_client_packet::GroupInvite, *this, &BotRealmConnector::OnGroupInvite);
 
+			// Register party state handlers
+			RegisterPacketHandler(game::realm_client_packet::GroupList, *this, &BotRealmConnector::OnGroupList);
+			RegisterPacketHandler(game::realm_client_packet::GroupDestroyed, *this, &BotRealmConnector::OnGroupDestroyed);
+			RegisterPacketHandler(game::realm_client_packet::GroupSetLeader, *this, &BotRealmConnector::OnGroupSetLeader);
+
 			// Register handlers for common packets that can be safely ignored by the bot
 			RegisterPacketHandler(game::realm_client_packet::UpdateObject, *this, &BotRealmConnector::OnIgnoredPacket);
 			RegisterPacketHandler(game::realm_client_packet::CompressedUpdateObject, *this, &BotRealmConnector::OnIgnoredPacket);
@@ -559,5 +564,175 @@ namespace mmo
 		});
 
 		ILOG("Declined party invitation");
+	}
+
+	const BotPartyMember* BotRealmConnector::GetPartyMember(uint32 index) const
+	{
+		if (!m_inParty || index >= m_partyMembers.size())
+		{
+			return nullptr;
+		}
+
+		return &m_partyMembers[index];
+	}
+
+	std::vector<uint64> BotRealmConnector::GetPartyMemberGuids() const
+	{
+		std::vector<uint64> guids;
+		if (m_inParty)
+		{
+			guids.reserve(m_partyMembers.size());
+			for (const auto& member : m_partyMembers)
+			{
+				guids.push_back(member.guid);
+			}
+		}
+		return guids;
+	}
+
+	void BotRealmConnector::LeaveParty()
+	{
+		if (!m_inParty)
+		{
+			WLOG("Cannot leave party: Not in a party");
+			return;
+		}
+
+		// Send GroupUninvite with empty name to leave
+		sendSinglePacket([](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::GroupUninvite);
+			packet << io::write_dynamic_range<uint8>(std::string{});
+			packet.Finish();
+		});
+
+		ILOG("Left party");
+	}
+
+	void BotRealmConnector::KickFromParty(const std::string& playerName)
+	{
+		if (!m_inParty)
+		{
+			WLOG("Cannot kick from party: Not in a party");
+			return;
+		}
+
+		if (!IsPartyLeader())
+		{
+			WLOG("Cannot kick from party: Not the party leader");
+			return;
+		}
+
+		sendSinglePacket([&playerName](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::GroupUninvite);
+			packet << io::write_dynamic_range<uint8>(playerName);
+			packet.Finish();
+		});
+
+		ILOG("Kicked " << playerName << " from party");
+	}
+
+	void BotRealmConnector::InviteToParty(const std::string& playerName)
+	{
+		sendSinglePacket([&playerName](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::GroupInvite);
+			packet << io::write_dynamic_range<uint8>(playerName);
+			packet.Finish();
+		});
+
+		ILOG("Invited " << playerName << " to party");
+	}
+
+	PacketParseResult BotRealmConnector::OnGroupList(game::IncomingPacket& packet)
+	{
+		uint8 groupType = 0;
+		uint8 isAssistant = 0;
+		uint8 memberCount = 0;
+
+		if (!(packet >> io::read<uint8>(groupType) >> io::read<uint8>(isAssistant) >> io::read<uint8>(memberCount)))
+		{
+			ELOG("Failed to read GroupList packet header!");
+			return PacketParseResult::Disconnect;
+		}
+
+		const bool wasInParty = m_inParty;
+
+		// Read party members
+		m_partyMembers.clear();
+		m_partyMembers.resize(memberCount);
+
+		for (uint8 i = 0; i < memberCount; ++i)
+		{
+			String memberName;
+			if (!(packet 
+				>> io::read_container<uint8>(memberName)
+				>> io::read<uint64>(m_partyMembers[i].guid)
+				>> io::read<uint8>(m_partyMembers[i].status)
+				>> io::read<uint8>(m_partyMembers[i].group)
+				>> io::read<uint8>(m_partyMembers[i].assistant)))
+			{
+				ELOG("Failed to read GroupList member data!");
+				return PacketParseResult::Disconnect;
+			}
+			m_partyMembers[i].name = memberName;
+		}
+
+		// Read leader guid
+		if (!(packet >> io::read<uint64>(m_partyLeaderGuid)))
+		{
+			ELOG("Failed to read GroupList leader guid!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// We're in a party if group type is not 0 (none)
+		m_inParty = (groupType != 0);
+
+		ILOG("GroupList received: " << static_cast<int>(memberCount) << " members, leader: " << m_partyLeaderGuid);
+
+		// Fire signal if we just joined a party
+		if (m_inParty && !wasInParty)
+		{
+			PartyJoined(m_partyLeaderGuid, static_cast<uint32>(memberCount));
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnGroupDestroyed(game::IncomingPacket& packet)
+	{
+		ILOG("Party has been disbanded");
+
+		m_partyMembers.clear();
+		m_partyLeaderGuid = 0;
+		m_inParty = false;
+
+		PartyLeft();
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnGroupSetLeader(game::IncomingPacket& packet)
+	{
+		String newLeaderName;
+		if (!(packet >> io::read_container<uint8>(newLeaderName)))
+		{
+			ELOG("Failed to read GroupSetLeader packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Find the member with this name and update leader guid
+		for (const auto& member : m_partyMembers)
+		{
+			if (member.name == newLeaderName)
+			{
+				m_partyLeaderGuid = member.guid;
+				ILOG("Party leader changed to " << newLeaderName);
+				break;
+			}
+		}
+
+		return PacketParseResult::Pass;
 	}
 }
