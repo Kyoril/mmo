@@ -196,8 +196,9 @@ namespace mmo
 				return ActionResult::Success;
 			}
 
-			// Calculate facing direction
-			const float targetFacing = std::atan2(delta.y, delta.x);
+			// Calculate facing direction (Y is height, so we use X and Z for horizontal direction)
+			// Using atan2(-dz, dx) to match the game's coordinate system and GetAngle implementation
+			const float targetFacing = std::atan2(-delta.z, delta.x);
 			currentMovement.facing = Radian(targetFacing);
 			
 			// Start moving forward if not already moving
