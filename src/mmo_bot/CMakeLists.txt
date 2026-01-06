@@ -1,5 +1,5 @@
 
-add_exe(mmo_bot)
+add_exe_recurse(mmo_bot)
 
 target_link_libraries(mmo_bot
     base
