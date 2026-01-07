@@ -401,18 +401,26 @@ namespace mmo
 		// Load a grass mesh
 		MeshPtr grassMesh = MeshManager::Get().Load("Models/FalwynPlains/Plants/Grass_01.hmsh");
 
+		FoliageSettings foliageSettings;
+		foliageSettings.chunkSize = 32.0f;              // Size of each chunk in world units
+		foliageSettings.maxViewDistance = 150.0f;       // Maximum view distance
+		foliageSettings.loadRadius = 5;                 // Chunks to load around camera
+		foliageSettings.frustumCulling = true;          // Enable frustum culling
+		foliageSettings.globalDensityMultiplier = 1.0f; // Global density scale
+		g_foliage->SetSettings(foliageSettings);
+
 		// Create a layer with default settings
 		auto grassLayer = std::make_shared<FoliageLayer>("Grass", grassMesh);
 
 		// Configure layer settings
-		FoliageLayerSettings& settings = grassLayer->GetSettings();
-		settings.density = 2.0f;           // 2 instances per square unit
-		settings.minScale = 0.7f;          // Minimum random scale
-		settings.maxScale = 1.3f;          // Maximum random scale
-		settings.maxSlopeAngle = 30.0f;    // No grass on steep slopes
-		settings.fadeStartDistance = 40.0f;
-		settings.fadeEndDistance = 80.0f;
-		settings.castShadows = false;      // Disable shadows for performance
+		FoliageLayerSettings& layerSettings = grassLayer->GetSettings();
+		layerSettings.density = 2.0f;           // 2 instances per square unit
+		layerSettings.minScale = 0.7f;          // Minimum random scale
+		layerSettings.maxScale = 1.3f;          // Maximum random scale
+		layerSettings.maxSlopeAngle = 30.0f;    // No grass on steep slopes
+		layerSettings.fadeStartDistance = 40.0f;
+		layerSettings.fadeEndDistance = 80.0f;
+		layerSettings.castShadows = false;      // Disable shadows for performance
 
 		// Add to foliage system
 		g_foliage->AddLayer(grassLayer);

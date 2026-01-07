@@ -29,7 +29,7 @@
 
 #ifdef _DEBUG
 #ifndef MMO_GPU_DEBUG
-#	define MMO_GPU_DEBUG 0
+#	define MMO_GPU_DEBUG 1
 #endif
 #else
 #	define MMO_GPU_DEBUG 0

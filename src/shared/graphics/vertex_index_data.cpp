@@ -1,6 +1,7 @@
 
 #include "vertex_index_data.h"
 
+#include <cstring>
 #include <set>
 
 #include "graphics_device.h"
@@ -209,9 +210,48 @@ namespace mmo
 		return supportedCount;
 	}
 
-	IndexData* IndexData::Clone(bool copyData) const
+	IndexData* IndexData::Clone(const bool copyData) const
 	{
-		TODO("Implement");
-		return nullptr;
+		auto* result = new IndexData();
+		
+		if (indexBuffer)
+		{
+			if (copyData)
+			{
+				// Create a new index buffer with the same settings
+				result->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(
+					indexBuffer->GetIndexCount(),
+					indexBuffer->GetIndexSize(),
+					BufferUsage::Static,
+					nullptr
+				);
+
+				// Copy the data from source to destination
+				const size_t indexSize = indexBuffer->GetIndexSize() == IndexBufferSize::Index_16 ? 2 : 4;
+				const size_t bufferSize = indexBuffer->GetIndexCount() * indexSize;
+
+				void* srcData = indexBuffer->Map(LockOptions::ReadOnly);
+				if (srcData)
+				{
+					void* dstData = result->indexBuffer->Map(LockOptions::WriteOnly);
+					if (dstData)
+					{
+						std::memcpy(dstData, srcData, bufferSize);
+						result->indexBuffer->Unmap();
+					}
+					indexBuffer->Unmap();
+				}
+			}
+			else
+			{
+				// Just reference the same buffer
+				result->indexBuffer = indexBuffer;
+			}
+		}
+
+		result->indexStart = indexStart;
+		result->indexCount = indexCount;
+
+		return result;
 	}
 }
