@@ -94,7 +94,12 @@ namespace mmo
 						// Detach from scene
 						if (chunkIt->second->GetParentNode())
 						{
+							SceneNode* node = chunkIt->second->GetParentSceneNode();
 							chunkIt->second->DetachFromParent();
+							if (node)
+							{
+								m_scene.DestroySceneNode(*node);
+							}
 						}
 						chunkIt = m_chunks.erase(chunkIt);
 					}
@@ -131,7 +136,12 @@ namespace mmo
 		{
 			if (chunk->GetParentNode())
 			{
+				SceneNode* node = chunk->GetParentSceneNode();
 				chunk->DetachFromParent();
+				if (node)
+				{
+					m_scene.DestroySceneNode(*node);
+				}
 			}
 		}
 
@@ -200,9 +210,15 @@ namespace mmo
 		{
 			if (chunk->GetParentNode())
 			{
+				SceneNode* node = chunk->GetParentSceneNode();
 				chunk->DetachFromParent();
+				if (node)
+				{
+					m_scene.DestroySceneNode(*node);
+				}
 			}
 		}
+
 		m_chunks.clear();
 		m_activeChunks.clear();
 
