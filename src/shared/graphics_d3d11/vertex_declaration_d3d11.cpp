@@ -221,20 +221,6 @@ namespace mmo
 			microcode.size(), 
 			&inputLayout);
 
-		static bool loggedOnce = false;
-		if (!loggedOnce)
-		{
-			if (SUCCEEDED(hr))
-			{
-				DLOG("BindInstanced - Created input layout with " << inputElements.size() << " elements (including 4 instance matrix rows)");
-			}
-			else
-			{
-				ELOG("BindInstanced - FAILED to create input layout! HRESULT=0x" << std::hex << hr);
-			}
-			loggedOnce = true;
-		}
-
 		if (SUCCEEDED(hr))
 		{
 			ID3D11DeviceContext& context = m_device;

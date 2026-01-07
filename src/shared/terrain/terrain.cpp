@@ -269,6 +269,33 @@ namespace mmo
 			return value;
 		}
 
+		float Terrain::GetLayerValueAt(const float x, const float z, const uint8 layer) const
+		{
+			if (layer > 3)
+			{
+				return 0.0f;
+			}
+
+			const float halfTerrainWidth = (m_width * constants::PageSize) * 0.5f;
+			const float halfTerrainHeight = (m_height * constants::PageSize) * 0.5f;
+
+			// Convert world position to pixel position
+			constexpr float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::PixelsPerPage - 1));
+			const int32 pixelX = static_cast<int32>((x + halfTerrainWidth) / scale);
+			const int32 pixelZ = static_cast<int32>((z + halfTerrainHeight) / scale);
+
+			// Bounds check
+			const int32 totalPixels = m_width * (constants::PixelsPerPage - 1) + 1;
+			if (pixelX < 0 || pixelX >= totalPixels || pixelZ < 0 || pixelZ >= totalPixels)
+			{
+				return 0.0f;
+			}
+
+			const uint32 layers = GetLayersAt(pixelX, pixelZ);
+			const uint8 layerValue = (layers >> (layer * 8)) & 0xFF;
+			return layerValue / 255.0f;
+		}
+
 		Vector3 Terrain::GetVectorAt(uint32 x, uint32 z)
 		{
 			return Vector3();

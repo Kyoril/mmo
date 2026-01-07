@@ -76,7 +76,6 @@ namespace mmo
 			}
 		}
 
-		DLOG("Foliage::AddLayer - adding layer '" << layer->GetName() << "' with mesh: " << (layer->GetMesh() ? "yes" : "no") << ", material: " << (layer->GetMaterial() ? layer->GetMaterial()->GetName() : "none"));
 		m_layers.push_back(layer);
 		m_needsRebuild = true;
 	}
@@ -151,7 +150,6 @@ namespace mmo
 		// Check if we need a full rebuild
 		if (m_needsRebuild)
 		{
-			DLOG("Foliage::Update - rebuilding all chunks");
 			RebuildAll();
 			m_needsRebuild = false;
 		}
@@ -193,12 +191,6 @@ namespace mmo
 			}
 		}
 
-		static bool firstUpdate = true;
-		if (firstUpdate)
-		{
-			DLOG("Foliage::Update - active chunks: " << m_activeChunks.size() << ", total instances: " << GetTotalInstanceCount());
-			firstUpdate = false;
-		}
 	}
 
 	void Foliage::RebuildAll()

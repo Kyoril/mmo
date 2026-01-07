@@ -811,14 +811,21 @@ namespace mmo
 				return false;
 			}
 
+			// Only render foliage where terrain layer 0 has > 30% influence
+			constexpr float minLayer0Influence = 0.3f;
+			if (terrain->GetLayerValueAt(x, z, 0) < minLayer0Influence)
+			{
+				return false;
+			}
+
 			return true;
 		});
 
 		// Configure foliage settings
 		FoliageSettings settings;
 		settings.chunkSize = 32.0f;
-		settings.maxViewDistance = 100.0f;
-		settings.loadRadius = 4;
+		settings.maxViewDistance = 60.0f;
+		settings.loadRadius = 3;
 		settings.frustumCulling = true;
 		settings.globalDensityMultiplier = 1.0f;
 		m_foliage->SetSettings(settings);
@@ -838,12 +845,12 @@ namespace mmo
 			auto grassLayer = std::make_shared<FoliageLayer>("Grass", grassMesh);
 
 			FoliageLayerSettings& layerSettings = grassLayer->GetSettings();
-			layerSettings.density = 1.5f;
+			layerSettings.density = 2.0f;
 			layerSettings.minScale = 0.7f;
 			layerSettings.maxScale = 1.3f;
 			layerSettings.maxSlopeAngle = 45.0f;
-			layerSettings.fadeStartDistance = 60.0f;
-			layerSettings.fadeEndDistance = 100.0f;
+			layerSettings.fadeStartDistance = 40.0f;
+			layerSettings.fadeEndDistance = 60.0f;
 			layerSettings.castShadows = false;
 
 			m_foliage->AddLayer(grassLayer);
