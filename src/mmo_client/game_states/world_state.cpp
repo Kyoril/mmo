@@ -96,6 +96,9 @@ namespace mmo
 		static ConsoleVar *s_clampDepthBiasVar = nullptr;
 		static ConsoleVar *s_shadowTextureSizeVar = nullptr;
 
+		static ConsoleVar *s_foliageEnabledVar = nullptr;
+		static ConsoleVar *s_foliageDensityVar = nullptr;
+
 		String MapMouseButton(const MouseButton button)
 		{
 			if ((button & MouseButton::Left) == MouseButton::Left)
@@ -1050,6 +1053,11 @@ namespace mmo
 		s_shadowTextureSizeVar = ConsoleVarMgr::RegisterConsoleVar("ShadowTextureSize", "", "1");
 		m_cvarChangedSignals += s_shadowTextureSizeVar->Changed.connect(this, &WorldState::OnShadowTextureSizeChanged);
 
+		s_foliageEnabledVar = ConsoleVarMgr::RegisterConsoleVar("FoliageEnabled", "Enable or disable foliage rendering (grass, plants, etc.)", "1");
+		m_cvarChangedSignals += s_foliageEnabledVar->Changed.connect(this, &WorldState::OnFoliageEnabledChanged);
+		s_foliageDensityVar = ConsoleVarMgr::RegisterConsoleVar("FoliageDensity", "Foliage density multiplier (0.1 to 1.0). Lower values improve performance.", "1.0");
+		m_cvarChangedSignals += s_foliageDensityVar->Changed.connect(this, &WorldState::OnFoliageDensityChanged);
+
 		Console::RegisterCommand(command_names::s_reload, [this](const std::string &, const std::string &)
 								 { ReloadUI(); }, ConsoleCommandCategory::Debug, "Reloads the user interface.");
 
@@ -1074,6 +1082,8 @@ namespace mmo
 		OnShadowTextureSizeChanged(*s_shadowTextureSizeVar, "");
 		OnRenderShadowsChanged(*s_renderShadowsVar, "");
 		OnShadowBiasChanged(*s_depthBiasVar, "");
+		OnFoliageEnabledChanged(*s_foliageEnabledVar, "");
+		OnFoliageDensityChanged(*s_foliageDensityVar, "");
 	}
 
 	void WorldState::RemoveGameplayCommands()
@@ -1084,6 +1094,8 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowSlopeBias");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowClampBias");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowTextureSize");
+		ConsoleVarMgr::UnregisterConsoleVar("FoliageEnabled");
+		ConsoleVarMgr::UnregisterConsoleVar("FoliageDensity");
 
 		m_cvarChangedSignals.disconnect();
 
@@ -3575,6 +3587,27 @@ namespace mmo
 		const uint16 shadowTextureSize = s_shadowTexSizes[Clamp(s_shadowTextureSizeVar->GetIntValue(), 0, 3)];
 		ILOG("Updating shadow texture size to " << shadowTextureSize << "x" << shadowTextureSize);
 		deferred->SetShadowMapSize(shadowTextureSize);
+	}
+
+	void WorldState::OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		if (m_foliage)
+		{
+			const bool enabled = var.GetIntValue() != 0;
+			m_foliage->SetVisible(enabled);
+			ILOG("Foliage rendering " << (enabled ? "enabled" : "disabled"));
+		}
+	}
+
+	void WorldState::OnFoliageDensityChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		if (m_foliage)
+		{
+			FoliageSettings settings = m_foliage->GetSettings();
+			settings.globalDensityMultiplier = Clamp(var.GetFloatValue(), 0.1f, 1.0f);
+			m_foliage->SetSettings(settings);
+			ILOG("Foliage density set to " << settings.globalDensityMultiplier);
+		}
 	}
 
 	void WorldState::GetPlayerName(uint64 guid, std::weak_ptr<GamePlayerC> player)
