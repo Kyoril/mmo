@@ -205,7 +205,7 @@ namespace mmo
 
 	void FoliageChunk::PrepareRenderOperation(RenderOperation& operation)
 	{
-		if (!m_vertexData || !m_indexData)
+		if (!m_vertexData || !m_indexData || !m_instanceBuffer)
 		{
 			return;
 		}
@@ -215,8 +215,9 @@ namespace mmo
 		operation.indexData = m_indexData.get();
 		operation.material = GetMaterial();
 
-		// The instance buffer will be bound separately for instanced rendering
-		// This is handled by the scene rendering code
+		// Set up instanced rendering
+		operation.instanceBuffer = m_instanceBuffer.get();
+		operation.instanceCount = static_cast<uint32>(m_instances.size());
 	}
 
 	const Matrix4& FoliageChunk::GetWorldTransform() const
