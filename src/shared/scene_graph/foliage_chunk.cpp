@@ -35,6 +35,9 @@ namespace mmo
 			Vector3(centerX - halfSize, -1000.0f, centerZ - halfSize),
 			Vector3(centerX + halfSize, 1000.0f, centerZ + halfSize)
 		);
+
+		// Set shadow casting based on layer settings
+		SetCastShadows(layer->GetSettings().castShadows);
 	}
 
 	Vector3 FoliageChunk::GetChunkCenter() const
