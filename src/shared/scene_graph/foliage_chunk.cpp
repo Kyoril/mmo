@@ -7,6 +7,7 @@
 #include "render_operation.h"
 #include "sub_mesh.h"
 #include "graphics/graphics_device.h"
+#include "log/default_log_levels.h"
 
 namespace mmo
 {
@@ -196,7 +197,23 @@ namespace mmo
 	{
 		if (!HasInstances() || !m_instanceBuffer || !m_vertexData || !m_indexData)
 		{
+			static bool loggedOnce = false;
+			if (!loggedOnce)
+			{
+				DLOG("FoliageChunk::PopulateRenderQueue - skipping: instances=" << HasInstances() 
+					<< ", instanceBuffer=" << (m_instanceBuffer ? "yes" : "no")
+					<< ", vertexData=" << (m_vertexData ? "yes" : "no")
+					<< ", indexData=" << (m_indexData ? "yes" : "no"));
+				loggedOnce = true;
+			}
 			return;
+		}
+
+		static bool loggedRenderOnce = false;
+		if (!loggedRenderOnce)
+		{
+			DLOG("FoliageChunk::PopulateRenderQueue - adding to render queue with " << m_instances.size() << " instances, material: " << (GetMaterial() ? GetMaterial()->GetName() : "none"));
+			loggedRenderOnce = true;
 		}
 
 		// Add to main render queue

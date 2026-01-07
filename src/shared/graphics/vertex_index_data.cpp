@@ -72,6 +72,21 @@ namespace mmo
 
 		const auto result = new VertexData(dev);
 
+		// Copy vertex count and start
+		result->vertexCount = this->vertexCount;
+		result->vertexStart = this->vertexStart;
+
+		// Clone vertex declaration
+		for (const auto& element : this->vertexDeclaration->GetElements())
+		{
+			result->vertexDeclaration->AddElement(
+				element.GetSource(),
+				element.GetOffset(),
+				element.GetType(),
+				element.GetSemantic(),
+				element.GetIndex());
+		}
+
 		for (const VertexBufferBinding::VertexBufferBindingMap& bindings = this->vertexBufferBinding->GetBindings(); const auto& [index, buffer] : bindings)
 		{
 			const VertexBufferPtr sourceBuffer = buffer;

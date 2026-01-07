@@ -1223,8 +1223,13 @@ namespace mmo
 		ShaderBase* vertexShader = operation.material->GetVertexShader(vsType).get();
 		if (!vertexShader && vsType != VertexShaderType::Default)
 		{
-			WLOG("Vertex shader type " << static_cast<int>(vsType) << " not found in material " << operation.material->GetName() << " - falling back to default vertex shader");
+			ELOG("Vertex shader type " << static_cast<int>(vsType) << " not found in material " << operation.material->GetName() << " - falling back to default vertex shader. Material needs to be re-saved in editor!");
 			vertexShader = operation.material->GetVertexShader(VertexShaderType::Default).get();
+			// Don't use instanced rendering if we don't have the instanced shader
+			if (vsType == VertexShaderType::Instanced)
+			{
+				return; // Skip rendering - instanced shader required
+			}
 		}
 
 		// By now we should have a vertex shader
@@ -1283,6 +1288,15 @@ namespace mmo
 		// Handle instanced rendering
 		if (isInstanced)
 		{
+			static bool loggedInstancedOnce = false;
+			if (!loggedInstancedOnce)
+			{
+				DLOG("D3D11 Render - Instanced rendering: instanceCount=" << operation.instanceCount 
+					<< ", indexCount=" << (operation.indexData ? operation.indexData->indexCount : 0)
+					<< ", vertexShader=" << (vertexShader ? "valid" : "null"));
+				loggedInstancedOnce = true;
+			}
+
 			// Determine instance buffer slot (after all vertex buffer slots)
 			uint16 instanceSlot = 0;
 			for (const auto& bindings = operation.vertexData->vertexBufferBinding->GetBindings(); const auto& [slot, vb] : bindings)

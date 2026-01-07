@@ -2,6 +2,7 @@
 #include "vertex_declaration_d3d11.h"
 #include "graphics_device_d3d11.h"
 #include "vertex_shader_d3d11.h"
+#include "log/default_log_levels.h"
 
 namespace mmo
 {
@@ -219,6 +220,20 @@ namespace mmo
 			microcode.data(), 
 			microcode.size(), 
 			&inputLayout);
+
+		static bool loggedOnce = false;
+		if (!loggedOnce)
+		{
+			if (SUCCEEDED(hr))
+			{
+				DLOG("BindInstanced - Created input layout with " << inputElements.size() << " elements (including 4 instance matrix rows)");
+			}
+			else
+			{
+				ELOG("BindInstanced - FAILED to create input layout! HRESULT=0x" << std::hex << hr);
+			}
+			loggedOnce = true;
+		}
 
 		if (SUCCEEDED(hr))
 		{

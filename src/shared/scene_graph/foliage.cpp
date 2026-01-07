@@ -5,6 +5,7 @@
 #include "scene.h"
 #include "scene_node.h"
 #include "graphics/graphics_device.h"
+#include "log/default_log_levels.h"
 
 #include <cmath>
 
@@ -61,6 +62,7 @@ namespace mmo
 	{
 		if (!layer)
 		{
+			WLOG("Foliage::AddLayer - null layer provided");
 			return;
 		}
 
@@ -69,10 +71,12 @@ namespace mmo
 		{
 			if (existing->GetName() == layer->GetName())
 			{
+				WLOG("Foliage::AddLayer - duplicate layer name: " << layer->GetName());
 				return;
 			}
 		}
 
+		DLOG("Foliage::AddLayer - adding layer '" << layer->GetName() << "' with mesh: " << (layer->GetMesh() ? "yes" : "no") << ", material: " << (layer->GetMaterial() ? layer->GetMaterial()->GetName() : "none"));
 		m_layers.push_back(layer);
 		m_needsRebuild = true;
 	}
@@ -147,6 +151,7 @@ namespace mmo
 		// Check if we need a full rebuild
 		if (m_needsRebuild)
 		{
+			DLOG("Foliage::Update - rebuilding all chunks");
 			RebuildAll();
 			m_needsRebuild = false;
 		}
@@ -172,6 +177,7 @@ namespace mmo
 		UpdateActiveChunks(camera);
 
 		// Build/rebuild any chunks that need it
+		size_t chunksRebuilt = 0;
 		for (auto& chunk : m_activeChunks)
 		{
 			if (chunk->NeedsRebuild())
@@ -182,8 +188,16 @@ namespace mmo
 					chunk->ClearInstances();
 					GenerateChunkInstances(*chunk, *layer);
 					chunk->BuildBuffers(m_device);
+					chunksRebuilt++;
 				}
 			}
+		}
+
+		static bool firstUpdate = true;
+		if (firstUpdate)
+		{
+			DLOG("Foliage::Update - active chunks: " << m_activeChunks.size() << ", total instances: " << GetTotalInstanceCount());
+			firstUpdate = false;
 		}
 	}
 
