@@ -40,6 +40,8 @@
 #include "game/quest.h"
 #include "game_client/game_bag_c.h"
 #include "terrain/page.h"
+#include "terrain/constants.h"
+#include "terrain/terrain.h"
 #include "systems/guild_client.h"
 #include "systems/friend_client.h"
 #include "systems/talent_client.h"
@@ -55,6 +57,7 @@
 #include "game_client/game_world_object_c_base.h"
 #include "graphics/texture_mgr.h"
 #include "scene_graph/material_manager.h"
+#include "scene_graph/mesh_manager.h"
 #include "scene_graph/octree_scene.h"
 
 #include "discord.h"
@@ -322,6 +325,7 @@ namespace mmo
 	void WorldState::OnLeave()
 	{
 		m_debugPathVisualizer.reset();
+		m_foliage.reset();
 
 		m_audio.StopSound(&m_backgroundMusicChannel);
 		m_backgroundMusicChannel = InvalidChannel;
@@ -602,6 +606,13 @@ namespace mmo
 		{
 			m_projectileManager->Update(deltaSeconds);
 		}
+
+		// Update foliage system
+		if (m_foliage && m_worldLoaded)
+		{
+			m_foliage->Update(m_playerController->GetCamera());
+		}
+
 		// Position the sky dome to follow the player
 		if (m_skyComponent && m_playerController->GetRootNode())
 		{
@@ -758,6 +769,85 @@ namespace mmo
 			2,
 			pos,
 			*m_pageLoader);
+
+		// Initialize foliage system
+		SetupFoliage();
+	}
+
+	void WorldState::SetupFoliage()
+	{
+		m_foliage = std::make_unique<Foliage>(*m_scene, GraphicsDevice::Get());
+
+		// Set up height query callback that checks terrain height, normal, and holes
+		m_foliage->SetHeightQueryCallback([this](float x, float z, float& height, Vector3& normal) -> bool
+		{
+			// Check if world instance and terrain are available
+			if (!m_worldInstance || !m_worldInstance->HasTerrain())
+			{
+				return false;
+			}
+
+			terrain::Terrain* terrain = m_worldInstance->GetTerrain();
+			if (!terrain)
+			{
+				return false;
+			}
+
+			// Check if this position is a hole
+			if (terrain->IsHoleAt(x, z))
+			{
+				return false;
+			}
+
+			// Get height and normal from terrain
+			height = terrain->GetSmoothHeightAt(x, z);
+			normal = terrain->GetSmoothNormalAt(x, z);
+
+			// Check slope - if normal.y is too low, slope is too steep
+			// cos(45°) ≈ 0.707, so normal.y must be >= 0.707 for walkable terrain
+			constexpr float maxSlopeCosine = 0.707f; // 45 degrees
+			if (normal.y < maxSlopeCosine)
+			{
+				return false;
+			}
+
+			return true;
+		});
+
+		// Configure foliage settings
+		FoliageSettings settings;
+		settings.chunkSize = 32.0f;
+		settings.maxViewDistance = 100.0f;
+		settings.loadRadius = 4;
+		settings.frustumCulling = true;
+		settings.globalDensityMultiplier = 1.0f;
+		m_foliage->SetSettings(settings);
+
+		// Set bounds to cover the entire terrain (64x64 pages)
+		// Terrain is centered at origin, so it extends from -halfSize to +halfSize
+		constexpr float halfTerrainSize = 64.0f * terrain::constants::PageSize * 0.5f;
+		m_foliage->SetBounds(AABB(
+			Vector3(-halfTerrainSize, -1000.0f, -halfTerrainSize),
+			Vector3(halfTerrainSize, 1000.0f, halfTerrainSize)
+		));
+
+		// Load grass mesh and create layer
+		MeshPtr grassMesh = MeshManager::Get().Load("Models/FalwynPlains/Plants/Grass_01.hmsh");
+		if (grassMesh)
+		{
+			auto grassLayer = std::make_shared<FoliageLayer>("Grass", grassMesh);
+
+			FoliageLayerSettings& layerSettings = grassLayer->GetSettings();
+			layerSettings.density = 1.5f;
+			layerSettings.minScale = 0.7f;
+			layerSettings.maxScale = 1.3f;
+			layerSettings.maxSlopeAngle = 45.0f;
+			layerSettings.fadeStartDistance = 60.0f;
+			layerSettings.fadeEndDistance = 100.0f;
+			layerSettings.castShadows = false;
+
+			m_foliage->AddLayer(grassLayer);
+		}
 	}
 
 	void WorldState::SetupPacketHandler()

@@ -1390,6 +1390,49 @@ namespace mmo
 			return false;
 		}
 
+		bool Terrain::IsHoleAt(const float x, const float z) const
+		{
+			const float halfTerrainWidth = (m_width * constants::PageSize) * 0.5f;
+			const float halfTerrainHeight = (m_height * constants::PageSize) * 0.5f;
+
+			// Calculate page indices
+			const int32 pageX = static_cast<int32>(std::floor((x + halfTerrainWidth) / constants::PageSize));
+			const int32 pageZ = static_cast<int32>(std::floor((z + halfTerrainHeight) / constants::PageSize));
+
+			// Bounds check
+			if (pageX < 0 || pageX >= static_cast<int32>(m_width) || pageZ < 0 || pageZ >= static_cast<int32>(m_height))
+			{
+				return true; // Outside terrain bounds - treat as hole
+			}
+
+			Page* page = GetPage(pageX, pageZ);
+			if (!page || !page->IsPrepared())
+			{
+				return true; // Page not loaded - treat as hole
+			}
+
+			// Calculate local position within page
+			const float pageOriginX = pageX * constants::PageSize - halfTerrainWidth;
+			const float pageOriginZ = pageZ * constants::PageSize - halfTerrainHeight;
+			const float localX = x - pageOriginX;
+			const float localZ = z - pageOriginZ;
+
+			// Calculate tile indices within the page
+			const uint32 tileX = std::min(static_cast<uint32>(localX / constants::TileSize), static_cast<uint32>(constants::TilesPerPage - 1));
+			const uint32 tileZ = std::min(static_cast<uint32>(localZ / constants::TileSize), static_cast<uint32>(constants::TilesPerPage - 1));
+
+			// Calculate position within tile
+			const float tileLocalX = localX - tileX * constants::TileSize;
+			const float tileLocalZ = localZ - tileZ * constants::TileSize;
+
+			// Calculate inner vertex indices (8 inner vertices per tile side)
+			const float innerCellSize = static_cast<float>(constants::TileSize / constants::InnerVerticesPerTileSide);
+			const uint32 innerX = std::min(static_cast<uint32>(tileLocalX / innerCellSize), constants::InnerVerticesPerTileSide - 1);
+			const uint32 innerZ = std::min(static_cast<uint32>(tileLocalZ / innerCellSize), constants::InnerVerticesPerTileSide - 1);
+
+			return page->IsHole(tileX, tileZ, innerX, innerZ);
+		}
+
 		void Terrain::PaintHoles(float brushCenterX, float brushCenterZ, float radius, bool addHole)
 		{
 			// Convert brush center from world space to page coordinates

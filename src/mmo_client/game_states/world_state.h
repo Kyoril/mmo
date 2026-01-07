@@ -36,6 +36,7 @@
 
 #include "game_client/net_client.h"
 #include "debug_path_visualizer.h"
+#include "scene_graph/foliage.h"
 
 namespace mmo
 {
@@ -194,6 +195,8 @@ namespace mmo
 		// Setup stuff
 
 		void SetupWorldScene();
+
+		void SetupFoliage();
 
 		void SetupPacketHandler();
 
@@ -449,6 +452,9 @@ namespace mmo
 		Discord &m_discord;
 
 		std::unique_ptr<DebugPathVisualizer> m_debugPathVisualizer;
+
+		/// Foliage system for rendering grass and other vegetation
+		std::unique_ptr<Foliage> m_foliage;
 
 		TalentClient &m_talentClient;
 

@@ -146,6 +146,12 @@ namespace mmo
 			/// @param addHole True to add holes, false to remove holes
 			void PaintHoles(float brushCenterX, float brushCenterZ, float radius, bool addHole);
 
+			/// @brief Check if a world position is over a terrain hole
+			/// @param x World X position
+			/// @param z World Z position
+			/// @return True if the position is over a hole, false otherwise
+			[[nodiscard]] bool IsHoleAt(float x, float z) const;
+
 		private:
 			void UpdateTiles(int fromX, int fromZ, int toX, int toZ);
 
