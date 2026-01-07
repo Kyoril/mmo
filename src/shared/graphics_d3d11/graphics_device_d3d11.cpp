@@ -806,6 +806,23 @@ namespace mmo
 		m_batchCount++;
 	}
 
+	void GraphicsDeviceD3D11::DrawIndexedInstanced(const uint32 indexCount, const uint32 instanceCount, const uint32 startIndex, const int32 baseVertex, const uint32 startInstance)
+	{
+		UpdateCurrentRasterizerState();
+		UpdateDepthStencilState();
+		UpdateSamplerState();
+
+		if (m_matrixDirty)
+		{
+			m_matrixDirty = false;
+			UpdateMatrixBuffer();
+		}
+
+		// Execute instanced draw command
+		m_immContext->DrawIndexedInstanced(indexCount, instanceCount, startIndex, baseVertex, startInstance);
+		m_batchCount++;
+	}
+
 	namespace
 	{
 		/// Determines the D3D11_PRIMITIVE_TOPOLOGY value from an EGxTopologyType value.

@@ -198,11 +198,23 @@ namespace mmo
 
 		virtual void Render(const RenderOperation& operation) {}
 
-		/// 
+		/// @brief Draws non-indexed primitives.
+		/// @param vertexCount Number of vertices to draw.
+		/// @param start Starting vertex offset.
 		virtual void Draw(uint32 vertexCount, uint32 start = 0) = 0;
 
-		/// 
+		/// @brief Draws indexed primitives.
+		/// @param startIndex Starting index offset.
+		/// @param endIndex Ending index (exclusive). If 0, draws all indices.
 		virtual void DrawIndexed(uint32 startIndex = 0, uint32 endIndex = 0) = 0;
+
+		/// @brief Draws indexed primitives using GPU instancing.
+		/// @param indexCount Number of indices per instance.
+		/// @param instanceCount Number of instances to draw.
+		/// @param startIndex Starting index offset.
+		/// @param baseVertex Vertex offset added to each index.
+		/// @param startInstance Starting instance offset.
+		virtual void DrawIndexedInstanced(uint32 indexCount, uint32 instanceCount, uint32 startIndex = 0, int32 baseVertex = 0, uint32 startInstance = 0) = 0;
 
 		/// 
 		virtual void SetTopologyType(TopologyType type);
