@@ -807,8 +807,8 @@ namespace mmo
 			normal = terrain->GetSmoothNormalAt(x, z);
 
 			// Check slope - if normal.y is too low, slope is too steep
-			// cos(45°) ≈ 0.707, so normal.y must be >= 0.707 for walkable terrain
-			constexpr float maxSlopeCosine = 0.707f; // 45 degrees
+			// cos(35°) ≈ 0.8191f, so normal.y must be >= 0.8191f for walkable terrain
+			constexpr float maxSlopeCosine = 0.8191f; // 35 degrees
 			if (normal.y < maxSlopeCosine)
 			{
 				return false;
@@ -827,7 +827,7 @@ namespace mmo
 		// Configure foliage settings
 		FoliageSettings settings;
 		settings.chunkSize = 32.0f;
-		settings.maxViewDistance = 60.0f;
+		settings.maxViewDistance = 50.0f;
 		settings.loadRadius = 3;
 		settings.frustumCulling = true;
 		settings.globalDensityMultiplier = 1.0f;
@@ -851,7 +851,7 @@ namespace mmo
 			layerSettings.density = 2.0f;
 			layerSettings.minScale = 0.7f;
 			layerSettings.maxScale = 1.3f;
-			layerSettings.maxSlopeAngle = 45.0f;
+			layerSettings.maxSlopeAngle = 35.0f;
 			layerSettings.fadeStartDistance = 40.0f;
 			layerSettings.fadeEndDistance = 60.0f;
 			layerSettings.castShadows = false;
@@ -1186,6 +1186,8 @@ namespace mmo
 		{
 			jobsDone++;
 		}
+
+		m_foliage->RebuildAll();
 
 		m_dispatcher.post([this, jobsDone, dispatched]()
 			{
