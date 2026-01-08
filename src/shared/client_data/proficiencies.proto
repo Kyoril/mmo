@@ -1,0 +1,12 @@
+syntax = "proto2";
+package mmo.proto_client;
+
+message ProficiencyEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	optional uint32 flags = 3;
+}
+
+message Proficiencies {
+	repeated ProficiencyEntry entry = 1;
+}
