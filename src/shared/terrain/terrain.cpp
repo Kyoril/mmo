@@ -420,6 +420,26 @@ namespace mmo
 			return true;
 		}
 
+		void Terrain::SetLodEnabled(bool enabled)
+		{
+			m_lodEnabled = enabled;
+		}
+
+		bool Terrain::IsLodEnabled() const
+		{
+			return m_lodEnabled;
+		}
+
+		void Terrain::SetDebugLodIsVisible(bool visible)
+		{
+			m_debugLod = visible;
+		}
+
+		bool Terrain::IsDebugLodVisible() const
+		{
+			return m_debugLod;
+		}
+
 		void Terrain::SetBaseFileName(const String &name)
 		{
 			m_baseFileName = name;

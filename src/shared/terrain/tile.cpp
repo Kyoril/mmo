@@ -30,7 +30,7 @@ namespace mmo
 			m_tileY = m_startZ / (constants::OuterVerticesPerTileSide - 1);
 
 			CreateVertexData(m_startX, m_startZ);
-			CreateIndexData(0, 0);
+			CreateIndexData(0);
 
 			m_coverageTexture = TextureManager::Get().CreateManual(m_name, constants::PixelsPerTile, constants::PixelsPerTile, R8G8B8A8, BufferUsage::StaticWriteOnly);
 			ASSERT(m_coverageTexture);
@@ -67,7 +67,24 @@ namespace mmo
 		void Tile::PrepareRenderOperation(RenderOperation &operation)
 		{
 			operation.vertexData = m_vertexData.get();
-			operation.indexData = m_indexData.get();
+			if (m_currentLod < m_lodIndexData.size() && m_lodIndexData[m_currentLod])
+			{
+				operation.indexData = m_lodIndexData[m_currentLod].get();
+			}
+			else
+			{
+				// Fallback to simpler LOD or LOD 0 if available?
+				if (!m_lodIndexData.empty() && m_lodIndexData[0])
+				{
+					operation.indexData = m_lodIndexData[0].get();
+				}
+				else
+				{
+					// Should not happen if HasRenderableGeometry is checked
+					operation.indexData = nullptr;
+				}
+			}
+
 			operation.topology = TopologyType::TriangleList;
 
 			// A little hack to use the wireframe material for rendering instead
@@ -88,7 +105,11 @@ namespace mmo
 
 		float Tile::GetSquaredViewDepth(const Camera &camera) const
 		{
-			return GetParentSceneNode()->GetSquaredViewDepth(camera);
+			// Determine the tile's center position from bounds
+			const Vector3 center = (GetParentNodeFullTransform() * GetBoundingBox()).GetCenter();
+
+			// Calculate squared distance from camera to tile center
+			return (camera.GetDerivedPosition() - center).GetSquaredLength();
 		}
 
 		MaterialPtr Tile::GetMaterial() const
@@ -156,6 +177,20 @@ namespace mmo
 					queue.AddRenderable(*this, WireframeRenderGroupId);
 				}
 			}
+		}
+
+		bool Tile::PreRender(Scene& scene, GraphicsDevice& graphicsDevice, Camera& camera)
+		{
+			if (m_page.GetTerrain().IsLodEnabled())
+			{
+				UpdateLOD(camera);
+			}
+			else
+			{
+				m_currentLod = 0;
+			}
+			
+			return Renderable::PreRender(scene, graphicsDevice, camera);
 		}
 
 		Terrain &Tile::GetTerrain() const
@@ -275,7 +310,8 @@ namespace mmo
 			m_worldAABBDirty = true;
 
 		// Regenerate index data in case holes have changed
-		CreateIndexData(0, 0);
+		m_lodIndexData.clear();
+		CreateIndexData(0);
 	}
 
 	void Tile::UpdateCoverageMap()
@@ -341,6 +377,11 @@ namespace mmo
 
 			std::vector<VertexStruct> vertices(m_vertexData->vertexCount);
 			VertexStruct *vert = vertices.data();
+
+			const float minX = outerScale * startX;
+			const float minZ = outerScale * startZ;
+			const float maxX = outerScale * (startX + constants::OuterVerticesPerTileSide - 1);
+			const float maxZ = outerScale * (startZ + constants::OuterVerticesPerTileSide - 1);
 
 			// First, create all outer vertices (9x9 = 81 vertices)
 			for (size_t j = 0; j < constants::OuterVerticesPerTileSide; ++j)
@@ -435,8 +476,8 @@ namespace mmo
 			}
 
 			m_bounds = AABB(
-				Vector3(outerScale * startX, minHeight, outerScale * startZ),
-				Vector3(outerScale * (startX + constants::OuterVerticesPerTileSide - 1), maxHeight, outerScale * (startZ + constants::OuterVerticesPerTileSide - 1)));
+				Vector3(minX, minHeight, minZ),
+				Vector3(maxX, maxHeight, maxZ));
 
 			m_center = m_bounds.GetCenter();
 
@@ -461,89 +502,157 @@ namespace mmo
 			return x == 0 || y == 0 || x >= constants::OuterVerticesPerTileSide - 1 || y >= constants::OuterVerticesPerTileSide - 1;
 		}
 
-		void Tile::CreateIndexData(uint32 lod, uint32 neighborState)
+		void Tile::CreateIndexData(uint32 lod)
 		{
-			// For the new structure, we'll create indices differently:
-			// Each inner vertex connects to 4 outer vertices to form 4 triangles
-			// Pattern for each quad (O = outer, I = inner):
-			//   O---O
-			//   |\I/|
-			//   | X |
-			//   |/I\|
-			//   O---O
+			if (m_lodIndexData.size() <= lod)
+			{
+				m_lodIndexData.resize(lod + 1);
+			}
 
-			// Estimate index count:
-			// - Each of 64 inner vertices creates 4 triangles = 256 triangles = 768 indices
-			// We'll allocate more for safety
+			// Estimate index count
 			std::vector<uint16> indices;
 			indices.reserve(800);
 
 			// Get the hole map for this tile
 			const uint64 holeMap = m_page.GetTileHoleMap(m_tileX, m_tileY);
 
-			// For each inner vertex, create 4 triangles connecting to surrounding outer vertices
-			for (size_t j = 0; j < constants::InnerVerticesPerTileSide; ++j)
+			if (lod == 0)
 			{
-				for (size_t i = 0; i < constants::InnerVerticesPerTileSide; ++i)
+				// For each inner vertex, create 4 triangles connecting to surrounding outer vertices
+				for (size_t j = 0; j < constants::InnerVerticesPerTileSide; ++j)
 				{
-					// Check if this inner vertex is marked as a hole
-					const uint32 bitIndex = static_cast<uint32>(i + j * constants::InnerVerticesPerTileSide);
-					const bool isHole = (holeMap & (1ULL << bitIndex)) != 0;
-
-					// Skip triangles for holes
-					if (isHole)
+					for (size_t i = 0; i < constants::InnerVerticesPerTileSide; ++i)
 					{
-						continue;
+						// Check if this inner vertex is marked as a hole
+						const uint32 bitIndex = static_cast<uint32>(i + j * constants::InnerVerticesPerTileSide);
+						const bool isHole = (holeMap & (1ULL << bitIndex)) != 0;
+
+						// Skip triangles for holes
+						if (isHole)
+						{
+							continue;
+						}
+
+						const uint16 innerIdx = GetInnerVertexIndex(i, j);
+
+						// Get the 4 surrounding outer vertices
+						const uint16 outerTL = GetOuterVertexIndex(i, j);		  // Top-left
+						const uint16 outerTR = GetOuterVertexIndex(i + 1, j);	  // Top-right
+						const uint16 outerBL = GetOuterVertexIndex(i, j + 1);	  // Bottom-left
+						const uint16 outerBR = GetOuterVertexIndex(i + 1, j + 1); // Bottom-right
+
+						// Create 4 triangles (counter-clockwise winding when viewed from above)
+						// Top triangle
+						indices.push_back(innerIdx);
+						indices.push_back(outerTR);
+						indices.push_back(outerTL);
+
+						// Right triangle
+						indices.push_back(innerIdx);
+						indices.push_back(outerBR);
+						indices.push_back(outerTR);
+
+						// Bottom triangle
+						indices.push_back(innerIdx);
+						indices.push_back(outerBL);
+						indices.push_back(outerBR);
+
+						// Left triangle
+						indices.push_back(innerIdx);
+						indices.push_back(outerTL);
+						indices.push_back(outerBL);
 					}
+				}
+			}
+			else
+			{
+				const uint32 step = 1 << (lod - 1);
 
-					const uint16 innerIdx = GetInnerVertexIndex(i, j);
+				for (size_t j = 0; j < constants::OuterVerticesPerTileSide - 1; j += step)
+				{
+					for (size_t i = 0; i < constants::OuterVerticesPerTileSide - 1; i += step)
+					{
+						// Check for holes in the covered area
+						bool isHole = false;
+						for (size_t hj = 0; hj < step; ++hj)
+						{
+							for (size_t hi = 0; hi < step; ++hi)
+							{
+								if (i + hi < constants::InnerVerticesPerTileSide && j + hj < constants::InnerVerticesPerTileSide)
+								{
+									const uint32 bitIndex = static_cast<uint32>((i + hi) + (j + hj) * constants::InnerVerticesPerTileSide);
+									if ((holeMap & (1ULL << bitIndex)) != 0) {
+										isHole = true;
+										break;
+									}
+								}
+							}
+							if (isHole) break;
+						}
 
-					// Get the 4 surrounding outer vertices
-					const uint16 outerTL = GetOuterVertexIndex(i, j);		  // Top-left
-					const uint16 outerTR = GetOuterVertexIndex(i + 1, j);	  // Top-right
-					const uint16 outerBL = GetOuterVertexIndex(i, j + 1);	  // Bottom-left
-					const uint16 outerBR = GetOuterVertexIndex(i + 1, j + 1); // Bottom-right
+						if (isHole) continue;
 
-					// Create 4 triangles (counter-clockwise winding when viewed from above)
-					// Top triangle
-					indices.push_back(innerIdx);
-					indices.push_back(outerTR);
-					indices.push_back(outerTL);
+						const uint16 outerTL = GetOuterVertexIndex(i, j);
+						const uint16 outerTR = GetOuterVertexIndex(std::min((uint32)i + step, constants::OuterVerticesPerTileSide - 1), j);
+						const uint16 outerBL = GetOuterVertexIndex(i, std::min((uint32)j + step, constants::OuterVerticesPerTileSide - 1));
+						const uint16 outerBR = GetOuterVertexIndex(std::min((uint32)i + step, constants::OuterVerticesPerTileSide - 1), std::min((uint32)j + step, constants::OuterVerticesPerTileSide - 1));
 
-					// Right triangle
-					indices.push_back(innerIdx);
-					indices.push_back(outerBR);
-					indices.push_back(outerTR);
+						// Triangle 1: TL, BL, BR
+						indices.push_back(outerTL);
+						indices.push_back(outerBL);
+						indices.push_back(outerBR);
 
-					// Bottom triangle
-					indices.push_back(innerIdx);
-					indices.push_back(outerBL);
-					indices.push_back(outerBR);
-
-					// Left triangle
-					indices.push_back(innerIdx);
-					indices.push_back(outerTL);
-					indices.push_back(outerBL);
+						// Triangle 2: TL, BR, TR
+						indices.push_back(outerTL);
+						indices.push_back(outerBR);
+						indices.push_back(outerTR);
+					}
 				}
 			}
 
 			// If no indices were generated, mark tile as non-renderable and skip buffer creation
 			if (indices.empty())
 			{
-				m_indexData.reset();
-				m_hasRenderableGeometry = false;
+				m_lodIndexData[lod].reset();
+				if (lod == 0) m_hasRenderableGeometry = false;
 			}
 			else
 			{
-				m_indexData = std::make_unique<IndexData>();
-				m_indexData->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(
+				m_lodIndexData[lod] = std::make_unique<IndexData>();
+				m_lodIndexData[lod]->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(
 					static_cast<uint32>(indices.size()),
 					IndexBufferSize::Index_16,
 					BufferUsage::StaticWriteOnly,
 					indices.data());
-				m_indexData->indexCount = static_cast<uint32>(indices.size());
-				m_indexData->indexStart = 0;
-				m_hasRenderableGeometry = true;
+				m_lodIndexData[lod]->indexCount = static_cast<uint32>(indices.size());
+				m_lodIndexData[lod]->indexStart = 0;
+				
+				if (lod == 0) m_hasRenderableGeometry = true;
+			}
+		}
+
+		void Tile::UpdateLOD(const Camera& camera)
+		{
+			if (!m_hasRenderableGeometry) return;
+
+			float distSq = GetSquaredViewDepth(camera);
+
+			uint32 newLod = 0;
+			if (distSq > constants::TileSize * constants::TileSize * 16.0f) newLod = 3;
+			else if (distSq > constants::TileSize * constants::TileSize * 4.0f) newLod = 2; // 2 tile dist
+			else if (distSq > constants::TileSize * constants::TileSize * 1.0f) newLod = 1; // 1 tile dist
+
+			if (newLod != m_currentLod)
+			{
+				if (m_lodIndexData.size() <= newLod || !m_lodIndexData[newLod])
+				{
+					CreateIndexData(newLod);
+				}
+
+				if (m_lodIndexData.size() > newLod && m_lodIndexData[newLod])
+				{
+					m_currentLod = newLod;
+				}
 			}
 		}
 

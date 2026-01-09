@@ -59,6 +59,8 @@ namespace mmo
 
 			void PopulateRenderQueue(RenderQueue& queue) override;
 
+			bool PreRender(Scene& scene, GraphicsDevice& graphicsDevice, Camera& camera) override;
+
 			/// \brief Indicates whether this tile currently contains renderable terrain geometry.
 			/// \details When all inner cells of the tile are marked as holes, no triangles are generated
 			///          and the tile becomes non-renderable. In this case, index buffer creation is skipped
@@ -74,6 +76,8 @@ namespace mmo
 
 			void UpdateCoverageMap();
 
+			void UpdateLOD(const Camera& camera);
+
 			ICollidable* GetCollidable() override { return this; }
 
 			const ICollidable* GetCollidable() const override { return this; }
@@ -81,7 +85,7 @@ namespace mmo
 		private:
 			void CreateVertexData(size_t startX, size_t startZ);
 
-			void CreateIndexData(uint32 lod, uint32 neighborState);
+			void CreateIndexData(uint32 lod);
 
 			// Helper methods for new vertex layout (outer + inner vertices)
 			/// @brief Gets the vertex index for an outer vertex at grid position (x, y)
@@ -99,18 +103,29 @@ namespace mmo
 			/// @brief Determines if a grid cell is on the outer edge of the tile
 			/// @param x X coordinate in the grid
 			/// @param y Y coordinate in the grid
-			/// @return True if the cell is on the outer edge
+			/// @return True if on edge
 			bool IsOuterEdge(size_t x, size_t y) const;
 
-			enum class Direction : uint8
-			{
-				North = 0,
-				East = 1,
-				South = 2,
-				West = 3
-			};
+		private:
+			Page& m_page;
+			size_t m_tileX, m_tileY;
+			size_t m_startX, m_startZ;
+			std::unique_ptr<VertexData> m_vertexData;
+			std::unique_ptr<IndexData> m_indexData;
+			bool m_hasRenderableGeometry{ false };
+			VertexBufferPtr m_mainBuffer;
 
-			uint32 StitchEdge(Direction direction, uint32 hiLOD, uint32 loLOD, bool omitFirstTri, bool omitLastTri, uint16** ppIdx);
+			TexturePtr m_coverageTexture;
+			std::shared_ptr<MaterialInstance> m_materialInstance;
+
+			AABB m_bounds;
+			float m_boundingRadius { 0.0f };
+			Vector3 m_center;
+
+			bool m_worldAABBDirty { true };
+			
+			std::vector<std::unique_ptr<IndexData>> m_lodIndexData;
+			uint32 m_currentLod = 0;
 
 		public:
 			/// @brief Tests collision between a capsule and this terrain tile.
@@ -125,20 +140,6 @@ namespace mmo
 
 			bool TestRayCollision(const Ray& ray, CollisionResult& result) const override;
 
-		private:
-			Page& m_page;
-			AABB m_bounds;
-			size_t m_tileX, m_tileY;
-			size_t m_startX, m_startZ;
-			float m_boundingRadius;
-			Vector3 m_center;
-			std::unique_ptr<VertexData> m_vertexData;
-			std::unique_ptr<IndexData> m_indexData;
-			VertexBufferPtr m_mainBuffer;
-			std::shared_ptr<MaterialInstance> m_materialInstance;
-			TexturePtr m_coverageTexture;
-			/// \brief Flag indicating whether this tile has non-empty index data and can be rendered.
-			bool m_hasRenderableGeometry { true };
 		};
 	}
 }

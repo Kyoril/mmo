@@ -94,6 +94,11 @@ namespace mmo
 
 			void SetDefaultMaterial(MaterialPtr material);
 
+			void SetLodEnabled(bool enabled);
+			bool IsLodEnabled() const;
+			void SetDebugLodIsVisible(bool visible);
+			bool IsDebugLodVisible() const;
+
 			[[nodiscard]] Scene &GetScene() const;
 
 			[[nodiscard]] SceneNode *GetNode() const;
@@ -351,6 +356,8 @@ namespace mmo
 			int32 m_lastX;
 			int32 m_lastZ;
 			uint32 m_tileSceneQueryFlags = 0;
+			bool m_lodEnabled { true };
+			bool m_debugLod { false };
 			MaterialPtr m_defaultMaterial;
 			bool m_showWireframe = false;
 			MaterialPtr m_wireframeMaterial;

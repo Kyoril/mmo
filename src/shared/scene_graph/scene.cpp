@@ -439,9 +439,9 @@ namespace mmo
 		op.pixelConstantBuffers.push_back(m_psCameraBuffer.get());
 
 		// Bind vertex layout
-		renderable.PreRender(*this, gx);
+		renderable.PreRender(*this, gx, *m_activeCamera);
 		gx.Render(op);
-		renderable.PostRender(*this, gx);
+		renderable.PostRender(*this, gx, *m_activeCamera);
 	}
 
 	ManualRenderObject* Scene::CreateManualRenderObject(const String& name)

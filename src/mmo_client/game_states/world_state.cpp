@@ -81,6 +81,8 @@ namespace mmo
 		static const char *s_toggleAxis = "ToggleAxis";
 		static const char *s_toggleGrid = "ToggleGrid";
 		static const char *s_toggleWire = "ToggleWire";
+		static const char *s_toggleTerrainLOD = "ToggleTerrainLOD";
+		static const char *s_toggleTerrainDebug = "ToggleTerrainDebug";
 		static const char *s_freezeCulling = "ToggleCullingFreeze";
 		static const char *s_reload = "reload";
 	}
@@ -1104,6 +1106,28 @@ namespace mmo
 		Console::RegisterCommand(command_names::s_toggleWire, [this](const std::string &, const std::string &)
 								 { ToggleWireframe(); }, ConsoleCommandCategory::Debug, "Toggles wireframe render mode.");
 
+		Console::RegisterCommand(command_names::s_toggleTerrainLOD, [this](const std::string &, const std::string &)
+								 {
+									 if (m_worldInstance && m_worldInstance->HasTerrain())
+									 {
+										 const bool enabled = !m_worldInstance->GetTerrain()->IsLodEnabled();
+										 m_worldInstance->GetTerrain()->SetLodEnabled(enabled);
+										 ILOG("Terrain LOD " << (enabled ? "enabled" : "disabled"));
+									 }
+								 },
+								 ConsoleCommandCategory::Debug, "Toggles terrain LOD.");
+
+		Console::RegisterCommand(command_names::s_toggleTerrainDebug, [this](const std::string &, const std::string &)
+								 {
+									 if (m_worldInstance && m_worldInstance->HasTerrain())
+									 {
+										 const bool visible = !m_worldInstance->GetTerrain()->IsDebugLodVisible();
+										 m_worldInstance->GetTerrain()->SetDebugLodIsVisible(visible);
+										 ILOG("Terrain LOD debug " << (visible ? "enabled" : "disabled"));
+									 }
+								 },
+								 ConsoleCommandCategory::Debug, "Toggles terrain LOD debug visualization.");
+
 		Console::RegisterCommand(command_names::s_freezeCulling, [this](const std::string &, const std::string &)
 								 {
 				// Ensure that the frustum planes are recalculated to immediately see the effect
@@ -1137,6 +1161,8 @@ namespace mmo
 			command_names::s_toggleAxis,
 			command_names::s_toggleGrid,
 			command_names::s_toggleWire,
+			command_names::s_toggleTerrainLOD,
+			command_names::s_toggleTerrainDebug,
 			command_names::s_freezeCulling,
 			command_names::s_reload};
 
@@ -1174,15 +1200,17 @@ namespace mmo
 
 	void WorldState::ToggleWireframe() const
 	{
-		auto &camera = m_playerController->GetCamera();
-		camera.SetFillMode(camera.GetFillMode() == FillMode::Solid ? FillMode::Wireframe : FillMode::Solid);
-		if (camera.GetFillMode() == FillMode::Wireframe)
+		if (m_worldInstance->GetTerrain())
 		{
-			ILOG("Wireframe active");
-		}
-		else
-		{
-			ILOG("Wireframe inactive");
+			m_worldInstance->GetTerrain()->SetWireframeVisible(!m_worldInstance->GetTerrain()->IsWireframeVisible());
+			if (m_worldInstance->GetTerrain()->IsWireframeVisible())
+			{
+				ILOG("Wireframe active");
+			}
+			else
+			{
+				ILOG("Wireframe inactive");
+			}
 		}
 	}
 
