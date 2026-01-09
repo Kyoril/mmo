@@ -848,7 +848,7 @@ namespace mmo
 			auto grassLayer = std::make_shared<FoliageLayer>("Grass", grassMesh);
 
 			FoliageLayerSettings& layerSettings = grassLayer->GetSettings();
-			layerSettings.density = 2.0f;
+			layerSettings.density = 4.0f;
 			layerSettings.minScale = 0.7f;
 			layerSettings.maxScale = 1.3f;
 			layerSettings.maxSlopeAngle = 35.0f;
@@ -857,6 +857,40 @@ namespace mmo
 			layerSettings.castShadows = false;
 
 			m_foliage->AddLayer(grassLayer);
+		}
+
+		MeshPtr grassMesh2 = MeshManager::Get().Load("Models/FalwynPlains/Plants/Grass_02.hmsh");
+		if (grassMesh2)
+		{
+			auto grassLayer2 = std::make_shared<FoliageLayer>("Grass02", grassMesh2);
+
+			FoliageLayerSettings& layerSettings = grassLayer2->GetSettings();
+			layerSettings.density = 0.7f;
+			layerSettings.minScale = 1.0f;
+			layerSettings.maxScale = 1.0f;
+			layerSettings.maxSlopeAngle = 35.0f;
+			layerSettings.fadeStartDistance = 40.0f;
+			layerSettings.fadeEndDistance = 60.0f;
+			layerSettings.castShadows = false;
+
+			m_foliage->AddLayer(grassLayer2);
+		}
+
+		MeshPtr flowerMesh = MeshManager::Get().Load("Models/FalwynPlains/Plants/Shrub_Flower_01.hmsh");
+		if (flowerMesh)
+		{
+			auto flowerLayer = std::make_shared<FoliageLayer>("Flowers", flowerMesh);
+
+			FoliageLayerSettings& layerSettings = flowerLayer->GetSettings();
+			layerSettings.density = 0.32f;
+			layerSettings.minScale = 1.0f;
+			layerSettings.maxScale = 1.0f;
+			layerSettings.maxSlopeAngle = 35.0f;
+			layerSettings.fadeStartDistance = 40.0f;
+			layerSettings.fadeEndDistance = 60.0f;
+			layerSettings.castShadows = false;
+
+			m_foliage->AddLayer(flowerLayer);
 		}
 	}
 
@@ -3598,6 +3632,8 @@ namespace mmo
 			const bool enabled = var.GetIntValue() != 0;
 			m_foliage->SetVisible(enabled);
 			ILOG("Foliage rendering " << (enabled ? "enabled" : "disabled"));
+
+			m_foliage->RebuildAll();
 		}
 	}
 
@@ -3609,6 +3645,8 @@ namespace mmo
 			settings.globalDensityMultiplier = Clamp(var.GetFloatValue(), 0.1f, 1.0f);
 			m_foliage->SetSettings(settings);
 			ILOG("Foliage density set to " << settings.globalDensityMultiplier);
+
+			m_foliage->RebuildAll();
 		}
 	}
 
