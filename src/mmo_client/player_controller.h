@@ -73,6 +73,8 @@ namespace mmo
 
 		void HandleCameraCollision();
 
+		void SetOrbitModeEnabled(bool enable);
+
 	public:
 		void SetControlBit(const ControlFlags::Type flag, bool set) override;
 
@@ -114,5 +116,6 @@ namespace mmo
 		GameTime m_nextSetFacing = 0;
 
 		Vector3 m_desiredCameraLocation;
+		Quaternion m_savedOrientation;
 	};
 }

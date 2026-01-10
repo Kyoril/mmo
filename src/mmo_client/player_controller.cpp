@@ -365,6 +365,33 @@ namespace mmo
 		m_cameraNode->SetPosition(m_desiredCameraLocation);
 	}
 
+	void PlayerController::SetOrbitModeEnabled(bool enable)
+	{
+		// Already enabled / disabled? Then do nothing
+		if (enable == !m_cameraAnchorNode->IsInheritingOrientation())
+		{
+			return;
+		}
+
+		if (enable)
+		{
+			const Quaternion storedOrientation = m_cameraAnchorNode->GetDerivedOrientation();
+			m_cameraAnchorNode->SetInheritOrientation(false);
+			m_cameraAnchorNode->SetOrientation(storedOrientation);
+		}
+		else
+		{
+			const Quaternion storedOrientation = m_cameraAnchorNode->GetDerivedOrientation();
+
+			// Convert stored world space orientation to parent space
+			const Quaternion parentOrientation = m_cameraAnchorNode->GetParentSceneNode()->GetDerivedOrientation().Inverse();
+			const Quaternion localOrientation = parentOrientation * storedOrientation;
+
+			m_cameraAnchorNode->SetInheritOrientation(true);
+			m_cameraAnchorNode->SetOrientation(localOrientation);
+		}
+	}
+
 	void PlayerController::SetControlBit(const ControlFlags::Type flag, bool set)
 	{
 		if (set)
@@ -376,6 +403,18 @@ namespace mmo
 				m_controlFlags &= ~ControlFlags::Autorun;
 			}
 
+			if (flag & (ControlFlags::TurnCamera | ControlFlags::TurnPlayer) != 0)
+			{
+				if ((flag & ControlFlags::TurnCamera) != 0 && (m_controlFlags & ControlFlags::TurnPlayer) == 0)
+				{
+					SetOrbitModeEnabled(true);
+				}
+				else
+				{
+					SetOrbitModeEnabled(false);
+				}
+			}
+			
 			// If any relevant flag was added and we are moving using both mouse buttons now, remove auto run flag
 			if (((flag & ControlFlags::MoveAndTurnPlayer) != 0) &&
 				(m_controlFlags & ControlFlags::MoveAndTurnPlayer) == ControlFlags::MoveAndTurnPlayer)
@@ -386,6 +425,18 @@ namespace mmo
 		else
 		{
 			m_controlFlags &= ~flag;
+
+			if (flag & (ControlFlags::TurnCamera | ControlFlags::TurnPlayer) != 0)
+			{
+				if ((flag & ControlFlags::TurnPlayer) != 0 && (m_controlFlags & ControlFlags::TurnCamera) != 0)
+				{
+					SetOrbitModeEnabled(true);
+				}
+				else
+				{
+					SetOrbitModeEnabled(false);
+				}
+			}
 		}
 	}
 
@@ -789,6 +840,7 @@ namespace mmo
 		m_x = x;
 		m_y = y;
 
+		// Not turning camera nor player, then nothing to do for us
 		if ((m_controlFlags & (ControlFlags::TurnCamera | ControlFlags::TurnPlayer)) == 0)
 		{
 			return;
@@ -916,6 +968,7 @@ namespace mmo
 		ASSERT(m_cameraNode);
 		ASSERT(m_cameraAnchorNode);
 		m_cameraNode->SetPosition(Vector3::UnitZ * 3.0f);
+		m_cameraAnchorNode->SetInheritOrientation(true);
 
 		const Quaternion defaultRotation(Degree(0.0f), Vector3::UnitY);
 		m_cameraAnchorNode->SetOrientation(defaultRotation);
