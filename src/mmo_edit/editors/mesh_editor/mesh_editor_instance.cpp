@@ -2,6 +2,7 @@
 
 #include "mesh_editor_instance.h"
 
+#include <algorithm>
 #include <imgui_internal.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
@@ -446,6 +447,7 @@ namespace mmo
 		const String collisionId = "Collision##" + GetAssetPath().string();
 		const String bonesId = "Bones##" + GetAssetPath().string();
 		const String animationsId = "Animation##" + GetAssetPath().string();
+		const String timelineId = "Animation Timeline##" + GetAssetPath().string();
 
 		// Draw sidebar windows
 		DrawDetails(detailsId);
@@ -455,6 +457,7 @@ namespace mmo
 		{
 			DrawBones(bonesId);
 			DrawAnimations(animationsId);
+			DrawAnimationTimelineWindow(timelineId);
 		}
 		else
 		{
@@ -472,9 +475,16 @@ namespace mmo
 			ImGui::DockBuilderSetNodeSize(dockSpaceId, ImGui::GetMainViewport()->Size);
 
 			auto mainId = dockSpaceId;
+			
+			// Split bottom for animation timeline (250px height)
+			const auto bottomId = ImGui::DockBuilderSplitNode(mainId, ImGuiDir_Down, 250.0f / ImGui::GetMainViewport()->Size.y, nullptr, &mainId);
+			
+			// Split right for details/bones panel (400px width)
 			const auto sideId = ImGui::DockBuilderSplitNode(mainId, ImGuiDir_Right, 400.0f / ImGui::GetMainViewport()->Size.x, nullptr, &mainId);
 			
+			// Dock windows to appropriate areas
 			ImGui::DockBuilderDockWindow(viewportId.c_str(), mainId);
+			ImGui::DockBuilderDockWindow(timelineId.c_str(), bottomId);
 			ImGui::DockBuilderDockWindow(animationsId.c_str(), sideId);
 			ImGui::DockBuilderDockWindow(bonesId.c_str(), sideId);
 			ImGui::DockBuilderDockWindow(collisionId.c_str(), sideId);
@@ -842,30 +852,257 @@ namespace mmo
 		ImGui::End();
 	}
 
+	void MeshEditorInstance::DrawAnimationTimeline()
+	{
+		if (!m_animState)
+		{
+			return;
+		}
+
+		const float timelineHeight = 200.0f;
+		const float rulerHeight = 30.0f;
+		const float trackHeight = 40.0f;
+		const float notifyHeight = 20.0f;
+		
+		ImVec2 canvasPos = ImGui::GetCursorScreenPos();
+		ImVec2 canvasSize = ImVec2(ImGui::GetContentRegionAvail().x, timelineHeight);
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+		// Background
+		drawList->AddRectFilled(canvasPos, ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y), 
+			IM_COL32(30, 30, 30, 255));
+
+		const float animLength = m_animState->GetLength();
+		const float pixelsPerSecond = (canvasSize.x - 40.0f) / animLength * m_timelineZoom;
+
+		// Draw ruler
+		drawList->AddRectFilled(canvasPos, ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + rulerHeight),
+			IM_COL32(40, 40, 40, 255));
+
+		// Draw time markers
+		const float markerInterval = 1.0f; // 1 second intervals
+		for (float t = 0.0f; t <= animLength; t += markerInterval)
+		{
+			const float x = canvasPos.x + 20.0f + t * pixelsPerSecond;
+			if (x >= canvasPos.x && x <= canvasPos.x + canvasSize.x)
+			{
+				drawList->AddLine(ImVec2(x, canvasPos.y + rulerHeight - 10), 
+					ImVec2(x, canvasPos.y + rulerHeight), IM_COL32(150, 150, 150, 255), 1.0f);
+
+				// Draw time label
+				char label[32];
+				snprintf(label, sizeof(label), "%.1f", t);
+				drawList->AddText(ImVec2(x - 10, canvasPos.y + 5), IM_COL32(200, 200, 200, 255), label);
+			}
+		}
+
+		// Draw sub-markers (frames at 30fps)
+		const float frameInterval = 1.0f / 30.0f;
+		for (float t = 0.0f; t <= animLength; t += frameInterval)
+		{
+			const float x = canvasPos.x + 20.0f + t * pixelsPerSecond;
+			if (x >= canvasPos.x && x <= canvasPos.x + canvasSize.x)
+			{
+				drawList->AddLine(ImVec2(x, canvasPos.y + rulerHeight - 5),
+					ImVec2(x, canvasPos.y + rulerHeight), IM_COL32(100, 100, 100, 255), 1.0f);
+			}
+		}
+
+		// Draw playback cursor
+		const float currentTime = m_animState->GetTimePosition();
+		const float cursorX = canvasPos.x + 20.0f + currentTime * pixelsPerSecond;
+		drawList->AddLine(ImVec2(cursorX, canvasPos.y), 
+			ImVec2(cursorX, canvasPos.y + canvasSize.y), IM_COL32(255, 100, 100, 255), 2.0f);
+
+		// Draw cursor triangle at top
+		drawList->AddTriangleFilled(
+			ImVec2(cursorX, canvasPos.y),
+			ImVec2(cursorX - 6, canvasPos.y + 12),
+			ImVec2(cursorX + 6, canvasPos.y + 12),
+			IM_COL32(255, 100, 100, 255));
+
+		// Draw notify track
+		const float notifyTrackY = canvasPos.y + rulerHeight + 10.0f;
+		drawList->AddRectFilled(
+			ImVec2(canvasPos.x, notifyTrackY),
+			ImVec2(canvasPos.x + canvasSize.x, notifyTrackY + trackHeight),
+			IM_COL32(35, 35, 35, 255));
+
+		drawList->AddText(ImVec2(canvasPos.x + 5, notifyTrackY + 5), 
+			IM_COL32(180, 180, 180, 255), "Notifies");
+
+		// Get notifies for current animation
+		const String& animName = m_animState->GetAnimationName();
+		auto& notifies = m_animationNotifies[animName];
+
+		// Draw notifies
+		m_hoveredNotifyIndex = -1;
+		for (int i = 0; i < static_cast<int>(notifies.size()); ++i)
+		{
+			const auto& notify = notifies[i];
+			const float notifyX = canvasPos.x + 20.0f + notify.time * pixelsPerSecond;
+			const float notifyY = notifyTrackY + 15.0f;
+
+			ImVec2 notifyPos(notifyX - 5, notifyY);
+			ImVec2 notifySize(80, notifyHeight);
+
+			// Check if mouse is hovering
+			ImVec2 mousePos = ImGui::GetMousePos();
+			bool isHovered = mousePos.x >= notifyPos.x && mousePos.x <= notifyPos.x + notifySize.x &&
+				mousePos.y >= notifyPos.y && mousePos.y <= notifyPos.y + notifySize.y;
+
+			if (isHovered)
+			{
+				m_hoveredNotifyIndex = i;
+			}
+
+			// Draw notify box
+			ImU32 notifyColor = IM_COL32(100, 150, 255, 255);
+			if (i == m_selectedNotifyIndex)
+			{
+				notifyColor = IM_COL32(255, 200, 100, 255);
+			}
+			else if (isHovered)
+			{
+				notifyColor = IM_COL32(150, 180, 255, 255);
+			}
+
+			drawList->AddRectFilled(notifyPos, ImVec2(notifyPos.x + notifySize.x, notifyPos.y + notifySize.y),
+				notifyColor, 3.0f);
+			drawList->AddRect(notifyPos, ImVec2(notifyPos.x + notifySize.x, notifyPos.y + notifySize.y),
+				IM_COL32(255, 255, 255, 200), 3.0f, 0, 1.5f);
+
+			// Draw notify diamond marker
+			drawList->AddCircleFilled(ImVec2(notifyX, notifyY), 5.0f, IM_COL32(255, 255, 255, 255));
+
+			// Draw notify text
+			const char* displayText = notify.name.empty() ? notify.type.c_str() : notify.name.c_str();
+			drawList->AddText(ImVec2(notifyPos.x + 5, notifyPos.y + 2), IM_COL32(255, 255, 255, 255), displayText);
+		}
+
+		// Invisible button for timeline interaction
+		ImGui::SetCursorScreenPos(canvasPos);
+		ImGui::InvisibleButton("timeline", canvasSize);
+
+		// Handle timeline scrubbing
+		if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+		{
+			ImVec2 mousePos = ImGui::GetMousePos();
+			float newTime = (mousePos.x - canvasPos.x - 20.0f) / pixelsPerSecond;
+			newTime = Clamp(newTime, 0.0f, animLength);
+			m_animState->SetTimePosition(newTime);
+			m_isDraggingTimeline = true;
+
+			// Pause animation while scrubbing
+			if (m_playAnimation)
+			{
+				m_playAnimation = false;
+			}
+		}
+		else
+		{
+			m_isDraggingTimeline = false;
+		}
+
+		// Handle notify selection and dragging
+		if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && m_hoveredNotifyIndex >= 0)
+		{
+			m_selectedNotifyIndex = m_hoveredNotifyIndex;
+			m_isDraggingNotify = true;
+		}
+
+		if (m_isDraggingNotify && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+		{
+			if (m_selectedNotifyIndex >= 0 && m_selectedNotifyIndex < static_cast<int>(notifies.size()))
+			{
+				ImVec2 mousePos = ImGui::GetMousePos();
+				float newTime = (mousePos.x - canvasPos.x - 20.0f) / pixelsPerSecond;
+				newTime = Clamp(newTime, 0.0f, animLength);
+				notifies[m_selectedNotifyIndex].time = newTime;
+
+				// Re-sort notifies by time
+				std::sort(notifies.begin(), notifies.end());
+			}
+		}
+
+		if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+		{
+			m_isDraggingNotify = false;
+		}
+
+		// Handle notify deletion
+		if (m_selectedNotifyIndex >= 0 && ImGui::IsKeyPressed(ImGuiKey_Delete))
+		{
+			if (m_selectedNotifyIndex < static_cast<int>(notifies.size()))
+			{
+				notifies.erase(notifies.begin() + m_selectedNotifyIndex);
+				m_selectedNotifyIndex = -1;
+			}
+		}
+
+		// Right-click context menu for adding notifies
+		if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+		{
+			ImVec2 mousePos = ImGui::GetMousePos();
+			float clickTime = (mousePos.x - canvasPos.x - 20.0f) / pixelsPerSecond;
+			clickTime = Clamp(clickTime, 0.0f, animLength);
+
+			AnimationNotify newNotify;
+			newNotify.name = "Notify";
+			newNotify.time = clickTime;
+			newNotify.type = "PlaySound";
+			notifies.push_back(newNotify);
+			std::sort(notifies.begin(), notifies.end());
+		}
+
+		ImGui::SetCursorScreenPos(ImVec2(canvasPos.x, canvasPos.y + canvasSize.y));
+	}
+
+	void MeshEditorInstance::DrawAnimationTimelineWindow(const String& id)
+	{
+		if (ImGui::Begin(id.c_str()))
+		{
+			if (m_animState)
+			{
+				DrawAnimationTimeline();
+			}
+			else
+			{
+				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Select an animation to view timeline");
+			}
+		}
+		ImGui::End();
+	}
+
 	void MeshEditorInstance::DrawAnimations(const String& id)
 	{
 		if (ImGui::Begin(id.c_str()))
 		{
 			if (m_mesh->HasSkeleton())
 			{
-				// Ask for a name for the new animation
-				ImGui::InputText("Animation Name", &m_newAnimationName, ImGuiInputTextFlags_None, nullptr, nullptr);
-				ImGui::InputText("FBX Path", &m_animationImportPath, ImGuiInputTextFlags_None, nullptr, nullptr);
-
-				ImGui::BeginDisabled(m_newAnimationName.empty() || m_animationImportPath.empty());
-				if (ImGui::Button("Import Animation"))
+				// Animation Import Section
+				if (ImGui::CollapsingHeader("Import Animation", ImGuiTreeNodeFlags_None))
 				{
-					// Do the import
-					ImportAnimationFromFbx(m_animationImportPath, m_newAnimationName);
+					ImGui::Indent();
+					ImGui::InputText("Animation Name", &m_newAnimationName, ImGuiInputTextFlags_None, nullptr, nullptr);
+					ImGui::InputText("FBX Path", &m_animationImportPath, ImGuiInputTextFlags_None, nullptr, nullptr);
+
+					ImGui::BeginDisabled(m_newAnimationName.empty() || m_animationImportPath.empty());
+					if (ImGui::Button("Import Animation"))
+					{
+						// Do the import
+						ImportAnimationFromFbx(m_animationImportPath, m_newAnimationName);
+					}
+					ImGui::EndDisabled();
+					ImGui::Unindent();
 				}
-				ImGui::EndDisabled();
 
 				ImGui::Separator();
 
 				if (m_mesh->GetSkeleton()->GetNumAnimations() > 0)
 				{
-					// Draw a popup box with all available animations and select the active one
-
+					// Animation Selection
+					ImGui::Text("Animation Selection");
 					static const String s_defaultPreviewString = "(None)";
 					const String* previewValue = &s_defaultPreviewString;
 					if (m_animState)
@@ -873,7 +1110,7 @@ namespace mmo
 						previewValue = &m_animState->GetAnimationName();
 					}
 
-					if (ImGui::BeginCombo("Animation", previewValue->c_str()))
+					if (ImGui::BeginCombo("##Animation", previewValue->c_str()))
 					{
 						if (ImGui::Selectable(s_defaultPreviewString.c_str()))
 						{
@@ -891,29 +1128,127 @@ namespace mmo
 						ImGui::EndCombo();
 					}
 
+					ImGui::Separator();
+
+					// Animation Controls (only show if animation is selected)
 					if (m_animState)
 					{
-						bool looped = m_animState->IsLoop();
-						if (ImGui::Checkbox("Looped", &looped))
+						ImGui::Text("Playback Controls");
+						
+						// Playback buttons (Play/Pause, Stop)
+						ImGui::PushStyleColor(ImGuiCol_Button, m_playAnimation ? 
+							ImVec4(0.2f, 0.7f, 0.2f, 1.0f) : ImVec4(0.2f, 0.4f, 0.7f, 1.0f));
+						
+						if (ImGui::Button(m_playAnimation ? "Pause" : "Play", ImVec2(80, 0)))
 						{
-							m_animState->SetLoop(looped);
+							m_playAnimation = !m_playAnimation;
+							if (m_playAnimation && m_animState->GetTimePosition() >= m_animState->GetLength())
+							{
+								m_animState->SetTimePosition(0.0f);
+							}
 						}
-					}
+						ImGui::PopStyleColor();
 
-					if (ImGui::Checkbox("Play", &m_playAnimation) && m_playAnimation)
-					{
-						if (m_animState)
+						ImGui::SameLine();
+						if (ImGui::Button("Stop", ImVec2(80, 0)))
+						{
+							m_playAnimation = false;
+							m_animState->SetTimePosition(0.0f);
+						}
+
+						ImGui::SameLine();
+						if (ImGui::Button("|<", ImVec2(40, 0)))
 						{
 							m_animState->SetTimePosition(0.0f);
 						}
-					}
 
-					if (m_animState != nullptr)
-					{
-						float timePos = m_animState->GetTimePosition();
-						if (ImGui::SliderFloat("Time pos", &timePos, 0.0f, m_animState->GetLength()))
+						ImGui::SameLine();
+						if (ImGui::Button(">|", ImVec2(40, 0)))
 						{
-							m_animState->SetTimePosition(timePos);
+							m_animState->SetTimePosition(m_animState->GetLength());
+						}
+
+						// Animation properties
+						ImGui::Spacing();
+						bool looped = m_animState->IsLoop();
+						if (ImGui::Checkbox("Loop", &looped))
+						{
+							m_animState->SetLoop(looped);
+						}
+
+						ImGui::SameLine();
+						float playRate = m_animState->GetPlayRate();
+						ImGui::SetNextItemWidth(100);
+						if (ImGui::DragFloat("Speed", &playRate, 0.01f, 0.1f, 5.0f, "%.2f"))
+						{
+							m_animState->SetPlayRate(playRate);
+						}
+
+						// Animation info
+						ImGui::Spacing();
+						ImGui::Text("Length: %.2fs", m_animState->GetLength());
+						ImGui::Text("Current: %.2fs (%.1f%%)", 
+							m_animState->GetTimePosition(),
+							(m_animState->GetTimePosition() / m_animState->GetLength()) * 100.0f);
+
+						ImGui::Separator();
+
+						// Timeline zoom control
+						ImGui::Text("Timeline Zoom");
+						ImGui::SetNextItemWidth(200);
+						ImGui::SliderFloat("##Zoom", &m_timelineZoom, 0.5f, 5.0f, "%.1fx");
+
+						ImGui::Separator();
+
+						// Notify Editor
+						if (ImGui::CollapsingHeader("Notify Editor", ImGuiTreeNodeFlags_DefaultOpen))
+						{
+							const String& animName = m_animState->GetAnimationName();
+							auto& notifies = m_animationNotifies[animName];
+
+							ImGui::Text("Selected notify: %s", 
+								m_selectedNotifyIndex >= 0 && m_selectedNotifyIndex < static_cast<int>(notifies.size()) ?
+								notifies[m_selectedNotifyIndex].name.c_str() : "None");
+
+							if (m_selectedNotifyIndex >= 0 && m_selectedNotifyIndex < static_cast<int>(notifies.size()))
+							{
+								auto& notify = notifies[m_selectedNotifyIndex];
+								
+								ImGui::Text("Edit Notify:");
+								ImGui::InputText("Name", &notify.name);
+								
+								const char* types[] = { "PlaySound", "SpawnParticle", "SpawnEffect", "Custom" };
+								int currentType = 0;
+								for (int i = 0; i < 4; ++i)
+								{
+									if (notify.type == types[i])
+									{
+										currentType = i;
+										break;
+									}
+								}
+								
+								if (ImGui::Combo("Type", &currentType, types, 4))
+								{
+									notify.type = types[currentType];
+								}
+
+								float notifyTime = notify.time;
+								if (ImGui::DragFloat("Time", &notifyTime, 0.01f, 0.0f, m_animState->GetLength(), "%.2fs"))
+								{
+									notify.time = Clamp(notifyTime, 0.0f, m_animState->GetLength());
+									std::sort(notifies.begin(), notifies.end());
+								}
+
+								if (ImGui::Button("Delete Notify"))
+								{
+									notifies.erase(notifies.begin() + m_selectedNotifyIndex);
+									m_selectedNotifyIndex = -1;
+								}
+							}
+
+							ImGui::Spacing();
+							ImGui::TextWrapped("Tip: Right-click on timeline to add notify, Left-click to select, Drag to move, Delete key to remove");
 						}
 					}
 				}

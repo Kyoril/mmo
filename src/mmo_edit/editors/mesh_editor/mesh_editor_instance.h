@@ -23,6 +23,19 @@ namespace mmo
 	class Camera;
 	class SceneNode;
 
+	/// Animation notify/event structure
+	struct AnimationNotify
+	{
+		String name;
+		float time;
+		String type;  // e.g., "PlaySound", "SpawnParticle", "Custom"
+		
+		bool operator<(const AnimationNotify& other) const
+		{
+			return time < other.time;
+		}
+	};
+
 	class MeshEditorInstance final : public EditorInstance
 	{
 	public:
@@ -49,6 +62,10 @@ namespace mmo
 		void DrawDetails(const String& id);
 
 		void DrawAnimations(const String& id);
+
+		void DrawAnimationTimeline();
+
+		void DrawAnimationTimelineWindow(const String& id);
 
 		void DrawBones(const String& id);
 
@@ -110,5 +127,16 @@ namespace mmo
 		Vector3 m_importOffset = Vector3::Zero;
 		Vector3 m_importScale = Vector3::UnitScale;;
 		Quaternion m_importRotation = Quaternion::Identity;
+
+		// Animation timeline UI state
+		float m_timelineZoom = 1.0f;
+		float m_timelineScroll = 0.0f;
+		bool m_isDraggingTimeline = false;
+		bool m_isDraggingNotify = false;
+		int m_selectedNotifyIndex = -1;
+		int m_hoveredNotifyIndex = -1;
+		std::map<String, std::vector<AnimationNotify>> m_animationNotifies;
+		String m_newNotifyName;
+		String m_newNotifyType = "PlaySound";
 	};
 }
