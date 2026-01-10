@@ -9,7 +9,7 @@
 
 namespace mmo
 {
-	typedef uint64 MapId;
+	typedef uint32 MapId;
 
 	typedef uuids::uuid InstanceId;
 
