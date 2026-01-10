@@ -229,6 +229,11 @@ namespace mmo
 				direction = 0;
 			}
 
+			if ((m_controlFlags & ControlFlags::TurnPlayer) != 0)
+			{
+				direction = 0;
+			}
+
 			if (direction != 0)
 			{
 				//m_controlledUnit->AddYawInput(Radian(m_controlledUnit->GetSpeed(movement_type::Turn)) * direction);
