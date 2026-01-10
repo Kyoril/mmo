@@ -5,6 +5,7 @@
 #include "scene_graph/renderable.h"
 
 #include <memory>
+#include <map>
 
 #include "coverage_map.h"
 #include "graphics/material_instance.h"
@@ -78,6 +79,10 @@ namespace mmo
 
 			void UpdateLOD(const Camera& camera);
 
+			/// @brief Returns the current LOD level for this tile.
+			/// @return The current LOD level (0 = highest detail, 3 = lowest detail)
+			[[nodiscard]] uint32 GetCurrentLOD() const;
+
 			ICollidable* GetCollidable() override { return this; }
 
 			const ICollidable* GetCollidable() const override { return this; }
@@ -85,7 +90,16 @@ namespace mmo
 		private:
 			void CreateVertexData(size_t startX, size_t startZ);
 
-			void CreateIndexData(uint32 lod);
+			void CreateIndexData(uint32 lod, uint32 northLod, uint32 eastLod, uint32 southLod, uint32 westLod);
+
+			/// @brief Generates edge stitching triangles to connect with neighbors at different LOD levels
+			/// @param indices Vector to append stitching indices to
+			/// @param lod Current tile's LOD level
+			/// @param northLod North neighbor's LOD level
+			/// @param eastLod East neighbor's LOD level
+			/// @param southLod South neighbor's LOD level
+			/// @param westLod West neighbor's LOD level
+			void GenerateEdgeStitching(std::vector<uint16>& indices, uint32 lod, uint32 northLod, uint32 eastLod, uint32 southLod, uint32 westLod);
 
 			// Helper methods for new vertex layout (outer + inner vertices)
 			/// @brief Gets the vertex index for an outer vertex at grid position (x, y)
@@ -124,8 +138,10 @@ namespace mmo
 
 			bool m_worldAABBDirty { true };
 			
-			std::vector<std::unique_ptr<IndexData>> m_lodIndexData;
+			// Index data cache: key is (lod | (northLod << 4) | (eastLod << 8) | (southLod << 12) | (westLod << 16))
+			std::map<uint32, std::unique_ptr<IndexData>> m_lodIndexCache;
 			uint32 m_currentLod = 0;
+			uint32 m_currentStitchKey = 0;
 
 		public:
 			/// @brief Tests collision between a capsule and this terrain tile.
