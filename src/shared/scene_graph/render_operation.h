@@ -32,6 +32,12 @@ namespace mmo
 
 		std::vector<ConstantBuffer*> pixelConstantBuffers{};
 
+		/// @brief Instance buffer for GPU instancing. If non-null, enables instanced rendering.
+		VertexBuffer* instanceBuffer{ nullptr };
+
+		/// @brief Number of instances to render when instanceBuffer is set.
+		uint32 instanceCount{ 0 };
+
 		uint32 GetRenderGroupId() const { return m_renderGroupId; }
 
 	private:

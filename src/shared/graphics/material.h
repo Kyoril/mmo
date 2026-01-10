@@ -306,12 +306,12 @@ namespace mmo
 		bool m_castShadow { true };
 		bool m_receiveShadows { true };
 		MaterialType m_type { MaterialType::Opaque };
-		ShaderPtr m_vertexShader[5];	// Non-skinned, skinned low, skinned medium, skinned high and UI
+		ShaderPtr m_vertexShader[6];	// Non-skinned, skinned low, skinned medium, skinned high, UI and Instanced
 		ShaderPtr m_pixelShader[4]; // Forward, GBuffer, ShadowMap and UI
 		std::vector<String> m_textureFiles;
 		std::vector<TexturePtr> m_textures;
 		bool m_texturesChanged { true };
-		std::vector<uint8> m_vertexShaderCode[5];
+		std::vector<uint8> m_vertexShaderCode[6];
 		bool m_vertexShaderChanged { true };
 		std::vector<uint8> m_pixelShaderCode[4]; // Forward, GBuffer and ShadowMap
 		bool m_pixelShaderChanged[4] { true, true, true, true };

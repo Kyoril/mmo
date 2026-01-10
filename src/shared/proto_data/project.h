@@ -45,6 +45,7 @@
 #include "shared/proto_data/conditions.pb.h"
 #include "shared/proto_data/animations.pb.h"
 #include "shared/proto_data/spell_visualizations.pb.h"
+#include "shared/proto_data/proficiencies.pb.h"
 
 namespace mmo
 {
@@ -91,6 +92,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::Conditions, mmo::proto::Condition> ConditionManager;
 		typedef TemplateManager<mmo::proto::Animations, mmo::proto::AnimationEntry> AnimationManager;
 		typedef TemplateManager<mmo::proto::SpellVisualizations, mmo::proto::SpellVisualization> SpellVisualizationManager;
+		typedef TemplateManager<mmo::proto::Proficiencies, mmo::proto::ProficiencyEntry> ProficiencyManager;
 
 		/// Determines whether a spell entry has a certain spell effect.
 		bool SpellHasEffect(const proto::SpellEntry& spell, mmo::SpellEffect type);
@@ -150,6 +152,7 @@ namespace mmo
 			ConditionManager conditions;
 			AnimationManager animations;
 			SpellVisualizationManager spellVisualizations;
+			ProficiencyManager proficiencies;
 
 		private:
 
@@ -234,6 +237,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("conditions", conditions));
 				managers.push_back(ManagerEntry("animations", animations));
 				managers.push_back(ManagerEntry("spell_visualizations", spellVisualizations));
+				managers.push_back(ManagerEntry("proficiencies", proficiencies));
 
 				virtual_dir::FileSystemReader virtualDirectory(realmDataPath);
 				if (!RealmProjectLoader::load(
@@ -308,6 +312,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("conditions", "conditions", conditions));
 				managers.push_back(ManagerEntry("animations", "animations", animations));
 				managers.push_back(ManagerEntry("spell_visualizations", "spell_visualizations", spellVisualizations));
+				managers.push_back(ManagerEntry("proficiencies", "proficiencies", proficiencies));
 
 				if (!RealmProjectSaver::save(realmDataPath, managers))
 				{

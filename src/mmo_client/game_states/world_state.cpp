@@ -40,6 +40,8 @@
 #include "game/quest.h"
 #include "game_client/game_bag_c.h"
 #include "terrain/page.h"
+#include "terrain/constants.h"
+#include "terrain/terrain.h"
 #include "systems/guild_client.h"
 #include "systems/friend_client.h"
 #include "systems/talent_client.h"
@@ -55,6 +57,7 @@
 #include "game_client/game_world_object_c_base.h"
 #include "graphics/texture_mgr.h"
 #include "scene_graph/material_manager.h"
+#include "scene_graph/mesh_manager.h"
 #include "scene_graph/octree_scene.h"
 
 #include "discord.h"
@@ -92,6 +95,9 @@ namespace mmo
 		static ConsoleVar *s_slopeDepthBiasVar = nullptr;
 		static ConsoleVar *s_clampDepthBiasVar = nullptr;
 		static ConsoleVar *s_shadowTextureSizeVar = nullptr;
+
+		static ConsoleVar *s_foliageEnabledVar = nullptr;
+		static ConsoleVar *s_foliageDensityVar = nullptr;
 
 		String MapMouseButton(const MouseButton button)
 		{
@@ -322,6 +328,7 @@ namespace mmo
 	void WorldState::OnLeave()
 	{
 		m_debugPathVisualizer.reset();
+		m_foliage.reset();
 
 		m_audio.StopSound(&m_backgroundMusicChannel);
 		m_backgroundMusicChannel = InvalidChannel;
@@ -602,6 +609,13 @@ namespace mmo
 		{
 			m_projectileManager->Update(deltaSeconds);
 		}
+
+		// Update foliage system
+		if (m_foliage && m_worldLoaded)
+		{
+			m_foliage->Update(m_playerController->GetCamera());
+		}
+
 		// Position the sky dome to follow the player
 		if (m_skyComponent && m_playerController->GetRootNode())
 		{
@@ -758,6 +772,126 @@ namespace mmo
 			2,
 			pos,
 			*m_pageLoader);
+
+		// Initialize foliage system
+		SetupFoliage();
+	}
+
+	void WorldState::SetupFoliage()
+	{
+		m_foliage = std::make_unique<Foliage>(*m_scene, GraphicsDevice::Get());
+
+		// Set up height query callback that checks terrain height, normal, and holes
+		m_foliage->SetHeightQueryCallback([this](float x, float z, float& height, Vector3& normal) -> bool
+		{
+			// Check if world instance and terrain are available
+			if (!m_worldInstance || !m_worldInstance->HasTerrain())
+			{
+				return false;
+			}
+
+			terrain::Terrain* terrain = m_worldInstance->GetTerrain();
+			if (!terrain)
+			{
+				return false;
+			}
+
+			// Check if this position is a hole
+			if (terrain->IsHoleAt(x, z))
+			{
+				return false;
+			}
+
+			// Get height and normal from terrain
+			height = terrain->GetSmoothHeightAt(x, z);
+			normal = terrain->GetSmoothNormalAt(x, z);
+
+			// Check slope - if normal.y is too low, slope is too steep
+			// cos(35°) ≈ 0.8191f, so normal.y must be >= 0.8191f for walkable terrain
+			constexpr float maxSlopeCosine = 0.8191f; // 35 degrees
+			if (normal.y < maxSlopeCosine)
+			{
+				return false;
+			}
+
+			// Only render foliage where terrain layer 0 has > 30% influence
+			constexpr float minLayer0Influence = 0.3f;
+			if (terrain->GetLayerValueAt(x, z, 0) < minLayer0Influence)
+			{
+				return false;
+			}
+
+			return true;
+		});
+
+		// Configure foliage settings
+		FoliageSettings settings;
+		settings.chunkSize = 32.0f;
+		settings.maxViewDistance = 50.0f;
+		settings.loadRadius = 3;
+		settings.frustumCulling = true;
+		settings.globalDensityMultiplier = 1.0f;
+		m_foliage->SetSettings(settings);
+
+		// Set bounds to cover the entire terrain (64x64 pages)
+		// Terrain is centered at origin, so it extends from -halfSize to +halfSize
+		constexpr float halfTerrainSize = 64.0f * terrain::constants::PageSize * 0.5f;
+		m_foliage->SetBounds(AABB(
+			Vector3(-halfTerrainSize, -1000.0f, -halfTerrainSize),
+			Vector3(halfTerrainSize, 1000.0f, halfTerrainSize)
+		));
+
+		// Load grass mesh and create layer
+		MeshPtr grassMesh = MeshManager::Get().Load("Models/FalwynPlains/Plants/Grass_01.hmsh");
+		if (grassMesh)
+		{
+			auto grassLayer = std::make_shared<FoliageLayer>("Grass", grassMesh);
+
+			FoliageLayerSettings& layerSettings = grassLayer->GetSettings();
+			layerSettings.density = 4.0f;
+			layerSettings.minScale = 0.7f;
+			layerSettings.maxScale = 1.3f;
+			layerSettings.maxSlopeAngle = 35.0f;
+			layerSettings.fadeStartDistance = 40.0f;
+			layerSettings.fadeEndDistance = 60.0f;
+			layerSettings.castShadows = false;
+
+			m_foliage->AddLayer(grassLayer);
+		}
+
+		MeshPtr grassMesh2 = MeshManager::Get().Load("Models/FalwynPlains/Plants/Grass_02.hmsh");
+		if (grassMesh2)
+		{
+			auto grassLayer2 = std::make_shared<FoliageLayer>("Grass02", grassMesh2);
+
+			FoliageLayerSettings& layerSettings = grassLayer2->GetSettings();
+			layerSettings.density = 0.7f;
+			layerSettings.minScale = 1.0f;
+			layerSettings.maxScale = 1.0f;
+			layerSettings.maxSlopeAngle = 35.0f;
+			layerSettings.fadeStartDistance = 40.0f;
+			layerSettings.fadeEndDistance = 60.0f;
+			layerSettings.castShadows = false;
+
+			m_foliage->AddLayer(grassLayer2);
+		}
+
+		MeshPtr flowerMesh = MeshManager::Get().Load("Models/FalwynPlains/Plants/Shrub_Flower_01.hmsh");
+		if (flowerMesh)
+		{
+			auto flowerLayer = std::make_shared<FoliageLayer>("Flowers", flowerMesh);
+
+			FoliageLayerSettings& layerSettings = flowerLayer->GetSettings();
+			layerSettings.density = 0.32f;
+			layerSettings.minScale = 1.0f;
+			layerSettings.maxScale = 1.0f;
+			layerSettings.maxSlopeAngle = 35.0f;
+			layerSettings.fadeStartDistance = 40.0f;
+			layerSettings.fadeEndDistance = 60.0f;
+			layerSettings.castShadows = false;
+
+			m_foliage->AddLayer(flowerLayer);
+		}
 	}
 
 	void WorldState::SetupPacketHandler()
@@ -953,6 +1087,11 @@ namespace mmo
 		s_shadowTextureSizeVar = ConsoleVarMgr::RegisterConsoleVar("ShadowTextureSize", "", "1");
 		m_cvarChangedSignals += s_shadowTextureSizeVar->Changed.connect(this, &WorldState::OnShadowTextureSizeChanged);
 
+		s_foliageEnabledVar = ConsoleVarMgr::RegisterConsoleVar("FoliageEnabled", "Enable or disable foliage rendering (grass, plants, etc.)", "1");
+		m_cvarChangedSignals += s_foliageEnabledVar->Changed.connect(this, &WorldState::OnFoliageEnabledChanged);
+		s_foliageDensityVar = ConsoleVarMgr::RegisterConsoleVar("FoliageDensity", "Foliage density multiplier (0.1 to 1.0). Lower values improve performance.", "1.0");
+		m_cvarChangedSignals += s_foliageDensityVar->Changed.connect(this, &WorldState::OnFoliageDensityChanged);
+
 		Console::RegisterCommand(command_names::s_reload, [this](const std::string &, const std::string &)
 								 { ReloadUI(); }, ConsoleCommandCategory::Debug, "Reloads the user interface.");
 
@@ -977,6 +1116,8 @@ namespace mmo
 		OnShadowTextureSizeChanged(*s_shadowTextureSizeVar, "");
 		OnRenderShadowsChanged(*s_renderShadowsVar, "");
 		OnShadowBiasChanged(*s_depthBiasVar, "");
+		OnFoliageEnabledChanged(*s_foliageEnabledVar, "");
+		OnFoliageDensityChanged(*s_foliageDensityVar, "");
 	}
 
 	void WorldState::RemoveGameplayCommands()
@@ -987,6 +1128,8 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowSlopeBias");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowClampBias");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowTextureSize");
+		ConsoleVarMgr::UnregisterConsoleVar("FoliageEnabled");
+		ConsoleVarMgr::UnregisterConsoleVar("FoliageDensity");
 
 		m_cvarChangedSignals.disconnect();
 
@@ -1077,6 +1220,8 @@ namespace mmo
 		{
 			jobsDone++;
 		}
+
+		m_foliage->RebuildAll();
 
 		m_dispatcher.post([this, jobsDone, dispatched]()
 			{
@@ -3472,11 +3617,37 @@ namespace mmo
 		const uint16 s_shadowTexSizes[] = {
 			512,
 			1024,
-			2048};
+			2048,
+			4096 };
 
-		const uint16 shadowTextureSize = s_shadowTexSizes[Clamp(s_shadowTextureSizeVar->GetIntValue(), 0, 2)];
+		const uint16 shadowTextureSize = s_shadowTexSizes[Clamp(s_shadowTextureSizeVar->GetIntValue(), 0, 3)];
 		ILOG("Updating shadow texture size to " << shadowTextureSize << "x" << shadowTextureSize);
 		deferred->SetShadowMapSize(shadowTextureSize);
+	}
+
+	void WorldState::OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		if (m_foliage)
+		{
+			const bool enabled = var.GetIntValue() != 0;
+			m_foliage->SetVisible(enabled);
+			ILOG("Foliage rendering " << (enabled ? "enabled" : "disabled"));
+
+			m_foliage->RebuildAll();
+		}
+	}
+
+	void WorldState::OnFoliageDensityChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		if (m_foliage)
+		{
+			FoliageSettings settings = m_foliage->GetSettings();
+			settings.globalDensityMultiplier = Clamp(var.GetFloatValue(), 0.1f, 1.0f);
+			m_foliage->SetSettings(settings);
+			ILOG("Foliage density set to " << settings.globalDensityMultiplier);
+
+			m_foliage->RebuildAll();
+		}
 	}
 
 	void WorldState::GetPlayerName(uint64 guid, std::weak_ptr<GamePlayerC> player)

@@ -9,6 +9,7 @@ This document provides a comprehensive reference of all Lua functions available 
 - [Movement Functions](#movement-functions)
 - [Targeting Functions](#targeting-functions)
 - [UI Functions](#ui-functions)
+- [Frame UI Classes](#frame-ui-classes)
 - [Combat Functions](#combat-functions)
 - [Quest Functions](#quest-functions)
 - [Inventory Functions](#inventory-functions)
@@ -59,6 +60,16 @@ This document provides a comprehensive reference of all Lua functions available 
 **Parameters:** `sound` (string) - The path to the sound file to play  
 **Returns:** None  
 **Description:** Plays a sound specified by the path.
+
+### Localize
+**Parameters:** `id` (string) - The localization key  
+**Returns:** string - The localized string  
+**Description:** Returns a localized string from the UI localization table.
+
+### getglobal
+**Parameters:** `name` (string) - Global Lua variable name  
+**Returns:** any - The global Lua value, or nil  
+**Description:** Returns a global variable from the UI Lua environment.
 
 ### Quit
 **Parameters:** None  
@@ -237,6 +248,83 @@ This document provides a comprehensive reference of all Lua functions available 
 **Parameters:** `spell` (Spell) - The spell entry to check  
 **Returns:** boolean - True if the spell is passive, false otherwise  
 **Description:** Checks if the specified spell is passive.
+
+## Frame UI Classes
+
+The following bindings are exposed by the FrameUI system (`src/shared/frame_ui/frame_mgr.cpp`).
+
+### AnchorPoint (enum)
+- `NONE`, `TOP`, `RIGHT`, `BOTTOM`, `LEFT`, `H_CENTER`, `V_CENTER`
+
+### ButtonState (enum)
+- `NORMAL`, `HOVERED`, `PUSHED`
+
+### Frame
+- `SetText(text)`
+- `GetText()`
+- `Show()`, `Hide()`
+- `SetEnabled(enable)`, `Enable()`, `Disable()`
+- `RegisterEvent(name, fn)`
+- `GetName()`
+- `IsHovered()`
+- `IsVisible()` (includes parent visibility)
+- `RemoveAllChildren()`
+- `Clone()`
+- `AddChild(frame)`
+- `GetChildCount()`, `GetChild(index)`
+- `GetParent()`
+- `SetAnchor(point, relativePoint, relativeTo, offset)`
+- `ClearAnchor(point)`, `ClearAnchors()`
+- `SetSize(width, height)`, `SetWidth(width)`, `SetHeight(height)`
+- `GetWidth()`, `GetHeight()`
+- `GetX()`, `GetY()`
+- `GetTextWidth()`, `GetTextHeight()`
+- `CaptureInput()`, `HasInputCaptured()`, `ReleaseInput()`
+- `SetProperty(name, value)`
+- `GetProperty(name)` -> string or nil
+- `SetOnEnterHandler(fn)`, `SetOnLeaveHandler(fn)`
+- `SetOpacity(alpha)`, `GetOpacity(inherit)`
+- `userData` (property)
+- `id` (property)
+
+### Button (inherits Frame)
+- `SetClickedHandler(fn)`
+- `SetButtonState(state)`, `GetButtonState()`
+- `SetChecked(checked)`, `IsChecked()`
+- `SetCheckable(checkable)`, `IsCheckable()`
+
+### TextField (inherits Frame)
+- `SetAcceptsTab(value)`, `AcceptsTab()`
+- `SetTextMasked(value)`
+- `SetTextAreaOffset(rect)`, `GetTextAreaOffset()`
+
+### ScrollBar (inherits Frame)
+- `SetMinimum(value)`, `GetMinimum()`
+- `SetMaximum(value)`, `GetMaximum()`
+- `SetValue(value)`, `GetValue()`
+- `SetStep(value)`, `GetStep()`
+- `SetOnValueChangedHandler(fn)`
+
+### ProgressBar (inherits Frame)
+- `SetProgress(value)`, `GetProgress()`
+
+### ScrollingMessageFrame (inherits Frame)
+- `AddMessage(text, r, g, b)`
+- `Clear()`
+- `ScrollUp()`, `ScrollDown()`
+- `ScrollToTop()`, `ScrollToBottom()`
+- `IsAtTop()`, `IsAtBottom()`
+
+### Thumb (inherits Button)
+- No additional methods
+
+### Point
+- Constructors: `Point()`, `Point(x, y)`
+- Properties: `x`, `y`
+
+### Rect
+- Constructors: `Rect()`, `Rect(left, top, right, bottom)`
+- Properties: `left`, `top`, `right`, `bottom`
 
 ## Combat Functions
 

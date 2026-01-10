@@ -201,7 +201,7 @@ namespace mmo
 			}
 
 			VertexShaderType shaderType;
-			if (!(reader >> io::read<uint8>(shaderType)) || static_cast<uint8_t>(shaderType) >= 5)
+			if (!(reader >> io::read<uint8>(shaderType)) || static_cast<uint8_t>(shaderType) >= 6)
 			{
 				return false;
 			}
@@ -490,9 +490,9 @@ namespace mmo
 			ChunkWriter shaderChunkWriter { MaterialVertexShaderChunk, writer };
 
 			// TODO: Number of shaders to write
-			writer << io::write<uint8>(5);
+			writer << io::write<uint8>(6);
 
-			for (uint32 i = 0; i < 5; ++i)
+			for (uint32 i = 0; i < 6; ++i)
 			{
 				// TODO: Shader model
 				writer << io::write_dynamic_range<uint8>(String("D3D_SM5"));

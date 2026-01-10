@@ -45,6 +45,12 @@ namespace mmo
 	public:
 		void Bind(VertexShaderD3D11& boundVertexProgram, VertexBufferBinding* binding);
 
+		/// @brief Binds the vertex declaration with instance buffer support for instanced rendering.
+		/// @param boundVertexProgram The vertex shader to use.
+		/// @param binding The vertex buffer binding.
+		/// @param instanceSlot The slot where the instance buffer is bound.
+		void BindInstanced(VertexShaderD3D11& boundVertexProgram, VertexBufferBinding* binding, uint16 instanceSlot);
+
 	private:
 		GraphicsDeviceD3D11& m_device;
 		bool m_needsRebuild{ true };

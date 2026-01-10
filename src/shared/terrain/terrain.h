@@ -51,6 +51,13 @@ namespace mmo
 
 			void SetLayerAt(uint32 x, uint32 z, uint8 layer, float value) const;
 
+			/// @brief Gets the value of a specific layer at a world position.
+			/// @param x World X coordinate.
+			/// @param z World Z coordinate.
+			/// @param layer Layer index (0-3).
+			/// @return Layer value as a float (0.0 to 1.0).
+			[[nodiscard]] float GetLayerValueAt(float x, float z, uint8 layer) const;
+
 			float GetSmoothHeightAt(float x, float z);
 
 			Vector3 GetVectorAt(uint32 x, uint32 z);
@@ -145,6 +152,12 @@ namespace mmo
 			/// @param radius Radius of the brush
 			/// @param addHole True to add holes, false to remove holes
 			void PaintHoles(float brushCenterX, float brushCenterZ, float radius, bool addHole);
+
+			/// @brief Check if a world position is over a terrain hole
+			/// @param x World X position
+			/// @param z World Z position
+			/// @return True if the position is over a hole, false otherwise
+			[[nodiscard]] bool IsHoleAt(float x, float z) const;
 
 		private:
 			void UpdateTiles(int fromX, int fromZ, int toX, int toZ);

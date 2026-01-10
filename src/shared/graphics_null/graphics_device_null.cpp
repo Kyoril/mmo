@@ -129,6 +129,10 @@ namespace mmo
 	void GraphicsDeviceNull::DrawIndexed(const uint32 startIndex, const uint32 endIndex)
 	{
 	}
+
+	void GraphicsDeviceNull::DrawIndexedInstanced(const uint32 indexCount, const uint32 instanceCount, const uint32 startIndex, const int32 baseVertex, const uint32 startInstance)
+	{
+	}
 	
 	void GraphicsDeviceNull::SetTopologyType(TopologyType InType)
 	{

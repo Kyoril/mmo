@@ -17,6 +17,9 @@
 #include "terrain/page.h"
 #include "terrain/terrain.h"
 
+#include "scene_graph/foliage.h"
+#include "scene_graph/mesh_manager.h"
+
 namespace mmo
 {
 	static bool g_lmb = false;
@@ -51,6 +54,8 @@ namespace mmo
 	std::unique_ptr<DeferredRenderer> g_deferredRenderer = nullptr;
 
 	VertexBufferPtr g_quadBuffer = nullptr;
+
+	std::unique_ptr<Foliage> g_foliage = nullptr;
 
 	void RenderScene()
 	{
@@ -91,6 +96,11 @@ namespace mmo
 		if (g_idleState)
 		{
 			g_idleState->AddTime(elapsedTime);
+		}
+
+		if (g_foliage)
+		{
+			g_foliage->Update(*g_camera);
 		}
 	}
 
@@ -377,11 +387,50 @@ namespace mmo
 
 		g_quadBuffer = GraphicsDevice::Get().CreateVertexBuffer(6, sizeof(POS_COL_TEX_VERTEX), BufferUsage::StaticWriteOnly, vertices);
 
+		g_foliage = std::make_unique<Foliage>(*g_scene, GraphicsDevice::Get());
+
+		g_foliage->SetHeightQueryCallback([](float x, float z, float& height, Vector3& normal)
+			{
+				height = 0.0f;
+				normal = Vector3::UnitY;
+				return true;
+			});
+
+		g_foliage->SetBounds(AABB(Vector3(-50.0f, -100.0f, -50.0f), Vector3(50.0f, 200.0f, 50.0f)));
+
+		// Load a grass mesh
+		MeshPtr grassMesh = MeshManager::Get().Load("Models/FalwynPlains/Plants/Grass_01.hmsh");
+
+		FoliageSettings foliageSettings;
+		foliageSettings.chunkSize = 32.0f;              // Size of each chunk in world units
+		foliageSettings.maxViewDistance = 150.0f;       // Maximum view distance
+		foliageSettings.loadRadius = 5;                 // Chunks to load around camera
+		foliageSettings.frustumCulling = true;          // Enable frustum culling
+		foliageSettings.globalDensityMultiplier = 1.0f; // Global density scale
+		g_foliage->SetSettings(foliageSettings);
+
+		// Create a layer with default settings
+		auto grassLayer = std::make_shared<FoliageLayer>("Grass", grassMesh);
+
+		// Configure layer settings
+		FoliageLayerSettings& layerSettings = grassLayer->GetSettings();
+		layerSettings.density = 2.0f;           // 2 instances per square unit
+		layerSettings.minScale = 0.7f;          // Minimum random scale
+		layerSettings.maxScale = 1.3f;          // Maximum random scale
+		layerSettings.maxSlopeAngle = 30.0f;    // No grass on steep slopes
+		layerSettings.fadeStartDistance = 40.0f;
+		layerSettings.fadeEndDistance = 80.0f;
+		layerSettings.castShadows = false;      // Disable shadows for performance
+
+		// Add to foliage system
+		g_foliage->AddLayer(grassLayer);
+
 		return true;
 	}
 
 	void DestroyGlobal()
 	{
+		g_foliage.reset();
 		g_terrain.reset();
 
 		if (g_particleEmitter)

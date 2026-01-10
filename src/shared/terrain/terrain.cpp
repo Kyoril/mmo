@@ -269,6 +269,33 @@ namespace mmo
 			return value;
 		}
 
+		float Terrain::GetLayerValueAt(const float x, const float z, const uint8 layer) const
+		{
+			if (layer > 3)
+			{
+				return 0.0f;
+			}
+
+			const float halfTerrainWidth = (m_width * constants::PageSize) * 0.5f;
+			const float halfTerrainHeight = (m_height * constants::PageSize) * 0.5f;
+
+			// Convert world position to pixel position
+			constexpr float scale = static_cast<float>(constants::PageSize / static_cast<double>(constants::PixelsPerPage - 1));
+			const int32 pixelX = static_cast<int32>((x + halfTerrainWidth) / scale);
+			const int32 pixelZ = static_cast<int32>((z + halfTerrainHeight) / scale);
+
+			// Bounds check
+			const int32 totalPixels = m_width * (constants::PixelsPerPage - 1) + 1;
+			if (pixelX < 0 || pixelX >= totalPixels || pixelZ < 0 || pixelZ >= totalPixels)
+			{
+				return 0.0f;
+			}
+
+			const uint32 layers = GetLayersAt(pixelX, pixelZ);
+			const uint8 layerValue = (layers >> (layer * 8)) & 0xFF;
+			return layerValue / 255.0f;
+		}
+
 		Vector3 Terrain::GetVectorAt(uint32 x, uint32 z)
 		{
 			return Vector3();
@@ -1388,6 +1415,49 @@ namespace mmo
 
 			// Line intersection but not a ray intersection
 			return false;
+		}
+
+		bool Terrain::IsHoleAt(const float x, const float z) const
+		{
+			const float halfTerrainWidth = (m_width * constants::PageSize) * 0.5f;
+			const float halfTerrainHeight = (m_height * constants::PageSize) * 0.5f;
+
+			// Calculate page indices
+			const int32 pageX = static_cast<int32>(std::floor((x + halfTerrainWidth) / constants::PageSize));
+			const int32 pageZ = static_cast<int32>(std::floor((z + halfTerrainHeight) / constants::PageSize));
+
+			// Bounds check
+			if (pageX < 0 || pageX >= static_cast<int32>(m_width) || pageZ < 0 || pageZ >= static_cast<int32>(m_height))
+			{
+				return true; // Outside terrain bounds - treat as hole
+			}
+
+			Page* page = GetPage(pageX, pageZ);
+			if (!page || !page->IsPrepared())
+			{
+				return true; // Page not loaded - treat as hole
+			}
+
+			// Calculate local position within page
+			const float pageOriginX = pageX * constants::PageSize - halfTerrainWidth;
+			const float pageOriginZ = pageZ * constants::PageSize - halfTerrainHeight;
+			const float localX = x - pageOriginX;
+			const float localZ = z - pageOriginZ;
+
+			// Calculate tile indices within the page
+			const uint32 tileX = std::min(static_cast<uint32>(localX / constants::TileSize), static_cast<uint32>(constants::TilesPerPage - 1));
+			const uint32 tileZ = std::min(static_cast<uint32>(localZ / constants::TileSize), static_cast<uint32>(constants::TilesPerPage - 1));
+
+			// Calculate position within tile
+			const float tileLocalX = localX - tileX * constants::TileSize;
+			const float tileLocalZ = localZ - tileZ * constants::TileSize;
+
+			// Calculate inner vertex indices (8 inner vertices per tile side)
+			const float innerCellSize = static_cast<float>(constants::TileSize / constants::InnerVerticesPerTileSide);
+			const uint32 innerX = std::min(static_cast<uint32>(tileLocalX / innerCellSize), constants::InnerVerticesPerTileSide - 1);
+			const uint32 innerZ = std::min(static_cast<uint32>(tileLocalZ / innerCellSize), constants::InnerVerticesPerTileSide - 1);
+
+			return page->IsHole(tileX, tileZ, innerX, innerZ);
 		}
 
 		void Terrain::PaintHoles(float brushCenterX, float brushCenterZ, float radius, bool addHole)

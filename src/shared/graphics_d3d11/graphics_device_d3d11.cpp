@@ -806,6 +806,23 @@ namespace mmo
 		m_batchCount++;
 	}
 
+	void GraphicsDeviceD3D11::DrawIndexedInstanced(const uint32 indexCount, const uint32 instanceCount, const uint32 startIndex, const int32 baseVertex, const uint32 startInstance)
+	{
+		UpdateCurrentRasterizerState();
+		UpdateDepthStencilState();
+		UpdateSamplerState();
+
+		if (m_matrixDirty)
+		{
+			m_matrixDirty = false;
+			UpdateMatrixBuffer();
+		}
+
+		// Execute instanced draw command
+		m_immContext->DrawIndexedInstanced(indexCount, instanceCount, startIndex, baseVertex, startInstance);
+		m_batchCount++;
+	}
+
 	namespace
 	{
 		/// Determines the D3D11_PRIMITIVE_TOPOLOGY value from an EGxTopologyType value.
@@ -1189,12 +1206,29 @@ namespace mmo
 		// Apply material
 		operation.material->Apply(*this, MaterialDomain::Surface, operation.pixelShaderType);
 		
-		const bool hasVertexAnimData = (operation.vertexData->vertexDeclaration->FindElementBySemantic(VertexElementSemantic::BlendIndices) != nullptr);
-		ShaderBase* vertexShader = operation.material->GetVertexShader(hasVertexAnimData ? VertexShaderType::SkinnedHigh : VertexShaderType::Default).get();
-		if (!vertexShader)
+		// Determine which vertex shader type to use
+		const bool isInstanced = (operation.instanceBuffer != nullptr && operation.instanceCount > 0);
+		VertexShaderType vsType = VertexShaderType::Default;
+		
+		if (isInstanced)
 		{
-			WLOG("No skinning vertex shader found in material " << operation.material->GetName() << " - falling back to default vertex shader");
+			vsType = VertexShaderType::Instanced;
+		}
+		else
+		{
+			const bool hasVertexAnimData = (operation.vertexData->vertexDeclaration->FindElementBySemantic(VertexElementSemantic::BlendIndices) != nullptr);
+			vsType = hasVertexAnimData ? VertexShaderType::SkinnedHigh : VertexShaderType::Default;
+		}
+		
+		ShaderBase* vertexShader = operation.material->GetVertexShader(vsType).get();
+		if (!vertexShader && vsType != VertexShaderType::Default)
+		{
 			vertexShader = operation.material->GetVertexShader(VertexShaderType::Default).get();
+			// Don't use instanced rendering if we don't have the instanced shader
+			if (vsType == VertexShaderType::Instanced)
+			{
+				return; // Skip rendering - instanced shader required
+			}
 		}
 
 		// By now we should have a vertex shader
@@ -1250,17 +1284,51 @@ namespace mmo
 		SetFaceCullMode(operation.material->IsTwoSided() ? FaceCullMode::None : FaceCullMode::Front);	// ???
 		SetBlendMode(operation.material->IsTranslucent() ? BlendMode::Alpha : BlendMode::Opaque);
 
-		static_cast<VertexDeclarationD3D11*>(operation.vertexData->vertexDeclaration)->Bind(*static_cast<VertexShaderD3D11*>(vertexShader), operation.vertexData->vertexBufferBinding);
-		SetTopologyType(operation.topology);
-
-		if (operation.indexData)
+		// Handle instanced rendering
+		if (isInstanced)
 		{
-			operation.indexData->indexBuffer->Set(0);
-			DrawIndexed(operation.indexData->indexStart, operation.indexData->indexStart + operation.indexData->indexCount);
+			// Determine instance buffer slot (after all vertex buffer slots)
+			uint16 instanceSlot = 0;
+			for (const auto& bindings = operation.vertexData->vertexBufferBinding->GetBindings(); const auto& [slot, vb] : bindings)
+			{
+				if (slot >= instanceSlot)
+				{
+					instanceSlot = slot + 1;
+				}
+			}
+
+			// Bind instance buffer
+			operation.instanceBuffer->Set(instanceSlot);
+
+			// Use instanced input layout
+			static_cast<VertexDeclarationD3D11*>(operation.vertexData->vertexDeclaration)->BindInstanced(*static_cast<VertexShaderD3D11*>(vertexShader), operation.vertexData->vertexBufferBinding, instanceSlot);
+			SetTopologyType(operation.topology);
+
+			if (operation.indexData)
+			{
+				operation.indexData->indexBuffer->Set(0);
+				DrawIndexedInstanced(
+					operation.indexData->indexCount, 
+					operation.instanceCount,
+					operation.indexData->indexStart,
+					0,
+					0);
+			}
 		}
 		else
 		{
-			Draw(operation.vertexData->vertexCount, operation.vertexData->vertexStart);
+			static_cast<VertexDeclarationD3D11*>(operation.vertexData->vertexDeclaration)->Bind(*static_cast<VertexShaderD3D11*>(vertexShader), operation.vertexData->vertexBufferBinding);
+			SetTopologyType(operation.topology);
+
+			if (operation.indexData)
+			{
+				operation.indexData->indexBuffer->Set(0);
+				DrawIndexed(operation.indexData->indexStart, operation.indexData->indexStart + operation.indexData->indexCount);
+			}
+			else
+			{
+				Draw(operation.vertexData->vertexCount, operation.vertexData->vertexStart);
+			}
 		}
 	}
 

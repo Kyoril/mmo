@@ -1308,6 +1308,13 @@ namespace mmo
 				<< "\tfloat4 boneWeights : BLENDWEIGHT;\n";
 		}
 
+		// Instance data for instanced rendering
+		if (type == VertexShaderType::Instanced)
+		{
+			vertexShaderStream
+				<< "\tcolumn_major float4x4 instanceWorld : TEXCOORD8;\n";
+		}
+
 		vertexShaderStream
 			<< "};\n\n";
 
@@ -1408,28 +1415,50 @@ namespace mmo
 			}
 		}
 
-		// Basic transformations
-		vertexShaderStream
-			<< "\toutput.pos = mul(transformedPos, matWorld);\n"
-			<< "\toutput.worldPos = output.pos.xyz;\n"
-			<< "\toutput.viewDir = normalize(matInvView[3].xyz - output.worldPos);\n"
-			<< "\toutput.pos = mul(output.pos, matView);\n"
-			<< "\toutput.viewPos = output.pos;\n"
-			<< "\toutput.pos = mul(output.pos, matProj);\n"
-			<< "\toutput.color = input.color;\n";
+		// Basic transformations - use instance world matrix for instanced rendering
+		if (type == VertexShaderType::Instanced)
+		{
+			vertexShaderStream
+				<< "\toutput.pos = mul(transformedPos, input.instanceWorld);\n"
+				<< "\toutput.worldPos = output.pos.xyz;\n"
+				<< "\toutput.viewDir = normalize(matInvView[3].xyz - output.worldPos);\n"
+				<< "\toutput.pos = mul(output.pos, matView);\n"
+				<< "\toutput.viewPos = output.pos;\n"
+				<< "\toutput.pos = mul(output.pos, matProj);\n"
+				<< "\toutput.color = input.color;\n";
+
+			if (m_lit)
+			{
+				vertexShaderStream
+					<< "\toutput.binormal = normalize(mul(normalize(transformedBinormal), (float3x3)input.instanceWorld));\n"
+					<< "\toutput.tangent = normalize(mul(normalize(transformedTangent), (float3x3)input.instanceWorld));\n"
+					<< "\toutput.normal = normalize(mul(normalize(transformedNormal), (float3x3)input.instanceWorld));\n";
+			}
+		}
+		else
+		{
+			vertexShaderStream
+				<< "\toutput.pos = mul(transformedPos, matWorld);\n"
+				<< "\toutput.worldPos = output.pos.xyz;\n"
+				<< "\toutput.viewDir = normalize(matInvView[3].xyz - output.worldPos);\n"
+				<< "\toutput.pos = mul(output.pos, matView);\n"
+				<< "\toutput.viewPos = output.pos;\n"
+				<< "\toutput.pos = mul(output.pos, matProj);\n"
+				<< "\toutput.color = input.color;\n";
+
+			if (m_lit && type != VertexShaderType::UI)
+			{
+				vertexShaderStream
+					<< "\toutput.binormal = normalize(mul(normalize(transformedBinormal), (float3x3)matWorld));\n"
+					<< "\toutput.tangent = normalize(mul(normalize(transformedTangent), (float3x3)matWorld));\n"
+					<< "\toutput.normal = normalize(mul(normalize(transformedNormal), (float3x3)matWorld));\n";
+			}
+		}
 
 		for (uint32 i = 0; i < m_numTexCoordinates; ++i)
 		{
 			vertexShaderStream
 				<< "\toutput.uv" << i << " = input.uv" << i << ";\n";
-		}
-
-		if (m_lit && type != VertexShaderType::UI)
-		{
-			vertexShaderStream
-				<< "\toutput.binormal = normalize(mul(normalize(transformedBinormal), (float3x3)matWorld));\n"
-				<< "\toutput.tangent = normalize(mul(normalize(transformedTangent), (float3x3)matWorld));\n"
-				<< "\toutput.normal = normalize(mul(normalize(transformedNormal), (float3x3)matWorld));\n";
 		}
 
 		// Main procedure end
