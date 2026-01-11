@@ -408,7 +408,7 @@ namespace mmo
 				m_controlFlags &= ~ControlFlags::Autorun;
 			}
 
-			if (flag & (ControlFlags::TurnCamera | ControlFlags::TurnPlayer) != 0)
+			if ((flag & (ControlFlags::TurnCamera | ControlFlags::TurnPlayer)) != 0)
 			{
 				if ((flag & ControlFlags::TurnCamera) != 0 && (m_controlFlags & ControlFlags::TurnPlayer) == 0)
 				{
@@ -431,7 +431,7 @@ namespace mmo
 		{
 			m_controlFlags &= ~flag;
 
-			if (flag & (ControlFlags::TurnCamera | ControlFlags::TurnPlayer) != 0)
+			if ((flag & (ControlFlags::TurnCamera | ControlFlags::TurnPlayer)) != 0)
 			{
 				if ((flag & ControlFlags::TurnPlayer) != 0 && (m_controlFlags & ControlFlags::TurnCamera) != 0)
 				{

@@ -65,6 +65,8 @@ namespace mmo
 	protected:
 		virtual void SetupSceneObjects() override;
 
+		void OnDisplayIdChanged() override;
+
 		void OnEquipmentChanged(uint64);
 
 		void RefreshDisplay();
@@ -100,5 +102,7 @@ namespace mmo
 		};
 
 		std::unordered_map<uint32, ItemAttachment> m_itemAttachments;
+
+		scoped_connection_container m_animNotifyConnections;
 	};
 }

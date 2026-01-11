@@ -32,6 +32,7 @@ namespace mmo
 		m_parent->NotifyDirty();
 	}
 
+	// Fixed SetTimePosition function - to be merged back
 	void AnimationState::SetTimePosition(const float timePos)
 	{
 		if (timePos == m_timePos)
@@ -107,7 +108,7 @@ namespace mmo
 
 				if (shouldTrigger)
 				{
-					notify->Trigger();
+					notifyTriggered(*notify, m_animationName, *this);
 					m_triggeredNotifies.push_back(i);
 				}
 			}
@@ -344,3 +345,5 @@ namespace mmo
 		NotifyDirty();
 	}
 }
+
+

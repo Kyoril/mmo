@@ -228,8 +228,16 @@ namespace mmo
 		// Register footstep handlers for animations
 		RegisterFootstepHandlers();
 
-	   // Refresh collider
-	   UpdateCollider();
+		// Refresh collider
+		UpdateCollider();
+	}
+
+	void GamePlayerC::OnDisplayIdChanged()
+	{
+		GameUnitC::OnDisplayIdChanged();
+
+		// We need to ensure our footstep handlers are registered for the new model
+		RegisterFootstepHandlers();
 	}
 
 	void GamePlayerC::RefreshDisplay()
@@ -322,13 +330,22 @@ namespace mmo
 			return;
 		}
 
+		AnimationStateSet* animStateSet = m_entity->GetAllAnimationStates();
+		if (!animStateSet)
+		{
+			return;
+		}
+
+		// Subscribe to notify signals from all animation states
 		auto* skeleton = m_entity->GetSkeleton().get();
 		if (!skeleton)
 		{
 			return;
 		}
+		
+		// Reset notification connections
+		m_animNotifyConnections.disconnect();
 
-		// Iterate through all animations in the skeleton
 		const uint16 numAnims = skeleton->GetNumAnimations();
 		for (uint16 i = 0; i < numAnims; ++i)
 		{
@@ -337,24 +354,28 @@ namespace mmo
 			{
 				continue;
 			}
-
-			// Register handler for all footstep notifies in this animation
-			for (const auto& notify : anim->GetNotifies())
+			
+			AnimationState* animState = animStateSet->GetAnimationState(anim->GetName());
+			if (!animState)
 			{
-				if (notify->GetType() == AnimationNotifyType::Footstep)
-				{
-					// Capture weak_ptr to prevent circular reference
-					std::weak_ptr<GamePlayerC> weakSelf = std::static_pointer_cast<GamePlayerC>(shared_from_this());
-					
-					notify->RegisterHandler([weakSelf](const AnimationNotify& n)
-					{
-						if (auto self = weakSelf.lock())
-						{
-							self->OnFootstep(n);
-						}
-					});
-				}
+				continue;
 			}
+
+			// Capture weak_ptr to prevent circular reference
+			std::weak_ptr weakSelf = std::static_pointer_cast<GamePlayerC>(shared_from_this());
+			
+			// Subscribe to the signal - filter footstep notifies in the callback
+			m_animNotifyConnections += animState->notifyTriggered.connect([weakSelf](const AnimationNotify& notify, const String& animName, const AnimationState& state)
+			{
+				if (const auto self = weakSelf.lock())
+				{
+					// Only handle footstep notifies from animations with sufficient weight
+					if (notify.GetType() == AnimationNotifyType::Footstep && state.GetWeight() >= 0.35f)
+					{
+						self->OnFootstep(notify);
+					}
+				}
+			});
 		}
 	}
 
@@ -395,7 +416,14 @@ namespace mmo
 			// Play the sound at the player's position
 			ChannelIndex channelIndex = InvalidChannel;
 			m_audio->PlaySound(soundIndex, &channelIndex, 0.8f);
-			
+			IChannelInstance* channel = m_audio->GetChannelInstance(channelIndex);
+			if (channel)
+			{
+				std::uniform_real_distribution pitchDistribution(0.7f, 1.3f);
+				channel->SetPitch(pitchDistribution(gen));
+				channel->SetVolume(0.35f);
+			}
+
 			// Set 3D position for the sound
 			if (channelIndex != InvalidChannel)
 			{

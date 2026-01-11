@@ -109,6 +109,47 @@ namespace mmo
 	void FMODChannelInstance::SetFMODChannel(FMOD::Channel* channel)
 	{
 		m_channel = channel;
+
+		SetPitch(1.0f);
+	}
+
+	void FMODChannelInstance::SetPitch(float value)
+	{
+		if (m_channel)
+		{
+			m_channel->setPitch(value);
+		}
+	}
+
+	float FMODChannelInstance::GetPitch() const
+	{
+		if (m_channel)
+		{
+			float pitch = 1.0f;
+			m_channel->getPitch(&pitch);
+			return pitch;
+		}
+
+		return 1.0f;
+	}
+
+	void FMODChannelInstance::SetVolume(float volume)
+	{
+		if (m_channel)
+		{
+			m_channel->setVolume(volume);
+		}
+	}
+
+	float FMODChannelInstance::GetVolume() const
+	{
+		if (m_channel)
+		{
+			float volume = 1.0f;
+			m_channel->getVolume(&volume);
+			return volume;
+		}
+		return 1.0f;
 	}
 
 	SoundIndex FMODChannelInstance::GetSoundIndex() const

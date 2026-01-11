@@ -471,7 +471,7 @@ namespace mmo
 		bool IsHostileTo(const GameUnitC &other) const;
 
 	protected:
-		void OnDisplayIdChanged();
+		virtual void OnDisplayIdChanged();
 
 		void UpdateCollider();
 

@@ -2,6 +2,7 @@
 
 #include "base/typedefs.h"
 #include "base/macros.h"
+#include "base/signal.h"
 
 #include <vector>
 #include <map>
@@ -15,9 +16,14 @@ namespace mmo
 	class AnimationStateSet;
 	class Animation;
 	class Skeleton;
+	class AnimationNotify;
 
 	class AnimationState
 	{
+	public:
+		/// Signal emitted when an animation notify is triggered
+	/// Parameters: (const AnimationNotify& notify, const String& animationName, const AnimationState& state)
+	signal<void(const AnimationNotify&, const String&, const AnimationState&)> notifyTriggered;
 	public:
 
 		typedef std::vector<float> BoneBlendMask;

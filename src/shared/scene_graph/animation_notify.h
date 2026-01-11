@@ -49,25 +49,7 @@ namespace mmo
 		/// Clone this notification
 		[[nodiscard]] virtual std::unique_ptr<AnimationNotify> Clone() const = 0;
 
-		/// Handler callback for notification triggers
-		using Handler = std::function<void(const AnimationNotify&)>;
-
-		/// Register a handler for this notification
-		void RegisterHandler(Handler handler)
-		{
-			m_handler = std::move(handler);
-		}
-
-		/// Trigger this notification (calls the registered handler)
-		void Trigger() const
-		{
-			if (m_handler)
-			{
-				m_handler(*this);
-			}
-		}
-
-		/// Get the time position of this notification in the animation
+		/// Get the time position of this notification in the animation in the animation
 		[[nodiscard]] float GetTime() const
 		{
 			return m_time;
@@ -94,7 +76,6 @@ namespace mmo
 	protected:
 		float m_time = 0.0f;
 		String m_name;
-		Handler m_handler;
 	};
 
 	/// Footstep notification - triggers footstep logic (sound, particles, etc.)

@@ -43,6 +43,12 @@ namespace mmo
 
 	public:
 		virtual void Clear() = 0;
+
+		virtual void SetPitch(float value) = 0;
+		virtual float GetPitch() const = 0;
+
+		virtual void SetVolume(float volume) = 0;
+		virtual float GetVolume() const = 0;
 	};
 
 	class IAudio
