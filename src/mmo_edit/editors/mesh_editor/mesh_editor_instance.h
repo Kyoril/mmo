@@ -10,6 +10,7 @@
 #include "anim_evaluator.h"
 #include "editors/editor_instance.h"
 #include "graphics/render_texture.h"
+#include "scene_graph/animation_notify.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/axis_display.h"
 #include "scene_graph/mesh_serializer.h"
@@ -22,19 +23,7 @@ namespace mmo
 	class Entity;
 	class Camera;
 	class SceneNode;
-
-	/// Animation notify/event structure
-	struct AnimationNotify
-	{
-		String name;
-		float time;
-		String type;  // e.g., "PlaySound", "SpawnParticle", "Custom"
-		
-		bool operator<(const AnimationNotify& other) const
-		{
-			return time < other.time;
-		}
-	};
+	class Animation;
 
 	class MeshEditorInstance final : public EditorInstance
 	{
@@ -135,8 +124,7 @@ namespace mmo
 		bool m_isDraggingNotify = false;
 		int m_selectedNotifyIndex = -1;
 		int m_hoveredNotifyIndex = -1;
-		std::map<String, std::vector<AnimationNotify>> m_animationNotifies;
 		String m_newNotifyName;
-		String m_newNotifyType = "PlaySound";
+		AnimationNotifyType m_newNotifyType = AnimationNotifyType::Footstep;
 	};
 }

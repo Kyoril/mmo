@@ -12,12 +12,15 @@
 #include "assets/asset_registry.h"
 #include "editor_windows/asset_picker_widget.h"
 #include "log/default_log_levels.h"
+#include "scene_graph/animation.h"
+#include "scene_graph/animation_notify.h"
 #include "scene_graph/animation_state.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/mesh_serializer.h"
 #include "scene_graph/scene_node.h"
+#include "scene_graph/skeleton.h"
 
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
@@ -557,6 +560,28 @@ namespace mmo
 		serializer.Serialize(m_mesh, writer);
 
 		ILOG("Successfully saved mesh " << GetAssetPath());
+		
+		// Save skeleton
+		if (m_mesh->HasSkeleton())
+		{
+			// Serialize skeleton
+			const std::filesystem::path p = m_mesh->GetSkeleton()->GetName();
+
+			// Create the file name
+			const auto filePtr = AssetRegistry::CreateNewFile(p.string());
+			if (filePtr == nullptr)
+			{
+				ELOG("Unable to create skeleton file " << p);
+				return false;
+			}
+
+			io::StreamSink skeletonSink{ *filePtr };
+			io::Writer skeletonWriter{ skeletonSink };
+			SkeletonSerializer serializer;
+			serializer.Export(*m_mesh->GetSkeleton(), skeletonWriter);
+			ILOG("Successfully saved animation to skeleton " << p);
+		}
+
 		return true;
 	}
 
@@ -854,7 +879,15 @@ namespace mmo
 
 	void MeshEditorInstance::DrawAnimationTimeline()
 	{
-		if (!m_animState)
+		if (!m_animState || !m_entity || !m_entity->HasSkeleton())
+		{
+			return;
+		}
+
+		// Get the current animation
+		const String& animName = m_animState->GetAnimationName();
+		Animation* animation = m_entity->GetSkeleton()->GetAnimation(animName);
+		if (!animation)
 		{
 			return;
 		}
@@ -931,16 +964,15 @@ namespace mmo
 		drawList->AddText(ImVec2(canvasPos.x + 5, notifyTrackY + 5), 
 			IM_COL32(180, 180, 180, 255), "Notifies");
 
-		// Get notifies for current animation
-		const String& animName = m_animState->GetAnimationName();
-		auto& notifies = m_animationNotifies[animName];
+		// Get notifies from the animation
+		const auto& notifies = animation->GetNotifies();
 
 		// Draw notifies
 		m_hoveredNotifyIndex = -1;
 		for (int i = 0; i < static_cast<int>(notifies.size()); ++i)
 		{
 			const auto& notify = notifies[i];
-			const float notifyX = canvasPos.x + 20.0f + notify.time * pixelsPerSecond;
+			const float notifyX = canvasPos.x + 20.0f + notify->GetTime() * pixelsPerSecond;
 			const float notifyY = notifyTrackY + 15.0f;
 
 			ImVec2 notifyPos(notifyX - 5, notifyY);
@@ -976,8 +1008,8 @@ namespace mmo
 			drawList->AddCircleFilled(ImVec2(notifyX, notifyY), 5.0f, IM_COL32(255, 255, 255, 255));
 
 			// Draw notify text
-			const char* displayText = notify.name.empty() ? notify.type.c_str() : notify.name.c_str();
-			drawList->AddText(ImVec2(notifyPos.x + 5, notifyPos.y + 2), IM_COL32(255, 255, 255, 255), displayText);
+			const String displayText = notify->GetDisplayName();
+			drawList->AddText(ImVec2(notifyPos.x + 5, notifyPos.y + 2), IM_COL32(255, 255, 255, 255), displayText.c_str());
 		}
 
 		// Invisible button for timeline interaction
@@ -1018,10 +1050,7 @@ namespace mmo
 				ImVec2 mousePos = ImGui::GetMousePos();
 				float newTime = (mousePos.x - canvasPos.x - 20.0f) / pixelsPerSecond;
 				newTime = Clamp(newTime, 0.0f, animLength);
-				notifies[m_selectedNotifyIndex].time = newTime;
-
-				// Re-sort notifies by time
-				std::sort(notifies.begin(), notifies.end());
+				notifies[m_selectedNotifyIndex]->SetTime(newTime);
 			}
 		}
 
@@ -1035,7 +1064,7 @@ namespace mmo
 		{
 			if (m_selectedNotifyIndex < static_cast<int>(notifies.size()))
 			{
-				notifies.erase(notifies.begin() + m_selectedNotifyIndex);
+				animation->RemoveNotify(m_selectedNotifyIndex);
 				m_selectedNotifyIndex = -1;
 			}
 		}
@@ -1047,12 +1076,13 @@ namespace mmo
 			float clickTime = (mousePos.x - canvasPos.x - 20.0f) / pixelsPerSecond;
 			clickTime = Clamp(clickTime, 0.0f, animLength);
 
-			AnimationNotify newNotify;
-			newNotify.name = "Notify";
-			newNotify.time = clickTime;
-			newNotify.type = "PlaySound";
-			notifies.push_back(newNotify);
-			std::sort(notifies.begin(), notifies.end());
+			std::unique_ptr<AnimationNotify> newNotify = AnimationNotifyFactory::Create(m_newNotifyType);
+			if (newNotify)
+			{
+				newNotify->SetTime(clickTime);
+				newNotify->SetName("Notify");
+				animation->AddNotify(std::move(newNotify));
+			}
 		}
 
 		ImGui::SetCursorScreenPos(ImVec2(canvasPos.x, canvasPos.y + canvasSize.y));
@@ -1204,51 +1234,82 @@ namespace mmo
 						if (ImGui::CollapsingHeader("Notify Editor", ImGuiTreeNodeFlags_DefaultOpen))
 						{
 							const String& animName = m_animState->GetAnimationName();
-							auto& notifies = m_animationNotifies[animName];
-
-							ImGui::Text("Selected notify: %s", 
-								m_selectedNotifyIndex >= 0 && m_selectedNotifyIndex < static_cast<int>(notifies.size()) ?
-								notifies[m_selectedNotifyIndex].name.c_str() : "None");
-
-							if (m_selectedNotifyIndex >= 0 && m_selectedNotifyIndex < static_cast<int>(notifies.size()))
+							Animation* animation = m_entity->GetSkeleton()->GetAnimation(animName);
+							if (animation)
 							{
-								auto& notify = notifies[m_selectedNotifyIndex];
-								
-								ImGui::Text("Edit Notify:");
-								ImGui::InputText("Name", &notify.name);
-								
-								const char* types[] = { "PlaySound", "SpawnParticle", "SpawnEffect", "Custom" };
-								int currentType = 0;
-								for (int i = 0; i < 4; ++i)
+								const auto& notifies = animation->GetNotifies();
+
+								ImGui::Text("Selected notify: %s", 
+									m_selectedNotifyIndex >= 0 && m_selectedNotifyIndex < static_cast<int>(notifies.size()) ?
+									notifies[m_selectedNotifyIndex]->GetDisplayName().c_str() : "None");
+
+								if (m_selectedNotifyIndex >= 0 && m_selectedNotifyIndex < static_cast<int>(notifies.size()))
 								{
-									if (notify.type == types[i])
+									AnimationNotify* notify = notifies[m_selectedNotifyIndex].get();
+									
+									ImGui::Text("Edit Notify:");
+									String notifyName = notify->GetName();
+									if (ImGui::InputText("Name", &notifyName))
 									{
-										currentType = i;
-										break;
+										notify->SetName(notifyName);
+									}
+									
+									const char* types[] = { "Footstep", "PlaySound" };
+									int currentType = static_cast<int>(notify->GetType());
+									
+									if (ImGui::Combo("Type", &currentType, types, 2))
+									{
+										// Type change requires recreating the notify
+										auto newNotify = AnimationNotifyFactory::Create(static_cast<AnimationNotifyType>(currentType));
+										if (newNotify)
+										{
+											newNotify->SetTime(notify->GetTime());
+											newNotify->SetName(notify->GetName());
+											
+											// Replace the notify
+											animation->RemoveNotify(m_selectedNotifyIndex);
+											animation->AddNotify(std::move(newNotify));
+											notify = notifies[m_selectedNotifyIndex].get();
+										}
+									}
+
+									float notifyTime = notify->GetTime();
+									if (ImGui::DragFloat("Time", &notifyTime, 0.01f, 0.0f, m_animState->GetLength(), "%.2fs"))
+									{
+										notify->SetTime(Clamp(notifyTime, 0.0f, m_animState->GetLength()));
+									}
+
+									// Type-specific properties
+									if (notify->GetType() == AnimationNotifyType::PlaySound)
+									{
+										PlaySoundNotify* soundNotify = static_cast<PlaySoundNotify*>(notify);
+										String soundPath = soundNotify->GetSoundPath();
+										if (ImGui::InputText("Sound Path", &soundPath))
+										{
+											soundNotify->SetSoundPath(soundPath);
+										}
+									}
+
+									if (ImGui::Button("Delete Notify"))
+									{
+										animation->RemoveNotify(m_selectedNotifyIndex);
+										m_selectedNotifyIndex = -1;
 									}
 								}
+
+								ImGui::Spacing();
 								
-								if (ImGui::Combo("Type", &currentType, types, 4))
+								// Default notify type selector
+								const char* defaultTypes[] = { "Footstep", "PlaySound" };
+								int defaultType = static_cast<int>(m_newNotifyType);
+								if (ImGui::Combo("New Notify Type", &defaultType, defaultTypes, 2))
 								{
-									notify.type = types[currentType];
+									m_newNotifyType = static_cast<AnimationNotifyType>(defaultType);
 								}
-
-								float notifyTime = notify.time;
-								if (ImGui::DragFloat("Time", &notifyTime, 0.01f, 0.0f, m_animState->GetLength(), "%.2fs"))
-								{
-									notify.time = Clamp(notifyTime, 0.0f, m_animState->GetLength());
-									std::sort(notifies.begin(), notifies.end());
-								}
-
-								if (ImGui::Button("Delete Notify"))
-								{
-									notifies.erase(notifies.begin() + m_selectedNotifyIndex);
-									m_selectedNotifyIndex = -1;
-								}
+								
+								ImGui::Spacing();
+								ImGui::TextWrapped("Tip: Right-click on timeline to add notify, Left-click to select, Drag to move, Delete key to remove");
 							}
-
-							ImGui::Spacing();
-							ImGui::TextWrapped("Tip: Right-click on timeline to add notify, Left-click to select, Drag to move, Delete key to remove");
 						}
 					}
 				}
