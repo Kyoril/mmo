@@ -226,7 +226,9 @@ namespace mmo
     GameTimeComponent* SkyComponent::GetGameTimeComponent()
     {
         return m_gameTime;
-    }    void SkyComponent::UpdateLighting(float normalizedTime)
+    }
+	
+	void SkyComponent::UpdateLighting(float normalizedTime)
     {
         if (!m_sunLight || !m_sunLightNode)
             return;

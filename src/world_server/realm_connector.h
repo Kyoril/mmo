@@ -191,7 +191,7 @@ namespace mmo
 		/// fixed after a server restart anyway).
 		bool m_willReconnect;
 
-		std::vector<uint64> m_hostedMapIds;
+		std::vector<uint32> m_hostedMapIds;
 
 		const proto::Project& m_project;
 
