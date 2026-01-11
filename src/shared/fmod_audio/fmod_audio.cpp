@@ -530,9 +530,7 @@ namespace mmo
 		if (result == FMOD_OK)
 		{
 			channel->set3DMinMaxDistance(minDistance, maxDistance);
-			
-			// Use linear rolloff - volume reaches 0 at max distance (complete silence)
-			channel->setMode(FMOD_3D | FMOD_3D_LINEARROLLOFF);
+			channel->setMode(FMOD_3D | FMOD_3D_LINEARSQUAREROLLOFF);
 		}
 	}
 
