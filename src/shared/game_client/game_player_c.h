@@ -13,6 +13,7 @@ namespace mmo
 	}
 
 	struct GuildInfo;
+	class IAudio;
 }
 
 namespace mmo
@@ -20,8 +21,9 @@ namespace mmo
 	class GamePlayerC : public GameUnitC
 	{
 	public:
-		explicit GamePlayerC(Scene& scene, NetClient& netDriver, const proto_client::Project& project, uint32 map)
+		explicit GamePlayerC(Scene& scene, NetClient& netDriver, const proto_client::Project& project, uint32 map, IAudio* audio)
 			: GameUnitC(scene, netDriver, project, map)
+			, m_audio(audio)
 		{
 		}
 
@@ -89,6 +91,7 @@ namespace mmo
 		scoped_connection m_guildChangedHandler;
 
 		const GuildInfo* m_guild{ nullptr };
+		IAudio* m_audio{ nullptr };
 
 		struct ItemAttachment
 		{

@@ -213,13 +213,13 @@ namespace mmo
 		
 		// TODO
 		listenerUp.x = 0.0f;
-		listenerUp.y = 0.0f;
-		listenerUp.z = 1.0f;
+		listenerUp.y = 1.0f;
+		listenerUp.z = 0.0f;
 		
-		listenerVelocity.x = vectorVelocity.x;
-		listenerVelocity.y = vectorVelocity.y;
-		listenerVelocity.z = vectorVelocity.z;
-
+		listenerVelocity.x = 0.0f;
+		listenerVelocity.y = 0.0f;
+		listenerVelocity.z = 0.0f;
+		
 		m_system->set3DListenerAttributes(0, &listenerPosition, &listenerVelocity, &listenerForward, &listenerUp);
 
 		// Increment current time

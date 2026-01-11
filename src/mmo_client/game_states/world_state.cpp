@@ -1267,7 +1267,7 @@ namespace mmo
 					object = std::make_shared<GameUnitC>(*m_scene, *this, m_project, g_mapId);
 					break;
 				case ObjectTypeId::Player:
-					object = std::make_shared<GamePlayerC>(*m_scene, *this, m_project, g_mapId);
+					object = std::make_shared<GamePlayerC>(*m_scene, *this, m_project, g_mapId, &m_audio);
 					break;
 				case ObjectTypeId::Item:
 					object = std::make_shared<GameItemC>(*m_scene, *this, m_project);

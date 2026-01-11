@@ -6,6 +6,7 @@
 #include "game/guild_info.h"
 #include "game/spell.h"
 #include "log/default_log_levels.h"
+#include "audio/audio.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/tag_point.h"
@@ -359,17 +360,19 @@ namespace mmo
 
 	void GamePlayerC::OnFootstep(const AnimationNotify& notify)
 	{
-		// For now, just log the footstep event
-		// TODO: Play a random grass footstep sound from data/client/Sound/Character/Footsteps
-		
+		if (!m_audio)
+		{
+			return;
+		}
+
 		// Prepare list of available grass footstep sounds (6 variants)
 		static const std::array<String, 6> footstepSounds = {
-			"Sound/Character/Footsteps/grass_1.WAV",
-			"Sound/Character/Footsteps/grass_2.WAV",
-			"Sound/Character/Footsteps/grass_3.WAV",
-			"Sound/Character/Footsteps/grass_4.WAV",
-			"Sound/Character/Footsteps/grass_5.WAV",
-			"Sound/Character/Footsteps/grass_6.WAV"
+			"Sound/Character/Footsteps/ground_1.WAV",
+			"Sound/Character/Footsteps/ground_2.WAV",
+			"Sound/Character/Footsteps/ground_3.WAV",
+			"Sound/Character/Footsteps/ground_4.WAV",
+			"Sound/Character/Footsteps/ground_5.WAV",
+			"Sound/Character/Footsteps/ground_6.WAV"
 		};
 
 		// Pick a random sound
@@ -378,7 +381,27 @@ namespace mmo
 		std::uniform_int_distribution<> dis(0, static_cast<int>(footstepSounds.size()) - 1);
 		const int randomIndex = dis(gen);
 
-		// TODO: Actually play the sound using IAudio
-		// For now, log which sound would be played
-		DLOG("Footstep triggered: " << notify.GetName() << " at time " << notify.GetTime() << " - would play: " << footstepSounds[randomIndex]);
-	}}
+		// Find or create the sound
+		const String& soundPath = footstepSounds[randomIndex];
+		SoundIndex soundIndex = m_audio->FindSound(soundPath, SoundType::Sound3D);
+		
+		if (soundIndex == InvalidSound)
+		{
+			soundIndex = m_audio->CreateSound(soundPath, SoundType::Sound3D);
+		}
+
+		if (soundIndex != InvalidSound)
+		{
+			// Play the sound at the player's position
+			ChannelIndex channelIndex = InvalidChannel;
+			m_audio->PlaySound(soundIndex, &channelIndex, 0.8f);
+			
+			// Set 3D position for the sound
+			if (channelIndex != InvalidChannel)
+			{
+				m_audio->Set3DPosition(channelIndex, GetPosition());
+				m_audio->Set3DMinMaxDistance(channelIndex, 1.0f, 20.0f);
+			}
+		}
+	}
+}
