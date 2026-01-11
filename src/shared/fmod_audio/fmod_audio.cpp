@@ -219,7 +219,7 @@ namespace mmo
 		listenerVelocity.x = 0.0f;
 		listenerVelocity.y = 0.0f;
 		listenerVelocity.z = 0.0f;
-		
+
 		m_system->set3DListenerAttributes(0, &listenerPosition, &listenerVelocity, &listenerForward, &listenerUp);
 
 		// Increment current time
@@ -409,7 +409,14 @@ namespace mmo
 
 		// Configure the channel
 		channel->setVolume(1.0);
-		channel->setPaused(false);
+
+		// For 3D sounds, set proper rolloff mode to ensure sounds beyond max distance are inaudible
+		if (instance.GetType() == SoundType::Sound3D || instance.GetType() == SoundType::SoundLooped3D)
+		{
+			channel->setMode(FMOD_3D | FMOD_3D_LINEARSQUAREROLLOFF);
+			channel->set3DLevel(1.0f);
+		}
+			channel->setPaused(false);
 
 		// Store the sound index with the channel for proper tracking
 		int channelIndex32;
@@ -523,6 +530,9 @@ namespace mmo
 		if (result == FMOD_OK)
 		{
 			channel->set3DMinMaxDistance(minDistance, maxDistance);
+			
+			// Use linear rolloff - volume reaches 0 at max distance (complete silence)
+			channel->setMode(FMOD_3D | FMOD_3D_LINEARROLLOFF);
 		}
 	}
 
