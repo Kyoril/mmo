@@ -9,7 +9,14 @@
 #include "scene_graph/material_manager.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/tag_point.h"
+#include "scene_graph/entity.h"
+#include "scene_graph/skeleton.h"
+#include "scene_graph/animation.h"
+#include "scene_graph/animation_notify.h"
+#include "scene_graph/animation_state.h"
 #include "shared/client_data/proto_client/item_display.pb.h"
+
+#include <random>
 
 namespace mmo
 {
@@ -217,6 +224,9 @@ namespace mmo
 		// TODO: For now we attach a shield to all player characters. This should be done based on the player's equipment though.
 		ASSERT(m_entity);
 
+		// Register footstep handlers for animations
+		RegisterFootstepHandlers();
+
 	   // Refresh collider
 	   UpdateCollider();
 	}
@@ -303,4 +313,72 @@ namespace mmo
 			m_netDriver.GetItemData(itemEntry, std::static_pointer_cast<GamePlayerC>(shared_from_this()));
 		}
 	}
-}
+
+	void GamePlayerC::RegisterFootstepHandlers()
+	{
+		if (!m_entity || !m_entity->HasSkeleton())
+		{
+			return;
+		}
+
+		auto* skeleton = m_entity->GetSkeleton().get();
+		if (!skeleton)
+		{
+			return;
+		}
+
+		// Iterate through all animations in the skeleton
+		const uint16 numAnims = skeleton->GetNumAnimations();
+		for (uint16 i = 0; i < numAnims; ++i)
+		{
+			Animation* anim = skeleton->GetAnimation(i);
+			if (!anim)
+			{
+				continue;
+			}
+
+			// Register handler for all footstep notifies in this animation
+			for (const auto& notify : anim->GetNotifies())
+			{
+				if (notify->GetType() == AnimationNotifyType::Footstep)
+				{
+					// Capture weak_ptr to prevent circular reference
+					std::weak_ptr<GamePlayerC> weakSelf = std::static_pointer_cast<GamePlayerC>(shared_from_this());
+					
+					notify->RegisterHandler([weakSelf](const AnimationNotify& n)
+					{
+						if (auto self = weakSelf.lock())
+						{
+							self->OnFootstep(n);
+						}
+					});
+				}
+			}
+		}
+	}
+
+	void GamePlayerC::OnFootstep(const AnimationNotify& notify)
+	{
+		// For now, just log the footstep event
+		// TODO: Play a random grass footstep sound from data/client/Sound/Character/Footsteps
+		
+		// Prepare list of available grass footstep sounds (6 variants)
+		static const std::array<String, 6> footstepSounds = {
+			"Sound/Character/Footsteps/grass_1.WAV",
+			"Sound/Character/Footsteps/grass_2.WAV",
+			"Sound/Character/Footsteps/grass_3.WAV",
+			"Sound/Character/Footsteps/grass_4.WAV",
+			"Sound/Character/Footsteps/grass_5.WAV",
+			"Sound/Character/Footsteps/grass_6.WAV"
+		};
+
+		// Pick a random sound
+		static std::random_device rd;
+		static std::mt19937 gen(rd());
+		std::uniform_int_distribution<> dis(0, static_cast<int>(footstepSounds.size()) - 1);
+		const int randomIndex = dis(gen);
+
+		// TODO: Actually play the sound using IAudio
+		// For now, log which sound would be played
+		DLOG("Footstep triggered: " << notify.GetName() << " at time " << notify.GetTime() << " - would play: " << footstepSounds[randomIndex]);
+	}}

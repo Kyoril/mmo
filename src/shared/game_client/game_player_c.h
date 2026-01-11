@@ -73,6 +73,12 @@ namespace mmo
 
 		void ClearAllAttachments();
 
+		/// Register footstep notification handlers for all animations
+		void RegisterFootstepHandlers();
+
+		/// Handle footstep notification trigger
+		void OnFootstep(const class AnimationNotify& notify);
+
 	private:
 
 

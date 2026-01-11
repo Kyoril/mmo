@@ -13,6 +13,8 @@
 namespace mmo
 {
 	class AnimationStateSet;
+	class Animation;
+	class Skeleton;
 
 	class AnimationState
 	{
@@ -23,6 +25,18 @@ namespace mmo
 	public:
 		AnimationState(String name, AnimationStateSet& parent, float timePos, float length, float weight = 1.0f, bool enabled = false);
         AnimationState(AnimationStateSet& parent, const AnimationState& rhs);
+
+		/// Set the Animation object for notification triggering
+		void SetAnimation(Animation* animation)
+		{
+			m_animation = animation;
+		}
+
+		/// Set the Skeleton object (for future use)
+		void SetSkeleton(Skeleton* skeleton)
+		{
+			m_skeleton = skeleton;
+		}
 
 	public:
         [[nodiscard]] const String& GetAnimationName() const { return m_animationName; }
@@ -96,6 +110,15 @@ namespace mmo
         float m_playRate{ 1.0f };
 		bool m_enabled;
 		bool m_loop;
+
+		/// Animation object for notification access
+		Animation* m_animation{ nullptr };
+		/// Skeleton object (for future use)
+		Skeleton* m_skeleton{ nullptr };
+		/// Last time position for tracking notify triggers
+		float m_lastTimePos{ 0.0f };
+		/// Indices of notifies that have been triggered in current animation loop
+		std::vector<size_t> m_triggeredNotifies;
 	};
 
     // A map of animation states

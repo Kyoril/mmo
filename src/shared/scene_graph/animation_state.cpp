@@ -1,4 +1,5 @@
 #include "animation_state.h"
+#include "animation.h"
 
 #include <cmath>
 #include <ranges>
@@ -38,7 +39,10 @@ namespace mmo
 			return;
 		}
 
+		const float oldTimePos = m_timePos;
 		m_timePos = timePos;
+		bool hasLooped = false;
+
 		if (m_loop)
 		{
 			// Wrap
@@ -47,6 +51,9 @@ namespace mmo
 			{
 				m_timePos += m_length;
 			}
+
+			// Check if we wrapped around
+			hasLooped = (oldTimePos > m_timePos && timePos > oldTimePos);
 		}
 		else
 		{
@@ -60,6 +67,53 @@ namespace mmo
 				m_timePos = m_length;
 			}
 		}
+
+		// Trigger animation notifies if we have an animation
+		if (m_animation && m_enabled)
+		{
+			// If we looped, clear triggered notifies
+			if (hasLooped)
+			{
+				m_triggeredNotifies.clear();
+			}
+
+			// Check each notify to see if we crossed its time
+			const auto& notifies = m_animation->GetNotifies();
+			for (size_t i = 0; i < notifies.size(); ++i)
+			{
+				const auto& notify = notifies[i];
+				const float notifyTime = notify->GetTime();
+
+				// Skip if already triggered
+				if (std::find(m_triggeredNotifies.begin(), m_triggeredNotifies.end(), i) != m_triggeredNotifies.end())
+				{
+					continue;
+				}
+
+				// Check if we crossed this notify's time
+				bool shouldTrigger = false;
+				if (hasLooped)
+				{
+					// When looping, trigger if notify is between old and end, or between 0 and new
+					shouldTrigger = (notifyTime >= oldTimePos && notifyTime < m_length) ||
+						(notifyTime >= 0.0f && notifyTime <= m_timePos);
+				}
+				else
+				{
+					// Normal case: trigger if we passed the notify time
+					shouldTrigger = (oldTimePos < notifyTime && m_timePos >= notifyTime) ||
+						(oldTimePos > m_timePos && notifyTime <= m_timePos); // Handle reverse playback
+				}
+
+				if (shouldTrigger)
+				{
+					notify->Trigger();
+					m_triggeredNotifies.push_back(i);
+				}
+			}
+		}
+
+		m_lastTimePos = m_timePos;
 
 		if (m_enabled)
 		{
