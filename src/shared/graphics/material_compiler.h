@@ -218,7 +218,11 @@ namespace mmo
 		/// @brief Adds a world position expression.
 		/// @return The world position expression index or IndexNone in case of an error.
 		virtual ExpressionIndex AddWorldPosition() = 0;
-		
+
+		/// @brief Adds a camera world position expression.
+		/// @return The camera world position expression index or IndexNone in case of an error.
+		virtual ExpressionIndex AddCameraPosition() = 0;
+
 		/// @brief Adds a camera vector (view direction) expression.
 		/// @return The camera vector (view direction) expression index or IndexNone in case of an error.
 		virtual ExpressionIndex AddCameraVector() = 0;

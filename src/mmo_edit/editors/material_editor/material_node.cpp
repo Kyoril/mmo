@@ -1107,6 +1107,16 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
+	ExpressionIndex CameraPositionNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddCameraPosition();
+		}
+
+		return m_compiledExpressionId;
+	}
+
 	ExpressionIndex CameraVectorNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)

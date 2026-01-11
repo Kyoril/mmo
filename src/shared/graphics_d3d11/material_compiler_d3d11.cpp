@@ -332,7 +332,16 @@ namespace mmo
 		
 		return AddExpression(outputStream.str(), ExpressionType::Float_3);
 	}
-	
+
+	ExpressionIndex MaterialCompilerD3D11::AddCameraPosition()
+	{
+		std::ostringstream outputStream;
+		outputStream << "cameraPos";
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), ExpressionType::Float_3);
+	}
+
 	ExpressionIndex MaterialCompilerD3D11::AddCameraVector()
 	{
 		std::ostringstream outputStream;
