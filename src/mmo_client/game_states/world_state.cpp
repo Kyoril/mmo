@@ -724,7 +724,7 @@ namespace mmo
 	void WorldState::SetupWorldScene()
 	{
 		m_scene = std::make_unique<OctreeScene>();
-		m_scene->SetFogRange(210.0f, 300.0f);
+		m_scene->SetFogRange(60.0f, 500.0f);
 
 		// Create sky component to manage the sky dome and day/night cycle
 		m_skyComponent = std::make_unique<SkyComponent>(*m_scene, &m_gameTime);
@@ -1295,7 +1295,7 @@ namespace mmo
 					object = std::make_shared<GameUnitC>(*m_scene, *this, m_project, g_mapId);
 					break;
 				case ObjectTypeId::Player:
-					object = std::make_shared<GamePlayerC>(*m_scene, *this, m_project, g_mapId);
+					object = std::make_shared<GamePlayerC>(*m_scene, *this, m_project, g_mapId, &m_audio);
 					break;
 				case ObjectTypeId::Item:
 					object = std::make_shared<GameItemC>(*m_scene, *this, m_project);

@@ -6,10 +6,18 @@
 #include "game/guild_info.h"
 #include "game/spell.h"
 #include "log/default_log_levels.h"
+#include "audio/audio.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/tag_point.h"
+#include "scene_graph/entity.h"
+#include "scene_graph/skeleton.h"
+#include "scene_graph/animation.h"
+#include "scene_graph/animation_notify.h"
+#include "scene_graph/animation_state.h"
 #include "shared/client_data/proto_client/item_display.pb.h"
+
+#include <random>
 
 namespace mmo
 {
@@ -217,8 +225,19 @@ namespace mmo
 		// TODO: For now we attach a shield to all player characters. This should be done based on the player's equipment though.
 		ASSERT(m_entity);
 
-	   // Refresh collider
-	   UpdateCollider();
+		// Register footstep handlers for animations
+		RegisterFootstepHandlers();
+
+		// Refresh collider
+		UpdateCollider();
+	}
+
+	void GamePlayerC::OnDisplayIdChanged()
+	{
+		GameUnitC::OnDisplayIdChanged();
+
+		// We need to ensure our footstep handlers are registered for the new model
+		RegisterFootstepHandlers();
 	}
 
 	void GamePlayerC::RefreshDisplay()
@@ -301,6 +320,116 @@ namespace mmo
 			}
 
 			m_netDriver.GetItemData(itemEntry, std::static_pointer_cast<GamePlayerC>(shared_from_this()));
+		}
+	}
+
+	void GamePlayerC::RegisterFootstepHandlers()
+	{
+		if (!m_entity || !m_entity->HasSkeleton())
+		{
+			return;
+		}
+
+		AnimationStateSet* animStateSet = m_entity->GetAllAnimationStates();
+		if (!animStateSet)
+		{
+			return;
+		}
+
+		// Subscribe to notify signals from all animation states
+		auto* skeleton = m_entity->GetSkeleton().get();
+		if (!skeleton)
+		{
+			return;
+		}
+		
+		// Reset notification connections
+		m_animNotifyConnections.disconnect();
+
+		const uint16 numAnims = skeleton->GetNumAnimations();
+		for (uint16 i = 0; i < numAnims; ++i)
+		{
+			Animation* anim = skeleton->GetAnimation(i);
+			if (!anim)
+			{
+				continue;
+			}
+			
+			AnimationState* animState = animStateSet->GetAnimationState(anim->GetName());
+			if (!animState)
+			{
+				continue;
+			}
+
+			// Capture weak_ptr to prevent circular reference
+			std::weak_ptr weakSelf = std::static_pointer_cast<GamePlayerC>(shared_from_this());
+			
+			// Subscribe to the signal - filter footstep notifies in the callback
+			m_animNotifyConnections += animState->notifyTriggered.connect([weakSelf](const AnimationNotify& notify, const String& animName, const AnimationState& state)
+			{
+				if (const auto self = weakSelf.lock())
+				{
+					// Only handle footstep notifies from animations with sufficient weight
+					if (notify.GetType() == AnimationNotifyType::Footstep && state.GetWeight() >= 0.35f)
+					{
+						self->OnFootstep(notify);
+					}
+				}
+			});
+		}
+	}
+
+	void GamePlayerC::OnFootstep(const AnimationNotify& notify)
+	{
+		if (!m_audio)
+		{
+			return;
+		}
+
+		// Prepare list of available grass footstep sounds (6 variants)
+		static const std::array<String, 6> footstepSounds = {
+			"Sound/Character/Footsteps/ground_1.WAV",
+			"Sound/Character/Footsteps/ground_2.WAV",
+			"Sound/Character/Footsteps/ground_3.WAV",
+			"Sound/Character/Footsteps/ground_4.WAV",
+			"Sound/Character/Footsteps/ground_5.WAV",
+			"Sound/Character/Footsteps/ground_6.WAV"
+		};
+
+		// Pick a random sound
+		static std::random_device rd;
+		static std::mt19937 gen(rd());
+		std::uniform_int_distribution<> dis(0, static_cast<int>(footstepSounds.size()) - 1);
+		const int randomIndex = dis(gen);
+
+		// Find or create the sound
+		const String& soundPath = footstepSounds[randomIndex];
+		SoundIndex soundIndex = m_audio->FindSound(soundPath, SoundType::Sound3D);
+		
+		if (soundIndex == InvalidSound)
+		{
+			soundIndex = m_audio->CreateSound(soundPath, SoundType::Sound3D);
+		}
+
+		if (soundIndex != InvalidSound)
+		{
+			// Play the sound at the player's position
+			ChannelIndex channelIndex = InvalidChannel;
+			m_audio->PlaySound(soundIndex, &channelIndex, 0.8f);
+			IChannelInstance* channel = m_audio->GetChannelInstance(channelIndex);
+			if (channel)
+			{
+				std::uniform_real_distribution pitchDistribution(0.7f, 1.3f);
+				channel->SetPitch(pitchDistribution(gen));
+				channel->SetVolume(0.35f);
+			}
+
+			// Set 3D position for the sound
+			if (channelIndex != InvalidChannel)
+			{
+				m_audio->Set3DPosition(channelIndex, GetPosition());
+				m_audio->Set3DMinMaxDistance(channelIndex, 1.0f, 20.0f);
+			}
 		}
 	}
 }

@@ -67,7 +67,7 @@ namespace mmo
 
 		m_scene.GetRootSceneNode().AddChild(*m_cameraAnchor);
 
-		m_scene.SetFogRange(210.0f, 300.0f);
+		m_scene.SetFogRange(60.0f, 500.0f);
 
 		const Vector3 fogColor = Vector3(0.231f * 1.5f, 0.398f * 1.5f, 0.535f * 1.5f);
 		m_scene.SetFogColor(fogColor);

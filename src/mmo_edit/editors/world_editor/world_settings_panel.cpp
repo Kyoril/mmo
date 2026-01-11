@@ -69,6 +69,13 @@ namespace mmo
                     m_terrain.GetScene().SetFogEnabled(showFog);
                 }
 
+                // Fog fade range controls
+                float fogValues[2] = { m_terrain.GetScene().GetFogStart(), m_terrain.GetScene().GetFogEnd() };
+                if (ImGui::DragFloat2("Fog Fade Range", fogValues, 1.0f, 0.0f, fogValues[1] - 0.1f))
+                {
+                    m_terrain.GetScene().SetFogRange(fogValues[0], fogValues[1]);
+				}
+
                 if (m_hasTerrain)
                 {
                     if (ImGui::BeginDragDropTarget())

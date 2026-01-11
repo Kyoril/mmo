@@ -58,6 +58,10 @@ namespace mmo
 
 	public:
         void Clear() override {}
+        void SetPitch(float value) override;
+        float GetPitch() const override;
+		void SetVolume(float volume) override;
+		float GetVolume() const override;
 	};
 
 	

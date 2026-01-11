@@ -109,6 +109,47 @@ namespace mmo
 	void FMODChannelInstance::SetFMODChannel(FMOD::Channel* channel)
 	{
 		m_channel = channel;
+
+		SetPitch(1.0f);
+	}
+
+	void FMODChannelInstance::SetPitch(float value)
+	{
+		if (m_channel)
+		{
+			m_channel->setPitch(value);
+		}
+	}
+
+	float FMODChannelInstance::GetPitch() const
+	{
+		if (m_channel)
+		{
+			float pitch = 1.0f;
+			m_channel->getPitch(&pitch);
+			return pitch;
+		}
+
+		return 1.0f;
+	}
+
+	void FMODChannelInstance::SetVolume(float volume)
+	{
+		if (m_channel)
+		{
+			m_channel->setVolume(volume);
+		}
+	}
+
+	float FMODChannelInstance::GetVolume() const
+	{
+		if (m_channel)
+		{
+			float volume = 1.0f;
+			m_channel->getVolume(&volume);
+			return volume;
+		}
+		return 1.0f;
 	}
 
 	SoundIndex FMODChannelInstance::GetSoundIndex() const
@@ -213,12 +254,12 @@ namespace mmo
 		
 		// TODO
 		listenerUp.x = 0.0f;
-		listenerUp.y = 0.0f;
-		listenerUp.z = 1.0f;
+		listenerUp.y = 1.0f;
+		listenerUp.z = 0.0f;
 		
-		listenerVelocity.x = vectorVelocity.x;
-		listenerVelocity.y = vectorVelocity.y;
-		listenerVelocity.z = vectorVelocity.z;
+		listenerVelocity.x = 0.0f;
+		listenerVelocity.y = 0.0f;
+		listenerVelocity.z = 0.0f;
 
 		m_system->set3DListenerAttributes(0, &listenerPosition, &listenerVelocity, &listenerForward, &listenerUp);
 
@@ -409,7 +450,14 @@ namespace mmo
 
 		// Configure the channel
 		channel->setVolume(1.0);
-		channel->setPaused(false);
+
+		// For 3D sounds, set proper rolloff mode to ensure sounds beyond max distance are inaudible
+		if (instance.GetType() == SoundType::Sound3D || instance.GetType() == SoundType::SoundLooped3D)
+		{
+			channel->setMode(FMOD_3D | FMOD_3D_LINEARSQUAREROLLOFF);
+			channel->set3DLevel(1.0f);
+		}
+			channel->setPaused(false);
 
 		// Store the sound index with the channel for proper tracking
 		int channelIndex32;
@@ -523,6 +571,7 @@ namespace mmo
 		if (result == FMOD_OK)
 		{
 			channel->set3DMinMaxDistance(minDistance, maxDistance);
+			channel->setMode(FMOD_3D | FMOD_3D_LINEARSQUAREROLLOFF);
 		}
 	}
 

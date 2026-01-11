@@ -60,6 +60,9 @@ namespace mmo
 		/// @copydoc MaterialCompiler::AddWorldPosition
 		ExpressionIndex AddWorldPosition() override;
 		
+		/// @copydoc MaterialCompiler::AddCameraPosition
+		ExpressionIndex AddCameraPosition() override;
+
 		/// @copydoc MaterialCompiler::AddCameraVector
 		ExpressionIndex AddCameraVector() override;
 		

@@ -335,6 +335,10 @@ namespace mmo
 
 		bool IsFogEnabled() const { return m_fogEnabled; }
 
+		float GetFogStart() const { return m_fogStart; }
+
+		float GetFogEnd() const { return m_fogEnd; }
+
 		void SetFogRange(float start, float end);
 
 		void SetFogColor(const Vector3& color);

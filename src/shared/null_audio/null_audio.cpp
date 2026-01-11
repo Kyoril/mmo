@@ -7,6 +7,24 @@
 
 namespace mmo
 {
+	void NullChannelInstance::SetPitch(float value)
+	{
+	}
+
+	float NullChannelInstance::GetPitch() const
+	{
+		return 1.0f;
+	}
+
+	void NullChannelInstance::SetVolume(float volume)
+	{
+	}
+
+	float NullChannelInstance::GetVolume() const
+	{
+		return 0.0f;
+	}
+
 	NullAudio::NullAudio()
 	{
 		ILOG("Using NULL audio system");
