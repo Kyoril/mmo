@@ -524,14 +524,16 @@ namespace mmo
 			// Get the hole map for this tile
 			const uint64 holeMap = m_page.GetTileHoleMap(m_tileX, m_tileY);
 
-			// Calculate steps for each edge based on neighbor LOD
-			// When neighbor has lower detail (higher LOD), we use their step size on shared edges
-			const size_t ourStep = (lod == 0) ? 1 : (static_cast<size_t>(1) << (lod - 1));
-			const size_t northStep = (northLod == 0) ? 1 : (static_cast<size_t>(1) << (northLod - 1));
-			const size_t eastStep = (eastLod == 0) ? 1 : (static_cast<size_t>(1) << (eastLod - 1));
-			const size_t southStep = (southLod == 0) ? 1 : (static_cast<size_t>(1) << (southLod - 1));
-			const size_t westStep = (westLod == 0) ? 1 : (static_cast<size_t>(1) << (westLod - 1));
-			
+			// Calculate step size for this tile's LOD
+			// LOD 0 = step 1, LOD 1 = step 1, LOD 2 = step 2, LOD 3 = step 4
+			const size_t ourStep = (lod <= 1) ? 1 : (static_cast<size_t>(1) << (lod - 1));
+
+			// Calculate step sizes for neighbor tiles
+			const size_t northStep = (northLod <= 1) ? 1 : (static_cast<size_t>(1) << (northLod - 1));
+			const size_t eastStep = (eastLod <= 1) ? 1 : (static_cast<size_t>(1) << (eastLod - 1));
+			const size_t southStep = (southLod <= 1) ? 1 : (static_cast<size_t>(1) << (southLod - 1));
+			const size_t westStep = (westLod <= 1) ? 1 : (static_cast<size_t>(1) << (westLod - 1));
+
 			const size_t maxIdx = constants::OuterVerticesPerTileSide - 1;
 
 			if (lod == 0)
@@ -539,10 +541,9 @@ namespace mmo
 				// For LOD 0, we use the inner vertex diamond pattern
 				// Each inner vertex connects to 4 outer vertices forming 4 triangles
 				//
-				// When a neighbor has lower detail (higher LOD), we skip ONLY the edge-facing
-				// triangles. The stitching will replace them with triangles that use only
-				// coarse edge vertices.
-				
+				// When a neighbor has lower detail (higher LOD), we need to skip triangles
+				// that use intermediate edge vertices that the neighbor doesn't have.
+
 				for (size_t j = 0; j < constants::InnerVerticesPerTileSide; ++j)
 				{
 					for (size_t i = 0; i < constants::InnerVerticesPerTileSide; ++i)
@@ -570,18 +571,15 @@ namespace mmo
 						const bool touchesSouth = (j == constants::InnerVerticesPerTileSide - 1);
 						const bool touchesWest = (i == 0);
 
-						// Calculate which outer vertices are intermediate (not shared with coarser neighbor)
-						// North edge: outerTL at (i,0) and outerTR at (i+1,0)
-						// East edge: outerTR at (maxIdx,j) and outerBR at (maxIdx,j+1)
-						// South edge: outerBL at (i,maxIdx) and outerBR at (i+1,maxIdx)
-						// West edge: outerTL at (0,j) and outerBL at (0,j+1)
-						
+						// Helper lambda to check if a vertex is an intermediate on an edge
+						// (i.e., it won't be used by a coarser neighbor)
 						auto isIntermediateOnEdge = [](size_t coord, size_t step) -> bool
 						{
 							return step > 1 && (coord % step) != 0;
 						};
-						
+
 						// Check if outer vertices are intermediate on their respective edges
+						// This determines whether we need to skip triangles for stitching
 						const bool outerTL_isIntermediateNorth = touchesNorth && northLod > lod && isIntermediateOnEdge(i, northStep);
 						const bool outerTR_isIntermediateNorth = touchesNorth && northLod > lod && isIntermediateOnEdge(i + 1, northStep);
 						const bool outerTR_isIntermediateEast = touchesEast && eastLod > lod && isIntermediateOnEdge(j, eastStep);
@@ -590,12 +588,12 @@ namespace mmo
 						const bool outerBR_isIntermediateSouth = touchesSouth && southLod > lod && isIntermediateOnEdge(i + 1, southStep);
 						const bool outerTL_isIntermediateWest = touchesWest && westLod > lod && isIntermediateOnEdge(j, westStep);
 						const bool outerBL_isIntermediateWest = touchesWest && westLod > lod && isIntermediateOnEdge(j + 1, westStep);
-						
-						// Skip triangles that use any intermediate edge vertex
+
+						// Skip triangles that use intermediate edge vertices
 						const bool skipTopTri = outerTL_isIntermediateNorth || outerTR_isIntermediateNorth;
-						const bool skipRightTri = outerTR_isIntermediateEast || outerBR_isIntermediateEast || outerTR_isIntermediateNorth || outerBR_isIntermediateSouth;
+						const bool skipRightTri = outerTR_isIntermediateEast || outerBR_isIntermediateEast;
 						const bool skipBottomTri = outerBL_isIntermediateSouth || outerBR_isIntermediateSouth;
-						const bool skipLeftTri = outerTL_isIntermediateWest || outerBL_isIntermediateWest || outerTL_isIntermediateNorth || outerBL_isIntermediateSouth;
+						const bool skipLeftTri = outerTL_isIntermediateWest || outerBL_isIntermediateWest;
 
 						// Top triangle (faces north edge)
 						if (!skipTopTri)
@@ -633,14 +631,14 @@ namespace mmo
 			}
 			else
 			{
-				// For LOD > 0, use simple quad grid
+				// For LOD > 0, use simple quad grid with the appropriate step size
 				const size_t step = ourStep;
 
 				for (size_t j = 0; j < maxIdx; j += step)
 				{
 					for (size_t i = 0; i < maxIdx; i += step)
 					{
-						// Check for holes
+						// Check for holes - if any cell in the quad is a hole, skip the whole quad
 						bool isHole = false;
 						for (size_t hj = 0; hj < step && !isHole; ++hj)
 						{
@@ -723,7 +721,7 @@ namespace mmo
 					indices.data());
 				m_lodIndexCache[stitchKey]->indexCount = static_cast<uint32>(indices.size());
 				m_lodIndexCache[stitchKey]->indexStart = 0;
-				
+
 				if (lod == 0)
 				{
 					m_hasRenderableGeometry = true;
@@ -735,294 +733,533 @@ namespace mmo
 
 		void Tile::GenerateEdgeStitching(std::vector<uint16>& indices, uint32 lod, uint32 northLod, uint32 eastLod, uint32 southLod, uint32 westLod)
 		{
-			// Edge stitching replaces the skipped triangles with triangles that don't use
-			// intermediate edge vertices.
+			// Edge stitching creates triangles that connect this tile's edge to a coarser
+			// neighbor without creating T-junctions.
 			//
-			// For LOD 0 with the diamond pattern, when we skip triangles using an intermediate
-			// edge vertex, we skip:
-			// - The top triangles of the inner vertices in that segment
-			// - The left/right triangles connecting adjacent inner vertices through the intermediate vertex
-			//
-			// For north edge segment [0,2] with intermediate at outer(1,0), the pentagon boundary is:
-			// coarseLeft(0,0) -> inner(0,0) -> outer(1,1) -> inner(1,0) -> coarseRight(2,0)
-			//
-			// We fan from coarseLeft to create:
-			// 1. coarseLeft -> inner(0,0) -> outer(1,1)
-			// 2. coarseLeft -> outer(1,1) -> inner(1,0)
-			// 3. coarseLeft -> inner(1,0) -> coarseRight
+			// The key insight is that the coarser neighbor only has vertices at certain
+			// positions (every neighborStep vertices), so we must fan from those coarse
+			// vertices to our finer edge vertices.
 
 			const size_t maxIdx = constants::OuterVerticesPerTileSide - 1;
-			const size_t innerMax = static_cast<size_t>(constants::InnerVerticesPerTileSide - 1);
+			const size_t innerMax = constants::InnerVerticesPerTileSide - 1;
 
-			// North edge (j = 0)
-			// Only stitch when neighbor has step > 1 (i.e., northLod >= 2), meaning there are intermediate vertices
-			if (northLod > 1 && lod == 0)
+			// Calculate step sizes
+			const size_t ourStep = (lod <= 1) ? 1 : (static_cast<size_t>(1) << (lod - 1));
+			const size_t northStep = (northLod <= 1) ? 1 : (static_cast<size_t>(1) << (northLod - 1));
+			const size_t eastStep = (eastLod <= 1) ? 1 : (static_cast<size_t>(1) << (eastLod - 1));
+			const size_t southStep = (southLod <= 1) ? 1 : (static_cast<size_t>(1) << (southLod - 1));
+			const size_t westStep = (westLod <= 1) ? 1 : (static_cast<size_t>(1) << (westLod - 1));
+
+			// ===== NORTH EDGE STITCHING =====
+			if (northLod > lod)
 			{
-				const size_t neighborStep = static_cast<size_t>(1) << (northLod - 1);
-				
-				for (size_t segStart = 0; segStart < maxIdx; segStart += neighborStep)
+				// For each segment between coarse neighbor vertices
+				for (size_t segStart = 0; segStart < maxIdx; segStart += northStep)
 				{
-					const size_t segEnd = std::min(segStart + neighborStep, maxIdx);
+					const size_t segEnd = std::min(segStart + northStep, maxIdx);
 					const uint16 coarseLeft = GetOuterVertexIndex(segStart, 0);
 					const uint16 coarseRight = GetOuterVertexIndex(segEnd, 0);
-					
-					const size_t numInners = segEnd - segStart;
-					
-					if (numInners <= 1)
+
+					if (lod == 0)
 					{
-						// Edge case: shouldn't happen with neighborStep > 1, but handle gracefully
-						continue;
+						// LOD 0 uses diamond pattern - need to connect through inner vertices
+						// Fan from coarseLeft through all inner vertices in this segment to coarseRight
+						for (size_t k = segStart; k < segEnd; ++k)
+						{
+							const uint16 innerVertex = GetInnerVertexIndex(k, 0);
+
+							if (k == segStart)
+							{
+								// First: connect coarseLeft to first inner and the vertex below
+								if (segEnd - segStart > 1)
+								{
+									const uint16 belowVertex = GetOuterVertexIndex(k + 1, 1);
+									indices.push_back(coarseLeft);
+									indices.push_back(innerVertex);
+									indices.push_back(belowVertex);
+								}
+							}
+							else
+							{
+								// Middle: connect through the "below" outer vertex
+								const uint16 prevInner = GetInnerVertexIndex(k - 1, 0);
+								const uint16 belowVertex = GetOuterVertexIndex(k, 1);
+
+								indices.push_back(coarseLeft);
+								indices.push_back(prevInner);
+								indices.push_back(belowVertex);
+
+								indices.push_back(coarseLeft);
+								indices.push_back(belowVertex);
+								indices.push_back(innerVertex);
+							}
+						}
+
+						// Final triangle: coarseLeft -> lastInner -> coarseRight
+						if (segEnd > segStart)
+						{
+							const uint16 lastInner = GetInnerVertexIndex(segEnd - 1, 0);
+							indices.push_back(coarseLeft);
+							indices.push_back(lastInner);
+							indices.push_back(coarseRight);
+						}
 					}
-					
-					// Multiple inner vertices with intermediate "below" vertices between them
-					// Polygon: coarseLeft -> inner(segStart) -> outer(segStart+1,1) -> inner(segStart+1) -> ... -> inner(segEnd-1) -> coarseRight
-					//
-					// Fan from coarseLeft, iterating LEFT to RIGHT
-					
-					for (size_t k = segStart; k < segEnd - 1; ++k)
+					else
 					{
-						const uint16 currInner = GetInnerVertexIndex(k, 0);
-						const uint16 belowK = GetOuterVertexIndex(k + 1, 1);  // The "below" vertex at k+1
-						const uint16 nextInner = GetInnerVertexIndex(k + 1, 0);
-						
-						// Two triangles:
-						// coarseLeft -> currInner -> belowK
-						// coarseLeft -> belowK -> nextInner
-						indices.push_back(coarseLeft);
-						indices.push_back(currInner);
-						indices.push_back(belowK);
-						
-						indices.push_back(coarseLeft);
-						indices.push_back(belowK);
-						indices.push_back(nextInner);
+						// LOD > 0 uses quad pattern
+						// Collect all vertices along edge and interior
+						std::vector<uint16> edgeVertices;
+						std::vector<uint16> interiorVertices;
+						for (size_t x = segStart; x <= segEnd; x += ourStep)
+						{
+							edgeVertices.push_back(GetOuterVertexIndex(x, 0));
+							interiorVertices.push_back(GetOuterVertexIndex(x, ourStep));
+						}
+
+						// For each segment between our fine edge vertices
+						for (size_t i = 0; i + 1 < edgeVertices.size(); ++i)
+						{
+							const uint16 edgeLeft = edgeVertices[i];
+							const uint16 edgeRight = edgeVertices[i + 1];
+							const uint16 intLeft = interiorVertices[i];
+							const uint16 intRight = interiorVertices[i + 1];
+
+							// Check if edge vertices are on the coarse grid
+							const size_t edgeLeftX = segStart + i * ourStep;
+							const size_t edgeRightX = segStart + (i + 1) * ourStep;
+							const bool isCoarseLeft = (edgeLeftX % northStep) == 0;
+							const bool isCoarseRight = (edgeRightX % northStep) == 0;
+
+							if (isCoarseLeft && isCoarseRight)
+							{
+								// Both on coarse grid - simple quad
+								indices.push_back(edgeLeft);
+								indices.push_back(intLeft);
+								indices.push_back(intRight);
+
+								indices.push_back(edgeLeft);
+								indices.push_back(intRight);
+								indices.push_back(edgeRight);
+							}
+							else if (isCoarseLeft)
+							{
+								// Fan from left coarse vertex
+								indices.push_back(edgeLeft);
+								indices.push_back(intLeft);
+								indices.push_back(intRight);
+
+								indices.push_back(edgeLeft);
+								indices.push_back(intRight);
+								indices.push_back(edgeRight);
+							}
+							else if (isCoarseRight)
+							{
+								// Fan from right coarse vertex
+								indices.push_back(edgeRight);
+								indices.push_back(edgeLeft);
+								indices.push_back(intLeft);
+
+								indices.push_back(edgeRight);
+								indices.push_back(intLeft);
+								indices.push_back(intRight);
+							}
+							else
+							{
+								// Both intermediate - need 4 triangles to cover the quad and connect to coarse
+								// First fill the interior quad
+								indices.push_back(edgeLeft);
+								indices.push_back(intLeft);
+								indices.push_back(intRight);
+
+								indices.push_back(edgeLeft);
+								indices.push_back(intRight);
+								indices.push_back(edgeRight);
+
+								// Then connect edge vertices to the coarse vertex
+								indices.push_back(coarseLeft);
+								indices.push_back(edgeLeft);
+								indices.push_back(intLeft);
+
+								indices.push_back(coarseLeft);
+								indices.push_back(intRight);
+								indices.push_back(edgeRight);
+							}
+						}
 					}
-					
-					// Final triangle: coarseLeft -> inner(segEnd-1) -> coarseRight
-					const uint16 lastInner = GetInnerVertexIndex(segEnd - 1, 0);
-					indices.push_back(coarseLeft);
-					indices.push_back(lastInner);
-					indices.push_back(coarseRight);
-				}
-			}
-			else if (northLod > lod)
-			{
-				// LOD > 0: simpler quad-based stitching
-				const size_t neighborStep = static_cast<size_t>(1) << (northLod - 1);
-				const size_t ourStep = static_cast<size_t>(1) << (lod - 1);
-				
-				for (size_t segStart = 0; segStart < maxIdx; segStart += neighborStep)
-				{
-					const size_t segEnd = std::min(segStart + neighborStep, maxIdx);
-					const uint16 coarseLeft = GetOuterVertexIndex(segStart, 0);
-					const uint16 coarseRight = GetOuterVertexIndex(segEnd, 0);
-					const uint16 intLeft = GetOuterVertexIndex(segStart, ourStep);
-					const uint16 intRight = GetOuterVertexIndex(segEnd, ourStep);
-					
-					indices.push_back(intLeft);
-					indices.push_back(coarseRight);
-					indices.push_back(coarseLeft);
-					
-					indices.push_back(intLeft);
-					indices.push_back(intRight);
-					indices.push_back(coarseRight);
 				}
 			}
 
-			// East edge (i = max)
-			// Only stitch when neighbor has step > 1 (i.e., eastLod >= 2)
-			if (eastLod > 1 && lod == 0)
+			// ===== EAST EDGE STITCHING =====
+			if (eastLod > lod)
 			{
-				const size_t neighborStep = static_cast<size_t>(1) << (eastLod - 1);
-				
-				for (size_t segStart = 0; segStart < maxIdx; segStart += neighborStep)
+				for (size_t segStart = 0; segStart < maxIdx; segStart += eastStep)
 				{
-					const size_t segEnd = std::min(segStart + neighborStep, maxIdx);
+					const size_t segEnd = std::min(segStart + eastStep, maxIdx);
 					const uint16 coarseTop = GetOuterVertexIndex(maxIdx, segStart);
 					const uint16 coarseBottom = GetOuterVertexIndex(maxIdx, segEnd);
-					
-					const size_t numInners = segEnd - segStart;
-					
-					if (numInners <= 1)
+
+					if (lod == 0)
 					{
-						continue;
+						for (size_t k = segStart; k < segEnd; ++k)
+						{
+							const uint16 innerVertex = GetInnerVertexIndex(innerMax, k);
+
+							if (k == segStart)
+							{
+								if (segEnd - segStart > 1)
+								{
+									const uint16 leftVertex = GetOuterVertexIndex(maxIdx - 1, k + 1);
+									indices.push_back(coarseTop);
+									indices.push_back(innerVertex);
+									indices.push_back(leftVertex);
+								}
+							}
+							else
+							{
+								const uint16 prevInner = GetInnerVertexIndex(innerMax, k - 1);
+								const uint16 leftVertex = GetOuterVertexIndex(maxIdx - 1, k);
+
+								indices.push_back(coarseTop);
+								indices.push_back(prevInner);
+								indices.push_back(leftVertex);
+
+								indices.push_back(coarseTop);
+								indices.push_back(leftVertex);
+								indices.push_back(innerVertex);
+							}
+						}
+
+						if (segEnd > segStart)
+						{
+							const uint16 lastInner = GetInnerVertexIndex(innerMax, segEnd - 1);
+							indices.push_back(coarseTop);
+							indices.push_back(lastInner);
+							indices.push_back(coarseBottom);
+						}
 					}
-					
-					// Polygon: coarseTop -> inner(segStart) -> outer(maxIdx-1, segStart+1) -> inner(segStart+1) -> ... -> coarseBottom
-					for (size_t k = segStart; k < segEnd - 1; ++k)
+					else
 					{
-						const uint16 currInner = GetInnerVertexIndex(innerMax, k);
-						const uint16 leftK = GetOuterVertexIndex(maxIdx - 1, k + 1);
-						const uint16 nextInner = GetInnerVertexIndex(innerMax, k + 1);
-						
-						indices.push_back(coarseTop);
-						indices.push_back(currInner);
-						indices.push_back(leftK);
-						
-						indices.push_back(coarseTop);
-						indices.push_back(leftK);
-						indices.push_back(nextInner);
+						std::vector<uint16> edgeVertices;
+						std::vector<uint16> interiorVertices;
+						for (size_t y = segStart; y <= segEnd; y += ourStep)
+						{
+							edgeVertices.push_back(GetOuterVertexIndex(maxIdx, y));
+							interiorVertices.push_back(GetOuterVertexIndex(maxIdx - ourStep, y));
+						}
+
+						for (size_t i = 0; i + 1 < edgeVertices.size(); ++i)
+						{
+							const uint16 edgeTop = edgeVertices[i];
+							const uint16 edgeBottom = edgeVertices[i + 1];
+							const uint16 intTop = interiorVertices[i];
+							const uint16 intBottom = interiorVertices[i + 1];
+
+							const size_t edgeTopY = segStart + i * ourStep;
+							const size_t edgeBottomY = segStart + (i + 1) * ourStep;
+							const bool isCoarseTop = (edgeTopY % eastStep) == 0;
+							const bool isCoarseBottom = (edgeBottomY % eastStep) == 0;
+
+							if (isCoarseTop && isCoarseBottom)
+							{
+								indices.push_back(edgeTop);
+								indices.push_back(intTop);
+								indices.push_back(intBottom);
+
+								indices.push_back(edgeTop);
+								indices.push_back(intBottom);
+								indices.push_back(edgeBottom);
+							}
+							else if (isCoarseTop)
+							{
+								indices.push_back(edgeTop);
+								indices.push_back(intTop);
+								indices.push_back(intBottom);
+
+								indices.push_back(edgeTop);
+								indices.push_back(intBottom);
+								indices.push_back(edgeBottom);
+							}
+							else if (isCoarseBottom)
+							{
+								indices.push_back(edgeBottom);
+								indices.push_back(edgeTop);
+								indices.push_back(intTop);
+
+								indices.push_back(edgeBottom);
+								indices.push_back(intTop);
+								indices.push_back(intBottom);
+							}
+							else
+							{
+								// Both intermediate - 4 triangles
+								indices.push_back(edgeTop);
+								indices.push_back(intTop);
+								indices.push_back(intBottom);
+
+								indices.push_back(edgeTop);
+								indices.push_back(intBottom);
+								indices.push_back(edgeBottom);
+
+								indices.push_back(coarseTop);
+								indices.push_back(edgeTop);
+								indices.push_back(intTop);
+
+								indices.push_back(coarseTop);
+								indices.push_back(intBottom);
+								indices.push_back(edgeBottom);
+							}
+						}
 					}
-					
-					const uint16 lastInner = GetInnerVertexIndex(innerMax, segEnd - 1);
-					indices.push_back(coarseTop);
-					indices.push_back(lastInner);
-					indices.push_back(coarseBottom);
-				}
-			}
-			else if (eastLod > lod)
-			{
-				const size_t neighborStep = static_cast<size_t>(1) << (eastLod - 1);
-				const size_t ourStep = static_cast<size_t>(1) << (lod - 1);
-				
-				for (size_t segStart = 0; segStart < maxIdx; segStart += neighborStep)
-				{
-					const size_t segEnd = std::min(segStart + neighborStep, maxIdx);
-					const uint16 coarseTop = GetOuterVertexIndex(maxIdx, segStart);
-					const uint16 coarseBottom = GetOuterVertexIndex(maxIdx, segEnd);
-					const uint16 intTop = GetOuterVertexIndex(maxIdx - ourStep, segStart);
-					const uint16 intBottom = GetOuterVertexIndex(maxIdx - ourStep, segEnd);
-					
-					indices.push_back(intTop);
-					indices.push_back(coarseBottom);
-					indices.push_back(coarseTop);
-					
-					indices.push_back(intTop);
-					indices.push_back(intBottom);
-					indices.push_back(coarseBottom);
 				}
 			}
 
-			// South edge (j = max)
-			// Only stitch when neighbor has step > 1 (i.e., southLod >= 2)
-			if (southLod > 1 && lod == 0)
+			// ===== SOUTH EDGE STITCHING =====
+			if (southLod > lod)
 			{
-				const size_t neighborStep = static_cast<size_t>(1) << (southLod - 1);
-				
-				for (size_t segStart = 0; segStart < maxIdx; segStart += neighborStep)
+				for (size_t segStart = 0; segStart < maxIdx; segStart += southStep)
 				{
-					const size_t segEnd = std::min(segStart + neighborStep, maxIdx);
+					const size_t segEnd = std::min(segStart + southStep, maxIdx);
 					const uint16 coarseLeft = GetOuterVertexIndex(segStart, maxIdx);
 					const uint16 coarseRight = GetOuterVertexIndex(segEnd, maxIdx);
-					
-					const size_t numInners = segEnd - segStart;
-					
-					if (numInners <= 1)
+
+					if (lod == 0)
 					{
-						continue;
+						for (size_t k = segEnd; k > segStart; --k)
+						{
+							const size_t idx = k - 1;
+							const uint16 innerVertex = GetInnerVertexIndex(idx, innerMax);
+
+							if (k == segEnd)
+							{
+								if (segEnd - segStart > 1)
+								{
+									const uint16 aboveVertex = GetOuterVertexIndex(k - 1, maxIdx - 1);
+									indices.push_back(coarseRight);
+									indices.push_back(innerVertex);
+									indices.push_back(aboveVertex);
+								}
+							}
+							else
+							{
+								const uint16 nextInner = GetInnerVertexIndex(k, innerMax);
+								const uint16 aboveVertex = GetOuterVertexIndex(k, maxIdx - 1);
+
+								indices.push_back(coarseRight);
+								indices.push_back(nextInner);
+								indices.push_back(aboveVertex);
+
+								indices.push_back(coarseRight);
+								indices.push_back(aboveVertex);
+								indices.push_back(innerVertex);
+							}
+						}
+
+						if (segEnd > segStart)
+						{
+							const uint16 firstInner = GetInnerVertexIndex(segStart, innerMax);
+							indices.push_back(coarseRight);
+							indices.push_back(firstInner);
+							indices.push_back(coarseLeft);
+						}
 					}
-					
-					// Polygon: coarseRight -> inner(segEnd-1) -> outer(segEnd-1, maxIdx-1) -> ... -> inner(segStart) -> coarseLeft
-					// Fan from coarseRight, iterating RIGHT to LEFT
-					
-					for (size_t k = segEnd - 1; k > segStart; --k)
+					else
 					{
-						const uint16 currInner = GetInnerVertexIndex(k, innerMax);
-						const uint16 aboveK = GetOuterVertexIndex(k, maxIdx - 1);
-						const uint16 prevInner = GetInnerVertexIndex(k - 1, innerMax);
-						
-						indices.push_back(coarseRight);
-						indices.push_back(currInner);
-						indices.push_back(aboveK);
-						
-						indices.push_back(coarseRight);
-						indices.push_back(aboveK);
-						indices.push_back(prevInner);
+						std::vector<uint16> edgeVertices;
+						std::vector<uint16> interiorVertices;
+						for (size_t x = segStart; x <= segEnd; x += ourStep)
+						{
+							edgeVertices.push_back(GetOuterVertexIndex(x, maxIdx));
+							interiorVertices.push_back(GetOuterVertexIndex(x, maxIdx - ourStep));
+						}
+
+						for (size_t i = 0; i + 1 < edgeVertices.size(); ++i)
+						{
+							const uint16 edgeLeft = edgeVertices[i];
+							const uint16 edgeRight = edgeVertices[i + 1];
+							const uint16 intLeft = interiorVertices[i];
+							const uint16 intRight = interiorVertices[i + 1];
+
+							const size_t edgeLeftX = segStart + i * ourStep;
+							const size_t edgeRightX = segStart + (i + 1) * ourStep;
+							const bool isCoarseLeft = (edgeLeftX % southStep) == 0;
+							const bool isCoarseRight = (edgeRightX % southStep) == 0;
+
+							if (isCoarseLeft && isCoarseRight)
+							{
+								indices.push_back(edgeRight);
+								indices.push_back(intRight);
+								indices.push_back(intLeft);
+
+								indices.push_back(edgeRight);
+								indices.push_back(intLeft);
+								indices.push_back(edgeLeft);
+							}
+							else if (isCoarseLeft)
+							{
+								indices.push_back(edgeLeft);
+								indices.push_back(edgeRight);
+								indices.push_back(intRight);
+
+								indices.push_back(edgeLeft);
+								indices.push_back(intRight);
+								indices.push_back(intLeft);
+							}
+							else if (isCoarseRight)
+							{
+								indices.push_back(edgeRight);
+								indices.push_back(intRight);
+								indices.push_back(intLeft);
+
+								indices.push_back(edgeRight);
+								indices.push_back(intLeft);
+								indices.push_back(edgeLeft);
+							}
+							else
+							{
+								// Both intermediate - 4 triangles
+								indices.push_back(edgeRight);
+								indices.push_back(intRight);
+								indices.push_back(intLeft);
+
+								indices.push_back(edgeRight);
+								indices.push_back(intLeft);
+								indices.push_back(edgeLeft);
+
+								indices.push_back(coarseRight);
+								indices.push_back(edgeRight);
+								indices.push_back(intRight);
+
+								indices.push_back(coarseRight);
+								indices.push_back(intLeft);
+								indices.push_back(edgeLeft);
+							}
+						}
 					}
-					
-					// Final triangle: coarseRight -> inner(segStart) -> coarseLeft
-					const uint16 firstInner = GetInnerVertexIndex(segStart, innerMax);
-					indices.push_back(coarseRight);
-					indices.push_back(firstInner);
-					indices.push_back(coarseLeft);
-				}
-			}
-			else if (southLod > lod)
-			{
-				const size_t neighborStep = static_cast<size_t>(1) << (southLod - 1);
-				const size_t ourStep = static_cast<size_t>(1) << (lod - 1);
-				
-				for (size_t segStart = 0; segStart < maxIdx; segStart += neighborStep)
-				{
-					const size_t segEnd = std::min(segStart + neighborStep, maxIdx);
-					const uint16 coarseLeft = GetOuterVertexIndex(segStart, maxIdx);
-					const uint16 coarseRight = GetOuterVertexIndex(segEnd, maxIdx);
-					const uint16 intLeft = GetOuterVertexIndex(segStart, maxIdx - ourStep);
-					const uint16 intRight = GetOuterVertexIndex(segEnd, maxIdx - ourStep);
-					
-					indices.push_back(intRight);
-					indices.push_back(coarseLeft);
-					indices.push_back(coarseRight);
-					
-					indices.push_back(intRight);
-					indices.push_back(intLeft);
-					indices.push_back(coarseLeft);
 				}
 			}
 
-			// West edge (i = 0)
-			// Only stitch when neighbor has step > 1 (i.e., westLod >= 2)
-			if (westLod > 1 && lod == 0)
+			// ===== WEST EDGE STITCHING =====
+			if (westLod > lod)
 			{
-				const size_t neighborStep = static_cast<size_t>(1) << (westLod - 1);
-				
-				for (size_t segStart = 0; segStart < maxIdx; segStart += neighborStep)
+				for (size_t segStart = 0; segStart < maxIdx; segStart += westStep)
 				{
-					const size_t segEnd = std::min(segStart + neighborStep, maxIdx);
+					const size_t segEnd = std::min(segStart + westStep, maxIdx);
 					const uint16 coarseTop = GetOuterVertexIndex(0, segStart);
 					const uint16 coarseBottom = GetOuterVertexIndex(0, segEnd);
-					
-					const size_t numInners = segEnd - segStart;
-					
-					if (numInners <= 1)
+
+					if (lod == 0)
 					{
-						continue;
+						for (size_t k = segEnd; k > segStart; --k)
+						{
+							const size_t idx = k - 1;
+							const uint16 innerVertex = GetInnerVertexIndex(0, idx);
+
+							if (k == segEnd)
+							{
+								if (segEnd - segStart > 1)
+								{
+									const uint16 rightVertex = GetOuterVertexIndex(1, k - 1);
+									indices.push_back(coarseBottom);
+									indices.push_back(innerVertex);
+									indices.push_back(rightVertex);
+								}
+							}
+							else
+							{
+								const uint16 nextInner = GetInnerVertexIndex(0, k);
+								const uint16 rightVertex = GetOuterVertexIndex(1, k);
+
+								indices.push_back(coarseBottom);
+								indices.push_back(nextInner);
+								indices.push_back(rightVertex);
+
+								indices.push_back(coarseBottom);
+								indices.push_back(rightVertex);
+								indices.push_back(innerVertex);
+							}
+						}
+
+						if (segEnd > segStart)
+						{
+							const uint16 firstInner = GetInnerVertexIndex(0, segStart);
+							indices.push_back(coarseBottom);
+							indices.push_back(firstInner);
+							indices.push_back(coarseTop);
+						}
 					}
-					
-					// Polygon: coarseBottom -> inner(segEnd-1) -> outer(1, segEnd-1) -> ... -> inner(segStart) -> coarseTop
-					// Fan from coarseBottom, iterating BOTTOM to TOP
-					
-					for (size_t k = segEnd - 1; k > segStart; --k)
+					else
 					{
-						const uint16 currInner = GetInnerVertexIndex(0, k);
-						const uint16 rightK = GetOuterVertexIndex(1, k);
-						const uint16 prevInner = GetInnerVertexIndex(0, k - 1);
-						
-						indices.push_back(coarseBottom);
-						indices.push_back(currInner);
-						indices.push_back(rightK);
-						
-						indices.push_back(coarseBottom);
-						indices.push_back(rightK);
-						indices.push_back(prevInner);
+						std::vector<uint16> edgeVertices;
+						std::vector<uint16> interiorVertices;
+						for (size_t y = segStart; y <= segEnd; y += ourStep)
+						{
+							edgeVertices.push_back(GetOuterVertexIndex(0, y));
+							interiorVertices.push_back(GetOuterVertexIndex(ourStep, y));
+						}
+
+						for (size_t i = 0; i + 1 < edgeVertices.size(); ++i)
+						{
+							const uint16 edgeTop = edgeVertices[i];
+							const uint16 edgeBottom = edgeVertices[i + 1];
+							const uint16 intTop = interiorVertices[i];
+							const uint16 intBottom = interiorVertices[i + 1];
+
+							const size_t edgeTopY = segStart + i * ourStep;
+							const size_t edgeBottomY = segStart + (i + 1) * ourStep;
+							const bool isCoarseTop = (edgeTopY % westStep) == 0;
+							const bool isCoarseBottom = (edgeBottomY % westStep) == 0;
+
+							if (isCoarseTop && isCoarseBottom)
+							{
+								indices.push_back(edgeBottom);
+								indices.push_back(intBottom);
+								indices.push_back(intTop);
+
+								indices.push_back(edgeBottom);
+								indices.push_back(intTop);
+								indices.push_back(edgeTop);
+							}
+							else if (isCoarseTop)
+							{
+								indices.push_back(edgeTop);
+								indices.push_back(edgeBottom);
+								indices.push_back(intBottom);
+
+								indices.push_back(edgeTop);
+								indices.push_back(intBottom);
+								indices.push_back(intTop);
+							}
+							else if (isCoarseBottom)
+							{
+								indices.push_back(edgeBottom);
+								indices.push_back(intBottom);
+								indices.push_back(intTop);
+
+								indices.push_back(edgeBottom);
+								indices.push_back(intTop);
+								indices.push_back(edgeTop);
+							}
+							else
+							{
+								// Both intermediate - 4 triangles
+								indices.push_back(edgeBottom);
+								indices.push_back(intBottom);
+								indices.push_back(intTop);
+
+								indices.push_back(edgeBottom);
+								indices.push_back(intTop);
+								indices.push_back(edgeTop);
+
+								indices.push_back(coarseBottom);
+								indices.push_back(edgeBottom);
+								indices.push_back(intBottom);
+
+								indices.push_back(coarseBottom);
+								indices.push_back(intTop);
+								indices.push_back(edgeTop);
+							}
+						}
 					}
-					
-					// Final triangle: coarseBottom -> inner(segStart) -> coarseTop
-					const uint16 firstInner = GetInnerVertexIndex(0, segStart);
-					indices.push_back(coarseBottom);
-					indices.push_back(firstInner);
-					indices.push_back(coarseTop);
-				}
-			}
-			else if (westLod > lod)
-			{
-				const size_t neighborStep = static_cast<size_t>(1) << (westLod - 1);
-				const size_t ourStep = static_cast<size_t>(1) << (lod - 1);
-				
-				for (size_t segStart = 0; segStart < maxIdx; segStart += neighborStep)
-				{
-					const size_t segEnd = std::min(segStart + neighborStep, maxIdx);
-					const uint16 coarseTop = GetOuterVertexIndex(0, segStart);
-					const uint16 coarseBottom = GetOuterVertexIndex(0, segEnd);
-					const uint16 intTop = GetOuterVertexIndex(ourStep, segStart);
-					const uint16 intBottom = GetOuterVertexIndex(ourStep, segEnd);
-					
-					indices.push_back(intBottom);
-					indices.push_back(coarseTop);
-					indices.push_back(coarseBottom);
-					
-					indices.push_back(intBottom);
-					indices.push_back(intTop);
-					indices.push_back(coarseTop);
 				}
 			}
 		}
