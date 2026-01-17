@@ -133,6 +133,7 @@ namespace mmo
 		m_terrain = std::make_unique<terrain::Terrain>(m_scene, m_camera, 64, 64);
 		m_terrain->SetTileSceneQueryFlags(SceneQueryFlags_Tile);
 		m_terrain->SetWireframeMaterial(MaterialManager::Get().Load("Editor/Wireframe.hmat"));
+		m_terrain->SetLodEnabled(false);
 
 		// Replace all \ with /
 		String baseFileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Terrain").string();
