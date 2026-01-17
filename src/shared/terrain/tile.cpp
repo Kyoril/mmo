@@ -1349,16 +1349,30 @@ namespace mmo
 
 			float distSq = GetSquaredViewDepth(camera);
 
+			// LOD distance thresholds based on Faudra-style approach:
+			// Use larger distances to keep higher detail active longer, reducing pop-in
+			// The multipliers are squared distances (so 4x multiplier = 2x actual distance)
+			//
+			// LOD 0 (full detail):     0 to TileSize * 2.5  (close range)
+			// LOD 1 (half detail):     TileSize * 2.5 to TileSize * 5   (medium range) 
+			// LOD 2 (quarter detail):  TileSize * 5 to TileSize * 10    (far range)
+			// LOD 3 (eighth detail):   beyond TileSize * 10             (distant)
+			//
+			// Squared thresholds: 6.25, 25, 100
+			constexpr float lodThreshold1 = static_cast<float>(constants::TileSize * constants::TileSize * 6.25);   // LOD 0 -> 1
+			constexpr float lodThreshold2 = static_cast<float>(constants::TileSize * constants::TileSize * 25.0);   // LOD 1 -> 2
+			constexpr float lodThreshold3 = static_cast<float>(constants::TileSize * constants::TileSize * 100.0);  // LOD 2 -> 3
+
 			uint32 newLod = 0;
-			if (distSq > constants::TileSize * constants::TileSize * 16.0f)
+			if (distSq > lodThreshold3)
 			{
 				newLod = 3;
 			}
-			else if (distSq > constants::TileSize * constants::TileSize * 4.0f)
+			else if (distSq > lodThreshold2)
 			{
 				newLod = 2;
 			}
-			else if (distSq > constants::TileSize * constants::TileSize * 1.0f)
+			else if (distSq > lodThreshold1)
 			{
 				newLod = 1;
 			}
