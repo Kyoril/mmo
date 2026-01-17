@@ -526,6 +526,13 @@ namespace mmo
 
 		void Tile::CreateIndexData(uint32 lod, uint32 northLod, uint32 eastLod, uint32 southLod, uint32 westLod)
 		{
+			// Validate LOD levels: only 0-3 are currently valid. Higher values would
+			// still fit into the 4-bit encoding but represent invalid LOD levels.
+			ASSERT(lod < 4);
+			ASSERT(northLod < 4);
+			ASSERT(eastLod < 4);
+			ASSERT(southLod < 4);
+			ASSERT(westLod < 4);
 			// Calculate a unique key for this LOD + neighbor LOD combination
 			// Format: lod | (northLod << 4) | (eastLod << 8) | (southLod << 12) | (westLod << 16)
 			const uint32 stitchKey = lod | (northLod << 4) | (eastLod << 8) | (southLod << 12) | (westLod << 16);
