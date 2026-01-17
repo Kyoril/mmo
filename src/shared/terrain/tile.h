@@ -215,7 +215,18 @@ namespace mmo
 
 			bool m_worldAABBDirty { true };
 			
-			// Index data cache: key is (lod | (northLod << 4) | (eastLod << 8) | (southLod << 12) | (westLod << 16))
+			/// @brief Index data cache for LOD and neighbor stitching combinations.
+			/// 
+			/// The key encodes the local tile LOD and the LOD of its four neighbors as:
+			/// (lod | (northLod << 4) | (eastLod << 8) | (southLod << 12) | (westLod << 16)).
+			/// With 4 LOD levels and 4 neighbors, this yields up to 4^5 = 1024 possible
+			/// cache entries per tile in the worst case.
+			///
+			/// @note This cache is maintained per tile and does not currently implement
+			///       an explicit size limit or eviction policy. For very large terrains
+			///       with many tiles and heavily exercised LOD transitions, the memory
+			///       used by all tile caches combined can be significant and should be
+			///       taken into account when configuring terrain size and LOD settings.
 			std::map<uint32, std::unique_ptr<IndexData>> m_lodIndexCache;
 			uint32 m_currentLod = 0;
 			uint32 m_currentStitchKey = 0;
