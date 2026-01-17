@@ -1162,7 +1162,6 @@ namespace mmo
 
 			float distSq = GetSquaredViewDepth(camera);
 
-			// LOD distance thresholds based on Faudra-style approach:
 			// Use larger distances to keep higher detail active longer, reducing pop-in
 			// The multipliers are squared distances (so 4x multiplier = 2x actual distance)
 			//
@@ -1194,10 +1193,11 @@ namespace mmo
 			m_currentLod = newLod;
 
 			// Get neighbor tile LODs for edge stitching
-			uint32 northLod = newLod;
-			uint32 eastLod = newLod;
-			uint32 southLod = newLod;
-			uint32 westLod = newLod;
+			// Initialize to LOD 0 (highest detail) for non-existent neighbors to prevent cracks at boundaries
+			uint32 northLod = 0;
+			uint32 eastLod = 0;
+			uint32 southLod = 0;
+			uint32 westLod = 0;
 
 			// Get terrain reference for cross-page lookups
 			Terrain& terrain = m_page.GetTerrain();
@@ -1224,6 +1224,7 @@ namespace mmo
 					}
 				}
 			}
+			// else: northLod remains 0 (highest detail) for boundary edge
 
 			if (m_tileX < constants::TilesPerPage - 1)
 			{
@@ -1244,6 +1245,7 @@ namespace mmo
 					}
 				}
 			}
+			// else: eastLod remains 0 (highest detail) for boundary edge
 
 			if (m_tileY < constants::TilesPerPage - 1)
 			{
@@ -1264,6 +1266,7 @@ namespace mmo
 					}
 				}
 			}
+			// else: southLod remains 0 (highest detail) for boundary edge
 
 			if (m_tileX > 0)
 			{
@@ -1284,6 +1287,7 @@ namespace mmo
 					}
 				}
 			}
+			// else: westLod remains 0 (highest detail) for boundary edge
 
 			// Calculate the stitch key for the current LOD configuration
 			const uint32 stitchKey = newLod | (northLod << 4) | (eastLod << 8) | (southLod << 12) | (westLod << 16);
@@ -1511,7 +1515,7 @@ namespace mmo
 					const uint32 bitIndex = static_cast<uint32>(i + j * constants::InnerVerticesPerTileSide);
 					const bool isHole = (holeMap & (1ULL << bitIndex)) != 0;
 
-					// Skip ray testing for holes
+									// Skip ray testing for holes
 					if (isHole)
 					{
 						continue;
