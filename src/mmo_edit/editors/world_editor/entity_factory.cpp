@@ -115,7 +115,6 @@ namespace mmo
             PagePosition(
                 static_cast<uint32>(floor(position.x / terrain::constants::PageSize)) + 32,
                 static_cast<uint32>(floor(position.z / terrain::constants::PageSize)) + 32));
-        light.SetUserObject(m_mapEntities.back().get());
 
         // Update scene outline when a new light is created
         if (m_sceneOutlineWindow)

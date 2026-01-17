@@ -570,7 +570,7 @@ namespace mmo
 		std::map<String, uint32> entityNames;
 		for (const auto& mapEntity : m_mapEntities)
 		{
-			const auto meshName = String(mapEntity->GetEntity().GetMesh()->GetName());
+			const auto meshName = String(mapEntity->GetEntity()->GetMesh()->GetName());
 			if (entityNames.contains(meshName))
 			{
 				continue;

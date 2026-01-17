@@ -17,6 +17,7 @@ namespace mmo
 	class Entity;
 	class SceneNode;
 	class Scene;
+	class Light;
 
 	namespace world_version
 	{

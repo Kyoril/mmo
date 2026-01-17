@@ -606,7 +606,14 @@ namespace mmo
                 entry.displayName = mapEntity->GetDisplayName();
                 if (entry.displayName.empty())
                 {
-                    entry.displayName = mapEntity->GetEntity().GetName();
+                    if (mapEntity->IsLight())
+                    {
+                        entry.displayName = "Point Light";
+                    }
+                    else if (mapEntity->GetEntity())
+                    {
+                        entry.displayName = mapEntity->GetEntity()->GetName();
+                    }
                 }
                 
                 // Use category if available

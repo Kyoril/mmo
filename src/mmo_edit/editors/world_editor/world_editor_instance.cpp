@@ -43,9 +43,9 @@ namespace mmo
 	static const ChunkMagic terrainChunk = MakeChunkMagic('RRET');
 
 	static ChunkMagic WorldEntityVersionChunk = MakeChunkMagic('WVER');
-	static ChunkMagic WorldEntityType = MakeChunkMagic('WTYP');
-	static ChunkMagic WorldEntityMesh = MakeChunkMagic('WMSH');
-	static ChunkMagic WorldEntityLight = MakeChunkMagic('WLIT');
+	static ChunkMagic WorldEntityTypeChunk = MakeChunkMagic('WTYP');
+	static ChunkMagic WorldEntityMeshChunk = MakeChunkMagic('WMSH');
+	static ChunkMagic WorldEntityLightChunk = MakeChunkMagic('WLIT');
 
 	struct MapEntityChunkContent
 	{
@@ -640,7 +640,7 @@ namespace mmo
 		std::map<String, uint32> entityNames;
 		for (const auto &mapEntity : m_mapEntities)
 		{
-			const auto meshName = String(mapEntity->GetEntity().GetMesh()->GetName());
+			const auto meshName = String(mapEntity->GetEntity()->GetMesh()->GetName());
 			if (entityNames.contains(meshName))
 			{
 				continue;
@@ -774,7 +774,7 @@ namespace mmo
 
 			// Write entity type chunk
 			{
-				ChunkWriter chunkWriter(WorldEntityType, fileWriter);
+				ChunkWriter chunkWriter(WorldEntityTypeChunk, fileWriter);
 				if (ent->IsLight())
 				{
 					fileWriter << io::write<uint8>(static_cast<uint8>(WorldEntityType::PointLight));
@@ -790,7 +790,7 @@ namespace mmo
 			if (ent->IsLight())
 			{
 				// Write light chunk
-				ChunkWriter chunkWriter(WorldEntityLight, fileWriter);
+				ChunkWriter chunkWriter(WorldEntityLightChunk, fileWriter);
 				Light *light = ent->GetLight();
 				ASSERT(light);
 
@@ -819,7 +819,7 @@ namespace mmo
 			else
 			{
 				// Write mesh chunk
-				ChunkWriter chunkWriter(WorldEntityMesh, fileWriter);
+				ChunkWriter chunkWriter(WorldEntityMeshChunk, fileWriter);
 				const Vector3 position = ent->GetSceneNode().GetDerivedPosition();
 				const Vector3 scale = ent->GetSceneNode().GetScale();
 				const Quaternion rotation = ent->GetSceneNode().GetDerivedOrientation();
@@ -938,11 +938,15 @@ namespace mmo
 		Light *light = m_entityFactory->CreatePointLight(position, color, intensity, range, 0);
 		if (light)
 		{
-			MapEntity *mapEntity = light->GetUserObject<MapEntity>();
-			if (mapEntity)
+			// Find the MapEntity in the list - it's the last one added
+			if (!m_mapEntities.empty())
 			{
-				mapEntity->remove.connect(this, &WorldEditorInstance::OnMapEntityRemoved);
-				mapEntity->MarkModified();
+				MapEntity *mapEntity = m_mapEntities.back().get();
+				if (mapEntity && mapEntity->GetLight() == light)
+				{
+					mapEntity->remove.connect(this, &WorldEditorInstance::OnMapEntityRemoved);
+					mapEntity->MarkModified();
+				}
 			}
 		}
 		return light;
@@ -1483,8 +1487,8 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 								entityPos.z < page->GetSceneNode()->GetDerivedPosition().z + pageSize)
 							{
 								// Get the entity's bounding box to determine its height
-								Entity &entity = mapEntity->GetEntity();
-								const AABB &entityBounds = entity.GetBoundingBox();
+								Entity *entity = mapEntity->GetEntity();
+								const AABB &entityBounds = entity->GetBoundingBox();
 								if (!entityBounds.IsNull())
 								{
 									const Vector3 entityWorldPos = mapEntity->GetSceneNode().GetDerivedPosition();
@@ -1527,9 +1531,9 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 								entityPos.z >= page->GetSceneNode()->GetDerivedPosition().z &&
 								entityPos.z < page->GetSceneNode()->GetDerivedPosition().z + pageSize)
 							{
-								Entity &entity = mapEntity->GetEntity();
-								originalRenderQueues.emplace_back(&entity, entity.GetRenderQueueGroup());
-								entity.SetRenderQueueGroup(WorldGeometry1); // Same as terrain
+								Entity *entity = mapEntity->GetEntity();
+								originalRenderQueues.emplace_back(entity, entity->GetRenderQueueGroup());
+								entity->SetRenderQueueGroup(WorldGeometry1); // Same as terrain
 							}
 						}
 					}
@@ -1685,7 +1689,15 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 					continue;
 				}
 
-				mapEntity = light->GetUserObject<MapEntity>();
+				// Find the MapEntity - it's the last one added
+				if (!m_mapEntities.empty())
+				{
+					mapEntity = m_mapEntities.back().get();
+					if (mapEntity && mapEntity->GetLight() == light)
+					{
+						mapEntity->remove.connect(this, &WorldEditorInstance::OnMapEntityRemoved);
+					}
+				}
 			}
 			else
 			{

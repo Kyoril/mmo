@@ -9,9 +9,9 @@
 namespace mmo
 {
 	static ChunkMagic WorldEntityVersionChunk = MakeChunkMagic('WVER');
-	static ChunkMagic WorldEntityType = MakeChunkMagic('WTYP');
-	static ChunkMagic WorldEntityMesh = MakeChunkMagic('WMSH');
-	static ChunkMagic WorldEntityLight = MakeChunkMagic('WLIT');
+	static ChunkMagic WorldEntityTypeChunk = MakeChunkMagic('WTYP');
+	static ChunkMagic WorldEntityMeshChunk = MakeChunkMagic('WMSH');
+	static ChunkMagic WorldEntityLightChunk = MakeChunkMagic('WLIT');
 
 	uint64 GenerateUniqueId()
 	{
@@ -53,11 +53,11 @@ namespace mmo
 
 		if (m_version >= 0x00003)
 		{
-			AddChunkHandler(*WorldEntityType, true, *this, &WorldEntityLoader::OnEntityTypeChunk);
+			AddChunkHandler(*WorldEntityTypeChunk, true, *this, &WorldEntityLoader::OnEntityTypeChunk);
 		}
 		else
 		{
-			AddChunkHandler(*WorldEntityMesh, true, *this, &WorldEntityLoader::OnEntityMeshChunk);
+			AddChunkHandler(*WorldEntityMeshChunk, true, *this, &WorldEntityLoader::OnEntityMeshChunk);
 		}
 
 		return reader;
@@ -65,7 +65,7 @@ namespace mmo
 
 	bool WorldEntityLoader::OnEntityMeshChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
 	{
-		ASSERT(chunkHeader == *WorldEntityMesh);
+		ASSERT(chunkHeader == *WorldEntityMeshChunk);
 
 		if (!(reader
 			>> io::read<uint64>(m_entity.uniqueId)
@@ -133,9 +133,9 @@ namespace mmo
 
 	bool WorldEntityLoader::OnEntityTypeChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
 	{
-		ASSERT(chunkHeader == *WorldEntityType);
+		ASSERT(chunkHeader == *WorldEntityTypeChunk);
 
-		RemoveChunkHandler(*WorldEntityType);
+		RemoveChunkHandler(*WorldEntityTypeChunk);
 
 		uint8 entityType = 0;
 		if (!(reader >> io::read<uint8>(entityType)))
@@ -149,11 +149,11 @@ namespace mmo
 		// Based on entity type, add appropriate chunk handler
 		if (m_entity.type == WorldEntityType::PointLight)
 		{
-			AddChunkHandler(*WorldEntityLight, true, *this, &WorldEntityLoader::OnEntityLightChunk);
+			AddChunkHandler(*WorldEntityLightChunk, true, *this, &WorldEntityLoader::OnEntityLightChunk);
 		}
 		else if (m_entity.type == WorldEntityType::Mesh)
 		{
-			AddChunkHandler(*WorldEntityMesh, true, *this, &WorldEntityLoader::OnEntityMeshChunk);
+			AddChunkHandler(*WorldEntityMeshChunk, true, *this, &WorldEntityLoader::OnEntityMeshChunk);
 		}
 
 		return reader;
@@ -161,7 +161,7 @@ namespace mmo
 
 	bool WorldEntityLoader::OnEntityLightChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
 	{
-		ASSERT(chunkHeader == *WorldEntityLight);
+		ASSERT(chunkHeader == *WorldEntityLightChunk);
 
 		if (!(reader
 			>> io::read<uint64>(m_entity.uniqueId)

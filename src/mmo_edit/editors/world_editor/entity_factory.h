@@ -20,6 +20,7 @@ namespace mmo
     class MapEntity;
     class SceneOutlineWindow;
     class Light;
+    class Vector4;
 
     namespace proto
     {
