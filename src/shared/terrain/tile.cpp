@@ -1116,7 +1116,7 @@ namespace mmo
 					{
 						int nextZ = z - superstep;
 
-						// Bottom side triangless order: edge, interior-upper, interior-lower
+						// Bottom side triangles order: edge, interior-upper, interior-lower
 						for (int k = 0; k < halfsuperstep; k += step)
 						{
 							if (z != tileSize - 1 || k != 0 || !omitFirst)
