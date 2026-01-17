@@ -3,14 +3,18 @@
 #include <list>
 #include <unordered_map>
 #include <memory>
+#include <mutex>
 
 namespace mmo
 {
 	namespace terrain
 	{
-		/// @brief A generic LRU (Least Recently Used) cache implementation with configurable size limit.
+		/// @brief A thread-safe LRU (Least Recently Used) cache implementation with configurable size limit.
 		/// @tparam KeyType The type of the cache key.
 		/// @tparam ValueType The type of the cached value (must be a unique_ptr).
+		/// @details This cache is thread-safe and can be safely accessed from multiple threads, such as
+		///          rendering threads, LOD update threads, and terrain editing threads. All operations
+		///          are protected by an internal mutex.
 		template<typename KeyType, typename ValueType>
 		class LRUCache
 		{
@@ -28,15 +32,18 @@ namespace mmo
 			LRUCache(const LRUCache&) = delete;
 			LRUCache& operator=(const LRUCache&) = delete;
 
-			LRUCache(LRUCache&&) = default;
-			LRUCache& operator=(LRUCache&&) = default;
+			LRUCache(LRUCache&&) = delete;
+			LRUCache& operator=(LRUCache&&) = delete;
 
 			/// @brief Retrieves a value from the cache.
 			/// @param key The key to look up.
 			/// @return Pointer to the cached value if found, nullptr otherwise. The returned pointer
 			///         remains valid until the entry is evicted or the cache is cleared.
+			/// @note This method is thread-safe.
 			ValueType* Get(const KeyType& key)
 			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+
 				auto it = m_map.find(key);
 				if (it == m_map.end())
 				{
@@ -55,8 +62,11 @@ namespace mmo
 			/// @details If the cache is at capacity, the least recently used entry will be evicted.
 			///          If an entry with the same key already exists, it will be replaced and moved
 			///          to the front of the LRU list.
+			/// @note This method is thread-safe.
 			void Put(const KeyType& key, std::unique_ptr<ValueType> value)
 			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+
 				auto it = m_map.find(key);
 
 				// If key already exists, update it and move to front
@@ -86,29 +96,37 @@ namespace mmo
 			/// @brief Checks if a key exists in the cache without updating access time.
 			/// @param key The key to check.
 			/// @return True if the key exists in the cache, false otherwise.
+			/// @note This method is thread-safe.
 			bool Contains(const KeyType& key) const
 			{
+				std::lock_guard<std::mutex> lock(m_mutex);
 				return m_map.find(key) != m_map.end();
 			}
 
 			/// @brief Removes all entries from the cache.
+			/// @note This method is thread-safe.
 			void Clear()
 			{
+				std::lock_guard<std::mutex> lock(m_mutex);
 				m_map.clear();
 				m_list.clear();
 			}
 
 			/// @brief Gets the current number of entries in the cache.
 			/// @return The number of entries.
+			/// @note This method is thread-safe.
 			size_t Size() const
 			{
+				std::lock_guard<std::mutex> lock(m_mutex);
 				return m_list.size();
 			}
 
 			/// @brief Gets the maximum capacity of the cache.
 			/// @return The maximum number of entries the cache can hold.
+			/// @note This method is thread-safe. The max size can be modified by SetMaxSize.
 			size_t MaxSize() const
 			{
+				std::lock_guard<std::mutex> lock(m_mutex);
 				return m_maxSize;
 			}
 
@@ -116,8 +134,11 @@ namespace mmo
 			/// @param newMaxSize The new maximum size. If smaller than the current size,
 			///                   least recently used entries will be evicted until the size
 			///                   matches the new limit.
+			/// @note This method is thread-safe.
 			void SetMaxSize(size_t newMaxSize)
 			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+
 				m_maxSize = newMaxSize;
 
 				// Evict entries if we're now over capacity
@@ -140,6 +161,7 @@ namespace mmo
 			size_t m_maxSize;
 			std::list<KeyType> m_list;
 			std::unordered_map<KeyType, CacheEntry> m_map;
+			mutable std::mutex m_mutex;
 		};
 	}
 }
