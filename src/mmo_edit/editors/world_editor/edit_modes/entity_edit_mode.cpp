@@ -31,7 +31,7 @@ namespace mmo
 		{
 			// Create a point light at the camera position
 			const Vector3 cameraPos = m_worldEditor.GetCamera().GetDerivedPosition();
-			m_worldEditor.CreatePointLight(cameraPos, Vector4(1.0f, 1.0f, 1.0f, 1.0f), 1.0f, 10.0f);
+			m_worldEditor.CreatePointLight(cameraPos, Vector4(1.0f, 1.0f, 0.0f, 1.0f), 1.0f, 10.0f);
 		}
 	}
 

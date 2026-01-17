@@ -104,6 +104,7 @@ namespace mmo
         light.SetColor(color);
         light.SetIntensity(intensity);
         light.SetRange(range);
+        light.SetCastShadows(false);
 
         auto &node = m_scene.CreateSceneNode(uniqueId);
         m_scene.GetRootSceneNode().AddChild(node);
