@@ -203,7 +203,7 @@ namespace mmo
 			size_t m_startX, m_startZ;
 			std::unique_ptr<VertexData> m_vertexData;
 			std::unique_ptr<IndexData> m_indexData;
-			bool m_hasRenderableGeometry{ false };
+			bool m_hasRenderableGeometry{ true };
 			VertexBufferPtr m_mainBuffer;
 
 			TexturePtr m_coverageTexture;
