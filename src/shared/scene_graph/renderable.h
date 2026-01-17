@@ -40,6 +40,7 @@ namespace mmo
         /// @brief Called just before the renderable is being rendered.
         /// @param scene The scene that this renderable belongs to.
         /// @param graphicsDevice The graphics device that is used for rendering.
+		/// @param camera The camera that is used for rendering.
         /// @return true if the automatic rendering should proceed, false to skip rendering.
         virtual bool PreRender(Scene& scene, GraphicsDevice& graphicsDevice, Camera& camera)
 		{
@@ -49,6 +50,7 @@ namespace mmo
         /// @brief Called immediately after the renderable has been rendered.
         /// @param scene The scene that this renderable belongs to.
         /// @param graphicsDevice The graphics device that was used for rendering.
+		/// @param camera The camera that was used for rendering.
         virtual void PostRender(Scene& scene, GraphicsDevice& graphicsDevice, Camera& camera)
         {
         }
