@@ -101,6 +101,8 @@ namespace mmo
 		static ConsoleVar *s_foliageEnabledVar = nullptr;
 		static ConsoleVar *s_foliageDensityVar = nullptr;
 
+		static ConsoleVar *s_terrainLodEnabledVar = nullptr;
+
 		String MapMouseButton(const MouseButton button)
 		{
 			if ((button & MouseButton::Left) == MouseButton::Left)
@@ -1090,6 +1092,8 @@ namespace mmo
 		m_cvarChangedSignals += s_shadowTextureSizeVar->Changed.connect(this, &WorldState::OnShadowTextureSizeChanged);
 
 		s_foliageEnabledVar = ConsoleVarMgr::RegisterConsoleVar("FoliageEnabled", "Enable or disable foliage rendering (grass, plants, etc.)", "1");
+
+		s_terrainLodEnabledVar = ConsoleVarMgr::RegisterConsoleVar("TerrainLodEnabled", "Enable or disable terrain level of detail", "1");
 		m_cvarChangedSignals += s_foliageEnabledVar->Changed.connect(this, &WorldState::OnFoliageEnabledChanged);
 		s_foliageDensityVar = ConsoleVarMgr::RegisterConsoleVar("FoliageDensity", "Foliage density multiplier (0.1 to 1.0). Lower values improve performance.", "1.0");
 		m_cvarChangedSignals += s_foliageDensityVar->Changed.connect(this, &WorldState::OnFoliageDensityChanged);
@@ -1112,6 +1116,10 @@ namespace mmo
 									 {
 										 const bool enabled = !m_worldInstance->GetTerrain()->IsLodEnabled();
 										 m_worldInstance->GetTerrain()->SetLodEnabled(enabled);
+										 if (s_terrainLodEnabledVar)
+										 {
+											 s_terrainLodEnabledVar->Set(enabled);
+										 }
 										 ILOG("Terrain LOD " << (enabled ? "enabled" : "disabled"));
 									 }
 								 },
@@ -3368,6 +3376,12 @@ namespace mmo
 
 		// Load area triggers for this map
 		m_areaTriggerManager.LoadTriggersForMap(map->id(), m_project.areaTriggers);
+
+		// Apply terrain LOD setting from console variable
+		if (m_worldInstance->HasTerrain() && s_terrainLodEnabledVar)
+		{
+			m_worldInstance->GetTerrain()->SetLodEnabled(s_terrainLodEnabledVar->GetIntValue() != 0);
+		}
 
 		return true;
 	}

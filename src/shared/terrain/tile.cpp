@@ -190,7 +190,20 @@ namespace mmo
 			}
 			else
 			{
-				m_currentLod = 0;
+				// When LOD is disabled, force LOD 0 with no edge stitching
+				constexpr uint32 lodDisabledStitchKey = 0; // LOD 0, all neighbors LOD 0
+				if (m_currentStitchKey != lodDisabledStitchKey || m_currentLod != 0)
+				{
+					m_currentLod = 0;
+					if (m_lodIndexCache.find(lodDisabledStitchKey) == m_lodIndexCache.end())
+					{
+						CreateIndexData(0, 0, 0, 0, 0);
+					}
+					else
+					{
+						m_currentStitchKey = lodDisabledStitchKey;
+					}
+				}
 			}
 			
 			return Renderable::PreRender(scene, graphicsDevice, camera);
