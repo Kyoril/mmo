@@ -1130,7 +1130,7 @@ namespace mmo
 						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(interiorX), static_cast<size_t>(z - halfsuperstep)));
 						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(edgeX), static_cast<size_t>(nextZ)));
 
-						// Top side triangles
+						// Upper portion (second half) of west edge triangles
 						for (int k = halfsuperstep; k < superstep; k += step)
 						{
 							if (z != superstep || k != superstep - step || !omitLast)
