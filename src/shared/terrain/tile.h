@@ -101,6 +101,18 @@ namespace mmo
 			/// @param westLod West neighbor's LOD level
 			void GenerateEdgeStitching(std::vector<uint16>& indices, uint32 lod, uint32 northLod, uint32 eastLod, uint32 southLod, uint32 westLod);
 
+			/// @brief Stitches the north edge for LOD > 0 using Faudra algorithm
+			void StitchEdgeNorth(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri);
+
+			/// @brief Stitches the east edge for LOD > 0 using Faudra algorithm
+			void StitchEdgeEast(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri);
+
+			/// @brief Stitches the south edge for LOD > 0 using Faudra algorithm
+			void StitchEdgeSouth(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri);
+
+			/// @brief Stitches the west edge for LOD > 0 using Faudra algorithm
+			void StitchEdgeWest(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri);
+
 			// Helper methods for new vertex layout (outer + inner vertices)
 			/// @brief Gets the vertex index for an outer vertex at grid position (x, y)
 			/// @param x X coordinate in outer vertex grid (0-8)

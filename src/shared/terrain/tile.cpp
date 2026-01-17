@@ -11,6 +11,7 @@
 #include "math/matrix3.h"
 #include "scene_graph/mesh_manager.h"
 #include "scene_graph/scene.h"
+#include "log/default_log_levels.h"
 
 namespace mmo
 {
@@ -524,17 +525,21 @@ namespace mmo
 			// Get the hole map for this tile
 			const uint64 holeMap = m_page.GetTileHoleMap(m_tileX, m_tileY);
 
-			// Calculate step size for this tile's LOD
-			// LOD 0 = step 1, LOD 1 = step 1, LOD 2 = step 2, LOD 3 = step 4
-			const size_t ourStep = (lod <= 1) ? 1 : (static_cast<size_t>(1) << (lod - 1));
+			// For LOD >= 1, use Faudra-style step-based LOD on the outer vertex grid only
+			// LOD 0 = diamond pattern with inner vertices
+			// LOD 1 = step 1 on outer grid (8x8 quads from 9x9 vertices)
+			// LOD 2 = step 2 on outer grid (4x4 quads from 5x5 vertices)
+			// LOD 3 = step 4 on outer grid (2x2 quads from 3x3 vertices)
+			const size_t ourStep = (lod == 0) ? 1 : (static_cast<size_t>(1) << (lod - 1));
 
-			// Calculate step sizes for neighbor tiles
-			const size_t northStep = (northLod <= 1) ? 1 : (static_cast<size_t>(1) << (northLod - 1));
-			const size_t eastStep = (eastLod <= 1) ? 1 : (static_cast<size_t>(1) << (eastLod - 1));
-			const size_t southStep = (southLod <= 1) ? 1 : (static_cast<size_t>(1) << (southLod - 1));
-			const size_t westStep = (westLod <= 1) ? 1 : (static_cast<size_t>(1) << (westLod - 1));
+			// Calculate step sizes for neighbor tiles (used for stitching)
+			const size_t northStep = (northLod == 0) ? 1 : (static_cast<size_t>(1) << (northLod - 1));
+			const size_t eastStep = (eastLod == 0) ? 1 : (static_cast<size_t>(1) << (eastLod - 1));
+			const size_t southStep = (southLod == 0) ? 1 : (static_cast<size_t>(1) << (southLod - 1));
+			const size_t westStep = (westLod == 0) ? 1 : (static_cast<size_t>(1) << (westLod - 1));
 
-			const size_t maxIdx = constants::OuterVerticesPerTileSide - 1;
+			const size_t tileSize = constants::OuterVerticesPerTileSide;
+			const size_t maxIdx = tileSize - 1;
 
 			if (lod == 0)
 			{
@@ -631,12 +636,24 @@ namespace mmo
 			}
 			else
 			{
-				// For LOD > 0, use simple quad grid with the appropriate step size
+				// For LOD > 0, use Faudra-style geometry: outer vertex grid only
+				// Step through the grid at the appropriate spacing for this LOD level
 				const size_t step = ourStep;
 
-				for (size_t j = 0; j < maxIdx; j += step)
+				// Determine which edges need stitching (neighbor has coarser detail = higher LOD value)
+				const size_t north = (northLod > lod) ? step : 0;
+				const size_t east = (eastLod > lod) ? step : 0;
+				const size_t south = (southLod > lod) ? step : 0;
+				const size_t west = (westLod > lod) ? step : 0;
+
+				DLOG("LOD " << lod << " main grid: step=" << step 
+					<< " gaps: N=" << north << " E=" << east << " S=" << south << " W=" << west
+					<< " loop j=[" << north << "," << (tileSize - 1 - south) << ") i=[" << west << "," << (tileSize - 1 - east) << ")");
+
+				// Generate the main grid, leaving gaps at edges that need stitching
+				for (size_t j = north; j < tileSize - 1 - south; j += step)
 				{
-					for (size_t i = 0; i < maxIdx; i += step)
+					for (size_t i = west; i < tileSize - 1 - east; i += step)
 					{
 						// Check for holes - if any cell in the quad is a hole, skip the whole quad
 						bool isHole = false;
@@ -660,24 +677,6 @@ namespace mmo
 							continue;
 						}
 
-						// Check if this quad touches an edge with a coarser neighbor
-						const bool touchesNorth = (j == 0);
-						const bool touchesEast = (i + step >= maxIdx);
-						const bool touchesSouth = (j + step >= maxIdx);
-						const bool touchesWest = (i == 0);
-
-						// Skip edge quads that will be handled by stitching
-						const bool needsNorthStitch = touchesNorth && (northLod > lod);
-						const bool needsEastStitch = touchesEast && (eastLod > lod);
-						const bool needsSouthStitch = touchesSouth && (southLod > lod);
-						const bool needsWestStitch = touchesWest && (westLod > lod);
-
-						// If any stitching is needed for this quad, skip it - stitching will handle it
-						if (needsNorthStitch || needsEastStitch || needsSouthStitch || needsWestStitch)
-						{
-							continue;
-						}
-
 						const size_t nextI = std::min(i + step, maxIdx);
 						const size_t nextJ = std::min(j + step, maxIdx);
 
@@ -686,13 +685,13 @@ namespace mmo
 						const uint16 outerBL = GetOuterVertexIndex(i, nextJ);
 						const uint16 outerBR = GetOuterVertexIndex(nextI, nextJ);
 
-						// Triangle 1: TL, BL, BR
+						// Triangle 1: TL, BL, TR
 						indices.push_back(outerTL);
 						indices.push_back(outerBL);
-						indices.push_back(outerBR);
+						indices.push_back(outerTR);
 
-						// Triangle 2: TL, BR, TR
-						indices.push_back(outerTL);
+						// Triangle 2: BL, BR, TR
+						indices.push_back(outerBL);
 						indices.push_back(outerBR);
 						indices.push_back(outerTR);
 					}
@@ -700,7 +699,15 @@ namespace mmo
 			}
 
 			// Generate edge stitching triangles for edges with coarser neighbors
+			const size_t indicesBeforeStitch = indices.size();
 			GenerateEdgeStitching(indices, lod, northLod, eastLod, southLod, westLod);
+			const size_t stitchTriangles = (indices.size() - indicesBeforeStitch) / 3;
+			
+			if (stitchTriangles > 0)
+			{
+				DLOG("Tile LOD " << lod << " generated " << stitchTriangles << " stitch triangles, "
+					<< (indicesBeforeStitch / 3) << " main grid triangles");
+			}
 
 			// If no indices were generated, mark tile as non-renderable and skip buffer creation
 			if (indices.empty())
@@ -733,36 +740,38 @@ namespace mmo
 
 		void Tile::GenerateEdgeStitching(std::vector<uint16>& indices, uint32 lod, uint32 northLod, uint32 eastLod, uint32 southLod, uint32 westLod)
 		{
-			// Edge stitching creates triangles that connect this tile's edge to a coarser
-			// neighbor without creating T-junctions.
+			// Edge stitching connects this tile's edge to a coarser (higher LOD value) neighbor
+			// without creating T-junctions.
 			//
-			// The key insight is that the coarser neighbor only has vertices at certain
-			// positions (every neighborStep vertices), so we must fan from those coarse
-			// vertices to our finer edge vertices.
+			// For LOD 0 (diamond pattern), stitching uses inner vertices.
+			// For LOD > 0 (Faudra-style), stitching uses the fan approach from the coarse edge
+			// vertices to the fine interior vertices.
 
-			const size_t maxIdx = constants::OuterVerticesPerTileSide - 1;
+			const size_t tileSize = constants::OuterVerticesPerTileSide;
+			const size_t maxIdx = tileSize - 1;
 			const size_t innerMax = constants::InnerVerticesPerTileSide - 1;
 
-			// Calculate step sizes
-			const size_t ourStep = (lod <= 1) ? 1 : (static_cast<size_t>(1) << (lod - 1));
-			const size_t northStep = (northLod <= 1) ? 1 : (static_cast<size_t>(1) << (northLod - 1));
-			const size_t eastStep = (eastLod <= 1) ? 1 : (static_cast<size_t>(1) << (eastLod - 1));
-			const size_t southStep = (southLod <= 1) ? 1 : (static_cast<size_t>(1) << (southLod - 1));
-			const size_t westStep = (westLod <= 1) ? 1 : (static_cast<size_t>(1) << (westLod - 1));
+			// Calculate step sizes based on LOD levels
+			// For LOD 0, the "step" on the outer grid is 1
+			// For LOD >= 1, step = 2^(lod-1)
+			const size_t northStep = (northLod == 0) ? 1 : (static_cast<size_t>(1) << (northLod - 1));
+			const size_t eastStep = (eastLod == 0) ? 1 : (static_cast<size_t>(1) << (eastLod - 1));
+			const size_t southStep = (southLod == 0) ? 1 : (static_cast<size_t>(1) << (southLod - 1));
+			const size_t westStep = (westLod == 0) ? 1 : (static_cast<size_t>(1) << (westLod - 1));
 
-			// ===== NORTH EDGE STITCHING =====
-			if (northLod > lod)
+			if (lod == 0)
 			{
-				// For each segment between coarse neighbor vertices
-				for (size_t segStart = 0; segStart < maxIdx; segStart += northStep)
-				{
-					const size_t segEnd = std::min(segStart + northStep, maxIdx);
-					const uint16 coarseLeft = GetOuterVertexIndex(segStart, 0);
-					const uint16 coarseRight = GetOuterVertexIndex(segEnd, 0);
+				// LOD 0 stitching: Use inner vertices to fan from coarse edge vertices
 
-					if (lod == 0)
+				// ===== NORTH EDGE STITCHING (LOD 0) =====
+				if (northLod > lod)
+				{
+					for (size_t segStart = 0; segStart < maxIdx; segStart += northStep)
 					{
-						// LOD 0 uses diamond pattern - need to connect through inner vertices
+						const size_t segEnd = std::min(segStart + northStep, maxIdx);
+						const uint16 coarseLeft = GetOuterVertexIndex(segStart, 0);
+						const uint16 coarseRight = GetOuterVertexIndex(segEnd, 0);
+
 						// Fan from coarseLeft through all inner vertices in this segment to coarseRight
 						for (size_t k = segStart; k < segEnd; ++k)
 						{
@@ -770,7 +779,6 @@ namespace mmo
 
 							if (k == segStart)
 							{
-								// First: connect coarseLeft to first inner and the vertex below
 								if (segEnd - segStart > 1)
 								{
 									const uint16 belowVertex = GetOuterVertexIndex(k + 1, 1);
@@ -781,7 +789,6 @@ namespace mmo
 							}
 							else
 							{
-								// Middle: connect through the "below" outer vertex
 								const uint16 prevInner = GetInnerVertexIndex(k - 1, 0);
 								const uint16 belowVertex = GetOuterVertexIndex(k, 1);
 
@@ -795,7 +802,6 @@ namespace mmo
 							}
 						}
 
-						// Final triangle: coarseLeft -> lastInner -> coarseRight
 						if (segEnd > segStart)
 						{
 							const uint16 lastInner = GetInnerVertexIndex(segEnd - 1, 0);
@@ -804,102 +810,17 @@ namespace mmo
 							indices.push_back(coarseRight);
 						}
 					}
-					else
-					{
-						// LOD > 0 uses quad pattern
-						// Collect all vertices along edge and interior
-						std::vector<uint16> edgeVertices;
-						std::vector<uint16> interiorVertices;
-						for (size_t x = segStart; x <= segEnd; x += ourStep)
-						{
-							edgeVertices.push_back(GetOuterVertexIndex(x, 0));
-							interiorVertices.push_back(GetOuterVertexIndex(x, ourStep));
-						}
-
-						// For each segment between our fine edge vertices
-						for (size_t i = 0; i + 1 < edgeVertices.size(); ++i)
-						{
-							const uint16 edgeLeft = edgeVertices[i];
-							const uint16 edgeRight = edgeVertices[i + 1];
-							const uint16 intLeft = interiorVertices[i];
-							const uint16 intRight = interiorVertices[i + 1];
-
-							// Check if edge vertices are on the coarse grid
-							const size_t edgeLeftX = segStart + i * ourStep;
-							const size_t edgeRightX = segStart + (i + 1) * ourStep;
-							const bool isCoarseLeft = (edgeLeftX % northStep) == 0;
-							const bool isCoarseRight = (edgeRightX % northStep) == 0;
-
-							if (isCoarseLeft && isCoarseRight)
-							{
-								// Both on coarse grid - simple quad
-								indices.push_back(edgeLeft);
-								indices.push_back(intLeft);
-								indices.push_back(intRight);
-
-								indices.push_back(edgeLeft);
-								indices.push_back(intRight);
-								indices.push_back(edgeRight);
-							}
-							else if (isCoarseLeft)
-							{
-								// Fan from left coarse vertex
-								indices.push_back(edgeLeft);
-								indices.push_back(intLeft);
-								indices.push_back(intRight);
-
-								indices.push_back(edgeLeft);
-								indices.push_back(intRight);
-								indices.push_back(edgeRight);
-							}
-							else if (isCoarseRight)
-							{
-								// Fan from right coarse vertex
-								indices.push_back(edgeRight);
-								indices.push_back(edgeLeft);
-								indices.push_back(intLeft);
-
-								indices.push_back(edgeRight);
-								indices.push_back(intLeft);
-								indices.push_back(intRight);
-							}
-							else
-							{
-								// Both intermediate - need 4 triangles to cover the quad and connect to coarse
-								// First fill the interior quad
-								indices.push_back(edgeLeft);
-								indices.push_back(intLeft);
-								indices.push_back(intRight);
-
-								indices.push_back(edgeLeft);
-								indices.push_back(intRight);
-								indices.push_back(edgeRight);
-
-								// Then connect edge vertices to the coarse vertex
-								indices.push_back(coarseLeft);
-								indices.push_back(edgeLeft);
-								indices.push_back(intLeft);
-
-								indices.push_back(coarseLeft);
-								indices.push_back(intRight);
-								indices.push_back(edgeRight);
-							}
-						}
-					}
 				}
-			}
 
-			// ===== EAST EDGE STITCHING =====
-			if (eastLod > lod)
-			{
-				for (size_t segStart = 0; segStart < maxIdx; segStart += eastStep)
+				// ===== EAST EDGE STITCHING (LOD 0) =====
+				if (eastLod > lod)
 				{
-					const size_t segEnd = std::min(segStart + eastStep, maxIdx);
-					const uint16 coarseTop = GetOuterVertexIndex(maxIdx, segStart);
-					const uint16 coarseBottom = GetOuterVertexIndex(maxIdx, segEnd);
-
-					if (lod == 0)
+					for (size_t segStart = 0; segStart < maxIdx; segStart += eastStep)
 					{
+						const size_t segEnd = std::min(segStart + eastStep, maxIdx);
+						const uint16 coarseTop = GetOuterVertexIndex(maxIdx, segStart);
+						const uint16 coarseBottom = GetOuterVertexIndex(maxIdx, segEnd);
+
 						for (size_t k = segStart; k < segEnd; ++k)
 						{
 							const uint16 innerVertex = GetInnerVertexIndex(innerMax, k);
@@ -937,93 +858,17 @@ namespace mmo
 							indices.push_back(coarseBottom);
 						}
 					}
-					else
-					{
-						std::vector<uint16> edgeVertices;
-						std::vector<uint16> interiorVertices;
-						for (size_t y = segStart; y <= segEnd; y += ourStep)
-						{
-							edgeVertices.push_back(GetOuterVertexIndex(maxIdx, y));
-							interiorVertices.push_back(GetOuterVertexIndex(maxIdx - ourStep, y));
-						}
-
-						for (size_t i = 0; i + 1 < edgeVertices.size(); ++i)
-						{
-							const uint16 edgeTop = edgeVertices[i];
-							const uint16 edgeBottom = edgeVertices[i + 1];
-							const uint16 intTop = interiorVertices[i];
-							const uint16 intBottom = interiorVertices[i + 1];
-
-							const size_t edgeTopY = segStart + i * ourStep;
-							const size_t edgeBottomY = segStart + (i + 1) * ourStep;
-							const bool isCoarseTop = (edgeTopY % eastStep) == 0;
-							const bool isCoarseBottom = (edgeBottomY % eastStep) == 0;
-
-							if (isCoarseTop && isCoarseBottom)
-							{
-								indices.push_back(edgeTop);
-								indices.push_back(intTop);
-								indices.push_back(intBottom);
-
-								indices.push_back(edgeTop);
-								indices.push_back(intBottom);
-								indices.push_back(edgeBottom);
-							}
-							else if (isCoarseTop)
-							{
-								indices.push_back(edgeTop);
-								indices.push_back(intTop);
-								indices.push_back(intBottom);
-
-								indices.push_back(edgeTop);
-								indices.push_back(intBottom);
-								indices.push_back(edgeBottom);
-							}
-							else if (isCoarseBottom)
-							{
-								indices.push_back(edgeBottom);
-								indices.push_back(edgeTop);
-								indices.push_back(intTop);
-
-								indices.push_back(edgeBottom);
-								indices.push_back(intTop);
-								indices.push_back(intBottom);
-							}
-							else
-							{
-								// Both intermediate - 4 triangles
-								indices.push_back(edgeTop);
-								indices.push_back(intTop);
-								indices.push_back(intBottom);
-
-								indices.push_back(edgeTop);
-								indices.push_back(intBottom);
-								indices.push_back(edgeBottom);
-
-								indices.push_back(coarseTop);
-								indices.push_back(edgeTop);
-								indices.push_back(intTop);
-
-								indices.push_back(coarseTop);
-								indices.push_back(intBottom);
-								indices.push_back(edgeBottom);
-							}
-						}
-					}
 				}
-			}
 
-			// ===== SOUTH EDGE STITCHING =====
-			if (southLod > lod)
-			{
-				for (size_t segStart = 0; segStart < maxIdx; segStart += southStep)
+				// ===== SOUTH EDGE STITCHING (LOD 0) =====
+				if (southLod > lod)
 				{
-					const size_t segEnd = std::min(segStart + southStep, maxIdx);
-					const uint16 coarseLeft = GetOuterVertexIndex(segStart, maxIdx);
-					const uint16 coarseRight = GetOuterVertexIndex(segEnd, maxIdx);
-
-					if (lod == 0)
+					for (size_t segStart = 0; segStart < maxIdx; segStart += southStep)
 					{
+						const size_t segEnd = std::min(segStart + southStep, maxIdx);
+						const uint16 coarseLeft = GetOuterVertexIndex(segStart, maxIdx);
+						const uint16 coarseRight = GetOuterVertexIndex(segEnd, maxIdx);
+
 						for (size_t k = segEnd; k > segStart; --k)
 						{
 							const size_t idx = k - 1;
@@ -1062,93 +907,17 @@ namespace mmo
 							indices.push_back(coarseLeft);
 						}
 					}
-					else
-					{
-						std::vector<uint16> edgeVertices;
-						std::vector<uint16> interiorVertices;
-						for (size_t x = segStart; x <= segEnd; x += ourStep)
-						{
-							edgeVertices.push_back(GetOuterVertexIndex(x, maxIdx));
-							interiorVertices.push_back(GetOuterVertexIndex(x, maxIdx - ourStep));
-						}
-
-						for (size_t i = 0; i + 1 < edgeVertices.size(); ++i)
-						{
-							const uint16 edgeLeft = edgeVertices[i];
-							const uint16 edgeRight = edgeVertices[i + 1];
-							const uint16 intLeft = interiorVertices[i];
-							const uint16 intRight = interiorVertices[i + 1];
-
-							const size_t edgeLeftX = segStart + i * ourStep;
-							const size_t edgeRightX = segStart + (i + 1) * ourStep;
-							const bool isCoarseLeft = (edgeLeftX % southStep) == 0;
-							const bool isCoarseRight = (edgeRightX % southStep) == 0;
-
-							if (isCoarseLeft && isCoarseRight)
-							{
-								indices.push_back(edgeRight);
-								indices.push_back(intRight);
-								indices.push_back(intLeft);
-
-								indices.push_back(edgeRight);
-								indices.push_back(intLeft);
-								indices.push_back(edgeLeft);
-							}
-							else if (isCoarseLeft)
-							{
-								indices.push_back(edgeLeft);
-								indices.push_back(edgeRight);
-								indices.push_back(intRight);
-
-								indices.push_back(edgeLeft);
-								indices.push_back(intRight);
-								indices.push_back(intLeft);
-							}
-							else if (isCoarseRight)
-							{
-								indices.push_back(edgeRight);
-								indices.push_back(intRight);
-								indices.push_back(intLeft);
-
-								indices.push_back(edgeRight);
-								indices.push_back(intLeft);
-								indices.push_back(edgeLeft);
-							}
-							else
-							{
-								// Both intermediate - 4 triangles
-								indices.push_back(edgeRight);
-								indices.push_back(intRight);
-								indices.push_back(intLeft);
-
-								indices.push_back(edgeRight);
-								indices.push_back(intLeft);
-								indices.push_back(edgeLeft);
-
-								indices.push_back(coarseRight);
-								indices.push_back(edgeRight);
-								indices.push_back(intRight);
-
-								indices.push_back(coarseRight);
-								indices.push_back(intLeft);
-								indices.push_back(edgeLeft);
-							}
-						}
-					}
 				}
-			}
 
-			// ===== WEST EDGE STITCHING =====
-			if (westLod > lod)
-			{
-				for (size_t segStart = 0; segStart < maxIdx; segStart += westStep)
+				// ===== WEST EDGE STITCHING (LOD 0) =====
+				if (westLod > lod)
 				{
-					const size_t segEnd = std::min(segStart + westStep, maxIdx);
-					const uint16 coarseTop = GetOuterVertexIndex(0, segStart);
-					const uint16 coarseBottom = GetOuterVertexIndex(0, segEnd);
-
-					if (lod == 0)
+					for (size_t segStart = 0; segStart < maxIdx; segStart += westStep)
 					{
+						const size_t segEnd = std::min(segStart + westStep, maxIdx);
+						const uint16 coarseTop = GetOuterVertexIndex(0, segStart);
+						const uint16 coarseBottom = GetOuterVertexIndex(0, segEnd);
+
 						for (size_t k = segEnd; k > segStart; --k)
 						{
 							const size_t idx = k - 1;
@@ -1187,78 +956,413 @@ namespace mmo
 							indices.push_back(coarseTop);
 						}
 					}
-					else
+				}
+			}
+			else
+			{
+				// LOD > 0: Faudra-style stitching using outer vertices only
+				// Direct port of Faudra's _stitchEdge algorithm as a single unified function
+
+				const int tileSize = static_cast<int>(constants::OuterVerticesPerTileSide);
+
+				// Debug: Log which edges need stitching
+				if (northLod > lod || eastLod > lod || southLod > lod || westLod > lod)
+				{
+					DLOG("Tile LOD " << lod << " stitching: N=" << (northLod > lod ? "Y" : "N")
+						<< " E=" << (eastLod > lod ? "Y" : "N")
+						<< " S=" << (southLod > lod ? "Y" : "N")
+						<< " W=" << (westLod > lod ? "Y" : "N")
+						<< " (neighborLODs: N=" << northLod << " E=" << eastLod << " S=" << southLod << " W=" << westLod << ")");
+				}
+
+				// ===== NORTH EDGE STITCHING (LOD > 0) =====
+				// Edge at Z=0, interior at Z=step. Triangles fan from coarse edge to fine interior.
+				// North edge draws all triangles including corners - vertical edges will omit their corner triangles.
+				if (northLod > lod)
+				{
+					int step = 1 << (lod - 1);
+					int superstep = 1 << (northLod - 1);
+					int halfsuperstep = superstep >> 1;
+
+					DLOG("NORTH stitch: step=" << step << " superstep=" << superstep << " halfsuperstep=" << halfsuperstep);
+
+					// Iterate along the edge from X=0 to X=tileSize-1
+					for (int x = 0; x < tileSize - 1; x += superstep)
 					{
-						std::vector<uint16> edgeVertices;
-						std::vector<uint16> interiorVertices;
-						for (size_t y = segStart; y <= segEnd; y += ourStep)
+						int nextX = x + superstep;
+
+						// Left side triangles (from x to x+halfsuperstep)
+						for (int k = 0; k < halfsuperstep; k += step)
 						{
-							edgeVertices.push_back(GetOuterVertexIndex(0, y));
-							interiorVertices.push_back(GetOuterVertexIndex(ourStep, y));
+							// Always draw - no omit logic for horizontal edges
+							{
+								// Triangle: edge(x,0) -> interior(x+k,step) -> interior(x+k+step,step)
+								// Winding: CCW when viewed from above to match main grid
+								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x), 0));
+								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x + k), static_cast<size_t>(step)));
+								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x + k + step), static_cast<size_t>(step)));
+							}
 						}
 
-						for (size_t i = 0; i + 1 < edgeVertices.size(); ++i)
+						// Center triangle: edge(x,0) -> interior(x+halfsuperstep,step) -> edge(nextX,0)
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x), 0));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x + halfsuperstep), static_cast<size_t>(step)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(nextX), 0));
+
+						// Right side triangles (from x+halfsuperstep to nextX)
+						for (int k = halfsuperstep; k < superstep; k += step)
 						{
-							const uint16 edgeTop = edgeVertices[i];
-							const uint16 edgeBottom = edgeVertices[i + 1];
-							const uint16 intTop = interiorVertices[i];
-							const uint16 intBottom = interiorVertices[i + 1];
-
-							const size_t edgeTopY = segStart + i * ourStep;
-							const size_t edgeBottomY = segStart + (i + 1) * ourStep;
-							const bool isCoarseTop = (edgeTopY % westStep) == 0;
-							const bool isCoarseBottom = (edgeBottomY % westStep) == 0;
-
-							if (isCoarseTop && isCoarseBottom)
+							// Always draw - no omit logic for horizontal edges
 							{
-								indices.push_back(edgeBottom);
-								indices.push_back(intBottom);
-								indices.push_back(intTop);
-
-								indices.push_back(edgeBottom);
-								indices.push_back(intTop);
-								indices.push_back(edgeTop);
-							}
-							else if (isCoarseTop)
-							{
-								indices.push_back(edgeTop);
-								indices.push_back(edgeBottom);
-								indices.push_back(intBottom);
-
-								indices.push_back(edgeTop);
-								indices.push_back(intBottom);
-								indices.push_back(intTop);
-							}
-							else if (isCoarseBottom)
-							{
-								indices.push_back(edgeBottom);
-								indices.push_back(intBottom);
-								indices.push_back(intTop);
-
-								indices.push_back(edgeBottom);
-								indices.push_back(intTop);
-								indices.push_back(edgeTop);
-							}
-							else
-							{
-								// Both intermediate - 4 triangles
-								indices.push_back(edgeBottom);
-								indices.push_back(intBottom);
-								indices.push_back(intTop);
-
-								indices.push_back(edgeBottom);
-								indices.push_back(intTop);
-								indices.push_back(edgeTop);
-
-								indices.push_back(coarseBottom);
-								indices.push_back(edgeBottom);
-								indices.push_back(intBottom);
-
-								indices.push_back(coarseBottom);
-								indices.push_back(intTop);
-								indices.push_back(edgeTop);
+								// Triangle: edge(nextX,0) -> interior(x+k,step) -> interior(x+k+step,step)
+								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(nextX), 0));
+								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x + k), static_cast<size_t>(step)));
+								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x + k + step), static_cast<size_t>(step)));
 							}
 						}
+					}
+				}
+
+				// ===== SOUTH EDGE STITCHING (LOD > 0) =====
+				// Edge at Z=tileSize-1, interior at Z=tileSize-1-step
+				// South edge draws all triangles including corners - vertical edges will omit their corner triangles.
+				if (southLod > lod)
+				{
+					int step = 1 << (lod - 1);
+					int superstep = 1 << (southLod - 1);
+					int halfsuperstep = superstep >> 1;
+					int edgeZ = tileSize - 1;
+					int interiorZ = edgeZ - step;
+
+					// Iterate along the edge from X=tileSize-1 down to X=0
+					for (int x = tileSize - 1; x > 0; x -= superstep)
+					{
+						int nextX = x - superstep;
+
+						// Left side triangles - always draw, no omit logic for horizontal edges
+						for (int k = 0; k < halfsuperstep; k += step)
+						{
+							indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x), static_cast<size_t>(edgeZ)));
+							indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x - k), static_cast<size_t>(interiorZ)));
+							indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x - k - step), static_cast<size_t>(interiorZ)));
+						}
+
+						// Center triangle
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x), static_cast<size_t>(edgeZ)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x - halfsuperstep), static_cast<size_t>(interiorZ)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(nextX), static_cast<size_t>(edgeZ)));
+
+						// Right side triangles - always draw, no omit logic for horizontal edges
+						for (int k = halfsuperstep; k < superstep; k += step)
+						{
+							indices.push_back(GetOuterVertexIndex(static_cast<size_t>(nextX), static_cast<size_t>(edgeZ)));
+							indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x - k), static_cast<size_t>(interiorZ)));
+							indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x - k - step), static_cast<size_t>(interiorZ)));
+						}
+					}
+				}
+
+				// ===== EAST EDGE STITCHING (LOD > 0) =====
+				// Edge at X=tileSize-1, interior at X=tileSize-1-step
+				if (eastLod > lod)
+				{
+					int step = 1 << (lod - 1);
+					int superstep = 1 << (eastLod - 1);
+					int halfsuperstep = superstep >> 1;
+					int edgeX = tileSize - 1;
+					int interiorX = edgeX - step;
+
+					bool omitFirst = (northLod > lod);
+					bool omitLast = (southLod > lod);
+
+					// Iterate along the edge from Z=0 to Z=tileSize-1
+					for (int z = 0; z < tileSize - 1; z += superstep)
+					{
+						int nextZ = z + superstep;
+
+						// Top side triangles - match Faudra's order: edge, interior-lower, interior-upper
+						for (int k = 0; k < halfsuperstep; k += step)
+						{
+							if (z != 0 || k != 0 || !omitFirst)
+							{
+								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(edgeX), static_cast<size_t>(z)));
+								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(interiorX), static_cast<size_t>(z + k)));
+								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(interiorX), static_cast<size_t>(z + k + step)));
+							}
+						}
+
+						// Center triangle
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(edgeX), static_cast<size_t>(z)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(interiorX), static_cast<size_t>(z + halfsuperstep)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(edgeX), static_cast<size_t>(nextZ)));
+
+						// Bottom side triangles
+						for (int k = halfsuperstep; k < superstep; k += step)
+						{
+							if (z != tileSize - 1 - superstep || k != superstep - step || !omitLast)
+							{
+								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(edgeX), static_cast<size_t>(nextZ)));
+								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(interiorX), static_cast<size_t>(z + k)));
+								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(interiorX), static_cast<size_t>(z + k + step)));
+							}
+						}
+					}
+				}
+
+				// ===== WEST EDGE STITCHING (LOD > 0) =====
+				// Edge at X=0, interior at X=step
+				if (westLod > lod)
+				{
+					int step = 1 << (lod - 1);
+					int superstep = 1 << (westLod - 1);
+					int halfsuperstep = superstep >> 1;
+					int edgeX = 0;
+					int interiorX = step;
+
+					bool omitFirst = (southLod > lod);
+					bool omitLast = (northLod > lod);
+
+					// Iterate along the edge from Z=tileSize-1 down to Z=0
+					for (int z = tileSize - 1; z > 0; z -= superstep)
+					{
+						int nextZ = z - superstep;
+
+						// Bottom side triangles - match Faudra's order: edge, interior-upper, interior-lower
+						for (int k = 0; k < halfsuperstep; k += step)
+						{
+							if (z != tileSize - 1 || k != 0 || !omitFirst)
+							{
+								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(edgeX), static_cast<size_t>(z)));
+								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(interiorX), static_cast<size_t>(z - k)));
+								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(interiorX), static_cast<size_t>(z - k - step)));
+							}
+						}
+
+						// Center triangle
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(edgeX), static_cast<size_t>(z)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(interiorX), static_cast<size_t>(z - halfsuperstep)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(edgeX), static_cast<size_t>(nextZ)));
+
+						// Top side triangles
+						for (int k = halfsuperstep; k < superstep; k += step)
+						{
+							if (z != superstep || k != superstep - step || !omitLast)
+							{
+								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(edgeX), static_cast<size_t>(nextZ)));
+								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(interiorX), static_cast<size_t>(z - k)));
+								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(interiorX), static_cast<size_t>(z - k - step)));
+							}
+						}
+					}
+				}
+			}
+		}
+
+		void Tile::StitchEdgeNorth(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri)
+		{
+			// Port of Faudra's _stitchEdge for NORTH direction
+			// hiLod = this tile's LOD, loLod = neighbor's coarser LOD
+			ASSERT(loLod > hiLod);
+
+			const int tileSize = static_cast<int>(constants::OuterVerticesPerTileSide);
+
+			// Calculate step sizes: for MMO terrain LOD 1+, step = 2^(lod-1)
+			const int step = 1 << (hiLod - 1);
+			const int superstep = 1 << (loLod - 1);
+			const int halfsuperstep = superstep >> 1;
+			const int rowstep = step;  // Interior is below (positive y)
+
+			// NORTH: horizontal edge at y=0, iterate x from 0 to tileSize-1
+			const int starty = 0;
+			const int startx = 0;
+			const int endx = tileSize - 1;
+
+			for (int j = startx; j != endx; j += superstep)
+			{
+				// First half: fan from left coarse vertex
+				for (int k = 0; k != halfsuperstep; k += step)
+				{
+					const int jk = j + k;
+					if (j != startx || k != 0 || !omitFirstTri)
+					{
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j), static_cast<size_t>(starty)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(jk), static_cast<size_t>(starty + rowstep)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(jk + step), static_cast<size_t>(starty + rowstep)));
+					}
+				}
+
+				// Center triangle: connects two coarse edge vertices through interior
+				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j), static_cast<size_t>(starty)));
+				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j + halfsuperstep), static_cast<size_t>(starty + rowstep)));
+				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j + superstep), static_cast<size_t>(starty)));
+
+				// Second half: fan from right coarse vertex
+				for (int k = halfsuperstep; k != superstep; k += step)
+				{
+					const int jk = j + k;
+					if (j != endx - superstep || k != superstep - step || !omitLastTri)
+					{
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j + superstep), static_cast<size_t>(starty)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(jk), static_cast<size_t>(starty + rowstep)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(jk + step), static_cast<size_t>(starty + rowstep)));
+					}
+				}
+			}
+		}
+
+		void Tile::StitchEdgeEast(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri)
+		{
+			// Port of Faudra's _stitchEdge for EAST direction
+			ASSERT(loLod > hiLod);
+
+			const int tileSize = static_cast<int>(constants::OuterVerticesPerTileSide);
+
+			const int step = 1 << (hiLod - 1);
+			const int superstep = 1 << (loLod - 1);
+			const int halfsuperstep = superstep >> 1;
+			const int rowstep = -step;  // Interior is to the left (negative x)
+
+			// EAST: vertical edge at x=tileSize-1, iterate y from 0 to tileSize-1
+			const int startx = tileSize - 1;
+			const int starty = 0;
+			const int endx = tileSize - 1;
+
+			for (int j = starty; j != endx; j += superstep)
+			{
+				// First half: fan from top coarse vertex
+				for (int k = 0; k != halfsuperstep; k += step)
+				{
+					const int jk = j + k;
+					if (j != starty || k != 0 || !omitFirstTri)
+					{
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx), static_cast<size_t>(j)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(jk)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(jk + step)));
+					}
+				}
+
+				// Center triangle
+				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx), static_cast<size_t>(j)));
+				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(j + halfsuperstep)));
+				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx), static_cast<size_t>(j + superstep)));
+
+				// Second half: fan from bottom coarse vertex
+				for (int k = halfsuperstep; k != superstep; k += step)
+				{
+					const int jk = j + k;
+					if (j != endx - superstep || k != superstep - step || !omitLastTri)
+					{
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx), static_cast<size_t>(j + superstep)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(jk)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(jk + step)));
+					}
+				}
+			}
+		}
+
+		void Tile::StitchEdgeSouth(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri)
+		{
+			// Port of Faudra's _stitchEdge for SOUTH direction
+			// South goes in reverse: from right to left, with negative steps
+			ASSERT(loLod > hiLod);
+
+			const int tileSize = static_cast<int>(constants::OuterVerticesPerTileSide);
+
+			// For SOUTH in Faudra: set rowstep first, then negate step/superstep
+			const int baseStep = 1 << (hiLod - 1);
+			const int baseSuperstep = 1 << (loLod - 1);
+			const int rowstep = -baseStep;  // Interior is above (negative y)
+			const int step = -baseStep;
+			const int superstep = -baseSuperstep;
+			const int halfsuperstep = superstep >> 1;
+
+			// SOUTH: horizontal edge at y=tileSize-1, iterate x from tileSize-1 down to 0
+			const int starty = tileSize - 1;
+			const int startx = tileSize - 1;
+			const int endx = 0;
+
+			for (int j = startx; j != endx; j += superstep)
+			{
+				// First half
+				for (int k = 0; k != halfsuperstep; k += step)
+				{
+					const int jk = j + k;
+					if (j != startx || k != 0 || !omitFirstTri)
+					{
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j), static_cast<size_t>(starty)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(jk), static_cast<size_t>(starty + rowstep)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(jk + step), static_cast<size_t>(starty + rowstep)));
+					}
+				}
+
+				// Center triangle
+				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j), static_cast<size_t>(starty)));
+				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j + halfsuperstep), static_cast<size_t>(starty + rowstep)));
+				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j + superstep), static_cast<size_t>(starty)));
+
+				// Second half
+				for (int k = halfsuperstep; k != superstep; k += step)
+				{
+					const int jk = j + k;
+					if (j != endx - superstep || k != superstep - step || !omitLastTri)
+					{
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j + superstep), static_cast<size_t>(starty)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(jk), static_cast<size_t>(starty + rowstep)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(jk + step), static_cast<size_t>(starty + rowstep)));
+					}
+				}
+			}
+		}
+
+		void Tile::StitchEdgeWest(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri)
+		{
+			// Port of Faudra's _stitchEdge for WEST direction
+			// West goes in reverse: from bottom to top, with negative steps
+			ASSERT(loLod > hiLod);
+
+			const int tileSize = static_cast<int>(constants::OuterVerticesPerTileSide);
+
+			// For WEST in Faudra: set rowstep first, then negate step/superstep
+			const int baseStep = 1 << (hiLod - 1);
+			const int baseSuperstep = 1 << (loLod - 1);
+			const int rowstep = baseStep;  // Interior is to the right (positive x)
+			const int step = -baseStep;
+			const int superstep = -baseSuperstep;
+			const int halfsuperstep = superstep >> 1;
+
+			// WEST: vertical edge at x=0, iterate y from tileSize-1 down to 0
+			const int startx = 0;
+			const int starty = tileSize - 1;
+			const int endx = 0;
+
+			for (int j = starty; j != endx; j += superstep)
+			{
+				// First half
+				for (int k = 0; k != halfsuperstep; k += step)
+				{
+					const int jk = j + k;
+					if (j != starty || k != 0 || !omitFirstTri)
+					{
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx), static_cast<size_t>(j)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(jk)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(jk + step)));
+					}
+				}
+
+				// Center triangle
+				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx), static_cast<size_t>(j)));
+				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(j + halfsuperstep)));
+				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx), static_cast<size_t>(j + superstep)));
+
+				// Second half
+				for (int k = halfsuperstep; k != superstep; k += step)
+				{
+					const int jk = j + k;
+					if (j != endx - superstep || k != superstep - step || !omitLastTri)
+					{
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx), static_cast<size_t>(j + superstep)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(jk)));
+						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(jk + step)));
 					}
 				}
 			}
@@ -1286,6 +1390,9 @@ namespace mmo
 			{
 				newLod = 1;
 			}
+
+			// Store our new LOD immediately so that neighbors querying us get the current frame's value
+			m_currentLod = newLod;
 
 			// Get neighbor tile LODs for edge stitching
 			uint32 northLod = newLod;
@@ -1332,8 +1439,6 @@ namespace mmo
 			// Only regenerate if the LOD or stitching configuration changed
 			if (stitchKey != m_currentStitchKey)
 			{
-				m_currentLod = newLod;
-
 				// Check if we already have this configuration cached
 				if (m_lodIndexCache.find(stitchKey) == m_lodIndexCache.end())
 				{
