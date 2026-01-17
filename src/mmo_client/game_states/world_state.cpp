@@ -81,6 +81,8 @@ namespace mmo
 		static const char *s_toggleAxis = "ToggleAxis";
 		static const char *s_toggleGrid = "ToggleGrid";
 		static const char *s_toggleWire = "ToggleWire";
+		static const char *s_toggleTerrainLOD = "ToggleTerrainLOD";
+		static const char *s_toggleTerrainDebug = "ToggleTerrainDebug";
 		static const char *s_freezeCulling = "ToggleCullingFreeze";
 		static const char *s_reload = "reload";
 	}
@@ -98,6 +100,8 @@ namespace mmo
 
 		static ConsoleVar *s_foliageEnabledVar = nullptr;
 		static ConsoleVar *s_foliageDensityVar = nullptr;
+
+		static ConsoleVar *s_terrainLodEnabledVar = nullptr;
 
 		String MapMouseButton(const MouseButton button)
 		{
@@ -1087,6 +1091,9 @@ namespace mmo
 		s_shadowTextureSizeVar = ConsoleVarMgr::RegisterConsoleVar("ShadowTextureSize", "", "1");
 		m_cvarChangedSignals += s_shadowTextureSizeVar->Changed.connect(this, &WorldState::OnShadowTextureSizeChanged);
 
+		s_terrainLodEnabledVar = ConsoleVarMgr::RegisterConsoleVar("TerrainLodEnabled", "Enable or disable terrain level of detail", "1");
+		m_cvarChangedSignals += s_terrainLodEnabledVar->Changed.connect(this, &WorldState::OnTerrainLodEnabledChanged);
+
 		s_foliageEnabledVar = ConsoleVarMgr::RegisterConsoleVar("FoliageEnabled", "Enable or disable foliage rendering (grass, plants, etc.)", "1");
 		m_cvarChangedSignals += s_foliageEnabledVar->Changed.connect(this, &WorldState::OnFoliageEnabledChanged);
 		s_foliageDensityVar = ConsoleVarMgr::RegisterConsoleVar("FoliageDensity", "Foliage density multiplier (0.1 to 1.0). Lower values improve performance.", "1.0");
@@ -1103,6 +1110,32 @@ namespace mmo
 
 		Console::RegisterCommand(command_names::s_toggleWire, [this](const std::string &, const std::string &)
 								 { ToggleWireframe(); }, ConsoleCommandCategory::Debug, "Toggles wireframe render mode.");
+
+		Console::RegisterCommand(command_names::s_toggleTerrainLOD, [this](const std::string &, const std::string &)
+								 {
+									 if (m_worldInstance && m_worldInstance->HasTerrain())
+									 {
+										 const bool enabled = !m_worldInstance->GetTerrain()->IsLodEnabled();
+										 m_worldInstance->GetTerrain()->SetLodEnabled(enabled);
+										 if (s_terrainLodEnabledVar)
+										 {
+											 s_terrainLodEnabledVar->Set(enabled);
+										 }
+										 ILOG("Terrain LOD " << (enabled ? "enabled" : "disabled"));
+									 }
+								 },
+								 ConsoleCommandCategory::Debug, "Toggles terrain LOD.");
+
+		Console::RegisterCommand(command_names::s_toggleTerrainDebug, [this](const std::string &, const std::string &)
+								 {
+									 if (m_worldInstance && m_worldInstance->HasTerrain())
+									 {
+										 const bool visible = !m_worldInstance->GetTerrain()->IsDebugLodVisible();
+										 m_worldInstance->GetTerrain()->SetDebugLodIsVisible(visible);
+										 ILOG("Terrain LOD debug " << (visible ? "enabled" : "disabled"));
+									 }
+								 },
+								 ConsoleCommandCategory::Debug, "Toggles terrain LOD debug visualization.");
 
 		Console::RegisterCommand(command_names::s_freezeCulling, [this](const std::string &, const std::string &)
 								 {
@@ -1137,6 +1170,8 @@ namespace mmo
 			command_names::s_toggleAxis,
 			command_names::s_toggleGrid,
 			command_names::s_toggleWire,
+			command_names::s_toggleTerrainLOD,
+			command_names::s_toggleTerrainDebug,
 			command_names::s_freezeCulling,
 			command_names::s_reload};
 
@@ -1174,15 +1209,17 @@ namespace mmo
 
 	void WorldState::ToggleWireframe() const
 	{
-		auto &camera = m_playerController->GetCamera();
-		camera.SetFillMode(camera.GetFillMode() == FillMode::Solid ? FillMode::Wireframe : FillMode::Solid);
-		if (camera.GetFillMode() == FillMode::Wireframe)
+		if (m_worldInstance->GetTerrain())
 		{
-			ILOG("Wireframe active");
-		}
-		else
-		{
-			ILOG("Wireframe inactive");
+			m_worldInstance->GetTerrain()->SetWireframeVisible(!m_worldInstance->GetTerrain()->IsWireframeVisible());
+			if (m_worldInstance->GetTerrain()->IsWireframeVisible())
+			{
+				ILOG("Wireframe active");
+			}
+			else
+			{
+				ILOG("Wireframe inactive");
+			}
 		}
 	}
 
@@ -3341,6 +3378,12 @@ namespace mmo
 		// Load area triggers for this map
 		m_areaTriggerManager.LoadTriggersForMap(map->id(), m_project.areaTriggers);
 
+		// Apply terrain LOD setting from console variable
+		if (m_worldInstance->HasTerrain() && s_terrainLodEnabledVar)
+		{
+			m_worldInstance->GetTerrain()->SetLodEnabled(s_terrainLodEnabledVar->GetIntValue() != 0);
+		}
+
 		return true;
 	}
 
@@ -3648,6 +3691,16 @@ namespace mmo
 
 			m_foliage->RebuildAll();
 		}
+	}
+
+	void WorldState::OnTerrainLodEnabledChanged(ConsoleVar& var, const std::string& oldValue)
+	{
+		if (!m_worldInstance || !m_worldInstance->GetTerrain())
+		{
+			return;
+		}
+
+		m_worldInstance->GetTerrain()->SetLodEnabled(var.GetBoolValue());
 	}
 
 	void WorldState::GetPlayerName(uint64 guid, std::weak_ptr<GamePlayerC> player)

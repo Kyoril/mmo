@@ -62,6 +62,16 @@ namespace mmo
                     m_terrain.SetWireframeVisible(wireframe);
                 }
 
+                bool lodEnabled = m_terrain.IsLodEnabled();
+                if (ImGui::Checkbox("Simulate Terrain LOD", &lodEnabled))
+                {
+                    m_terrain.SetLodEnabled(lodEnabled);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Enable terrain level of detail to simulate in-game appearance");
+                }
+
                 // TODO: Hack: Use terrain to get scene
                 bool showFog = m_terrain.GetScene().IsFogEnabled();
                 if (ImGui::Checkbox("Show Fog", &showFog))
