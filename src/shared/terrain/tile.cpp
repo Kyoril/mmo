@@ -77,6 +77,7 @@ namespace mmo
 		{
 			operation.vertexData = m_vertexData.get();
 			
+			// Try to get the index data for the current LOD configuration
 			IndexData* cachedIndexData = m_lodIndexCache.Get(m_currentStitchKey);
 			if (cachedIndexData)
 			{
@@ -84,16 +85,10 @@ namespace mmo
 			}
 			else
 			{
-				// Fallback to LOD 0 with no stitching
+				// Fallback to LOD 0 with no stitching (key = 0)
+				// This should always exist unless the tile has no renderable geometry
 				cachedIndexData = m_lodIndexCache.Get(0);
-				if (cachedIndexData)
-				{
-					operation.indexData = cachedIndexData;
-				}
-				else
-				{
-					operation.indexData = nullptr;
-				}
+				operation.indexData = cachedIndexData; // Will be nullptr if tile has no geometry
 			}
 
 			operation.topology = TopologyType::TriangleList;
