@@ -1000,12 +1000,10 @@ namespace mmo
 						for (int k = halfsuperstep; k < superstep; k += step)
 						{
 							// Always draw - no omit logic for horizontal edges
-							{
-								// Triangle: edge(nextX,0) -> interior(x+k,step) -> interior(x+k+step,step)
-								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(nextX), 0));
-								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x + k), static_cast<size_t>(step)));
-								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x + k + step), static_cast<size_t>(step)));
-							}
+							// Triangle: edge(nextX,0) -> interior(x+k,step) -> interior(x+k+step,step)
+							indices.push_back(GetOuterVertexIndex(static_cast<size_t>(nextX), 0));
+							indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x + k), static_cast<size_t>(step)));
+							indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x + k + step), static_cast<size_t>(step)));
 						}
 					}
 				}
