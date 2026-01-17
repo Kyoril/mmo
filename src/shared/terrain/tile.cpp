@@ -19,8 +19,16 @@ namespace mmo
 	{
 		constexpr uint32 WireframeRenderGroupId = RenderQueueGroupId::Main + 1;
 
+		/// @brief Default maximum number of LOD index buffer combinations to cache per tile.
+		/// @details This value provides a good balance between memory usage and performance.
+		///          With 64 entries, each tile can cache the most frequently used LOD
+		///          combinations while keeping memory overhead reasonable (typically < 100 KB
+		///          per tile for cached index buffers).
+		constexpr size_t DefaultLodCacheSize = 64;
+
 		Tile::Tile(const String &name, Page &page, size_t startX, size_t startZ)
 			: MovableObject(name), Renderable(), m_page(page), m_startX(startX), m_startZ(startZ)
+			, m_lodIndexCache(DefaultLodCacheSize)
 		{
 			SetRenderQueueGroup(WorldGeometry1);
 
@@ -69,18 +77,18 @@ namespace mmo
 		{
 			operation.vertexData = m_vertexData.get();
 			
-			auto it = m_lodIndexCache.find(m_currentStitchKey);
-			if (it != m_lodIndexCache.end() && it->second)
+			IndexData* cachedIndexData = m_lodIndexCache.Get(m_currentStitchKey);
+			if (cachedIndexData)
 			{
-				operation.indexData = it->second.get();
+				operation.indexData = cachedIndexData;
 			}
 			else
 			{
 				// Fallback to LOD 0 with no stitching
-				it = m_lodIndexCache.find(0);
-				if (it != m_lodIndexCache.end() && it->second)
+				cachedIndexData = m_lodIndexCache.Get(0);
+				if (cachedIndexData)
 				{
-					operation.indexData = it->second.get();
+					operation.indexData = cachedIndexData;
 				}
 				else
 				{
@@ -195,7 +203,7 @@ namespace mmo
 				if (m_currentStitchKey != lodDisabledStitchKey || m_currentLod != 0)
 				{
 					m_currentLod = 0;
-					if (m_lodIndexCache.find(lodDisabledStitchKey) == m_lodIndexCache.end())
+					if (!m_lodIndexCache.Contains(lodDisabledStitchKey))
 					{
 						CreateIndexData(0, 0, 0, 0, 0);
 					}
@@ -324,7 +332,7 @@ namespace mmo
 			m_worldAABBDirty = true;
 
 		// Regenerate index data in case holes have changed
-		m_lodIndexCache.clear();
+		m_lodIndexCache.Clear();
 		CreateIndexData(0, 0, 0, 0, 0);
 	}
 
@@ -523,7 +531,7 @@ namespace mmo
 			const uint32 stitchKey = lod | (northLod << 4) | (eastLod << 8) | (southLod << 12) | (westLod << 16);
 
 			// Check if we already have this configuration cached
-			if (m_lodIndexCache.find(stitchKey) != m_lodIndexCache.end())
+			if (m_lodIndexCache.Contains(stitchKey))
 			{
 				m_currentStitchKey = stitchKey;
 				return;
@@ -711,7 +719,7 @@ namespace mmo
 			// If no indices were generated, mark tile as non-renderable and skip buffer creation
 			if (indices.empty())
 			{
-				m_lodIndexCache[stitchKey].reset();
+				m_lodIndexCache.Put(stitchKey, nullptr);
 				if (lod == 0)
 				{
 					m_hasRenderableGeometry = false;
@@ -719,14 +727,16 @@ namespace mmo
 			}
 			else
 			{
-				m_lodIndexCache[stitchKey] = std::make_unique<IndexData>();
-				m_lodIndexCache[stitchKey]->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(
+				auto indexData = std::make_unique<IndexData>();
+				indexData->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(
 					static_cast<uint32>(indices.size()),
 					IndexBufferSize::Index_16,
 					BufferUsage::StaticWriteOnly,
 					indices.data());
-				m_lodIndexCache[stitchKey]->indexCount = static_cast<uint32>(indices.size());
-				m_lodIndexCache[stitchKey]->indexStart = 0;
+				indexData->indexCount = static_cast<uint32>(indices.size());
+				indexData->indexStart = 0;
+
+				m_lodIndexCache.Put(stitchKey, std::move(indexData));
 
 				if (lod == 0)
 				{
@@ -982,13 +992,11 @@ namespace mmo
 						for (int k = 0; k < halfsuperstep; k += step)
 						{
 							// Always draw - no omit logic for horizontal edges
-							{
-								// Triangle: edge(x,0) -> interior(x+k,step) -> interior(x+k+step,step)
-								// Winding: CCW when viewed from above to match main grid
-								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x), 0));
-								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x + k), static_cast<size_t>(step)));
-								indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x + k + step), static_cast<size_t>(step)));
-							}
+							// Triangle: edge(x,0) -> interior(x+k,step) -> interior(x+k+step,step)
+							// Winding: CCW when viewed from above to match main grid
+							indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x), 0));
+							indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x + k), static_cast<size_t>(step)));
+							indices.push_back(GetOuterVertexIndex(static_cast<size_t>(x + k + step), static_cast<size_t>(step)));
 						}
 
 						// Center triangle: edge(x,0) -> interior(x+halfsuperstep,step) -> edge(nextX,0)
@@ -1143,212 +1151,6 @@ namespace mmo
 			}
 		}
 
-		void Tile::StitchEdgeNorth(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri)
-		{
-			// hiLod = this tile's LOD, loLod = neighbor's coarser LOD
-			ASSERT(loLod > hiLod);
-
-			const int tileSize = static_cast<int>(constants::OuterVerticesPerTileSide);
-
-			// Calculate step sizes: for MMO terrain LOD 1+, step = 2^(lod-1)
-			const int step = 1 << (hiLod - 1);
-			const int superstep = 1 << (loLod - 1);
-			const int halfsuperstep = superstep >> 1;
-			const int rowstep = step;  // Interior is below (positive y)
-
-			// NORTH: horizontal edge at y=0, iterate x from 0 to tileSize-1
-			const int starty = 0;
-			const int startx = 0;
-			const int endx = tileSize - 1;
-
-			for (int j = startx; j != endx; j += superstep)
-			{
-				// First half: fan from left coarse vertex
-				for (int k = 0; k != halfsuperstep; k += step)
-				{
-					const int jk = j + k;
-					if (j != startx || k != 0 || !omitFirstTri)
-					{
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j), static_cast<size_t>(starty)));
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(jk), static_cast<size_t>(starty + rowstep)));
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(jk + step), static_cast<size_t>(starty + rowstep)));
-					}
-				}
-
-				// Center triangle: connects two coarse edge vertices through interior
-				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j), static_cast<size_t>(starty)));
-				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j + halfsuperstep), static_cast<size_t>(starty + rowstep)));
-				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j + superstep), static_cast<size_t>(starty)));
-
-				// Second half: fan from right coarse vertex
-				for (int k = halfsuperstep; k != superstep; k += step)
-				{
-					const int jk = j + k;
-					if (j != endx - superstep || k != superstep - step || !omitLastTri)
-					{
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j + superstep), static_cast<size_t>(starty)));
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(jk), static_cast<size_t>(starty + rowstep)));
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(jk + step), static_cast<size_t>(starty + rowstep)));
-					}
-				}
-			}
-		}
-
-		void Tile::StitchEdgeEast(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri)
-		{
-			ASSERT(loLod > hiLod);
-
-			const int tileSize = static_cast<int>(constants::OuterVerticesPerTileSide);
-
-			const int step = 1 << (hiLod - 1);
-			const int superstep = 1 << (loLod - 1);
-			const int halfsuperstep = superstep >> 1;
-			const int rowstep = -step;  // Interior is to the left (negative x)
-
-			// EAST: vertical edge at x=tileSize-1, iterate y from 0 to tileSize-1
-			const int startx = tileSize - 1;
-			const int starty = 0;
-			const int endx = tileSize - 1;
-
-			for (int j = starty; j != endx; j += superstep)
-			{
-				// First half: fan from top coarse vertex
-				for (int k = 0; k != halfsuperstep; k += step)
-				{
-					const int jk = j + k;
-					if (j != starty || k != 0 || !omitFirstTri)
-					{
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx), static_cast<size_t>(j)));
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(jk)));
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(jk + step)));
-					}
-				}
-
-				// Center triangle
-				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx), static_cast<size_t>(j)));
-				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(j + halfsuperstep)));
-				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx), static_cast<size_t>(j + superstep)));
-
-				// Second half: fan from bottom coarse vertex
-				for (int k = halfsuperstep; k != superstep; k += step)
-				{
-					const int jk = j + k;
-					if (j != endx - superstep || k != superstep - step || !omitLastTri)
-					{
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx), static_cast<size_t>(j + superstep)));
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(jk)));
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(jk + step)));
-					}
-				}
-			}
-		}
-
-		void Tile::StitchEdgeSouth(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri)
-		{
-			// South goes in reverse: from right to left, with negative steps
-			ASSERT(loLod > hiLod);
-
-			const int tileSize = static_cast<int>(constants::OuterVerticesPerTileSide);
-
-			// For SOUTH: set rowstep first, then negate step/superstep
-			const int baseStep = 1 << (hiLod - 1);
-			const int baseSuperstep = 1 << (loLod - 1);
-			const int rowstep = -baseStep;  // Interior is above (negative y)
-			const int step = -baseStep;
-			const int superstep = -baseSuperstep;
-			const int halfsuperstep = superstep >> 1;
-
-			// SOUTH: horizontal edge at y=tileSize-1, iterate x from tileSize-1 down to 0
-			const int starty = tileSize - 1;
-			const int startx = tileSize - 1;
-			const int endx = 0;
-
-			for (int j = startx; j != endx; j += superstep)
-			{
-				// First half
-				for (int k = 0; k != halfsuperstep; k += step)
-				{
-					const int jk = j + k;
-					if (j != startx || k != 0 || !omitFirstTri)
-					{
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j), static_cast<size_t>(starty)));
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(jk), static_cast<size_t>(starty + rowstep)));
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(jk + step), static_cast<size_t>(starty + rowstep)));
-					}
-				}
-
-				// Center triangle
-				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j), static_cast<size_t>(starty)));
-				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j + halfsuperstep), static_cast<size_t>(starty + rowstep)));
-				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j + superstep), static_cast<size_t>(starty)));
-
-				// Second half
-				for (int k = halfsuperstep; k != superstep; k += step)
-				{
-					const int jk = j + k;
-					if (j != endx - superstep || k != superstep - step || !omitLastTri)
-					{
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(j + superstep), static_cast<size_t>(starty)));
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(jk), static_cast<size_t>(starty + rowstep)));
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(jk + step), static_cast<size_t>(starty + rowstep)));
-					}
-				}
-			}
-		}
-
-		void Tile::StitchEdgeWest(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri)
-		{
-			// West goes in reverse: from bottom to top, with negative steps
-			ASSERT(loLod > hiLod);
-
-			const int tileSize = static_cast<int>(constants::OuterVerticesPerTileSide);
-
-			// For WEST: set rowstep first, then negate step/superstep
-			const int baseStep = 1 << (hiLod - 1);
-			const int baseSuperstep = 1 << (loLod - 1);
-			const int rowstep = baseStep;  // Interior is to the right (positive x)
-			const int step = -baseStep;
-			const int superstep = -baseSuperstep;
-			const int halfsuperstep = superstep >> 1;
-
-			// WEST: vertical edge at x=0, iterate y from tileSize-1 down to 0
-			const int startx = 0;
-			const int starty = tileSize - 1;
-			const int endx = 0;
-
-			for (int j = starty; j != endx; j += superstep)
-			{
-				// First half
-				for (int k = 0; k != halfsuperstep; k += step)
-				{
-					const int jk = j + k;
-					if (j != starty || k != 0 || !omitFirstTri)
-					{
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx), static_cast<size_t>(j)));
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(jk)));
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(jk + step)));
-					}
-				}
-
-				// Center triangle
-				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx), static_cast<size_t>(j)));
-				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(j + halfsuperstep)));
-				indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx), static_cast<size_t>(j + superstep)));
-
-				// Second half
-				for (int k = halfsuperstep; k != superstep; k += step)
-				{
-					const int jk = j + k;
-					if (j != endx - superstep || k != superstep - step || !omitLastTri)
-					{
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx), static_cast<size_t>(j + superstep)));
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(jk)));
-						indices.push_back(GetOuterVertexIndex(static_cast<size_t>(startx + rowstep), static_cast<size_t>(jk + step)));
-					}
-				}
-			}
-		}
-
 		void Tile::UpdateLOD(const Camera& camera)
 		{
 			if (!m_hasRenderableGeometry)
@@ -1488,7 +1290,7 @@ namespace mmo
 			if (stitchKey != m_currentStitchKey)
 			{
 				// Check if we already have this configuration cached
-				if (m_lodIndexCache.find(stitchKey) == m_lodIndexCache.end())
+				if (!m_lodIndexCache.Contains(stitchKey))
 				{
 					CreateIndexData(newLod, northLod, eastLod, southLod, westLod);
 				}
@@ -1509,7 +1311,22 @@ namespace mmo
 			return m_hasRenderableGeometry;
 		}
 
-		bool Tile::TestCapsuleCollision(const Capsule &capsule, std::vector<CollisionResult> &results) const
+		void Tile::SetLodCacheSize(size_t maxCacheSize)
+		{
+			m_lodIndexCache.SetMaxSize(maxCacheSize);
+		}
+
+		size_t Tile::GetLodCacheSize() const
+		{
+			return m_lodIndexCache.MaxSize();
+		}
+
+		size_t Tile::GetLodCacheUsage() const
+		{
+			return m_lodIndexCache.Size();
+		}
+
+		bool Tile::TestCapsuleCollision(const Capsule& capsule, std::vector<CollisionResult>& results) const
 		{
 			// Transform capsule to tile's local space
 			const Matrix4 worldTransform = GetParentNodeFullTransform();
@@ -1659,7 +1476,7 @@ namespace mmo
 			return hasCollision;
 		}
 
-		bool Tile::TestRayCollision(const Ray &ray, CollisionResult &result) const
+		bool Tile::TestRayCollision(const Ray& ray, CollisionResult& result) const
 		{
 			// Transform ray to tile's local space
 			const Matrix4 worldTransform = GetParentNodeFullTransform();

@@ -5,11 +5,11 @@
 #include "scene_graph/renderable.h"
 
 #include <memory>
-#include <map>
 
 #include "coverage_map.h"
 #include "graphics/material_instance.h"
 #include "scene_graph/mesh.h"
+#include "lru_cache.h"
 
 namespace mmo
 {
@@ -166,18 +166,6 @@ namespace mmo
 			/// @param westLod West neighbor's LOD level
 			void GenerateEdgeStitching(std::vector<uint16>& indices, uint32 lod, uint32 northLod, uint32 eastLod, uint32 southLod, uint32 westLod);
 
-			/// @brief Stitches the north edge for LOD > 0 using Faudra algorithm
-			void StitchEdgeNorth(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri);
-
-			/// @brief Stitches the east edge for LOD > 0 using Faudra algorithm
-			void StitchEdgeEast(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri);
-
-			/// @brief Stitches the south edge for LOD > 0 using Faudra algorithm
-			void StitchEdgeSouth(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri);
-
-			/// @brief Stitches the west edge for LOD > 0 using Faudra algorithm
-			void StitchEdgeWest(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri);
-
 			// Helper methods for new vertex layout (outer + inner vertices)
 			/// @brief Gets the vertex index for an outer vertex at grid position (x, y)
 			/// @param x X coordinate in outer vertex grid (0-8)
@@ -215,19 +203,25 @@ namespace mmo
 
 			bool m_worldAABBDirty { true };
 			
-			/// @brief Index data cache for LOD and neighbor stitching combinations.
+			/// @brief LRU cache for LOD index data combinations.
 			/// 
 			/// The key encodes the local tile LOD and the LOD of its four neighbors as:
 			/// (lod | (northLod << 4) | (eastLod << 8) | (southLod << 12) | (westLod << 16)).
-			/// With 4 LOD levels and 4 neighbors, this yields up to 4^5 = 1024 possible
-			/// cache entries per tile in the worst case.
-			///
-			/// @note This cache is maintained per tile and does not currently implement
-			///       an explicit size limit or eviction policy. For very large terrains
-			///       with many tiles and heavily exercised LOD transitions, the memory
-			///       used by all tile caches combined can be significant and should be
-			///       taken into account when configuring terrain size and LOD settings.
-			std::map<uint32, std::unique_ptr<IndexData>> m_lodIndexCache;
+			/// 
+			/// With 4 LOD levels and 4 neighbors, there are up to 4^5 = 1024 possible
+			/// combinations. To prevent unbounded memory growth, this cache uses an LRU
+			/// eviction policy with a configurable size limit (default 64 entries per tile).
+			/// 
+			/// The cache size can be adjusted via SetLodCacheSize(). For terrains with
+			/// frequent LOD transitions, a larger cache reduces regeneration overhead.
+			/// For memory-constrained scenarios, a smaller cache trades CPU time for
+			/// reduced memory usage.
+			/// 
+			/// @note The default cache size of 64 entries provides a good balance between
+			///       memory usage and performance for typical use cases. This allows caching
+			///       the most frequently used LOD combinations while keeping per-tile memory
+			///       overhead reasonable (typically < 100 KB per tile for cached index buffers).
+			LRUCache<uint32, IndexData> m_lodIndexCache;
 			uint32 m_currentLod = 0;
 			uint32 m_currentStitchKey = 0;
 
@@ -249,6 +243,24 @@ namespace mmo
 			/// @param result Output parameter for collision result.
 			/// @return True if a collision was detected, false otherwise.
 			bool TestRayCollision(const Ray& ray, CollisionResult& result) const override;
+
+			/// @brief Sets the maximum number of LOD index buffer combinations to cache per tile.
+			/// @param maxCacheSize The maximum number of cached index buffer configurations.
+			///                     A larger value reduces index buffer regeneration at the cost
+			///                     of increased memory usage. Default is 64 entries.
+			/// @details When the cache is full, the least recently used entry will be evicted
+			///          to make room for new entries. Setting this to a very small value (e.g., 1-4)
+			///          may cause frequent regeneration, while very large values (e.g., > 256)
+			///          may consume significant memory for large terrains with many tiles.
+			void SetLodCacheSize(size_t maxCacheSize);
+
+			/// @brief Gets the current LOD cache size for this tile.
+			/// @return The maximum number of LOD index buffer combinations that can be cached.
+			size_t GetLodCacheSize() const;
+
+			/// @brief Gets the number of LOD index buffer combinations currently cached.
+			/// @return The number of cached entries.
+			size_t GetLodCacheUsage() const;
 
 		};
 	}
