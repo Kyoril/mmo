@@ -199,10 +199,8 @@ namespace mmo
 					{
 						CreateIndexData(0, 0, 0, 0, 0);
 					}
-					else
-					{
-						m_currentStitchKey = lodDisabledStitchKey;
-					}
+
+					m_currentStitchKey = lodDisabledStitchKey;
 				}
 			}
 			
