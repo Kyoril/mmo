@@ -525,7 +525,7 @@ namespace mmo
 			// Get the hole map for this tile
 			const uint64 holeMap = m_page.GetTileHoleMap(m_tileX, m_tileY);
 
-			// For LOD >= 1, use Faudra-style step-based LOD on the outer vertex grid only
+			// For LOD >= 1, use step-based LOD on the outer vertex grid only
 			// LOD 0 = diamond pattern with inner vertices
 			// LOD 1 = step 1 on outer grid (8x8 quads from 9x9 vertices)
 			// LOD 2 = step 2 on outer grid (4x4 quads from 5x5 vertices)
@@ -636,7 +636,7 @@ namespace mmo
 			}
 			else
 			{
-				// For LOD > 0, use Faudra-style geometry: outer vertex grid only
+				// For LOD > 0, use outer vertex grid only
 				// Step through the grid at the appropriate spacing for this LOD level
 				const size_t step = ourStep;
 
@@ -645,10 +645,6 @@ namespace mmo
 				const size_t east = (eastLod > lod) ? step : 0;
 				const size_t south = (southLod > lod) ? step : 0;
 				const size_t west = (westLod > lod) ? step : 0;
-
-				DLOG("LOD " << lod << " main grid: step=" << step 
-					<< " gaps: N=" << north << " E=" << east << " S=" << south << " W=" << west
-					<< " loop j=[" << north << "," << (tileSize - 1 - south) << ") i=[" << west << "," << (tileSize - 1 - east) << ")");
 
 				// Generate the main grid, leaving gaps at edges that need stitching
 				for (size_t j = north; j < tileSize - 1 - south; j += step)
@@ -699,16 +695,8 @@ namespace mmo
 			}
 
 			// Generate edge stitching triangles for edges with coarser neighbors
-			const size_t indicesBeforeStitch = indices.size();
 			GenerateEdgeStitching(indices, lod, northLod, eastLod, southLod, westLod);
-			const size_t stitchTriangles = (indices.size() - indicesBeforeStitch) / 3;
 			
-			if (stitchTriangles > 0)
-			{
-				DLOG("Tile LOD " << lod << " generated " << stitchTriangles << " stitch triangles, "
-					<< (indicesBeforeStitch / 3) << " main grid triangles");
-			}
-
 			// If no indices were generated, mark tile as non-renderable and skip buffer creation
 			if (indices.empty())
 			{
@@ -744,7 +732,7 @@ namespace mmo
 			// without creating T-junctions.
 			//
 			// For LOD 0 (diamond pattern), stitching uses inner vertices.
-			// For LOD > 0 (Faudra-style), stitching uses the fan approach from the coarse edge
+			// For LOD > 0 (grid pattern), stitching uses the fan approach from the coarse edge
 			// vertices to the fine interior vertices.
 
 			const size_t tileSize = constants::OuterVerticesPerTileSide;
@@ -960,20 +948,10 @@ namespace mmo
 			}
 			else
 			{
-				// LOD > 0: Faudra-style stitching using outer vertices only
-				// Direct port of Faudra's _stitchEdge algorithm as a single unified function
+				// LOD > 0: stitching using outer vertices only
+				// stitchEdge algorithm as a single unified function
 
 				const int tileSize = static_cast<int>(constants::OuterVerticesPerTileSide);
-
-				// Debug: Log which edges need stitching
-				if (northLod > lod || eastLod > lod || southLod > lod || westLod > lod)
-				{
-					DLOG("Tile LOD " << lod << " stitching: N=" << (northLod > lod ? "Y" : "N")
-						<< " E=" << (eastLod > lod ? "Y" : "N")
-						<< " S=" << (southLod > lod ? "Y" : "N")
-						<< " W=" << (westLod > lod ? "Y" : "N")
-						<< " (neighborLODs: N=" << northLod << " E=" << eastLod << " S=" << southLod << " W=" << westLod << ")");
-				}
 
 				// ===== NORTH EDGE STITCHING (LOD > 0) =====
 				// Edge at Z=0, interior at Z=step. Triangles fan from coarse edge to fine interior.
@@ -983,8 +961,6 @@ namespace mmo
 					int step = 1 << (lod - 1);
 					int superstep = 1 << (northLod - 1);
 					int halfsuperstep = superstep >> 1;
-
-					DLOG("NORTH stitch: step=" << step << " superstep=" << superstep << " halfsuperstep=" << halfsuperstep);
 
 					// Iterate along the edge from X=0 to X=tileSize-1
 					for (int x = 0; x < tileSize - 1; x += superstep)
@@ -1080,7 +1056,7 @@ namespace mmo
 					{
 						int nextZ = z + superstep;
 
-						// Top side triangles - match Faudra's order: edge, interior-lower, interior-upper
+						// Top side triangles: edge, interior-lower, interior-upper
 						for (int k = 0; k < halfsuperstep; k += step)
 						{
 							if (z != 0 || k != 0 || !omitFirst)
@@ -1127,7 +1103,7 @@ namespace mmo
 					{
 						int nextZ = z - superstep;
 
-						// Bottom side triangles - match Faudra's order: edge, interior-upper, interior-lower
+						// Bottom side triangless order: edge, interior-upper, interior-lower
 						for (int k = 0; k < halfsuperstep; k += step)
 						{
 							if (z != tileSize - 1 || k != 0 || !omitFirst)
@@ -1160,7 +1136,6 @@ namespace mmo
 
 		void Tile::StitchEdgeNorth(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri)
 		{
-			// Port of Faudra's _stitchEdge for NORTH direction
 			// hiLod = this tile's LOD, loLod = neighbor's coarser LOD
 			ASSERT(loLod > hiLod);
 
@@ -1212,7 +1187,6 @@ namespace mmo
 
 		void Tile::StitchEdgeEast(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri)
 		{
-			// Port of Faudra's _stitchEdge for EAST direction
 			ASSERT(loLod > hiLod);
 
 			const int tileSize = static_cast<int>(constants::OuterVerticesPerTileSide);
@@ -1262,13 +1236,12 @@ namespace mmo
 
 		void Tile::StitchEdgeSouth(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri)
 		{
-			// Port of Faudra's _stitchEdge for SOUTH direction
 			// South goes in reverse: from right to left, with negative steps
 			ASSERT(loLod > hiLod);
 
 			const int tileSize = static_cast<int>(constants::OuterVerticesPerTileSide);
 
-			// For SOUTH in Faudra: set rowstep first, then negate step/superstep
+			// For SOUTH: set rowstep first, then negate step/superstep
 			const int baseStep = 1 << (hiLod - 1);
 			const int baseSuperstep = 1 << (loLod - 1);
 			const int rowstep = -baseStep;  // Interior is above (negative y)
@@ -1316,13 +1289,12 @@ namespace mmo
 
 		void Tile::StitchEdgeWest(std::vector<uint16>& indices, uint32 hiLod, uint32 loLod, bool omitFirstTri, bool omitLastTri)
 		{
-			// Port of Faudra's _stitchEdge for WEST direction
 			// West goes in reverse: from bottom to top, with negative steps
 			ASSERT(loLod > hiLod);
 
 			const int tileSize = static_cast<int>(constants::OuterVerticesPerTileSide);
 
-			// For WEST in Faudra: set rowstep first, then negate step/superstep
+			// For WEST: set rowstep first, then negate step/superstep
 			const int baseStep = 1 << (hiLod - 1);
 			const int baseSuperstep = 1 << (loLod - 1);
 			const int rowstep = baseStep;  // Interior is to the right (positive x)
@@ -1400,36 +1372,89 @@ namespace mmo
 			uint32 southLod = newLod;
 			uint32 westLod = newLod;
 
-			// Query neighbor tiles from the page
+			// Get terrain reference for cross-page lookups
+			Terrain& terrain = m_page.GetTerrain();
+			const uint32 pageX = m_page.GetX();
+			const uint32 pageY = m_page.GetY();
+
+			// Query neighbor tiles - check both within-page and cross-page boundaries
 			if (m_tileY > 0)
 			{
+				// North neighbor is within the same page
 				if (Tile* northTile = m_page.GetTile(static_cast<uint32>(m_tileX), static_cast<uint32>(m_tileY - 1)))
 				{
 					northLod = northTile->GetCurrentLOD();
 				}
 			}
+			else if (pageY > 0)
+			{
+				// North neighbor is on the page to the north (pageY - 1), tile at bottom edge (TilesPerPage - 1)
+				if (Page* northPage = terrain.GetPage(pageX, pageY - 1))
+				{
+					if (Tile* northTile = northPage->GetTile(static_cast<uint32>(m_tileX), constants::TilesPerPage - 1))
+					{
+						northLod = northTile->GetCurrentLOD();
+					}
+				}
+			}
 
 			if (m_tileX < constants::TilesPerPage - 1)
 			{
+				// East neighbor is within the same page
 				if (Tile* eastTile = m_page.GetTile(static_cast<uint32>(m_tileX + 1), static_cast<uint32>(m_tileY)))
 				{
 					eastLod = eastTile->GetCurrentLOD();
 				}
 			}
+			else
+			{
+				// East neighbor is on the page to the east (pageX + 1), tile at left edge (0)
+				if (Page* eastPage = terrain.GetPage(pageX + 1, pageY))
+				{
+					if (Tile* eastTile = eastPage->GetTile(0, static_cast<uint32>(m_tileY)))
+					{
+						eastLod = eastTile->GetCurrentLOD();
+					}
+				}
+			}
 
 			if (m_tileY < constants::TilesPerPage - 1)
 			{
+				// South neighbor is within the same page
 				if (Tile* southTile = m_page.GetTile(static_cast<uint32>(m_tileX), static_cast<uint32>(m_tileY + 1)))
 				{
 					southLod = southTile->GetCurrentLOD();
 				}
 			}
+			else
+			{
+				// South neighbor is on the page to the south (pageY + 1), tile at top edge (0)
+				if (Page* southPage = terrain.GetPage(pageX, pageY + 1))
+				{
+					if (Tile* southTile = southPage->GetTile(static_cast<uint32>(m_tileX), 0))
+					{
+						southLod = southTile->GetCurrentLOD();
+					}
+				}
+			}
 
 			if (m_tileX > 0)
 			{
+				// West neighbor is within the same page
 				if (Tile* westTile = m_page.GetTile(static_cast<uint32>(m_tileX - 1), static_cast<uint32>(m_tileY)))
 				{
 					westLod = westTile->GetCurrentLOD();
+				}
+			}
+			else if (pageX > 0)
+			{
+				// West neighbor is on the page to the west (pageX - 1), tile at right edge (TilesPerPage - 1)
+				if (Page* westPage = terrain.GetPage(pageX - 1, pageY))
+				{
+					if (Tile* westTile = westPage->GetTile(constants::TilesPerPage - 1, static_cast<uint32>(m_tileY)))
+					{
+						westLod = westTile->GetCurrentLOD();
+					}
 				}
 			}
 
