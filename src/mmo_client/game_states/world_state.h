@@ -173,6 +173,8 @@ namespace mmo
 
 		void OnFoliageDensityChanged(ConsoleVar &var, const std::string &oldValue);
 
+		void OnTerrainLodEnabledChanged(ConsoleVar& var, const std::string& oldValue);
+
 	private:
 		// EventLoop connections
 
