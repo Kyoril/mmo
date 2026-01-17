@@ -15,7 +15,9 @@ namespace mmo
 
 	class Quaternion;
 	class Vector3;
+	class Vector4;
 	class Entity;
+	class Light;
 	class Camera;
 
 	namespace proto
@@ -56,6 +58,8 @@ namespace mmo
 		virtual float GetTranslateGridSnapSize() const = 0;
 
 		virtual Entity* CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 objectId) = 0;
+
+		virtual Light* CreatePointLight(const Vector3& position, const Vector4& color, float intensity, float range) = 0;
 
 		virtual bool HasTerrain() const = 0;
 

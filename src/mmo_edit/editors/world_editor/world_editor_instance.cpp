@@ -16,6 +16,7 @@
 #include "scene_graph/material_manager.h"
 #include "scene_graph/render_queue.h"
 #include "scene_graph/scene_node.h"
+#include "scene_graph/light.h"
 #include "selected_map_entity.h"
 #include "stream_sink.h"
 #include "game/object_type_id.h"
@@ -42,7 +43,9 @@ namespace mmo
 	static const ChunkMagic terrainChunk = MakeChunkMagic('RRET');
 
 	static ChunkMagic WorldEntityVersionChunk = MakeChunkMagic('WVER');
+	static ChunkMagic WorldEntityType = MakeChunkMagic('WTYP');
 	static ChunkMagic WorldEntityMesh = MakeChunkMagic('WMSH');
+	static ChunkMagic WorldEntityLight = MakeChunkMagic('WLIT');
 
 	struct MapEntityChunkContent
 	{
@@ -52,6 +55,20 @@ namespace mmo
 		Quaternion rotation;
 		Vector3 scale;
 	};
+
+	MapEntity::~MapEntity()
+	{
+		if (m_isLight && m_light)
+		{
+			m_scene.DestroyLight(*m_light);
+		}
+		else if (m_entity)
+		{
+			m_scene.DestroyEntity(*m_entity);
+		}
+
+		m_scene.DestroySceneNode(m_sceneNode);
+	}
 
 	WorldEditorInstance::WorldEditorInstance(EditorHost &host, WorldEditor &editor, Path asset)
 		: EditorInstance(host, std::move(asset)), m_editor(editor), m_wireFrame(false)
@@ -751,16 +768,63 @@ namespace mmo
 
 			{
 				ChunkWriter chunkWriter(WorldEntityVersionChunk, fileWriter);
-				fileWriter << io::write<uint32>(2);
+				fileWriter << io::write<uint32>(3);
 				chunkWriter.Finish();
 			}
 
+			// Write entity type chunk
 			{
+				ChunkWriter chunkWriter(WorldEntityType, fileWriter);
+				if (ent->IsLight())
+				{
+					fileWriter << io::write<uint8>(static_cast<uint8>(WorldEntityType::PointLight));
+				}
+				else
+				{
+					fileWriter << io::write<uint8>(static_cast<uint8>(WorldEntityType::Mesh));
+				}
+				chunkWriter.Finish();
+			}
+
+			// Write entity-specific data
+			if (ent->IsLight())
+			{
+				// Write light chunk
+				ChunkWriter chunkWriter(WorldEntityLight, fileWriter);
+				Light *light = ent->GetLight();
+				ASSERT(light);
+
+				const Vector3 position = ent->GetSceneNode().GetDerivedPosition();
+				const Vector4 &color = light->GetColor();
+
+				fileWriter
+					<< io::write<uint64>(ent->GetUniqueId())
+					<< io::write<float>(position.x)
+					<< io::write<float>(position.y)
+					<< io::write<float>(position.z)
+					<< io::write<float>(color.x)
+					<< io::write<float>(color.y)
+					<< io::write<float>(color.z)
+					<< io::write<float>(color.w)
+					<< io::write<float>(light->GetIntensity())
+					<< io::write<float>(light->GetRange());
+
+				// Write name and category
+				fileWriter
+					<< io::write_dynamic_range<uint8>(ent->GetDisplayName())
+					<< io::write_dynamic_range<uint16>(ent->GetCategory());
+
+				chunkWriter.Finish();
+			}
+			else
+			{
+				// Write mesh chunk
 				ChunkWriter chunkWriter(WorldEntityMesh, fileWriter);
 				const Vector3 position = ent->GetSceneNode().GetDerivedPosition();
 				const Vector3 scale = ent->GetSceneNode().GetScale();
 				const Quaternion rotation = ent->GetSceneNode().GetDerivedOrientation();
-				const String mesh = ent->GetEntity().GetMesh()->GetName().data();
+				const String mesh = ent->GetEntity()->GetMesh()->GetName().data();
+
 				fileWriter
 					<< io::write<uint64>(ent->GetUniqueId())
 					<< io::write_dynamic_range<uint16>(mesh)
@@ -777,12 +841,12 @@ namespace mmo
 
 				// Collect material overrides
 				std::vector<MaterialOverride> materialOverrides;
-				for (uint8 i = 0; i < ent->GetEntity().GetNumSubEntities(); ++i)
+				for (uint8 i = 0; i < ent->GetEntity()->GetNumSubEntities(); ++i)
 				{
-					SubEntity *sub = ent->GetEntity().GetSubEntity(i);
+					SubEntity *sub = ent->GetEntity()->GetSubEntity(i);
 					ASSERT(sub);
 
-					SubMesh &submesh = ent->GetEntity().GetMesh()->GetSubMesh(i);
+					SubMesh &submesh = ent->GetEntity()->GetMesh()->GetSubMesh(i);
 					if (const bool hasDifferentMaterial = sub->GetMaterial() && sub->GetMaterial() != submesh.GetMaterial())
 					{
 						materialOverrides.emplace_back(i, String(sub->GetMaterial()->GetName()));
@@ -867,6 +931,21 @@ namespace mmo
 			}
 		}
 		return entity;
+	}
+
+	Light *WorldEditorInstance::CreatePointLight(const Vector3 &position, const Vector4 &color, float intensity, float range)
+	{
+		Light *light = m_entityFactory->CreatePointLight(position, color, intensity, range, 0);
+		if (light)
+		{
+			MapEntity *mapEntity = light->GetUserObject<MapEntity>();
+			if (mapEntity)
+			{
+				mapEntity->remove.connect(this, &WorldEditorInstance::OnMapEntityRemoved);
+				mapEntity->MarkModified();
+			}
+		}
+		return light;
 	}
 
 	void WorldEditorInstance::OnMapEntityRemoved(MapEntity &entity)
@@ -1589,36 +1668,59 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			}
 
 			const auto &entity = loader.GetEntity();
-			Entity *object = CreateMapEntity(
-				entity.meshName,
-				entity.position,
-				entity.rotation,
-				entity.scale,
-				entity.uniqueId);
-			if (!object)
+
+			MapEntity *mapEntity = nullptr;
+
+			if (entity.type == WorldEntityType::PointLight)
 			{
-				ELOG("Failed to create entity from file " << file << "!");
-				continue;
+				Light *light = m_entityFactory->CreatePointLight(
+					entity.position,
+					entity.lightColor,
+					entity.lightIntensity,
+					entity.lightRange,
+					entity.uniqueId);
+				if (!light)
+				{
+					ELOG("Failed to create light from file " << file << "!");
+					continue;
+				}
+
+				mapEntity = light->GetUserObject<MapEntity>();
+			}
+			else
+			{
+				Entity *object = CreateMapEntity(
+					entity.meshName,
+					entity.position,
+					entity.rotation,
+					entity.scale,
+					entity.uniqueId);
+				if (!object)
+				{
+					ELOG("Failed to create entity from file " << file << "!");
+					continue;
+				}
+
+				mapEntity = object->GetUserObject<MapEntity>();
+
+				// Apply material overrides
+				for (const auto &materialOverride : entity.materialOverrides)
+				{
+					if (materialOverride.materialIndex >= object->GetNumSubEntities())
+					{
+						WLOG("Entity has material override for material index greater than entity material count! Skipping material override");
+						continue;
+					}
+
+					object->GetSubEntity(materialOverride.materialIndex)->SetMaterial(MaterialManager::Get().Load(materialOverride.materialName));
+				}
 			}
 
 			// We just loaded the object - it has not been modified
-			MapEntity *mapEntity = object->GetUserObject<MapEntity>();
 			ASSERT(mapEntity);
 			mapEntity->SetDisplayName(entity.name);
 			mapEntity->SetCategory(entity.category);
 			mapEntity->MarkAsUnmodified();
-
-			// Apply material overrides
-			for (const auto &materialOverride : entity.materialOverrides)
-			{
-				if (materialOverride.materialIndex >= object->GetNumSubEntities())
-				{
-					WLOG("Entity has material override for material index greater than entity material count! Skipping material override");
-					continue;
-				}
-
-				object->GetSubEntity(materialOverride.materialIndex)->SetMaterial(MaterialManager::Get().Load(materialOverride.materialName));
-			}
 		}
 	}
 
@@ -1698,101 +1800,139 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		static const char *s_noMaterialPreview = "<None>";
 
 		MapEntity &mapEntity = selectable.GetEntity();
-		Entity &entity = mapEntity.GetEntity();
 
 		ImGui::Text("Unique Id: %u", mapEntity.GetUniqueId());
 
-		if (ImGui::CollapsingHeader("Mesh"))
+		// Check if this is a light entity
+		if (mapEntity.IsLight())
 		{
-			const MeshPtr mesh = entity.GetMesh();
-			const String meshName = mesh->GetName().data();
+			Light *light = mapEntity.GetLight();
+			ASSERT(light);
 
-			const String filename = Path(meshName).filename().string();
-
-			if (ImGui::BeginCombo("Mesh", filename.c_str()))
+			if (ImGui::CollapsingHeader("Light Properties", ImGuiTreeNodeFlags_DefaultOpen))
 			{
-				// TODO: Draw available mesh files from asset registry
-
-				ImGui::EndCombo();
-			}
-
-			if (ImGui::BeginDragDropTarget())
-			{
-				// We only accept mesh file drops
-				if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmsh"))
+				// Color picker
+				Vector4 color = light->GetColor();
+				if (ImGui::ColorEdit4("Color", color.Ptr()))
 				{
-					entity.SetMesh(MeshManager::Get().Load(*static_cast<String *>(payload->Data)));
+					light->SetColor(color);
 					mapEntity.MarkModified();
 				}
 
-				ImGui::EndDragDropTarget();
+				// Intensity slider
+				float intensity = light->GetIntensity();
+				if (ImGui::SliderFloat("Intensity", &intensity, 0.0f, 10.0f))
+				{
+					light->SetIntensity(intensity);
+					mapEntity.MarkModified();
+				}
+
+				// Range slider
+				float range = light->GetRange();
+				if (ImGui::SliderFloat("Range", &range, 0.1f, 100.0f))
+				{
+					light->SetRange(range);
+					mapEntity.MarkModified();
+				}
 			}
 		}
-
-		if (ImGui::CollapsingHeader("Materials"))
+		else
 		{
-			for (uint32 i = 0; i < entity.GetNumSubEntities(); ++i)
+			Entity *entity = mapEntity.GetEntity();
+			ASSERT(entity);
+
+			if (ImGui::CollapsingHeader("Mesh"))
 			{
-				SubEntity *sub = entity.GetSubEntity(i);
-				ASSERT(sub);
+				const MeshPtr mesh = entity->GetMesh();
+				const String meshName = mesh->GetName().data();
 
-				SubMesh &submesh = entity.GetMesh()->GetSubMesh(i);
+				const String filename = Path(meshName).filename().string();
 
-				ImGui::PushID(i);
-
-				// Get material
-				MaterialPtr material = sub->GetMaterial();
-				if (!material)
+				if (ImGui::BeginCombo("Mesh", filename.c_str()))
 				{
-					material = submesh.GetMaterial();
-				}
+					// TODO: Draw available mesh files from asset registry
 
-				// Build preview string
-				const char *previewString = s_noMaterialPreview;
-				if (material)
-				{
-					previewString = material->GetName().data();
-				}
-
-				const String materialName = sub->GetMaterial()->GetName().data();
-				const String filename = Path(materialName).filename().string();
-
-				bool isOverridden = material != submesh.GetMaterial();
-
-				ImGui::BeginDisabled(!isOverridden);
-				if (ImGui::Checkbox("##overridden", &isOverridden))
-				{
-					sub->SetMaterial(submesh.GetMaterial());
-					mapEntity.MarkModified();
-				}
-				ImGui::EndDisabled();
-
-				ImGui::SameLine();
-
-				if (ImGui::BeginCombo("Material", filename.c_str()))
-				{
 					ImGui::EndCombo();
 				}
 
 				if (ImGui::BeginDragDropTarget())
 				{
 					// We only accept mesh file drops
-					if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmat"))
+					if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmsh"))
 					{
-						sub->SetMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
-						mapEntity.MarkModified();
-					}
-
-					if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmi"))
-					{
-						sub->SetMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
+						entity->SetMesh(MeshManager::Get().Load(*static_cast<String *>(payload->Data)));
 						mapEntity.MarkModified();
 					}
 
 					ImGui::EndDragDropTarget();
 				}
+			}
 
-				ImGui::PopID();
+			if (ImGui::CollapsingHeader("Materials"))
+			{
+				for (uint32 i = 0; i < entity->GetNumSubEntities(); ++i)
+				{
+					SubEntity *sub = entity->GetSubEntity(i);
+					ASSERT(sub);
+
+					SubMesh &submesh = entity->GetMesh()->GetSubMesh(i);
+
+					ImGui::PushID(i);
+
+					// Get material
+					MaterialPtr material = sub->GetMaterial();
+					if (!material)
+					{
+						material = submesh.GetMaterial();
+					}
+
+					// Build preview string
+					const char *previewString = s_noMaterialPreview;
+					if (material)
+					{
+						previewString = material->GetName().data();
+					}
+
+					const String materialName = sub->GetMaterial()->GetName().data();
+					const String filename = Path(materialName).filename().string();
+
+					bool isOverridden = material != submesh.GetMaterial();
+
+					ImGui::BeginDisabled(!isOverridden);
+					if (ImGui::Checkbox("##overridden", &isOverridden))
+					{
+						sub->SetMaterial(submesh.GetMaterial());
+						mapEntity.MarkModified();
+					}
+					ImGui::EndDisabled();
+
+					ImGui::SameLine();
+
+					if (ImGui::BeginCombo("Material", filename.c_str()))
+					{
+						ImGui::EndCombo();
+					}
+
+					if (ImGui::BeginDragDropTarget())
+					{
+						// We only accept mesh file drops
+						if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmat"))
+						{
+							sub->SetMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
+							mapEntity.MarkModified();
+						}
+
+						if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmi"))
+						{
+							sub->SetMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
+							mapEntity.MarkModified();
+						}
+
+						ImGui::EndDragDropTarget();
+					}
+
+					ImGui::PopID();
+				}
 			}
 		}
 	}

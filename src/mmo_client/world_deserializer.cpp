@@ -13,6 +13,7 @@
 #include "scene_graph/material_manager.h"
 #include "scene_graph/scene_node.h"
 #include "scene_graph/scene.h"
+#include "scene_graph/light.h"
 
 namespace mmo
 {
@@ -93,11 +94,23 @@ namespace mmo
 				continue;
 			}
 
-			Entity* entity = it->second.entity;
-			SceneNode* node = it->second.node;
-			entity->DetachFromParent();
-			m_scene.DestroyEntity(*entity);
-			m_scene.DestroySceneNode(*node);
+			if (it->second.entity)
+			{
+				Entity* entity = it->second.entity;
+				SceneNode* node = it->second.node;
+				entity->DetachFromParent();
+				m_scene.DestroyEntity(*entity);
+				m_scene.DestroySceneNode(*node);
+			}
+			else if (it->second.light)
+			{
+				Light* light = it->second.light;
+				SceneNode* node = it->second.node;
+				light->DetachFromParent();
+				m_scene.DestroyLight(*light);
+				m_scene.DestroySceneNode(*node);
+			}
+
 			it = m_entities.erase(it);
 		}
 
@@ -108,11 +121,23 @@ namespace mmo
 	{
 		for (auto it = m_entities.begin(); it != m_entities.end();)
 		{
-			Entity* entity = it->second.entity;
-			SceneNode* node = it->second.node;
-			entity->DetachFromParent();
-			m_scene.DestroyEntity(*entity);
-			m_scene.DestroySceneNode(*node);
+			if (it->second.entity)
+			{
+				Entity* entity = it->second.entity;
+				SceneNode* node = it->second.node;
+				entity->DetachFromParent();
+				m_scene.DestroyEntity(*entity);
+				m_scene.DestroySceneNode(*node);
+			}
+			else if (it->second.light)
+			{
+				Light* light = it->second.light;
+				SceneNode* node = it->second.node;
+				light->DetachFromParent();
+				m_scene.DestroyLight(*light);
+				m_scene.DestroySceneNode(*node);
+			}
+
 			it = m_entities.erase(it);
 		}
 
@@ -145,6 +170,27 @@ namespace mmo
 		m_entities.emplace(uniqueId, EntityPlacement{ .pageIndex= BuildPageIndex(page.x(), page.y()), .entity= entity, .node= node });
 
 		return entity;
+	}
+
+	Light* ClientWorldInstance::CreatePointLight(const Vector3& position, const Vector4& color, float intensity, float range, uint64 uniqueId)
+	{
+		const String lightName = "Light_" + std::to_string(uniqueId);
+
+		// Create scene node
+		SceneNode* node = m_rootNode.CreateChildSceneNode();
+		node->SetPosition(position);
+
+		// Create light
+		Light& light = m_scene.CreateLight(lightName, LightType::Point);
+		light.SetColor(color);
+		light.SetIntensity(intensity);
+		light.SetRange(range);
+		node->AttachObject(light);
+
+		const PagePosition page = GetPagePosition(position);
+		m_entities.emplace(uniqueId, EntityPlacement{ .pageIndex= BuildPageIndex(page.x(), page.y()), .light= &light, .node= node });
+
+		return &light;
 	}
 
 	void ClientWorldInstance::InternalLoadPageEntity(uint16 pageIndex, const String& filename)
@@ -181,24 +227,37 @@ namespace mmo
 					return;
 				}
 
-				Entity* object = strong->CreateMapEntity(
-					entity.meshName,
-					entity.position,
-					entity.rotation,
-					entity.scale,
-					entity.uniqueId
-				);
-
-				// Apply material overrides
-				for (const auto& materialOverride : entity.materialOverrides)
+				if (entity.type == WorldEntityType::PointLight)
 				{
-					if (materialOverride.materialIndex >= object->GetNumSubEntities())
-					{
-						WLOG("Entity has material override for material index greater than entity material count! Skipping material override");
-						continue;
-					}
+					strong->CreatePointLight(
+						entity.position,
+						entity.lightColor,
+						entity.lightIntensity,
+						entity.lightRange,
+						entity.uniqueId
+					);
+				}
+				else
+				{
+					Entity* object = strong->CreateMapEntity(
+						entity.meshName,
+						entity.position,
+						entity.rotation,
+						entity.scale,
+						entity.uniqueId
+					);
 
-					object->GetSubEntity(materialOverride.materialIndex)->SetMaterial(MaterialManager::Get().Load(materialOverride.materialName));
+					// Apply material overrides
+					for (const auto& materialOverride : entity.materialOverrides)
+					{
+						if (materialOverride.materialIndex >= object->GetNumSubEntities())
+						{
+							WLOG("Entity has material override for material index greater than entity material count! Skipping material override");
+							continue;
+						}
+
+						object->GetSubEntity(materialOverride.materialIndex)->SetMaterial(MaterialManager::Get().Load(materialOverride.materialName));
+					}
 				}
 			});
 	}

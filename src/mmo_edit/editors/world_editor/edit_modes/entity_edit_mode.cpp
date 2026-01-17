@@ -27,6 +27,12 @@ namespace mmo
 
 	void EntityEditMode::DrawDetails()
 	{
+		if (ImGui::Button("Create Point Light at Camera"))
+		{
+			// Create a point light at the camera position
+			const Vector3 cameraPos = m_worldEditor.GetCamera().GetDerivedPosition();
+			m_worldEditor.CreatePointLight(cameraPos, Vector4(1.0f, 1.0f, 1.0f, 1.0f), 1.0f, 10.0f);
+		}
 	}
 
 	void EntityEditMode::OnViewportDrop(float x, float y)

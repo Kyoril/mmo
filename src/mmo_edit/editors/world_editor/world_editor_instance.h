@@ -52,6 +52,8 @@ namespace mmo
 	class Entity;
 	class Camera;
 	class SceneNode;
+	class Light;
+	class MovableObject;
 
 	/// @brief Represents a single entity on the map.
 	class MapEntity final : public NonCopyable
@@ -65,15 +67,16 @@ namespace mmo
 
 	public:
 		explicit MapEntity(Scene &scene, SceneNode &sceneNode, Entity &entity, uint32 uniqueId)
-			: m_scene(scene), m_sceneNode(sceneNode), m_entity(entity), m_uniqueId(uniqueId)
+			: m_scene(scene), m_sceneNode(sceneNode), m_entity(&entity), m_uniqueId(uniqueId), m_isLight(false)
 		{
 		}
 
-		~MapEntity() override
+		explicit MapEntity(Scene &scene, SceneNode &sceneNode, Light &light, uint32 uniqueId)
+			: m_scene(scene), m_sceneNode(sceneNode), m_light(&light), m_uniqueId(uniqueId), m_isLight(true)
 		{
-			m_scene.DestroyEntity(m_entity);
-			m_scene.DestroySceneNode(m_sceneNode);
 		}
+
+		~MapEntity() override;
 
 	public:
 		SceneNode &GetSceneNode() const
@@ -81,9 +84,19 @@ namespace mmo
 			return m_sceneNode;
 		}
 
-		Entity &GetEntity() const
+		Entity *GetEntity() const
 		{
 			return m_entity;
+		}
+
+		Light *GetLight() const
+		{
+			return m_light;
+		}
+
+		bool IsLight() const
+		{
+			return m_isLight;
 		}
 
 		uint64 GetUniqueId() const
@@ -146,10 +159,12 @@ namespace mmo
 	private:
 		Scene &m_scene;
 		SceneNode &m_sceneNode;
-		Entity &m_entity;
+		Entity *m_entity { nullptr };
+		Light *m_light { nullptr };
 		uint64 m_uniqueId;
 		std::optional<PagePosition> m_referencePagePosition;
 		bool m_modified{false};
+		bool m_isLight{false};
 		String m_name;
 		String m_category;
 	};
@@ -203,6 +218,8 @@ namespace mmo
 		void OnTerrainMouseMoved(float viewportX, float viewportY);
 
 		Entity *CreateMapEntity(const String &assetName, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale, uint64 objectId) override;
+
+		Light *CreatePointLight(const Vector3 &position, const Vector4 &color, float intensity, float range) override;
 
 		void OnMapEntityRemoved(MapEntity &entity);
 

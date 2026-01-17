@@ -9,7 +9,9 @@
 namespace mmo
 {
 	static ChunkMagic WorldEntityVersionChunk = MakeChunkMagic('WVER');
+	static ChunkMagic WorldEntityType = MakeChunkMagic('WTYP');
 	static ChunkMagic WorldEntityMesh = MakeChunkMagic('WMSH');
+	static ChunkMagic WorldEntityLight = MakeChunkMagic('WLIT');
 
 	uint64 GenerateUniqueId()
 	{
@@ -43,13 +45,21 @@ namespace mmo
 			return false;
 		}
 
-		if (m_version < 0x00001 || m_version > 0x00002)
+		if (m_version < 0x00001 || m_version > 0x00003)
 		{
 			ELOG("Unsupported world entity version " << m_version);
 			return false;
 		}
 
-		AddChunkHandler(*WorldEntityMesh, true, *this, &WorldEntityLoader::OnEntityMeshChunk);
+		if (m_version >= 0x00003)
+		{
+			AddChunkHandler(*WorldEntityType, true, *this, &WorldEntityLoader::OnEntityTypeChunk);
+		}
+		else
+		{
+			AddChunkHandler(*WorldEntityMesh, true, *this, &WorldEntityLoader::OnEntityMeshChunk);
+		}
+
 		return reader;
 	}
 
@@ -116,6 +126,75 @@ namespace mmo
 		{
 			m_entity.name.clear();
 			m_entity.category.clear();
+		}
+
+		return reader;
+	}
+
+	bool WorldEntityLoader::OnEntityTypeChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		ASSERT(chunkHeader == *WorldEntityType);
+
+		RemoveChunkHandler(*WorldEntityType);
+
+		uint8 entityType = 0;
+		if (!(reader >> io::read<uint8>(entityType)))
+		{
+			ELOG("Failed to read entity type, unexpected end of file!");
+			return false;
+		}
+
+		m_entity.type = static_cast<WorldEntityType>(entityType);
+
+		// Based on entity type, add appropriate chunk handler
+		if (m_entity.type == WorldEntityType::PointLight)
+		{
+			AddChunkHandler(*WorldEntityLight, true, *this, &WorldEntityLoader::OnEntityLightChunk);
+		}
+		else if (m_entity.type == WorldEntityType::Mesh)
+		{
+			AddChunkHandler(*WorldEntityMesh, true, *this, &WorldEntityLoader::OnEntityMeshChunk);
+		}
+
+		return reader;
+	}
+
+	bool WorldEntityLoader::OnEntityLightChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		ASSERT(chunkHeader == *WorldEntityLight);
+
+		if (!(reader
+			>> io::read<uint64>(m_entity.uniqueId)
+			>> io::read<float>(m_entity.position.x)
+			>> io::read<float>(m_entity.position.y)
+			>> io::read<float>(m_entity.position.z)
+			>> io::read<float>(m_entity.lightColor.x)
+			>> io::read<float>(m_entity.lightColor.y)
+			>> io::read<float>(m_entity.lightColor.z)
+			>> io::read<float>(m_entity.lightColor.w)
+			>> io::read<float>(m_entity.lightIntensity)
+			>> io::read<float>(m_entity.lightRange)))
+		{
+			ELOG("Failed to read light chunk content, unexpected end of file!");
+			return false;
+		}
+
+		if (m_entity.uniqueId == 0)
+		{
+			m_entity.uniqueId = GenerateUniqueId();
+		}
+
+		// Read name and category
+		if (!(reader >> io::read_container<uint8>(m_entity.name)))
+		{
+			ELOG("Failed to read light entity name, unexpected end of file!");
+			return false;
+		}
+
+		if (!(reader >> io::read_container<uint16>(m_entity.category)))
+		{
+			ELOG("Failed to read light entity category, unexpected end of file!");
+			return false;
 		}
 
 		return reader;

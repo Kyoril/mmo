@@ -5,6 +5,7 @@
 #include "scene_graph/scene.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/scene_node.h"
+#include "scene_graph/light.h"
 #include "world_editor.h"
 #include "world_editor_instance.h"
 #include "scene_outline_window.h"
@@ -88,6 +89,41 @@ namespace mmo
         }
 
         return entity;
+    }
+
+    Light *EntityFactory::CreatePointLight(const Vector3 &position, const Vector4 &color, float intensity, float range, uint64 objectId)
+    {
+        if (objectId == 0)
+        {
+            objectId = GenerateUniqueId();
+        }
+
+        const String uniqueId = "Light_" + std::to_string(objectId);
+
+        Light &light = m_scene.CreateLight(uniqueId, LightType::Point);
+        light.SetColor(color);
+        light.SetIntensity(intensity);
+        light.SetRange(range);
+
+        auto &node = m_scene.CreateSceneNode(uniqueId);
+        m_scene.GetRootSceneNode().AddChild(node);
+        node.AttachObject(light);
+        node.SetPosition(position);
+
+        const auto &mapEntity = m_mapEntities.emplace_back(std::make_unique<MapEntity>(m_scene, node, light, objectId));
+        mapEntity->SetReferencePagePosition(
+            PagePosition(
+                static_cast<uint32>(floor(position.x / terrain::constants::PageSize)) + 32,
+                static_cast<uint32>(floor(position.z / terrain::constants::PageSize)) + 32));
+        light.SetUserObject(m_mapEntities.back().get());
+
+        // Update scene outline when a new light is created
+        if (m_sceneOutlineWindow)
+        {
+            m_sceneOutlineWindow->Update();
+        }
+
+        return &light;
     }
 
     Entity *EntityFactory::CreateUnitSpawnEntity(proto::UnitSpawnEntry &spawn)

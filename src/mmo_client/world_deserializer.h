@@ -56,6 +56,8 @@ namespace mmo
 	protected:
 		Entity* CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId);
 
+		Light* CreatePointLight(const Vector3& position, const Vector4& color, float intensity, float range, uint64 uniqueId);
+
 		static uint16 BuildPageIndex(uint8 x, const uint8 y)
 		{
 			return (x << 8) | y;
@@ -82,7 +84,8 @@ namespace mmo
 		struct EntityPlacement
 		{
 			uint16 pageIndex;
-			Entity* entity;
+			Entity* entity { nullptr };
+			Light* light { nullptr };
 			SceneNode* node;
 		};
 

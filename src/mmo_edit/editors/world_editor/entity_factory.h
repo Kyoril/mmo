@@ -19,6 +19,7 @@ namespace mmo
     class WorldEditor;
     class MapEntity;
     class SceneOutlineWindow;
+    class Light;
 
     namespace proto
     {
@@ -53,6 +54,15 @@ namespace mmo
         /// @param objectId Unique object ID (0 to auto-generate).
         /// @return Pointer to the created entity, or nullptr on failure.
         Entity *CreateMapEntity(const String &assetName, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale, uint64 objectId);
+
+        /// @brief Creates a point light in the scene.
+        /// @param position World position for the light.
+        /// @param color Light color (RGBA).
+        /// @param intensity Light intensity.
+        /// @param range Light range.
+        /// @param objectId Unique object ID (0 to auto-generate).
+        /// @return Pointer to the created light, or nullptr on failure.
+        Light *CreatePointLight(const Vector3 &position, const Vector4 &color, float intensity, float range, uint64 objectId);
 
         /// @brief Creates a unit spawn entity in the scene.
         /// @param spawn Reference to the unit spawn entry data.
