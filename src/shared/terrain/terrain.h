@@ -290,9 +290,9 @@ namespace mmo
 			/// @param innerRadius The inner radius of the brush where full effect is applied.
 			/// @param outerRadius The outer radius of the brush where effect fades out.
 			/// @param power The strength of the painting effect.
-			/// @param minSloap The minimum slope angle for painting.
-			/// @param maxSloap The maximum slope angle for painting.
-			void Paint(uint8 layer, float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power, float minSloap, float maxSloap);
+			/// @param minSlope The minimum slope angle for painting.
+			/// @param maxSlope The maximum slope angle for painting.
+			void Paint(uint8 layer, float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power, float minSlope, float maxSlope);
 
 			/// @brief Colors the terrain vertices in a brush area.
 			/// @param brushCenterX World X position of the brush center.
