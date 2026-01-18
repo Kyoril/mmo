@@ -371,7 +371,7 @@ namespace mmo
 		return x;
 	}
 
-	void TextField::OnMouseDown(MouseButton button, int32 buttons, const Point & position)
+	bool TextField::OnMouseDown(MouseButton button, int32 buttons, const Point & position)
 	{
 		// If the left mouse button is pressed...
 		if (button == MouseButton::Left)
@@ -406,14 +406,16 @@ namespace mmo
 		}
 
 		// Raise the signal from the super class
-		Frame::OnMouseDown(button, buttons, position);
+		bool consumed = Frame::OnMouseDown(button, buttons, position);
 		abort_emission();
+		return true;
 	}
 
-	void TextField::OnMouseUp(MouseButton button, int32 buttons, const Point& position)
+	bool TextField::OnMouseUp(MouseButton button, int32 buttons, const Point& position)
 	{
-		Frame::OnMouseUp(button, buttons, position);
+		bool consumed = Frame::OnMouseUp(button, buttons, position);
 		abort_emission();
+		return true;
 	}
 
 	void TextField::OnKeyDown(Key key)

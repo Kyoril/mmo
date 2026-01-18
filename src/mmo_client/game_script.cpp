@@ -950,16 +950,24 @@ namespace mmo
 							   .def("GetBlock", &ItemHandle::GetBlock)
 							   .def("GetDurability", &ItemHandle::GetDurability)
 							   .def("GetMaxDurability", &ItemHandle::GetMaxDurability)
+					   		   .def("GetStackCount", &ItemHandle::GetStackCount)
+							   .def("GetClass", &ItemHandle::GetItemClass)
+							   .def("GetSubClass", &ItemHandle::GetItemSubClass)
+							   .def("GetInventoryType", &ItemHandle::GetInventoryType)
 							   .def("GetSellPrice", &ItemHandle::GetSellPrice)
 							   .def("GetIcon", &ItemHandle::GetIcon)
 							   .def("GetEntry", &ItemHandle::GetEntry)
 							   .def("GetSpell", &ItemHandle::GetSpell)
 							   .def("GetSpellTriggerType", &ItemHandle::GetSpellTriggerType)
 							   .def("GetStatType", &ItemHandle::GetStatType)
+								.def("GetBagSlots", &ItemHandle::GetBagSlots)
+							   .def("GetDescription", &ItemHandle::GetDescription)
+							   .def("GetMinDamage", &ItemHandle::GetMinDamage)
+							   .def("GetProficiency", &ItemHandle::GetProficiency)
 							   .def("GetStatValue", &ItemHandle::GetStatValue)),
 
-					   luabind::scope(
-						   luabind::class_<proto_client::SpellEntry>("Spell")
+						   luabind::scope(
+							   luabind::class_<proto_client::SpellEntry>("Spell")
 							   .def_readonly("id", &proto_client::SpellEntry::id)
 							   .def_readonly("name", &proto_client::SpellEntry::name)
 							   .def_readonly("rank", &proto_client::SpellEntry::rank)
@@ -1114,10 +1122,29 @@ namespace mmo
 					   luabind::def<std::function<void(uint32)>>("UseContainerItem", [this](uint32 slot)
 																 { this->UseContainerItem(slot); }),
 					   luabind::def<std::function<int32(uint32)>>("GetItemCount", [this](const uint32 id) -> int32
-																  { return ObjectMgr::GetItemCount(id); }),
+						   { return ObjectMgr::GetItemCount(id); }),
 
 					   luabind::def<std::function<int32()>>("GetNumLootItems", [this]()
-															{ return this->GetNumLootItems(); }),
+						   { return this->GetNumLootItems(); }),
+
+				   
+				   luabind::def<std::function<void(uint32, uint32)>>("DestroyItem", [this](uint32 slot, uint32 count)
+											 { 
+												 uint8 bag = (slot >> 8) & 0xFF;
+												 uint8 bagSlot = slot & 0xFF;
+												 this->m_realmConnector.DestroyItem(bag, bagSlot, static_cast<uint8>(count)); 
+											 }),
+				   
+				   // Cursor management functions
+				   luabind::def<std::function<bool()>>("CursorHasItem", []() -> bool
+											 { return g_cursor.GetCursorItem() != static_cast<uint32>(-1); }),
+				   luabind::def<std::function<uint32()>>("GetCursorItemSlot", []() -> uint32
+											 { return g_cursor.GetCursorItem(); }),
+				   luabind::def<std::function<void()>>("ClearCursorItem", []()
+											 { g_cursor.Clear(); }),
+				   luabind::def<std::function<void(uint32)>>("SetCursorItem", [](uint32 slot)
+											 { g_cursor.SetItem(slot); }),
+				   
 					   luabind::def<std::function<void(int32, bool)>>("LootSlot", [this](int32 slot, bool force)
 																	  { this->LootSlot(slot, force); }),
 					   luabind::def<std::function<bool(int32)>>("LootSlotIsCoin", [this](int32 slot)

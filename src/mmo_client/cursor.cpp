@@ -165,10 +165,12 @@ namespace mmo
 
 		UpdateCursorIcon();
 	}
+
 	uint32 Cursor::GetCursorItem() const
 	{
 		return m_itemSlot;
 	}
+
 	std::shared_ptr<GameItemC> Cursor::ResolveItemFromSlot(uint32 slot) const
 	{
 		const auto player = ObjectMgr::GetActivePlayer();

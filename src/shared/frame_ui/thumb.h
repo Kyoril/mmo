@@ -47,9 +47,9 @@ namespace mmo
 		virtual void OnThumbTrackEnded();
 
 	protected:
-		virtual void OnMouseDown(MouseButton button, int32 buttons, const Point& position) override;
+		virtual bool OnMouseDown(MouseButton button, int32 buttons, const Point& position) override;
 
-		virtual void OnMouseUp(MouseButton button, int32 buttons, const Point& position) override;
+		virtual bool OnMouseUp(MouseButton button, int32 buttons, const Point& position) override;
 
 		virtual void OnMouseMoved(const Point& position, const Point& delta) override;
 

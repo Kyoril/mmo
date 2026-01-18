@@ -25,9 +25,9 @@ namespace mmo
 		thumbPositionChanged(*this);
 	}
 
-	void Thumb::OnMouseDown(MouseButton button, int32 buttons, const Point& position)
+	bool Thumb::OnMouseDown(MouseButton button, int32 buttons, const Point& position)
 	{
-		Button::OnMouseDown(button, buttons, position);
+		bool consumed = Button::OnMouseDown(button, buttons, position);
 
 		if (button == MouseButton::Left)
 		{
@@ -35,11 +35,13 @@ namespace mmo
 			m_dragPoint = position;
 			OnThumbTrackStarted();
 		}
+		
+		return consumed;
 	}
 
-	void Thumb::OnMouseUp(MouseButton button, int32 buttons, const Point& position)
+	bool Thumb::OnMouseUp(MouseButton button, int32 buttons, const Point& position)
 	{
-		Button::OnMouseUp(button, buttons, position);
+		bool consumed = Button::OnMouseUp(button, buttons, position);
 
 		if (button == MouseButton::Left)
 		{
@@ -48,6 +50,8 @@ namespace mmo
 
 			OnThumbPositionChanged();
 		}
+		
+		return consumed;
 	}
 
 	void Thumb::OnMouseMoved(const Point& position, const Point& delta)

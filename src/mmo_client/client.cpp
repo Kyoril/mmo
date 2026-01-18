@@ -209,12 +209,12 @@ namespace mmo
 			return false; });
 		s_frameUiConnections += EventLoop::MouseDown.connect([](EMouseButton button, int32 x, int32 y)
 															 {
-			FrameManager::Get().NotifyMouseDown(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y));
-			return false; });
+			// Returns true if the UI consumed the event, preventing further processing
+			return FrameManager::Get().NotifyMouseDown(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y)); });
 		s_frameUiConnections += EventLoop::MouseUp.connect([](EMouseButton button, int32 x, int32 y)
 														   {
-			FrameManager::Get().NotifyMouseUp(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y));
-			return false; });
+			// Returns true if the UI consumed the event, preventing further processing
+			return FrameManager::Get().NotifyMouseUp(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y)); });
 
 		s_frameUiConnections += EventLoop::KeyDown.connect([](int32 key, bool)
 														   {
