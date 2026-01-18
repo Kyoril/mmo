@@ -1187,6 +1187,15 @@ namespace mmo
 																		 { m_realmConnector.InviteByName(playerName); }),
 					   luabind::def<std::function<void(const String &)>>("UninviteByName", [this](const String &playerName)
 																		 { m_realmConnector.UninviteByName(playerName); }),
+					   luabind::def<std::function<void()>>("LeaveParty", [this]()
+														   {
+															   // Leave the party by uninviting ourselves
+															   const auto player = ObjectMgr::GetActivePlayer();
+															   if (player && m_partyInfo.GetMemberCount() > 0)
+															   {
+																   m_realmConnector.UninviteByName(player->GetName());
+															   }
+														   }),
 
 					   luabind::def<std::function<void()>>("RequestTimePlayed", [this]()
 														   { m_realmConnector.SendTimePlayedRequest(); }));

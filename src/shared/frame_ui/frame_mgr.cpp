@@ -375,6 +375,14 @@ namespace mmo
 		LUABIND_MODULE(luaState,
 			luabind::def("Localize", &LuaLocalize),
 			luabind::def("getglobal", &FrameManager::GetGlobal),
+			luabind::def<std::function<Point()>>("GetCursorPosition", []()
+			{
+				// Convert screen coordinates to native resolution coordinates
+				// so the position can be used directly with anchor offsets
+				const Point mousePos = FrameManager::Get().GetMousePosition();
+				const Point uiScale = FrameManager::Get().GetUIScale();
+				return Point(mousePos.x / uiScale.x, mousePos.y / uiScale.y);
+			}),
 
 			luabind::scope(
 				luabind::class_<AnchorPoint>("AnchorPoint")

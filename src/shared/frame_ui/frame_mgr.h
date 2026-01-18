@@ -116,6 +116,9 @@ namespace mmo
 		/// Gets the frame that is currently capturing input events.
 		inline FramePtr GetCaptureFrame() const { return m_inputCapture; }
 
+		/// Gets the current mouse cursor position.
+		inline Point GetMousePosition() const { return m_mousePos; }
+
 		/// Notifies the FrameManager that the mouse cursor has been moved.
 		void NotifyMouseMoved(const Point& position);
 
