@@ -7,6 +7,7 @@
 #include "base/clock.h"
 #include "log/default_log_levels.h"
 #include "shared/client_data/proto_client/classes.pb.h"
+#include "shared/client_data/proto_client/spells.pb.h"
 
 namespace mmo
 {
@@ -47,6 +48,22 @@ namespace mmo
 	{
 		if (!CheckNonNull()) return nullptr;
 		return Get()->GetSpell();
+	}
+
+	bool AuraHandle::IsNegative() const
+	{
+		if (!CheckNonNull()) return false;
+		
+		const auto* spell = Get()->GetSpell();
+		if (!spell) return false;
+		
+		// Check if the Negative attribute flag is set (0x04000000 in attributes[0])
+		if (spell->attributes_size() > 0)
+		{
+			return (spell->attributes(0) & 0x04000000) != 0;
+		}
+		
+		return false;
 	}
 
 	bool AuraHandle::CheckNonNull() const

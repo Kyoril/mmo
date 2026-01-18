@@ -38,6 +38,8 @@ namespace mmo
 
 		[[nodiscard]] const proto_client::SpellEntry* GetSpell() const;
 
+		[[nodiscard]] bool IsNegative() const;
+
 	private:
 		[[nodiscard]] bool CheckNonNull() const;
 	};

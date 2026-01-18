@@ -935,20 +935,13 @@ namespace mmo
 							   .def("IsExpired", &AuraHandle::IsExpired)
 							   .def("CanExpire", &AuraHandle::CanExpire)
 							   .def("GetDuration", &AuraHandle::GetDuration)
-							   .def("GetSpell", &AuraHandle::GetSpell)),
+						   .def("GetSpell", &AuraHandle::GetSpell)
+						   .def("IsNegative", &AuraHandle::IsNegative)),
 
-					   luabind::scope(
-						   luabind::class_<ItemHandle>("ItemHandle")
-							   .def("GetId", &ItemHandle::GetId)
-							   .def("GetName", &ItemHandle::GetName)
-							   .def("GetDescription", &ItemHandle::GetDescription)
-							   .def("GetClass", &ItemHandle::GetItemClass)
-							   .def("GetInventoryType", &ItemHandle::GetInventoryType)
-							   .def("GetSubClass", &ItemHandle::GetItemSubClass)
-							   .def("GetProficiency", &ItemHandle::GetProficiency)
-							   .def("GetStackCount", &ItemHandle::GetStackCount)
-							   .def("GetBagSlots", &ItemHandle::GetBagSlots)
-							   .def("GetMinDamage", &ItemHandle::GetMinDamage)
+				   luabind::scope(
+					   luabind::class_<ItemHandle>("ItemHandle")
+						   .def("GetId", &ItemHandle::GetId)
+						   .def("GetName", &ItemHandle::GetName)
 							   .def("GetMaxDamage", &ItemHandle::GetMaxDamage)
 							   .def("GetAttackSpeed", &ItemHandle::GetAttackSpeed)
 							   .def("GetDps", &ItemHandle::GetDps)
