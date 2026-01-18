@@ -33,6 +33,8 @@ namespace mmo
 		m_packetHandlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::QuestLogFull, *this, &QuestClient::OnQuestLogFull);
 		m_packetHandlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GossipComplete, *this, &QuestClient::OnGossipComplete);
 		m_packetHandlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::QuestQueryResult, *this, &QuestClient::OnQuestQueryResult);
+		m_packetHandlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::QuestAccepted, *this, &QuestClient::OnQuestAccepted);
+		m_packetHandlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::QuestAbandoned, *this, &QuestClient::OnQuestAbandoned);
 	}
 
 	void QuestClient::Shutdown()
@@ -924,6 +926,38 @@ namespace mmo
 		}
 
 		m_questCache.NotifyObjectResponse(id, std::move(entry));
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult QuestClient::OnQuestAccepted(game::IncomingPacket& packet)
+	{
+		String questTitle;
+		uint32 questId;
+		if (!(packet >> io::read_container<uint8>(questTitle) >> io::read<uint32>(questId)))
+		{
+			ELOG("Failed to read QuestAccepted packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Trigger UI event
+		FrameManager::Get().TriggerLuaEvent("QUEST_ACCEPTED", questTitle);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult QuestClient::OnQuestAbandoned(game::IncomingPacket& packet)
+	{
+		String questTitle;
+		uint32 questId;
+		if (!(packet >> io::read_container<uint8>(questTitle) >> io::read<uint32>(questId)))
+		{
+			ELOG("Failed to read QuestAbandoned packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Trigger UI event
+		FrameManager::Get().TriggerLuaEvent("QUEST_ABANDONED", questTitle);
+
 		return PacketParseResult::Pass;
 	}
 }

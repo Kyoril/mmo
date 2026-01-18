@@ -101,6 +101,17 @@ namespace mmo
 		}
 
 		DLOG("Player " << m_characterData.name << " accepted quest " << questId << " from quest giver object " << log_hex_digit(questGiverGuid));
+		
+		// Notify client that quest was accepted
+		SendPacket([questId, quest](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::QuestAccepted);
+			packet
+				<< io::write_dynamic_range<uint8>(quest->name())
+				<< io::write<uint32>(questId);
+			packet.Finish();
+		});
+
 		if (questGiver->IsUnit())
 		{
 			questGiver->AsUnit().RaiseTrigger(trigger_event::OnQuestAccept, { questId }, m_character.get());
@@ -119,10 +130,29 @@ namespace mmo
 			return;
 		}
 
+		// Get quest info before abandoning
+		const auto* quest = m_project.quests.getById(questId);
+		if (!quest)
+		{
+			ELOG("Failed to abandon quest " << questId << ": quest not found");
+			return;
+		}
+
 		if (!m_character->AbandonQuest(questId))
 		{
 			ELOG("Failed to abandon quest " << questId);
+			return;
 		}
+
+		// Notify client that quest was abandoned
+		SendPacket([questId, quest](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::QuestAbandoned);
+			packet
+				<< io::write_dynamic_range<uint8>(quest->name())
+				<< io::write<uint32>(questId);
+			packet.Finish();
+		});
 	}
 
 	void Player::OnQuestGiverQueryQuest(uint16 opCode, uint32 size, io::Reader& contentReader)

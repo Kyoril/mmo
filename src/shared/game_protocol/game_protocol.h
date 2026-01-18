@@ -383,6 +383,9 @@ namespace mmo
 
 				SpellEnergizeLog,
 				MoveEnded,
+				
+				QuestAccepted,
+				QuestAbandoned,
 
 				TransferPending,
 
