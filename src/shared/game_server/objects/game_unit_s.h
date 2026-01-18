@@ -714,6 +714,13 @@ namespace mmo
 		/// @param aura The aura container to remove.
 		void RemoveAura(const std::shared_ptr<AuraContainer> &aura);
 
+		/// Removes an aura from the unit by spell ID if it was cast by the specified caster.
+		/// Only removes positive (non-negative) auras.
+		/// @param spellId The ID of the spell.
+		/// @param casterId The GUID of the caster (usually the unit itself for self-cancellation).
+		/// @returns true if an aura was removed, false otherwise.
+		bool RemoveAuraBySpellId(uint32 spellId, uint64 casterId = 0);
+
 		/// Checks if the unit has an aura from a specific caster.
 		/// @param spellId The ID of the spell.
 		/// @param casterId The GUID of the caster.

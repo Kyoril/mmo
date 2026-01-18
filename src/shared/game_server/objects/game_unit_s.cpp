@@ -845,6 +845,30 @@ namespace mmo
 		}
 	}
 
+	bool GameUnitS::RemoveAuraBySpellId(const uint32 spellId, const uint64 casterId)
+	{
+		ASSERT(spellId != 0);
+
+		for (auto it = m_auras.begin(); it != m_auras.end(); ++it)
+		{
+			const auto& aura = *it;
+			if (aura->GetSpellId() == spellId)
+			{
+				// Check for caster id as well when removing?
+				if (casterId != 0 && aura->GetCasterId() != casterId)
+				{
+					continue;
+				}
+
+				// Check if the aura is positive (negative auras can't be cancelled)
+				const auto& spell = aura->GetSpell();
+				RemoveAura(aura);
+				return true;
+			}
+		}
+		return false;
+	}
+
 	bool GameUnitS::HasAuraSpellFromCaster(uint32 spellId, uint64 casterId)
 	{
 		for (auto it = m_auras.begin(); it != m_auras.end(); ++it)

@@ -482,6 +482,9 @@ namespace mmo
 		case game::client_realm_packet::CancelCast:
 			OnCancelCast(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::CancelAura:
+			OnCancelAura(opCode, buffer.size(), reader);
+			break;
 
 		case game::client_realm_packet::AttackSwing:
 			OnAttackSwing(opCode, buffer.size(), reader);
@@ -1526,6 +1529,39 @@ namespace mmo
 	void Player::OnCancelCast(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		m_character->CancelCast(spell_interrupt_flags::Any, 0);
+	}
+
+	void Player::OnCancelAura(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 spellId;
+		if (!(contentReader >> io::read<uint32>(spellId)))
+		{
+			ELOG("Failed to read spell ID for cancel aura");
+			return;
+		}
+
+		// Check if known spell
+		const auto* spell = m_project.spells.getById(spellId);
+		if (!spell)
+		{
+			ELOG("Unknown spell " << spellId << " - can not cancel aura!");
+			Kick();
+			return;
+		}
+
+		if (spell->attributes(0) & spell_attributes::Negative)
+		{
+			WLOG("Tried to cancel negative aura " << spellId);
+			return;
+		}
+		if (spell->attributes(0) & spell_attributes::Passive)
+		{
+			WLOG("Tried to cancel passive aura " << spellId);
+			return;
+		}
+
+		// Try to remove the aura - this will check if it exists, is self-cast, and is positive
+		m_character->RemoveAuraBySpellId(spellId, m_character->GetGuid());
 	}
 
 	void Player::OnAttackSwing(uint16 opCode, uint32 size, io::Reader& contentReader)

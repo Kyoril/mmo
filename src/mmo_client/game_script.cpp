@@ -1020,6 +1020,8 @@ namespace mmo
 
 					   luabind::def("UnitAura", &Script_UnitAura, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 
+					   luabind::def<std::function<void(uint32)>>("CancelAura", [this](uint32 spellId)
+															{ m_realmConnector.CancelAura(spellId); }),
 					   luabind::def("GetSpellDescription", &Script_GetSpellDescription),
 					   luabind::def("GetSpellAuraText", &Script_GetSpellAuraText),
 					   luabind::def("IsPassiveSpell", &Script_IsPassiveSpell),

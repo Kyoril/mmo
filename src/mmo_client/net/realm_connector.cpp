@@ -702,11 +702,11 @@ namespace mmo
 			});
 	}
 
-	void RealmConnector::CancelAura()
+	void RealmConnector::CancelAura(const uint32 spellId)
 	{
-		sendSinglePacket([](game::OutgoingPacket& packet) {
+		sendSinglePacket([spellId](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CancelAura);
-			// TODO
+			packet << io::write<uint32>(spellId);
 			packet.Finish();
 			});
 	}
