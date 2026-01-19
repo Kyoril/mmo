@@ -818,6 +818,22 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::LeaveGroup()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::GroupLeave);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::DisbandGroup()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::GroupDisband);
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::RandomRoll(int32 min, int32 max)
 	{
 		sendSinglePacket([min, max](game::OutgoingPacket& packet) {

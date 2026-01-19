@@ -424,6 +424,8 @@ namespace mmo
 		PacketParseResult OnGroupUninvite(game::IncomingPacket &packet);
 		PacketParseResult OnGroupAccept(game::IncomingPacket &packet);
 		PacketParseResult OnGroupDecline(game::IncomingPacket &packet);
+		PacketParseResult OnGroupLeave(game::IncomingPacket& packet);
+		PacketParseResult OnGroupDisband(game::IncomingPacket& packet);
 		PacketParseResult OnLogoutRequest(game::IncomingPacket &packet);
 
 		// Guild packet handlers

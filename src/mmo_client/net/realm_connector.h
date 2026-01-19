@@ -405,6 +405,10 @@ namespace mmo
 
 		void DeclineGroup();
 
+		void LeaveGroup();
+
+		void DisbandGroup();
+
 		void RandomRoll(int32 min, int32 max);
 
 		void SendChatMessage(const String& message, ChatType chatType, const String& target);

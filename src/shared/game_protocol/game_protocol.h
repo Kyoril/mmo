@@ -239,6 +239,9 @@ namespace mmo
 
 				AreaTriggerTriggered,
 
+				GroupLeave,
+				GroupDisband,
+
 				/// Counter constant
 				Count_,
 			};
