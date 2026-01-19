@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "systems/action_bar.h"
+#include "systems/cooldown_manager.h"
 #include "char_creation/char_create_info.h"
 #include "char_creation/char_select.h"
 #include "cursor.h"
@@ -759,9 +760,9 @@ namespace mmo
 		}
 	}
 
-	GameScript::GameScript(LoginConnector &loginConnector, RealmConnector &realmConnector, LootClient &lootClient, VendorClient &vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project &project, ActionBar &actionBar, SpellCast &spellCast, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, PartyInfo &partyInfo, CharCreateInfo &charCreateInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, GameTimeComponent &gameTime,
+	GameScript::GameScript(LoginConnector &loginConnector, RealmConnector &realmConnector, LootClient &lootClient, VendorClient &vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project &project, ActionBar &actionBar, SpellCast &spellCast, CooldownManager &cooldownManager, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, PartyInfo &partyInfo, CharCreateInfo &charCreateInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, GameTimeComponent &gameTime,
 						   TalentClient &talentClient)
-		: m_loginConnector(loginConnector), m_realmConnector(realmConnector), m_lootClient(lootClient), m_vendorClient(vendorClient), m_loginState(std::move(loginState)), m_project(project), m_actionBar(actionBar), m_spellCast(spellCast), m_trainerClient(trainerClient), m_questClient(questClient), m_audio(audio), m_partyInfo(partyInfo), m_charCreateInfo(charCreateInfo), m_charSelect(charSelect), m_guildClient(guildClient), m_friendClient(friendClient), m_gameTime(gameTime), m_talentClient(talentClient)
+		: m_loginConnector(loginConnector), m_realmConnector(realmConnector), m_lootClient(lootClient), m_vendorClient(vendorClient), m_loginState(std::move(loginState)), m_project(project), m_actionBar(actionBar), m_spellCast(spellCast), m_cooldownManager(cooldownManager), m_trainerClient(trainerClient), m_questClient(questClient), m_audio(audio), m_partyInfo(partyInfo), m_charCreateInfo(charCreateInfo), m_charSelect(charSelect), m_guildClient(guildClient), m_friendClient(friendClient), m_gameTime(gameTime), m_talentClient(talentClient)
 	{
 		// Initialize the cursor with project data for icon resolution
 		g_cursor.Initialize(m_project);
@@ -1091,6 +1092,14 @@ namespace mmo
 																							{ return this->m_actionBar.GetActionButtonSpell(slot); }),
 					   luabind::def<std::function<const ItemInfo *(int32)>>("GetActionButtonItem", [this](int32 slot)
 																			{ return this->m_actionBar.GetActionButtonItem(slot); }),
+
+					   // Cooldowns
+					   luabind::def<std::function<float(uint32)>>("GetSpellCooldownProgress", [this](uint32 spellId)
+																  { return this->m_cooldownManager.GetCooldownProgress(spellId); }),
+					   luabind::def<std::function<float(uint32)>>("GetSpellCooldownRemaining", [this](uint32 spellId)
+																  { return this->m_cooldownManager.GetCooldownRemaining(spellId); }),
+					   luabind::def<std::function<bool(uint32)>>("IsSpellOnCooldown", [this](uint32 spellId)
+																 { return this->m_cooldownManager.IsOnCooldown(spellId); }),
 
 					   luabind::def<std::function<void(int32, const ItemInfo *&, String &, int32 &, int32 &, int32 &, bool &)>>("GetVendorItemInfo", [this](int32 slot, const ItemInfo *&out_item, String &out_icon, int32 &out_price, int32 &out_quantity, int32 &out_numAvailable, bool &out_usable)
 																																{ return this->GetVendorItemInfo(slot, out_item, out_icon, out_price, out_quantity, out_numAvailable, out_usable); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>, luabind::pure_out_value<7>>()),

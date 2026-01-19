@@ -75,6 +75,7 @@ namespace mmo
 	class Discord;
 	class Minimap;
 	class InventoryClient;
+	class CooldownManager;
 
 	/// This class represents the initial game state where the player is asked to enter
 	/// his credentials in order to authenticate.
@@ -97,6 +98,7 @@ namespace mmo
 			VendorClient &vendorClient,
 			ActionBar &actionBar,
 			SpellCast &spellCast,
+			CooldownManager &cooldownManager,
 			TrainerClient &trainerClient,
 			QuestClient &questClient,
 			IAudio &audio,
@@ -440,6 +442,7 @@ namespace mmo
 
 		ActionBar &m_actionBar;
 		SpellCast &m_spellCast;
+		CooldownManager &m_cooldownManager;
 		TrainerClient &m_trainerClient;
 		QuestClient &m_questClient;
 		PartyInfo &m_partyInfo;

@@ -68,7 +68,7 @@ namespace mmo
 
 		constexpr uint32 MAX_FRIENDS = 50;
 
-		constexpr uint32 ProtocolVersion = 0x00000003;
+		constexpr uint32 ProtocolVersion = 0x00000004;
 
 		////////////////////////////////////////////////////////////////////////////////
 		// BEGIN: Client <-> Realm section

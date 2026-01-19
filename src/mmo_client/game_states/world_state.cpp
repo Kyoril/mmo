@@ -21,6 +21,7 @@
 
 #include "systems/action_bar.h"
 #include "systems/quest_client.h"
+#include "systems/cooldown_manager.h"
 #include "game_client/object_mgr.h"
 #include "systems/trainer_client.h"
 #include "systems/vendor_client.h"
@@ -203,9 +204,9 @@ namespace mmo
 	IInputControl *WorldState::s_inputControl = nullptr;
 
 	WorldState::WorldState(GameStateMgr &gameStateManager, RealmConnector &realmConnector, const proto_client::Project &project, TimerQueue &timers, LootClient &lootClient, VendorClient &vendorClient,
-						   ActionBar &actionBar, SpellCast &spellCast, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, PartyInfo &partyInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, ICacheProvider &cache, Discord &discord,
+						   ActionBar &actionBar, SpellCast &spellCast, CooldownManager &cooldownManager, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, PartyInfo &partyInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, ICacheProvider &cache, Discord &discord,
 						   GameTimeComponent &gameTime, TalentClient &talentClient, Minimap &minimap, InventoryClient &inventoryClient)
-		: GameState(gameStateManager), m_realmConnector(realmConnector), m_audio(audio), m_gameTime(gameTime), m_cache(cache), m_project(project), m_timers(timers), m_lootClient(lootClient), m_vendorClient(vendorClient), m_actionBar(actionBar), m_spellCast(spellCast), m_trainerClient(trainerClient), m_questClient(questClient), m_partyInfo(partyInfo), m_charSelect(charSelect), m_guildClient(guildClient), m_friendClient(friendClient), m_discord(discord), m_talentClient(talentClient), m_minimap(minimap), m_inventoryClient(inventoryClient)
+		: GameState(gameStateManager), m_realmConnector(realmConnector), m_audio(audio), m_gameTime(gameTime), m_cache(cache), m_project(project), m_timers(timers), m_lootClient(lootClient), m_vendorClient(vendorClient), m_actionBar(actionBar), m_spellCast(spellCast), m_cooldownManager(cooldownManager), m_trainerClient(trainerClient), m_questClient(questClient), m_partyInfo(partyInfo), m_charSelect(charSelect), m_guildClient(guildClient), m_friendClient(friendClient), m_discord(discord), m_talentClient(talentClient), m_minimap(minimap), m_inventoryClient(inventoryClient)
 	{
 		// TODO: Do we want to put these asset references in some sort of config setting or something?
 		ObjectMgr::SetUnitNameFontSettings(FontManager::Get().CreateOrRetrieve("Fonts/FRIZQT__.TTF", 24.0f, 1.0f), MaterialManager::Get().Load("Models/UnitNameFont.hmat"));
@@ -601,6 +602,9 @@ namespace mmo
 			m_playerController->Update(deltaSeconds);
 			ObjectMgr::UpdateObjects(deltaSeconds);
 		}
+
+		// Update cooldown manager
+		m_cooldownManager.Update(deltaSeconds);
 
 		// Update minimap
 		if (const auto &controlled = m_playerController->GetControlledUnit())
@@ -1997,8 +2001,9 @@ namespace mmo
 		uint32 spellId;
 		GameTime gameTime;
 		SpellTargetMap targetMap;
+		uint32 cooldownMs = 0;
 
-		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<GameTime>(gameTime) >> targetMap))
+		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<GameTime>(gameTime) >> targetMap >> io::read<uint32>(cooldownMs)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -2053,6 +2058,12 @@ namespace mmo
 		if (casterId == ObjectMgr::GetActivePlayerGuid())
 		{
 			m_spellCast.OnSpellGo(spellId);
+
+			// Start cooldown if there is one
+			if (cooldownMs > 0)
+			{
+				m_cooldownManager.StartCooldown(spellId, cooldownMs);
+			}
 		}
 
 		return PacketParseResult::Pass;

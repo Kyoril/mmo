@@ -144,6 +144,10 @@ namespace mmo
 
 		bool ConsumePower();
 
+		/// @brief Calculates the final cooldown for this spell after applying spell mods.
+		/// @return The final cooldown in milliseconds, or 0 if no cooldown.
+		GameTime CalculateFinalCooldown() const;
+
 		void ApplyCooldown(GameTime cooldownTimeMs, GameTime categoryCooldownTimeMs);
 
 		void ApplyAllEffects();
