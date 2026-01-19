@@ -900,6 +900,7 @@ namespace mmo
 
 					   luabind::scope(
 						   luabind::class_<UnitHandle>("UnitHandle")
+								.def("GetGuid", &UnitHandle::GetGuid)
 							   .def("GetHealth", &UnitHandle::GetHealth)
 							   .def("GetMaxHealth", &UnitHandle::GetMaxHealth)
 							   .def("GetPower", &UnitHandle::GetPower)
@@ -929,7 +930,8 @@ namespace mmo
 							   .def("GetHealthFromStat", &UnitHandle::GetHealthFromStat)
 							   .def("GetManaFromStat", &UnitHandle::GetManaFromStat)
 							   .def("GetAttributeCost", &UnitHandle::GetAttributeCost)
-							   .def("HasProficiency", &UnitHandle::HasProficiency)),
+							   .def("HasProficiency", &UnitHandle::HasProficiency)
+								.def("__eq", &UnitHandle::operator==)),
 
 					   luabind::scope(
 						   luabind::class_<AuraHandle>("AuraHandle")

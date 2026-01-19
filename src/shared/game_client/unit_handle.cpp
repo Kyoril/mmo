@@ -316,6 +316,12 @@ namespace mmo
 		return false;
 	}
 
+	bool UnitHandle::operator==(const UnitHandle& other) const
+	{
+		// If the guids are equal it should be the same object
+		return other.GetGuid() == GetGuid();
+	}
+
 	bool UnitHandle::CheckNonNull() const
 	{
 		if (Get())

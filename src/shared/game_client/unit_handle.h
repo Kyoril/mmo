@@ -86,6 +86,7 @@ namespace mmo
 
 		[[nodiscard]] virtual bool HasProficiency(int32 type, uint32 proficiency) const;
 
+		[[nodiscard]] bool operator==(const UnitHandle & other) const;
 
 	private:
 		[[nodiscard]] bool CheckNonNull() const;
