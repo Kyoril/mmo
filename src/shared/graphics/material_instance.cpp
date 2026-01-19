@@ -192,7 +192,7 @@ namespace mmo
 			device.SetDepthTestComparison(DepthTestMethod::LessEqual);
 		}
 
-		if (m_type == MaterialType::Translucent || m_type == MaterialType::Masked)
+		if (m_type == MaterialType::Translucent || m_type == MaterialType::Masked || m_type == MaterialType::UserInterface)
 		{
 			device.SetBlendMode(BlendMode::Alpha);
 		}

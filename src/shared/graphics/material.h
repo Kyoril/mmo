@@ -213,7 +213,7 @@ namespace mmo
 		[[nodiscard]] MaterialType GetType() const override { return m_type; }
 
 		/// @brief Gets whether this material is translucent.
-		[[nodiscard]] bool IsTranslucent() const override { return m_type == MaterialType::Translucent; }
+		[[nodiscard]] bool IsTranslucent() const override { return m_type == MaterialType::Translucent || m_type == MaterialType::UserInterface; }
 
 		/// @brief Gets whether this material is receiving light.
 		[[nodiscard]] bool IsLit() const override { return m_type == MaterialType::Masked || m_type == MaterialType::Translucent || m_type == MaterialType::Opaque; }
