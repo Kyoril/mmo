@@ -1297,7 +1297,16 @@ namespace mmo
 			return;
 		}
 
-		const uint32 mask = m_spell.itemsubclassmask();
+		// Get proficiency ID from the effect's miscvaluea field
+		const uint32 proficiencyId = effect.miscvaluea();
+		if (proficiencyId == 0)
+		{
+			WLOG("Spell " << m_spell.id() << " has Proficiency effect with no proficiency ID");
+			return;
+		}
+
+		// Create bitmask for this proficiency
+		const uint32 mask = (1 << proficiencyId);
 
 		for (auto* targetObject : effectTargets)
 		{

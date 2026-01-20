@@ -702,6 +702,7 @@ namespace mmo
 		uint32 startquestid;
 		float rangedrangepercent;
 		uint32 skill;
+		uint32 requiredProficiency;
 
 		const char* GetItemClassName() const;
 

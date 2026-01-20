@@ -1870,6 +1870,11 @@ std::shared_ptr<GameItemS> Inventory::GetItemAtSlot(uint16 absoluteSlot) const n
 		return m_owner.GetArmorProficiency();
 	}
 
+	bool Inventory::HasProficiency(uint32 proficiencyId) const noexcept
+	{
+		return m_owner.HasProficiency(proficiencyId);
+	}
+
 	bool Inventory::CanDualWield() const noexcept
 	{
 		return m_owner.CanDualWield();

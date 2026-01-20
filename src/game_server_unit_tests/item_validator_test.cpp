@@ -159,7 +159,40 @@ TEST_CASE("ItemValidator - ValidateItemRequirements", "[item_validator]")
 	project.itemClasses.add(item_class::Armor);
 	project.itemClasses.add(item_class::Weapon);
 	project.proficiencies.add(weapon_prof::OneHandSword);
-	project.proficiencies.add(weapon_prof::OneHandSword);
+	project.proficiencies.add(weapon_prof::TwoHandAxe);
+	project.proficiencies.add(armor_prof::Cloth);
+	project.proficiencies.add(armor_prof::Plate);
+
+	// Set up item subclasses with required proficiencies
+	auto* oneHandSwordSubclass = project.itemSubclasses.add(item_subclass_weapon::OneHandedSword);
+	if (oneHandSwordSubclass)
+	{
+		oneHandSwordSubclass->set_requiredproficiency(weapon_prof::OneHandSword);
+	}
+	
+	auto* twoHandAxeSubclass = project.itemSubclasses.add(item_subclass_weapon::TwoHandedAxe);
+	if (twoHandAxeSubclass)
+	{
+		twoHandAxeSubclass->set_requiredproficiency(weapon_prof::TwoHandAxe);
+	}
+	
+	auto* clothSubclass = project.itemSubclasses.add(item_subclass_armor::Cloth);
+	if (clothSubclass)
+	{
+		clothSubclass->set_requiredproficiency(armor_prof::Cloth);
+	}
+	
+	auto* plateSubclass = project.itemSubclasses.add(item_subclass_armor::Plate);
+	if (plateSubclass)
+	{
+		plateSubclass->set_requiredproficiency(armor_prof::Plate);
+	}
+	
+	auto* leatherSubclass = project.itemSubclasses.add(item_subclass_armor::Leather);
+	if (leatherSubclass)
+	{
+		leatherSubclass->set_requiredproficiency(armor_prof::Leather);
+	}
 
 	MockPlayerValidatorContext player;
 	ItemValidator validator(player, project);
@@ -269,6 +302,7 @@ TEST_CASE("ItemValidator - ValidateItemRequirements", "[item_validator]")
 		auto entry = ItemEntryBuilder()
 			.WithClass(item_class::Consumable)
 			.WithSubclass(item_subclass_consumable::Potion)
+			.WithInventoryType(inventory_type::NonEquip)
 			.Build();
 
 		auto result = validator.ValidateItemRequirements(entry);

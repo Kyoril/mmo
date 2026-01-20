@@ -21,7 +21,8 @@ namespace mmo
 
 	uint32 ItemInfo::GetProficiency() const
 	{
-		return 1 << itemSubclass;
+		// Return the required proficiency ID (0 means no proficiency required)
+		return requiredProficiency;
 	}
 
 	const char* ItemInfo::GetItemInventoryTypeName() const
@@ -255,7 +256,8 @@ namespace mmo
 			<< io::write<uint32>(itemInfo.extraflags)
 			<< io::write<uint32>(itemInfo.startquestid)
 			<< io::write<float>(itemInfo.rangedrangepercent)
-			<< io::write<uint32>(itemInfo.skill);
+			<< io::write<uint32>(itemInfo.skill)
+			<< io::write<uint32>(itemInfo.requiredProficiency);
 
 		return writer;
 	}
@@ -336,7 +338,8 @@ namespace mmo
 			>> io::read<uint32>(itemInfo.extraflags)
 			>> io::read<uint32>(itemInfo.startquestid)
 			>> io::read<float>(itemInfo.rangedrangepercent)
-			>> io::read<uint32>(itemInfo.skill);
+			>> io::read<uint32>(itemInfo.skill)
+			>> io::read<uint32>(itemInfo.requiredProficiency);
 
 		return reader;
 	}

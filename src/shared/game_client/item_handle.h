@@ -12,7 +12,7 @@ namespace mmo
 	class ItemHandle : public WeakHandle<GameItemC>
 	{
 	public:
-		explicit ItemHandle(GameItemC& item, const proto_client::SpellManager& spells);
+		explicit ItemHandle(GameItemC& item, const proto_client::Project& project);
 		explicit ItemHandle();
 		virtual ~ItemHandle() override = default;
 
@@ -74,6 +74,6 @@ namespace mmo
 	private:
 		[[nodiscard]] bool CheckNonNull() const;
 
-		const proto_client::SpellManager* m_spells{ nullptr };
+		const proto_client::Project* m_project{ nullptr };
 	};
 }

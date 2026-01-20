@@ -4,6 +4,7 @@
 
 #include "game_server/objects/game_item_s.h"
 #include "shared/proto_data/items.pb.h"
+#include "shared/proto_data/project.h"
 #include "base/macros.h"
 
 namespace mmo
@@ -269,22 +270,28 @@ namespace mmo
 	InventoryResult<void> EquipmentManager::ValidateProficiency(
 		const proto::ItemEntry& entry) const noexcept
 	{
-		if (entry.itemclass() == item_class::Weapon)
-		{
-			const uint32 weaponProf = m_context.GetWeaponProficiency();
-			const uint32 requiredProf = 1 << entry.subclass();
+		// Get the required proficiency ID
+		uint32 requiredProficiencyId = 0;
 
-			if ((weaponProf & requiredProf) == 0)
+		// First check if item has explicit proficiency requirement
+		if (entry.has_requiredproficiency() && entry.requiredproficiency() > 0)
+		{
+			requiredProficiencyId = entry.requiredproficiency();
+		}
+		else if (entry.has_subclass())
+		{
+			// Fall back to subclass proficiency
+			const auto* subclass = m_context.GetProject().itemSubclasses.getById(entry.subclass());
+			if (subclass && subclass->has_requiredproficiency())
 			{
-				return InventoryResult<void>::Failure(inventory_change_failure::NoRequiredProficiency);
+				requiredProficiencyId = subclass->requiredproficiency();
 			}
 		}
-		else if (entry.itemclass() == item_class::Armor)
-		{
-			const uint32 armorProf = m_context.GetArmorProficiency();
-			const uint32 requiredProf = (1 << entry.subclass());
 
-			if ((armorProf & requiredProf) == 0)
+		// Check if proficiency is required
+		if (requiredProficiencyId > 0)
+		{
+			if (!m_context.HasProficiency(requiredProficiencyId))
 			{
 				return InventoryResult<void>::Failure(inventory_change_failure::NoRequiredProficiency);
 			}

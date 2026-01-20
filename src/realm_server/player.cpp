@@ -2859,6 +2859,25 @@ namespace mmo
 		info.startquestid = itemEntry->questentry();
 		info.skill = itemEntry->skill();
 
+		// Set required proficiency - check item first, then fall back to subclass
+		if (itemEntry->has_requiredproficiency() && itemEntry->requiredproficiency() > 0)
+		{
+			info.requiredProficiency = itemEntry->requiredproficiency();
+		}
+		else
+		{
+			// Look up subclass to get required proficiency
+			const auto* subclass = m_project.itemSubclasses.getById(itemEntry->subclass());
+			if (subclass && subclass->has_requiredproficiency())
+			{
+				info.requiredProficiency = subclass->requiredproficiency();
+			}
+			else
+			{
+				info.requiredProficiency = 0;
+			}
+		}
+
 		m_connection->sendSinglePacket([entry, &info](game::OutgoingPacket &packet)
 									   {
 				packet.Start(game::realm_client_packet::ItemQueryResult);

@@ -255,6 +255,7 @@ namespace mmo
 		[[nodiscard]] uint32 GetLevel() const noexcept override;
 		[[nodiscard]] uint32 GetWeaponProficiency() const noexcept override;
 		[[nodiscard]] uint32 GetArmorProficiency() const noexcept override;
+		[[nodiscard]] bool HasProficiency(uint32 proficiencyId) const noexcept override;
 		[[nodiscard]] bool CanDualWield() const noexcept override;
 		// GetItemAtSlot already implemented in ISlotManagerContext
 		void ApplyItemStats(const GameItemS &item, bool apply) noexcept override;

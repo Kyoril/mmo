@@ -295,7 +295,7 @@ namespace mmo
 		return Get()->GetAttributeCost(attribute);
 	}
 
-	bool UnitHandle::HasProficiency(const int32 type, const uint32 proficiency) const
+	bool UnitHandle::HasProficiency(const uint32 proficiency) const
 	{
 		// No requirement?
 		if (proficiency == 0)
@@ -303,17 +303,16 @@ namespace mmo
 			return true;
 		}
 
-		if (!CheckNonNull()) return false;
-
-		switch (type)
+		if (!CheckNonNull())
 		{
-		case proficiency_type::Weapon:
-			return (Get()->GetWeaponProficiency() & proficiency) != 0;
-		case proficiency_type::Armor:
-			return (Get()->GetArmorProficiency() & proficiency) != 0;
+			return false;
 		}
 
-		return false;
+		// In the new data-driven system, proficiency is a proficiency ID.
+		// We check if the bit corresponding to that ID is set in either mask.
+		const uint32 proficiencyBit = (1 << proficiency);
+		return ((Get()->GetWeaponProficiency() & proficiencyBit) != 0) || 
+		       ((Get()->GetArmorProficiency() & proficiencyBit) != 0);
 	}
 
 	bool UnitHandle::operator==(const UnitHandle& other) const

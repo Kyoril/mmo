@@ -84,7 +84,12 @@ namespace mmo
 		[[nodiscard]] virtual int32 GetAttackPowerFromStat(int32 statId) const;
 		[[nodiscard]] virtual uint8 GetAttributeCost(uint32 attribute) const;
 
-		[[nodiscard]] virtual bool HasProficiency(int32 type, uint32 proficiency) const;
+		/**
+		 * @brief Checks if the unit has a specific proficiency.
+		 * @param proficiency The proficiency ID to check for.
+		 * @return True if the unit has the proficiency, false otherwise.
+		 */
+		[[nodiscard]] virtual bool HasProficiency(uint32 proficiency) const;
 
 		[[nodiscard]] bool operator==(const UnitHandle & other) const;
 

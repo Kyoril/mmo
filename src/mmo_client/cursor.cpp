@@ -266,7 +266,7 @@ namespace mmo
 			const auto item = ResolveItemFromSlot(m_itemSlot);
 			if (item)
 			{
-				ItemHandle itemHandle(*item, m_project->spells);
+				ItemHandle itemHandle(*item, *m_project);
 				const char* itemIcon = itemHandle.GetIcon();
 				if (itemIcon)
 				{

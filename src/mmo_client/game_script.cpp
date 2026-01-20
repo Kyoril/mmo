@@ -858,11 +858,43 @@ namespace mmo
 					   luabind::scope(
 						   luabind::class_<proto_client::Project>("Project")
 							   .def_readonly("spells", &mmo::proto_client::Project::spells)
-							   .def_readonly("models", &mmo::proto_client::Project::models)),
+							   .def_readonly("models", &mmo::proto_client::Project::models)
+							   .def_readonly("proficiencies", &mmo::proto_client::Project::proficiencies)
+							   .def_readonly("itemClasses", &mmo::proto_client::Project::itemClasses)
+							   .def_readonly("itemSubclasses", &mmo::proto_client::Project::itemSubclasses)),
 
 					   luabind::scope(
 						   luabind::class_<proto_client::SpellManager>("SpellManager")
 							   .def_const<const proto_client::SpellEntry *, proto_client::SpellManager, uint32>("GetById", &mmo::proto_client::SpellManager::getById)),
+
+					   luabind::scope(
+						   luabind::class_<proto_client::ProficiencyManager>("ProficiencyManager")
+							   .def_const<const proto_client::ProficiencyEntry *, proto_client::ProficiencyManager, uint32>("GetById", &mmo::proto_client::ProficiencyManager::getById)),
+
+					   luabind::scope(
+						   luabind::class_<proto_client::ItemClassManager>("ItemClassManager")
+							   .def_const<const proto_client::ItemClassEntry *, proto_client::ItemClassManager, uint32>("GetById", &mmo::proto_client::ItemClassManager::getById)),
+
+					   luabind::scope(
+						   luabind::class_<proto_client::ItemSubclassManager>("ItemSubclassManager")
+							   .def_const<const proto_client::ItemSubclassEntry *, proto_client::ItemSubclassManager, uint32>("GetById", &mmo::proto_client::ItemSubclassManager::getById)),
+
+					   luabind::scope(
+						   luabind::class_<proto_client::ProficiencyEntry>("Proficiency")
+							   .def_readonly("id", &proto_client::ProficiencyEntry::id)
+							   .def_readonly("name", &proto_client::ProficiencyEntry::name)),
+
+					   luabind::scope(
+						   luabind::class_<proto_client::ItemClassEntry>("ItemClass")
+							   .def_readonly("id", &proto_client::ItemClassEntry::id)
+							   .def_readonly("name", &proto_client::ItemClassEntry::name)),
+
+					   luabind::scope(
+						   luabind::class_<proto_client::ItemSubclassEntry>("ItemSubclass")
+							   .def_readonly("id", &proto_client::ItemSubclassEntry::id)
+							   .def_readonly("name", &proto_client::ItemSubclassEntry::name)
+							   .def_readonly("itemclass", &proto_client::ItemSubclassEntry::itemclass)
+							   .def_readonly("requiredproficiency", &proto_client::ItemSubclassEntry::requiredproficiency)),
 
 					   luabind::scope(
 						   luabind::class_<RealmConnector>("RealmConnector")
@@ -1071,7 +1103,7 @@ namespace mmo
 					return std::shared_ptr<ItemHandle>();
 				}
 
-				return std::make_shared<ItemHandle>(*item, m_project.spells); }),
+				return std::make_shared<ItemHandle>(*item, m_project); }),
 
 					   luabind::def("GetTime", &GetAsyncTimeMs),
 

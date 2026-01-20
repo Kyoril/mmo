@@ -5,9 +5,9 @@
 
 namespace mmo
 {
-	ItemHandle::ItemHandle(GameItemC& item, const proto_client::SpellManager& spells)
+	ItemHandle::ItemHandle(GameItemC& item, const proto_client::Project& project)
 		: WeakHandle(item, item.removed)
-		, m_spells(&spells)
+		, m_project(&project)
 	{
 	}
 
@@ -81,11 +81,26 @@ namespace mmo
 	uint32 ItemHandle::GetProficiency() const
 	{
 		if (!CheckNonNull()) return 0;
+		if (!m_project) return 0;
 
 		const ItemInfo* info = Get()->GetEntry();
 		if (!info) return 0;
 
-		return 1 << info->itemSubclass;
+		// First check if item has explicit required proficiency
+		if (info->requiredProficiency > 0)
+		{
+			return info->requiredProficiency;
+		}
+
+		// Otherwise, look up the item subclass to get the required proficiency
+		const auto* subclass = m_project->itemSubclasses.getById(info->itemSubclass);
+		if (subclass && subclass->has_requiredproficiency())
+		{
+			return subclass->requiredproficiency();
+		}
+
+		// No proficiency required
+		return 0;
 	}
 
 	const char* ItemHandle::GetInventoryType() const
@@ -237,8 +252,8 @@ namespace mmo
 		const ItemInfo* info = Get()->GetEntry();
 		if (!info) return nullptr;
 
-		if (!m_spells) return nullptr;
-		return m_spells->getById(info->spells[index].spellId);
+		if (!m_project) return nullptr;
+		return m_project->spells.getById(info->spells[index].spellId);
 	}
 
 	const char* ItemHandle::GetSpellTriggerType(int32 index) const

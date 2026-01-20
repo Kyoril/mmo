@@ -36,6 +36,7 @@ namespace
 		void SetWeaponProficiency(uint32 prof) { m_weaponProficiency = prof; }
 		void SetArmorProficiency(uint32 prof) { m_armorProficiency = prof; }
 		void SetCanDualWield(bool canDualWield) { m_canDualWield = canDualWield; }
+		void SetProject(proto::Project* project) { m_project = project; }
 
 		void SetItemAtSlot(uint16 slot, std::shared_ptr<GameItemS> item)
 		{
@@ -62,6 +63,20 @@ namespace
 		uint32 GetArmorProficiency() const noexcept override
 		{
 			return m_armorProficiency;
+		}
+
+		bool HasProficiency(uint32 proficiencyId) const noexcept override
+		{
+			// Check if the bit corresponding to the proficiency ID is set in either mask
+			const uint32 proficiencyBit = (1 << proficiencyId);
+			return ((m_weaponProficiency & proficiencyBit) != 0) ||
+			       ((m_armorProficiency & proficiencyBit) != 0);
+		}
+
+		const proto::Project& GetProject() const noexcept override
+		{
+			ASSERT(m_project != nullptr);
+			return *m_project;
 		}
 
 		bool CanDualWield() const noexcept override
@@ -102,6 +117,7 @@ namespace
 		uint32 m_armorProficiency;
 		bool m_canDualWield;
 		std::map<uint16, std::shared_ptr<GameItemS>> m_items;
+		proto::Project* m_project { nullptr };
 
 		// Test tracking
 		bool m_statsApplied;
@@ -190,11 +206,21 @@ namespace
 		item->Initialize();
 		return item;
 	}
+
+	/**
+	 * @brief Gets a shared test project for use in tests.
+	 */
+	proto::Project& GetTestProject()
+	{
+		static proto::Project testProject;
+		return testProject;
+	}
 }
 
 TEST_CASE("EquipmentManager - Slot compatibility validation", "[equipment_manager]")
 {
 	MockEquipmentManagerContext context;
+	context.SetProject(&GetTestProject());
 	EquipmentManager manager(context);
 
 	SECTION("Validates head slot accepts head items")
@@ -291,6 +317,7 @@ TEST_CASE("EquipmentManager - Slot compatibility validation", "[equipment_manage
 TEST_CASE("EquipmentManager - Level requirement validation", "[equipment_manager]")
 {
 	MockEquipmentManagerContext context;
+	context.SetProject(&GetTestProject());
 	EquipmentManager manager(context);
 
 	SECTION("Allows equipping when level requirement is met")
@@ -352,21 +379,74 @@ TEST_CASE("EquipmentManager - Level requirement validation", "[equipment_manager
 TEST_CASE("EquipmentManager - Proficiency validation", "[equipment_manager]")
 {
 	MockEquipmentManagerContext context;
+	context.SetProject(&GetTestProject());
 	EquipmentManager manager(context);
+
+	// Set up subclasses with proficiency IDs for the new data-driven system
+	// We use subclass IDs starting from 1 to avoid ID 0 issues
+	auto& project = GetTestProject();
+
+	// Define test subclass and proficiency IDs
+	constexpr uint32 OneHandedAxeSubclass = 1;
+	constexpr uint32 TwoHandedAxeSubclass = 2;
+	constexpr uint32 ClothSubclass = 3;
+	constexpr uint32 LeatherSubclass = 4;
+	constexpr uint32 OneHandedAxeProficiency = 1;
+	constexpr uint32 TwoHandedAxeProficiency = 2;
+	constexpr uint32 ClothProficiency = 3;
+	constexpr uint32 LeatherProficiency = 4;
+
+	// Add subclasses if they don't exist yet
+	if (!project.itemSubclasses.getById(OneHandedAxeSubclass))
+	{
+		auto* axe1h = project.itemSubclasses.add(OneHandedAxeSubclass);
+		if (axe1h)
+		{
+			axe1h->set_requiredproficiency(OneHandedAxeProficiency);
+		}
+	}
+
+	if (!project.itemSubclasses.getById(TwoHandedAxeSubclass))
+	{
+		auto* axe2h = project.itemSubclasses.add(TwoHandedAxeSubclass);
+		if (axe2h)
+		{
+			axe2h->set_requiredproficiency(TwoHandedAxeProficiency);
+		}
+	}
+
+	if (!project.itemSubclasses.getById(ClothSubclass))
+	{
+		auto* cloth = project.itemSubclasses.add(ClothSubclass);
+		if (cloth)
+		{
+			cloth->set_requiredproficiency(ClothProficiency);
+		}
+	}
+
+	if (!project.itemSubclasses.getById(LeatherSubclass))
+	{
+		auto* leather = project.itemSubclasses.add(LeatherSubclass);
+		if (leather)
+		{
+			leather->set_requiredproficiency(LeatherProficiency);
+		}
+	}
 
 	SECTION("Validates weapon proficiency")
 	{
-		context.SetWeaponProficiency(1 << item_subclass_weapon::OneHandedAxe);  // Only first weapon type
+		context.SetWeaponProficiency(1 << OneHandedAxeProficiency);  // Only has proficiency 1
+		context.SetArmorProficiency(0);  // Clear armor proficiency for this test
 
 		const auto validEntry = ItemEntryBuilder()
 			.WithClass(item_class::Weapon)
-			.WithSubclass(item_subclass_weapon::OneHandedAxe)  // Has proficiency
+			.WithSubclass(OneHandedAxeSubclass)  // Has proficiency
 			.WithInventoryType(inventory_type::MainHandWeapon)
 			.Build();
 
 		const auto invalidEntry = ItemEntryBuilder()
 			.WithClass(item_class::Weapon)
-			.WithSubclass(item_subclass_weapon::TwoHandedAxe)  // No proficiency
+			.WithSubclass(TwoHandedAxeSubclass)  // No proficiency
 			.WithInventoryType(inventory_type::MainHandWeapon)
 			.Build();
 
@@ -384,17 +464,18 @@ TEST_CASE("EquipmentManager - Proficiency validation", "[equipment_manager]")
 
 	SECTION("Validates armor proficiency")
 	{
-		context.SetArmorProficiency((1 << item_subclass_armor::Cloth));  // Only first armor type
+		context.SetWeaponProficiency(0);  // Clear weapon proficiency for this test
+		context.SetArmorProficiency(1 << ClothProficiency);  // Only has proficiency 3
 
 		const auto validEntry = ItemEntryBuilder()
 			.WithClass(item_class::Armor)
-			.WithSubclass(item_subclass_armor::Cloth)  // Has proficiency
+			.WithSubclass(ClothSubclass)  // Has proficiency
 			.WithInventoryType(inventory_type::Chest)
 			.Build();
 
 		const auto invalidEntry = ItemEntryBuilder()
 			.WithClass(item_class::Armor)
-			.WithSubclass(item_subclass_armor::Leather)  // No proficiency
+			.WithSubclass(LeatherSubclass)  // No proficiency
 			.WithInventoryType(inventory_type::Chest)
 			.Build();
 
@@ -414,6 +495,7 @@ TEST_CASE("EquipmentManager - Proficiency validation", "[equipment_manager]")
 TEST_CASE("EquipmentManager - Weapon slot validation", "[equipment_manager]")
 {
 	MockEquipmentManagerContext context;
+	context.SetProject(&GetTestProject());
 	EquipmentManager manager(context);
 
 	SECTION("Mainhand accepts main hand and two-handed weapons")
@@ -483,6 +565,7 @@ TEST_CASE("EquipmentManager - Weapon slot validation", "[equipment_manager]")
 TEST_CASE("EquipmentManager - Dual wield validation", "[equipment_manager]")
 {
 	MockEquipmentManagerContext context;
+	context.SetProject(&GetTestProject());
 	EquipmentManager manager(context);
 
 	SECTION("Allows shield in offhand without dual wield")
@@ -561,6 +644,7 @@ TEST_CASE("EquipmentManager - Dual wield validation", "[equipment_manager]")
 TEST_CASE("EquipmentManager - Two-handed weapon validation", "[equipment_manager]")
 {
 	MockEquipmentManagerContext context;
+	context.SetProject(&GetTestProject());
 	EquipmentManager manager(context);
 
 	SECTION("Rejects offhand item when mainhand has two-handed weapon")
@@ -630,6 +714,7 @@ TEST_CASE("EquipmentManager - Two-handed weapon validation", "[equipment_manager
 TEST_CASE("EquipmentManager - Apply equipment effects", "[equipment_manager]")
 {
 	MockEquipmentManagerContext context;
+	context.SetProject(&GetTestProject());
 	EquipmentManager manager(context);
 
 	SECTION("Applies stats when equipping new item")
@@ -741,6 +826,7 @@ TEST_CASE("EquipmentManager - Apply equipment effects", "[equipment_manager]")
 TEST_CASE("EquipmentManager - Remove equipment effects", "[equipment_manager]")
 {
 	MockEquipmentManagerContext context;
+	context.SetProject(&GetTestProject());
 	EquipmentManager manager(context);
 
 	SECTION("Removes stats when unequipping")
