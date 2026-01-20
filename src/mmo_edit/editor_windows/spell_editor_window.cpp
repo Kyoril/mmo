@@ -810,20 +810,34 @@ namespace mmo
 
 			DrawSectionHeader("Item Requirements");
 
-			// Create an imgui dropdown for itemclass field (enum: item_class::Type)
+			// Create an imgui dropdown for itemclass field
 			int currentItemClass = currentEntry.itemclass();
 			ImGui::SetNextItemWidth(200);
-			if (ImGui::Combo("##ItemClass", &currentItemClass, [](void*, int idx, const char** out_text)
-				{
-					if (idx < 0 || idx >= s_itemClassStrings.size())
-					{
-						return false;
-					}
-					*out_text = s_itemClassStrings[idx].c_str();
-					return true;
-				}, nullptr, s_itemClassStrings.size(), -1))
+			if (ImGui::BeginCombo("##ItemClass", currentItemClass > 0 ? m_project.itemClasses.getById(currentItemClass)->name().c_str() : "None"))
 			{
-				currentEntry.set_itemclass(currentItemClass);
+				// None option
+				if (ImGui::Selectable("None", currentItemClass == 0))
+				{
+					currentEntry.set_itemclass(0);
+					currentItemClass = 0;
+				}
+
+				// List all item classes from the project
+				for (size_t i = 0; i < m_project.itemClasses.count(); ++i)
+				{
+					const auto& itemClass = m_project.itemClasses.getTemplates().entry(i);
+					const bool isSelected = (currentItemClass == itemClass.id());
+					if (ImGui::Selectable(itemClass.name().c_str(), isSelected))
+					{
+						currentEntry.set_itemclass(itemClass.id());
+						currentItemClass = itemClass.id();
+					}
+					if (isSelected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+				}
+				ImGui::EndCombo();
 			}
 			ImGui::SameLine();
 			ImGui::Text("Item Class");
@@ -836,46 +850,29 @@ namespace mmo
 			ImGui::Spacing();
 			ImGui::Spacing();
 
-			// For each subclass, create a checkbox to toggle it's flag. The flag count depends on the item class. We only support weapon and armor subclass flags for now
-			if (currentItemClass == item_class::Weapon)
+			// Display subclass checkboxes for the selected item class
+			if (currentItemClass != 0)
 			{
-				DrawSectionHeader("Weapon Subclass Requirements");
-				if (ImGui::BeginTable("weaponSubclassMask", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg))
+				DrawSectionHeader("Item Subclass Requirements");
+				if (ImGui::BeginTable("itemSubclassMask", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg))
 				{
-					for (uint32 i = 0; i < s_itemSubclassWeaponStrings.size(); ++i)
+					// Iterate through all subclasses and filter by the selected item class
+					for (size_t i = 0; i < m_project.itemSubclasses.count(); ++i)
 					{
-						ImGui::TableNextColumn();
-						bool subclassIncluded = (itemSubclassMask & (1 << i)) != 0;
-						if (ImGui::Checkbox(s_itemSubclassWeaponStrings[i].c_str(), &subclassIncluded))
+						const auto& subclass = m_project.itemSubclasses.getTemplates().entry(i);
+						if (subclass.itemclass() == currentItemClass)
 						{
-							if (subclassIncluded)
-								itemSubclassMask |= (1 << i);
-							else
-								itemSubclassMask &= ~(1 << i);
+							ImGui::TableNextColumn();
+							bool subclassIncluded = (itemSubclassMask & (1 << subclass.id())) != 0;
+							if (ImGui::Checkbox(subclass.name().c_str(), &subclassIncluded))
+							{
+								if (subclassIncluded)
+									itemSubclassMask |= (1 << subclass.id());
+								else
+									itemSubclassMask &= ~(1 << subclass.id());
 
-							currentEntry.set_itemsubclassmask(itemSubclassMask); // Update the mask in the entry
-						}
-					}
-					ImGui::EndTable();
-				}
-			}
-			else if (currentItemClass == item_class::Armor)
-			{
-				DrawSectionHeader("Armor Subclass Requirements");
-				if (ImGui::BeginTable("armorSubclassMask", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg))
-				{
-					for (uint32 i = 0; i < s_itemSubclassArmorStrings.size(); ++i)
-					{
-						ImGui::TableNextColumn();
-						bool subclassIncluded = (itemSubclassMask & (1 << i)) != 0;
-						if (ImGui::Checkbox(s_itemSubclassArmorStrings[i].c_str(), &subclassIncluded))
-						{
-							if (subclassIncluded)
-								itemSubclassMask |= (1 << i);
-							else
-								itemSubclassMask &= ~(1 << i);
-
-							currentEntry.set_itemsubclassmask(itemSubclassMask); // Update the mask in the entry
+								currentEntry.set_itemsubclassmask(itemSubclassMask);
+							}
 						}
 					}
 					ImGui::EndTable();

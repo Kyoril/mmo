@@ -172,101 +172,6 @@ namespace mmo
 		ImColor(0.64f, 0.21f, 0.93f),
 		ImColor(1.0f, 0.5f, 0.0f)};
 
-	static const std::vector<String> s_itemSubclassConsumableStrings = {
-		"Consumable",
-		"Potion",
-		"Elixir",
-		"Flask",
-		"Scroll",
-		"Food",
-		"Item Enhancement",
-		"Bandage"};
-
-	static const std::vector<String> s_itemSubclassContainerStrings = {
-		"Container"};
-
-	std::vector<String> s_itemClassStrings = {
-		"Consumable",
-		"Container",
-		"Weapon",
-		"Gem",
-		"Armor",
-		"Reagent",
-		"Projectile",
-		"Trade Goods",
-		"Generic",
-		"Recipe",
-		"Money",
-		"Quiver",
-		"Quest",
-		"Key",
-		"Permanent",
-		"Junk"};
-
-	std::vector<String> s_itemSubclassWeaponStrings = {
-		"One Handed Axe",
-		"Two Handed Axe",
-		"Bow",
-		"Gun",
-		"One Handed Mace",
-		"Two Handed Mace",
-		"Polearm",
-		"One Handed Sword",
-		"Two Handed Sword",
-		"Staff",
-		"Fist",
-		"Dagger",
-		"Thrown",
-		"Spear",
-		"Cross Bow",
-		"Wand",
-		"Fishing Pole"};
-
-	std::vector<String> s_itemSubclassArmorStrings = {
-		"Misc",
-		"Cloth",
-		"Leather",
-		"Mail",
-		"Plate",
-		"Buckler",
-		"Shield",
-		"Libram",
-		"Idol",
-		"Totem"};
-
-	static const std::vector<String> s_itemSubclassGemStrings = {
-		"Red",
-		"Blue",
-		"Yellow",
-		"Purple",
-		"Green",
-		"Orange",
-		"Prismatic"};
-
-	static const std::vector<String> s_itemSubclassProjectileStrings = {
-		"Wand",
-		"Bolt",
-		"Arrow",
-		"Bullet",
-		"Thrown"};
-
-	static const std::vector<String> s_itemSubclassTradeGoodsStrings = {
-		"TradeGoods",
-		"Parts",
-		"Eplosives",
-		"Devices",
-		"Jewelcrafting",
-		"Cloth",
-		"Leather",
-		"MetalStone",
-		"Meat",
-		"Herb",
-		"Elemental",
-		"TradeGoodsOther",
-		"Enchanting",
-		"Material",
-	};
-
 	static const std::vector<String> s_inventoryTypeStrings = {
 		"NonEquip",
 		"Head",
@@ -508,138 +413,119 @@ namespace mmo
 				SLIDER_UINT32_PROP(containerslots, "Slot Count", 1, 36);
 			}
 
-			// Class
-			int currentItemClass = currentEntry.itemclass();
-			if (ImGui::Combo("Class", &currentItemClass, [](void *, int idx, const char **out_text)
-							 {
-					if (idx < 0 || idx >= s_itemClassStrings.size())
+			// Class - using data-driven item classes
+			uint32 currentItemClass = currentEntry.itemclass();
+			const auto* itemClassEntry = m_project.itemClasses.getById(currentItemClass);
+			if (ImGui::BeginCombo("Class", itemClassEntry != nullptr ? itemClassEntry->name().c_str() : "None", ImGuiComboFlags_None))
+			{
+				for (int i = 0; i < m_project.itemClasses.count(); i++)
+				{
+					ImGui::PushID(i);
+					const bool item_selected = m_project.itemClasses.getTemplates().entry(i).id() == currentItemClass;
+					const char* item_text = m_project.itemClasses.getTemplates().entry(i).name().c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						currentEntry.set_itemclass(m_project.itemClasses.getTemplates().entry(i).id());
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+
+			// Subclass - using data-driven item subclasses filtered by item class
+			uint32 currentSubclass = currentEntry.subclass();
+			const auto* subclassEntry = m_project.itemSubclasses.getById(currentSubclass);
+			if (ImGui::BeginCombo("Subclass", subclassEntry != nullptr ? subclassEntry->name().c_str() : "None", ImGuiComboFlags_None))
+			{
+				// Add "None" option
+				if (ImGui::Selectable("None", currentSubclass == 0))
+				{
+					currentEntry.set_subclass(0);
+				}
+				
+				// Filter subclasses by current item class
+				for (int i = 0; i < m_project.itemSubclasses.count(); i++)
+				{
+					const auto& subclass = m_project.itemSubclasses.getTemplates().entry(i);
+					
+					// Only show subclasses that match the current item class
+					if (subclass.itemclass() == currentItemClass)
+					{
+						ImGui::PushID(i);
+						const bool item_selected = subclass.id() == currentSubclass;
+						const char* item_text = subclass.name().c_str();
+						if (ImGui::Selectable(item_text, item_selected))
+						{
+							currentEntry.set_subclass(subclass.id());
+						}
+						if (item_selected)
+						{
+							ImGui::SetItemDefaultFocus();
+						}
+						ImGui::PopID();
+					}
+				}
+
+				ImGui::EndCombo();
+			}
+
+			// Inventory Type - always available for all items
+			int inventoryType = currentEntry.inventorytype();
+			if (ImGui::Combo("Inventory Type", &inventoryType, [](void *, int idx, const char **out_text)
+				{
+					if (idx < 0 || idx >= s_inventoryTypeStrings.size())
 					{
 						return false;
 					}
 
-					*out_text = s_itemClassStrings[idx].c_str();
-					return true; }, nullptr, s_itemClassStrings.size(), -1))
+					*out_text = s_inventoryTypeStrings[idx].c_str();
+							return true; 
+				}, nullptr, s_inventoryTypeStrings.size(), -1))
 			{
-				currentEntry.set_itemclass(currentItemClass);
+				currentEntry.set_inventorytype(inventoryType);
 			}
 
-			// Subclass
-			const std::vector<String> *subclassStrings = nullptr;
-			bool hasInventoryType = false;
-			switch (currentItemClass)
+			ImGui::SameLine();
+			DrawHelpMarker("Equipment slot where this item can be equipped");
+
+			ImGui::Spacing();
+			DrawSectionHeader("Equipment Settings");
+
+			ImGui::SetNextItemWidth(150);
+			SLIDER_UINT32_PROP(durability, "Durability", 0, 200);
+			ImGui::SameLine();
+			DrawHelpMarker("Maximum durability of this item");
+
+			// Show weapon properties based on inventory type
+			const uint32 invType = currentEntry.inventorytype();
+			const bool isWeapon = (invType == inventory_type::Weapon || 
+								   invType == inventory_type::TwoHandedWeapon || 
+								   invType == inventory_type::MainHandWeapon || 
+								   invType == inventory_type::OffHandWeapon ||
+								   invType == inventory_type::Ranged ||
+								   invType == inventory_type::Thrown ||
+								   invType == inventory_type::RangedRight);
+
+			if (isWeapon)
 			{
-			case ItemClass::Consumable:
-				subclassStrings = &s_itemSubclassConsumableStrings;
-				break;
-			case ItemClass::Weapon:
-				subclassStrings = &s_itemSubclassWeaponStrings;
-				hasInventoryType = true;
-				break;
-			case ItemClass::Armor:
-				subclassStrings = &s_itemSubclassArmorStrings;
-				hasInventoryType = true;
-				break;
-			case ItemClass::Container:
-				subclassStrings = &s_itemSubclassContainerStrings;
-				hasInventoryType = true;
-				break;
-			case ItemClass::Gem:
-				subclassStrings = &s_itemSubclassGemStrings;
-				break;
-			case ItemClass::Reagent:
-				break;
-			case ItemClass::Projectile:
-				subclassStrings = &s_itemSubclassProjectileStrings;
-				break;
-			case ItemClass::TradeGoods:
-				subclassStrings = &s_itemSubclassTradeGoodsStrings;
-				break;
-			case ItemClass::Generic:
-				break;
-			case ItemClass::Recipe:
-				break;
-			case ItemClass::Money:
-				break;
-			case ItemClass::Quiver:
-				break;
-			case ItemClass::Quest:
-				break;
-			case ItemClass::Key:
-				break;
-			case ItemClass::Permanent:
-				break;
-			case ItemClass::Junk:
-				break;
-			default:
-				break;
-			}
-
-			if (subclassStrings)
-			{
-				int currentSubclass = currentEntry.subclass();
-				if (ImGui::Combo("Subclass", &currentSubclass, [](void *texts, int idx, const char **out_text)
-								 {
-						const std::vector<String>* strings = static_cast<std::vector<String>*>(texts);
-						if (idx < 0 || idx >= strings->size())
-						{
-							return false;
-						}
-
-						*out_text = (*strings)[idx].c_str();
-						return true; }, (void *)subclassStrings, subclassStrings->size(), -1))
-				{
-					currentEntry.set_subclass(currentSubclass);
-				}
-			}
-
-			// Inventory Type
-			if (hasInventoryType)
-			{
-				int inventoryType = currentEntry.inventorytype();
-				if (ImGui::Combo("Inventory Type", &inventoryType, [](void *, int idx, const char **out_text)
-								 {
-						if (idx < 0 || idx >= s_inventoryTypeStrings.size())
-						{
-							return false;
-						}
-
-						*out_text = s_inventoryTypeStrings[idx].c_str();
-						return true; }, nullptr, s_inventoryTypeStrings.size(), -1))
-				{
-					currentEntry.set_inventorytype(inventoryType);
-				}
+				SLIDER_UINT32_PROP(delay, "Attack Speed (ms)", 0, 100000000);
 				ImGui::SameLine();
-				DrawHelpMarker("Equipment slot where this item can be equipped");
+				DrawHelpMarker("Time between attacks in milliseconds (lower = faster)");
 
-				ImGui::Spacing();
-				DrawSectionHeader("Equipment Settings");
-
-				ImGui::SetNextItemWidth(150);
-				SLIDER_UINT32_PROP(durability, "Durability", 0, 200);
-				ImGui::SameLine();
-				DrawHelpMarker("Maximum durability of this item");
-
-				// Only show weapon properties for weapons
-				if (currentItemClass == item_class::Weapon)
+				float damage[2] = {currentEntry.damage().mindmg(), currentEntry.damage().maxdmg()};
+				if (ImGui::InputFloat2("Min / Max Damage", damage))
 				{
-					ImGui::Spacing();
-					DrawSectionHeader("Weapon Properties");
+					if (damage[1] < damage[0] || damage[0] > damage[1])
+						damage[1] = damage[0];
 
-					ImGui::SetNextItemWidth(150);
-					SLIDER_UINT32_PROP(delay, "Attack Speed (ms)", 0, 100000000);
-					ImGui::SameLine();
-					DrawHelpMarker("Time between attacks in milliseconds (lower = faster)");
-
-					float damage[2] = {currentEntry.damage().mindmg(), currentEntry.damage().maxdmg()};
-					if (ImGui::InputFloat2("Min / Max Damage", damage))
-					{
-						if (damage[1] < damage[0] || damage[0] > damage[1])
-							damage[1] = damage[0];
-
-						currentEntry.mutable_damage()->set_type(0);
-						currentEntry.mutable_damage()->set_mindmg(damage[0]);
-						currentEntry.mutable_damage()->set_maxdmg(damage[1]);
-					}
+					currentEntry.mutable_damage()->set_type(0);
+					currentEntry.mutable_damage()->set_mindmg(damage[0]);
+					currentEntry.mutable_damage()->set_maxdmg(damage[1]);
 				}
 			}
 
@@ -649,14 +535,15 @@ namespace mmo
 			// Quality
 			int currentQuality = currentEntry.quality();
 			if (ImGui::Combo("Quality", &currentQuality, [](void *, int idx, const char **out_text)
-							 {
+				{
 					if (idx < 0 || idx >= s_itemQualityStrings.size())
 					{
 						return false;
 					}
 
 					*out_text = s_itemQualityStrings[idx].c_str();
-					return true; }, nullptr, s_itemQualityStrings.size(), -1))
+					return true; 
+				}, nullptr, s_itemQualityStrings.size(), -1))
 			{
 				currentEntry.set_quality(currentQuality);
 			}
@@ -669,11 +556,17 @@ namespace mmo
 			ImGui::BeginGroupPanel(nullptr, ImVec2(0, -1));
 			ImGui::TextColored(s_itemQualityColors[currentQuality].Value, currentEntry.name().c_str());
 
-			if (currentItemClass == item_class::Weapon || currentItemClass == item_class::Armor)
-			{
-				ImGui::Text("%s", s_inventoryTypeStrings[currentEntry.inventorytype()].c_str());
+			// Determine if this is an equippable item based on inventory type
+			const bool isEquippable = (invType != inventory_type::NonEquip && 
+									   invType != inventory_type::Bag && 
+									   invType != inventory_type::Quiver &&
+									   invType != inventory_type::Ammo);
 
-				if (currentItemClass == item_class::Weapon)
+			if (isEquippable)
+			{
+				ImGui::Text("%s", s_inventoryTypeStrings[invType].c_str());
+
+				if (isWeapon)
 				{
 					ImGui::Text("%.0f - %.0f Damage", currentEntry.damage().mindmg(), currentEntry.damage().maxdmg());
 					ImGui::SameLine();
@@ -729,8 +622,14 @@ namespace mmo
 			ImGui::Unindent();
 		}
 
-		// Equippable items can have stats and spells
-		if (currentEntry.itemclass() == ItemClass::Armor || currentEntry.itemclass() == ItemClass::Weapon)
+		// Equippable items can have stats and spells (based on inventory type)
+		const uint32 invType = currentEntry.inventorytype();
+		const bool isEquippable = (invType != inventory_type::NonEquip && 
+								   invType != inventory_type::Bag && 
+								   invType != inventory_type::Quiver &&
+								   invType != inventory_type::Ammo);
+		
+		if (isEquippable)
 		{
 			if (ImGui::CollapsingHeader("Stats", ImGuiTreeNodeFlags_None))
 			{
