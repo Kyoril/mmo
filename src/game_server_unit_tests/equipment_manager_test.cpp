@@ -10,6 +10,7 @@
 
 #include <map>
 #include <memory>
+#include <set>
 
 using namespace mmo;
 
@@ -23,20 +24,39 @@ namespace
 	public:
 		MockEquipmentManagerContext()
 			: m_level(60)
-			, m_weaponProficiency(0xFFFFFFFF)  // All weapon proficiencies
-			, m_armorProficiency(0xFFFFFFFF)   // All armor proficiencies
 			, m_canDualWield(true)
 			, m_statsApplied(false)
 			, m_itemSetEquipped(false)
 		{
+			// Add all proficiencies by default for tests that don't care about proficiency
+			for (uint32 i = 1; i <= 32; ++i)
+			{
+				m_proficiencies.insert(i);
+			}
 		}
 
 		// Test setup methods
 		void SetLevel(uint32 level) { m_level = level; }
-		void SetWeaponProficiency(uint32 prof) { m_weaponProficiency = prof; }
-		void SetArmorProficiency(uint32 prof) { m_armorProficiency = prof; }
 		void SetCanDualWield(bool canDualWield) { m_canDualWield = canDualWield; }
 		void SetProject(proto::Project* project) { m_project = project; }
+
+		void AddProficiency(uint32 proficiencyId)
+		{
+			if (proficiencyId > 0)
+			{
+				m_proficiencies.insert(proficiencyId);
+			}
+		}
+
+		void RemoveProficiency(uint32 proficiencyId)
+		{
+			m_proficiencies.erase(proficiencyId);
+		}
+
+		void ClearProficiencies()
+		{
+			m_proficiencies.clear();
+		}
 
 		void SetItemAtSlot(uint16 slot, std::shared_ptr<GameItemS> item)
 		{
@@ -55,22 +75,15 @@ namespace
 			return m_level;
 		}
 
-		uint32 GetWeaponProficiency() const noexcept override
-		{
-			return m_weaponProficiency;
-		}
-
-		uint32 GetArmorProficiency() const noexcept override
-		{
-			return m_armorProficiency;
-		}
-
 		bool HasProficiency(uint32 proficiencyId) const noexcept override
 		{
-			// Check if the bit corresponding to the proficiency ID is set in either mask
-			const uint32 proficiencyBit = (1 << proficiencyId);
-			return ((m_weaponProficiency & proficiencyBit) != 0) ||
-			       ((m_armorProficiency & proficiencyBit) != 0);
+			// Proficiency ID 0 means no proficiency required
+			if (proficiencyId == 0)
+			{
+				return true;
+			}
+
+			return m_proficiencies.contains(proficiencyId);
 		}
 
 		const proto::Project& GetProject() const noexcept override
@@ -113,9 +126,8 @@ namespace
 
 	private:
 		uint32 m_level;
-		uint32 m_weaponProficiency;
-		uint32 m_armorProficiency;
 		bool m_canDualWield;
+		std::set<uint32> m_proficiencies;
 		std::map<uint16, std::shared_ptr<GameItemS>> m_items;
 		proto::Project* m_project { nullptr };
 
@@ -435,8 +447,9 @@ TEST_CASE("EquipmentManager - Proficiency validation", "[equipment_manager]")
 
 	SECTION("Validates weapon proficiency")
 	{
-		context.SetWeaponProficiency(1 << OneHandedAxeProficiency);  // Only has proficiency 1
-		context.SetArmorProficiency(0);  // Clear armor proficiency for this test
+		// Clear all proficiencies and add only the one we want
+		context.ClearProficiencies();
+		context.AddProficiency(OneHandedAxeProficiency);  // Only has proficiency 1
 
 		const auto validEntry = ItemEntryBuilder()
 			.WithClass(item_class::Weapon)
@@ -464,8 +477,9 @@ TEST_CASE("EquipmentManager - Proficiency validation", "[equipment_manager]")
 
 	SECTION("Validates armor proficiency")
 	{
-		context.SetWeaponProficiency(0);  // Clear weapon proficiency for this test
-		context.SetArmorProficiency(1 << ClothProficiency);  // Only has proficiency 3
+		// Clear all proficiencies and add only the one we want
+		context.ClearProficiencies();
+		context.AddProficiency(ClothProficiency);  // Only has proficiency 3
 
 		const auto validEntry = ItemEntryBuilder()
 			.WithClass(item_class::Armor)

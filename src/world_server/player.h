@@ -479,9 +479,7 @@ namespace mmo
 
 		void OnRootChanged(bool applied, uint32 ackId) override;
 
-		void OnWeaponProficiencyChanged(uint32 weaponProficiency) override;
-
-		void OnArmorProficiencyChanged(uint32 armorProficiency) override;
+		void OnProficiencyChanged(uint32 proficiencyId, bool added) override;
 
 	private:
 		PlayerManager& m_manager;

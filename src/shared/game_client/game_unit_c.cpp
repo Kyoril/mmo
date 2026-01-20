@@ -1867,14 +1867,28 @@ namespace mmo
 		PlayOneShotAnimation(m_damageHitState);
 	}
 
-	void GameUnitC::SetWeaponProficiency(const uint32 mask)
+	void GameUnitC::AddProficiency(const uint32 proficiencyId)
 	{
-		m_weaponProficiency = mask;
+		if (proficiencyId > 0)
+		{
+			m_proficiencies.insert(proficiencyId);
+		}
 	}
 
-	void GameUnitC::SetArmorProficiency(const uint32 mask)
+	void GameUnitC::RemoveProficiency(const uint32 proficiencyId)
 	{
-		m_armorProficiency = mask;
+		m_proficiencies.erase(proficiencyId);
+	}
+
+	bool GameUnitC::HasProficiency(const uint32 proficiencyId) const
+	{
+		// Proficiency ID 0 means no proficiency required
+		if (proficiencyId == 0)
+		{
+			return true;
+		}
+
+		return m_proficiencies.contains(proficiencyId);
 	}
 
 	bool GameUnitC::IsFriendlyTo(const GameUnitC &other) const

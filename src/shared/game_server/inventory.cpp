@@ -766,12 +766,29 @@ std::shared_ptr<GameItemS> Inventory::GetItemAtSlot(uint16 absoluteSlot) const n
 	if (!item || item->GetEntry().itemclass() != item_class::Weapon)
 	{
 		return nullptr;
-	}		if ((m_owner.GetWeaponProficiency() & (1 << item->GetEntry().subclass())) == 0)
-		{
-			return nullptr; // No proficiency for this weapon type
-		}
+	}
 
-		if (nonbroken && item->IsBroken())
+	// Check proficiency using the data-driven system
+	uint32 requiredProficiencyId = 0;
+	if (item->GetEntry().has_requiredproficiency() && item->GetEntry().requiredproficiency() > 0)
+	{
+		requiredProficiencyId = item->GetEntry().requiredproficiency();
+	}
+	else if (item->GetEntry().has_subclass())
+	{
+		const auto* subclass = GetProject().itemSubclasses.getById(item->GetEntry().subclass());
+		if (subclass && subclass->has_requiredproficiency())
+		{
+			requiredProficiencyId = subclass->requiredproficiency();
+		}
+	}
+	
+	if (requiredProficiencyId > 0 && !m_owner.HasProficiency(requiredProficiencyId))
+	{
+		return nullptr; // No proficiency for this weapon type
+	}
+
+	if (nonbroken && item->IsBroken())
 		{
 			return nullptr;
 		}
@@ -1858,16 +1875,6 @@ std::shared_ptr<GameItemS> Inventory::GetItemAtSlot(uint16 absoluteSlot) const n
 	uint32 Inventory::GetLevel() const noexcept
 	{
 		return m_owner.GetLevel();
-	}
-
-	uint32 Inventory::GetWeaponProficiency() const noexcept
-	{
-		return m_owner.GetWeaponProficiency();
-	}
-
-	uint32 Inventory::GetArmorProficiency() const noexcept
-	{
-		return m_owner.GetArmorProficiency();
 	}
 
 	bool Inventory::HasProficiency(uint32 proficiencyId) const noexcept

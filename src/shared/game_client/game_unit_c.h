@@ -1,6 +1,7 @@
 #pragma once
 
 #include <queue>
+#include <set>
 
 #include "game_object_c.h"
 #include "game_aura_c.h"
@@ -422,13 +423,14 @@ namespace mmo
 
 		void NotifyHitEvent();
 
-		void SetWeaponProficiency(uint32 mask);
+		/// Adds a proficiency by ID.
+		void AddProficiency(uint32 proficiencyId);
 
-		void SetArmorProficiency(uint32 mask);
+		/// Removes a proficiency by ID.
+		void RemoveProficiency(uint32 proficiencyId);
 
-		uint32 GetWeaponProficiency() const { return m_weaponProficiency; }
-
-		uint32 GetArmorProficiency() const { return m_armorProficiency; }
+		/// Checks if the unit has a specific proficiency.
+		bool HasProficiency(uint32 proficiencyId) const;
 
 		/// @brief Get the maximum step-up height for this unit
 		/// @return Maximum step-up height in world units
@@ -554,8 +556,7 @@ namespace mmo
 
 		std::shared_ptr<CustomizableAvatarDefinition> m_customizationDefinition;
 
-		uint32 m_weaponProficiency = 0;
-		uint32 m_armorProficiency = 0;
+		std::set<uint32> m_proficiencies;  ///< Set of proficiency IDs the unit has
 
 	protected:
 		// Animation stuff

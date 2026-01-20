@@ -1305,9 +1305,6 @@ namespace mmo
 			return;
 		}
 
-		// Create bitmask for this proficiency
-		const uint32 mask = (1 << proficiencyId);
-
 		for (auto* targetObject : effectTargets)
 		{
 			if (!targetObject->IsUnit())
@@ -1318,19 +1315,8 @@ namespace mmo
 			m_affectedTargets.insert(targetObject->shared_from_this());
 			auto& unitTarget = targetObject->AsUnit();
 
-			if (m_spell.itemclass() == item_class::Weapon)
-			{
-				unitTarget.AddWeaponProficiency(mask);
-			}
-			else if (m_spell.itemclass() == item_class::Armor)
-			{
-				unitTarget.AddArmorProficiency(mask);
-			}
-			else
-			{
-				WLOG("Unknown item class for spell " << m_spell.id() << ": " << m_spell.itemclass());
-				return;
-			}
+			// Add the proficiency by ID
+			unitTarget.AddProficiency(proficiencyId);
 		}
 	}
 

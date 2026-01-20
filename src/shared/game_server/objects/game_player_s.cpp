@@ -230,19 +230,26 @@ namespace mmo
 	{
 		const auto &itemEntry = item.GetEntry();
 
-		// Check if item is usable
-		if (item.GetEntry().itemclass() == item_class::Weapon)
+		// Check if item requires proficiency
+		if (itemEntry.itemclass() == item_class::Weapon || itemEntry.itemclass() == item_class::Armor)
 		{
-			// Do not apply this: Proficiency check failed!
-			if ((GetWeaponProficiency() & (1 << item.GetEntry().subclass())) == 0)
+			// Get required proficiency ID from item entry or subclass
+			uint32 requiredProficiencyId = 0;
+			if (itemEntry.has_requiredproficiency() && itemEntry.requiredproficiency() > 0)
 			{
-				return;
+				requiredProficiencyId = itemEntry.requiredproficiency();
 			}
-		}
-		else if (item.GetEntry().itemclass() == item_class::Armor)
-		{
-			// Do not apply this: Proficiency check failed!
-			if ((GetArmorProficiency() & (1 << item.GetEntry().subclass())) == 0)
+			else if (itemEntry.has_subclass())
+			{
+				const auto* subclass = GetProject().itemSubclasses.getById(itemEntry.subclass());
+				if (subclass && subclass->has_requiredproficiency())
+				{
+					requiredProficiencyId = subclass->requiredproficiency();
+				}
+			}
+
+			// Do not apply if proficiency check failed
+			if (requiredProficiencyId > 0 && !HasProficiency(requiredProficiencyId))
 			{
 				return;
 			}

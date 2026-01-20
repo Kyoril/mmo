@@ -299,9 +299,10 @@ namespace mmo
 
 		virtual void OnSpellModChanged(SpellModType type, uint8 effectIndex, SpellModOp op, int32 value) = 0;
 
-		virtual void OnWeaponProficiencyChanged(uint32 weaponProficiency) = 0;
-
-		virtual void OnArmorProficiencyChanged(uint32 armorProficiency) = 0;
+		/// Called when a proficiency is added or removed.
+		/// @param proficiencyId The proficiency ID that changed.
+		/// @param added True if the proficiency was added, false if removed.
+		virtual void OnProficiencyChanged(uint32 proficiencyId, bool added) = 0;
 	};
 
 	/// Enumerates possible movement changes which need to be acknowledged by the client.
@@ -829,17 +830,6 @@ namespace mmo
 		/// Called when a proc event occurs to check if any auras should proc
 		void TriggerProcEvent(SpellProcFlags eventFlags, GameUnitS *target = nullptr, uint32 damage = 0, uint32 procEx = 0, uint8 school = 0, bool isProc = false, uint64 familyFlags = 0);
 
-		/// Gets the weapon proficiency mask of this character (which weapons can be
-		/// wielded)
-		uint32 GetWeaponProficiency() const noexcept { return m_weaponProficiency; }
-
-		/// Gets the armor proficiency mask of this character (which armor types
-		/// can be wielded: Cloth, Leather, Mail, Plate etc.)
-		uint32 GetArmorProficiency() const noexcept
-		{
-			return m_armorProficiency;
-		}
-
 		/// Checks if the character has a specific proficiency.
 		/// @param proficiencyId The ID of the proficiency to check (from proficiencies.proto).
 		/// @return true if the character has the proficiency, false otherwise.
@@ -851,89 +841,56 @@ namespace mmo
 				return true;
 			}
 
-			// Check if the proficiency bit is set in either weapon or armor proficiency mask
-			const uint32 proficiencyBit = (1 << proficiencyId);
-			return ((m_weaponProficiency & proficiencyBit) != 0) || ((m_armorProficiency & proficiencyBit) != 0);
+			return m_proficiencies.contains(proficiencyId);
 		}
 
-		/// Adds a new weapon proficiency to the mask.
-		void AddWeaponProficiency(uint32 mask)
+		/// Adds a proficiency by ID.
+		/// @param proficiencyId The ID of the proficiency to add.
+		void AddProficiency(uint32 proficiencyId)
 		{
-			if ((m_weaponProficiency & mask) == mask)
+			if (proficiencyId == 0 || m_proficiencies.contains(proficiencyId))
 			{
 				return;
 			}
 
-			m_weaponProficiency |= mask;
+			m_proficiencies.insert(proficiencyId);
 
 			if (m_netUnitWatcher)
 			{
-				m_netUnitWatcher->OnWeaponProficiencyChanged(m_weaponProficiency);
+				m_netUnitWatcher->OnProficiencyChanged(proficiencyId, true);
 			}
 			else
 			{
-				WLOG("No unit watcher notified weapon prof change");
+				WLOG("No unit watcher notified proficiency add");
 			}
 		}
 
-		/// Adds a new armor proficiency to the mask.
-		void AddArmorProficiency(uint32 mask)
+		/// Removes a proficiency by ID.
+		/// @param proficiencyId The ID of the proficiency to remove.
+		void RemoveProficiency(uint32 proficiencyId)
 		{
-			if ((m_armorProficiency & mask) == mask)
+			if (proficiencyId == 0 || !m_proficiencies.contains(proficiencyId))
 			{
 				return;
 			}
 
-			m_armorProficiency |= mask;
+			m_proficiencies.erase(proficiencyId);
 
 			if (m_netUnitWatcher)
 			{
-				m_netUnitWatcher->OnArmorProficiencyChanged(m_armorProficiency);
+				m_netUnitWatcher->OnProficiencyChanged(proficiencyId, false);
 			}
 			else
 			{
-				WLOG("No unit watcher notified armor prof change");
+				WLOG("No unit watcher notified proficiency remove");
 			}
 		}
 
-		/// Removes a weapon proficiency from the mask.
-		void RemoveWeaponProficiency(uint32 mask)
+		/// Gets all proficiency IDs the character has.
+		/// @return Set of proficiency IDs.
+		const std::set<uint32>& GetProficiencies() const noexcept
 		{
-			if ((m_weaponProficiency & mask) == 0)
-			{
-				return;
-			}
-
-			m_weaponProficiency &= ~mask;
-
-			if (m_netUnitWatcher)
-			{
-				m_netUnitWatcher->OnWeaponProficiencyChanged(m_armorProficiency);
-			}
-			else
-			{
-				WLOG("No unit watcher notified weapon prof change");
-			}
-		}
-
-		/// Removes an armor proficiency from the mask.
-		void RemoveArmorProficiency(uint32 mask)
-		{
-			if ((m_armorProficiency & mask) == 0)
-			{
-				return;
-			}
-
-			m_armorProficiency &= ~mask;
-
-			if (m_netUnitWatcher)
-			{
-				m_netUnitWatcher->OnArmorProficiencyChanged(m_armorProficiency);
-			}
-			else
-			{
-				WLOG("No unit watcher notified armor prof change");
-			}
+			return m_proficiencies;
 		}
 
 		bool CanUseWeapon(WeaponAttack attackType);
@@ -1319,8 +1276,7 @@ public:
 		Countdown m_pvpCombatCountdown;
 		uint32 m_state = 0;
 
-		uint32 m_weaponProficiency = 0; ///< Weapon proficiency mask (which weapons can be wielded)
-		uint32 m_armorProficiency = 0;	///< Armor proficiency mask (which armor types can be wielded: Cloth, Leather, Mail, Plate etc.)
+		std::set<uint32> m_proficiencies;  ///< Set of proficiency IDs the character has
 
 	private:
 		/// Serializes a GameUnitS object to a Writer for binary serialization.

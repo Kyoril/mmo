@@ -308,11 +308,8 @@ namespace mmo
 			return false;
 		}
 
-		// In the new data-driven system, proficiency is a proficiency ID.
-		// We check if the bit corresponding to that ID is set in either mask.
-		const uint32 proficiencyBit = (1 << proficiency);
-		return ((Get()->GetWeaponProficiency() & proficiencyBit) != 0) || 
-		       ((Get()->GetArmorProficiency() & proficiencyBit) != 0);
+		// In the new data-driven system, we check if the unit has the proficiency ID
+		return Get()->HasProficiency(proficiency);
 	}
 
 	bool UnitHandle::operator==(const UnitHandle& other) const
