@@ -1111,7 +1111,7 @@ namespace mmo
 			if (m_mesh->HasSkeleton())
 			{
 				// Animation Import Section
-				if (ImGui::CollapsingHeader("Import Animation", ImGuiTreeNodeFlags_None))
+				if (ImGui::CollapsingHeader("Import Animation##Header", ImGuiTreeNodeFlags_None))
 				{
 					ImGui::Indent();
 					ImGui::InputText("Animation Name", &m_newAnimationName, ImGuiInputTextFlags_None, nullptr, nullptr);
