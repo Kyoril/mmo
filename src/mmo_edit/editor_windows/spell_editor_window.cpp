@@ -1677,6 +1677,33 @@ namespace mmo
 					}
 				}
 				break;
+			case spell_effects::Proficiency:
+				{
+					const uint32 proficiency = effect.miscvaluea();
+
+					const auto* proficiencyEntry = m_project.proficiencies.getById(proficiency);
+					if (ImGui::BeginCombo("Proficiency", proficiencyEntry != nullptr ? proficiencyEntry->name().c_str() : "None", ImGuiComboFlags_None))
+					{
+						for (int i = 0; i < m_project.proficiencies.count(); i++)
+						{
+							ImGui::PushID(i);
+							const bool item_selected = m_project.proficiencies.getTemplates().entry(i).id() == proficiency;
+							const char* item_text = m_project.proficiencies.getTemplates().entry(i).name().c_str();
+							if (ImGui::Selectable(item_text, item_selected))
+							{
+								effect.set_miscvaluea(m_project.proficiencies.getTemplates().entry(i).id());
+							}
+							if (item_selected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+							ImGui::PopID();
+						}
+
+						ImGui::EndCombo();
+					}
+					break;
+				}
 			case spell_effects::CreateItem:
 				{
 					const uint32 item = effect.itemtype();
