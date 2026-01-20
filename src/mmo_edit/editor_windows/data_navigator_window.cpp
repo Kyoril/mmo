@@ -18,6 +18,7 @@
 #include "class_editor_window.h"
 #include "unit_class_editor_window.h"
 #include "race_editor_window.h"
+#include "proficiency_editor_window.h"
 #include "faction_editor_window.h"
 #include "faction_template_editor_window.h"
 #include "gossip_editor_window.h"
@@ -243,6 +244,13 @@ namespace mmo
             "Races",
             [this]() { OpenEditorWindow(std::type_index(typeid(RaceEditorWindow))); },
             static_cast<int>(m_project.races.count())
+        });
+        
+        characterCategory.editors.push_back({
+            std::type_index(typeid(ProficiencyEditorWindow)),
+            "Proficiencies",
+            [this]() { OpenEditorWindow(std::type_index(typeid(ProficiencyEditorWindow))); },
+            static_cast<int>(m_project.proficiencies.count())
         });
         
         characterCategory.editors.push_back({
