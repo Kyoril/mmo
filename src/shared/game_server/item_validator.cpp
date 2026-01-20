@@ -367,8 +367,8 @@ namespace mmo
 		const proto::ItemEntry& entry) const
 	{
 		// Only bags and quivers can go in bag pack slots
-		if (entry.itemclass() != item_class::Container &&
-			entry.itemclass() != item_class::Quiver)
+		if (entry.inventorytype() != inventory_type::Bag &&
+			entry.inventorytype() != inventory_type::Quiver)
 		{
 			return InventoryResult<void>::Failure(inventory_change_failure::NotABag);
 		}

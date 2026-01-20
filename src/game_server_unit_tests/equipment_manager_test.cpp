@@ -16,6 +16,15 @@ using namespace mmo;
 
 namespace
 {
+	namespace mock_item_class
+	{
+		enum Type
+		{
+			Armor = 1,
+			Weapon = 2
+		};
+	}
+
 	/**
 	 * @brief Mock implementation of IEquipmentManagerContext for testing.
 	 */
@@ -149,7 +158,7 @@ namespace
 		ItemEntryBuilder()
 		{
 			m_entry.set_id(1000);
-			m_entry.set_itemclass(item_class::Armor);
+			m_entry.set_itemclass(mock_item_class::Armor);
 			m_entry.set_subclass(1);
 			m_entry.set_inventorytype(inventory_type::Head);
 			m_entry.set_requiredlevel(0);
@@ -163,7 +172,7 @@ namespace
 			return *this;
 		}
 
-		ItemEntryBuilder& WithClass(item_class::Type itemClass)
+		ItemEntryBuilder& WithClass(uint32 itemClass)
 		{
 			m_entry.set_itemclass(itemClass);
 			return *this;
@@ -452,13 +461,13 @@ TEST_CASE("EquipmentManager - Proficiency validation", "[equipment_manager]")
 		context.AddProficiency(OneHandedAxeProficiency);  // Only has proficiency 1
 
 		const auto validEntry = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
+			.WithClass(mock_item_class::Weapon)
 			.WithSubclass(OneHandedAxeSubclass)  // Has proficiency
 			.WithInventoryType(inventory_type::MainHandWeapon)
 			.Build();
 
 		const auto invalidEntry = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
+			.WithClass(mock_item_class::Weapon)
 			.WithSubclass(TwoHandedAxeSubclass)  // No proficiency
 			.WithInventoryType(inventory_type::MainHandWeapon)
 			.Build();
@@ -482,13 +491,13 @@ TEST_CASE("EquipmentManager - Proficiency validation", "[equipment_manager]")
 		context.AddProficiency(ClothProficiency);  // Only has proficiency 3
 
 		const auto validEntry = ItemEntryBuilder()
-			.WithClass(item_class::Armor)
+			.WithClass(mock_item_class::Armor)
 			.WithSubclass(ClothSubclass)  // Has proficiency
 			.WithInventoryType(inventory_type::Chest)
 			.Build();
 
 		const auto invalidEntry = ItemEntryBuilder()
-			.WithClass(item_class::Armor)
+			.WithClass(mock_item_class::Armor)
 			.WithSubclass(LeatherSubclass)  // No proficiency
 			.WithInventoryType(inventory_type::Chest)
 			.Build();
@@ -515,12 +524,12 @@ TEST_CASE("EquipmentManager - Weapon slot validation", "[equipment_manager]")
 	SECTION("Mainhand accepts main hand and two-handed weapons")
 	{
 		const auto mainHandEntry = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
+			.WithClass(mock_item_class::Weapon)
 			.WithInventoryType(inventory_type::MainHandWeapon)
 			.Build();
 
 		const auto twoHandEntry = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
+			.WithClass(mock_item_class::Weapon)
 			.WithInventoryType(inventory_type::TwoHandedWeapon)
 			.Build();
 
@@ -536,12 +545,12 @@ TEST_CASE("EquipmentManager - Weapon slot validation", "[equipment_manager]")
 	SECTION("Offhand accepts offhand weapons and shields")
 	{
 		const auto offhandEntry = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
+			.WithClass(mock_item_class::Weapon)
 			.WithInventoryType(inventory_type::OffHandWeapon)
 			.Build();
 
 		const auto shieldEntry = ItemEntryBuilder()
-			.WithClass(item_class::Armor)
+			.WithClass(mock_item_class::Armor)
 			.WithInventoryType(inventory_type::Shield)
 			.Build();
 
@@ -557,12 +566,12 @@ TEST_CASE("EquipmentManager - Weapon slot validation", "[equipment_manager]")
 	SECTION("Ranged slot accepts ranged and thrown weapons")
 	{
 		const auto rangedEntry = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
+			.WithClass(mock_item_class::Weapon)
 			.WithInventoryType(inventory_type::Ranged)
 			.Build();
 
 		const auto thrownEntry = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
+			.WithClass(mock_item_class::Weapon)
 			.WithInventoryType(inventory_type::Thrown)
 			.Build();
 
@@ -587,7 +596,7 @@ TEST_CASE("EquipmentManager - Dual wield validation", "[equipment_manager]")
 		context.SetCanDualWield(false);
 
 		const auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Armor)
+			.WithClass(mock_item_class::Armor)
 			.WithInventoryType(inventory_type::Shield)
 			.Build();
 
@@ -622,7 +631,7 @@ TEST_CASE("EquipmentManager - Dual wield validation", "[equipment_manager]")
 		context.SetCanDualWield(false);
 
 		const auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
+			.WithClass(mock_item_class::Weapon)
 			.WithInventoryType(inventory_type::OffHandWeapon)
 			.Build();
 
@@ -641,7 +650,7 @@ TEST_CASE("EquipmentManager - Dual wield validation", "[equipment_manager]")
 		context.SetCanDualWield(true);
 
 		const auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
+			.WithClass(mock_item_class::Weapon)
 			.WithInventoryType(inventory_type::OffHandWeapon)
 			.Build();
 
@@ -665,7 +674,7 @@ TEST_CASE("EquipmentManager - Two-handed weapon validation", "[equipment_manager
 	{
 		// Setup: Two-handed weapon in mainhand
 		const auto twoHandEntry = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
+			.WithClass(mock_item_class::Weapon)
 			.WithInventoryType(inventory_type::TwoHandedWeapon)
 			.Build();
 
@@ -679,7 +688,7 @@ TEST_CASE("EquipmentManager - Two-handed weapon validation", "[equipment_manager
 
 		// Try to equip shield in offhand
 		const auto shieldEntry = ItemEntryBuilder()
-			.WithClass(item_class::Armor)
+			.WithClass(mock_item_class::Armor)
 			.WithInventoryType(inventory_type::Shield)
 			.Build();
 
@@ -697,7 +706,7 @@ TEST_CASE("EquipmentManager - Two-handed weapon validation", "[equipment_manager
 	{
 		// Setup: One-handed weapon in mainhand
 		const auto oneHandEntry = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
+			.WithClass(mock_item_class::Weapon)
 			.WithInventoryType(inventory_type::MainHandWeapon)
 			.Build();
 
@@ -711,7 +720,7 @@ TEST_CASE("EquipmentManager - Two-handed weapon validation", "[equipment_manager
 
 		// Try to equip shield in offhand
 		const auto shieldEntry = ItemEntryBuilder()
-			.WithClass(item_class::Armor)
+			.WithClass(mock_item_class::Armor)
 			.WithInventoryType(inventory_type::Shield)
 			.Build();
 

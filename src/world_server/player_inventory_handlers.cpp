@@ -193,8 +193,8 @@ namespace mmo
 			targetSlot = player_equipment_slots::Ranged;
 			break;
 		default:
-			if (entry.itemclass() == item_class::Container ||
-				entry.itemclass() == item_class::Quiver)
+			if (entry.inventorytype() == inventory_type::Bag ||
+				entry.inventorytype() == inventory_type::Quiver)
 			{
 				for (uint16 slot = player_inventory_slots::Start; slot < player_inventory_slots::End; ++slot)
 				{

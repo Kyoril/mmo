@@ -78,6 +78,26 @@ namespace mmo
 		return info->GetItemSubClassName();
 	}
 
+	uint32 ItemHandle::GetClassId() const
+	{
+		if (!CheckNonNull()) return 0;
+
+		const ItemInfo* info = Get()->GetEntry();
+		if (!info) return 0;
+
+		return info->itemClass;
+	}
+
+	uint32 ItemHandle::GetSubClassId() const
+	{
+		if (!CheckNonNull()) return 0;
+
+		const ItemInfo* info = Get()->GetEntry();
+		if (!info) return 0;
+
+		return info->itemSubclass;
+	}
+
 	uint32 ItemHandle::GetProficiency() const
 	{
 		if (!CheckNonNull()) return 0;
@@ -147,7 +167,6 @@ namespace mmo
 
 		const ItemInfo* info = Get()->GetEntry();
 		if (!info) return 0;
-		if (info->itemClass != item_class::Weapon) return 0;
 
 		return static_cast<int32>(floor(info->damage.min));
 	}
@@ -158,7 +177,6 @@ namespace mmo
 
 		const ItemInfo* info = Get()->GetEntry();
 		if (!info) return 0;
-		if (info->itemClass != item_class::Weapon) return 0;
 
 		return static_cast<int32>(floor(info->damage.max));
 	}
@@ -169,7 +187,6 @@ namespace mmo
 
 		const ItemInfo* info = Get()->GetEntry();
 		if (!info) return 0.0f;
-		if (info->itemClass != item_class::Weapon) return 0.0f;
 
 		return static_cast<float>(info->attackTime) / 1000.0f;
 	}

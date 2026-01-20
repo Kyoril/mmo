@@ -919,6 +919,8 @@ namespace mmo
 							   .def_readonly("maxDurability", &ItemInfo::maxdurability)
 							   .def_readonly("class", &ItemInfo::GetItemClassName)
 							   .def_readonly("subClass", &ItemInfo::GetItemSubClassName)
+							   .def_readonly("classId", &ItemInfo::itemClass)
+							   .def_readonly("subClassId", &ItemInfo::itemSubclass)
 							   .def_readonly("proficiency", &ItemInfo::GetProficiency)
 							   .def_readonly("inventoryType", &ItemInfo::GetItemInventoryTypeName)
 							   .def<std::function<const char *(const ItemInfo *)>>("GetIcon", [this](const ItemInfo *self) -> const char *
@@ -988,6 +990,8 @@ namespace mmo
 					   		   .def("GetStackCount", &ItemHandle::GetStackCount)
 							   .def("GetClass", &ItemHandle::GetItemClass)
 							   .def("GetSubClass", &ItemHandle::GetItemSubClass)
+							   .def("GetClassId", &ItemHandle::GetClassId)
+							   .def("GetSubClassId", &ItemHandle::GetSubClassId)
 							   .def("GetInventoryType", &ItemHandle::GetInventoryType)
 							   .def("GetSellPrice", &ItemHandle::GetSellPrice)
 							   .def("GetIcon", &ItemHandle::GetIcon)
@@ -1448,9 +1452,7 @@ namespace mmo
 			return;
 		}
 
-		if (entry->itemClass == item_class::Weapon ||
-			entry->itemClass == item_class::Armor ||
-			entry->itemClass == item_class::Container)
+		if (entry->inventoryType != inventory_type::NonEquip)
 		{
 			m_realmConnector.AutoEquipItem((slot >> 8) & 0xff, slot & 0xff);
 			return;

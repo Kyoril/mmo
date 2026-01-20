@@ -531,70 +531,6 @@ namespace mmo
 		return RemoveItem(slot, stacks);
 	}
 
-	namespace
-	{
-		weapon_prof::Type weaponProficiency(uint32 subclass)
-		{
-			switch (subclass)
-			{
-			case item_subclass_weapon::OneHandedAxe:
-				return weapon_prof::OneHandAxe;
-			case item_subclass_weapon::TwoHandedAxe:
-				return weapon_prof::TwoHandAxe;
-			case item_subclass_weapon::Bow:
-				return weapon_prof::Bow;
-			case item_subclass_weapon::CrossBow:
-				return weapon_prof::Crossbow;
-			case item_subclass_weapon::Dagger:
-				return weapon_prof::Dagger;
-			case item_subclass_weapon::Fist:
-				return weapon_prof::Fist;
-			case item_subclass_weapon::Gun:
-				return weapon_prof::Gun;
-			case item_subclass_weapon::OneHandedMace:
-				return weapon_prof::OneHandMace;
-			case item_subclass_weapon::TwoHandedMace:
-				return weapon_prof::TwoHandMace;
-			case item_subclass_weapon::Polearm:
-				return weapon_prof::Polearm;
-			case item_subclass_weapon::Staff:
-				return weapon_prof::Staff;
-			case item_subclass_weapon::OneHandedSword:
-				return weapon_prof::OneHandSword;
-			case item_subclass_weapon::TwoHandedSword:
-				return weapon_prof::TwoHandSword;
-			case item_subclass_weapon::Thrown:
-				return weapon_prof::Throw;
-			case item_subclass_weapon::Wand:
-				return weapon_prof::Wand;
-			}
-
-			return weapon_prof::None;
-		}
-
-		armor_prof::Type armorProficiency(uint32 subclass)
-		{
-			switch (subclass)
-			{
-			case item_subclass_armor::Misc:
-				return armor_prof::Common;
-			case item_subclass_armor::Buckler:
-			case item_subclass_armor::Shield:
-				return armor_prof::Shield;
-			case item_subclass_armor::Cloth:
-				return armor_prof::Cloth;
-			case item_subclass_armor::Leather:
-				return armor_prof::Leather;
-			case item_subclass_armor::Mail:
-				return armor_prof::Mail;
-			case item_subclass_armor::Plate:
-				return armor_prof::Plate;
-			}
-
-			return armor_prof::None;
-		}
-	}
-
 InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntry &entry) const
 {
 	const InventorySlot invSlot = InventorySlot::FromAbsolute(slot);
@@ -647,7 +583,7 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 			return inventory_change_failure::ItemDoesNotGoToSlot;
 		}
 
-		if (bag->GetEntry().itemclass() == item_class::Quiver &&
+		if (bag->GetEntry().inventorytype() == inventory_type::Quiver &&
 			entry.inventorytype() != inventory_type::Ammo)
 		{
 			return inventory_change_failure::OnlyAmmoCanGoHere;
@@ -658,14 +594,14 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 
 	if (invSlot.IsBagPack())
 	{
-		if (entry.itemclass() != item_class::Container &&
-			entry.itemclass() != item_class::Quiver)
+		if (entry.inventorytype() != inventory_type::Bag &&
+			entry.inventorytype() != inventory_type::Quiver)
 		{
 			return inventory_change_failure::NotABag;
 		}
 
 		// Make sure that we have only up to one quiver equipped at a time
-		if (entry.itemclass() == item_class::Quiver)
+		if (entry.inventorytype() == inventory_type::Quiver)
 		{
 			if (HasEquippedQuiver())
 				return inventory_change_failure::CanEquipOnlyOneQuiver;
@@ -710,21 +646,23 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 		for (uint8 slot = player_inventory_slots::Start; slot < player_inventory_slots::End; ++slot)
 		{
 			const auto testBag = GetItemAtSlot(InventorySlot::FromRelative(player_inventory_slots::Bag_0, slot).GetAbsolute());
-			if (testBag && testBag->GetEntry().itemclass() == item_class::Quiver)
+			if (testBag && testBag->GetEntry().inventorytype() == inventory_type::Quiver)
 			{
 				return true;
 			}
 		}
 
-	return false;
-}
+		return false;
+	}
 
-std::shared_ptr<GameItemS> Inventory::GetItemAtSlot(uint16 absoluteSlot) const noexcept
-{
-	if (const auto it = m_itemsBySlot.find(absoluteSlot); it != m_itemsBySlot.end())
+	std::shared_ptr<GameItemS> Inventory::GetItemAtSlot(uint16 absoluteSlot) const noexcept
 	{
-		return it->second;
-	}		return nullptr;
+		if (const auto it = m_itemsBySlot.find(absoluteSlot); it != m_itemsBySlot.end())
+		{
+			return it->second;
+		}
+		
+		return nullptr;
 	}
 
 	std::shared_ptr<GameBagS> Inventory::GetBagAtSlot(uint16 absolute_slot) const noexcept
@@ -759,36 +697,39 @@ std::shared_ptr<GameItemS> Inventory::GetItemAtSlot(uint16 absoluteSlot) const n
 		case weapon_attack::RangedAttack:
 			slot = player_equipment_slots::Ranged;
 			break;
-	}
-
-	std::shared_ptr<GameItemS> item = GetItemAtSlot(InventorySlot::FromRelative(player_inventory_slots::Bag_0, slot).GetAbsolute());
-
-	if (!item || item->GetEntry().itemclass() != item_class::Weapon)
-	{
-		return nullptr;
-	}
-
-	// Check proficiency using the data-driven system
-	uint32 requiredProficiencyId = 0;
-	if (item->GetEntry().has_requiredproficiency() && item->GetEntry().requiredproficiency() > 0)
-	{
-		requiredProficiencyId = item->GetEntry().requiredproficiency();
-	}
-	else if (item->GetEntry().has_subclass())
-	{
-		const auto* subclass = GetProject().itemSubclasses.getById(item->GetEntry().subclass());
-		if (subclass && subclass->has_requiredproficiency())
-		{
-			requiredProficiencyId = subclass->requiredproficiency();
 		}
-	}
-	
-	if (requiredProficiencyId > 0 && !m_owner.HasProficiency(requiredProficiencyId))
-	{
-		return nullptr; // No proficiency for this weapon type
-	}
 
-	if (nonbroken && item->IsBroken())
+		std::shared_ptr<GameItemS> item = GetItemAtSlot(InventorySlot::FromRelative(player_inventory_slots::Bag_0, slot).GetAbsolute());
+
+		if (!item || (item->GetEntry().inventorytype() != inventory_type::Weapon &&
+			item->GetEntry().inventorytype() != inventory_type::MainHandWeapon && 
+			item->GetEntry().inventorytype() != inventory_type::OffHandWeapon && 
+			item->GetEntry().inventorytype() != inventory_type::TwoHandedWeapon))
+		{
+			return nullptr;
+		}
+
+		// Check proficiency using the data-driven system
+		uint32 requiredProficiencyId = 0;
+		if (item->GetEntry().has_requiredproficiency() && item->GetEntry().requiredproficiency() > 0)
+		{
+			requiredProficiencyId = item->GetEntry().requiredproficiency();
+		}
+		else if (item->GetEntry().has_subclass())
+		{
+			const auto* subclass = GetProject().itemSubclasses.getById(item->GetEntry().subclass());
+			if (subclass && subclass->has_requiredproficiency())
+			{
+				requiredProficiencyId = subclass->requiredproficiency();
+			}
+		}
+		
+		if (requiredProficiencyId > 0 && !m_owner.HasProficiency(requiredProficiencyId))
+		{
+			return nullptr; // No proficiency for this weapon type
+		}
+
+		if (nonbroken && item->IsBroken())
 		{
 			return nullptr;
 		}
@@ -920,8 +861,8 @@ std::shared_ptr<GameItemS> Inventory::GetItemAtSlot(uint16 absoluteSlot) const n
 
 				// Create a new item instance
 				std::shared_ptr<GameItemS> item;
-				if (entry->itemclass() == item_class::Container ||
-					entry->itemclass() == item_class::Quiver)
+				if (entry->inventorytype() == inventory_type::Bag ||
+					entry->inventorytype() == inventory_type::Quiver)
 				{
 					item = std::make_shared<GameBagS>(m_owner.GetProject(), *entry);
 				}

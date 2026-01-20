@@ -231,7 +231,7 @@ namespace mmo
 		const auto &itemEntry = item.GetEntry();
 
 		// Check if item requires proficiency
-		if (itemEntry.itemclass() == item_class::Weapon || itemEntry.itemclass() == item_class::Armor)
+		if (itemEntry.inventorytype() != inventory_type::NonEquip)
 		{
 			// Get required proficiency ID from item entry or subclass
 			uint32 requiredProficiencyId = 0;

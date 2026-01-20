@@ -66,6 +66,16 @@ namespace
 		uint32 m_updateCount;
 	};
 
+
+	namespace mock_item_class
+	{
+		enum Type
+		{
+			Container = 1,
+			Weapon = 2,
+		};
+	}
+
 	/**
 	 * @brief Helper to create a mock bag for testing.
 	 */
@@ -73,7 +83,7 @@ namespace
 	{
 		proto::ItemEntry entry;
 		entry.set_id(entryId);
-		entry.set_itemclass(item_class::Container);
+		entry.set_itemclass(mock_item_class::Container);
 		entry.set_subclass(0);
 		entry.set_inventorytype(inventory_type::Bag);
 		entry.set_containerslots(slotCount);
@@ -94,7 +104,7 @@ namespace
 	{
 		proto::ItemEntry entry;
 		entry.set_id(entryId);
-		entry.set_itemclass(item_class::Weapon);
+		entry.set_itemclass(mock_item_class::Weapon);
 		entry.set_subclass(1);
 		entry.set_inventorytype(inventory_type::MainHandWeapon);
 

@@ -402,7 +402,8 @@ namespace mmo
 			ImGui::SetNextItemWidth(150);
 			SLIDER_UINT32_PROP(maxstack, "Max Stack", 1, 255);
 
-			if (currentEntry.itemclass() == ItemClass::Container)
+			if (currentEntry.inventorytype() == inventory_type::Bag ||
+				currentEntry.inventorytype() == inventory_type::Quiver)
 			{
 				// Ensure container slot count is clamped
 				if (currentEntry.containerslots() < 1 || currentEntry.containerslots() > 36)
@@ -412,7 +413,7 @@ namespace mmo
 
 				SLIDER_UINT32_PROP(containerslots, "Slot Count", 1, 36);
 			}
-
+			
 			// Class - using data-driven item classes
 			uint32 currentItemClass = currentEntry.itemclass();
 			const auto* itemClassEntry = m_project.itemClasses.getById(currentItemClass);
@@ -624,10 +625,7 @@ namespace mmo
 
 		// Equippable items can have stats and spells (based on inventory type)
 		const uint32 invType = currentEntry.inventorytype();
-		const bool isEquippable = (invType != inventory_type::NonEquip && 
-								   invType != inventory_type::Bag && 
-								   invType != inventory_type::Quiver &&
-								   invType != inventory_type::Ammo);
+		const bool isEquippable = invType != inventory_type::NonEquip;
 		
 		if (isEquippable)
 		{
@@ -644,13 +642,10 @@ namespace mmo
 				ImGui::SameLine();
 				DrawHelpMarker("Armor value provided by this item");
 
-				if (currentEntry.itemclass() == ItemClass::Armor && currentEntry.subclass() == ItemSubclassArmor::Shield)
-				{
-					ImGui::SetNextItemWidth(150);
-					SLIDER_UINT32_PROP(block, "Block", 0, 100000000);
-					ImGui::SameLine();
-					DrawHelpMarker("Amount of damage blocked by this shield");
-				}
+				ImGui::SetNextItemWidth(150);
+				SLIDER_UINT32_PROP(block, "Block", 0, 100000000);
+				ImGui::SameLine();
+				DrawHelpMarker("Amount of damage blocked by this shield");
 
 				ImGui::BeginDisabled(currentEntry.stats_size() >= 10);
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
