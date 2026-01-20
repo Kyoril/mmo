@@ -1709,6 +1709,8 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+
+
 		m_cache.GetItemCache().NotifyObjectResponse(id, entry);
 		return PacketParseResult::Pass;
 	}
