@@ -43,8 +43,7 @@ namespace mmo
 
 		// IPlayerValidatorContext implementation
 		uint32 GetLevel() const noexcept override;
-		uint32 GetWeaponProficiency() const noexcept override;
-		uint32 GetArmorProficiency() const noexcept override;
+		bool HasProficiency(uint32 proficiencyId) const noexcept override;
 		bool IsAlive() const noexcept override;
 		bool IsInCombat() const noexcept override;
 		bool CanDualWield() const noexcept override;

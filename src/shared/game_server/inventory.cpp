@@ -33,7 +33,7 @@ namespace mmo
 	Inventory::Inventory(GamePlayerS &owner)
 		: m_owner(owner), m_freeSlots(player_inventory_pack_slots::End - player_inventory_pack_slots::Start) // Default slot count with only a backpack
 		  ,
-		  m_nextBuyBackSlot(player_buy_back_slots::Start), m_repository(nullptr), m_isDirty(false), m_validator(std::make_unique<ItemValidator>(owner)), m_slotManager(std::make_unique<SlotManager>(*this)), m_commandFactory(std::make_unique<InventoryCommandFactory>(*this, *this, *this)), m_commandLogger(std::make_unique<InventoryCommandLogger>()), m_itemFactory(std::make_unique<ItemFactory>(*this)), m_equipmentManager(std::make_unique<EquipmentManager>(*this)), m_bagManager(std::make_unique<BagManager>(*this))
+		  m_nextBuyBackSlot(player_buy_back_slots::Start), m_repository(nullptr), m_isDirty(false), m_validator(std::make_unique<ItemValidator>(owner, owner.GetProject())), m_slotManager(std::make_unique<SlotManager>(*this)), m_commandFactory(std::make_unique<InventoryCommandFactory>(*this, *this, *this)), m_commandLogger(std::make_unique<InventoryCommandLogger>()), m_itemFactory(std::make_unique<ItemFactory>(*this)), m_equipmentManager(std::make_unique<EquipmentManager>(*this)), m_bagManager(std::make_unique<BagManager>(*this))
 	{
 		// Connect to item change signals to automatically mark inventory as dirty
 		m_inventoryConnections += itemInstanceCreated.connect([this](std::shared_ptr<GameItemS>, uint16)

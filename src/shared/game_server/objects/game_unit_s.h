@@ -840,6 +840,22 @@ namespace mmo
 			return m_armorProficiency;
 		}
 
+		/// Checks if the character has a specific proficiency.
+		/// @param proficiencyId The ID of the proficiency to check (from proficiencies.proto).
+		/// @return true if the character has the proficiency, false otherwise.
+		bool HasProficiency(uint32 proficiencyId) const noexcept override
+		{
+			// Proficiency ID 0 means no proficiency required
+			if (proficiencyId == 0)
+			{
+				return true;
+			}
+
+			// Check if the proficiency bit is set in either weapon or armor proficiency mask
+			const uint32 proficiencyBit = (1 << proficiencyId);
+			return ((m_weaponProficiency & proficiencyBit) != 0) || ((m_armorProficiency & proficiencyBit) != 0);
+		}
+
 		/// Adds a new weapon proficiency to the mask.
 		void AddWeaponProficiency(uint32 mask)
 		{

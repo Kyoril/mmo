@@ -15,14 +15,23 @@ namespace mmo
 		return m_player.GetLevel();
 	}
 
-	uint32 PlayerValidatorAdapter::GetWeaponProficiency() const noexcept
+	bool PlayerValidatorAdapter::HasProficiency(uint32 proficiencyId) const noexcept
 	{
-		return m_player.GetWeaponProficiency();
-	}
+		// Proficiency ID 0 means no proficiency required
+		if (proficiencyId == 0)
+		{
+			return true;
+		}
 
-	uint32 PlayerValidatorAdapter::GetArmorProficiency() const noexcept
-	{
-		return m_player.GetArmorProficiency();
+		// Check if the player has the proficiency bit set in their proficiency mask
+		// Note: We're using a combined proficiency check here. In the future, if weapon
+		// and armor proficiencies are separated in the data, we might need to check both masks.
+		// For now, we check both weapon and armor proficiency masks.
+		const uint32 proficiencyBit = (1 << proficiencyId);
+		const uint32 weaponProf = m_player.GetWeaponProficiency();
+		const uint32 armorProf = m_player.GetArmorProficiency();
+
+		return ((weaponProf & proficiencyBit) != 0) || ((armorProf & proficiencyBit) != 0);
 	}
 
 	bool PlayerValidatorAdapter::IsAlive() const noexcept
