@@ -42,6 +42,8 @@
 #include "editor_windows/model_editor_window.h"
 #include "editor_windows/race_editor_window.h"
 #include "editor_windows/proficiency_editor_window.h"
+#include "editor_windows/item_subclass_editor_window.h"
+#include "editor_windows/item_class_editor_window.h"
 #include "editor_windows/trainer_editor_window.h"
 #include "editor_windows/vendor_editor_window.h"
 #include "editor_windows/quest_editor_window.h"
@@ -164,6 +166,8 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ProficiencyEditorWindow>("Proficiency Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ModelEditorWindow>("Model Data Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ItemEditorWindow>("Item Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::ItemClassEditorWindow>("Item Class Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::ItemSubclassEditorWindow>("Item Subclass Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ItemDisplayEditorWindow>("Item Display Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ObjectDisplayEditorWindow>("Object Display Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::UnitLootEditorWindow>("Unit Loot Editor", project, mainWindow));

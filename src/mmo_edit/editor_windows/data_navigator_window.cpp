@@ -13,6 +13,8 @@
 #include "spell_editor_window.h"
 #include "quest_editor_window.h"
 #include "item_editor_window.h"
+#include "item_subclass_editor_window.h"
+#include "item_class_editor_window.h"
 #include "range_type_editor_window.h"
 #include "creature_editor_window.h"
 #include "class_editor_window.h"
@@ -209,6 +211,20 @@ namespace mmo
             "Items",
             [this]() { OpenEditorWindow(std::type_index(typeid(ItemEditorWindow))); },
             static_cast<int>(m_project.items.count())
+        });
+        
+        gameplayCategory.editors.push_back({
+            std::type_index(typeid(ItemClassEditorWindow)),
+            "Item Classes",
+            [this]() { OpenEditorWindow(std::type_index(typeid(ItemClassEditorWindow))); },
+            static_cast<int>(m_project.itemClasses.count())
+        });
+        
+        gameplayCategory.editors.push_back({
+            std::type_index(typeid(ItemSubclassEditorWindow)),
+            "Item Subclasses",
+            [this]() { OpenEditorWindow(std::type_index(typeid(ItemSubclassEditorWindow))); },
+            static_cast<int>(m_project.itemSubclasses.count())
         });
         
         gameplayCategory.editors.push_back({

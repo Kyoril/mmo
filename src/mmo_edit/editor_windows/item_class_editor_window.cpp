@@ -1,6 +1,6 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
-#include "proficiency_editor_window.h"
+#include "item_class_editor_window.h"
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
@@ -9,17 +9,17 @@
 
 namespace mmo
 {
-	ProficiencyEditorWindow::ProficiencyEditorWindow(const String& name, proto::Project& project, EditorHost& host)
-		: EditorEntryWindowBase(project, project.proficiencies, name)
+	ItemClassEditorWindow::ItemClassEditorWindow(const String& name, proto::Project& project, EditorHost& host)
+		: EditorEntryWindowBase(project, project.itemClasses, name)
 		, m_host(host)
 	{
 		EditorWindowBase::SetVisible(false);
 
 		m_hasToolbarButton = false;
-		m_toolbarButtonText = "Proficiencies";
+		m_toolbarButtonText = "Item Classes";
 	}
 
-	void ProficiencyEditorWindow::DrawDetailsImpl(EntryType& currentEntry)
+	void ItemClassEditorWindow::DrawDetailsImpl(EntryType& currentEntry)
 	{
 		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
 		{
@@ -38,23 +38,13 @@ namespace mmo
 					ImGui::EndDisabled();
 				}
 
-				if (ImGui::TableNextColumn())
-				{
-					uint32 flags = currentEntry.has_flags() ? currentEntry.flags() : 0;
-					if (ImGui::InputScalar("Flags", ImGuiDataType_U32, &flags))
-					{
-						currentEntry.set_flags(flags);
-					}
-				}
-
 				ImGui::EndTable();
 			}
 		}
 	}
 
-	void ProficiencyEditorWindow::OnNewEntry(proto::TemplateManager<proto::Proficiencies, proto::ProficiencyEntry>::EntryType& entry)
+	void ItemClassEditorWindow::OnNewEntry(proto::TemplateManager<proto::ItemClasses, proto::ItemClassEntry>::EntryType& entry)
 	{
-		entry.set_name("New Proficiency");
-		entry.set_flags(0);
+		entry.set_name("New Item Class");
 	}
 }

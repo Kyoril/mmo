@@ -46,6 +46,8 @@
 #include "shared/proto_data/animations.pb.h"
 #include "shared/proto_data/spell_visualizations.pb.h"
 #include "shared/proto_data/proficiencies.pb.h"
+#include "shared/proto_data/item_classes.pb.h"
+#include "shared/proto_data/item_subclasses.pb.h"
 
 namespace mmo
 {
@@ -93,6 +95,8 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::Animations, mmo::proto::AnimationEntry> AnimationManager;
 		typedef TemplateManager<mmo::proto::SpellVisualizations, mmo::proto::SpellVisualization> SpellVisualizationManager;
 		typedef TemplateManager<mmo::proto::Proficiencies, mmo::proto::ProficiencyEntry> ProficiencyManager;
+		typedef TemplateManager<mmo::proto::ItemClasses, mmo::proto::ItemClassEntry> ItemClassManager;
+		typedef TemplateManager<mmo::proto::ItemSubclasses, mmo::proto::ItemSubclassEntry> ItemSubclassManager;
 
 		/// Determines whether a spell entry has a certain spell effect.
 		bool SpellHasEffect(const proto::SpellEntry& spell, mmo::SpellEffect type);
@@ -153,6 +157,8 @@ namespace mmo
 			AnimationManager animations;
 			SpellVisualizationManager spellVisualizations;
 			ProficiencyManager proficiencies;
+			ItemClassManager itemClasses;
+			ItemSubclassManager itemSubclasses;
 
 		private:
 
@@ -238,6 +244,8 @@ namespace mmo
 				managers.push_back(ManagerEntry("animations", animations));
 				managers.push_back(ManagerEntry("spell_visualizations", spellVisualizations));
 				managers.push_back(ManagerEntry("proficiencies", proficiencies));
+				managers.push_back(ManagerEntry("item_classes", itemClasses));
+				managers.push_back(ManagerEntry("item_subclasses", itemSubclasses));
 
 				virtual_dir::FileSystemReader virtualDirectory(realmDataPath);
 				if (!RealmProjectLoader::load(
@@ -313,6 +321,8 @@ namespace mmo
 				managers.push_back(ManagerEntry("animations", "animations", animations));
 				managers.push_back(ManagerEntry("spell_visualizations", "spell_visualizations", spellVisualizations));
 				managers.push_back(ManagerEntry("proficiencies", "proficiencies", proficiencies));
+				managers.push_back(ManagerEntry("item_classes", "item_classes", itemClasses));
+				managers.push_back(ManagerEntry("item_subclasses", "item_subclasses", itemSubclasses));
 
 				if (!RealmProjectSaver::save(realmDataPath, managers))
 				{
