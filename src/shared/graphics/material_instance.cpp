@@ -56,15 +56,21 @@ namespace mmo
 		for (auto& param : m_parent->GetScalarParameters())
 		{
 			m_scalarParameters.push_back(param);
+			m_bufferDataDirty[0] = true;
+			m_bufferLayoutDirty[0] = true;
 		}
 		for (auto& param : m_parent->GetVectorParameters())
 		{
 			m_vectorParameters.push_back(param);
+			m_bufferDataDirty[1] = true;
+			m_bufferLayoutDirty[1] = true;
 		}
 		for (auto& param : m_parent->GetTextureParameters())
 		{
 			m_textureParameters.push_back(param);
 			m_textureParamTextures[param.name] = TextureManager::Get().CreateOrRetrieve(param.texture);
+			m_bufferDataDirty[2] = true;
+			m_bufferLayoutDirty[2] = true;
 		}
 
 		// Refresh base values from parent material if this is the first reference to a parent material
@@ -186,7 +192,7 @@ namespace mmo
 			device.SetDepthTestComparison(DepthTestMethod::LessEqual);
 		}
 
-		if (m_type == MaterialType::Translucent || m_type == MaterialType::Masked)
+		if (m_type == MaterialType::Translucent || m_type == MaterialType::Masked || m_type == MaterialType::UserInterface)
 		{
 			device.SetBlendMode(BlendMode::Alpha);
 		}

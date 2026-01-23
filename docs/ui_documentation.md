@@ -1,353 +1,277 @@
-# MMO User Interface Documentation
+# MMO UI System Documentation
 
-## Overview
+This document describes the MMO UI system as implemented in `data/client/Interface` and the `frame_ui` library (`src/shared/frame_ui`). It is written for developers and AI agents who want to build or extend UI components safely and consistently.
 
-This document provides a comprehensive overview of the UI system used in the MMO project. The UI is divided into two main sections:
+## Table of Contents
 
-1. **GlueUI** - The out-of-game interface (login screens, character selection, etc.)
-2. **GameUI** - The in-game interface (player frames, action bars, chat, etc.)
+- [System Overview](#system-overview)
+- [Runtime Entry Points](#runtime-entry-points)
+- [UI File Layout](#ui-file-layout)
+- [XML Layout Grammar](#xml-layout-grammar)
+- [Visual System: Imagery Sections and State Imagery](#visual-system-imagery-sections-and-state-imagery)
+- [Frame Types and Renderers](#frame-types-and-renderers)
+- [Built-in Properties and Bindings](#built-in-properties-and-bindings)
+- [Lua Event Flow and Handlers](#lua-event-flow-and-handlers)
+- [Anchors, Positioning, and Scaling](#anchors-positioning-and-scaling)
+- [Localization and Text Markup](#localization-and-text-markup)
+- [Panel System and Layout Conventions](#panel-system-and-layout-conventions)
+- [AI Agent Extension Checklist](#ai-agent-extension-checklist)
+- [References](#references)
 
-Both systems use a common underlying framework based on Lua scripting with C++ bindings.
+## System Overview
 
-## Core UI Architecture
+The UI system is a hybrid of:
+- **XML layout files** (`.xml`) that define frame hierarchies, visuals, fonts, and scripts.
+- **Lua scripts** (`.lua`) that implement behavior, game bindings, and event handlers.
+- **FrameUI C++ runtime** (`src/shared/frame_ui`) that loads XML, binds Lua, renders, and routes input.
 
-The UI system is built on a frame-based architecture where UI elements are organized in a hierarchy. The system is managed by the `FrameManager` class in C++ which handles:
+Key architectural features:
+- **Frame hierarchy**: Every UI element is a `Frame` (or subclass) with children.
+- **Visual separation**: Rendering uses named imagery sections and state imagery.
+- **Property binding**: Visual components can bind to frame properties.
+- **Script hooks**: XML can embed Lua via `<Scripts>` handlers or reference files.
 
-- Layout management
-- Event handling
-- Input capture
-- Frame rendering
+## Runtime Entry Points
 
-### Key Components
+UI is loaded by the game states:
+- Login flow (GlueUI): `src/mmo_client/game_states/login_state.cpp` loads `Interface/GlueUI/GlueUI.toc`.
+- In-game flow (GameUI): `src/mmo_client/game_states/world_state.cpp` loads `Interface/GameUI/GameUI.toc`.
 
-- **Frames**: Basic UI containers that can contain other frames
-- **Buttons**: Interactive elements that respond to clicks
-- **Text Fields**: For text input
-- **Models**: For displaying 3D character models
-- **Textures**: For displaying images and icons
+The runtime is initialized in `src/mmo_client/client.cpp`:
+- `FrameManager::Initialize` sets up Lua bindings and default renderers.
+- Custom renderers/frame types are registered for **Model**, **UnitModel**, **Minimap**, **World**.
 
-## UI Panel System
+## UI File Layout
 
-The game employs a sophisticated panel management system that controls how UI windows are shown, hidden, and arranged. This system is primarily managed through the GameParent.lua file.
+Primary UI roots:
+- `data/client/Interface/GlueUI`: login/character creation UIs.
+- `data/client/Interface/GameUI`: in-game UI (action bars, chat, HUD).
 
-### Panel Areas
+Key file types:
+- `.toc`: load order lists of XML/Lua files (one per line).
+- `.xml`: UI layout definitions.
+- `.lua`: scripts, event handlers, helpers.
+- `.htex/.hmat`: textures and materials for UI visuals.
+- `Bindings.xml`: key bindings loaded in game state.
 
-- **Left**: Standard UI panels (character window, spellbook, etc.)
-- **Center**: Dialog boxes and some special panels
-- **Full**: Full-screen panels that hide the game world
-- **Undefined**: Custom panels that don't follow standard positioning rules
+Load order in `.toc` matters: templates and shared definitions must appear before layouts that `inherits` them.
 
-### Panel Functions
+## XML Layout Grammar
 
-- `ShowUIPanel(frame, force)`: Shows a UI panel, handling positioning based on panel type
-- `HideUIPanel(frame)`: Hides a UI panel
-- `CloseAllWindows(ignoreCenter)`: Closes all UI panels except optionally center panels
-- `MovePanelToLeft()`, `MovePanelToCenter()`: Repositions panels between areas
+Layout files follow the `UiLayout` root and are parsed by `LayoutXmlLoader` in `src/shared/frame_ui/layout_xml_loader.cpp`. Updated schema files are in `data/client/Interface/Ui.xsd` and `data/client/Interface/GlueUI/Ui.xsd`. Some GlueUI XML files use inconsistent namespaces; for strict validation, align the `xmlns` to `http://mmo-dev.net/ui`.
 
-## GlueUI Components
+High-level structure:
+```xml
+<UiLayout>
+  <Script file="SomeFile.lua" />
+  <Font name="DefaultSmall" file="Fonts/FRIZQT__.TTF" size="26" outline="0" />
 
-### AccountLogin
-
-The login screen that handles user authentication.
-
-```
-Key functions:
-- AccountLogin_Login(): Initiates login process
-- AccountLogin_OnRealmList(): Called when realm list is received
-- AccountLogin_AuthError(): Handles authentication errors
-```
-
-### RealmList
-
-Displays available game realms for connection.
-
-```
-Key functions:
-- RealmList_Show(): Displays the realm selection screen
-- RealmList_Accept(): Connects to selected realm
-- RealmListItem_Clicked(): Handler for realm selection
-```
-
-### CharSelect
-
-Character selection screen.
-
-```
-Key functions:
-- CharList_Show(): Displays available characters
-- CharSelect_EnterWorld(): Enters the game world with selected character
-- CharSelect_CreateCharacter(): Opens character creation screen
-```
-
-### CharCreate
-
-Character creation interface.
-
-```
-Key functions:
-- CharCreate_Show(): Shows character creation UI
-- CharCreate_Submit(): Creates a new character
-- SetupCustomization(): Sets up character customization options
+  <Frame name="MyFrame" type="Frame" renderer="DefaultRenderer">
+    <Property name="Text" value="HELLO" />
+    <Area>
+      <Anchor point="LEFT" offset="32" />
+      <Anchor point="TOP" offset="32" />
+      <Size><AbsDimension x="400" y="100" /></Size>
+    </Area>
+    <Visual>...</Visual>
+    <Scripts>...</Scripts>
+  </Frame>
+</UiLayout>
 ```
 
-### GlueDialog
+### Core Elements
 
-Dialog system for the login screens.
+- `UiLayout`: file root.
+- `Script file="...lua"`: Lua file to load after XML parsing.
+- `Font`: registers a font name for later use by frames.
+- `Frame`: a UI element (may contain nested frames).
+- `Property`: name/value properties used by logic or visuals.
+- `Area`: size/position/anchor definitions.
+- `Visual`: imagery sections and state imagery.
+- `Scripts`: inline Lua handlers.
 
-```
-Key functions:
-- GlueDialog_Show(which, text, data): Shows a dialog by type
-- GlueDialog_Hide(): Hides the current dialog
-- GlueDialog_Button1Clicked(): Handles primary button clicks
-```
+### Frame Attributes
 
-## GameUI Components
+Supported attributes (from `LayoutXmlLoader`):
+- `name` (required)
+- `type` (optional): `Frame`, `Button`, `TextField`, `ScrollBar`, `Thumb`, `ProgressBar`, `ScrollingMessageFrame`, `Model`, `UnitModel`, `Minimap`, `World`, etc.
+- `renderer` (optional): `DefaultRenderer`, `ButtonRenderer`, `CheckboxRenderer`, `TextFieldRenderer`, `ModelRenderer`, `WorldRenderer`.
+- `parent` (optional): explicit parent by name.
+- `inherits` (optional): template frame name.
+- `setAllPoints` (optional): `true/false`, anchors to all parent edges.
+- `id` (optional): integer ID passed into Lua (used by ActionBar, etc).
 
-### GameParent
+### Area and Anchors
 
-The main frame that contains all in-game UI elements.
+`Area` may contain:
+- `Size` with `AbsDimension x/y`
+- `Position` with `AbsDimension x/y` (fallback if no anchors)
+- `Anchor` with `point`, optional `relativePoint`, `relativeTo`, and `offset`
 
-```
-Key functions:
-- GameParent_OnLoad(): Sets up game events
-- ShowUIPanel(), HideUIPanel(): Controls panel visibility
-- CloseAllWindows(): Hides all UI elements
-```
+Anchor offset is a **single float**; horizontal anchors use X scale, vertical anchors use Y scale.
 
-### PlayerFrame
+### Inline Scripts
 
-Displays player information (health, mana, level).
+`Scripts` can include:
+- `OnLoad`
+- `OnUpdate`
+- `OnClick`
+- `OnShow` / `OnHide`
+- `OnEnter` / `OnLeave`
+- `OnDrag` / `OnDrop`
+- `OnTabPressed`, `OnEnterPressed`, `OnSpacePressed`, `OnEscapePressed`
 
-```
-Key functions:
-- PlayerFrame_Update(): Updates player information
-- PlayerFrame_OnCombatModeChanged(): Handles combat state changes
-- PlayerFrame_UpdateLeader(): Updates group leader status
-```
-
-### TargetFrame
-
-Displays information about the player's target.
-
-```
-Key functions:
-- TargetFrame_Update(): Updates target information
-- TargetFrame_UpdateAuras(): Updates target buffs/debuffs
-- TargetFrame_OnUnitUpdate(): Handles target unit changes
-```
-
-### PartyFrame
-
-Manages the display of party member information.
-
-```
-Key functions:
-- PartyFrame_OnMembersChanged(): Updates when party composition changes
-- PartyMemberFrame_UpdateMember(): Updates individual party member display
-- PartyMemberFrame_OnClick(): Handles clicking on party members
+Each script block should **return a function**:
+```xml
+<OnClick>
+  return function(this, button)
+    DoSomething(this, button)
+  end
+</OnClick>
 ```
 
-### ChatFrame
+## Visual System: Imagery Sections and State Imagery
 
-Manages the in-game chat system.
+Visuals are defined in two layers:
+1. **ImagerySection**: a named collection of render components (image, border, text).
+2. **StateImagery**: a named state that combines imagery sections in ordered layers.
 
-```
-Key functions:
-- ChatFrame_SendMessage(): Sends chat messages
-- ChatFrame_ParseText(): Parses slash commands
-- ChatEdit_UpdateHeader(): Updates chat input header based on chat type
-```
+Example (from `data/client/Interface/GameUI/ActionBarButton.xml`):
+```xml
+<ImagerySection name="Image">
+  <ImageComponent>
+    <Area><Inset all="16" /></Area>
+    <PropertyValue property="Icon" />
+  </ImageComponent>
+</ImagerySection>
 
-### InventoryFrame
-
-Displays player inventory and equipped items.
-
-```
-Key functions:
-- InventoryFrame_Load(): Sets up inventory display
-- InventoryFrame_UpdateSlots(): Updates inventory slot display
-- InventoryFrame_UpdateMoney(): Updates player money display
-```
-
-### VendorFrame
-
-Interface for buying and selling items with NPCs.
-
-```
-Key functions:
-- VendorFrame_Show(): Displays the vendor interface
-- VendorFrame_UpdateVendorItems(): Updates vendor item listings
-- VendorButton_OnClick(): Handles buying/selling items
+<StateImagery name="Normal">
+  <Layer>
+    <Section section="NormalFrame" />
+    <Section section="Image" />
+  </Layer>
+</StateImagery>
 ```
 
-### GuildFrame
+### Components
 
-Interface for guild management.
+- `ImageComponent` (texture/tint/tiling)
+- `BorderComponent` (nine-slice border)
+- `TextComponent` (color/align)
 
-```
-Key functions:
-- GuildRoster_Update(): Updates guild member listings
-- GuildFrame_InviteClicked(): Invites new members
-- GuildFrame_OnEvent(): Handles guild-related events
-```
+Components can bind properties:
+- Prefix attributes with `$` to bind to a property (e.g., `color="$TextColor"`).
+- Use `<PropertyValue property="Icon" />` inside `ImageComponent` to bind image source.
 
-### GameMenu
+## Frame Types and Renderers
 
-In-game menu system.
+Registered frame types:
+- Core: `Frame`, `Button`, `TextField`, `ScrollBar`, `Thumb`, `ProgressBar`, `ScrollingMessageFrame`
+- Client UI: `Model`, `UnitModel`, `Minimap`, `World`
 
-```
-Key functions:
-- AddMenuButton(): Adds buttons to the game menu
-- GameMenu_OnLoad(): Sets up the game menu
-- ToggleGameMenu(): Shows/hides the game menu
-```
+Registered renderers and state names:
+- `DefaultRenderer`: uses `Enabled` / `Disabled`
+- `ButtonRenderer`: `Normal` / `Hovered` / `Pushed` / `Disabled`
+- `CheckboxRenderer`: same as Button + `Checked` suffix (e.g., `NormalChecked`)
+- `TextFieldRenderer`: `Enabled` / `Disabled` and optional `Caret`
+- `ProgressBar` (custom): `Enabled` / `Disabled` + `Progress` and optional `Overlay` / `OverlayDisabled`
 
-### StaticDialog
+Renderer logic lives in `src/shared/frame_ui/*_renderer.cpp`.
 
-In-game dialog system.
+## Built-in Properties and Bindings
 
-```
-Key functions:
-- StaticDialog_Show(): Shows a dialog by type
-- StaticDialogs: Table containing all dialog definitions
-- StaticDialog_Button1Clicked(): Handles dialog button clicks
-```
+Base `Frame` properties (available in XML and Lua):
+- `Text`, `Font`, `Visible`, `Enabled`, `ClippedByParent`
+- `Color` (ARGB hex string)
+- `Focusable`, `Clickable`
+- `DragEnabled`, `DropEnabled`
 
-### MoneyFrame
+Button properties:
+- `Checkable`, `Checked`
 
-Displays currency in gold/silver/copper format.
+TextField properties:
+- `Masked`, `AcceptsTab`
+- `EnabledTextColor`, `DisabledTextColor`
 
-```
-Key functions:
-- RefreshMoneyFrame(): Updates money display
-- MoneyFrame_SetType(): Sets money frame behavior type
-```
+ProgressBar properties:
+- `Progress` (0.0-1.0), `ProgressColor`
 
-### GameTooltip
+Property rules:
+- `Property name="Text"` is localized during XML load.
+- Visual components may bind to properties via `$PropertyName` or `PropertyValue`.
 
-System for displaying tooltip information.
+## Lua Event Flow and Handlers
 
-```
-Key functions:
-- GameTooltip_SetItem(): Sets tooltip for items
-- GameTooltip_SetAura(): Sets tooltip for buffs/debuffs
-- GameTooltip_AddLine(): Adds text to tooltips
-```
+UI events are delivered via:
+- `Frame:RegisterEvent("EVENT_NAME", fn)` from Lua.
+- `FrameManager::TriggerLuaEvent` from C++ (see `login_state.cpp`, `world_state.cpp`).
 
-## UI Anchoring System
+Examples of engine-triggered events:
+- `PLAYER_ENTER_WORLD`
+- `PLAYER_HEALTH_CHANGED`
+- `PLAYER_POWER_CHANGED`
+- `PLAYER_TARGET_CHANGED`
+- `ACTION_BAR_CHANGED`
+- `SPELL_LEARNED`
+- `ITEM_RECEIVED`
+- `CHAT_MSG_SAY`
+- `AUTH_SUCCESS`, `AUTH_FAILED`, `REALM_LIST`, `CHAR_LIST`
 
-The UI uses an anchor-based layout system where elements are positioned relative to each other or their parent containers.
+Handler signatures:
+- `OnClick(this, buttonName)`
+- `OnUpdate(this, elapsedSeconds)`
+- `OnDrag(this, buttonName, position)` and `OnDrop(...)`
+- `OnEnter/OnLeave(this)`
+- `OnEnterPressed/OnTabPressed/OnSpacePressed/OnEscapePressed(this)`
 
-```lua
-frame:SetAnchor(AnchorPoint.TOP, AnchorPoint.BOTTOM, relativeFrame, 0)
-```
+## Anchors, Positioning, and Scaling
 
-Available anchor points:
-- TOP, BOTTOM, LEFT, RIGHT
-- TOPLEFT, TOPRIGHT, BOTTOMLEFT, BOTTOMRIGHT
-- H_CENTER, V_CENTER, CENTER
+Anchor rules (from `anchor_point.cpp`):
+- Only one `offset` value is supported; it applies to X for horizontal anchors and Y for vertical anchors.
+- Opposite anchors (left/right, top/bottom) define size.
+- `setAllPoints="true"` anchors all sides to parent.
 
-## Event System
+The system scales UI based on `FrameManager::SetNativeResolution` and current window size.
 
-UI frames can register for events and handle them with callback functions.
+## Localization and Text Markup
 
-```lua
-frame:RegisterEvent("EVENT_NAME", callbackFunction)
-```
+Localization:
+- `Localize("STRING_ID")` is bound to Lua.
+- `Property name="Text"` is auto-localized during XML parsing.
 
-Common events:
-- PLAYER_ENTER_WORLD: Fired when player enters the world
-- PLAYER_TARGET_CHANGED: Fired when player changes target
-- UNIT_HEALTH_UPDATED: Fired when unit health changes
-- CHAT_MSG_SAY: Fired when a chat message is received
+Inline text markup:
+- Color tags: `|cAARRGGBB` and reset `|r`
+- Hyperlinks: `|caarrggbb|Htype:payload|h[displaytext]|h|r`
 
-## Dialog System
+See `docs/hyperlink_usage_example.md` for examples.
 
-The game has two dialog systems:
-1. **GlueDialog**: For login screens
-2. **StaticDialog**: For in-game
+## Panel System and Layout Conventions
 
-Both follow a similar pattern where dialogs are defined in a table with properties:
-- text: The dialog message
-- button1, button2: Button text
-- OnAccept, OnCancel: Button handlers
-- timeout: Auto-close timeout
+The panel system (left/center/full) is implemented in `data/client/Interface/GameUI/GameParent.lua`. Use `ShowUIPanel`, `HideUIPanel`, and `CloseAllWindows` to manage panels.
 
-## Slash Command System
+Common conventions:
+- Use templates from `GameTemplates.xml` and `GlueTemplates.xml`.
+- Prefer `inherits` for repeated elements (buttons, labels).
+- Register events in `OnLoad`.
+- Keep UI logic in Lua; keep layout in XML.
 
-The chat system supports slash commands via the SlashCmdList table.
+## AI Agent Extension Checklist
 
-```lua
-SlashCmdList["COMMAND_NAME"] = function(msg)
-    -- Command implementation
-end
+When adding a new UI component:
+1. Decide whether it belongs to GlueUI or GameUI and update the appropriate `.toc`.
+2. Create a new `.xml` layout and `.lua` script (or extend an existing one).
+3. Use `inherits` from templates (`GameTemplates.xml`, `GlueTemplates.xml`).
+4. Add `Scripts` handlers that return functions.
+5. Register events in `OnLoad` and handle updates in Lua.
+6. Bind visuals to properties with `$PropertyName` and `<PropertyValue>`.
+7. Confirm frame names are unique and consistent with Lua global usage.
+8. If needed, add/extend Lua API in `docs/lua_api.md`.
 
-SLASH_COMMAND_NAME1 = "/command"  -- Primary alias
-SLASH_COMMAND_NAME2 = "/cmd"      -- Alternative alias
-```
+## References
 
-## UI Creation Patterns
-
-Common patterns for creating UI elements:
-
-### Creating a Button
-```lua
-local button = ButtonTemplate:Clone()
-button:SetText("Button Text")
-button:SetClickedHandler(OnButtonClicked)
-parentFrame:AddChild(button)
-```
-
-### Positioning Elements
-```lua
-button:SetAnchor(AnchorPoint.TOP, AnchorPoint.TOP, nil, yOffset)
-button:SetAnchor(AnchorPoint.LEFT, AnchorPoint.LEFT, nil, xOffset)
-```
-
-### Creating a Panel Window
-```lua
-function MyPanel_OnLoad(self)
-    SidePanel_OnLoad(self)
-    self:RegisterEvent("RELEVANT_EVENT", MyPanel_OnEvent)
-end
-
-function MyPanel_Toggle()
-    if (MyPanel:IsVisible()) then
-        HideUIPanel(MyPanel)
-    else
-        ShowUIPanel(MyPanel)
-    end
-end
-```
-
-## Best Practices
-
-1. Use templates for commonly repeated UI elements
-2. Register for only the events you need
-3. Unregister events when frames are hidden
-4. Use appropriate anchoring to maintain layout during screen resize
-5. Follow the naming conventions:
-   - FunctionName for functions
-   - variableName for variables
-   - CONSTANT_NAME for constants
-
-## Debug UI Tools
-
-The game includes a debug UI system accessible through the debug menu button:
-
-```lua
-function DebugUI_Toggle()
-    if (DebugPanel:IsVisible()) then
-        DebugPanel:Hide()
-    else
-        DebugPanel:Show()
-    end
-end
-```
-
-Debug UI components can be added with:
-```lua
-DebugUI_AddMenuButton('BUTTON_NAME', function()
-    -- Debug action
-end)
-```
+- UI entry points: `src/mmo_client/game_states/login_state.cpp`, `src/mmo_client/game_states/world_state.cpp`
+- Layout loader: `src/shared/frame_ui/layout_xml_loader.cpp`
+- Renderers: `src/shared/frame_ui/*_renderer.cpp`
+- Templates: `data/client/Interface/GameUI/GameTemplates.xml`, `data/client/Interface/GlueUI/GlueTemplates.xml`
+- Action bar example: `data/client/Interface/GameUI/ActionBar.xml`, `data/client/Interface/GameUI/ActionBar.lua`
+- Tutorials: `docs/ui_tutorials.md`

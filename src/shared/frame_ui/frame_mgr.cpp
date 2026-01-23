@@ -375,6 +375,14 @@ namespace mmo
 		LUABIND_MODULE(luaState,
 			luabind::def("Localize", &LuaLocalize),
 			luabind::def("getglobal", &FrameManager::GetGlobal),
+			luabind::def<std::function<Point()>>("GetCursorPosition", []()
+			{
+				// Convert screen coordinates to native resolution coordinates
+				// so the position can be used directly with anchor offsets
+				const Point mousePos = FrameManager::Get().GetMousePosition();
+				const Point uiScale = FrameManager::Get().GetUIScale();
+				return Point(mousePos.x / uiScale.x, mousePos.y / uiScale.y);
+			}),
 
 			luabind::scope(
 				luabind::class_<AnchorPoint>("AnchorPoint")
@@ -797,8 +805,10 @@ namespace mmo
 		}
 	}
 
-	void FrameManager::NotifyMouseDown(MouseButton button, const Point & position)
+	bool FrameManager::NotifyMouseDown(MouseButton button, const Point & position)
 	{
+		bool consumed = false;
+		
 		// Only works if we have a top frame
 		if (m_topFrame != nullptr)
 		{
@@ -816,14 +826,18 @@ namespace mmo
 				{
 					m_mouseDownFrames[button] = clickableFrame->shared_from_this();
 					m_pressedButtons |= static_cast<int32>(button);
-					clickableFrame->OnMouseDown(button, m_pressedButtons, position);
+					consumed = clickableFrame->OnMouseDown(button, m_pressedButtons, position);
 				}
 			}
 		}
+		
+		return consumed;
 	}
 
-	void FrameManager::NotifyMouseUp(MouseButton button, const Point & position)
+	bool FrameManager::NotifyMouseUp(MouseButton button, const Point & position)
 	{
+		bool consumed = false;
+		
 		// For mouse button up, we want to notify the same frame that received the corresponding
 		// MouseDown event, even if the new position doesn't hit the old frame. This is done so
 		// that the old frame can correctly update it's state.
@@ -833,7 +847,7 @@ namespace mmo
 			m_pressedButtons &= ~static_cast<int32>(button);
 			if (it->second)
 			{
-				it->second->OnMouseUp(button, m_pressedButtons, position);
+				consumed = it->second->OnMouseUp(button, m_pressedButtons, position);
 
 				if (button == Left && it->second->IsHovered() && !it->second->GetAbsoluteFrameRect().IsPointInRect(position))
 				{
@@ -843,6 +857,8 @@ namespace mmo
 				m_mouseDownFrames.erase(it);
 			}
 		}
+		
+		return consumed;
 	}
 
 	void FrameManager::NotifyKeyDown(Key key)

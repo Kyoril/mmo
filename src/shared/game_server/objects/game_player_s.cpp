@@ -230,19 +230,26 @@ namespace mmo
 	{
 		const auto &itemEntry = item.GetEntry();
 
-		// Check if item is usable
-		if (item.GetEntry().itemclass() == item_class::Weapon)
+		// Check if item requires proficiency
+		if (itemEntry.inventorytype() != inventory_type::NonEquip)
 		{
-			// Do not apply this: Proficiency check failed!
-			if ((GetWeaponProficiency() & (1 << item.GetEntry().subclass())) == 0)
+			// Get required proficiency ID from item entry or subclass
+			uint32 requiredProficiencyId = 0;
+			if (itemEntry.has_requiredproficiency() && itemEntry.requiredproficiency() > 0)
 			{
-				return;
+				requiredProficiencyId = itemEntry.requiredproficiency();
 			}
-		}
-		else if (item.GetEntry().itemclass() == item_class::Armor)
-		{
-			// Do not apply this: Proficiency check failed!
-			if ((GetArmorProficiency() & (1 << item.GetEntry().subclass())) == 0)
+			else if (itemEntry.has_subclass())
+			{
+				const auto* subclass = GetProject().itemSubclasses.getById(itemEntry.subclass());
+				if (subclass && subclass->has_requiredproficiency())
+				{
+					requiredProficiencyId = subclass->requiredproficiency();
+				}
+			}
+
+			// Do not apply if proficiency check failed
+			if (requiredProficiencyId > 0 && !HasProficiency(requiredProficiencyId))
 			{
 				return;
 			}
@@ -1006,6 +1013,9 @@ namespace mmo
 
 	void GamePlayerS::OnQuestItemAddedCredit(const proto::ItemEntry &entry, uint32 amount)
 	{
+		const uint32 currentTotal = m_inventory.GetItemCount(entry.id());
+		const uint32 previousTotal = (currentTotal >= amount) ? (currentTotal - amount) : 0;
+
 		// If this is set to true, all nearby objects will be updated
 		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
 		{
@@ -1043,19 +1053,31 @@ namespace mmo
 			// Check every quest entry requirement
 			for (const auto &req : quest->requirements())
 			{
+				uint32 requiredCount = 0;
 				if (req.itemid() == entry.id())
 				{
-					if (m_inventory.GetItemCount(entry.id()) >= req.itemcount())
-					{
-						validateQuest = true;
-					}
+					requiredCount = req.itemcount();
 				}
 				else if (req.sourceid() == entry.id())
 				{
-					if (m_inventory.GetItemCount(entry.id()) >= req.sourcecount())
-					{
-						validateQuest = true;
-					}
+					requiredCount = req.sourcecount();
+				}
+				else
+				{
+					continue;
+				}
+
+				const uint32 previousCount = std::min(previousTotal, requiredCount);
+				const uint32 currentCount = std::min(currentTotal, requiredCount);
+
+				if (currentCount > previousCount && m_netPlayerWatcher)
+				{
+					m_netPlayerWatcher->OnQuestItemCredit(*quest, entry.id(), currentCount, requiredCount);
+				}
+
+				if (currentCount >= requiredCount)
+				{
+					validateQuest = true;
 				}
 			}
 

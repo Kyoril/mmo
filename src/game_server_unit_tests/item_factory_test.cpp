@@ -66,6 +66,24 @@ namespace
 		std::map<uint16, std::shared_ptr<GameBagS>> m_bags;
 	};
 
+	namespace mock_item_class
+	{
+		enum Type
+		{
+			Consumable = 1,
+			Container = 2,
+			Quiver = 3
+		};
+	}
+
+	namespace mock_item_subclass_consumable
+	{
+		enum Type
+		{
+			Potion
+		};
+	}
+
 	/**
 	 * @brief Helper to build test item entries.
 	 */
@@ -75,8 +93,8 @@ namespace
 		ItemEntryBuilder()
 		{
 			m_entry.set_id(100);
-			m_entry.set_itemclass(item_class::Consumable);
-			m_entry.set_subclass(item_subclass_consumable::Potion);
+			m_entry.set_itemclass(mock_item_class::Consumable);
+			m_entry.set_subclass(mock_item_subclass_consumable::Potion);
 			m_entry.set_inventorytype(inventory_type::NonEquip);
 			m_entry.set_maxcount(0);
 			m_entry.set_maxstack(20);
@@ -89,7 +107,7 @@ namespace
 			return *this;
 		}
 
-		ItemEntryBuilder& WithClass(item_class::Type itemClass)
+		ItemEntryBuilder& WithClass(uint32 itemClass)
 		{
 			m_entry.set_itemclass(itemClass);
 			return *this;
@@ -132,7 +150,7 @@ TEST_CASE("ItemFactory - Basic item creation", "[item_factory]")
 	{
 		const auto entry = ItemEntryBuilder()
 			.WithId(100)
-			.WithClass(item_class::Consumable)
+			.WithClass(mock_item_class::Consumable)
 			.Build();
 
 		const auto slot = InventorySlot::FromRelative(
@@ -190,7 +208,7 @@ TEST_CASE("ItemFactory - Container creation", "[item_factory]")
 	SECTION("Creates GameBagS for container item class")
 	{
 		const auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Container)
+			.WithClass(mock_item_class::Container)
 			.WithContainerSlots(16)
 			.Build();
 
@@ -212,7 +230,7 @@ TEST_CASE("ItemFactory - Container creation", "[item_factory]")
 	SECTION("Creates GameBagS for quiver item class")
 	{
 		const auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Quiver)
+			.WithClass(mock_item_class::Quiver)
 			.WithContainerSlots(20)
 			.Build();
 
@@ -325,7 +343,7 @@ TEST_CASE("ItemFactory - Container assignment", "[item_factory]")
 
 		// Create and setup a bag
 		const auto bagEntry = ItemEntryBuilder()
-			.WithClass(item_class::Container)
+			.WithClass(mock_item_class::Container)
 			.WithContainerSlots(16)
 			.Build();
 

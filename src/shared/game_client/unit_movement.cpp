@@ -6,6 +6,7 @@
 #include "scene_graph/scene.h"
 #include "math/capsule.h"
 #include "math/aabb.h"
+#include "math/ray.h"
 
 #include <cmath>
 #include <cfloat>
@@ -15,18 +16,39 @@
 
 namespace mmo
 {
+	/// @brief Debug flag to enable detailed movement logging.
+	/// Set to true to see detailed logs for debugging movement issues.
+	#define DEBUG_MOVEMENT_LOGS 0
+	
+	// Helper macro for movement debug logging - only logs when DEBUG_MOVEMENT_LOGS is true
+	#if DEBUG_MOVEMENT_LOGS
+	#	define MOVEMENT_LOG(msg) if (DEBUG_MOVEMENT_LOGS) { DLOG(msg); }
+	#else
+	#	define MOVEMENT_LOG(msg)
+	#endif
+
 	constexpr float MIN_TICK_TIME = 1e-6f;
 	constexpr float MIN_FLOOR_DIST = 0.019f;
 	constexpr float MAX_FLOOR_DIST = 0.024f;
 	constexpr float BRAKE_TO_STOP_VELOCITY = 0.1f;
 	constexpr float SWEEP_EDGE_REJECT_DISTANCE = 0.0015f;
+	
+	/// @brief Minimum time threshold for velocity computation after collision deflection.
+	/// If remaining time is smaller than this, we use this value to prevent velocity explosion.
+	constexpr float MIN_TIME_FOR_VELOCITY_COMPUTATION = 0.001f;
+	
+	/// @brief Maximum velocity boost factor allowed when computing deflection velocity.
+	/// This prevents extreme velocities when the remaining time is very small.
+	constexpr float MAX_VELOCITY_BOOST_FACTOR = 2.0f;
 
 	static const auto s_stringColor = Color(0.0f, 0.66f, 1.0f);
 
 	void FindFloorResult::SetFromSweep(const CollisionHitResult& hit, const float sweepFloorDistance,
 	                                   const bool isWalkableFloor)
 	{
-		bValidFloor = hit.IsValidBlockingHit();
+		// For valid floor detection, we accept either a valid blocking hit OR
+		// a penetrating hit that has a walkable surface (we can depenetrate from it)
+		bValidFloor = hit.IsValidBlockingHit() || (hit.bStartPenetrating && isWalkableFloor);
 		bWalkableFloor = isWalkableFloor;
 		bLineTrace = false;
 		FloorDistance = sweepFloorDistance;
@@ -160,6 +182,25 @@ namespace mmo
 
 			// make sure we update our new floor/base on initial entry of the walking physics
 			FindFloor(GetUpdatedNode().GetPosition(), m_currentFloor, nullptr);
+			
+			// Handle initial penetration when switching to walking mode
+			// This helps when a character spawns slightly inside the ground
+			if (m_currentFloor.HitResult.bStartPenetrating && !m_currentFloor.IsWalkableFloor())
+			{
+				MOVEMENT_LOG("SetMovementMode: Starting in penetration, attempting to resolve");
+				CollisionHitResult hit(m_currentFloor.HitResult);
+				
+				// Try pushing upward to get out of the floor
+				const float penetrationDepth = hit.PenetrationDepth > 0.f ? hit.PenetrationDepth : 0.125f;
+				const Vector3 upwardAdjustment = -GetGravityDirection() * (penetrationDepth + 0.05f);
+				
+				if (ResolvePenetration(upwardAdjustment, hit, GetUpdatedNode().GetOrientation()))
+				{
+					// After resolving penetration, re-check the floor
+					FindFloor(GetUpdatedNode().GetPosition(), m_currentFloor, nullptr);
+				}
+			}
+			
 			AdjustFloorHeight();
 		}
 		else
@@ -505,15 +546,37 @@ namespace mmo
 			{
 				AdjustFloorHeight();
 			}
-			else if (m_currentFloor.HitResult.bStartPenetrating && remainingTime <= 0.f)
+			else if (m_currentFloor.HitResult.bStartPenetrating)
 			{
 				// The floor check failed because it started in penetration
 				// We do not want to try to move downward because the downward sweep failed, rather we'd like to try to pop out of the floor.
 				CollisionHitResult hit(m_currentFloor.HitResult);
 				hit.TraceEnd = hit.TraceStart + -GetGravityDirection() * MAX_FLOOR_DIST;
-				const Vector3 requestedAdjustment = GetPenetrationAdjustment(hit);
-				ResolvePenetration(requestedAdjustment, hit, GetUpdatedNode().GetOrientation());
-				//bForceNextFloorCheck = true;
+				
+				// For penetration, push upward (against gravity) to get out of the floor
+				Vector3 requestedAdjustment = GetPenetrationAdjustment(hit);
+				
+				// If the normal-based adjustment is too horizontal (which can happen when hitting terrain edges),
+				// try pushing directly upward instead
+				const float adjustmentUpwardComponent = GetGravitySpaceY(-requestedAdjustment);
+				if (adjustmentUpwardComponent < 0.01f && hit.bStartPenetrating)
+				{
+					// The adjustment is mostly horizontal - try pushing straight up instead
+					const float penetrationDepth = hit.PenetrationDepth > 0.f ? hit.PenetrationDepth : 0.125f;
+					requestedAdjustment = -GetGravityDirection() * (penetrationDepth + 0.01f);
+					MOVEMENT_LOG("HandleWalking: Penetration adjustment was horizontal, pushing up instead: " 
+						<< requestedAdjustment.x << ", " << requestedAdjustment.y << ", " << requestedAdjustment.z);
+				}
+				
+				if (ResolvePenetration(requestedAdjustment, hit, GetUpdatedNode().GetOrientation()))
+				{
+					// After resolving penetration, re-check the floor
+					FindFloor(GetUpdatedNode().GetPosition(), m_currentFloor, nullptr);
+					if (m_currentFloor.IsWalkableFloor())
+					{
+						AdjustFloorHeight();
+					}
+				}
 			}
 
 			// check if just entered water
@@ -527,6 +590,9 @@ namespace mmo
 			// See if we need to start falling.
 			if (!m_currentFloor.IsWalkableFloor() && !m_currentFloor.HitResult.bStartPenetrating)
 			{
+				MOVEMENT_LOG("HandleWalking: Floor not walkable! bBlockingHit=" << m_currentFloor.HitResult.bBlockingHit 
+					<< ", normal=(" << m_currentFloor.HitResult.ImpactNormal.x << "," << m_currentFloor.HitResult.ImpactNormal.y << "," << m_currentFloor.HitResult.ImpactNormal.z << ")"
+					<< ", bLineTrace=" << m_currentFloor.bLineTrace << ", FloorDistance=" << m_currentFloor.FloorDistance);
 				const bool bMustJump = m_justTeleported || zeroDelta;
 				if ((bMustJump || !checkedFall) && CheckFall(delta, oldLocation, remainingTime, timeTick,
 				                                             iterations))
@@ -923,7 +989,12 @@ namespace mmo
 
 			if (hit.bStartPenetrating)
 			{
-				assert(false);
+				// Still stuck - try to resolve the penetration
+				const Vector3 requestedAdjustment = GetPenetrationAdjustment(hit);
+				if (!requestedAdjustment.IsZero())
+				{
+					ResolvePenetration(requestedAdjustment, hit, GetUpdatedNode().GetOrientation());
+				}
 				//OnCharacterStuckInGeometry(&Hit);
 			}
 		}
@@ -948,6 +1019,7 @@ namespace mmo
 				if (CanStepUp(hit))
 				{
 					// hit a barrier, try to step up
+					MOVEMENT_LOG("MoveAlongFloor: Attempting StepUp, hit.ImpactPoint=(" << hit.ImpactPoint.x << "," << hit.ImpactPoint.y << "," << hit.ImpactPoint.z << "), hit.ImpactNormal=(" << hit.ImpactNormal.x << "," << hit.ImpactNormal.y << "," << hit.ImpactNormal.z << ")");
 					const Vector3 preStepUpLocation = GetUpdatedNode().GetPosition();
 					if (!StepUp(GetGravityDirection(), delta * (1.f - percentTimeApplied), hit, outStepDownResult))
 					{
@@ -1170,9 +1242,23 @@ namespace mmo
 				Vector3 delta = ComputeSlideVector(adjusted, 1.f - hit.Time, oldHitNormal);
 
 				// Compute velocity after deflection (only gravity component for RootMotion)
+				// Use a safe minimum time to prevent velocity explosion when subTimeTickRemaining is very small
 				if (subTimeTickRemaining > 1.e-4f && !m_justTeleported)
 				{
-					const Vector3 newVelocity = (delta / subTimeTickRemaining);
+					const float safeTimeRemaining = std::max(subTimeTickRemaining, MIN_TIME_FOR_VELOCITY_COMPUTATION);
+					Vector3 newVelocity = delta / safeTimeRemaining;
+					
+					// Clamp velocity magnitude to prevent extreme values
+					// The new velocity should not exceed the original velocity by more than a reasonable factor
+					const float originalSpeed = oldVelocity.GetLength();
+					const float maxAllowedSpeed = std::max(originalSpeed * MAX_VELOCITY_BOOST_FACTOR, GetMaxSpeed());
+					const float newSpeed = newVelocity.GetLength();
+					
+					if (newSpeed > maxAllowedSpeed && newSpeed > 1.e-4f)
+					{
+						newVelocity = newVelocity * (maxAllowedSpeed / newSpeed);
+					}
+					
 					m_velocity = newVelocity;
 				}
 
@@ -1226,10 +1312,23 @@ namespace mmo
 						}
 
 						// Compute velocity after deflection (only gravity component for RootMotion)
+						// Use a safe minimum time to prevent velocity explosion when subTimeTickRemaining is very small
 						if (subTimeTickRemaining > 1.e-4f && !m_justTeleported)
 						{
-							const Vector3 NewVelocity = (delta / subTimeTickRemaining);
-							m_velocity = NewVelocity;
+							const float safeTimeRemaining = std::max(subTimeTickRemaining, MIN_TIME_FOR_VELOCITY_COMPUTATION);
+							Vector3 newVelocity = delta / safeTimeRemaining;
+							
+							// Clamp velocity magnitude to prevent extreme values
+							const float originalSpeed = oldVelocity.GetLength();
+							const float maxAllowedSpeed = std::max(originalSpeed * MAX_VELOCITY_BOOST_FACTOR, GetMaxSpeed());
+							const float newSpeed = newVelocity.GetLength();
+							
+							if (newSpeed > maxAllowedSpeed && newSpeed > 1.e-4f)
+							{
+								newVelocity = newVelocity * (maxAllowedSpeed / newSpeed);
+							}
+							
+							m_velocity = newVelocity;
 						}
 
 						// bDitch=true means that pawn is straddling two slopes, neither of which it can stand on
@@ -1326,29 +1425,37 @@ namespace mmo
 	{
 		if (!CanStepUp(inHit) || m_maxStepHeight <= 0.f)
 		{
+			MOVEMENT_LOG("StepUp: Failed - CanStepUp=" << CanStepUp(inHit) << ", maxStepHeight=" << m_maxStepHeight);
 			return false;
 		}
 
 		const Vector3 oldLocation = GetUpdatedNode().GetPosition();
-		float pawnRadius = 0.35f, pawnHalfHeight = 1.0f;
+		const float pawnRadius = GetCapsuleRadius();
+		const float pawnHalfHeight = GetCapsuleHalfHeight();
 
 		// Don't bother stepping up if top of capsule is hitting something.
+		// With feet-based positioning: top of lower hemisphere = feetY + radius
+		// Top of capsule = feetY + totalHeight = feetY + 2*halfHeight
 		const float initialImpactY = inHit.ImpactPoint | -gravDir;
 		const float oldLocationY = oldLocation | -gravDir;
-		if (initialImpactY > oldLocationY + (pawnHalfHeight - pawnRadius))
+		// Check if impact is above the top of lower hemisphere (which starts at feetY + radius)
+		if (initialImpactY > oldLocationY + (pawnHalfHeight * 2.0f - pawnRadius))
 		{
+			MOVEMENT_LOG("StepUp: Failed - impact above capsule top. impactY=" << initialImpactY << ", limit=" << (oldLocationY + pawnHalfHeight * 2.0f - pawnRadius));
 			return false;
 		}
 
 		if (gravDir.IsZero())
 		{
+			MOVEMENT_LOG("StepUp: Failed - gravDir is zero");
 			return false;
 		}
 
 		float stepTravelUpHeight = m_maxStepHeight;
 		float stepTravelDownHeight = stepTravelUpHeight;
 		const float stepSideY = -1.f * inHit.ImpactNormal.Dot(gravDir);
-		float initialFloorBaseY = oldLocationY - pawnHalfHeight;
+		// With feet-based positioning, the floor base IS the feet position (oldLocationY)
+		float initialFloorBaseY = oldLocationY;
 		float floorPointY = initialFloorBaseY;
 
 		if (IsMovingOnGround() && m_currentFloor.IsWalkableFloor())
@@ -1358,6 +1465,8 @@ namespace mmo
 			initialFloorBaseY -= floorDist;
 			stepTravelUpHeight = std::max(stepTravelUpHeight - floorDist, 0.f);
 			stepTravelDownHeight = (m_maxStepHeight + MAX_FLOOR_DIST * 2.f);
+
+			MOVEMENT_LOG("StepUp: floorDist=" << floorDist << ", stepTravelUpHeight=" << stepTravelUpHeight);
 
 			const bool bHitVerticalFace = !IsWithinEdgeTolerance(inHit.Location, inHit.ImpactPoint, pawnRadius);
 			if (!m_currentFloor.bLineTrace && !bHitVerticalFace)
@@ -1374,6 +1483,7 @@ namespace mmo
 		// Don't step up if the impact is below us, accounting for distance from floor.
 		if (initialImpactY <= initialFloorBaseY)
 		{
+			MOVEMENT_LOG("StepUp: Failed - impact below floor. impactY=" << initialImpactY << ", floorBaseY=" << initialFloorBaseY);
 			return false;
 		}
 
@@ -1387,20 +1497,40 @@ namespace mmo
 
 		if (sweepUpHit.bStartPenetrating)
 		{
+			MOVEMENT_LOG("StepUp: Failed - sweepUp started penetrating");
 			// Undo movement
 			scopedStepUpMovement.RevertMove();
 			return false;
 		}
+		MOVEMENT_LOG("StepUp: Swept up by " << stepTravelUpHeight << ", hit=" << sweepUpHit.bBlockingHit << ", time=" << sweepUpHit.Time);
 
 		// step fwd
+		// First try with original delta, but if that fails due to hitting the step's front face,
+		// we may need a slightly larger forward movement to clear the edge.
+		// We use a smaller boost (half radius) to avoid excessive speed on stairs.
+		Vector3 forwardDelta = delta;
+		const float deltaLength = delta.GetLength();
+		const float minForwardDist = pawnRadius * 0.5f;  // Use half radius as minimum to balance step-up vs speed
+		bool didBoostForward = false;
+		
+		if (deltaLength > 1e-6f && deltaLength < minForwardDist)
+		{
+			// Scale up the delta to ensure minimum forward movement
+			forwardDelta = delta.NormalizedCopy() * minForwardDist;
+			didBoostForward = true;
+			MOVEMENT_LOG("StepUp: Boosting forward delta from " << deltaLength << " to " << minForwardDist);
+		}
+
 		CollisionHitResult hit(1.f);
-		SafeMoveNode(delta, rotation, true, &hit);
+		SafeMoveNode(forwardDelta, rotation, true, &hit);
+		MOVEMENT_LOG("StepUp: Forward move delta=(" << forwardDelta.x << "," << forwardDelta.y << "," << forwardDelta.z << "), hit=" << hit.bBlockingHit << ", time=" << hit.Time);
 
 		// Check result of forward movement
 		if (hit.bBlockingHit)
 		{
 			if (hit.bStartPenetrating)
 			{
+				MOVEMENT_LOG("StepUp: Failed - forward move started penetrating");
 				// Undo movement
 				scopedStepUpMovement.RevertMove();
 				return false;
@@ -1423,7 +1553,7 @@ namespace mmo
 
 			// adjust and try again
 			const float forwardHitTime = hit.Time;
-			const float forwardSlideAmount = SlideAlongSurface(delta, 1.f - hit.Time, hit.Normal, hit, true);
+			const float forwardSlideAmount = SlideAlongSurface(forwardDelta, 1.f - hit.Time, hit.Normal, hit, true);
 
 			if (IsFalling())
 			{
@@ -1434,17 +1564,21 @@ namespace mmo
 			// If both the forward hit and the deflection got us nowhere, there is no point in this step up.
 			if (forwardHitTime == 0.f && forwardSlideAmount == 0.f)
 			{
+				MOVEMENT_LOG("StepUp: Failed - no forward progress. forwardHitTime=" << forwardHitTime << ", forwardSlideAmount=" << forwardSlideAmount);
 				scopedStepUpMovement.RevertMove();
 				return false;
 			}
 		}
 
 		// Step down
+		MOVEMENT_LOG("StepUp: About to step down by " << stepTravelDownHeight);
 		SafeMoveNode(gravDir * stepTravelDownHeight, GetUpdatedNode().GetOrientation(), true, &hit);
+		MOVEMENT_LOG("StepUp: Step down hit=" << hit.bBlockingHit << ", time=" << hit.Time << ", penetrating=" << hit.bStartPenetrating);
 
 		// If step down was initially penetrating abort the step-up
 		if (hit.bStartPenetrating)
 		{
+			MOVEMENT_LOG("StepUp: Failed - step down started penetrating");
 			scopedStepUpMovement.RevertMove();
 			return false;
 		}
@@ -1454,8 +1588,10 @@ namespace mmo
 		{
 			// See if this step sequence had allowed us to travel higher than our max step height allows.
 			const float deltaZ = (hit.ImpactPoint | -gravDir) - floorPointY;
+			MOVEMENT_LOG("StepUp: deltaZ=" << deltaZ << ", impactPointY=" << (hit.ImpactPoint | -gravDir) << ", floorPointY=" << floorPointY);
 			if (deltaZ > m_maxStepHeight)
 			{
+				MOVEMENT_LOG("StepUp: Failed - deltaZ > maxStepHeight (" << deltaZ << " > " << m_maxStepHeight << ")");
 				scopedStepUpMovement.RevertMove();
 				return false;
 			}
@@ -1463,10 +1599,12 @@ namespace mmo
 			// Reject unwalkable surface normals here.
 			if (!IsWalkable(hit))
 			{
+				MOVEMENT_LOG("StepUp: Surface not walkable, normal=(" << hit.ImpactNormal.x << "," << hit.ImpactNormal.y << "," << hit.ImpactNormal.z << ")");
 				// Reject if normal opposes movement direction
 				const bool bNormalTowardsMe = (delta | hit.ImpactNormal) < 0.f;
 				if (bNormalTowardsMe)
 				{
+					MOVEMENT_LOG("StepUp: Failed - unwalkable surface normal towards me");
 					scopedStepUpMovement.RevertMove();
 					return false;
 				}
@@ -1475,6 +1613,7 @@ namespace mmo
 				// It's fine to step down onto an unwalkable normal below us, we will just slide off. Rejecting those moves would prevent us from being able to walk off the edge.
 				if ((hit.Location | -gravDir) > oldLocationY)
 				{
+					MOVEMENT_LOG("StepUp: Failed - unwalkable surface and ending higher than start");
 					scopedStepUpMovement.RevertMove();
 					return false;
 				}
@@ -1483,6 +1622,7 @@ namespace mmo
 			// Reject moves where the downward sweep hit something very close to the edge of the capsule. This maintains consistency with FindFloor as well.
 			if (!IsWithinEdgeTolerance(hit.Location, hit.ImpactPoint, pawnRadius))
 			{
+				MOVEMENT_LOG("StepUp: Failed - not within edge tolerance");
 				scopedStepUpMovement.RevertMove();
 				return false;
 			}
@@ -1490,6 +1630,7 @@ namespace mmo
 			// Don't step up onto invalid surfaces if traveling higher.
 			if (deltaZ > 0.f && !CanStepUp(hit))
 			{
+				MOVEMENT_LOG("StepUp: Failed - deltaZ>0 but CanStepUp=false");
 				scopedStepUpMovement.RevertMove();
 				return false;
 			}
@@ -1525,6 +1666,7 @@ namespace mmo
 		// Don't recalculate velocity based on this height adjustment, if considering vertical adjustments.
 		m_justTeleported |= !m_maintainHorizontalGroundVelocity;
 
+		MOVEMENT_LOG("StepUp: SUCCESS!");
 		return true;
 	}
 
@@ -1567,7 +1709,7 @@ namespace mmo
 		if (GetGravitySpaceY(hit.Normal) > 1.e-4f && !hit.Normal.IsNearlyEqual(hit.ImpactNormal))
 		{
 			const Vector3 pawnLocation = GetUpdatedNode().GetPosition();
-			if (IsWithinEdgeTolerance(pawnLocation, hit.ImpactPoint, 0.35f))
+			if (IsWithinEdgeTolerance(pawnLocation, hit.ImpactPoint, GetCapsuleRadius()))
 			{
 				return true;
 			}
@@ -1604,6 +1746,7 @@ namespace mmo
 	{
 		if (!hit.bBlockingHit)
 		{
+			MOVEMENT_LOG("IsValidLandingSpot: Failed - no blocking hit");
 			return false;
 		}
 
@@ -1613,21 +1756,36 @@ namespace mmo
 			// Reject unwalkable floor normals.
 			if (!IsWalkable(hit))
 			{
+				MOVEMENT_LOG("IsValidLandingSpot: Failed - not walkable. ImpactNormal=(" << hit.ImpactNormal.x << "," << hit.ImpactNormal.y << "," << hit.ImpactNormal.z << "), walkableFloorY=" << m_walkableFloorY);
 				return false;
 			}
 
-			constexpr float pawnRadius = 0.35f;
+			const float pawnRadius = GetCapsuleRadius();
 
 			// Reject hits that are above our lower hemisphere (can happen when sliding down a vertical surface).
-			const float lowerHemisphereY = GetGravitySpaceY(hit.Location);
-			if (GetGravitySpaceY(hit.ImpactPoint) >= lowerHemisphereY)
+			// With feet-based positioning, the lower hemisphere center is at feetY + radius
+			const float lowerHemisphereCenterY = GetGravitySpaceY(hit.Location) + pawnRadius;
+			if (GetGravitySpaceY(hit.ImpactPoint) >= lowerHemisphereCenterY)
 			{
+				MOVEMENT_LOG("IsValidLandingSpot: Failed - impact above lower hemisphere. impactY=" << GetGravitySpaceY(hit.ImpactPoint) << ", lowerHemisphereCenterY=" << lowerHemisphereCenterY);
 				return false;
 			}
 
-			// Reject hits that are barely on the cusp of the radius of the capsule
-			if (!IsWithinEdgeTolerance(hit.Location, hit.ImpactPoint, pawnRadius))
+			// Reject hits that are barely on the cusp of the radius of the capsule.
+			// However, skip this check for walkable surfaces since:
+			// 1. Terrain triangles may report impact points that are geometrically at triangle
+			//    edges/vertices rather than directly below the capsule center
+			// 2. A walkable slope is not a thin ledge that we could perch on
+			// The edge tolerance check is specifically to prevent perching on thin ledges,
+			// which will have steep (non-walkable) normals anyway.
+			const float gravityNormalY = GetGravitySpaceY(hit.ImpactNormal);
+			const bool isWalkableSurface = gravityNormalY >= m_walkableFloorY;
+			
+			if (!isWalkableSurface && !IsWithinEdgeTolerance(hit.Location, hit.ImpactPoint, pawnRadius))
 			{
+				const float distFromCenterSq = ProjectToGravityFloor(hit.ImpactPoint - hit.Location).GetSquaredLength();
+				const float reducedRadius = std::max(SWEEP_EDGE_REJECT_DISTANCE + 1.e-4f, pawnRadius - SWEEP_EDGE_REJECT_DISTANCE);
+				MOVEMENT_LOG("IsValidLandingSpot: Failed - not within edge tolerance. distFromCenter=" << std::sqrt(distFromCenterSq) << ", reducedRadius=" << reducedRadius << ", pawnRadius=" << pawnRadius);
 				return false;
 			}
 		}
@@ -1646,9 +1804,11 @@ namespace mmo
 
 		if (!floorResult.IsWalkableFloor())
 		{
+			MOVEMENT_LOG("IsValidLandingSpot: Failed - FindFloor returned non-walkable. bLineTrace=" << floorResult.bLineTrace << ", FloorDistance=" << floorResult.FloorDistance);
 			return false;
 		}
 
+		MOVEMENT_LOG("IsValidLandingSpot: SUCCESS");
 		return true;
 	}
 
@@ -1982,6 +2142,79 @@ namespace mmo
 		return false;
 	}
 
+	bool UnitMovement::SweepSingleCastWithRadius(const Vector3& start, const Vector3& end, const float radius, CollisionHitResult& outHit, const CollisionParams& params) const
+	{
+		// Similar to SweepMultiCast but uses a custom capsule radius
+		Scene& scene = GetUpdatedNode().GetScene();
+
+		const Vector3 sweepVector = end - start;
+		const float sweepDistance = sweepVector.GetLength();
+
+		// Early exit for zero-distance sweeps
+		if (sweepDistance < 1e-6f)
+		{
+			outHit.Init(start, end);
+			return false;
+		}
+
+		// Create capsules with custom radius for the sweep
+		const Capsule startCapsule = CreateCapsuleAtPositionWithRadius(start, radius);
+		const Capsule endCapsule = CreateCapsuleAtPositionWithRadius(end, radius);
+
+		// Create a bounding box that encompasses the entire sweep
+		AABB sweepBounds = startCapsule.GetBounds();
+		sweepBounds.Combine(endCapsule.GetBounds());
+
+		std::vector<CollisionHitResult> hits;
+
+		// Query the scene for potential collision candidates
+		const auto query = scene.CreateAABBQuery(sweepBounds);
+		if (query)
+		{
+			query->SetQueryMask(params.QueryMask);
+			query->Execute(*query);
+
+			const auto& queryResult = query->GetLastResult();
+			for (const auto& movable : queryResult)
+			{
+				const ICollidable* collidable = movable->GetCollidable();
+				if (!collidable || !collidable->IsCollidable())
+				{
+					continue;
+				}
+
+				// Perform swept collision test against this collidable
+				std::vector<CollisionResult> collisionResults;
+				if (SweepCapsuleAgainstCollidable(startCapsule, endCapsule, collidable, collisionResults))
+				{
+					// Convert collision results to HitResults
+					for (const auto& collisionResult : collisionResults)
+					{
+						CollisionHitResult hitResult = ConvertCollisionToHitResult(
+							collisionResult, start, end, collisionResult.distance);
+						hits.push_back(hitResult);
+					}
+				}
+			}
+		}
+
+		if (!hits.empty())
+		{
+			// Sort by time and get first blocking hit
+			std::sort(hits.begin(), hits.end(), [](const CollisionHitResult& a, const CollisionHitResult& b)
+			{
+				return a.Time < b.Time;
+			});
+
+			const CollisionHitResult* blockingHit = CollisionHitResult::GetFirstBlockingHit(hits);
+			outHit = blockingHit ? *blockingHit : hits[0];
+			return true;
+		}
+
+		outHit.Init(start, end);
+		return false;
+	}
+
 	bool UnitMovement::DoJump()
 	{
 		if (m_movedUnit.CanJump())
@@ -2011,9 +2244,44 @@ namespace mmo
 		m_walkableFloorY = std::cos(m_walkableFloorAngle.GetValueRadians());
 	}
 
+	float UnitMovement::GetCapsuleRadius() const
+	{
+		return m_movedUnit.GetCollider().GetRadius();
+	}
+
+	float UnitMovement::GetCapsuleHalfHeight() const
+	{
+		// Half-height is the distance from center to the sphere centers at top/bottom
+		// This matches Unreal's convention for capsule half-height
+		constexpr float lineHalfHeight = 0.65f; // From GameUnitC::UpdateCollider
+		return lineHalfHeight + GetCapsuleRadius();
+	}
+
+	float UnitMovement::GetCapsuleTotalHeight() const
+	{
+		// Total height = line segment length + diameter of sphere caps
+		constexpr float lineHalfHeight = 0.65f;
+		const float radius = GetCapsuleRadius();
+		return (lineHalfHeight * 2.0f) + (radius * 2.0f);
+	}
+
 	Capsule UnitMovement::CreateCapsuleAtPosition(const Vector3& position) const
 	{
-		const float radius = m_movedUnit.GetCollider().GetRadius();
+		// NOTE: 'position' is the BOTTOM CENTER (feet) of the capsule, not the center.
+		// This differs from Unreal Engine which uses center-based positioning.
+		const float radius = GetCapsuleRadius();
+		constexpr float halfHeight = 0.65f; // From GameUnitC::UpdateCollider
+
+		return {
+			position + Vector3(0.0f, radius, 0.0f),
+			position + Vector3(0.0f, radius + halfHeight * 2.0f, 0.0f),
+			radius
+		};
+	}
+
+	Capsule UnitMovement::CreateCapsuleAtPositionWithRadius(const Vector3& position, const float radius) const
+	{
+		// NOTE: 'position' is the BOTTOM CENTER (feet) of the capsule, not the center.
 		constexpr float halfHeight = 0.65f; // From GameUnitC::UpdateCollider
 
 		return {
@@ -2033,12 +2301,16 @@ namespace mmo
 		result.bStartPenetrating = collisionRes.distance == 0 && collisionRes.hasCollision;
 		result.Time = hitTime;
 		result.Distance = hitTime * (traceEnd - traceStart).GetLength();
+		result.PenetrationDepth = collisionRes.penetrationDepth;
 
 		if (collisionRes.hasCollision)
 		{
-			// Set hit location and impact point
+			// Set hit location (center of capsule at hit time)
 			result.Location = traceStart + (traceEnd - traceStart) * hitTime;
-			result.ImpactPoint = result.Location; //CollisionRes.contactPoint;
+			
+			// Set impact point to actual contact point on the surface
+			// This is critical for step-up logic to correctly determine impact height
+			result.ImpactPoint = collisionRes.contactPoint;
 
 			// Set normals
 			result.ImpactNormal = collisionRes.contactNormal;
@@ -2070,10 +2342,23 @@ namespace mmo
 			return collidable->TestCapsuleCollision(startCapsule, collisionResults);
 		}
 
-		// Use binary search or continuous collision detection instead of fixed steps
+		// Use binary search to find the first contact point.
+		// We search for the smallest t where collision occurs.
 		float minT = 0.0f;
 		float maxT = 1.0f;
-		const int maxIterations = 20;
+		
+		// First, check if there's any collision at the end position
+		std::vector<CollisionResult> endResults;
+		const bool hasEndCollision = collidable->TestCapsuleCollision(endCapsule, endResults);
+		if (!hasEndCollision)
+		{
+			// No collision throughout the entire sweep
+			return false;
+		}
+
+		// Binary search for the first contact time
+		constexpr int maxIterations = 20;
+		constexpr float convergenceThreshold = 0.0005f;
 
 		for (int iter = 0; iter < maxIterations; ++iter)
 		{
@@ -2101,7 +2386,21 @@ namespace mmo
 				minT = midT;
 			}
 
-			if (maxT - minT < 0.001f) break;
+			if (maxT - minT < convergenceThreshold)
+			{
+				break;
+			}
+		}
+
+		// After binary search, the actual first contact is at maxT (or very close to it).
+		// Use the last valid collision results which were stored when we found a collision.
+		// Ensure the distance/time is set to the converged maxT value for accuracy.
+		if (!collisionResults.empty())
+		{
+			for (auto& result : collisionResults)
+			{
+				result.distance = maxT;
+			}
 		}
 
 		return !collisionResults.empty();
@@ -2116,7 +2415,7 @@ namespace mmo
 
 	float UnitMovement::GetValidPerchRadius() const
 	{
-		constexpr float pawnRadius = 0.35f;
+		const float pawnRadius = GetCapsuleRadius();
 		return Clamp(pawnRadius - GetPerchRadiusThreshold(), 0.0011f, pawnRadius);
 	}
 
@@ -2169,13 +2468,14 @@ namespace mmo
 			return false;
 		}
 
-		constexpr float pawnRadius = 0.35f;
+		const float pawnRadius = GetCapsuleRadius();
 		// Sweep further than actual requested distance, because a reduced capsule radius means we could miss some hits that the normal radius would contact.
-		constexpr float pawnHalfHeight = 1.0f;
 		const Vector3 capsuleLocation = inHit.Location;
 
+		// With feet-based positioning, the impact point height above the base is simply the difference
+		// (no need to add pawnHalfHeight since capsuleLocation is already at the base)
 		const float inHitAboveBase = std::max<float>(
-			0.f, GetGravitySpaceY(inHit.ImpactPoint - capsuleLocation) + pawnHalfHeight);
+			0.f, GetGravitySpaceY(inHit.ImpactPoint - capsuleLocation));
 		const float perchLineDist = std::max(0.f, inMaxFloorDist - inHitAboveBase);
 		const float perchSweepDist = std::max(0.f, inMaxFloorDist);
 
@@ -2208,7 +2508,7 @@ namespace mmo
 		// Sweep floor
 		if (floorLineTraceDist > 0.f || floorSweepTraceDist > 0.f || m_justTeleported)
 		{
-			ComputeFloorDist(capsuleLocation, floorLineTraceDist, floorSweepTraceDist, floorResult, 0.35f,
+			ComputeFloorDist(capsuleLocation, floorLineTraceDist, floorSweepTraceDist, floorResult, GetCapsuleRadius(),
 			                 downwardSweepResult);
 		}
 
@@ -2219,6 +2519,7 @@ namespace mmo
 			constexpr bool bCheckRadius = true;
 			if (ShouldComputePerchResult(floorResult.HitResult, bCheckRadius))
 			{
+				MOVEMENT_LOG("FindFloor: Checking perch result...");
 				float maxPerchFloorDist = std::max(MAX_FLOOR_DIST, m_maxStepHeight + heightCheckAdjust);
 				if (IsMovingOnGround())
 				{
@@ -2247,7 +2548,16 @@ namespace mmo
 				else
 				{
 					// We had no floor (or an invalid one because it was unwalkable), and couldn't perch here, so invalidate floor (which will cause us to start falling).
-					floorResult.bWalkableFloor = false;
+					// However, don't invalidate if the floor was already marked as walkable by ComputeFloorDist
+					if (!floorResult.bWalkableFloor)
+					{
+						MOVEMENT_LOG("FindFloor: Perch failed, invalidating non-walkable floor");
+						floorResult.bWalkableFloor = false;
+					}
+					else
+					{
+						MOVEMENT_LOG("FindFloor: Perch failed, but floor was already walkable - keeping it");
+					}
 				}
 			}
 		}
@@ -2259,8 +2569,8 @@ namespace mmo
 	{
 		outFloorResult.Clear();
 
-		constexpr float pawnRadius = 0.35f;
-		constexpr float pawnHalfHeight = 1.0f;
+		const float pawnRadius = GetCapsuleRadius();
+		const float pawnHalfHeight = GetCapsuleHalfHeight();
 
 		bool skipSweep = false;
 		if (downwardSweepResult != nullptr && downwardSweepResult->IsValidBlockingHit())
@@ -2304,8 +2614,9 @@ namespace mmo
 		{
 			// Use a shorter height to avoid sweeps giving weird results if we start on a surface.
 			// This also allows us to adjust out of penetrations.
+			// With feet-based positioning, the shrinkable portion is the line segment portion (halfHeight - radius)
 			constexpr float shrinkScale = 0.9f;
-			constexpr float shrinkHeight = (pawnHalfHeight - pawnRadius) * (1.f - shrinkScale);
+			const float shrinkHeight = (pawnHalfHeight - pawnRadius) * (1.f - shrinkScale);
 			const float traceDist = sweepDistance + shrinkHeight;
 
 			CollisionHitResult hit(1.f);
@@ -2315,18 +2626,36 @@ namespace mmo
 			{
 				// Reduce hit distance by ShrinkHeight because we shrank the capsule for the trace.
 				// We allow negative distances here, because this allows us to pull out of penetrations.
-				constexpr float maxPenetrationAdjust = std::max(MAX_FLOOR_DIST, pawnRadius);
+				const float maxPenetrationAdjust = std::max(MAX_FLOOR_DIST, pawnRadius);
 				const float sweepResult = std::max(-maxPenetrationAdjust, hit.Time * traceDist - shrinkHeight);
 
+				MOVEMENT_LOG("ComputeFloorDist: bBlockingHit=1, hit.Time=" << hit.Time << ", traceDist=" << traceDist 
+					<< ", shrinkHeight=" << shrinkHeight << ", sweepResult=" << sweepResult
+					<< ", ImpactNormal=(" << hit.ImpactNormal.x << "," << hit.ImpactNormal.y << "," << hit.ImpactNormal.z << ")"
+					<< ", bStartPenetrating=" << static_cast<int32>(hit.bStartPenetrating));
+
 				outFloorResult.SetFromSweep(hit, sweepResult, false);
-				if (hit.IsValidBlockingHit() && IsWalkable(hit))
+				
+				// Check if walkable - for penetration cases (hit.Time == 0), we still want to 
+				// accept surfaces with walkable normals since we can depenetrate from them
+				const bool bIsWalkableNormal = IsWalkable(hit);
+				const bool bAcceptHit = hit.IsValidBlockingHit() || (hit.bStartPenetrating && bIsWalkableNormal);
+				
+				if (bAcceptHit && bIsWalkableNormal)
 				{
 					if (sweepResult <= sweepDistance)
 					{
 						// Hit within test distance.
 						outFloorResult.bWalkableFloor = true;
+						outFloorResult.bValidFloor = true;  // Also mark as valid floor
+						MOVEMENT_LOG("ComputeFloorDist: Floor is WALKABLE (penetrating=" << static_cast<int32>(hit.bStartPenetrating) << ")");
 						return;
 					}
+					MOVEMENT_LOG("ComputeFloorDist: sweepResult > sweepDistance (" << sweepResult << " > " << sweepDistance << ")");
+				}
+				else
+				{
+					MOVEMENT_LOG("ComputeFloorDist: Not walkable - IsValidBlockingHit=" << hit.IsValidBlockingHit() << ", IsWalkable=" << bIsWalkableNormal << ", bAcceptHit=" << bAcceptHit);
 				}
 			}
 		}
@@ -2339,9 +2668,47 @@ namespace mmo
 			return;
 		}
 
-		// Line trace
-		if (lineDistance > 0.f)
+		// Line trace - if the sweep hit an unwalkable surface OR if we started in penetration,
+		// try a line trace to find walkable floor beneath.
+		// This helps when the capsule sweep hits beveled edges of geometry but there's flat floor nearby,
+		// or when the character spawns slightly inside the ground.
+		const bool bShouldTryLineTrace = (outFloorResult.bValidFloor && !outFloorResult.bWalkableFloor) ||
+		                                  outFloorResult.HitResult.bStartPenetrating;
+		if (lineDistance > 0.f && bShouldTryLineTrace)
 		{
+			// The sweep found an unwalkable surface or started in penetration. Try a sweep with a very small radius 
+			// (like a line trace) straight down from the center of the capsule to check if there's walkable floor beneath.
+			// With feet-based positioning, trace from feet position + small offset down to lineDistance.
+			// For penetration cases, start the trace from higher up to get clear of the penetrating geometry.
+			const float traceStartOffset = outFloorResult.HitResult.bStartPenetrating ? 
+			                               (pawnHalfHeight * 0.5f) : MAX_FLOOR_DIST;
+			const Vector3 traceStart = capsuleLocation - GetGravityDirection() * traceStartOffset;
+			const Vector3 traceEnd = capsuleLocation + GetGravityDirection() * lineDistance;
+			
+			// Use a very small radius for line-like trace - this avoids hitting beveled edges
+			constexpr float lineTraceRadius = 0.05f;
+			
+			const float traceDist = (traceEnd - traceStart).GetLength();
+			
+			// Perform sweep with tiny radius
+			CollisionHitResult innerHit(1.f);
+			const bool bInnerHit = SweepSingleCastWithRadius(traceStart, traceEnd, lineTraceRadius, innerHit);
+			
+			if (bInnerHit && innerHit.bBlockingHit && IsWalkable(innerHit))
+			{
+				// Found walkable floor with line trace - use it
+				const float lineFloorDist = innerHit.Time * traceDist - traceStartOffset;
+				if (lineFloorDist <= lineDistance || outFloorResult.HitResult.bStartPenetrating)
+				{
+					MOVEMENT_LOG("ComputeFloorDist: Line trace found walkable floor at dist=" << lineFloorDist 
+						<< " (penetrating=" << static_cast<int32>(outFloorResult.HitResult.bStartPenetrating) << ")");
+					
+					// For penetration cases, mark the floor as valid so we can try to depenetrate
+					outFloorResult.SetFromLineTrace(innerHit, outFloorResult.FloorDistance, lineFloorDist, true);
+					outFloorResult.bValidFloor = true;
+					return;
+				}
+			}
 		}
 
 		// No hits were acceptable.
@@ -2350,7 +2717,8 @@ namespace mmo
 
 	bool UnitMovement::IsWalkable(const CollisionHitResult& hit) const
 	{
-		if (!hit.IsValidBlockingHit())
+		// Check if we have a blocking hit (including penetration cases)
+		if (!hit.bBlockingHit)
 		{
 			return false;
 		}
@@ -2400,7 +2768,60 @@ namespace mmo
 			const float initialY = GetGravitySpaceY(GetUpdatedNode().GetPosition());
 			constexpr float avgFloorDist = (MIN_FLOOR_DIST + MAX_FLOOR_DIST) * 0.5f;
 			const float moveDist = avgFloorDist - oldFloorDist;
+			
+			// If we're starting in penetration (negative floor distance indicates we're below the floor surface),
+			// we need to move without sweeping to get out, as a sweep will fail immediately.
+			// Check both the HitResult flag AND negative floor distance, since the line trace might have 
+			// replaced the HitResult with one that doesn't have bStartPenetrating set.
+			const bool bStartingInPenetration = m_currentFloor.HitResult.bStartPenetrating || oldFloorDist < 0.f;
+			if (bStartingInPenetration && moveDist > 0.f)
+			{
+				MOVEMENT_LOG("AdjustFloorHeight: Attempting penetration escape, oldFloorDist=" << oldFloorDist << ", moveDist=" << moveDist);
+				
+				// We're in penetration and need to move up - try without sweep first to escape
+				// Check if the destination is clear using an overlap test
+				const Vector3 targetPosition = GetUpdatedNode().GetPosition() - GetGravityDirection() * moveDist;
+				if (!OverlapTest(targetPosition, CollisionParams()))
+				{
+					// Destination is clear, teleport there
+					GetUpdatedNode().SetPosition(targetPosition);
+					m_currentFloor.FloorDistance = avgFloorDist;
+					m_justTeleported = true;
+					MOVEMENT_LOG("AdjustFloorHeight: Teleported up " << moveDist << " to escape penetration");
+					return;
+				}
+				else
+				{
+					// Try smaller increments to find a valid position
+					constexpr int maxSteps = 10;
+					const float stepSize = moveDist / maxSteps;
+					for (int i = maxSteps; i > 0; --i)
+					{
+						const float testDist = stepSize * i;
+						const Vector3 testPosition = GetUpdatedNode().GetPosition() - GetGravityDirection() * testDist;
+						if (!OverlapTest(testPosition, CollisionParams()))
+						{
+							GetUpdatedNode().SetPosition(testPosition);
+							m_currentFloor.FloorDistance = oldFloorDist + testDist;
+							m_justTeleported = true;
+							MOVEMENT_LOG("AdjustFloorHeight: Teleported up " << testDist << " (partial) to escape penetration");
+							return;
+						}
+					}
+					// Could not find clear space - this is problematic, but continue with normal logic
+					MOVEMENT_LOG("AdjustFloorHeight: Could not find clear space above to escape penetration");
+				}
+			}
+			
 			SafeMoveNode(-GetGravityDirection() * moveDist, GetUpdatedNode().GetOrientation(), true, &adjustHit);
+
+			// Check if we actually moved - bStartPenetrating means sweep failed at start
+			if (adjustHit.bStartPenetrating)
+			{
+				// Sweep started in penetration and couldn't move - don't update floor distance
+				MOVEMENT_LOG("AdjustFloorHeight: Sweep failed due to penetration, no movement");
+				return;
+			}
 
 			if (!adjustHit.IsValidBlockingHit())
 			{
@@ -2424,6 +2845,90 @@ namespace mmo
 			// Also avoid it if we moved out of penetration
 			m_justTeleported |= !m_maintainHorizontalGroundVelocity || (oldFloorDist < 0.f);
 		}
+	}
+
+	bool UnitMovement::CorrectGroundHeight(const float maxCorrectionDistance)
+	{
+		const Vector3 currentPosition = GetUpdatedNode().GetPosition();
+		Scene& scene = GetUpdatedNode().GetScene();
+
+		// Create a ray going straight down from current position
+		// Start slightly above current position to handle cases where we're already on or in the ground
+		const Vector3 rayStart = currentPosition + Vector3(0.0f, 1.0f, 0.0f);
+		const Vector3 rayEnd = currentPosition - Vector3(0.0f, maxCorrectionDistance + 1.0f, 0.0f);
+		const Ray ray(rayStart, rayEnd);
+
+		// Query the scene for collidable objects in the sweep path
+		const AABB sweepBounds(
+			Vector3(
+				currentPosition.x - 0.5f,
+				currentPosition.y - maxCorrectionDistance - 1.0f,
+				currentPosition.z - 0.5f),
+			Vector3(
+				currentPosition.x + 0.5f,
+				currentPosition.y + 2.0f,
+				currentPosition.z + 0.5f));
+
+		const auto query = scene.CreateAABBQuery(sweepBounds);
+		if (!query)
+		{
+			return false;
+		}
+
+		query->SetQueryMask(0xFFFFFFFF);
+		query->Execute(*query);
+
+		const auto& queryResult = query->GetLastResult();
+		
+		float closestHitY = currentPosition.y - maxCorrectionDistance - 1.0f;
+		bool foundGround = false;
+
+		for (const auto& movable : queryResult)
+		{
+			const ICollidable* collidable = movable->GetCollidable();
+			if (!collidable || !collidable->IsCollidable())
+			{
+				continue;
+			}
+
+			// Test ray collision against this collidable
+			CollisionResult result;
+			if (collidable->TestRayCollision(ray, result))
+			{
+				if (result.hasCollision && result.contactPoint.y > closestHitY)
+				{
+					// Check if the surface normal indicates walkable ground (mostly pointing up)
+					if (result.contactNormal.y > 0.5f)
+					{
+						closestHitY = result.contactPoint.y;
+						foundGround = true;
+					}
+				}
+			}
+		}
+
+		if (!foundGround)
+		{
+			return false;
+		}
+
+		// Calculate the target position (slightly above the ground)
+		constexpr float groundOffset = 0.02f;
+		const float targetY = closestHitY + groundOffset;
+
+		// Only adjust if the difference is significant
+		const float heightDiff = std::abs(currentPosition.y - targetY);
+		if (heightDiff < 0.01f)
+		{
+			return true; // Already close enough
+		}
+
+		// Apply the height correction
+		Vector3 newPosition = currentPosition;
+		newPosition.y = targetY;
+		GetUpdatedNode().SetPosition(newPosition);
+
+		return true;
 	}
 
 	SceneNode& UnitMovement::GetUpdatedNode() const

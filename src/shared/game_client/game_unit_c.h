@@ -1,6 +1,7 @@
 #pragma once
 
 #include <queue>
+#include <set>
 
 #include "game_object_c.h"
 #include "game_aura_c.h"
@@ -177,6 +178,20 @@ namespace mmo
 		void SetQuestGiverMesh(const String &meshName);
 
 		virtual void RefreshUnitName();
+
+	public:
+		/// @brief Locks the current position as the synced position.
+		/// Called after sending a movement-stopping packet to ensure the next start packet uses the same position.
+		void LockPositionForSync();
+
+		/// @brief Gets the synced position for the next movement packet.
+		/// If position is locked, returns the locked position and unlocks it.
+		/// Otherwise returns the current position.
+		/// @param outPosition The position to use for the movement packet.
+		void GetSyncedPositionForPacket(Vector3& outPosition);
+
+		/// @brief Returns true if position is currently locked for sync.
+		bool IsPositionLocked() const { return m_positionLocked; }
 
 	public:
 		/// @brief Starts moving the unit forward or backward.
@@ -408,13 +423,14 @@ namespace mmo
 
 		void NotifyHitEvent();
 
-		void SetWeaponProficiency(uint32 mask);
+		/// Adds a proficiency by ID.
+		void AddProficiency(uint32 proficiencyId);
 
-		void SetArmorProficiency(uint32 mask);
+		/// Removes a proficiency by ID.
+		void RemoveProficiency(uint32 proficiencyId);
 
-		uint32 GetWeaponProficiency() const { return m_weaponProficiency; }
-
-		uint32 GetArmorProficiency() const { return m_armorProficiency; }
+		/// Checks if the unit has a specific proficiency.
+		bool HasProficiency(uint32 proficiencyId) const;
 
 		/// @brief Get the maximum step-up height for this unit
 		/// @return Maximum step-up height in world units
@@ -457,7 +473,7 @@ namespace mmo
 		bool IsHostileTo(const GameUnitC &other) const;
 
 	protected:
-		void OnDisplayIdChanged();
+		virtual void OnDisplayIdChanged();
 
 		void UpdateCollider();
 
@@ -540,8 +556,7 @@ namespace mmo
 
 		std::shared_ptr<CustomizableAvatarDefinition> m_customizationDefinition;
 
-		uint32 m_weaponProficiency = 0;
-		uint32 m_armorProficiency = 0;
+		std::set<uint32> m_proficiencies;  ///< Set of proficiency IDs the unit has
 
 	protected:
 		// Animation stuff
@@ -604,6 +619,14 @@ namespace mmo
 		std::queue<MovementEvent> m_movementEventQueue;
 
 		GameTime m_lastHeartbeat = 0;
+
+		/// @brief Whether the position is currently locked due to a stop packet being sent.
+		/// When true, the next movement-starting packet must use m_syncedPosition.
+		bool m_positionLocked = false;
+
+		/// @brief The last position that was sent to the server.
+		/// Used to ensure position consistency between stop and start packets.
+		Vector3 m_syncedPosition;
 
 		/// @brief Map of active spell tints (spellId -> tint color).
 		std::map<uint32, Vector4> m_spellTints;

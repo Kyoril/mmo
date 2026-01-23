@@ -168,6 +168,12 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnCancelCast(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// Handles the client's request to cancel an active aura on the character.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnCancelAura(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 		/// Handles the client's request to start auto attacking a target.
 		///	@param opCode The op code of the packet.
 		///	@param size The size of the packet content in bytes, excluding the packet header.
@@ -461,6 +467,8 @@ namespace mmo
 
 		void OnQuestKillCredit(const proto::QuestEntry&, uint64 guid, uint32 entry, uint32 count, uint32 maxCount) override;
 
+		void OnQuestItemCredit(const proto::QuestEntry&, uint32 entry, uint32 count, uint32 maxCount) override;
+
 		void OnQuestDataChanged(uint32 questId, const QuestStatusData& data) override;
 
 		void OnQuestCompleted(uint64 questgiverGuid, uint32 questId, uint32 rewardedXp, uint32 rewardMoney) override;
@@ -471,9 +479,7 @@ namespace mmo
 
 		void OnRootChanged(bool applied, uint32 ackId) override;
 
-		void OnWeaponProficiencyChanged(uint32 weaponProficiency) override;
-
-		void OnArmorProficiencyChanged(uint32 armorProficiency) override;
+		void OnProficiencyChanged(uint32 proficiencyId, bool added) override;
 
 	private:
 		PlayerManager& m_manager;

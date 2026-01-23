@@ -46,7 +46,7 @@ namespace mmo
 		const Message& GetMessageAt(size_t index) const;
 
 		/// Handles mouse click events to check for hyperlink clicks
-		virtual void OnMouseDown(MouseButton button, int32 buttons, const Point& position) override;
+		virtual bool OnMouseDown(MouseButton button, int32 buttons, const Point& position) override;
 
 	private:
 		void PopulateGeometryBuffer() override;

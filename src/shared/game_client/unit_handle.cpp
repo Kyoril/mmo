@@ -7,6 +7,7 @@
 #include "base/clock.h"
 #include "log/default_log_levels.h"
 #include "shared/client_data/proto_client/classes.pb.h"
+#include "shared/client_data/proto_client/spells.pb.h"
 
 namespace mmo
 {
@@ -47,6 +48,22 @@ namespace mmo
 	{
 		if (!CheckNonNull()) return nullptr;
 		return Get()->GetSpell();
+	}
+
+	bool AuraHandle::IsNegative() const
+	{
+		if (!CheckNonNull()) return false;
+		
+		const auto* spell = Get()->GetSpell();
+		if (!spell) return false;
+		
+		// Check if the Negative attribute flag is set (0x04000000 in attributes[0])
+		if (spell->attributes_size() > 0)
+		{
+			return (spell->attributes(0) & 0x04000000) != 0;
+		}
+		
+		return false;
 	}
 
 	bool AuraHandle::CheckNonNull() const
@@ -278,7 +295,7 @@ namespace mmo
 		return Get()->GetAttributeCost(attribute);
 	}
 
-	bool UnitHandle::HasProficiency(const int32 type, const uint32 proficiency) const
+	bool UnitHandle::HasProficiency(const uint32 proficiency) const
 	{
 		// No requirement?
 		if (proficiency == 0)
@@ -286,17 +303,19 @@ namespace mmo
 			return true;
 		}
 
-		if (!CheckNonNull()) return false;
-
-		switch (type)
+		if (!CheckNonNull())
 		{
-		case proficiency_type::Weapon:
-			return (Get()->GetWeaponProficiency() & proficiency) != 0;
-		case proficiency_type::Armor:
-			return (Get()->GetArmorProficiency() & proficiency) != 0;
+			return false;
 		}
 
-		return false;
+		// In the new data-driven system, we check if the unit has the proficiency ID
+		return Get()->HasProficiency(proficiency);
+	}
+
+	bool UnitHandle::operator==(const UnitHandle& other) const
+	{
+		// If the guids are equal it should be the same object
+		return other.GetGuid() == GetGuid();
 	}
 
 	bool UnitHandle::CheckNonNull() const

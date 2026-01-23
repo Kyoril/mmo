@@ -2,6 +2,7 @@
 #include "vertex_declaration_d3d11.h"
 #include "graphics_device_d3d11.h"
 #include "vertex_shader_d3d11.h"
+#include "log/default_log_levels.h"
 
 namespace mmo
 {
@@ -171,5 +172,59 @@ namespace mmo
 		ID3D11DeviceContext& context = m_device;
 		context.IASetInputLayout(pVertexLayout);
 
+	}
+
+	void VertexDeclarationD3D11::BindInstanced(VertexShaderD3D11& boundVertexProgram, VertexBufferBinding* binding, uint16 instanceSlot)
+	{
+		// Create the input element descriptions including instance data
+		std::vector<D3D11_INPUT_ELEMENT_DESC> inputElements;
+		inputElements.reserve(m_elementList.size() + 4);
+		
+		for (auto element : m_elementList)
+		{
+			D3D11_INPUT_ELEMENT_DESC elementDesc;
+			
+			elementDesc.SemanticName = MapSemanticNameD3D11(element.GetSemantic()).c_str();
+			elementDesc.SemanticIndex = element.GetIndex();
+			elementDesc.Format = MapDeclarationFormatD3D11(element.GetType());
+			elementDesc.InputSlot = element.GetSource();
+			elementDesc.AlignedByteOffset = element.GetOffset();
+			elementDesc.InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
+			elementDesc.InstanceDataStepRate = 0;
+			inputElements.push_back(elementDesc);
+		}
+
+		// Add instance world matrix (4x float4 = 64 bytes)
+		// This matches the HLSL: float4x4 instanceWorld : TEXCOORD8
+		for (uint32 row = 0; row < 4; ++row)
+		{
+			D3D11_INPUT_ELEMENT_DESC instanceElement;
+			instanceElement.SemanticName = "TEXCOORD";
+			instanceElement.SemanticIndex = 8 + row;
+			instanceElement.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+			instanceElement.InputSlot = instanceSlot;
+			instanceElement.AlignedByteOffset = row * 16;
+			instanceElement.InputSlotClass = D3D11_INPUT_PER_INSTANCE_DATA;
+			instanceElement.InstanceDataStepRate = 1;
+			inputElements.push_back(instanceElement);
+		}
+
+		// Create a unique key for the instanced layout by combining the hash with the shader pointer + instance flag
+		// We need a separate cache entry for instanced layouts
+		const auto& microcode = boundVertexProgram.GetByteCode();
+		
+		ComPtr<ID3D11InputLayout> inputLayout;
+		HRESULT hr = static_cast<ID3D11Device&>(m_device).CreateInputLayout(
+			inputElements.data(), 
+			static_cast<UINT>(inputElements.size()), 
+			microcode.data(), 
+			microcode.size(), 
+			&inputLayout);
+
+		if (SUCCEEDED(hr))
+		{
+			ID3D11DeviceContext& context = m_device;
+			context.IASetInputLayout(inputLayout.Get());
+		}
 	}
 }

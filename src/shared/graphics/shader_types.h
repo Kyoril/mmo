@@ -36,5 +36,8 @@ namespace mmo
         SkinnedHigh,
 
         UI,
+
+        /// @brief Instanced rendering (world matrix from instance buffer).
+        Instanced,
     };
 }

@@ -48,6 +48,8 @@ namespace mmo
 
 		void DrawIndexed(uint32 startIndex = 0, uint32 endIndex = 0) override;
 
+		void DrawIndexedInstanced(uint32 indexCount, uint32 instanceCount, uint32 startIndex = 0, int32 baseVertex = 0, uint32 startInstance = 0) override;
+
 		void SetTopologyType(TopologyType InType) override;
 
 		void SetVertexFormat(VertexFormat InFormat) override;

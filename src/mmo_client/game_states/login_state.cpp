@@ -140,6 +140,9 @@ namespace mmo
 		if (result != auth::auth_result::Success)
 		{
 			FrameManager::Get().TriggerLuaEvent("AUTH_FAILED", static_cast<int32>(result));
+			
+			// Close the connection after notifying the UI about the error
+			m_loginConnector.close();
 		}
 		else
 		{

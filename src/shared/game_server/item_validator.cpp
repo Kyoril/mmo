@@ -5,11 +5,13 @@
 #include "game_server/objects/game_item_s.h"
 #include "game_server/objects/game_bag_s.h"
 #include "shared/proto_data/items.pb.h"
+#include "proto_data/project.h"
+#include "shared/proto_data/item_subclasses.pb.h"
 
 namespace mmo
 {
-	ItemValidator::ItemValidator(const IPlayerValidatorContext& player)
-		: m_player(player)
+	ItemValidator::ItemValidator(const IPlayerValidatorContext& player, const proto::Project& project)
+		: m_player(player), m_project(project)
 	{
 	}
 
@@ -31,19 +33,10 @@ namespace mmo
 		}
 		*/
 
-		// Check proficiency for weapons
-		if (entry.itemclass() == item_class::Weapon)
+		// Check proficiency for equippable items
+		if (entry.inventorytype() != inventory_type::NonEquip)
 		{
-			if (!HasWeaponProficiency(entry))
-			{
-				return InventoryResult<void>::Failure(inventory_change_failure::NoRequiredProficiency);
-			}
-		}
-
-		// Check proficiency for armor
-		if (entry.itemclass() == item_class::Armor)
-		{
-			if (!HasArmorProficiency(entry))
+			if (!HasRequiredProficiency(entry))
 			{
 				return InventoryResult<void>::Failure(inventory_change_failure::NoRequiredProficiency);
 			}
@@ -184,20 +177,33 @@ namespace mmo
 		return InventoryResult<void>::Success();
 	}
 
-	bool ItemValidator::HasWeaponProficiency(const proto::ItemEntry& entry) const
+	bool ItemValidator::HasRequiredProficiency(const proto::ItemEntry& entry) const
 	{
-		const weapon_prof::Type requiredProf = GetWeaponProficiency(entry.subclass());
-		const uint32 playerProf = m_player.GetWeaponProficiency();
-		
-		return (playerProf & requiredProf) != 0;
-	}
+		uint32 requiredProficiencyId = 0;
 
-	bool ItemValidator::HasArmorProficiency(const proto::ItemEntry& entry) const
-	{
-		const armor_prof::Type requiredProf = GetArmorProficiency(entry.subclass());
-		const uint32 playerProf = m_player.GetArmorProficiency();
-		
-		return (playerProf & requiredProf) != 0;
+		// Check if item has explicitly defined required proficiency
+		if (entry.has_requiredproficiency() && entry.requiredproficiency() > 0)
+		{
+			requiredProficiencyId = entry.requiredproficiency();
+		}
+		// Otherwise, check item subclass for required proficiency
+		else if (entry.subclass() > 0)
+		{
+			const auto* subclass = m_project.itemSubclasses.getById(entry.subclass());
+			if (subclass && subclass->has_requiredproficiency() && subclass->requiredproficiency() > 0)
+			{
+				requiredProficiencyId = subclass->requiredproficiency();
+			}
+		}
+
+		// If no proficiency is required, allow the item
+		if (requiredProficiencyId == 0)
+		{
+			return true;
+		}
+
+		// Check if player has the required proficiency
+		return m_player.HasProficiency(requiredProficiencyId);
 	}
 
 	InventoryResult<void> ItemValidator::ValidateEquipmentSlot(
@@ -361,8 +367,8 @@ namespace mmo
 		const proto::ItemEntry& entry) const
 	{
 		// Only bags and quivers can go in bag pack slots
-		if (entry.itemclass() != item_class::Container &&
-			entry.itemclass() != item_class::Quiver)
+		if (entry.inventorytype() != inventory_type::Bag &&
+			entry.inventorytype() != inventory_type::Quiver)
 		{
 			return InventoryResult<void>::Failure(inventory_change_failure::NotABag);
 		}
@@ -421,64 +427,4 @@ namespace mmo
 		return InventoryResult<void>::Success();
 	}
 
-	weapon_prof::Type ItemValidator::GetWeaponProficiency(uint32 subclass)
-	{
-		switch (subclass)
-		{
-		case item_subclass_weapon::OneHandedAxe:
-			return weapon_prof::OneHandAxe;
-		case item_subclass_weapon::TwoHandedAxe:
-			return weapon_prof::TwoHandAxe;
-		case item_subclass_weapon::Bow:
-			return weapon_prof::Bow;
-		case item_subclass_weapon::CrossBow:
-			return weapon_prof::Crossbow;
-		case item_subclass_weapon::Dagger:
-			return weapon_prof::Dagger;
-		case item_subclass_weapon::Fist:
-			return weapon_prof::Fist;
-		case item_subclass_weapon::Gun:
-			return weapon_prof::Gun;
-		case item_subclass_weapon::OneHandedMace:
-			return weapon_prof::OneHandMace;
-		case item_subclass_weapon::TwoHandedMace:
-			return weapon_prof::TwoHandMace;
-		case item_subclass_weapon::Polearm:
-			return weapon_prof::Polearm;
-		case item_subclass_weapon::Staff:
-			return weapon_prof::Staff;
-		case item_subclass_weapon::OneHandedSword:
-			return weapon_prof::OneHandSword;
-		case item_subclass_weapon::TwoHandedSword:
-			return weapon_prof::TwoHandSword;
-		case item_subclass_weapon::Thrown:
-			return weapon_prof::Throw;
-		case item_subclass_weapon::Wand:
-			return weapon_prof::Wand;
-		}
-
-		return weapon_prof::None;
-	}
-
-	armor_prof::Type ItemValidator::GetArmorProficiency(uint32 subclass)
-	{
-		switch (subclass)
-		{
-		case item_subclass_armor::Misc:
-			return armor_prof::Common;
-		case item_subclass_armor::Buckler:
-		case item_subclass_armor::Shield:
-			return armor_prof::Shield;
-		case item_subclass_armor::Cloth:
-			return armor_prof::Cloth;
-		case item_subclass_armor::Leather:
-			return armor_prof::Leather;
-		case item_subclass_armor::Mail:
-			return armor_prof::Mail;
-		case item_subclass_armor::Plate:
-			return armor_prof::Plate;
-		}
-
-		return armor_prof::None;
-	}
 }

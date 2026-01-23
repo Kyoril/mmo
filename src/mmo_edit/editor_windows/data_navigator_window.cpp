@@ -13,11 +13,14 @@
 #include "spell_editor_window.h"
 #include "quest_editor_window.h"
 #include "item_editor_window.h"
+#include "item_subclass_editor_window.h"
+#include "item_class_editor_window.h"
 #include "range_type_editor_window.h"
 #include "creature_editor_window.h"
 #include "class_editor_window.h"
 #include "unit_class_editor_window.h"
 #include "race_editor_window.h"
+#include "proficiency_editor_window.h"
 #include "faction_editor_window.h"
 #include "faction_template_editor_window.h"
 #include "gossip_editor_window.h"
@@ -211,6 +214,20 @@ namespace mmo
         });
         
         gameplayCategory.editors.push_back({
+            std::type_index(typeid(ItemClassEditorWindow)),
+            "Item Classes",
+            [this]() { OpenEditorWindow(std::type_index(typeid(ItemClassEditorWindow))); },
+            static_cast<int>(m_project.itemClasses.count())
+        });
+        
+        gameplayCategory.editors.push_back({
+            std::type_index(typeid(ItemSubclassEditorWindow)),
+            "Item Subclasses",
+            [this]() { OpenEditorWindow(std::type_index(typeid(ItemSubclassEditorWindow))); },
+            static_cast<int>(m_project.itemSubclasses.count())
+        });
+        
+        gameplayCategory.editors.push_back({
             std::type_index(typeid(RangeTypeEditorWindow)),
             "Spell Range Types",
             [this]() { OpenEditorWindow(std::type_index(typeid(RangeTypeEditorWindow))); },
@@ -243,6 +260,13 @@ namespace mmo
             "Races",
             [this]() { OpenEditorWindow(std::type_index(typeid(RaceEditorWindow))); },
             static_cast<int>(m_project.races.count())
+        });
+        
+        characterCategory.editors.push_back({
+            std::type_index(typeid(ProficiencyEditorWindow)),
+            "Proficiencies",
+            [this]() { OpenEditorWindow(std::type_index(typeid(ProficiencyEditorWindow))); },
+            static_cast<int>(m_project.proficiencies.count())
         });
         
         characterCategory.editors.push_back({

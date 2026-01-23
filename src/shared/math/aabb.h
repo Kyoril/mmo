@@ -85,6 +85,20 @@ namespace mmo
 
 		bool Intersects(const Vector3& v) const;
 
+		/// @brief Gets all 8 corners of the bounding box.
+		/// @param corners Output array of 8 Vector3 values.
+		void GetCorners(Vector3* corners) const
+		{
+			corners[0] = Vector3(min.x, min.y, min.z);
+			corners[1] = Vector3(max.x, min.y, min.z);
+			corners[2] = Vector3(min.x, max.y, min.z);
+			corners[3] = Vector3(max.x, max.y, min.z);
+			corners[4] = Vector3(min.x, min.y, max.z);
+			corners[5] = Vector3(max.x, min.y, max.z);
+			corners[6] = Vector3(min.x, max.y, max.z);
+			corners[7] = Vector3(max.x, max.y, max.z);
+		}
+
 	public:
 		/// Minimum bounding box vector.
 		Vector3 min;

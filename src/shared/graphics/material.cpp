@@ -316,7 +316,7 @@ namespace mmo
 		compiler.Compile(*this, shaderCompiler);
 
 		// Compile vertex shader
-		for (uint32 i = 0; i < 5; ++i)
+		for (uint32 i = 0; i < 6; ++i)
 		{
 			ShaderCompileResult vertexOutput;
 			ShaderCompileInput vertexInput{ compiler.GetVertexShaderCode(), ShaderType::VertexShader };

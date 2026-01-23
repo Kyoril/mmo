@@ -60,7 +60,6 @@ namespace mmo
 
 		/// Realm list infos.
 		std::vector<RealmData> m_realms;
-
 	public:
 		/// Initializes a new instance of the TestConnector class.
 		/// @param io The io service to be used in order to create the internal socket.

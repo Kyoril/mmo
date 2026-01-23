@@ -24,8 +24,6 @@ namespace
 	public:
 		MockPlayerValidatorContext()
 			: m_level(1)
-			, m_weaponProficiency(0)
-			, m_armorProficiency(0)
 			, m_isAlive(true)
 			, m_isInCombat(false)
 			, m_canDualWield(false)
@@ -33,75 +31,128 @@ namespace
 		}
 
 		// Setters for test setup
-		void SetLevel(uint32 level)
+		void SetLevel(const uint32 level)
 		{
 			m_level = level;
 		}
 
-		void SetWeaponProficiency(uint32 proficiency)
+		void AddProficiency(const uint32 proficiencyId)
 		{
-			m_weaponProficiency = proficiency;
+			m_proficiencies.emplace(proficiencyId);
 		}
 
-		void SetArmorProficiency(uint32 proficiency)
+		bool HasProficiency(const uint32 proficiencyId) const noexcept override
 		{
-			m_armorProficiency = proficiency;
+			return m_proficiencies.contains(proficiencyId);
 		}
 
-		void SetAlive(bool alive)
+		void SetAlive(const bool alive)
 		{
 			m_isAlive = alive;
 		}
 
-		void SetInCombat(bool inCombat)
+		void SetInCombat(const bool inCombat)
 		{
 			m_isInCombat = inCombat;
 		}
 
-		void SetCanDualWield(bool canDualWield)
+		void SetCanDualWield(const bool canDualWield)
 		{
 			m_canDualWield = canDualWield;
 		}
 
 		// IPlayerValidatorContext implementation
-		uint32 GetLevel() const noexcept override
+		[[nodiscard]] uint32 GetLevel() const noexcept override
 		{
 			return m_level;
 		}
 
-		uint32 GetWeaponProficiency() const noexcept override
-		{
-			return m_weaponProficiency;
-		}
-
-		uint32 GetArmorProficiency() const noexcept override
-		{
-			return m_armorProficiency;
-		}
-
-		bool IsAlive() const noexcept override
+		[[nodiscard]] bool IsAlive() const noexcept override
 		{
 			return m_isAlive;
 		}
 
-		bool IsInCombat() const noexcept override
+		[[nodiscard]] bool IsInCombat() const noexcept override
 		{
 			return m_isInCombat;
 		}
 
-		bool CanDualWield() const noexcept override
+		[[nodiscard]] bool CanDualWield() const noexcept override
 		{
 			return m_canDualWield;
 		}
 
 	private:
 		uint32 m_level;
-		uint32 m_weaponProficiency;
-		uint32 m_armorProficiency;
 		bool m_isAlive;
 		bool m_isInCombat;
 		bool m_canDualWield;
+		std::set<uint32> m_proficiencies;
 	};
+
+	// Only used in this unit test
+	namespace mock_item_class
+	{
+		enum Type
+		{
+			Armor = 1,
+			Weapon = 2,
+			Consumable = 3,
+			Container = 4,
+			Quiver = 5,
+		};
+	}
+
+	// Only used in this unit test
+	namespace mock_item_subclass_weapon
+	{
+		enum Type
+		{
+			OneHandedSword = 1,
+			TwoHandedAxe = 2,
+			TwoHandedSword = 3
+		};
+	}
+
+	// Only used in this unit test
+	namespace mock_item_subclass_armor
+	{
+		enum Type
+		{
+			Cloth = 1,
+			Leather = 2,
+			Mail = 3,
+			Plate = 4,
+			Shield = 5,
+			Misc = 6,
+		};
+	}
+
+	// Only used in this unit test
+	namespace mock_item_subclass_consumable
+	{
+		enum Type
+		{
+			Potion = 1,
+		};
+	}
+
+	// Only used in this unit test
+	namespace mock_prof
+	{
+		enum Type
+		{
+			OneHandSword = 1,
+			TwoHandAxe = 2,
+			Cloth = 3,
+			Leather = 4,
+			Mail = 5,
+			Plate = 6,
+			TwoHandSword = 7,
+			Shield = 8,
+			Common = 9
+		};
+	}
 
 	/**
 	 * @brief Helper to create test item entries with common defaults.
@@ -112,15 +163,15 @@ namespace
 		ItemEntryBuilder()
 		{
 			m_entry.set_id(1);
-			m_entry.set_itemclass(item_class::Weapon);
-			m_entry.set_subclass(item_subclass_weapon::OneHandedSword);
+			m_entry.set_itemclass(mock_item_class::Weapon);
+			m_entry.set_subclass(mock_item_subclass_weapon::OneHandedSword);
 			m_entry.set_inventorytype(inventory_type::Weapon);
 			m_entry.set_requiredlevel(0);
 			m_entry.set_maxcount(0);
 			m_entry.set_maxstack(1);
 		}
 
-		ItemEntryBuilder& WithClass(item_class::Type itemClass)
+		ItemEntryBuilder& WithClass(uint32 itemClass)
 		{
 			m_entry.set_itemclass(itemClass);
 			return *this;
@@ -168,17 +219,56 @@ namespace
 
 TEST_CASE("ItemValidator - ValidateItemRequirements", "[item_validator]")
 {
+	proto::Project project;
+	project.itemClasses.add(mock_item_class::Armor);
+	project.itemClasses.add(mock_item_class::Weapon);
+	project.proficiencies.add(mock_prof::OneHandSword);
+	project.proficiencies.add(mock_prof::TwoHandAxe);
+	project.proficiencies.add(mock_prof::Cloth);
+	project.proficiencies.add(mock_prof::Plate);
+
+	// Set up item subclasses with required proficiencies
+	auto* oneHandSwordSubclass = project.itemSubclasses.add(mock_item_subclass_weapon::OneHandedSword);
+	if (oneHandSwordSubclass)
+	{
+		oneHandSwordSubclass->set_requiredproficiency(mock_prof::OneHandSword);
+	}
+	
+	auto* twoHandAxeSubclass = project.itemSubclasses.add(mock_item_subclass_weapon::TwoHandedAxe);
+	if (twoHandAxeSubclass)
+	{
+		twoHandAxeSubclass->set_requiredproficiency(mock_prof::TwoHandAxe);
+	}
+	
+	auto* clothSubclass = project.itemSubclasses.add(mock_item_subclass_armor::Cloth);
+	if (clothSubclass)
+	{
+		clothSubclass->set_requiredproficiency(mock_prof::Cloth);
+	}
+	
+	auto* plateSubclass = project.itemSubclasses.add(mock_item_subclass_armor::Plate);
+	if (plateSubclass)
+	{
+		plateSubclass->set_requiredproficiency(mock_prof::Plate);
+	}
+	
+	auto* leatherSubclass = project.itemSubclasses.add(mock_item_subclass_armor::Leather);
+	if (leatherSubclass)
+	{
+		leatherSubclass->set_requiredproficiency(mock_prof::Leather);
+	}
+
 	MockPlayerValidatorContext player;
-	ItemValidator validator(player);
+	ItemValidator validator(player, project);
 
 	SECTION("Accepts items when all requirements are met")
 	{
 		player.SetLevel(10);
-		player.SetWeaponProficiency(weapon_prof::OneHandSword);
+		player.AddProficiency(mock_prof::OneHandSword);
 
 		auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
-			.WithSubclass(item_subclass_weapon::OneHandedSword)
+			.WithClass(mock_item_class::Weapon)
+			.WithSubclass(mock_item_subclass_weapon::OneHandedSword)
 			.WithRequiredLevel(5)
 			.Build();
 
@@ -202,11 +292,11 @@ TEST_CASE("ItemValidator - ValidateItemRequirements", "[item_validator]")
 	SECTION("Rejects weapons without proficiency")
 	{
 		player.SetLevel(10);
-		player.SetWeaponProficiency(weapon_prof::OneHandSword);
+		player.AddProficiency(mock_prof::OneHandSword);
 
 		auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
-			.WithSubclass(item_subclass_weapon::TwoHandedAxe)
+			.WithClass(mock_item_class::Weapon)
+			.WithSubclass(mock_item_subclass_weapon::TwoHandedAxe)
 			.Build();
 
 		auto result = validator.ValidateItemRequirements(entry);
@@ -216,18 +306,19 @@ TEST_CASE("ItemValidator - ValidateItemRequirements", "[item_validator]")
 
 	SECTION("Accepts weapons with correct proficiency")
 	{
-		player.SetWeaponProficiency(weapon_prof::OneHandSword | weapon_prof::TwoHandAxe);
+		player.AddProficiency(mock_prof::OneHandSword);
+		player.AddProficiency(mock_prof::TwoHandAxe);
 
 		auto sword = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
-			.WithSubclass(item_subclass_weapon::OneHandedSword)
+			.WithClass(mock_item_class::Weapon)
+			.WithSubclass(mock_item_subclass_weapon::OneHandedSword)
 			.Build();
 
 		REQUIRE(validator.ValidateItemRequirements(sword).IsSuccess());
 
 		auto axe = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
-			.WithSubclass(item_subclass_weapon::TwoHandedAxe)
+			.WithClass(mock_item_class::Weapon)
+			.WithSubclass(mock_item_subclass_weapon::TwoHandedAxe)
 			.Build();
 
 		REQUIRE(validator.ValidateItemRequirements(axe).IsSuccess());
@@ -235,11 +326,11 @@ TEST_CASE("ItemValidator - ValidateItemRequirements", "[item_validator]")
 
 	SECTION("Rejects armor without proficiency")
 	{
-		player.SetArmorProficiency(armor_prof::Cloth);
+		player.AddProficiency(mock_prof::Cloth);
 
 		auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Armor)
-			.WithSubclass(item_subclass_armor::Plate)
+			.WithClass(mock_item_class::Armor)
+			.WithSubclass(mock_item_subclass_armor::Plate)
 			.Build();
 
 		auto result = validator.ValidateItemRequirements(entry);
@@ -249,18 +340,20 @@ TEST_CASE("ItemValidator - ValidateItemRequirements", "[item_validator]")
 
 	SECTION("Accepts armor with correct proficiency")
 	{
-		player.SetArmorProficiency(armor_prof::Cloth | armor_prof::Leather | armor_prof::Plate);
+		player.AddProficiency(mock_prof::Cloth);
+		player.AddProficiency(mock_prof::Leather);
+		player.AddProficiency(mock_prof::Plate);
 
 		auto cloth = ItemEntryBuilder()
-			.WithClass(item_class::Armor)
-			.WithSubclass(item_subclass_armor::Cloth)
+			.WithClass(mock_item_class::Armor)
+			.WithSubclass(mock_item_subclass_armor::Cloth)
 			.Build();
 
 		REQUIRE(validator.ValidateItemRequirements(cloth).IsSuccess());
 
 		auto plate = ItemEntryBuilder()
-			.WithClass(item_class::Armor)
-			.WithSubclass(item_subclass_armor::Plate)
+			.WithClass(mock_item_class::Armor)
+			.WithSubclass(mock_item_subclass_armor::Plate)
 			.Build();
 
 		REQUIRE(validator.ValidateItemRequirements(plate).IsSuccess());
@@ -271,8 +364,9 @@ TEST_CASE("ItemValidator - ValidateItemRequirements", "[item_validator]")
 		player.SetLevel(1);
 
 		auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Consumable)
-			.WithSubclass(item_subclass_consumable::Potion)
+			.WithClass(mock_item_class::Consumable)
+			.WithSubclass(mock_item_subclass_consumable::Potion)
+			.WithInventoryType(inventory_type::NonEquip)
 			.Build();
 
 		auto result = validator.ValidateItemRequirements(entry);
@@ -282,8 +376,14 @@ TEST_CASE("ItemValidator - ValidateItemRequirements", "[item_validator]")
 
 TEST_CASE("ItemValidator - ValidateItemLimits", "[item_validator]")
 {
+	proto::Project project;
+	project.itemClasses.add(mock_item_class::Armor);
+	project.itemClasses.add(mock_item_class::Weapon);
+	project.proficiencies.add(mock_prof::OneHandSword);
+	project.proficiencies.add(mock_prof::OneHandSword);
+
 	MockPlayerValidatorContext player;
-	ItemValidator validator(player);
+	ItemValidator validator(player, project);
 
 	SECTION("Accepts items within limits")
 	{
@@ -345,8 +445,14 @@ TEST_CASE("ItemValidator - ValidateItemLimits", "[item_validator]")
 
 TEST_CASE("ItemValidator - ValidatePlayerState", "[item_validator]")
 {
+	proto::Project project;
+	project.itemClasses.add(mock_item_class::Armor);
+	project.itemClasses.add(mock_item_class::Weapon);
+	project.proficiencies.add(mock_prof::OneHandSword);
+	project.proficiencies.add(mock_prof::OneHandSword);
+
 	MockPlayerValidatorContext player;
-	ItemValidator validator(player);
+	ItemValidator validator(player, project);
 
 	SECTION("Accepts operations when player is alive and not in combat")
 	{
@@ -388,11 +494,17 @@ TEST_CASE("ItemValidator - ValidatePlayerState", "[item_validator]")
 
 TEST_CASE("ItemValidator - ValidateSlotPlacement for equipment", "[item_validator]")
 {
+	proto::Project project;
+	project.itemClasses.add(mock_item_class::Armor);
+	project.itemClasses.add(mock_item_class::Weapon);
+	project.proficiencies.add(mock_prof::OneHandSword);
+	project.proficiencies.add(mock_prof::OneHandSword);
+
 	MockPlayerValidatorContext player;
 	player.SetLevel(10);
-	player.SetWeaponProficiency(weapon_prof::OneHandSword);
-	player.SetArmorProficiency(armor_prof::Cloth);
-	ItemValidator validator(player);
+	player.AddProficiency(mock_prof::OneHandSword);
+	player.AddProficiency(mock_prof::Cloth);
+	ItemValidator validator(player, project);
 
 	SECTION("Accepts head items in head slot")
 	{
@@ -402,9 +514,9 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for equipment", "[item_validato
 		);
 
 		auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Armor)
+			.WithClass(mock_item_class::Armor)
 			.WithInventoryType(inventory_type::Head)
-			.WithSubclass(item_subclass_armor::Cloth)
+			.WithSubclass(mock_item_subclass_armor::Cloth)
 			.Build();
 
 		auto result = validator.ValidateSlotPlacement(slot, entry);
@@ -419,7 +531,7 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for equipment", "[item_validato
 		);
 
 		auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
+			.WithClass(mock_item_class::Weapon)
 			.WithInventoryType(inventory_type::Weapon)
 			.Build();
 
@@ -436,17 +548,17 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for equipment", "[item_validato
 		);
 
 		auto chest = ItemEntryBuilder()
-			.WithClass(item_class::Armor)
+			.WithClass(mock_item_class::Armor)
 			.WithInventoryType(inventory_type::Chest)
-			.WithSubclass(item_subclass_armor::Cloth)
+			.WithSubclass(mock_item_subclass_armor::Cloth)
 			.Build();
 
 		REQUIRE(validator.ValidateSlotPlacement(slot, chest).IsSuccess());
 
 		auto robe = ItemEntryBuilder()
-			.WithClass(item_class::Armor)
+			.WithClass(mock_item_class::Armor)
 			.WithInventoryType(inventory_type::Robe)
-			.WithSubclass(item_subclass_armor::Cloth)
+			.WithSubclass(mock_item_subclass_armor::Cloth)
 			.Build();
 
 		REQUIRE(validator.ValidateSlotPlacement(slot, robe).IsSuccess());
@@ -454,7 +566,7 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for equipment", "[item_validato
 
 	SECTION("Accepts rings in finger slots")
 	{
-		player.SetArmorProficiency(armor_prof::Common);  // Rings are misc armor
+		player.AddProficiency(mock_prof::Common);  // Rings are misc armor
 
 		auto slot1 = InventorySlot::FromRelative(
 			player_inventory_slots::Bag_0,
@@ -467,9 +579,9 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for equipment", "[item_validato
 		);
 
 		auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Armor)
+			.WithClass(mock_item_class::Armor)
 			.WithInventoryType(inventory_type::Finger)
-			.WithSubclass(item_subclass_armor::Misc)
+			.WithSubclass(mock_item_subclass_armor::Misc)
 			.Build();
 
 		REQUIRE(validator.ValidateSlotPlacement(slot1, entry).IsSuccess());
@@ -478,7 +590,7 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for equipment", "[item_validato
 
 	SECTION("Accepts trinkets in trinket slots")
 	{
-		player.SetArmorProficiency(armor_prof::Common);  // Trinkets are misc armor
+		player.AddProficiency(mock_prof::Common);  // Trinkets are misc armor
 
 		auto slot1 = InventorySlot::FromRelative(
 			player_inventory_slots::Bag_0,
@@ -491,9 +603,9 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for equipment", "[item_validato
 		);
 
 		auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Armor)
+			.WithClass(mock_item_class::Armor)
 			.WithInventoryType(inventory_type::Trinket)
-			.WithSubclass(item_subclass_armor::Misc)
+			.WithSubclass(mock_item_subclass_armor::Misc)
 			.Build();
 
 		REQUIRE(validator.ValidateSlotPlacement(slot1, entry).IsSuccess());
@@ -503,11 +615,18 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for equipment", "[item_validato
 
 TEST_CASE("ItemValidator - ValidateSlotPlacement for weapons", "[item_validator]")
 {
+	proto::Project project;
+	project.itemClasses.add(mock_item_class::Armor);
+	project.itemClasses.add(mock_item_class::Weapon);
+	project.proficiencies.add(mock_prof::OneHandSword);
+	project.proficiencies.add(mock_prof::OneHandSword);
+
 	MockPlayerValidatorContext player;
 	player.SetLevel(10);
-	player.SetWeaponProficiency(weapon_prof::OneHandSword | weapon_prof::TwoHandSword);
+	player.AddProficiency(mock_prof::OneHandSword);
+	player.AddProficiency(mock_prof::TwoHandSword);
 	player.SetCanDualWield(false);
-	ItemValidator validator(player);
+	ItemValidator validator(player, project);
 
 	SECTION("Accepts weapons in mainhand slot")
 	{
@@ -517,8 +636,8 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for weapons", "[item_validator]
 		);
 
 		auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
-			.WithSubclass(item_subclass_weapon::OneHandedSword)
+			.WithClass(mock_item_class::Weapon)
+			.WithSubclass(mock_item_subclass_weapon::OneHandedSword)
 			.WithInventoryType(inventory_type::Weapon)
 			.Build();
 
@@ -534,8 +653,8 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for weapons", "[item_validator]
 		);
 
 		auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
-			.WithSubclass(item_subclass_weapon::TwoHandedSword)
+			.WithClass(mock_item_class::Weapon)
+			.WithSubclass(mock_item_subclass_weapon::TwoHandedSword)
 			.WithInventoryType(inventory_type::TwoHandedWeapon)
 			.Build();
 
@@ -551,8 +670,8 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for weapons", "[item_validator]
 		);
 
 		auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
-			.WithSubclass(item_subclass_weapon::OneHandedSword)
+			.WithClass(mock_item_class::Weapon)
+			.WithSubclass(mock_item_subclass_weapon::OneHandedSword)
 			.WithInventoryType(inventory_type::Weapon)
 			.Build();
 
@@ -571,8 +690,8 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for weapons", "[item_validator]
 		);
 
 		auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
-			.WithSubclass(item_subclass_weapon::OneHandedSword)
+			.WithClass(mock_item_class::Weapon)
+			.WithSubclass(mock_item_subclass_weapon::OneHandedSword)
 			.WithInventoryType(inventory_type::Weapon)
 			.Build();
 
@@ -582,7 +701,7 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for weapons", "[item_validator]
 
 	SECTION("Accepts shields in offhand without dual wield")
 	{
-		player.SetArmorProficiency(armor_prof::Shield);  // Shields require shield proficiency
+		player.AddProficiency(mock_prof::Shield);  // Shields require shield proficiency
 
 		auto slot = InventorySlot::FromRelative(
 			player_inventory_slots::Bag_0,
@@ -590,8 +709,8 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for weapons", "[item_validator]
 		);
 
 		auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Armor)
-			.WithSubclass(item_subclass_armor::Shield)
+			.WithClass(mock_item_class::Armor)
+			.WithSubclass(mock_item_subclass_armor::Shield)
 			.WithInventoryType(inventory_type::Shield)
 			.Build();
 
@@ -601,7 +720,7 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for weapons", "[item_validator]
 
 	SECTION("Accepts holdables in offhand without dual wield")
 	{
-		player.SetArmorProficiency(armor_prof::Common);  // Holdables are misc armor
+		player.AddProficiency(mock_prof::Common);  // Holdables are misc armor
 
 		auto slot = InventorySlot::FromRelative(
 			player_inventory_slots::Bag_0,
@@ -609,8 +728,8 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for weapons", "[item_validator]
 		);
 
 		auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Armor)
-			.WithSubclass(item_subclass_armor::Misc)
+			.WithClass(mock_item_class::Armor)
+			.WithSubclass(mock_item_subclass_armor::Misc)
 			.WithInventoryType(inventory_type::Holdable)
 			.Build();
 
@@ -621,8 +740,14 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for weapons", "[item_validator]
 
 TEST_CASE("ItemValidator - ValidateSlotPlacement for bags", "[item_validator]")
 {
+	proto::Project project;
+	project.itemClasses.add(mock_item_class::Armor);
+	project.itemClasses.add(mock_item_class::Weapon);
+	project.proficiencies.add(mock_prof::OneHandSword);
+	project.proficiencies.add(mock_prof::OneHandSword);
+
 	MockPlayerValidatorContext player;
-	ItemValidator validator(player);
+	ItemValidator validator(player, project);
 
 	SECTION("Accepts bags in bag pack slots")
 	{
@@ -632,7 +757,7 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for bags", "[item_validator]")
 		);
 
 		auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Container)
+			.WithClass(mock_item_class::Container)
 			.WithInventoryType(inventory_type::Bag)
 			.Build();
 
@@ -648,7 +773,7 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for bags", "[item_validator]")
 		);
 
 		auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Quiver)
+			.WithClass(mock_item_class::Quiver)
 			.WithInventoryType(inventory_type::Quiver)
 			.Build();
 
@@ -664,7 +789,7 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for bags", "[item_validator]")
 		);
 
 		auto entry = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
+			.WithClass(mock_item_class::Weapon)
 			.WithInventoryType(inventory_type::Weapon)
 			.Build();
 
@@ -681,19 +806,19 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for bags", "[item_validator]")
 		);
 
 		auto weapon = ItemEntryBuilder()
-			.WithClass(item_class::Weapon)
+			.WithClass(mock_item_class::Weapon)
 			.Build();
 
 		REQUIRE(validator.ValidateSlotPlacement(slot, weapon).IsSuccess());
 
 		auto consumable = ItemEntryBuilder()
-			.WithClass(item_class::Consumable)
+			.WithClass(mock_item_class::Consumable)
 			.Build();
 
 		REQUIRE(validator.ValidateSlotPlacement(slot, consumable).IsSuccess());
 
 		auto bag = ItemEntryBuilder()
-			.WithClass(item_class::Container)
+			.WithClass(mock_item_class::Container)
 			.Build();
 
 		REQUIRE(validator.ValidateSlotPlacement(slot, bag).IsSuccess());
@@ -702,9 +827,15 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for bags", "[item_validator]")
 
 TEST_CASE("ItemValidator - Edge cases", "[item_validator]")
 {
+	proto::Project project;
+	project.itemClasses.add(mock_item_class::Armor);
+	project.itemClasses.add(mock_item_class::Weapon);
+	project.proficiencies.add(mock_prof::OneHandSword);
+	project.proficiencies.add(mock_prof::OneHandSword);
+
 	MockPlayerValidatorContext player;
 	player.SetLevel(10);
-	ItemValidator validator(player);
+	ItemValidator validator(player, project);
 
 	SECTION("Handles unknown slot types")
 	{
@@ -721,7 +852,7 @@ TEST_CASE("ItemValidator - Edge cases", "[item_validator]")
 	SECTION("Handles items with zero required level")
 	{
 		player.SetLevel(1);
-		player.SetWeaponProficiency(weapon_prof::OneHandSword);  // Default test weapon needs proficiency
+		player.AddProficiency(mock_prof::OneHandSword);  // Default test weapon needs proficiency
 
 		auto entry = ItemEntryBuilder()
 			.WithRequiredLevel(0)
@@ -734,7 +865,7 @@ TEST_CASE("ItemValidator - Edge cases", "[item_validator]")
 	SECTION("Handles exact level requirement match")
 	{
 		player.SetLevel(10);
-		player.SetWeaponProficiency(weapon_prof::OneHandSword);  // Default test weapon needs proficiency
+		player.AddProficiency(mock_prof::OneHandSword);  // Default test weapon needs proficiency
 
 		auto entry = ItemEntryBuilder()
 			.WithRequiredLevel(10)

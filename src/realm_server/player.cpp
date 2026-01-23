@@ -632,8 +632,8 @@ namespace mmo
 		const auto strongWorld = m_world.lock();
 		if (!strongWorld)
 		{
-			WLOG("Received proxy packet from character without a world!");
-			return PacketParseResult::Disconnect;
+			WLOG("Received proxy packet " << log_hex_digit(packet.GetId()) << " from character without a world!");
+			return PacketParseResult::Pass;
 		}
 
 		// Check for GM commands that require specific GM levels
@@ -1142,6 +1142,43 @@ namespace mmo
 	PacketParseResult Player::OnGroupDecline(game::IncomingPacket &packet)
 	{
 		DeclineGroupInvite();
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnGroupLeave(game::IncomingPacket& packet)
+	{
+		if (!m_group)
+		{
+			SendPartyOperationResult(party_operation::Leave, party_result::YouNotInGroup, "");
+			WLOG("Player tried to leave group without being in a group");
+			return PacketParseResult::Pass;
+		}
+
+		DLOG("Player wants to leave group");
+		m_group->RemoveMember(m_characterData->characterId);
+		m_group.reset();
+		
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnGroupDisband(game::IncomingPacket& packet)
+	{
+		if (!m_group)
+		{
+			SendPartyOperationResult(party_operation::Disband, party_result::YouNotInGroup, "");
+			WLOG("Player tried to disband group without being in a group");
+			return PacketParseResult::Pass;
+		}
+
+		if (m_group->GetLeader() != m_characterData->characterId)
+		{
+			SendPartyOperationResult(party_operation::Disband, party_result::YouNotLeader, "");
+			WLOG("Player tried to disband group without being the leader");
+			return PacketParseResult::Pass;
+		}
+
+		m_group->Disband(false);
 
 		return PacketParseResult::Pass;
 	}
@@ -2065,7 +2102,11 @@ namespace mmo
 		m_characterData->maxEnergy = character.Get<uint32>(object_fields::MaxEnergy);
 		m_characterData->money = character.Get<uint32>(object_fields::Money);
 
-		m_characterData->attributePointsSpent;
+		// Keep attribute point distribution in sync for world transfers
+		for (uint32 i = 0; i < m_characterData->attributePointsSpent.size(); ++i)
+		{
+			m_characterData->attributePointsSpent[i] = character.GetAttributePointsByAttribute(i);
+		}
 
 		m_characterData->spellIds.clear();
 		for (const auto &spell : character.GetSpells())
@@ -2083,8 +2124,16 @@ namespace mmo
 		m_characterData->bindMap = character.GetBindMap();
 		m_characterData->bindPosition = character.GetBindPosition();
 		m_characterData->bindFacing = character.GetBindFacing();
-		// NOTE: Inventory is no longer cached here - it's persisted via new SaveInventoryItems/DeleteInventoryItems
-		m_characterData->items.clear();
+
+		// Cache current inventory snapshot for the next world node (items are also persisted separately)
+		m_characterData->items = character.GetInventory().GetItemData();
+
+		// Sync learned talents so the next world node restores the correct ranks
+		m_characterData->talentRanks.clear();
+		for (const auto& [talentId, rank] : character.GetTalents())
+		{
+			m_characterData->talentRanks[talentId] = static_cast<uint8>(rank);
+		}
 		m_characterData->isGameMaster = (m_gmLevel > 0);
 	}
 
@@ -2291,6 +2340,8 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::GroupAccept, *this, &Player::OnGroupAccept);
 			RegisterPacketHandler(game::client_realm_packet::GroupDecline, *this, &Player::OnGroupDecline);
 			RegisterPacketHandler(game::client_realm_packet::LogoutRequest, *this, &Player::OnLogoutRequest);
+			RegisterPacketHandler(game::client_realm_packet::GroupLeave, *this, &Player::OnGroupLeave);
+			RegisterPacketHandler(game::client_realm_packet::GroupDisband, *this, &Player::OnGroupDisband);
 
 #if MMO_WITH_DEV_COMMANDS
 			RegisterPacketHandler(game::client_realm_packet::CheatTeleportToPlayer, *this, &Player::OnCheatTeleportToPlayer);
@@ -2359,7 +2410,7 @@ namespace mmo
 									   {
 			outPacket.Start(game::realm_client_packet::LoginVerifyWorld);
 			outPacket
-				<< io::write<uint64>(m_characterData->mapId)	
+				<< io::write<uint32>(m_characterData->mapId)	
 				<< io::write<float>(m_characterData->position.x)
 				<< io::write<float>(m_characterData->position.y)
 				<< io::write<float>(m_characterData->position.z)
@@ -2807,6 +2858,25 @@ namespace mmo
 		info.extraflags = itemEntry->extraflags();
 		info.startquestid = itemEntry->questentry();
 		info.skill = itemEntry->skill();
+
+		// Set required proficiency - check item first, then fall back to subclass
+		if (itemEntry->has_requiredproficiency() && itemEntry->requiredproficiency() > 0)
+		{
+			info.requiredProficiency = itemEntry->requiredproficiency();
+		}
+		else
+		{
+			// Look up subclass to get required proficiency
+			const auto* subclass = m_project.itemSubclasses.getById(itemEntry->subclass());
+			if (subclass && subclass->has_requiredproficiency())
+			{
+				info.requiredProficiency = subclass->requiredproficiency();
+			}
+			else
+			{
+				info.requiredProficiency = 0;
+			}
+		}
 
 		m_connection->sendSinglePacket([entry, &info](game::OutgoingPacket &packet)
 									   {

@@ -61,6 +61,9 @@ namespace mmo
 		{
 			// Connection error!
 			ELOG("Could not connect to the login server.");
+			
+			// Notify listeners about the connection failure
+			AuthenticationResult(auth::AuthResult::FailInvalidServer);
 		}
 		return true;
 	}
@@ -73,7 +76,6 @@ namespace mmo
 		ClearPacketHandlers();
 
 		m_realms.clear();
-		
 	}
 
 	void LoginConnector::connectionMalformedPacket()
@@ -229,7 +231,8 @@ namespace mmo
 			ELOG("[Login] Auth Error: " << static_cast<uint16>(result));
 			AuthenticationResult(static_cast<auth::AuthResult>(result));
 
-			return PacketParseResult::Disconnect;
+			// Don't disconnect here - let the UI handle it and close properly
+			return PacketParseResult::Pass;
 		}
 
 		// Successfully parsed the packet, proceed
@@ -268,7 +271,8 @@ namespace mmo
 				ELOG("[Login] Auth Error!");
 
 				AuthenticationResult(auth::AuthResult::FailInternalError);
-				return PacketParseResult::Disconnect;
+				// Don't disconnect here - let the UI handle it and close properly
+				return PacketParseResult::Pass;
 			}
 		}
 		else
@@ -282,8 +286,8 @@ namespace mmo
 				AuthenticationResult(static_cast<auth::AuthResult>(result));
 			}
 
-			// Disconnect after we handled this packet
-			return PacketParseResult::Disconnect;
+			// Don't disconnect here - let the UI handle it and close properly
+			return PacketParseResult::Pass;
 		}
 
 		// Successfully parsed the packet

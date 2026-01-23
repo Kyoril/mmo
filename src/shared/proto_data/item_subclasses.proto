@@ -1,0 +1,15 @@
+syntax = "proto2";
+package mmo.proto;
+
+message ItemSubclassEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	// The item class this subclass belongs to
+	required uint32 itemclass = 3;
+	// The proficiency required to use items of this subclass (0 = none)
+	optional uint32 requiredproficiency = 4;
+}
+
+message ItemSubclasses {
+	repeated ItemSubclassEntry entry = 1;
+}

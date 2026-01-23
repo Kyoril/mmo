@@ -482,6 +482,9 @@ namespace mmo
 		case game::client_realm_packet::CancelCast:
 			OnCancelCast(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::CancelAura:
+			OnCancelAura(opCode, buffer.size(), reader);
+			break;
 
 		case game::client_realm_packet::AttackSwing:
 			OnAttackSwing(opCode, buffer.size(), reader);
@@ -1528,6 +1531,39 @@ namespace mmo
 		m_character->CancelCast(spell_interrupt_flags::Any, 0);
 	}
 
+	void Player::OnCancelAura(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 spellId;
+		if (!(contentReader >> io::read<uint32>(spellId)))
+		{
+			ELOG("Failed to read spell ID for cancel aura");
+			return;
+		}
+
+		// Check if known spell
+		const auto* spell = m_project.spells.getById(spellId);
+		if (!spell)
+		{
+			ELOG("Unknown spell " << spellId << " - can not cancel aura!");
+			Kick();
+			return;
+		}
+
+		if (spell->attributes(0) & spell_attributes::Negative)
+		{
+			WLOG("Tried to cancel negative aura " << spellId);
+			return;
+		}
+		if (spell->attributes(0) & spell_attributes::Passive)
+		{
+			WLOG("Tried to cancel passive aura " << spellId);
+			return;
+		}
+
+		// Try to remove the aura - this will check if it exists, is self-cast, and is positive
+		m_character->RemoveAuraBySpellId(spellId, m_character->GetGuid());
+	}
+
 	void Player::OnAttackSwing(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		uint64 victimGuid;
@@ -2227,6 +2263,19 @@ namespace mmo
 			});
 	}
 
+	void Player::OnQuestItemCredit(const proto::QuestEntry& quest, uint32 entry, uint32 count, uint32 maxCount)
+	{
+		SendPacket([&quest, entry, count, maxCount](game::OutgoingPacket& packet) {
+			packet.Start(game::realm_client_packet::QuestUpdateAddItem);
+			packet
+				<< io::write<uint32>(quest.id())
+				<< io::write<uint32>(entry)
+				<< io::write<uint32>(count)
+				<< io::write<uint32>(maxCount);
+			packet.Finish();
+			});
+	}
+
 	void Player::OnQuestDataChanged(uint32 questId, const QuestStatusData& data)
 	{
 		// Send quest data packet to realm server so that it will be persisted in the database
@@ -2323,30 +2372,16 @@ namespace mmo
 			});
 	}
 
-	void Player::OnWeaponProficiencyChanged(const uint32 weaponProficiency)
+	void Player::OnProficiencyChanged(const uint32 proficiencyId, const bool added)
 	{
-		DLOG("Player " << m_character->GetName() << " changed weapon proficiency to " << log_hex_digit(weaponProficiency));
+		DLOG("Player " << m_character->GetName() << (added ? " gained" : " lost") << " proficiency " << proficiencyId);
 
-		SendPacket([weaponProficiency](game::OutgoingPacket& packet)
+		SendPacket([proficiencyId, added](game::OutgoingPacket& packet)
 			{
 				packet.Start(game::realm_client_packet::SetProficiency);
 				packet
-					<< io::write<uint8>(item_class::Weapon)
-					<< io::write<uint32>(weaponProficiency);
-				packet.Finish();
-			});
-	}
-
-	void Player::OnArmorProficiencyChanged(const uint32 armorProficiency)
-	{
-		DLOG("Player " << m_character->GetName() << " changed armor proficiency to " << log_hex_digit(armorProficiency));
-
-		SendPacket([armorProficiency](game::OutgoingPacket& packet)
-			{
-				packet.Start(game::realm_client_packet::SetProficiency);
-				packet
-					<< io::write<uint8>(item_class::Armor)
-					<< io::write<uint32>(armorProficiency);
+					<< io::write<uint32>(proficiencyId)
+					<< io::write<uint8>(added ? 1 : 0);
 				packet.Finish();
 			});
 	}

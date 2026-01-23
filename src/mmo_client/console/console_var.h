@@ -179,15 +179,17 @@ namespace mmo
 		}
 
 		/// @brief Resets the current value to use the default value. Also removes the CVF_Modified flag.
-		void Reset()
-		{
-			const std::string oldValue = std::move(m_stringValue);
+               void Reset()
+               {
+                       const std::string oldValue = m_stringValue;
 
-			Set(m_defaultValue);
-			RemoveFlag(CVF_Modified);
+                       m_stringValue = m_defaultValue;
+                       m_intValue = std::atoi(m_stringValue.c_str());
+                       m_floatValue = static_cast<float>(std::atof(m_stringValue.c_str()));
+                       RemoveFlag(CVF_Modified);
 
-			NotifyChanged(oldValue);
-		}
+                       NotifyChanged(oldValue);
+               }
 
 		/// @brief Gets the current string value.
 		[[nodiscard]] const std::string& GetStringValue() const

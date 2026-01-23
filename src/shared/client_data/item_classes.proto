@@ -1,0 +1,11 @@
+syntax = "proto2";
+package mmo.proto_client;
+
+message ItemClassEntry {
+	required uint32 id = 1;
+	required string name = 2;
+}
+
+message ItemClasses {
+	repeated ItemClassEntry entry = 1;
+}

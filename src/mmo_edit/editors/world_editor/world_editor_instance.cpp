@@ -67,7 +67,7 @@ namespace mmo
 
 		m_scene.GetRootSceneNode().AddChild(*m_cameraAnchor);
 
-		m_scene.SetFogRange(210.0f, 300.0f);
+		m_scene.SetFogRange(60.0f, 500.0f);
 
 		const Vector3 fogColor = Vector3(0.231f * 1.5f, 0.398f * 1.5f, 0.535f * 1.5f);
 		m_scene.SetFogColor(fogColor);
@@ -133,6 +133,7 @@ namespace mmo
 		m_terrain = std::make_unique<terrain::Terrain>(m_scene, m_camera, 64, 64);
 		m_terrain->SetTileSceneQueryFlags(SceneQueryFlags_Tile);
 		m_terrain->SetWireframeMaterial(MaterialManager::Get().Load("Editor/Wireframe.hmat"));
+		m_terrain->SetLodEnabled(false);
 
 		// Replace all \ with /
 		String baseFileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Terrain").string();
@@ -1848,7 +1849,7 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 						terrain::Tile*pageTile = page.GetTile(x, y);
 						if (pageTile)
 						{
-							pageTile->SetMaterial(tile.GetMaterial());
+							pageTile->SetMaterial(tile.GetBaseMaterial());
 						}
 					}
 				}

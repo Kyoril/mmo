@@ -72,6 +72,11 @@ namespace mmo
 		return IndexNone;
 	}
 
+	ExpressionIndex MaterialCompilerNull::AddCameraPosition()
+	{
+		return IndexNone;
+	}
+
 	ExpressionIndex MaterialCompilerNull::AddCameraVector()
 	{
 		return IndexNone;

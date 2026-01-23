@@ -45,7 +45,7 @@ namespace mmo
 		material.SetDepthTestEnabled(m_depthTest);
 		material.SetTwoSided(m_twoSided);
 
-		for (uint32 i = 0; i < 5; ++i)
+		for (uint32 i = 0; i < 6; ++i)
 		{
 			m_vertexShaderCode.clear();
 			GenerateVertexShaderCode(static_cast<VertexShaderType>(i));

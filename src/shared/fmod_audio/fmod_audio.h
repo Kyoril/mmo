@@ -78,6 +78,12 @@ namespace mmo
 		FMOD::Channel* GetFMODChannel() const;
 		void SetFMODChannel(FMOD::Channel* channel);
 
+		void SetPitch(float value) override;
+		float GetPitch() const override;
+
+		void SetVolume(float volume) override;
+		float GetVolume() const override;
+
 		// Add sound tracking
 		SoundIndex GetSoundIndex() const;
 		void SetSoundIndex(SoundIndex soundIndex);

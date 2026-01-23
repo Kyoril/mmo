@@ -346,19 +346,16 @@ namespace mmo
 				const auto item = inv.GetItemAtSlot(itemSlot);
 				ASSERT(item);
 
-				if (item->GetEntry().itemclass() == item_class::Consumable)
+				if (SpellHasEffect(m_spell, spell_effects::Heal) && target->GetHealth() >= target->GetMaxHealth())
 				{
-					if (SpellHasEffect(m_spell, spell_effects::Heal) && target->GetHealth() >= target->GetMaxHealth())
-					{
-						SendEndCast(spell_cast_result::FailedAlreadyAtFullHealth);
-						return false;
-					}
+					SendEndCast(spell_cast_result::FailedAlreadyAtFullHealth);
+					return false;
+				}
 
-					if (SpellHasEffect(m_spell, spell_effects::Energize) && target->GetPower() >= target->GetMaxPower())
-					{
-						SendEndCast(spell_cast_result::FailedAlreadyAtFullPower);
-						return false;
-					}
+				if (SpellHasEffect(m_spell, spell_effects::Energize) && target->GetPower() >= target->GetMaxPower())
+				{
+					SendEndCast(spell_cast_result::FailedAlreadyAtFullPower);
+					return false;
 				}
 			}
 
@@ -655,9 +652,8 @@ namespace mmo
 		}
 	}
 
-	void SingleCastState::ApplyAllEffects()
+	GameTime SingleCastState::CalculateFinalCooldown() const
 	{
-		// Add spell cooldown if any
 		const uint64 spellCatCD = m_spell.categorycooldown();
 		const uint64 spellCD = m_spell.cooldown();
 
@@ -671,8 +667,18 @@ namespace mmo
 		{
 			// Modify spell cooldown by spell mods
 			m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Cooldown, m_spell.id(), finalCD);
+		}
 
-			ApplyCooldown(finalCD, spellCatCD);
+		return finalCD;
+	}
+
+	void SingleCastState::ApplyAllEffects()
+	{
+		// Add spell cooldown if any - use the pre-calculated value
+		const GameTime finalCD = CalculateFinalCooldown();
+		if (finalCD)
+		{
+			ApplyCooldown(finalCD, m_spell.categorycooldown());
 		}
 
 		// Make sure that this isn't destroyed during the effects
@@ -1288,7 +1294,13 @@ namespace mmo
 			return;
 		}
 
-		const uint32 mask = m_spell.itemsubclassmask();
+		// Get proficiency ID from the effect's miscvaluea field
+		const uint32 proficiencyId = effect.miscvaluea();
+		if (proficiencyId == 0)
+		{
+			WLOG("Spell " << m_spell.id() << " has Proficiency effect with no proficiency ID");
+			return;
+		}
 
 		for (auto* targetObject : effectTargets)
 		{
@@ -1300,19 +1312,8 @@ namespace mmo
 			m_affectedTargets.insert(targetObject->shared_from_this());
 			auto& unitTarget = targetObject->AsUnit();
 
-			if (m_spell.itemclass() == item_class::Weapon)
-			{
-				unitTarget.AddWeaponProficiency(mask);
-			}
-			else if (m_spell.itemclass() == item_class::Armor)
-			{
-				unitTarget.AddArmorProficiency(mask);
-			}
-			else
-			{
-				WLOG("Unknown item class for spell " << m_spell.id() << ": " << m_spell.itemclass());
-				return;
-			}
+			// Add the proficiency by ID
+			unitTarget.AddProficiency(proficiencyId);
 		}
 	}
 
@@ -1953,15 +1954,19 @@ namespace mmo
 				targetMap.SetUnitTarget(executer.GetGuid());
 			}
 
+			// Calculate cooldown to include in the packet
+			const GameTime cooldownMs = CalculateFinalCooldown();
+
 			SendPacketFromCaster(executer,
-				[casterId, spellId, &targetMap](game::OutgoingPacket& out_packet)
+				[casterId, spellId, &targetMap, cooldownMs](game::OutgoingPacket& out_packet)
 				{
 					out_packet.Start(game::realm_client_packet::SpellGo);
 					out_packet
 						<< io::write_packed_guid(casterId)
 						<< io::write<uint32>(spellId)
 						<< io::write<GameTime>(GetAsyncTimeMs())
-						<< targetMap;
+						<< targetMap
+						<< io::write<uint32>(cooldownMs);
 					out_packet.Finish();
 				});
 		}

@@ -59,6 +59,7 @@ namespace mmo
 
 	static const std::string ScriptsElement("Scripts");
 	static const std::string OnClickElement("OnClick");
+	static const std::string OnMouseDownElement("OnMouseDown");
 	static const std::string OnLoadElement("OnLoad");
 	static const std::string OnUpdateElement("OnUpdate");
 	static const std::string OnTabPressedElement("OnTabPressed");
@@ -236,6 +237,10 @@ namespace mmo
 			{
 				ElementOnClickStart(attributes);
 			}
+			else if (element == OnMouseDownElement)
+			{
+				ElementOnMouseDownStart(attributes);
+			}
 			else if (element == OnLoadElement)
 			{
 				ElementOnLoadStart(attributes);
@@ -394,6 +399,10 @@ namespace mmo
 			else if (element == OnClickElement)
 			{
 				ElementOnClickEnd();
+			}
+			else if (element == OnMouseDownElement)
+			{
+				ElementOnMouseDownEnd();
 			}
 			else if (element == OnLoadElement)
 			{
@@ -1237,6 +1246,33 @@ namespace mmo
 		else
 		{
 			ELOG("OnClick element found outside of frame!");
+		}
+	}
+
+	void LayoutXmlLoader::ElementOnMouseDownStart(const XmlAttributes& attributes)
+	{
+		if (!m_scriptTag)
+		{
+			ELOG("Unexpected " << OnMouseDownElement << " element!");
+			return;
+		}
+	}
+
+	void LayoutXmlLoader::ElementOnMouseDownEnd()
+	{
+		FramePtr frame = m_frames.top();
+		if (frame)
+		{
+			String script = m_text;
+			m_scriptFunctions.push_back([frame, script]()
+			{
+				const luabind::object onMouseDown = FrameManager::Get().CompileFunction(frame->GetName() + ":OnMouseDown", script);
+				frame->SetOnMouseDown(onMouseDown);
+			});
+		}
+		else
+		{
+			ELOG("OnMouseDown element found outside of frame!");
 		}
 	}
 

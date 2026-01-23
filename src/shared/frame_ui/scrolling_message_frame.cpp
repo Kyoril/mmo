@@ -361,10 +361,10 @@ namespace mmo
 		Invalidate(false);
 	}
 
-	void ScrollingMessageFrame::OnMouseDown(MouseButton button, int32 buttons, const Point& position)
+	bool ScrollingMessageFrame::OnMouseDown(MouseButton button, int32 buttons, const Point& position)
 	{
 		// Call parent implementation first
-		Frame::OnMouseDown(button, buttons, position);
+		bool consumed = Frame::OnMouseDown(button, buttons, position);
 
 		// Convert position to relative coordinates within the frame
 		Rect frameRect = GetAbsoluteFrameRect();
@@ -421,9 +421,11 @@ namespace mmo
 				{
 					// Trigger hyperlink click event
 					TriggerEvent("HYPERLINK_CLICKED", this, hyperlink.type, hyperlink.payload);
-					return;
+					return true;
 				}
 			}
 		}
+		
+		return consumed;
 	}
 }

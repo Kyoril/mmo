@@ -70,6 +70,10 @@ namespace mmo
 			m_movementInfo.movementFlags &= ~movement_flags::Falling;
 
 			m_netDriver.OnMoveEvent(*this, MovementEvent(movement_event_type::Land, m_movementInfo.timestamp, m_movementInfo));
+
+			// Lock the position so the next start packet uses the same position
+			// This prevents drift from physics adjustments between landing and next movement
+			LockPositionForSync();
 		}
 	}
 
@@ -282,6 +286,13 @@ namespace mmo
 		if (!m_movementPath.empty() && !m_pathCompleted)
 		{
 			UpdatePathMovement(deltaTime);
+		}
+		else if (!IsControlledByLocalPlayer() && m_unitMovement)
+		{
+			// For idle non-player units (NPCs), correct their ground height
+			// This fixes floating NPCs that spawn at server navmesh heights
+			// which may not match the client's detailed collision geometry
+			m_unitMovement->CorrectGroundHeight();
 		}
 
 		// Update animation state based on movement
@@ -839,6 +850,16 @@ namespace mmo
 		}
 
 		UpdateMovementInfo();
+
+		// If position was locked from a previous stop packet, use that position
+		// in the packet to maintain consistency with what the server expects.
+		// Don't snap the scene node - that would cause visual teleporting.
+		if (m_positionLocked)
+		{
+			m_movementInfo.position = m_syncedPosition;
+			m_positionLocked = false;
+		}
+
 		m_lastHeartbeat = m_movementInfo.timestamp;
 
 		QueueMovementEvent(forward ? movement_event_type::StartMoveForward : movement_event_type::StartMoveBackward, m_movementInfo.timestamp, m_movementInfo);
@@ -858,6 +879,16 @@ namespace mmo
 		}
 
 		UpdateMovementInfo();
+
+		// If position was locked from a previous stop packet, use that position
+		// in the packet to maintain consistency with what the server expects.
+		// Don't snap the scene node - that would cause visual teleporting.
+		if (m_positionLocked)
+		{
+			m_movementInfo.position = m_syncedPosition;
+			m_positionLocked = false;
+		}
+
 		m_lastHeartbeat = m_movementInfo.timestamp;
 
 		QueueMovementEvent(left ? movement_event_type::StartStrafeLeft : movement_event_type::StartStrafeRight, m_movementInfo.timestamp, m_movementInfo);
@@ -872,6 +903,10 @@ namespace mmo
 		m_lastHeartbeat = m_movementInfo.timestamp;
 
 		QueueMovementEvent(movement_event_type::StopMove, m_movementInfo.timestamp, m_movementInfo);
+
+		// Lock the position so the next start packet uses the same position
+		// This prevents drift from physics adjustments between stop and start
+		LockPositionForSync();
 	}
 
 	void GameUnitC::StopStrafe()
@@ -883,6 +918,10 @@ namespace mmo
 		m_lastHeartbeat = m_movementInfo.timestamp;
 
 		QueueMovementEvent(movement_event_type::StopStrafe, m_movementInfo.timestamp, m_movementInfo);
+
+		// Lock the position so the next start packet uses the same position
+		// This prevents drift from physics adjustments between stop and start
+		LockPositionForSync();
 	}
 
 	void GameUnitC::StartTurn(const bool left)
@@ -898,8 +937,17 @@ namespace mmo
 			m_movementInfo.movementFlags &= ~movement_flags::TurnLeft;
 		}
 
-		// Stop movement
 		UpdateMovementInfo();
+
+		// If position was locked from a previous stop packet, use that position
+		// in the packet to maintain consistency with what the server expects.
+		// Don't snap the scene node - that would cause visual teleporting.
+		if (m_positionLocked)
+		{
+			m_movementInfo.position = m_syncedPosition;
+			m_positionLocked = false;
+		}
+
 		m_lastHeartbeat = m_movementInfo.timestamp;
 
 		QueueMovementEvent(left ? movement_event_type::StartTurnLeft : movement_event_type::StartTurnRight, m_movementInfo.timestamp, m_movementInfo);
@@ -909,8 +957,17 @@ namespace mmo
 	{
 		m_movementInfo.movementFlags &= ~movement_flags::Turning;
 
-		// Stop movement
 		UpdateMovementInfo();
+
+		// If position was locked from a previous stop packet, use that position
+		// in the packet to maintain consistency with what the server expects.
+		if (m_positionLocked)
+		{
+			m_movementInfo.position = m_syncedPosition;
+			// Don't clear the lock - turning doesn't actually change position,
+			// so we want the next movement start to still use the locked position
+		}
+
 		m_lastHeartbeat = m_movementInfo.timestamp;
 
 		QueueMovementEvent(movement_event_type::StopTurn, m_movementInfo.timestamp, m_movementInfo);
@@ -925,6 +982,20 @@ namespace mmo
 			m_sceneNode->SetOrientation(Quaternion(facing, Vector3::UnitY));
 
 			UpdateMovementInfo();
+
+			// If position was locked from a previous stop packet, use that position
+			// in the packet to maintain consistency with what the server expects.
+			// Don't snap the scene node - that would cause visual teleporting.
+			// Also don't re-lock here - SetFacing doesn't stop movement, so we shouldn't
+			// keep overwriting the position with old values.
+			if (m_positionLocked)
+			{
+				m_movementInfo.position = m_syncedPosition;
+				// Note: We don't clear m_positionLocked here because SetFacing
+				// can be called many times in rapid succession. The lock is only
+				// cleared when actual movement starts (StartMove, StartStrafe, etc.)
+			}
+
 			m_lastHeartbeat = m_movementInfo.timestamp;
 
 			QueueMovementEvent(movement_event_type::SetFacing, m_movementInfo.timestamp, m_movementInfo);
@@ -968,6 +1039,15 @@ namespace mmo
 		m_lastHeartbeat = GetAsyncTimeMs();
 		UpdateMovementInfo();
 		m_movementInfo.movementFlags |= movement_flags::Falling;
+
+		// If position was locked from a previous stop/land packet, use that position
+		// in the packet to maintain consistency with what the server expects.
+		// Don't snap the scene node - that would cause visual teleporting.
+		if (m_positionLocked)
+		{
+			m_movementInfo.position = m_syncedPosition;
+			m_positionLocked = false;
+		}
 
 		if (!wasFalling)
 		{
@@ -1226,6 +1306,13 @@ namespace mmo
 			}
 
 			m_sceneNode->SetPosition(newPosition);
+
+			// Correct the height to match the client's ground geometry
+			// This is needed because the server's navmesh may not match the client's detailed collision
+			if (m_unitMovement)
+			{
+				m_unitMovement->CorrectGroundHeight();
+			}
 
 			// Set run animation for all units following paths
 			if (m_runAnimState)
@@ -1780,14 +1867,28 @@ namespace mmo
 		PlayOneShotAnimation(m_damageHitState);
 	}
 
-	void GameUnitC::SetWeaponProficiency(const uint32 mask)
+	void GameUnitC::AddProficiency(const uint32 proficiencyId)
 	{
-		m_weaponProficiency = mask;
+		if (proficiencyId > 0)
+		{
+			m_proficiencies.insert(proficiencyId);
+		}
 	}
 
-	void GameUnitC::SetArmorProficiency(const uint32 mask)
+	void GameUnitC::RemoveProficiency(const uint32 proficiencyId)
 	{
-		m_armorProficiency = mask;
+		m_proficiencies.erase(proficiencyId);
+	}
+
+	bool GameUnitC::HasProficiency(const uint32 proficiencyId) const
+	{
+		// Proficiency ID 0 means no proficiency required
+		if (proficiencyId == 0)
+		{
+			return true;
+		}
+
+		return m_proficiencies.contains(proficiencyId);
 	}
 
 	bool GameUnitC::IsFriendlyTo(const GameUnitC &other) const
@@ -2022,6 +2123,28 @@ namespace mmo
 		}
 
 		return Vector3::UnitY * height;
+	}
+
+	void GameUnitC::LockPositionForSync()
+	{
+		m_syncedPosition = m_sceneNode->GetPosition();
+		m_positionLocked = true;
+	}
+
+	void GameUnitC::GetSyncedPositionForPacket(Vector3& outPosition)
+	{
+		if (m_positionLocked)
+		{
+			outPosition = m_syncedPosition;
+			m_positionLocked = false;
+			
+			// Also snap the scene node to the synced position to keep physics in sync
+			m_sceneNode->SetPosition(m_syncedPosition);
+		}
+		else
+		{
+			outPosition = m_sceneNode->GetPosition();
+		}
 	}
 
 	void GameUnitC::UpdateMovementInfo()

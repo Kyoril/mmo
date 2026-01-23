@@ -53,6 +53,7 @@
 
 #include "systems/action_bar.h"
 #include "systems/spell_cast.h"
+#include "systems/cooldown_manager.h"
 #include "systems/trainer_client.h"
 #include "systems/quest_client.h"
 #include "systems/party_info.h"
@@ -73,6 +74,7 @@
 #include "luabind/iterator_policy.hpp"
 #include "luabind/out_value_policy.hpp"
 #include "ui/minimap_frame.h"
+#include "ui/cooldown_frame.h"
 
 ////////////////////////////////////////////////////////////////
 // Network handler
@@ -189,6 +191,8 @@ namespace mmo
 												 { return std::make_shared<UnitModelFrame>(name); });
 		FrameManager::Get().RegisterFrameFactory("Minimap", [](const std::string &name)
 												 { return std::make_shared<MinimapFrame>(name, *s_minimap); });
+		FrameManager::Get().RegisterFrameFactory("Cooldown", [](const std::string &name)
+												 { return std::make_shared<CooldownFrame>(name); });
 
 		// Setup cursor graphics
 		g_cursor.LoadCursorTypeFromTexture(CursorType::Pointer, "Interface/Cursor/pointer001.htex");
@@ -209,12 +213,12 @@ namespace mmo
 			return false; });
 		s_frameUiConnections += EventLoop::MouseDown.connect([](EMouseButton button, int32 x, int32 y)
 															 {
-			FrameManager::Get().NotifyMouseDown(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y));
-			return false; });
+			// Returns true if the UI consumed the event, preventing further processing
+			return FrameManager::Get().NotifyMouseDown(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y)); });
 		s_frameUiConnections += EventLoop::MouseUp.connect([](EMouseButton button, int32 x, int32 y)
 														   {
-			FrameManager::Get().NotifyMouseUp(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y));
-			return false; });
+			// Returns true if the UI consumed the event, preventing further processing
+			return FrameManager::Get().NotifyMouseUp(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y)); });
 
 		s_frameUiConnections += EventLoop::KeyDown.connect([](int32 key, bool)
 														   {
@@ -245,7 +249,12 @@ namespace mmo
 
 					   luabind::scope(
 						   luabind::class_<UnitModelFrame, ModelFrame>("UnitModelFrame")
-							   .def("SetUnit", &UnitModelFrame::SetUnit)));
+							   .def("SetUnit", &UnitModelFrame::SetUnit)),
+
+					   luabind::scope(
+						   luabind::class_<CooldownFrame, Frame>("CooldownFrame")
+							   .def("SetProgress", &CooldownFrame::SetProgress)
+							   .def("GetProgress", &CooldownFrame::GetProgress)));
 
 		return true;
 	}
@@ -260,6 +269,7 @@ namespace mmo
 		FrameManager::Get().RemoveFrameRenderer("ModelRenderer");
 		FrameManager::Get().UnregisterFrameFactory("Model");
 		FrameManager::Get().UnregisterFrameFactory("UnitModel");
+		FrameManager::Get().UnregisterFrameFactory("Cooldown");
 
 		// Destroy the frame manager
 		FrameManager::Destroy();
@@ -290,6 +300,7 @@ namespace mmo
 
 	static std::unique_ptr<ActionBar> s_actionBar;
 	static std::unique_ptr<SpellCast> s_spellCast;
+	static std::unique_ptr<CooldownManager> s_cooldownManager;
 	static std::unique_ptr<QuestClient> s_questClient;
 	static std::unique_ptr<PartyInfo> s_partyInfo;
 	static std::unique_ptr<GuildClient> s_guildClient;
@@ -390,6 +401,7 @@ namespace mmo
 		s_guildClient = std::make_unique<GuildClient>(*s_realmConnector, s_clientCache->GetGuildCache(), s_project.races, s_project.classes);
 		s_friendClient = std::make_unique<FriendClient>(*s_realmConnector, s_project.races, s_project.classes);
 		s_spellCast = std::make_unique<SpellCast>(*s_realmConnector, s_project.spells, s_project.ranges);
+		s_cooldownManager = std::make_unique<CooldownManager>();
 		s_actionBar = std::make_unique<ActionBar>(*s_realmConnector, s_project.spells, s_clientCache->GetItemCache(), *s_spellCast);
 		s_talentClient = std::make_unique<TalentClient>(s_project.talentTabs, s_project.talents, s_project.spells, *s_realmConnector);
 
@@ -400,12 +412,12 @@ namespace mmo
 		gameStateMgr.AddGameState(loginState);
 
 		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient,
-															 *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charSelect, *s_guildClient, *s_friendClient, *s_clientCache, *s_discord, s_gameTime, *s_talentClient,
+															 *s_actionBar, *s_spellCast, *s_cooldownManager, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charSelect, *s_guildClient, *s_friendClient, *s_clientCache, *s_discord, s_gameTime, *s_talentClient,
 															 *s_minimap, *s_inventoryClient);
 		gameStateMgr.AddGameState(worldState);
 
 		// Initialize the game script instance
-		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project, *s_actionBar, *s_spellCast, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charCreateInfo, *s_charSelect, *s_guildClient, *s_friendClient, s_gameTime, *s_talentClient);
+		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project, *s_actionBar, *s_spellCast, *s_cooldownManager, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charCreateInfo, *s_charSelect, *s_guildClient, *s_friendClient, s_gameTime, *s_talentClient);
 		s_minimap->RegisterScriptFunctions(&s_gameScript->GetLuaState());
 
 		// Setup FrameUI library

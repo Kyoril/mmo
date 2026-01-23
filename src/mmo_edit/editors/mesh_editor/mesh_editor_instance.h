@@ -10,6 +10,7 @@
 #include "anim_evaluator.h"
 #include "editors/editor_instance.h"
 #include "graphics/render_texture.h"
+#include "scene_graph/animation_notify.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/axis_display.h"
 #include "scene_graph/mesh_serializer.h"
@@ -22,6 +23,7 @@ namespace mmo
 	class Entity;
 	class Camera;
 	class SceneNode;
+	class Animation;
 
 	class MeshEditorInstance final : public EditorInstance
 	{
@@ -49,6 +51,10 @@ namespace mmo
 		void DrawDetails(const String& id);
 
 		void DrawAnimations(const String& id);
+
+		void DrawAnimationTimeline();
+
+		void DrawAnimationTimelineWindow(const String& id);
 
 		void DrawBones(const String& id);
 
@@ -110,5 +116,15 @@ namespace mmo
 		Vector3 m_importOffset = Vector3::Zero;
 		Vector3 m_importScale = Vector3::UnitScale;;
 		Quaternion m_importRotation = Quaternion::Identity;
+
+		// Animation timeline UI state
+		float m_timelineZoom = 1.0f;
+		float m_timelineScroll = 0.0f;
+		bool m_isDraggingTimeline = false;
+		bool m_isDraggingNotify = false;
+		int m_selectedNotifyIndex = -1;
+		int m_hoveredNotifyIndex = -1;
+		String m_newNotifyName;
+		AnimationNotifyType m_newNotifyType = AnimationNotifyType::Footstep;
 	};
 }

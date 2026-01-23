@@ -355,7 +355,8 @@ namespace mmo
 
 		/// Sends a packet to the server indicating that the player wants to cancel an active aura on his character. The aura must exist and be removable for this
 		///	to work, otherwise the server will ignore the request.
-		void CancelAura();
+		/// @param spellId The ID of the spell to cancel the aura for.
+		void CancelAura(uint32 spellId);
 
 		/// Sends a packet to the server indicating that the player wants to buy a spell from a trainer npc. The spell must be available for the player to buy and
 		///	the player must fulfill all requirements such as level and money. The trainer must be the current trainer, initiated by the TrainerMenu or the GossipHello packet.
@@ -403,6 +404,10 @@ namespace mmo
 		void AcceptGroup();
 
 		void DeclineGroup();
+
+		void LeaveGroup();
+
+		void DisbandGroup();
 
 		void RandomRoll(int32 min, int32 max);
 

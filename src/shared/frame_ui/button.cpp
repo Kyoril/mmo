@@ -34,16 +34,17 @@ namespace mmo
 		otherButton->m_checked = m_checked;
 	}
 
-	void Button::OnMouseDown(MouseButton button, int32 buttons, const Point& position)
+	bool Button::OnMouseDown(MouseButton button, int32 buttons, const Point& position)
 	{
-		Frame::OnMouseDown(button, buttons, position);
+		bool consumed = Frame::OnMouseDown(button, buttons, position);
 
 		SetButtonState(ButtonState::Pushed);
 
 		abort_emission();
+		return true;
 	}
 
-	void Button::OnMouseUp(MouseButton button, int32 buttons, const Point & position)
+	bool Button::OnMouseUp(MouseButton button, int32 buttons, const Point & position)
 	{
 		if (button == MouseButton::Left)
 		{
@@ -57,8 +58,9 @@ namespace mmo
 		}
 
 		// Call super class method
-		Frame::OnMouseUp(button, buttons, position);
+		bool consumed = Frame::OnMouseUp(button, buttons, position);
 		abort_emission();
+		return true;
 	}
 
 	void Button::OnMouseEnter()

@@ -2,6 +2,7 @@
 
 #include "remove_item_command.h"
 #include "game_server/objects/game_item_s.h"
+#include "objects/game_bag_s.h"
 
 namespace mmo
 {
@@ -53,11 +54,21 @@ namespace mmo
     InventoryResult<void> RemoveItemCommand::ValidateRemoval()
     {
         // Check if item exists at slot
-        auto item = m_context.GetItemAtSlot(m_slot.GetAbsolute());
+        const auto item = m_context.GetItemAtSlot(m_slot.GetAbsolute());
         if (!item)
         {
             return InventoryResult<void>::Failure(
                 inventory_change_failure::ItemNotFound);
+        }
+
+        // If item is a bag ensure it is empty
+        if (item->IsContainer())
+        {
+            const auto bag = std::static_pointer_cast<GameBagS>(item);
+            if (!bag->IsEmpty())
+            {
+                return InventoryResult<void>::Failure(inventory_change_failure::CanOnlyDoWithEmptyBags);
+            }
         }
 
         // If specific stack count requested, validate it

@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 static const float PI = 3.14159265359;
+static const uint NUM_SHADOW_CASCADES = 4;
 
 // Input structure from the vertex shader
 struct PS_INPUT
@@ -17,7 +18,11 @@ Texture2D MaterialTexture : register(t2);
 Texture2D EmissiveTexture : register(t3);
 Texture2D ViewRayTexture : register(t4);
 
-Texture2D ShadowMap : register(t5);
+// Cascade shadow maps
+Texture2D ShadowMapCascade0 : register(t5);
+Texture2D ShadowMapCascade1 : register(t6);
+Texture2D ShadowMapCascade2 : register(t7);
+Texture2D ShadowMapCascade3 : register(t8);
 
 // Samplers
 SamplerState PointSampler : register(s0);
@@ -115,14 +120,30 @@ cbuffer LightBuffer : register(b2)
 
 cbuffer ShadowBuffer : register(b3)
 {
-    column_major matrix LightViewProj;
+    // Cascade view-projection matrices
+    column_major matrix CascadeViewProj[NUM_SHADOW_CASCADES];
+    
+    // Cascade split distances (in view space)
+    float4 CascadeSplitDistances;
     
     // Shadow filter parameters
     float ShadowBias;           // Depth bias to prevent shadow acne
     float NormalBiasScale;      // Bias scale factor based on normal
     float ShadowSoftness;       // Controls general softness of shadows
     float BlockerSearchRadius;  // Search radius for the blocker search phase
+    
     float LightSize;            // Controls the size of the virtual light (larger = softer shadows)
+    uint CascadeCount;          // Number of active cascades
+    uint DebugCascades;         // Whether to show cascade debug colors
+    float CascadeBlendFactor;   // Blend factor for cascade transitions
+};
+
+// Debug colors for cascade visualization
+static const float3 CASCADE_COLORS[4] = {
+    float3(1.0, 0.0, 0.0),  // Red - cascade 0 (nearest)
+    float3(0.0, 1.0, 0.0),  // Green - cascade 1
+    float3(0.0, 0.0, 1.0),  // Blue - cascade 2
+    float3(1.0, 1.0, 0.0)   // Yellow - cascade 3 (farthest)
 };
 
 // Reconstructs world position from depth
@@ -206,21 +227,24 @@ float3 CalculatePointLight(Light light, float3 viewDir, float3 worldPos, float3 
     return (kD * diffuse + specularBRDF) * radiance * NdotL;
 }
 
-// Helper function to find average blocker depth
-float FindBlockerDepth(float2 uv, float receiverDepth, float searchRadius, out float numBlockers)
+// Helper function to find average blocker depth for a specific cascade
+float FindBlockerDepthCascade(Texture2D shadowMap, float2 uv, float receiverDepth, float searchRadius, out float numBlockers)
 {
     float blockerSum = 0.0f;
     numBlockers = 0.0f;
     
     // Generate a random rotation angle to reduce banding artifacts
-    float angle = frac(sin(dot(uv, float2(12.9898, 78.233))) * 43758.5453) * 3.14159;
-    float2x2 rot = float2x2(cos(angle), -sin(angle), sin(angle), cos(angle));
+    float angle = frac(sin(dot(uv, float2(12.9898, 78.233))) * 43758.5453) * PI;
+    float cosAngle = cos(angle);
+    float sinAngle = sin(angle);
+    float2x2 rot = float2x2(cosAngle, -sinAngle, sinAngle, cosAngle);
     
     // Sample potential blockers
+    [unroll]
     for (int i = 0; i < 16; i++)
     {
         float2 offset = mul(rot, POISSON_DISK[i]) * searchRadius;
-        float shadowMapDepth = ShadowMap.SampleLevel(PointSampler, uv + offset, 0).r;
+        float shadowMapDepth = shadowMap.SampleLevel(PointSampler, uv + offset, 0).r;
         
         // If the depth is less than the receiver's depth, it's a blocker
         if (shadowMapDepth < receiverDepth - ShadowBias)
@@ -231,45 +255,53 @@ float FindBlockerDepth(float2 uv, float receiverDepth, float searchRadius, out f
     }
     
     if (numBlockers > 0.0f)
+    {
         return blockerSum / numBlockers;
+    }
         
     return 1.0f;
 }
 
-// Percentage-Closer Filtering with variable filter size
-float PCF_Filter(float2 uv, float receiverDepth, float filterRadius)
+// Optimized PCF filter with rotated Poisson disk
+float PCF_FilterCascade(Texture2D shadowMap, float2 uv, float receiverDepth, float filterRadius)
 {
     float sum = 0.0f;
     
     // Generate a random rotation angle to reduce banding artifacts
-    float angle = frac(sin(dot(uv, float2(12.9898, 78.233))) * 43758.5453) * 3.14159;
-    float2x2 rot = float2x2(cos(angle), -sin(angle), sin(angle), cos(angle));
+    float angle = frac(sin(dot(uv, float2(12.9898, 78.233))) * 43758.5453) * PI;
+    float cosAngle = cos(angle);
+    float sinAngle = sin(angle);
+    float2x2 rot = float2x2(cosAngle, -sinAngle, sinAngle, cosAngle);
     
-    // Higher sample count for larger filter radius
-    int sampleCount = lerp(16, 32, saturate(filterRadius * 10.0));
-    sampleCount = min(sampleCount, 16); // Cap at 16 samples for performance
-    
-    for (int i = 0; i < sampleCount; i++)
+    // Use fixed 16 samples for consistent quality
+    [unroll]
+    for (int i = 0; i < 16; i++)
     {
-        float2 offset = mul(rot, POISSON_DISK[i % 16]) * filterRadius;
-        sum += ShadowMap.SampleCmpLevelZero(ShadowSampler, uv + offset, receiverDepth - ShadowBias);
+        float2 offset = mul(rot, POISSON_DISK[i]) * filterRadius;
+        sum += shadowMap.SampleCmpLevelZero(ShadowSampler, uv + offset, receiverDepth - ShadowBias);
     }
     
-    return sum / float(sampleCount);
+    return sum / 16.0f;
 }
 
-// Advanced shadow sampling using PCSS (Percentage Closer Soft Shadows)
-float SampleShadow(float3 worldPos, float3 normal, float normalBias)
+// Sample shadow from a specific cascade
+float SampleShadowCascade(Texture2D shadowMap, float3 worldPos, float3 normal, uint cascadeIndex)
 {
     // Apply normal-based bias to reduce shadow acne on sloped surfaces
-    float adjustedNormalBias = normalBias * NormalBiasScale;
-    float3 biasedWorldPos = worldPos + normal * adjustedNormalBias;
+    float3 lightDir = -normalize(Lights[0].Direction);
+    float NdotL = saturate(dot(normal, lightDir));
+    
+    // Scale bias based on slope - more bias for grazing angles
+    float slopeBias = NormalBiasScale * (1.0 - NdotL);
+    float3 biasedWorldPos = worldPos + normal * slopeBias;
     
     // Transform to light space
-    float4 lightSpacePos = mul(float4(biasedWorldPos, 1.0f), LightViewProj);
+    float4 lightSpacePos = mul(float4(biasedWorldPos, 1.0f), CascadeViewProj[cascadeIndex]);
     
     if (lightSpacePos.w <= 0.0f)
+    {
         return 1.0f;
+    }
         
     // Perspective division
     float3 ndc = lightSpacePos.xyz / lightSpacePos.w;
@@ -279,42 +311,93 @@ float SampleShadow(float3 worldPos, float3 normal, float normalBias)
     float receiverDepth = ndc.z;
     
     // Early out if outside shadow map
-    if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f || ndc.z > 1.0f)
+    if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f || ndc.z > 1.0f || ndc.z < 0.0f)
+    {
         return 1.0f;
+    }
     
     // Check if surface is facing light
-    float NdotL = dot(normal, -normalize(Lights[0].Direction));
     if (NdotL <= 0.0f)
+    {
         return 0.0f;  // Surface faces away from light
+    }
     
-    // ------------------------
-    // STEP 1: Blocker search
-    // ------------------------
-    float numBlockers;
-    float searchRadius = BlockerSearchRadius / lightSpacePos.w; // Scale with depth
-    float avgBlockerDepth = FindBlockerDepth(uv, receiverDepth, searchRadius, numBlockers);
+    // Calculate filter radius based on cascade (larger cascades need larger filter radius in UV space)
+    // But since each cascade has similar world-space coverage per texel, use consistent filtering
+    float baseFilterRadius = 1.0f / 2048.0f;  // Base texel size
+    float filterRadius = baseFilterRadius * (1.0f + float(cascadeIndex) * 0.5f) * ShadowSoftness;
     
-    // Early out if no blockers found
-    if (numBlockers < 1.0f)
+    // Use simpler PCF for quality/performance balance
+    return PCF_FilterCascade(shadowMap, uv, receiverDepth, filterRadius);
+}
+
+// Select cascade and sample shadow with optional blending
+float SampleShadowCSM(float3 worldPos, float3 normal, float viewDepth, out uint selectedCascade)
+{
+    selectedCascade = 0;
+    
+    // Early out if no cascades
+    if (CascadeCount == 0)
+    {
         return 1.0f;
+    }
     
-    // ------------------------
-    // STEP 2: Penumbra estimation
-    // ------------------------
-    // Estimate penumbra size based on blocker distance
-    float penumbraRatio = (receiverDepth - avgBlockerDepth) / avgBlockerDepth;
-    float filterRadius = penumbraRatio * LightSize * ShadowSoftness;
+    // Find the appropriate cascade based on view depth
+    // Cascades are ordered by distance, so find the first one that contains our depth
+    float cascadeSplits[4] = { 
+        CascadeSplitDistances.x, 
+        CascadeSplitDistances.y, 
+        CascadeSplitDistances.z, 
+        CascadeSplitDistances.w 
+    };
     
-    // Adjust filter radius based on distance to avoid excessive blurring for distant objects
-    filterRadius = min(filterRadius, 0.01f);
+    // Select cascade - find the first cascade where our depth is within range
+    selectedCascade = CascadeCount - 1;  // Default to last cascade
+    for (uint i = 0; i < CascadeCount; i++)
+    {
+        if (viewDepth <= cascadeSplits[i])
+        {
+            selectedCascade = i;
+            break;
+        }
+    }
     
-    // Ensure minimum filter size to prevent hard shadow edges
-    filterRadius = max(filterRadius, 1.0f / 4096.0f);
+    // Sample the selected cascade
+    float shadow = 1.0f;
     
-    // ------------------------
-    // STEP 3: Filtering
-    // ------------------------
-    return PCF_Filter(uv, receiverDepth, filterRadius);
+    // Use switch for proper texture sampling (can't index textures dynamically in SM5)
+    switch (selectedCascade)
+    {
+        case 0: shadow = SampleShadowCascade(ShadowMapCascade0, worldPos, normal, 0); break;
+        case 1: shadow = SampleShadowCascade(ShadowMapCascade1, worldPos, normal, 1); break;
+        case 2: shadow = SampleShadowCascade(ShadowMapCascade2, worldPos, normal, 2); break;
+        case 3: shadow = SampleShadowCascade(ShadowMapCascade3, worldPos, normal, 3); break;
+    }
+    
+    // Optional: Blend between cascades for smoother transitions
+    if (CascadeBlendFactor > 0.0f && selectedCascade < CascadeCount - 1)
+    {
+        float currentSplit = cascadeSplits[selectedCascade];
+        float blendStart = currentSplit * (1.0f - CascadeBlendFactor);
+        
+        if (viewDepth > blendStart)
+        {
+            float blendWeight = (viewDepth - blendStart) / (currentSplit - blendStart);
+            blendWeight = smoothstep(0.0f, 1.0f, blendWeight);
+            
+            float nextShadow = 1.0f;
+            switch (selectedCascade + 1)
+            {
+                case 1: nextShadow = SampleShadowCascade(ShadowMapCascade1, worldPos, normal, 1); break;
+                case 2: nextShadow = SampleShadowCascade(ShadowMapCascade2, worldPos, normal, 2); break;
+                case 3: nextShadow = SampleShadowCascade(ShadowMapCascade3, worldPos, normal, 3); break;
+            }
+            
+            shadow = lerp(shadow, nextShadow, blendWeight);
+        }
+    }
+    
+    return shadow;
 }
 
 // Calculates directional light contribution
@@ -425,10 +508,16 @@ float4 main(PS_INPUT input) : SV_TARGET
     // Reconstruct world position from depth
     float3 worldPos = ReconstructPosition(depth, viewRay);
 
+    // Calculate view depth for cascade selection - use distance from camera
+    float viewDepth = length(worldPos - CameraPosition);
+
     // Initialize lighting with ambient and emissive
     float3 lighting = albedo * AmbientColor * ao + emissive;
     
     float3 viewDir = normalize(CameraPosition - worldPos);
+    
+    // Debug cascade visualization color
+    float3 cascadeDebugColor = float3(1.0, 1.0, 1.0);
     
     // Calculate lighting for each light
     for (uint i = 0; i < LightCount; i++)
@@ -442,9 +531,16 @@ float4 main(PS_INPUT input) : SV_TARGET
         else if (light.Type == 1) // Directional light
         {
             float shadow = 1.0f;
-            if (light.ShadowMap > 0)
+            if (light.ShadowMap > 0 && CascadeCount > 0)
             {
-                shadow = SampleShadow(worldPos, normal, 0.078125f * 0.2f);
+                uint selectedCascade = 0;
+                shadow = SampleShadowCSM(worldPos, normal, viewDepth, selectedCascade);
+                
+                // Store cascade debug color
+                if (DebugCascades > 0)
+                {
+                    cascadeDebugColor = CASCADE_COLORS[selectedCascade];
+                }
             }
             
             lighting += CalculateDirectionalLight(light, viewDir, worldPos, normal, albedo, metallic, roughness, specular, shadow);
@@ -454,7 +550,14 @@ float4 main(PS_INPUT input) : SV_TARGET
             lighting += CalculateSpotLight(light, viewDir, worldPos, normal, albedo, metallic, roughness, specular);
         }   
     }
-      // Apply fog
+    
+    // Apply cascade debug visualization
+    if (DebugCascades > 0)
+    {
+        lighting = lerp(lighting, lighting * cascadeDebugColor, 0.3);
+    }
+    
+    // Apply fog
     float distanceToCamera = length(worldPos - CameraPosition);
 	float fogFactor = saturate((distanceToCamera - FogStart) / (FogEnd - FogStart));
     lighting = lerp(lighting, FogColor, fogFactor);

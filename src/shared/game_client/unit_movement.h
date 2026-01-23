@@ -464,6 +464,13 @@ namespace mmo
 		/// @return Reference to the acceleration vector
 		[[nodiscard]] const Vector3& GetAcceleration() const { return m_acceleration; }
 
+		/// @brief Corrects the height of a non-locally-controlled unit (NPC) to match the ground.
+		/// This is used for remote units following server paths where the server's navmesh height
+		/// may not match the client's detailed collision geometry.
+		/// @param maxCorrectionDistance Maximum distance to search for ground (default 5.0 units)
+		/// @return True if ground was found and position was corrected, false otherwise
+		bool CorrectGroundHeight(float maxCorrectionDistance = 5.0f);
+
 	public:
 		/// @brief Calculates velocity based on input parameters and applies friction
 		/// @param deltaTime Time step for velocity calculation
@@ -561,6 +568,15 @@ namespace mmo
 		/// @param params Collision parameters for the sweep
 		/// @return True if a blocking hit was found
 		bool SweepSingleCast(const Vector3& start, const Vector3& end, CollisionHitResult& outHit, const CollisionParams& params = CollisionParams()) const;
+
+		/// @brief Sweeps a capsule with custom radius between two points
+		/// @param start Starting position for the sweep
+		/// @param end Ending position for the sweep
+		/// @param radius Custom capsule radius to use
+		/// @param outHit Output for the closest blocking hit
+		/// @param params Collision parameters for the sweep
+		/// @return True if a blocking hit was found
+		bool SweepSingleCastWithRadius(const Vector3& start, const Vector3& end, float radius, CollisionHitResult& outHit, const CollisionParams& params = CollisionParams()) const;
 
 		/// @brief Handles movement logic when the unit is in walking mode
 		/// @param deltaTime Time step for movement calculations
@@ -785,10 +801,31 @@ namespace mmo
 			return Vector3::VectorPlaneProject(vector, GetGravityDirection()); 
 		}
 
+		/// @brief Gets the capsule radius for collision
+		/// @return Capsule radius in world units
+		[[nodiscard]] float GetCapsuleRadius() const;
+
+		/// @brief Gets the capsule half-height (distance from center to top/bottom sphere centers)
+		/// @return Capsule half-height in world units
+		[[nodiscard]] float GetCapsuleHalfHeight() const;
+
+		/// @brief Gets the total capsule height from bottom to top
+		/// @return Total capsule height in world units
+		[[nodiscard]] float GetCapsuleTotalHeight() const;
+
 		/// @brief Create a capsule representing the unit's collision shape at a given position
-		/// @param position The position to create the capsule at
+		/// @note The position represents the BOTTOM CENTER (feet) of the capsule, not the center.
+		///       This differs from Unreal Engine which uses center-based positioning.
+		/// @param position The feet position to create the capsule at
 		/// @return Capsule collision shape
 		[[nodiscard]] Capsule CreateCapsuleAtPosition(const Vector3& position) const;
+
+		/// @brief Create a capsule with custom radius at a given position
+		/// @note The position represents the BOTTOM CENTER (feet) of the capsule, not the center.
+		/// @param position The feet position to create the capsule at
+		/// @param radius The custom radius to use for the capsule
+		/// @return Capsule collision shape
+		[[nodiscard]] Capsule CreateCapsuleAtPositionWithRadius(const Vector3& position, float radius) const;
 
 		/// @brief Convert CollisionResult to CollisionHitResult
 		/// @param collisionRes The collision result from the collision system

@@ -149,6 +149,11 @@ namespace mmo
 	void GraphicsDeviceMetal::DrawIndexed(const uint32 startIndex, const uint32 endIndex)
 	{
 	}
+
+	void GraphicsDeviceMetal::DrawIndexedInstanced(const uint32 indexCount, const uint32 instanceCount, const uint32 startIndex, const int32 baseVertex, const uint32 startInstance)
+	{
+		// TODO: Implement Metal instanced drawing when Metal backend is fully implemented
+	}
 	
 	void GraphicsDeviceMetal::SetTopologyType(TopologyType InType)
 	{
