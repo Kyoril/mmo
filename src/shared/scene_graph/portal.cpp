@@ -38,6 +38,11 @@ namespace mmo
         m_scale = scale;
         m_verticesDirty = true;
     }
+
+    void Portal::SetPortalType(PortalType type)
+    {
+        m_portalType = type;
+    }
         
     void Portal::SetDimensions(float width, float height)
     {

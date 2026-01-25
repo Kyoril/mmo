@@ -1820,7 +1820,7 @@ namespace mmo
 
 		Portal& portal = m_worldModel->AddPortal();
 		
-		// Calculate portal plane from vertices
+		// Calculate portal plane and center from vertices
 		if (vertices.size() >= 3)
 		{
 			Vector3 v1 = vertices[1] - vertices[0];
@@ -1828,13 +1828,38 @@ namespace mmo
 			Vector3 normal = v1.Cross(v2);
 			normal.Normalize();
 
-			// Store the portal center
+			// Calculate the portal center
 			Vector3 center = Vector3::Zero;
 			for (const auto& v : vertices)
 			{
 				center += v;
 			}
 			center /= static_cast<float>(vertices.size());
+
+			// Calculate portal dimensions from vertices
+			float width = (vertices[1] - vertices[0]).GetLength();
+			float height = (vertices.size() >= 4) ? (vertices[3] - vertices[0]).GetLength() : (vertices[2] - vertices[1]).GetLength();
+
+			// Calculate rotation from normal (portal faces along -Z by default)
+			Quaternion rotation = Quaternion::Identity;
+			Vector3 defaultNormal(0, 0, -1);
+			if (normal.Dot(defaultNormal) < 0.999f)
+			{
+				Vector3 axis = defaultNormal.Cross(normal);
+				if (axis.GetSquaredLength() > 0.0001f)
+				{
+					axis.Normalize();
+					float dotVal = defaultNormal.Dot(normal);
+					if (dotVal < -1.0f) dotVal = -1.0f;
+					if (dotVal > 1.0f) dotVal = 1.0f;
+					float angle = std::acos(dotVal);
+					rotation = Quaternion(Radian(angle), axis);
+				}
+			}
+
+			// Set the portal transform and dimensions
+			portal.SetTransform(center, rotation, Vector3::UnitScale);
+			portal.SetDimensions(width, height);
 		}
 
 		const size_t portalIndex = m_worldModel->GetPortals().size() - 1;
@@ -2606,6 +2631,86 @@ namespace mmo
 		// Delete button
 		if (m_selectedPortalIndex >= 0 && m_selectedPortalIndex < static_cast<int32>(portals.size()))
 		{
+			ImGui::Separator();
+			
+			// Portal properties
+			ImGui::Text("Selected Portal Properties:");
+			
+			auto& portal = portals[m_selectedPortalIndex];
+			if (portal)
+			{
+				// Position
+				Vector3 pos = portal->GetPosition();
+				float posArr[3] = { pos.x, pos.y, pos.z };
+				if (ImGui::DragFloat3("Position##portal", posArr, 0.1f))
+				{
+					portal->SetTransform(Vector3(posArr[0], posArr[1], posArr[2]), portal->GetRotation(), portal->GetScale());
+					UpdatePortalVisualizations();
+				}
+
+				// Rotation (as angle-axis for easier understanding)
+				Quaternion rot = portal->GetRotation();
+				Radian angle;
+				Vector3 axis;
+				rot.ToAngleAxis(angle, axis);
+				
+				float angleDeg = Degree(angle).GetValueDegrees();
+				float axisArr[3] = { axis.x, axis.y, axis.z };
+				
+				bool rotChanged = false;
+				if (ImGui::DragFloat("Rotation Angle##portal", &angleDeg, 1.0f, -180.0f, 180.0f))
+				{
+					rotChanged = true;
+				}
+				if (ImGui::DragFloat3("Rotation Axis##portal", axisArr, 0.01f, -1.0f, 1.0f))
+				{
+					rotChanged = true;
+				}
+				
+				if (rotChanged)
+				{
+					axis = Vector3(axisArr[0], axisArr[1], axisArr[2]);
+					if (axis.GetSquaredLength() > 0.0001f)
+					{
+						axis.Normalize();
+						Quaternion newRot;
+						newRot.FromAngleAxis(Degree(angleDeg), axis);
+						portal->SetTransform(portal->GetPosition(), newRot, portal->GetScale());
+						UpdatePortalVisualizations();
+					}
+				}
+
+				// Dimensions
+				float width = portal->GetWidth();
+				float height = portal->GetHeight();
+				if (ImGui::DragFloat("Width##portal", &width, 0.1f, 0.1f, 100.0f))
+				{
+					portal->SetDimensions(width, height);
+					UpdatePortalVisualizations();
+				}
+				if (ImGui::DragFloat("Height##portal", &height, 0.1f, 0.1f, 100.0f))
+				{
+					portal->SetDimensions(width, height);
+					UpdatePortalVisualizations();
+				}
+
+				// Portal type
+				PortalType ptype = portal->GetPortalType();
+				int ptypeInt = static_cast<int>(ptype);
+				const char* typeNames[] = { "One-Way", "Two-Way" };
+				if (ImGui::Combo("Type##portal", &ptypeInt, typeNames, 2))
+				{
+					portal->SetPortalType(static_cast<PortalType>(ptypeInt));
+				}
+
+				// Active state
+				bool active = portal->IsActive();
+				if (ImGui::Checkbox("Active##portal", &active))
+				{
+					portal->SetActive(active);
+				}
+			}
+
 			ImGui::Separator();
 			if (ImGui::Button("Delete Selected Portal"))
 			{
