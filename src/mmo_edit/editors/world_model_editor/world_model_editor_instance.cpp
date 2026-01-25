@@ -2253,8 +2253,11 @@ namespace mmo
 			// Create portal visualization as a quad outline
 			vis.renderable = m_scene.CreateManualRenderObject("PortalVis_" + std::to_string(i));
 			vis.renderable->SetQueryFlags(0);
+			
+			// Set render queue to overlay so it renders on top of geometry
+			vis.renderable->SetRenderQueueGroup(Overlay);
 
-			auto lineOp = vis.renderable->AddLineListOperation(MaterialManager::Get().Load("Models/Engine/Axis.hmat"));
+			auto lineOp = vis.renderable->AddLineListOperation(MaterialManager::Get().Load("Models/Engine/WorldGrid.hmat"));
 
 			// Get portal vertices
 			const auto& worldVerts = portal->GetWorldVertices();
