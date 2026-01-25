@@ -318,7 +318,9 @@ namespace mmo
             if (light->GetType() != LightType::Directional)
             {
                 // Check if light is in the camera's view frustum using world bounding box
-                if (!camera.IsVisible(light->GetWorldBoundingBox(true)))
+                // Note: For debugging, we can comment this out to verify lights work
+                const AABB worldAABB = light->GetWorldBoundingBox(true);
+                if (!camera.IsVisible(worldAABB))
                 {
                     continue;  // Skip lights that are not in view
                 }
@@ -332,7 +334,7 @@ namespace mmo
             bufferedLight.intensity = light->GetIntensity();
             bufferedLight.range = light->GetRange();
             bufferedLight.spotAngle = 0.0f;
-            bufferedLight.direction = light->GetDirection();
+            bufferedLight.direction = light->GetDerivedDirection();
             bufferedLight.shadowMap = light->IsCastingShadows() ? 1 : 0;    // TODO: Shadow map index
 
             // Set up a directional light
