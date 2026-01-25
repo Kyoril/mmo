@@ -390,6 +390,13 @@ namespace mmo
 				UpdateGroupVisualizations();
 				UpdatePortalVisualizations();
 				UpdateLightVisualizations();
+				UpdateChildWMOVisualizations();
+
+				// Update mesh ref visualizations for all groups
+				for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
+				{
+					UpdateMeshRefVisualizations(i);
+				}
 			}
 			else
 			{
@@ -862,6 +869,8 @@ namespace mmo
 			ImGui::DockBuilderDockWindow(detailsId.c_str(), rightId);
 			ImGui::DockBuilderDockWindow(worldSettingsId.c_str(), rightId);
 			ImGui::DockBuilderDockWindow(groupsId.c_str(), leftId);
+			ImGui::DockBuilderDockWindow(meshRefsId.c_str(), leftId);
+			ImGui::DockBuilderDockWindow(childWMOsId.c_str(), leftId);
 			ImGui::DockBuilderDockWindow(portalsId.c_str(), leftId);
 			ImGui::DockBuilderDockWindow(doodadsId.c_str(), leftId);
 			ImGui::DockBuilderDockWindow(lightsId.c_str(), leftId);
@@ -1251,6 +1260,21 @@ namespace mmo
 	{
 		m_meshNames.clear();
 		RemoveAllChunkHandlers();
+
+		// Update all visualizations after loading
+		UpdateGroupVisualizations();
+		UpdatePortalVisualizations();
+		UpdateLightVisualizations();
+		UpdateChildWMOVisualizations();
+
+		// Update mesh ref visualizations for all groups
+		if (m_worldModel)
+		{
+			for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
+			{
+				UpdateMeshRefVisualizations(i);
+			}
+		}
 
 		return ChunkReader::OnReadFinished();
 	}
@@ -2613,6 +2637,18 @@ namespace mmo
 			m_showAddMeshRefDialog = true;
 			std::memset(m_addMeshRefPath, 0, sizeof(m_addMeshRefPath));
 			std::memset(m_addMeshRefName, 0, sizeof(m_addMeshRefName));
+		}
+
+		// Drag-drop target for mesh files
+		ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Drop .hmsh files here to add");
+		if (ImGui::BeginDragDropTarget())
+		{
+			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
+			{
+				const String meshPath = *static_cast<String*>(payload->Data);
+				AddMeshRefToGroup(groupIndex, meshPath);
+			}
+			ImGui::EndDragDropTarget();
 		}
 
 		// List mesh references

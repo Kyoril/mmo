@@ -567,10 +567,15 @@ namespace mmo
                     << io::write<uint32>(*MeshRefsChunk)
                     << io::write<uint32>(static_cast<uint32>(meshRefSize));
 
+                DLOG("Writing " << group->GetMeshRefs().size() << " mesh refs (size=" << meshRefSize << ")");
+
                 writer << io::write<uint32>(static_cast<uint32>(group->GetMeshRefs().size()));
 
                 for (const auto& meshRef : group->GetMeshRefs())
                 {
+                    DLOG("  MeshRef: path='" << meshRef.meshPath << "' (len=" << meshRef.meshPath.size() 
+                         << ") name='" << meshRef.name << "' (len=" << meshRef.name.size() << ")");
+                    
                     // Write mesh path
                     writer << io::write<uint32>(static_cast<uint32>(meshRef.meshPath.size()));
                     writer.Sink().Write(meshRef.meshPath.c_str(), meshRef.meshPath.size() + 1);
@@ -1204,6 +1209,8 @@ namespace mmo
                 uint32 count;
                 reader >> io::read<uint32>(count);
 
+                DLOG("Reading " << count << " mesh refs from chunk (size=" << subChunkSize << ")");
+
                 for (uint32 i = 0; i < count; ++i)
                 {
                     WorldModelMeshRef meshRef;
@@ -1262,14 +1269,15 @@ namespace mmo
                     meshRef.scale = Vector3(sx, sy, sz);
                     meshRef.visible = visible != 0;
 
+                    DLOG("  MeshRef[" << i << "]: path='" << meshRef.meshPath << "' name='" << meshRef.name << "'");
+
                     group.AddMeshRef(meshRef);
                 }
+
             }
-            else
-            {
-                // Skip unknown sub-chunk
-                reader.getSource()->skip(subChunkSize);
-            }
+
+            // Always seek to end of sub-chunk to ensure alignment for next iteration
+            reader.getSource()->seek(subChunkEndPos);
         }
 
         return reader;
