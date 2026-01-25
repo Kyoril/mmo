@@ -86,6 +86,226 @@ namespace mmo
 		removed();
 	}
 
+	// SelectedGroupMesh implementation
+	SelectedGroupMesh::SelectedGroupMesh(WorldModelGroup& group, size_t meshIndex, SceneNode& node)
+		: m_group(group)
+		, m_meshIndex(meshIndex)
+		, m_node(node)
+	{
+	}
+
+	Vector3 SelectedGroupMesh::GetPosition() const
+	{
+		if (const auto* meshRef = m_group.GetMeshRef(m_meshIndex))
+		{
+			return meshRef->position;
+		}
+		return Vector3::Zero;
+	}
+
+	void SelectedGroupMesh::SetPosition(const Vector3& position) const
+	{
+		if (auto* meshRef = m_group.GetMeshRef(m_meshIndex))
+		{
+			meshRef->position = position;
+		}
+		m_node.SetPosition(position);
+	}
+
+	Quaternion SelectedGroupMesh::GetOrientation() const
+	{
+		if (const auto* meshRef = m_group.GetMeshRef(m_meshIndex))
+		{
+			return meshRef->rotation;
+		}
+		return Quaternion::Identity;
+	}
+
+	void SelectedGroupMesh::SetOrientation(const Quaternion& orientation) const
+	{
+		if (auto* meshRef = m_group.GetMeshRef(m_meshIndex))
+		{
+			meshRef->rotation = orientation;
+		}
+		m_node.SetOrientation(orientation);
+	}
+
+	Vector3 SelectedGroupMesh::GetScale() const
+	{
+		if (const auto* meshRef = m_group.GetMeshRef(m_meshIndex))
+		{
+			return meshRef->scale;
+		}
+		return Vector3::UnitScale;
+	}
+
+	void SelectedGroupMesh::SetScale(const Vector3& scale) const
+	{
+		if (auto* meshRef = m_group.GetMeshRef(m_meshIndex))
+		{
+			meshRef->scale = scale;
+		}
+		m_node.SetScale(scale);
+	}
+
+	void SelectedGroupMesh::Translate(const Vector3& delta)
+	{
+		if (auto* meshRef = m_group.GetMeshRef(m_meshIndex))
+		{
+			meshRef->position += delta;
+			m_node.Translate(delta);
+		}
+	}
+
+	void SelectedGroupMesh::Rotate(const Quaternion& delta)
+	{
+		if (auto* meshRef = m_group.GetMeshRef(m_meshIndex))
+		{
+			meshRef->rotation = delta * meshRef->rotation;
+			m_node.Rotate(delta);
+		}
+	}
+
+	void SelectedGroupMesh::Scale(const Vector3& delta)
+	{
+		if (auto* meshRef = m_group.GetMeshRef(m_meshIndex))
+		{
+			meshRef->scale += delta;
+			m_node.SetScale(meshRef->scale);
+		}
+	}
+
+	void SelectedGroupMesh::Duplicate()
+	{
+		if (const auto* meshRef = m_group.GetMeshRef(m_meshIndex))
+		{
+			WorldModelMeshRef newRef = *meshRef;
+			newRef.name = meshRef->name + "_copy";
+			newRef.position += Vector3(1.0f, 0.0f, 0.0f);  // Offset the copy
+			m_group.AddMeshRef(newRef);
+		}
+	}
+
+	void SelectedGroupMesh::Remove()
+	{
+		removed();
+	}
+
+	WorldModelMeshRef* SelectedGroupMesh::GetMeshRef()
+	{
+		return m_group.GetMeshRef(m_meshIndex);
+	}
+
+	// SelectedChildWMO implementation
+	SelectedChildWMO::SelectedChildWMO(WorldModel& worldModel, size_t childIndex, SceneNode& node)
+		: m_worldModel(worldModel)
+		, m_childIndex(childIndex)
+		, m_node(node)
+	{
+	}
+
+	Vector3 SelectedChildWMO::GetPosition() const
+	{
+		if (const auto* childRef = m_worldModel.GetChildRef(m_childIndex))
+		{
+			return childRef->position;
+		}
+		return Vector3::Zero;
+	}
+
+	void SelectedChildWMO::SetPosition(const Vector3& position) const
+	{
+		if (auto* childRef = m_worldModel.GetChildRef(m_childIndex))
+		{
+			childRef->position = position;
+		}
+		m_node.SetPosition(position);
+	}
+
+	Quaternion SelectedChildWMO::GetOrientation() const
+	{
+		if (const auto* childRef = m_worldModel.GetChildRef(m_childIndex))
+		{
+			return childRef->rotation;
+		}
+		return Quaternion::Identity;
+	}
+
+	void SelectedChildWMO::SetOrientation(const Quaternion& orientation) const
+	{
+		if (auto* childRef = m_worldModel.GetChildRef(m_childIndex))
+		{
+			childRef->rotation = orientation;
+		}
+		m_node.SetOrientation(orientation);
+	}
+
+	Vector3 SelectedChildWMO::GetScale() const
+	{
+		if (const auto* childRef = m_worldModel.GetChildRef(m_childIndex))
+		{
+			return childRef->scale;
+		}
+		return Vector3::UnitScale;
+	}
+
+	void SelectedChildWMO::SetScale(const Vector3& scale) const
+	{
+		if (auto* childRef = m_worldModel.GetChildRef(m_childIndex))
+		{
+			childRef->scale = scale;
+		}
+		m_node.SetScale(scale);
+	}
+
+	void SelectedChildWMO::Translate(const Vector3& delta)
+	{
+		if (auto* childRef = m_worldModel.GetChildRef(m_childIndex))
+		{
+			childRef->position += delta;
+			m_node.Translate(delta);
+		}
+	}
+
+	void SelectedChildWMO::Rotate(const Quaternion& delta)
+	{
+		if (auto* childRef = m_worldModel.GetChildRef(m_childIndex))
+		{
+			childRef->rotation = delta * childRef->rotation;
+			m_node.Rotate(delta);
+		}
+	}
+
+	void SelectedChildWMO::Scale(const Vector3& delta)
+	{
+		if (auto* childRef = m_worldModel.GetChildRef(m_childIndex))
+		{
+			childRef->scale += delta;
+			m_node.SetScale(childRef->scale);
+		}
+	}
+
+	void SelectedChildWMO::Duplicate()
+	{
+		if (const auto* childRef = m_worldModel.GetChildRef(m_childIndex))
+		{
+			WorldModelChildRef newRef = *childRef;
+			newRef.name = childRef->name + "_copy";
+			newRef.position += Vector3(5.0f, 0.0f, 0.0f);  // Offset the copy
+			m_worldModel.AddChildRef(newRef);
+		}
+	}
+
+	void SelectedChildWMO::Remove()
+	{
+		removed();
+	}
+
+	WorldModelChildRef* SelectedChildWMO::GetChildRef()
+	{
+		return m_worldModel.GetChildRef(m_childIndex);
+	}
+
 	// Chunk definitions
 	static const ChunkMagic versionChunk = MakeChunkMagic('MVER');
 	static const ChunkMagic meshChunk = MakeChunkMagic('MESH');
@@ -330,6 +550,8 @@ namespace mmo
 		const String detailsId = "Details##" + GetAssetPath().string();
 		const String worldSettingsId = "Settings##" + GetAssetPath().string();
 		const String groupsId = "Groups##" + GetAssetPath().string();
+		const String meshRefsId = "Meshes##" + GetAssetPath().string();
+		const String childWMOsId = "Child WMOs##" + GetAssetPath().string();
 		const String portalsId = "Portals##" + GetAssetPath().string();
 		const String doodadsId = "Doodads##" + GetAssetPath().string();
 		const String lightsId = "Lights##" + GetAssetPath().string();
@@ -352,6 +574,20 @@ namespace mmo
 		if (ImGui::Begin(groupsId.c_str()))
 		{
 			DrawGroupsPanel();
+		}
+		ImGui::End();
+
+		// Mesh references panel (for selected group)
+		if (ImGui::Begin(meshRefsId.c_str()))
+		{
+			DrawMeshRefsPanel(m_selectedGroupIndex);
+		}
+		ImGui::End();
+
+		// Child WMOs panel
+		if (ImGui::Begin(childWMOsId.c_str()))
+		{
+			DrawChildWMOsPanel();
 		}
 		ImGui::End();
 
@@ -417,6 +653,18 @@ namespace mmo
 				ImGui::Text("Lights: %zu", m_worldModel->GetLights().size());
 				ImGui::Text("Doodad Sets: %zu", m_worldModel->GetDoodadSets().size());
 				ImGui::Text("Doodads: %zu", m_worldModel->GetDoodads().size());
+				ImGui::Text("Child WMOs: %zu", m_worldModel->GetChildRefs().size());
+				
+				// Count total mesh refs
+				size_t totalMeshRefs = 0;
+				for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
+				{
+					if (const auto* group = m_worldModel->GetGroup(i))
+					{
+						totalMeshRefs += group->GetMeshRefs().size();
+					}
+				}
+				ImGui::Text("Mesh References: %zu", totalMeshRefs);
 
 				ImGui::Separator();
 
@@ -1232,6 +1480,313 @@ namespace mmo
 		UpdateGroupVisualizations();
 	}
 
+	void WorldModelEditorInstance::AddMeshRefToGroup(int32 groupIndex, const String& meshPath,
+		const Vector3& position, const Quaternion& rotation, const Vector3& scale, const String& name)
+	{
+		if (!m_worldModel || groupIndex < 0 || groupIndex >= static_cast<int32>(m_worldModel->GetGroupCount()))
+		{
+			ELOG("Invalid group index for adding mesh reference");
+			return;
+		}
+
+		auto* group = m_worldModel->GetGroup(groupIndex);
+		if (!group)
+		{
+			ELOG("Failed to get group at index " << groupIndex);
+			return;
+		}
+
+		// Verify the mesh can be loaded
+		auto mesh = MeshManager::Get().Load(meshPath);
+		if (!mesh)
+		{
+			ELOG("Failed to load mesh: " << meshPath);
+			return;
+		}
+
+		// Create the mesh reference
+		WorldModelMeshRef meshRef;
+		meshRef.meshPath = meshPath;
+		meshRef.position = position;
+		meshRef.rotation = rotation;
+		meshRef.scale = scale;
+		meshRef.visible = true;
+		
+		if (name.empty())
+		{
+			// Generate a name from the mesh path
+			std::filesystem::path path(meshPath);
+			meshRef.name = path.stem().string();
+		}
+		else
+		{
+			meshRef.name = name;
+		}
+
+		size_t refIndex = group->AddMeshRef(meshRef);
+		ILOG("Added mesh reference '" << meshRef.name << "' to group '" << group->GetName() << "' at index " << refIndex);
+
+		// Update bounding box to include the new mesh
+		AABB meshAABB = mesh->GetBounds();
+		Matrix4 transform;
+		transform.MakeTransform(position, scale, rotation);
+		meshAABB.Transform(transform);
+		
+		AABB groupAABB = group->GetBoundingBox();
+		if (groupAABB.IsNull())
+		{
+			group->SetBoundingBox(meshAABB);
+		}
+		else
+		{
+			groupAABB.Combine(meshAABB);
+			group->SetBoundingBox(groupAABB);
+		}
+
+		UpdateMeshRefVisualizations(groupIndex);
+	}
+
+	void WorldModelEditorInstance::RemoveMeshRefFromGroup(int32 groupIndex, size_t meshRefIndex)
+	{
+		if (!m_worldModel || groupIndex < 0 || groupIndex >= static_cast<int32>(m_worldModel->GetGroupCount()))
+		{
+			ELOG("Invalid group index for removing mesh reference");
+			return;
+		}
+
+		auto* group = m_worldModel->GetGroup(groupIndex);
+		if (!group)
+		{
+			ELOG("Failed to get group at index " << groupIndex);
+			return;
+		}
+
+		if (meshRefIndex >= group->GetMeshRefs().size())
+		{
+			ELOG("Invalid mesh reference index " << meshRefIndex);
+			return;
+		}
+
+		ILOG("Removing mesh reference at index " << meshRefIndex << " from group '" << group->GetName() << "'");
+		group->RemoveMeshRef(meshRefIndex);
+
+		// Update selection if needed
+		if (m_selectedMeshRefIndex == static_cast<int32>(meshRefIndex))
+		{
+			m_selection.Clear();
+			m_selectedMeshRefIndex = -1;
+		}
+		else if (m_selectedMeshRefIndex > static_cast<int32>(meshRefIndex))
+		{
+			m_selectedMeshRefIndex--;
+		}
+
+		UpdateMeshRefVisualizations(groupIndex);
+	}
+
+	void WorldModelEditorInstance::AddChildWMO(const String& wmoPath,
+		const Vector3& position, const Quaternion& rotation, const Vector3& scale, const String& name)
+	{
+		if (!m_worldModel)
+		{
+			ELOG("No world model to add child WMO to");
+			return;
+		}
+
+		// Create the child reference
+		WorldModelChildRef childRef;
+		childRef.wmoPath = wmoPath;
+		childRef.position = position;
+		childRef.rotation = rotation;
+		childRef.scale = scale;
+		childRef.visible = true;
+
+		if (name.empty())
+		{
+			// Generate a name from the WMO path
+			std::filesystem::path path(wmoPath);
+			childRef.name = path.stem().string();
+		}
+		else
+		{
+			childRef.name = name;
+		}
+
+		size_t refIndex = m_worldModel->AddChildRef(childRef);
+		ILOG("Added child WMO reference '" << childRef.name << "' at index " << refIndex);
+
+		UpdateChildWMOVisualizations();
+	}
+
+	void WorldModelEditorInstance::RemoveChildWMO(size_t childIndex)
+	{
+		if (!m_worldModel)
+		{
+			ELOG("No world model");
+			return;
+		}
+
+		if (childIndex >= m_worldModel->GetChildRefs().size())
+		{
+			ELOG("Invalid child WMO index " << childIndex);
+			return;
+		}
+
+		ILOG("Removing child WMO at index " << childIndex);
+		m_worldModel->RemoveChildRef(childIndex);
+
+		// Update selection if needed
+		if (m_selectedChildWMOIndex == static_cast<int32>(childIndex))
+		{
+			m_selection.Clear();
+			m_selectedChildWMOIndex = -1;
+		}
+		else if (m_selectedChildWMOIndex > static_cast<int32>(childIndex))
+		{
+			m_selectedChildWMOIndex--;
+		}
+
+		UpdateChildWMOVisualizations();
+	}
+
+	void WorldModelEditorInstance::UpdateMeshRefVisualizations(size_t groupIndex)
+	{
+		if (!m_worldModel || groupIndex >= m_groupVisualizations.size())
+		{
+			return;
+		}
+
+		auto& groupViz = m_groupVisualizations[groupIndex];
+		auto* group = m_worldModel->GetGroup(groupIndex);
+		if (!group)
+		{
+			return;
+		}
+
+		// Clear existing mesh ref visualizations
+		for (auto& meshRefViz : groupViz.meshRefVisualizations)
+		{
+			if (meshRefViz.entity)
+			{
+				if (meshRefViz.node)
+				{
+					meshRefViz.node->DetachObject(*meshRefViz.entity);
+				}
+				m_scene.DestroyEntity(*meshRefViz.entity);
+				meshRefViz.entity = nullptr;
+			}
+			if (meshRefViz.node)
+			{
+				m_scene.DestroySceneNode(*meshRefViz.node);
+				meshRefViz.node = nullptr;
+			}
+		}
+		groupViz.meshRefVisualizations.clear();
+
+		// Create visualizations for each mesh reference
+		const auto& meshRefs = group->GetMeshRefs();
+		for (size_t i = 0; i < meshRefs.size(); ++i)
+		{
+			const auto& meshRef = meshRefs[i];
+			
+			MeshRefVisualization viz;
+			viz.meshRefIndex = i;
+			viz.visible = meshRef.visible;
+
+			// Create scene node under the group node
+			String nodeName = "MeshRef_" + std::to_string(groupIndex) + "_" + std::to_string(i);
+			viz.node = &m_scene.CreateSceneNode(nodeName);
+			viz.node->SetPosition(meshRef.position);
+			viz.node->SetOrientation(meshRef.rotation);
+			viz.node->SetScale(meshRef.scale);
+			
+			if (groupViz.node)
+			{
+				groupViz.node->AddChild(*viz.node);
+			}
+			else
+			{
+				m_scene.GetRootSceneNode().AddChild(*viz.node);
+			}
+
+			// Load and attach the mesh
+			viz.mesh = MeshManager::Get().Load(meshRef.meshPath);
+			if (viz.mesh)
+			{
+				String entityName = "MeshRefEntity_" + std::to_string(groupIndex) + "_" + std::to_string(i) + "_" + std::to_string(m_meshCounter++);
+				viz.entity = m_scene.CreateEntity(entityName, viz.mesh);
+				viz.entity->SetQueryFlags(1);
+				viz.node->AttachObject(*viz.entity);
+				
+				// Apply material override if specified
+				if (!meshRef.materialOverride.empty())
+				{
+					auto material = MaterialManager::Get().Load(meshRef.materialOverride);
+					if (material)
+					{
+						viz.entity->SetMaterial(material);
+					}
+				}
+			}
+
+			groupViz.meshRefVisualizations.push_back(std::move(viz));
+		}
+	}
+
+	void WorldModelEditorInstance::UpdateChildWMOVisualizations()
+	{
+		// Clear existing child WMO visualizations
+		for (auto& childViz : m_childWMOVisualizations)
+		{
+			for (auto* entity : childViz.entities)
+			{
+				if (childViz.node)
+				{
+					childViz.node->DetachObject(*entity);
+				}
+				m_scene.DestroyEntity(*entity);
+			}
+			childViz.entities.clear();
+			
+			if (childViz.node)
+			{
+				m_scene.DestroySceneNode(*childViz.node);
+				childViz.node = nullptr;
+			}
+		}
+		m_childWMOVisualizations.clear();
+
+		if (!m_worldModel)
+		{
+			return;
+		}
+
+		// Create visualizations for each child WMO reference
+		const auto& childRefs = m_worldModel->GetChildRefs();
+		for (size_t i = 0; i < childRefs.size(); ++i)
+		{
+			const auto& childRef = childRefs[i];
+			
+			ChildWMOVisualization viz;
+			viz.childRefIndex = i;
+			viz.visible = childRef.visible;
+
+			// Create scene node
+			String nodeName = "ChildWMO_" + std::to_string(i);
+			viz.node = &m_scene.CreateSceneNode(nodeName);
+			viz.node->SetPosition(childRef.position);
+			viz.node->SetOrientation(childRef.rotation);
+			viz.node->SetScale(childRef.scale);
+			m_scene.GetRootSceneNode().AddChild(*viz.node);
+
+			// TODO: Load and display the child WMO
+			// For now, we'll just show a placeholder bounding box or similar
+			// Full implementation would recursively load the child WMO and display its geometry
+
+			m_childWMOVisualizations.push_back(std::move(viz));
+		}
+	}
+
 	void WorldModelEditorInstance::CreatePortal(int32 groupA, int32 groupB, const std::vector<Vector3>& vertices)
 	{
 		if (!m_worldModel || vertices.size() < 3)
@@ -2032,6 +2587,410 @@ namespace mmo
 			{
 				RemovePortal(m_selectedPortalIndex);
 			}
+		}
+	}
+
+	void WorldModelEditorInstance::DrawMeshRefsPanel(int32 groupIndex)
+	{
+		if (!m_worldModel || groupIndex < 0 || groupIndex >= static_cast<int32>(m_worldModel->GetGroupCount()))
+		{
+			ImGui::Text("Select a group first");
+			return;
+		}
+
+		auto* group = m_worldModel->GetGroup(groupIndex);
+		if (!group)
+		{
+			return;
+		}
+
+		ImGui::Text("Meshes in '%s':", group->GetName().c_str());
+		ImGui::Separator();
+
+		// Add mesh button
+		if (ImGui::Button("Add Mesh..."))
+		{
+			m_showAddMeshRefDialog = true;
+			std::memset(m_addMeshRefPath, 0, sizeof(m_addMeshRefPath));
+			std::memset(m_addMeshRefName, 0, sizeof(m_addMeshRefName));
+		}
+
+		// List mesh references
+		const auto& meshRefs = group->GetMeshRefs();
+		for (size_t i = 0; i < meshRefs.size(); ++i)
+		{
+			const auto& meshRef = meshRefs[i];
+			ImGui::PushID(static_cast<int>(i));
+
+			bool isSelected = m_selectedMeshRefIndex == static_cast<int32>(i);
+			String label = meshRef.name;
+			if (label.empty())
+			{
+				label = meshRef.meshPath;
+				// Extract just the filename
+				size_t lastSlash = label.find_last_of("/\\");
+				if (lastSlash != String::npos)
+				{
+					label = label.substr(lastSlash + 1);
+				}
+			}
+
+			if (ImGui::Selectable(label.c_str(), isSelected))
+			{
+				m_selectedMeshRefIndex = static_cast<int32>(i);
+				m_selection.Clear();
+				
+				// Select this mesh for transform editing
+				if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
+				{
+					auto& groupViz = m_groupVisualizations[groupIndex];
+					if (i < groupViz.meshRefVisualizations.size() && groupViz.meshRefVisualizations[i].node)
+					{
+						m_selection.AddSelectable(std::make_unique<SelectedGroupMesh>(*group, i, *groupViz.meshRefVisualizations[i].node));
+					}
+				}
+			}
+
+			// Context menu
+			if (ImGui::BeginPopupContextItem())
+			{
+				if (ImGui::MenuItem("Duplicate"))
+				{
+					WorldModelMeshRef newRef = meshRef;
+					newRef.name = meshRef.name + "_copy";
+					newRef.position += Vector3(1.0f, 0.0f, 0.0f);
+					group->AddMeshRef(newRef);
+					UpdateMeshRefVisualizations(groupIndex);
+				}
+				if (ImGui::MenuItem("Delete"))
+				{
+					RemoveMeshRefFromGroup(groupIndex, i);
+					ImGui::EndPopup();
+					ImGui::PopID();
+					break;
+				}
+				ImGui::EndPopup();
+			}
+
+			// Visibility toggle
+			ImGui::SameLine();
+			if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size() && 
+				i < m_groupVisualizations[groupIndex].meshRefVisualizations.size())
+			{
+				bool visible = m_groupVisualizations[groupIndex].meshRefVisualizations[i].visible;
+				if (ImGui::Checkbox("##vis", &visible))
+				{
+					m_groupVisualizations[groupIndex].meshRefVisualizations[i].visible = visible;
+					if (m_groupVisualizations[groupIndex].meshRefVisualizations[i].entity)
+					{
+						m_groupVisualizations[groupIndex].meshRefVisualizations[i].entity->SetVisible(visible);
+					}
+				}
+			}
+
+			ImGui::PopID();
+		}
+
+		// Selected mesh properties
+		if (m_selectedMeshRefIndex >= 0 && m_selectedMeshRefIndex < static_cast<int32>(meshRefs.size()))
+		{
+			ImGui::Separator();
+			ImGui::Text("Properties:");
+
+			auto* selectedRef = group->GetMeshRef(m_selectedMeshRefIndex);
+			if (selectedRef)
+			{
+				// Name
+				char nameBuffer[256];
+				std::strncpy(nameBuffer, selectedRef->name.c_str(), sizeof(nameBuffer) - 1);
+				nameBuffer[sizeof(nameBuffer) - 1] = '\0';
+				if (ImGui::InputText("Name##meshref", nameBuffer, sizeof(nameBuffer)))
+				{
+					selectedRef->name = nameBuffer;
+				}
+
+				// Position
+				float pos[3] = { selectedRef->position.x, selectedRef->position.y, selectedRef->position.z };
+				if (ImGui::DragFloat3("Position##meshref", pos, 0.1f))
+				{
+					selectedRef->position = Vector3(pos[0], pos[1], pos[2]);
+					// Update visualization
+					if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
+					{
+						auto& groupViz = m_groupVisualizations[groupIndex];
+						if (static_cast<size_t>(m_selectedMeshRefIndex) < groupViz.meshRefVisualizations.size() &&
+							groupViz.meshRefVisualizations[m_selectedMeshRefIndex].node)
+						{
+							groupViz.meshRefVisualizations[m_selectedMeshRefIndex].node->SetPosition(selectedRef->position);
+						}
+					}
+				}
+
+				// Scale
+				float scl[3] = { selectedRef->scale.x, selectedRef->scale.y, selectedRef->scale.z };
+				if (ImGui::DragFloat3("Scale##meshref", scl, 0.01f, 0.01f, 100.0f))
+				{
+					selectedRef->scale = Vector3(scl[0], scl[1], scl[2]);
+					// Update visualization
+					if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
+					{
+						auto& groupViz = m_groupVisualizations[groupIndex];
+						if (static_cast<size_t>(m_selectedMeshRefIndex) < groupViz.meshRefVisualizations.size() &&
+							groupViz.meshRefVisualizations[m_selectedMeshRefIndex].node)
+						{
+							groupViz.meshRefVisualizations[m_selectedMeshRefIndex].node->SetScale(selectedRef->scale);
+						}
+					}
+				}
+
+				// Material override
+				char matBuffer[512];
+				std::strncpy(matBuffer, selectedRef->materialOverride.c_str(), sizeof(matBuffer) - 1);
+				matBuffer[sizeof(matBuffer) - 1] = '\0';
+				if (ImGui::InputText("Material##meshref", matBuffer, sizeof(matBuffer)))
+				{
+					selectedRef->materialOverride = matBuffer;
+					// Apply the material override
+					if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
+					{
+						auto& groupViz = m_groupVisualizations[groupIndex];
+						if (static_cast<size_t>(m_selectedMeshRefIndex) < groupViz.meshRefVisualizations.size() &&
+							groupViz.meshRefVisualizations[m_selectedMeshRefIndex].entity)
+						{
+							if (!selectedRef->materialOverride.empty())
+							{
+								auto material = MaterialManager::Get().Load(selectedRef->materialOverride);
+								if (material)
+								{
+									groupViz.meshRefVisualizations[m_selectedMeshRefIndex].entity->SetMaterial(material);
+								}
+							}
+						}
+					}
+				}
+
+				// Mesh path (read-only)
+				ImGui::TextDisabled("Mesh: %s", selectedRef->meshPath.c_str());
+			}
+		}
+
+		// Add mesh dialog
+		if (m_showAddMeshRefDialog)
+		{
+			ImGui::OpenPopup("Add Mesh Reference");
+		}
+
+		if (ImGui::BeginPopupModal("Add Mesh Reference", &m_showAddMeshRefDialog))
+		{
+			ImGui::InputText("Mesh Path##add", m_addMeshRefPath, sizeof(m_addMeshRefPath));
+			ImGui::InputText("Name##add", m_addMeshRefName, sizeof(m_addMeshRefName));
+
+			// Drag-drop target for mesh files
+			if (ImGui::BeginDragDropTarget())
+			{
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_PATH"))
+				{
+					std::string path(static_cast<const char*>(payload->Data), payload->DataSize - 1);
+					std::strncpy(m_addMeshRefPath, path.c_str(), sizeof(m_addMeshRefPath) - 1);
+				}
+				ImGui::EndDragDropTarget();
+			}
+
+			ImGui::Separator();
+
+			if (ImGui::Button("Add", ImVec2(120, 0)))
+			{
+				if (std::strlen(m_addMeshRefPath) > 0)
+				{
+					AddMeshRefToGroup(groupIndex, m_addMeshRefPath, Vector3::Zero, Quaternion::Identity, Vector3::UnitScale, m_addMeshRefName);
+					m_showAddMeshRefDialog = false;
+				}
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel", ImVec2(120, 0)))
+			{
+				m_showAddMeshRefDialog = false;
+			}
+
+			ImGui::EndPopup();
+		}
+	}
+
+	void WorldModelEditorInstance::DrawChildWMOsPanel()
+	{
+		if (!m_worldModel)
+		{
+			ImGui::Text("No world model loaded");
+			return;
+		}
+
+		ImGui::Text("Child WMO References:");
+		ImGui::Separator();
+
+		// Add child WMO button
+		if (ImGui::Button("Add Child WMO..."))
+		{
+			m_showAddChildWMODialog = true;
+			std::memset(m_addChildWMOPath, 0, sizeof(m_addChildWMOPath));
+			std::memset(m_addChildWMOName, 0, sizeof(m_addChildWMOName));
+		}
+
+		// List child WMO references
+		const auto& childRefs = m_worldModel->GetChildRefs();
+		for (size_t i = 0; i < childRefs.size(); ++i)
+		{
+			const auto& childRef = childRefs[i];
+			ImGui::PushID(static_cast<int>(i));
+
+			bool isSelected = m_selectedChildWMOIndex == static_cast<int32>(i);
+			String label = childRef.name;
+			if (label.empty())
+			{
+				label = childRef.wmoPath;
+				// Extract just the filename
+				size_t lastSlash = label.find_last_of("/\\");
+				if (lastSlash != String::npos)
+				{
+					label = label.substr(lastSlash + 1);
+				}
+			}
+
+			if (ImGui::Selectable(label.c_str(), isSelected))
+			{
+				m_selectedChildWMOIndex = static_cast<int32>(i);
+				m_selection.Clear();
+				
+				// Select this child WMO for transform editing
+				if (i < m_childWMOVisualizations.size() && m_childWMOVisualizations[i].node)
+				{
+					m_selection.AddSelectable(std::make_unique<SelectedChildWMO>(*m_worldModel, i, *m_childWMOVisualizations[i].node));
+				}
+			}
+
+			// Context menu
+			if (ImGui::BeginPopupContextItem())
+			{
+				if (ImGui::MenuItem("Duplicate"))
+				{
+					WorldModelChildRef newRef = childRef;
+					newRef.name = childRef.name + "_copy";
+					newRef.position += Vector3(5.0f, 0.0f, 0.0f);
+					m_worldModel->AddChildRef(newRef);
+					UpdateChildWMOVisualizations();
+				}
+				if (ImGui::MenuItem("Delete"))
+				{
+					RemoveChildWMO(i);
+					ImGui::EndPopup();
+					ImGui::PopID();
+					break;
+				}
+				ImGui::EndPopup();
+			}
+
+			// Visibility toggle
+			ImGui::SameLine();
+			if (i < m_childWMOVisualizations.size())
+			{
+				bool visible = m_childWMOVisualizations[i].visible;
+				if (ImGui::Checkbox("##vis", &visible))
+				{
+					m_childWMOVisualizations[i].visible = visible;
+					// TODO: Update visibility of child WMO entities
+				}
+			}
+
+			ImGui::PopID();
+		}
+
+		// Selected child WMO properties
+		if (m_selectedChildWMOIndex >= 0 && m_selectedChildWMOIndex < static_cast<int32>(childRefs.size()))
+		{
+			ImGui::Separator();
+			ImGui::Text("Properties:");
+
+			auto* selectedRef = m_worldModel->GetChildRef(m_selectedChildWMOIndex);
+			if (selectedRef)
+			{
+				// Name
+				char nameBuffer[256];
+				std::strncpy(nameBuffer, selectedRef->name.c_str(), sizeof(nameBuffer) - 1);
+				nameBuffer[sizeof(nameBuffer) - 1] = '\0';
+				if (ImGui::InputText("Name##childwmo", nameBuffer, sizeof(nameBuffer)))
+				{
+					selectedRef->name = nameBuffer;
+				}
+
+				// Position
+				float pos[3] = { selectedRef->position.x, selectedRef->position.y, selectedRef->position.z };
+				if (ImGui::DragFloat3("Position##childwmo", pos, 0.1f))
+				{
+					selectedRef->position = Vector3(pos[0], pos[1], pos[2]);
+					// Update visualization
+					if (static_cast<size_t>(m_selectedChildWMOIndex) < m_childWMOVisualizations.size() &&
+						m_childWMOVisualizations[m_selectedChildWMOIndex].node)
+					{
+						m_childWMOVisualizations[m_selectedChildWMOIndex].node->SetPosition(selectedRef->position);
+					}
+				}
+
+				// Scale
+				float scl[3] = { selectedRef->scale.x, selectedRef->scale.y, selectedRef->scale.z };
+				if (ImGui::DragFloat3("Scale##childwmo", scl, 0.01f, 0.01f, 100.0f))
+				{
+					selectedRef->scale = Vector3(scl[0], scl[1], scl[2]);
+					// Update visualization
+					if (static_cast<size_t>(m_selectedChildWMOIndex) < m_childWMOVisualizations.size() &&
+						m_childWMOVisualizations[m_selectedChildWMOIndex].node)
+					{
+						m_childWMOVisualizations[m_selectedChildWMOIndex].node->SetScale(selectedRef->scale);
+					}
+				}
+
+				// WMO path (read-only)
+				ImGui::TextDisabled("WMO: %s", selectedRef->wmoPath.c_str());
+			}
+		}
+
+		// Add child WMO dialog
+		if (m_showAddChildWMODialog)
+		{
+			ImGui::OpenPopup("Add Child WMO");
+		}
+
+		if (ImGui::BeginPopupModal("Add Child WMO", &m_showAddChildWMODialog))
+		{
+			ImGui::InputText("WMO Path##add", m_addChildWMOPath, sizeof(m_addChildWMOPath));
+			ImGui::InputText("Name##add", m_addChildWMOName, sizeof(m_addChildWMOName));
+
+			// Drag-drop target for WMO files
+			if (ImGui::BeginDragDropTarget())
+			{
+				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_PATH"))
+				{
+					std::string path(static_cast<const char*>(payload->Data), payload->DataSize - 1);
+					std::strncpy(m_addChildWMOPath, path.c_str(), sizeof(m_addChildWMOPath) - 1);
+				}
+				ImGui::EndDragDropTarget();
+			}
+
+			ImGui::Separator();
+
+			if (ImGui::Button("Add", ImVec2(120, 0)))
+			{
+				if (std::strlen(m_addChildWMOPath) > 0)
+				{
+					AddChildWMO(m_addChildWMOPath, Vector3::Zero, Quaternion::Identity, Vector3::UnitScale, m_addChildWMOName);
+					m_showAddChildWMODialog = false;
+				}
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel", ImVec2(120, 0)))
+			{
+				m_showAddChildWMODialog = false;
+			}
+
+			ImGui::EndPopup();
 		}
 	}
 

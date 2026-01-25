@@ -30,6 +30,11 @@ namespace mmo
     static const ChunkMagic GroupVertexColorsChunk = MakeChunkMagic('MOCV');
     static const ChunkMagic GroupIndicesChunk = MakeChunkMagic('MOVI');
     static const ChunkMagic GroupMaterialsChunk = MakeChunkMagic('MOPY');
+    
+    // New chunks for mesh references and child WMOs
+    static const ChunkMagic MeshRefsChunk = MakeChunkMagic('MMRF');
+    static const ChunkMagic ChildWMOsChunk = MakeChunkMagic('MCWR');
+    static const ChunkMagic GroupNameChunk = MakeChunkMagic('MGNM');
 
     // ==================== WorldModelSerializer ====================
 
@@ -292,6 +297,63 @@ namespace mmo
             }
         }
 
+        // Write child WMO references (MCWR)
+        if (!worldModel.GetChildRefs().empty())
+        {
+            // Calculate chunk size
+            size_t childWMOSize = 4; // count
+            for (const auto& childRef : worldModel.GetChildRefs())
+            {
+                childWMOSize += 4; // string length
+                childWMOSize += childRef.wmoPath.size() + 1; // path + null
+                childWMOSize += 4; // name string length
+                childWMOSize += childRef.name.size() + 1; // name + null
+                childWMOSize += 12; // position (3 floats)
+                childWMOSize += 16; // rotation (4 floats - quaternion)
+                childWMOSize += 12; // scale (3 floats)
+                childWMOSize += 1;  // visible
+            }
+
+            writer
+                << io::write<uint32>(*ChildWMOsChunk)
+                << io::write<uint32>(static_cast<uint32>(childWMOSize));
+
+            writer << io::write<uint32>(static_cast<uint32>(worldModel.GetChildRefs().size()));
+            
+            for (const auto& childRef : worldModel.GetChildRefs())
+            {
+                // Write path
+                writer << io::write<uint32>(static_cast<uint32>(childRef.wmoPath.size()));
+                writer.Sink().Write(childRef.wmoPath.c_str(), childRef.wmoPath.size() + 1);
+                
+                // Write name
+                writer << io::write<uint32>(static_cast<uint32>(childRef.name.size()));
+                writer.Sink().Write(childRef.name.c_str(), childRef.name.size() + 1);
+                
+                // Write position
+                writer
+                    << io::write<float>(childRef.position.x)
+                    << io::write<float>(childRef.position.y)
+                    << io::write<float>(childRef.position.z);
+                
+                // Write rotation
+                writer
+                    << io::write<float>(childRef.rotation.w)
+                    << io::write<float>(childRef.rotation.x)
+                    << io::write<float>(childRef.rotation.y)
+                    << io::write<float>(childRef.rotation.z);
+                
+                // Write scale
+                writer
+                    << io::write<float>(childRef.scale.x)
+                    << io::write<float>(childRef.scale.y)
+                    << io::write<float>(childRef.scale.z);
+                
+                // Write visible
+                writer << io::write<uint8>(childRef.visible ? 1 : 0);
+            }
+        }
+
         // Write groups (MOGP)
         for (size_t groupIdx = 0; groupIdx < worldModel.GetGroupCount(); ++groupIdx)
         {
@@ -317,6 +379,33 @@ namespace mmo
             if (!group->GetVertexColors().empty()) groupDataSize += 8;
             if (!group->GetIndices().empty()) groupDataSize += 8;
             if (!group->GetMaterialIndices().empty()) groupDataSize += 8;
+
+            // Add group name chunk size
+            if (!group->GetName().empty())
+            {
+                groupDataSize += 8; // chunk header
+                groupDataSize += group->GetName().size() + 1; // name + null
+            }
+
+            // Add mesh refs chunk size
+            if (!group->GetMeshRefs().empty())
+            {
+                groupDataSize += 8; // chunk header
+                groupDataSize += 4; // count
+                for (const auto& meshRef : group->GetMeshRefs())
+                {
+                    groupDataSize += 4; // path string length
+                    groupDataSize += meshRef.meshPath.size() + 1;
+                    groupDataSize += 4; // name string length
+                    groupDataSize += meshRef.name.size() + 1;
+                    groupDataSize += 4; // material override length
+                    groupDataSize += meshRef.materialOverride.size() + 1;
+                    groupDataSize += 12; // position
+                    groupDataSize += 16; // rotation
+                    groupDataSize += 12; // scale
+                    groupDataSize += 1;  // visible
+                }
+            }
 
             writer
                 << io::write<uint32>(*GroupChunk)
@@ -443,6 +532,80 @@ namespace mmo
                     writer << io::write<uint16>(matIdx);
                 }
             }
+
+            // Write group name (MGNM)
+            if (!group->GetName().empty())
+            {
+                const uint32 nameSize = static_cast<uint32>(group->GetName().size() + 1);
+                writer
+                    << io::write<uint32>(*GroupNameChunk)
+                    << io::write<uint32>(nameSize);
+                
+                writer.Sink().Write(group->GetName().c_str(), group->GetName().size() + 1);
+            }
+
+            // Write mesh references (MMRF)
+            if (!group->GetMeshRefs().empty())
+            {
+                // Calculate chunk size
+                size_t meshRefSize = 4; // count
+                for (const auto& meshRef : group->GetMeshRefs())
+                {
+                    meshRefSize += 4; // path string length
+                    meshRefSize += meshRef.meshPath.size() + 1;
+                    meshRefSize += 4; // name string length
+                    meshRefSize += meshRef.name.size() + 1;
+                    meshRefSize += 4; // material override length
+                    meshRefSize += meshRef.materialOverride.size() + 1;
+                    meshRefSize += 12; // position
+                    meshRefSize += 16; // rotation
+                    meshRefSize += 12; // scale
+                    meshRefSize += 1;  // visible
+                }
+
+                writer
+                    << io::write<uint32>(*MeshRefsChunk)
+                    << io::write<uint32>(static_cast<uint32>(meshRefSize));
+
+                writer << io::write<uint32>(static_cast<uint32>(group->GetMeshRefs().size()));
+
+                for (const auto& meshRef : group->GetMeshRefs())
+                {
+                    // Write mesh path
+                    writer << io::write<uint32>(static_cast<uint32>(meshRef.meshPath.size()));
+                    writer.Sink().Write(meshRef.meshPath.c_str(), meshRef.meshPath.size() + 1);
+                    
+                    // Write name
+                    writer << io::write<uint32>(static_cast<uint32>(meshRef.name.size()));
+                    writer.Sink().Write(meshRef.name.c_str(), meshRef.name.size() + 1);
+                    
+                    // Write material override
+                    writer << io::write<uint32>(static_cast<uint32>(meshRef.materialOverride.size()));
+                    writer.Sink().Write(meshRef.materialOverride.c_str(), meshRef.materialOverride.size() + 1);
+                    
+                    // Write position
+                    writer
+                        << io::write<float>(meshRef.position.x)
+                        << io::write<float>(meshRef.position.y)
+                        << io::write<float>(meshRef.position.z);
+                    
+                    // Write rotation
+                    writer
+                        << io::write<float>(meshRef.rotation.w)
+                        << io::write<float>(meshRef.rotation.x)
+                        << io::write<float>(meshRef.rotation.y)
+                        << io::write<float>(meshRef.rotation.z);
+                    
+                    // Write scale
+                    writer
+                        << io::write<float>(meshRef.scale.x)
+                        << io::write<float>(meshRef.scale.y)
+                        << io::write<float>(meshRef.scale.z);
+                    
+                    // Write visible
+                    writer << io::write<uint8>(meshRef.visible ? 1 : 0);
+                }
+            }
         }
     }
 
@@ -481,6 +644,7 @@ namespace mmo
         AddChunkHandler(*DoodadNamesChunk, false, *this, &WorldModelDeserializer::ReadDoodadNamesChunk);
         AddChunkHandler(*DoodadDefsChunk, false, *this, &WorldModelDeserializer::ReadDoodadDefsChunk);
         AddChunkHandler(*FogChunk, false, *this, &WorldModelDeserializer::ReadFogChunk);
+        AddChunkHandler(*ChildWMOsChunk, false, *this, &WorldModelDeserializer::ReadChildWMOsChunk);
         AddChunkHandler(*GroupChunk, false, *this, &WorldModelDeserializer::ReadGroupChunk);
 
         return reader;
@@ -1021,11 +1185,157 @@ namespace mmo
                     materials.push_back(matIdx);
                 }
             }
+            else if (subChunkId == *GroupNameChunk)
+            {
+                // Read group name
+                std::string name;
+                name.resize(subChunkSize);
+                reader.getSource()->read(&name[0], subChunkSize);
+                // Remove null terminator if present
+                if (!name.empty() && name.back() == '\0')
+                {
+                    name.resize(name.size() - 1);
+                }
+                group.SetName(name);
+            }
+            else if (subChunkId == *MeshRefsChunk)
+            {
+                // Read mesh references
+                uint32 count;
+                reader >> io::read<uint32>(count);
+
+                for (uint32 i = 0; i < count; ++i)
+                {
+                    WorldModelMeshRef meshRef;
+
+                    // Read mesh path
+                    uint32 pathLen;
+                    reader >> io::read<uint32>(pathLen);
+                    meshRef.meshPath.resize(pathLen + 1);
+                    reader.getSource()->read(&meshRef.meshPath[0], pathLen + 1);
+                    if (!meshRef.meshPath.empty() && meshRef.meshPath.back() == '\0')
+                    {
+                        meshRef.meshPath.resize(pathLen);
+                    }
+
+                    // Read name
+                    uint32 nameLen;
+                    reader >> io::read<uint32>(nameLen);
+                    meshRef.name.resize(nameLen + 1);
+                    reader.getSource()->read(&meshRef.name[0], nameLen + 1);
+                    if (!meshRef.name.empty() && meshRef.name.back() == '\0')
+                    {
+                        meshRef.name.resize(nameLen);
+                    }
+
+                    // Read material override
+                    uint32 matLen;
+                    reader >> io::read<uint32>(matLen);
+                    meshRef.materialOverride.resize(matLen + 1);
+                    reader.getSource()->read(&meshRef.materialOverride[0], matLen + 1);
+                    if (!meshRef.materialOverride.empty() && meshRef.materialOverride.back() == '\0')
+                    {
+                        meshRef.materialOverride.resize(matLen);
+                    }
+
+                    // Read transform
+                    float px, py, pz;
+                    float rw, rx, ry, rz;
+                    float sx, sy, sz;
+                    uint8 visible;
+
+                    reader
+                        >> io::read<float>(px)
+                        >> io::read<float>(py)
+                        >> io::read<float>(pz)
+                        >> io::read<float>(rw)
+                        >> io::read<float>(rx)
+                        >> io::read<float>(ry)
+                        >> io::read<float>(rz)
+                        >> io::read<float>(sx)
+                        >> io::read<float>(sy)
+                        >> io::read<float>(sz)
+                        >> io::read<uint8>(visible);
+
+                    meshRef.position = Vector3(px, py, pz);
+                    meshRef.rotation = Quaternion(rw, rx, ry, rz);
+                    meshRef.scale = Vector3(sx, sy, sz);
+                    meshRef.visible = visible != 0;
+
+                    group.AddMeshRef(meshRef);
+                }
+            }
             else
             {
                 // Skip unknown sub-chunk
                 reader.getSource()->skip(subChunkSize);
             }
+        }
+
+        return reader;
+    }
+
+    bool WorldModelDeserializer::ReadChildWMOsChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+    {
+        ASSERT(chunkHeader == *ChildWMOsChunk);
+
+        uint32 count;
+        reader >> io::read<uint32>(count);
+
+        for (uint32 i = 0; i < count; ++i)
+        {
+            WorldModelChildRef childRef;
+
+            // Read WMO path
+            uint32 pathLen;
+            reader >> io::read<uint32>(pathLen);
+            childRef.wmoPath.resize(pathLen + 1);
+            reader.getSource()->read(&childRef.wmoPath[0], pathLen + 1);
+            if (!childRef.wmoPath.empty() && childRef.wmoPath.back() == '\0')
+            {
+                childRef.wmoPath.resize(pathLen);
+            }
+
+            // Read name
+            uint32 nameLen;
+            reader >> io::read<uint32>(nameLen);
+            childRef.name.resize(nameLen + 1);
+            reader.getSource()->read(&childRef.name[0], nameLen + 1);
+            if (!childRef.name.empty() && childRef.name.back() == '\0')
+            {
+                childRef.name.resize(nameLen);
+            }
+
+            // Read transform
+            float px, py, pz;
+            float rw, rx, ry, rz;
+            float sx, sy, sz;
+            uint8 visible;
+
+            reader
+                >> io::read<float>(px)
+                >> io::read<float>(py)
+                >> io::read<float>(pz)
+                >> io::read<float>(rw)
+                >> io::read<float>(rx)
+                >> io::read<float>(ry)
+                >> io::read<float>(rz)
+                >> io::read<float>(sx)
+                >> io::read<float>(sy)
+                >> io::read<float>(sz)
+                >> io::read<uint8>(visible);
+
+            if (!reader)
+            {
+                return false;
+            }
+
+            childRef.position = Vector3(px, py, pz);
+            childRef.rotation = Quaternion(rw, rx, ry, rz);
+            childRef.scale = Vector3(sx, sy, sz);
+            childRef.visible = visible != 0;
+
+            m_worldModel.AddChildRef(childRef);
         }
 
         return reader;

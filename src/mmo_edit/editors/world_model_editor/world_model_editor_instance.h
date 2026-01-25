@@ -93,6 +93,162 @@ namespace mmo
 		SceneNode& m_node;
 	};
 
+	/// @brief Represents a selectable mesh reference within a world model group.
+	/// This allows selecting and transforming individual meshes within a group.
+	class SelectedGroupMesh final : public Selectable
+	{
+	public:
+		/// @brief Creates a selectable mesh reference.
+		/// @param group The group containing the mesh.
+		/// @param meshIndex The index of the mesh reference within the group.
+		/// @param node The scene node representing this mesh.
+		explicit SelectedGroupMesh(WorldModelGroup& group, size_t meshIndex, SceneNode& node);
+
+		/// @copydoc Selectable::Visit
+		void Visit(SelectableVisitor& visitor) override {}
+
+		/// @copydoc Selectable::GetPosition
+		Vector3 GetPosition() const override;
+
+		/// @copydoc Selectable::SetPosition
+		void SetPosition(const Vector3& position) const override;
+
+		/// @copydoc Selectable::GetOrientation
+		Quaternion GetOrientation() const override;
+
+		/// @copydoc Selectable::SetOrientation
+		void SetOrientation(const Quaternion& orientation) const override;
+
+		/// @copydoc Selectable::GetScale
+		Vector3 GetScale() const override;
+
+		/// @copydoc Selectable::SetScale
+		void SetScale(const Vector3& scale) const override;
+
+		/// @copydoc Selectable::Translate
+		void Translate(const Vector3& delta) override;
+
+		/// @copydoc Selectable::Rotate
+		void Rotate(const Quaternion& delta) override;
+
+		/// @copydoc Selectable::Scale
+		void Scale(const Vector3& delta) override;
+
+		/// @copydoc Selectable::SupportsTranslate
+		bool SupportsTranslate() const override { return true; }
+
+		/// @copydoc Selectable::SupportsRotate
+		bool SupportsRotate() const override { return true; }
+
+		/// @copydoc Selectable::SupportsScale
+		bool SupportsScale() const override { return true; }
+
+		/// @copydoc Selectable::Duplicate
+		void Duplicate() override;
+
+		/// @copydoc Selectable::Remove
+		void Remove() override;
+
+		/// @copydoc Selectable::Deselect
+		void Deselect() override {}
+
+		/// @brief Gets the underlying world model group.
+		WorldModelGroup& GetGroup() { return m_group; }
+
+		/// @brief Gets the mesh index within the group.
+		size_t GetMeshIndex() const { return m_meshIndex; }
+
+		/// @brief Gets the mesh reference, or nullptr if invalid.
+		WorldModelMeshRef* GetMeshRef();
+
+	public:
+		/// @brief Signal fired when this mesh is removed.
+		signal<void()> removed;
+
+	private:
+		WorldModelGroup& m_group;
+		size_t m_meshIndex;
+		SceneNode& m_node;
+	};
+
+	/// @brief Represents a selectable child WMO reference.
+	/// This allows selecting and transforming child world models.
+	class SelectedChildWMO final : public Selectable
+	{
+	public:
+		/// @brief Creates a selectable child WMO reference.
+		/// @param worldModel The parent world model.
+		/// @param childIndex The index of the child reference.
+		/// @param node The scene node representing this child WMO.
+		explicit SelectedChildWMO(WorldModel& worldModel, size_t childIndex, SceneNode& node);
+
+		/// @copydoc Selectable::Visit
+		void Visit(SelectableVisitor& visitor) override {}
+
+		/// @copydoc Selectable::GetPosition
+		Vector3 GetPosition() const override;
+
+		/// @copydoc Selectable::SetPosition
+		void SetPosition(const Vector3& position) const override;
+
+		/// @copydoc Selectable::GetOrientation
+		Quaternion GetOrientation() const override;
+
+		/// @copydoc Selectable::SetOrientation
+		void SetOrientation(const Quaternion& orientation) const override;
+
+		/// @copydoc Selectable::GetScale
+		Vector3 GetScale() const override;
+
+		/// @copydoc Selectable::SetScale
+		void SetScale(const Vector3& scale) const override;
+
+		/// @copydoc Selectable::Translate
+		void Translate(const Vector3& delta) override;
+
+		/// @copydoc Selectable::Rotate
+		void Rotate(const Quaternion& delta) override;
+
+		/// @copydoc Selectable::Scale
+		void Scale(const Vector3& delta) override;
+
+		/// @copydoc Selectable::SupportsTranslate
+		bool SupportsTranslate() const override { return true; }
+
+		/// @copydoc Selectable::SupportsRotate
+		bool SupportsRotate() const override { return true; }
+
+		/// @copydoc Selectable::SupportsScale
+		bool SupportsScale() const override { return true; }
+
+		/// @copydoc Selectable::Duplicate
+		void Duplicate() override;
+
+		/// @copydoc Selectable::Remove
+		void Remove() override;
+
+		/// @copydoc Selectable::Deselect
+		void Deselect() override {}
+
+		/// @brief Gets the parent world model.
+		WorldModel& GetWorldModel() { return m_worldModel; }
+
+		/// @brief Gets the child WMO index.
+		size_t GetChildIndex() const { return m_childIndex; }
+
+		/// @brief Gets the child reference, or nullptr if invalid.
+		WorldModelChildRef* GetChildRef();
+
+	public:
+		/// @brief Signal fired when this child WMO is removed.
+		signal<void()> removed;
+
+	private:
+		WorldModel& m_worldModel;
+		size_t m_childIndex;
+		SceneNode& m_node;
+	};
+
 	/// @brief Edit modes for the world model editor.
 	enum class WorldModelEditMode
 	{
@@ -105,7 +261,19 @@ namespace mmo
 		/// @brief Mode for placing lights within groups.
 		Light,
 		/// @brief Mode for defining collision geometry.
-		Collision
+		Collision,
+		/// @brief Mode for editing mesh references within groups.
+		MeshEdit
+	};
+
+	/// @brief Represents visualization of a single mesh reference within a group.
+	struct MeshRefVisualization
+	{
+		SceneNode* node { nullptr };
+		Entity* entity { nullptr };
+		MeshPtr mesh { nullptr };
+		size_t meshRefIndex { 0 };
+		bool visible { true };
 	};
 
 	/// @brief Represents a group visualization in the editor.
@@ -113,8 +281,23 @@ namespace mmo
 	{
 		SceneNode* node { nullptr };
 		ManualRenderObject* boundingBoxRenderable { nullptr };
+		
+		// Legacy geometry (for old-style embedded geometry)
 		Entity* meshEntity { nullptr };
 		MeshPtr mesh { nullptr };
+		
+		// Mesh references (new style)
+		std::vector<MeshRefVisualization> meshRefVisualizations;
+		
+		bool visible { true };
+	};
+
+	/// @brief Represents visualization of a child WMO reference.
+	struct ChildWMOVisualization
+	{
+		SceneNode* node { nullptr };
+		std::vector<Entity*> entities;
+		size_t childRefIndex { 0 };
 		bool visible { true };
 	};
 
@@ -228,13 +411,54 @@ namespace mmo
 		/// @param scale The scale.
 		void AddDoodad(uint32 setIndex, const String& meshPath, const Vector3& position, const Quaternion& rotation, float scale);
 
-		/// @brief Assigns a mesh to a group for geometry.
+		/// @brief Assigns a mesh to a group for geometry (legacy).
 		/// @param groupIndex The group index.
 		/// @param meshPath The path to the mesh file.
 		void AssignMeshToGroup(int32 groupIndex, const String& meshPath);
 
+		/// @brief Adds a mesh reference to a group.
+		/// @param groupIndex The group index.
+		/// @param meshPath The path to the mesh file.
+		/// @param position Local position within the group.
+		/// @param rotation Local rotation within the group.
+		/// @param scale Local scale.
+		/// @param name Optional name for the mesh reference.
+		void AddMeshRefToGroup(int32 groupIndex, const String& meshPath, 
+			const Vector3& position = Vector3::Zero,
+			const Quaternion& rotation = Quaternion::Identity,
+			const Vector3& scale = Vector3::UnitScale,
+			const String& name = "");
+
+		/// @brief Removes a mesh reference from a group.
+		/// @param groupIndex The group index.
+		/// @param meshRefIndex The mesh reference index within the group.
+		void RemoveMeshRefFromGroup(int32 groupIndex, size_t meshRefIndex);
+
+		/// @brief Adds a child WMO reference.
+		/// @param wmoPath The path to the child WMO file.
+		/// @param position Position of the child WMO.
+		/// @param rotation Rotation of the child WMO.
+		/// @param scale Scale of the child WMO.
+		/// @param name Optional name for the child reference.
+		void AddChildWMO(const String& wmoPath,
+			const Vector3& position = Vector3::Zero,
+			const Quaternion& rotation = Quaternion::Identity,
+			const Vector3& scale = Vector3::UnitScale,
+			const String& name = "");
+
+		/// @brief Removes a child WMO reference.
+		/// @param childIndex The index of the child WMO to remove.
+		void RemoveChildWMO(size_t childIndex);
+
 		/// @brief Updates visualization for all groups.
 		void UpdateGroupVisualizations();
+
+		/// @brief Updates visualization for mesh references in a group.
+		/// @param groupIndex The group index.
+		void UpdateMeshRefVisualizations(size_t groupIndex);
+
+		/// @brief Updates visualization for all child WMOs.
+		void UpdateChildWMOVisualizations();
 
 		/// @brief Updates visualization for all portals.
 		void UpdatePortalVisualizations();
@@ -244,6 +468,13 @@ namespace mmo
 
 		/// @brief Draws the groups panel UI.
 		void DrawGroupsPanel();
+
+		/// @brief Draws the mesh references panel UI for a group.
+		/// @param groupIndex The group index.
+		void DrawMeshRefsPanel(int32 groupIndex);
+
+		/// @brief Draws the child WMOs panel UI.
+		void DrawChildWMOsPanel();
 
 		/// @brief Draws the portals panel UI.
 		void DrawPortalsPanel();
@@ -355,5 +586,22 @@ namespace mmo
 		// Assign mesh dialog state
 		bool m_showAssignMeshDialog { false };
 		char m_assignMeshPath[512] { "" };
+
+		// Child WMO visualizations
+		std::vector<ChildWMOVisualization> m_childWMOVisualizations;
+		
+		// Mesh editing state
+		int32 m_selectedMeshRefIndex { -1 };
+		int32 m_selectedChildWMOIndex { -1 };
+		
+		// Add mesh ref dialog state
+		bool m_showAddMeshRefDialog { false };
+		char m_addMeshRefPath[512] { "" };
+		char m_addMeshRefName[256] { "" };
+		
+		// Add child WMO dialog state
+		bool m_showAddChildWMODialog { false };
+		char m_addChildWMOPath[512] { "" };
+		char m_addChildWMOName[256] { "" };
 	};
 }

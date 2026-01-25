@@ -84,6 +84,9 @@ namespace mmo
         /// @brief Reads the fog chunk (MFOG).
         bool ReadFogChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
         
+        /// @brief Reads the child WMO references chunk (MCWR).
+        bool ReadChildWMOsChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+        
         /// @brief Reads a group chunk (MOGP).
         bool ReadGroupChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
         

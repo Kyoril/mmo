@@ -14,6 +14,40 @@ namespace mmo
 
     WorldModelGroup::~WorldModelGroup() = default;
 
+    size_t WorldModelGroup::AddMeshRef(const WorldModelMeshRef& meshRef)
+    {
+        m_meshRefs.push_back(meshRef);
+        return m_meshRefs.size() - 1;
+    }
+
+    void WorldModelGroup::RemoveMeshRef(size_t index)
+    {
+        if (index < m_meshRefs.size())
+        {
+            m_meshRefs.erase(m_meshRefs.begin() + index);
+        }
+    }
+
+    WorldModelMeshRef* WorldModelGroup::GetMeshRef(size_t index)
+    {
+        if (index >= m_meshRefs.size())
+        {
+            return nullptr;
+        }
+        
+        return &m_meshRefs[index];
+    }
+
+    const WorldModelMeshRef* WorldModelGroup::GetMeshRef(size_t index) const
+    {
+        if (index >= m_meshRefs.size())
+        {
+            return nullptr;
+        }
+        
+        return &m_meshRefs[index];
+    }
+
     // ==================== WorldModel ====================
 
     WorldModel::WorldModel()
@@ -95,5 +129,39 @@ namespace mmo
                 // This may need to be updated if portal removal is needed
             }
         }
+    }
+
+    size_t WorldModel::AddChildRef(const WorldModelChildRef& childRef)
+    {
+        m_childRefs.push_back(childRef);
+        return m_childRefs.size() - 1;
+    }
+
+    void WorldModel::RemoveChildRef(size_t index)
+    {
+        if (index < m_childRefs.size())
+        {
+            m_childRefs.erase(m_childRefs.begin() + index);
+        }
+    }
+
+    WorldModelChildRef* WorldModel::GetChildRef(size_t index)
+    {
+        if (index >= m_childRefs.size())
+        {
+            return nullptr;
+        }
+        
+        return &m_childRefs[index];
+    }
+
+    const WorldModelChildRef* WorldModel::GetChildRef(size_t index) const
+    {
+        if (index >= m_childRefs.size())
+        {
+            return nullptr;
+        }
+        
+        return &m_childRefs[index];
     }
 }

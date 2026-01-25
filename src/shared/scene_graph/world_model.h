@@ -155,6 +155,57 @@ namespace mmo
         uint32 underwaterFogColor;
     };
 
+    /// @brief Represents a mesh reference within a world model group.
+    /// This allows a group to contain multiple meshes, each with their own
+    /// transform and material override.
+    struct WorldModelMeshRef
+    {
+        /// @brief Path to the mesh file (.hmsh).
+        String meshPath;
+        
+        /// @brief Local position within the group.
+        Vector3 position { 0.0f, 0.0f, 0.0f };
+        
+        /// @brief Local rotation within the group.
+        Quaternion rotation { Quaternion::Identity };
+        
+        /// @brief Local scale.
+        Vector3 scale { 1.0f, 1.0f, 1.0f };
+        
+        /// @brief Optional material override. Empty means use mesh's default material.
+        String materialOverride;
+        
+        /// @brief Whether this mesh reference is visible.
+        bool visible { true };
+        
+        /// @brief User-defined name for this mesh reference (for editor display).
+        String name;
+    };
+
+    /// @brief Represents a child world model reference.
+    /// This allows nesting world models within other world models,
+    /// such as building a town WMO from multiple house WMOs.
+    struct WorldModelChildRef
+    {
+        /// @brief Path to the child world model file (.hwmo).
+        String wmoPath;
+        
+        /// @brief Local position within the parent.
+        Vector3 position { 0.0f, 0.0f, 0.0f };
+        
+        /// @brief Local rotation within the parent.
+        Quaternion rotation { Quaternion::Identity };
+        
+        /// @brief Local scale.
+        Vector3 scale { 1.0f, 1.0f, 1.0f };
+        
+        /// @brief Whether this child reference is visible.
+        bool visible { true };
+        
+        /// @brief User-defined name for this child reference (for editor display).
+        String name;
+    };
+
     /// @brief Represents a portal reference linking groups.
     struct WorldModelPortalRef
     {
@@ -285,19 +336,49 @@ namespace mmo
         /// @brief Gets mutable doodad references.
         std::vector<uint16>& GetDoodadRefs() { return m_doodadRefs; }
 
+        /// @brief Gets the mesh references for this group.
+        /// @return Const reference to mesh references vector.
+        const std::vector<WorldModelMeshRef>& GetMeshRefs() const { return m_meshRefs; }
+        
+        /// @brief Gets mutable mesh references.
+        /// @return Mutable reference to mesh references vector.
+        std::vector<WorldModelMeshRef>& GetMeshRefs() { return m_meshRefs; }
+        
+        /// @brief Adds a mesh reference to this group.
+        /// @param meshRef The mesh reference to add.
+        /// @return Index of the added mesh reference.
+        size_t AddMeshRef(const WorldModelMeshRef& meshRef);
+        
+        /// @brief Removes a mesh reference by index.
+        /// @param index The index of the mesh reference to remove.
+        void RemoveMeshRef(size_t index);
+        
+        /// @brief Gets a mesh reference by index.
+        /// @param index The index of the mesh reference.
+        /// @return Pointer to the mesh reference, or nullptr if out of range.
+        WorldModelMeshRef* GetMeshRef(size_t index);
+        
+        /// @brief Gets a mesh reference by index (const).
+        /// @param index The index of the mesh reference.
+        /// @return Const pointer to the mesh reference, or nullptr if out of range.
+        const WorldModelMeshRef* GetMeshRef(size_t index) const;
+
     private:
         String m_name;
         uint32 m_flags;
         AABB m_boundingBox;
         uint32 m_ambientColor;
         
-        // Geometry data
+        // Geometry data (legacy - for backwards compatibility)
         std::vector<Vector3> m_vertices;
         std::vector<Vector3> m_normals;
         std::vector<Vector3> m_texCoords;
         std::vector<uint32> m_vertexColors;
         std::vector<uint32> m_indices;
         std::vector<uint16> m_materialIndices;
+        
+        // Mesh references (new - preferred way to add geometry)
+        std::vector<WorldModelMeshRef> m_meshRefs;
         
         // References
         std::vector<WorldModelPortalRef> m_portalRefs;
@@ -438,6 +519,35 @@ namespace mmo
         /// @brief Gets mutable group info list.
         std::vector<WorldModelGroupInfo>& GetGroupInfos() { return m_groupInfos; }
 
+        // Child WMO References
+        
+        /// @brief Gets all child WMO references.
+        /// @return Const reference to child WMO references vector.
+        const std::vector<WorldModelChildRef>& GetChildRefs() const { return m_childRefs; }
+        
+        /// @brief Gets mutable child WMO references.
+        /// @return Mutable reference to child WMO references vector.
+        std::vector<WorldModelChildRef>& GetChildRefs() { return m_childRefs; }
+        
+        /// @brief Adds a child WMO reference.
+        /// @param childRef The child reference to add.
+        /// @return Index of the added child reference.
+        size_t AddChildRef(const WorldModelChildRef& childRef);
+        
+        /// @brief Removes a child WMO reference by index.
+        /// @param index The index of the child reference to remove.
+        void RemoveChildRef(size_t index);
+        
+        /// @brief Gets a child WMO reference by index.
+        /// @param index The index of the child reference.
+        /// @return Pointer to the child reference, or nullptr if out of range.
+        WorldModelChildRef* GetChildRef(size_t index);
+        
+        /// @brief Gets a child WMO reference by index (const).
+        /// @param index The index of the child reference.
+        /// @return Const pointer to the child reference, or nullptr if out of range.
+        const WorldModelChildRef* GetChildRef(size_t index) const;
+
     private:
         String m_name;
         AABB m_boundingBox;
@@ -455,6 +565,9 @@ namespace mmo
         
         std::vector<WorldModelLight> m_lights;
         std::vector<WorldModelFog> m_fogs;
+        
+        // Child WMO references for nesting world models
+        std::vector<WorldModelChildRef> m_childRefs;
     };
 
     typedef std::shared_ptr<WorldModel> WorldModelPtr;
