@@ -15,6 +15,7 @@
 #include "scene_graph/scene.h"
 #include "scene_graph/mesh_serializer.h"
 #include "scene_graph/world_grid.h"
+#include "scene_graph/world_model.h"
 #include "transform_widget.h"
 #include "selection.h"
 
@@ -25,40 +26,247 @@ namespace mmo
 	class Camera;
 	class SceneNode;
 
+	/// @brief Represents a selectable group in the world model editor.
+	class SelectedWorldModelGroup final : public Selectable
+	{
+	public:
+		explicit SelectedWorldModelGroup(WorldModelGroup& group, SceneNode& node);
+
+		/// @copydoc Selectable::Visit
+		void Visit(SelectableVisitor& visitor) override {}
+
+		/// @copydoc Selectable::GetPosition
+		Vector3 GetPosition() const override;
+
+		/// @copydoc Selectable::SetPosition
+		void SetPosition(const Vector3& position) const override;
+
+		/// @copydoc Selectable::GetOrientation
+		Quaternion GetOrientation() const override;
+
+		/// @copydoc Selectable::SetOrientation
+		void SetOrientation(const Quaternion& orientation) const override;
+
+		/// @copydoc Selectable::GetScale
+		Vector3 GetScale() const override;
+
+		/// @copydoc Selectable::SetScale
+		void SetScale(const Vector3& scale) const override;
+
+		/// @copydoc Selectable::Translate
+		void Translate(const Vector3& delta) override;
+
+		/// @copydoc Selectable::Rotate
+		void Rotate(const Quaternion& delta) override;
+
+		/// @copydoc Selectable::Scale
+		void Scale(const Vector3& delta) override;
+
+		/// @copydoc Selectable::SupportsTranslate
+		bool SupportsTranslate() const override { return true; }
+
+		/// @copydoc Selectable::SupportsRotate
+		bool SupportsRotate() const override { return false; }
+
+		/// @copydoc Selectable::SupportsScale
+		bool SupportsScale() const override { return true; }
+
+		/// @copydoc Selectable::Duplicate
+		void Duplicate() override {}
+
+		/// @copydoc Selectable::Remove
+		void Remove() override;
+
+		/// @copydoc Selectable::Deselect
+		void Deselect() override {}
+
+		/// @brief Gets the underlying world model group.
+		WorldModelGroup& GetGroup() { return m_group; }
+
+	public:
+		/// @brief Signal fired when this group is removed.
+		signal<void()> removed;
+
+	private:
+		WorldModelGroup& m_group;
+		SceneNode& m_node;
+	};
+
+	/// @brief Edit modes for the world model editor.
+	enum class WorldModelEditMode
+	{
+		/// @brief Default mode - select and transform groups.
+		Select,
+		/// @brief Mode for editing portals between groups.
+		Portal,
+		/// @brief Mode for placing doodads within groups.
+		Doodad,
+		/// @brief Mode for placing lights within groups.
+		Light,
+		/// @brief Mode for defining collision geometry.
+		Collision
+	};
+
+	/// @brief Represents a group visualization in the editor.
+	struct GroupVisualization
+	{
+		SceneNode* node { nullptr };
+		ManualRenderObject* boundingBoxRenderable { nullptr };
+		Entity* meshEntity { nullptr };
+		bool visible { true };
+	};
+
+	/// @brief Represents a portal visualization in the editor.
+	struct PortalVisualization
+	{
+		SceneNode* node { nullptr };
+		ManualRenderObject* renderable { nullptr };
+		int32 groupA { -1 };
+		int32 groupB { -1 };
+	};
+
+	/// @brief Represents a light visualization in the editor.
+	struct LightVisualization
+	{
+		SceneNode* node { nullptr };
+		Light* light { nullptr };
+		ManualRenderObject* iconRenderable { nullptr };
+	};
+
+	/// @brief Editor instance for editing world model objects (WMO-like structures).
+	/// 
+	/// World model objects are complex structures that can contain multiple groups (rooms),
+	/// portals connecting groups for visibility culling, doodads, lights, and fog volumes.
 	class WorldModelEditorInstance final : public EditorInstance, public ChunkReader
 	{
 
 	public:
+		/// @brief Constructs the world model editor instance.
+		/// @param host The editor host.
+		/// @param editor The parent editor.
+		/// @param asset The asset path to edit.
 		explicit WorldModelEditorInstance(EditorHost& host, WorldModelEditor& editor, Path asset);
+
+		/// @brief Destroys the world model editor instance.
 		~WorldModelEditorInstance() override;
 
 	public:
-		/// Renders the actual 3d viewport content.
+		/// @brief Renders the actual 3d viewport content.
 		void Render();
 
+		/// @copydoc EditorInstance::Draw
 		void Draw() override;
 		
+		/// @copydoc EditorInstance::OnMouseButtonDown
 		void OnMouseButtonDown(uint32 button, uint16 x, uint16 y) override;
 
+		/// @copydoc EditorInstance::OnMouseButtonUp
 		void OnMouseButtonUp(uint32 button, uint16 x, uint16 y) override;
 
+		/// @copydoc EditorInstance::OnMouseMoved
 		void OnMouseMoved(uint16 x, uint16 y) override;
 
+		/// @copydoc EditorInstance::Save
 		bool Save() override;
 
 	private:
+		/// @brief Updates the debug AABB visualization.
 		void UpdateDebugAABB(const AABB& aabb);
 
+		/// @brief Performs entity selection raycast.
 		void PerformEntitySelectionRaycast(float viewportX, float viewportY);
 
+		/// @brief Creates a map entity from a mesh.
 		void CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
 
+		/// @brief Called when a map entity is removed.
 		void OnMapEntityRemoved(MapEntity& entity);
 
+		/// @brief Creates a new group in the world model.
+		/// @param name The name of the group.
+		/// @param flags The group flags.
+		/// @return Pointer to the created group.
+		WorldModelGroup* CreateGroup(const String& name, uint32 flags = 0);
+
+		/// @brief Removes a group from the world model.
+		/// @param groupIndex The index of the group to remove.
+		void RemoveGroup(size_t groupIndex);
+
+		/// @brief Creates a portal between two groups.
+		/// @param groupA First group index.
+		/// @param groupB Second group index.
+		/// @param vertices Portal vertices.
+		void CreatePortal(int32 groupA, int32 groupB, const std::vector<Vector3>& vertices);
+
+		/// @brief Removes a portal from the world model.
+		/// @param portalIndex The index of the portal to remove.
+		void RemovePortal(size_t portalIndex);
+
+		/// @brief Creates a light in the world model.
+		/// @param groupIndex The group to add the light to.
+		/// @param position The light position.
+		/// @param color The light color.
+		/// @param intensity The light intensity.
+		void CreateLight(int32 groupIndex, const Vector3& position, uint32 color, float intensity);
+
+		/// @brief Removes a light from the world model.
+		/// @param lightIndex The index of the light to remove.
+		void RemoveLight(size_t lightIndex);
+
+		/// @brief Creates a doodad set.
+		/// @param name The name of the set.
+		/// @return Index of the created set.
+		uint32 CreateDoodadSet(const String& name);
+
+		/// @brief Adds a doodad to the current set.
+		/// @param setIndex The set index.
+		/// @param meshPath The mesh path.
+		/// @param position The position.
+		/// @param rotation The rotation.
+		/// @param scale The scale.
+		void AddDoodad(uint32 setIndex, const String& meshPath, const Vector3& position, const Quaternion& rotation, float scale);
+
+		/// @brief Updates visualization for all groups.
+		void UpdateGroupVisualizations();
+
+		/// @brief Updates visualization for all portals.
+		void UpdatePortalVisualizations();
+
+		/// @brief Updates visualization for all lights.
+		void UpdateLightVisualizations();
+
+		/// @brief Draws the groups panel UI.
+		void DrawGroupsPanel();
+
+		/// @brief Draws the portals panel UI.
+		void DrawPortalsPanel();
+
+		/// @brief Draws the doodads panel UI.
+		void DrawDoodadsPanel();
+
+		/// @brief Draws the lights panel UI.
+		void DrawLightsPanel();
+
+		/// @brief Draws the fog panel UI.
+		void DrawFogPanel();
+
+		/// @brief Draws the properties panel for the current selection.
+		void DrawPropertiesPanel();
+
+		/// @brief Draws the toolbar.
+		void DrawToolbar();
+
 	private:
+		/// @brief Reads the version chunk.
 		bool ReadMVERChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		/// @brief Reads the mesh names chunk.
 		bool ReadMeshChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		/// @brief Reads an entity chunk.
 		bool ReadEntityChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		/// @copydoc ChunkReader::OnReadFinished
 		bool OnReadFinished() override;
 
 	private:
@@ -105,5 +313,32 @@ namespace mmo
 
 		std::vector<String> m_meshNames;
 		Vector3 m_brushPosition{};
+
+		// World model specific members
+		WorldModelPtr m_worldModel;
+		WorldModelEditMode m_editMode { WorldModelEditMode::Select };
+		int32 m_selectedGroupIndex { -1 };
+		int32 m_selectedPortalIndex { -1 };
+		int32 m_selectedLightIndex { -1 };
+		int32 m_selectedDoodadSetIndex { 0 };
+
+		std::vector<GroupVisualization> m_groupVisualizations;
+		std::vector<PortalVisualization> m_portalVisualizations;
+		std::vector<LightVisualization> m_lightVisualizations;
+
+		bool m_showGroupBounds { true };
+		bool m_showPortals { true };
+		bool m_showLights { true };
+		bool m_showDoodads { true };
+
+		// Portal creation state
+		bool m_creatingPortal { false };
+		int32 m_portalSourceGroup { -1 };
+		std::vector<Vector3> m_portalVertices;
+
+		// New group dialog state
+		bool m_showNewGroupDialog { false };
+		char m_newGroupName[256] { "" };
+		uint32 m_newGroupFlags { 0 };
 	};
 }
