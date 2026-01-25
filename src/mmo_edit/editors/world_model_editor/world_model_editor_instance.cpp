@@ -1962,7 +1962,7 @@ namespace mmo
 		}
 	}
 
-	void WorldModelEditorInstance::CreateLight(int32 groupIndex, const Vector3& position, uint32 color, float intensity)
+	void WorldModelEditorInstance::CreateLight(int32 groupIndex, const Vector3& position, uint32 color, float intensity, WorldModelLight::LightType type)
 	{
 		if (!m_worldModel)
 		{
@@ -1970,13 +1970,14 @@ namespace mmo
 		}
 
 		WorldModelLight light;
-		light.type = WorldModelLight::LightType::Omni;
+		light.type = type;
 		light.useAttenuation = true;
 		light.color = color;
 		light.position = position;
 		light.intensity = intensity;
-		light.attenuationStart = 1.0f;
+		light.attenuationStart = 0.0f;
 		light.attenuationEnd = 10.0f;
+		light.rotation = Quaternion::Identity;
 
 		auto& lights = m_worldModel->GetLights();
 		lights.push_back(light);
@@ -2361,6 +2362,10 @@ namespace mmo
 			{
 				m_scene.DestroyManualRenderObject(*vis.iconRenderable);
 			}
+			if (vis.iconEntity)
+			{
+				m_scene.DestroyEntity(*vis.iconEntity);
+			}
 			if (vis.node)
 			{
 				m_scene.DestroySceneNode(*vis.node);
@@ -2381,10 +2386,17 @@ namespace mmo
 			LightVisualization vis;
 			vis.node = &m_scene.CreateSceneNode("LightNode_" + std::to_string(i));
 			vis.node->SetPosition(lightData.position);
+			vis.node->SetOrientation(lightData.rotation);
 			m_scene.GetRootSceneNode().AddChild(*vis.node);
 
-			// Create a light
-			vis.light = &m_scene.CreateLight("Light_" + std::to_string(i), LightType::Point);
+			// Create appropriate light type
+			LightType sceneType = LightType::Point;
+			if (lightData.type == WorldModelLight::LightType::Spot)
+			{
+				sceneType = LightType::Spot;
+			}
+			
+			vis.light = &m_scene.CreateLight("WMOLight_" + std::to_string(i), sceneType);
 			
 			// Convert color from uint32 to Color
 			Vector4 lightColor(
@@ -2398,6 +2410,14 @@ namespace mmo
 			vis.light->SetRange(lightData.attenuationEnd);
 
 			vis.node->AttachObject(*vis.light);
+
+			// Create a visual marker for the light (small sphere/icon)
+			vis.iconEntity = m_scene.CreateEntity("LightIcon_" + std::to_string(i), "Editor/Joint.hmsh");
+			if (vis.iconEntity)
+			{
+				vis.iconEntity->SetQueryFlags(0);
+				vis.node->AttachObject(*vis.iconEntity);
+			}
 
 			m_lightVisualizations.push_back(std::move(vis));
 		}
@@ -3417,9 +3437,16 @@ namespace mmo
 
 	void WorldModelEditorInstance::DrawLightsPanel()
 	{
-		if (ImGui::Button("Add Light"))
+		if (ImGui::Button("Add Point Light"))
 		{
-			CreateLight(m_selectedGroupIndex, Vector3::Zero, 0xFFFFFFFF, 1.0f);
+			CreateLight(m_selectedGroupIndex, Vector3::Zero, 0xFFFFFFFF, 1.0f, WorldModelLight::LightType::Omni);
+		}
+
+		ImGui::SameLine();
+
+		if (ImGui::Button("Add Spot Light"))
+		{
+			CreateLight(m_selectedGroupIndex, Vector3::Zero, 0xFFFFFFFF, 1.0f, WorldModelLight::LightType::Spot);
 		}
 
 		ImGui::SameLine();
@@ -3437,13 +3464,20 @@ namespace mmo
 			return;
 		}
 
-		const auto& lights = m_worldModel->GetLights();
+		auto& lights = m_worldModel->GetLights();
 		for (size_t i = 0; i < lights.size(); ++i)
 		{
 			ImGui::PushID(static_cast<int>(i));
 
 			bool isSelected = m_selectedLightIndex == static_cast<int32>(i);
-			String label = "Light " + std::to_string(i);
+			
+			// Show light type in label
+			const char* typeStr = "Point";
+			if (lights[i].type == WorldModelLight::LightType::Spot)
+			{
+				typeStr = "Spot";
+			}
+			String label = String(typeStr) + " Light " + std::to_string(i);
 
 			if (ImGui::Selectable(label.c_str(), isSelected))
 			{
@@ -3451,6 +3485,96 @@ namespace mmo
 			}
 
 			ImGui::PopID();
+		}
+
+		// Selected light properties
+		if (m_selectedLightIndex >= 0 && m_selectedLightIndex < static_cast<int32>(lights.size()))
+		{
+			ImGui::Separator();
+			ImGui::Text("Light Properties:");
+
+			auto& light = lights[m_selectedLightIndex];
+
+			// Light type (Point or Spot only)
+			int typeInt = (light.type == WorldModelLight::LightType::Spot) ? 1 : 0;
+			const char* typeNames[] = { "Point", "Spot" };
+			if (ImGui::Combo("Type##light", &typeInt, typeNames, 2))
+			{
+				light.type = (typeInt == 1) ? WorldModelLight::LightType::Spot : WorldModelLight::LightType::Omni;
+				UpdateLightVisualizations();
+			}
+
+			// Position
+			float posArr[3] = { light.position.x, light.position.y, light.position.z };
+			if (ImGui::InputFloat3("Position##light", posArr, "%.2f"))
+			{
+				light.position = Vector3(posArr[0], posArr[1], posArr[2]);
+				UpdateLightVisualizations();
+			}
+
+			// Color picker
+			float colorArr[3] = {
+				((light.color >> 16) & 0xFF) / 255.0f,
+				((light.color >> 8) & 0xFF) / 255.0f,
+				(light.color & 0xFF) / 255.0f
+			};
+			if (ImGui::ColorEdit3("Color##light", colorArr))
+			{
+				uint32 r = static_cast<uint32>(colorArr[0] * 255.0f) & 0xFF;
+				uint32 g = static_cast<uint32>(colorArr[1] * 255.0f) & 0xFF;
+				uint32 b = static_cast<uint32>(colorArr[2] * 255.0f) & 0xFF;
+				light.color = 0xFF000000 | (r << 16) | (g << 8) | b;
+				UpdateLightVisualizations();
+			}
+
+			// Intensity
+			if (ImGui::InputFloat("Intensity##light", &light.intensity, 0.1f, 1.0f, "%.2f"))
+			{
+				UpdateLightVisualizations();
+			}
+
+			// Range (attenuation end)
+			if (ImGui::InputFloat("Range##light", &light.attenuationEnd, 1.0f, 5.0f, "%.1f"))
+			{
+				if (light.attenuationEnd < 0.1f)
+				{
+					light.attenuationEnd = 0.1f;
+				}
+				UpdateLightVisualizations();
+			}
+
+			// Direction for spot lights
+			if (light.type == WorldModelLight::LightType::Spot)
+			{
+				ImGui::Separator();
+				ImGui::Text("Spot Direction:");
+				
+				Matrix3 rotMat;
+				light.rotation.ToRotationMatrix(rotMat);
+				Radian yaw, pitch, roll;
+				rotMat.ToEulerAnglesYXZ(yaw, pitch, roll);
+				
+				float yawDeg = Degree(yaw).GetValueDegrees();
+				float pitchDeg = Degree(pitch).GetValueDegrees();
+				
+				bool rotChanged = false;
+				if (ImGui::InputFloat("Yaw##lightdir", &yawDeg, 1.0f, 10.0f, "%.1f"))
+				{
+					rotChanged = true;
+				}
+				if (ImGui::InputFloat("Pitch##lightdir", &pitchDeg, 1.0f, 10.0f, "%.1f"))
+				{
+					rotChanged = true;
+				}
+				
+				if (rotChanged)
+				{
+					Matrix3 newRotMat;
+					newRotMat.FromEulerAnglesYXZ(Degree(yawDeg), Degree(pitchDeg), Radian(0));
+					light.rotation.FromRotationMatrix(newRotMat);
+					UpdateLightVisualizations();
+				}
+			}
 		}
 	}
 

@@ -317,8 +317,8 @@ namespace mmo
 
             if (light->GetType() != LightType::Directional)
             {
-                // Check if light is in the camera's view frustum
-                if (!camera.IsVisible(light->GetBoundingBox()))
+                // Check if light is in the camera's view frustum using world bounding box
+                if (!camera.IsVisible(light->GetWorldBoundingBox(true)))
                 {
                     continue;  // Skip lights that are not in view
                 }

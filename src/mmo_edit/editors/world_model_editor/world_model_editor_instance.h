@@ -316,6 +316,7 @@ namespace mmo
 		SceneNode* node { nullptr };
 		Light* light { nullptr };
 		ManualRenderObject* iconRenderable { nullptr };
+		Entity* iconEntity { nullptr };
 	};
 
 	/// @brief Editor instance for editing world model objects (WMO-like structures).
@@ -395,11 +396,12 @@ namespace mmo
 		void UpdatePortalGroupConnection(int32 portalIndex, int32 oldGroupA, int32 newGroupA, int32 newGroupB);
 
 		/// @brief Creates a light in the world model.
-		/// @param groupIndex The group to add the light to.
+		/// @param groupIndex The group to add the light to (currently unused).
 		/// @param position The light position.
 		/// @param color The light color.
 		/// @param intensity The light intensity.
-		void CreateLight(int32 groupIndex, const Vector3& position, uint32 color, float intensity);
+		/// @param type The type of light (Point or Spot).
+		void CreateLight(int32 groupIndex, const Vector3& position, uint32 color, float intensity, WorldModelLight::LightType type);
 
 		/// @brief Removes a light from the world model.
 		/// @param lightIndex The index of the light to remove.
