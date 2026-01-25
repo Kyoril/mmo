@@ -2,6 +2,7 @@
 
 #include "world_model_editor_instance.h"
 
+#include <algorithm>
 #include <imgui_internal.h>
 
 #include "editor_host.h"
@@ -1912,6 +1913,55 @@ namespace mmo
 		UpdatePortalVisualizations();
 	}
 
+	void WorldModelEditorInstance::UpdatePortalGroupConnection(int32 portalIndex, int32 oldGroupA, int32 newGroupA, int32 newGroupB)
+	{
+		if (!m_worldModel || portalIndex < 0)
+		{
+			return;
+		}
+
+		// First, remove this portal reference from all groups
+		for (size_t gi = 0; gi < m_worldModel->GetGroupCount(); ++gi)
+		{
+			auto* grp = m_worldModel->GetGroup(gi);
+			if (grp)
+			{
+				auto& refs = grp->GetPortalRefs();
+				refs.erase(std::remove_if(refs.begin(), refs.end(),
+					[portalIndex](const WorldModelPortalRef& ref) {
+						return ref.portalIndex == static_cast<uint16>(portalIndex);
+					}), refs.end());
+			}
+		}
+
+		// Now add references to the new groups
+		if (newGroupA >= 0 && newGroupA < static_cast<int32>(m_worldModel->GetGroupCount()))
+		{
+			auto* grpA = m_worldModel->GetGroup(newGroupA);
+			if (grpA)
+			{
+				WorldModelPortalRef refA;
+				refA.portalIndex = static_cast<uint16>(portalIndex);
+				refA.groupIndex = newGroupB >= 0 ? static_cast<uint16>(newGroupB) : 0;
+				refA.side = 1;
+				grpA->GetPortalRefs().push_back(refA);
+			}
+		}
+
+		if (newGroupB >= 0 && newGroupB < static_cast<int32>(m_worldModel->GetGroupCount()))
+		{
+			auto* grpB = m_worldModel->GetGroup(newGroupB);
+			if (grpB)
+			{
+				WorldModelPortalRef refB;
+				refB.portalIndex = static_cast<uint16>(portalIndex);
+				refB.groupIndex = newGroupA >= 0 ? static_cast<uint16>(newGroupA) : 0;
+				refB.side = -1;
+				grpB->GetPortalRefs().push_back(refB);
+			}
+		}
+	}
+
 	void WorldModelEditorInstance::CreateLight(int32 groupIndex, const Vector3& position, uint32 color, float intensity)
 	{
 		if (!m_worldModel)
@@ -2423,6 +2473,59 @@ namespace mmo
 
 			ImGui::PopID();
 		}
+
+		// Selected group properties
+		if (m_selectedGroupIndex >= 0 && m_selectedGroupIndex < static_cast<int32>(m_worldModel->GetGroupCount()))
+		{
+			ImGui::Separator();
+			ImGui::Text("Selected Group Properties:");
+
+			auto* selectedGroup = m_worldModel->GetGroup(m_selectedGroupIndex);
+			if (selectedGroup)
+			{
+				// Group name editing
+				char nameBuffer[256];
+				std::strncpy(nameBuffer, selectedGroup->GetName().c_str(), sizeof(nameBuffer) - 1);
+				nameBuffer[sizeof(nameBuffer) - 1] = '\0';
+				if (ImGui::InputText("Name##group", nameBuffer, sizeof(nameBuffer)))
+				{
+					selectedGroup->SetName(nameBuffer);
+				}
+
+				// Group flags
+				bool isInterior = selectedGroup->IsInterior();
+				if (ImGui::Checkbox("Interior##group", &isInterior))
+				{
+					uint32 flags = selectedGroup->GetFlags();
+					if (isInterior)
+					{
+						flags |= 0x2000; // Interior flag
+						flags &= ~0x8; // Clear exterior flag
+					}
+					else
+					{
+						flags &= ~0x2000;
+					}
+					selectedGroup->SetFlags(flags);
+				}
+
+				bool isExterior = selectedGroup->IsExterior();
+				if (ImGui::Checkbox("Exterior##group", &isExterior))
+				{
+					uint32 flags = selectedGroup->GetFlags();
+					if (isExterior)
+					{
+						flags |= 0x8; // Exterior flag
+						flags &= ~0x2000; // Clear interior flag
+					}
+					else
+					{
+						flags &= ~0x8;
+					}
+					selectedGroup->SetFlags(flags);
+				}
+			}
+		}
 	}
 
 	void WorldModelEditorInstance::DrawPortalsPanel()
@@ -2642,59 +2745,69 @@ namespace mmo
 			auto& portal = portals[m_selectedPortalIndex];
 			if (portal)
 			{
-				// Position
+				// Position (with InputFloat for precise entry)
 				Vector3 pos = portal->GetPosition();
 				float posArr[3] = { pos.x, pos.y, pos.z };
-				if (ImGui::DragFloat3("Position##portal", posArr, 0.1f))
+				if (ImGui::InputFloat3("Position##portal", posArr, "%.2f"))
 				{
 					portal->SetTransform(Vector3(posArr[0], posArr[1], posArr[2]), portal->GetRotation(), portal->GetScale());
 					UpdatePortalVisualizations();
 				}
 
-				// Rotation (as angle-axis for easier understanding)
+				// Rotation as Yaw/Pitch/Roll (more intuitive)
 				Quaternion rot = portal->GetRotation();
-				Radian angle;
-				Vector3 axis;
-				rot.ToAngleAxis(angle, axis);
+				Matrix3 rotMat;
+				rot.ToRotationMatrix(rotMat);
+				Radian yaw, pitch, roll;
+				rotMat.ToEulerAnglesYXZ(yaw, pitch, roll);
 				
-				float angleDeg = Degree(angle).GetValueDegrees();
-				float axisArr[3] = { axis.x, axis.y, axis.z };
+				float yawDeg = Degree(yaw).GetValueDegrees();
+				float pitchDeg = Degree(pitch).GetValueDegrees();
+				float rollDeg = Degree(roll).GetValueDegrees();
 				
 				bool rotChanged = false;
-				if (ImGui::DragFloat("Rotation Angle##portal", &angleDeg, 1.0f, -180.0f, 180.0f))
+				if (ImGui::InputFloat("Yaw##portal", &yawDeg, 1.0f, 10.0f, "%.1f"))
 				{
 					rotChanged = true;
 				}
-				if (ImGui::DragFloat3("Rotation Axis##portal", axisArr, 0.01f, -1.0f, 1.0f))
+				if (ImGui::InputFloat("Pitch##portal", &pitchDeg, 1.0f, 10.0f, "%.1f"))
+				{
+					rotChanged = true;
+				}
+				if (ImGui::InputFloat("Roll##portal", &rollDeg, 1.0f, 10.0f, "%.1f"))
 				{
 					rotChanged = true;
 				}
 				
 				if (rotChanged)
 				{
-					axis = Vector3(axisArr[0], axisArr[1], axisArr[2]);
-					if (axis.GetSquaredLength() > 0.0001f)
+					// Convert back to quaternion
+					Matrix3 newRotMat;
+					newRotMat.FromEulerAnglesYXZ(Degree(yawDeg), Degree(pitchDeg), Degree(rollDeg));
+					Quaternion newRot;
+					newRot.FromRotationMatrix(newRotMat);
+					portal->SetTransform(portal->GetPosition(), newRot, portal->GetScale());
+					UpdatePortalVisualizations();
+				}
+
+				// Dimensions (with InputFloat for precise entry)
+				float width = portal->GetWidth();
+				float height = portal->GetHeight();
+				if (ImGui::InputFloat("Width##portal", &width, 0.1f, 1.0f, "%.2f"))
+				{
+					if (width > 0.0f)
 					{
-						axis.Normalize();
-						Quaternion newRot;
-						newRot.FromAngleAxis(Degree(angleDeg), axis);
-						portal->SetTransform(portal->GetPosition(), newRot, portal->GetScale());
+						portal->SetDimensions(width, height);
 						UpdatePortalVisualizations();
 					}
 				}
-
-				// Dimensions
-				float width = portal->GetWidth();
-				float height = portal->GetHeight();
-				if (ImGui::DragFloat("Width##portal", &width, 0.1f, 0.1f, 100.0f))
+				if (ImGui::InputFloat("Height##portal", &height, 0.1f, 1.0f, "%.2f"))
 				{
-					portal->SetDimensions(width, height);
-					UpdatePortalVisualizations();
-				}
-				if (ImGui::DragFloat("Height##portal", &height, 0.1f, 0.1f, 100.0f))
-				{
-					portal->SetDimensions(width, height);
-					UpdatePortalVisualizations();
+					if (height > 0.0f)
+					{
+						portal->SetDimensions(width, height);
+						UpdatePortalVisualizations();
+					}
 				}
 
 				// Portal type
@@ -2711,6 +2824,113 @@ namespace mmo
 				if (ImGui::Checkbox("Active##portal", &active))
 				{
 					portal->SetActive(active);
+				}
+
+				// Connected groups editing
+				ImGui::Separator();
+				ImGui::Text("Connected Groups:");
+
+				// Find which groups reference this portal
+				int32 groupA = -1, groupB = -1;
+				for (size_t gi = 0; gi < m_worldModel->GetGroupCount(); ++gi)
+				{
+					auto* grp = m_worldModel->GetGroup(gi);
+					if (grp)
+					{
+						for (const auto& ref : grp->GetPortalRefs())
+						{
+							if (ref.portalIndex == static_cast<uint16>(m_selectedPortalIndex))
+							{
+								if (groupA < 0)
+								{
+									groupA = static_cast<int32>(gi);
+								}
+								else
+								{
+									groupB = static_cast<int32>(gi);
+								}
+								break;
+							}
+						}
+					}
+				}
+
+				// Group A selection
+				String groupAPreview = "(none)";
+				if (groupA >= 0 && groupA < static_cast<int32>(m_worldModel->GetGroupCount()))
+				{
+					const auto* grpA = m_worldModel->GetGroup(groupA);
+					if (grpA)
+					{
+						groupAPreview = grpA->GetName();
+						if (groupAPreview.empty())
+						{
+							groupAPreview = "Group " + std::to_string(groupA);
+						}
+					}
+				}
+				
+				if (ImGui::BeginCombo("Group A##portalgrp", groupAPreview.c_str()))
+				{
+					for (size_t gi = 0; gi < m_worldModel->GetGroupCount(); ++gi)
+					{
+						const auto* grp = m_worldModel->GetGroup(gi);
+						if (grp && static_cast<int32>(gi) != groupB)
+						{
+							String itemLabel = grp->GetName();
+							if (itemLabel.empty())
+							{
+								itemLabel = "Group " + std::to_string(gi);
+							}
+							itemLabel += "##grpA" + std::to_string(gi);
+							
+							if (ImGui::Selectable(itemLabel.c_str(), groupA == static_cast<int32>(gi)))
+							{
+								// Update portal references
+								UpdatePortalGroupConnection(m_selectedPortalIndex, groupA, static_cast<int32>(gi), groupB);
+							}
+						}
+					}
+					ImGui::EndCombo();
+				}
+
+				// Group B selection
+				String groupBPreview = "(none)";
+				if (groupB >= 0 && groupB < static_cast<int32>(m_worldModel->GetGroupCount()))
+				{
+					const auto* grpB = m_worldModel->GetGroup(groupB);
+					if (grpB)
+					{
+						groupBPreview = grpB->GetName();
+						if (groupBPreview.empty())
+						{
+							groupBPreview = "Group " + std::to_string(groupB);
+						}
+					}
+				}
+				
+				if (ImGui::BeginCombo("Group B##portalgrp", groupBPreview.c_str()))
+				{
+					for (size_t gi = 0; gi < m_worldModel->GetGroupCount(); ++gi)
+					{
+						const auto* grp = m_worldModel->GetGroup(gi);
+						if (grp && static_cast<int32>(gi) != groupA)
+						{
+							String itemLabel = grp->GetName();
+							if (itemLabel.empty())
+							{
+								itemLabel = "Group " + std::to_string(gi);
+							}
+							itemLabel += "##grpB" + std::to_string(gi);
+							
+							if (ImGui::Selectable(itemLabel.c_str(), groupB == static_cast<int32>(gi)))
+							{
+								// Update portal references
+								UpdatePortalGroupConnection(m_selectedPortalIndex, groupA, groupA, static_cast<int32>(gi));
+							}
+						}
+					}
+					ImGui::EndCombo();
 				}
 			}
 

@@ -387,6 +387,13 @@ namespace mmo
 		/// @param portalIndex The index of the portal to remove.
 		void RemovePortal(size_t portalIndex);
 
+		/// @brief Updates the group connections for a portal.
+		/// @param portalIndex The index of the portal.
+		/// @param oldGroupA The old group A index (-1 if none).
+		/// @param newGroupA The new group A index (-1 if none).
+		/// @param newGroupB The new group B index (-1 if none).
+		void UpdatePortalGroupConnection(int32 portalIndex, int32 oldGroupA, int32 newGroupA, int32 newGroupB);
+
 		/// @brief Creates a light in the world model.
 		/// @param groupIndex The group to add the light to.
 		/// @param position The light position.
