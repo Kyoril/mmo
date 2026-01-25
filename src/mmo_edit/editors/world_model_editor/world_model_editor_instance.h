@@ -18,6 +18,7 @@
 #include "scene_graph/world_model.h"
 #include "transform_widget.h"
 #include "selection.h"
+#include "deferred_shading/deferred_renderer.h"
 
 namespace mmo
 {
@@ -559,6 +560,9 @@ namespace mmo
 		ImVec2 m_lastContentRectMin{};
 
 		Light* m_sunLight{ nullptr };
+
+		/// @brief The deferred renderer for proper lighting support.
+		std::unique_ptr<DeferredRenderer> m_deferredRenderer;
 
 		std::vector<String> m_meshNames;
 		Vector3 m_brushPosition{};

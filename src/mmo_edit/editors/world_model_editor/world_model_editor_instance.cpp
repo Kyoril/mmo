@@ -349,6 +349,9 @@ namespace mmo
 		m_mainLight->SetColor(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
 		m_lightNode->AttachObject(*m_mainLight);
 
+		// Create deferred renderer for proper lighting support
+		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), m_scene, 1920, 1080);
+
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
 		m_worldGrid->SetQueryFlags(0);
 		m_worldGrid->SetVisible(true);
@@ -398,6 +401,14 @@ namespace mmo
 				{
 					UpdateMeshRefVisualizations(i);
 				}
+				
+				// Sync ambient color to scene for deferred renderer
+				const uint32 ambientColor = m_worldModel->GetAmbientColor();
+				m_scene.SetAmbientColor(Vector3(
+					((ambientColor >> 16) & 0xFF) / 255.0f,
+					((ambientColor >> 8) & 0xFF) / 255.0f,
+					(ambientColor & 0xFF) / 255.0f
+				));
 			}
 			else
 			{
@@ -527,24 +538,21 @@ namespace mmo
 		m_cameraAnchor->Translate(m_cameraVelocity * deltaTimeSeconds, TransformSpace::Local);
 		m_cameraVelocity *= powf(0.025f, deltaTimeSeconds);
 
-		if (!m_viewportRT) return;
+		if (!m_deferredRenderer) return;
 		if (m_lastAvailViewportSize.x <= 0.0f || m_lastAvailViewportSize.y <= 0.0f) return;
 
 		auto& gx = GraphicsDevice::Get();
 
-		// Render the scene first
+		// Render using the deferred renderer for proper lighting support
+		gx.CaptureState();
 		gx.Reset();
-		gx.SetClearColor(Color::Black);
-		m_viewportRT->Activate();
-		m_viewportRT->Clear(mmo::ClearFlags::All);
-		gx.SetViewport(0, 0, m_lastAvailViewportSize.x, m_lastAvailViewportSize.y, 0.0f, 1.0f);
 		m_camera->SetAspectRatio(m_lastAvailViewportSize.x / m_lastAvailViewportSize.y);
 		m_camera->SetFillMode(m_wireFrame ? FillMode::Wireframe : FillMode::Solid);
 
-		m_scene.Render(*m_camera, PixelShaderType::Forward);
+		m_deferredRenderer->Render(m_scene, *m_camera);
 		m_transformWidget->Update(m_camera);
 		
-		m_viewportRT->Update();
+		gx.RestoreState();
 	}
 
 	void WorldModelEditorInstance::Draw()
@@ -651,6 +659,9 @@ namespace mmo
 						(static_cast<uint32>(color[1] * 255.0f) << 8) |
 						static_cast<uint32>(color[2] * 255.0f);
 					m_worldModel->SetAmbientColor(newColor);
+					
+					// Also sync to scene for deferred renderer
+					m_scene.SetAmbientColor(Vector3(color[0], color[1], color[2]));
 				}
 
 				ImGui::Separator();
@@ -696,19 +707,20 @@ namespace mmo
 			// or resize it if needed
 			const auto availableSpace = ImGui::GetContentRegionAvail();
 			
-			if (m_viewportRT == nullptr)
+			if (m_lastAvailViewportSize.x != availableSpace.x || m_lastAvailViewportSize.y != availableSpace.y)
 			{
-				m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("Viewport", std::max(1.0f, availableSpace.x), std::max(1.0f, availableSpace.y), RenderTextureFlags::HasColorBuffer | RenderTextureFlags::HasDepthBuffer | RenderTextureFlags::ShaderResourceView);
-				m_lastAvailViewportSize = availableSpace;
-			}
-			else if (m_lastAvailViewportSize.x != availableSpace.x || m_lastAvailViewportSize.y != availableSpace.y)
-			{
-				m_viewportRT->Resize(availableSpace.x, availableSpace.y);
+				if (m_deferredRenderer && availableSpace.x > 0 && availableSpace.y > 0)
+				{
+					m_deferredRenderer->Resize(static_cast<uint32>(availableSpace.x), static_cast<uint32>(availableSpace.y));
+				}
 				m_lastAvailViewportSize = availableSpace;
 			}
 
-			// Render the render target content into the window as image object
-			ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
+			// Render the deferred renderer's output into the window as image object
+			if (m_deferredRenderer && m_deferredRenderer->GetFinalRenderTarget())
+			{
+				ImGui::Image(m_deferredRenderer->GetFinalRenderTarget()->GetTextureObject(), availableSpace);
+			};
 			ImGui::SetItemUsingMouseWheel();
 
 			m_hovering = ImGui::IsItemHovered();

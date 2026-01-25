@@ -174,6 +174,9 @@ namespace mmo
 
     void DeferredRenderer::Render(Scene& scene, Camera& camera)
     {
+        // Update the scene graph first to ensure all transforms are up-to-date
+        scene.UpdateSceneGraph();
+
         // Traverse the scene graph and find all kind of lighting information for the current frame
         FindLights(scene, camera);
 
