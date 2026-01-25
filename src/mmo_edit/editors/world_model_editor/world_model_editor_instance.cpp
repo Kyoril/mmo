@@ -19,6 +19,10 @@
 #include "stream_sink.h"
 #include "editors/world_editor/world_editor_instance.h"
 #include "scene_graph/mesh_manager.h"
+#include "scene_graph/sub_mesh.h"
+#include "graphics/graphics_device.h"
+#include "graphics/vertex_declaration.h"
+#include "graphics/vertex_index_data.h"
 #include "terrain/page.h"
 #include "terrain/tile.h"
 
@@ -114,6 +118,15 @@ namespace mmo
 		m_cameraAnchor->SetOrientation(Quaternion(Degree(-35.0f), Vector3::UnitX));
 
 		m_scene.GetRootSceneNode().AddChild(*m_cameraAnchor);
+
+		// Create a directional light for proper geometry lighting
+		m_lightNode = &m_scene.CreateSceneNode("MainLightNode");
+		m_scene.GetRootSceneNode().AddChild(*m_lightNode);
+		m_mainLight = &m_scene.CreateLight("MainLight", LightType::Directional);
+		m_mainLight->SetDirection(Vector3(-0.5f, -1.0f, -0.3f).NormalizedCopy());
+		m_mainLight->SetIntensity(1.0f);
+		m_mainLight->SetColor(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+		m_lightNode->AttachObject(*m_mainLight);
 
 		m_worldGrid = std::make_unique<WorldGrid>(m_scene, "WorldGrid");
 		m_worldGrid->SetQueryFlags(0);
@@ -1030,6 +1043,195 @@ namespace mmo
 		UpdatePortalVisualizations();
 	}
 
+	void WorldModelEditorInstance::AssignMeshToGroup(int32 groupIndex, const String& meshPath)
+	{
+		if (!m_worldModel || groupIndex < 0 || groupIndex >= static_cast<int32>(m_worldModel->GetGroupCount()))
+		{
+			ELOG("Invalid group index for mesh assignment");
+			return;
+		}
+
+		auto* group = m_worldModel->GetGroup(groupIndex);
+		if (!group)
+		{
+			ELOG("Failed to get group at index " << groupIndex);
+			return;
+		}
+
+		// Load the mesh
+		auto mesh = MeshManager::Get().Load(meshPath);
+		if (!mesh)
+		{
+			ELOG("Failed to load mesh: " << meshPath);
+			return;
+		}
+
+		// Clear existing geometry
+		group->GetVertices().clear();
+		group->GetNormals().clear();
+		group->GetTexCoords().clear();
+		group->GetVertexColors().clear();
+		group->GetIndices().clear();
+		group->GetMaterialIndices().clear();
+
+		AABB boundingBox;
+		boundingBox.SetNull();
+
+		uint32 baseVertexIndex = 0;
+
+		// Iterate through all submeshes and extract geometry
+		for (uint16 subMeshIdx = 0; subMeshIdx < mesh->GetSubMeshCount(); ++subMeshIdx)
+		{
+			SubMesh& subMesh = mesh->GetSubMesh(subMeshIdx);
+			
+			VertexData* vertexData = nullptr;
+			if (subMesh.useSharedVertices && mesh->sharedVertexData)
+			{
+				vertexData = mesh->sharedVertexData.get();
+			}
+			else if (subMesh.vertexData)
+			{
+				vertexData = subMesh.vertexData.get();
+			}
+
+			if (!vertexData || !vertexData->vertexDeclaration || !vertexData->vertexBufferBinding)
+			{
+				continue;
+			}
+
+			// Find position element
+			const VertexElement* posElem = vertexData->vertexDeclaration->FindElementBySemantic(VertexElementSemantic::Position);
+			const VertexElement* normElem = vertexData->vertexDeclaration->FindElementBySemantic(VertexElementSemantic::Normal);
+			const VertexElement* texElem = vertexData->vertexDeclaration->FindElementBySemantic(VertexElementSemantic::TextureCoordinate);
+			const VertexElement* colorElem = vertexData->vertexDeclaration->FindElementBySemantic(VertexElementSemantic::Diffuse);
+
+			if (!posElem)
+			{
+				continue;
+			}
+
+			// Get vertex buffer
+			auto vbuf = vertexData->vertexBufferBinding->GetBuffer(posElem->GetSource());
+			if (!vbuf)
+			{
+				continue;
+			}
+
+			// Lock vertex buffer for reading
+			void* rawVertexPtr = vbuf->Map(LockOptions::ReadOnly);
+			if (!rawVertexPtr)
+			{
+				continue;
+			}
+
+			uint8* vertexPtr = static_cast<uint8*>(rawVertexPtr);
+			uint32 vertexStart = vertexData->vertexStart;
+			uint32 vertexCount = vertexData->vertexCount;
+			size_t vertexSize = vbuf->GetVertexSize();
+
+			// Read vertices
+			for (uint32 v = 0; v < vertexCount; ++v)
+			{
+				uint8* basePtr = vertexPtr + (vertexStart + v) * vertexSize;
+
+				// Position
+				float* posData = nullptr;
+				posElem->BaseVertexPointerToElement(basePtr, &posData);
+				Vector3 position(posData[0], posData[1], posData[2]);
+				group->GetVertices().push_back(position);
+				boundingBox.Combine(position);
+
+				// Normal
+				if (normElem)
+				{
+					float* normData = nullptr;
+					normElem->BaseVertexPointerToElement(basePtr, &normData);
+					group->GetNormals().push_back(Vector3(normData[0], normData[1], normData[2]));
+				}
+				else
+				{
+					group->GetNormals().push_back(Vector3::UnitY);
+				}
+
+				// Texture coordinates
+				if (texElem)
+				{
+					float* texData = nullptr;
+					texElem->BaseVertexPointerToElement(basePtr, &texData);
+					group->GetTexCoords().push_back(Vector3(texData[0], texData[1], 0.0f));
+				}
+				else
+				{
+					group->GetTexCoords().push_back(Vector3::Zero);
+				}
+
+				// Vertex color
+				if (colorElem)
+				{
+					uint32* colorData = nullptr;
+					colorElem->BaseVertexPointerToElement(basePtr, &colorData);
+					group->GetVertexColors().push_back(*colorData);
+				}
+				else
+				{
+					group->GetVertexColors().push_back(0xFFFFFFFF);
+				}
+			}
+
+			vbuf->Unmap();
+
+			// Read indices
+			if (subMesh.indexData && subMesh.indexData->indexBuffer)
+			{
+				auto ibuf = subMesh.indexData->indexBuffer;
+				void* indexPtr = ibuf->Map(LockOptions::ReadOnly);
+				
+				if (indexPtr)
+				{
+					size_t indexStart = subMesh.indexData->indexStart;
+					size_t indexCount = subMesh.indexData->indexCount;
+					bool use32Bit = ibuf->GetIndexSize() == IndexBufferSize::Index_32;
+
+					for (size_t i = 0; i < indexCount; ++i)
+					{
+						uint32 index;
+						if (use32Bit)
+						{
+							index = static_cast<uint32*>(indexPtr)[indexStart + i];
+						}
+						else
+						{
+							index = static_cast<uint16*>(indexPtr)[indexStart + i];
+						}
+						group->GetIndices().push_back(baseVertexIndex + index);
+						
+						// Set material index for each vertex (every 3 indices = 1 triangle)
+						if ((i % 3) == 0)
+						{
+							group->GetMaterialIndices().push_back(subMeshIdx);
+						}
+					}
+
+					ibuf->Unmap();
+				}
+			}
+
+			baseVertexIndex = static_cast<uint32>(group->GetVertices().size());
+		}
+
+		// Update group bounding box
+		if (!boundingBox.IsNull())
+		{
+			group->SetBoundingBox(boundingBox);
+		}
+
+		ILOG("Assigned mesh '" << meshPath << "' to group '" << group->GetName() << "' (" 
+			<< group->GetVertices().size() << " vertices, " 
+			<< group->GetIndices().size() / 3 << " triangles)");
+
+		UpdateGroupVisualizations();
+	}
+
 	void WorldModelEditorInstance::CreatePortal(int32 groupA, int32 groupB, const std::vector<Vector3>& vertices)
 	{
 		if (!m_worldModel || vertices.size() < 3)
@@ -1229,6 +1431,10 @@ namespace mmo
 		// Clear existing visualizations
 		for (auto& vis : m_groupVisualizations)
 		{
+			if (vis.meshEntity)
+			{
+				m_scene.DestroyEntity(*vis.meshEntity);
+			}
 			if (vis.boundingBoxRenderable)
 			{
 				m_scene.DestroyManualRenderObject(*vis.boundingBoxRenderable);
@@ -1286,6 +1492,121 @@ namespace mmo
 			vis.node->AttachObject(*vis.boundingBoxRenderable);
 			vis.visible = true;
 
+			// Create mesh from group geometry if available
+			const auto& vertices = group->GetVertices();
+			const auto& indices = group->GetIndices();
+			
+			if (!vertices.empty() && !indices.empty())
+			{
+				const auto& normals = group->GetNormals();
+				const auto& texCoords = group->GetTexCoords();
+				const auto& vertexColors = group->GetVertexColors();
+
+				// Create a manual mesh with unique name
+				String meshName = "WMO_GroupMesh_" + std::to_string(m_meshCounter++) + "_" + std::to_string(i);
+				MeshPtr groupMesh = MeshManager::Get().CreateManual(meshName);
+				vis.mesh = groupMesh;
+				
+				if (groupMesh)
+				{
+					SubMesh& subMesh = groupMesh->CreateSubMesh();
+					subMesh.useSharedVertices = false;
+					
+					// Create vertex data
+					subMesh.vertexData = std::make_unique<VertexData>(&GraphicsDevice::Get());
+					subMesh.vertexData->vertexCount = vertices.size();
+					subMesh.vertexData->vertexStart = 0;
+					
+					// Setup vertex declaration - must match the format expected by Default.hmat
+					// Order: Position, Color, Normal, Binormal, Tangent, TexCoord
+					VertexDeclaration* decl = subMesh.vertexData->vertexDeclaration;
+					uint32 offset = 0;
+					offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Position).GetSize();
+					offset += decl->AddElement(0, offset, VertexElementType::ColorArgb, VertexElementSemantic::Diffuse).GetSize();
+					offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Normal).GetSize();
+					offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Binormal).GetSize();
+					offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Tangent).GetSize();
+					offset += decl->AddElement(0, offset, VertexElementType::Float2, VertexElementSemantic::TextureCoordinate).GetSize();
+					
+					// Vertex struct matching the declaration
+					struct VertexStruct
+					{
+						Vector3 position;
+						uint32 color;
+						Vector3 normal;
+						Vector3 binormal;
+						Vector3 tangent;
+						float u, v;
+					};
+					
+					// Build vertex buffer data
+					std::vector<VertexStruct> vertexData(vertices.size());
+					
+					for (size_t v = 0; v < vertices.size(); ++v)
+					{
+						VertexStruct& vert = vertexData[v];
+						
+						// Position
+						vert.position = vertices[v];
+						
+						// Color (ARGB format)
+						vert.color = (v < vertexColors.size()) ? vertexColors[v] : 0xFFFFFFFF;
+						
+						// Normal
+						if (v < normals.size())
+						{
+							vert.normal = normals[v];
+						}
+						else
+						{
+							vert.normal = Vector3::UnitY;
+						}
+						
+						// Binormal - compute from normal
+						Vector3 up = (std::abs(vert.normal.y) < 0.99f) ? Vector3::UnitY : Vector3::UnitX;
+						vert.tangent = vert.normal.Cross(up).NormalizedCopy();
+						vert.binormal = vert.tangent.Cross(vert.normal).NormalizedCopy();
+						
+						// TexCoord
+						if (v < texCoords.size())
+						{
+							vert.u = texCoords[v].x;
+							vert.v = texCoords[v].y;
+						}
+						else
+						{
+							vert.u = 0.0f;
+							vert.v = 0.0f;
+						}
+					}
+					
+					// Create vertex buffer
+					VertexBufferPtr vertexBuffer = GraphicsDevice::Get().CreateVertexBuffer(
+						vertices.size(), offset, BufferUsage::StaticWriteOnly, vertexData.data());
+					subMesh.vertexData->vertexBufferBinding->SetBinding(0, vertexBuffer);
+					
+					// Create index data
+					subMesh.indexData = std::make_unique<IndexData>();
+					subMesh.indexData->indexCount = indices.size();
+					subMesh.indexData->indexStart = 0;
+					subMesh.indexData->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(
+						indices.size(), IndexBufferSize::Index_32, BufferUsage::StaticWriteOnly, indices.data());
+					
+					// Set mesh bounds
+					groupMesh->SetBounds(bbox);
+					
+					// Set a default material
+					subMesh.SetMaterial(MaterialManager::Get().Load("Models/Default.hmat"));
+					
+					// Create entity from mesh
+					vis.meshEntity = m_scene.CreateEntity("GroupEntity_" + std::to_string(i), groupMesh);
+					if (vis.meshEntity)
+					{
+						vis.node->AttachObject(*vis.meshEntity);
+					}
+				}
+			}
+
 			m_groupVisualizations.push_back(std::move(vis));
 		}
 	}
@@ -1311,8 +1632,63 @@ namespace mmo
 			return;
 		}
 
-		// Portal visualizations would require portal vertex data
-		// For now, this is a placeholder for when we have proper portal geometry
+		// Create visualizations for each portal
+		auto& portals = m_worldModel->GetPortals();
+		for (size_t i = 0; i < portals.size(); ++i)
+		{
+			auto& portal = portals[i];
+			if (!portal)
+			{
+				continue;
+			}
+
+			PortalVisualization vis;
+			vis.node = &m_scene.CreateSceneNode("PortalNode_" + std::to_string(i));
+			m_scene.GetRootSceneNode().AddChild(*vis.node);
+
+			// Create portal visualization as a quad outline
+			vis.renderable = m_scene.CreateManualRenderObject("PortalVis_" + std::to_string(i));
+			vis.renderable->SetQueryFlags(0);
+
+			auto lineOp = vis.renderable->AddLineListOperation(MaterialManager::Get().Load("Models/Engine/Axis.hmat"));
+
+			// Get portal vertices
+			const auto& worldVerts = portal->GetWorldVertices();
+			if (worldVerts.size() >= 4)
+			{
+				// Draw the portal as a quad outline (cyan color for visibility)
+				for (size_t v = 0; v < worldVerts.size(); ++v)
+				{
+					size_t nextV = (v + 1) % worldVerts.size();
+					auto& line = lineOp->AddLine(worldVerts[v], worldVerts[nextV]);
+					line.SetColor(0xFF00FFFF); // Cyan
+				}
+
+				// Draw diagonal lines to make it more visible
+				if (worldVerts.size() == 4)
+				{
+					auto& diag1 = lineOp->AddLine(worldVerts[0], worldVerts[2]);
+					diag1.SetColor(0xFF00FFFF);
+					auto& diag2 = lineOp->AddLine(worldVerts[1], worldVerts[3]);
+					diag2.SetColor(0xFF00FFFF);
+				}
+			}
+			else
+			{
+				// Fallback: draw a simple cross at the portal position
+				Vector3 pos = portal->GetPosition();
+				float size = 1.0f;
+				auto& line1 = lineOp->AddLine(pos - Vector3::UnitX * size, pos + Vector3::UnitX * size);
+				line1.SetColor(0xFF00FFFF);
+				auto& line2 = lineOp->AddLine(pos - Vector3::UnitY * size, pos + Vector3::UnitY * size);
+				line2.SetColor(0xFF00FFFF);
+				auto& line3 = lineOp->AddLine(pos - Vector3::UnitZ * size, pos + Vector3::UnitZ * size);
+				line3.SetColor(0xFF00FFFF);
+			}
+
+			vis.node->AttachObject(*vis.renderable);
+			m_portalVisualizations.push_back(std::move(vis));
+		}
 	}
 
 	void WorldModelEditorInstance::UpdateLightVisualizations()
@@ -1404,6 +1780,10 @@ namespace mmo
 
 			bool isSelected = m_selectedGroupIndex == static_cast<int32>(i);
 			String label = group->GetName();
+			if (label.empty())
+			{
+				label = "(unnamed)";
+			}
 			
 			if (group->IsInterior())
 			{
@@ -1440,51 +1820,218 @@ namespace mmo
 
 	void WorldModelEditorInstance::DrawPortalsPanel()
 	{
-		if (ImGui::Button("Create Portal"))
-		{
-			if (m_selectedGroupIndex >= 0)
-			{
-				m_creatingPortal = true;
-				m_portalSourceGroup = m_selectedGroupIndex;
-				m_portalVertices.clear();
-			}
-		}
-
-		if (m_creatingPortal)
-		{
-			ImGui::SameLine();
-			ImGui::TextColored(ImVec4(1, 1, 0, 1), "Creating portal from group %d...", m_portalSourceGroup);
-			
-			if (ImGui::Button("Cancel"))
-			{
-				m_creatingPortal = false;
-				m_portalSourceGroup = -1;
-				m_portalVertices.clear();
-			}
-		}
-
-		ImGui::Separator();
-
 		if (!m_worldModel)
 		{
 			ImGui::Text("No world model loaded");
 			return;
 		}
 
-		const auto& portals = m_worldModel->GetPortals();
-		for (size_t i = 0; i < portals.size(); ++i)
+		// Portal creation UI
+		if (!m_creatingPortal)
 		{
-			ImGui::PushID(static_cast<int>(i));
-
-			bool isSelected = m_selectedPortalIndex == static_cast<int32>(i);
-			String label = "Portal " + std::to_string(i);
-
-			if (ImGui::Selectable(label.c_str(), isSelected))
+			if (m_worldModel->GetGroupCount() < 2)
 			{
-				m_selectedPortalIndex = static_cast<int32>(i);
+				ImGui::TextDisabled("Need at least 2 groups to create a portal");
+			}
+			else if (ImGui::Button("Create Portal..."))
+			{
+				m_creatingPortal = true;
+				m_portalSourceGroup = -1;
+				m_portalTargetGroup = -1;
+			}
+		}
+		else
+		{
+			ImGui::TextColored(ImVec4(1, 1, 0, 1), "Creating Portal:");
+			
+			// Source group selection
+			ImGui::Text("Source Group:");
+			ImGui::SameLine();
+			
+			// Cache the preview string before BeginCombo to avoid issues
+			String sourcePreview = "Select...";
+			if (m_portalSourceGroup >= 0 && m_portalSourceGroup < static_cast<int32>(m_worldModel->GetGroupCount()))
+			{
+				const auto* srcGroup = m_worldModel->GetGroup(m_portalSourceGroup);
+				if (srcGroup)
+				{
+					sourcePreview = srcGroup->GetName();
+					if (sourcePreview.empty())
+					{
+						sourcePreview = "(unnamed)";
+					}
+				}
+			}
+			
+			if (ImGui::BeginCombo("##SourceGroup", sourcePreview.c_str()))
+			{
+				for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
+				{
+					const auto* group = m_worldModel->GetGroup(i);
+					if (group && static_cast<int32>(i) != m_portalTargetGroup)
+					{
+						bool isSelected = m_portalSourceGroup == static_cast<int32>(i);
+						// Use ##index suffix to ensure unique ID even if name is empty
+						String itemLabel = group->GetName();
+						if (itemLabel.empty())
+						{
+							itemLabel = "(unnamed)";
+						}
+						itemLabel += "##src" + std::to_string(i);
+						if (ImGui::Selectable(itemLabel.c_str(), isSelected))
+						{
+							m_portalSourceGroup = static_cast<int32>(i);
+						}
+					}
+				}
+				ImGui::EndCombo();
 			}
 
-			ImGui::PopID();
+			// Target group selection
+			ImGui::Text("Target Group:");
+			ImGui::SameLine();
+			
+			// Cache the preview string before BeginCombo to avoid issues
+			String targetPreview = "Select...";
+			if (m_portalTargetGroup >= 0 && m_portalTargetGroup < static_cast<int32>(m_worldModel->GetGroupCount()))
+			{
+				const auto* tgtGroup = m_worldModel->GetGroup(m_portalTargetGroup);
+				if (tgtGroup)
+				{
+					targetPreview = tgtGroup->GetName();
+					if (targetPreview.empty())
+					{
+						targetPreview = "(unnamed)";
+					}
+				}
+			}
+			
+			if (ImGui::BeginCombo("##TargetGroup", targetPreview.c_str()))
+			{
+				for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
+				{
+					const auto* group = m_worldModel->GetGroup(i);
+					if (group && static_cast<int32>(i) != m_portalSourceGroup)
+					{
+						bool isSelected = m_portalTargetGroup == static_cast<int32>(i);
+						// Use ##index suffix to ensure unique ID even if name is empty
+						String itemLabel = group->GetName();
+						if (itemLabel.empty())
+						{
+							itemLabel = "(unnamed)";
+						}
+						itemLabel += "##tgt" + std::to_string(i);
+						if (ImGui::Selectable(itemLabel.c_str(), isSelected))
+						{
+							m_portalTargetGroup = static_cast<int32>(i);
+						}
+					}
+				}
+				ImGui::EndCombo();
+			}
+
+			ImGui::Separator();
+
+			// Create button
+			bool canCreate = m_portalSourceGroup >= 0 && m_portalTargetGroup >= 0;
+			if (!canCreate)
+			{
+				ImGui::BeginDisabled();
+			}
+			
+			if (ImGui::Button("Create Portal"))
+			{
+				// Create a default portal between the two groups
+				// Use the midpoint between the two group bounding boxes as the portal location
+				const auto* srcGroup = m_worldModel->GetGroup(m_portalSourceGroup);
+				const auto* tgtGroup = m_worldModel->GetGroup(m_portalTargetGroup);
+				
+				if (srcGroup && tgtGroup)
+				{
+					// Calculate portal position at the boundary between groups
+					Vector3 srcCenter = srcGroup->GetBoundingBox().GetCenter();
+					Vector3 tgtCenter = tgtGroup->GetBoundingBox().GetCenter();
+					Vector3 portalCenter = (srcCenter + tgtCenter) * 0.5f;
+					
+					// Create a simple quad portal
+					Vector3 direction = (tgtCenter - srcCenter).NormalizedCopy();
+					Vector3 up = Vector3::UnitY;
+					Vector3 right = direction.Cross(up).NormalizedCopy();
+					if (right.GetSquaredLength() < 0.001f)
+					{
+						right = Vector3::UnitX;
+					}
+					up = right.Cross(direction).NormalizedCopy();
+					
+					// Default portal size of 2x2 units
+					float halfWidth = 1.0f;
+					float halfHeight = 1.0f;
+					
+					std::vector<Vector3> vertices;
+					vertices.push_back(portalCenter - right * halfWidth - up * halfHeight);
+					vertices.push_back(portalCenter + right * halfWidth - up * halfHeight);
+					vertices.push_back(portalCenter + right * halfWidth + up * halfHeight);
+					vertices.push_back(portalCenter - right * halfWidth + up * halfHeight);
+					
+					CreatePortal(m_portalSourceGroup, m_portalTargetGroup, vertices);
+				}
+				
+				// Reset state
+				m_creatingPortal = false;
+				m_portalSourceGroup = -1;
+				m_portalTargetGroup = -1;
+			}
+			
+			if (!canCreate)
+			{
+				ImGui::EndDisabled();
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel"))
+			{
+				m_creatingPortal = false;
+				m_portalSourceGroup = -1;
+				m_portalTargetGroup = -1;
+			}
+		}
+
+		ImGui::Separator();
+
+		// Portal list
+		ImGui::Text("Portals:");
+		
+		const auto& portals = m_worldModel->GetPortals();
+		if (portals.empty())
+		{
+			ImGui::TextDisabled("No portals");
+		}
+		else
+		{
+			for (size_t i = 0; i < portals.size(); ++i)
+			{
+				ImGui::PushID(static_cast<int>(i));
+
+				bool isSelected = m_selectedPortalIndex == static_cast<int32>(i);
+				String label = "Portal " + std::to_string(i);
+
+				if (ImGui::Selectable(label.c_str(), isSelected))
+				{
+					m_selectedPortalIndex = static_cast<int32>(i);
+				}
+
+				ImGui::PopID();
+			}
+		}
+
+		// Delete button
+		if (m_selectedPortalIndex >= 0 && m_selectedPortalIndex < static_cast<int32>(portals.size()))
+		{
+			ImGui::Separator();
+			if (ImGui::Button("Delete Selected Portal"))
+			{
+				RemovePortal(m_selectedPortalIndex);
+			}
 		}
 	}
 
@@ -1701,6 +2248,45 @@ namespace mmo
 						(static_cast<uint32>(color[1] * 255.0f) << 8) |
 						static_cast<uint32>(color[2] * 255.0f);
 					group->SetAmbientColor(newColor);
+				}
+
+				ImGui::Separator();
+
+				// Geometry assignment
+				ImGui::Text("Geometry");
+				
+				bool hasGeometry = !group->GetVertices().empty();
+				if (hasGeometry)
+				{
+					ImGui::Text("Vertices: %zu", group->GetVertices().size());
+					ImGui::Text("Triangles: %zu", group->GetIndices().size() / 3);
+					
+					if (ImGui::Button("Clear Geometry"))
+					{
+						group->GetVertices().clear();
+						group->GetNormals().clear();
+						group->GetTexCoords().clear();
+						group->GetVertexColors().clear();
+						group->GetIndices().clear();
+						group->GetMaterialIndices().clear();
+						UpdateGroupVisualizations();
+					}
+				}
+				else
+				{
+					ImGui::TextDisabled("No geometry assigned");
+				}
+				
+				// Drag-drop target for mesh files
+				ImGui::Button("Drag .hmsh file here to assign geometry");
+				if (ImGui::BeginDragDropTarget())
+				{
+					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
+					{
+						String meshPath = *static_cast<String*>(payload->Data);
+						AssignMeshToGroup(m_selectedGroupIndex, meshPath);
+					}
+					ImGui::EndDragDropTarget();
 				}
 			}
 		}

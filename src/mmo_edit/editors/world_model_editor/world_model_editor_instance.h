@@ -25,6 +25,7 @@ namespace mmo
 	class Entity;
 	class Camera;
 	class SceneNode;
+	class Light;
 
 	/// @brief Represents a selectable group in the world model editor.
 	class SelectedWorldModelGroup final : public Selectable
@@ -113,6 +114,7 @@ namespace mmo
 		SceneNode* node { nullptr };
 		ManualRenderObject* boundingBoxRenderable { nullptr };
 		Entity* meshEntity { nullptr };
+		MeshPtr mesh { nullptr };
 		bool visible { true };
 	};
 
@@ -226,6 +228,11 @@ namespace mmo
 		/// @param scale The scale.
 		void AddDoodad(uint32 setIndex, const String& meshPath, const Vector3& position, const Quaternion& rotation, float scale);
 
+		/// @brief Assigns a mesh to a group for geometry.
+		/// @param groupIndex The group index.
+		/// @param meshPath The path to the mesh file.
+		void AssignMeshToGroup(int32 groupIndex, const String& meshPath);
+
 		/// @brief Updates visualization for all groups.
 		void UpdateGroupVisualizations();
 
@@ -278,6 +285,8 @@ namespace mmo
 		Scene m_scene;
 		SceneNode* m_cameraAnchor { nullptr };
 		SceneNode* m_cameraNode { nullptr };
+		SceneNode* m_lightNode { nullptr };
+		Light* m_mainLight { nullptr };
 		Entity* m_entity { nullptr };
 		Camera* m_camera { nullptr };
 		std::unique_ptr<WorldGrid> m_worldGrid;
@@ -325,6 +334,7 @@ namespace mmo
 		std::vector<GroupVisualization> m_groupVisualizations;
 		std::vector<PortalVisualization> m_portalVisualizations;
 		std::vector<LightVisualization> m_lightVisualizations;
+		uint32 m_meshCounter { 0 };
 
 		bool m_showGroupBounds { true };
 		bool m_showPortals { true };
@@ -334,11 +344,16 @@ namespace mmo
 		// Portal creation state
 		bool m_creatingPortal { false };
 		int32 m_portalSourceGroup { -1 };
+		int32 m_portalTargetGroup { -1 };
 		std::vector<Vector3> m_portalVertices;
 
 		// New group dialog state
 		bool m_showNewGroupDialog { false };
 		char m_newGroupName[256] { "" };
 		uint32 m_newGroupFlags { 0 };
+
+		// Assign mesh dialog state
+		bool m_showAssignMeshDialog { false };
+		char m_assignMeshPath[512] { "" };
 	};
 }
