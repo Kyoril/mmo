@@ -2365,35 +2365,77 @@ namespace mmo
 			}
 		}
 
-		// Only update if the camera moved to a different group
-		if (currentGroupIndex == m_lastCameraGroupIndex)
-		{
-			return;
-		}
-
+		// Always update visibility - we need to check portal visibility even if the
+		// camera stays in the same group since the camera orientation may have changed
 		m_lastCameraGroupIndex = currentGroupIndex;
 
 		// Determine which groups are visible through portal culling
 		std::vector<int32> visibleGroups;
+		std::vector<bool> visitedGroups(m_worldModel->GetGroupCount(), false);
 		
 		if (currentGroupIndex < 0)
 		{
-			// Camera is not in any group - show all exterior groups
+			// Camera is not in any group - show all exterior groups and check
+			// what interior groups are visible through portals
+			std::vector<int32> groupsToProcess;
+			
 			for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
 			{
 				const auto* group = m_worldModel->GetGroup(i);
 				if (group && group->IsExterior())
 				{
 					visibleGroups.push_back(static_cast<int32>(i));
+					visitedGroups[i] = true;
+					groupsToProcess.push_back(static_cast<int32>(i));
+				}
+			}
+			
+			// Now traverse through portals from exterior groups to find visible interior groups
+			while (!groupsToProcess.empty())
+			{
+				int32 groupIndex = groupsToProcess.back();
+				groupsToProcess.pop_back();
+
+				if (groupIndex < 0 || groupIndex >= static_cast<int32>(visitedGroups.size()))
+				{
+					continue;
+				}
+
+				// Get connected groups through portals
+				const auto* group = m_worldModel->GetGroup(groupIndex);
+				if (!group)
+				{
+					continue;
+				}
+
+				for (const auto& portalRef : group->GetPortalRefs())
+				{
+					int32 targetGroup = portalRef.groupIndex;
+					if (targetGroup >= 0 && targetGroup < static_cast<int32>(visitedGroups.size()) && !visitedGroups[targetGroup])
+					{
+						// Check if the portal is active
+						if (portalRef.portalIndex < m_worldModel->GetPortals().size())
+						{
+							const auto& portal = m_worldModel->GetPortals()[portalRef.portalIndex];
+							if (portal && portal->IsActive())
+							{
+								// Check if portal is visible from camera (simple frustum test)
+								AABB portalBBox = portal->GetWorldBounds();
+								if (m_camera->IsVisible(portalBBox))
+								{
+									visitedGroups[targetGroup] = true;
+									visibleGroups.push_back(targetGroup);
+									groupsToProcess.push_back(targetGroup);
+								}
+							}
+						}
+					}
 				}
 			}
 		}
 		else
 		{
-			// Perform portal-based visibility culling
-			std::vector<bool> visitedGroups(m_worldModel->GetGroupCount(), false);
-			
-			// Simple flood-fill through connected portals
+			// Perform portal-based visibility culling from inside a group
 			std::vector<int32> groupsToProcess;
 			groupsToProcess.push_back(currentGroupIndex);
 
