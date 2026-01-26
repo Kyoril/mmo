@@ -733,12 +733,22 @@ namespace mmo
 							}
 						}
 						m_lastCameraGroupIndex = -1;
+						m_freezePortalCulling = false;
 					}
 				}
 				if (m_previewPortalCulling)
 				{
 					ImGui::SameLine();
 					ImGui::TextDisabled("(Group: %d)", m_lastCameraGroupIndex);
+					
+					ImGui::Indent();
+					ImGui::Checkbox("Freeze Culling", &m_freezePortalCulling);
+					if (m_freezePortalCulling)
+					{
+						ImGui::SameLine();
+						ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "(Frozen)");
+					}
+					ImGui::Unindent();
 				}
 			}
 		}
@@ -2340,6 +2350,12 @@ namespace mmo
 			return;
 		}
 
+		// If culling is frozen, don't update visibility
+		if (m_freezePortalCulling)
+		{
+			return;
+		}
+
 		// Determine which group the camera is currently in
 		Vector3 cameraPos = m_camera->GetDerivedPosition();
 		int32 currentGroupIndex = -1;
@@ -2365,8 +2381,6 @@ namespace mmo
 			}
 		}
 
-		// Always update visibility - we need to check portal visibility even if the
-		// camera stays in the same group since the camera orientation may have changed
 		m_lastCameraGroupIndex = currentGroupIndex;
 
 		// Determine which groups are visible through portal culling
@@ -2375,22 +2389,33 @@ namespace mmo
 		
 		if (currentGroupIndex < 0)
 		{
-			// Camera is not in any group - show all exterior groups and check
-			// what interior groups are visible through portals
+			// Camera is not in any group - show all exterior groups and any
+			// interior groups whose bounding box is visible in the camera frustum
 			std::vector<int32> groupsToProcess;
 			
 			for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
 			{
 				const auto* group = m_worldModel->GetGroup(i);
-				if (group && group->IsExterior())
+				if (group)
 				{
-					visibleGroups.push_back(static_cast<int32>(i));
-					visitedGroups[i] = true;
-					groupsToProcess.push_back(static_cast<int32>(i));
+					// Always include exterior groups
+					if (group->IsExterior())
+					{
+						visibleGroups.push_back(static_cast<int32>(i));
+						visitedGroups[i] = true;
+						groupsToProcess.push_back(static_cast<int32>(i));
+					}
+					// Also include any group whose bounding box is visible in the frustum
+					else if (m_camera->IsVisible(group->GetBoundingBox()))
+					{
+						visibleGroups.push_back(static_cast<int32>(i));
+						visitedGroups[i] = true;
+						groupsToProcess.push_back(static_cast<int32>(i));
+					}
 				}
 			}
 			
-			// Now traverse through portals from exterior groups to find visible interior groups
+			// Now traverse through portals from visible groups to find more visible groups
 			while (!groupsToProcess.empty())
 			{
 				int32 groupIndex = groupsToProcess.back();
@@ -2419,9 +2444,15 @@ namespace mmo
 							const auto& portal = m_worldModel->GetPortals()[portalRef.portalIndex];
 							if (portal && portal->IsActive())
 							{
-								// Check if portal is visible from camera (simple frustum test)
+								// For editor preview, show connected groups if the portal is visible
+								// OR if the target group's bounding box is visible
 								AABB portalBBox = portal->GetWorldBounds();
-								if (m_camera->IsVisible(portalBBox))
+								const auto* targetGroupPtr = m_worldModel->GetGroup(targetGroup);
+								
+								bool portalVisible = !portalBBox.IsNull() && m_camera->IsVisible(portalBBox);
+								bool targetVisible = targetGroupPtr && m_camera->IsVisible(targetGroupPtr->GetBoundingBox());
+								
+								if (portalVisible || targetVisible)
 								{
 									visitedGroups[targetGroup] = true;
 									visibleGroups.push_back(targetGroup);
@@ -2475,9 +2506,15 @@ namespace mmo
 							const auto& portal = m_worldModel->GetPortals()[portalRef.portalIndex];
 							if (portal && portal->IsActive())
 							{
-								// Check if portal is visible from camera (simple frustum test)
+								// For editor preview, show connected groups if the portal is visible
+								// OR if the target group's bounding box is visible
 								AABB portalBBox = portal->GetWorldBounds();
-								if (m_camera->IsVisible(portalBBox))
+								const auto* targetGroupPtr = m_worldModel->GetGroup(targetGroup);
+								
+								bool portalVisible = !portalBBox.IsNull() && m_camera->IsVisible(portalBBox);
+								bool targetVisible = targetGroupPtr && m_camera->IsVisible(targetGroupPtr->GetBoundingBox());
+								
+								if (portalVisible || targetVisible)
 								{
 									groupsToProcess.push_back(targetGroup);
 								}

@@ -591,6 +591,7 @@ namespace mmo
 		bool m_showLightMarkers { true };
 		bool m_showDoodads { true };
 		bool m_previewPortalCulling { false };
+		bool m_freezePortalCulling { false };
 		int32 m_lastCameraGroupIndex { -1 };
 
 		// Portal creation state
