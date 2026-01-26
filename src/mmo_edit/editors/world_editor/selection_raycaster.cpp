@@ -228,6 +228,7 @@ namespace mmo
         {
             // Find the closest object that actually intersects with the ray geometry
             MovableObject *closestMovable = nullptr;
+            MapEntity *closestMapEntity = nullptr;
             float closestDistance = std::numeric_limits<float>::max();
 
             for (const auto &result : hitResult)
@@ -247,8 +248,48 @@ namespace mmo
                     {
                         if (hitDistance < closestDistance)
                         {
-                            closestDistance = hitDistance;
-                            closestMovable = entity;
+                            // Check if this entity has a MapEntity directly
+                            MapEntity* mapEntity = entity->GetUserObject<MapEntity>();
+                            
+                            // If not, check if its parent node belongs to a WorldModelInstance
+                            if (!mapEntity)
+                            {
+                                SceneNode* parentNode = entity->GetParentSceneNode();
+                                if (parentNode)
+                                {
+                                    // Walk up the scene graph to find a WorldModelInstance
+                                    SceneNode* current = parentNode->GetParentSceneNode();
+                                    while (current)
+                                    {
+                                        // Check attached objects for WorldModelInstance
+                                        for (uint16 i = 0; i < current->GetNumAttachedObjects(); ++i)
+                                        {
+                                            if (auto* wmo = dynamic_cast<WorldModelInstance*>(current->GetAttachedObject(i)))
+                                            {
+                                                mapEntity = wmo->GetUserObject<MapEntity>();
+                                                if (mapEntity)
+                                                {
+                                                    closestDistance = hitDistance;
+                                                    closestMovable = wmo;
+                                                    closestMapEntity = mapEntity;
+                                                }
+                                                break;
+                                            }
+                                        }
+                                        if (mapEntity)
+                                        {
+                                            break;
+                                        }
+                                        current = current->GetParentSceneNode();
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                closestDistance = hitDistance;
+                                closestMovable = entity;
+                                closestMapEntity = mapEntity;
+                            }
                         }
                     }
                 }
@@ -260,23 +301,24 @@ namespace mmo
                     auto [hit, distance] = ray.IntersectsAABB(worldBounds);
                     if (hit && distance < closestDistance)
                     {
-                        closestDistance = distance;
-                        closestMovable = wmo;
+                        MapEntity* mapEntity = wmo->GetUserObject<MapEntity>();
+                        if (mapEntity)
+                        {
+                            closestDistance = distance;
+                            closestMovable = wmo;
+                            closestMapEntity = mapEntity;
+                        }
                     }
                 }
             }
 
             // Select the closest entity if we found one
-            if (closestMovable)
+            if (closestMovable && closestMapEntity)
             {
-                MapEntity *mapEntity = closestMovable->GetUserObject<MapEntity>();
-                if (mapEntity)
-                {
-                    // Note: Duplication callback will be provided by WorldEditorInstance
-                    // since it requires CreateMapEntity and GenerateUniqueId
-                    m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*mapEntity, nullptr));
-                    UpdateDebugAABB(closestMovable->GetWorldBoundingBox());
-                }
+                // Note: Duplication callback will be provided by WorldEditorInstance
+                // since it requires CreateMapEntity and GenerateUniqueId
+                m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*closestMapEntity, nullptr));
+                UpdateDebugAABB(closestMovable->GetWorldBoundingBox());
             }
         }
     }
