@@ -34,7 +34,7 @@ namespace mmo
     {
         if (version == world_model_version::Latest)
         {
-            version = world_model_version::Version_1_0;
+            version = world_model_version::Version_2_0;
         }
 
         // Write version chunk
@@ -97,10 +97,18 @@ namespace mmo
 
         // Write group info (MOGI)
         {
-            const uint32 groupInfoSize = static_cast<uint32>(worldModel.GetGroupCount() * 32);
+            const bool isV2 = (version >= world_model_version::Version_2_0);
+            const uint32 groupCount = static_cast<uint32>(worldModel.GetGroupCount());
+            const uint32 groupInfoSize = groupCount * 32 + (isV2 ? 4 : 0);
+            
             writer
                 << io::write<uint32>(*GroupInfoChunk)
                 << io::write<uint32>(groupInfoSize);
+
+            if (isV2)
+            {
+                writer << io::write<uint32>(groupCount);
+            }
 
             for (size_t i = 0; i < worldModel.GetGroupCount(); ++i)
             {
@@ -123,16 +131,22 @@ namespace mmo
 
         // Write portal vertices (MOPV)
         {
+            const bool isV2 = (version >= world_model_version::Version_2_0);
             size_t totalVertices = 0;
             for (const auto& portal : worldModel.GetPortals())
             {
                 totalVertices += portal->GetWorldVertices().size();
             }
 
-            const uint32 portalVerticesSize = static_cast<uint32>(totalVertices * 12); // 3 floats per vertex
+            const uint32 portalVerticesSize = static_cast<uint32>(totalVertices * 12 + (isV2 ? 4 : 0));
             writer
                 << io::write<uint32>(*PortalVerticesChunk)
                 << io::write<uint32>(portalVerticesSize);
+
+            if (isV2)
+            {
+                writer << io::write<uint32>(static_cast<uint32>(totalVertices));
+            }
 
             for (const auto& portal : worldModel.GetPortals())
             {
@@ -148,10 +162,18 @@ namespace mmo
 
         // Write portal info (MOPT)
         {
-            const uint32 portalInfoSize = static_cast<uint32>(worldModel.GetPortals().size() * 44);
+            const bool isV2 = (version >= world_model_version::Version_2_0);
+            const uint32 portalCount = static_cast<uint32>(worldModel.GetPortals().size());
+            const uint32 portalInfoSize = portalCount * 44 + (isV2 ? 4 : 0);
+            
             writer
                 << io::write<uint32>(*PortalInfoChunk)
                 << io::write<uint32>(portalInfoSize);
+
+            if (isV2)
+            {
+                writer << io::write<uint32>(portalCount);
+            }
 
             uint16 vertexOffset = 0;
             for (const auto& portal : worldModel.GetPortals())
@@ -186,10 +208,18 @@ namespace mmo
 
         // Write lights (MOLT)
         {
-            const uint32 lightsSize = static_cast<uint32>(worldModel.GetLights().size() * 48);
+            const bool isV2 = (version >= world_model_version::Version_2_0);
+            const uint32 lightCount = static_cast<uint32>(worldModel.GetLights().size());
+            const uint32 lightsSize = lightCount * 48 + (isV2 ? 4 : 0);
+            
             writer
                 << io::write<uint32>(*LightsChunk)
                 << io::write<uint32>(lightsSize);
+
+            if (isV2)
+            {
+                writer << io::write<uint32>(lightCount);
+            }
 
             for (const auto& light : worldModel.GetLights())
             {
@@ -214,10 +244,18 @@ namespace mmo
 
         // Write doodad sets (MODS)
         {
-            const uint32 doodadSetsSize = static_cast<uint32>(worldModel.GetDoodadSets().size() * 32);
+            const bool isV2 = (version >= world_model_version::Version_2_0);
+            const uint32 setCount = static_cast<uint32>(worldModel.GetDoodadSets().size());
+            const uint32 doodadSetsSize = setCount * 32 + (isV2 ? 4 : 0);
+            
             writer
                 << io::write<uint32>(*DoodadSetsChunk)
                 << io::write<uint32>(doodadSetsSize);
+
+            if (isV2)
+            {
+                writer << io::write<uint32>(setCount);
+            }
 
             for (const auto& set : worldModel.GetDoodadSets())
             {
@@ -252,10 +290,18 @@ namespace mmo
 
         // Write doodad definitions (MODD)
         {
-            const uint32 doodadDefsSize = static_cast<uint32>(worldModel.GetDoodads().size() * 40);
+            const bool isV2 = (version >= world_model_version::Version_2_0);
+            const uint32 doodadCount = static_cast<uint32>(worldModel.GetDoodads().size());
+            const uint32 doodadDefsSize = doodadCount * 40 + (isV2 ? 4 : 0);
+            
             writer
                 << io::write<uint32>(*DoodadDefsChunk)
                 << io::write<uint32>(doodadDefsSize);
+
+            if (isV2)
+            {
+                writer << io::write<uint32>(doodadCount);
+            }
 
             for (const auto& doodad : worldModel.GetDoodads())
             {
@@ -275,10 +321,18 @@ namespace mmo
 
         // Write fog (MFOG)
         {
-            const uint32 fogSize = static_cast<uint32>(worldModel.GetFogs().size() * 48);
+            const bool isV2 = (version >= world_model_version::Version_2_0);
+            const uint32 fogCount = static_cast<uint32>(worldModel.GetFogs().size());
+            const uint32 fogSize = fogCount * 48 + (isV2 ? 4 : 0);
+            
             writer
                 << io::write<uint32>(*FogChunk)
                 << io::write<uint32>(fogSize);
+
+            if (isV2)
+            {
+                writer << io::write<uint32>(fogCount);
+            }
 
             for (const auto& fog : worldModel.GetFogs())
             {
@@ -321,10 +375,18 @@ namespace mmo
         // Write portal refs (MOPR)
         if (!allPortalRefs.empty())
         {
-            const uint32 portalRefsSize = static_cast<uint32>(allPortalRefs.size() * 8);
+            const bool isV2 = (version >= world_model_version::Version_2_0);
+            const uint32 refCount = static_cast<uint32>(allPortalRefs.size());
+            const uint32 portalRefsSize = refCount * 8 + (isV2 ? 4 : 0);
+            
             writer
                 << io::write<uint32>(*PortalRefsChunk)
                 << io::write<uint32>(portalRefsSize);
+
+            if (isV2)
+            {
+                writer << io::write<uint32>(refCount);
+            }
 
             for (const auto& ref : allPortalRefs)
             {
@@ -667,7 +729,20 @@ namespace mmo
     {
         ASSERT(chunkHeader == *GroupInfoChunk);
         
-        const size_t numGroups = chunkSize / 32;
+        const bool isV2 = (m_version >= world_model_version::Version_2_0);
+        
+        size_t numGroups;
+        if (isV2)
+        {
+            uint32 count;
+            reader >> io::read<uint32>(count);
+            numGroups = count;
+        }
+        else
+        {
+            numGroups = chunkSize / 32;
+        }
+        
         auto& groupInfos = m_worldModel.GetGroupInfos();
         groupInfos.clear();
         groupInfos.reserve(numGroups);
@@ -704,7 +779,20 @@ namespace mmo
     {
         ASSERT(chunkHeader == *PortalVerticesChunk);
         
-        const size_t numVertices = chunkSize / 12;
+        const bool isV2 = (m_version >= world_model_version::Version_2_0);
+        
+        size_t numVertices;
+        if (isV2)
+        {
+            uint32 count;
+            reader >> io::read<uint32>(count);
+            numVertices = count;
+        }
+        else
+        {
+            numVertices = chunkSize / 12;
+        }
+        
         m_portalVertices.clear();
         m_portalVertices.reserve(numVertices);
 
@@ -731,10 +819,25 @@ namespace mmo
     {
         ASSERT(chunkHeader == *PortalInfoChunk);
         
-        // Support both old format (28 bytes per portal) and new format (44 bytes per portal)
-        const bool hasRotation = (chunkSize % 44 == 0);
-        const size_t portalSize = hasRotation ? 44 : 28;
-        const size_t numPortals = chunkSize / portalSize;
+        const bool isV2 = (m_version >= world_model_version::Version_2_0);
+        
+        size_t numPortals;
+        bool hasRotation;
+        
+        if (isV2)
+        {
+            uint32 count;
+            reader >> io::read<uint32>(count);
+            numPortals = count;
+            hasRotation = true; // V2 always has rotation
+        }
+        else
+        {
+            // Support both old format (28 bytes per portal) and new format (44 bytes per portal)
+            hasRotation = (chunkSize % 44 == 0);
+            const size_t portalSize = hasRotation ? 44 : 28;
+            numPortals = chunkSize / portalSize;
+        }
         
         m_portalInfos.clear();
         m_portalInfos.reserve(numPortals);
@@ -784,7 +887,20 @@ namespace mmo
     {
         ASSERT(chunkHeader == *PortalRefsChunk);
         
-        const size_t numRefs = chunkSize / 8;
+        const bool isV2 = (m_version >= world_model_version::Version_2_0);
+        
+        size_t numRefs;
+        if (isV2)
+        {
+            uint32 count;
+            reader >> io::read<uint32>(count);
+            numRefs = count;
+        }
+        else
+        {
+            numRefs = chunkSize / 8;
+        }
+        
         m_portalRefs.clear();
         m_portalRefs.reserve(numRefs);
 
@@ -813,7 +929,20 @@ namespace mmo
     {
         ASSERT(chunkHeader == *LightsChunk);
         
-        const size_t numLights = chunkSize / 48;
+        const bool isV2 = (m_version >= world_model_version::Version_2_0);
+        
+        size_t numLights;
+        if (isV2)
+        {
+            uint32 count;
+            reader >> io::read<uint32>(count);
+            numLights = count;
+        }
+        else
+        {
+            numLights = chunkSize / 48;
+        }
+        
         auto& lights = m_worldModel.GetLights();
         lights.clear();
         lights.reserve(numLights);
@@ -861,7 +990,20 @@ namespace mmo
     {
         ASSERT(chunkHeader == *DoodadSetsChunk);
         
-        const size_t numSets = chunkSize / 32;
+        const bool isV2 = (m_version >= world_model_version::Version_2_0);
+        
+        size_t numSets;
+        if (isV2)
+        {
+            uint32 count;
+            reader >> io::read<uint32>(count);
+            numSets = count;
+        }
+        else
+        {
+            numSets = chunkSize / 32;
+        }
+        
         auto& doodadSets = m_worldModel.GetDoodadSets();
         doodadSets.clear();
         doodadSets.reserve(numSets);
@@ -919,7 +1061,20 @@ namespace mmo
     {
         ASSERT(chunkHeader == *DoodadDefsChunk);
         
-        const size_t numDoodads = chunkSize / 40;
+        const bool isV2 = (m_version >= world_model_version::Version_2_0);
+        
+        size_t numDoodads;
+        if (isV2)
+        {
+            uint32 count;
+            reader >> io::read<uint32>(count);
+            numDoodads = count;
+        }
+        else
+        {
+            numDoodads = chunkSize / 40;
+        }
+        
         auto& doodads = m_worldModel.GetDoodads();
         doodads.clear();
         doodads.reserve(numDoodads);
@@ -959,7 +1114,20 @@ namespace mmo
     {
         ASSERT(chunkHeader == *FogChunk);
         
-        const size_t numFogs = chunkSize / 48;
+        const bool isV2 = (m_version >= world_model_version::Version_2_0);
+        
+        size_t numFogs;
+        if (isV2)
+        {
+            uint32 count;
+            reader >> io::read<uint32>(count);
+            numFogs = count;
+        }
+        else
+        {
+            numFogs = chunkSize / 48;
+        }
+        
         auto& fogs = m_worldModel.GetFogs();
         fogs.clear();
         fogs.reserve(numFogs);
