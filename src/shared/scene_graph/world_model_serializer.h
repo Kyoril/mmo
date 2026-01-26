@@ -119,5 +119,13 @@ namespace mmo
             int16 side;
         };
         std::vector<PortalRef> m_portalRefs;
+        
+        /// @brief Stores portal start/count for each group during loading.
+        struct GroupPortalInfo
+        {
+            uint16 portalStart;
+            uint16 portalCount;
+        };
+        std::vector<GroupPortalInfo> m_groupPortalInfos;
     };
 }

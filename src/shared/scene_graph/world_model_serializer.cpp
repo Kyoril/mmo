@@ -298,6 +298,44 @@ namespace mmo
             }
         }
 
+        // Build global portal refs list and track portalStart for each group
+        std::vector<uint16> groupPortalStarts(worldModel.GetGroupCount());
+        std::vector<uint16> groupPortalCounts(worldModel.GetGroupCount());
+        std::vector<WorldModelPortalRef> allPortalRefs;
+        
+        for (size_t groupIdx = 0; groupIdx < worldModel.GetGroupCount(); ++groupIdx)
+        {
+            const auto* group = worldModel.GetGroup(groupIdx);
+            if (group)
+            {
+                groupPortalStarts[groupIdx] = static_cast<uint16>(allPortalRefs.size());
+                groupPortalCounts[groupIdx] = static_cast<uint16>(group->GetPortalRefs().size());
+                
+                for (const auto& ref : group->GetPortalRefs())
+                {
+                    allPortalRefs.push_back(ref);
+                }
+            }
+        }
+
+        // Write portal refs (MOPR)
+        if (!allPortalRefs.empty())
+        {
+            const uint32 portalRefsSize = static_cast<uint32>(allPortalRefs.size() * 8);
+            writer
+                << io::write<uint32>(*PortalRefsChunk)
+                << io::write<uint32>(portalRefsSize);
+
+            for (const auto& ref : allPortalRefs)
+            {
+                writer
+                    << io::write<uint16>(ref.portalIndex)
+                    << io::write<uint16>(ref.groupIndex)
+                    << io::write<int16>(ref.side)
+                    << io::write<uint16>(0); // filler
+            }
+        }
+
         // Write child WMO references (MCWR)
         if (!worldModel.GetChildRefs().empty())
         {
@@ -416,8 +454,8 @@ namespace mmo
                 << io::write<float>(groupBBox.max.z);
 
             writer
-                << io::write<uint16>(0) // portalStart
-                << io::write<uint16>(0) // portalCount
+                << io::write<uint16>(groupPortalStarts[groupIdx])
+                << io::write<uint16>(groupPortalCounts[groupIdx])
                 << io::write<uint16>(0) // transBatchCount
                 << io::write<uint16>(0) // intBatchCount
                 << io::write<uint16>(0) // extBatchCount
@@ -1005,6 +1043,12 @@ namespace mmo
         bbox.max = Vector3(maxX, maxY, maxZ);
         group.SetBoundingBox(bbox);
 
+        // Store portal info for this group to be processed in OnReadFinished
+        GroupPortalInfo groupPortalInfo;
+        groupPortalInfo.portalStart = portalStart;
+        groupPortalInfo.portalCount = portalCount;
+        m_groupPortalInfos.push_back(groupPortalInfo);
+
         // Read sub-chunks until we've read the expected amount
         const size_t chunkEndPos = reader.getSource()->position() + (chunkSize - 68);
         
@@ -1211,10 +1255,37 @@ namespace mmo
             portal.SetDimensions(info.width, info.height);
         }
 
+        // Assign portal refs to groups
+        for (size_t groupIdx = 0; groupIdx < m_groupPortalInfos.size() && groupIdx < m_worldModel.GetGroupCount(); ++groupIdx)
+        {
+            const auto& groupPortalInfo = m_groupPortalInfos[groupIdx];
+            auto* group = m_worldModel.GetGroup(groupIdx);
+            if (!group)
+            {
+                continue;
+            }
+
+            auto& portalRefs = group->GetPortalRefs();
+            for (uint16 i = 0; i < groupPortalInfo.portalCount; ++i)
+            {
+                const size_t refIndex = groupPortalInfo.portalStart + i;
+                if (refIndex < m_portalRefs.size())
+                {
+                    const auto& ref = m_portalRefs[refIndex];
+                    WorldModelPortalRef wmRef;
+                    wmRef.portalIndex = ref.portalIndex;
+                    wmRef.groupIndex = ref.groupIndex;
+                    wmRef.side = ref.side;
+                    portalRefs.push_back(wmRef);
+                }
+            }
+        }
+
         // Clear temporary data
         m_portalVertices.clear();
         m_portalInfos.clear();
         m_portalRefs.clear();
+        m_groupPortalInfos.clear();
 
         RemoveAllChunkHandlers();
         return ChunkReader::OnReadFinished();

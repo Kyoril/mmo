@@ -3,6 +3,7 @@
 #include "world_model_editor_instance.h"
 
 #include <algorithm>
+#include <sstream>
 #include <imgui_internal.h>
 
 #include "editor_host.h"
@@ -747,6 +748,12 @@ namespace mmo
 					{
 						ImGui::SameLine();
 						ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "(Frozen)");
+					}
+					
+					// Show debug info
+					if (!m_portalCullingDebugInfo.empty())
+					{
+						ImGui::TextWrapped("%s", m_portalCullingDebugInfo.c_str());
 					}
 					ImGui::Unindent();
 				}
@@ -2383,6 +2390,10 @@ namespace mmo
 
 		m_lastCameraGroupIndex = currentGroupIndex;
 
+		// Build debug info
+		std::ostringstream debugStream;
+		debugStream << "Groups: " << m_worldModel->GetGroupCount() << ", Portals: " << m_worldModel->GetPortals().size() << "\n";
+
 		// Determine which groups are visible through portal culling
 		std::vector<int32> visibleGroups;
 		std::vector<bool> visitedGroups(m_worldModel->GetGroupCount(), false);
@@ -2393,6 +2404,8 @@ namespace mmo
 			// interior groups whose bounding box is visible in the camera frustum
 			std::vector<int32> groupsToProcess;
 			
+			int exteriorCount = 0;
+			int visibleBBoxCount = 0;
 			for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
 			{
 				const auto* group = m_worldModel->GetGroup(i);
@@ -2401,6 +2414,7 @@ namespace mmo
 					// Always include exterior groups
 					if (group->IsExterior())
 					{
+						exteriorCount++;
 						visibleGroups.push_back(static_cast<int32>(i));
 						visitedGroups[i] = true;
 						groupsToProcess.push_back(static_cast<int32>(i));
@@ -2408,12 +2422,14 @@ namespace mmo
 					// Also include any group whose bounding box is visible in the frustum
 					else if (m_camera->IsVisible(group->GetBoundingBox()))
 					{
+						visibleBBoxCount++;
 						visibleGroups.push_back(static_cast<int32>(i));
 						visitedGroups[i] = true;
 						groupsToProcess.push_back(static_cast<int32>(i));
 					}
 				}
 			}
+			debugStream << "Outside: " << exteriorCount << " exterior, " << visibleBBoxCount << " bbox visible\n";
 			
 			// Now traverse through portals from visible groups to find more visible groups
 			while (!groupsToProcess.empty())
@@ -2469,6 +2485,12 @@ namespace mmo
 			// Perform portal-based visibility culling from inside a group
 			std::vector<int32> groupsToProcess;
 			groupsToProcess.push_back(currentGroupIndex);
+			
+			const auto* currentGroup = m_worldModel->GetGroup(currentGroupIndex);
+			if (currentGroup)
+			{
+				debugStream << "Inside group " << currentGroupIndex << ": " << currentGroup->GetPortalRefs().size() << " portal refs\\n";
+			}
 
 			while (!groupsToProcess.empty())
 			{
@@ -2514,16 +2536,30 @@ namespace mmo
 								bool portalVisible = !portalBBox.IsNull() && m_camera->IsVisible(portalBBox);
 								bool targetVisible = targetGroupPtr && m_camera->IsVisible(targetGroupPtr->GetBoundingBox());
 								
+								debugStream << "  Portal " << portalRef.portalIndex << " -> grp " << targetGroup 
+								           << " (pVis:" << portalVisible << " tVis:" << targetVisible << ")\\n";
+								
 								if (portalVisible || targetVisible)
 								{
 									groupsToProcess.push_back(targetGroup);
 								}
 							}
+							else
+							{
+								debugStream << "  Portal " << portalRef.portalIndex << " inactive\\n";
+							}
+						}
+						else
+						{
+							debugStream << "  Invalid portal index: " << portalRef.portalIndex << "\\n";
 						}
 					}
 				}
 			}
 		}
+
+		debugStream << "Visible: " << visibleGroups.size() << "/" << m_worldModel->GetGroupCount() << " groups";
+		m_portalCullingDebugInfo = debugStream.str();
 
 		// Update visibility of all groups
 		for (size_t i = 0; i < m_groupVisualizations.size(); ++i)
