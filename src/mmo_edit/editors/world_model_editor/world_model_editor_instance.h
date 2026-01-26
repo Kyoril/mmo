@@ -4,6 +4,7 @@
 
 #include "base/signal.h"
 #include "world_model_selectables.h"
+#include "panels/world_model_groups_panel.h"
 
 #include <imgui.h>
 #include <asio/io_service.hpp>
@@ -283,9 +284,6 @@ namespace mmo
 		/// @brief Updates group visibility based on portal culling from camera position.
 		void UpdatePortalCullingPreview();
 
-		/// @brief Draws the groups panel UI.
-		void DrawGroupsPanel();
-
 		/// @brief Draws the mesh references panel UI for a group.
 		/// @param groupIndex The group index.
 		void DrawMeshRefsPanel(int32 groupIndex);
@@ -298,9 +296,6 @@ namespace mmo
 
 		/// @brief Draws the doodads panel UI.
 		void DrawDoodadsPanel();
-
-		/// @brief Draws the lights panel UI.
-		void DrawLightsPanel();
 
 		/// @brief Draws the fog panel UI.
 		void DrawFogPanel();
@@ -403,10 +398,13 @@ namespace mmo
 		int32 m_portalTargetGroup { -1 };
 		std::vector<Vector3> m_portalVertices;
 
-		// New group dialog state
+		// New group dialog state  (kept for backward compatibility, use m_groupsPanelState for new code)
 		bool m_showNewGroupDialog { false };
 		char m_newGroupName[256] { "" };
 		uint32 m_newGroupFlags { 0 };
+
+		// UI panel state
+		GroupsPanelState m_groupsPanelState;
 
 		// Assign mesh dialog state
 		bool m_showAssignMeshDialog { false };

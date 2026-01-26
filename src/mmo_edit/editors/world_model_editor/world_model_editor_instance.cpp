@@ -2,6 +2,8 @@
 
 #include "world_model_editor_instance.h"
 #include "world_model_selectables.h"
+#include "panels/world_model_groups_panel.h"
+#include "panels/world_model_lights_panel.h"
 
 #include <algorithm>
 #include <sstream>
@@ -9,7 +11,6 @@
 
 #include "editor_host.h"
 #include "world_model_editor.h"
-#include "paging/world_page_loader.h"
 #include "assets/asset_registry.h"
 #include "editors/material_editor/node_editor/node_layout.h"
 #include "log/default_log_levels.h"
@@ -22,10 +23,7 @@
 #include "stream_sink.h"
 #include "editors/world_editor/world_editor_instance.h"
 #include "scene_graph/mesh_manager.h"
-#include "scene_graph/sub_mesh.h"
 #include "graphics/graphics_device.h"
-#include "graphics/vertex_declaration.h"
-#include "graphics/vertex_index_data.h"
 #include "terrain/page.h"
 #include "terrain/tile.h"
 
@@ -35,7 +33,6 @@ namespace mmo
 	static const ChunkMagic versionChunk = MakeChunkMagic('MVER');
 	static const ChunkMagic meshChunk = MakeChunkMagic('MESH');
 	static const ChunkMagic entityChunk = MakeChunkMagic('MENT');
-	static const ChunkMagic terrainChunk = MakeChunkMagic('RRET');
 
 	struct MapEntityChunkContent
 	{
@@ -377,7 +374,36 @@ namespace mmo
 		// Groups panel
 		if (ImGui::Begin(groupsId.c_str()))
 		{
-			DrawGroupsPanel();
+			GroupsPanelCallbacks groupsCallbacks;
+			groupsCallbacks.onRemoveGroup = [this](size_t index) { RemoveGroup(index); };
+			groupsCallbacks.onSelectGroup = [this](int32 index) 
+			{ 
+				m_selectedGroupIndex = index;
+				m_selection.Clear();
+				if (index >= 0 && index < static_cast<int32>(m_groupVisualizations.size()) &&
+					m_groupVisualizations[index].node)
+				{
+					auto* group = m_worldModel->GetGroup(index);
+					if (group)
+					{
+						m_selection.AddSelectable(std::make_unique<SelectedWorldModelGroup>(
+							*group, *m_groupVisualizations[index].node));
+					}
+				}
+			};
+			groupsCallbacks.onSetGroupVisibility = [this](size_t index, bool visible) 
+			{
+				if (index < m_groupVisualizations.size())
+				{
+					m_groupVisualizations[index].visible = visible;
+					if (m_groupVisualizations[index].node)
+					{
+						m_groupVisualizations[index].node->SetVisible(visible, true);
+					}
+				}
+			};
+
+			DrawGroupsPanel(m_worldModel.get(), m_groupVisualizations, m_selectedGroupIndex, m_groupsPanelState, groupsCallbacks);
 		}
 		ImGui::End();
 
@@ -412,7 +438,48 @@ namespace mmo
 		// Lights panel
 		if (ImGui::Begin(lightsId.c_str()))
 		{
-			DrawLightsPanel();
+			LightsPanelState lightsState;
+			lightsState.selectedLightIndex = m_selectedLightIndex;
+
+			LightsPanelCallbacks lightsCallbacks;
+			lightsCallbacks.onCreateLight = [this](int32 groupIndex, const Vector3& pos, uint32 color, float intensity, WorldModelLight::LightType type) 
+			{
+				CreateLight(m_selectedGroupIndex, pos, color, intensity, type);
+			};
+			lightsCallbacks.onSelectLight = [this](int32 index) 
+			{
+				m_selectedLightIndex = index;
+				UpdateSelectedLightVisualization();
+				
+				m_selection.Clear();
+				if (m_selectedLightIndex >= 0 && m_selectedLightIndex < static_cast<int32>(m_lightVisualizations.size()) &&
+					m_lightVisualizations[m_selectedLightIndex].node)
+				{
+					m_selection.AddSelectable(std::make_unique<SelectedWorldModelLight>(
+						*m_worldModel, static_cast<size_t>(m_selectedLightIndex), *m_lightVisualizations[m_selectedLightIndex].node));
+				}
+			};
+			lightsCallbacks.onRemoveLight = [this](int32 index) { RemoveLight(index); };
+			lightsCallbacks.onLightChanged = [this]() { UpdateLightVisualizations(); };
+			lightsCallbacks.onFocusPosition = [this](const Vector3& pos) 
+			{
+				m_cameraAnchor->SetPosition(pos);
+				m_cameraVelocity = Vector3::Zero;
+			};
+			lightsCallbacks.onDuplicateLight = [this](size_t index) 
+			{
+				auto& lights = m_worldModel->GetLights();
+				if (index < lights.size())
+				{
+					WorldModelLight newLight = lights[index];
+					newLight.position += Vector3(1.0f, 0.0f, 0.0f);
+					lights.push_back(newLight);
+					UpdateLightVisualizations();
+				}
+			};
+
+			DrawLightsPanel(m_worldModel.get(), lightsState, lightsCallbacks);
+			m_selectedLightIndex = lightsState.selectedLightIndex;
 		}
 		ImGui::End();
 
@@ -2650,131 +2717,6 @@ namespace mmo
 		}
 	}
 
-	void WorldModelEditorInstance::DrawGroupsPanel()
-	{
-		if (ImGui::Button("New Group"))
-		{
-			m_showNewGroupDialog = true;
-		}
-
-		ImGui::SameLine();
-		
-		if (ImGui::Button("Delete") && m_selectedGroupIndex >= 0)
-		{
-			RemoveGroup(m_selectedGroupIndex);
-		}
-
-		ImGui::Separator();
-
-		if (!m_worldModel)
-		{
-			ImGui::Text("No world model loaded");
-			return;
-		}
-
-		for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
-		{
-			const auto* group = m_worldModel->GetGroup(i);
-			if (!group)
-			{
-				continue;
-			}
-
-			ImGui::PushID(static_cast<int>(i));
-
-			bool isSelected = m_selectedGroupIndex == static_cast<int32>(i);
-			String label = group->GetName();
-			if (label.empty())
-			{
-				label = "(unnamed)";
-			}
-			
-			if (group->IsInterior())
-			{
-				label += " [Interior]";
-			}
-			else if (group->IsExterior())
-			{
-				label += " [Exterior]";
-			}
-
-			if (ImGui::Selectable(label.c_str(), isSelected))
-			{
-				m_selectedGroupIndex = static_cast<int32>(i);
-			}
-
-			// Visibility toggle
-			if (i < m_groupVisualizations.size())
-			{
-				ImGui::SameLine();
-				bool visible = m_groupVisualizations[i].visible;
-				if (ImGui::Checkbox("##vis", &visible))
-				{
-					m_groupVisualizations[i].visible = visible;
-					if (m_groupVisualizations[i].boundingBoxRenderable)
-					{
-						m_groupVisualizations[i].boundingBoxRenderable->SetVisible(visible);
-					}
-				}
-			}
-
-			ImGui::PopID();
-		}
-
-		// Selected group properties
-		if (m_selectedGroupIndex >= 0 && m_selectedGroupIndex < static_cast<int32>(m_worldModel->GetGroupCount()))
-		{
-			ImGui::Separator();
-			ImGui::Text("Selected Group Properties:");
-
-			auto* selectedGroup = m_worldModel->GetGroup(m_selectedGroupIndex);
-			if (selectedGroup)
-			{
-				// Group name editing
-				char nameBuffer[256];
-				std::strncpy(nameBuffer, selectedGroup->GetName().c_str(), sizeof(nameBuffer) - 1);
-				nameBuffer[sizeof(nameBuffer) - 1] = '\0';
-				if (ImGui::InputText("Name##group", nameBuffer, sizeof(nameBuffer)))
-				{
-					selectedGroup->SetName(nameBuffer);
-				}
-
-				// Group flags
-				bool isInterior = selectedGroup->IsInterior();
-				if (ImGui::Checkbox("Interior##group", &isInterior))
-				{
-					uint32 flags = selectedGroup->GetFlags();
-					if (isInterior)
-					{
-						flags |= 0x2000; // Interior flag
-						flags &= ~0x8; // Clear exterior flag
-					}
-					else
-					{
-						flags &= ~0x2000;
-					}
-					selectedGroup->SetFlags(flags);
-				}
-
-				bool isExterior = selectedGroup->IsExterior();
-				if (ImGui::Checkbox("Exterior##group", &isExterior))
-				{
-					uint32 flags = selectedGroup->GetFlags();
-					if (isExterior)
-					{
-						flags |= 0x8; // Exterior flag
-						flags &= ~0x2000; // Clear interior flag
-					}
-					else
-					{
-						flags &= ~0x8;
-					}
-					selectedGroup->SetFlags(flags);
-				}
-			}
-		}
-	}
-
 	void WorldModelEditorInstance::DrawPortalsPanel()
 	{
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 4));
@@ -4223,267 +4165,6 @@ namespace mmo
 				ImGui::BulletText("%s", name.c_str());
 			}
 		}
-	}
-
-	void WorldModelEditorInstance::DrawLightsPanel()
-	{
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 4));
-		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6, 6));
-
-		if (!m_worldModel)
-		{
-			ImGui::TextDisabled("No world model loaded");
-			ImGui::PopStyleVar(2);
-			return;
-		}
-
-		// Header with count
-		auto& lights = m_worldModel->GetLights();
-		ImGui::Text("Lights");
-		ImGui::SameLine();
-		ImGui::TextDisabled("(%zu)", lights.size());
-
-		ImGui::Spacing();
-
-		// Add light buttons with styled colors
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.3f, 0.8f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.4f, 0.9f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.8f, 0.5f, 1.0f));
-		if (ImGui::Button("+ Point Light", ImVec2(ImGui::GetContentRegionAvail().x * 0.5f - 3, 0)))
-		{
-			CreateLight(m_selectedGroupIndex, Vector3::Zero, 0xFFFFFFFF, 1.0f, WorldModelLight::LightType::Omni);
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("+ Spot Light", ImVec2(-1, 0)))
-		{
-			CreateLight(m_selectedGroupIndex, Vector3::Zero, 0xFFFFFFFF, 1.0f, WorldModelLight::LightType::Spot);
-		}
-		ImGui::PopStyleColor(3);
-
-		ImGui::Spacing();
-		ImGui::Separator();
-		ImGui::Spacing();
-
-		// Lights list with collapsible header
-		if (ImGui::CollapsingHeader("Light List", ImGuiTreeNodeFlags_DefaultOpen))
-		{
-			ImGui::Indent();
-
-			if (lights.empty())
-			{
-				ImGui::TextDisabled("No lights defined");
-			}
-			else
-			{
-				int visibleCount = 0;
-				for (size_t i = 0; i < lights.size(); ++i)
-				{
-					visibleCount++;
-					ImGui::PushID(static_cast<int>(i));
-
-					bool isSelected = m_selectedLightIndex == static_cast<int32>(i);
-
-					// Alternating row colors
-					if (visibleCount % 2 == 0)
-					{
-						ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.18f, 0.18f, 0.2f, 1.0f));
-					}
-					else
-					{
-						ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.15f, 0.15f, 0.17f, 1.0f));
-					}
-
-					// Light type icon and label
-					const char* typeStr = (lights[i].type == WorldModelLight::LightType::Spot) ? "Spot" : "Point";
-					String label = String(typeStr) + " Light " + std::to_string(i);
-
-					if (ImGui::Selectable(label.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns))
-					{
-						m_selectedLightIndex = static_cast<int32>(i);
-						UpdateSelectedLightVisualization();
-						
-						// Add to selection system for transform widget support
-						m_selection.Clear();
-						if (m_selectedLightIndex < static_cast<int32>(m_lightVisualizations.size()) &&
-							m_lightVisualizations[m_selectedLightIndex].node)
-						{
-							m_selection.AddSelectable(std::make_unique<SelectedWorldModelLight>(
-								*m_worldModel, i, *m_lightVisualizations[m_selectedLightIndex].node));
-						}
-					}
-
-					ImGui::PopStyleColor();
-
-					// Context menu
-					if (ImGui::BeginPopupContextItem())
-					{
-						if (ImGui::MenuItem("Focus (F)"))
-						{
-							m_cameraAnchor->SetPosition(lights[i].position);
-							m_cameraVelocity = Vector3::Zero;
-						}
-						ImGui::Separator();
-						if (ImGui::MenuItem("Duplicate"))
-						{
-							WorldModelLight newLight = lights[i];
-							newLight.position += Vector3(1.0f, 0.0f, 0.0f);
-							m_worldModel->GetLights().push_back(newLight);
-							UpdateLightVisualizations();
-						}
-						ImGui::Separator();
-						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
-						if (ImGui::MenuItem("Delete"))
-						{
-							RemoveLight(static_cast<int32>(i));
-							ImGui::PopStyleColor();
-							ImGui::EndPopup();
-							ImGui::PopID();
-							break;
-						}
-						ImGui::PopStyleColor();
-						ImGui::EndPopup();
-					}
-
-					// Tooltip
-					if (ImGui::IsItemHovered())
-					{
-						ImGui::BeginTooltip();
-						ImGui::Text("Type: %s", typeStr);
-						ImGui::Text("Position: %.2f, %.2f, %.2f", lights[i].position.x, lights[i].position.y, lights[i].position.z);
-						ImGui::Text("Intensity: %.2f", lights[i].intensity);
-						ImGui::EndTooltip();
-					}
-
-					ImGui::PopID();
-				}
-			}
-
-			ImGui::Unindent();
-		}
-
-		// Selected light properties
-		if (m_selectedLightIndex >= 0 && m_selectedLightIndex < static_cast<int32>(lights.size()))
-		{
-			ImGui::Spacing();
-
-			if (ImGui::CollapsingHeader("Selected Light Properties", ImGuiTreeNodeFlags_DefaultOpen))
-			{
-				ImGui::Indent();
-
-				auto& light = lights[m_selectedLightIndex];
-
-				// Light type combo
-				ImGui::Text("Type:");
-				ImGui::SameLine();
-				ImGui::SetNextItemWidth(-1);
-				int typeInt = (light.type == WorldModelLight::LightType::Spot) ? 1 : 0;
-				const char* typeNames[] = { "Point", "Spot" };
-				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
-				if (ImGui::Combo("##lightType", &typeInt, typeNames, 2))
-				{
-					light.type = (typeInt == 1) ? WorldModelLight::LightType::Spot : WorldModelLight::LightType::Omni;
-					UpdateLightVisualizations();
-				}
-				ImGui::PopStyleColor();
-
-				ImGui::Spacing();
-
-				// Transform section
-				ImGui::Text("Transform");
-				ImGui::Separator();
-
-				// Position
-				float posArr[3] = { light.position.x, light.position.y, light.position.z };
-				if (ImGui::DragFloat3("Position##light", posArr, 0.1f))
-				{
-					light.position = Vector3(posArr[0], posArr[1], posArr[2]);
-					UpdateLightVisualizations();
-				}
-
-				// Direction for spot lights
-				if (light.type == WorldModelLight::LightType::Spot)
-				{
-					Matrix3 rotMat;
-					light.rotation.ToRotationMatrix(rotMat);
-					Radian yaw, pitch, roll;
-					rotMat.ToEulerAnglesYXZ(yaw, pitch, roll);
-
-					float yawDeg = Degree(yaw).GetValueDegrees();
-					float pitchDeg = Degree(pitch).GetValueDegrees();
-
-					bool rotChanged = false;
-					if (ImGui::DragFloat("Yaw##lightdir", &yawDeg, 1.0f, -180.0f, 180.0f, "%.1f"))
-					{
-						rotChanged = true;
-					}
-					if (ImGui::DragFloat("Pitch##lightdir", &pitchDeg, 1.0f, -90.0f, 90.0f, "%.1f"))
-					{
-						rotChanged = true;
-					}
-
-					if (rotChanged)
-					{
-						Matrix3 newRotMat;
-						newRotMat.FromEulerAnglesYXZ(Degree(yawDeg), Degree(pitchDeg), Radian(0));
-						light.rotation.FromRotationMatrix(newRotMat);
-						UpdateLightVisualizations();
-					}
-				}
-
-				ImGui::Spacing();
-
-				// Appearance section
-				ImGui::Text("Appearance");
-				ImGui::Separator();
-
-				// Color picker
-				float colorArr[3] = {
-					((light.color >> 16) & 0xFF) / 255.0f,
-					((light.color >> 8) & 0xFF) / 255.0f,
-					(light.color & 0xFF) / 255.0f
-				};
-				if (ImGui::ColorEdit3("Color##light", colorArr))
-				{
-					uint32 r = static_cast<uint32>(colorArr[0] * 255.0f) & 0xFF;
-					uint32 g = static_cast<uint32>(colorArr[1] * 255.0f) & 0xFF;
-					uint32 b = static_cast<uint32>(colorArr[2] * 255.0f) & 0xFF;
-					light.color = 0xFF000000 | (r << 16) | (g << 8) | b;
-					UpdateLightVisualizations();
-				}
-
-				// Intensity
-				if (ImGui::DragFloat("Intensity##light", &light.intensity, 0.1f, 0.0f, 100.0f, "%.2f"))
-				{
-					UpdateLightVisualizations();
-				}
-
-				// Range
-				if (ImGui::DragFloat("Range##light", &light.attenuationEnd, 0.5f, 0.1f, 1000.0f, "%.1f"))
-				{
-					if (light.attenuationEnd < 0.1f)
-					{
-						light.attenuationEnd = 0.1f;
-					}
-					UpdateLightVisualizations();
-				}
-
-				ImGui::Spacing();
-
-				// Delete button
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 0.8f));
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.9f));
-				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.4f, 0.4f, 1.0f));
-				if (ImGui::Button("Delete Selected", ImVec2(-1, 0)))
-				{
-					RemoveLight(m_selectedLightIndex);
-				}
-				ImGui::PopStyleColor(3);
-
-				ImGui::Unindent();
-			}
-		}
-
-		ImGui::PopStyleVar(2);
 	}
 
 	void WorldModelEditorInstance::DrawFogPanel()
