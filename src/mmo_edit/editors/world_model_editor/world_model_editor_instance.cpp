@@ -1969,6 +1969,26 @@ namespace mmo
 			{
 				m_scene.DestroySceneNode(*vis.node);
 			}
+
+			// Clear existing mesh ref visualizations
+			for (auto& meshRefViz : vis.meshRefVisualizations)
+			{
+				if (meshRefViz.entity)
+				{
+					if (meshRefViz.node)
+					{
+						meshRefViz.node->DetachObject(*meshRefViz.entity);
+					}
+					m_scene.DestroyEntity(*meshRefViz.entity);
+					meshRefViz.entity = nullptr;
+				}
+				if (meshRefViz.node)
+				{
+					m_scene.DestroySceneNode(*meshRefViz.node);
+					meshRefViz.node = nullptr;
+				}
+			}
+			vis.meshRefVisualizations.clear();
 		}
 		m_groupVisualizations.clear();
 
@@ -3704,6 +3724,11 @@ namespace mmo
 				{
 					group->SetBoundingBox(bbox);
 					UpdateGroupVisualizations();
+
+					for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
+					{
+						UpdateMeshRefVisualizations(i);
+					}
 				}
 
 				// Ambient color
