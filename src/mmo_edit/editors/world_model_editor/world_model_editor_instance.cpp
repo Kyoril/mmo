@@ -1376,195 +1376,6 @@ namespace mmo
 		UpdatePortalVisualizations();
 	}
 
-	void WorldModelEditorInstance::AssignMeshToGroup(int32 groupIndex, const String& meshPath)
-	{
-		if (!m_worldModel || groupIndex < 0 || groupIndex >= static_cast<int32>(m_worldModel->GetGroupCount()))
-		{
-			ELOG("Invalid group index for mesh assignment");
-			return;
-		}
-
-		auto* group = m_worldModel->GetGroup(groupIndex);
-		if (!group)
-		{
-			ELOG("Failed to get group at index " << groupIndex);
-			return;
-		}
-
-		// Load the mesh
-		auto mesh = MeshManager::Get().Load(meshPath);
-		if (!mesh)
-		{
-			ELOG("Failed to load mesh: " << meshPath);
-			return;
-		}
-
-		// Clear existing geometry
-		group->GetVertices().clear();
-		group->GetNormals().clear();
-		group->GetTexCoords().clear();
-		group->GetVertexColors().clear();
-		group->GetIndices().clear();
-		group->GetMaterialIndices().clear();
-
-		AABB boundingBox;
-		boundingBox.SetNull();
-
-		uint32 baseVertexIndex = 0;
-
-		// Iterate through all submeshes and extract geometry
-		for (uint16 subMeshIdx = 0; subMeshIdx < mesh->GetSubMeshCount(); ++subMeshIdx)
-		{
-			SubMesh& subMesh = mesh->GetSubMesh(subMeshIdx);
-			
-			VertexData* vertexData = nullptr;
-			if (subMesh.useSharedVertices && mesh->sharedVertexData)
-			{
-				vertexData = mesh->sharedVertexData.get();
-			}
-			else if (subMesh.vertexData)
-			{
-				vertexData = subMesh.vertexData.get();
-			}
-
-			if (!vertexData || !vertexData->vertexDeclaration || !vertexData->vertexBufferBinding)
-			{
-				continue;
-			}
-
-			// Find position element
-			const VertexElement* posElem = vertexData->vertexDeclaration->FindElementBySemantic(VertexElementSemantic::Position);
-			const VertexElement* normElem = vertexData->vertexDeclaration->FindElementBySemantic(VertexElementSemantic::Normal);
-			const VertexElement* texElem = vertexData->vertexDeclaration->FindElementBySemantic(VertexElementSemantic::TextureCoordinate);
-			const VertexElement* colorElem = vertexData->vertexDeclaration->FindElementBySemantic(VertexElementSemantic::Diffuse);
-
-			if (!posElem)
-			{
-				continue;
-			}
-
-			// Get vertex buffer
-			auto vbuf = vertexData->vertexBufferBinding->GetBuffer(posElem->GetSource());
-			if (!vbuf)
-			{
-				continue;
-			}
-
-			// Lock vertex buffer for reading
-			void* rawVertexPtr = vbuf->Map(LockOptions::ReadOnly);
-			if (!rawVertexPtr)
-			{
-				continue;
-			}
-
-			uint8* vertexPtr = static_cast<uint8*>(rawVertexPtr);
-			uint32 vertexStart = vertexData->vertexStart;
-			uint32 vertexCount = vertexData->vertexCount;
-			size_t vertexSize = vbuf->GetVertexSize();
-
-			// Read vertices
-			for (uint32 v = 0; v < vertexCount; ++v)
-			{
-				uint8* basePtr = vertexPtr + (vertexStart + v) * vertexSize;
-
-				// Position
-				float* posData = nullptr;
-				posElem->BaseVertexPointerToElement(basePtr, &posData);
-				Vector3 position(posData[0], posData[1], posData[2]);
-				group->GetVertices().push_back(position);
-				boundingBox.Combine(position);
-
-				// Normal
-				if (normElem)
-				{
-					float* normData = nullptr;
-					normElem->BaseVertexPointerToElement(basePtr, &normData);
-					group->GetNormals().push_back(Vector3(normData[0], normData[1], normData[2]));
-				}
-				else
-				{
-					group->GetNormals().push_back(Vector3::UnitY);
-				}
-
-				// Texture coordinates
-				if (texElem)
-				{
-					float* texData = nullptr;
-					texElem->BaseVertexPointerToElement(basePtr, &texData);
-					group->GetTexCoords().push_back(Vector3(texData[0], texData[1], 0.0f));
-				}
-				else
-				{
-					group->GetTexCoords().push_back(Vector3::Zero);
-				}
-
-				// Vertex color
-				if (colorElem)
-				{
-					uint32* colorData = nullptr;
-					colorElem->BaseVertexPointerToElement(basePtr, &colorData);
-					group->GetVertexColors().push_back(*colorData);
-				}
-				else
-				{
-					group->GetVertexColors().push_back(0xFFFFFFFF);
-				}
-			}
-
-			vbuf->Unmap();
-
-			// Read indices
-			if (subMesh.indexData && subMesh.indexData->indexBuffer)
-			{
-				auto ibuf = subMesh.indexData->indexBuffer;
-				void* indexPtr = ibuf->Map(LockOptions::ReadOnly);
-				
-				if (indexPtr)
-				{
-					size_t indexStart = subMesh.indexData->indexStart;
-					size_t indexCount = subMesh.indexData->indexCount;
-					bool use32Bit = ibuf->GetIndexSize() == IndexBufferSize::Index_32;
-
-					for (size_t i = 0; i < indexCount; ++i)
-					{
-						uint32 index;
-						if (use32Bit)
-						{
-							index = static_cast<uint32*>(indexPtr)[indexStart + i];
-						}
-						else
-						{
-							index = static_cast<uint16*>(indexPtr)[indexStart + i];
-						}
-						group->GetIndices().push_back(baseVertexIndex + index);
-						
-						// Set material index for each vertex (every 3 indices = 1 triangle)
-						if ((i % 3) == 0)
-						{
-							group->GetMaterialIndices().push_back(subMeshIdx);
-						}
-					}
-
-					ibuf->Unmap();
-				}
-			}
-
-			baseVertexIndex = static_cast<uint32>(group->GetVertices().size());
-		}
-
-		// Update group bounding box
-		if (!boundingBox.IsNull())
-		{
-			group->SetBoundingBox(boundingBox);
-		}
-
-		ILOG("Assigned mesh '" << meshPath << "' to group '" << group->GetName() << "' (" 
-			<< group->GetVertices().size() << " vertices, " 
-			<< group->GetIndices().size() / 3 << " triangles)");
-
-		UpdateGroupVisualizations();
-	}
-
 	void WorldModelEditorInstance::AddMeshRefToGroup(int32 groupIndex, const String& meshPath,
 		const Vector3& position, const Quaternion& rotation, const Vector3& scale, const String& name)
 	{
@@ -2207,121 +2018,6 @@ namespace mmo
 			vis.node->AttachObject(*vis.boundingBoxRenderable);
 			vis.visible = true;
 
-			// Create mesh from group geometry if available
-			const auto& vertices = group->GetVertices();
-			const auto& indices = group->GetIndices();
-			
-			if (!vertices.empty() && !indices.empty())
-			{
-				const auto& normals = group->GetNormals();
-				const auto& texCoords = group->GetTexCoords();
-				const auto& vertexColors = group->GetVertexColors();
-
-				// Create a manual mesh with unique name
-				String meshName = "WMO_GroupMesh_" + std::to_string(m_meshCounter++) + "_" + std::to_string(i);
-				MeshPtr groupMesh = MeshManager::Get().CreateManual(meshName);
-				vis.mesh = groupMesh;
-				
-				if (groupMesh)
-				{
-					SubMesh& subMesh = groupMesh->CreateSubMesh();
-					subMesh.useSharedVertices = false;
-					
-					// Create vertex data
-					subMesh.vertexData = std::make_unique<VertexData>(&GraphicsDevice::Get());
-					subMesh.vertexData->vertexCount = vertices.size();
-					subMesh.vertexData->vertexStart = 0;
-					
-					// Setup vertex declaration - must match the format expected by Default.hmat
-					// Order: Position, Color, Normal, Binormal, Tangent, TexCoord
-					VertexDeclaration* decl = subMesh.vertexData->vertexDeclaration;
-					uint32 offset = 0;
-					offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Position).GetSize();
-					offset += decl->AddElement(0, offset, VertexElementType::ColorArgb, VertexElementSemantic::Diffuse).GetSize();
-					offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Normal).GetSize();
-					offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Binormal).GetSize();
-					offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Tangent).GetSize();
-					offset += decl->AddElement(0, offset, VertexElementType::Float2, VertexElementSemantic::TextureCoordinate).GetSize();
-					
-					// Vertex struct matching the declaration
-					struct VertexStruct
-					{
-						Vector3 position;
-						uint32 color;
-						Vector3 normal;
-						Vector3 binormal;
-						Vector3 tangent;
-						float u, v;
-					};
-					
-					// Build vertex buffer data
-					std::vector<VertexStruct> vertexData(vertices.size());
-					
-					for (size_t v = 0; v < vertices.size(); ++v)
-					{
-						VertexStruct& vert = vertexData[v];
-						
-						// Position
-						vert.position = vertices[v];
-						
-						// Color (ARGB format)
-						vert.color = (v < vertexColors.size()) ? vertexColors[v] : 0xFFFFFFFF;
-						
-						// Normal
-						if (v < normals.size())
-						{
-							vert.normal = normals[v];
-						}
-						else
-						{
-							vert.normal = Vector3::UnitY;
-						}
-						
-						// Binormal - compute from normal
-						Vector3 up = (std::abs(vert.normal.y) < 0.99f) ? Vector3::UnitY : Vector3::UnitX;
-						vert.tangent = vert.normal.Cross(up).NormalizedCopy();
-						vert.binormal = vert.tangent.Cross(vert.normal).NormalizedCopy();
-						
-						// TexCoord
-						if (v < texCoords.size())
-						{
-							vert.u = texCoords[v].x;
-							vert.v = texCoords[v].y;
-						}
-						else
-						{
-							vert.u = 0.0f;
-							vert.v = 0.0f;
-						}
-					}
-					
-					// Create vertex buffer
-					VertexBufferPtr vertexBuffer = GraphicsDevice::Get().CreateVertexBuffer(
-						vertices.size(), offset, BufferUsage::StaticWriteOnly, vertexData.data());
-					subMesh.vertexData->vertexBufferBinding->SetBinding(0, vertexBuffer);
-					
-					// Create index data
-					subMesh.indexData = std::make_unique<IndexData>();
-					subMesh.indexData->indexCount = indices.size();
-					subMesh.indexData->indexStart = 0;
-					subMesh.indexData->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(
-						indices.size(), IndexBufferSize::Index_32, BufferUsage::StaticWriteOnly, indices.data());
-					
-					// Set mesh bounds
-					groupMesh->SetBounds(bbox);
-					
-					// Set a default material
-					subMesh.SetMaterial(MaterialManager::Get().Load("Models/Default.hmat"));
-					
-					// Create entity from mesh
-					vis.meshEntity = m_scene.CreateEntity("GroupEntity_" + std::to_string(i), groupMesh);
-					if (vis.meshEntity)
-					{
-						vis.node->AttachObject(*vis.meshEntity);
-					}
-				}
-			}
-
 			m_groupVisualizations.push_back(std::move(vis));
 		}
 	}
@@ -2627,15 +2323,25 @@ namespace mmo
 		// Determine which group the camera is currently in
 		Vector3 cameraPos = m_camera->GetDerivedPosition();
 		int32 currentGroupIndex = -1;
+		float smallestVolume = std::numeric_limits<float>::max();
 
 		// Check each group's bounding box to find which one contains the camera
+		// If multiple groups contain the camera, prefer the one with the smallest
+		// bounding box volume (most specific/inner group)
 		for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
 		{
 			const auto* group = m_worldModel->GetGroup(i);
 			if (group && group->GetBoundingBox().Intersects(cameraPos))
 			{
-				currentGroupIndex = static_cast<int32>(i);
-				break;
+				const AABB& bbox = group->GetBoundingBox();
+				Vector3 size = bbox.max - bbox.min;
+				float volume = size.x * size.y * size.z;
+				
+				if (volume < smallestVolume)
+				{
+					smallestVolume = volume;
+					currentGroupIndex = static_cast<int32>(i);
+				}
 			}
 		}
 
@@ -4016,45 +3722,6 @@ namespace mmo
 						(static_cast<uint32>(color[1] * 255.0f) << 8) |
 						static_cast<uint32>(color[2] * 255.0f);
 					group->SetAmbientColor(newColor);
-				}
-
-				ImGui::Separator();
-
-				// Geometry assignment
-				ImGui::Text("Geometry");
-				
-				bool hasGeometry = !group->GetVertices().empty();
-				if (hasGeometry)
-				{
-					ImGui::Text("Vertices: %zu", group->GetVertices().size());
-					ImGui::Text("Triangles: %zu", group->GetIndices().size() / 3);
-					
-					if (ImGui::Button("Clear Geometry"))
-					{
-						group->GetVertices().clear();
-						group->GetNormals().clear();
-						group->GetTexCoords().clear();
-						group->GetVertexColors().clear();
-						group->GetIndices().clear();
-						group->GetMaterialIndices().clear();
-						UpdateGroupVisualizations();
-					}
-				}
-				else
-				{
-					ImGui::TextDisabled("No geometry assigned");
-				}
-				
-				// Drag-drop target for mesh files
-				ImGui::Button("Drag .hmsh file here to assign geometry");
-				if (ImGui::BeginDragDropTarget())
-				{
-					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
-					{
-						String meshPath = *static_cast<String*>(payload->Data);
-						AssignMeshToGroup(m_selectedGroupIndex, meshPath);
-					}
-					ImGui::EndDragDropTarget();
 				}
 			}
 		}

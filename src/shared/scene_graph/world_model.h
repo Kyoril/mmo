@@ -282,42 +282,6 @@ namespace mmo
         /// @param color The new ambient color.
         void SetAmbientColor(uint32 color) { m_ambientColor = color; }
 
-        /// @brief Gets the vertex positions.
-        const std::vector<Vector3>& GetVertices() const { return m_vertices; }
-        
-        /// @brief Gets mutable vertex positions.
-        std::vector<Vector3>& GetVertices() { return m_vertices; }
-        
-        /// @brief Gets the vertex normals.
-        const std::vector<Vector3>& GetNormals() const { return m_normals; }
-        
-        /// @brief Gets mutable vertex normals.
-        std::vector<Vector3>& GetNormals() { return m_normals; }
-        
-        /// @brief Gets the vertex texture coordinates.
-        const std::vector<Vector3>& GetTexCoords() const { return m_texCoords; }
-        
-        /// @brief Gets mutable vertex texture coordinates.
-        std::vector<Vector3>& GetTexCoords() { return m_texCoords; }
-        
-        /// @brief Gets the vertex colors.
-        const std::vector<uint32>& GetVertexColors() const { return m_vertexColors; }
-        
-        /// @brief Gets mutable vertex colors.
-        std::vector<uint32>& GetVertexColors() { return m_vertexColors; }
-        
-        /// @brief Gets the triangle indices.
-        const std::vector<uint32>& GetIndices() const { return m_indices; }
-        
-        /// @brief Gets mutable triangle indices.
-        std::vector<uint32>& GetIndices() { return m_indices; }
-        
-        /// @brief Gets the material indices for each triangle.
-        const std::vector<uint16>& GetMaterialIndices() const { return m_materialIndices; }
-        
-        /// @brief Gets mutable material indices.
-        std::vector<uint16>& GetMaterialIndices() { return m_materialIndices; }
-
         /// @brief Gets portal references for this group.
         const std::vector<WorldModelPortalRef>& GetPortalRefs() const { return m_portalRefs; }
         
@@ -368,14 +332,6 @@ namespace mmo
         uint32 m_flags;
         AABB m_boundingBox;
         uint32 m_ambientColor;
-        
-        // Geometry data (legacy - for backwards compatibility)
-        std::vector<Vector3> m_vertices;
-        std::vector<Vector3> m_normals;
-        std::vector<Vector3> m_texCoords;
-        std::vector<uint32> m_vertexColors;
-        std::vector<uint32> m_indices;
-        std::vector<uint16> m_materialIndices;
         
         // Mesh references (new - preferred way to add geometry)
         std::vector<WorldModelMeshRef> m_meshRefs;

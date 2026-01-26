@@ -23,14 +23,6 @@ namespace mmo
     static const ChunkMagic FogChunk = MakeChunkMagic('MFOG');
     static const ChunkMagic GroupChunk = MakeChunkMagic('MOGP');
     
-    // Group sub-chunks
-    static const ChunkMagic GroupVerticesChunk = MakeChunkMagic('MOVT');
-    static const ChunkMagic GroupNormalsChunk = MakeChunkMagic('MONR');
-    static const ChunkMagic GroupTexCoordsChunk = MakeChunkMagic('MOTV');
-    static const ChunkMagic GroupVertexColorsChunk = MakeChunkMagic('MOCV');
-    static const ChunkMagic GroupIndicesChunk = MakeChunkMagic('MOVI');
-    static const ChunkMagic GroupMaterialsChunk = MakeChunkMagic('MOPY');
-    
     // New chunks for mesh references and child WMOs
     static const ChunkMagic MeshRefsChunk = MakeChunkMagic('MMRF');
     static const ChunkMagic ChildWMOsChunk = MakeChunkMagic('MCWR');
@@ -374,20 +366,6 @@ namespace mmo
 
             // Calculate group chunk size
             size_t groupDataSize = 68; // Header size
-            groupDataSize += group->GetVertices().size() * 12;     // MOVT
-            groupDataSize += group->GetNormals().size() * 12;      // MONR
-            groupDataSize += group->GetTexCoords().size() * 8;     // MOTV
-            groupDataSize += group->GetVertexColors().size() * 4;  // MOCV
-            groupDataSize += group->GetIndices().size() * 2;       // MOVI
-            groupDataSize += group->GetMaterialIndices().size() * 2; // MOPY
-
-            // Add chunk headers (8 bytes each)
-            if (!group->GetVertices().empty()) groupDataSize += 8;
-            if (!group->GetNormals().empty()) groupDataSize += 8;
-            if (!group->GetTexCoords().empty()) groupDataSize += 8;
-            if (!group->GetVertexColors().empty()) groupDataSize += 8;
-            if (!group->GetIndices().empty()) groupDataSize += 8;
-            if (!group->GetMaterialIndices().empty()) groupDataSize += 8;
 
             // Add group name chunk size
             if (!group->GetName().empty())
@@ -449,98 +427,6 @@ namespace mmo
                 << io::write<uint32>(0) // uniqueID
                 << io::write<uint32>(0) // flags2
                 << io::write<uint32>(0); // padding
-
-            // Write vertices (MOVT)
-            if (!group->GetVertices().empty())
-            {
-                const uint32 verticesSize = static_cast<uint32>(group->GetVertices().size() * 12);
-                writer
-                    << io::write<uint32>(*GroupVerticesChunk)
-                    << io::write<uint32>(verticesSize);
-
-                for (const auto& vertex : group->GetVertices())
-                {
-                    writer
-                        << io::write<float>(vertex.x)
-                        << io::write<float>(vertex.y)
-                        << io::write<float>(vertex.z);
-                }
-            }
-
-            // Write normals (MONR)
-            if (!group->GetNormals().empty())
-            {
-                const uint32 normalsSize = static_cast<uint32>(group->GetNormals().size() * 12);
-                writer
-                    << io::write<uint32>(*GroupNormalsChunk)
-                    << io::write<uint32>(normalsSize);
-
-                for (const auto& normal : group->GetNormals())
-                {
-                    writer
-                        << io::write<float>(normal.x)
-                        << io::write<float>(normal.y)
-                        << io::write<float>(normal.z);
-                }
-            }
-
-            // Write texture coordinates (MOTV)
-            if (!group->GetTexCoords().empty())
-            {
-                const uint32 texCoordsSize = static_cast<uint32>(group->GetTexCoords().size() * 8);
-                writer
-                    << io::write<uint32>(*GroupTexCoordsChunk)
-                    << io::write<uint32>(texCoordsSize);
-
-                for (const auto& texCoord : group->GetTexCoords())
-                {
-                    writer
-                        << io::write<float>(texCoord.x)
-                        << io::write<float>(texCoord.y);
-                }
-            }
-
-            // Write vertex colors (MOCV)
-            if (!group->GetVertexColors().empty())
-            {
-                const uint32 colorsSize = static_cast<uint32>(group->GetVertexColors().size() * 4);
-                writer
-                    << io::write<uint32>(*GroupVertexColorsChunk)
-                    << io::write<uint32>(colorsSize);
-
-                for (const auto& color : group->GetVertexColors())
-                {
-                    writer << io::write<uint32>(color);
-                }
-            }
-
-            // Write indices (MOVI)
-            if (!group->GetIndices().empty())
-            {
-                const uint32 indicesSize = static_cast<uint32>(group->GetIndices().size() * 2);
-                writer
-                    << io::write<uint32>(*GroupIndicesChunk)
-                    << io::write<uint32>(indicesSize);
-
-                for (const auto& index : group->GetIndices())
-                {
-                    writer << io::write<uint16>(static_cast<uint16>(index));
-                }
-            }
-
-            // Write material indices (MOPY)
-            if (!group->GetMaterialIndices().empty())
-            {
-                const uint32 materialSize = static_cast<uint32>(group->GetMaterialIndices().size() * 2);
-                writer
-                    << io::write<uint32>(*GroupMaterialsChunk)
-                    << io::write<uint32>(materialSize);
-
-                for (const auto& matIdx : group->GetMaterialIndices())
-                {
-                    writer << io::write<uint16>(matIdx);
-                }
-            }
 
             // Write group name (MGNM)
             if (!group->GetName().empty())
@@ -1136,93 +1022,7 @@ namespace mmo
 
             const size_t subChunkEndPos = reader.getSource()->position() + subChunkSize;
 
-            if (subChunkId == *GroupVerticesChunk)
-            {
-                const size_t numVertices = subChunkSize / 12;
-                auto& vertices = group.GetVertices();
-                vertices.reserve(numVertices);
-
-                for (size_t i = 0; i < numVertices; ++i)
-                {
-                    float x, y, z;
-                    reader
-                        >> io::read<float>(x)
-                        >> io::read<float>(y)
-                        >> io::read<float>(z);
-                    vertices.emplace_back(x, y, z);
-                }
-            }
-            else if (subChunkId == *GroupNormalsChunk)
-            {
-                const size_t numNormals = subChunkSize / 12;
-                auto& normals = group.GetNormals();
-                normals.reserve(numNormals);
-
-                for (size_t i = 0; i < numNormals; ++i)
-                {
-                    float x, y, z;
-                    reader
-                        >> io::read<float>(x)
-                        >> io::read<float>(y)
-                        >> io::read<float>(z);
-                    normals.emplace_back(x, y, z);
-                }
-            }
-            else if (subChunkId == *GroupTexCoordsChunk)
-            {
-                const size_t numTexCoords = subChunkSize / 8;
-                auto& texCoords = group.GetTexCoords();
-                texCoords.reserve(numTexCoords);
-
-                for (size_t i = 0; i < numTexCoords; ++i)
-                {
-                    float u, v;
-                    reader
-                        >> io::read<float>(u)
-                        >> io::read<float>(v);
-                    texCoords.emplace_back(u, v, 0);
-                }
-            }
-            else if (subChunkId == *GroupVertexColorsChunk)
-            {
-                const size_t numColors = subChunkSize / 4;
-                auto& colors = group.GetVertexColors();
-                colors.reserve(numColors);
-
-                for (size_t i = 0; i < numColors; ++i)
-                {
-                    uint32 color;
-                    reader >> io::read<uint32>(color);
-                    colors.push_back(color);
-                }
-            }
-            else if (subChunkId == *GroupIndicesChunk)
-            {
-                const size_t numIndices = subChunkSize / 2;
-                auto& indices = group.GetIndices();
-                indices.reserve(numIndices);
-
-                for (size_t i = 0; i < numIndices; ++i)
-                {
-                    uint16 index;
-                    reader >> io::read<uint16>(index);
-                    indices.push_back(index);
-                }
-            }
-            else if (subChunkId == *GroupMaterialsChunk)
-            {
-                const size_t numMaterials = subChunkSize / 2;
-                auto& materials = group.GetMaterialIndices();
-                materials.reserve(numMaterials);
-
-                for (size_t i = 0; i < numMaterials; ++i)
-                {
-                    uint16 matIdx;
-                    reader >> io::read<uint16>(matIdx);
-                    materials.push_back(matIdx);
-                }
-            }
-            else if (subChunkId == *GroupNameChunk)
+            if (subChunkId == *GroupNameChunk)
             {
                 // Read group name
                 std::string name;

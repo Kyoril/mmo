@@ -422,11 +422,6 @@ namespace mmo
 		/// @param scale The scale.
 		void AddDoodad(uint32 setIndex, const String& meshPath, const Vector3& position, const Quaternion& rotation, float scale);
 
-		/// @brief Assigns a mesh to a group for geometry (legacy).
-		/// @param groupIndex The group index.
-		/// @param meshPath The path to the mesh file.
-		void AssignMeshToGroup(int32 groupIndex, const String& meshPath);
-
 		/// @brief Adds a mesh reference to a group.
 		/// @param groupIndex The group index.
 		/// @param meshPath The path to the mesh file.

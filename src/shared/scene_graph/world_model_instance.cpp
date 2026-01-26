@@ -72,16 +72,29 @@ namespace mmo
         }
 
         // Check each group's bounding box
+        // If multiple groups contain the camera, prefer the one with the smallest
+        // bounding box volume (most specific/inner group)
+        int32 bestGroupIndex = -1;
+        float smallestVolume = std::numeric_limits<float>::max();
+
         for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
         {
             const auto* group = m_worldModel->GetGroup(i);
             if (group && group->GetBoundingBox().Intersects(localCameraPos))
             {
-                return static_cast<int32>(i);
+                const AABB& bbox = group->GetBoundingBox();
+                Vector3 size = bbox.max - bbox.min;
+                float volume = size.x * size.y * size.z;
+                
+                if (volume < smallestVolume)
+                {
+                    smallestVolume = volume;
+                    bestGroupIndex = static_cast<int32>(i);
+                }
             }
         }
 
-        return -1;
+        return bestGroupIndex;
     }
 
     bool WorldModelInstance::IsPointInside(const Vector3& point) const
