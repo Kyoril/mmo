@@ -400,6 +400,10 @@ namespace mmo
 		/// @brief Determines whether rendering is currently frozen.
 		bool IsRenderingFrozen() const { return m_frozen; }
 
+		/// @brief Gets the currently active camera being used for rendering.
+		/// @return Pointer to the active camera, or nullptr if not currently rendering.
+		Camera* GetActiveCamera() const { return m_activeCamera; }
+
 		MaterialPtr GetDefaultMaterial();
 
 		/// @brief Gets all lights in the scene.

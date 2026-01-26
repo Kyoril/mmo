@@ -238,20 +238,62 @@ namespace mmo
             return;
         }
 
-        // TODO: Implement portal culling here
-        // For now, render all groups
-        for (auto& groupRenderable : m_groupRenderables)
+        // Check if scene's culling is frozen - if so, use cached visibility
+        Scene* scene = GetScene();
+        const bool cullingFrozen = scene && scene->IsRenderingFrozen();
+
+        if (!cullingFrozen)
         {
-            for (auto& meshViz : groupRenderable.meshVisualizations)
+            // Update portal culling visibility
+            m_visibleGroups.clear();
+
+            // Determine current group from active camera
+            if (scene)
             {
-                if (meshViz.entity)
+                Camera* camera = scene->GetActiveCamera();
+                if (camera)
                 {
-                    meshViz.entity->PopulateRenderQueue(renderQueue);
+                    m_currentGroup = DetermineCurrentGroup(*camera);
+                    PerformPortalCulling(*camera, m_currentGroup, m_visibleGroups);
+                }
+                else
+                {
+                    // No camera, show all groups
+                    m_currentGroup = -1;
+                    for (size_t i = 0; i < m_groupRenderables.size(); ++i)
+                    {
+                        m_visibleGroups.push_back(static_cast<int32>(i));
+                    }
+                }
+            }
+            else
+            {
+                // No scene, show all groups
+                m_currentGroup = -1;
+                for (size_t i = 0; i < m_groupRenderables.size(); ++i)
+                {
+                    m_visibleGroups.push_back(static_cast<int32>(i));
                 }
             }
         }
 
-        // Render doodads
+        // Render visible groups
+        for (const int32 groupIndex : m_visibleGroups)
+        {
+            if (groupIndex >= 0 && groupIndex < static_cast<int32>(m_groupRenderables.size()))
+            {
+                auto& groupRenderable = m_groupRenderables[groupIndex];
+                for (auto& meshViz : groupRenderable.meshVisualizations)
+                {
+                    if (meshViz.entity)
+                    {
+                        meshViz.entity->PopulateRenderQueue(renderQueue);
+                    }
+                }
+            }
+        }
+
+        // Render doodads (always visible for now)
         for (auto& doodad : m_doodadInstances)
         {
             if (doodad.entity)
