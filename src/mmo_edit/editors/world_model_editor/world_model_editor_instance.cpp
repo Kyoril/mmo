@@ -541,6 +541,12 @@ namespace mmo
 		if (!m_deferredRenderer) return;
 		if (m_lastAvailViewportSize.x <= 0.0f || m_lastAvailViewportSize.y <= 0.0f) return;
 
+		// Update portal culling preview if enabled
+		if (m_previewPortalCulling && m_worldModel)
+		{
+			UpdatePortalCullingPreview();
+		}
+
 		auto& gx = GraphicsDevice::Get();
 
 		// Render using the deferred renderer for proper lighting support
@@ -704,6 +710,36 @@ namespace mmo
 					ImGui::Unindent();
 				}
 				ImGui::Checkbox("Show Doodads", &m_showDoodads);
+				
+				ImGui::Separator();
+				if (ImGui::Checkbox("Preview Portal Culling", &m_previewPortalCulling))
+				{
+					if (!m_previewPortalCulling)
+					{
+						// Show all groups when disabling preview
+						for (auto& groupVis : m_groupVisualizations)
+						{
+							groupVis.visible = true;
+							if (groupVis.meshEntity)
+							{
+								groupVis.meshEntity->SetVisible(true);
+							}
+							for (auto& meshRefVis : groupVis.meshRefVisualizations)
+							{
+								if (meshRefVis.entity)
+								{
+									meshRefVis.entity->SetVisible(true);
+								}
+							}
+						}
+						m_lastCameraGroupIndex = -1;
+					}
+				}
+				if (m_previewPortalCulling)
+				{
+					ImGui::SameLine();
+					ImGui::TextDisabled("(Group: %d)", m_lastCameraGroupIndex);
+				}
 			}
 		}
 		ImGui::End();
@@ -2577,6 +2613,132 @@ namespace mmo
 			if (vis.iconEntity)
 			{
 				vis.iconEntity->SetVisible(m_showLights && m_showLightMarkers);
+			}
+		}
+	}
+
+	void WorldModelEditorInstance::UpdatePortalCullingPreview()
+	{
+		if (!m_worldModel || !m_camera)
+		{
+			return;
+		}
+
+		// Determine which group the camera is currently in
+		Vector3 cameraPos = m_camera->GetDerivedPosition();
+		int32 currentGroupIndex = -1;
+
+		// Check each group's bounding box to find which one contains the camera
+		for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
+		{
+			const auto* group = m_worldModel->GetGroup(i);
+			if (group && group->GetBoundingBox().Intersects(cameraPos))
+			{
+				currentGroupIndex = static_cast<int32>(i);
+				break;
+			}
+		}
+
+		// Only update if the camera moved to a different group
+		if (currentGroupIndex == m_lastCameraGroupIndex)
+		{
+			return;
+		}
+
+		m_lastCameraGroupIndex = currentGroupIndex;
+
+		// Determine which groups are visible through portal culling
+		std::vector<int32> visibleGroups;
+		
+		if (currentGroupIndex < 0)
+		{
+			// Camera is not in any group - show all exterior groups
+			for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
+			{
+				const auto* group = m_worldModel->GetGroup(i);
+				if (group && group->IsExterior())
+				{
+					visibleGroups.push_back(static_cast<int32>(i));
+				}
+			}
+		}
+		else
+		{
+			// Perform portal-based visibility culling
+			std::vector<bool> visitedGroups(m_worldModel->GetGroupCount(), false);
+			
+			// Simple flood-fill through connected portals
+			std::vector<int32> groupsToProcess;
+			groupsToProcess.push_back(currentGroupIndex);
+
+			while (!groupsToProcess.empty())
+			{
+				int32 groupIndex = groupsToProcess.back();
+				groupsToProcess.pop_back();
+
+				if (groupIndex < 0 || groupIndex >= static_cast<int32>(visitedGroups.size()))
+				{
+					continue;
+				}
+
+				if (visitedGroups[groupIndex])
+				{
+					continue;
+				}
+
+				visitedGroups[groupIndex] = true;
+				visibleGroups.push_back(groupIndex);
+
+				// Get connected groups through portals
+				const auto* group = m_worldModel->GetGroup(groupIndex);
+				if (!group)
+				{
+					continue;
+				}
+
+				for (const auto& portalRef : group->GetPortalRefs())
+				{
+					int32 targetGroup = portalRef.groupIndex;
+					if (targetGroup >= 0 && targetGroup < static_cast<int32>(visitedGroups.size()) && !visitedGroups[targetGroup])
+					{
+						// Check if the portal is active
+						if (portalRef.portalIndex < m_worldModel->GetPortals().size())
+						{
+							const auto& portal = m_worldModel->GetPortals()[portalRef.portalIndex];
+							if (portal && portal->IsActive())
+							{
+								// Check if portal is visible from camera (simple frustum test)
+								AABB portalBBox = portal->GetWorldBounds();
+								if (m_camera->IsVisible(portalBBox))
+								{
+									groupsToProcess.push_back(targetGroup);
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Update visibility of all groups
+		for (size_t i = 0; i < m_groupVisualizations.size(); ++i)
+		{
+			bool isVisible = std::find(visibleGroups.begin(), visibleGroups.end(), static_cast<int32>(i)) != visibleGroups.end();
+			
+			auto& groupVis = m_groupVisualizations[i];
+			groupVis.visible = isVisible;
+
+			if (groupVis.meshEntity)
+			{
+				groupVis.meshEntity->SetVisible(isVisible);
+			}
+
+			for (auto& meshRefVis : groupVis.meshRefVisualizations)
+			{
+				if (meshRefVis.entity)
+				{
+					meshRefVis.entity->SetVisible(isVisible);
+				}
 			}
 		}
 	}

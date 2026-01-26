@@ -156,7 +156,7 @@ namespace mmo
 
         // Write portal info (MOPT)
         {
-            const uint32 portalInfoSize = static_cast<uint32>(worldModel.GetPortals().size() * 28);
+            const uint32 portalInfoSize = static_cast<uint32>(worldModel.GetPortals().size() * 44);
             writer
                 << io::write<uint32>(*PortalInfoChunk)
                 << io::write<uint32>(portalInfoSize);
@@ -170,6 +170,9 @@ namespace mmo
                 // For simplicity, we use the portal's stored normal
                 Vector3 normal(0, 0, 1);
                 float planeDist = 0;
+
+                // Get the rotation quaternion
+                const Quaternion& rotation = portal->GetRotation();
                 
                 writer
                     << io::write<uint16>(vertexOffset)
@@ -179,7 +182,11 @@ namespace mmo
                     << io::write<float>(normal.z)
                     << io::write<float>(planeDist)
                     << io::write<float>(portal->GetWidth())
-                    << io::write<float>(portal->GetHeight());
+                    << io::write<float>(portal->GetHeight())
+                    << io::write<float>(rotation.x)
+                    << io::write<float>(rotation.y)
+                    << io::write<float>(rotation.z)
+                    << io::write<float>(rotation.w);
 
                 vertexOffset += count;
             }
@@ -800,7 +807,10 @@ namespace mmo
     {
         ASSERT(chunkHeader == *PortalInfoChunk);
         
-        size_t numPortals = chunkSize / 28;
+        // Support both old format (28 bytes per portal) and new format (44 bytes per portal)
+        const bool hasRotation = (chunkSize % 44 == 0);
+        const size_t portalSize = hasRotation ? 44 : 28;
+        const size_t numPortals = chunkSize / portalSize;
         
         m_portalInfos.clear();
         m_portalInfos.reserve(numPortals);
@@ -815,8 +825,25 @@ namespace mmo
                 >> io::read<float>(info.planeNormal[1])
                 >> io::read<float>(info.planeNormal[2])
                 >> io::read<float>(info.planeDist)
-        		>> io::read<float>(info.width)
-        		>> io::read<float>(info.height);
+                >> io::read<float>(info.width)
+                >> io::read<float>(info.height);
+
+            if (hasRotation)
+            {
+                reader
+                    >> io::read<float>(info.rotation[0])
+                    >> io::read<float>(info.rotation[1])
+                    >> io::read<float>(info.rotation[2])
+                    >> io::read<float>(info.rotation[3]);
+            }
+            else
+            {
+                // Default to identity rotation for old format
+                info.rotation[0] = 0.0f;
+                info.rotation[1] = 0.0f;
+                info.rotation[2] = 0.0f;
+                info.rotation[3] = 1.0f;
+            }
 
             if (!reader)
             {
@@ -1379,7 +1406,8 @@ namespace mmo
                 center /= static_cast<float>(info.vertexCount);
             }
 
-            portal.SetTransform(center, Quaternion::Identity, Vector3::UnitScale);
+            Quaternion rotation(info.rotation[0], info.rotation[1], info.rotation[2], info.rotation[3]);
+            portal.SetTransform(center, rotation, Vector3::UnitScale);
             portal.SetDimensions(info.width, info.height);
         }
 

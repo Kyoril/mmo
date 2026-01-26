@@ -108,6 +108,7 @@ namespace mmo
             float planeDist;
             float width;
             float height;
+            float rotation[4]; // x, y, z, w quaternion
         };
         std::vector<PortalInfo> m_portalInfos;
         

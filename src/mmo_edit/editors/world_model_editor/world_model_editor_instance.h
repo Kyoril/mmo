@@ -483,6 +483,9 @@ namespace mmo
 		/// @brief Updates visibility of light markers based on m_showLightMarkers.
 		void UpdateLightMarkerVisibility();
 
+		/// @brief Updates group visibility based on portal culling from camera position.
+		void UpdatePortalCullingPreview();
+
 		/// @brief Draws the groups panel UI.
 		void DrawGroupsPanel();
 
@@ -592,6 +595,8 @@ namespace mmo
 		bool m_showLights { true };
 		bool m_showLightMarkers { true };
 		bool m_showDoodads { true };
+		bool m_previewPortalCulling { false };
+		int32 m_lastCameraGroupIndex { -1 };
 
 		// Portal creation state
 		bool m_creatingPortal { false };
