@@ -4,6 +4,9 @@
 #include "world_model_selectables.h"
 #include "panels/world_model_groups_panel.h"
 #include "panels/world_model_lights_panel.h"
+#include "panels/world_model_portals_panel.h"
+#include "panels/world_model_doodads_panel.h"
+#include "panels/world_model_properties_panel.h"
 
 #include <algorithm>
 #include <sstream>
@@ -424,14 +427,60 @@ namespace mmo
 		// Portals panel
 		if (ImGui::Begin(portalsId.c_str()))
 		{
-			DrawPortalsPanel();
+			PortalCreationState portalCreationState;
+			portalCreationState.creatingPortal = m_creatingPortal;
+			portalCreationState.sourceGroup = m_portalSourceGroup;
+			portalCreationState.targetGroup = m_portalTargetGroup;
+
+			PortalsPanelCallbacks portalCallbacks;
+			portalCallbacks.onCreatePortal = [this](int32 groupA, int32 groupB, const std::vector<Vector3>& vertices) 
+			{
+				CreatePortal(groupA, groupB, vertices);
+			};
+			portalCallbacks.onSelectPortal = [this](int32 index) 
+			{
+				m_selectedPortalIndex = index;
+			};
+			portalCallbacks.onRemovePortal = [this](int32 index) 
+			{
+				RemovePortal(static_cast<size_t>(index));
+				if (m_selectedPortalIndex >= index)
+				{
+					m_selectedPortalIndex = std::max(-1, m_selectedPortalIndex - 1);
+				}
+			};
+			portalCallbacks.onPortalChanged = [this]() 
+			{
+				UpdatePortalVisualizations();
+			};
+			portalCallbacks.onFocusPosition = [this](const Vector3& pos) 
+			{
+				m_cameraAnchor->SetPosition(pos);
+				m_cameraVelocity = Vector3::Zero;
+			};
+			portalCallbacks.onUpdatePortalGroupConnection = [this](int32 portalIndex, int32 oldGroupA, int32 newGroupA, int32 newGroupB)
+			{
+				UpdatePortalGroupConnection(portalIndex, oldGroupA, newGroupA, newGroupB);
+			};
+
+			DrawPortalsPanel(m_worldModel.get(), m_selectedPortalIndex, portalCreationState, portalCallbacks);
+
+			m_creatingPortal = portalCreationState.creatingPortal;
+			m_portalSourceGroup = portalCreationState.sourceGroup;
+			m_portalTargetGroup = portalCreationState.targetGroup;
 		}
 		ImGui::End();
 
 		// Doodads panel  
 		if (ImGui::Begin(doodadsId.c_str()))
 		{
-			DrawDoodadsPanel();
+			DoodadsPanelCallbacks doodadCallbacks;
+			doodadCallbacks.onCreateDoodadSet = [this](const String& name) 
+			{
+				CreateDoodadSet(name);
+			};
+
+			DrawDoodadsPanel(m_worldModel.get(), m_selectedDoodadSetIndex, doodadCallbacks);
 		}
 		ImGui::End();
 
@@ -486,7 +535,17 @@ namespace mmo
 		// Details/Properties panel
 		if (ImGui::Begin(detailsId.c_str()))
 		{
-			DrawPropertiesPanel();
+			PropertiesPanelCallbacks propCallbacks;
+			propCallbacks.onSave = [this]() 
+			{
+				Save();
+			};
+			propCallbacks.onUpdateGroupVisualizations = [this]() 
+			{
+				UpdateGroupVisualizations();
+			};
+
+			DrawPropertiesPanel(m_worldModel.get(), m_selectedGroupIndex, propCallbacks);
 		}
 		ImGui::End();
 		
@@ -2717,506 +2776,6 @@ namespace mmo
 		}
 	}
 
-	void WorldModelEditorInstance::DrawPortalsPanel()
-	{
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 4));
-		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6, 6));
-
-		if (!m_worldModel)
-		{
-			ImGui::TextDisabled("No world model loaded");
-			ImGui::PopStyleVar(2);
-			return;
-		}
-
-		// Header with count
-		const auto& portals = m_worldModel->GetPortals();
-		ImGui::Text("Portals");
-		ImGui::SameLine();
-		ImGui::TextDisabled("(%zu)", portals.size());
-
-		ImGui::Spacing();
-
-		// Portal creation UI
-		if (!m_creatingPortal)
-		{
-			if (m_worldModel->GetGroupCount() < 2)
-			{
-				ImGui::TextDisabled("Need at least 2 groups to create a portal");
-			}
-			else
-			{
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.3f, 0.8f));
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.4f, 0.9f));
-				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.8f, 0.5f, 1.0f));
-				if (ImGui::Button("+ Create Portal...", ImVec2(-1, 0)))
-				{
-					m_creatingPortal = true;
-					m_portalSourceGroup = -1;
-					m_portalTargetGroup = -1;
-				}
-				ImGui::PopStyleColor(3);
-			}
-		}
-		else
-		{
-			// Portal creation wizard
-			ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.12f, 0.15f, 0.18f, 1.0f));
-			ImGui::BeginChild("PortalCreation", ImVec2(-1, 130), true);
-
-			ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Creating New Portal");
-			ImGui::Separator();
-			ImGui::Spacing();
-
-			// Source group selection
-			ImGui::Text("Source Group:");
-			ImGui::SameLine();
-			ImGui::SetNextItemWidth(-1);
-
-			String sourcePreview = "Select...";
-			if (m_portalSourceGroup >= 0 && m_portalSourceGroup < static_cast<int32>(m_worldModel->GetGroupCount()))
-			{
-				const auto* srcGroup = m_worldModel->GetGroup(m_portalSourceGroup);
-				if (srcGroup)
-				{
-					sourcePreview = srcGroup->GetName().empty() ? "(unnamed)" : srcGroup->GetName();
-				}
-			}
-
-			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
-			if (ImGui::BeginCombo("##SourceGroup", sourcePreview.c_str()))
-			{
-				for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
-				{
-					const auto* group = m_worldModel->GetGroup(i);
-					if (group && static_cast<int32>(i) != m_portalTargetGroup)
-					{
-						bool isSelected = m_portalSourceGroup == static_cast<int32>(i);
-						String itemLabel = group->GetName().empty() ? "(unnamed)" : group->GetName();
-						itemLabel += "##src" + std::to_string(i);
-						if (ImGui::Selectable(itemLabel.c_str(), isSelected))
-						{
-							m_portalSourceGroup = static_cast<int32>(i);
-						}
-					}
-				}
-				ImGui::EndCombo();
-			}
-			ImGui::PopStyleColor();
-
-			// Target group selection
-			ImGui::Text("Target Group:");
-			ImGui::SameLine();
-			ImGui::SetNextItemWidth(-1);
-
-			String targetPreview = "Select...";
-			if (m_portalTargetGroup >= 0 && m_portalTargetGroup < static_cast<int32>(m_worldModel->GetGroupCount()))
-			{
-				const auto* tgtGroup = m_worldModel->GetGroup(m_portalTargetGroup);
-				if (tgtGroup)
-				{
-					targetPreview = tgtGroup->GetName().empty() ? "(unnamed)" : tgtGroup->GetName();
-				}
-			}
-
-			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
-			if (ImGui::BeginCombo("##TargetGroup", targetPreview.c_str()))
-			{
-				for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
-				{
-					const auto* group = m_worldModel->GetGroup(i);
-					if (group && static_cast<int32>(i) != m_portalSourceGroup)
-					{
-						bool isSelected = m_portalTargetGroup == static_cast<int32>(i);
-						String itemLabel = group->GetName().empty() ? "(unnamed)" : group->GetName();
-						itemLabel += "##tgt" + std::to_string(i);
-						if (ImGui::Selectable(itemLabel.c_str(), isSelected))
-						{
-							m_portalTargetGroup = static_cast<int32>(i);
-						}
-					}
-				}
-				ImGui::EndCombo();
-			}
-			ImGui::PopStyleColor();
-
-			ImGui::Spacing();
-
-			// Buttons
-			bool canCreate = m_portalSourceGroup >= 0 && m_portalTargetGroup >= 0;
-			if (!canCreate)
-			{
-				ImGui::BeginDisabled();
-			}
-
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.3f, 0.8f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.4f, 0.9f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.8f, 0.5f, 1.0f));
-			if (ImGui::Button("Create", ImVec2(100, 0)))
-			{
-				const auto* srcGroup = m_worldModel->GetGroup(m_portalSourceGroup);
-				const auto* tgtGroup = m_worldModel->GetGroup(m_portalTargetGroup);
-
-				if (srcGroup && tgtGroup)
-				{
-					Vector3 srcCenter = srcGroup->GetBoundingBox().GetCenter();
-					Vector3 tgtCenter = tgtGroup->GetBoundingBox().GetCenter();
-					Vector3 portalCenter = (srcCenter + tgtCenter) * 0.5f;
-
-					Vector3 direction = (tgtCenter - srcCenter).NormalizedCopy();
-					Vector3 up = Vector3::UnitY;
-					Vector3 right = direction.Cross(up).NormalizedCopy();
-					if (right.GetSquaredLength() < 0.001f)
-					{
-						right = Vector3::UnitX;
-					}
-					up = right.Cross(direction).NormalizedCopy();
-
-					float halfWidth = 1.0f;
-					float halfHeight = 1.0f;
-
-					std::vector<Vector3> vertices;
-					vertices.push_back(portalCenter - right * halfWidth - up * halfHeight);
-					vertices.push_back(portalCenter + right * halfWidth - up * halfHeight);
-					vertices.push_back(portalCenter + right * halfWidth + up * halfHeight);
-					vertices.push_back(portalCenter - right * halfWidth + up * halfHeight);
-
-					CreatePortal(m_portalSourceGroup, m_portalTargetGroup, vertices);
-				}
-
-				m_creatingPortal = false;
-				m_portalSourceGroup = -1;
-				m_portalTargetGroup = -1;
-			}
-			ImGui::PopStyleColor(3);
-
-			if (!canCreate)
-			{
-				ImGui::EndDisabled();
-			}
-
-			ImGui::SameLine();
-			if (ImGui::Button("Cancel", ImVec2(100, 0)))
-			{
-				m_creatingPortal = false;
-				m_portalSourceGroup = -1;
-				m_portalTargetGroup = -1;
-			}
-
-			ImGui::EndChild();
-			ImGui::PopStyleColor();
-		}
-
-		ImGui::Spacing();
-		ImGui::Separator();
-		ImGui::Spacing();
-
-		// Portal list with collapsible header
-		if (ImGui::CollapsingHeader("Portal List", ImGuiTreeNodeFlags_DefaultOpen))
-		{
-			ImGui::Indent();
-
-			if (portals.empty())
-			{
-				ImGui::TextDisabled("No portals defined");
-			}
-			else
-			{
-				int visibleCount = 0;
-				for (size_t i = 0; i < portals.size(); ++i)
-				{
-					visibleCount++;
-					ImGui::PushID(static_cast<int>(i));
-
-					bool isSelected = m_selectedPortalIndex == static_cast<int32>(i);
-
-					// Alternating row colors
-					if (visibleCount % 2 == 0)
-					{
-						ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.18f, 0.18f, 0.2f, 1.0f));
-					}
-					else
-					{
-						ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.15f, 0.15f, 0.17f, 1.0f));
-					}
-
-					String label = "Portal " + std::to_string(i);
-					if (ImGui::Selectable(label.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns))
-					{
-						m_selectedPortalIndex = static_cast<int32>(i);
-					}
-
-					ImGui::PopStyleColor();
-
-					// Context menu
-					if (ImGui::BeginPopupContextItem())
-					{
-						if (portals[i] && ImGui::MenuItem("Focus (F)"))
-						{
-							m_cameraAnchor->SetPosition(portals[i]->GetPosition());
-							m_cameraVelocity = Vector3::Zero;
-						}
-						ImGui::Separator();
-						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
-						if (ImGui::MenuItem("Delete"))
-						{
-							RemovePortal(static_cast<int32>(i));
-							ImGui::PopStyleColor();
-							ImGui::EndPopup();
-							ImGui::PopID();
-							break;
-						}
-						ImGui::PopStyleColor();
-						ImGui::EndPopup();
-					}
-
-					// Tooltip
-					if (ImGui::IsItemHovered() && portals[i])
-					{
-						ImGui::BeginTooltip();
-						Vector3 pos = portals[i]->GetPosition();
-						ImGui::Text("Position: %.2f, %.2f, %.2f", pos.x, pos.y, pos.z);
-						ImGui::Text("Size: %.2fx%.2f", portals[i]->GetWidth(), portals[i]->GetHeight());
-						ImGui::EndTooltip();
-					}
-
-					ImGui::PopID();
-				}
-			}
-
-			ImGui::Unindent();
-		}
-
-		// Selected portal properties
-		if (m_selectedPortalIndex >= 0 && m_selectedPortalIndex < static_cast<int32>(portals.size()))
-		{
-			ImGui::Spacing();
-
-			if (ImGui::CollapsingHeader("Selected Portal Properties", ImGuiTreeNodeFlags_DefaultOpen))
-			{
-				ImGui::Indent();
-
-				auto& portal = portals[m_selectedPortalIndex];
-				if (portal)
-				{
-					// Transform section
-					ImGui::Text("Transform");
-					ImGui::Separator();
-
-					// Position
-					Vector3 pos = portal->GetPosition();
-					float posArr[3] = { pos.x, pos.y, pos.z };
-					if (ImGui::DragFloat3("Position##portal", posArr, 0.1f))
-					{
-						portal->SetTransform(Vector3(posArr[0], posArr[1], posArr[2]), portal->GetRotation(), portal->GetScale());
-						UpdatePortalVisualizations();
-					}
-
-					// Rotation
-					Quaternion rot = portal->GetRotation();
-					Matrix3 rotMat;
-					rot.ToRotationMatrix(rotMat);
-					Radian yaw, pitch, roll;
-					rotMat.ToEulerAnglesYXZ(yaw, pitch, roll);
-
-					float yawDeg = Degree(yaw).GetValueDegrees();
-					float pitchDeg = Degree(pitch).GetValueDegrees();
-					float rollDeg = Degree(roll).GetValueDegrees();
-
-					bool rotChanged = false;
-					if (ImGui::DragFloat("Yaw##portal", &yawDeg, 1.0f, -180.0f, 180.0f, "%.1f"))
-					{
-						rotChanged = true;
-					}
-					if (ImGui::DragFloat("Pitch##portal", &pitchDeg, 1.0f, -90.0f, 90.0f, "%.1f"))
-					{
-						rotChanged = true;
-					}
-					if (ImGui::DragFloat("Roll##portal", &rollDeg, 1.0f, -180.0f, 180.0f, "%.1f"))
-					{
-						rotChanged = true;
-					}
-
-					if (rotChanged)
-					{
-						Matrix3 newRotMat;
-						newRotMat.FromEulerAnglesYXZ(Degree(yawDeg), Degree(pitchDeg), Degree(rollDeg));
-						Quaternion newRot;
-						newRot.FromRotationMatrix(newRotMat);
-						portal->SetTransform(portal->GetPosition(), newRot, portal->GetScale());
-						UpdatePortalVisualizations();
-					}
-
-					ImGui::Spacing();
-
-					// Dimensions section
-					ImGui::Text("Dimensions");
-					ImGui::Separator();
-
-					float width = portal->GetWidth();
-					float height = portal->GetHeight();
-					if (ImGui::DragFloat("Width##portal", &width, 0.1f, 0.1f, 100.0f, "%.2f"))
-					{
-						if (width > 0.0f)
-						{
-							portal->SetDimensions(width, height);
-							UpdatePortalVisualizations();
-						}
-					}
-					if (ImGui::DragFloat("Height##portal", &height, 0.1f, 0.1f, 100.0f, "%.2f"))
-					{
-						if (height > 0.0f)
-						{
-							portal->SetDimensions(width, height);
-							UpdatePortalVisualizations();
-						}
-					}
-
-					ImGui::Spacing();
-
-					// Settings section
-					ImGui::Text("Settings");
-					ImGui::Separator();
-
-					// Portal type
-					PortalType ptype = portal->GetPortalType();
-					int ptypeInt = static_cast<int>(ptype);
-					const char* typeNames[] = { "One-Way", "Two-Way" };
-					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
-					if (ImGui::Combo("Type##portal", &ptypeInt, typeNames, 2))
-					{
-						portal->SetPortalType(static_cast<PortalType>(ptypeInt));
-					}
-					ImGui::PopStyleColor();
-
-					// Active state
-					bool active = portal->IsActive();
-					if (ImGui::Checkbox("Active##portal", &active))
-					{
-						portal->SetActive(active);
-					}
-
-					ImGui::Spacing();
-
-					// Connected groups section
-					ImGui::Text("Connected Groups");
-					ImGui::Separator();
-
-					// Find which groups reference this portal
-					int32 groupA = -1, groupB = -1;
-					for (size_t gi = 0; gi < m_worldModel->GetGroupCount(); ++gi)
-					{
-						auto* grp = m_worldModel->GetGroup(gi);
-						if (grp)
-						{
-							for (const auto& ref : grp->GetPortalRefs())
-							{
-								if (ref.portalIndex == static_cast<uint16>(m_selectedPortalIndex))
-								{
-									if (groupA < 0)
-									{
-										groupA = static_cast<int32>(gi);
-									}
-									else
-									{
-										groupB = static_cast<int32>(gi);
-									}
-									break;
-								}
-							}
-						}
-					}
-
-					// Group A selection
-					String groupAPreview = "(none)";
-					if (groupA >= 0 && groupA < static_cast<int32>(m_worldModel->GetGroupCount()))
-					{
-						const auto* grpA = m_worldModel->GetGroup(groupA);
-						if (grpA)
-						{
-							groupAPreview = grpA->GetName().empty() ? "Group " + std::to_string(groupA) : grpA->GetName();
-						}
-					}
-
-					ImGui::Text("Group A:");
-					ImGui::SameLine();
-					ImGui::SetNextItemWidth(-1);
-					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
-					if (ImGui::BeginCombo("##portalGrpA", groupAPreview.c_str()))
-					{
-						for (size_t gi = 0; gi < m_worldModel->GetGroupCount(); ++gi)
-						{
-							const auto* grp = m_worldModel->GetGroup(gi);
-							if (grp && static_cast<int32>(gi) != groupB)
-							{
-								String itemLabel = grp->GetName().empty() ? "Group " + std::to_string(gi) : grp->GetName();
-								itemLabel += "##grpA" + std::to_string(gi);
-
-								if (ImGui::Selectable(itemLabel.c_str(), groupA == static_cast<int32>(gi)))
-								{
-									UpdatePortalGroupConnection(m_selectedPortalIndex, groupA, static_cast<int32>(gi), groupB);
-								}
-							}
-						}
-						ImGui::EndCombo();
-					}
-					ImGui::PopStyleColor();
-
-					// Group B selection
-					String groupBPreview = "(none)";
-					if (groupB >= 0 && groupB < static_cast<int32>(m_worldModel->GetGroupCount()))
-					{
-						const auto* grpB = m_worldModel->GetGroup(groupB);
-						if (grpB)
-						{
-							groupBPreview = grpB->GetName().empty() ? "Group " + std::to_string(groupB) : grpB->GetName();
-						}
-					}
-
-					ImGui::Text("Group B:");
-					ImGui::SameLine();
-					ImGui::SetNextItemWidth(-1);
-					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
-					if (ImGui::BeginCombo("##portalGrpB", groupBPreview.c_str()))
-					{
-						for (size_t gi = 0; gi < m_worldModel->GetGroupCount(); ++gi)
-						{
-							const auto* grp = m_worldModel->GetGroup(gi);
-							if (grp && static_cast<int32>(gi) != groupA)
-							{
-								String itemLabel = grp->GetName().empty() ? "Group " + std::to_string(gi) : grp->GetName();
-								itemLabel += "##grpB" + std::to_string(gi);
-
-								if (ImGui::Selectable(itemLabel.c_str(), groupB == static_cast<int32>(gi)))
-								{
-									UpdatePortalGroupConnection(m_selectedPortalIndex, groupA, groupA, static_cast<int32>(gi));
-								}
-							}
-						}
-						ImGui::EndCombo();
-					}
-					ImGui::PopStyleColor();
-
-					ImGui::Spacing();
-
-					// Delete button
-					ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 0.8f));
-					ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.9f));
-					ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.4f, 0.4f, 1.0f));
-					if (ImGui::Button("Delete Selected", ImVec2(-1, 0)))
-					{
-						RemovePortal(m_selectedPortalIndex);
-					}
-					ImGui::PopStyleColor(3);
-				}
-
-				ImGui::Unindent();
-			}
-		}
-
-		ImGui::PopStyleVar(2);
-	}
-
 	void WorldModelEditorInstance::DrawMeshRefsPanel(int32 groupIndex)
 	{
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 4));
@@ -4110,63 +3669,6 @@ namespace mmo
 		}
 	}
 
-	void WorldModelEditorInstance::DrawDoodadsPanel()
-	{
-		if (ImGui::Button("New Doodad Set"))
-		{
-			CreateDoodadSet("DoodadSet_" + std::to_string(m_worldModel ? m_worldModel->GetDoodadSets().size() : 0));
-		}
-
-		ImGui::Separator();
-
-		if (!m_worldModel)
-		{
-			ImGui::Text("No world model loaded");
-			return;
-		}
-
-		const auto& sets = m_worldModel->GetDoodadSets();
-		for (size_t i = 0; i < sets.size(); ++i)
-		{
-			ImGui::PushID(static_cast<int>(i));
-
-			bool isSelected = m_selectedDoodadSetIndex == static_cast<int32>(i);
-			String label = sets[i].name + " (" + std::to_string(sets[i].count) + " doodads)";
-
-			if (ImGui::Selectable(label.c_str(), isSelected))
-			{
-				m_selectedDoodadSetIndex = static_cast<int32>(i);
-			}
-
-			ImGui::PopID();
-		}
-
-		ImGui::Separator();
-
-		if (m_selectedDoodadSetIndex >= 0 && m_selectedDoodadSetIndex < static_cast<int32>(sets.size()))
-		{
-			ImGui::Text("Doodads in set '%s':", sets[m_selectedDoodadSetIndex].name.c_str());
-
-			const auto& doodads = m_worldModel->GetDoodads();
-			const auto& doodadNames = m_worldModel->GetDoodadNames();
-			const auto& set = sets[m_selectedDoodadSetIndex];
-
-			for (uint32 i = 0; i < set.count; ++i)
-			{
-				uint32 doodadIndex = set.startIndex + i;
-				if (doodadIndex >= doodads.size())
-				{
-					break;
-				}
-
-				const auto& doodad = doodads[doodadIndex];
-				String name = doodad.nameIndex < doodadNames.size() ? doodadNames[doodad.nameIndex] : "Unknown";
-				
-				ImGui::BulletText("%s", name.c_str());
-			}
-		}
-	}
-
 	void WorldModelEditorInstance::DrawFogPanel()
 	{
 		if (!m_worldModel)
@@ -4180,220 +3682,6 @@ namespace mmo
 		ImGui::Text("Fog Volumes: %zu", fogs.size());
 
 		// TODO: Implement fog editing UI
-	}
-
-	void WorldModelEditorInstance::DrawPropertiesPanel()
-	{
-		if (ImGui::Button("Save"))
-		{
-			Save();
-		}
-
-		ImGui::Separator();
-
-		// Show selected group properties
-		if (m_selectedGroupIndex >= 0 && m_worldModel && m_selectedGroupIndex < static_cast<int32>(m_worldModel->GetGroupCount()))
-		{
-			auto* group = m_worldModel->GetGroup(m_selectedGroupIndex);
-			if (group)
-			{
-				ImGui::Text("Selected Group: %s", group->GetName().c_str());
-				ImGui::Separator();
-
-				// Group flags
-				uint32 flags = group->GetFlags();
-				
-				bool isInterior = (flags & static_cast<uint32>(WorldModelGroupFlags::Interior)) != 0;
-				if (ImGui::Checkbox("Interior", &isInterior))
-				{
-					if (isInterior)
-					{
-						flags |= static_cast<uint32>(WorldModelGroupFlags::Interior);
-						flags &= ~static_cast<uint32>(WorldModelGroupFlags::Exterior);
-					}
-					else
-					{
-						flags &= ~static_cast<uint32>(WorldModelGroupFlags::Interior);
-					}
-					group->SetFlags(flags);
-				}
-
-				bool isExterior = (flags & static_cast<uint32>(WorldModelGroupFlags::Exterior)) != 0;
-				if (ImGui::Checkbox("Exterior", &isExterior))
-				{
-					if (isExterior)
-					{
-						flags |= static_cast<uint32>(WorldModelGroupFlags::Exterior);
-						flags &= ~static_cast<uint32>(WorldModelGroupFlags::Interior);
-					}
-					else
-					{
-						flags &= ~static_cast<uint32>(WorldModelGroupFlags::Exterior);
-					}
-					group->SetFlags(flags);
-				}
-
-				bool showSkybox = (flags & static_cast<uint32>(WorldModelGroupFlags::ShowSkybox)) != 0;
-				if (ImGui::Checkbox("Show Skybox", &showSkybox))
-				{
-					if (showSkybox)
-					{
-						flags |= static_cast<uint32>(WorldModelGroupFlags::ShowSkybox);
-					}
-					else
-					{
-						flags &= ~static_cast<uint32>(WorldModelGroupFlags::ShowSkybox);
-					}
-					group->SetFlags(flags);
-				}
-
-				ImGui::Separator();
-
-				// Bounding box
-				AABB bbox = group->GetBoundingBox();
-				bool bboxChanged = false;
-
-				if (ImGui::InputFloat3("Min", bbox.min.Ptr()))
-				{
-					bboxChanged = true;
-				}
-				if (ImGui::InputFloat3("Max", bbox.max.Ptr()))
-				{
-					bboxChanged = true;
-				}
-
-				if (bboxChanged)
-				{
-					group->SetBoundingBox(bbox);
-					UpdateGroupVisualizations();
-
-					for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
-					{
-						UpdateMeshRefVisualizations(i);
-					}
-				}
-
-				// Ambient color
-				uint32 ambientColor = group->GetAmbientColor();
-				float color[4] = {
-					((ambientColor >> 16) & 0xFF) / 255.0f,
-					((ambientColor >> 8) & 0xFF) / 255.0f,
-					(ambientColor & 0xFF) / 255.0f,
-					((ambientColor >> 24) & 0xFF) / 255.0f
-				};
-				if (ImGui::ColorEdit4("Ambient Color", color))
-				{
-					uint32 newColor =
-						(static_cast<uint32>(color[3] * 255.0f) << 24) |
-						(static_cast<uint32>(color[0] * 255.0f) << 16) |
-						(static_cast<uint32>(color[1] * 255.0f) << 8) |
-						static_cast<uint32>(color[2] * 255.0f);
-					group->SetAmbientColor(newColor);
-				}
-			}
-		}
-		else if (m_selectedLightIndex >= 0 && m_worldModel)
-		{
-			auto& lights = m_worldModel->GetLights();
-			if (m_selectedLightIndex < static_cast<int32>(lights.size()))
-			{
-				auto& light = lights[m_selectedLightIndex];
-				
-				ImGui::Text("Selected Light: %d", m_selectedLightIndex);
-				ImGui::Separator();
-
-				ImGui::InputFloat3("Position", light.position.Ptr());
-				ImGui::InputFloat("Intensity", &light.intensity);
-				ImGui::InputFloat("Attenuation Start", &light.attenuationStart);
-				ImGui::InputFloat("Attenuation End", &light.attenuationEnd);
-
-				float color[4] = {
-					((light.color >> 16) & 0xFF) / 255.0f,
-					((light.color >> 8) & 0xFF) / 255.0f,
-					(light.color & 0xFF) / 255.0f,
-					((light.color >> 24) & 0xFF) / 255.0f
-				};
-				if (ImGui::ColorEdit4("Color", color))
-				{
-					light.color =
-						(static_cast<uint32>(color[3] * 255.0f) << 24) |
-						(static_cast<uint32>(color[0] * 255.0f) << 16) |
-						(static_cast<uint32>(color[1] * 255.0f) << 8) |
-						static_cast<uint32>(color[2] * 255.0f);
-				}
-
-				// Update visualization
-				if (m_selectedLightIndex < static_cast<int32>(m_lightVisualizations.size()))
-				{
-					auto& vis = m_lightVisualizations[m_selectedLightIndex];
-					if (vis.node)
-					{
-						vis.node->SetPosition(light.position);
-					}
-					if (vis.light)
-					{
-						Vector4 lightColor(
-							((light.color >> 16) & 0xFF) / 255.0f,
-							((light.color >> 8) & 0xFF) / 255.0f,
-							(light.color & 0xFF) / 255.0f,
-							1.0f
-						);
-						vis.light->SetColor(lightColor);
-						vis.light->SetIntensity(light.intensity);
-						vis.light->SetRange(light.attenuationEnd);
-					}
-				}
-			}
-		}
-		else if (!m_selection.IsEmpty())
-		{
-			Selectable* selected = m_selection.GetSelectedObjects().back().get();
-
-			if (selected->SupportsTranslate() || selected->SupportsRotate() || selected->SupportsScale())
-			{
-				if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
-				{
-					if (selected->SupportsTranslate())
-					{
-						Vector3 position = selected->GetPosition();
-						if (ImGui::InputFloat3("Position", position.Ptr()))
-						{
-							selected->SetPosition(position);
-						}
-					}
-
-					if (selected->SupportsRotate())
-					{
-						Rotator rotation = selected->GetOrientation().ToRotator();
-						float angles[3] = { rotation.roll.GetValueDegrees(), rotation.yaw.GetValueDegrees(), rotation.pitch.GetValueDegrees() };
-						if (ImGui::InputFloat3("Rotation", angles, "%.3f"))
-						{
-							rotation.roll = angles[0];
-							rotation.pitch = angles[2];
-							rotation.yaw = angles[1];
-
-							Quaternion quaternion = Quaternion::FromRotator(rotation);
-							quaternion.Normalize();
-
-							selected->SetOrientation(quaternion);
-						}
-					}
-
-					if (selected->SupportsScale())
-					{
-						Vector3 scale = selected->GetScale();
-						if (ImGui::InputFloat3("Scale", scale.Ptr()))
-						{
-							selected->SetScale(scale);
-						}
-					}
-				}
-			}
-		}
-		else
-		{
-			ImGui::Text("No selection");
-		}
 	}
 
 	void WorldModelEditorInstance::DrawToolbar()

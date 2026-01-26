@@ -291,17 +291,8 @@ namespace mmo
 		/// @brief Draws the child WMOs panel UI.
 		void DrawChildWMOsPanel();
 
-		/// @brief Draws the portals panel UI.
-		void DrawPortalsPanel();
-
-		/// @brief Draws the doodads panel UI.
-		void DrawDoodadsPanel();
-
 		/// @brief Draws the fog panel UI.
 		void DrawFogPanel();
-
-		/// @brief Draws the properties panel for the current selection.
-		void DrawPropertiesPanel();
 
 		/// @brief Draws the toolbar.
 		void DrawToolbar();
