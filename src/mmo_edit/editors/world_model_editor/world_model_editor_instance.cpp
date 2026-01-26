@@ -2528,18 +2528,15 @@ namespace mmo
 							const auto& portal = m_worldModel->GetPortals()[portalRef.portalIndex];
 							if (portal && portal->IsActive())
 							{
-								// For editor preview, show connected groups if the portal is visible
-								// OR if the target group's bounding box is visible
+								// When inside a group, only check portal visibility
+								// The target group is only visible if we can see through the portal
 								AABB portalBBox = portal->GetWorldBounds();
-								const auto* targetGroupPtr = m_worldModel->GetGroup(targetGroup);
-								
 								bool portalVisible = !portalBBox.IsNull() && m_camera->IsVisible(portalBBox);
-								bool targetVisible = targetGroupPtr && m_camera->IsVisible(targetGroupPtr->GetBoundingBox());
 								
 								debugStream << "  Portal " << portalRef.portalIndex << " -> grp " << targetGroup 
-								           << " (pVis:" << portalVisible << " tVis:" << targetVisible << ")\\n";
+								           << " (pVis:" << portalVisible << ")\\n";
 								
-								if (portalVisible || targetVisible)
+								if (portalVisible)
 								{
 									groupsToProcess.push_back(targetGroup);
 								}
