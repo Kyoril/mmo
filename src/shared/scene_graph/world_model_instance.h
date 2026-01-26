@@ -59,6 +59,11 @@ namespace mmo
         /// @return The ambient color as ARGB.
         uint32 GetAmbientColorAtCamera(const Camera& camera) const;
 
+        /// @brief Destroys all scene objects created by this instance.
+        /// Call this before destroying the instance to ensure proper cleanup.
+        /// @param scene The scene to destroy objects in.
+        void Destroy(Scene& scene);
+
     public:
         // MovableObject overrides
         

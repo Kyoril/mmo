@@ -205,6 +205,14 @@ namespace mmo
         return m_worldModel ? m_worldModel->GetAmbientColor() : 0xFFFFFFFF;
     }
 
+    void WorldModelInstance::Destroy(Scene& scene)
+    {
+        // Clear all created scene objects
+        ClearGeometry(&scene);
+        ClearDoodads(&scene);
+        ClearLights(&scene);
+    }
+
     const String& WorldModelInstance::GetMovableType() const
     {
         return s_movableType;

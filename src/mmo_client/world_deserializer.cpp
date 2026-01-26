@@ -50,6 +50,7 @@ namespace mmo
 		{
 			if (it->second.instance)
 			{
+				it->second.instance->Destroy(m_scene);
 				it->second.instance->DetachFromParent();
 			}
 			if (it->second.node)
@@ -128,6 +129,7 @@ namespace mmo
 
 			if (it->second.instance)
 			{
+				it->second.instance->Destroy(m_scene);
 				it->second.instance->DetachFromParent();
 			}
 			if (it->second.node)
@@ -158,6 +160,7 @@ namespace mmo
 		{
 			if (it->second.instance)
 			{
+				it->second.instance->Destroy(m_scene);
 				it->second.instance->DetachFromParent();
 			}
 			if (it->second.node)
