@@ -6,6 +6,7 @@
 
 #include <imgui.h>
 #include <asio/io_service.hpp>
+#include <set>
 
 #include "selected_map_entity.h"
 #include "paging/world_page_loader.h"
@@ -422,6 +423,17 @@ namespace mmo
 		/// @param scale The scale.
 		void AddDoodad(uint32 setIndex, const String& meshPath, const Vector3& position, const Quaternion& rotation, float scale);
 
+		/// @brief Generates a unique name for a mesh reference within a group.
+		/// @param group The group to check for existing names.
+		/// @param baseName The base name to use (without suffix).
+		/// @return A unique name with numeric suffix if necessary.
+		String GenerateUniqueMeshRefName(const WorldModelGroup& group, const String& baseName);
+
+		/// @brief Generates a unique name for a child WMO reference.
+		/// @param baseName The base name to use (without suffix).
+		/// @return A unique name with numeric suffix if necessary.
+		String GenerateUniqueChildWMOName(const String& baseName);
+
 		/// @brief Adds a mesh reference to a group.
 		/// @param groupIndex The group index.
 		/// @param meshPath The path to the mesh file.
@@ -439,6 +451,17 @@ namespace mmo
 		/// @param groupIndex The group index.
 		/// @param meshRefIndex The mesh reference index within the group.
 		void RemoveMeshRefFromGroup(int32 groupIndex, size_t meshRefIndex);
+
+		/// @brief Removes multiple mesh references from a group.
+		/// @param groupIndex The group index.
+		/// @param meshRefIndices The set of mesh reference indices to remove.
+		void RemoveMultipleMeshRefsFromGroup(int32 groupIndex, const std::set<size_t>& meshRefIndices);
+
+		/// @brief Moves mesh references from one group to another.
+		/// @param sourceGroupIndex The source group index.
+		/// @param targetGroupIndex The target group index.
+		/// @param meshRefIndices The set of mesh reference indices to move.
+		void MoveMeshRefsToGroup(int32 sourceGroupIndex, int32 targetGroupIndex, const std::set<size_t>& meshRefIndices);
 
 		/// @brief Adds a child WMO reference.
 		/// @param wmoPath The path to the child WMO file.
@@ -615,7 +638,11 @@ namespace mmo
 		
 		// Mesh editing state
 		int32 m_selectedMeshRefIndex { -1 };
+		std::set<size_t> m_selectedMeshRefIndices;  // For multi-selection
 		int32 m_selectedChildWMOIndex { -1 };
+		std::set<size_t> m_selectedChildWMOIndices;  // For multi-selection
+		bool m_showMoveMeshDialog { false };
+		int32 m_moveMeshTargetGroup { -1 };
 		
 		// Add mesh ref dialog state
 		bool m_showAddMeshRefDialog { false };
@@ -626,5 +653,9 @@ namespace mmo
 		bool m_showAddChildWMODialog { false };
 		char m_addChildWMOPath[512] { "" };
 		char m_addChildWMOName[256] { "" };
+
+		// Search filters
+		char m_meshRefSearchFilter[256] { "" };
+		char m_childWMOSearchFilter[256] { "" };
 	};
 }

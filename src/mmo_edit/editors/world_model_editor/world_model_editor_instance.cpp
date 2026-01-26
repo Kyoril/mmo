@@ -942,16 +942,24 @@ namespace mmo
 			auto mainId = dockspaceId;
 			const auto rightId = ImGui::DockBuilderSplitNode(mainId, ImGuiDir_Right, 350.0f / ImGui::GetMainViewport()->Size.x, nullptr, &mainId);
 			const auto leftId = ImGui::DockBuilderSplitNode(mainId, ImGuiDir_Left, 280.0f / (ImGui::GetMainViewport()->Size.x - 350.0f), nullptr, &mainId);
+			
+			// Split left dock into upper and lower sections for better organization
+			ImGuiID leftUpperId, leftLowerId;
+			leftLowerId = ImGui::DockBuilderSplitNode(leftId, ImGuiDir_Down, 0.45f, nullptr, &leftUpperId);
 
 			ImGui::DockBuilderDockWindow(viewportId.c_str(), mainId);
 			ImGui::DockBuilderDockWindow(detailsId.c_str(), rightId);
 			ImGui::DockBuilderDockWindow(worldSettingsId.c_str(), rightId);
-			ImGui::DockBuilderDockWindow(groupsId.c_str(), leftId);
-			ImGui::DockBuilderDockWindow(meshRefsId.c_str(), leftId);
-			ImGui::DockBuilderDockWindow(childWMOsId.c_str(), leftId);
-			ImGui::DockBuilderDockWindow(portalsId.c_str(), leftId);
-			ImGui::DockBuilderDockWindow(doodadsId.c_str(), leftId);
-			ImGui::DockBuilderDockWindow(lightsId.c_str(), leftId);
+			
+			// Upper left: Groups, Portals, Doodads, Lights
+			ImGui::DockBuilderDockWindow(groupsId.c_str(), leftUpperId);
+			ImGui::DockBuilderDockWindow(portalsId.c_str(), leftUpperId);
+			ImGui::DockBuilderDockWindow(doodadsId.c_str(), leftUpperId);
+			ImGui::DockBuilderDockWindow(lightsId.c_str(), leftUpperId);
+			
+			// Lower left: Mesh refs and Child WMOs (separate dock group)
+			ImGui::DockBuilderDockWindow(meshRefsId.c_str(), leftLowerId);
+			ImGui::DockBuilderDockWindow(childWMOsId.c_str(), leftLowerId);
 			
 			ImGui::DockBuilderFinish(dockspaceId);
 			m_initDockLayout = false;
@@ -1393,6 +1401,156 @@ namespace mmo
 		UpdatePortalVisualizations();
 	}
 
+	String WorldModelEditorInstance::GenerateUniqueMeshRefName(const WorldModelGroup& group, const String& baseName)
+	{
+		const auto& meshRefs = group.GetMeshRefs();
+		
+		// Check if base name is already unique
+		bool baseExists = false;
+		for (const auto& ref : meshRefs)
+		{
+			if (ref.name == baseName)
+			{
+				baseExists = true;
+				break;
+			}
+		}
+		
+		if (!baseExists)
+		{
+			return baseName;
+		}
+		
+		// Find the highest existing suffix number
+		int maxSuffix = 0;
+		String baseNameLower = baseName;
+		std::transform(baseNameLower.begin(), baseNameLower.end(), baseNameLower.begin(), ::tolower);
+		
+		for (const auto& ref : meshRefs)
+		{
+			String refName = ref.name;
+			String refNameLower = refName;
+			std::transform(refNameLower.begin(), refNameLower.end(), refNameLower.begin(), ::tolower);
+			
+			// Check if this name starts with our base name
+			if (refNameLower.find(baseNameLower) == 0)
+			{
+				// Check for numeric suffix pattern: "baseName_N" or "baseName (N)"
+				if (refName.length() > baseName.length())
+				{
+					String suffix = refName.substr(baseName.length());
+					
+					// Try "_N" format
+					if (suffix.length() > 1 && suffix[0] == '_')
+					{
+						try
+						{
+							int num = std::stoi(suffix.substr(1));
+							maxSuffix = std::max(maxSuffix, num);
+						}
+						catch (...) {}
+					}
+					// Try " (N)" format  
+					else if (suffix.length() > 3 && suffix.substr(0, 2) == " (")
+					{
+						size_t endParen = suffix.find(')');
+						if (endParen != String::npos)
+						{
+							try
+							{
+								int num = std::stoi(suffix.substr(2, endParen - 2));
+								maxSuffix = std::max(maxSuffix, num);
+							}
+							catch (...) {}
+						}
+					}
+				}
+				else if (refNameLower == baseNameLower)
+				{
+					// Exact match counts as suffix 0
+					maxSuffix = std::max(maxSuffix, 0);
+				}
+			}
+		}
+		
+		return baseName + "_" + std::to_string(maxSuffix + 1);
+	}
+
+	String WorldModelEditorInstance::GenerateUniqueChildWMOName(const String& baseName)
+	{
+		if (!m_worldModel)
+		{
+			return baseName;
+		}
+
+		const auto& childRefs = m_worldModel->GetChildRefs();
+		
+		// Check if base name is already unique
+		bool baseExists = false;
+		for (const auto& ref : childRefs)
+		{
+			if (ref.name == baseName)
+			{
+				baseExists = true;
+				break;
+			}
+		}
+		
+		if (!baseExists)
+		{
+			return baseName;
+		}
+		
+		// Find the highest existing suffix number
+		int maxSuffix = 0;
+		String baseNameLower = baseName;
+		std::transform(baseNameLower.begin(), baseNameLower.end(), baseNameLower.begin(), ::tolower);
+		
+		for (const auto& ref : childRefs)
+		{
+			String refName = ref.name;
+			String refNameLower = refName;
+			std::transform(refNameLower.begin(), refNameLower.end(), refNameLower.begin(), ::tolower);
+			
+			if (refNameLower.find(baseNameLower) == 0)
+			{
+				if (refName.length() > baseName.length())
+				{
+					String suffix = refName.substr(baseName.length());
+					
+					if (suffix.length() > 1 && suffix[0] == '_')
+					{
+						try
+						{
+							int num = std::stoi(suffix.substr(1));
+							maxSuffix = std::max(maxSuffix, num);
+						}
+						catch (...) {}
+					}
+					else if (suffix.length() > 3 && suffix.substr(0, 2) == " (")
+					{
+						size_t endParen = suffix.find(')');
+						if (endParen != String::npos)
+						{
+							try
+							{
+								int num = std::stoi(suffix.substr(2, endParen - 2));
+								maxSuffix = std::max(maxSuffix, num);
+							}
+							catch (...) {}
+						}
+					}
+				}
+				else if (refNameLower == baseNameLower)
+				{
+					maxSuffix = std::max(maxSuffix, 0);
+				}
+			}
+		}
+		
+		return baseName + "_" + std::to_string(maxSuffix + 1);
+	}
+
 	void WorldModelEditorInstance::AddMeshRefToGroup(int32 groupIndex, const String& meshPath,
 		const Vector3& position, const Quaternion& rotation, const Vector3& scale, const String& name)
 	{
@@ -1425,16 +1583,19 @@ namespace mmo
 		meshRef.scale = scale;
 		meshRef.visible = true;
 		
+		// Generate a unique name
+		String baseName;
 		if (name.empty())
 		{
-			// Generate a name from the mesh path
+			// Generate a base name from the mesh path
 			std::filesystem::path path(meshPath);
-			meshRef.name = path.stem().string();
+			baseName = path.stem().string();
 		}
 		else
 		{
-			meshRef.name = name;
+			baseName = name;
 		}
+		meshRef.name = GenerateUniqueMeshRefName(*group, baseName);
 
 		size_t refIndex = group->AddMeshRef(meshRef);
 		ILOG("Added mesh reference '" << meshRef.name << "' to group '" << group->GetName() << "' at index " << refIndex);
@@ -1494,7 +1655,131 @@ namespace mmo
 			m_selectedMeshRefIndex--;
 		}
 
+		// Clear multi-selection
+		m_selectedMeshRefIndices.clear();
+
 		UpdateMeshRefVisualizations(groupIndex);
+	}
+
+	void WorldModelEditorInstance::RemoveMultipleMeshRefsFromGroup(int32 groupIndex, const std::set<size_t>& meshRefIndices)
+	{
+		if (!m_worldModel || groupIndex < 0 || groupIndex >= static_cast<int32>(m_worldModel->GetGroupCount()))
+		{
+			ELOG("Invalid group index for removing mesh references");
+			return;
+		}
+
+		auto* group = m_worldModel->GetGroup(groupIndex);
+		if (!group)
+		{
+			ELOG("Failed to get group at index " << groupIndex);
+			return;
+		}
+
+		if (meshRefIndices.empty())
+		{
+			return;
+		}
+
+		ILOG("Removing " << meshRefIndices.size() << " mesh references from group '" << group->GetName() << "'");
+
+		// Remove in reverse order to preserve indices
+		std::vector<size_t> sortedIndices(meshRefIndices.begin(), meshRefIndices.end());
+		std::sort(sortedIndices.rbegin(), sortedIndices.rend());
+
+		for (size_t idx : sortedIndices)
+		{
+			if (idx < group->GetMeshRefs().size())
+			{
+				group->RemoveMeshRef(idx);
+			}
+		}
+
+		// Clear selections
+		m_selection.Clear();
+		m_selectedMeshRefIndex = -1;
+		m_selectedMeshRefIndices.clear();
+
+		UpdateMeshRefVisualizations(groupIndex);
+	}
+
+	void WorldModelEditorInstance::MoveMeshRefsToGroup(int32 sourceGroupIndex, int32 targetGroupIndex, const std::set<size_t>& meshRefIndices)
+	{
+		if (!m_worldModel)
+		{
+			ELOG("No world model for moving mesh references");
+			return;
+		}
+
+		if (sourceGroupIndex < 0 || sourceGroupIndex >= static_cast<int32>(m_worldModel->GetGroupCount()) ||
+			targetGroupIndex < 0 || targetGroupIndex >= static_cast<int32>(m_worldModel->GetGroupCount()))
+		{
+			ELOG("Invalid group indices for moving mesh references");
+			return;
+		}
+
+		if (sourceGroupIndex == targetGroupIndex)
+		{
+			return;
+		}
+
+		auto* sourceGroup = m_worldModel->GetGroup(sourceGroupIndex);
+		auto* targetGroup = m_worldModel->GetGroup(targetGroupIndex);
+		if (!sourceGroup || !targetGroup)
+		{
+			ELOG("Failed to get source or target group");
+			return;
+		}
+
+		if (meshRefIndices.empty())
+		{
+			return;
+		}
+
+		ILOG("Moving " << meshRefIndices.size() << " mesh references from group '" << sourceGroup->GetName() 
+			<< "' to group '" << targetGroup->GetName() << "'");
+
+		// Collect mesh refs to move (in sorted order to ensure consistent behavior)
+		std::vector<WorldModelMeshRef> refsToMove;
+		std::vector<size_t> sortedIndices(meshRefIndices.begin(), meshRefIndices.end());
+		std::sort(sortedIndices.begin(), sortedIndices.end());
+
+		for (size_t idx : sortedIndices)
+		{
+			if (idx < sourceGroup->GetMeshRefs().size())
+			{
+				WorldModelMeshRef ref = sourceGroup->GetMeshRefs()[idx];
+				// Generate unique name in target group
+				ref.name = GenerateUniqueMeshRefName(*targetGroup, ref.name.empty() ? 
+					ref.meshPath.substr(ref.meshPath.find_last_of("/\\") + 1) : ref.name);
+				refsToMove.push_back(ref);
+			}
+		}
+
+		// Add to target group
+		for (const auto& ref : refsToMove)
+		{
+			targetGroup->AddMeshRef(ref);
+		}
+
+		// Remove from source group (in reverse order to preserve indices)
+		std::sort(sortedIndices.rbegin(), sortedIndices.rend());
+		for (size_t idx : sortedIndices)
+		{
+			if (idx < sourceGroup->GetMeshRefs().size())
+			{
+				sourceGroup->RemoveMeshRef(idx);
+			}
+		}
+
+		// Clear selections
+		m_selection.Clear();
+		m_selectedMeshRefIndex = -1;
+		m_selectedMeshRefIndices.clear();
+
+		// Update visualizations for both groups
+		UpdateMeshRefVisualizations(sourceGroupIndex);
+		UpdateMeshRefVisualizations(targetGroupIndex);
 	}
 
 	void WorldModelEditorInstance::AddChildWMO(const String& wmoPath,
@@ -1514,16 +1799,19 @@ namespace mmo
 		childRef.scale = scale;
 		childRef.visible = true;
 
+		// Generate a unique name
+		String baseName;
 		if (name.empty())
 		{
-			// Generate a name from the WMO path
+			// Generate a base name from the WMO path
 			std::filesystem::path path(wmoPath);
-			childRef.name = path.stem().string();
+			baseName = path.stem().string();
 		}
 		else
 		{
-			childRef.name = name;
+			baseName = name;
 		}
+		childRef.name = GenerateUniqueChildWMOName(baseName);
 
 		size_t refIndex = m_worldModel->AddChildRef(childRef);
 		ILOG("Added child WMO reference '" << childRef.name << "' at index " << refIndex);
@@ -2708,11 +2996,23 @@ namespace mmo
 
 	void WorldModelEditorInstance::DrawPortalsPanel()
 	{
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 4));
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6, 6));
+
 		if (!m_worldModel)
 		{
-			ImGui::Text("No world model loaded");
+			ImGui::TextDisabled("No world model loaded");
+			ImGui::PopStyleVar(2);
 			return;
 		}
+
+		// Header with count
+		const auto& portals = m_worldModel->GetPortals();
+		ImGui::Text("Portals");
+		ImGui::SameLine();
+		ImGui::TextDisabled("(%zu)", portals.size());
+
+		ImGui::Spacing();
 
 		// Portal creation UI
 		if (!m_creatingPortal)
@@ -2721,36 +3021,46 @@ namespace mmo
 			{
 				ImGui::TextDisabled("Need at least 2 groups to create a portal");
 			}
-			else if (ImGui::Button("Create Portal..."))
+			else
 			{
-				m_creatingPortal = true;
-				m_portalSourceGroup = -1;
-				m_portalTargetGroup = -1;
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.3f, 0.8f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.4f, 0.9f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.8f, 0.5f, 1.0f));
+				if (ImGui::Button("+ Create Portal...", ImVec2(-1, 0)))
+				{
+					m_creatingPortal = true;
+					m_portalSourceGroup = -1;
+					m_portalTargetGroup = -1;
+				}
+				ImGui::PopStyleColor(3);
 			}
 		}
 		else
 		{
-			ImGui::TextColored(ImVec4(1, 1, 0, 1), "Creating Portal:");
-			
+			// Portal creation wizard
+			ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.12f, 0.15f, 0.18f, 1.0f));
+			ImGui::BeginChild("PortalCreation", ImVec2(-1, 130), true);
+
+			ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "Creating New Portal");
+			ImGui::Separator();
+			ImGui::Spacing();
+
 			// Source group selection
 			ImGui::Text("Source Group:");
 			ImGui::SameLine();
-			
-			// Cache the preview string before BeginCombo to avoid issues
+			ImGui::SetNextItemWidth(-1);
+
 			String sourcePreview = "Select...";
 			if (m_portalSourceGroup >= 0 && m_portalSourceGroup < static_cast<int32>(m_worldModel->GetGroupCount()))
 			{
 				const auto* srcGroup = m_worldModel->GetGroup(m_portalSourceGroup);
 				if (srcGroup)
 				{
-					sourcePreview = srcGroup->GetName();
-					if (sourcePreview.empty())
-					{
-						sourcePreview = "(unnamed)";
-					}
+					sourcePreview = srcGroup->GetName().empty() ? "(unnamed)" : srcGroup->GetName();
 				}
 			}
-			
+
+			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
 			if (ImGui::BeginCombo("##SourceGroup", sourcePreview.c_str()))
 			{
 				for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
@@ -2759,12 +3069,7 @@ namespace mmo
 					if (group && static_cast<int32>(i) != m_portalTargetGroup)
 					{
 						bool isSelected = m_portalSourceGroup == static_cast<int32>(i);
-						// Use ##index suffix to ensure unique ID even if name is empty
-						String itemLabel = group->GetName();
-						if (itemLabel.empty())
-						{
-							itemLabel = "(unnamed)";
-						}
+						String itemLabel = group->GetName().empty() ? "(unnamed)" : group->GetName();
 						itemLabel += "##src" + std::to_string(i);
 						if (ImGui::Selectable(itemLabel.c_str(), isSelected))
 						{
@@ -2774,26 +3079,24 @@ namespace mmo
 				}
 				ImGui::EndCombo();
 			}
+			ImGui::PopStyleColor();
 
 			// Target group selection
 			ImGui::Text("Target Group:");
 			ImGui::SameLine();
-			
-			// Cache the preview string before BeginCombo to avoid issues
+			ImGui::SetNextItemWidth(-1);
+
 			String targetPreview = "Select...";
 			if (m_portalTargetGroup >= 0 && m_portalTargetGroup < static_cast<int32>(m_worldModel->GetGroupCount()))
 			{
 				const auto* tgtGroup = m_worldModel->GetGroup(m_portalTargetGroup);
 				if (tgtGroup)
 				{
-					targetPreview = tgtGroup->GetName();
-					if (targetPreview.empty())
-					{
-						targetPreview = "(unnamed)";
-					}
+					targetPreview = tgtGroup->GetName().empty() ? "(unnamed)" : tgtGroup->GetName();
 				}
 			}
-			
+
+			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
 			if (ImGui::BeginCombo("##TargetGroup", targetPreview.c_str()))
 			{
 				for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
@@ -2802,12 +3105,7 @@ namespace mmo
 					if (group && static_cast<int32>(i) != m_portalSourceGroup)
 					{
 						bool isSelected = m_portalTargetGroup == static_cast<int32>(i);
-						// Use ##index suffix to ensure unique ID even if name is empty
-						String itemLabel = group->GetName();
-						if (itemLabel.empty())
-						{
-							itemLabel = "(unnamed)";
-						}
+						String itemLabel = group->GetName().empty() ? "(unnamed)" : group->GetName();
 						itemLabel += "##tgt" + std::to_string(i);
 						if (ImGui::Selectable(itemLabel.c_str(), isSelected))
 						{
@@ -2817,31 +3115,31 @@ namespace mmo
 				}
 				ImGui::EndCombo();
 			}
+			ImGui::PopStyleColor();
 
-			ImGui::Separator();
+			ImGui::Spacing();
 
-			// Create button
+			// Buttons
 			bool canCreate = m_portalSourceGroup >= 0 && m_portalTargetGroup >= 0;
 			if (!canCreate)
 			{
 				ImGui::BeginDisabled();
 			}
-			
-			if (ImGui::Button("Create Portal"))
+
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.3f, 0.8f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.4f, 0.9f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.8f, 0.5f, 1.0f));
+			if (ImGui::Button("Create", ImVec2(100, 0)))
 			{
-				// Create a default portal between the two groups
-				// Use the midpoint between the two group bounding boxes as the portal location
 				const auto* srcGroup = m_worldModel->GetGroup(m_portalSourceGroup);
 				const auto* tgtGroup = m_worldModel->GetGroup(m_portalTargetGroup);
-				
+
 				if (srcGroup && tgtGroup)
 				{
-					// Calculate portal position at the boundary between groups
 					Vector3 srcCenter = srcGroup->GetBoundingBox().GetCenter();
 					Vector3 tgtCenter = tgtGroup->GetBoundingBox().GetCenter();
 					Vector3 portalCenter = (srcCenter + tgtCenter) * 0.5f;
-					
-					// Create a simple quad portal
+
 					Vector3 direction = (tgtCenter - srcCenter).NormalizedCopy();
 					Vector3 up = Vector3::UnitY;
 					Vector3 right = direction.Cross(up).NormalizedCopy();
@@ -2850,303 +3148,398 @@ namespace mmo
 						right = Vector3::UnitX;
 					}
 					up = right.Cross(direction).NormalizedCopy();
-					
-					// Default portal size of 2x2 units
+
 					float halfWidth = 1.0f;
 					float halfHeight = 1.0f;
-					
+
 					std::vector<Vector3> vertices;
 					vertices.push_back(portalCenter - right * halfWidth - up * halfHeight);
 					vertices.push_back(portalCenter + right * halfWidth - up * halfHeight);
 					vertices.push_back(portalCenter + right * halfWidth + up * halfHeight);
 					vertices.push_back(portalCenter - right * halfWidth + up * halfHeight);
-					
+
 					CreatePortal(m_portalSourceGroup, m_portalTargetGroup, vertices);
 				}
-				
-				// Reset state
+
 				m_creatingPortal = false;
 				m_portalSourceGroup = -1;
 				m_portalTargetGroup = -1;
 			}
-			
+			ImGui::PopStyleColor(3);
+
 			if (!canCreate)
 			{
 				ImGui::EndDisabled();
 			}
 
 			ImGui::SameLine();
-			if (ImGui::Button("Cancel"))
+			if (ImGui::Button("Cancel", ImVec2(100, 0)))
 			{
 				m_creatingPortal = false;
 				m_portalSourceGroup = -1;
 				m_portalTargetGroup = -1;
 			}
+
+			ImGui::EndChild();
+			ImGui::PopStyleColor();
 		}
 
+		ImGui::Spacing();
 		ImGui::Separator();
+		ImGui::Spacing();
 
-		// Portal list
-		ImGui::Text("Portals:");
-		
-		const auto& portals = m_worldModel->GetPortals();
-		if (portals.empty())
+		// Portal list with collapsible header
+		if (ImGui::CollapsingHeader("Portal List", ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			ImGui::TextDisabled("No portals");
-		}
-		else
-		{
-			for (size_t i = 0; i < portals.size(); ++i)
+			ImGui::Indent();
+
+			if (portals.empty())
 			{
-				ImGui::PushID(static_cast<int>(i));
-
-				bool isSelected = m_selectedPortalIndex == static_cast<int32>(i);
-				String label = "Portal " + std::to_string(i);
-
-				if (ImGui::Selectable(label.c_str(), isSelected))
-				{
-					m_selectedPortalIndex = static_cast<int32>(i);
-				}
-
-				ImGui::PopID();
+				ImGui::TextDisabled("No portals defined");
 			}
+			else
+			{
+				int visibleCount = 0;
+				for (size_t i = 0; i < portals.size(); ++i)
+				{
+					visibleCount++;
+					ImGui::PushID(static_cast<int>(i));
+
+					bool isSelected = m_selectedPortalIndex == static_cast<int32>(i);
+
+					// Alternating row colors
+					if (visibleCount % 2 == 0)
+					{
+						ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.18f, 0.18f, 0.2f, 1.0f));
+					}
+					else
+					{
+						ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.15f, 0.15f, 0.17f, 1.0f));
+					}
+
+					String label = "Portal " + std::to_string(i);
+					if (ImGui::Selectable(label.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns))
+					{
+						m_selectedPortalIndex = static_cast<int32>(i);
+					}
+
+					ImGui::PopStyleColor();
+
+					// Context menu
+					if (ImGui::BeginPopupContextItem())
+					{
+						if (portals[i] && ImGui::MenuItem("Focus (F)"))
+						{
+							m_cameraAnchor->SetPosition(portals[i]->GetPosition());
+							m_cameraVelocity = Vector3::Zero;
+						}
+						ImGui::Separator();
+						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
+						if (ImGui::MenuItem("Delete"))
+						{
+							RemovePortal(static_cast<int32>(i));
+							ImGui::PopStyleColor();
+							ImGui::EndPopup();
+							ImGui::PopID();
+							break;
+						}
+						ImGui::PopStyleColor();
+						ImGui::EndPopup();
+					}
+
+					// Tooltip
+					if (ImGui::IsItemHovered() && portals[i])
+					{
+						ImGui::BeginTooltip();
+						Vector3 pos = portals[i]->GetPosition();
+						ImGui::Text("Position: %.2f, %.2f, %.2f", pos.x, pos.y, pos.z);
+						ImGui::Text("Size: %.2fx%.2f", portals[i]->GetWidth(), portals[i]->GetHeight());
+						ImGui::EndTooltip();
+					}
+
+					ImGui::PopID();
+				}
+			}
+
+			ImGui::Unindent();
 		}
 
-		// Delete button
+		// Selected portal properties
 		if (m_selectedPortalIndex >= 0 && m_selectedPortalIndex < static_cast<int32>(portals.size()))
 		{
-			ImGui::Separator();
-			
-			// Portal properties
-			ImGui::Text("Selected Portal Properties:");
-			
-			auto& portal = portals[m_selectedPortalIndex];
-			if (portal)
+			ImGui::Spacing();
+
+			if (ImGui::CollapsingHeader("Selected Portal Properties", ImGuiTreeNodeFlags_DefaultOpen))
 			{
-				// Position (with InputFloat for precise entry)
-				Vector3 pos = portal->GetPosition();
-				float posArr[3] = { pos.x, pos.y, pos.z };
-				if (ImGui::InputFloat3("Position##portal", posArr, "%.2f"))
-				{
-					portal->SetTransform(Vector3(posArr[0], posArr[1], posArr[2]), portal->GetRotation(), portal->GetScale());
-					UpdatePortalVisualizations();
-				}
+				ImGui::Indent();
 
-				// Rotation as Yaw/Pitch/Roll (more intuitive)
-				Quaternion rot = portal->GetRotation();
-				Matrix3 rotMat;
-				rot.ToRotationMatrix(rotMat);
-				Radian yaw, pitch, roll;
-				rotMat.ToEulerAnglesYXZ(yaw, pitch, roll);
-				
-				float yawDeg = Degree(yaw).GetValueDegrees();
-				float pitchDeg = Degree(pitch).GetValueDegrees();
-				float rollDeg = Degree(roll).GetValueDegrees();
-				
-				bool rotChanged = false;
-				if (ImGui::InputFloat("Yaw##portal", &yawDeg, 1.0f, 10.0f, "%.1f"))
+				auto& portal = portals[m_selectedPortalIndex];
+				if (portal)
 				{
-					rotChanged = true;
-				}
-				if (ImGui::InputFloat("Pitch##portal", &pitchDeg, 1.0f, 10.0f, "%.1f"))
-				{
-					rotChanged = true;
-				}
-				if (ImGui::InputFloat("Roll##portal", &rollDeg, 1.0f, 10.0f, "%.1f"))
-				{
-					rotChanged = true;
-				}
-				
-				if (rotChanged)
-				{
-					// Convert back to quaternion
-					Matrix3 newRotMat;
-					newRotMat.FromEulerAnglesYXZ(Degree(yawDeg), Degree(pitchDeg), Degree(rollDeg));
-					Quaternion newRot;
-					newRot.FromRotationMatrix(newRotMat);
-					portal->SetTransform(portal->GetPosition(), newRot, portal->GetScale());
-					UpdatePortalVisualizations();
-				}
+					// Transform section
+					ImGui::Text("Transform");
+					ImGui::Separator();
 
-				// Dimensions (with InputFloat for precise entry)
-				float width = portal->GetWidth();
-				float height = portal->GetHeight();
-				if (ImGui::InputFloat("Width##portal", &width, 0.1f, 1.0f, "%.2f"))
-				{
-					if (width > 0.0f)
+					// Position
+					Vector3 pos = portal->GetPosition();
+					float posArr[3] = { pos.x, pos.y, pos.z };
+					if (ImGui::DragFloat3("Position##portal", posArr, 0.1f))
 					{
-						portal->SetDimensions(width, height);
+						portal->SetTransform(Vector3(posArr[0], posArr[1], posArr[2]), portal->GetRotation(), portal->GetScale());
 						UpdatePortalVisualizations();
 					}
-				}
-				if (ImGui::InputFloat("Height##portal", &height, 0.1f, 1.0f, "%.2f"))
-				{
-					if (height > 0.0f)
+
+					// Rotation
+					Quaternion rot = portal->GetRotation();
+					Matrix3 rotMat;
+					rot.ToRotationMatrix(rotMat);
+					Radian yaw, pitch, roll;
+					rotMat.ToEulerAnglesYXZ(yaw, pitch, roll);
+
+					float yawDeg = Degree(yaw).GetValueDegrees();
+					float pitchDeg = Degree(pitch).GetValueDegrees();
+					float rollDeg = Degree(roll).GetValueDegrees();
+
+					bool rotChanged = false;
+					if (ImGui::DragFloat("Yaw##portal", &yawDeg, 1.0f, -180.0f, 180.0f, "%.1f"))
 					{
-						portal->SetDimensions(width, height);
+						rotChanged = true;
+					}
+					if (ImGui::DragFloat("Pitch##portal", &pitchDeg, 1.0f, -90.0f, 90.0f, "%.1f"))
+					{
+						rotChanged = true;
+					}
+					if (ImGui::DragFloat("Roll##portal", &rollDeg, 1.0f, -180.0f, 180.0f, "%.1f"))
+					{
+						rotChanged = true;
+					}
+
+					if (rotChanged)
+					{
+						Matrix3 newRotMat;
+						newRotMat.FromEulerAnglesYXZ(Degree(yawDeg), Degree(pitchDeg), Degree(rollDeg));
+						Quaternion newRot;
+						newRot.FromRotationMatrix(newRotMat);
+						portal->SetTransform(portal->GetPosition(), newRot, portal->GetScale());
 						UpdatePortalVisualizations();
 					}
-				}
 
-				// Portal type
-				PortalType ptype = portal->GetPortalType();
-				int ptypeInt = static_cast<int>(ptype);
-				const char* typeNames[] = { "One-Way", "Two-Way" };
-				if (ImGui::Combo("Type##portal", &ptypeInt, typeNames, 2))
-				{
-					portal->SetPortalType(static_cast<PortalType>(ptypeInt));
-				}
+					ImGui::Spacing();
 
-				// Active state
-				bool active = portal->IsActive();
-				if (ImGui::Checkbox("Active##portal", &active))
-				{
-					portal->SetActive(active);
-				}
+					// Dimensions section
+					ImGui::Text("Dimensions");
+					ImGui::Separator();
 
-				// Connected groups editing
-				ImGui::Separator();
-				ImGui::Text("Connected Groups:");
-
-				// Find which groups reference this portal
-				int32 groupA = -1, groupB = -1;
-				for (size_t gi = 0; gi < m_worldModel->GetGroupCount(); ++gi)
-				{
-					auto* grp = m_worldModel->GetGroup(gi);
-					if (grp)
+					float width = portal->GetWidth();
+					float height = portal->GetHeight();
+					if (ImGui::DragFloat("Width##portal", &width, 0.1f, 0.1f, 100.0f, "%.2f"))
 					{
-						for (const auto& ref : grp->GetPortalRefs())
+						if (width > 0.0f)
 						{
-							if (ref.portalIndex == static_cast<uint16>(m_selectedPortalIndex))
-							{
-								if (groupA < 0)
-								{
-									groupA = static_cast<int32>(gi);
-								}
-								else
-								{
-									groupB = static_cast<int32>(gi);
-								}
-								break;
-							}
+							portal->SetDimensions(width, height);
+							UpdatePortalVisualizations();
 						}
 					}
-				}
-
-				// Group A selection
-				String groupAPreview = "(none)";
-				if (groupA >= 0 && groupA < static_cast<int32>(m_worldModel->GetGroupCount()))
-				{
-					const auto* grpA = m_worldModel->GetGroup(groupA);
-					if (grpA)
+					if (ImGui::DragFloat("Height##portal", &height, 0.1f, 0.1f, 100.0f, "%.2f"))
 					{
-						groupAPreview = grpA->GetName();
-						if (groupAPreview.empty())
+						if (height > 0.0f)
 						{
-							groupAPreview = "Group " + std::to_string(groupA);
+							portal->SetDimensions(width, height);
+							UpdatePortalVisualizations();
 						}
 					}
-				}
-				
-				if (ImGui::BeginCombo("Group A##portalgrp", groupAPreview.c_str()))
-				{
+
+					ImGui::Spacing();
+
+					// Settings section
+					ImGui::Text("Settings");
+					ImGui::Separator();
+
+					// Portal type
+					PortalType ptype = portal->GetPortalType();
+					int ptypeInt = static_cast<int>(ptype);
+					const char* typeNames[] = { "One-Way", "Two-Way" };
+					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
+					if (ImGui::Combo("Type##portal", &ptypeInt, typeNames, 2))
+					{
+						portal->SetPortalType(static_cast<PortalType>(ptypeInt));
+					}
+					ImGui::PopStyleColor();
+
+					// Active state
+					bool active = portal->IsActive();
+					if (ImGui::Checkbox("Active##portal", &active))
+					{
+						portal->SetActive(active);
+					}
+
+					ImGui::Spacing();
+
+					// Connected groups section
+					ImGui::Text("Connected Groups");
+					ImGui::Separator();
+
+					// Find which groups reference this portal
+					int32 groupA = -1, groupB = -1;
 					for (size_t gi = 0; gi < m_worldModel->GetGroupCount(); ++gi)
 					{
-						const auto* grp = m_worldModel->GetGroup(gi);
-						if (grp && static_cast<int32>(gi) != groupB)
+						auto* grp = m_worldModel->GetGroup(gi);
+						if (grp)
 						{
-							String itemLabel = grp->GetName();
-							if (itemLabel.empty())
+							for (const auto& ref : grp->GetPortalRefs())
 							{
-								itemLabel = "Group " + std::to_string(gi);
-							}
-							itemLabel += "##grpA" + std::to_string(gi);
-							
-							if (ImGui::Selectable(itemLabel.c_str(), groupA == static_cast<int32>(gi)))
-							{
-								// Update portal references
-								UpdatePortalGroupConnection(m_selectedPortalIndex, groupA, static_cast<int32>(gi), groupB);
+								if (ref.portalIndex == static_cast<uint16>(m_selectedPortalIndex))
+								{
+									if (groupA < 0)
+									{
+										groupA = static_cast<int32>(gi);
+									}
+									else
+									{
+										groupB = static_cast<int32>(gi);
+									}
+									break;
+								}
 							}
 						}
 					}
-					ImGui::EndCombo();
+
+					// Group A selection
+					String groupAPreview = "(none)";
+					if (groupA >= 0 && groupA < static_cast<int32>(m_worldModel->GetGroupCount()))
+					{
+						const auto* grpA = m_worldModel->GetGroup(groupA);
+						if (grpA)
+						{
+							groupAPreview = grpA->GetName().empty() ? "Group " + std::to_string(groupA) : grpA->GetName();
+						}
+					}
+
+					ImGui::Text("Group A:");
+					ImGui::SameLine();
+					ImGui::SetNextItemWidth(-1);
+					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
+					if (ImGui::BeginCombo("##portalGrpA", groupAPreview.c_str()))
+					{
+						for (size_t gi = 0; gi < m_worldModel->GetGroupCount(); ++gi)
+						{
+							const auto* grp = m_worldModel->GetGroup(gi);
+							if (grp && static_cast<int32>(gi) != groupB)
+							{
+								String itemLabel = grp->GetName().empty() ? "Group " + std::to_string(gi) : grp->GetName();
+								itemLabel += "##grpA" + std::to_string(gi);
+
+								if (ImGui::Selectable(itemLabel.c_str(), groupA == static_cast<int32>(gi)))
+								{
+									UpdatePortalGroupConnection(m_selectedPortalIndex, groupA, static_cast<int32>(gi), groupB);
+								}
+							}
+						}
+						ImGui::EndCombo();
+					}
+					ImGui::PopStyleColor();
+
+					// Group B selection
+					String groupBPreview = "(none)";
+					if (groupB >= 0 && groupB < static_cast<int32>(m_worldModel->GetGroupCount()))
+					{
+						const auto* grpB = m_worldModel->GetGroup(groupB);
+						if (grpB)
+						{
+							groupBPreview = grpB->GetName().empty() ? "Group " + std::to_string(groupB) : grpB->GetName();
+						}
+					}
+
+					ImGui::Text("Group B:");
+					ImGui::SameLine();
+					ImGui::SetNextItemWidth(-1);
+					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
+					if (ImGui::BeginCombo("##portalGrpB", groupBPreview.c_str()))
+					{
+						for (size_t gi = 0; gi < m_worldModel->GetGroupCount(); ++gi)
+						{
+							const auto* grp = m_worldModel->GetGroup(gi);
+							if (grp && static_cast<int32>(gi) != groupA)
+							{
+								String itemLabel = grp->GetName().empty() ? "Group " + std::to_string(gi) : grp->GetName();
+								itemLabel += "##grpB" + std::to_string(gi);
+
+								if (ImGui::Selectable(itemLabel.c_str(), groupB == static_cast<int32>(gi)))
+								{
+									UpdatePortalGroupConnection(m_selectedPortalIndex, groupA, groupA, static_cast<int32>(gi));
+								}
+							}
+						}
+						ImGui::EndCombo();
+					}
+					ImGui::PopStyleColor();
+
+					ImGui::Spacing();
+
+					// Delete button
+					ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 0.8f));
+					ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.9f));
+					ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.4f, 0.4f, 1.0f));
+					if (ImGui::Button("Delete Selected", ImVec2(-1, 0)))
+					{
+						RemovePortal(m_selectedPortalIndex);
+					}
+					ImGui::PopStyleColor(3);
 				}
 
-				// Group B selection
-				String groupBPreview = "(none)";
-				if (groupB >= 0 && groupB < static_cast<int32>(m_worldModel->GetGroupCount()))
-				{
-					const auto* grpB = m_worldModel->GetGroup(groupB);
-					if (grpB)
-					{
-						groupBPreview = grpB->GetName();
-						if (groupBPreview.empty())
-						{
-							groupBPreview = "Group " + std::to_string(groupB);
-						}
-					}
-				}
-				
-				if (ImGui::BeginCombo("Group B##portalgrp", groupBPreview.c_str()))
-				{
-					for (size_t gi = 0; gi < m_worldModel->GetGroupCount(); ++gi)
-					{
-						const auto* grp = m_worldModel->GetGroup(gi);
-						if (grp && static_cast<int32>(gi) != groupA)
-						{
-							String itemLabel = grp->GetName();
-							if (itemLabel.empty())
-							{
-								itemLabel = "Group " + std::to_string(gi);
-							}
-							itemLabel += "##grpB" + std::to_string(gi);
-							
-							if (ImGui::Selectable(itemLabel.c_str(), groupB == static_cast<int32>(gi)))
-							{
-								// Update portal references
-								UpdatePortalGroupConnection(m_selectedPortalIndex, groupA, groupA, static_cast<int32>(gi));
-							}
-						}
-					}
-					ImGui::EndCombo();
-				}
-			}
-
-			ImGui::Separator();
-			if (ImGui::Button("Delete Selected Portal"))
-			{
-				RemovePortal(m_selectedPortalIndex);
+				ImGui::Unindent();
 			}
 		}
+
+		ImGui::PopStyleVar(2);
 	}
 
 	void WorldModelEditorInstance::DrawMeshRefsPanel(int32 groupIndex)
 	{
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 4));
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6, 6));
+
 		if (!m_worldModel || groupIndex < 0 || groupIndex >= static_cast<int32>(m_worldModel->GetGroupCount()))
 		{
-			ImGui::Text("Select a group first");
+			ImGui::TextDisabled("Select a group to manage meshes");
+			ImGui::PopStyleVar(2);
 			return;
 		}
 
 		auto* group = m_worldModel->GetGroup(groupIndex);
 		if (!group)
 		{
+			ImGui::PopStyleVar(2);
 			return;
 		}
 
-		ImGui::Text("Meshes in '%s':", group->GetName().c_str());
-		ImGui::Separator();
+		// Header with group name and mesh count
+		const auto& meshRefs = group->GetMeshRefs();
+		ImGui::Text("Group: %s", group->GetName().empty() ? "(unnamed)" : group->GetName().c_str());
+		ImGui::SameLine();
+		ImGui::TextDisabled("(%zu meshes)", meshRefs.size());
 
-		// Add mesh button
-		if (ImGui::Button("Add Mesh..."))
+		ImGui::Spacing();
+
+		// Action buttons
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.3f, 0.8f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.4f, 0.9f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.8f, 0.5f, 1.0f));
+		if (ImGui::Button("+ Add Mesh", ImVec2(-1, 0)))
 		{
 			m_showAddMeshRefDialog = true;
 			std::memset(m_addMeshRefPath, 0, sizeof(m_addMeshRefPath));
 			std::memset(m_addMeshRefName, 0, sizeof(m_addMeshRefName));
 		}
+		ImGui::PopStyleColor(3);
 
-		// Drag-drop target for mesh files
-		ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Drop .hmsh files here to add");
+		// Drag-drop hint
+		ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.18f, 0.5f));
+		ImGui::BeginChild("DragDropHint", ImVec2(-1, 24), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+		ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Drop .hmsh files here to add");
+		ImGui::EndChild();
+		ImGui::PopStyleColor();
+		
 		if (ImGui::BeginDragDropTarget())
 		{
 			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
@@ -3157,164 +3550,463 @@ namespace mmo
 			ImGui::EndDragDropTarget();
 		}
 
-		// List mesh references
-		const auto& meshRefs = group->GetMeshRefs();
-		for (size_t i = 0; i < meshRefs.size(); ++i)
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		// Search filter
+		ImGui::Text("Search:");
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(-1);
+		ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
+		ImGui::InputTextWithHint("##meshSearch", "Filter meshes...", m_meshRefSearchFilter, sizeof(m_meshRefSearchFilter));
+		ImGui::PopStyleColor();
+
+		ImGui::Spacing();
+
+		// Mesh list with collapsible items
+		if (ImGui::CollapsingHeader("Mesh List", ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			const auto& meshRef = meshRefs[i];
-			ImGui::PushID(static_cast<int>(i));
+			ImGui::Indent();
 
-			bool isSelected = m_selectedMeshRefIndex == static_cast<int32>(i);
-			String label = meshRef.name;
-			if (label.empty())
+			if (meshRefs.empty())
 			{
-				label = meshRef.meshPath;
-				// Extract just the filename
-				size_t lastSlash = label.find_last_of("/\\");
-				if (lastSlash != String::npos)
-				{
-					label = label.substr(lastSlash + 1);
-				}
+				ImGui::TextDisabled("No meshes in this group");
 			}
-
-			if (ImGui::Selectable(label.c_str(), isSelected))
+			else
 			{
-				m_selectedMeshRefIndex = static_cast<int32>(i);
-				m_selection.Clear();
-				
-				// Select this mesh for transform editing
-				if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
+				// Convert search filter to lowercase for case-insensitive matching
+				String searchLower = m_meshRefSearchFilter;
+				std::transform(searchLower.begin(), searchLower.end(), searchLower.begin(), ::tolower);
+
+				int visibleCount = 0;
+				for (size_t i = 0; i < meshRefs.size(); ++i)
 				{
-					auto& groupViz = m_groupVisualizations[groupIndex];
-					if (i < groupViz.meshRefVisualizations.size() && groupViz.meshRefVisualizations[i].node)
+					const auto& meshRef = meshRefs[i];
+
+					// Get display label
+					String label = meshRef.name;
+					if (label.empty())
 					{
-						m_selection.AddSelectable(std::make_unique<SelectedGroupMesh>(*group, i, *groupViz.meshRefVisualizations[i].node));
+						label = meshRef.meshPath;
+						size_t lastSlash = label.find_last_of("/\\");
+						if (lastSlash != String::npos)
+						{
+							label = label.substr(lastSlash + 1);
+						}
 					}
-				}
-			}
 
-			// Context menu
-			if (ImGui::BeginPopupContextItem())
-			{
-				if (ImGui::MenuItem("Duplicate"))
-				{
-					WorldModelMeshRef newRef = meshRef;
-					newRef.name = meshRef.name + "_copy";
-					newRef.position += Vector3(1.0f, 0.0f, 0.0f);
-					group->AddMeshRef(newRef);
-					UpdateMeshRefVisualizations(groupIndex);
-				}
-				if (ImGui::MenuItem("Delete"))
-				{
-					RemoveMeshRefFromGroup(groupIndex, i);
-					ImGui::EndPopup();
+					// Apply search filter
+					if (!searchLower.empty())
+					{
+						String labelLower = label;
+						std::transform(labelLower.begin(), labelLower.end(), labelLower.begin(), ::tolower);
+						String pathLower = meshRef.meshPath;
+						std::transform(pathLower.begin(), pathLower.end(), pathLower.begin(), ::tolower);
+
+						if (labelLower.find(searchLower) == String::npos && 
+							pathLower.find(searchLower) == String::npos)
+						{
+							continue;
+						}
+					}
+
+					visibleCount++;
+					ImGui::PushID(static_cast<int>(i));
+
+					bool isSelected = m_selectedMeshRefIndices.count(i) > 0;
+
+					// Alternating row colors for better readability
+					if (visibleCount % 2 == 0)
+					{
+						ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.18f, 0.18f, 0.2f, 1.0f));
+					}
+					else
+					{
+						ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.15f, 0.15f, 0.17f, 1.0f));
+					}
+
+					// Visibility checkbox first
+					if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size() && 
+						i < m_groupVisualizations[groupIndex].meshRefVisualizations.size())
+					{
+						bool visible = m_groupVisualizations[groupIndex].meshRefVisualizations[i].visible;
+						if (ImGui::Checkbox("##vis", &visible))
+						{
+							m_groupVisualizations[groupIndex].meshRefVisualizations[i].visible = visible;
+							if (m_groupVisualizations[groupIndex].meshRefVisualizations[i].entity)
+							{
+								m_groupVisualizations[groupIndex].meshRefVisualizations[i].entity->SetVisible(visible);
+							}
+						}
+						ImGui::SameLine();
+					}
+
+					// Selectable item with multi-select support
+					if (ImGui::Selectable(label.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns))
+					{
+						const bool ctrlPressed = ImGui::GetIO().KeyCtrl;
+						const bool shiftPressed = ImGui::GetIO().KeyShift;
+
+						if (ctrlPressed)
+						{
+							// Toggle selection of this item
+							if (m_selectedMeshRefIndices.count(i) > 0)
+							{
+								m_selectedMeshRefIndices.erase(i);
+							}
+							else
+							{
+								m_selectedMeshRefIndices.insert(i);
+							}
+						}
+						else if (shiftPressed && m_selectedMeshRefIndex >= 0)
+						{
+							// Range selection from last selected to current
+							size_t start = static_cast<size_t>(m_selectedMeshRefIndex);
+							size_t end = i;
+							if (start > end)
+							{
+								std::swap(start, end);
+							}
+							for (size_t j = start; j <= end; ++j)
+							{
+								m_selectedMeshRefIndices.insert(j);
+							}
+						}
+						else
+						{
+							// Single selection - clear previous and select only this
+							m_selectedMeshRefIndices.clear();
+							m_selectedMeshRefIndices.insert(i);
+						}
+
+						m_selectedMeshRefIndex = static_cast<int32>(i);
+						m_selection.Clear();
+						
+						if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
+						{
+							auto& groupViz = m_groupVisualizations[groupIndex];
+							if (i < groupViz.meshRefVisualizations.size() && groupViz.meshRefVisualizations[i].node)
+							{
+								m_selection.AddSelectable(std::make_unique<SelectedGroupMesh>(*group, i, *groupViz.meshRefVisualizations[i].node));
+							}
+						}
+					}
+
+					ImGui::PopStyleColor();
+
+					// Context menu
+					if (ImGui::BeginPopupContextItem())
+					{
+						const bool hasMultiSelection = m_selectedMeshRefIndices.size() > 1;
+						
+						if (hasMultiSelection)
+						{
+							ImGui::TextDisabled("(%zu items selected)", m_selectedMeshRefIndices.size());
+							ImGui::Separator();
+						}
+
+						if (ImGui::MenuItem("Focus (F)"))
+						{
+							m_cameraAnchor->SetPosition(meshRef.position);
+							m_cameraVelocity = Vector3::Zero;
+						}
+						ImGui::Separator();
+
+						// Move to group submenu (only for multi-group WMOs)
+						if (m_worldModel->GetGroupCount() > 1)
+						{
+							if (ImGui::BeginMenu(hasMultiSelection ? "Move Selected to Group" : "Move to Group"))
+							{
+								for (size_t gi = 0; gi < m_worldModel->GetGroupCount(); ++gi)
+								{
+									if (static_cast<int32>(gi) == groupIndex)
+									{
+										continue; // Skip current group
+									}
+									
+									auto* targetGroup = m_worldModel->GetGroup(static_cast<int32>(gi));
+									if (targetGroup)
+									{
+										String groupLabel = targetGroup->GetName().empty() ? 
+											"Group " + std::to_string(gi) : targetGroup->GetName();
+										if (ImGui::MenuItem(groupLabel.c_str()))
+										{
+											if (hasMultiSelection)
+											{
+												MoveMeshRefsToGroup(groupIndex, static_cast<int32>(gi), m_selectedMeshRefIndices);
+											}
+											else
+											{
+												std::set<size_t> singleSelection;
+												singleSelection.insert(i);
+												MoveMeshRefsToGroup(groupIndex, static_cast<int32>(gi), singleSelection);
+											}
+											ImGui::EndMenu();
+											ImGui::EndPopup();
+											ImGui::PopID();
+											break;
+										}
+									}
+								}
+								ImGui::EndMenu();
+							}
+							ImGui::Separator();
+						}
+
+						if (!hasMultiSelection && ImGui::MenuItem("Duplicate"))
+						{
+							WorldModelMeshRef newRef = meshRef;
+							newRef.name = GenerateUniqueMeshRefName(*group, meshRef.name.empty() ? label : meshRef.name);
+							newRef.position += Vector3(1.0f, 0.0f, 0.0f);
+							group->AddMeshRef(newRef);
+							UpdateMeshRefVisualizations(groupIndex);
+						}
+						ImGui::Separator();
+						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
+						if (hasMultiSelection)
+						{
+							if (ImGui::MenuItem("Delete Selected"))
+							{
+								RemoveMultipleMeshRefsFromGroup(groupIndex, m_selectedMeshRefIndices);
+								ImGui::PopStyleColor();
+								ImGui::EndPopup();
+								ImGui::PopID();
+								break;
+							}
+						}
+						else
+						{
+							if (ImGui::MenuItem("Delete"))
+							{
+								RemoveMeshRefFromGroup(groupIndex, i);
+								ImGui::PopStyleColor();
+								ImGui::EndPopup();
+								ImGui::PopID();
+								break;
+							}
+						}
+						ImGui::PopStyleColor();
+						ImGui::EndPopup();
+					}
+
+					// Tooltip with full path
+					if (ImGui::IsItemHovered())
+					{
+						ImGui::BeginTooltip();
+						ImGui::Text("Path: %s", meshRef.meshPath.c_str());
+						ImGui::Text("Position: %.2f, %.2f, %.2f", meshRef.position.x, meshRef.position.y, meshRef.position.z);
+						ImGui::EndTooltip();
+					}
+
 					ImGui::PopID();
-					break;
 				}
-				ImGui::EndPopup();
-			}
 
-			// Visibility toggle
-			ImGui::SameLine();
-			if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size() && 
-				i < m_groupVisualizations[groupIndex].meshRefVisualizations.size())
-			{
-				bool visible = m_groupVisualizations[groupIndex].meshRefVisualizations[i].visible;
-				if (ImGui::Checkbox("##vis", &visible))
+				if (visibleCount == 0 && !searchLower.empty())
 				{
-					m_groupVisualizations[groupIndex].meshRefVisualizations[i].visible = visible;
-					if (m_groupVisualizations[groupIndex].meshRefVisualizations[i].entity)
-					{
-						m_groupVisualizations[groupIndex].meshRefVisualizations[i].entity->SetVisible(visible);
-					}
+					ImGui::TextDisabled("No meshes match '%s'", m_meshRefSearchFilter);
 				}
 			}
 
-			ImGui::PopID();
+			ImGui::Unindent();
 		}
 
-		// Selected mesh properties
-		if (m_selectedMeshRefIndex >= 0 && m_selectedMeshRefIndex < static_cast<int32>(meshRefs.size()))
+		// Multi-selection actions section
+		if (m_selectedMeshRefIndices.size() > 1)
 		{
-			ImGui::Separator();
-			ImGui::Text("Properties:");
+			ImGui::Spacing();
 
-			auto* selectedRef = group->GetMeshRef(m_selectedMeshRefIndex);
-			if (selectedRef)
+			if (ImGui::CollapsingHeader("Bulk Actions", ImGuiTreeNodeFlags_DefaultOpen))
 			{
-				// Name
-				char nameBuffer[256];
-				std::strncpy(nameBuffer, selectedRef->name.c_str(), sizeof(nameBuffer) - 1);
-				nameBuffer[sizeof(nameBuffer) - 1] = '\0';
-				if (ImGui::InputText("Name##meshref", nameBuffer, sizeof(nameBuffer)))
-				{
-					selectedRef->name = nameBuffer;
-				}
+				ImGui::Indent();
 
-				// Position
-				float pos[3] = { selectedRef->position.x, selectedRef->position.y, selectedRef->position.z };
-				if (ImGui::DragFloat3("Position##meshref", pos, 0.1f))
+				ImGui::TextDisabled("%zu meshes selected", m_selectedMeshRefIndices.size());
+				ImGui::Spacing();
+
+				// Select All / Deselect All buttons
+				if (ImGui::Button("Select All", ImVec2(100, 0)))
 				{
-					selectedRef->position = Vector3(pos[0], pos[1], pos[2]);
-					// Update visualization
-					if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
+					m_selectedMeshRefIndices.clear();
+					for (size_t idx = 0; idx < meshRefs.size(); ++idx)
 					{
-						auto& groupViz = m_groupVisualizations[groupIndex];
-						if (static_cast<size_t>(m_selectedMeshRefIndex) < groupViz.meshRefVisualizations.size() &&
-							groupViz.meshRefVisualizations[m_selectedMeshRefIndex].node)
-						{
-							groupViz.meshRefVisualizations[m_selectedMeshRefIndex].node->SetPosition(selectedRef->position);
-						}
+						m_selectedMeshRefIndices.insert(idx);
 					}
 				}
-
-				// Scale
-				float scl[3] = { selectedRef->scale.x, selectedRef->scale.y, selectedRef->scale.z };
-				if (ImGui::DragFloat3("Scale##meshref", scl, 0.01f, 0.01f, 100.0f))
+				ImGui::SameLine();
+				if (ImGui::Button("Deselect All", ImVec2(100, 0)))
 				{
-					selectedRef->scale = Vector3(scl[0], scl[1], scl[2]);
-					// Update visualization
-					if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
-					{
-						auto& groupViz = m_groupVisualizations[groupIndex];
-						if (static_cast<size_t>(m_selectedMeshRefIndex) < groupViz.meshRefVisualizations.size() &&
-							groupViz.meshRefVisualizations[m_selectedMeshRefIndex].node)
-						{
-							groupViz.meshRefVisualizations[m_selectedMeshRefIndex].node->SetScale(selectedRef->scale);
-						}
-					}
+					m_selectedMeshRefIndices.clear();
+					m_selectedMeshRefIndex = -1;
 				}
 
-				// Material override
-				char matBuffer[512];
-				std::strncpy(matBuffer, selectedRef->materialOverride.c_str(), sizeof(matBuffer) - 1);
-				matBuffer[sizeof(matBuffer) - 1] = '\0';
-				if (ImGui::InputText("Material##meshref", matBuffer, sizeof(matBuffer)))
+				ImGui::Spacing();
+
+				// Move to group combo
+				if (m_worldModel->GetGroupCount() > 1)
 				{
-					selectedRef->materialOverride = matBuffer;
-					// Apply the material override
-					if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
+					ImGui::Text("Move to Group:");
+					ImGui::SameLine();
+					ImGui::SetNextItemWidth(150);
+					if (ImGui::BeginCombo("##moveTargetGroup", "Select group..."))
 					{
-						auto& groupViz = m_groupVisualizations[groupIndex];
-						if (static_cast<size_t>(m_selectedMeshRefIndex) < groupViz.meshRefVisualizations.size() &&
-							groupViz.meshRefVisualizations[m_selectedMeshRefIndex].entity)
+						for (size_t gi = 0; gi < m_worldModel->GetGroupCount(); ++gi)
 						{
-							if (!selectedRef->materialOverride.empty())
+							if (static_cast<int32>(gi) == groupIndex)
 							{
-								auto material = MaterialManager::Get().Load(selectedRef->materialOverride);
-								if (material)
+								continue;
+							}
+
+							auto* targetGroup = m_worldModel->GetGroup(static_cast<int32>(gi));
+							if (targetGroup)
+							{
+								String groupLabel = targetGroup->GetName().empty() ? 
+									"Group " + std::to_string(gi) : targetGroup->GetName();
+								if (ImGui::Selectable(groupLabel.c_str()))
 								{
-									groupViz.meshRefVisualizations[m_selectedMeshRefIndex].entity->SetMaterial(material);
+									MoveMeshRefsToGroup(groupIndex, static_cast<int32>(gi), m_selectedMeshRefIndices);
+								}
+							}
+						}
+						ImGui::EndCombo();
+					}
+
+					ImGui::Spacing();
+				}
+
+				// Delete selected button
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 0.8f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.9f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.4f, 0.4f, 1.0f));
+				if (ImGui::Button("Delete Selected", ImVec2(-1, 0)))
+				{
+					RemoveMultipleMeshRefsFromGroup(groupIndex, m_selectedMeshRefIndices);
+				}
+				ImGui::PopStyleColor(3);
+
+				ImGui::Unindent();
+			}
+		}
+
+		// Selected mesh properties section (only show for single selection)
+		if (m_selectedMeshRefIndices.size() == 1 && m_selectedMeshRefIndex >= 0 && m_selectedMeshRefIndex < static_cast<int32>(meshRefs.size()))
+		{
+			ImGui::Spacing();
+
+			if (ImGui::CollapsingHeader("Selected Mesh Properties", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				ImGui::Indent();
+
+				auto* selectedRef = group->GetMeshRef(m_selectedMeshRefIndex);
+				if (selectedRef)
+				{
+					// Name field
+					ImGui::Text("Name:");
+					ImGui::SameLine();
+					char nameBuffer[256];
+					std::strncpy(nameBuffer, selectedRef->name.c_str(), sizeof(nameBuffer) - 1);
+					nameBuffer[sizeof(nameBuffer) - 1] = '\0';
+					ImGui::SetNextItemWidth(-1);
+					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
+					if (ImGui::InputText("##meshrefName", nameBuffer, sizeof(nameBuffer)))
+					{
+						selectedRef->name = nameBuffer;
+					}
+					ImGui::PopStyleColor();
+
+					ImGui::Spacing();
+
+					// Transform section
+					ImGui::Text("Transform");
+					ImGui::Separator();
+
+					// Position
+					float pos[3] = { selectedRef->position.x, selectedRef->position.y, selectedRef->position.z };
+					if (ImGui::DragFloat3("Position##meshref", pos, 0.1f))
+					{
+						selectedRef->position = Vector3(pos[0], pos[1], pos[2]);
+						if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
+						{
+							auto& groupViz = m_groupVisualizations[groupIndex];
+							if (static_cast<size_t>(m_selectedMeshRefIndex) < groupViz.meshRefVisualizations.size() &&
+								groupViz.meshRefVisualizations[m_selectedMeshRefIndex].node)
+							{
+								groupViz.meshRefVisualizations[m_selectedMeshRefIndex].node->SetPosition(selectedRef->position);
+							}
+						}
+					}
+
+					// Scale
+					float scl[3] = { selectedRef->scale.x, selectedRef->scale.y, selectedRef->scale.z };
+					if (ImGui::DragFloat3("Scale##meshref", scl, 0.01f, 0.01f, 100.0f))
+					{
+						selectedRef->scale = Vector3(scl[0], scl[1], scl[2]);
+						if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
+						{
+							auto& groupViz = m_groupVisualizations[groupIndex];
+							if (static_cast<size_t>(m_selectedMeshRefIndex) < groupViz.meshRefVisualizations.size() &&
+								groupViz.meshRefVisualizations[m_selectedMeshRefIndex].node)
+							{
+								groupViz.meshRefVisualizations[m_selectedMeshRefIndex].node->SetScale(selectedRef->scale);
+							}
+						}
+					}
+
+					ImGui::Spacing();
+
+					// Material section
+					ImGui::Text("Material Override");
+					ImGui::Separator();
+					char matBuffer[512];
+					std::strncpy(matBuffer, selectedRef->materialOverride.c_str(), sizeof(matBuffer) - 1);
+					matBuffer[sizeof(matBuffer) - 1] = '\0';
+					ImGui::SetNextItemWidth(-1);
+					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
+					if (ImGui::InputText("##meshrefMat", matBuffer, sizeof(matBuffer)))
+					{
+						selectedRef->materialOverride = matBuffer;
+						if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
+						{
+							auto& groupViz = m_groupVisualizations[groupIndex];
+							if (static_cast<size_t>(m_selectedMeshRefIndex) < groupViz.meshRefVisualizations.size() &&
+								groupViz.meshRefVisualizations[m_selectedMeshRefIndex].entity)
+							{
+								if (!selectedRef->materialOverride.empty())
+								{
+									auto material = MaterialManager::Get().Load(selectedRef->materialOverride);
+									if (material)
+									{
+										groupViz.meshRefVisualizations[m_selectedMeshRefIndex].entity->SetMaterial(material);
+									}
 								}
 							}
 						}
 					}
+					ImGui::PopStyleColor();
+
+					ImGui::Spacing();
+
+					// Source mesh (read-only)
+					ImGui::TextDisabled("Source: %s", selectedRef->meshPath.c_str());
+
+					ImGui::Spacing();
+
+					// Action buttons
+					ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 0.8f));
+					ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.9f));
+					ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.4f, 0.4f, 1.0f));
+					if (ImGui::Button("Delete Selected", ImVec2(-1, 0)))
+					{
+						RemoveMeshRefFromGroup(groupIndex, m_selectedMeshRefIndex);
+					}
+					ImGui::PopStyleColor(3);
 				}
 
-				// Mesh path (read-only)
-				ImGui::TextDisabled("Mesh: %s", selectedRef->meshPath.c_str());
+				ImGui::Unindent();
 			}
 		}
+
+		ImGui::PopStyleVar(2);
 
 		// Add mesh dialog
 		if (m_showAddMeshRefDialog)
@@ -3322,12 +4014,20 @@ namespace mmo
 			ImGui::OpenPopup("Add Mesh Reference");
 		}
 
-		if (ImGui::BeginPopupModal("Add Mesh Reference", &m_showAddMeshRefDialog))
+		if (ImGui::BeginPopupModal("Add Mesh Reference", &m_showAddMeshRefDialog, ImGuiWindowFlags_AlwaysAutoResize))
 		{
-			ImGui::InputText("Mesh Path##add", m_addMeshRefPath, sizeof(m_addMeshRefPath));
-			ImGui::InputText("Name##add", m_addMeshRefName, sizeof(m_addMeshRefName));
+			ImGui::Text("Mesh Path:");
+			ImGui::SetNextItemWidth(350);
+			ImGui::InputText("##addMeshPath", m_addMeshRefPath, sizeof(m_addMeshRefPath));
 
-			// Drag-drop target for mesh files
+			ImGui::Spacing();
+
+			ImGui::Text("Display Name (optional):");
+			ImGui::SetNextItemWidth(350);
+			ImGui::InputText("##addMeshName", m_addMeshRefName, sizeof(m_addMeshRefName));
+			ImGui::TextDisabled("Leave empty to auto-generate from mesh filename");
+
+			// Drag-drop target
 			if (ImGui::BeginDragDropTarget())
 			{
 				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_PATH"))
@@ -3338,8 +4038,13 @@ namespace mmo
 				ImGui::EndDragDropTarget();
 			}
 
+			ImGui::Spacing();
 			ImGui::Separator();
+			ImGui::Spacing();
 
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.3f, 0.8f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.4f, 0.9f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.8f, 0.5f, 1.0f));
 			if (ImGui::Button("Add", ImVec2(120, 0)))
 			{
 				if (std::strlen(m_addMeshRefPath) > 0)
@@ -3348,6 +4053,8 @@ namespace mmo
 					m_showAddMeshRefDialog = false;
 				}
 			}
+			ImGui::PopStyleColor(3);
+
 			ImGui::SameLine();
 			if (ImGui::Button("Cancel", ImVec2(120, 0)))
 			{
@@ -3360,139 +4067,268 @@ namespace mmo
 
 	void WorldModelEditorInstance::DrawChildWMOsPanel()
 	{
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 4));
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6, 6));
+
 		if (!m_worldModel)
 		{
-			ImGui::Text("No world model loaded");
+			ImGui::TextDisabled("No world model loaded");
+			ImGui::PopStyleVar(2);
 			return;
 		}
 
-		ImGui::Text("Child WMO References:");
-		ImGui::Separator();
+		// Header with count
+		const auto& childRefs = m_worldModel->GetChildRefs();
+		ImGui::Text("Child WMO References");
+		ImGui::SameLine();
+		ImGui::TextDisabled("(%zu)", childRefs.size());
+
+		ImGui::Spacing();
 
 		// Add child WMO button
-		if (ImGui::Button("Add Child WMO..."))
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.3f, 0.8f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.4f, 0.9f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.8f, 0.5f, 1.0f));
+		if (ImGui::Button("+ Add Child WMO", ImVec2(-1, 0)))
 		{
 			m_showAddChildWMODialog = true;
 			std::memset(m_addChildWMOPath, 0, sizeof(m_addChildWMOPath));
 			std::memset(m_addChildWMOName, 0, sizeof(m_addChildWMOName));
 		}
+		ImGui::PopStyleColor(3);
+
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		// Search filter
+		ImGui::Text("Search:");
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(-1);
+		ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
+		ImGui::InputTextWithHint("##childWmoSearch", "Filter child WMOs...", m_childWMOSearchFilter, sizeof(m_childWMOSearchFilter));
+		ImGui::PopStyleColor();
+
+		ImGui::Spacing();
 
 		// List child WMO references
-		const auto& childRefs = m_worldModel->GetChildRefs();
-		for (size_t i = 0; i < childRefs.size(); ++i)
+		if (ImGui::CollapsingHeader("Child WMO List", ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			const auto& childRef = childRefs[i];
-			ImGui::PushID(static_cast<int>(i));
+			ImGui::Indent();
 
-			bool isSelected = m_selectedChildWMOIndex == static_cast<int32>(i);
-			String label = childRef.name;
-			if (label.empty())
+			if (childRefs.empty())
 			{
-				label = childRef.wmoPath;
-				// Extract just the filename
-				size_t lastSlash = label.find_last_of("/\\");
-				if (lastSlash != String::npos)
-				{
-					label = label.substr(lastSlash + 1);
-				}
+				ImGui::TextDisabled("No child WMOs");
 			}
-
-			if (ImGui::Selectable(label.c_str(), isSelected))
+			else
 			{
-				m_selectedChildWMOIndex = static_cast<int32>(i);
-				m_selection.Clear();
-				
-				// Select this child WMO for transform editing
-				if (i < m_childWMOVisualizations.size() && m_childWMOVisualizations[i].node)
-				{
-					m_selection.AddSelectable(std::make_unique<SelectedChildWMO>(*m_worldModel, i, *m_childWMOVisualizations[i].node));
-				}
-			}
+				// Convert search filter to lowercase for case-insensitive matching
+				String searchLower = m_childWMOSearchFilter;
+				std::transform(searchLower.begin(), searchLower.end(), searchLower.begin(), ::tolower);
 
-			// Context menu
-			if (ImGui::BeginPopupContextItem())
-			{
-				if (ImGui::MenuItem("Duplicate"))
+				int visibleCount = 0;
+				for (size_t i = 0; i < childRefs.size(); ++i)
 				{
-					WorldModelChildRef newRef = childRef;
-					newRef.name = childRef.name + "_copy";
-					newRef.position += Vector3(5.0f, 0.0f, 0.0f);
-					m_worldModel->AddChildRef(newRef);
-					UpdateChildWMOVisualizations();
-				}
-				if (ImGui::MenuItem("Delete"))
-				{
-					RemoveChildWMO(i);
-					ImGui::EndPopup();
+					const auto& childRef = childRefs[i];
+
+					// Get display label
+					String label = childRef.name;
+					if (label.empty())
+					{
+						label = childRef.wmoPath;
+						size_t lastSlash = label.find_last_of("/\\");
+						if (lastSlash != String::npos)
+						{
+							label = label.substr(lastSlash + 1);
+						}
+					}
+
+					// Apply search filter
+					if (!searchLower.empty())
+					{
+						String labelLower = label;
+						std::transform(labelLower.begin(), labelLower.end(), labelLower.begin(), ::tolower);
+						String pathLower = childRef.wmoPath;
+						std::transform(pathLower.begin(), pathLower.end(), pathLower.begin(), ::tolower);
+
+						if (labelLower.find(searchLower) == String::npos && 
+							pathLower.find(searchLower) == String::npos)
+						{
+							continue;
+						}
+					}
+
+					visibleCount++;
+					ImGui::PushID(static_cast<int>(i));
+
+					bool isSelected = m_selectedChildWMOIndex == static_cast<int32>(i);
+
+					// Alternating row colors
+					if (visibleCount % 2 == 0)
+					{
+						ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.18f, 0.18f, 0.2f, 1.0f));
+					}
+					else
+					{
+						ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.15f, 0.15f, 0.17f, 1.0f));
+					}
+
+					// Visibility checkbox first
+					if (i < m_childWMOVisualizations.size())
+					{
+						bool visible = m_childWMOVisualizations[i].visible;
+						if (ImGui::Checkbox("##vis", &visible))
+						{
+							m_childWMOVisualizations[i].visible = visible;
+						}
+						ImGui::SameLine();
+					}
+
+					// Selectable item
+					if (ImGui::Selectable(label.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns))
+					{
+						m_selectedChildWMOIndex = static_cast<int32>(i);
+						m_selection.Clear();
+						
+						if (i < m_childWMOVisualizations.size() && m_childWMOVisualizations[i].node)
+						{
+							m_selection.AddSelectable(std::make_unique<SelectedChildWMO>(*m_worldModel, i, *m_childWMOVisualizations[i].node));
+						}
+					}
+
+					ImGui::PopStyleColor();
+
+					// Context menu
+					if (ImGui::BeginPopupContextItem())
+					{
+						if (ImGui::MenuItem("Focus (F)"))
+						{
+							m_cameraAnchor->SetPosition(childRef.position);
+							m_cameraVelocity = Vector3::Zero;
+						}
+						ImGui::Separator();
+						if (ImGui::MenuItem("Duplicate"))
+						{
+							WorldModelChildRef newRef = childRef;
+							newRef.name = GenerateUniqueChildWMOName(childRef.name.empty() ? label : childRef.name);
+							newRef.position += Vector3(5.0f, 0.0f, 0.0f);
+							m_worldModel->AddChildRef(newRef);
+							UpdateChildWMOVisualizations();
+						}
+						ImGui::Separator();
+						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
+						if (ImGui::MenuItem("Delete"))
+						{
+							RemoveChildWMO(i);
+							ImGui::PopStyleColor();
+							ImGui::EndPopup();
+							ImGui::PopID();
+							break;
+						}
+						ImGui::PopStyleColor();
+						ImGui::EndPopup();
+					}
+
+					// Tooltip with full path
+					if (ImGui::IsItemHovered())
+					{
+						ImGui::BeginTooltip();
+						ImGui::Text("Path: %s", childRef.wmoPath.c_str());
+						ImGui::Text("Position: %.2f, %.2f, %.2f", childRef.position.x, childRef.position.y, childRef.position.z);
+						ImGui::EndTooltip();
+					}
+
 					ImGui::PopID();
-					break;
 				}
-				ImGui::EndPopup();
-			}
 
-			// Visibility toggle
-			ImGui::SameLine();
-			if (i < m_childWMOVisualizations.size())
-			{
-				bool visible = m_childWMOVisualizations[i].visible;
-				if (ImGui::Checkbox("##vis", &visible))
+				if (visibleCount == 0 && !searchLower.empty())
 				{
-					m_childWMOVisualizations[i].visible = visible;
-					// TODO: Update visibility of child WMO entities
+					ImGui::TextDisabled("No child WMOs match '%s'", m_childWMOSearchFilter);
 				}
 			}
 
-			ImGui::PopID();
+			ImGui::Unindent();
 		}
 
 		// Selected child WMO properties
 		if (m_selectedChildWMOIndex >= 0 && m_selectedChildWMOIndex < static_cast<int32>(childRefs.size()))
 		{
-			ImGui::Separator();
-			ImGui::Text("Properties:");
+			ImGui::Spacing();
 
-			auto* selectedRef = m_worldModel->GetChildRef(m_selectedChildWMOIndex);
-			if (selectedRef)
+			if (ImGui::CollapsingHeader("Selected Child WMO Properties", ImGuiTreeNodeFlags_DefaultOpen))
 			{
-				// Name
-				char nameBuffer[256];
-				std::strncpy(nameBuffer, selectedRef->name.c_str(), sizeof(nameBuffer) - 1);
-				nameBuffer[sizeof(nameBuffer) - 1] = '\0';
-				if (ImGui::InputText("Name##childwmo", nameBuffer, sizeof(nameBuffer)))
-				{
-					selectedRef->name = nameBuffer;
-				}
+				ImGui::Indent();
 
-				// Position
-				float pos[3] = { selectedRef->position.x, selectedRef->position.y, selectedRef->position.z };
-				if (ImGui::DragFloat3("Position##childwmo", pos, 0.1f))
+				auto* selectedRef = m_worldModel->GetChildRef(m_selectedChildWMOIndex);
+				if (selectedRef)
 				{
-					selectedRef->position = Vector3(pos[0], pos[1], pos[2]);
-					// Update visualization
-					if (static_cast<size_t>(m_selectedChildWMOIndex) < m_childWMOVisualizations.size() &&
-						m_childWMOVisualizations[m_selectedChildWMOIndex].node)
+					// Name field
+					ImGui::Text("Name:");
+					ImGui::SameLine();
+					char nameBuffer[256];
+					std::strncpy(nameBuffer, selectedRef->name.c_str(), sizeof(nameBuffer) - 1);
+					nameBuffer[sizeof(nameBuffer) - 1] = '\0';
+					ImGui::SetNextItemWidth(-1);
+					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
+					if (ImGui::InputText("##childWmoName", nameBuffer, sizeof(nameBuffer)))
 					{
-						m_childWMOVisualizations[m_selectedChildWMOIndex].node->SetPosition(selectedRef->position);
+						selectedRef->name = nameBuffer;
 					}
-				}
+					ImGui::PopStyleColor();
 
-				// Scale
-				float scl[3] = { selectedRef->scale.x, selectedRef->scale.y, selectedRef->scale.z };
-				if (ImGui::DragFloat3("Scale##childwmo", scl, 0.01f, 0.01f, 100.0f))
-				{
-					selectedRef->scale = Vector3(scl[0], scl[1], scl[2]);
-					// Update visualization
-					if (static_cast<size_t>(m_selectedChildWMOIndex) < m_childWMOVisualizations.size() &&
-						m_childWMOVisualizations[m_selectedChildWMOIndex].node)
+					ImGui::Spacing();
+
+					// Transform section
+					ImGui::Text("Transform");
+					ImGui::Separator();
+
+					// Position
+					float pos[3] = { selectedRef->position.x, selectedRef->position.y, selectedRef->position.z };
+					if (ImGui::DragFloat3("Position##childwmo", pos, 0.1f))
 					{
-						m_childWMOVisualizations[m_selectedChildWMOIndex].node->SetScale(selectedRef->scale);
+						selectedRef->position = Vector3(pos[0], pos[1], pos[2]);
+						if (static_cast<size_t>(m_selectedChildWMOIndex) < m_childWMOVisualizations.size() &&
+							m_childWMOVisualizations[m_selectedChildWMOIndex].node)
+						{
+							m_childWMOVisualizations[m_selectedChildWMOIndex].node->SetPosition(selectedRef->position);
+						}
 					}
+
+					// Scale
+					float scl[3] = { selectedRef->scale.x, selectedRef->scale.y, selectedRef->scale.z };
+					if (ImGui::DragFloat3("Scale##childwmo", scl, 0.01f, 0.01f, 100.0f))
+					{
+						selectedRef->scale = Vector3(scl[0], scl[1], scl[2]);
+						if (static_cast<size_t>(m_selectedChildWMOIndex) < m_childWMOVisualizations.size() &&
+							m_childWMOVisualizations[m_selectedChildWMOIndex].node)
+						{
+							m_childWMOVisualizations[m_selectedChildWMOIndex].node->SetScale(selectedRef->scale);
+						}
+					}
+
+					ImGui::Spacing();
+
+					// Source path (read-only)
+					ImGui::TextDisabled("Source: %s", selectedRef->wmoPath.c_str());
+
+					ImGui::Spacing();
+
+					// Action buttons
+					ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 0.8f));
+					ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.9f));
+					ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.4f, 0.4f, 1.0f));
+					if (ImGui::Button("Delete Selected", ImVec2(-1, 0)))
+					{
+						RemoveChildWMO(m_selectedChildWMOIndex);
+					}
+					ImGui::PopStyleColor(3);
 				}
 
-				// WMO path (read-only)
-				ImGui::TextDisabled("WMO: %s", selectedRef->wmoPath.c_str());
+				ImGui::Unindent();
 			}
 		}
+
+		ImGui::PopStyleVar(2);
 
 		// Add child WMO dialog
 		if (m_showAddChildWMODialog)
@@ -3500,12 +4336,20 @@ namespace mmo
 			ImGui::OpenPopup("Add Child WMO");
 		}
 
-		if (ImGui::BeginPopupModal("Add Child WMO", &m_showAddChildWMODialog))
+		if (ImGui::BeginPopupModal("Add Child WMO", &m_showAddChildWMODialog, ImGuiWindowFlags_AlwaysAutoResize))
 		{
-			ImGui::InputText("WMO Path##add", m_addChildWMOPath, sizeof(m_addChildWMOPath));
-			ImGui::InputText("Name##add", m_addChildWMOName, sizeof(m_addChildWMOName));
+			ImGui::Text("WMO Path:");
+			ImGui::SetNextItemWidth(350);
+			ImGui::InputText("##addWmoPath", m_addChildWMOPath, sizeof(m_addChildWMOPath));
 
-			// Drag-drop target for WMO files
+			ImGui::Spacing();
+
+			ImGui::Text("Display Name (optional):");
+			ImGui::SetNextItemWidth(350);
+			ImGui::InputText("##addWmoName", m_addChildWMOName, sizeof(m_addChildWMOName));
+			ImGui::TextDisabled("Leave empty to auto-generate from WMO filename");
+
+			// Drag-drop target
 			if (ImGui::BeginDragDropTarget())
 			{
 				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_PATH"))
@@ -3516,8 +4360,13 @@ namespace mmo
 				ImGui::EndDragDropTarget();
 			}
 
+			ImGui::Spacing();
 			ImGui::Separator();
+			ImGui::Spacing();
 
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.3f, 0.8f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.4f, 0.9f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.8f, 0.5f, 1.0f));
 			if (ImGui::Button("Add", ImVec2(120, 0)))
 			{
 				if (std::strlen(m_addChildWMOPath) > 0)
@@ -3526,6 +4375,8 @@ namespace mmo
 					m_showAddChildWMODialog = false;
 				}
 			}
+			ImGui::PopStyleColor(3);
+
 			ImGui::SameLine();
 			if (ImGui::Button("Cancel", ImVec2(120, 0)))
 			{
@@ -3595,146 +4446,254 @@ namespace mmo
 
 	void WorldModelEditorInstance::DrawLightsPanel()
 	{
-		if (ImGui::Button("Add Point Light"))
-		{
-			CreateLight(m_selectedGroupIndex, Vector3::Zero, 0xFFFFFFFF, 1.0f, WorldModelLight::LightType::Omni);
-		}
-
-		ImGui::SameLine();
-
-		if (ImGui::Button("Add Spot Light"))
-		{
-			CreateLight(m_selectedGroupIndex, Vector3::Zero, 0xFFFFFFFF, 1.0f, WorldModelLight::LightType::Spot);
-		}
-
-		ImGui::SameLine();
-
-		if (ImGui::Button("Delete") && m_selectedLightIndex >= 0)
-		{
-			RemoveLight(m_selectedLightIndex);
-		}
-
-		ImGui::Separator();
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 4));
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6, 6));
 
 		if (!m_worldModel)
 		{
-			ImGui::Text("No world model loaded");
+			ImGui::TextDisabled("No world model loaded");
+			ImGui::PopStyleVar(2);
 			return;
 		}
 
+		// Header with count
 		auto& lights = m_worldModel->GetLights();
-		for (size_t i = 0; i < lights.size(); ++i)
+		ImGui::Text("Lights");
+		ImGui::SameLine();
+		ImGui::TextDisabled("(%zu)", lights.size());
+
+		ImGui::Spacing();
+
+		// Add light buttons with styled colors
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.3f, 0.8f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.4f, 0.9f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.8f, 0.5f, 1.0f));
+		if (ImGui::Button("+ Point Light", ImVec2(ImGui::GetContentRegionAvail().x * 0.5f - 3, 0)))
 		{
-			ImGui::PushID(static_cast<int>(i));
+			CreateLight(m_selectedGroupIndex, Vector3::Zero, 0xFFFFFFFF, 1.0f, WorldModelLight::LightType::Omni);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("+ Spot Light", ImVec2(-1, 0)))
+		{
+			CreateLight(m_selectedGroupIndex, Vector3::Zero, 0xFFFFFFFF, 1.0f, WorldModelLight::LightType::Spot);
+		}
+		ImGui::PopStyleColor(3);
 
-			bool isSelected = m_selectedLightIndex == static_cast<int32>(i);
-			
-			// Show light type in label
-			const char* typeStr = "Point";
-			if (lights[i].type == WorldModelLight::LightType::Spot)
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		// Lights list with collapsible header
+		if (ImGui::CollapsingHeader("Light List", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::Indent();
+
+			if (lights.empty())
 			{
-				typeStr = "Spot";
+				ImGui::TextDisabled("No lights defined");
 			}
-			String label = String(typeStr) + " Light " + std::to_string(i);
-
-			if (ImGui::Selectable(label.c_str(), isSelected))
+			else
 			{
-				m_selectedLightIndex = static_cast<int32>(i);
-				UpdateSelectedLightVisualization();
+				int visibleCount = 0;
+				for (size_t i = 0; i < lights.size(); ++i)
+				{
+					visibleCount++;
+					ImGui::PushID(static_cast<int>(i));
+
+					bool isSelected = m_selectedLightIndex == static_cast<int32>(i);
+
+					// Alternating row colors
+					if (visibleCount % 2 == 0)
+					{
+						ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.18f, 0.18f, 0.2f, 1.0f));
+					}
+					else
+					{
+						ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.15f, 0.15f, 0.17f, 1.0f));
+					}
+
+					// Light type icon and label
+					const char* typeStr = (lights[i].type == WorldModelLight::LightType::Spot) ? "Spot" : "Point";
+					String label = String(typeStr) + " Light " + std::to_string(i);
+
+					if (ImGui::Selectable(label.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns))
+					{
+						m_selectedLightIndex = static_cast<int32>(i);
+						UpdateSelectedLightVisualization();
+					}
+
+					ImGui::PopStyleColor();
+
+					// Context menu
+					if (ImGui::BeginPopupContextItem())
+					{
+						if (ImGui::MenuItem("Focus (F)"))
+						{
+							m_cameraAnchor->SetPosition(lights[i].position);
+							m_cameraVelocity = Vector3::Zero;
+						}
+						ImGui::Separator();
+						if (ImGui::MenuItem("Duplicate"))
+						{
+							WorldModelLight newLight = lights[i];
+							newLight.position += Vector3(1.0f, 0.0f, 0.0f);
+							m_worldModel->GetLights().push_back(newLight);
+							UpdateLightVisualizations();
+						}
+						ImGui::Separator();
+						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
+						if (ImGui::MenuItem("Delete"))
+						{
+							RemoveLight(static_cast<int32>(i));
+							ImGui::PopStyleColor();
+							ImGui::EndPopup();
+							ImGui::PopID();
+							break;
+						}
+						ImGui::PopStyleColor();
+						ImGui::EndPopup();
+					}
+
+					// Tooltip
+					if (ImGui::IsItemHovered())
+					{
+						ImGui::BeginTooltip();
+						ImGui::Text("Type: %s", typeStr);
+						ImGui::Text("Position: %.2f, %.2f, %.2f", lights[i].position.x, lights[i].position.y, lights[i].position.z);
+						ImGui::Text("Intensity: %.2f", lights[i].intensity);
+						ImGui::EndTooltip();
+					}
+
+					ImGui::PopID();
+				}
 			}
 
-			ImGui::PopID();
+			ImGui::Unindent();
 		}
 
 		// Selected light properties
 		if (m_selectedLightIndex >= 0 && m_selectedLightIndex < static_cast<int32>(lights.size()))
 		{
-			ImGui::Separator();
-			ImGui::Text("Light Properties:");
+			ImGui::Spacing();
 
-			auto& light = lights[m_selectedLightIndex];
-
-			// Light type (Point or Spot only)
-			int typeInt = (light.type == WorldModelLight::LightType::Spot) ? 1 : 0;
-			const char* typeNames[] = { "Point", "Spot" };
-			if (ImGui::Combo("Type##light", &typeInt, typeNames, 2))
+			if (ImGui::CollapsingHeader("Selected Light Properties", ImGuiTreeNodeFlags_DefaultOpen))
 			{
-				light.type = (typeInt == 1) ? WorldModelLight::LightType::Spot : WorldModelLight::LightType::Omni;
-				UpdateLightVisualizations();
-			}
+				ImGui::Indent();
 
-			// Position
-			float posArr[3] = { light.position.x, light.position.y, light.position.z };
-			if (ImGui::InputFloat3("Position##light", posArr, "%.2f"))
-			{
-				light.position = Vector3(posArr[0], posArr[1], posArr[2]);
-				UpdateLightVisualizations();
-			}
+				auto& light = lights[m_selectedLightIndex];
 
-			// Color picker
-			float colorArr[3] = {
-				((light.color >> 16) & 0xFF) / 255.0f,
-				((light.color >> 8) & 0xFF) / 255.0f,
-				(light.color & 0xFF) / 255.0f
-			};
-			if (ImGui::ColorEdit3("Color##light", colorArr))
-			{
-				uint32 r = static_cast<uint32>(colorArr[0] * 255.0f) & 0xFF;
-				uint32 g = static_cast<uint32>(colorArr[1] * 255.0f) & 0xFF;
-				uint32 b = static_cast<uint32>(colorArr[2] * 255.0f) & 0xFF;
-				light.color = 0xFF000000 | (r << 16) | (g << 8) | b;
-				UpdateLightVisualizations();
-			}
-
-			// Intensity
-			if (ImGui::InputFloat("Intensity##light", &light.intensity, 0.1f, 1.0f, "%.2f"))
-			{
-				UpdateLightVisualizations();
-			}
-
-			// Range (attenuation end)
-			if (ImGui::InputFloat("Range##light", &light.attenuationEnd, 1.0f, 5.0f, "%.1f"))
-			{
-				if (light.attenuationEnd < 0.1f)
+				// Light type combo
+				ImGui::Text("Type:");
+				ImGui::SameLine();
+				ImGui::SetNextItemWidth(-1);
+				int typeInt = (light.type == WorldModelLight::LightType::Spot) ? 1 : 0;
+				const char* typeNames[] = { "Point", "Spot" };
+				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
+				if (ImGui::Combo("##lightType", &typeInt, typeNames, 2))
 				{
-					light.attenuationEnd = 0.1f;
-				}
-				UpdateLightVisualizations();
-			}
-
-			// Direction for spot lights
-			if (light.type == WorldModelLight::LightType::Spot)
-			{
-				ImGui::Separator();
-				ImGui::Text("Spot Direction:");
-				
-				Matrix3 rotMat;
-				light.rotation.ToRotationMatrix(rotMat);
-				Radian yaw, pitch, roll;
-				rotMat.ToEulerAnglesYXZ(yaw, pitch, roll);
-				
-				float yawDeg = Degree(yaw).GetValueDegrees();
-				float pitchDeg = Degree(pitch).GetValueDegrees();
-				
-				bool rotChanged = false;
-				if (ImGui::InputFloat("Yaw##lightdir", &yawDeg, 1.0f, 10.0f, "%.1f"))
-				{
-					rotChanged = true;
-				}
-				if (ImGui::InputFloat("Pitch##lightdir", &pitchDeg, 1.0f, 10.0f, "%.1f"))
-				{
-					rotChanged = true;
-				}
-				
-				if (rotChanged)
-				{
-					Matrix3 newRotMat;
-					newRotMat.FromEulerAnglesYXZ(Degree(yawDeg), Degree(pitchDeg), Radian(0));
-					light.rotation.FromRotationMatrix(newRotMat);
+					light.type = (typeInt == 1) ? WorldModelLight::LightType::Spot : WorldModelLight::LightType::Omni;
 					UpdateLightVisualizations();
 				}
+				ImGui::PopStyleColor();
+
+				ImGui::Spacing();
+
+				// Transform section
+				ImGui::Text("Transform");
+				ImGui::Separator();
+
+				// Position
+				float posArr[3] = { light.position.x, light.position.y, light.position.z };
+				if (ImGui::DragFloat3("Position##light", posArr, 0.1f))
+				{
+					light.position = Vector3(posArr[0], posArr[1], posArr[2]);
+					UpdateLightVisualizations();
+				}
+
+				// Direction for spot lights
+				if (light.type == WorldModelLight::LightType::Spot)
+				{
+					Matrix3 rotMat;
+					light.rotation.ToRotationMatrix(rotMat);
+					Radian yaw, pitch, roll;
+					rotMat.ToEulerAnglesYXZ(yaw, pitch, roll);
+
+					float yawDeg = Degree(yaw).GetValueDegrees();
+					float pitchDeg = Degree(pitch).GetValueDegrees();
+
+					bool rotChanged = false;
+					if (ImGui::DragFloat("Yaw##lightdir", &yawDeg, 1.0f, -180.0f, 180.0f, "%.1f"))
+					{
+						rotChanged = true;
+					}
+					if (ImGui::DragFloat("Pitch##lightdir", &pitchDeg, 1.0f, -90.0f, 90.0f, "%.1f"))
+					{
+						rotChanged = true;
+					}
+
+					if (rotChanged)
+					{
+						Matrix3 newRotMat;
+						newRotMat.FromEulerAnglesYXZ(Degree(yawDeg), Degree(pitchDeg), Radian(0));
+						light.rotation.FromRotationMatrix(newRotMat);
+						UpdateLightVisualizations();
+					}
+				}
+
+				ImGui::Spacing();
+
+				// Appearance section
+				ImGui::Text("Appearance");
+				ImGui::Separator();
+
+				// Color picker
+				float colorArr[3] = {
+					((light.color >> 16) & 0xFF) / 255.0f,
+					((light.color >> 8) & 0xFF) / 255.0f,
+					(light.color & 0xFF) / 255.0f
+				};
+				if (ImGui::ColorEdit3("Color##light", colorArr))
+				{
+					uint32 r = static_cast<uint32>(colorArr[0] * 255.0f) & 0xFF;
+					uint32 g = static_cast<uint32>(colorArr[1] * 255.0f) & 0xFF;
+					uint32 b = static_cast<uint32>(colorArr[2] * 255.0f) & 0xFF;
+					light.color = 0xFF000000 | (r << 16) | (g << 8) | b;
+					UpdateLightVisualizations();
+				}
+
+				// Intensity
+				if (ImGui::DragFloat("Intensity##light", &light.intensity, 0.1f, 0.0f, 100.0f, "%.2f"))
+				{
+					UpdateLightVisualizations();
+				}
+
+				// Range
+				if (ImGui::DragFloat("Range##light", &light.attenuationEnd, 0.5f, 0.1f, 1000.0f, "%.1f"))
+				{
+					if (light.attenuationEnd < 0.1f)
+					{
+						light.attenuationEnd = 0.1f;
+					}
+					UpdateLightVisualizations();
+				}
+
+				ImGui::Spacing();
+
+				// Delete button
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 0.8f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.9f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.4f, 0.4f, 1.0f));
+				if (ImGui::Button("Delete Selected", ImVec2(-1, 0)))
+				{
+					RemoveLight(m_selectedLightIndex);
+				}
+				ImGui::PopStyleColor(3);
+
+				ImGui::Unindent();
 			}
 		}
+
+		ImGui::PopStyleVar(2);
 	}
 
 	void WorldModelEditorInstance::DrawFogPanel()
