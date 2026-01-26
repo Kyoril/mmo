@@ -51,13 +51,13 @@ namespace mmo
     // ==================== WorldModel ====================
 
     WorldModel::WorldModel()
-        : m_ambientColor(0xFFFFFFFF)
+        : m_ambientColor(0xFF333333)
     {
     }
 
     WorldModel::WorldModel(const String& name)
         : m_name(name)
-        , m_ambientColor(0xFFFFFFFF)
+        , m_ambientColor(0xFF333333)
     {
     }
 

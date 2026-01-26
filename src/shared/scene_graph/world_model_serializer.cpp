@@ -156,7 +156,7 @@ namespace mmo
 
         // Write portal info (MOPT)
         {
-            const uint32 portalInfoSize = static_cast<uint32>(worldModel.GetPortals().size() * 20);
+            const uint32 portalInfoSize = static_cast<uint32>(worldModel.GetPortals().size() * 28);
             writer
                 << io::write<uint32>(*PortalInfoChunk)
                 << io::write<uint32>(portalInfoSize);
@@ -177,7 +177,9 @@ namespace mmo
                     << io::write<float>(normal.x)
                     << io::write<float>(normal.y)
                     << io::write<float>(normal.z)
-                    << io::write<float>(planeDist);
+                    << io::write<float>(planeDist)
+                    << io::write<float>(portal->GetWidth())
+                    << io::write<float>(portal->GetHeight());
 
                 vertexOffset += count;
             }
@@ -798,7 +800,8 @@ namespace mmo
     {
         ASSERT(chunkHeader == *PortalInfoChunk);
         
-        const size_t numPortals = chunkSize / 20;
+        size_t numPortals = chunkSize / 28;
+        
         m_portalInfos.clear();
         m_portalInfos.reserve(numPortals);
 
@@ -811,7 +814,9 @@ namespace mmo
                 >> io::read<float>(info.planeNormal[0])
                 >> io::read<float>(info.planeNormal[1])
                 >> io::read<float>(info.planeNormal[2])
-                >> io::read<float>(info.planeDist);
+                >> io::read<float>(info.planeDist)
+        		>> io::read<float>(info.width)
+        		>> io::read<float>(info.height);
 
             if (!reader)
             {
@@ -1357,24 +1362,15 @@ namespace mmo
             auto& portal = m_worldModel.AddPortal();
             const auto& info = m_portalInfos[i];
 
-            // Calculate portal center and dimensions from vertices
+            // Calculate portal center from vertices
             Vector3 center = Vector3::Zero;
-            float minY = std::numeric_limits<float>::max();
-            float maxY = std::numeric_limits<float>::lowest();
-            float minX = std::numeric_limits<float>::max();
-            float maxX = std::numeric_limits<float>::lowest();
 
             for (uint16 j = 0; j < info.vertexCount; ++j)
             {
                 const size_t vertexIndex = info.startVertex + j;
                 if (vertexIndex < m_portalVertices.size())
                 {
-                    const auto& v = m_portalVertices[vertexIndex];
-                    center += v;
-                    minY = std::min(minY, v.y);
-                    maxY = std::max(maxY, v.y);
-                    minX = std::min(minX, v.x);
-                    maxX = std::max(maxX, v.x);
+                    center += m_portalVertices[vertexIndex];
                 }
             }
 
@@ -1384,7 +1380,7 @@ namespace mmo
             }
 
             portal.SetTransform(center, Quaternion::Identity, Vector3::UnitScale);
-            portal.SetDimensions(maxX - minX, maxY - minY);
+            portal.SetDimensions(info.width, info.height);
         }
 
         // Clear temporary data

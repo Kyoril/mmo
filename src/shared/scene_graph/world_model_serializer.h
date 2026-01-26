@@ -106,6 +106,8 @@ namespace mmo
             uint16 vertexCount;
             float planeNormal[3];
             float planeDist;
+            float width;
+            float height;
         };
         std::vector<PortalInfo> m_portalInfos;
         

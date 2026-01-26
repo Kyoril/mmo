@@ -318,6 +318,7 @@ namespace mmo
 		Light* light { nullptr };
 		ManualRenderObject* iconRenderable { nullptr };
 		Entity* iconEntity { nullptr };
+		ManualRenderObject* rangeRenderable { nullptr };
 	};
 
 	/// @brief Editor instance for editing world model objects (WMO-like structures).
@@ -476,6 +477,12 @@ namespace mmo
 		/// @brief Updates visualization for all lights.
 		void UpdateLightVisualizations();
 
+		/// @brief Updates the range visualization for the selected light.
+		void UpdateSelectedLightVisualization();
+
+		/// @brief Updates visibility of light markers based on m_showLightMarkers.
+		void UpdateLightMarkerVisibility();
+
 		/// @brief Draws the groups panel UI.
 		void DrawGroupsPanel();
 
@@ -583,6 +590,7 @@ namespace mmo
 		bool m_showGroupBounds { true };
 		bool m_showPortals { true };
 		bool m_showLights { true };
+		bool m_showLightMarkers { true };
 		bool m_showDoodads { true };
 
 		// Portal creation state

@@ -690,7 +690,19 @@ namespace mmo
 				// Display options
 				ImGui::Checkbox("Show Group Bounds", &m_showGroupBounds);
 				ImGui::Checkbox("Show Portals", &m_showPortals);
-				ImGui::Checkbox("Show Lights", &m_showLights);
+				if (ImGui::Checkbox("Show Lights", &m_showLights))
+				{
+					UpdateLightMarkerVisibility();
+				}
+				if (m_showLights)
+				{
+					ImGui::Indent();
+					if (ImGui::Checkbox("Show Light Markers", &m_showLightMarkers))
+					{
+						UpdateLightMarkerVisibility();
+					}
+					ImGui::Unindent();
+				}
 				ImGui::Checkbox("Show Doodads", &m_showDoodads);
 			}
 		}
@@ -2378,6 +2390,10 @@ namespace mmo
 			{
 				m_scene.DestroyEntity(*vis.iconEntity);
 			}
+			if (vis.rangeRenderable)
+			{
+				m_scene.DestroyManualRenderObject(*vis.rangeRenderable);
+			}
 			if (vis.node)
 			{
 				m_scene.DestroySceneNode(*vis.node);
@@ -2432,6 +2448,136 @@ namespace mmo
 			}
 
 			m_lightVisualizations.push_back(std::move(vis));
+		}
+		
+		// Update range visualization for selected light
+		UpdateSelectedLightVisualization();
+	}
+
+	void WorldModelEditorInstance::UpdateSelectedLightVisualization()
+	{
+		// Clear existing range visualizations
+		for (auto& vis : m_lightVisualizations)
+		{
+			if (vis.rangeRenderable)
+			{
+				m_scene.DestroyManualRenderObject(*vis.rangeRenderable);
+				vis.rangeRenderable = nullptr;
+			}
+		}
+
+		// Only create range visualization for selected light
+		if (m_selectedLightIndex < 0 || m_selectedLightIndex >= static_cast<int32>(m_lightVisualizations.size()))
+		{
+			return;
+		}
+
+		if (!m_worldModel)
+		{
+			return;
+		}
+
+		const auto& lights = m_worldModel->GetLights();
+		if (m_selectedLightIndex >= static_cast<int32>(lights.size()))
+		{
+			return;
+		}
+
+		const auto& lightData = lights[m_selectedLightIndex];
+		auto& vis = m_lightVisualizations[m_selectedLightIndex];
+
+		vis.rangeRenderable = m_scene.CreateManualRenderObject("LightRange_" + std::to_string(m_selectedLightIndex));
+		vis.rangeRenderable->SetQueryFlags(0);
+
+		// Get light color for the range visualization
+		const uint32 lightColor = 
+			0xFF000000 |
+			((lightData.color >> 16) & 0xFF) |
+			(lightData.color & 0xFF00) |
+			((lightData.color & 0xFF) << 16);
+
+		const int segments = 32;
+
+		if (lightData.type == WorldModelLight::LightType::Omni)
+		{
+			// Point light - draw 3 circles (one for each axis) at the light's range
+			const float range = lightData.attenuationEnd;
+			auto lineOp = vis.rangeRenderable->AddLineListOperation(MaterialManager::Get().Load("Models/Engine/WorldGrid.hmat"));
+
+			// XY plane circle (around Z axis)
+			for (int i = 0; i < segments; ++i)
+			{
+				const float angle1 = (static_cast<float>(i) / segments) * 2.0f * 3.14159265f;
+				const float angle2 = (static_cast<float>(i + 1) / segments) * 2.0f * 3.14159265f;
+				Vector3 p1(std::cos(angle1) * range, std::sin(angle1) * range, 0.0f);
+				Vector3 p2(std::cos(angle2) * range, std::sin(angle2) * range, 0.0f);
+				auto& line = lineOp->AddLine(p1, p2);
+				line.SetColor(lightColor);
+			}
+
+			// XZ plane circle (around Y axis)
+			for (int i = 0; i < segments; ++i)
+			{
+				const float angle1 = (static_cast<float>(i) / segments) * 2.0f * 3.14159265f;
+				const float angle2 = (static_cast<float>(i + 1) / segments) * 2.0f * 3.14159265f;
+				Vector3 p1(std::cos(angle1) * range, 0.0f, std::sin(angle1) * range);
+				Vector3 p2(std::cos(angle2) * range, 0.0f, std::sin(angle2) * range);
+				auto& line = lineOp->AddLine(p1, p2);
+				line.SetColor(lightColor);
+			}
+
+			// YZ plane circle (around X axis)
+			for (int i = 0; i < segments; ++i)
+			{
+				const float angle1 = (static_cast<float>(i) / segments) * 2.0f * 3.14159265f;
+				const float angle2 = (static_cast<float>(i + 1) / segments) * 2.0f * 3.14159265f;
+				Vector3 p1(0.0f, std::cos(angle1) * range, std::sin(angle1) * range);
+				Vector3 p2(0.0f, std::cos(angle2) * range, std::sin(angle2) * range);
+				auto& line = lineOp->AddLine(p1, p2);
+				line.SetColor(lightColor);
+			}
+		}
+		else if (lightData.type == WorldModelLight::LightType::Spot)
+		{
+			// Spot light - draw outer cone
+			const float range = lightData.attenuationEnd;
+			const float outerAngle = 45.0f; // Default outer angle in degrees
+			const float outerRadius = range * std::tan(outerAngle * 0.5f * 3.14159265f / 180.0f);
+			
+			auto lineOp = vis.rangeRenderable->AddLineListOperation(MaterialManager::Get().Load("Models/Engine/WorldGrid.hmat"));
+
+			// Draw cone edges (4 lines from apex to base circle)
+			for (int i = 0; i < 4; ++i)
+			{
+				const float angle = (static_cast<float>(i) / 4) * 2.0f * 3.14159265f;
+				Vector3 basePoint(std::cos(angle) * outerRadius, std::sin(angle) * outerRadius, -range);
+				auto& line = lineOp->AddLine(Vector3::Zero, basePoint);
+				line.SetColor(lightColor);
+			}
+
+			// Draw base circle
+			for (int i = 0; i < segments; ++i)
+			{
+				const float angle1 = (static_cast<float>(i) / segments) * 2.0f * 3.14159265f;
+				const float angle2 = (static_cast<float>(i + 1) / segments) * 2.0f * 3.14159265f;
+				Vector3 p1(std::cos(angle1) * outerRadius, std::sin(angle1) * outerRadius, -range);
+				Vector3 p2(std::cos(angle2) * outerRadius, std::sin(angle2) * outerRadius, -range);
+				auto& line = lineOp->AddLine(p1, p2);
+				line.SetColor(lightColor);
+			}
+		}
+
+		vis.node->AttachObject(*vis.rangeRenderable);
+	}
+
+	void WorldModelEditorInstance::UpdateLightMarkerVisibility()
+	{
+		for (auto& vis : m_lightVisualizations)
+		{
+			if (vis.iconEntity)
+			{
+				vis.iconEntity->SetVisible(m_showLights && m_showLightMarkers);
+			}
 		}
 	}
 
@@ -3494,6 +3640,7 @@ namespace mmo
 			if (ImGui::Selectable(label.c_str(), isSelected))
 			{
 				m_selectedLightIndex = static_cast<int32>(i);
+				UpdateSelectedLightVisualization();
 			}
 
 			ImGui::PopID();
