@@ -11,7 +11,7 @@
 
 namespace mmo
 {
-	static const String WorldModelFileExtension = ".wmo";
+	static const String WorldModelFileExtension = ".hwmo";
 
 	WorldModelEditor::WorldModelEditor(EditorHost& host, proto::Project& project)
 		: EditorBase(host)
