@@ -19,6 +19,7 @@ namespace mmo
     class WorldEditor;
     class MapEntity;
     class SceneOutlineWindow;
+    class WorldModelInstance;
 
     namespace proto
     {
@@ -53,6 +54,15 @@ namespace mmo
         /// @param objectId Unique object ID (0 to auto-generate).
         /// @return Pointer to the created entity, or nullptr on failure.
         Entity *CreateMapEntity(const String &assetName, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale, uint64 objectId);
+
+        /// @brief Creates a world model entity in the scene.
+        /// @param assetName The world model asset name to use (.hwmo file).
+        /// @param position World position for the entity.
+        /// @param orientation World orientation for the entity.
+        /// @param scale World scale for the entity.
+        /// @param objectId Unique object ID (0 to auto-generate).
+        /// @return Pointer to the created world model instance, or nullptr on failure.
+        WorldModelInstance *CreateWorldModelEntity(const String &assetName, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale, uint64 objectId);
 
         /// @brief Creates a unit spawn entity in the scene.
         /// @param spawn Reference to the unit spawn entry data.
@@ -95,5 +105,8 @@ namespace mmo
         IdGenerator<uint64> m_objectIdGenerator{1};
         IdGenerator<uint64> m_unitSpawnIdGenerator{1};
         IdGenerator<uint64> m_objectSpawnIdGenerator{1};
+
+        /// @brief Owned world model instances.
+        std::vector<std::unique_ptr<WorldModelInstance>> m_worldModelInstances;
     };
 }

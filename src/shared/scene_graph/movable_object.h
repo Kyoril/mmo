@@ -84,6 +84,7 @@ namespace mmo
 		mutable bool m_worldAABBDirty{ true };
 		bool m_renderingDisabled;
 		bool m_castShadows{ true };
+		void* m_userObject{ nullptr };
 
 		static uint32 m_defaultQueryFlags;
 		static uint32 m_defaultVisibilityFlags;
@@ -94,6 +95,15 @@ namespace mmo
 		virtual ~MovableObject();
 
 	public:
+		/// @brief Sets a user-defined object pointer for this movable.
+		/// @param userObject Pointer to the user-defined object.
+		void SetUserObject(void* userObject) { m_userObject = userObject; }
+
+		/// @brief Gets the user-defined object pointer for this movable.
+		/// @return The user-defined object pointer, cast to the specified type.
+		template <typename T>
+		T* GetUserObject() const { return static_cast<T*>(m_userObject); }
+
 		virtual void SetCreator(MovableObjectFactory* creator) { m_creator = creator; }
 
 		[[nodiscard]] virtual MovableObjectFactory* GetCreator() const { return m_creator; }

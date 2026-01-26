@@ -16,6 +16,7 @@
 #include "scene_graph/material_manager.h"
 #include "scene_graph/render_queue.h"
 #include "scene_graph/scene_node.h"
+#include "scene_graph/world_model_manager.h"
 #include "selected_map_entity.h"
 #include "stream_sink.h"
 #include "game/object_type_id.h"
@@ -43,6 +44,7 @@ namespace mmo
 
 	static ChunkMagic WorldEntityVersionChunk = MakeChunkMagic('WVER');
 	static ChunkMagic WorldEntityMesh = MakeChunkMagic('WMSH');
+	static ChunkMagic WorldEntityWMO = MakeChunkMagic('WWMO');
 
 	struct MapEntityChunkContent
 	{
@@ -52,6 +54,19 @@ namespace mmo
 		Quaternion rotation;
 		Vector3 scale;
 	};
+
+	String MapEntity::GetAssetName() const
+	{
+		if (m_entityType == MapEntityType::WorldModel)
+		{
+			return m_assetName;
+		}
+		else if (m_entity && m_entity->GetMesh())
+		{
+			return String(m_entity->GetMesh()->GetName());
+		}
+		return String();
+	}
 
 	WorldEditorInstance::WorldEditorInstance(EditorHost &host, WorldEditor &editor, Path asset)
 		: EditorInstance(host, std::move(asset)), m_editor(editor), m_wireFrame(false)
@@ -619,17 +634,20 @@ namespace mmo
 
 	bool WorldEditorInstance::Save()
 	{
-		// Build mesh name index map
+		// Build mesh name index map (only for mesh entities)
 		std::map<String, uint32> entityNames;
 		for (const auto &mapEntity : m_mapEntities)
 		{
-			const auto meshName = String(mapEntity->GetEntity().GetMesh()->GetName());
-			if (entityNames.contains(meshName))
+			if (mapEntity->IsMeshEntity() && mapEntity->GetEntity() && mapEntity->GetEntity()->GetMesh())
 			{
-				continue;
-			}
+				const auto meshName = String(mapEntity->GetEntity()->GetMesh()->GetName());
+				if (entityNames.contains(meshName))
+				{
+					continue;
+				}
 
-			entityNames.emplace(meshName, entityNames.size());
+				entityNames.emplace(meshName, entityNames.size());
+			}
 		}
 
 		// Open file for writing
@@ -749,18 +767,48 @@ namespace mmo
 			io::StreamSink fileSink{*filePtr};
 			io::Writer fileWriter{fileSink};
 
+			// Version 3 supports world model entities
 			{
 				ChunkWriter chunkWriter(WorldEntityVersionChunk, fileWriter);
-				fileWriter << io::write<uint32>(2);
+				fileWriter << io::write<uint32>(3);
 				chunkWriter.Finish();
 			}
 
+			const Vector3 position = ent->GetSceneNode().GetDerivedPosition();
+			const Vector3 scale = ent->GetSceneNode().GetScale();
+			const Quaternion rotation = ent->GetSceneNode().GetDerivedOrientation();
+
+			if (ent->IsWorldModelEntity())
 			{
+				// Save world model entity
+				ChunkWriter chunkWriter(WorldEntityWMO, fileWriter);
+				const String assetName = ent->GetAssetName();
+				fileWriter
+					<< io::write<uint64>(ent->GetUniqueId())
+					<< io::write_dynamic_range<uint16>(assetName)
+					<< io::write<float>(position.x)
+					<< io::write<float>(position.y)
+					<< io::write<float>(position.z)
+					<< io::write<float>(rotation.w)
+					<< io::write<float>(rotation.x)
+					<< io::write<float>(rotation.y)
+					<< io::write<float>(rotation.z)
+					<< io::write<float>(scale.x)
+					<< io::write<float>(scale.y)
+					<< io::write<float>(scale.z);
+
+				// Write name and category
+				fileWriter
+					<< io::write_dynamic_range<uint8>(ent->GetDisplayName())
+					<< io::write_dynamic_range<uint16>(ent->GetCategory());
+
+				chunkWriter.Finish();
+			}
+			else
+			{
+				// Save mesh entity
 				ChunkWriter chunkWriter(WorldEntityMesh, fileWriter);
-				const Vector3 position = ent->GetSceneNode().GetDerivedPosition();
-				const Vector3 scale = ent->GetSceneNode().GetScale();
-				const Quaternion rotation = ent->GetSceneNode().GetDerivedOrientation();
-				const String mesh = ent->GetEntity().GetMesh()->GetName().data();
+				const String mesh = ent->GetEntity()->GetMesh()->GetName().data();
 				fileWriter
 					<< io::write<uint64>(ent->GetUniqueId())
 					<< io::write_dynamic_range<uint16>(mesh)
@@ -777,12 +825,12 @@ namespace mmo
 
 				// Collect material overrides
 				std::vector<MaterialOverride> materialOverrides;
-				for (uint8 i = 0; i < ent->GetEntity().GetNumSubEntities(); ++i)
+				for (uint8 i = 0; i < ent->GetEntity()->GetNumSubEntities(); ++i)
 				{
-					SubEntity *sub = ent->GetEntity().GetSubEntity(i);
+					SubEntity *sub = ent->GetEntity()->GetSubEntity(i);
 					ASSERT(sub);
 
-					SubMesh &submesh = ent->GetEntity().GetMesh()->GetSubMesh(i);
+					SubMesh &submesh = ent->GetEntity()->GetMesh()->GetSubMesh(i);
 					if (const bool hasDifferentMaterial = sub->GetMaterial() && sub->GetMaterial() != submesh.GetMaterial())
 					{
 						materialOverrides.emplace_back(i, String(sub->GetMaterial()->GetName()));
@@ -867,6 +915,21 @@ namespace mmo
 			}
 		}
 		return entity;
+	}
+
+	WorldModelInstance *WorldEditorInstance::CreateWorldModelEntity(const String &assetName, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale, uint64 objectId)
+	{
+		WorldModelInstance *worldModelInstance = m_entityFactory->CreateWorldModelEntity(assetName, position, orientation, scale, objectId);
+		if (worldModelInstance)
+		{
+			MapEntity *mapEntity = worldModelInstance->GetUserObject<MapEntity>();
+			if (mapEntity)
+			{
+				mapEntity->remove.connect(this, &WorldEditorInstance::OnMapEntityRemoved);
+				mapEntity->MarkModified();
+			}
+		}
+		return worldModelInstance;
 	}
 
 	void WorldEditorInstance::OnMapEntityRemoved(MapEntity &entity)
@@ -1403,17 +1466,20 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 								entityPos.z >= page->GetSceneNode()->GetDerivedPosition().z &&
 								entityPos.z < page->GetSceneNode()->GetDerivedPosition().z + pageSize)
 							{
-								// Get the entity's bounding box to determine its height
-								Entity &entity = mapEntity->GetEntity();
-								const AABB &entityBounds = entity.GetBoundingBox();
-								if (!entityBounds.IsNull())
+								// Get the movable object's bounding box to determine its height
+								MovableObject *movable = mapEntity->GetMovableObject();
+								if (movable)
 								{
-									const Vector3 entityWorldPos = mapEntity->GetSceneNode().GetDerivedPosition();
-									const Vector3 entityScale = mapEntity->GetSceneNode().GetDerivedScale();
+									const AABB &entityBounds = movable->GetBoundingBox();
+									if (!entityBounds.IsNull())
+									{
+										const Vector3 entityWorldPos = mapEntity->GetSceneNode().GetDerivedPosition();
+										const Vector3 entityScale = mapEntity->GetSceneNode().GetDerivedScale();
 
-									// Calculate the actual world-space top of the entity
-									float entityTop = entityWorldPos.y + (entityBounds.max.y * entityScale.y);
-									maxHeight = std::max(maxHeight, entityTop);
+										// Calculate the actual world-space top of the entity
+										float entityTop = entityWorldPos.y + (entityBounds.max.y * entityScale.y);
+										maxHeight = std::max(maxHeight, entityTop);
+									}
 								}
 							}
 						}
@@ -1437,7 +1503,7 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 					minimapRT->Clear(ClearFlags::All);
 
 					// Temporarily change entity render queue groups to match terrain for consistent rendering
-					std::vector<std::pair<Entity *, uint8>> originalRenderQueues;
+					std::vector<std::pair<MovableObject *, uint8>> originalRenderQueues;
 					for (const auto &mapEntity : m_mapEntities)
 					{
 						if (mapEntity && &mapEntity->GetSceneNode())
@@ -1448,9 +1514,12 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 								entityPos.z >= page->GetSceneNode()->GetDerivedPosition().z &&
 								entityPos.z < page->GetSceneNode()->GetDerivedPosition().z + pageSize)
 							{
-								Entity &entity = mapEntity->GetEntity();
-								originalRenderQueues.emplace_back(&entity, entity.GetRenderQueueGroup());
-								entity.SetRenderQueueGroup(WorldGeometry1); // Same as terrain
+								MovableObject *movable = mapEntity->GetMovableObject();
+								if (movable)
+								{
+									originalRenderQueues.emplace_back(movable, movable->GetRenderQueueGroup());
+									movable->SetRenderQueueGroup(WorldGeometry1); // Same as terrain
+								}
 							}
 						}
 					}
@@ -1461,9 +1530,9 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 					minimapRT->Update();
 
 					// Restore original render queue groups
-					for (const auto &[entity, originalQueue] : originalRenderQueues)
+					for (const auto &[movable, originalQueue] : originalRenderQueues)
 					{
-						entity->SetRenderQueueGroup(originalQueue);
+						movable->SetRenderQueueGroup(originalQueue);
 					}
 
 					// Create texture from render target
@@ -1589,36 +1658,61 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			}
 
 			const auto &entity = loader.GetEntity();
-			Entity *object = CreateMapEntity(
-				entity.meshName,
-				entity.position,
-				entity.rotation,
-				entity.scale,
-				entity.uniqueId);
-			if (!object)
+
+			MapEntity *mapEntity = nullptr;
+
+			if (entity.entityType == WorldEntityType::WorldModel)
 			{
-				ELOG("Failed to create entity from file " << file << "!");
-				continue;
+				// Create world model entity
+				WorldModelInstance *wmoInstance = m_entityFactory->CreateWorldModelEntity(
+					entity.meshName,
+					entity.position,
+					entity.rotation,
+					entity.scale,
+					entity.uniqueId);
+				if (!wmoInstance)
+				{
+					ELOG("Failed to create world model entity from file " << file << "!");
+					continue;
+				}
+
+				mapEntity = wmoInstance->GetUserObject<MapEntity>();
+			}
+			else
+			{
+				// Create mesh entity
+				Entity *object = CreateMapEntity(
+					entity.meshName,
+					entity.position,
+					entity.rotation,
+					entity.scale,
+					entity.uniqueId);
+				if (!object)
+				{
+					ELOG("Failed to create entity from file " << file << "!");
+					continue;
+				}
+
+				mapEntity = object->GetUserObject<MapEntity>();
+
+				// Apply material overrides (only for mesh entities)
+				for (const auto &materialOverride : entity.materialOverrides)
+				{
+					if (materialOverride.materialIndex >= object->GetNumSubEntities())
+					{
+						WLOG("Entity has material override for material index greater than entity material count! Skipping material override");
+						continue;
+					}
+
+					object->GetSubEntity(materialOverride.materialIndex)->SetMaterial(MaterialManager::Get().Load(materialOverride.materialName));
+				}
 			}
 
 			// We just loaded the object - it has not been modified
-			MapEntity *mapEntity = object->GetUserObject<MapEntity>();
 			ASSERT(mapEntity);
 			mapEntity->SetDisplayName(entity.name);
 			mapEntity->SetCategory(entity.category);
 			mapEntity->MarkAsUnmodified();
-
-			// Apply material overrides
-			for (const auto &materialOverride : entity.materialOverrides)
-			{
-				if (materialOverride.materialIndex >= object->GetNumSubEntities())
-				{
-					WLOG("Entity has material override for material index greater than entity material count! Skipping material override");
-					continue;
-				}
-
-				object->GetSubEntity(materialOverride.materialIndex)->SetMaterial(MaterialManager::Get().Load(materialOverride.materialName));
-			}
 		}
 	}
 
@@ -1698,101 +1792,112 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		static const char *s_noMaterialPreview = "<None>";
 
 		MapEntity &mapEntity = selectable.GetEntity();
-		Entity &entity = mapEntity.GetEntity();
+		
+		ImGui::Text("Unique Id: %llu", mapEntity.GetUniqueId());
 
-		ImGui::Text("Unique Id: %u", mapEntity.GetUniqueId());
-
-		if (ImGui::CollapsingHeader("Mesh"))
+		if (mapEntity.IsWorldModelEntity())
 		{
-			const MeshPtr mesh = entity.GetMesh();
-			const String meshName = mesh->GetName().data();
-
-			const String filename = Path(meshName).filename().string();
-
-			if (ImGui::BeginCombo("Mesh", filename.c_str()))
-			{
-				// TODO: Draw available mesh files from asset registry
-
-				ImGui::EndCombo();
-			}
-
-			if (ImGui::BeginDragDropTarget())
-			{
-				// We only accept mesh file drops
-				if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmsh"))
-				{
-					entity.SetMesh(MeshManager::Get().Load(*static_cast<String *>(payload->Data)));
-					mapEntity.MarkModified();
-				}
-
-				ImGui::EndDragDropTarget();
-			}
+			// World model specific UI
+			ImGui::Text("Type: World Model");
+			ImGui::Text("Asset: %s", mapEntity.GetAssetName().c_str());
 		}
-
-		if (ImGui::CollapsingHeader("Materials"))
+		else if (Entity* entity = mapEntity.GetEntity())
 		{
-			for (uint32 i = 0; i < entity.GetNumSubEntities(); ++i)
+			// Mesh entity specific UI
+			ImGui::Text("Type: Mesh Entity");
+
+			if (ImGui::CollapsingHeader("Mesh"))
 			{
-				SubEntity *sub = entity.GetSubEntity(i);
-				ASSERT(sub);
+				const MeshPtr mesh = entity->GetMesh();
+				const String meshName = mesh->GetName().data();
 
-				SubMesh &submesh = entity.GetMesh()->GetSubMesh(i);
+				const String filename = Path(meshName).filename().string();
 
-				ImGui::PushID(i);
-
-				// Get material
-				MaterialPtr material = sub->GetMaterial();
-				if (!material)
+				if (ImGui::BeginCombo("Mesh", filename.c_str()))
 				{
-					material = submesh.GetMaterial();
-				}
+					// TODO: Draw available mesh files from asset registry
 
-				// Build preview string
-				const char *previewString = s_noMaterialPreview;
-				if (material)
-				{
-					previewString = material->GetName().data();
-				}
-
-				const String materialName = sub->GetMaterial()->GetName().data();
-				const String filename = Path(materialName).filename().string();
-
-				bool isOverridden = material != submesh.GetMaterial();
-
-				ImGui::BeginDisabled(!isOverridden);
-				if (ImGui::Checkbox("##overridden", &isOverridden))
-				{
-					sub->SetMaterial(submesh.GetMaterial());
-					mapEntity.MarkModified();
-				}
-				ImGui::EndDisabled();
-
-				ImGui::SameLine();
-
-				if (ImGui::BeginCombo("Material", filename.c_str()))
-				{
 					ImGui::EndCombo();
 				}
 
 				if (ImGui::BeginDragDropTarget())
 				{
 					// We only accept mesh file drops
-					if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmat"))
+					if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmsh"))
 					{
-						sub->SetMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
-						mapEntity.MarkModified();
-					}
-
-					if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmi"))
-					{
-						sub->SetMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
+						entity->SetMesh(MeshManager::Get().Load(*static_cast<String *>(payload->Data)));
 						mapEntity.MarkModified();
 					}
 
 					ImGui::EndDragDropTarget();
 				}
+			}
 
-				ImGui::PopID();
+			if (ImGui::CollapsingHeader("Materials"))
+			{
+				for (uint32 i = 0; i < entity->GetNumSubEntities(); ++i)
+				{
+					SubEntity *sub = entity->GetSubEntity(i);
+					ASSERT(sub);
+
+					SubMesh &submesh = entity->GetMesh()->GetSubMesh(i);
+
+					ImGui::PushID(i);
+
+					// Get material
+					MaterialPtr material = sub->GetMaterial();
+					if (!material)
+					{
+						material = submesh.GetMaterial();
+					}
+
+					// Build preview string
+					const char *previewString = s_noMaterialPreview;
+					if (material)
+					{
+						previewString = material->GetName().data();
+					}
+
+					const String materialName = sub->GetMaterial()->GetName().data();
+					const String filename = Path(materialName).filename().string();
+
+					bool isOverridden = material != submesh.GetMaterial();
+
+					ImGui::BeginDisabled(!isOverridden);
+					if (ImGui::Checkbox("##overridden", &isOverridden))
+					{
+						sub->SetMaterial(submesh.GetMaterial());
+						mapEntity.MarkModified();
+					}
+					ImGui::EndDisabled();
+
+					ImGui::SameLine();
+
+					if (ImGui::BeginCombo("Material", filename.c_str()))
+					{
+						ImGui::EndCombo();
+					}
+
+					if (ImGui::BeginDragDropTarget())
+					{
+						// We only accept mesh file drops
+						if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmat"))
+						{
+							sub->SetMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
+							mapEntity.MarkModified();
+						}
+
+						if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmi"))
+						{
+							sub->SetMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
+							mapEntity.MarkModified();
+						}
+
+						ImGui::EndDragDropTarget();
+					}
+
+					ImGui::PopID();
+				}
 			}
 		}
 	}

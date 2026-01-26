@@ -101,35 +101,50 @@ namespace mmo
 
         /// @brief Creates the renderable geometry for a group.
         /// @param groupIndex The group index to create geometry for.
-        void CreateGroupGeometry(size_t groupIndex);
+        /// @param scene The scene to create entities in.
+        void CreateGroupGeometry(size_t groupIndex, Scene& scene);
 
         /// @brief Creates doodad entities for the current doodad set.
-        void CreateDoodads();
+        /// @param scene The scene to create entities in.
+        void CreateDoodads(Scene& scene);
 
         /// @brief Clears all doodad entities.
-        void ClearDoodads();
+        /// @param scene The scene to destroy entities in (can be null).
+        void ClearDoodads(Scene* scene);
+
+        /// @brief Clears all geometry.
+        /// @param scene The scene to destroy entities in (can be null).
+        void ClearGeometry(Scene* scene);
 
     private:
         WorldModelPtr m_worldModel;
         uint32 m_activeDoodadSet;
+        bool m_geometryCreated;
         
         AABB m_worldBoundingBox;
         float m_boundingRadius;
         
+        // Mesh visualization within a group
+        struct MeshVisualization
+        {
+            std::shared_ptr<Mesh> mesh;
+            Entity* entity { nullptr };
+            SceneNode* node { nullptr };
+        };
+
         // Group renderables
         struct GroupRenderable
         {
-            std::shared_ptr<Mesh> mesh;
-            std::unique_ptr<Entity> entity;
-            std::unique_ptr<SceneNode> node;
+            size_t groupIndex { 0 };
+            std::vector<MeshVisualization> meshVisualizations;
         };
         std::vector<GroupRenderable> m_groupRenderables;
         
         // Doodad instances
         struct DoodadInstance
         {
-            std::unique_ptr<Entity> entity;
-            std::unique_ptr<SceneNode> node;
+            Entity* entity { nullptr };
+            SceneNode* node { nullptr };
         };
         std::vector<DoodadInstance> m_doodadInstances;
 

@@ -21,27 +21,66 @@ namespace mmo
         , m_activeDoodadSet(0)
         , m_boundingRadius(0.0f)
         , m_currentGroup(-1)
+        , m_geometryCreated(false)
     {
         if (m_worldModel)
         {
             m_worldBoundingBox = m_worldModel->GetBoundingBox();
             m_boundingRadius = m_worldBoundingBox.GetExtents().GetLength();
 
-            // Create renderables for each group
-            for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
-            {
-                CreateGroupGeometry(i);
-            }
-
-            // Create doodads for the default set
-            CreateDoodads();
+            // Note: Geometry is created when attached to a scene node
+            // in NotifyAttachmentChanged, because we need access to the Scene
         }
     }
 
     WorldModelInstance::~WorldModelInstance()
     {
-        ClearDoodads();
+        // Get scene from parent node if available
+        Scene* scene = nullptr;
+        if (m_parentNode)
+        {
+            auto* sceneNode = dynamic_cast<SceneNode*>(m_parentNode);
+            if (sceneNode)
+            {
+                scene = &sceneNode->GetScene();
+            }
+        }
+
+        ClearGeometry(scene);
+        ClearDoodads(scene);
+    }
+
+    void WorldModelInstance::ClearGeometry(Scene* scene)
+    {
+        // Clean up entities and nodes
+        for (auto& groupRenderable : m_groupRenderables)
+        {
+            for (auto& meshViz : groupRenderable.meshVisualizations)
+            {
+                if (meshViz.entity && meshViz.node)
+                {
+                    meshViz.node->DetachObject(*meshViz.entity);
+                }
+                
+                if (scene)
+                {
+                    if (meshViz.entity)
+                    {
+                        scene->DestroyEntity(*meshViz.entity);
+                    }
+                    if (meshViz.node)
+                    {
+                        scene->DestroySceneNode(*meshViz.node);
+                    }
+                }
+                
+                meshViz.entity = nullptr;
+                meshViz.node = nullptr;
+            }
+            groupRenderable.meshVisualizations.clear();
+        }
         m_groupRenderables.clear();
+        m_geometryCreated = false;
     }
 
     void WorldModelInstance::SetActiveDoodadSet(uint32 setIndex)
@@ -49,8 +88,17 @@ namespace mmo
         if (m_activeDoodadSet != setIndex)
         {
             m_activeDoodadSet = setIndex;
-            ClearDoodads();
-            CreateDoodads();
+            
+            // Re-create doodads if we have a scene (geometry was already created)
+            if (m_geometryCreated && m_parentNode)
+            {
+                auto* sceneNode = dynamic_cast<SceneNode*>(m_parentNode);
+                if (sceneNode)
+                {
+                    ClearDoodads(&sceneNode->GetScene());
+                    CreateDoodads(sceneNode->GetScene());
+                }
+            }
         }
     }
 
@@ -173,9 +221,12 @@ namespace mmo
         // Visit each visible group's renderables
         for (const auto& groupRenderable : m_groupRenderables)
         {
-            if (groupRenderable.entity)
+            for (const auto& meshViz : groupRenderable.meshVisualizations)
             {
-                groupRenderable.entity->VisitRenderables(visitor, debugRenderables);
+                if (meshViz.entity)
+                {
+                    meshViz.entity->VisitRenderables(visitor, debugRenderables);
+                }
             }
         }
     }
@@ -191,9 +242,12 @@ namespace mmo
         // For now, render all groups
         for (auto& groupRenderable : m_groupRenderables)
         {
-            if (groupRenderable.entity)
+            for (auto& meshViz : groupRenderable.meshVisualizations)
             {
-                groupRenderable.entity->PopulateRenderQueue(renderQueue);
+                if (meshViz.entity)
+                {
+                    meshViz.entity->PopulateRenderQueue(renderQueue);
+                }
             }
         }
 
@@ -211,8 +265,24 @@ namespace mmo
     {
         MovableObject::NotifyAttachmentChanged(parent, isTagPoint);
 
-        // Update doodad node parents
-        // Note: This may need to be implemented if we need doodads to be children of this node
+        // Create geometry when attached to a scene node for the first time
+        if (parent && !m_geometryCreated && m_worldModel)
+        {
+            auto* sceneNode = dynamic_cast<SceneNode*>(parent);
+            if (sceneNode)
+            {
+                // Create renderables for each group
+                for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
+                {
+                    CreateGroupGeometry(i, sceneNode->GetScene());
+                }
+
+                // Create doodads for the default set
+                CreateDoodads(sceneNode->GetScene());
+
+                m_geometryCreated = true;
+            }
+        }
     }
 
     void WorldModelInstance::PerformPortalCulling(const Camera& camera, int32 startGroupIndex, std::vector<int32>& visibleGroups) const
@@ -307,7 +377,7 @@ namespace mmo
         }
     }
 
-    void WorldModelInstance::CreateGroupGeometry(size_t groupIndex)
+    void WorldModelInstance::CreateGroupGeometry(size_t groupIndex, Scene& scene)
     {
         if (!m_worldModel)
         {
@@ -321,18 +391,71 @@ namespace mmo
         }
 
         GroupRenderable renderable;
+        renderable.groupIndex = groupIndex;
 
-        // Create a mesh for this group
-        const String meshName = m_name + "_group_" + std::to_string(groupIndex);
-        
-        // For now, we'll create simple renderables
-        // In a full implementation, we'd create proper Mesh objects from the group geometry
-        // and use SubMesh with proper materials
+        // Load and create entities for each mesh reference in this group
+        const auto& meshRefs = group->GetMeshRefs();
+        for (size_t i = 0; i < meshRefs.size(); ++i)
+        {
+            const auto& meshRef = meshRefs[i];
+            if (!meshRef.visible)
+            {
+                continue;
+            }
+
+            MeshVisualization viz;
+
+            // Load the mesh
+            viz.mesh = MeshManager::Get().Load(meshRef.meshPath);
+            if (!viz.mesh)
+            {
+                continue;
+            }
+
+            // Create a unique name for the entity
+            const String nodeName = m_name + "_group" + std::to_string(groupIndex) + "_mesh" + std::to_string(i);
+            
+            // Create scene node under the parent
+            viz.node = &scene.CreateSceneNode(nodeName);
+            viz.node->SetPosition(meshRef.position);
+            viz.node->SetOrientation(meshRef.rotation);
+            viz.node->SetScale(meshRef.scale);
+            
+            // Attach to parent node
+            if (m_parentNode)
+            {
+                static_cast<SceneNode*>(m_parentNode)->AddChild(*viz.node);
+            }
+            else
+            {
+                scene.GetRootSceneNode().AddChild(*viz.node);
+            }
+
+            // Create entity
+            viz.entity = scene.CreateEntity(nodeName + "_entity", viz.mesh);
+            if (viz.entity)
+            {
+                viz.entity->SetQueryFlags(GetQueryFlags());
+                viz.node->AttachObject(*viz.entity);
+
+                // Apply material override if specified
+                if (!meshRef.materialOverride.empty())
+                {
+                    auto material = MaterialManager::Get().Load(meshRef.materialOverride);
+                    if (material)
+                    {
+                        viz.entity->SetMaterial(material);
+                    }
+                }
+            }
+
+            renderable.meshVisualizations.push_back(std::move(viz));
+        }
 
         m_groupRenderables.push_back(std::move(renderable));
     }
 
-    void WorldModelInstance::CreateDoodads()
+    void WorldModelInstance::CreateDoodads(Scene& scene)
     {
         if (!m_worldModel)
         {
@@ -360,6 +483,7 @@ namespace mmo
         }
 
         // Create doodad instances
+        size_t doodadCounter = 0;
         for (const auto& [startIndex, count] : setsToLoad)
         {
             for (uint32 i = 0; i < count; ++i)
@@ -376,23 +500,70 @@ namespace mmo
                     continue;
                 }
 
-                // In a full implementation, we would:
-                // 1. Load the mesh from doodadNames[doodad.nameIndex]
-                // 2. Create an Entity with that mesh
-                // 3. Create a SceneNode and position it
-                // 4. Apply scale and rotation from the doodad definition
+                const String& meshPath = doodadNames[doodad.nameIndex];
+                auto mesh = MeshManager::Get().Load(meshPath);
+                if (!mesh)
+                {
+                    continue;
+                }
 
                 DoodadInstance instance;
-                // instance.entity = ...
-                // instance.node = ...
+
+                // Create scene node
+                const String nodeName = m_name + "_doodad" + std::to_string(doodadCounter++);
+                instance.node = &scene.CreateSceneNode(nodeName);
+                instance.node->SetPosition(doodad.position);
+                instance.node->SetOrientation(doodad.rotation);
+                instance.node->SetScale(Vector3(doodad.scale, doodad.scale, doodad.scale));
+
+                // Attach to parent node
+                if (m_parentNode)
+                {
+                    static_cast<SceneNode*>(m_parentNode)->AddChild(*instance.node);
+                }
+                else
+                {
+                    scene.GetRootSceneNode().AddChild(*instance.node);
+                }
+
+                // Create entity
+                instance.entity = scene.CreateEntity(nodeName + "_entity", mesh);
+                if (instance.entity)
+                {
+                    instance.entity->SetQueryFlags(GetQueryFlags());
+                    instance.node->AttachObject(*instance.entity);
+                }
                 
                 m_doodadInstances.push_back(std::move(instance));
             }
         }
     }
 
-    void WorldModelInstance::ClearDoodads()
+    void WorldModelInstance::ClearDoodads(Scene* scene)
     {
+        // Clean up entities and nodes
+        for (auto& doodad : m_doodadInstances)
+        {
+            if (doodad.entity && doodad.node)
+            {
+                doodad.node->DetachObject(*doodad.entity);
+            }
+            
+            if (scene)
+            {
+                if (doodad.entity)
+                {
+                    scene->DestroyEntity(*doodad.entity);
+                }
+                if (doodad.node)
+                {
+                    scene->DestroySceneNode(*doodad.node);
+                }
+            }
+            
+            doodad.entity = nullptr;
+            doodad.node = nullptr;
+        }
         m_doodadInstances.clear();
     }
 }

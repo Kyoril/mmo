@@ -606,7 +606,11 @@ namespace mmo
                 entry.displayName = mapEntity->GetDisplayName();
                 if (entry.displayName.empty())
                 {
-                    entry.displayName = mapEntity->GetEntity().GetName();
+                    MovableObject* movable = mapEntity->GetMovableObject();
+                    if (movable)
+                    {
+                        entry.displayName = movable->GetName();
+                    }
                 }
                 
                 // Use category if available

@@ -65,11 +65,6 @@ namespace mmo
 
 		void SetMaterial(const MaterialPtr& material);
 
-		void SetUserObject(void* userObject) { m_userObject = userObject; }
-
-		template<typename T>
-		T* GetUserObject() const { return static_cast<T*>(m_userObject); }
-
 		TagPoint* AttachObjectToBone(const String& boneName,
 			MovableObject& pMovable,
 			const Quaternion& offsetOrientation = Quaternion::Identity,
@@ -107,8 +102,6 @@ namespace mmo
 		ChildObjects m_childObjects{};
 
 		mutable AABB m_fullBoundingBox {};
-
-		void* m_userObject{ nullptr };
 
 		std::vector<Matrix4> m_boneMatrices;
 

@@ -11,6 +11,7 @@
 #include "scene_graph/scene_node.h"
 #include "scene_graph/mesh.h"
 #include "scene_graph/sub_mesh.h"
+#include "scene_graph/world_model_instance.h"
 #include "graphics/vertex_index_data.h"
 #include "graphics/vertex_declaration.h"
 #include "terrain/terrain.h"
@@ -225,40 +226,56 @@ namespace mmo
         const auto &hitResult = m_raySceneQuery.GetLastResult();
         if (!hitResult.empty())
         {
-            // Find the closest entity that actually intersects with the ray geometry
-            Entity *closestEntity = nullptr;
+            // Find the closest object that actually intersects with the ray geometry
+            MovableObject *closestMovable = nullptr;
             float closestDistance = std::numeric_limits<float>::max();
 
             for (const auto &result : hitResult)
             {
-                Entity *entity = static_cast<Entity *>(result.movable);
-                if (!entity)
+                MovableObject *movable = result.movable;
+                if (!movable)
                 {
                     continue;
                 }
 
-                // Test against actual mesh geometry
-                float hitDistance;
-                if (IntersectMeshGeometry(ray, entity, hitDistance))
+                // Try as Entity first
+                if (Entity *entity = dynamic_cast<Entity*>(movable))
                 {
-                    if (hitDistance < closestDistance)
+                    // Test against actual mesh geometry
+                    float hitDistance;
+                    if (IntersectMeshGeometry(ray, entity, hitDistance))
                     {
-                        closestDistance = hitDistance;
-                        closestEntity = entity;
+                        if (hitDistance < closestDistance)
+                        {
+                            closestDistance = hitDistance;
+                            closestMovable = entity;
+                        }
+                    }
+                }
+                // Try as WorldModelInstance
+                else if (WorldModelInstance *wmo = dynamic_cast<WorldModelInstance*>(movable))
+                {
+                    // For world models, use bounding box intersection for now
+                    const AABB& worldBounds = wmo->GetBoundingBox();
+                    auto [hit, distance] = ray.IntersectsAABB(worldBounds);
+                    if (hit && distance < closestDistance)
+                    {
+                        closestDistance = distance;
+                        closestMovable = wmo;
                     }
                 }
             }
 
             // Select the closest entity if we found one
-            if (closestEntity)
+            if (closestMovable)
             {
-                MapEntity *mapEntity = closestEntity->GetUserObject<MapEntity>();
+                MapEntity *mapEntity = closestMovable->GetUserObject<MapEntity>();
                 if (mapEntity)
                 {
                     // Note: Duplication callback will be provided by WorldEditorInstance
                     // since it requires CreateMapEntity and GenerateUniqueId
                     m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*mapEntity, nullptr));
-                    UpdateDebugAABB(closestEntity->GetWorldBoundingBox());
+                    UpdateDebugAABB(closestMovable->GetWorldBoundingBox());
                 }
             }
         }

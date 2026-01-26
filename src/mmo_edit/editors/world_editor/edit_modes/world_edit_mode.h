@@ -17,6 +17,7 @@ namespace mmo
 	class Vector3;
 	class Entity;
 	class Camera;
+	class WorldModelInstance;
 
 	namespace proto
 	{
@@ -55,7 +56,23 @@ namespace mmo
 
 		virtual float GetTranslateGridSnapSize() const = 0;
 
+		/// @brief Creates a mesh entity in the scene.
+		/// @param assetName The mesh asset name to use (.hmsh file).
+		/// @param position World position for the entity.
+		/// @param orientation World orientation for the entity.
+		/// @param scale World scale for the entity.
+		/// @param objectId Unique object ID (0 to auto-generate).
+		/// @return Pointer to the created entity, or nullptr on failure.
 		virtual Entity* CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 objectId) = 0;
+
+		/// @brief Creates a world model entity in the scene.
+		/// @param assetName The world model asset name to use (.hwmo file).
+		/// @param position World position for the entity.
+		/// @param orientation World orientation for the entity.
+		/// @param scale World scale for the entity.
+		/// @param objectId Unique object ID (0 to auto-generate).
+		/// @return Pointer to the created world model instance, or nullptr on failure.
+		virtual WorldModelInstance* CreateWorldModelEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 objectId) = 0;
 
 		virtual bool HasTerrain() const = 0;
 

@@ -33,8 +33,14 @@ namespace mmo
 	{
 		WorldEditMode::OnViewportDrop(x, y);
 
-		// We only accept mesh file drops
-		if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
+		// Check for mesh file drops
+		const ImGuiPayload* meshPayload = ImGui::AcceptDragDropPayload(".hmsh");
+		const ImGuiPayload* wmoPayload = !meshPayload ? ImGui::AcceptDragDropPayload(".hwmo") : nullptr;
+
+		const ImGuiPayload* payload = meshPayload ? meshPayload : wmoPayload;
+		const bool isWorldModel = (payload == wmoPayload);
+
+		if (payload)
 		{
 			Vector3 position;
 
@@ -51,7 +57,7 @@ namespace mmo
 			{
 				for (const auto& hit : result)
 				{
-					if (const auto entity = static_cast<Entity*>(hit.movable))
+					if (const auto entity = dynamic_cast<Entity*>(hit.movable))
 					{
 						AABBTree& tree = entity->GetMesh()->GetCollisionTree();
 						if (tree.IntersectRay(ray, nullptr, raycast_flags::EarlyExit))
@@ -96,7 +102,14 @@ namespace mmo
 				position.z = std::round(position.z / gridSize) * gridSize;
 			}
 
-			m_worldEditor.CreateMapEntity(*static_cast<String*>(payload->Data), position, Quaternion::Identity, Vector3::UnitScale, 0);
+			if (isWorldModel)
+			{
+				m_worldEditor.CreateWorldModelEntity(*static_cast<String*>(payload->Data), position, Quaternion::Identity, Vector3::UnitScale, 0);
+			}
+			else
+			{
+				m_worldEditor.CreateMapEntity(*static_cast<String*>(payload->Data), position, Quaternion::Identity, Vector3::UnitScale, 0);
+			}
 		}
 	}
 }
