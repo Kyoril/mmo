@@ -620,6 +620,9 @@ namespace mmo
 		m_rasterizerDesc.SlopeScaledDepthBias = 0.0f;
 		m_rasterizerDescChanged = true;
 
+		// Force depth stencil state to be re-applied since ClearState() unbinds it
+		m_depthStencilChanged = true;
+
 		m_lastInputLayout = nullptr;
 
 		m_lastFrameBatchCount = m_batchCount;
