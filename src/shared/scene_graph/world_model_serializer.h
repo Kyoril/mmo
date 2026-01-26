@@ -21,10 +21,6 @@ namespace mmo
         {
             Latest = -1,
 
-            /// @brief Initial version with basic group/portal support.
-            /// Uses chunk size to determine element counts.
-            Version_1_0 = 0x0100,
-
             /// @brief Version 2.0 with explicit element counts.
             /// Each chunk writes element count explicitly instead of relying on chunk size.
             Version_2_0 = 0x0200,
