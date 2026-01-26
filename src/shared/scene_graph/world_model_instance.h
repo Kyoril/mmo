@@ -17,6 +17,7 @@ namespace mmo
     class RenderQueue;
     class SubMesh;
     class Mesh;
+    class Light;
 
     /// @brief Represents a runtime instance of a world model placed in the scene.
     /// Handles rendering with portal culling, visibility determination, and collision.
@@ -108,9 +109,17 @@ namespace mmo
         /// @param scene The scene to create entities in.
         void CreateDoodads(Scene& scene);
 
+        /// @brief Creates lights from the world model.
+        /// @param scene The scene to create lights in.
+        void CreateLights(Scene& scene);
+
         /// @brief Clears all doodad entities.
         /// @param scene The scene to destroy entities in (can be null).
         void ClearDoodads(Scene* scene);
+
+        /// @brief Clears all lights.
+        /// @param scene The scene to destroy lights in (can be null).
+        void ClearLights(Scene* scene);
 
         /// @brief Clears all geometry.
         /// @param scene The scene to destroy entities in (can be null).
@@ -147,6 +156,14 @@ namespace mmo
             SceneNode* node { nullptr };
         };
         std::vector<DoodadInstance> m_doodadInstances;
+
+        // Light instances
+        struct LightInstance
+        {
+            Light* light { nullptr };
+            SceneNode* node { nullptr };
+        };
+        std::vector<LightInstance> m_lightInstances;
 
         // Visibility state (updated each frame)
         mutable std::vector<int32> m_visibleGroups;

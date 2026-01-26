@@ -10,6 +10,9 @@
 #include "mesh_manager.h"
 #include "sub_mesh.h"
 #include "material_manager.h"
+#include "light.h"
+
+#include <algorithm>
 
 namespace mmo
 {
@@ -48,6 +51,7 @@ namespace mmo
 
         ClearGeometry(scene);
         ClearDoodads(scene);
+        ClearLights(scene);
     }
 
     void WorldModelInstance::ClearGeometry(Scene* scene)
@@ -321,6 +325,9 @@ namespace mmo
 
                 // Create doodads for the default set
                 CreateDoodads(sceneNode->GetScene());
+
+                // Create lights
+                CreateLights(sceneNode->GetScene());
 
                 m_geometryCreated = true;
             }
@@ -607,5 +614,144 @@ namespace mmo
             doodad.node = nullptr;
         }
         m_doodadInstances.clear();
+    }
+
+    void WorldModelInstance::CreateLights(Scene& scene)
+    {
+        ClearLights(&scene);
+
+        if (!m_worldModel)
+        {
+            return;
+        }
+
+        const auto& lights = m_worldModel->GetLights();
+        if (lights.empty())
+        {
+            return;
+        }
+
+        const String baseName = m_parentNode ? m_parentNode->GetName() : "wmo";
+        uint32 lightIndex = 0;
+
+        for (const auto& wmoLight : lights)
+        {
+            // Skip ambient lights - they don't map to scene lights
+            if (wmoLight.type == WorldModelLight::LightType::Ambient)
+            {
+                continue;
+            }
+
+            // Map WMO light type to scene light type
+            LightType sceneType = LightType::Point;
+            switch (wmoLight.type)
+            {
+            case WorldModelLight::LightType::Omni:
+                sceneType = LightType::Point;
+                break;
+            case WorldModelLight::LightType::Spot:
+                sceneType = LightType::Spot;
+                break;
+            case WorldModelLight::LightType::Direct:
+                sceneType = LightType::Directional;
+                break;
+            default:
+                break;
+            }
+
+            // Create a unique name for this light
+            String lightName = baseName + "_light_" + std::to_string(lightIndex++);
+
+            // Create scene node for the light
+            SceneNode& lightNode = scene.CreateSceneNode(lightName + "_node");
+
+            // Attach to parent node
+            if (m_parentNode)
+            {
+                static_cast<SceneNode*>(m_parentNode)->AddChild(lightNode);
+            }
+            else
+            {
+                scene.GetRootSceneNode().AddChild(lightNode);
+            }
+
+            // Set light position relative to parent
+            lightNode.SetPosition(wmoLight.position);
+            
+            // Only set orientation for spot/directional lights that actually use it
+            // Validate quaternion before using to avoid NaN issues
+            if (sceneType != LightType::Point)
+            {
+                Quaternion rotation = wmoLight.rotation;
+                const float lengthSq = rotation.x * rotation.x + rotation.y * rotation.y + 
+                                       rotation.z * rotation.z + rotation.w * rotation.w;
+                if (lengthSq > 0.001f)
+                {
+                    rotation.Normalize();
+                    lightNode.SetOrientation(rotation);
+                }
+            }
+
+            // Create the light
+            Light& light = scene.CreateLight(lightName, sceneType);
+
+            // Convert ARGB color to Vector4 (RGBA, normalized)
+            // Format: 0xAARRGGBB
+            const float r = static_cast<float>((wmoLight.color >> 16) & 0xFF) / 255.0f;
+            const float g = static_cast<float>((wmoLight.color >> 8) & 0xFF) / 255.0f;
+            const float b = static_cast<float>((wmoLight.color >> 0) & 0xFF) / 255.0f;
+            light.SetColor(Vector4(r, g, b, 1.0f));
+
+            // Set intensity - clamp to reasonable range to avoid over-brightening
+            const float clampedIntensity = std::min(wmoLight.intensity, 10.0f);
+            light.SetIntensity(clampedIntensity);
+
+            // Set range from attenuation end
+            if (wmoLight.useAttenuation && wmoLight.attenuationEnd > 0.0f)
+            {
+                light.SetRange(wmoLight.attenuationEnd);
+            }
+            else
+            {
+                // Default range if no attenuation
+                light.SetRange(50.0f);
+            }
+
+            // Attach light to node
+            lightNode.AttachObject(light);
+
+            // Store the light instance
+            LightInstance instance;
+            instance.light = &light;
+            instance.node = &lightNode;
+            m_lightInstances.push_back(std::move(instance));
+        }
+    }
+
+    void WorldModelInstance::ClearLights(Scene* scene)
+    {
+        for (auto& lightInstance : m_lightInstances)
+        {
+            if (lightInstance.light && lightInstance.node)
+            {
+                lightInstance.node->DetachObject(*lightInstance.light);
+            }
+
+            if (scene)
+            {
+                if (lightInstance.light)
+                {
+                    scene->DestroyLight(*lightInstance.light);
+                }
+                if (lightInstance.node)
+                {
+                    scene->DestroySceneNode(*lightInstance.node);
+                }
+            }
+
+            lightInstance.light = nullptr;
+            lightInstance.node = nullptr;
+        }
+        m_lightInstances.clear();
     }
 }
