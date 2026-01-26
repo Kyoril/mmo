@@ -92,7 +92,7 @@ namespace mmo
 	SelectedGroupMesh::SelectedGroupMesh(WorldModelGroup& group, size_t meshIndex, SceneNode& node)
 		: m_group(group)
 		, m_meshIndex(meshIndex)
-		, m_node(node)
+		, m_node(&node)
 	{
 	}
 
@@ -111,7 +111,8 @@ namespace mmo
 		{
 			meshRef->position = position;
 		}
-		m_node.SetPosition(position);
+		m_node->SetPosition(position);
+		positionChanged(*this);
 	}
 
 	Quaternion SelectedGroupMesh::GetOrientation() const
@@ -129,7 +130,8 @@ namespace mmo
 		{
 			meshRef->rotation = orientation;
 		}
-		m_node.SetOrientation(orientation);
+		m_node->SetOrientation(orientation);
+		rotationChanged(*this);
 	}
 
 	Vector3 SelectedGroupMesh::GetScale() const
@@ -147,7 +149,8 @@ namespace mmo
 		{
 			meshRef->scale = scale;
 		}
-		m_node.SetScale(scale);
+		m_node->SetScale(scale);
+		scaleChanged(*this);
 	}
 
 	void SelectedGroupMesh::Translate(const Vector3& delta)
@@ -155,7 +158,8 @@ namespace mmo
 		if (auto* meshRef = m_group.GetMeshRef(m_meshIndex))
 		{
 			meshRef->position += delta;
-			m_node.Translate(delta);
+			m_node->Translate(delta);
+			positionChanged(*this);
 		}
 	}
 
@@ -164,7 +168,8 @@ namespace mmo
 		if (auto* meshRef = m_group.GetMeshRef(m_meshIndex))
 		{
 			meshRef->rotation = delta * meshRef->rotation;
-			m_node.Rotate(delta);
+			m_node->Rotate(delta);
+			rotationChanged(*this);
 		}
 	}
 
@@ -173,7 +178,8 @@ namespace mmo
 		if (auto* meshRef = m_group.GetMeshRef(m_meshIndex))
 		{
 			meshRef->scale += delta;
-			m_node.SetScale(meshRef->scale);
+			m_node->SetScale(meshRef->scale);
+			scaleChanged(*this);
 		}
 	}
 
@@ -182,9 +188,59 @@ namespace mmo
 		if (const auto* meshRef = m_group.GetMeshRef(m_meshIndex))
 		{
 			WorldModelMeshRef newRef = *meshRef;
-			newRef.name = meshRef->name + "_copy";
-			newRef.position += Vector3(1.0f, 0.0f, 0.0f);  // Offset the copy
+			
+			// Generate a unique name with counter
+			// Strip any existing " (N)" suffix to get base name
+			String baseName = meshRef->name;
+			const auto parenPos = baseName.rfind(" (");
+			if (parenPos != String::npos)
+			{
+				// Check if it ends with " (N)"
+				const auto closePos = baseName.rfind(')');
+				if (closePos == baseName.length() - 1 && closePos > parenPos)
+				{
+					baseName = baseName.substr(0, parenPos);
+				}
+			}
+			
+			// Find the highest existing counter for this base name
+			int maxCounter = 1;
+			const auto& meshRefs = m_group.GetMeshRefs();
+			for (const auto& ref : meshRefs)
+			{
+				if (ref.name == baseName)
+				{
+					// Found base name without counter, so we need at least (2)
+					maxCounter = std::max(maxCounter, 1);
+				}
+				else if (ref.name.find(baseName + " (") == 0)
+				{
+					// Extract counter from " (N)"
+					const auto startPos = baseName.length() + 2; // Skip " ("
+					const auto endPos = ref.name.rfind(')');
+					if (endPos > startPos)
+					{
+						try
+						{
+							const int counter = std::stoi(ref.name.substr(startPos, endPos - startPos));
+							maxCounter = std::max(maxCounter, counter);
+						}
+						catch (...)
+						{
+							// Ignore parsing errors
+						}
+					}
+				}
+			}
+			
+			newRef.name = baseName + " (" + std::to_string(maxCounter + 1) + ")";
+			
+			// Don't offset - the copy stays at the current position while original continues moving
 			m_group.AddMeshRef(newRef);
+			
+			// Fire signal with the index of the new mesh
+			const size_t newIndex = m_group.GetMeshRefs().size() - 1;
+			duplicated(newIndex);
 		}
 	}
 
@@ -308,6 +364,123 @@ namespace mmo
 		return m_worldModel.GetChildRef(m_childIndex);
 	}
 
+	// SelectedWorldModelLight implementation
+	SelectedWorldModelLight::SelectedWorldModelLight(WorldModel& worldModel, size_t lightIndex, SceneNode& node)
+		: m_worldModel(worldModel)
+		, m_lightIndex(lightIndex)
+		, m_node(&node)
+	{
+	}
+
+	Vector3 SelectedWorldModelLight::GetPosition() const
+	{
+		auto& lights = m_worldModel.GetLights();
+		if (m_lightIndex < lights.size())
+		{
+			return lights[m_lightIndex].position;
+		}
+		return Vector3::Zero;
+	}
+
+	void SelectedWorldModelLight::SetPosition(const Vector3& position) const
+	{
+		auto& lights = m_worldModel.GetLights();
+		if (m_lightIndex < lights.size())
+		{
+			lights[m_lightIndex].position = position;
+		}
+		m_node->SetPosition(position);
+		positionChanged(*this);
+	}
+
+	Quaternion SelectedWorldModelLight::GetOrientation() const
+	{
+		auto& lights = m_worldModel.GetLights();
+		if (m_lightIndex < lights.size())
+		{
+			return lights[m_lightIndex].rotation;
+		}
+		return Quaternion::Identity;
+	}
+
+	void SelectedWorldModelLight::SetOrientation(const Quaternion& orientation) const
+	{
+		auto& lights = m_worldModel.GetLights();
+		if (m_lightIndex < lights.size())
+		{
+			lights[m_lightIndex].rotation = orientation;
+		}
+		m_node->SetOrientation(orientation);
+		rotationChanged(*this);
+	}
+
+	Vector3 SelectedWorldModelLight::GetScale() const
+	{
+		return Vector3::UnitScale;
+	}
+
+	void SelectedWorldModelLight::SetScale(const Vector3& scale) const
+	{
+		// Lights don't have scale
+	}
+
+	void SelectedWorldModelLight::Translate(const Vector3& delta)
+	{
+		auto& lights = m_worldModel.GetLights();
+		if (m_lightIndex < lights.size())
+		{
+			lights[m_lightIndex].position += delta;
+			m_node->Translate(delta);
+			positionChanged(*this);
+		}
+	}
+
+	void SelectedWorldModelLight::Rotate(const Quaternion& delta)
+	{
+		auto& lights = m_worldModel.GetLights();
+		if (m_lightIndex < lights.size())
+		{
+			lights[m_lightIndex].rotation = delta * lights[m_lightIndex].rotation;
+			m_node->Rotate(delta);
+			rotationChanged(*this);
+		}
+	}
+
+	void SelectedWorldModelLight::Scale(const Vector3& delta)
+	{
+		// Lights don't support scaling
+	}
+
+	void SelectedWorldModelLight::Duplicate()
+	{
+		auto& lights = m_worldModel.GetLights();
+		if (m_lightIndex < lights.size())
+		{
+			WorldModelLight newLight = lights[m_lightIndex];
+			// Don't offset - the copy will be at the same position, and the user will drag it
+			lights.push_back(newLight);
+			
+			// Fire signal with the index of the new light
+			const size_t newIndex = lights.size() - 1;
+			duplicated(newIndex);
+		}
+	}
+
+	void SelectedWorldModelLight::Remove()
+	{
+		removed();
+	}
+
+	WorldModelLight* SelectedWorldModelLight::GetLight()
+	{
+		auto& lights = m_worldModel.GetLights();
+		if (m_lightIndex < lights.size())
+		{
+			return &lights[m_lightIndex];
+		}
+		return nullptr;
+	}
+
 	// Chunk definitions
 	static const ChunkMagic versionChunk = MakeChunkMagic('MVER');
 	static const ChunkMagic meshChunk = MakeChunkMagic('MESH');
@@ -374,10 +547,68 @@ namespace mmo
 				return;
 			}
 
-			// Copy selection
-			for (const auto& selected : m_selection.GetSelectedObjects())
+			auto& selectedObjects = m_selection.GetSelectedObjects();
+			if (selectedObjects.empty())
 			{
-				selected->Duplicate();
+				return;
+			}
+
+			// Handle mesh duplication - duplicate stays at current position, original continues moving
+			if (auto* selectedMesh = dynamic_cast<SelectedGroupMesh*>(selectedObjects.back().get()))
+			{
+				WorldModelGroup& group = selectedMesh->GetGroup();
+				const size_t meshIndex = selectedMesh->GetMeshIndex();
+				
+				// Perform the duplication
+				selectedMesh->Duplicate();
+
+				// Update visualizations to create the scene node for the new mesh
+				// This rebuilds ALL mesh ref nodes, invalidating the current selection's node pointer
+				for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
+				{
+					if (m_worldModel->GetGroup(i) == &group)
+					{
+						UpdateMeshRefVisualizations(i);
+						
+						// Update the node pointer in the selection to point to the new node
+						if (i < m_groupVisualizations.size())
+						{
+							auto& groupViz = m_groupVisualizations[i];
+							if (meshIndex < groupViz.meshRefVisualizations.size() &&
+								groupViz.meshRefVisualizations[meshIndex].node)
+							{
+								selectedMesh->UpdateNode(groupViz.meshRefVisualizations[meshIndex].node);
+							}
+						}
+						break;
+					}
+				}
+				// Selection stays on original - transform continues
+			}
+			else if (auto* selectedLight = dynamic_cast<SelectedWorldModelLight*>(selectedObjects.back().get()))
+			{
+				const size_t lightIndex = selectedLight->GetLightIndex();
+				
+				// Perform the duplication
+				selectedLight->Duplicate();
+
+				// Update light visualizations - this rebuilds ALL light nodes
+				UpdateLightVisualizations();
+				
+				// Update the node pointer in the selection to point to the new node
+				if (lightIndex < m_lightVisualizations.size() && m_lightVisualizations[lightIndex].node)
+				{
+					selectedLight->UpdateNode(m_lightVisualizations[lightIndex].node);
+				}
+				// Selection stays on original - transform continues
+			}
+			else
+			{
+				// Generic duplication for other types
+				for (const auto& selected : selectedObjects)
+				{
+					selected->Duplicate();
+				}
 			}
 		};
 
@@ -4520,6 +4751,15 @@ namespace mmo
 					{
 						m_selectedLightIndex = static_cast<int32>(i);
 						UpdateSelectedLightVisualization();
+						
+						// Add to selection system for transform widget support
+						m_selection.Clear();
+						if (m_selectedLightIndex < static_cast<int32>(m_lightVisualizations.size()) &&
+							m_lightVisualizations[m_selectedLightIndex].node)
+						{
+							m_selection.AddSelectable(std::make_unique<SelectedWorldModelLight>(
+								*m_worldModel, i, *m_lightVisualizations[m_selectedLightIndex].node));
+						}
 					}
 
 					ImGui::PopStyleColor();
