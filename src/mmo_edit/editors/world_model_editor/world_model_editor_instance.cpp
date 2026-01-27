@@ -10,6 +10,7 @@
 #include "panels/world_model_hierarchy_panel.h"
 
 #include <algorithm>
+#include <array>
 #include <sstream>
 #include <imgui_internal.h>
 
@@ -756,6 +757,124 @@ namespace mmo
 					{
 						m_lightVisualizations[lightIndex].node->SetPosition(lights[lightIndex].position);
 					}
+				}
+			};
+			propCallbacks.onCalculateCombinedMeshBounds = [this](int32 groupIndex) -> AABB
+			{
+				AABB combinedBounds;
+				combinedBounds.SetNull();
+
+				if (groupIndex < 0 || static_cast<size_t>(groupIndex) >= m_groupVisualizations.size())
+				{
+					return combinedBounds;
+				}
+
+				auto* group = m_worldModel->GetGroup(groupIndex);
+				if (!group)
+				{
+					return combinedBounds;
+				}
+
+				const auto& meshRefs = group->GetMeshRefs();
+				const auto& groupViz = m_groupVisualizations[groupIndex];
+
+				for (size_t i = 0; i < meshRefs.size() && i < groupViz.meshRefVisualizations.size(); ++i)
+				{
+					const auto& meshRef = meshRefs[i];
+					const auto& meshViz = groupViz.meshRefVisualizations[i];
+
+					if (meshViz.mesh)
+					{
+						AABB meshBounds = meshViz.mesh->GetBounds();
+
+						// Transform the mesh bounds by the mesh ref's transform
+						// Apply scale first
+						Vector3 scaledMin = meshBounds.min * meshRef.scale;
+						Vector3 scaledMax = meshBounds.max * meshRef.scale;
+
+						// Ensure min is still min after scaling (negative scales can flip)
+						AABB scaledBounds(
+							Vector3(std::min(scaledMin.x, scaledMax.x), std::min(scaledMin.y, scaledMax.y), std::min(scaledMin.z, scaledMax.z)),
+							Vector3(std::max(scaledMin.x, scaledMax.x), std::max(scaledMin.y, scaledMax.y), std::max(scaledMin.z, scaledMax.z))
+						);
+
+						// Get all 8 corners of the bounding box
+						std::array<Vector3, 8> corners;
+						corners[0] = Vector3(scaledBounds.min.x, scaledBounds.min.y, scaledBounds.min.z);
+						corners[1] = Vector3(scaledBounds.max.x, scaledBounds.min.y, scaledBounds.min.z);
+						corners[2] = Vector3(scaledBounds.min.x, scaledBounds.max.y, scaledBounds.min.z);
+						corners[3] = Vector3(scaledBounds.max.x, scaledBounds.max.y, scaledBounds.min.z);
+						corners[4] = Vector3(scaledBounds.min.x, scaledBounds.min.y, scaledBounds.max.z);
+						corners[5] = Vector3(scaledBounds.max.x, scaledBounds.min.y, scaledBounds.max.z);
+						corners[6] = Vector3(scaledBounds.min.x, scaledBounds.max.y, scaledBounds.max.z);
+						corners[7] = Vector3(scaledBounds.max.x, scaledBounds.max.y, scaledBounds.max.z);
+
+						// Rotate and translate each corner, then expand the combined bounds
+						for (const auto& corner : corners)
+						{
+							Vector3 rotatedCorner = meshRef.rotation * corner;
+							Vector3 transformedCorner = rotatedCorner + meshRef.position;
+							combinedBounds.Combine(transformedCorner);
+						}
+					}
+				}
+
+				return combinedBounds;
+			};
+			propCallbacks.onUpdateGroupBoundingBox = [this](int32 groupIndex)
+			{
+				if (groupIndex < 0 || static_cast<size_t>(groupIndex) >= m_groupVisualizations.size())
+				{
+					return;
+				}
+
+				auto* group = m_worldModel->GetGroup(groupIndex);
+				if (!group)
+				{
+					return;
+				}
+
+				auto& vis = m_groupVisualizations[groupIndex];
+
+				// Destroy and recreate the bounding box renderable
+				if (vis.boundingBoxRenderable)
+				{
+					if (vis.node)
+					{
+						vis.node->DetachObject(*vis.boundingBoxRenderable);
+					}
+					m_scene.DestroyManualRenderObject(*vis.boundingBoxRenderable);
+					vis.boundingBoxRenderable = nullptr;
+				}
+
+				// Create new bounding box visualization
+				vis.boundingBoxRenderable = m_scene.CreateManualRenderObject("GroupBBox_" + std::to_string(groupIndex));
+				vis.boundingBoxRenderable->SetQueryFlags(0);
+
+				const AABB& bbox = group->GetBoundingBox();
+				auto lineListOp = vis.boundingBoxRenderable->AddLineListOperation(MaterialManager::Get().Load("Models/Engine/WorldGrid.hmat"));
+
+				// Bottom face
+				lineListOp->AddLine(Vector3(bbox.min.x, bbox.min.y, bbox.min.z), Vector3(bbox.max.x, bbox.min.y, bbox.min.z));
+				lineListOp->AddLine(Vector3(bbox.max.x, bbox.min.y, bbox.min.z), Vector3(bbox.max.x, bbox.min.y, bbox.max.z));
+				lineListOp->AddLine(Vector3(bbox.max.x, bbox.min.y, bbox.max.z), Vector3(bbox.min.x, bbox.min.y, bbox.max.z));
+				lineListOp->AddLine(Vector3(bbox.min.x, bbox.min.y, bbox.max.z), Vector3(bbox.min.x, bbox.min.y, bbox.min.z));
+
+				// Top face
+				lineListOp->AddLine(Vector3(bbox.min.x, bbox.max.y, bbox.min.z), Vector3(bbox.max.x, bbox.max.y, bbox.min.z));
+				lineListOp->AddLine(Vector3(bbox.max.x, bbox.max.y, bbox.min.z), Vector3(bbox.max.x, bbox.max.y, bbox.max.z));
+				lineListOp->AddLine(Vector3(bbox.max.x, bbox.max.y, bbox.max.z), Vector3(bbox.min.x, bbox.max.y, bbox.max.z));
+				lineListOp->AddLine(Vector3(bbox.min.x, bbox.max.y, bbox.max.z), Vector3(bbox.min.x, bbox.max.y, bbox.min.z));
+
+				// Vertical edges
+				lineListOp->AddLine(Vector3(bbox.min.x, bbox.min.y, bbox.min.z), Vector3(bbox.min.x, bbox.max.y, bbox.min.z));
+				lineListOp->AddLine(Vector3(bbox.max.x, bbox.min.y, bbox.min.z), Vector3(bbox.max.x, bbox.max.y, bbox.min.z));
+				lineListOp->AddLine(Vector3(bbox.max.x, bbox.min.y, bbox.max.z), Vector3(bbox.max.x, bbox.max.y, bbox.max.z));
+				lineListOp->AddLine(Vector3(bbox.min.x, bbox.min.y, bbox.max.z), Vector3(bbox.min.x, bbox.max.y, bbox.max.z));
+
+				if (vis.node)
+				{
+					vis.node->AttachObject(*vis.boundingBoxRenderable);
 				}
 			};
 

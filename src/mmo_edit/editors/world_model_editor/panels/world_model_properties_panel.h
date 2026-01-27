@@ -97,6 +97,15 @@ namespace mmo
 		/// @brief Called to update a light's scene node.
 		/// @param lightIndex The light index.
 		std::function<void(int32)> onUpdateLightSceneNode;
+
+		/// @brief Called to calculate the combined bounding box of all meshes in a group.
+		/// @param groupIndex The group index.
+		/// @return The combined AABB of all mesh refs in the group.
+		std::function<AABB(int32)> onCalculateCombinedMeshBounds;
+
+		/// @brief Called to update a single group's bounding box visualization.
+		/// @param groupIndex The group index to update.
+		std::function<void(int32)> onUpdateGroupBoundingBox;
 	};
 
 	/// @brief Draws the properties panel UI.

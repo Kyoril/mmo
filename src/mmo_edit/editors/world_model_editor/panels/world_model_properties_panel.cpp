@@ -110,9 +110,32 @@ namespace mmo
 		if (bboxChanged)
 		{
 			group->SetBoundingBox(bbox);
-			if (callbacks.onUpdateGroupVisualizations)
+			if (callbacks.onUpdateGroupBoundingBox)
 			{
-				callbacks.onUpdateGroupVisualizations();
+				callbacks.onUpdateGroupBoundingBox(groupIndex);
+			}
+		}
+
+		ImGui::Spacing();
+
+		// Button to set bounding box from mesh refs
+		if (callbacks.onCalculateCombinedMeshBounds)
+		{
+			if (ImGui::Button("Set from Meshes"))
+			{
+				AABB combinedBounds = callbacks.onCalculateCombinedMeshBounds(groupIndex);
+				if (!combinedBounds.IsNull())
+				{
+					group->SetBoundingBox(combinedBounds);
+					if (callbacks.onUpdateGroupBoundingBox)
+					{
+						callbacks.onUpdateGroupBoundingBox(groupIndex);
+					}
+				}
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Calculate bounding box from the combined bounds of all assigned meshes");
 			}
 		}
 	}
