@@ -7,6 +7,7 @@
 #include "math/vector3.h"
 #include "math/quaternion.h"
 #include "math/aabb.h"
+#include "math/plane.h"
 #include "scene_graph/portal.h"
 
 #include <vector>
@@ -206,6 +207,90 @@ namespace mmo
         String name;
     };
 
+    /// @brief Represents a convex containment volume for accurate inside/outside detection.
+    /// 
+    /// Containment volumes provide more accurate point-in-group testing than simple AABBs.
+    /// For complex room shapes (L-shaped, T-shaped, etc.), multiple containment volumes
+    /// can be used to define the exact interior space without the AABB extending outside
+    /// the actual geometry.
+    /// 
+    /// A point is considered inside the volume if it is on the negative side (behind)
+    /// all planes in the volume.
+    struct ContainmentVolume
+    {
+        /// @brief Convex hull planes defining this volume.
+        /// A point is inside if it's behind (negative distance) ALL planes.
+        std::vector<Plane> planes;
+        
+        /// @brief Quick-reject bounding box for this volume.
+        AABB boundingBox;
+        
+        /// @brief User-friendly name for editor display.
+        String name;
+        
+        /// @brief Check if a point is inside this convex volume.
+        /// @param point The point to test.
+        /// @return True if the point is inside (behind all planes), false otherwise.
+        bool ContainsPoint(const Vector3& point) const
+        {
+            // Quick AABB rejection test
+            if (!boundingBox.Intersects(point))
+            {
+                return false;
+            }
+            
+            // Check all planes - point must be behind (negative side) of all
+            for (const auto& plane : planes)
+            {
+                if (plane.GetDistance(point) > 0.0001f)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+        
+        /// @brief Creates a box-shaped containment volume from an AABB.
+        /// @param box The AABB to create the volume from.
+        /// @param volumeName Optional name for the volume.
+        /// @return A containment volume with 6 planes defining the box.
+        static ContainmentVolume FromAABB(const AABB& box, const String& volumeName = "")
+        {
+            ContainmentVolume volume;
+            volume.boundingBox = box;
+            volume.name = volumeName;
+            
+            // Create 6 planes facing inward (normals point outward, so points inside are behind all planes)
+            // Left plane (-X)
+            volume.planes.emplace_back(Vector3(-1, 0, 0), box.min);
+            // Right plane (+X)  
+            volume.planes.emplace_back(Vector3(1, 0, 0), box.max);
+            // Bottom plane (-Y)
+            volume.planes.emplace_back(Vector3(0, -1, 0), box.min);
+            // Top plane (+Y)
+            volume.planes.emplace_back(Vector3(0, 1, 0), box.max);
+            // Back plane (-Z)
+            volume.planes.emplace_back(Vector3(0, 0, -1), box.min);
+            // Front plane (+Z)
+            volume.planes.emplace_back(Vector3(0, 0, 1), box.max);
+            
+            return volume;
+        }
+        
+        /// @brief Recalculates the bounding box from the planes.
+        /// Note: This is an approximation based on plane intersections.
+        void RecalculateBoundingBox()
+        {
+            // For box volumes created from AABB, this is already accurate.
+            // For more complex volumes, we'd need to compute plane intersections.
+            // For now, we keep the existing bounding box or set a null one if empty.
+            if (planes.empty())
+            {
+                boundingBox.SetNull();
+            }
+        }
+    };
+
     /// @brief Represents a portal reference linking groups.
     struct WorldModelPortalRef
     {
@@ -327,6 +412,41 @@ namespace mmo
         /// @return Const pointer to the mesh reference, or nullptr if out of range.
         const WorldModelMeshRef* GetMeshRef(size_t index) const;
 
+        // Containment Volumes
+        
+        /// @brief Gets the containment volumes for this group.
+        /// @return Const reference to containment volumes vector.
+        const std::vector<ContainmentVolume>& GetContainmentVolumes() const { return m_containmentVolumes; }
+        
+        /// @brief Gets mutable containment volumes.
+        /// @return Mutable reference to containment volumes vector.
+        std::vector<ContainmentVolume>& GetContainmentVolumes() { return m_containmentVolumes; }
+        
+        /// @brief Adds a containment volume to this group.
+        /// @param volume The containment volume to add.
+        /// @return Index of the added containment volume.
+        size_t AddContainmentVolume(const ContainmentVolume& volume);
+        
+        /// @brief Removes a containment volume by index.
+        /// @param index The index of the containment volume to remove.
+        void RemoveContainmentVolume(size_t index);
+        
+        /// @brief Gets a containment volume by index.
+        /// @param index The index of the containment volume.
+        /// @return Pointer to the containment volume, or nullptr if out of range.
+        ContainmentVolume* GetContainmentVolume(size_t index);
+        
+        /// @brief Gets a containment volume by index (const).
+        /// @param index The index of the containment volume.
+        /// @return Const pointer to the containment volume, or nullptr if out of range.
+        const ContainmentVolume* GetContainmentVolume(size_t index) const;
+        
+        /// @brief Checks if a point is inside this group using containment volumes.
+        /// If no containment volumes are defined, falls back to AABB check.
+        /// @param point The point to test (in group local space).
+        /// @return True if the point is inside the group.
+        bool ContainsPoint(const Vector3& point) const;
+
     private:
         String m_name;
         uint32 m_flags;
@@ -335,6 +455,9 @@ namespace mmo
         
         // Mesh references (new - preferred way to add geometry)
         std::vector<WorldModelMeshRef> m_meshRefs;
+        
+        // Containment volumes for accurate point-in-group testing
+        std::vector<ContainmentVolume> m_containmentVolumes;
         
         // References
         std::vector<WorldModelPortalRef> m_portalRefs;

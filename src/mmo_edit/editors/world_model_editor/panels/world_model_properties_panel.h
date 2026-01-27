@@ -110,6 +110,10 @@ namespace mmo
 		/// @brief Called to update a single group's bounding box visualization.
 		/// @param groupIndex The group index to update.
 		std::function<void(int32)> onUpdateGroupBoundingBox;
+
+		/// @brief Called when containment volumes are modified for a group.
+		/// @param groupIndex The group index whose containment volumes were changed.
+		std::function<void(int32)> onUpdateContainmentVolumes;
 	};
 
 	/// @brief Draws the properties panel UI.

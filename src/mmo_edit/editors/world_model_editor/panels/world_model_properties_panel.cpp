@@ -140,6 +140,126 @@ namespace mmo
 		}
 
 		ImGui::Spacing();
+
+		// Containment Volumes section
+		ImGui::Text("Containment Volumes");
+		ImGui::Separator();
+		
+		auto& volumes = group->GetContainmentVolumes();
+		
+		if (volumes.empty())
+		{
+			ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No containment volumes defined.");
+			ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Using AABB for containment testing.");
+		}
+		else
+		{
+			ImGui::TextColored(ImVec4(0.4f, 0.8f, 0.4f, 1.0f), "%zu volume(s) defined", volumes.size());
+		}
+		
+		ImGui::Spacing();
+		
+		// Button to add a containment volume from current bounding box
+		if (ImGui::Button("Add Volume from AABB"))
+		{
+			ContainmentVolume newVolume = ContainmentVolume::FromAABB(
+				group->GetBoundingBox(),
+				"Volume " + std::to_string(volumes.size() + 1)
+			);
+			group->AddContainmentVolume(newVolume);
+			if (callbacks.onUpdateContainmentVolumes)
+			{
+				callbacks.onUpdateContainmentVolumes(groupIndex);
+			}
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Create a box-shaped containment volume matching the current bounding box.\nUseful as a starting point for defining interior spaces.");
+		}
+		
+		// List existing volumes with editing
+		static int selectedVolumeIndex = -1;
+		
+		for (size_t i = 0; i < volumes.size(); ++i)
+		{
+			ImGui::PushID(static_cast<int>(i));
+			
+			auto& volume = volumes[i];
+			
+			bool isSelected = (selectedVolumeIndex == static_cast<int>(i));
+			String volumeLabel = volume.name.empty() ? "Volume " + std::to_string(i + 1) : volume.name;
+			volumeLabel += " (" + std::to_string(volume.planes.size()) + " planes)";
+			
+			if (ImGui::CollapsingHeader(volumeLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				// Volume name
+				char nameBuffer[256];
+				std::strncpy(nameBuffer, volume.name.c_str(), sizeof(nameBuffer) - 1);
+				nameBuffer[sizeof(nameBuffer) - 1] = '\0';
+				ImGui::Text("Name:");
+				ImGui::SameLine();
+				ImGui::SetNextItemWidth(-1);
+				if (ImGui::InputText("##volumeName", nameBuffer, sizeof(nameBuffer)))
+				{
+					volume.name = nameBuffer;
+				}
+				
+				// Volume bounding box (read-only display)
+				ImGui::Text("Bounds: (%.1f, %.1f, %.1f) - (%.1f, %.1f, %.1f)",
+					volume.boundingBox.min.x, volume.boundingBox.min.y, volume.boundingBox.min.z,
+					volume.boundingBox.max.x, volume.boundingBox.max.y, volume.boundingBox.max.z);
+				
+				// Plane count
+				ImGui::Text("Planes: %zu", volume.planes.size());
+				
+				// Edit volume bounds
+				ImGui::Spacing();
+				AABB volumeBounds = volume.boundingBox;
+				bool volumeBoundsChanged = false;
+				
+				if (ImGui::InputFloat3("Vol Min", volumeBounds.min.Ptr()))
+				{
+					volumeBoundsChanged = true;
+				}
+				if (ImGui::InputFloat3("Vol Max", volumeBounds.max.Ptr()))
+				{
+					volumeBoundsChanged = true;
+				}
+				
+				if (volumeBoundsChanged)
+				{
+					// Recreate the volume with new bounds
+					String oldName = volume.name;
+					volume = ContainmentVolume::FromAABB(volumeBounds, oldName);
+					if (callbacks.onUpdateContainmentVolumes)
+					{
+						callbacks.onUpdateContainmentVolumes(groupIndex);
+					}
+				}
+				
+				// Delete volume button
+				ImGui::Spacing();
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.2f, 0.2f, 0.8f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.7f, 0.3f, 0.3f, 0.9f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.8f, 0.4f, 0.4f, 1.0f));
+				if (ImGui::Button("Remove Volume"))
+				{
+					group->RemoveContainmentVolume(i);
+					if (callbacks.onUpdateContainmentVolumes)
+					{
+						callbacks.onUpdateContainmentVolumes(groupIndex);
+					}
+					ImGui::PopStyleColor(3);
+					ImGui::PopID();
+					break; // Exit loop as indices have changed
+				}
+				ImGui::PopStyleColor(3);
+			}
+			
+			ImGui::PopID();
+		}
+
+		ImGui::Spacing();
 		ImGui::Separator();
 		ImGui::Spacing();
 

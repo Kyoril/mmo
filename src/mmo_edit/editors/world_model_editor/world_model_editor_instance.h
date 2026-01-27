@@ -65,6 +65,9 @@ namespace mmo
 		SceneNode* node { nullptr };
 		ManualRenderObject* boundingBoxRenderable { nullptr };
 		
+		/// @brief Renderables for containment volume visualizations.
+		std::vector<ManualRenderObject*> containmentVolumeRenderables;
+		
 		// Legacy geometry (for old-style embedded geometry)
 		Entity* meshEntity { nullptr };
 		MeshPtr mesh { nullptr };
@@ -262,6 +265,10 @@ namespace mmo
 
 		/// @brief Updates visualization for all groups.
 		void UpdateGroupVisualizations();
+
+		/// @brief Updates containment volume visualizations for a group.
+		/// @param groupIndex The group index.
+		void UpdateContainmentVolumeVisualizations(int32 groupIndex);
 
 		/// @brief Updates visualization for mesh references in a group.
 		/// @param groupIndex The group index.

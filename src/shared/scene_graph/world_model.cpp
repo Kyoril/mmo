@@ -48,6 +48,59 @@ namespace mmo
         return &m_meshRefs[index];
     }
 
+    size_t WorldModelGroup::AddContainmentVolume(const ContainmentVolume& volume)
+    {
+        m_containmentVolumes.push_back(volume);
+        return m_containmentVolumes.size() - 1;
+    }
+
+    void WorldModelGroup::RemoveContainmentVolume(size_t index)
+    {
+        if (index < m_containmentVolumes.size())
+        {
+            m_containmentVolumes.erase(m_containmentVolumes.begin() + index);
+        }
+    }
+
+    ContainmentVolume* WorldModelGroup::GetContainmentVolume(size_t index)
+    {
+        if (index >= m_containmentVolumes.size())
+        {
+            return nullptr;
+        }
+        
+        return &m_containmentVolumes[index];
+    }
+
+    const ContainmentVolume* WorldModelGroup::GetContainmentVolume(size_t index) const
+    {
+        if (index >= m_containmentVolumes.size())
+        {
+            return nullptr;
+        }
+        
+        return &m_containmentVolumes[index];
+    }
+
+    bool WorldModelGroup::ContainsPoint(const Vector3& point) const
+    {
+        // If containment volumes are defined, use them for accurate testing
+        if (!m_containmentVolumes.empty())
+        {
+            for (const auto& volume : m_containmentVolumes)
+            {
+                if (volume.ContainsPoint(point))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        // Fall back to AABB check if no containment volumes defined
+        return m_boundingBox.Intersects(point);
+    }
+
     // ==================== WorldModel ====================
 
     WorldModel::WorldModel()

@@ -123,7 +123,7 @@ namespace mmo
             localCameraPos = invWorld * localCameraPos;
         }
 
-        // Check each group's bounding box
+        // Check each group using containment volumes (if defined) or AABB fallback
         // If multiple groups contain the camera, prefer the one with the smallest
         // bounding box volume (most specific/inner group)
         int32 bestGroupIndex = -1;
@@ -132,7 +132,7 @@ namespace mmo
         for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
         {
             const auto* group = m_worldModel->GetGroup(i);
-            if (group && group->GetBoundingBox().Intersects(localCameraPos))
+            if (group && group->ContainsPoint(localCameraPos))
             {
                 const AABB& bbox = group->GetBoundingBox();
                 Vector3 size = bbox.max - bbox.min;
@@ -171,11 +171,11 @@ namespace mmo
             return false;
         }
 
-        // Check each group
+        // Check each group using containment volumes (if defined) or AABB fallback
         for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
         {
             const auto* group = m_worldModel->GetGroup(i);
-            if (group && group->GetBoundingBox().Intersects(localPoint))
+            if (group && group->ContainsPoint(localPoint))
             {
                 // For interior groups, we're "inside"
                 if (group->IsInterior())

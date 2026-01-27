@@ -27,6 +27,7 @@ namespace mmo
     static const ChunkMagic MeshRefsChunk = MakeChunkMagic('MMRF');
     static const ChunkMagic ChildWMOsChunk = MakeChunkMagic('MCWR');
     static const ChunkMagic GroupNameChunk = MakeChunkMagic('MGNM');
+    static const ChunkMagic ContainmentVolumesChunk = MakeChunkMagic('MCVP');  // Containment Volume Planes
 
     // ==================== WorldModelSerializer ====================
 
@@ -454,6 +455,21 @@ namespace mmo
                 }
             }
 
+            // Add containment volumes chunk size
+            if (!group->GetContainmentVolumes().empty())
+            {
+                groupDataSize += 8; // chunk header
+                groupDataSize += 4; // count
+                for (const auto& volume : group->GetContainmentVolumes())
+                {
+                    groupDataSize += 4; // name string length
+                    groupDataSize += volume.name.size() + 1;
+                    groupDataSize += 24; // bounding box (6 floats)
+                    groupDataSize += 4;  // plane count
+                    groupDataSize += volume.planes.size() * 16; // 4 floats per plane
+                }
+            }
+
             writer
                 << io::write<uint32>(*GroupChunk)
                 << io::write<uint32>(static_cast<uint32>(groupDataSize));
@@ -564,6 +580,54 @@ namespace mmo
                     
                     // Write visible
                     writer << io::write<uint8>(meshRef.visible ? 1 : 0);
+                }
+            }
+
+            // Write containment volumes (MCVP)
+            if (!group->GetContainmentVolumes().empty())
+            {
+                // Calculate chunk size
+                size_t cvSize = 4; // count
+                for (const auto& volume : group->GetContainmentVolumes())
+                {
+                    cvSize += 4; // name string length
+                    cvSize += volume.name.size() + 1;
+                    cvSize += 24; // bounding box (6 floats)
+                    cvSize += 4;  // plane count
+                    cvSize += volume.planes.size() * 16; // 4 floats per plane (normal + d)
+                }
+
+                writer
+                    << io::write<uint32>(*ContainmentVolumesChunk)
+                    << io::write<uint32>(static_cast<uint32>(cvSize));
+
+                writer << io::write<uint32>(static_cast<uint32>(group->GetContainmentVolumes().size()));
+
+                for (const auto& volume : group->GetContainmentVolumes())
+                {
+                    // Write name
+                    writer << io::write<uint32>(static_cast<uint32>(volume.name.size()));
+                    writer.Sink().Write(volume.name.c_str(), volume.name.size() + 1);
+                    
+                    // Write bounding box
+                    writer
+                        << io::write<float>(volume.boundingBox.min.x)
+                        << io::write<float>(volume.boundingBox.min.y)
+                        << io::write<float>(volume.boundingBox.min.z)
+                        << io::write<float>(volume.boundingBox.max.x)
+                        << io::write<float>(volume.boundingBox.max.y)
+                        << io::write<float>(volume.boundingBox.max.z);
+                    
+                    // Write planes
+                    writer << io::write<uint32>(static_cast<uint32>(volume.planes.size()));
+                    for (const auto& plane : volume.planes)
+                    {
+                        writer
+                            << io::write<float>(plane.normal.x)
+                            << io::write<float>(plane.normal.y)
+                            << io::write<float>(plane.normal.z)
+                            << io::write<float>(plane.d);
+                    }
                 }
             }
         }
@@ -1177,7 +1241,64 @@ namespace mmo
 
                     group.AddMeshRef(meshRef);
                 }
+            }
+            else if (subChunkId == *ContainmentVolumesChunk)
+            {
+                // Read containment volumes
+                uint32 count;
+                reader >> io::read<uint32>(count);
 
+                DLOG("Reading " << count << " containment volumes from chunk");
+
+                for (uint32 i = 0; i < count; ++i)
+                {
+                    ContainmentVolume volume;
+
+                    // Read name
+                    uint32 nameLen;
+                    reader >> io::read<uint32>(nameLen);
+                    volume.name.resize(nameLen + 1);
+                    reader.getSource()->read(&volume.name[0], nameLen + 1);
+                    if (!volume.name.empty() && volume.name.back() == '\0')
+                    {
+                        volume.name.resize(nameLen);
+                    }
+
+                    // Read bounding box
+                    float minX, minY, minZ, maxX, maxY, maxZ;
+                    reader
+                        >> io::read<float>(minX)
+                        >> io::read<float>(minY)
+                        >> io::read<float>(minZ)
+                        >> io::read<float>(maxX)
+                        >> io::read<float>(maxY)
+                        >> io::read<float>(maxZ);
+                    
+                    volume.boundingBox.min = Vector3(minX, minY, minZ);
+                    volume.boundingBox.max = Vector3(maxX, maxY, maxZ);
+
+                    // Read planes
+                    uint32 planeCount;
+                    reader >> io::read<uint32>(planeCount);
+                    
+                    volume.planes.reserve(planeCount);
+                    for (uint32 j = 0; j < planeCount; ++j)
+                    {
+                        float nx, ny, nz, d;
+                        reader
+                            >> io::read<float>(nx)
+                            >> io::read<float>(ny)
+                            >> io::read<float>(nz)
+                            >> io::read<float>(d);
+                        
+                        volume.planes.emplace_back(nx, ny, nz, d);
+                    }
+
+                    DLOG("  ContainmentVolume[" << i << "]: name='" << volume.name 
+                         << "' planes=" << volume.planes.size());
+
+                    group.AddContainmentVolume(volume);
+                }
             }
 
             // Always seek to end of sub-chunk to ensure alignment for next iteration

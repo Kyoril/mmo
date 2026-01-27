@@ -887,6 +887,11 @@ namespace mmo
 					vis.node->AttachObject(*vis.boundingBoxRenderable);
 				}
 			};
+			propCallbacks.onUpdateContainmentVolumes = [this](int32 groupIndex)
+			{
+				// Update the 3D visualization for containment volumes
+				UpdateContainmentVolumeVisualizations(groupIndex);
+			};
 
 			DrawPropertiesPanel(m_worldModel.get(), selectionState, propCallbacks);
 		}
@@ -2560,6 +2565,21 @@ namespace mmo
 			{
 				m_scene.DestroyManualRenderObject(*vis.boundingBoxRenderable);
 			}
+			
+			// Clean up containment volume renderables
+			for (auto* renderable : vis.containmentVolumeRenderables)
+			{
+				if (renderable)
+				{
+					if (vis.node)
+					{
+						vis.node->DetachObject(*renderable);
+					}
+					m_scene.DestroyManualRenderObject(*renderable);
+				}
+			}
+			vis.containmentVolumeRenderables.clear();
+			
 			if (vis.node)
 			{
 				m_scene.DestroySceneNode(*vis.node);
@@ -2634,6 +2654,95 @@ namespace mmo
 			vis.visible = true;
 
 			m_groupVisualizations.push_back(std::move(vis));
+			
+			// Create containment volume visualizations for this group
+			UpdateContainmentVolumeVisualizations(static_cast<int32>(i));
+		}
+	}
+
+	void WorldModelEditorInstance::UpdateContainmentVolumeVisualizations(int32 groupIndex)
+	{
+		if (groupIndex < 0 || static_cast<size_t>(groupIndex) >= m_groupVisualizations.size())
+		{
+			return;
+		}
+		
+		auto* group = m_worldModel->GetGroup(groupIndex);
+		if (!group)
+		{
+			return;
+		}
+		
+		auto& vis = m_groupVisualizations[groupIndex];
+		
+		// Clean up existing containment volume renderables
+		for (auto* renderable : vis.containmentVolumeRenderables)
+		{
+			if (renderable)
+			{
+				if (vis.node)
+				{
+					vis.node->DetachObject(*renderable);
+				}
+				m_scene.DestroyManualRenderObject(*renderable);
+			}
+		}
+		vis.containmentVolumeRenderables.clear();
+		
+		// Create new visualizations for each containment volume
+		const auto& volumes = group->GetContainmentVolumes();
+		for (size_t v = 0; v < volumes.size(); ++v)
+		{
+			const auto& volume = volumes[v];
+			
+			auto* renderable = m_scene.CreateManualRenderObject(
+				"GroupContVol_" + std::to_string(groupIndex) + "_" + std::to_string(v)
+			);
+			renderable->SetQueryFlags(0);
+			
+			// Use green lines for containment volumes to distinguish from AABB
+			auto lineListOp = renderable->AddLineListOperation(
+				MaterialManager::Get().Load("Models/Engine/WorldGrid.hmat")
+			);
+			
+			const AABB& vbox = volume.boundingBox;
+			
+			// Bottom face (green)
+			auto& line1 = lineListOp->AddLine(Vector3(vbox.min.x, vbox.min.y, vbox.min.z), Vector3(vbox.max.x, vbox.min.y, vbox.min.z));
+			line1.SetColor(0xFF00FF00); // Green
+			auto& line2 = lineListOp->AddLine(Vector3(vbox.max.x, vbox.min.y, vbox.min.z), Vector3(vbox.max.x, vbox.min.y, vbox.max.z));
+			line2.SetColor(0xFF00FF00);
+			auto& line3 = lineListOp->AddLine(Vector3(vbox.max.x, vbox.min.y, vbox.max.z), Vector3(vbox.min.x, vbox.min.y, vbox.max.z));
+			line3.SetColor(0xFF00FF00);
+			auto& line4 = lineListOp->AddLine(Vector3(vbox.min.x, vbox.min.y, vbox.max.z), Vector3(vbox.min.x, vbox.min.y, vbox.min.z));
+			line4.SetColor(0xFF00FF00);
+			
+			// Top face (green)
+			auto& line5 = lineListOp->AddLine(Vector3(vbox.min.x, vbox.max.y, vbox.min.z), Vector3(vbox.max.x, vbox.max.y, vbox.min.z));
+			line5.SetColor(0xFF00FF00);
+			auto& line6 = lineListOp->AddLine(Vector3(vbox.max.x, vbox.max.y, vbox.min.z), Vector3(vbox.max.x, vbox.max.y, vbox.max.z));
+			line6.SetColor(0xFF00FF00);
+			auto& line7 = lineListOp->AddLine(Vector3(vbox.max.x, vbox.max.y, vbox.max.z), Vector3(vbox.min.x, vbox.max.y, vbox.max.z));
+			line7.SetColor(0xFF00FF00);
+			auto& line8 = lineListOp->AddLine(Vector3(vbox.min.x, vbox.max.y, vbox.max.z), Vector3(vbox.min.x, vbox.max.y, vbox.min.z));
+			line8.SetColor(0xFF00FF00);
+			
+			// Vertical edges (green)
+			auto& line9 = lineListOp->AddLine(Vector3(vbox.min.x, vbox.min.y, vbox.min.z), Vector3(vbox.min.x, vbox.max.y, vbox.min.z));
+			line9.SetColor(0xFF00FF00);
+			auto& line10 = lineListOp->AddLine(Vector3(vbox.max.x, vbox.min.y, vbox.min.z), Vector3(vbox.max.x, vbox.max.y, vbox.min.z));
+			line10.SetColor(0xFF00FF00);
+			auto& line11 = lineListOp->AddLine(Vector3(vbox.max.x, vbox.min.y, vbox.max.z), Vector3(vbox.max.x, vbox.max.y, vbox.max.z));
+			line11.SetColor(0xFF00FF00);
+			auto& line12 = lineListOp->AddLine(Vector3(vbox.min.x, vbox.min.y, vbox.max.z), Vector3(vbox.min.x, vbox.max.y, vbox.max.z));
+			line12.SetColor(0xFF00FF00);
+			
+			if (vis.node)
+			{
+				vis.node->AttachObject(*renderable);
+			}
+			
+			vis.containmentVolumeRenderables.push_back(renderable);
 		}
 	}
 
@@ -2946,13 +3055,14 @@ namespace mmo
 		int32 currentGroupIndex = -1;
 		float smallestVolume = std::numeric_limits<float>::max();
 
-		// Check each group's bounding box to find which one contains the camera
+		// Check each group to find which one contains the camera
+		// Uses containment volumes if defined, otherwise falls back to AABB
 		// If multiple groups contain the camera, prefer the one with the smallest
 		// bounding box volume (most specific/inner group)
 		for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
 		{
 			const auto* group = m_worldModel->GetGroup(i);
-			if (group && group->GetBoundingBox().Intersects(cameraPos))
+			if (group && group->ContainsPoint(cameraPos))
 			{
 				const AABB& bbox = group->GetBoundingBox();
 				Vector3 size = bbox.max - bbox.min;
