@@ -106,6 +106,11 @@ namespace mmo
 	public:
 		void RemoveFromParent() const;
 
+		/// @brief Sets whether this node is considered part of the scene graph.
+		/// @details When false, this node will not be processed during octree traversal
+		///          but will still be part of the parent-child hierarchy for transform inheritance.
+		void SetInSceneGraph(bool inSceneGraph);
+
 	protected:
 		void UpdateFromParentImpl() const override;
 
@@ -115,7 +120,6 @@ namespace mmo
 
 		void SetParent(Node* parent) override;
 
-		void SetInSceneGraph(bool inSceneGraph);
 	protected:
 		typedef std::unordered_map<String, MovableObject*> ObjectMap;
 		ObjectMap m_objectsByName{};

@@ -49,6 +49,12 @@ namespace mmo
             }
         }
 
+        // Unregister from scene before destruction
+        if (scene)
+        {
+            scene->UnregisterWorldModelInstance(this);
+        }
+
         ClearGeometry(scene);
         ClearDoodads(scene);
         ClearLights(scene);
@@ -250,6 +256,18 @@ namespace mmo
             return;
         }
 
+        // Entity visibility is now set by UpdatePortalCulling, which is called
+        // by the Scene before FindVisibleObjects. We don't need to do anything here
+        // as the entities render themselves through the normal octree traversal.
+    }
+
+    void WorldModelInstance::UpdatePortalCulling(Camera& camera)
+    {
+        if (!m_worldModel || !IsVisible())
+        {
+            return;
+        }
+
         // Check if scene's culling is frozen - if so, use cached visibility
         Scene* scene = GetScene();
         const bool cullingFrozen = scene && scene->IsRenderingFrozen();
@@ -259,64 +277,42 @@ namespace mmo
             // Update portal culling visibility
             m_visibleGroups.clear();
 
-            // Determine current group from active camera
-            if (scene)
-            {
-                Camera* camera = scene->GetActiveCamera();
-                if (camera)
-                {
-                    m_currentGroup = DetermineCurrentGroup(*camera);
-                    PerformPortalCulling(*camera, m_currentGroup, m_visibleGroups);
-                }
-                else
-                {
-                    // No camera, show all groups
-                    m_currentGroup = -1;
-                    for (size_t i = 0; i < m_groupRenderables.size(); ++i)
-                    {
-                        m_visibleGroups.push_back(static_cast<int32>(i));
-                    }
-                }
-            }
-            else
-            {
-                // No scene, show all groups
-                m_currentGroup = -1;
-                for (size_t i = 0; i < m_groupRenderables.size(); ++i)
-                {
-                    m_visibleGroups.push_back(static_cast<int32>(i));
-                }
-            }
+            // Determine current group from camera
+            m_currentGroup = DetermineCurrentGroup(camera);
+            PerformPortalCulling(camera, m_currentGroup, m_visibleGroups);
         }
 
-        // Render visible groups
-        for (const int32 groupIndex : m_visibleGroups)
+        // Update entity visibility based on portal culling.
+        // This is called BEFORE the octree traverses scene nodes, so the visibility
+        // will be set correctly when entities are processed.
+        for (size_t i = 0; i < m_groupRenderables.size(); ++i)
         {
-            if (groupIndex >= 0 && groupIndex < static_cast<int32>(m_groupRenderables.size()))
+            bool isVisible = std::find(m_visibleGroups.begin(), m_visibleGroups.end(), 
+                static_cast<int32>(i)) != m_visibleGroups.end();
+            
+            auto& groupRenderable = m_groupRenderables[i];
+            for (auto& meshViz : groupRenderable.meshVisualizations)
             {
-                auto& groupRenderable = m_groupRenderables[groupIndex];
-                for (auto& meshViz : groupRenderable.meshVisualizations)
+                if (meshViz.entity)
                 {
-                    if (meshViz.entity)
-                    {
-                        meshViz.entity->PopulateRenderQueue(renderQueue);
-                    }
+                    meshViz.entity->SetVisible(isVisible);
                 }
-            }
-        }
-
-        // Render doodads (always visible for now)
-        for (auto& doodad : m_doodadInstances)
-        {
-            if (doodad.entity)
-            {
-                doodad.entity->PopulateRenderQueue(renderQueue);
             }
         }
     }
 
     void WorldModelInstance::NotifyAttachmentChanged(Node* parent, bool isTagPoint)
     {
+        // Unregister from old scene if we had one
+        if (m_parentNode && m_geometryCreated)
+        {
+            auto* oldSceneNode = dynamic_cast<SceneNode*>(m_parentNode);
+            if (oldSceneNode)
+            {
+                oldSceneNode->GetScene().UnregisterWorldModelInstance(this);
+            }
+        }
+
         MovableObject::NotifyAttachmentChanged(parent, isTagPoint);
 
         // Create geometry when attached to a scene node for the first time
@@ -325,6 +321,12 @@ namespace mmo
             auto* sceneNode = dynamic_cast<SceneNode*>(parent);
             if (sceneNode)
             {
+                // Set the scene reference so portal culling can access the active camera
+                SetScene(&sceneNode->GetScene());
+
+                // Register with scene for pre-render portal culling updates
+                sceneNode->GetScene().RegisterWorldModelInstance(this);
+
                 // Create renderables for each group
                 for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
                 {
@@ -340,26 +342,113 @@ namespace mmo
                 m_geometryCreated = true;
             }
         }
+        else if (parent && m_geometryCreated)
+        {
+            // Re-register with the new scene
+            auto* sceneNode = dynamic_cast<SceneNode*>(parent);
+            if (sceneNode)
+            {
+                SetScene(&sceneNode->GetScene());
+                sceneNode->GetScene().RegisterWorldModelInstance(this);
+            }
+        }
     }
 
     void WorldModelInstance::PerformPortalCulling(const Camera& camera, int32 startGroupIndex, std::vector<int32>& visibleGroups) const
     {
-        if (!m_worldModel || startGroupIndex < 0)
+        if (!m_worldModel)
         {
-            // If we're not in any group, render all exterior groups
+            return;
+        }
+
+        std::vector<bool> visitedGroups(m_worldModel->GetGroupCount(), false);
+
+        if (startGroupIndex < 0)
+        {
+            // Camera is not in any group - show all exterior groups and any
+            // interior groups whose bounding box is visible in the camera frustum
+            std::vector<int32> groupsToProcess;
+            
             for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
             {
                 const auto* group = m_worldModel->GetGroup(i);
-                if (group && group->IsExterior())
+                if (group)
                 {
-                    visibleGroups.push_back(static_cast<int32>(i));
+                    // Always include exterior groups
+                    if (group->IsExterior())
+                    {
+                        visibleGroups.push_back(static_cast<int32>(i));
+                        visitedGroups[i] = true;
+                        groupsToProcess.push_back(static_cast<int32>(i));
+                    }
+                    // Also include any group whose bounding box is visible in the frustum
+                    else
+                    {
+                        AABB worldBBox = group->GetBoundingBox();
+                        if (m_parentNode)
+                        {
+                            worldBBox.Transform(m_parentNode->GetFullTransform());
+                        }
+                        
+                        if (camera.IsVisible(worldBBox))
+                        {
+                            visibleGroups.push_back(static_cast<int32>(i));
+                            visitedGroups[i] = true;
+                            groupsToProcess.push_back(static_cast<int32>(i));
+                        }
+                    }
+                }
+            }
+            
+            // Traverse through portals from visible groups to find more visible groups
+            while (!groupsToProcess.empty())
+            {
+                int32 groupIndex = groupsToProcess.back();
+                groupsToProcess.pop_back();
+
+                if (groupIndex < 0 || groupIndex >= static_cast<int32>(visitedGroups.size()))
+                {
+                    continue;
+                }
+
+                const auto* group = m_worldModel->GetGroup(groupIndex);
+                if (!group)
+                {
+                    continue;
+                }
+
+                for (const auto& portalRef : group->GetPortalRefs())
+                {
+                    int32 targetGroup = portalRef.groupIndex;
+                    if (targetGroup >= 0 && targetGroup < static_cast<int32>(visitedGroups.size()) && !visitedGroups[targetGroup])
+                    {
+                        if (portalRef.portalIndex < m_worldModel->GetPortals().size())
+                        {
+                            const auto& portal = m_worldModel->GetPortals()[portalRef.portalIndex];
+                            if (portal && portal->IsActive())
+                            {
+                                // Check if the portal bounds are visible
+                                AABB portalBBox = portal->GetWorldBounds();
+                                if (m_parentNode && !portalBBox.IsNull())
+                                {
+                                    portalBBox.Transform(m_parentNode->GetFullTransform());
+                                }
+
+                                if (!portalBBox.IsNull() && camera.IsVisible(portalBBox))
+                                {
+                                    visitedGroups[targetGroup] = true;
+                                    visibleGroups.push_back(targetGroup);
+                                    groupsToProcess.push_back(targetGroup);
+                                }
+                            }
+                        }
+                    }
                 }
             }
             return;
         }
 
         // Start from the current group and cull through portals
-        std::vector<bool> visitedGroups(m_worldModel->GetGroupCount(), false);
         CullThroughPortals(camera, startGroupIndex, visitedGroups, visibleGroups, 0);
     }
 
@@ -405,28 +494,22 @@ namespace mmo
             if (targetGroup >= 0 && targetGroup < static_cast<int32>(visitedGroups.size()) && !visitedGroups[targetGroup])
             {
                 // Check if portal is visible from camera
-                // For now, we do a simple frustum check on the portal's bounding box
                 if (portalRef.portalIndex < m_worldModel->GetPortals().size())
                 {
                     const auto& portal = m_worldModel->GetPortals()[portalRef.portalIndex];
                     
                     if (portal && portal->IsActive())
                     {
-                        // Simple visibility check - just check if target group bbox is in frustum
-                        const auto* targetGroupData = m_worldModel->GetGroup(targetGroup);
-                        if (targetGroupData)
+                        // Check if the portal bounds are visible in the camera frustum
+                        AABB portalBBox = portal->GetWorldBounds();
+                        if (m_parentNode && !portalBBox.IsNull())
                         {
-                            // Transform group bbox to world space
-                            AABB worldBBox = targetGroupData->GetBoundingBox();
-                            if (m_parentNode)
-                            {
-                                worldBBox.Transform(m_parentNode->GetFullTransform());
-                            }
+                            portalBBox.Transform(m_parentNode->GetFullTransform());
+                        }
 
-                            if (camera.IsVisible(worldBBox))
-                            {
-                                CullThroughPortals(camera, targetGroup, visitedGroups, visibleGroups, recursionDepth + 1);
-                            }
+                        if (!portalBBox.IsNull() && camera.IsVisible(portalBBox))
+                        {
+                            CullThroughPortals(camera, targetGroup, visitedGroups, visibleGroups, recursionDepth + 1);
                         }
                     }
                 }
@@ -478,7 +561,8 @@ namespace mmo
             viz.node->SetOrientation(meshRef.rotation);
             viz.node->SetScale(meshRef.scale);
             
-            // Attach to parent node
+            // Attach to parent node - this is needed for proper world transforms,
+            // collision detection, and bounding box calculations
             if (m_parentNode)
             {
                 static_cast<SceneNode*>(m_parentNode)->AddChild(*viz.node);

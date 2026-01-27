@@ -28,6 +28,7 @@ namespace mmo
 {
 	class Scene;
 	class Material;
+	class WorldModelInstance;
 
 	class SceneQueuedRenderableVisitor final : public QueuedRenderableVisitor
 	{
@@ -325,6 +326,14 @@ namespace mmo
 
 		std::vector<Entity*> GetAllEntities() const;
 
+		/// @brief Registers a WorldModelInstance for pre-render portal culling updates.
+		/// @param instance The instance to register.
+		void RegisterWorldModelInstance(WorldModelInstance* instance);
+
+		/// @brief Unregisters a WorldModelInstance from pre-render portal culling updates.
+		/// @param instance The instance to unregister.
+		void UnregisterWorldModelInstance(WorldModelInstance* instance);
+
 		virtual std::unique_ptr<AABBSceneQuery> CreateAABBQuery(const AABB& box);
 
 		virtual std::unique_ptr<SphereSceneQuery> CreateSphereQuery(const Sphere& sphere);
@@ -502,6 +511,9 @@ namespace mmo
 
 		typedef std::map<String, std::unique_ptr<ParticleEmitter>> ParticleEmitterMap;
 		ParticleEmitterMap m_particleEmitters;
+
+		/// Registered WorldModelInstances for pre-render portal culling updates.
+		std::vector<WorldModelInstance*> m_worldModelInstances;
 		
 		SceneQueuedRenderableVisitor m_renderableVisitor;
 

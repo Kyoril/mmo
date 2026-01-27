@@ -9,6 +9,7 @@
 #include "material_manager.h"
 #include "mesh_manager.h"
 #include "render_operation.h"
+#include "world_model_instance.h"
 
 #include "base/macros.h"
 #include "graphics/graphics_device.h"
@@ -54,6 +55,7 @@ namespace mmo
 		m_manualRenderObjects.clear();
 		m_lights.clear();
 		m_particleEmitters.clear();
+		m_worldModelInstances.clear();
 
 		m_sceneNodes.clear();
 		m_rootNode = nullptr;
@@ -247,6 +249,16 @@ namespace mmo
 		if (!m_frozen)
 		{
 			PrepareRenderQueue();
+
+			// Update portal culling for all WorldModelInstances BEFORE FindVisibleObjects
+			// so that entity visibility is set correctly before octree traversal.
+			for (auto* wmi : m_worldModelInstances)
+			{
+				if (wmi)
+				{
+					wmi->UpdatePortalCulling(camera);
+				}
+			}
 
 			const auto visibleObjectsIt = m_camVisibleObjectsMap.find(&camera);
 			ASSERT(visibleObjectsIt != m_camVisibleObjectsMap.end());
@@ -541,6 +553,30 @@ namespace mmo
 		}
 
 		return result;
+	}
+
+	void Scene::RegisterWorldModelInstance(WorldModelInstance* instance)
+	{
+		if (instance)
+		{
+			auto it = std::find(m_worldModelInstances.begin(), m_worldModelInstances.end(), instance);
+			if (it == m_worldModelInstances.end())
+			{
+				m_worldModelInstances.push_back(instance);
+			}
+		}
+	}
+
+	void Scene::UnregisterWorldModelInstance(WorldModelInstance* instance)
+	{
+		if (instance)
+		{
+			auto it = std::find(m_worldModelInstances.begin(), m_worldModelInstances.end(), instance);
+			if (it != m_worldModelInstances.end())
+			{
+				m_worldModelInstances.erase(it);
+			}
+		}
 	}
 
 	std::unique_ptr<AABBSceneQuery> Scene::CreateAABBQuery(const AABB& box)

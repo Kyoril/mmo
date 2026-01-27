@@ -85,6 +85,12 @@ namespace mmo
         /// @copydoc MovableObject::NotifyAttachmentChanged
         void NotifyAttachmentChanged(Node* parent, bool isTagPoint = false) override;
 
+        /// @brief Updates portal culling visibility for all child entities.
+        /// This should be called before the scene's FindVisibleObjects to ensure
+        /// child entity visibility is set correctly before octree traversal.
+        /// @param camera The camera to use for visibility calculations.
+        void UpdatePortalCulling(Camera& camera);
+
     private:
         /// @brief Performs portal-based visibility culling.
         /// @param camera The camera to cull from.
