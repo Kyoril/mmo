@@ -7,6 +7,7 @@
 #include "panels/world_model_portals_panel.h"
 #include "panels/world_model_doodads_panel.h"
 #include "panels/world_model_properties_panel.h"
+#include "panels/world_model_hierarchy_panel.h"
 
 #include <algorithm>
 #include <sstream>
@@ -353,12 +354,9 @@ namespace mmo
 		const String viewportId = "Viewport##" + GetAssetPath().string();
 		const String detailsId = "Details##" + GetAssetPath().string();
 		const String worldSettingsId = "Settings##" + GetAssetPath().string();
-		const String groupsId = "Groups##" + GetAssetPath().string();
-		const String meshRefsId = "Meshes##" + GetAssetPath().string();
+		const String hierarchyId = "Hierarchy##" + GetAssetPath().string();
 		const String childWMOsId = "Child WMOs##" + GetAssetPath().string();
-		const String portalsId = "Portals##" + GetAssetPath().string();
 		const String doodadsId = "Doodads##" + GetAssetPath().string();
-		const String lightsId = "Lights##" + GetAssetPath().string();
 
 		if (ImGui::IsKeyPressed(ImGuiKey_LeftAlt, false))
 		{
@@ -374,14 +372,49 @@ namespace mmo
 			m_transformWidget->SetTransformMode(TransformMode::Rotate);
 		}
 
-		// Groups panel
-		if (ImGui::Begin(groupsId.c_str()))
+		// Hierarchy panel (unified groups, meshes, lights, portals)
+		if (ImGui::Begin(hierarchyId.c_str()))
 		{
-			GroupsPanelCallbacks groupsCallbacks;
-			groupsCallbacks.onRemoveGroup = [this](size_t index) { RemoveGroup(index); };
-			groupsCallbacks.onSelectGroup = [this](int32 index) 
-			{ 
+			// Sync hierarchy state from editor state
+			m_hierarchyPanelState.selectedGroupIndex = m_selectedGroupIndex;
+			m_hierarchyPanelState.selectedMeshRefIndex = m_selectedMeshRefIndex;
+			m_hierarchyPanelState.selectedMeshRefIndices = m_selectedMeshRefIndices;
+			m_hierarchyPanelState.selectedLightIndex = m_selectedLightIndex;
+			m_hierarchyPanelState.selectedPortalIndex = m_selectedPortalIndex;
+
+			// Determine the current selection type for the hierarchy panel
+			if (m_selectedMeshRefIndex >= 0 && !m_selectedMeshRefIndices.empty())
+			{
+				m_hierarchyPanelState.selectedType = HierarchyItemType::MeshRef;
+			}
+			else if (m_selectedLightIndex >= 0)
+			{
+				m_hierarchyPanelState.selectedType = HierarchyItemType::Light;
+			}
+			else if (m_selectedPortalIndex >= 0)
+			{
+				m_hierarchyPanelState.selectedType = HierarchyItemType::Portal;
+			}
+			else if (m_selectedGroupIndex >= 0)
+			{
+				m_hierarchyPanelState.selectedType = HierarchyItemType::Group;
+			}
+			else
+			{
+				m_hierarchyPanelState.selectedType = HierarchyItemType::None;
+			}
+
+			HierarchyPanelCallbacks hierarchyCallbacks;
+			
+			// Group selection
+			hierarchyCallbacks.onSelectGroup = [this](int32 index) 
+			{
 				m_selectedGroupIndex = index;
+				m_selectedMeshRefIndex = -1;
+				m_selectedMeshRefIndices.clear();
+				m_selectedLightIndex = -1;
+				m_selectedPortalIndex = -1;
+				
 				m_selection.Clear();
 				if (index >= 0 && index < static_cast<int32>(m_groupVisualizations.size()) &&
 					m_groupVisualizations[index].node)
@@ -394,7 +427,87 @@ namespace mmo
 					}
 				}
 			};
-			groupsCallbacks.onSetGroupVisibility = [this](size_t index, bool visible) 
+
+			// Mesh ref selection
+			hierarchyCallbacks.onSelectMeshRef = [this](int32 groupIndex, int32 meshRefIndex) 
+			{
+				m_selectedGroupIndex = groupIndex;
+				m_selectedMeshRefIndex = meshRefIndex;
+				m_selectedLightIndex = -1;
+				m_selectedPortalIndex = -1;
+				
+				m_selection.Clear();
+				if (groupIndex >= 0 && static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
+				{
+					auto& groupViz = m_groupVisualizations[groupIndex];
+					if (meshRefIndex >= 0 && static_cast<size_t>(meshRefIndex) < groupViz.meshRefVisualizations.size() &&
+						groupViz.meshRefVisualizations[meshRefIndex].node)
+					{
+						auto* group = m_worldModel->GetGroup(groupIndex);
+						if (group)
+						{
+							m_selection.AddSelectable(std::make_unique<SelectedGroupMesh>(
+								*group, static_cast<size_t>(meshRefIndex), *groupViz.meshRefVisualizations[meshRefIndex].node));
+						}
+					}
+				}
+			};
+
+			// Light selection
+			hierarchyCallbacks.onSelectLight = [this](int32 index) 
+			{
+				m_selectedLightIndex = index;
+				m_selectedMeshRefIndex = -1;
+				m_selectedMeshRefIndices.clear();
+				m_selectedPortalIndex = -1;
+				
+				UpdateSelectedLightVisualization();
+				
+				m_selection.Clear();
+				if (m_selectedLightIndex >= 0 && m_selectedLightIndex < static_cast<int32>(m_lightVisualizations.size()) &&
+					m_lightVisualizations[m_selectedLightIndex].node)
+				{
+					m_selection.AddSelectable(std::make_unique<SelectedWorldModelLight>(
+						*m_worldModel, static_cast<size_t>(m_selectedLightIndex), *m_lightVisualizations[m_selectedLightIndex].node));
+				}
+			};
+
+			// Portal selection
+			hierarchyCallbacks.onSelectPortal = [this](int32 index) 
+			{
+				m_selectedPortalIndex = index;
+				m_selectedMeshRefIndex = -1;
+				m_selectedMeshRefIndices.clear();
+				m_selectedLightIndex = -1;
+			};
+
+			// Remove callbacks
+			hierarchyCallbacks.onRemoveGroup = [this](size_t index) { RemoveGroup(index); };
+			hierarchyCallbacks.onRemoveMeshRef = [this](int32 groupIndex, size_t meshRefIndex) 
+			{
+				RemoveMeshRefFromGroup(groupIndex, meshRefIndex);
+				m_selectedMeshRefIndex = -1;
+				m_selectedMeshRefIndices.clear();
+			};
+			hierarchyCallbacks.onRemoveLight = [this](int32 index) 
+			{
+				RemoveLight(static_cast<size_t>(index));
+				if (m_selectedLightIndex >= index)
+				{
+					m_selectedLightIndex = std::max(-1, m_selectedLightIndex - 1);
+				}
+			};
+			hierarchyCallbacks.onRemovePortal = [this](int32 index) 
+			{
+				RemovePortal(static_cast<size_t>(index));
+				if (m_selectedPortalIndex >= index)
+				{
+					m_selectedPortalIndex = std::max(-1, m_selectedPortalIndex - 1);
+				}
+			};
+
+			// Visibility callbacks
+			hierarchyCallbacks.onSetGroupVisibility = [this](size_t index, bool visible) 
 			{
 				if (index < m_groupVisualizations.size())
 				{
@@ -405,15 +518,87 @@ namespace mmo
 					}
 				}
 			};
+			hierarchyCallbacks.onSetMeshRefVisibility = [this](int32 groupIndex, size_t meshRefIndex, bool visible) 
+			{
+				if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size() &&
+					meshRefIndex < m_groupVisualizations[groupIndex].meshRefVisualizations.size())
+				{
+					m_groupVisualizations[groupIndex].meshRefVisualizations[meshRefIndex].visible = visible;
+					if (m_groupVisualizations[groupIndex].meshRefVisualizations[meshRefIndex].entity)
+					{
+						m_groupVisualizations[groupIndex].meshRefVisualizations[meshRefIndex].entity->SetVisible(visible);
+					}
+				}
+			};
 
-			DrawGroupsPanel(m_worldModel.get(), m_groupVisualizations, m_selectedGroupIndex, m_groupsPanelState, groupsCallbacks);
-		}
-		ImGui::End();
+			// Create callbacks
+			hierarchyCallbacks.onCreateGroup = [this](const String& name) 
+			{
+				CreateGroup(name);
+			};
+			hierarchyCallbacks.onCreateLight = [this](WorldModelLight::LightType type) 
+			{
+				CreateLight(m_selectedGroupIndex, Vector3::Zero, 0xFFFFFFFF, 1.0f, type);
+			};
+			hierarchyCallbacks.onStartPortalCreation = [this]() 
+			{
+				m_creatingPortal = true;
+				m_portalSourceGroup = -1;
+				m_portalTargetGroup = -1;
+			};
 
-		// Mesh references panel (for selected group)
-		if (ImGui::Begin(meshRefsId.c_str()))
-		{
-			DrawMeshRefsPanel(m_selectedGroupIndex);
+			// Other callbacks
+			hierarchyCallbacks.onFocusPosition = [this](const Vector3& pos) 
+			{
+				m_cameraAnchor->SetPosition(pos);
+				m_cameraVelocity = Vector3::Zero;
+			};
+			hierarchyCallbacks.onAddMeshToGroup = [this](int32 groupIndex) 
+			{
+				m_selectedGroupIndex = groupIndex;
+				m_showAddMeshRefDialog = true;
+				std::memset(m_addMeshRefPath, 0, sizeof(m_addMeshRefPath));
+				std::memset(m_addMeshRefName, 0, sizeof(m_addMeshRefName));
+			};
+			hierarchyCallbacks.onDuplicateLight = [this](size_t index) 
+			{
+				auto& lights = m_worldModel->GetLights();
+				if (index < lights.size())
+				{
+					WorldModelLight newLight = lights[index];
+					newLight.position += Vector3(1.0f, 0.0f, 0.0f);
+					lights.push_back(newLight);
+					UpdateLightVisualizations();
+				}
+			};
+			hierarchyCallbacks.onDuplicateMeshRef = [this](int32 groupIndex, size_t meshRefIndex) 
+			{
+				if (groupIndex >= 0 && groupIndex < static_cast<int32>(m_worldModel->GetGroupCount()))
+				{
+					auto* group = m_worldModel->GetGroup(groupIndex);
+					if (group)
+					{
+						const auto& meshRefs = group->GetMeshRefs();
+						if (meshRefIndex < meshRefs.size())
+						{
+							WorldModelMeshRef newRef = meshRefs[meshRefIndex];
+							newRef.name = GenerateUniqueMeshRefName(*group, newRef.name.empty() ? newRef.meshPath : newRef.name);
+							newRef.position += Vector3(1.0f, 0.0f, 0.0f);
+							group->AddMeshRef(newRef);
+							UpdateMeshRefVisualizations(static_cast<size_t>(groupIndex));
+						}
+					}
+				}
+			};
+
+			DrawHierarchyPanel(m_worldModel.get(), m_groupVisualizations, m_hierarchyPanelState, hierarchyCallbacks);
+
+			// Sync back to editor state
+			m_selectedGroupIndex = m_hierarchyPanelState.selectedGroupIndex;
+			m_selectedMeshRefIndex = m_hierarchyPanelState.selectedMeshRefIndex;
+			m_selectedMeshRefIndices = m_hierarchyPanelState.selectedMeshRefIndices;
+			m_selectedLightIndex = m_hierarchyPanelState.selectedLightIndex;
+			m_selectedPortalIndex = m_hierarchyPanelState.selectedPortalIndex;
 		}
 		ImGui::End();
 
@@ -421,53 +606,6 @@ namespace mmo
 		if (ImGui::Begin(childWMOsId.c_str()))
 		{
 			DrawChildWMOsPanel();
-		}
-		ImGui::End();
-
-		// Portals panel
-		if (ImGui::Begin(portalsId.c_str()))
-		{
-			PortalCreationState portalCreationState;
-			portalCreationState.creatingPortal = m_creatingPortal;
-			portalCreationState.sourceGroup = m_portalSourceGroup;
-			portalCreationState.targetGroup = m_portalTargetGroup;
-
-			PortalsPanelCallbacks portalCallbacks;
-			portalCallbacks.onCreatePortal = [this](int32 groupA, int32 groupB, const std::vector<Vector3>& vertices) 
-			{
-				CreatePortal(groupA, groupB, vertices);
-			};
-			portalCallbacks.onSelectPortal = [this](int32 index) 
-			{
-				m_selectedPortalIndex = index;
-			};
-			portalCallbacks.onRemovePortal = [this](int32 index) 
-			{
-				RemovePortal(static_cast<size_t>(index));
-				if (m_selectedPortalIndex >= index)
-				{
-					m_selectedPortalIndex = std::max(-1, m_selectedPortalIndex - 1);
-				}
-			};
-			portalCallbacks.onPortalChanged = [this]() 
-			{
-				UpdatePortalVisualizations();
-			};
-			portalCallbacks.onFocusPosition = [this](const Vector3& pos) 
-			{
-				m_cameraAnchor->SetPosition(pos);
-				m_cameraVelocity = Vector3::Zero;
-			};
-			portalCallbacks.onUpdatePortalGroupConnection = [this](int32 portalIndex, int32 oldGroupA, int32 newGroupA, int32 newGroupB)
-			{
-				UpdatePortalGroupConnection(portalIndex, oldGroupA, newGroupA, newGroupB);
-			};
-
-			DrawPortalsPanel(m_worldModel.get(), m_selectedPortalIndex, portalCreationState, portalCallbacks);
-
-			m_creatingPortal = portalCreationState.creatingPortal;
-			m_portalSourceGroup = portalCreationState.sourceGroup;
-			m_portalTargetGroup = portalCreationState.targetGroup;
 		}
 		ImGui::End();
 
@@ -484,58 +622,10 @@ namespace mmo
 		}
 		ImGui::End();
 
-		// Lights panel
-		if (ImGui::Begin(lightsId.c_str()))
-		{
-			LightsPanelState lightsState;
-			lightsState.selectedLightIndex = m_selectedLightIndex;
-
-			LightsPanelCallbacks lightsCallbacks;
-			lightsCallbacks.onCreateLight = [this](int32 groupIndex, const Vector3& pos, uint32 color, float intensity, WorldModelLight::LightType type) 
-			{
-				CreateLight(m_selectedGroupIndex, pos, color, intensity, type);
-			};
-			lightsCallbacks.onSelectLight = [this](int32 index) 
-			{
-				m_selectedLightIndex = index;
-				UpdateSelectedLightVisualization();
-				
-				m_selection.Clear();
-				if (m_selectedLightIndex >= 0 && m_selectedLightIndex < static_cast<int32>(m_lightVisualizations.size()) &&
-					m_lightVisualizations[m_selectedLightIndex].node)
-				{
-					m_selection.AddSelectable(std::make_unique<SelectedWorldModelLight>(
-						*m_worldModel, static_cast<size_t>(m_selectedLightIndex), *m_lightVisualizations[m_selectedLightIndex].node));
-				}
-			};
-			lightsCallbacks.onRemoveLight = [this](int32 index) { RemoveLight(index); };
-			lightsCallbacks.onLightChanged = [this]() { UpdateLightVisualizations(); };
-			lightsCallbacks.onFocusPosition = [this](const Vector3& pos) 
-			{
-				m_cameraAnchor->SetPosition(pos);
-				m_cameraVelocity = Vector3::Zero;
-			};
-			lightsCallbacks.onDuplicateLight = [this](size_t index) 
-			{
-				auto& lights = m_worldModel->GetLights();
-				if (index < lights.size())
-				{
-					WorldModelLight newLight = lights[index];
-					newLight.position += Vector3(1.0f, 0.0f, 0.0f);
-					lights.push_back(newLight);
-					UpdateLightVisualizations();
-				}
-			};
-
-			DrawLightsPanel(m_worldModel.get(), lightsState, lightsCallbacks);
-			m_selectedLightIndex = lightsState.selectedLightIndex;
-		}
-		ImGui::End();
-
 		// Details/Properties panel
 		if (ImGui::Begin(detailsId.c_str()))
 		{
-			// Build selection state
+			// Build selection state from hierarchy panel state
 			PropertiesSelectionState selectionState;
 			selectionState.selectedGroupIndex = m_selectedGroupIndex;
 			selectionState.selectedLightIndex = m_selectedLightIndex;
@@ -543,26 +633,24 @@ namespace mmo
 			selectionState.selectedMeshRefIndex = m_selectedMeshRefIndex;
 			selectionState.selectedMeshRefIndices = m_selectedMeshRefIndices;
 
-			// Determine selection type based on what's selected
-			if (m_selectedMeshRefIndex >= 0 && !m_selectedMeshRefIndices.empty())
+			// Map hierarchy selection type to properties selection type
+			switch (m_hierarchyPanelState.selectedType)
 			{
-				selectionState.type = PropertiesSelectionType::MeshRef;
-			}
-			else if (m_selectedLightIndex >= 0)
-			{
-				selectionState.type = PropertiesSelectionType::Light;
-			}
-			else if (m_selectedPortalIndex >= 0)
-			{
-				selectionState.type = PropertiesSelectionType::Portal;
-			}
-			else if (m_selectedGroupIndex >= 0)
-			{
+			case HierarchyItemType::Group:
 				selectionState.type = PropertiesSelectionType::Group;
-			}
-			else
-			{
+				break;
+			case HierarchyItemType::MeshRef:
+				selectionState.type = PropertiesSelectionType::MeshRef;
+				break;
+			case HierarchyItemType::Light:
+				selectionState.type = PropertiesSelectionType::Light;
+				break;
+			case HierarchyItemType::Portal:
+				selectionState.type = PropertiesSelectionType::Portal;
+				break;
+			default:
 				selectionState.type = PropertiesSelectionType::None;
+				break;
 			}
 
 			PropertiesPanelCallbacks propCallbacks;
@@ -984,14 +1072,11 @@ namespace mmo
 			ImGui::DockBuilderDockWindow(detailsId.c_str(), rightId);
 			ImGui::DockBuilderDockWindow(worldSettingsId.c_str(), rightId);
 			
-			// Upper left: Groups, Portals, Doodads, Lights
-			ImGui::DockBuilderDockWindow(groupsId.c_str(), leftUpperId);
-			ImGui::DockBuilderDockWindow(portalsId.c_str(), leftUpperId);
+			// Upper left: Hierarchy (unified panel), Doodads
+			ImGui::DockBuilderDockWindow(hierarchyId.c_str(), leftUpperId);
 			ImGui::DockBuilderDockWindow(doodadsId.c_str(), leftUpperId);
-			ImGui::DockBuilderDockWindow(lightsId.c_str(), leftUpperId);
 			
-			// Lower left: Mesh refs and Child WMOs (separate dock group)
-			ImGui::DockBuilderDockWindow(meshRefsId.c_str(), leftLowerId);
+			// Lower left: Child WMOs (separate dock group)
 			ImGui::DockBuilderDockWindow(childWMOsId.c_str(), leftLowerId);
 			
 			ImGui::DockBuilderFinish(dockspaceId);

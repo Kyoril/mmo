@@ -5,6 +5,7 @@
 #include "base/signal.h"
 #include "world_model_selectables.h"
 #include "panels/world_model_groups_panel.h"
+#include "panels/world_model_hierarchy_panel.h"
 
 #include <imgui.h>
 #include <asio/io_service.hpp>
@@ -396,6 +397,7 @@ namespace mmo
 
 		// UI panel state
 		GroupsPanelState m_groupsPanelState;
+		HierarchyPanelState m_hierarchyPanelState;
 
 		// Assign mesh dialog state
 		bool m_showAssignMeshDialog { false };
