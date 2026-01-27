@@ -591,6 +591,10 @@ namespace mmo
 					}
 				}
 			};
+			hierarchyCallbacks.onDropMeshOnGroup = [this](int32 groupIndex, const String& meshPath) 
+			{
+				AddMeshRefToGroup(groupIndex, meshPath);
+			};
 
 			DrawHierarchyPanel(m_worldModel.get(), m_groupVisualizations, m_hierarchyPanelState, hierarchyCallbacks);
 
@@ -1074,36 +1078,46 @@ namespace mmo
 				// We only accept mesh file drops
 				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
 				{
-					Vector3 position = Vector3::Zero;
+					String meshPath = *static_cast<String*>(payload->Data);
 
-					const ImVec2 mousePos = ImGui::GetMousePos();
-					const Plane plane = Plane(Vector3::UnitY, Vector3::Zero);
-					const Ray ray = m_camera->GetCameraToViewportRay(
-						(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
-						(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y,
-						10000.0f);
-					const auto hit = ray.Intersects(plane);
-					if (hit.first)
+					// If a group is selected, add the mesh to that group
+					if (m_selectedGroupIndex >= 0 && m_selectedGroupIndex < static_cast<int32>(m_worldModel->GetGroupCount()))
 					{
-						position = ray.GetPoint(hit.second);
+						Vector3 position = Vector3::Zero;
+
+						const ImVec2 mousePos = ImGui::GetMousePos();
+						const Plane plane = Plane(Vector3::UnitY, Vector3::Zero);
+						const Ray ray = m_camera->GetCameraToViewportRay(
+							(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+							(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y,
+							10000.0f);
+						const auto hit = ray.Intersects(plane);
+						if (hit.first)
+						{
+							position = ray.GetPoint(hit.second);
+						}
+						else
+						{
+							position = ray.GetPoint(10.0f);
+						}
+
+						// Snap to grid?
+						if (m_gridSnap)
+						{
+							const float gridSize = m_translateSnapSizes[m_currentTranslateSnapSize];
+
+							// Snap position to grid size
+							position.x = std::round(position.x / gridSize) * gridSize;
+							position.y = std::round(position.y / gridSize) * gridSize;
+							position.z = std::round(position.z / gridSize) * gridSize;
+						}
+
+						AddMeshRefToGroup(m_selectedGroupIndex, meshPath, position, Quaternion::Identity, Vector3::UnitScale);
 					}
 					else
 					{
-						position = ray.GetPoint(10.0f);
+						WLOG("No group selected. Please select a group in the hierarchy panel first, then drag a mesh into the viewport or onto the group.");
 					}
-
-					// Snap to grid?
-					if (m_gridSnap)
-					{
-						const float gridSize = m_translateSnapSizes[m_currentTranslateSnapSize];
-
-						// Snap position to grid size
-						position.x = std::round(position.x / gridSize) * gridSize;
-						position.y = std::round(position.y / gridSize) * gridSize;
-						position.z = std::round(position.z / gridSize) * gridSize;
-					}
-
-					CreateMapEntity(*static_cast<String*>(payload->Data), position, Quaternion::Identity, Vector3::UnitScale);
 				}
 				ImGui::EndDragDropTarget();
 			}

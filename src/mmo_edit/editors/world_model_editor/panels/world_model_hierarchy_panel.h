@@ -116,6 +116,11 @@ namespace mmo
 
 		/// @brief Called when a mesh ref should be duplicated.
 		std::function<void(int32, size_t)> onDuplicateMeshRef;
+
+		/// @brief Called when a mesh file is dropped onto a group.
+		/// @param groupIndex The group to add the mesh to.
+		/// @param meshPath The path of the dropped mesh file.
+		std::function<void(int32, const String&)> onDropMeshOnGroup;
 	};
 
 	/// @brief Draws the unified hierarchy panel UI.

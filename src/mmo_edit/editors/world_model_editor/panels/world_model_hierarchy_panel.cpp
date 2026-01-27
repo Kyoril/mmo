@@ -143,6 +143,20 @@ namespace mmo
 					state.expandedGroups.erase(static_cast<int32>(gi));
 				}
 
+				// Drag-drop target for mesh files
+				if (ImGui::BeginDragDropTarget())
+				{
+					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
+					{
+						String meshPath = *static_cast<String*>(payload->Data);
+						if (callbacks.onDropMeshOnGroup)
+						{
+							callbacks.onDropMeshOnGroup(static_cast<int32>(gi), meshPath);
+						}
+					}
+					ImGui::EndDragDropTarget();
+				}
+
 				// Handle selection on click (not arrow)
 				if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
 				{
@@ -638,6 +652,35 @@ namespace mmo
 		ImGui::PopStyleColor();
 
 		ImGui::Spacing();
+
+		// Quick action toolbar - show relevant buttons based on selection
+		bool showedToolbar = false;
+		if (state.selectedGroupIndex >= 0)
+		{
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.3f, 0.8f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.4f, 0.9f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.8f, 0.5f, 1.0f));
+			if (ImGui::Button("+ Add Mesh##hierarchyToolbar", ImVec2(-1, 0)))
+			{
+				if (callbacks.onAddMeshToGroup)
+				{
+					callbacks.onAddMeshToGroup(state.selectedGroupIndex);
+				}
+			}
+			ImGui::PopStyleColor(3);
+			
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Add a new mesh reference to the selected group\n(Or drag & drop a .hmsh file onto a group)");
+			}
+			showedToolbar = true;
+		}
+
+		if (showedToolbar)
+		{
+			ImGui::Spacing();
+		}
+
 		ImGui::Separator();
 		ImGui::Spacing();
 
