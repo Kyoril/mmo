@@ -1331,6 +1331,152 @@ namespace mmo
 			ImGui::EndPopup();
 		}
 
+		// Create portal dialog
+		if (m_creatingPortal)
+		{
+			ImGui::OpenPopup("Create Portal");
+		}
+
+		if (ImGui::BeginPopupModal("Create Portal", &m_creatingPortal, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			if (!m_worldModel || m_worldModel->GetGroupCount() < 2)
+			{
+				ImGui::TextDisabled("Need at least 2 groups to create a portal");
+				if (ImGui::Button("Close", ImVec2(120, 0)))
+				{
+					m_creatingPortal = false;
+					ImGui::CloseCurrentPopup();
+				}
+			}
+			else
+			{
+				ImGui::Text("Create a portal connecting two groups:");
+				ImGui::Spacing();
+
+				// Source group selection
+				ImGui::Text("Source Group:");
+				ImGui::SameLine(120);
+				ImGui::SetNextItemWidth(200);
+
+				String sourcePreview = "Select...";
+				if (m_portalSourceGroup >= 0 && m_portalSourceGroup < static_cast<int32>(m_worldModel->GetGroupCount()))
+				{
+					const auto* srcGroup = m_worldModel->GetGroup(m_portalSourceGroup);
+					if (srcGroup)
+					{
+						sourcePreview = srcGroup->GetName().empty() ? ("Group " + std::to_string(m_portalSourceGroup)) : srcGroup->GetName();
+					}
+				}
+
+				if (ImGui::BeginCombo("##SourceGroup", sourcePreview.c_str()))
+				{
+					for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
+					{
+						const auto* group = m_worldModel->GetGroup(i);
+						if (group && static_cast<int32>(i) != m_portalTargetGroup)
+						{
+							bool isSelected = m_portalSourceGroup == static_cast<int32>(i);
+							String itemLabel = group->GetName().empty() ? ("Group " + std::to_string(i)) : group->GetName();
+							if (ImGui::Selectable(itemLabel.c_str(), isSelected))
+							{
+								m_portalSourceGroup = static_cast<int32>(i);
+							}
+						}
+					}
+					ImGui::EndCombo();
+				}
+
+				// Target group selection
+				ImGui::Text("Target Group:");
+				ImGui::SameLine(120);
+				ImGui::SetNextItemWidth(200);
+
+				String targetPreview = "Select...";
+				if (m_portalTargetGroup >= 0 && m_portalTargetGroup < static_cast<int32>(m_worldModel->GetGroupCount()))
+				{
+					const auto* tgtGroup = m_worldModel->GetGroup(m_portalTargetGroup);
+					if (tgtGroup)
+					{
+						targetPreview = tgtGroup->GetName().empty() ? ("Group " + std::to_string(m_portalTargetGroup)) : tgtGroup->GetName();
+					}
+				}
+
+				if (ImGui::BeginCombo("##TargetGroup", targetPreview.c_str()))
+				{
+					for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
+					{
+						const auto* group = m_worldModel->GetGroup(i);
+						if (group && static_cast<int32>(i) != m_portalSourceGroup)
+						{
+							bool isSelected = m_portalTargetGroup == static_cast<int32>(i);
+							String itemLabel = group->GetName().empty() ? ("Group " + std::to_string(i)) : group->GetName();
+							if (ImGui::Selectable(itemLabel.c_str(), isSelected))
+							{
+								m_portalTargetGroup = static_cast<int32>(i);
+							}
+						}
+					}
+					ImGui::EndCombo();
+				}
+
+				ImGui::Spacing();
+				ImGui::Separator();
+				ImGui::Spacing();
+
+				bool canCreate = m_portalSourceGroup >= 0 && m_portalTargetGroup >= 0 && m_portalSourceGroup != m_portalTargetGroup;
+
+				if (!canCreate)
+				{
+					ImGui::BeginDisabled();
+				}
+
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.3f, 0.8f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.4f, 0.9f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.8f, 0.5f, 1.0f));
+				if (ImGui::Button("Create", ImVec2(120, 0)))
+				{
+					// Create a default quad portal between the two groups
+					// The portal will be placed at the midpoint between group centers
+					const auto* srcGroup = m_worldModel->GetGroup(m_portalSourceGroup);
+					const auto* tgtGroup = m_worldModel->GetGroup(m_portalTargetGroup);
+
+					Vector3 srcCenter = srcGroup ? srcGroup->GetBoundingBox().GetCenter() : Vector3::Zero;
+					Vector3 tgtCenter = tgtGroup ? tgtGroup->GetBoundingBox().GetCenter() : Vector3::Zero;
+					Vector3 portalCenter = (srcCenter + tgtCenter) * 0.5f;
+
+					// Create a default 2x2 quad portal
+					std::vector<Vector3> vertices;
+					vertices.push_back(portalCenter + Vector3(-1.0f, -1.0f, 0.0f));
+					vertices.push_back(portalCenter + Vector3(1.0f, -1.0f, 0.0f));
+					vertices.push_back(portalCenter + Vector3(1.0f, 1.0f, 0.0f));
+					vertices.push_back(portalCenter + Vector3(-1.0f, 1.0f, 0.0f));
+
+					CreatePortal(m_portalSourceGroup, m_portalTargetGroup, vertices);
+					
+					m_creatingPortal = false;
+					m_portalSourceGroup = -1;
+					m_portalTargetGroup = -1;
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::PopStyleColor(3);
+
+				if (!canCreate)
+				{
+					ImGui::EndDisabled();
+				}
+
+				ImGui::SameLine();
+				if (ImGui::Button("Cancel", ImVec2(120, 0)))
+				{
+					m_creatingPortal = false;
+					m_portalSourceGroup = -1;
+					m_portalTargetGroup = -1;
+					ImGui::CloseCurrentPopup();
+				}
+			}
+			ImGui::EndPopup();
+		}
+
 		ImGui::PopID();
 	}
 
