@@ -138,6 +138,23 @@ namespace mmo
 				ImGui::SetTooltip("Calculate bounding box from the combined bounds of all assigned meshes");
 			}
 		}
+
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		// Delete button
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 0.8f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.9f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.4f, 0.4f, 1.0f));
+		if (ImGui::Button("Delete Group", ImVec2(-1, 0)))
+		{
+			if (callbacks.onRemoveGroup)
+			{
+				callbacks.onRemoveGroup(groupIndex);
+			}
+		}
+		ImGui::PopStyleColor(3);
 	}
 
 	/// @brief Draws the light properties section.

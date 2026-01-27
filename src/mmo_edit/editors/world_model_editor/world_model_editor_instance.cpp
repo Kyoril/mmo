@@ -694,6 +694,16 @@ namespace mmo
 					m_selectedPortalIndex = std::max(-1, m_selectedPortalIndex - 1);
 				}
 			};
+			propCallbacks.onRemoveGroup = [this](int32 index) 
+			{
+				RemoveGroup(static_cast<size_t>(index));
+				if (m_selectedGroupIndex >= index)
+				{
+					m_selectedGroupIndex = std::max(-1, m_selectedGroupIndex - 1);
+				}
+				m_selectedMeshRefIndex = -1;
+				m_selectedMeshRefIndices.clear();
+			};
 			propCallbacks.onRemoveMeshRef = [this](int32 groupIndex, size_t meshRefIndex) 
 			{
 				RemoveMeshRefFromGroup(groupIndex, meshRefIndex);
@@ -1630,11 +1640,54 @@ namespace mmo
 			return;
 		}
 
+		// Clean up visualization for this specific group before removing
+		if (groupIndex < m_groupVisualizations.size())
+		{
+			auto& vis = m_groupVisualizations[groupIndex];
+
+			// Clean up mesh ref visualizations
+			for (auto& meshRefViz : vis.meshRefVisualizations)
+			{
+				if (meshRefViz.entity)
+				{
+					if (meshRefViz.node)
+					{
+						meshRefViz.node->DetachObject(*meshRefViz.entity);
+					}
+					m_scene.DestroyEntity(*meshRefViz.entity);
+					meshRefViz.entity = nullptr;
+				}
+				if (meshRefViz.node)
+				{
+					m_scene.DestroySceneNode(*meshRefViz.node);
+					meshRefViz.node = nullptr;
+				}
+			}
+			vis.meshRefVisualizations.clear();
+
+			// Clean up group visualization
+			if (vis.meshEntity)
+			{
+				m_scene.DestroyEntity(*vis.meshEntity);
+			}
+			if (vis.boundingBoxRenderable)
+			{
+				m_scene.DestroyManualRenderObject(*vis.boundingBoxRenderable);
+			}
+			if (vis.node)
+			{
+				m_scene.DestroySceneNode(*vis.node);
+			}
+
+			// Remove from visualizations vector
+			m_groupVisualizations.erase(m_groupVisualizations.begin() + groupIndex);
+		}
+
 		m_worldModel->RemoveGroup(groupIndex);
 		m_selectedGroupIndex = -1;
 		m_selection.Clear();
 
-		UpdateGroupVisualizations();
+		// Only update portal visualizations as they reference group indices
 		UpdatePortalVisualizations();
 	}
 

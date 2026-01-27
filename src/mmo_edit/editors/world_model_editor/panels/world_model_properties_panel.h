@@ -64,6 +64,10 @@ namespace mmo
 		/// @param portalIndex The index of the portal to remove.
 		std::function<void(int32)> onRemovePortal;
 
+		/// @brief Called when a group is removed.
+		/// @param groupIndex The index of the group to remove.
+		std::function<void(int32)> onRemoveGroup;
+
 		/// @brief Called when a mesh ref is removed.
 		/// @param groupIndex The group index.
 		/// @param meshRefIndex The mesh ref index.
