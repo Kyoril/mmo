@@ -92,59 +92,6 @@ namespace mmo
 
 			ImGui::PopID();
 		}
-
-		// Selected group properties
-		if (selectedGroupIndex >= 0 && selectedGroupIndex < static_cast<int32>(worldModel->GetGroupCount()))
-		{
-			ImGui::Separator();
-			ImGui::Text("Selected Group Properties:");
-
-			auto* selectedGroup = worldModel->GetGroup(selectedGroupIndex);
-			if (selectedGroup)
-			{
-				// Group name editing
-				char nameBuffer[256];
-				std::strncpy(nameBuffer, selectedGroup->GetName().c_str(), sizeof(nameBuffer) - 1);
-				nameBuffer[sizeof(nameBuffer) - 1] = '\0';
-				if (ImGui::InputText("Name##group", nameBuffer, sizeof(nameBuffer)))
-				{
-					selectedGroup->SetName(nameBuffer);
-				}
-
-				// Group flags
-				bool isInterior = selectedGroup->IsInterior();
-				if (ImGui::Checkbox("Interior##group", &isInterior))
-				{
-					uint32 flags = selectedGroup->GetFlags();
-					if (isInterior)
-					{
-						flags |= 0x2000; // Interior flag
-						flags &= ~0x8; // Clear exterior flag
-					}
-					else
-					{
-						flags &= ~0x2000;
-					}
-					selectedGroup->SetFlags(flags);
-				}
-
-				bool isExterior = selectedGroup->IsExterior();
-				if (ImGui::Checkbox("Exterior##group", &isExterior))
-				{
-					uint32 flags = selectedGroup->GetFlags();
-					if (isExterior)
-					{
-						flags |= 0x8; // Exterior flag
-						flags &= ~0x2000; // Clear interior flag
-					}
-					else
-					{
-						flags &= ~0x8;
-					}
-					selectedGroup->SetFlags(flags);
-				}
-			}
-		}
 	}
 
 }

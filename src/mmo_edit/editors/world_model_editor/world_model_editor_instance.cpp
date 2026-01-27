@@ -535,6 +535,36 @@ namespace mmo
 		// Details/Properties panel
 		if (ImGui::Begin(detailsId.c_str()))
 		{
+			// Build selection state
+			PropertiesSelectionState selectionState;
+			selectionState.selectedGroupIndex = m_selectedGroupIndex;
+			selectionState.selectedLightIndex = m_selectedLightIndex;
+			selectionState.selectedPortalIndex = m_selectedPortalIndex;
+			selectionState.selectedMeshRefIndex = m_selectedMeshRefIndex;
+			selectionState.selectedMeshRefIndices = m_selectedMeshRefIndices;
+
+			// Determine selection type based on what's selected
+			if (m_selectedMeshRefIndex >= 0 && !m_selectedMeshRefIndices.empty())
+			{
+				selectionState.type = PropertiesSelectionType::MeshRef;
+			}
+			else if (m_selectedLightIndex >= 0)
+			{
+				selectionState.type = PropertiesSelectionType::Light;
+			}
+			else if (m_selectedPortalIndex >= 0)
+			{
+				selectionState.type = PropertiesSelectionType::Portal;
+			}
+			else if (m_selectedGroupIndex >= 0)
+			{
+				selectionState.type = PropertiesSelectionType::Group;
+			}
+			else
+			{
+				selectionState.type = PropertiesSelectionType::None;
+			}
+
 			PropertiesPanelCallbacks propCallbacks;
 			propCallbacks.onSave = [this]() 
 			{
@@ -544,8 +574,104 @@ namespace mmo
 			{
 				UpdateGroupVisualizations();
 			};
+			propCallbacks.onUpdateLightVisualizations = [this]() 
+			{
+				UpdateLightVisualizations();
+			};
+			propCallbacks.onUpdatePortalVisualizations = [this]() 
+			{
+				UpdatePortalVisualizations();
+			};
+			propCallbacks.onUpdateMeshRefVisualizations = [this](int32 groupIndex) 
+			{
+				if (groupIndex >= 0)
+				{
+					UpdateMeshRefVisualizations(static_cast<size_t>(groupIndex));
+				}
+			};
+			propCallbacks.onRemoveLight = [this](int32 index) 
+			{
+				RemoveLight(static_cast<size_t>(index));
+				if (m_selectedLightIndex >= index)
+				{
+					m_selectedLightIndex = std::max(-1, m_selectedLightIndex - 1);
+				}
+			};
+			propCallbacks.onRemovePortal = [this](int32 index) 
+			{
+				RemovePortal(static_cast<size_t>(index));
+				if (m_selectedPortalIndex >= index)
+				{
+					m_selectedPortalIndex = std::max(-1, m_selectedPortalIndex - 1);
+				}
+			};
+			propCallbacks.onRemoveMeshRef = [this](int32 groupIndex, size_t meshRefIndex) 
+			{
+				RemoveMeshRefFromGroup(groupIndex, meshRefIndex);
+				m_selectedMeshRefIndex = -1;
+				m_selectedMeshRefIndices.clear();
+			};
+			propCallbacks.onUpdatePortalGroupConnection = [this](int32 portalIndex, int32 oldGroupA, int32 newGroupA, int32 newGroupB) 
+			{
+				UpdatePortalGroupConnection(portalIndex, oldGroupA, newGroupA, newGroupB);
+			};
+			propCallbacks.onUpdateMeshRefPosition = [this](int32 groupIndex, int32 meshRefIndex, const Vector3& position) 
+			{
+				if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
+				{
+					auto& groupViz = m_groupVisualizations[groupIndex];
+					if (static_cast<size_t>(meshRefIndex) < groupViz.meshRefVisualizations.size() &&
+						groupViz.meshRefVisualizations[meshRefIndex].node)
+					{
+						groupViz.meshRefVisualizations[meshRefIndex].node->SetPosition(position);
+					}
+				}
+			};
+			propCallbacks.onUpdateMeshRefScale = [this](int32 groupIndex, int32 meshRefIndex, const Vector3& scale) 
+			{
+				if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
+				{
+					auto& groupViz = m_groupVisualizations[groupIndex];
+					if (static_cast<size_t>(meshRefIndex) < groupViz.meshRefVisualizations.size() &&
+						groupViz.meshRefVisualizations[meshRefIndex].node)
+					{
+						groupViz.meshRefVisualizations[meshRefIndex].node->SetScale(scale);
+					}
+				}
+			};
+			propCallbacks.onUpdateMeshRefMaterial = [this](int32 groupIndex, int32 meshRefIndex, const String& material) 
+			{
+				if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
+				{
+					auto& groupViz = m_groupVisualizations[groupIndex];
+					if (static_cast<size_t>(meshRefIndex) < groupViz.meshRefVisualizations.size() &&
+						groupViz.meshRefVisualizations[meshRefIndex].entity)
+					{
+						if (!material.empty())
+						{
+							auto mat = MaterialManager::Get().Load(material);
+							if (mat)
+							{
+								groupViz.meshRefVisualizations[meshRefIndex].entity->SetMaterial(mat);
+							}
+						}
+					}
+				}
+			};
+			propCallbacks.onUpdateLightSceneNode = [this](int32 lightIndex) 
+			{
+				if (lightIndex >= 0 && static_cast<size_t>(lightIndex) < m_lightVisualizations.size() &&
+					m_lightVisualizations[lightIndex].node)
+				{
+					auto& lights = m_worldModel->GetLights();
+					if (static_cast<size_t>(lightIndex) < lights.size())
+					{
+						m_lightVisualizations[lightIndex].node->SetPosition(lights[lightIndex].position);
+					}
+				}
+			};
 
-			DrawPropertiesPanel(m_worldModel.get(), m_selectedGroupIndex, propCallbacks);
+			DrawPropertiesPanel(m_worldModel.get(), selectionState, propCallbacks);
 		}
 		ImGui::End();
 		
@@ -3165,124 +3291,6 @@ namespace mmo
 					RemoveMultipleMeshRefsFromGroup(groupIndex, m_selectedMeshRefIndices);
 				}
 				ImGui::PopStyleColor(3);
-
-				ImGui::Unindent();
-			}
-		}
-
-		// Selected mesh properties section (only show for single selection)
-		if (m_selectedMeshRefIndices.size() == 1 && m_selectedMeshRefIndex >= 0 && m_selectedMeshRefIndex < static_cast<int32>(meshRefs.size()))
-		{
-			ImGui::Spacing();
-
-			if (ImGui::CollapsingHeader("Selected Mesh Properties", ImGuiTreeNodeFlags_DefaultOpen))
-			{
-				ImGui::Indent();
-
-				auto* selectedRef = group->GetMeshRef(m_selectedMeshRefIndex);
-				if (selectedRef)
-				{
-					// Name field
-					ImGui::Text("Name:");
-					ImGui::SameLine();
-					char nameBuffer[256];
-					std::strncpy(nameBuffer, selectedRef->name.c_str(), sizeof(nameBuffer) - 1);
-					nameBuffer[sizeof(nameBuffer) - 1] = '\0';
-					ImGui::SetNextItemWidth(-1);
-					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
-					if (ImGui::InputText("##meshrefName", nameBuffer, sizeof(nameBuffer)))
-					{
-						selectedRef->name = nameBuffer;
-					}
-					ImGui::PopStyleColor();
-
-					ImGui::Spacing();
-
-					// Transform section
-					ImGui::Text("Transform");
-					ImGui::Separator();
-
-					// Position
-					float pos[3] = { selectedRef->position.x, selectedRef->position.y, selectedRef->position.z };
-					if (ImGui::DragFloat3("Position##meshref", pos, 0.1f))
-					{
-						selectedRef->position = Vector3(pos[0], pos[1], pos[2]);
-						if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
-						{
-							auto& groupViz = m_groupVisualizations[groupIndex];
-							if (static_cast<size_t>(m_selectedMeshRefIndex) < groupViz.meshRefVisualizations.size() &&
-								groupViz.meshRefVisualizations[m_selectedMeshRefIndex].node)
-							{
-								groupViz.meshRefVisualizations[m_selectedMeshRefIndex].node->SetPosition(selectedRef->position);
-							}
-						}
-					}
-
-					// Scale
-					float scl[3] = { selectedRef->scale.x, selectedRef->scale.y, selectedRef->scale.z };
-					if (ImGui::DragFloat3("Scale##meshref", scl, 0.01f, 0.01f, 100.0f))
-					{
-						selectedRef->scale = Vector3(scl[0], scl[1], scl[2]);
-						if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
-						{
-							auto& groupViz = m_groupVisualizations[groupIndex];
-							if (static_cast<size_t>(m_selectedMeshRefIndex) < groupViz.meshRefVisualizations.size() &&
-								groupViz.meshRefVisualizations[m_selectedMeshRefIndex].node)
-							{
-								groupViz.meshRefVisualizations[m_selectedMeshRefIndex].node->SetScale(selectedRef->scale);
-							}
-						}
-					}
-
-					ImGui::Spacing();
-
-					// Material section
-					ImGui::Text("Material Override");
-					ImGui::Separator();
-					char matBuffer[512];
-					std::strncpy(matBuffer, selectedRef->materialOverride.c_str(), sizeof(matBuffer) - 1);
-					matBuffer[sizeof(matBuffer) - 1] = '\0';
-					ImGui::SetNextItemWidth(-1);
-					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
-					if (ImGui::InputText("##meshrefMat", matBuffer, sizeof(matBuffer)))
-					{
-						selectedRef->materialOverride = matBuffer;
-						if (static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
-						{
-							auto& groupViz = m_groupVisualizations[groupIndex];
-							if (static_cast<size_t>(m_selectedMeshRefIndex) < groupViz.meshRefVisualizations.size() &&
-								groupViz.meshRefVisualizations[m_selectedMeshRefIndex].entity)
-							{
-								if (!selectedRef->materialOverride.empty())
-								{
-									auto material = MaterialManager::Get().Load(selectedRef->materialOverride);
-									if (material)
-									{
-										groupViz.meshRefVisualizations[m_selectedMeshRefIndex].entity->SetMaterial(material);
-									}
-								}
-							}
-						}
-					}
-					ImGui::PopStyleColor();
-
-					ImGui::Spacing();
-
-					// Source mesh (read-only)
-					ImGui::TextDisabled("Source: %s", selectedRef->meshPath.c_str());
-
-					ImGui::Spacing();
-
-					// Action buttons
-					ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 0.8f));
-					ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.9f));
-					ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.9f, 0.4f, 0.4f, 1.0f));
-					if (ImGui::Button("Delete Selected", ImVec2(-1, 0)))
-					{
-						RemoveMeshRefFromGroup(groupIndex, m_selectedMeshRefIndex);
-					}
-					ImGui::PopStyleColor(3);
-				}
 
 				ImGui::Unindent();
 			}
