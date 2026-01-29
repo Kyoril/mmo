@@ -13,9 +13,184 @@
 #include "light.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace mmo
 {
+    // PortalFrustum implementation
+
+    bool PortalFrustum::IsPointInside(const Vector3& point) const
+    {
+        // A point is inside if it's on the positive side of all planes
+        for (const Plane& plane : planes)
+        {
+            if (plane.GetDistance(point) < 0)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool PortalFrustum::IsVisible(const AABB& bbox) const
+    {
+        if (bbox.IsNull())
+        {
+            return false;
+        }
+
+        const Vector3 center = bbox.GetCenter();
+        const Vector3 halfSize = bbox.GetExtents();
+
+        // Check against all planes - if the box is entirely behind any plane, it's not visible
+        for (const Plane& plane : planes)
+        {
+            Plane::Side side = plane.GetSide(center, halfSize);
+            if (side == Plane::NegativeSide)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool PortalFrustum::IsPortalVisible(const std::vector<Vector3>& vertices) const
+    {
+        if (vertices.empty())
+        {
+            return false;
+        }
+
+        // Check if all vertices are on the negative side of any single plane
+        // If so, the portal is completely outside the frustum
+        for (const Plane& plane : planes)
+        {
+            bool allOutside = true;
+            for (const Vector3& v : vertices)
+            {
+                if (plane.GetDistance(v) >= 0)
+                {
+                    allOutside = false;
+                    break;
+                }
+            }
+            if (allOutside)
+            {
+                return false; // All vertices are behind this plane
+            }
+        }
+
+        // At least one vertex is on the positive side of each plane,
+        // so the portal is at least partially visible
+        return true;
+    }
+
+    PortalFrustum PortalFrustum::ClipThroughPortal(const std::vector<Vector3>& portalVertices) const
+    {
+        if (portalVertices.size() < 3)
+        {
+            return *this;
+        }
+
+        PortalFrustum newFrustum;
+        newFrustum.origin = origin;
+
+        // Compute portal center for validating plane normal directions
+        Vector3 portalCenter(0, 0, 0);
+        for (const Vector3& v : portalVertices)
+        {
+            portalCenter += v;
+        }
+        portalCenter /= static_cast<float>(portalVertices.size());
+
+        // Build planes from the eye/origin through each edge of the portal
+        // Portal vertices are assumed to be in order (e.g., CCW or CW winding)
+        const size_t numVerts = portalVertices.size();
+        
+        for (size_t i = 0; i < numVerts; ++i)
+        {
+            const Vector3& v0 = portalVertices[i];
+            const Vector3& v1 = portalVertices[(i + 1) % numVerts];
+
+            // Create a plane from origin through edge v0-v1
+            Vector3 edge = v1 - v0;
+            Vector3 toVertex = v0 - origin;
+            
+            // Cross product gives us the plane normal
+            Vector3 planeNormal = edge.Cross(toVertex);
+            
+            float length = planeNormal.GetLength();
+            if (length < 0.0001f)
+            {
+                continue; // Degenerate edge, skip
+            }
+            
+            planeNormal /= length;
+            
+            // Ensure the normal points toward the portal center (inside the visible cone)
+            // The portal center should be on the positive side of this plane
+            Vector3 toCenter = portalCenter - origin;
+            if (planeNormal.Dot(toCenter) < 0)
+            {
+                planeNormal = -planeNormal;
+            }
+            
+            // The plane passes through the origin (camera position)
+            Plane edgePlane(planeNormal, origin);
+            newFrustum.planes.push_back(edgePlane);
+        }
+
+        // Also add the portal's own plane to ensure we don't see behind it
+        // Calculate portal plane from first 3 vertices
+        if (numVerts >= 3)
+        {
+            Vector3 portalNormal = (portalVertices[1] - portalVertices[0]).Cross(
+                                   portalVertices[2] - portalVertices[0]);
+            float length = portalNormal.GetLength();
+            if (length > 0.0001f)
+            {
+                portalNormal /= length;
+                
+                // Make sure the portal plane faces toward the camera
+                Vector3 toCamera = origin - portalVertices[0];
+                if (portalNormal.Dot(toCamera) < 0)
+                {
+                    portalNormal = -portalNormal;
+                }
+                
+                // Create plane - we want things on the far side of the portal to be visible
+                // So the normal should point away from the camera (into the next room)
+                Plane portalPlane(-portalNormal, portalVertices[0]);
+                newFrustum.planes.push_back(portalPlane);
+            }
+        }
+
+        // IMPORTANT: Add the parent frustum's NEW edge planes (not the original camera planes)
+        // This creates the proper intersection of view cones through multiple portals.
+        // We only want to keep planes that were created from portal edges, not the original
+        // camera frustum planes (which are typically the first 6 planes).
+        // For recursive portals, the parent will already have accumulated the necessary restrictions.
+        for (const Plane& parentPlane : planes)
+        {
+            newFrustum.planes.push_back(parentPlane);
+        }
+
+        return newFrustum;
+    }
+
+    PortalFrustum PortalFrustum::FromCamera(const Camera& camera)
+    {
+        PortalFrustum frustum;
+        frustum.origin = camera.GetDerivedPosition();
+        
+        // Extract the 6 frustum planes from the camera (skip far plane for infinite frustums)
+        frustum.planes.resize(6);
+        camera.ExtractFrustumPlanes(frustum.planes.data());
+        
+        return frustum;
+    }
+
     const String WorldModelInstance::s_movableType = "WorldModelInstance";
 
     WorldModelInstance::WorldModelInstance(const String& name, WorldModelPtr worldModel)
@@ -363,11 +538,22 @@ namespace mmo
 
         std::vector<bool> visitedGroups(m_worldModel->GetGroupCount(), false);
 
+        // Create initial frustum from camera
+        PortalFrustum cameraFrustum = PortalFrustum::FromCamera(camera);
+
         if (startGroupIndex < 0)
         {
             // Camera is not in any group - show all exterior groups and any
             // interior groups whose bounding box is visible in the camera frustum
-            std::vector<int32> groupsToProcess;
+            // Use frustum narrowing when traversing through portals
+            
+            struct CullEntry
+            {
+                int32 groupIndex;
+                PortalFrustum frustum;
+            };
+            
+            std::vector<CullEntry> groupsToProcess;
             
             for (size_t i = 0; i < m_worldModel->GetGroupCount(); ++i)
             {
@@ -379,7 +565,7 @@ namespace mmo
                     {
                         visibleGroups.push_back(static_cast<int32>(i));
                         visitedGroups[i] = true;
-                        groupsToProcess.push_back(static_cast<int32>(i));
+                        groupsToProcess.push_back({static_cast<int32>(i), cameraFrustum});
                     }
                     // Also include any group whose bounding box is visible in the frustum
                     else
@@ -394,24 +580,24 @@ namespace mmo
                         {
                             visibleGroups.push_back(static_cast<int32>(i));
                             visitedGroups[i] = true;
-                            groupsToProcess.push_back(static_cast<int32>(i));
+                            groupsToProcess.push_back({static_cast<int32>(i), cameraFrustum});
                         }
                     }
                 }
             }
             
-            // Traverse through portals from visible groups to find more visible groups
+            // Traverse through portals from visible groups using frustum narrowing
             while (!groupsToProcess.empty())
             {
-                int32 groupIndex = groupsToProcess.back();
+                CullEntry entry = groupsToProcess.back();
                 groupsToProcess.pop_back();
 
-                if (groupIndex < 0 || groupIndex >= static_cast<int32>(visitedGroups.size()))
+                if (entry.groupIndex < 0 || entry.groupIndex >= static_cast<int32>(visitedGroups.size()))
                 {
                     continue;
                 }
 
-                const auto* group = m_worldModel->GetGroup(groupIndex);
+                const auto* group = m_worldModel->GetGroup(entry.groupIndex);
                 if (!group)
                 {
                     continue;
@@ -427,18 +613,28 @@ namespace mmo
                             const auto& portal = m_worldModel->GetPortals()[portalRef.portalIndex];
                             if (portal && portal->IsActive())
                             {
-                                // Check if the portal bounds are visible
-                                AABB portalBBox = portal->GetWorldBounds();
-                                if (m_parentNode && !portalBBox.IsNull())
+                                // Get portal vertices in world space
+                                std::vector<Vector3> portalVertices = portal->GetWorldVertices();
+                                
+                                // Transform portal vertices by the world model's transform
+                                if (m_parentNode)
                                 {
-                                    portalBBox.Transform(m_parentNode->GetFullTransform());
+                                    const Matrix4& worldTransform = m_parentNode->GetFullTransform();
+                                    for (Vector3& vertex : portalVertices)
+                                    {
+                                        vertex = worldTransform * vertex;
+                                    }
                                 }
 
-                                if (!portalBBox.IsNull() && camera.IsVisible(portalBBox))
+                                // Check if portal is visible through the current frustum using vertex test
+                                if (!portalVertices.empty() && entry.frustum.IsPortalVisible(portalVertices))
                                 {
                                     visitedGroups[targetGroup] = true;
                                     visibleGroups.push_back(targetGroup);
-                                    groupsToProcess.push_back(targetGroup);
+                                    
+                                    // Create a narrowed frustum through this portal
+                                    PortalFrustum narrowedFrustum = entry.frustum.ClipThroughPortal(portalVertices);
+                                    groupsToProcess.push_back({targetGroup, narrowedFrustum});
                                 }
                             }
                         }
@@ -448,12 +644,12 @@ namespace mmo
             return;
         }
 
-        // Start from the current group and cull through portals
-        CullThroughPortals(camera, startGroupIndex, visitedGroups, visibleGroups, 0);
+        // Start from the current group and cull through portals using frustum narrowing
+        CullThroughPortals(cameraFrustum, startGroupIndex, visitedGroups, visibleGroups, 0);
     }
 
     void WorldModelInstance::CullThroughPortals(
-        const Camera& camera,
+        const PortalFrustum& frustum,
         int32 currentGroupIndex,
         std::vector<bool>& visitedGroups,
         std::vector<int32>& visibleGroups,
@@ -486,30 +682,41 @@ namespace mmo
             return;
         }
 
-        // For each portal in this group, check if it's visible and recurse
+        // For each portal in this group, check if it's visible through the current frustum and recurse
         for (const auto& portalRef : group->GetPortalRefs())
         {
             const int32 targetGroup = portalRef.groupIndex;
             
             if (targetGroup >= 0 && targetGroup < static_cast<int32>(visitedGroups.size()) && !visitedGroups[targetGroup])
             {
-                // Check if portal is visible from camera
+                // Check if portal is visible through the current (possibly narrowed) frustum
                 if (portalRef.portalIndex < m_worldModel->GetPortals().size())
                 {
                     const auto& portal = m_worldModel->GetPortals()[portalRef.portalIndex];
                     
                     if (portal && portal->IsActive())
                     {
-                        // Check if the portal bounds are visible in the camera frustum
-                        AABB portalBBox = portal->GetWorldBounds();
-                        if (m_parentNode && !portalBBox.IsNull())
+                        // Get portal vertices in world space
+                        std::vector<Vector3> portalVertices = portal->GetWorldVertices();
+                        
+                        // Transform portal vertices by the world model's transform
+                        if (m_parentNode)
                         {
-                            portalBBox.Transform(m_parentNode->GetFullTransform());
+                            const Matrix4& worldTransform = m_parentNode->GetFullTransform();
+                            for (Vector3& vertex : portalVertices)
+                            {
+                                vertex = worldTransform * vertex;
+                            }
                         }
 
-                        if (!portalBBox.IsNull() && camera.IsVisible(portalBBox))
+                        // Check if the portal is visible in the current frustum using vertex test
+                        if (!portalVertices.empty() && frustum.IsPortalVisible(portalVertices))
                         {
-                            CullThroughPortals(camera, targetGroup, visitedGroups, visibleGroups, recursionDepth + 1);
+                            // Create a narrowed frustum through this portal
+                            PortalFrustum narrowedFrustum = frustum.ClipThroughPortal(portalVertices);
+                            
+                            // Recurse with the narrowed frustum
+                            CullThroughPortals(narrowedFrustum, targetGroup, visitedGroups, visibleGroups, recursionDepth + 1);
                         }
                     }
                 }

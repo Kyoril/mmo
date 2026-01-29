@@ -24,6 +24,7 @@
 #include "scene_graph/mesh_serializer.h"
 #include "scene_graph/scene_node.h"
 #include "scene_graph/world_model_serializer.h"
+#include "scene_graph/world_model_instance.h"
 #include "selected_map_entity.h"
 #include "stream_sink.h"
 #include "editors/world_editor/world_editor_instance.h"
@@ -3330,36 +3331,46 @@ namespace mmo
 		}
 		else
 		{
-			// Perform portal-based visibility culling from inside a group
-			std::vector<int32> groupsToProcess;
-			groupsToProcess.push_back(currentGroupIndex);
-			
+			// Perform portal-based visibility culling from inside a group using frustum narrowing
 			const auto* currentGroup = m_worldModel->GetGroup(currentGroupIndex);
 			if (currentGroup)
 			{
 				debugStream << "Inside group " << currentGroupIndex << ": " << currentGroup->GetPortalRefs().size() << " portal refs\\n";
 			}
 
+			// Create initial frustum from camera
+			PortalFrustum cameraFrustum = PortalFrustum::FromCamera(*m_camera);
+
+			// Use a stack-based approach with frustum tracking for proper portal culling
+			struct CullEntry
+			{
+				int32 groupIndex;
+				PortalFrustum frustum;
+			};
+			
+			std::vector<CullEntry> groupsToProcess;
+			groupsToProcess.push_back({currentGroupIndex, cameraFrustum});
+
 			while (!groupsToProcess.empty())
 			{
-				int32 groupIndex = groupsToProcess.back();
+				CullEntry entry = groupsToProcess.back();
 				groupsToProcess.pop_back();
 
-				if (groupIndex < 0 || groupIndex >= static_cast<int32>(visitedGroups.size()))
+				if (entry.groupIndex < 0 || entry.groupIndex >= static_cast<int32>(visitedGroups.size()))
 				{
 					continue;
 				}
 
-				if (visitedGroups[groupIndex])
+				if (visitedGroups[entry.groupIndex])
 				{
 					continue;
 				}
 
-				visitedGroups[groupIndex] = true;
-				visibleGroups.push_back(groupIndex);
+				visitedGroups[entry.groupIndex] = true;
+				visibleGroups.push_back(entry.groupIndex);
 
 				// Get connected groups through portals
-				const auto* group = m_worldModel->GetGroup(groupIndex);
+				const auto* group = m_worldModel->GetGroup(entry.groupIndex);
 				if (!group)
 				{
 					continue;
@@ -3376,17 +3387,20 @@ namespace mmo
 							const auto& portal = m_worldModel->GetPortals()[portalRef.portalIndex];
 							if (portal && portal->IsActive())
 							{
-								// When inside a group, only check portal visibility
-								// The target group is only visible if we can see through the portal
-								AABB portalBBox = portal->GetWorldBounds();
-								bool portalVisible = !portalBBox.IsNull() && m_camera->IsVisible(portalBBox);
+								// Get portal vertices in world space
+								std::vector<Vector3> portalVertices = portal->GetWorldVertices();
+
+								// Check if portal is visible through the current (possibly narrowed) frustum
+								bool portalVisible = !portalVertices.empty() && entry.frustum.IsPortalVisible(portalVertices);
 								
 								debugStream << "  Portal " << portalRef.portalIndex << " -> grp " << targetGroup 
 								           << " (pVis:" << portalVisible << ")\\n";
 								
 								if (portalVisible)
 								{
-									groupsToProcess.push_back(targetGroup);
+									// Create a narrowed frustum through this portal
+									PortalFrustum narrowedFrustum = entry.frustum.ClipThroughPortal(portalVertices);
+									groupsToProcess.push_back({targetGroup, narrowedFrustum});
 								}
 							}
 							else
