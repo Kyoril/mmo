@@ -29,7 +29,11 @@
 #include "stream_sink.h"
 #include "editors/world_editor/world_editor_instance.h"
 #include "scene_graph/mesh_manager.h"
+#include "scene_graph/mesh.h"
+#include "scene_graph/sub_mesh.h"
 #include "graphics/graphics_device.h"
+#include "graphics/vertex_index_data.h"
+#include "graphics/vertex_declaration.h"
 #include "terrain/page.h"
 #include "terrain/tile.h"
 
@@ -417,6 +421,9 @@ namespace mmo
 				m_selectedLightIndex = -1;
 				m_selectedPortalIndex = -1;
 				
+				// Clear light range visualization since we're not selecting a light
+				UpdateSelectedLightVisualization();
+				
 				m_selection.Clear();
 				if (index >= 0 && index < static_cast<int32>(m_groupVisualizations.size()) &&
 					m_groupVisualizations[index].node)
@@ -437,6 +444,9 @@ namespace mmo
 				m_selectedMeshRefIndex = meshRefIndex;
 				m_selectedLightIndex = -1;
 				m_selectedPortalIndex = -1;
+				
+				// Clear light range visualization since we're not selecting a light
+				UpdateSelectedLightVisualization();
 				
 				m_selection.Clear();
 				if (groupIndex >= 0 && static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
@@ -481,6 +491,9 @@ namespace mmo
 				m_selectedMeshRefIndex = -1;
 				m_selectedMeshRefIndices.clear();
 				m_selectedLightIndex = -1;
+				
+				// Clear light range visualization since we're not selecting a light
+				UpdateSelectedLightVisualization();
 			};
 
 			// Remove callbacks
@@ -956,7 +969,10 @@ namespace mmo
 
 				// Display options
 				ImGui::Checkbox("Show Group Bounds", &m_showGroupBounds);
-				ImGui::Checkbox("Show Portals", &m_showPortals);
+				if (ImGui::Checkbox("Show Portals", &m_showPortals))
+				{
+					UpdatePortalVisibility();
+				}
 				if (ImGui::Checkbox("Show Lights", &m_showLights))
 				{
 					UpdateLightMarkerVisibility();
@@ -1616,28 +1632,304 @@ namespace mmo
 		if (!ImGui::IsKeyPressed(ImGuiKey_LeftShift))
 		{
 			m_selection.Clear();
+			m_selectedLightIndex = -1;
+			m_selectedMeshRefIndex = -1;
+			m_selectedMeshRefIndices.clear();
+			m_selectedGroupIndex = -1;
+			UpdateSelectedLightVisualization();
 		}
 
 		m_debugBoundingBox->Clear();
 
 		const auto& hitResult = m_raySceneQuery->GetLastResult();
-		if (!hitResult.empty())
+		if (hitResult.empty())
 		{
-			Entity* entity = (Entity*)hitResult[0].movable;
-			if (entity)
+			return;
+		}
+
+		// Find the closest object using geometry-level intersection
+		Entity* closestEntity = nullptr;
+		float closestDistance = std::numeric_limits<float>::max();
+		MeshRefEntityData* closestMeshRefData = nullptr;
+		LightEntityData* closestLightData = nullptr;
+		MapEntity* closestMapEntity = nullptr;
+
+		for (const auto& result : hitResult)
+		{
+			Entity* entity = dynamic_cast<Entity*>(result.movable);
+			if (!entity)
 			{
-				MapEntity* mapEntity = entity->GetUserObject<MapEntity>();
-				if (mapEntity)
+				continue;
+			}
+
+			// Check if it's a mesh ref entity
+			MeshRefEntityData* meshRefData = entity->GetUserObject<MeshRefEntityData>();
+			if (meshRefData)
+			{
+				// Use geometry-level intersection for mesh refs
+				float hitDistance;
+				if (IntersectMeshGeometry(ray, entity, hitDistance))
 				{
-					String asset = entity->GetMesh()->GetName().data();
-					m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*mapEntity, [this, asset](Selectable& selected)
+					if (hitDistance < closestDistance)
 					{
-						CreateMapEntity(asset, selected.GetPosition(), selected.GetOrientation(), selected.GetScale());
-					}));
-					UpdateDebugAABB(hitResult[0].movable->GetWorldBoundingBox());
+						closestDistance = hitDistance;
+						closestEntity = entity;
+						closestMeshRefData = meshRefData;
+						closestLightData = nullptr;
+						closestMapEntity = nullptr;
+					}
+				}
+				continue;
+			}
+
+			// Check if it's a light icon entity
+			LightEntityData* lightData = entity->GetUserObject<LightEntityData>();
+			if (lightData)
+			{
+				// For light icons, use bounding box distance since they're small markers
+				if (result.distance < closestDistance)
+				{
+					closestDistance = result.distance;
+					closestEntity = entity;
+					closestMeshRefData = nullptr;
+					closestLightData = lightData;
+					closestMapEntity = nullptr;
+				}
+				continue;
+			}
+
+			// Check if it's a map entity (legacy support)
+			MapEntity* mapEntity = entity->GetUserObject<MapEntity>();
+			if (mapEntity)
+			{
+				// Use geometry-level intersection for map entities
+				float hitDistance;
+				if (IntersectMeshGeometry(ray, entity, hitDistance))
+				{
+					if (hitDistance < closestDistance)
+					{
+						closestDistance = hitDistance;
+						closestEntity = entity;
+						closestMeshRefData = nullptr;
+						closestLightData = nullptr;
+						closestMapEntity = mapEntity;
+					}
+				}
+				continue;
+			}
+		}
+
+		// Handle the closest hit
+		if (!closestEntity)
+		{
+			return;
+		}
+
+		if (closestMeshRefData)
+		{
+			const int32 groupIndex = closestMeshRefData->groupIndex;
+			const size_t meshRefIndex = closestMeshRefData->meshRefIndex;
+			
+			if (groupIndex >= 0 && static_cast<size_t>(groupIndex) < m_groupVisualizations.size())
+			{
+				auto& groupViz = m_groupVisualizations[groupIndex];
+				if (meshRefIndex < groupViz.meshRefVisualizations.size() &&
+					groupViz.meshRefVisualizations[meshRefIndex].node)
+				{
+					auto* group = m_worldModel->GetGroup(groupIndex);
+					if (group)
+					{
+						m_selectedGroupIndex = groupIndex;
+						m_selectedMeshRefIndex = static_cast<int32>(meshRefIndex);
+						m_selectedMeshRefIndices.clear();
+						m_selectedMeshRefIndices.insert(meshRefIndex);
+						m_selectedLightIndex = -1;
+						m_selectedPortalIndex = -1;
+						
+						// Update hierarchy panel selection type
+						m_hierarchyPanelState.selectedType = HierarchyItemType::MeshRef;
+						m_hierarchyPanelState.selectedGroupIndex = groupIndex;
+						m_hierarchyPanelState.selectedMeshRefIndex = static_cast<int32>(meshRefIndex);
+						m_hierarchyPanelState.selectedMeshRefIndices = m_selectedMeshRefIndices;
+						
+						m_selection.AddSelectable(std::make_unique<SelectedGroupMesh>(
+							*group, meshRefIndex, *groupViz.meshRefVisualizations[meshRefIndex].node));
+						UpdateDebugAABB(closestEntity->GetWorldBoundingBox());
+						UpdateSelectedLightVisualization();
+					}
 				}
 			}
 		}
+		else if (closestLightData)
+		{
+			const size_t lightIndex = closestLightData->lightIndex;
+			
+			if (lightIndex < m_lightVisualizations.size() && m_lightVisualizations[lightIndex].node)
+			{
+				m_selectedLightIndex = static_cast<int32>(lightIndex);
+				m_selectedMeshRefIndex = -1;
+				m_selectedMeshRefIndices.clear();
+				m_selectedPortalIndex = -1;
+				
+				// Update hierarchy panel selection type
+				m_hierarchyPanelState.selectedType = HierarchyItemType::Light;
+				m_hierarchyPanelState.selectedLightIndex = m_selectedLightIndex;
+				
+				m_selection.AddSelectable(std::make_unique<SelectedWorldModelLight>(
+					*m_worldModel, lightIndex, *m_lightVisualizations[lightIndex].node));
+				UpdateSelectedLightVisualization();
+			}
+		}
+		else if (closestMapEntity)
+		{
+			String asset = closestEntity->GetMesh()->GetName().data();
+			m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*closestMapEntity, [this, asset](Selectable& selected)
+			{
+				CreateMapEntity(asset, selected.GetPosition(), selected.GetOrientation(), selected.GetScale());
+			}));
+			UpdateDebugAABB(closestEntity->GetWorldBoundingBox());
+		}
+	}
+
+	bool WorldModelEditorInstance::IntersectMeshGeometry(const Ray& ray, Entity* entity, float& outDistance) const
+	{
+		if (!entity)
+		{
+			return false;
+		}
+
+		const MeshPtr& mesh = entity->GetMesh();
+		if (!mesh)
+		{
+			return false;
+		}
+
+		// Get the entity's world transform
+		SceneNode* parentNode = entity->GetParentSceneNode();
+		if (!parentNode)
+		{
+			return false;
+		}
+
+		const Matrix4& worldTransform = parentNode->GetFullTransform();
+		const Matrix4 invWorldTransform = worldTransform.Inverse();
+
+		// Transform ray to entity's local space
+		const Vector3 localOrigin = invWorldTransform * ray.origin;
+		const Vector3 localDest = invWorldTransform * ray.destination;
+		const Ray localRay(localOrigin, localDest);
+
+		float closestDistance = std::numeric_limits<float>::max();
+		bool hitFound = false;
+
+		// Iterate through all submeshes
+		const uint16 subMeshCount = mesh->GetSubMeshCount();
+		for (uint16 i = 0; i < subMeshCount; ++i)
+		{
+			SubMesh& subMesh = mesh->GetSubMesh(i);
+
+			// Skip if no vertex or index data
+			if (!subMesh.vertexData || !subMesh.indexData)
+			{
+				continue;
+			}
+
+			const VertexData* vertexData = subMesh.vertexData.get();
+			const IndexData* indexData = subMesh.indexData.get();
+
+			// Find position element
+			const VertexElement* posElem = vertexData->vertexDeclaration->FindElementBySemantic(VertexElementSemantic::Position);
+			if (!posElem)
+			{
+				continue;
+			}
+
+			// Get vertex buffer for positions
+			const VertexBufferBinding* binding = vertexData->vertexBufferBinding;
+			const VertexBufferPtr& vertexBuffer = binding->GetBuffer(posElem->GetSource());
+			if (!vertexBuffer)
+			{
+				continue;
+			}
+
+			// Lock vertex buffer for reading
+			void* vertexDataPtr = vertexBuffer->Map(LockOptions::ReadOnly);
+			if (!vertexDataPtr)
+			{
+				continue;
+			}
+
+			const uint32 vertexSize = vertexBuffer->GetVertexSize();
+			const uint32 posOffset = posElem->GetOffset();
+
+			// Get index buffer
+			const IndexBufferPtr& indexBuffer = indexData->indexBuffer;
+			if (!indexBuffer)
+			{
+				vertexBuffer->Unmap();
+				continue;
+			}
+
+			void* indexDataPtr = indexBuffer->Map(LockOptions::ReadOnly);
+			if (!indexDataPtr)
+			{
+				vertexBuffer->Unmap();
+				continue;
+			}
+
+			const bool use32BitIndices = (indexBuffer->GetIndexSize() == IndexBufferSize::Index_32);
+			const size_t indexCount = indexData->indexCount;
+
+			// Test each triangle
+			for (size_t triIdx = 0; triIdx < indexCount; triIdx += 3)
+			{
+				uint32 indices[3];
+
+				// Read indices
+				if (use32BitIndices)
+				{
+					const uint32* indexPtr = static_cast<const uint32*>(indexDataPtr);
+					indices[0] = indexPtr[triIdx + 0];
+					indices[1] = indexPtr[triIdx + 1];
+					indices[2] = indexPtr[triIdx + 2];
+				}
+				else
+				{
+					const uint16* indexPtr = static_cast<const uint16*>(indexDataPtr);
+					indices[0] = indexPtr[triIdx + 0];
+					indices[1] = indexPtr[triIdx + 1];
+					indices[2] = indexPtr[triIdx + 2];
+				}
+
+				// Read vertex positions
+				Vector3 vertices[3];
+				for (int v = 0; v < 3; ++v)
+				{
+					const uint8* vertexPtr = static_cast<const uint8*>(vertexDataPtr) + (indices[v] * vertexSize) + posOffset;
+					const float* posPtr = reinterpret_cast<const float*>(vertexPtr);
+					vertices[v] = Vector3(posPtr[0], posPtr[1], posPtr[2]);
+				}
+
+				// Test ray against triangle
+				const auto [hit, distance] = localRay.IntersectsTriangle(vertices[0], vertices[1], vertices[2]);
+				if (hit && distance < closestDistance)
+				{
+					closestDistance = distance;
+					hitFound = true;
+				}
+			}
+
+			indexBuffer->Unmap();
+			vertexBuffer->Unmap();
+		}
+
+		if (hitFound)
+		{
+			outDistance = closestDistance;
+			return true;
+		}
+
+		return false;
 	}
 
 	void WorldModelEditorInstance::CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale)
@@ -2375,6 +2667,13 @@ namespace mmo
 				viz.entity->SetQueryFlags(1);
 				viz.node->AttachObject(*viz.entity);
 				
+				// Store entity data for raycast identification
+				auto entityData = std::make_unique<MeshRefEntityData>();
+				entityData->groupIndex = static_cast<int32>(groupIndex);
+				entityData->meshRefIndex = i;
+				viz.entity->SetUserObject(entityData.get());
+				m_meshRefEntityData.push_back(std::move(entityData));
+				
 				// Apply material override if specified
 				if (!meshRef.materialOverride.empty())
 				{
@@ -2715,6 +3014,9 @@ namespace mmo
 
 	void WorldModelEditorInstance::UpdateGroupVisualizations()
 	{
+		// Clear mesh ref entity data (will be rebuilt)
+		m_meshRefEntityData.clear();
+		
 		// Clear existing visualizations
 		for (auto& vis : m_groupVisualizations)
 		{
@@ -3017,6 +3319,7 @@ namespace mmo
 			}
 		}
 		m_lightVisualizations.clear();
+		m_lightEntityData.clear();
 
 		if (!m_worldModel)
 		{
@@ -3060,8 +3363,14 @@ namespace mmo
 			vis.iconEntity = m_scene.CreateEntity("LightIcon_" + std::to_string(i), "Editor/Joint.hmsh");
 			if (vis.iconEntity)
 			{
-				vis.iconEntity->SetQueryFlags(0);
+				vis.iconEntity->SetQueryFlags(1);  // Enable raycast selection
 				vis.node->AttachObject(*vis.iconEntity);
+				
+				// Store entity data for raycast identification
+				auto entityData = std::make_unique<LightEntityData>();
+				entityData->lightIndex = i;
+				vis.iconEntity->SetUserObject(entityData.get());
+				m_lightEntityData.push_back(std::move(entityData));
 			}
 
 			m_lightVisualizations.push_back(std::move(vis));
@@ -3194,6 +3503,17 @@ namespace mmo
 			if (vis.iconEntity)
 			{
 				vis.iconEntity->SetVisible(m_showLights && m_showLightMarkers);
+			}
+		}
+	}
+
+	void WorldModelEditorInstance::UpdatePortalVisibility()
+	{
+		for (auto& vis : m_portalVisualizations)
+		{
+			if (vis.node)
+			{
+				vis.node->SetVisible(m_showPortals, true);
 			}
 		}
 	}

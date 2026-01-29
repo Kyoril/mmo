@@ -49,6 +49,19 @@ namespace mmo
 		MeshEdit
 	};
 
+	/// @brief User data structure stored on mesh ref entities for raycast identification.
+	struct MeshRefEntityData
+	{
+		int32 groupIndex { -1 };
+		size_t meshRefIndex { 0 };
+	};
+
+	/// @brief User data structure stored on light icon entities for raycast identification.
+	struct LightEntityData
+	{
+		size_t lightIndex { 0 };
+	};
+
 	/// @brief Represents visualization of a single mesh reference within a group.
 	struct MeshRefVisualization
 	{
@@ -148,6 +161,13 @@ namespace mmo
 
 		/// @brief Performs entity selection raycast.
 		void PerformEntitySelectionRaycast(float viewportX, float viewportY);
+
+		/// @brief Performs accurate ray-mesh intersection using triangle tests.
+		/// @param ray The ray in world space.
+		/// @param entity The entity to test against.
+		/// @param outDistance The distance to the closest hit point (if any).
+		/// @return True if the ray intersects the mesh geometry, false otherwise.
+		bool IntersectMeshGeometry(const Ray& ray, Entity* entity, float& outDistance) const;
 
 		/// @brief Creates a map entity from a mesh.
 		void CreateMapEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale);
@@ -279,6 +299,9 @@ namespace mmo
 
 		/// @brief Updates visualization for all portals.
 		void UpdatePortalVisualizations();
+
+		/// @brief Updates visibility of portal visualizations based on m_showPortals.
+		void UpdatePortalVisibility();
 
 		/// @brief Updates visualization for all lights.
 		void UpdateLightVisualizations();
@@ -434,5 +457,11 @@ namespace mmo
 		// Search filters
 		char m_meshRefSearchFilter[256] { "" };
 		char m_childWMOSearchFilter[256] { "" };
+
+		/// @brief Storage for mesh ref entity identification data.
+		std::vector<std::unique_ptr<MeshRefEntityData>> m_meshRefEntityData;
+
+		/// @brief Storage for light entity identification data.
+		std::vector<std::unique_ptr<LightEntityData>> m_lightEntityData;
 	};
 }
