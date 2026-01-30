@@ -448,6 +448,7 @@ namespace mmo
         }
 
         std::unordered_set<std::uint32_t> rasterizedEntities;
+        std::unordered_set<std::uint64_t> rasterizedWorldModels;
 
         // incrementally rasterize mesh geometry into the height field, setting poly flags as appropriate
         for (auto const& chunk : chunks)
@@ -476,6 +477,33 @@ namespace mmo
                     return false;
 
                 rasterizedEntities.insert(wmoId);
+            }
+
+            // World Model Entities
+            for (auto const& worldModelId : chunk->m_worldModelInstances)
+            {
+                if (rasterizedWorldModels.contains(worldModelId))
+                {
+                    continue;
+                }
+
+                auto const worldModelInstance = m_map->GetWorldModelEntityInstance(worldModelId);
+                ASSERT(worldModelInstance);
+
+                std::vector<Vector3> vertices;
+                std::vector<int32> indices;
+
+                worldModelInstance->BuildTriangles(vertices, indices);
+                
+                DLOG("Rasterizing world model instance " << worldModelId << " with " << vertices.size() << " vertices and " << indices.size() << " indices");
+                
+                if (!TransformAndRasterize(ctx, *solid, config.walkableSlopeAngle,
+                    vertices, indices, poly_flags::WorldModel))
+                {
+                    return false;
+                }
+
+                rasterizedWorldModels.insert(worldModelId);
             }
         }
 

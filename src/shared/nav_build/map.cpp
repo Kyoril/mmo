@@ -14,6 +14,8 @@
 #include "game_client/world_entity_loader.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/mesh_serializer.h"
+#include "scene_graph/world_model.h"
+#include "scene_graph/world_model_serializer.h"
 
 
 namespace mmo
@@ -96,6 +98,153 @@ namespace mmo
         std::copy(Model->Indices.cbegin(), Model->Indices.cend(), indices.begin());
 
         for (auto& vertex : Model->Vertices)
+        {
+            vertices.push_back(TransformVertex(vertex));
+        }
+    }
+
+    WorldModelEntity::WorldModelEntity(const std::string& path)
+        : Filename(path)
+    {
+        auto file = AssetRegistry::OpenFile(path);
+        if (!file)
+        {
+            ELOG("Failed to load world model file " << path << ": File does not exist");
+            return;
+        }
+
+        io::StreamSource source{ *file };
+        io::Reader reader{ source };
+
+        WorldModel worldModel(path);
+        WorldModelDeserializer deserializer(worldModel);
+        if (!deserializer.Read(reader))
+        {
+            ELOG("Failed to deserialize world model file " << path);
+            return;
+        }
+
+        // Recalculate bounds from groups since the deserializer doesn't set the world model bounds
+        worldModel.RecalculateBoundingBox();
+        Bounds = worldModel.GetBoundingBox();
+        
+        DLOG("World model " << path << " has " << worldModel.GetGroupCount() << " groups, bounds: " << Bounds.min << " - " << Bounds.max);
+
+        // Collect collision data from all groups and their mesh references
+        for (size_t groupIndex = 0; groupIndex < worldModel.GetGroupCount(); ++groupIndex)
+        {
+            const WorldModelGroup* group = worldModel.GetGroup(groupIndex);
+            if (!group)
+            {
+                WLOG("World model " << path << " group " << groupIndex << " is null");
+                continue;
+            }
+            
+            const auto& meshRefs = group->GetMeshRefs();
+            DLOG("World model " << path << " group " << groupIndex << " (" << group->GetName() << ") has " << meshRefs.size() << " mesh refs");
+
+            for (size_t meshRefIdx = 0; meshRefIdx < meshRefs.size(); ++meshRefIdx)
+            {
+                const auto& meshRef = meshRefs[meshRefIdx];
+                
+                if (meshRef.meshPath.empty())
+                {
+                    WLOG("World model " << path << " group " << groupIndex << " mesh ref " << meshRefIdx << " has empty path");
+                    continue;
+                }
+                
+                if (!meshRef.visible)
+                {
+                    DLOG("World model " << path << " group " << groupIndex << " mesh ref " << meshRefIdx << " (" << meshRef.meshPath << ") is not visible, skipping");
+                    continue;
+                }
+
+                DLOG("Loading mesh for collision: " << meshRef.meshPath);
+
+                // Load the mesh to get collision data
+                auto meshFile = AssetRegistry::OpenFile(meshRef.meshPath);
+                if (!meshFile)
+                {
+                    WLOG("Failed to load mesh file " << meshRef.meshPath << " for world model " << path);
+                    continue;
+                }
+
+                io::StreamSource meshSource{ *meshFile };
+                io::Reader meshReader{ meshSource };
+
+                MeshPtr mesh = std::make_shared<Mesh>(meshRef.meshPath);
+                MeshDeserializer meshDeserializer(*mesh);
+                meshDeserializer.Read(meshReader);
+
+                const AABBTree& collisionTree = mesh->GetCollisionTree();
+                if (collisionTree.IsEmpty())
+                {
+                    WLOG("Mesh " << meshRef.meshPath << " has no collision tree");
+                    continue;
+                }
+                
+                DLOG("Mesh " << meshRef.meshPath << " has " << collisionTree.GetVertices().size() << " collision vertices");
+
+                // Build mesh ref transform matrix
+                Matrix4 meshTransform;
+                meshTransform.MakeTransform(meshRef.position, meshRef.scale, meshRef.rotation);
+
+                // Get base index for this mesh's vertices
+                const int32 baseIndex = static_cast<int32>(Vertices.size());
+
+                // Add transformed vertices
+                for (const auto& vertex : collisionTree.GetVertices())
+                {
+                    Vertices.push_back(meshTransform * vertex);
+                }
+
+                // Add indices with offset
+                for (const auto& index : collisionTree.GetIndices())
+                {
+                    Indices.push_back(baseIndex + static_cast<int32>(index));
+                }
+            }
+        }
+        
+        // If we loaded collision data but bounds were null, compute bounds from vertices
+        if (Bounds.IsNull() && !Vertices.empty())
+        {
+            Bounds.SetNull();
+            for (const auto& v : Vertices)
+            {
+                Bounds.Combine(v);
+            }
+            DLOG("Computed world model bounds from vertices: " << Bounds.min << " - " << Bounds.max);
+        }
+
+        DLOG("Loaded world model " << path << " with " << Vertices.size() << " collision vertices and " << Indices.size() << " indices");
+    }
+
+    WorldModelEntityInstance::WorldModelEntityInstance(
+        const WorldModelEntity* entity,
+        AABB bounds,
+        const Matrix4& transformMatrix)
+        : TransformMatrix(transformMatrix)
+        , Bounds(std::move(bounds))
+        , Model(entity)
+    {
+    }
+
+    Vector3 WorldModelEntityInstance::TransformVertex(const Vector3& vertex) const
+    {
+        return TransformMatrix * vertex;
+    }
+
+    void WorldModelEntityInstance::BuildTriangles(std::vector<Vector3>& vertices, std::vector<int32>& indices) const
+    {
+        vertices.clear();
+        vertices.reserve(Model->Vertices.size());
+
+        indices.clear();
+        indices.resize(Model->Indices.size());
+        std::copy(Model->Indices.cbegin(), Model->Indices.cend(), indices.begin());
+
+        for (const auto& vertex : Model->Vertices)
         {
             vertices.push_back(TransformVertex(vertex));
         }
@@ -239,11 +388,33 @@ namespace mmo
                 tileBounds.min.y = FLT_MIN;
                 tileBounds.max.y = FLT_MAX;
                 map->GetMapEntityInstancesInArea(tileBounds, m_chunks[y][x]->m_mapEntityInstances);
+                map->GetWorldModelEntityInstancesInArea(tileBounds, m_chunks[y][x]->m_worldModelInstances);
+                
+                if (!m_chunks[y][x]->m_worldModelInstances.empty())
+                {
+                    DLOG("Chunk (" << x << ", " << y << ") on page (" << X << ", " << Y << ") has " << m_chunks[y][x]->m_worldModelInstances.size() << " world model instances");
+                }
 
                 // Adjust min and max Y values based on map entities
                 for (const auto& uniqueId : m_chunks[y][x]->m_mapEntityInstances)
                 {
                     const auto* instance = map->GetMapEntityInstance(uniqueId);
+
+                    const float minY = std::min(instance->Bounds.min.y, m_chunks[y][x]->m_minY);
+                    const float maxY = std::max(instance->Bounds.max.y, m_chunks[y][x]->m_maxY);
+
+                    m_chunks[y][x]->m_minY = std::min(m_chunks[y][x]->m_minY, minY);
+                    m_chunks[y][x]->m_maxY = std::max(m_chunks[y][x]->m_maxY, maxY);
+
+                    // Adjust tile bounds
+                    Bounds.min.y = std::min(Bounds.min.y, minY);
+                    Bounds.max.y = std::min(Bounds.max.y, maxY);
+                }
+
+                // Adjust min and max Y values based on world model entities
+                for (const auto& uniqueId : m_chunks[y][x]->m_worldModelInstances)
+                {
+                    const auto* instance = map->GetWorldModelEntityInstance(uniqueId);
 
                     const float minY = std::min(instance->Bounds.min.y, m_chunks[y][x]->m_minY);
                     const float maxY = std::max(instance->Bounds.max.y, m_chunks[y][x]->m_maxY);
@@ -318,25 +489,61 @@ namespace mmo
 			}
 
 			const auto& placement = loader.GetEntity();
-            if (GetMapEntityInstance(placement.uniqueId) != nullptr)
-            {
-                WLOG("Duplicate entity id found: " << placement.uniqueId);
-                continue;
-            }
-
-            const MapEntity* entity = GetMapEntity(placement.meshName);
-            ASSERT(entity);
 
             Matrix4 transform;
             transform.MakeTransform(placement.position, placement.scale, placement.rotation);
 
-            AABB bounds = entity->Bounds;
-            bounds.Transform(transform);
+            if (placement.entityType == WorldEntityType::WorldModel)
+            {
+                DLOG("Found world model entity: " << placement.meshName << " (id: " << placement.uniqueId << ")");
+                
+                // Handle world model entities
+                if (GetWorldModelEntityInstance(placement.uniqueId) != nullptr)
+                {
+                    WLOG("Duplicate world model entity id found: " << placement.uniqueId);
+                    continue;
+                }
 
-            InsertMapEntityInstance(placement.uniqueId, std::make_unique<MapEntityInstance>(entity, bounds, transform));
+                const WorldModelEntity* entity = GetWorldModelEntity(placement.meshName);
+                if (!entity)
+                {
+                    WLOG("Failed to load world model entity: " << placement.meshName);
+                    continue;
+                }
+                
+                if (entity->Vertices.empty())
+                {
+                    WLOG("World model entity has no collision data: " << placement.meshName);
+                    continue;
+                }
+
+                AABB bounds = entity->Bounds;
+                bounds.Transform(transform);
+                
+                DLOG("Inserting world model entity instance at " << placement.position << " with bounds " << bounds.min << " - " << bounds.max);
+
+                InsertWorldModelEntityInstance(placement.uniqueId, std::make_unique<WorldModelEntityInstance>(entity, bounds, transform));
+            }
+            else
+            {
+                // Handle regular mesh entities
+                if (GetMapEntityInstance(placement.uniqueId) != nullptr)
+                {
+                    WLOG("Duplicate entity id found: " << placement.uniqueId);
+                    continue;
+                }
+
+                const MapEntity* entity = GetMapEntity(placement.meshName);
+                ASSERT(entity);
+
+                AABB bounds = entity->Bounds;
+                bounds.Transform(transform);
+
+                InsertMapEntityInstance(placement.uniqueId, std::make_unique<MapEntityInstance>(entity, bounds, transform));
+            }
         }
 
-		DLOG("Loaded " << m_loadedMapEntityInstances.size() << " map entities!");
+		DLOG("Loaded " << m_loadedMapEntityInstances.size() << " map entities and " << m_loadedWorldModelEntityInstances.size() << " world model entities!");
     }
 
     bool Map::HasPage(int x, int y) const
@@ -412,6 +619,53 @@ namespace mmo
 				out_instanceIds.push_back(uniqueId);
 			}
 		}
+    }
+
+    const WorldModelEntity* Map::GetWorldModelEntity(const std::string& name)
+    {
+        std::lock_guard guard(m_worldModelMutex);
+
+        for (auto const& entity : m_loadedWorldModelEntities)
+        {
+            if (entity->Filename == name)
+            {
+                return entity.get();
+            }
+        }
+
+        DLOG("Loading world model entity " << name << "...");
+
+        auto ret = std::make_unique<WorldModelEntity>(name);
+        m_loadedWorldModelEntities.push_back(std::move(ret));
+
+        return m_loadedWorldModelEntities.back().get();
+    }
+
+    void Map::InsertWorldModelEntityInstance(uint64 uniqueId, std::unique_ptr<WorldModelEntityInstance> instance)
+    {
+        std::lock_guard guard(m_worldModelMutex);
+        m_loadedWorldModelEntityInstances[uniqueId] = std::move(instance);
+    }
+
+    const WorldModelEntityInstance* Map::GetWorldModelEntityInstance(uint64 uniqueId) const
+    {
+        std::lock_guard guard(m_worldModelMutex);
+
+        auto const itr = m_loadedWorldModelEntityInstances.find(uniqueId);
+        return itr == m_loadedWorldModelEntityInstances.end() ? nullptr : itr->second.get();
+    }
+
+    void Map::GetWorldModelEntityInstancesInArea(const AABB& bounds, std::vector<uint64>& out_instanceIds) const
+    {
+        std::lock_guard guard(m_worldModelMutex);
+
+        for (auto const& [uniqueId, instance] : m_loadedWorldModelEntityInstances)
+        {
+            if (bounds.Intersects(instance->Bounds))
+            {
+                out_instanceIds.push_back(uniqueId);
+            }
+        }
     }
 
     void Map::Serialize(io::Writer& writer) const

@@ -47,6 +47,7 @@ namespace mmo
         std::vector<int32> m_liquidIndices;
 
         std::vector<uint32> m_mapEntityInstances;
+        std::vector<uint64> m_worldModelInstances;
 
         uint32 m_areaId = 0;
         uint32 m_zoneId = 0;
@@ -83,6 +84,62 @@ namespace mmo
 
         Vector3 TransformVertex(const Vector3& vertex) const;
 
+        void BuildTriangles(std::vector<Vector3>& vertices, std::vector<int32>& indices) const;
+    };
+
+    /// @brief Represents a world model entity for navigation mesh building.
+    struct WorldModelEntity
+    {
+        /// @brief Path to the world model file.
+        String Filename;
+
+        /// @brief Bounds of the world model.
+        AABB Bounds;
+
+        /// @brief Collision triangles - vertices for each group's meshes.
+        std::vector<Vector3> Vertices;
+
+        /// @brief Collision triangles - indices for each group's meshes.
+        std::vector<int32> Indices;
+
+        /// @brief Constructs a WorldModelEntity from a .hwmo file path.
+        /// @param path Path to the world model file.
+        explicit WorldModelEntity(const std::string& path);
+    };
+
+    /// @brief Represents a placed instance of a world model entity in the world.
+    class WorldModelEntityInstance
+    {
+    public:
+        /// @brief Transform matrix for this instance.
+        const Matrix4 TransformMatrix;
+
+        /// @brief World-space bounds of this instance.
+        AABB Bounds;
+
+        /// @brief Pointer to the world model entity data.
+        const WorldModelEntity* const Model;
+
+        /// @brief Set of page chunks this instance overlaps.
+        std::set<PageChunkLocation> PageChunks;
+
+        /// @brief Constructs a WorldModelEntityInstance.
+        /// @param entity The world model entity.
+        /// @param bounds The world-space bounds.
+        /// @param transformMatrix The transform matrix.
+        WorldModelEntityInstance(
+            const WorldModelEntity* entity,
+            AABB bounds,
+            const Matrix4& transformMatrix);
+
+        /// @brief Transforms a vertex from model space to world space.
+        /// @param vertex The vertex to transform.
+        /// @return The transformed vertex.
+        Vector3 TransformVertex(const Vector3& vertex) const;
+
+        /// @brief Builds transformed triangles for this instance.
+        /// @param vertices Output vertices in world space.
+        /// @param indices Output indices.
         void BuildTriangles(std::vector<Vector3>& vertices, std::vector<int32>& indices) const;
     };
 
@@ -146,6 +203,26 @@ namespace mmo
 
         void GetMapEntityInstancesInArea(const AABB& bounds, std::vector<uint32>& out_instanceIds) const;
 
+        /// @brief Gets or loads a world model entity by path.
+        /// @param name Path to the world model file.
+        /// @return Pointer to the world model entity.
+        const WorldModelEntity* GetWorldModelEntity(const std::string& name);
+
+        /// @brief Inserts a world model entity instance.
+        /// @param uniqueId Unique ID for the instance.
+        /// @param instance The instance to insert.
+        void InsertWorldModelEntityInstance(uint64 uniqueId, std::unique_ptr<WorldModelEntityInstance> instance);
+
+        /// @brief Gets a world model entity instance by ID.
+        /// @param uniqueId The unique ID.
+        /// @return Pointer to the instance, or nullptr if not found.
+        const WorldModelEntityInstance* GetWorldModelEntityInstance(uint64 uniqueId) const;
+
+        /// @brief Gets world model entity instances that intersect with the given bounds.
+        /// @param bounds The bounds to check.
+        /// @param out_instanceIds Output vector of instance IDs.
+        void GetWorldModelEntityInstancesInArea(const AABB& bounds, std::vector<uint64>& out_instanceIds) const;
+
 		bool HasTerrain() const { return m_hasTerrain; }
 
 		void Serialize(io::Writer& writer) const;
@@ -184,6 +261,10 @@ namespace mmo
         mutable std::mutex m_mapEntityMutex;
         std::vector<std::unique_ptr<const MapEntity>> m_loadedMapEntities;
         std::map<uint32, std::unique_ptr<const MapEntityInstance>> m_loadedMapEntityInstances;
+
+        mutable std::mutex m_worldModelMutex;
+        std::vector<std::unique_ptr<const WorldModelEntity>> m_loadedWorldModelEntities;
+        std::map<uint64, std::unique_ptr<const WorldModelEntityInstance>> m_loadedWorldModelEntityInstances;
 
         friend TerrainPage::TerrainPage(const Map*, int, int);
 
