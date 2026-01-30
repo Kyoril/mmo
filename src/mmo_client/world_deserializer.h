@@ -11,12 +11,14 @@
 #include "math/vector3.h"
 #include "paging/page.h"
 #include "terrain/terrain.h"
+#include "game_client/world_entity_loader.h"
 
 namespace mmo
 {
 	class Entity;
 	class SceneNode;
 	class Scene;
+	class WorldModelInstance;
 
 	namespace world_version
 	{
@@ -56,6 +58,8 @@ namespace mmo
 	protected:
 		Entity* CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId);
 
+		WorldModelInstance* CreateWorldModelEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId);
+
 		static uint16 BuildPageIndex(uint8 x, const uint8 y)
 		{
 			return (x << 8) | y;
@@ -86,7 +90,15 @@ namespace mmo
 			SceneNode* node;
 		};
 
+		struct WorldModelPlacement
+		{
+			uint16 pageIndex;
+			std::unique_ptr<WorldModelInstance> instance;
+			SceneNode* node;
+		};
+
 		std::map<uint64, EntityPlacement> m_entities;
+		std::map<uint64, WorldModelPlacement> m_worldModels;
 
 		std::set<uint16> m_loadedPages;
 	};

@@ -10,6 +10,7 @@ namespace mmo
 {
 	static ChunkMagic WorldEntityVersionChunk = MakeChunkMagic('WVER');
 	static ChunkMagic WorldEntityMesh = MakeChunkMagic('WMSH');
+	static ChunkMagic WorldEntityWMO = MakeChunkMagic('WWMO');
 
 	uint64 GenerateUniqueId()
 	{
@@ -43,19 +44,25 @@ namespace mmo
 			return false;
 		}
 
-		if (m_version < 0x00001 || m_version > 0x00002)
+		if (m_version < 0x00001 || m_version > 0x00003)
 		{
 			ELOG("Unsupported world entity version " << m_version);
 			return false;
 		}
 
 		AddChunkHandler(*WorldEntityMesh, true, *this, &WorldEntityLoader::OnEntityMeshChunk);
+		AddChunkHandler(*WorldEntityWMO, true, *this, &WorldEntityLoader::OnWorldModelChunk);
 		return reader;
 	}
 
 	bool WorldEntityLoader::OnEntityMeshChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
 	{
 		ASSERT(chunkHeader == *WorldEntityMesh);
+
+		RemoveChunkHandler(*WorldEntityMesh);
+		RemoveChunkHandler(*WorldEntityWMO);
+
+		m_entity.entityType = WorldEntityType::Mesh;
 
 		if (!(reader
 			>> io::read<uint64>(m_entity.uniqueId)
@@ -117,6 +124,66 @@ namespace mmo
 			m_entity.name.clear();
 			m_entity.category.clear();
 		}
+
+		return reader;
+	}
+
+	bool WorldEntityLoader::OnWorldModelChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		ASSERT(chunkHeader == *WorldEntityWMO);
+
+		RemoveChunkHandler(*WorldEntityMesh);
+		RemoveChunkHandler(*WorldEntityWMO);
+
+		m_entity.entityType = WorldEntityType::WorldModel;
+
+		if (!(reader
+			>> io::read<uint64>(m_entity.uniqueId)
+			>> io::read_container<uint16>(m_entity.meshName)
+			>> io::read<float>(m_entity.position.x)
+			>> io::read<float>(m_entity.position.y)
+			>> io::read<float>(m_entity.position.z)
+			>> io::read<float>(m_entity.rotation.w)
+			>> io::read<float>(m_entity.rotation.x)
+			>> io::read<float>(m_entity.rotation.y)
+			>> io::read<float>(m_entity.rotation.z)
+			>> io::read<float>(m_entity.scale.x)
+			>> io::read<float>(m_entity.scale.y)
+			>> io::read<float>(m_entity.scale.z)
+		))
+		{
+			ELOG("Failed to read world model chunk content, unexpected end of file!");
+			return false;
+		}
+
+		if (m_entity.uniqueId == 0)
+		{
+			m_entity.uniqueId = GenerateUniqueId();
+		}
+
+		// Read name and category (available from version 3+)
+		if (m_version >= 0x00003)
+		{
+			if (!(reader >> io::read_container<uint8>(m_entity.name)))
+			{
+				ELOG("Failed to read world model entity name, unexpected end of file!");
+				return false;
+			}
+
+			if (!(reader >> io::read_container<uint16>(m_entity.category)))
+			{
+				ELOG("Failed to read world model entity category, unexpected end of file!");
+				return false;
+			}
+		}
+		else
+		{
+			m_entity.name.clear();
+			m_entity.category.clear();
+		}
+
+		// World models don't have material overrides
+		m_entity.materialOverrides.clear();
 
 		return reader;
 	}

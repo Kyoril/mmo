@@ -8,6 +8,15 @@ namespace mmo
 {
 	uint64 GenerateUniqueId();
 
+	/// @brief Type of world entity.
+	enum class WorldEntityType : uint8
+	{
+		/// @brief Regular mesh entity.
+		Mesh = 0,
+		/// @brief World model object.
+		WorldModel = 1
+	};
+
 	class WorldEntityLoader final : public ChunkReader
 	{
 	public:
@@ -19,7 +28,8 @@ namespace mmo
 
 		struct MapEntity
 		{
-			String meshName;
+			WorldEntityType entityType = WorldEntityType::Mesh;
+			String meshName;  ///< For Mesh type, this is the mesh file. For WorldModel type, this is the hwmo file.
 			Vector3 position;
 			Quaternion rotation;
 			Vector3 scale;
@@ -41,6 +51,8 @@ namespace mmo
 		bool OnVersionChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 		bool OnEntityMeshChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		bool OnWorldModelChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 	private:
 		uint32 m_version;

@@ -13,6 +13,8 @@
 #include "scene_graph/material_manager.h"
 #include "scene_graph/scene_node.h"
 #include "scene_graph/scene.h"
+#include "scene_graph/world_model_instance.h"
+#include "scene_graph/world_model_manager.h"
 
 namespace mmo
 {
@@ -32,7 +34,7 @@ namespace mmo
 
 	ClientWorldInstance::~ClientWorldInstance()
 	{
-		// Ensure all are unloaded properly
+		// Ensure all entities are unloaded properly
 		for (auto it = m_entities.begin(); it != m_entities.end(); ++it)
 		{
 			Entity* entity = it->second.entity;
@@ -41,8 +43,22 @@ namespace mmo
 			m_scene.DestroyEntity(*entity);
 			m_scene.DestroySceneNode(*node);
 		}
-
 		m_entities.clear();
+
+		// Ensure all world models are unloaded properly
+		for (auto it = m_worldModels.begin(); it != m_worldModels.end(); ++it)
+		{
+			if (it->second.instance)
+			{
+				it->second.instance->Destroy(m_scene);
+				it->second.instance->DetachFromParent();
+			}
+			if (it->second.node)
+			{
+				m_scene.DestroySceneNode(*it->second.node);
+			}
+		}
+		m_worldModels.clear();
 	}
 
 	ClientWorldInstance::ClientWorldInstance(Scene& scene, SceneNode& rootNode, const String& name, asio::io_service& workQueue, asio::io_service& dispatcher)
@@ -85,6 +101,7 @@ namespace mmo
 	{
 		const uint16 pageIndex = BuildPageIndex(x, y);
 
+		// Unload regular entities
 		for (auto it = m_entities.begin(); it != m_entities.end();)
 		{
 			if (it->second.pageIndex != pageIndex)
@@ -101,11 +118,33 @@ namespace mmo
 			it = m_entities.erase(it);
 		}
 
+		// Unload world models
+		for (auto it = m_worldModels.begin(); it != m_worldModels.end();)
+		{
+			if (it->second.pageIndex != pageIndex)
+			{
+				++it;
+				continue;
+			}
+
+			if (it->second.instance)
+			{
+				it->second.instance->Destroy(m_scene);
+				it->second.instance->DetachFromParent();
+			}
+			if (it->second.node)
+			{
+				m_scene.DestroySceneNode(*it->second.node);
+			}
+			it = m_worldModels.erase(it);
+		}
+
 		m_loadedPages.erase(BuildPageIndex(x, y));
 	}
 
 	void ClientWorldInstance::UnloadAllEntities()
 	{
+		// Unload regular entities
 		for (auto it = m_entities.begin(); it != m_entities.end();)
 		{
 			Entity* entity = it->second.entity;
@@ -114,6 +153,21 @@ namespace mmo
 			m_scene.DestroyEntity(*entity);
 			m_scene.DestroySceneNode(*node);
 			it = m_entities.erase(it);
+		}
+
+		// Unload world models
+		for (auto it = m_worldModels.begin(); it != m_worldModels.end();)
+		{
+			if (it->second.instance)
+			{
+				it->second.instance->Destroy(m_scene);
+				it->second.instance->DetachFromParent();
+			}
+			if (it->second.node)
+			{
+				m_scene.DestroySceneNode(*it->second.node);
+			}
+			it = m_worldModels.erase(it);
 		}
 
 		m_loadedPages.clear();
@@ -145,6 +199,49 @@ namespace mmo
 		m_entities.emplace(uniqueId, EntityPlacement{ .pageIndex= BuildPageIndex(page.x(), page.y()), .entity= entity, .node= node });
 
 		return entity;
+	}
+
+	WorldModelInstance* ClientWorldInstance::CreateWorldModelEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId)
+	{
+		// Check if already exists
+		auto it = m_worldModels.find(uniqueId);
+		if (it != m_worldModels.end())
+		{
+			return it->second.instance.get();
+		}
+
+		const String instanceName = "WorldModel_" + std::to_string(uniqueId);
+
+		// Load the world model
+		WorldModelPtr worldModel = WorldModelManager::Get().Load(assetName);
+		if (!worldModel)
+		{
+			ELOG("Failed to load world model: " << assetName);
+			return nullptr;
+		}
+
+		// Create the world model instance
+		auto worldModelInstance = std::make_unique<WorldModelInstance>(instanceName, worldModel);
+		worldModelInstance->SetQueryFlags(1 | (1 << 6));
+
+		// Create scene node
+		SceneNode* node = m_rootNode.CreateChildSceneNode();
+		node->SetPosition(position);
+		node->SetOrientation(orientation);
+		node->SetScale(scale);
+		node->AttachObject(*worldModelInstance);
+
+		// Get the raw pointer before moving ownership
+		WorldModelInstance* rawInstance = worldModelInstance.get();
+
+		const PagePosition page = GetPagePosition(position);
+		m_worldModels.emplace(uniqueId, WorldModelPlacement{
+			.pageIndex = BuildPageIndex(page.x(), page.y()),
+			.instance = std::move(worldModelInstance),
+			.node = node
+		});
+
+		return rawInstance;
 	}
 
 	void ClientWorldInstance::InternalLoadPageEntity(uint16 pageIndex, const String& filename)
@@ -181,24 +278,43 @@ namespace mmo
 					return;
 				}
 
-				Entity* object = strong->CreateMapEntity(
-					entity.meshName,
-					entity.position,
-					entity.rotation,
-					entity.scale,
-					entity.uniqueId
-				);
-
-				// Apply material overrides
-				for (const auto& materialOverride : entity.materialOverrides)
+				// Handle different entity types
+				if (entity.entityType == WorldEntityType::WorldModel)
 				{
-					if (materialOverride.materialIndex >= object->GetNumSubEntities())
-					{
-						WLOG("Entity has material override for material index greater than entity material count! Skipping material override");
-						continue;
-					}
+					// Create world model entity
+					strong->CreateWorldModelEntity(
+						entity.meshName,
+						entity.position,
+						entity.rotation,
+						entity.scale,
+						entity.uniqueId
+					);
+				}
+				else
+				{
+					// Create regular mesh entity
+					Entity* object = strong->CreateMapEntity(
+						entity.meshName,
+						entity.position,
+						entity.rotation,
+						entity.scale,
+						entity.uniqueId
+					);
 
-					object->GetSubEntity(materialOverride.materialIndex)->SetMaterial(MaterialManager::Get().Load(materialOverride.materialName));
+					if (object)
+					{
+						// Apply material overrides
+						for (const auto& materialOverride : entity.materialOverrides)
+						{
+							if (materialOverride.materialIndex >= object->GetNumSubEntities())
+							{
+								WLOG("Entity has material override for material index greater than entity material count! Skipping material override");
+								continue;
+							}
+
+							object->GetSubEntity(materialOverride.materialIndex)->SetMaterial(MaterialManager::Get().Load(materialOverride.materialName));
+						}
+					}
 				}
 			});
 	}

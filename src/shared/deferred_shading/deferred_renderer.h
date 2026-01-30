@@ -110,6 +110,8 @@ namespace mmo
 
         void FindLights(Scene& scene, Camera& camera);
 
+        void AddLightToBuffer(Light* light, struct LightBuffer& lightBuffer);
+
 		void RenderShadowMap(Scene& scene, Camera& camera);
 
         void RenderCascadedShadowMaps(Scene& scene, Camera& camera);

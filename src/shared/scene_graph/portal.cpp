@@ -38,6 +38,11 @@ namespace mmo
         m_scale = scale;
         m_verticesDirty = true;
     }
+
+    void Portal::SetPortalType(PortalType type)
+    {
+        m_portalType = type;
+    }
         
     void Portal::SetDimensions(float width, float height)
     {
@@ -77,9 +82,9 @@ namespace mmo
         m_verticesDirty = false;
     }
 
-    const std::vector<Vector3>& Portal::GetWorldVertices()
+    const std::vector<Vector3>& Portal::GetWorldVertices() const
     {
-        UpdateWorldVertices();
+        const_cast<Portal*>(this)->UpdateWorldVertices();
         return m_worldVertices;
     }
 
