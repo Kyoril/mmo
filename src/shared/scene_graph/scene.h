@@ -445,6 +445,59 @@ namespace mmo
 			m_ambientColor = color;
 		}
 
+		// ============================================================================
+		// Visible Light System - For efficient light gathering with frustum culling
+		// ============================================================================
+
+		/// @brief Information about a visible light for rendering.
+		/// Contains pre-computed data for efficient shader upload.
+		struct VisibleLightInfo
+		{
+			Light* light = nullptr;
+			Vector3 position;
+			Vector3 direction;
+			Vector3 color;
+			float range = 0.0f;
+			float intensity = 1.0f;
+			float spotAngle = 0.0f;
+			LightType type = LightType::Point;
+			bool castsShadows = false;
+			float priority = 0.0f;  // Higher priority = more important light
+		};
+
+		/// @brief Statistics about light rendering for the current frame.
+		struct LightRenderStats
+		{
+			uint32 totalLightsInScene = 0;       // Total number of lights in the scene
+			uint32 visibleLights = 0;            // Lights that passed frustum culling
+			uint32 directionalLights = 0;        // Number of directional lights
+			uint32 pointLights = 0;              // Number of point lights  
+			uint32 spotLights = 0;               // Number of spot lights
+			uint32 lightsRendered = 0;           // Actual lights sent to shader (may be capped)
+			uint32 shadowCastingLights = 0;      // Lights that cast shadows
+		};
+
+		/// @brief Gathers all visible lights for rendering with frustum culling and priority sorting.
+		/// @param camera The camera to use for frustum culling.
+		/// @param maxLights Maximum number of lights to return (0 = no limit).
+		/// @return Vector of visible lights sorted by priority.
+		virtual std::vector<VisibleLightInfo> GatherVisibleLights(const Camera& camera, uint32 maxLights = 0);
+
+		/// @brief Gets the light render statistics from the last GatherVisibleLights call.
+		/// @return Reference to the light render statistics.
+		const LightRenderStats& GetLightRenderStats() const { return m_lightRenderStats; }
+
+	protected:
+		/// @brief Calculates the priority of a light for rendering.
+		/// Higher priority means the light should be rendered first.
+		/// @param light The light to calculate priority for.
+		/// @param cameraPosition The position of the camera.
+		/// @return Priority value (higher = more important).
+		virtual float CalculateLightPriority(const Light& light, const Vector3& cameraPosition) const;
+
+		/// @brief Light render statistics from the last gather operation.
+		LightRenderStats m_lightRenderStats;
+
 	protected:
 		void RenderVisibleObjects();
 		
@@ -490,6 +543,13 @@ namespace mmo
 		LightInfoList m_testLightInfos;
 		uint32 m_lightsDirtyCounter { 0 };
 
+		/// @brief Typedef for the light object map.
+		typedef std::map<String, std::unique_ptr<Light>> LightObjectMap;
+
+		/// @brief Gets the internal light map for derived class access.
+		/// @return Reference to the light object map.
+		const LightObjectMap& GetLightMap() const { return m_lights; }
+
 	private:
 		bool m_fogEnabled = false;
 		Cameras m_cameras;
@@ -506,7 +566,6 @@ namespace mmo
 		typedef std::map<String, std::unique_ptr<ManualRenderObject>> ManualRenderObjectMap;
 		ManualRenderObjectMap m_manualRenderObjects;
 
-		typedef std::map<String, std::unique_ptr<Light>> LightObjectMap;
 		LightObjectMap m_lights;
 
 		typedef std::map<String, std::unique_ptr<ParticleEmitter>> ParticleEmitterMap;

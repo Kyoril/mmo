@@ -2,6 +2,7 @@
 
 #include "scene.h"
 
+#include <algorithm>
 #include <ranges>
 
 #include "camera.h"
@@ -317,6 +318,140 @@ namespace mmo
 		}
 
 		return lights;
+	}
+
+	std::vector<Scene::VisibleLightInfo> Scene::GatherVisibleLights(const Camera& camera, uint32 maxLights)
+	{
+		// Reset statistics
+		m_lightRenderStats = LightRenderStats{};
+		m_lightRenderStats.totalLightsInScene = static_cast<uint32>(m_lights.size());
+
+		std::vector<VisibleLightInfo> visibleLights;
+		visibleLights.reserve(m_lights.size());
+
+		const Vector3 cameraPosition = camera.GetDerivedPosition();
+
+		// Gather all visible lights
+		for (const auto& [name, light] : m_lights)
+		{
+			if (!light->IsVisible())
+			{
+				continue;
+			}
+
+			VisibleLightInfo info;
+			info.light = light.get();
+			info.type = light->GetType();
+			info.color = Vector3(light->GetColor().x, light->GetColor().y, light->GetColor().z);
+			info.intensity = light->GetIntensity();
+			info.range = light->GetRange();
+			info.castsShadows = light->IsCastingShadows();
+
+			// Handle different light types
+			if (info.type == LightType::Directional)
+			{
+				// Directional lights are always visible (no position-based culling)
+				info.position = Vector3::Zero;
+				info.direction = light->GetDerivedDirection();
+				info.spotAngle = 0.0f;
+				info.priority = 1000.0f;  // Directional lights have highest priority
+				++m_lightRenderStats.directionalLights;
+			}
+			else
+			{
+				info.position = light->GetDerivedPosition();
+				
+				// Frustum culling for point and spot lights
+				const Sphere lightSphere(info.position, info.range);
+				if (!camera.IsVisible(lightSphere))
+				{
+					continue;  // Light is outside the view frustum
+				}
+
+				if (info.type == LightType::Point)
+				{
+					info.direction = Vector3(0.0f, -1.0f, 0.0f);  // Default direction for point lights
+					info.spotAngle = 0.0f;
+					++m_lightRenderStats.pointLights;
+				}
+				else // Spot light
+				{
+					info.direction = light->GetDerivedDirection();
+					info.spotAngle = light->GetOuterConeAngle();
+					++m_lightRenderStats.spotLights;
+				}
+
+				// Calculate priority based on distance and range
+				info.priority = CalculateLightPriority(*light, cameraPosition);
+			}
+
+			if (info.castsShadows)
+			{
+				++m_lightRenderStats.shadowCastingLights;
+			}
+
+			visibleLights.push_back(info);
+		}
+
+		m_lightRenderStats.visibleLights = static_cast<uint32>(visibleLights.size());
+
+		// Sort by priority (higher priority first)
+		// Directional lights always come first, then by calculated priority
+		std::sort(visibleLights.begin(), visibleLights.end(), 
+			[](const VisibleLightInfo& a, const VisibleLightInfo& b)
+			{
+				// Directional lights always first
+				if (a.type == LightType::Directional && b.type != LightType::Directional)
+				{
+					return true;
+				}
+				if (a.type != LightType::Directional && b.type == LightType::Directional)
+				{
+					return false;
+				}
+				// Then sort by priority (higher first)
+				return a.priority > b.priority;
+			});
+
+		// Limit the number of lights if requested
+		if (maxLights > 0 && visibleLights.size() > maxLights)
+		{
+			visibleLights.resize(maxLights);
+		}
+
+		m_lightRenderStats.lightsRendered = static_cast<uint32>(visibleLights.size());
+
+		return visibleLights;
+	}
+
+	float Scene::CalculateLightPriority(const Light& light, const Vector3& cameraPosition) const
+	{
+		// Priority factors:
+		// 1. Distance from camera (closer = higher priority)
+		// 2. Light range (larger range = higher priority)
+		// 3. Light intensity (brighter = higher priority)
+
+		const Vector3 lightPosition = light.GetDerivedPosition();
+		const float distanceSquared = (lightPosition - cameraPosition).GetSquaredLength();
+		const float range = light.GetRange();
+		const float intensity = light.GetIntensity();
+
+		// Avoid division by zero
+		const float distance = std::sqrt(distanceSquared) + 0.001f;
+
+		// Priority formula:
+		// - Closer lights get higher priority (inverse distance)
+		// - Larger lights get higher priority (range factor)
+		// - Brighter lights get higher priority (intensity factor)
+		// - Lights within their range get a bonus
+		const float distanceFactor = range / distance;
+		const float rangeFactor = range * 0.1f;  // Normalize range contribution
+		const float intensityFactor = intensity;
+
+		// If the camera is within the light's range, give it a significant priority boost
+		const float withinRangeBonus = (distance < range) ? 10.0f : 1.0f;
+
+		return (distanceFactor + rangeFactor + intensityFactor) * withinRangeBonus;
 	}
 
 	void Scene::RenderVisibleObjects()

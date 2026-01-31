@@ -299,115 +299,61 @@ namespace mmo
     {
         m_shadowCastingDirectionalLight = nullptr;
 
-        // Prepare the light metadata
-        LightMetadata metadata;
-        metadata.ambientColor = m_scene.GetAmbientColor();
-        metadata.lightCount = 0;
+        // Use the scene's efficient light gathering with frustum culling and priority sorting
+        const auto visibleLights = scene.GatherVisibleLights(camera, MAX_LIGHTS);
 
-        // Temporary array to hold lights before uploading to structured buffer
-        std::vector<ShaderLight> lights;
-        lights.reserve(MAX_LIGHTS);
+        // Convert visible lights to shader format
+        std::vector<ShaderLight> shaderLights;
+        shaderLights.reserve(visibleLights.size());
 
-        // First pass: Add directional lights first (shader assumes Lights[0] is directional for shadow bias)
-        for (auto* light : scene.GetAllLights())
+        for (const auto& visibleLight : visibleLights)
         {
-            if (lights.size() >= MAX_LIGHTS)
+            ShaderLight shaderLight;
+            shaderLight.position = visibleLight.position;
+            shaderLight.color = visibleLight.color;
+            shaderLight.intensity = visibleLight.intensity;
+            shaderLight.range = visibleLight.range;
+            shaderLight.direction = visibleLight.direction;
+            shaderLight.spotAngle = visibleLight.spotAngle;
+            shaderLight.shadowMap = visibleLight.castsShadows ? 1 : 0;
+            shaderLight.padding = Vector2::Zero;
+
+            // Set light type
+            switch (visibleLight.type)
             {
+            case LightType::Directional:
+                shaderLight.type = 1;
+                // Track first shadow-casting directional light
+                if (m_shadowCastingDirectionalLight == nullptr && visibleLight.castsShadows)
+                {
+                    m_shadowCastingDirectionalLight = visibleLight.light;
+                }
+                break;
+            case LightType::Point:
+                shaderLight.type = 0;
+                break;
+            case LightType::Spot:
+                shaderLight.type = 2;
                 break;
             }
 
-            if (!light->IsVisible())
-            {
-                continue;
-            }
-
-            if (light->GetType() != LightType::Directional)
-            {
-                continue;  // Skip non-directional lights in first pass
-            }
-
-            if (m_shadowCastingDirectionalLight == nullptr && light->IsCastingShadows())
-            {
-                m_shadowCastingDirectionalLight = light;
-            }
-
-            AddLightToBuffer(light, lights);
-        }
-
-        // Second pass: Add point and spot lights
-        for (auto* light : scene.GetAllLights())
-        {
-            if (lights.size() >= MAX_LIGHTS)
-            {
-                break;
-            }
-
-            if (!light->IsVisible())
-            {
-                continue;
-            }
-
-            if (light->GetType() == LightType::Directional)
-            {
-                continue;  // Already added in first pass
-            }
-
-            // Check if light is in the camera's view frustum
-            const AABB worldAABB = light->GetWorldBoundingBox(true);
-            if (!camera.IsVisible(worldAABB))
-            {
-                continue;
-            }
-
-            AddLightToBuffer(light, lights);
+            shaderLights.push_back(shaderLight);
         }
 
         // Update the light metadata constant buffer
-        metadata.lightCount = static_cast<uint32>(lights.size());
+        LightMetadata metadata;
+        metadata.ambientColor = scene.GetAmbientColor();
+        metadata.lightCount = static_cast<uint32>(shaderLights.size());
         m_lightMetadataBuffer->Update(&metadata);
 
         // Update the structured buffer with light data
-        if (!lights.empty())
+        if (!shaderLights.empty())
         {
-            m_lightStructuredBuffer->Update(lights.data(), lights.size());
-        }
-    }
-
-    void DeferredRenderer::AddLightToBuffer(Light* light, std::vector<ShaderLight>& lights)
-    {
-        const Vector4& color = light->GetColor();
-
-        ShaderLight bufferedLight;
-        bufferedLight.position = light->GetDerivedPosition();
-        bufferedLight.color = Vector3(color.x, color.y, color.z);
-        bufferedLight.intensity = light->GetIntensity();
-        bufferedLight.range = light->GetRange();
-        bufferedLight.spotAngle = 0.0f;
-        bufferedLight.shadowMap = light->IsCastingShadows() ? 1 : 0;
-        bufferedLight.padding = Vector2::Zero;
-
-        // Set up light type-specific properties
-        switch (light->GetType())
-        {
-        case LightType::Directional:
-            bufferedLight.position = Vector3(0.0f, 0.0f, 0.0f);
-            bufferedLight.range = 0.0f;
-            bufferedLight.direction = light->GetDerivedDirection();
-            bufferedLight.type = 1;
-            break;
-        case LightType::Point:
-            // Point lights don't use direction, set to safe default
-            bufferedLight.direction = Vector3(0.0f, -1.0f, 0.0f);
-            bufferedLight.type = 0;
-            break;
-        case LightType::Spot:
-            bufferedLight.direction = light->GetDerivedDirection();
-            bufferedLight.type = 2;
-            bufferedLight.spotAngle = light->GetOuterConeAngle();
-            break;
+            m_lightStructuredBuffer->Update(shaderLights.data(), shaderLights.size());
         }
 
-        lights.push_back(bufferedLight);
+        // Store statistics for external access
+        m_lastLightStats = scene.GetLightRenderStats();
     }
 
     void DeferredRenderer::RenderShadowMap(Scene& scene, Camera& camera)

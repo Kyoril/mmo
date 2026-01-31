@@ -99,6 +99,10 @@ namespace mmo
         void SetShadowMapSize(uint16 size);
         uint16 GetShadowMapSize() const { return m_shadowMapSize; }
 
+        /// @brief Gets the light rendering statistics from the last frame.
+        /// @return Reference to the light render statistics.
+        const Scene::LightRenderStats& GetLightRenderStats() const { return m_lastLightStats; }
+
     private:
         /// @brief Renders the geometry pass.
         /// @param scene The scene to render.
@@ -110,9 +114,10 @@ namespace mmo
         /// @param camera The camera to use for rendering.
         void RenderLightingPass(Scene& scene, Camera& camera);
 
+        /// @brief Gathers visible lights from the scene and uploads them to the GPU.
+        /// @param scene The scene to gather lights from.
+        /// @param camera The camera used for frustum culling.
         void FindLights(Scene& scene, Camera& camera);
-
-        void AddLightToBuffer(Light* light, std::vector<struct ShaderLight>& lights);
 
 		void RenderShadowMap(Scene& scene, Camera& camera);
 
@@ -188,5 +193,8 @@ namespace mmo
         float m_blockerSearchRadius = 0.005f; // Search radius for blocker search phase
         float m_lightSize = 0.021f;           // Size of the virtual light (smaller = sharper shadows)
         uint16 m_shadowMapSize = 2048;        // Size of the shadow map texture (increased for quality)
+
+        /// @brief Cached light render statistics from the last frame.
+        Scene::LightRenderStats m_lastLightStats;
     };
 }

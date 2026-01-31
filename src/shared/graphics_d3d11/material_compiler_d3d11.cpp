@@ -1125,7 +1125,7 @@ namespace mmo
 
 					// Emissive - empty for lit materials
 					m_pixelShaderStream
-						<< "\toutput.emissive = float4(0.0, 0.0, 0.0, 0.0);\n";
+						<< "\toutput.emissive = float4(emissiveColor, 0.0);\n";
 				}
 
 				// Return G-Buffer output
