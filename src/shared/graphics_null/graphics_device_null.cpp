@@ -269,6 +269,11 @@ namespace mmo
 		return nullptr;
 	}
 
+	StructuredBufferPtr GraphicsDeviceNull::CreateStructuredBuffer(size_t elementSize, size_t elementCount, const void* initialData)
+	{
+		return nullptr;
+	}
+
 	void GraphicsDeviceNull::SetHardwareCursor(void* osCursorData)
 	{
 	}

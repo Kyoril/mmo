@@ -6,6 +6,7 @@
 #include "frame_ui/rect.h"
 #include "graphics/graphics_device.h"
 #include "graphics/shader_compiler.h"
+#include "graphics/structured_buffer.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/render_queue.h"
 #include "log/default_log_levels.h"
@@ -19,7 +20,7 @@
 
 namespace mmo
 {
-    // Light structure that matches the one in the shader
+    // Light structure that matches the one in the shader (StructuredBuffer element)
     struct alignas(16) ShaderLight
     {
         Vector3 position;
@@ -52,12 +53,11 @@ namespace mmo
         float cascadeBlendFactor;   // Blend factor for cascade transitions
     };
 
-    // Light buffer structure that matches the one in the shader
-    struct alignas(16) LightBuffer
+    // Light metadata constant buffer - small struct with just count and ambient color
+    struct alignas(16) LightMetadata
     {
         uint32 lightCount;
         Vector3 ambientColor;
-        ShaderLight lights[DeferredRenderer::MAX_LIGHTS];
     };
 
 	DeferredRenderer::DeferredRenderer(GraphicsDevice& device, Scene& scene, uint32 width, uint32 height)
@@ -80,8 +80,12 @@ namespace mmo
 		m_deferredLightVs = m_device.CreateShader(ShaderType::VertexShader, g_VS_DeferredLighting, std::size(g_VS_DeferredLighting));
         m_deferredLightPs = m_device.CreateShader(ShaderType::PixelShader, g_PS_DeferredLighting, std::size(g_PS_DeferredLighting));
 #endif
-        // Create the light buffer
-        m_lightBuffer = m_device.CreateConstantBuffer(sizeof(LightBuffer), nullptr);
+        // Create the light metadata constant buffer (small - just count and ambient color)
+        m_lightMetadataBuffer = m_device.CreateConstantBuffer(sizeof(LightMetadata), nullptr);
+        
+        // Create the structured buffer for lights (can hold many more lights than a constant buffer)
+        m_lightStructuredBuffer = m_device.CreateStructuredBuffer(sizeof(ShaderLight), MAX_LIGHTS, nullptr);
+        
         m_shadowBuffer = m_device.CreateConstantBuffer(sizeof(ShadowBuffer), nullptr);
 
         // Create the render texture with 16-bit per channel format to reduce banding
@@ -267,8 +271,11 @@ namespace mmo
 
         // Bind buffer to stage
         scene.GetCameraBuffer()->BindToStage(ShaderType::PixelShader, 1);
-        m_lightBuffer->BindToStage(ShaderType::PixelShader, 2);
+        m_lightMetadataBuffer->BindToStage(ShaderType::PixelShader, 2);
         m_shadowBuffer->BindToStage(ShaderType::PixelShader, 3);
+        
+        // Bind the structured buffer for lights (t9 slot in shader)
+        m_lightStructuredBuffer->BindToStage(ShaderType::PixelShader, 9);
 
         m_device.SetFillMode(FillMode::Solid);
         m_device.SetFaceCullMode(FaceCullMode::None);
@@ -292,15 +299,19 @@ namespace mmo
     {
         m_shadowCastingDirectionalLight = nullptr;
 
-        // Prepare the light buffer
-        LightBuffer lightBuffer;
-        lightBuffer.ambientColor = m_scene.GetAmbientColor();
-        lightBuffer.lightCount = 0;
+        // Prepare the light metadata
+        LightMetadata metadata;
+        metadata.ambientColor = m_scene.GetAmbientColor();
+        metadata.lightCount = 0;
+
+        // Temporary array to hold lights before uploading to structured buffer
+        std::vector<ShaderLight> lights;
+        lights.reserve(MAX_LIGHTS);
 
         // First pass: Add directional lights first (shader assumes Lights[0] is directional for shadow bias)
         for (auto* light : scene.GetAllLights())
         {
-            if (lightBuffer.lightCount >= MAX_LIGHTS)
+            if (lights.size() >= MAX_LIGHTS)
             {
                 break;
             }
@@ -320,13 +331,13 @@ namespace mmo
                 m_shadowCastingDirectionalLight = light;
             }
 
-            AddLightToBuffer(light, lightBuffer);
+            AddLightToBuffer(light, lights);
         }
 
         // Second pass: Add point and spot lights
         for (auto* light : scene.GetAllLights())
         {
-            if (lightBuffer.lightCount >= MAX_LIGHTS)
+            if (lights.size() >= MAX_LIGHTS)
             {
                 break;
             }
@@ -348,24 +359,32 @@ namespace mmo
                 continue;
             }
 
-            AddLightToBuffer(light, lightBuffer);
+            AddLightToBuffer(light, lights);
         }
 
-        // Update the light buffer
-        m_lightBuffer->Update(&lightBuffer);
+        // Update the light metadata constant buffer
+        metadata.lightCount = static_cast<uint32>(lights.size());
+        m_lightMetadataBuffer->Update(&metadata);
+
+        // Update the structured buffer with light data
+        if (!lights.empty())
+        {
+            m_lightStructuredBuffer->Update(lights.data(), lights.size());
+        }
     }
 
-    void DeferredRenderer::AddLightToBuffer(Light* light, LightBuffer& lightBuffer)
+    void DeferredRenderer::AddLightToBuffer(Light* light, std::vector<ShaderLight>& lights)
     {
         const Vector4& color = light->GetColor();
 
-        ShaderLight& bufferedLight = lightBuffer.lights[lightBuffer.lightCount++];
+        ShaderLight bufferedLight;
         bufferedLight.position = light->GetDerivedPosition();
         bufferedLight.color = Vector3(color.x, color.y, color.z);
         bufferedLight.intensity = light->GetIntensity();
         bufferedLight.range = light->GetRange();
         bufferedLight.spotAngle = 0.0f;
         bufferedLight.shadowMap = light->IsCastingShadows() ? 1 : 0;
+        bufferedLight.padding = Vector2::Zero;
 
         // Set up light type-specific properties
         switch (light->GetType())
@@ -387,6 +406,8 @@ namespace mmo
             bufferedLight.spotAngle = light->GetOuterConeAngle();
             break;
         }
+
+        lights.push_back(bufferedLight);
     }
 
     void DeferredRenderer::RenderShadowMap(Scene& scene, Camera& camera)

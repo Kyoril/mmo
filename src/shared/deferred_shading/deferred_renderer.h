@@ -8,10 +8,12 @@
 #include "graphics/material_compiler.h"
 #include "graphics/g_buffer.h"
 #include "graphics/material.h"
+#include "graphics/structured_buffer.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/light.h"
 
 #include <array>
+#include <vector>
 
 #ifdef _WIN32
 #   include <d3d11.h>
@@ -110,7 +112,7 @@ namespace mmo
 
         void FindLights(Scene& scene, Camera& camera);
 
-        void AddLightToBuffer(Light* light, struct LightBuffer& lightBuffer);
+        void AddLightToBuffer(Light* light, std::vector<struct ShaderLight>& lights);
 
 		void RenderShadowMap(Scene& scene, Camera& camera);
 
@@ -118,7 +120,8 @@ namespace mmo
 
     public:
         /// @brief Maximum number of lights that can be processed in a single pass.
-        static constexpr uint32 MAX_LIGHTS = 16;
+        /// With structured buffers, we can support many more lights than constant buffers allow.
+        static constexpr uint32 MAX_LIGHTS = 256;
 
     private:
         /// @brief The graphics device.
@@ -129,8 +132,11 @@ namespace mmo
         /// @brief The G-Buffer.
         GBuffer m_gBuffer;
 
-        /// @brief The light buffer.
-        ConstantBufferPtr m_lightBuffer;
+        /// @brief The light metadata constant buffer (contains light count and ambient color).
+        ConstantBufferPtr m_lightMetadataBuffer;
+
+        /// @brief The structured buffer containing light data.
+        StructuredBufferPtr m_lightStructuredBuffer;
 
         ConstantBufferPtr m_shadowBuffer;
 

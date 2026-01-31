@@ -96,7 +96,7 @@ cbuffer CameraBuffer : register(b1)
     column_major matrix InverseViewMatrix;
 }
 
-// Light structure
+// Light structure (matches StructuredBuffer element in C++)
 struct Light
 {
     float3 Position;
@@ -110,13 +110,15 @@ struct Light
     float2 Padding;
 };
 
-// Light buffer
-cbuffer LightBuffer : register(b2)
+// Light metadata constant buffer (small - just count and ambient color)
+cbuffer LightMetadata : register(b2)
 {
     uint LightCount;
     float3 AmbientColor;
-    Light Lights[16];
 }
+
+// Structured buffer containing light data (can hold many more lights than constant buffers)
+StructuredBuffer<Light> Lights : register(t9);
 
 cbuffer ShadowBuffer : register(b3)
 {

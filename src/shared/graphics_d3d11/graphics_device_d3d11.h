@@ -47,6 +47,8 @@ namespace mmo
 
 		ConstantBufferPtr CreateConstantBuffer(size_t size, const void* initialData) override;
 
+		StructuredBufferPtr CreateStructuredBuffer(size_t elementSize, size_t elementCount, const void* initialData) override;
+
 		ShaderPtr CreateShader(ShaderType type, const void* shaderCode, size_t shaderCodeSize) override;
 
 		void SetDepthBias(float bias) override;

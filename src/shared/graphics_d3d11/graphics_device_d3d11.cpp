@@ -3,6 +3,7 @@
 #include "graphics_device_d3d11.h"
 
 #include "constant_buffer_d3d11.h"
+#include "structured_buffer_d3d11.h"
 #include "index_buffer_d3d11.h"
 #include "material_compiler_d3d11.h"
 #include "pixel_shader_d3d11.h"
@@ -724,6 +725,11 @@ namespace mmo
 	ConstantBufferPtr GraphicsDeviceD3D11::CreateConstantBuffer(size_t size, const void* initialData)
 	{
 		return std::make_shared<ConstantBufferD3D11>(*this, *this, size, initialData);
+	}
+
+	StructuredBufferPtr GraphicsDeviceD3D11::CreateStructuredBuffer(size_t elementSize, size_t elementCount, const void* initialData)
+	{
+		return std::make_shared<StructuredBufferD3D11>(*this, *this, elementSize, elementCount, initialData);
 	}
 
 	ShaderPtr GraphicsDeviceD3D11::CreateShader(const ShaderType type, const void * shaderCode, size_t shaderCodeSize)
