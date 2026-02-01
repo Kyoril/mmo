@@ -57,6 +57,10 @@ namespace mmo
 
 	SpellVisualizationPreview::~SpellVisualizationPreview()
 	{
+		// Clear audio system reference first to prevent StopAllSounds from accessing destroyed audio
+		m_audioSystem = nullptr;
+		m_activeChannels.clear();
+
 		CleanupSpellEffects();
 
 		if (m_casterEntity)
@@ -495,37 +499,52 @@ namespace mmo
 			// Update projectile mesh if specified
 			if (projectile.has_mesh_name() && !projectile.mesh_name().empty())
 			{
-				if (m_projectileNode == nullptr)
+				// Only recreate if mesh path changed
+				if (m_projectileMeshPath != projectile.mesh_name())
 				{
-					// Create projectile node only if it doesn't exist
-					m_projectileNode = m_scene.GetRootSceneNode().CreateChildSceneNode("ProjectileNode");
-					m_projectileNode->SetPosition(Vector3(0.0f, -1000.0f, 0.0f));
-				}
+					m_projectileMeshPath = projectile.mesh_name();
 
-				try
-				{
-					if (m_projectileEntity)
+					// Use existing projectile node from CreateCharacterEntities
+					if (m_projectileNode == nullptr)
 					{
-						m_projectileNode->DetachObject(*m_projectileEntity);
-						m_scene.DestroyEntity(*m_projectileEntity);
-						m_projectileEntity = nullptr;
+						m_projectileNode = m_scene.GetRootSceneNode().CreateChildSceneNode("ProjectileNode");
+						m_projectileNode->SetPosition(Vector3(0.0f, -1000.0f, 0.0f));
 					}
-					m_projectileEntity = m_scene.CreateEntity("Projectile_" + std::to_string(visualization.id()), projectile.mesh_name());
-					if (m_projectileEntity)
+
+					try
 					{
-						m_projectileNode->AttachObject(*m_projectileEntity);
-						m_projectileEntity->SetVisible(false);
-						
-						if (projectile.has_scale())
+						if (m_projectileEntity)
 						{
-							const float scale = projectile.scale();
-							m_projectileNode->SetScale(Vector3(scale, scale, scale));
+							m_projectileNode->DetachObject(*m_projectileEntity);
+							m_scene.DestroyEntity(*m_projectileEntity);
+							m_projectileEntity = nullptr;
+						}
+						
+						m_projectileEntity = m_scene.CreateEntity("Projectile_" + std::to_string(visualization.id()), projectile.mesh_name());
+						if (m_projectileEntity)
+						{
+							m_projectileNode->AttachObject(*m_projectileEntity);
+							m_projectileEntity->SetVisible(false);
 						}
 					}
+					catch (...)
+					{
+						WLOG("Failed to load projectile mesh: " << projectile.mesh_name());
+					}
 				}
-				catch (...)
+
+				// Always update scale
+				if (m_projectileNode)
 				{
-					WLOG("Failed to load projectile mesh: " << projectile.mesh_name());
+					if (projectile.has_scale() && projectile.scale() > 0.0f)
+					{
+						const float scale = projectile.scale();
+						m_projectileNode->SetScale(Vector3(scale, scale, scale));
+					}
+					else
+					{
+						m_projectileNode->SetScale(Vector3(1.0f, 1.0f, 1.0f));
+					}
 				}
 			}
 		}
@@ -689,7 +708,7 @@ namespace mmo
 
 	void SpellVisualizationPreview::StartProjectile()
 	{
-		if (!m_casterNode || !m_targetNode)
+		if (!m_casterNode || !m_targetNode || !m_projectileNode)
 		{
 			return;
 		}

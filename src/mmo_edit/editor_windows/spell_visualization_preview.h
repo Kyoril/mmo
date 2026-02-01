@@ -164,6 +164,7 @@ namespace mmo
 		ParticleEmitter* m_impactParticles{ nullptr };
 		Entity* m_projectileEntity{ nullptr };
 		SceneNode* m_projectileNode{ nullptr };
+		String m_projectileMeshPath;
 
 		// Current visualization being previewed
 		proto::SpellVisualization* m_currentVisualization{ nullptr };
