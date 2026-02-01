@@ -94,6 +94,34 @@ namespace mmo
 			currentEntry.set_icon(icon);
 		}
 
+		// Effect preset path (.hsep file for 3D preview)
+		std::string effectPreset = currentEntry.effect_preset();
+		static const std::set<String> effectExtensions = {".hsep"};
+		if (AssetPickerWidget::Draw("Effect Preset", effectPreset, effectExtensions, &m_previewManager, nullptr, 0.0f))
+		{
+			currentEntry.set_effect_preset(effectPreset);
+		}
+
+		// Preview button to open the 3D spell effect editor
+		ImGui::SameLine();
+		if (!effectPreset.empty())
+		{
+			if (ImGui::Button("Preview Effect"))
+			{
+				m_host.OpenAsset(effectPreset);
+			}
+		}
+		else
+		{
+			ImGui::BeginDisabled();
+			ImGui::Button("Preview Effect");
+			ImGui::EndDisabled();
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			{
+				ImGui::SetTooltip("Select an effect preset (.hsep) file first");
+			}
+		}
+
 		ImGui::Spacing();
 		ImGui::Separator();
 		ImGui::Text("Visual Kits by Event");

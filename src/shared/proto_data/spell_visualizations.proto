@@ -96,6 +96,9 @@ message SpellVisualization
 
     // Optional projectile configuration (if spell has speed > 0)
     optional ProjectileVisual projectile = 5;
+
+    // Path to the effect preset file (.hsep) for 3D preview editing
+    optional string effect_preset = 6;
 }
 
 // Dataset containing all spell visualizations
