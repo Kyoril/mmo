@@ -4,6 +4,7 @@
 #include "asset_picker_widget.h"
 
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include "log/default_log_levels.h"
@@ -37,7 +38,10 @@ namespace mmo
 		"Sine Wave"};
 
 	SpellVisualizationEditorWindow::SpellVisualizationEditorWindow(const String &name, proto::Project &project, EditorHost &host, PreviewProviderManager &previewManager, IAudio *audioSystem)
-		: EditorEntryWindowBase<proto::SpellVisualizations, proto::SpellVisualization>(project, project.spellVisualizations, name), m_host(host), m_previewManager(previewManager), m_audioSystem(audioSystem)
+		: EditorEntryWindowBase<proto::SpellVisualizations, proto::SpellVisualization>(project, project.spellVisualizations, name)
+		, m_host(host)
+		, m_previewManager(previewManager)
+		, m_audioSystem(audioSystem)
 	{
 		m_visible = false;
 		m_hasToolbarButton = false;
@@ -47,6 +51,193 @@ namespace mmo
 		{
 			m_eventExpanded[i] = false;
 		}
+
+		// Create the 3D preview panel with audio support
+		m_preview = std::make_unique<SpellVisualizationPreview>(host, audioSystem);
+	}
+
+	bool SpellVisualizationEditorWindow::Draw()
+	{
+		if (!m_visible)
+		{
+			return false;
+		}
+
+		ImGui::SetNextWindowSize(ImVec2(1200, 800), ImGuiCond_FirstUseEver);
+
+		if (ImGui::Begin(m_name.c_str(), &m_visible, ImGuiWindowFlags_MenuBar))
+		{
+			// Menu bar
+			if (ImGui::BeginMenuBar())
+			{
+				if (ImGui::BeginMenu("View"))
+				{
+					ImGui::MenuItem("Show 3D Preview", nullptr, &m_showPreview);
+					ImGui::EndMenu();
+				}
+				ImGui::EndMenuBar();
+			}
+
+			// Main layout: 3 columns - List | Details | Preview
+			const float windowWidth = ImGui::GetContentRegionAvail().x;
+			const float listWidth = 250.0f;
+			const float minPreviewWidth = 450.0f;
+			const float previewWidth = m_showPreview ? std::max(windowWidth * 0.40f, minPreviewWidth) : 0.0f;
+			const float detailsWidth = windowWidth - listWidth - previewWidth - 16.0f;
+
+			// Left column - Entry list
+			ImGui::BeginChild("##entryListColumn", ImVec2(listWidth, 0), true);
+			{
+				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+				ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
+				if (ImGui::Button("+ Add New", ImVec2(-1, 0)))
+				{
+					auto *entry = m_manager.add();
+					OnNewEntry(*entry);
+					m_currentItem = m_manager.count() - 1;
+				}
+				ImGui::PopStyleColor();
+
+				ImGui::BeginDisabled(m_currentItem == -1);
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
+				if (ImGui::Button("Remove Selected", ImVec2(-1, 0)))
+				{
+					m_manager.remove(m_manager.getTemplates().entry().at(m_currentItem).id());
+					m_currentItem = -1;
+				}
+				ImGui::PopStyleColor();
+				ImGui::EndDisabled();
+
+				ImGui::Spacing();
+
+				// Search bar
+				static char searchBuffer[256] = "";
+				ImGui::SetNextItemWidth(-1);
+				ImGui::InputTextWithHint("##search", "Search...", searchBuffer, IM_ARRAYSIZE(searchBuffer));
+
+				const String searchText = searchBuffer;
+				std::string lowerSearchText = searchText.c_str();
+				std::transform(lowerSearchText.begin(), lowerSearchText.end(), lowerSearchText.begin(),
+					[](unsigned char c) { return std::tolower(c); });
+
+				ImGui::Spacing();
+				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%zu entries", m_manager.count());
+				ImGui::Spacing();
+
+				// Entry list
+				ImGui::BeginChild("##entryListScroll", ImVec2(0, 0));
+				for (int i = 0; i < m_manager.count(); ++i)
+				{
+					const auto& entry = m_manager.getTemplates().entry().at(i);
+					
+					// Filter by search
+					if (!lowerSearchText.empty())
+					{
+						std::string lowerName = entry.name();
+						std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(),
+							[](unsigned char c) { return std::tolower(c); });
+						std::string idStr = std::to_string(entry.id());
+						
+						if (lowerName.find(lowerSearchText) == std::string::npos &&
+							idStr.find(lowerSearchText) == std::string::npos)
+						{
+							continue;
+						}
+					}
+
+					char label[256];
+					snprintf(label, sizeof(label), "%u: %s", entry.id(), entry.name().c_str());
+
+					if (ImGui::Selectable(label, m_currentItem == i))
+					{
+						m_currentItem = i;
+						
+						// Sync preview with new selection
+						if (m_preview && m_currentItem >= 0)
+						{
+							auto& currentEntry = m_manager.getTemplates().mutable_entry()->at(m_currentItem);
+							m_preview->SyncWithVisualization(currentEntry);
+						}
+					}
+				}
+				ImGui::EndChild();
+
+				ImGui::PopStyleVar(2);
+			}
+			ImGui::EndChild();
+
+			ImGui::SameLine();
+
+			// Middle column - Details
+			ImGui::BeginChild("##detailsColumn", ImVec2(detailsWidth, 0), true);
+			{
+				if (m_currentItem >= 0 && m_currentItem < m_manager.count())
+				{
+					auto* currentEntry = &m_manager.getTemplates().mutable_entry()->at(m_currentItem);
+					
+					// Quick action toolbar at top
+					DrawQuickActions(*currentEntry);
+					
+					ImGui::Separator();
+					
+					// Scrollable details
+					ImGui::BeginChild("##detailsScroll", ImVec2(0, 0));
+					DrawDetailsImpl(*currentEntry);
+					ImGui::EndChild();
+				}
+				else
+				{
+					ImGui::TextDisabled("Select a visualization from the list");
+				}
+			}
+			ImGui::EndChild();
+
+			// Right column - 3D Preview
+			if (m_showPreview)
+			{
+				ImGui::SameLine();
+
+				ImGui::BeginChild("##previewColumn", ImVec2(0, 0), true);
+				{
+					proto::SpellVisualization* currentEntry = nullptr;
+					if (m_currentItem >= 0 && m_currentItem < m_manager.count())
+					{
+						currentEntry = &m_manager.getTemplates().mutable_entry()->at(m_currentItem);
+					}
+
+					DrawPreviewPanel(currentEntry);
+				}
+				ImGui::EndChild();
+			}
+		}
+		ImGui::End();
+
+		return false;
+	}
+
+	void SpellVisualizationEditorWindow::DrawQuickActions(proto::SpellVisualization& currentEntry)
+	{
+		// Quick actions are now integrated into the preview panel toolbar
+		// This method is kept for potential future quick action buttons in the details panel
+	}
+
+	void SpellVisualizationEditorWindow::DrawPreviewPanel(proto::SpellVisualization* currentEntry)
+	{
+		if (!m_preview)
+		{
+			ImGui::TextDisabled("Preview not available");
+			return;
+		}
+
+		// Preview toolbar
+		m_preview->DrawToolbar(currentEntry);
+		
+		ImGui::Separator();
+
+		// 3D viewport fills remaining space
+		m_preview->DrawViewport(currentEntry, "##spellPreviewViewport");
 	}
 
 	void SpellVisualizationEditorWindow::OnNewEntry(
@@ -95,35 +286,12 @@ namespace mmo
 		}
 
 		// Effect preset path (.hsep file for 3D preview)
-		std::string effectPreset = currentEntry.effect_preset();
-		static const std::set<String> effectExtensions = {".hsep"};
-		if (AssetPickerWidget::Draw("Effect Preset", effectPreset, effectExtensions, &m_previewManager, nullptr, 0.0f))
+		// Sync preview with current entry when selection changes
+		if (m_preview)
 		{
-			currentEntry.set_effect_preset(effectPreset);
+			m_preview->SyncWithVisualization(currentEntry);
 		}
 
-		// Preview button to open the 3D spell effect editor
-		ImGui::SameLine();
-		if (!effectPreset.empty())
-		{
-			if (ImGui::Button("Preview Effect"))
-			{
-				m_host.OpenAsset(effectPreset);
-			}
-		}
-		else
-		{
-			ImGui::BeginDisabled();
-			ImGui::Button("Preview Effect");
-			ImGui::EndDisabled();
-			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-			{
-				ImGui::SetTooltip("Select an effect preset (.hsep) file first");
-			}
-		}
-
-		ImGui::Spacing();
-		ImGui::Separator();
 		ImGui::Text("Visual Kits by Event");
 		ImGui::Separator();
 		ImGui::Spacing();
