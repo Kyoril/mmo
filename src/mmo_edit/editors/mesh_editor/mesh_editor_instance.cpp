@@ -1254,10 +1254,10 @@ namespace mmo
 										notify->SetName(notifyName);
 									}
 									
-									const char* types[] = { "Footstep", "PlaySound" };
+									const char* types[] = { "Footstep", "PlaySound", "SpellGo" };
 									int currentType = static_cast<int>(notify->GetType());
 									
-									if (ImGui::Combo("Type", &currentType, types, 2))
+									if (ImGui::Combo("Type", &currentType, types, 3))
 									{
 										// Type change requires recreating the notify
 										auto newNotify = AnimationNotifyFactory::Create(static_cast<AnimationNotifyType>(currentType));
@@ -1300,9 +1300,9 @@ namespace mmo
 								ImGui::Spacing();
 								
 								// Default notify type selector
-								const char* defaultTypes[] = { "Footstep", "PlaySound" };
+								const char* defaultTypes[] = { "Footstep", "PlaySound", "SpellGo" };
 								int defaultType = static_cast<int>(m_newNotifyType);
-								if (ImGui::Combo("New Notify Type", &defaultType, defaultTypes, 2))
+								if (ImGui::Combo("New Notify Type", &defaultType, defaultTypes, 3))
 								{
 									m_newNotifyType = static_cast<AnimationNotifyType>(defaultType);
 								}

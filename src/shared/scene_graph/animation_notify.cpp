@@ -29,6 +29,18 @@ namespace mmo
 		reader >> io::read_container<uint16>(m_soundPath);
 	}
 
+	void SpellGoNotify::Serialize(io::Writer& writer) const
+	{
+		// SpellGo notify has no additional data beyond base class
+		// Base data (time, name) is serialized by the container
+	}
+
+	void SpellGoNotify::Deserialize(io::Reader& reader)
+	{
+		// SpellGo notify has no additional data beyond base class
+		// Base data (time, name) is deserialized by the container
+	}
+
 	std::unique_ptr<AnimationNotify> AnimationNotifyFactory::Create(const AnimationNotifyType type)
 	{
 		switch (type)
@@ -37,6 +49,8 @@ namespace mmo
 			return std::make_unique<FootstepNotify>();
 		case AnimationNotifyType::PlaySound:
 			return std::make_unique<PlaySoundNotify>();
+		case AnimationNotifyType::SpellGo:
+			return std::make_unique<SpellGoNotify>();
 		default:
 			return nullptr;
 		}

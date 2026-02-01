@@ -22,6 +22,7 @@ namespace mmo
 	{
 		Footstep = 0,
 		PlaySound = 1,
+		SpellGo = 2,
 		// Add new types here as needed
 	};
 
@@ -158,6 +159,39 @@ namespace mmo
 
 	private:
 		String m_soundPath;
+	};
+
+	/// Spell go notification - triggers spell release events (projectile spawn, effects, etc.)
+	class SpellGoNotify final : public AnimationNotify
+	{
+	public:
+		SpellGoNotify() = default;
+
+		[[nodiscard]] AnimationNotifyType GetType() const override
+		{
+			return AnimationNotifyType::SpellGo;
+		}
+
+		void Serialize(io::Writer& writer) const override;
+		void Deserialize(io::Reader& reader) override;
+
+		[[nodiscard]] String GetDisplayName() const override
+		{
+			return m_name.empty() ? "SpellGo" : m_name;
+		}
+
+		[[nodiscard]] String GetTypeName() const override
+		{
+			return "SpellGo";
+		}
+
+		[[nodiscard]] std::unique_ptr<AnimationNotify> Clone() const override
+		{
+			auto clone = std::make_unique<SpellGoNotify>();
+			clone->m_time = m_time;
+			clone->m_name = m_name;
+			return clone;
+		}
 	};
 
 	/// Factory for creating animation notifications

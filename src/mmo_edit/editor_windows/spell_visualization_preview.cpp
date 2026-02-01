@@ -10,11 +10,15 @@
 #include "scene_graph/light.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/scene_node.h"
+#include "scene_graph/skeleton.h"
+#include "scene_graph/animation.h"
 #include "log/default_log_levels.h"
 
 #include "proto_data/project.h"
 
 #include "game_common/projectile_target.h"
+
+#include <algorithm>
 
 namespace mmo
 {
@@ -70,7 +74,7 @@ namespace mmo
 	{
 		// Clear audio system reference first to prevent StopAllSounds from accessing destroyed audio
 		m_audioSystem = nullptr;
-		m_activeChannels.clear();
+		m_fadingChannels.clear();
 
 		// Clear projectile manager before scene destruction
 		m_projectileManager.reset();
@@ -116,6 +120,9 @@ namespace mmo
 		// Update animations
 		UpdateAnimations(deltaTime);
 
+		// Update sound fades
+		UpdateSoundFades(deltaTime);
+
 		// Update projectiles using the EditorProjectileManager
 		if (m_projectileManager)
 		{
@@ -150,16 +157,23 @@ namespace mmo
 				break;
 
 			case PreviewEvent::CastSucceeded:
-				// Start projectile once and wait for impact
-				if (!m_projectileSpawned)
+				// Wait for SpellGo animation notify to spawn projectile
+				// Fallback: if animation ends without SpellGo notify, spawn anyway
+				if (!m_projectileSpawned && m_waitingForSpellGo && m_hasCastSucceededAnimation)
 				{
-					StartProjectile();
-					m_projectileSpawned = true;
+					// Check if the caster animation has ended (fallback trigger)
+					if (m_casterAnimState && m_casterAnimState->HasEnded())
+					{
+						StartProjectile();
+						m_projectileSpawned = true;
+						m_waitingForSpellGo = false;
+					}
 				}
+				
 				// Give some time for projectile to travel, then auto-transition to impact
 				// The actual impact timing will depend on projectile speed and distance
 				// We use a longer timeout to ensure the projectile has time to reach
-				if (m_sequenceTimer >= 3.0f)
+				if (m_projectileSpawned && m_sequenceTimer >= 4.0f)
 				{
 					m_currentSequenceEvent = PreviewEvent::Impact;
 					m_sequenceTimer = 0.0f;
@@ -373,8 +387,8 @@ namespace mmo
 			return;
 		}
 
-		// Stop sounds from previous event before playing new ones
-		StopAllSounds();
+		// Fade out sounds from previous event (allows overlap during transition)
+		FadeOutPreviousSounds();
 
 		// Map PreviewEvent to proto::SpellVisualEvent
 		uint32 protoEvent = 0;
@@ -383,6 +397,8 @@ namespace mmo
 		case PreviewEvent::StartCast:
 			protoEvent = 0; // START_CAST
 			m_projectileSpawned = false; // Reset for new cast
+			m_waitingForSpellGo = false;
+			m_hasCastSucceededAnimation = false;
 			break;
 		case PreviewEvent::CancelCast:
 			protoEvent = 1; // CANCEL_CAST
@@ -392,19 +408,43 @@ namespace mmo
 			break;
 		case PreviewEvent::CastSucceeded:
 			protoEvent = 3; // CAST_SUCCEEDED
-			if (!m_projectileSpawned)
-			{
-				StartProjectile();
-				m_projectileSpawned = true;
-			}
+			// Will check after ApplyEventKits if an animation was set
 			break;
 		case PreviewEvent::Impact:
 			protoEvent = 4; // IMPACT
 			break;
 		}
 
+		// Remember caster animation state before applying kits
+		AnimationState* prevCasterAnim = m_casterAnimState;
+
 		// Apply the kits for this event
 		ApplyEventKits(m_currentVisualization, protoEvent);
+
+		// For CastSucceeded, check if a valid caster animation was set
+		if (event == PreviewEvent::CastSucceeded)
+		{
+			// Check if a new non-looping caster animation was applied
+			m_hasCastSucceededAnimation = (m_casterAnimState != nullptr && 
+			                               m_casterAnimState != prevCasterAnim &&
+			                               !m_casterAnimState->IsLoop());
+
+			if (m_hasCastSucceededAnimation)
+			{
+				// Wait for SpellGo animation notify or animation end
+				m_waitingForSpellGo = true;
+			}
+			else
+			{
+				// No animation to wait for - spawn projectile immediately
+				if (!m_projectileSpawned)
+				{
+					StartProjectile();
+					m_projectileSpawned = true;
+				}
+				m_waitingForSpellGo = false;
+			}
+		}
 	}
 
 	void SpellVisualizationPreview::TriggerFullCastSequence()
@@ -424,6 +464,8 @@ namespace mmo
 		m_castSequenceActive = false;
 		m_sequenceTimer = 0.0f;
 		m_projectileSpawned = false;
+		m_waitingForSpellGo = false;
+		m_hasCastSucceededAnimation = false;
 
 		// Stop all sounds
 		StopAllSounds();
@@ -459,6 +501,9 @@ namespace mmo
 
 		m_casterMeshPath = meshPath;
 
+		// Clear animation notify connections (will be reconnected)
+		m_animNotifyConnections.disconnect();
+
 		// Recreate caster entity
 		if (m_casterEntity)
 		{
@@ -480,6 +525,9 @@ namespace mmo
 					m_casterAnimState->SetEnabled(true);
 					m_casterAnimState->SetLoop(true);
 				}
+
+				// Reconnect animation notify signals for SpellGo events
+				ConnectAnimationNotifySignals(m_casterEntity);
 			}
 		}
 		catch (...)
@@ -561,6 +609,9 @@ namespace mmo
 
 	void SpellVisualizationPreview::CreateCharacterEntities()
 	{
+		// Clear any existing animation notify connections
+		m_animNotifyConnections.disconnect();
+
 		// Create caster node and entity (positioned to the left)
 		m_casterNode = m_scene.GetRootSceneNode().CreateChildSceneNode("CasterNode");
 		m_casterNode->SetPosition(Vector3(-3.0f, 0.0f, 0.0f));
@@ -579,6 +630,9 @@ namespace mmo
 					m_casterAnimState->SetEnabled(true);
 					m_casterAnimState->SetLoop(true);
 				}
+
+				// Connect to animation notify signals for SpellGo events
+				ConnectAnimationNotifySignals(m_casterEntity);
 			}
 		}
 		catch (...)
@@ -720,6 +774,62 @@ namespace mmo
 		}
 	}
 
+	void SpellVisualizationPreview::OnAnimationNotify(const AnimationNotify& notify, const String& animName, const AnimationState& state)
+	{
+		// Only handle SpellGo notifies when we're waiting for one
+		if (notify.GetType() == AnimationNotifyType::SpellGo && m_waitingForSpellGo && !m_projectileSpawned)
+		{
+			// SpellGo notify triggered - spawn the projectile now
+			StartProjectile();
+			m_projectileSpawned = true;
+			m_waitingForSpellGo = false;
+		}
+	}
+
+	void SpellVisualizationPreview::ConnectAnimationNotifySignals(Entity* entity)
+	{
+		if (!entity || !entity->GetSkeleton())
+		{
+			return;
+		}
+
+		AnimationStateSet* animStateSet = entity->GetAllAnimationStates();
+		if (!animStateSet)
+		{
+			return;
+		}
+
+		Skeleton* skeleton = entity->GetSkeleton().get();
+		if (!skeleton)
+		{
+			return;
+		}
+
+		// Iterate through all animations in the skeleton
+		const uint16 numAnims = skeleton->GetNumAnimations();
+		for (uint16 i = 0; i < numAnims; ++i)
+		{
+			Animation* anim = skeleton->GetAnimation(i);
+			if (!anim)
+			{
+				continue;
+			}
+
+			AnimationState* animState = animStateSet->GetAnimationState(anim->GetName());
+			if (!animState)
+			{
+				continue;
+			}
+
+			// Subscribe to the signal - filter SpellGo notifies in the callback
+			m_animNotifyConnections += animState->notifyTriggered.connect(
+				[this](const AnimationNotify& notify, const String& animName, const AnimationState& state)
+				{
+					OnAnimationNotify(notify, animName, state);
+				});
+		}
+	}
+
 	void SpellVisualizationPreview::CleanupSpellEffects()
 	{
 		StopAllSounds();
@@ -823,10 +933,22 @@ namespace mmo
 				ChannelIndex channelIndex = InvalidChannel;
 				m_audioSystem->PlaySound(soundIndex, &channelIndex);
 				
-				// Track the channel so we can stop it later
+				// Track the channel with fade-in state
 				if (channelIndex != InvalidChannel)
 				{
-					m_activeChannels.push_back(channelIndex);
+					// Start at zero volume for fade-in
+					if (IChannelInstance* channelInstance = m_audioSystem->GetChannelInstance(channelIndex))
+					{
+						channelInstance->SetVolume(0.0f);
+					}
+
+					FadingChannel fadingChannel;
+					fadingChannel.channel = channelIndex;
+					fadingChannel.currentVolume = 0.0f;
+					fadingChannel.targetVolume = 0.75f;
+					fadingChannel.fadeSpeed = 1.0f; // Fade in over ~0.33 seconds
+					fadingChannel.markedForRemoval = false;
+					m_fadingChannels.push_back(fadingChannel);
 				}
 			}
 		}
@@ -836,6 +958,78 @@ namespace mmo
 		}
 	}
 
+	void SpellVisualizationPreview::FadeOutPreviousSounds()
+	{
+		if (!m_audioSystem)
+		{
+			return;
+		}
+
+		// Mark all current sounds for fade-out instead of stopping them
+		for (auto& fadingChannel : m_fadingChannels)
+		{
+			fadingChannel.targetVolume = 0.0f;
+			fadingChannel.fadeSpeed = 1.0f; // Fade out over ~0.5 seconds
+		}
+	}
+
+	void SpellVisualizationPreview::UpdateSoundFades(float deltaTime)
+	{
+		if (!m_audioSystem)
+		{
+			return;
+		}
+
+		for (auto& fadingChannel : m_fadingChannels)
+		{
+			if (fadingChannel.channel == InvalidChannel)
+			{
+				fadingChannel.markedForRemoval = true;
+				continue;
+			}
+
+			IChannelInstance* channelInstance = m_audioSystem->GetChannelInstance(fadingChannel.channel);
+			if (!channelInstance)
+			{
+				fadingChannel.markedForRemoval = true;
+				continue;
+			}
+
+			// Lerp volume toward target
+			if (fadingChannel.currentVolume < fadingChannel.targetVolume)
+			{
+				fadingChannel.currentVolume += fadingChannel.fadeSpeed * deltaTime;
+				if (fadingChannel.currentVolume >= fadingChannel.targetVolume)
+				{
+					fadingChannel.currentVolume = fadingChannel.targetVolume;
+				}
+			}
+			else if (fadingChannel.currentVolume > fadingChannel.targetVolume)
+			{
+				fadingChannel.currentVolume -= fadingChannel.fadeSpeed * deltaTime;
+				if (fadingChannel.currentVolume <= fadingChannel.targetVolume)
+				{
+					fadingChannel.currentVolume = fadingChannel.targetVolume;
+				}
+			}
+
+			channelInstance->SetVolume(fadingChannel.currentVolume);
+
+			// If faded out completely, stop the sound and mark for removal
+			if (fadingChannel.currentVolume <= 0.0f && fadingChannel.targetVolume <= 0.0f)
+			{
+				m_audioSystem->StopSound(&fadingChannel.channel);
+				fadingChannel.markedForRemoval = true;
+			}
+		}
+
+		// Remove channels that are done
+		m_fadingChannels.erase(
+			std::remove_if(m_fadingChannels.begin(), m_fadingChannels.end(),
+				[](const FadingChannel& fc) { return fc.markedForRemoval; }),
+			m_fadingChannels.end());
+	}
+
 	void SpellVisualizationPreview::StopAllSounds()
 	{
 		if (!m_audioSystem)
@@ -843,10 +1037,13 @@ namespace mmo
 			return;
 		}
 
-		for (auto& channel : m_activeChannels)
+		for (auto& fadingChannel : m_fadingChannels)
 		{
-			m_audioSystem->StopSound(&channel);
+			if (fadingChannel.channel != InvalidChannel)
+			{
+				m_audioSystem->StopSound(&fadingChannel.channel);
+			}
 		}
-		m_activeChannels.clear();
+		m_fadingChannels.clear();
 	}
 }

@@ -11,6 +11,7 @@
 #include "scene_graph/world_grid.h"
 #include "scene_graph/particle_emitter.h"
 #include "scene_graph/entity.h"
+#include "scene_graph/animation_notify.h"
 
 #include "game_common/projectile_target.h"
 
@@ -122,22 +123,40 @@ namespace mmo
 		/// @param eventValue The event enum value.
 		void ApplyEventKits(proto::SpellVisualization* visualization, uint32 eventValue);
 
-		/// @brief Plays a sound file.
+		/// @brief Plays a sound file with fade-in.
 		/// @param soundPath Path to the sound file.
 		void PlaySound(const String& soundPath);
 
-		/// @brief Stops all currently playing sounds.
+		/// @brief Fades out and stops all currently playing sounds.
 		void StopAllSounds();
+
+		/// @brief Fades out sounds from the previous event (allows overlap during transition).
+		void FadeOutPreviousSounds();
+
+		/// @brief Updates all fading sound channels.
+		/// @param deltaTime Time since last update.
+		void UpdateSoundFades(float deltaTime);
 
 		/// @brief Called when a projectile impacts its target.
 		/// @param target The target that was hit.
 		void OnProjectileImpact(IProjectileTarget* target);
+
+		/// @brief Called when an animation notify is triggered.
+		/// @param notify The notification that was triggered.
+		/// @param animName The name of the animation.
+		/// @param state The animation state.
+		void OnAnimationNotify(const AnimationNotify& notify, const String& animName, const AnimationState& state);
+
+		/// @brief Connects to animation notify signals for an entity.
+		/// @param entity The entity to connect to.
+		void ConnectAnimationNotifySignals(Entity* entity);
 
 	private:
 		EditorHost& m_host;
 		IAudio* m_audioSystem{ nullptr };
 		scoped_connection m_updateConnection;
 		scoped_connection m_projectileImpactConnection;
+		scoped_connection_container m_animNotifyConnections;
 
 		// Viewport state
 		ImVec2 m_viewportSize{ 0, 0 };
@@ -189,9 +208,21 @@ namespace mmo
 		float m_castDuration{ 1.5f };
 		bool m_loopSequence{ false };
 		bool m_projectileSpawned{ false };
+		bool m_waitingForSpellGo{ false };
+		bool m_hasCastSucceededAnimation{ false };
 
-		// Active sound channels for cleanup
-		std::vector<ChannelIndex> m_activeChannels;
+		// Sound channel with fade state
+		struct FadingChannel
+		{
+			ChannelIndex channel{ InvalidChannel };
+			float currentVolume{ 0.0f };
+			float targetVolume{ 1.0f };
+			float fadeSpeed{ 2.0f }; // Volume units per second
+			bool markedForRemoval{ false };
+		};
+
+		// Active sound channels with fade state
+		std::vector<FadingChannel> m_fadingChannels;
 
 		// Mouse interaction
 		int16 m_lastMouseX{ 0 };
