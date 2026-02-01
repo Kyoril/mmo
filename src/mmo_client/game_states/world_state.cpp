@@ -623,6 +623,12 @@ namespace mmo
 			m_projectileManager->Update(deltaSeconds);
 		}
 
+		// Update spell visualization service (audio fading, etc.)
+		SpellVisualizationService::Get().Update(deltaSeconds);
+
+		// Update pending projectiles (animation notify fallback)
+		UpdatePendingProjectiles();
+
 		// Update foliage system
 		if (m_foliage && m_worldLoaded)
 		{
@@ -2038,7 +2044,61 @@ namespace mmo
 
 				if (casterUnit && targetUnit && m_projectileManager)
 				{
-					m_projectileManager->SpawnProjectile(*spell, visualization, casterUnit.get(), targetUnit.get());
+					// Check if there's a CastSucceeded animation - if so, defer projectile spawn
+					bool hasCastSucceededAnimation = false;
+					if (visualization)
+					{
+						const uint32 eventKey = static_cast<uint32>(proto_client::CAST_SUCCEEDED);
+						const auto& eventMap = visualization->kits_by_event();
+						auto kitIt = eventMap.find(eventKey);
+						if (kitIt != eventMap.end())
+						{
+							for (const auto& kit : kitIt->second.kits())
+							{
+								if (kit.has_animation_name() && !kit.animation_name().empty())
+								{
+									hasCastSucceededAnimation = true;
+									break;
+								}
+							}
+						}
+					}
+
+					if (hasCastSucceededAnimation)
+					{
+						// Create pending projectile and wait for SpellGo animation notify or animation end
+						auto pending = std::make_unique<PendingProjectile>();
+						pending->spellId = spellId;
+						pending->casterGuid = casterId;
+						pending->targetGuid = unitTargetGuid;
+						pending->visualization = visualization;
+						pending->hasCastSucceededAnimation = true;
+						
+						// Capture raw pointer for use in lambdas before moving
+						PendingProjectile* pendingPtr = pending.get();
+
+						// Subscribe to animation notify signals on the caster
+						pending->connections += casterUnit->animationNotifyTriggered.connect(
+							[this, pendingPtr](GameUnitC& unit, const AnimationNotify& notify, const String&, const AnimationState&)
+							{
+								if (notify.GetType() == AnimationNotifyType::SpellGo)
+								{
+									// SpellGo notify triggered - spawn the projectile now
+									SpawnPendingProjectile(pendingPtr);
+								}
+							});
+
+						// Also check if animation ends without SpellGo notify (fallback)
+						// We need to check on Update if the one-shot animation has ended
+						// For simplicity, we'll set a timeout fallback
+
+						m_pendingProjectiles.push_back(std::move(pending));
+					}
+					else
+					{
+						// No animation, spawn immediately
+						m_projectileManager->SpawnProjectile(*spell, visualization, casterUnit.get(), targetUnit.get());
+					}
 				}
 			}
 		}
@@ -2074,6 +2134,75 @@ namespace mmo
 		}
 
 		return PacketParseResult::Pass;
+	}
+
+	void WorldState::SpawnPendingProjectile(PendingProjectile* pending)
+	{
+		if (!pending || !m_projectileManager)
+		{
+			return;
+		}
+
+		// Get spell
+		const auto* spell = m_project.spells.getById(pending->spellId);
+		if (!spell)
+		{
+			return;
+		}
+
+		// Get caster and target units
+		auto casterUnit = ObjectMgr::Get<GameUnitC>(pending->casterGuid);
+		auto targetUnit = ObjectMgr::Get<GameUnitC>(pending->targetGuid);
+
+		if (casterUnit && targetUnit)
+		{
+			m_projectileManager->SpawnProjectile(*spell, pending->visualization, casterUnit.get(), targetUnit.get());
+		}
+
+		// Remove this pending projectile from the list
+		auto it = std::find_if(m_pendingProjectiles.begin(), m_pendingProjectiles.end(),
+			[pending](const std::unique_ptr<PendingProjectile>& p)
+			{
+				return p.get() == pending;
+			});
+
+		if (it != m_pendingProjectiles.end())
+		{
+			m_pendingProjectiles.erase(it);
+		}
+	}
+
+	void WorldState::UpdatePendingProjectiles()
+	{
+		// Check pending projectiles for animation end fallback
+		for (auto it = m_pendingProjectiles.begin(); it != m_pendingProjectiles.end(); )
+		{
+			PendingProjectile* pending = it->get();
+			
+			// Get caster unit to check animation state
+			auto casterUnit = ObjectMgr::Get<GameUnitC>(pending->casterGuid);
+			if (!casterUnit)
+			{
+				// Caster no longer exists, just remove the pending projectile
+				it = m_pendingProjectiles.erase(it);
+				continue;
+			}
+
+			// Check if one-shot animation has ended
+			// If the unit has no active one-shot animation and we were waiting for SpellGo,
+			// spawn the projectile as fallback
+			if (pending->hasCastSucceededAnimation && !casterUnit->IsPlayingOneShotAnimation())
+			{
+				// Animation ended without SpellGo notify - spawn as fallback
+				SpawnPendingProjectile(pending);
+				// SpawnPendingProjectile removes from the list, so just break to avoid invalidating iterator
+				// Actually, we need to restart iteration since the list was modified
+				it = m_pendingProjectiles.begin();
+				continue;
+			}
+
+			++it;
+		}
 	}
 
 	PacketParseResult WorldState::OnSpellFailure(game::IncomingPacket &packet)

@@ -16,11 +16,15 @@
 #include "game/character_customization/avatar_definition_mgr.h"
 #include "log/default_log_levels.h"
 #include "math/collision.h"
+#include "scene_graph/animation_notify.h"
+#include "scene_graph/animation_state.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/mesh_manager.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/sub_entity.h"
 #include "scene_graph/entity.h"
+#include "scene_graph/skeleton.h"
+#include "scene_graph/animation.h"
 #include "graphics/material.h"
 #include "graphics/material_instance.h"
 #include "shared/client_data/proto_client/factions.pb.h"
@@ -704,6 +708,60 @@ namespace mmo
 		if (entryId != -1)
 		{
 			m_netDriver.GetCreatureData(entryId, std::static_pointer_cast<GameUnitC>(shared_from_this()));
+		}
+	}
+
+	void GameUnitC::ConnectAnimationNotifySignals()
+	{
+		// Disconnect any existing connections
+		m_animNotifyConnections.disconnect();
+
+		if (!m_entity || !m_entity->GetSkeleton())
+		{
+			return;
+		}
+
+		AnimationStateSet* animStateSet = m_entity->GetAllAnimationStates();
+		if (!animStateSet)
+		{
+			return;
+		}
+
+		Skeleton* skeleton = m_entity->GetSkeleton().get();
+		if (!skeleton)
+		{
+			return;
+		}
+
+		// Capture weak_ptr to prevent circular reference
+		std::weak_ptr<GameUnitC> weakSelf = std::static_pointer_cast<GameUnitC>(shared_from_this());
+
+		// Iterate through all animations and subscribe to their notify signals
+		const uint16 numAnims = skeleton->GetNumAnimations();
+		for (uint16 i = 0; i < numAnims; ++i)
+		{
+			Animation* anim = skeleton->GetAnimation(i);
+			if (!anim)
+			{
+				continue;
+			}
+
+			AnimationState* animState = animStateSet->GetAnimationState(anim->GetName());
+			if (!animState)
+			{
+				continue;
+			}
+
+			// Subscribe to the notify signal
+			m_animNotifyConnections += animState->notifyTriggered.connect(
+				[weakSelf](const AnimationNotify& notify, const String& animName, const AnimationState& state)
+				{
+					if (const auto self = weakSelf.lock())
+					{
+						// Broadcast through our signal
+						self->animationNotifyTriggered(*self, notify, animName, state);
+					}
+				});
 		}
 	}
 
@@ -2091,6 +2149,9 @@ namespace mmo
 		{
 			m_nameComponentNode->SetPosition(Vector3::UnitY * (m_entity->GetBoundingRadius()));
 		}
+
+		// Connect to animation notify signals for all animations
+		ConnectAnimationNotifySignals();
 
 		OnScaleChanged();
 	}

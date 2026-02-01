@@ -6,8 +6,10 @@
 #include <map>
 #include <cstdint>
 #include <string>
+#include <functional>
 
 #include "base/typedefs.h"
+#include "base/signal.h"
 #include "shared/audio/audio.h"
 #include "shared/client_data/proto_client/spells.pb.h"
 #include "shared/client_data/proto_client/spell_visualizations.pb.h"
@@ -64,6 +66,13 @@ namespace mmo
         /// \brief Stop any looped sound currently playing for an actor (e.g., on cancel/success/death).
         void StopLoopedSoundForActor(uint64 actorGuid);
 
+        /// \brief Fade out any looped sound currently playing for an actor (smooth transition).
+        void FadeOutLoopedSoundForActor(uint64 actorGuid);
+
+        /// \brief Update sound fading (call each frame).
+        /// \param deltaTime Time since last update.
+        void Update(float deltaTime);
+
         /// \brief Remove tint from an actor for a specific spell (public for aura removal).
         void RemoveTintFromActor(GameUnitC& actor, uint32 spellId);
 
@@ -93,11 +102,36 @@ namespace mmo
             ChannelIndex audioHandle;
             uint32 spellId;
             Event event;
+            float currentVolume;
+            float targetVolume;
+            float fadeSpeed;
             
             LoopedSoundHandle() 
                 : audioHandle(InvalidChannel)
                 , spellId(0)
                 , event(Event::StartCast)
+                , currentVolume(0.0f)
+                , targetVolume(1.0f)
+                , fadeSpeed(3.0f)
+            {
+            }
+        };
+
+        /// \brief Structure to track a one-shot sound with fading.
+        struct FadingSound
+        {
+            ChannelIndex channel;
+            float currentVolume;
+            float targetVolume;
+            float fadeSpeed;
+            bool markedForRemoval;
+            
+            FadingSound()
+                : channel(InvalidChannel)
+                , currentVolume(0.0f)
+                , targetVolume(1.0f)
+                , fadeSpeed(3.0f)
+                , markedForRemoval(false)
             {
             }
         };
@@ -121,6 +155,9 @@ namespace mmo
 
         /// \brief Map actor guid -> looped sound handle for proper cleanup on cancel/success/aura removal.
         mutable std::map<uint64, LoopedSoundHandle> m_loopedSounds;
+        
+        /// \brief One-shot sounds with fading.
+        mutable std::vector<FadingSound> m_fadingSounds;
         
         /// \brief Map actor guid -> active spell animation for cancellation on same-spell events.
         mutable std::map<uint64, ActiveSpellAnimation> m_activeSpellAnimations;

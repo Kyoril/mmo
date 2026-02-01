@@ -17,6 +17,8 @@
 
 namespace mmo
 {
+	class AnimationNotify;
+	class AnimationState;
 	class ManualRenderObject;
 	class NetClient;
 
@@ -37,7 +39,11 @@ namespace mmo
 	class GameUnitC : public GameObjectC, public CustomizationPropertyGroupApplier
 	{
 	public:
+		/// @brief Signal emitted when movement ends.
 		signal<void(GameUnitC &, const MovementInfo &)> movementEnded;
+
+		/// @brief Signal emitted when an animation notify is triggered on this unit.
+		signal<void(GameUnitC&, const AnimationNotify&, const String&, const AnimationState&)> animationNotifyTriggered;
 
 	public:
 		/// @brief Creates a instance of the GameUnitC class.
@@ -178,6 +184,9 @@ namespace mmo
 		void SetQuestGiverMesh(const String &meshName);
 
 		virtual void RefreshUnitName();
+
+		/// @brief Connects to animation notify signals on all animations for this unit.
+		void ConnectAnimationNotifySignals();
 
 	public:
 		/// @brief Locks the current position as the synced position.
@@ -416,6 +425,9 @@ namespace mmo
 		/// @brief Cancel the currently playing one-shot animation and refresh movement state
 		void CancelOneShotAnimation();
 
+		/// @brief Returns true if a one-shot animation is currently playing.
+		bool IsPlayingOneShotAnimation() const { return m_oneShotState != nullptr && m_oneShotState->GetWeight() > 0.0f; }
+
 		/// @brief Force an update of movement-based animations (e.g., after canceling spell animations)
 		void RefreshMovementAnimation();
 
@@ -640,5 +652,8 @@ namespace mmo
 
 		/// @brief Map of SubEntity -> material state (only populated when tinting is active).
 		std::map<class SubEntity*, SubEntityMaterialState> m_tintMaterialStates;
+
+		/// @brief Connections to animation notify signals.
+		scoped_connection_container m_animNotifyConnections;
 	};
 }

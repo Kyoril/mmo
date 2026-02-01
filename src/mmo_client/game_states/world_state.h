@@ -20,6 +20,7 @@
 #include "scene_graph/axis_display.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/world_grid.h"
+#include "scene_graph/animation_notify.h"
 #include "game_client/projectile_manager.h"
 
 #include "base/id_generator.h"
@@ -164,6 +165,15 @@ namespace mmo
 		void OnTargetPowerChanged(uint64 monitoredGuid);
 
 		void OnTargetLevelChanged(uint64 monitoredGuid);
+
+		// Forward declaration for PendingProjectile (defined below)
+		struct PendingProjectile;
+
+		/// @brief Spawns a pending projectile and removes it from the pending list.
+		void SpawnPendingProjectile(PendingProjectile* pending);
+
+		/// @brief Updates pending projectiles (checks for animation end fallback).
+		void UpdatePendingProjectiles();
 
 		void OnRenderShadowsChanged(ConsoleVar &var, const std::string &oldValue);
 
@@ -417,6 +427,20 @@ namespace mmo
 		const proto_client::Project &m_project;
 
 		std::unique_ptr<ProjectileManager> m_projectileManager;
+
+		/// @brief Structure to track pending projectile spawns waiting for SpellGo animation notify.
+		struct PendingProjectile
+		{
+			uint32 spellId = 0;
+			uint64 casterGuid = 0;
+			uint64 targetGuid = 0;
+			const proto_client::SpellVisualization* visualization = nullptr;
+			bool hasCastSucceededAnimation = false;
+			scoped_connection_container connections;
+		};
+
+		/// @brief List of pending projectiles waiting for SpellGo animation notify.
+		std::vector<std::unique_ptr<PendingProjectile>> m_pendingProjectiles;
 
 		TimerQueue &m_timers;
 		AttackSwingEvent m_lastAttackSwingEvent{AttackSwingEvent::Unknown};
