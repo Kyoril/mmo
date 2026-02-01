@@ -150,11 +150,11 @@ namespace mmo
 				break;
 
 			case PreviewEvent::CastSucceeded:
-				// Start projectile and wait for impact
-				// The projectile is started immediately, and impact is triggered when it hits
-				if (m_sequenceTimer < 0.1f)
+				// Start projectile once and wait for impact
+				if (!m_projectileSpawned)
 				{
 					StartProjectile();
+					m_projectileSpawned = true;
 				}
 				// Give some time for projectile to travel, then auto-transition to impact
 				// The actual impact timing will depend on projectile speed and distance
@@ -176,11 +176,36 @@ namespace mmo
 						// Restart the sequence
 						m_currentSequenceEvent = PreviewEvent::StartCast;
 						m_sequenceTimer = 0.0f;
+						m_projectileSpawned = false;
 						TriggerEvent(PreviewEvent::StartCast);
 					}
 					else
 					{
 						m_castSequenceActive = false;
+
+						// Reset caster animation to idle
+						if (m_casterEntity && m_casterEntity->HasAnimationState("Idle"))
+						{
+							if (m_casterAnimState)
+							{
+								m_casterAnimState->SetEnabled(false);
+							}
+							m_casterAnimState = m_casterEntity->GetAnimationState("Idle");
+							m_casterAnimState->SetEnabled(true);
+							m_casterAnimState->SetLoop(true);
+						}
+
+						// Reset target animation to idle
+						if (m_targetEntity && m_targetEntity->HasAnimationState("Idle"))
+						{
+							if (m_targetAnimState)
+							{
+								m_targetAnimState->SetEnabled(false);
+							}
+							m_targetAnimState = m_targetEntity->GetAnimationState("Idle");
+							m_targetAnimState->SetEnabled(true);
+							m_targetAnimState->SetLoop(true);
+						}
 					}
 				}
 				break;
@@ -357,6 +382,7 @@ namespace mmo
 		{
 		case PreviewEvent::StartCast:
 			protoEvent = 0; // START_CAST
+			m_projectileSpawned = false; // Reset for new cast
 			break;
 		case PreviewEvent::CancelCast:
 			protoEvent = 1; // CANCEL_CAST
@@ -366,7 +392,11 @@ namespace mmo
 			break;
 		case PreviewEvent::CastSucceeded:
 			protoEvent = 3; // CAST_SUCCEEDED
-			StartProjectile();
+			if (!m_projectileSpawned)
+			{
+				StartProjectile();
+				m_projectileSpawned = true;
+			}
 			break;
 		case PreviewEvent::Impact:
 			protoEvent = 4; // IMPACT
@@ -393,6 +423,7 @@ namespace mmo
 	{
 		m_castSequenceActive = false;
 		m_sequenceTimer = 0.0f;
+		m_projectileSpawned = false;
 
 		// Stop all sounds
 		StopAllSounds();

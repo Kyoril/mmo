@@ -188,6 +188,7 @@ namespace mmo
 		float m_sequenceTimer{ 0.0f };
 		float m_castDuration{ 1.5f };
 		bool m_loopSequence{ false };
+		bool m_projectileSpawned{ false };
 
 		// Active sound channels for cleanup
 		std::vector<ChannelIndex> m_activeChannels;
