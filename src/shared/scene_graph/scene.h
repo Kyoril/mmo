@@ -14,6 +14,7 @@
 #include "manual_render_object.h"
 #include "movable_object.h"
 #include "particle_emitter.h"
+#include "ribbon_trail.h"
 #include "scene_node.h"
 #include "math/ray.h"
 
@@ -438,6 +439,25 @@ namespace mmo
 		/// @return A vector of all particle emitters in the scene.
 		std::vector<ParticleEmitter*> GetAllParticleEmitters() const;
 
+		// Ribbon trail management
+
+		/// Creates a new ribbon trail using the specified name.
+		/// @param name Name of the trail. Has to be unique to the scene.
+		/// @returns Pointer to the created trail.
+		RibbonTrail* CreateRibbonTrail(const String& name);
+
+		/// Destroys a given ribbon trail.
+		/// @param trail The trail to remove.
+		void DestroyRibbonTrail(const RibbonTrail& trail);
+
+		/// Destroys a ribbon trail using a specific name.
+		/// @param name Name of the trail to remove.
+		void DestroyRibbonTrail(const String& name);
+
+		/// @brief Gets all ribbon trails in the scene.
+		/// @return A vector of all ribbon trails in the scene.
+		std::vector<RibbonTrail*> GetAllRibbonTrails() const;
+
 		const Vector3& GetAmbientColor() const { return m_ambientColor; }
 
 		void SetAmbientColor(const Vector3& color)
@@ -570,6 +590,9 @@ namespace mmo
 
 		typedef std::map<String, std::unique_ptr<ParticleEmitter>> ParticleEmitterMap;
 		ParticleEmitterMap m_particleEmitters;
+
+		typedef std::map<String, std::unique_ptr<RibbonTrail>> RibbonTrailMap;
+		RibbonTrailMap m_ribbonTrails;
 
 		/// Registered WorldModelInstances for pre-render portal culling updates.
 		std::vector<WorldModelInstance*> m_worldModelInstances;

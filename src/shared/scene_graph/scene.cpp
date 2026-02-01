@@ -179,6 +179,45 @@ namespace mmo
 		return emitters;
 	}
 
+	RibbonTrail* Scene::CreateRibbonTrail(const String& name)
+	{
+		ASSERT(!name.empty());
+		ASSERT(m_ribbonTrails.find(name) == m_ribbonTrails.end());
+
+		auto trail = std::make_unique<RibbonTrail>(name, GraphicsDevice::Get());
+		trail->SetScene(this);
+
+		auto [iterator, inserted] = m_ribbonTrails.emplace(name, std::move(trail));
+		return iterator->second.get();
+	}
+
+	void Scene::DestroyRibbonTrail(const RibbonTrail& trail)
+	{
+		DestroyRibbonTrail(trail.GetName());
+	}
+
+	void Scene::DestroyRibbonTrail(const String& name)
+	{
+		const auto trailIt = m_ribbonTrails.find(name);
+		if (trailIt != m_ribbonTrails.end())
+		{
+			m_ribbonTrails.erase(trailIt);
+		}
+	}
+
+	std::vector<RibbonTrail*> Scene::GetAllRibbonTrails() const
+	{
+		std::vector<RibbonTrail*> trails;
+		trails.reserve(m_ribbonTrails.size());
+
+		for (const auto& [name, trail] : m_ribbonTrails)
+		{
+			trails.push_back(trail.get());
+		}
+
+		return trails;
+	}
+
 	bool Scene::HasEntity(const String& name) const
 	{
 		return m_entities.find(name) != m_entities.end();
@@ -247,6 +286,12 @@ namespace mmo
 			emitter->Update();
 		}
 
+		// Update ribbon trails (self-timed)
+		for (auto& [name, trail] : m_ribbonTrails)
+		{
+			trail->Update();
+		}
+
 		if (!m_frozen)
 		{
 			PrepareRenderQueue();
@@ -270,6 +315,12 @@ namespace mmo
 			for (auto& [name, emitter] : m_particleEmitters)
 			{
 				emitter->PopulateRenderQueue(GetRenderQueue());
+			}
+
+			// Add ribbon trails to render queue
+			for (auto& [name, trail] : m_ribbonTrails)
+			{
+				trail->PopulateRenderQueue(GetRenderQueue());
 			}
 		}
 		
