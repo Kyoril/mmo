@@ -54,6 +54,12 @@ namespace mmo
 
 		// Create the 3D preview panel with audio support
 		m_preview = std::make_unique<SpellVisualizationPreview>(host, audioSystem);
+
+		// Set initial projectile speed for the preview
+		if (m_preview)
+		{
+			m_preview->SetProjectileSpeed(m_previewProjectileSpeed);
+		}
 	}
 
 	bool SpellVisualizationEditorWindow::Draw()
@@ -555,6 +561,23 @@ namespace mmo
 
 		ImGui::Indent();
 		auto *projectile = currentEntry.mutable_projectile();
+
+		// Preview speed setting (affects editor preview only)
+		ImGui::TextDisabled("Preview Settings (Editor Only)");
+		if (ImGui::DragFloat("Preview Speed", &m_previewProjectileSpeed, 0.5f, 1.0f, 100.0f, "%.1f units/sec"))
+		{
+			// Update the preview speed
+			if (m_preview)
+			{
+				m_preview->SetProjectileSpeed(m_previewProjectileSpeed);
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::SmallButton("?##previewspeed"))
+		{
+			ImGui::SetTooltip("Speed for previewing projectiles in the editor.\nActual speed is determined by the Spell entry that uses this visualization.");
+		}
+		ImGui::Separator();
 
 		// Movement section
 		if (ImGui::CollapsingHeader("Movement", ImGuiTreeNodeFlags_DefaultOpen))

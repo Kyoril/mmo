@@ -12,10 +12,13 @@
 #include "scene_graph/particle_emitter.h"
 #include "scene_graph/entity.h"
 
+#include "game_common/projectile_target.h"
+
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <chrono>
 #include <vector>
+#include <memory>
 
 namespace mmo
 {
@@ -28,6 +31,7 @@ namespace mmo
 	class Camera;
 	class SceneNode;
 	class Light;
+	class EditorProjectileManager;
 
 	/// @brief Spell visual event that can be triggered for preview.
 	enum class PreviewEvent
@@ -92,6 +96,10 @@ namespace mmo
 		/// @param visualization The visualization to sync with.
 		void SyncWithVisualization(const proto::SpellVisualization& visualization);
 
+		/// @brief Sets the projectile preview speed.
+		/// @param speed Speed in units per second.
+		void SetProjectileSpeed(float speed);
+
 	private:
 		/// @brief Creates the floor plane mesh.
 		void CreateFloorPlane();
@@ -99,15 +107,11 @@ namespace mmo
 		/// @brief Creates the caster and target entities.
 		void CreateCharacterEntities();
 
-		/// @brief Updates active projectile simulation.
-		/// @param deltaTime Time since last update.
-		void UpdateProjectile(float deltaTime);
-
 		/// @brief Updates active animation states.
 		/// @param deltaTime Time since last update.
 		void UpdateAnimations(float deltaTime);
 
-		/// @brief Starts the projectile flight.
+		/// @brief Starts the projectile flight using EditorProjectileManager.
 		void StartProjectile();
 
 		/// @brief Cleans up all spell effect objects.
@@ -125,10 +129,15 @@ namespace mmo
 		/// @brief Stops all currently playing sounds.
 		void StopAllSounds();
 
+		/// @brief Called when a projectile impacts its target.
+		/// @param target The target that was hit.
+		void OnProjectileImpact(IProjectileTarget* target);
+
 	private:
 		EditorHost& m_host;
 		IAudio* m_audioSystem{ nullptr };
 		scoped_connection m_updateConnection;
+		scoped_connection m_projectileImpactConnection;
 
 		// Viewport state
 		ImVec2 m_viewportSize{ 0, 0 };
@@ -162,19 +171,16 @@ namespace mmo
 		// Spell effect objects
 		ParticleEmitter* m_castParticles{ nullptr };
 		ParticleEmitter* m_impactParticles{ nullptr };
-		Entity* m_projectileEntity{ nullptr };
-		SceneNode* m_projectileNode{ nullptr };
-		String m_projectileMeshPath;
 
 		// Current visualization being previewed
 		proto::SpellVisualization* m_currentVisualization{ nullptr };
 
-		// Projectile state
-		bool m_projectileActive{ false };
-		Vector3 m_projectileStartPos;
-		Vector3 m_projectileTargetPos;
-		float m_projectileProgress{ 0.0f };
+		// Preview projectile speed
 		float m_projectileSpeed{ 15.0f };
+
+		// Projectile manager (uses editor-specific implementation)
+		std::unique_ptr<EditorProjectileManager> m_projectileManager;
+		std::shared_ptr<StaticProjectileTarget> m_projectileTarget;
 
 		// Cast sequence state
 		bool m_castSequenceActive{ false };

@@ -11,7 +11,7 @@
 #include "math/vector3.h"
 #include "paging/page.h"
 #include "terrain/terrain.h"
-#include "game_client/world_entity_loader.h"
+#include "game_common/world_entity_loader.h"
 
 namespace mmo
 {

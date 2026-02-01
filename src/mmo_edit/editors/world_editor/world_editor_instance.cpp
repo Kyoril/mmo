@@ -22,7 +22,7 @@
 #include "game/object_type_id.h"
 #include "game/character_customization/avatar_definition_mgr.h"
 #include "game/character_customization/customizable_avatar_definition.h"
-#include "game_client/world_entity_loader.h"
+#include "game_common/world_entity_loader.h"
 #include "graphics/texture_mgr.h"
 #include "nav_build/common.h"
 #include "scene_graph/mesh_manager.h"

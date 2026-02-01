@@ -23,6 +23,7 @@
 #include "systems/quest_client.h"
 #include "systems/cooldown_manager.h"
 #include "game_client/object_mgr.h"
+#include "game_common/projectile_target.h"
 #include "systems/trainer_client.h"
 #include "systems/vendor_client.h"
 #include "world_deserializer.h"
@@ -227,12 +228,16 @@ namespace mmo
 		m_projectileManager = std::make_unique<ProjectileManager>(*m_scene, &m_audio);
 
 		// Connect projectile impact signal to visualization service
-		m_projectileManager->projectileImpact.connect([](const proto_client::SpellEntry &spell, GameUnitC *target)
+		m_projectileManager->projectileImpact.connect([](const proto_client::SpellEntry &spell, IProjectileTarget *target)
 													  {
 				std::vector<GameUnitC*> targets;
 				if (target)
 				{
-					targets.push_back(target);
+					// Try to get the GameUnitC from the target's GUID
+					if (auto unit = ObjectMgr::Get<GameUnitC>(target->GetGuid()))
+					{
+						targets.push_back(unit.get());
+					}
 				}
 				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Impact, spell, nullptr, targets); });
 

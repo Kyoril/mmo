@@ -2,6 +2,7 @@
 
 #include "spell_visualization_preview.h"
 #include "editor_host.h"
+#include "editor_projectile_manager.h"
 
 #include "audio/audio.h"
 #include "graphics/graphics_device.h"
@@ -12,6 +13,8 @@
 #include "log/default_log_levels.h"
 
 #include "proto_data/project.h"
+
+#include "game_common/projectile_target.h"
 
 namespace mmo
 {
@@ -51,6 +54,14 @@ namespace mmo
 		// Create character entities
 		CreateCharacterEntities();
 
+		// Create projectile manager using editor-specific implementation
+		m_projectileManager = std::make_unique<EditorProjectileManager>(m_scene, m_audioSystem);
+		m_projectileImpactConnection = m_projectileManager->projectileImpact.connect(
+			this, &SpellVisualizationPreview::OnProjectileImpact);
+
+		// Create a static target for projectiles (will be positioned at target entity)
+		m_projectileTarget = std::make_shared<StaticProjectileTarget>(Vector3::Zero, 1);
+
 		// Connect to update signal
 		m_updateConnection = m_host.beforeUiUpdate.connect(this, &SpellVisualizationPreview::Update);
 	}
@@ -60,6 +71,10 @@ namespace mmo
 		// Clear audio system reference first to prevent StopAllSounds from accessing destroyed audio
 		m_audioSystem = nullptr;
 		m_activeChannels.clear();
+
+		// Clear projectile manager before scene destruction
+		m_projectileManager.reset();
+		m_projectileTarget.reset();
 
 		CleanupSpellEffects();
 
@@ -101,10 +116,10 @@ namespace mmo
 		// Update animations
 		UpdateAnimations(deltaTime);
 
-		// Update projectile
-		if (m_projectileActive)
+		// Update projectiles using the EditorProjectileManager
+		if (m_projectileManager)
 		{
-			UpdateProjectile(deltaTime);
+			m_projectileManager->Update(deltaTime);
 		}
 
 		// Update cast sequence
@@ -136,12 +151,15 @@ namespace mmo
 
 			case PreviewEvent::CastSucceeded:
 				// Start projectile and wait for impact
-				if (!m_projectileActive && m_sequenceTimer < 0.1f)
+				// The projectile is started immediately, and impact is triggered when it hits
+				if (m_sequenceTimer < 0.1f)
 				{
 					StartProjectile();
 				}
-				// When projectile reaches target, trigger impact
-				if (!m_projectileActive && m_sequenceTimer >= 0.1f)
+				// Give some time for projectile to travel, then auto-transition to impact
+				// The actual impact timing will depend on projectile speed and distance
+				// We use a longer timeout to ensure the projectile has time to reach
+				if (m_sequenceTimer >= 3.0f)
 				{
 					m_currentSequenceEvent = PreviewEvent::Impact;
 					m_sequenceTimer = 0.0f;
@@ -292,11 +310,7 @@ namespace mmo
 
 		ImGui::SameLine();
 		ImGui::SetNextItemWidth(70);
-		ImGui::DragFloat("##speed", &m_projectileSpeed, 0.5f, 1.0f, 50.0f, "%.0f spd");
-		
-		ImGui::SameLine();
-		ImGui::SetNextItemWidth(70);
-		ImGui::DragFloat("##cast", &m_castDuration, 0.1f, 0.5f, 5.0f, "%.1fs");
+		ImGui::DragFloat("##cast", &m_castDuration, 0.1f, 0.5f, 5.0f, "%.1fs cast");
 
 		// Row 2: Individual event triggers
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.4f, 0.6f, 0.8f));
@@ -378,21 +392,15 @@ namespace mmo
 	void SpellVisualizationPreview::StopPreview()
 	{
 		m_castSequenceActive = false;
-		m_projectileActive = false;
 		m_sequenceTimer = 0.0f;
 
 		// Stop all sounds
 		StopAllSounds();
 
-		// Reset projectile position
-		if (m_projectileNode)
+		// Clear any active projectiles
+		if (m_projectileManager)
 		{
-			m_projectileNode->SetPosition(Vector3(0.0f, -1000.0f, 0.0f));
-		}
-
-		if (m_projectileEntity)
-		{
-			m_projectileEntity->SetVisible(false);
+			m_projectileManager->Clear();
 		}
 
 		// Reset animations to idle
@@ -490,64 +498,8 @@ namespace mmo
 	void SpellVisualizationPreview::SyncWithVisualization(const proto::SpellVisualization& visualization)
 	{
 		m_currentVisualization = const_cast<proto::SpellVisualization*>(&visualization);
-
-		// Sync projectile settings if available
-		if (visualization.has_projectile())
-		{
-			const auto& projectile = visualization.projectile();
-			
-			// Update projectile mesh if specified
-			if (projectile.has_mesh_name() && !projectile.mesh_name().empty())
-			{
-				// Only recreate if mesh path changed
-				if (m_projectileMeshPath != projectile.mesh_name())
-				{
-					m_projectileMeshPath = projectile.mesh_name();
-
-					// Use existing projectile node from CreateCharacterEntities
-					if (m_projectileNode == nullptr)
-					{
-						m_projectileNode = m_scene.GetRootSceneNode().CreateChildSceneNode("ProjectileNode");
-						m_projectileNode->SetPosition(Vector3(0.0f, -1000.0f, 0.0f));
-					}
-
-					try
-					{
-						if (m_projectileEntity)
-						{
-							m_projectileNode->DetachObject(*m_projectileEntity);
-							m_scene.DestroyEntity(*m_projectileEntity);
-							m_projectileEntity = nullptr;
-						}
-						
-						m_projectileEntity = m_scene.CreateEntity("Projectile_" + std::to_string(visualization.id()), projectile.mesh_name());
-						if (m_projectileEntity)
-						{
-							m_projectileNode->AttachObject(*m_projectileEntity);
-							m_projectileEntity->SetVisible(false);
-						}
-					}
-					catch (...)
-					{
-						WLOG("Failed to load projectile mesh: " << projectile.mesh_name());
-					}
-				}
-
-				// Always update scale
-				if (m_projectileNode)
-				{
-					if (projectile.has_scale() && projectile.scale() > 0.0f)
-					{
-						const float scale = projectile.scale();
-						m_projectileNode->SetScale(Vector3(scale, scale, scale));
-					}
-					else
-					{
-						m_projectileNode->SetScale(Vector3(1.0f, 1.0f, 1.0f));
-					}
-				}
-			}
-		}
+		// Projectile visuals are now handled by EditorProjectileManager
+		// The manager creates and destroys projectile entities as needed
 	}
 
 	void SpellVisualizationPreview::CreateFloorPlane()
@@ -628,69 +580,7 @@ namespace mmo
 			WLOG("Failed to load target mesh: " << m_targetMeshPath);
 		}
 
-		// Create projectile node (hidden initially)
-		m_projectileNode = m_scene.GetRootSceneNode().CreateChildSceneNode("ProjectileNode");
-		m_projectileNode->SetPosition(Vector3(0.0f, -1000.0f, 0.0f));
-		m_projectileNode->SetScale(Vector3(0.3f, 0.3f, 0.3f));
-
-		// Create default projectile entity (a simple sphere)
-		try
-		{
-			m_projectileEntity = m_scene.CreateEntity("ProjectileDefault", "Editor/Sphere.hmsh");
-			if (m_projectileEntity)
-			{
-				m_projectileNode->AttachObject(*m_projectileEntity);
-				m_projectileEntity->SetVisible(false);
-			}
-		}
-		catch (...)
-		{
-			WLOG("Failed to create default projectile entity");
-		}
-	}
-
-	void SpellVisualizationPreview::UpdateProjectile(float deltaTime)
-	{
-		if (!m_projectileActive)
-		{
-			return;
-		}
-
-		const Vector3 direction = m_projectileTargetPos - m_projectileStartPos;
-		const float totalDistance = direction.GetLength();
-		const float travelTime = totalDistance / m_projectileSpeed;
-
-		m_projectileProgress += deltaTime / travelTime;
-
-		if (m_projectileProgress >= 1.0f)
-		{
-			m_projectileProgress = 1.0f;
-			m_projectileActive = false;
-
-			if (m_projectileEntity)
-			{
-				m_projectileEntity->SetVisible(false);
-			}
-
-			return;
-		}
-
-		// Interpolate position with arc
-		const float t = m_projectileProgress;
-		Vector3 currentPos = m_projectileStartPos + direction * t;
-
-		// Add parabolic arc
-		const float arcHeight = 0.8f;
-		currentPos.y += ::sin(t * 3.14159f) * arcHeight;
-
-		m_projectileNode->SetPosition(currentPos);
-
-		// Orient towards target
-		const Vector3 velocity = (m_projectileTargetPos - currentPos);
-		if (velocity.GetSquaredLength() > 0.001f)
-		{
-			m_projectileNode->SetDirection(velocity.NormalizedCopy(), TransformSpace::World, Vector3::NegativeUnitZ);
-		}
+		// Projectile visuals are now managed by EditorProjectileManager
 	}
 
 	void SpellVisualizationPreview::UpdateAnimations(float deltaTime)
@@ -708,27 +598,106 @@ namespace mmo
 
 	void SpellVisualizationPreview::StartProjectile()
 	{
-		if (!m_casterNode || !m_targetNode || !m_projectileNode)
+		if (!m_casterNode || !m_targetNode)
 		{
 			return;
 		}
 
-		m_projectileStartPos = m_casterNode->GetDerivedPosition() + Vector3(0.0f, 1.2f, 0.0f);
-		m_projectileTargetPos = m_targetNode->GetDerivedPosition() + Vector3(0.0f, 0.8f, 0.0f);
-		m_projectileProgress = 0.0f;
-		m_projectileActive = true;
-
-		m_projectileNode->SetPosition(m_projectileStartPos);
-
-		if (m_projectileEntity)
+		if (!m_projectileManager)
 		{
-			m_projectileEntity->SetVisible(true);
+			return;
+		}
+
+		if (!m_currentVisualization)
+		{
+			return;
+		}
+
+		// Update target position for the static target
+		const Vector3 targetPos = m_targetNode->GetDerivedPosition() + Vector3(0.0f, 0.8f, 0.0f);
+		m_projectileTarget->SetPosition(targetPos);
+
+		// Spawn projectile using EditorProjectileManager
+		const Vector3 startPos = m_casterNode->GetDerivedPosition() + Vector3(0.0f, 1.2f, 0.0f);
+
+		// Build projectile parameters from the visualization
+		ProjectileParams params;
+		params.speed = m_projectileSpeed;
+		
+		if (m_currentVisualization->has_projectile())
+		{
+			const auto& projVis = m_currentVisualization->projectile();
+			
+			if (projVis.has_mesh_name())
+			{
+				params.meshFile = projVis.mesh_name();
+			}
+			
+			if (projVis.has_trail_particle())
+			{
+				params.particleFile = projVis.trail_particle();
+			}
+			
+			if (projVis.has_motion())
+			{
+				params.motionType = static_cast<ProjectileMotionType>(projVis.motion());
+			}
+			
+			if (projVis.has_arc_height())
+			{
+				params.arcHeight = projVis.arc_height();
+			}
+			
+			if (projVis.has_wave_amplitude())
+			{
+				params.sineAmplitude = projVis.wave_amplitude();
+			}
+			
+			if (projVis.has_wave_frequency())
+			{
+				params.sineFrequency = projVis.wave_frequency();
+			}
+			
+			if (projVis.has_scale())
+			{
+				params.scale = projVis.scale();
+			}
+			
+			if (projVis.has_face_movement())
+			{
+				params.faceMovement = projVis.face_movement();
+			}
+		}
+
+		m_projectileManager->SpawnProjectile(params, startPos, m_projectileTarget);
+	}
+
+	void SpellVisualizationPreview::SetProjectileSpeed(float speed)
+	{
+		m_projectileSpeed = speed;
+	}
+
+	void SpellVisualizationPreview::OnProjectileImpact(IProjectileTarget* target)
+	{
+		// When projectile hits, trigger the impact event
+		if (m_castSequenceActive && m_currentSequenceEvent == PreviewEvent::CastSucceeded)
+		{
+			// Transition to impact event
+			m_currentSequenceEvent = PreviewEvent::Impact;
+			m_sequenceTimer = 0.0f;
+			TriggerEvent(PreviewEvent::Impact);
 		}
 	}
 
 	void SpellVisualizationPreview::CleanupSpellEffects()
 	{
 		StopAllSounds();
+
+		// Clear projectiles
+		if (m_projectileManager)
+		{
+			m_projectileManager->Clear();
+		}
 
 		if (m_castParticles)
 		{
@@ -740,12 +709,6 @@ namespace mmo
 		{
 			m_scene.DestroyParticleEmitter(*m_impactParticles);
 			m_impactParticles = nullptr;
-		}
-
-		if (m_projectileEntity)
-		{
-			m_scene.DestroyEntity(*m_projectileEntity);
-			m_projectileEntity = nullptr;
 		}
 	}
 

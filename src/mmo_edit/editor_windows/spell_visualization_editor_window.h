@@ -100,5 +100,8 @@ namespace mmo
 		
 		/// @brief Preview panel height ratio (0.0 - 1.0).
 		float m_previewHeightRatio{ 0.4f };
+
+		/// @brief Preview projectile speed (units per second).
+		float m_previewProjectileSpeed{ 15.0f };
 	};
 }

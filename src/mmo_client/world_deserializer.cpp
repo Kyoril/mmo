@@ -6,7 +6,7 @@
 
 #include "assets/asset_registry.h"
 #include "base/chunk_writer.h"
-#include "game_client/world_entity_loader.h"
+#include "game_common/world_entity_loader.h"
 #include "game_states/login_state.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/entity.h"

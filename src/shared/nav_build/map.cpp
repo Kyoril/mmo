@@ -11,7 +11,7 @@
 #include <sstream>
 
 #include "base/utilities.h"
-#include "game_client/world_entity_loader.h"
+#include "game_common/world_entity_loader.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/mesh_serializer.h"
 #include "scene_graph/world_model.h"
