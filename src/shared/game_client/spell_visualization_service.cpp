@@ -342,9 +342,21 @@ namespace mmo
         auto it = m_loopedSounds.find(actorGuid);
         if (it != m_loopedSounds.end())
         {
-            // Set target volume to 0 to fade out
-            it->second.targetVolume = 0.0f;
-            it->second.fadeSpeed = 2.0f; // Fade out over ~0.5 seconds
+            // Move the looped sound to the fading sounds list so it can fade out
+            // while a new sound can be added for this actor
+            if (it->second.audioHandle != InvalidChannel)
+            {
+                FadingSound fadingSound;
+                fadingSound.channel = it->second.audioHandle;
+                fadingSound.currentVolume = it->second.currentVolume;
+                fadingSound.targetVolume = 0.0f;
+                fadingSound.fadeSpeed = 2.0f; // Fade out over ~0.5 seconds
+                fadingSound.markedForRemoval = false;
+                m_fadingSounds.push_back(fadingSound);
+            }
+            
+            // Remove from the looped sounds map so a new looped sound can be added
+            m_loopedSounds.erase(it);
         }
     }
 
