@@ -67,6 +67,7 @@ namespace mmo
 			IdGenerator<uint64> &groupIdGenerator,
 			GuildMgr &guildMgr,
 			FriendMgr &friendMgr);
+		/// Disconnects the player if still connected.
 		void Kick();
 
 		/// Gets the player connection class used to send packets to the client.
@@ -82,8 +83,10 @@ namespace mmo
 		/// Gets the world manager which manages all connected world nodes.
 		WorldManager &GetWorldManager() const { return m_worldManager; }
 
+		/// Returns true if character data has been loaded for this player.
 		[[nodiscard]] bool HasCharacterGuid() const { return m_characterData.has_value(); }
 
+		/// Gets the active character guid, or 0 if not set.
 		[[nodiscard]] uint64 GetCharacterGuid() const { return m_characterData.has_value() ? m_characterData.value().characterId : 0; }
 
 		/// Determines whether the player is authentificated.
@@ -93,6 +96,7 @@ namespace mmo
 		/// Gets the account name the player is logged in with.
 		const std::string &GetAccountName() const { return m_accountName; }
 
+		/// Gets the account id the player is logged in with.
 		uint64 GetAccountId() const { return m_accountId; }
 
 		/// Gets the GM level of the player.
@@ -101,38 +105,49 @@ namespace mmo
 		/// Checks if the player has a specific GM level or higher.
 		bool HasGMLevel(uint8 level) const { return m_gmLevel >= level; }
 
+		/// Gets the active character name.
 		[[nodiscard]] const String &GetCharacterName() const { return m_characterData->name; }
 
+		/// Gets the active character level.
 		[[nodiscard]] uint32 GetCharacterLevel() const { return m_characterData->level; }
 
+		/// Gets the active character race id.
 		[[nodiscard]] uint32 GetCharacterRace() const { return m_characterData->raceId; }
 
+		/// Gets the active character class id.
 		[[nodiscard]] uint32 GetCharacterClass() const { return m_characterData->classId; }
 
-		// Inititalizes a character transfer to a new map.
+		/// Initializes a character transfer to a new map.
 		bool InitializeTransfer(uint32 map, const Vector3 &location, float o, bool shouldLeaveNode = false);
 
 		/// Commits an initialized transfer (if any).
 		void CommitTransfer();
 
-		///
+		/// Gets the world instance id the character is currently in.
 		const InstanceId &GetWorldInstanceId() const { return m_instanceId; }
 
+		/// Gets the player's current group.
 		std::shared_ptr<PlayerGroup> GetGroup() const { return m_group; }
 
+		/// Sets the pending inviter guid for a group invite.
 		void SetInviterGuid(uint64 inviter);
 
+		/// Sets the player's current group.
 		void SetGroup(std::shared_ptr<PlayerGroup> group) { m_group = std::move(group); }
 
+		/// Sends a party invite to this player.
 		void SendPartyInvite(const String &inviterName);
 
 		/// Declines a pending group invite (if available).
 		void DeclineGroupInvite();
 
+		/// Gets the world node this player is currently on.
 		std::shared_ptr<World> GetWorld() const { return m_world.lock(); }
 
+		/// Builds a party member stats packet for this player.
 		void BuildPartyMemberStatsPacket(game::OutgoingPacket &packet, uint32 groupUpdateFlags) const;
 
+		/// Notifies the player that their guild membership has changed.
 		void GuildChange(uint64 guildId);
 
 		// Friend system methods
@@ -156,6 +171,7 @@ namespace mmo
 		/// Sends the complete friend list to the client.
 		void SendFriendListUpdate();
 
+		/// Notifies the client about a character update from a world node.
 		void NotifyCharacterUpdate(uint32 mapId, InstanceId instanceId, const GamePlayerS &character);
 
 	public:
@@ -166,17 +182,22 @@ namespace mmo
 		/// be encrypted from here on.
 		void InitializeSession(const BigNumber &sessionKey);
 
+		/// Sends a proxy packet to the connected world node.
 		void SendProxyPacket(uint16 packetId, const std::vector<char> &buffer);
 
 		/// Sends the Message of the Day to the player
 		void SendMessageOfTheDay(const std::string &motd);
 
+		/// Notifies the player that the world node was left.
 		void OnWorldLeft(const std::shared_ptr<World> &world, auth::WorldLeftReason reason);
 
+		/// Responds to a character location request.
 		void CharacterLocationResponseNotification(bool succeeded, uint64 ackId, uint32 mapId, const Vector3 &position, const Radian &facing);
 
+		/// Handles an incoming group update from a world node.
 		PacketParseResult OnGroupUpdate(auth::IncomingPacket &packet);
 
+		/// Sends quest data updates to the client.
 		void NotifyQuestData(uint32 questId, const QuestStatusData &questData);
 
 	private:

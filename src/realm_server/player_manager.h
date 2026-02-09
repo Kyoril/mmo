@@ -42,13 +42,16 @@ namespace mmo
 		/// Adds a new player instance to the manager.
 		void AddPlayer(std::shared_ptr<Player> added);
 
+		/// Kicks a player by account id if connected.
 		void KickPlayerByAccountId(uint64 accountId);
 
 		/// Gets a player by his account name.
 		Player *GetPlayerByAccountName(const String &accountName);
 
+		/// Gets a player by character guid.
 		Player* GetPlayerByCharacterGuid(uint64 characterGuid);
 
+		/// Gets a player by character name.
 		Player* GetPlayerByCharacterName(const String& characterName);
 
 		/// Gets the current Message of the Day from the MOTD manager.

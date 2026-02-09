@@ -14,7 +14,7 @@ namespace mmo
 {
 	class Realm;
 
-	/// Manages all connected players.
+	/// Manages all connected realms.
 	class RealmManager final : public NonCopyable
 	{
 	public:
@@ -23,29 +23,30 @@ namespace mmo
 
 	public:
 
-		/// Initializes a new instance of the player manager class.
-		/// @param playerCapacity The maximum number of connections that can be connected at the same time.
+		/// Initializes a new instance of the realm manager class.
+		/// @param playerCapacity The maximum number of realms that can be connected at the same time.
 		explicit RealmManager(
 		    size_t playerCapacity
 		);
 		~RealmManager();
 
-		/// Notifies the manager that a player has been disconnected which will
-		/// delete the player instance.
+		/// Notifies the manager that a realm has been disconnected which will
+		/// delete the realm instance.
 		void RealmDisconnected(Realm &realm);
 
-		/// Determines whether the player capacity limit has been reached.
+		/// Determines whether the realm capacity limit has been reached.
 		bool HasCapacityBeenReached();
 
-		/// Adds a new player instance to the manager.
+		/// Adds a new realm instance to the manager.
 		void AddRealm(std::shared_ptr<Realm> added);
 
 		/// Gets a realm by it's name.
 		Realm *GetRealmByName(const String &realmName);
 
-		/// 
+		/// Gets a realm by id.
 		Realm *GetRealmByID(uint32 id);
 
+		/// Notifies all realms that an account has been banned.
 		void NotifyAccountBanned(uint64 accountId);
 
 		/// Executes a function callback for each realm.

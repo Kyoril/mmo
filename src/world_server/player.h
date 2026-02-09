@@ -38,6 +38,7 @@ namespace mmo
 	class Player final : public TileSubscriber, public NetUnitWatcherS, public NetPlayerWatcher, public std::enable_shared_from_this<Player>
 	{
 	public:
+		/// Creates a player connection proxy for a world node.
 		explicit Player(PlayerManager& manager, RealmConnector& realmConnector, std::shared_ptr<GamePlayerS> characterObject,
 		                CharacterData characterData, const proto::Project& project, WorldInstance& instance, ConditionMgr& conditionMgr);
 		~Player() override;
@@ -63,6 +64,7 @@ namespace mmo
 		/// @copydoc TileSubscriber::GetGameUnit
 		GameUnitS& GetGameUnit() const override { return *m_character; }
 
+		/// Notifies the client about updated objects.
 		void NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects) override;
 
 		/// @copydoc TileSubscriber::NotifyObjectsSpawned
@@ -74,22 +76,31 @@ namespace mmo
 		/// @copydoc TileSubscriber::SendPacket
 		void SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer, bool flush = true) override;
 
+		/// Handles a proxy packet received from the realm server.
 		void HandleProxyPacket(game::client_realm_packet::Type opCode, std::vector<uint8>& buffer);
 
+		/// Sends a local chat message to the client.
 		void LocalChatMessage(ChatType type, const std::string& message);
 
+		/// Persists current character data to the database.
 		void SaveCharacterData() const;
 
+		/// Opens the loot dialog for a loot instance.
 		void OpenLootDialog(std::shared_ptr<LootInstance> lootInstance, std::shared_ptr<GameObjectS> source);
 
+		/// Closes the currently open loot dialog.
 		void CloseLootDialog();
 
+		/// Returns true if the player is currently looting.
 		bool IsLooting() const;
 
+		/// Notifies the client that an item was created in a slot.
 		void OnItemCreated(std::shared_ptr<GameItemS> item, uint16 slot);
 
+		/// Notifies the client that an item was updated in a slot.
 		void OnItemUpdated(std::shared_ptr<GameItemS> item, uint16 slot);
 
+		/// Notifies the client that an item was destroyed in a slot.
 		void OnItemDestroyed(std::shared_ptr<GameItemS> item, uint16 slot);
 		
 		/// @brief Sends the current game time information to the client.
@@ -99,11 +110,14 @@ namespace mmo
 		/// @param error The inventory error code to send.
 		void SendInventoryError(InventoryChangeFailure error) const;
 
+		/// Sends a group update to the realm server for this character.
 		void UpdateCharacterGroup(uint64 groupId);
 
+		/// Sends a guild update to the realm server for this character.
 		void UpdateCharacterGuild(uint64 guildId);
 
 	public:
+		/// Gets the current tile index for the character.
 		TileIndex2D GetTileIndex() const;
 
 	private:

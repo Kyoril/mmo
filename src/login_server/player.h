@@ -40,6 +40,7 @@ namespace mmo
 			std::shared_ptr<Client> connection,
 			const std::string &address);
 
+		/// Disconnects the player if still connected.
 		void Kick();
 
 		/// Gets the player connection class used to send packets to the client.
@@ -51,7 +52,7 @@ namespace mmo
 		inline bool IsAuthenticated() const { return false;/* (getSession() != nullptr);*/ }
 		/// Gets the account name the player is logged in with.
 		inline const std::string &GetAccountName() const { return m_accountName; }
-		/// 
+		/// Gets the account id the player is logged in with.
 		inline uint64 GetAccountId() const { return m_accountId; }
 		/// Returns the client locale.
 		inline const auth::AuthLocale &getLocale() const { return m_locale; }

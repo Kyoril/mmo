@@ -65,18 +65,22 @@ namespace mmo
 		void NotifyInstanceDestroyed(InstanceId instanceId);
 
 		/// @brief Sends a proxy packet directly to the client with the given character guid.
-		/// @param characterGuid 
-		/// @param packetId 
-		/// @param packetSize 
-		/// @param packetContent 
+		/// @param characterGuid The guid of the character to send to.
+		/// @param packetId The packet opcode.
+		/// @param packetSize The packet payload size in bytes.
+		/// @param packetContent The packet payload buffer.
 		void SendProxyPacket(uint64 characterGuid, uint16 packetId, uint32 packetSize, const std::vector<char>& packetContent, bool flush = true);
 
+		/// Sends character data to the realm server for proxying to the client.
 		void SendCharacterData(uint32 mapId, const InstanceId& instanceId, uint32 timePlayed, const GamePlayerS& character);
 
+		/// Sends quest data updates to the realm server.
 		void SendQuestData(uint64 characterGuid, uint32 questId, const QuestStatusData& questData);
 
+		/// Sends a teleport request to the realm server.
 		void SendTeleportRequest(uint64 characterGuid, uint32 mapId, const Vector3& position, const Radian& facing);
 
+		/// Notifies the realm server that a character left the world instance.
 		void NotifyWorldInstanceLeft(uint64 characterGuid, auth::WorldLeftReason reason);
 
 		/// Sends a group update to the realm.

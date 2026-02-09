@@ -57,12 +57,18 @@ namespace mmo
 		/// Password of the world node at the realm server.
 		String realmServerPassword;
 
+		/// Root data folder used by the world server.
 		String dataFolder;
+		/// Root map data folder used by the world server.
 		String mapFolder;
+		/// Whether to watch the data folders for changes.
 		bool watchDataForChanges;
 
+		/// Creates a configuration instance with default values.
 		explicit Configuration();
+		/// Loads configuration values from the given file.
 		bool load(const String &fileName);
+		/// Saves configuration values to the given file.
 		bool save(const String &fileName);
 	};
 }

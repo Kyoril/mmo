@@ -25,6 +25,9 @@ namespace mmo
 		/// @param player The player to remove from the player manager.
 		void RemovePlayer(const PlayerPtr& player);
 
+		/// @brief Gets a player by character guid.
+		/// @param guid Character guid to look up.
+		/// @return Shared pointer to the player if found, otherwise nullptr.
 		PlayerPtr GetPlayerByCharacterGuid(ObjectGuid guid) const;
 
 	private:
