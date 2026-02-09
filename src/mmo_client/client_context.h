@@ -1,13 +1,20 @@
 #pragma once
 
+#include "base/signal.h"
+#include "frame_ui/localization.h"
+
+#include <fstream>
 #include <memory>
 
 #include <asio/io_service.hpp>
 
 namespace mmo
 {
-	class LoginConnector;
-	class RealmConnector;
+	namespace proto_client
+	{
+		class Project;
+	}
+
 	class GameScript;
 	class Minimap;
 	class TimerQueue;
@@ -28,6 +35,8 @@ namespace mmo
 	class CharSelect;
 	class TalentClient;
 	class Discord;
+	class GameTimeComponent;
+	class ClientRuntime;
 
 	struct ClientContext
 	{
@@ -37,10 +46,15 @@ namespace mmo
 		ClientContext(const ClientContext&) = delete;
 		ClientContext& operator=(const ClientContext&) = delete;
 
-		std::unique_ptr<asio::io_service> networkIo;
-		std::unique_ptr<asio::io_service::work> networkWork;
-		std::shared_ptr<LoginConnector> loginConnector;
-		std::shared_ptr<RealmConnector> realmConnector;
+		std::unique_ptr<ClientRuntime> runtime;
+		asio::io_service timerService;
+
+		scoped_connection_container frameUiConnections;
+		Localization localization;
+
+		std::ofstream logFile;
+		scoped_connection logConnection;
+		scoped_connection timerConnection;
 
 		std::unique_ptr<GameScript> gameScript;
 		std::unique_ptr<Minimap> minimap;
@@ -63,6 +77,8 @@ namespace mmo
 		std::unique_ptr<CharSelect> charSelect;
 		std::unique_ptr<TalentClient> talentClient;
 		std::unique_ptr<Discord> discord;
+		std::unique_ptr<proto_client::Project> project;
+		std::unique_ptr<GameTimeComponent> gameTime;
 	};
 
 	ClientContext& GetClientContext();

@@ -70,6 +70,7 @@
 #include "game_client/object_mgr.h"
 #include "ui/unit_model_frame.h"
 #include "client_context.h"
+#include "client_runtime.h"
 
 #include "luabind/luabind.hpp"
 #include "luabind/iterator_policy.hpp"
@@ -82,11 +83,9 @@
 
 namespace mmo
 {
-	static asio::io_service s_timerService;
-
 	void DispatchOnGameThread(std::function<void()> &&f)
 	{
-		s_timerService.post(std::move(f));
+		GetClientContext().timerService.post(std::move(f));
 	}
 }
 
@@ -97,13 +96,12 @@ namespace mmo
 	void NetWorkProc()
 	{
 		auto& context = GetClientContext();
-		if (!context.networkIo)
+		if (!context.runtime)
 		{
 			return;
 		}
 
-		// Run the network thread
-		context.networkIo->poll_one();
+		context.runtime->PollNetwork();
 	}
 
 	/// Initializes the login connector and starts one or multiple network
@@ -112,14 +110,8 @@ namespace mmo
 	void NetInit()
 	{
 		auto& context = GetClientContext();
-		context.networkIo = std::make_unique<asio::io_service>();
-
-		// Keep the worker busy until this object is destroyed
-		context.networkWork = std::make_unique<asio::io_service::work>(*context.networkIo);
-
-		// Create the login connector instance
-		context.loginConnector = std::make_shared<LoginConnector>(*context.networkIo);
-		context.realmConnector = std::make_shared<RealmConnector>(*context.networkIo);
+		context.runtime = std::make_unique<ClientRuntime>();
+		context.runtime->Initialize();
 	}
 
 	/// Destroy the login connector, cuts all opened connections and waits
@@ -128,33 +120,13 @@ namespace mmo
 	void NetDestroy()
 	{
 		auto& context = GetClientContext();
-
-		// Close the realm connector
-		if (context.realmConnector)
+		if (!context.runtime)
 		{
-			context.realmConnector->resetListener();
-			context.realmConnector->close();
+			return;
 		}
 
-		// Close the login connector
-		if (context.loginConnector)
-		{
-			context.loginConnector->resetListener();
-			context.loginConnector->close();
-		}
-
-		// Destroy the work object that keeps the worker busy so that
-		// it can actually exit
-		context.networkWork.reset();
-		if (context.networkIo)
-		{
-			context.networkIo->stop();
-			context.networkIo->reset();
-		}
-
-		context.realmConnector.reset();
-		context.loginConnector.reset();
-		context.networkIo.reset();
+		context.runtime->Shutdown();
+		context.runtime.reset();
 	}
 }
 
@@ -163,9 +135,6 @@ namespace mmo
 
 namespace mmo
 {
-	static scoped_connection_container s_frameUiConnections;
-	static Localization s_localization;
-
 	extern Cursor g_cursor;
 
 	/// Initializes everything related to FrameUI.
@@ -175,17 +144,17 @@ namespace mmo
 
 		if (const auto window = GraphicsDevice::Get().GetAutoCreatedWindow())
 		{
-			s_frameUiConnections += window->Resized.connect([](uint16 width, uint16 height)
+			context.frameUiConnections += window->Resized.connect([](uint16 width, uint16 height)
 															{ FrameManager::Get().NotifyScreenSizeChanged(width, height); });
 		}
 
-		if (!s_localization.LoadFromFile())
+		if (!context.localization.LoadFromFile())
 		{
 			ELOG("Failed to initialize localization!");
 		}
 
 		// Initialize the frame manager
-		FrameManager::Initialize(&context.gameScript->GetLuaState(), s_localization);
+		FrameManager::Initialize(&context.gameScript->GetLuaState(), context.localization);
 
 		// Register model renderer
 		FrameManager::Get().RegisterFrameRenderer("ModelRenderer", [](const std::string &name)
@@ -210,32 +179,32 @@ namespace mmo
 		g_cursor.SetCursorType(CursorType::Pointer);
 
 		// Connect idle event
-		s_frameUiConnections += EventLoop::Idle.connect([](float deltaSeconds, GameTime timestamp)
+		context.frameUiConnections += EventLoop::Idle.connect([](float deltaSeconds, GameTime timestamp)
 														{ FrameManager::Get().Update(deltaSeconds); });
 
 		// Watch for mouse events
-		s_frameUiConnections += EventLoop::MouseMove.connect([](int32 x, int32 y)
+		context.frameUiConnections += EventLoop::MouseMove.connect([](int32 x, int32 y)
 															 {
 			FrameManager::Get().NotifyMouseMoved(Point(x, y));
 			return false; });
-		s_frameUiConnections += EventLoop::MouseDown.connect([](EMouseButton button, int32 x, int32 y)
+		context.frameUiConnections += EventLoop::MouseDown.connect([](EMouseButton button, int32 x, int32 y)
 															 {
 			// Returns true if the UI consumed the event, preventing further processing
 			return FrameManager::Get().NotifyMouseDown(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y)); });
-		s_frameUiConnections += EventLoop::MouseUp.connect([](EMouseButton button, int32 x, int32 y)
+		context.frameUiConnections += EventLoop::MouseUp.connect([](EMouseButton button, int32 x, int32 y)
 														   {
 			// Returns true if the UI consumed the event, preventing further processing
 			return FrameManager::Get().NotifyMouseUp(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y)); });
 
-		s_frameUiConnections += EventLoop::KeyDown.connect([](int32 key, bool)
+		context.frameUiConnections += EventLoop::KeyDown.connect([](int32 key, bool)
 														   {
 			FrameManager::Get().NotifyKeyDown(key);
 			return true; });
-		s_frameUiConnections += EventLoop::KeyChar.connect([](uint16 codepoint)
+		context.frameUiConnections += EventLoop::KeyChar.connect([](uint16 codepoint)
 														   {
 			FrameManager::Get().NotifyKeyChar(codepoint);
 			return false; });
-		s_frameUiConnections += EventLoop::KeyUp.connect([](int32 key)
+		context.frameUiConnections += EventLoop::KeyUp.connect([](int32 key)
 														 {
 			FrameManager::Get().NotifyKeyUp(key);
 			return false; });
@@ -269,8 +238,10 @@ namespace mmo
 	/// Destroys everything related to FrameUI.
 	void DestroyFrameUI()
 	{
+		auto& context = GetClientContext();
+
 		// Disconnect FrameUI connections
-		s_frameUiConnections.disconnect();
+		context.frameUiConnections.disconnect();
 
 		// Unregister model renderer
 		FrameManager::Get().RemoveFrameRenderer("ModelRenderer");
@@ -288,20 +259,13 @@ namespace mmo
 
 namespace mmo
 {
-	static std::ofstream s_logFile;
-	static scoped_connection s_logConn;
-
-	static scoped_connection s_timerConnection;
-
-	static proto_client::Project s_project;
-
-	static GameTimeComponent s_gameTime;
-
 	/// Initializes the global game systems.
 	bool InitializeGlobal()
 	{
 		auto& context = GetClientContext();
-		context.timerQueue = std::make_unique<TimerQueue>(s_timerService);
+		context.project = std::make_unique<proto_client::Project>();
+		context.gameTime = std::make_unique<GameTimeComponent>();
+		context.timerQueue = std::make_unique<TimerQueue>(context.timerService);
 
 		// Receive the current working directory
 		std::error_code error;
@@ -317,13 +281,13 @@ namespace mmo
 		std::filesystem::create_directories(currentPath / "Config");
 
 		// Setup the log file connection after opening the log file
-		s_logFile.open((currentPath / "Logs" / "Client.log").string().c_str(), std::ios::out);
-		if (s_logFile)
+		context.logFile.open((currentPath / "Logs" / "Client.log").string().c_str(), std::ios::out);
+		if (context.logFile)
 		{
-			s_logConn = g_DefaultLog.signal().connect(
+			context.logConnection = g_DefaultLog.signal().connect(
 				[](const LogEntry &entry)
 				{
-					printLogEntry(s_logFile, entry, g_DefaultFileLogOptions);
+					printLogEntry(GetClientContext().logFile, entry, g_DefaultFileLogOptions);
 				});
 		}
 
@@ -344,22 +308,24 @@ namespace mmo
 		context.audio->Create();
 
 		// Run service
-		s_timerConnection = EventLoop::Idle.connect([&](float, const mmo::GameTime &)
+		context.timerConnection = EventLoop::Idle.connect([&](float, const mmo::GameTime &)
 													{
 				NetWorkProc();
-				s_timerService.poll_one(); });
+				GetClientContext().timerService.poll_one(); });
 
 		// Verify the connector instances have been initialized
-		ASSERT(context.loginConnector && context.realmConnector);
+		ASSERT(context.runtime && context.runtime->IsInitialized());
+		auto& loginConnector = context.runtime->GetLoginConnector();
+		auto& realmConnector = context.runtime->GetRealmConnector();
 
 		// Load game data
-		if (!s_project.load("ClientDB"))
+		if (!context.project->load("ClientDB"))
 		{
 			ELOG("Failed to load project files!");
 			return false;
 		}
 
-		context.clientCache = std::make_unique<ClientCache>(*context.realmConnector);
+		context.clientCache = std::make_unique<ClientCache>(realmConnector);
 		if (!context.clientCache->Load())
 		{
 			ELOG("Failed to load the client cache!");
@@ -372,36 +338,36 @@ namespace mmo
 		// Setup minimap
 		context.minimap = std::make_unique<Minimap>(256);
 
-		context.charCreateInfo = std::make_unique<CharCreateInfo>(s_project, *context.realmConnector);
-		context.charSelect = std::make_unique<CharSelect>(s_project, *context.realmConnector);
+		context.charCreateInfo = std::make_unique<CharCreateInfo>(*context.project, realmConnector);
+		context.charSelect = std::make_unique<CharSelect>(*context.project, realmConnector);
 
 		// Initialize loot client
-		context.lootClient = std::make_unique<LootClient>(*context.realmConnector, context.clientCache->GetItemCache());
-		context.vendorClient = std::make_unique<VendorClient>(*context.realmConnector, context.clientCache->GetItemCache());
-		context.trainerClient = std::make_unique<TrainerClient>(*context.realmConnector, s_project.spells);
-		context.inventoryClient = std::make_unique<InventoryClient>(*context.realmConnector);
-		context.questClient = std::make_unique<QuestClient>(*context.realmConnector, context.clientCache->GetQuestCache(), s_project.spells, context.clientCache->GetItemCache(), context.clientCache->GetCreatureCache(), s_localization);
-		context.partyInfo = std::make_unique<PartyInfo>(*context.realmConnector, context.clientCache->GetNameCache());
-		context.guildClient = std::make_unique<GuildClient>(*context.realmConnector, context.clientCache->GetGuildCache(), s_project.races, s_project.classes);
-		context.friendClient = std::make_unique<FriendClient>(*context.realmConnector, s_project.races, s_project.classes);
-		context.spellCast = std::make_unique<SpellCast>(*context.realmConnector, s_project.spells, s_project.ranges);
+		context.lootClient = std::make_unique<LootClient>(realmConnector, context.clientCache->GetItemCache());
+		context.vendorClient = std::make_unique<VendorClient>(realmConnector, context.clientCache->GetItemCache());
+		context.trainerClient = std::make_unique<TrainerClient>(realmConnector, context.project->spells);
+		context.inventoryClient = std::make_unique<InventoryClient>(realmConnector);
+		context.questClient = std::make_unique<QuestClient>(realmConnector, context.clientCache->GetQuestCache(), context.project->spells, context.clientCache->GetItemCache(), context.clientCache->GetCreatureCache(), context.localization);
+		context.partyInfo = std::make_unique<PartyInfo>(realmConnector, context.clientCache->GetNameCache());
+		context.guildClient = std::make_unique<GuildClient>(realmConnector, context.clientCache->GetGuildCache(), context.project->races, context.project->classes);
+		context.friendClient = std::make_unique<FriendClient>(realmConnector, context.project->races, context.project->classes);
+		context.spellCast = std::make_unique<SpellCast>(realmConnector, context.project->spells, context.project->ranges);
 		context.cooldownManager = std::make_unique<CooldownManager>();
-		context.actionBar = std::make_unique<ActionBar>(*context.realmConnector, s_project.spells, context.clientCache->GetItemCache(), *context.spellCast);
-		context.talentClient = std::make_unique<TalentClient>(s_project.talentTabs, s_project.talents, s_project.spells, *context.realmConnector);
+		context.actionBar = std::make_unique<ActionBar>(realmConnector, context.project->spells, context.clientCache->GetItemCache(), *context.spellCast);
+		context.talentClient = std::make_unique<TalentClient>(context.project->talentTabs, context.project->talents, context.project->spells, realmConnector);
 
 		GameStateMgr &gameStateMgr = GameStateMgr::Get();
 
 		// Register game states
-		const auto loginState = std::make_shared<LoginState>(gameStateMgr, *context.loginConnector, *context.realmConnector, *context.timerQueue, *context.audio, *context.discord);
+		const auto loginState = std::make_shared<LoginState>(gameStateMgr, loginConnector, realmConnector, *context.timerQueue, *context.audio, *context.discord);
 		gameStateMgr.AddGameState(loginState);
 
-		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *context.realmConnector, s_project, *context.timerQueue, *context.lootClient, *context.vendorClient,
-															 *context.actionBar, *context.spellCast, *context.cooldownManager, *context.trainerClient, *context.questClient, *context.audio, *context.partyInfo, *context.charSelect, *context.guildClient, *context.friendClient, *context.clientCache, *context.discord, s_gameTime, *context.talentClient,
+		const auto worldState = std::make_shared<WorldState>(gameStateMgr, realmConnector, *context.project, *context.timerQueue, *context.lootClient, *context.vendorClient,
+															 *context.actionBar, *context.spellCast, *context.cooldownManager, *context.trainerClient, *context.questClient, *context.audio, *context.partyInfo, *context.charSelect, *context.guildClient, *context.friendClient, *context.clientCache, *context.discord, *context.gameTime, *context.talentClient,
 															 *context.minimap, *context.inventoryClient);
 		gameStateMgr.AddGameState(worldState);
 
 		// Initialize the game script instance
-		context.gameScript = std::make_unique<GameScript>(*context.loginConnector, *context.realmConnector, *context.lootClient, *context.vendorClient, loginState, s_project, *context.actionBar, *context.spellCast, *context.cooldownManager, *context.trainerClient, *context.questClient, *context.audio, *context.partyInfo, *context.charCreateInfo, *context.charSelect, *context.guildClient, *context.friendClient, s_gameTime, *context.talentClient);
+		context.gameScript = std::make_unique<GameScript>(loginConnector, realmConnector, *context.lootClient, *context.vendorClient, loginState, *context.project, *context.actionBar, *context.spellCast, *context.cooldownManager, *context.trainerClient, *context.questClient, *context.audio, *context.partyInfo, *context.charCreateInfo, *context.charSelect, *context.guildClient, *context.friendClient, *context.gameTime, *context.talentClient);
 		context.minimap->RegisterScriptFunctions(&context.gameScript->GetLuaState());
 
 		// Setup FrameUI library
@@ -432,7 +398,7 @@ namespace mmo
 	{
 		auto& context = GetClientContext();
 		context.minimap.reset();
-		s_timerConnection.disconnect();
+		context.timerConnection.disconnect();
 
 		// Remove all registered game states and also leave the current game state.
 		GameStateMgr::Get().RemoveAllGameStates();
@@ -470,6 +436,22 @@ namespace mmo
 		ASSERT(context.clientCache);
 		context.clientCache->Save();
 
+		context.talentClient.reset();
+		context.actionBar.reset();
+		context.spellCast.reset();
+		context.cooldownManager.reset();
+		context.questClient.reset();
+		context.partyInfo.reset();
+		context.guildClient.reset();
+		context.friendClient.reset();
+		context.charCreateInfo.reset();
+		context.charSelect.reset();
+		context.discord.reset();
+		context.clientCache.reset();
+		context.timerQueue.reset();
+		context.gameTime.reset();
+		context.project.reset();
+
 		context.audio.reset();
 
 		// Destroy the graphics device object
@@ -478,8 +460,10 @@ namespace mmo
 		AssetRegistry::Destroy();
 
 		// Destroy log
-		s_logConn.disconnect();
-		s_logFile.close();
+		context.logConnection.disconnect();
+		context.logFile.close();
+		context.timerService.stop();
+		context.timerService.reset();
 	}
 }
 
@@ -733,9 +717,9 @@ LONG WINAPI ExceptionFilterWin32(_In_ struct _EXCEPTION_POINTERS *ExceptionInfo)
 	}
 
 	// Flush log file first
-	if (mmo::s_logFile.is_open())
+	if (mmo::GetClientContext().logFile.is_open())
 	{
-		mmo::s_logFile.flush();
+		mmo::GetClientContext().logFile.flush();
 	}
 
 	// Call error sender executable

@@ -5,8 +5,7 @@
 #include "data/client_cache.h"
 #include "discord.h"
 #include "game_script.h"
-#include "net/login_connector.h"
-#include "net/realm_connector.h"
+#include "client_runtime.h"
 #include "systems/action_bar.h"
 #include "systems/cooldown_manager.h"
 #include "systems/friend_client.h"
@@ -22,6 +21,8 @@
 #include "ui/minimap.h"
 #include "base/timer_queue.h"
 #include "shared/audio/audio.h"
+#include "client_data/project.h"
+#include "game/game_time_component.h"
 
 namespace mmo
 {
