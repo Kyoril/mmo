@@ -6,6 +6,7 @@
 #include "discord.h"
 #include "game_script.h"
 #include "client_runtime.h"
+#include "client_ui_runtime.h"
 #include "systems/action_bar.h"
 #include "systems/cooldown_manager.h"
 #include "systems/friend_client.h"
@@ -26,8 +27,10 @@
 
 namespace mmo
 {
+	/// @copydoc ClientContext::~ClientContext
 	ClientContext::~ClientContext() = default;
 
+	/// @copydoc GetClientContext
 	ClientContext& GetClientContext()
 	{
 		static ClientContext context;

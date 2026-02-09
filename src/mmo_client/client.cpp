@@ -71,12 +71,7 @@
 #include "ui/unit_model_frame.h"
 #include "client_context.h"
 #include "client_runtime.h"
-
-#include "luabind/luabind.hpp"
-#include "luabind/iterator_policy.hpp"
-#include "luabind/out_value_policy.hpp"
-#include "ui/minimap_frame.h"
-#include "ui/cooldown_frame.h"
+#include "client_ui_runtime.h"
 
 ////////////////////////////////////////////////////////////////
 // Network handler
@@ -131,134 +126,12 @@ namespace mmo
 }
 
 ////////////////////////////////////////////////////////////////
-// FrameUI stuff
+// Initialization and destruction
 
 namespace mmo
 {
 	extern Cursor g_cursor;
 
-	/// Initializes everything related to FrameUI.
-	bool InitializeFrameUi()
-	{
-		auto& context = GetClientContext();
-
-		if (const auto window = GraphicsDevice::Get().GetAutoCreatedWindow())
-		{
-			context.frameUiConnections += window->Resized.connect([](uint16 width, uint16 height)
-															{ FrameManager::Get().NotifyScreenSizeChanged(width, height); });
-		}
-
-		if (!context.localization.LoadFromFile())
-		{
-			ELOG("Failed to initialize localization!");
-		}
-
-		// Initialize the frame manager
-		FrameManager::Initialize(&context.gameScript->GetLuaState(), context.localization);
-
-		// Register model renderer
-		FrameManager::Get().RegisterFrameRenderer("ModelRenderer", [](const std::string &name)
-												  { return std::make_unique<ModelRenderer>(name); });
-
-		// Register model frame type
-		FrameManager::Get().RegisterFrameFactory("Model", [](const std::string &name)
-												 { return std::make_shared<ModelFrame>(name); });
-		FrameManager::Get().RegisterFrameFactory("UnitModel", [](const std::string &name)
-												 { return std::make_shared<UnitModelFrame>(name); });
-		FrameManager::Get().RegisterFrameFactory("Minimap", [](const std::string &name)
-												 { return std::make_shared<MinimapFrame>(name, *GetClientContext().minimap); });
-		FrameManager::Get().RegisterFrameFactory("Cooldown", [](const std::string &name)
-												 { return std::make_shared<CooldownFrame>(name); });
-
-		// Setup cursor graphics
-		g_cursor.LoadCursorTypeFromTexture(CursorType::Pointer, "Interface/Cursor/pointer001.htex");
-		g_cursor.LoadCursorTypeFromTexture(CursorType::Interact, "Interface/Cursor/gears001.htex");
-		g_cursor.LoadCursorTypeFromTexture(CursorType::Attack, "Interface/Cursor/sword001.htex");
-		g_cursor.LoadCursorTypeFromTexture(CursorType::Loot, "Interface/Cursor/bag001.htex");
-		g_cursor.LoadCursorTypeFromTexture(CursorType::Gossip, "Interface/Cursor/talk001.htex");
-		g_cursor.SetCursorType(CursorType::Pointer);
-
-		// Connect idle event
-		context.frameUiConnections += EventLoop::Idle.connect([](float deltaSeconds, GameTime timestamp)
-														{ FrameManager::Get().Update(deltaSeconds); });
-
-		// Watch for mouse events
-		context.frameUiConnections += EventLoop::MouseMove.connect([](int32 x, int32 y)
-															 {
-			FrameManager::Get().NotifyMouseMoved(Point(x, y));
-			return false; });
-		context.frameUiConnections += EventLoop::MouseDown.connect([](EMouseButton button, int32 x, int32 y)
-															 {
-			// Returns true if the UI consumed the event, preventing further processing
-			return FrameManager::Get().NotifyMouseDown(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y)); });
-		context.frameUiConnections += EventLoop::MouseUp.connect([](EMouseButton button, int32 x, int32 y)
-														   {
-			// Returns true if the UI consumed the event, preventing further processing
-			return FrameManager::Get().NotifyMouseUp(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y)); });
-
-		context.frameUiConnections += EventLoop::KeyDown.connect([](int32 key, bool)
-														   {
-			FrameManager::Get().NotifyKeyDown(key);
-			return true; });
-		context.frameUiConnections += EventLoop::KeyChar.connect([](uint16 codepoint)
-														   {
-			FrameManager::Get().NotifyKeyChar(codepoint);
-			return false; });
-		context.frameUiConnections += EventLoop::KeyUp.connect([](int32 key)
-														 {
-			FrameManager::Get().NotifyKeyUp(key);
-			return false; });
-
-		// Expose model frame methods to lua
-
-		LUABIND_MODULE(&context.gameScript->GetLuaState(),
-					   luabind::scope(
-						   luabind::class_<ModelFrame, Frame>("ModelFrame")
-							   .def("SetModelFile", &ModelFrame::SetModelFile)
-							   .def("Yaw", &ModelFrame::Yaw)
-							   .def("SetZoom", &ModelFrame::SetZoom)
-							   .def("GetZoom", &ModelFrame::GetZoom)
-							   .def("GetYaw", &ModelFrame::GetYaw)
-							   .def("ResetYaw", &ModelFrame::ResetYaw)
-							   .def("InvalidateModel", &ModelFrame::InvalidateModel)
-							   .def("SetAutoRender", &ModelFrame::SetAutoRender)),
-
-					   luabind::scope(
-						   luabind::class_<UnitModelFrame, ModelFrame>("UnitModelFrame")
-							   .def("SetUnit", &UnitModelFrame::SetUnit)),
-
-					   luabind::scope(
-						   luabind::class_<CooldownFrame, Frame>("CooldownFrame")
-							   .def("SetProgress", &CooldownFrame::SetProgress)
-							   .def("GetProgress", &CooldownFrame::GetProgress)));
-
-		return true;
-	}
-
-	/// Destroys everything related to FrameUI.
-	void DestroyFrameUI()
-	{
-		auto& context = GetClientContext();
-
-		// Disconnect FrameUI connections
-		context.frameUiConnections.disconnect();
-
-		// Unregister model renderer
-		FrameManager::Get().RemoveFrameRenderer("ModelRenderer");
-		FrameManager::Get().UnregisterFrameFactory("Model");
-		FrameManager::Get().UnregisterFrameFactory("UnitModel");
-		FrameManager::Get().UnregisterFrameFactory("Cooldown");
-
-		// Destroy the frame manager
-		FrameManager::Destroy();
-	}
-}
-
-////////////////////////////////////////////////////////////////
-// Initialization and destruction
-
-namespace mmo
-{
 	/// Initializes the global game systems.
 	bool InitializeGlobal()
 	{
@@ -266,6 +139,7 @@ namespace mmo
 		context.project = std::make_unique<proto_client::Project>();
 		context.gameTime = std::make_unique<GameTimeComponent>();
 		context.timerQueue = std::make_unique<TimerQueue>(context.timerService);
+		context.uiRuntime = std::make_unique<ClientUiRuntime>();
 
 		// Receive the current working directory
 		std::error_code error;
@@ -346,7 +220,8 @@ namespace mmo
 		context.vendorClient = std::make_unique<VendorClient>(realmConnector, context.clientCache->GetItemCache());
 		context.trainerClient = std::make_unique<TrainerClient>(realmConnector, context.project->spells);
 		context.inventoryClient = std::make_unique<InventoryClient>(realmConnector);
-		context.questClient = std::make_unique<QuestClient>(realmConnector, context.clientCache->GetQuestCache(), context.project->spells, context.clientCache->GetItemCache(), context.clientCache->GetCreatureCache(), context.localization);
+		context.uiRuntime->LoadLocalization();
+		context.questClient = std::make_unique<QuestClient>(realmConnector, context.clientCache->GetQuestCache(), context.project->spells, context.clientCache->GetItemCache(), context.clientCache->GetCreatureCache(), context.uiRuntime->GetLocalization());
 		context.partyInfo = std::make_unique<PartyInfo>(realmConnector, context.clientCache->GetNameCache());
 		context.guildClient = std::make_unique<GuildClient>(realmConnector, context.clientCache->GetGuildCache(), context.project->races, context.project->classes);
 		context.friendClient = std::make_unique<FriendClient>(realmConnector, context.project->races, context.project->classes);
@@ -370,8 +245,8 @@ namespace mmo
 		context.gameScript = std::make_unique<GameScript>(loginConnector, realmConnector, *context.lootClient, *context.vendorClient, loginState, *context.project, *context.actionBar, *context.spellCast, *context.cooldownManager, *context.trainerClient, *context.questClient, *context.audio, *context.partyInfo, *context.charCreateInfo, *context.charSelect, *context.guildClient, *context.friendClient, *context.gameTime, *context.talentClient);
 		context.minimap->RegisterScriptFunctions(&context.gameScript->GetLuaState());
 
-		// Setup FrameUI library
-		if (!InitializeFrameUi())
+		// Setup FrameUI runtime
+		if (!context.uiRuntime->Initialize(*context.gameScript, *context.minimap, g_cursor))
 		{
 			return false;
 		}
@@ -397,7 +272,6 @@ namespace mmo
 	void DestroyGlobal()
 	{
 		auto& context = GetClientContext();
-		context.minimap.reset();
 		context.timerConnection.disconnect();
 
 		// Remove all registered game states and also leave the current game state.
@@ -425,10 +299,14 @@ namespace mmo
 		context.trainerClient.reset();
 		context.inventoryClient.reset();
 
-		DestroyFrameUI();
+		if (context.uiRuntime)
+		{
+			context.uiRuntime->Shutdown();
+		}
 
 		// Reset game script instance
 		context.gameScript.reset();
+		context.minimap.reset();
 
 		// Destroy the network thread
 		NetDestroy();
@@ -451,6 +329,7 @@ namespace mmo
 		context.timerQueue.reset();
 		context.gameTime.reset();
 		context.project.reset();
+		context.uiRuntime.reset();
 
 		context.audio.reset();
 
