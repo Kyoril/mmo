@@ -14,6 +14,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <unordered_set>
 
 extern "C"
 {
@@ -139,6 +140,9 @@ namespace mmo
 		/// Notifies the FrameManager that a key has been released.
 		void NotifyKeyUp(Key key);
 
+		/// Determines whether a key is currently pressed.
+		bool IsKeyDown(Key key) const;
+
 		void NotifyScreenSizeChanged(float width, float height);
 
 		/// Executes lua code.
@@ -241,5 +245,8 @@ namespace mmo
 		Size m_cursorIconSize{ 32.0f, 32.0f };
 
 		GeometryBuffer m_cursorIconBuffer;
+
+		/// Set of currently pressed keys to support modifier-aware controls.
+		std::unordered_set<Key> m_pressedKeys;
 	};
 }
