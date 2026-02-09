@@ -56,6 +56,45 @@ namespace mmo
 		}
 
 		auto& context = GetClientContext();
+		LoginConnector* loginConnector = nullptr;
+		RealmConnector* realmConnector = nullptr;
+
+		if (!InitializeCore(context) ||
+			!InitializeRuntimeServices(context, loginConnector, realmConnector) ||
+			!LoadProjectAndCache(context, *realmConnector))
+		{
+			return false;
+		}
+
+		InitializeGameplaySystems(context, *realmConnector);
+		InitializeStatesAndScripts(context, *loginConnector, *realmConnector);
+		if (!InitializeUiAndEnterState(context))
+		{
+			return false;
+		}
+
+		m_started = true;
+		return true;
+	}
+
+	/// @copydoc ClientApplication::Stop
+	void ClientApplication::Stop()
+	{
+		if (!m_started)
+		{
+			return;
+		}
+
+		auto& context = GetClientContext();
+		ShutdownSystems(context);
+		ResetContext(context);
+
+		m_started = false;
+	}
+
+	/// @copydoc ClientApplication::InitializeCore
+	bool ClientApplication::InitializeCore(ClientContext& context)
+	{
 		context.project = std::make_unique<proto_client::Project>();
 		context.gameTime = std::make_unique<GameTimeComponent>();
 		context.timerQueue = std::make_unique<TimerQueue>(context.timerService);
@@ -84,7 +123,12 @@ namespace mmo
 
 		EventLoop::Initialize();
 		Console::Initialize("Config/Config.cfg");
+		return true;
+	}
 
+	/// @copydoc ClientApplication::InitializeRuntimeServices
+	bool ClientApplication::InitializeRuntimeServices(ClientContext& context, LoginConnector*& outLoginConnector, RealmConnector*& outRealmConnector)
+	{
 		context.runtime = std::make_unique<ClientRuntime>();
 		context.runtime->Initialize();
 
@@ -111,9 +155,14 @@ namespace mmo
 			return false;
 		}
 
-		auto& loginConnector = context.runtime->GetLoginConnector();
-		auto& realmConnector = context.runtime->GetRealmConnector();
+		outLoginConnector = &context.runtime->GetLoginConnector();
+		outRealmConnector = &context.runtime->GetRealmConnector();
+		return true;
+	}
 
+	/// @copydoc ClientApplication::LoadProjectAndCache
+	bool ClientApplication::LoadProjectAndCache(ClientContext& context, RealmConnector& realmConnector)
+	{
 		if (!context.project->load("ClientDB"))
 		{
 			ELOG("Failed to load project files!");
@@ -127,6 +176,12 @@ namespace mmo
 			return false;
 		}
 
+		return true;
+	}
+
+	/// @copydoc ClientApplication::InitializeGameplaySystems
+	void ClientApplication::InitializeGameplaySystems(ClientContext& context, RealmConnector& realmConnector)
+	{
 		context.discord = std::make_unique<Discord>();
 		context.discord->Initialize();
 		context.minimap = std::make_unique<Minimap>(256);
@@ -146,7 +201,11 @@ namespace mmo
 		context.cooldownManager = std::make_unique<CooldownManager>();
 		context.actionBar = std::make_unique<ActionBar>(realmConnector, context.project->spells, context.clientCache->GetItemCache(), *context.spellCast);
 		context.talentClient = std::make_unique<TalentClient>(context.project->talentTabs, context.project->talents, context.project->spells, realmConnector);
+	}
 
+	/// @copydoc ClientApplication::InitializeStatesAndScripts
+	void ClientApplication::InitializeStatesAndScripts(ClientContext& context, LoginConnector& loginConnector, RealmConnector& realmConnector)
+	{
 		GameStateMgr& gameStateMgr = GameStateMgr::Get();
 		const auto loginState = std::make_shared<LoginState>(gameStateMgr, loginConnector, realmConnector, *context.timerQueue, *context.audio, *context.discord);
 		gameStateMgr.AddGameState(loginState);
@@ -158,13 +217,17 @@ namespace mmo
 
 		context.gameScript = std::make_unique<GameScript>(loginConnector, realmConnector, *context.lootClient, *context.vendorClient, loginState, *context.project, *context.actionBar, *context.spellCast, *context.cooldownManager, *context.trainerClient, *context.questClient, *context.audio, *context.partyInfo, *context.charCreateInfo, *context.charSelect, *context.guildClient, *context.friendClient, *context.gameTime, *context.talentClient);
 		context.minimap->RegisterScriptFunctions(&context.gameScript->GetLuaState());
+	}
 
+	/// @copydoc ClientApplication::InitializeUiAndEnterState
+	bool ClientApplication::InitializeUiAndEnterState(ClientContext& context)
+	{
 		if (!context.uiRuntime->Initialize(*context.gameScript, *context.minimap, g_cursor))
 		{
 			return false;
 		}
 
-		gameStateMgr.SetGameState(LoginState::Name);
+		GameStateMgr::Get().SetGameState(LoginState::Name);
 		Console::ExecuteCommand("run Config/RunOnce.cfg");
 
 		const auto window = GraphicsDevice::Get().GetAutoCreatedWindow();
@@ -173,19 +236,12 @@ namespace mmo
 			FrameManager::Get().NotifyScreenSizeChanged(window->GetWidth(), window->GetHeight());
 		}
 
-		m_started = true;
 		return true;
 	}
 
-	/// @copydoc ClientApplication::Stop
-	void ClientApplication::Stop()
+	/// @copydoc ClientApplication::ShutdownSystems
+	void ClientApplication::ShutdownSystems(ClientContext& context)
 	{
-		if (!m_started)
-		{
-			return;
-		}
-
-		auto& context = GetClientContext();
 		context.timerConnection.disconnect();
 		GameStateMgr::Get().RemoveAllGameStates();
 
@@ -221,7 +277,11 @@ namespace mmo
 		{
 			context.clientCache->Save();
 		}
+	}
 
+	/// @copydoc ClientApplication::ResetContext
+	void ClientApplication::ResetContext(ClientContext& context)
+	{
 		context.talentClient.reset();
 		context.actionBar.reset();
 		context.spellCast.reset();
@@ -248,7 +308,5 @@ namespace mmo
 		context.logFile.close();
 		context.timerService.stop();
 		context.timerService.reset();
-
-		m_started = false;
 	}
 }

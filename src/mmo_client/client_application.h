@@ -4,6 +4,10 @@
 
 namespace mmo
 {
+	struct ClientContext;
+	class LoginConnector;
+	class RealmConnector;
+
 	/// @brief Orchestrates client startup and shutdown lifecycle.
 	///
 	/// This class encapsulates the previous global init/destroy flow and keeps
@@ -27,6 +31,48 @@ namespace mmo
 		bool IsStarted() const { return m_started; }
 
 	private:
+		/// @brief Initializes core services and foundational runtime objects.
+		/// @param context Shared client context.
+		/// @return True on success.
+		bool InitializeCore(ClientContext& context);
+
+		/// @brief Initializes network/audio runtime and validates connectors.
+		/// @param context Shared client context.
+		/// @param outLoginConnector Receives the initialized login connector reference.
+		/// @param outRealmConnector Receives the initialized realm connector reference.
+		/// @return True on success.
+		bool InitializeRuntimeServices(ClientContext& context, LoginConnector*& outLoginConnector, RealmConnector*& outRealmConnector);
+
+		/// @brief Loads project data and client cache.
+		/// @param context Shared client context.
+		/// @param realmConnector Initialized realm connector.
+		/// @return True on success.
+		bool LoadProjectAndCache(ClientContext& context, RealmConnector& realmConnector);
+
+		/// @brief Initializes gameplay-oriented client subsystems.
+		/// @param context Shared client context.
+		/// @param realmConnector Initialized realm connector.
+		void InitializeGameplaySystems(ClientContext& context, RealmConnector& realmConnector);
+
+		/// @brief Registers game states and script layer.
+		/// @param context Shared client context.
+		/// @param loginConnector Initialized login connector.
+		/// @param realmConnector Initialized realm connector.
+		void InitializeStatesAndScripts(ClientContext& context, LoginConnector& loginConnector, RealmConnector& realmConnector);
+
+		/// @brief Initializes frame-ui runtime and enters login state.
+		/// @param context Shared client context.
+		/// @return True on success.
+		bool InitializeUiAndEnterState(ClientContext& context);
+
+		/// @brief Shuts down gameplay and network systems gracefully.
+		/// @param context Shared client context.
+		void ShutdownSystems(ClientContext& context);
+
+		/// @brief Releases context-owned pointers and core services.
+		/// @param context Shared client context.
+		void ResetContext(ClientContext& context);
+
 		bool m_started = false;
 	};
 }
