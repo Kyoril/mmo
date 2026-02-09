@@ -33,6 +33,8 @@ namespace mmo
 		, m_delayedCast(false)
 		, m_itemGuid(itemGuid)
 	{
+		m_effectTargetsScratch.reserve(8);
+
 		// Check if the executor is in the world
 		auto& executor = m_cast.GetExecuter();
 		const auto* worldInstance = executor.GetWorldInstance();
@@ -150,7 +152,8 @@ namespace mmo
 			spell,
 			target,
 			castTime,
-			itemGuid);
+			itemGuid,
+			false);
 
 		return std::make_pair(spell_cast_result::CastOkay, &casting);
 	}
@@ -233,121 +236,66 @@ namespace mmo
 			return true;
 		}
 
-		// Caster level too low?
+		if (!ValidatePlayerRequirements())
+		{
+			return false;
+		}
+
+		if (!ValidateCasterRequirements())
+		{
+			return false;
+		}
+
+		return ValidateTargetRequirements(ResolveUnitTarget());
+	}
+
+	bool SingleCastState::ValidatePlayerRequirements()
+	{
+		if (!m_cast.GetExecuter().IsPlayer())
+		{
+			return true;
+		}
+
+		GamePlayerS& playerCaster = m_cast.GetExecuter().AsPlayer();
+		if (m_spell.racemask() != 0 && !(m_spell.racemask() & (1 << (playerCaster.GetRaceEntry()->id() - 1))))
+		{
+			SendEndCast(spell_cast_result::FailedError);
+			return false;
+		}
+
+		if (m_spell.classmask() != 0 && !(m_spell.classmask() & (1 << (playerCaster.GetClassEntry()->id() - 1))))
+		{
+			SendEndCast(spell_cast_result::FailedError);
+			return false;
+		}
+
+		for (const auto& reagent : m_spell.reagents())
+		{
+			if (playerCaster.GetInventory().GetItemCount(reagent.item()) < reagent.count())
+			{
+				WLOG("Not enough items in inventory!");
+				SendEndCast(spell_cast_result::FailedReagents);
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	bool SingleCastState::ValidateCasterRequirements()
+	{
 		if (m_spell.spelllevel() > 1 && static_cast<int32>(m_cast.GetExecuter().GetLevel()) < m_spell.spelllevel())
 		{
 			SendEndCast(spell_cast_result::FailedLevelRequirement);
 			return false;
 		}
 
-		// Check race requirement
-		if (m_cast.GetExecuter().IsPlayer())
-		{
-			GamePlayerS& playerCaster = m_cast.GetExecuter().AsPlayer();
-			if (m_spell.racemask() != 0 && !(m_spell.racemask() & (1 << (playerCaster.GetRaceEntry()->id() - 1))))
-			{
-				SendEndCast(spell_cast_result::FailedError);
-				return false;
-			}
-
-			// Check class requirement
-			if (m_spell.classmask() != 0 && !(m_spell.classmask() & (1 << (playerCaster.GetClassEntry()->id() - 1))))
-			{
-				SendEndCast(spell_cast_result::FailedError);
-				return false;
-			}
-
-			for (const auto& reagent : m_spell.reagents())
-			{
-				if (playerCaster.GetInventory().GetItemCount(reagent.item()) < reagent.count())
-				{
-					WLOG("Not enough items in inventory!");
-					SendEndCast(spell_cast_result::FailedReagents);
-					return false;
-				}
-			}
-		}
-
-		// Caster either has to be alive or spell has to be castable while dead
 		if (!m_cast.GetExecuter().IsAlive() && !HasAttributes(0, spell_attributes::CastableWhileDead))
 		{
 			SendEndCast(spell_cast_result::FailedCasterDead);
 			return false;
 		}
 
-		GameUnitS* unitTarget = ResolveUnitTarget();
-
-		if (unitTarget != nullptr)
-		{
-			if ((m_spell.facing() & spell_facing_flags::TargetInFront) != 0 && !m_cast.GetExecuter().IsFacingTowards(*unitTarget))
-			{
-				SendEndCast(spell_cast_result::FailedUnitNotInfront);
-				return false;
-			}
-
-			if ((m_spell.facing() & spell_facing_flags::BehindTarget) != 0 && !unitTarget->IsFacingAwayFrom(m_cast.GetExecuter()))
-			{
-				SendEndCast(spell_cast_result::FailedUnitNotBehind);
-				return false;
-			}
-		}
-
-		// If this is an item and targets a unit target, check if it's a potion
-		if ((unitTarget || m_target.GetTargetMap() == spell_cast_target_flags::Self) && m_itemGuid && m_cast.GetExecuter().IsPlayer())
-		{
-			GameUnitS* target = unitTarget ? unitTarget : &m_cast.GetExecuter();
-			ASSERT(target);
-
-			auto& player = m_cast.GetExecuter().AsPlayer();
-			auto& inv = player.GetInventory();
-
-			if (uint16 itemSlot; inv.FindItemByGUID(m_itemGuid, itemSlot))
-			{
-				const auto item = inv.GetItemAtSlot(itemSlot);
-				ASSERT(item);
-
-				if (SpellHasEffect(m_spell, spell_effects::Heal) && target->GetHealth() >= target->GetMaxHealth())
-				{
-					SendEndCast(spell_cast_result::FailedAlreadyAtFullHealth);
-					return false;
-				}
-
-				if (SpellHasEffect(m_spell, spell_effects::Energize) && target->GetPower() >= target->GetMaxPower())
-				{
-					SendEndCast(spell_cast_result::FailedAlreadyAtFullPower);
-					return false;
-				}
-			}
-
-		}
-
-		// Check if we are trying to cast a spell on a dead target which is not allowed
-		if (unitTarget && !unitTarget->IsAlive() && !HasAttributes(0, spell_attributes::CanTargetDead))
-		{
-			SendEndCast(spell_cast_result::FailedTargetNotDead);
-			return false;
-		}
-
-		if (unitTarget && m_spell.has_rangetype())
-		{
-			const proto::RangeType* rangeType = unitTarget->GetProject().ranges.getById(m_spell.rangetype());
-			if (rangeType && rangeType->range() > 0.0f)
-			{
-				float range = rangeType->range();
-
-				// Modify spell range by spell mods
-				m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Range, m_spell.id(), range);
-
-				// If distance is too big, cancel casting. Note we use squared distance check as distance involves sqrt which is more expansive
-				if (m_cast.GetExecuter().GetSquaredDistanceTo(unitTarget->GetPosition(), true) > range * range)
-				{
-					SendEndCast(spell_cast_result::FailedOutOfRange);
-					return false;
-				}
-			}
-		}
-
-		// If only castable on daytime, check the current time of day
 		if (HasAttributes(0, spell_attributes::DaytimeOnly) && !HasAttributes(0, spell_attributes::NightOnly))
 		{
 			// TODO
@@ -381,6 +329,75 @@ namespace mmo
 		{
 			SendEndCast(spell_cast_result::FailedAffectingCombat);
 			return false;
+		}
+
+		return true;
+	}
+
+	bool SingleCastState::ValidateTargetRequirements(GameUnitS* unitTarget)
+	{
+		if (unitTarget != nullptr)
+		{
+			if ((m_spell.facing() & spell_facing_flags::TargetInFront) != 0 && !m_cast.GetExecuter().IsFacingTowards(*unitTarget))
+			{
+				SendEndCast(spell_cast_result::FailedUnitNotInfront);
+				return false;
+			}
+
+			if ((m_spell.facing() & spell_facing_flags::BehindTarget) != 0 && !unitTarget->IsFacingAwayFrom(m_cast.GetExecuter()))
+			{
+				SendEndCast(spell_cast_result::FailedUnitNotBehind);
+				return false;
+			}
+		}
+
+		if ((unitTarget || m_target.GetTargetMap() == spell_cast_target_flags::Self) && m_itemGuid && m_cast.GetExecuter().IsPlayer())
+		{
+			GameUnitS* target = unitTarget ? unitTarget : &m_cast.GetExecuter();
+			ASSERT(target);
+
+			auto& player = m_cast.GetExecuter().AsPlayer();
+			auto& inv = player.GetInventory();
+
+			if (uint16 itemSlot; inv.FindItemByGUID(m_itemGuid, itemSlot))
+			{
+				const auto item = inv.GetItemAtSlot(itemSlot);
+				ASSERT(item);
+
+				if (SpellHasEffect(m_spell, spell_effects::Heal) && target->GetHealth() >= target->GetMaxHealth())
+				{
+					SendEndCast(spell_cast_result::FailedAlreadyAtFullHealth);
+					return false;
+				}
+
+				if (SpellHasEffect(m_spell, spell_effects::Energize) && target->GetPower() >= target->GetMaxPower())
+				{
+					SendEndCast(spell_cast_result::FailedAlreadyAtFullPower);
+					return false;
+				}
+			}
+		}
+
+		if (unitTarget && !unitTarget->IsAlive() && !HasAttributes(0, spell_attributes::CanTargetDead))
+		{
+			SendEndCast(spell_cast_result::FailedTargetNotDead);
+			return false;
+		}
+
+		if (unitTarget && m_spell.has_rangetype())
+		{
+			const proto::RangeType* rangeType = unitTarget->GetProject().ranges.getById(m_spell.rangetype());
+			if (rangeType && rangeType->range() > 0.0f)
+			{
+				float range = rangeType->range();
+				m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Range, m_spell.id(), range);
+
+				if (m_cast.GetExecuter().GetSquaredDistanceTo(unitTarget->GetPosition(), true) > range * range)
+				{
+					SendEndCast(spell_cast_result::FailedOutOfRange);
+					return false;
+				}
+			}
 		}
 
 		return true;
@@ -486,7 +503,7 @@ namespace mmo
 					{
 						if (delayed)
 						{
-							m_completedEffectsExecution[m_cast.GetExecuter().GetGuid()] = completedEffects.connect(removeItem);
+							m_completedEffectsExecution = completedEffects.connect(removeItem);
 						}
 						else
 						{
@@ -736,71 +753,17 @@ namespace mmo
 			ApplyCooldown(finalCD, m_spell.categorycooldown());
 		}
 
-		// Make sure that this isn't destroyed during the effects
-		auto strong = shared_from_this();
-
-		std::vector<uint32> effects;
-		for (int i = 0; i < m_spell.effects_size(); ++i)
-		{
-			effects.push_back(m_spell.effects(i).type());
-		}
-
 		m_canTrigger = true;
-
-		namespace se = spell_effects;
-
-		std::vector<std::pair<uint32, EffectHandler>> effectMap{
-			{se::Dummy,					std::bind(&SingleCastState::SpellEffectDummy, this, std::placeholders::_1) },
-			{se::InstantKill,				std::bind(&SingleCastState::SpellEffectInstantKill, this, std::placeholders::_1)},
-			{se::PowerDrain,				std::bind(&SingleCastState::SpellEffectDrainPower, this, std::placeholders::_1)},
-			{se::Heal,					std::bind(&SingleCastState::SpellEffectHeal, this, std::placeholders::_1)},
-			{se::Bind,					std::bind(&SingleCastState::SpellEffectBind, this, std::placeholders::_1)},
-			{se::QuestComplete,			std::bind(&SingleCastState::SpellEffectQuestComplete, this, std::placeholders::_1)},
-			{se::WeaponDamageNoSchool,	std::bind(&SingleCastState::SpellEffectWeaponDamageNoSchool, this, std::placeholders::_1)},
-			{se::CreateItem,				std::bind(&SingleCastState::SpellEffectCreateItem, this, std::placeholders::_1)},
-			{se::WeaponDamage,			std::bind(&SingleCastState::SpellEffectWeaponDamage, this, std::placeholders::_1)},
-			{se::TeleportUnits,			std::bind(&SingleCastState::SpellEffectTeleportUnits, this, std::placeholders::_1)},
-			{se::Energize,				std::bind(&SingleCastState::SpellEffectEnergize, this, std::placeholders::_1)},
-			{se::WeaponPercentDamage,		std::bind(&SingleCastState::SpellEffectWeaponPercentDamage, this, std::placeholders::_1)},
-			{se::OpenLock,				std::bind(&SingleCastState::SpellEffectOpenLock, this, std::placeholders::_1)},
-			{se::Dispel,					std::bind(&SingleCastState::SpellEffectDispel, this, std::placeholders::_1)},
-			{se::Summon,					std::bind(&SingleCastState::SpellEffectSummon, this, std::placeholders::_1)},
-			{se::SummonPet,				std::bind(&SingleCastState::SpellEffectSummonPet, this, std::placeholders::_1) },
-			{se::LearnSpell,				std::bind(&SingleCastState::SpellEffectLearnSpell, this, std::placeholders::_1) },
-			{se::Resurrect,				std::bind(&SingleCastState::SpellEffectResurrect, this, std::placeholders::_1) },
-			{se::ApplyAura,				std::bind(&SingleCastState::SpellEffectApplyAura, this, std::placeholders::_1)},
-			{se::ApplyAreaAura,			std::bind(&SingleCastState::SpellEffectApplyAura, this, std::placeholders::_1)},	// Area Auras are auras too, but have a special handling in the resulting aura container
-			{se::PersistentAreaAura,		std::bind(&SingleCastState::SpellEffectPersistentAreaAura, this, std::placeholders::_1) },
-			{se::SchoolDamage,			std::bind(&SingleCastState::SpellEffectSchoolDamage, this, std::placeholders::_1)},
-			{se::ResetAttributePoints,	std::bind(&SingleCastState::SpellEffectResetAttributePoints, this, std::placeholders::_1)},
-			{se::Parry,					std::bind(&SingleCastState::SpellEffectParry, this, std::placeholders::_1)},
-			{se::Block,					std::bind(&SingleCastState::SpellEffectBlock, this, std::placeholders::_1)},
-			{se::Dodge,					std::bind(&SingleCastState::SpellEffectDodge, this, std::placeholders::_1)},
-			{se::HealPct,					std::bind(&SingleCastState::SpellEffectHealPct, this, std::placeholders::_1)},
-			{se::AddExtraAttacks,			std::bind(&SingleCastState::SpellEffectAddExtraAttacks, this, std::placeholders::_1)},
-			{se::Charge,					std::bind(&SingleCastState::SpellEffectCharge, this, std::placeholders::_1)},
-			{se::InterruptSpellCast,		std::bind(&SingleCastState::SpellEffectInterruptSpellCast, this, std::placeholders::_1)},
-			{se::ResetTalents,			std::bind(&SingleCastState::SpellEffectResetTalents, this, std::placeholders::_1)},
-			{se::Proficiency,				std::bind(&SingleCastState::SpellEffectProficiency, this, std::placeholders::_1)}
-		};
 
 		// Make sure that the executer exists after all effects have been executed
 		auto strongCaster = std::static_pointer_cast<GameUnitS>(m_cast.GetExecuter().shared_from_this());
 
 		if (!m_delayedCast)
 		{
-			for (auto& effect : effectMap)
+			for (int index = 0; index < m_spell.effects_size(); ++index)
 			{
-				for (int k = 0; k < effects.size(); ++k)
-				{
-					if (effect.first == effects[k])
-					{
-						ASSERT(effect.second);
-						effect.second(m_spell.effects(k));
-					}
-				}
+				ApplyEffect(m_spell.effects(index));
 			}
-
 			m_delayedCast = true;
 		}
 		
@@ -827,18 +790,57 @@ namespace mmo
 
 		if (strongCaster->IsUnit())
 		{
-			for (const auto& target : m_affectedTargets)
+			for (const uint64 targetGuid : m_affectedTargetGuids)
 			{
-				auto strongTarget = target.lock();
-				if (strongTarget)
+				if (GameUnitS* targetUnit = m_cast.GetExecuter().GetWorldInstance()->FindByGuid<GameUnitS>(targetGuid))
 				{
-					if (strongTarget->IsUnit())
-					{
-						std::static_pointer_cast<GameUnitS>(strongTarget)->RaiseTrigger(
-							trigger_event::OnSpellHit, { m_spell.id() }, &m_cast.GetExecuter());
-					}
+					targetUnit->RaiseTrigger(trigger_event::OnSpellHit, { m_spell.id() }, &m_cast.GetExecuter());
 				}
 			}
+		}
+	}
+
+	void SingleCastState::ApplyEffect(const proto::SpellEffect& effect)
+	{
+		namespace se = spell_effects;
+		switch (effect.type())
+		{
+		case se::Dummy: SpellEffectDummy(effect); break;
+		case se::InstantKill: SpellEffectInstantKill(effect); break;
+		case se::PowerDrain: SpellEffectDrainPower(effect); break;
+		case se::Heal: SpellEffectHeal(effect); break;
+		case se::Bind: SpellEffectBind(effect); break;
+		case se::QuestComplete: SpellEffectQuestComplete(effect); break;
+		case se::WeaponDamageNoSchool: SpellEffectWeaponDamageNoSchool(effect); break;
+		case se::CreateItem: SpellEffectCreateItem(effect); break;
+		case se::WeaponDamage: SpellEffectWeaponDamage(effect); break;
+		case se::TeleportUnits: SpellEffectTeleportUnits(effect); break;
+		case se::Energize: SpellEffectEnergize(effect); break;
+		case se::WeaponPercentDamage: SpellEffectWeaponPercentDamage(effect); break;
+		case se::OpenLock: SpellEffectOpenLock(effect); break;
+		case se::Dispel: SpellEffectDispel(effect); break;
+		case se::Summon: SpellEffectSummon(effect); break;
+		case se::SummonPet: SpellEffectSummonPet(effect); break;
+		case se::LearnSpell: SpellEffectLearnSpell(effect); break;
+		case se::Resurrect: SpellEffectResurrect(effect); break;
+		case se::ApplyAura:
+		case se::ApplyAreaAura:
+			SpellEffectApplyAura(effect);
+			break;
+		case se::PersistentAreaAura: SpellEffectPersistentAreaAura(effect); break;
+		case se::SchoolDamage: SpellEffectSchoolDamage(effect); break;
+		case se::ResetAttributePoints: SpellEffectResetAttributePoints(effect); break;
+		case se::Parry: SpellEffectParry(effect); break;
+		case se::Block: SpellEffectBlock(effect); break;
+		case se::Dodge: SpellEffectDodge(effect); break;
+		case se::HealPct: SpellEffectHealPct(effect); break;
+		case se::AddExtraAttacks: SpellEffectAddExtraAttacks(effect); break;
+		case se::Charge: SpellEffectCharge(effect); break;
+		case se::InterruptSpellCast: SpellEffectInterruptSpellCast(effect); break;
+		case se::ResetTalents: SpellEffectResetTalents(effect); break;
+		case se::Proficiency: SpellEffectProficiency(effect); break;
+		default:
+			break;
 		}
 	}
 
@@ -918,7 +920,7 @@ namespace mmo
 
 	void SingleCastState::SpellEffectSchoolDamage(const proto::SpellEffect& effect)
 	{
-		std::vector<GameObjectS*> effectTargets;
+		auto& effectTargets = m_effectTargetsScratch;
 		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
 		{
 			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
@@ -963,7 +965,7 @@ namespace mmo
 
 	void SingleCastState::SpellEffectTeleportUnits(const proto::SpellEffect& effect)
 	{
-		std::vector<GameObjectS*> effectTargets;
+		auto& effectTargets = m_effectTargetsScratch;
 		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
 		{
 			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
@@ -1031,7 +1033,7 @@ namespace mmo
 		// So what we want to do in this ApplyAuraEffect is to create one AuraContainer for each target that is affected and add an aura to that container.
 		// After all effects have been processed, we then want to apply all created aura containers for their respective targets.
 
-		std::vector<GameObjectS*> effectTargets;
+		auto& effectTargets = m_effectTargetsScratch;
 		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
 		{
 			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
@@ -1051,7 +1053,7 @@ namespace mmo
 				continue;
 			}
 
-			m_affectedTargets.insert(targetObject->shared_from_this());
+			MarkAffectedTarget(*targetObject);
 			auto& unitTarget = targetObject->AsUnit();
 
 			// Threaten target on aura application if the target is not ourself
@@ -1075,7 +1077,7 @@ namespace mmo
 
 	void SingleCastState::SpellEffectHeal(const proto::SpellEffect& effect)
 	{
-		std::vector<GameObjectS*> effectTargets;
+		auto& effectTargets = m_effectTargetsScratch;
 		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
 		{
 			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
@@ -1089,7 +1091,7 @@ namespace mmo
 				continue;
 			}
 
-			m_affectedTargets.insert(targetObject->shared_from_this());
+			MarkAffectedTarget(*targetObject);
 			auto& unitTarget = targetObject->AsUnit();
 
 			// TODO: Do real calculation including crit chance, miss chance, resists, etc.
@@ -1159,7 +1161,7 @@ namespace mmo
 
 	void SingleCastState::SpellEffectBind(const proto::SpellEffect& effect)
 	{
-		std::vector<GameObjectS*> effectTargets;
+		auto& effectTargets = m_effectTargetsScratch;
 		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
 		{
 			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
@@ -1173,7 +1175,7 @@ namespace mmo
 				continue;
 			}
 
-			m_affectedTargets.insert(targetObject->shared_from_this());
+			MarkAffectedTarget(*targetObject);
 			auto& unitTarget = targetObject->AsUnit();
 			unitTarget.SetBinding(
 				unitTarget.GetWorldInstance()->GetMapId(),
@@ -1201,7 +1203,7 @@ namespace mmo
 			return;
 		}
 
-		std::vector<GameObjectS*> effectTargets;
+		auto& effectTargets = m_effectTargetsScratch;
 		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
 		{
 			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
@@ -1215,7 +1217,7 @@ namespace mmo
 				continue;
 			}
 
-			m_affectedTargets.insert(targetObject->shared_from_this());
+			MarkAffectedTarget(*targetObject);
 			auto& playerTarget = targetObject->AsPlayer();
 
 			const int32 itemCount = CalculateEffectBasePoints(effect);
@@ -1242,7 +1244,7 @@ namespace mmo
 			return;
 		}
 
-		std::vector<GameObjectS*> effectTargets;
+		auto& effectTargets = m_effectTargetsScratch;
 		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
 		{
 			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
@@ -1256,7 +1258,7 @@ namespace mmo
 				continue;
 			}
 
-			m_affectedTargets.insert(targetObject->shared_from_this());
+			MarkAffectedTarget(*targetObject);
 			auto& unitTarget = targetObject->AsUnit();
 			uint32 power = CalculateEffectBasePoints(effect);
 
@@ -1303,7 +1305,7 @@ namespace mmo
 			return;
 		}
 
-		std::vector<GameObjectS*> effectTargets;
+		auto& effectTargets = m_effectTargetsScratch;
 		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
 		{
 			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
@@ -1342,7 +1344,7 @@ namespace mmo
 
 	void SingleCastState::SpellEffectProficiency(const proto::SpellEffect& effect)
 	{
-		std::vector<GameObjectS*> effectTargets;
+		auto& effectTargets = m_effectTargetsScratch;
 		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
 		{
 			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
@@ -1364,7 +1366,7 @@ namespace mmo
 				continue;
 			}
 
-			m_affectedTargets.insert(targetObject->shared_from_this());
+			MarkAffectedTarget(*targetObject);
 			auto& unitTarget = targetObject->AsUnit();
 
 			// Add the proficiency by ID
@@ -1394,7 +1396,7 @@ namespace mmo
 
 	void SingleCastState::SpellEffectCharge(const proto::SpellEffect& effect)
 	{
-		std::vector<GameObjectS*> effectTargets;
+		auto& effectTargets = m_effectTargetsScratch;
 		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
 		{
 			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
@@ -1408,7 +1410,7 @@ namespace mmo
 				continue;
 			}
 
-			m_affectedTargets.insert(targetObject->shared_from_this());
+			MarkAffectedTarget(*targetObject);
 			auto& unitTarget = targetObject->AsUnit();
 
 			auto& mover = m_cast.GetExecuter().GetMover();
@@ -1435,7 +1437,7 @@ namespace mmo
 
 	void SingleCastState::SpellEffectInterruptSpellCast(const proto::SpellEffect& effect)
 	{
-		std::vector<GameObjectS*> effectTargets;
+		auto& effectTargets = m_effectTargetsScratch;
 		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
 		{
 			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
@@ -1471,7 +1473,7 @@ namespace mmo
 			return;
 		}
 
-		std::vector<GameObjectS*> effectTargets;
+		auto& effectTargets = m_effectTargetsScratch;
 		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
 		{
 			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
@@ -1485,7 +1487,7 @@ namespace mmo
 				continue;
 			}
 
-			m_affectedTargets.insert(targetObject->shared_from_this());
+			MarkAffectedTarget(*targetObject);
 			auto& unitTarget = targetObject->AsUnit();
 			unitTarget.AddSpell(spellId);
 		}
@@ -1528,7 +1530,7 @@ namespace mmo
 			return;
 		}
 
-		m_affectedTargets.insert(unitTarget->shared_from_this());
+		MarkAffectedTarget(*unitTarget);
 
 		if (const std::shared_ptr<GamePlayerS> playerTarget = std::dynamic_pointer_cast<GamePlayerS>(unitTarget))
 		{
@@ -1543,7 +1545,7 @@ namespace mmo
 
 	void SingleCastState::SpellEffectParry(const proto::SpellEffect& effect)
 	{
-		std::vector<GameObjectS*> effectTargets;
+		auto& effectTargets = m_effectTargetsScratch;
 		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
 		{
 			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
@@ -1557,7 +1559,7 @@ namespace mmo
 				continue;
 			}
 
-			m_affectedTargets.insert(targetObject->shared_from_this());
+			MarkAffectedTarget(*targetObject);
 			auto& unitTarget = targetObject->AsUnit();
 			unitTarget.NotifyCanParry(true);
 		}
@@ -1565,7 +1567,7 @@ namespace mmo
 
 	void SingleCastState::SpellEffectBlock(const proto::SpellEffect& effect)
 	{
-		std::vector<GameObjectS*> effectTargets;
+		auto& effectTargets = m_effectTargetsScratch;
 		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
 		{
 			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
@@ -1579,7 +1581,7 @@ namespace mmo
 				continue;
 			}
 
-			m_affectedTargets.insert(targetObject->shared_from_this());
+			MarkAffectedTarget(*targetObject);
 			auto& unitTarget = targetObject->AsUnit();
 			unitTarget.NotifyCanBlock(true);
 		}
@@ -1587,7 +1589,7 @@ namespace mmo
 
 	void SingleCastState::SpellEffectDodge(const proto::SpellEffect& effect)
 	{
-		std::vector<GameObjectS*> effectTargets;
+		auto& effectTargets = m_effectTargetsScratch;
 		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
 		{
 			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
@@ -1601,7 +1603,7 @@ namespace mmo
 				continue;
 			}
 
-			m_affectedTargets.insert(targetObject->shared_from_this());
+			MarkAffectedTarget(*targetObject);
 			auto& unitTarget = targetObject->AsUnit();
 			unitTarget.NotifyCanDodge(true);
 		}
@@ -1609,7 +1611,7 @@ namespace mmo
 
 	void SingleCastState::SpellEffectHealPct(const proto::SpellEffect& effect)
 	{
-		std::vector<GameObjectS*> effectTargets;
+		auto& effectTargets = m_effectTargetsScratch;
 		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
 		{
 			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
@@ -1623,7 +1625,7 @@ namespace mmo
 				continue;
 			}
 
-			m_affectedTargets.insert(targetObject->shared_from_this());
+			MarkAffectedTarget(*targetObject);
 			auto& unitTarget = targetObject->AsUnit();
 
 			// TODO: Do real calculation including crit chance, miss chance, resists, etc.
@@ -1654,14 +1656,14 @@ namespace mmo
 
 		for (int32 i = 0; i < numAttacks; ++i)
 		{
-			m_affectedTargets.insert(m_cast.GetExecuter().shared_from_this());
+			MarkAffectedTarget(m_cast.GetExecuter());
 			m_cast.GetExecuter().OnAttackSwing();
 		}
 	}
 
 	void SingleCastState::SpellEffectResetTalents(const proto::SpellEffect& effect)
 	{
-		std::vector<GameObjectS*> effectTargets;
+		auto& effectTargets = m_effectTargetsScratch;
 		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
 		{
 			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
@@ -1675,7 +1677,7 @@ namespace mmo
 				continue;
 			}
 
-			m_affectedTargets.insert(targetObject->shared_from_this());
+			MarkAffectedTarget(*targetObject);
 
 			if (targetObject->IsPlayer())
 			{
@@ -1690,7 +1692,11 @@ namespace mmo
 
 	bool SingleCastState::GetEffectTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets)
 	{
-		const proto::RangeType* range = m_cast.GetExecuter().GetProject().ranges.getById(m_spell.rangetype());
+		targets.clear();
+		if (targets.capacity() < 8)
+		{
+			targets.reserve(8);
+		}
 
 		if (effect.targeta() == spell_effect_targets::Caster)
 		{
@@ -1876,40 +1882,41 @@ namespace mmo
 			effect.targeta() == spell_effect_targets::TargetAny ||
 			effect.targeta() == spell_effect_targets::TargetEnemy)
 		{
-			GameObjectS* targetObject = m_cast.GetExecuter().GetWorldInstance()->FindObjectByGuid(m_target.GetUnitTarget());
-			if (!targetObject)
+			GameUnitS* unit = m_cast.GetExecuter().GetWorldInstance()->FindByGuid<GameUnitS>(m_target.GetUnitTarget());
+			if (!unit)
 			{
 				return false;
 			}
 
-			const auto unit = std::dynamic_pointer_cast<GameUnitS>(targetObject->shared_from_this());
-			if (unit)
+			switch (effect.targeta())
 			{
-				switch (effect.targeta())
+			case spell_effect_targets::TargetAlly:
+				// For now we consider all non-hostile units as allies
+				if (!m_cast.GetExecuter().UnitIsFriendly(*unit))
 				{
-				case spell_effect_targets::TargetAlly:
-					// For now we consider all non-hostile units as allies
-					if (!m_cast.GetExecuter().UnitIsFriendly(*unit))
-					{
-						// Target has to be an ally but is not
-						return false;
-					}
-					break;
-				case spell_effect_targets::TargetEnemy:
-					if (m_cast.GetExecuter().UnitIsFriendly(*unit))
-					{
-						// Target has to be an enemy but is not
-						return false;
-					}
-					break;
+					// Target has to be an ally but is not
+					return false;
 				}
+				break;
+			case spell_effect_targets::TargetEnemy:
+				if (m_cast.GetExecuter().UnitIsFriendly(*unit))
+				{
+					// Target has to be an enemy but is not
+					return false;
+				}
+				break;
 			}
 
-			targets.push_back(unit.get());
+			targets.push_back(unit);
 			return true;
 		}
 
 		return false;
+	}
+
+	void SingleCastState::MarkAffectedTarget(GameObjectS& target)
+	{
+		m_affectedTargetGuids.insert(target.GetGuid());
 	}
 
 	void SingleCastState::InternalSpellEffectWeaponDamage(const proto::SpellEffect& effect, SpellSchool school)
@@ -1920,7 +1927,7 @@ namespace mmo
 			return;
 		}
 
-		m_affectedTargets.insert(unitTarget->shared_from_this());
+		MarkAffectedTarget(*unitTarget);
 		const float minDamage = m_cast.GetExecuter().Get<float>(object_fields::MinDamage);
 		const float maxDamage = m_cast.GetExecuter().Get<float>(object_fields::MaxDamage);
 		const uint32 casterLevel = m_cast.GetExecuter().Get<uint32>(object_fields::Level);
@@ -2173,3 +2180,6 @@ namespace mmo
 	{
 	}
 }
+
+
+

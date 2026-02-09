@@ -49,7 +49,8 @@ namespace mmo
 		const proto::SpellEntry& spell,
 		const SpellTargetMap& target,
 		GameTime castTime,
-		uint64 itemGuid
+		uint64 itemGuid,
+		bool isProc = false
 	);
 
 	class SpellCast

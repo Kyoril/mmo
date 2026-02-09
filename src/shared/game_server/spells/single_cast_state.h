@@ -5,6 +5,7 @@
 #include "base/typedefs.h"
 
 #include <map>
+#include <unordered_set>
 
 #include "game_server/spells/aura_container.h"
 #include "game_server/objects/game_unit_s.h"
@@ -60,6 +61,9 @@ namespace mmo
 
 	private:
 		bool Validate();
+		bool ValidatePlayerRequirements();
+		bool ValidateCasterRequirements();
+		bool ValidateTargetRequirements(GameUnitS* unitTarget);
 		[[nodiscard]] bool ShouldStartCooldownOnCastStart() const;
 		[[nodiscard]] bool UsesGlobalCooldown() const;
 		void NotifyCastEnded(bool succeeded);
@@ -157,6 +161,7 @@ namespace mmo
 		void ApplyCooldown(GameTime cooldownTimeMs, GameTime categoryCooldownTimeMs);
 
 		void ApplyAllEffects();
+		void ApplyEffect(const proto::SpellEffect& effect);
 
 		int32 CalculateEffectBasePoints(const proto::SpellEffect& effect);
 
@@ -215,6 +220,7 @@ namespace mmo
 
 	private:
 		bool GetEffectTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets);
+		void MarkAffectedTarget(GameObjectS& target);
 
 	private:
 		void InternalSpellEffectWeaponDamage(const proto::SpellEffect& effect, SpellSchool school);
@@ -232,7 +238,7 @@ namespace mmo
 		Countdown m_countdown;
 		Countdown m_impactCountdown;
 		signal<void()> completedEffects;
-		std::unordered_map<uint64, scoped_connection> m_completedEffectsExecution;
+		scoped_connection m_completedEffectsExecution;
 		scoped_connection m_onTargetDied;
 		scoped_connection m_onTargetRemoved, m_damaged;
 		scoped_connection m_onThreatened;
@@ -245,7 +251,8 @@ namespace mmo
 		Vector3 m_projectileOrigin, m_projectileDest;
 		bool m_connectedMeleeSignal;
 		uint32 m_delayCounter;
-		std::set<std::weak_ptr<GameObjectS>, std::owner_less<std::weak_ptr<GameObjectS>>> m_affectedTargets;
+		std::unordered_set<uint64> m_affectedTargetGuids;
+		std::vector<GameObjectS*> m_effectTargetsScratch;
 		bool m_tookCastItem { false };
 		bool m_tookReagents { false };
 		uint32 m_attackerProc;
@@ -269,7 +276,5 @@ namespace mmo
 
 		std::map<GameUnitS*, std::unique_ptr<AuraContainer>> m_targetAuraContainers;
 		uint64 m_itemGuid;
-
-		typedef std::function<void(const proto::SpellEffect&)> EffectHandler;
 	};
 }

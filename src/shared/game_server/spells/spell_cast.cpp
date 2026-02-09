@@ -10,9 +10,9 @@
 
 namespace mmo
 {
-	SpellCasting& CastSpell(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, GameTime castTime, uint64 itemGuid)
+	SpellCasting& CastSpell(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, GameTime castTime, uint64 itemGuid, bool isProc)
 	{
-		auto newState = std::make_shared<SingleCastState>(cast, spell, target, castTime, false, itemGuid);
+		auto newState = std::make_shared<SingleCastState>(cast, spell, target, castTime, isProc, itemGuid);
 
 		auto& casting = newState->GetCasting();
 		cast.SetState(std::move(newState));
@@ -66,11 +66,7 @@ namespace mmo
 		// Check if we have enough resources for that spell
 		if (isProc)
 		{
-			const auto newCastState = std::make_shared<SingleCastState>(
-				*this, spell, std::move(target), castTime, true, itemGuid
-			);
-			newCastState->Activate();
-
+			CastSpell(*this, spell, target, castTime, itemGuid, true);
 			return std::make_pair(spell_cast_result::CastOkay, nullptr);
 		}
 
