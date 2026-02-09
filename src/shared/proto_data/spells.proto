@@ -123,6 +123,7 @@ message SpellEntry {
 
 	// Bitmask for cooldown behavior flags.
 	// Bit 0 (1): cooldown starts when casting starts instead of on successful cast.
+	// Bit 1 (2): spell uses shared global cooldown instead of an individual cooldown.
 	optional uint32 cooldownflags = 70 [default = 0];
 }
 

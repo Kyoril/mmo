@@ -61,6 +61,7 @@ namespace mmo
 	private:
 		bool Validate();
 		[[nodiscard]] bool ShouldStartCooldownOnCastStart() const;
+		[[nodiscard]] bool UsesGlobalCooldown() const;
 
 		template<class T>
 		bool HasAttributes(uint32 index, T attributes)

@@ -405,9 +405,13 @@ namespace mmo
 		return unit_mods::Mana;
 	}
 
-	auto GameUnitS::SpellHasCooldown(const uint32 spellId, uint32 spellCategory) const -> bool
+	auto GameUnitS::SpellHasCooldown(const uint32 spellId, uint32 spellCategory, const uint32 cooldownFlags) const -> bool
 	{
 		const auto now = GetAsyncTimeMs();
+		if ((cooldownFlags & spell_cooldown_flags::UseGlobalCooldown) != 0)
+		{
+			return m_globalCooldownEnd > now;
+		}
 
 		if (const auto it = m_spellCooldowns.find(spellId); it != m_spellCooldowns.end() && it->second > now)
 		{
@@ -591,6 +595,18 @@ namespace mmo
 		else
 		{
 			m_spellCategoryCooldowns[spellCategory] = GetAsyncTimeMs() + cooldownTimeMs;
+		}
+	}
+
+	void GameUnitS::SetGlobalCooldown(const GameTime cooldownTimeMs)
+	{
+		if (cooldownTimeMs == 0)
+		{
+			m_globalCooldownEnd = 0;
+		}
+		else
+		{
+			m_globalCooldownEnd = GetAsyncTimeMs() + cooldownTimeMs;
 		}
 	}
 

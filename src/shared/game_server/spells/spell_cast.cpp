@@ -58,7 +58,7 @@ namespace mmo
 		}
 
 		// Check for cooldown
-		if (m_executor.SpellHasCooldown(spell.id(), spell.category()))
+		if (m_executor.SpellHasCooldown(spell.id(), spell.category(), spell.cooldownflags()))
 		{
 			return std::make_pair(spell_cast_result::FailedNotReady, nullptr);
 		}

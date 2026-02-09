@@ -639,6 +639,10 @@ namespace mmo
 			ImGui::SameLine();
 			DrawHelpMarker("If enabled, cooldown starts when casting starts and is rolled back when the cast fails or is interrupted.");
 
+			CHECKBOX_FLAG_PROP(cooldownflags, "Use Global Cooldown", spell_cooldown_flags::UseGlobalCooldown);
+			ImGui::SameLine();
+			DrawHelpMarker("If enabled, this spell uses shared global cooldown instead of an individual cooldown.");
+
 			ImGui::SetNextItemWidth(150);
 			SLIDER_UINT32_PROP(casttime, "##CastTime", 0, 100000);
 			ImGui::SameLine();

@@ -119,7 +119,10 @@ namespace mmo
 			None = 0,
 
 			/// Spell cooldown starts when the cast starts instead of when cast succeeds.
-			StartOnCastStart = 1 << 0
+			StartOnCastStart = 1 << 0,
+
+			/// Spell participates in the global cooldown instead of using its own cooldown.
+			UseGlobalCooldown = 1 << 1
 		};
 	}
 

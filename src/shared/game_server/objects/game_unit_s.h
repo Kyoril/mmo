@@ -604,8 +604,9 @@ namespace mmo
 		/// Checks if a spell has a cooldown.
 		/// @param spellId The ID of the spell.
 		/// @param spellCategory The category of the spell.
+		/// @param cooldownFlags Cooldown behavior flags from the spell definition.
 		/// @returns true if the spell has a cooldown, false otherwise.
-		bool SpellHasCooldown(uint32 spellId, uint32 spellCategory) const;
+		bool SpellHasCooldown(uint32 spellId, uint32 spellCategory, uint32 cooldownFlags) const;
 
 		/// Checks if the unit has a specific spell.
 		/// @param spellId The ID of the spell.
@@ -642,6 +643,10 @@ namespace mmo
 		/// @param spellCategory The category of the spell.
 		/// @param cooldownTimeMs The cooldown time in milliseconds.
 		void SetSpellCategoryCooldown(uint32 spellCategory, GameTime cooldownTimeMs);
+
+		/// Sets the global spell cooldown shared by global-cooldown spells.
+		/// @param cooldownTimeMs The cooldown time in milliseconds.
+		void SetGlobalCooldown(GameTime cooldownTimeMs);
 
 		/// Casts a spell.
 		/// @param target The target map for the spell.
@@ -1236,6 +1241,7 @@ public:
 
 		std::map<uint32, GameTime> m_spellCooldowns;
 		std::map<uint32, GameTime> m_spellCategoryCooldowns;
+		GameTime m_globalCooldownEnd = 0;
 
 		AttackingUnitSet m_attackingUnits;
 

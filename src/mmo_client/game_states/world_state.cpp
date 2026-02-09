@@ -2407,8 +2407,13 @@ namespace mmo
 
 		if (casterId == ObjectMgr::GetActivePlayerGuid())
 		{
+			const bool wasCastingThisSpell = m_spellCast.GetCastingSpellId() == spellId;
+			const bool castWasConfirmedByServer = m_spellCast.HasServerConfirmedCastStart(spellId);
 			m_spellCast.OnSpellFailure(spellId);
-			if (spell && (spell->cooldownflags() & spell_cooldown_flags::StartOnCastStart) != 0)
+			if (wasCastingThisSpell &&
+				castWasConfirmedByServer &&
+				spell &&
+				(spell->cooldownflags() & spell_cooldown_flags::StartOnCastStart) != 0)
 			{
 				m_cooldownManager.ClearCooldown(spellId);
 			}

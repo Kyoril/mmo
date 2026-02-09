@@ -3,17 +3,25 @@
 #include "cooldown_manager.h"
 #include "base/clock.h"
 #include "frame_ui/frame_mgr.h"
+#include "game/spell.h"
 
 namespace mmo
 {
+	CooldownManager::CooldownManager(const proto_client::SpellManager& spells)
+		: m_spells(spells)
+	{
+	}
+
 	void CooldownManager::OnEnterWorld()
 	{
 		m_cooldowns.clear();
+		m_globalCooldown.reset();
 	}
 
 	void CooldownManager::OnLeftWorld()
 	{
 		m_cooldowns.clear();
+		m_globalCooldown.reset();
 	}
 
 	void CooldownManager::StartCooldown(const uint32 spellId, const GameTime durationMs)
@@ -24,11 +32,15 @@ namespace mmo
 			return;
 		}
 
-		CooldownInfo info;
-		info.startTime = GetAsyncTimeMs();
-		info.duration = durationMs;
-
-		m_cooldowns[spellId] = info;
+		const CooldownInfo info{ GetAsyncTimeMs(), durationMs };
+		if (UsesGlobalCooldown(spellId))
+		{
+			m_globalCooldown = info;
+		}
+		else
+		{
+			m_cooldowns[spellId] = info;
+		}
 
 		// Fire signal
 		CooldownStarted(spellId, durationMs);
@@ -39,7 +51,18 @@ namespace mmo
 
 	void CooldownManager::ClearCooldown(const uint32 spellId)
 	{
-		if (m_cooldowns.erase(spellId) > 0)
+		bool wasCleared = false;
+		if (UsesGlobalCooldown(spellId))
+		{
+			wasCleared = m_globalCooldown.has_value();
+			m_globalCooldown.reset();
+		}
+		else
+		{
+			wasCleared = m_cooldowns.erase(spellId) > 0;
+		}
+
+		if (wasCleared)
 		{
 			// Fire signal
 			CooldownEnded(spellId);
@@ -51,42 +74,44 @@ namespace mmo
 
 	float CooldownManager::GetCooldownProgress(const uint32 spellId) const
 	{
+		if (UsesGlobalCooldown(spellId))
+		{
+			if (!m_globalCooldown.has_value())
+			{
+				return 1.0f;
+			}
+
+			return GetCooldownProgress(*m_globalCooldown);
+		}
+
 		const auto it = m_cooldowns.find(spellId);
 		if (it == m_cooldowns.end())
 		{
-			return 1.0f; // No cooldown = ready
+			return 1.0f;
 		}
 
-		const CooldownInfo& info = it->second;
-		const GameTime now = GetAsyncTimeMs();
-		const GameTime elapsed = now - info.startTime;
-
-		if (elapsed >= info.duration)
-		{
-			return 1.0f; // Cooldown expired
-		}
-
-		return static_cast<float>(elapsed) / static_cast<float>(info.duration);
+		return GetCooldownProgress(it->second);
 	}
 
 	float CooldownManager::GetCooldownRemaining(const uint32 spellId) const
 	{
+		if (UsesGlobalCooldown(spellId))
+		{
+			if (!m_globalCooldown.has_value())
+			{
+				return 0.0f;
+			}
+
+			return GetCooldownRemaining(*m_globalCooldown);
+		}
+
 		const auto it = m_cooldowns.find(spellId);
 		if (it == m_cooldowns.end())
 		{
-			return 0.0f; // No cooldown
+			return 0.0f;
 		}
 
-		const CooldownInfo& info = it->second;
-		const GameTime now = GetAsyncTimeMs();
-		const GameTime elapsed = now - info.startTime;
-
-		if (elapsed >= info.duration)
-		{
-			return 0.0f; // Cooldown expired
-		}
-
-		return static_cast<float>(info.duration - elapsed) / 1000.0f; // Convert to seconds
+		return GetCooldownRemaining(it->second);
 	}
 
 	bool CooldownManager::IsOnCooldown(const uint32 spellId) const
@@ -103,8 +128,7 @@ namespace mmo
 
 		for (const auto& [spellId, info] : m_cooldowns)
 		{
-			const GameTime elapsed = now - info.startTime;
-			if (elapsed >= info.duration)
+			if (IsCooldownExpired(info, now))
 			{
 				expiredCooldowns.push_back(spellId);
 			}
@@ -115,5 +139,52 @@ namespace mmo
 		{
 			ClearCooldown(spellId);
 		}
+
+		if (m_globalCooldown.has_value() && IsCooldownExpired(*m_globalCooldown, now))
+		{
+			m_globalCooldown.reset();
+			CooldownEnded(0);
+			FrameManager::Get().TriggerLuaEvent("SPELL_COOLDOWN_ENDED", 0);
+		}
+	}
+
+	bool CooldownManager::UsesGlobalCooldown(const uint32 spellId) const
+	{
+		const auto* spell = m_spells.getById(spellId);
+		if (!spell)
+		{
+			return false;
+		}
+
+		return (spell->cooldownflags() & spell_cooldown_flags::UseGlobalCooldown) != 0;
+	}
+
+	float CooldownManager::GetCooldownProgress(const CooldownInfo& info) const
+	{
+		const GameTime now = GetAsyncTimeMs();
+		const GameTime elapsed = now - info.startTime;
+		if (elapsed >= info.duration)
+		{
+			return 1.0f;
+		}
+
+		return static_cast<float>(elapsed) / static_cast<float>(info.duration);
+	}
+
+	float CooldownManager::GetCooldownRemaining(const CooldownInfo& info) const
+	{
+		const GameTime now = GetAsyncTimeMs();
+		const GameTime elapsed = now - info.startTime;
+		if (elapsed >= info.duration)
+		{
+			return 0.0f;
+		}
+
+		return static_cast<float>(info.duration - elapsed) / 1000.0f;
+	}
+
+	bool CooldownManager::IsCooldownExpired(const CooldownInfo& info, const GameTime now) const
+	{
+		return now - info.startTime >= info.duration;
 	}
 }

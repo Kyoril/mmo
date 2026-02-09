@@ -115,7 +115,7 @@ namespace mmo
 			m_cooldownStartedAtCastStartMs = CalculateFinalCooldown();
 			if (m_cooldownStartedAtCastStartMs > 0)
 			{
-				m_cast.GetExecuter().SetCooldown(m_spell.id(), m_cooldownStartedAtCastStartMs);
+				ApplyCooldown(m_cooldownStartedAtCastStartMs, m_spell.categorycooldown());
 				m_cooldownStartedOnCastStart = true;
 			}
 		}
@@ -653,6 +653,15 @@ namespace mmo
 
 	auto SingleCastState::ApplyCooldown(const GameTime cooldownTimeMs, const GameTime categoryCooldownTimeMs) -> void
 	{
+		if (UsesGlobalCooldown())
+		{
+			if (cooldownTimeMs > 0)
+			{
+				m_cast.GetExecuter().SetGlobalCooldown(cooldownTimeMs);
+			}
+			return;
+		}
+
 		if (cooldownTimeMs > 0)
 		{
 			m_cast.GetExecuter().SetCooldown(m_spell.id(), cooldownTimeMs);
@@ -660,7 +669,7 @@ namespace mmo
 		
 		if (categoryCooldownTimeMs > 0)
 		{
-			m_cast.GetExecuter().SetCooldown(m_spell.id(), cooldownTimeMs);
+			m_cast.GetExecuter().SetSpellCategoryCooldown(m_spell.category(), categoryCooldownTimeMs);
 		}
 	}
 
@@ -669,6 +678,11 @@ namespace mmo
 		return !m_isProc
 			&& m_castTime > 0
 			&& (m_spell.cooldownflags() & spell_cooldown_flags::StartOnCastStart) != 0;
+	}
+
+	bool SingleCastState::UsesGlobalCooldown() const
+	{
+		return (m_spell.cooldownflags() & spell_cooldown_flags::UseGlobalCooldown) != 0;
 	}
 
 	GameTime SingleCastState::CalculateFinalCooldown() const
@@ -693,9 +707,9 @@ namespace mmo
 
 	void SingleCastState::ApplyAllEffects()
 	{
-		// Add spell cooldown if any - use the pre-calculated value
+		// Add spell cooldown if any - unless it was already started at cast start.
 		const GameTime finalCD = CalculateFinalCooldown();
-		if (finalCD)
+		if (finalCD && !m_cooldownStartedOnCastStart)
 		{
 			ApplyCooldown(finalCD, m_spell.categorycooldown());
 		}
@@ -1994,7 +2008,14 @@ namespace mmo
 			// Rollback cast-start cooldown if the cast did not succeed.
 			if (m_cooldownStartedOnCastStart)
 			{
-				executer.SetCooldown(m_spell.id(), 0);
+				if (UsesGlobalCooldown())
+				{
+					executer.SetGlobalCooldown(0);
+				}
+				else
+				{
+					executer.SetCooldown(m_spell.id(), 0);
+				}
 				m_cooldownStartedOnCastStart = false;
 				m_cooldownStartedAtCastStartMs = 0;
 			}

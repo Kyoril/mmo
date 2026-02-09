@@ -198,7 +198,7 @@ namespace mmo
 		context.guildClient = std::make_unique<GuildClient>(realmConnector, context.clientCache->GetGuildCache(), context.project->races, context.project->classes);
 		context.friendClient = std::make_unique<FriendClient>(realmConnector, context.project->races, context.project->classes);
 		context.spellCast = std::make_unique<SpellCast>(realmConnector, context.project->spells, context.project->ranges);
-		context.cooldownManager = std::make_unique<CooldownManager>();
+		context.cooldownManager = std::make_unique<CooldownManager>(context.project->spells);
 		context.actionBar = std::make_unique<ActionBar>(realmConnector, context.project->spells, context.clientCache->GetItemCache(), *context.spellCast);
 		context.talentClient = std::make_unique<TalentClient>(context.project->talentTabs, context.project->talents, context.project->spells, realmConnector);
 	}

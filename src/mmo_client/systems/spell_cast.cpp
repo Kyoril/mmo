@@ -71,6 +71,7 @@ namespace mmo
 	void SpellCast::OnEnterWorld()
 	{
 		m_spellCastId = 0;
+		m_serverConfirmedCastStart = false;
 
 		// Register packet handlers
 	}
@@ -79,6 +80,7 @@ namespace mmo
 	{
 		// We are no longer casting a spell
 		m_spellCastId = 0;
+		m_serverConfirmedCastStart = false;
 	}
 
 	void SpellCast::OnSpellStart(const proto_client::SpellEntry& spell, GameTime castTime)
@@ -93,6 +95,7 @@ namespace mmo
 		}
 
 		m_spellCastId = spell.id();
+		m_serverConfirmedCastStart = true;
 		FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_START", &spell, castTime);
 	}
 
@@ -110,6 +113,7 @@ namespace mmo
 
 		FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", true);
 		m_spellCastId = 0;
+		m_serverConfirmedCastStart = false;
 	}
 
 	void SpellCast::OnSpellFailure(uint32 spellId)
@@ -125,6 +129,7 @@ namespace mmo
 		}
 
 		m_spellCastId = 0;
+		m_serverConfirmedCastStart = false;
 	}
 
 	bool SpellCast::SetSpellTargetMap(SpellTargetMap& targetMap, const proto_client::SpellEntry& spell)
@@ -342,6 +347,7 @@ namespace mmo
 
 		// Send network packet to start casting the spell
 		m_spellCastId = spellId;
+		m_serverConfirmedCastStart = false;
 		m_connector.CastSpell(spellId, targetMap);
 	}
 
@@ -356,6 +362,7 @@ namespace mmo
 		// Send network packet to stop casting the spell
 		m_connector.CancelCast();
 		m_spellCastId = 0;
+		m_serverConfirmedCastStart = false;
 		return true;
 	}
 
@@ -367,5 +374,10 @@ namespace mmo
 	uint32 SpellCast::GetCastingSpellId() const
 	{
 		return m_spellCastId;
+	}
+
+	bool SpellCast::HasServerConfirmedCastStart(const uint32 spellId) const
+	{
+		return m_serverConfirmedCastStart && m_spellCastId == spellId;
 	}
 }
