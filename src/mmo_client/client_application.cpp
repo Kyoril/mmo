@@ -244,7 +244,15 @@ namespace mmo
 	{
 		context.timerConnection.disconnect();
 		GameStateMgr::Get().RemoveAllGameStates();
+		ShutdownGameplaySystems(context);
+		ShutdownUiSystems(context);
+		ShutdownRuntimeServices(context);
+		ShutdownCoreServices(context);
+	}
 
+	/// @copydoc ClientApplication::ShutdownGameplaySystems
+	void ClientApplication::ShutdownGameplaySystems(ClientContext& context)
+	{
 		if (context.lootClient) context.lootClient->Shutdown();
 		if (context.vendorClient) context.vendorClient->Shutdown();
 		if (context.trainerClient) context.trainerClient->Shutdown();
@@ -258,7 +266,11 @@ namespace mmo
 		context.lootClient.reset();
 		context.trainerClient.reset();
 		context.inventoryClient.reset();
+	}
 
+	/// @copydoc ClientApplication::ShutdownUiSystems
+	void ClientApplication::ShutdownUiSystems(ClientContext& context)
+	{
 		if (context.uiRuntime)
 		{
 			context.uiRuntime->Shutdown();
@@ -266,7 +278,11 @@ namespace mmo
 
 		context.gameScript.reset();
 		context.minimap.reset();
+	}
 
+	/// @copydoc ClientApplication::ShutdownRuntimeServices
+	void ClientApplication::ShutdownRuntimeServices(ClientContext& context)
+	{
 		if (context.runtime)
 		{
 			context.runtime->Shutdown();
@@ -277,6 +293,19 @@ namespace mmo
 		{
 			context.clientCache->Save();
 		}
+	}
+
+	/// @copydoc ClientApplication::ShutdownCoreServices
+	void ClientApplication::ShutdownCoreServices(ClientContext& context)
+	{
+		Console::Destroy();
+		EventLoop::Destroy();
+		AssetRegistry::Destroy();
+
+		context.logConnection.disconnect();
+		context.logFile.close();
+		context.timerService.stop();
+		context.timerService.reset();
 	}
 
 	/// @copydoc ClientApplication::ResetContext
@@ -299,14 +328,5 @@ namespace mmo
 		context.project.reset();
 		context.uiRuntime.reset();
 		context.audio.reset();
-
-		Console::Destroy();
-		EventLoop::Destroy();
-		AssetRegistry::Destroy();
-
-		context.logConnection.disconnect();
-		context.logFile.close();
-		context.timerService.stop();
-		context.timerService.reset();
 	}
 }

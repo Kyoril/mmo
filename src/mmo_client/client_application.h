@@ -69,6 +69,22 @@ namespace mmo
 		/// @param context Shared client context.
 		void ShutdownSystems(ClientContext& context);
 
+		/// @brief Shuts down gameplay client systems and releases related instances.
+		/// @param context Shared client context.
+		void ShutdownGameplaySystems(ClientContext& context);
+
+		/// @brief Shuts down UI runtime and releases UI-facing objects.
+		/// @param context Shared client context.
+		void ShutdownUiSystems(ClientContext& context);
+
+		/// @brief Shuts down network/runtime services and persists cache state.
+		/// @param context Shared client context.
+		void ShutdownRuntimeServices(ClientContext& context);
+
+		/// @brief Shuts down core engine services and logging/timer facilities.
+		/// @param context Shared client context.
+		void ShutdownCoreServices(ClientContext& context);
+
 		/// @brief Releases context-owned pointers and core services.
 		/// @param context Shared client context.
 		void ResetContext(ClientContext& context);
