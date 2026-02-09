@@ -17,16 +17,12 @@
 #include "log/default_log_levels.h"
 #include "log/log_std_stream.h"
 #include "assets/asset_registry.h"
-#include "base/filesystem.h"
 
 #include "event_loop.h"
 #include "console/console.h"
 #include "net/login_connector.h"
 #include "net/realm_connector.h"
 #include "game_states/game_state_mgr.h"
-#include "game_states/login_state.h"
-#include "game_script.h"
-#include "ui/model_frame.h"
 #include "ui/model_renderer.h"
 
 #ifdef _WIN32
@@ -37,312 +33,27 @@
 
 #include <iostream>
 #include <fstream>
-#include <thread>
 #include <memory>
 
-#include "data/client_cache.h"
-#include "cursor.h"
-#include "systems/loot_client.h"
-#include "stream_sink.h"
-#include "systems/vendor_client.h"
 #include "game_states/world_state.h"
-#include "base/timer_queue.h"
 
 #include "base/executable_path.h"
 #include "client_data/project.h"
 
-#include "systems/action_bar.h"
-#include "systems/spell_cast.h"
-#include "systems/cooldown_manager.h"
-#include "systems/trainer_client.h"
-#include "systems/quest_client.h"
-#include "systems/party_info.h"
-#include "systems/guild_client.h"
-#include "systems/friend_client.h"
-#include "systems/talent_client.h"
 #include "systems/inventory_client.h"
 
 #include "ui/minimap.h"
 
-#include "char_creation/char_create_info.h"
-#include "char_creation/char_select.h"
 #include "base/create_process.h"
 #include "game_client/object_mgr.h"
-#include "ui/unit_model_frame.h"
 #include "client_context.h"
-#include "client_runtime.h"
-#include "client_ui_runtime.h"
-
-////////////////////////////////////////////////////////////////
-// Network handler
+#include "client_application.h"
 
 namespace mmo
 {
 	void DispatchOnGameThread(std::function<void()> &&f)
 	{
 		GetClientContext().timerService.post(std::move(f));
-	}
-}
-
-namespace mmo
-{
-	// The io service used for networking
-	/// Runs the network thread to handle incoming packets.
-	void NetWorkProc()
-	{
-		auto& context = GetClientContext();
-		if (!context.runtime)
-		{
-			return;
-		}
-
-		context.runtime->PollNetwork();
-	}
-
-	/// Initializes the login connector and starts one or multiple network
-	/// threads to handle network events. Should be called from the main
-	/// thread.
-	void NetInit()
-	{
-		auto& context = GetClientContext();
-		context.runtime = std::make_unique<ClientRuntime>();
-		context.runtime->Initialize();
-	}
-
-	/// Destroy the login connector, cuts all opened connections and waits
-	/// for all network threads to stop running. Thus, this method should
-	/// be called from the main thread.
-	void NetDestroy()
-	{
-		auto& context = GetClientContext();
-		if (!context.runtime)
-		{
-			return;
-		}
-
-		context.runtime->Shutdown();
-		context.runtime.reset();
-	}
-}
-
-////////////////////////////////////////////////////////////////
-// Initialization and destruction
-
-namespace mmo
-{
-	extern Cursor g_cursor;
-
-	/// Initializes the global game systems.
-	bool InitializeGlobal()
-	{
-		auto& context = GetClientContext();
-		context.project = std::make_unique<proto_client::Project>();
-		context.gameTime = std::make_unique<GameTimeComponent>();
-		context.timerQueue = std::make_unique<TimerQueue>(context.timerService);
-		context.uiRuntime = std::make_unique<ClientUiRuntime>();
-
-		// Receive the current working directory
-		std::error_code error;
-		const auto currentPath = std::filesystem::current_path(error);
-		if (error)
-		{
-			ELOG("Could not obtain working directory: " << error);
-			return false;
-		}
-
-		// Ensure the logs directory exists
-		std::filesystem::create_directories(currentPath / "Logs");
-		std::filesystem::create_directories(currentPath / "Config");
-
-		// Setup the log file connection after opening the log file
-		context.logFile.open((currentPath / "Logs" / "Client.log").string().c_str(), std::ios::out);
-		if (context.logFile)
-		{
-			context.logConnection = g_DefaultLog.signal().connect(
-				[](const LogEntry &entry)
-				{
-					printLogEntry(GetClientContext().logFile, entry, g_DefaultFileLogOptions);
-				});
-		}
-
-		// Initialize the event loop
-		EventLoop::Initialize();
-
-		// Initialize the console client which also loads the config file
-		Console::Initialize("Config/Config.cfg");
-
-		// Initialize network threads
-		NetInit();
-
-#ifdef _WIN32
-		context.audio = std::make_unique<FMODAudio>();
-#else
-		context.audio = std::make_unique<NullAudio>();
-#endif
-		context.audio->Create();
-
-		// Run service
-		context.timerConnection = EventLoop::Idle.connect([&](float, const mmo::GameTime &)
-													{
-				NetWorkProc();
-				GetClientContext().timerService.poll_one(); });
-
-		// Verify the connector instances have been initialized
-		ASSERT(context.runtime && context.runtime->IsInitialized());
-		auto& loginConnector = context.runtime->GetLoginConnector();
-		auto& realmConnector = context.runtime->GetRealmConnector();
-
-		// Load game data
-		if (!context.project->load("ClientDB"))
-		{
-			ELOG("Failed to load project files!");
-			return false;
-		}
-
-		context.clientCache = std::make_unique<ClientCache>(realmConnector);
-		if (!context.clientCache->Load())
-		{
-			ELOG("Failed to load the client cache!");
-			return false;
-		}
-
-		context.discord = std::make_unique<Discord>();
-		context.discord->Initialize();
-
-		// Setup minimap
-		context.minimap = std::make_unique<Minimap>(256);
-
-		context.charCreateInfo = std::make_unique<CharCreateInfo>(*context.project, realmConnector);
-		context.charSelect = std::make_unique<CharSelect>(*context.project, realmConnector);
-
-		// Initialize loot client
-		context.lootClient = std::make_unique<LootClient>(realmConnector, context.clientCache->GetItemCache());
-		context.vendorClient = std::make_unique<VendorClient>(realmConnector, context.clientCache->GetItemCache());
-		context.trainerClient = std::make_unique<TrainerClient>(realmConnector, context.project->spells);
-		context.inventoryClient = std::make_unique<InventoryClient>(realmConnector);
-		context.uiRuntime->LoadLocalization();
-		context.questClient = std::make_unique<QuestClient>(realmConnector, context.clientCache->GetQuestCache(), context.project->spells, context.clientCache->GetItemCache(), context.clientCache->GetCreatureCache(), context.uiRuntime->GetLocalization());
-		context.partyInfo = std::make_unique<PartyInfo>(realmConnector, context.clientCache->GetNameCache());
-		context.guildClient = std::make_unique<GuildClient>(realmConnector, context.clientCache->GetGuildCache(), context.project->races, context.project->classes);
-		context.friendClient = std::make_unique<FriendClient>(realmConnector, context.project->races, context.project->classes);
-		context.spellCast = std::make_unique<SpellCast>(realmConnector, context.project->spells, context.project->ranges);
-		context.cooldownManager = std::make_unique<CooldownManager>();
-		context.actionBar = std::make_unique<ActionBar>(realmConnector, context.project->spells, context.clientCache->GetItemCache(), *context.spellCast);
-		context.talentClient = std::make_unique<TalentClient>(context.project->talentTabs, context.project->talents, context.project->spells, realmConnector);
-
-		GameStateMgr &gameStateMgr = GameStateMgr::Get();
-
-		// Register game states
-		const auto loginState = std::make_shared<LoginState>(gameStateMgr, loginConnector, realmConnector, *context.timerQueue, *context.audio, *context.discord);
-		gameStateMgr.AddGameState(loginState);
-
-		const auto worldState = std::make_shared<WorldState>(gameStateMgr, realmConnector, *context.project, *context.timerQueue, *context.lootClient, *context.vendorClient,
-															 *context.actionBar, *context.spellCast, *context.cooldownManager, *context.trainerClient, *context.questClient, *context.audio, *context.partyInfo, *context.charSelect, *context.guildClient, *context.friendClient, *context.clientCache, *context.discord, *context.gameTime, *context.talentClient,
-															 *context.minimap, *context.inventoryClient);
-		gameStateMgr.AddGameState(worldState);
-
-		// Initialize the game script instance
-		context.gameScript = std::make_unique<GameScript>(loginConnector, realmConnector, *context.lootClient, *context.vendorClient, loginState, *context.project, *context.actionBar, *context.spellCast, *context.cooldownManager, *context.trainerClient, *context.questClient, *context.audio, *context.partyInfo, *context.charCreateInfo, *context.charSelect, *context.guildClient, *context.friendClient, *context.gameTime, *context.talentClient);
-		context.minimap->RegisterScriptFunctions(&context.gameScript->GetLuaState());
-
-		// Setup FrameUI runtime
-		if (!context.uiRuntime->Initialize(*context.gameScript, *context.minimap, g_cursor))
-		{
-			return false;
-		}
-
-		// Enter login state
-		gameStateMgr.SetGameState(LoginState::Name);
-
-		// Run the RunOnce script
-		Console::ExecuteCommand("run Config/RunOnce.cfg");
-
-		const auto window = GraphicsDevice::Get().GetAutoCreatedWindow();
-		if (window)
-		{
-			FrameManager::Get().NotifyScreenSizeChanged(window->GetWidth(), window->GetHeight());
-		}
-
-		// TODO: Initialize other systems
-
-		return true;
-	}
-
-	/// Destroys the global game systems.
-	void DestroyGlobal()
-	{
-		auto& context = GetClientContext();
-		context.timerConnection.disconnect();
-
-		// Remove all registered game states and also leave the current game state.
-		GameStateMgr::Get().RemoveAllGameStates();
-
-		// Shutdown client systems
-		if (context.lootClient)
-			context.lootClient->Shutdown();
-		if (context.vendorClient)
-			context.vendorClient->Shutdown();
-		if (context.trainerClient)
-			context.trainerClient->Shutdown();
-		if (context.inventoryClient)
-			context.inventoryClient->Shutdown();
-		if (context.questClient)
-			context.questClient->Shutdown();
-		if (context.partyInfo)
-			context.partyInfo->Shutdown();
-		if (context.guildClient)
-			context.guildClient->Shutdown();
-		if (context.friendClient)
-			context.friendClient->Shutdown();
-		context.vendorClient.reset();
-		context.lootClient.reset();
-		context.trainerClient.reset();
-		context.inventoryClient.reset();
-
-		if (context.uiRuntime)
-		{
-			context.uiRuntime->Shutdown();
-		}
-
-		// Reset game script instance
-		context.gameScript.reset();
-		context.minimap.reset();
-
-		// Destroy the network thread
-		NetDestroy();
-
-		ASSERT(context.clientCache);
-		context.clientCache->Save();
-
-		context.talentClient.reset();
-		context.actionBar.reset();
-		context.spellCast.reset();
-		context.cooldownManager.reset();
-		context.questClient.reset();
-		context.partyInfo.reset();
-		context.guildClient.reset();
-		context.friendClient.reset();
-		context.charCreateInfo.reset();
-		context.charSelect.reset();
-		context.discord.reset();
-		context.clientCache.reset();
-		context.timerQueue.reset();
-		context.gameTime.reset();
-		context.project.reset();
-		context.uiRuntime.reset();
-
-		context.audio.reset();
-
-		// Destroy the graphics device object
-		Console::Destroy();
-		EventLoop::Destroy();
-		AssetRegistry::Destroy();
-
-		// Destroy log
-		context.logConnection.disconnect();
-		context.logFile.close();
-		context.timerService.stop();
-		context.timerService.reset();
 	}
 }
 
@@ -356,15 +67,11 @@ namespace mmo
 	{
 		// TODO: Do something with command line arguments
 
-		// Initialize the game systems, and on success, run the main event loop
-		if (InitializeGlobal())
+		ClientApplication app;
+		if (app.Start())
 		{
-			// Run the event loop
 			EventLoop::Run();
-
-			// After finishing the main even loop, destroy everything that has
-			// being initialized so far
-			DestroyGlobal();
+			app.Stop();
 		}
 
 		return 0;
