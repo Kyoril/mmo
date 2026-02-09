@@ -103,10 +103,13 @@ namespace mmo
 
 	void SingleCastState::Activate()
 	{
+		m_selfHold = shared_from_this();
+
 		if (!Validate())
 		{
 			ELOG("Validation failed");
 			m_hasFinished = true;
+			NotifyCastEnded(false);
 			return;
 		}
 
@@ -120,43 +123,15 @@ namespace mmo
 			}
 		}
 
+		ConnectTargetSignals(ResolveUnitTarget());
+
 		if (m_castTime > 0)
 		{
 			m_castEnd = GetAsyncTimeMs() + m_castTime;
 			m_countdown.SetEnd(m_castEnd);
-
-			WorldInstance* world = m_cast.GetExecuter().GetWorldInstance();
-			ASSERT(world);
-
-			GameUnitS* unitTarget = nullptr;
-			if (m_target.HasUnitTarget())
-			{
-				unitTarget = dynamic_cast<GameUnitS*>(world->FindObjectByGuid(m_target.GetUnitTarget()));
-			}
-			
-			if (unitTarget)
-			{
-				m_onTargetDied = unitTarget->killed.connect(this, &SingleCastState::OnTargetKilled);
-				m_onTargetRemoved = unitTarget->despawned.connect(this, &SingleCastState::OnTargetDespawned);
-			}
 		}
 		else
 		{
-			WorldInstance* world = m_cast.GetExecuter().GetWorldInstance();
-			ASSERT(world);
-
-			GameUnitS* unitTarget = nullptr;
-			if (m_target.HasUnitTarget())
-			{
-				unitTarget = dynamic_cast<GameUnitS*>(world->FindObjectByGuid(m_target.GetUnitTarget()));
-			}
-
-			if (unitTarget)
-			{
-				m_onTargetDied = unitTarget->killed.connect(this, &SingleCastState::OnTargetKilled);
-				m_onTargetRemoved = unitTarget->despawned.connect(this, &SingleCastState::OnTargetDespawned);
-			}
-
 			OnCastFinished();
 		}
 	}
@@ -182,8 +157,6 @@ namespace mmo
 
 	void SingleCastState::StopCast(SpellInterruptFlags reason, const GameTime interruptCooldown)
 	{
-		FinishChanneling();
-
 		// Nothing to cancel
 		if (m_hasFinished)
 		{
@@ -210,6 +183,11 @@ namespace mmo
 			break;
 		}
 
+		if (IsChanneled())
+		{
+			EndChanneling(false);
+		}
+
 		m_countdown.Cancel();
 		SendEndCast(result);
 		m_hasFinished = true;
@@ -220,7 +198,6 @@ namespace mmo
 		}
 
 		const std::weak_ptr weakThis = shared_from_this();
-		m_casting.ended(false);
 
 		if (weakThis.lock())
 		{
@@ -245,32 +222,7 @@ namespace mmo
 
 	void SingleCastState::FinishChanneling()
 	{
-		if (!IsChanneled())
-		{
-			return;
-		}
-
-		// Caster could have left the world
-		const auto* world = m_cast.GetExecuter().GetWorldInstance();
-		if (!world)
-		{
-			return;
-		}
-
-		const uint64 casterId = m_cast.GetExecuter().GetGuid();
-		SendPacketFromCaster(m_cast.GetExecuter(),
-			[casterId](game::OutgoingPacket& out_packet)
-			{
-				out_packet.Start(game::realm_client_packet::ChannelUpdate);
-				out_packet
-					<< io::write_packed_guid(casterId)
-					<< io::write<GameTime>(0);
-				out_packet.Finish();
-			});
-
-		//m_cast.GetExecuter().Set<uint64>(object_fields::ChannelObject, 0);
-		//m_cast.GetExecuter().Set<uint32>(object_fields::ChannelSpell, 0);
-		m_casting.ended(true);
+		EndChanneling(true);
 	}
 
 	bool SingleCastState::Validate()
@@ -323,11 +275,7 @@ namespace mmo
 			return false;
 		}
 
-		GameUnitS* unitTarget = nullptr;
-		if (m_target.HasUnitTarget())
-		{
-			unitTarget = reinterpret_cast<GameUnitS*>(m_cast.GetExecuter().GetWorldInstance()->FindObjectByGuid(m_target.GetUnitTarget()));
-		}
+		GameUnitS* unitTarget = ResolveUnitTarget();
 
 		if (unitTarget != nullptr)
 		{
@@ -683,6 +631,80 @@ namespace mmo
 	bool SingleCastState::UsesGlobalCooldown() const
 	{
 		return (m_spell.cooldownflags() & spell_cooldown_flags::UseGlobalCooldown) != 0;
+	}
+
+	void SingleCastState::NotifyCastEnded(bool succeeded)
+	{
+		if (m_endNotified)
+		{
+			return;
+		}
+
+		m_endNotified = true;
+		m_casting.ended(succeeded);
+		m_selfHold.reset();
+	}
+
+	void SingleCastState::EndChanneling(bool succeeded)
+	{
+		if (!IsChanneled())
+		{
+			return;
+		}
+
+		// Nothing to do twice.
+		if (m_hasFinished)
+		{
+			return;
+		}
+
+		// Caster could have left the world
+		const auto* world = m_cast.GetExecuter().GetWorldInstance();
+		if (world)
+		{
+			const uint64 casterId = m_cast.GetExecuter().GetGuid();
+			SendPacketFromCaster(m_cast.GetExecuter(),
+				[casterId](game::OutgoingPacket& out_packet)
+				{
+					out_packet.Start(game::realm_client_packet::ChannelUpdate);
+					out_packet
+						<< io::write_packed_guid(casterId)
+						<< io::write<GameTime>(0);
+					out_packet.Finish();
+				});
+		}
+
+		//m_cast.GetExecuter().Set<uint64>(object_fields::ChannelObject, 0);
+		//m_cast.GetExecuter().Set<uint32>(object_fields::ChannelSpell, 0);
+		m_hasFinished = true;
+		NotifyCastEnded(succeeded);
+	}
+
+	GameUnitS* SingleCastState::ResolveUnitTarget() const
+	{
+		if (!m_target.HasUnitTarget())
+		{
+			return nullptr;
+		}
+
+		auto* world = m_cast.GetExecuter().GetWorldInstance();
+		if (!world)
+		{
+			return nullptr;
+		}
+
+		return world->FindByGuid<GameUnitS>(m_target.GetUnitTarget());
+	}
+
+	void SingleCastState::ConnectTargetSignals(GameUnitS* unitTarget)
+	{
+		if (!unitTarget)
+		{
+			return;
+		}
+
+		m_onTargetDied = unitTarget->killed.connect(this, &SingleCastState::OnTargetKilled);
+		m_onTargetRemoved = unitTarget->despawned.connect(this, &SingleCastState::OnTargetDespawned);
 	}
 
 	GameTime SingleCastState::CalculateFinalCooldown() const
@@ -1966,13 +1988,12 @@ namespace mmo
 		auto& executer = m_cast.GetExecuter();
 		auto* worldInstance = executer.GetWorldInstance();
 
+		NotifyCastEnded(result == spell_cast_result::CastOkay);
+
 		if (!worldInstance || m_spell.attributes(0) & spell_attributes::Passive)
 		{
 			return;
 		}
-
-		// Raise event
-		GetCasting().ended(result == spell_cast_result::CastOkay);
 
 		const uint64 casterId = executer.GetGuid();
 		const uint32 spellId = m_spell.id();
@@ -2131,12 +2152,6 @@ namespace mmo
 			ApplyAllEffects();
 		}
 		m_cast.GetExecuter().RaiseTrigger(trigger_event::OnSpellCast, { m_spell.id() }, &m_cast.GetExecuter());
-		
-		if (!IsChanneled())
-		{
-			// may destroy this, too
-			m_casting.ended(true);
-		}
 	}
 
 	void SingleCastState::OnTargetKilled(GameUnitS*)

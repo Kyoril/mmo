@@ -62,6 +62,10 @@ namespace mmo
 		bool Validate();
 		[[nodiscard]] bool ShouldStartCooldownOnCastStart() const;
 		[[nodiscard]] bool UsesGlobalCooldown() const;
+		void NotifyCastEnded(bool succeeded);
+		void EndChanneling(bool succeeded);
+		GameUnitS* ResolveUnitTarget() const;
+		void ConnectTargetSignals(GameUnitS* unitTarget);
 
 		template<class T>
 		bool HasAttributes(uint32 index, T attributes)
@@ -253,6 +257,8 @@ namespace mmo
 		scoped_connection m_onChannelAuraRemoved;
 		bool m_cooldownStartedOnCastStart { false };
 		GameTime m_cooldownStartedAtCastStartMs { 0 };
+		bool m_endNotified { false };
+		std::shared_ptr<SingleCastState> m_selfHold;
 
 		void SendEndCast(SpellCastResult result);
 		void OnCastFinished();
