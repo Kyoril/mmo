@@ -1978,8 +1978,9 @@ namespace mmo
 		uint32 spellId;
 		GameTime castTime;
 		SpellTargetMap targetMap;
+		uint32 cooldownMs = 0;
 
-		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<GameTime>(castTime) >> targetMap))
+		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<GameTime>(castTime) >> targetMap >> io::read<uint32>(cooldownMs)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -2002,6 +2003,11 @@ namespace mmo
 			if (casterId == m_playerController->GetControlledUnit()->GetGuid() && castTime > 0)
 			{
 				m_spellCast.OnSpellStart(*spell, castTime);
+
+				if (cooldownMs > 0)
+				{
+					m_cooldownManager.StartCooldown(spellId, cooldownMs);
+				}
 			}
 		}
 
@@ -2402,6 +2408,10 @@ namespace mmo
 		if (casterId == ObjectMgr::GetActivePlayerGuid())
 		{
 			m_spellCast.OnSpellFailure(spellId);
+			if (spell && (spell->cooldownflags() & spell_cooldown_flags::StartOnCastStart) != 0)
+			{
+				m_cooldownManager.ClearCooldown(spellId);
+			}
 
 			const char *errorMessage = s_unknown;
 			if (result < std::size(s_spellCastResultStrings))

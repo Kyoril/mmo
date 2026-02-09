@@ -47,19 +47,21 @@ namespace mmo
 		}
 		
 		auto const casterId = executor.GetGuid();
+		const uint32 startCooldownMs = ShouldStartCooldownOnCastStart() ? static_cast<uint32>(CalculateFinalCooldown()) : 0;
 
 		if (worldInstance && !(m_spell.attributes(0) & spell_attributes::Passive) && !m_isProc && m_castTime > 0)
 		{
 			SendPacketFromCaster(
 				executor,
-				[casterId, this](game::OutgoingPacket& out_packet)
+				[casterId, startCooldownMs, this](game::OutgoingPacket& out_packet)
 				{
 					out_packet.Start(game::realm_client_packet::SpellStart);
 					out_packet
 						<< io::write_packed_guid(casterId)
 						<< io::write<uint32>(m_spell.id())
 						<< io::write<GameTime>(m_castTime)
-						<< m_target;
+						<< m_target
+						<< io::write<uint32>(startCooldownMs);
 					out_packet.Finish();
 				});
 		}
@@ -106,6 +108,16 @@ namespace mmo
 			ELOG("Validation failed");
 			m_hasFinished = true;
 			return;
+		}
+
+		if (ShouldStartCooldownOnCastStart())
+		{
+			m_cooldownStartedAtCastStartMs = CalculateFinalCooldown();
+			if (m_cooldownStartedAtCastStartMs > 0)
+			{
+				m_cast.GetExecuter().SetCooldown(m_spell.id(), m_cooldownStartedAtCastStartMs);
+				m_cooldownStartedOnCastStart = true;
+			}
 		}
 
 		if (m_castTime > 0)
@@ -650,6 +662,13 @@ namespace mmo
 		{
 			m_cast.GetExecuter().SetCooldown(m_spell.id(), cooldownTimeMs);
 		}
+	}
+
+	bool SingleCastState::ShouldStartCooldownOnCastStart() const
+	{
+		return !m_isProc
+			&& m_castTime > 0
+			&& (m_spell.cooldownflags() & spell_cooldown_flags::StartOnCastStart) != 0;
 	}
 
 	GameTime SingleCastState::CalculateFinalCooldown() const
@@ -1954,8 +1973,8 @@ namespace mmo
 				targetMap.SetUnitTarget(executer.GetGuid());
 			}
 
-			// Calculate cooldown to include in the packet
-			const GameTime cooldownMs = CalculateFinalCooldown();
+			// Cooldown has already been started at cast start for flagged spells.
+			const GameTime cooldownMs = m_cooldownStartedOnCastStart ? 0 : CalculateFinalCooldown();
 
 			SendPacketFromCaster(executer,
 				[casterId, spellId, &targetMap, cooldownMs](game::OutgoingPacket& out_packet)
@@ -1972,6 +1991,14 @@ namespace mmo
 		}
 		else
 		{
+			// Rollback cast-start cooldown if the cast did not succeed.
+			if (m_cooldownStartedOnCastStart)
+			{
+				executer.SetCooldown(m_spell.id(), 0);
+				m_cooldownStartedOnCastStart = false;
+				m_cooldownStartedAtCastStartMs = 0;
+			}
+
 			SendPacketFromCaster(executer,
 				[casterId, spellId, result](game::OutgoingPacket& out_packet)
 				{

@@ -60,6 +60,7 @@ namespace mmo
 
 	private:
 		bool Validate();
+		[[nodiscard]] bool ShouldStartCooldownOnCastStart() const;
 
 		template<class T>
 		bool HasAttributes(uint32 index, T attributes)
@@ -249,6 +250,8 @@ namespace mmo
 		std::vector<uint64> m_dynObjectsToDespawn;
 		bool m_instantsCast, m_delayedCast;
 		scoped_connection m_onChannelAuraRemoved;
+		bool m_cooldownStartedOnCastStart { false };
+		GameTime m_cooldownStartedAtCastStartMs { 0 };
 
 		void SendEndCast(SpellCastResult result);
 		void OnCastFinished();
