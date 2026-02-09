@@ -10,10 +10,8 @@
 #include "game_server/spells/aura_container.h"
 #include "game_server/objects/game_unit_s.h"
 #include "game_server/spells/spell_cast.h"
-#include "game_server/world/tile_subscriber.h"
-#include "binary_io/vector_sink.h"
-#include "game_protocol/game_protocol.h"
-#include "game_server/world/each_tile_in_sight.h"
+#include "game_server/spells/spell_cast_context.h"
+#include "game_server/spells/spell_target_resolver.h"
 #include "game/spell.h"
 
 namespace mmo
@@ -78,70 +76,6 @@ namespace mmo
 		}
 
 		std::shared_ptr<GameUnitS> GetEffectUnitTarget(const proto::SpellEffect& effect);
-
-	public:
-		template <class T>
-		void SendPacketFromCaster(GameUnitS& caster, T generator)
-		{
-			const auto* worldInstance = caster.GetWorldInstance();
-			if (!worldInstance)
-			{
-				return;
-			}
-
-			TileIndex2D tileIndex;
-			worldInstance->GetGrid().GetTilePosition(caster.GetPosition(), tileIndex[0], tileIndex[1]);
-
-			std::vector<char> buffer;
-			io::VectorSink sink(buffer);
-			game::Protocol::OutgoingPacket packet(sink);
-			generator(packet);
-
-			ForEachSubscriberInSight(
-				worldInstance->GetGrid(),
-				tileIndex,
-				[&buffer, &packet](TileSubscriber& subscriber)
-				{
-					subscriber.SendPacket(
-						packet,
-						buffer
-					);
-				});
-		}
-
-		template <class T>
-		void SendPacketToCaster(GameUnitS& caster, T generator)
-		{
-			const auto* worldInstance = caster.GetWorldInstance();
-			if (!worldInstance)
-			{
-				return;
-			}
-
-			TileIndex2D tileIndex;
-			worldInstance->GetGrid().GetTilePosition(caster.GetPosition(), tileIndex[0], tileIndex[1]);
-
-			std::vector<char> buffer;
-			io::VectorSink sink(buffer);
-			game::Protocol::OutgoingPacket packet(sink);
-			generator(packet);
-
-			ForEachSubscriberInSight(
-				worldInstance->GetGrid(),
-				tileIndex,
-				[&buffer, &packet, &caster](TileSubscriber& subscriber)
-				{
-					if (&subscriber.GetGameUnit() == &caster)
-					{
-						subscriber.SendPacket(
-							packet,
-							buffer
-						);
-					}
-				});
-		}
-
-	public:
 
 		/// Determines if this spell is a channeled spell.
 		bool IsChanneled() const { return m_spell.attributes(0) & spell_attributes::Channeled; }
@@ -276,5 +210,9 @@ namespace mmo
 
 		std::map<GameUnitS*, std::unique_ptr<AuraContainer>> m_targetAuraContainers;
 		uint64 m_itemGuid;
+		SpellCastContext m_context;
+		SpellTargetResolver m_targetResolver;
+
+		using EffectHandler = void (SingleCastState::*)(const proto::SpellEffect&);
 	};
 }
