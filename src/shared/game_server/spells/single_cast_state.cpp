@@ -673,6 +673,12 @@ namespace mmo
 
 	GameTime SingleCastState::CalculateFinalCooldown() const
 	{
+		// No cooldown for procs
+		if (m_isProc)
+		{
+			return 0;
+		}
+
 		const uint64 spellCatCD = m_spell.categorycooldown();
 		const uint64 spellCD = m_spell.cooldown();
 
