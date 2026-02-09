@@ -48,5 +48,6 @@ namespace mmo
 
 		entry.add_attributes(0);
 		entry.add_attributes(0);
+		entry.set_cooldownflags(0);
 	}
 }

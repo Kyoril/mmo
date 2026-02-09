@@ -632,6 +632,13 @@ namespace mmo
 			ImGui::SameLine();
 			DrawHelpMarker("Time before spell can be cast again");
 
+			ImGui::Spacing();
+			DrawSectionHeader("Cooldown Flags");
+
+			CHECKBOX_FLAG_PROP(cooldownflags, "Start Cooldown On Cast Start", spell_cooldown_flags::StartOnCastStart);
+			ImGui::SameLine();
+			DrawHelpMarker("If enabled, cooldown starts when casting starts and is rolled back when the cast fails or is interrupted.");
+
 			ImGui::SetNextItemWidth(150);
 			SLIDER_UINT32_PROP(casttime, "##CastTime", 0, 100000);
 			ImGui::SameLine();
