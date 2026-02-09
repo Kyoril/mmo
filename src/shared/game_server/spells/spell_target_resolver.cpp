@@ -69,115 +69,196 @@ namespace mmo
 		}
 	}
 
-	bool SpellTargetResolver::ResolveEffectTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets) const
+	void SpellTargetResolver::PrepareTargetsBuffer(std::vector<GameObjectS*>& targets) const
 	{
 		targets.clear();
 		if (targets.capacity() < 8)
 		{
 			targets.reserve(8);
 		}
+	}
 
-		if (effect.targeta() == spell_effect_targets::Caster)
+	bool SpellTargetResolver::ResolveSingleCasterTarget(std::vector<GameObjectS*>& targets) const
+	{
+		targets.push_back(&m_context.GetExecutor());
+		return true;
+	}
+
+	bool SpellTargetResolver::ResolveSingleObjectTarget(std::vector<GameObjectS*>& targets) const
+	{
+		if (!m_context.GetTarget().HasGOTarget())
 		{
-			targets.push_back(&m_context.GetExecutor());
+			return false;
+		}
+
+		GameObjectS* target = m_context.FindObjectByGuid(m_context.GetTarget().GetGOTarget());
+		if (!target)
+		{
+			return false;
+		}
+
+		targets.push_back(target);
+		return true;
+	}
+
+	bool SpellTargetResolver::ResolveSingleUnitTarget(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets) const
+	{
+		GameUnitS* unit = m_context.FindUnitByGuid(m_context.GetTarget().GetUnitTarget());
+		if (!unit)
+		{
+			return false;
+		}
+
+		switch (effect.targeta())
+		{
+		case spell_effect_targets::TargetAlly:
+			if (!m_context.GetExecutor().UnitIsFriendly(*unit))
+			{
+				return false;
+			}
+			break;
+		case spell_effect_targets::TargetEnemy:
+			if (m_context.GetExecutor().UnitIsFriendly(*unit))
+			{
+				return false;
+			}
+			break;
+		}
+
+		targets.push_back(unit);
+		return true;
+	}
+
+	bool SpellTargetResolver::ValidateEffectRadius(const proto::SpellEffect& effect) const
+	{
+		if (effect.radius() > 0.0f)
+		{
 			return true;
 		}
 
-		if (effect.targeta() == spell_effect_targets::ObjectTarget)
+		ELOG("Spell " << m_context.GetSpell().id() << " (" << m_context.GetSpell().name() << ") effect has no radius >= 0 set");
+		return false;
+	}
+
+	bool SpellTargetResolver::CanAddUnitTarget(const std::vector<GameObjectS*>& targets, const GameUnitS& unit) const
+	{
+		if (m_context.GetSpell().maxtargets() > 0 && targets.size() >= m_context.GetSpell().maxtargets())
 		{
-			if (!m_context.GetTarget().HasGOTarget())
-			{
-				return false;
-			}
-
-			GameObjectS* target = m_context.FindObjectByGuid(m_context.GetTarget().GetGOTarget());
-			if (!target)
-			{
-				return false;
-			}
-
-			targets.push_back(target);
-			return true;
+			return false;
 		}
 
-		if (effect.targeta() == spell_effect_targets::CasterAreaParty ||
-			effect.targeta() == spell_effect_targets::NearbyParty ||
-			effect.targeta() == spell_effect_targets::NearbyAlly ||
-			effect.targeta() == spell_effect_targets::NearbyEnemy)
+		if (!(m_context.GetSpell().attributes(0) & spell_attributes::CanTargetDead) && !unit.IsAlive())
 		{
-			const auto& position = m_context.GetExecutor().GetPosition();
-			if (effect.radius() <= 0.0f)
+			return false;
+		}
+
+		return true;
+	}
+
+	bool SpellTargetResolver::ResolvePartyOrNearbyTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets) const
+	{
+		if (!ValidateEffectRadius(effect))
+		{
+			return false;
+		}
+
+		const bool isPartyTargetType =
+			effect.targeta() == spell_effect_targets::CasterAreaParty ||
+			effect.targeta() == spell_effect_targets::NearbyParty;
+
+		if (isPartyTargetType)
+		{
+			if (!m_context.GetExecutor().IsPlayer() || m_context.GetExecutor().AsPlayer().GetGroupId() == 0)
 			{
-				ELOG("Spell " << m_context.GetSpell().id() << " (" << m_context.GetSpell().name() << ") effect has no radius >= 0 set");
-				return false;
-			}
-
-			if (effect.targeta() == spell_effect_targets::CasterAreaParty ||
-				effect.targeta() == spell_effect_targets::NearbyParty)
-			{
-				if (!m_context.GetExecutor().IsPlayer() || m_context.GetExecutor().AsPlayer().GetGroupId() == 0)
-				{
-					targets.push_back(&m_context.GetExecutor());
-					return true;
-				}
-			}
-
-			auto* world = m_context.GetWorldInstance();
-			if (!world)
-			{
-				return false;
-			}
-
-			world->GetUnitFinder().FindUnits(Circle(position.x, position.z, effect.radius()), [this, &effect, &targets](GameUnitS& unit)
-			{
-				if (m_context.GetSpell().maxtargets() > 0 && targets.size() >= m_context.GetSpell().maxtargets())
-				{
-					return true;
-				}
-
-				if (!(m_context.GetSpell().attributes(0) & spell_attributes::CanTargetDead) && !unit.IsAlive())
-				{
-					return true;
-				}
-
-				if (effect.targeta() == spell_effect_targets::CasterAreaParty ||
-					effect.targeta() == spell_effect_targets::NearbyParty)
-				{
-					if (!unit.IsPlayer())
-					{
-						return true;
-					}
-
-					if (unit.AsPlayer().GetGroupId() == m_context.GetExecutor().AsPlayer().GetGroupId())
-					{
-						targets.push_back(&unit);
-					}
-				}
-				else if (effect.targeta() == spell_effect_targets::NearbyAlly)
-				{
-					if (!m_context.GetExecutor().UnitIsFriendly(unit))
-					{
-						return true;
-					}
-
-					targets.push_back(&unit);
-				}
-				else if (effect.targeta() == spell_effect_targets::NearbyEnemy)
-				{
-					if (m_context.GetExecutor().UnitIsFriendly(unit))
-					{
-						return true;
-					}
-
-					targets.push_back(&unit);
-				}
-
+				targets.push_back(&m_context.GetExecutor());
 				return true;
-			});
-
-			return true;
+			}
 		}
 
+		auto* world = m_context.GetWorldInstance();
+		if (!world)
+		{
+			return false;
+		}
+
+		const auto& position = m_context.GetExecutor().GetPosition();
+		world->GetUnitFinder().FindUnits(Circle(position.x, position.z, effect.radius()), [this, &effect, &targets, isPartyTargetType](GameUnitS& unit)
+		{
+			if (!CanAddUnitTarget(targets, unit))
+			{
+				return true;
+			}
+
+			if (isPartyTargetType)
+			{
+				if (unit.IsPlayer() && unit.AsPlayer().GetGroupId() == m_context.GetExecutor().AsPlayer().GetGroupId())
+				{
+					targets.push_back(&unit);
+				}
+				return true;
+			}
+
+			if (effect.targeta() == spell_effect_targets::NearbyAlly)
+			{
+				if (!m_context.GetExecutor().UnitIsFriendly(unit))
+				{
+					return true;
+				}
+
+				targets.push_back(&unit);
+				return true;
+			}
+
+			if (effect.targeta() == spell_effect_targets::NearbyEnemy)
+			{
+				if (m_context.GetExecutor().UnitIsFriendly(unit))
+				{
+					return true;
+				}
+
+				targets.push_back(&unit);
+			}
+
+			return true;
+		});
+
+		return true;
+	}
+
+	bool SpellTargetResolver::CollectEnemyUnitsInRadius(const proto::SpellEffect& effect, float centerX, float centerZ, std::vector<GameObjectS*>& targets) const
+	{
+		if (!ValidateEffectRadius(effect))
+		{
+			return false;
+		}
+
+		auto* world = m_context.GetWorldInstance();
+		if (!world)
+		{
+			return false;
+		}
+
+		world->GetUnitFinder().FindUnits(Circle(centerX, centerZ, effect.radius()), [this, &targets](GameUnitS& unit)
+		{
+			if (!CanAddUnitTarget(targets, unit))
+			{
+				return true;
+			}
+
+			if (m_context.GetExecutor().UnitIsFriendly(unit))
+			{
+				return true;
+			}
+
+			targets.push_back(&unit);
+			return true;
+		});
+
+		return true;
+	}
+
+	bool SpellTargetResolver::ResolveAreaEnemyTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets) const
+	{
 		if (effect.targeta() == spell_effect_targets::TargetAreaEnemy)
 		{
 			GameObjectS* targetObject = m_context.FindObjectByGuid(m_context.GetTarget().GetUnitTarget());
@@ -187,111 +268,42 @@ namespace mmo
 			}
 
 			const auto& position = targetObject->GetPosition();
-			if (effect.radius() <= 0.0f)
-			{
-				ELOG("Spell " << m_context.GetSpell().id() << " (" << m_context.GetSpell().name() << ") effect has no radius >= 0 set");
-				return false;
-			}
-
-			auto* world = m_context.GetWorldInstance();
-			if (!world)
-			{
-				return false;
-			}
-
-			world->GetUnitFinder().FindUnits(Circle(position.x, position.z, effect.radius()), [this, &targets](GameUnitS& unit)
-			{
-				if (m_context.GetSpell().maxtargets() > 0 && targets.size() >= m_context.GetSpell().maxtargets())
-				{
-					return true;
-				}
-
-				if (!(m_context.GetSpell().attributes(0) & spell_attributes::CanTargetDead) && !unit.IsAlive())
-				{
-					return true;
-				}
-
-				if (m_context.GetExecutor().UnitIsFriendly(unit))
-				{
-					return true;
-				}
-
-				targets.push_back(&unit);
-				return true;
-			});
-
-			return true;
+			return CollectEnemyUnitsInRadius(effect, position.x, position.z, targets);
 		}
 
 		if (effect.targeta() == spell_effect_targets::SourceAreaEnemy)
 		{
 			const auto& position = m_context.GetExecutor().GetPosition();
-			if (effect.radius() <= 0.0f)
-			{
-				ELOG("Spell " << m_context.GetSpell().id() << " (" << m_context.GetSpell().name() << ") effect has no radius >= 0 set");
-				return false;
-			}
-
-			auto* world = m_context.GetWorldInstance();
-			if (!world)
-			{
-				return false;
-			}
-
-			world->GetUnitFinder().FindUnits(Circle(position.x, position.z, effect.radius()), [this, &targets](GameUnitS& unit)
-			{
-				if (m_context.GetSpell().maxtargets() > 0 && targets.size() >= m_context.GetSpell().maxtargets())
-				{
-					return true;
-				}
-
-				if (!(m_context.GetSpell().attributes(0) & spell_attributes::CanTargetDead) && !unit.IsAlive())
-				{
-					return true;
-				}
-
-				if (m_context.GetExecutor().UnitIsFriendly(unit))
-				{
-					return true;
-				}
-
-				targets.push_back(&unit);
-				return true;
-			});
-
-			return true;
-		}
-
-		if (effect.targeta() == spell_effect_targets::TargetAlly ||
-			effect.targeta() == spell_effect_targets::TargetAny ||
-			effect.targeta() == spell_effect_targets::TargetEnemy)
-		{
-			GameUnitS* unit = m_context.FindUnitByGuid(m_context.GetTarget().GetUnitTarget());
-			if (!unit)
-			{
-				return false;
-			}
-
-			switch (effect.targeta())
-			{
-			case spell_effect_targets::TargetAlly:
-				if (!m_context.GetExecutor().UnitIsFriendly(*unit))
-				{
-					return false;
-				}
-				break;
-			case spell_effect_targets::TargetEnemy:
-				if (m_context.GetExecutor().UnitIsFriendly(*unit))
-				{
-					return false;
-				}
-				break;
-			}
-
-			targets.push_back(unit);
-			return true;
+			return CollectEnemyUnitsInRadius(effect, position.x, position.z, targets);
 		}
 
 		return false;
+	}
+
+	bool SpellTargetResolver::ResolveEffectTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets) const
+	{
+		PrepareTargetsBuffer(targets);
+
+		switch (effect.targeta())
+		{
+		case spell_effect_targets::Caster:
+			return ResolveSingleCasterTarget(targets);
+		case spell_effect_targets::ObjectTarget:
+			return ResolveSingleObjectTarget(targets);
+		case spell_effect_targets::TargetAlly:
+		case spell_effect_targets::TargetAny:
+		case spell_effect_targets::TargetEnemy:
+			return ResolveSingleUnitTarget(effect, targets);
+		case spell_effect_targets::CasterAreaParty:
+		case spell_effect_targets::NearbyParty:
+		case spell_effect_targets::NearbyAlly:
+		case spell_effect_targets::NearbyEnemy:
+			return ResolvePartyOrNearbyTargets(effect, targets);
+		case spell_effect_targets::TargetAreaEnemy:
+		case spell_effect_targets::SourceAreaEnemy:
+			return ResolveAreaEnemyTargets(effect, targets);
+		default:
+			return false;
+		}
 	}
 }
