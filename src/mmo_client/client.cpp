@@ -69,6 +69,7 @@
 #include "base/create_process.h"
 #include "game_client/object_mgr.h"
 #include "ui/unit_model_frame.h"
+#include "client_context.h"
 
 #include "luabind/luabind.hpp"
 #include "luabind/iterator_policy.hpp"
@@ -92,16 +93,17 @@ namespace mmo
 namespace mmo
 {
 	// The io service used for networking
-	static std::unique_ptr<asio::io_service> s_networkIO;
-	static std::unique_ptr<asio::io_service::work> s_networkWork;
-	static std::shared_ptr<LoginConnector> s_loginConnector;
-	static std::shared_ptr<RealmConnector> s_realmConnector;
-
 	/// Runs the network thread to handle incoming packets.
 	void NetWorkProc()
 	{
+		auto& context = GetClientContext();
+		if (!context.networkIo)
+		{
+			return;
+		}
+
 		// Run the network thread
-		s_networkIO->poll_one();
+		context.networkIo->poll_one();
 	}
 
 	/// Initializes the login connector and starts one or multiple network
@@ -109,14 +111,15 @@ namespace mmo
 	/// thread.
 	void NetInit()
 	{
-		s_networkIO = std::make_unique<asio::io_service>();
+		auto& context = GetClientContext();
+		context.networkIo = std::make_unique<asio::io_service>();
 
 		// Keep the worker busy until this object is destroyed
-		s_networkWork = std::make_unique<asio::io_service::work>(*s_networkIO);
+		context.networkWork = std::make_unique<asio::io_service::work>(*context.networkIo);
 
 		// Create the login connector instance
-		s_loginConnector = std::make_shared<LoginConnector>(*s_networkIO);
-		s_realmConnector = std::make_shared<RealmConnector>(*s_networkIO);
+		context.loginConnector = std::make_shared<LoginConnector>(*context.networkIo);
+		context.realmConnector = std::make_shared<RealmConnector>(*context.networkIo);
 	}
 
 	/// Destroy the login connector, cuts all opened connections and waits
@@ -124,30 +127,34 @@ namespace mmo
 	/// be called from the main thread.
 	void NetDestroy()
 	{
+		auto& context = GetClientContext();
+
 		// Close the realm connector
-		if (s_realmConnector)
+		if (context.realmConnector)
 		{
-			s_realmConnector->resetListener();
-			s_realmConnector->close();
+			context.realmConnector->resetListener();
+			context.realmConnector->close();
 		}
 
 		// Close the login connector
-		if (s_loginConnector)
+		if (context.loginConnector)
 		{
-			s_loginConnector->resetListener();
-			s_loginConnector->close();
+			context.loginConnector->resetListener();
+			context.loginConnector->close();
 		}
 
 		// Destroy the work object that keeps the worker busy so that
 		// it can actually exit
-		s_networkWork.reset();
-		s_networkIO->stop();
+		context.networkWork.reset();
+		if (context.networkIo)
+		{
+			context.networkIo->stop();
+			context.networkIo->reset();
+		}
 
-		// Wait for the network thread to stop running
-		s_networkIO->reset();
-
-		s_realmConnector.reset();
-		s_loginConnector.reset();
+		context.realmConnector.reset();
+		context.loginConnector.reset();
+		context.networkIo.reset();
 	}
 }
 
@@ -157,15 +164,15 @@ namespace mmo
 namespace mmo
 {
 	static scoped_connection_container s_frameUiConnections;
-	static std::unique_ptr<GameScript> s_gameScript;
 	static Localization s_localization;
-	static std::unique_ptr<Minimap> s_minimap;
 
 	extern Cursor g_cursor;
 
 	/// Initializes everything related to FrameUI.
 	bool InitializeFrameUi()
 	{
+		auto& context = GetClientContext();
+
 		if (const auto window = GraphicsDevice::Get().GetAutoCreatedWindow())
 		{
 			s_frameUiConnections += window->Resized.connect([](uint16 width, uint16 height)
@@ -178,7 +185,7 @@ namespace mmo
 		}
 
 		// Initialize the frame manager
-		FrameManager::Initialize(&s_gameScript->GetLuaState(), s_localization);
+		FrameManager::Initialize(&context.gameScript->GetLuaState(), s_localization);
 
 		// Register model renderer
 		FrameManager::Get().RegisterFrameRenderer("ModelRenderer", [](const std::string &name)
@@ -190,7 +197,7 @@ namespace mmo
 		FrameManager::Get().RegisterFrameFactory("UnitModel", [](const std::string &name)
 												 { return std::make_shared<UnitModelFrame>(name); });
 		FrameManager::Get().RegisterFrameFactory("Minimap", [](const std::string &name)
-												 { return std::make_shared<MinimapFrame>(name, *s_minimap); });
+												 { return std::make_shared<MinimapFrame>(name, *GetClientContext().minimap); });
 		FrameManager::Get().RegisterFrameFactory("Cooldown", [](const std::string &name)
 												 { return std::make_shared<CooldownFrame>(name); });
 
@@ -235,7 +242,7 @@ namespace mmo
 
 		// Expose model frame methods to lua
 
-		LUABIND_MODULE(&s_gameScript->GetLuaState(),
+		LUABIND_MODULE(&context.gameScript->GetLuaState(),
 					   luabind::scope(
 						   luabind::class_<ModelFrame, Frame>("ModelFrame")
 							   .def("SetModelFile", &ModelFrame::SetModelFile)
@@ -284,40 +291,17 @@ namespace mmo
 	static std::ofstream s_logFile;
 	static scoped_connection s_logConn;
 
-	static std::unique_ptr<TimerQueue> s_timerQueue;
 	static scoped_connection s_timerConnection;
 
 	static proto_client::Project s_project;
-
-	static std::unique_ptr<IAudio> s_audio;
-
-	std::unique_ptr<LootClient> s_lootClient;
-	std::unique_ptr<VendorClient> s_vendorClient;
-	std::unique_ptr<TrainerClient> s_trainerClient;
-	std::unique_ptr<InventoryClient> s_inventoryClient;
-
-	std::unique_ptr<ClientCache> s_clientCache;
-
-	static std::unique_ptr<ActionBar> s_actionBar;
-	static std::unique_ptr<SpellCast> s_spellCast;
-	static std::unique_ptr<CooldownManager> s_cooldownManager;
-	static std::unique_ptr<QuestClient> s_questClient;
-	static std::unique_ptr<PartyInfo> s_partyInfo;
-	static std::unique_ptr<GuildClient> s_guildClient;
-	static std::unique_ptr<FriendClient> s_friendClient;
-
-	static std::unique_ptr<CharCreateInfo> s_charCreateInfo;
-	static std::unique_ptr<CharSelect> s_charSelect;
-	static std::unique_ptr<TalentClient> s_talentClient;
-
-	static std::unique_ptr<Discord> s_discord;
 
 	static GameTimeComponent s_gameTime;
 
 	/// Initializes the global game systems.
 	bool InitializeGlobal()
 	{
-		s_timerQueue = std::make_unique<TimerQueue>(s_timerService);
+		auto& context = GetClientContext();
+		context.timerQueue = std::make_unique<TimerQueue>(s_timerService);
 
 		// Receive the current working directory
 		std::error_code error;
@@ -353,11 +337,11 @@ namespace mmo
 		NetInit();
 
 #ifdef _WIN32
-		s_audio = std::make_unique<FMODAudio>();
+		context.audio = std::make_unique<FMODAudio>();
 #else
-		s_audio = std::make_unique<NullAudio>();
+		context.audio = std::make_unique<NullAudio>();
 #endif
-		s_audio->Create();
+		context.audio->Create();
 
 		// Run service
 		s_timerConnection = EventLoop::Idle.connect([&](float, const mmo::GameTime &)
@@ -366,7 +350,7 @@ namespace mmo
 				s_timerService.poll_one(); });
 
 		// Verify the connector instances have been initialized
-		ASSERT(s_loginConnector && s_realmConnector);
+		ASSERT(context.loginConnector && context.realmConnector);
 
 		// Load game data
 		if (!s_project.load("ClientDB"))
@@ -375,50 +359,50 @@ namespace mmo
 			return false;
 		}
 
-		s_clientCache = std::make_unique<ClientCache>(*s_realmConnector);
-		if (!s_clientCache->Load())
+		context.clientCache = std::make_unique<ClientCache>(*context.realmConnector);
+		if (!context.clientCache->Load())
 		{
 			ELOG("Failed to load the client cache!");
 			return false;
 		}
 
-		s_discord = std::make_unique<Discord>();
-		s_discord->Initialize();
+		context.discord = std::make_unique<Discord>();
+		context.discord->Initialize();
 
 		// Setup minimap
-		s_minimap = std::make_unique<Minimap>(256);
+		context.minimap = std::make_unique<Minimap>(256);
 
-		s_charCreateInfo = std::make_unique<CharCreateInfo>(s_project, *s_realmConnector);
-		s_charSelect = std::make_unique<CharSelect>(s_project, *s_realmConnector);
+		context.charCreateInfo = std::make_unique<CharCreateInfo>(s_project, *context.realmConnector);
+		context.charSelect = std::make_unique<CharSelect>(s_project, *context.realmConnector);
 
 		// Initialize loot client
-		s_lootClient = std::make_unique<LootClient>(*s_realmConnector, s_clientCache->GetItemCache());
-		s_vendorClient = std::make_unique<VendorClient>(*s_realmConnector, s_clientCache->GetItemCache());
-		s_trainerClient = std::make_unique<TrainerClient>(*s_realmConnector, s_project.spells);
-		s_inventoryClient = std::make_unique<InventoryClient>(*s_realmConnector);
-		s_questClient = std::make_unique<QuestClient>(*s_realmConnector, s_clientCache->GetQuestCache(), s_project.spells, s_clientCache->GetItemCache(), s_clientCache->GetCreatureCache(), s_localization);
-		s_partyInfo = std::make_unique<PartyInfo>(*s_realmConnector, s_clientCache->GetNameCache());
-		s_guildClient = std::make_unique<GuildClient>(*s_realmConnector, s_clientCache->GetGuildCache(), s_project.races, s_project.classes);
-		s_friendClient = std::make_unique<FriendClient>(*s_realmConnector, s_project.races, s_project.classes);
-		s_spellCast = std::make_unique<SpellCast>(*s_realmConnector, s_project.spells, s_project.ranges);
-		s_cooldownManager = std::make_unique<CooldownManager>();
-		s_actionBar = std::make_unique<ActionBar>(*s_realmConnector, s_project.spells, s_clientCache->GetItemCache(), *s_spellCast);
-		s_talentClient = std::make_unique<TalentClient>(s_project.talentTabs, s_project.talents, s_project.spells, *s_realmConnector);
+		context.lootClient = std::make_unique<LootClient>(*context.realmConnector, context.clientCache->GetItemCache());
+		context.vendorClient = std::make_unique<VendorClient>(*context.realmConnector, context.clientCache->GetItemCache());
+		context.trainerClient = std::make_unique<TrainerClient>(*context.realmConnector, s_project.spells);
+		context.inventoryClient = std::make_unique<InventoryClient>(*context.realmConnector);
+		context.questClient = std::make_unique<QuestClient>(*context.realmConnector, context.clientCache->GetQuestCache(), s_project.spells, context.clientCache->GetItemCache(), context.clientCache->GetCreatureCache(), s_localization);
+		context.partyInfo = std::make_unique<PartyInfo>(*context.realmConnector, context.clientCache->GetNameCache());
+		context.guildClient = std::make_unique<GuildClient>(*context.realmConnector, context.clientCache->GetGuildCache(), s_project.races, s_project.classes);
+		context.friendClient = std::make_unique<FriendClient>(*context.realmConnector, s_project.races, s_project.classes);
+		context.spellCast = std::make_unique<SpellCast>(*context.realmConnector, s_project.spells, s_project.ranges);
+		context.cooldownManager = std::make_unique<CooldownManager>();
+		context.actionBar = std::make_unique<ActionBar>(*context.realmConnector, s_project.spells, context.clientCache->GetItemCache(), *context.spellCast);
+		context.talentClient = std::make_unique<TalentClient>(s_project.talentTabs, s_project.talents, s_project.spells, *context.realmConnector);
 
 		GameStateMgr &gameStateMgr = GameStateMgr::Get();
 
 		// Register game states
-		const auto loginState = std::make_shared<LoginState>(gameStateMgr, *s_loginConnector, *s_realmConnector, *s_timerQueue, *s_audio, *s_discord);
+		const auto loginState = std::make_shared<LoginState>(gameStateMgr, *context.loginConnector, *context.realmConnector, *context.timerQueue, *context.audio, *context.discord);
 		gameStateMgr.AddGameState(loginState);
 
-		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient,
-															 *s_actionBar, *s_spellCast, *s_cooldownManager, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charSelect, *s_guildClient, *s_friendClient, *s_clientCache, *s_discord, s_gameTime, *s_talentClient,
-															 *s_minimap, *s_inventoryClient);
+		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *context.realmConnector, s_project, *context.timerQueue, *context.lootClient, *context.vendorClient,
+															 *context.actionBar, *context.spellCast, *context.cooldownManager, *context.trainerClient, *context.questClient, *context.audio, *context.partyInfo, *context.charSelect, *context.guildClient, *context.friendClient, *context.clientCache, *context.discord, s_gameTime, *context.talentClient,
+															 *context.minimap, *context.inventoryClient);
 		gameStateMgr.AddGameState(worldState);
 
 		// Initialize the game script instance
-		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project, *s_actionBar, *s_spellCast, *s_cooldownManager, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charCreateInfo, *s_charSelect, *s_guildClient, *s_friendClient, s_gameTime, *s_talentClient);
-		s_minimap->RegisterScriptFunctions(&s_gameScript->GetLuaState());
+		context.gameScript = std::make_unique<GameScript>(*context.loginConnector, *context.realmConnector, *context.lootClient, *context.vendorClient, loginState, s_project, *context.actionBar, *context.spellCast, *context.cooldownManager, *context.trainerClient, *context.questClient, *context.audio, *context.partyInfo, *context.charCreateInfo, *context.charSelect, *context.guildClient, *context.friendClient, s_gameTime, *context.talentClient);
+		context.minimap->RegisterScriptFunctions(&context.gameScript->GetLuaState());
 
 		// Setup FrameUI library
 		if (!InitializeFrameUi())
@@ -446,46 +430,47 @@ namespace mmo
 	/// Destroys the global game systems.
 	void DestroyGlobal()
 	{
-		s_minimap.reset();
+		auto& context = GetClientContext();
+		context.minimap.reset();
 		s_timerConnection.disconnect();
 
 		// Remove all registered game states and also leave the current game state.
 		GameStateMgr::Get().RemoveAllGameStates();
 
 		// Shutdown client systems
-		if (s_lootClient)
-			s_lootClient->Shutdown();
-		if (s_vendorClient)
-			s_vendorClient->Shutdown();
-		if (s_trainerClient)
-			s_trainerClient->Shutdown();
-		if (s_inventoryClient)
-			s_inventoryClient->Shutdown();
-		if (s_questClient)
-			s_questClient->Shutdown();
-		if (s_partyInfo)
-			s_partyInfo->Shutdown();
-		if (s_guildClient)
-			s_guildClient->Shutdown();
-		if (s_friendClient)
-			s_friendClient->Shutdown();
-		s_vendorClient.reset();
-		s_lootClient.reset();
-		s_trainerClient.reset();
-		s_inventoryClient.reset();
+		if (context.lootClient)
+			context.lootClient->Shutdown();
+		if (context.vendorClient)
+			context.vendorClient->Shutdown();
+		if (context.trainerClient)
+			context.trainerClient->Shutdown();
+		if (context.inventoryClient)
+			context.inventoryClient->Shutdown();
+		if (context.questClient)
+			context.questClient->Shutdown();
+		if (context.partyInfo)
+			context.partyInfo->Shutdown();
+		if (context.guildClient)
+			context.guildClient->Shutdown();
+		if (context.friendClient)
+			context.friendClient->Shutdown();
+		context.vendorClient.reset();
+		context.lootClient.reset();
+		context.trainerClient.reset();
+		context.inventoryClient.reset();
 
 		DestroyFrameUI();
 
 		// Reset game script instance
-		s_gameScript.reset();
+		context.gameScript.reset();
 
 		// Destroy the network thread
 		NetDestroy();
 
-		ASSERT(s_clientCache);
-		s_clientCache->Save();
+		ASSERT(context.clientCache);
+		context.clientCache->Save();
 
-		s_audio.reset();
+		context.audio.reset();
 
 		// Destroy the graphics device object
 		Console::Destroy();
