@@ -7,6 +7,7 @@
 #include <imgui_internal.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
+#include "editor_imgui_helpers.h"
 #include "log/default_log_levels.h"
 #include "preview_providers/preview_provider_manager.h"
 
@@ -97,23 +98,19 @@ namespace mmo
 				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
 				ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
 
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
-				if (ImGui::Button("+ Add New", ImVec2(-1, 0)))
+				if (DrawPrimaryButton("+ Add New", ImVec2(-1, 0)))
 				{
 					auto *entry = m_manager.add();
 					OnNewEntry(*entry);
 					m_currentItem = m_manager.count() - 1;
 				}
-				ImGui::PopStyleColor();
 
 				ImGui::BeginDisabled(m_currentItem == -1);
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-				if (ImGui::Button("Remove Selected", ImVec2(-1, 0)))
+				if (DrawDangerButton("Remove Selected", ImVec2(-1, 0)))
 				{
 					m_manager.remove(m_manager.getTemplates().entry().at(m_currentItem).id());
 					m_currentItem = -1;
 				}
-				ImGui::PopStyleColor();
 				ImGui::EndDisabled();
 
 				ImGui::Spacing();

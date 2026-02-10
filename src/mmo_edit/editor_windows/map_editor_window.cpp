@@ -39,15 +39,13 @@ namespace mmo
 		// Top toolbar with actions
 		const bool hasWorldFile = !currentEntry.directory().empty();
 		ImGui::BeginDisabled(!hasWorldFile);
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
-		if (ImGui::Button("Open in World Editor", ImVec2(180, 0)))
+		if (DrawPrimaryButton("Open in World Editor", ImVec2(180, 0)))
 		{
 			// Construct the world file path: Worlds/{name}/{name}.hwld
 			const String worldName = currentEntry.directory();
 			const String worldFilePath = "Worlds/" + worldName + "/" + worldName + ".hwld";
 			m_host.OpenAsset(worldFilePath);
 		}
-		ImGui::PopStyleColor();
 		ImGui::EndDisabled();
 		ImGui::SameLine();
 		DrawHelpMarker(hasWorldFile ? "Open this map's world file in the World Editor" : "No world file path specified");
@@ -125,8 +123,7 @@ namespace mmo
 
 			static int currentCreatureSpawn = -1;
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
-			if (ImGui::Button("+ Add Creature Spawn", ImVec2(-1, 0)))
+			if (DrawSuccessButton("+ Add Creature Spawn", ImVec2(-1, 0)))
 			{
 				auto* spawn = currentEntry.mutable_unitspawns()->Add();
 				spawn->set_positionx(0.0f);
@@ -140,16 +137,12 @@ namespace mmo
 				spawn->set_respawndelay(30 * 1000);
 				spawn->set_isactive(true);
 			}
-			ImGui::PopStyleColor();
-
 			ImGui::BeginDisabled(currentCreatureSpawn == -1 || currentCreatureSpawn >= currentEntry.unitspawns_size());
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-			if (ImGui::Button("Remove Spawn", ImVec2(-1, 0)))
+			if (DrawDangerButton("Remove Spawn", ImVec2(-1, 0)))
 			{
 				currentEntry.mutable_unitspawns()->erase(currentEntry.mutable_unitspawns()->begin() + currentCreatureSpawn);
 				currentCreatureSpawn = -1;
 			}
-			ImGui::PopStyleColor();
 			ImGui::EndDisabled();
 
 			ImGui::Spacing();

@@ -565,23 +565,19 @@ namespace mmo
 			{
 				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
 				ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
-				if (ImGui::Button("+ Add New", ImVec2(-1, 0)))
+				if (DrawSuccessButton("+ Add New", ImVec2(-1, 0)))
 				{
 					auto* entry = m_manager.add();
 					OnNewEntry(*entry);
 					m_currentItem = m_manager.count() - 1;
 				}
-				ImGui::PopStyleColor();
 
 				ImGui::BeginDisabled(m_currentItem < 0 || m_currentItem >= m_manager.count());
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-				if (ImGui::Button("Remove Selected", ImVec2(-1, 0)))
+				if (DrawDangerButton("Remove Selected", ImVec2(-1, 0)))
 				{
 					m_manager.remove(m_manager.getTemplates().entry().at(m_currentItem).id());
 					m_currentItem = -1;
 				}
-				ImGui::PopStyleColor();
 				ImGui::EndDisabled();
 
 				ImGui::Spacing();
@@ -643,15 +639,13 @@ namespace mmo
 	}
 	void ItemDisplayEditorWindow::DrawDetailsImpl(EntryType& currentEntry)
 	{
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
-		if (ImGui::Button("Duplicate Display Data", ImVec2(180.0f, 0.0f)))
+		if (DrawPrimaryButton("Duplicate Display Data", ImVec2(180.0f, 0.0f)))
 		{
 			proto::ItemDisplayEntry* copied = m_project.itemDisplays.add();
 			const uint32 newId = copied->id();
 			copied->CopyFrom(currentEntry);
 			copied->set_id(newId);
 		}
-		ImGui::PopStyleColor();
 		ImGui::SameLine();
 		DrawHelpMarker("Creates a full copy of this item display with a new id");
 

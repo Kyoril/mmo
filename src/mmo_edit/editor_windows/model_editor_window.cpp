@@ -5,7 +5,9 @@
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
+#include "asset_picker_widget.h"
 #include "assets/asset_registry.h"
+#include "editor_imgui_helpers.h"
 #include "game/character_customization/avatar_definition_mgr.h"
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "log/default_log_levels.h"
@@ -26,7 +28,7 @@ namespace mmo
 
 	void ModelEditorWindow::DrawDetailsImpl(EntryType& currentEntry)
 	{
-		if (ImGui::Button("Duplicate"))
+		if (DrawPrimaryButton("Duplicate", ImVec2(140.0f, 0.0f)))
 		{
 			proto::ModelDataEntry* copied = m_project.models.add();
 			const uint32 newId = copied->id();
@@ -102,35 +104,20 @@ namespace mmo
 			CHECKBOX_FLAG_PROP(flags, "Customizable", model_data_flags::IsCustomizable);
 			CHECKBOX_FLAG_PROP(flags, "Is Player Character", model_data_flags::IsPlayerCharacter);
 
-			if (ImGui::BeginCombo("File", currentEntry.filename().c_str(), ImGuiComboFlags_None))
+			static const std::set<String> modelExtensions = { ".hmsh", ".char" };
+			String modelFile = currentEntry.filename();
+			if (AssetPickerWidget::Draw("File", modelFile, modelExtensions, nullptr, nullptr, 48.0f))
 			{
-				for (int i = 0; i < m_modelFiles.size(); i++)
+				currentEntry.set_filename(modelFile);
+				const Path p = modelFile;
+				if (p.extension() == ".char")
 				{
-					ImGui::PushID(i);
-					const bool item_selected = m_modelFiles[i] == currentEntry.filename();
-					const char* item_text = m_modelFiles[i].c_str();
-					if (ImGui::Selectable(item_text, item_selected))
-					{
-						currentEntry.set_filename(item_text);
-
-						const Path p = item_text;
-						if (p.extension() == ".char")
-						{
-							currentEntry.set_flags(currentEntry.flags() | model_data_flags::IsCustomizable);
-						}
-						else
-						{
-							currentEntry.set_flags(currentEntry.flags() & ~model_data_flags::IsCustomizable);
-						}
-					}
-					if (item_selected)
-					{
-						ImGui::SetItemDefaultFocus();
-					}
-					ImGui::PopID();
+					currentEntry.set_flags(currentEntry.flags() | model_data_flags::IsCustomizable);
 				}
-
-				ImGui::EndCombo();
+				else
+				{
+					currentEntry.set_flags(currentEntry.flags() & ~model_data_flags::IsCustomizable);
+				}
 			}
 
 			if (currentEntry.flags() & model_data_flags::IsCustomizable)

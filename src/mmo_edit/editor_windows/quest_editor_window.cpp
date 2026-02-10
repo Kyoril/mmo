@@ -91,15 +91,13 @@ namespace mmo
 	void QuestEditorWindow::DrawDetailsImpl(proto::QuestEntry &currentEntry)
 	{
 		// Top toolbar with actions
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
-		if (ImGui::Button("Duplicate Quest", ImVec2(120, 0)))
+		if (DrawPrimaryButton("Duplicate Quest", ImVec2(120, 0)))
 		{
 			proto::QuestEntry *copied = m_project.quests.add();
 			const uint32 newId = copied->id();
 			copied->CopyFrom(currentEntry);
 			copied->set_id(newId);
 		}
-		ImGui::PopStyleColor();
 
 		ImGui::SameLine();
 		DrawHelpMarker("Create a copy of this quest with a new ID");
@@ -490,12 +488,10 @@ namespace mmo
 			DrawSectionHeader("Quest Objectives");
 
 			ImGui::BeginDisabled(currentEntry.requirements_size() >= 4);
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
-			if (ImGui::Button("+ Add Objective", ImVec2(150, 30)))
+			if (DrawSuccessButton("+ Add Objective", ImVec2(150, 30)))
 			{
 				auto *newEntry = currentEntry.add_requirements();
 			}
-			ImGui::PopStyleColor();
 			ImGui::EndDisabled();
 
 			ImGui::SameLine();
@@ -664,13 +660,11 @@ namespace mmo
 
 					// Actions
 					ImGui::TableNextColumn();
-					ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-					if (ImGui::Button("Remove", ImVec2(-1, 0)))
+					if (DrawDangerButton("Remove", ImVec2(-1, 0)))
 					{
 						currentEntry.mutable_requirements()->erase(currentEntry.mutable_requirements()->begin() + index);
 						index--;
 					}
-					ImGui::PopStyleColor();
 
 					ImGui::PopID();
 				}
@@ -697,8 +691,7 @@ namespace mmo
 			ImGui::SetNextItemWidth(150);
 			SLIDER_UINT32_PROP(rewardxp, "Experience Points", 0, std::numeric_limits<int32>::max());
 			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.4f, 0.8f, 0.8f));
-			if (ImGui::Button("Auto-Calculate XP"))
+			if (DrawPrimaryButton("Auto-Calculate XP"))
 			{
 				float difficultyMultiplier = 1.0f;
 
@@ -724,7 +717,6 @@ namespace mmo
 
 				currentEntry.set_rewardxp(GetSuggestedQuestXP(currentEntry.questlevel(), difficultyMultiplier));
 			}
-			ImGui::PopStyleColor();
 			ImGui::SameLine();
 			DrawHelpMarker("Automatically calculate XP based on quest level and difficulty");
 
@@ -737,12 +729,10 @@ namespace mmo
 			ImGui::Spacing();
 			DrawSectionHeader("Item Rewards");
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
-			if (ImGui::Button("+ Add Reward Item", ImVec2(150, 30)))
+			if (DrawSuccessButton("+ Add Reward Item", ImVec2(150, 30)))
 			{
 				auto *newEntry = currentEntry.add_rewarditems();
 			}
-			ImGui::PopStyleColor();
 
 			ImGui::SameLine();
 			ImGui::TextDisabled("%d reward items", currentEntry.rewarditems_size());
@@ -814,13 +804,11 @@ namespace mmo
 					}
 
 					ImGui::TableNextColumn();
-					ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-					if (ImGui::Button("Remove", ImVec2(-1, 0)))
+					if (DrawDangerButton("Remove", ImVec2(-1, 0)))
 					{
 						currentEntry.mutable_rewarditems()->erase(currentEntry.mutable_rewarditems()->begin() + index);
 						index--;
 					}
-					ImGui::PopStyleColor();
 
 					ImGui::PopID();
 				}

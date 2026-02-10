@@ -2,6 +2,7 @@
 
 #include "spell_visualization_preview.h"
 #include "editor_host.h"
+#include "editor_imgui_helpers.h"
 #include "editor_projectile_manager.h"
 
 #include "audio/audio.h"
@@ -325,21 +326,17 @@ namespace mmo
 	void SpellVisualizationPreview::DrawToolbar(proto::SpellVisualization* visualization)
 	{
 		// Row 1: Main playback controls
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 0.8f));
-		if (ImGui::Button("Play", ImVec2(50, 0)))
+		if (DrawSuccessButton("Play", ImVec2(50, 0)))
 		{
 			TriggerFullCastSequence();
 		}
-		ImGui::PopStyleColor();
 
 		ImGui::SameLine();
 
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.2f, 0.2f, 0.8f));
-		if (ImGui::Button("Stop", ImVec2(50, 0)))
+		if (DrawDangerButton("Stop", ImVec2(50, 0)))
 		{
 			StopPreview();
 		}
-		ImGui::PopStyleColor();
 
 		ImGui::SameLine();
 		ImGui::Checkbox("Loop", &m_loopSequence);
@@ -352,32 +349,30 @@ namespace mmo
 		ImGui::DragFloat("##cast", &m_castDuration, 0.1f, 0.5f, 5.0f, "%.1fs cast");
 
 		// Row 2: Individual event triggers
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.4f, 0.6f, 0.8f));
-		if (ImGui::SmallButton("Start"))
+		if (DrawPrimarySmallButton("Start"))
 		{
 			TriggerEvent(PreviewEvent::StartCast);
 		}
 		ImGui::SameLine();
-		if (ImGui::SmallButton("Casting"))
+		if (DrawPrimarySmallButton("Casting"))
 		{
 			TriggerEvent(PreviewEvent::Casting);
 		}
 		ImGui::SameLine();
-		if (ImGui::SmallButton("OK"))
+		if (DrawPrimarySmallButton("OK"))
 		{
 			TriggerEvent(PreviewEvent::CastSucceeded);
 		}
 		ImGui::SameLine();
-		if (ImGui::SmallButton("Impact"))
+		if (DrawPrimarySmallButton("Impact"))
 		{
 			TriggerEvent(PreviewEvent::Impact);
 		}
 		ImGui::SameLine();
-		if (ImGui::SmallButton("Cancel"))
+		if (DrawPrimarySmallButton("Cancel"))
 		{
 			TriggerEvent(PreviewEvent::CancelCast);
 		}
-		ImGui::PopStyleColor();
 	}
 
 	void SpellVisualizationPreview::TriggerEvent(PreviewEvent event)

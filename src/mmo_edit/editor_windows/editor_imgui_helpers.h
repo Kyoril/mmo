@@ -67,4 +67,74 @@ namespace mmo
 
 		return changed;
 	}
+
+	/// @brief Draws a primary (blue) button with consistent editor styling.
+	/// @param label Button label.
+	/// @param size Optional button size.
+	/// @return True if pressed.
+	inline bool DrawPrimaryButton(const char* label, const ImVec2& size = ImVec2(0, 0))
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
+		const bool pressed = ImGui::Button(label, size);
+		ImGui::PopStyleColor();
+		return pressed;
+	}
+
+	/// @brief Draws a primary (blue) small button with consistent editor styling.
+	/// @param label Button label.
+	/// @return True if pressed.
+	inline bool DrawPrimarySmallButton(const char* label)
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
+		const bool pressed = ImGui::SmallButton(label);
+		ImGui::PopStyleColor();
+		return pressed;
+	}
+
+	/// @brief Draws a danger (red) button with consistent editor styling.
+	/// @param label Button label.
+	/// @param size Optional button size.
+	/// @return True if pressed.
+	inline bool DrawDangerButton(const char* label, const ImVec2& size = ImVec2(0, 0))
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
+		const bool pressed = ImGui::Button(label, size);
+		ImGui::PopStyleColor();
+		return pressed;
+	}
+
+	/// @brief Draws a danger (red) small button with consistent editor styling.
+	/// @param label Button label.
+	/// @return True if pressed.
+	inline bool DrawDangerSmallButton(const char* label)
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
+		const bool pressed = ImGui::SmallButton(label);
+		ImGui::PopStyleColor();
+		return pressed;
+	}
+
+	/// @brief Draws a success (green) button with consistent editor styling.
+	/// @param label Button label.
+	/// @param size Optional button size.
+	/// @return True if pressed.
+	inline bool DrawSuccessButton(const char* label, const ImVec2& size = ImVec2(0, 0))
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
+		const bool pressed = ImGui::Button(label, size);
+		ImGui::PopStyleColor();
+		return pressed;
+	}
+
+	/// @brief Draws a neutral (gray) button with consistent editor styling.
+	/// @param label Button label.
+	/// @param size Optional button size.
+	/// @return True if pressed.
+	inline bool DrawNeutralButton(const char* label, const ImVec2& size = ImVec2(0, 0))
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
+		const bool pressed = ImGui::Button(label, size);
+		ImGui::PopStyleColor();
+		return pressed;
+	}
 }
