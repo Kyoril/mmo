@@ -650,7 +650,12 @@ namespace mmo
 
 		gx.SetTransformMatrix(World, renderable.GetWorldTransform());
 
+		// Reserve space to avoid heap allocation on push_back
 		ASSERT(m_psCameraBuffer);
+		if (op.pixelConstantBuffers.empty())
+		{
+			op.pixelConstantBuffers.reserve(4);
+		}
 		op.pixelConstantBuffers.push_back(m_psCameraBuffer.get());
 
 		// Bind vertex layout

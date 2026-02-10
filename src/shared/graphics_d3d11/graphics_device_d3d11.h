@@ -16,12 +16,17 @@ using Microsoft::WRL::ComPtr;
 namespace mmo
 {
 	class VertexShaderD3D11;
+	class PixelShaderD3D11;
 	D3D11_MAP MapLockOptionsToD3D11(LockOptions options);
 
 	/// This is the d3d11 implementation of the graphics device class.
 	class GraphicsDeviceD3D11 final
 		: public GraphicsDevice
 	{
+		friend class VertexShaderD3D11;
+		friend class PixelShaderD3D11;
+		friend class VertexDeclarationD3D11;
+
 	public:
 		GraphicsDeviceD3D11();
 
@@ -264,8 +269,22 @@ namespace mmo
 		HCURSOR m_hardwareCursor = nullptr;
 
 		Texture* m_textureSlots[16]{ };
-		ShaderBase* m_vertexShader { nullptr };
-		ShaderBase* m_pixelShader { nullptr };
+
+		/// Currently bound vertex shader (for caching to avoid redundant VSSetShader calls).
+		ShaderBase* m_currentVertexShader { nullptr };
+
+		/// Currently bound pixel shader (for caching to avoid redundant PSSetShader calls).
+		ShaderBase* m_currentPixelShader { nullptr };
+
+		/// Last bound material pointer. When consecutive draws use the same material,
+		/// we skip Material::Apply entirely since shaders/textures/state are already set.
+		MaterialInterface* m_lastBoundMaterial { nullptr };
+
+		/// Last pixel shader type used with the last bound material.
+		PixelShaderType m_lastBoundPixelShaderType { PixelShaderType::Forward };
+
+		/// Cache for vertex declaration -> hasBlendIndices to avoid linear search per draw call.
+		std::unordered_map<VertexDeclaration*, bool> m_blendIndicesCache;
 
 		ID3D11InputLayout* m_lastInputLayout{ nullptr };
 		uint64 m_batchCount = 0;

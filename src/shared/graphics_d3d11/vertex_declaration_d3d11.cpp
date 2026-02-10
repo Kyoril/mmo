@@ -169,9 +169,15 @@ namespace mmo
 	{
 		ID3D11InputLayout* pVertexLayout = GetILayoutByShader(boundVertexProgram, binding);
 
+		// Skip IASetInputLayout if the same layout is already bound
+		if (pVertexLayout == m_device.m_lastInputLayout)
+		{
+			return;
+		}
+
 		ID3D11DeviceContext& context = m_device;
 		context.IASetInputLayout(pVertexLayout);
-
+		m_device.m_lastInputLayout = pVertexLayout;
 	}
 
 	void VertexDeclarationD3D11::BindInstanced(VertexShaderD3D11& boundVertexProgram, VertexBufferBinding* binding, uint16 instanceSlot)

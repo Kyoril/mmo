@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "pixel_shader_d3d11.h"
+#include "graphics_device_d3d11.h"
 #include "base/macros.h"
 
 
@@ -21,7 +22,13 @@ namespace mmo
 
 	void PixelShaderD3D11::Set()
 	{
+		if (Device.m_currentPixelShader == this)
+		{
+			return;
+		}
+
 		ID3D11DeviceContext& Context = Device;
 		Context.PSSetShader(Shader.Get(), nullptr, 0);
+		Device.m_currentPixelShader = this;
 	}
 }

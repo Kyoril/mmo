@@ -636,6 +636,9 @@ namespace mmo
 		m_lastInputLayout = nullptr;
 		m_currentRasterizerState = nullptr;
 		m_currentDepthStencilState = nullptr;
+		m_currentVertexShader = nullptr;
+		m_currentPixelShader = nullptr;
+		m_lastBoundMaterial = nullptr;
 
 		m_lastFrameBatchCount = m_batchCount;
 		m_batchCount = 0;
@@ -1226,8 +1229,16 @@ namespace mmo
 			return;
 		}
 
-		// Apply material
-		operation.material->Apply(*this, MaterialDomain::Surface, operation.pixelShaderType);
+		// Only re-apply material if it changed since the last draw call.
+		// Material sorting in the render queue ensures consecutive draws often share materials.
+		MaterialInterface* materialPtr = operation.material.get();
+		const bool materialChanged = (materialPtr != m_lastBoundMaterial || operation.pixelShaderType != m_lastBoundPixelShaderType);
+		if (materialChanged)
+		{
+			operation.material->Apply(*this, MaterialDomain::Surface, operation.pixelShaderType);
+			m_lastBoundMaterial = materialPtr;
+			m_lastBoundPixelShaderType = operation.pixelShaderType;
+		}
 		
 		// Determine which vertex shader type to use
 		const bool isInstanced = (operation.instanceBuffer != nullptr && operation.instanceCount > 0);
@@ -1239,7 +1250,19 @@ namespace mmo
 		}
 		else
 		{
-			const bool hasVertexAnimData = (operation.vertexData->vertexDeclaration->FindElementBySemantic(VertexElementSemantic::BlendIndices) != nullptr);
+			// Use cached BlendIndices lookup to avoid linear search per draw call
+			VertexDeclaration* vertexDecl = operation.vertexData->vertexDeclaration;
+			auto cacheIt = m_blendIndicesCache.find(vertexDecl);
+			bool hasVertexAnimData;
+			if (cacheIt != m_blendIndicesCache.end())
+			{
+				hasVertexAnimData = cacheIt->second;
+			}
+			else
+			{
+				hasVertexAnimData = (vertexDecl->FindElementBySemantic(VertexElementSemantic::BlendIndices) != nullptr);
+				m_blendIndicesCache[vertexDecl] = hasVertexAnimData;
+			}
 			vsType = hasVertexAnimData ? VertexShaderType::SkinnedHigh : VertexShaderType::Default;
 		}
 		
@@ -1254,16 +1277,13 @@ namespace mmo
 			}
 		}
 
-		// By now we should have a vertex shader
-		if (vertexShader)
-		{
-			vertexShader->Set();
-		}
-
 		if (!vertexShader)
 		{
 			return;
 		}
+
+		// Set vertex shader (caching is handled inside Set())
+		vertexShader->Set();
 
 		// Bind vertex buffers
 		for (const auto& bindings = operation.vertexData->vertexBufferBinding->GetBindings(); const auto & [slot, vertexBuffer] : bindings)
@@ -1286,7 +1306,7 @@ namespace mmo
 			m_immContext->VSSetConstantBuffers(startSlot++, 1, buffers);
 		}
 
-		// Bind additional constant buffers if any
+		// Bind additional pixel constant buffers if any
 		int psStartSlot = 1;
 		for (auto& buffer : operation.pixelConstantBuffers)
 		{
@@ -1295,17 +1315,22 @@ namespace mmo
 			ID3D11Buffer* buffers[] = { ((ConstantBufferD3D11*)buffer)->GetBuffer() };
 			m_immContext->PSSetConstantBuffers(psStartSlot++, 1, buffers);
 		}
-		if (const ConstantBufferPtr scalarBuffer = operation.material->GetParameterBuffer(MaterialParameterType::Scalar, *this))
+
+		// Only update material parameter buffers when the material changed
+		if (materialChanged)
 		{
-			scalarBuffer->BindToStage(ShaderType::PixelShader, psStartSlot++);
-		}
-		if (const ConstantBufferPtr vectorBuffer = operation.material->GetParameterBuffer(MaterialParameterType::Vector, *this))
-		{
-			vectorBuffer->BindToStage(ShaderType::PixelShader, psStartSlot++);
+			if (const ConstantBufferPtr scalarBuffer = operation.material->GetParameterBuffer(MaterialParameterType::Scalar, *this))
+			{
+				scalarBuffer->BindToStage(ShaderType::PixelShader, psStartSlot++);
+			}
+			if (const ConstantBufferPtr vectorBuffer = operation.material->GetParameterBuffer(MaterialParameterType::Vector, *this))
+			{
+				vectorBuffer->BindToStage(ShaderType::PixelShader, psStartSlot++);
+			}
 		}
 
 		SetFaceCullMode(operation.material->IsTwoSided() ? FaceCullMode::None : FaceCullMode::Front);	// ???
-		SetBlendMode(operation.material->IsTranslucent() ? BlendMode::Alpha : BlendMode::Opaque);
+		//SetBlendMode(operation.material->IsTranslucent() ? BlendMode::Alpha : BlendMode::Opaque);
 
 		// Handle instanced rendering
 		if (isInstanced)
