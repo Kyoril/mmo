@@ -13,6 +13,8 @@
 
 namespace mmo
 {
+	class ModelPreview;
+
 	/// Manages the available model files in the asset registry.
 	class ModelEditorWindow final
 		: public EditorEntryWindowBase<proto::ModelDatas, proto::ModelDataEntry>
@@ -20,9 +22,11 @@ namespace mmo
 	{
 	public:
 		explicit ModelEditorWindow(const String& name, proto::Project& project, EditorHost& host);
-		~ModelEditorWindow() override = default;
+		~ModelEditorWindow() override;
 
 	private:
+		bool Draw() override;
+
 		void DrawDetailsImpl(EntryType& currentEntry) override;
 
 		void OnNewEntry(proto::TemplateManager<proto::ModelDatas, proto::ModelDataEntry>::EntryType& entry) override;
@@ -40,6 +44,7 @@ namespace mmo
 		EditorHost& m_host;
 		std::vector<String> m_modelFiles;
 		scoped_connection m_assetImported;
+		std::unique_ptr<ModelPreview> m_preview;
 
 		std::shared_ptr<CustomizableAvatarDefinition> m_definition;
 	};
