@@ -4,6 +4,7 @@ file(GLOB codeFiles
 )
 
 add_executable(mmo_error WIN32 mmo_error.rc ${codeFiles})
+mmo_deploy_runtime_dependencies(mmo_error)
 
 target_link_libraries(mmo_error base log)
 target_link_libraries(mmo_error ${OPENSSL_LIBRARIES})
