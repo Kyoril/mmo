@@ -23,6 +23,9 @@ namespace mmo
 		/// @brief Path to the editor project.
 		String projectPath;
 
+		/// @brief Default character asset used by Item Display preview.
+		String itemDisplayPreviewCharacter;
+
 		/// @brief 
 		String mysqlHost;
 
@@ -37,6 +40,9 @@ namespace mmo
 
 		/// @brief 
 		String mysqlDatabase;
+
+		/// @brief Last loaded or saved config file path.
+		String configFilePath;
 
 	public:
 		/**

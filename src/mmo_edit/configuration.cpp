@@ -19,6 +19,7 @@ namespace mmo
 	Configuration::Configuration()
 		: assetRegistryPath("Data")
 		, projectPath("Project")
+		, itemDisplayPreviewCharacter("")
 		, mysqlHost("127.0.0.1")
 		, mysqlPort(mmo::constants::DefaultMySQLPort)
 		, mysqlUser("mmo")
@@ -29,6 +30,8 @@ namespace mmo
 
 	bool Configuration::Load(const String& fileName)
 	{
+		configFilePath = fileName;
+
 		typedef String::const_iterator Iterator;
 		typedef sff::read::tree::Table<Iterator> Table;
 
@@ -78,6 +81,7 @@ namespace mmo
 			{
 				assetRegistryPath = dataTable->getString("assetRegistryPath", assetRegistryPath);
 				projectPath = dataTable->getString("projectPath", projectPath);
+				itemDisplayPreviewCharacter = dataTable->getString("itemDisplayPreviewCharacter", itemDisplayPreviewCharacter);
 			}
 
 			if (const Table* const mysqlDatabaseTable = global.getTable("mysqlDatabase"))
@@ -102,6 +106,8 @@ namespace mmo
 
 	bool Configuration::Save(const String& fileName)
 	{
+		configFilePath = fileName;
+
 		// Try to create directories
 		try
 		{
@@ -131,6 +137,7 @@ namespace mmo
 			sff::write::Table<Char> dataTable(global, "data", sff::write::MultiLine);
 			dataTable.addKey("assetRegistryPath", assetRegistryPath);
 			dataTable.addKey("projectPath", projectPath);
+			dataTable.addKey("itemDisplayPreviewCharacter", itemDisplayPreviewCharacter);
 			dataTable.Finish();
 		}
 

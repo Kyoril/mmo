@@ -168,7 +168,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ItemEditorWindow>("Item Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ItemClassEditorWindow>("Item Class Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ItemSubclassEditorWindow>("Item Subclass Editor", project, mainWindow));
-	mainWindow.AddEditorWindow(std::make_unique<mmo::ItemDisplayEditorWindow>("Item Display Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::ItemDisplayEditorWindow>("Item Display Editor", project, mainWindow, previewProviderManager, config));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ObjectDisplayEditorWindow>("Object Display Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::UnitLootEditorWindow>("Unit Loot Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::TrainerEditorWindow>("Trainer Editor", project, mainWindow));

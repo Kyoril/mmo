@@ -7,21 +7,28 @@
 #include "editor_entry_window_base.h"
 
 #include "editor_host.h"
-#include "graphics/texture.h"
+#include "preview_providers/preview_provider_manager.h"
+#include "configuration.h"
 #include "proto_data/project.h"
+
+#include <memory>
 
 namespace mmo
 {
+	class ItemDisplayPreview;
+
 	/// Manages the available model files in the asset registry.
 	class ItemDisplayEditorWindow final
 		: public EditorEntryWindowBase<proto::ItemDisplayData, proto::ItemDisplayEntry>
 		, public NonCopyable
 	{
 	public:
-		explicit ItemDisplayEditorWindow(const String& name, proto::Project& project, EditorHost& host);
-		~ItemDisplayEditorWindow() override = default;
+		explicit ItemDisplayEditorWindow(const String& name, proto::Project& project, EditorHost& host, PreviewProviderManager& previewManager, Configuration& config);
+		~ItemDisplayEditorWindow() override;
 
 	private:
+		bool Draw() override;
+
 		void DrawDetailsImpl(EntryType& currentEntry) override;
 
 		void OnNewEntry(EntryType& entry) override;
@@ -33,7 +40,8 @@ namespace mmo
 
 	private:
 		EditorHost& m_host;
-		std::vector<String> m_textures;
-		std::map<std::string, TexturePtr> m_iconCache;
+		PreviewProviderManager& m_previewManager;
+		Configuration& m_config;
+		std::unique_ptr<ItemDisplayPreview> m_preview;
 	};
 }
