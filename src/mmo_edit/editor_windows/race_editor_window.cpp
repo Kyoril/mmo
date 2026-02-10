@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "race_editor_window.h"
+#include "editor_imgui_helpers.h"
 
 #include "faction_editor_window.h"
 
@@ -81,7 +82,7 @@ namespace mmo
 
 		static const char* s_factionTemplateNone = "<None>";
 
-		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Basic", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			if (ImGui::BeginTable("table", 2, ImGuiTableFlags_None))
 			{
@@ -128,7 +129,7 @@ namespace mmo
 
 		static const char* s_mapEntryNone = "<None>";
 
-		if (ImGui::CollapsingHeader("Starting point", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Starting point", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			int32 startMap = currentEntry.startmap();
 
@@ -159,7 +160,7 @@ namespace mmo
 		}
 
 
-		if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Visuals", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			int32 maleModel = currentEntry.malemodel();
 
@@ -210,7 +211,7 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Initial Items", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Initial Items", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			static const char* s_itemNone = "<None>";
 

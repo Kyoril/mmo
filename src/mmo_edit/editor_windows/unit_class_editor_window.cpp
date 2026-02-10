@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "unit_class_editor_window.h"
+#include "editor_imgui_helpers.h"
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
@@ -60,7 +61,7 @@ namespace mmo
 		}
 
 		// Basic Information
-		if (ImGui::CollapsingHeader("Basic Information", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Basic Information", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			if (ImGui::BeginTable("basic_table", 3, ImGuiTableFlags_None))
 			{
@@ -112,7 +113,7 @@ namespace mmo
 
 	void UnitClassEditorWindow::DrawBaseValuesSection(EntryType& currentEntry)
 	{
-		if (ImGui::CollapsingHeader("Base Values per Level", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Base Values per Level", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			ImGui::TextWrapped("Define base stat values for key levels. The system will interpolate between these values for intermediate levels.");
 
@@ -229,7 +230,7 @@ namespace mmo
 
 	void UnitClassEditorWindow::DrawStatSourcesSection(EntryType& currentEntry)
 	{
-		if (ImGui::CollapsingHeader("Stat Conversion Formulas", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Stat Conversion Formulas", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			ImGui::TextWrapped("Define how base stats (strength, agility, etc.) convert to derived stats like health, mana, attack power, and armor.");
 
@@ -249,7 +250,7 @@ namespace mmo
 
 	void UnitClassEditorWindow::DrawRegenerationSection(EntryType& currentEntry)
 	{
-		if (ImGui::CollapsingHeader("Regeneration Settings"))
+		if (const auto section = ScopedEditorSection("Regeneration Settings"))
 		{
 			ImGui::BeginGroupPanel("Mana Regeneration");
 			{
@@ -285,7 +286,7 @@ namespace mmo
 
 	void UnitClassEditorWindow::DrawCombatSection(EntryType& currentEntry)
 	{
-		if (ImGui::CollapsingHeader("Combat Settings"))
+		if (const auto section = ScopedEditorSection("Combat Settings"))
 		{
 			ImGui::BeginGroupPanel("Attack Power");
 			{

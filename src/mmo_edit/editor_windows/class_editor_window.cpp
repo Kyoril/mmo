@@ -1,9 +1,14 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "class_editor_window.h"
+#include "editor_imgui_helpers.h"
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
+#include <array>
+#include <algorithm>
+#include <limits>
+#include <cstdio>
 
 #include "assets/asset_registry.h"
 #include "graphics/texture_mgr.h"
@@ -68,7 +73,7 @@ namespace mmo
 #define SLIDER_UINT32_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 32, min, max)
 #define SLIDER_UINT64_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 64, min, max)
 
-		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Basic", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			if (ImGui::BeginTable("table", 2, ImGuiTableFlags_None))
 			{
@@ -111,7 +116,7 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Base Values", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Base Values", ImGuiTreeNodeFlags_None))
 		{
 			static std::vector<float> s_healthValues;
 			static std::vector<float> s_manaValues;
@@ -143,18 +148,175 @@ namespace mmo
 				}
 			}
 
-			ImGui::PlotLines("Stamina", s_staminaValues.data(), s_staminaValues.size());
-			ImGui::PlotLines("Strength", s_strengthValues.data(), s_strengthValues.size());
-			ImGui::PlotLines("Agility", s_agilityValues.data(), s_agilityValues.size());
-			ImGui::PlotLines("Intellect", s_intellectValues.data(), s_intellectValues.size());
-			ImGui::PlotLines("Spirit", s_spiritValues.data(), s_spiritValues.size());
-			ImGui::PlotLines("Health", s_healthValues.data(), s_healthValues.size());
-			ImGui::PlotLines("Mana", s_manaValues.data(), s_manaValues.size());
+			static bool s_showHealth = true;
+			static bool s_showMana = true;
+			static bool s_showStamina = true;
+			static bool s_showStrength = true;
+			static bool s_showAgility = true;
+			static bool s_showIntellect = true;
+			static bool s_showSpirit = true;
+
+			struct PlotSeries
+			{
+				const char* label;
+				const std::vector<float>* values;
+				bool* enabled;
+				ImU32 color;
+			};
+
+			std::array<PlotSeries, 7> series = { {
+				{ "Health", &s_healthValues, &s_showHealth, IM_COL32(240, 90, 90, 255) },
+				{ "Mana", &s_manaValues, &s_showMana, IM_COL32(90, 140, 255, 255) },
+				{ "Stamina", &s_staminaValues, &s_showStamina, IM_COL32(90, 210, 120, 255) },
+				{ "Strength", &s_strengthValues, &s_showStrength, IM_COL32(255, 160, 70, 255) },
+				{ "Agility", &s_agilityValues, &s_showAgility, IM_COL32(245, 235, 120, 255) },
+				{ "Intellect", &s_intellectValues, &s_showIntellect, IM_COL32(180, 120, 255, 255) },
+				{ "Spirit", &s_spiritValues, &s_showSpirit, IM_COL32(120, 235, 235, 255) },
+			} };
+
+			ImGui::TextUnformatted("Base Values Graph");
+			for (size_t i = 0; i < series.size(); ++i)
+			{
+				ImGui::PushID(static_cast<int>(i));
+				ImGui::Checkbox(series[i].label, series[i].enabled);
+				ImGui::PopID();
+				if ((i % 4) != 3 && i + 1 < series.size())
+				{
+					ImGui::SameLine();
+				}
+			}
+
+			const ImVec2 graphSize(ImGui::GetContentRegionAvail().x, 220.0f);
+			const ImVec2 graphTopLeft = ImGui::GetCursorScreenPos();
+			ImGui::InvisibleButton("##baseValuesCombinedGraph", graphSize);
+			const ImVec2 graphBottomRight(graphTopLeft.x + graphSize.x, graphTopLeft.y + graphSize.y);
+			ImDrawList* drawList = ImGui::GetWindowDrawList();
+			drawList->AddRectFilled(graphTopLeft, graphBottomRight, IM_COL32(26, 29, 34, 255), 4.0f);
+			drawList->AddRect(graphTopLeft, graphBottomRight, IM_COL32(82, 86, 94, 255), 4.0f);
+
+			float minValue = std::numeric_limits<float>::max();
+			float maxValue = std::numeric_limits<float>::lowest();
+			int maxPoints = 0;
+			for (const auto& s : series)
+			{
+				if (!*s.enabled || s.values->empty())
+				{
+					continue;
+				}
+
+				maxPoints = std::max(maxPoints, static_cast<int>(s.values->size()));
+				for (const float value : *s.values)
+				{
+					minValue = std::min(minValue, value);
+					maxValue = std::max(maxValue, value);
+				}
+			}
+
+			if (maxPoints >= 2 && minValue <= maxValue)
+			{
+				if (minValue == maxValue)
+				{
+					minValue -= 1.0f;
+					maxValue += 1.0f;
+				}
+
+				const float leftMargin = 52.0f;
+				const float rightMargin = 12.0f;
+				const float topMargin = 12.0f;
+				const float bottomMargin = 24.0f;
+				const float graphWidth = std::max(8.0f, graphSize.x - leftMargin - rightMargin);
+				const float graphHeight = std::max(8.0f, graphSize.y - topMargin - bottomMargin);
+				const ImVec2 origin(graphTopLeft.x + leftMargin, graphTopLeft.y + topMargin);
+
+				const int yTickCount = 5;
+				for (int tick = 0; tick < yTickCount; ++tick)
+				{
+					const float t = static_cast<float>(tick) / static_cast<float>(yTickCount - 1);
+					const float y = origin.y + graphHeight - t * graphHeight;
+					const float value = minValue + t * (maxValue - minValue);
+					drawList->AddLine(ImVec2(origin.x, y), ImVec2(origin.x + graphWidth, y), IM_COL32(58, 62, 70, 255), 1.0f);
+					char valueLabel[32];
+					std::snprintf(valueLabel, sizeof(valueLabel), "%.0f", value);
+					drawList->AddText(ImVec2(graphTopLeft.x + 6.0f, y - ImGui::GetTextLineHeight() * 0.5f), IM_COL32(190, 194, 202, 255), valueLabel);
+				}
+
+				drawList->AddLine(
+					ImVec2(origin.x, origin.y + graphHeight),
+					ImVec2(origin.x + graphWidth, origin.y + graphHeight),
+					IM_COL32(116, 122, 134, 255),
+					1.0f);
+
+				const int levelFirst = 1;
+				const int levelMid = std::max(1, maxPoints / 2);
+				const int levelLast = std::max(1, maxPoints);
+				const std::array<int, 3> xLevels = { levelFirst, levelMid, levelLast };
+				for (const int level : xLevels)
+				{
+					const int pointIndex = std::clamp(level - 1, 0, maxPoints - 1);
+					const float x = origin.x + (static_cast<float>(pointIndex) / static_cast<float>(maxPoints - 1)) * graphWidth;
+					drawList->AddLine(ImVec2(x, origin.y), ImVec2(x, origin.y + graphHeight), IM_COL32(50, 54, 62, 255), 1.0f);
+					char levelLabel[32];
+					std::snprintf(levelLabel, sizeof(levelLabel), "L%d", level);
+					drawList->AddText(ImVec2(x - 10.0f, origin.y + graphHeight + 3.0f), IM_COL32(190, 194, 202, 255), levelLabel);
+				}
+
+				for (const auto& s : series)
+				{
+					if (!*s.enabled || s.values->size() < 2)
+					{
+						continue;
+					}
+
+					for (size_t i = 1; i < s.values->size(); ++i)
+					{
+						const float x0 = origin.x + (static_cast<float>(i - 1) / static_cast<float>(s.values->size() - 1)) * graphWidth;
+						const float x1 = origin.x + (static_cast<float>(i) / static_cast<float>(s.values->size() - 1)) * graphWidth;
+						const float y0 = origin.y + graphHeight - ((s.values->at(i - 1) - minValue) / (maxValue - minValue)) * graphHeight;
+						const float y1 = origin.y + graphHeight - ((s.values->at(i) - minValue) / (maxValue - minValue)) * graphHeight;
+						drawList->AddLine(ImVec2(x0, y0), ImVec2(x1, y1), s.color, 2.0f);
+					}
+				}
+			}
+			else
+			{
+				ImGui::SetCursorScreenPos(ImVec2(graphTopLeft.x + 10.0f, graphTopLeft.y + 10.0f));
+				ImGui::TextDisabled("Enable at least one series and add at least 2 levels.");
+			}
+
+			const float legendHeight = 40.0f;
+			if (ImGui::BeginChild("##baseValuesLegend", ImVec2(-1.0f, legendHeight), false))
+			{
+				for (size_t i = 0; i < series.size(); ++i)
+				{
+					ImGui::PushID(1000 + static_cast<int>(i));
+					const ImVec4 color(
+						static_cast<float>((series[i].color >> IM_COL32_R_SHIFT) & 0xFF) / 255.0f,
+						static_cast<float>((series[i].color >> IM_COL32_G_SHIFT) & 0xFF) / 255.0f,
+						static_cast<float>((series[i].color >> IM_COL32_B_SHIFT) & 0xFF) / 255.0f,
+						*series[i].enabled ? 1.0f : 0.35f);
+					ImGui::ColorButton("##legendColor", color, ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop, ImVec2(10.0f, 10.0f));
+					ImGui::SameLine();
+					if (*series[i].enabled)
+					{
+						ImGui::TextUnformatted(series[i].label);
+					}
+					else
+					{
+						ImGui::TextDisabled("%s", series[i].label);
+					}
+					ImGui::PopID();
+					if ((i % 4) != 3 && i + 1 < series.size())
+					{
+						ImGui::SameLine();
+					}
+				}
+			}
+			ImGui::EndChild();
 
 			ImGui::BeginChildFrame(ImGui::GetID("effectsBorder"), ImVec2(-1, 400), ImGuiWindowFlags_AlwaysUseWindowPadding);
 
 			// Add button
-			if (ImGui::Button("Add Value", ImVec2(-1, 0)))
+			if (DrawSuccessButton("Add Value", ImVec2(-1, 0)))
 			{
 				auto* baseValues = currentEntry.add_levelbasevalues();
 
@@ -251,7 +413,7 @@ namespace mmo
 		}
 
 
-		if (ImGui::CollapsingHeader("Experience Points", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Experience Points", ImGuiTreeNodeFlags_None))
 		{
 			ImGui::PlotLines("XP to next level", [](void* data, int idx) -> float
 				{
@@ -260,7 +422,7 @@ namespace mmo
 				}, &currentEntry, currentEntry.xptonextlevel_size(), 0, 0, FLT_MAX, FLT_MAX, ImVec2(0, 200));
 
 
-			if (ImGui::Button("Add Value", ImVec2(-1, 0)))
+			if (DrawSuccessButton("Add Value", ImVec2(-1, 0)))
 			{
 				currentEntry.add_xptonextlevel(currentEntry.xptonextlevel_size() == 0 ? 400 : currentEntry.xptonextlevel(currentEntry.xptonextlevel_size() - 1) * 2);
 			}
@@ -301,7 +463,7 @@ namespace mmo
 			"Spirit"
 		};
 
-		if (ImGui::CollapsingHeader("Attack Power", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Attack Power", ImGuiTreeNodeFlags_None))
 		{
 			float offset = currentEntry.attackpoweroffset();
 			if (ImGui::InputFloat("Attack Power Offset", &offset)) currentEntry.set_attackpoweroffset(offset);
@@ -312,7 +474,7 @@ namespace mmo
 			ImGui::Text("Attack Power Stat Source");
 
 			// Add button
-			if (ImGui::Button("Add", ImVec2(-1, 0)))
+			if (DrawSuccessButton("Add", ImVec2(-1, 0)))
 			{
 				auto* newEntry = currentEntry.add_attackpowerstatsources();
 				newEntry->set_statid(0);
@@ -357,7 +519,7 @@ namespace mmo
 
 					ImGui::SameLine();
 
-					if (ImGui::Button("Remove"))
+					if (DrawDangerButton("Remove"))
 					{
 						currentEntry.mutable_attackpowerstatsources()->erase(currentEntry.mutable_attackpowerstatsources()->begin() + index);
 						index--;
@@ -370,12 +532,12 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Health", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Health", ImGuiTreeNodeFlags_None))
 		{
 			ImGui::Text("Health Stat Source");
 
 			// Add button
-			if (ImGui::Button("Add##addHealthStat", ImVec2(-1, 0)))
+			if (DrawSuccessButton("Add##addHealthStat", ImVec2(-1, 0)))
 			{
 				auto* newEntry = currentEntry.add_healthstatsources();
 				newEntry->set_statid(0);
@@ -420,7 +582,7 @@ namespace mmo
 
 					ImGui::SameLine();
 
-					if (ImGui::Button("Remove"))
+					if (DrawDangerButton("Remove"))
 					{
 						currentEntry.mutable_healthstatsources()->erase(currentEntry.mutable_healthstatsources()->begin() + index);
 						index--;
@@ -433,12 +595,12 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Mana", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Mana", ImGuiTreeNodeFlags_None))
 		{
 			ImGui::Text("Mana Stat Source");
 
 			// Add button
-			if (ImGui::Button("Add##addManaStat", ImVec2(-1, 0)))
+			if (DrawSuccessButton("Add##addManaStat", ImVec2(-1, 0)))
 			{
 				auto* newEntry = currentEntry.add_manastatsources();
 				newEntry->set_statid(0);
@@ -483,7 +645,7 @@ namespace mmo
 
 					ImGui::SameLine();
 
-					if (ImGui::Button("Remove"))
+					if (DrawDangerButton("Remove"))
 					{
 						currentEntry.mutable_manastatsources()->erase(currentEntry.mutable_manastatsources()->begin() + index);
 						index--;
@@ -496,12 +658,12 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Armor", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Armor", ImGuiTreeNodeFlags_None))
 		{
 			ImGui::Text("Armor Stat Source");
 
 			// Add button
-			if (ImGui::Button("Add##addArmorStat", ImVec2(-1, 0)))
+			if (DrawSuccessButton("Add##addArmorStat", ImVec2(-1, 0)))
 			{
 				auto* newEntry = currentEntry.add_armorstatsources();
 				newEntry->set_statid(0);
@@ -554,7 +716,7 @@ namespace mmo
 
 					ImGui::SameLine();
 
-					if (ImGui::Button("Remove"))
+					if (DrawDangerButton("Remove"))
 					{
 						currentEntry.mutable_armorstatsources()->erase(currentEntry.mutable_armorstatsources()->begin() + index);
 						index--;
@@ -567,7 +729,7 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Regeneration", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Regeneration", ImGuiTreeNodeFlags_None))
 		{
 			float baseManaRegen = currentEntry.basemanaregenpertick();
 			if (ImGui::InputFloat("Mana Regeneration per Tick", &baseManaRegen)) currentEntry.set_basemanaregenpertick(baseManaRegen);
@@ -584,10 +746,10 @@ namespace mmo
 
 		static const char* s_spellNone = "<None>";
 
-		if (ImGui::CollapsingHeader("Spells", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Spells", ImGuiTreeNodeFlags_None))
 		{
 			// Add button
-			if (ImGui::Button("Add", ImVec2(-1, 0)))
+			if (DrawSuccessButton("Add", ImVec2(-1, 0)))
 			{
 				auto* newSpell = currentEntry.add_spells();
 				newSpell->set_level(1);
@@ -643,7 +805,7 @@ namespace mmo
 
 					ImGui::SameLine();
 
-					if (ImGui::Button("Remove"))
+					if (DrawDangerButton("Remove"))
 					{
 						currentEntry.mutable_spells()->erase(currentEntry.mutable_spells()->begin() + index);
 						index--;
@@ -677,3 +839,4 @@ namespace mmo
 		baseValues->set_spirit(23);
 	}
 }
+

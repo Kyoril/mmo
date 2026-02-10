@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "range_type_editor_window.h"
+#include "editor_imgui_helpers.h"
 
 namespace mmo
 {
@@ -26,7 +27,7 @@ namespace mmo
 			} \
 		}
 
-		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Basic", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			if (ImGui::BeginTable("table", 3, ImGuiTableFlags_None))
 			{

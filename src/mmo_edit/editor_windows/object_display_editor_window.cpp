@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "object_display_editor_window.h"
+#include "editor_imgui_helpers.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -8,7 +9,6 @@
 
 #include "asset_picker_widget.h"
 #include "assets/asset_registry.h"
-#include "editor_imgui_helpers.h"
 #include "graphics/texture_mgr.h"
 #include "log/default_log_levels.h"
 
@@ -106,7 +106,7 @@ namespace mmo
 #define SLIDER_UINT32_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 32, min, max)
 #define SLIDER_UINT64_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 64, min, max)
 
-		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Basic", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			if (ImGui::BeginTable("table", 2, ImGuiTableFlags_None))
 			{
@@ -127,7 +127,7 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Appearance", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Appearance", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			static const std::set<String> meshExtensions = { ".hmsh" };
 			String filename = currentEntry.filename();

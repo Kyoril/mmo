@@ -8,6 +8,40 @@
 
 namespace mmo
 {
+	class ScopedEditorSection final
+	{
+	public:
+		explicit ScopedEditorSection(const char* label, ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_None)
+		{
+			m_open = ImGui::CollapsingHeader(label, flags);
+			if (m_open)
+			{
+				ImGui::Indent();
+				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+				ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+			}
+		}
+
+		~ScopedEditorSection()
+		{
+			if (m_open)
+			{
+				ImGui::PopStyleVar(2);
+				ImGui::Unindent();
+			}
+		}
+
+		ScopedEditorSection(const ScopedEditorSection&) = delete;
+		ScopedEditorSection& operator=(const ScopedEditorSection&) = delete;
+		ScopedEditorSection(ScopedEditorSection&&) = delete;
+		ScopedEditorSection& operator=(ScopedEditorSection&&) = delete;
+
+		explicit operator bool() const noexcept { return m_open; }
+
+	private:
+		bool m_open{ false };
+	};
+
 	/// @brief Draws a styled section header with blue text and separator.
 	/// @param text The header text to display.
 	inline void DrawSectionHeader(const char* text)

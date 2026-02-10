@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "proficiency_editor_window.h"
+#include "editor_imgui_helpers.h"
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
@@ -21,7 +22,7 @@ namespace mmo
 
 	void ProficiencyEditorWindow::DrawDetailsImpl(EntryType& currentEntry)
 	{
-		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Basic", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			if (ImGui::BeginTable("table", 2, ImGuiTableFlags_None))
 			{
