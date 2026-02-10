@@ -1,6 +1,7 @@
 
 #include "sub_entity.h"
 
+#include "camera.h"
 #include "entity.h"
 #include "sub_mesh.h"
 #include "scene_graph/render_operation.h"
@@ -35,8 +36,9 @@ namespace mmo
 
 		const auto* parent = m_parent.GetParentSceneNode();
 		ASSERT(parent);
-		
-		m_cachedCameraDist = 0.0f;
+
+		// Calculate the squared distance from the camera to the parent node's world position
+		m_cachedCameraDist = (parent->GetDerivedPosition() - camera.GetDerivedPosition()).GetSquaredLength();
 		m_cachedCamera = &camera;
 
 		return m_cachedCameraDist;

@@ -17,6 +17,8 @@
 
 #include <algorithm>
 #include <mutex>
+#include <sstream>
+#include <iomanip>
 
 #include "loading_screen.h"
 #include "base/profiler.h"
@@ -59,6 +61,8 @@ namespace mmo
 	/// A geometry buffer which is populated by the console font's draw commands and then used to
 	/// actually draw the console text on screen.
 	static std::unique_ptr<GeometryBuffer> s_consoleTextGeom;
+	/// A separate geometry buffer for the performance overlay, so it doesn't conflict with console text.
+	static std::unique_ptr<GeometryBuffer> s_perfTextGeom;
 	/// A flag that indicates that the console text needs to be redrawn. Set on scrolling and text
 	/// change events currently.
 	static bool s_consoleTextDirty = true;
@@ -360,6 +364,7 @@ namespace mmo
 		s_consoleFont = FontManager::Get().CreateOrRetrieve("Fonts/consola.ttf", 16.0f, 0.0f);
 		
 		s_consoleTextGeom = std::make_unique<GeometryBuffer>();
+		s_perfTextGeom = std::make_unique<GeometryBuffer>();
 		s_consoleTextDirty = true;
 		s_consoleLog.clear();
 		
@@ -417,6 +422,7 @@ namespace mmo
 		s_consoleLogConn.disconnect();
 		
 		s_consoleTextGeom.reset();
+		s_perfTextGeom.reset();
 		
 		s_consoleFont.reset();
 		
@@ -661,27 +667,116 @@ namespace mmo
 			return;
 		}
 
-		if (showPerf || s_consoleTextDirty)
-		{
-			s_consoleTextGeom->Reset();
-		}
-
+		// Rebuild the perf overlay geometry every frame since the data changes each frame
 		if (showPerf)
 		{
-			std::stringstream strm;
-			strm << "Batch count: " << gx.GetBatchCount() << "\n";
+			s_perfTextGeom->Reset();
 
-			auto& metrics = Profiler::GetInstance().GetMetrics();
-			for (auto& m : metrics)
+			auto& profiler = Profiler::GetInstance();
+			const auto& metrics = profiler.GetMetrics();
+
+			const float lineHeight = s_consoleFont->GetHeight();
+			const float xPadding = 8.0f;
+			float yOffset = 4.0f;
+
+			// Header: FPS and frame time
+			const double fps = profiler.GetAverageFPS();
+			const double frameTime = profiler.GetAverageFrameTimeMs();
+			const double currentFrameTime = profiler.GetFrameTimeMs();
+
+			// Color the FPS value based on performance
+			argb_t fpsColor;
+			if (fps >= 60.0)
 			{
-				strm << m.name << " " << std::setprecision(2) << m.totalTimeMs << " ms (" << m.callCount << " calls)\n";
+				fpsColor = Color(0.0f, 1.0f, 0.0f); // Green: 60+ fps
+			}
+			else if (fps >= 30.0)
+			{
+				fpsColor = Color(1.0f, 1.0f, 0.0f); // Yellow: 30-59 fps
+			}
+			else
+			{
+				fpsColor = Color(1.0f, 0.3f, 0.3f); // Red: below 30 fps
 			}
 
-			s_consoleFont->DrawText(strm.str(), Point(0.0f, 0.0f), *s_consoleTextGeom, 1.0f);
+			{
+				std::ostringstream strm;
+				strm << std::fixed << std::setprecision(1);
+				strm << "FPS: " << fps << "  Frame: " << frameTime << " ms (cur: " << currentFrameTime << " ms)";
+				s_consoleFont->DrawText(strm.str(), Point(xPadding, yOffset), *s_perfTextGeom, 1.0f, fpsColor);
+				yOffset += lineHeight;
+			}
+
+			// Batch count
+			{
+				std::ostringstream strm;
+				strm << "Batches: " << gx.GetBatchCount();
+				s_consoleFont->DrawText(strm.str(), Point(xPadding, yOffset), *s_perfTextGeom, 1.0f, Color(0.7f, 0.7f, 0.7f));
+				yOffset += lineHeight;
+			}
+
+			// Separator
+			yOffset += 2.0f;
+			s_consoleFont->DrawText("----------------------------------------------", Point(xPadding, yOffset), *s_perfTextGeom, 1.0f, Color(0.4f, 0.4f, 0.4f));
+			yOffset += lineHeight;
+
+			// Column header
+			{
+				std::ostringstream strm;
+				strm << std::left << std::setw(30) << "Metric"
+					<< std::right << std::setw(10) << "Time(ms)"
+					<< std::setw(8) << "Avg"
+					<< std::setw(8) << "Calls";
+				s_consoleFont->DrawText(strm.str(), Point(xPadding, yOffset), *s_perfTextGeom, 1.0f, Color(0.8f, 0.8f, 0.8f));
+				yOffset += lineHeight;
+			}
+
+			// Target frame budget for bar visualization (16.67ms = 60fps)
+			constexpr double frameBudgetMs = 16.667;
+
+			// Metrics (already sorted by totalTimeMs descending from profiler)
+			for (const auto& m : metrics)
+			{
+				// Choose color based on time cost
+				argb_t metricColor;
+				if (m.totalTimeMs < 1.0)
+				{
+					metricColor = Color(0.0f, 1.0f, 0.0f);   // Green: < 1ms
+				}
+				else if (m.totalTimeMs < 4.0)
+				{
+					metricColor = Color(1.0f, 1.0f, 0.0f);   // Yellow: 1-4ms
+				}
+				else
+				{
+					metricColor = Color(1.0f, 0.3f, 0.3f);   // Red: >= 4ms
+				}
+
+				const double avgTime = m.GetAverageTimeMs();
+
+				// Build a simple bar: each '#' represents ~1ms of frame budget
+				const int barLength = static_cast<int>((m.totalTimeMs / frameBudgetMs) * 20.0);
+				const int clampedBar = std::min(barLength, 20);
+				std::string bar(clampedBar, '#');
+
+				// Format: MetricName              Time    Avg   Calls  |####|
+				std::ostringstream strm;
+				strm << std::fixed << std::setprecision(2);
+				strm << std::left << std::setw(30) << m.name
+					<< std::right << std::setw(8) << m.totalTimeMs
+					<< std::setw(8) << avgTime
+					<< std::setw(6) << m.callCount
+					<< "  |" << std::left << std::setw(20) << bar << "|";
+
+				s_consoleFont->DrawText(strm.str(), Point(xPadding, yOffset), *s_perfTextGeom, 1.0f, metricColor);
+				yOffset += lineHeight;
+			}
 		}
 
 		if (s_consoleTextDirty)
 		{
+			s_consoleTextGeom->Reset();
+
 			// Calculate start point
 			Point startPoint{ 0.0f, static_cast<float>(s_consoleWindowHeight) - s_consoleFont->GetHeight() };
 			
@@ -720,40 +815,51 @@ namespace mmo
 		auto vpWidth = 0, vpHeight = 0;
 		gx.GetViewport(nullptr, nullptr, &vpWidth, &vpHeight, nullptr, nullptr);
 
-		if (vpWidth != s_lastViewportWidth || vpHeight != s_lastViewportHeight)
+		if (s_consoleVisible)
 		{
-			s_lastViewportWidth = vpWidth;
-			s_lastViewportHeight = vpHeight;
+			if (vpWidth != s_lastViewportWidth || vpHeight != s_lastViewportHeight)
+			{
+				s_lastViewportWidth = vpWidth;
+				s_lastViewportHeight = vpHeight;
 
-			// Create the vertex buffer for the console background
-			const POS_COL_VERTEX vertices[] = {
-				{ { 0.0f, 0.0f, 0.0f }, 0xc0000000 },
-				{ { static_cast<float>(s_lastViewportWidth), 0.0f, 0.0f }, 0xc0000000 },
-				{ { static_cast<float>(s_lastViewportWidth), static_cast<float>(s_consoleWindowHeight), 0.0f }, 0xc0000000 },
-				{ { 0.0f, static_cast<float>(s_consoleWindowHeight), 0.0f }, 0xc0000000 }
-			};
+				// Create the vertex buffer for the console background
+				const POS_COL_VERTEX vertices[] = {
+					{ { 0.0f, 0.0f, 0.0f }, 0xc0000000 },
+					{ { static_cast<float>(s_lastViewportWidth), 0.0f, 0.0f }, 0xc0000000 },
+					{ { static_cast<float>(s_lastViewportWidth), static_cast<float>(s_consoleWindowHeight), 0.0f }, 0xc0000000 },
+					{ { 0.0f, static_cast<float>(s_consoleWindowHeight), 0.0f }, 0xc0000000 }
+				};
 
-			// Update vertex buffer data
-			CScopedGxBufferLock<POS_COL_VERTEX> lock { *s_consoleVertBuf, LockOptions::Discard };
-			*lock[0] = vertices[0];
-			*lock[1] = vertices[1];
-			*lock[2] = vertices[2];
-			*lock[3] = vertices[3];
+				// Update vertex buffer data
+				CScopedGxBufferLock<POS_COL_VERTEX> lock { *s_consoleVertBuf, LockOptions::Discard };
+				*lock[0] = vertices[0];
+				*lock[1] = vertices[1];
+				*lock[2] = vertices[2];
+				*lock[3] = vertices[3];
+			}
+
+			gx.SetClipRect(0, 0, s_lastViewportWidth, s_consoleWindowHeight);
+			gx.SetTransformMatrix(Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, vpWidth, vpHeight, 0.0f, 100.0f));
+
+			gx.SetVertexFormat(VertexFormat::PosColor);
+			gx.SetTopologyType(TopologyType::TriangleList);
+			gx.SetBlendMode(BlendMode::Alpha);
+
+			s_consoleVertBuf->Set(0);
+			s_consoleIndBuf->Set(0);
+			gx.DrawIndexed();
+
+			s_consoleTextGeom->Draw();
+
+			gx.ResetClipRect();
 		}
-		
-		gx.SetClipRect(0, 0, s_lastViewportWidth, s_consoleWindowHeight);
-		gx.SetTransformMatrix(Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, vpWidth, vpHeight, 0.0f, 100.0f));
-		
-		gx.SetVertexFormat(VertexFormat::PosColor);
-		gx.SetTopologyType(TopologyType::TriangleList);
-		gx.SetBlendMode(BlendMode::Alpha);
-		
-		s_consoleVertBuf->Set(0);
-		s_consoleIndBuf->Set(0);
-		gx.DrawIndexed();
-		
-		s_consoleTextGeom->Draw();
-		
-		gx.ResetClipRect();
+
+		// Draw perf overlay on top of everything (no clip, no background quad)
+		if (showPerf)
+		{
+			gx.SetTransformMatrix(Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, vpWidth, vpHeight, 0.0f, 100.0f));
+			gx.SetBlendMode(BlendMode::Alpha);
+			s_perfTextGeom->Draw();
+		}
 	}
 }

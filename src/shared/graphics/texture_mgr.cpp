@@ -94,6 +94,10 @@ namespace mmo
 				// Remove reference
 				it = m_texturesByName.erase(it);
 			}
+			else
+			{
+				++it;
+			}
 		}
 
 		DLOG("Removed " << erasedCount << " unreferenced textures");
@@ -119,6 +123,10 @@ namespace mmo
 
 				// Remove reference
 				it = m_texturesByName.erase(it);
+			}
+			else
+			{
+				++it;
 			}
 		}
 	}

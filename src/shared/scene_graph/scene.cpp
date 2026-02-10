@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+// Copyright (C) 2019 - 2026, Kyoril. All rights reserved.
 
 #include "scene.h"
 
@@ -13,6 +13,7 @@
 #include "world_model_instance.h"
 
 #include "base/macros.h"
+#include "base/profiler.h"
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
 
@@ -264,6 +265,8 @@ namespace mmo
 
 	void Scene::Render(Camera& camera, PixelShaderType shaderType)
 	{
+		PROFILE_SCOPE("Scene::Render");
+
 		m_pixelShaderType = shaderType;
 
 		auto& gx = GraphicsDevice::Get();
@@ -281,15 +284,21 @@ namespace mmo
 		UpdateSceneGraph();
 
 		// Update particle emitters (self-timed)
-		for (auto& [name, emitter] : m_particleEmitters)
 		{
-			emitter->Update();
+			PROFILE_SCOPE("ParticleEmitters::Update");
+			for (auto& [name, emitter] : m_particleEmitters)
+			{
+				emitter->Update();
+			}
 		}
 
 		// Update ribbon trails (self-timed)
-		for (auto& [name, trail] : m_ribbonTrails)
 		{
-			trail->Update();
+			PROFILE_SCOPE("RibbonTrails::Update");
+			for (auto& [name, trail] : m_ribbonTrails)
+			{
+				trail->Update();
+			}
 		}
 
 		if (!m_frozen)
@@ -343,6 +352,8 @@ namespace mmo
 
 	void Scene::UpdateSceneGraph()
 	{
+		PROFILE_SCOPE("UpdateSceneGraph");
+
 		GetRootSceneNode().Update(true, false);
 	}
 
@@ -507,6 +518,8 @@ namespace mmo
 
 	void Scene::RenderVisibleObjects()
 	{
+		PROFILE_SCOPE("RenderVisibleObjects");
+
 		m_renderQueue->SortByMaterial();
 
 		for (auto& queue = GetRenderQueue(); auto& [groupId, group] : queue)
@@ -538,6 +551,8 @@ namespace mmo
 
 	void Scene::FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds, bool onlyShadowCasters)
 	{
+		PROFILE_SCOPE("FindVisibleObjects");
+
 		GetRootSceneNode().FindVisibleObjects(camera, GetRenderQueue(), visibleObjectBounds, true, onlyShadowCasters);
 	}
 
@@ -608,6 +623,8 @@ namespace mmo
 
 	void Scene::RenderSingleObject(Renderable& renderable, uint32 groupId)
 	{
+		PROFILE_SCOPE("RenderSingleObject");
+
 		RenderOperation op { groupId };
 		renderable.PrepareRenderOperation(op);
 		op.pixelShaderType = m_pixelShaderType;

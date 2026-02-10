@@ -242,12 +242,14 @@ namespace mmo
 		D3D11_RASTERIZER_DESC m_rasterizerDesc;
 		bool m_rasterizerDescChanged = false;
 		size_t m_rasterizerHash = 0;
+		ID3D11RasterizerState* m_currentRasterizerState = nullptr;
 		D3D11_SAMPLER_DESC m_samplerDesc;
 		bool m_samplerDescChanged = false;
 		size_t m_samplerHash = 0;
 		D3D11_DEPTH_STENCIL_DESC m_depthStencilDesc;
 		size_t m_depthStencilHash = 0;
 		bool m_depthStencilChanged = false;
+		ID3D11DepthStencilState* m_currentDepthStencilState = nullptr;
 
 #ifdef _DEBUG
 		ComPtr<ID3D11Debug> m_d3dDebug;

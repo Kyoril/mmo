@@ -18,6 +18,7 @@
 #include "vertex_declaration_d3d11.h"
 
 #include "base/macros.h"
+#include "base/profiler.h"
 #include "graphics/depth_stencil_hash.h"
 #include "log/default_log_levels.h"
 #include "luabind/operator.hpp"
@@ -371,7 +372,8 @@ namespace mmo
 		// Activate new state if requested
 		if (set)
 		{
-			m_immContext->RSSetState(state.Get());
+			m_currentRasterizerState = state.Get();
+			m_immContext->RSSetState(m_currentRasterizerState);
 		}
 	}
 
@@ -396,8 +398,12 @@ namespace mmo
 		}
 		else
 		{
-			// State exists, so activate it
-			m_immContext->RSSetState(it->second.Get());
+			// Only set if actually different from current bound state
+			if (m_currentRasterizerState != it->second.Get())
+			{
+				m_currentRasterizerState = it->second.Get();
+				m_immContext->RSSetState(m_currentRasterizerState);
+			}
 		}
 	}
 
@@ -417,16 +423,16 @@ namespace mmo
 					it = m_depthStencilStates.emplace(hash, depthStencilState).first;
 					ASSERT(it != m_depthStencilStates.end());
 				}
-				
-				m_immContext->OMSetDepthStencilState(it->second.Get(), 0);
+
+				// Only issue the API call if the state object actually changed
+				if (m_currentDepthStencilState != it->second.Get())
+				{
+					m_currentDepthStencilState = it->second.Get();
+					m_immContext->OMSetDepthStencilState(m_currentDepthStencilState, 0);
+				}
 				m_depthStencilHash = hash;
 			}
-			else
-			{
-				const auto it = m_depthStencilStates.find(m_depthStencilHash);
-				ASSERT(it != m_depthStencilStates.end());
-				m_immContext->OMSetDepthStencilState(it->second.Get(), 0);
-			}
+			// else: hash matches, state is already bound — skip redundant API call
 
 			m_depthStencilChanged = false;
 		}
@@ -608,8 +614,11 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::Reset()
 	{
-		// Clear the state
-		m_immContext->ClearState();
+		PROFILE_SCOPE("D3D11::Reset");
+
+		// Instead of ClearState() which nukes ALL GPU state and forces full rebinding,
+		// we only reset the specific state we need to. This avoids the driver having to
+		// re-validate every single binding on the next draw call.
 
 		m_vertexFormat = VertexFormat::Last;
 		m_blendMode = BlendMode::Undefined;
@@ -621,10 +630,12 @@ namespace mmo
 		m_rasterizerDesc.SlopeScaledDepthBias = 0.0f;
 		m_rasterizerDescChanged = true;
 
-		// Force depth stencil state to be re-applied since ClearState() unbinds it
+		// Force depth stencil state to be re-applied
 		m_depthStencilChanged = true;
 
 		m_lastInputLayout = nullptr;
+		m_currentRasterizerState = nullptr;
+		m_currentDepthStencilState = nullptr;
 
 		m_lastFrameBatchCount = m_batchCount;
 		m_batchCount = 0;
@@ -648,6 +659,7 @@ namespace mmo
 			m_textureSlots[i] = nullptr;
 		}
 
+		// Unbind shaders explicitly (cheaper than ClearState)
 		m_immContext->VSSetShader(nullptr, nullptr, 0);
 		m_immContext->PSSetShader(nullptr, nullptr, 0);
 
@@ -1204,6 +1216,8 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::Render(const RenderOperation& operation)
 	{
+		PROFILE_SCOPE("D3D11::Render");
+
 		GraphicsDevice::Render(operation);
 
 		ASSERT(operation.material);
