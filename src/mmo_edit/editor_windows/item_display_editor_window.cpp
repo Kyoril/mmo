@@ -68,10 +68,18 @@ namespace mmo
 			}
 
 			float rotation[4] = { att->rotation_w(), att->rotation_x(), att->rotation_y(), att->rotation_z() };
-			if (ImGui::InputFloat4("Rotation (wxyz)", rotation))
+			Quaternion rotationQuat(rotation[0], rotation[1], rotation[2], rotation[3]);
+			if (DrawQuaternionEulerDegreesControl("Rotation (Degrees)", rotationQuat))
 			{
+				rotation[0] = rotationQuat.w;
+				rotation[1] = rotationQuat.x;
+				rotation[2] = rotationQuat.y;
+				rotation[3] = rotationQuat.z;
 				att->set_rotation_w(rotation[0]); att->set_rotation_x(rotation[1]); att->set_rotation_y(rotation[2]); att->set_rotation_z(rotation[3]);
 			}
+			ImGui::BeginDisabled(true);
+			ImGui::InputFloat4("Quaternion (wxyz)", rotation);
+			ImGui::EndDisabled();
 
 			float scale[3] = { att->scale_x(), att->scale_y(), att->scale_z() };
 			if (ImGui::InputFloat3("Scale", scale))
@@ -478,17 +486,31 @@ namespace mmo
 
 		ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
 		ImGui::SetItemUsingMouseWheel();
-		if (ImGui::IsItemHovered()) m_cameraNode->Translate(Vector3::UnitZ * ImGui::GetIO().MouseWheel * 0.3f, TransformSpace::Local);
-		if (ImGui::IsItemActive())
+
+		const bool hovered = ImGui::IsItemHovered();
+		if (hovered)
 		{
-			const ImVec2 delta = ImGui::GetIO().MouseDelta;
-			if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+			// Mouse wheel: zoom in/out.
+			const float wheel = ImGui::GetIO().MouseWheel;
+			if (wheel != 0.0f)
 			{
-				m_cameraAnchor->Yaw(Degree(-delta.x * 0.3f), TransformSpace::World);
-				m_cameraAnchor->Pitch(Degree(-delta.y * 0.3f), TransformSpace::Local);
+				m_cameraNode->Translate(Vector3::UnitZ * -wheel * 0.35f, TransformSpace::Local);
 			}
-			else if (ImGui::IsMouseDown(ImGuiMouseButton_Right))
+
+			// Left-drag: orbit camera.
+			if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
 			{
+				const ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0.0f);
+				ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
+				m_cameraAnchor->Yaw(Degree(-delta.x * 0.25f), TransformSpace::World);
+				m_cameraAnchor->Pitch(Degree(-delta.y * 0.25f), TransformSpace::Local);
+			}
+
+			// Right-drag: pan camera anchor.
+			if (ImGui::IsMouseDragging(ImGuiMouseButton_Right))
+			{
+				const ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Right, 0.0f);
+				ImGui::ResetMouseDragDelta(ImGuiMouseButton_Right);
 				m_cameraAnchor->Translate(Vector3(-delta.x * 0.01f, delta.y * 0.01f, 0.0f), TransformSpace::World);
 			}
 		}

@@ -3,6 +3,8 @@
 #pragma once
 
 #include <imgui.h>
+#include "math/degree.h"
+#include "math/quaternion.h"
 
 namespace mmo
 {
@@ -30,5 +32,39 @@ namespace mmo
 			ImGui::PopTextWrapPos();
 			ImGui::EndTooltip();
 		}
+	}
+
+	/// @brief Draws an editable quaternion rotation using Roll/Pitch/Yaw in degrees.
+	/// @param label Section label shown above the controls.
+	/// @param quaternion Quaternion to edit.
+	/// @return True if edited.
+	inline bool DrawQuaternionEulerDegreesControl(const char* label, Quaternion& quaternion)
+	{
+		bool changed = false;
+
+		if (label && *label)
+		{
+			ImGui::TextUnformatted(label);
+		}
+
+		Rotator rotator = quaternion.ToRotator();
+		float roll = rotator.roll.GetValueDegrees();
+		float pitch = rotator.pitch.GetValueDegrees();
+		float yaw = rotator.yaw.GetValueDegrees();
+
+		changed |= ImGui::InputFloat("Roll", &roll);
+		changed |= ImGui::InputFloat("Pitch", &pitch);
+		changed |= ImGui::InputFloat("Yaw", &yaw);
+
+		if (changed)
+		{
+			Rotator updated;
+			updated.roll = Degree(roll);
+			updated.pitch = Degree(pitch);
+			updated.yaw = Degree(yaw);
+			quaternion = Quaternion::FromRotator(updated);
+		}
+
+		return changed;
 	}
 }
