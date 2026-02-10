@@ -19,6 +19,7 @@
 #include "scene_graph/scene.h"
 #include "scene_graph/scene_node.h"
 #include "scene_graph/sub_entity.h"
+#include "scene_graph/animation_state.h"
 #include "scene_graph/world_grid.h"
 #include "scene_graph/axis_display.h"
 
@@ -51,8 +52,10 @@ namespace mmo
 		{
 			if (m_entity)
 			{
+				m_scene.GetRootSceneNode().DetachObject(*m_entity);
 				m_scene.DestroyEntity(*m_entity);
 				m_entity = nullptr;
+				m_animState = nullptr;
 			}
 			m_worldGrid.reset();
 			m_axisDisplay.reset();
@@ -191,8 +194,10 @@ namespace mmo
 
 			if (m_entity)
 			{
+				m_scene.GetRootSceneNode().DetachObject(*m_entity);
 				m_scene.DestroyEntity(*m_entity);
 				m_entity = nullptr;
+				m_animState = nullptr;
 			}
 
 			m_avatarDefinition.reset();
@@ -305,6 +310,15 @@ namespace mmo
 			m_scene.GetRootSceneNode().AttachObject(*m_entity);
 			m_entity->ResetSubEntities();
 
+			// Many character meshes rely on idle pose bones for proper appearance.
+			m_animState = m_entity->GetAnimationState("Idle");
+			if (m_animState)
+			{
+				m_animState->SetLoop(true);
+				m_animState->SetEnabled(true);
+				m_animState->SetWeight(1.0f);
+			}
+
 			if (m_avatarDefinition)
 			{
 				m_avatarConfiguration.Apply(*this, *m_avatarDefinition);
@@ -366,7 +380,7 @@ namespace mmo
 			if (!m_viewportRT || m_viewportSize.x <= 0.0f || m_viewportSize.y <= 0.0f)
 			{
 				return;
-			}0
+			}
 
 			auto& gx = GraphicsDevice::Get();
 			gx.Reset();
@@ -391,6 +405,7 @@ namespace mmo
 		RenderTexturePtr m_viewportRT;
 		ImVec2 m_viewportSize{ 0.0f, 0.0f };
 		Entity* m_entity{ nullptr };
+		AnimationState* m_animState{ nullptr };
 
 		proto::ModelDataEntry* m_currentEntry{ nullptr };
 		String m_lastEntrySerialized;

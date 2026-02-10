@@ -182,6 +182,7 @@ namespace mmo
 
 		if (pixelShaderType != PixelShaderType::ShadowMap)
 		{
+			device.SetDepthEnabled(m_depthTest);
 			device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
 			device.SetDepthWriteEnabled(m_depthWrite);
 		}
