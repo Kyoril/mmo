@@ -1,6 +1,7 @@
 #pragma once
 
 #include "graphics/vertex_index_data.h"
+#include "graphics/occlusion_query.h"
 #include "scene_graph/movable_object.h"
 #include "scene_graph/renderable.h"
 
@@ -101,6 +102,12 @@ namespace mmo
 			/// @param camera The camera being used for rendering.
 			/// @return True if the tile should be rendered, false otherwise.
 			bool PreRender(Scene& scene, GraphicsDevice& graphicsDevice, Camera& camera) override;
+
+			/// @brief Called after the tile has been rendered. Used to end occlusion queries.
+			/// @param scene The scene that was rendered.
+			/// @param graphicsDevice The graphics device used for rendering.
+			/// @param camera The camera used for rendering.
+			void PostRender(Scene& scene, GraphicsDevice& graphicsDevice, Camera& camera) override;
 
 			/// @brief Indicates whether this tile currently contains renderable terrain geometry.
 			/// @details When all inner cells of the tile are marked as holes, no triangles are generated
@@ -223,6 +230,23 @@ namespace mmo
 			LRUCache<uint32, IndexData> m_lodIndexCache;
 			uint32 m_currentLod = 0;
 			uint32 m_currentStitchKey = 0;
+
+			/// @brief GPU occlusion query for this tile. Created lazily on first render.
+			OcclusionQueryPtr m_occlusionQuery;
+
+			/// @brief Whether this tile was visible according to the last occlusion query result.
+			bool m_occlusionVisible = true;
+
+			/// @brief Number of frames this tile has been skipped due to occlusion.
+			///        Used to trigger periodic re-tests.
+			uint32 m_occlusionSkippedFrames = 0;
+
+			/// @brief Stagger offset for re-testing occluded tiles.
+			///        Distributes retest load across frames.
+			uint32 m_occlusionStaggerOffset = 0;
+
+			/// @brief How many frames an occluded tile can be skipped before re-testing.
+			static constexpr uint32 OcclusionRetestInterval = 8;
 
 		public:
 			/// @brief Tests collision between a capsule and this terrain tile.

@@ -187,6 +187,8 @@ namespace mmo
 
 		void OnTerrainLodEnabledChanged(ConsoleVar& var, const std::string& oldValue);
 
+		void OnTerrainOcclusionCullingChanged(ConsoleVar& var, const std::string& oldValue);
+
 	private:
 		// EventLoop connections
 

@@ -15,6 +15,7 @@
 #include "vertex_declaration.h"
 #include "shared/graphics/constant_buffer.h"
 #include "shared/graphics/structured_buffer.h"
+#include "shared/graphics/occlusion_query.h"
 
 
 namespace mmo
@@ -205,6 +206,10 @@ namespace mmo
 		virtual void SetDepthBiasClamp(float bias) {}
 
 		virtual void Render(const RenderOperation& operation) {}
+
+		/// @brief Creates a GPU occlusion query object for visibility testing.
+		/// @return A unique pointer to the occlusion query, or nullptr if not supported.
+		virtual OcclusionQueryPtr CreateOcclusionQuery() { return nullptr; }
 
 		/// @brief Draws non-indexed primitives.
 		/// @param vertexCount Number of vertices to draw.

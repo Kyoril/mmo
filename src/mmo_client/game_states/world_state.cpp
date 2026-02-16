@@ -104,6 +104,7 @@ namespace mmo
 		static ConsoleVar *s_foliageDensityVar = nullptr;
 
 		static ConsoleVar *s_terrainLodEnabledVar = nullptr;
+		static ConsoleVar *s_terrainOcclusionCullingVar = nullptr;
 
 		String MapMouseButton(const MouseButton button)
 		{
@@ -1108,6 +1109,9 @@ namespace mmo
 
 		s_terrainLodEnabledVar = ConsoleVarMgr::RegisterConsoleVar("TerrainLodEnabled", "Enable or disable terrain level of detail", "1");
 		m_cvarChangedSignals += s_terrainLodEnabledVar->Changed.connect(this, &WorldState::OnTerrainLodEnabledChanged);
+
+		s_terrainOcclusionCullingVar = ConsoleVarMgr::RegisterConsoleVar("TerrainOcclusionCulling", "Enable or disable GPU occlusion culling for terrain tiles", "1");
+		m_cvarChangedSignals += s_terrainOcclusionCullingVar->Changed.connect(this, &WorldState::OnTerrainOcclusionCullingChanged);
 
 		s_foliageEnabledVar = ConsoleVarMgr::RegisterConsoleVar("FoliageEnabled", "Enable or disable foliage rendering (grass, plants, etc.)", "1");
 		m_cvarChangedSignals += s_foliageEnabledVar->Changed.connect(this, &WorldState::OnFoliageEnabledChanged);
@@ -3546,6 +3550,12 @@ namespace mmo
 			m_worldInstance->GetTerrain()->SetLodEnabled(s_terrainLodEnabledVar->GetIntValue() != 0);
 		}
 
+		// Apply terrain occlusion culling setting from console variable
+		if (m_worldInstance->HasTerrain() && s_terrainOcclusionCullingVar)
+		{
+			m_worldInstance->GetTerrain()->SetOcclusionCullingEnabled(s_terrainOcclusionCullingVar->GetIntValue() != 0);
+		}
+
 		return true;
 	}
 
@@ -3863,6 +3873,16 @@ namespace mmo
 		}
 
 		m_worldInstance->GetTerrain()->SetLodEnabled(var.GetBoolValue());
+	}
+
+	void WorldState::OnTerrainOcclusionCullingChanged(ConsoleVar& var, const std::string& oldValue)
+	{
+		if (!m_worldInstance || !m_worldInstance->GetTerrain())
+		{
+			return;
+		}
+
+		m_worldInstance->GetTerrain()->SetOcclusionCullingEnabled(var.GetBoolValue());
 	}
 
 	void WorldState::GetPlayerName(uint64 guid, std::weak_ptr<GamePlayerC> player)

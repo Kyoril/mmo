@@ -3,6 +3,7 @@
 #include "graphics_device_d3d11.h"
 
 #include "constant_buffer_d3d11.h"
+#include "occlusion_query_d3d11.h"
 #include "structured_buffer_d3d11.h"
 #include "index_buffer_d3d11.h"
 #include "material_compiler_d3d11.h"
@@ -1378,6 +1379,11 @@ namespace mmo
 				Draw(operation.vertexData->vertexCount, operation.vertexData->vertexStart);
 			}
 		}
+	}
+
+	OcclusionQueryPtr GraphicsDeviceD3D11::CreateOcclusionQuery()
+	{
+		return std::make_unique<OcclusionQueryD3D11>(*m_device.Get(), *m_immContext.Get());
 	}
 
 	void GraphicsDeviceD3D11::SetHardwareCursor(void* osCursorData)

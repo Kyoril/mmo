@@ -430,6 +430,11 @@ namespace mmo
 			return m_lodEnabled;
 		}
 
+		void Terrain::SetOcclusionCullingEnabled(bool enabled)
+		{
+			m_occlusionCullingEnabled = enabled;
+		}
+
 		void Terrain::SetDebugLodIsVisible(bool visible)
 		{
 			m_debugLod = visible;

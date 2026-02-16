@@ -197,6 +197,14 @@ namespace mmo
 			/// @brief Checks if level of detail (LOD) is enabled.
 			/// @return True if LOD is enabled, false otherwise.
 			bool IsLodEnabled() const;
+
+			/// @brief Enables or disables GPU occlusion culling for terrain tiles.
+			/// @param enabled True to enable occlusion culling, false to disable.
+			void SetOcclusionCullingEnabled(bool enabled);
+
+			/// @brief Checks if GPU occlusion culling is enabled for terrain tiles.
+			/// @return True if occlusion culling is enabled, false otherwise.
+			bool IsOcclusionCullingEnabled() const { return m_occlusionCullingEnabled; }
 			
 			/// @brief Sets the visibility of debug LOD information.
 			/// @param visible True to show debug LOD information, false to hide it.
@@ -607,6 +615,7 @@ namespace mmo
 			MaterialPtr m_defaultMaterial;
 			bool m_showWireframe = false;
 			MaterialPtr m_wireframeMaterial;
+			bool m_occlusionCullingEnabled { true };
 		};
 	}
 

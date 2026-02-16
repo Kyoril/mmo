@@ -17,7 +17,7 @@ namespace mmo
 {
 	namespace terrain
 	{
-		constexpr uint32 WireframeRenderGroupId = RenderQueueGroupId::Main + 1;
+		constexpr uint32 WireframeRenderGroupId = RenderQueueGroupId::TerrainGeometry + 1;
 
 		/// @brief Default maximum number of LOD index buffer combinations to cache per tile.
 		/// @details This value provides a good balance between memory usage and performance.
@@ -30,13 +30,16 @@ namespace mmo
 			: MovableObject(name), Renderable(), m_page(page), m_startX(startX), m_startZ(startZ)
 			, m_lodIndexCache(DefaultLodCacheSize)
 		{
-			SetRenderQueueGroup(WorldGeometry1);
+			SetRenderQueueGroup(TerrainGeometry);
 
 			SetCastShadows(false);
 
 			// Calculate tile coordinates based on outer vertex spacing
 			m_tileX = m_startX / (constants::OuterVerticesPerTileSide - 1);
 			m_tileY = m_startZ / (constants::OuterVerticesPerTileSide - 1);
+
+			// Pre-compute stagger offset for occlusion retest distribution
+			m_occlusionStaggerOffset = (static_cast<uint32>(m_tileX) + static_cast<uint32>(m_tileY) * constants::TilesPerPage) % OcclusionRetestInterval;
 
 			CreateVertexData(m_startX, m_startZ);
 			CreateIndexData(0, 0, 0, 0, 0);
@@ -174,14 +177,44 @@ namespace mmo
 
 		void Tile::PopulateRenderQueue(RenderQueue &queue)
 		{
-			if (HasRenderableGeometry())
+			if (!HasRenderableGeometry())
 			{
-				queue.AddRenderable(*this, m_renderQueueId);
+				return;
+			}
 
-				if (m_page.GetTerrain().IsWireframeVisible())
+			// Check occlusion query result from previous frame
+			if (m_page.GetTerrain().IsOcclusionCullingEnabled() && m_occlusionQuery)
+			{
+				uint64 pixelCount = 0;
+				if (m_occlusionQuery->TryGetResult(pixelCount))
 				{
-					queue.AddRenderable(*this, WireframeRenderGroupId);
+					m_occlusionVisible = (pixelCount > 0);
+
+					if (!m_occlusionVisible)
+					{
+						m_occlusionSkippedFrames = 0;
+					}
 				}
+
+				// If the tile was occluded, skip rendering most frames but periodically
+				// re-test to detect when the tile becomes visible again.
+				// Use staggered retesting to distribute the cost across frames.
+				if (!m_occlusionVisible)
+				{
+					m_occlusionSkippedFrames++;
+
+					if ((m_occlusionSkippedFrames % OcclusionRetestInterval) != m_occlusionStaggerOffset)
+					{
+						return;
+					}
+				}
+			}
+
+			queue.AddRenderable(*this, m_renderQueueId);
+
+			if (m_page.GetTerrain().IsWireframeVisible())
+			{
+				queue.AddRenderable(*this, WireframeRenderGroupId);
 			}
 		}
 
@@ -206,8 +239,34 @@ namespace mmo
 					m_currentStitchKey = lodDisabledStitchKey;
 				}
 			}
-			
+
+			// Create occlusion query lazily on first use
+			if (m_page.GetTerrain().IsOcclusionCullingEnabled() && !m_occlusionQuery)
+			{
+				m_occlusionQuery = graphicsDevice.CreateOcclusionQuery();
+
+				// Compute stagger offset from tile position to distribute re-tests
+				m_occlusionStaggerOffset = (static_cast<uint32>(m_tileX) + static_cast<uint32>(m_tileY) * constants::TilesPerPage) % OcclusionRetestInterval;
+			}
+
+			// Begin occlusion query to wrap this tile's draw call
+			if (m_occlusionQuery && m_page.GetTerrain().IsOcclusionCullingEnabled())
+			{
+				m_occlusionQuery->Begin();
+			}
+
 			return Renderable::PreRender(scene, graphicsDevice, camera);
+		}
+
+		void Tile::PostRender(Scene& scene, GraphicsDevice& graphicsDevice, Camera& camera)
+		{
+			// End occlusion query after the draw call
+			if (m_occlusionQuery && m_page.GetTerrain().IsOcclusionCullingEnabled())
+			{
+				m_occlusionQuery->End();
+			}
+
+			Renderable::PostRender(scene, graphicsDevice, camera);
 		}
 
 		Terrain &Tile::GetTerrain() const

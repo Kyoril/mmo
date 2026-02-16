@@ -124,6 +124,8 @@ namespace mmo
 
 		void Render(const RenderOperation& operation) override;
 
+		OcclusionQueryPtr CreateOcclusionQuery() override;
+
 		void SetHardwareCursor(void* osCursorData) override;
 
 		void* GetHardwareCursor() override;
