@@ -959,7 +959,7 @@ namespace mmo
 			}
 
 			// Emissive color
-			m_pixelShaderStream << "\tfloat3 emissiveColor = float3(1.0, 1.0, 1.0);\n\n";
+			m_pixelShaderStream << "\tfloat3 emissiveColor = float3(0.0, 0.0, 0.0);\n\n";
 			if (m_emissiveExpression != IndexNone)
 			{
 				const auto expressionType = GetExpressionType(m_emissiveExpression);
@@ -971,11 +971,11 @@ namespace mmo
 				{
 					if (expressionType == ExpressionType::Float_2)
 					{
-						m_pixelShaderStream << "\tbaseColor = float3(expr_" << m_emissiveExpression << ", 1.0);\n\n";
+						m_pixelShaderStream << "\temissiveColor = float3(expr_" << m_emissiveExpression << ", 1.0);\n\n";
 					}
 					else if (expressionType == ExpressionType::Float_4)
 					{
-						m_pixelShaderStream << "\tbaseColor = expr_" << m_emissiveExpression << ".rgb;\n\n";
+						m_pixelShaderStream << "\temissiveColor = expr_" << m_emissiveExpression << ".rgb;\n\n";
 					}
 				}
 			}

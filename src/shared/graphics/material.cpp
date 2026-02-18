@@ -400,7 +400,14 @@ namespace mmo
 			device.SetDepthTestComparison(DepthTestMethod::LessEqual);
 		}
 
-		if (m_type == MaterialType::Translucent || m_type == MaterialType::Masked)
+		// G-Buffer pass must always use opaque blending - the G-Buffer stores material
+		// properties (normals, roughness, depth) that are meaningless when alpha-blended.
+		// Opacity masking is handled by shader discard.
+		if (pixelShaderType == PixelShaderType::GBuffer || pixelShaderType == PixelShaderType::ShadowMap)
+		{
+			device.SetBlendMode(BlendMode::Opaque);
+		}
+		else if (m_type == MaterialType::Translucent || m_type == MaterialType::UserInterface)
 		{
 			device.SetBlendMode(BlendMode::Alpha);
 		}
