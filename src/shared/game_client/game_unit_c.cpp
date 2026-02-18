@@ -1206,19 +1206,10 @@ namespace mmo
 		const Vector3 newPathStart = points[0];
 		const float distanceToNewStart = (newPathStart - currentPosition).GetLength();
 
-		constexpr float pathStartTolerance = 5.0f; // Allow 5 units tolerance for new path starts
-
-		Vector3 actualStartPosition;
-		if (distanceToNewStart <= pathStartTolerance)
-		{
-			// Close enough - start from current position
-			actualStartPosition = currentPosition;
-		}
-		else
-		{
-			// Too far - use the path's start position but this might cause a small teleport
-			actualStartPosition = newPathStart;
-		}
+		// Always start from our current client position for smooth transitions.
+		// The speed-based interpolation in UpdatePathMovement will naturally
+		// catch up to the correct path position, eliminating visual snapping.
+		Vector3 actualStartPosition = currentPosition;
 
 		// Store the path points and target rotation
 		m_movementPath = points;
@@ -1341,26 +1332,31 @@ namespace mmo
 			targetPosition = CalculatePositionAlongPath(targetDistance);
 		}
 
-		// Move towards target position smoothly without large teleports
+		// Move towards target position smoothly using speed-based interpolation
 		const Vector3 unitCurrentPosition = m_sceneNode->GetDerivedPosition();
 		Vector3 direction = targetPosition - unitCurrentPosition;
 		const float distanceFromTarget = direction.GetLength();
 
-		constexpr float maxMovePerFrame = 0.5f; // Maximum distance to move in one frame
+		// Use actual movement speed scaled by deltaTime for smooth, framerate-independent movement.
+		// Add a catch-up factor when falling behind the computed path position to avoid persistent lag.
+		const float baseMove = runSpeed * deltaTime;
+		const float catchUpFactor = std::min(distanceFromTarget / std::max(baseMove, 0.01f), 3.0f);
+		const float maxMoveThisFrame = baseMove * std::max(catchUpFactor, 1.0f);
+
 		if (distanceFromTarget > 0.01f)
 		{
 			Vector3 newPosition;
 
-			if (distanceFromTarget <= maxMovePerFrame)
+			if (distanceFromTarget <= maxMoveThisFrame)
 			{
-				// Small distance - move directly to target
+				// Close enough - move directly to target position
 				newPosition = targetPosition;
 			}
 			else
 			{
-				// Large distance - move gradually towards target
+				// Move towards target at appropriate speed with catch-up
 				direction.Normalize();
-				newPosition = unitCurrentPosition + direction * maxMovePerFrame;
+				newPosition = unitCurrentPosition + direction * maxMoveThisFrame;
 			}
 
 			m_sceneNode->SetPosition(newPosition);

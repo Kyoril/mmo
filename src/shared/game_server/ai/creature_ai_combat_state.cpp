@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include <algorithm>
+#include <cmath>
 
 #include "game_server/ai/creature_ai_combat_state.h"
 #include "game_server/ai/creature_ai.h"
@@ -477,15 +478,19 @@ namespace mmo
 
 		// Use consistent range calculation with ShouldMoveToTarget and OnAttackSwing
 		const float attackRange = GetControlled().GetMeleeReach() + target.GetMeleeReach();
-		// Move slightly closer than attack range to ensure we're definitely in range
+		// Stop at 90% of attack range: close enough to attack but not inside the target
 		const float moveRange = attackRange * COMBAT_RANGE_FACTOR;
 
 		auto& mover = GetControlled().GetMover();
 		
 		// Use predicted target position for better interception
-		const Vector3 targetPosition = PredictTargetPosition(target);
+		Vector3 targetPosition = PredictTargetPosition(target);
+
+		// Apply formation offset so multiple creatures spread around the target
+		// instead of all stacking in the same spot
+		targetPosition = CalculateFormationPosition(target, targetPosition, moveRange);
 		
-		// Attempt to move to the predicted target position
+		// Attempt to move to the formation-adjusted target position
 		if (mover.MoveTo(targetPosition, moveRange))
 		{
 			// Successfully initiated movement
@@ -1156,5 +1161,61 @@ namespace mmo
 		return !HandleMovementFailure();
 	}
 	
+	Vector3 CreatureAICombatState::CalculateFormationPosition(const GameUnitS& target, const Vector3& approachPosition, float standoffDistance) const
+	{
+		const auto& controlled = GetControlled();
+		
+		// Count how many other creatures are attacking the same target and determine our slot
+		int totalAttackers = 0;
+		int ourSlot = 0;
+		const uint64 ourGuid = controlled.GetGuid();
+
+		target.ForEachAttacker([&](const GameUnitS& attacker)
+		{
+			if (&attacker == &target)
+			{
+				return;
+			}
+
+			if (attacker.GetGuid() == ourGuid)
+			{
+				ourSlot = totalAttackers;
+			}
+
+			totalAttackers++;
+		});
+
+		// With 0 or 1 attackers, no formation needed - go straight at the target
+		if (totalAttackers <= 1)
+		{
+			return approachPosition;
+		}
+
+		// Calculate the base angle from target to the approach position
+		const Vector3 targetPos = target.GetPosition();
+		const Vector3 toApproach = approachPosition - targetPos;
+		const float baseAngle = std::atan2(toApproach.z, toApproach.x);
+
+		// Spread creatures in a semicircle centered on the base approach angle.
+		// The spread increases with more attackers but is capped.
+		const float totalSpread = std::min(
+			static_cast<float>(totalAttackers - 1) * FORMATION_ANGLE_STEP,
+			FORMATION_MAX_ANGLE);
+		const float startAngle = baseAngle - totalSpread * 0.5f;
+		const float angleStep = (totalAttackers > 1)
+			? totalSpread / static_cast<float>(totalAttackers - 1)
+			: 0.0f;
+
+		const float slotAngle = startAngle + static_cast<float>(ourSlot) * angleStep;
+
+		// Calculate offset position at the standoff distance from the target
+		Vector3 formationPos;
+		formationPos.x = targetPos.x + std::cos(slotAngle) * standoffDistance;
+		formationPos.y = approachPosition.y; // Keep the original height
+		formationPos.z = targetPos.z + std::sin(slotAngle) * standoffDistance;
+
+		return formationPos;
+	}
+
 	// === End of new methods ===
 }

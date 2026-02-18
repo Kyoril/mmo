@@ -1042,6 +1042,24 @@ public:
 		/// Removes all attacking units from the list of attackers.
 		void RemoveAllAttackingUnits();
 
+		/// Gets the number of units currently attacking this unit.
+		/// @returns The number of attacking units.
+		size_t GetAttackerCount() const { return m_attackingUnits.size(); }
+
+		/// Executes a callback for each unit currently attacking this unit.
+		/// @param callback The callback to execute for each attacker.
+		template<typename Func>
+		void ForEachAttacker(Func callback) const
+		{
+			for (const auto* attacker : m_attackingUnits)
+			{
+				if (attacker)
+				{
+					callback(*attacker);
+				}
+			}
+		}
+
 		/// Gets the base speed for a specific movement type.
 		/// @param type The movement type.
 		/// @returns The base speed as a float.
