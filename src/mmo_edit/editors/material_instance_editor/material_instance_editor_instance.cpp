@@ -399,11 +399,13 @@ namespace mmo
 				{
 					ImGui::PushID(param.name.c_str());
 
+					ImGui::Text("%s", param.name.c_str());
+
 					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
 					
 					float value = param.value;
 					ImGui::SetNextItemWidth(-1);
-					if (ImGui::DragFloat(param.name.c_str(), &value, 0.01f))
+					if (ImGui::DragFloat("##value", &value, 0.01f))
 					{
 						m_material->SetScalarParameter(param.name, value);
 					}

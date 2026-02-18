@@ -125,7 +125,7 @@ namespace mmo
 			// Calculate size of mip level
 			const int32 width = m_header.width >> mipLevel;
 			const int32 height = m_header.height >> mipLevel;
-			if (width <= 1 || height <= 1 || mipData[mipLevel].size() == 0)
+			if (width < 1 || height < 1 || mipData[mipLevel].size() == 0)
 			{
 				break;
 			}
@@ -152,6 +152,11 @@ namespace mmo
 			}
 
 			actualMipLevelCount++;
+
+			if (width <= 1 || height <= 1)
+			{
+				break;
+			}
 		}
 
 		td.MipLevels = actualMipLevelCount;
