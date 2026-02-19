@@ -127,21 +127,14 @@ namespace mmo
 		void SimulateJumpArc(const RemoteMovementSnapshot& snapshot, float elapsed,
 		                     Vector3& outPosition, Vector3& outVelocity) const;
 
-		/// @brief Simulates a curved movement path from a snapshot using facing interpolation.
-		/// Uses small time steps to integrate position along an arc when turning while moving.
-		/// @param snapshot The starting snapshot.
-		/// @param elapsed Elapsed time in seconds since the snapshot.
-		/// @param totalDuration Total duration of the interpolation interval in seconds.
-		/// @param runSpeed Run speed for forward/strafe movement.
-		/// @param backwardsSpeed Backwards movement speed.
-		/// @param turnSpeed Turn speed in rad/s.
-		/// @param totalFacingDelta Total facing change over the interval (radians, wrapped).
-		/// @param outPosition The simulated position.
-		/// @param outFacing The simulated facing at the given elapsed time.
-		void SimulateMovementArc(const RemoteMovementSnapshot& snapshot, float elapsed, float totalDuration,
-		                         float runSpeed, float backwardsSpeed, float turnSpeed,
-		                         float totalFacingDelta,
-		                         Vector3& outPosition, Radian& outFacing) const;
+		/// @brief Computes the instantaneous velocity vector of a snapshot from its movement
+		/// flags and facing direction. Used as tangent input for Hermite spline interpolation.
+		/// @param snapshot The snapshot to compute velocity for.
+		/// @param runSpeed Forward/strafe movement speed.
+		/// @param backwardsSpeed Backward movement speed.
+		/// @return Velocity vector based on the snapshot's movement flags and facing.
+		Vector3 ComputeSnapshotVelocity(const RemoteMovementSnapshot& snapshot,
+		                                float runSpeed, float backwardsSpeed) const;
 
 		/// @brief Prunes snapshots that are too old to be useful for interpolation.
 		/// Keeps at least the most recent snapshot before playback time.

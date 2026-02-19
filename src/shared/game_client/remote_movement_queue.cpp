@@ -116,14 +116,17 @@ namespace mmo
 			prev = &m_snapshots.front();
 		}
 
-		// Case 1: We have two snapshots to interpolate between
+		// Case 1: We have two snapshots to interpolate between.
+		// Uses cubic Hermite spline interpolation to ensure velocity continuity
+		// at snapshot boundaries, preventing the stutter/deceleration that occurs
+		// with simple blended interpolation.
 		if (next && next->timestamp > prev->timestamp && playbackTime >= prev->timestamp && playbackTime <= next->timestamp)
 		{
 			const float totalDuration = static_cast<float>(next->timestamp - prev->timestamp) / 1000.0f;
 			const float elapsed = static_cast<float>(playbackTime - prev->timestamp) / 1000.0f;
 			const float t = (totalDuration > 0.0f) ? std::min(1.0f, elapsed / totalDuration) : 1.0f;
 
-			// Interpolate facing first (shortest arc) — used by both branches
+			// Interpolate facing (shortest arc)
 			float facingDiff = (next->facing - prev->facing).GetValueRadians();
 			while (facingDiff > 3.14159265f)
 			{
@@ -135,51 +138,49 @@ namespace mmo
 			}
 			outState.facing = Radian(prev->facing.GetValueRadians() + facingDiff * t);
 
-			// Check if we're in a falling/jumping state
+			// Compute endpoint velocities from movement flags.
+			// These serve as tangent vectors for Hermite interpolation.
+			const Vector3 v0 = ComputeSnapshotVelocity(*prev, runSpeed, backwardsSpeed);
+			const Vector3 v1 = ComputeSnapshotVelocity(*next, runSpeed, backwardsSpeed);
+
+			// Cubic Hermite basis functions for parameter t in [0, 1]
+			const float t2 = t * t;
+			const float t3 = t2 * t;
+			const float h00 =  2.0f * t3 - 3.0f * t2 + 1.0f;  // value at p0
+			const float h10 =         t3 - 2.0f * t2 + t;       // tangent at p0
+			const float h01 = -2.0f * t3 + 3.0f * t2;           // value at p1
+			const float h11 =         t3 -        t2;            // tangent at p1
+
+			// Tangent vectors scaled by interval duration
+			const Vector3 m0 = v0 * totalDuration;
+			const Vector3 m1 = v1 * totalDuration;
+
 			const bool prevFalling = (prev->movementFlags & movement_flags::Falling) != 0;
 
 			if (prevFalling)
 			{
-				// During a jump/fall, simulate the physics arc from the prev snapshot
+				// Physics simulation for vertical (Y) axis
 				Vector3 simPos = prev->position;
 				Vector3 simVel;
 				SimulateJumpArc(*prev, elapsed, simPos, simVel);
 
-				// For the lateral component, simulate curved path based on facing interpolation,
-				// then blend toward the known next position to correct drift.
-				Vector3 simLateralPos;
-				Radian simFacing;
-				SimulateMovementArc(*prev, elapsed, totalDuration, runSpeed, backwardsSpeed, turnSpeed,
-				                    facingDiff, simLateralPos, simFacing);
+				// Hermite spline for lateral (X/Z) movement
+				const Vector3 p0(prev->position.x, 0.0f, prev->position.z);
+				const Vector3 p1(next->position.x, 0.0f, next->position.z);
+				const Vector3 lm0(m0.x, 0.0f, m0.z);
+				const Vector3 lm1(m1.x, 0.0f, m1.z);
 
-				// Blend the simulated lateral position toward the known destination
-				const Vector3 targetLateral(next->position.x, 0.0f, next->position.z);
-				const Vector3 curLateral(simLateralPos.x, 0.0f, simLateralPos.z);
-				// Use smooth blend that increases correction as we approach t=1
-				const float blendFactor = t * t; // Quadratic ease-in for correction
-				const Vector3 blendedLateral = curLateral + (targetLateral - curLateral) * blendFactor;
+				const Vector3 lateralPos = p0 * h00 + lm0 * h10 + p1 * h01 + lm1 * h11;
 
-				outState.position = Vector3(blendedLateral.x, simPos.y, blendedLateral.z);
+				outState.position = Vector3(lateralPos.x, simPos.y, lateralPos.z);
 				outState.velocity = simVel;
 				outState.isFalling = true;
 			}
 			else
 			{
-				// Walking/standing: simulate curved path using facing interpolation
-				// and movement flags, then blend toward known next position.
-				Vector3 simPos;
-				Radian simFacing;
-				SimulateMovementArc(*prev, elapsed, totalDuration, runSpeed, backwardsSpeed, turnSpeed,
-				                    facingDiff, simPos, simFacing);
-
-				// Blend toward the known next position to correct accumulated drift.
-				// Use quadratic ease-in so corrections accelerate toward the end of the interval.
-				const float blendFactor = t * t;
-				outState.position = simPos + (next->position - simPos) * blendFactor;
-
-				outState.velocity = (totalDuration > 0.0f)
-					? (next->position - prev->position) / totalDuration
-					: Vector3::Zero;
+				// Full Hermite spline interpolation for grounded movement
+				outState.position = prev->position * h00 + m0 * h10 + next->position * h01 + m1 * h11;
+				outState.velocity = v0 + (v1 - v0) * t;
 				outState.isFalling = false;
 			}
 
@@ -308,95 +309,34 @@ namespace mmo
 		outVelocity.y += gravity * elapsed;
 	}
 
-	void RemoteMovementQueue::SimulateMovementArc(const RemoteMovementSnapshot& snapshot, const float elapsed,
-	                                               const float totalDuration,
-	                                               const float runSpeed, const float backwardsSpeed,
-	                                               const float turnSpeed, const float totalFacingDelta,
-	                                               Vector3& outPosition, Radian& outFacing) const
+	Vector3 RemoteMovementQueue::ComputeSnapshotVelocity(const RemoteMovementSnapshot& snapshot,
+	                                                       const float runSpeed,
+	                                                       const float backwardsSpeed) const
 	{
-		outPosition = snapshot.position;
-		outFacing = snapshot.facing;
+		const Quaternion orientation(snapshot.facing, Vector3::UnitY);
+		const Vector3 forward = orientation * Vector3::UnitX;
+		const Vector3 right = orientation * Vector3::UnitZ;
 
-		if (elapsed <= 0.0f)
+		Vector3 vel = Vector3::Zero;
+
+		if (snapshot.movementFlags & movement_flags::Forward)
 		{
-			return;
+			vel += forward * runSpeed;
+		}
+		if (snapshot.movementFlags & movement_flags::Backward)
+		{
+			vel -= forward * backwardsSpeed;
+		}
+		if (snapshot.movementFlags & movement_flags::StrafeLeft)
+		{
+			vel -= right * runSpeed;
+		}
+		if (snapshot.movementFlags & movement_flags::StrafeRight)
+		{
+			vel += right * runSpeed;
 		}
 
-		// Determine if the player is turning (based on movement flags or facing delta)
-		const bool isTurning = (snapshot.movementFlags & movement_flags::TurnLeft) != 0 ||
-		                       (snapshot.movementFlags & movement_flags::TurnRight) != 0 ||
-		                       std::abs(totalFacingDelta) > 0.01f;
-
-		const bool isMoving = (snapshot.movementFlags & movement_flags::Moving) != 0;
-
-		// If the player is not turning, or not moving, just use straight-line extrapolation
-		if (!isTurning || !isMoving)
-		{
-			ExtrapolateFromSnapshot(snapshot, elapsed, runSpeed, backwardsSpeed, turnSpeed,
-			                        outPosition, outFacing);
-			return;
-		}
-
-		// Simulate curved movement using small time steps.
-		// We integrate position using the continuously changing facing.
-		constexpr int numSteps = 16;
-		const float dt = elapsed / static_cast<float>(numSteps);
-		const float startFacing = snapshot.facing.GetValueRadians();
-
-		// Compute facing rate: use the known total facing delta if we have a valid interval,
-		// otherwise fall back to turn speed from flags.
-		float facingRate;
-		if (totalDuration > 0.001f)
-		{
-			facingRate = totalFacingDelta / totalDuration;
-		}
-		else
-		{
-			facingRate = 0.0f;
-			if (snapshot.movementFlags & movement_flags::TurnLeft)
-			{
-				facingRate = turnSpeed;
-			}
-			if (snapshot.movementFlags & movement_flags::TurnRight)
-			{
-				facingRate = -turnSpeed;
-			}
-		}
-
-		Vector3 pos = snapshot.position;
-
-		for (int step = 0; step < numSteps; ++step)
-		{
-			const float stepTime = (static_cast<float>(step) + 0.5f) * dt;
-			const float currentFacing = startFacing + facingRate * stepTime;
-
-			const Quaternion orientation(Radian(currentFacing), Vector3::UnitY);
-			const Vector3 forward = orientation * Vector3::UnitX;
-			const Vector3 right = orientation * Vector3::UnitZ;
-
-			Vector3 moveDir = Vector3::Zero;
-			if (snapshot.movementFlags & movement_flags::Forward)
-			{
-				moveDir += forward * runSpeed;
-			}
-			if (snapshot.movementFlags & movement_flags::Backward)
-			{
-				moveDir -= forward * backwardsSpeed;
-			}
-			if (snapshot.movementFlags & movement_flags::StrafeLeft)
-			{
-				moveDir -= right * runSpeed;
-			}
-			if (snapshot.movementFlags & movement_flags::StrafeRight)
-			{
-				moveDir += right * runSpeed;
-			}
-
-			pos += moveDir * dt;
-		}
-
-		outPosition = pos;
-		outFacing = Radian(startFacing + facingRate * elapsed);
+		return vel;
 	}
 
 	void RemoteMovementQueue::PruneOldSnapshots(const GameTime playbackTime)
