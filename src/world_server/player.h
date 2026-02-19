@@ -155,6 +155,11 @@ namespace mmo
 		/// @param repo The inventory repository instance.
 		void SetInventoryRepository(std::shared_ptr<IInventoryRepository> repo);
 
+		/// @brief Sets the fall damage configuration values.
+		/// @param minHeight Minimum fall distance in meters before fall damage starts.
+		/// @param lethalHeight Fall distance in meters at which fall damage becomes lethal.
+		void SetFallDamageConfig(float minHeight, float lethalHeight);
+
 	private:
 		// Client Network Handlers, Implemented in player.cpp
 
@@ -470,6 +475,8 @@ namespace mmo
 
 		void OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags) override;
 
+		void OnEnvironmentalDamageLog(uint64 targetGuid, uint32 amount, EnvironmentalDamageType type) override;
+
 		void OnSpeedChangeApplied(MovementType type, float speed, uint32 ackId) override;
 
 		void OnTeleport(uint32 mapId, const Vector3& position, const Radian& facing) override;
@@ -506,6 +513,22 @@ namespace mmo
 		AttackSwingEvent m_lastAttackSwingEvent{ attack_swing_event::Unknown };
 		std::shared_ptr<LootInstance> m_loot{ nullptr };
 		std::shared_ptr<GameObjectS> m_lootSource{ nullptr };
+
+		/// @brief The Y position when the player started falling (for fall damage calculation).
+		float m_fallStartHeight{ 0.0f };
+
+		/// @brief Whether the player is currently tracking a fall (started via MoveJump).
+		bool m_trackingFall{ false };
+
+		/// @brief Whether the player may transition into falling state without a jump packet.
+		/// Set after teleport or spawn so that air-spawned falls pass the anti-cheat check.
+		bool m_pendingFallStart{ false };
+
+		/// @brief Minimum fall distance in meters before fall damage starts being applied.
+		float m_fallDamageMinHeight{ 5.0f };
+
+		/// @brief Fall distance in meters at which fall damage becomes lethal (100% of max HP).
+		float m_fallDamageLethalHeight{ 40.0f };
 
 		scoped_connection_container m_lootSignals;
 		scoped_connection m_onLootSourceDespawned;

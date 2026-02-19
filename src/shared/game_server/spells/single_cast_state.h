@@ -108,6 +108,7 @@ namespace mmo
 		void SpellEffectInstantKill(const proto::SpellEffect& effect);
 		void SpellEffectDummy(const proto::SpellEffect& effect);
 		void SpellEffectSchoolDamage(const proto::SpellEffect& effect);
+		void SpellEffectEnvironmentalDamage(const proto::SpellEffect& effect);
 		void SpellEffectTeleportUnits(const proto::SpellEffect& effect);
 		void SpellEffectApplyAura(const proto::SpellEffect& effect);
 		void SpellEffectPersistentAreaAura(const proto::SpellEffect& effect);

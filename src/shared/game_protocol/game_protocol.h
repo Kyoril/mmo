@@ -442,6 +442,9 @@ namespace mmo
 				SpellSuperceeded,
 				SetProficiency,
 
+				/// Environmental damage log packet (fall damage, drowning, lava, etc.)
+				EnvironmentalDamageLog,
+
 				/// Time played response packet sent to the client
 				TimePlayedResponse,
 

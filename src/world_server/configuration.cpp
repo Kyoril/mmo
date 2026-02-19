@@ -153,6 +153,12 @@ namespace mmo
 				watchDataForChanges = detail::parseBoolean(*folders, "watchDataForChanges", watchDataForChanges);
 			}
 
+			if (const Table* const gameplay = global.getTable("gameplay"))
+			{
+				fallDamageMinHeight = static_cast<float>(gameplay->getInteger("fallDamageMinHeight", static_cast<unsigned>(fallDamageMinHeight)));
+				fallDamageLethalHeight = static_cast<float>(gameplay->getInteger("fallDamageLethalHeight", static_cast<unsigned>(fallDamageLethalHeight)));
+			}
+
 			if (const Table *const log = global.getTable("log"))
 			{
 				isLogActive = log->getInteger("active", static_cast<unsigned>(isLogActive)) != 0;
@@ -263,6 +269,15 @@ namespace mmo
 			log.addKey("fileName", logFileName);
 			log.addKey("buffering", isLogFileBuffering);
 			log.Finish();
+		}
+
+		global.writer.newLine();
+
+		{
+			sff::write::Table<Char> gameplay(global, "gameplay", sff::write::MultiLine);
+			gameplay.addKey("fallDamageMinHeight", static_cast<unsigned>(fallDamageMinHeight));
+			gameplay.addKey("fallDamageLethalHeight", static_cast<unsigned>(fallDamageLethalHeight));
+			gameplay.Finish();
 		}
 
 		return true;

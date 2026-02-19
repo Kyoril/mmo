@@ -780,6 +780,7 @@ namespace mmo
 			{se::ApplyAreaAura, &SingleCastState::SpellEffectApplyAura},
 			{se::PersistentAreaAura, &SingleCastState::SpellEffectPersistentAreaAura},
 			{se::SchoolDamage, &SingleCastState::SpellEffectSchoolDamage},
+			{se::EnvironmentalDamage, &SingleCastState::SpellEffectEnvironmentalDamage},
 			{se::ResetAttributePoints, &SingleCastState::SpellEffectResetAttributePoints},
 			{se::Parry, &SingleCastState::SpellEffectParry},
 			{se::Block, &SingleCastState::SpellEffectBlock},
@@ -917,6 +918,44 @@ namespace mmo
 			// Trigger proc events for spell damage
 			m_cast.GetExecuter().TriggerProcEvent(spell_proc_flags::DoneSpellMagicDmgClassNeg, &unitTarget, damageAmount, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
 			unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMagicDmgClassNeg, &m_cast.GetExecuter(), damageAmount, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
+		}
+	}
+
+	void SingleCastState::SpellEffectEnvironmentalDamage(const proto::SpellEffect& effect)
+	{
+		auto& effectTargets = m_effectTargetsScratch;
+		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
+		{
+			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
+			return;
+		}
+
+		for (auto* targetObject : effectTargets)
+		{
+			if (!targetObject->IsUnit())
+			{
+				continue;
+			}
+
+			auto& unitTarget = targetObject->AsUnit();
+
+			// Environmental damage uses base points as a percentage of max HP
+			const int32 basePoints = CalculateEffectBasePoints(effect);
+			const uint32 maxHealth = unitTarget.GetMaxHealth();
+			uint32 damageAmount = static_cast<uint32>(static_cast<float>(maxHealth) * static_cast<float>(basePoints) / 100.0f);
+			if (damageAmount < 1)
+			{
+				damageAmount = 1;
+			}
+
+			// Apply as physical damage (school from spell)
+			const uint32 actualDamage = unitTarget.Damage(damageAmount, m_spell.spellschool(), &m_cast.GetExecuter(), damage_type::PhysicalAbility);
+
+			// Determine environmental damage type from miscvaluea (0=Fall, 1=Drowning, 2=Lava, 3=Fire)
+			const auto envDamageType = static_cast<EnvironmentalDamageType>(effect.miscvaluea());
+
+			// Send environmental damage log to the target's net watcher
+			unitTarget.EnvironmentalDamageLog(unitTarget.GetGuid(), actualDamage, envDamageType);
 		}
 	}
 

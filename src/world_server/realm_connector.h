@@ -98,6 +98,11 @@ namespace mmo
 		/// @param slots Vector of absolute slot indices to delete.
 		void SendDeleteInventoryItems(uint64 characterGuid, uint32 operationId, const std::vector<uint16>& slots);
 
+		/// @brief Sets the fall damage configuration values.
+		/// @param minHeight Minimum fall distance in meters before fall damage starts.
+		/// @param lethalHeight Fall distance in meters at which fall damage becomes lethal.
+		void SetFallDamageConfig(float minHeight, float lethalHeight);
+
 	private:
 		/// Perform client-side srp6-a calculations after we received server values
 		void DoSRP6ACalculation();
@@ -200,6 +205,12 @@ namespace mmo
 		const proto::Project& m_project;
 
 		ConditionMgr& m_conditionMgr;
+
+		/// @brief Minimum fall distance in meters before fall damage starts being applied.
+		float m_fallDamageMinHeight{ 5.0f };
+
+		/// @brief Fall distance in meters at which fall damage becomes lethal (100% of max HP).
+		float m_fallDamageLethalHeight{ 40.0f };
 
 	public:
 		// ~ Begin IConnectorListener

@@ -291,6 +291,12 @@ namespace mmo
 
 		virtual void OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags) = 0;
 
+		/// @brief Called when environmental damage is dealt to a unit.
+		/// @param targetGuid The GUID of the target unit.
+		/// @param amount The amount of damage dealt.
+		/// @param type The type of environmental damage.
+		virtual void OnEnvironmentalDamageLog(uint64 targetGuid, uint32 amount, EnvironmentalDamageType type) = 0;
+
 		virtual void OnSpeedChangeApplied(MovementType type, float speed, uint32 ackId) = 0;
 
 		virtual void OnRootChanged(bool applied, uint32 ackId) = 0;
@@ -682,6 +688,12 @@ namespace mmo
 		/// @param flags The damage flags.
 		/// @param spell The spell entry used to deal the damage.
 		void SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry &spell);
+
+		/// Logs environmental damage dealt to a unit.
+		/// @param targetGuid The GUID of the target unit.
+		/// @param amount The amount of damage dealt.
+		/// @param type The type of environmental damage.
+		void EnvironmentalDamageLog(uint64 targetGuid, uint32 amount, EnvironmentalDamageType type);
 
 		/// Kills the unit.
 		/// @param killer The unit that killed this unit.

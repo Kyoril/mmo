@@ -746,6 +746,16 @@ namespace mmo
 		m_netUnitWatcher->OnSpellDamageLog(targetGuid, amount, school, flags, spell);
 	}
 
+	void GameUnitS::EnvironmentalDamageLog(uint64 targetGuid, uint32 amount, EnvironmentalDamageType type)
+	{
+		if (!m_netUnitWatcher)
+		{
+			return;
+		}
+
+		m_netUnitWatcher->OnEnvironmentalDamageLog(targetGuid, amount, type);
+	}
+
 	void GameUnitS::Kill(GameUnitS *killer)
 	{
 		Set<uint32>(object_fields::Health, 0);

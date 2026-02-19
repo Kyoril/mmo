@@ -843,6 +843,10 @@ namespace mmo
 		// Lets track the session start time		
     	m_sessionStartTime = std::chrono::steady_clock::now();
 		m_spawned = true;
+
+		// Allow the client to transition into falling state without a jump packet.
+		// This handles the case where the player spawns in the air (e.g., cross-map teleport).
+		m_pendingFallStart = true;
 	}
 
 	void Player::OnDespawned(GameObjectS& object)
@@ -1339,9 +1343,20 @@ namespace mmo
 		// Did the client try to sneak in a FALLING flag without sending a jump packet?
 		if (info.IsFalling() && !prevMovementInfo.IsFalling() && opCode != game::client_realm_packet::MoveJump)
 		{
-			ELOG("Client tried to apply FALLING flag in non-jump packet!");
-			//Kick();
-			return;
+			// Allow falling to start without a jump if the player was recently spawned or
+			// teleported cross-map (they may have spawned in the air)
+			if (m_pendingFallStart)
+			{
+				m_pendingFallStart = false;
+				m_fallStartHeight = info.position.y;
+				m_trackingFall = true;
+			}
+			else
+			{
+				ELOG("Client tried to apply FALLING flag in non-jump packet!");
+				//Kick();
+				return;
+			}
 		}
 		// Did the client try to remove a FALLING flag without sending a landing packet?
 		if (!info.IsFalling() && prevMovementInfo.IsFalling() && (opCode != game::client_realm_packet::MoveFallLand && opCode != game::client_realm_packet::MoveEnded))
@@ -1359,6 +1374,11 @@ namespace mmo
 				//Kick();
 				return;
 			}
+
+			// Record the Y position at the start of the jump/fall for fall damage calculation
+			m_fallStartHeight = info.position.y;
+			m_trackingFall = true;
+			m_pendingFallStart = false;
 		}
 		else if (opCode == game::client_realm_packet::MoveFallLand)
 		{
@@ -1368,6 +1388,48 @@ namespace mmo
 				//Kick();
 				return;
 			}
+
+			// Calculate and apply fall damage on landing
+			if (m_trackingFall && m_character->IsAlive())
+			{
+				const float fallDistance = m_fallStartHeight - info.position.y;
+				if (fallDistance > m_fallDamageMinHeight)
+				{
+					// Calculate damage as a percentage of max HP, scaling linearly from 0% at minHeight to 100% at lethalHeight
+					const float damageRange = m_fallDamageLethalHeight - m_fallDamageMinHeight;
+					float damagePct = 0.0f;
+					if (damageRange > 0.0f)
+					{
+						damagePct = (fallDistance - m_fallDamageMinHeight) / damageRange;
+					}
+
+					// Clamp to 0..1 range (100% at lethal height or beyond)
+					if (damagePct > 1.0f)
+					{
+						damagePct = 1.0f;
+					}
+
+					const uint32 maxHealth = m_character->GetMaxHealth();
+					uint32 fallDamage = static_cast<uint32>(static_cast<float>(maxHealth) * damagePct);
+					if (fallDamage > 0)
+					{
+						// Apply fall damage as physical damage with no instigator
+						const uint32 actualDamage = m_character->Damage(fallDamage, static_cast<uint32>(DamageSchool::Physical), nullptr, damage_type::PhysicalAbility);
+
+						// Send environmental damage log to the client
+						m_character->EnvironmentalDamageLog(m_character->GetGuid(), actualDamage, environmental_damage_type::Fall);
+					}
+				}
+			}
+
+			m_trackingFall = false;
+		}
+
+		// Clear the pending fall start flag if the player is on the ground
+		// (they landed normally or were never in the air after spawn/teleport)
+		if (!info.IsFalling() && m_pendingFallStart)
+		{
+			m_pendingFallStart = false;
 		}
 
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
@@ -1833,6 +1895,12 @@ namespace mmo
 			}
 
 			DLOG("Received teleport ack towards " << change.teleportInfo.x << "," << change.teleportInfo.y << "," << change.teleportInfo.z);
+
+			// Start tracking fall damage from the teleport position since the player
+			// is now falling after the teleport (Falling flag is always sent in teleport)
+			m_fallStartHeight = info.position.y;
+			m_trackingFall = true;
+			m_pendingFallStart = false;
 			break;
 		}
 
@@ -2120,6 +2188,25 @@ namespace mmo
 					<< io::write<uint8>(flags);
 				packet.Finish();
 			});
+	}
+
+	void Player::OnEnvironmentalDamageLog(uint64 targetGuid, uint32 amount, EnvironmentalDamageType type)
+	{
+		SendPacket([targetGuid, amount, type](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::EnvironmentalDamageLog);
+				packet
+					<< io::write_packed_guid(targetGuid)
+					<< io::write<uint32>(amount)
+					<< io::write<uint8>(type);
+				packet.Finish();
+			});
+	}
+
+	void Player::SetFallDamageConfig(float minHeight, float lethalHeight)
+	{
+		m_fallDamageMinHeight = minHeight;
+		m_fallDamageLethalHeight = lethalHeight;
 	}
 
 	void Player::OnSpeedChangeApplied(MovementType type, float speed, uint32 ackId)

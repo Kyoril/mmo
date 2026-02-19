@@ -1625,6 +1625,33 @@ namespace mmo
 					}
 				}
 				break;
+			case spell_effects::EnvironmentalDamage:
+				{
+					static const char* s_envDamageTypes[] = { "Fall", "Drowning", "Lava", "Fire" };
+					int envType = effect.miscvaluea();
+					if (envType < 0 || envType >= IM_ARRAYSIZE(s_envDamageTypes))
+					{
+						envType = 0;
+					}
+
+					if (ImGui::Combo("Damage Type", &envType,
+						[](void*, int idx, const char** out_text)
+						{
+							static const char* types[] = { "Fall", "Drowning", "Lava", "Fire" };
+							if (idx < 0 || idx >= IM_ARRAYSIZE(types))
+							{
+								return false;
+							}
+							*out_text = types[idx];
+							return true;
+						}, nullptr, IM_ARRAYSIZE(s_envDamageTypes)))
+					{
+						effect.set_miscvaluea(envType);
+					}
+
+					DrawHelpMarker("The type of environmental damage. Base Points represent the damage as a percentage of max HP.");
+					break;
+				}
 			case spell_effects::Proficiency:
 				{
 					const uint32 proficiency = effect.miscvaluea();

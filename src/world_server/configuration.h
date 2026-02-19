@@ -64,6 +64,12 @@ namespace mmo
 		/// Whether to watch the data folders for changes.
 		bool watchDataForChanges;
 
+		/// @brief Minimum fall distance in meters before fall damage starts being applied.
+		float fallDamageMinHeight{ 5.0f };
+
+		/// @brief Fall distance in meters at which fall damage becomes lethal (100% of max HP).
+		float fallDamageLethalHeight{ 40.0f };
+
 		/// Creates a configuration instance with default values.
 		explicit Configuration();
 		/// Loads configuration values from the given file.
