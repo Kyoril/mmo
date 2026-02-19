@@ -331,20 +331,28 @@ namespace mmo
 	void RemoteMovementQueue::SimulateJumpArc(const RemoteMovementSnapshot& snapshot, const float elapsed,
 	                                           Vector3& outPosition, Vector3& outVelocity) const
 	{
-		// Use the jump velocity from the snapshot
-		Vector3 velocity = snapshot.jumpVelocity;
+		// jumpVelocity is the initial velocity at the START of the jump.
+		// If this snapshot is mid-jump (e.g. a SetFacing packet while airborne),
+		// fallTime tells us how long gravity has already been applied. We must
+		// compute the current velocity at the snapshot moment before integrating
+		// forward, otherwise we'd apply the full initial upward velocity from an
+		// already-elevated position, causing massive Y overshoot / teleportation.
 		const float gravity = -GRAVITY_ACCELERATION * m_gravityScale;
+		const float alreadyFallen = static_cast<float>(snapshot.fallTime) / 1000.0f;
 
-		// Integrate velocity with gravity over elapsed time
-		// position = start + velocity * t + 0.5 * gravity * t^2
-		// velocity = startVelocity + gravity * t
+		Vector3 velocity = snapshot.jumpVelocity;
+		velocity.y += gravity * alreadyFallen; // Current Y velocity at snapshot time
+
+		// Integrate velocity with gravity over elapsed time from this snapshot:
+		// position = start + currentVelocity * t + 0.5 * gravity * t^2
+		// velocity = currentVelocity + gravity * t
 		outPosition.y = outPosition.y + velocity.y * elapsed + 0.5f * gravity * elapsed * elapsed;
 
-		// Also apply lateral velocity from jump
+		// Lateral velocity from jump (not affected by gravity)
 		outPosition.x += velocity.x * elapsed;
 		outPosition.z += velocity.z * elapsed;
 
-		// Compute current velocity
+		// Compute velocity at the end of the integration period
 		outVelocity = velocity;
 		outVelocity.y += gravity * elapsed;
 	}
