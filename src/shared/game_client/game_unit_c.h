@@ -14,6 +14,7 @@
 
 #include "unit_movement.h"
 #include "movement_event.h"
+#include "remote_movement_queue.h"
 
 namespace mmo
 {
@@ -134,6 +135,16 @@ namespace mmo
 		void AdvanceAnimationTimes(const float deltaTime) const;
 
 		virtual void ApplyMovementInfo(const MovementInfo &movementInfo);
+
+		/// @brief Enqueues a movement snapshot for a remote player into the buffered queue.
+		/// This should be called instead of ApplyMovementInfo for non-local players.
+		/// @param movementInfo The movement info from the network packet.
+		void EnqueueRemoteMovement(const MovementInfo &movementInfo);
+
+		/// @brief Processes the remote movement queue and updates the unit's visual state.
+		/// Called every frame for remote players.
+		/// @param deltaTime The time elapsed since the last frame.
+		void UpdateRemoteMovement(float deltaTime);
 
 		/// @copydoc GameObjectC::InitializeFieldMap
 		virtual void InitializeFieldMap() override;
@@ -519,6 +530,7 @@ namespace mmo
 		/// Calculates position along the path based on distance traveled
 		Vector3 CalculatePositionAlongPath(float distance) const;
 
+	public:
 		/// Returns true if this unit is controlled by the local player
 		bool IsControlledByLocalPlayer() const;
 
@@ -629,6 +641,9 @@ namespace mmo
 		Radian m_yawInput{0.0f};
 
 		std::queue<MovementEvent> m_movementEventQueue;
+
+		/// @brief Buffered movement queue for remote players.
+		RemoteMovementQueue m_remoteMovementQueue;
 
 		GameTime m_lastHeartbeat = 0;
 

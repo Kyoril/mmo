@@ -1406,14 +1406,12 @@ namespace mmo
 		}
 		else if (!prevMovementInfo.IsChangingPosition() && opCode != game::realm_client_packet::MoveSplineDone)
 		{
-			const float positionTolerance = 0.01f; // Small tolerance for floating point precision
+			// Allow a generous tolerance for position drift from client-side physics
+			// (gravity, collision resolution, etc.) that can shift position between packets
+			const float positionTolerance = 1.0f;
             if (!info.position.IsNearlyEqual(m_character->GetPosition(), positionTolerance))
             {
-                ELOG("[OPCode " << opCode << "] Pos changed on client while it should not be able to do so based on server info");
-                ELOG("\tS: " << m_character->GetPosition());
-                ELOG("\tC: " << info.position);
-                ELOG("\tDistance: " << (info.position - m_character->GetPosition()).GetLength());
-                //return;
+                WLOG("[OPCode " << opCode << "] Position drift detected: server=" << m_character->GetPosition() << " client=" << info.position << " dist=" << (info.position - m_character->GetPosition()).GetLength());
             }
 		}
 
@@ -1471,7 +1469,7 @@ namespace mmo
 				io::VectorSink sink{ buffer };
 				game::OutgoingPacket movementPacket{ sink };
 				movementPacket.Start(opCode);
-				movementPacket << io::write<uint64>(characterGuid) << info;
+				movementPacket << io::write<uint64>(characterGuid) << copy;
 				movementPacket.Finish();
 
 				watcher->SendPacket(movementPacket, buffer);

@@ -1561,11 +1561,10 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		// Apply movement packet
+		// Apply movement packet to remote units via the buffered queue
 		if (ObjectMgr::GetActivePlayerGuid() != characterGuid)
 		{
-			unitPtr->QueueMovementEvent(movement_event_type::Fall, GetAsyncTimeMs(), movementInfo);
-			// unitPtr->ApplyMovementInfo(movementInfo);
+			unitPtr->EnqueueRemoteMovement(movementInfo);
 		}
 
 		return PacketParseResult::Pass;

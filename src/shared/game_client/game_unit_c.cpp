@@ -189,15 +189,12 @@ namespace mmo
 			{
 				m_netDriver.OnMoveEvent(*this, moveEvent);
 			}
-			else
-			{
-				// Adjust timestamp
-				ApplyMovementInfo(moveEvent.movementInfo);
-			}
 
 			// Remove processed event
 			m_movementEventQueue.pop();
 		}
+
+		const bool isRemotePlayer = IsPlayer() && !IsControlledByLocalPlayer();
 
 		if (IsControlledByLocalPlayer())
 		{
@@ -210,30 +207,39 @@ namespace mmo
 			}
 		}
 
-		// Based on current movement info, update movement states
-		if (m_movementInfo.movementFlags & movement_flags::Forward)
+		// For remote players, use the buffered movement queue for smooth playback.
+		// For the local player and NPCs, use the existing flag-based input system.
+		if (isRemotePlayer)
 		{
-			AddInputVector(GetForwardVector() * GetSpeed(movement_type::Run));
+			UpdateRemoteMovement(deltaTime);
 		}
-		if (m_movementInfo.movementFlags & movement_flags::Backward)
+		else
 		{
-			AddInputVector(-GetForwardVector() * GetSpeed(movement_type::Backwards));
-		}
-		if (m_movementInfo.movementFlags & movement_flags::StrafeLeft)
-		{
-			AddInputVector(-GetRightVector() * GetSpeed(movement_type::Run));
-		}
-		if (m_movementInfo.movementFlags & movement_flags::StrafeRight)
-		{
-			AddInputVector(GetRightVector() * GetSpeed(movement_type::Run));
-		}
-		if (m_movementInfo.movementFlags & movement_flags::TurnLeft)
-		{
-			AddYawInput(Radian(GetSpeed(movement_type::Turn) * 1.0f));
-		}
-		if (m_movementInfo.movementFlags & movement_flags::TurnRight)
-		{
-			AddYawInput(Radian(GetSpeed(movement_type::Turn) * -1.0f));
+			// Based on current movement info, update movement states
+			if (m_movementInfo.movementFlags & movement_flags::Forward)
+			{
+				AddInputVector(GetForwardVector() * GetSpeed(movement_type::Run));
+			}
+			if (m_movementInfo.movementFlags & movement_flags::Backward)
+			{
+				AddInputVector(-GetForwardVector() * GetSpeed(movement_type::Backwards));
+			}
+			if (m_movementInfo.movementFlags & movement_flags::StrafeLeft)
+			{
+				AddInputVector(-GetRightVector() * GetSpeed(movement_type::Run));
+			}
+			if (m_movementInfo.movementFlags & movement_flags::StrafeRight)
+			{
+				AddInputVector(GetRightVector() * GetSpeed(movement_type::Run));
+			}
+			if (m_movementInfo.movementFlags & movement_flags::TurnLeft)
+			{
+				AddYawInput(Radian(GetSpeed(movement_type::Turn) * 1.0f));
+			}
+			if (m_movementInfo.movementFlags & movement_flags::TurnRight)
+			{
+				AddYawInput(Radian(GetSpeed(movement_type::Turn) * -1.0f));
+			}
 		}
 
 		UpdateQuestGiverAndNameVisuals(deltaTime);
@@ -246,7 +252,17 @@ namespace mmo
 
 		UpdateAnimationStates(deltaTime, isDead);
 
-		m_unitMovement->Tick(deltaTime);
+		// For remote players, the queue handles position updates directly -
+		// UnitMovement::Tick is not needed for them. But we must consume the
+		// input vector that was fed for animation detection purposes.
+		if (!isRemotePlayer)
+		{
+			m_unitMovement->Tick(deltaTime);
+		}
+		else
+		{
+			ConsumeInputVector();
+		}
 	}
 
 	void GameUnitC::UpdateQuestGiverAndNameVisuals(const float deltaTime)
@@ -291,11 +307,13 @@ namespace mmo
 		{
 			UpdatePathMovement(deltaTime);
 		}
-		else if (!IsControlledByLocalPlayer() && m_unitMovement)
+		else if (!IsControlledByLocalPlayer() && !IsPlayer() && m_unitMovement)
 		{
-			// For idle non-player units (NPCs), correct their ground height
+			// For idle non-player units (NPCs only), correct their ground height.
 			// This fixes floating NPCs that spawn at server navmesh heights
-			// which may not match the client's detailed collision geometry
+			// which may not match the client's detailed collision geometry.
+			// Remote players are excluded because their height is managed by
+			// the RemoteMovementQueue (including jump arcs).
 			m_unitMovement->CorrectGroundHeight();
 		}
 
@@ -517,14 +535,100 @@ namespace mmo
 	{
 		m_movementInfo = movementInfo;
 
-		// Instantly apply movement data for now
+		// Set position and orientation directly from the packet.
+		// For the local player this keeps physics in sync.
+		// For remote units this provides the sync point from which
+		// extrapolation continues until the next packet arrives.
 		GetSceneNode()->SetDerivedPosition(movementInfo.position);
 		GetSceneNode()->SetDerivedOrientation(Quaternion(Radian(movementInfo.facing), Vector3::UnitY));
 
+		// Handle falling state transitions
 		if (m_movementInfo.IsFalling())
 		{
 			m_unitMovement->SetVelocity(m_movementInfo.jumpVelocity);
-			m_unitMovement->SetMovementMode(MovementMode::Falling);
+			if (!m_unitMovement->IsFalling())
+			{
+				m_unitMovement->SetMovementMode(MovementMode::Falling);
+			}
+		}
+		else if (m_unitMovement->IsFalling())
+		{
+			// Landed: transition back to walking
+			m_unitMovement->SetMovementMode(MovementMode::Walking);
+		}
+
+		UpdateCollider();
+	}
+
+	void GameUnitC::EnqueueRemoteMovement(const MovementInfo &movementInfo)
+	{
+		m_remoteMovementQueue.EnqueueSnapshot(movementInfo);
+	}
+
+	void GameUnitC::UpdateRemoteMovement(const float deltaTime)
+	{
+		const GameTime now = GetAsyncTimeMs();
+
+		RemoteMovementState state;
+		if (!m_remoteMovementQueue.Sample(
+			now,
+			GetSpeed(movement_type::Run),
+			GetSpeed(movement_type::Backwards),
+			GetSpeed(movement_type::Turn),
+			state))
+		{
+			// No snapshots yet, nothing to do
+			return;
+		}
+
+		// Apply interpolated position and facing directly to the scene node
+		GetSceneNode()->SetDerivedPosition(state.position);
+		GetSceneNode()->SetDerivedOrientation(Quaternion(state.facing, Vector3::UnitY));
+
+		// Update movement info flags so animation system works correctly
+		m_movementInfo.movementFlags = state.movementFlags;
+		m_movementInfo.position = state.position;
+		m_movementInfo.facing = state.facing;
+
+		// Handle falling/jumping state for animations
+		if (state.isFalling)
+		{
+			m_unitMovement->SetVelocity(state.velocity);
+			if (!m_unitMovement->IsFalling())
+			{
+				m_unitMovement->SetMovementMode(MovementMode::Falling);
+			}
+		}
+		else
+		{
+			// Ensure walking mode is set so animation system knows we're on ground
+			if (!m_unitMovement->IsMovingOnGround())
+			{
+				m_unitMovement->SetMovementMode(MovementMode::Walking);
+			}
+		}
+
+		// Feed the input vector from interpolated movement flags so the animation
+		// system detects that the remote player is moving (run vs idle).
+		const Quaternion orientation(state.facing, Vector3::UnitY);
+		const Vector3 forward = orientation * Vector3::UnitX;
+		const Vector3 right = orientation * Vector3::UnitZ;
+
+		if (state.movementFlags & movement_flags::Forward)
+		{
+			AddInputVector(forward * GetSpeed(movement_type::Run));
+		}
+		if (state.movementFlags & movement_flags::Backward)
+		{
+			AddInputVector(-forward * GetSpeed(movement_type::Backwards));
+		}
+		if (state.movementFlags & movement_flags::StrafeLeft)
+		{
+			AddInputVector(-right * GetSpeed(movement_type::Run));
+		}
+		if (state.movementFlags & movement_flags::StrafeRight)
+		{
+			AddInputVector(right * GetSpeed(movement_type::Run));
 		}
 
 		UpdateCollider();
