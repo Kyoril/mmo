@@ -13,6 +13,7 @@ namespace mmo
 	}
 
 	struct GuildInfo;
+	class IAudio;
 }
 
 namespace mmo
@@ -20,8 +21,9 @@ namespace mmo
 	class GamePlayerC : public GameUnitC
 	{
 	public:
-		explicit GamePlayerC(Scene& scene, NetClient& netDriver, const proto_client::Project& project, uint32 map)
+		explicit GamePlayerC(Scene& scene, NetClient& netDriver, const proto_client::Project& project, uint32 map, IAudio* audio)
 			: GameUnitC(scene, netDriver, project, map)
+			, m_audio(audio)
 		{
 		}
 
@@ -63,6 +65,8 @@ namespace mmo
 	protected:
 		virtual void SetupSceneObjects() override;
 
+		void OnDisplayIdChanged() override;
+
 		void OnEquipmentChanged(uint64);
 
 		void RefreshDisplay();
@@ -72,6 +76,12 @@ namespace mmo
 		virtual void RefreshUnitName() override;
 
 		void ClearAllAttachments();
+
+		/// Register footstep notification handlers for all animations
+		void RegisterFootstepHandlers();
+
+		/// Handle footstep notification trigger
+		void OnFootstep(const class AnimationNotify& notify);
 
 	private:
 
@@ -83,6 +93,7 @@ namespace mmo
 		scoped_connection m_guildChangedHandler;
 
 		const GuildInfo* m_guild{ nullptr };
+		IAudio* m_audio{ nullptr };
 
 		struct ItemAttachment
 		{
@@ -91,5 +102,7 @@ namespace mmo
 		};
 
 		std::unordered_map<uint32, ItemAttachment> m_itemAttachments;
+
+		scoped_connection_container m_animNotifyConnections;
 	};
 }

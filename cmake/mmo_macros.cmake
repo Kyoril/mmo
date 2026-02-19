@@ -39,6 +39,34 @@ function(enable_unity_build UB_SUFFIX SOURCE_VARIABLE_NAME)
 	endif()
 endfunction()
 
+function(mmo_deploy_runtime_dependencies target_name)
+	if (NOT WIN32)
+		return()
+	endif()
+
+	foreach(runtime_dll IN LISTS MMO_WINDOWS_RUNTIME_DLLS)
+		if (EXISTS "${runtime_dll}")
+			add_custom_command(TARGET ${target_name} POST_BUILD
+				COMMAND ${CMAKE_COMMAND} -E copy_if_different
+				"${runtime_dll}"
+				$<TARGET_FILE_DIR:${target_name}>
+				COMMENT "Copying ${runtime_dll} for ${target_name}"
+			)
+		endif()
+	endforeach()
+
+	# Config-dependent DLLs (e.g., assimp release vs debug).
+	# These contain generator expressions so we cannot use if(EXISTS) here.
+	foreach(runtime_dll_genex IN LISTS MMO_WINDOWS_RUNTIME_DLLS_GENEX)
+		add_custom_command(TARGET ${target_name} POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+			"${runtime_dll_genex}"
+			$<TARGET_FILE_DIR:${target_name}>
+			COMMENT "Copying config-specific DLL for ${target_name}"
+		)
+	endforeach()
+endfunction()
+
 macro(add_lib name)
 	file(GLOB sources "*.cpp" "*.c" "*.mm" "*.m")
 	file(GLOB headers "*.h" "*.hpp")
@@ -107,6 +135,7 @@ macro(add_exe name)
 		enable_unity_build(${name} sources)
 	endif()
 	add_executable(${name} ${headers} ${sources})
+	mmo_deploy_runtime_dependencies(${name})
 	#add_precompiled_header(${name} "${CMAKE_CURRENT_SOURCE_DIR}/pch.h")
 	source_group(src FILES ${headers} ${sources})
 	if(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
@@ -138,6 +167,7 @@ macro(add_gui_exe name)
 	endif()
 	
 	add_executable(${name} WIN32 MACOSX_BUNDLE ${resources} ${headers} ${sources} ${additionalSources})
+	mmo_deploy_runtime_dependencies(${name})
 	#add_precompiled_header(${name} "${CMAKE_CURRENT_SOURCE_DIR}/pch.h")
 	if(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
 		target_link_libraries(${name} stdc++fs)
@@ -187,6 +217,7 @@ macro(add_exe_recurse name)
         enable_unity_build(${name} filtered_sources)
     endif()
     add_executable(${name} ${filtered_headers} ${filtered_sources})
+    mmo_deploy_runtime_dependencies(${name})
     source_group(
         TREE "${CMAKE_CURRENT_SOURCE_DIR}"
         PREFIX "src"
@@ -269,6 +300,7 @@ macro(add_gui_exe_recurse name)
         enable_unity_build(${name} filtered_sources)
     endif()
     add_executable(${name} WIN32 MACOSX_BUNDLE ${filtered_resources} ${filtered_headers} ${filtered_sources})
+    mmo_deploy_runtime_dependencies(${name})
     # Only group files under the current source dir as a tree
     filter_files_under_dir(tree_files "${CMAKE_CURRENT_SOURCE_DIR}" ${filtered_headers} ${filtered_sources} ${filtered_resources})
     source_group(

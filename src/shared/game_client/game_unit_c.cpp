@@ -16,11 +16,15 @@
 #include "game/character_customization/avatar_definition_mgr.h"
 #include "log/default_log_levels.h"
 #include "math/collision.h"
+#include "scene_graph/animation_notify.h"
+#include "scene_graph/animation_state.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/mesh_manager.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/sub_entity.h"
 #include "scene_graph/entity.h"
+#include "scene_graph/skeleton.h"
+#include "scene_graph/animation.h"
 #include "graphics/material.h"
 #include "graphics/material_instance.h"
 #include "shared/client_data/proto_client/factions.pb.h"
@@ -185,15 +189,12 @@ namespace mmo
 			{
 				m_netDriver.OnMoveEvent(*this, moveEvent);
 			}
-			else
-			{
-				// Adjust timestamp
-				ApplyMovementInfo(moveEvent.movementInfo);
-			}
 
 			// Remove processed event
 			m_movementEventQueue.pop();
 		}
+
+		const bool isRemotePlayer = IsPlayer() && !IsControlledByLocalPlayer();
 
 		if (IsControlledByLocalPlayer())
 		{
@@ -206,30 +207,39 @@ namespace mmo
 			}
 		}
 
-		// Based on current movement info, update movement states
-		if (m_movementInfo.movementFlags & movement_flags::Forward)
+		// For remote players, use the buffered movement queue for smooth playback.
+		// For the local player and NPCs, use the existing flag-based input system.
+		if (isRemotePlayer)
 		{
-			AddInputVector(GetForwardVector() * GetSpeed(movement_type::Run));
+			UpdateRemoteMovement(deltaTime);
 		}
-		if (m_movementInfo.movementFlags & movement_flags::Backward)
+		else
 		{
-			AddInputVector(-GetForwardVector() * GetSpeed(movement_type::Backwards));
-		}
-		if (m_movementInfo.movementFlags & movement_flags::StrafeLeft)
-		{
-			AddInputVector(-GetRightVector() * GetSpeed(movement_type::Run));
-		}
-		if (m_movementInfo.movementFlags & movement_flags::StrafeRight)
-		{
-			AddInputVector(GetRightVector() * GetSpeed(movement_type::Run));
-		}
-		if (m_movementInfo.movementFlags & movement_flags::TurnLeft)
-		{
-			AddYawInput(Radian(GetSpeed(movement_type::Turn) * 1.0f));
-		}
-		if (m_movementInfo.movementFlags & movement_flags::TurnRight)
-		{
-			AddYawInput(Radian(GetSpeed(movement_type::Turn) * -1.0f));
+			// Based on current movement info, update movement states
+			if (m_movementInfo.movementFlags & movement_flags::Forward)
+			{
+				AddInputVector(GetForwardVector() * GetSpeed(movement_type::Run));
+			}
+			if (m_movementInfo.movementFlags & movement_flags::Backward)
+			{
+				AddInputVector(-GetForwardVector() * GetSpeed(movement_type::Backwards));
+			}
+			if (m_movementInfo.movementFlags & movement_flags::StrafeLeft)
+			{
+				AddInputVector(-GetRightVector() * GetSpeed(movement_type::Run));
+			}
+			if (m_movementInfo.movementFlags & movement_flags::StrafeRight)
+			{
+				AddInputVector(GetRightVector() * GetSpeed(movement_type::Run));
+			}
+			if (m_movementInfo.movementFlags & movement_flags::TurnLeft)
+			{
+				AddYawInput(Radian(GetSpeed(movement_type::Turn) * 1.0f));
+			}
+			if (m_movementInfo.movementFlags & movement_flags::TurnRight)
+			{
+				AddYawInput(Radian(GetSpeed(movement_type::Turn) * -1.0f));
+			}
 		}
 
 		UpdateQuestGiverAndNameVisuals(deltaTime);
@@ -242,7 +252,17 @@ namespace mmo
 
 		UpdateAnimationStates(deltaTime, isDead);
 
-		m_unitMovement->Tick(deltaTime);
+		// For remote players, the queue handles position updates directly -
+		// UnitMovement::Tick is not needed for them. But we must consume the
+		// input vector that was fed for animation detection purposes.
+		if (!isRemotePlayer)
+		{
+			m_unitMovement->Tick(deltaTime);
+		}
+		else
+		{
+			ConsumeInputVector();
+		}
 	}
 
 	void GameUnitC::UpdateQuestGiverAndNameVisuals(const float deltaTime)
@@ -287,11 +307,13 @@ namespace mmo
 		{
 			UpdatePathMovement(deltaTime);
 		}
-		else if (!IsControlledByLocalPlayer() && m_unitMovement)
+		else if (!IsControlledByLocalPlayer() && !IsPlayer() && m_unitMovement)
 		{
-			// For idle non-player units (NPCs), correct their ground height
+			// For idle non-player units (NPCs only), correct their ground height.
 			// This fixes floating NPCs that spawn at server navmesh heights
-			// which may not match the client's detailed collision geometry
+			// which may not match the client's detailed collision geometry.
+			// Remote players are excluded because their height is managed by
+			// the RemoteMovementQueue (including jump arcs).
 			m_unitMovement->CorrectGroundHeight();
 		}
 
@@ -513,14 +535,100 @@ namespace mmo
 	{
 		m_movementInfo = movementInfo;
 
-		// Instantly apply movement data for now
+		// Set position and orientation directly from the packet.
+		// For the local player this keeps physics in sync.
+		// For remote units this provides the sync point from which
+		// extrapolation continues until the next packet arrives.
 		GetSceneNode()->SetDerivedPosition(movementInfo.position);
 		GetSceneNode()->SetDerivedOrientation(Quaternion(Radian(movementInfo.facing), Vector3::UnitY));
 
+		// Handle falling state transitions
 		if (m_movementInfo.IsFalling())
 		{
 			m_unitMovement->SetVelocity(m_movementInfo.jumpVelocity);
-			m_unitMovement->SetMovementMode(MovementMode::Falling);
+			if (!m_unitMovement->IsFalling())
+			{
+				m_unitMovement->SetMovementMode(MovementMode::Falling);
+			}
+		}
+		else if (m_unitMovement->IsFalling())
+		{
+			// Landed: transition back to walking
+			m_unitMovement->SetMovementMode(MovementMode::Walking);
+		}
+
+		UpdateCollider();
+	}
+
+	void GameUnitC::EnqueueRemoteMovement(const MovementInfo &movementInfo)
+	{
+		m_remoteMovementQueue.EnqueueSnapshot(movementInfo);
+	}
+
+	void GameUnitC::UpdateRemoteMovement(const float deltaTime)
+	{
+		const GameTime now = GetAsyncTimeMs();
+
+		RemoteMovementState state;
+		if (!m_remoteMovementQueue.Sample(
+			now,
+			GetSpeed(movement_type::Run),
+			GetSpeed(movement_type::Backwards),
+			GetSpeed(movement_type::Turn),
+			state))
+		{
+			// No snapshots yet, nothing to do
+			return;
+		}
+
+		// Apply interpolated position and facing directly to the scene node
+		GetSceneNode()->SetDerivedPosition(state.position);
+		GetSceneNode()->SetDerivedOrientation(Quaternion(state.facing, Vector3::UnitY));
+
+		// Update movement info flags so animation system works correctly
+		m_movementInfo.movementFlags = state.movementFlags;
+		m_movementInfo.position = state.position;
+		m_movementInfo.facing = state.facing;
+
+		// Handle falling/jumping state for animations
+		if (state.isFalling)
+		{
+			m_unitMovement->SetVelocity(state.velocity);
+			if (!m_unitMovement->IsFalling())
+			{
+				m_unitMovement->SetMovementMode(MovementMode::Falling);
+			}
+		}
+		else
+		{
+			// Ensure walking mode is set so animation system knows we're on ground
+			if (!m_unitMovement->IsMovingOnGround())
+			{
+				m_unitMovement->SetMovementMode(MovementMode::Walking);
+			}
+		}
+
+		// Feed the input vector from interpolated movement flags so the animation
+		// system detects that the remote player is moving (run vs idle).
+		const Quaternion orientation(state.facing, Vector3::UnitY);
+		const Vector3 forward = orientation * Vector3::UnitX;
+		const Vector3 right = orientation * Vector3::UnitZ;
+
+		if (state.movementFlags & movement_flags::Forward)
+		{
+			AddInputVector(forward * GetSpeed(movement_type::Run));
+		}
+		if (state.movementFlags & movement_flags::Backward)
+		{
+			AddInputVector(-forward * GetSpeed(movement_type::Backwards));
+		}
+		if (state.movementFlags & movement_flags::StrafeLeft)
+		{
+			AddInputVector(-right * GetSpeed(movement_type::Run));
+		}
+		if (state.movementFlags & movement_flags::StrafeRight)
+		{
+			AddInputVector(right * GetSpeed(movement_type::Run));
 		}
 
 		UpdateCollider();
@@ -704,6 +812,60 @@ namespace mmo
 		if (entryId != -1)
 		{
 			m_netDriver.GetCreatureData(entryId, std::static_pointer_cast<GameUnitC>(shared_from_this()));
+		}
+	}
+
+	void GameUnitC::ConnectAnimationNotifySignals()
+	{
+		// Disconnect any existing connections
+		m_animNotifyConnections.disconnect();
+
+		if (!m_entity || !m_entity->GetSkeleton())
+		{
+			return;
+		}
+
+		AnimationStateSet* animStateSet = m_entity->GetAllAnimationStates();
+		if (!animStateSet)
+		{
+			return;
+		}
+
+		Skeleton* skeleton = m_entity->GetSkeleton().get();
+		if (!skeleton)
+		{
+			return;
+		}
+
+		// Capture weak_ptr to prevent circular reference
+		std::weak_ptr<GameUnitC> weakSelf = std::static_pointer_cast<GameUnitC>(shared_from_this());
+
+		// Iterate through all animations and subscribe to their notify signals
+		const uint16 numAnims = skeleton->GetNumAnimations();
+		for (uint16 i = 0; i < numAnims; ++i)
+		{
+			Animation* anim = skeleton->GetAnimation(i);
+			if (!anim)
+			{
+				continue;
+			}
+
+			AnimationState* animState = animStateSet->GetAnimationState(anim->GetName());
+			if (!animState)
+			{
+				continue;
+			}
+
+			// Subscribe to the notify signal
+			m_animNotifyConnections += animState->notifyTriggered.connect(
+				[weakSelf](const AnimationNotify& notify, const String& animName, const AnimationState& state)
+				{
+					if (const auto self = weakSelf.lock())
+					{
+						// Broadcast through our signal
+						self->animationNotifyTriggered(*self, notify, animName, state);
+					}
+				});
 		}
 	}
 
@@ -1148,19 +1310,10 @@ namespace mmo
 		const Vector3 newPathStart = points[0];
 		const float distanceToNewStart = (newPathStart - currentPosition).GetLength();
 
-		constexpr float pathStartTolerance = 5.0f; // Allow 5 units tolerance for new path starts
-
-		Vector3 actualStartPosition;
-		if (distanceToNewStart <= pathStartTolerance)
-		{
-			// Close enough - start from current position
-			actualStartPosition = currentPosition;
-		}
-		else
-		{
-			// Too far - use the path's start position but this might cause a small teleport
-			actualStartPosition = newPathStart;
-		}
+		// Always start from our current client position for smooth transitions.
+		// The speed-based interpolation in UpdatePathMovement will naturally
+		// catch up to the correct path position, eliminating visual snapping.
+		Vector3 actualStartPosition = currentPosition;
 
 		// Store the path points and target rotation
 		m_movementPath = points;
@@ -1283,26 +1436,31 @@ namespace mmo
 			targetPosition = CalculatePositionAlongPath(targetDistance);
 		}
 
-		// Move towards target position smoothly without large teleports
+		// Move towards target position smoothly using speed-based interpolation
 		const Vector3 unitCurrentPosition = m_sceneNode->GetDerivedPosition();
 		Vector3 direction = targetPosition - unitCurrentPosition;
 		const float distanceFromTarget = direction.GetLength();
 
-		constexpr float maxMovePerFrame = 0.5f; // Maximum distance to move in one frame
+		// Use actual movement speed scaled by deltaTime for smooth, framerate-independent movement.
+		// Add a catch-up factor when falling behind the computed path position to avoid persistent lag.
+		const float baseMove = runSpeed * deltaTime;
+		const float catchUpFactor = std::min(distanceFromTarget / std::max(baseMove, 0.01f), 3.0f);
+		const float maxMoveThisFrame = baseMove * std::max(catchUpFactor, 1.0f);
+
 		if (distanceFromTarget > 0.01f)
 		{
 			Vector3 newPosition;
 
-			if (distanceFromTarget <= maxMovePerFrame)
+			if (distanceFromTarget <= maxMoveThisFrame)
 			{
-				// Small distance - move directly to target
+				// Close enough - move directly to target position
 				newPosition = targetPosition;
 			}
 			else
 			{
-				// Large distance - move gradually towards target
+				// Move towards target at appropriate speed with catch-up
 				direction.Normalize();
-				newPosition = unitCurrentPosition + direction * maxMovePerFrame;
+				newPosition = unitCurrentPosition + direction * maxMoveThisFrame;
 			}
 
 			m_sceneNode->SetPosition(newPosition);
@@ -1867,14 +2025,28 @@ namespace mmo
 		PlayOneShotAnimation(m_damageHitState);
 	}
 
-	void GameUnitC::SetWeaponProficiency(const uint32 mask)
+	void GameUnitC::AddProficiency(const uint32 proficiencyId)
 	{
-		m_weaponProficiency = mask;
+		if (proficiencyId > 0)
+		{
+			m_proficiencies.insert(proficiencyId);
+		}
 	}
 
-	void GameUnitC::SetArmorProficiency(const uint32 mask)
+	void GameUnitC::RemoveProficiency(const uint32 proficiencyId)
 	{
-		m_armorProficiency = mask;
+		m_proficiencies.erase(proficiencyId);
+	}
+
+	bool GameUnitC::HasProficiency(const uint32 proficiencyId) const
+	{
+		// Proficiency ID 0 means no proficiency required
+		if (proficiencyId == 0)
+		{
+			return true;
+		}
+
+		return m_proficiencies.contains(proficiencyId);
 	}
 
 	bool GameUnitC::IsFriendlyTo(const GameUnitC &other) const
@@ -2077,6 +2249,9 @@ namespace mmo
 		{
 			m_nameComponentNode->SetPosition(Vector3::UnitY * (m_entity->GetBoundingRadius()));
 		}
+
+		// Connect to animation notify signals for all animations
+		ConnectAnimationNotifySignals();
 
 		OnScaleChanged();
 	}

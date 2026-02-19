@@ -6,52 +6,71 @@
 #include "editor_entry_window_base.h"
 #include "editor_host.h"
 #include "proto_data/project.h"
+#include "spell_visualization_preview.h"
+
+#include <memory>
 
 namespace mmo
 {
 	class PreviewProviderManager;
 	class IAudio;
 
-	/// \brief Editor window for managing spell visualizations (data-driven visual effects).
+	/// @brief Editor window for managing spell visualizations (data-driven visual effects).
 	///
 	/// Provides CRUD operations for SpellVisualization entries with per-event kit management.
 	/// Each visualization can have multiple kits bound to different spell lifecycle events
 	/// (StartCast, CancelCast, Casting, CastSucceeded, Impact, AuraApplied, AuraRemoved, etc.).
+	/// 
+	/// Features an integrated 3D preview viewport for real-time visualization of spell effects.
 	class SpellVisualizationEditorWindow final
 		: public EditorEntryWindowBase<proto::SpellVisualizations, proto::SpellVisualization>
 		, public NonCopyable
 	{
 	public:
-	/// \brief Constructor.
-	/// \param name Window title.
-	/// \param project Proto data project containing the spell visualizations dataset.
-	/// \param host Editor host for additional UI services.
-	/// \param previewManager Preview provider manager for asset previews.
-	/// \param audioSystem Audio system for sound previews (optional, may be null).
-	explicit SpellVisualizationEditorWindow(const String& name, proto::Project& project, EditorHost& host, PreviewProviderManager& previewManager, IAudio* audioSystem = nullptr);		~SpellVisualizationEditorWindow() override = default;
+		/// @brief Constructor.
+		/// @param name Window title.
+		/// @param project Proto data project containing the spell visualizations dataset.
+		/// @param host Editor host for additional UI services.
+		/// @param previewManager Preview provider manager for asset previews.
+		/// @param audioSystem Audio system for sound previews (optional, may be null).
+		explicit SpellVisualizationEditorWindow(const String& name, proto::Project& project, EditorHost& host, PreviewProviderManager& previewManager, IAudio* audioSystem = nullptr);
+		
+		/// @brief Destructor.
+		~SpellVisualizationEditorWindow() override = default;
+
+		/// @brief Override Draw to add custom layout with 3D preview.
+		bool Draw() override;
 
 	private:
-		/// \brief Draw the details panel for the selected visualization entry.
-		/// \param currentEntry The currently selected SpellVisualization entry.
+		/// @brief Draw the details panel for the selected visualization entry.
+		/// @param currentEntry The currently selected SpellVisualization entry.
 		void DrawDetailsImpl(proto::SpellVisualization& currentEntry) override;
 
-		/// \brief Draw the kits for a specific event.
-		/// \param currentEntry The visualization being edited.
-		/// \param eventValue The event enum value (proto::SpellVisualEvent).
-		/// \param eventName Human-readable name for the event.
+		/// @brief Draw the kits for a specific event.
+		/// @param currentEntry The visualization being edited.
+		/// @param eventValue The event enum value (proto::SpellVisualEvent).
+		/// @param eventName Human-readable name for the event.
 		void DrawEventKits(proto::SpellVisualization& currentEntry, uint32 eventValue, const char* eventName);
 
-		/// \brief Draw a single kit editor (sounds, animation, tint, loop).
-		/// \param kit The SpellKit to edit.
-		/// \param kitIndex Index of this kit within its event list.
-		/// \return True if the kit should be removed.
+		/// @brief Draw a single kit editor (sounds, animation, tint, loop).
+		/// @param kit The SpellKit to edit.
+		/// @param kitIndex Index of this kit within its event list.
+		/// @return True if the kit should be removed.
 		bool DrawKit(proto::SpellKit& kit, int kitIndex);
 
-		/// \brief Draw the projectile configuration section.
-		/// \param currentEntry The visualization being edited.
+		/// @brief Draw the projectile configuration section.
+		/// @param currentEntry The visualization being edited.
 		void DrawProjectileConfig(proto::SpellVisualization& currentEntry);
 
-		/// \brief Initialize a new entry with default values.
+		/// @brief Draw the 3D preview viewport.
+		/// @param currentEntry The current visualization (can be null).
+		void DrawPreviewPanel(proto::SpellVisualization* currentEntry);
+
+		/// @brief Draw quick action buttons for common operations.
+		/// @param currentEntry The current visualization.
+		void DrawQuickActions(proto::SpellVisualization& currentEntry);
+
+		/// @brief Initialize a new entry with default values.
 		void OnNewEntry(proto::TemplateManager<proto::SpellVisualizations, proto::SpellVisualization>::EntryType& entry) override;
 
 	public:
@@ -70,7 +89,19 @@ namespace mmo
 		PreviewProviderManager& m_previewManager;
 		IAudio* m_audioSystem;
 		
-		/// \brief Track which event sections are expanded in the UI.
+		/// @brief 3D preview panel for real-time visualization.
+		std::unique_ptr<SpellVisualizationPreview> m_preview;
+		
+		/// @brief Track which event sections are expanded in the UI.
 		std::map<uint32, bool> m_eventExpanded;
+		
+		/// @brief Whether to show the preview panel.
+		bool m_showPreview{ true };
+		
+		/// @brief Preview panel height ratio (0.0 - 1.0).
+		float m_previewHeightRatio{ 0.4f };
+
+		/// @brief Preview projectile speed (units per second).
+		float m_previewProjectileSpeed{ 15.0f };
 	};
 }

@@ -20,6 +20,7 @@ namespace mmo
 	struct IDatabase;
 	class PlayerManager;
 
+	/// Represents a party/raid group and its membership state.
 	class PlayerGroup final : public std::enable_shared_from_this<PlayerGroup>
 	{
 	public:
@@ -39,6 +40,7 @@ namespace mmo
 		/// created using the create method before it will be valid.
 		explicit PlayerGroup(uint64 id, PlayerManager& playerManager, AsyncDatabase& database, TimerQueue& timers);
 
+		/// Preloads group data asynchronously.
 		void Preload();
 
 		/// Restores the group from the database.
@@ -64,25 +66,25 @@ namespace mmo
 		/// Adds a new member to the group. The group member has to be invited first.
 		PartyResult AddMember(uint64 memberGuid, const String& memberName);
 
-		/// 
+		/// Gets a member guid by character name.
 		uint64 GetMemberGuid(const String& name) const;
 
-		/// 
+		/// Removes a member from the group.
 		void RemoveMember(uint64 guid);
 
-		/// 
+		/// Removes an invite for the given guid.
 		bool RemoveInvite(uint64 guid);
 
 		/// Sends a group update message to all members of the group.
 		void SendUpdate();
 
-		/// 
+		/// Disbands the group.
 		void Disband(bool silent);
 
-		/// 
+		/// Returns the instance binding for a map, if any.
 		InstanceId InstanceBindingForMap(uint32 map);
 
-		/// 
+		/// Adds an instance binding for a map.
 		bool AddInstanceBinding(InstanceId instance, uint32 map);
 
 		/// Converts the group into a raid group.
@@ -115,6 +117,7 @@ namespace mmo
 		/// Gets the group id.
 		uint64 GetId() const { return m_id; }
 
+		/// Returns true if the group has finished loading.
 		bool IsLoaded() const { return m_leaderGUID != 0 && !m_loading; }
 
 		/// Broadcasts a network packet to all party mambers.

@@ -656,6 +656,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 
 		// Create a new player object
 		auto player = std::make_shared<Player>(m_playerManager, *this, characterObject, characterData, m_project, *instance, m_conditionMgr);
+		player->SetFallDamageConfig(m_fallDamageMinHeight, m_fallDamageLethalHeight);
 		m_playerManager.AddPlayer(player);
 
 		// Set up inventory persistence (World Server)
@@ -997,5 +998,11 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 	{
 		ELOG("Received a malformed packet");
 		QueueReconnect();
+	}
+
+	void RealmConnector::SetFallDamageConfig(float minHeight, float lethalHeight)
+	{
+		m_fallDamageMinHeight = minHeight;
+		m_fallDamageLethalHeight = lethalHeight;
 	}
 }

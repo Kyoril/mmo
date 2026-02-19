@@ -62,15 +62,20 @@ namespace mmo
 				extension = currentAssetPath.substr(dotPos);
 			}
 
+			bool hasPreview = false;
 			if (auto* provider = previewManager->GetPreviewProviderForExtension(extension))
 			{
 				if (const ImTextureID texId = provider->GetAssetPreview(currentAssetPath))
 				{
 					ImGui::Image(texId, ImVec2(previewSize, previewSize));
+					hasPreview = true;
 				}
 			}
 
-			ImGui::SameLine();
+			if (hasPreview)
+			{
+				ImGui::SameLine();
+			}
 		}
 
 		// Audio preview button (if audio system available and audio file selected)

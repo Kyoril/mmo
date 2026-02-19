@@ -331,6 +331,23 @@ namespace mmo
 		 */
 		bool ShouldResetAI(const GameUnitS* victim) const;
 
+		/**
+		 * @brief Calculates a formation offset position around the target for melee positioning.
+		 * 
+		 * When multiple creatures attack the same target, this method assigns each creature
+		 * a unique angular slot around the target so they spread out in a semicircle
+		 * facing toward the target rather than stacking on the same spot.
+		 * 
+		 * The semicircle is oriented based on the average approach direction, allowing
+		 * the player to influence creature positions by controlling their own position.
+		 * 
+		 * @param target The target being attacked.
+		 * @param approachPosition The base position to approach from.
+		 * @param standoffDistance The distance from the target to position at.
+		 * @return The formation-adjusted position around the target.
+		 */
+		Vector3 CalculateFormationPosition(const GameUnitS& target, const Vector3& approachPosition, float standoffDistance) const;
+
 		// === Initialization Helpers ===
 
 		/**
@@ -394,13 +411,17 @@ namespace mmo
 		static constexpr uint32 RESET_TIMEOUT_MS = 10000;  // 10 seconds
 		static constexpr uint32 MAX_STUCK_COUNT = 20;
 		static constexpr uint32 ACTION_INTERVAL_MS = 500;
-		/// Movement target range factor (0.75 = move to 75% of attack range to ensure we're close enough)
-		static constexpr float COMBAT_RANGE_FACTOR = 0.75f;
+		/// Movement target range factor (0.9 = move to 90% of attack range to stop in front of, not inside, the target)
+		static constexpr float COMBAT_RANGE_FACTOR = 0.9f;
 		/// Optimal caster range (distance to maintain from target)
 		static constexpr float CASTER_OPTIMAL_RANGE = 20.0f;
 		/// Minimum distance to maintain from target for casters
 		static constexpr float CASTER_MIN_RANGE = 8.0f;
 		/// Maximum spell casting range
 		static constexpr float MAX_SPELL_RANGE = 30.0f;
+		/// Angular spread per creature in formation (radians, ~40 degrees)
+		static constexpr float FORMATION_ANGLE_STEP = 0.7f;
+		/// Maximum angular spread for the formation semicircle (radians, ~160 degrees)
+		static constexpr float FORMATION_MAX_ANGLE = 2.8f;
 	};
 }

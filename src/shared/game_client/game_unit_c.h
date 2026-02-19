@@ -1,6 +1,7 @@
 #pragma once
 
 #include <queue>
+#include <set>
 
 #include "game_object_c.h"
 #include "game_aura_c.h"
@@ -13,9 +14,12 @@
 
 #include "unit_movement.h"
 #include "movement_event.h"
+#include "remote_movement_queue.h"
 
 namespace mmo
 {
+	class AnimationNotify;
+	class AnimationState;
 	class ManualRenderObject;
 	class NetClient;
 
@@ -36,7 +40,11 @@ namespace mmo
 	class GameUnitC : public GameObjectC, public CustomizationPropertyGroupApplier
 	{
 	public:
+		/// @brief Signal emitted when movement ends.
 		signal<void(GameUnitC &, const MovementInfo &)> movementEnded;
+
+		/// @brief Signal emitted when an animation notify is triggered on this unit.
+		signal<void(GameUnitC&, const AnimationNotify&, const String&, const AnimationState&)> animationNotifyTriggered;
 
 	public:
 		/// @brief Creates a instance of the GameUnitC class.
@@ -128,6 +136,16 @@ namespace mmo
 
 		virtual void ApplyMovementInfo(const MovementInfo &movementInfo);
 
+		/// @brief Enqueues a movement snapshot for a remote player into the buffered queue.
+		/// This should be called instead of ApplyMovementInfo for non-local players.
+		/// @param movementInfo The movement info from the network packet.
+		void EnqueueRemoteMovement(const MovementInfo &movementInfo);
+
+		/// @brief Processes the remote movement queue and updates the unit's visual state.
+		/// Called every frame for remote players.
+		/// @param deltaTime The time elapsed since the last frame.
+		void UpdateRemoteMovement(float deltaTime);
+
 		/// @copydoc GameObjectC::InitializeFieldMap
 		virtual void InitializeFieldMap() override;
 
@@ -177,6 +195,9 @@ namespace mmo
 		void SetQuestGiverMesh(const String &meshName);
 
 		virtual void RefreshUnitName();
+
+		/// @brief Connects to animation notify signals on all animations for this unit.
+		void ConnectAnimationNotifySignals();
 
 	public:
 		/// @brief Locks the current position as the synced position.
@@ -415,6 +436,9 @@ namespace mmo
 		/// @brief Cancel the currently playing one-shot animation and refresh movement state
 		void CancelOneShotAnimation();
 
+		/// @brief Returns true if a one-shot animation is currently playing.
+		bool IsPlayingOneShotAnimation() const { return m_oneShotState != nullptr && m_oneShotState->GetWeight() > 0.0f; }
+
 		/// @brief Force an update of movement-based animations (e.g., after canceling spell animations)
 		void RefreshMovementAnimation();
 
@@ -422,13 +446,14 @@ namespace mmo
 
 		void NotifyHitEvent();
 
-		void SetWeaponProficiency(uint32 mask);
+		/// Adds a proficiency by ID.
+		void AddProficiency(uint32 proficiencyId);
 
-		void SetArmorProficiency(uint32 mask);
+		/// Removes a proficiency by ID.
+		void RemoveProficiency(uint32 proficiencyId);
 
-		uint32 GetWeaponProficiency() const { return m_weaponProficiency; }
-
-		uint32 GetArmorProficiency() const { return m_armorProficiency; }
+		/// Checks if the unit has a specific proficiency.
+		bool HasProficiency(uint32 proficiencyId) const;
 
 		/// @brief Get the maximum step-up height for this unit
 		/// @return Maximum step-up height in world units
@@ -471,7 +496,7 @@ namespace mmo
 		bool IsHostileTo(const GameUnitC &other) const;
 
 	protected:
-		void OnDisplayIdChanged();
+		virtual void OnDisplayIdChanged();
 
 		void UpdateCollider();
 
@@ -505,6 +530,7 @@ namespace mmo
 		/// Calculates position along the path based on distance traveled
 		Vector3 CalculatePositionAlongPath(float distance) const;
 
+	public:
 		/// Returns true if this unit is controlled by the local player
 		bool IsControlledByLocalPlayer() const;
 
@@ -554,8 +580,7 @@ namespace mmo
 
 		std::shared_ptr<CustomizableAvatarDefinition> m_customizationDefinition;
 
-		uint32 m_weaponProficiency = 0;
-		uint32 m_armorProficiency = 0;
+		std::set<uint32> m_proficiencies;  ///< Set of proficiency IDs the unit has
 
 	protected:
 		// Animation stuff
@@ -617,6 +642,9 @@ namespace mmo
 
 		std::queue<MovementEvent> m_movementEventQueue;
 
+		/// @brief Buffered movement queue for remote players.
+		RemoteMovementQueue m_remoteMovementQueue;
+
 		GameTime m_lastHeartbeat = 0;
 
 		/// @brief Whether the position is currently locked due to a stop packet being sent.
@@ -639,5 +667,8 @@ namespace mmo
 
 		/// @brief Map of SubEntity -> material state (only populated when tinting is active).
 		std::map<class SubEntity*, SubEntityMaterialState> m_tintMaterialStates;
+
+		/// @brief Connections to animation notify signals.
+		scoped_connection_container m_animNotifyConnections;
 	};
 }

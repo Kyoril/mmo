@@ -308,13 +308,11 @@ namespace mmo
 			ImGui::Separator();
 
 			// Provide a button to remove this event.
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-			if (ImGui::Button("Remove Event", ImVec2(-1, 0)))
+			if (DrawDangerButton("Remove Event", ImVec2(-1, 0)))
 			{
 				// Removing an event invalidates the indices, so break out after removal.
 				currentEntry.mutable_newevents()->DeleteSubrange(eventIndex, 1);
 			}
-			ImGui::PopStyleColor();
 
 			ImGui::PopStyleVar();
 		}
@@ -876,13 +874,11 @@ namespace mmo
 			ImGui::Separator();
 
 			// Provide a remove button for this action.
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-			if (ImGui::Button("Remove Action", ImVec2(-1, 0)))
+			if (DrawDangerButton("Remove Action", ImVec2(-1, 0)))
 			{
 				// Removing an element from a repeated field invalidates indices so break out after removal.
 				currentEntry.mutable_actions()->DeleteSubrange(actionIndex, 1);
 			}
-			ImGui::PopStyleColor();
 
 			ImGui::PopStyleVar();
 		}
@@ -1046,12 +1042,10 @@ namespace mmo
 
 			ImGui::Spacing();
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
-			if (ImGui::Button("+ Add Event", ImVec2(-1, 0)))
+			if (DrawSuccessButton("+ Add Event", ImVec2(-1, 0)))
 			{
 				ImGui::OpenPopup("Event Details");
 			}
-			ImGui::PopStyleColor();
 
 			ImGui::PopStyleVar(2);
 			ImGui::Unindent();
@@ -1077,8 +1071,7 @@ namespace mmo
 
 			static int currentAction = -1;
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
-			if (ImGui::Button("+ Add Action", ImVec2(-1, 0)))
+			if (DrawSuccessButton("+ Add Action", ImVec2(-1, 0)))
 			{
 				auto* newAction = currentEntry.add_actions();
 				newAction->set_action(0);
@@ -1086,16 +1079,13 @@ namespace mmo
 				newAction->set_targetname("");
 				currentAction = currentEntry.actions_size() - 1;
 			}
-			ImGui::PopStyleColor();
 
 			ImGui::BeginDisabled(currentAction == -1 || currentAction >= currentEntry.actions_size());
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-			if (ImGui::Button("Remove Action", ImVec2(-1, 0)))
+			if (DrawDangerButton("Remove Action", ImVec2(-1, 0)))
 			{
 				currentEntry.mutable_actions()->erase(currentEntry.mutable_actions()->begin() + currentAction);
 				currentAction = -1;
 			}
-			ImGui::PopStyleColor();
 			ImGui::EndDisabled();
 
 			ImGui::Spacing();
@@ -1209,23 +1199,19 @@ namespace mmo
 			ImGui::Separator();
 			ImGui::Spacing();
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
-			if (ImGui::Button("Add", ImVec2(120, 0)))
+			if (DrawSuccessButton("Add", ImVec2(120, 0)))
 			{
 				auto& event = *currentEntry.add_newevents();
 				event.set_type(trigger_event::Type(selectedEventType));
 				ImGui::CloseCurrentPopup();
 			}
-			ImGui::PopStyleColor();
 
 			ImGui::SameLine();
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
-			if (ImGui::Button("Cancel", ImVec2(120, 0)))
+			if (DrawNeutralButton("Cancel", ImVec2(120, 0)))
 			{
 				ImGui::CloseCurrentPopup();
 			}
-			ImGui::PopStyleColor();
 
 			ImGui::EndPopup();
 		}

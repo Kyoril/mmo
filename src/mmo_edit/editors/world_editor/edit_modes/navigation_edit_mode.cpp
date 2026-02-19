@@ -121,6 +121,7 @@ namespace mmo
 			duDebugDrawNavMeshPolysWithFlags(m_detourDebugDraw.get(), m_navMap->GetNavMesh(), poly_flags::Ground, 0xff00ff00);
 			duDebugDrawNavMeshPolysWithFlags(m_detourDebugDraw.get(), m_navMap->GetNavMesh(), poly_flags::Entity, 0xffff4444);
 			duDebugDrawNavMeshPolysWithFlags(m_detourDebugDraw.get(), m_navMap->GetNavMesh(), poly_flags::Steep, 0xff0000ff);
+			duDebugDrawNavMeshPolysWithFlags(m_detourDebugDraw.get(), m_navMap->GetNavMesh(), poly_flags::WorldModel, 0xffff8800);
 		}
 
 		if (m_showNavMeshPortals)

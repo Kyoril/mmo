@@ -365,6 +365,13 @@ namespace mmo
 		/// @param deltaTime Time step for movement
 		void ControlledCharacterMove(const Vector3& inputVector, float deltaTime);
 
+		/// @brief Moves a remote player character based on extrapolation from network state.
+		/// Uses simple velocity-based movement without collision detection, since the
+		/// originating client handles physics. Smoothly corrects towards network target.
+		/// @param inputVector Direction and magnitude from movement flags
+		/// @param deltaTime Time step for movement
+		void RemotePlayerMove(const Vector3& inputVector, float deltaTime);
+
 		/// @brief Constrains input acceleration to valid movement parameters
 		/// @param inputAcceleration Raw input acceleration vector
 		/// @return Constrained acceleration vector

@@ -112,6 +112,22 @@ namespace mmo
 
 	typedef spell_cast_target_flags::Type SpellCastTargetFlags;
 
+	namespace spell_cooldown_flags
+	{
+		enum Type
+		{
+			None = 0,
+
+			/// Spell cooldown starts when the cast starts instead of when cast succeeds.
+			StartOnCastStart = 1 << 0,
+
+			/// Spell participates in the global cooldown instead of using its own cooldown.
+			UseGlobalCooldown = 1 << 1
+		};
+	}
+
+	typedef spell_cooldown_flags::Type SpellCooldownFlags;
+
 	namespace spell_miss_info
 	{
 		enum Type

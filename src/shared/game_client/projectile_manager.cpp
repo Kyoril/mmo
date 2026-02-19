@@ -32,7 +32,7 @@ namespace mmo
 						   const proto_client::SpellEntry &spell,
 						   const proto_client::SpellVisualization *visualization,
 						   const Vector3 &startPosition,
-						   std::weak_ptr<GameUnitC> target)
+						   std::shared_ptr<IProjectileTarget> target)
 		: m_scene(scene), m_audio(audio), m_spell(spell), m_visualization(visualization), m_target(target), m_node(nullptr), m_entity(nullptr), m_trailEmitter(nullptr), m_startPosition(startPosition), m_velocity(Vector3::UnitZ), m_travelTime(0.0f), m_totalDistance(0.0f), m_hasHit(false), m_soundChannel(InvalidChannel)
 	{
 		// Create scene node for projectile
@@ -101,9 +101,9 @@ namespace mmo
 		}
 
 		// Calculate initial velocity direction
-		if (auto targetUnit = m_target.lock())
+		if (m_target)
 		{
-			const Vector3 targetPos = targetUnit->GetPosition();
+			const Vector3 targetPos = m_target->GetPosition();
 			m_velocity = targetPos - startPosition;
 			m_totalDistance = m_velocity.GetLength();
 
@@ -159,8 +159,7 @@ namespace mmo
 		}
 
 		// Check if target still exists
-		auto targetUnit = m_target.lock();
-		if (!targetUnit)
+		if (!m_target)
 		{
 			m_hasHit = true;
 			return true;
@@ -208,7 +207,7 @@ namespace mmo
 
 		// Check for impact
 		const Vector3 currentPos = m_node->GetDerivedPosition();
-		const Vector3 targetPos = targetUnit->GetPosition();
+		const Vector3 targetPos = m_target->GetPosition();
 		const float distanceToTarget = (targetPos - currentPos).GetLength();
 
 		if (distanceToTarget <= 0.5f)
@@ -223,13 +222,12 @@ namespace mmo
 	void Projectile::UpdateLinearMotion(float deltaTime)
 	{
 		// Simple linear movement toward initial target position
-		auto targetUnit = m_target.lock();
-		if (!targetUnit)
+		if (!m_target)
 		{
 			return;
 		}
 
-		const Vector3 targetPos = targetUnit->GetPosition();
+		const Vector3 targetPos = m_target->GetPosition();
 		const Vector3 currentPos = m_node->GetDerivedPosition();
 		Vector3 direction = targetPos - currentPos;
 
@@ -243,13 +241,12 @@ namespace mmo
 
 	void Projectile::UpdateArcMotion(float deltaTime)
 	{
-		auto targetUnit = m_target.lock();
-		if (!targetUnit)
+		if (!m_target)
 		{
 			return;
 		}
 
-		const Vector3 targetPos = targetUnit->GetPosition();
+		const Vector3 targetPos = m_target->GetPosition();
 		const float travelProgress = (m_travelTime * m_spell.speed()) / m_totalDistance;
 
 		if (travelProgress >= 1.0f)
@@ -276,14 +273,13 @@ namespace mmo
 
 	void Projectile::UpdateHomingMotion(float deltaTime)
 	{
-		auto targetUnit = m_target.lock();
-		if (!targetUnit)
+		if (!m_target)
 		{
 			return;
 		}
 
 		const Vector3 currentPos = m_node->GetDerivedPosition();
-		const Vector3 targetPos = targetUnit->GetPosition();
+		const Vector3 targetPos = m_target->GetPosition();
 
 		// Calculate desired direction
 		Vector3 desiredDirection = targetPos - currentPos;
@@ -308,13 +304,12 @@ namespace mmo
 
 	void Projectile::UpdateSineWaveMotion(float deltaTime)
 	{
-		auto targetUnit = m_target.lock();
-		if (!targetUnit)
+		if (!m_target)
 		{
 			return;
 		}
 
-		const Vector3 targetPos = targetUnit->GetPosition();
+		const Vector3 targetPos = m_target->GetPosition();
 		Vector3 direction = targetPos - m_startPosition;
 		direction.Normalize();
 
@@ -391,12 +386,60 @@ namespace mmo
 		return m_node->GetDerivedPosition();
 	}
 
+	// Internal storage for temporary proto objects created by SpawnProjectileEx
+	struct ProjectileManager::TempProtoStorage
+	{
+		std::vector<std::unique_ptr<proto_client::SpellEntry>> spells;
+		std::vector<std::unique_ptr<proto_client::SpellVisualization>> visualizations;
+	};
+
 	// ProjectileManager implementation
 
 	ProjectileManager::ProjectileManager(Scene &scene, IAudio *audio)
-		: m_scene(scene), m_audio(audio)
+		: m_scene(scene)
+		, m_audio(audio)
+		, m_tempStorage(std::make_unique<TempProtoStorage>())
 	{
 	}
+
+	ProjectileManager::~ProjectileManager() = default;
+
+	/// @brief Wrapper to adapt GameUnitC to IProjectileTarget interface.
+	class GameUnitProjectileTarget : public IProjectileTarget
+	{
+	public:
+		explicit GameUnitProjectileTarget(std::weak_ptr<GameUnitC> unit)
+			: m_unit(unit)
+		{
+		}
+
+		Vector3 GetPosition() const override
+		{
+			if (auto unit = m_unit.lock())
+			{
+				return unit->GetPosition();
+			}
+			return Vector3::Zero;
+		}
+
+		uint64 GetGuid() const override
+		{
+			if (auto unit = m_unit.lock())
+			{
+				return unit->GetGuid();
+			}
+			return 0;
+		}
+
+		/// @brief Check if the underlying unit is still valid.
+		bool IsValid() const
+		{
+			return !m_unit.expired();
+		}
+
+	private:
+		std::weak_ptr<GameUnitC> m_unit;
+	};
 
 	void ProjectileManager::SpawnProjectile(const proto_client::SpellEntry &spell,
 											const proto_client::SpellVisualization *visualization,
@@ -419,7 +462,78 @@ namespace mmo
 		std::shared_ptr<GameObjectC> targetShared = ObjectMgr::Get<GameObjectC>(target->GetGuid());
 		std::weak_ptr<GameUnitC> targetWeak = std::static_pointer_cast<GameUnitC>(targetShared);
 
-		auto projectile = std::make_unique<Projectile>(m_scene, m_audio, spell, visualization, startPosition, targetWeak);
+		auto targetWrapper = std::make_shared<GameUnitProjectileTarget>(targetWeak);
+		auto projectile = std::make_unique<Projectile>(m_scene, m_audio, spell, visualization, startPosition, targetWrapper);
+		m_projectiles.push_back(std::move(projectile));
+	}
+
+	void ProjectileManager::SpawnProjectile(const proto_client::SpellEntry &spell,
+											const proto_client::SpellVisualization *visualization,
+											const Vector3 &startPosition,
+											std::shared_ptr<IProjectileTarget> target)
+	{
+		if (!target)
+		{
+			return;
+		}
+
+		// Only spawn projectiles for spells with speed > 0
+		if (spell.speed() <= 0.0f)
+		{
+			return;
+		}
+
+		auto projectile = std::make_unique<Projectile>(m_scene, m_audio, spell, visualization, startPosition, target);
+		m_projectiles.push_back(std::move(projectile));
+	}
+
+	void ProjectileManager::SpawnProjectileEx(const ProjectileParams& params,
+	                                          const Vector3 &startPosition,
+	                                          std::shared_ptr<IProjectileTarget> target)
+	{
+		if (!target)
+		{
+			return;
+		}
+
+		// Only spawn projectiles with speed > 0
+		if (params.speed <= 0.0f)
+		{
+			return;
+		}
+
+		// Create temporary proto objects from params
+		// These are stored in a helper structure that persists with the projectile
+		auto tempSpell = std::make_unique<proto_client::SpellEntry>();
+		tempSpell->set_id(0);
+		tempSpell->set_speed(params.speed);
+
+		auto tempVis = std::make_unique<proto_client::SpellVisualization>();
+		auto* projVis = tempVis->mutable_projectile();
+		
+		if (!params.meshFile.empty())
+		{
+			projVis->set_mesh_name(params.meshFile);
+		}
+		
+		if (!params.particleFile.empty())
+		{
+			projVis->set_trail_particle(params.particleFile);
+		}
+		
+		projVis->set_motion(static_cast<proto_client::ProjectileMotion>(static_cast<int>(params.motionType)));
+		projVis->set_arc_height(params.arcHeight);
+		projVis->set_wave_amplitude(params.sineAmplitude);
+		projVis->set_wave_frequency(params.sineFrequency);
+		projVis->set_scale(params.scale);
+		projVis->set_face_movement(params.faceMovement);
+
+		// Store the temp objects in the internal storage (to keep them alive)
+		m_tempStorage->spells.push_back(std::move(tempSpell));
+		m_tempStorage->visualizations.push_back(std::move(tempVis));
+
+		auto projectile = std::make_unique<Projectile>(m_scene, m_audio, 
+			*m_tempStorage->spells.back(), m_tempStorage->visualizations.back().get(), startPosition, target);
 		m_projectiles.push_back(std::move(projectile));
 	}
 
@@ -431,9 +545,10 @@ namespace mmo
 			Projectile *projectile = it->get();
 			if (projectile->Update(deltaTime))
 			{
-				// Projectile hit - trigger impact event
+				// Projectile hit - trigger impact events
 				auto target = projectile->GetTarget();
 				projectileImpact(projectile->GetSpell(), target.get());
+				projectileImpactSimple(target.get());
 
 				// Remove projectile
 				it = EraseByMove(m_projectiles, it);
@@ -448,5 +563,10 @@ namespace mmo
 	void ProjectileManager::Clear()
 	{
 		m_projectiles.clear();
+		if (m_tempStorage)
+		{
+			m_tempStorage->spells.clear();
+			m_tempStorage->visualizations.clear();
+		}
 	}
 }

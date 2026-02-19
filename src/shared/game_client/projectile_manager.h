@@ -8,6 +8,7 @@
 #include "math/quaternion.h"
 #include "math/radian.h"
 #include "audio/audio.h"
+#include "game_common/projectile_target.h"
 
 #include <vector>
 #include <memory>
@@ -32,12 +33,19 @@ namespace mmo
     class Projectile
     {
     public:
+        /// @brief Constructor for projectiles with IProjectileTarget interface.
+        /// @param scene The scene to create visual objects in.
+        /// @param audio Audio system for sound playback (may be null).
+        /// @param spell The spell entry containing speed and other data.
+        /// @param visualization The spell visualization containing projectile config.
+        /// @param startPosition The starting position of the projectile.
+        /// @param target The target to track (uses IProjectileTarget interface).
         Projectile(Scene &scene,
                    IAudio *audio,
                    const proto_client::SpellEntry &spell,
                    const proto_client::SpellVisualization *visualization,
                    const Vector3 &startPosition,
-                   std::weak_ptr<GameUnitC> target);
+                   std::shared_ptr<IProjectileTarget> target);
 
         ~Projectile();
 
@@ -53,10 +61,10 @@ namespace mmo
             return m_spell;
         }
 
-        /// @brief Get the target unit if still valid
-        std::shared_ptr<GameUnitC> GetTarget() const
+        /// @brief Get the target if still valid
+        std::shared_ptr<IProjectileTarget> GetTarget() const
         {
-            return m_target.lock();
+            return m_target;
         }
 
         /// @brief Get current projectile position
@@ -75,7 +83,7 @@ namespace mmo
         IAudio *m_audio;
         const proto_client::SpellEntry &m_spell;
         const proto_client::SpellVisualization *m_visualization;
-        std::weak_ptr<GameUnitC> m_target;
+        std::shared_ptr<IProjectileTarget> m_target;
 
         // Scene objects
         SceneNode *m_node;
@@ -98,18 +106,37 @@ namespace mmo
     {
     public:
         explicit ProjectileManager(Scene &scene, IAudio *audio);
-        ~ProjectileManager() = default;
+        ~ProjectileManager();
 
     public:
-        /// @brief Spawn a new projectile
-        /// @param spell Spell entry containing speed and data
-        /// @param visualization Spell visualization containing projectile config
-        /// @param caster Unit casting the spell
-        /// @param target Target unit
+        /// @brief Spawn a new projectile from GameUnitC caster/target.
+        /// @param spell Spell entry containing speed and data.
+        /// @param visualization Spell visualization containing projectile config.
+        /// @param caster Unit casting the spell.
+        /// @param target Target unit.
         void SpawnProjectile(const proto_client::SpellEntry &spell,
                              const proto_client::SpellVisualization *visualization,
                              GameUnitC *caster,
                              GameUnitC *target);
+
+        /// @brief Spawn a new projectile using abstract targets.
+        /// @param spell Spell entry containing speed and data.
+        /// @param visualization Spell visualization containing projectile config.
+        /// @param startPosition The starting position.
+        /// @param target Abstract target implementing IProjectileTarget.
+        void SpawnProjectile(const proto_client::SpellEntry &spell,
+                             const proto_client::SpellVisualization *visualization,
+                             const Vector3 &startPosition,
+                             std::shared_ptr<IProjectileTarget> target);
+
+        /// @brief Spawn a projectile using explicit parameters instead of proto types.
+        /// This overload is useful when proto types are not available (e.g., in editor).
+        /// @param params The projectile configuration parameters.
+        /// @param startPosition The starting position.
+        /// @param target Abstract target implementing IProjectileTarget.
+        void SpawnProjectileEx(const ProjectileParams& params,
+                               const Vector3 &startPosition,
+                               std::shared_ptr<IProjectileTarget> target);
 
         /// @brief Update all active projectiles
         /// @param deltaTime Time elapsed since last update
@@ -122,11 +149,20 @@ namespace mmo
         /// @brief Signal emitted when a projectile hits its target
         /// @param spell The spell entry
         /// @param target The target that was hit (may be null if target died)
-        signal<void(const proto_client::SpellEntry &, GameUnitC *)> projectileImpact;
+        signal<void(const proto_client::SpellEntry &, IProjectileTarget *)> projectileImpact;
+
+        /// @brief Simple signal emitted when any projectile hits its target.
+        /// This version has no proto dependencies and can be used by the editor.
+        /// @param target The target that was hit (may be null if target died).
+        signal<void(IProjectileTarget *)> projectileImpactSimple;
 
     private:
         Scene &m_scene;
         IAudio *m_audio;
         std::vector<std::unique_ptr<Projectile>> m_projectiles;
+        
+        // Internal storage for SpawnProjectileEx - implementation details hidden in cpp
+        struct TempProtoStorage;
+        std::unique_ptr<TempProtoStorage> m_tempStorage;
     };
 }

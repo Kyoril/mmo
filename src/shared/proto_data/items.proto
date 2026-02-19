@@ -98,6 +98,8 @@ message ItemEntry {
 	optional float rangedrange = 64;
 	// Item skill type (weapons or armor)
 	optional uint32 skill = 65;
+	// Required proficiency ID to equip this item (0 = use subclass default)
+	optional uint32 requiredproficiency = 68;
 }
 
 message Items {

@@ -91,9 +91,13 @@ namespace mmo
 	{
 		const Vector3 inputVector = m_movedUnit.ConsumeInputVector();
 
-		if (m_movedUnit.IsPlayer())
+		if (m_movedUnit.IsControlledByLocalPlayer())
 		{
 			ControlledCharacterMove(inputVector, deltaSeconds);
+		}
+		else if (m_movedUnit.IsPlayer())
+		{
+			RemotePlayerMove(inputVector, deltaSeconds);
 		}
 	}
 
@@ -229,6 +233,37 @@ namespace mmo
 		m_analogInputModifier = ComputeAnalogInputModifier();
 
 		PerformMovement(deltaTime);
+	}
+
+	void UnitMovement::RemotePlayerMove(const Vector3& inputVector, const float deltaTime)
+	{
+		if (deltaTime < MIN_TICK_TIME)
+		{
+			return;
+		}
+
+		// Apply rotation from turn flags
+		GetUpdatedNode().Yaw(m_movedUnit.ConsumeRotation() * deltaTime, TransformSpace::World);
+
+		Vector3 currentPos = GetUpdatedNode().GetPosition();
+
+		// Extrapolate lateral position from movement flags.
+		// The input vector already contains direction * speed from the Update() loop.
+		if (!inputVector.IsZero())
+		{
+			const Vector3 lateralInput = Vector3::VectorPlaneProject(inputVector, -GetGravityDirection());
+			currentPos += lateralInput * deltaTime;
+		}
+
+		// Simulate gravity while falling so jumps look correct on other clients.
+		if (m_movementMode == MovementMode::Falling)
+		{
+			const Vector3 gravity = -GetGravityDirection() * GetGravityY();
+			m_velocity = NewFallVelocity(m_velocity, gravity, deltaTime);
+			currentPos += m_velocity * deltaTime;
+		}
+
+		GetUpdatedNode().SetPosition(currentPos);
 	}
 
 	Vector3 UnitMovement::ConstrainInputAcceleration(const Vector3& inputAcceleration) const

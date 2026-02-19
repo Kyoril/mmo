@@ -273,7 +273,14 @@ namespace mmo
 		// Iterate through all animations
 		for (const auto& animation : m_animationsList | std::views::values)
 		{
-			animationState.CreateAnimationState(animation->GetName(), 0.0f, animation->GetDuration());
+			AnimationState* state = animationState.CreateAnimationState(animation->GetName(), 0.0f, animation->GetDuration());
+			
+			// Link the Animation object to the AnimationState for notification triggering
+			if (state)
+			{
+				state->SetAnimation(animation.get());
+				state->SetSkeleton(this);
+			}
 		}
 	}
 

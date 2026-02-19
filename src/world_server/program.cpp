@@ -151,6 +151,7 @@ namespace mmo
 				project,
 				conditionMgr);
 		realmConnector->Login(config.realmServerAddress, config.realmServerPort, config.realmServerAuthName, config.realmServerPassword);
+		realmConnector->SetFallDamageConfig(config.fallDamageMinHeight, config.fallDamageLethalHeight);
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Create the web service

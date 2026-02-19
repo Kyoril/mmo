@@ -51,8 +51,8 @@ namespace mmo
         const auto& project = m_context.GetProject();
 
         // Create bag for container/quiver items, regular item otherwise
-        if (entry.itemclass() == item_class::Container ||
-            entry.itemclass() == item_class::Quiver)
+        if (entry.inventorytype() == inventory_type::Bag ||
+            entry.inventorytype() == inventory_type::Quiver)
         {
             return std::make_shared<GameBagS>(project, entry);
         }

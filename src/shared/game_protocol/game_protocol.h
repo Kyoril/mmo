@@ -68,7 +68,7 @@ namespace mmo
 
 		constexpr uint32 MAX_FRIENDS = 50;
 
-		constexpr uint32 ProtocolVersion = 0x00000003;
+		constexpr uint32 ProtocolVersion = 0x00000004;
 
 		////////////////////////////////////////////////////////////////////////////////
 		// BEGIN: Client <-> Realm section
@@ -239,6 +239,9 @@ namespace mmo
 
 				AreaTriggerTriggered,
 
+				GroupLeave,
+				GroupDisband,
+
 				/// Counter constant
 				Count_,
 			};
@@ -383,6 +386,9 @@ namespace mmo
 
 				SpellEnergizeLog,
 				MoveEnded,
+				
+				QuestAccepted,
+				QuestAbandoned,
 
 				TransferPending,
 
@@ -435,6 +441,9 @@ namespace mmo
 
 				SpellSuperceeded,
 				SetProficiency,
+
+				/// Environmental damage log packet (fall damage, drowning, lava, etc.)
+				EnvironmentalDamageLog,
 
 				/// Time played response packet sent to the client
 				TimePlayedResponse,

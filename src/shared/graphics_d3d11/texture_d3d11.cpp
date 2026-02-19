@@ -4,6 +4,7 @@
 
 #include "base/macros.h"
 
+#include <algorithm>
 #include <vector>
 #include <stdexcept>
 
@@ -124,7 +125,7 @@ namespace mmo
 			// Calculate size of mip level
 			const int32 width = m_header.width >> mipLevel;
 			const int32 height = m_header.height >> mipLevel;
-			if (width <= 1 || height <= 1 || mipData[mipLevel].size() == 0)
+			if (width < 1 || height < 1 || mipData[mipLevel].size() == 0)
 			{
 				break;
 			}
@@ -151,6 +152,11 @@ namespace mmo
 			}
 
 			actualMipLevelCount++;
+
+			if (width <= 1 || height <= 1)
+			{
+				break;
+			}
 		}
 
 		td.MipLevels = actualMipLevelCount;
@@ -267,8 +273,48 @@ namespace mmo
 			return;
 		}
 
-		// Copy pixel data to buffer
-		memcpy(destination, mappedResource.pData, GetPixelDataSize());
+		// Copy pixel data row-by-row to account for driver-specific row pitch padding.
+		const uint8* srcData = static_cast<const uint8*>(mappedResource.pData);
+		const UINT srcRowPitch = mappedResource.RowPitch;
+
+		UINT dstRowPitch = 0;
+		UINT rowCount = 0;
+		switch (textureDesc.Format)
+		{
+		case DXGI_FORMAT_R8G8B8A8_UNORM:
+			dstRowPitch = textureDesc.Width * 4;
+			rowCount = textureDesc.Height;
+			break;
+		case DXGI_FORMAT_BC1_UNORM:
+		{
+			const UINT blocksWide = std::max(1u, (textureDesc.Width + 3u) / 4u);
+			dstRowPitch = blocksWide * 8u;
+			rowCount = std::max(1u, (textureDesc.Height + 3u) / 4u);
+			break;
+		}
+		case DXGI_FORMAT_BC3_UNORM:
+		{
+			const UINT blocksWide = std::max(1u, (textureDesc.Width + 3u) / 4u);
+			dstRowPitch = blocksWide * 16u;
+			rowCount = std::max(1u, (textureDesc.Height + 3u) / 4u);
+			break;
+		}
+		default:
+			// Fall back to the previous behavior for unknown formats.
+			memcpy(destination, mappedResource.pData, GetPixelDataSize());
+			context->Unmap(stagingTexture, 0);
+			stagingTexture->Release();
+			context->Release();
+			return;
+		}
+
+		uint8* dstData = destination;
+		for (UINT row = 0; row < rowCount; ++row)
+		{
+			memcpy(dstData, srcData, dstRowPitch);
+			srcData += srcRowPitch;
+			dstData += dstRowPitch;
+		}
 
 		context->Unmap(stagingTexture, 0);
 		stagingTexture->Release();

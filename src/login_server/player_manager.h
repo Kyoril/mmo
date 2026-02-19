@@ -42,9 +42,10 @@ namespace mmo
 		/// Gets a player by his account name.
 		Player *GetPlayerByAccountName(const String &accountName);
 
-		/// 
+		/// Gets a player by account id.
 		Player *GetPlayerByAccountID(uint64 accountId);
 
+		/// Kicks a player by account id if connected.
 		void KickPlayerByAccountId(uint64 accountId);
 
 	private:

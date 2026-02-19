@@ -25,6 +25,7 @@ namespace mmo
 	namespace proto
 	{
 		class ItemEntry;
+		class Project;
 	}
 
 	/**
@@ -46,8 +47,9 @@ namespace mmo
 		/**
 		 * @brief Constructs an item validator for a specific player.
 		 * @param player The player whose constraints will be validated against.
+		 * @param project The project data containing item classes, subclasses, and proficiencies.
 		 */
-		explicit ItemValidator(const IPlayerValidatorContext& player);
+		explicit ItemValidator(const IPlayerValidatorContext& player, const proto::Project& project);
 
 		/**
 		 * @brief Validates if player can use/equip this item.
@@ -136,16 +138,16 @@ namespace mmo
 
 	private:
 		const IPlayerValidatorContext& m_player;
+		const proto::Project& m_project;
 
 		/**
-		 * @brief Checks if player has required weapon proficiency.
+		 * @brief Checks if player has required proficiency for an item.
+		 * Uses the new data-driven proficiency system:
+		 * - First checks item's explicit requiredproficiency field
+		 * - Falls back to item subclass's requiredproficiency
+		 * - If neither is set, no proficiency is required
 		 */
-		bool HasWeaponProficiency(const proto::ItemEntry& entry) const;
-
-		/**
-		 * @brief Checks if player has required armor proficiency.
-		 */
-		bool HasArmorProficiency(const proto::ItemEntry& entry) const;
+		bool HasRequiredProficiency(const proto::ItemEntry& entry) const;
 
 		/**
 		 * @brief Validates equipment slot compatibility.
@@ -181,15 +183,5 @@ namespace mmo
 		InventoryResult<void> ValidateOffhandWeapon(
 			InventorySlot slot,
 			const proto::ItemEntry& entry) const;
-
-		/**
-		 * @brief Converts item subclass to weapon proficiency type.
-		 */
-		static weapon_prof::Type GetWeaponProficiency(uint32 subclass);
-
-		/**
-		 * @brief Converts item subclass to armor proficiency type.
-		 */
-		static armor_prof::Type GetArmorProficiency(uint32 subclass);
 	};
 }

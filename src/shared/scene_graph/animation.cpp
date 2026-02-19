@@ -261,4 +261,34 @@ namespace mmo
 			DestroyNodeTrack(handle);
 		}
 	}
+
+	void Animation::AddNotify(std::unique_ptr<AnimationNotify> notify)
+	{
+		if (notify)
+		{
+			m_notifies.push_back(std::move(notify));
+		}
+	}
+
+	void Animation::RemoveNotify(const size_t index)
+	{
+		if (index < m_notifies.size())
+		{
+			m_notifies.erase(m_notifies.begin() + index);
+		}
+	}
+
+	void Animation::ClearNotifies()
+	{
+		m_notifies.clear();
+	}
+
+	AnimationNotify* Animation::GetNotify(const size_t index) const
+	{
+		if (index < m_notifies.size())
+		{
+			return m_notifies[index].get();
+		}
+		return nullptr;
+	}
 }

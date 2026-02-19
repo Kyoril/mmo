@@ -161,6 +161,7 @@ namespace mmo
 		///	@param characterGuid Unique id of the character to delete.
 		virtual void DeleteCharacter(uint64 characterGuid) = 0;
 
+		/// Loads all guilds from the database.
 		virtual std::optional<std::vector<GuildData>> LoadGuilds() = 0;
 
 		/// Creates a new character on the given account.
@@ -183,8 +184,10 @@ namespace mmo
 		///	@returns Character data of the character, if the character exists.
 		virtual std::optional<CharacterData> CharacterEnterWorld(uint64 characterId, uint64 accountId) = 0;
 		
+		/// Creates a new world entry with SRP credentials.
 		virtual std::optional<WorldCreationResult> CreateWorkd(const String& name, const String& s, const String& v) = 0;
 
+		/// Stores a chat message in the database.
 		virtual void ChatMessage(uint64 characterId, uint16 type, String message) = 0;
 
 		/// Updates character data in the database.
@@ -192,44 +195,64 @@ namespace mmo
 		/// @note Inventory is persisted separately via SaveInventoryItems() and DeleteInventoryItems().
 		virtual void UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position, const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money, uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing, std::array<uint32, 5> attributePointsSpent, const std::vector<uint32>& spellIds, const std::unordered_map<uint32, uint32>& talentRanks, uint32 timePlayed) = 0;
 
+		/// Loads the action buttons for a character.
 		virtual std::optional<ActionButtons> GetActionButtons(uint64 characterId) = 0;
 
+		/// Sets the action buttons for a character.
 		virtual void SetCharacterActionButtons(DatabaseId characterId, ActionButtons buttons) = 0;
 		
+		/// Adds a learned spell to a character.
 		virtual void LearnSpell(DatabaseId characterId, uint32 spellId) = 0;
 
+		/// Updates the quest status data for a character.
 		virtual void SetQuestData(DatabaseId characterId, uint32 questId, const QuestStatusData& data) = 0;
 
+		/// Gets character location data by character name.
 		virtual std::optional<CharacterLocationData> GetCharacterLocationDataByName(String characterName) = 0;
 
+		/// Gets character id by character name.
 		virtual std::optional<DatabaseId> GetCharacterIdByName(String characterName) = 0;
 
+		/// Teleports a character to the given map and position.
 		virtual void TeleportCharacterByName(String characterName, uint32 map, Vector3 position, Radian orientation) = 0;
 
+		/// Creates a new group with the given leader.
 		virtual void CreateGroup(uint64 id, uint64 leaderGuid) = 0;
 
+		/// Sets the leader of a group.
 		virtual void SetGroupLeader(uint64 groupId, uint64 leaderGuid) = 0;
 
+		/// Adds a member to a group.
 		virtual void AddGroupMember(uint64 groupId, uint64 memberGuid) = 0;
 
+		/// Removes a member from a group.
 		virtual void RemoveGroupMember(uint64 groupId, uint64 memberGuid) = 0;
 
+		/// Disbands a group.
 		virtual void DisbandGroup(uint64 groupId) = 0;
 
+		/// Lists all group ids.
 		virtual std::optional<std::vector<uint64>> ListGroups() = 0;
 
+		/// Loads group data by id.
 		virtual std::optional<GroupData> LoadGroup(uint64 groupId) = 0;
 
+		/// Gets a character name by id.
 		virtual std::optional<String> GetCharacterNameById(uint64 characterId) = 0;
 
+		/// Creates a new guild with the given members and ranks.
 		virtual void CreateGuild(uint64 id, String name, uint64 leaderGuid, const std::vector<GuildRank>& ranks, const std::vector<GuildMember>& member) = 0;
 
+		/// Adds a member to a guild.
 		virtual void AddGuildMember(uint64 guildId, uint64 memberGuid, uint32 rank) = 0;
 
+		/// Removes a member from a guild.
 		virtual void RemoveGuildMember(uint64 guildId, uint64 memberGuid) = 0;
 
+		/// Disbands a guild.
 		virtual void DisbandGuild(uint64 guildId) = 0;
 
+		/// Sets a guild member's rank.
 		virtual void SetGuildMemberRank(uint64 guildId, uint64 memberGuid, uint32 rank) = 0;
 
 		/// Adds a friend relationship between two characters.

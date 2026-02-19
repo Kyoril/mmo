@@ -56,15 +56,21 @@ namespace mmo
 		for (auto& param : m_parent->GetScalarParameters())
 		{
 			m_scalarParameters.push_back(param);
+			m_bufferDataDirty[0] = true;
+			m_bufferLayoutDirty[0] = true;
 		}
 		for (auto& param : m_parent->GetVectorParameters())
 		{
 			m_vectorParameters.push_back(param);
+			m_bufferDataDirty[1] = true;
+			m_bufferLayoutDirty[1] = true;
 		}
 		for (auto& param : m_parent->GetTextureParameters())
 		{
 			m_textureParameters.push_back(param);
 			m_textureParamTextures[param.name] = TextureManager::Get().CreateOrRetrieve(param.texture);
+			m_bufferDataDirty[2] = true;
+			m_bufferLayoutDirty[2] = true;
 		}
 
 		// Refresh base values from parent material if this is the first reference to a parent material
@@ -176,6 +182,7 @@ namespace mmo
 
 		if (pixelShaderType != PixelShaderType::ShadowMap)
 		{
+			device.SetDepthEnabled(m_depthTest);
 			device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
 			device.SetDepthWriteEnabled(m_depthWrite);
 		}
@@ -186,7 +193,14 @@ namespace mmo
 			device.SetDepthTestComparison(DepthTestMethod::LessEqual);
 		}
 
-		if (m_type == MaterialType::Translucent || m_type == MaterialType::Masked)
+		// G-Buffer pass must always use opaque blending - the G-Buffer stores material
+		// properties (normals, roughness, depth) that are meaningless when alpha-blended.
+		// Opacity masking is handled by shader discard.
+		if (pixelShaderType == PixelShaderType::GBuffer || pixelShaderType == PixelShaderType::ShadowMap)
+		{
+			device.SetBlendMode(BlendMode::Opaque);
+		}
+		else if (m_type == MaterialType::Translucent || m_type == MaterialType::UserInterface)
 		{
 			device.SetBlendMode(BlendMode::Alpha);
 		}

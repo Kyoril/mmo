@@ -52,7 +52,8 @@ namespace mmo
 		enum Type
 		{
 			Invite,
-			Leave
+			Leave,
+			Disband
 		};
 	}
 

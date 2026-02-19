@@ -1146,6 +1146,43 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult Player::OnGroupLeave(game::IncomingPacket& packet)
+	{
+		if (!m_group)
+		{
+			SendPartyOperationResult(party_operation::Leave, party_result::YouNotInGroup, "");
+			WLOG("Player tried to leave group without being in a group");
+			return PacketParseResult::Pass;
+		}
+
+		DLOG("Player wants to leave group");
+		m_group->RemoveMember(m_characterData->characterId);
+		m_group.reset();
+		
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnGroupDisband(game::IncomingPacket& packet)
+	{
+		if (!m_group)
+		{
+			SendPartyOperationResult(party_operation::Disband, party_result::YouNotInGroup, "");
+			WLOG("Player tried to disband group without being in a group");
+			return PacketParseResult::Pass;
+		}
+
+		if (m_group->GetLeader() != m_characterData->characterId)
+		{
+			SendPartyOperationResult(party_operation::Disband, party_result::YouNotLeader, "");
+			WLOG("Player tried to disband group without being the leader");
+			return PacketParseResult::Pass;
+		}
+
+		m_group->Disband(false);
+
+		return PacketParseResult::Pass;
+	}
+
 	PacketParseResult Player::OnLogoutRequest(game::IncomingPacket &packet)
 	{
 		if (!m_characterData)
@@ -2303,6 +2340,8 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::GroupAccept, *this, &Player::OnGroupAccept);
 			RegisterPacketHandler(game::client_realm_packet::GroupDecline, *this, &Player::OnGroupDecline);
 			RegisterPacketHandler(game::client_realm_packet::LogoutRequest, *this, &Player::OnLogoutRequest);
+			RegisterPacketHandler(game::client_realm_packet::GroupLeave, *this, &Player::OnGroupLeave);
+			RegisterPacketHandler(game::client_realm_packet::GroupDisband, *this, &Player::OnGroupDisband);
 
 #if MMO_WITH_DEV_COMMANDS
 			RegisterPacketHandler(game::client_realm_packet::CheatTeleportToPlayer, *this, &Player::OnCheatTeleportToPlayer);
@@ -2819,6 +2858,25 @@ namespace mmo
 		info.extraflags = itemEntry->extraflags();
 		info.startquestid = itemEntry->questentry();
 		info.skill = itemEntry->skill();
+
+		// Set required proficiency - check item first, then fall back to subclass
+		if (itemEntry->has_requiredproficiency() && itemEntry->requiredproficiency() > 0)
+		{
+			info.requiredProficiency = itemEntry->requiredproficiency();
+		}
+		else
+		{
+			// Look up subclass to get required proficiency
+			const auto* subclass = m_project.itemSubclasses.getById(itemEntry->subclass());
+			if (subclass && subclass->has_requiredproficiency())
+			{
+				info.requiredProficiency = subclass->requiredproficiency();
+			}
+			else
+			{
+				info.requiredProficiency = 0;
+			}
+		}
 
 		m_connection->sendSinglePacket([entry, &info](game::OutgoingPacket &packet)
 									   {

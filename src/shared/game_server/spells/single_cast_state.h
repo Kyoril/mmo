@@ -5,14 +5,13 @@
 #include "base/typedefs.h"
 
 #include <map>
+#include <unordered_set>
 
 #include "game_server/spells/aura_container.h"
 #include "game_server/objects/game_unit_s.h"
 #include "game_server/spells/spell_cast.h"
-#include "game_server/world/tile_subscriber.h"
-#include "binary_io/vector_sink.h"
-#include "game_protocol/game_protocol.h"
-#include "game_server/world/each_tile_in_sight.h"
+#include "game_server/spells/spell_cast_context.h"
+#include "game_server/spells/spell_target_resolver.h"
 #include "game/spell.h"
 
 namespace mmo
@@ -60,6 +59,15 @@ namespace mmo
 
 	private:
 		bool Validate();
+		bool ValidatePlayerRequirements();
+		bool ValidateCasterRequirements();
+		bool ValidateTargetRequirements(GameUnitS* unitTarget);
+		[[nodiscard]] bool ShouldStartCooldownOnCastStart() const;
+		[[nodiscard]] bool UsesGlobalCooldown() const;
+		void NotifyCastEnded(bool succeeded);
+		void EndChanneling(bool succeeded);
+		GameUnitS* ResolveUnitTarget() const;
+		void ConnectTargetSignals(GameUnitS* unitTarget);
 
 		template<class T>
 		bool HasAttributes(uint32 index, T attributes)
@@ -68,70 +76,6 @@ namespace mmo
 		}
 
 		std::shared_ptr<GameUnitS> GetEffectUnitTarget(const proto::SpellEffect& effect);
-
-	public:
-		template <class T>
-		void SendPacketFromCaster(GameUnitS& caster, T generator)
-		{
-			const auto* worldInstance = caster.GetWorldInstance();
-			if (!worldInstance)
-			{
-				return;
-			}
-
-			TileIndex2D tileIndex;
-			worldInstance->GetGrid().GetTilePosition(caster.GetPosition(), tileIndex[0], tileIndex[1]);
-
-			std::vector<char> buffer;
-			io::VectorSink sink(buffer);
-			game::Protocol::OutgoingPacket packet(sink);
-			generator(packet);
-
-			ForEachSubscriberInSight(
-				worldInstance->GetGrid(),
-				tileIndex,
-				[&buffer, &packet](TileSubscriber& subscriber)
-				{
-					subscriber.SendPacket(
-						packet,
-						buffer
-					);
-				});
-		}
-
-		template <class T>
-		void SendPacketToCaster(GameUnitS& caster, T generator)
-		{
-			const auto* worldInstance = caster.GetWorldInstance();
-			if (!worldInstance)
-			{
-				return;
-			}
-
-			TileIndex2D tileIndex;
-			worldInstance->GetGrid().GetTilePosition(caster.GetPosition(), tileIndex[0], tileIndex[1]);
-
-			std::vector<char> buffer;
-			io::VectorSink sink(buffer);
-			game::Protocol::OutgoingPacket packet(sink);
-			generator(packet);
-
-			ForEachSubscriberInSight(
-				worldInstance->GetGrid(),
-				tileIndex,
-				[&buffer, &packet, &caster](TileSubscriber& subscriber)
-				{
-					if (&subscriber.GetGameUnit() == &caster)
-					{
-						subscriber.SendPacket(
-							packet,
-							buffer
-						);
-					}
-				});
-		}
-
-	public:
 
 		/// Determines if this spell is a channeled spell.
 		bool IsChanneled() const { return m_spell.attributes(0) & spell_attributes::Channeled; }
@@ -144,9 +88,14 @@ namespace mmo
 
 		bool ConsumePower();
 
+		/// @brief Calculates the final cooldown for this spell after applying spell mods.
+		/// @return The final cooldown in milliseconds, or 0 if no cooldown.
+		GameTime CalculateFinalCooldown() const;
+
 		void ApplyCooldown(GameTime cooldownTimeMs, GameTime categoryCooldownTimeMs);
 
 		void ApplyAllEffects();
+		void ApplyEffect(const proto::SpellEffect& effect);
 
 		int32 CalculateEffectBasePoints(const proto::SpellEffect& effect);
 
@@ -159,6 +108,7 @@ namespace mmo
 		void SpellEffectInstantKill(const proto::SpellEffect& effect);
 		void SpellEffectDummy(const proto::SpellEffect& effect);
 		void SpellEffectSchoolDamage(const proto::SpellEffect& effect);
+		void SpellEffectEnvironmentalDamage(const proto::SpellEffect& effect);
 		void SpellEffectTeleportUnits(const proto::SpellEffect& effect);
 		void SpellEffectApplyAura(const proto::SpellEffect& effect);
 		void SpellEffectPersistentAreaAura(const proto::SpellEffect& effect);
@@ -205,6 +155,7 @@ namespace mmo
 
 	private:
 		bool GetEffectTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets);
+		void MarkAffectedTarget(GameObjectS& target);
 
 	private:
 		void InternalSpellEffectWeaponDamage(const proto::SpellEffect& effect, SpellSchool school);
@@ -222,7 +173,7 @@ namespace mmo
 		Countdown m_countdown;
 		Countdown m_impactCountdown;
 		signal<void()> completedEffects;
-		std::unordered_map<uint64, scoped_connection> m_completedEffectsExecution;
+		scoped_connection m_completedEffectsExecution;
 		scoped_connection m_onTargetDied;
 		scoped_connection m_onTargetRemoved, m_damaged;
 		scoped_connection m_onThreatened;
@@ -235,7 +186,8 @@ namespace mmo
 		Vector3 m_projectileOrigin, m_projectileDest;
 		bool m_connectedMeleeSignal;
 		uint32 m_delayCounter;
-		std::set<std::weak_ptr<GameObjectS>, std::owner_less<std::weak_ptr<GameObjectS>>> m_affectedTargets;
+		std::unordered_set<uint64> m_affectedTargetGuids;
+		std::vector<GameObjectS*> m_effectTargetsScratch;
 		bool m_tookCastItem { false };
 		bool m_tookReagents { false };
 		uint32 m_attackerProc;
@@ -245,6 +197,10 @@ namespace mmo
 		std::vector<uint64> m_dynObjectsToDespawn;
 		bool m_instantsCast, m_delayedCast;
 		scoped_connection m_onChannelAuraRemoved;
+		bool m_cooldownStartedOnCastStart { false };
+		GameTime m_cooldownStartedAtCastStartMs { 0 };
+		bool m_endNotified { false };
+		std::shared_ptr<SingleCastState> m_selfHold;
 
 		void SendEndCast(SpellCastResult result);
 		void OnCastFinished();
@@ -255,7 +211,9 @@ namespace mmo
 
 		std::map<GameUnitS*, std::unique_ptr<AuraContainer>> m_targetAuraContainers;
 		uint64 m_itemGuid;
+		SpellCastContext m_context;
+		SpellTargetResolver m_targetResolver;
 
-		typedef std::function<void(const proto::SpellEffect&)> EffectHandler;
+		using EffectHandler = void (SingleCastState::*)(const proto::SpellEffect&);
 	};
 }

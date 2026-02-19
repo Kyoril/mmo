@@ -48,7 +48,7 @@ namespace mmo
         AABB GetWorldBounds() const;
         
         // World vertices access
-        const std::vector<Vector3>& GetWorldVertices();
+        const std::vector<Vector3>& GetWorldVertices() const;
         
         // State
         void SetActive(bool active) 

@@ -24,6 +24,7 @@ namespace mmo
 	class QuestClient;
 	class TrainerClient;
 	class SpellCast;
+	class CooldownManager;
 	class ActionBar;
 	struct ItemInfo;
 	class VendorClient;
@@ -66,6 +67,7 @@ namespace mmo
 			const proto_client::Project& project,
 			ActionBar& actionBar,
 			SpellCast& spellCast,
+			CooldownManager& cooldownManager,
 			TrainerClient& trainerClient,
 			QuestClient& questClient,
 			IAudio& audio,
@@ -153,6 +155,8 @@ namespace mmo
 		ActionBar& m_actionBar;
 
 		SpellCast& m_spellCast;
+
+		CooldownManager& m_cooldownManager;
 
 		TrainerClient& m_trainerClient;
 

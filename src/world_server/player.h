@@ -38,6 +38,7 @@ namespace mmo
 	class Player final : public TileSubscriber, public NetUnitWatcherS, public NetPlayerWatcher, public std::enable_shared_from_this<Player>
 	{
 	public:
+		/// Creates a player connection proxy for a world node.
 		explicit Player(PlayerManager& manager, RealmConnector& realmConnector, std::shared_ptr<GamePlayerS> characterObject,
 		                CharacterData characterData, const proto::Project& project, WorldInstance& instance, ConditionMgr& conditionMgr);
 		~Player() override;
@@ -63,6 +64,7 @@ namespace mmo
 		/// @copydoc TileSubscriber::GetGameUnit
 		GameUnitS& GetGameUnit() const override { return *m_character; }
 
+		/// Notifies the client about updated objects.
 		void NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects) override;
 
 		/// @copydoc TileSubscriber::NotifyObjectsSpawned
@@ -74,22 +76,31 @@ namespace mmo
 		/// @copydoc TileSubscriber::SendPacket
 		void SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer, bool flush = true) override;
 
+		/// Handles a proxy packet received from the realm server.
 		void HandleProxyPacket(game::client_realm_packet::Type opCode, std::vector<uint8>& buffer);
 
+		/// Sends a local chat message to the client.
 		void LocalChatMessage(ChatType type, const std::string& message);
 
+		/// Persists current character data to the database.
 		void SaveCharacterData() const;
 
+		/// Opens the loot dialog for a loot instance.
 		void OpenLootDialog(std::shared_ptr<LootInstance> lootInstance, std::shared_ptr<GameObjectS> source);
 
+		/// Closes the currently open loot dialog.
 		void CloseLootDialog();
 
+		/// Returns true if the player is currently looting.
 		bool IsLooting() const;
 
+		/// Notifies the client that an item was created in a slot.
 		void OnItemCreated(std::shared_ptr<GameItemS> item, uint16 slot);
 
+		/// Notifies the client that an item was updated in a slot.
 		void OnItemUpdated(std::shared_ptr<GameItemS> item, uint16 slot);
 
+		/// Notifies the client that an item was destroyed in a slot.
 		void OnItemDestroyed(std::shared_ptr<GameItemS> item, uint16 slot);
 		
 		/// @brief Sends the current game time information to the client.
@@ -99,11 +110,14 @@ namespace mmo
 		/// @param error The inventory error code to send.
 		void SendInventoryError(InventoryChangeFailure error) const;
 
+		/// Sends a group update to the realm server for this character.
 		void UpdateCharacterGroup(uint64 groupId);
 
+		/// Sends a guild update to the realm server for this character.
 		void UpdateCharacterGuild(uint64 guildId);
 
 	public:
+		/// Gets the current tile index for the character.
 		TileIndex2D GetTileIndex() const;
 
 	private:
@@ -141,6 +155,11 @@ namespace mmo
 		/// @param repo The inventory repository instance.
 		void SetInventoryRepository(std::shared_ptr<IInventoryRepository> repo);
 
+		/// @brief Sets the fall damage configuration values.
+		/// @param minHeight Minimum fall distance in meters before fall damage starts.
+		/// @param lethalHeight Fall distance in meters at which fall damage becomes lethal.
+		void SetFallDamageConfig(float minHeight, float lethalHeight);
+
 	private:
 		// Client Network Handlers, Implemented in player.cpp
 
@@ -167,6 +186,12 @@ namespace mmo
 		///	@param size The size of the packet content in bytes, excluding the packet header.
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnCancelCast(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's request to cancel an active aura on the character.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnCancelAura(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		/// Handles the client's request to start auto attacking a target.
 		///	@param opCode The op code of the packet.
@@ -450,6 +475,8 @@ namespace mmo
 
 		void OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags) override;
 
+		void OnEnvironmentalDamageLog(uint64 targetGuid, uint32 amount, EnvironmentalDamageType type) override;
+
 		void OnSpeedChangeApplied(MovementType type, float speed, uint32 ackId) override;
 
 		void OnTeleport(uint32 mapId, const Vector3& position, const Radian& facing) override;
@@ -473,9 +500,7 @@ namespace mmo
 
 		void OnRootChanged(bool applied, uint32 ackId) override;
 
-		void OnWeaponProficiencyChanged(uint32 weaponProficiency) override;
-
-		void OnArmorProficiencyChanged(uint32 armorProficiency) override;
+		void OnProficiencyChanged(uint32 proficiencyId, bool added) override;
 
 	private:
 		PlayerManager& m_manager;
@@ -488,6 +513,22 @@ namespace mmo
 		AttackSwingEvent m_lastAttackSwingEvent{ attack_swing_event::Unknown };
 		std::shared_ptr<LootInstance> m_loot{ nullptr };
 		std::shared_ptr<GameObjectS> m_lootSource{ nullptr };
+
+		/// @brief The Y position when the player started falling (for fall damage calculation).
+		float m_fallStartHeight{ 0.0f };
+
+		/// @brief Whether the player is currently tracking a fall (started via MoveJump).
+		bool m_trackingFall{ false };
+
+		/// @brief Whether the player may transition into falling state without a jump packet.
+		/// Set after teleport or spawn so that air-spawned falls pass the anti-cheat check.
+		bool m_pendingFallStart{ false };
+
+		/// @brief Minimum fall distance in meters before fall damage starts being applied.
+		float m_fallDamageMinHeight{ 5.0f };
+
+		/// @brief Fall distance in meters at which fall damage becomes lethal (100% of max HP).
+		float m_fallDamageLethalHeight{ 40.0f };
 
 		scoped_connection_container m_lootSignals;
 		scoped_connection m_onLootSourceDespawned;

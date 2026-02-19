@@ -15,14 +15,9 @@ namespace mmo
 		return m_player.GetLevel();
 	}
 
-	uint32 PlayerValidatorAdapter::GetWeaponProficiency() const noexcept
+	bool PlayerValidatorAdapter::HasProficiency(uint32 proficiencyId) const noexcept
 	{
-		return m_player.GetWeaponProficiency();
-	}
-
-	uint32 PlayerValidatorAdapter::GetArmorProficiency() const noexcept
-	{
-		return m_player.GetArmorProficiency();
+		return m_player.HasProficiency(proficiencyId);
 	}
 
 	bool PlayerValidatorAdapter::IsAlive() const noexcept

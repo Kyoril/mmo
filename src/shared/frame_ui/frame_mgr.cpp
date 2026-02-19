@@ -375,6 +375,14 @@ namespace mmo
 		LUABIND_MODULE(luaState,
 			luabind::def("Localize", &LuaLocalize),
 			luabind::def("getglobal", &FrameManager::GetGlobal),
+			luabind::def<std::function<Point()>>("GetCursorPosition", []()
+			{
+				// Convert screen coordinates to native resolution coordinates
+				// so the position can be used directly with anchor offsets
+				const Point mousePos = FrameManager::Get().GetMousePosition();
+				const Point uiScale = FrameManager::Get().GetUIScale();
+				return Point(mousePos.x / uiScale.x, mousePos.y / uiScale.y);
+			}),
 
 			luabind::scope(
 				luabind::class_<AnchorPoint>("AnchorPoint")
@@ -702,6 +710,7 @@ namespace mmo
 		m_inputCapture = nullptr;
 		m_mouseDownFrames.clear();
 		m_framesByName.clear();
+		m_pressedKeys.clear();
 		m_inputCapture.reset();
 
 		m_topFrame.reset();
@@ -797,8 +806,10 @@ namespace mmo
 		}
 	}
 
-	void FrameManager::NotifyMouseDown(MouseButton button, const Point & position)
+	bool FrameManager::NotifyMouseDown(MouseButton button, const Point & position)
 	{
+		bool consumed = false;
+		
 		// Only works if we have a top frame
 		if (m_topFrame != nullptr)
 		{
@@ -816,14 +827,18 @@ namespace mmo
 				{
 					m_mouseDownFrames[button] = clickableFrame->shared_from_this();
 					m_pressedButtons |= static_cast<int32>(button);
-					clickableFrame->OnMouseDown(button, m_pressedButtons, position);
+					consumed = clickableFrame->OnMouseDown(button, m_pressedButtons, position);
 				}
 			}
 		}
+		
+		return consumed;
 	}
 
-	void FrameManager::NotifyMouseUp(MouseButton button, const Point & position)
+	bool FrameManager::NotifyMouseUp(MouseButton button, const Point & position)
 	{
+		bool consumed = false;
+		
 		// For mouse button up, we want to notify the same frame that received the corresponding
 		// MouseDown event, even if the new position doesn't hit the old frame. This is done so
 		// that the old frame can correctly update it's state.
@@ -833,7 +848,7 @@ namespace mmo
 			m_pressedButtons &= ~static_cast<int32>(button);
 			if (it->second)
 			{
-				it->second->OnMouseUp(button, m_pressedButtons, position);
+				consumed = it->second->OnMouseUp(button, m_pressedButtons, position);
 
 				if (button == Left && it->second->IsHovered() && !it->second->GetAbsoluteFrameRect().IsPointInRect(position))
 				{
@@ -843,10 +858,14 @@ namespace mmo
 				m_mouseDownFrames.erase(it);
 			}
 		}
+		
+		return consumed;
 	}
 
 	void FrameManager::NotifyKeyDown(Key key)
 	{
+		m_pressedKeys.insert(key);
+
 		// We need an active input capture to handle key down events
 		if (!m_inputCapture)
 		{
@@ -871,6 +890,8 @@ namespace mmo
 
 	void FrameManager::NotifyKeyUp(Key key)
 	{
+		m_pressedKeys.erase(key);
+
 		// We need an active input capture to handle key up events
 		if (!m_inputCapture)
 		{
@@ -879,6 +900,11 @@ namespace mmo
 
 		// Forward the event
 		m_inputCapture->OnKeyUp(key);
+	}
+
+	bool FrameManager::IsKeyDown(Key key) const
+	{
+		return m_pressedKeys.find(key) != m_pressedKeys.end();
 	}
 
 	void FrameManager::NotifyScreenSizeChanged(float width, float height)

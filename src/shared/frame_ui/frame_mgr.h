@@ -14,6 +14,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <unordered_set>
 
 extern "C"
 {
@@ -116,14 +117,19 @@ namespace mmo
 		/// Gets the frame that is currently capturing input events.
 		inline FramePtr GetCaptureFrame() const { return m_inputCapture; }
 
+		/// Gets the current mouse cursor position.
+		inline Point GetMousePosition() const { return m_mousePos; }
+
 		/// Notifies the FrameManager that the mouse cursor has been moved.
 		void NotifyMouseMoved(const Point& position);
 
 		/// Notifies the FrameManager that a mouse button was pressed.
-		void NotifyMouseDown(MouseButton button, const Point& position);
+		/// @return True if the event was consumed by the UI, false otherwise.
+		bool NotifyMouseDown(MouseButton button, const Point& position);
 
 		/// Notifies the FrameManager that a mouse button was released.
-		void NotifyMouseUp(MouseButton button, const Point& position);
+		/// @return True if the event was consumed by the UI, false otherwise.
+		bool NotifyMouseUp(MouseButton button, const Point& position);
 
 		/// Notifies the FrameManager that a key has been pressed.
 		void NotifyKeyDown(Key key);
@@ -133,6 +139,9 @@ namespace mmo
 
 		/// Notifies the FrameManager that a key has been released.
 		void NotifyKeyUp(Key key);
+
+		/// Determines whether a key is currently pressed.
+		bool IsKeyDown(Key key) const;
 
 		void NotifyScreenSizeChanged(float width, float height);
 
@@ -236,5 +245,8 @@ namespace mmo
 		Size m_cursorIconSize{ 32.0f, 32.0f };
 
 		GeometryBuffer m_cursorIconBuffer;
+
+		/// Set of currently pressed keys to support modifier-aware controls.
+		std::unordered_set<Key> m_pressedKeys;
 	};
 }

@@ -19,7 +19,11 @@
 namespace mmo
 {
 	// Forward declarations
-	namespace proto { class ItemEntry; }
+	namespace proto
+	{
+		class ItemEntry;
+		class Project;
+	}
 	class GameItemS;
 
 	/**
@@ -39,16 +43,17 @@ namespace mmo
 		virtual uint32 GetLevel() const noexcept = 0;
 
 		/**
-		 * @brief Gets the player's weapon proficiency flags.
-		 * @return Bitfield of weapon proficiencies.
+		 * @brief Checks if the player has a specific proficiency.
+		 * @param proficiencyId The proficiency ID to check.
+		 * @return true if the player has the proficiency, false otherwise.
 		 */
-		virtual uint32 GetWeaponProficiency() const noexcept = 0;
+		virtual bool HasProficiency(uint32 proficiencyId) const noexcept = 0;
 
 		/**
-		 * @brief Gets the player's armor proficiency flags.
-		 * @return Bitfield of armor proficiencies.
+		 * @brief Gets the project for data lookups.
+		 * @return Reference to the project.
 		 */
-		virtual uint32 GetArmorProficiency() const noexcept = 0;
+		virtual const proto::Project& GetProject() const noexcept = 0;
 
 		/**
 		 * @brief Checks if the player can dual wield weapons.

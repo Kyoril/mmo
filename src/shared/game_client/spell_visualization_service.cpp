@@ -6,6 +6,8 @@
 #include "log/default_log_levels.h"
 #include "scene_graph/animation_state.h"
 
+#include <algorithm>
+
 namespace mmo
 {
     SpellVisualizationService& SpellVisualizationService::Get()
@@ -114,8 +116,8 @@ namespace mmo
                 m_activeSpellAnimations.erase(animIt);
             }
             
-            // Stop any looped sound for this caster
-            StopLoopedSoundForActor(caster->GetGuid());
+            // Fade out any looped sound for this caster (smooth transition)
+            FadeOutLoopedSoundForActor(caster->GetGuid());
             
             // Remove tints for this spell on the caster
             RemoveTintFromActor(*caster, spell.id());
@@ -176,12 +178,8 @@ namespace mmo
                 if (isLooped)
                 {
                     const uint64 guid = actor.GetGuid();
-                    // Stop any existing looped sound for this actor (only one loop per actor at a time)
-                    auto it = m_loopedSounds.find(guid);
-                    if (it != m_loopedSounds.end() && it->second.audioHandle != InvalidChannel)
-                    {
-                        m_audioPlayer->StopSound(&it->second.audioHandle);
-                    }
+                    // Fade out any existing looped sound for this actor (only one loop per actor at a time)
+                    FadeOutLoopedSoundForActor(guid);
                     
                     // Create looped 3D sound
                     SoundIndex soundIdx = m_audioPlayer->FindSound(snd, SoundType::SoundLooped3D);
@@ -196,6 +194,12 @@ namespace mmo
                         m_audioPlayer->PlaySound(soundIdx, &channel);
                         if (channel != InvalidChannel)
                         {
+                            // Start at zero volume for fade-in
+                            if (IChannelInstance* channelInstance = m_audioPlayer->GetChannelInstance(channel))
+                            {
+                                channelInstance->SetVolume(0.0f);
+                            }
+                            
                             // Set 3D position for the sound
                             m_audioPlayer->Set3DPosition(channel, actorPosition);
                             
@@ -206,6 +210,9 @@ namespace mmo
                             loopHandle.audioHandle = channel;
                             loopHandle.spellId = vis.id();
                             loopHandle.event = Event::Casting;
+                            loopHandle.currentVolume = 0.0f;
+                            loopHandle.targetVolume = 1.0f;
+                            loopHandle.fadeSpeed = 3.0f; // Fade in over ~0.33 seconds
                             m_loopedSounds[guid] = loopHandle;
                         }
                     }
@@ -224,11 +231,26 @@ namespace mmo
                         m_audioPlayer->PlaySound(soundIdx, &channel);
                         if (channel != InvalidChannel)
                         {
+                            // Start at zero volume for fade-in
+                            if (IChannelInstance* channelInstance = m_audioPlayer->GetChannelInstance(channel))
+                            {
+                                channelInstance->SetVolume(0.0f);
+                            }
+                            
                             // Set 3D position for the sound
                             m_audioPlayer->Set3DPosition(channel, actorPosition);
                             
                             // Set reasonable attenuation distance (5 units min, 30 units max)
                             m_audioPlayer->Set3DMinMaxDistance(channel, 5.0f, 30.0f);
+                            
+                            // Track for fade-in
+                            FadingSound fadingSound;
+                            fadingSound.channel = channel;
+                            fadingSound.currentVolume = 0.0f;
+                            fadingSound.targetVolume = 1.0f;
+                            fadingSound.fadeSpeed = 3.0f; // Fade in over ~0.33 seconds
+                            fadingSound.markedForRemoval = false;
+                            m_fadingSounds.push_back(fadingSound);
                         }
                     }
                 }
@@ -313,6 +335,137 @@ namespace mmo
             }
             m_loopedSounds.erase(it);
         }
+    }
+
+    void SpellVisualizationService::FadeOutLoopedSoundForActor(uint64 actorGuid)
+    {
+        auto it = m_loopedSounds.find(actorGuid);
+        if (it != m_loopedSounds.end())
+        {
+            // Move the looped sound to the fading sounds list so it can fade out
+            // while a new sound can be added for this actor
+            if (it->second.audioHandle != InvalidChannel)
+            {
+                FadingSound fadingSound;
+                fadingSound.channel = it->second.audioHandle;
+                fadingSound.currentVolume = it->second.currentVolume;
+                fadingSound.targetVolume = 0.0f;
+                fadingSound.fadeSpeed = 2.0f; // Fade out over ~0.5 seconds
+                fadingSound.markedForRemoval = false;
+                m_fadingSounds.push_back(fadingSound);
+            }
+            
+            // Remove from the looped sounds map so a new looped sound can be added
+            m_loopedSounds.erase(it);
+        }
+    }
+
+    void SpellVisualizationService::Update(float deltaTime)
+    {
+        if (!m_audioPlayer)
+        {
+            return;
+        }
+
+        // Update looped sounds fading
+        for (auto it = m_loopedSounds.begin(); it != m_loopedSounds.end(); )
+        {
+            LoopedSoundHandle& handle = it->second;
+            
+            if (handle.audioHandle == InvalidChannel)
+            {
+                it = m_loopedSounds.erase(it);
+                continue;
+            }
+
+            IChannelInstance* channelInstance = m_audioPlayer->GetChannelInstance(handle.audioHandle);
+            if (!channelInstance)
+            {
+                it = m_loopedSounds.erase(it);
+                continue;
+            }
+
+            // Lerp volume toward target
+            if (handle.currentVolume < handle.targetVolume)
+            {
+                handle.currentVolume += handle.fadeSpeed * deltaTime;
+                if (handle.currentVolume >= handle.targetVolume)
+                {
+                    handle.currentVolume = handle.targetVolume;
+                }
+            }
+            else if (handle.currentVolume > handle.targetVolume)
+            {
+                handle.currentVolume -= handle.fadeSpeed * deltaTime;
+                if (handle.currentVolume <= handle.targetVolume)
+                {
+                    handle.currentVolume = handle.targetVolume;
+                }
+            }
+
+            channelInstance->SetVolume(handle.currentVolume);
+
+            // If faded out completely, stop the sound and remove
+            if (handle.currentVolume <= 0.0f && handle.targetVolume <= 0.0f)
+            {
+                m_audioPlayer->StopSound(&handle.audioHandle);
+                it = m_loopedSounds.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+
+        // Update one-shot sounds fading
+        for (auto& fadingSound : m_fadingSounds)
+        {
+            if (fadingSound.channel == InvalidChannel)
+            {
+                fadingSound.markedForRemoval = true;
+                continue;
+            }
+
+            IChannelInstance* channelInstance = m_audioPlayer->GetChannelInstance(fadingSound.channel);
+            if (!channelInstance)
+            {
+                fadingSound.markedForRemoval = true;
+                continue;
+            }
+
+            // Lerp volume toward target
+            if (fadingSound.currentVolume < fadingSound.targetVolume)
+            {
+                fadingSound.currentVolume += fadingSound.fadeSpeed * deltaTime;
+                if (fadingSound.currentVolume >= fadingSound.targetVolume)
+                {
+                    fadingSound.currentVolume = fadingSound.targetVolume;
+                }
+            }
+            else if (fadingSound.currentVolume > fadingSound.targetVolume)
+            {
+                fadingSound.currentVolume -= fadingSound.fadeSpeed * deltaTime;
+                if (fadingSound.currentVolume <= fadingSound.targetVolume)
+                {
+                    fadingSound.currentVolume = fadingSound.targetVolume;
+                }
+            }
+
+            channelInstance->SetVolume(fadingSound.currentVolume);
+
+            // If faded out completely, stop the sound and mark for removal
+            if (fadingSound.currentVolume <= 0.0f && fadingSound.targetVolume <= 0.0f)
+            {
+                m_audioPlayer->StopSound(&fadingSound.channel);
+                fadingSound.markedForRemoval = true;
+            }
+        }
+
+        // Remove sounds that are done
+        m_fadingSounds.erase(
+            std::remove_if(m_fadingSounds.begin(), m_fadingSounds.end(),
+                [](const FadingSound& fs) { return fs.markedForRemoval; }),
+            m_fadingSounds.end());
     }
 
     void SpellVisualizationService::ApplyTintToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId)

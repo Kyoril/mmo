@@ -15,6 +15,8 @@ namespace mmo
             Liquid = 1 << 2,
 
             Entity = 1 << 3,
+
+            WorldModel = 1 << 4,
         };
     }
 }

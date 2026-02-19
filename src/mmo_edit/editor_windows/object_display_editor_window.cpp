@@ -1,11 +1,13 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "object_display_editor_window.h"
+#include "editor_imgui_helpers.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
+#include "asset_picker_widget.h"
 #include "assets/asset_registry.h"
 #include "graphics/texture_mgr.h"
 #include "log/default_log_levels.h"
@@ -31,13 +33,15 @@ namespace mmo
 
 	void ObjectDisplayEditorWindow::DrawDetailsImpl(EntryType& currentEntry)
 	{
-		if (ImGui::Button("Duplicate Display Data"))
+		if (DrawPrimaryButton("Duplicate Display Data", ImVec2(180.0f, 0.0f)))
 		{
 			proto::ObjectDisplayEntry* copied = m_project.objectDisplays.add();
 			const uint32 newId = copied->id();
 			copied->CopyFrom(currentEntry);
 			copied->set_id(newId);
 		}
+		ImGui::SameLine();
+		DrawHelpMarker("Creates a full copy of this object display with a new id");
 
 #define SLIDER_UNSIGNED_PROP(name, label, datasize, min, max) \
 	{ \
@@ -102,7 +106,7 @@ namespace mmo
 #define SLIDER_UINT32_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 32, min, max)
 #define SLIDER_UINT64_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 64, min, max)
 
-		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Basic", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			if (ImGui::BeginTable("table", 2, ImGuiTableFlags_None))
 			{
@@ -123,22 +127,13 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Appearance", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Appearance", ImGuiTreeNodeFlags_DefaultOpen))
 		{
+			static const std::set<String> meshExtensions = { ".hmsh" };
 			String filename = currentEntry.filename();
-			if (ImGui::InputText("Filename", &filename, ImGuiInputTextFlags_EnterReturnsTrue))
+			if (AssetPickerWidget::Draw("Mesh", filename, meshExtensions, nullptr, nullptr, 48.0f))
 			{
 				currentEntry.set_filename(filename);
-			}
-
-			// Add drag & drop support for hmsh files
-			if (ImGui::BeginDragDropTarget())
-			{
-				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
-				{
-					currentEntry.set_filename(*static_cast<String*>(payload->Data));
-				}
-				ImGui::EndDragDropTarget();
 			}
 
 			// Check if file exists

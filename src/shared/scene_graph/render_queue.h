@@ -30,6 +30,10 @@ namespace mmo
 		
 		/// The default render queue
 		Main = 50,
+
+		/// Terrain renders after Main so the depth buffer already contains
+		/// buildings and other occluders, enabling GPU occlusion culling.
+		TerrainGeometry = 55,
 		
         /// Penultimate queue (before overlays), used for skies if rendered last
 		SkiesLate = 95,

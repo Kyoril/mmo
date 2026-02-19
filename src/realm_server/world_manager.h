@@ -13,7 +13,7 @@ namespace mmo
 {
 	class World;
 
-	/// Manages all connected players.
+	/// Manages all connected world nodes.
 	class WorldManager final : public NonCopyable
 	{
 	public:
@@ -22,8 +22,8 @@ namespace mmo
 
 	public:
 
-		/// Initializes a new instance of the player manager class.
-		/// @param playerCapacity The maximum number of connections that can be connected at the same time.
+		/// Initializes a new instance of the world manager class.
+		/// @param playerCapacity The maximum number of world nodes that can be connected at the same time.
 		explicit WorldManager(
 		    size_t playerCapacity
 		);
@@ -32,20 +32,21 @@ namespace mmo
 
 	public:
 
-		/// Notifies the manager that a player has been disconnected which will
+		/// Notifies the manager that a world node has been disconnected which will
 		/// delete the world instance.
 		void WorldDisconnected(World &player);
 
-		/// Determines whether the player capacity limit has been reached.
+		/// Determines whether the world capacity limit has been reached.
 		bool HasCapacityBeenReached();
 
-		/// Adds a new player instance to the manager.
+		/// Adds a new world node instance to the manager.
 		void AddWorld(std::shared_ptr<World> added);
 
 		/// Tries to find a world node which is capable of hosting the given map id and, if provided,
 		///	is also hosting the given instance id.
 		std::shared_ptr<World> GetIdealWorldNode(MapId mapId, InstanceId instanceId);
 
+		/// Gets a world node by instance id.
 		std::shared_ptr<World> GetWorldByInstanceId(InstanceId instanceId);
 
 	private:

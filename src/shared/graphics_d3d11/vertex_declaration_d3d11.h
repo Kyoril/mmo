@@ -22,6 +22,9 @@ namespace mmo
 		ShaderToILayoutMap m_shaderToILayoutMap;
 		ShaderToInputDesc m_d3dElements;
 
+		/// Cached instanced input layouts, keyed by vertex shader pointer.
+		ShaderToILayoutMap m_instancedLayoutCache;
+
 	public:
 		VertexDeclarationD3D11(GraphicsDeviceD3D11& device);
 		~VertexDeclarationD3D11() override;

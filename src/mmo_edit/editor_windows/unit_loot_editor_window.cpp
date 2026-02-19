@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "unit_loot_editor_window.h"
+#include "editor_imgui_helpers.h"
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
@@ -105,7 +106,7 @@ namespace mmo
 		ImGui::TextColored(ImVec4(0.8f, 0.5f, 0.0f, 1.0f), "%d c", copper); \
 	}
 
-		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Basic", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			if (ImGui::BeginTable("table", 2, ImGuiTableFlags_None))
 			{
@@ -126,7 +127,7 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Money", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Money", ImGuiTreeNodeFlags_None))
 		{
 			SLIDER_UINT32_PROP(minmoney, "Min Money", 0, 1000000);
 			ImGui::SameLine();
@@ -138,7 +139,7 @@ namespace mmo
 
 		}
 
-		if (ImGui::CollapsingHeader("Groups", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Groups", ImGuiTreeNodeFlags_None))
 		{
 			if (ImGui::Button("Add Group"))
 			{
@@ -153,7 +154,7 @@ namespace mmo
 
 				ImGui::PushID(groupId);
 
-				if (ImGui::CollapsingHeader(("Group " + std::to_string(groupId)).c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+				if (const auto section = ScopedEditorSection(("Group " + std::to_string(groupId)).c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 				{
 					if (ImGui::Button("Add Item"))
 					{

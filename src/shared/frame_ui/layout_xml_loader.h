@@ -81,6 +81,8 @@ namespace mmo
 		void ElementScriptsEnd();
 		void ElementOnClickStart(const XmlAttributes& attributes);
 		void ElementOnClickEnd();
+		void ElementOnMouseDownStart(const XmlAttributes& attributes);
+		void ElementOnMouseDownEnd();
 		void ElementOnLoadStart(const XmlAttributes& attributes);
 		void ElementOnLoadEnd();
 		void ElementOnUpdateStart(const XmlAttributes& attributes);

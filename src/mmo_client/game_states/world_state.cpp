@@ -21,7 +21,9 @@
 
 #include "systems/action_bar.h"
 #include "systems/quest_client.h"
+#include "systems/cooldown_manager.h"
 #include "game_client/object_mgr.h"
+#include "game_common/projectile_target.h"
 #include "systems/trainer_client.h"
 #include "systems/vendor_client.h"
 #include "world_deserializer.h"
@@ -81,6 +83,8 @@ namespace mmo
 		static const char *s_toggleAxis = "ToggleAxis";
 		static const char *s_toggleGrid = "ToggleGrid";
 		static const char *s_toggleWire = "ToggleWire";
+		static const char *s_toggleTerrainLOD = "ToggleTerrainLOD";
+		static const char *s_toggleTerrainDebug = "ToggleTerrainDebug";
 		static const char *s_freezeCulling = "ToggleCullingFreeze";
 		static const char *s_reload = "reload";
 	}
@@ -98,6 +102,9 @@ namespace mmo
 
 		static ConsoleVar *s_foliageEnabledVar = nullptr;
 		static ConsoleVar *s_foliageDensityVar = nullptr;
+
+		static ConsoleVar *s_terrainLodEnabledVar = nullptr;
+		static ConsoleVar *s_terrainOcclusionCullingVar = nullptr;
 
 		String MapMouseButton(const MouseButton button)
 		{
@@ -199,9 +206,9 @@ namespace mmo
 	IInputControl *WorldState::s_inputControl = nullptr;
 
 	WorldState::WorldState(GameStateMgr &gameStateManager, RealmConnector &realmConnector, const proto_client::Project &project, TimerQueue &timers, LootClient &lootClient, VendorClient &vendorClient,
-						   ActionBar &actionBar, SpellCast &spellCast, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, PartyInfo &partyInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, ICacheProvider &cache, Discord &discord,
+						   ActionBar &actionBar, SpellCast &spellCast, CooldownManager &cooldownManager, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, PartyInfo &partyInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, ICacheProvider &cache, Discord &discord,
 						   GameTimeComponent &gameTime, TalentClient &talentClient, Minimap &minimap, InventoryClient &inventoryClient)
-		: GameState(gameStateManager), m_realmConnector(realmConnector), m_audio(audio), m_gameTime(gameTime), m_cache(cache), m_project(project), m_timers(timers), m_lootClient(lootClient), m_vendorClient(vendorClient), m_actionBar(actionBar), m_spellCast(spellCast), m_trainerClient(trainerClient), m_questClient(questClient), m_partyInfo(partyInfo), m_charSelect(charSelect), m_guildClient(guildClient), m_friendClient(friendClient), m_discord(discord), m_talentClient(talentClient), m_minimap(minimap), m_inventoryClient(inventoryClient)
+		: GameState(gameStateManager), m_realmConnector(realmConnector), m_audio(audio), m_gameTime(gameTime), m_cache(cache), m_project(project), m_timers(timers), m_lootClient(lootClient), m_vendorClient(vendorClient), m_actionBar(actionBar), m_spellCast(spellCast), m_cooldownManager(cooldownManager), m_trainerClient(trainerClient), m_questClient(questClient), m_partyInfo(partyInfo), m_charSelect(charSelect), m_guildClient(guildClient), m_friendClient(friendClient), m_discord(discord), m_talentClient(talentClient), m_minimap(minimap), m_inventoryClient(inventoryClient)
 	{
 		// TODO: Do we want to put these asset references in some sort of config setting or something?
 		ObjectMgr::SetUnitNameFontSettings(FontManager::Get().CreateOrRetrieve("Fonts/FRIZQT__.TTF", 24.0f, 1.0f), MaterialManager::Get().Load("Models/UnitNameFont.hmat"));
@@ -222,12 +229,16 @@ namespace mmo
 		m_projectileManager = std::make_unique<ProjectileManager>(*m_scene, &m_audio);
 
 		// Connect projectile impact signal to visualization service
-		m_projectileManager->projectileImpact.connect([](const proto_client::SpellEntry &spell, GameUnitC *target)
+		m_projectileManager->projectileImpact.connect([](const proto_client::SpellEntry &spell, IProjectileTarget *target)
 													  {
 				std::vector<GameUnitC*> targets;
 				if (target)
 				{
-					targets.push_back(target);
+					// Try to get the GameUnitC from the target's GUID
+					if (auto unit = ObjectMgr::Get<GameUnitC>(target->GetGuid()))
+					{
+						targets.push_back(unit.get());
+					}
 				}
 				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Impact, spell, nullptr, targets); });
 
@@ -598,6 +609,9 @@ namespace mmo
 			ObjectMgr::UpdateObjects(deltaSeconds);
 		}
 
+		// Update cooldown manager
+		m_cooldownManager.Update(deltaSeconds);
+
 		// Update minimap
 		if (const auto &controlled = m_playerController->GetControlledUnit())
 		{
@@ -609,6 +623,12 @@ namespace mmo
 		{
 			m_projectileManager->Update(deltaSeconds);
 		}
+
+		// Update spell visualization service (audio fading, etc.)
+		SpellVisualizationService::Get().Update(deltaSeconds);
+
+		// Update pending projectiles (animation notify fallback)
+		UpdatePendingProjectiles();
 
 		// Update foliage system
 		if (m_foliage && m_worldLoaded)
@@ -722,7 +742,7 @@ namespace mmo
 	void WorldState::SetupWorldScene()
 	{
 		m_scene = std::make_unique<OctreeScene>();
-		m_scene->SetFogRange(210.0f, 300.0f);
+		m_scene->SetFogRange(60.0f, 500.0f);
 
 		// Create sky component to manage the sky dome and day/night cycle
 		m_skyComponent = std::make_unique<SkyComponent>(*m_scene, &m_gameTime);
@@ -937,6 +957,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::XpLog, *this, &WorldState::OnXpLog);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellDamageLog, *this, &WorldState::OnSpellDamageLog);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::NonSpellDamageLog, *this, &WorldState::OnNonSpellDamageLog);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::EnvironmentalDamageLog, *this, &WorldState::OnLogEnvironmentalDamage);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CreatureQueryResult, *this, &WorldState::OnCreatureQueryResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ItemQueryResult, *this, &WorldState::OnItemQueryResult);
@@ -1087,6 +1108,12 @@ namespace mmo
 		s_shadowTextureSizeVar = ConsoleVarMgr::RegisterConsoleVar("ShadowTextureSize", "", "1");
 		m_cvarChangedSignals += s_shadowTextureSizeVar->Changed.connect(this, &WorldState::OnShadowTextureSizeChanged);
 
+		s_terrainLodEnabledVar = ConsoleVarMgr::RegisterConsoleVar("TerrainLodEnabled", "Enable or disable terrain level of detail", "1");
+		m_cvarChangedSignals += s_terrainLodEnabledVar->Changed.connect(this, &WorldState::OnTerrainLodEnabledChanged);
+
+		s_terrainOcclusionCullingVar = ConsoleVarMgr::RegisterConsoleVar("TerrainOcclusionCulling", "Enable or disable GPU occlusion culling for terrain tiles", "1");
+		m_cvarChangedSignals += s_terrainOcclusionCullingVar->Changed.connect(this, &WorldState::OnTerrainOcclusionCullingChanged);
+
 		s_foliageEnabledVar = ConsoleVarMgr::RegisterConsoleVar("FoliageEnabled", "Enable or disable foliage rendering (grass, plants, etc.)", "1");
 		m_cvarChangedSignals += s_foliageEnabledVar->Changed.connect(this, &WorldState::OnFoliageEnabledChanged);
 		s_foliageDensityVar = ConsoleVarMgr::RegisterConsoleVar("FoliageDensity", "Foliage density multiplier (0.1 to 1.0). Lower values improve performance.", "1.0");
@@ -1103,6 +1130,32 @@ namespace mmo
 
 		Console::RegisterCommand(command_names::s_toggleWire, [this](const std::string &, const std::string &)
 								 { ToggleWireframe(); }, ConsoleCommandCategory::Debug, "Toggles wireframe render mode.");
+
+		Console::RegisterCommand(command_names::s_toggleTerrainLOD, [this](const std::string &, const std::string &)
+								 {
+									 if (m_worldInstance && m_worldInstance->HasTerrain())
+									 {
+										 const bool enabled = !m_worldInstance->GetTerrain()->IsLodEnabled();
+										 m_worldInstance->GetTerrain()->SetLodEnabled(enabled);
+										 if (s_terrainLodEnabledVar)
+										 {
+											 s_terrainLodEnabledVar->Set(enabled);
+										 }
+										 ILOG("Terrain LOD " << (enabled ? "enabled" : "disabled"));
+									 }
+								 },
+								 ConsoleCommandCategory::Debug, "Toggles terrain LOD.");
+
+		Console::RegisterCommand(command_names::s_toggleTerrainDebug, [this](const std::string &, const std::string &)
+								 {
+									 if (m_worldInstance && m_worldInstance->HasTerrain())
+									 {
+										 const bool visible = !m_worldInstance->GetTerrain()->IsDebugLodVisible();
+										 m_worldInstance->GetTerrain()->SetDebugLodIsVisible(visible);
+										 ILOG("Terrain LOD debug " << (visible ? "enabled" : "disabled"));
+									 }
+								 },
+								 ConsoleCommandCategory::Debug, "Toggles terrain LOD debug visualization.");
 
 		Console::RegisterCommand(command_names::s_freezeCulling, [this](const std::string &, const std::string &)
 								 {
@@ -1137,6 +1190,8 @@ namespace mmo
 			command_names::s_toggleAxis,
 			command_names::s_toggleGrid,
 			command_names::s_toggleWire,
+			command_names::s_toggleTerrainLOD,
+			command_names::s_toggleTerrainDebug,
 			command_names::s_freezeCulling,
 			command_names::s_reload};
 
@@ -1174,15 +1229,17 @@ namespace mmo
 
 	void WorldState::ToggleWireframe() const
 	{
-		auto &camera = m_playerController->GetCamera();
-		camera.SetFillMode(camera.GetFillMode() == FillMode::Solid ? FillMode::Wireframe : FillMode::Solid);
-		if (camera.GetFillMode() == FillMode::Wireframe)
+		if (m_worldInstance->GetTerrain())
 		{
-			ILOG("Wireframe active");
-		}
-		else
-		{
-			ILOG("Wireframe inactive");
+			m_worldInstance->GetTerrain()->SetWireframeVisible(!m_worldInstance->GetTerrain()->IsWireframeVisible());
+			if (m_worldInstance->GetTerrain()->IsWireframeVisible())
+			{
+				ILOG("Wireframe active");
+			}
+			else
+			{
+				ILOG("Wireframe inactive");
+			}
 		}
 	}
 
@@ -1267,7 +1324,7 @@ namespace mmo
 					object = std::make_shared<GameUnitC>(*m_scene, *this, m_project, g_mapId);
 					break;
 				case ObjectTypeId::Player:
-					object = std::make_shared<GamePlayerC>(*m_scene, *this, m_project, g_mapId);
+					object = std::make_shared<GamePlayerC>(*m_scene, *this, m_project, g_mapId, &m_audio);
 					break;
 				case ObjectTypeId::Item:
 					object = std::make_shared<GameItemC>(*m_scene, *this, m_project);
@@ -1505,11 +1562,10 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		// Apply movement packet
+		// Apply movement packet to remote units via the buffered queue
 		if (ObjectMgr::GetActivePlayerGuid() != characterGuid)
 		{
-			unitPtr->QueueMovementEvent(movement_event_type::Fall, GetAsyncTimeMs(), movementInfo);
-			// unitPtr->ApplyMovementInfo(movementInfo);
+			unitPtr->EnqueueRemoteMovement(movementInfo);
 		}
 
 		return PacketParseResult::Pass;
@@ -1667,6 +1723,8 @@ namespace mmo
 			ELOG("Failed to read item info!");
 			return PacketParseResult::Disconnect;
 		}
+
+
 
 		m_cache.GetItemCache().NotifyObjectResponse(id, entry);
 		return PacketParseResult::Pass;
@@ -1924,8 +1982,9 @@ namespace mmo
 		uint32 spellId;
 		GameTime castTime;
 		SpellTargetMap targetMap;
+		uint32 cooldownMs = 0;
 
-		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<GameTime>(castTime) >> targetMap))
+		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<GameTime>(castTime) >> targetMap >> io::read<uint32>(cooldownMs)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -1948,6 +2007,11 @@ namespace mmo
 			if (casterId == m_playerController->GetControlledUnit()->GetGuid() && castTime > 0)
 			{
 				m_spellCast.OnSpellStart(*spell, castTime);
+
+				if (cooldownMs > 0)
+				{
+					m_cooldownManager.StartCooldown(spellId, cooldownMs);
+				}
 			}
 		}
 
@@ -1960,8 +2024,9 @@ namespace mmo
 		uint32 spellId;
 		GameTime gameTime;
 		SpellTargetMap targetMap;
+		uint32 cooldownMs = 0;
 
-		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<GameTime>(gameTime) >> targetMap))
+		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<GameTime>(gameTime) >> targetMap >> io::read<uint32>(cooldownMs)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -1989,7 +2054,61 @@ namespace mmo
 
 				if (casterUnit && targetUnit && m_projectileManager)
 				{
-					m_projectileManager->SpawnProjectile(*spell, visualization, casterUnit.get(), targetUnit.get());
+					// Check if there's a CastSucceeded animation - if so, defer projectile spawn
+					bool hasCastSucceededAnimation = false;
+					if (visualization)
+					{
+						const uint32 eventKey = static_cast<uint32>(proto_client::CAST_SUCCEEDED);
+						const auto& eventMap = visualization->kits_by_event();
+						auto kitIt = eventMap.find(eventKey);
+						if (kitIt != eventMap.end())
+						{
+							for (const auto& kit : kitIt->second.kits())
+							{
+								if (kit.has_animation_name() && !kit.animation_name().empty())
+								{
+									hasCastSucceededAnimation = true;
+									break;
+								}
+							}
+						}
+					}
+
+					if (hasCastSucceededAnimation)
+					{
+						// Create pending projectile and wait for SpellGo animation notify or animation end
+						auto pending = std::make_unique<PendingProjectile>();
+						pending->spellId = spellId;
+						pending->casterGuid = casterId;
+						pending->targetGuid = unitTargetGuid;
+						pending->visualization = visualization;
+						pending->hasCastSucceededAnimation = true;
+						
+						// Capture raw pointer for use in lambdas before moving
+						PendingProjectile* pendingPtr = pending.get();
+
+						// Subscribe to animation notify signals on the caster
+						pending->connections += casterUnit->animationNotifyTriggered.connect(
+							[this, pendingPtr](GameUnitC& unit, const AnimationNotify& notify, const String&, const AnimationState&)
+							{
+								if (notify.GetType() == AnimationNotifyType::SpellGo)
+								{
+									// SpellGo notify triggered - spawn the projectile now
+									SpawnPendingProjectile(pendingPtr);
+								}
+							});
+
+						// Also check if animation ends without SpellGo notify (fallback)
+						// We need to check on Update if the one-shot animation has ended
+						// For simplicity, we'll set a timeout fallback
+
+						m_pendingProjectiles.push_back(std::move(pending));
+					}
+					else
+					{
+						// No animation, spawn immediately
+						m_projectileManager->SpawnProjectile(*spell, visualization, casterUnit.get(), targetUnit.get());
+					}
 				}
 			}
 		}
@@ -2016,9 +2135,84 @@ namespace mmo
 		if (casterId == ObjectMgr::GetActivePlayerGuid())
 		{
 			m_spellCast.OnSpellGo(spellId);
+
+			// Start cooldown if there is one
+			if (cooldownMs > 0)
+			{
+				m_cooldownManager.StartCooldown(spellId, cooldownMs);
+			}
 		}
 
 		return PacketParseResult::Pass;
+	}
+
+	void WorldState::SpawnPendingProjectile(PendingProjectile* pending)
+	{
+		if (!pending || !m_projectileManager)
+		{
+			return;
+		}
+
+		// Get spell
+		const auto* spell = m_project.spells.getById(pending->spellId);
+		if (!spell)
+		{
+			return;
+		}
+
+		// Get caster and target units
+		auto casterUnit = ObjectMgr::Get<GameUnitC>(pending->casterGuid);
+		auto targetUnit = ObjectMgr::Get<GameUnitC>(pending->targetGuid);
+
+		if (casterUnit && targetUnit)
+		{
+			m_projectileManager->SpawnProjectile(*spell, pending->visualization, casterUnit.get(), targetUnit.get());
+		}
+
+		// Remove this pending projectile from the list
+		auto it = std::find_if(m_pendingProjectiles.begin(), m_pendingProjectiles.end(),
+			[pending](const std::unique_ptr<PendingProjectile>& p)
+			{
+				return p.get() == pending;
+			});
+
+		if (it != m_pendingProjectiles.end())
+		{
+			m_pendingProjectiles.erase(it);
+		}
+	}
+
+	void WorldState::UpdatePendingProjectiles()
+	{
+		// Check pending projectiles for animation end fallback
+		for (auto it = m_pendingProjectiles.begin(); it != m_pendingProjectiles.end(); )
+		{
+			PendingProjectile* pending = it->get();
+			
+			// Get caster unit to check animation state
+			auto casterUnit = ObjectMgr::Get<GameUnitC>(pending->casterGuid);
+			if (!casterUnit)
+			{
+				// Caster no longer exists, just remove the pending projectile
+				it = m_pendingProjectiles.erase(it);
+				continue;
+			}
+
+			// Check if one-shot animation has ended
+			// If the unit has no active one-shot animation and we were waiting for SpellGo,
+			// spawn the projectile as fallback
+			if (pending->hasCastSucceededAnimation && !casterUnit->IsPlayingOneShotAnimation())
+			{
+				// Animation ended without SpellGo notify - spawn as fallback
+				SpawnPendingProjectile(pending);
+				// SpawnPendingProjectile removes from the list, so just break to avoid invalidating iterator
+				// Actually, we need to restart iteration since the list was modified
+				it = m_pendingProjectiles.begin();
+				continue;
+			}
+
+			++it;
+		}
 	}
 
 	PacketParseResult WorldState::OnSpellFailure(game::IncomingPacket &packet)
@@ -2217,7 +2411,16 @@ namespace mmo
 
 		if (casterId == ObjectMgr::GetActivePlayerGuid())
 		{
+			const bool wasCastingThisSpell = m_spellCast.GetCastingSpellId() == spellId;
+			const bool castWasConfirmedByServer = m_spellCast.HasServerConfirmedCastStart(spellId);
 			m_spellCast.OnSpellFailure(spellId);
+			if (wasCastingThisSpell &&
+				castWasConfirmedByServer &&
+				spell &&
+				(spell->cooldownflags() & spell_cooldown_flags::StartOnCastStart) != 0)
+			{
+				m_cooldownManager.ClearCooldown(spellId);
+			}
 
 			const char *errorMessage = s_unknown;
 			if (result < std::size(s_spellCastResultStrings))
@@ -2439,6 +2642,23 @@ namespace mmo
 
 	PacketParseResult WorldState::OnLogEnvironmentalDamage(game::IncomingPacket &packet)
 	{
+		uint64 targetGuid;
+		uint32 amount;
+		uint8 damageType;
+
+		if (!(packet >> io::read_packed_guid(targetGuid) >> io::read<uint32>(amount) >> io::read<uint8>(damageType)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Find the target unit to display floating combat text
+		std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid);
+		if (target)
+		{
+			// Environmental damage is displayed in red-orange to distinguish from regular damage
+			AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color(1.0f, 0.5f, 0.0f, 1.0f), 2.0f);
+		}
+
 		return PacketParseResult::Pass;
 	}
 
@@ -3341,6 +3561,18 @@ namespace mmo
 		// Load area triggers for this map
 		m_areaTriggerManager.LoadTriggersForMap(map->id(), m_project.areaTriggers);
 
+		// Apply terrain LOD setting from console variable
+		if (m_worldInstance->HasTerrain() && s_terrainLodEnabledVar)
+		{
+			m_worldInstance->GetTerrain()->SetLodEnabled(s_terrainLodEnabledVar->GetIntValue() != 0);
+		}
+
+		// Apply terrain occlusion culling setting from console variable
+		if (m_worldInstance->HasTerrain() && s_terrainOcclusionCullingVar)
+		{
+			m_worldInstance->GetTerrain()->SetOcclusionCullingEnabled(s_terrainOcclusionCullingVar->GetIntValue() != 0);
+		}
+
 		return true;
 	}
 
@@ -3650,6 +3882,26 @@ namespace mmo
 		}
 	}
 
+	void WorldState::OnTerrainLodEnabledChanged(ConsoleVar& var, const std::string& oldValue)
+	{
+		if (!m_worldInstance || !m_worldInstance->GetTerrain())
+		{
+			return;
+		}
+
+		m_worldInstance->GetTerrain()->SetLodEnabled(var.GetBoolValue());
+	}
+
+	void WorldState::OnTerrainOcclusionCullingChanged(ConsoleVar& var, const std::string& oldValue)
+	{
+		if (!m_worldInstance || !m_worldInstance->GetTerrain())
+		{
+			return;
+		}
+
+		m_worldInstance->GetTerrain()->SetOcclusionCullingEnabled(var.GetBoolValue());
+	}
+
 	void WorldState::GetPlayerName(uint64 guid, std::weak_ptr<GamePlayerC> player)
 	{
 		m_cache.GetNameCache().Get(guid, [player](uint64, const String &name)
@@ -3788,10 +4040,10 @@ namespace mmo
 
 	PacketParseResult WorldState::OnSetProficiency(game::IncomingPacket &packet)
 	{
-		uint8 itemclass;
-		uint32 mask;
+		uint32 proficiencyId;
+		uint8 added;
 
-		if (!(packet >> io::read<uint8>(itemclass) >> io::read<uint32>(mask)))
+		if (!(packet >> io::read<uint32>(proficiencyId) >> io::read<uint8>(added)))
 		{
 			ELOG("Failed to read SetProficiency packet!");
 			return PacketParseResult::Disconnect;
@@ -3800,17 +4052,17 @@ namespace mmo
 		auto player = ObjectMgr::GetActivePlayer();
 		ASSERT(player);
 
-		if (itemclass == item_class::Weapon)
+		if (added)
 		{
-			player->SetWeaponProficiency(mask);
+			player->AddProficiency(proficiencyId);
 		}
-		else if (itemclass == item_class::Armor)
+		else
 		{
-			player->SetArmorProficiency(mask);
+			player->RemoveProficiency(proficiencyId);
 		}
 
 		// Log proficiency for character
-		ILOG("Proficiency in item class " << static_cast<uint32>(itemclass) << " set to " << log_hex_digit(mask));
+		ILOG("Proficiency " << proficiencyId << (added ? " added" : " removed"));
 
 		return PacketParseResult::Pass;
 	}

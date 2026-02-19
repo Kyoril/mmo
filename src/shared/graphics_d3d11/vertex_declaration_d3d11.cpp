@@ -169,18 +169,33 @@ namespace mmo
 	{
 		ID3D11InputLayout* pVertexLayout = GetILayoutByShader(boundVertexProgram, binding);
 
+		// Skip IASetInputLayout if the same layout is already bound
+		if (pVertexLayout == m_device.m_lastInputLayout)
+		{
+			return;
+		}
+
 		ID3D11DeviceContext& context = m_device;
 		context.IASetInputLayout(pVertexLayout);
-
+		m_device.m_lastInputLayout = pVertexLayout;
 	}
 
 	void VertexDeclarationD3D11::BindInstanced(VertexShaderD3D11& boundVertexProgram, VertexBufferBinding* binding, uint16 instanceSlot)
 	{
+		// Check the instanced layout cache first
+		auto instancedCacheIt = m_instancedLayoutCache.find(&boundVertexProgram);
+		if (instancedCacheIt != m_instancedLayoutCache.end())
+		{
+			ID3D11DeviceContext& context = m_device;
+			context.IASetInputLayout(instancedCacheIt->second.Get());
+			return;
+		}
+
 		// Create the input element descriptions including instance data
 		std::vector<D3D11_INPUT_ELEMENT_DESC> inputElements;
 		inputElements.reserve(m_elementList.size() + 4);
 		
-		for (auto element : m_elementList)
+		for (const auto& element : m_elementList)
 		{
 			D3D11_INPUT_ELEMENT_DESC elementDesc;
 			
@@ -209,8 +224,6 @@ namespace mmo
 			inputElements.push_back(instanceElement);
 		}
 
-		// Create a unique key for the instanced layout by combining the hash with the shader pointer + instance flag
-		// We need a separate cache entry for instanced layouts
 		const auto& microcode = boundVertexProgram.GetByteCode();
 		
 		ComPtr<ID3D11InputLayout> inputLayout;
@@ -225,6 +238,9 @@ namespace mmo
 		{
 			ID3D11DeviceContext& context = m_device;
 			context.IASetInputLayout(inputLayout.Get());
+
+			// Cache the instanced input layout for reuse
+			m_instancedLayoutCache[&boundVertexProgram] = std::move(inputLayout);
 		}
 	}
 }

@@ -18,6 +18,7 @@ namespace mmo
 	{
 	public:
 
+		/// Creates a web service for login server administration.
 		explicit WebService(
 		    asio::io_service &service,
 		    uint16 port,
@@ -27,12 +28,18 @@ namespace mmo
 			IDatabase &database
 		);
 
+		/// Gets the player manager.
 		PlayerManager &GetPlayerManager() const { return m_playerManager; }
+		/// Gets the realm manager.
 		RealmManager& GetRealmManager() const { return m_realmManager; }
+		/// Gets the database instance.
 		IDatabase &GetDatabase() const { return m_database; }
+		/// Returns the time this service started.
 		GameTime GetStartTime() const;
+		/// Gets the configured admin password.
 		const String &GetPassword() const;
 
+		/// Creates a web client instance for a new connection.
 		virtual web::WebService::WebClientPtr createClient(std::shared_ptr<Client> connection) override;
 
 	private:

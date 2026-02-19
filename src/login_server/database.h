@@ -98,24 +98,41 @@ namespace mmo
 		/// @param ip The current ip of the player.
 		virtual void PlayerLogin(uint64 accountId, const std::string& sessionKey, const std::string& ip) = 0;
 
-		/// @brief 
-		/// @param accountId 
-		/// @param ip 
+		/// Records a failed login attempt for the account.
+		/// @param accountId ID of the account that failed to log in.
+		/// @param ip The current ip of the player.
 		virtual void PlayerLoginFailed(uint64 accountId, const std::string& ip) = 0;
 
-		/// @brief 
-		/// @param realmId 
-		/// @param sessionKey 
-		/// @param ip 
-		/// @param build 
+		/// Writes realm session data to the database after a successful login.
+		/// @param realmId ID of the realm to modify.
+		/// @param sessionKey The new session key (hex str).
+		/// @param ip The current ip of the realm.
+		/// @param build The realm build string.
 		virtual void RealmLogin(uint32 realmId, const std::string& sessionKey, const std::string& ip, const std::string& build) = 0;
 
+		/// Creates a new account with the given salted password verifier.
+		/// @param id Account name (typically normalized to uppercase).
+		/// @param s SRP salt value.
+		/// @param v SRP verifier value.
 		virtual std::optional<AccountCreationResult> AccountCreate(const std::string& id, const std::string& s, const std::string& v) = 0;
 
+		/// Creates a new realm with the given connection info and SRP values.
+		/// @param name Realm name.
+		/// @param address Realm public address.
+		/// @param port Realm public port.
+		/// @param s SRP salt value.
+		/// @param v SRP verifier value.
 		virtual std::optional<RealmCreationResult> RealmCreate(const std::string& name, const std::string& address, uint16 port, const std::string& s, const std::string& v) = 0;
 
+		/// Bans an account by name.
+		/// @param accountName Account name to ban.
+		/// @param expiration Expiration timestamp string.
+		/// @param reason Reason for the ban.
 		virtual void BanAccountByName(const std::string& accountName, const std::string& expiration, const std::string& reason) = 0;
 
+		/// Removes a ban from an account by name.
+		/// @param accountName Account name to unban.
+		/// @param reason Reason for the unban.
 		virtual void UnbanAccountByName(const std::string& accountName, const std::string& reason) = 0;
 	};
 

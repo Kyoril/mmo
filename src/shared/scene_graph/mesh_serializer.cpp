@@ -531,7 +531,6 @@ namespace mmo
 		}
 
 		subMesh.useSharedVertices = useSharedVertices;
-		ASSERT(!useSharedVertices || m_mesh.sharedVertexData);
 
 		if (m_version >= mesh_version::Version_0_3_1)
 		{
@@ -814,7 +813,8 @@ namespace mmo
 			CalculateBinormalsAndTangents();
 		}
 
-		if (m_version <= mesh_version::Version_0_2)
+		// Any vertexdata?
+		if (!m_entry.vertices.empty())
 		{
 			std::vector<POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX> vertices;
 			vertices.resize(m_entry.vertices.size());

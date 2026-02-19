@@ -26,6 +26,8 @@
 #include "shared/client_data/proto_client/spell_visualizations.pb.h"
 #include "shared/client_data/proto_client/area_triggers.pb.h"
 #include "shared/client_data/proto_client/proficiencies.pb.h"
+#include "shared/client_data/proto_client/item_classes.pb.h"
+#include "shared/client_data/proto_client/item_subclasses.pb.h"
 
 namespace mmo
 {
@@ -49,6 +51,8 @@ namespace mmo
 		typedef TemplateManager<mmo::proto_client::SpellVisualizations, mmo::proto_client::SpellVisualization> SpellVisualizationManager;
 		typedef TemplateManager<mmo::proto_client::AreaTriggers, mmo::proto_client::AreaTriggerEntry> AreaTriggerManager;
 		typedef TemplateManager<mmo::proto_client::Proficiencies, mmo::proto_client::ProficiencyEntry> ProficiencyManager;
+		typedef TemplateManager<mmo::proto_client::ItemClasses, mmo::proto_client::ItemClassEntry> ItemClassManager;
+		typedef TemplateManager<mmo::proto_client::ItemSubclasses, mmo::proto_client::ItemSubclassEntry> ItemSubclassManager;
 
 		/// This class contains contains all the static game data like item templates.
 		class Project final
@@ -82,6 +86,8 @@ namespace mmo
 			SpellVisualizationManager spellVisualizations;
 			AreaTriggerManager areaTriggers;
 			ProficiencyManager proficiencies;
+			ItemClassManager itemClasses;
+			ItemSubclassManager itemSubclasses;
 
 		private:
 
@@ -143,6 +149,8 @@ namespace mmo
 				managers.push_back(ManagerEntry("spell_visualizations", spellVisualizations));
 				managers.push_back(ManagerEntry("area_triggers", areaTriggers));
 				managers.push_back(ManagerEntry("proficiencies", proficiencies));
+				managers.push_back(ManagerEntry("item_classes", itemClasses));
+				managers.push_back(ManagerEntry("item_subclasses", itemSubclasses));
 
 				if (!ClientProjectLoader::load(
 				            directory,
@@ -190,6 +198,8 @@ namespace mmo
 				managers.emplace_back("spell_visualizations", "spell_visualizations", spellVisualizations);
 				managers.emplace_back("area_triggers", "area_triggers", areaTriggers);
 				managers.emplace_back("proficiencies", "proficiencies", proficiencies);
+				managers.emplace_back("item_classes", "item_classes", itemClasses);
+				managers.emplace_back("item_subclasses", "item_subclasses", itemSubclasses);
 
 				if (!ClientProjectSaver::save(realmDataPath, managers))
 				{

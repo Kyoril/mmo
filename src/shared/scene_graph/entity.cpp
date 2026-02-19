@@ -235,10 +235,13 @@ namespace mmo
 		// Apply animation states
 		m_skeleton->SetAnimationState(*m_animationStates);
 
-		if (m_boneMatrices.size() != 256)
+		const uint16 numBones = m_skeleton->GetNumBones();
+		const size_t requiredSize = static_cast<size_t>(numBones);
+
+		if (m_boneMatrices.size() != requiredSize)
 		{
-			m_boneMatrices.resize(256, Matrix4::Identity);
-			m_boneMatrixBuffer = GraphicsDevice::Get().CreateConstantBuffer(sizeof(Matrix4) * 256, m_boneMatrices.data());
+			m_boneMatrices.resize(requiredSize, Matrix4::Identity);
+			m_boneMatrixBuffer = GraphicsDevice::Get().CreateConstantBuffer(sizeof(Matrix4) * requiredSize, m_boneMatrices.data());
 		}
 
 		m_skeleton->GetBoneMatrices(m_boneMatrices.data());

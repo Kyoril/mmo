@@ -161,6 +161,10 @@ namespace mmo
 
 		PacketParseResult OnQuestQueryResult(game::IncomingPacket& packet);
 
+		PacketParseResult OnQuestAccepted(game::IncomingPacket& packet);
+
+		PacketParseResult OnQuestAbandoned(game::IncomingPacket& packet);
+
 	private:
 		RealmConnector& m_connector;
 		RealmConnector::PacketHandlerHandleContainer m_packetHandlers;

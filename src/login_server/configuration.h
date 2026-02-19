@@ -33,6 +33,7 @@ namespace mmo
 		/// The mysql database to be used.
 		String mysqlDatabase;
 
+		/// Path to where update files in the form of "YYYYMMDD_INDEX.sql" are stored.
 		String mysqlUpdatePath;
 
 		/// Indicates whether or not file logging is enabled.
@@ -53,8 +54,11 @@ namespace mmo
 		String webPassword;
 
 
+		/// Creates a configuration instance with default values.
 		explicit Configuration();
+		/// Loads configuration values from the given file.
 		bool load(const String &fileName);
+		/// Saves configuration values to the given file.
 		bool save(const String &fileName);
 	};
 }

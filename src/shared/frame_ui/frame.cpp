@@ -1109,7 +1109,7 @@ namespace mmo
 		}
 	}
 
-	void Frame::OnClick(MouseButton button)
+	bool Frame::OnClick(MouseButton button)
 	{
 		if (m_onClick.is_valid())
 		{
@@ -1135,7 +1135,19 @@ namespace mmo
 					break;
 				}
 
-				m_onClick(this, buttonName);
+				luabind::object result = m_onClick(this, buttonName);
+				
+				// Check if the handler returned false (event not consumed)
+				if (result.is_valid() && luabind::type(result) == LUA_TBOOLEAN)
+				{
+					bool consumed = luabind::object_cast<bool>(result);
+					Clicked();
+					return consumed;
+				}
+				
+				// Handler didn't return a boolean, assume consumed
+				Clicked();
+				return true;
 			}
 			catch(const luabind::error& e)
 			{
@@ -1143,7 +1155,9 @@ namespace mmo
 			}
 		}
 
+		// No click handler, don't consume the event
 		Clicked();
+		return false;
 	}
 
 	Rect Frame::GetRelativeFrameRect(const bool withScale)
@@ -1437,7 +1451,7 @@ namespace mmo
 		return m_geometryBuffer;
 	}
 
-	void Frame::OnMouseDown(MouseButton button, int32 buttons, const Point & position)
+	bool Frame::OnMouseDown(MouseButton button, int32 buttons, const Point & position)
 	{
 		// Capture the input if this frame is focusable
 		if (m_focusable)
@@ -1454,18 +1468,46 @@ namespace mmo
 		// Simply raise the signal
 		MouseDown(MouseEventArgs(buttons, position.x, position.y));
 
+		// If we have an OnMouseDown handler, call it and check the return value
+		if (m_onMouseDown.is_valid())
+		{
+			try
+			{
+				const luabind::object result = luabind::call_function<luabind::object>(m_onMouseDown, this, static_cast<int32>(button));
+				if (result.is_valid() && luabind::type(result) == LUA_TBOOLEAN)
+				{
+					const bool consumed = luabind::object_cast<bool>(result);
+					if (consumed)
+					{
+						abort_emission();
+					}
+					return consumed;
+				}
+			}
+			catch (const luabind::error& e)
+			{
+				ELOG("Error calling OnMouseDown: " << e.what());
+			}
+		}
+
+		// If we have a click handler but no mouse down handler, consume by default (legacy behavior)
 		if (m_onClick.is_valid())
 		{
 			abort_emission();
+			return true;
 		}
+		
+		return false;
 	}
 
-	void Frame::OnMouseUp(MouseButton button, int32 buttons, const Point & position)
+	bool Frame::OnMouseUp(MouseButton button, int32 buttons, const Point & position)
 	{
+		bool consumed = false;
+		
 		if (const Rect frame = GetAbsoluteFrameRect(); frame.IsPointInRect(position))
 		{
 			// Trigger lua clicked event handler if there is any
-			OnClick(button);
+			consumed = OnClick(button);
 		}
 
 		// Simply raise the signal
@@ -1487,6 +1529,8 @@ namespace mmo
 		{
 			abort_emission();
 		}
+		
+		return consumed;
 	}
 
 	void Frame::OnMouseMoved(const Point& position, const Point& delta)

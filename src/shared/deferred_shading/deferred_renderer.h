@@ -8,10 +8,12 @@
 #include "graphics/material_compiler.h"
 #include "graphics/g_buffer.h"
 #include "graphics/material.h"
+#include "graphics/structured_buffer.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/light.h"
 
 #include <array>
+#include <vector>
 
 #ifdef _WIN32
 #   include <d3d11.h>
@@ -97,6 +99,10 @@ namespace mmo
         void SetShadowMapSize(uint16 size);
         uint16 GetShadowMapSize() const { return m_shadowMapSize; }
 
+        /// @brief Gets the light rendering statistics from the last frame.
+        /// @return Reference to the light render statistics.
+        const Scene::LightRenderStats& GetLightRenderStats() const { return m_lastLightStats; }
+
     private:
         /// @brief Renders the geometry pass.
         /// @param scene The scene to render.
@@ -108,6 +114,9 @@ namespace mmo
         /// @param camera The camera to use for rendering.
         void RenderLightingPass(Scene& scene, Camera& camera);
 
+        /// @brief Gathers visible lights from the scene and uploads them to the GPU.
+        /// @param scene The scene to gather lights from.
+        /// @param camera The camera used for frustum culling.
         void FindLights(Scene& scene, Camera& camera);
 
 		void RenderShadowMap(Scene& scene, Camera& camera);
@@ -116,7 +125,8 @@ namespace mmo
 
     public:
         /// @brief Maximum number of lights that can be processed in a single pass.
-        static constexpr uint32 MAX_LIGHTS = 16;
+        /// With structured buffers, we can support many more lights than constant buffers allow.
+        static constexpr uint32 MAX_LIGHTS = 256;
 
     private:
         /// @brief The graphics device.
@@ -127,8 +137,11 @@ namespace mmo
         /// @brief The G-Buffer.
         GBuffer m_gBuffer;
 
-        /// @brief The light buffer.
-        ConstantBufferPtr m_lightBuffer;
+        /// @brief The light metadata constant buffer (contains light count and ambient color).
+        ConstantBufferPtr m_lightMetadataBuffer;
+
+        /// @brief The structured buffer containing light data.
+        StructuredBufferPtr m_lightStructuredBuffer;
 
         ConstantBufferPtr m_shadowBuffer;
 
@@ -180,5 +193,8 @@ namespace mmo
         float m_blockerSearchRadius = 0.005f; // Search radius for blocker search phase
         float m_lightSize = 0.021f;           // Size of the virtual light (smaller = sharper shadows)
         uint16 m_shadowMapSize = 2048;        // Size of the shadow map texture (increased for quality)
+
+        /// @brief Cached light render statistics from the last frame.
+        Scene::LightRenderStats m_lastLightStats;
     };
 }

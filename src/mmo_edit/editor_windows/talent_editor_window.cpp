@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "talent_editor_window.h"
+#include "editor_imgui_helpers.h"
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
@@ -34,7 +35,7 @@ namespace mmo
 	void TalentEditorWindow::DrawDetailsImpl(proto::TalentTabEntry& currentEntry)
     {
         // Basic tab properties
-        if (ImGui::CollapsingHeader("Talent Tab Properties", ImGuiTreeNodeFlags_DefaultOpen))
+        if (const auto section = ScopedEditorSection("Talent Tab Properties", ImGuiTreeNodeFlags_DefaultOpen))
         {
             ImGui::AlignTextToFramePadding();
             ImGui::Text("ID:"); ImGui::SameLine();
@@ -75,7 +76,7 @@ namespace mmo
         ImGui::Separator();
 
         // Talent Tree Grid
-        if (ImGui::CollapsingHeader("Talent Tree", ImGuiTreeNodeFlags_DefaultOpen))
+        if (const auto section = ScopedEditorSection("Talent Tree", ImGuiTreeNodeFlags_DefaultOpen))
         {
             // Create a side-by-side layout with talent tree on the left and details on the right
             ImGui::Columns(2, "TalentEditorColumns", true);

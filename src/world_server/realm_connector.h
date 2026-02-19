@@ -65,18 +65,22 @@ namespace mmo
 		void NotifyInstanceDestroyed(InstanceId instanceId);
 
 		/// @brief Sends a proxy packet directly to the client with the given character guid.
-		/// @param characterGuid 
-		/// @param packetId 
-		/// @param packetSize 
-		/// @param packetContent 
+		/// @param characterGuid The guid of the character to send to.
+		/// @param packetId The packet opcode.
+		/// @param packetSize The packet payload size in bytes.
+		/// @param packetContent The packet payload buffer.
 		void SendProxyPacket(uint64 characterGuid, uint16 packetId, uint32 packetSize, const std::vector<char>& packetContent, bool flush = true);
 
+		/// Sends character data to the realm server for proxying to the client.
 		void SendCharacterData(uint32 mapId, const InstanceId& instanceId, uint32 timePlayed, const GamePlayerS& character);
 
+		/// Sends quest data updates to the realm server.
 		void SendQuestData(uint64 characterGuid, uint32 questId, const QuestStatusData& questData);
 
+		/// Sends a teleport request to the realm server.
 		void SendTeleportRequest(uint64 characterGuid, uint32 mapId, const Vector3& position, const Radian& facing);
 
+		/// Notifies the realm server that a character left the world instance.
 		void NotifyWorldInstanceLeft(uint64 characterGuid, auth::WorldLeftReason reason);
 
 		/// Sends a group update to the realm.
@@ -93,6 +97,11 @@ namespace mmo
 		/// @param operationId Unique ID for tracking this operation.
 		/// @param slots Vector of absolute slot indices to delete.
 		void SendDeleteInventoryItems(uint64 characterGuid, uint32 operationId, const std::vector<uint16>& slots);
+
+		/// @brief Sets the fall damage configuration values.
+		/// @param minHeight Minimum fall distance in meters before fall damage starts.
+		/// @param lethalHeight Fall distance in meters at which fall damage becomes lethal.
+		void SetFallDamageConfig(float minHeight, float lethalHeight);
 
 	private:
 		/// Perform client-side srp6-a calculations after we received server values
@@ -191,11 +200,17 @@ namespace mmo
 		/// fixed after a server restart anyway).
 		bool m_willReconnect;
 
-		std::vector<uint64> m_hostedMapIds;
+		std::vector<uint32> m_hostedMapIds;
 
 		const proto::Project& m_project;
 
 		ConditionMgr& m_conditionMgr;
+
+		/// @brief Minimum fall distance in meters before fall damage starts being applied.
+		float m_fallDamageMinHeight{ 5.0f };
+
+		/// @brief Fall distance in meters at which fall damage becomes lethal (100% of max HP).
+		float m_fallDamageLethalHeight{ 40.0f };
 
 	public:
 		// ~ Begin IConnectorListener

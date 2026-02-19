@@ -47,6 +47,29 @@ namespace mmo
 
     typedef damage_type::Type DamageType;
 
+    /// @brief Enumerates environmental damage types.
+    namespace environmental_damage_type
+    {
+        enum Type : uint8
+        {
+            /// @brief Damage caused by falling from a height.
+            Fall = 0,
+
+            /// @brief Damage caused by drowning.
+            Drowning = 1,
+
+            /// @brief Damage caused by lava.
+            Lava = 2,
+
+            /// @brief Damage caused by fire.
+            Fire = 3,
+
+            Count_
+        };
+    }
+
+    typedef environmental_damage_type::Type EnvironmentalDamageType;
+
     namespace melee_attack_outcome
     {
 	    enum Type

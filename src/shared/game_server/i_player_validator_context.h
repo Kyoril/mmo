@@ -40,16 +40,11 @@ namespace mmo
 		virtual uint32 GetLevel() const noexcept = 0;
 
 		/**
-		 * @brief Gets the player's weapon proficiency flags.
-		 * @return Bitfield of weapon_prof::Type values.
+		 * @brief Checks if the player has a specific proficiency.
+		 * @param proficiencyId The ID of the proficiency to check (from proficiencies.proto).
+		 * @return true if player has the proficiency, false otherwise.
 		 */
-		virtual uint32 GetWeaponProficiency() const noexcept = 0;
-
-		/**
-		 * @brief Gets the player's armor proficiency flags.
-		 * @return Bitfield of armor_prof::Type values.
-		 */
-		virtual uint32 GetArmorProficiency() const noexcept = 0;
+		virtual bool HasProficiency(uint32 proficiencyId) const noexcept = 0;
 
 		/**
 		 * @brief Checks if the player is alive.

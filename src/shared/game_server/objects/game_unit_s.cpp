@@ -405,9 +405,13 @@ namespace mmo
 		return unit_mods::Mana;
 	}
 
-	auto GameUnitS::SpellHasCooldown(const uint32 spellId, uint32 spellCategory) const -> bool
+	auto GameUnitS::SpellHasCooldown(const uint32 spellId, uint32 spellCategory, const uint32 cooldownFlags) const -> bool
 	{
 		const auto now = GetAsyncTimeMs();
+		if ((cooldownFlags & spell_cooldown_flags::UseGlobalCooldown) != 0)
+		{
+			return m_globalCooldownEnd > now;
+		}
 
 		if (const auto it = m_spellCooldowns.find(spellId); it != m_spellCooldowns.end() && it->second > now)
 		{
@@ -594,6 +598,18 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::SetGlobalCooldown(const GameTime cooldownTimeMs)
+	{
+		if (cooldownTimeMs == 0)
+		{
+			m_globalCooldownEnd = 0;
+		}
+		else
+		{
+			m_globalCooldownEnd = GetAsyncTimeMs() + cooldownTimeMs;
+		}
+	}
+
 	SpellCastResult GameUnitS::CastSpell(const SpellTargetMap &target, const proto::SpellEntry &spell, const uint32 castTimeMs, bool isProc, uint64 itemGuid)
 	{
 		if (!isProc && itemGuid == 0 && !HasSpell(spell.id()))
@@ -730,6 +746,16 @@ namespace mmo
 		m_netUnitWatcher->OnSpellDamageLog(targetGuid, amount, school, flags, spell);
 	}
 
+	void GameUnitS::EnvironmentalDamageLog(uint64 targetGuid, uint32 amount, EnvironmentalDamageType type)
+	{
+		if (!m_netUnitWatcher)
+		{
+			return;
+		}
+
+		m_netUnitWatcher->OnEnvironmentalDamageLog(targetGuid, amount, type);
+	}
+
 	void GameUnitS::Kill(GameUnitS *killer)
 	{
 		Set<uint32>(object_fields::Health, 0);
@@ -843,6 +869,30 @@ namespace mmo
 				++it;
 			}
 		}
+	}
+
+	bool GameUnitS::RemoveAuraBySpellId(const uint32 spellId, const uint64 casterId)
+	{
+		ASSERT(spellId != 0);
+
+		for (auto it = m_auras.begin(); it != m_auras.end(); ++it)
+		{
+			const auto& aura = *it;
+			if (aura->GetSpellId() == spellId)
+			{
+				// Check for caster id as well when removing?
+				if (casterId != 0 && aura->GetCasterId() != casterId)
+				{
+					continue;
+				}
+
+				// Check if the aura is positive (negative auras can't be cancelled)
+				const auto& spell = aura->GetSpell();
+				RemoveAura(aura);
+				return true;
+			}
+		}
+		return false;
 	}
 
 	bool GameUnitS::HasAuraSpellFromCaster(uint32 spellId, uint64 casterId)

@@ -1,7 +1,8 @@
-// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+// Copyright (C) 2019 - 2026, Kyoril. All rights reserved.
 
 #include "scene.h"
 
+#include <algorithm>
 #include <ranges>
 
 #include "camera.h"
@@ -9,8 +10,10 @@
 #include "material_manager.h"
 #include "mesh_manager.h"
 #include "render_operation.h"
+#include "world_model_instance.h"
 
 #include "base/macros.h"
+#include "base/profiler.h"
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
 
@@ -54,6 +57,7 @@ namespace mmo
 		m_manualRenderObjects.clear();
 		m_lights.clear();
 		m_particleEmitters.clear();
+		m_worldModelInstances.clear();
 
 		m_sceneNodes.clear();
 		m_rootNode = nullptr;
@@ -176,6 +180,45 @@ namespace mmo
 		return emitters;
 	}
 
+	RibbonTrail* Scene::CreateRibbonTrail(const String& name)
+	{
+		ASSERT(!name.empty());
+		ASSERT(m_ribbonTrails.find(name) == m_ribbonTrails.end());
+
+		auto trail = std::make_unique<RibbonTrail>(name, GraphicsDevice::Get());
+		trail->SetScene(this);
+
+		auto [iterator, inserted] = m_ribbonTrails.emplace(name, std::move(trail));
+		return iterator->second.get();
+	}
+
+	void Scene::DestroyRibbonTrail(const RibbonTrail& trail)
+	{
+		DestroyRibbonTrail(trail.GetName());
+	}
+
+	void Scene::DestroyRibbonTrail(const String& name)
+	{
+		const auto trailIt = m_ribbonTrails.find(name);
+		if (trailIt != m_ribbonTrails.end())
+		{
+			m_ribbonTrails.erase(trailIt);
+		}
+	}
+
+	std::vector<RibbonTrail*> Scene::GetAllRibbonTrails() const
+	{
+		std::vector<RibbonTrail*> trails;
+		trails.reserve(m_ribbonTrails.size());
+
+		for (const auto& [name, trail] : m_ribbonTrails)
+		{
+			trails.push_back(trail.get());
+		}
+
+		return trails;
+	}
+
 	bool Scene::HasEntity(const String& name) const
 	{
 		return m_entities.find(name) != m_entities.end();
@@ -222,6 +265,8 @@ namespace mmo
 
 	void Scene::Render(Camera& camera, PixelShaderType shaderType)
 	{
+		PROFILE_SCOPE("Scene::Render");
+
 		m_pixelShaderType = shaderType;
 
 		auto& gx = GraphicsDevice::Get();
@@ -239,14 +284,36 @@ namespace mmo
 		UpdateSceneGraph();
 
 		// Update particle emitters (self-timed)
-		for (auto& [name, emitter] : m_particleEmitters)
 		{
-			emitter->Update();
+			PROFILE_SCOPE("ParticleEmitters::Update");
+			for (auto& [name, emitter] : m_particleEmitters)
+			{
+				emitter->Update();
+			}
+		}
+
+		// Update ribbon trails (self-timed)
+		{
+			PROFILE_SCOPE("RibbonTrails::Update");
+			for (auto& [name, trail] : m_ribbonTrails)
+			{
+				trail->Update();
+			}
 		}
 
 		if (!m_frozen)
 		{
 			PrepareRenderQueue();
+
+			// Update portal culling for all WorldModelInstances BEFORE FindVisibleObjects
+			// so that entity visibility is set correctly before octree traversal.
+			for (auto* wmi : m_worldModelInstances)
+			{
+				if (wmi)
+				{
+					wmi->UpdatePortalCulling(camera);
+				}
+			}
 
 			const auto visibleObjectsIt = m_camVisibleObjectsMap.find(&camera);
 			ASSERT(visibleObjectsIt != m_camVisibleObjectsMap.end());
@@ -257,6 +324,12 @@ namespace mmo
 			for (auto& [name, emitter] : m_particleEmitters)
 			{
 				emitter->PopulateRenderQueue(GetRenderQueue());
+			}
+
+			// Add ribbon trails to render queue
+			for (auto& [name, trail] : m_ribbonTrails)
+			{
+				trail->PopulateRenderQueue(GetRenderQueue());
 			}
 		}
 		
@@ -279,6 +352,8 @@ namespace mmo
 
 	void Scene::UpdateSceneGraph()
 	{
+		PROFILE_SCOPE("UpdateSceneGraph");
+
 		GetRootSceneNode().Update(true, false);
 	}
 
@@ -307,8 +382,144 @@ namespace mmo
 		return lights;
 	}
 
+	std::vector<Scene::VisibleLightInfo> Scene::GatherVisibleLights(const Camera& camera, uint32 maxLights)
+	{
+		// Reset statistics
+		m_lightRenderStats = LightRenderStats{};
+		m_lightRenderStats.totalLightsInScene = static_cast<uint32>(m_lights.size());
+
+		std::vector<VisibleLightInfo> visibleLights;
+		visibleLights.reserve(m_lights.size());
+
+		const Vector3 cameraPosition = camera.GetDerivedPosition();
+
+		// Gather all visible lights
+		for (const auto& [name, light] : m_lights)
+		{
+			if (!light->IsVisible())
+			{
+				continue;
+			}
+
+			VisibleLightInfo info;
+			info.light = light.get();
+			info.type = light->GetType();
+			info.color = Vector3(light->GetColor().x, light->GetColor().y, light->GetColor().z);
+			info.intensity = light->GetIntensity();
+			info.range = light->GetRange();
+			info.castsShadows = light->IsCastingShadows();
+
+			// Handle different light types
+			if (info.type == LightType::Directional)
+			{
+				// Directional lights are always visible (no position-based culling)
+				info.position = Vector3::Zero;
+				info.direction = light->GetDerivedDirection();
+				info.spotAngle = 0.0f;
+				info.priority = 1000.0f;  // Directional lights have highest priority
+				++m_lightRenderStats.directionalLights;
+			}
+			else
+			{
+				info.position = light->GetDerivedPosition();
+				
+				// Frustum culling for point and spot lights
+				const Sphere lightSphere(info.position, info.range);
+				if (!camera.IsVisible(lightSphere))
+				{
+					continue;  // Light is outside the view frustum
+				}
+
+				if (info.type == LightType::Point)
+				{
+					info.direction = Vector3(0.0f, -1.0f, 0.0f);  // Default direction for point lights
+					info.spotAngle = 0.0f;
+					++m_lightRenderStats.pointLights;
+				}
+				else // Spot light
+				{
+					info.direction = light->GetDerivedDirection();
+					info.spotAngle = light->GetOuterConeAngle();
+					++m_lightRenderStats.spotLights;
+				}
+
+				// Calculate priority based on distance and range
+				info.priority = CalculateLightPriority(*light, cameraPosition);
+			}
+
+			if (info.castsShadows)
+			{
+				++m_lightRenderStats.shadowCastingLights;
+			}
+
+			visibleLights.push_back(info);
+		}
+
+		m_lightRenderStats.visibleLights = static_cast<uint32>(visibleLights.size());
+
+		// Sort by priority (higher priority first)
+		// Directional lights always come first, then by calculated priority
+		std::sort(visibleLights.begin(), visibleLights.end(), 
+			[](const VisibleLightInfo& a, const VisibleLightInfo& b)
+			{
+				// Directional lights always first
+				if (a.type == LightType::Directional && b.type != LightType::Directional)
+				{
+					return true;
+				}
+				if (a.type != LightType::Directional && b.type == LightType::Directional)
+				{
+					return false;
+				}
+				// Then sort by priority (higher first)
+				return a.priority > b.priority;
+			});
+
+		// Limit the number of lights if requested
+		if (maxLights > 0 && visibleLights.size() > maxLights)
+		{
+			visibleLights.resize(maxLights);
+		}
+
+		m_lightRenderStats.lightsRendered = static_cast<uint32>(visibleLights.size());
+
+		return visibleLights;
+	}
+
+	float Scene::CalculateLightPriority(const Light& light, const Vector3& cameraPosition) const
+	{
+		// Priority factors:
+		// 1. Distance from camera (closer = higher priority)
+		// 2. Light range (larger range = higher priority)
+		// 3. Light intensity (brighter = higher priority)
+
+		const Vector3 lightPosition = light.GetDerivedPosition();
+		const float distanceSquared = (lightPosition - cameraPosition).GetSquaredLength();
+		const float range = light.GetRange();
+		const float intensity = light.GetIntensity();
+
+		// Avoid division by zero
+		const float distance = std::sqrt(distanceSquared) + 0.001f;
+
+		// Priority formula:
+		// - Closer lights get higher priority (inverse distance)
+		// - Larger lights get higher priority (range factor)
+		// - Brighter lights get higher priority (intensity factor)
+		// - Lights within their range get a bonus
+		const float distanceFactor = range / distance;
+		const float rangeFactor = range * 0.1f;  // Normalize range contribution
+		const float intensityFactor = intensity;
+
+		// If the camera is within the light's range, give it a significant priority boost
+		const float withinRangeBonus = (distance < range) ? 10.0f : 1.0f;
+
+		return (distanceFactor + rangeFactor + intensityFactor) * withinRangeBonus;
+	}
+
 	void Scene::RenderVisibleObjects()
 	{
+		PROFILE_SCOPE("RenderVisibleObjects");
+
 		m_renderQueue->SortByMaterial();
 
 		for (auto& queue = GetRenderQueue(); auto& [groupId, group] : queue)
@@ -340,6 +551,8 @@ namespace mmo
 
 	void Scene::FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds, bool onlyShadowCasters)
 	{
+		PROFILE_SCOPE("FindVisibleObjects");
+
 		GetRootSceneNode().FindVisibleObjects(camera, GetRenderQueue(), visibleObjectBounds, true, onlyShadowCasters);
 	}
 
@@ -410,6 +623,8 @@ namespace mmo
 
 	void Scene::RenderSingleObject(Renderable& renderable, uint32 groupId)
 	{
+		PROFILE_SCOPE("RenderSingleObject");
+
 		RenderOperation op { groupId };
 		renderable.PrepareRenderOperation(op);
 		op.pixelShaderType = m_pixelShaderType;
@@ -435,13 +650,18 @@ namespace mmo
 
 		gx.SetTransformMatrix(World, renderable.GetWorldTransform());
 
+		// Reserve space to avoid heap allocation on push_back
 		ASSERT(m_psCameraBuffer);
+		if (op.pixelConstantBuffers.empty())
+		{
+			op.pixelConstantBuffers.reserve(4);
+		}
 		op.pixelConstantBuffers.push_back(m_psCameraBuffer.get());
 
 		// Bind vertex layout
-		renderable.PreRender(*this, gx);
+		renderable.PreRender(*this, gx, *m_activeCamera);
 		gx.Render(op);
-		renderable.PostRender(*this, gx);
+		renderable.PostRender(*this, gx, *m_activeCamera);
 	}
 
 	ManualRenderObject* Scene::CreateManualRenderObject(const String& name)
@@ -541,6 +761,30 @@ namespace mmo
 		}
 
 		return result;
+	}
+
+	void Scene::RegisterWorldModelInstance(WorldModelInstance* instance)
+	{
+		if (instance)
+		{
+			auto it = std::find(m_worldModelInstances.begin(), m_worldModelInstances.end(), instance);
+			if (it == m_worldModelInstances.end())
+			{
+				m_worldModelInstances.push_back(instance);
+			}
+		}
+	}
+
+	void Scene::UnregisterWorldModelInstance(WorldModelInstance* instance)
+	{
+		if (instance)
+		{
+			auto it = std::find(m_worldModelInstances.begin(), m_worldModelInstances.end(), instance);
+			if (it != m_worldModelInstances.end())
+			{
+				m_worldModelInstances.erase(it);
+			}
+		}
 	}
 
 	std::unique_ptr<AABBSceneQuery> Scene::CreateAABBQuery(const AABB& box)

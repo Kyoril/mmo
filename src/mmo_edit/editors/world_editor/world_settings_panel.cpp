@@ -62,12 +62,29 @@ namespace mmo
                     m_terrain.SetWireframeVisible(wireframe);
                 }
 
+                bool lodEnabled = m_terrain.IsLodEnabled();
+                if (ImGui::Checkbox("Simulate Terrain LOD", &lodEnabled))
+                {
+                    m_terrain.SetLodEnabled(lodEnabled);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Enable terrain level of detail to simulate in-game appearance");
+                }
+
                 // TODO: Hack: Use terrain to get scene
                 bool showFog = m_terrain.GetScene().IsFogEnabled();
                 if (ImGui::Checkbox("Show Fog", &showFog))
                 {
                     m_terrain.GetScene().SetFogEnabled(showFog);
                 }
+
+                // Fog fade range controls
+                float fogValues[2] = { m_terrain.GetScene().GetFogStart(), m_terrain.GetScene().GetFogEnd() };
+                if (ImGui::DragFloat2("Fog Fade Range", fogValues, 1.0f, 0.0f, fogValues[1] - 0.1f))
+                {
+                    m_terrain.GetScene().SetFogRange(fogValues[0], fogValues[1]);
+				}
 
                 if (m_hasTerrain)
                 {

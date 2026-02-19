@@ -75,6 +75,23 @@ namespace
 		std::map<uint32, uint16> m_itemCounts;
 	};
 
+	namespace mock_item_class
+	{
+		enum Type
+		{
+			Consumable = 1,
+			Container = 2,
+		};
+	}
+
+	namespace mock_item_subclass_consumable
+	{
+		enum Type
+		{
+			Potion
+		};
+	}
+
 	/**
 	 * @brief Helper to create test item entries with common defaults.
 	 */
@@ -84,8 +101,8 @@ namespace
 		ItemEntryBuilder()
 		{
 			m_entry.set_id(1);
-			m_entry.set_itemclass(item_class::Consumable);
-			m_entry.set_subclass(item_subclass_consumable::Potion);
+			m_entry.set_itemclass(mock_item_class::Consumable);
+			m_entry.set_subclass(mock_item_subclass_consumable::Potion);
 			m_entry.set_inventorytype(inventory_type::NonEquip);
 			m_entry.set_maxcount(0);
 			m_entry.set_maxstack(20);
@@ -150,7 +167,7 @@ namespace
 		
 		proto::ItemEntry entry;
 		entry.set_id(1000);
-		entry.set_itemclass(item_class::Container);
+		entry.set_itemclass(mock_item_class::Container);
 		entry.set_containerslots(slotCount);
 		
 		auto bag = std::make_shared<GameBagS>(testProject, entry);

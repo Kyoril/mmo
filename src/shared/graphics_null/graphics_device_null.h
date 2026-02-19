@@ -92,6 +92,8 @@ namespace mmo
 
 		ConstantBufferPtr CreateConstantBuffer(size_t size, const void* initialData) override;
 
+		StructuredBufferPtr CreateStructuredBuffer(size_t elementSize, size_t elementCount, const void* initialData) override;
+
 		void SetHardwareCursor(void* osCursorData) override;
 
 		void* GetHardwareCursor() override;

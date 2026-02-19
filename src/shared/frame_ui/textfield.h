@@ -80,8 +80,8 @@ namespace mmo
 
 
 	public:
-		virtual void OnMouseDown(MouseButton button, int32 buttons, const Point& position) override;
-		virtual void OnMouseUp(MouseButton button, int32 buttons, const Point& position) override;
+		virtual bool OnMouseDown(MouseButton button, int32 buttons, const Point& position) override;
+		virtual bool OnMouseUp(MouseButton button, int32 buttons, const Point& position) override;
 		virtual void OnKeyDown(Key key) override;
 		virtual void OnKeyChar(uint16 codepoint) override;
 		virtual void OnKeyUp(Key key) override;
@@ -95,6 +95,11 @@ namespace mmo
 		virtual void PopulateGeometryBuffer() override;
 
 	private:
+		void CopyToClipboard();
+		void CutToClipboard();
+		void PasteFromClipboard();
+		void InsertTextAtCursor(const std::string& utf8Text);
+
 		/// 
 		void OnMaskedPropChanged(const Property& property);
 		void OnAcceptTabChanged(const Property& property);

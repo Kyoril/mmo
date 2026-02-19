@@ -47,6 +47,8 @@ namespace mmo
 
 		uint32 GetCastingSpellId() const;
 
+		[[nodiscard]] bool HasServerConfirmedCastStart(uint32 spellId) const;
+
 	private:
 		RealmConnector& m_connector;
 
@@ -55,5 +57,6 @@ namespace mmo
 		const proto_client::RangeManager& m_ranges;
 
 		uint32 m_spellCastId = 0;
+		bool m_serverConfirmedCastStart = false;
 	};
 }

@@ -62,12 +62,17 @@ namespace mmo
 		/// The password hash of the realm used to authenticate at the login server.
 		String realmPasswordHash;
 
+		/// Root data folder used by the realm server.
 		String dataFolder;
+		/// Whether to watch the data folder for changes.
 		bool watchDataForChanges;
 
 
+		/// Creates a configuration instance with default values.
 		explicit Configuration();
+		/// Loads configuration values from the given file.
 		bool load(const String &fileName);
+		/// Saves configuration values to the given file.
 		bool save(const String &fileName);
 	};
 }

@@ -376,11 +376,13 @@ namespace mmo
 		/// Gets the geometry buffer that is used to render this frame.
 		GeometryBuffer& GetGeometryBuffer();
 
-		/// 
-		virtual void OnMouseDown(MouseButton button, int32 buttons, const Point& position);
+		/// Called when a mouse button is pressed on this frame.
+		/// @return True if the event was consumed, false to let it bubble up.
+		virtual bool OnMouseDown(MouseButton button, int32 buttons, const Point& position);
 
-		/// 
-		virtual void OnMouseUp(MouseButton button, int32 buttons, const Point& position);
+		/// Called when a mouse button is released on this frame.
+		/// @return True if the event was consumed, false to let it bubble up.
+		virtual bool OnMouseUp(MouseButton button, int32 buttons, const Point& position);
 
 		virtual void OnMouseMoved(const Point& position, const Point& delta);
 
@@ -436,6 +438,8 @@ namespace mmo
 
 		void SetOnClick(const luabind::object& func);
 
+		void SetOnMouseDown(const luabind::object& func) { m_onMouseDown = func; }
+
 		void SetClickable(const bool clickable) { m_clickable = clickable; }
 
 		bool IsClickable() const { return m_clickable; }
@@ -456,7 +460,9 @@ namespace mmo
 
 		virtual void OnMouseLeave();
 
-		virtual void OnClick(MouseButton button);
+		/// Called when the frame is clicked.
+		/// @return True if the event was consumed, false to let it bubble up.
+		virtual bool OnClick(MouseButton button);
 
 		void SetOpacity(const float opacity) { m_opacity = Clamp(opacity, 0.0f, 1.0f); Invalidate(); }
 
@@ -594,6 +600,8 @@ namespace mmo
 		luabind::object m_onLeave;
 
 		luabind::object m_onClick;
+
+		luabind::object m_onMouseDown;
 
 		int32 m_id = 0;
 

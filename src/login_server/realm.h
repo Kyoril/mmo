@@ -46,7 +46,7 @@ namespace mmo
 		inline bool IsAuthentificated() const { return m_authenticated; }
 		/// Gets the name of the realm.
 		inline const std::string &GetRealmName() const { return m_realmName; }
-		/// 
+		/// Gets the realm id.
 		inline uint32 GetRealmId() const { return m_realmId; }
 		/// Realm address string.
 		inline const std::string& GetAddress() const { return m_address; }
@@ -56,6 +56,7 @@ namespace mmo
 		inline uint16 GetRealmListPort() const { return m_realmListPort; }
 
 	public:
+		/// Notifies this realm that an account has been banned.
 		void NotifyAccountBanned(uint64 accountId);
 
 	public:
@@ -126,6 +127,7 @@ namespace mmo
 		/// Send the auth session result back to the realm server.
 		void SendAuthSessionResult(uint64 requestId, auth::AuthResult result, uint64 accountId, uint8 gmLevel, BigNumber sessionKey);
 
+		/// Schedules the next ping timeout check.
 		void QueueNextPingTimeoutCheck();
 
 	private:

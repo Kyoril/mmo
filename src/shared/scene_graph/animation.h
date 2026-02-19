@@ -3,6 +3,7 @@
 #include <map>
 #include <vector>
 
+#include "animation_notify.h"
 #include "animation_state.h"
 #include "animation_track.h"
 #include "base/typedefs.h"
@@ -111,6 +112,19 @@ namespace mmo
 
 		void DestroyNodeTrack(uint16 handle);
 
+		// Animation notification methods
+		void AddNotify(std::unique_ptr<AnimationNotify> notify);
+
+		void RemoveNotify(size_t index);
+
+		void ClearNotifies();
+
+		[[nodiscard]] size_t GetNumNotifies() const { return m_notifies.size(); }
+
+		[[nodiscard]] AnimationNotify* GetNotify(size_t index) const;
+
+		[[nodiscard]] const std::vector<std::unique_ptr<AnimationNotify>>& GetNotifies() const { return m_notifies; }
+
 	public:
 		static void SetDefaultInterpolationMode(InterpolationMode mode) { s_defaultInterpolationMode = mode; }
 
@@ -146,6 +160,9 @@ namespace mmo
 
 		/// Node tracks, indexed by handle
 		NodeTrackList m_nodeTrackList;
+
+		/// Animation notifications
+		std::vector<std::unique_ptr<AnimationNotify>> m_notifies;
 
 	protected:
 		void BuildKeyFrameTimeList() const;

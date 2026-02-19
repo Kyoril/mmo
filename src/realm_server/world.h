@@ -71,8 +71,10 @@ namespace mmo
 		/// Gets the name of this world.
 		const String& GetWorldName() const { return m_worldName; }
 
+		/// Requests a character to join this world node.
 		void Join(CharacterData characterData, JoinWorldCallback callback);
 
+		/// Requests a character to leave this world node.
 		void Leave(ObjectGuid characterGuid, auth::WorldLeftReason reason);
 
 	public:
@@ -107,12 +109,16 @@ namespace mmo
 		/// Sends a local chat message to the world on behalf of a player.
 		void LocalChatMessage(uint64 playerGuid, ChatType chatType, const std::string& message) const;
 
+		/// Requests the character's current location asynchronously.
 		void SendFetchLocationRequestAsync(uint64 characterId, uint64 ackId);
 
+		/// Requests a teleport for the given character.
 		void SendTeleportRequest(uint64 characterId, uint32 mapId, const Vector3& position, const Radian& facing);
 
+		/// Notifies the world node that a character's group changed.
 		void NotifyPlayerGroupChanged(uint64 characterId, uint64 groupId);
 
+		/// Notifies the world node that a character's guild changed.
 		void NotifyPlayerGuildChanged(uint64 characterId, uint64 guildId);
 
 	private:

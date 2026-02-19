@@ -19,6 +19,7 @@
 #include "scene_graph/axis_display.h"
 #include "scene_graph/mesh_serializer.h"
 #include "scene_graph/world_grid.h"
+#include "scene_graph/world_model_instance.h"
 #include "transform_widget.h"
 #include "selection.h"
 #include "selection_raycaster.h"
@@ -53,7 +54,16 @@ namespace mmo
 	class Camera;
 	class SceneNode;
 
-	/// @brief Represents a single entity on the map.
+	/// @brief Represents the type of a map entity.
+	enum class MapEntityType
+	{
+		/// @brief A regular mesh entity.
+		Mesh,
+		/// @brief A world model object instance.
+		WorldModel
+	};
+
+	/// @brief Represents a single entity on the map (mesh or world model).
 	class MapEntity final : public NonCopyable
 	{
 	public:
@@ -64,27 +74,97 @@ namespace mmo
 		RemoveSignal remove;
 
 	public:
-		explicit MapEntity(Scene &scene, SceneNode &sceneNode, Entity &entity, uint32 uniqueId)
-			: m_scene(scene), m_sceneNode(sceneNode), m_entity(entity), m_uniqueId(uniqueId)
+		/// @brief Constructs a mesh-based map entity.
+		explicit MapEntity(Scene &scene, SceneNode &sceneNode, Entity &entity, uint64 uniqueId)
+			: m_scene(scene)
+			, m_sceneNode(sceneNode)
+			, m_entity(&entity)
+			, m_worldModelInstance(nullptr)
+			, m_uniqueId(uniqueId)
+			, m_entityType(MapEntityType::Mesh)
+		{
+		}
+
+		/// @brief Constructs a world model-based map entity.
+		explicit MapEntity(Scene &scene, SceneNode &sceneNode, WorldModelInstance &worldModelInstance, uint64 uniqueId)
+			: m_scene(scene)
+			, m_sceneNode(sceneNode)
+			, m_entity(nullptr)
+			, m_worldModelInstance(&worldModelInstance)
+			, m_uniqueId(uniqueId)
+			, m_entityType(MapEntityType::WorldModel)
 		{
 		}
 
 		~MapEntity() override
 		{
-			m_scene.DestroyEntity(m_entity);
+			if (m_entity)
+			{
+				m_scene.DestroyEntity(*m_entity);
+			}
+			if (m_worldModelInstance)
+			{
+				m_sceneNode.DetachObject(*m_worldModelInstance);
+				// World model instance will be deleted when the unique_ptr is destroyed
+			}
 			m_scene.DestroySceneNode(m_sceneNode);
 		}
 
 	public:
+		/// @brief Gets the type of this map entity.
+		/// @return The entity type (Mesh or WorldModel).
+		MapEntityType GetEntityType() const
+		{
+			return m_entityType;
+		}
+
+		/// @brief Checks if this is a mesh entity.
+		/// @return True if this is a mesh entity.
+		bool IsMeshEntity() const
+		{
+			return m_entityType == MapEntityType::Mesh;
+		}
+
+		/// @brief Checks if this is a world model entity.
+		/// @return True if this is a world model entity.
+		bool IsWorldModelEntity() const
+		{
+			return m_entityType == MapEntityType::WorldModel;
+		}
+
 		SceneNode &GetSceneNode() const
 		{
 			return m_sceneNode;
 		}
 
-		Entity &GetEntity() const
+		/// @brief Gets the mesh entity if this is a mesh-based map entity.
+		/// @return Pointer to the entity, or nullptr if this is a world model entity.
+		Entity *GetEntity() const
 		{
 			return m_entity;
 		}
+
+		/// @brief Gets the world model instance if this is a world model-based map entity.
+		/// @return Pointer to the world model instance, or nullptr if this is a mesh entity.
+		WorldModelInstance *GetWorldModelInstance() const
+		{
+			return m_worldModelInstance;
+		}
+
+		/// @brief Gets the movable object (works for both entity types).
+		/// @return Pointer to the movable object.
+		MovableObject *GetMovableObject() const
+		{
+			if (m_entity)
+			{
+				return m_entity;
+			}
+			return m_worldModelInstance;
+		}
+
+		/// @brief Gets the asset name for this entity.
+		/// @return The asset name (mesh name or world model name).
+		String GetAssetName() const;
 
 		uint64 GetUniqueId() const
 		{
@@ -143,15 +223,25 @@ namespace mmo
 			m_modified = true;
 		}
 
+		/// @brief Sets the asset name for this entity.
+		/// @param assetName The asset name to set.
+		void SetAssetName(const String &assetName)
+		{
+			m_assetName = assetName;
+		}
+
 	private:
 		Scene &m_scene;
 		SceneNode &m_sceneNode;
-		Entity &m_entity;
+		Entity *m_entity;
+		WorldModelInstance *m_worldModelInstance;
 		uint64 m_uniqueId;
+		MapEntityType m_entityType;
 		std::optional<PagePosition> m_referencePagePosition;
 		bool m_modified{false};
 		String m_name;
 		String m_category;
+		String m_assetName;  ///< Cached asset name for world model entities
 	};
 
 	struct WorldPage
@@ -203,6 +293,8 @@ namespace mmo
 		void OnTerrainMouseMoved(float viewportX, float viewportY);
 
 		Entity *CreateMapEntity(const String &assetName, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale, uint64 objectId) override;
+
+		WorldModelInstance *CreateWorldModelEntity(const String &assetName, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale, uint64 objectId) override;
 
 		void OnMapEntityRemoved(MapEntity &entity);
 

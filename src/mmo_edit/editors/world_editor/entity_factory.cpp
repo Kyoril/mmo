@@ -5,6 +5,8 @@
 #include "scene_graph/scene.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/scene_node.h"
+#include "scene_graph/world_model_instance.h"
+#include "scene_graph/world_model_manager.h"
 #include "world_editor.h"
 #include "world_editor_instance.h"
 #include "scene_outline_window.h"
@@ -88,6 +90,59 @@ namespace mmo
         }
 
         return entity;
+    }
+
+    WorldModelInstance *EntityFactory::CreateWorldModelEntity(const String &assetName, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale, uint64 objectId)
+    {
+        if (objectId == 0)
+        {
+            objectId = GenerateUniqueId();
+        }
+
+        const String uniqueId = "WorldModel_" + std::to_string(objectId);
+
+        // Load the world model
+        WorldModelPtr worldModel = WorldModelManager::Get().Load(assetName);
+        if (!worldModel)
+        {
+            ELOG("Failed to load world model: " << assetName);
+            return nullptr;
+        }
+
+        // Create the world model instance
+        auto worldModelInstance = std::make_unique<WorldModelInstance>(uniqueId, worldModel);
+        worldModelInstance->SetQueryFlags(SceneQueryFlags_Entity);
+
+        // Create scene node
+        auto &node = m_scene.CreateSceneNode(uniqueId);
+        m_scene.GetRootSceneNode().AddChild(node);
+        node.AttachObject(*worldModelInstance);
+        node.SetPosition(position);
+        node.SetOrientation(orientation);
+        node.SetScale(scale);
+
+        // Get the raw pointer before moving ownership
+        WorldModelInstance *rawInstance = worldModelInstance.get();
+
+        // Create map entity
+        const auto &mapEntity = m_mapEntities.emplace_back(std::make_unique<MapEntity>(m_scene, node, *rawInstance, objectId));
+        mapEntity->SetAssetName(assetName);
+        mapEntity->SetReferencePagePosition(
+            PagePosition(
+                static_cast<uint32>(floor(position.x / terrain::constants::PageSize)) + 32,
+                static_cast<uint32>(floor(position.z / terrain::constants::PageSize)) + 32));
+        rawInstance->SetUserObject(m_mapEntities.back().get());
+
+        // Store ownership of the world model instance
+        m_worldModelInstances.push_back(std::move(worldModelInstance));
+
+        // Update scene outline when a new entity is created
+        if (m_sceneOutlineWindow)
+        {
+            m_sceneOutlineWindow->Update();
+        }
+
+        return rawInstance;
     }
 
     Entity *EntityFactory::CreateUnitSpawnEntity(proto::UnitSpawnEntry &spawn)

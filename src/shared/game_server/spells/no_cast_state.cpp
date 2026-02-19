@@ -14,9 +14,10 @@ namespace mmo
 		SpellCasting& casting = CastSpell(
 			cast,
 			spell,
-			std::move(target),
+			target,
 			castTime,
-			itemGuid
+			itemGuid,
+			false
 		);
 
 		return std::make_pair(spell_cast_result::CastOkay, &casting);

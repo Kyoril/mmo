@@ -3,6 +3,7 @@
 
 #include <ranges>
 
+#include "animation_notify.h"
 #include "skeleton.h"
 #include "base/chunk_writer.h"
 #include "binary_io/writer.h"
@@ -15,12 +16,13 @@ namespace mmo
 	static const ChunkMagic SkeletonBoneChunk = MakeChunkMagic('BONE');
 	static const ChunkMagic SkeletonHierarchyChunk = MakeChunkMagic('HIER');
 	static const ChunkMagic AnimationChunk = MakeChunkMagic('ANIM');
+	static const ChunkMagic AnimationNotifyChunk = MakeChunkMagic('NTFY');
 
 	void SkeletonSerializer::Export(const Skeleton& skeleton, io::Writer& writer, SkeletonVersion version)
 	{
 		if (version == skeleton_version::Latest)
 		{
-			version = skeleton_version::Version_0_1;
+			version = skeleton_version::Version_0_2;
 		}
 
 		// Main chunk
@@ -140,6 +142,19 @@ namespace mmo
 							<< io::write<float>(scale.z);
 					}
 				}
+
+				// Write notifications
+				writer << io::write<uint16>(animation->GetNumNotifies());
+				for (const auto& notify : animation->GetNotifies())
+				{
+					writer
+						<< io::write<uint8>(notify->GetType())
+						<< io::write<float>(notify->GetTime())
+						<< io::write_dynamic_range<uint16>(notify->GetName());
+
+					// Write type-specific data
+					notify->Serialize(writer);
+				}
 			}
 			animChunk.Finish();
 		}
@@ -163,7 +178,7 @@ namespace mmo
 
 		if (reader)
 		{
-			if (version >= skeleton_version::Version_0_1)
+			if (m_version >= skeleton_version::Version_0_1)
 			{
 				AddChunkHandler(*SkeletonMainChunk, true, *this, &SkeletonDeserializer::ReadSkeletonChunk);
 				AddChunkHandler(*SkeletonBoneChunk, false, *this, &SkeletonDeserializer::ReadBoneChunk);
@@ -339,6 +354,27 @@ namespace mmo
 			}
 		}
 
+		if (m_version >= skeleton_version::Version_0_2)
+		{
+			// Read notifications if present (for newer file versions)
+			uint16 numNotifies = 0;
+			if (reader >> io::read<uint16>(numNotifies))
+			{
+				for (uint16 i = 0; i < numNotifies; ++i)
+				{
+					auto notify = AnimationNotifyFactory::Deserialize(reader);
+					if (notify)
+					{
+						anim.AddNotify(std::move(notify));
+					}
+					else
+					{
+						WLOG("Failed to deserialize animation notify for animation '" << name << "'");
+					}
+				}
+			}
+		}
+	
 		return reader;
 	}
 

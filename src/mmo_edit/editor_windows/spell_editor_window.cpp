@@ -6,6 +6,7 @@
 #include <imgui/misc/cpp/imgui_stdlib.h>
 #include <map>
 
+#include "asset_picker_widget.h"
 #include "assets/asset_registry.h"
 #include "editor_imgui_helpers.h"
 #include "game/aura.h"
@@ -14,7 +15,6 @@
 #include "game_server/spells/spell_cast.h"
 #include "graphics/texture_mgr.h"
 #include "log/default_log_levels.h"
-#include "editor_imgui_helpers.h"
 
 namespace mmo
 {
@@ -328,8 +328,7 @@ namespace mmo
 	void SpellEditorWindow::DrawDetailsImpl(proto::SpellEntry& currentEntry)
 	{
 		// Top toolbar with actions
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.6f, 0.9f, 0.8f));
-		if (ImGui::Button("New Rank", ImVec2(120, 0)))
+		if (DrawPrimaryButton("New Rank", ImVec2(120, 0)))
 		{
 			if (!currentEntry.has_baseid() || currentEntry.baseid() == 0)
 			{
@@ -348,22 +347,18 @@ namespace mmo
 			copied->set_rank(currentEntry.rank() + 1);
 			copied->set_baseid(currentEntry.baseid());
 		}
-		ImGui::PopStyleColor();
-
 		ImGui::SameLine();
 		DrawHelpMarker("Create a new rank of this spell with incremented rank number");
 
 		ImGui::SameLine();
 
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
-		if (ImGui::Button("Duplicate Spell", ImVec2(140, 0)))
+		if (DrawPrimaryButton("Duplicate Spell", ImVec2(140, 0)))
 		{
 			proto::SpellEntry* copied = m_project.spells.add();
 			const uint32 newId = copied->id();
 			copied->CopyFrom(currentEntry);
 			copied->set_id(newId);
 		}
-		ImGui::PopStyleColor();
 
 		ImGui::SameLine();
 		DrawHelpMarker("Create a complete copy of this spell with a new ID");
@@ -632,6 +627,17 @@ namespace mmo
 			ImGui::SameLine();
 			DrawHelpMarker("Time before spell can be cast again");
 
+			ImGui::Spacing();
+			DrawSectionHeader("Cooldown Flags");
+
+			CHECKBOX_FLAG_PROP(cooldownflags, "Start Cooldown On Cast Start", spell_cooldown_flags::StartOnCastStart);
+			ImGui::SameLine();
+			DrawHelpMarker("If enabled, cooldown starts when casting starts and is rolled back when the cast fails or is interrupted.");
+
+			CHECKBOX_FLAG_PROP(cooldownflags, "Use Global Cooldown", spell_cooldown_flags::UseGlobalCooldown);
+			ImGui::SameLine();
+			DrawHelpMarker("If enabled, this spell uses shared global cooldown instead of an individual cooldown.");
+
 			ImGui::SetNextItemWidth(150);
 			SLIDER_UINT32_PROP(casttime, "##CastTime", 0, 100000);
 			ImGui::SameLine();
@@ -707,12 +713,10 @@ namespace mmo
 
 			ImGui::SameLine();
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.6f, 0.7f, 0.8f));
-			if (ImGui::Button("Edit Ranges"))
+			if (DrawPrimaryButton("Edit Ranges"))
 			{
 				// TODO: Open popup
 			}
-			ImGui::PopStyleColor();
 
 			ImGui::SetNextItemWidth(150);
 			SLIDER_FLOAT_PROP(threat_multiplier, "##ThreatMultiplier", 0.0f, 100000.0f);
@@ -810,20 +814,34 @@ namespace mmo
 
 			DrawSectionHeader("Item Requirements");
 
-			// Create an imgui dropdown for itemclass field (enum: item_class::Type)
+			// Create an imgui dropdown for itemclass field
 			int currentItemClass = currentEntry.itemclass();
 			ImGui::SetNextItemWidth(200);
-			if (ImGui::Combo("##ItemClass", &currentItemClass, [](void*, int idx, const char** out_text)
-				{
-					if (idx < 0 || idx >= s_itemClassStrings.size())
-					{
-						return false;
-					}
-					*out_text = s_itemClassStrings[idx].c_str();
-					return true;
-				}, nullptr, s_itemClassStrings.size(), -1))
+			if (ImGui::BeginCombo("##ItemClass", currentItemClass > 0 ? m_project.itemClasses.getById(currentItemClass)->name().c_str() : "None"))
 			{
-				currentEntry.set_itemclass(currentItemClass);
+				// None option
+				if (ImGui::Selectable("None", currentItemClass == 0))
+				{
+					currentEntry.set_itemclass(0);
+					currentItemClass = 0;
+				}
+
+				// List all item classes from the project
+				for (size_t i = 0; i < m_project.itemClasses.count(); ++i)
+				{
+					const auto& itemClass = m_project.itemClasses.getTemplates().entry(i);
+					const bool isSelected = (currentItemClass == itemClass.id());
+					if (ImGui::Selectable(itemClass.name().c_str(), isSelected))
+					{
+						currentEntry.set_itemclass(itemClass.id());
+						currentItemClass = itemClass.id();
+					}
+					if (isSelected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+				}
+				ImGui::EndCombo();
 			}
 			ImGui::SameLine();
 			ImGui::Text("Item Class");
@@ -836,46 +854,29 @@ namespace mmo
 			ImGui::Spacing();
 			ImGui::Spacing();
 
-			// For each subclass, create a checkbox to toggle it's flag. The flag count depends on the item class. We only support weapon and armor subclass flags for now
-			if (currentItemClass == item_class::Weapon)
+			// Display subclass checkboxes for the selected item class
+			if (currentItemClass != 0)
 			{
-				DrawSectionHeader("Weapon Subclass Requirements");
-				if (ImGui::BeginTable("weaponSubclassMask", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg))
+				DrawSectionHeader("Item Subclass Requirements");
+				if (ImGui::BeginTable("itemSubclassMask", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg))
 				{
-					for (uint32 i = 0; i < s_itemSubclassWeaponStrings.size(); ++i)
+					// Iterate through all subclasses and filter by the selected item class
+					for (size_t i = 0; i < m_project.itemSubclasses.count(); ++i)
 					{
-						ImGui::TableNextColumn();
-						bool subclassIncluded = (itemSubclassMask & (1 << i)) != 0;
-						if (ImGui::Checkbox(s_itemSubclassWeaponStrings[i].c_str(), &subclassIncluded))
+						const auto& subclass = m_project.itemSubclasses.getTemplates().entry(i);
+						if (subclass.itemclass() == currentItemClass)
 						{
-							if (subclassIncluded)
-								itemSubclassMask |= (1 << i);
-							else
-								itemSubclassMask &= ~(1 << i);
+							ImGui::TableNextColumn();
+							bool subclassIncluded = (itemSubclassMask & (1 << subclass.id())) != 0;
+							if (ImGui::Checkbox(subclass.name().c_str(), &subclassIncluded))
+							{
+								if (subclassIncluded)
+									itemSubclassMask |= (1 << subclass.id());
+								else
+									itemSubclassMask &= ~(1 << subclass.id());
 
-							currentEntry.set_itemsubclassmask(itemSubclassMask); // Update the mask in the entry
-						}
-					}
-					ImGui::EndTable();
-				}
-			}
-			else if (currentItemClass == item_class::Armor)
-			{
-				DrawSectionHeader("Armor Subclass Requirements");
-				if (ImGui::BeginTable("armorSubclassMask", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg))
-				{
-					for (uint32 i = 0; i < s_itemSubclassArmorStrings.size(); ++i)
-					{
-						ImGui::TableNextColumn();
-						bool subclassIncluded = (itemSubclassMask & (1 << i)) != 0;
-						if (ImGui::Checkbox(s_itemSubclassArmorStrings[i].c_str(), &subclassIncluded))
-						{
-							if (subclassIncluded)
-								itemSubclassMask |= (1 << i);
-							else
-								itemSubclassMask &= ~(1 << i);
-
-							currentEntry.set_itemsubclassmask(itemSubclassMask); // Update the mask in the entry
+								currentEntry.set_itemsubclassmask(itemSubclassMask);
+							}
 						}
 					}
 					ImGui::EndTable();
@@ -944,12 +945,10 @@ namespace mmo
 
 				ImGui::SameLine();
 
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.3f, 0.2f, 0.8f));
-				if (ImGui::Button("Reset Reagents", ImVec2(120, 0)))
+				if (DrawDangerButton("Reset Reagents", ImVec2(120, 0)))
 				{
 					currentEntry.clear_reagents();
 				}
-				ImGui::PopStyleColor();
 
 				ImGui::EndPopup();
 			}
@@ -990,16 +989,13 @@ namespace mmo
 					}
 
 					ImGui::TableSetColumnIndex(2);
-					ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-					if (ImGui::Button("Remove", ImVec2(-1, 0)))
+					if (DrawDangerButton("Remove", ImVec2(-1, 0)))
 					{
 						currentEntry.mutable_reagents()->erase(currentEntry.mutable_reagents()->begin() + i);
 						// Break the loop to avoid invalidating the iterator
-						ImGui::PopStyleColor();
 						ImGui::PopID();
 						break;
 					}
-					ImGui::PopStyleColor();
 
 					ImGui::PopID();
 				}
@@ -1320,50 +1316,11 @@ namespace mmo
 			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
 
 			DrawSectionHeader("Spell Icon");
-
-			if (!currentEntry.icon().empty())
+			static const std::set<String> iconExtensions = { ".htex", ".blp" };
+			String iconPath = currentEntry.icon();
+			if (AssetPickerWidget::Draw("Icon", iconPath, iconExtensions, nullptr, nullptr, 64.0f))
 			{
-				if (!m_iconCache.contains(currentEntry.icon()))
-				{
-					m_iconCache[currentEntry.icon()] = TextureManager::Get().CreateOrRetrieve(currentEntry.icon());
-				}
-
-				if (const TexturePtr tex = m_iconCache[currentEntry.icon()])
-				{
-					ImGui::Image(tex->GetTextureObject(), ImVec2(64, 64));
-				}
-			}
-
-			if (ImGui::BeginCombo("Icon", currentEntry.icon().c_str(), ImGuiComboFlags_None))
-			{
-				for (int i = 0; i < m_textures.size(); i++)
-				{
-					ImGui::PushID(i);
-					const bool item_selected = m_textures[i] == currentEntry.icon();
-					const char* item_text = m_textures[i].c_str();
-					if (ImGui::Selectable(item_text, item_selected))
-					{
-						currentEntry.set_icon(item_text);
-					}
-					if (item_selected)
-					{
-						ImGui::SetItemDefaultFocus();
-					}
-					ImGui::PopID();
-				}
-
-				ImGui::EndCombo();
-			}
-
-			if (ImGui::BeginDragDropTarget())
-			{
-				// We only accept mesh file drops
-				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".htex"))
-				{
-					currentEntry.set_icon(*static_cast<String*>(payload->Data));
-				}
-
-				ImGui::EndDragDropTarget();
+				currentEntry.set_icon(iconPath);
 			}
 
 			ImGui::Spacing();
@@ -1412,12 +1369,10 @@ namespace mmo
 			if (currentEntry.has_visualization_id() && visualizationId > 0)
 			{
 				ImGui::SameLine();
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.3f, 0.2f, 0.8f));
-				if (ImGui::SmallButton("Clear"))
+				if (DrawDangerSmallButton("Clear"))
 				{
 					currentEntry.clear_visualization_id();
 				}
-				ImGui::PopStyleColor();
 			}
 
 			ImGui::PopStyleVar(2);
@@ -1535,24 +1490,19 @@ namespace mmo
 			ImGui::SameLine();
 			DrawHelpMarker(s_spellEffectInfo[currentEffect].description);
 			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.6f, 0.7f, 0.8f));
-			if (ImGui::Button("Details", ImVec2(80, 0)))
+			if (DrawPrimaryButton("Details", ImVec2(80, 0)))
 			{
 				ImGui::OpenPopup("SpellEffectDetails");
 			}
-			ImGui::PopStyleColor();
 			ImGui::SameLine();
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-			if (ImGui::Button("Remove", ImVec2(80, 0)))
+			if (DrawDangerButton("Remove", ImVec2(80, 0)))
 			{
 				currentEntry.mutable_effects()->DeleteSubrange(effectIndex, 1);
-				ImGui::PopStyleColor();
 				effectIndex--;
 			}
 			else
 			{
-				ImGui::PopStyleColor();
 				DrawEffectDialog(currentEntry, *currentEntry.mutable_effects(effectIndex), effectIndex);
 			}
 				
@@ -1560,12 +1510,10 @@ namespace mmo
 			}
 
 			// Add button
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
-			if (ImGui::Button("+ Add Effect", ImVec2(-1, 0)))
+			if (DrawSuccessButton("+ Add Effect", ImVec2(-1, 0)))
 			{
 				currentEntry.add_effects()->set_index(currentEntry.effects_size() - 1);
 			}
-			ImGui::PopStyleColor();
 
 			ImGui::EndChildFrame();
 
@@ -1677,6 +1625,60 @@ namespace mmo
 					}
 				}
 				break;
+			case spell_effects::EnvironmentalDamage:
+				{
+					static const char* s_envDamageTypes[] = { "Fall", "Drowning", "Lava", "Fire" };
+					int envType = effect.miscvaluea();
+					if (envType < 0 || envType >= IM_ARRAYSIZE(s_envDamageTypes))
+					{
+						envType = 0;
+					}
+
+					if (ImGui::Combo("Damage Type", &envType,
+						[](void*, int idx, const char** out_text)
+						{
+							static const char* types[] = { "Fall", "Drowning", "Lava", "Fire" };
+							if (idx < 0 || idx >= IM_ARRAYSIZE(types))
+							{
+								return false;
+							}
+							*out_text = types[idx];
+							return true;
+						}, nullptr, IM_ARRAYSIZE(s_envDamageTypes)))
+					{
+						effect.set_miscvaluea(envType);
+					}
+
+					DrawHelpMarker("The type of environmental damage. Base Points represent the damage as a percentage of max HP.");
+					break;
+				}
+			case spell_effects::Proficiency:
+				{
+					const uint32 proficiency = effect.miscvaluea();
+
+					const auto* proficiencyEntry = m_project.proficiencies.getById(proficiency);
+					if (ImGui::BeginCombo("Proficiency", proficiencyEntry != nullptr ? proficiencyEntry->name().c_str() : "None", ImGuiComboFlags_None))
+					{
+						for (int i = 0; i < m_project.proficiencies.count(); i++)
+						{
+							ImGui::PushID(i);
+							const bool item_selected = m_project.proficiencies.getTemplates().entry(i).id() == proficiency;
+							const char* item_text = m_project.proficiencies.getTemplates().entry(i).name().c_str();
+							if (ImGui::Selectable(item_text, item_selected))
+							{
+								effect.set_miscvaluea(m_project.proficiencies.getTemplates().entry(i).id());
+							}
+							if (item_selected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+							ImGui::PopID();
+						}
+
+						ImGui::EndCombo();
+					}
+					break;
+				}
 			case spell_effects::CreateItem:
 				{
 					const uint32 item = effect.itemtype();
@@ -1852,12 +1854,10 @@ namespace mmo
 			ImGui::Separator();
 			ImGui::Spacing();
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.6f, 0.9f, 0.8f));
-			if (ImGui::Button("Close", ImVec2(120, 0)))
+			if (DrawPrimaryButton("Close", ImVec2(120, 0)))
 			{
 				ImGui::CloseCurrentPopup();
 			}
-			ImGui::PopStyleColor();
 
 			ImGui::PopStyleVar(2);
 			ImGui::EndPopup();

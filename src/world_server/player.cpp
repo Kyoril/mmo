@@ -482,6 +482,9 @@ namespace mmo
 		case game::client_realm_packet::CancelCast:
 			OnCancelCast(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::CancelAura:
+			OnCancelAura(opCode, buffer.size(), reader);
+			break;
 
 		case game::client_realm_packet::AttackSwing:
 			OnAttackSwing(opCode, buffer.size(), reader);
@@ -840,6 +843,10 @@ namespace mmo
 		// Lets track the session start time		
     	m_sessionStartTime = std::chrono::steady_clock::now();
 		m_spawned = true;
+
+		// Allow the client to transition into falling state without a jump packet.
+		// This handles the case where the player spawns in the air (e.g., cross-map teleport).
+		m_pendingFallStart = true;
 	}
 
 	void Player::OnDespawned(GameObjectS& object)
@@ -1336,9 +1343,20 @@ namespace mmo
 		// Did the client try to sneak in a FALLING flag without sending a jump packet?
 		if (info.IsFalling() && !prevMovementInfo.IsFalling() && opCode != game::client_realm_packet::MoveJump)
 		{
-			ELOG("Client tried to apply FALLING flag in non-jump packet!");
-			//Kick();
-			return;
+			// Allow falling to start without a jump if the player was recently spawned or
+			// teleported cross-map (they may have spawned in the air)
+			if (m_pendingFallStart)
+			{
+				m_pendingFallStart = false;
+				m_fallStartHeight = info.position.y;
+				m_trackingFall = true;
+			}
+			else
+			{
+				ELOG("Client tried to apply FALLING flag in non-jump packet!");
+				//Kick();
+				return;
+			}
 		}
 		// Did the client try to remove a FALLING flag without sending a landing packet?
 		if (!info.IsFalling() && prevMovementInfo.IsFalling() && (opCode != game::client_realm_packet::MoveFallLand && opCode != game::client_realm_packet::MoveEnded))
@@ -1356,6 +1374,11 @@ namespace mmo
 				//Kick();
 				return;
 			}
+
+			// Record the Y position at the start of the jump/fall for fall damage calculation
+			m_fallStartHeight = info.position.y;
+			m_trackingFall = true;
+			m_pendingFallStart = false;
 		}
 		else if (opCode == game::client_realm_packet::MoveFallLand)
 		{
@@ -1365,6 +1388,48 @@ namespace mmo
 				//Kick();
 				return;
 			}
+
+			// Calculate and apply fall damage on landing
+			if (m_trackingFall && m_character->IsAlive())
+			{
+				const float fallDistance = m_fallStartHeight - info.position.y;
+				if (fallDistance > m_fallDamageMinHeight)
+				{
+					// Calculate damage as a percentage of max HP, scaling linearly from 0% at minHeight to 100% at lethalHeight
+					const float damageRange = m_fallDamageLethalHeight - m_fallDamageMinHeight;
+					float damagePct = 0.0f;
+					if (damageRange > 0.0f)
+					{
+						damagePct = (fallDistance - m_fallDamageMinHeight) / damageRange;
+					}
+
+					// Clamp to 0..1 range (100% at lethal height or beyond)
+					if (damagePct > 1.0f)
+					{
+						damagePct = 1.0f;
+					}
+
+					const uint32 maxHealth = m_character->GetMaxHealth();
+					uint32 fallDamage = static_cast<uint32>(static_cast<float>(maxHealth) * damagePct);
+					if (fallDamage > 0)
+					{
+						// Apply fall damage as physical damage with no instigator
+						const uint32 actualDamage = m_character->Damage(fallDamage, static_cast<uint32>(DamageSchool::Physical), nullptr, damage_type::PhysicalAbility);
+
+						// Send environmental damage log to the client
+						m_character->EnvironmentalDamageLog(m_character->GetGuid(), actualDamage, environmental_damage_type::Fall);
+					}
+				}
+			}
+
+			m_trackingFall = false;
+		}
+
+		// Clear the pending fall start flag if the player is on the ground
+		// (they landed normally or were never in the air after spawn/teleport)
+		if (!info.IsFalling() && m_pendingFallStart)
+		{
+			m_pendingFallStart = false;
 		}
 
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
@@ -1403,14 +1468,12 @@ namespace mmo
 		}
 		else if (!prevMovementInfo.IsChangingPosition() && opCode != game::realm_client_packet::MoveSplineDone)
 		{
-			const float positionTolerance = 0.01f; // Small tolerance for floating point precision
+			// Allow a generous tolerance for position drift from client-side physics
+			// (gravity, collision resolution, etc.) that can shift position between packets
+			const float positionTolerance = 1.0f;
             if (!info.position.IsNearlyEqual(m_character->GetPosition(), positionTolerance))
             {
-                ELOG("[OPCode " << opCode << "] Pos changed on client while it should not be able to do so based on server info");
-                ELOG("\tS: " << m_character->GetPosition());
-                ELOG("\tC: " << info.position);
-                ELOG("\tDistance: " << (info.position - m_character->GetPosition()).GetLength());
-                //return;
+                WLOG("[OPCode " << opCode << "] Position drift detected: server=" << m_character->GetPosition() << " client=" << info.position << " dist=" << (info.position - m_character->GetPosition()).GetLength());
             }
 		}
 
@@ -1468,7 +1531,7 @@ namespace mmo
 				io::VectorSink sink{ buffer };
 				game::OutgoingPacket movementPacket{ sink };
 				movementPacket.Start(opCode);
-				movementPacket << io::write<uint64>(characterGuid) << info;
+				movementPacket << io::write<uint64>(characterGuid) << copy;
 				movementPacket.Finish();
 
 				watcher->SendPacket(movementPacket, buffer);
@@ -1526,6 +1589,39 @@ namespace mmo
 	void Player::OnCancelCast(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		m_character->CancelCast(spell_interrupt_flags::Any, 0);
+	}
+
+	void Player::OnCancelAura(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 spellId;
+		if (!(contentReader >> io::read<uint32>(spellId)))
+		{
+			ELOG("Failed to read spell ID for cancel aura");
+			return;
+		}
+
+		// Check if known spell
+		const auto* spell = m_project.spells.getById(spellId);
+		if (!spell)
+		{
+			ELOG("Unknown spell " << spellId << " - can not cancel aura!");
+			Kick();
+			return;
+		}
+
+		if (spell->attributes(0) & spell_attributes::Negative)
+		{
+			WLOG("Tried to cancel negative aura " << spellId);
+			return;
+		}
+		if (spell->attributes(0) & spell_attributes::Passive)
+		{
+			WLOG("Tried to cancel passive aura " << spellId);
+			return;
+		}
+
+		// Try to remove the aura - this will check if it exists, is self-cast, and is positive
+		m_character->RemoveAuraBySpellId(spellId, m_character->GetGuid());
 	}
 
 	void Player::OnAttackSwing(uint16 opCode, uint32 size, io::Reader& contentReader)
@@ -1799,6 +1895,12 @@ namespace mmo
 			}
 
 			DLOG("Received teleport ack towards " << change.teleportInfo.x << "," << change.teleportInfo.y << "," << change.teleportInfo.z);
+
+			// Start tracking fall damage from the teleport position since the player
+			// is now falling after the teleport (Falling flag is always sent in teleport)
+			m_fallStartHeight = info.position.y;
+			m_trackingFall = true;
+			m_pendingFallStart = false;
 			break;
 		}
 
@@ -2088,6 +2190,25 @@ namespace mmo
 			});
 	}
 
+	void Player::OnEnvironmentalDamageLog(uint64 targetGuid, uint32 amount, EnvironmentalDamageType type)
+	{
+		SendPacket([targetGuid, amount, type](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::EnvironmentalDamageLog);
+				packet
+					<< io::write_packed_guid(targetGuid)
+					<< io::write<uint32>(amount)
+					<< io::write<uint8>(type);
+				packet.Finish();
+			});
+	}
+
+	void Player::SetFallDamageConfig(float minHeight, float lethalHeight)
+	{
+		m_fallDamageMinHeight = minHeight;
+		m_fallDamageLethalHeight = lethalHeight;
+	}
+
 	void Player::OnSpeedChangeApplied(MovementType type, float speed, uint32 ackId)
 	{
 		SendPacket([type, speed, ackId](game::OutgoingPacket& packet)
@@ -2336,30 +2457,16 @@ namespace mmo
 			});
 	}
 
-	void Player::OnWeaponProficiencyChanged(const uint32 weaponProficiency)
+	void Player::OnProficiencyChanged(const uint32 proficiencyId, const bool added)
 	{
-		DLOG("Player " << m_character->GetName() << " changed weapon proficiency to " << log_hex_digit(weaponProficiency));
+		DLOG("Player " << m_character->GetName() << (added ? " gained" : " lost") << " proficiency " << proficiencyId);
 
-		SendPacket([weaponProficiency](game::OutgoingPacket& packet)
+		SendPacket([proficiencyId, added](game::OutgoingPacket& packet)
 			{
 				packet.Start(game::realm_client_packet::SetProficiency);
 				packet
-					<< io::write<uint8>(item_class::Weapon)
-					<< io::write<uint32>(weaponProficiency);
-				packet.Finish();
-			});
-	}
-
-	void Player::OnArmorProficiencyChanged(const uint32 armorProficiency)
-	{
-		DLOG("Player " << m_character->GetName() << " changed armor proficiency to " << log_hex_digit(armorProficiency));
-
-		SendPacket([armorProficiency](game::OutgoingPacket& packet)
-			{
-				packet.Start(game::realm_client_packet::SetProficiency);
-				packet
-					<< io::write<uint8>(item_class::Armor)
-					<< io::write<uint32>(armorProficiency);
+					<< io::write<uint32>(proficiencyId)
+					<< io::write<uint8>(added ? 1 : 0);
 				packet.Finish();
 			});
 	}

@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "systems/action_bar.h"
+#include "systems/cooldown_manager.h"
 #include "char_creation/char_create_info.h"
 #include "char_creation/char_select.h"
 #include "cursor.h"
@@ -759,9 +760,9 @@ namespace mmo
 		}
 	}
 
-	GameScript::GameScript(LoginConnector &loginConnector, RealmConnector &realmConnector, LootClient &lootClient, VendorClient &vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project &project, ActionBar &actionBar, SpellCast &spellCast, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, PartyInfo &partyInfo, CharCreateInfo &charCreateInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, GameTimeComponent &gameTime,
+	GameScript::GameScript(LoginConnector &loginConnector, RealmConnector &realmConnector, LootClient &lootClient, VendorClient &vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project &project, ActionBar &actionBar, SpellCast &spellCast, CooldownManager &cooldownManager, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, PartyInfo &partyInfo, CharCreateInfo &charCreateInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, GameTimeComponent &gameTime,
 						   TalentClient &talentClient)
-		: m_loginConnector(loginConnector), m_realmConnector(realmConnector), m_lootClient(lootClient), m_vendorClient(vendorClient), m_loginState(std::move(loginState)), m_project(project), m_actionBar(actionBar), m_spellCast(spellCast), m_trainerClient(trainerClient), m_questClient(questClient), m_audio(audio), m_partyInfo(partyInfo), m_charCreateInfo(charCreateInfo), m_charSelect(charSelect), m_guildClient(guildClient), m_friendClient(friendClient), m_gameTime(gameTime), m_talentClient(talentClient)
+		: m_loginConnector(loginConnector), m_realmConnector(realmConnector), m_lootClient(lootClient), m_vendorClient(vendorClient), m_loginState(std::move(loginState)), m_project(project), m_actionBar(actionBar), m_spellCast(spellCast), m_cooldownManager(cooldownManager), m_trainerClient(trainerClient), m_questClient(questClient), m_audio(audio), m_partyInfo(partyInfo), m_charCreateInfo(charCreateInfo), m_charSelect(charSelect), m_guildClient(guildClient), m_friendClient(friendClient), m_gameTime(gameTime), m_talentClient(talentClient)
 	{
 		// Initialize the cursor with project data for icon resolution
 		g_cursor.Initialize(m_project);
@@ -857,11 +858,43 @@ namespace mmo
 					   luabind::scope(
 						   luabind::class_<proto_client::Project>("Project")
 							   .def_readonly("spells", &mmo::proto_client::Project::spells)
-							   .def_readonly("models", &mmo::proto_client::Project::models)),
+							   .def_readonly("models", &mmo::proto_client::Project::models)
+							   .def_readonly("proficiencies", &mmo::proto_client::Project::proficiencies)
+							   .def_readonly("itemClasses", &mmo::proto_client::Project::itemClasses)
+							   .def_readonly("itemSubclasses", &mmo::proto_client::Project::itemSubclasses)),
 
 					   luabind::scope(
 						   luabind::class_<proto_client::SpellManager>("SpellManager")
 							   .def_const<const proto_client::SpellEntry *, proto_client::SpellManager, uint32>("GetById", &mmo::proto_client::SpellManager::getById)),
+
+					   luabind::scope(
+						   luabind::class_<proto_client::ProficiencyManager>("ProficiencyManager")
+							   .def_const<const proto_client::ProficiencyEntry *, proto_client::ProficiencyManager, uint32>("GetById", &mmo::proto_client::ProficiencyManager::getById)),
+
+					   luabind::scope(
+						   luabind::class_<proto_client::ItemClassManager>("ItemClassManager")
+							   .def_const<const proto_client::ItemClassEntry *, proto_client::ItemClassManager, uint32>("GetById", &mmo::proto_client::ItemClassManager::getById)),
+
+					   luabind::scope(
+						   luabind::class_<proto_client::ItemSubclassManager>("ItemSubclassManager")
+							   .def_const<const proto_client::ItemSubclassEntry *, proto_client::ItemSubclassManager, uint32>("GetById", &mmo::proto_client::ItemSubclassManager::getById)),
+
+					   luabind::scope(
+						   luabind::class_<proto_client::ProficiencyEntry>("Proficiency")
+							   .def_readonly("id", &proto_client::ProficiencyEntry::id)
+							   .def_readonly("name", &proto_client::ProficiencyEntry::name)),
+
+					   luabind::scope(
+						   luabind::class_<proto_client::ItemClassEntry>("ItemClass")
+							   .def_readonly("id", &proto_client::ItemClassEntry::id)
+							   .def_readonly("name", &proto_client::ItemClassEntry::name)),
+
+					   luabind::scope(
+						   luabind::class_<proto_client::ItemSubclassEntry>("ItemSubclass")
+							   .def_readonly("id", &proto_client::ItemSubclassEntry::id)
+							   .def_readonly("name", &proto_client::ItemSubclassEntry::name)
+							   .def_readonly("itemclass", &proto_client::ItemSubclassEntry::itemclass)
+							   .def_readonly("requiredproficiency", &proto_client::ItemSubclassEntry::requiredproficiency)),
 
 					   luabind::scope(
 						   luabind::class_<RealmConnector>("RealmConnector")
@@ -886,6 +919,8 @@ namespace mmo
 							   .def_readonly("maxDurability", &ItemInfo::maxdurability)
 							   .def_readonly("class", &ItemInfo::GetItemClassName)
 							   .def_readonly("subClass", &ItemInfo::GetItemSubClassName)
+							   .def_readonly("classId", &ItemInfo::itemClass)
+							   .def_readonly("subClassId", &ItemInfo::itemSubclass)
 							   .def_readonly("proficiency", &ItemInfo::GetProficiency)
 							   .def_readonly("inventoryType", &ItemInfo::GetItemInventoryTypeName)
 							   .def<std::function<const char *(const ItemInfo *)>>("GetIcon", [this](const ItemInfo *self) -> const char *
@@ -899,6 +934,7 @@ namespace mmo
 
 					   luabind::scope(
 						   luabind::class_<UnitHandle>("UnitHandle")
+								.def("GetGuid", &UnitHandle::GetGuid)
 							   .def("GetHealth", &UnitHandle::GetHealth)
 							   .def("GetMaxHealth", &UnitHandle::GetMaxHealth)
 							   .def("GetPower", &UnitHandle::GetPower)
@@ -928,27 +964,21 @@ namespace mmo
 							   .def("GetHealthFromStat", &UnitHandle::GetHealthFromStat)
 							   .def("GetManaFromStat", &UnitHandle::GetManaFromStat)
 							   .def("GetAttributeCost", &UnitHandle::GetAttributeCost)
-							   .def("HasProficiency", &UnitHandle::HasProficiency)),
+							   .def("HasProficiency", &UnitHandle::HasProficiency)
+								.def("__eq", &UnitHandle::operator==)),
 
 					   luabind::scope(
 						   luabind::class_<AuraHandle>("AuraHandle")
 							   .def("IsExpired", &AuraHandle::IsExpired)
 							   .def("CanExpire", &AuraHandle::CanExpire)
 							   .def("GetDuration", &AuraHandle::GetDuration)
-							   .def("GetSpell", &AuraHandle::GetSpell)),
+						   .def("GetSpell", &AuraHandle::GetSpell)
+						   .def("IsNegative", &AuraHandle::IsNegative)),
 
-					   luabind::scope(
-						   luabind::class_<ItemHandle>("ItemHandle")
-							   .def("GetId", &ItemHandle::GetId)
-							   .def("GetName", &ItemHandle::GetName)
-							   .def("GetDescription", &ItemHandle::GetDescription)
-							   .def("GetClass", &ItemHandle::GetItemClass)
-							   .def("GetInventoryType", &ItemHandle::GetInventoryType)
-							   .def("GetSubClass", &ItemHandle::GetItemSubClass)
-							   .def("GetProficiency", &ItemHandle::GetProficiency)
-							   .def("GetStackCount", &ItemHandle::GetStackCount)
-							   .def("GetBagSlots", &ItemHandle::GetBagSlots)
-							   .def("GetMinDamage", &ItemHandle::GetMinDamage)
+				   luabind::scope(
+					   luabind::class_<ItemHandle>("ItemHandle")
+						   .def("GetId", &ItemHandle::GetId)
+						   .def("GetName", &ItemHandle::GetName)
 							   .def("GetMaxDamage", &ItemHandle::GetMaxDamage)
 							   .def("GetAttackSpeed", &ItemHandle::GetAttackSpeed)
 							   .def("GetDps", &ItemHandle::GetDps)
@@ -957,16 +987,26 @@ namespace mmo
 							   .def("GetBlock", &ItemHandle::GetBlock)
 							   .def("GetDurability", &ItemHandle::GetDurability)
 							   .def("GetMaxDurability", &ItemHandle::GetMaxDurability)
+					   		   .def("GetStackCount", &ItemHandle::GetStackCount)
+							   .def("GetClass", &ItemHandle::GetItemClass)
+							   .def("GetSubClass", &ItemHandle::GetItemSubClass)
+							   .def("GetClassId", &ItemHandle::GetClassId)
+							   .def("GetSubClassId", &ItemHandle::GetSubClassId)
+							   .def("GetInventoryType", &ItemHandle::GetInventoryType)
 							   .def("GetSellPrice", &ItemHandle::GetSellPrice)
 							   .def("GetIcon", &ItemHandle::GetIcon)
 							   .def("GetEntry", &ItemHandle::GetEntry)
 							   .def("GetSpell", &ItemHandle::GetSpell)
 							   .def("GetSpellTriggerType", &ItemHandle::GetSpellTriggerType)
 							   .def("GetStatType", &ItemHandle::GetStatType)
+								.def("GetBagSlots", &ItemHandle::GetBagSlots)
+							   .def("GetDescription", &ItemHandle::GetDescription)
+							   .def("GetMinDamage", &ItemHandle::GetMinDamage)
+							   .def("GetProficiency", &ItemHandle::GetProficiency)
 							   .def("GetStatValue", &ItemHandle::GetStatValue)),
 
-					   luabind::scope(
-						   luabind::class_<proto_client::SpellEntry>("Spell")
+						   luabind::scope(
+							   luabind::class_<proto_client::SpellEntry>("Spell")
 							   .def_readonly("id", &proto_client::SpellEntry::id)
 							   .def_readonly("name", &proto_client::SpellEntry::name)
 							   .def_readonly("rank", &proto_client::SpellEntry::rank)
@@ -1027,6 +1067,8 @@ namespace mmo
 
 					   luabind::def("UnitAura", &Script_UnitAura, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 
+					   luabind::def<std::function<void(uint32)>>("CancelAura", [this](uint32 spellId)
+															{ m_realmConnector.CancelAura(spellId); }),
 					   luabind::def("GetSpellDescription", &Script_GetSpellDescription),
 					   luabind::def("GetSpellAuraText", &Script_GetSpellAuraText),
 					   luabind::def("IsPassiveSpell", &Script_IsPassiveSpell),
@@ -1065,7 +1107,7 @@ namespace mmo
 					return std::shared_ptr<ItemHandle>();
 				}
 
-				return std::make_shared<ItemHandle>(*item, m_project.spells); }),
+				return std::make_shared<ItemHandle>(*item, m_project); }),
 
 					   luabind::def("GetTime", &GetAsyncTimeMs),
 
@@ -1088,6 +1130,14 @@ namespace mmo
 																							{ return this->m_actionBar.GetActionButtonSpell(slot); }),
 					   luabind::def<std::function<const ItemInfo *(int32)>>("GetActionButtonItem", [this](int32 slot)
 																			{ return this->m_actionBar.GetActionButtonItem(slot); }),
+
+					   // Cooldowns
+					   luabind::def<std::function<float(uint32)>>("GetSpellCooldownProgress", [this](uint32 spellId)
+																  { return this->m_cooldownManager.GetCooldownProgress(spellId); }),
+					   luabind::def<std::function<float(uint32)>>("GetSpellCooldownRemaining", [this](uint32 spellId)
+																  { return this->m_cooldownManager.GetCooldownRemaining(spellId); }),
+					   luabind::def<std::function<bool(uint32)>>("IsSpellOnCooldown", [this](uint32 spellId)
+																 { return this->m_cooldownManager.IsOnCooldown(spellId); }),
 
 					   luabind::def<std::function<void(int32, const ItemInfo *&, String &, int32 &, int32 &, int32 &, bool &)>>("GetVendorItemInfo", [this](int32 slot, const ItemInfo *&out_item, String &out_icon, int32 &out_price, int32 &out_quantity, int32 &out_numAvailable, bool &out_usable)
 																																{ return this->GetVendorItemInfo(slot, out_item, out_icon, out_price, out_quantity, out_numAvailable, out_usable); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>, luabind::pure_out_value<7>>()),
@@ -1119,10 +1169,29 @@ namespace mmo
 					   luabind::def<std::function<void(uint32)>>("UseContainerItem", [this](uint32 slot)
 																 { this->UseContainerItem(slot); }),
 					   luabind::def<std::function<int32(uint32)>>("GetItemCount", [this](const uint32 id) -> int32
-																  { return ObjectMgr::GetItemCount(id); }),
+						   { return ObjectMgr::GetItemCount(id); }),
 
 					   luabind::def<std::function<int32()>>("GetNumLootItems", [this]()
-															{ return this->GetNumLootItems(); }),
+						   { return this->GetNumLootItems(); }),
+
+				   
+				   luabind::def<std::function<void(uint32, uint32)>>("DestroyItem", [this](uint32 slot, uint32 count)
+											 { 
+												 uint8 bag = (slot >> 8) & 0xFF;
+												 uint8 bagSlot = slot & 0xFF;
+												 this->m_realmConnector.DestroyItem(bag, bagSlot, static_cast<uint8>(count)); 
+											 }),
+				   
+				   // Cursor management functions
+				   luabind::def<std::function<bool()>>("CursorHasItem", []() -> bool
+											 { return g_cursor.GetCursorItem() != static_cast<uint32>(-1); }),
+				   luabind::def<std::function<uint32()>>("GetCursorItemSlot", []() -> uint32
+											 { return g_cursor.GetCursorItem(); }),
+				   luabind::def<std::function<void()>>("ClearCursorItem", []()
+											 { g_cursor.Clear(); }),
+				   luabind::def<std::function<void(uint32)>>("SetCursorItem", [](uint32 slot)
+											 { g_cursor.SetItem(slot); }),
+				   
 					   luabind::def<std::function<void(int32, bool)>>("LootSlot", [this](int32 slot, bool force)
 																	  { this->LootSlot(slot, force); }),
 					   luabind::def<std::function<bool(int32)>>("LootSlotIsCoin", [this](int32 slot)
@@ -1165,6 +1234,14 @@ namespace mmo
 																		 { m_realmConnector.InviteByName(playerName); }),
 					   luabind::def<std::function<void(const String &)>>("UninviteByName", [this](const String &playerName)
 																		 { m_realmConnector.UninviteByName(playerName); }),
+					   luabind::def<std::function<void()>>("LeaveParty", [this]()
+														   {
+															   m_realmConnector.LeaveGroup();
+														   }),
+					   luabind::def<std::function<void()>>("DisbandParty", [this]()
+						   {
+							   m_realmConnector.DisbandGroup();
+						   }),
 
 					   luabind::def<std::function<void()>>("RequestTimePlayed", [this]()
 														   { m_realmConnector.SendTimePlayedRequest(); }));
@@ -1375,9 +1452,7 @@ namespace mmo
 			return;
 		}
 
-		if (entry->itemClass == item_class::Weapon ||
-			entry->itemClass == item_class::Armor ||
-			entry->itemClass == item_class::Container)
+		if (entry->inventoryType != inventory_type::NonEquip)
 		{
 			m_realmConnector.AutoEquipItem((slot >> 8) & 0xff, slot & 0xff);
 			return;

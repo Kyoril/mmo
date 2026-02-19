@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "race_editor_window.h"
+#include "editor_imgui_helpers.h"
 
 #include "faction_editor_window.h"
 
@@ -79,10 +80,40 @@ namespace mmo
 #define SLIDER_UINT32_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 32, min, max)
 #define SLIDER_UINT64_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 64, min, max)
 
+		// Quick setup state to streamline race creation flow.
+		// Validate by existence in project data, because id "0" can be valid in some projects.
+		const bool hasFactionTemplate = m_project.factionTemplates.getById(currentEntry.factiontemplate()) != nullptr;
+		const bool hasStartMap = m_project.maps.getById(currentEntry.startmap()) != nullptr;
+		const bool hasMaleModel = m_project.models.getById(currentEntry.malemodel()) != nullptr;
+		const bool hasFemaleModel = m_project.models.getById(currentEntry.femalemodel()) != nullptr;
+		const bool isSetupComplete = hasFactionTemplate && hasStartMap && hasMaleModel && hasFemaleModel;
+		if (ImGui::BeginTable("raceSetupStatus", 4, ImGuiTableFlags_SizingStretchProp))
+		{
+			auto drawStatus = [](const char* label, bool ready)
+			{
+				ImGui::TableNextColumn();
+				ImGui::PushStyleColor(ImGuiCol_Text, ready ? ImVec4(0.3f, 0.8f, 0.4f, 1.0f) : ImVec4(0.9f, 0.65f, 0.2f, 1.0f));
+				ImGui::Text("%s: %s", label, ready ? "OK" : "Missing");
+				ImGui::PopStyleColor();
+			};
+
+			drawStatus("Faction", hasFactionTemplate);
+			drawStatus("Start Map", hasStartMap);
+			drawStatus("Male Model", hasMaleModel);
+			drawStatus("Female Model", hasFemaleModel);
+			ImGui::EndTable();
+		}
+		if (!isSetupComplete)
+		{
+			ImGui::TextDisabled("Fix missing entries in: Basic -> Faction Template, Starting point -> Map, Visuals -> Male/Female Model.");
+		}
+		ImGui::Spacing();
+
 		static const char* s_factionTemplateNone = "<None>";
 
-		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Basic", ImGuiTreeNodeFlags_DefaultOpen))
 		{
+			DrawSectionHeader("Identity");
 			if (ImGui::BeginTable("table", 2, ImGuiTableFlags_None))
 			{
 				if (ImGui::TableNextColumn())
@@ -101,6 +132,7 @@ namespace mmo
 				ImGui::EndTable();
 			}
 
+			DrawSectionHeader("Gameplay Defaults");
 			int32 factionTemplate = currentEntry.factiontemplate();
 
 			const auto* factionEntry = m_project.factionTemplates.getById(factionTemplate);
@@ -128,8 +160,9 @@ namespace mmo
 
 		static const char* s_mapEntryNone = "<None>";
 
-		if (ImGui::CollapsingHeader("Starting point", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Starting point", ImGuiTreeNodeFlags_DefaultOpen))
 		{
+			DrawSectionHeader("Spawn Location");
 			int32 startMap = currentEntry.startmap();
 
 			const auto* mapEntry = m_project.maps.getById(startMap);
@@ -159,8 +192,9 @@ namespace mmo
 		}
 
 
-		if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Visuals", ImGuiTreeNodeFlags_DefaultOpen))
 		{
+			DrawSectionHeader("Character Models");
 			int32 maleModel = currentEntry.malemodel();
 
 			const auto* maleModelEntry = m_project.models.getById(maleModel);
@@ -210,9 +244,10 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Initial Items", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Initial Items", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			static const char* s_itemNone = "<None>";
+			DrawSectionHeader("Starter Gear Per Class");
 
 			if (ImGui::BeginTable("initialItemsTable", 1, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
 			{
@@ -294,7 +329,7 @@ namespace mmo
 
 							// Remove button
 							ImGui::SameLine();
-							if (ImGui::Button("Remove"))
+							if (DrawDangerButton("Remove"))
 							{
 								itemsList.erase(itemsList.begin() + itemIndex);
 								ImGui::Unindent();
@@ -308,7 +343,7 @@ namespace mmo
 
 						// Add new item button
 						ImGui::Indent();
-						if (ImGui::Button("Add Item"))
+						if (DrawSuccessButton("Add Item"))
 						{
 							itemsList.Add(0); // Add a placeholder item that can be configured
 						}

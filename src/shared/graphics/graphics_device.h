@@ -14,6 +14,8 @@
 #include "material_compiler.h"
 #include "vertex_declaration.h"
 #include "shared/graphics/constant_buffer.h"
+#include "shared/graphics/structured_buffer.h"
+#include "shared/graphics/occlusion_query.h"
 
 
 namespace mmo
@@ -187,6 +189,13 @@ namespace mmo
 		/// Creates a new constant buffer.
 		virtual ConstantBufferPtr CreateConstantBuffer(size_t size, const void* initialData = nullptr) = 0;
 
+		/// @brief Creates a new structured buffer.
+		/// @param elementSize The size of a single element in bytes.
+		/// @param elementCount The maximum number of elements the buffer can hold.
+		/// @param initialData Optional initial data to populate the buffer with.
+		/// @return A shared pointer to the newly created structured buffer.
+		virtual StructuredBufferPtr CreateStructuredBuffer(size_t elementSize, size_t elementCount, const void* initialData = nullptr) = 0;
+
 		/// Creates a new shader of a certain type if supported.
 		virtual ShaderPtr CreateShader(ShaderType type, const void* shaderCode, size_t shaderCodeSize) = 0;
 
@@ -197,6 +206,10 @@ namespace mmo
 		virtual void SetDepthBiasClamp(float bias) {}
 
 		virtual void Render(const RenderOperation& operation) {}
+
+		/// @brief Creates a GPU occlusion query object for visibility testing.
+		/// @return A unique pointer to the occlusion query, or nullptr if not supported.
+		virtual OcclusionQueryPtr CreateOcclusionQuery() { return nullptr; }
 
 		/// @brief Draws non-indexed primitives.
 		/// @param vertexCount Number of vertices to draw.
