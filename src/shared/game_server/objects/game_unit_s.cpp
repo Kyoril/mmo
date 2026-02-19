@@ -659,6 +659,12 @@ namespace mmo
 			return 0;
 		}
 
+		// Check if the unit is immune to damage
+		if (Get<uint32>(object_fields::Flags) & unit_flags::Immune)
+		{
+			return 0;
+		}
+
 		if (IsPlayer() && instigator && instigator->IsPlayer())
 		{
 			SetInCombat(true, true);

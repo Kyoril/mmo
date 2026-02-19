@@ -5,6 +5,8 @@
 
 #include "game_server/ai/creature_ai_combat_state.h"
 #include "game_server/ai/creature_ai.h"
+#include "game_server/ai/creature_combat_script.h"
+#include "game_server/ai/creature_combat_script_registry.h"
 #include "objects/game_creature_s.h"
 #include "game_server/world/universe.h"
 #include "log/default_log_levels.h"
@@ -103,6 +105,23 @@ namespace mmo
 
 		m_entered = true;
 
+		// Create combat script if one is configured for this creature
+		const auto& scriptName = controlled.GetEntry().script_name();
+		if (!scriptName.empty())
+		{
+			m_script = CreatureCombatScriptRegistry::Instance().CreateScript(scriptName, *this);
+			if (!m_script)
+			{
+				WLOG("Creature " << controlled.GetEntry().id() << " has script_name '" << scriptName << "' but no script is registered with that name");
+			}
+		}
+
+		// Notify script that combat has started
+		if (m_script)
+		{
+			m_script->OnCombatStart();
+		}
+
 		// Schedule first action for next tick
 		std::weak_ptr weakThis = std::static_pointer_cast<CreatureAICombatState>(shared_from_this());
 		controlled.GetWorldInstance()->GetUniverse().Post([weakThis]() 
@@ -161,6 +180,13 @@ namespace mmo
 		// Clear all signal containers
 		m_killedSignals.clear();
 		m_miscSignals.clear();
+
+		// Notify script and clean up
+		if (m_script)
+		{
+			m_script->OnCombatEnd();
+			m_script.reset();
+		}
 	}
 
 	void CreatureAICombatState::OnDamage(GameUnitS& attacker)
@@ -175,6 +201,13 @@ namespace mmo
 			{
 				GetControlled().AddLootRecipient(attacker.GetGuid());
 			}
+		}
+
+		// Notify script and check health thresholds
+		if (m_script)
+		{
+			m_script->OnDamageTaken(attacker);
+			m_script->CheckHealthThresholds();
 		}
 	}
 
@@ -214,6 +247,12 @@ namespace mmo
 				// Temporarily switch to melee mode until mana recovers
 				// This could be expanded with a more sophisticated state system
 			}
+		}
+
+		// Notify the script
+		if (m_script)
+		{
+			m_script->OnSpellCastEnded(succeeded);
 		}
 		
 		// Schedule next action immediately after spell cast ends
@@ -464,6 +503,12 @@ namespace mmo
 			return true; // Consider this successful - we're doing what we should be doing
 		}
 
+		// Check if the script prevents movement
+		if (m_script && !m_script->CanMove())
+		{
+			return true; // Script says we can't move, treat as success
+		}
+
 		if (!ShouldMoveToTarget(target))
 		{
 			return true; // No movement needed
@@ -554,7 +599,41 @@ namespace mmo
 			}
 		}
 
-		// First, determine our current victim
+		// If a combat script is active and handles actions completely,
+		// we skip UpdateVictim to avoid re-starting auto-attack each tick.
+		if (m_script)
+		{
+			// Clean up expired threats so the threat list stays valid
+			CleanupExpiredThreats();
+
+			// Check if there are any threateners left
+			if (m_threat.empty())
+			{
+				GetAI().Reset();
+				return;
+			}
+
+			// Schedule next action check
+			m_nextActionCountdown.SetEnd(GetAsyncTimeMs() + ACTION_INTERVAL_MS);
+
+			// Check for script-defined reset conditions
+			if (m_script->ShouldResetCombat())
+			{
+				GetAI().Reset();
+				return;
+			}
+
+			// Let the script choose the next action
+			if (m_script->OnChooseAction())
+			{
+				return; // Script handled the action entirely
+			}
+
+			// Script returned false — fall through to default AI below.
+			// UpdateVictim is needed for the default AI path.
+		}
+
+		// Determine our current victim (also starts auto-attack on new targets)
 		UpdateVictim();
 
 		// Check if we should reset due to no valid targets
@@ -577,6 +656,8 @@ namespace mmo
 
 		// Schedule next action check
 		m_nextActionCountdown.SetEnd(GetAsyncTimeMs() + actionInterval);
+
+		// === Default AI logic (runs when no script, or script returned false) ===
 
 		// For casters and ranged units, prioritize spell casting if possible
 		if ((m_combatBehavior == CombatBehavior::Caster || m_combatBehavior == CombatBehavior::Ranged) && 
@@ -748,6 +829,12 @@ namespace mmo
 		// Watch for unit killed signal
 		m_killedSignals[guid] = threatener.killed.connect([this, guid, &threatener](GameUnitS*)
 		{
+			// Notify script before removing threat
+			if (m_script)
+			{
+				m_script->OnTargetDied(threatener);
+			}
+
 			RemoveThreat(threatener);
 		});
 
@@ -1217,5 +1304,46 @@ namespace mmo
 		return formationPos;
 	}
 
-	// === End of new methods ===
+	// === Script Support Methods ===
+
+	std::vector<GameUnitS*> CreatureAICombatState::GetThreatTargets() const
+	{
+		std::vector<GameUnitS*> result;
+		result.reserve(m_threat.size());
+
+		for (const auto& pair : m_threat)
+		{
+			if (auto threatener = pair.second.threatener.lock())
+			{
+				if (threatener->IsAlive())
+				{
+					result.push_back(threatener.get());
+				}
+			}
+		}
+
+		return result;
+	}
+
+	void CreatureAICombatState::AddThreatFromScript(GameUnitS& threatener, float amount)
+	{
+		const uint64 guid = threatener.GetGuid();
+		const auto it = m_threat.find(guid);
+		if (it != m_threat.end())
+		{
+			it->second.amount = std::max(0.0f, it->second.amount + amount);
+		}
+		else if (amount >= 0.0f)
+		{
+			AddThreat(threatener, amount);
+		}
+	}
+
+	void CreatureAICombatState::ResetAllThreatFromScript()
+	{
+		for (auto& pair : m_threat)
+		{
+			pair.second.amount = 0.0f;
+		}
+	}
 }

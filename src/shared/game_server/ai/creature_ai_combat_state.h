@@ -4,6 +4,7 @@
 
 #include "base/typedefs.h"
 #include "creature_ai_state.h"
+#include "creature_combat_script.h"
 #include "base/countdown.h"
 #include "objects/game_unit_s.h"
 #include "math/vector3.h"
@@ -193,6 +194,44 @@ namespace mmo
 		 * @param succeeded Whether the spell cast succeeded.
 		 */
 		void OnSpellCastEnded(bool succeeded);
+
+		// === Script Support API ===
+
+		/**
+		 * @brief Gets all living units currently on the threat list.
+		 * @return Vector of pointers to alive threat targets.
+		 */
+		std::vector<GameUnitS*> GetThreatTargets() const;
+
+		/**
+		 * @brief Whether the creature is currently casting a spell.
+		 * @return True if casting.
+		 */
+		bool IsCasting() const { return m_isCasting; }
+
+		/**
+		 * @brief Gets the number of units on the threat list.
+		 * @return Number of threat entries.
+		 */
+		uint32 GetThreatCount() const { return static_cast<uint32>(m_threat.size()); }
+
+		/**
+		 * @brief Adds threat from a script context.
+		 * @param threatener The threatening unit.
+		 * @param amount Threat amount (can be negative to reduce).
+		 */
+		void AddThreatFromScript(GameUnitS& threatener, float amount);
+
+		/**
+		 * @brief Resets all threat values to zero (called from scripts).
+		 */
+		void ResetAllThreatFromScript();
+
+		/**
+		 * @brief Gets the active combat script, if any.
+		 * @return Pointer to the combat script, or nullptr.
+		 */
+		CreatureCombatScript* GetScript() const { return m_script.get(); }
 
 	private:
 		// === Threat Management ===
@@ -406,7 +445,11 @@ namespace mmo
 		
 		// === Casting Timeout ===
 		GameTime m_castingTimeoutEnd;
-				// === Constants ===
+
+		// === Combat Script ===
+		std::unique_ptr<CreatureCombatScript> m_script;
+
+		// === Constants ===
 		static constexpr float RESET_DISTANCE_SQ = 60.0f * 60.0f;
 		static constexpr uint32 RESET_TIMEOUT_MS = 10000;  // 10 seconds
 		static constexpr uint32 MAX_STUCK_COUNT = 20;

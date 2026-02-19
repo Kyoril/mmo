@@ -34,6 +34,12 @@ namespace mmo
 			Looting = 0x00000004,
 
 			Attacking = 0x00000008,
+
+			/// Unit is immune to all damage.
+			Immune = 0x00000010,
+
+			/// Unit cannot be targeted or attacked.
+			NotAttackable = 0x00000020,
 		};
 	}
 

@@ -95,6 +95,9 @@ message UnitEntry {
 	
 	// Whether to use the new stat system (when false, falls back to legacy system)
 	optional bool useStatBasedSystem = 82 [default = false];
+	
+	// Name of the combat script to use for this creature (registered in CreatureCombatScriptRegistry)
+	optional string script_name = 83;
 }
 
 message Units {
