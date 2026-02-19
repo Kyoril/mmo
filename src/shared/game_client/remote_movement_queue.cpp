@@ -151,9 +151,26 @@ namespace mmo
 			const float h01 = -2.0f * t3 + 3.0f * t2;           // value at p1
 			const float h11 =         t3 -        t2;            // tangent at p1
 
-			// Tangent vectors scaled by interval duration
-			const Vector3 m0 = v0 * totalDuration;
-			const Vector3 m1 = v1 * totalDuration;
+			// Tangent vectors scaled by interval duration.
+			Vector3 m0 = v0 * totalDuration;
+			Vector3 m1 = v1 * totalDuration;
+
+			// Clamp tangent magnitudes to the chord length.
+			// This prevents backward-motion artifacts when a character transitions
+			// between stopped and moving: the positions are nearly identical but
+			// the velocity tangent is large, causing the h11 basis function
+			// (which is negative for t in 0..1) to pull the spline backwards.
+			const float chordLength = (next->position - prev->position).GetLength();
+			const float m0Len = m0.GetLength();
+			const float m1Len = m1.GetLength();
+			if (m0Len > chordLength && m0Len > 0.001f)
+			{
+				m0 = m0 * (chordLength / m0Len);
+			}
+			if (m1Len > chordLength && m1Len > 0.001f)
+			{
+				m1 = m1 * (chordLength / m1Len);
+			}
 
 			const bool prevFalling = (prev->movementFlags & movement_flags::Falling) != 0;
 
@@ -196,6 +213,29 @@ namespace mmo
 				: 0.0f;
 			const float clampedElapsed = std::min(rawElapsed, 2.0f); // Don't extrapolate more than 2 seconds
 
+			// Compute a "stuck ratio" to suppress extrapolation when the character
+			// is against a wall or otherwise not actually moving despite having movement
+			// flags set. We compare the actual displacement between the last two
+			// snapshots against what was predicted from movement flags. If the
+			// character barely moved, we scale down extrapolation proportionally.
+			float stuckRatio = 1.0f;
+			if (m_snapshots.size() >= 2)
+			{
+				const auto& secondLast = m_snapshots[m_snapshots.size() - 2];
+				const auto& last = m_snapshots[m_snapshots.size() - 1];
+				const float dt = static_cast<float>(last.timestamp - secondLast.timestamp) / 1000.0f;
+				if (dt > 0.01f)
+				{
+					const Vector3 predicted = ComputeSnapshotVelocity(secondLast, runSpeed, backwardsSpeed);
+					const float predictedDist = predicted.GetLength() * dt;
+					const float actualDist = (last.position - secondLast.position).GetLength();
+					if (predictedDist > 0.1f)
+					{
+						stuckRatio = std::min(1.0f, actualDist / predictedDist);
+					}
+				}
+			}
+
 			const bool isFalling = (prev->movementFlags & movement_flags::Falling) != 0;
 
 			if (isFalling)
@@ -208,7 +248,7 @@ namespace mmo
 				// Also apply lateral extrapolation for the falling case
 				Vector3 extraPos;
 				Radian extraFacing;
-				ExtrapolateFromSnapshot(*prev, clampedElapsed, runSpeed, backwardsSpeed, turnSpeed, extraPos, extraFacing);
+				ExtrapolateFromSnapshot(*prev, clampedElapsed * stuckRatio, runSpeed, backwardsSpeed, turnSpeed, extraPos, extraFacing);
 
 				// Use the Y from physics simulation, lateral from extrapolation
 				outState.position = Vector3(extraPos.x, simPos.y, extraPos.z);
@@ -218,8 +258,8 @@ namespace mmo
 			}
 			else
 			{
-				// Extrapolate laterally based on movement flags
-				ExtrapolateFromSnapshot(*prev, clampedElapsed, runSpeed, backwardsSpeed, turnSpeed,
+				// Extrapolate laterally based on movement flags, scaled by stuck ratio
+				ExtrapolateFromSnapshot(*prev, clampedElapsed * stuckRatio, runSpeed, backwardsSpeed, turnSpeed,
 				                        outState.position, outState.facing);
 				outState.velocity = Vector3::Zero;
 				outState.isFalling = false;
