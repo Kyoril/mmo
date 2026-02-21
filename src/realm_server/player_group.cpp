@@ -449,7 +449,13 @@ namespace mmo
 		const auto it = m_instances.find(map);
 		if (it != m_instances.end())
 		{
-			return false;
+			if (it->second == instance)
+			{
+				return false;
+			}
+
+			it->second = instance;
+			return true;
 		}
 
 		m_instances[map] = instance;

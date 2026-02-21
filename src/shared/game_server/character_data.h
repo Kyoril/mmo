@@ -95,6 +95,7 @@ namespace mmo
 		if (!(reader
 			>> io::read_packed_guid(data.characterId)
 			>> io::read<MapId>(data.mapId)
+			>> data.instanceId
 			>> io::read_container<uint8>(data.name)
 			>> io::read<float>(data.position.x)
 			>> io::read<float>(data.position.y)
@@ -172,6 +173,7 @@ namespace mmo
 		writer
 			<< io::write_packed_guid(data.characterId)
 			<< io::write<MapId>(data.mapId)
+			<< data.instanceId
 			<< io::write_dynamic_range<uint8>(data.name)
 			<< io::write<float>(data.position.x)
 			<< io::write<float>(data.position.y)
