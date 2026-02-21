@@ -663,7 +663,7 @@ namespace mmo
 			// Require GM level 2
 			if (!HasGMLevel(2))
 			{
-				WLOG("Player " << m_characterData->name << " attempted to use a teleport command without sufficient privileges");
+				WLOG("Player " << m_characterData->name << " attempted to use a GM command without sufficient privileges");
 				return PacketParseResult::Pass;
 			}
 			break;

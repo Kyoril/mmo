@@ -445,7 +445,8 @@ namespace mmo
 		// TODO: This might be bad because we aren't technically really spawned in this world yet! We do this only so that passives can be cast!
 		spawned->SetWorldInstance(this);
 		spawned->SetEntry(entry);
-		
+		spawned->SetHealthPercent(1.0f);
+
 		return spawned;
 	}
 
