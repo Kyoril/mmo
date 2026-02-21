@@ -2172,6 +2172,24 @@ namespace mmo
 			{
 				return groupInstance;
 			}
+
+			// No group binding yet - check if the leader is currently inside that
+			// dungeon.  If so, adopt the leader's instance as the group binding so
+			// that other members entering the dungeon join the same instance.
+			const uint64 leaderGuid = m_group->GetLeader();
+			if (leaderGuid != 0 && leaderGuid != GetCharacterGuid())
+			{
+				Player* leader = m_manager.GetPlayerByCharacterGuid(leaderGuid);
+				if (leader && leader->HasCharacterGuid())
+				{
+					const auto& leaderData = leader->GetCharacterData();
+					if (leaderData.mapId == mapId && !leaderData.instanceId.is_nil())
+					{
+						m_group->AddInstanceBinding(leaderData.instanceId, mapId);
+						return leaderData.instanceId;
+					}
+				}
+			}
 		}
 
 		// Check personal dungeon binding

@@ -86,6 +86,9 @@ namespace mmo
 		/// Returns true if character data has been loaded for this player.
 		[[nodiscard]] bool HasCharacterGuid() const { return m_characterData.has_value(); }
 
+		/// Gets the character data for the active character.
+		[[nodiscard]] const CharacterData& GetCharacterData() const { return m_characterData.value(); }
+
 		/// Gets the active character guid, or 0 if not set.
 		[[nodiscard]] uint64 GetCharacterGuid() const { return m_characterData.has_value() ? m_characterData.value().characterId : 0; }
 
