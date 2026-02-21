@@ -87,6 +87,12 @@ namespace mmo
 		/// Adds an instance binding for a map.
 		bool AddInstanceBinding(InstanceId instance, uint32 map);
 
+		/// Removes the instance binding for a specific map.
+		void RemoveInstanceBinding(uint32 map);
+
+		/// Removes any instance binding that matches a specific instance id.
+		void RemoveInstanceBindingByInstanceId(InstanceId instanceId);
+
 		/// Converts the group into a raid group.
 		void ConvertToRaidGroup();
 

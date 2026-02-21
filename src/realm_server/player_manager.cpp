@@ -2,6 +2,7 @@
 
 #include "player_manager.h"
 #include "player.h"
+#include "player_group.h"
 #include "motd_manager.h"
 
 #include "binary_io/string_sink.h"
@@ -171,6 +172,19 @@ namespace mmo
 			if (player.HasCharacterGuid())
 			{
 				player.SendMessageOfTheDay(motd);
+			}
+		});
+	}
+
+	void PlayerManager::OnInstanceDestroyed(InstanceId instanceId)
+	{
+		// Clear dungeon bindings for all players and their groups
+		ForEachPlayer([&instanceId](Player& player) {
+			player.ClearDungeonBindingByInstanceId(instanceId);
+
+			if (auto group = player.GetGroup())
+			{
+				group->RemoveInstanceBindingByInstanceId(instanceId);
 			}
 		});
 	}

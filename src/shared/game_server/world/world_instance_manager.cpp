@@ -11,6 +11,7 @@
 #include "solid_visibility_grid.h"
 #include "tiled_unit_finder.h"
 #include "tiled_unit_finder_tile.h"
+#include "log/default_log_levels.h"
 
 namespace mmo
 {
@@ -73,6 +74,90 @@ namespace mmo
 
 		return it->get();
 	}
+
+	void WorldInstanceManager::DestroyInstance(InstanceId instanceId)
+	{
+		std::unique_lock lock{ m_worldInstanceMutex };
+
+		const auto it = std::find_if(m_worldInstances.begin(), m_worldInstances.end(), [&instanceId](const std::unique_ptr<WorldInstance>& instance)
+		{
+			return instance->GetId() == instanceId;
+		});
+
+		if (it == m_worldInstances.end())
+		{
+			WLOG("Tried to destroy instance " << instanceId << " but it was not found");
+			return;
+		}
+
+		ILOG("Destroying empty dungeon instance " << instanceId << " for map " << (*it)->GetMapId());
+		m_emptyDungeonTimestamps.erase(instanceId);
+
+		// Fire signal before erasing (so listeners can react while the instance still exists)
+		instanceDestroyed(instanceId);
+		m_worldInstances.erase(it);
+	}
+
+	void WorldInstanceManager::CheckEmptyDungeonInstances()
+	{
+		const auto now = GetAsyncTimeMs();
+
+		// Collect instance ids that need to be destroyed (can't destroy while iterating)
+		std::vector<InstanceId> toDestroy;
+
+		for (const auto& worldInstance : m_worldInstances)
+		{
+			// Only track non-persistent (dungeon/raid/etc.) instances
+			if (worldInstance->IsPersistent())
+			{
+				continue;
+			}
+
+			const InstanceId id = worldInstance->GetId();
+			const bool hasPlayers = worldInstance->HasPlayers();
+
+			if (!hasPlayers)
+			{
+				// Instance is empty - start or check timer
+				const auto emptyIt = m_emptyDungeonTimestamps.find(id);
+				if (emptyIt == m_emptyDungeonTimestamps.end())
+				{
+					// First time this instance is empty - start tracking
+					m_emptyDungeonTimestamps[id] = now;
+					DLOG("Dungeon instance " << id << " is now empty, starting " << (EmptyDungeonTimeout / 60000) << " minute countdown");
+				}
+				else if (now - emptyIt->second >= EmptyDungeonTimeout)
+				{
+					// Timeout reached - mark for destruction
+					toDestroy.push_back(id);
+				}
+			}
+			else
+			{
+				// Instance has players - remove from empty tracking
+				m_emptyDungeonTimestamps.erase(id);
+			}
+		}
+
+		// Destroy empty instances (outside the iteration loop)
+		// Need to unlock and use the public method which takes its own lock
+		for (const auto& id : toDestroy)
+		{
+			// Erase directly since we already hold the lock
+			const auto it = std::find_if(m_worldInstances.begin(), m_worldInstances.end(), [&id](const std::unique_ptr<WorldInstance>& instance)
+			{
+				return instance->GetId() == id;
+			});
+
+			if (it != m_worldInstances.end())
+			{
+				ILOG("Destroying empty dungeon instance " << id << " for map " << (*it)->GetMapId() << " after " << (EmptyDungeonTimeout / 60000) << " minutes of inactivity");
+				m_emptyDungeonTimestamps.erase(id);
+				instanceDestroyed(id);
+				m_worldInstances.erase(it);
+			}
+		}
+	}
 	
 	void WorldInstanceManager::OnUpdate()
 	{
@@ -93,6 +178,9 @@ namespace mmo
 		{
 			worldInstance->Update(update);
 		}
+
+		// Check for empty dungeon instances that should be cleaned up
+		CheckEmptyDungeonInstances();
 	}
 
 	void WorldInstanceManager::ScheduleNextUpdate()

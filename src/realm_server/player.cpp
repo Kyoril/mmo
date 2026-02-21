@@ -962,8 +962,18 @@ namespace mmo
 		m_characterData->position = m_transferPosition;
 		m_characterData->facing = m_transferFacing;
 
+		// Resolve the correct instance id based on map type
+		InstanceId targetInstanceId{};
+		const proto::MapEntry* mapEntry = m_project.maps.getById(m_transferMap);
+		if (mapEntry && mapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL)
+		{
+			// Dungeon/raid map: resolve instance from group or personal bindings
+			targetInstanceId = ResolveDungeonInstanceId(m_transferMap);
+			DLOG("Resolved dungeon instance id for transfer map " << m_transferMap << ": " << targetInstanceId);
+		}
+
 		// Find a new world node
-		std::shared_ptr<World> world = m_worldManager.GetIdealWorldNode(m_transferMap, InstanceId());
+		std::shared_ptr<World> world = m_worldManager.GetIdealWorldNode(m_transferMap, targetInstanceId);
 		if (!world)
 		{
 			// World does not exist
@@ -971,6 +981,9 @@ namespace mmo
 			OnWorldTransferAborted(game::transfer_abort_reason::NotFound);
 			return PacketParseResult::Pass;
 		}
+
+		// Set the resolved instance id on character data so the world server receives it
+		m_characterData->instanceId = targetInstanceId;
 
 		std::weak_ptr weakThis = shared_from_this();
 		std::weak_ptr weakWorld = world;
@@ -2137,6 +2150,65 @@ namespace mmo
 		m_characterData->isGameMaster = (m_gmLevel > 0);
 	}
 
+	InstanceId Player::ResolveDungeonInstanceId(const MapId mapId) const
+	{
+		const proto::MapEntry* mapEntry = m_project.maps.getById(mapId);
+		if (!mapEntry)
+		{
+			return {};
+		}
+
+		// Global maps don't need special instance resolution
+		if (mapEntry->instancetype() == proto::MapEntry_MapInstanceType_GLOBAL)
+		{
+			return {};
+		}
+
+		// For dungeon/raid maps, check group binding first, then personal binding
+		if (m_group && m_group->IsCreated())
+		{
+			const InstanceId groupInstance = m_group->InstanceBindingForMap(mapId);
+			if (!groupInstance.is_nil())
+			{
+				return groupInstance;
+			}
+		}
+
+		// Check personal dungeon binding
+		const auto it = m_dungeonBindings.find(mapId);
+		if (it != m_dungeonBindings.end())
+		{
+			return it->second;
+		}
+
+		return {};
+	}
+
+	void Player::SetDungeonBinding(const MapId mapId, const InstanceId instanceId)
+	{
+		m_dungeonBindings[mapId] = instanceId;
+	}
+
+	void Player::ClearDungeonBinding(const MapId mapId)
+	{
+		m_dungeonBindings.erase(mapId);
+	}
+
+	void Player::ClearDungeonBindingByInstanceId(const InstanceId instanceId)
+	{
+		for (auto it = m_dungeonBindings.begin(); it != m_dungeonBindings.end(); )
+		{
+			if (it->second == instanceId)
+			{
+				it = m_dungeonBindings.erase(it);
+			}
+			else
+			{
+				++it;
+			}
+		}
+	}
+
 	void Player::SendAuthChallenge()
 	{
 		// We will start accepting LogonChallenge packets from the client
@@ -2406,6 +2478,24 @@ namespace mmo
 		ASSERT(m_characterData);
 		m_characterData->instanceId = instanceId;
 
+		// Store dungeon instance binding if applicable
+		const proto::MapEntry* mapEntry = m_project.maps.getById(m_characterData->mapId);
+		if (mapEntry && mapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL && !instanceId.is_nil())
+		{
+			if (m_group && m_group->IsCreated())
+			{
+				// Assign to group (ownership goes to group leader)
+				m_group->AddInstanceBinding(instanceId, m_characterData->mapId);
+				DLOG("Stored dungeon instance binding for group " << m_group->GetId() << " on map " << m_characterData->mapId);
+			}
+			else
+			{
+				// Assign to this player personally
+				SetDungeonBinding(m_characterData->mapId, instanceId);
+				DLOG("Stored personal dungeon instance binding on map " << m_characterData->mapId);
+			}
+		}
+
 		m_connection->sendSinglePacket([&](game::OutgoingPacket &outPacket)
 									   {
 			outPacket.Start(game::realm_client_packet::LoginVerifyWorld);
@@ -2479,6 +2569,24 @@ namespace mmo
 
 		ASSERT(m_characterData);
 		m_characterData->instanceId = instanceId;
+
+		// Store dungeon instance binding if applicable
+		const proto::MapEntry* transferMapEntry = m_project.maps.getById(m_characterData->mapId);
+		if (transferMapEntry && transferMapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL && !instanceId.is_nil())
+		{
+			if (m_group && m_group->IsCreated())
+			{
+				// Assign to group (ownership goes to group leader)
+				m_group->AddInstanceBinding(instanceId, m_characterData->mapId);
+				DLOG("Stored dungeon instance binding for group " << m_group->GetId() << " on map " << m_characterData->mapId);
+			}
+			else
+			{
+				// Assign to this player personally
+				SetDungeonBinding(m_characterData->mapId, instanceId);
+				DLOG("Stored personal dungeon instance binding on map " << m_characterData->mapId);
+			}
+		}
 	}
 
 	void Player::OnWorldJoinFailed(const game::player_login_response::Type response)
@@ -2601,6 +2709,20 @@ namespace mmo
 		}
 
 		// TODO: Persist added spells back in database
+
+		// Resolve the correct instance id based on map type (dungeon vs global)
+		const proto::MapEntry* mapEntry = m_project.maps.getById(m_characterData->mapId);
+		if (mapEntry && mapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL)
+		{
+			// Dungeon/raid map: resolve instance from group or personal bindings
+			m_characterData->instanceId = ResolveDungeonInstanceId(m_characterData->mapId);
+			DLOG("Resolved dungeon instance id for map " << m_characterData->mapId << ": " << m_characterData->instanceId);
+		}
+		else
+		{
+			// Global map: clear instance id to use the singleton behavior
+			m_characterData->instanceId = InstanceId{};
+		}
 
 		// Find a world node for the character's map id and instance id
 		auto world = m_worldManager.GetIdealWorldNode(m_characterData->mapId, m_characterData->instanceId);

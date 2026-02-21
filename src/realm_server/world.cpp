@@ -599,8 +599,17 @@ namespace mmo
 
 		ILOG("World instance host terminated: " << instanceId.to_string());
 
-		std::scoped_lock lock { m_hostedInstanceIdMutex };
-		m_hostedInstanceIds.emplace_back(std::move(instanceId));
+		{
+			std::scoped_lock lock { m_hostedInstanceIdMutex };
+			const auto it = std::find(m_hostedInstanceIds.begin(), m_hostedInstanceIds.end(), instanceId);
+			if (it != m_hostedInstanceIds.end())
+			{
+				m_hostedInstanceIds.erase(it);
+			}
+		}
+
+		// Notify player manager to clear any dungeon bindings for this instance
+		m_playerManager.OnInstanceDestroyed(instanceId);
 
 		return PacketParseResult::Pass;
 	}

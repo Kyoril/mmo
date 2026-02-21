@@ -516,20 +516,38 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		}
 		
 		DLOG("Player character " << log_hex_digit(characterData.characterId) << " wants to join world...");
+
+		// Determine if this is a dungeon/instanced map
+		const proto::MapEntry* mapEntry = m_project.maps.getById(characterData.mapId);
+		const bool isDungeonMap = mapEntry && mapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL;
 		
 		WorldInstance* instance = nullptr;
 		if (characterData.instanceId.is_nil())
 		{
-			instance = m_worldInstanceManager.GetInstanceByMap(characterData.mapId);
+			if (isDungeonMap)
+			{
+				// Dungeon maps with no instance id always get a new instance
+				DLOG("Creating new dungeon instance for map " << characterData.mapId);
+			}
+			else
+			{
+				// Global maps try to reuse existing instance
+				instance = m_worldInstanceManager.GetInstanceByMap(characterData.mapId);
+			}
 		}
 		else
 		{
 			instance = m_worldInstanceManager.GetInstanceById(characterData.instanceId);
 			if (!instance)
 			{
-				// TODO: Try to load instance id from instance storage
 				WLOG("Unable to find world instance by id " << characterData.instanceId);
-				instance = m_worldInstanceManager.GetInstanceByMap(characterData.mapId);
+
+				if (!isDungeonMap)
+				{
+					// For global maps, fall back to finding any instance by map
+					instance = m_worldInstanceManager.GetInstanceByMap(characterData.mapId);
+				}
+				// For dungeon maps, don't fall back - create a new instance below
 			}
 		}
 

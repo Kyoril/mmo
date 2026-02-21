@@ -456,6 +456,26 @@ namespace mmo
 		return true;
 	}
 
+	void PlayerGroup::RemoveInstanceBinding(const uint32 map)
+	{
+		m_instances.erase(map);
+	}
+
+	void PlayerGroup::RemoveInstanceBindingByInstanceId(InstanceId instanceId)
+	{
+		for (auto it = m_instances.begin(); it != m_instances.end(); )
+		{
+			if (it->second == instanceId)
+			{
+				it = m_instances.erase(it);
+			}
+			else
+			{
+				++it;
+			}
+		}
+	}
+
 	void PlayerGroup::ConvertToRaidGroup()
 	{
 		ASSERT(m_leaderGUID != 0);
