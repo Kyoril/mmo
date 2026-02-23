@@ -3,6 +3,9 @@
 #include "projectile_manager.h"
 #include "game_unit_c.h"
 #include "object_mgr.h"
+
+#include <algorithm>
+
 #include "log/default_log_levels.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/scene_node.h"
@@ -35,8 +38,9 @@ namespace mmo
 						   const proto_client::SpellEntry &spell,
 						   const proto_client::SpellVisualization *visualization,
 						   const Vector3 &startPosition,
-						   std::shared_ptr<IProjectileTarget> target)
-		: m_scene(scene), m_audio(audio), m_spell(spell), m_visualization(visualization), m_target(target), m_node(nullptr), m_entity(nullptr), m_trailEmitter(nullptr), m_light(nullptr), m_ribbonTrail(nullptr), m_lightTargetIntensity(0.0f), m_lightFadeInTime(0.0f), m_startPosition(startPosition), m_velocity(Vector3::UnitZ), m_travelTime(0.0f), m_totalDistance(0.0f), m_hasHit(false), m_soundChannel(InvalidChannel)
+						   std::shared_ptr<IProjectileTarget> target,
+						   float animationDelay)
+		: m_scene(scene), m_audio(audio), m_spell(spell), m_visualization(visualization), m_target(target), m_node(nullptr), m_entity(nullptr), m_trailEmitter(nullptr), m_light(nullptr), m_ribbonTrail(nullptr), m_lightTargetIntensity(0.0f), m_lightFadeInTime(0.0f), m_startPosition(startPosition), m_velocity(Vector3::UnitZ), m_travelTime(0.0f), m_totalDistance(0.0f), m_speedMultiplier(1.0f), m_hasHit(false), m_soundChannel(InvalidChannel)
 	{
 		// Create scene node for projectile
 		m_node = m_scene.GetRootSceneNode().CreateChildSceneNode();
@@ -170,6 +174,27 @@ namespace mmo
 				m_velocity.Normalize();
 				m_velocity *= spell.speed();
 			}
+
+			// Boost speed to compensate for animation delay
+			if (animationDelay > 0.0f && spell.speed() > 0.0f && m_totalDistance > 0.0f)
+			{
+				const float expectedTravelTime = m_totalDistance / spell.speed();
+				const float remainingTime = expectedTravelTime - animationDelay;
+
+				if (remainingTime > 0.1f)
+				{
+					// Scale speed so projectile arrives on time
+					m_speedMultiplier = expectedTravelTime / remainingTime;
+				}
+				else
+				{
+					// Delay consumed most/all of the travel time — use a high speed cap
+					m_speedMultiplier = expectedTravelTime / 0.1f;
+				}
+
+				// Apply multiplier to initial velocity
+				m_velocity *= m_speedMultiplier;
+			}
 		}
 	}
 
@@ -294,7 +319,12 @@ namespace mmo
 		const Vector3 targetPos = m_target->GetPosition();
 		const float distanceToTarget = (targetPos - currentPos).GetLength();
 
-		if (distanceToTarget <= 0.5f)
+		// Use a distance threshold that accounts for the step size at the current speed,
+		// so high-speed or low-framerate projectiles don't oscillate past the target.
+		const float stepSize = m_spell.speed() * m_speedMultiplier * deltaTime;
+		const float hitThreshold = std::max(0.5f, stepSize * 1.1f);
+
+		if (distanceToTarget <= hitThreshold)
 		{
 			m_hasHit = true;
 			return true;
@@ -305,7 +335,7 @@ namespace mmo
 
 	void Projectile::UpdateLinearMotion(float deltaTime)
 	{
-		// Simple linear movement toward initial target position
+		// Simple linear movement toward target position
 		if (!m_target)
 		{
 			return;
@@ -318,8 +348,10 @@ namespace mmo
 		const float distance = direction.GetLength();
 		if (distance > 0.0f)
 		{
+			// Clamp step to remaining distance to prevent overshooting
+			const float step = std::min(m_spell.speed() * m_speedMultiplier * deltaTime, distance);
 			direction.Normalize();
-			m_node->Translate(direction * m_spell.speed() * deltaTime, TransformSpace::World);
+			m_node->Translate(direction * step, TransformSpace::World);
 		}
 	}
 
@@ -331,7 +363,7 @@ namespace mmo
 		}
 
 		const Vector3 targetPos = m_target->GetPosition();
-		const float travelProgress = (m_travelTime * m_spell.speed()) / m_totalDistance;
+		const float travelProgress = std::min((m_travelTime * m_spell.speed() * m_speedMultiplier) / m_totalDistance, 1.0f);
 
 		if (travelProgress >= 1.0f)
 		{
@@ -377,13 +409,18 @@ namespace mmo
 		}
 
 		// Smoothly turn velocity toward target
+		const float lerpFactor = std::min(homingStrength * deltaTime, 1.0f);
 		m_velocity.Normalize();
-		m_velocity = m_velocity.Lerp(desiredDirection, homingStrength * deltaTime);
+		m_velocity = m_velocity.Lerp(desiredDirection, lerpFactor);
 		m_velocity.Normalize();
-		m_velocity *= m_spell.speed();
+		m_velocity *= m_spell.speed() * m_speedMultiplier;
 
-		// Move
-		m_node->Translate(m_velocity * deltaTime, TransformSpace::World);
+		// Clamp step to remaining distance to prevent overshooting
+		const float distToTarget = (targetPos - currentPos).GetLength();
+		const float step = std::min(m_velocity.GetLength() * deltaTime, distToTarget);
+		Vector3 moveDir = m_velocity;
+		moveDir.Normalize();
+		m_node->Translate(moveDir * step, TransformSpace::World);
 	}
 
 	void Projectile::UpdateSineWaveMotion(float deltaTime)
@@ -413,8 +450,8 @@ namespace mmo
 			}
 		}
 
-		// Calculate forward progress
-		const float forwardDistance = m_travelTime * m_spell.speed();
+		// Calculate forward progress, clamped to total distance
+		const float forwardDistance = std::min(m_travelTime * m_spell.speed() * m_speedMultiplier, m_totalDistance);
 		const Vector3 forwardPos = m_startPosition + direction * forwardDistance;
 
 		// Calculate perpendicular offset (sine wave)
@@ -528,7 +565,8 @@ namespace mmo
 	void ProjectileManager::SpawnProjectile(const proto_client::SpellEntry &spell,
 											const proto_client::SpellVisualization *visualization,
 											GameUnitC *caster,
-											GameUnitC *target)
+											GameUnitC *target,
+											float animationDelay)
 	{
 		if (!caster || !target)
 		{
@@ -547,7 +585,7 @@ namespace mmo
 		std::weak_ptr<GameUnitC> targetWeak = std::static_pointer_cast<GameUnitC>(targetShared);
 
 		auto targetWrapper = std::make_shared<GameUnitProjectileTarget>(targetWeak);
-		auto projectile = std::make_unique<Projectile>(m_scene, m_audio, spell, visualization, startPosition, targetWrapper);
+		auto projectile = std::make_unique<Projectile>(m_scene, m_audio, spell, visualization, startPosition, targetWrapper, animationDelay);
 		m_projectiles.push_back(std::move(projectile));
 	}
 

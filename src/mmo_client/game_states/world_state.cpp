@@ -2083,6 +2083,7 @@ namespace mmo
 						pending->targetGuid = unitTargetGuid;
 						pending->visualization = visualization;
 						pending->hasCastSucceededAnimation = true;
+						pending->creationTime = GetAsyncTimeMs();
 						
 						// Capture raw pointer for use in lambdas before moving
 						PendingProjectile* pendingPtr = pending.get();
@@ -2166,7 +2167,18 @@ namespace mmo
 
 		if (casterUnit && targetUnit)
 		{
-			m_projectileManager->SpawnProjectile(*spell, pending->visualization, casterUnit.get(), targetUnit.get());
+			// Calculate how long the projectile was delayed by the animation
+			float animationDelay = 0.0f;
+			if (pending->creationTime > 0)
+			{
+				const GameTime now = GetAsyncTimeMs();
+				if (now > pending->creationTime)
+				{
+					animationDelay = static_cast<float>(now - pending->creationTime) / 1000.0f;
+				}
+			}
+
+			m_projectileManager->SpawnProjectile(*spell, pending->visualization, casterUnit.get(), targetUnit.get(), animationDelay);
 		}
 
 		// Remove this pending projectile from the list

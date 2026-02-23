@@ -2,6 +2,9 @@
 
 #include "editor_projectile_manager.h"
 #include "audio/audio.h"
+
+#include <algorithm>
+
 #include "scene_graph/scene.h"
 #include "scene_graph/scene_node.h"
 #include "scene_graph/entity.h"
@@ -247,7 +250,12 @@ namespace mmo
 		const Vector3 targetPos = m_target->GetPosition();
 		const float distanceToTarget = (targetPos - currentPos).GetLength();
 
-		if (distanceToTarget <= 0.5f)
+		// Use a distance threshold that accounts for the step size at the current speed,
+		// so high-speed or low-framerate projectiles don't oscillate past the target.
+		const float stepSize = m_params.speed * deltaTime;
+		const float hitThreshold = std::max(0.5f, stepSize * 1.1f);
+
+		if (distanceToTarget <= hitThreshold)
 		{
 			m_hasHit = true;
 			return true;
@@ -270,8 +278,10 @@ namespace mmo
 		const float distance = direction.GetLength();
 		if (distance > 0.0f)
 		{
+			// Clamp step to remaining distance to prevent overshooting
+			const float step = std::min(m_params.speed * deltaTime, distance);
 			direction.Normalize();
-			m_node->Translate(direction * m_params.speed * deltaTime, TransformSpace::World);
+			m_node->Translate(direction * step, TransformSpace::World);
 		}
 	}
 
@@ -283,7 +293,7 @@ namespace mmo
 		}
 
 		const Vector3 targetPos = m_target->GetPosition();
-		const float travelProgress = (m_travelTime * m_params.speed) / m_totalDistance;
+		const float travelProgress = std::min((m_travelTime * m_params.speed) / m_totalDistance, 1.0f);
 
 		if (travelProgress >= 1.0f)
 		{
@@ -319,13 +329,18 @@ namespace mmo
 		constexpr float homingStrength = 5.0f;
 
 		// Smoothly turn velocity toward target
+		const float lerpFactor = std::min(homingStrength * deltaTime, 1.0f);
 		m_velocity.Normalize();
-		m_velocity = m_velocity.Lerp(desiredDirection, homingStrength * deltaTime);
+		m_velocity = m_velocity.Lerp(desiredDirection, lerpFactor);
 		m_velocity.Normalize();
 		m_velocity *= m_params.speed;
 
-		// Move
-		m_node->Translate(m_velocity * deltaTime, TransformSpace::World);
+		// Clamp step to remaining distance to prevent overshooting
+		const float distToTarget = (targetPos - currentPos).GetLength();
+		const float step = std::min(m_velocity.GetLength() * deltaTime, distToTarget);
+		Vector3 moveDir = m_velocity;
+		moveDir.Normalize();
+		m_node->Translate(moveDir * step, TransformSpace::World);
 	}
 
 	void EditorProjectile::UpdateSineWaveMotion(float deltaTime)
@@ -339,8 +354,8 @@ namespace mmo
 		Vector3 direction = targetPos - m_startPosition;
 		direction.Normalize();
 
-		// Calculate forward progress
-		const float forwardDistance = m_travelTime * m_params.speed;
+		// Calculate forward progress, clamped to total distance
+		const float forwardDistance = std::min(m_travelTime * m_params.speed, m_totalDistance);
 		const Vector3 forwardPos = m_startPosition + direction * forwardDistance;
 
 		// Calculate perpendicular offset (sine wave)

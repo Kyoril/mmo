@@ -42,12 +42,14 @@ namespace mmo
         /// @param visualization The spell visualization containing projectile config.
         /// @param startPosition The starting position of the projectile.
         /// @param target The target to track (uses IProjectileTarget interface).
+        /// @param animationDelay Seconds the projectile spawn was delayed by animation. Used to boost speed.
         Projectile(Scene &scene,
                    IAudio *audio,
                    const proto_client::SpellEntry &spell,
                    const proto_client::SpellVisualization *visualization,
                    const Vector3 &startPosition,
-                   std::shared_ptr<IProjectileTarget> target);
+                   std::shared_ptr<IProjectileTarget> target,
+                   float animationDelay = 0.0f);
 
         ~Projectile();
 
@@ -103,6 +105,7 @@ namespace mmo
         Vector3 m_velocity;
         float m_travelTime;
         float m_totalDistance;
+        float m_speedMultiplier;
         bool m_hasHit;
 
         // Audio
@@ -122,10 +125,12 @@ namespace mmo
         /// @param visualization Spell visualization containing projectile config.
         /// @param caster Unit casting the spell.
         /// @param target Target unit.
+        /// @param animationDelay Seconds the spawn was delayed by animation.
         void SpawnProjectile(const proto_client::SpellEntry &spell,
                              const proto_client::SpellVisualization *visualization,
                              GameUnitC *caster,
-                             GameUnitC *target);
+                             GameUnitC *target,
+                             float animationDelay = 0.0f);
 
         /// @brief Spawn a new projectile using abstract targets.
         /// @param spell Spell entry containing speed and data.

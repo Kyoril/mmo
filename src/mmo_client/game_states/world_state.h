@@ -438,6 +438,7 @@ namespace mmo
 			uint64 targetGuid = 0;
 			const proto_client::SpellVisualization* visualization = nullptr;
 			bool hasCastSucceededAnimation = false;
+			GameTime creationTime = 0;
 			scoped_connection_container connections;
 		};
 
