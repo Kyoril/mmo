@@ -142,6 +142,8 @@ namespace mmo
             return;
         }
 
+        const bool isInstantEvent = (event == Event::CancelCast || event == Event::CastSucceeded || event == Event::Impact || event == Event::AuraTick);
+
         const proto_client::SpellKitList& kitList = it->second;
 
         // Apply kits by scope
@@ -152,7 +154,7 @@ namespace mmo
             {
                 if(unit)
                 {
-                    ApplyKitToActor(*vis, kit, *unit, spell.id());
+                    ApplyKitToActor(*vis, kit, *unit, spell.id(), isInstantEvent);
                 }
             };
 
@@ -175,7 +177,8 @@ namespace mmo
     void SpellVisualizationService::ApplyKitToActor(const proto_client::SpellVisualization& vis,
                                                      const proto_client::SpellKit& kit,
                                                      GameUnitC& actor,
-                                                     uint32 spellId)
+                                                     uint32 spellId,
+                                                     bool instantEvent)
     {
         // Apply animation if specified
         ApplyAnimationToActor(kit, actor, spellId);
@@ -277,7 +280,7 @@ namespace mmo
         ApplyParticlesToActor(kit, actor, spellId);
 
         // Spawn point light
-        ApplyLightToActor(kit, actor, spellId);
+        ApplyLightToActor(kit, actor, spellId, instantEvent);
 
         // Spawn ribbon trail
         ApplyRibbonTrailToActor(kit, actor, spellId);
@@ -570,6 +573,11 @@ namespace mmo
                     }
                     it->light->SetIntensity(it->currentIntensity);
                 }
+                else if (it->autoFadeOut && it->fadeOutSpeed > 0.0f)
+                {
+                    // Fade-in is complete and this is an instant event — auto-trigger fade-out
+                    it->fadingOut = true;
+                }
             }
 
             ++it;
@@ -696,7 +704,7 @@ namespace mmo
         }
     }
 
-    void SpellVisualizationService::ApplyLightToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId)
+    void SpellVisualizationService::ApplyLightToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, bool instantEvent)
     {
         if (!kit.has_light())
         {
@@ -788,6 +796,7 @@ namespace mmo
             fl.fadeInSpeed = (fadeInTime > 0.0f) ? (targetIntensity / fadeInTime) : 0.0f;
             fl.fadeOutSpeed = (fadeOutTime > 0.0f) ? (targetIntensity / fadeOutTime) : 0.0f;
             fl.fadingOut = false;
+            fl.autoFadeOut = instantEvent;
             m_fadingLights.push_back(fl);
         }
         catch (const std::exception& e)

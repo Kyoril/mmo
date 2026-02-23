@@ -94,7 +94,8 @@ namespace mmo
         void ApplyKitToActor(const proto_client::SpellVisualization& vis,
                              const proto_client::SpellKit& kit,
                              GameUnitC& actor,
-                             uint32 spellId);
+                             uint32 spellId,
+                             bool instantEvent = false);
 
         void ApplyAnimationToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
 
@@ -104,7 +105,7 @@ namespace mmo
         void ApplyParticlesToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
 
         /// \brief Spawn a point light defined in a kit, optionally attached to a bone.
-        void ApplyLightToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
+        void ApplyLightToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, bool instantEvent = false);
 
         /// \brief Spawn a ribbon trail defined in a kit, optionally attached to a bone.
         void ApplyRibbonTrailToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
@@ -202,6 +203,7 @@ namespace mmo
             float fadeInSpeed{ 0.0f };
             float fadeOutSpeed{ 0.0f };
             bool fadingOut{ false };
+            bool autoFadeOut{ false };
         };
 
         /// \brief Active lights with fade state.

@@ -167,6 +167,11 @@ namespace mmo
 					}
 					it->light->SetIntensity(it->currentIntensity);
 				}
+				else if (it->autoFadeOut && it->fadeOutSpeed > 0.0f)
+				{
+					// Fade-in is complete and this is an instant event — auto-trigger fade-out
+					it->fadingOut = true;
+				}
 			}
 
 			++it;
@@ -1085,6 +1090,9 @@ namespace mmo
 		}
 		m_kitEffectNodes.clear();
 
+		// Determine if this is an instant (one-shot) event
+		const bool instantEvent = (eventValue == 1 || eventValue == 3 || eventValue == 4);
+
 		const auto& kitsMap = visualization->kits_by_event();
 		auto it = kitsMap.find(eventValue);
 		if (it == kitsMap.end())
@@ -1162,7 +1170,7 @@ namespace mmo
 			// Spawn point light
 			if (kit.has_light() && targetEntity && targetNode)
 			{
-				SpawnKitLight(kit, targetEntity, targetNode);
+				SpawnKitLight(kit, targetEntity, targetNode, instantEvent);
 			}
 
 			// Spawn ribbon trail
@@ -1404,7 +1412,7 @@ namespace mmo
 		}
 	}
 
-	void SpellVisualizationPreview::SpawnKitLight(const proto::SpellKit& kit, Entity* entity, SceneNode* entityNode)
+	void SpellVisualizationPreview::SpawnKitLight(const proto::SpellKit& kit, Entity* entity, SceneNode* entityNode, bool instantEvent)
 	{
 		if (!kit.has_light())
 		{
@@ -1457,6 +1465,7 @@ namespace mmo
 			fadingLight.fadeInSpeed = fadeInTime > 0.0f ? (fullIntensity / fadeInTime) : 0.0f;
 			fadingLight.fadeOutSpeed = fadeOutTime > 0.0f ? (fullIntensity / fadeOutTime) : 0.0f;
 			fadingLight.fadingOut = false;
+			fadingLight.autoFadeOut = instantEvent;
 			m_fadingLights.push_back(fadingLight);
 		}
 		catch (const std::exception& e)

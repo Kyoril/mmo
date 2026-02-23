@@ -177,7 +177,7 @@ namespace mmo
 		/// @param kit The spell kit containing light definition.
 		/// @param entity The entity to attach to (for bone attachment).
 		/// @param entityNode Scene node of the entity (for positional fallback).
-		void SpawnKitLight(const proto::SpellKit& kit, Entity* entity, SceneNode* entityNode);
+		void SpawnKitLight(const proto::SpellKit& kit, Entity* entity, SceneNode* entityNode, bool instantEvent = false);
 
 		/// @brief Creates a ribbon trail for a kit, optionally at a bone.
 		/// @param kit The spell kit containing ribbon trail definition.
@@ -247,6 +247,7 @@ namespace mmo
 			float fadeInSpeed{ 0.0f };
 			float fadeOutSpeed{ 0.0f };
 			bool fadingOut{ false };
+			bool autoFadeOut{ false };
 		};
 
 		/// @brief Active fading lights (includes kit-spawned and pending fade-out).
