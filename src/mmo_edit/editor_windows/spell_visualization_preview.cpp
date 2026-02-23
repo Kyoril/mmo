@@ -745,66 +745,100 @@ namespace mmo
 		const Vector3 targetPos = m_targetNode->GetDerivedPosition() + Vector3(0.0f, 0.8f, 0.0f);
 		m_projectileTarget->SetPosition(targetPos);
 
-		// Determine start position: use spawn bone if specified, else default offset
-		Vector3 startPos;
-		if (m_currentVisualization->has_projectile() && m_currentVisualization->projectile().has_spawn_bone() &&
-			!m_currentVisualization->projectile().spawn_bone().empty())
+		// Collect all projectile visuals (repeated field first, singular fallback)
+		std::vector<const proto::ProjectileVisual*> projVisuals;
+		if (m_currentVisualization->projectiles_size() > 0)
 		{
-			startPos = GetBoneWorldPosition(m_casterEntity, m_casterNode,
-				m_currentVisualization->projectile().spawn_bone(),
-				Vector3(0.0f, 1.2f, 0.0f));
+			for (int i = 0; i < m_currentVisualization->projectiles_size(); ++i)
+			{
+				projVisuals.push_back(&m_currentVisualization->projectiles(i));
+			}
 		}
-		else
+		else if (m_currentVisualization->has_projectile())
 		{
-			startPos = m_casterNode->GetDerivedPosition() + Vector3(0.0f, 1.2f, 0.0f);
+			projVisuals.push_back(&m_currentVisualization->projectile());
 		}
 
-		// Build projectile parameters from the visualization
-		ProjectileParams params;
-		params.speed = m_projectileSpeed;
-		
-		if (m_currentVisualization->has_projectile())
+		if (projVisuals.empty())
 		{
-			const auto& projVis = m_currentVisualization->projectile();
-			
+			return;
+		}
+
+		// For each projectile visual, build params and spawn
+		for (const auto* projVisPtr : projVisuals)
+		{
+			const auto& projVis = *projVisPtr;
+
+			// Determine start position: use spawn bone if specified, else default offset
+			Vector3 startPos;
+			if (projVis.has_spawn_bone() && !projVis.spawn_bone().empty())
+			{
+				startPos = GetBoneWorldPosition(m_casterEntity, m_casterNode,
+					projVis.spawn_bone(),
+					Vector3(0.0f, 1.2f, 0.0f));
+			}
+			else
+			{
+				startPos = m_casterNode->GetDerivedPosition() + Vector3(0.0f, 1.2f, 0.0f);
+			}
+
+			// Build projectile parameters from the visualization
+			ProjectileParams params;
+			params.speed = m_projectileSpeed;
+
 			if (projVis.has_mesh_name())
 			{
 				params.meshFile = projVis.mesh_name();
 			}
-			
+
 			if (projVis.has_trail_particle())
 			{
 				params.particleFile = projVis.trail_particle();
 			}
-			
+
 			if (projVis.has_motion())
 			{
 				params.motionType = static_cast<ProjectileMotionType>(projVis.motion());
 			}
-			
+
 			if (projVis.has_arc_height())
 			{
 				params.arcHeight = projVis.arc_height();
 			}
-			
+
+			if (projVis.has_arc_width())
+			{
+				params.arcWidth = projVis.arc_width();
+			}
+
 			if (projVis.has_wave_amplitude())
 			{
 				params.sineAmplitude = projVis.wave_amplitude();
 			}
-			
+
 			if (projVis.has_wave_frequency())
 			{
 				params.sineFrequency = projVis.wave_frequency();
 			}
-			
+
 			if (projVis.has_scale())
 			{
 				params.scale = projVis.scale();
 			}
-			
+
 			if (projVis.has_face_movement())
 			{
 				params.faceMovement = projVis.face_movement();
+			}
+
+			if (projVis.has_spawn_offset_right())
+			{
+				params.spawnOffsetRight = projVis.spawn_offset_right();
+			}
+
+			if (projVis.has_spawn_offset_up())
+			{
+				params.spawnOffsetUp = projVis.spawn_offset_up();
 			}
 
 			// Light parameters
@@ -866,9 +900,9 @@ namespace mmo
 					params.ribbonMaxSegments = ribbonConfig.max_segments();
 				}
 			}
-		}
 
-		m_projectileManager->SpawnProjectile(params, startPos, m_projectileTarget);
+			m_projectileManager->SpawnProjectile(params, startPos, m_projectileTarget);
+		}
 	}
 
 	void SpellVisualizationPreview::SetProjectileSpeed(float speed)
@@ -878,13 +912,29 @@ namespace mmo
 
 	void SpellVisualizationPreview::OnProjectileImpact(IProjectileTarget* target)
 	{
-		// Spawn impact particle if configured
-		if (m_currentVisualization && m_currentVisualization->has_projectile())
+		// Spawn impact particles if configured (check all projectile entries)
+		if (m_currentVisualization && target)
 		{
-			const auto& projVis = m_currentVisualization->projectile();
-			if (projVis.has_impact_particle() && !projVis.impact_particle().empty() && target)
+			// Collect all projectile visuals
+			std::vector<const proto::ProjectileVisual*> projVisuals;
+			if (m_currentVisualization->projectiles_size() > 0)
 			{
-				SpawnImpactParticle(projVis.impact_particle(), target->GetPosition());
+				for (int i = 0; i < m_currentVisualization->projectiles_size(); ++i)
+				{
+					projVisuals.push_back(&m_currentVisualization->projectiles(i));
+				}
+			}
+			else if (m_currentVisualization->has_projectile())
+			{
+				projVisuals.push_back(&m_currentVisualization->projectile());
+			}
+
+			for (const auto* projVis : projVisuals)
+			{
+				if (projVis->has_impact_particle() && !projVis->impact_particle().empty())
+				{
+					SpawnImpactParticle(projVis->impact_particle(), target->GetPosition());
+				}
 			}
 		}
 

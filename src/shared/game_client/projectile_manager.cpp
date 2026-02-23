@@ -36,20 +36,20 @@ namespace mmo
 	Projectile::Projectile(Scene &scene,
 						   IAudio *audio,
 						   const proto_client::SpellEntry &spell,
-						   const proto_client::SpellVisualization *visualization,
+						   const proto_client::ProjectileVisual *projectileVisual,
 						   const Vector3 &startPosition,
 						   std::shared_ptr<IProjectileTarget> target,
 						   float animationDelay)
-		: m_scene(scene), m_audio(audio), m_spell(spell), m_visualization(visualization), m_target(target), m_node(nullptr), m_entity(nullptr), m_trailEmitter(nullptr), m_light(nullptr), m_ribbonTrail(nullptr), m_lightTargetIntensity(0.0f), m_lightFadeInTime(0.0f), m_startPosition(startPosition), m_velocity(Vector3::UnitZ), m_travelTime(0.0f), m_totalDistance(0.0f), m_speedMultiplier(1.0f), m_hasHit(false), m_soundChannel(InvalidChannel)
+		: m_scene(scene), m_audio(audio), m_spell(spell), m_projectileVisual(projectileVisual), m_target(target), m_node(nullptr), m_entity(nullptr), m_trailEmitter(nullptr), m_light(nullptr), m_ribbonTrail(nullptr), m_lightTargetIntensity(0.0f), m_lightFadeInTime(0.0f), m_startPosition(startPosition), m_velocity(Vector3::UnitZ), m_travelTime(0.0f), m_totalDistance(0.0f), m_speedMultiplier(1.0f), m_hasHit(false), m_soundChannel(InvalidChannel)
 	{
 		// Create scene node for projectile
 		m_node = m_scene.GetRootSceneNode().CreateChildSceneNode();
 		m_node->SetPosition(startPosition);
 
 		// Setup visual representation if configured
-		if (m_visualization && m_visualization->has_projectile())
+		if (m_projectileVisual)
 		{
-			const auto &projVis = m_visualization->projectile();
+			const auto &projVis = *m_projectileVisual;
 
 			// Create mesh entity if specified
 			if (projVis.has_mesh_name() && !projVis.mesh_name().empty())
@@ -266,10 +266,9 @@ namespace mmo
 		m_travelTime += deltaTime;
 
 		// Determine motion type and update position
-		if (m_visualization && m_visualization->has_projectile())
+		if (m_projectileVisual)
 		{
-			const auto &projVis = m_visualization->projectile();
-			switch (projVis.motion())
+			switch (m_projectileVisual->motion())
 			{
 			case proto_client::LINEAR:
 				UpdateLinearMotion(deltaTime);
@@ -375,16 +374,43 @@ namespace mmo
 		const Vector3 linearPos = m_startPosition + (targetPos - m_startPosition) * travelProgress;
 
 		float arcHeight = 5.0f; // Default arc height
-		if (m_visualization && m_visualization->has_projectile() && m_visualization->projectile().has_arc_height())
+		if (m_projectileVisual && m_projectileVisual->has_arc_height())
 		{
-			arcHeight = m_visualization->projectile().arc_height();
+			arcHeight = m_projectileVisual->arc_height();
 		}
 
-		// Parabolic arc: height peaks at 50% progress
-		const float heightOffset = arcHeight * 4.0f * travelProgress * (1.0f - travelProgress);
-		const Vector3 arcPos = linearPos + Vector3(0.0f, heightOffset, 0.0f);
+		// Get horizontal arc width
+		float arcWidth = 0.0f;
+		if (m_projectileVisual && m_projectileVisual->has_arc_width())
+		{
+			arcWidth = m_projectileVisual->arc_width();
+		}
 
-		m_node->SetPosition(arcPos);
+		// Parabolic arc: peaks at 50% progress
+		const float arcFactor = 4.0f * travelProgress * (1.0f - travelProgress);
+		const float heightOffset = arcHeight * arcFactor;
+
+		// Horizontal arc offset (perpendicular to travel direction)
+		float widthOffset = 0.0f;
+		if (arcWidth != 0.0f)
+		{
+			Vector3 travelDir = targetPos - m_startPosition;
+			travelDir.Normalize();
+			Vector3 right = travelDir.Cross(Vector3::UnitY);
+			if (right.GetLength() < 0.001f)
+			{
+				right = travelDir.Cross(Vector3::UnitX);
+			}
+			right.Normalize();
+			widthOffset = arcWidth * arcFactor;
+			const Vector3 arcPos = linearPos + Vector3(0.0f, heightOffset, 0.0f) + right * widthOffset;
+			m_node->SetPosition(arcPos);
+		}
+		else
+		{
+			const Vector3 arcPos = linearPos + Vector3(0.0f, heightOffset, 0.0f);
+			m_node->SetPosition(arcPos);
+		}
 	}
 
 	void Projectile::UpdateHomingMotion(float deltaTime)
@@ -403,9 +429,9 @@ namespace mmo
 
 		// Get homing strength (turn rate)
 		float homingStrength = 5.0f;
-		if (m_visualization && m_visualization->has_projectile() && m_visualization->projectile().has_homing_strength())
+		if (m_projectileVisual && m_projectileVisual->has_homing_strength())
 		{
-			homingStrength = m_visualization->projectile().homing_strength();
+			homingStrength = m_projectileVisual->homing_strength();
 		}
 
 		// Smoothly turn velocity toward target
@@ -437,16 +463,15 @@ namespace mmo
 		// Get wave parameters
 		float frequency = 1.0f;
 		float amplitude = 1.0f;
-		if (m_visualization && m_visualization->has_projectile())
+		if (m_projectileVisual)
 		{
-			const auto &projVis = m_visualization->projectile();
-			if (projVis.has_wave_frequency())
+			if (m_projectileVisual->has_wave_frequency())
 			{
-				frequency = projVis.wave_frequency();
+				frequency = m_projectileVisual->wave_frequency();
 			}
-			if (projVis.has_wave_amplitude())
+			if (m_projectileVisual->has_wave_amplitude())
 			{
-				amplitude = projVis.wave_amplitude();
+				amplitude = m_projectileVisual->wave_amplitude();
 			}
 		}
 
@@ -465,12 +490,12 @@ namespace mmo
 
 	void Projectile::UpdateRotation(float deltaTime)
 	{
-		if (!m_visualization || !m_visualization->has_projectile())
+		if (!m_projectileVisual)
 		{
 			return;
 		}
 
-		const auto &projVis = m_visualization->projectile();
+		const auto &projVis = *m_projectileVisual;
 
 		// Face movement direction
 		if (projVis.has_face_movement() && projVis.face_movement())
@@ -562,6 +587,56 @@ namespace mmo
 		std::weak_ptr<GameUnitC> m_unit;
 	};
 
+	/// @brief Compute offset start position for a projectile based on spawn_offset_right and spawn_offset_up.
+	static Vector3 ApplySpawnOffset(const Vector3 &startPosition, const Vector3 &targetPosition,
+	                                float offsetRight, float offsetUp)
+	{
+		if (offsetRight == 0.0f && offsetUp == 0.0f)
+		{
+			return startPosition;
+		}
+
+		Vector3 forward = targetPosition - startPosition;
+		forward.y = 0.0f;
+		const float len = forward.GetLength();
+		if (len < 0.001f)
+		{
+			return startPosition + Vector3(offsetRight, offsetUp, 0.0f);
+		}
+
+		forward /= len;
+		Vector3 right = forward.Cross(Vector3::UnitY);
+		right.Normalize();
+
+		return startPosition + right * offsetRight + Vector3(0.0f, offsetUp, 0.0f);
+	}
+
+	/// @brief Collect the list of projectile visuals to spawn from a visualization.
+	/// Uses the repeated 'projectiles' field if non-empty, else falls back to singular 'projectile'.
+	static std::vector<const proto_client::ProjectileVisual*> CollectProjectileVisuals(
+		const proto_client::SpellVisualization *visualization)
+	{
+		std::vector<const proto_client::ProjectileVisual*> result;
+		if (!visualization)
+		{
+			return result;
+		}
+
+		if (visualization->projectiles_size() > 0)
+		{
+			for (int i = 0; i < visualization->projectiles_size(); ++i)
+			{
+				result.push_back(&visualization->projectiles(i));
+			}
+		}
+		else if (visualization->has_projectile())
+		{
+			result.push_back(&visualization->projectile());
+		}
+
+		return result;
+	}
+
 	void ProjectileManager::SpawnProjectile(const proto_client::SpellEntry &spell,
 											const proto_client::SpellVisualization *visualization,
 											GameUnitC *caster,
@@ -579,14 +654,33 @@ namespace mmo
 			return;
 		}
 
-		const Vector3 startPosition = caster->GetPosition();
+		const Vector3 baseStartPosition = caster->GetPosition();
+		const Vector3 targetPosition = target->GetPosition();
+
 		// Get weak_ptr from ObjectMgr since GameUnitC doesn't use shared_from_this
 		std::shared_ptr<GameObjectC> targetShared = ObjectMgr::Get<GameObjectC>(target->GetGuid());
 		std::weak_ptr<GameUnitC> targetWeak = std::static_pointer_cast<GameUnitC>(targetShared);
-
 		auto targetWrapper = std::make_shared<GameUnitProjectileTarget>(targetWeak);
-		auto projectile = std::make_unique<Projectile>(m_scene, m_audio, spell, visualization, startPosition, targetWrapper, animationDelay);
-		m_projectiles.push_back(std::move(projectile));
+
+		const auto projVisuals = CollectProjectileVisuals(visualization);
+		if (projVisuals.empty())
+		{
+			// No projectile config — spawn a single default projectile
+			auto projectile = std::make_unique<Projectile>(m_scene, m_audio, spell, nullptr, baseStartPosition, targetWrapper, animationDelay);
+			m_projectiles.push_back(std::move(projectile));
+		}
+		else
+		{
+			for (const auto *projVis : projVisuals)
+			{
+				const float offsetRight = projVis->has_spawn_offset_right() ? projVis->spawn_offset_right() : 0.0f;
+				const float offsetUp = projVis->has_spawn_offset_up() ? projVis->spawn_offset_up() : 0.0f;
+				const Vector3 startPos = ApplySpawnOffset(baseStartPosition, targetPosition, offsetRight, offsetUp);
+
+				auto projectile = std::make_unique<Projectile>(m_scene, m_audio, spell, projVis, startPos, targetWrapper, animationDelay);
+				m_projectiles.push_back(std::move(projectile));
+			}
+		}
 	}
 
 	void ProjectileManager::SpawnProjectile(const proto_client::SpellEntry &spell,
@@ -605,8 +699,26 @@ namespace mmo
 			return;
 		}
 
-		auto projectile = std::make_unique<Projectile>(m_scene, m_audio, spell, visualization, startPosition, target);
-		m_projectiles.push_back(std::move(projectile));
+		const Vector3 targetPosition = target->GetPosition();
+		const auto projVisuals = CollectProjectileVisuals(visualization);
+
+		if (projVisuals.empty())
+		{
+			auto projectile = std::make_unique<Projectile>(m_scene, m_audio, spell, nullptr, startPosition, target);
+			m_projectiles.push_back(std::move(projectile));
+		}
+		else
+		{
+			for (const auto *projVis : projVisuals)
+			{
+				const float offsetRight = projVis->has_spawn_offset_right() ? projVis->spawn_offset_right() : 0.0f;
+				const float offsetUp = projVis->has_spawn_offset_up() ? projVis->spawn_offset_up() : 0.0f;
+				const Vector3 startPos = ApplySpawnOffset(startPosition, targetPosition, offsetRight, offsetUp);
+
+				auto projectile = std::make_unique<Projectile>(m_scene, m_audio, spell, projVis, startPos, target);
+				m_projectiles.push_back(std::move(projectile));
+			}
+		}
 	}
 
 	void ProjectileManager::SpawnProjectileEx(const ProjectileParams& params,
@@ -645,10 +757,13 @@ namespace mmo
 		
 		projVis->set_motion(static_cast<proto_client::ProjectileMotion>(static_cast<int>(params.motionType)));
 		projVis->set_arc_height(params.arcHeight);
+		projVis->set_arc_width(params.arcWidth);
 		projVis->set_wave_amplitude(params.sineAmplitude);
 		projVis->set_wave_frequency(params.sineFrequency);
 		projVis->set_scale(params.scale);
 		projVis->set_face_movement(params.faceMovement);
+		projVis->set_spawn_offset_right(params.spawnOffsetRight);
+		projVis->set_spawn_offset_up(params.spawnOffsetUp);
 
 		// Populate light config if present
 		if (params.hasLight)
@@ -689,8 +804,15 @@ namespace mmo
 		m_tempStorage->spells.push_back(std::move(tempSpell));
 		m_tempStorage->visualizations.push_back(std::move(tempVis));
 
+		// Apply spawn offset
+		const Vector3 targetPosition = target->GetPosition();
+		const float offsetRight = params.spawnOffsetRight;
+		const float offsetUp = params.spawnOffsetUp;
+		const Vector3 finalStartPos = ApplySpawnOffset(startPosition, targetPosition, offsetRight, offsetUp);
+
+		const auto *storedProjVis = &m_tempStorage->visualizations.back()->projectile();
 		auto projectile = std::make_unique<Projectile>(m_scene, m_audio, 
-			*m_tempStorage->spells.back(), m_tempStorage->visualizations.back().get(), startPosition, target);
+			*m_tempStorage->spells.back(), storedProjVis, finalStartPos, target);
 		m_projectiles.push_back(std::move(projectile));
 	}
 

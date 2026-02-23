@@ -783,44 +783,16 @@ namespace mmo
 		return shouldRemove;
 	}
 
-	void SpellVisualizationEditorWindow::DrawProjectileConfig(proto::SpellVisualization &currentEntry)
+	/// @brief Draw the config UI for a single ProjectileVisual entry.
+	void SpellVisualizationEditorWindow::DrawSingleProjectileConfig(proto::ProjectileVisual &projectile, int index)
 	{
-		ImGui::PushID("ProjectileConfig");
-
-		// Check if projectile config exists
-		bool hasProjectile = currentEntry.has_projectile();
-
-		if (ImGui::Checkbox("Enable Projectile", &hasProjectile))
-		{
-			if (hasProjectile)
-			{
-				// Create projectile config with defaults
-				auto *projectile = currentEntry.mutable_projectile();
-				projectile->set_motion(proto::LINEAR);
-				projectile->set_scale(1.0f);
-				projectile->set_face_movement(true);
-			}
-			else
-			{
-				// Clear projectile config
-				currentEntry.clear_projectile();
-			}
-		}
-
-		if (!hasProjectile)
-		{
-			ImGui::PopID();
-			return;
-		}
-
-		ImGui::Indent();
-		auto *projectile = currentEntry.mutable_projectile();
+		ImGui::PushID(index);
 
 		// Spawn bone
-		std::string spawnBone = projectile->has_spawn_bone() ? projectile->spawn_bone() : "";
+		std::string spawnBone = projectile.has_spawn_bone() ? projectile.spawn_bone() : "";
 		if (ImGui::InputText("Spawn Bone", &spawnBone))
 		{
-			projectile->set_spawn_bone(spawnBone);
+			projectile.set_spawn_bone(spawnBone);
 		}
 		ImGui::SameLine();
 		if (ImGui::SmallButton("?##spawnbone"))
@@ -828,21 +800,29 @@ namespace mmo
 			ImGui::SetTooltip("Bone name to spawn the projectile from (e.g., hand_right).\nLeave empty to use a default offset above the caster.");
 		}
 
-		// Preview speed setting (affects editor preview only)
-		ImGui::TextDisabled("Preview Settings (Editor Only)");
-		if (ImGui::DragFloat("Preview Speed", &m_previewProjectileSpeed, 0.5f, 1.0f, 100.0f, "%.1f units/sec"))
+		// Spawn offsets
+		float offsetRight = projectile.has_spawn_offset_right() ? projectile.spawn_offset_right() : 0.0f;
+		if (ImGui::DragFloat("Spawn Offset Right", &offsetRight, 0.05f, -10.0f, 10.0f, "%.2f"))
 		{
-			// Update the preview speed
-			if (m_preview)
-			{
-				m_preview->SetProjectileSpeed(m_previewProjectileSpeed);
-			}
+			projectile.set_spawn_offset_right(offsetRight);
 		}
 		ImGui::SameLine();
-		if (ImGui::SmallButton("?##previewspeed"))
+		if (ImGui::SmallButton("?##offsetright"))
 		{
-			ImGui::SetTooltip("Speed for previewing projectiles in the editor.\nActual speed is determined by the Spell entry that uses this visualization.");
+			ImGui::SetTooltip("Horizontal offset to the right of the cast direction.\nNegative values offset to the left.\nUsed to spread multiple projectiles side by side.");
 		}
+
+		float offsetUp = projectile.has_spawn_offset_up() ? projectile.spawn_offset_up() : 0.0f;
+		if (ImGui::DragFloat("Spawn Offset Up", &offsetUp, 0.05f, -10.0f, 10.0f, "%.2f"))
+		{
+			projectile.set_spawn_offset_up(offsetUp);
+		}
+		ImGui::SameLine();
+		if (ImGui::SmallButton("?##offsetup"))
+		{
+			ImGui::SetTooltip("Vertical offset from the spawn position.\nNegative values offset downward.");
+		}
+
 		ImGui::Separator();
 
 		// Movement section
@@ -851,35 +831,46 @@ namespace mmo
 			ImGui::Indent();
 
 			// Motion type
-			int motionType = projectile->has_motion() ? static_cast<int>(projectile->motion()) : 0;
+			int motionType = projectile.has_motion() ? static_cast<int>(projectile.motion()) : 0;
 			if (ImGui::Combo("Motion Type", &motionType, s_motionTypeNames, IM_ARRAYSIZE(s_motionTypeNames)))
 			{
-				projectile->set_motion(static_cast<proto::ProjectileMotion>(motionType));
+				projectile.set_motion(static_cast<proto::ProjectileMotion>(motionType));
 			}
 
 			// Motion-specific parameters
-			switch (projectile->motion())
+			switch (projectile.motion())
 			{
 			case proto::ARC:
 				{
-					float arcHeight = projectile->has_arc_height() ? projectile->arc_height() : 0.0f;
-					if (ImGui::DragFloat("Arc Height", &arcHeight, 0.1f, 0.0f, 50.0f))
+					float arcHeight = projectile.has_arc_height() ? projectile.arc_height() : 0.0f;
+					if (ImGui::DragFloat("Arc Height", &arcHeight, 0.1f, -50.0f, 50.0f))
 					{
-						projectile->set_arc_height(arcHeight);
+						projectile.set_arc_height(arcHeight);
 					}
 					ImGui::SameLine();
-					if (ImGui::SmallButton("?##arc"))
+					if (ImGui::SmallButton("?##archeight"))
 					{
-						ImGui::SetTooltip("Maximum height of the parabolic arc in world units");
+						ImGui::SetTooltip("Vertical offset of the parabolic arc in world units.\nPositive = up, Negative = down.");
+					}
+
+					float arcWidth = projectile.has_arc_width() ? projectile.arc_width() : 0.0f;
+					if (ImGui::DragFloat("Arc Width", &arcWidth, 0.1f, -50.0f, 50.0f))
+					{
+						projectile.set_arc_width(arcWidth);
+					}
+					ImGui::SameLine();
+					if (ImGui::SmallButton("?##arcwidth"))
+					{
+						ImGui::SetTooltip("Horizontal offset of the parabolic arc in world units.\nPerpendicular to the travel direction.\nCombine with Arc Height for diagonal arcs.");
 					}
 					break;
 				}
 			case proto::HOMING:
 				{
-					float homingStrength = projectile->has_homing_strength() ? projectile->homing_strength() : 5.0f;
+					float homingStrength = projectile.has_homing_strength() ? projectile.homing_strength() : 5.0f;
 					if (ImGui::DragFloat("Homing Strength", &homingStrength, 0.1f, 0.1f, 20.0f))
 					{
-						projectile->set_homing_strength(homingStrength);
+						projectile.set_homing_strength(homingStrength);
 					}
 					ImGui::SameLine();
 					if (ImGui::SmallButton("?##homing"))
@@ -890,16 +881,16 @@ namespace mmo
 				}
 			case proto::SINE_WAVE:
 				{
-					float frequency = projectile->has_wave_frequency() ? projectile->wave_frequency() : 1.0f;
+					float frequency = projectile.has_wave_frequency() ? projectile.wave_frequency() : 1.0f;
 					if (ImGui::DragFloat("Wave Frequency", &frequency, 0.1f, 0.1f, 10.0f))
 					{
-						projectile->set_wave_frequency(frequency);
+						projectile.set_wave_frequency(frequency);
 					}
 
-					float amplitude = projectile->has_wave_amplitude() ? projectile->wave_amplitude() : 1.0f;
+					float amplitude = projectile.has_wave_amplitude() ? projectile.wave_amplitude() : 1.0f;
 					if (ImGui::DragFloat("Wave Amplitude", &amplitude, 0.1f, 0.0f, 10.0f))
 					{
-						projectile->set_wave_amplitude(amplitude);
+						projectile.set_wave_amplitude(amplitude);
 					}
 					ImGui::SameLine();
 					if (ImGui::SmallButton("?##sine"))
@@ -921,11 +912,11 @@ namespace mmo
 			ImGui::Indent();
 
 			// Mesh name
-			std::string meshName = projectile->has_mesh_name() ? projectile->mesh_name() : "";
+			std::string meshName = projectile.has_mesh_name() ? projectile.mesh_name() : "";
 			static const std::set<String> meshExtensions = {".hmsh"};
 			if (AssetPickerWidget::Draw("Mesh", meshName, meshExtensions, &m_previewManager, nullptr, 64.0f))
 			{
-				projectile->set_mesh_name(meshName);
+				projectile.set_mesh_name(meshName);
 			}
 			ImGui::SameLine();
 			if (ImGui::SmallButton("?##mesh"))
@@ -934,19 +925,19 @@ namespace mmo
 			}
 
 			// Material name
-			std::string materialName = projectile->has_material_name() ? projectile->material_name() : "";
+			std::string materialName = projectile.has_material_name() ? projectile.material_name() : "";
 			static const std::set<String> materialExtensions = {".hmat"};
 			if (AssetPickerWidget::Draw("Material", materialName, materialExtensions, nullptr, nullptr, 0.0f))
 			{
-				projectile->set_material_name(materialName);
+				projectile.set_material_name(materialName);
 			}
 
 			// Trail particle
-			std::string trailParticle = projectile->has_trail_particle() ? projectile->trail_particle() : "";
+			std::string trailParticle = projectile.has_trail_particle() ? projectile.trail_particle() : "";
 			static const std::set<String> particleExtensions = {".hpfx"};
 			if (AssetPickerWidget::Draw("Trail Particle", trailParticle, particleExtensions, &m_previewManager, nullptr, 64.0f))
 			{
-				projectile->set_trail_particle(trailParticle);
+				projectile.set_trail_particle(trailParticle);
 			}
 			ImGui::SameLine();
 			if (ImGui::SmallButton("?##trail"))
@@ -955,10 +946,10 @@ namespace mmo
 			}
 
 			// Scale
-			float scale = projectile->has_scale() ? projectile->scale() : 1.0f;
+			float scale = projectile.has_scale() ? projectile.scale() : 1.0f;
 			if (ImGui::DragFloat("Scale", &scale, 0.01f, 0.1f, 10.0f))
 			{
-				projectile->set_scale(scale);
+				projectile.set_scale(scale);
 			}
 
 			ImGui::Unindent();
@@ -970,10 +961,10 @@ namespace mmo
 			ImGui::Indent();
 
 			// Face movement
-			bool faceMovement = projectile->has_face_movement() ? projectile->face_movement() : true;
+			bool faceMovement = projectile.has_face_movement() ? projectile.face_movement() : true;
 			if (ImGui::Checkbox("Face Movement Direction", &faceMovement))
 			{
-				projectile->set_face_movement(faceMovement);
+				projectile.set_face_movement(faceMovement);
 			}
 			ImGui::SameLine();
 			if (ImGui::SmallButton("?##face"))
@@ -982,10 +973,10 @@ namespace mmo
 			}
 
 			// Spin rate
-			float spinRate = projectile->has_spin_rate() ? projectile->spin_rate() : 0.0f;
+			float spinRate = projectile.has_spin_rate() ? projectile.spin_rate() : 0.0f;
 			if (ImGui::DragFloat("Spin Rate (deg/sec)", &spinRate, 1.0f, -720.0f, 720.0f))
 			{
-				projectile->set_spin_rate(spinRate);
+				projectile.set_spin_rate(spinRate);
 			}
 			ImGui::SameLine();
 			if (ImGui::SmallButton("?##spin"))
@@ -1001,12 +992,12 @@ namespace mmo
 		{
 			ImGui::Indent();
 
-			bool hasProjLight = projectile->has_light();
+			bool hasProjLight = projectile.has_light();
 			if (ImGui::Checkbox("Enable Projectile Light", &hasProjLight))
 			{
 				if (hasProjLight)
 				{
-					auto* light = projectile->mutable_light();
+					auto* light = projectile.mutable_light();
 					light->set_r(1.0f);
 					light->set_g(0.6f);
 					light->set_b(0.2f);
@@ -1015,13 +1006,13 @@ namespace mmo
 				}
 				else
 				{
-					projectile->clear_light();
+					projectile.clear_light();
 				}
 			}
 
-			if (projectile->has_light())
+			if (projectile.has_light())
 			{
-				auto* light = projectile->mutable_light();
+				auto* light = projectile.mutable_light();
 
 				float lightColor[3] =
 				{
@@ -1069,12 +1060,12 @@ namespace mmo
 		{
 			ImGui::Indent();
 
-			bool hasProjRibbon = projectile->has_ribbon_trail();
+			bool hasProjRibbon = projectile.has_ribbon_trail();
 			if (ImGui::Checkbox("Enable Projectile Ribbon Trail", &hasProjRibbon))
 			{
 				if (hasProjRibbon)
 				{
-					auto* ribbon = projectile->mutable_ribbon_trail();
+					auto* ribbon = projectile.mutable_ribbon_trail();
 					ribbon->set_initial_width(0.3f);
 					ribbon->set_final_width(0.0f);
 					ribbon->set_segment_lifetime(0.8f);
@@ -1090,13 +1081,13 @@ namespace mmo
 				}
 				else
 				{
-					projectile->clear_ribbon_trail();
+					projectile.clear_ribbon_trail();
 				}
 			}
 
-			if (projectile->has_ribbon_trail())
+			if (projectile.has_ribbon_trail())
 			{
-				auto* ribbon = projectile->mutable_ribbon_trail();
+				auto* ribbon = projectile.mutable_ribbon_trail();
 
 				// Material
 				std::string ribbonMaterial = ribbon->has_material_name() ? ribbon->material_name() : "";
@@ -1182,23 +1173,23 @@ namespace mmo
 			{
 				if (ImGui::Button("Add Sound"))
 				{
-					projectile->add_sounds("Sound/Spells/Projectile.wav");
+					projectile.add_sounds("Sound/Spells/Projectile.wav");
 				}
 
 				static const std::set<String> soundExtensions = {".wav", ".ogg", ".mp3"};
 				std::vector<int> soundsToRemove;
 
-				for (int i = 0; i < projectile->sounds_size(); ++i)
+				for (int i = 0; i < projectile.sounds_size(); ++i)
 				{
 					ImGui::PushID(i);
 
-					std::string sound = projectile->sounds(i);
+					std::string sound = projectile.sounds(i);
 					char soundLabel[32];
 					snprintf(soundLabel, sizeof(soundLabel), "Sound %d", i);
 
 					if (AssetPickerWidget::Draw(soundLabel, sound, soundExtensions, nullptr, m_audioSystem, 0.0f))
 					{
-						projectile->set_sounds(i, sound);
+						projectile.set_sounds(i, sound);
 					}
 					ImGui::SameLine();
 					if (ImGui::SmallButton("Remove"))
@@ -1212,18 +1203,18 @@ namespace mmo
 				// Remove sounds in reverse order
 				for (auto it = soundsToRemove.rbegin(); it != soundsToRemove.rend(); ++it)
 				{
-					projectile->mutable_sounds()->erase(projectile->mutable_sounds()->begin() + *it);
+					projectile.mutable_sounds()->erase(projectile.mutable_sounds()->begin() + *it);
 				}
 
 				ImGui::TreePop();
 			}
 
 			// Impact particle (asset picker instead of plain text input)
-			std::string impactParticle = projectile->has_impact_particle() ? projectile->impact_particle() : "";
+			std::string impactParticle = projectile.has_impact_particle() ? projectile.impact_particle() : "";
 			static const std::set<String> impactParticleExtensions = {".hpfx"};
 			if (AssetPickerWidget::Draw("Impact Particle", impactParticle, impactParticleExtensions, &m_previewManager, nullptr, 64.0f))
 			{
-				projectile->set_impact_particle(impactParticle);
+				projectile.set_impact_particle(impactParticle);
 			}
 			ImGui::SameLine();
 			if (ImGui::SmallButton("?##impact"))
@@ -1234,7 +1225,120 @@ namespace mmo
 			ImGui::Unindent();
 		}
 
-		ImGui::Unindent();
+		ImGui::PopID();
+	}
+
+	void SpellVisualizationEditorWindow::DrawProjectileConfig(proto::SpellVisualization &currentEntry)
+	{
+		ImGui::PushID("ProjectileConfig");
+
+		const int projectileCount = currentEntry.projectiles_size();
+		const bool hasLegacyProjectile = currentEntry.has_projectile();
+		const bool hasAnyProjectile = projectileCount > 0 || hasLegacyProjectile;
+
+		// Preview speed setting (shared, affects editor preview only)
+		ImGui::TextDisabled("Preview Settings (Editor Only)");
+		if (ImGui::DragFloat("Preview Speed", &m_previewProjectileSpeed, 0.5f, 1.0f, 100.0f, "%.1f units/sec"))
+		{
+			if (m_preview)
+			{
+				m_preview->SetProjectileSpeed(m_previewProjectileSpeed);
+			}
+		}
+		ImGui::SameLine();
+		if (ImGui::SmallButton("?##previewspeed"))
+		{
+			ImGui::SetTooltip("Speed for previewing projectiles in the editor.\nActual speed is determined by the Spell entry that uses this visualization.");
+		}
+		ImGui::Separator();
+
+		// Migration: if legacy single projectile exists and no repeated entries, offer migration
+		if (hasLegacyProjectile && projectileCount == 0)
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Legacy single projectile detected.");
+			if (ImGui::Button("Migrate to Multi-Projectile"))
+			{
+				// Copy the legacy projectile into the repeated list
+				*currentEntry.add_projectiles() = currentEntry.projectile();
+				currentEntry.clear_projectile();
+			}
+			ImGui::SameLine();
+			ImGui::TextDisabled("(?)");
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Moves the existing projectile config into the new\nmulti-projectile list. After migration, you can add more projectiles.");
+			}
+
+			ImGui::Separator();
+
+			// Still show the legacy single-projectile editor
+			ImGui::Text("Projectile (Legacy)");
+			ImGui::Indent();
+			DrawSingleProjectileConfig(*currentEntry.mutable_projectile(), 0);
+			ImGui::Unindent();
+		}
+		else
+		{
+			// Multi-projectile UI
+			ImGui::Text("Projectiles: %d", projectileCount);
+			ImGui::SameLine();
+
+			if (ImGui::Button("Add Projectile"))
+			{
+				auto* proj = currentEntry.add_projectiles();
+				proj->set_motion(proto::LINEAR);
+				proj->set_scale(1.0f);
+				proj->set_face_movement(true);
+			}
+
+			int removeIndex = -1;
+			int duplicateIndex = -1;
+
+			for (int i = 0; i < projectileCount; ++i)
+			{
+				ImGui::PushID(i);
+
+				char headerLabel[64];
+				snprintf(headerLabel, sizeof(headerLabel), "Projectile %d", i + 1);
+
+				bool opened = ImGui::CollapsingHeader(headerLabel, ImGuiTreeNodeFlags_DefaultOpen);
+
+				// Buttons on the same line as the header
+				ImGui::SameLine(ImGui::GetContentRegionAvail().x - 100.0f);
+				if (ImGui::SmallButton("Duplicate"))
+				{
+					duplicateIndex = i;
+				}
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Remove"))
+				{
+					removeIndex = i;
+				}
+
+				if (opened)
+				{
+					ImGui::Indent();
+					DrawSingleProjectileConfig(*currentEntry.mutable_projectiles(i), i);
+					ImGui::Unindent();
+				}
+
+				ImGui::PopID();
+			}
+
+			// Handle duplicate
+			if (duplicateIndex >= 0 && duplicateIndex < projectileCount)
+			{
+				*currentEntry.add_projectiles() = currentEntry.projectiles(duplicateIndex);
+			}
+
+			// Handle removal
+			if (removeIndex >= 0 && removeIndex < currentEntry.projectiles_size())
+			{
+				currentEntry.mutable_projectiles()->erase(
+					currentEntry.mutable_projectiles()->begin() + removeIndex);
+			}
+		}
+
 		ImGui::PopID();
 	}
 }

@@ -58,6 +58,11 @@ namespace mmo
 		/// @return True if the kit should be removed.
 		bool DrawKit(proto::SpellKit& kit, int kitIndex);
 
+		/// @brief Draw the configuration UI for a single projectile visual entry.
+		/// @param projectile The projectile visual to edit.
+		/// @param index The index of the projectile in the list (used for unique ImGui IDs).
+		void DrawSingleProjectileConfig(proto::ProjectileVisual& projectile, int index);
+
 		/// @brief Draw the projectile configuration section.
 		/// @param currentEntry The visualization being edited.
 		void DrawProjectileConfig(proto::SpellVisualization& currentEntry);

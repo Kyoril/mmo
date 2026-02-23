@@ -105,6 +105,16 @@ message ProjectileVisual
 
 	// Bone to spawn the projectile from (e.g., "hand_right")
 	optional string spawn_bone = 16;
+
+	// Horizontal arc width for ARC motion (perpendicular to the travel direction)
+	optional float arc_width = 17 [default = 0.0];
+
+	// Spawn offset to the right of the cast direction (negative = left).
+	// Used to spread multiple projectiles horizontally.
+	optional float spawn_offset_right = 18 [default = 0.0];
+
+	// Spawn offset upward from the cast position (negative = down).
+	optional float spawn_offset_up = 19 [default = 0.0];
 }
 
 // A visualization kit containing sounds, animation, particles, lights, and optional tint
@@ -150,7 +160,13 @@ message SpellVisualization
 	map<uint32, SpellKitList> kits_by_event = 4;
 
 	// Optional projectile configuration (if spell has speed > 0)
+	// Deprecated: use repeated projectiles field instead.
 	optional ProjectileVisual projectile = 5;
+
+	// Multiple projectile configurations (if spell has speed > 0).
+	// Each entry spawns a separate projectile. If this is empty, the
+	// singular 'projectile' field is used as a fallback for backward compatibility.
+	repeated ProjectileVisual projectiles = 6;
 }
 
 // Dataset containing all spell visualizations

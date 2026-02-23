@@ -304,11 +304,30 @@ namespace mmo
 		// Calculate arc position
 		const Vector3 linearPos = m_startPosition + (targetPos - m_startPosition) * travelProgress;
 
-		// Parabolic arc: height peaks at 50% progress
-		const float heightOffset = m_params.arcHeight * 4.0f * travelProgress * (1.0f - travelProgress);
-		const Vector3 arcPos = linearPos + Vector3(0.0f, heightOffset, 0.0f);
+		// Parabolic arc: peaks at 50% progress
+		const float arcFactor = 4.0f * travelProgress * (1.0f - travelProgress);
+		const float heightOffset = m_params.arcHeight * arcFactor;
 
-		m_node->SetPosition(arcPos);
+		// Horizontal arc offset
+		if (m_params.arcWidth != 0.0f)
+		{
+			Vector3 travelDir = targetPos - m_startPosition;
+			travelDir.Normalize();
+			Vector3 right = travelDir.Cross(Vector3::UnitY);
+			if (right.GetLength() < 0.001f)
+			{
+				right = travelDir.Cross(Vector3::UnitX);
+			}
+			right.Normalize();
+			const float widthOffset = m_params.arcWidth * arcFactor;
+			const Vector3 arcPos = linearPos + Vector3(0.0f, heightOffset, 0.0f) + right * widthOffset;
+			m_node->SetPosition(arcPos);
+		}
+		else
+		{
+			const Vector3 arcPos = linearPos + Vector3(0.0f, heightOffset, 0.0f);
+			m_node->SetPosition(arcPos);
+		}
 	}
 
 	void EditorProjectile::UpdateHomingMotion(float deltaTime)
@@ -400,6 +419,30 @@ namespace mmo
 	{
 	}
 
+	/// @brief Compute offset start position for a projectile based on spawn offsets.
+	static Vector3 ApplyEditorSpawnOffset(const Vector3 &startPosition, const Vector3 &targetPosition,
+	                                     float offsetRight, float offsetUp)
+	{
+		if (offsetRight == 0.0f && offsetUp == 0.0f)
+		{
+			return startPosition;
+		}
+
+		Vector3 forward = targetPosition - startPosition;
+		forward.y = 0.0f;
+		const float len = forward.GetLength();
+		if (len < 0.001f)
+		{
+			return startPosition + Vector3(offsetRight, offsetUp, 0.0f);
+		}
+
+		forward /= len;
+		Vector3 right = forward.Cross(Vector3::UnitY);
+		right.Normalize();
+
+		return startPosition + right * offsetRight + Vector3(0.0f, offsetUp, 0.0f);
+	}
+
 	void EditorProjectileManager::SpawnProjectile(const ProjectileParams& params,
 	                                              const Vector3& startPosition,
 	                                              std::shared_ptr<IProjectileTarget> target)
@@ -414,7 +457,11 @@ namespace mmo
 			return;
 		}
 
-		auto projectile = std::make_unique<EditorProjectile>(m_scene, m_audio, params, startPosition, target);
+		const Vector3 targetPosition = target->GetPosition();
+		const Vector3 startPos = ApplyEditorSpawnOffset(startPosition, targetPosition,
+			params.spawnOffsetRight, params.spawnOffsetUp);
+
+		auto projectile = std::make_unique<EditorProjectile>(m_scene, m_audio, params, startPos, target);
 		m_projectiles.push_back(std::move(projectile));
 	}
 

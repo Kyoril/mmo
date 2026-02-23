@@ -95,6 +95,8 @@ namespace mmo
 		ProjectileMotionType motionType = ProjectileMotionType::Linear;
 		/// @brief Height of arc (for Arc motion type).
 		float arcHeight = 0.0f;
+		/// @brief Width of arc (for Arc motion type, horizontal component).
+		float arcWidth = 0.0f;
 		/// @brief Amplitude (for Sine wave motion type).
 		float sineAmplitude = 0.5f;
 		/// @brief Frequency (for Sine wave motion type).
@@ -133,5 +135,10 @@ namespace mmo
 		float ribbonSegmentLifetime = 1.0f;
 		/// @brief Ribbon trail max segments.
 		uint32 ribbonMaxSegments = 64;
+
+		/// @brief Spawn offset to the right of the cast direction (negative = left).
+		float spawnOffsetRight = 0.0f;
+		/// @brief Spawn offset upward from the cast position (negative = down).
+		float spawnOffsetUp = 0.0f;
 	};
 }
