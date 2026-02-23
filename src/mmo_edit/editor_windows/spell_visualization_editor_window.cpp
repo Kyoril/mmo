@@ -400,6 +400,18 @@ namespace mmo
 				kit.set_scope(static_cast<proto::KitScope>(scopeIndex));
 			}
 
+			// Bone attachment name
+			std::string attachBone = kit.has_attach_bone() ? kit.attach_bone() : "";
+			if (ImGui::InputText("Attach Bone", &attachBone))
+			{
+				kit.set_attach_bone(attachBone);
+			}
+			ImGui::SameLine();
+			if (ImGui::SmallButton("?##bone"))
+			{
+				ImGui::SetTooltip("Bone/socket name to attach effects to (e.g., hand_right, hand_left, chest).\nLeave empty to use the entity root.");
+			}
+
 			// Animation name
 			std::string animName = kit.has_animation_name() ? kit.animation_name() : "";
 			if (ImGui::InputText("Animation Name", &animName))
@@ -407,7 +419,7 @@ namespace mmo
 				kit.set_animation_name(animName);
 			}
 			ImGui::SameLine();
-			if (ImGui::SmallButton("?"))
+			if (ImGui::SmallButton("?##anim"))
 			{
 				ImGui::SetTooltip("Examples: CastLoop, CastRelease, SpellCast, etc.");
 			}
@@ -419,9 +431,9 @@ namespace mmo
 				kit.set_loop(loop);
 			}
 			ImGui::SameLine();
-			if (ImGui::SmallButton("??"))
+			if (ImGui::SmallButton("?##loop"))
 			{
-				ImGui::SetTooltip("Looped sounds will play continuously until the event ends (e.g., during Casting).");
+				ImGui::SetTooltip("Looped effects play continuously until the event ends (e.g., during Casting).\nApplies to animation, sounds, particles, light, and ribbon trail.");
 			}
 
 			// Duration
@@ -431,17 +443,15 @@ namespace mmo
 				kit.set_duration_ms(duration);
 			}
 
-			// Sounds list
+			// --- Sounds ---
 			ImGui::Spacing();
 			if (ImGui::TreeNode("Sounds"))
 			{
-				// Add sound button
 				if (ImGui::Button("Add Sound"))
 				{
 					kit.add_sounds("Sound/Spells/NewSound.wav");
 				}
 
-				// Draw existing sounds
 				static const std::set<String> soundExtensions = {".wav", ".ogg", ".mp3"};
 				std::vector<int> soundsToRemove;
 
@@ -453,7 +463,6 @@ namespace mmo
 					char soundLabel[32];
 					snprintf(soundLabel, sizeof(soundLabel), "Sound %d", i);
 
-					// Use asset picker for sound selection
 					if (AssetPickerWidget::Draw(soundLabel, sound, soundExtensions, nullptr, m_audioSystem, 0.0f))
 					{
 						kit.set_sounds(i, sound);
@@ -467,7 +476,6 @@ namespace mmo
 					ImGui::PopID();
 				}
 
-				// Remove sounds (in reverse order)
 				for (auto it = soundsToRemove.rbegin(); it != soundsToRemove.rend(); ++it)
 				{
 					kit.mutable_sounds()->erase(kit.mutable_sounds()->begin() + *it);
@@ -476,7 +484,238 @@ namespace mmo
 				ImGui::TreePop();
 			}
 
-			// Tint color
+			// --- Particles ---
+			ImGui::Spacing();
+			if (ImGui::TreeNode("Particles"))
+			{
+				if (ImGui::Button("Add Particle System"))
+				{
+					kit.add_particles("");
+				}
+				ImGui::SameLine();
+				if (ImGui::SmallButton("?##particles"))
+				{
+					ImGui::SetTooltip("Particle systems to spawn for this kit.\nIf Attach Bone is set, particles are attached to that bone via TagPoints.");
+				}
+
+				static const std::set<String> particleExtensions = {".hpfx"};
+				std::vector<int> particlesToRemove;
+
+				for (int i = 0; i < kit.particles_size(); ++i)
+				{
+					ImGui::PushID(i);
+
+					std::string particle = kit.particles(i);
+					char particleLabel[32];
+					snprintf(particleLabel, sizeof(particleLabel), "Particle %d", i);
+
+					if (AssetPickerWidget::Draw(particleLabel, particle, particleExtensions, &m_previewManager, nullptr, 64.0f))
+					{
+						kit.set_particles(i, particle);
+					}
+					ImGui::SameLine();
+					if (ImGui::SmallButton("Remove"))
+					{
+						particlesToRemove.push_back(i);
+					}
+
+					ImGui::PopID();
+				}
+
+				for (auto it = particlesToRemove.rbegin(); it != particlesToRemove.rend(); ++it)
+				{
+					kit.mutable_particles()->erase(kit.mutable_particles()->begin() + *it);
+				}
+
+				ImGui::TreePop();
+			}
+
+			// --- Mesh ---
+			ImGui::Spacing();
+			if (ImGui::TreeNode("Mesh"))
+			{
+				std::string meshName = kit.has_mesh_name() ? kit.mesh_name() : "";
+				static const std::set<String> meshExtensions = {".hmsh"};
+				if (AssetPickerWidget::Draw("Mesh", meshName, meshExtensions, &m_previewManager, nullptr, 64.0f))
+				{
+					kit.set_mesh_name(meshName);
+				}
+				ImGui::SameLine();
+				if (ImGui::SmallButton("?##mesh"))
+				{
+					ImGui::SetTooltip("Mesh to spawn at bone/position (e.g., a glow orb or magic circle).\nIf Attach Bone is set, mesh is attached to that bone via TagPoints.");
+				}
+
+				ImGui::TreePop();
+			}
+
+			// --- Point Light ---
+			ImGui::Spacing();
+			if (ImGui::TreeNode("Point Light"))
+			{
+				bool hasLight = kit.has_light();
+				if (ImGui::Checkbox("Enable Light", &hasLight))
+				{
+					if (hasLight)
+					{
+						auto* light = kit.mutable_light();
+						light->set_r(1.0f);
+						light->set_g(0.9f);
+						light->set_b(0.7f);
+						light->set_intensity(1.0f);
+						light->set_range(10.0f);
+					}
+					else
+					{
+						kit.clear_light();
+					}
+				}
+
+				if (kit.has_light())
+				{
+					auto* light = kit.mutable_light();
+
+					float lightColor[3] =
+					{
+						light->has_r() ? light->r() : 1.0f,
+						light->has_g() ? light->g() : 0.9f,
+						light->has_b() ? light->b() : 0.7f
+					};
+					if (ImGui::ColorEdit3("Color", lightColor))
+					{
+						light->set_r(lightColor[0]);
+						light->set_g(lightColor[1]);
+						light->set_b(lightColor[2]);
+					}
+
+					float intensity = light->has_intensity() ? light->intensity() : 1.0f;
+					if (ImGui::DragFloat("Intensity", &intensity, 0.1f, 0.0f, 20.0f))
+					{
+						light->set_intensity(intensity);
+					}
+
+					float range = light->has_range() ? light->range() : 10.0f;
+					if (ImGui::DragFloat("Range", &range, 0.5f, 0.1f, 100.0f))
+					{
+						light->set_range(range);
+					}
+
+					float attenuation = light->has_attenuation() ? light->attenuation() : 1.0f;
+					if (ImGui::DragFloat("Attenuation", &attenuation, 0.1f, 0.0f, 5.0f))
+					{
+						light->set_attenuation(attenuation);
+					}
+
+					ImGui::SameLine();
+					if (ImGui::SmallButton("?##light"))
+					{
+						ImGui::SetTooltip("Point light at bone/entity position.\nGreat for glowing hands, fiery aura effects, etc.");
+					}
+				}
+
+				ImGui::TreePop();
+			}
+
+			// --- Ribbon Trail ---
+			ImGui::Spacing();
+			if (ImGui::TreeNode("Ribbon Trail"))
+			{
+				bool hasRibbon = kit.has_ribbon_trail();
+				if (ImGui::Checkbox("Enable Ribbon Trail", &hasRibbon))
+				{
+					if (hasRibbon)
+					{
+						auto* ribbon = kit.mutable_ribbon_trail();
+						ribbon->set_initial_width(0.5f);
+						ribbon->set_final_width(0.0f);
+						ribbon->set_segment_lifetime(1.0f);
+						ribbon->set_max_segments(64);
+					}
+					else
+					{
+						kit.clear_ribbon_trail();
+					}
+				}
+
+				if (kit.has_ribbon_trail())
+				{
+					auto* ribbon = kit.mutable_ribbon_trail();
+
+					// Material
+					std::string ribbonMaterial = ribbon->has_material_name() ? ribbon->material_name() : "";
+					static const std::set<String> materialExtensions = {".hmat"};
+					if (AssetPickerWidget::Draw("Material", ribbonMaterial, materialExtensions, nullptr, nullptr, 0.0f))
+					{
+						ribbon->set_material_name(ribbonMaterial);
+					}
+
+					// Width
+					float initWidth = ribbon->has_initial_width() ? ribbon->initial_width() : 0.5f;
+					if (ImGui::DragFloat("Initial Width", &initWidth, 0.01f, 0.0f, 10.0f))
+					{
+						ribbon->set_initial_width(initWidth);
+					}
+
+					float finalWidth = ribbon->has_final_width() ? ribbon->final_width() : 0.0f;
+					if (ImGui::DragFloat("Final Width", &finalWidth, 0.01f, 0.0f, 10.0f))
+					{
+						ribbon->set_final_width(finalWidth);
+					}
+
+					// Initial color
+					float initColor[4] =
+					{
+						ribbon->has_initial_r() ? ribbon->initial_r() : 1.0f,
+						ribbon->has_initial_g() ? ribbon->initial_g() : 1.0f,
+						ribbon->has_initial_b() ? ribbon->initial_b() : 1.0f,
+						ribbon->has_initial_a() ? ribbon->initial_a() : 1.0f
+					};
+					if (ImGui::ColorEdit4("Initial Color", initColor))
+					{
+						ribbon->set_initial_r(initColor[0]);
+						ribbon->set_initial_g(initColor[1]);
+						ribbon->set_initial_b(initColor[2]);
+						ribbon->set_initial_a(initColor[3]);
+					}
+
+					// Final color
+					float finalColor[4] =
+					{
+						ribbon->has_final_r() ? ribbon->final_r() : 1.0f,
+						ribbon->has_final_g() ? ribbon->final_g() : 1.0f,
+						ribbon->has_final_b() ? ribbon->final_b() : 1.0f,
+						ribbon->has_final_a() ? ribbon->final_a() : 0.0f
+					};
+					if (ImGui::ColorEdit4("Final Color", finalColor))
+					{
+						ribbon->set_final_r(finalColor[0]);
+						ribbon->set_final_g(finalColor[1]);
+						ribbon->set_final_b(finalColor[2]);
+						ribbon->set_final_a(finalColor[3]);
+					}
+
+					// Timing
+					float segLifetime = ribbon->has_segment_lifetime() ? ribbon->segment_lifetime() : 1.0f;
+					if (ImGui::DragFloat("Segment Lifetime", &segLifetime, 0.05f, 0.1f, 10.0f))
+					{
+						ribbon->set_segment_lifetime(segLifetime);
+					}
+
+					int maxSeg = ribbon->has_max_segments() ? static_cast<int>(ribbon->max_segments()) : 64;
+					if (ImGui::InputInt("Max Segments", &maxSeg))
+					{
+						if (maxSeg < 4)
+						{
+							maxSeg = 4;
+						}
+						ribbon->set_max_segments(static_cast<uint32_t>(maxSeg));
+					}
+				}
+
+				ImGui::TreePop();
+			}
+
+			// --- Tint Color ---
 			ImGui::Spacing();
 			if (ImGui::TreeNode("Tint Color"))
 			{
@@ -516,10 +755,16 @@ namespace mmo
 		}
 		else
 		{
-			// Draw compact view when collapsed
+			// Draw compact summary when collapsed
 			ImGui::SameLine();
 			const char *scopeName = kit.has_scope() ? s_scopeNames[kit.scope()] : "Caster";
-			ImGui::TextDisabled("(%s, %d sounds)", scopeName, kit.sounds_size());
+			const char* boneName = kit.has_attach_bone() && !kit.attach_bone().empty() ? kit.attach_bone().c_str() : "root";
+			ImGui::TextDisabled("(%s @ %s | %d snd, %d pfx%s%s%s)",
+				scopeName, boneName,
+				kit.sounds_size(), kit.particles_size(),
+				kit.has_light() ? " +light" : "",
+				kit.has_ribbon_trail() ? " +ribbon" : "",
+				kit.has_mesh_name() && !kit.mesh_name().empty() ? " +mesh" : "");
 		}
 
 		ImGui::PopID();
@@ -558,6 +803,18 @@ namespace mmo
 
 		ImGui::Indent();
 		auto *projectile = currentEntry.mutable_projectile();
+
+		// Spawn bone
+		std::string spawnBone = projectile->has_spawn_bone() ? projectile->spawn_bone() : "";
+		if (ImGui::InputText("Spawn Bone", &spawnBone))
+		{
+			projectile->set_spawn_bone(spawnBone);
+		}
+		ImGui::SameLine();
+		if (ImGui::SmallButton("?##spawnbone"))
+		{
+			ImGui::SetTooltip("Bone name to spawn the projectile from (e.g., hand_right).\nLeave empty to use a default offset above the caster.");
+		}
 
 		// Preview speed setting (affects editor preview only)
 		ImGui::TextDisabled("Preview Settings (Editor Only)");
@@ -599,7 +856,7 @@ namespace mmo
 						projectile->set_arc_height(arcHeight);
 					}
 					ImGui::SameLine();
-					if (ImGui::SmallButton("?"))
+					if (ImGui::SmallButton("?##arc"))
 					{
 						ImGui::SetTooltip("Maximum height of the parabolic arc in world units");
 					}
@@ -613,7 +870,7 @@ namespace mmo
 						projectile->set_homing_strength(homingStrength);
 					}
 					ImGui::SameLine();
-					if (ImGui::SmallButton("?"))
+					if (ImGui::SmallButton("?##homing"))
 					{
 						ImGui::SetTooltip("Turn rate - higher values make sharper turns");
 					}
@@ -633,7 +890,7 @@ namespace mmo
 						projectile->set_wave_amplitude(amplitude);
 					}
 					ImGui::SameLine();
-					if (ImGui::SmallButton("?"))
+					if (ImGui::SmallButton("?##sine"))
 					{
 						ImGui::SetTooltip("Side-to-side oscillation distance");
 					}
@@ -661,7 +918,7 @@ namespace mmo
 			ImGui::SameLine();
 			if (ImGui::SmallButton("?##mesh"))
 			{
-				ImGui::SetTooltip("3D mesh for the projectile (e.g., arrow, fireball)");
+				ImGui::SetTooltip("3D mesh for the projectile (e.g., arrow, fireball orb)");
 			}
 
 			// Material name
@@ -674,14 +931,15 @@ namespace mmo
 
 			// Trail particle
 			std::string trailParticle = projectile->has_trail_particle() ? projectile->trail_particle() : "";
-			if (ImGui::InputText("Trail Particle", &trailParticle))
+			static const std::set<String> particleExtensions = {".hpfx"};
+			if (AssetPickerWidget::Draw("Trail Particle", trailParticle, particleExtensions, &m_previewManager, nullptr, 64.0f))
 			{
 				projectile->set_trail_particle(trailParticle);
 			}
 			ImGui::SameLine();
 			if (ImGui::SmallButton("?##trail"))
 			{
-				ImGui::SetTooltip("Particle system name for trailing effect");
+				ImGui::SetTooltip("Particle system for trailing effect behind the projectile");
 			}
 
 			// Scale
@@ -721,6 +979,170 @@ namespace mmo
 			if (ImGui::SmallButton("?##spin"))
 			{
 				ImGui::SetTooltip("Rotation around forward axis in degrees per second");
+			}
+
+			ImGui::Unindent();
+		}
+
+		// Point Light on projectile
+		if (ImGui::CollapsingHeader("Projectile Light"))
+		{
+			ImGui::Indent();
+
+			bool hasProjLight = projectile->has_light();
+			if (ImGui::Checkbox("Enable Projectile Light", &hasProjLight))
+			{
+				if (hasProjLight)
+				{
+					auto* light = projectile->mutable_light();
+					light->set_r(1.0f);
+					light->set_g(0.6f);
+					light->set_b(0.2f);
+					light->set_intensity(2.0f);
+					light->set_range(8.0f);
+				}
+				else
+				{
+					projectile->clear_light();
+				}
+			}
+
+			if (projectile->has_light())
+			{
+				auto* light = projectile->mutable_light();
+
+				float lightColor[3] =
+				{
+					light->has_r() ? light->r() : 1.0f,
+					light->has_g() ? light->g() : 0.6f,
+					light->has_b() ? light->b() : 0.2f
+				};
+				if (ImGui::ColorEdit3("Color", lightColor))
+				{
+					light->set_r(lightColor[0]);
+					light->set_g(lightColor[1]);
+					light->set_b(lightColor[2]);
+				}
+
+				float intensity = light->has_intensity() ? light->intensity() : 2.0f;
+				if (ImGui::DragFloat("Intensity", &intensity, 0.1f, 0.0f, 20.0f))
+				{
+					light->set_intensity(intensity);
+				}
+
+				float range = light->has_range() ? light->range() : 8.0f;
+				if (ImGui::DragFloat("Range", &range, 0.5f, 0.1f, 100.0f))
+				{
+					light->set_range(range);
+				}
+			}
+
+			ImGui::Unindent();
+		}
+
+		// Ribbon Trail on projectile
+		if (ImGui::CollapsingHeader("Projectile Ribbon Trail"))
+		{
+			ImGui::Indent();
+
+			bool hasProjRibbon = projectile->has_ribbon_trail();
+			if (ImGui::Checkbox("Enable Projectile Ribbon Trail", &hasProjRibbon))
+			{
+				if (hasProjRibbon)
+				{
+					auto* ribbon = projectile->mutable_ribbon_trail();
+					ribbon->set_initial_width(0.3f);
+					ribbon->set_final_width(0.0f);
+					ribbon->set_segment_lifetime(0.8f);
+					ribbon->set_max_segments(48);
+					ribbon->set_initial_r(1.0f);
+					ribbon->set_initial_g(0.3f);
+					ribbon->set_initial_b(0.1f);
+					ribbon->set_initial_a(1.0f);
+					ribbon->set_final_r(1.0f);
+					ribbon->set_final_g(0.1f);
+					ribbon->set_final_b(0.0f);
+					ribbon->set_final_a(0.0f);
+				}
+				else
+				{
+					projectile->clear_ribbon_trail();
+				}
+			}
+
+			if (projectile->has_ribbon_trail())
+			{
+				auto* ribbon = projectile->mutable_ribbon_trail();
+
+				// Material
+				std::string ribbonMaterial = ribbon->has_material_name() ? ribbon->material_name() : "";
+				static const std::set<String> ribbonMatExtensions = {".hmat"};
+				if (AssetPickerWidget::Draw("Material", ribbonMaterial, ribbonMatExtensions, nullptr, nullptr, 0.0f))
+				{
+					ribbon->set_material_name(ribbonMaterial);
+				}
+
+				// Width
+				float initWidth = ribbon->has_initial_width() ? ribbon->initial_width() : 0.3f;
+				if (ImGui::DragFloat("Initial Width", &initWidth, 0.01f, 0.0f, 10.0f))
+				{
+					ribbon->set_initial_width(initWidth);
+				}
+
+				float finalWidth = ribbon->has_final_width() ? ribbon->final_width() : 0.0f;
+				if (ImGui::DragFloat("Final Width", &finalWidth, 0.01f, 0.0f, 10.0f))
+				{
+					ribbon->set_final_width(finalWidth);
+				}
+
+				// Initial color
+				float initColor[4] =
+				{
+					ribbon->has_initial_r() ? ribbon->initial_r() : 1.0f,
+					ribbon->has_initial_g() ? ribbon->initial_g() : 0.3f,
+					ribbon->has_initial_b() ? ribbon->initial_b() : 0.1f,
+					ribbon->has_initial_a() ? ribbon->initial_a() : 1.0f
+				};
+				if (ImGui::ColorEdit4("Initial Color", initColor))
+				{
+					ribbon->set_initial_r(initColor[0]);
+					ribbon->set_initial_g(initColor[1]);
+					ribbon->set_initial_b(initColor[2]);
+					ribbon->set_initial_a(initColor[3]);
+				}
+
+				// Final color
+				float finalColor[4] =
+				{
+					ribbon->has_final_r() ? ribbon->final_r() : 1.0f,
+					ribbon->has_final_g() ? ribbon->final_g() : 0.1f,
+					ribbon->has_final_b() ? ribbon->final_b() : 0.0f,
+					ribbon->has_final_a() ? ribbon->final_a() : 0.0f
+				};
+				if (ImGui::ColorEdit4("Final Color", finalColor))
+				{
+					ribbon->set_final_r(finalColor[0]);
+					ribbon->set_final_g(finalColor[1]);
+					ribbon->set_final_b(finalColor[2]);
+					ribbon->set_final_a(finalColor[3]);
+				}
+
+				// Timing
+				float segLifetime = ribbon->has_segment_lifetime() ? ribbon->segment_lifetime() : 0.8f;
+				if (ImGui::DragFloat("Segment Lifetime", &segLifetime, 0.05f, 0.1f, 10.0f))
+				{
+					ribbon->set_segment_lifetime(segLifetime);
+				}
+
+				int maxSeg = ribbon->has_max_segments() ? static_cast<int>(ribbon->max_segments()) : 48;
+				if (ImGui::InputInt("Max Segments", &maxSeg))
+				{
+					if (maxSeg < 4)
+					{
+						maxSeg = 4;
+					}
+					ribbon->set_max_segments(static_cast<uint32_t>(maxSeg));
+				}
 			}
 
 			ImGui::Unindent();
@@ -772,16 +1194,17 @@ namespace mmo
 				ImGui::TreePop();
 			}
 
-			// Impact particle
+			// Impact particle (asset picker instead of plain text input)
 			std::string impactParticle = projectile->has_impact_particle() ? projectile->impact_particle() : "";
-			if (ImGui::InputText("Impact Particle", &impactParticle))
+			static const std::set<String> impactParticleExtensions = {".hpfx"};
+			if (AssetPickerWidget::Draw("Impact Particle", impactParticle, impactParticleExtensions, &m_previewManager, nullptr, 64.0f))
 			{
 				projectile->set_impact_particle(impactParticle);
 			}
 			ImGui::SameLine();
 			if (ImGui::SmallButton("?##impact"))
 			{
-				ImGui::SetTooltip("Particle burst effect on impact (not yet implemented)");
+				ImGui::SetTooltip("Particle burst effect spawned at the impact point when the projectile hits");
 			}
 
 			ImGui::Unindent();

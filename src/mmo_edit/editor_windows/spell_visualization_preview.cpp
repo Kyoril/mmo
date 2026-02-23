@@ -13,11 +13,15 @@
 #include "scene_graph/scene_node.h"
 #include "scene_graph/skeleton.h"
 #include "scene_graph/animation.h"
+#include "scene_graph/ribbon_trail.h"
+#include "scene_graph/particle_emitter_serializer.h"
+#include "scene_graph/tag_point.h"
 #include "log/default_log_levels.h"
 
 #include "proto_data/project.h"
 
 #include "game_common/projectile_target.h"
+#include "assets/asset_registry.h"
 
 #include <algorithm>
 
@@ -697,8 +701,19 @@ namespace mmo
 		const Vector3 targetPos = m_targetNode->GetDerivedPosition() + Vector3(0.0f, 0.8f, 0.0f);
 		m_projectileTarget->SetPosition(targetPos);
 
-		// Spawn projectile using EditorProjectileManager
-		const Vector3 startPos = m_casterNode->GetDerivedPosition() + Vector3(0.0f, 1.2f, 0.0f);
+		// Determine start position: use spawn bone if specified, else default offset
+		Vector3 startPos;
+		if (m_currentVisualization->has_projectile() && m_currentVisualization->projectile().has_spawn_bone() &&
+			!m_currentVisualization->projectile().spawn_bone().empty())
+		{
+			startPos = GetBoneWorldPosition(m_casterEntity, m_casterNode,
+				m_currentVisualization->projectile().spawn_bone(),
+				Vector3(0.0f, 1.2f, 0.0f));
+		}
+		else
+		{
+			startPos = m_casterNode->GetDerivedPosition() + Vector3(0.0f, 1.2f, 0.0f);
+		}
 
 		// Build projectile parameters from the visualization
 		ProjectileParams params;
@@ -759,6 +774,16 @@ namespace mmo
 
 	void SpellVisualizationPreview::OnProjectileImpact(IProjectileTarget* target)
 	{
+		// Spawn impact particle if configured
+		if (m_currentVisualization && m_currentVisualization->has_projectile())
+		{
+			const auto& projVis = m_currentVisualization->projectile();
+			if (projVis.has_impact_particle() && !projVis.impact_particle().empty() && target)
+			{
+				SpawnImpactParticle(projVis.impact_particle(), target->GetPosition());
+			}
+		}
+
 		// When projectile hits, trigger the impact event
 		if (m_castSequenceActive && m_currentSequenceEvent == PreviewEvent::CastSucceeded)
 		{
@@ -835,6 +860,49 @@ namespace mmo
 			m_projectileManager->Clear();
 		}
 
+		// Clean up kit-spawned particle emitters
+		for (auto* emitter : m_kitParticles)
+		{
+			if (emitter)
+			{
+				emitter->Stop();
+				m_scene.DestroyParticleEmitter(*emitter);
+			}
+		}
+		m_kitParticles.clear();
+
+		// Clean up kit-spawned lights
+		for (auto* light : m_kitLights)
+		{
+			if (light)
+			{
+				m_scene.DestroyLight(*light);
+			}
+		}
+		m_kitLights.clear();
+
+		// Clean up kit-spawned ribbon trails
+		for (auto* trail : m_kitRibbonTrails)
+		{
+			if (trail)
+			{
+				trail->Stop();
+				m_scene.DestroyRibbonTrail(*trail);
+			}
+		}
+		m_kitRibbonTrails.clear();
+
+		// Clean up kit effect scene nodes
+		for (auto* node : m_kitEffectNodes)
+		{
+			if (node)
+			{
+				m_scene.DestroySceneNode(*node);
+			}
+		}
+		m_kitEffectNodes.clear();
+
+		// Legacy particles
 		if (m_castParticles)
 		{
 			m_scene.DestroyParticleEmitter(*m_castParticles);
@@ -855,6 +923,45 @@ namespace mmo
 			return;
 		}
 
+		// Clean up effects from the previous event
+		for (auto* emitter : m_kitParticles)
+		{
+			if (emitter)
+			{
+				emitter->Stop();
+				m_scene.DestroyParticleEmitter(*emitter);
+			}
+		}
+		m_kitParticles.clear();
+
+		for (auto* light : m_kitLights)
+		{
+			if (light)
+			{
+				m_scene.DestroyLight(*light);
+			}
+		}
+		m_kitLights.clear();
+
+		for (auto* trail : m_kitRibbonTrails)
+		{
+			if (trail)
+			{
+				trail->Stop();
+				m_scene.DestroyRibbonTrail(*trail);
+			}
+		}
+		m_kitRibbonTrails.clear();
+
+		for (auto* node : m_kitEffectNodes)
+		{
+			if (node)
+			{
+				m_scene.DestroySceneNode(*node);
+			}
+		}
+		m_kitEffectNodes.clear();
+
 		const auto& kitsMap = visualization->kits_by_event();
 		auto it = kitsMap.find(eventValue);
 		if (it == kitsMap.end())
@@ -866,25 +973,37 @@ namespace mmo
 
 		for (const auto& kit : kitList.kits())
 		{
-			// Apply animation based on scope
+			// Determine target entity and node based on scope
+			Entity* targetEntity = nullptr;
+			SceneNode* targetNode = nullptr;
+
+			switch (kit.scope())
+			{
+			case proto::CASTER:
+				targetEntity = m_casterEntity;
+				targetNode = m_casterNode;
+				break;
+			case proto::TARGET:
+			case proto::PROJECTILE_IMPACT:
+				targetEntity = m_targetEntity;
+				targetNode = m_targetNode;
+				break;
+			default:
+				break;
+			}
+
+			// Apply animation
 			if (kit.has_animation_name() && !kit.animation_name().empty())
 			{
-				Entity* targetEntity = nullptr;
 				AnimationState** animStatePtr = nullptr;
 
-				switch (kit.scope())
+				if (kit.scope() == proto::CASTER)
 				{
-				case proto::CASTER:
-					targetEntity = m_casterEntity;
 					animStatePtr = &m_casterAnimState;
-					break;
-				case proto::TARGET:
-				case proto::PROJECTILE_IMPACT:
-					targetEntity = m_targetEntity;
+				}
+				else
+				{
 					animStatePtr = &m_targetAnimState;
-					break;
-				default:
-					break;
 				}
 
 				if (targetEntity && animStatePtr && targetEntity->HasAnimationState(kit.animation_name()))
@@ -894,7 +1013,7 @@ namespace mmo
 					{
 						(*animStatePtr)->SetEnabled(false);
 					}
-					
+
 					*animStatePtr = targetEntity->GetAnimationState(kit.animation_name());
 					(*animStatePtr)->SetEnabled(true);
 					(*animStatePtr)->SetLoop(kit.has_loop() && kit.loop());
@@ -909,6 +1028,24 @@ namespace mmo
 				{
 					PlaySound(sound);
 				}
+			}
+
+			// Spawn particles
+			if (kit.particles_size() > 0 && targetEntity && targetNode)
+			{
+				SpawnKitParticles(kit, targetEntity, targetNode);
+			}
+
+			// Spawn point light
+			if (kit.has_light() && targetEntity && targetNode)
+			{
+				SpawnKitLight(kit, targetEntity, targetNode);
+			}
+
+			// Spawn ribbon trail
+			if (kit.has_ribbon_trail() && targetEntity && targetNode)
+			{
+				SpawnKitRibbonTrail(kit, targetEntity, targetNode);
 			}
 		}
 	}
@@ -1040,5 +1177,274 @@ namespace mmo
 			}
 		}
 		m_fadingChannels.clear();
+	}
+
+	Vector3 SpellVisualizationPreview::GetBoneWorldPosition(Entity* entity, SceneNode* entityNode, const String& boneName, const Vector3& fallbackOffset)
+	{
+		if (entity && entity->HasSkeleton() && !boneName.empty())
+		{
+			auto skeleton = entity->GetSkeleton();
+			if (skeleton && skeleton->HasBone(boneName))
+			{
+				Bone* bone = skeleton->GetBone(boneName);
+				if (bone)
+				{
+					// The bone's derived position is in skeleton-local space.
+					// Transform it by the entity's parent node to get world space.
+					const Vector3 boneLocalPos = bone->GetDerivedPosition();
+					if (entityNode)
+					{
+						return entityNode->GetDerivedPosition() +
+							entityNode->GetDerivedOrientation() * (entityNode->GetDerivedScale() * boneLocalPos);
+					}
+
+					return boneLocalPos;
+				}
+			}
+		}
+
+		// Fallback: entity position + offset
+		if (entityNode)
+		{
+			return entityNode->GetDerivedPosition() + fallbackOffset;
+		}
+
+		return fallbackOffset;
+	}
+
+	void SpellVisualizationPreview::SpawnKitParticles(const proto::SpellKit& kit, Entity* entity, SceneNode* entityNode)
+	{
+		for (int i = 0; i < kit.particles_size(); ++i)
+		{
+			const auto& particlePath = kit.particles(i);
+			if (particlePath.empty())
+			{
+				continue;
+			}
+
+			try
+			{
+				// Create a unique name for this emitter
+				const String emitterName = "KitParticle_" + std::to_string(m_effectCounter++);
+				ParticleEmitter* emitter = m_scene.CreateParticleEmitter(emitterName);
+				if (!emitter)
+				{
+					continue;
+				}
+
+				// Load particle parameters from .hpfx file
+				const auto file = AssetRegistry::OpenFile(particlePath);
+				if (file)
+				{
+					io::StreamSource source(*file);
+					io::Reader reader(source);
+
+					ParticleEmitterSerializer serializer;
+					ParticleEmitterParameters params;
+					if (serializer.Deserialize(params, reader))
+					{
+						emitter->SetParameters(params);
+					}
+				}
+
+				// Attach to bone if specified, otherwise attach to a child scene node
+				if (kit.has_attach_bone() && !kit.attach_bone().empty() && entity && entity->HasSkeleton())
+				{
+					auto skeleton = entity->GetSkeleton();
+					if (skeleton && skeleton->HasBone(kit.attach_bone()))
+					{
+						entity->AttachObjectToBone(kit.attach_bone(), *emitter);
+					}
+					else
+					{
+						// Bone not found, attach to entity node
+						SceneNode* childNode = entityNode->CreateChildSceneNode(emitterName + "_Node");
+						childNode->AttachObject(*emitter);
+						m_kitEffectNodes.push_back(childNode);
+					}
+				}
+				else
+				{
+					// No bone specified, attach to a child scene node at entity position
+					SceneNode* childNode = entityNode->CreateChildSceneNode(emitterName + "_Node");
+					childNode->AttachObject(*emitter);
+					m_kitEffectNodes.push_back(childNode);
+				}
+
+				emitter->Play();
+				m_kitParticles.push_back(emitter);
+			}
+			catch (const std::exception& e)
+			{
+				ELOG("Failed to spawn kit particle '" << particlePath << "': " << e.what());
+			}
+		}
+	}
+
+	void SpellVisualizationPreview::SpawnKitLight(const proto::SpellKit& kit, Entity* entity, SceneNode* entityNode)
+	{
+		if (!kit.has_light())
+		{
+			return;
+		}
+
+		try
+		{
+			const auto& lightConfig = kit.light();
+			const String lightName = "KitLight_" + std::to_string(m_effectCounter++);
+
+			Light& light = m_scene.CreateLight(lightName, LightType::Point);
+			light.SetColor(Vector4(lightConfig.r(), lightConfig.g(), lightConfig.b(), 1.0f));
+			light.SetIntensity(lightConfig.intensity());
+			light.SetRange(lightConfig.range());
+
+			// Attach to bone if specified
+			if (kit.has_attach_bone() && !kit.attach_bone().empty() && entity && entity->HasSkeleton())
+			{
+				auto skeleton = entity->GetSkeleton();
+				if (skeleton && skeleton->HasBone(kit.attach_bone()))
+				{
+					entity->AttachObjectToBone(kit.attach_bone(), light);
+				}
+				else
+				{
+					SceneNode* childNode = entityNode->CreateChildSceneNode(lightName + "_Node");
+					childNode->AttachObject(light);
+					m_kitEffectNodes.push_back(childNode);
+				}
+			}
+			else
+			{
+				SceneNode* childNode = entityNode->CreateChildSceneNode(lightName + "_Node");
+				childNode->AttachObject(light);
+				m_kitEffectNodes.push_back(childNode);
+			}
+
+			m_kitLights.push_back(&light);
+		}
+		catch (const std::exception& e)
+		{
+			ELOG("Failed to spawn kit light: " << e.what());
+		}
+	}
+
+	void SpellVisualizationPreview::SpawnKitRibbonTrail(const proto::SpellKit& kit, Entity* entity, SceneNode* entityNode)
+	{
+		if (!kit.has_ribbon_trail())
+		{
+			return;
+		}
+
+		try
+		{
+			const auto& trailConfig = kit.ribbon_trail();
+			const String trailName = "KitRibbon_" + std::to_string(m_effectCounter++);
+
+			RibbonTrail* trail = m_scene.CreateRibbonTrail(trailName);
+			if (!trail)
+			{
+				return;
+			}
+
+			// Configure ribbon trail parameters
+			RibbonTrailParameters params;
+			params.initialWidth = trailConfig.initial_width();
+			params.finalWidth = trailConfig.final_width();
+			params.initialColor = Vector4(trailConfig.initial_r(), trailConfig.initial_g(), trailConfig.initial_b(), trailConfig.initial_a());
+			params.finalColor = Vector4(trailConfig.final_r(), trailConfig.final_g(), trailConfig.final_b(), trailConfig.final_a());
+			params.segmentLifetime = trailConfig.segment_lifetime();
+			params.maxSegments = trailConfig.max_segments();
+			trail->SetParameters(params);
+
+			// Load material if specified
+			if (trailConfig.has_material_name() && !trailConfig.material_name().empty())
+			{
+				auto material = MaterialManager::Get().Load(trailConfig.material_name());
+				if (material)
+				{
+					trail->SetMaterial(material);
+				}
+			}
+			else
+			{
+				trail->SetMaterial(RibbonTrail::GetDefaultMaterial(true));
+			}
+
+			// Attach to bone if specified
+			if (kit.has_attach_bone() && !kit.attach_bone().empty() && entity && entity->HasSkeleton())
+			{
+				auto skeleton = entity->GetSkeleton();
+				if (skeleton && skeleton->HasBone(kit.attach_bone()))
+				{
+					entity->AttachObjectToBone(kit.attach_bone(), *trail);
+				}
+				else
+				{
+					SceneNode* childNode = entityNode->CreateChildSceneNode(trailName + "_Node");
+					childNode->AttachObject(*trail);
+					m_kitEffectNodes.push_back(childNode);
+				}
+			}
+			else
+			{
+				SceneNode* childNode = entityNode->CreateChildSceneNode(trailName + "_Node");
+				childNode->AttachObject(*trail);
+				m_kitEffectNodes.push_back(childNode);
+			}
+
+			trail->Play();
+			m_kitRibbonTrails.push_back(trail);
+		}
+		catch (const std::exception& e)
+		{
+			ELOG("Failed to spawn kit ribbon trail: " << e.what());
+		}
+	}
+
+	void SpellVisualizationPreview::SpawnImpactParticle(const String& particleName, const Vector3& position)
+	{
+		if (particleName.empty())
+		{
+			return;
+		}
+
+		try
+		{
+			const String emitterName = "ImpactParticle_" + std::to_string(m_effectCounter++);
+			ParticleEmitter* emitter = m_scene.CreateParticleEmitter(emitterName);
+			if (!emitter)
+			{
+				return;
+			}
+
+			// Load particle parameters from .hpfx file
+			const auto file = AssetRegistry::OpenFile(particleName);
+			if (file)
+			{
+				io::StreamSource source(*file);
+				io::Reader reader(source);
+
+				ParticleEmitterSerializer serializer;
+				ParticleEmitterParameters params;
+				if (serializer.Deserialize(params, reader))
+				{
+					emitter->SetParameters(params);
+				}
+			}
+
+			// Create a scene node at the impact position
+			SceneNode* impactNode = m_scene.GetRootSceneNode().CreateChildSceneNode(emitterName + "_Node", position);
+			impactNode->AttachObject(*emitter);
+
+			emitter->Play();
+
+			// Store for cleanup
+			m_kitParticles.push_back(emitter);
+			m_kitEffectNodes.push_back(impactNode);
+		}
+		catch (const std::exception& e)
+		{
+			ELOG("Failed to spawn impact particle '" << particleName << "': " << e.what());
+		}
 	}
 }

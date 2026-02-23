@@ -10,6 +10,7 @@
 #include "scene_graph/axis_display.h"
 #include "scene_graph/world_grid.h"
 #include "scene_graph/particle_emitter.h"
+#include "scene_graph/ribbon_trail.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/animation_notify.h"
 
@@ -26,6 +27,7 @@ namespace mmo
 	namespace proto
 	{
 		class SpellVisualization;
+		class SpellKit;
 	}
 
 	class EditorHost;
@@ -151,6 +153,37 @@ namespace mmo
 		/// @param entity The entity to connect to.
 		void ConnectAnimationNotifySignals(Entity* entity);
 
+		/// @brief Gets the world position of a bone on an entity, or fallback offset.
+		/// @param entity The entity with skeleton.
+		/// @param entityNode The scene node of the entity.
+		/// @param boneName Name of the bone to find.
+		/// @param fallbackOffset Fallback offset from entity position if bone not found.
+		/// @return World-space position.
+		Vector3 GetBoneWorldPosition(Entity* entity, SceneNode* entityNode, const String& boneName, const Vector3& fallbackOffset);
+
+		/// @brief Spawns particle emitters for a kit, optionally attached to a bone.
+		/// @param kit The spell kit containing particle definitions.
+		/// @param entity The entity to attach to (for bone attachment).
+		/// @param entityNode Scene node of the entity (for positional fallback).
+		void SpawnKitParticles(const proto::SpellKit& kit, Entity* entity, SceneNode* entityNode);
+
+		/// @brief Creates a point light for a kit, optionally at a bone.
+		/// @param kit The spell kit containing light definition.
+		/// @param entity The entity to attach to (for bone attachment).
+		/// @param entityNode Scene node of the entity (for positional fallback).
+		void SpawnKitLight(const proto::SpellKit& kit, Entity* entity, SceneNode* entityNode);
+
+		/// @brief Creates a ribbon trail for a kit, optionally at a bone.
+		/// @param kit The spell kit containing ribbon trail definition.
+		/// @param entity The entity to attach to (for bone attachment).
+		/// @param entityNode Scene node of the entity (for positional fallback).
+		void SpawnKitRibbonTrail(const proto::SpellKit& kit, Entity* entity, SceneNode* entityNode);
+
+		/// @brief Spawns an impact particle emitter at a given position.
+		/// @param particleName Asset path of the particle system.
+		/// @param position World position to spawn at.
+		void SpawnImpactParticle(const String& particleName, const Vector3& position);
+
 	private:
 		EditorHost& m_host;
 		IAudio* m_audioSystem{ nullptr };
@@ -187,9 +220,21 @@ namespace mmo
 		AnimationState* m_targetAnimState{ nullptr };
 		String m_targetMeshPath{ "Models/Creatures/Boar/Boar.hmsh" };
 
-		// Spell effect objects
+		// Spell effect objects (legacy)
 		ParticleEmitter* m_castParticles{ nullptr };
 		ParticleEmitter* m_impactParticles{ nullptr };
+
+		// Kit-spawned effect objects (new)
+		/// @brief Particle emitters spawned by kits, cleaned up on event change/stop.
+		std::vector<ParticleEmitter*> m_kitParticles;
+		/// @brief Scene nodes created for kit effects.
+		std::vector<SceneNode*> m_kitEffectNodes;
+		/// @brief Point lights spawned by kits.
+		std::vector<Light*> m_kitLights;
+		/// @brief Ribbon trails spawned by kits.
+		std::vector<RibbonTrail*> m_kitRibbonTrails;
+		/// @brief Counter for unique naming of spawned effects.
+		uint32 m_effectCounter{ 0 };
 
 		// Current visualization being previewed
 		proto::SpellVisualization* m_currentVisualization{ nullptr };
