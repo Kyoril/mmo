@@ -277,6 +277,12 @@ namespace mmo
 
 		PacketParseResult OnSpellFailure(game::IncomingPacket &packet);
 
+		/// @brief Handles the ChannelStart packet from the server.
+		PacketParseResult OnChannelStart(game::IncomingPacket &packet);
+
+		/// @brief Handles the ChannelUpdate packet from the server.
+		PacketParseResult OnChannelUpdate(game::IncomingPacket &packet);
+
 		PacketParseResult OnAttackStart(game::IncomingPacket &packet);
 
 		PacketParseResult OnAttackStop(game::IncomingPacket &packet);

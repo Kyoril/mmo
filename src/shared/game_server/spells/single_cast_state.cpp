@@ -55,7 +55,7 @@ namespace mmo
 		auto const casterId = executor.GetGuid();
 		const uint32 startCooldownMs = ShouldStartCooldownOnCastStart() ? static_cast<uint32>(CalculateFinalCooldown()) : 0;
 
-		if (worldInstance && !(m_spell.attributes(0) & spell_attributes::Passive) && !m_isProc && m_castTime > 0)
+		if (worldInstance && !(m_spell.attributes(0) & spell_attributes::Passive) && !m_isProc && m_castTime > 0 && !IsChanneled())
 		{
 			m_context.SendPacketFromCaster(
 								[casterId, startCooldownMs, this](game::OutgoingPacket& out_packet)
@@ -80,7 +80,7 @@ namespace mmo
 					out_packet
 						<< io::write_packed_guid(casterId)
 						<< io::write<uint32>(m_spell.id())
-						<< io::write<int32>(m_spell.duration());
+						<< io::write<int32>(m_castTime);
 					out_packet.Finish();
 				}
 			);
@@ -133,6 +133,63 @@ namespace mmo
 		{
 			m_castEnd = GetAsyncTimeMs() + m_castTime;
 			m_countdown.SetEnd(m_castEnd);
+
+			// For channeled spells, apply effects immediately when the channel starts
+			if (IsChanneled())
+			{
+				if (!ConsumePower())
+				{
+					m_countdown.Cancel();
+					return;
+				}
+
+				if (!ConsumeReagents())
+				{
+					m_countdown.Cancel();
+					return;
+				}
+
+				if (!ConsumeItem())
+				{
+					m_countdown.Cancel();
+					m_hasFinished = true;
+					NotifyCastEnded(false);
+					return;
+				}
+
+				// Send SpellGo packet without ending the cast (channel continues)
+				auto& executer = m_cast.GetExecuter();
+				auto* world = m_context.GetWorldInstance();
+				if (world && !(m_spell.attributes(0) & spell_attributes::Passive))
+				{
+					const uint64 chanCasterId = executer.GetGuid();
+					const uint32 chanSpellId = m_spell.id();
+					SpellTargetMap targetMap = m_target;
+					if (targetMap.GetTargetMap() == spell_cast_target_flags::Self)
+					{
+						targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+						targetMap.SetUnitTarget(executer.GetGuid());
+					}
+
+					const GameTime cooldownMs = m_cooldownStartedOnCastStart ? 0 : CalculateFinalCooldown();
+
+					m_context.SendPacketFromCaster(
+						[chanCasterId, chanSpellId, &targetMap, cooldownMs](game::OutgoingPacket& out_packet)
+						{
+							out_packet.Start(game::realm_client_packet::SpellGo);
+							out_packet
+								<< io::write_packed_guid(chanCasterId)
+								<< io::write<uint32>(chanSpellId)
+								<< io::write<GameTime>(GetAsyncTimeMs())
+								<< targetMap
+								<< io::write<uint32>(cooldownMs);
+							out_packet.Finish();
+						});
+				}
+
+				ApplyAllEffects();
+				m_cast.GetExecuter().RaiseTrigger(trigger_event::OnSpellCast, { m_spell.id() }, &m_cast.GetExecuter());
+			}
 		}
 		else
 		{

@@ -949,6 +949,8 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellStart, *this, &WorldState::OnSpellStart);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellGo, *this, &WorldState::OnSpellGo);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellFailure, *this, &WorldState::OnSpellFailure);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ChannelStart, *this, &WorldState::OnChannelStart);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ChannelUpdate, *this, &WorldState::OnChannelUpdate);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AttackStart, *this, &WorldState::OnAttackStart);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AttackStop, *this, &WorldState::OnAttackStop);
@@ -2441,6 +2443,55 @@ namespace mmo
 			}
 			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", false);
 			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", errorMessage);
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnChannelStart(game::IncomingPacket &packet)
+	{
+		uint64 casterId;
+		uint32 spellId;
+		int32 duration;
+
+		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<int32>(duration)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		const auto *spell = m_project.spells.getById(spellId);
+		if (!spell)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		if (m_playerController->GetControlledUnit())
+		{
+			if (casterId == m_playerController->GetControlledUnit()->GetGuid() && duration > 0)
+			{
+				m_spellCast.OnChannelStart(*spell, static_cast<GameTime>(duration));
+			}
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnChannelUpdate(game::IncomingPacket &packet)
+	{
+		uint64 casterId;
+		GameTime timeLeft;
+
+		if (!(packet >> io::read_packed_guid(casterId) >> io::read<GameTime>(timeLeft)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (m_playerController->GetControlledUnit())
+		{
+			if (casterId == m_playerController->GetControlledUnit()->GetGuid())
+			{
+				m_spellCast.OnChannelUpdate(casterId, timeLeft);
+			}
 		}
 
 		return PacketParseResult::Pass;
