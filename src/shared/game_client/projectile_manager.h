@@ -19,6 +19,8 @@ namespace mmo
     class SceneNode;
     class Entity;
     class ParticleEmitter;
+    class Light;
+    class RibbonTrail;
     class GameUnitC;
     class IAudio;
 
@@ -89,6 +91,12 @@ namespace mmo
         SceneNode *m_node;
         Entity *m_entity;
         ParticleEmitter *m_trailEmitter;
+        Light *m_light;
+        RibbonTrail *m_ribbonTrail;
+
+        // Light fade state
+        float m_lightTargetIntensity;
+        float m_lightFadeInTime;
 
         // Movement state
         Vector3 m_startPosition;

@@ -42,6 +42,8 @@ message PointLightConfig
 	optional float intensity = 4 [default = 1.0];
 	optional float range = 5 [default = 10.0];
 	optional float attenuation = 6 [default = 1.0];
+	optional float fade_in_time = 7 [default = 0.3];
+	optional float fade_out_time = 8 [default = 0.5];
 }
 
 // Ribbon trail configuration for spell effects

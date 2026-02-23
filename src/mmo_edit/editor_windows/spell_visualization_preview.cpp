@@ -132,6 +132,46 @@ namespace mmo
 		// Update sound fades
 		UpdateSoundFades(deltaTime);
 
+		// Update light fading (fade-in and fade-out)
+		for (auto it = m_fadingLights.begin(); it != m_fadingLights.end(); )
+		{
+			if (!it->light)
+			{
+				it = m_fadingLights.erase(it);
+				continue;
+			}
+
+			if (it->fadingOut)
+			{
+				// Fade out
+				it->currentIntensity -= it->fadeOutSpeed * deltaTime;
+				if (it->currentIntensity <= 0.0f)
+				{
+					it->currentIntensity = 0.0f;
+					it->light->SetIntensity(0.0f);
+					m_scene.DestroyLight(*it->light);
+					it = m_fadingLights.erase(it);
+					continue;
+				}
+				it->light->SetIntensity(it->currentIntensity);
+			}
+			else
+			{
+				// Fade in
+				if (it->currentIntensity < it->targetIntensity)
+				{
+					it->currentIntensity += it->fadeInSpeed * deltaTime;
+					if (it->currentIntensity >= it->targetIntensity)
+					{
+						it->currentIntensity = it->targetIntensity;
+					}
+					it->light->SetIntensity(it->currentIntensity);
+				}
+			}
+
+			++it;
+		}
+
 		// Update projectiles using the EditorProjectileManager
 		if (m_projectileManager)
 		{
@@ -761,6 +801,66 @@ namespace mmo
 			{
 				params.faceMovement = projVis.face_movement();
 			}
+
+			// Light parameters
+			if (projVis.has_light())
+			{
+				const auto& lightConfig = projVis.light();
+				params.hasLight = true;
+				params.lightColor = Vector4(
+					lightConfig.has_r() ? lightConfig.r() : 1.0f,
+					lightConfig.has_g() ? lightConfig.g() : 0.6f,
+					lightConfig.has_b() ? lightConfig.b() : 0.2f,
+					1.0f);
+				params.lightIntensity = lightConfig.has_intensity() ? lightConfig.intensity() : 2.0f;
+				params.lightRange = lightConfig.has_range() ? lightConfig.range() : 8.0f;
+				params.lightFadeInTime = lightConfig.has_fade_in_time() ? lightConfig.fade_in_time() : 0.3f;
+				params.lightFadeOutTime = lightConfig.has_fade_out_time() ? lightConfig.fade_out_time() : 0.5f;
+			}
+
+			// Ribbon trail parameters
+			if (projVis.has_ribbon_trail())
+			{
+				const auto& ribbonConfig = projVis.ribbon_trail();
+				params.hasRibbonTrail = true;
+
+				if (ribbonConfig.has_material_name())
+				{
+					params.ribbonMaterial = ribbonConfig.material_name();
+				}
+
+				if (ribbonConfig.has_initial_width())
+				{
+					params.ribbonInitialWidth = ribbonConfig.initial_width();
+				}
+
+				if (ribbonConfig.has_final_width())
+				{
+					params.ribbonFinalWidth = ribbonConfig.final_width();
+				}
+
+				params.ribbonInitialColor = Vector4(
+					ribbonConfig.initial_r(),
+					ribbonConfig.initial_g(),
+					ribbonConfig.initial_b(),
+					ribbonConfig.initial_a());
+
+				params.ribbonFinalColor = Vector4(
+					ribbonConfig.final_r(),
+					ribbonConfig.final_g(),
+					ribbonConfig.final_b(),
+					ribbonConfig.final_a());
+
+				if (ribbonConfig.has_segment_lifetime())
+				{
+					params.ribbonSegmentLifetime = ribbonConfig.segment_lifetime();
+				}
+
+				if (ribbonConfig.has_max_segments())
+				{
+					params.ribbonMaxSegments = ribbonConfig.max_segments();
+				}
+			}
 		}
 
 		m_projectileManager->SpawnProjectile(params, startPos, m_projectileTarget);
@@ -870,15 +970,27 @@ namespace mmo
 		}
 		m_kitParticles.clear();
 
-		// Clean up kit-spawned lights
-		for (auto* light : m_kitLights)
+		// Fade out kit-spawned lights (or destroy instantly if no fade-out)
+		for (auto& fadingLight : m_fadingLights)
 		{
-			if (light)
+			if (fadingLight.light && !fadingLight.fadingOut)
 			{
-				m_scene.DestroyLight(*light);
+				if (fadingLight.fadeOutSpeed > 0.0f)
+				{
+					fadingLight.fadingOut = true;
+				}
+				else
+				{
+					m_scene.DestroyLight(*fadingLight.light);
+					fadingLight.light = nullptr;
+				}
 			}
 		}
-		m_kitLights.clear();
+		// Remove already destroyed entries
+		m_fadingLights.erase(
+			std::remove_if(m_fadingLights.begin(), m_fadingLights.end(),
+				[](const FadingLight& fl) { return fl.light == nullptr; }),
+			m_fadingLights.end());
 
 		// Clean up kit-spawned ribbon trails
 		for (auto* trail : m_kitRibbonTrails)
@@ -933,14 +1045,26 @@ namespace mmo
 		}
 		m_kitParticles.clear();
 
-		for (auto* light : m_kitLights)
+		// Trigger fade-out on active lights (or destroy instantly if no fade)
+		for (auto& fadingLight : m_fadingLights)
 		{
-			if (light)
+			if (fadingLight.light && !fadingLight.fadingOut)
 			{
-				m_scene.DestroyLight(*light);
+				if (fadingLight.fadeOutSpeed > 0.0f)
+				{
+					fadingLight.fadingOut = true;
+				}
+				else
+				{
+					m_scene.DestroyLight(*fadingLight.light);
+					fadingLight.light = nullptr;
+				}
 			}
 		}
-		m_kitLights.clear();
+		m_fadingLights.erase(
+			std::remove_if(m_fadingLights.begin(), m_fadingLights.end(),
+				[](const FadingLight& fl) { return fl.light == nullptr; }),
+			m_fadingLights.end());
 
 		for (auto* trail : m_kitRibbonTrails)
 		{
@@ -1294,8 +1418,15 @@ namespace mmo
 
 			Light& light = m_scene.CreateLight(lightName, LightType::Point);
 			light.SetColor(Vector4(lightConfig.r(), lightConfig.g(), lightConfig.b(), 1.0f));
-			light.SetIntensity(lightConfig.intensity());
 			light.SetRange(lightConfig.range());
+
+			// Set up fading
+			const float fadeInTime = lightConfig.fade_in_time();
+			const float fadeOutTime = lightConfig.fade_out_time();
+			const float fullIntensity = lightConfig.intensity();
+
+			// Start at zero intensity for fade-in (or full if no fade)
+			light.SetIntensity(fadeInTime > 0.0f ? 0.0f : fullIntensity);
 
 			// Attach to bone if specified
 			if (kit.has_attach_bone() && !kit.attach_bone().empty() && entity && entity->HasSkeleton())
@@ -1319,7 +1450,14 @@ namespace mmo
 				m_kitEffectNodes.push_back(childNode);
 			}
 
-			m_kitLights.push_back(&light);
+			FadingLight fadingLight;
+			fadingLight.light = &light;
+			fadingLight.currentIntensity = fadeInTime > 0.0f ? 0.0f : fullIntensity;
+			fadingLight.targetIntensity = fullIntensity;
+			fadingLight.fadeInSpeed = fadeInTime > 0.0f ? (fullIntensity / fadeInTime) : 0.0f;
+			fadingLight.fadeOutSpeed = fadeOutTime > 0.0f ? (fullIntensity / fadeOutTime) : 0.0f;
+			fadingLight.fadingOut = false;
+			m_fadingLights.push_back(fadingLight);
 		}
 		catch (const std::exception& e)
 		{

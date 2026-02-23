@@ -488,6 +488,92 @@ namespace mmo
             std::remove_if(m_fadingSounds.begin(), m_fadingSounds.end(),
                 [](const FadingSound& fs) { return fs.markedForRemoval; }),
             m_fadingSounds.end());
+
+        // Update fading lights
+        for (auto it = m_fadingLights.begin(); it != m_fadingLights.end(); )
+        {
+            if (!it->light)
+            {
+                it = m_fadingLights.erase(it);
+                continue;
+            }
+
+            if (it->fadingOut)
+            {
+                it->currentIntensity -= it->fadeOutSpeed * deltaTime;
+                if (it->currentIntensity <= 0.0f)
+                {
+                    it->currentIntensity = 0.0f;
+                    it->light->SetIntensity(0.0f);
+
+                    // Find the scene via the actor and destroy the light
+                    auto actor = ObjectMgr::Get<GameUnitC>(it->actorGuid);
+                    if (actor)
+                    {
+                        Scene& scene = actor->GetScene();
+                        scene.DestroyLight(*it->light);
+                    }
+
+                    // Remove from effect tracking
+                    for (auto& effect : m_activeEffects)
+                    {
+                        for (auto litIt = effect.lights.begin(); litIt != effect.lights.end(); ++litIt)
+                        {
+                            if (*litIt == it->light)
+                            {
+                                effect.lights.erase(litIt);
+                                break;
+                            }
+                        }
+                    }
+
+                    // Clean up empty effects (destroy remaining scene nodes)
+                    for (auto effIt = m_activeEffects.begin(); effIt != m_activeEffects.end(); )
+                    {
+                        if (effIt->particles.empty() && effIt->lights.empty() &&
+                            effIt->ribbonTrails.empty())
+                        {
+                            auto effActor = ObjectMgr::Get<GameUnitC>(effIt->actorGuid);
+                            if (effActor)
+                            {
+                                Scene& effScene = effActor->GetScene();
+                                for (auto* node : effIt->effectNodes)
+                                {
+                                    if (node)
+                                    {
+                                        effScene.DestroySceneNode(*node);
+                                    }
+                                }
+                            }
+                            effIt = m_activeEffects.erase(effIt);
+                        }
+                        else
+                        {
+                            ++effIt;
+                        }
+                    }
+
+                    it = m_fadingLights.erase(it);
+                    continue;
+                }
+
+                it->light->SetIntensity(it->currentIntensity);
+            }
+            else
+            {
+                if (it->currentIntensity < it->targetIntensity)
+                {
+                    it->currentIntensity += it->fadeInSpeed * deltaTime;
+                    if (it->currentIntensity >= it->targetIntensity)
+                    {
+                        it->currentIntensity = it->targetIntensity;
+                    }
+                    it->light->SetIntensity(it->currentIntensity);
+                }
+            }
+
+            ++it;
+        }
     }
 
     void SpellVisualizationService::ApplyTintToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId)
@@ -651,10 +737,23 @@ namespace mmo
             const auto& lightConfig = kit.light();
             const String lightName = "SpellLight_" + std::to_string(m_effectCounter++);
 
+            const float targetIntensity = lightConfig.intensity();
+            const float fadeInTime = lightConfig.has_fade_in_time() ? lightConfig.fade_in_time() : 0.3f;
+            const float fadeOutTime = lightConfig.has_fade_out_time() ? lightConfig.fade_out_time() : 0.5f;
+
             Light& light = scene.CreateLight(lightName, LightType::Point);
             light.SetColor(Vector4(lightConfig.r(), lightConfig.g(), lightConfig.b(), 1.0f));
-            light.SetIntensity(lightConfig.intensity());
             light.SetRange(lightConfig.range());
+
+            // Start at 0 intensity if fading in, otherwise full intensity
+            if (fadeInTime > 0.0f)
+            {
+                light.SetIntensity(0.0f);
+            }
+            else
+            {
+                light.SetIntensity(targetIntensity);
+            }
 
             // Attach to bone if specified
             if (kit.has_attach_bone() && !kit.attach_bone().empty() && entity->HasSkeleton())
@@ -679,6 +778,17 @@ namespace mmo
             }
 
             effect->lights.push_back(&light);
+
+            // Track for fading
+            FadingLight fl;
+            fl.light = &light;
+            fl.actorGuid = guid;
+            fl.currentIntensity = (fadeInTime > 0.0f) ? 0.0f : targetIntensity;
+            fl.targetIntensity = targetIntensity;
+            fl.fadeInSpeed = (fadeInTime > 0.0f) ? (targetIntensity / fadeInTime) : 0.0f;
+            fl.fadeOutSpeed = (fadeOutTime > 0.0f) ? (targetIntensity / fadeOutTime) : 0.0f;
+            fl.fadingOut = false;
+            m_fadingLights.push_back(fl);
         }
         catch (const std::exception& e)
         {
@@ -820,8 +930,50 @@ namespace mmo
                     {
                         if (light)
                         {
-                            scene->DestroyLight(*light);
+                            // Trigger fade-out instead of instant destroy
+                            bool foundFading = false;
+                            for (auto& fl : m_fadingLights)
+                            {
+                                if (fl.light == light)
+                                {
+                                    if (fl.fadeOutSpeed > 0.0f)
+                                    {
+                                        fl.fadingOut = true;
+                                        foundFading = true;
+                                    }
+                                    break;
+                                }
+                            }
+
+                            if (!foundFading)
+                            {
+                                scene->DestroyLight(*light);
+                            }
                         }
+                    }
+
+                    // Clear the lights vector - fading lights are tracked in m_fadingLights
+                    // For non-fading lights, they are already destroyed above
+                    // For fading lights, do NOT erase from effect.lights yet (the fade loop handles it)
+                    {
+                        std::vector<Light*> remainingLights;
+                        for (auto* light : it->lights)
+                        {
+                            bool isFading = false;
+                            for (const auto& fl : m_fadingLights)
+                            {
+                                if (fl.light == light && fl.fadingOut)
+                                {
+                                    isFading = true;
+                                    break;
+                                }
+                            }
+                            if (isFading)
+                            {
+                                remainingLights.push_back(light);
+                            }
+                        }
+                        it->lights = remainingLights;
                     }
 
                     for (auto* trail : it->ribbonTrails)
@@ -833,16 +985,32 @@ namespace mmo
                         }
                     }
 
-                    for (auto* node : it->effectNodes)
+                    // Only destroy scene nodes if no lights are still fading
+                    if (it->lights.empty())
                     {
-                        if (node)
+                        for (auto* node : it->effectNodes)
                         {
-                            scene->DestroySceneNode(*node);
+                            if (node)
+                            {
+                                scene->DestroySceneNode(*node);
+                            }
                         }
+                        it->effectNodes.clear();
                     }
                 }
 
-                it = m_activeEffects.erase(it);
+                // Don't erase if there are still fading-out lights
+                if (it->lights.empty())
+                {
+                    it = m_activeEffects.erase(it);
+                }
+                else
+                {
+                    // Keep the effect alive for fading lights, but clear everything else
+                    it->particles.clear();
+                    it->ribbonTrails.clear();
+                    ++it;
+                }
             }
             else
             {

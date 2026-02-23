@@ -8,6 +8,9 @@
 #include "scene_graph/scene_node.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/particle_emitter.h"
+#include "scene_graph/light.h"
+#include "scene_graph/ribbon_trail.h"
+#include "scene_graph/material_manager.h"
 #include "shared/client_data/proto_client/spells.pb.h"
 #include "shared/client_data/proto_client/spell_visualizations.pb.h"
 #include "shared/audio/audio.h"
@@ -33,7 +36,7 @@ namespace mmo
 						   const proto_client::SpellVisualization *visualization,
 						   const Vector3 &startPosition,
 						   std::shared_ptr<IProjectileTarget> target)
-		: m_scene(scene), m_audio(audio), m_spell(spell), m_visualization(visualization), m_target(target), m_node(nullptr), m_entity(nullptr), m_trailEmitter(nullptr), m_startPosition(startPosition), m_velocity(Vector3::UnitZ), m_travelTime(0.0f), m_totalDistance(0.0f), m_hasHit(false), m_soundChannel(InvalidChannel)
+		: m_scene(scene), m_audio(audio), m_spell(spell), m_visualization(visualization), m_target(target), m_node(nullptr), m_entity(nullptr), m_trailEmitter(nullptr), m_light(nullptr), m_ribbonTrail(nullptr), m_lightTargetIntensity(0.0f), m_lightFadeInTime(0.0f), m_startPosition(startPosition), m_velocity(Vector3::UnitZ), m_travelTime(0.0f), m_totalDistance(0.0f), m_hasHit(false), m_soundChannel(InvalidChannel)
 	{
 		// Create scene node for projectile
 		m_node = m_scene.GetRootSceneNode().CreateChildSceneNode();
@@ -98,6 +101,61 @@ namespace mmo
 					}
 				}
 			}
+
+			// Create point light if specified
+			if (projVis.has_light())
+			{
+				const auto& lightConfig = projVis.light();
+				static uint64 s_projLightId = 0;
+				const String lightName = "ProjectileLight_" + std::to_string(s_projLightId++);
+
+				m_light = &m_scene.CreateLight(lightName, LightType::Point);
+				m_light->SetColor(Vector4(lightConfig.r(), lightConfig.g(), lightConfig.b(), 1.0f));
+				m_lightTargetIntensity = lightConfig.intensity();
+				m_lightFadeInTime = lightConfig.fade_in_time();
+				m_light->SetIntensity(m_lightFadeInTime > 0.0f ? 0.0f : m_lightTargetIntensity);
+				m_light->SetRange(lightConfig.range());
+				m_node->AttachObject(*m_light);
+			}
+
+			// Create ribbon trail if specified
+			if (projVis.has_ribbon_trail())
+			{
+				const auto& trailConfig = projVis.ribbon_trail();
+				static uint64 s_projRibbonId = 0;
+				const String ribbonName = "ProjectileRibbon_" + std::to_string(s_projRibbonId++);
+
+				m_ribbonTrail = m_scene.CreateRibbonTrail(ribbonName);
+				if (m_ribbonTrail)
+				{
+					RibbonTrailParameters ribbonParams;
+					ribbonParams.initialWidth = trailConfig.initial_width();
+					ribbonParams.finalWidth = trailConfig.final_width();
+					ribbonParams.initialColor = Vector4(trailConfig.initial_r(), trailConfig.initial_g(),
+						trailConfig.initial_b(), trailConfig.initial_a());
+					ribbonParams.finalColor = Vector4(trailConfig.final_r(), trailConfig.final_g(),
+						trailConfig.final_b(), trailConfig.final_a());
+					ribbonParams.segmentLifetime = trailConfig.segment_lifetime();
+					ribbonParams.maxSegments = trailConfig.max_segments();
+					m_ribbonTrail->SetParameters(ribbonParams);
+
+					if (trailConfig.has_material_name() && !trailConfig.material_name().empty())
+					{
+						auto material = MaterialManager::Get().Load(trailConfig.material_name());
+						if (material)
+						{
+							m_ribbonTrail->SetMaterial(material);
+						}
+					}
+					else
+					{
+						m_ribbonTrail->SetMaterial(RibbonTrail::GetDefaultMaterial(true));
+					}
+
+					m_node->AttachObject(*m_ribbonTrail);
+					m_ribbonTrail->Play();
+				}
+			}
 		}
 
 		// Calculate initial velocity direction
@@ -127,6 +185,21 @@ namespace mmo
 		{
 			m_audio->StopSound(&m_soundChannel);
 			m_soundChannel = InvalidChannel;
+		}
+
+		// Destroy ribbon trail
+		if (m_ribbonTrail)
+		{
+			m_ribbonTrail->Stop();
+			m_scene.DestroyRibbonTrail(*m_ribbonTrail);
+			m_ribbonTrail = nullptr;
+		}
+
+		// Destroy light
+		if (m_light)
+		{
+			m_scene.DestroyLight(*m_light);
+			m_light = nullptr;
 		}
 
 		// Destroy trail emitter
@@ -203,6 +276,17 @@ namespace mmo
 		if (m_audio && m_soundChannel != InvalidChannel)
 		{
 			m_audio->Set3DPosition(m_soundChannel, m_node->GetDerivedPosition());
+		}
+
+		// Update light fade-in
+		if (m_light && m_lightFadeInTime > 0.0f)
+		{
+			const float currentIntensity = m_light->GetIntensity();
+			if (currentIntensity < m_lightTargetIntensity)
+			{
+				const float newIntensity = currentIntensity + (m_lightTargetIntensity / m_lightFadeInTime) * deltaTime;
+				m_light->SetIntensity(std::min(newIntensity, m_lightTargetIntensity));
+			}
 		}
 
 		// Check for impact
@@ -527,6 +611,41 @@ namespace mmo
 		projVis->set_wave_frequency(params.sineFrequency);
 		projVis->set_scale(params.scale);
 		projVis->set_face_movement(params.faceMovement);
+
+		// Populate light config if present
+		if (params.hasLight)
+		{
+			auto* lightConfig = projVis->mutable_light();
+			lightConfig->set_r(params.lightColor.x);
+			lightConfig->set_g(params.lightColor.y);
+			lightConfig->set_b(params.lightColor.z);
+			lightConfig->set_intensity(params.lightIntensity);
+			lightConfig->set_range(params.lightRange);
+			lightConfig->set_fade_in_time(params.lightFadeInTime);
+			lightConfig->set_fade_out_time(params.lightFadeOutTime);
+		}
+
+		// Populate ribbon trail config if present
+		if (params.hasRibbonTrail)
+		{
+			auto* trailConfig = projVis->mutable_ribbon_trail();
+			if (!params.ribbonMaterial.empty())
+			{
+				trailConfig->set_material_name(params.ribbonMaterial);
+			}
+			trailConfig->set_initial_width(params.ribbonInitialWidth);
+			trailConfig->set_final_width(params.ribbonFinalWidth);
+			trailConfig->set_initial_r(params.ribbonInitialColor.x);
+			trailConfig->set_initial_g(params.ribbonInitialColor.y);
+			trailConfig->set_initial_b(params.ribbonInitialColor.z);
+			trailConfig->set_initial_a(params.ribbonInitialColor.w);
+			trailConfig->set_final_r(params.ribbonFinalColor.x);
+			trailConfig->set_final_g(params.ribbonFinalColor.y);
+			trailConfig->set_final_b(params.ribbonFinalColor.z);
+			trailConfig->set_final_a(params.ribbonFinalColor.w);
+			trailConfig->set_segment_lifetime(params.ribbonSegmentLifetime);
+			trailConfig->set_max_segments(params.ribbonMaxSegments);
+		}
 
 		// Store the temp objects in the internal storage (to keep them alive)
 		m_tempStorage->spells.push_back(std::move(tempSpell));

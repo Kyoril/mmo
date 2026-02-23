@@ -235,10 +235,23 @@ namespace mmo
 		std::vector<ParticleEmitter*> m_kitParticles;
 		/// @brief Scene nodes created for kit effects.
 		std::vector<SceneNode*> m_kitEffectNodes;
-		/// @brief Point lights spawned by kits.
-		std::vector<Light*> m_kitLights;
 		/// @brief Ribbon trails spawned by kits.
 		std::vector<RibbonTrail*> m_kitRibbonTrails;
+
+		/// @brief Tracks a fading light with current and target intensity.
+		struct FadingLight
+		{
+			Light* light{ nullptr };
+			float currentIntensity{ 0.0f };
+			float targetIntensity{ 0.0f };
+			float fadeInSpeed{ 0.0f };
+			float fadeOutSpeed{ 0.0f };
+			bool fadingOut{ false };
+		};
+
+		/// @brief Active fading lights (includes kit-spawned and pending fade-out).
+		std::vector<FadingLight> m_fadingLights;
+
 		/// @brief Counter for unique naming of spawned effects.
 		uint32 m_effectCounter{ 0 };
 

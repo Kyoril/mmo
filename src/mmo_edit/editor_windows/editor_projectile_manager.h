@@ -17,6 +17,8 @@ namespace mmo
 	class SceneNode;
 	class Entity;
 	class ParticleEmitter;
+	class Light;
+	class RibbonTrail;
 	class IAudio;
 
 	/// @brief Simple projectile for editor preview.
@@ -73,6 +75,8 @@ namespace mmo
 		SceneNode* m_node;
 		Entity* m_entity;
 		ParticleEmitter* m_trailEmitter;
+		Light* m_light;
+		RibbonTrail* m_ribbonTrail;
 
 		Vector3 m_startPosition;
 		Vector3 m_velocity;

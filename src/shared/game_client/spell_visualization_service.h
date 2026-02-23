@@ -192,6 +192,21 @@ namespace mmo
         /// \brief All active spell effects across all actors.
         mutable std::vector<ActiveSpellEffect> m_activeEffects;
 
+        /// \brief Tracks a light that is fading in or out.
+        struct FadingLight
+        {
+            Light* light{ nullptr };
+            uint64 actorGuid{ 0 };
+            float currentIntensity{ 0.0f };
+            float targetIntensity{ 0.0f };
+            float fadeInSpeed{ 0.0f };
+            float fadeOutSpeed{ 0.0f };
+            bool fadingOut{ false };
+        };
+
+        /// \brief Active lights with fade state.
+        mutable std::vector<FadingLight> m_fadingLights;
+
         /// \brief Counter for generating unique effect names.
         mutable uint32 m_effectCounter{ 0 };
     };

@@ -6,6 +6,9 @@
 #include "scene_graph/scene_node.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/particle_emitter.h"
+#include "scene_graph/light.h"
+#include "scene_graph/ribbon_trail.h"
+#include "scene_graph/material_manager.h"
 #include "base/macros.h"
 #include "log/default_log_levels.h"
 #include "math/quaternion.h"
@@ -38,6 +41,8 @@ namespace mmo
 		, m_node(nullptr)
 		, m_entity(nullptr)
 		, m_trailEmitter(nullptr)
+		, m_light(nullptr)
+		, m_ribbonTrail(nullptr)
 		, m_startPosition(startPosition)
 		, m_velocity(Vector3::UnitZ)
 		, m_travelTime(0.0f)
@@ -77,6 +82,54 @@ namespace mmo
 			}
 		}
 
+		// Create point light if specified
+		if (params.hasLight)
+		{
+			static uint64 s_lightId = 0;
+			const String lightName = "EditorProjectileLight_" + std::to_string(s_lightId++);
+			m_light = &m_scene.CreateLight(lightName, LightType::Point);
+			m_light->SetColor(params.lightColor);
+			m_light->SetIntensity(params.lightFadeInTime > 0.0f ? 0.0f : params.lightIntensity);
+			m_light->SetRange(params.lightRange);
+			m_node->AttachObject(*m_light);
+		}
+
+		// Create ribbon trail if specified
+		if (params.hasRibbonTrail)
+		{
+			static uint64 s_ribbonId = 0;
+			const String ribbonName = "EditorProjectileRibbon_" + std::to_string(s_ribbonId++);
+			m_ribbonTrail = m_scene.CreateRibbonTrail(ribbonName);
+
+			if (m_ribbonTrail)
+			{
+				RibbonTrailParameters ribbonParams;
+				ribbonParams.initialWidth = params.ribbonInitialWidth;
+				ribbonParams.finalWidth = params.ribbonFinalWidth;
+				ribbonParams.initialColor = params.ribbonInitialColor;
+				ribbonParams.finalColor = params.ribbonFinalColor;
+				ribbonParams.segmentLifetime = params.ribbonSegmentLifetime;
+				ribbonParams.maxSegments = params.ribbonMaxSegments;
+				m_ribbonTrail->SetParameters(ribbonParams);
+
+				if (!params.ribbonMaterial.empty())
+				{
+					auto material = MaterialManager::Get().Load(params.ribbonMaterial);
+					if (material)
+					{
+						m_ribbonTrail->SetMaterial(material);
+					}
+				}
+				else
+				{
+					m_ribbonTrail->SetMaterial(RibbonTrail::GetDefaultMaterial(true));
+				}
+
+				m_node->AttachObject(*m_ribbonTrail);
+				m_ribbonTrail->Play();
+			}
+		}
+
 		// Calculate initial velocity direction
 		if (m_target)
 		{
@@ -104,6 +157,21 @@ namespace mmo
 		{
 			m_audio->StopSound(&m_soundChannel);
 			m_soundChannel = InvalidChannel;
+		}
+
+		// Destroy ribbon trail
+		if (m_ribbonTrail)
+		{
+			m_ribbonTrail->Stop();
+			m_scene.DestroyRibbonTrail(*m_ribbonTrail);
+			m_ribbonTrail = nullptr;
+		}
+
+		// Destroy light
+		if (m_light)
+		{
+			m_scene.DestroyLight(*m_light);
+			m_light = nullptr;
 		}
 
 		// Destroy trail emitter
@@ -156,6 +224,17 @@ namespace mmo
 
 		// Update rotation
 		UpdateRotation(deltaTime);
+
+		// Update light fade-in
+		if (m_light && m_params.lightFadeInTime > 0.0f)
+		{
+			const float currentIntensity = m_light->GetIntensity();
+			if (currentIntensity < m_params.lightIntensity)
+			{
+				const float newIntensity = currentIntensity + (m_params.lightIntensity / m_params.lightFadeInTime) * deltaTime;
+				m_light->SetIntensity(std::min(newIntensity, m_params.lightIntensity));
+			}
+		}
 
 		// Update 3D sound position
 		if (m_audio && m_soundChannel != InvalidChannel)

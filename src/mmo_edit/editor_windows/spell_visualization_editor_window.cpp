@@ -606,6 +606,18 @@ namespace mmo
 						light->set_attenuation(attenuation);
 					}
 
+					float fadeIn = light->has_fade_in_time() ? light->fade_in_time() : 0.3f;
+					if (ImGui::DragFloat("Fade In Time", &fadeIn, 0.05f, 0.0f, 5.0f, "%.2f s"))
+					{
+						light->set_fade_in_time(fadeIn);
+					}
+
+					float fadeOut = light->has_fade_out_time() ? light->fade_out_time() : 0.5f;
+					if (ImGui::DragFloat("Fade Out Time", &fadeOut, 0.05f, 0.0f, 5.0f, "%.2f s"))
+					{
+						light->set_fade_out_time(fadeOut);
+					}
+
 					ImGui::SameLine();
 					if (ImGui::SmallButton("?##light"))
 					{
@@ -1034,6 +1046,18 @@ namespace mmo
 				if (ImGui::DragFloat("Range", &range, 0.5f, 0.1f, 100.0f))
 				{
 					light->set_range(range);
+				}
+
+				float fadeIn = light->has_fade_in_time() ? light->fade_in_time() : 0.3f;
+				if (ImGui::DragFloat("Fade In Time##proj", &fadeIn, 0.05f, 0.0f, 5.0f, "%.2f s"))
+				{
+					light->set_fade_in_time(fadeIn);
+				}
+
+				float fadeOut = light->has_fade_out_time() ? light->fade_out_time() : 0.5f;
+				if (ImGui::DragFloat("Fade Out Time##proj", &fadeOut, 0.05f, 0.0f, 5.0f, "%.2f s"))
+				{
+					light->set_fade_out_time(fadeOut);
 				}
 			}
 
