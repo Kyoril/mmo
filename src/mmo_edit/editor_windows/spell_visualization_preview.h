@@ -5,6 +5,7 @@
 #include "audio/audio.h"
 #include "base/signal.h"
 #include "base/typedefs.h"
+#include "deferred_shading/deferred_renderer.h"
 #include "graphics/render_texture.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/axis_display.h"
@@ -21,6 +22,11 @@
 #include <chrono>
 #include <vector>
 #include <memory>
+
+// Windows.h (pulled in via deferred_renderer.h -> d3d11.h) defines PlaySound as a macro
+#ifdef PlaySound
+#undef PlaySound
+#endif
 
 namespace mmo
 {
@@ -193,7 +199,7 @@ namespace mmo
 
 		// Viewport state
 		ImVec2 m_viewportSize{ 0, 0 };
-		RenderTexturePtr m_viewportRT;
+		std::unique_ptr<DeferredRenderer> m_deferredRenderer;
 		bool m_wireFrame{ false };
 
 		// Scene objects

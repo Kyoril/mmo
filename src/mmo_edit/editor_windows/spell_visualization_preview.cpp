@@ -107,12 +107,16 @@ namespace mmo
 
 		m_worldGrid.reset();
 		m_axisDisplay.reset();
+
+		// Destroy deferred renderer before clearing the scene
+		m_deferredRenderer.reset();
+
 		m_scene.Clear();
 	}
 
 	void SpellVisualizationPreview::Update()
 	{
-		if (!m_viewportRT || m_viewportSize.x <= 0.0f || m_viewportSize.y <= 0.0f)
+		if (!m_deferredRenderer || m_viewportSize.x <= 0.0f || m_viewportSize.y <= 0.0f)
 		{
 			return;
 		}
@@ -234,21 +238,17 @@ namespace mmo
 			}
 		}
 
-		// Render the scene
+		// Render the scene using deferred renderer
 		auto& gx = GraphicsDevice::Get();
 
+		gx.CaptureState();
 		gx.Reset();
-		gx.SetClearColor(Color(0.12f, 0.14f, 0.18f, 1.0f));
-		m_viewportRT->Activate();
-		m_viewportRT->Clear(ClearFlags::All);
-		gx.SetViewport(0, 0, static_cast<int>(m_viewportSize.x), static_cast<int>(m_viewportSize.y), 0.0f, 1.0f);
 		m_camera->SetAspectRatio(m_viewportSize.x / m_viewportSize.y);
+		m_camera->SetFillMode(m_wireFrame ? FillMode::Wireframe : FillMode::Solid);
 
-		gx.SetFillMode(m_wireFrame ? FillMode::Wireframe : FillMode::Solid);
+		m_deferredRenderer->Render(m_scene, *m_camera);
 
-		m_scene.Render(*m_camera, PixelShaderType::Forward);
-
-		m_viewportRT->Update();
+		gx.RestoreState();
 	}
 
 	void SpellVisualizationPreview::DrawViewport(proto::SpellVisualization* visualization, const String& panelId)
@@ -263,28 +263,27 @@ namespace mmo
 			// Get available size
 			const ImVec2 availableSpace = ImGui::GetContentRegionAvail();
 
-			// Create or resize render texture
-			if (m_viewportRT == nullptr && availableSpace.x > 0 && availableSpace.y > 0)
+			// Create or resize deferred renderer
+			if (!m_deferredRenderer && availableSpace.x > 0 && availableSpace.y > 0)
 			{
-				m_viewportRT = GraphicsDevice::Get().CreateRenderTexture("SpellVizPreview",
-					static_cast<uint16>(availableSpace.x),
-					static_cast<uint16>(availableSpace.y),
-					RenderTextureFlags::HasColorBuffer | RenderTextureFlags::HasDepthBuffer | RenderTextureFlags::ShaderResourceView);
+				m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), m_scene,
+					static_cast<uint32>(availableSpace.x),
+					static_cast<uint32>(availableSpace.y));
 				m_viewportSize = availableSpace;
 			}
-			else if (m_viewportRT && (m_viewportSize.x != availableSpace.x || m_viewportSize.y != availableSpace.y))
+			else if (m_deferredRenderer && (m_viewportSize.x != availableSpace.x || m_viewportSize.y != availableSpace.y))
 			{
 				if (availableSpace.x > 0 && availableSpace.y > 0)
 				{
-					m_viewportRT->Resize(static_cast<uint16>(availableSpace.x), static_cast<uint16>(availableSpace.y));
+					m_deferredRenderer->Resize(static_cast<uint32>(availableSpace.x), static_cast<uint32>(availableSpace.y));
 					m_viewportSize = availableSpace;
 				}
 			}
 
 			// Render the viewport image
-			if (m_viewportRT)
+			if (m_deferredRenderer && m_deferredRenderer->GetFinalRenderTarget())
 			{
-				ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
+				ImGui::Image(m_deferredRenderer->GetFinalRenderTarget()->GetTextureObject(), availableSpace);
 				ImGui::SetItemUsingMouseWheel();
 
 				// Handle mouse wheel zoom
