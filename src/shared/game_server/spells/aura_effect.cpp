@@ -590,20 +590,50 @@ namespace mmo
 
 	void AuraEffect::HandlePeriodicTriggerSpell() const
 	{
-		SpellTargetMap targetMap;
-		if (m_effect.targeta() == spell_effect_targets::Caster)
+		// Resolve the caster who will cast the triggered spell
+		GameUnitS* caster = m_container.GetCaster();
+		if (!caster)
 		{
-			targetMap.SetTargetMap(spell_cast_target_flags::Self);
+			caster = &m_container.GetOwner();
 		}
-		else
+
+		// Build the target map based on the effect's target type
+		SpellTargetMap targetMap;
+		switch (m_effect.targetb())
 		{
+		case spell_effect_targets::Caster:
+			targetMap.SetTargetMap(spell_cast_target_flags::Self);
+			break;
+
+		case spell_effect_targets::TargetEnemy:
+		case spell_effect_targets::TargetAny:
+		case spell_effect_targets::TargetAlly:
+			{
+				// Use the caster's current combat victim as the target
+				const uint64 targetGuid = caster->Get<uint64>(object_fields::TargetUnit);
+				if (targetGuid != 0)
+				{
+					targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+					targetMap.SetUnitTarget(targetGuid);
+				}
+				else
+				{
+					WLOG("HandlePeriodicTriggerSpell: No enemy target available for trigger spell " << m_effect.triggerspell());
+					return;
+				}
+			}
+			break;
+
+		default:
+			// Fallback: target the caster itself
 			targetMap.SetUnitTarget(m_container.GetCasterId());
+			break;
 		}
 
 		// Cast trigger spell if we know it
 		if (const proto::SpellEntry* triggerSpell = m_container.GetOwner().GetProject().spells.getById(m_effect.triggerspell()))
 		{
-			m_container.GetOwner().CastSpell(targetMap, *triggerSpell, 0, true, 0);
+			caster->CastSpell(targetMap, *triggerSpell, 0, true, 0);
 		}
 		else
 		{
