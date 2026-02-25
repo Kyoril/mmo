@@ -573,6 +573,41 @@ namespace mmo
 		return AddExpression(outputStream.str(), outputType);
 	}
 
+	ExpressionIndex MaterialCompilerD3D11::AddTime()
+	{
+		return AddExpression("time", ExpressionType::Float_1);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddRotator(ExpressionIndex coordinates, ExpressionIndex center, ExpressionIndex rotation)
+	{
+		if (coordinates == IndexNone)
+		{
+			WLOG("Missing coordinates input for Rotator");
+			return IndexNone;
+		}
+
+		if (center == IndexNone)
+		{
+			WLOG("Missing center input for Rotator");
+			return IndexNone;
+		}
+
+		if (rotation == IndexNone)
+		{
+			WLOG("Missing rotation input for Rotator");
+			return IndexNone;
+		}
+
+		std::ostringstream outputStream;
+		outputStream << "(float2("
+			<< "cos(expr_" << rotation << ") * (expr_" << coordinates << ".x - expr_" << center << ".x) - sin(expr_" << rotation << ") * (expr_" << coordinates << ".y - expr_" << center << ".y) + expr_" << center << ".x, "
+			<< "sin(expr_" << rotation << ") * (expr_" << coordinates << ".x - expr_" << center << ".x) + cos(expr_" << rotation << ") * (expr_" << coordinates << ".y - expr_" << center << ".y) + expr_" << center << ".y"
+			<< "))";
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), ExpressionType::Float_2);
+	}
+
 	void MaterialCompilerD3D11::GeneratePixelShaderCode(PixelShaderType type)
 	{
 		m_pixelShaderStream.str("");
@@ -639,6 +674,8 @@ namespace mmo
 			<< "\tfloat fogEnd;		// Distance of fog end\n"
 			<< "\tfloat3 fogColor;	// Fog color\n"
 			<< "\trow_major matrix inverseCameraView;	// Inverse view matrix\n"
+			<< "\tfloat time;		// Time in seconds since game start\n"
+			<< "\tfloat3 _padding;	// Padding for alignment\n"
 			<< "};\n\n";
 
 		const auto& scalarParams = m_floatParameters;
