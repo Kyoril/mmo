@@ -284,6 +284,13 @@ namespace mmo
 		/// @return Index of the rotated coordinates expression (float2) or IndexNone in case of an error.
 		virtual ExpressionIndex AddRotator(ExpressionIndex coordinates, ExpressionIndex center, ExpressionIndex rotation) = 0;
 
+		/// @brief Adds a Fresnel expression using the Schlick approximation.
+		/// @param exponent The exponent expression controlling the falloff (float1).
+		/// @param baseReflectFraction The base reflectivity at normal incidence (float1).
+		/// @param normal The surface normal expression (float3). If IndexNone, uses the default vertex normal.
+		/// @return Index of the Fresnel expression (float1) or IndexNone in case of an error.
+		virtual ExpressionIndex AddFresnel(ExpressionIndex exponent, ExpressionIndex baseReflectFraction, ExpressionIndex normal) = 0;
+
 	public:
 		void SetDepthTestEnabled(const bool enable) { m_depthTest = enable; }
 

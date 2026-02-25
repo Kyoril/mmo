@@ -2113,4 +2113,53 @@ namespace mmo
 		Pin* m_inputPins[3] = { &m_coordsInput, &m_centerInput, &m_rotationInput };
 		Pin* m_outputPins[1] = { &m_output };
 	};
+
+	/// @brief A node which computes the Fresnel effect using the Schlick approximation.
+	class FresnelNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(FresnelNode, "Fresnel")
+
+		FresnelNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		float m_exponent = 5.0f;
+		float m_baseReflectFraction = 0.04f;
+
+		FloatProperty m_exponentProp { "Exponent", m_exponent };
+		FloatProperty m_baseReflectFractionProp { "Base Reflect Fraction", m_baseReflectFraction };
+
+		PropertyBase* m_properties[2] = { &m_exponentProp, &m_baseReflectFractionProp };
+
+		/// @brief Optional exponent input pin (float1).
+		MaterialPin m_exponentInput = { this, "Exponent" };
+
+		/// @brief Optional base reflect fraction input pin (float1).
+		MaterialPin m_baseReflectFractionInput = { this, "Base Reflect Fraction" };
+
+		/// @brief Optional normal input pin (float3). Defaults to vertex normal.
+		MaterialPin m_normalInput = { this, "Normal" };
+
+		/// @brief The Fresnel output pin (float1).
+		MaterialPin m_output = { this };
+
+		Pin* m_inputPins[3] = { &m_exponentInput, &m_baseReflectFractionInput, &m_normalInput };
+		Pin* m_outputPins[1] = { &m_output };
+	};
 }

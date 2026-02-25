@@ -608,6 +608,38 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_2);
 	}
 
+	ExpressionIndex MaterialCompilerD3D11::AddFresnel(ExpressionIndex exponent, ExpressionIndex baseReflectFraction, ExpressionIndex normal)
+	{
+		if (exponent == IndexNone)
+		{
+			WLOG("Missing exponent input for Fresnel");
+			return IndexNone;
+		}
+
+		if (baseReflectFraction == IndexNone)
+		{
+			WLOG("Missing base reflect fraction input for Fresnel");
+			return IndexNone;
+		}
+
+		// Fresnel = base + (1 - base) * pow(1 - saturate(dot(N, V)), exponent)
+		// V is the normalized view direction, available in the shader as 'V'
+		std::ostringstream outputStream;
+		if (normal != IndexNone)
+		{
+			outputStream << "expr_" << baseReflectFraction << " + (1.0 - expr_" << baseReflectFraction
+				<< ") * pow(1.0 - saturate(dot(normalize(expr_" << normal << "), V)), expr_" << exponent << ")";
+		}
+		else
+		{
+			outputStream << "expr_" << baseReflectFraction << " + (1.0 - expr_" << baseReflectFraction
+				<< ") * pow(1.0 - saturate(dot(normalize(input.normal), V)), expr_" << exponent << ")";
+		}
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), ExpressionType::Float_1);
+	}
+
 	void MaterialCompilerD3D11::GeneratePixelShaderCode(PixelShaderType type)
 	{
 		m_pixelShaderStream.str("");
@@ -1094,6 +1126,10 @@ namespace mmo
 					m_pixelShaderStream
 						<< "\tfloat3 color = ambient + Lo;\n";
 
+					// Add emissive color additively before tone mapping
+					m_pixelShaderStream
+						<< "\tcolor += emissiveColor;\n";
+
 					m_pixelShaderStream
 						<< "\tcolor = color / (color + 1.0f.xxx);\n"
 						<< "\tcolor = pow(color, (1.0f/2.2f).xxx);\n";
@@ -1142,9 +1178,9 @@ namespace mmo
 					m_pixelShaderStream
 						<< "\toutput.material = float4(metallic, roughness, specular, 1.0);\n";
 
-					// Emissive - use base color for unlit materials
+					// Emissive - use base color + emissive color for unlit materials
 					m_pixelShaderStream
-						<< "\toutput.emissive = float4(baseColor, 0.0);\n";
+						<< "\toutput.emissive = float4(baseColor + emissiveColor, 0.0);\n";
 				}
 				else
 				{
@@ -1181,8 +1217,9 @@ namespace mmo
 				}
 				else
 				{
+					// Add emissive color additively for unlit forward rendering
 					m_pixelShaderStream
-						<< "\toutputColor = float4(baseColor, opacity);\n";
+						<< "\toutputColor = float4(baseColor + emissiveColor, opacity);\n";
 				}
 
 				// End of main function

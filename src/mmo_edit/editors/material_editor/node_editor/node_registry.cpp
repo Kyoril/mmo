@@ -48,7 +48,8 @@ namespace mmo
 			ArcTangentNode::GetStaticTypeInfo(),
 			CameraPositionNode::GetStaticTypeInfo(),
 			TimeNode::GetStaticTypeInfo(),
-			RotatorNode::GetStaticTypeInfo()
+			RotatorNode::GetStaticTypeInfo(),
+			FresnelNode::GetStaticTypeInfo()
 		})
 	{
 		RebuildTypes();
