@@ -188,7 +188,12 @@ namespace mmo
 						ItemAttachment attachment;
 						attachment.entity = m_scene.CreateEntity(m_entity->GetName() + "_ITEM_" + std::to_string(data.displayId), variant.mesh());
 						attachment.attachment = m_entity->AttachObjectToBone(variant.attached_bone_default().bone_name(), *attachment.entity);
-						attachment.attachment->SetScale(Vector3(variant.attached_bone_default().scale_x(), variant.attached_bone_default().scale_y(), variant.attached_bone_default().scale_z()));
+						if (attachment.attachment)
+						{
+							attachment.attachment->SetPosition(Vector3(variant.attached_bone_default().offset_x(), variant.attached_bone_default().offset_y(), variant.attached_bone_default().offset_z()));
+							attachment.attachment->SetOrientation(Quaternion(variant.attached_bone_default().rotation_w(), variant.attached_bone_default().rotation_x(), variant.attached_bone_default().rotation_y(), variant.attached_bone_default().rotation_z()));
+							attachment.attachment->SetScale(Vector3(variant.attached_bone_default().scale_x(), variant.attached_bone_default().scale_y(), variant.attached_bone_default().scale_z()));
+						}
 						m_itemAttachments[data.displayId] = attachment;
 					}
 				}
