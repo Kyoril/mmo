@@ -71,23 +71,8 @@ namespace mmo
 				});
 		}
 
-		if (worldInstance && IsChanneled())
-		{
-			m_context.SendPacketFromCaster(
-								[casterId, this](game::OutgoingPacket& out_packet)
-				{
-					out_packet.Start(game::realm_client_packet::ChannelStart);
-					out_packet
-						<< io::write_packed_guid(casterId)
-						<< io::write<uint32>(m_spell.id())
-						<< io::write<int32>(m_castTime);
-					out_packet.Finish();
-				}
-			);
-
-			//executor.Set<uint64>(object_fields::ChannelObject, m_target.getUnitTarget());
-			//executor.Set<uint32>(object_fields::ChannelSpell, m_spell.id());
-		}
+		// Note: ChannelStart packet is sent in Activate() after validation succeeds,
+		// to avoid sending it for spells that will fail range or other checks.
 
 		const Vector3& location = m_cast.GetExecuter().GetPosition();
 		m_x = location.x, m_y = location.y, m_z = location.z;
@@ -137,23 +122,42 @@ namespace mmo
 			// For channeled spells, apply effects immediately when the channel starts
 			if (IsChanneled())
 			{
+				// Send ChannelStart now that validation has passed
+				auto* worldInstance = m_context.GetWorldInstance();
+				if (worldInstance)
+				{
+					const uint64 casterId = m_cast.GetExecuter().GetGuid();
+					m_context.SendPacketFromCaster(
+						[casterId, this](game::OutgoingPacket& out_packet)
+						{
+							out_packet.Start(game::realm_client_packet::ChannelStart);
+							out_packet
+								<< io::write_packed_guid(casterId)
+								<< io::write<uint32>(m_spell.id())
+								<< io::write<int32>(m_castTime);
+							out_packet.Finish();
+						}
+					);
+				}
+
 				if (!ConsumePower())
 				{
 					m_countdown.Cancel();
+					EndChanneling(false);
 					return;
 				}
 
 				if (!ConsumeReagents())
 				{
 					m_countdown.Cancel();
+					EndChanneling(false);
 					return;
 				}
 
 				if (!ConsumeItem())
 				{
 					m_countdown.Cancel();
-					m_hasFinished = true;
-					NotifyCastEnded(false);
+					EndChanneling(false);
 					return;
 				}
 

@@ -373,25 +373,16 @@ namespace mmo
 		// Calculate arc position
 		const Vector3 linearPos = m_startPosition + (targetPos - m_startPosition) * travelProgress;
 
-		float arcHeight = 5.0f; // Default arc height
-		if (m_projectileVisual && m_projectileVisual->has_arc_height())
-		{
-			arcHeight = m_projectileVisual->arc_height();
-		}
-
-		// Get horizontal arc width
-		float arcWidth = 0.0f;
-		if (m_projectileVisual && m_projectileVisual->has_arc_width())
-		{
-			arcWidth = m_projectileVisual->arc_width();
-		}
+		// Read arc parameters directly from the proto accessor which returns
+		// the proto default (0.0) for unset fields.
+		const float arcHeight = m_projectileVisual ? m_projectileVisual->arc_height() : 0.0f;
+		const float arcWidth  = m_projectileVisual ? m_projectileVisual->arc_width()  : 0.0f;
 
 		// Parabolic arc: peaks at 50% progress
 		const float arcFactor = 4.0f * travelProgress * (1.0f - travelProgress);
 		const float heightOffset = arcHeight * arcFactor;
 
 		// Horizontal arc offset (perpendicular to travel direction)
-		float widthOffset = 0.0f;
 		if (arcWidth != 0.0f)
 		{
 			Vector3 travelDir = targetPos - m_startPosition;
@@ -402,7 +393,7 @@ namespace mmo
 				right = travelDir.Cross(Vector3::UnitX);
 			}
 			right.Normalize();
-			widthOffset = arcWidth * arcFactor;
+			const float widthOffset = arcWidth * arcFactor;
 			const Vector3 arcPos = linearPos + Vector3(0.0f, heightOffset, 0.0f) + right * widthOffset;
 			m_node->SetPosition(arcPos);
 		}
@@ -427,12 +418,8 @@ namespace mmo
 		Vector3 desiredDirection = targetPos - currentPos;
 		desiredDirection.Normalize();
 
-		// Get homing strength (turn rate)
-		float homingStrength = 5.0f;
-		if (m_projectileVisual && m_projectileVisual->has_homing_strength())
-		{
-			homingStrength = m_projectileVisual->homing_strength();
-		}
+		// Get homing strength (turn rate) – proto default is 5.0
+		const float homingStrength = m_projectileVisual ? m_projectileVisual->homing_strength() : 5.0f;
 
 		// Smoothly turn velocity toward target
 		const float lerpFactor = std::min(homingStrength * deltaTime, 1.0f);
@@ -460,20 +447,9 @@ namespace mmo
 		Vector3 direction = targetPos - m_startPosition;
 		direction.Normalize();
 
-		// Get wave parameters
-		float frequency = 1.0f;
-		float amplitude = 1.0f;
-		if (m_projectileVisual)
-		{
-			if (m_projectileVisual->has_wave_frequency())
-			{
-				frequency = m_projectileVisual->wave_frequency();
-			}
-			if (m_projectileVisual->has_wave_amplitude())
-			{
-				amplitude = m_projectileVisual->wave_amplitude();
-			}
-		}
+		// Get wave parameters – proto defaults are 1.0 for both
+		const float frequency = m_projectileVisual ? m_projectileVisual->wave_frequency() : 1.0f;
+		const float amplitude = m_projectileVisual ? m_projectileVisual->wave_amplitude() : 1.0f;
 
 		// Calculate forward progress, clamped to total distance
 		const float forwardDistance = std::min(m_travelTime * m_spell.speed() * m_speedMultiplier, m_totalDistance);
