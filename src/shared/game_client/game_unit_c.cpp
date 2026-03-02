@@ -2747,6 +2747,12 @@ namespace mmo
 			result.y += tint.y * tint.w;
 			result.z += tint.z * tint.w;
 		}
+
+		if (m_spellTints.size() > 1)
+		{
+			result /= static_cast<float>(m_spellTints.size()); // Average the tints
+		}
+		
 		
 		// Clamp to [0, 1] range
 		result.x = std::min(result.x, 1.0f);

@@ -345,6 +345,16 @@ namespace mmo
 				auto *newKit = kitsMap[eventValue].add_kits();
 				newKit->set_scope(proto::CASTER);
 				newKit->set_loop(false);
+
+				// Adjust tint
+				auto* tint = newKit->mutable_tint();
+				if (tint)
+				{
+					tint->set_r(0.0f);
+					tint->set_g(0.0f);
+					tint->set_b(0.0f);
+					tint->set_a(0.0f);
+				}
 			}
 
 			// Draw existing kits (re-fetch the list after potential add)

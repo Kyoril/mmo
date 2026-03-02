@@ -588,8 +588,13 @@ namespace mmo
 			const auto currentTime = GetAsyncTimeMs();
 			if (currentTime > m_castingTimeoutEnd)
 			{
-				// Spell casting has taken too long, assume it's finished
+				// Spell casting has taken too long, assume it's finished.
+				// OnSpellCastEnded will recursively call ChooseNextAction after
+				// clearing the casting state. We must return here to avoid
+				// continuing on a potentially destroyed 'this' (the recursive
+				// call may trigger Reset which destroys this combat state).
 				OnSpellCastEnded(false);
+				return;
 			}
 			else
 			{
