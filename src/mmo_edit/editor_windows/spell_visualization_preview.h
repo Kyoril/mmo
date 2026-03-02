@@ -14,6 +14,7 @@
 #include "scene_graph/ribbon_trail.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/animation_notify.h"
+#include "graphics/material_instance.h"
 
 #include "game_common/projectile_target.h"
 
@@ -49,7 +50,22 @@ namespace mmo
 		Casting,
 		CastSucceeded,
 		Impact,
-		CancelCast
+		CancelCast,
+		AuraApplied,
+		AuraRemoved,
+		AuraTick,
+		AuraIdle
+	};
+
+	/// @brief The type of preview sequence to play.
+	enum class PreviewSequenceMode
+	{
+		/// @brief Full cast: StartCast -> Casting -> CastSucceeded -> Impact.
+		Cast,
+		/// @brief Instant cast: CastSucceeded -> Impact (skips StartCast/Casting).
+		InstantCast,
+		/// @brief Aura: AuraApplied -> AuraIdle (looping) -> AuraRemoved on stop.
+		Aura
 	};
 
 	class IAudio;
@@ -90,6 +106,12 @@ namespace mmo
 		/// @brief Triggers the full spell cast sequence (StartCast -> Casting -> CastSucceeded -> Impact).
 		void TriggerFullCastSequence();
 
+		/// @brief Triggers an instant cast sequence (CastSucceeded -> Impact, no cast time).
+		void TriggerInstantCastSequence();
+
+		/// @brief Triggers an aura sequence (AuraApplied -> AuraIdle looping -> AuraRemoved on stop).
+		void TriggerAuraSequence();
+
 		/// @brief Stops all active previews and resets to idle.
 		void StopPreview();
 
@@ -122,6 +144,18 @@ namespace mmo
 
 		/// @brief Starts the projectile flight using EditorProjectileManager.
 		void StartProjectile();
+
+		/// @brief Updates the cast sequence state machine.
+		void UpdateCastSequence();
+
+		/// @brief Updates the instant cast sequence state machine.
+		void UpdateInstantCastSequence();
+
+		/// @brief Updates the aura sequence state machine.
+		void UpdateAuraSequence();
+
+		/// @brief Resets animations to idle and ends the sequence.
+		void EndSequenceAndResetToIdle();
 
 		/// @brief Cleans up all spell effect objects.
 		void CleanupSpellEffects();
@@ -190,6 +224,15 @@ namespace mmo
 		/// @param position World position to spawn at.
 		void SpawnImpactParticle(const String& particleName, const Vector3& position);
 
+		/// @brief Applies a tint color to an entity using MaterialInstances.
+		/// @param entity The entity to tint.
+		/// @param tintColor The RGBA tint color to apply.
+		void ApplyTintToEntity(Entity* entity, const Vector4& tintColor);
+
+		/// @brief Removes tint from an entity, restoring original materials.
+		/// @param entity The entity to remove tint from.
+		void RemoveTintFromEntity(Entity* entity);
+
 	private:
 		EditorHost& m_host;
 		IAudio* m_audioSystem{ nullptr };
@@ -256,6 +299,16 @@ namespace mmo
 		/// @brief Counter for unique naming of spawned effects.
 		uint32 m_effectCounter{ 0 };
 
+		/// @brief Tracks original and tint instance materials for a SubEntity.
+		struct SubEntityTintState
+		{
+			MaterialPtr originalMaterial;
+			std::shared_ptr<MaterialInstance> tintInstance;
+		};
+
+		/// @brief Maps entity -> (sub-entity index -> tint state) for active tints.
+		std::map<Entity*, std::map<uint16, SubEntityTintState>> m_entityTintStates;
+
 		// Current visualization being previewed
 		proto::SpellVisualization* m_currentVisualization{ nullptr };
 
@@ -268,6 +321,7 @@ namespace mmo
 
 		// Cast sequence state
 		bool m_castSequenceActive{ false };
+		PreviewSequenceMode m_sequenceMode{ PreviewSequenceMode::Cast };
 		PreviewEvent m_currentSequenceEvent{ PreviewEvent::StartCast };
 		float m_sequenceTimer{ 0.0f };
 		float m_castDuration{ 1.5f };
@@ -275,6 +329,9 @@ namespace mmo
 		bool m_projectileSpawned{ false };
 		bool m_waitingForSpellGo{ false };
 		bool m_hasCastSucceededAnimation{ false };
+
+		/// @brief True when an aura sequence is active (AuraIdle is looping).
+		bool m_auraActive{ false };
 
 		// Sound channel with fade state
 		struct FadingChannel

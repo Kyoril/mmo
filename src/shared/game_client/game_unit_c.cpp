@@ -2730,24 +2730,28 @@ namespace mmo
 	{
 		if (m_spellTints.empty())
 		{
-			// Default gray tint (no tinting)
-			return Vector4(0.5f, 0.5f, 0.5f, 1.0f);
+			// Default black (no emissive glow)
+			return Vector4(0.0f, 0.0f, 0.0f, 1.0f);
 		}
 		
-		// Start with default gray
-		Vector4 result(0.5f, 0.5f, 0.5f, 1.0f);
+		// Start with black (no emissive glow)
+		Vector4 result(0.0f, 0.0f, 0.0f, 1.0f);
 		
-		// Blend all active tints using multiplicative blending
+		// Blend all active tints using additive blending (emissive colors add up)
 		for (const auto& pair : m_spellTints)
 		{
 			const Vector4& tint = pair.second;
 			
-			// Lerp between result and (result * tint.rgb) based on tint.a
-			// This allows the alpha to control tint strength
-			result.x = result.x * (1.0f - tint.w) + (result.x * tint.x) * tint.w;
-			result.y = result.y * (1.0f - tint.w) + (result.y * tint.y) * tint.w;
-			result.z = result.z * (1.0f - tint.w) + (result.z * tint.z) * tint.w;
+			// Add the tint color scaled by its alpha (alpha controls tint strength)
+			result.x += tint.x * tint.w;
+			result.y += tint.y * tint.w;
+			result.z += tint.z * tint.w;
 		}
+		
+		// Clamp to [0, 1] range
+		result.x = std::min(result.x, 1.0f);
+		result.y = std::min(result.y, 1.0f);
+		result.z = std::min(result.z, 1.0f);
 		
 		return result;
 	}

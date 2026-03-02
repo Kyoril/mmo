@@ -16,6 +16,7 @@
 #include "scene_graph/ribbon_trail.h"
 #include "scene_graph/particle_emitter_serializer.h"
 #include "scene_graph/tag_point.h"
+#include "scene_graph/sub_entity.h"
 #include "log/default_log_levels.h"
 
 #include "proto_data/project.h"
@@ -188,97 +189,16 @@ namespace mmo
 		{
 			m_sequenceTimer += deltaTime;
 
-			switch (m_currentSequenceEvent)
+			switch (m_sequenceMode)
 			{
-			case PreviewEvent::StartCast:
-				// Transition to Casting after a brief moment
-				if (m_sequenceTimer >= 0.3f)
-				{
-					m_currentSequenceEvent = PreviewEvent::Casting;
-					m_sequenceTimer = 0.0f;
-					TriggerEvent(PreviewEvent::Casting);
-				}
+			case PreviewSequenceMode::Cast:
+				UpdateCastSequence();
 				break;
-
-			case PreviewEvent::Casting:
-				// Transition to CastSucceeded after cast duration
-				if (m_sequenceTimer >= m_castDuration)
-				{
-					m_currentSequenceEvent = PreviewEvent::CastSucceeded;
-					m_sequenceTimer = 0.0f;
-					TriggerEvent(PreviewEvent::CastSucceeded);
-				}
+			case PreviewSequenceMode::InstantCast:
+				UpdateInstantCastSequence();
 				break;
-
-			case PreviewEvent::CastSucceeded:
-				// Wait for SpellGo animation notify to spawn projectile
-				// Fallback: if animation ends without SpellGo notify, spawn anyway
-				if (!m_projectileSpawned && m_waitingForSpellGo && m_hasCastSucceededAnimation)
-				{
-					// Check if the caster animation has ended (fallback trigger)
-					if (m_casterAnimState && m_casterAnimState->HasEnded())
-					{
-						StartProjectile();
-						m_projectileSpawned = true;
-						m_waitingForSpellGo = false;
-					}
-				}
-				
-				// Give some time for projectile to travel, then auto-transition to impact
-				// The actual impact timing will depend on projectile speed and distance
-				// We use a longer timeout to ensure the projectile has time to reach
-				if (m_projectileSpawned && m_sequenceTimer >= 4.0f)
-				{
-					m_currentSequenceEvent = PreviewEvent::Impact;
-					m_sequenceTimer = 0.0f;
-					TriggerEvent(PreviewEvent::Impact);
-				}
-				break;
-
-			case PreviewEvent::Impact:
-				// End sequence or loop
-				if (m_sequenceTimer >= 1.0f)
-				{
-					if (m_loopSequence)
-					{
-						// Restart the sequence
-						m_currentSequenceEvent = PreviewEvent::StartCast;
-						m_sequenceTimer = 0.0f;
-						m_projectileSpawned = false;
-						TriggerEvent(PreviewEvent::StartCast);
-					}
-					else
-					{
-						m_castSequenceActive = false;
-
-						// Reset caster animation to idle
-						if (m_casterEntity && m_casterEntity->HasAnimationState("Idle"))
-						{
-							if (m_casterAnimState)
-							{
-								m_casterAnimState->SetEnabled(false);
-							}
-							m_casterAnimState = m_casterEntity->GetAnimationState("Idle");
-							m_casterAnimState->SetEnabled(true);
-							m_casterAnimState->SetLoop(true);
-						}
-
-						// Reset target animation to idle
-						if (m_targetEntity && m_targetEntity->HasAnimationState("Idle"))
-						{
-							if (m_targetAnimState)
-							{
-								m_targetAnimState->SetEnabled(false);
-							}
-							m_targetAnimState = m_targetEntity->GetAnimationState("Idle");
-							m_targetAnimState->SetEnabled(true);
-							m_targetAnimState->SetLoop(true);
-						}
-					}
-				}
-				break;
-
-			default:
+			case PreviewSequenceMode::Aura:
+				UpdateAuraSequence();
 				break;
 			}
 		}
@@ -374,9 +294,23 @@ namespace mmo
 	void SpellVisualizationPreview::DrawToolbar(proto::SpellVisualization* visualization)
 	{
 		// Row 1: Main playback controls
-		if (DrawSuccessButton("Play", ImVec2(50, 0)))
+		if (DrawSuccessButton("Cast", ImVec2(50, 0)))
 		{
 			TriggerFullCastSequence();
+		}
+
+		ImGui::SameLine();
+
+		if (DrawSuccessButton("Instant", ImVec2(55, 0)))
+		{
+			TriggerInstantCastSequence();
+		}
+
+		ImGui::SameLine();
+
+		if (DrawPrimaryButton("Aura", ImVec2(50, 0)))
+		{
+			TriggerAuraSequence();
 		}
 
 		ImGui::SameLine();
@@ -396,7 +330,9 @@ namespace mmo
 		ImGui::SetNextItemWidth(70);
 		ImGui::DragFloat("##cast", &m_castDuration, 0.1f, 0.5f, 5.0f, "%.1fs cast");
 
-		// Row 2: Individual event triggers
+		// Row 2: Individual cast event triggers
+		ImGui::TextDisabled("Cast:");
+		ImGui::SameLine();
 		if (DrawPrimarySmallButton("Start"))
 		{
 			TriggerEvent(PreviewEvent::StartCast);
@@ -420,6 +356,29 @@ namespace mmo
 		if (DrawPrimarySmallButton("Cancel"))
 		{
 			TriggerEvent(PreviewEvent::CancelCast);
+		}
+
+		// Row 3: Individual aura event triggers
+		ImGui::TextDisabled("Aura:");
+		ImGui::SameLine();
+		if (DrawPrimarySmallButton("Applied"))
+		{
+			TriggerEvent(PreviewEvent::AuraApplied);
+		}
+		ImGui::SameLine();
+		if (DrawPrimarySmallButton("Idle"))
+		{
+			TriggerEvent(PreviewEvent::AuraIdle);
+		}
+		ImGui::SameLine();
+		if (DrawPrimarySmallButton("Tick"))
+		{
+			TriggerEvent(PreviewEvent::AuraTick);
+		}
+		ImGui::SameLine();
+		if (DrawPrimarySmallButton("Removed"))
+		{
+			TriggerEvent(PreviewEvent::AuraRemoved);
 		}
 	}
 
@@ -455,6 +414,19 @@ namespace mmo
 			break;
 		case PreviewEvent::Impact:
 			protoEvent = 4; // IMPACT
+			break;
+		case PreviewEvent::AuraApplied:
+			protoEvent = 5; // AURA_APPLIED
+			break;
+		case PreviewEvent::AuraRemoved:
+			protoEvent = 6; // AURA_REMOVED
+			m_auraActive = false;
+			break;
+		case PreviewEvent::AuraTick:
+			protoEvent = 7; // AURA_TICK
+			break;
+		case PreviewEvent::AuraIdle:
+			protoEvent = 8; // AURA_IDLE
 			break;
 		}
 
@@ -496,22 +468,63 @@ namespace mmo
 		StopPreview();
 		
 		m_castSequenceActive = true;
+		m_sequenceMode = PreviewSequenceMode::Cast;
 		m_currentSequenceEvent = PreviewEvent::StartCast;
 		m_sequenceTimer = 0.0f;
 
 		TriggerEvent(PreviewEvent::StartCast);
 	}
 
+	void SpellVisualizationPreview::TriggerInstantCastSequence()
+	{
+		// Reset and start the instant cast sequence (skip StartCast/Casting)
+		StopPreview();
+
+		m_castSequenceActive = true;
+		m_sequenceMode = PreviewSequenceMode::InstantCast;
+		m_currentSequenceEvent = PreviewEvent::CastSucceeded;
+		m_sequenceTimer = 0.0f;
+
+		TriggerEvent(PreviewEvent::CastSucceeded);
+	}
+
+	void SpellVisualizationPreview::TriggerAuraSequence()
+	{
+		// Reset and start the aura sequence
+		StopPreview();
+
+		m_castSequenceActive = true;
+		m_sequenceMode = PreviewSequenceMode::Aura;
+		m_currentSequenceEvent = PreviewEvent::AuraApplied;
+		m_sequenceTimer = 0.0f;
+		m_auraActive = true;
+
+		TriggerEvent(PreviewEvent::AuraApplied);
+	}
+
 	void SpellVisualizationPreview::StopPreview()
 	{
+		// If an aura sequence is active, trigger AuraRemoved before stopping
+		if (m_auraActive && m_currentVisualization)
+		{
+			m_auraActive = false;
+			FadeOutPreviousSounds();
+			ApplyEventKits(m_currentVisualization, 6); // AURA_REMOVED
+		}
+
 		m_castSequenceActive = false;
 		m_sequenceTimer = 0.0f;
 		m_projectileSpawned = false;
 		m_waitingForSpellGo = false;
 		m_hasCastSucceededAnimation = false;
+		m_auraActive = false;
 
 		// Stop all sounds
 		StopAllSounds();
+
+		// Remove tints from preview entities
+		RemoveTintFromEntity(m_casterEntity);
+		RemoveTintFromEntity(m_targetEntity);
 
 		// Clear any active projectiles
 		if (m_projectileManager)
@@ -1004,9 +1017,213 @@ namespace mmo
 		}
 	}
 
+	void SpellVisualizationPreview::UpdateCastSequence()
+	{
+		switch (m_currentSequenceEvent)
+		{
+		case PreviewEvent::StartCast:
+			// Transition to Casting after a brief moment
+			if (m_sequenceTimer >= 0.3f)
+			{
+				m_currentSequenceEvent = PreviewEvent::Casting;
+				m_sequenceTimer = 0.0f;
+				TriggerEvent(PreviewEvent::Casting);
+			}
+			break;
+
+		case PreviewEvent::Casting:
+			// Transition to CastSucceeded after cast duration
+			if (m_sequenceTimer >= m_castDuration)
+			{
+				m_currentSequenceEvent = PreviewEvent::CastSucceeded;
+				m_sequenceTimer = 0.0f;
+				TriggerEvent(PreviewEvent::CastSucceeded);
+			}
+			break;
+
+		case PreviewEvent::CastSucceeded:
+			// Wait for SpellGo animation notify to spawn projectile
+			// Fallback: if animation ends without SpellGo notify, spawn anyway
+			if (!m_projectileSpawned && m_waitingForSpellGo && m_hasCastSucceededAnimation)
+			{
+				// Check if the caster animation has ended (fallback trigger)
+				if (m_casterAnimState && m_casterAnimState->HasEnded())
+				{
+					StartProjectile();
+					m_projectileSpawned = true;
+					m_waitingForSpellGo = false;
+				}
+			}
+
+			// Give some time for projectile to travel, then auto-transition to impact
+			if (m_projectileSpawned && m_sequenceTimer >= 4.0f)
+			{
+				m_currentSequenceEvent = PreviewEvent::Impact;
+				m_sequenceTimer = 0.0f;
+				TriggerEvent(PreviewEvent::Impact);
+			}
+			break;
+
+		case PreviewEvent::Impact:
+			// End sequence or loop
+			if (m_sequenceTimer >= 1.0f)
+			{
+				if (m_loopSequence)
+				{
+					m_currentSequenceEvent = PreviewEvent::StartCast;
+					m_sequenceTimer = 0.0f;
+					m_projectileSpawned = false;
+					TriggerEvent(PreviewEvent::StartCast);
+				}
+				else
+				{
+					EndSequenceAndResetToIdle();
+				}
+			}
+			break;
+
+		default:
+			break;
+		}
+	}
+
+	void SpellVisualizationPreview::UpdateInstantCastSequence()
+	{
+		switch (m_currentSequenceEvent)
+		{
+		case PreviewEvent::CastSucceeded:
+			// Wait for SpellGo animation notify to spawn projectile
+			if (!m_projectileSpawned && m_waitingForSpellGo && m_hasCastSucceededAnimation)
+			{
+				if (m_casterAnimState && m_casterAnimState->HasEnded())
+				{
+					StartProjectile();
+					m_projectileSpawned = true;
+					m_waitingForSpellGo = false;
+				}
+			}
+
+			// Give time for projectile to travel, then auto-transition to impact
+			if (m_projectileSpawned && m_sequenceTimer >= 4.0f)
+			{
+				m_currentSequenceEvent = PreviewEvent::Impact;
+				m_sequenceTimer = 0.0f;
+				TriggerEvent(PreviewEvent::Impact);
+			}
+			break;
+
+		case PreviewEvent::Impact:
+			// End sequence or loop
+			if (m_sequenceTimer >= 1.0f)
+			{
+				if (m_loopSequence)
+				{
+					m_currentSequenceEvent = PreviewEvent::CastSucceeded;
+					m_sequenceTimer = 0.0f;
+					m_projectileSpawned = false;
+					TriggerEvent(PreviewEvent::CastSucceeded);
+				}
+				else
+				{
+					EndSequenceAndResetToIdle();
+				}
+			}
+			break;
+
+		default:
+			break;
+		}
+	}
+
+	void SpellVisualizationPreview::UpdateAuraSequence()
+	{
+		switch (m_currentSequenceEvent)
+		{
+		case PreviewEvent::AuraApplied:
+			// Transition to AuraIdle after a brief moment
+			if (m_sequenceTimer >= 0.5f)
+			{
+				m_currentSequenceEvent = PreviewEvent::AuraIdle;
+				m_sequenceTimer = 0.0f;
+				TriggerEvent(PreviewEvent::AuraIdle);
+			}
+			break;
+
+		case PreviewEvent::AuraIdle:
+			// Stay in AuraIdle. If not looping, auto-remove after a few seconds.
+			if (!m_loopSequence && m_sequenceTimer >= 5.0f)
+			{
+				m_currentSequenceEvent = PreviewEvent::AuraRemoved;
+				m_sequenceTimer = 0.0f;
+				TriggerEvent(PreviewEvent::AuraRemoved);
+			}
+			break;
+
+		case PreviewEvent::AuraRemoved:
+			// End sequence or loop
+			if (m_sequenceTimer >= 1.0f)
+			{
+				if (m_loopSequence)
+				{
+					// Restart the aura sequence
+					m_currentSequenceEvent = PreviewEvent::AuraApplied;
+					m_sequenceTimer = 0.0f;
+					m_auraActive = true;
+					TriggerEvent(PreviewEvent::AuraApplied);
+				}
+				else
+				{
+					EndSequenceAndResetToIdle();
+				}
+			}
+			break;
+
+		default:
+			break;
+		}
+	}
+
+	void SpellVisualizationPreview::EndSequenceAndResetToIdle()
+	{
+		m_castSequenceActive = false;
+		m_auraActive = false;
+
+		// Reset caster animation to idle
+		if (m_casterEntity && m_casterEntity->HasAnimationState("Idle"))
+		{
+			if (m_casterAnimState)
+			{
+				m_casterAnimState->SetEnabled(false);
+			}
+			m_casterAnimState = m_casterEntity->GetAnimationState("Idle");
+			m_casterAnimState->SetEnabled(true);
+			m_casterAnimState->SetLoop(true);
+		}
+
+		// Reset target animation to idle
+		if (m_targetEntity && m_targetEntity->HasAnimationState("Idle"))
+		{
+			if (m_targetAnimState)
+			{
+				m_targetAnimState->SetEnabled(false);
+			}
+			m_targetAnimState = m_targetEntity->GetAnimationState("Idle");
+			m_targetAnimState->SetEnabled(true);
+			m_targetAnimState->SetLoop(true);
+		}
+
+		// Remove tints when sequence ends
+		RemoveTintFromEntity(m_casterEntity);
+		RemoveTintFromEntity(m_targetEntity);
+	}
+
 	void SpellVisualizationPreview::CleanupSpellEffects()
 	{
 		StopAllSounds();
+
+		// Remove tints from all entities
+		RemoveTintFromEntity(m_casterEntity);
+		RemoveTintFromEntity(m_targetEntity);
 
 		// Clear projectiles
 		if (m_projectileManager)
@@ -1089,59 +1306,72 @@ namespace mmo
 			return;
 		}
 
-		// Clean up effects from the previous event
-		for (auto* emitter : m_kitParticles)
-		{
-			if (emitter)
-			{
-				emitter->Stop();
-				m_scene.DestroyParticleEmitter(*emitter);
-			}
-		}
-		m_kitParticles.clear();
+		// AuraTick (7) is an overlay event - it should not clean up existing persistent effects,
+		// only add its own effects on top (they will be cleaned up on the next non-tick event).
+		const bool isOverlayEvent = (eventValue == 7); // AURA_TICK
 
-		// Trigger fade-out on active lights (or destroy instantly if no fade)
-		for (auto& fadingLight : m_fadingLights)
+		if (!isOverlayEvent)
 		{
-			if (fadingLight.light && !fadingLight.fadingOut)
+			// Remove tints from previous event
+			RemoveTintFromEntity(m_casterEntity);
+			RemoveTintFromEntity(m_targetEntity);
+
+			// Clean up effects from the previous event
+			for (auto* emitter : m_kitParticles)
 			{
-				if (fadingLight.fadeOutSpeed > 0.0f)
+				if (emitter)
 				{
-					fadingLight.fadingOut = true;
-				}
-				else
-				{
-					m_scene.DestroyLight(*fadingLight.light);
-					fadingLight.light = nullptr;
+					emitter->Stop();
+					m_scene.DestroyParticleEmitter(*emitter);
 				}
 			}
-		}
-		m_fadingLights.erase(
-			std::remove_if(m_fadingLights.begin(), m_fadingLights.end(),
-				[](const FadingLight& fl) { return fl.light == nullptr; }),
-			m_fadingLights.end());
+			m_kitParticles.clear();
 
-		for (auto* trail : m_kitRibbonTrails)
-		{
-			if (trail)
+			// Trigger fade-out on active lights (or destroy instantly if no fade)
+			for (auto& fadingLight : m_fadingLights)
 			{
-				trail->Stop();
-				m_scene.DestroyRibbonTrail(*trail);
+				if (fadingLight.light && !fadingLight.fadingOut)
+				{
+					if (fadingLight.fadeOutSpeed > 0.0f)
+					{
+						fadingLight.fadingOut = true;
+					}
+					else
+					{
+						m_scene.DestroyLight(*fadingLight.light);
+						fadingLight.light = nullptr;
+					}
+				}
 			}
-		}
-		m_kitRibbonTrails.clear();
+			m_fadingLights.erase(
+				std::remove_if(m_fadingLights.begin(), m_fadingLights.end(),
+					[](const FadingLight& fl) { return fl.light == nullptr; }),
+				m_fadingLights.end());
 
-		for (auto* node : m_kitEffectNodes)
-		{
-			if (node)
+			for (auto* trail : m_kitRibbonTrails)
 			{
-				m_scene.DestroySceneNode(*node);
+				if (trail)
+				{
+					trail->Stop();
+					m_scene.DestroyRibbonTrail(*trail);
+				}
 			}
+			m_kitRibbonTrails.clear();
+
+			for (auto* node : m_kitEffectNodes)
+			{
+				if (node)
+				{
+					m_scene.DestroySceneNode(*node);
+				}
+			}
+			m_kitEffectNodes.clear();
 		}
-		m_kitEffectNodes.clear();
 
 		// Determine if this is an instant (one-shot) event
-		const bool instantEvent = (eventValue == 1 || eventValue == 3 || eventValue == 4);
+		// Cast events: CancelCast(1), CastSucceeded(3), Impact(4)
+		// Aura events: AuraTick(7)
+		const bool instantEvent = (eventValue == 1 || eventValue == 3 || eventValue == 4 || eventValue == 7);
 
 		const auto& kitsMap = visualization->kits_by_event();
 		auto it = kitsMap.find(eventValue);
@@ -1227,6 +1457,18 @@ namespace mmo
 			if (kit.has_ribbon_trail() && targetEntity && targetNode)
 			{
 				SpawnKitRibbonTrail(kit, targetEntity, targetNode);
+			}
+
+			// Apply tint
+			if (kit.has_tint() && targetEntity)
+			{
+				const auto& tintProto = kit.tint();
+				const Vector4 tintColor(
+					tintProto.has_r() ? tintProto.r() : 0.0f,
+					tintProto.has_g() ? tintProto.g() : 0.0f,
+					tintProto.has_b() ? tintProto.b() : 0.0f,
+					tintProto.has_a() ? tintProto.a() : 1.0f);
+				ApplyTintToEntity(targetEntity, tintColor);
 			}
 		}
 	}
@@ -1642,5 +1884,81 @@ namespace mmo
 		{
 			ELOG("Failed to spawn impact particle '" << particleName << "': " << e.what());
 		}
+	}
+
+	void SpellVisualizationPreview::ApplyTintToEntity(Entity* entity, const Vector4& tintColor)
+	{
+		if (!entity)
+		{
+			return;
+		}
+
+		const uint32 subEntityCount = entity->GetNumSubEntities();
+		for (uint32 i = 0; i < subEntityCount; ++i)
+		{
+			SubEntity* subEntity = entity->GetSubEntity(static_cast<uint16>(i));
+			if (!subEntity || !subEntity->IsVisible())
+			{
+				continue;
+			}
+
+			MaterialPtr currentMaterial = subEntity->GetMaterial();
+			if (!currentMaterial)
+			{
+				continue;
+			}
+
+			// Check if we already have a tint state for this sub-entity
+			auto& entityStates = m_entityTintStates[entity];
+			auto stateIt = entityStates.find(static_cast<uint16>(i));
+			if (stateIt != entityStates.end())
+			{
+				// Update existing tint instance
+				if (stateIt->second.tintInstance)
+				{
+					stateIt->second.tintInstance->SetVectorParameter("Tint", tintColor);
+				}
+				continue;
+			}
+
+			// Create a new MaterialInstance for tinting
+			const std::string instanceName = std::string(entity->GetName()) + "_PreviewTint_" + std::to_string(i);
+			auto tintInstance = std::make_shared<MaterialInstance>(instanceName, currentMaterial);
+			tintInstance->SetVectorParameter("Tint", tintColor);
+
+			SubEntityTintState state;
+			state.originalMaterial = currentMaterial;
+			state.tintInstance = tintInstance;
+			entityStates[static_cast<uint16>(i)] = state;
+
+			// Apply the tinted material instance to the sub-entity
+			subEntity->SetMaterial(std::static_pointer_cast<MaterialInterface>(tintInstance));
+		}
+	}
+
+	void SpellVisualizationPreview::RemoveTintFromEntity(Entity* entity)
+	{
+		if (!entity)
+		{
+			return;
+		}
+
+		auto it = m_entityTintStates.find(entity);
+		if (it == m_entityTintStates.end())
+		{
+			return;
+		}
+
+		// Restore original materials
+		for (auto& [subIndex, state] : it->second)
+		{
+			SubEntity* subEntity = entity->GetSubEntity(subIndex);
+			if (subEntity && state.originalMaterial)
+			{
+				subEntity->SetMaterial(state.originalMaterial);
+			}
+		}
+
+		m_entityTintStates.erase(it);
 	}
 }
