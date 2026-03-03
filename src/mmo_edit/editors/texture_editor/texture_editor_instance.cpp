@@ -4,12 +4,33 @@
 
 #include <imgui.h>
 #include <imgui_internal.h>
+#include "imgui/misc/cpp/imgui_stdlib.h"
 
 #include "texture_editor.h"
 #include "graphics/texture_mgr.h"
 
 namespace mmo
 {
+	namespace
+	{
+		/// @brief Returns a human-readable name for the given pixel format.
+		const char* GetPixelFormatName(const PixelFormat format)
+		{
+			switch (format)
+			{
+			case PixelFormat::R8G8B8A8:		return "R8G8B8A8 (32-bit)";
+			case PixelFormat::B8G8R8A8:		return "B8G8R8A8 (32-bit)";
+			case PixelFormat::R16G16B16A16:	return "R16G16B16A16 (64-bit)";
+			case PixelFormat::R32G32B32A32:	return "R32G32B32A32 (128-bit)";
+			case PixelFormat::DXT1:			return "DXT1 / BC1 (Compressed)";
+			case PixelFormat::DXT3:			return "DXT3 / BC2 (Compressed)";
+			case PixelFormat::DXT5:			return "DXT5 / BC3 (Compressed)";
+			case PixelFormat::D32F:			return "D32F (Depth 32-bit)";
+			default:						return "Unknown";
+			}
+		}
+	}
+
 	TextureEditorInstance::TextureEditorInstance(EditorHost& host, TextureEditor& editor, Path assetPath)
 		: EditorInstance(host, std::move(assetPath))
 		, m_textureEditor(editor)
@@ -64,84 +85,187 @@ namespace mmo
 	{
 		if (ImGui::Begin(id.c_str()))
 		{
-			if (ImGui::Button("Save"))
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+
+			// Save button with green styling
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.4f, 0.9f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.9f, 0.5f, 1.0f));
+			if (ImGui::Button("Save Texture", ImVec2(200, 0)))
 			{
 				Save();
 			}
+			ImGui::PopStyleColor(3);
 
-			ImGui::Separator();
+			ImGui::Spacing();
 
+			// Texture Info Section
 			if (ImGui::CollapsingHeader("Texture Info", ImGuiTreeNodeFlags_DefaultOpen))
 			{
-				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+				ImGui::Indent();
 
-				if (ImGui::BeginTable("texture_info", 2, ImGuiTableFlags_Resizable))
+				if (m_texture)
 				{
-					ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 100.0f);
-					ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+					ImGui::AlignTextToFramePadding();
+					ImGui::TextDisabled("Dimensions:");
+					ImGui::SameLine();
+					ImGui::Text("%d x %d px", m_texture->GetWidth(), m_texture->GetHeight());
 
-					if (m_texture)
+					ImGui::AlignTextToFramePadding();
+					ImGui::TextDisabled("Format:");
+					ImGui::SameLine();
+					ImGui::Text("%s", GetPixelFormatName(m_texture->GetPixelFormat()));
+
+					ImGui::AlignTextToFramePadding();
+					ImGui::TextDisabled("Compressed:");
+					ImGui::SameLine();
+					const PixelFormat fmt = m_texture->GetPixelFormat();
+					const bool isCompressed = (fmt == PixelFormat::DXT1 || fmt == PixelFormat::DXT3 || fmt == PixelFormat::DXT5);
+					ImGui::TextColored(
+						isCompressed ? ImVec4(0.3f, 0.8f, 0.3f, 1.0f) : ImVec4(0.8f, 0.8f, 0.3f, 1.0f),
+						"%s", isCompressed ? "Yes" : "No");
+
+					ImGui::AlignTextToFramePadding();
+					ImGui::TextDisabled("Mip Maps:");
+					ImGui::SameLine();
+					if (m_texture->HasMipMaps())
 					{
-						ImGui::TableNextRow();
-						ImGui::TableSetColumnIndex(0);
-						ImGui::TextUnformatted("Width");
-						ImGui::TableSetColumnIndex(1);
-						ImGui::Text("%d px", m_texture->GetWidth());
-
-						ImGui::TableNextRow();
-						ImGui::TableSetColumnIndex(0);
-						ImGui::TextUnformatted("Height");
-						ImGui::TableSetColumnIndex(1);
-						ImGui::Text("%d px", m_texture->GetHeight());
-
-						ImGui::TableNextRow();
-						ImGui::TableSetColumnIndex(0);
-						ImGui::TextUnformatted("Memory");
-						ImGui::TableSetColumnIndex(1);
-						const uint32 memSize = m_texture->GetMemorySize();
-						if (memSize >= 1024 * 1024)
-						{
-							ImGui::Text("%.2f MB", static_cast<float>(memSize) / (1024.0f * 1024.0f));
-						}
-						else if (memSize >= 1024)
-						{
-							ImGui::Text("%.2f KB", static_cast<float>(memSize) / 1024.0f);
-						}
-						else
-						{
-							ImGui::Text("%u bytes", memSize);
-						}
+						ImGui::Text("Yes (%u levels)", m_texture->GetMipMapCount());
 					}
 					else
 					{
-						ImGui::TableNextRow();
-						ImGui::TableSetColumnIndex(0);
-						ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Failed to load texture");
+						ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.3f, 1.0f), "No");
 					}
 
-					ImGui::EndTable();
+					ImGui::AlignTextToFramePadding();
+					ImGui::TextDisabled("Memory:");
+					ImGui::SameLine();
+					const uint32 memSize = m_texture->GetMemorySize();
+					if (memSize >= 1024 * 1024)
+					{
+						ImGui::Text("%.2f MB", static_cast<float>(memSize) / (1024.0f * 1024.0f));
+					}
+					else if (memSize >= 1024)
+					{
+						ImGui::Text("%.2f KB", static_cast<float>(memSize) / 1024.0f);
+					}
+					else
+					{
+						ImGui::Text("%u bytes", memSize);
+					}
+
+					ImGui::AlignTextToFramePadding();
+					ImGui::TextDisabled("Asset:");
+					ImGui::SameLine();
+					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
+					String assetStr = m_assetPath.string();
+					ImGui::SetNextItemWidth(-1);
+					ImGui::InputText("##asset_path", &assetStr, ImGuiInputTextFlags_ReadOnly);
+					ImGui::PopStyleColor();
+				}
+				else
+				{
+					ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Failed to load texture");
 				}
 
-				ImGui::PopStyleVar();
+				ImGui::Unindent();
 			}
 
-			ImGui::Separator();
+			ImGui::Spacing();
 
+			// Texture Settings Section
+			ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.22f, 0.22f, 0.25f, 1.0f));
+			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.27f, 0.27f, 0.3f, 1.0f));
+			ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.32f, 0.32f, 0.35f, 1.0f));
+			if (ImGui::CollapsingHeader("Texture Settings", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				ImGui::Indent();
+
+				if (m_texture)
+				{
+					// Address Mode U
+					ImGui::AlignTextToFramePadding();
+					ImGui::TextDisabled("Address U:");
+					ImGui::SameLine();
+					ImGui::SetNextItemWidth(-1);
+					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.18f, 1.0f));
+					int addressModeU = static_cast<int>(m_texture->GetTextureAddressModeU());
+					if (ImGui::Combo("##address_u", &addressModeU, "Clamp\0Wrap\0Mirror\0Border\0"))
+					{
+						m_texture->SetTextureAddressModeU(static_cast<TextureAddressMode>(addressModeU));
+					}
+					ImGui::PopStyleColor();
+
+					// Address Mode V
+					ImGui::AlignTextToFramePadding();
+					ImGui::TextDisabled("Address V:");
+					ImGui::SameLine();
+					ImGui::SetNextItemWidth(-1);
+					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.18f, 1.0f));
+					int addressModeV = static_cast<int>(m_texture->GetTextureAddressModeV());
+					if (ImGui::Combo("##address_v", &addressModeV, "Clamp\0Wrap\0Mirror\0Border\0"))
+					{
+						m_texture->SetTextureAddressModeV(static_cast<TextureAddressMode>(addressModeV));
+					}
+					ImGui::PopStyleColor();
+
+					// Filter Mode
+					ImGui::AlignTextToFramePadding();
+					ImGui::TextDisabled("Filter:");
+					ImGui::SameLine();
+					ImGui::SetNextItemWidth(-1);
+					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.18f, 1.0f));
+					int filterMode = static_cast<int>(m_texture->GetTextureFilter());
+					if (ImGui::Combo("##filter", &filterMode, "None\0Bilinear\0Trilinear\0Anisotropic\0"))
+					{
+						m_texture->SetFilter(static_cast<TextureFilter>(filterMode));
+					}
+					ImGui::PopStyleColor();
+				}
+				else
+				{
+					ImGui::TextDisabled("No texture loaded");
+				}
+
+				ImGui::Unindent();
+			}
+			ImGui::PopStyleColor(3);
+
+			ImGui::Spacing();
+
+			// View Settings Section
+			ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.22f, 0.22f, 0.25f, 1.0f));
+			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.27f, 0.27f, 0.3f, 1.0f));
+			ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.32f, 0.32f, 0.35f, 1.0f));
 			if (ImGui::CollapsingHeader("View Settings", ImGuiTreeNodeFlags_DefaultOpen))
 			{
-				ImGui::Checkbox("Show Checkerboard", &m_showCheckerboard);
+				ImGui::Indent();
 
-				ImGui::Separator();
-
-				ImGui::Text("Zoom: %.0f%%", m_zoom * 100.0f);
+				ImGui::AlignTextToFramePadding();
+				ImGui::TextDisabled("Zoom:");
 				ImGui::SameLine();
+				ImGui::Text("%.0f%%", m_zoom * 100.0f);
+
+				ImGui::SameLine();
+
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.5f, 0.8f, 0.8f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.5f, 0.6f, 0.9f, 0.9f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.6f, 0.7f, 1.0f, 1.0f));
 				if (ImGui::Button("Reset View"))
 				{
 					ResetView();
 				}
+				ImGui::PopStyleColor(3);
 
 				ImGui::Checkbox("Fit to Window", &m_fitToWindow);
+				ImGui::Checkbox("Show Checkerboard", &m_showCheckerboard);
+
+				ImGui::Unindent();
 			}
+			ImGui::PopStyleColor(3);
+
+			ImGui::PopStyleVar(2);
 		}
 		ImGui::End();
 	}

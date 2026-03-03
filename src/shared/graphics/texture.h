@@ -128,6 +128,12 @@ namespace mmo
 		
 		virtual void SetFilter(const TextureFilter filter) { m_filter = filter; }
 
+		/// Gets the number of mip map levels for this texture.
+		virtual uint32 GetMipMapCount() const { return m_mipCount; }
+
+		/// Gets whether this texture has mip maps.
+		virtual bool HasMipMaps() const { return m_header.hasMips; }
+
 		void SetDebugName(String debugName);
 
 		[[nodiscard]] const String& GetDebugName() const { return m_debugName; }
