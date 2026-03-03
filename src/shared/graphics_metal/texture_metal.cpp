@@ -40,13 +40,20 @@ namespace mmo
 
 	uint32 TextureMetal::GetMemorySize() const
 	{
-		// For now, all textures are uncompressed RGBAs
 		switch (m_header.format)
 		{
 		case tex::v1_0::DXT1:
 			return (m_header.width * m_header.height * sizeof(uint32)) / 8;
 		case tex::v1_0::DXT5:
 			return (m_header.width * m_header.height * sizeof(uint32)) / 4;
+		case tex::v1_0::R8:
+			return m_header.width * m_header.height * sizeof(uint8);
+		case tex::v1_0::RG8:
+			return m_header.width * m_header.height * sizeof(uint8) * 2;
+		case tex::v1_0::BC4:
+			return std::max(1, (m_header.width + 3) / 4) * std::max(1, (m_header.height + 3) / 4) * 8;
+		case tex::v1_0::BC5:
+			return std::max(1, (m_header.width + 3) / 4) * std::max(1, (m_header.height + 3) / 4) * 16;
 		default:
 			return m_header.width * m_header.height * sizeof(uint32);
 		}

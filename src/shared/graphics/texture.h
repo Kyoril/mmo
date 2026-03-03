@@ -30,6 +30,18 @@ namespace mmo
 
 		D32F,
 
+		/// Single-channel 8-bit (grayscale, alpha masks, heightmaps)
+		R8,
+
+		/// Two-channel 8-bit (normal maps stored as XY, reconstructed Z in shader)
+		RG8,
+
+		/// BC4 compressed single-channel
+		BC4,
+
+		/// BC5 compressed two-channel (normal maps)
+		BC5,
+
 		Unknown
 	};
 

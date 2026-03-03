@@ -99,11 +99,6 @@ namespace mmo
 
 		std::ostringstream outputStream;
 
-		if (type == SamplerType::Normal)
-		{
-			outputStream << "(";
-		}
-
 		if (srgb)
 		{
 			outputStream << "pow(";
@@ -125,12 +120,22 @@ namespace mmo
 			outputStream << ", 2.2)";
 		}
 
+		outputStream.flush();
+
 		if (type == SamplerType::Normal)
 		{
-			outputStream << " * 2.0 - 1.0)";
-		}
+			// First, add the raw sample as a temporary expression
+			const ExpressionIndex rawSample = AddExpression(outputStream.str(), ExpressionType::Float_4);
 
-		outputStream.flush();
+			// Reconstruct the normal: read RG, remap to [-1,1], derive Z = sqrt(1 - x^2 - y^2)
+			// This works correctly for both BC5/RG8 (where B=0) and standard RGBA normal maps
+			std::ostringstream normalStream;
+			normalStream << "float4(expr_" << rawSample << ".rg * 2.0 - 1.0, "
+				<< "sqrt(saturate(1.0 - dot(expr_" << rawSample << ".rg * 2.0 - 1.0, expr_" << rawSample << ".rg * 2.0 - 1.0))), 0.0)";
+			normalStream.flush();
+
+			return AddExpression(normalStream.str(), ExpressionType::Float_4);
+		}
 
 		return AddExpression(outputStream.str(), ExpressionType::Float_4);
 	}
@@ -1276,11 +1281,6 @@ namespace mmo
 
 		std::ostringstream outputStream;
 
-		if (type == SamplerType::Normal)
-		{
-			outputStream << "(";
-		}
-
 		if (srgb)
 		{
 			outputStream << "pow(";
@@ -1302,12 +1302,22 @@ namespace mmo
 			outputStream << ", 2.2)";
 		}
 
+		outputStream.flush();
+
 		if (type == SamplerType::Normal)
 		{
-			outputStream << " * 2.0 - 1.0)";
-		}
+			// First, add the raw sample as a temporary expression
+			const ExpressionIndex rawSample = AddExpression(outputStream.str(), ExpressionType::Float_4);
 
-		outputStream.flush();
+			// Reconstruct the normal: read RG, remap to [-1,1], derive Z = sqrt(1 - x^2 - y^2)
+			// This works correctly for both BC5/RG8 (where B=0) and standard RGBA normal maps
+			std::ostringstream normalStream;
+			normalStream << "float4(expr_" << rawSample << ".rg * 2.0 - 1.0, "
+				<< "sqrt(saturate(1.0 - dot(expr_" << rawSample << ".rg * 2.0 - 1.0, expr_" << rawSample << ".rg * 2.0 - 1.0))), 0.0)";
+			normalStream.flush();
+
+			return AddExpression(normalStream.str(), ExpressionType::Float_4);
+		}
 
 		return AddExpression(outputStream.str(), ExpressionType::Float_4);
 	}

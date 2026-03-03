@@ -2,12 +2,22 @@
 
 #include "texture_editor_instance.h"
 
+#include <cmath>
+#include <cstring>
+
 #include <imgui.h>
 #include <imgui_internal.h>
 #include "imgui/misc/cpp/imgui_stdlib.h"
 
 #include "texture_editor.h"
 #include "graphics/texture_mgr.h"
+#include "graphics/graphics_device.h"
+#include "assets/asset_registry.h"
+#include "tex_v1_0/header_load.h"
+#include "tex/pre_header_load.h"
+#include "binary_io/reader.h"
+#include "binary_io/stream_source.h"
+#include "log/default_log_levels.h"
 
 namespace mmo
 {
@@ -18,6 +28,8 @@ namespace mmo
 		{
 			switch (format)
 			{
+			case PixelFormat::R8:			return "R8 (8-bit Single Channel)";
+			case PixelFormat::RG8:			return "RG8 (16-bit Two Channel)";
 			case PixelFormat::R8G8B8A8:		return "R8G8B8A8 (32-bit)";
 			case PixelFormat::B8G8R8A8:		return "B8G8R8A8 (32-bit)";
 			case PixelFormat::R16G16B16A16:	return "R16G16B16A16 (64-bit)";
@@ -25,6 +37,8 @@ namespace mmo
 			case PixelFormat::DXT1:			return "DXT1 / BC1 (Compressed)";
 			case PixelFormat::DXT3:			return "DXT3 / BC2 (Compressed)";
 			case PixelFormat::DXT5:			return "DXT5 / BC3 (Compressed)";
+			case PixelFormat::BC4:			return "BC4 (Compressed Single Channel)";
+			case PixelFormat::BC5:			return "BC5 (Compressed Two Channel)";
 			case PixelFormat::D32F:			return "D32F (Depth 32-bit)";
 			default:						return "Unknown";
 			}
@@ -36,6 +50,7 @@ namespace mmo
 		, m_textureEditor(editor)
 	{
 		m_texture = TextureManager::Get().CreateOrRetrieve(m_assetPath.string());
+		CreateDisplayTexture();
 	}
 
 	void TextureEditorInstance::Draw()
@@ -121,7 +136,7 @@ namespace mmo
 					ImGui::TextDisabled("Compressed:");
 					ImGui::SameLine();
 					const PixelFormat fmt = m_texture->GetPixelFormat();
-					const bool isCompressed = (fmt == PixelFormat::DXT1 || fmt == PixelFormat::DXT3 || fmt == PixelFormat::DXT5);
+					const bool isCompressed = (fmt == PixelFormat::DXT1 || fmt == PixelFormat::DXT3 || fmt == PixelFormat::DXT5 || fmt == PixelFormat::BC4 || fmt == PixelFormat::BC5);
 					ImGui::TextColored(
 						isCompressed ? ImVec4(0.3f, 0.8f, 0.3f, 1.0f) : ImVec4(0.8f, 0.8f, 0.3f, 1.0f),
 						"%s", isCompressed ? "Yes" : "No");
@@ -352,8 +367,9 @@ namespace mmo
 				drawList->PopClipRect();
 			}
 
-			// Draw the texture
-			drawList->AddImage(m_texture->GetTextureObject(), imageTopLeft, imageBottomRight);
+			// Draw the texture (use display texture if available for proper channel reconstruction)
+			const auto displayTex = m_displayTexture ? m_displayTexture : m_texture;
+			drawList->AddImage(displayTex->GetTextureObject(), imageTopLeft, imageBottomRight);
 
 			// Invisible button to capture input over the entire viewport area
 			ImGui::InvisibleButton("##texture_viewport", availableSpace);
@@ -493,5 +509,234 @@ namespace mmo
 		m_fitToWindow = true;
 		m_zoom = 1.0f;
 		m_panOffset = ImVec2(0.0f, 0.0f);
+	}
+
+	void TextureEditorInstance::CreateDisplayTexture()
+	{
+		if (!m_texture)
+		{
+			return;
+		}
+
+		const PixelFormat fmt = m_texture->GetPixelFormat();
+
+		// Only create display texture for formats that don't render well as-is
+		if (fmt != PixelFormat::BC4 && fmt != PixelFormat::BC5 &&
+			fmt != PixelFormat::R8 && fmt != PixelFormat::RG8)
+		{
+			return;
+		}
+
+		const uint16 width = m_texture->GetWidth();
+		const uint16 height = m_texture->GetHeight();
+		if (width == 0 || height == 0)
+		{
+			return;
+		}
+
+		// Open the htex file and read the raw mip 0 data
+		auto file = AssetRegistry::OpenFile(m_assetPath.string());
+		if (!file)
+		{
+			WLOG("Failed to open texture file for display texture creation: " << m_assetPath.string());
+			return;
+		}
+
+		io::StreamSource source{ *file };
+		io::Reader reader{ source };
+
+		// Load pre header
+		tex::PreHeader preHeader;
+		if (!tex::loadPreHeader(preHeader, reader))
+		{
+			WLOG("Failed to load texture pre header for display texture");
+			return;
+		}
+
+		// Load header
+		tex::v1_0::Header header(tex::Version_1_0);
+		if (!tex::v1_0::loadHeader(header, reader))
+		{
+			WLOG("Failed to load texture header for display texture");
+			return;
+		}
+
+		if (header.mipmapOffsets[0] == 0 || header.mipmapLengths[0] == 0)
+		{
+			WLOG("No mip data available for display texture");
+			return;
+		}
+
+		// Read mip 0 data
+		std::vector<uint8> mipData(header.mipmapLengths[0]);
+		file->seekg(header.mipmapOffsets[0], std::ios::beg);
+		file->read(reinterpret_cast<char*>(mipData.data()), header.mipmapLengths[0]);
+
+		// Create RGBA pixel data
+		const size_t pixelCount = static_cast<size_t>(width) * height;
+		std::vector<uint8> rgbaData(pixelCount * 4);
+
+		if (fmt == PixelFormat::R8)
+		{
+			// Expand single channel to grayscale RGBA
+			for (size_t i = 0; i < pixelCount; ++i)
+			{
+				const uint8 v = mipData[i];
+				rgbaData[i * 4 + 0] = v;
+				rgbaData[i * 4 + 1] = v;
+				rgbaData[i * 4 + 2] = v;
+				rgbaData[i * 4 + 3] = 255;
+			}
+		}
+		else if (fmt == PixelFormat::RG8)
+		{
+			// Expand RG to RGBA, reconstruct blue channel for normal maps
+			for (size_t i = 0; i < pixelCount; ++i)
+			{
+				const float r = mipData[i * 2 + 0] / 255.0f;
+				const float g = mipData[i * 2 + 1] / 255.0f;
+
+				// Reconstruct Z from X,Y (tangent space normal map: x² + y² + z² = 1)
+				const float nx = r * 2.0f - 1.0f;
+				const float ny = g * 2.0f - 1.0f;
+				const float nzSq = 1.0f - nx * nx - ny * ny;
+				const float nz = std::sqrt(std::max(0.0f, nzSq));
+				const uint8 b = static_cast<uint8>((nz * 0.5f + 0.5f) * 255.0f);
+
+				rgbaData[i * 4 + 0] = mipData[i * 2 + 0];
+				rgbaData[i * 4 + 1] = mipData[i * 2 + 1];
+				rgbaData[i * 4 + 2] = b;
+				rgbaData[i * 4 + 3] = 255;
+			}
+		}
+		else if (fmt == PixelFormat::BC4 || fmt == PixelFormat::BC5)
+		{
+			// BC4/BC5 decompression
+			// A BC4 block is 8 bytes: 2 reference values + 6 bytes of 3-bit indices for a 4x4 texel block
+			// BC5 is two BC4 blocks (16 bytes per texel block)
+			const int blocksX = std::max(1, (width + 3) / 4);
+			const int blocksY = std::max(1, (height + 3) / 4);
+			const int blockSize = (fmt == PixelFormat::BC4) ? 8 : 16;
+
+			// Lambda to decompress a single BC4 block (8 bytes) into 16 output values
+			auto decompressBC4Block = [](const uint8* block, uint8 output[16])
+			{
+				const uint8 alpha0 = block[0];
+				const uint8 alpha1 = block[1];
+
+				// Build lookup table of 8 interpolated values
+				uint8 lut[8];
+				lut[0] = alpha0;
+				lut[1] = alpha1;
+
+				if (alpha0 > alpha1)
+				{
+					lut[2] = static_cast<uint8>((6 * alpha0 + 1 * alpha1) / 7);
+					lut[3] = static_cast<uint8>((5 * alpha0 + 2 * alpha1) / 7);
+					lut[4] = static_cast<uint8>((4 * alpha0 + 3 * alpha1) / 7);
+					lut[5] = static_cast<uint8>((3 * alpha0 + 4 * alpha1) / 7);
+					lut[6] = static_cast<uint8>((2 * alpha0 + 5 * alpha1) / 7);
+					lut[7] = static_cast<uint8>((1 * alpha0 + 6 * alpha1) / 7);
+				}
+				else
+				{
+					lut[2] = static_cast<uint8>((4 * alpha0 + 1 * alpha1) / 5);
+					lut[3] = static_cast<uint8>((3 * alpha0 + 2 * alpha1) / 5);
+					lut[4] = static_cast<uint8>((2 * alpha0 + 3 * alpha1) / 5);
+					lut[5] = static_cast<uint8>((1 * alpha0 + 4 * alpha1) / 5);
+					lut[6] = 0;
+					lut[7] = 255;
+				}
+
+				// Decode 3-bit indices from bytes 2..7 (48 bits total, 16 texels * 3 bits each)
+				uint64 bits = 0;
+				for (int i = 0; i < 6; ++i)
+				{
+					bits |= static_cast<uint64>(block[2 + i]) << (i * 8);
+				}
+
+				for (int i = 0; i < 16; ++i)
+				{
+					const int index = static_cast<int>((bits >> (i * 3)) & 0x7);
+					output[i] = lut[index];
+				}
+			};
+
+			for (int by = 0; by < blocksY; ++by)
+			{
+				for (int bx = 0; bx < blocksX; ++bx)
+				{
+					const size_t blockIndex = static_cast<size_t>(by) * blocksX + bx;
+					const uint8* blockPtr = mipData.data() + blockIndex * blockSize;
+
+					uint8 redValues[16];
+					uint8 greenValues[16];
+
+					if (fmt == PixelFormat::BC4)
+					{
+						decompressBC4Block(blockPtr, redValues);
+						// For BC4/grayscale, green = red
+						std::memcpy(greenValues, redValues, 16);
+					}
+					else
+					{
+						// BC5: first 8 bytes = red channel, second 8 bytes = green channel
+						decompressBC4Block(blockPtr, redValues);
+						decompressBC4Block(blockPtr + 8, greenValues);
+					}
+
+					// Write decompressed texels into the RGBA output
+					for (int ty = 0; ty < 4; ++ty)
+					{
+						for (int tx = 0; tx < 4; ++tx)
+						{
+							const int px = bx * 4 + tx;
+							const int py = by * 4 + ty;
+							if (px >= width || py >= height)
+							{
+								continue;
+							}
+
+							const size_t pixelIndex = static_cast<size_t>(py) * width + px;
+							const int texelIndex = ty * 4 + tx;
+							const uint8 r = redValues[texelIndex];
+							const uint8 g = greenValues[texelIndex];
+
+							if (fmt == PixelFormat::BC4)
+							{
+								// Grayscale
+								rgbaData[pixelIndex * 4 + 0] = r;
+								rgbaData[pixelIndex * 4 + 1] = r;
+								rgbaData[pixelIndex * 4 + 2] = r;
+								rgbaData[pixelIndex * 4 + 3] = 255;
+							}
+							else
+							{
+								// BC5: reconstruct blue channel from normal map
+								const float nx = r / 255.0f * 2.0f - 1.0f;
+								const float ny = g / 255.0f * 2.0f - 1.0f;
+								const float nzSq = 1.0f - nx * nx - ny * ny;
+								const float nz = std::sqrt(std::max(0.0f, nzSq));
+								const uint8 b = static_cast<uint8>((nz * 0.5f + 0.5f) * 255.0f);
+
+								rgbaData[pixelIndex * 4 + 0] = r;
+								rgbaData[pixelIndex * 4 + 1] = g;
+								rgbaData[pixelIndex * 4 + 2] = b;
+								rgbaData[pixelIndex * 4 + 3] = 255;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Create the display texture
+		const String displayName = m_assetPath.string() + "_display";
+		m_displayTexture = TextureManager::Get().CreateManual(displayName, width, height, PixelFormat::R8G8B8A8, BufferUsage::Static);
+		if (m_displayTexture)
+		{
+			m_displayTexture->LoadRaw(rgbaData.data(), rgbaData.size());
+			ILOG("Created display texture for " << m_assetPath.string());
+		}
 	}
 }

@@ -6,6 +6,7 @@
 
 #include "editors/editor_instance.h"
 #include "graphics/texture.h"
+#include "graphics/texture_mgr.h"
 
 namespace mmo
 {
@@ -50,6 +51,10 @@ namespace mmo
 		/// @brief Resets zoom and pan to fit the texture in the viewport.
 		void ResetView();
 
+		/// @brief Creates an RGBA display texture for formats that don't display well directly (BC4, BC5, R8, RG8).
+		/// Reconstructs the blue channel for normal maps (BC5, RG8) and expands single channel to grayscale (BC4, R8).
+		void CreateDisplayTexture();
+
 	private:
 		TextureEditor& m_textureEditor;
 		TexturePtr m_texture;
@@ -63,5 +68,8 @@ namespace mmo
 
 		bool m_showAlpha{ true };
 		bool m_showCheckerboard{ true };
+
+		/// @brief RGBA display texture for formats that require channel reconstruction (BC4, BC5, R8, RG8).
+		TexturePtr m_displayTexture;
 	};
 }

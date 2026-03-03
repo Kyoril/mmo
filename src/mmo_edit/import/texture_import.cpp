@@ -2,6 +2,7 @@
 
 #include "texture_import.h"
 
+#include <cstring>
 #include <set>
 
 #include "assets/asset_registry.h"
@@ -62,12 +63,54 @@ namespace mmo
 			m_showImportFileDialog = false;
 		}
 
-		if (ImGui::BeginPopupModal("Texture Import Settings", nullptr))
+		if (ImGui::BeginPopupModal("Texture Import Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 		{
-			ImGui::Text("Importing %d texture files", m_filesToImport.size());
-			ImGui::Checkbox("Apply compression", &m_useCompression);
+			ImGui::Text("Importing %d texture file(s)", static_cast<int>(m_filesToImport.size()));
+			ImGui::Separator();
+			ImGui::Spacing();
 
-			if (ImGui::Button(m_filesToImport.size() > 1 ? "Import all" : "Import"))
+			// Texture usage selection
+			ImGui::Text("Texture Type:");
+			int usage = static_cast<int>(m_textureUsage);
+			ImGui::RadioButton("Color (Diffuse, Albedo, UI)", &usage, static_cast<int>(TextureUsage::Color));
+			ImGui::RadioButton("Normal Map (XY stored, Z reconstructed)", &usage, static_cast<int>(TextureUsage::NormalMap));
+			ImGui::RadioButton("Grayscale (Heightmap, Alpha, Roughness)", &usage, static_cast<int>(TextureUsage::Grayscale));
+			m_textureUsage = static_cast<TextureUsage>(usage);
+
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+
+			// Compression toggle
+			ImGui::Checkbox("Apply compression", &m_useCompression);
+			if (m_useCompression)
+			{
+				ImGui::SameLine();
+				ImGui::TextDisabled("(?)");
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::BeginTooltip();
+					switch (m_textureUsage)
+					{
+					case TextureUsage::Color:
+						ImGui::Text("Color: DXT1/BC1 (no alpha) or DXT5/BC3 (with alpha)");
+						break;
+					case TextureUsage::NormalMap:
+						ImGui::Text("Normal Map: BC5 (high quality two-channel compression)");
+						break;
+					case TextureUsage::Grayscale:
+						ImGui::Text("Grayscale: BC4 (single-channel compression)");
+						break;
+					}
+					ImGui::EndTooltip();
+				}
+			}
+
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+
+			if (ImGui::Button(m_filesToImport.size() > 1 ? "Import all" : "Import", ImVec2(120, 0)))
 			{
 				DoImportInternal();
 				ImGui::CloseCurrentPopup();
@@ -75,7 +118,7 @@ namespace mmo
 
 			ImGui::SameLine();
 
-			if (ImGui::Button("Cancel"))
+			if (ImGui::Button("Cancel", ImVec2(120, 0)))
 			{
 				m_filesToImport.clear();
 				ImGui::CloseCurrentPopup();
@@ -158,28 +201,69 @@ namespace mmo
 		data.width = static_cast<uint16>(width);
 		data.height = static_cast<uint16>(height);
 
-		if (numChannels == 3)
+		switch (m_textureUsage)
 		{
-			data.format = ImageFormat::RGBX;
-		}
-		else if (numChannels == 4)
-		{
-			data.format = ImageFormat::RGBA;
-		}
-		else
-		{
-			ELOG("Unsupported amount of channels in source image data (" << numChannels << "), only 3 or 4 channels are supported!");
-			return false;
+		case TextureUsage::Grayscale:
+			{
+				// Extract only the red channel (or luminance) from the RGBA source
+				const size_t pixelCount = static_cast<size_t>(width) * height;
+				data.data.resize(pixelCount);
+				for (size_t i = 0; i < pixelCount; ++i)
+				{
+					data.data[i] = rawData[i * 4]; // R channel
+				}
+				data.format = ImageFormat::R8;
+				ILOG("Converted to single-channel grayscale");
+			}
+			break;
+
+		case TextureUsage::NormalMap:
+			{
+				// Extract only R and G channels (XY of the normal), Z can be reconstructed in shader
+				const size_t pixelCount = static_cast<size_t>(width) * height;
+				data.data.resize(pixelCount * 2);
+				for (size_t i = 0; i < pixelCount; ++i)
+				{
+					data.data[i * 2 + 0] = rawData[i * 4 + 0]; // R = X
+					data.data[i * 2 + 1] = rawData[i * 4 + 1]; // G = Y
+				}
+				data.format = ImageFormat::RG8;
+				ILOG("Converted to two-channel normal map (XY)");
+			}
+			break;
+
+		case TextureUsage::Color:
+		default:
+			{
+				if (numChannels == 3)
+				{
+					data.format = ImageFormat::RGBX;
+				}
+				else if (numChannels == 4)
+				{
+					data.format = ImageFormat::RGBA;
+				}
+				else if (numChannels == 1)
+				{
+					// Single-channel source but user wants color — expand to RGBA
+					data.format = ImageFormat::RGBX;
+				}
+				else
+				{
+					ELOG("Unsupported amount of channels in source image data (" << numChannels << ")!");
+					return false;
+				}
+				data.data = rawData;
+			}
+			break;
 		}
 
-		data.data = rawData;
 		return true;
 	}
 
-	/// @brief Determines the output pixel format.
+	/// @brief Determines the output pixel format based on the image format and compression setting.
 	static mmo::tex::v1_0::PixelFormat DetermineOutputFormat(const ImageFormat info, const bool compress)
 	{
-		// Determine output pixel format
 		if (!compress)
 		{
 			switch (info)
@@ -194,12 +278,16 @@ namespace mmo
 			case mmo::ImageFormat::DXT5:
 				DLOG("Output format: DXT5");
 				return mmo::tex::v1_0::DXT5;
+			case mmo::ImageFormat::R8:
+				DLOG("Output format: R8");
+				return mmo::tex::v1_0::R8;
+			case mmo::ImageFormat::RG8:
+				DLOG("Output format: RG8");
+				return mmo::tex::v1_0::RG8;
 			}
 		}
 		else
 		{
-			// If there is an alpha channel in the source format, we need to apply DXT5
-			// since DXT1 does not support alpha channels
 			switch (info)
 			{
 			case mmo::ImageFormat::RGBA:
@@ -210,6 +298,12 @@ namespace mmo
 			case mmo::ImageFormat::DXT1:
 				DLOG("Output format: DXT1");
 				return mmo::tex::v1_0::DXT1;
+			case mmo::ImageFormat::R8:
+				DLOG("Output format: BC4");
+				return mmo::tex::v1_0::BC4;
+			case mmo::ImageFormat::RG8:
+				DLOG("Output format: BC5");
+				return mmo::tex::v1_0::BC5;
 			}
 		}
 
@@ -308,12 +402,28 @@ namespace mmo
 
 				ILOG("Generating mip #" << i << " with size " << newWidth << "x" << newHeight);
 
-				const stbir_pixel_layout pixelLayout = /*data.format == ImageFormat::RGBX ? STBIR_RGB : */STBIR_RGBA;
-				const uint32 numChannels = /*data.format == ImageFormat::RGBX ? 3 :*/ 4;
+				// Determine channel count and pixel layout based on the source format
+				uint32 numChannels;
+				stbir_pixel_layout pixelLayout;
+				switch (data.format)
+				{
+				case ImageFormat::R8:
+					numChannels = 1;
+					pixelLayout = STBIR_1CHANNEL;
+					break;
+				case ImageFormat::RG8:
+					numChannels = 2;
+					pixelLayout = STBIR_2CHANNEL;
+					break;
+				default:
+					numChannels = 4;
+					pixelLayout = STBIR_RGBA;
+					break;
+				}
 
 				// Resize the image
 				resizedData.resize(newWidth * newHeight * numChannels);
-				stbir_resize_uint8_srgb(data.data.data(), header.width, header.height, 
+				stbir_resize_uint8_linear(data.data.data(), header.width, header.height, 
 					0, resizedData.data(), newWidth, newHeight, 0, pixelLayout);
 
 				dataPtr = &resizedData;
@@ -326,22 +436,98 @@ namespace mmo
 			// Apply compression
 			if (applyCompression)
 			{
-				// Determine if dxt5 is used
-				const bool useDxt5 = header.format == v1_0::DXT5;
+				if (header.format == v1_0::BC4)
+				{
+					// BC4: compress single-channel data
+					// We need to expand R8 to RGBA for stb_dxt, then compress as DXT5 and extract alpha block
+					// Alternative: write a simple BC4 compressor
+					// For now, expand to RGBA and use DXT5, extracting only the alpha blocks
+					const size_t pixelCount = static_cast<size_t>(dataWidth) * dataHeight;
+					std::vector<uint8> expandedData(pixelCount * 4);
+					for (size_t p = 0; p < pixelCount; ++p)
+					{
+						expandedData[p * 4 + 0] = 0;
+						expandedData[p * 4 + 1] = 0;
+						expandedData[p * 4 + 2] = 0;
+						expandedData[p * 4 + 3] = (*dataPtr)[p]; // Store value in alpha for DXT5 alpha block
+					}
 
-				// Calculate compressed buffer size
-				const size_t compressedSize = useDxt5 ? dataPtr->size() / 4 : dataPtr->size() / 8;
+					// Compress as DXT5, then extract only the alpha blocks (first 8 bytes of each 16-byte block)
+					const size_t dxt5Size = pixelCount; // DXT5 = 1 byte per pixel
+					std::vector<uint8> dxt5Buffer(dxt5Size);
+					rygCompress(dxt5Buffer.data(), expandedData.data(), dataWidth, dataHeight, true);
 
-				// Allocate buffer for compression
-				buffer.resize(compressedSize);
+					// Extract alpha blocks: each DXT5 block is 16 bytes, alpha block is first 8 bytes
+					const size_t numBlocksX = std::max(1, (dataWidth + 3) / 4);
+					const size_t numBlocksY = std::max(1, (dataHeight + 3) / 4);
+					const size_t totalBlocks = numBlocksX * numBlocksY;
+					buffer.resize(totalBlocks * 8);
+					for (size_t b = 0; b < totalBlocks; ++b)
+					{
+						std::memcpy(&buffer[b * 8], &dxt5Buffer[b * 16], 8);
+					}
 
-				// Apply compression
-				ILOG("Original size: " << dataPtr->size());
-				rygCompress(buffer.data(), dataPtr->data(), dataWidth, dataHeight, useDxt5);
-				ILOG("Compressed size: " << buffer.size());
+					ILOG("BC4 compressed size: " << buffer.size());
+					header.mipmapLengths[i] = static_cast<uint32>(buffer.size());
+					sink.Write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
+				}
+				else if (header.format == v1_0::BC5)
+				{
+					// BC5: two independent BC4 blocks (one for R, one for G)
+					const size_t pixelCount = static_cast<size_t>(dataWidth) * dataHeight;
+					const size_t numBlocksX = std::max(1, (dataWidth + 3) / 4);
+					const size_t numBlocksY = std::max(1, (dataHeight + 3) / 4);
+					const size_t totalBlocks = numBlocksX * numBlocksY;
+					buffer.resize(totalBlocks * 16); // 16 bytes per BC5 block
 
-				header.mipmapLengths[i] = static_cast<uint32>(buffer.size());
-				sink.Write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
+					// Compress R channel via DXT5 alpha
+					std::vector<uint8> expandedR(pixelCount * 4, 0);
+					for (size_t p = 0; p < pixelCount; ++p)
+					{
+						expandedR[p * 4 + 3] = (*dataPtr)[p * 2 + 0]; // R in alpha
+					}
+					std::vector<uint8> dxt5R(pixelCount);
+					rygCompress(dxt5R.data(), expandedR.data(), dataWidth, dataHeight, true);
+
+					// Compress G channel via DXT5 alpha
+					std::vector<uint8> expandedG(pixelCount * 4, 0);
+					for (size_t p = 0; p < pixelCount; ++p)
+					{
+						expandedG[p * 4 + 3] = (*dataPtr)[p * 2 + 1]; // G in alpha
+					}
+					std::vector<uint8> dxt5G(pixelCount);
+					rygCompress(dxt5G.data(), expandedG.data(), dataWidth, dataHeight, true);
+
+					// Interleave: BC5 block = alpha block from R + alpha block from G
+					for (size_t b = 0; b < totalBlocks; ++b)
+					{
+						std::memcpy(&buffer[b * 16 + 0], &dxt5R[b * 16], 8);  // R block
+						std::memcpy(&buffer[b * 16 + 8], &dxt5G[b * 16], 8);  // G block
+					}
+
+					ILOG("BC5 compressed size: " << buffer.size());
+					header.mipmapLengths[i] = static_cast<uint32>(buffer.size());
+					sink.Write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
+				}
+				else
+				{
+					// DXT1 or DXT5 compression for standard color textures
+					const bool useDxt5 = header.format == v1_0::DXT5;
+
+					// Calculate compressed buffer size
+					const size_t compressedSize = useDxt5 ? dataPtr->size() / 4 : dataPtr->size() / 8;
+
+					// Allocate buffer for compression
+					buffer.resize(compressedSize);
+
+					// Apply compression
+					ILOG("Original size: " << dataPtr->size());
+					rygCompress(buffer.data(), dataPtr->data(), dataWidth, dataHeight, useDxt5);
+					ILOG("Compressed size: " << buffer.size());
+
+					header.mipmapLengths[i] = static_cast<uint32>(buffer.size());
+					sink.Write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
+				}
 			}
 			else
 			{
