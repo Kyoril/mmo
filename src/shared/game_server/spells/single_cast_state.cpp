@@ -1767,50 +1767,218 @@ namespace mmo
 		}
 
 		MarkAffectedTarget(*unitTarget);
-		const float minDamage = m_cast.GetExecuter().Get<float>(object_fields::MinDamage);
-		const float maxDamage = m_cast.GetExecuter().Get<float>(object_fields::MaxDamage);
-		const uint32 casterLevel = m_cast.GetExecuter().Get<uint32>(object_fields::Level);
 
+		auto& executer = m_cast.GetExecuter();
+		const float minDamage = executer.Get<float>(object_fields::MinDamage);
+		const float maxDamage = executer.Get<float>(object_fields::MaxDamage);
+		const uint32 casterLevel = executer.Get<uint32>(object_fields::Level);
 		const int32 bonus = CalculateEffectBasePoints(effect);
+		const auto& combatSettings = executer.GetCombatSettings();
 
-		// Calculate damage between minimum and maximum damage
-		std::uniform_real_distribution distribution(minDamage + bonus, maxDamage + bonus + 1.0f);
-		uint32 totalDamage = static_cast<uint32>(distribution(randomGenerator));
+		// Auto-attack spells (AutoRepeat) use the full melee combat table and send
+		// AttackerStateUpdate (white damage text) instead of SpellDamageLog (yellow).
+		const bool isAutoAttack = (m_spell.attributes(1) & spell_attributes_b::AutoRepeat) != 0;
 
-		// Physical damage is reduced by armor
-		if (school == spell_school::Normal)
+		if (isAutoAttack)
 		{
-			totalDamage = unitTarget->CalculateArmorReducedDamage(casterLevel, totalDamage);
+			// Roll the full melee combat table
+			const MeleeAttackOutcome outcome = executer.RollMeleeOutcomeAgainst(*unitTarget, weapon_attack::BaseAttack);
+
+			// Calculate base weapon damage
+			std::uniform_real_distribution distribution(minDamage + bonus, maxDamage + bonus + 1.0f);
+			uint32 totalDamage = static_cast<uint32>(distribution(randomGenerator));
+
+			uint32 hitInfo = hit_info::NormalSwing;
+			uint32 victimState = victim_state::Normal;
+			bool hit = true;
+
+			switch (outcome)
+			{
+			case melee_attack_outcome::Crit:
+				hitInfo |= hit_info::CriticalHit;
+				totalDamage = static_cast<uint32>(totalDamage * combatSettings.melee_crit_multiplier());
+				break;
+
+			case melee_attack_outcome::Crushing:
+				hitInfo |= hit_info::Crushing;
+				totalDamage = static_cast<uint32>(totalDamage * combatSettings.crushing_damage_multiplier());
+				break;
+
+			case melee_attack_outcome::Glancing:
+				hitInfo |= hit_info::Glancing;
+				{
+					const int32 skillDiff = unitTarget->GetMaxSkillValueForLevel(unitTarget->GetLevel()) - executer.GetMaxSkillValueForLevel(casterLevel);
+					float damageReduction = std::min(combatSettings.glancing_max_reduction(), static_cast<float>(skillDiff) * combatSettings.glancing_reduction_per_skill_diff());
+					float glancingMod = 1.0f - (damageReduction / 100.0f);
+					totalDamage = static_cast<uint32>(totalDamage * glancingMod);
+				}
+				break;
+
+			case melee_attack_outcome::Miss:
+				hitInfo |= hit_info::Miss;
+				victimState = victim_state::Normal;
+				hit = false;
+				totalDamage = 0;
+				break;
+
+			case melee_attack_outcome::Parry:
+				hitInfo |= hit_info::Miss;
+				victimState = victim_state::Parry;
+				hit = false;
+				totalDamage = 0;
+				break;
+
+			case melee_attack_outcome::Dodge:
+				hitInfo |= hit_info::Miss;
+				victimState = victim_state::Dodge;
+				hit = false;
+				totalDamage = 0;
+				break;
+
+			case melee_attack_outcome::Normal:
+				break;
+
+			default:
+				break;
+			}
+
+			// Check for block after hit determination
+			uint32 blockedDamage = 0;
+			if (hit && unitTarget->CanBlock() && unitTarget->IsFacingTowards(executer))
+			{
+				std::uniform_real_distribution blockChanceDist(0.0f, 100.0f);
+				if (blockChanceDist(randomGenerator) < unitTarget->BlockChance())
+				{
+					uint32 blockValue = combatSettings.default_block_value();
+					blockedDamage = std::min(blockValue, totalDamage);
+					totalDamage -= blockedDamage;
+
+					hitInfo |= hit_info::Block;
+					victimState = victim_state::Blocks;
+
+					unitTarget->OnBlock();
+				}
+			}
+
+			// Apply armor reduction for physical damage
+			if (hit && totalDamage > 0 && school == spell_school::Normal)
+			{
+				totalDamage = unitTarget->CalculateArmorReducedDamage(casterLevel, totalDamage);
+			}
+
+			// Apply spell mods
+			if (hit && totalDamage > 0)
+			{
+				executer.ApplySpellMod(spell_mod_op::Damage, m_spell.id(), totalDamage);
+			}
+
+			// Deal damage
+			uint32 absorbedDamage = 0;
+			if (hit && totalDamage > 0)
+			{
+				if (unitTarget->Damage(totalDamage, school, &executer, damage_type::AttackSwing) > 0)
+				{
+					unitTarget->threatened(executer, static_cast<float>(totalDamage));
+				}
+			}
+
+			// Trigger defense events
+			if (outcome == melee_attack_outcome::Parry)
+			{
+				unitTarget->OnParry();
+			}
+			else if (outcome == melee_attack_outcome::Dodge)
+			{
+				unitTarget->OnDodge();
+			}
+
+			// Send melee damage packet (white text) instead of SpellDamageLog (yellow text)
+			executer.SendAttackerStateUpdate(unitTarget->GetGuid(), hitInfo, victimState, totalDamage, school, absorbedDamage, 0, blockedDamage);
+
+			// Generate rage based on damage done
+			if (totalDamage > 0 && executer.Get<uint32>(object_fields::PowerType) == power_type::Rage)
+			{
+				const float rageConversion = static_cast<float>(
+					(combatSettings.rage_conversion_quadratic() * casterLevel * casterLevel) +
+					combatSettings.rage_conversion_linear() * casterLevel) +
+					combatSettings.rage_conversion_constant();
+				const float addRage = (static_cast<float>(totalDamage) / rageConversion) * combatSettings.rage_damage_factor();
+				executer.AddPower(power_type::Rage, addRage);
+			}
+
+			// Trigger melee auto-attack proc events
+			if (hit)
+			{
+				uint32 procEx = 0;
+				if (hitInfo & hit_info::CriticalHit)
+				{
+					procEx |= proc_ex_flags::CriticalHit;
+				}
+				else
+				{
+					procEx |= proc_ex_flags::NormalHit;
+				}
+
+				if (victimState == victim_state::Dodge)
+				{
+					procEx |= proc_ex_flags::Dodge;
+				}
+				else if (victimState == victim_state::Parry)
+				{
+					procEx |= proc_ex_flags::Parry;
+				}
+				else if (victimState == victim_state::Blocks)
+				{
+					procEx |= proc_ex_flags::Block;
+				}
+
+				executer.TriggerProcEvent(spell_proc_flags::DoneMeleeAutoAttack, unitTarget.get(), totalDamage, procEx, school, false);
+				unitTarget->TriggerProcEvent(spell_proc_flags::TakenMeleeAutoAttack, &executer, totalDamage, procEx, school, false);
+			}
 		}
-
-		m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Damage, m_spell.id(), totalDamage);
-
-		// Get configurable crit chance and multiplier from combat settings
-		const auto& combatSettings = m_cast.GetExecuter().GetCombatSettings();
-		float critChance = combatSettings.spell_weapon_default_crit_chance();
-		std::uniform_real_distribution critDistribution(0.0f, 100.0f);
-
-		m_cast.GetExecuter().ApplySpellMod(spell_mod_op::CritChance, m_spell.id(), critChance);
-
-		bool isCrit = false;
-		if (critDistribution(randomGenerator) < critChance)
+		else
 		{
-			isCrit = true;
-			totalDamage = static_cast<uint32>(totalDamage * combatSettings.spell_weapon_crit_multiplier());
-		}
+			// Regular weapon damage spell (e.g., Heroic Strike, Mortal Strike)
+			// Uses simplified crit roll and SpellDamageLog
 
-		// Log spell damage to client
-		if (unitTarget->Damage(totalDamage, school, &m_cast.GetExecuter(), damage_type::PhysicalAbility) > 0)
-		{
-			float threat = static_cast<float>(totalDamage) * m_spell.threat_multiplier();
-			m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Threat, m_spell.id(), threat);
-			unitTarget->threatened(m_cast.GetExecuter(), threat);
-		}
-		m_cast.GetExecuter().SpellDamageLog(unitTarget->GetGuid(), totalDamage, school, isCrit ? DamageFlags::Crit : DamageFlags::None, m_spell);
+			// Calculate damage between minimum and maximum damage
+			std::uniform_real_distribution distribution(minDamage + bonus, maxDamage + bonus + 1.0f);
+			uint32 totalDamage = static_cast<uint32>(distribution(randomGenerator));
 
-		// Trigger proc events for spell damage
-		m_cast.GetExecuter().TriggerProcEvent(spell_proc_flags::DoneSpellMeleeDmgClass, unitTarget.get(), totalDamage, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
-		unitTarget->TriggerProcEvent(spell_proc_flags::TakenSpellMeleeDmgClass, &m_cast.GetExecuter(), totalDamage, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
+			// Physical damage is reduced by armor
+			if (school == spell_school::Normal)
+			{
+				totalDamage = unitTarget->CalculateArmorReducedDamage(casterLevel, totalDamage);
+			}
+
+			executer.ApplySpellMod(spell_mod_op::Damage, m_spell.id(), totalDamage);
+
+			// Get configurable crit chance and multiplier from combat settings
+			float critChance = combatSettings.spell_weapon_default_crit_chance();
+			std::uniform_real_distribution critDistribution(0.0f, 100.0f);
+
+			executer.ApplySpellMod(spell_mod_op::CritChance, m_spell.id(), critChance);
+
+			bool isCrit = false;
+			if (critDistribution(randomGenerator) < critChance)
+			{
+				isCrit = true;
+				totalDamage = static_cast<uint32>(totalDamage * combatSettings.spell_weapon_crit_multiplier());
+			}
+
+			// Log spell damage to client
+			if (unitTarget->Damage(totalDamage, school, &executer, damage_type::PhysicalAbility) > 0)
+			{
+				float threat = static_cast<float>(totalDamage) * m_spell.threat_multiplier();
+				executer.ApplySpellMod(spell_mod_op::Threat, m_spell.id(), threat);
+				unitTarget->threatened(executer, threat);
+			}
+			executer.SpellDamageLog(unitTarget->GetGuid(), totalDamage, school, isCrit ? DamageFlags::Crit : DamageFlags::None, m_spell);
+
+			// Trigger proc events for spell damage
+			executer.TriggerProcEvent(spell_proc_flags::DoneSpellMeleeDmgClass, unitTarget.get(), totalDamage, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
+			unitTarget->TriggerProcEvent(spell_proc_flags::TakenSpellMeleeDmgClass, &executer, totalDamage, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
+		}
 	}
 
 	AuraContainer& SingleCastState::GetOrCreateAuraContainer(GameUnitS& target)

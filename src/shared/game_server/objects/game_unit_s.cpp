@@ -753,6 +753,31 @@ namespace mmo
 		m_netUnitWatcher->OnSpellDamageLog(targetGuid, amount, school, flags, spell);
 	}
 
+	void GameUnitS::SendAttackerStateUpdate(uint64 victimGuid, uint32 hitInfo, uint32 victimState,
+		uint32 totalDamage, uint32 school, uint32 absorbedDamage, uint32 resistedDamage, uint32 blockedDamage)
+	{
+		std::vector<char> buffer;
+		io::VectorSink sink(buffer);
+		game::Protocol::OutgoingPacket packet(sink);
+		packet.Start(game::realm_client_packet::AttackerStateUpdate);
+		packet
+			<< io::write_packed_guid(GetGuid())
+			<< io::write_packed_guid(victimGuid)
+			<< io::write<uint32>(hitInfo)
+			<< io::write<uint32>(victimState)
+			<< io::write<uint32>(totalDamage)
+			<< io::write<uint32>(school)
+			<< io::write<uint32>(absorbedDamage)
+			<< io::write<uint32>(resistedDamage)
+			<< io::write<uint32>(blockedDamage);
+		packet.Finish();
+		ForEachSubscriberInSight(
+			[&packet, &buffer](TileSubscriber& subscriber)
+			{
+				subscriber.SendPacket(packet, buffer);
+			});
+	}
+
 	void GameUnitS::EnvironmentalDamageLog(uint64 targetGuid, uint32 amount, EnvironmentalDamageType type)
 	{
 		if (!m_netUnitWatcher)
@@ -2520,26 +2545,7 @@ namespace mmo
 		}
 
 		// Notify all subscribers
-		std::vector<char> buffer;
-		io::VectorSink sink(buffer);
-		game::Protocol::OutgoingPacket packet(sink);
-		packet.Start(game::realm_client_packet::AttackerStateUpdate);
-		packet
-			<< io::write_packed_guid(GetGuid())
-			<< io::write_packed_guid(victim->GetGuid())
-			<< io::write<uint32>(hitInfo)
-			<< io::write<uint32>(victimState)
-			<< io::write<uint32>(totalDamage)
-			<< io::write<uint32>(spell_school::Normal)
-			<< io::write<uint32>(absorbedDamage) // Absorbed damage
-			<< io::write<uint32>(0)				 // Resisted damage
-			<< io::write<uint32>(blockedDamage); // Blocked damage
-		packet.Finish();
-		ForEachSubscriberInSight(
-			[&packet, &buffer](TileSubscriber &subscriber)
-			{
-				subscriber.SendPacket(packet, buffer);
-			});
+		SendAttackerStateUpdate(victim->GetGuid(), hitInfo, victimState, totalDamage, spell_school::Normal, absorbedDamage, 0, blockedDamage);
 
 		// Generate rage based on damage done (using combat settings)
 		if (totalDamage > 0 && Get<uint32>(object_fields::PowerType) == power_type::Rage)
