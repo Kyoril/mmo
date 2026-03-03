@@ -1785,8 +1785,9 @@ namespace mmo
 
 		m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Damage, m_spell.id(), totalDamage);
 
-		// TODO: Add stuff like immunities, miss chance, dodge, parry, glancing, crushing, crit, block, absorb etc.
-		float critChance = 5.0f;			// 5% crit chance hard coded for now
+		// Get configurable crit chance and multiplier from combat settings
+		const auto& combatSettings = m_cast.GetExecuter().GetCombatSettings();
+		float critChance = combatSettings.spell_weapon_default_crit_chance();
 		std::uniform_real_distribution critDistribution(0.0f, 100.0f);
 
 		m_cast.GetExecuter().ApplySpellMod(spell_mod_op::CritChance, m_spell.id(), critChance);
@@ -1795,7 +1796,7 @@ namespace mmo
 		if (critDistribution(randomGenerator) < critChance)
 		{
 			isCrit = true;
-			totalDamage *= 2;
+			totalDamage = static_cast<uint32>(totalDamage * combatSettings.spell_weapon_crit_multiplier());
 		}
 
 		// Log spell damage to client

@@ -261,6 +261,7 @@ namespace mmo
 
 	namespace proto
 	{
+		class CombatSettings;
 		class FactionTemplateEntry;
 		class SpellEntry;
 	}
@@ -1028,6 +1029,15 @@ public:
 
 		/// Stops attacking the current victim.
 		void StopAttack();
+
+		/// Gets the auto-attack spell for the current weapon configuration.
+		/// Returns nullptr if no auto-attack spell is configured (legacy behavior).
+		/// Override in subclasses to provide class-specific auto-attack spells.
+		virtual const proto::SpellEntry* GetAutoAttackSpell() const { return nullptr; }
+
+		/// Gets the combat settings containing configurable combat formula parameters.
+		/// Uses the project's combat settings if available, otherwise returns defaults.
+		const proto::CombatSettings& GetCombatSettings() const;
 
 		/// Sets the target of the unit.
 		/// @param targetGuid The GUID of the target.

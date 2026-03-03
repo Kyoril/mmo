@@ -583,4 +583,14 @@ namespace mmo
 	{
 		return m_entry ? m_entry->name() : m_originalEntry.name();
 	}
+
+	const proto::SpellEntry* GameCreatureS::GetAutoAttackSpell() const
+	{
+		if (m_entry && m_entry->has_auto_attack_spell())
+		{
+			return m_project.spells.getById(m_entry->auto_attack_spell());
+		}
+
+		return nullptr;
+	}
 }

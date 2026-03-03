@@ -71,6 +71,18 @@ message ClassEntry {
 	repeated HealthStatSource healthStatSources = 18;
 	
 	repeated ManaStatSource manaStatSources = 19;
+
+	// Auto-attack spell used when melee auto-attacking with the main hand weapon.
+	// If 0, the unit has no melee auto-attack.
+	optional uint32 mainhand_auto_attack_spell = 20;
+
+	// Auto-attack spell used when auto-attacking with an off-hand weapon.
+	// If 0, no off-hand auto-attack is performed.
+	optional uint32 offhand_auto_attack_spell = 21;
+
+	// Auto-attack spell used for ranged auto-attacks (e.g. Auto Shot with a bow).
+	// If 0, no ranged auto-attack is performed.
+	optional uint32 ranged_auto_attack_spell = 22;
 }
 
 message Classes {

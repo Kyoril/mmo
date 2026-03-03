@@ -172,6 +172,12 @@ namespace mmo
 		}
 
 		const String& GetName() const override;
+
+	protected:
+		/// @brief Returns the auto-attack spell configured for this creature, if any.
+		/// @return Pointer to the auto-attack spell entry, or nullptr if not configured.
+		const proto::SpellEntry* GetAutoAttackSpell() const override;
+
 	private:
 
 		/// Calculates and applies stats using the new stat-based system

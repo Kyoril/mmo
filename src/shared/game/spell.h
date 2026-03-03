@@ -538,7 +538,11 @@ namespace mmo
 
 			HiddenAura = 1 << 1,
 
-			Talent = 1 << 2
+			Talent = 1 << 2,
+
+			/// Spell will auto-repeat on a timer (e.g. Auto Shot for ranged weapons).
+			/// The repeat interval is determined by the weapon's attack speed.
+			AutoRepeat = 1 << 3,
 		};
 	}
 

@@ -1187,6 +1187,16 @@ namespace mmo
 		return GameUnitS::GetUnitMissChance();
 	}
 
+	const proto::SpellEntry* GamePlayerS::GetAutoAttackSpell() const
+	{
+		if (m_classEntry && m_classEntry->has_mainhand_auto_attack_spell())
+		{
+			return m_project.spells.getById(m_classEntry->mainhand_auto_attack_spell());
+		}
+
+		return nullptr;
+	}
+
 	bool GamePlayerS::HasOffhandWeapon() const
 	{
 		if (m_inventory.GetWeaponByAttackType(weapon_attack::OffhandAttack, false, true))

@@ -33,6 +33,7 @@
 #include "unit_loot_editor_window.h"
 #include "trainer_editor_window.h"
 #include "vendor_editor_window.h"
+#include "combat_settings_editor_window.h"
 
 namespace mmo
 {
@@ -355,6 +356,13 @@ namespace mmo
             [this]() { OpenEditorWindow(std::type_index(typeid(GossipEditorWindow))); },
             static_cast<int>(m_project.gossipMenus.count())
             });
+
+        miscCategory.editors.push_back({
+            std::type_index(typeid(CombatSettingsEditorWindow)),
+            "Combat Settings",
+            [this]() { OpenEditorWindow(std::type_index(typeid(CombatSettingsEditorWindow))); },
+            0
+        });
         
         // Add all categories to the main list
         m_categories.push_back(std::move(gameplayCategory));

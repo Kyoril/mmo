@@ -98,6 +98,9 @@ message UnitEntry {
 	
 	// Name of the combat script to use for this creature (registered in CreatureCombatScriptRegistry)
 	optional string script_name = 83;
+
+	// Auto-attack spell for this creature (if configured, melee auto-attack uses the spell system)
+	optional uint32 auto_attack_spell = 84;
 }
 
 message Units {

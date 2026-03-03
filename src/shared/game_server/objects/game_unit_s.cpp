@@ -8,6 +8,7 @@
 #include "binary_io/vector_sink.h"
 #include "game/chat_type.h"
 #include "proto_data/project.h"
+#include "shared/proto_data/combat_settings.pb.h"
 
 namespace mmo
 {
@@ -948,17 +949,19 @@ namespace mmo
 			return;
 		}
 
+		const auto& settings = GetCombatSettings();
+
 		// Reset swing timer for main hand weapon
 		const GameTime now = GetAsyncTimeMs();
 
-		// Reduce attack time to 300 ms if it's higher
+		// Reduce attack time to parry_haste_min_swing_ms if it's higher
 		const uint32 swingTime = Get<uint32>(object_fields::BaseAttackTime);
 
-		// This is the ideal time (we want to trigger the next attack swing in 0.3 seconds from now on)
-		const uint32 idealLastMainHand = now - swingTime + 300;
+		// This is the ideal time (we want to trigger the next attack swing in parry_haste_min_swing_ms from now on)
+		const uint32 idealLastMainHand = now - swingTime + settings.parry_haste_min_swing_ms();
 
 		// If last swing was even further in the past, we don't need to adjust anything. But if it was more recent, we adjust the timing so
-		// that the next attack swing will trigger in at least 0.3 seconds
+		// that the next attack swing will trigger in at least parry_haste_min_swing_ms
 		if (m_lastMainHand > idealLastMainHand)
 		{
 			m_lastMainHand = idealLastMainHand;
@@ -1472,6 +1475,8 @@ namespace mmo
 
 	MeleeAttackOutcome GameUnitS::RollMeleeOutcomeAgainst(GameUnitS &victim, const WeaponAttack attackType) const
 	{
+		const auto& settings = GetCombatSettings();
+
 		// TODO: Add check for melee immunity
 
 		const int32 attackerMaxSkillValueForLevel = GetMaxSkillValueForLevel(GetLevel());
@@ -1531,9 +1536,8 @@ namespace mmo
 		// Check for glancing blow (only happens when attacking higher level targets)
 		if (GetLevel() <= victim.GetLevel())
 		{
-			// Glancing blow chance formula (approximation)
-			float glancingChance = 10.0f + (victim.GetLevel() - GetLevel()) * 5.0f;
-			glancingChance = std::min(glancingChance, 40.0f);
+			float glancingChance = settings.glancing_base_chance() + (victim.GetLevel() - GetLevel()) * settings.glancing_chance_per_level();
+			glancingChance = std::min(glancingChance, settings.glancing_max_chance());
 
 			chance += glancingChance;
 			if (roll < chance)
@@ -1551,12 +1555,11 @@ namespace mmo
 			return MeleeAttackOutcome::Crit;
 		}
 
-		// Check for crushing blow (only happens when attacking lower level targets)
-		if (GetLevel() >= victim.GetLevel() + 4)
+		// Check for crushing blow (only happens when attacker is significantly higher level)
+		if (GetLevel() >= victim.GetLevel() + static_cast<int32>(settings.crushing_level_threshold()))
 		{
-			// Crushing blow chance (approximation)
-			float crushingChance = 15.0f + (GetLevel() - victim.GetLevel() - 3) * 2.0f;
-			crushingChance = std::min(crushingChance, 25.0f);
+			float crushingChance = settings.crushing_base_chance() + (GetLevel() - victim.GetLevel() - 3) * settings.crushing_chance_per_level();
+			crushingChance = std::min(crushingChance, settings.crushing_max_chance());
 
 			chance += crushingChance;
 			if (roll < chance)
@@ -1664,6 +1667,11 @@ namespace mmo
 		// Notify all subscribers
 		ForEachSubscriberInSight([&packet, &buffer](TileSubscriber &subscriber)
 								 { subscriber.SendPacket(packet, buffer); });
+	}
+
+	const proto::CombatSettings& GameUnitS::GetCombatSettings() const
+	{
+		return m_project.combatSettings;
 	}
 
 	void GameUnitS::SetTarget(uint64 targetGuid)
@@ -1951,6 +1959,8 @@ namespace mmo
 
 	uint32 GameUnitS::CalculateArmorReducedDamage(const uint32 attackerLevel, const uint32 damage) const
 	{
+		const auto& settings = GetCombatSettings();
+
 		float armor = static_cast<float>(Get<uint32>(object_fields::Armor));
 
 		// Apply armor penetration effects
@@ -1967,10 +1977,10 @@ namespace mmo
 			armor = 0.0f;
 		}
 
-		// Damage reduction = armor / (armor + 400 + 85 * attacker_level)
-		// Maximum damage reduction from armor is 75%
-		float armorFactor = armor / (armor + 400.0f + 85.0f * attackerLevel);
-		armorFactor = Clamp(armorFactor, 0.0f, 0.75f);
+		// Damage reduction = armor / (armor + armor_constant + armor_level_factor * attacker_level)
+		// Maximum damage reduction from armor is max_armor_reduction_pct
+		float armorFactor = armor / (armor + settings.armor_constant() + settings.armor_level_factor() * attackerLevel);
+		armorFactor = Clamp(armorFactor, 0.0f, settings.max_armor_reduction_pct());
 
 		// Apply the damage reduction
 		uint32 reducedDamage = damage - static_cast<uint32>(damage * armorFactor);
@@ -2316,8 +2326,10 @@ namespace mmo
 
 	void GameUnitS::OnAttackSwing()
 	{
-		// This value in milliseconds is used to retry auto attack in case of an error like out of range or wrong facing
-		constexpr GameTime attackSwingErrorDelay = 200;
+		const auto& settings = GetCombatSettings();
+
+		// Error delay from combat settings
+		const GameTime attackSwingErrorDelay = settings.attack_swing_error_delay_ms();
 
 		// Remember that we tried to swing just now
 		const GameTime now = GetAsyncTimeMs();
@@ -2358,6 +2370,7 @@ namespace mmo
 			m_victim.reset();
 			return;
 		}
+
 		// Get the distance - use combined melee reach of both attacker and target
 		const float attackRange = GetMeleeReach() + victim->GetMeleeReach();
 		if (victim->GetSquaredDistanceTo(GetPosition(), false) > (attackRange * attackRange))
@@ -2374,6 +2387,26 @@ namespace mmo
 			m_attackSwingCountdown.SetEnd(GetAsyncTimeMs() + attackSwingErrorDelay);
 			return;
 		}
+
+		// Check if we have a configured auto-attack spell to use instead of the legacy hardcoded combat
+		const proto::SpellEntry* autoAttackSpell = GetAutoAttackSpell();
+		if (autoAttackSpell)
+		{
+			// Cast the auto-attack spell targeting the victim.
+			// The spell itself handles damage calculation, combat table, procs, etc.
+			SpellTargetMap targetMap;
+			targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+			targetMap.SetUnitTarget(victim->GetGuid());
+
+			// Auto-attack spells are always instant and treated as procs (no resource cost, no cooldown check)
+			CastSpell(targetMap, *autoAttackSpell, 0, true);
+
+			OnAttackSwingEvent(AttackSwingEvent::Success);
+			TriggerNextAutoAttack();
+			return;
+		}
+
+		// === Legacy hardcoded auto-attack logic (fallback when no auto-attack spell is configured) ===
 
 		// Calculate melee hit outcome
 		const MeleeAttackOutcome outcome = RollMeleeOutcomeAgainst(*victim, WeaponAttack::BaseAttack);
@@ -2392,23 +2425,19 @@ namespace mmo
 		{
 		case MeleeAttackOutcome::Crit:
 			hitInfo |= hit_info::CriticalHit;
-			// crits are 2x damage before armor
-			totalDamage *= 2;
+			totalDamage = static_cast<uint32>(totalDamage * settings.melee_crit_multiplier());
 			break;
 
 		case MeleeAttackOutcome::Crushing:
 			hitInfo |= hit_info::Crushing;
-			// Crushing blows do 150% damage
-			totalDamage = static_cast<uint32>(totalDamage * 1.5f);
+			totalDamage = static_cast<uint32>(totalDamage * settings.crushing_damage_multiplier());
 			break;
 
 		case MeleeAttackOutcome::Glancing:
 			hitInfo |= hit_info::Glancing;
-			// Glancing blows do 70%-85% damage based on skill difference
 			{
 				const int32 skillDiff = victim->GetMaxSkillValueForLevel(victim->GetLevel()) - GetMaxSkillValueForLevel(GetLevel());
-				// Normalize to 30% reduction at maximum skill diff
-				float damageReduction = std::min(30.0f, static_cast<float>(skillDiff) * 0.6f);
+				float damageReduction = std::min(settings.glancing_max_reduction(), static_cast<float>(skillDiff) * settings.glancing_reduction_per_skill_diff());
 				float glancingMod = 1.0f - (damageReduction / 100.0f);
 				totalDamage = static_cast<uint32>(totalDamage * glancingMod);
 			}
@@ -2447,9 +2476,8 @@ namespace mmo
 			std::uniform_real_distribution blockChanceDist(0.0f, 100.0f);
 			if (blockChanceDist(randomGenerator) < victim->BlockChance())
 			{
-				// Calculate block amount
-				// In Classic: base block value from shield + strength bonus
-				uint32 blockValue = 30; // Default block value, replace with actual shield block value
+				// Block value from combat settings
+				uint32 blockValue = settings.default_block_value();
 				blockedDamage = std::min(blockValue, totalDamage);
 				totalDamage -= blockedDamage;
 
@@ -2513,11 +2541,14 @@ namespace mmo
 				subscriber.SendPacket(packet, buffer);
 			});
 
-		// Generate rage based on damage done
+		// Generate rage based on damage done (using combat settings)
 		if (totalDamage > 0 && Get<uint32>(object_fields::PowerType) == power_type::Rage)
 		{
-			const float rageConversion = static_cast<float>((0.0091107836 * GetLevel() * GetLevel()) + 3.225598133 * GetLevel()) + 4.2652911f;
-			const float addRage = (static_cast<float>(totalDamage) / rageConversion) * 7.5f;
+			const float rageConversion = static_cast<float>(
+				(settings.rage_conversion_quadratic() * GetLevel() * GetLevel()) +
+				settings.rage_conversion_linear() * GetLevel()) +
+				settings.rage_conversion_constant();
+			const float addRage = (static_cast<float>(totalDamage) / rageConversion) * settings.rage_damage_factor();
 			AddPower(power_type::Rage, addRage);
 		}
 

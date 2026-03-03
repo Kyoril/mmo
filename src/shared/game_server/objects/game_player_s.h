@@ -206,6 +206,10 @@ namespace mmo
 		const std::unordered_map<uint32, uint32> &GetTalents() const { return m_talents; }
 
 	protected:
+		/// @brief Returns the auto-attack spell configured for this player's class, if any.
+		/// @return Pointer to the auto-attack spell entry, or nullptr if not configured.
+		const proto::SpellEntry* GetAutoAttackSpell() const override;
+
 		float GetUnitMissChance() const override;
 
 		bool HasOffhandWeapon() const override;
