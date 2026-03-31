@@ -5,6 +5,8 @@
 #include "base/utilities.h"
 #include "proto_data/project.h"
 #include "game_server/world/world_instance.h"
+#include "game_server/ai/creature_ai.h"
+#include "ai/creature_ai_combat_state.h"
 #include "binary_io/vector_sink.h"
 
 namespace mmo
@@ -592,5 +594,28 @@ namespace mmo
 		}
 
 		return nullptr;
+	}
+
+	bool GameCreatureS::SetCombatPhase(uint32 phase)
+	{
+		if (!m_ai)
+		{
+			return false;
+		}
+
+		auto* combatState = dynamic_cast<CreatureAICombatState*>(m_ai->GetCurrentState());
+		if (!combatState)
+		{
+			return false;
+		}
+
+		auto* script = combatState->GetScript();
+		if (!script)
+		{
+			return false;
+		}
+
+		script->SetPhase(phase);
+		return true;
 	}
 }

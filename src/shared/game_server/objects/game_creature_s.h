@@ -156,6 +156,15 @@ namespace mmo
 		/// @param enabled True to enable combat movement, false to disable.
 		void SetCombatMovement(bool enabled) { m_combatMovementEnabled = enabled; }
 
+		/// @brief Returns the creature's AI controller.
+		/// @return Pointer to the AI, or nullptr if not initialized.
+		CreatureAI* GetAI() const { return m_ai.get(); }
+
+		/// @brief Sets the creature's AI combat phase via the active combat script.
+		/// @param phase The phase number to set.
+		/// @return True if the phase was set successfully, false if the creature has no combat script.
+		bool SetCombatPhase(uint32 phase);
+
 		void RefreshStats() override;
 
 		/// Executes a callback function for every valid combat participant.

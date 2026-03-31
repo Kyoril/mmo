@@ -48,6 +48,9 @@ namespace mmo
 		/// Allow the combat state to call protected methods like CheckHealthThresholds.
 		friend class CreatureAICombatState;
 
+		/// Allow GameCreatureS to call SetPhase for trigger action forwarding.
+		friend class GameCreatureS;
+
 	public:
 
 		/**
