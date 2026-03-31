@@ -21,6 +21,7 @@ namespace mmo
 {
 	class ConditionMgr;
 	class ITriggerHandler;
+	class LuaScriptMgr;
 }
 
 namespace mmo
@@ -138,6 +139,14 @@ namespace mmo
 		/// @return Pointer to the spawner, or nullptr if not found.
 		WorldObjectSpawner* FindObjectSpawner(const String& name);
 
+		/// @brief Returns the Lua script manager, if set.
+		/// @return Pointer to the script manager, or nullptr if not set.
+		LuaScriptMgr* GetScriptMgr() const { return m_scriptMgr; }
+
+		/// @brief Sets the Lua script manager for this world instance.
+		/// @param scriptMgr Pointer to the script manager.
+		void SetScriptMgr(LuaScriptMgr* scriptMgr) { m_scriptMgr = scriptMgr; }
+
 		template<class T>
 		T* FindByGuid(uint64 guid)
 		{
@@ -232,5 +241,7 @@ namespace mmo
 		std::map<String, WorldObjectSpawner*> m_objectSpawnsByName;
 
 		const ConditionMgr& m_conditionMgr;
+
+		LuaScriptMgr* m_scriptMgr = nullptr;
 	};
 }

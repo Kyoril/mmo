@@ -15,6 +15,7 @@
 #include "player_manager.h"
 #include "game_server/condition_mgr.h"
 #include "trigger_handler.h"
+#include "lua_script_mgr.h"
 
 #include <fstream>
 #include <sstream>
@@ -136,6 +137,22 @@ namespace mmo
 		Universe universe(ioService, timer);
 		IdGenerator<uint64> objectIdGenerator(0x01);
 		WorldInstanceManager worldInstanceManager{ ioService, universe, project, objectIdGenerator, triggerHandler, conditionMgr };
+
+		/////////////////////////////////////////////////////////////////////////////////////////////////
+		// Lua scripting setup
+		/////////////////////////////////////////////////////////////////////////////////////////////////
+
+		LuaScriptMgr luaScriptMgr;
+		luaScriptMgr.LoadScripts("data/scripts");
+
+		// Inject script manager into newly created world instances
+		worldInstanceManager.instanceCreated += [&worldInstanceManager, &luaScriptMgr](const InstanceId id)
+		{
+			if (auto* instance = worldInstanceManager.GetInstanceById(id))
+			{
+				instance->SetScriptMgr(&luaScriptMgr);
+			}
+		};
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Game service setup
