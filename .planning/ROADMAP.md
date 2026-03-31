@@ -33,7 +33,7 @@
 Plans:
 - [x] 01-01-PLAN.md — Infrastructure: object fields, world object spawner methods, combat movement flag
 - [x] 01-02-PLAN.md — All 7 trigger action implementations
-- [ ] 01-03-PLAN.md — Server-side Lua event hook system
+- [x] 01-03-PLAN.md — Server-side Lua event hook system
 
 **Success criteria:**
 1. All TODO trigger actions in `trigger_handler.cpp` are implemented and tested — SetWorldObjectState changes door/object state, SetVirtualEquipmentSlot alters NPC visuals, SetPhase moves objects between phases, Dismount/SetMount work, SetSpawnState works for ObjectSpawner, SetCombatMovement enables/disables movement
