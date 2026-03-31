@@ -133,8 +133,10 @@ namespace mmo
 		///
 		CreatureSpawner* FindCreatureSpawner(const String& name);
 
-		///
-		//WorldObjectSpawner* FindObjectSpawner(const String& name);
+		/// @brief Finds a world object spawner by its name.
+		/// @param name The name to search for.
+		/// @return Pointer to the spawner, or nullptr if not found.
+		WorldObjectSpawner* FindObjectSpawner(const String& name);
 
 		template<class T>
 		T* FindByGuid(uint64 guid)

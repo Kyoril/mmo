@@ -412,6 +412,17 @@ namespace mmo
 		return it->second;
 	}
 
+	WorldObjectSpawner* WorldInstance::FindObjectSpawner(const String& name)
+	{
+		const auto it = m_objectSpawnsByName.find(name);
+		if (it == m_objectSpawnsByName.end())
+		{
+			return nullptr;
+		}
+
+		return it->second;
+	}
+
 	VisibilityGrid& WorldInstance::GetGrid() const
 	{
 		ASSERT(m_visibilityGrid);

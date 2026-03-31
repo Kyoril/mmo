@@ -46,6 +46,22 @@ namespace mmo
 			return m_objects;
 		}
 
+		/// @brief Returns whether this spawner is currently active.
+		/// @return True if the spawner is active, false otherwise.
+		bool IsActive() const { return m_active; }
+
+		/// @brief Returns whether respawning is enabled.
+		/// @return True if respawning is enabled, false otherwise.
+		bool IsRespawnEnabled() const { return m_respawn; }
+
+		/// @brief Sets whether this spawner is active. If deactivated, despawns all objects.
+		/// @param active True to activate, false to deactivate.
+		void SetState(bool active);
+
+		/// @brief Sets whether respawning is enabled for this spawner.
+		/// @param enabled True to enable respawning, false to disable.
+		void SetRespawn(bool enabled);
+
 	private:
 
 		/// Spawns one more creature and adds it to the world.
@@ -75,5 +91,7 @@ namespace mmo
 		Countdown m_respawnCountdown;
 		uint32 m_animProgress;
 		uint32 m_state;
+		bool m_active = true;
+		bool m_respawn = true;
 	};
 }

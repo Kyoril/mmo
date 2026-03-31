@@ -206,10 +206,24 @@ namespace mmo
 
 	void CreatureCombatScript::SetVirtualEquipment(uint8 slot, uint32 displayId)
 	{
-		// TODO: Implement when virtual equipment display object fields are added.
-		// For now, equipment changes are visual-only and need additional object field support.
+		if (slot >= 3)
+		{
+			WLOG("CombatScript: SetVirtualEquipment invalid slot=" << static_cast<int>(slot));
+			return;
+		}
+
+		static const uint16 virtualItemFields[] =
+		{
+			object_fields::VirtualItem0,
+			object_fields::VirtualItem1,
+			object_fields::VirtualItem2
+		};
+
+		auto& creature = GetCreature();
+		creature.Set<uint32>(virtualItemFields[slot], displayId);
+
 		DLOG("CombatScript: SetVirtualEquipment slot=" << static_cast<int>(slot)
-			<< " displayId=" << displayId << " (not yet implemented)");
+			<< " displayId=" << displayId);
 	}
 
 	void CreatureCombatScript::SetHealthPercent(uint8 percent)

@@ -107,4 +107,49 @@ namespace mmo
 		m_respawnCountdown.SetEnd(
 			GetAsyncTimeMs() + m_respawnDelay);
 	}
+
+	void WorldObjectSpawner::SetState(bool active)
+	{
+		if (m_active != active)
+		{
+			if (active && !m_currentlySpawned)
+			{
+				for (size_t i = 0; i < m_maxCount; ++i)
+				{
+					SpawnOne();
+				}
+			}
+			else
+			{
+				m_respawnCountdown.Cancel();
+
+				for (auto& obj : m_objects)
+				{
+					m_world.RemoveGameObject(*obj);
+				}
+
+				m_objects.clear();
+				m_currentlySpawned = 0;
+			}
+
+			m_active = active;
+		}
+	}
+
+	void WorldObjectSpawner::SetRespawn(bool enabled)
+	{
+		if (m_respawn != enabled)
+		{
+			if (!enabled)
+			{
+				m_respawnCountdown.Cancel();
+			}
+			else
+			{
+				SetRespawnTimer();
+			}
+
+			m_respawn = enabled;
+		}
+	}
 }
