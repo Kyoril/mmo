@@ -31,7 +31,7 @@
 **Plans:** 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Infrastructure: object fields, world object spawner methods, combat movement flag
+- [x] 01-01-PLAN.md — Infrastructure: object fields, world object spawner methods, combat movement flag
 - [ ] 01-02-PLAN.md — All 7 trigger action implementations
 - [ ] 01-03-PLAN.md — Server-side Lua event hook system
 
