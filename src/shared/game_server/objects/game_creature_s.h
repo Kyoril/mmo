@@ -148,6 +148,14 @@ namespace mmo
 
 		void SetMovementType(CreatureMovement movementType);
 
+		/// @brief Returns whether combat movement is enabled.
+		/// @return True if combat movement is enabled, false otherwise.
+		bool IsCombatMovementEnabled() const { return m_combatMovementEnabled; }
+
+		/// @brief Sets whether combat movement is enabled.
+		/// @param enabled True to enable combat movement, false to disable.
+		void SetCombatMovement(bool enabled) { m_combatMovementEnabled = enabled; }
+
 		void RefreshStats() override;
 
 		/// Executes a callback function for every valid combat participant.
@@ -191,5 +199,6 @@ namespace mmo
 		CreatureMovement m_movement;
 		LootRecipients m_lootRecipients;
 		float m_healthPercent = 1.0f;
+		bool m_combatMovementEnabled = true;
 	};
 }
