@@ -5,6 +5,11 @@
 #include "luabind/luabind.hpp"
 #include "luabind/lua_include.hpp"
 #include "luabind/scope.hpp"
+
+extern "C"
+{
+#include "lualib.h"
+}
 #include "log/default_log_levels.h"
 #include "game_server/objects/game_creature_s.h"
 #include "game_server/objects/game_player_s.h"
@@ -71,14 +76,14 @@ namespace mmo
 			luabind::scope(
 				luabind::class_<GameCreatureS>("Creature")
 					.def("GetName", &GameCreatureS::GetName)
-					.def("GetHealth", &GameCreatureS::GetUInt32Value, luabind::_2 = static_cast<uint16>(object_fields::Health))
-					.def("GetMaxHealth", &GameCreatureS::GetUInt32Value, luabind::_2 = static_cast<uint16>(object_fields::MaxHealth))
+					.def("GetHealth", &GameCreatureS::GetHealth)
+					.def("GetMaxHealth", &GameCreatureS::GetMaxHealth)
 			),
 			luabind::scope(
 				luabind::class_<GamePlayerS>("Player")
 					.def("GetName", &GamePlayerS::GetName)
-					.def("GetHealth", &GamePlayerS::GetUInt32Value, luabind::_2 = static_cast<uint16>(object_fields::Health))
-					.def("GetMaxHealth", &GamePlayerS::GetUInt32Value, luabind::_2 = static_cast<uint16>(object_fields::MaxHealth))
+					.def("GetHealth", &GamePlayerS::GetHealth)
+					.def("GetMaxHealth", &GamePlayerS::GetMaxHealth)
 			),
 			luabind::scope(
 				luabind::class_<GameWorldObjectS>("WorldObject")
@@ -151,7 +156,7 @@ namespace mmo
 			luabind::object tbl(luabind::from_stack(L, -2));
 			lua_pop(L, 2);
 
-			luabind::call_function<void>(func, boost::ref(creature), boost::ref(player));
+			luabind::call_function<void>(func, &creature, &player);
 			return true;
 		}
 		catch (const luabind::error& e)
@@ -185,7 +190,7 @@ namespace mmo
 			luabind::object func(luabind::from_stack(L, -1));
 			lua_pop(L, 2);
 
-			luabind::call_function<void>(func, boost::ref(creature), boost::ref(player), optionId);
+			luabind::call_function<void>(func, &creature, &player, optionId);
 			return true;
 		}
 		catch (const luabind::error& e)
@@ -219,7 +224,7 @@ namespace mmo
 			luabind::object func(luabind::from_stack(L, -1));
 			lua_pop(L, 2);
 
-			luabind::call_function<void>(func, boost::ref(creature), boost::ref(player), questId);
+			luabind::call_function<void>(func, &creature, &player, questId);
 			return true;
 		}
 		catch (const luabind::error& e)
@@ -253,7 +258,7 @@ namespace mmo
 			luabind::object func(luabind::from_stack(L, -1));
 			lua_pop(L, 2);
 
-			luabind::call_function<void>(func, boost::ref(creature), boost::ref(player), questId);
+			luabind::call_function<void>(func, &creature, &player, questId);
 			return true;
 		}
 		catch (const luabind::error& e)
@@ -288,7 +293,7 @@ namespace mmo
 			luabind::object func(luabind::from_stack(L, -1));
 			lua_pop(L, 2);
 
-			luabind::call_function<void>(func, boost::ref(worldObject), boost::ref(player));
+			luabind::call_function<void>(func, &worldObject, &player);
 			return true;
 		}
 		catch (const luabind::error& e)
