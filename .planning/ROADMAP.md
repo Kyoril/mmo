@@ -28,6 +28,13 @@
 
 **Why first:** Triggers are the foundation for quest events, NPC scripting, and world object behavior. Later phases depend on triggers working reliably.
 
+**Plans:** 3 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Infrastructure: object fields, world object spawner methods, combat movement flag
+- [ ] 01-02-PLAN.md — All 7 trigger action implementations
+- [ ] 01-03-PLAN.md — Server-side Lua event hook system
+
 **Success criteria:**
 1. All TODO trigger actions in `trigger_handler.cpp` are implemented and tested — SetWorldObjectState changes door/object state, SetVirtualEquipmentSlot alters NPC visuals, SetPhase moves objects between phases, Dismount/SetMount work, SetSpawnState works for ObjectSpawner, SetCombatMovement enables/disables movement
 2. World objects respond to trigger-based state changes (a trigger can open a door, activate an object, or spawn a chest)
