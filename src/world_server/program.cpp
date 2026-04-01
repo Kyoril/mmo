@@ -143,7 +143,7 @@ namespace mmo
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
 		LuaScriptMgr luaScriptMgr;
-		luaScriptMgr.LoadScripts("data/scripts");
+		luaScriptMgr.LoadScripts(config.scriptFolder);
 
 		// Inject script manager into newly created world instances
 		worldInstanceManager.instanceCreated += [&worldInstanceManager, &luaScriptMgr](const InstanceId id)
