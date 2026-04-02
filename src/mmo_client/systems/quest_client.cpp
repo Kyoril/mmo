@@ -77,6 +77,13 @@ namespace mmo
 			),
 
 			luabind::scope(
+				luabind::class_<QuestRewardItemDisplay>("QuestRewardItemDisplay")
+				.def_readonly("itemId", &QuestRewardItemDisplay::itemId)
+				.def_readonly("count", &QuestRewardItemDisplay::count)
+				.def_readonly("displayId", &QuestRewardItemDisplay::displayId)
+			),
+
+			luabind::scope(
 				luabind::class_<QuestDetails>("QuestDetails")
 				.def_readonly("id", &QuestDetails::questId)
 				.def_readonly("title", &QuestDetails::questTitle)
@@ -107,7 +114,11 @@ namespace mmo
 			luabind::def_lambda("GetQuestObjectiveText", [this](uint32 index) { return GetQuestObjectiveText(index); }),
 			luabind::def_lambda("GossipAction", [this](int32 index) { return ExecuteGossipAction(index); }),
 			luabind::def_lambda("GetQuestDetailsText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->description; ProcessQuestText(questText); return questText; }),
-			luabind::def_lambda("GetQuestObjectivesText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->summary; ProcessQuestText(questText); return questText; })
+			luabind::def_lambda("GetQuestObjectivesText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->summary; ProcessQuestText(questText); return questText; }),
+			luabind::def_lambda("GetQuestRewardItemCount", [this]() -> uint32 { return static_cast<uint32>(m_questDetails.rewardItems.size()); }),
+			luabind::def_lambda("GetQuestRewardItem", [this](uint32 index) -> const QuestRewardItemDisplay* { if (index >= m_questDetails.rewardItems.size()) { return nullptr; } return &m_questDetails.rewardItems[index]; }),
+			luabind::def_lambda("GetQuestRewardChoiceItemCount", [this]() -> uint32 { return static_cast<uint32>(m_questDetails.rewardItemsChoice.size()); }),
+			luabind::def_lambda("GetQuestRewardChoiceItem", [this](uint32 index) -> const QuestRewardItemDisplay* { if (index >= m_questDetails.rewardItemsChoice.size()) { return nullptr; } return &m_questDetails.rewardItemsChoice[index]; })
 		);
 	}
 
@@ -640,7 +651,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		if (rewardItemsChoiceCount > 0)
+		for (uint32 i = 0; i < rewardItemsChoiceCount; ++i)
 		{
 			uint32 itemId, count, displayId;
 			if (!(packet >> io::read<uint32>(itemId) >> io::read<uint32>(count) >> io::read<uint32>(displayId)))
@@ -648,6 +659,8 @@ namespace mmo
 				ELOG("Failed to read QuestGiverQuestDetails packet");
 				return PacketParseResult::Disconnect;
 			}
+
+			m_questDetails.rewardItemsChoice.push_back({ itemId, count, displayId });
 
 			if (itemId != 0)
 			{
@@ -661,7 +674,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		if (rewardItemsCount > 0)
+		for (uint32 i = 0; i < rewardItemsCount; ++i)
 		{
 			uint32 itemId, count, displayId;
 			if (!(packet >> io::read<uint32>(itemId) >> io::read<uint32>(count) >> io::read<uint32>(displayId)))
@@ -669,6 +682,8 @@ namespace mmo
 				ELOG("Failed to read QuestGiverQuestDetails packet");
 				return PacketParseResult::Disconnect;
 			}
+
+			m_questDetails.rewardItems.push_back({ itemId, count, displayId });
 
 			if (itemId != 0)
 			{
