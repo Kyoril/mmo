@@ -1049,6 +1049,15 @@ namespace mmo
 				}
 			}
 
+			// Object interaction / spell cast on object required
+			if (req.objectid() != 0)
+			{
+				if (it->second.creatures[counter] < req.objectcount())
+				{
+					return false;
+				}
+			}
+
 			// Item required
 			if (req.itemid() != 0)
 			{
@@ -1192,8 +1201,8 @@ namespace mmo
 				continue;
 			}
 
-			// Check if the quest was already completed
-			if (it->second.status != quest_status::Incomplete)
+			// Only check quests that are currently complete - item removal might make them incomplete
+			if (it->second.status != quest_status::Complete)
 			{
 				continue;
 			}
@@ -1248,7 +1257,67 @@ namespace mmo
 
 	void GamePlayerS::OnQuestSpellCastCredit(uint32 spellId, GameObjectS &target)
 	{
-		// TODO
+		const uint32 targetEntry = target.Get<uint32>(object_fields::Entry);
+
+		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
+		{
+			QuestField field = Get<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)));
+			if (field.questId == 0)
+			{
+				continue;
+			}
+
+			auto it = m_quests.find(field.questId);
+			if (it == m_quests.end())
+			{
+				continue;
+			}
+
+			if (it->second.status != quest_status::Incomplete)
+			{
+				continue;
+			}
+
+			const auto *quest = GetProject().quests.getById(field.questId);
+			if (!quest)
+			{
+				continue;
+			}
+
+			uint8 reqIndex = 0;
+			for (const auto &req : quest->requirements())
+			{
+				if (req.spellcast() == spellId && req.objectid() == targetEntry)
+				{
+					uint8 counter = field.counters[reqIndex];
+					if (counter < req.objectcount())
+					{
+						field.counters[reqIndex] = ++counter;
+						it->second.creatures[reqIndex]++;
+
+						Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
+
+						if (m_netPlayerWatcher)
+						{
+							m_netPlayerWatcher->OnQuestKillCredit(*quest, target.GetGuid(), targetEntry, counter, req.objectcount());
+						}
+
+						if (FulfillsQuestRequirements(*quest))
+						{
+							it->second.status = quest_status::Complete;
+							field.status = quest_status::Complete;
+							Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
+							if (m_netPlayerWatcher)
+							{
+								m_netPlayerWatcher->OnQuestDataChanged(field.questId, it->second);
+							}
+						}
+					}
+				}
+
+				reqIndex++;
+			}
+		}
 	}
 
 	bool GamePlayerS::NeedsQuestItem(uint32 itemId) const

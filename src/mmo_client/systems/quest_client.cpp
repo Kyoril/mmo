@@ -692,7 +692,7 @@ namespace mmo
 		}
 
 		uint32 rewardSpellId = 0;
-		if (!(packet >> io::read<uint32>(m_questDetails.rewardMoney) >> io::read<uint32>(rewardSpellId)))
+		if (!(packet >> io::read<uint32>(m_questDetails.rewardMoney) >> io::read<uint32>(m_questDetails.rewardXp) >> io::read<uint32>(rewardSpellId)))
 		{
 			ELOG("Failed to read QuestGiverQuestDetails packet");
 			return PacketParseResult::Disconnect;
@@ -761,6 +761,69 @@ namespace mmo
 			ELOG("Failed to read QuestGiverOfferReward packet");
 			return PacketParseResult::Disconnect;
 		}
+
+		// Read reward items choice
+		uint32 rewardItemsChoiceCount;
+		if (!(packet >> io::read<uint32>(rewardItemsChoiceCount)))
+		{
+			ELOG("Failed to read QuestGiverOfferReward packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		for (uint32 i = 0; i < rewardItemsChoiceCount; ++i)
+		{
+			uint32 itemId, count, displayId;
+			if (!(packet >> io::read<uint32>(itemId) >> io::read<uint32>(count) >> io::read<uint32>(displayId)))
+			{
+				ELOG("Failed to read QuestGiverOfferReward packet");
+				return PacketParseResult::Disconnect;
+			}
+
+			m_questDetails.rewardItemsChoice.push_back({ itemId, count, displayId });
+
+			if (itemId != 0)
+			{
+				m_itemCache.Get(itemId);
+			}
+		}
+
+		// Read reward items
+		uint32 rewardItemsCount;
+		if (!(packet >> io::read<uint32>(rewardItemsCount)))
+		{
+			ELOG("Failed to read QuestGiverOfferReward packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		for (uint32 i = 0; i < rewardItemsCount; ++i)
+		{
+			uint32 itemId, count, displayId;
+			if (!(packet >> io::read<uint32>(itemId) >> io::read<uint32>(count) >> io::read<uint32>(displayId)))
+			{
+				ELOG("Failed to read QuestGiverOfferReward packet");
+				return PacketParseResult::Disconnect;
+			}
+
+			m_questDetails.rewardItems.push_back({ itemId, count, displayId });
+
+			if (itemId != 0)
+			{
+				m_itemCache.Get(itemId);
+			}
+		}
+
+		// Read reward money, XP, and spell
+		uint32 rewardSpellId = 0;
+		if (!(packet >> io::read<uint32>(m_questDetails.rewardMoney) >> io::read<uint32>(m_questDetails.rewardXp) >> io::read<uint32>(rewardSpellId)))
+		{
+			ELOG("Failed to read QuestGiverOfferReward packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		m_questDetails.rewardSpell = (rewardSpellId != 0) ? m_spells.getById(rewardSpellId) : nullptr;
+
+		// Ensure we have the quest in the cache
+		m_questCache.Get(m_questDetails.questId);
 
 		// Process quest text
 		ProcessQuestText(m_questDetails.questOfferRewardText);

@@ -1111,6 +1111,7 @@ namespace mmo
 						<< io::write<uint32>(quest.rewardmoney());
 				}
 
+				packet << io::write<uint32>(quest.rewardxp());
 				packet << io::write<uint32>(quest.rewardspell());
 				packet.Finish();
 			});
