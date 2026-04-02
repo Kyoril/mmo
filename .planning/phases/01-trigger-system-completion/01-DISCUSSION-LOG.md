@@ -140,3 +140,67 @@
 - Visibility phasing (WoW-style)
 - Extended Lua combat events (OnCombatStart, OnDeath, etc.)
 - Full Lua scripting engine
+
+---
+
+# Update Session: 2026-04-02
+
+**Areas discussed:** Lua API surface (post-implementation review)
+
+---
+
+## Lua API Growth Strategy
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Expand now | Add bindings needed for quest/NPC scripting now in Phase 1 scope | |
+| Expand per phase | Each downstream phase adds the bindings it needs | ✓ |
+| Define contract, implement later | Define full target API surface now, implement incrementally | |
+
+**User's choice:** Expand per phase
+**Notes:** Phase 1 ships with minimal bindings (GetName, GetHealth, GetMaxHealth). Downstream phases add what they need.
+
+---
+
+## Lua Binding Style
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Thin bindings only | Scripts call C++ methods via luabind. No Lua-side abstractions. | ✓ |
+| Thin bindings + Lua helpers | Small Lua utility layer for common patterns | |
+| Framework approach | Richer Lua framework with event registration, utility modules | |
+
+**User's choice:** Thin bindings only
+**Notes:** No Lua-side helper libraries or abstractions.
+
+---
+
+## Lua Error Model
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Log and continue | Errors logged server-side, script continues or silently fails | ✓ |
+| Log and fallback | Errors logged, event returns false for C++ fallback | |
+| Strict (disable on error) | Errors logged, script disabled for entry until reload | |
+
+**User's choice:** Log and continue
+**Notes:** Matches existing LuaScriptMgr catch pattern.
+
+---
+
+## Script Reloading
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Startup only (current) | Scripts loaded once at startup. Server restart for changes. | ✓ |
+| Runtime reload command | Console command to reload all scripts without restart | |
+
+**User's choice:** Startup only (current)
+**Notes:** Hot-reload deferred to future consideration.
+
+---
+
+## Additional Deferred Ideas (from update session)
+
+- Lua hot-reload — runtime reload command deferred
+- Lua helper library — decided against (thin bindings only)

@@ -1,7 +1,8 @@
 # Phase 1: Trigger System Completion - Context
 
 **Gathered:** 2026-03-31
-**Status:** Ready for planning
+**Updated:** 2026-04-02
+**Status:** Complete (implemented)
 
 <domain>
 ## Phase Boundary
@@ -35,6 +36,12 @@ Specifically: implement 7 stub trigger actions (SetWorldObjectState, SetVirtualE
 - **D-09:** Use luabind for Lua bindings — already in deps/ and used client-side. Consistent approach across client and server.
 - **D-10:** Core event callbacks only: `OnGossipHello`, `OnGossipSelect`, `OnQuestAccept`, `OnQuestComplete`, `OnUse` (world objects). No combat events in this phase.
 - **D-11:** Scripts live in `data/scripts/` folder, loaded by world_server at startup. One file per creature/object entry (e.g., `creature_1234.lua`, `object_5678.lua`).
+
+### Lua API Growth Strategy (added 2026-04-02)
+- **D-12:** Lua API expands per-phase — each downstream phase adds the bindings it needs. Phase 1 ships with minimal bindings (GetName, GetHealth, GetMaxHealth on Creature/Player). Phase 2 will add quest-related bindings, Phase 3 will add gossip/vendor bindings, etc.
+- **D-13:** Bindings are thin C++ method wrappers via luabind only — no Lua-side helper libraries, abstractions, or utility layers. Scripts call C++ methods directly.
+- **D-14:** Lua error model is log-and-continue — errors are logged server-side, script continues or silently fails. No strict mode, no script disabling on error. Matches existing LuaScriptMgr catch pattern.
+- **D-15:** Scripts are loaded at startup only — no hot-reload. Server restart required for script changes. Runtime reload deferred to future consideration.
 
 ### Agent's Discretion
 - Internal implementation details of field replication to client
@@ -116,6 +123,8 @@ No specific requirements — follow existing codebase patterns. Key pattern refe
 - **Visibility phasing** — WoW-style phasing where different players see different world states. Noted for potential future phase.
 - **Extended Lua combat events** — OnCombatStart, OnDeath, OnSpawn, OnReachWaypoint. Deferred to after core NPC/quest hooks are proven.
 - **Full Lua scripting engine** — Rich API for spawning creatures, modifying world, running timers. Beyond scope of event hooks.
+- **Lua hot-reload** — Runtime reload command for scripts without server restart. Deferred to future consideration.
+- **Lua helper library** — Lua-side utility layer for common patterns. Decided against (D-13: thin bindings only).
 
 </deferred>
 
@@ -123,3 +132,4 @@ No specific requirements — follow existing codebase patterns. Key pattern refe
 
 *Phase: 01-trigger-system-completion*
 *Context gathered: 2026-03-31*
+*Context updated: 2026-04-02*
