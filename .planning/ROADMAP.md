@@ -52,6 +52,13 @@ Plans:
 
 **Why after Phase 1:** Quest events fire triggers (accept, complete, fail). Trigger system must be solid first.
 
+**Plans:** 3 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Server-side quest reward completion (spells, triggers, chains, FailQuest)
+- [ ] 02-02-PLAN.md — Client quest data layer (reward items, objective text, status icons)
+- [ ] 02-03-PLAN.md — End-to-end quest flow integration (item tracking, XP display, chain verification)
+
 **Success criteria:**
 1. Quest giver NPCs display correct status icons (!, ?) on the client based on quest availability and completion state
 2. Quest log UI shows active quests with objectives, descriptions, and real-time progress updates
