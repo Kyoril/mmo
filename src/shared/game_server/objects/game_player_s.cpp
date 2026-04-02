@@ -680,9 +680,58 @@ namespace mmo
 		return false;
 	}
 
+	/// @brief Fails the specified quest, updating status and firing fail triggers.
 	bool GamePlayerS::FailQuest(uint32 quest)
 	{
-		// TODO
+		// Find the quest in the quest log
+		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
+		{
+			QuestField field = Get<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)));
+			if (field.questId != quest)
+			{
+				continue;
+			}
+
+			// Verify quest state
+			auto it = m_quests.find(field.questId);
+			if (it == m_quests.end())
+			{
+				continue;
+			}
+
+			if (it->second.status != quest_status::Incomplete)
+			{
+				continue;
+			}
+
+			// Set quest status to Failed
+			it->second.status = quest_status::Failed;
+			field.status = quest_status::Failed;
+
+			// Update quest log field
+			Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
+
+			// Notify client about quest data change
+			if (m_netPlayerWatcher)
+			{
+				m_netPlayerWatcher->OnQuestDataChanged(quest, it->second);
+			}
+
+			// Fire fail triggers
+			const auto *entry = GetProject().quests.getById(quest);
+			if (entry)
+			{
+				for (const auto triggerId : entry->failtriggers())
+				{
+					if (const auto *triggerEntry = GetProject().triggers.getById(triggerId))
+					{
+						unitTrigger(*triggerEntry, *this, this);
+					}
+				}
+			}
+
+			return true;
+		}
 
 		return false;
 	}
@@ -836,6 +885,33 @@ namespace mmo
 			{
 				// 0 means: remove ALL of this item
 				m_inventory.RemoveItems(*itemEntry, 0);
+			}
+		}
+
+		// Grant reward spell (teach to player)
+		if (entry->rewardspell() != 0)
+		{
+			AddSpell(entry->rewardspell());
+		}
+
+		// Cast reward spell on player (if specified separately from learned spell)
+		if (entry->rewardspellcast() != 0)
+		{
+			if (const auto *spellEntry = GetProject().spells.getById(entry->rewardspellcast()))
+			{
+				SpellTargetMap targetMap;
+				targetMap.SetUnitTarget(GetGuid());
+				targetMap.SetTargetMap(spell_cast_target_flags::Self);
+				CastSpell(targetMap, *spellEntry, 0, true);
+			}
+		}
+
+		// Fire reward triggers
+		for (const auto triggerId : entry->rewardtriggers())
+		{
+			if (const auto *triggerEntry = GetProject().triggers.getById(triggerId))
+			{
+				unitTrigger(*triggerEntry, *this, this);
 			}
 		}
 
