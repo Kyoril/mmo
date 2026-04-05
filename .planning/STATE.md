@@ -4,12 +4,12 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 05
 status: executing
-last_updated: "2026-04-05T15:41:06.020Z"
+last_updated: "2026-04-05T15:48:04.568Z"
 progress:
   total_phases: 8
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 15
-  completed_plans: 14
+  completed_plans: 15
 ---
 
 # Project State
@@ -56,10 +56,12 @@ progress:
 | 2026-04-05 | LootMethod stored on GamePlayerS alongside m_groupId — same pattern as groupId, synced from realm per-member | World server needs loot method at creature death; no auth context in LootInstance |
 | 2026-04-05 | MasterLoot GUID sentinel: client sends 0, realm replaces with leader characterId before sync | Avoids sending leader GUID over wire; server owns source of truth |
 | 2026-04-05 | Enforcement single point in LootInstance::TakeItem() — no bypass via OnAutoStoreLootItem | Anti-pattern: checking loot method in multiple places leads to bypasses |
+| 2026-04-05 | data/client is a git submodule — Lua/locale changes committed inside submodule first, then parent reference updated | Git submodule boundary; cannot stage submodule files from parent repo directly |
+| 2026-04-05 | Fourth locale is ruRU (not koKR); ruRU uses English placeholder strings consistent with existing pattern | koKR directory does not exist in this repo; ruRU already uses English stubs throughout |
 
 ## Blockers
 
 None currently.
 
 ---
-*Last updated: 2026-04-05 after Phase 5 Plan 01 loot method enforcement complete*
+*Last updated: 2026-04-05 after Phase 5 Plan 03 client loot method UI complete*

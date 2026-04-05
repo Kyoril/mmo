@@ -131,7 +131,7 @@ Plans:
 Plans:
 - [x] 05-01-PLAN.md — Server loot enforcement: protocol opcodes, GamePlayerS loot state, LootInstance MasterLoot/RoundRobin/FFA enforcement, realm-world sync pipeline, realm OnSetLootMethod handler
 - [x] 05-02-PLAN.md — Guild MOTD: SQL migration, database layer, Guild m_motd, WriteRoster with MOTD, OnGuildMotd complete, client guild_client fix, GuildFrame display
-- [ ] 05-03-PLAN.md — Client loot method UI: party_info 2-person bug fix, PARTY_LOOT_METHOD_CHANGED event, RealmConnector send, Lua bindings, slash command, context menu, localization
+- [x] 05-03-PLAN.md — Client loot method UI: party_info 2-person bug fix, PARTY_LOOT_METHOD_CHANGED event, RealmConnector send, Lua bindings, slash command, context menu, localization
 
 **Success criteria:**
 1. Player can create/join groups via invite — invite notification shown, accept/decline works, group shows in UI
