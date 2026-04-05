@@ -337,6 +337,13 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnListInventory(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// Handles the client's request to use a world object (door, chest, etc.).
+		/// Validates distance and object state, then calls GameWorldObjectS::Use().
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnGameObjectUse(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 		/// Handles the client's request to ask for an npc's quest dialog. This is expected to be sent when the npc is just a quest giver / quest acceptor and nothing more.
 		///	@param opCode The op code of the packet.
 		///	@param size The size of the packet content in bytes, excluding the packet header.
