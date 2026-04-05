@@ -3816,8 +3816,20 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		// TODO: Set the guild MOTD
-		ELOG("Set guild MOTD functionality not implemented yet");
+		guild->SetMotd(motd);
+
+		// Broadcast to all online guild members
+		guild->BroadcastEvent(guild_event::Motd, 0, motd.c_str());
+
+		// Persist to database — MUST use asyncRequest (no synchronous DB calls on main thread)
+		auto dbHandler = [](bool success)
+		{
+			if (!success)
+			{
+				ELOG("Failed to persist guild MOTD");
+			}
+		};
+		m_database.asyncRequest(std::move(dbHandler), &IDatabase::SetGuildMotd, m_characterData->guildId, motd);
 
 		return PacketParseResult::Pass;
 	}
