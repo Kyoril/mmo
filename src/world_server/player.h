@@ -116,6 +116,11 @@ namespace mmo
 		/// Sends a guild update to the realm server for this character.
 		void UpdateCharacterGuild(uint64 guildId);
 
+		/// Updates the loot method stored on this player's GamePlayerS, synchronized from the realm server.
+		/// @param lootMethod The new loot method.
+		/// @param lootMasterGuid The loot master GUID (0 if not MasterLoot).
+		void UpdateCharacterGroupLootMethod(LootMethod lootMethod, uint64 lootMasterGuid);
+
 	public:
 		/// Gets the current tile index for the character.
 		TileIndex2D GetTileIndex() const;

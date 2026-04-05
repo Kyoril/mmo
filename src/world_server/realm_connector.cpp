@@ -484,6 +484,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 				RegisterPacketHandler(auth::realm_world_packet::TeleportRequest, *this, &RealmConnector::OnTeleportRequest);
 				RegisterPacketHandler(auth::realm_world_packet::PlayerGroupChanged, *this, &RealmConnector::OnPlayerGroupChanged);
 				RegisterPacketHandler(auth::realm_world_packet::PlayerGuildChanged, *this, &RealmConnector::OnPlayerGuildChanged);
+				RegisterPacketHandler(auth::realm_world_packet::PlayerGroupLootMethodChanged, *this, &RealmConnector::OnPlayerGroupLootMethodChanged);
 				RegisterPacketHandler(auth::realm_world_packet::InventoryOperationResult, *this, &RealmConnector::OnInventoryOperationResult);
 				
 				PropagateHostedMapIds();
@@ -917,6 +918,28 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		}
 
 		player->UpdateCharacterGuild(guildId);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnPlayerGroupLootMethodChanged(auth::IncomingPacket& packet)
+	{
+		uint64 characterId = 0;
+		uint8 lootMethod = 0;
+		uint64 lootMasterGuid = 0;
+		if (!(packet >> io::read<uint64>(characterId) >> io::read<uint8>(lootMethod) >> io::read<uint64>(lootMasterGuid)))
+		{
+			ELOG("Failed to read PLAYER_GROUP_LOOT_METHOD_CHANGED packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Player " << log_hex_digit(characterId) << " loot method changed to " << static_cast<uint32>(lootMethod));
+
+		const std::shared_ptr<Player> player = m_playerManager.GetPlayerByCharacterGuid(characterId);
+		if (player)
+		{
+			player->UpdateCharacterGroupLootMethod(static_cast<LootMethod>(lootMethod), lootMasterGuid);
+		}
+
 		return PacketParseResult::Pass;
 	}
 

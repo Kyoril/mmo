@@ -108,6 +108,9 @@ namespace mmo
 		/// Returns the number of group members.
 		size_t GetMemberCount() const { return m_members.size(); }
 
+		/// Returns a const reference to the map of group members, keyed by character GUID.
+		const MembersByGUID& GetMembers() const { return m_members; }
+
 		/// Determines whether this group has been created.
 		bool IsCreated() const { return m_leaderGUID != 0; }
 

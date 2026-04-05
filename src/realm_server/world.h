@@ -121,6 +121,12 @@ namespace mmo
 		/// Notifies the world node that a character's guild changed.
 		void NotifyPlayerGuildChanged(uint64 characterId, uint64 guildId);
 
+		/// Notifies the world node of a loot method change for all group members on this world.
+		/// @param characterId The character whose group loot method changed.
+		/// @param lootMethod The new loot method (sent as uint8 over the wire).
+		/// @param lootMasterGuid The new loot master GUID (0 if not MasterLoot).
+		void NotifyPlayerGroupLootMethodChanged(uint64 characterId, uint8 lootMethod, uint64 lootMasterGuid);
+
 	private:
 		TimerQueue& m_timerQueue;
 		WorldManager &m_manager;

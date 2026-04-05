@@ -1262,6 +1262,50 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult Player::OnSetLootMethod(game::IncomingPacket& packet)
+	{
+		uint8 method = 0;
+		uint64 lootMasterGuid = 0;
+		uint8 lootThreshold = 2;
+		if (!(packet >> io::read<uint8>(method) >> io::read<uint64>(lootMasterGuid) >> io::read<uint8>(lootThreshold)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Only the group leader may change loot method
+		if (!m_group || m_group->GetLeader() != m_characterData->characterId)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		const auto lootMethod = static_cast<LootMethod>(method);
+
+		// MasterLoot sentinel: GUID 0 means "leader self-assigns as loot master" (client sends 0 by design)
+		if (lootMethod == loot_method::MasterLoot && lootMasterGuid == 0)
+		{
+			lootMasterGuid = m_characterData->characterId;
+		}
+
+		m_group->SetLootMethod(lootMethod, lootMasterGuid, lootThreshold);
+
+		// CRITICAL: SendUpdate() must be called so all clients receive the updated GroupList packet
+		m_group->SendUpdate();
+
+		// Sync loot method to world server for every group member so creature_ai_death_state can read it
+		for (const auto& [memberGuid, memberSlot] : m_group->GetMembers())
+		{
+			if (const auto memberPlayer = m_manager.GetPlayerByCharacterGuid(memberGuid))
+			{
+				if (const auto world = memberPlayer->GetWorld())
+				{
+					world->NotifyPlayerGroupLootMethodChanged(memberGuid, method, lootMasterGuid);
+				}
+			}
+		}
+
+		return PacketParseResult::Pass;
+	}
+
 	PacketParseResult Player::OnLogoutRequest(game::IncomingPacket &packet)
 	{
 		if (!m_characterData)
@@ -2498,6 +2542,7 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::LogoutRequest, *this, &Player::OnLogoutRequest);
 			RegisterPacketHandler(game::client_realm_packet::GroupLeave, *this, &Player::OnGroupLeave);
 			RegisterPacketHandler(game::client_realm_packet::GroupDisband, *this, &Player::OnGroupDisband);
+			RegisterPacketHandler(game::client_realm_packet::SetLootMethod, *this, &Player::OnSetLootMethod);
 
 #if MMO_WITH_DEV_COMMANDS
 			RegisterPacketHandler(game::client_realm_packet::CheatTeleportToPlayer, *this, &Player::OnCheatTeleportToPlayer);

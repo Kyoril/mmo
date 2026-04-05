@@ -544,6 +544,19 @@ namespace mmo
 			});
 	}
 
+	void World::NotifyPlayerGroupLootMethodChanged(const uint64 characterId, const uint8 lootMethod, const uint64 lootMasterGuid)
+	{
+		GetConnection().sendSinglePacket([characterId, lootMethod, lootMasterGuid](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::realm_world_packet::PlayerGroupLootMethodChanged);
+				outPacket
+					<< io::write<uint64>(characterId)
+					<< io::write<uint8>(lootMethod)
+					<< io::write<uint64>(lootMasterGuid);
+				outPacket.Finish();
+			});
+	}
+
 	PacketParseResult World::OnPlayerCharacterJoined(auth::IncomingPacket& packet)
 	{
 		uint64 characterGuid = 0;

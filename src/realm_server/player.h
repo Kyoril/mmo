@@ -472,6 +472,9 @@ namespace mmo
 		PacketParseResult OnGroupDecline(game::IncomingPacket &packet);
 		PacketParseResult OnGroupLeave(game::IncomingPacket& packet);
 		PacketParseResult OnGroupDisband(game::IncomingPacket& packet);
+
+		/// Handles a client request to change the group's loot method.
+		PacketParseResult OnSetLootMethod(game::IncomingPacket& packet);
 		PacketParseResult OnLogoutRequest(game::IncomingPacket &packet);
 
 		// Guild packet handlers

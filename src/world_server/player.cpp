@@ -236,6 +236,15 @@ namespace mmo
 		m_character->Set<uint64>(object_fields::Guild, guildId);
 	}
 
+	void Player::UpdateCharacterGroupLootMethod(const LootMethod lootMethod, const uint64 lootMasterGuid)
+	{
+		if (m_character)
+		{
+			m_character->SetLootMethod(lootMethod);
+			m_character->SetLootMasterGuid(lootMasterGuid);
+		}
+	}
+
 	void Player::NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects)
 	{
 		// Prepare dynamic fields for world objects
