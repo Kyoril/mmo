@@ -44,5 +44,8 @@ namespace mmo
 
 		/// @brief An npc performs an emote.
 		UnitEmote,
+
+		/// @brief A system-generated message displayed in the chat window (e.g., error feedback).
+		System,
 	};
 }
