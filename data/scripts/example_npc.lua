@@ -19,4 +19,4 @@ function script.OnQuestComplete(creature, player, questId)
     print("[LuaScript] Player " .. player:GetName() .. " completed quest " .. questId)
 end
 
-RegisterCreatureScript(1, script)
+RegisterCreatureScript(5, script)
