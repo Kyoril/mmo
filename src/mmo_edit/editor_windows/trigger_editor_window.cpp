@@ -7,6 +7,7 @@
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
+#include "imgui_node_editor.h"
 
 #include <iomanip>
 #include <sstream>
@@ -894,6 +895,15 @@ namespace mmo
 		m_toolbarButtonText = "Triggers";
 	}
 
+	TriggerEditorWindow::~TriggerEditorWindow()
+	{
+		if (m_nodeEditorCtx)
+		{
+			ax::NodeEditor::DestroyEditor(m_nodeEditorCtx);
+			m_nodeEditorCtx = nullptr;
+		}
+	}
+
 	void TriggerEditorWindow::DrawDetailsImpl(proto::TriggerEntry& currentEntry)
 	{
 
@@ -938,6 +948,31 @@ namespace mmo
 	}
 #define SLIDER_UINT32_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 32, min, max)
 #define SLIDER_UINT64_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 64, min, max)
+
+		// Handle a pending node-click jump (set by DrawChainView last frame).
+		if (m_jumpToTriggerId != 0)
+		{
+			m_showChainView = false;
+			SelectEntryById(m_jumpToTriggerId);
+			m_jumpToTriggerId = 0;
+			return;
+		}
+
+		// Chain View / Edit View toggle button.
+		if (ImGui::Button(m_showChainView ? "Edit View" : "Chain View"))
+		{
+			m_showChainView = !m_showChainView;
+		}
+
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		// When Chain View is active, render the node graph and return early.
+		if (m_showChainView)
+		{
+			DrawChainView(m_manager.getTemplates());
+			return;
+		}
 
 		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
 		{
@@ -1215,5 +1250,93 @@ namespace mmo
 
 			ImGui::EndPopup();
 		}
+	}
+
+	void TriggerEditorWindow::DrawChainView(const proto::Triggers& triggers)
+	{
+		// Lazy-create the editor context on first use.
+		if (!m_nodeEditorCtx)
+		{
+			ax::NodeEditor::Config config;
+			config.SettingsFile = nullptr; // Do not persist layout to file.
+			m_nodeEditorCtx = ax::NodeEditor::CreateEditor(&config);
+		}
+
+		ax::NodeEditor::SetCurrentEditor(m_nodeEditorCtx);
+		ax::NodeEditor::Begin("TriggerChain", ImVec2(0.0f, 0.0f));
+
+		// Draw one node per TriggerEntry.
+		for (int i = 0; i < triggers.entry_size(); ++i)
+		{
+			const auto& trigger = triggers.entry(i);
+			const ax::NodeEditor::NodeId nodeId(trigger.id());
+
+			ax::NodeEditor::BeginNode(nodeId);
+
+			ImGui::Text("[%u] %s", trigger.id(), trigger.name().c_str());
+			ImGui::Dummy(ImVec2(160.0f, 0.0f)); // Enforce minimum node width.
+
+			// Stats row: event and action counts.
+			ImGui::TextDisabled("%d event(s)  %d action(s)",
+				trigger.newevents_size(), trigger.actions_size());
+
+			// Input pin (left) and output pin (right).
+			const ax::NodeEditor::PinId inputPin(trigger.id() * 3 + 1);
+			const ax::NodeEditor::PinId outputPin(trigger.id() * 3 + 2);
+
+			ax::NodeEditor::BeginPin(inputPin, ax::NodeEditor::PinKind::Input);
+			ImGui::Text(">");
+			ax::NodeEditor::EndPin();
+
+			ImGui::SameLine();
+			ImGui::SetCursorPosX(ax::NodeEditor::GetNodeSize(nodeId).x - 24.0f);
+
+			ax::NodeEditor::BeginPin(outputPin, ax::NodeEditor::PinKind::Output);
+			ImGui::Text(">");
+			ax::NodeEditor::EndPin();
+
+			ax::NodeEditor::EndNode();
+		}
+
+		// Draw directed edges for Trigger actions (trigger_actions::Trigger == 0).
+		// Target trigger ID is stored in action.data(0).
+		for (int i = 0; i < triggers.entry_size(); ++i)
+		{
+			const auto& trigger = triggers.entry(i);
+
+			for (int j = 0; j < trigger.actions_size(); ++j)
+			{
+				const auto& action = trigger.actions(j);
+
+				if (action.action() == trigger_actions::Trigger && action.data_size() > 0)
+				{
+					const uint32 targetId = static_cast<uint32>(action.data(0));
+
+					if (targetId != 0)
+					{
+						const uint32 linkId = (trigger.id() << 16) | (targetId & 0xFFFFu);
+
+						ax::NodeEditor::Link(
+							ax::NodeEditor::LinkId(linkId),
+							ax::NodeEditor::PinId(trigger.id() * 3 + 2),  // source output pin
+							ax::NodeEditor::PinId(targetId * 3 + 1)        // target input pin
+						);
+					}
+				}
+			}
+		}
+
+		// Detect node selection and queue a switch back to Edit mode.
+		{
+			ax::NodeEditor::NodeId selectedNode;
+
+			if (ax::NodeEditor::GetSelectedNodes(&selectedNode, 1) > 0)
+			{
+				m_jumpToTriggerId = static_cast<uint32>(selectedNode.Get());
+			}
+		}
+
+		ax::NodeEditor::End();
+		ax::NodeEditor::SetCurrentEditor(nullptr);
 	}
 }
