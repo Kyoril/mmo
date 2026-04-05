@@ -8,6 +8,7 @@
 #include "game_unit_s.h"
 #include "game_server/inventory.h"
 #include "game/quest.h"
+#include "game/group.h"
 #include "game/character_customization/customizable_avatar_definition.h"
 
 namespace mmo
@@ -103,6 +104,18 @@ namespace mmo
 
 		/// Sets the characters group id.
 		void SetGroupId(uint64 groupId) { m_groupId = groupId; }
+
+		/// Gets the loot method for this player's group.
+		[[nodiscard]] LootMethod GetLootMethod() const noexcept { return m_lootMethod; }
+
+		/// Sets the loot method.
+		void SetLootMethod(const LootMethod method) noexcept { m_lootMethod = method; }
+
+		/// Gets the loot master GUID for this player's group.
+		[[nodiscard]] uint64 GetLootMasterGuid() const noexcept { return m_lootMasterGuid; }
+
+		/// Sets the loot master GUID.
+		void SetLootMasterGuid(const uint64 guid) noexcept { m_lootMasterGuid = guid; }
 		void WriteObjectUpdateBlock(io::Writer &writer, bool creation = true) const override;
 
 		void RaiseTrigger(trigger_event::Type e, const std::vector<uint32> &data, GameUnitS *triggeringUnit) override;
@@ -281,6 +294,8 @@ namespace mmo
 		std::set<uint32> m_rewardedQuestIds;
 		NetPlayerWatcher *m_netPlayerWatcher = nullptr;
 		uint64 m_groupId = 0;
+		LootMethod m_lootMethod = loot_method::FreeForAll;
+		uint64 m_lootMasterGuid = 0;
 		AvatarConfiguration m_configuration;
 		std::weak_ptr<GameObjectS> m_lootObject;
 		bool m_isGameMaster = false;

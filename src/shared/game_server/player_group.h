@@ -6,6 +6,7 @@
 
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
+#include "game/group.h"
 
 namespace mmo
 {
@@ -50,9 +51,22 @@ namespace mmo
 		/// @returns true if the player is a member, false otherwise.
 		[[nodiscard]] bool IsMember(const uint64 playerGuid) const { return m_members.contains(playerGuid); }
 
+		/// Gets the current loot method for this group.
+		[[nodiscard]] LootMethod GetLootMethod() const noexcept { return m_lootMethod; }
+
+		/// Sets the loot method for this group.
+		void SetLootMethod(const LootMethod method) noexcept { m_lootMethod = method; }
+
+		/// Gets the loot master's GUID (only meaningful for MasterLoot).
+		[[nodiscard]] uint64 GetLootMasterGuid() const noexcept { return m_lootMasterGuid; }
+
+		/// Sets the loot master GUID.
+		void SetLootMasterGuid(const uint64 guid) noexcept { m_lootMasterGuid = guid; }
+
 	private:
 		uint64 m_guid;
-
 		std::set<uint64> m_members;
+		LootMethod m_lootMethod = loot_method::FreeForAll;
+		uint64 m_lootMasterGuid = 0;
 	};
 }

@@ -117,6 +117,9 @@ namespace mmo
 		/// Gets the groups loot method.
 		LootMethod GetLootMethod() const { return m_lootMethod; }
 
+		/// Gets the loot master's GUID (valid when loot method is MasterLoot).
+		[[nodiscard]] uint64 GetLootMasterGuid() const { return m_lootMaster; }
+
 		/// Gets the group leaders GUID.
 		uint64 GetLeader() const { return m_leaderGUID; }
 
