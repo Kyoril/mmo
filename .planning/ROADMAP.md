@@ -14,7 +14,7 @@
 | 3 | NPC & World Object Interaction | 3/3 | Complete   | 2026-04-05 |
 | 4 | Chat System | 3/3 | Complete   | 2026-04-05 |
 | 5 | Group & Guild Features | 3/3 | Complete   | 2026-04-05 |
-| 6 | Character Progression | XP gain, leveling, ability learning | PROG-01..04 | 3 |
+| 6 | Character Progression | 1/1 | Complete   | 2026-04-05 |
 | 7 | Loot & Economy | Creature loot, world object loot, vendor economy | LOOT-01..05 | 4 |
 | 8 | Editor Content Workflows | Editor tooling for spawns, triggers, quests | EDIT-01..04 | 3 |
 
