@@ -279,6 +279,12 @@ namespace mmo
 
 		void AutoStoreLootItem(uint8 lootSlot);
 
+		/// Sends a SetLootMethod packet to the realm server to change the group's loot method.
+		/// @param method The new loot method (0=FreeForAll, 1=RoundRobin, 2=MasterLoot, 3=GroupLoot).
+		/// @param masterGuid The loot master's character GUID (only meaningful for MasterLoot; 0 = server defaults to leader).
+		/// @param threshold The item quality threshold for the loot method.
+		void SetGroupLootMethod(uint8 method, uint64 masterGuid, uint8 threshold);
+
 		void AutoEquipItem(uint8 srcBag, uint8 srcSlot);
 
 		void SwapItem(uint8 srcBag, uint8 srcSlot, uint8 dstBag, uint8 dstSlot);
