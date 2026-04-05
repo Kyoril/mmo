@@ -14,6 +14,42 @@
 
 namespace mmo
 {
+	namespace
+	{
+		CreatureMovement ConvertSpawnMovement(const proto::UnitSpawnEntry& spawnEntry)
+		{
+			switch (spawnEntry.movement())
+			{
+			case proto::UnitSpawnEntry_MovementType_STATIONARY:
+				return creature_movement::None;
+			case proto::UnitSpawnEntry_MovementType_PATROL:
+				return creature_movement::Waypoints;
+			case proto::UnitSpawnEntry_MovementType_ROUTE:
+				WLOG("Route creature movement is not implemented yet - falling back to stationary");
+				return creature_movement::None;
+			default:
+				WLOG("Invalid movement type for creature spawn - falling back to stationary");
+				return creature_movement::None;
+			}
+		}
+
+		std::vector<GameCreatureS::PatrolWaypoint> BuildPatrolWaypoints(const proto::UnitSpawnEntry& spawnEntry)
+		{
+			std::vector<GameCreatureS::PatrolWaypoint> patrolWaypoints;
+			patrolWaypoints.reserve(spawnEntry.waypoints_size());
+
+			for (const auto& waypoint : spawnEntry.waypoints())
+			{
+				patrolWaypoints.push_back({
+					Vector3(waypoint.positionx(), waypoint.positiony(), waypoint.positionz()),
+					waypoint.waittime()
+				});
+			}
+
+			return patrolWaypoints;
+		}
+	}
+
 	CreatureSpawner::CreatureSpawner(
 		WorldInstance& world,
 		const proto::UnitEntry& entry,
@@ -51,15 +87,8 @@ namespace mmo
 		auto spawned = m_world.CreateCreature(m_entry, location, o, m_spawnEntry.radius());
 		spawned->ClearFieldChanges();
 
-		CreatureMovement movement = creature_movement::None;
-		if (m_spawnEntry.movement() >= creature_movement::Invalid)
-		{
-			WLOG("Invalid movement type for creature spawn - spawn ignored");
-		}
-		else
-		{
-			movement = static_cast<CreatureMovement>(m_spawnEntry.movement());
-		}
+		const CreatureMovement movement = ConvertSpawnMovement(m_spawnEntry);
+		spawned->SetPatrolWaypoints(BuildPatrolWaypoints(m_spawnEntry));
 		spawned->SetMovementType(movement);
 		spawned->SetHealthPercent(m_spawnEntry.health_percent());
 

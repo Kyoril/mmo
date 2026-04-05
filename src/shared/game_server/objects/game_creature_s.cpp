@@ -342,6 +342,12 @@ namespace mmo
 			}
 		}
 	}
+
+	void GameCreatureS::SetPatrolWaypoints(std::vector<PatrolWaypoint> patrolWaypoints)
+	{
+		m_patrolWaypoints = std::move(patrolWaypoints);
+	}
+
 	void GameCreatureS::RefreshStats()
 	{
 		GameUnitS::RefreshStats();
