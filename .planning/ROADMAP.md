@@ -77,6 +77,13 @@ Plans:
 
 **Why after Phase 2:** Some vendors/trainers are quest-gated. Quest infrastructure must work first.
 
+**Plans:** 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — NPC Lua frame polish: fix TrainerFrame_OnTrainerUpdate, add NPC name to QuestFrame gossip header, audit VendorFrame completeness
+- [ ] 03-02-PLAN.md — UseObject opcode protocol + client: add enum value, implement RealmConnector::UseObject(), replace spell-cast click handler
+- [ ] 03-03-PLAN.md — UseObject server handler + GameWorldObjectS fix: fix type TODO, door/chest branching in Use(), OnGameObjectUse handler end-to-end
+
 **Success criteria:**
 1. Vendor buy/sell interface works — player can browse items, buy items (gold deducted, item added to inventory), and sell items (item removed, gold added)
 2. Trainer interface lists available abilities — player can learn abilities that meet level requirements (gold deducted, spell granted)
