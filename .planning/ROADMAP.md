@@ -11,7 +11,7 @@
 |---|-------|------|--------------|------------------|
 | 1 | Trigger System Completion | All trigger actions functional, world objects scriptable | TRIG-01, TRIG-02, TRIG-03 | 3 |
 | 2 | Quest System Polish | End-to-end quest flow from discovery to reward | QUEST-01..06 | 4 |
-| 3 | NPC & World Object Interaction | Vendors, trainers, gossip, and usable world objects | NPC-01..04, WOBJ-01..03 | 4 |
+| 3 | NPC & World Object Interaction | 1/3 | In Progress|  |
 | 4 | Chat System | All chat channels functional between players | CHAT-01..05 | 3 |
 | 5 | Group & Guild Features | Party gameplay, loot sharing, guild management | GRP-01..05 | 4 |
 | 6 | Character Progression | XP gain, leveling, ability learning | PROG-01..04 | 3 |
@@ -77,11 +77,11 @@ Plans:
 
 **Why after Phase 2:** Some vendors/trainers are quest-gated. Quest infrastructure must work first.
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 - [ ] 03-01-PLAN.md — NPC Lua frame polish: fix TrainerFrame_OnTrainerUpdate, add NPC name to QuestFrame gossip header, audit VendorFrame completeness
-- [ ] 03-02-PLAN.md — UseObject opcode protocol + client: add enum value, implement RealmConnector::UseObject(), replace spell-cast click handler
+- [x] 03-02-PLAN.md — UseObject opcode protocol + client: add enum value, implement RealmConnector::UseObject(), replace spell-cast click handler
 - [ ] 03-03-PLAN.md — UseObject server handler + GameWorldObjectS fix: fix type TODO, door/chest branching in Use(), OnGameObjectUse handler end-to-end
 
 **Success criteria:**

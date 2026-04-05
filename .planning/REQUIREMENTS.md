@@ -62,7 +62,7 @@ Requirements for the next milestone: **Game Systems Polish & Playable Loop**. Ea
 
 ### World Objects
 
-- [ ] **WOBJ-01**: World objects respond to player interaction (doors open, chests give loot)
+- [x] **WOBJ-01**: World objects respond to player interaction (doors open, chests give loot)
 - [ ] **WOBJ-02**: Quest-required world objects are only usable when the quest is active
 - [ ] **WOBJ-03**: World objects can be enabled/disabled by triggers and scripts
 
@@ -152,7 +152,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LOOT-03 | Phase 7 | Pending |
 | LOOT-04 | Phase 7 | Pending |
 | LOOT-05 | Phase 7 | Pending |
-| WOBJ-01 | Phase 3 | Pending |
+| WOBJ-01 | Phase 3 | Complete |
 | WOBJ-02 | Phase 3 | Pending |
 | WOBJ-03 | Phase 3 | Pending |
 | EDIT-01 | Phase 8 | Pending |
