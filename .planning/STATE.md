@@ -4,12 +4,12 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 05
 status: executing
-last_updated: "2026-04-05T15:26:12.037Z"
+last_updated: "2026-04-05T15:41:06.020Z"
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 15
-  completed_plans: 13
+  completed_plans: 14
 ---
 
 # Project State
@@ -53,10 +53,13 @@ progress:
 | 2026-04-05 | Whisper error uses ChatType::System with packed GUID 0 | Server-generated error messages carry no sender identity; skip DB log for failed whisper attempts |
 | 2026-04-05 | CHAT_MSG_SYSTEM handler receives only (this, message) matching world_state.cpp TriggerLuaEvent signature | No senderName arg needed; server sends complete error text |
 | 2026-04-05 | RAID ChatTypeInfo sticky=1 so chat box stays in RAID mode between messages | Consistency with PARTY/GUILD/SAY which are also sticky |
+| 2026-04-05 | LootMethod stored on GamePlayerS alongside m_groupId — same pattern as groupId, synced from realm per-member | World server needs loot method at creature death; no auth context in LootInstance |
+| 2026-04-05 | MasterLoot GUID sentinel: client sends 0, realm replaces with leader characterId before sync | Avoids sending leader GUID over wire; server owns source of truth |
+| 2026-04-05 | Enforcement single point in LootInstance::TakeItem() — no bypass via OnAutoStoreLootItem | Anti-pattern: checking loot method in multiple places leads to bypasses |
 
 ## Blockers
 
 None currently.
 
 ---
-*Last updated: 2026-04-05 after Phase 4 Chat System verification passed (10/10)*
+*Last updated: 2026-04-05 after Phase 5 Plan 01 loot method enforcement complete*
