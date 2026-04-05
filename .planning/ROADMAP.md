@@ -13,7 +13,7 @@
 | 2 | Quest System Polish | End-to-end quest flow from discovery to reward | QUEST-01..06 | 4 |
 | 3 | NPC & World Object Interaction | 3/3 | Complete   | 2026-04-05 |
 | 4 | Chat System | 3/3 | Complete   | 2026-04-05 |
-| 5 | Group & Guild Features | Party gameplay, loot sharing, guild management | GRP-01..05 | 4 |
+| 5 | Group & Guild Features | 1/3 | In Progress|  |
 | 6 | Character Progression | XP gain, leveling, ability learning | PROG-01..04 | 3 |
 | 7 | Loot & Economy | Creature loot, world object loot, vendor economy | LOOT-01..05 | 4 |
 | 8 | Editor Content Workflows | Editor tooling for spawns, triggers, quests | EDIT-01..04 | 3 |
@@ -126,11 +126,11 @@ Plans:
 
 **Why after Phase 4:** Group play needs chat for coordination. Loot distribution (Phase 7) builds on group structure.
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 - [ ] 05-01-PLAN.md — Server loot enforcement: protocol opcodes, GamePlayerS loot state, LootInstance MasterLoot/RoundRobin/FFA enforcement, realm-world sync pipeline, realm OnSetLootMethod handler
-- [ ] 05-02-PLAN.md — Guild MOTD: SQL migration, database layer, Guild m_motd, WriteRoster with MOTD, OnGuildMotd complete, client guild_client fix, GuildFrame display
+- [x] 05-02-PLAN.md — Guild MOTD: SQL migration, database layer, Guild m_motd, WriteRoster with MOTD, OnGuildMotd complete, client guild_client fix, GuildFrame display
 - [ ] 05-03-PLAN.md — Client loot method UI: party_info 2-person bug fix, PARTY_LOOT_METHOD_CHANGED event, RealmConnector send, Lua bindings, slash command, context menu, localization
 
 **Success criteria:**

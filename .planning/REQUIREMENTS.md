@@ -42,8 +42,8 @@ Requirements for the next milestone: **Game Systems Polish & Playable Loop**. Ea
 - [ ] **GRP-01**: Player can invite others to a group and accept/decline invitations
 - [ ] **GRP-02**: Group members share XP from creature kills
 - [ ] **GRP-03**: Group loot rules work (round-robin, master loot, or free-for-all)
-- [ ] **GRP-04**: Guild roster displays online status and member ranks
-- [ ] **GRP-05**: Guild leader can promote, demote, invite, and remove members
+- [x] **GRP-04**: Guild roster displays online status and member ranks
+- [x] **GRP-05**: Guild leader can promote, demote, invite, and remove members
 
 ### Character Progression
 
@@ -141,8 +141,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GRP-01 | Phase 5 | Pending |
 | GRP-02 | Phase 5 | Pending |
 | GRP-03 | Phase 5 | Pending |
-| GRP-04 | Phase 5 | Pending |
-| GRP-05 | Phase 5 | Pending |
+| GRP-04 | Phase 5 | Complete |
+| GRP-05 | Phase 5 | Complete |
 | PROG-01 | Phase 6 | Pending |
 | PROG-02 | Phase 6 | Pending |
 | PROG-03 | Phase 6 | Pending |
