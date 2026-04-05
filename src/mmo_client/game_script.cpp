@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+﻿// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "game_script.h"
 #include "console/console.h"
@@ -1153,6 +1153,8 @@ namespace mmo
 																 { this->m_trainerClient.BuySpell(slot); }),
 					   luabind::def<std::function<void()>>("CloseTrainer", [this]()
 														   { this->m_trainerClient.CloseTrainer(); }),
+					   luabind::def<std::function<String()>>("GetTrainerTitle", [this]()
+														   { return this->m_trainerClient.GetTrainerTitle(); }),
 
 					   luabind::def<std::function<const char *(const ItemInfo *, int32)>>("GetItemSpellTriggerType", [this](const ItemInfo *item, int32 index)
 																						  { return this->GetItemSpellTriggerType(item, index); }),

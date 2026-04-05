@@ -2092,7 +2092,8 @@ namespace mmo
 				packet.Start(game::realm_client_packet::TrainerList);
 				packet
 					<< io::write<uint64>(trainerUnit.GetGuid())
-					<< io::write<uint16>(trainer.spells_size());
+					<< io::write<uint16>(trainer.spells_size())
+					<< io::write_dynamic_range<uint8>(trainer.title());
 
 				uint32 index = 0;
 				for (const auto& trainerSpellEntry : trainer.spells())

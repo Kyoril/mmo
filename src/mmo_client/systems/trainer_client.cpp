@@ -105,13 +105,15 @@ namespace mmo
 	{
 		uint64 trainerGuid;
 		uint16 spellCount;
-		if (!(packet >> io::read<uint64>(trainerGuid) >> io::read<uint16>(spellCount)))
+		String trainerTitle;
+		if (!(packet >> io::read<uint64>(trainerGuid) >> io::read<uint16>(spellCount) >> io::read_container<uint8>(trainerTitle)))
 		{
 			ELOG("Failed to read trainer list packet!");
 			return PacketParseResult::Disconnect;
 		}
 
 		m_trainerGuid = trainerGuid;
+		m_trainerTitle = std::move(trainerTitle);
 		m_trainerSpells.clear();
 
 		if (spellCount == 0)
@@ -179,6 +181,9 @@ namespace mmo
 			ASSERT(false && "Unknown trainer buy result op code received!");
 		}
 
+		// Notify Lua to refresh the trainer list state after a buy attempt
+		FrameManager::Get().TriggerLuaEvent("TRAINER_UPDATE");
+
 		return PacketParseResult::Pass;
 	}
 
@@ -196,6 +201,9 @@ namespace mmo
 
 		// Notify the loot frame manager
 		FrameManager::Get().TriggerLuaEvent("TRAINER_BUY_SUCCEEDED", spellId);
+
+		// Notify Lua to refresh the trainer list — bought spell becomes known
+		FrameManager::Get().TriggerLuaEvent("TRAINER_UPDATE");
 
 		return PacketParseResult::Pass;
 	}
