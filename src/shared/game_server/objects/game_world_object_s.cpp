@@ -20,7 +20,7 @@ namespace mmo
 
 		Set<uint32>(object_fields::Entry, m_entry.id());
 		Set<uint32>(object_fields::ObjectDisplayId, m_entry.displayid());
-		Set<uint32>(object_fields::ObjectTypeId, static_cast<uint32>(GameWorldObjectType::Chest));	// TODO
+		Set<uint32>(object_fields::ObjectTypeId, static_cast<uint32>(m_entry.type()));
 
 		// Apply quest requirement from proto data
 		if (m_entry.has_requiredquest() && m_entry.requiredquest() != 0)
@@ -68,19 +68,60 @@ namespace mmo
 			return;
 		}
 
-		if (!m_loot)
+		switch (GetType())
 		{
-			ASSERT(m_worldInstance);
+		case GameWorldObjectType::Chest:
+			{
+				// Guard against stub chests with no configured loot entry
+				if (m_entry.objectlootentry() == 0)
+				{
+					DLOG("Chest has no loot entry configured - no loot window opened");
+					return;
+				}
 
-			const auto weakPlayer = std::weak_ptr(std::dynamic_pointer_cast<GamePlayerS>(player.shared_from_this()));
-			m_loot = std::make_shared<LootInstance>(m_project.items, m_worldInstance->GetConditionMgr(), GetGuid(), m_project.unitLoot.getById(m_entry.objectlootentry()), 0, 0, std::vector{ weakPlayer });
+				if (!m_loot)
+				{
+					ASSERT(m_worldInstance);
 
-			auto weakThis = std::weak_ptr(shared_from_this());
-			m_lootSignals += m_loot->closed.connect(this, &GameWorldObjectS::OnLootClosed);
-			m_lootSignals += m_loot->cleared.connect(this, &GameWorldObjectS::OnLootCleared);
+					const auto weakPlayer = std::weak_ptr(std::dynamic_pointer_cast<GamePlayerS>(player.shared_from_this()));
+					m_loot = std::make_shared<LootInstance>(
+						m_project.items, m_worldInstance->GetConditionMgr(), GetGuid(),
+						m_project.unitLoot.getById(m_entry.objectlootentry()), 0, 0,
+						std::vector{ weakPlayer });
+
+					auto weakThis = std::weak_ptr(shared_from_this());
+					m_lootSignals += m_loot->closed.connect(this, &GameWorldObjectS::OnLootClosed);
+					m_lootSignals += m_loot->cleared.connect(this, &GameWorldObjectS::OnLootCleared);
+				}
+
+				player.LootObject(shared_from_this());
+			}
+			break;
+
+		case GameWorldObjectType::Door:
+			{
+				// Toggle door open/closed using the State field (0=closed, 1=open)
+				// Set<>() auto-broadcasts the change to all nearby players via AddObjectUpdate()
+				const uint32 currentState = Get<uint32>(object_fields::State);
+				const bool isOpen = (currentState == 1u);
+
+				if (isOpen)
+				{
+					// Close the door
+					Set<uint32>(object_fields::State, 0u);
+				}
+				else
+				{
+					// Open the door
+					Set<uint32>(object_fields::State, 1u);
+				}
+			}
+			break;
+
+		default:
+			WLOG("Player tried to use world object with unhandled type " << static_cast<uint32>(GetType()));
+			break;
 		}
-
-		player.LootObject(shared_from_this());
 	}
 
 	const String& GameWorldObjectS::GetName() const
