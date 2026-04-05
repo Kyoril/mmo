@@ -807,15 +807,7 @@ namespace mmo
 					}
 					else if (m_hoveredObject->IsWorldObject() && m_hoveredObject->IsUsable(m_controlledUnit->AsPlayer()))
 					{
-						const proto_client::SpellEntry* unlockSpell = m_controlledUnit->GetOpenSpell();
-						if (!unlockSpell)
-						{
-							FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "ERR_CANT_OPEN");
-						}
-						else
-						{
-							m_spellCast.CastSpell(unlockSpell->id(), m_hoveredObject);
-						}
+						m_connector.UseObject(m_hoveredObject->GetGuid());
 					}
 				}
 			}
