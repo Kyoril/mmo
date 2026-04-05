@@ -102,6 +102,13 @@ Plans:
 
 **Why here:** Chat is needed for group coordination (Phase 5) and is independent of combat/loot systems.
 
+**Plans:** 3 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — Foundation: ChatType::System enum + server OnChatMessage fix (whisper routing, raid broadcast, target-name parse)
+- [ ] 04-02-PLAN.md — Lua + data layer: ChatFrame handlers (whisper/raid/system), sticky reply, SLASH_RAID, locale strings ×4
+- [ ] 04-03-PLAN.md — Client C++: world_state System guard, game_script RAID type string + WHISPER_INFORM fire
+
 **Success criteria:**
 1. Say/Yell messages are visible to nearby players at appropriate ranges, displayed in chat window with sender name
 2. Group/Raid chat messages are delivered to all party/raid members regardless of location
