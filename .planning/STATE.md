@@ -4,12 +4,12 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 03
 status: executing
-last_updated: "2026-04-05T09:10:31.600Z"
+last_updated: "2026-04-05T09:17:08.176Z"
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 9
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # Project State
@@ -25,7 +25,7 @@ progress:
 |-------|------|--------|---------|-----------|
 | 1 | Trigger System Completion | Done | 2026-03-31 | 2026-03-31 |
 | 2 | Quest System Polish | Done | 2026-04-02 | 2026-04-02 |
-| 3 | NPC & World Object Interaction | Not Started | — | — |
+| 3 | NPC & World Object Interaction | In Progress | 2026-04-05 | — |
 | 4 | Chat System | Not Started | — | — |
 | 5 | Group & Guild Features | Not Started | — | — |
 | 6 | Character Progression | Not Started | — | — |
@@ -48,10 +48,12 @@ progress:
 | 2026-03-31 | Triggers first | Foundation for quest events, NPC scripting, world object behavior |
 | 2026-03-31 | Editor last | Most valuable after runtime systems are stable |
 | 2026-03-31 | PvP deferred to v2 | PvE gameplay loop is the priority |
+| 2026-04-05 | Trainer title wired through TrainerList packet | Server sends TrainerEntry.title field; client exposes via GetTrainerTitle() Lua binding |
+| 2026-04-05 | GOSSIP_SHOW + GOSSIP_CLOSED events added to quest_client.cpp | GOSSIP_SHOW coexists with QUEST_GREETING for pure gossip; GOSSIP_CLOSED fires in OnGossipComplete |
 
 ## Blockers
 
 None currently.
 
 ---
-*Last updated: 2026-03-31 after initialization*
+*Last updated: 2026-04-05 after 03-01-PLAN.md completion*

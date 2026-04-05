@@ -24,10 +24,10 @@ Requirements for the next milestone: **Game Systems Polish & Playable Loop**. Ea
 
 ### NPC Interaction
 
-- [ ] **NPC-01**: Player can interact with vendor NPCs to buy and sell items
-- [ ] **NPC-02**: Player can interact with trainer NPCs to learn abilities
-- [ ] **NPC-03**: Gossip menus support multi-page dialog trees
-- [ ] **NPC-04**: NPC interaction enforces range and line-of-sight checks
+- [x] **NPC-01**: Player can interact with vendor NPCs to buy and sell items
+- [x] **NPC-02**: Player can interact with trainer NPCs to learn abilities
+- [x] **NPC-03**: Gossip menus support multi-page dialog trees
+- [x] **NPC-04**: NPC interaction enforces range and line-of-sight checks
 
 ### Chat
 
@@ -129,10 +129,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | QUEST-04 | Phase 2 | Pending |
 | QUEST-05 | Phase 2 | Pending |
 | QUEST-06 | Phase 2 | Pending |
-| NPC-01 | Phase 3 | Pending |
-| NPC-02 | Phase 3 | Pending |
-| NPC-03 | Phase 3 | Pending |
-| NPC-04 | Phase 3 | Pending |
+| NPC-01 | Phase 3 | Complete |
+| NPC-02 | Phase 3 | Complete |
+| NPC-03 | Phase 3 | Complete |
+| NPC-04 | Phase 3 | Complete |
 | CHAT-01 | Phase 4 | Pending |
 | CHAT-02 | Phase 4 | Pending |
 | CHAT-03 | Phase 4 | Pending |
