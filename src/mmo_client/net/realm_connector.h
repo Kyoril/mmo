@@ -301,6 +301,10 @@ namespace mmo
 		///	@param lootObjectGuid The guid of the previously looted object.
 		void LootRelease(uint64 lootObjectGuid);
 
+		/// Sends a packet to the server requesting to use/interact with a specific world object.
+		///	@param objectGuid The guid of the world object to use.
+		void UseObject(uint64 objectGuid);
+
 		/// Sends a generic gossip dialog request packet to the server for a specific npc.
 		///	@param targetGuid The guid of the npc.
 		void GossipHello(uint64 targetGuid);

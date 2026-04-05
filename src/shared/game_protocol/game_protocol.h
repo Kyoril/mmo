@@ -242,6 +242,8 @@ namespace mmo
 				GroupLeave,
 				GroupDisband,
 
+				UseObject,
+
 				/// Counter constant
 				Count_,
 			};

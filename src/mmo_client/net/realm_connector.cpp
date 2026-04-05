@@ -597,6 +597,16 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::UseObject(uint64 objectGuid)
+	{
+		sendSinglePacket([objectGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::UseObject);
+			packet
+				<< io::write<uint64>(objectGuid);
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::GossipHello(uint64 targetGuid)
 	{
 		sendSinglePacket([targetGuid](game::OutgoingPacket& packet) {
