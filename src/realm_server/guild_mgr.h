@@ -37,6 +37,12 @@ namespace mmo
 		/// Gets the leader's character guid.
 		uint64 GetLeaderGuid() const { return m_leaderGuid; }
 
+		/// Gets the guild's current message of the day.
+		[[nodiscard]] const String& GetMotd() const { return m_motd; }
+
+		/// Sets the guild's message of the day (in-memory only — caller must persist to DB).
+		void SetMotd(const String& motd) { m_motd = motd; }
+
 		/// Checks if the given character is a member of this guild.
 		bool IsMember(uint64 playerGuid) const;
 
@@ -116,6 +122,8 @@ namespace mmo
 		uint64 m_leaderGuid;
 		std::vector<GuildMember> m_members;
 		std::vector<GuildRank> m_ranks;
+		/// Current message of the day; empty string if not set.
+		String m_motd;
 	};
 
 	/// Manages all guilds on the realm server.
