@@ -12,7 +12,7 @@
 | 1 | Trigger System Completion | All trigger actions functional, world objects scriptable | TRIG-01, TRIG-02, TRIG-03 | 3 |
 | 2 | Quest System Polish | End-to-end quest flow from discovery to reward | QUEST-01..06 | 4 |
 | 3 | NPC & World Object Interaction | 3/3 | Complete   | 2026-04-05 |
-| 4 | Chat System | 2/3 | In Progress|  |
+| 4 | Chat System | 3/3 | Complete   | 2026-04-05 |
 | 5 | Group & Guild Features | Party gameplay, loot sharing, guild management | GRP-01..05 | 4 |
 | 6 | Character Progression | XP gain, leveling, ability learning | PROG-01..04 | 3 |
 | 7 | Loot & Economy | Creature loot, world object loot, vendor economy | LOOT-01..05 | 4 |
