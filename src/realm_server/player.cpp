@@ -698,9 +698,20 @@ namespace mmo
 
 		uint8 chatType;
 		std::string message;
+		std::string targetName;
+
 		if (!(packet >> io::read<uint8>(chatType) >> io::read_limited_string<512>(message)))
 		{
 			return PacketParseResult::Disconnect;
+		}
+
+		if (static_cast<ChatType>(chatType) == ChatType::Whisper
+			|| static_cast<ChatType>(chatType) == ChatType::Channel)
+		{
+			if (!(packet >> io::read_container<uint8>(targetName)))
+			{
+				return PacketParseResult::Disconnect;
+			}
 		}
 
 		// Switch chat type
@@ -780,8 +791,63 @@ namespace mmo
 		}
 		break;
 
+		case ChatType::Whisper:
+		{
+			if (targetName.empty())
+			{
+				WLOG("Whisper received with empty target name, ignoring.");
+				break;
+			}
+
+			Player* target = m_manager.GetPlayerByCharacterName(targetName);
+			if (target == nullptr)
+			{
+				// Target not found — send system error back to sender; skip DB log for failed whispers
+				const std::string errorMsg = "No player named '" + targetName + "' is currently online.";
+				SendPacket([this, &errorMsg](game::OutgoingPacket &outPacket)
+				{
+					outPacket.Start(game::realm_client_packet::ChatMessage);
+					outPacket
+						<< io::write_packed_guid(0)
+						<< io::write<uint8>(ChatType::System)
+						<< io::write_range(errorMsg) << io::write<uint8>(0)
+						<< io::write<uint8>(0)
+						<< io::write<uint8>(0);
+					outPacket.Finish();
+				});
+				return PacketParseResult::Pass;
+			}
+
+			target->SendPacket([this, &message, chatType](game::OutgoingPacket &outPacket)
+			{
+				outPacket.Start(game::realm_client_packet::ChatMessage);
+				outPacket
+					<< io::write_packed_guid(m_characterData->characterId)
+					<< io::write<uint8>(chatType)
+					<< io::write_range(message) << io::write<uint8>(0)
+					<< io::write<uint8>(0)
+					<< io::write<uint8>(0);
+				outPacket.Finish();
+			});
+		}
+		break;
+
 		case ChatType::Raid:
-			WLOG("Raid chat is not implemented yet!");
+			if (!m_group || !m_group->IsMember(m_characterData->characterId))
+			{
+				WLOG("Player tried to send raid chat message without being in a group!");
+				break;
+			}
+			m_group->BroadcastPacket([this, &message, chatType](game::OutgoingPacket &outPacket)
+									 {
+					outPacket.Start(game::realm_client_packet::ChatMessage);
+					outPacket
+						<< io::write_packed_guid(m_characterData->characterId)
+						<< io::write<uint8>(chatType)
+						<< io::write_range(message)
+						<< io::write<uint8>(0)
+						<< io::write<uint8>(0);
+					outPacket.Finish(); });
 			break;
 
 		case ChatType::Channel:
