@@ -33,9 +33,9 @@ Requirements for the next milestone: **Game Systems Polish & Playable Loop**. Ea
 
 - [ ] **CHAT-01**: Player can send and receive Say messages (nearby players)
 - [ ] **CHAT-02**: Player can send and receive Yell messages (wider radius)
-- [ ] **CHAT-03**: Player can send and receive Group/Raid chat messages
+- [x] **CHAT-03**: Player can send and receive Group/Raid chat messages
 - [ ] **CHAT-04**: Player can send and receive Guild chat messages
-- [ ] **CHAT-05**: Player can send whisper messages to other players by name
+- [x] **CHAT-05**: Player can send whisper messages to other players by name
 
 ### Groups & Social
 
@@ -63,8 +63,8 @@ Requirements for the next milestone: **Game Systems Polish & Playable Loop**. Ea
 ### World Objects
 
 - [x] **WOBJ-01**: World objects respond to player interaction (doors open, chests give loot)
-- [ ] **WOBJ-02**: Quest-required world objects are only usable when the quest is active
-- [ ] **WOBJ-03**: World objects can be enabled/disabled by triggers and scripts
+- [x] **WOBJ-02**: Quest-required world objects are only usable when the quest is active
+- [x] **WOBJ-03**: World objects can be enabled/disabled by triggers and scripts
 
 ### Editor Workflows
 
@@ -135,9 +135,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NPC-04 | Phase 3 | Complete |
 | CHAT-01 | Phase 4 | Pending |
 | CHAT-02 | Phase 4 | Pending |
-| CHAT-03 | Phase 4 | Pending |
+| CHAT-03 | Phase 4 | Complete |
 | CHAT-04 | Phase 4 | Pending |
-| CHAT-05 | Phase 4 | Pending |
+| CHAT-05 | Phase 4 | Complete |
 | GRP-01 | Phase 5 | Pending |
 | GRP-02 | Phase 5 | Pending |
 | GRP-03 | Phase 5 | Pending |
@@ -153,8 +153,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LOOT-04 | Phase 7 | Pending |
 | LOOT-05 | Phase 7 | Pending |
 | WOBJ-01 | Phase 3 | Complete |
-| WOBJ-02 | Phase 3 | Pending |
-| WOBJ-03 | Phase 3 | Pending |
+| WOBJ-02 | Phase 3 | Complete |
+| WOBJ-03 | Phase 3 | Complete |
 | EDIT-01 | Phase 8 | Pending |
 | EDIT-02 | Phase 8 | Pending |
 | EDIT-03 | Phase 8 | Pending |
