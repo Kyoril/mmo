@@ -2117,6 +2117,27 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			{
 				selectable.GetEntry().set_animprogress(animProgress);
 			}
+
+			// Per-spawn loot entry override (0 = use base ObjectEntry.objectlootentry)
+			uint32 lootEntry = selectable.GetEntry().loot_entry();
+			if (ImGui::InputScalar("Loot Entry", ImGuiDataType_U32, &lootEntry))
+			{
+				selectable.GetEntry().set_loot_entry(lootEntry);
+			}
+
+			// Per-spawn trigger override
+			// Show base trigger count from ObjectEntry as read-only info
+			const proto::ObjectEntry* objEntry = m_editor.GetProject().objects.getById(selectable.GetEntry().objectentry());
+			if (objEntry && objEntry->triggers_size() > 0)
+			{
+				ImGui::TextDisabled("Base: %d trigger(s)", objEntry->triggers_size());
+			}
+
+			uint32 triggerId = selectable.GetEntry().trigger_id();
+			if (ImGui::InputScalar("Trigger ID", ImGuiDataType_U32, &triggerId))
+			{
+				selectable.GetEntry().set_trigger_id(triggerId);
+			}
 		}
 	}
 

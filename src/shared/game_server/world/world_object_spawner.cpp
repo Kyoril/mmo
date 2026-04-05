@@ -21,7 +21,8 @@ namespace mmo
 		const Quaternion& rotation,
 		float radius,
 		uint32 animProgress,
-		uint32 state)
+		uint32 state,
+		uint32 lootEntryOverride)
 		: m_world(world)
 		, m_entry(entry)
 		, m_maxCount(maxCount)
@@ -33,6 +34,7 @@ namespace mmo
 		, m_respawnCountdown(world.GetUniverse().GetTimers())
 		, m_animProgress(animProgress)
 		, m_state(state)
+		, m_lootEntryOverride(lootEntryOverride)
 	{
 		// Immediately spawn all objects
 		for (size_t i = 0; i < m_maxCount; ++i)
@@ -63,6 +65,12 @@ namespace mmo
 		spawned->Set<float>(object_fields::RotationZ, m_rotation.z);
 		spawned->Set<uint32>(object_fields::AnimProgress, m_animProgress);
 		spawned->Set<uint32>(object_fields::State, m_state);
+
+		// Apply per-spawn loot entry override if one is configured
+		if (m_lootEntryOverride != 0)
+		{
+			spawned->SetLootEntryOverride(m_lootEntryOverride);
+		}
 
 		// watch for destruction
 		spawned->destroy = std::bind(&WorldObjectSpawner::OnRemoval, this, std::placeholders::_1);

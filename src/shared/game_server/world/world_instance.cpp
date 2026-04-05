@@ -147,7 +147,8 @@ namespace mmo
 				{ spawn.location().rotationw(), spawn.location().rotationx(), spawn.location().rotationy(), spawn.location().rotationz() },
 				spawn.radius(),
 				spawn.animprogress(),
-				spawn.state()));
+				spawn.state(),
+				spawn.loot_entry()));
 			m_objectSpawners.push_back(std::move(spawner));
 			if (!spawn.name().empty())
 			{

@@ -27,7 +27,17 @@ namespace mmo
 		typedef std::vector<std::shared_ptr<GameWorldObjectS>> OwnedObjects;
 
 	public:
-		///
+		/// @brief Constructs a WorldObjectSpawner and immediately spawns all objects.
+		/// @param world The world instance to spawn objects into.
+		/// @param entry The object entry definition.
+		/// @param maxCount Maximum number of concurrent spawns.
+		/// @param respawnDelay Time in milliseconds before respawning a dead object.
+		/// @param center Spawn center position.
+		/// @param rotation Spawn rotation quaternion.
+		/// @param radius Spawn radius (currently unused for objects).
+		/// @param animProgress Initial animation progress value.
+		/// @param state Initial object state value.
+		/// @param lootEntryOverride Per-spawn loot entry override (0 = use base ObjectEntry).
 		explicit WorldObjectSpawner(
 			WorldInstance& world,
 			const proto::ObjectEntry& entry,
@@ -37,7 +47,8 @@ namespace mmo
 			const Quaternion& rotation,
 			float radius,
 			uint32 animProgress,
-			uint32 state);
+			uint32 state,
+			uint32 lootEntryOverride = 0);
 		virtual ~WorldObjectSpawner();
 
 		///
@@ -91,6 +102,7 @@ namespace mmo
 		Countdown m_respawnCountdown;
 		uint32 m_animProgress;
 		uint32 m_state;
+		uint32 m_lootEntryOverride;
 		bool m_active = true;
 		bool m_respawn = true;
 	};

@@ -72,8 +72,10 @@ namespace mmo
 		{
 		case GameWorldObjectType::Chest:
 			{
-				// Guard against stub chests with no configured loot entry
-				if (m_entry.objectlootentry() == 0)
+				// Guard against stub chests with no configured loot entry.
+				// Use per-spawn override if set, otherwise fall back to base ObjectEntry.objectlootentry.
+				const uint32 lootEntryId = (m_lootEntryOverride != 0) ? m_lootEntryOverride : m_entry.objectlootentry();
+				if (lootEntryId == 0)
 				{
 					DLOG("Chest has no loot entry configured - no loot window opened");
 					return;
@@ -84,13 +86,15 @@ namespace mmo
 					ASSERT(m_worldInstance);
 
 					const auto weakPlayer = std::weak_ptr(std::dynamic_pointer_cast<GamePlayerS>(player.shared_from_this()));
-					const auto* lootEntry = m_project.unitLoot.getById(m_entry.objectlootentry());
+					const auto* lootEntry = m_project.unitLoot.getById(lootEntryId);
 					m_loot = std::make_shared<LootInstance>(
 						m_project.items, m_worldInstance->GetConditionMgr(), GetGuid(),
 						lootEntry,
 						lootEntry ? lootEntry->minmoney() : 0,
 						lootEntry ? lootEntry->maxmoney() : 0,
 						std::vector{ weakPlayer });
+
+					// TODO: wire trigger_id — fire a specific trigger on chest open when trigger_id != 0
 
 					auto weakThis = std::weak_ptr(shared_from_this());
 					m_lootSignals += m_loot->closed.connect(this, &GameWorldObjectS::OnLootClosed);

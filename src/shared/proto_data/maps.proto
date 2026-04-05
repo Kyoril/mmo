@@ -68,6 +68,9 @@ message ObjectSpawnEntry {
 	optional bool isactive = 9 [default = true];
 
 	required ObjectSpawnLocation location = 10;
+
+	optional uint32 loot_entry = 11 [default = 0];   // 0 = use base ObjectEntry.objectlootentry
+	optional uint32 trigger_id = 12 [default = 0];    // 0 = use base ObjectEntry.triggers
 }
 
 message MapEntry {
