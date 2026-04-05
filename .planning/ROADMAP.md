@@ -17,6 +17,8 @@
 | 6 | Character Progression | 1/1 | Complete   | 2026-04-05 |
 | 7 | Loot & Economy | 3/3 | Complete   | 2026-04-05 |
 | 8 | Editor Content Workflows | 3/3 | Complete   | 2026-04-05 |
+| 9 | World Object Loot & Trigger Wiring | Close audit gaps: chest group loot + trigger_id runtime | GRP-03, LOOT-04, EDIT-02, WOBJ-03 | Pending |
+| 10 | Quest Editor Linking | Close audit gap: quest reward/fail triggers + chain links | EDIT-04 | Pending |
 
 ## Phase Details
 
@@ -192,6 +194,44 @@ Plans:
 3. Trigger editor provides visual chain editing with action/condition configuration and test execution
 
 **Depends on:** All prior phases (editor surfaces runtime features)
+
+---
+
+### Phase 9: World Object Loot & Trigger Wiring
+
+**Goal:** Close two audit gaps from v1.0: apply group loot rules to chest/world-object loot (not just creatures), and wire the per-spawn `trigger_id` through the runtime so chests can fire triggers on use.
+
+**Requirements:** GRP-03, LOOT-04, EDIT-02, WOBJ-03
+
+**Gap Closure:** Closes gaps from v1.0 audit — all 4 partial requirements
+
+**Plans:** 0 plans
+
+**Success criteria:**
+1. Opening a chest as a group applies the configured loot method (round-robin, master loot, FFA) — same enforcement as creature corpse loot
+2. A world object spawn with `trigger_id != 0` fires the trigger when the object is used — wired from `world_instance.cpp` → `WorldObjectSpawner` → `GameWorldObjectS::Use()`
+3. Both behaviors verified via editor: set loot_entry + trigger_id on a spawn, interact in-game and confirm loot method + trigger fire
+
+**Depends on:** Phase 8 (trigger_id proto field + editor UI already done)
+
+---
+
+### Phase 10: Quest Editor Linking
+
+**Goal:** Complete the quest editor so content creators can assign reward triggers, fail triggers, and next-quest chain links — closing the EDIT-04 audit gap.
+
+**Requirements:** EDIT-04
+
+**Gap Closure:** Closes unsatisfied requirement from v1.0 audit
+
+**Plans:** 0 plans
+
+**Success criteria:**
+1. Quest editor window shows `rewardtriggers[]` multi-entry field — triggers are saved to quest proto and fire on quest completion
+2. Quest editor shows `failtriggers[]` multi-entry field — triggers saved and fire on quest fail
+3. Quest editor shows `nextquestid` / `nextchainquestid` dropdowns — selecting a quest populates the chain link, visible in quest chain view
+
+**Depends on:** Phase 8 (trigger chain editor), Phase 2 (quest system)
 
 ---
 
