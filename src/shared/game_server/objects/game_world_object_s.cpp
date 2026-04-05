@@ -84,9 +84,12 @@ namespace mmo
 					ASSERT(m_worldInstance);
 
 					const auto weakPlayer = std::weak_ptr(std::dynamic_pointer_cast<GamePlayerS>(player.shared_from_this()));
+					const auto* lootEntry = m_project.unitLoot.getById(m_entry.objectlootentry());
 					m_loot = std::make_shared<LootInstance>(
 						m_project.items, m_worldInstance->GetConditionMgr(), GetGuid(),
-						m_project.unitLoot.getById(m_entry.objectlootentry()), 0, 0,
+						lootEntry,
+						lootEntry ? lootEntry->minmoney() : 0,
+						lootEntry ? lootEntry->maxmoney() : 0,
 						std::vector{ weakPlayer });
 
 					auto weakThis = std::weak_ptr(shared_from_this());
