@@ -544,6 +544,13 @@ namespace mmo
 		// Raise UI event to show the quest list window to the user
 		FrameManager::Get().TriggerLuaEvent("QUEST_GREETING");
 
+		// Fire GOSSIP_SHOW for pure gossip menus (no quest list) — coexists with QUEST_GREETING per Research Pitfall 5
+		// Quest givers only receive QUEST_GREETING (showQuests != 0)
+		if (!showQuests)
+		{
+			FrameManager::Get().TriggerLuaEvent("GOSSIP_SHOW");
+		}
+
 		return PacketParseResult::Pass;
 	}
 
@@ -954,6 +961,9 @@ namespace mmo
 
 	PacketParseResult QuestClient::OnGossipComplete(game::IncomingPacket& packet)
 	{
+		// Notify Lua that the gossip session has ended (per CONTEXT.md locked decision: Fire GOSSIP_CLOSED following VendorClient pattern)
+		FrameManager::Get().TriggerLuaEvent("GOSSIP_CLOSED");
+
 		CloseQuest();
 
 		return PacketParseResult::Pass;
