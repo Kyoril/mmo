@@ -1293,7 +1293,8 @@ namespace mmo
 			{"WHISPER", ChatType::Whisper},
 			{"GUILD", ChatType::Guild},
 			{"CHANNEL", ChatType::Channel},
-			{"EMOTE", ChatType::Emote}};
+			{"EMOTE", ChatType::Emote},
+			{"RAID", ChatType::Raid}};
 
 		const String typeString = type;
 		ChatType chatType = ChatType::Unknown;
@@ -1325,6 +1326,13 @@ namespace mmo
 		}
 
 		m_realmConnector.SendChatMessage(message, chatType, target ? target : s_emptyTarget);
+
+		if (chatType == ChatType::Whisper)
+		{
+			FrameManager::Get().TriggerLuaEvent("CHAT_MSG_WHISPER_INFORM",
+				std::string(target ? target : ""),
+				std::string(message));
+		}
 	}
 
 	void GameScript::TargetNearestEnemy()
