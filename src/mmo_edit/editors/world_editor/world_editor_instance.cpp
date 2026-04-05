@@ -533,6 +533,13 @@ namespace mmo
 		{
 			const auto mousePos = ImGui::GetMousePos();
 			m_transformWidget->OnMousePressed(button, (mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x, (mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+
+			if (button == 0 && m_editMode)
+			{
+				m_editMode->OnMouseDown(
+					(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+					(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+			}
 		}
 	}
 
@@ -574,9 +581,14 @@ namespace mmo
 			{
 				if (!widgetWasActive && button == 0 && m_hovering)
 				{
-					m_selectionRaycaster->PerformSpawnSelection(
-						(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
-						(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+					// Skip spawn selection raycasting while waypoint editing is active;
+					// clicks are consumed by the waypoint add / drag logic instead.
+					if (!m_spawnEditMode->IsWaypointEditActive())
+					{
+						m_selectionRaycaster->PerformSpawnSelection(
+							(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+							(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+					}
 				}
 			}
 			else if (m_editMode == m_terrainEditMode.get())
@@ -601,8 +613,11 @@ namespace mmo
 			const int16 deltaX = static_cast<int16>(x) - m_lastMouseX;
 			const int16 deltaY = static_cast<int16>(y) - m_lastMouseY;
 
+			// Skip camera rotation when the spawn editor is actively dragging a waypoint.
+			const bool isDraggingWaypoint = (m_editMode == m_spawnEditMode.get() && m_spawnEditMode->IsDraggingWaypoint());
+
 			// TODO: Move this into edit modes handling of OnMouseMoved
-			if (m_rightButtonPressed || (m_leftButtonPressed && (m_editMode != m_terrainEditMode.get() || (m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Deform &&
+			if (m_rightButtonPressed || (m_leftButtonPressed && !isDraggingWaypoint && (m_editMode != m_terrainEditMode.get() || (m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Deform &&
 																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Paint &&
 																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Area &&
 																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::VertexShading &&
@@ -620,6 +635,13 @@ namespace mmo
 		m_transformWidget->OnMouseMoved(
 			(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
 			(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+
+		if (m_editMode)
+		{
+			m_editMode->OnMouseMoved(
+				(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+				(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+		}
 
 		if (m_editMode == m_terrainEditMode.get())
 		{
@@ -1969,6 +1991,10 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 	void WorldEditorInstance::Visit(SelectedUnitSpawn &selectable)
 	{
+		// Notify the spawn edit mode which spawn is currently shown so it can
+		// enable waypoint editing when movement type is PATROL.
+		m_spawnEditMode->SetSelectedSpawn(&selectable.GetEntry());
+
 		if (ImGui::CollapsingHeader("Unit Spawn"))
 		{
 			proto::UnitEntry *selectedUnit = m_editor.GetProject().units.getById(selectable.GetEntry().unitentry());
@@ -2056,6 +2082,66 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 				}
 
 				ImGui::EndCombo();
+			}
+
+			// --- Patrol Waypoints section (only when PATROL movement is selected) ---
+			if (selectable.GetEntry().movement() == proto::UnitSpawnEntry_MovementType_PATROL)
+			{
+				ImGui::Separator();
+				ImGui::Text("Patrol Waypoints");
+				ImGui::Separator();
+				ImGui::TextDisabled("Click in the viewport to add waypoints.");
+
+				bool waypointChanged = false;
+				int removeIndex = -1;
+
+				for (int i = 0; i < selectable.GetEntry().waypoints_size(); ++i)
+				{
+					auto* wp = selectable.GetEntry().mutable_waypoints(i);
+
+					ImGui::PushID(i);
+
+					ImGui::Text("[%d]", i + 1);
+					ImGui::SameLine();
+
+					float waitTime = static_cast<float>(wp->waittime());
+					ImGui::SetNextItemWidth(120.0f);
+					if (ImGui::InputFloat("Wait (ms)", &waitTime, 0.0f, 0.0f, "%.0f"))
+					{
+						wp->set_waittime(static_cast<uint32>(waitTime));
+						waypointChanged = true;
+					}
+
+					ImGui::SameLine();
+
+					if (ImGui::SmallButton("X"))
+					{
+						removeIndex = i;
+					}
+
+					ImGui::PopID();
+				}
+
+				if (removeIndex >= 0)
+				{
+					selectable.GetEntry().mutable_waypoints()->erase(
+						selectable.GetEntry().mutable_waypoints()->begin() + removeIndex);
+					waypointChanged = true;
+				}
+
+				if (selectable.GetEntry().waypoints_size() > 0)
+				{
+					if (ImGui::Button("Clear All"))
+					{
+						selectable.GetEntry().mutable_waypoints()->Clear();
+						waypointChanged = true;
+					}
+				}
+
+				if (waypointChanged)
+				{
+					m_spawnEditMode->RebuildWaypointVisualization();
+				}
 			}
 		}
 	}
@@ -2477,6 +2563,12 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 	{
 		m_debugBoundingBox->SetVisible(false);
 		m_selection.Clear();
+
+		// Clear spawn edit mode's selected spawn so waypoint visualization is removed.
+		if (m_spawnEditMode)
+		{
+			m_spawnEditMode->SetSelectedSpawn(nullptr);
+		}
 	}
 
 	bool WorldEditorInstance::IsTransforming() const

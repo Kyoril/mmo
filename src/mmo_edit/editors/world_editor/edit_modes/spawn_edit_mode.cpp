@@ -9,7 +9,9 @@
 #include "math/plane.h"
 #include "math/ray.h"
 #include "scene_graph/camera.h"
+#include "scene_graph/material_manager.h"
 #include "scene_graph/scene.h"
+#include "scene_graph/scene_node.h"
 #include "scene_graph/movable_object.h"
 #include "terrain/terrain.h"
 
@@ -309,6 +311,9 @@ namespace mmo
 	{
 		WorldEditMode::OnDeactivate();
 
+		// Clear selected spawn and destroy any waypoint visualization.
+		SetSelectedSpawn(nullptr);
+
 		m_worldEditor.RemoveAllUnitSpawns();
 		m_worldEditor.ClearSelection();
 	}
@@ -500,5 +505,331 @@ namespace mmo
 		}
 		
 		return "";
+	}
+
+	void SpawnEditMode::SetSelectedSpawn(proto::UnitSpawnEntry* spawn)
+	{
+		// Re-evaluate active state even when pointer is unchanged (movement type may have changed).
+		const bool newActive = spawn != nullptr &&
+			spawn->movement() == proto::UnitSpawnEntry_MovementType_PATROL;
+
+		if (m_selectedUnitSpawn == spawn && newActive == m_waypointEditActive)
+		{
+			return;
+		}
+
+		m_selectedUnitSpawn = spawn;
+		m_draggingWaypointIndex = -1;
+		m_hoveredWaypointIndex = -1;
+		m_waypointEditActive = newActive;
+
+		RebuildWaypointVisualization();
+	}
+
+	void SpawnEditMode::RebuildWaypointVisualization()
+	{
+		Scene* scene = m_worldEditor.GetCamera().GetScene();
+		if (!scene)
+		{
+			return;
+		}
+
+		// Destroy existing path node/object.
+		if (m_waypointPathNode)
+		{
+			m_waypointPathNode->DetachAllObjects();
+
+			if (m_waypointPathObj)
+			{
+				scene->DestroyManualRenderObject(*m_waypointPathObj);
+				m_waypointPathObj = nullptr;
+			}
+
+			for (auto* markerObj : m_waypointSpheres)
+			{
+				scene->DestroyManualRenderObject(*markerObj);
+			}
+
+			m_waypointSpheres.clear();
+
+			for (auto* markerNode : m_waypointMarkerNodes)
+			{
+				markerNode->DetachAllObjects();
+				scene->GetRootSceneNode().RemoveChild(*markerNode);
+				scene->DestroySceneNode(*markerNode);
+			}
+
+			m_waypointMarkerNodes.clear();
+
+			scene->GetRootSceneNode().RemoveChild(*m_waypointPathNode);
+			scene->DestroySceneNode(*m_waypointPathNode);
+			m_waypointPathNode = nullptr;
+		}
+
+		if (!m_selectedUnitSpawn || m_selectedUnitSpawn->waypoints_size() < 1)
+		{
+			return;
+		}
+
+		// Use a stable unique name based on the spawn's address.
+		const String idStr = std::to_string(reinterpret_cast<uintptr_t>(m_selectedUnitSpawn));
+
+		// Create scene node at world origin for the path lines.
+		m_waypointPathNode = scene->GetRootSceneNode().CreateChildSceneNode("WaypointPathNode_" + idStr);
+
+		// Create path render object and draw loop lines.
+		m_waypointPathObj = scene->CreateManualRenderObject("WaypointPath_" + idStr);
+		m_waypointPathObj->SetCastShadows(false);
+		m_waypointPathNode->AttachObject(*m_waypointPathObj);
+
+		{
+			auto lineOp = m_waypointPathObj->AddLineListOperation(
+				MaterialManager::Get().Load("Editor/Wireframe"));
+
+			const int wpCount = m_selectedUnitSpawn->waypoints_size();
+			for (int i = 0; i < wpCount; ++i)
+			{
+				const auto& wp0 = m_selectedUnitSpawn->waypoints(i);
+				const auto& wp1 = m_selectedUnitSpawn->waypoints((i + 1) % wpCount);
+
+				lineOp->AddLine(
+					Vector3(wp0.positionx(), wp0.positiony(), wp0.positionz()),
+					Vector3(wp1.positionx(), wp1.positiony(), wp1.positionz()));
+			}
+
+			// lineOp goes out of scope here; its destructor calls Finish().
+		}
+
+		// Create one cross-marker render object per waypoint.
+		const int wpCount = m_selectedUnitSpawn->waypoints_size();
+		for (int i = 0; i < wpCount; ++i)
+		{
+			const auto& wp = m_selectedUnitSpawn->waypoints(i);
+			const Vector3 center(wp.positionx(), wp.positiony(), wp.positionz());
+
+			SceneNode* markerNode = scene->GetRootSceneNode().CreateChildSceneNode(
+				"WaypointMarkerNode_" + idStr + "_" + std::to_string(i));
+
+			ManualRenderObject* markerObj = scene->CreateManualRenderObject(
+				"WaypointMarker_" + idStr + "_" + std::to_string(i));
+			markerObj->SetCastShadows(false);
+			markerNode->AttachObject(*markerObj);
+
+			{
+				auto markerOp = markerObj->AddLineListOperation(
+					MaterialManager::Get().Load("Editor/Wireframe"));
+
+				const float s = 0.5f;
+
+				markerOp->AddLine(center + Vector3(-s, 0.0f, 0.0f), center + Vector3(s, 0.0f, 0.0f));
+				markerOp->AddLine(center + Vector3(0.0f, -s, 0.0f), center + Vector3(0.0f, s, 0.0f));
+				markerOp->AddLine(center + Vector3(0.0f, 0.0f, -s), center + Vector3(0.0f, 0.0f, s));
+
+				// markerOp destructor calls Finish().
+			}
+
+			m_waypointSpheres.push_back(markerObj);
+			m_waypointMarkerNodes.push_back(markerNode);
+		}
+	}
+
+	int SpawnEditMode::HitTestWaypoint(float worldX, float worldY, float worldZ) const
+	{
+		if (!m_selectedUnitSpawn)
+		{
+			return -1;
+		}
+
+		const float hitRadiusSq = 1.5f * 1.5f;
+
+		int closestIndex = -1;
+		float closestDistSq = std::numeric_limits<float>::max();
+
+		for (int i = 0; i < m_selectedUnitSpawn->waypoints_size(); ++i)
+		{
+			const auto& wp = m_selectedUnitSpawn->waypoints(i);
+
+			const float dx = wp.positionx() - worldX;
+			const float dy = wp.positiony() - worldY;
+			const float dz = wp.positionz() - worldZ;
+			const float distSq = dx * dx + dy * dy + dz * dz;
+
+			if (distSq < hitRadiusSq && distSq < closestDistSq)
+			{
+				closestDistSq = distSq;
+				closestIndex = i;
+			}
+		}
+
+		return closestIndex;
+	}
+
+	void SpawnEditMode::OnMouseDown(float x, float y)
+	{
+		if (!m_waypointEditActive || !m_selectedUnitSpawn)
+		{
+			return;
+		}
+
+		// Raycast to world position using scene geometry, falling back to ground plane.
+		Vector3 hitPos;
+		bool hitFound = false;
+
+		Scene* scene = m_worldEditor.GetCamera().GetScene();
+		if (scene)
+		{
+			const Ray ray = m_worldEditor.GetCamera().GetCameraToViewportRay(x, y, 10000.0f);
+			auto query = scene->CreateRayQuery(ray);
+			query->SetSortByDistance(true);
+			query->Execute();
+
+			const auto& results = query->GetLastResult();
+			float closestDist = std::numeric_limits<float>::max();
+
+			for (const auto& entry : results)
+			{
+				if (hitFound && entry.distance > closestDist)
+				{
+					break;
+				}
+
+				if (entry.movable)
+				{
+					const ICollidable* collidable = entry.movable->GetCollidable();
+					if (collidable)
+					{
+						CollisionResult hit;
+						if (collidable->IsCollidable() && collidable->TestRayCollision(ray, hit))
+						{
+							if (hit.distance < closestDist)
+							{
+								closestDist = hit.distance;
+								hitPos = hit.contactPoint;
+								hitFound = true;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		if (!hitFound)
+		{
+			const Ray ray = m_worldEditor.GetCamera().GetCameraToViewportRay(x, y, 10000.0f);
+			const auto plane = Plane(Vector3::UnitY, Vector3::Zero);
+			const auto hit = ray.Intersects(plane);
+
+			if (hit.first)
+			{
+				hitPos = ray.GetPoint(hit.second);
+			}
+			else
+			{
+				hitPos = ray.GetPoint(10.0f);
+			}
+		}
+
+		// Check if the user clicked near an existing waypoint (begin drag).
+		const int wpIndex = HitTestWaypoint(hitPos.x, hitPos.y, hitPos.z);
+		if (wpIndex >= 0)
+		{
+			m_draggingWaypointIndex = wpIndex;
+		}
+		else
+		{
+			// Add a new waypoint at the hit position.
+			auto* wp = m_selectedUnitSpawn->mutable_waypoints()->Add();
+			wp->set_positionx(hitPos.x);
+			wp->set_positiony(hitPos.y);
+			wp->set_positionz(hitPos.z);
+			wp->set_waittime(0);
+
+			RebuildWaypointVisualization();
+		}
+	}
+
+	void SpawnEditMode::OnMouseMoved(float x, float y)
+	{
+		if (m_draggingWaypointIndex < 0 || !m_selectedUnitSpawn)
+		{
+			return;
+		}
+
+		if (m_draggingWaypointIndex >= m_selectedUnitSpawn->waypoints_size())
+		{
+			m_draggingWaypointIndex = -1;
+			return;
+		}
+
+		// Raycast to updated world position.
+		Vector3 hitPos;
+		bool hitFound = false;
+
+		Scene* scene = m_worldEditor.GetCamera().GetScene();
+		if (scene)
+		{
+			const Ray ray = m_worldEditor.GetCamera().GetCameraToViewportRay(x, y, 10000.0f);
+			auto query = scene->CreateRayQuery(ray);
+			query->SetSortByDistance(true);
+			query->Execute();
+
+			const auto& results = query->GetLastResult();
+			float closestDist = std::numeric_limits<float>::max();
+
+			for (const auto& entry : results)
+			{
+				if (hitFound && entry.distance > closestDist)
+				{
+					break;
+				}
+
+				if (entry.movable)
+				{
+					const ICollidable* collidable = entry.movable->GetCollidable();
+					if (collidable)
+					{
+						CollisionResult hit;
+						if (collidable->IsCollidable() && collidable->TestRayCollision(ray, hit))
+						{
+							if (hit.distance < closestDist)
+							{
+								closestDist = hit.distance;
+								hitPos = hit.contactPoint;
+								hitFound = true;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		if (!hitFound)
+		{
+			const Ray ray = m_worldEditor.GetCamera().GetCameraToViewportRay(x, y, 10000.0f);
+			const auto plane = Plane(Vector3::UnitY, Vector3::Zero);
+			const auto hit = ray.Intersects(plane);
+
+			if (hit.first)
+			{
+				hitPos = ray.GetPoint(hit.second);
+			}
+			else
+			{
+				return;
+			}
+		}
+
+		// Update the dragged waypoint position and refresh visualization.
+		auto* wp = m_selectedUnitSpawn->mutable_waypoints(m_draggingWaypointIndex);
+		wp->set_positionx(hitPos.x);
+		wp->set_positiony(hitPos.y);
+		wp->set_positionz(hitPos.z);
+
+		RebuildWaypointVisualization();
+	}
+
+	void SpawnEditMode::OnMouseUp(float x, float y)
+	{
+		m_draggingWaypointIndex = -1;
 	}
 }
