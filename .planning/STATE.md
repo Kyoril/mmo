@@ -4,12 +4,12 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 04
 status: executing
-last_updated: "2026-04-05T10:24:18.773Z"
+last_updated: "2026-04-05T12:55:08.496Z"
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 12
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 # Project State
@@ -51,10 +51,12 @@ progress:
 | 2026-04-05 | Trainer title wired through TrainerList packet | Server sends TrainerEntry.title field; client exposes via GetTrainerTitle() Lua binding |
 | 2026-04-05 | GOSSIP_SHOW + GOSSIP_CLOSED events added to quest_client.cpp | GOSSIP_SHOW coexists with QUEST_GREETING for pure gossip; GOSSIP_CLOSED fires in OnGossipComplete |
 | 2026-04-05 | Whisper error uses ChatType::System with packed GUID 0 | Server-generated error messages carry no sender identity; skip DB log for failed whisper attempts |
+| 2026-04-05 | CHAT_MSG_SYSTEM handler receives only (this, message) matching world_state.cpp TriggerLuaEvent signature | No senderName arg needed; server sends complete error text |
+| 2026-04-05 | RAID ChatTypeInfo sticky=1 so chat box stays in RAID mode between messages | Consistency with PARTY/GUILD/SAY which are also sticky |
 
 ## Blockers
 
 None currently.
 
 ---
-*Last updated: 2026-04-05 after 04-01-PLAN.md completion*
+*Last updated: 2026-04-05 after 04-02-PLAN.md completion*

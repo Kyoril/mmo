@@ -12,7 +12,7 @@
 | 1 | Trigger System Completion | All trigger actions functional, world objects scriptable | TRIG-01, TRIG-02, TRIG-03 | 3 |
 | 2 | Quest System Polish | End-to-end quest flow from discovery to reward | QUEST-01..06 | 4 |
 | 3 | NPC & World Object Interaction | 3/3 | Complete   | 2026-04-05 |
-| 4 | Chat System | 1/3 | In Progress|  |
+| 4 | Chat System | 2/3 | In Progress|  |
 | 5 | Group & Guild Features | Party gameplay, loot sharing, guild management | GRP-01..05 | 4 |
 | 6 | Character Progression | XP gain, leveling, ability learning | PROG-01..04 | 3 |
 | 7 | Loot & Economy | Creature loot, world object loot, vendor economy | LOOT-01..05 | 4 |
@@ -102,11 +102,11 @@ Plans:
 
 **Why here:** Chat is needed for group coordination (Phase 5) and is independent of combat/loot systems.
 
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 - [x] 04-01-PLAN.md — Foundation: ChatType::System enum + server OnChatMessage fix (whisper routing, raid broadcast, target-name parse)
-- [ ] 04-02-PLAN.md — Lua + data layer: ChatFrame handlers (whisper/raid/system), sticky reply, SLASH_RAID, locale strings ×4
+- [x] 04-02-PLAN.md — Lua + data layer: ChatFrame handlers (whisper/raid/system), sticky reply, SLASH_RAID, locale strings ×4
 - [ ] 04-03-PLAN.md — Client C++: world_state System guard, game_script RAID type string + WHISPER_INFORM fire
 
 **Success criteria:**

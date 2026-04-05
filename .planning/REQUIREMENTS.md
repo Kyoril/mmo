@@ -31,10 +31,10 @@ Requirements for the next milestone: **Game Systems Polish & Playable Loop**. Ea
 
 ### Chat
 
-- [ ] **CHAT-01**: Player can send and receive Say messages (nearby players)
-- [ ] **CHAT-02**: Player can send and receive Yell messages (wider radius)
+- [x] **CHAT-01**: Player can send and receive Say messages (nearby players)
+- [x] **CHAT-02**: Player can send and receive Yell messages (wider radius)
 - [x] **CHAT-03**: Player can send and receive Group/Raid chat messages
-- [ ] **CHAT-04**: Player can send and receive Guild chat messages
+- [x] **CHAT-04**: Player can send and receive Guild chat messages
 - [x] **CHAT-05**: Player can send whisper messages to other players by name
 
 ### Groups & Social
@@ -133,10 +133,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NPC-02 | Phase 3 | Complete |
 | NPC-03 | Phase 3 | Complete |
 | NPC-04 | Phase 3 | Complete |
-| CHAT-01 | Phase 4 | Pending |
-| CHAT-02 | Phase 4 | Pending |
+| CHAT-01 | Phase 4 | Complete |
+| CHAT-02 | Phase 4 | Complete |
 | CHAT-03 | Phase 4 | Complete |
-| CHAT-04 | Phase 4 | Pending |
+| CHAT-04 | Phase 4 | Complete |
 | CHAT-05 | Phase 4 | Complete |
 | GRP-01 | Phase 5 | Pending |
 | GRP-02 | Phase 5 | Pending |
