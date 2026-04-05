@@ -1613,6 +1613,13 @@ namespace mmo
 		}
 		else
 		{
+			// System messages (GUID 0) do not require a name lookup
+			if (type == ChatType::System)
+			{
+				FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SYSTEM", message);
+				return PacketParseResult::Pass;
+			}
+
 			m_cache.GetNameCache().Get(characterGuid, [this, type, message, flags](uint64, const String &name)
 									   {
 					String chatMessageType = "SAY";
