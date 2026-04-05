@@ -126,6 +126,13 @@ Plans:
 
 **Why after Phase 4:** Group play needs chat for coordination. Loot distribution (Phase 7) builds on group structure.
 
+**Plans:** 3 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — Server loot enforcement: protocol opcodes, GamePlayerS loot state, LootInstance MasterLoot/RoundRobin/FFA enforcement, realm-world sync pipeline, realm OnSetLootMethod handler
+- [ ] 05-02-PLAN.md — Guild MOTD: SQL migration, database layer, Guild m_motd, WriteRoster with MOTD, OnGuildMotd complete, client guild_client fix, GuildFrame display
+- [ ] 05-03-PLAN.md — Client loot method UI: party_info 2-person bug fix, PARTY_LOOT_METHOD_CHANGED event, RealmConnector send, Lua bindings, slash command, context menu, localization
+
 **Success criteria:**
 1. Player can create/join groups via invite — invite notification shown, accept/decline works, group shows in UI
 2. XP from creature kills is shared among nearby group members using distance-based sharing formula
