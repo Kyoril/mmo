@@ -20,6 +20,7 @@ namespace mmo
 	void CreatureAIIdleState::OnEnter()
 	{
 		CreatureAIState::OnEnter();
+		GetControlled().SetMovementMode(unit_movement_mode::Walk);
 
 		m_connections += m_waitCountdown.ended.connect(*this, &CreatureAIIdleState::OnWaitCountdownExpired);
 		m_connections += GetAI().GetControlled().GetMover().targetReached.connect(*this, &CreatureAIIdleState::OnTargetReached);
@@ -241,6 +242,7 @@ namespace mmo
 			return;
 		}
 
+		const float walkSpeed = GetControlled().GetSpeed(movement_type::Walk);
 		if (!GetControlled().GetMover().MoveTo(waypoint.position, 0.0f))
 		{
 			StartWait(250);

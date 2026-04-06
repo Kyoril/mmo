@@ -122,6 +122,12 @@ namespace mmo
 		/// @brief Updates animation based on movement state
 		void UpdateMovementBasedAnimation();
 
+		/// @brief Returns the current walk/run mode replicated from the server.
+		[[nodiscard]] UnitMovementMode GetMovementMode() const { return GetUnitMovementModeFromFlags(m_movementInfo.movementFlags); }
+
+		/// @brief Returns true if walk mode is currently enabled.
+		[[nodiscard]] bool IsWalkModeEnabled() const { return GetMovementMode() == unit_movement_mode::Walk; }
+
 		/// @brief Updates animation states (transitions, blending, etc.)
 		void UpdateAnimationStates(const float deltaTime, const bool isDead);
 
@@ -260,7 +266,7 @@ namespace mmo
 		void SetJumpForceTimeRemining(float remaining) { m_jumpForceTimeRemaining = remaining; }
 
 		/// @brief Makes the unit follow a given path of points.
-		void SetMovementPath(const std::vector<Vector3> &points, GameTime moveTime, const std::optional<Radian> &targetRotation);
+		void SetMovementPath(const std::vector<Vector3> &points, GameTime moveTime, const std::optional<Radian> &targetRotation, UnitMovementMode movementMode);
 
 		void SetSpeed(const movement_type::Type type, float speed) { m_unitSpeed[type] = speed; }
 
@@ -551,6 +557,7 @@ namespace mmo
 		bool m_pathCompleted = false;
 		GameTime m_pathStartTime = 0;			 // When the path movement started
 		float m_pathTotalLength = 0.0f;			 // Total length of all path segments
+		float m_pathMoveSpeed = 0.0f;			 // Movement speed derived from server path duration
 		std::vector<float> m_pathSegmentLengths; // Length of each segment for time calculation
 
 		// Path gravity simulation
@@ -585,6 +592,7 @@ namespace mmo
 	protected:
 		// Animation stuff
 		AnimationState *m_idleAnimState{nullptr};
+		AnimationState *m_walkAnimState{nullptr};
 		AnimationState *m_readyAnimState{nullptr};
 		AnimationState *m_runAnimState{nullptr};
 		AnimationState *m_deathState{nullptr};

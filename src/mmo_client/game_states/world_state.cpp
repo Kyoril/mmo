@@ -1840,6 +1840,7 @@ namespace mmo
 		GameTime endTime;
 		uint32 pathSize;
 		std::optional<Radian> targetRotation;
+		UnitMovementMode movementMode = unit_movement_mode::Run;
 
 		if (!(packet >> io::read_packed_guid(guid) >> io::read<float>(startPosition.x) >> io::read<float>(startPosition.y) >> io::read<float>(startPosition.z) >> io::read<GameTime>(startTime) >> io::read<GameTime>(endTime) >> io::read<uint32>(pathSize) >> io::read<float>(endPosition.x) >> io::read<float>(endPosition.y) >> io::read<float>(endPosition.z)))
 		{
@@ -1861,6 +1862,17 @@ namespace mmo
 			}
 
 			targetRotation = Radian(rotation);
+		}
+
+		uint8 rawMovementMode = unit_movement_mode::Run;
+		if (!(packet >> io::read<uint8>(rawMovementMode)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (rawMovementMode < unit_movement_mode::Count_)
+		{
+			movementMode = static_cast<UnitMovementMode>(rawMovementMode);
 		}
 
 		// Find unit by guid
@@ -1907,7 +1919,7 @@ namespace mmo
 			}
 		}
 
-		unitPtr->SetMovementPath(path, endTime - startTime, targetRotation);
+		unitPtr->SetMovementPath(path, endTime - startTime, targetRotation, movementMode);
 
 		return PacketParseResult::Pass;
 	}

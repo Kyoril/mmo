@@ -1829,6 +1829,24 @@ namespace mmo
 		return baseSpeed * m_speedBonus[type];
 	}
 
+	UnitMovementMode GameUnitS::GetMovementMode() const
+	{
+		return GetUnitMovementModeFromFlags(m_movementInfo.movementFlags);
+	}
+
+	void GameUnitS::SetMovementMode(const UnitMovementMode movementMode)
+	{
+		MovementInfo movementInfo = GetMovementInfo();
+		if (GetUnitMovementModeFromFlags(movementInfo.movementFlags) == movementMode)
+		{
+			return;
+		}
+
+		SetUnitMovementModeOnFlags(movementInfo.movementFlags, movementMode);
+		movementInfo.timestamp = GetAsyncTimeMs();
+		ApplyMovementInfo(movementInfo);
+	}
+
 	void GameUnitS::NotifySpeedChanged(MovementType type, bool initial)
 	{
 		float speed = 1.0f;

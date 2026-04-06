@@ -379,7 +379,13 @@ namespace mmo
 		// Regular movement animations
 		if (m_unitMovement->IsMovingOnGround() && inputVector2DSize > 0.1f)
 		{
-			SetTargetAnimState(m_runAnimState);
+			AnimationState* movementAnim = m_runAnimState;
+			if (m_walkAnimState && IsWalkModeEnabled())
+			{
+				movementAnim = m_walkAnimState;
+			}
+
+			SetTargetAnimState(movementAnim);
 		}
 		else
 		{
@@ -1289,7 +1295,7 @@ namespace mmo
 		return jumpIsAllowed;
 	}
 
-	void GameUnitC::SetMovementPath(const std::vector<Vector3> &points, GameTime moveTime, const std::optional<Radian> &targetRotation)
+	void GameUnitC::SetMovementPath(const std::vector<Vector3> &points, GameTime moveTime, const std::optional<Radian> &targetRotation, const UnitMovementMode movementMode)
 	{
 		// Clear any existing animation-based movement
 		m_movementAnimationTime = 0.0f;
@@ -1322,6 +1328,8 @@ namespace mmo
 		m_pathCompleted = false;
 		m_pathStartTime = GetAsyncTimeMs();
 		m_pathStartPosition = actualStartPosition; // Use tolerance-checked start position
+		m_pathMoveSpeed = GetSpeed(movement_type::Run);
+		SetUnitMovementModeOnFlags(m_movementInfo.movementFlags, movementMode);
 
 		// Initialize path gravity variables
 		m_pathVerticalVelocity = 0.0f;
@@ -1340,6 +1348,11 @@ namespace mmo
 			m_pathSegmentLengths.push_back(segmentLength);
 			m_pathTotalLength += segmentLength;
 			currentPos = segmentEnd;
+		}
+
+		if (moveTime > 0 && m_pathTotalLength > 0.0f)
+		{
+			m_pathMoveSpeed = m_pathTotalLength / (static_cast<float>(moveTime) / 1000.0f);
 		}
 
 		// For remote units, we don't use movement flags for physics - we use direct positioning
@@ -1376,8 +1389,8 @@ namespace mmo
 		const float elapsedTime = static_cast<float>(currentTime - m_pathStartTime) / 1000.0f; // Convert to seconds
 
 		// Calculate how far along the path we should be based on movement speed
-		const float runSpeed = GetSpeed(movement_type::Run);
-		const float targetDistance = runSpeed * elapsedTime;
+		const float pathMoveSpeed = m_pathMoveSpeed > 0.0f ? m_pathMoveSpeed : GetSpeed(movement_type::Run);
+		const float targetDistance = pathMoveSpeed * elapsedTime;
 
 		// Check if we're close enough to the final destination (ONLY distance-based completion)
 		const Vector3 currentPosition = m_sceneNode->GetDerivedPosition();
@@ -1443,7 +1456,7 @@ namespace mmo
 
 		// Use actual movement speed scaled by deltaTime for smooth, framerate-independent movement.
 		// Add a catch-up factor when falling behind the computed path position to avoid persistent lag.
-		const float baseMove = runSpeed * deltaTime;
+		const float baseMove = pathMoveSpeed * deltaTime;
 		const float catchUpFactor = std::min(distanceFromTarget / std::max(baseMove, 0.01f), 3.0f);
 		const float maxMoveThisFrame = baseMove * std::max(catchUpFactor, 1.0f);
 
@@ -1473,9 +1486,15 @@ namespace mmo
 			}
 
 			// Set run animation for all units following paths
-			if (m_runAnimState)
+			AnimationState* movementAnim = m_runAnimState;
+			if (m_walkAnimState && IsWalkModeEnabled())
 			{
-				SetTargetAnimState(m_runAnimState);
+				movementAnim = m_walkAnimState;
+			}
+
+			if (movementAnim)
+			{
+				SetTargetAnimState(movementAnim);
 			}
 		}
 
@@ -2116,6 +2135,7 @@ namespace mmo
 
 		// Reset animation states
 		m_idleAnimState = nullptr;
+		m_walkAnimState = nullptr;
 		m_runAnimState = nullptr;
 		m_readyAnimState = nullptr;
 		m_castingState = nullptr;
@@ -2177,6 +2197,11 @@ namespace mmo
 		if (m_entity->HasAnimationState("Idle"))
 		{
 			m_idleAnimState = m_entity->GetAnimationState("Idle");
+		}
+
+		if (m_entity->HasAnimationState("Walk"))
+		{
+			m_walkAnimState = m_entity->GetAnimationState("Walk");
 		}
 
 		if (m_entity->HasAnimationState("Run"))

@@ -72,6 +72,7 @@ namespace mmo
 	void CreatureAICombatState::OnEnter()
 	{
 		CreatureAIState::OnEnter();
+		GetControlled().SetMovementMode(unit_movement_mode::Run);
 		
 		// Initialize state
 		m_stuckCounter = 0;

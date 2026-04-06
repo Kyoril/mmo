@@ -1109,6 +1109,14 @@ public:
 		/// @returns The current speed as a float.
 		float GetSpeed(const MovementType type) const;
 
+		/// @brief Returns the current server-controlled movement mode.
+		/// @return Walk or run mode.
+		[[nodiscard]] UnitMovementMode GetMovementMode() const;
+
+		/// @brief Sets the current server-controlled movement mode.
+		/// @param movementMode Walk or run mode.
+		void SetMovementMode(UnitMovementMode movementMode);
+
 		/// Called by spell auras to notify that a speed aura has been applied or misapplied.
 		/// If this unit is player controlled, a client notification is sent and the speed is
 		/// only changed after the client has acknowledged this change. Otherwise, the speed

@@ -73,7 +73,7 @@ namespace mmo
 							strongUnit->Relocate(target, o);
 
 							auto info = strongUnit->GetMovementInfo();
-							info.movementFlags = movement_flags::None;
+							info.movementFlags &= movement_flags::WalkMode;
 							strongUnit->ApplyMovementInfo(info);
 						}
 					});
@@ -96,7 +96,8 @@ namespace mmo
 
 	bool UnitMover::MoveTo(const Vector3& target, float acceptanceRadius, const Radian* targetFacing, const IShape* clipping/* = nullptr*/)
 	{
-		const bool result = MoveTo(target, m_unit.GetSpeed(movement_type::Run), acceptanceRadius, targetFacing, clipping);
+		const MovementType moveType = m_unit.GetMovementMode() == unit_movement_mode::Walk ? movement_type::Walk : movement_type::Run;
+		const bool result = MoveTo(target, m_unit.GetSpeed(moveType), acceptanceRadius, targetFacing, clipping);
 		m_customSpeed = false;
 		return result;
 	}
@@ -106,6 +107,7 @@ namespace mmo
 		uint64 guid,
 		const Vector3& oldPosition,
 		const std::vector<Vector3>& path,
+		UnitMovementMode movementMode,
 		const Radian* targetFacing,
 		GameTime startTime,
 		GameTime endTime
@@ -139,6 +141,8 @@ namespace mmo
 		{
 			out_packet << io::write<uint8>(0);
 		}
+
+		out_packet << io::write<uint8>(movementMode);
 
 		// Write points in between (if any)
 		if (path.size() > 1)
@@ -264,7 +268,7 @@ namespace mmo
 		m_moveEnd = moveTime;
 
 		auto movementInfo = moved.GetMovementInfo();
-		movementInfo.movementFlags = movement_flags::None;
+		movementInfo.movementFlags &= movement_flags::WalkMode;
 		moved.ApplyMovementInfo(movementInfo);
 
 		// Send movement packet
@@ -274,7 +278,7 @@ namespace mmo
 			std::vector<char> buffer;
 			io::VectorSink sink(buffer);
 			game::Protocol::OutgoingPacket packet(sink);
-			WriteCreatureMove(packet, moved.GetGuid(), currentLoc, path, targetFacing, m_moveStart, m_moveEnd);
+			WriteCreatureMove(packet, moved.GetGuid(), currentLoc, path, moved.GetMovementMode(), targetFacing, m_moveStart, m_moveEnd);
 
 			ForEachSubscriberInSight(
 				moved.GetWorldInstance()->GetGrid(),
@@ -352,7 +356,7 @@ namespace mmo
 			std::vector<char> buffer;
 			io::VectorSink sink(buffer);
 			game::Protocol::OutgoingPacket packet(sink);
-			WriteCreatureMove(packet, moved.GetGuid(), currentLoc, { currentLoc }, nullptr, now, now);
+			WriteCreatureMove(packet, moved.GetGuid(), currentLoc, { currentLoc }, moved.GetMovementMode(), nullptr, now, now);
 
 			ForEachSubscriberInSight(
 				moved.GetWorldInstance()->GetGrid(),
@@ -417,7 +421,7 @@ namespace mmo
 		std::vector<char> buffer;
 		io::VectorSink sink(buffer);
 		game::Protocol::OutgoingPacket packet(sink);
-		WriteCreatureMove(packet, GetMoved().GetGuid(), location, path, customFacing, now, m_moveEnd);
+		WriteCreatureMove(packet, GetMoved().GetGuid(), location, path, GetMoved().GetMovementMode(), customFacing, now, m_moveEnd);
 		subscriber.SendPacket(packet, buffer);
 	}
 }
