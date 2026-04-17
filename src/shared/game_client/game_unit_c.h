@@ -564,6 +564,17 @@ namespace mmo
 		float m_pathVerticalVelocity = 0.0f; // Current vertical velocity for gravity
 		bool m_pathOnGround = true;			 // Whether unit is on ground during path movement
 
+		// Easing state tracking for smooth path transitions
+		float m_easingProgress = 0.0f;		 // Current easing progress [0, 1] within waypoint transition
+		float m_easingTransitionDistance = 0.0f; // Distance being eased for current turn
+
+		/// @brief Detects if there's a turn between two consecutive path segments
+		/// @param prevPoint Previous waypoint
+		/// @param currPoint Current waypoint
+		/// @param nextPoint Next waypoint
+		/// @return True if a turn is detected (angle > threshold)
+		bool DetectTurnBetweenSegments(const Vector3& prevPoint, const Vector3& currPoint, const Vector3& nextPoint) const;
+
 		std::vector<const proto_client::SpellEntry *> m_spells;
 		std::vector<const proto_client::SpellEntry *> m_spellBookSpells;
 

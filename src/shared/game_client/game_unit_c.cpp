@@ -16,6 +16,7 @@
 #include "game/character_customization/avatar_definition_mgr.h"
 #include "log/default_log_levels.h"
 #include "math/collision.h"
+#include "math/math_utils.h"
 #include "scene_graph/animation_notify.h"
 #include "scene_graph/animation_state.h"
 #include "scene_graph/material_manager.h"
@@ -1306,6 +1307,10 @@ namespace mmo
 		m_targetRotation.reset();
 		m_pathCompleted = false;
 
+		// Reset easing state when new path is assigned
+		m_easingProgress = 0.0f;
+		m_easingTransitionDistance = 0.0f;
+
 		if (points.empty())
 		{
 			return;
@@ -1572,6 +1577,19 @@ namespace mmo
 
 		// If we get here, we've gone past the end of the path
 		return m_movementPath.back();
+	}
+
+	bool GameUnitC::DetectTurnBetweenSegments(const Vector3& prevPoint, const Vector3& currPoint, const Vector3& nextPoint) const
+	{
+		// Use the ComputeSegmentAngle utility from math_utils to determine if a turn exists
+		// A turn is detected if the angle between the two segments is greater than a threshold
+		const float segmentAngle = ComputeSegmentAngle(prevPoint, currPoint, nextPoint);
+		
+		// Define turn threshold: we consider angles > 30 degrees as a "turn" requiring easing
+		// This is approximately 0.524 radians (Pi/6)
+		constexpr float turnThresholdRadians = 0.524f;
+		
+		return segmentAngle > turnThresholdRadians;
 	}
 
 	bool GameUnitC::IsControlledByLocalPlayer() const
