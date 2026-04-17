@@ -534,7 +534,8 @@ namespace mmo
 		bool IsFollowingPath() const { return !m_movementPath.empty() && !m_pathCompleted; }
 
 		/// Calculates position along the path based on distance traveled
-		Vector3 CalculatePositionAlongPath(float distance) const;
+		/// Applies easing at waypoint turns for smooth transitions
+		Vector3 CalculatePositionAlongPath(float distance);
 
 	public:
 		/// Returns true if this unit is controlled by the local player
