@@ -7,6 +7,7 @@
 #include "game_server/ai/creature_ai.h"
 #include "game_server/ai/creature_combat_script.h"
 #include "game_server/ai/creature_combat_script_registry.h"
+#include "game_server/ai/creature_separation_manager.h"
 #include "objects/game_creature_s.h"
 #include "game_server/world/universe.h"
 #include "log/default_log_levels.h"
@@ -1202,6 +1203,10 @@ namespace mmo
 		
 		const float currentDistanceSq = controlled.GetSquaredDistanceTo(target.GetPosition(), true);
 		
+		// Get threat targets for separation logic
+		const auto threatTargets = GetThreatTargets();
+		auto& separationManager = CreatureSeparationManager::Get();
+		
 		switch (m_combatBehavior)
 		{
 		case CombatBehavior::Melee:
@@ -1222,7 +1227,10 @@ namespace mmo
 					const Vector3 targetPos = target.GetPosition();
 					const Vector3 ourPos = controlled.GetPosition();
 					const Vector3 direction = (ourPos - targetPos).NormalizedCopy();
-					const Vector3 retreatPos = targetPos + direction * CASTER_OPTIMAL_RANGE;
+					Vector3 retreatPos = targetPos + direction * CASTER_OPTIMAL_RANGE;
+					
+					// Apply separation logic to avoid stacking with nearby creatures
+					retreatPos = separationManager.AdjustTargetForSeparation(controlled, retreatPos, threatTargets);
 					
 					if (mover.MoveTo(retreatPos, 2.0f))
 					{
@@ -1234,7 +1242,10 @@ namespace mmo
 				// If too far, move closer
 				else if (currentDistanceSq > optimalRangeSq)
 				{
-					const Vector3 targetPosition = PredictTargetPosition(target);
+					Vector3 targetPosition = PredictTargetPosition(target);
+					
+					// Apply separation logic to avoid stacking with nearby creatures
+					targetPosition = separationManager.AdjustTargetForSeparation(controlled, targetPosition, threatTargets);
 					
 					if (mover.MoveTo(targetPosition, CASTER_OPTIMAL_RANGE * 0.8f))
 					{
