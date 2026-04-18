@@ -41,6 +41,7 @@ namespace mmo
 		targetPosition = target;
 		combatRange = range;
 		isMovingToCombat = true;
+		lastWaypointTarget = target;
 	}
 
 	void CreatureAICombatState::MovementState::Reset()
@@ -48,6 +49,7 @@ namespace mmo
 		targetPosition = Vector3::Zero;
 		combatRange = 0.0f;
 		isMovingToCombat = false;
+		lastWaypointTarget = Vector3::Zero;
 	}
 
 	// === CreatureAICombatState Implementation ===
@@ -449,6 +451,18 @@ namespace mmo
 			return false; // Already in range
 		}
 
+		// Check if player has moved more than threshold distance from our current waypoint target
+		// This triggers recalculation when the player moves significantly (e.g., kiting away)
+		if (m_movementState.isMovingToCombat)
+		{
+			const float playerDistanceFromWaypointSq = target.GetSquaredDistanceTo(m_movementState.lastWaypointTarget, true);
+			if (playerDistanceFromWaypointSq > PLAYER_POSITION_THRESHOLD)
+			{
+				DLOG("Recalculation: distance_sq=" << playerDistanceFromWaypointSq << " > threshold; triggering waypoint recompute");
+				return true; // Player moved too far, need to recalculate
+			}
+		}
+
 		// If we're moving, check if we'll be in range by the time we reach our destination
 		if (mover.IsMoving())
 		{
@@ -509,6 +523,19 @@ namespace mmo
 		if (m_script && !m_script->CanMove())
 		{
 			return true; // Script says we can't move, treat as success
+		}
+
+		// Check if player has moved beyond our threshold distance from current waypoint target
+		// This detects kiting and triggers immediate waypoint recalculation
+		if (m_movementState.isMovingToCombat && !GetControlled().IsRooted())
+		{
+			const float playerDistanceFromWaypointSq = target.GetSquaredDistanceTo(m_movementState.lastWaypointTarget, true);
+			if (playerDistanceFromWaypointSq > PLAYER_POSITION_THRESHOLD)
+			{
+				DLOG("Recalculation: distance_sq=" << playerDistanceFromWaypointSq << " > threshold; triggering waypoint recompute");
+				// Invalidate movement state to force recalculation
+				m_movementState.Reset();
+			}
 		}
 
 		if (!ShouldMoveToTarget(target))

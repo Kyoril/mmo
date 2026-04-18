@@ -114,6 +114,8 @@ namespace mmo
 			float combatRange;
 			/// Whether we are currently moving to a valid combat position.
 			bool isMovingToCombat;
+			/// Last recorded waypoint target position (for player movement detection).
+			Vector3 lastWaypointTarget;
 
 			/**
 			 * @brief Constructs a new movement state.
@@ -122,6 +124,7 @@ namespace mmo
 				: targetPosition(Vector3::Zero)
 				, combatRange(0.0f)
 				, isMovingToCombat(false)
+				, lastWaypointTarget(Vector3::Zero)
 			{
 			}
 
@@ -466,5 +469,7 @@ namespace mmo
 		static constexpr float FORMATION_ANGLE_STEP = 0.7f;
 		/// Maximum angular spread for the formation semicircle (radians, ~160 degrees)
 		static constexpr float FORMATION_MAX_ANGLE = 2.8f;
+		/// Distance threshold for waypoint recalculation when player moves (5m, stored as squared distance)
+		static constexpr float PLAYER_POSITION_THRESHOLD = 25.0f; // 5^2 = 25
 	};
 }
