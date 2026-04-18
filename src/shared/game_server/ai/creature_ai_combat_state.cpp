@@ -1204,14 +1204,30 @@ namespace mmo
 			{
 				const float meleeRangeSq = (controlled.GetMeleeReach() + target.GetMeleeReach()) * 
 										   (controlled.GetMeleeReach() + target.GetMeleeReach());
-				return distanceSq <= meleeRangeSq;
+				const bool inRange = distanceSq <= meleeRangeSq;
+				if (inRange)
+				{
+					const float distance = std::sqrtf(distanceSq);
+					const float acceptanceRadius = std::sqrtf(meleeRangeSq);
+					DLOG("Creature " << controlled.GetGuid() << " stopped at engagement range: distance=" 
+						<< distance << " <= acceptanceRadius=" << acceptanceRadius);
+				}
+				return inRange;
 			}
 		case CombatBehavior::Caster:
 		case CombatBehavior::Ranged:
 			{
 				const float minRangeSq = CASTER_MIN_RANGE * CASTER_MIN_RANGE;
 				const float maxRangeSq = CASTER_OPTIMAL_RANGE * CASTER_OPTIMAL_RANGE;
-				return distanceSq >= minRangeSq && distanceSq <= maxRangeSq;
+				const bool inRange = distanceSq >= minRangeSq && distanceSq <= maxRangeSq;
+				if (inRange)
+				{
+					const float distance = std::sqrtf(distanceSq);
+					const float acceptanceRadius = CASTER_OPTIMAL_RANGE;
+					DLOG("Creature " << controlled.GetGuid() << " stopped at engagement range: distance=" 
+						<< distance << " <= acceptanceRadius=" << acceptanceRadius);
+				}
+				return inRange;
 			}
 		}
 		
@@ -1278,7 +1294,10 @@ namespace mmo
 					// Apply separation logic to avoid stacking with nearby creatures
 					retreatPos = separationManager.AdjustTargetForSeparation(controlled, retreatPos, threatTargets);
 					
-					if (mover.MoveTo(retreatPos, 2.0f))
+					// Use combat range factor for engagement range enforcement
+					// Stop at roughly CASTER_MIN_RANGE to ensure safe distance
+					const float retreatEngagementRange = CASTER_MIN_RANGE * COMBAT_RANGE_FACTOR;
+					if (mover.MoveTo(retreatPos, retreatEngagementRange))
 					{
 						m_movementState.UpdateTarget(retreatPos, CASTER_OPTIMAL_RANGE);
 						m_stuckCounter = 0;
@@ -1293,7 +1312,10 @@ namespace mmo
 					// Apply separation logic to avoid stacking with nearby creatures
 					targetPosition = separationManager.AdjustTargetForSeparation(controlled, targetPosition, threatTargets);
 					
-					if (mover.MoveTo(targetPosition, CASTER_OPTIMAL_RANGE * 0.8f))
+					// Use combat range factor for engagement range enforcement
+					// Stop at roughly CASTER_OPTIMAL_RANGE to ensure proper spell casting distance
+					const float approachEngagementRange = CASTER_OPTIMAL_RANGE * COMBAT_RANGE_FACTOR;
+					if (mover.MoveTo(targetPosition, approachEngagementRange))
 					{
 						m_movementState.UpdateTarget(targetPosition, CASTER_OPTIMAL_RANGE);
 						m_stuckCounter = 0;
