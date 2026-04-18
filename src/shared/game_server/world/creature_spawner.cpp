@@ -23,7 +23,12 @@ namespace mmo
 			case proto::UnitSpawnEntry_MovementType_STATIONARY:
 				return creature_movement::None;
 			case proto::UnitSpawnEntry_MovementType_PATROL:
-				return creature_movement::Waypoints;
+				if (spawnEntry.waypoints_size() > 0)
+				{
+					return creature_movement::Waypoints;
+				}
+
+				return creature_movement::Random;
 			case proto::UnitSpawnEntry_MovementType_ROUTE:
 				WLOG("Route creature movement is not implemented yet - falling back to stationary");
 				return creature_movement::None;
