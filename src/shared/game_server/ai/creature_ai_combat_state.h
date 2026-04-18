@@ -426,6 +426,7 @@ namespace mmo
 		// === Timing and Counters ===
 		GameTime m_lastThreatTime;
 		Countdown m_nextActionCountdown;
+		Countdown m_recalculationCountdown;
 		uint32 m_stuckCounter;
 		
 		// === Flags ===
@@ -471,5 +472,7 @@ namespace mmo
 		static constexpr float FORMATION_MAX_ANGLE = 2.8f;
 		/// Distance threshold for waypoint recalculation when player moves (5m, stored as squared distance)
 		static constexpr float PLAYER_POSITION_THRESHOLD = 25.0f; // 5^2 = 25
+		/// Periodic recalculation interval (500ms for responsive positioning updates)
+		static constexpr uint32 RECALCULATION_INTERVAL_MS = 500;
 	};
 }

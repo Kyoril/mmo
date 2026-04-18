@@ -61,6 +61,7 @@ namespace mmo
 		, m_lastThreatTime(0)
 		, m_stuckCounter(0)
 		, m_nextActionCountdown(ai.GetControlled().GetTimers())
+		, m_recalculationCountdown(ai.GetControlled().GetTimers())
 		, m_isCasting(false)
 		, m_entered(false)
 		, m_isRanged(false)
@@ -81,6 +82,9 @@ namespace mmo
 		m_stuckCounter = 0;
 		m_movementState.Reset();
 		m_lastSpellCastTime = 0;
+
+		// Initialize recalculation countdown to fire at 500ms intervals
+		m_recalculationCountdown.SetEnd(GetAsyncTimeMs() + RECALCULATION_INTERVAL_MS);
 
 		auto& controlled = GetControlled();
 		controlled.RemoveAllCombatParticipants();
@@ -680,6 +684,21 @@ namespace mmo
 
 		// Update spell cooldowns
 		UpdateSpellCooldowns();
+
+		// Check if periodic recalculation countdown has fired
+		const auto currentTime = GetAsyncTimeMs();
+		if (currentTime >= m_recalculationCountdown.GetEnd())
+		{
+			// Periodic recalculation countdown fired; forcing waypoint revalidation
+			DLOG("Periodic recalculation countdown fired; forcing waypoint revalidation");
+			
+			// Force movement revalidation by resetting movement state
+			// This will trigger a fresh MoveToOptimalRange() calculation
+			m_movementState.Reset();
+			
+			// Reset countdown for next interval
+			m_recalculationCountdown.SetEnd(currentTime + RECALCULATION_INTERVAL_MS);
+		}
 
 		// Use shorter intervals when target is moving to improve responsiveness
 		uint32 actionInterval = ACTION_INTERVAL_MS;
