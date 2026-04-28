@@ -5,6 +5,7 @@
 #include "bot_context.h"
 #include "bot_profile.h"
 #include "bot_profiles.h"
+#include "bot_startup_types.h"
 #include "bot_unit_watcher.h"
 
 #include "base/clock.h"
@@ -34,30 +35,6 @@ using json = nlohmann::json;
 
 namespace mmo
 {
-	struct BotConfig
-	{
-		std::string loginHost { "mmo-dev.net" };
-		uint16 loginPort { constants::DefaultLoginPlayerPort };
-		std::string username;
-		std::string password;
-
-		std::string realmName;
-		size_t realmIndex { 0 };
-
-		std::string characterName { "Bot" };
-		bool createCharacter { false };
-		uint8 race { 0 };
-		uint8 characterClass { 1 };
-		uint8 gender { 0 };
-
-		std::string greeting { "Hi" };
-		bool randomMove { false };
-		uint32 heartbeatMs { 5000 };
-		
-		// Profile configuration
-		std::string profileName { "simple_greeter" };
-	};
-
 	bool LoadConfig(const fs::path& path, BotConfig& outConfig)
 	{
 		if (!fs::exists(path))

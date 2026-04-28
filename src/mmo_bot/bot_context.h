@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "bot_startup_types.h"
+
 #include "base/typedefs.h"
 #include "game/chat_type.h"
 #include "game/movement_info.h"
@@ -20,7 +22,6 @@ namespace mmo
 	class BotRealmConnector;
 	class BotObjectManager;
 	class BotUnit;
-	struct BotConfig;
 
 	/// Provides context and capabilities to bot actions.
 	/// This class acts as a facade, exposing only the necessary operations

@@ -12,9 +12,6 @@
 
 namespace mmo
 {
-	// Forward declaration of BotConfig (defined in bot_main.cpp)
-	struct BotConfig;
-
 	BotContext::BotContext(
 		std::shared_ptr<BotRealmConnector> realmConnector,
 		const BotConfig& config)

@@ -19,6 +19,10 @@ target_link_libraries(unit_tests
 	game
 	game_server)
 
+target_sources(unit_tests PRIVATE
+	../mmo_bot/bot_startup_selection.cpp
+)
+
 if (WIN32)
 	target_link_libraries(unit_tests graphics_d3d11)
 endif()
