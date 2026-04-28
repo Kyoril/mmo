@@ -26,6 +26,8 @@ target_sources(unit_tests PRIVATE
 	../mmo_bot/bot_startup_selection.cpp
 	../mmo_bot/bot_console_prompt.cpp
 	../mmo_bot/bot_nav_service.cpp
+	../mmo_bot/bot_movement_math.cpp
+	../mmo_bot/bot_follow_policy.cpp
 )
 
 if (WIN32)
