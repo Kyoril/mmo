@@ -78,7 +78,7 @@ Profiles implement the **Strategy Pattern**, defining different bot behaviors th
 - `PatrolProfile`: Moves through waypoints
 - `SequenceProfile`: Demonstrates combining multiple actions
 - `CombatProfile`: Demonstrates target selection plus direct pursuit melee behavior
-- `PartyFollowProfile`: Runs a long-lived nav-backed leader follow action with bounded repath diagnostics
+- `PartyFollowProfile`: Runs the live companion runtime: follow the party leader out of combat, switch to role-aware combat anchors in combat, and regroup or hold conservatively when anchor data becomes invalid
 
 **Profile Lifecycle:**
 ```cpp
@@ -141,7 +141,22 @@ Character startup follows the same "pick exactly one target" contract:
 
 `character.create_if_missing` only creates a character for an explicit named selector that was not found. Successful creation keeps the existing re-enumerate flow before entering the world, and startup logs now distinguish `profile_resolution`, `character_resolution`, and `character_create` phases without echoing credentials.
 
-Supported profiles: `simple_greeter`, `chatter`, `sequence`, `unit_awareness`, `combat`
+Supported profiles: `simple_greeter`, `chatter`, `sequence`, `unit_awareness`, `combat`, `party_follow`
+
+### Party Follow Companion Runtime
+
+`party_follow` is the canonical live startup profile for companion behavior. It queues a long-lived companion action that:
+
+- follows the current party leader while the party is out of combat
+- switches to a role-aware combat anchor once the party enters combat
+- regroups on the leader or holds position conservatively when the leader GUID, awareness, nav state, or combat anchor data becomes invalid
+
+**Expected diagnostics:**
+- one-shot `companion mode=` transitions when the runtime switches between travel, combat anchor, regroup, and hold states
+- one-shot `anchor decision=` logs that include the current anchor reason and follow decision
+- explicit reason codes for conservative fallbacks such as leader loss, stale combat anchors, unresolved maps, or nav unavailability
+
+These diagnostics may include GUIDs, mode names, distances, reason codes, and anchor coordinates, but they must not include credentials or session secrets.
 
 ## Design Principles Applied
 
@@ -335,22 +350,6 @@ profile->QueueAction(std::make_shared<ChatMessageAction>("Test passed"));
 
 **Profile selection not working:**
 - Check that `behavior.profile` or `--profile` matches one of the registered startup profile keys
-- Omit the selector only when you expect an interactive prompt on a TTY
-- Non-interactive runs now fail instead of silently falling back to another profile
-- Regenerate CMake cache after adding new files
-- Rebuild the project completely
-
-## Contributing
-
-When adding new actions or profiles:
-
-1. Follow the existing naming conventions
-2. Document the purpose and usage
-3. Add examples to this README
-4. Consider testability
-5. Update bot_config.json sample if needed
-6. Follow C++ Core Guidelines and project conventions
--profile` matches one of the registered startup profile keys
 - Omit the selector only when you expect an interactive prompt on a TTY
 - Non-interactive runs now fail instead of silently falling back to another profile
 - Regenerate CMake cache after adding new files

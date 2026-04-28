@@ -23,7 +23,9 @@ namespace mmo
 
 		void OnPartyJoined(BotContext& context, uint64 partyLeaderGuid, uint32 memberCount) override
 		{
-			ILOG("Party follow profile joined party leader_guid=" << partyLeaderGuid << " member_count=" << memberCount);
+			ILOG("Party follow profile joined party leader_guid=" << partyLeaderGuid
+				<< " member_count=" << memberCount
+				<< " and will travel on the leader, switch to role anchors in combat, and regroup conservatively when anchors go stale");
 		}
 
 		void OnPartyLeft(BotContext& context) override
@@ -34,7 +36,7 @@ namespace mmo
 	protected:
 		void OnActivateImpl(BotContext& context) override
 		{
-			ILOG("Party follow profile activated - following the current party leader when available");
+			ILOG("Party follow profile activated - companion runtime follows the leader out of combat, switches to role-aware combat anchors, and regroups or holds conservatively on invalid anchors");
 			QueueAction(std::make_shared<CompanionFollowAction>());
 		}
 

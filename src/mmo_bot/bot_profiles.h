@@ -29,6 +29,7 @@ namespace mmo
 			{ "sequence" },
 			{ "unit_awareness" },
 			{ "combat" },
+			{ "party_follow" },
 		};
 	}
 

@@ -26,6 +26,26 @@ namespace mmo
 		}
 	}
 
+	TEST_CASE("Startup profile selection resolves party_follow without ambiguity when the canonical key is present", "[bot][startup][profile]")
+	{
+		const std::vector<StartupProfileEntry> availableProfiles = {
+			{ "simple_greeter" },
+			{ "party_follow" },
+			{ "combat" },
+		};
+
+		const StartupProfileResolution resolution = ResolveStartupProfileSelection(
+			"party_follow",
+			"",
+			availableProfiles);
+
+		REQUIRE(resolution.kind == StartupProfileResolutionKind::Resolved);
+		REQUIRE(resolution.selector == "party_follow");
+		REQUIRE(resolution.resolvedKey == "party_follow");
+		REQUIRE(resolution.resolvedIndex == 1);
+		REQUIRE(resolution.candidateIndices.empty());
+	}
+
 	TEST_CASE("Startup profile selection prefers CLI selector over config selector", "[bot][startup][profile]")
 	{
 		const std::vector<StartupProfileEntry> availableProfiles = {
