@@ -36,6 +36,7 @@ target_sources(unit_tests PRIVATE
 	../mmo_bot/bot_warrior_capabilities.cpp
 	../mmo_bot/bot_warrior_controller.cpp
 	../mmo_bot/bot_cleric_capabilities.cpp
+	../mmo_bot/bot_cleric_controller.cpp
 	../mmo_bot/bot_actions/follow_leader_action.cpp
 	../mmo_bot/bot_actions/companion_follow_action.cpp
 	test_bot_companion_runtime.cpp
@@ -44,6 +45,7 @@ target_sources(unit_tests PRIVATE
 	test_bot_warrior_spellbook.cpp
 	test_bot_warrior_controller.cpp
 	test_bot_cleric_spellbook.cpp
+	test_bot_cleric_controller.cpp
 )
 
 if (WIN32)
