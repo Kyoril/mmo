@@ -51,6 +51,7 @@ target_sources(unit_tests PRIVATE
 	test_bot_cleric_runtime.cpp
 	test_bot_mage_spellbook.cpp
 	test_bot_mage_controller.cpp
+	test_bot_mage_runtime.cpp
 )
 
 if (WIN32)

@@ -78,7 +78,7 @@ Profiles implement the **Strategy Pattern**, defining different bot behaviors th
 - `PatrolProfile`: Moves through waypoints
 - `SequenceProfile`: Demonstrates combining multiple actions
 - `CombatProfile`: Demonstrates target selection plus direct pursuit melee behavior
-- `PartyFollowProfile`: Runs the live companion runtime: follow the party leader out of combat, switch to role-aware combat anchors in combat, and regroup or hold conservatively when anchor data becomes invalid
+- `PartyFollowProfile`: Runs the live companion runtime: follow the party leader out of combat, switch to role-aware combat anchors in combat, regroup or hold conservatively when anchor data becomes invalid, and execute class-specific companion combat decisions inside the same long-lived action
 
 **Profile Lifecycle:**
 ```cpp
@@ -152,8 +152,10 @@ Supported profiles: `simple_greeter`, `chatter`, `sequence`, `unit_awareness`, `
 - keeps the S02/S03 movement seam as the only live movement path
 - resolves warrior capabilities from committed class/spell data plus the live spellbook when the configured character is a warrior
 - resolves cleric capabilities from committed class/spell/range data plus the live spellbook when the configured character is a healer
+- resolves mage combat capabilities from committed class/spell/range data plus the live spellbook when the configured character is a mage
 - translates warrior controller intents into live auto-attack or cast packets inside the same runtime tick without starting a second action queue
 - translates cleric controller intents into live heal, support-aura, or filler casts inside the same runtime tick without starting a second action queue
+- translates mage controller intents into live Frostbolt-style ranged casts inside the same runtime tick without starting a second action queue, while holding explicitly when authored instant-fallback or spacing metadata is missing for the current project data
 - remembers last observed ally health for conservative healer triage when an injured party member drops out of awareness
 - regroups on the leader or holds position conservatively when the leader GUID, awareness, nav state, combat anchor data, or class runtime state becomes invalid
 
@@ -164,6 +166,8 @@ Supported profiles: `simple_greeter`, `chatter`, `sequence`, `unit_awareness`, `
 - one-shot `warrior failure=` logs for conservative skips, blocked casts, cast failures, incomplete spellbook/cooldown state, invalid targets, and follow/runtime gating
 - one-shot `cleric action=` logs for real heal, support-aura, or filler cast sends, including spell ids, target guids, health/mana context, and reason codes
 - one-shot `cleric failure=` logs for conservative holds, oom/cooldown gating, out-of-awareness allies, blocked casts, cast failures, incomplete spellbook/cooldown state, and follow/runtime gating
+- one-shot `mage action=` logs for real ranged cast sends, including spell ids, spell names, target guids, mana context, and reason codes
+- one-shot `mage failure=` logs for conservative holds, missing authored fallback categories, oom/cooldown gating, invalid targets, cast failures, and cast-failure backoff
 - explicit reason codes for conservative fallbacks such as leader loss, stale combat anchors, unresolved maps, nav unavailability, or class runtime state gaps
 
 These diagnostics may include GUIDs, spell ids, spell names, health percentages, distances, reason codes, and anchor coordinates, but they must not include credentials or session secrets.

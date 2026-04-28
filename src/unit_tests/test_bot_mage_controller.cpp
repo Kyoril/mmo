@@ -107,6 +107,23 @@ namespace mmo
 		CHECK(decision.castTargetGuid == input.primaryTarget.guid);
 	}
 
+	TEST_CASE("mage controller still uses the primary nuke when only the safe ranged damage category is authored", "[bot-mage][controller]")
+	{
+		BotMageCapabilities capabilities = MakeCapabilities();
+		capabilities.instantFallback.reset();
+		capabilities.emergencySpacing.reset();
+		BotMageDecisionInput input = MakeInput(capabilities);
+		input.primaryTarget.distanceToSelf = 24.0f;
+		input.primaryTarget.targetingSelf = false;
+		input.nearbyHostiles.clear();
+
+		BotMageController controller;
+		const BotMageDecision decision = controller.Evaluate(input);
+		REQUIRE(decision.type == BotMageDecisionType::CastSpell);
+		CHECK(decision.reason == "primary_nuke");
+		CHECK(decision.spellId == capabilities.primaryNuke->spellId);
+	}
+
 	TEST_CASE("mage controller prefers an instant fallback when pressure makes a long cast unsafe", "[bot-mage][controller]")
 	{
 		const BotMageCapabilities capabilities = MakeCapabilities();
@@ -194,13 +211,14 @@ namespace mmo
 			CHECK(decision.reason == "target_distance_invalid");
 		}
 
-		SECTION("missing emergency spacing capability")
+		SECTION("missing emergency spacing capability falls back to other authored recovery before holding")
 		{
 			input.nearbyHostiles.push_back(MakeHostile(9002, 4.0f, true));
 			capabilities.emergencySpacing.reset();
 			const BotMageDecision decision = controller.Evaluate(input);
-			REQUIRE(decision.type == BotMageDecisionType::Hold);
-			CHECK(decision.reason == "emergency_spacing_missing");
+			REQUIRE(decision.type == BotMageDecisionType::EmergencySpacing);
+			CHECK(decision.reason == "emergency_control");
+			CHECK(decision.spellId == capabilities.control->spellId);
 		}
 	}
 

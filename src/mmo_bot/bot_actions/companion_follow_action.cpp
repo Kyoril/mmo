@@ -21,6 +21,7 @@ namespace
 
 	constexpr uint8 kWarriorClassId = 1;
 	constexpr uint8 kPriestClassId = 5;
+	constexpr uint8 kMageClassId = 8;
 	constexpr GameTime kAutoAttackRetryDelayMs = 1000;
 	constexpr GameTime kCastFailureBackoffMs = 750;
 
@@ -93,6 +94,16 @@ namespace
 	}
 
 	std::string FirstIssueOrFallback(const BotClericCapabilities& capabilities, std::string_view fallback)
+	{
+		if (!capabilities.issues.empty())
+		{
+			return capabilities.issues.front();
+		}
+
+		return std::string(fallback);
+	}
+
+	std::string FirstIssueOrFallback(const BotMageCapabilities& capabilities, std::string_view fallback)
 	{
 		if (!capabilities.issues.empty())
 		{
@@ -262,6 +273,36 @@ namespace
 		return filtered;
 	}
 
+	BotMageCapabilities FilterKnownMageCapabilities(const BotMageCapabilities& baseCapabilities, const std::vector<uint32>& knownSpellIds)
+	{
+		BotMageCapabilities filtered = baseCapabilities;
+		const std::unordered_set<uint32> knownSpellSet(knownSpellIds.begin(), knownSpellIds.end());
+
+		auto isKnown = [&](const std::optional<BotMageResolvedSpell>& spell)
+		{
+			return spell.has_value() && knownSpellSet.find(spell->spellId) != knownSpellSet.end();
+		};
+
+		filtered.spells.clear();
+		for (const BotMageResolvedSpell& spell : baseCapabilities.spells)
+		{
+			if (knownSpellSet.find(spell.spellId) != knownSpellSet.end())
+			{
+				filtered.spells.push_back(spell);
+			}
+		}
+
+		if (!isKnown(filtered.primaryNuke)) filtered.primaryNuke.reset();
+		if (!isKnown(filtered.instantFallback)) filtered.instantFallback.reset();
+		if (!isKnown(filtered.control)) filtered.control.reset();
+		if (!isKnown(filtered.selfBuffEscape)) filtered.selfBuffEscape.reset();
+		if (!isKnown(filtered.emergencySpacing)) filtered.emergencySpacing.reset();
+
+		filtered.resolved = filtered.powerType == power_type::Mana
+			&& filtered.primaryNuke.has_value();
+		return filtered;
+	}
+
 	[[nodiscard]] bool IsValidHealthPercent(const float healthPercent)
 	{
 		return std::isfinite(healthPercent) && healthPercent >= 0.0f && healthPercent <= 1.0f;
@@ -414,6 +455,118 @@ namespace
 
 		return {};
 	}
+
+	struct MageTargetCandidate final
+	{
+		const BotUnit* unit { nullptr };
+		const char* source { "none" };
+	};
+
+	MageTargetCandidate SelectMagePrimaryTarget(BotContext& context, const CompanionFollowControllerOutput& output)
+	{
+		const BotUnit* self = context.GetSelf();
+		if (!self)
+		{
+			return {};
+		}
+
+		auto isValidTarget = [&](const uint64 guid, const char* source) -> MageTargetCandidate
+		{
+			if (guid == 0)
+			{
+				return {};
+			}
+
+			const BotUnit* candidate = context.GetUnit(guid);
+			if (!candidate || !candidate->IsAlive())
+			{
+				return {};
+			}
+
+			if (!candidate->IsHostileTo(*self) && !candidate->IsAttackableBy(*self))
+			{
+				return {};
+			}
+
+			MageTargetCandidate result;
+			result.unit = candidate;
+			result.source = source;
+			return result;
+		};
+
+		if (output.companion.hasAnchor)
+		{
+			if (const BotUnit* anchorUnit = context.GetUnit(output.companion.anchor.guid))
+			{
+				if (const MageTargetCandidate anchorTarget = isValidTarget(anchorUnit->GetTargetGuid(), "anchor_target"); anchorTarget.unit)
+				{
+					return anchorTarget;
+				}
+			}
+		}
+
+		if (const MageTargetCandidate selfTarget = isValidTarget(self->GetTargetGuid(), "self_target"); selfTarget.unit)
+		{
+			return selfTarget;
+		}
+
+		for (const BotUnit* unit : context.GetUnitsTargetingSelf())
+		{
+			if (!unit)
+			{
+				continue;
+			}
+
+			if (const MageTargetCandidate targetingSelf = isValidTarget(unit->GetGuid(), "targeting_self"); targetingSelf.unit)
+			{
+				return targetingSelf;
+			}
+		}
+
+		return {};
+	}
+
+	BotMageHostileSnapshot BuildMageHostileSnapshot(BotContext& context, const BotUnit& self, const BotUnit& unit)
+	{
+		BotMageHostileSnapshot hostile;
+		hostile.guid = unit.GetGuid();
+		hostile.isAlive = unit.IsAlive();
+		hostile.isAware = true;
+		hostile.isHostile = unit.IsHostileTo(self) || unit.IsAttackableBy(self);
+		hostile.targetingSelf = unit.GetTargetGuid() == self.GetGuid();
+		hostile.distanceToSelf = context.GetDistanceToUnit(unit.GetGuid());
+		return hostile;
+	}
+
+	std::vector<BotMageHostileSnapshot> BuildMageNearbyHostiles(
+		BotContext& context,
+		const BotUnit& self,
+		const MageTargetCandidate& primaryTarget)
+	{
+		std::vector<BotMageHostileSnapshot> hostiles;
+		std::unordered_set<uint64> seenGuids;
+
+		auto append = [&](const BotUnit* unit)
+		{
+			if (!unit || !seenGuids.insert(unit->GetGuid()).second)
+			{
+				return;
+			}
+			hostiles.push_back(BuildMageHostileSnapshot(context, self, *unit));
+		};
+
+		append(primaryTarget.unit);
+		for (const BotUnit* unit : context.GetUnitsTargetingSelf())
+		{
+			append(unit);
+		}
+		for (const BotUnit* unit : context.GetHostilesInRange(40.0f))
+		{
+			append(unit);
+		}
+
+		return hostiles;
+	}
 }
 
 namespace mmo
@@ -426,7 +579,7 @@ namespace mmo
 
 	std::string CompanionFollowAction::GetDescription() const
 	{
-		return "Follow the party leader out of combat, use role-aware anchors in combat, and execute warrior or cleric companion actions inside the same runtime";
+		return "Follow the party leader out of combat, use role-aware anchors in combat, and execute warrior, cleric, or mage companion actions inside the same runtime";
 	}
 
 	ActionResult CompanionFollowAction::Execute(BotContext& context)
@@ -439,9 +592,11 @@ namespace mmo
 		LogAnchorDecisionOnce(output, details);
 		ObserveWarriorCastFailure(context, output);
 		ObserveClericCastFailure(context, output);
+		ObserveMageCastFailure(context, output);
 		ApplyDecision(context, input, output);
 		ExecuteWarriorRuntime(context, input, output);
 		ExecuteClericRuntime(context, input, output);
+		ExecuteMageRuntime(context, input, output);
 		UpdatePreviousCompanionState(output);
 		return ActionResult::InProgress;
 	}
@@ -459,6 +614,8 @@ namespace mmo
 		m_lastWarriorFailureLogKey.clear();
 		m_lastClericActionLogKey.clear();
 		m_lastClericFailureLogKey.clear();
+		m_lastMageActionLogKey.clear();
+		m_lastMageFailureLogKey.clear();
 		m_pendingAutoAttackTargetGuid = 0;
 		m_pendingAutoAttackRequestedAt = 0;
 		m_lastObservedWarriorCastFailureAt = 0;
@@ -467,6 +624,9 @@ namespace mmo
 		m_lastObservedClericCastFailureAt = 0;
 		m_lastObservedClericCastFailureSpellId = 0;
 		m_lastObservedClericCastFailureReason = spell_cast_result::CastOkay;
+		m_lastObservedMageCastFailureAt = 0;
+		m_lastObservedMageCastFailureSpellId = 0;
+		m_lastObservedMageCastFailureReason = spell_cast_result::CastOkay;
 		m_lastObservedPartyHealthPercents.clear();
 	}
 
@@ -1419,5 +1579,290 @@ namespace mmo
 
 		m_lastClericFailureLogKey = key;
 		WLOG("cleric failure=" << reason << ' ' << details);
+	}
+
+	void CompanionFollowAction::RefreshMageCapabilities(BotContext& context)
+	{
+		if (context.GetConfig().characterClass != kMageClassId)
+		{
+			m_hasMageCapabilities = false;
+			m_mageCapabilityIssue = "mage_runtime_disabled";
+			return;
+		}
+
+		if (m_hasMageCapabilities)
+		{
+			return;
+		}
+
+		const BotNavService* navService = context.GetNavService();
+		if (!navService || !navService->IsReady() || navService->GetProject() == nullptr)
+		{
+			m_hasMageCapabilities = false;
+			m_mageCapabilityIssue = "capabilities_project_unavailable";
+			return;
+		}
+
+		m_mageCapabilities = ResolveMageCapabilities(*navService->GetProject());
+		m_hasMageCapabilities = m_mageCapabilities.powerType == power_type::Mana
+			&& m_mageCapabilities.primaryNuke.has_value();
+		m_mageCapabilityIssue = m_hasMageCapabilities
+			? std::string {}
+			: FirstIssueOrFallback(m_mageCapabilities, "capabilities_unresolved");
+	}
+
+	void CompanionFollowAction::ExecuteMageRuntime(BotContext& context, const CompanionFollowControllerInput& input, const CompanionFollowControllerOutput& output)
+	{
+		if (context.GetConfig().characterClass != kMageClassId)
+		{
+			return;
+		}
+
+		if (input.preconditionFailure != CompanionFollowPreconditionFailure::None)
+		{
+			std::ostringstream details;
+			details << BuildDecisionDetails(context, input, output)
+				<< " mage_decision=skipped"
+				<< " mage_reason=follow_runtime_blocked";
+			LogMageFailureOnce("follow_runtime_blocked", details.str());
+			return;
+		}
+
+		RefreshMageCapabilities(context);
+		if (!m_hasMageCapabilities)
+		{
+			std::ostringstream details;
+			details << BuildDecisionDetails(context, input, output)
+				<< " mage_decision=hold"
+				<< " capability_issue=" << m_mageCapabilityIssue;
+			LogMageFailureOnce("capabilities_unresolved", details.str());
+			return;
+		}
+
+		const BotUnit* self = context.GetSelf();
+		if (!self)
+		{
+			std::ostringstream details;
+			details << BuildDecisionDetails(context, input, output)
+				<< " mage_decision=hold"
+				<< " capability_issue=self_unavailable";
+			LogMageFailureOnce("self_unavailable", details.str());
+			return;
+		}
+
+		const BotUnit::CastState lastCastState = context.GetLastCastState();
+		if (lastCastState.status == BotUnit::CastState::Status::Pending || lastCastState.status == BotUnit::CastState::Status::Started)
+		{
+			std::ostringstream details;
+			details << BuildDecisionDetails(context, input, output)
+				<< " mage_decision=hold"
+				<< " runtime_issue=cast_in_flight"
+				<< " spell_id=" << lastCastState.spellId;
+			LogMageFailureOnce("cast_in_flight", details.str());
+			return;
+		}
+
+		if (lastCastState.status == BotUnit::CastState::Status::Failed
+			&& lastCastState.updatedAtMs > 0
+			&& input.now >= lastCastState.updatedAtMs
+			&& input.now - lastCastState.updatedAtMs < kCastFailureBackoffMs)
+		{
+			std::ostringstream details;
+			details << BuildDecisionDetails(context, input, output)
+				<< " mage_decision=hold"
+				<< " runtime_issue=cast_failure_backoff"
+				<< " spell_id=" << lastCastState.spellId
+				<< " failure_code=" << static_cast<uint32>(lastCastState.failureReason);
+			LogMageFailureOnce("cast_failure_backoff", details.str());
+			return;
+		}
+
+		const std::vector<uint32> knownSpellIds = context.GetKnownSpellIds();
+		const BotMageCapabilities knownCapabilities = FilterKnownMageCapabilities(m_mageCapabilities, knownSpellIds);
+		if (!knownCapabilities.resolved)
+		{
+			std::ostringstream details;
+			details << BuildDecisionDetails(context, input, output)
+				<< " mage_decision=hold"
+				<< " capability_issue=known_spells_incomplete";
+			LogMageFailureOnce("capabilities_unresolved", details.str());
+			return;
+		}
+
+		const MageTargetCandidate target = SelectMagePrimaryTarget(context, output);
+		const std::vector<BotUnit::CooldownState> activeCooldowns = context.GetActiveSpellCooldowns();
+		const std::vector<BotUnit::AuraState> visibleAuras = context.GetVisibleAuras();
+		const std::string lastSpellIssue = context.GetLastSpellStateIssue();
+		std::unordered_set<uint32> blockedCooldownSpellIds;
+		blockedCooldownSpellIds.reserve(activeCooldowns.size());
+		for (const BotUnit::CooldownState& cooldown : activeCooldowns)
+		{
+			blockedCooldownSpellIds.insert(cooldown.spellId);
+		}
+
+		BotMageDecisionInput mageInput;
+		mageInput.capabilities = &knownCapabilities;
+		mageInput.companionMode = output.companion.mode;
+		mageInput.spellbookReady = !knownSpellIds.empty()
+			&& !StartsWith(lastSpellIssue, "initial_spells_")
+			&& !StartsWith(lastSpellIssue, "learned_spell_")
+			&& !StartsWith(lastSpellIssue, "unlearned_spell_");
+		mageInput.cooldownsReady = !StartsWith(lastSpellIssue, "spell_cooldown_");
+		mageInput.powerReady = context.GetSelfPowerType() == knownCapabilities.powerType && context.GetSelfMaxPower() > 0;
+		mageInput.hasSelf = true;
+		mageInput.self.guid = self->GetGuid();
+		mageInput.self.isAlive = self->IsAlive();
+		mageInput.self.healthPercent = self->GetHealthPercent();
+		mageInput.self.mana = context.GetSelfPower();
+		mageInput.self.maxMana = context.GetSelfMaxPower();
+		for (const BotUnit::AuraState& aura : visibleAuras)
+		{
+			mageInput.self.activeAuraSpellIds.insert(aura.spellId);
+		}
+		mageInput.hasPrimaryTarget = target.unit != nullptr;
+		if (target.unit)
+		{
+			mageInput.primaryTarget = BuildMageHostileSnapshot(context, *self, *target.unit);
+		}
+		mageInput.nearbyHostiles = BuildMageNearbyHostiles(context, *self, target);
+		mageInput.cooldownBlockedSpellIds = std::move(blockedCooldownSpellIds);
+
+		const BotMageDecision decision = m_mageController.Evaluate(mageInput);
+		const BotMageResolvedSpell* resolvedSpell = knownCapabilities.FindSpell(decision.spellId);
+		std::ostringstream details;
+		details << BuildDecisionDetails(context, input, output)
+			<< " mage_decision=" << ToString(decision.type)
+			<< " mage_reason=" << decision.reason
+			<< " target_source=" << target.source
+			<< " target_guid=" << (target.unit ? target.unit->GetGuid() : 0)
+			<< " primary_target_distance=" << (target.unit ? context.GetDistanceToUnit(target.unit->GetGuid()) : 0.0f)
+			<< " nearby_hostiles=" << mageInput.nearbyHostiles.size()
+			<< " spellbook_ready=" << (mageInput.spellbookReady ? 1 : 0)
+			<< " cooldowns_ready=" << (mageInput.cooldownsReady ? 1 : 0)
+			<< " power_ready=" << (mageInput.powerReady ? 1 : 0)
+			<< " self_health_pct=" << mageInput.self.healthPercent
+			<< " mana=" << mageInput.self.mana
+			<< " max_mana=" << mageInput.self.maxMana
+			<< " capability_count=" << knownCapabilities.GetResolvedCategoryCount()
+			<< " cooldown_blocked=" << JoinSpellIds(mageInput.cooldownBlockedSpellIds);
+		if (!lastSpellIssue.empty())
+		{
+			details << " runtime_issue=" << lastSpellIssue;
+		}
+		if (!m_mageCapabilities.issues.empty())
+		{
+			details << " capability_issue=" << FirstIssueOrFallback(m_mageCapabilities, "capabilities_unresolved");
+		}
+
+		switch (decision.type)
+		{
+		case BotMageDecisionType::Hold:
+			LogMageFailureOnce(decision.reason, details.str());
+			return;
+
+		case BotMageDecisionType::CastSpell:
+		case BotMageDecisionType::EmergencySpacing:
+		{
+			SpellTargetMap targetMap;
+			if (decision.castOnSelf)
+			{
+				targetMap.SetTargetMap(spell_cast_target_flags::Self);
+			}
+			else
+			{
+				if (decision.castTargetGuid == 0)
+				{
+					LogMageFailureOnce("invalid_cast_target", details.str());
+					return;
+				}
+				targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+				targetMap.SetUnitTarget(decision.castTargetGuid);
+			}
+
+			if (!context.CastSpell(decision.spellId, targetMap))
+			{
+				std::ostringstream rejectedDetails;
+				rejectedDetails << details.str()
+					<< " spell_id=" << decision.spellId
+					<< " spell_name=" << (resolvedSpell ? resolvedSpell->name : std::string("unknown"))
+					<< " cast_target=" << decision.castTargetGuid
+					<< " cast_on_self=" << (decision.castOnSelf ? 1 : 0)
+					<< " runtime_issue=" << context.GetLastSpellStateIssue();
+				LogMageFailureOnce("cast_rejected", rejectedDetails.str());
+				return;
+			}
+
+			std::ostringstream castDetails;
+			castDetails << details.str()
+				<< " spell_id=" << decision.spellId
+				<< " spell_name=" << (resolvedSpell ? resolvedSpell->name : std::string("unknown"))
+				<< " cast_target=" << decision.castTargetGuid
+				<< " cast_on_self=" << (decision.castOnSelf ? 1 : 0);
+			LogMageActionOnce(ToString(decision.type), decision.reason, castDetails.str());
+			return;
+		}
+		}
+	}
+
+	void CompanionFollowAction::ObserveMageCastFailure(BotContext& context, const CompanionFollowControllerOutput& output)
+	{
+		if (context.GetConfig().characterClass != kMageClassId)
+		{
+			return;
+		}
+
+		const BotUnit::CastState lastCastState = context.GetLastCastState();
+		if (lastCastState.status != BotUnit::CastState::Status::Failed || lastCastState.updatedAtMs == 0)
+		{
+			return;
+		}
+
+		if (m_lastObservedMageCastFailureAt == lastCastState.updatedAtMs
+			&& m_lastObservedMageCastFailureSpellId == lastCastState.spellId
+			&& m_lastObservedMageCastFailureReason == lastCastState.failureReason)
+		{
+			return;
+		}
+
+		m_lastObservedMageCastFailureAt = lastCastState.updatedAtMs;
+		m_lastObservedMageCastFailureSpellId = lastCastState.spellId;
+		m_lastObservedMageCastFailureReason = lastCastState.failureReason;
+
+		std::ostringstream details;
+		details << "mode=" << ToString(output.companion.mode)
+			<< " mode_reason=" << output.companion.modeReason
+			<< " anchor_reason=" << output.companion.anchorReason
+			<< " spell_id=" << lastCastState.spellId
+			<< " failure_code=" << static_cast<uint32>(lastCastState.failureReason)
+			<< " updated_at=" << lastCastState.updatedAtMs;
+		LogMageFailureOnce("cast_failed", details.str());
+	}
+
+	void CompanionFollowAction::LogMageActionOnce(std::string_view action, std::string_view reason, const std::string& details)
+	{
+		std::ostringstream keyBuilder;
+		keyBuilder << action << '|' << reason << '|' << details;
+		const std::string key = keyBuilder.str();
+		if (m_lastMageActionLogKey == key)
+		{
+			return;
+		}
+
+		m_lastMageActionLogKey = key;
+		ILOG("mage action=" << action << " reason=" << reason << ' ' << details);
+	}
+
+	void CompanionFollowAction::LogMageFailureOnce(std::string_view reason, const std::string& details)
+	{
+		std::ostringstream keyBuilder;
+		keyBuilder << reason << '|' << details;
+		const std::string key = keyBuilder.str();
+		if (m_lastMageFailureLogKey == key)
+		{
+			return;
+		}
+
+		m_lastMageFailureLogKey = key;
+		WLOG("mage failure=" << reason << ' ' << details);
 	}
 }

@@ -174,14 +174,6 @@ namespace
 		{
 			return "primary_nuke_missing";
 		}
-		if (!capabilities.emergencySpacing.has_value())
-		{
-			return "emergency_spacing_missing";
-		}
-		if (!capabilities.instantFallback.has_value())
-		{
-			return "instant_fallback_missing";
-		}
 		return "capabilities_unresolved";
 	}
 }
@@ -196,10 +188,7 @@ namespace mmo
 		}
 
 		const BotMageCapabilities& capabilities = *input.capabilities;
-		if (!capabilities.resolved
-			|| !capabilities.primaryNuke.has_value()
-			|| !capabilities.emergencySpacing.has_value()
-			|| !capabilities.instantFallback.has_value())
+		if (!capabilities.primaryNuke.has_value())
 		{
 			return Hold(CapabilityHoldReason(capabilities));
 		}
@@ -326,9 +315,25 @@ namespace mmo
 			return Hold("no_hostile_target");
 		}
 
-		if (pressuredDamageWindow && capabilities.instantFallback.has_value() && CanCastAtHostile(input, capabilities.instantFallback, input.primaryTarget))
+		if (pressuredDamageWindow)
 		{
-			return CastAtHostile(BotMageDecisionType::CastSpell, *capabilities.instantFallback, input.primaryTarget, "instant_fallback_pressure");
+			if (capabilities.instantFallback.has_value() && CanCastAtHostile(input, capabilities.instantFallback, input.primaryTarget))
+			{
+				return CastAtHostile(BotMageDecisionType::CastSpell, *capabilities.instantFallback, input.primaryTarget, "instant_fallback_pressure");
+			}
+			if (!capabilities.instantFallback.has_value())
+			{
+				return Hold("instant_fallback_missing");
+			}
+			if (CooldownBlocked(input, capabilities.instantFallback))
+			{
+				return Hold("instant_fallback_cooldown");
+			}
+			if (!CanAfford(input, capabilities.instantFallback))
+			{
+				return Hold("instant_fallback_oom");
+			}
+			return Hold("instant_fallback_out_of_range");
 		}
 
 		if (CanCastAtHostile(input, capabilities.primaryNuke, input.primaryTarget))
@@ -341,7 +346,7 @@ namespace mmo
 			return CastAtHostile(BotMageDecisionType::CastSpell, *capabilities.instantFallback, input.primaryTarget, "instant_fallback");
 		}
 
-		if (pressuredDamageWindow && capabilities.instantFallback.has_value())
+		if (capabilities.instantFallback.has_value())
 		{
 			if (CooldownBlocked(input, capabilities.instantFallback))
 			{
@@ -351,7 +356,6 @@ namespace mmo
 			{
 				return Hold("instant_fallback_oom");
 			}
-			return Hold("instant_fallback_out_of_range");
 		}
 
 		if (CooldownBlocked(input, capabilities.primaryNuke))
