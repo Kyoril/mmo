@@ -3,7 +3,7 @@
 #pragma once
 
 #include "../bot_profile.h"
-#include "../bot_actions/follow_leader_action.h"
+#include "../bot_actions/companion_follow_action.h"
 
 namespace mmo
 {
@@ -35,12 +35,12 @@ namespace mmo
 		void OnActivateImpl(BotContext& context) override
 		{
 			ILOG("Party follow profile activated - following the current party leader when available");
-			QueueAction(std::make_shared<FollowLeaderAction>());
+			QueueAction(std::make_shared<CompanionFollowAction>());
 		}
 
 		bool OnQueueEmpty(BotContext& context) override
 		{
-			QueueAction(std::make_shared<FollowLeaderAction>());
+			QueueAction(std::make_shared<CompanionFollowAction>());
 			return true;
 		}
 	};
