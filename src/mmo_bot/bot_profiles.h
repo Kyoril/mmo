@@ -11,6 +11,7 @@
 #include "bot_profiles/sequence_profile.h"
 #include "bot_profiles/unit_awareness_profile.h"
 #include "bot_profiles/combat_profile.h"
+#include "bot_profiles/party_follow_profile.h"
 #include "bot_startup_types.h"
 
 #include <string_view>
@@ -59,6 +60,10 @@ namespace mmo
 		if (key == "combat")
 		{
 			return std::make_shared<CombatProfile>();
+		}
+		if (key == "party_follow")
+		{
+			return std::make_shared<PartyFollowProfile>();
 		}
 
 		return nullptr;

@@ -77,6 +77,8 @@ Profiles implement the **Strategy Pattern**, defining different bot behaviors th
 - `ChatterProfile`: Sends a sequence of messages with delays
 - `PatrolProfile`: Moves through waypoints
 - `SequenceProfile`: Demonstrates combining multiple actions
+- `CombatProfile`: Demonstrates target selection plus direct pursuit melee behavior
+- `PartyFollowProfile`: Runs a long-lived nav-backed leader follow action with bounded repath diagnostics
 
 **Profile Lifecycle:**
 ```cpp
@@ -333,6 +335,22 @@ profile->QueueAction(std::make_shared<ChatMessageAction>("Test passed"));
 
 **Profile selection not working:**
 - Check that `behavior.profile` or `--profile` matches one of the registered startup profile keys
+- Omit the selector only when you expect an interactive prompt on a TTY
+- Non-interactive runs now fail instead of silently falling back to another profile
+- Regenerate CMake cache after adding new files
+- Rebuild the project completely
+
+## Contributing
+
+When adding new actions or profiles:
+
+1. Follow the existing naming conventions
+2. Document the purpose and usage
+3. Add examples to this README
+4. Consider testability
+5. Update bot_config.json sample if needed
+6. Follow C++ Core Guidelines and project conventions
+-profile` matches one of the registered startup profile keys
 - Omit the selector only when you expect an interactive prompt on a TTY
 - Non-interactive runs now fail instead of silently falling back to another profile
 - Regenerate CMake cache after adding new files

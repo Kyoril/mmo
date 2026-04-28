@@ -54,7 +54,8 @@ namespace mmo
 		const MovementInfo& GetMovementInfo() const;
 
 		/// Gets the bot-side nav bridge if available.
-		const BotNavService* GetNavService() const { return m_navService.get(); }
+		BotNavService* GetNavService() { return m_navService.get(); }
+		[[nodiscard]] const BotNavService* GetNavService() const { return m_navService.get(); }
 
 		/// Gets whether authoritative movement info has been cached locally.
 		bool HasAuthoritativeMovementInfo() const { return m_hasAuthoritativeMovementInfo; }
