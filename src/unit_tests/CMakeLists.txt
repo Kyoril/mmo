@@ -33,8 +33,12 @@ target_sources(unit_tests PRIVATE
 	../mmo_bot/bot_realm_connector.cpp
 	../mmo_bot/bot_object_manager.cpp
 	../mmo_bot/bot_unit.cpp
+	../mmo_bot/bot_warrior_capabilities.cpp
+	../mmo_bot/bot_warrior_controller.cpp
 	../mmo_bot/bot_actions/follow_leader_action.cpp
 	test_bot_warrior_runtime.cpp
+	test_bot_warrior_spellbook.cpp
+	test_bot_warrior_controller.cpp
 )
 
 if (WIN32)
