@@ -130,6 +130,15 @@ Startup now resolves exactly one profile before the bot session begins networkin
 
 If `behavior.profile` is omitted or empty and more than one profile is registered, `mmo_bot` prompts for a numbered selection only when stdin is interactive. Non-interactive runs fail fast instead of silently falling back to `simple_greeter`.
 
+Character startup follows the same "pick exactly one target" contract:
+1. `--character <name>` CLI override
+2. `character.name` from the JSON config
+3. auto-resolve when exactly one enumerated character is available
+4. interactive numbered prompt when the character list is ambiguous or malformed (duplicate case-insensitive names / empty names)
+5. fail fast on non-interactive startup when a prompt would be required
+
+`character.create_if_missing` only creates a character for an explicit named selector that was not found. Successful creation keeps the existing re-enumerate flow before entering the world, and startup logs now distinguish `profile_resolution`, `character_resolution`, and `character_create` phases without echoing credentials.
+
 Supported profiles: `simple_greeter`, `chatter`, `sequence`, `unit_awareness`, `combat`
 
 ## Design Principles Applied

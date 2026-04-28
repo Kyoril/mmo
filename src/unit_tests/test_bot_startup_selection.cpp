@@ -150,6 +150,78 @@ namespace mmo
 		REQUIRE(resolution.resolvedIndex == 1);
 	}
 
+	TEST_CASE("Startup character selection honors config selector when CLI selector is omitted", "[bot][startup][character]")
+	{
+		const std::vector<CharacterView> availableCharacters = {
+			MakeCharacter(1, "MageOne"),
+			MakeCharacter(2, "TankTwo"),
+		};
+
+		const StartupCharacterResolution resolution = ResolveStartupCharacterSelection(
+			" ",
+			"TankTwo",
+			false,
+			availableCharacters);
+
+		REQUIRE(resolution.kind == StartupCharacterResolutionKind::Resolved);
+		REQUIRE(resolution.selector == "TankTwo");
+		REQUIRE(resolution.resolvedName == "TankTwo");
+		REQUIRE(resolution.resolvedIndex == 1);
+	}
+
+	TEST_CASE("Startup character selection requests a prompt when multiple characters are available without a selector", "[bot][startup][character]")
+	{
+		const std::vector<CharacterView> availableCharacters = {
+			MakeCharacter(1, "MageOne"),
+			MakeCharacter(2, "TankTwo"),
+		};
+
+		const StartupCharacterResolution resolution = ResolveStartupCharacterSelection(
+			"",
+			" ",
+			false,
+			availableCharacters);
+
+		REQUIRE(resolution.kind == StartupCharacterResolutionKind::NeedsPrompt);
+		REQUIRE(resolution.selector.empty());
+		REQUIRE(resolution.candidateIndices == std::vector<size_t>{ 0, 1 });
+	}
+
+	TEST_CASE("Startup character selection requests a prompt for duplicate case-insensitive names", "[bot][startup][character]")
+	{
+		const std::vector<CharacterView> availableCharacters = {
+			MakeCharacter(1, "MageOne"),
+			MakeCharacter(2, "mageone"),
+			MakeCharacter(3, "TankTwo"),
+		};
+
+		const StartupCharacterResolution resolution = ResolveStartupCharacterSelection(
+			"MageOne",
+			"",
+			false,
+			availableCharacters);
+
+		REQUIRE(resolution.kind == StartupCharacterResolutionKind::NeedsPrompt);
+		REQUIRE(resolution.candidateIndices == std::vector<size_t>{ 0, 1 });
+	}
+
+	TEST_CASE("Startup character selection requests a prompt when the character catalog contains empty names", "[bot][startup][character]")
+	{
+		const std::vector<CharacterView> availableCharacters = {
+			MakeCharacter(1, "MageOne"),
+			MakeCharacter(2, "   "),
+		};
+
+		const StartupCharacterResolution resolution = ResolveStartupCharacterSelection(
+			"MageOne",
+			"",
+			false,
+			availableCharacters);
+
+		REQUIRE(resolution.kind == StartupCharacterResolutionKind::NeedsPrompt);
+		REQUIRE(resolution.candidateIndices == std::vector<size_t>{ 0, 1 });
+	}
+
 	TEST_CASE("Startup character selection returns create_character only for a named missing target when enabled", "[bot][startup][character]")
 	{
 		const std::vector<CharacterView> availableCharacters = {

@@ -29,6 +29,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <sstream>
 #include <thread>
 
 using namespace std::chrono_literals;
@@ -319,6 +320,105 @@ namespace mmo
 		return std::nullopt;
 	}
 
+	void LogCharacterResolution(const StartupCharacterResolution& resolution, size_t availableCount)
+	{
+		switch (resolution.kind)
+		{
+		case StartupCharacterResolutionKind::Resolved:
+			ILOG("startup phase=character_resolution outcome=resolved selector="
+				<< DescribeSelector(resolution.selector)
+				<< " resolved_character=" << resolution.resolvedName
+				<< " available_count=" << availableCount);
+			break;
+		case StartupCharacterResolutionKind::NeedsPrompt:
+			ILOG("startup phase=character_resolution outcome=prompt_required selector="
+				<< DescribeSelector(resolution.selector)
+				<< " available_count=" << resolution.candidateIndices.size());
+			break;
+		case StartupCharacterResolutionKind::CreateCharacter:
+			ILOG("startup phase=character_resolution outcome=create_requested selector="
+				<< DescribeSelector(resolution.selector)
+				<< " available_count=" << availableCount);
+			break;
+		case StartupCharacterResolutionKind::NotFound:
+			ELOG("startup phase=character_resolution outcome=not_found selector="
+				<< DescribeSelector(resolution.selector)
+				<< " available_count=" << availableCount);
+			break;
+		}
+	}
+
+	std::string DescribeCharacterOption(const CharacterView& view)
+	{
+		std::ostringstream label;
+		const std::string name = TrimCopy(view.GetName());
+		label << (name.empty() ? std::string("<unnamed>") : name)
+			<< " (level " << static_cast<unsigned>(view.GetLevel())
+			<< ", race " << view.GetRaceId()
+			<< ", class " << view.GetClassId();
+		if (view.IsDead())
+		{
+			label << ", dead";
+		}
+		label << ')';
+		return label.str();
+	}
+
+	std::vector<std::string> BuildCharacterPromptOptions(
+		const std::vector<CharacterView>& catalog,
+		const std::vector<size_t>& indices)
+	{
+		std::vector<std::string> options;
+		options.reserve(indices.size());
+		for (const size_t index : indices)
+		{
+			if (index < catalog.size())
+			{
+				options.push_back(DescribeCharacterOption(catalog[index]));
+			}
+		}
+		return options;
+	}
+
+	std::optional<size_t> PromptForCharacterSelection(
+		const std::vector<CharacterView>& catalog,
+		const StartupCharacterResolution& resolution)
+	{
+		const std::vector<std::string> promptOptions = BuildCharacterPromptOptions(catalog, resolution.candidateIndices);
+		const BotConsolePromptResult promptResult = PromptForSelection(
+			"character",
+			promptOptions,
+			std::cin,
+			std::cout,
+			IsConsoleInputInteractive());
+
+		switch (promptResult.kind)
+		{
+		case BotConsolePromptResultKind::Selected:
+			if (promptResult.selectedIndex.has_value() && *promptResult.selectedIndex < resolution.candidateIndices.size())
+			{
+				const size_t resolvedIndex = resolution.candidateIndices[*promptResult.selectedIndex];
+				ILOG("startup phase=character_resolution outcome=prompt_selected selector="
+					<< catalog[resolvedIndex].GetName()
+					<< " available_count=" << resolution.candidateIndices.size());
+				return resolvedIndex;
+			}
+			break;
+		case BotConsolePromptResultKind::NonInteractive:
+			ELOG("startup phase=character_resolution outcome=non_interactive_refusal selector="
+				<< DescribeSelector(resolution.selector)
+				<< " available_count=" << resolution.candidateIndices.size());
+			break;
+		case BotConsolePromptResultKind::Aborted:
+			ELOG("startup phase=character_resolution outcome=prompt_aborted selector="
+				<< DescribeSelector(resolution.selector)
+				<< " available_count=" << resolution.candidateIndices.size());
+			break;
+		}
+
+		return std::nullopt;
+	}
+
 	bool ResolveConfiguredProfile(
 		BotConfig& config,
 		const StartupCliOptions& cliOptions,
@@ -538,42 +638,79 @@ namespace mmo
 					}
 
 					const auto& views = m_realm->GetCharacterViews();
-					const CharacterView* selected = nullptr;
-					auto findName = [this](const CharacterView& view)
-					{
-						return EqualsIgnoreCase(view.GetName(), m_config.characterName);
-					};
+					StartupCharacterResolution resolution = ResolveStartupCharacterSelection(
+						std::string_view{},
+						m_config.characterName,
+						m_config.createCharacter,
+						views);
+					LogCharacterResolution(resolution, views.size());
 
-					auto existing = std::find_if(views.begin(), views.end(), findName);
-					if (existing != views.end())
+					switch (resolution.kind)
 					{
-						selected = &(*existing);
-						ILOG("Using existing character \"" << selected->GetName() << "\".");
-						m_realm->EnterWorld(*selected);
+					case StartupCharacterResolutionKind::Resolved:
+						if (!resolution.resolvedIndex.has_value() || *resolution.resolvedIndex >= views.size())
+						{
+							ELOG("startup phase=character_resolution outcome=missing_resolved_character selector="
+								<< DescribeSelector(resolution.selector)
+								<< " available_count=" << views.size());
+							m_stopRequested = true;
+							return;
+						}
+
+						m_config.characterName = views[*resolution.resolvedIndex].GetName();
+						ILOG("Using existing character \"" << m_config.characterName << "\".");
+						m_realm->EnterWorld(views[*resolution.resolvedIndex]);
 						return;
-					}
+					case StartupCharacterResolutionKind::NeedsPrompt:
+						if (const std::optional<size_t> promptedIndex = PromptForCharacterSelection(views, resolution); promptedIndex.has_value())
+						{
+							m_config.characterName = views[*promptedIndex].GetName();
+							ILOG("Using selected character \"" << m_config.characterName << "\".");
+							m_realm->EnterWorld(views[*promptedIndex]);
+							return;
+						}
 
-					if (m_config.createCharacter)
+						m_stopRequested = true;
+						return;
+					case StartupCharacterResolutionKind::CreateCharacter:
 					{
-						ILOG("Character \"" << m_config.characterName << "\" not found. Creating a new one...");
+						if (resolution.selector.empty())
+						{
+							ELOG("startup phase=character_create outcome=missing_selector selector="
+								<< DescribeSelector(resolution.selector)
+								<< " available_count=" << views.size());
+							m_stopRequested = true;
+							return;
+						}
+
+						m_config.characterName = resolution.selector;
+						ILOG("startup phase=character_create outcome=requested selector="
+							<< DescribeSelector(resolution.selector)
+							<< " available_count=" << views.size());
 						AvatarConfiguration avatarConfig;
-						m_realm->CreateCharacter(m_config.characterName, m_config.race, m_config.characterClass, m_config.gender, avatarConfig);
+						m_realm->CreateCharacter(resolution.selector, m_config.race, m_config.characterClass, m_config.gender, avatarConfig);
 						return;
 					}
-
-					ELOG("Character \"" << m_config.characterName << "\" not found and auto-creation disabled.");
-					m_stopRequested = true;
+					case StartupCharacterResolutionKind::NotFound:
+						m_stopRequested = true;
+						return;
+					}
 				});
 
 			m_realm->CharacterCreated.connect([this](game::CharCreateResult result)
 				{
 					if (result != game::char_create_result::Unknown)
 					{
-						ELOG("Character creation failed with code " << static_cast<int32>(result));
+						ELOG("startup phase=character_create outcome=failed selector="
+							<< DescribeSelector(m_config.characterName)
+							<< " result=" << static_cast<int32>(result));
 						m_stopRequested = true;
 						return;
 					}
 
+					ILOG("startup phase=character_create outcome=created selector="
+						<< DescribeSelector(m_config.characterName)
+						<< " available_count=" << m_realm->GetCharacterViews().size());
 					m_realm->RequestCharEnum();
 				});
 
