@@ -36,7 +36,7 @@ namespace mmo
 	protected:
 		void OnActivateImpl(BotContext& context) override
 		{
-			ILOG("Party follow profile activated - companion runtime follows the leader out of combat, switches to role-aware combat anchors, and regroups or holds conservatively on invalid anchors");
+			ILOG("Party follow profile activated - companion runtime follows the leader out of combat, switches to role-aware combat anchors, executes warrior tank actions inside the same runtime when configured, and regroups or holds conservatively on invalid anchors");
 			QueueAction(std::make_shared<CompanionFollowAction>());
 		}
 

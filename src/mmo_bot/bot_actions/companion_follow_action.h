@@ -5,6 +5,7 @@
 #include "../bot_action.h"
 #include "../bot_companion_state_machine.h"
 #include "../bot_context.h"
+#include "../bot_warrior_controller.h"
 #include "follow_leader_action.h"
 
 #include <string>
@@ -126,6 +127,12 @@ namespace mmo
 		void LogAnchorDecisionOnce(const CompanionFollowControllerOutput& output, const std::string& details);
 		void UpdatePreviousCompanionState(const CompanionFollowControllerOutput& output);
 
+		void RefreshWarriorCapabilities(BotContext& context);
+		void ExecuteWarriorRuntime(BotContext& context, const CompanionFollowControllerInput& input, const CompanionFollowControllerOutput& output);
+		void ObserveWarriorCastFailure(BotContext& context, const CompanionFollowControllerOutput& output);
+		void LogWarriorActionOnce(std::string_view action, std::string_view reason, const std::string& details);
+		void LogWarriorFailureOnce(std::string_view reason, const std::string& details);
+
 	private:
 		static constexpr GameTime kHeartbeatIntervalMs { 500 };
 
@@ -137,5 +144,16 @@ namespace mmo
 		float m_moveSpeed { 7.0f };
 		std::string m_lastModeLogKey;
 		std::string m_lastAnchorLogKey;
+		std::string m_lastWarriorActionLogKey;
+		std::string m_lastWarriorFailureLogKey;
+		BotWarriorController m_warriorController;
+		BotWarriorCapabilities m_warriorCapabilities;
+		std::string m_warriorCapabilityIssue;
+		bool m_hasWarriorCapabilities { false };
+		uint64 m_pendingAutoAttackTargetGuid { 0 };
+		GameTime m_pendingAutoAttackRequestedAt { 0 };
+		GameTime m_lastObservedWarriorCastFailureAt { 0 };
+		uint32 m_lastObservedWarriorCastFailureSpellId { 0 };
+		SpellCastResult m_lastObservedWarriorCastFailureReason { spell_cast_result::CastOkay };
 	};
 }

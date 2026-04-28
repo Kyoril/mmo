@@ -2,37 +2,33 @@
 
 #include "catch.hpp"
 
+#include "mmo_bot/bot_actions/companion_follow_action.h"
 #include "mmo_bot/bot_context.h"
+#include "mmo_bot/bot_nav_service.h"
 #include "mmo_bot/bot_realm_connector.h"
+#include "mmo_bot/bot_warrior_capabilities.h"
 
 #include "binary_io/memory_source.h"
 #include "binary_io/string_sink.h"
-#include "game/field_map.h"
+#include "game/movement_info.h"
 #include "game/object_type_id.h"
 #include "game/spell.h"
 #include "game_protocol/game_incoming_packet.h"
 #include "game_protocol/game_outgoing_packet.h"
+#include "log/default_log.h"
+#include "log/log_entry.h"
 
 #include "asio/io_service.hpp"
+
+#include <initializer_list>
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace mmo
 {
 	namespace
 	{
-		struct ParsedPacket final
-		{
-			Buffer buffer;
-			io::MemorySource source;
-			game::IncomingPacket packet;
-
-			explicit ParsedPacket(Buffer packetBuffer)
-				: buffer(std::move(packetBuffer))
-				, source(buffer)
-			{
-				REQUIRE(game::IncomingPacket::Start(packet, source) == ReceiveState::Complete);
-			}
-		};
-
 		Buffer BuildRealmPacket(const uint16 opCode, const std::function<void(game::OutgoingPacket&)>& writer)
 		{
 			Buffer buffer;
@@ -45,257 +41,252 @@ namespace mmo
 			return buffer;
 		}
 
-		Buffer BuildPlayerUpdatePacket(
-			const uint64 guid,
-			const bool creation,
-			const std::function<void(FieldMap<uint32>&)>& mutateFields)
+		PacketParseResult HandleRealmPacket(BotRealmConnector& connector, Buffer packetBuffer)
 		{
-			return BuildRealmPacket(game::realm_client_packet::UpdateObject, [&](game::OutgoingPacket& packet)
+			io::MemorySource source(packetBuffer);
+			game::IncomingPacket packet;
+			REQUIRE(game::IncomingPacket::Start(packet, source) == ReceiveState::Complete);
+			return connector.HandleIncomingPacket(packet);
+		}
+
+		Buffer BuildGroupListPacket(const std::vector<std::pair<std::string, uint64>>& members, const uint64 leaderGuid)
+		{
+			return BuildRealmPacket(game::realm_client_packet::GroupList, [&](game::OutgoingPacket& packet)
 			{
-				packet << io::write<uint16>(1);
-				packet << io::write<uint8>(static_cast<uint8>(ObjectTypeId::Player));
-				packet << io::write<uint8>(creation ? 1 : 0);
-				if (!creation)
+				packet << io::write<uint8>(1u);
+				packet << io::write<uint8>(0u);
+				packet << io::write<uint8>(static_cast<uint8>(members.size()));
+				for (const auto& [name, guid] : members)
 				{
-					packet << io::write_packed_guid(guid);
+					packet << io::write_dynamic_range<uint8>(name);
+					packet << io::write<uint64>(guid);
+					packet << io::write<uint8>(0u);
+					packet << io::write<uint8>(0u);
+					packet << io::write<uint8>(0u);
 				}
-
-				packet << io::write<uint32>(0u);
-
-				FieldMap<uint32> fields;
-				fields.Initialize(object_fields::PlayerFieldCount);
-				fields.SetFieldValue<uint64>(object_fields::Guid, guid);
-				fields.SetFieldValue<uint32>(object_fields::Level, 10);
-				fields.SetFieldValue<uint32>(object_fields::Health, 123);
-				fields.SetFieldValue<uint32>(object_fields::MaxHealth, 456);
-				fields.SetFieldValue<uint32>(object_fields::PowerType, power_type::Rage);
-				fields.SetFieldValue<uint32>(object_fields::Rage, 35);
-				fields.SetFieldValue<uint32>(object_fields::MaxRage, 100);
-				mutateFields(fields);
-				if (creation)
-				{
-					fields.SerializeComplete(packet);
-				}
-				else
-				{
-					fields.SerializeChanges(packet);
-				}
-
-				packet
-					<< io::write<float>(2.5f)
-					<< io::write<float>(7.0f)
-					<< io::write<float>(4.5f)
-					<< io::write<float>(4.7f)
-					<< io::write<float>(2.5f)
-					<< io::write<float>(7.0f)
-					<< io::write<float>(4.5f)
-					<< io::write<float>(3.14f);
+				packet << io::write<uint64>(leaderGuid);
 			});
 		}
+
+		Buffer BuildInitialSpellsPacket(const std::vector<uint32>& spellIds)
+		{
+			return BuildRealmPacket(game::realm_client_packet::InitialSpells, [&](game::OutgoingPacket& packet)
+			{
+				packet << io::write<uint16>(static_cast<uint16>(spellIds.size()));
+				for (const uint32 spellId : spellIds)
+				{
+					packet << io::write<uint32>(spellId);
+				}
+			});
+		}
+
+		Buffer BuildSpellFailurePacket(const uint64 casterGuid, const uint32 spellId, const SpellCastResult result)
+		{
+			return BuildRealmPacket(game::realm_client_packet::SpellFailure, [&](game::OutgoingPacket& packet)
+			{
+				packet << io::write_packed_guid(casterGuid);
+				packet << io::write<uint32>(spellId);
+				packet << io::write<GameTime>(2500u);
+				packet << io::write<uint8>(result);
+			});
+		}
+
+		MovementInfo MakeMovementInfo(const Vector3& position, const float facing = 0.0f)
+		{
+			MovementInfo info;
+			info.position = position;
+			info.facing = Radian(facing);
+			info.timestamp = 1000;
+			return info;
+		}
+
+		BotUnit MakePlayer(const uint64 guid, const std::string& name, const Vector3& position, const bool inCombat, const uint64 targetGuid)
+		{
+			BotUnit unit(guid, ObjectTypeId::Player);
+			unit.SetName(name);
+			unit.SetMovementInfo(MakeMovementInfo(position));
+			unit.SetHealth(500);
+			unit.SetMaxHealth(500);
+			unit.SetPower(power_type::Rage, 35, 100);
+			unit.SetUnitFlags(inCombat ? 0x00000001u : 0u);
+			unit.SetTargetGuid(targetGuid);
+			return unit;
+		}
+
+		BotUnit MakeCreature(const uint64 guid, const Vector3& position, const bool inCombat, const uint64 targetGuid)
+		{
+			BotUnit unit(guid, ObjectTypeId::Unit);
+			unit.SetEntry(345);
+			unit.SetMovementInfo(MakeMovementInfo(position));
+			unit.SetHealth(350);
+			unit.SetMaxHealth(350);
+			unit.SetUnitFlags(inCombat ? 0x00000001u : 0u);
+			unit.SetTargetGuid(targetGuid);
+			return unit;
+		}
+
+		uint32 ResolveRuntimeMapId(const BotNavService& navService)
+		{
+			const proto::Project* project = navService.GetProject();
+			REQUIRE(project != nullptr);
+			const auto& maps = project->maps.getTemplates();
+			REQUIRE(maps.entry_size() > 0);
+			return maps.entry(0).id();
+		}
+
+		class LogCapture final
+		{
+		public:
+			LogCapture()
+			{
+				m_connection = g_DefaultLog.signal().connect([this](const LogEntry& entry)
+				{
+					m_messages.push_back(entry.message);
+				});
+			}
+
+			[[nodiscard]] bool Contains(const std::string& fragment) const
+			{
+				for (const std::string& message : m_messages)
+				{
+					if (message.find(fragment) != std::string::npos)
+					{
+						return true;
+					}
+				}
+				return false;
+			}
+
+			[[nodiscard]] size_t CountContaining(const std::string& fragment) const
+			{
+				size_t count = 0;
+				for (const std::string& message : m_messages)
+				{
+					if (message.find(fragment) != std::string::npos)
+					{
+						++count;
+					}
+				}
+				return count;
+			}
+
+			[[nodiscard]] std::string Dump() const
+			{
+				std::string result;
+				for (const std::string& message : m_messages)
+				{
+					if (!result.empty())
+					{
+						result += "\n";
+					}
+					result += message;
+				}
+				return result;
+			}
+
+		private:
+			scoped_connection m_connection;
+			std::vector<std::string> m_messages;
+		};
+
+		struct WarriorRuntimeFixture final
+		{
+			static constexpr uint64 kSelfGuid = 0x100u;
+			static constexpr uint64 kLeaderGuid = 0x200u;
+			static constexpr uint64 kEnemyGuid = 0x300u;
+
+			asio::io_service io;
+			std::shared_ptr<BotRealmConnector> connector;
+			BotConfig config;
+			std::shared_ptr<BotNavService> navService;
+			BotContext context;
+			BotWarriorCapabilities capabilities;
+			uint32 mapId { 0 };
+
+			WarriorRuntimeFixture()
+				: connector(std::make_shared<BotRealmConnector>(io))
+				, navService(std::make_shared<BotNavService>())
+				, context(connector, config, navService)
+			{
+				config.characterClass = 1;
+				connector->PrimeWorldSessionForTesting(kSelfGuid);
+				REQUIRE(navService->IsReady());
+				capabilities = ResolveWarriorCapabilities(*navService->GetProject());
+				REQUIRE(capabilities.resolved);
+				REQUIRE(capabilities.gapCloser.has_value());
+				mapId = ResolveRuntimeMapId(*navService);
+				context.SetCurrentMapId(mapId);
+				context.UpdateMovementInfo(MakeMovementInfo(Vector3::Zero));
+			}
+
+			void SeedCombatScene(const float targetDistance, const bool selfInCombat = false, const bool leaderInCombat = true, const uint64 enemyTargetGuid = kLeaderGuid)
+			{
+				BotObjectManager& objectManager = connector->GetObjectManager();
+				objectManager.Clear();
+				objectManager.SetSelfGuid(kSelfGuid);
+				objectManager.AddOrUpdateUnit(MakePlayer(kSelfGuid, "bot", Vector3::Zero, selfInCombat, 0));
+				objectManager.AddOrUpdateUnit(MakePlayer(kLeaderGuid, "leader", Vector3(2.0f, 0.0f, 0.0f), leaderInCombat, kEnemyGuid));
+				objectManager.AddOrUpdateUnit(MakeCreature(kEnemyGuid, Vector3(targetDistance, 0.0f, 0.0f), true, enemyTargetGuid));
+
+				REQUIRE(HandleRealmPacket(*connector, BuildGroupListPacket({ { "bot", kSelfGuid }, { "leader", kLeaderGuid } }, kLeaderGuid)) == PacketParseResult::Pass);
+			}
+
+			void SeedKnownSpells(const std::initializer_list<uint32> spellIds)
+			{
+				REQUIRE(HandleRealmPacket(*connector, BuildInitialSpellsPacket(std::vector<uint32>(spellIds))) == PacketParseResult::Pass);
+			}
+
+			void SendSpellFailure(const uint32 spellId, const SpellCastResult result)
+			{
+				REQUIRE(HandleRealmPacket(*connector, BuildSpellFailurePacket(kSelfGuid, spellId, result)) == PacketParseResult::Pass);
+			}
+		};
 	}
 
-	TEST_CASE("warrior runtime mirrors self power snapshots through bot context", "[bot-warrior][state]")
+	TEST_CASE("warrior runtime arms conservative auto attack once when spellbook state is incomplete", "[bot-warrior][runtime]")
 	{
-		asio::io_service io;
-		auto connector = std::make_shared<BotRealmConnector>(io);
-		connector->PrimeWorldSessionForTesting(0x100);
+		WarriorRuntimeFixture fixture;
+		fixture.SeedCombatScene(3.0f);
 
-		BotConfig config;
-		BotContext context(connector, config);
+		CompanionFollowAction action;
+		LogCapture logs;
 
-		CHECK(context.GetSelf() == nullptr);
-		CHECK(context.GetSelfPowerType() == power_type::Invalid_);
-		CHECK(context.GetSelfPower() == 0);
-		CHECK(context.GetSelfMaxPower() == 0);
-
-		ParsedPacket createPacket{ BuildPlayerUpdatePacket(0x100, true, [](FieldMap<uint32>&) {}) };
-		CHECK(connector->HandleIncomingPacket(createPacket.packet) == PacketParseResult::Pass);
-
-		REQUIRE(context.GetSelf() != nullptr);
-		CHECK(context.GetSelfPowerType() == power_type::Rage);
-		CHECK(context.GetSelfPower() == 35);
-		CHECK(context.GetSelfMaxPower() == 100);
-		CHECK(context.GetSelfPowerPercent() == Approx(0.35f));
-
-		ParsedPacket manaTransitionPacket{ BuildPlayerUpdatePacket(0x100, false, [](FieldMap<uint32>& fields)
+		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
+		if (!logs.Contains("warrior "))
 		{
-			fields.SetFieldValue<uint32>(object_fields::PowerType, power_type::Mana);
-			fields.MarkAsChanged(object_fields::Mana);
-			fields.SetFieldValue<uint32>(object_fields::Mana, 0);
-			fields.SetFieldValue<uint32>(object_fields::MaxMana, 120);
-		}) };
-		CHECK(connector->HandleIncomingPacket(manaTransitionPacket.packet) == PacketParseResult::Pass);
-		CHECK(context.GetSelfPowerType() == power_type::Mana);
-		CHECK(context.GetSelfPower() == 0);
-		CHECK(context.GetSelfMaxPower() == 120);
-		CHECK(context.GetSelfPowerPercent() == Approx(0.0f));
+			FAIL(logs.Dump());
+		}
+		INFO(logs.Dump());
+		INFO("last_spell_issue=" << fixture.context.GetLastSpellStateIssue());
+		CHECK(fixture.context.GetAutoAttackTarget() == WarriorRuntimeFixture::kEnemyGuid);
+		CHECK_FALSE(fixture.context.IsAutoAttacking());
+		CHECK(logs.Contains("warrior action=ensure_auto_attack reason=conservative_auto_attack"));
+		CHECK(logs.Contains("companion mode=combat_anchor"));
+
+		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
+		CHECK(logs.CountContaining("warrior action=ensure_auto_attack") == 1);
+		CHECK(logs.Contains("warrior failure=auto_attack_pending"));
 	}
 
-	TEST_CASE("warrior runtime mirrors spellbook and preserves aura state on malformed updates", "[bot-warrior][state]")
+	TEST_CASE("warrior runtime casts a resolved opener and surfaces later server cast failures", "[bot-warrior][runtime]")
 	{
-		asio::io_service io;
-		auto connector = std::make_shared<BotRealmConnector>(io);
-		connector->PrimeWorldSessionForTesting(0x200);
-		BotConfig config;
-		BotContext context(connector, config);
+		WarriorRuntimeFixture fixture;
+		fixture.SeedCombatScene(12.0f, false, true, WarriorRuntimeFixture::kLeaderGuid);
+		fixture.SeedKnownSpells({ fixture.capabilities.gapCloser->spellId });
 
-		ParsedPacket createPacket{ BuildPlayerUpdatePacket(0x200, true, [](FieldMap<uint32>&) {}) };
-		REQUIRE(connector->HandleIncomingPacket(createPacket.packet) == PacketParseResult::Pass);
+		CompanionFollowAction action;
+		LogCapture logs;
 
-		ParsedPacket initialSpellsPacket{ BuildRealmPacket(game::realm_client_packet::InitialSpells, [](game::OutgoingPacket& packet)
-		{
-			packet << io::write<uint16>(4);
-			packet << io::write<uint32>(6673);
-			packet << io::write<uint32>(355);
-			packet << io::write<uint32>(6673);
-			packet << io::write<uint32>(0);
-		}) };
-		REQUIRE(connector->HandleIncomingPacket(initialSpellsPacket.packet) == PacketParseResult::Pass);
-		const std::vector<uint32> initialKnown = context.GetKnownSpellIds();
-		REQUIRE(initialKnown.size() == 2);
-		CHECK(initialKnown[0] == 355);
-		CHECK(initialKnown[1] == 6673);
+		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
+		CHECK(fixture.context.GetLastCastState().status == BotUnit::CastState::Status::Pending);
+		CHECK(fixture.context.GetLastCastState().spellId == fixture.capabilities.gapCloser->spellId);
+		CHECK(fixture.context.GetLastCastState().unitTargetGuid == WarriorRuntimeFixture::kEnemyGuid);
+		CHECK(logs.Contains("warrior action=cast_spell reason=charge_opener"));
 
-		ParsedPacket learnedPacket{ BuildRealmPacket(game::realm_client_packet::LearnedSpell, [](game::OutgoingPacket& packet)
-		{
-			packet << io::write<uint32>(2458);
-		}) };
-		REQUIRE(connector->HandleIncomingPacket(learnedPacket.packet) == PacketParseResult::Pass);
-		CHECK(context.HasKnownSpell(2458));
-
-		ParsedPacket duplicateLearnedPacket{ BuildRealmPacket(game::realm_client_packet::LearnedSpell, [](game::OutgoingPacket& packet)
-		{
-			packet << io::write<uint32>(2458);
-		}) };
-		REQUIRE(connector->HandleIncomingPacket(duplicateLearnedPacket.packet) == PacketParseResult::Pass);
-		CHECK(context.GetKnownSpellIds().size() == 3);
-
-		ParsedPacket unknownCooldownPacket{ BuildRealmPacket(game::realm_client_packet::SpellCooldown, [](game::OutgoingPacket& packet)
-		{
-			packet << io::write<uint32>(999999u) << io::write<uint32>(1500u);
-		}) };
-		REQUIRE(connector->HandleIncomingPacket(unknownCooldownPacket.packet) == PacketParseResult::Pass);
-		CHECK_FALSE(context.IsSpellOnCooldown(999999u));
-		CHECK(context.GetLastSpellStateIssue() == "spell_cooldown_unknown_spell");
-
-		ParsedPacket auraPacket{ BuildRealmPacket(game::realm_client_packet::AuraUpdate, [](game::OutgoingPacket& packet)
-		{
-			packet << io::write<uint32>(1u);
-			packet << io::write<uint32>(6673u);
-			packet << io::write<uint32>(5000u);
-			packet << io::write_packed_guid(0x200u);
-			packet << io::write<uint8>(2u);
-			packet << io::write<int32>(5);
-			packet << io::write<int32>(10);
-		}) };
-		REQUIRE(connector->HandleIncomingPacket(auraPacket.packet) == PacketParseResult::Pass);
-		REQUIRE(context.HasVisibleAura(6673));
-		const std::vector<BotUnit::AuraState> visibleAuras = context.GetVisibleAuras();
-		REQUIRE(visibleAuras.size() == 1);
-		CHECK(visibleAuras[0].remainingMs == 5000u);
-		REQUIRE(visibleAuras[0].basePoints.size() == 2);
-		CHECK(visibleAuras[0].basePoints[0] == 5);
-		CHECK(visibleAuras[0].basePoints[1] == 10);
-
-		ParsedPacket malformedAuraPacket{ BuildRealmPacket(game::realm_client_packet::AuraUpdate, [](game::OutgoingPacket& packet)
-		{
-			packet << io::write<uint32>(1u);
-			packet << io::write<uint32>(0u);
-			packet << io::write<uint32>(1000u);
-			packet << io::write_packed_guid(0x200u);
-			packet << io::write<uint8>(1u);
-			packet << io::write<int32>(7);
-		}) };
-		REQUIRE(connector->HandleIncomingPacket(malformedAuraPacket.packet) == PacketParseResult::Pass);
-		CHECK(context.GetLastSpellStateIssue() == "aura_update_invalid_spell_id");
-		CHECK(context.HasVisibleAura(6673));
-		CHECK(context.GetVisibleAuras().size() == 1);
-
-		ParsedPacket clearAuraPacket{ BuildRealmPacket(game::realm_client_packet::AuraUpdate, [](game::OutgoingPacket& packet)
-		{
-			packet << io::write<uint32>(0u);
-		}) };
-		REQUIRE(connector->HandleIncomingPacket(clearAuraPacket.packet) == PacketParseResult::Pass);
-		CHECK_FALSE(context.HasVisibleAura(6673));
-		CHECK(context.GetVisibleAuras().empty());
-
-		ParsedPacket unlearnedPacket{ BuildRealmPacket(game::realm_client_packet::UnlearnedSpell, [](game::OutgoingPacket& packet)
-		{
-			packet << io::write<uint32>(2458u);
-		}) };
-		REQUIRE(connector->HandleIncomingPacket(unlearnedPacket.packet) == PacketParseResult::Pass);
-		CHECK_FALSE(context.HasKnownSpell(2458u));
-	}
-
-	TEST_CASE("warrior runtime tracks cooldown and cast lifecycle while reusing the real cast packet format", "[bot-warrior][state]")
-	{
-		asio::io_service io;
-		auto connector = std::make_shared<BotRealmConnector>(io);
-		connector->PrimeWorldSessionForTesting(0x300);
-		BotConfig config;
-		BotContext context(connector, config);
-
-		ParsedPacket createPacket{ BuildPlayerUpdatePacket(0x300, true, [](FieldMap<uint32>&) {}) };
-		REQUIRE(connector->HandleIncomingPacket(createPacket.packet) == PacketParseResult::Pass);
-
-		ParsedPacket initialSpellsPacket{ BuildRealmPacket(game::realm_client_packet::InitialSpells, [](game::OutgoingPacket& packet)
-		{
-			packet << io::write<uint16>(1u);
-			packet << io::write<uint32>(6673u);
-		}) };
-		REQUIRE(connector->HandleIncomingPacket(initialSpellsPacket.packet) == PacketParseResult::Pass);
-
-		SpellTargetMap targetMap;
-		targetMap.SetTargetMap(spell_cast_target_flags::Unit);
-		targetMap.SetUnitTarget(0x999u);
-
-		REQUIRE(connector->SendCastSpell(6673u, targetMap, false));
-		ParsedPacket castPacket{ connector->getSendBuffer() };
-		CHECK(castPacket.packet.GetId() == game::client_realm_packet::CastSpell);
-		uint32 serializedSpellId = 0;
-		SpellTargetMap serializedTargetMap;
-		REQUIRE(castPacket.packet >> io::read<uint32>(serializedSpellId) >> serializedTargetMap);
-		CHECK(serializedSpellId == 6673u);
-		CHECK(serializedTargetMap.GetTargetMap() == spell_cast_target_flags::Unit);
-		CHECK(serializedTargetMap.GetUnitTarget() == 0x999u);
-		connector->getSendBuffer().clear();
-
-		CHECK_FALSE(context.CastSpell(999999u, targetMap));
-		CHECK(context.GetLastCastState().status == BotUnit::CastState::Status::Failed);
-		CHECK(context.GetLastCastState().failureReason == spell_cast_result::FailedNotKnown);
-		CHECK(context.GetLastSpellStateIssue() == "cast_spell_unknown_spell");
-
-		ParsedPacket spellStartPacket{ BuildRealmPacket(game::realm_client_packet::SpellStart, [&](game::OutgoingPacket& packet)
-		{
-			packet << io::write_packed_guid(0x300u);
-			packet << io::write<uint32>(6673u);
-			packet << io::write<GameTime>(1500u);
-			packet << targetMap;
-			packet << io::write<uint32>(1500u);
-		}) };
-		REQUIRE(connector->HandleIncomingPacket(spellStartPacket.packet) == PacketParseResult::Pass);
-		CHECK(context.GetLastCastState().status == BotUnit::CastState::Status::Started);
-		CHECK(context.GetLastCastState().spellId == 6673u);
-		CHECK(context.GetLastCastState().unitTargetGuid == 0x999u);
-		CHECK(context.IsSpellOnCooldown(6673u));
-		CHECK(context.GetSpellCooldownRemaining(6673u) > 0u);
-
-		ParsedPacket spellFailurePacket{ BuildRealmPacket(game::realm_client_packet::SpellFailure, [](game::OutgoingPacket& packet)
-		{
-			packet << io::write_packed_guid(0x300u);
-			packet << io::write<uint32>(6673u);
-			packet << io::write<GameTime>(1510u);
-			packet << io::write<uint8>(spell_cast_result::FailedMoving);
-		}) };
-		REQUIRE(connector->HandleIncomingPacket(spellFailurePacket.packet) == PacketParseResult::Pass);
-		CHECK(context.GetLastCastState().status == BotUnit::CastState::Status::Failed);
-		CHECK(context.GetLastCastState().failureReason == spell_cast_result::FailedMoving);
-
-		ParsedPacket cooldownClearPacket{ BuildRealmPacket(game::realm_client_packet::SpellCooldown, [](game::OutgoingPacket& packet)
-		{
-			packet << io::write<uint32>(6673u) << io::write<uint32>(0u);
-		}) };
-		REQUIRE(connector->HandleIncomingPacket(cooldownClearPacket.packet) == PacketParseResult::Pass);
-		CHECK_FALSE(context.IsSpellOnCooldown(6673u));
+		fixture.SendSpellFailure(fixture.capabilities.gapCloser->spellId, spell_cast_result::FailedMoving);
+		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
+		CHECK(fixture.context.GetLastCastState().status == BotUnit::CastState::Status::Failed);
+		CHECK(logs.Contains("warrior failure=cast_failed"));
+		CHECK(logs.Contains("failure_code=" + std::to_string(static_cast<uint32>(spell_cast_result::FailedMoving))));
 	}
 }

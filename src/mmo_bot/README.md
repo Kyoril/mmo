@@ -145,16 +145,21 @@ Supported profiles: `simple_greeter`, `chatter`, `sequence`, `unit_awareness`, `
 
 ### Party Follow Companion Runtime
 
-`party_follow` is the canonical live startup profile for companion behavior. It queues a long-lived companion action that:
+`party_follow` is the canonical live startup profile for companion behavior. It queues one long-lived companion action that:
 
 - follows the current party leader while the party is out of combat
 - switches to a role-aware combat anchor once the party enters combat
-- regroups on the leader or holds position conservatively when the leader GUID, awareness, nav state, or combat anchor data becomes invalid
+- keeps the S02/S03 movement seam as the only live movement path
+- resolves warrior capabilities from committed class/spell data plus the live spellbook when the configured character is a warrior
+- translates warrior controller intents into live auto-attack or cast packets inside the same runtime tick without starting a second action queue
+- regroups on the leader or holds position conservatively when the leader GUID, awareness, nav state, combat anchor data, or warrior combat state becomes invalid
 
 **Expected diagnostics:**
 - one-shot `companion mode=` transitions when the runtime switches between travel, combat anchor, regroup, and hold states
 - one-shot `anchor decision=` logs that include the current anchor reason and follow decision
-- explicit reason codes for conservative fallbacks such as leader loss, stale combat anchors, unresolved maps, or nav unavailability
+- one-shot `warrior action=` logs for real auto-attack or cast sends, including reason codes and target/spell details
+- one-shot `warrior failure=` logs for conservative skips, blocked casts, cast failures, incomplete spellbook/cooldown state, invalid targets, and follow/runtime gating
+- explicit reason codes for conservative fallbacks such as leader loss, stale combat anchors, unresolved maps, nav unavailability, or warrior runtime state gaps
 
 These diagnostics may include GUIDs, mode names, distances, reason codes, and anchor coordinates, but they must not include credentials or session secrets.
 
