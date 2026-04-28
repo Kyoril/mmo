@@ -706,9 +706,8 @@ namespace mmo
 			m_pendingAutoAttackRequestedAt = 0;
 		}
 
-		if (input.preconditionFailure != CompanionFollowPreconditionFailure::None
-			|| output.followDecision.type == BotFollowDecisionType::Abort
-			|| output.followDecision.type == BotFollowDecisionType::Stuck)
+		if (input.preconditionFailure == CompanionFollowPreconditionFailure::SelfUnavailable
+			|| input.preconditionFailure == CompanionFollowPreconditionFailure::InvalidSelfPosition)
 		{
 			std::ostringstream details;
 			details << BuildDecisionDetails(context, input, output)
