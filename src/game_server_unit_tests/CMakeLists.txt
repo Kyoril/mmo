@@ -22,4 +22,4 @@ target_link_libraries(game_server_unit_tests
 target_link_libraries(game_server_unit_tests ${OPENSSL_LIBRARIES})
 set_property(TARGET game_server_unit_tests PROPERTY FOLDER "tests")
 
-add_test(NAME game_server_unit_tests COMMAND game_server_unit_tests)
+add_test(NAME game_server_tests COMMAND game_server_unit_tests)

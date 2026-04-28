@@ -17,11 +17,15 @@ target_link_libraries(unit_tests
 	hpak_v1_0
 	math
 	game
-	game_server)
+	game_server
+	assets
+	proto_data
+	nav_mesh)
 
 target_sources(unit_tests PRIVATE
 	../mmo_bot/bot_startup_selection.cpp
 	../mmo_bot/bot_console_prompt.cpp
+	../mmo_bot/bot_nav_service.cpp
 )
 
 if (WIN32)

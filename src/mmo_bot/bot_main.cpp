@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "bot_login_connector.h"
+#include "bot_nav_service.h"
 #include "bot_realm_connector.h"
 #include "bot_console_prompt.h"
 #include "bot_context.h"
@@ -491,7 +492,8 @@ namespace mmo
 			, m_io()
 			, m_login(std::make_shared<BotLoginConnector>(m_io, m_config.loginHost, m_config.loginPort))
 			, m_realm(std::make_shared<BotRealmConnector>(m_io))
-			, m_context(std::make_shared<BotContext>(m_realm, m_config))
+			, m_navService(std::make_shared<BotNavService>())
+			, m_context(std::make_shared<BotContext>(m_realm, m_config, m_navService))
 			, m_profile(std::move(profile))
 		{
 			BindSignals();
@@ -526,14 +528,10 @@ namespace mmo
 						m_profileActivated = true;
 					}
 
-					// Update area watcher with bot's current position
+					// Update area watcher with bot's authoritative current position
 					if (m_areaWatcher)
 					{
-						auto* self = m_realm->GetObjectManager().GetSelf();
-						if (self)
-						{
-							m_areaWatcher->SetCenter(self->GetPosition());
-						}
+						m_areaWatcher->SetCenter(m_context->GetPosition());
 						m_areaWatcher->Update();
 					}
 
@@ -724,12 +722,16 @@ namespace mmo
 				{
 					ILOG("Entered world on map " << mapId << " at position (" << position.x << ", " << position.y << ", " << position.z << ").");
 					
-					// Initialize cached movement info from realm connector
+					m_context->SetCurrentMapId(mapId);
 					m_context->UpdateMovementInfo(m_realm->GetMovementInfo());
+					if (m_navService)
+					{
+						static_cast<void>(m_navService->EnsureMapAvailable(mapId));
+					}
 					
-					// Create the area watcher centered on bot's position with 40 yard radius
+					// Create the area watcher centered on the authoritative cached position.
 					auto& objectManager = m_realm->GetObjectManager();
-					m_areaWatcher = std::make_unique<BotUnitWatcher>(objectManager, position, 40.0f);
+					m_areaWatcher = std::make_unique<BotUnitWatcher>(objectManager, m_context->GetPosition(), 40.0f);
 					
 					// Wire up area watcher events to profile
 					m_areaWatcher->UnitEntered.connect([this](const BotUnit& unit)
@@ -809,15 +811,10 @@ namespace mmo
 
 					m_profile->OnUnitSpawned(*m_context, unit);
 					
-					// Update the area watcher if it exists
+					// Update the area watcher from the authoritative cached position.
 					if (m_areaWatcher)
 					{
-						// Reposition watcher to bot's current position
-						auto* self = m_realm->GetObjectManager().GetSelf();
-						if (self)
-						{
-							m_areaWatcher->SetCenter(self->GetPosition());
-						}
+						m_areaWatcher->SetCenter(m_context->GetPosition());
 						m_areaWatcher->Update();
 					}
 				});
@@ -885,6 +882,7 @@ namespace mmo
 		asio::io_service m_io;
 		std::shared_ptr<BotLoginConnector> m_login;
 		std::shared_ptr<BotRealmConnector> m_realm;
+		std::shared_ptr<BotNavService> m_navService;
 		std::shared_ptr<BotContext> m_context;
 		BotProfilePtr m_profile;
 		std::unique_ptr<BotUnitWatcher> m_areaWatcher;

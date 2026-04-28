@@ -22,6 +22,7 @@ namespace mmo
 	class BotRealmConnector;
 	class BotObjectManager;
 	class BotUnit;
+	class BotNavService;
 
 	/// Provides context and capabilities to bot actions.
 	/// This class acts as a facade, exposing only the necessary operations
@@ -34,7 +35,8 @@ namespace mmo
 	public:
 		explicit BotContext(
 			std::shared_ptr<BotRealmConnector> realmConnector,
-			const BotConfig& config);
+			const BotConfig& config,
+			std::shared_ptr<BotNavService> navService = nullptr);
 
 		/// Gets the bot's configuration.
 		const BotConfig& GetConfig() const { return m_config; }
@@ -50,6 +52,21 @@ namespace mmo
 
 		/// Gets the current movement information of the bot.
 		const MovementInfo& GetMovementInfo() const;
+
+		/// Gets the bot-side nav bridge if available.
+		const BotNavService* GetNavService() const { return m_navService.get(); }
+
+		/// Gets whether authoritative movement info has been cached locally.
+		bool HasAuthoritativeMovementInfo() const { return m_hasAuthoritativeMovementInfo; }
+
+		/// Persists the authoritative current map id.
+		void SetCurrentMapId(uint32 mapId);
+
+		/// Checks whether a current map id is known.
+		bool HasCurrentMapId() const { return m_hasCurrentMapId; }
+
+		/// Gets the authoritative current map id, or 0 if unknown.
+		uint32 GetCurrentMapId() const { return m_currentMapId; }
 
 		/// Sends a chat message.
 		/// @param message The message text to send.
@@ -302,8 +319,12 @@ namespace mmo
 
 	private:
 		std::shared_ptr<BotRealmConnector> m_realmConnector;
+		std::shared_ptr<BotNavService> m_navService;
 		const BotConfig& m_config;
 		bool m_worldReady { false };
+		bool m_hasCurrentMapId { false };
+		uint32 m_currentMapId { 0 };
+		bool m_hasAuthoritativeMovementInfo { false };
 		MovementInfo m_cachedMovementInfo;
 		
 		/// Custom state storage for actions and profiles

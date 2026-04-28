@@ -14,8 +14,10 @@ namespace mmo
 {
 	BotContext::BotContext(
 		std::shared_ptr<BotRealmConnector> realmConnector,
-		const BotConfig& config)
+		const BotConfig& config,
+		std::shared_ptr<BotNavService> navService)
 		: m_realmConnector(std::move(realmConnector))
+		, m_navService(std::move(navService))
 		, m_config(config)
 	{
 	}
@@ -36,6 +38,12 @@ namespace mmo
 		// The realm connector's movement info is only updated by server (teleports, speed changes)
 		// and would be stale for client-initiated movement
 		return m_cachedMovementInfo;
+	}
+
+	void BotContext::SetCurrentMapId(const uint32 mapId)
+	{
+		m_currentMapId = mapId;
+		m_hasCurrentMapId = mapId != 0;
 	}
 
 	void BotContext::SendChatMessage(const std::string& message, ChatType chatType, const std::string& target)
@@ -66,11 +74,13 @@ namespace mmo
 
 		m_realmConnector->SendMovementUpdate(guid, opCode, info);
 		m_cachedMovementInfo = info;
+		m_hasAuthoritativeMovementInfo = true;
 	}
 
 	void BotContext::UpdateMovementInfo(const MovementInfo& info)
 	{
 		m_cachedMovementInfo = info;
+		m_hasAuthoritativeMovementInfo = true;
 	}
 
 	void BotContext::SendLandedPacket()
@@ -277,13 +287,17 @@ namespace mmo
 
 	Vector3 BotContext::GetPosition() const
 	{
+		if (m_hasAuthoritativeMovementInfo)
+		{
+			return m_cachedMovementInfo.position;
+		}
+
 		const BotUnit* self = GetSelf();
 		if (self)
 		{
 			return self->GetPosition();
 		}
 
-		// Fall back to cached movement info if unit not yet available
 		return m_cachedMovementInfo.position;
 	}
 
@@ -294,13 +308,7 @@ namespace mmo
 			return {};
 		}
 
-		const BotUnit* self = GetSelf();
-		if (!self)
-		{
-			return {};
-		}
-
-		return m_realmConnector->GetObjectManager().GetNearbyUnits(self->GetPosition(), radius);
+		return m_realmConnector->GetObjectManager().GetNearbyUnits(GetPosition(), radius);
 	}
 
 	std::vector<const BotUnit*> BotContext::GetNearbyPlayers(float radius) const
@@ -310,13 +318,7 @@ namespace mmo
 			return {};
 		}
 
-		const BotUnit* self = GetSelf();
-		if (!self)
-		{
-			return {};
-		}
-
-		return m_realmConnector->GetObjectManager().GetNearbyPlayers(self->GetPosition(), radius);
+		return m_realmConnector->GetObjectManager().GetNearbyPlayers(GetPosition(), radius);
 	}
 
 	std::vector<const BotUnit*> BotContext::GetNearbyCreatures(float radius) const
@@ -326,13 +328,7 @@ namespace mmo
 			return {};
 		}
 
-		const BotUnit* self = GetSelf();
-		if (!self)
-		{
-			return {};
-		}
-
-		return m_realmConnector->GetObjectManager().GetNearbyCreatures(self->GetPosition(), radius);
+		return m_realmConnector->GetObjectManager().GetNearbyCreatures(GetPosition(), radius);
 	}
 
 	const BotUnit* BotContext::GetNearestHostile(float maxRange) const
@@ -342,7 +338,29 @@ namespace mmo
 			return nullptr;
 		}
 
-		return m_realmConnector->GetObjectManager().GetNearestHostile(maxRange);
+		const auto& objectManager = m_realmConnector->GetObjectManager();
+		const BotUnit* self = objectManager.GetSelf();
+		if (!self)
+		{
+			return nullptr;
+		}
+
+		const Vector3 selfPosition = GetPosition();
+		const float maxRangeSquared = maxRange * maxRange;
+		return objectManager.GetNearestUnit(selfPosition, [self, selfPosition, maxRangeSquared](const BotUnit& unit)
+			{
+				if (unit.GetGuid() == self->GetGuid() || !unit.IsAlive())
+				{
+					return false;
+				}
+
+				if (unit.GetDistanceToSquared(selfPosition) > maxRangeSquared)
+				{
+					return false;
+				}
+
+				return unit.IsHostileTo(*self);
+			});
 	}
 
 	const BotUnit* BotContext::GetNearestAttackable(float maxRange) const
@@ -352,7 +370,29 @@ namespace mmo
 			return nullptr;
 		}
 
-		return m_realmConnector->GetObjectManager().GetNearestAttackable(maxRange);
+		const auto& objectManager = m_realmConnector->GetObjectManager();
+		const BotUnit* self = objectManager.GetSelf();
+		if (!self)
+		{
+			return nullptr;
+		}
+
+		const Vector3 selfPosition = GetPosition();
+		const float maxRangeSquared = maxRange * maxRange;
+		return objectManager.GetNearestUnit(selfPosition, [self, selfPosition, maxRangeSquared](const BotUnit& unit)
+			{
+				if (unit.GetGuid() == self->GetGuid() || !unit.IsAlive())
+				{
+					return false;
+				}
+
+				if (unit.GetDistanceToSquared(selfPosition) > maxRangeSquared)
+				{
+					return false;
+				}
+
+				return unit.IsAttackableBy(*self);
+			});
 	}
 
 	const BotUnit* BotContext::GetNearestFriendly(float maxRange) const
@@ -362,7 +402,29 @@ namespace mmo
 			return nullptr;
 		}
 
-		return m_realmConnector->GetObjectManager().GetNearestFriendly(maxRange);
+		const auto& objectManager = m_realmConnector->GetObjectManager();
+		const BotUnit* self = objectManager.GetSelf();
+		if (!self)
+		{
+			return nullptr;
+		}
+
+		const Vector3 selfPosition = GetPosition();
+		const float maxRangeSquared = maxRange * maxRange;
+		return objectManager.GetNearestUnit(selfPosition, [self, selfPosition, maxRangeSquared](const BotUnit& unit)
+			{
+				if (unit.GetGuid() == self->GetGuid() || !unit.IsAlive())
+				{
+					return false;
+				}
+
+				if (unit.GetDistanceToSquared(selfPosition) > maxRangeSquared)
+				{
+					return false;
+				}
+
+				return unit.IsFriendlyTo(*self);
+			});
 	}
 
 	const BotUnit* BotContext::GetNearestFriendlyPlayer(float maxRange) const
@@ -372,7 +434,29 @@ namespace mmo
 			return nullptr;
 		}
 
-		return m_realmConnector->GetObjectManager().GetNearestFriendlyPlayer(maxRange);
+		const auto& objectManager = m_realmConnector->GetObjectManager();
+		const BotUnit* self = objectManager.GetSelf();
+		if (!self)
+		{
+			return nullptr;
+		}
+
+		const Vector3 selfPosition = GetPosition();
+		const float maxRangeSquared = maxRange * maxRange;
+		return objectManager.GetNearestUnit(selfPosition, [self, selfPosition, maxRangeSquared](const BotUnit& unit)
+			{
+				if (unit.GetGuid() == self->GetGuid() || !unit.IsPlayer() || !unit.IsAlive())
+				{
+					return false;
+				}
+
+				if (unit.GetDistanceToSquared(selfPosition) > maxRangeSquared)
+				{
+					return false;
+				}
+
+				return unit.IsFriendlyTo(*self);
+			});
 	}
 
 	std::vector<const BotUnit*> BotContext::GetHostilesInRange(float maxRange) const
@@ -382,7 +466,34 @@ namespace mmo
 			return {};
 		}
 
-		return m_realmConnector->GetObjectManager().GetHostilesInRange(maxRange);
+		const auto& objectManager = m_realmConnector->GetObjectManager();
+		const BotUnit* self = objectManager.GetSelf();
+		if (!self)
+		{
+			return {};
+		}
+
+		const Vector3 selfPosition = GetPosition();
+		const float maxRangeSquared = maxRange * maxRange;
+		std::vector<const BotUnit*> result;
+		objectManager.ForEachUnit([&](const BotUnit& unit)
+			{
+				if (unit.GetGuid() == self->GetGuid() || !unit.IsAlive())
+				{
+					return;
+				}
+
+				if (unit.GetDistanceToSquared(selfPosition) > maxRangeSquared)
+				{
+					return;
+				}
+
+				if (unit.IsHostileTo(*self))
+				{
+					result.push_back(&unit);
+				}
+			});
+		return result;
 	}
 
 	std::vector<const BotUnit*> BotContext::GetFriendlyPlayersInRange(float maxRange) const
@@ -392,7 +503,34 @@ namespace mmo
 			return {};
 		}
 
-		return m_realmConnector->GetObjectManager().GetFriendlyPlayersInRange(maxRange);
+		const auto& objectManager = m_realmConnector->GetObjectManager();
+		const BotUnit* self = objectManager.GetSelf();
+		if (!self)
+		{
+			return {};
+		}
+
+		const Vector3 selfPosition = GetPosition();
+		const float maxRangeSquared = maxRange * maxRange;
+		std::vector<const BotUnit*> result;
+		objectManager.ForEachUnit([&](const BotUnit& unit)
+			{
+				if (unit.GetGuid() == self->GetGuid() || !unit.IsPlayer() || !unit.IsAlive())
+				{
+					return;
+				}
+
+				if (unit.GetDistanceToSquared(selfPosition) > maxRangeSquared)
+				{
+					return;
+				}
+
+				if (unit.IsFriendlyTo(*self))
+				{
+					result.push_back(&unit);
+				}
+			});
+		return result;
 	}
 
 	std::vector<const BotUnit*> BotContext::GetUnitsTargetingSelf(float maxRange) const

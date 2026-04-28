@@ -11,6 +11,9 @@ target_link_libraries(mmo_bot
     game_protocol
     game
     math
+    assets
+    proto_data
+    nav_mesh
     ${OPENSSL_LIBRARIES}
 )
 

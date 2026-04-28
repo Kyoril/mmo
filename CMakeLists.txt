@@ -8,6 +8,23 @@ if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.30")
     cmake_policy(SET CMP0169 OLD)
 endif()
 
+if(CMAKE_CONFIGURATION_TYPES)
+  set(MMO_DEFAULT_CTEST_CONFIG "Debug")
+  list(FIND CMAKE_CONFIGURATION_TYPES "${MMO_DEFAULT_CTEST_CONFIG}" MMO_HAS_DEBUG_CTEST_CONFIG)
+  if(MMO_HAS_DEBUG_CTEST_CONFIG EQUAL -1)
+    list(GET CMAKE_CONFIGURATION_TYPES 0 MMO_DEFAULT_CTEST_CONFIG)
+  endif()
+
+  configure_file(
+    "${CMAKE_CURRENT_LIST_DIR}/cmake/ctest_default_config.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/ctest_default_config.cmake"
+    @ONLY
+  )
+  set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/ctest_default_config.cmake"
+  )
+endif()
+
 # Add cmake directory to the list of paths
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 
