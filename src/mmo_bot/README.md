@@ -151,17 +151,22 @@ Supported profiles: `simple_greeter`, `chatter`, `sequence`, `unit_awareness`, `
 - switches to a role-aware combat anchor once the party enters combat
 - keeps the S02/S03 movement seam as the only live movement path
 - resolves warrior capabilities from committed class/spell data plus the live spellbook when the configured character is a warrior
+- resolves cleric capabilities from committed class/spell/range data plus the live spellbook when the configured character is a healer
 - translates warrior controller intents into live auto-attack or cast packets inside the same runtime tick without starting a second action queue
-- regroups on the leader or holds position conservatively when the leader GUID, awareness, nav state, combat anchor data, or warrior combat state becomes invalid
+- translates cleric controller intents into live heal, support-aura, or filler casts inside the same runtime tick without starting a second action queue
+- remembers last observed ally health for conservative healer triage when an injured party member drops out of awareness
+- regroups on the leader or holds position conservatively when the leader GUID, awareness, nav state, combat anchor data, or class runtime state becomes invalid
 
 **Expected diagnostics:**
 - one-shot `companion mode=` transitions when the runtime switches between travel, combat anchor, regroup, and hold states
 - one-shot `anchor decision=` logs that include the current anchor reason and follow decision
 - one-shot `warrior action=` logs for real auto-attack or cast sends, including reason codes and target/spell details
 - one-shot `warrior failure=` logs for conservative skips, blocked casts, cast failures, incomplete spellbook/cooldown state, invalid targets, and follow/runtime gating
-- explicit reason codes for conservative fallbacks such as leader loss, stale combat anchors, unresolved maps, nav unavailability, or warrior runtime state gaps
+- one-shot `cleric action=` logs for real heal, support-aura, or filler cast sends, including spell ids, target guids, health/mana context, and reason codes
+- one-shot `cleric failure=` logs for conservative holds, oom/cooldown gating, out-of-awareness allies, blocked casts, cast failures, incomplete spellbook/cooldown state, and follow/runtime gating
+- explicit reason codes for conservative fallbacks such as leader loss, stale combat anchors, unresolved maps, nav unavailability, or class runtime state gaps
 
-These diagnostics may include GUIDs, mode names, distances, reason codes, and anchor coordinates, but they must not include credentials or session secrets.
+These diagnostics may include GUIDs, spell ids, spell names, health percentages, distances, reason codes, and anchor coordinates, but they must not include credentials or session secrets.
 
 ## Design Principles Applied
 

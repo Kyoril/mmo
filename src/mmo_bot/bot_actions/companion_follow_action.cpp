@@ -20,6 +20,7 @@ namespace
 	using namespace mmo;
 
 	constexpr uint8 kWarriorClassId = 1;
+	constexpr uint8 kPriestClassId = 5;
 	constexpr GameTime kAutoAttackRetryDelayMs = 1000;
 	constexpr GameTime kCastFailureBackoffMs = 750;
 
@@ -82,6 +83,16 @@ namespace
 	}
 
 	std::string FirstIssueOrFallback(const BotWarriorCapabilities& capabilities, std::string_view fallback)
+	{
+		if (!capabilities.issues.empty())
+		{
+			return capabilities.issues.front();
+		}
+
+		return std::string(fallback);
+	}
+
+	std::string FirstIssueOrFallback(const BotClericCapabilities& capabilities, std::string_view fallback)
 	{
 		if (!capabilities.issues.empty())
 		{
@@ -217,6 +228,115 @@ namespace
 		return filtered;
 	}
 
+	BotClericCapabilities FilterKnownClericCapabilities(const BotClericCapabilities& baseCapabilities, const std::vector<uint32>& knownSpellIds)
+	{
+		BotClericCapabilities filtered = baseCapabilities;
+		const std::unordered_set<uint32> knownSpellSet(knownSpellIds.begin(), knownSpellIds.end());
+
+		auto isKnown = [&](const std::optional<BotClericResolvedSpell>& spell)
+		{
+			return spell.has_value() && knownSpellSet.find(spell->spellId) != knownSpellSet.end();
+		};
+
+		filtered.spells.clear();
+		for (const BotClericResolvedSpell& spell : baseCapabilities.spells)
+		{
+			if (knownSpellSet.find(spell.spellId) != knownSpellSet.end())
+			{
+				filtered.spells.push_back(spell);
+			}
+		}
+
+		if (!isKnown(filtered.emergencyHeal)) filtered.emergencyHeal.reset();
+		if (!isKnown(filtered.efficientHeal)) filtered.efficientHeal.reset();
+		if (!isKnown(filtered.supportAura)) filtered.supportAura.reset();
+		if (!isKnown(filtered.supportBuff)) filtered.supportBuff.reset();
+		if (!isKnown(filtered.defensive)) filtered.defensive.reset();
+		if (!isKnown(filtered.damageFiller)) filtered.damageFiller.reset();
+
+		filtered.resolved = baseCapabilities.resolved
+			&& filtered.powerType == power_type::Mana
+			&& filtered.emergencyHeal.has_value()
+			&& filtered.efficientHeal.has_value()
+			&& filtered.damageFiller.has_value();
+		return filtered;
+	}
+
+	[[nodiscard]] bool IsValidHealthPercent(const float healthPercent)
+	{
+		return std::isfinite(healthPercent) && healthPercent >= 0.0f && healthPercent <= 1.0f;
+	}
+
+	struct ClericHostileTargetCandidate final
+	{
+		const BotUnit* unit { nullptr };
+		const char* source { "none" };
+	};
+
+	ClericHostileTargetCandidate SelectClericHostileTarget(BotContext& context, const CompanionFollowControllerOutput& output)
+	{
+		const BotUnit* self = context.GetSelf();
+		if (!self)
+		{
+			return {};
+		}
+
+		auto isValidTarget = [&](const uint64 guid, const char* source) -> ClericHostileTargetCandidate
+		{
+			if (guid == 0)
+			{
+				return {};
+			}
+
+			const BotUnit* candidate = context.GetUnit(guid);
+			if (!candidate || !candidate->IsAlive())
+			{
+				return {};
+			}
+
+			if (!candidate->IsHostileTo(*self) && !candidate->IsAttackableBy(*self))
+			{
+				return {};
+			}
+
+			ClericHostileTargetCandidate result;
+			result.unit = candidate;
+			result.source = source;
+			return result;
+		};
+
+		if (output.companion.hasAnchor)
+		{
+			if (const BotUnit* anchorUnit = context.GetUnit(output.companion.anchor.guid))
+			{
+				if (const ClericHostileTargetCandidate anchorTarget = isValidTarget(anchorUnit->GetTargetGuid(), "anchor_target"); anchorTarget.unit)
+				{
+					return anchorTarget;
+				}
+			}
+		}
+
+		if (const ClericHostileTargetCandidate selfTarget = isValidTarget(self->GetTargetGuid(), "self_target"); selfTarget.unit)
+		{
+			return selfTarget;
+		}
+
+		for (const BotUnit* unit : context.GetUnitsTargetingSelf())
+		{
+			if (!unit)
+			{
+				continue;
+			}
+
+			if (const ClericHostileTargetCandidate targetingSelf = isValidTarget(unit->GetGuid(), "targeting_self"); targetingSelf.unit)
+			{
+				return targetingSelf;
+			}
+		}
+
+		return {};
+	}
+
 	struct WarriorTargetCandidate final
 	{
 		const BotUnit* unit { nullptr };
@@ -306,7 +426,7 @@ namespace mmo
 
 	std::string CompanionFollowAction::GetDescription() const
 	{
-		return "Follow the party leader out of combat, use role-aware anchors in combat, and execute warrior tank actions inside the same runtime";
+		return "Follow the party leader out of combat, use role-aware anchors in combat, and execute warrior or cleric companion actions inside the same runtime";
 	}
 
 	ActionResult CompanionFollowAction::Execute(BotContext& context)
@@ -318,8 +438,10 @@ namespace mmo
 		LogCompanionModeOnce(output, details);
 		LogAnchorDecisionOnce(output, details);
 		ObserveWarriorCastFailure(context, output);
+		ObserveClericCastFailure(context, output);
 		ApplyDecision(context, input, output);
 		ExecuteWarriorRuntime(context, input, output);
+		ExecuteClericRuntime(context, input, output);
 		UpdatePreviousCompanionState(output);
 		return ActionResult::InProgress;
 	}
@@ -335,11 +457,17 @@ namespace mmo
 		m_lastAnchorLogKey.clear();
 		m_lastWarriorActionLogKey.clear();
 		m_lastWarriorFailureLogKey.clear();
+		m_lastClericActionLogKey.clear();
+		m_lastClericFailureLogKey.clear();
 		m_pendingAutoAttackTargetGuid = 0;
 		m_pendingAutoAttackRequestedAt = 0;
 		m_lastObservedWarriorCastFailureAt = 0;
 		m_lastObservedWarriorCastFailureSpellId = 0;
 		m_lastObservedWarriorCastFailureReason = spell_cast_result::CastOkay;
+		m_lastObservedClericCastFailureAt = 0;
+		m_lastObservedClericCastFailureSpellId = 0;
+		m_lastObservedClericCastFailureReason = spell_cast_result::CastOkay;
+		m_lastObservedPartyHealthPercents.clear();
 	}
 
 	bool CompanionFollowAction::IsInterruptible() const
@@ -950,5 +1078,346 @@ namespace mmo
 
 		m_lastWarriorFailureLogKey = key;
 		WLOG("warrior failure=" << reason << ' ' << details);
+	}
+
+	void CompanionFollowAction::RefreshClericCapabilities(BotContext& context)
+	{
+		if (context.GetConfig().characterClass != kPriestClassId)
+		{
+			m_hasClericCapabilities = false;
+			m_clericCapabilityIssue = "cleric_runtime_disabled";
+			return;
+		}
+
+		if (m_hasClericCapabilities)
+		{
+			return;
+		}
+
+		const BotNavService* navService = context.GetNavService();
+		if (!navService || !navService->IsReady() || navService->GetProject() == nullptr)
+		{
+			m_hasClericCapabilities = false;
+			m_clericCapabilityIssue = "capabilities_project_unavailable";
+			return;
+		}
+
+		m_clericCapabilities = ResolveClericCapabilities(*navService->GetProject());
+		m_hasClericCapabilities = m_clericCapabilities.resolved;
+		m_clericCapabilityIssue = m_hasClericCapabilities
+			? std::string {}
+			: FirstIssueOrFallback(m_clericCapabilities, "capabilities_unresolved");
+	}
+
+	void CompanionFollowAction::ExecuteClericRuntime(BotContext& context, const CompanionFollowControllerInput& input, const CompanionFollowControllerOutput& output)
+	{
+		if (context.GetConfig().characterClass != kPriestClassId)
+		{
+			return;
+		}
+
+		if (input.preconditionFailure != CompanionFollowPreconditionFailure::None)
+		{
+			std::ostringstream details;
+			details << BuildDecisionDetails(context, input, output)
+				<< " cleric_decision=skipped"
+				<< " cleric_reason=follow_runtime_blocked";
+			LogClericFailureOnce("follow_runtime_blocked", details.str());
+			return;
+		}
+
+		RefreshClericCapabilities(context);
+		if (!m_hasClericCapabilities)
+		{
+			std::ostringstream details;
+			details << BuildDecisionDetails(context, input, output)
+				<< " cleric_decision=hold"
+				<< " capability_issue=" << m_clericCapabilityIssue;
+			LogClericFailureOnce("capabilities_unresolved", details.str());
+			return;
+		}
+
+		const BotUnit* self = context.GetSelf();
+		if (!self)
+		{
+			std::ostringstream details;
+			details << BuildDecisionDetails(context, input, output)
+				<< " cleric_decision=hold"
+				<< " capability_issue=self_unavailable";
+			LogClericFailureOnce("self_unavailable", details.str());
+			return;
+		}
+
+		const BotUnit::CastState lastCastState = context.GetLastCastState();
+		if (lastCastState.status == BotUnit::CastState::Status::Pending || lastCastState.status == BotUnit::CastState::Status::Started)
+		{
+			std::ostringstream details;
+			details << BuildDecisionDetails(context, input, output)
+				<< " cleric_decision=hold"
+				<< " runtime_issue=cast_in_flight"
+				<< " spell_id=" << lastCastState.spellId;
+			LogClericFailureOnce("cast_in_flight", details.str());
+			return;
+		}
+
+		if (lastCastState.status == BotUnit::CastState::Status::Failed
+			&& lastCastState.updatedAtMs > 0
+			&& input.now >= lastCastState.updatedAtMs
+			&& input.now - lastCastState.updatedAtMs < kCastFailureBackoffMs)
+		{
+			return;
+		}
+
+		const std::vector<uint32> knownSpellIds = context.GetKnownSpellIds();
+		BotClericCapabilities knownCapabilities = FilterKnownClericCapabilities(m_clericCapabilities, knownSpellIds);
+		knownCapabilities.supportBuff.reset();
+		knownCapabilities.resolved = knownCapabilities.powerType == power_type::Mana
+			&& knownCapabilities.emergencyHeal.has_value()
+			&& knownCapabilities.efficientHeal.has_value()
+			&& knownCapabilities.damageFiller.has_value();
+		if (!knownCapabilities.resolved)
+		{
+			std::ostringstream details;
+			details << BuildDecisionDetails(context, input, output)
+				<< " cleric_decision=hold"
+				<< " capability_issue=known_spells_incomplete";
+			LogClericFailureOnce("capabilities_unresolved", details.str());
+			return;
+		}
+
+		const ClericHostileTargetCandidate hostileTarget = SelectClericHostileTarget(context, output);
+		const std::vector<BotUnit::CooldownState> activeCooldowns = context.GetActiveSpellCooldowns();
+		const std::vector<BotUnit::AuraState> visibleAuras = context.GetVisibleAuras();
+		const std::string lastSpellIssue = context.GetLastSpellStateIssue();
+		std::unordered_set<uint32> blockedCooldownSpellIds;
+		blockedCooldownSpellIds.reserve(activeCooldowns.size());
+		for (const BotUnit::CooldownState& cooldown : activeCooldowns)
+		{
+			blockedCooldownSpellIds.insert(cooldown.spellId);
+		}
+
+		BotClericDecisionInput clericInput;
+		clericInput.capabilities = &knownCapabilities;
+		clericInput.companionMode = (output.companion.mode == BotCompanionMode::Hold || output.companion.mode == BotCompanionMode::Regroup)
+			? ((input.snapshot.selfInCombat || input.snapshot.partyInCombat) ? BotCompanionMode::CombatAnchor : output.companion.mode)
+			: output.companion.mode;
+		clericInput.spellbookReady = !knownSpellIds.empty()
+			&& !StartsWith(lastSpellIssue, "initial_spells_")
+			&& !StartsWith(lastSpellIssue, "learned_spell_")
+			&& !StartsWith(lastSpellIssue, "unlearned_spell_");
+		clericInput.cooldownsReady = !StartsWith(lastSpellIssue, "spell_cooldown_");
+		clericInput.powerReady = context.GetSelfPowerType() == knownCapabilities.powerType && context.GetSelfMaxPower() > 0;
+		clericInput.hasSelf = true;
+		clericInput.self.guid = self->GetGuid();
+		clericInput.self.role = BotCompanionRole::Healer;
+		clericInput.self.isAlive = self->IsAlive();
+		clericInput.self.isAware = true;
+		clericInput.self.isInCombat = self->IsInCombat();
+		clericInput.self.healthPercent = self->GetHealthPercent();
+		clericInput.self.distanceToSelf = 0.0f;
+		clericInput.self.targetGuid = self->GetTargetGuid();
+		for (const BotUnit::AuraState& aura : visibleAuras)
+		{
+			clericInput.self.activeAuraSpellIds.insert(aura.spellId);
+		}
+		clericInput.mana = context.GetSelfPower();
+		clericInput.maxMana = context.GetSelfMaxPower();
+		clericInput.hasHostileTarget = hostileTarget.unit != nullptr;
+		clericInput.hostileTargetAlive = hostileTarget.unit && hostileTarget.unit->IsAlive();
+		clericInput.hostileTargetHostile = hostileTarget.unit && (hostileTarget.unit->IsHostileTo(*self) || hostileTarget.unit->IsAttackableBy(*self));
+		clericInput.hostileTargetGuid = hostileTarget.unit ? hostileTarget.unit->GetGuid() : 0;
+		clericInput.hostileTargetDistance = hostileTarget.unit ? context.GetDistanceToUnit(hostileTarget.unit->GetGuid()) : 0.0f;
+		clericInput.cooldownBlockedSpellIds = blockedCooldownSpellIds;
+
+		std::unordered_set<uint64> seenGuids;
+		uint64 focusTargetGuid = 0;
+		float focusTargetHealthPercent = 1.1f;
+		auto appendPartyMember = [&](const uint64 guid, const BotCompanionRole role)
+		{
+			if (guid == 0 || !seenGuids.insert(guid).second || guid == clericInput.self.guid)
+			{
+				return;
+			}
+
+			BotClericUnitSnapshot member;
+			member.guid = guid;
+			member.role = role;
+			if (const BotUnit* unit = context.GetUnit(guid))
+			{
+				member.isAware = true;
+				member.isAlive = unit->IsAlive();
+				member.isInCombat = unit->IsInCombat();
+				member.healthPercent = unit->GetHealthPercent();
+				member.distanceToSelf = context.GetDistanceToUnit(guid);
+				member.targetGuid = unit->GetTargetGuid();
+				if (IsValidHealthPercent(member.healthPercent))
+				{
+					m_lastObservedPartyHealthPercents[guid] = member.healthPercent;
+				}
+			}
+			else
+			{
+				member.isAware = false;
+				member.isAlive = true;
+				member.isInCombat = false;
+				const auto it = m_lastObservedPartyHealthPercents.find(guid);
+				member.healthPercent = it != m_lastObservedPartyHealthPercents.end() ? it->second : 1.0f;
+				member.distanceToSelf = 0.0f;
+				member.targetGuid = 0;
+			}
+
+			if (IsValidHealthPercent(member.healthPercent) && member.healthPercent < focusTargetHealthPercent)
+			{
+				focusTargetHealthPercent = member.healthPercent;
+				focusTargetGuid = member.guid;
+			}
+
+			clericInput.partyMembers.push_back(std::move(member));
+		};
+
+		const uint32 partyMemberCount = context.GetPartyMemberCount();
+		for (uint32 index = 0; index < partyMemberCount; ++index)
+		{
+			const uint64 guid = context.GetPartyMemberGuid(index);
+			appendPartyMember(guid, guid == input.snapshot.leaderGuid ? BotCompanionRole::Tank : BotCompanionRole::None);
+		}
+		appendPartyMember(input.snapshot.leaderGuid, BotCompanionRole::Tank);
+
+		const BotClericDecision decision = m_clericController.Evaluate(clericInput);
+		const uint64 targetGuid = decision.castOnSelf
+			? clericInput.self.guid
+			: (decision.castTargetGuid != 0 ? decision.castTargetGuid : focusTargetGuid);
+
+		std::ostringstream details;
+		details << BuildDecisionDetails(context, input, output)
+			<< " cleric_decision=" << ToString(decision.type)
+			<< " cleric_reason=" << decision.reason
+			<< " target_source=" << hostileTarget.source
+			<< " target_guid=" << targetGuid
+			<< " hostile_target_guid=" << clericInput.hostileTargetGuid
+			<< " hostile_target_distance=" << clericInput.hostileTargetDistance
+			<< " spellbook_ready=" << (clericInput.spellbookReady ? 1 : 0)
+			<< " cooldowns_ready=" << (clericInput.cooldownsReady ? 1 : 0)
+			<< " power_ready=" << (clericInput.powerReady ? 1 : 0)
+			<< " self_health_pct=" << clericInput.self.healthPercent
+			<< " mana=" << clericInput.mana
+			<< " max_mana=" << clericInput.maxMana
+			<< " party_members=" << clericInput.partyMembers.size()
+			<< " cooldown_blocked=" << JoinSpellIds(clericInput.cooldownBlockedSpellIds);
+		if (!lastSpellIssue.empty())
+		{
+			details << " runtime_issue=" << lastSpellIssue;
+		}
+		if (!m_clericCapabilityIssue.empty())
+		{
+			details << " capability_issue=" << m_clericCapabilityIssue;
+		}
+		if (!m_clericCapabilities.supportBuff.has_value())
+		{
+			details << " support_buff_state=unavailable";
+		}
+
+		switch (decision.type)
+		{
+		case BotClericDecisionType::Hold:
+			LogClericFailureOnce(decision.reason, details.str());
+			return;
+
+		case BotClericDecisionType::CastSpell:
+		{
+			SpellTargetMap targetMap;
+			if (decision.castOnSelf)
+			{
+				targetMap.SetTargetMap(spell_cast_target_flags::Self);
+			}
+			else
+			{
+				targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+				targetMap.SetUnitTarget(decision.castTargetGuid);
+			}
+
+			if (!context.CastSpell(decision.spellId, targetMap))
+			{
+				std::ostringstream rejectedDetails;
+				rejectedDetails << details.str()
+					<< " spell_id=" << decision.spellId
+					<< " cast_target=" << decision.castTargetGuid
+					<< " cast_on_self=" << (decision.castOnSelf ? 1 : 0)
+					<< " runtime_issue=" << context.GetLastSpellStateIssue();
+				LogClericFailureOnce("cast_rejected", rejectedDetails.str());
+				return;
+			}
+
+			std::ostringstream castDetails;
+			castDetails << details.str()
+				<< " spell_id=" << decision.spellId
+				<< " cast_target=" << decision.castTargetGuid
+				<< " cast_on_self=" << (decision.castOnSelf ? 1 : 0);
+			LogClericActionOnce(ToString(decision.type), decision.reason, castDetails.str());
+			return;
+		}
+		}
+	}
+
+	void CompanionFollowAction::ObserveClericCastFailure(BotContext& context, const CompanionFollowControllerOutput& output)
+	{
+		if (context.GetConfig().characterClass != kPriestClassId)
+		{
+			return;
+		}
+
+		const BotUnit::CastState lastCastState = context.GetLastCastState();
+		if (lastCastState.status != BotUnit::CastState::Status::Failed || lastCastState.updatedAtMs == 0)
+		{
+			return;
+		}
+
+		if (m_lastObservedClericCastFailureAt == lastCastState.updatedAtMs
+			&& m_lastObservedClericCastFailureSpellId == lastCastState.spellId
+			&& m_lastObservedClericCastFailureReason == lastCastState.failureReason)
+		{
+			return;
+		}
+
+		m_lastObservedClericCastFailureAt = lastCastState.updatedAtMs;
+		m_lastObservedClericCastFailureSpellId = lastCastState.spellId;
+		m_lastObservedClericCastFailureReason = lastCastState.failureReason;
+
+		std::ostringstream details;
+		details << "mode=" << ToString(output.companion.mode)
+			<< " mode_reason=" << output.companion.modeReason
+			<< " anchor_reason=" << output.companion.anchorReason
+			<< " spell_id=" << lastCastState.spellId
+			<< " failure_code=" << static_cast<uint32>(lastCastState.failureReason)
+			<< " updated_at=" << lastCastState.updatedAtMs;
+		LogClericFailureOnce("cast_failed", details.str());
+	}
+
+	void CompanionFollowAction::LogClericActionOnce(std::string_view action, std::string_view reason, const std::string& details)
+	{
+		std::ostringstream keyBuilder;
+		keyBuilder << action << '|' << reason << '|' << details;
+		const std::string key = keyBuilder.str();
+		if (m_lastClericActionLogKey == key)
+		{
+			return;
+		}
+
+		m_lastClericActionLogKey = key;
+		ILOG("cleric action=" << action << " reason=" << reason << ' ' << details);
+	}
+
+	void CompanionFollowAction::LogClericFailureOnce(std::string_view reason, const std::string& details)
+	{
+		std::ostringstream keyBuilder;
+		keyBuilder << reason << '|' << details;
+		const std::string key = keyBuilder.str();
+		if (m_lastClericFailureLogKey == key)
+		{
+			return;
+		}
+
+		m_lastClericFailureLogKey = key;
+		WLOG("cleric failure=" << reason << ' ' << details);
 	}
 }

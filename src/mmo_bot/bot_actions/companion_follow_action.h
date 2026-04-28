@@ -3,6 +3,7 @@
 #pragma once
 
 #include "../bot_action.h"
+#include "../bot_cleric_controller.h"
 #include "../bot_companion_state_machine.h"
 #include "../bot_context.h"
 #include "../bot_warrior_controller.h"
@@ -10,6 +11,7 @@
 
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 
 namespace mmo
@@ -133,6 +135,12 @@ namespace mmo
 		void LogWarriorActionOnce(std::string_view action, std::string_view reason, const std::string& details);
 		void LogWarriorFailureOnce(std::string_view reason, const std::string& details);
 
+		void RefreshClericCapabilities(BotContext& context);
+		void ExecuteClericRuntime(BotContext& context, const CompanionFollowControllerInput& input, const CompanionFollowControllerOutput& output);
+		void ObserveClericCastFailure(BotContext& context, const CompanionFollowControllerOutput& output);
+		void LogClericActionOnce(std::string_view action, std::string_view reason, const std::string& details);
+		void LogClericFailureOnce(std::string_view reason, const std::string& details);
+
 	private:
 		static constexpr GameTime kHeartbeatIntervalMs { 500 };
 
@@ -146,14 +154,24 @@ namespace mmo
 		std::string m_lastAnchorLogKey;
 		std::string m_lastWarriorActionLogKey;
 		std::string m_lastWarriorFailureLogKey;
+		std::string m_lastClericActionLogKey;
+		std::string m_lastClericFailureLogKey;
 		BotWarriorController m_warriorController;
 		BotWarriorCapabilities m_warriorCapabilities;
 		std::string m_warriorCapabilityIssue;
 		bool m_hasWarriorCapabilities { false };
+		BotClericController m_clericController;
+		BotClericCapabilities m_clericCapabilities;
+		std::string m_clericCapabilityIssue;
+		bool m_hasClericCapabilities { false };
+		std::unordered_map<uint64, float> m_lastObservedPartyHealthPercents;
 		uint64 m_pendingAutoAttackTargetGuid { 0 };
 		GameTime m_pendingAutoAttackRequestedAt { 0 };
 		GameTime m_lastObservedWarriorCastFailureAt { 0 };
 		uint32 m_lastObservedWarriorCastFailureSpellId { 0 };
 		SpellCastResult m_lastObservedWarriorCastFailureReason { spell_cast_result::CastOkay };
+		GameTime m_lastObservedClericCastFailureAt { 0 };
+		uint32 m_lastObservedClericCastFailureSpellId { 0 };
+		SpellCastResult m_lastObservedClericCastFailureReason { spell_cast_result::CastOkay };
 	};
 }
