@@ -38,6 +38,7 @@ target_sources(unit_tests PRIVATE
 	../mmo_bot/bot_cleric_capabilities.cpp
 	../mmo_bot/bot_cleric_controller.cpp
 	../mmo_bot/bot_mage_capabilities.cpp
+	../mmo_bot/bot_mage_controller.cpp
 	../mmo_bot/bot_actions/follow_leader_action.cpp
 	../mmo_bot/bot_actions/companion_follow_action.cpp
 	test_bot_companion_runtime.cpp
@@ -49,6 +50,7 @@ target_sources(unit_tests PRIVATE
 	test_bot_cleric_controller.cpp
 	test_bot_cleric_runtime.cpp
 	test_bot_mage_spellbook.cpp
+	test_bot_mage_controller.cpp
 )
 
 if (WIN32)
