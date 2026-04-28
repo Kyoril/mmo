@@ -234,10 +234,19 @@ namespace mmo
 			/// @brief GPU occlusion query for this tile. Created lazily on first render.
 			OcclusionQueryPtr m_occlusionQuery;
 
-			/// @brief Whether this tile was visible according to the last occlusion query result.
+			/// @brief Whether this tile is confirmed occluded and should be skipped.
+			/// @details A tile starts visible and only transitions to occluded after
+			///          receiving OcclusionGraceFrames consecutive 0-pixel query results.
+			///          This hysteresis prevents flickering from transient occlusion.
 			bool m_occlusionVisible = true;
 
-			/// @brief Number of frames this tile has been skipped due to occlusion.
+			/// @brief Number of consecutive frames the occlusion query returned 0 pixels.
+			/// @details The tile continues to render while this counter is below
+			///          OcclusionGraceFrames, providing a grace period during which
+			///          fresh query data is collected every frame.
+			uint32 m_consecutiveOccludedFrames = 0;
+
+			/// @brief Number of frames this tile has been skipped since being confirmed occluded.
 			///        Used to trigger periodic re-tests.
 			uint32 m_occlusionSkippedFrames = 0;
 
@@ -245,8 +254,15 @@ namespace mmo
 			///        Distributes retest load across frames.
 			uint32 m_occlusionStaggerOffset = 0;
 
-			/// @brief How many frames an occluded tile can be skipped before re-testing.
-			static constexpr uint32 OcclusionRetestInterval = 8;
+			/// @brief Number of consecutive 0-pixel query frames required before a tile
+			///        is actually hidden. During the grace period the tile keeps rendering
+			///        and issuing queries, so transient occlusion is resolved without pop.
+			static constexpr uint32 OcclusionGraceFrames = 5;
+
+			/// @brief How many frames a confirmed-occluded tile can be skipped before
+			///        re-testing visibility. Lower values detect reappearance faster but
+			///        cost more GPU time. 3 frames is a good balance.
+			static constexpr uint32 OcclusionRetestInterval = 3;
 
 		public:
 			/// @brief Tests collision between a capsule and this terrain tile.

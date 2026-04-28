@@ -221,22 +221,34 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		DLOG("Received SMSG_LOOT_MONEY_NOTIFY with " << receivedGold << " gold");
-
-		// This is sent when multiple players are looting and someone else got gold
-		// We don't need to update our local state, just show notification
-		// TODO: Could show a notification that someone else looted gold
-
+		FrameManager::Get().TriggerLuaEvent("LOOT_MONEY_NOTIFY", static_cast<int32>(receivedGold));
 		return PacketParseResult::Pass;
 	}
 
 	PacketParseResult LootClient::OnLootItemNotify(game::IncomingPacket& packet)
 	{
-		DLOG("Received SMSG_LOOT_ITEM_NOTIFY");
+		String memberName;
+		uint32 itemId;
+		uint8 quality;
+		uint8 count;
+		if (!(packet
+			>> io::read_container<uint8>(memberName)
+			>> io::read<uint32>(itemId)
+			>> io::read<uint8>(quality)
+			>> io::read<uint8>(count)))
+		{
+			return PacketParseResult::Disconnect;
+		}
 
-		// This packet is likely sent to notify other players that someone looted an item
-		// For now, we'll just log it since the actual item removal is handled by LootRemoved
-		// TODO: Could show a notification that someone else looted an item
+		m_itemCache.Get(itemId, [memberName, itemId, quality, count](uint64, const ItemInfo& itemInfo)
+		{
+			FrameManager::Get().TriggerLuaEvent("MEMBER_LOOT_ITEM_RECEIVED",
+				memberName,
+				itemInfo.name,
+				static_cast<int32>(itemId),
+				static_cast<int32>(quality),
+				static_cast<int32>(count));
+		});
 
 		return PacketParseResult::Pass;
 	}

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <fstream>
+
 #include "project_loader.h"
 #include "project_saver.h"
 #include "proto_template.h"
@@ -48,6 +50,7 @@
 #include "shared/proto_data/proficiencies.pb.h"
 #include "shared/proto_data/item_classes.pb.h"
 #include "shared/proto_data/item_subclasses.pb.h"
+#include "shared/proto_data/combat_settings.pb.h"
 
 namespace mmo
 {
@@ -97,6 +100,10 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::Proficiencies, mmo::proto::ProficiencyEntry> ProficiencyManager;
 		typedef TemplateManager<mmo::proto::ItemClasses, mmo::proto::ItemClassEntry> ItemClassManager;
 		typedef TemplateManager<mmo::proto::ItemSubclasses, mmo::proto::ItemSubclassEntry> ItemSubclassManager;
+
+		/// Gets the combat settings with all configurable combat formula parameters.
+		/// If no combat_settings file was loaded, defaults from the proto definition are used.
+		const CombatSettings& GetDefaultCombatSettings();
 
 		/// Determines whether a spell entry has a certain spell effect.
 		bool SpellHasEffect(const proto::SpellEntry& spell, mmo::SpellEffect type);
@@ -159,6 +166,9 @@ namespace mmo
 			ProficiencyManager proficiencies;
 			ItemClassManager itemClasses;
 			ItemSubclassManager itemSubclasses;
+
+			/// Combat settings containing all configurable combat formula parameters.
+			CombatSettings combatSettings;
 
 		private:
 
@@ -257,6 +267,9 @@ namespace mmo
 					return false;
 				}
 
+				// Load combat settings (optional singleton file - uses defaults if missing)
+				LoadCombatSettings(realmDataPath);
+
 				auto loadEnd = GetAsyncTimeMs();
 				ILOG("Loading finished in " << (loadEnd - loadStart) << "ms");
 
@@ -330,9 +343,76 @@ namespace mmo
 					return false;
 				}
 
+				// Save combat settings
+				SaveCombatSettings(realmDataPath);
+
 				auto saveEnd = GetAsyncTimeMs();
 				ILOG("Saving finished in " << (saveEnd - saveStart) << "ms");
 				return true;
+			}
+
+		private:
+
+			/// @brief Loads combat settings from a file. If the file does not exist, defaults are used.
+			/// @param dataPath The path to the data directory.
+			void LoadCombatSettings(const std::filesystem::path& dataPath)
+			{
+				const auto filePath = dataPath / "combat_settings";
+				if (!std::filesystem::exists(filePath))
+				{
+					ILOG("No combat_settings file found, using defaults");
+					combatSettings = CombatSettings();
+					return;
+				}
+
+				std::ifstream file(filePath, std::ios::binary);
+				if (!file)
+				{
+					WLOG("Failed to open combat_settings file, using defaults");
+					combatSettings = CombatSettings();
+					return;
+				}
+
+				CombatSettingsFile settingsFile;
+				if (!settingsFile.ParseFromIstream(&file))
+				{
+					WLOG("Failed to parse combat_settings file, using defaults");
+					combatSettings = CombatSettings();
+					return;
+				}
+
+				if (settingsFile.has_settings())
+				{
+					combatSettings = settingsFile.settings();
+					ILOG("Combat settings loaded successfully");
+				}
+				else
+				{
+					combatSettings = CombatSettings();
+					ILOG("Combat settings file has no settings entry, using defaults");
+				}
+			}
+
+			/// @brief Saves combat settings to a file.
+			/// @param dataPath The path to the data directory.
+			void SaveCombatSettings(const std::filesystem::path& dataPath)
+			{
+				const auto filePath = dataPath / "combat_settings";
+
+				CombatSettingsFile settingsFile;
+				*settingsFile.mutable_settings() = combatSettings;
+
+				std::ofstream file(filePath, std::ios::binary);
+				if (!file)
+				{
+					WLOG("Failed to open combat_settings file for writing");
+					return;
+				}
+
+				if (!settingsFile.SerializeToOstream(&file))
+				{
+					WLOG("Failed to write combat_settings file");
+				}
 			}
 		};
 	}

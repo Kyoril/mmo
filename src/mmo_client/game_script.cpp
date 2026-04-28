@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+﻿// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "game_script.h"
 #include "console/console.h"
@@ -1153,6 +1153,8 @@ namespace mmo
 																 { this->m_trainerClient.BuySpell(slot); }),
 					   luabind::def<std::function<void()>>("CloseTrainer", [this]()
 														   { this->m_trainerClient.CloseTrainer(); }),
+					   luabind::def<std::function<String()>>("GetTrainerTitle", [this]()
+														   { return this->m_trainerClient.GetTrainerTitle(); }),
 
 					   luabind::def<std::function<const char *(const ItemInfo *, int32)>>("GetItemSpellTriggerType", [this](const ItemInfo *item, int32 index)
 																						  { return this->GetItemSpellTriggerType(item, index); }),
@@ -1220,6 +1222,19 @@ namespace mmo
 															{ return m_partyInfo.GetLeaderIndex(); }),
 					   luabind::def<std::function<bool()>>("IsPartyLeader", [this]()
 														   { return m_partyInfo.GetLeaderGuid() == ObjectMgr::GetActivePlayerGuid(); }),
+
+				   luabind::def<std::function<int32()>>("GetLootMethod", [this]()
+														{ return static_cast<int32>(m_partyInfo.GetLootMethod()); }),
+
+				   luabind::def<std::function<void(int32, const String&)>>("SetLootMethod",
+					   [this](const int32 method, const String& /*masterName*/)
+					   {
+						   // MasterLoot: GUID 0 is a sentinel — the server-side OnSetLootMethod()
+						   // handler (plan 05-01) defaults lootMasterGuid to the leader's
+						   // characterId when lootMethod==MasterLoot && lootMasterGuid==0.
+						   const uint64 masterGuid = 0;
+						   m_realmConnector.SetGroupLootMethod(static_cast<uint8>(method), masterGuid, 2);
+					   }),
 
 					   luabind::def<std::function<void(const char *, const char *)>>("SendChatMessage", [this](const char *message, const char *type)
 																					 { SendChatMessage(message, type, nullptr); }),
@@ -1291,7 +1306,8 @@ namespace mmo
 			{"WHISPER", ChatType::Whisper},
 			{"GUILD", ChatType::Guild},
 			{"CHANNEL", ChatType::Channel},
-			{"EMOTE", ChatType::Emote}};
+			{"EMOTE", ChatType::Emote},
+			{"RAID", ChatType::Raid}};
 
 		const String typeString = type;
 		ChatType chatType = ChatType::Unknown;
@@ -1323,6 +1339,13 @@ namespace mmo
 		}
 
 		m_realmConnector.SendChatMessage(message, chatType, target ? target : s_emptyTarget);
+
+		if (chatType == ChatType::Whisper)
+		{
+			FrameManager::Get().TriggerLuaEvent("CHAT_MSG_WHISPER_INFORM",
+				std::string(target ? target : ""),
+				std::string(message));
+		}
 	}
 
 	void GameScript::TargetNearestEnemy()

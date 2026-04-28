@@ -82,6 +82,15 @@ namespace mmo
 		/// @copydoc MaterialCompiler::AddTransform
 		ExpressionIndex AddTransform(ExpressionIndex input, Space sourceSpace, Space targetSpace) override;
 
+		/// @copydoc MaterialCompiler::AddTime
+		ExpressionIndex AddTime() override;
+
+		/// @copydoc MaterialCompiler::AddRotator
+		ExpressionIndex AddRotator(ExpressionIndex coordinates, ExpressionIndex center, ExpressionIndex rotation) override;
+
+		/// @copydoc MaterialCompiler::AddFresnel
+		ExpressionIndex AddFresnel(ExpressionIndex exponent, ExpressionIndex baseReflectFraction, ExpressionIndex normal) override;
+
 	protected:
 		/// @copydoc MaterialCompiler::GenerateVertexShaderCode
 		void GenerateVertexShaderCode(VertexShaderType type) override;

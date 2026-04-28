@@ -5,13 +5,16 @@
 #include "audio/audio.h"
 #include "base/signal.h"
 #include "base/typedefs.h"
+#include "deferred_shading/deferred_renderer.h"
 #include "graphics/render_texture.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/axis_display.h"
 #include "scene_graph/world_grid.h"
 #include "scene_graph/particle_emitter.h"
+#include "scene_graph/ribbon_trail.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/animation_notify.h"
+#include "graphics/material_instance.h"
 
 #include "game_common/projectile_target.h"
 
@@ -21,11 +24,17 @@
 #include <vector>
 #include <memory>
 
+// Windows.h (pulled in via deferred_renderer.h -> d3d11.h) defines PlaySound as a macro
+#ifdef PlaySound
+#undef PlaySound
+#endif
+
 namespace mmo
 {
 	namespace proto
 	{
 		class SpellVisualization;
+		class SpellKit;
 	}
 
 	class EditorHost;
@@ -41,7 +50,22 @@ namespace mmo
 		Casting,
 		CastSucceeded,
 		Impact,
-		CancelCast
+		CancelCast,
+		AuraApplied,
+		AuraRemoved,
+		AuraTick,
+		AuraIdle
+	};
+
+	/// @brief The type of preview sequence to play.
+	enum class PreviewSequenceMode
+	{
+		/// @brief Full cast: StartCast -> Casting -> CastSucceeded -> Impact.
+		Cast,
+		/// @brief Instant cast: CastSucceeded -> Impact (skips StartCast/Casting).
+		InstantCast,
+		/// @brief Aura: AuraApplied -> AuraIdle (looping) -> AuraRemoved on stop.
+		Aura
 	};
 
 	class IAudio;
@@ -82,6 +106,12 @@ namespace mmo
 		/// @brief Triggers the full spell cast sequence (StartCast -> Casting -> CastSucceeded -> Impact).
 		void TriggerFullCastSequence();
 
+		/// @brief Triggers an instant cast sequence (CastSucceeded -> Impact, no cast time).
+		void TriggerInstantCastSequence();
+
+		/// @brief Triggers an aura sequence (AuraApplied -> AuraIdle looping -> AuraRemoved on stop).
+		void TriggerAuraSequence();
+
 		/// @brief Stops all active previews and resets to idle.
 		void StopPreview();
 
@@ -114,6 +144,18 @@ namespace mmo
 
 		/// @brief Starts the projectile flight using EditorProjectileManager.
 		void StartProjectile();
+
+		/// @brief Updates the cast sequence state machine.
+		void UpdateCastSequence();
+
+		/// @brief Updates the instant cast sequence state machine.
+		void UpdateInstantCastSequence();
+
+		/// @brief Updates the aura sequence state machine.
+		void UpdateAuraSequence();
+
+		/// @brief Resets animations to idle and ends the sequence.
+		void EndSequenceAndResetToIdle();
 
 		/// @brief Cleans up all spell effect objects.
 		void CleanupSpellEffects();
@@ -151,6 +193,46 @@ namespace mmo
 		/// @param entity The entity to connect to.
 		void ConnectAnimationNotifySignals(Entity* entity);
 
+		/// @brief Gets the world position of a bone on an entity, or fallback offset.
+		/// @param entity The entity with skeleton.
+		/// @param entityNode The scene node of the entity.
+		/// @param boneName Name of the bone to find.
+		/// @param fallbackOffset Fallback offset from entity position if bone not found.
+		/// @return World-space position.
+		Vector3 GetBoneWorldPosition(Entity* entity, SceneNode* entityNode, const String& boneName, const Vector3& fallbackOffset);
+
+		/// @brief Spawns particle emitters for a kit, optionally attached to a bone.
+		/// @param kit The spell kit containing particle definitions.
+		/// @param entity The entity to attach to (for bone attachment).
+		/// @param entityNode Scene node of the entity (for positional fallback).
+		void SpawnKitParticles(const proto::SpellKit& kit, Entity* entity, SceneNode* entityNode);
+
+		/// @brief Creates a point light for a kit, optionally at a bone.
+		/// @param kit The spell kit containing light definition.
+		/// @param entity The entity to attach to (for bone attachment).
+		/// @param entityNode Scene node of the entity (for positional fallback).
+		void SpawnKitLight(const proto::SpellKit& kit, Entity* entity, SceneNode* entityNode, bool instantEvent = false);
+
+		/// @brief Creates a ribbon trail for a kit, optionally at a bone.
+		/// @param kit The spell kit containing ribbon trail definition.
+		/// @param entity The entity to attach to (for bone attachment).
+		/// @param entityNode Scene node of the entity (for positional fallback).
+		void SpawnKitRibbonTrail(const proto::SpellKit& kit, Entity* entity, SceneNode* entityNode);
+
+		/// @brief Spawns an impact particle emitter at a given position.
+		/// @param particleName Asset path of the particle system.
+		/// @param position World position to spawn at.
+		void SpawnImpactParticle(const String& particleName, const Vector3& position);
+
+		/// @brief Applies a tint color to an entity using MaterialInstances.
+		/// @param entity The entity to tint.
+		/// @param tintColor The RGBA tint color to apply.
+		void ApplyTintToEntity(Entity* entity, const Vector4& tintColor);
+
+		/// @brief Removes tint from an entity, restoring original materials.
+		/// @param entity The entity to remove tint from.
+		void RemoveTintFromEntity(Entity* entity);
+
 	private:
 		EditorHost& m_host;
 		IAudio* m_audioSystem{ nullptr };
@@ -160,7 +242,7 @@ namespace mmo
 
 		// Viewport state
 		ImVec2 m_viewportSize{ 0, 0 };
-		RenderTexturePtr m_viewportRT;
+		std::unique_ptr<DeferredRenderer> m_deferredRenderer;
 		bool m_wireFrame{ false };
 
 		// Scene objects
@@ -187,9 +269,45 @@ namespace mmo
 		AnimationState* m_targetAnimState{ nullptr };
 		String m_targetMeshPath{ "Models/Creatures/Boar/Boar.hmsh" };
 
-		// Spell effect objects
+		// Spell effect objects (legacy)
 		ParticleEmitter* m_castParticles{ nullptr };
 		ParticleEmitter* m_impactParticles{ nullptr };
+
+		// Kit-spawned effect objects (new)
+		/// @brief Particle emitters spawned by kits, cleaned up on event change/stop.
+		std::vector<ParticleEmitter*> m_kitParticles;
+		/// @brief Scene nodes created for kit effects.
+		std::vector<SceneNode*> m_kitEffectNodes;
+		/// @brief Ribbon trails spawned by kits.
+		std::vector<RibbonTrail*> m_kitRibbonTrails;
+
+		/// @brief Tracks a fading light with current and target intensity.
+		struct FadingLight
+		{
+			Light* light{ nullptr };
+			float currentIntensity{ 0.0f };
+			float targetIntensity{ 0.0f };
+			float fadeInSpeed{ 0.0f };
+			float fadeOutSpeed{ 0.0f };
+			bool fadingOut{ false };
+			bool autoFadeOut{ false };
+		};
+
+		/// @brief Active fading lights (includes kit-spawned and pending fade-out).
+		std::vector<FadingLight> m_fadingLights;
+
+		/// @brief Counter for unique naming of spawned effects.
+		uint32 m_effectCounter{ 0 };
+
+		/// @brief Tracks original and tint instance materials for a SubEntity.
+		struct SubEntityTintState
+		{
+			MaterialPtr originalMaterial;
+			std::shared_ptr<MaterialInstance> tintInstance;
+		};
+
+		/// @brief Maps entity -> (sub-entity index -> tint state) for active tints.
+		std::map<Entity*, std::map<uint16, SubEntityTintState>> m_entityTintStates;
 
 		// Current visualization being previewed
 		proto::SpellVisualization* m_currentVisualization{ nullptr };
@@ -203,6 +321,7 @@ namespace mmo
 
 		// Cast sequence state
 		bool m_castSequenceActive{ false };
+		PreviewSequenceMode m_sequenceMode{ PreviewSequenceMode::Cast };
 		PreviewEvent m_currentSequenceEvent{ PreviewEvent::StartCast };
 		float m_sequenceTimer{ 0.0f };
 		float m_castDuration{ 1.5f };
@@ -210,6 +329,9 @@ namespace mmo
 		bool m_projectileSpawned{ false };
 		bool m_waitingForSpellGo{ false };
 		bool m_hasCastSucceededAnimation{ false };
+
+		/// @brief True when an aura sequence is active (AuraIdle is looping).
+		bool m_auraActive{ false };
 
 		// Sound channel with fade state
 		struct FadingChannel

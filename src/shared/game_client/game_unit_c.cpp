@@ -16,6 +16,7 @@
 #include "game/character_customization/avatar_definition_mgr.h"
 #include "log/default_log_levels.h"
 #include "math/collision.h"
+#include "math/math_utils.h"
 #include "scene_graph/animation_notify.h"
 #include "scene_graph/animation_state.h"
 #include "scene_graph/material_manager.h"
@@ -379,7 +380,13 @@ namespace mmo
 		// Regular movement animations
 		if (m_unitMovement->IsMovingOnGround() && inputVector2DSize > 0.1f)
 		{
-			SetTargetAnimState(m_runAnimState);
+			AnimationState* movementAnim = m_runAnimState;
+			if (m_walkAnimState && IsWalkModeEnabled())
+			{
+				movementAnim = m_walkAnimState;
+			}
+
+			SetTargetAnimState(movementAnim);
 		}
 		else
 		{
@@ -1289,7 +1296,7 @@ namespace mmo
 		return jumpIsAllowed;
 	}
 
-	void GameUnitC::SetMovementPath(const std::vector<Vector3> &points, GameTime moveTime, const std::optional<Radian> &targetRotation)
+	void GameUnitC::SetMovementPath(const std::vector<Vector3> &points, GameTime moveTime, const std::optional<Radian> &targetRotation, const UnitMovementMode movementMode)
 	{
 		// Clear any existing animation-based movement
 		m_movementAnimationTime = 0.0f;
@@ -1299,6 +1306,10 @@ namespace mmo
 		m_currentPathIndex = 0;
 		m_targetRotation.reset();
 		m_pathCompleted = false;
+
+		// Reset easing state when new path is assigned
+		m_easingProgress = 0.0f;
+		m_easingTransitionDistance = 0.0f;
 
 		if (points.empty())
 		{
@@ -1322,6 +1333,8 @@ namespace mmo
 		m_pathCompleted = false;
 		m_pathStartTime = GetAsyncTimeMs();
 		m_pathStartPosition = actualStartPosition; // Use tolerance-checked start position
+		m_pathMoveSpeed = GetSpeed(movement_type::Run);
+		SetUnitMovementModeOnFlags(m_movementInfo.movementFlags, movementMode);
 
 		// Initialize path gravity variables
 		m_pathVerticalVelocity = 0.0f;
@@ -1340,6 +1353,11 @@ namespace mmo
 			m_pathSegmentLengths.push_back(segmentLength);
 			m_pathTotalLength += segmentLength;
 			currentPos = segmentEnd;
+		}
+
+		if (moveTime > 0 && m_pathTotalLength > 0.0f)
+		{
+			m_pathMoveSpeed = m_pathTotalLength / (static_cast<float>(moveTime) / 1000.0f);
 		}
 
 		// For remote units, we don't use movement flags for physics - we use direct positioning
@@ -1376,8 +1394,8 @@ namespace mmo
 		const float elapsedTime = static_cast<float>(currentTime - m_pathStartTime) / 1000.0f; // Convert to seconds
 
 		// Calculate how far along the path we should be based on movement speed
-		const float runSpeed = GetSpeed(movement_type::Run);
-		const float targetDistance = runSpeed * elapsedTime;
+		const float pathMoveSpeed = m_pathMoveSpeed > 0.0f ? m_pathMoveSpeed : GetSpeed(movement_type::Run);
+		const float targetDistance = pathMoveSpeed * elapsedTime;
 
 		// Check if we're close enough to the final destination (ONLY distance-based completion)
 		const Vector3 currentPosition = m_sceneNode->GetDerivedPosition();
@@ -1443,7 +1461,7 @@ namespace mmo
 
 		// Use actual movement speed scaled by deltaTime for smooth, framerate-independent movement.
 		// Add a catch-up factor when falling behind the computed path position to avoid persistent lag.
-		const float baseMove = runSpeed * deltaTime;
+		const float baseMove = pathMoveSpeed * deltaTime;
 		const float catchUpFactor = std::min(distanceFromTarget / std::max(baseMove, 0.01f), 3.0f);
 		const float maxMoveThisFrame = baseMove * std::max(catchUpFactor, 1.0f);
 
@@ -1473,9 +1491,15 @@ namespace mmo
 			}
 
 			// Set run animation for all units following paths
-			if (m_runAnimState)
+			AnimationState* movementAnim = m_runAnimState;
+			if (m_walkAnimState && IsWalkModeEnabled())
 			{
-				SetTargetAnimState(m_runAnimState);
+				movementAnim = m_walkAnimState;
+			}
+
+			if (movementAnim)
+			{
+				SetTargetAnimState(movementAnim);
 			}
 		}
 
@@ -1516,7 +1540,7 @@ namespace mmo
 		}
 	}
 
-	Vector3 GameUnitC::CalculatePositionAlongPath(const float distance) const
+	Vector3 GameUnitC::CalculatePositionAlongPath(float distance)
 	{
 		if (m_movementPath.empty() || m_pathSegmentLengths.empty())
 		{
@@ -1525,6 +1549,9 @@ namespace mmo
 
 		float remainingDistance = distance;
 		Vector3 currentPos = m_pathStartPosition; // Start from where the path began
+
+		// Easing zone distance: smooth transitions over ~0.5 units on either side of a turn
+		constexpr float easingZoneDistance = 0.5f;
 
 		// Walk through path segments until we find where we should be
 		for (size_t i = 0; i < m_movementPath.size() && i < m_pathSegmentLengths.size(); ++i)
@@ -1537,7 +1564,66 @@ namespace mmo
 				// We're somewhere along this segment
 				if (segmentLength > 0.0f)
 				{
-					const float t = remainingDistance / segmentLength;
+					float t = remainingDistance / segmentLength;
+
+					// Check if we're in an easing zone
+					// Note: A turn exists at waypoint[i] if there's a turn between i-1, i, i+1
+					// and a turn exists at waypoint[i+1] if there's a turn between i, i+1, i+2
+					
+					bool hasTurnAtStart = false;  // Is there a turn at the START of this segment?
+					bool hasTurnAtEnd = false;    // Is there a turn at the END of this segment?
+
+					// Check for turn at start of segment
+					if (i > 0)
+					{
+						// Three points: waypoint at i-1, waypoint at i, waypoint at i+1
+						Vector3 prevWaypoint = (i > 1) ? m_movementPath[i - 2] : m_pathStartPosition;
+						hasTurnAtStart = DetectTurnBetweenSegments(prevWaypoint, currentPos, segmentEnd);
+					}
+
+					// Check for turn at end of segment
+					if (i + 1 < m_movementPath.size())
+					{
+						// Three points: waypoint at i, waypoint at i+1, waypoint at i+2
+						Vector3 nextWaypoint = (i + 1 < m_movementPath.size() - 1) ? m_movementPath[i + 2] : m_movementPath.back();
+						hasTurnAtEnd = DetectTurnBetweenSegments(currentPos, segmentEnd, nextWaypoint);
+					}
+
+					// Apply easing if we're near a turn
+					if (hasTurnAtEnd && remainingDistance >= segmentLength - easingZoneDistance)
+					{
+						// Near the end of segment with a turn - ease out as we approach it
+						float distanceFromTurn = segmentLength - remainingDistance;
+						float easeProgress = 1.0f - (distanceFromTurn / easingZoneDistance);
+						easeProgress = std::max(0.0f, std::min(1.0f, easeProgress)); // Clamp to [0, 1]
+						
+						// Apply easing function to smooth the exit from this segment
+						float easedT = EaseInOutCubic(easeProgress);
+						t = (segmentLength - easingZoneDistance + easedT * easingZoneDistance) / segmentLength;
+						t = std::max(0.0f, std::min(1.0f, t)); // Clamp interpolation
+						
+						m_easingProgress = easeProgress;
+						m_easingTransitionDistance = easingZoneDistance;
+					}
+					else if (hasTurnAtStart && remainingDistance <= easingZoneDistance)
+					{
+						// Near the start of segment with a turn - ease in as we leave it
+						float easeProgress = remainingDistance / easingZoneDistance;
+						easeProgress = std::max(0.0f, std::min(1.0f, easeProgress)); // Clamp to [0, 1]
+						
+						// Apply easing function to smooth the entry to this segment
+						float easedT = EaseInOutCubic(easeProgress);
+						t = easedT * easingZoneDistance / segmentLength;
+						t = std::max(0.0f, std::min(1.0f, t)); // Clamp interpolation
+						
+						m_easingProgress = easeProgress;
+						m_easingTransitionDistance = easingZoneDistance;
+					}
+					else
+					{
+						m_easingProgress = 0.0f;
+					}
+
 					return currentPos + (segmentEnd - currentPos) * t;
 				}
 				else
@@ -1553,6 +1639,19 @@ namespace mmo
 
 		// If we get here, we've gone past the end of the path
 		return m_movementPath.back();
+	}
+
+	bool GameUnitC::DetectTurnBetweenSegments(const Vector3& prevPoint, const Vector3& currPoint, const Vector3& nextPoint) const
+	{
+		// Use the ComputeSegmentAngle utility from math_utils to determine if a turn exists
+		// A turn is detected if the angle between the two segments is greater than a threshold
+		const float segmentAngle = ComputeSegmentAngle(prevPoint, currPoint, nextPoint);
+		
+		// Define turn threshold: we consider angles > 30 degrees as a "turn" requiring easing
+		// This is approximately 0.524 radians (Pi/6)
+		constexpr float turnThresholdRadians = 0.524f;
+		
+		return segmentAngle > turnThresholdRadians;
 	}
 
 	bool GameUnitC::IsControlledByLocalPlayer() const
@@ -2116,6 +2215,7 @@ namespace mmo
 
 		// Reset animation states
 		m_idleAnimState = nullptr;
+		m_walkAnimState = nullptr;
 		m_runAnimState = nullptr;
 		m_readyAnimState = nullptr;
 		m_castingState = nullptr;
@@ -2177,6 +2277,11 @@ namespace mmo
 		if (m_entity->HasAnimationState("Idle"))
 		{
 			m_idleAnimState = m_entity->GetAnimationState("Idle");
+		}
+
+		if (m_entity->HasAnimationState("Walk"))
+		{
+			m_walkAnimState = m_entity->GetAnimationState("Walk");
 		}
 
 		if (m_entity->HasAnimationState("Run"))
@@ -2730,24 +2835,34 @@ namespace mmo
 	{
 		if (m_spellTints.empty())
 		{
-			// Default gray tint (no tinting)
-			return Vector4(0.5f, 0.5f, 0.5f, 1.0f);
+			// Default black (no emissive glow)
+			return Vector4(0.0f, 0.0f, 0.0f, 1.0f);
 		}
 		
-		// Start with default gray
-		Vector4 result(0.5f, 0.5f, 0.5f, 1.0f);
+		// Start with black (no emissive glow)
+		Vector4 result(0.0f, 0.0f, 0.0f, 1.0f);
 		
-		// Blend all active tints using multiplicative blending
+		// Blend all active tints using additive blending (emissive colors add up)
 		for (const auto& pair : m_spellTints)
 		{
 			const Vector4& tint = pair.second;
 			
-			// Lerp between result and (result * tint.rgb) based on tint.a
-			// This allows the alpha to control tint strength
-			result.x = result.x * (1.0f - tint.w) + (result.x * tint.x) * tint.w;
-			result.y = result.y * (1.0f - tint.w) + (result.y * tint.y) * tint.w;
-			result.z = result.z * (1.0f - tint.w) + (result.z * tint.z) * tint.w;
+			// Add the tint color scaled by its alpha (alpha controls tint strength)
+			result.x += tint.x * tint.w;
+			result.y += tint.y * tint.w;
+			result.z += tint.z * tint.w;
 		}
+
+		if (m_spellTints.size() > 1)
+		{
+			result /= static_cast<float>(m_spellTints.size()); // Average the tints
+		}
+		
+		
+		// Clamp to [0, 1] range
+		result.x = std::min(result.x, 1.0f);
+		result.y = std::min(result.y, 1.0f);
+		result.z = std::min(result.z, 1.0f);
 		
 		return result;
 	}

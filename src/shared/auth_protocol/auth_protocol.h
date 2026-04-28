@@ -132,6 +132,9 @@ namespace mmo
 
 				PlayerGuildChanged,
 
+				/// Sent by the realm server to notify a world node of a group loot method change.
+				PlayerGroupLootMethodChanged,
+
 				/// Sent as response to inventory operation requests (save/delete).
 				InventoryOperationResult,
 			};

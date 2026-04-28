@@ -185,6 +185,9 @@ namespace mmo
 		
 		[[nodiscard]] SceneNode* GetSceneNode() const { return m_sceneNode; }
 
+		/// @brief Returns the scene this object belongs to.
+		[[nodiscard]] Scene& GetScene() const { return m_scene; }
+
 		[[nodiscard]] Entity* GetEntity() const { return m_entity; }
 
 		virtual void Update(float deltaTime);

@@ -508,6 +508,19 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::SetGroupLootMethod(const uint8 method, const uint64 masterGuid, const uint8 threshold)
+	{
+		sendSinglePacket([method, masterGuid, threshold](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::SetLootMethod);
+			packet
+				<< io::write<uint8>(method)
+				<< io::write<uint64>(masterGuid)
+				<< io::write<uint8>(threshold);
+			packet.Finish();
+		});
+	}
+
 	void RealmConnector::AutoEquipItem(uint8 srcBag, uint8 srcSlot)
 	{
 		sendSinglePacket([srcBag, srcSlot](game::OutgoingPacket& packet) {
@@ -593,6 +606,16 @@ namespace mmo
 			packet.Start(game::client_realm_packet::LootRelease);
 			packet
 				<< io::write<uint64>(lootObjectGuid);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::UseObject(uint64 objectGuid)
+	{
+		sendSinglePacket([objectGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::UseObject);
+			packet
+				<< io::write<uint64>(objectGuid);
 			packet.Finish();
 			});
 	}

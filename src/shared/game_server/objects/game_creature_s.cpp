@@ -5,6 +5,8 @@
 #include "base/utilities.h"
 #include "proto_data/project.h"
 #include "game_server/world/world_instance.h"
+#include "game_server/ai/creature_ai.h"
+#include "ai/creature_ai_combat_state.h"
 #include "binary_io/vector_sink.h"
 
 namespace mmo
@@ -340,6 +342,12 @@ namespace mmo
 			}
 		}
 	}
+
+	void GameCreatureS::SetPatrolWaypoints(std::vector<PatrolWaypoint> patrolWaypoints)
+	{
+		m_patrolWaypoints = std::move(patrolWaypoints);
+	}
+
 	void GameCreatureS::RefreshStats()
 	{
 		GameUnitS::RefreshStats();
@@ -582,5 +590,38 @@ namespace mmo
 	const String& GameCreatureS::GetName() const
 	{
 		return m_entry ? m_entry->name() : m_originalEntry.name();
+	}
+
+	const proto::SpellEntry* GameCreatureS::GetAutoAttackSpell() const
+	{
+		if (m_entry && m_entry->has_auto_attack_spell())
+		{
+			return m_project.spells.getById(m_entry->auto_attack_spell());
+		}
+
+		return nullptr;
+	}
+
+	bool GameCreatureS::SetCombatPhase(uint32 phase)
+	{
+		if (!m_ai)
+		{
+			return false;
+		}
+
+		auto* combatState = dynamic_cast<CreatureAICombatState*>(m_ai->GetCurrentState());
+		if (!combatState)
+		{
+			return false;
+		}
+
+		auto* script = combatState->GetScript();
+		if (!script)
+		{
+			return false;
+		}
+
+		script->SetPhase(phase);
+		return true;
 	}
 }

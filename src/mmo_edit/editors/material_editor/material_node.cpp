@@ -38,6 +38,9 @@ namespace mmo
 	const uint32 ArcCosineNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 	const uint32 ArcSineNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 	const uint32 ArcTangentNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 TimeNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
+	const uint32 RotatorNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 FresnelNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 
 	Pin::Pin(GraphNode* node, const PinType type, const std::string_view name)
 		: m_id(node ? node->GetMaterial()->MakePinId(this) : 0)
@@ -1112,6 +1115,107 @@ namespace mmo
 		if (m_compiledExpressionId == IndexNone)
 		{
 			m_compiledExpressionId = compiler.AddCameraPosition();
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex TimeNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddTime();
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex RotatorNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			// Coordinates input is required
+			ExpressionIndex coordsExpression = IndexNone;
+			if (m_coordsInput.IsLinked())
+			{
+				coordsExpression = m_coordsInput.GetLink()->GetNode()->Compile(compiler, m_coordsInput.GetLink());
+			}
+			else
+			{
+				ELOG("Missing coordinates input for Rotator node");
+				return IndexNone;
+			}
+
+			// Center input: use linked pin or fall back to property defaults
+			ExpressionIndex centerExpression = IndexNone;
+			if (m_centerInput.IsLinked())
+			{
+				centerExpression = m_centerInput.GetLink()->GetNode()->Compile(compiler, m_centerInput.GetLink());
+			}
+			else
+			{
+				std::ostringstream defaultCenter;
+				defaultCenter << "float2(" << m_centerX << ", " << m_centerY << ")";
+				centerExpression = compiler.AddExpression(defaultCenter.str(), ExpressionType::Float_2);
+			}
+
+			// Rotation input: use linked pin or fall back to property default
+			ExpressionIndex rotationExpression = IndexNone;
+			if (m_rotationInput.IsLinked())
+			{
+				rotationExpression = m_rotationInput.GetLink()->GetNode()->Compile(compiler, m_rotationInput.GetLink());
+			}
+			else
+			{
+				std::ostringstream defaultRotation;
+				defaultRotation << m_rotation;
+				rotationExpression = compiler.AddExpression(defaultRotation.str(), ExpressionType::Float_1);
+			}
+
+			m_compiledExpressionId = compiler.AddRotator(coordsExpression, centerExpression, rotationExpression);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex FresnelNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			// Exponent input: use linked pin or fall back to property default
+			ExpressionIndex exponentExpression = IndexNone;
+			if (m_exponentInput.IsLinked())
+			{
+				exponentExpression = m_exponentInput.GetLink()->GetNode()->Compile(compiler, m_exponentInput.GetLink());
+			}
+			else
+			{
+				std::ostringstream defaultExponent;
+				defaultExponent << m_exponent;
+				exponentExpression = compiler.AddExpression(defaultExponent.str(), ExpressionType::Float_1);
+			}
+
+			// Base reflect fraction input: use linked pin or fall back to property default
+			ExpressionIndex baseReflectExpression = IndexNone;
+			if (m_baseReflectFractionInput.IsLinked())
+			{
+				baseReflectExpression = m_baseReflectFractionInput.GetLink()->GetNode()->Compile(compiler, m_baseReflectFractionInput.GetLink());
+			}
+			else
+			{
+				std::ostringstream defaultBaseReflect;
+				defaultBaseReflect << m_baseReflectFraction;
+				baseReflectExpression = compiler.AddExpression(defaultBaseReflect.str(), ExpressionType::Float_1);
+			}
+
+			// Normal input: use linked pin or IndexNone (compiler will use default vertex normal)
+			ExpressionIndex normalExpression = IndexNone;
+			if (m_normalInput.IsLinked())
+			{
+				normalExpression = m_normalInput.GetLink()->GetNode()->Compile(compiler, m_normalInput.GetLink());
+			}
+
+			m_compiledExpressionId = compiler.AddFresnel(exponentExpression, baseReflectExpression, normalExpression);
 		}
 
 		return m_compiledExpressionId;

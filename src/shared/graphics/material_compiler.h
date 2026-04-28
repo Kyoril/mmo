@@ -273,6 +273,24 @@ namespace mmo
 		/// @return Index of the transform expression or IndexNone in case of an error.
 		virtual ExpressionIndex AddTransform(ExpressionIndex input, Space sourceSpace, Space targetSpace) = 0;
 
+		/// @brief Adds a time expression that returns the elapsed time in seconds since game start.
+		/// @return Index of the time expression or IndexNone in case of an error.
+		virtual ExpressionIndex AddTime() = 0;
+
+		/// @brief Adds a rotator expression that rotates 2D texture coordinates around a center point.
+		/// @param coordinates The input texture coordinate expression (float2).
+		/// @param center The center of rotation expression (float2).
+		/// @param rotation The rotation angle expression in radians (float1).
+		/// @return Index of the rotated coordinates expression (float2) or IndexNone in case of an error.
+		virtual ExpressionIndex AddRotator(ExpressionIndex coordinates, ExpressionIndex center, ExpressionIndex rotation) = 0;
+
+		/// @brief Adds a Fresnel expression using the Schlick approximation.
+		/// @param exponent The exponent expression controlling the falloff (float1).
+		/// @param baseReflectFraction The base reflectivity at normal incidence (float1).
+		/// @param normal The surface normal expression (float3). If IndexNone, uses the default vertex normal.
+		/// @return Index of the Fresnel expression (float1) or IndexNone in case of an error.
+		virtual ExpressionIndex AddFresnel(ExpressionIndex exponent, ExpressionIndex baseReflectFraction, ExpressionIndex normal) = 0;
+
 	public:
 		void SetDepthTestEnabled(const bool enable) { m_depthTest = enable; }
 

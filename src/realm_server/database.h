@@ -118,6 +118,9 @@ namespace mmo
 
 		uint64 leaderGuid;
 
+		/// Message of the day; empty string if not yet set.
+		String motd;
+
 		std::vector<GuildRank> ranks;
 
 		std::vector<GuildMember> members;
@@ -254,6 +257,11 @@ namespace mmo
 
 		/// Sets a guild member's rank.
 		virtual void SetGuildMemberRank(uint64 guildId, uint64 memberGuid, uint32 rank) = 0;
+
+		/// Sets the MOTD for a guild.
+		/// @param guildId The guild's unique identifier.
+		/// @param motd The new message of the day text.
+		virtual void SetGuildMotd(uint64 guildId, const String& motd) = 0;
 
 		/// Adds a friend relationship between two characters.
 		/// @param characterId The character initiating the friendship.

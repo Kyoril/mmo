@@ -142,6 +142,9 @@ namespace mmo
 
 		PacketParseResult OnPlayerGuildChanged(auth::IncomingPacket& packet);
 
+		/// Handles a loot method change notification from the realm server.
+		PacketParseResult OnPlayerGroupLootMethodChanged(auth::IncomingPacket& packet);
+
 		/// Handles the result of an inventory operation (save/delete).
 		/// @param packet Incoming packet containing operation result.
 		/// @returns Enum value which decides whether to continue the connection or destroy it.

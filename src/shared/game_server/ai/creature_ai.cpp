@@ -6,6 +6,7 @@
 #include "creature_ai_combat_state.h"
 #include "creature_ai_reset_state.h"
 #include "creature_ai_death_state.h"
+#include "creature_combat_script.h"
 #include "objects/game_creature_s.h"
 #include "objects/game_unit_s.h"
 #include "game_server/world/world_instance.h"
@@ -32,6 +33,21 @@ namespace mmo
 	{
 		m_onKilled = m_controlled.killed.connect([this](GameUnitS* killer)
 			{
+				// Check if a combat script prevents death (e.g., training dummies)
+				if (auto* combatState = dynamic_cast<CreatureAICombatState*>(m_state.get()))
+				{
+					if (auto* script = combatState->GetScript())
+					{
+						if (!script->CanDie())
+						{
+							// Restore health and stay in combat
+							m_controlled.Set<uint32>(object_fields::Health, 
+								std::max<uint32>(1, m_controlled.GetMaxHealth()));
+							return;
+						}
+					}
+				}
+
 				auto state = std::make_shared<CreatureAIDeathState>(*this);
 				SetState(std::move(state));
 			});

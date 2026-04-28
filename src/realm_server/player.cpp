@@ -663,7 +663,7 @@ namespace mmo
 			// Require GM level 2
 			if (!HasGMLevel(2))
 			{
-				WLOG("Player " << m_characterData->name << " attempted to use a teleport command without sufficient privileges");
+				WLOG("Player " << m_characterData->name << " attempted to use a GM command without sufficient privileges");
 				return PacketParseResult::Pass;
 			}
 			break;
@@ -698,9 +698,20 @@ namespace mmo
 
 		uint8 chatType;
 		std::string message;
+		std::string targetName;
+
 		if (!(packet >> io::read<uint8>(chatType) >> io::read_limited_string<512>(message)))
 		{
 			return PacketParseResult::Disconnect;
+		}
+
+		if (static_cast<ChatType>(chatType) == ChatType::Whisper
+			|| static_cast<ChatType>(chatType) == ChatType::Channel)
+		{
+			if (!(packet >> io::read_container<uint8>(targetName)))
+			{
+				return PacketParseResult::Disconnect;
+			}
 		}
 
 		// Switch chat type
@@ -780,8 +791,63 @@ namespace mmo
 		}
 		break;
 
+		case ChatType::Whisper:
+		{
+			if (targetName.empty())
+			{
+				WLOG("Whisper received with empty target name, ignoring.");
+				break;
+			}
+
+			Player* target = m_manager.GetPlayerByCharacterName(targetName);
+			if (target == nullptr)
+			{
+				// Target not found — send system error back to sender; skip DB log for failed whispers
+				const std::string errorMsg = "No player named '" + targetName + "' is currently online.";
+				SendPacket([this, &errorMsg](game::OutgoingPacket &outPacket)
+				{
+					outPacket.Start(game::realm_client_packet::ChatMessage);
+					outPacket
+						<< io::write_packed_guid(0)
+						<< io::write<uint8>(ChatType::System)
+						<< io::write_range(errorMsg) << io::write<uint8>(0)
+						<< io::write<uint8>(0)
+						<< io::write<uint8>(0);
+					outPacket.Finish();
+				});
+				return PacketParseResult::Pass;
+			}
+
+			target->SendPacket([this, &message, chatType](game::OutgoingPacket &outPacket)
+			{
+				outPacket.Start(game::realm_client_packet::ChatMessage);
+				outPacket
+					<< io::write_packed_guid(m_characterData->characterId)
+					<< io::write<uint8>(chatType)
+					<< io::write_range(message) << io::write<uint8>(0)
+					<< io::write<uint8>(0)
+					<< io::write<uint8>(0);
+				outPacket.Finish();
+			});
+		}
+		break;
+
 		case ChatType::Raid:
-			WLOG("Raid chat is not implemented yet!");
+			if (!m_group || !m_group->IsMember(m_characterData->characterId))
+			{
+				WLOG("Player tried to send raid chat message without being in a group!");
+				break;
+			}
+			m_group->BroadcastPacket([this, &message, chatType](game::OutgoingPacket &outPacket)
+									 {
+					outPacket.Start(game::realm_client_packet::ChatMessage);
+					outPacket
+						<< io::write_packed_guid(m_characterData->characterId)
+						<< io::write<uint8>(chatType)
+						<< io::write_range(message)
+						<< io::write<uint8>(0)
+						<< io::write<uint8>(0);
+					outPacket.Finish(); });
 			break;
 
 		case ChatType::Channel:
@@ -962,8 +1028,18 @@ namespace mmo
 		m_characterData->position = m_transferPosition;
 		m_characterData->facing = m_transferFacing;
 
+		// Resolve the correct instance id based on map type
+		InstanceId targetInstanceId{};
+		const proto::MapEntry* mapEntry = m_project.maps.getById(m_transferMap);
+		if (mapEntry && mapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL)
+		{
+			// Dungeon/raid map: resolve instance from group or personal bindings
+			targetInstanceId = ResolveDungeonInstanceId(m_transferMap);
+			DLOG("Resolved dungeon instance id for transfer map " << m_transferMap << ": " << targetInstanceId);
+		}
+
 		// Find a new world node
-		std::shared_ptr<World> world = m_worldManager.GetIdealWorldNode(m_transferMap, InstanceId());
+		std::shared_ptr<World> world = m_worldManager.GetIdealWorldNode(m_transferMap, targetInstanceId);
 		if (!world)
 		{
 			// World does not exist
@@ -971,6 +1047,9 @@ namespace mmo
 			OnWorldTransferAborted(game::transfer_abort_reason::NotFound);
 			return PacketParseResult::Pass;
 		}
+
+		// Set the resolved instance id on character data so the world server receives it
+		m_characterData->instanceId = targetInstanceId;
 
 		std::weak_ptr weakThis = shared_from_this();
 		std::weak_ptr weakWorld = world;
@@ -1179,6 +1258,50 @@ namespace mmo
 		}
 
 		m_group->Disband(false);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnSetLootMethod(game::IncomingPacket& packet)
+	{
+		uint8 method = 0;
+		uint64 lootMasterGuid = 0;
+		uint8 lootThreshold = 2;
+		if (!(packet >> io::read<uint8>(method) >> io::read<uint64>(lootMasterGuid) >> io::read<uint8>(lootThreshold)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Only the group leader may change loot method
+		if (!m_group || m_group->GetLeader() != m_characterData->characterId)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		const auto lootMethod = static_cast<LootMethod>(method);
+
+		// MasterLoot sentinel: GUID 0 means "leader self-assigns as loot master" (client sends 0 by design)
+		if (lootMethod == loot_method::MasterLoot && lootMasterGuid == 0)
+		{
+			lootMasterGuid = m_characterData->characterId;
+		}
+
+		m_group->SetLootMethod(lootMethod, lootMasterGuid, lootThreshold);
+
+		// CRITICAL: SendUpdate() must be called so all clients receive the updated GroupList packet
+		m_group->SendUpdate();
+
+		// Sync loot method to world server for every group member so creature_ai_death_state can read it
+		for (const auto& [memberGuid, memberSlot] : m_group->GetMembers())
+		{
+			if (const auto memberPlayer = m_manager.GetPlayerByCharacterGuid(memberGuid))
+			{
+				if (const auto world = memberPlayer->GetWorld())
+				{
+					world->NotifyPlayerGroupLootMethodChanged(memberGuid, method, lootMasterGuid);
+				}
+			}
+		}
 
 		return PacketParseResult::Pass;
 	}
@@ -2137,6 +2260,83 @@ namespace mmo
 		m_characterData->isGameMaster = (m_gmLevel > 0);
 	}
 
+	InstanceId Player::ResolveDungeonInstanceId(const MapId mapId) const
+	{
+		const proto::MapEntry* mapEntry = m_project.maps.getById(mapId);
+		if (!mapEntry)
+		{
+			return {};
+		}
+
+		// Global maps don't need special instance resolution
+		if (mapEntry->instancetype() == proto::MapEntry_MapInstanceType_GLOBAL)
+		{
+			return {};
+		}
+
+		// For dungeon/raid maps, check group binding first, then personal binding
+		if (m_group && m_group->IsCreated())
+		{
+			const InstanceId groupInstance = m_group->InstanceBindingForMap(mapId);
+			if (!groupInstance.is_nil())
+			{
+				return groupInstance;
+			}
+
+			// No group binding yet - check if the leader is currently inside that
+			// dungeon.  If so, adopt the leader's instance as the group binding so
+			// that other members entering the dungeon join the same instance.
+			const uint64 leaderGuid = m_group->GetLeader();
+			if (leaderGuid != 0 && leaderGuid != GetCharacterGuid())
+			{
+				Player* leader = m_manager.GetPlayerByCharacterGuid(leaderGuid);
+				if (leader && leader->HasCharacterGuid())
+				{
+					const auto& leaderData = leader->GetCharacterData();
+					if (leaderData.mapId == mapId && !leaderData.instanceId.is_nil())
+					{
+						m_group->AddInstanceBinding(leaderData.instanceId, mapId);
+						return leaderData.instanceId;
+					}
+				}
+			}
+		}
+
+		// Check personal dungeon binding
+		const auto it = m_dungeonBindings.find(mapId);
+		if (it != m_dungeonBindings.end())
+		{
+			return it->second;
+		}
+
+		return {};
+	}
+
+	void Player::SetDungeonBinding(const MapId mapId, const InstanceId instanceId)
+	{
+		m_dungeonBindings[mapId] = instanceId;
+	}
+
+	void Player::ClearDungeonBinding(const MapId mapId)
+	{
+		m_dungeonBindings.erase(mapId);
+	}
+
+	void Player::ClearDungeonBindingByInstanceId(const InstanceId instanceId)
+	{
+		for (auto it = m_dungeonBindings.begin(); it != m_dungeonBindings.end(); )
+		{
+			if (it->second == instanceId)
+			{
+				it = m_dungeonBindings.erase(it);
+			}
+			else
+			{
+				++it;
+			}
+		}
+	}
+
 	void Player::SendAuthChallenge()
 	{
 		// We will start accepting LogonChallenge packets from the client
@@ -2342,6 +2542,7 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::LogoutRequest, *this, &Player::OnLogoutRequest);
 			RegisterPacketHandler(game::client_realm_packet::GroupLeave, *this, &Player::OnGroupLeave);
 			RegisterPacketHandler(game::client_realm_packet::GroupDisband, *this, &Player::OnGroupDisband);
+			RegisterPacketHandler(game::client_realm_packet::SetLootMethod, *this, &Player::OnSetLootMethod);
 
 #if MMO_WITH_DEV_COMMANDS
 			RegisterPacketHandler(game::client_realm_packet::CheatTeleportToPlayer, *this, &Player::OnCheatTeleportToPlayer);
@@ -2405,6 +2606,24 @@ namespace mmo
 
 		ASSERT(m_characterData);
 		m_characterData->instanceId = instanceId;
+
+		// Store dungeon instance binding if applicable
+		const proto::MapEntry* mapEntry = m_project.maps.getById(m_characterData->mapId);
+		if (mapEntry && mapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL && !instanceId.is_nil())
+		{
+			if (m_group && m_group->IsCreated())
+			{
+				// Assign to group (ownership goes to group leader)
+				m_group->AddInstanceBinding(instanceId, m_characterData->mapId);
+				DLOG("Stored dungeon instance binding for group " << m_group->GetId() << " on map " << m_characterData->mapId);
+			}
+			else
+			{
+				// Assign to this player personally
+				SetDungeonBinding(m_characterData->mapId, instanceId);
+				DLOG("Stored personal dungeon instance binding on map " << m_characterData->mapId);
+			}
+		}
 
 		m_connection->sendSinglePacket([&](game::OutgoingPacket &outPacket)
 									   {
@@ -2479,6 +2698,24 @@ namespace mmo
 
 		ASSERT(m_characterData);
 		m_characterData->instanceId = instanceId;
+
+		// Store dungeon instance binding if applicable
+		const proto::MapEntry* transferMapEntry = m_project.maps.getById(m_characterData->mapId);
+		if (transferMapEntry && transferMapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL && !instanceId.is_nil())
+		{
+			if (m_group && m_group->IsCreated())
+			{
+				// Assign to group (ownership goes to group leader)
+				m_group->AddInstanceBinding(instanceId, m_characterData->mapId);
+				DLOG("Stored dungeon instance binding for group " << m_group->GetId() << " on map " << m_characterData->mapId);
+			}
+			else
+			{
+				// Assign to this player personally
+				SetDungeonBinding(m_characterData->mapId, instanceId);
+				DLOG("Stored personal dungeon instance binding on map " << m_characterData->mapId);
+			}
+		}
 	}
 
 	void Player::OnWorldJoinFailed(const game::player_login_response::Type response)
@@ -2601,6 +2838,20 @@ namespace mmo
 		}
 
 		// TODO: Persist added spells back in database
+
+		// Resolve the correct instance id based on map type (dungeon vs global)
+		const proto::MapEntry* mapEntry = m_project.maps.getById(m_characterData->mapId);
+		if (mapEntry && mapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL)
+		{
+			// Dungeon/raid map: resolve instance from group or personal bindings
+			m_characterData->instanceId = ResolveDungeonInstanceId(m_characterData->mapId);
+			DLOG("Resolved dungeon instance id for map " << m_characterData->mapId << ": " << m_characterData->instanceId);
+		}
+		else
+		{
+			// Global map: clear instance id to use the singleton behavior
+			m_characterData->instanceId = InstanceId{};
+		}
 
 		// Find a world node for the character's map id and instance id
 		auto world = m_worldManager.GetIdealWorldNode(m_characterData->mapId, m_characterData->instanceId);
@@ -3610,8 +3861,20 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		// TODO: Set the guild MOTD
-		ELOG("Set guild MOTD functionality not implemented yet");
+		guild->SetMotd(motd);
+
+		// Broadcast to all online guild members
+		guild->BroadcastEvent(guild_event::Motd, 0, motd.c_str());
+
+		// Persist to database — MUST use asyncRequest (no synchronous DB calls on main thread)
+		auto dbHandler = [](bool success)
+		{
+			if (!success)
+			{
+				ELOG("Failed to persist guild MOTD");
+			}
+		};
+		m_database.asyncRequest(std::move(dbHandler), &IDatabase::SetGuildMotd, m_characterData->guildId, motd);
 
 		return PacketParseResult::Pass;
 	}

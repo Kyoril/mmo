@@ -5,6 +5,7 @@
 #include "base/typedefs.h"
 #include "base/non_copyable.h"
 #include "base/signal.h"
+#include "game/game.h"
 #include <memory>
 #include <mutex>
 #include <list>
@@ -62,6 +63,10 @@ namespace mmo
 
 		/// Broadcasts the Message of the Day to all connected players.
 		void BroadcastMessageOfTheDay(const String& motd);
+
+		/// Called when a world instance has been destroyed. Clears any dungeon bindings for that instance.
+		/// @param instanceId The instance id that was destroyed.
+		void OnInstanceDestroyed(InstanceId instanceId);
 
 	private:
 

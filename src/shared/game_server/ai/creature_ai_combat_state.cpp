@@ -5,6 +5,9 @@
 
 #include "game_server/ai/creature_ai_combat_state.h"
 #include "game_server/ai/creature_ai.h"
+#include "game_server/ai/creature_combat_script.h"
+#include "game_server/ai/creature_combat_script_registry.h"
+#include "game_server/ai/creature_separation_manager.h"
 #include "objects/game_creature_s.h"
 #include "game_server/world/universe.h"
 #include "log/default_log_levels.h"
@@ -38,6 +41,7 @@ namespace mmo
 		targetPosition = target;
 		combatRange = range;
 		isMovingToCombat = true;
+		lastWaypointTarget = target;
 	}
 
 	void CreatureAICombatState::MovementState::Reset()
@@ -45,6 +49,7 @@ namespace mmo
 		targetPosition = Vector3::Zero;
 		combatRange = 0.0f;
 		isMovingToCombat = false;
+		lastWaypointTarget = Vector3::Zero;
 	}
 
 	// === CreatureAICombatState Implementation ===
@@ -56,6 +61,7 @@ namespace mmo
 		, m_lastThreatTime(0)
 		, m_stuckCounter(0)
 		, m_nextActionCountdown(ai.GetControlled().GetTimers())
+		, m_recalculationCountdown(ai.GetControlled().GetTimers())
 		, m_isCasting(false)
 		, m_entered(false)
 		, m_isRanged(false)
@@ -70,11 +76,15 @@ namespace mmo
 	void CreatureAICombatState::OnEnter()
 	{
 		CreatureAIState::OnEnter();
+		GetControlled().SetMovementMode(unit_movement_mode::Run);
 		
 		// Initialize state
 		m_stuckCounter = 0;
 		m_movementState.Reset();
 		m_lastSpellCastTime = 0;
+
+		// Initialize recalculation countdown to fire at 500ms intervals
+		m_recalculationCountdown.SetEnd(GetAsyncTimeMs() + RECALCULATION_INTERVAL_MS);
 
 		auto& controlled = GetControlled();
 		controlled.RemoveAllCombatParticipants();
@@ -102,6 +112,23 @@ namespace mmo
 		SetupResetConditions();
 
 		m_entered = true;
+
+		// Create combat script if one is configured for this creature
+		const auto& scriptName = controlled.GetEntry().script_name();
+		if (!scriptName.empty())
+		{
+			m_script = CreatureCombatScriptRegistry::Instance().CreateScript(scriptName, *this);
+			if (!m_script)
+			{
+				WLOG("Creature " << controlled.GetEntry().id() << " has script_name '" << scriptName << "' but no script is registered with that name");
+			}
+		}
+
+		// Notify script that combat has started
+		if (m_script)
+		{
+			m_script->OnCombatStart();
+		}
 
 		// Schedule first action for next tick
 		std::weak_ptr weakThis = std::static_pointer_cast<CreatureAICombatState>(shared_from_this());
@@ -161,6 +188,13 @@ namespace mmo
 		// Clear all signal containers
 		m_killedSignals.clear();
 		m_miscSignals.clear();
+
+		// Notify script and clean up
+		if (m_script)
+		{
+			m_script->OnCombatEnd();
+			m_script.reset();
+		}
 	}
 
 	void CreatureAICombatState::OnDamage(GameUnitS& attacker)
@@ -175,6 +209,13 @@ namespace mmo
 			{
 				GetControlled().AddLootRecipient(attacker.GetGuid());
 			}
+		}
+
+		// Notify script and check health thresholds
+		if (m_script)
+		{
+			m_script->OnDamageTaken(attacker);
+			m_script->CheckHealthThresholds();
 		}
 	}
 
@@ -214,6 +255,12 @@ namespace mmo
 				// Temporarily switch to melee mode until mana recovers
 				// This could be expanded with a more sophisticated state system
 			}
+		}
+
+		// Notify the script
+		if (m_script)
+		{
+			m_script->OnSpellCastEnded(succeeded);
 		}
 		
 		// Schedule next action immediately after spell cast ends
@@ -408,6 +455,18 @@ namespace mmo
 			return false; // Already in range
 		}
 
+		// Check if player has moved more than threshold distance from our current waypoint target
+		// This triggers recalculation when the player moves significantly (e.g., kiting away)
+		if (m_movementState.isMovingToCombat)
+		{
+			const float playerDistanceFromWaypointSq = target.GetSquaredDistanceTo(m_movementState.lastWaypointTarget, true);
+			if (playerDistanceFromWaypointSq > PLAYER_POSITION_THRESHOLD)
+			{
+				DLOG("Recalculation: distance_sq=" << playerDistanceFromWaypointSq << " > threshold; triggering waypoint recompute");
+				return true; // Player moved too far, need to recalculate
+			}
+		}
+
 		// If we're moving, check if we'll be in range by the time we reach our destination
 		if (mover.IsMoving())
 		{
@@ -462,6 +521,25 @@ namespace mmo
 		if (m_isCasting)
 		{
 			return true; // Consider this successful - we're doing what we should be doing
+		}
+
+		// Check if the script prevents movement
+		if (m_script && !m_script->CanMove())
+		{
+			return true; // Script says we can't move, treat as success
+		}
+
+		// Check if player has moved beyond our threshold distance from current waypoint target
+		// This detects kiting and triggers immediate waypoint recalculation
+		if (m_movementState.isMovingToCombat && !GetControlled().IsRooted())
+		{
+			const float playerDistanceFromWaypointSq = target.GetSquaredDistanceTo(m_movementState.lastWaypointTarget, true);
+			if (playerDistanceFromWaypointSq > PLAYER_POSITION_THRESHOLD)
+			{
+				DLOG("Recalculation: distance_sq=" << playerDistanceFromWaypointSq << " > threshold; triggering waypoint recompute");
+				// Invalidate movement state to force recalculation
+				m_movementState.Reset();
+			}
 		}
 
 		if (!ShouldMoveToTarget(target))
@@ -543,8 +621,13 @@ namespace mmo
 			const auto currentTime = GetAsyncTimeMs();
 			if (currentTime > m_castingTimeoutEnd)
 			{
-				// Spell casting has taken too long, assume it's finished
+				// Spell casting has taken too long, assume it's finished.
+				// OnSpellCastEnded will recursively call ChooseNextAction after
+				// clearing the casting state. We must return here to avoid
+				// continuing on a potentially destroyed 'this' (the recursive
+				// call may trigger Reset which destroys this combat state).
 				OnSpellCastEnded(false);
+				return;
 			}
 			else
 			{
@@ -554,7 +637,41 @@ namespace mmo
 			}
 		}
 
-		// First, determine our current victim
+		// If a combat script is active and handles actions completely,
+		// we skip UpdateVictim to avoid re-starting auto-attack each tick.
+		if (m_script)
+		{
+			// Clean up expired threats so the threat list stays valid
+			CleanupExpiredThreats();
+
+			// Check if there are any threateners left
+			if (m_threat.empty())
+			{
+				GetAI().Reset();
+				return;
+			}
+
+			// Schedule next action check
+			m_nextActionCountdown.SetEnd(GetAsyncTimeMs() + ACTION_INTERVAL_MS);
+
+			// Check for script-defined reset conditions
+			if (m_script->ShouldResetCombat())
+			{
+				GetAI().Reset();
+				return;
+			}
+
+			// Let the script choose the next action
+			if (m_script->OnChooseAction())
+			{
+				return; // Script handled the action entirely
+			}
+
+			// Script returned false — fall through to default AI below.
+			// UpdateVictim is needed for the default AI path.
+		}
+
+		// Determine our current victim (also starts auto-attack on new targets)
 		UpdateVictim();
 
 		// Check if we should reset due to no valid targets
@@ -568,6 +685,21 @@ namespace mmo
 		// Update spell cooldowns
 		UpdateSpellCooldowns();
 
+		// Check if periodic recalculation countdown has fired
+		const auto currentTime = GetAsyncTimeMs();
+		if (currentTime >= m_recalculationCountdown.GetEnd())
+		{
+			// Periodic recalculation countdown fired; forcing waypoint revalidation
+			DLOG("Periodic recalculation countdown fired; forcing waypoint revalidation");
+			
+			// Force movement revalidation by resetting movement state
+			// This will trigger a fresh MoveToOptimalRange() calculation
+			m_movementState.Reset();
+			
+			// Reset countdown for next interval
+			m_recalculationCountdown.SetEnd(currentTime + RECALCULATION_INTERVAL_MS);
+		}
+
 		// Use shorter intervals when target is moving to improve responsiveness
 		uint32 actionInterval = ACTION_INTERVAL_MS;
 		if (victim->GetMover().IsMoving())
@@ -577,6 +709,8 @@ namespace mmo
 
 		// Schedule next action check
 		m_nextActionCountdown.SetEnd(GetAsyncTimeMs() + actionInterval);
+
+		// === Default AI logic (runs when no script, or script returned false) ===
 
 		// For casters and ranged units, prioritize spell casting if possible
 		if ((m_combatBehavior == CombatBehavior::Caster || m_combatBehavior == CombatBehavior::Ranged) && 
@@ -748,6 +882,12 @@ namespace mmo
 		// Watch for unit killed signal
 		m_killedSignals[guid] = threatener.killed.connect([this, guid, &threatener](GameUnitS*)
 		{
+			// Notify script before removing threat
+			if (m_script)
+			{
+				m_script->OnTargetDied(threatener);
+			}
+
 			RemoveThreat(threatener);
 		});
 
@@ -1064,14 +1204,30 @@ namespace mmo
 			{
 				const float meleeRangeSq = (controlled.GetMeleeReach() + target.GetMeleeReach()) * 
 										   (controlled.GetMeleeReach() + target.GetMeleeReach());
-				return distanceSq <= meleeRangeSq;
+				const bool inRange = distanceSq <= meleeRangeSq;
+				if (inRange)
+				{
+					const float distance = std::sqrtf(distanceSq);
+					const float acceptanceRadius = std::sqrtf(meleeRangeSq);
+					DLOG("Creature " << controlled.GetGuid() << " stopped at engagement range: distance=" 
+						<< distance << " <= acceptanceRadius=" << acceptanceRadius);
+				}
+				return inRange;
 			}
 		case CombatBehavior::Caster:
 		case CombatBehavior::Ranged:
 			{
 				const float minRangeSq = CASTER_MIN_RANGE * CASTER_MIN_RANGE;
 				const float maxRangeSq = CASTER_OPTIMAL_RANGE * CASTER_OPTIMAL_RANGE;
-				return distanceSq >= minRangeSq && distanceSq <= maxRangeSq;
+				const bool inRange = distanceSq >= minRangeSq && distanceSq <= maxRangeSq;
+				if (inRange)
+				{
+					const float distance = std::sqrtf(distanceSq);
+					const float acceptanceRadius = CASTER_OPTIMAL_RANGE;
+					DLOG("Creature " << controlled.GetGuid() << " stopped at engagement range: distance=" 
+						<< distance << " <= acceptanceRadius=" << acceptanceRadius);
+				}
+				return inRange;
 			}
 		}
 		
@@ -1109,6 +1265,10 @@ namespace mmo
 		
 		const float currentDistanceSq = controlled.GetSquaredDistanceTo(target.GetPosition(), true);
 		
+		// Get threat targets for separation logic
+		const auto threatTargets = GetThreatTargets();
+		auto& separationManager = CreatureSeparationManager::Get();
+		
 		switch (m_combatBehavior)
 		{
 		case CombatBehavior::Melee:
@@ -1129,9 +1289,15 @@ namespace mmo
 					const Vector3 targetPos = target.GetPosition();
 					const Vector3 ourPos = controlled.GetPosition();
 					const Vector3 direction = (ourPos - targetPos).NormalizedCopy();
-					const Vector3 retreatPos = targetPos + direction * CASTER_OPTIMAL_RANGE;
+					Vector3 retreatPos = targetPos + direction * CASTER_OPTIMAL_RANGE;
 					
-					if (mover.MoveTo(retreatPos, 2.0f))
+					// Apply separation logic to avoid stacking with nearby creatures
+					retreatPos = separationManager.AdjustTargetForSeparation(controlled, retreatPos, threatTargets);
+					
+					// Use combat range factor for engagement range enforcement
+					// Stop at roughly CASTER_MIN_RANGE to ensure safe distance
+					const float retreatEngagementRange = CASTER_MIN_RANGE * COMBAT_RANGE_FACTOR;
+					if (mover.MoveTo(retreatPos, retreatEngagementRange))
 					{
 						m_movementState.UpdateTarget(retreatPos, CASTER_OPTIMAL_RANGE);
 						m_stuckCounter = 0;
@@ -1141,9 +1307,15 @@ namespace mmo
 				// If too far, move closer
 				else if (currentDistanceSq > optimalRangeSq)
 				{
-					const Vector3 targetPosition = PredictTargetPosition(target);
+					Vector3 targetPosition = PredictTargetPosition(target);
 					
-					if (mover.MoveTo(targetPosition, CASTER_OPTIMAL_RANGE * 0.8f))
+					// Apply separation logic to avoid stacking with nearby creatures
+					targetPosition = separationManager.AdjustTargetForSeparation(controlled, targetPosition, threatTargets);
+					
+					// Use combat range factor for engagement range enforcement
+					// Stop at roughly CASTER_OPTIMAL_RANGE to ensure proper spell casting distance
+					const float approachEngagementRange = CASTER_OPTIMAL_RANGE * COMBAT_RANGE_FACTOR;
+					if (mover.MoveTo(targetPosition, approachEngagementRange))
 					{
 						m_movementState.UpdateTarget(targetPosition, CASTER_OPTIMAL_RANGE);
 						m_stuckCounter = 0;
@@ -1217,5 +1389,46 @@ namespace mmo
 		return formationPos;
 	}
 
-	// === End of new methods ===
+	// === Script Support Methods ===
+
+	std::vector<GameUnitS*> CreatureAICombatState::GetThreatTargets() const
+	{
+		std::vector<GameUnitS*> result;
+		result.reserve(m_threat.size());
+
+		for (const auto& pair : m_threat)
+		{
+			if (auto threatener = pair.second.threatener.lock())
+			{
+				if (threatener->IsAlive())
+				{
+					result.push_back(threatener.get());
+				}
+			}
+		}
+
+		return result;
+	}
+
+	void CreatureAICombatState::AddThreatFromScript(GameUnitS& threatener, float amount)
+	{
+		const uint64 guid = threatener.GetGuid();
+		const auto it = m_threat.find(guid);
+		if (it != m_threat.end())
+		{
+			it->second.amount = std::max(0.0f, it->second.amount + amount);
+		}
+		else if (amount >= 0.0f)
+		{
+			AddThreat(threatener, amount);
+		}
+	}
+
+	void CreatureAICombatState::ResetAllThreatFromScript()
+	{
+		for (auto& pair : m_threat)
+		{
+			pair.second.amount = 0.0f;
+		}
+	}
 }

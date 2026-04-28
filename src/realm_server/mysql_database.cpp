@@ -262,7 +262,7 @@ namespace mmo
 	{
 		std::vector<GuildData> result;
 
-		mysql::Select select(m_connection, "SELECT `id`, `name`, `leader` FROM `guilds`");
+		mysql::Select select(m_connection, "SELECT `id`, `name`, `leader`, COALESCE(`motd`, '') FROM `guilds`");
 		if (select.Success())
 		{
 			mysql::Row row(select);
@@ -273,6 +273,7 @@ namespace mmo
 				row.GetField(0, info.id);
 				row.GetField(1, info.name);
 				row.GetField(2, info.leaderGuid);
+				row.GetField(3, info.motd);
 
 				// Load guild ranks
 				mysql::Select rankSelect(m_connection, "SELECT `name`, `permissions` FROM `guild_ranks` WHERE `guild_id` = '" + std::to_string(info.id) + "' ORDER BY id ASC LIMIT 10");
@@ -1457,6 +1458,18 @@ namespace mmo
 		{
 			PrintDatabaseError();
 			throw mysql::Exception(m_connection.GetErrorMessage());
+		}
+	}
+
+	void MySQLDatabase::SetGuildMotd(const uint64 guildId, const String& motd)
+	{
+		const auto escaped = m_connection.EscapeString(motd);
+		if (!m_connection.Execute(
+			"UPDATE `guilds` SET `motd` = '" + escaped + "' WHERE `id` = '" +
+			std::to_string(guildId) + "'"))
+		{
+			PrintDatabaseError();
+			ELOG("Failed to update guild MOTD for guild " << guildId);
 		}
 	}
 

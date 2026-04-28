@@ -4,6 +4,7 @@
 
 #include "base/typedefs.h"
 #include "math/vector3.h"
+#include "math/vector4.h"
 
 #include <memory>
 
@@ -94,6 +95,8 @@ namespace mmo
 		ProjectileMotionType motionType = ProjectileMotionType::Linear;
 		/// @brief Height of arc (for Arc motion type).
 		float arcHeight = 0.0f;
+		/// @brief Width of arc (for Arc motion type, horizontal component).
+		float arcWidth = 0.0f;
 		/// @brief Amplitude (for Sine wave motion type).
 		float sineAmplitude = 0.5f;
 		/// @brief Frequency (for Sine wave motion type).
@@ -102,5 +105,40 @@ namespace mmo
 		float scale = 1.0f;
 		/// @brief Whether projectile rotates to face movement direction.
 		bool faceMovement = true;
+
+		/// @brief Whether the projectile has a point light.
+		bool hasLight = false;
+		/// @brief Light color (RGB).
+		Vector4 lightColor = Vector4(1.0f, 0.9f, 0.7f, 1.0f);
+		/// @brief Light intensity.
+		float lightIntensity = 1.0f;
+		/// @brief Light range.
+		float lightRange = 10.0f;
+		/// @brief Light fade-in time in seconds.
+		float lightFadeInTime = 0.3f;
+		/// @brief Light fade-out time in seconds (used on destroy).
+		float lightFadeOutTime = 0.5f;
+
+		/// @brief Whether the projectile has a ribbon trail.
+		bool hasRibbonTrail = false;
+		/// @brief Ribbon trail material name (empty for default).
+		String ribbonMaterial;
+		/// @brief Ribbon trail initial width.
+		float ribbonInitialWidth = 0.5f;
+		/// @brief Ribbon trail final width.
+		float ribbonFinalWidth = 0.0f;
+		/// @brief Ribbon trail initial color (RGBA).
+		Vector4 ribbonInitialColor = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+		/// @brief Ribbon trail final color (RGBA).
+		Vector4 ribbonFinalColor = Vector4(1.0f, 1.0f, 1.0f, 0.0f);
+		/// @brief Ribbon trail segment lifetime.
+		float ribbonSegmentLifetime = 1.0f;
+		/// @brief Ribbon trail max segments.
+		uint32 ribbonMaxSegments = 64;
+
+		/// @brief Spawn offset to the right of the cast direction (negative = left).
+		float spawnOffsetRight = 0.0f;
+		/// @brief Spawn offset upward from the cast position (negative = down).
+		float spawnOffsetUp = 0.0f;
 	};
 }

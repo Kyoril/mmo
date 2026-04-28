@@ -147,7 +147,8 @@ namespace mmo
 				{ spawn.location().rotationw(), spawn.location().rotationx(), spawn.location().rotationy(), spawn.location().rotationz() },
 				spawn.radius(),
 				spawn.animprogress(),
-				spawn.state()));
+				spawn.state(),
+				spawn.loot_entry()));
 			m_objectSpawners.push_back(std::move(spawner));
 			if (!spawn.name().empty())
 			{
@@ -412,6 +413,17 @@ namespace mmo
 		return it->second;
 	}
 
+	WorldObjectSpawner* WorldInstance::FindObjectSpawner(const String& name)
+	{
+		const auto it = m_objectSpawnsByName.find(name);
+		if (it == m_objectSpawnsByName.end())
+		{
+			return nullptr;
+		}
+
+		return it->second;
+	}
+
 	VisibilityGrid& WorldInstance::GetGrid() const
 	{
 		ASSERT(m_visibilityGrid);
@@ -445,7 +457,8 @@ namespace mmo
 		// TODO: This might be bad because we aren't technically really spawned in this world yet! We do this only so that passives can be cast!
 		spawned->SetWorldInstance(this);
 		spawned->SetEntry(entry);
-		
+		spawned->SetHealthPercent(1.0f);
+
 		return spawned;
 	}
 

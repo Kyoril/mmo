@@ -94,6 +94,8 @@ cbuffer CameraBuffer : register(b1)
     float FogEnd;
     float3 FogColor;
     column_major matrix InverseViewMatrix;
+    float Time;
+    float3 _CameraPadding;
 }
 
 // Light structure (matches StructuredBuffer element in C++)

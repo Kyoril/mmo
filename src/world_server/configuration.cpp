@@ -37,6 +37,7 @@ namespace mmo
 		, realmServerPassword("")
 		, dataFolder("data")
 		, mapFolder("nav")
+		, scriptFolder("data/scripts")
 		, watchDataForChanges(true)
 	{
 	}
@@ -150,6 +151,7 @@ namespace mmo
 			{
 				dataFolder = folders->getString("data", dataFolder);
 				mapFolder = folders->getString("maps", mapFolder);
+				scriptFolder = folders->getString("scripts", scriptFolder);
 				watchDataForChanges = detail::parseBoolean(*folders, "watchDataForChanges", watchDataForChanges);
 			}
 
@@ -257,6 +259,7 @@ namespace mmo
 			sff::write::Table<Char> folders(global, "folders", sff::write::MultiLine);
 			folders.addKey("data", dataFolder);
 			folders.addKey("maps", mapFolder);
+			folders.addKey("scripts", scriptFolder);
 			folders.addKey("watchDataForChanges", watchDataForChanges);
 			folders.Finish();
 		}

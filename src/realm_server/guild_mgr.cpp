@@ -174,7 +174,10 @@ namespace mmo
 		{
 			guild->GetMembersRef().push_back(member);
 		}
-		
+
+		// Initialize MOTD from DB-loaded data
+		guild->SetMotd(info.motd);
+
 		m_guildsById[info.id] = std::move(guild);
 		m_guildIdsByName[info.name] = info.id;
 
@@ -424,7 +427,8 @@ namespace mmo
 	{
 		writer
 			<< io::write<uint32>(m_members.size())
-			<< io::write<uint32>(m_ranks.size());
+			<< io::write<uint32>(m_ranks.size())
+			<< io::write_dynamic_range<uint16>(m_motd);	// MOTD before ranks; client reads in same order
 
 		for (const auto& rank : m_ranks)
 		{

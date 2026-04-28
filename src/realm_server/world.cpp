@@ -544,6 +544,19 @@ namespace mmo
 			});
 	}
 
+	void World::NotifyPlayerGroupLootMethodChanged(const uint64 characterId, const uint8 lootMethod, const uint64 lootMasterGuid)
+	{
+		GetConnection().sendSinglePacket([characterId, lootMethod, lootMasterGuid](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::realm_world_packet::PlayerGroupLootMethodChanged);
+				outPacket
+					<< io::write<uint64>(characterId)
+					<< io::write<uint8>(lootMethod)
+					<< io::write<uint64>(lootMasterGuid);
+				outPacket.Finish();
+			});
+	}
+
 	PacketParseResult World::OnPlayerCharacterJoined(auth::IncomingPacket& packet)
 	{
 		uint64 characterGuid = 0;
@@ -599,8 +612,17 @@ namespace mmo
 
 		ILOG("World instance host terminated: " << instanceId.to_string());
 
-		std::scoped_lock lock { m_hostedInstanceIdMutex };
-		m_hostedInstanceIds.emplace_back(std::move(instanceId));
+		{
+			std::scoped_lock lock { m_hostedInstanceIdMutex };
+			const auto it = std::find(m_hostedInstanceIds.begin(), m_hostedInstanceIds.end(), instanceId);
+			if (it != m_hostedInstanceIds.end())
+			{
+				m_hostedInstanceIds.erase(it);
+			}
+		}
+
+		// Notify player manager to clear any dungeon bindings for this instance
+		m_playerManager.OnInstanceDestroyed(instanceId);
 
 		return PacketParseResult::Pass;
 	}

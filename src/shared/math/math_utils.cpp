@@ -87,4 +87,59 @@ namespace mmo
 		ny = static_cast<float>(enc.y) / 127.0f;
 		nz = static_cast<float>(enc.z) / 127.0f;
 	}
+
+	float EaseInOutQuad(float t)
+	{
+		// Clamp t to [0, 1]
+		if (t <= 0.0f) return 0.0f;
+		if (t >= 1.0f) return 1.0f;
+
+		// Acceleration until halfway, then deceleration
+		if (t < 0.5f)
+		{
+			return 2.0f * t * t;
+		}
+		else
+		{
+			const float mt = 1.0f - t;
+			return 1.0f - 2.0f * mt * mt;
+		}
+	}
+
+	float EaseInOutCubic(float t)
+	{
+		// Clamp t to [0, 1]
+		if (t <= 0.0f) return 0.0f;
+		if (t >= 1.0f) return 1.0f;
+
+		// Smoother acceleration/deceleration than quadratic
+		if (t < 0.5f)
+		{
+			return 4.0f * t * t * t;
+		}
+		else
+		{
+			const float mt = 1.0f - t;
+			return 1.0f - 4.0f * mt * mt * mt;
+		}
+	}
+
+	float ComputeSegmentAngle(const Vector3& prev, const Vector3& curr, const Vector3& next)
+	{
+		// Compute vectors from curr to prev and from curr to next
+		const Vector3 toPrev = (prev - curr).NormalizedCopy();
+		const Vector3 toNext = (next - curr).NormalizedCopy();
+
+		// Compute the dot product to get the cosine of the angle
+		const float dotProduct = toPrev.Dot(toNext);
+
+		// Clamp to [-1, 1] to handle floating-point errors
+		const float clamped = std::fmax(-1.0f, std::fmin(1.0f, dotProduct));
+
+		// Compute angle in radians
+		const float angle = std::acos(clamped);
+
+		// Return angle in [0, Pi]
+		return angle;
+	}
 }

@@ -41,6 +41,8 @@ namespace mmo
 		float fogEnd;
 		Vector3 fogColor;
 		Matrix4 inverseViewMatrix;
+		float time;
+		float _padding[3];
 	};
 
 	Scene::Scene()
@@ -826,6 +828,10 @@ namespace mmo
 
 	void Scene::RefreshCameraBuffer(const Camera& camera)
 	{
+		// Update elapsed time
+		const auto now = std::chrono::steady_clock::now();
+		m_elapsedTime = std::chrono::duration<float>(now - m_startTime).count();
+
 		PsCameraConstantBuffer buffer;
 		buffer.cameraPosition = camera.GetDerivedPosition();
 
@@ -835,6 +841,10 @@ namespace mmo
 
 		buffer.fogColor = m_fogColor;
 		buffer.inverseViewMatrix = camera.GetViewMatrix().Inverse();
+		buffer.time = m_elapsedTime;
+		buffer._padding[0] = 0.0f;
+		buffer._padding[1] = 0.0f;
+		buffer._padding[2] = 0.0f;
 		m_psCameraBuffer->Update(&buffer);
 	}
 

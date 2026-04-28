@@ -77,6 +77,13 @@ namespace mmo
 			),
 
 			luabind::scope(
+				luabind::class_<QuestRewardItemDisplay>("QuestRewardItemDisplay")
+				.def_readonly("itemId", &QuestRewardItemDisplay::itemId)
+				.def_readonly("count", &QuestRewardItemDisplay::count)
+				.def_readonly("displayId", &QuestRewardItemDisplay::displayId)
+			),
+
+			luabind::scope(
 				luabind::class_<QuestDetails>("QuestDetails")
 				.def_readonly("id", &QuestDetails::questId)
 				.def_readonly("title", &QuestDetails::questTitle)
@@ -107,7 +114,11 @@ namespace mmo
 			luabind::def_lambda("GetQuestObjectiveText", [this](uint32 index) { return GetQuestObjectiveText(index); }),
 			luabind::def_lambda("GossipAction", [this](int32 index) { return ExecuteGossipAction(index); }),
 			luabind::def_lambda("GetQuestDetailsText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->description; ProcessQuestText(questText); return questText; }),
-			luabind::def_lambda("GetQuestObjectivesText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->summary; ProcessQuestText(questText); return questText; })
+			luabind::def_lambda("GetQuestObjectivesText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->summary; ProcessQuestText(questText); return questText; }),
+			luabind::def_lambda("GetQuestRewardItemCount", [this]() -> uint32 { return static_cast<uint32>(m_questDetails.rewardItems.size()); }),
+			luabind::def_lambda("GetQuestRewardItem", [this](uint32 index) -> const QuestRewardItemDisplay* { if (index >= m_questDetails.rewardItems.size()) { return nullptr; } return &m_questDetails.rewardItems[index]; }),
+			luabind::def_lambda("GetQuestRewardChoiceItemCount", [this]() -> uint32 { return static_cast<uint32>(m_questDetails.rewardItemsChoice.size()); }),
+			luabind::def_lambda("GetQuestRewardChoiceItem", [this](uint32 index) -> const QuestRewardItemDisplay* { if (index >= m_questDetails.rewardItemsChoice.size()) { return nullptr; } return &m_questDetails.rewardItemsChoice[index]; })
 		);
 	}
 
@@ -533,6 +544,13 @@ namespace mmo
 		// Raise UI event to show the quest list window to the user
 		FrameManager::Get().TriggerLuaEvent("QUEST_GREETING");
 
+		// Fire GOSSIP_SHOW for pure gossip menus (no quest list) — coexists with QUEST_GREETING per Research Pitfall 5
+		// Quest givers only receive QUEST_GREETING (showQuests != 0)
+		if (!showQuests)
+		{
+			FrameManager::Get().TriggerLuaEvent("GOSSIP_SHOW");
+		}
+
 		return PacketParseResult::Pass;
 	}
 
@@ -640,7 +658,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		if (rewardItemsChoiceCount > 0)
+		for (uint32 i = 0; i < rewardItemsChoiceCount; ++i)
 		{
 			uint32 itemId, count, displayId;
 			if (!(packet >> io::read<uint32>(itemId) >> io::read<uint32>(count) >> io::read<uint32>(displayId)))
@@ -648,6 +666,8 @@ namespace mmo
 				ELOG("Failed to read QuestGiverQuestDetails packet");
 				return PacketParseResult::Disconnect;
 			}
+
+			m_questDetails.rewardItemsChoice.push_back({ itemId, count, displayId });
 
 			if (itemId != 0)
 			{
@@ -661,7 +681,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		if (rewardItemsCount > 0)
+		for (uint32 i = 0; i < rewardItemsCount; ++i)
 		{
 			uint32 itemId, count, displayId;
 			if (!(packet >> io::read<uint32>(itemId) >> io::read<uint32>(count) >> io::read<uint32>(displayId)))
@@ -670,6 +690,8 @@ namespace mmo
 				return PacketParseResult::Disconnect;
 			}
 
+			m_questDetails.rewardItems.push_back({ itemId, count, displayId });
+
 			if (itemId != 0)
 			{
 				m_itemCache.Get(itemId);
@@ -677,7 +699,7 @@ namespace mmo
 		}
 
 		uint32 rewardSpellId = 0;
-		if (!(packet >> io::read<uint32>(m_questDetails.rewardMoney) >> io::read<uint32>(rewardSpellId)))
+		if (!(packet >> io::read<uint32>(m_questDetails.rewardMoney) >> io::read<uint32>(m_questDetails.rewardXp) >> io::read<uint32>(rewardSpellId)))
 		{
 			ELOG("Failed to read QuestGiverQuestDetails packet");
 			return PacketParseResult::Disconnect;
@@ -746,6 +768,69 @@ namespace mmo
 			ELOG("Failed to read QuestGiverOfferReward packet");
 			return PacketParseResult::Disconnect;
 		}
+
+		// Read reward items choice
+		uint32 rewardItemsChoiceCount;
+		if (!(packet >> io::read<uint32>(rewardItemsChoiceCount)))
+		{
+			ELOG("Failed to read QuestGiverOfferReward packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		for (uint32 i = 0; i < rewardItemsChoiceCount; ++i)
+		{
+			uint32 itemId, count, displayId;
+			if (!(packet >> io::read<uint32>(itemId) >> io::read<uint32>(count) >> io::read<uint32>(displayId)))
+			{
+				ELOG("Failed to read QuestGiverOfferReward packet");
+				return PacketParseResult::Disconnect;
+			}
+
+			m_questDetails.rewardItemsChoice.push_back({ itemId, count, displayId });
+
+			if (itemId != 0)
+			{
+				m_itemCache.Get(itemId);
+			}
+		}
+
+		// Read reward items
+		uint32 rewardItemsCount;
+		if (!(packet >> io::read<uint32>(rewardItemsCount)))
+		{
+			ELOG("Failed to read QuestGiverOfferReward packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		for (uint32 i = 0; i < rewardItemsCount; ++i)
+		{
+			uint32 itemId, count, displayId;
+			if (!(packet >> io::read<uint32>(itemId) >> io::read<uint32>(count) >> io::read<uint32>(displayId)))
+			{
+				ELOG("Failed to read QuestGiverOfferReward packet");
+				return PacketParseResult::Disconnect;
+			}
+
+			m_questDetails.rewardItems.push_back({ itemId, count, displayId });
+
+			if (itemId != 0)
+			{
+				m_itemCache.Get(itemId);
+			}
+		}
+
+		// Read reward money, XP, and spell
+		uint32 rewardSpellId = 0;
+		if (!(packet >> io::read<uint32>(m_questDetails.rewardMoney) >> io::read<uint32>(m_questDetails.rewardXp) >> io::read<uint32>(rewardSpellId)))
+		{
+			ELOG("Failed to read QuestGiverOfferReward packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		m_questDetails.rewardSpell = (rewardSpellId != 0) ? m_spells.getById(rewardSpellId) : nullptr;
+
+		// Ensure we have the quest in the cache
+		m_questCache.Get(m_questDetails.questId);
 
 		// Process quest text
 		ProcessQuestText(m_questDetails.questOfferRewardText);
@@ -876,6 +961,9 @@ namespace mmo
 
 	PacketParseResult QuestClient::OnGossipComplete(game::IncomingPacket& packet)
 	{
+		// Notify Lua that the gossip session has ended (per CONTEXT.md locked decision: Fire GOSSIP_CLOSED following VendorClient pattern)
+		FrameManager::Get().TriggerLuaEvent("GOSSIP_CLOSED");
+
 		CloseQuest();
 
 		return PacketParseResult::Pass;

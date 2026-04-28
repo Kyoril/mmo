@@ -33,13 +33,44 @@ message ColorTint
     optional uint32 duration_ms = 5;
 }
 
+// Point light configuration for spell effects
+message PointLightConfig
+{
+	optional float r = 1 [default = 1.0];
+	optional float g = 2 [default = 0.9];
+	optional float b = 3 [default = 0.7];
+	optional float intensity = 4 [default = 1.0];
+	optional float range = 5 [default = 10.0];
+	optional float attenuation = 6 [default = 1.0];
+	optional float fade_in_time = 7 [default = 0.3];
+	optional float fade_out_time = 8 [default = 0.5];
+}
+
+// Ribbon trail configuration for spell effects
+message RibbonTrailConfig
+{
+	optional string material_name = 1;
+	optional float initial_width = 2 [default = 0.5];
+	optional float final_width = 3 [default = 0.0];
+	optional float initial_r = 4 [default = 1.0];
+	optional float initial_g = 5 [default = 1.0];
+	optional float initial_b = 6 [default = 1.0];
+	optional float initial_a = 7 [default = 1.0];
+	optional float final_r = 8 [default = 1.0];
+	optional float final_g = 9 [default = 1.0];
+	optional float final_b = 10 [default = 1.0];
+	optional float final_a = 11 [default = 0.0];
+	optional float segment_lifetime = 12 [default = 1.0];
+	optional uint32 max_segments = 13 [default = 64];
+}
+
 // Projectile movement type
 enum ProjectileMotion
 {
-	LINEAR = 0;          // Straight line to target
-	ARC = 1;            // Ballistic arc
-	HOMING = 2;         // Follows moving target
-	SINE_WAVE = 3;      // Oscillating side-to-side
+	LINEAR = 0;
+	ARC = 1;
+	HOMING = 2;
+	SINE_WAVE = 3;
 }
 
 // Projectile visual configuration
@@ -65,9 +96,28 @@ message ProjectileVisual
 	// Effects
 	repeated string sounds = 12;                          // Looping sounds during flight
 	optional string impact_particle = 13;                 // Particle burst on impact
+
+	// Point light on the projectile
+	optional PointLightConfig light = 14;
+
+	// Ribbon trail behind the projectile
+	optional RibbonTrailConfig ribbon_trail = 15;
+
+	// Bone to spawn the projectile from (e.g., "hand_right")
+	optional string spawn_bone = 16;
+
+	// Horizontal arc width for ARC motion (perpendicular to the travel direction)
+	optional float arc_width = 17 [default = 0.0];
+
+	// Spawn offset to the right of the cast direction (negative = left).
+	// Used to spread multiple projectiles horizontally.
+	optional float spawn_offset_right = 18 [default = 0.0];
+
+	// Spawn offset upward from the cast position (negative = down).
+	optional float spawn_offset_up = 19 [default = 0.0];
 }
 
-// A visualization kit containing sounds, animation, and optional tint
+// A visualization kit containing sounds, animation, particles, lights, and optional tint
 message SpellKit
 {
 	repeated string sounds = 1;
@@ -76,6 +126,21 @@ message SpellKit
 	optional bool loop = 4 [default = false];
 	optional uint32 duration_ms = 5;
 	optional ColorTint tint = 6;
+
+	// Particle systems to spawn for this kit
+	repeated string particles = 7;
+
+	// Bone/socket name to attach effects to (e.g., "hand_right", "hand_left")
+	optional string attach_bone = 8;
+
+	// Point light attached to bone/position
+	optional PointLightConfig light = 9;
+
+	// Ribbon trail from bone/position
+	optional RibbonTrailConfig ribbon_trail = 10;
+
+	// Mesh to spawn at position/bone (e.g., a glow orb mesh)
+	optional string mesh_name = 11;
 }
 
 // List of kits for a specific event
@@ -95,7 +160,13 @@ message SpellVisualization
 	map<uint32, SpellKitList> kits_by_event = 4;
 
 	// Optional projectile configuration (if spell has speed > 0)
+	// Deprecated: use repeated projectiles field instead.
 	optional ProjectileVisual projectile = 5;
+
+	// Multiple projectile configurations (if spell has speed > 0).
+	// Each entry spawns a separate projectile. If this is empty, the
+	// singular 'projectile' field is used as a fallback for backward compatibility.
+	repeated ProjectileVisual projectiles = 6;
 }
 
 // Dataset containing all spell visualizations

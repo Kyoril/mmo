@@ -1087,6 +1087,15 @@ namespace mmo
 		{
 			static const char* s_none = "<None>";
 
+			// Combat Script Name field
+			ImGui::InputText("Combat Script", currentEntry.mutable_script_name());
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Name of the combat script to use (e.g. 'training_dummy', 'example_dungeon_boss').\nLeave empty for default AI behavior.");
+			}
+
+			ImGui::Separator();
+
 			// Display existing triggers in a table
 			if (ImGui::BeginTable("TriggerTable", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
 			{

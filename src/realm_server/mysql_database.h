@@ -121,6 +121,9 @@ namespace mmo
 		/// @copydoc IDatabase::SetGuildMemberRank
 		void SetGuildMemberRank(uint64 guildId, uint64 memberGuid, uint32 rank) override;
 
+		/// @copydoc IDatabase::SetGuildMotd
+		void SetGuildMotd(uint64 guildId, const String& motd) override;
+
 		/// @copydoc IDatabase::AddFriend
 		void AddFriend(uint64 characterId, uint64 friendId) override;
 

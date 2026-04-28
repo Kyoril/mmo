@@ -96,5 +96,13 @@ namespace mmo
 		const proto::ObjectEntry& m_entry;
 		scoped_connection_container m_lootSignals;
 		uint32 m_requiredQuestId = 0;
+
+		/// @brief Per-spawn loot entry override. 0 = use base ObjectEntry.objectlootentry.
+		uint32 m_lootEntryOverride = 0;
+
+	public:
+		/// @brief Sets a per-spawn loot entry override for this world object.
+		/// @param lootEntry The loot entry ID to use, or 0 to fall back to the base entry.
+		void SetLootEntryOverride(uint32 lootEntry) { m_lootEntryOverride = lootEntry; }
 	};
 }

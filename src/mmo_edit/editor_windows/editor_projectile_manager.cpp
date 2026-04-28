@@ -2,10 +2,16 @@
 
 #include "editor_projectile_manager.h"
 #include "audio/audio.h"
+
+#include <algorithm>
+
 #include "scene_graph/scene.h"
 #include "scene_graph/scene_node.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/particle_emitter.h"
+#include "scene_graph/light.h"
+#include "scene_graph/ribbon_trail.h"
+#include "scene_graph/material_manager.h"
 #include "base/macros.h"
 #include "log/default_log_levels.h"
 #include "math/quaternion.h"
@@ -38,6 +44,8 @@ namespace mmo
 		, m_node(nullptr)
 		, m_entity(nullptr)
 		, m_trailEmitter(nullptr)
+		, m_light(nullptr)
+		, m_ribbonTrail(nullptr)
 		, m_startPosition(startPosition)
 		, m_velocity(Vector3::UnitZ)
 		, m_travelTime(0.0f)
@@ -77,6 +85,54 @@ namespace mmo
 			}
 		}
 
+		// Create point light if specified
+		if (params.hasLight)
+		{
+			static uint64 s_lightId = 0;
+			const String lightName = "EditorProjectileLight_" + std::to_string(s_lightId++);
+			m_light = &m_scene.CreateLight(lightName, LightType::Point);
+			m_light->SetColor(params.lightColor);
+			m_light->SetIntensity(params.lightFadeInTime > 0.0f ? 0.0f : params.lightIntensity);
+			m_light->SetRange(params.lightRange);
+			m_node->AttachObject(*m_light);
+		}
+
+		// Create ribbon trail if specified
+		if (params.hasRibbonTrail)
+		{
+			static uint64 s_ribbonId = 0;
+			const String ribbonName = "EditorProjectileRibbon_" + std::to_string(s_ribbonId++);
+			m_ribbonTrail = m_scene.CreateRibbonTrail(ribbonName);
+
+			if (m_ribbonTrail)
+			{
+				RibbonTrailParameters ribbonParams;
+				ribbonParams.initialWidth = params.ribbonInitialWidth;
+				ribbonParams.finalWidth = params.ribbonFinalWidth;
+				ribbonParams.initialColor = params.ribbonInitialColor;
+				ribbonParams.finalColor = params.ribbonFinalColor;
+				ribbonParams.segmentLifetime = params.ribbonSegmentLifetime;
+				ribbonParams.maxSegments = params.ribbonMaxSegments;
+				m_ribbonTrail->SetParameters(ribbonParams);
+
+				if (!params.ribbonMaterial.empty())
+				{
+					auto material = MaterialManager::Get().Load(params.ribbonMaterial);
+					if (material)
+					{
+						m_ribbonTrail->SetMaterial(material);
+					}
+				}
+				else
+				{
+					m_ribbonTrail->SetMaterial(RibbonTrail::GetDefaultMaterial(true));
+				}
+
+				m_node->AttachObject(*m_ribbonTrail);
+				m_ribbonTrail->Play();
+			}
+		}
+
 		// Calculate initial velocity direction
 		if (m_target)
 		{
@@ -104,6 +160,21 @@ namespace mmo
 		{
 			m_audio->StopSound(&m_soundChannel);
 			m_soundChannel = InvalidChannel;
+		}
+
+		// Destroy ribbon trail
+		if (m_ribbonTrail)
+		{
+			m_ribbonTrail->Stop();
+			m_scene.DestroyRibbonTrail(*m_ribbonTrail);
+			m_ribbonTrail = nullptr;
+		}
+
+		// Destroy light
+		if (m_light)
+		{
+			m_scene.DestroyLight(*m_light);
+			m_light = nullptr;
 		}
 
 		// Destroy trail emitter
@@ -157,6 +228,17 @@ namespace mmo
 		// Update rotation
 		UpdateRotation(deltaTime);
 
+		// Update light fade-in
+		if (m_light && m_params.lightFadeInTime > 0.0f)
+		{
+			const float currentIntensity = m_light->GetIntensity();
+			if (currentIntensity < m_params.lightIntensity)
+			{
+				const float newIntensity = currentIntensity + (m_params.lightIntensity / m_params.lightFadeInTime) * deltaTime;
+				m_light->SetIntensity(std::min(newIntensity, m_params.lightIntensity));
+			}
+		}
+
 		// Update 3D sound position
 		if (m_audio && m_soundChannel != InvalidChannel)
 		{
@@ -168,7 +250,12 @@ namespace mmo
 		const Vector3 targetPos = m_target->GetPosition();
 		const float distanceToTarget = (targetPos - currentPos).GetLength();
 
-		if (distanceToTarget <= 0.5f)
+		// Use a distance threshold that accounts for the step size at the current speed,
+		// so high-speed or low-framerate projectiles don't oscillate past the target.
+		const float stepSize = m_params.speed * deltaTime;
+		const float hitThreshold = std::max(0.5f, stepSize * 1.1f);
+
+		if (distanceToTarget <= hitThreshold)
 		{
 			m_hasHit = true;
 			return true;
@@ -191,8 +278,10 @@ namespace mmo
 		const float distance = direction.GetLength();
 		if (distance > 0.0f)
 		{
+			// Clamp step to remaining distance to prevent overshooting
+			const float step = std::min(m_params.speed * deltaTime, distance);
 			direction.Normalize();
-			m_node->Translate(direction * m_params.speed * deltaTime, TransformSpace::World);
+			m_node->Translate(direction * step, TransformSpace::World);
 		}
 	}
 
@@ -204,7 +293,7 @@ namespace mmo
 		}
 
 		const Vector3 targetPos = m_target->GetPosition();
-		const float travelProgress = (m_travelTime * m_params.speed) / m_totalDistance;
+		const float travelProgress = std::min((m_travelTime * m_params.speed) / m_totalDistance, 1.0f);
 
 		if (travelProgress >= 1.0f)
 		{
@@ -215,11 +304,30 @@ namespace mmo
 		// Calculate arc position
 		const Vector3 linearPos = m_startPosition + (targetPos - m_startPosition) * travelProgress;
 
-		// Parabolic arc: height peaks at 50% progress
-		const float heightOffset = m_params.arcHeight * 4.0f * travelProgress * (1.0f - travelProgress);
-		const Vector3 arcPos = linearPos + Vector3(0.0f, heightOffset, 0.0f);
+		// Parabolic arc: peaks at 50% progress
+		const float arcFactor = 4.0f * travelProgress * (1.0f - travelProgress);
+		const float heightOffset = m_params.arcHeight * arcFactor;
 
-		m_node->SetPosition(arcPos);
+		// Horizontal arc offset
+		if (m_params.arcWidth != 0.0f)
+		{
+			Vector3 travelDir = targetPos - m_startPosition;
+			travelDir.Normalize();
+			Vector3 right = travelDir.Cross(Vector3::UnitY);
+			if (right.GetLength() < 0.001f)
+			{
+				right = travelDir.Cross(Vector3::UnitX);
+			}
+			right.Normalize();
+			const float widthOffset = m_params.arcWidth * arcFactor;
+			const Vector3 arcPos = linearPos + Vector3(0.0f, heightOffset, 0.0f) + right * widthOffset;
+			m_node->SetPosition(arcPos);
+		}
+		else
+		{
+			const Vector3 arcPos = linearPos + Vector3(0.0f, heightOffset, 0.0f);
+			m_node->SetPosition(arcPos);
+		}
 	}
 
 	void EditorProjectile::UpdateHomingMotion(float deltaTime)
@@ -240,13 +348,18 @@ namespace mmo
 		constexpr float homingStrength = 5.0f;
 
 		// Smoothly turn velocity toward target
+		const float lerpFactor = std::min(homingStrength * deltaTime, 1.0f);
 		m_velocity.Normalize();
-		m_velocity = m_velocity.Lerp(desiredDirection, homingStrength * deltaTime);
+		m_velocity = m_velocity.Lerp(desiredDirection, lerpFactor);
 		m_velocity.Normalize();
 		m_velocity *= m_params.speed;
 
-		// Move
-		m_node->Translate(m_velocity * deltaTime, TransformSpace::World);
+		// Clamp step to remaining distance to prevent overshooting
+		const float distToTarget = (targetPos - currentPos).GetLength();
+		const float step = std::min(m_velocity.GetLength() * deltaTime, distToTarget);
+		Vector3 moveDir = m_velocity;
+		moveDir.Normalize();
+		m_node->Translate(moveDir * step, TransformSpace::World);
 	}
 
 	void EditorProjectile::UpdateSineWaveMotion(float deltaTime)
@@ -260,8 +373,8 @@ namespace mmo
 		Vector3 direction = targetPos - m_startPosition;
 		direction.Normalize();
 
-		// Calculate forward progress
-		const float forwardDistance = m_travelTime * m_params.speed;
+		// Calculate forward progress, clamped to total distance
+		const float forwardDistance = std::min(m_travelTime * m_params.speed, m_totalDistance);
 		const Vector3 forwardPos = m_startPosition + direction * forwardDistance;
 
 		// Calculate perpendicular offset (sine wave)
@@ -306,6 +419,30 @@ namespace mmo
 	{
 	}
 
+	/// @brief Compute offset start position for a projectile based on spawn offsets.
+	static Vector3 ApplyEditorSpawnOffset(const Vector3 &startPosition, const Vector3 &targetPosition,
+	                                     float offsetRight, float offsetUp)
+	{
+		if (offsetRight == 0.0f && offsetUp == 0.0f)
+		{
+			return startPosition;
+		}
+
+		Vector3 forward = targetPosition - startPosition;
+		forward.y = 0.0f;
+		const float len = forward.GetLength();
+		if (len < 0.001f)
+		{
+			return startPosition + Vector3(offsetRight, offsetUp, 0.0f);
+		}
+
+		forward /= len;
+		Vector3 right = forward.Cross(Vector3::UnitY);
+		right.Normalize();
+
+		return startPosition + right * offsetRight + Vector3(0.0f, offsetUp, 0.0f);
+	}
+
 	void EditorProjectileManager::SpawnProjectile(const ProjectileParams& params,
 	                                              const Vector3& startPosition,
 	                                              std::shared_ptr<IProjectileTarget> target)
@@ -320,7 +457,11 @@ namespace mmo
 			return;
 		}
 
-		auto projectile = std::make_unique<EditorProjectile>(m_scene, m_audio, params, startPosition, target);
+		const Vector3 targetPosition = target->GetPosition();
+		const Vector3 startPos = ApplyEditorSpawnOffset(startPosition, targetPosition,
+			params.spawnOffsetRight, params.spawnOffsetUp);
+
+		auto projectile = std::make_unique<EditorProjectile>(m_scene, m_audio, params, startPos, target);
 		m_projectiles.push_back(std::move(projectile));
 	}
 

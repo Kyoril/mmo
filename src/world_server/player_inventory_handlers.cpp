@@ -105,6 +105,47 @@ namespace mmo
 		// Consume this item
 		auto playerGuid = m_character->GetGuid();
 		m_loot->TakeItem(lootSlot, playerGuid);
+
+		// Notify in-sight group members that we looted this item
+		if (m_character->GetGroupId() != 0)
+		{
+			const String characterName = m_character->GetName();
+			const uint32 itemId = item->id();
+			const uint8 itemQuality = static_cast<uint8>(item->quality());
+			const uint8 itemCount = static_cast<uint8>(lootItem->count);
+
+			m_character->ForEachSubscriberInSight([&characterName, itemId, itemQuality, itemCount, this](TileSubscriber& subscriber)
+			{
+				if (subscriber.GetGameUnit().GetGuid() == m_character->GetGuid())
+				{
+					return;
+				}
+
+				if (!subscriber.GetGameUnit().IsPlayer())
+				{
+					return;
+				}
+
+				GamePlayerS& gamePlayer = subscriber.GetGameUnit().AsPlayer();
+				if (gamePlayer.GetGroupId() == m_character->GetGroupId())
+				{
+					std::shared_ptr<Player> member = m_manager.GetPlayerByCharacterGuid(gamePlayer.GetGuid());
+					if (member)
+					{
+						member->SendPacket([&characterName, itemId, itemQuality, itemCount](game::OutgoingPacket& packet)
+						{
+							packet.Start(game::realm_client_packet::LootItemNotify);
+							packet
+								<< io::write_dynamic_range<uint8>(characterName)
+								<< io::write<uint32>(itemId)
+								<< io::write<uint8>(itemQuality)
+								<< io::write<uint8>(itemCount);
+							packet.Finish();
+						});
+					}
+				}
+			});
+		}
 	}
 
 	void Player::OnAutoEquipItem(uint16 opCode, uint32 size, io::Reader &contentReader)

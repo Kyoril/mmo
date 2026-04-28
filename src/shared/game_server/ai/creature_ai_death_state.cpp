@@ -188,8 +188,29 @@ namespace mmo
 					weakRecipients.push_back(recipient.second);
 				}
 
+				// Read loot method from first recipient — must be done here; LootInstance has no auth context.
+				LootMethod groupLootMethod = loot_method::FreeForAll;
+				uint64 lootMasterGuid = 0;
+				if (!weakRecipients.empty())
+				{
+					if (const auto firstPlayer = weakRecipients.front().lock())
+					{
+						groupLootMethod = firstPlayer->GetLootMethod();
+						lootMasterGuid = firstPlayer->GetLootMasterGuid();
+					}
+				}
+
 				ASSERT(controlled.GetWorldInstance());
-				auto loot = std::make_unique<LootInstance>(controlled.GetProject().items, controlled.GetWorldInstance()->GetConditionMgr(), controlled.GetGuid(), lootEntry, lootEntry->minmoney(), lootEntry->maxmoney(), weakRecipients);
+				auto loot = std::make_unique<LootInstance>(
+					controlled.GetProject().items,
+					controlled.GetWorldInstance()->GetConditionMgr(),
+					controlled.GetGuid(),
+					lootEntry,
+					lootEntry->minmoney(),
+					lootEntry->maxmoney(),
+					weakRecipients,
+					groupLootMethod,
+					lootMasterGuid);
 
 				// 3 Minutes of despawn delay if creature still has loot
 				despawnDelay = constants::OneMinute * 3;

@@ -11,6 +11,7 @@
 
 #include "condition_mgr.h"
 #include "proto_data/project.h"
+#include "game/group.h"
 
 namespace io
 {
@@ -33,6 +34,9 @@ namespace mmo
 		/// The loot definition of this item which contains what item it is and other loot-related properties.
 		const proto::LootDefinition& definition;
 
+		/// The GUID of the player assigned to receive this item (used for RoundRobin loot method). 0 = unassigned.
+		uint64 assignedRecipientGuid = 0;
+
 		/// Default constructor.
 		/// @param count The number of items in this loot item.
 		/// @param def The loot definition of this item.
@@ -40,6 +44,7 @@ namespace mmo
 			: isLooted(false)
 			, count(count)
 			, definition(def)
+			, assignedRecipientGuid(0)
 		{
 		}
 	};
@@ -74,7 +79,21 @@ namespace mmo
 		/// Initializes a new instance of the loot instance.
 		explicit LootInstance(const proto::ItemManager& items, const ConditionMgr& conditionMgr, uint64 lootGuid);
 
-		explicit LootInstance(const proto::ItemManager& items, const ConditionMgr& conditionMgr, uint64 lootGuid, const proto::LootEntry* entry, uint32 minGold, uint32 maxGold, const std::vector<std::weak_ptr<GamePlayerS>>& lootRecipients);
+		/// Initializes a new instance of the loot instance with a loot entry and recipients.
+		/// @param items The item manager used to look up item templates.
+		/// @param conditionMgr The condition manager used to evaluate quest item conditions.
+		/// @param lootGuid The unique GUID of the loot source object.
+		/// @param entry The loot entry template defining possible drops.
+		/// @param minGold Minimum gold to generate.
+		/// @param maxGold Maximum gold to generate.
+		/// @param lootRecipients The list of eligible loot recipients.
+		/// @param lootMethod The loot distribution method to enforce. Defaults to FreeForAll.
+		/// @param lootMasterGuid The GUID of the loot master (only meaningful for MasterLoot). Defaults to 0.
+		explicit LootInstance(const proto::ItemManager& items, const ConditionMgr& conditionMgr, uint64 lootGuid,
+			const proto::LootEntry* entry, uint32 minGold, uint32 maxGold,
+			const std::vector<std::weak_ptr<GamePlayerS>>& lootRecipients,
+			LootMethod lootMethod = loot_method::FreeForAll,
+			uint64 lootMasterGuid = 0);
 
 	public:
 		/// Returns the id of this loot instance.
@@ -124,5 +143,7 @@ namespace mmo
 		std::vector<LootItem> m_items;
 		std::vector<uint64> m_recipients;
 		PlayerLootEntries m_playerLootData;
+		LootMethod m_lootMethod = loot_method::FreeForAll;
+		uint64 m_lootMasterGuid = 0;
 	};
 }

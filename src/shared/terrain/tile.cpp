@@ -182,24 +182,53 @@ namespace mmo
 				return;
 			}
 
-			// Check occlusion query result from previous frame
+			// Occlusion culling with hysteresis to prevent popping artefacts.
+			//
+			// The key insight: a single 0-pixel query result should NOT immediately
+			// hide a tile. Transient occlusion (camera jitter, depth ordering changes)
+			// can produce spurious 0-pixel frames. Instead we require several
+			// consecutive occluded frames before actually hiding the tile.
+			//
+			// During the "grace period" the tile keeps rendering and keeps issuing
+			// queries, so we get fresh data every frame and can detect when the
+			// transient occluder moves away without any visible pop.
+			//
+			// Additionally, tiles at LOD 0 (closest to the camera) are never culled
+			// because pops at close range are the most noticeable artefact.
 			if (m_page.GetTerrain().IsOcclusionCullingEnabled() && m_occlusionQuery)
 			{
+				// Never occlude tiles at the closest LOD – pops are too visible.
+				const bool closeRange = (m_currentLod == 0);
+
 				uint64 pixelCount = 0;
 				if (m_occlusionQuery->TryGetResult(pixelCount))
 				{
-					m_occlusionVisible = (pixelCount > 0);
-
-					if (!m_occlusionVisible)
+					if (pixelCount > 0)
 					{
+						// Tile is visible – reset all occluded state immediately.
+						m_occlusionVisible = true;
+						m_consecutiveOccludedFrames = 0;
 						m_occlusionSkippedFrames = 0;
+					}
+					else
+					{
+						// Query returned 0 pixels but do not hide right away.
+						m_consecutiveOccludedFrames++;
+
+						if (m_consecutiveOccludedFrames >= OcclusionGraceFrames && !closeRange)
+						{
+							// Enough consecutive 0-pixel frames – tile is truly hidden.
+							m_occlusionVisible = false;
+							m_occlusionSkippedFrames = 0;
+						}
+						// Otherwise: still in grace period, keep rendering & querying.
 					}
 				}
 
-				// If the tile was occluded, skip rendering most frames but periodically
+				// If confirmed occluded, skip rendering most frames but periodically
 				// re-test to detect when the tile becomes visible again.
-				// Use staggered retesting to distribute the cost across frames.
-				if (!m_occlusionVisible)
+				// Staggered retesting distributes the GPU cost across frames.
+				if (!m_occlusionVisible && !closeRange)
 				{
 					m_occlusionSkippedFrames++;
 

@@ -30,6 +30,18 @@ namespace mmo
 
 		D32F,
 
+		/// Single-channel 8-bit (grayscale, alpha masks, heightmaps)
+		R8,
+
+		/// Two-channel 8-bit (normal maps stored as XY, reconstructed Z in shader)
+		RG8,
+
+		/// BC4 compressed single-channel
+		BC4,
+
+		/// BC5 compressed two-channel (normal maps)
+		BC5,
+
 		Unknown
 	};
 
@@ -127,6 +139,12 @@ namespace mmo
 		virtual TextureFilter GetTextureFilter() const { return m_filter; }
 		
 		virtual void SetFilter(const TextureFilter filter) { m_filter = filter; }
+
+		/// Gets the number of mip map levels for this texture.
+		virtual uint32 GetMipMapCount() const { return m_mipCount; }
+
+		/// Gets whether this texture has mip maps.
+		virtual bool HasMipMaps() const { return m_header.hasMips; }
 
 		void SetDebugName(String debugName);
 

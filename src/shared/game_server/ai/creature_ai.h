@@ -90,6 +90,10 @@ namespace mmo
 		/// Determines if this creature's AI is currently in evade mode.
 		bool IsEvading() const { return m_evading; }
 
+		/// @brief Returns the current AI state.
+		/// @return Pointer to the current AI state, or nullptr if none.
+		CreatureAIState* GetCurrentState() const { return m_state.get(); }
+
 	public:
 		// These methods are meant to be called by the AI states on specific events.
 		void OnThreatened(GameUnitS& threat, float amount);

@@ -87,6 +87,12 @@ namespace mmo
 		/// Adds an instance binding for a map.
 		bool AddInstanceBinding(InstanceId instance, uint32 map);
 
+		/// Removes the instance binding for a specific map.
+		void RemoveInstanceBinding(uint32 map);
+
+		/// Removes any instance binding that matches a specific instance id.
+		void RemoveInstanceBindingByInstanceId(InstanceId instanceId);
+
 		/// Converts the group into a raid group.
 		void ConvertToRaidGroup();
 
@@ -102,6 +108,9 @@ namespace mmo
 		/// Returns the number of group members.
 		size_t GetMemberCount() const { return m_members.size(); }
 
+		/// Returns a const reference to the map of group members, keyed by character GUID.
+		const MembersByGUID& GetMembers() const { return m_members; }
+
 		/// Determines whether this group has been created.
 		bool IsCreated() const { return m_leaderGUID != 0; }
 
@@ -110,6 +119,9 @@ namespace mmo
 
 		/// Gets the groups loot method.
 		LootMethod GetLootMethod() const { return m_lootMethod; }
+
+		/// Gets the loot master's GUID (valid when loot method is MasterLoot).
+		[[nodiscard]] uint64 GetLootMasterGuid() const { return m_lootMaster; }
 
 		/// Gets the group leaders GUID.
 		uint64 GetLeader() const { return m_leaderGUID; }

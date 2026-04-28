@@ -4,6 +4,7 @@
 
 #include "base/typedefs.h"
 #include "creature_ai_state.h"
+#include "creature_combat_script.h"
 #include "base/countdown.h"
 #include "objects/game_unit_s.h"
 #include "math/vector3.h"
@@ -113,6 +114,8 @@ namespace mmo
 			float combatRange;
 			/// Whether we are currently moving to a valid combat position.
 			bool isMovingToCombat;
+			/// Last recorded waypoint target position (for player movement detection).
+			Vector3 lastWaypointTarget;
 
 			/**
 			 * @brief Constructs a new movement state.
@@ -121,6 +124,7 @@ namespace mmo
 				: targetPosition(Vector3::Zero)
 				, combatRange(0.0f)
 				, isMovingToCombat(false)
+				, lastWaypointTarget(Vector3::Zero)
 			{
 			}
 
@@ -193,6 +197,44 @@ namespace mmo
 		 * @param succeeded Whether the spell cast succeeded.
 		 */
 		void OnSpellCastEnded(bool succeeded);
+
+		// === Script Support API ===
+
+		/**
+		 * @brief Gets all living units currently on the threat list.
+		 * @return Vector of pointers to alive threat targets.
+		 */
+		std::vector<GameUnitS*> GetThreatTargets() const;
+
+		/**
+		 * @brief Whether the creature is currently casting a spell.
+		 * @return True if casting.
+		 */
+		bool IsCasting() const { return m_isCasting; }
+
+		/**
+		 * @brief Gets the number of units on the threat list.
+		 * @return Number of threat entries.
+		 */
+		uint32 GetThreatCount() const { return static_cast<uint32>(m_threat.size()); }
+
+		/**
+		 * @brief Adds threat from a script context.
+		 * @param threatener The threatening unit.
+		 * @param amount Threat amount (can be negative to reduce).
+		 */
+		void AddThreatFromScript(GameUnitS& threatener, float amount);
+
+		/**
+		 * @brief Resets all threat values to zero (called from scripts).
+		 */
+		void ResetAllThreatFromScript();
+
+		/**
+		 * @brief Gets the active combat script, if any.
+		 * @return Pointer to the combat script, or nullptr.
+		 */
+		CreatureCombatScript* GetScript() const { return m_script.get(); }
 
 	private:
 		// === Threat Management ===
@@ -384,6 +426,7 @@ namespace mmo
 		// === Timing and Counters ===
 		GameTime m_lastThreatTime;
 		Countdown m_nextActionCountdown;
+		Countdown m_recalculationCountdown;
 		uint32 m_stuckCounter;
 		
 		// === Flags ===
@@ -406,7 +449,11 @@ namespace mmo
 		
 		// === Casting Timeout ===
 		GameTime m_castingTimeoutEnd;
-				// === Constants ===
+
+		// === Combat Script ===
+		std::unique_ptr<CreatureCombatScript> m_script;
+
+		// === Constants ===
 		static constexpr float RESET_DISTANCE_SQ = 60.0f * 60.0f;
 		static constexpr uint32 RESET_TIMEOUT_MS = 10000;  // 10 seconds
 		static constexpr uint32 MAX_STUCK_COUNT = 20;
@@ -423,5 +470,9 @@ namespace mmo
 		static constexpr float FORMATION_ANGLE_STEP = 0.7f;
 		/// Maximum angular spread for the formation semicircle (radians, ~160 degrees)
 		static constexpr float FORMATION_MAX_ANGLE = 2.8f;
+		/// Distance threshold for waypoint recalculation when player moves (5m, stored as squared distance)
+		static constexpr float PLAYER_POSITION_THRESHOLD = 25.0f; // 5^2 = 25
+		/// Periodic recalculation interval (500ms for responsive positioning updates)
+		static constexpr uint32 RECALCULATION_INTERVAL_MS = 500;
 	};
 }

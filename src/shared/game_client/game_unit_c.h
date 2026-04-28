@@ -122,6 +122,12 @@ namespace mmo
 		/// @brief Updates animation based on movement state
 		void UpdateMovementBasedAnimation();
 
+		/// @brief Returns the current walk/run mode replicated from the server.
+		[[nodiscard]] UnitMovementMode GetMovementMode() const { return GetUnitMovementModeFromFlags(m_movementInfo.movementFlags); }
+
+		/// @brief Returns true if walk mode is currently enabled.
+		[[nodiscard]] bool IsWalkModeEnabled() const { return GetMovementMode() == unit_movement_mode::Walk; }
+
 		/// @brief Updates animation states (transitions, blending, etc.)
 		void UpdateAnimationStates(const float deltaTime, const bool isDead);
 
@@ -260,7 +266,7 @@ namespace mmo
 		void SetJumpForceTimeRemining(float remaining) { m_jumpForceTimeRemaining = remaining; }
 
 		/// @brief Makes the unit follow a given path of points.
-		void SetMovementPath(const std::vector<Vector3> &points, GameTime moveTime, const std::optional<Radian> &targetRotation);
+		void SetMovementPath(const std::vector<Vector3> &points, GameTime moveTime, const std::optional<Radian> &targetRotation, UnitMovementMode movementMode);
 
 		void SetSpeed(const movement_type::Type type, float speed) { m_unitSpeed[type] = speed; }
 
@@ -528,7 +534,8 @@ namespace mmo
 		bool IsFollowingPath() const { return !m_movementPath.empty() && !m_pathCompleted; }
 
 		/// Calculates position along the path based on distance traveled
-		Vector3 CalculatePositionAlongPath(float distance) const;
+		/// Applies easing at waypoint turns for smooth transitions
+		Vector3 CalculatePositionAlongPath(float distance);
 
 	public:
 		/// Returns true if this unit is controlled by the local player
@@ -551,11 +558,23 @@ namespace mmo
 		bool m_pathCompleted = false;
 		GameTime m_pathStartTime = 0;			 // When the path movement started
 		float m_pathTotalLength = 0.0f;			 // Total length of all path segments
+		float m_pathMoveSpeed = 0.0f;			 // Movement speed derived from server path duration
 		std::vector<float> m_pathSegmentLengths; // Length of each segment for time calculation
 
 		// Path gravity simulation
 		float m_pathVerticalVelocity = 0.0f; // Current vertical velocity for gravity
 		bool m_pathOnGround = true;			 // Whether unit is on ground during path movement
+
+		// Easing state tracking for smooth path transitions
+		float m_easingProgress = 0.0f;		 // Current easing progress [0, 1] within waypoint transition
+		float m_easingTransitionDistance = 0.0f; // Distance being eased for current turn
+
+		/// @brief Detects if there's a turn between two consecutive path segments
+		/// @param prevPoint Previous waypoint
+		/// @param currPoint Current waypoint
+		/// @param nextPoint Next waypoint
+		/// @return True if a turn is detected (angle > threshold)
+		bool DetectTurnBetweenSegments(const Vector3& prevPoint, const Vector3& currPoint, const Vector3& nextPoint) const;
 
 		std::vector<const proto_client::SpellEntry *> m_spells;
 		std::vector<const proto_client::SpellEntry *> m_spellBookSpells;
@@ -585,6 +604,7 @@ namespace mmo
 	protected:
 		// Animation stuff
 		AnimationState *m_idleAnimState{nullptr};
+		AnimationState *m_walkAnimState{nullptr};
 		AnimationState *m_readyAnimState{nullptr};
 		AnimationState *m_runAnimState{nullptr};
 		AnimationState *m_deathState{nullptr};

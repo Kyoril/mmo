@@ -5,6 +5,16 @@
 #include "object_mgr.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/animation_state.h"
+#include "scene_graph/scene.h"
+#include "scene_graph/scene_node.h"
+#include "scene_graph/particle_emitter.h"
+#include "scene_graph/particle_emitter_serializer.h"
+#include "scene_graph/ribbon_trail.h"
+#include "scene_graph/light.h"
+#include "scene_graph/skeleton.h"
+#include "scene_graph/tag_point.h"
+#include "scene_graph/material_manager.h"
+#include "assets/asset_registry.h"
 
 #include <algorithm>
 
@@ -121,6 +131,9 @@ namespace mmo
             
             // Remove tints for this spell on the caster
             RemoveTintFromActor(*caster, spell.id());
+
+            // Clean up visual effects (particles, lights, ribbon trails)
+            CleanupEffectsForActor(casterGuid, spell.id());
         }
         
         if (!hasKits)
@@ -128,6 +141,8 @@ namespace mmo
             // No kits to apply, we're done
             return;
         }
+
+        const bool isInstantEvent = (event == Event::CancelCast || event == Event::CastSucceeded || event == Event::Impact || event == Event::AuraTick);
 
         const proto_client::SpellKitList& kitList = it->second;
 
@@ -139,7 +154,7 @@ namespace mmo
             {
                 if(unit)
                 {
-                    ApplyKitToActor(*vis, kit, *unit, spell.id());
+                    ApplyKitToActor(*vis, kit, *unit, spell.id(), isInstantEvent);
                 }
             };
 
@@ -162,7 +177,8 @@ namespace mmo
     void SpellVisualizationService::ApplyKitToActor(const proto_client::SpellVisualization& vis,
                                                      const proto_client::SpellKit& kit,
                                                      GameUnitC& actor,
-                                                     uint32 spellId)
+                                                     uint32 spellId,
+                                                     bool instantEvent)
     {
         // Apply animation if specified
         ApplyAnimationToActor(kit, actor, spellId);
@@ -259,6 +275,15 @@ namespace mmo
 
         // Apply tint to the actor
         ApplyTintToActor(kit, actor, spellId);
+
+        // Spawn particle emitters
+        ApplyParticlesToActor(kit, actor, spellId);
+
+        // Spawn point light
+        ApplyLightToActor(kit, actor, spellId, instantEvent);
+
+        // Spawn ribbon trail
+        ApplyRibbonTrailToActor(kit, actor, spellId);
     }
 
     void SpellVisualizationService::ApplyAnimationToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId)
@@ -466,6 +491,97 @@ namespace mmo
             std::remove_if(m_fadingSounds.begin(), m_fadingSounds.end(),
                 [](const FadingSound& fs) { return fs.markedForRemoval; }),
             m_fadingSounds.end());
+
+        // Update fading lights
+        for (auto it = m_fadingLights.begin(); it != m_fadingLights.end(); )
+        {
+            if (!it->light)
+            {
+                it = m_fadingLights.erase(it);
+                continue;
+            }
+
+            if (it->fadingOut)
+            {
+                it->currentIntensity -= it->fadeOutSpeed * deltaTime;
+                if (it->currentIntensity <= 0.0f)
+                {
+                    it->currentIntensity = 0.0f;
+                    it->light->SetIntensity(0.0f);
+
+                    // Find the scene via the actor and destroy the light
+                    auto actor = ObjectMgr::Get<GameUnitC>(it->actorGuid);
+                    if (actor)
+                    {
+                        Scene& scene = actor->GetScene();
+                        scene.DestroyLight(*it->light);
+                    }
+
+                    // Remove from effect tracking
+                    for (auto& effect : m_activeEffects)
+                    {
+                        for (auto litIt = effect.lights.begin(); litIt != effect.lights.end(); ++litIt)
+                        {
+                            if (*litIt == it->light)
+                            {
+                                effect.lights.erase(litIt);
+                                break;
+                            }
+                        }
+                    }
+
+                    // Clean up empty effects (destroy remaining scene nodes)
+                    for (auto effIt = m_activeEffects.begin(); effIt != m_activeEffects.end(); )
+                    {
+                        if (effIt->particles.empty() && effIt->lights.empty() &&
+                            effIt->ribbonTrails.empty())
+                        {
+                            auto effActor = ObjectMgr::Get<GameUnitC>(effIt->actorGuid);
+                            if (effActor)
+                            {
+                                Scene& effScene = effActor->GetScene();
+                                for (auto* node : effIt->effectNodes)
+                                {
+                                    if (node)
+                                    {
+                                        effScene.DestroySceneNode(*node);
+                                    }
+                                }
+                            }
+                            effIt = m_activeEffects.erase(effIt);
+                        }
+                        else
+                        {
+                            ++effIt;
+                        }
+                    }
+
+                    it = m_fadingLights.erase(it);
+                    continue;
+                }
+
+                it->light->SetIntensity(it->currentIntensity);
+            }
+            else
+            {
+                if (it->currentIntensity < it->targetIntensity)
+                {
+                    it->currentIntensity += it->fadeInSpeed * deltaTime;
+                    if (it->currentIntensity >= it->targetIntensity)
+                    {
+                        it->currentIntensity = it->targetIntensity;
+                    }
+                    it->light->SetIntensity(it->currentIntensity);
+                }
+                else if (it->autoFadeOut && it->fadeOutSpeed > 0.0f)
+                {
+                    // Fade-in is complete and this is an instant event — auto-trigger fade-out
+                    it->fadingOut = true;
+                }
+            }
+
+            ++it;
+        }
     }
 
     void SpellVisualizationService::ApplyTintToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId)
@@ -488,6 +604,430 @@ namespace mmo
         actor.RemoveSpellTint(spellId);
     }
 
+    void SpellVisualizationService::ApplyParticlesToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId)
+    {
+        if (kit.particles_size() == 0)
+        {
+            return;
+        }
+
+        Entity* entity = actor.GetEntity();
+        SceneNode* sceneNode = actor.GetSceneNode();
+        if (!entity || !sceneNode)
+        {
+            return;
+        }
+
+        Scene& scene = actor.GetScene();
+        const uint64 guid = actor.GetGuid();
+
+        // Find or create the effect tracking for this actor+spell
+        ActiveSpellEffect* effect = nullptr;
+        for (auto& e : m_activeEffects)
+        {
+            if (e.actorGuid == guid && e.spellId == spellId)
+            {
+                effect = &e;
+                break;
+            }
+        }
+
+        if (!effect)
+        {
+            m_activeEffects.emplace_back();
+            effect = &m_activeEffects.back();
+            effect->spellId = spellId;
+            effect->actorGuid = guid;
+        }
+
+        for (int i = 0; i < kit.particles_size(); ++i)
+        {
+            const auto& particlePath = kit.particles(i);
+            if (particlePath.empty())
+            {
+                continue;
+            }
+
+            try
+            {
+                const String emitterName = "SpellParticle_" + std::to_string(m_effectCounter++);
+                ParticleEmitter* emitter = scene.CreateParticleEmitter(emitterName);
+                if (!emitter)
+                {
+                    continue;
+                }
+
+                // Load particle parameters from .hpfx file
+                const auto file = AssetRegistry::OpenFile(particlePath);
+                if (file)
+                {
+                    io::StreamSource source(*file);
+                    io::Reader reader(source);
+
+                    ParticleEmitterSerializer serializer;
+                    ParticleEmitterParameters params;
+                    if (serializer.Deserialize(params, reader))
+                    {
+                        emitter->SetParameters(params);
+                    }
+                }
+
+                // Attach to bone if specified
+                if (kit.has_attach_bone() && !kit.attach_bone().empty() && entity->HasSkeleton())
+                {
+                    auto skeleton = entity->GetSkeleton();
+                    if (skeleton && skeleton->HasBone(kit.attach_bone()))
+                    {
+                        entity->AttachObjectToBone(kit.attach_bone(), *emitter);
+                    }
+                    else
+                    {
+                        SceneNode* childNode = sceneNode->CreateChildSceneNode(emitterName + "_Node");
+                        childNode->AttachObject(*emitter);
+                        effect->effectNodes.push_back(childNode);
+                    }
+                }
+                else
+                {
+                    SceneNode* childNode = sceneNode->CreateChildSceneNode(emitterName + "_Node");
+                    childNode->AttachObject(*emitter);
+                    effect->effectNodes.push_back(childNode);
+                }
+
+                emitter->Play();
+                effect->particles.push_back(emitter);
+            }
+            catch (const std::exception& e)
+            {
+                ELOG("Failed to spawn spell particle '" << particlePath << "': " << e.what());
+            }
+        }
+    }
+
+    void SpellVisualizationService::ApplyLightToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, bool instantEvent)
+    {
+        if (!kit.has_light())
+        {
+            return;
+        }
+
+        Entity* entity = actor.GetEntity();
+        SceneNode* sceneNode = actor.GetSceneNode();
+        if (!entity || !sceneNode)
+        {
+            return;
+        }
+
+        Scene& scene = actor.GetScene();
+        const uint64 guid = actor.GetGuid();
+
+        // Find or create the effect tracking
+        ActiveSpellEffect* effect = nullptr;
+        for (auto& e : m_activeEffects)
+        {
+            if (e.actorGuid == guid && e.spellId == spellId)
+            {
+                effect = &e;
+                break;
+            }
+        }
+
+        if (!effect)
+        {
+            m_activeEffects.emplace_back();
+            effect = &m_activeEffects.back();
+            effect->spellId = spellId;
+            effect->actorGuid = guid;
+        }
+
+        try
+        {
+            const auto& lightConfig = kit.light();
+            const String lightName = "SpellLight_" + std::to_string(m_effectCounter++);
+
+            const float targetIntensity = lightConfig.intensity();
+            const float fadeInTime = lightConfig.has_fade_in_time() ? lightConfig.fade_in_time() : 0.3f;
+            const float fadeOutTime = lightConfig.has_fade_out_time() ? lightConfig.fade_out_time() : 0.5f;
+
+            Light& light = scene.CreateLight(lightName, LightType::Point);
+            light.SetColor(Vector4(lightConfig.r(), lightConfig.g(), lightConfig.b(), 1.0f));
+            light.SetRange(lightConfig.range());
+
+            // Start at 0 intensity if fading in, otherwise full intensity
+            if (fadeInTime > 0.0f)
+            {
+                light.SetIntensity(0.0f);
+            }
+            else
+            {
+                light.SetIntensity(targetIntensity);
+            }
+
+            // Attach to bone if specified
+            if (kit.has_attach_bone() && !kit.attach_bone().empty() && entity->HasSkeleton())
+            {
+                auto skeleton = entity->GetSkeleton();
+                if (skeleton && skeleton->HasBone(kit.attach_bone()))
+                {
+                    entity->AttachObjectToBone(kit.attach_bone(), light);
+                }
+                else
+                {
+                    SceneNode* childNode = sceneNode->CreateChildSceneNode(lightName + "_Node");
+                    childNode->AttachObject(light);
+                    effect->effectNodes.push_back(childNode);
+                }
+            }
+            else
+            {
+                SceneNode* childNode = sceneNode->CreateChildSceneNode(lightName + "_Node");
+                childNode->AttachObject(light);
+                effect->effectNodes.push_back(childNode);
+            }
+
+            effect->lights.push_back(&light);
+
+            // Track for fading
+            FadingLight fl;
+            fl.light = &light;
+            fl.actorGuid = guid;
+            fl.currentIntensity = (fadeInTime > 0.0f) ? 0.0f : targetIntensity;
+            fl.targetIntensity = targetIntensity;
+            fl.fadeInSpeed = (fadeInTime > 0.0f) ? (targetIntensity / fadeInTime) : 0.0f;
+            fl.fadeOutSpeed = (fadeOutTime > 0.0f) ? (targetIntensity / fadeOutTime) : 0.0f;
+            fl.fadingOut = false;
+            fl.autoFadeOut = instantEvent;
+            m_fadingLights.push_back(fl);
+        }
+        catch (const std::exception& e)
+        {
+            ELOG("Failed to spawn spell light: " << e.what());
+        }
+    }
+
+    void SpellVisualizationService::ApplyRibbonTrailToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId)
+    {
+        if (!kit.has_ribbon_trail())
+        {
+            return;
+        }
+
+        Entity* entity = actor.GetEntity();
+        SceneNode* sceneNode = actor.GetSceneNode();
+        if (!entity || !sceneNode)
+        {
+            return;
+        }
+
+        Scene& scene = actor.GetScene();
+        const uint64 guid = actor.GetGuid();
+
+        // Find or create the effect tracking
+        ActiveSpellEffect* effect = nullptr;
+        for (auto& e : m_activeEffects)
+        {
+            if (e.actorGuid == guid && e.spellId == spellId)
+            {
+                effect = &e;
+                break;
+            }
+        }
+
+        if (!effect)
+        {
+            m_activeEffects.emplace_back();
+            effect = &m_activeEffects.back();
+            effect->spellId = spellId;
+            effect->actorGuid = guid;
+        }
+
+        try
+        {
+            const auto& trailConfig = kit.ribbon_trail();
+            const String trailName = "SpellRibbon_" + std::to_string(m_effectCounter++);
+
+            RibbonTrail* trail = scene.CreateRibbonTrail(trailName);
+            if (!trail)
+            {
+                return;
+            }
+
+            // Configure ribbon trail parameters
+            RibbonTrailParameters params;
+            params.initialWidth = trailConfig.initial_width();
+            params.finalWidth = trailConfig.final_width();
+            params.initialColor = Vector4(trailConfig.initial_r(), trailConfig.initial_g(),
+                trailConfig.initial_b(), trailConfig.initial_a());
+            params.finalColor = Vector4(trailConfig.final_r(), trailConfig.final_g(),
+                trailConfig.final_b(), trailConfig.final_a());
+            params.segmentLifetime = trailConfig.segment_lifetime();
+            params.maxSegments = trailConfig.max_segments();
+            trail->SetParameters(params);
+
+            // Load material if specified
+            if (trailConfig.has_material_name() && !trailConfig.material_name().empty())
+            {
+                auto material = MaterialManager::Get().Load(trailConfig.material_name());
+                if (material)
+                {
+                    trail->SetMaterial(material);
+                }
+            }
+            else
+            {
+                trail->SetMaterial(RibbonTrail::GetDefaultMaterial(true));
+            }
+
+            // Attach to bone if specified
+            if (kit.has_attach_bone() && !kit.attach_bone().empty() && entity->HasSkeleton())
+            {
+                auto skeleton = entity->GetSkeleton();
+                if (skeleton && skeleton->HasBone(kit.attach_bone()))
+                {
+                    entity->AttachObjectToBone(kit.attach_bone(), *trail);
+                }
+                else
+                {
+                    SceneNode* childNode = sceneNode->CreateChildSceneNode(trailName + "_Node");
+                    childNode->AttachObject(*trail);
+                    effect->effectNodes.push_back(childNode);
+                }
+            }
+            else
+            {
+                SceneNode* childNode = sceneNode->CreateChildSceneNode(trailName + "_Node");
+                childNode->AttachObject(*trail);
+                effect->effectNodes.push_back(childNode);
+            }
+
+            trail->Play();
+            effect->ribbonTrails.push_back(trail);
+        }
+        catch (const std::exception& e)
+        {
+            ELOG("Failed to spawn spell ribbon trail: " << e.what());
+        }
+    }
+
+    void SpellVisualizationService::CleanupEffectsForActor(uint64 actorGuid, uint32 spellId)
+    {
+        for (auto it = m_activeEffects.begin(); it != m_activeEffects.end(); )
+        {
+            if (it->actorGuid == actorGuid && it->spellId == spellId)
+            {
+                // We need a Scene reference to destroy the objects.
+                // Try to get it from ObjectMgr via the actor guid.
+                Scene* scene = nullptr;
+                auto actor = ObjectMgr::Get<GameUnitC>(actorGuid);
+                if (actor)
+                {
+                    scene = &actor->GetScene();
+                }
+
+                if (scene)
+                {
+                    for (auto* emitter : it->particles)
+                    {
+                        if (emitter)
+                        {
+                            emitter->Stop();
+                            scene->DestroyParticleEmitter(*emitter);
+                        }
+                    }
+
+                    for (auto* light : it->lights)
+                    {
+                        if (light)
+                        {
+                            // Trigger fade-out instead of instant destroy
+                            bool foundFading = false;
+                            for (auto& fl : m_fadingLights)
+                            {
+                                if (fl.light == light)
+                                {
+                                    if (fl.fadeOutSpeed > 0.0f)
+                                    {
+                                        fl.fadingOut = true;
+                                        foundFading = true;
+                                    }
+                                    break;
+                                }
+                            }
+
+                            if (!foundFading)
+                            {
+                                scene->DestroyLight(*light);
+                            }
+                        }
+                    }
+
+                    // Clear the lights vector - fading lights are tracked in m_fadingLights
+                    // For non-fading lights, they are already destroyed above
+                    // For fading lights, do NOT erase from effect.lights yet (the fade loop handles it)
+                    {
+                        std::vector<Light*> remainingLights;
+                        for (auto* light : it->lights)
+                        {
+                            bool isFading = false;
+                            for (const auto& fl : m_fadingLights)
+                            {
+                                if (fl.light == light && fl.fadingOut)
+                                {
+                                    isFading = true;
+                                    break;
+                                }
+                            }
+                            if (isFading)
+                            {
+                                remainingLights.push_back(light);
+                            }
+                        }
+                        it->lights = remainingLights;
+                    }
+
+                    for (auto* trail : it->ribbonTrails)
+                    {
+                        if (trail)
+                        {
+                            trail->Stop();
+                            scene->DestroyRibbonTrail(*trail);
+                        }
+                    }
+
+                    // Only destroy scene nodes if no lights are still fading
+                    if (it->lights.empty())
+                    {
+                        for (auto* node : it->effectNodes)
+                        {
+                            if (node)
+                            {
+                                scene->DestroySceneNode(*node);
+                            }
+                        }
+                        it->effectNodes.clear();
+                    }
+                }
+
+                // Don't erase if there are still fading-out lights
+                if (it->lights.empty())
+                {
+                    it = m_activeEffects.erase(it);
+                }
+                else
+                {
+                    // Keep the effect alive for fading lights, but clear everything else
+                    it->particles.clear();
+                    it->ribbonTrails.clear();
+                    ++it;
+                }
+            }
+            else
+            {
+                ++it;
+            }
+        }
+    }
+
     // Free functions for aura visualization notifications
     void NotifyAuraVisualizationApplied(const proto_client::SpellEntry& spell, GameUnitC* target)
     {
@@ -508,6 +1048,8 @@ namespace mmo
             SpellVisualizationService::Get().StopLoopedSoundForActor(target->GetGuid());
             // Remove tints for this spell on the target
             SpellVisualizationService::Get().RemoveTintFromActor(*target, spell.id());
+            // Clean up visual effects for this target
+            SpellVisualizationService::Get().CleanupEffectsForActor(target->GetGuid(), spell.id());
         }
     }
 }

@@ -5,6 +5,7 @@
 #include "creature_ai_state.h"
 #include "game_server/world/unit_watcher.h"
 #include "base/countdown.h"
+#include <cstddef>
 
 namespace mmo
 {
@@ -38,6 +39,20 @@ namespace mmo
 		virtual void OnDamage(GameUnitS& attacker) override;
 
 	protected:
+		/// @brief Advances the creature's current idle movement mode.
+		void AdvanceIdleMovement();
+
+		/// @brief Starts moving towards the next patrol waypoint.
+		void MoveToNextPatrolWaypoint();
+
+		/// @brief Chooses the best patrol waypoint to resume from.
+		/// @return Zero-based patrol waypoint index.
+		[[nodiscard]] size_t FindClosestPatrolWaypointIndex() const;
+
+		/// @brief Starts a wait countdown in milliseconds.
+		/// @param waitTimeMs Delay before the next idle movement step.
+		void StartWait(uint32 waitTimeMs);
+
 		void OnWaitCountdownExpired();
 
 		void OnTargetReached();
@@ -51,5 +66,6 @@ namespace mmo
 		scoped_connection_container m_connections;
 
 		std::unique_ptr<UnitWatcher> m_unitWatcher;
+		size_t m_nextPatrolWaypointIndex = 0;
 	};
 }

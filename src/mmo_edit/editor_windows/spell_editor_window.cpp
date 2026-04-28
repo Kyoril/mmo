@@ -1301,6 +1301,9 @@ namespace mmo
 				ImGui::TableNextColumn();
 				CHECKBOX_ATTR_PROP(1, "Is Talent", spell_attributes_b::Talent);
 
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(1, "Auto Repeat", spell_attributes_b::AutoRepeat);
+
 				ImGui::EndTable();
 			}
 

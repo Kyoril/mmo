@@ -4,6 +4,7 @@
 #include "vector_sink.h"
 #include "base/utilities.h"
 #include "game_server/objects/game_creature_s.h"
+#include "game_server/objects/game_world_object_s.h"
 #include "game_server/world/universe.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"
@@ -261,7 +262,33 @@ namespace mmo
 
 	void TriggerHandler::HandleSetWorldObjectState(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		DLOG("TODO: ACTION_SET_WORLD_OBJECT_STATE");
+		auto* world = GetWorldInstance(context.owner);
+		if (!world)
+		{
+			ELOG("TRIGGER_ACTION_SET_WORLD_OBJECT_STATE: No world instance");
+			return;
+		}
+
+		if (action.target() != trigger_action_target::NamedWorldObject || action.targetname().empty())
+		{
+			WLOG("TRIGGER_ACTION_SET_WORLD_OBJECT_STATE: Invalid target (requires NamedWorldObject with name)");
+			return;
+		}
+
+		auto* spawner = world->FindObjectSpawner(action.targetname());
+		if (!spawner)
+		{
+			WLOG("TRIGGER_ACTION_SET_WORLD_OBJECT_STATE: Could not find object spawner '" << action.targetname() << "'");
+			return;
+		}
+
+		const uint32 newState = GetActionData(action, 0);
+		for (auto& obj : spawner->getSpawnedObjects())
+		{
+			obj->Set<uint32>(object_fields::State, newState);
+		}
+
+		DLOG("TRIGGER_ACTION_SET_WORLD_OBJECT_STATE: Set state to " << newState << " for spawner '" << action.targetname() << "'");
 	}
 
 	void TriggerHandler::HandleSetSpawnState(const proto::TriggerAction& action, TriggerContext& context)
@@ -293,8 +320,15 @@ namespace mmo
 		}
 		else
 		{
-			// TODO
-			DLOG("TODO: Implement SetSpawnState for ObjectSpawner");
+			auto* spawner = world->FindObjectSpawner(action.targetname());
+			if (!spawner)
+			{
+				WLOG("TRIGGER_ACTION_SET_SPAWN_STATE: Could not find named object spawner");
+				return;
+			}
+
+			const bool isActive = (GetActionData(action, 0) != 0);
+			spawner->SetState(isActive);
 		}
 	}
 
@@ -327,8 +361,15 @@ namespace mmo
 		}
 		else
 		{
-			// TODO
-			DLOG("TODO: Implement SetSpawnState for ObjectSpawner");
+			auto* spawner = world->FindObjectSpawner(action.targetname());
+			if (!spawner)
+			{
+				WLOG("TRIGGER_ACTION_SET_RESPAWN_STATE: Could not find named object spawner");
+				return;
+			}
+
+			const bool isEnabled = (GetActionData(action, 0) != 0);
+			spawner->SetRespawn(isEnabled);
 		}
 	}
 
@@ -448,8 +489,8 @@ namespace mmo
 		}
 
 		// Update combat movement setting
-		/*reinterpret_cast<GameCreatureS*>(target)->SetCombatMovement(
-			getActionData(action, 0) != 0);*/
+		reinterpret_cast<GameCreatureS*>(target)->SetCombatMovement(
+			GetActionData(action, 0) != 0);
 	}
 
 	void TriggerHandler::HandleStopAutoAttack(const proto::TriggerAction& action, TriggerContext& context)
@@ -519,13 +560,63 @@ namespace mmo
 
 	void TriggerHandler::HandleSetVirtualEquipmentSlot(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		// TODO
-		DLOG("TODO: ACTION_SET_VIRTUAL_EQUIPMENT_SLOT");
+		GameObjectS* target = GetActionTarget(action, context);
+		if (target == nullptr)
+		{
+			ELOG("TRIGGER_ACTION_SET_VIRTUAL_EQUIPMENT_SLOT: No target found, action will be ignored");
+			return;
+		}
+
+		if (!target->IsUnit())
+		{
+			WLOG("TRIGGER_ACTION_SET_VIRTUAL_EQUIPMENT_SLOT: Needs a unit target - action ignored");
+			return;
+		}
+
+		const uint32 slot = GetActionData(action, 0);
+		const uint32 displayId = GetActionData(action, 1);
+
+		if (slot >= 3)
+		{
+			WLOG("TRIGGER_ACTION_SET_VIRTUAL_EQUIPMENT_SLOT: Invalid slot " << slot << " (must be 0-2)");
+			return;
+		}
+
+		static const uint16 virtualItemFields[] =
+		{
+			object_fields::VirtualItem0,
+			object_fields::VirtualItem1,
+			object_fields::VirtualItem2
+		};
+
+		target->AsUnit().Set<uint32>(virtualItemFields[slot], displayId);
+		DLOG("TRIGGER_ACTION_SET_VIRTUAL_EQUIPMENT_SLOT: Set slot " << slot << " displayId=" << displayId);
 	}
 
 	void TriggerHandler::HandleSetPhase(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		WLOG("TODO: ACTION_SET_PHASE");
+		GameObjectS* target = GetActionTarget(action, context);
+		if (target == nullptr)
+		{
+			ELOG("TRIGGER_ACTION_SET_PHASE: No target found, action will be ignored");
+			return;
+		}
+
+		if (!target->IsUnit())
+		{
+			WLOG("TRIGGER_ACTION_SET_PHASE: Needs a unit target - action ignored");
+			return;
+		}
+
+		const uint32 phase = GetActionData(action, 0);
+		auto* creature = reinterpret_cast<GameCreatureS*>(target);
+		if (!creature->SetCombatPhase(phase))
+		{
+			WLOG("TRIGGER_ACTION_SET_PHASE: Target has no active combat script");
+			return;
+		}
+
+		DLOG("TRIGGER_ACTION_SET_PHASE: Set combat phase to " << phase);
 	}
 
 	void TriggerHandler::HandleSetSpellCooldown(const proto::TriggerAction& action, TriggerContext& context)
@@ -651,14 +742,41 @@ namespace mmo
 
 	void TriggerHandler::HandleDismount(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		// TODO
-		DLOG("TODO: ACTION_DISMOUNT");
+		GameObjectS* target = GetActionTarget(action, context);
+		if (target == nullptr)
+		{
+			ELOG("TRIGGER_ACTION_DISMOUNT: No target found, action will be ignored");
+			return;
+		}
+
+		if (!target->IsUnit())
+		{
+			WLOG("TRIGGER_ACTION_DISMOUNT: Needs a unit target - action ignored");
+			return;
+		}
+
+		target->AsUnit().Set<uint32>(object_fields::MountDisplayId, 0);
+		DLOG("TRIGGER_ACTION_DISMOUNT: Cleared mount display");
 	}
 
 	void TriggerHandler::HandleSetMount(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		// TODO
-		DLOG("TODO: ACTION_SET_MOUNT");
+		GameObjectS* target = GetActionTarget(action, context);
+		if (target == nullptr)
+		{
+			ELOG("TRIGGER_ACTION_SET_MOUNT: No target found, action will be ignored");
+			return;
+		}
+
+		if (!target->IsUnit())
+		{
+			WLOG("TRIGGER_ACTION_SET_MOUNT: Needs a unit target - action ignored");
+			return;
+		}
+
+		const uint32 mountDisplayId = GetActionData(action, 0);
+		target->AsUnit().Set<uint32>(object_fields::MountDisplayId, mountDisplayId);
+		DLOG("TRIGGER_ACTION_SET_MOUNT: Set mount display " << mountDisplayId);
 	}
 
 	void TriggerHandler::HandleDespawn(const proto::TriggerAction& action, TriggerContext& context)

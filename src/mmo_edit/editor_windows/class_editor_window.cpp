@@ -746,6 +746,62 @@ namespace mmo
 
 		static const char* s_spellNone = "<None>";
 
+		if (const auto section = ScopedEditorSection("Auto Attack Spells", ImGuiTreeNodeFlags_None))
+		{
+			// Helper lambda to draw a spell combo box for auto-attack spell fields
+			auto DrawAutoAttackSpellCombo = [&](const char* label, uint32 currentSpellId, auto setter)
+			{
+				const auto* spellEntry = currentSpellId != 0 ? m_project.spells.getById(currentSpellId) : nullptr;
+				if (ImGui::BeginCombo(label, spellEntry != nullptr ? spellEntry->name().c_str() : s_spellNone, ImGuiComboFlags_None))
+				{
+					// Add None option
+					if (ImGui::Selectable(s_spellNone, currentSpellId == 0))
+					{
+						setter(0);
+					}
+					if (currentSpellId == 0)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+
+					for (int i = 0; i < m_project.spells.count(); i++)
+					{
+						ImGui::PushID(i);
+						const auto& spell = m_project.spells.getTemplates().entry(i);
+						const bool item_selected = spell.id() == currentSpellId;
+						if (ImGui::Selectable(spell.name().c_str(), item_selected))
+						{
+							setter(spell.id());
+						}
+						if (item_selected)
+						{
+							ImGui::SetItemDefaultFocus();
+						}
+						ImGui::PopID();
+					}
+
+					ImGui::EndCombo();
+				}
+			};
+
+			DrawAutoAttackSpellCombo(
+				"Main Hand",
+				currentEntry.mainhand_auto_attack_spell(),
+				[&](uint32 id) { currentEntry.set_mainhand_auto_attack_spell(id); });
+
+			DrawAutoAttackSpellCombo(
+				"Off Hand",
+				currentEntry.offhand_auto_attack_spell(),
+				[&](uint32 id) { currentEntry.set_offhand_auto_attack_spell(id); });
+
+			DrawAutoAttackSpellCombo(
+				"Ranged",
+				currentEntry.ranged_auto_attack_spell(),
+				[&](uint32 id) { currentEntry.set_ranged_auto_attack_spell(id); });
+
+			ImGui::TextDisabled("When set, auto-attack uses the spell system instead of hardcoded combat logic.");
+		}
+
 		if (const auto section = ScopedEditorSection("Spells", ImGuiTreeNodeFlags_None))
 		{
 			// Add button

@@ -31,6 +31,13 @@ namespace mmo
 		bool isActive;
 	};
 
+	struct QuestRewardItemDisplay
+	{
+		uint32 itemId = 0;
+		uint32 count = 0;
+		uint32 displayId = 0;
+	};
+
 	struct QuestDetails
 	{
 		uint32 questId = 0;
@@ -40,10 +47,11 @@ namespace mmo
 		String questRequestItemsText;
 		String questOfferRewardText;
 		uint32 suggestedPlayerCount = 0;
-		// TODO: Rewarded item count
 		uint32 rewardXp = 0;
 		uint32 rewardMoney = 0;
 		const proto_client::SpellEntry* rewardSpell = nullptr;
+		std::vector<QuestRewardItemDisplay> rewardItemsChoice;
+		std::vector<QuestRewardItemDisplay> rewardItems;
 
 		void Clear()
 		{
@@ -55,6 +63,8 @@ namespace mmo
 			rewardXp = 0;
 			rewardMoney = 0;
 			rewardSpell = nullptr;
+			rewardItemsChoice.clear();
+			rewardItems.clear();
 		}
 	};
 

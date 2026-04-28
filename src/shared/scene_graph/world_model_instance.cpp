@@ -388,6 +388,10 @@ namespace mmo
 
     void WorldModelInstance::Destroy(Scene& scene)
     {
+        // Unregister from scene first, before clearing geometry resets m_geometryCreated
+        // which would prevent unregistration in NotifyAttachmentChanged and the destructor
+        scene.UnregisterWorldModelInstance(this);
+
         // Clear all created scene objects
         ClearGeometry(&scene);
         ClearDoodads(&scene);

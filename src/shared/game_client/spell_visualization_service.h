@@ -19,6 +19,10 @@ namespace mmo
 {
     class GameUnitC;
     class AnimationState;
+    class ParticleEmitter;
+    class Light;
+    class RibbonTrail;
+    class SceneNode;
 
     namespace proto_client
     {
@@ -76,6 +80,9 @@ namespace mmo
         /// \brief Remove tint from an actor for a specific spell (public for aura removal).
         void RemoveTintFromActor(GameUnitC& actor, uint32 spellId);
 
+        /// \brief Remove all active spell effects (particles, lights, ribbons) for a given actor and spell.
+        void CleanupEffectsForActor(uint64 actorGuid, uint32 spellId);
+
     private:
         SpellVisualizationService() = default;
         ~SpellVisualizationService() = default;
@@ -87,11 +94,21 @@ namespace mmo
         void ApplyKitToActor(const proto_client::SpellVisualization& vis,
                              const proto_client::SpellKit& kit,
                              GameUnitC& actor,
-                             uint32 spellId);
+                             uint32 spellId,
+                             bool instantEvent = false);
 
         void ApplyAnimationToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
 
         void ApplyTintToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
+
+        /// \brief Spawn particle emitters defined in a kit, optionally attached to a bone.
+        void ApplyParticlesToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
+
+        /// \brief Spawn a point light defined in a kit, optionally attached to a bone.
+        void ApplyLightToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, bool instantEvent = false);
+
+        /// \brief Spawn a ribbon trail defined in a kit, optionally attached to a bone.
+        void ApplyRibbonTrailToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
 
         static uint32 ToProtoEventValue(Event e);
 
@@ -161,6 +178,39 @@ namespace mmo
         
         /// \brief Map actor guid -> active spell animation for cancellation on same-spell events.
         mutable std::map<uint64, ActiveSpellAnimation> m_activeSpellAnimations;
+
+        /// \brief Structure to track active visual effects (particles, lights, ribbon trails) per actor.
+        struct ActiveSpellEffect
+        {
+            uint32 spellId{ 0 };
+            uint64 actorGuid{ 0 };
+            std::vector<ParticleEmitter*> particles;
+            std::vector<Light*> lights;
+            std::vector<RibbonTrail*> ribbonTrails;
+            std::vector<SceneNode*> effectNodes;
+        };
+
+        /// \brief All active spell effects across all actors.
+        mutable std::vector<ActiveSpellEffect> m_activeEffects;
+
+        /// \brief Tracks a light that is fading in or out.
+        struct FadingLight
+        {
+            Light* light{ nullptr };
+            uint64 actorGuid{ 0 };
+            float currentIntensity{ 0.0f };
+            float targetIntensity{ 0.0f };
+            float fadeInSpeed{ 0.0f };
+            float fadeOutSpeed{ 0.0f };
+            bool fadingOut{ false };
+            bool autoFadeOut{ false };
+        };
+
+        /// \brief Active lights with fade state.
+        mutable std::vector<FadingLight> m_fadingLights;
+
+        /// \brief Counter for generating unique effect names.
+        mutable uint32 m_effectCounter{ 0 };
     };
 
     // Free functions for aura visualization notifications (avoid circular includes)

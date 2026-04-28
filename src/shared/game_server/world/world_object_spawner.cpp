@@ -21,7 +21,8 @@ namespace mmo
 		const Quaternion& rotation,
 		float radius,
 		uint32 animProgress,
-		uint32 state)
+		uint32 state,
+		uint32 lootEntryOverride)
 		: m_world(world)
 		, m_entry(entry)
 		, m_maxCount(maxCount)
@@ -33,6 +34,7 @@ namespace mmo
 		, m_respawnCountdown(world.GetUniverse().GetTimers())
 		, m_animProgress(animProgress)
 		, m_state(state)
+		, m_lootEntryOverride(lootEntryOverride)
 	{
 		// Immediately spawn all objects
 		for (size_t i = 0; i < m_maxCount; ++i)
@@ -63,6 +65,12 @@ namespace mmo
 		spawned->Set<float>(object_fields::RotationZ, m_rotation.z);
 		spawned->Set<uint32>(object_fields::AnimProgress, m_animProgress);
 		spawned->Set<uint32>(object_fields::State, m_state);
+
+		// Apply per-spawn loot entry override if one is configured
+		if (m_lootEntryOverride != 0)
+		{
+			spawned->SetLootEntryOverride(m_lootEntryOverride);
+		}
 
 		// watch for destruction
 		spawned->destroy = std::bind(&WorldObjectSpawner::OnRemoval, this, std::placeholders::_1);
@@ -106,5 +114,50 @@ namespace mmo
 
 		m_respawnCountdown.SetEnd(
 			GetAsyncTimeMs() + m_respawnDelay);
+	}
+
+	void WorldObjectSpawner::SetState(bool active)
+	{
+		if (m_active != active)
+		{
+			if (active && !m_currentlySpawned)
+			{
+				for (size_t i = 0; i < m_maxCount; ++i)
+				{
+					SpawnOne();
+				}
+			}
+			else
+			{
+				m_respawnCountdown.Cancel();
+
+				for (auto& obj : m_objects)
+				{
+					m_world.RemoveGameObject(*obj);
+				}
+
+				m_objects.clear();
+				m_currentlySpawned = 0;
+			}
+
+			m_active = active;
+		}
+	}
+
+	void WorldObjectSpawner::SetRespawn(bool enabled)
+	{
+		if (m_respawn != enabled)
+		{
+			if (!enabled)
+			{
+				m_respawnCountdown.Cancel();
+			}
+			else
+			{
+				SetRespawnTimer();
+			}
+
+			m_respawn = enabled;
+		}
 	}
 }

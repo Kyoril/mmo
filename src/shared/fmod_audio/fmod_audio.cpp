@@ -695,6 +695,12 @@ namespace mmo
 		FMODSoundInstance *soundInstance;
 		soundInstance = static_cast<FMODSoundInstance *>(handle);
 
+		if (!soundInstance->GetStream())
+		{
+			*bytesread = 0;
+			return FMOD_ERR_FILE_EOF;
+		}
+
 		soundInstance->GetStream()->read((char*)buffer, sizebytes);
 		*bytesread = static_cast<unsigned int>(soundInstance->GetStream()->gcount());
 		if (*bytesread < sizebytes)
@@ -711,6 +717,12 @@ namespace mmo
 		FMODSoundInstance *soundInstance;
 
 		soundInstance = static_cast<FMODSoundInstance *>(handle);
+
+		if (!soundInstance->GetStream())
+		{
+			return FMOD_ERR_FILE_EOF;
+		}
+
 		soundInstance->GetStream()->seekg(pos, std::ios::beg);
 
 		return FMOD_OK;

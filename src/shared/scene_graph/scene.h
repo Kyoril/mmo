@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <chrono>
+
 #include "queued_renderable_visitor.h"
 #include "render_queue.h"
 #include "base/non_copyable.h"
@@ -626,5 +628,11 @@ namespace mmo
 		Vector3 m_ambientColor = Vector3(0.04f, 0.035f, 0.03f);
 
 		std::unique_ptr<IDebugGeometry> m_debugGeometry;
+
+		/// @brief Time point when the scene was created, used to calculate elapsed time.
+		std::chrono::steady_clock::time_point m_startTime { std::chrono::steady_clock::now() };
+
+		/// @brief Elapsed time in seconds since the scene was created, updated each frame.
+		float m_elapsedTime { 0.0f };
 	};
 }

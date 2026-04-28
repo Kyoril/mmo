@@ -99,11 +99,6 @@ namespace mmo
 
 		std::ostringstream outputStream;
 
-		if (type == SamplerType::Normal)
-		{
-			outputStream << "(";
-		}
-
 		if (srgb)
 		{
 			outputStream << "pow(";
@@ -125,12 +120,22 @@ namespace mmo
 			outputStream << ", 2.2)";
 		}
 
+		outputStream.flush();
+
 		if (type == SamplerType::Normal)
 		{
-			outputStream << " * 2.0 - 1.0)";
-		}
+			// First, add the raw sample as a temporary expression
+			const ExpressionIndex rawSample = AddExpression(outputStream.str(), ExpressionType::Float_4);
 
-		outputStream.flush();
+			// Reconstruct the normal: read RG, remap to [-1,1], derive Z = sqrt(1 - x^2 - y^2)
+			// This works correctly for both BC5/RG8 (where B=0) and standard RGBA normal maps
+			std::ostringstream normalStream;
+			normalStream << "float4(expr_" << rawSample << ".rg * 2.0 - 1.0, "
+				<< "sqrt(saturate(1.0 - dot(expr_" << rawSample << ".rg * 2.0 - 1.0, expr_" << rawSample << ".rg * 2.0 - 1.0))), 0.0)";
+			normalStream.flush();
+
+			return AddExpression(normalStream.str(), ExpressionType::Float_4);
+		}
 
 		return AddExpression(outputStream.str(), ExpressionType::Float_4);
 	}
@@ -573,6 +578,73 @@ namespace mmo
 		return AddExpression(outputStream.str(), outputType);
 	}
 
+	ExpressionIndex MaterialCompilerD3D11::AddTime()
+	{
+		return AddExpression("time", ExpressionType::Float_1);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddRotator(ExpressionIndex coordinates, ExpressionIndex center, ExpressionIndex rotation)
+	{
+		if (coordinates == IndexNone)
+		{
+			WLOG("Missing coordinates input for Rotator");
+			return IndexNone;
+		}
+
+		if (center == IndexNone)
+		{
+			WLOG("Missing center input for Rotator");
+			return IndexNone;
+		}
+
+		if (rotation == IndexNone)
+		{
+			WLOG("Missing rotation input for Rotator");
+			return IndexNone;
+		}
+
+		std::ostringstream outputStream;
+		outputStream << "(float2("
+			<< "cos(expr_" << rotation << ") * (expr_" << coordinates << ".x - expr_" << center << ".x) - sin(expr_" << rotation << ") * (expr_" << coordinates << ".y - expr_" << center << ".y) + expr_" << center << ".x, "
+			<< "sin(expr_" << rotation << ") * (expr_" << coordinates << ".x - expr_" << center << ".x) + cos(expr_" << rotation << ") * (expr_" << coordinates << ".y - expr_" << center << ".y) + expr_" << center << ".y"
+			<< "))";
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), ExpressionType::Float_2);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddFresnel(ExpressionIndex exponent, ExpressionIndex baseReflectFraction, ExpressionIndex normal)
+	{
+		if (exponent == IndexNone)
+		{
+			WLOG("Missing exponent input for Fresnel");
+			return IndexNone;
+		}
+
+		if (baseReflectFraction == IndexNone)
+		{
+			WLOG("Missing base reflect fraction input for Fresnel");
+			return IndexNone;
+		}
+
+		// Fresnel = base + (1 - base) * pow(1 - saturate(dot(N, V)), exponent)
+		// V is the normalized view direction, available in the shader as 'V'
+		std::ostringstream outputStream;
+		if (normal != IndexNone)
+		{
+			outputStream << "expr_" << baseReflectFraction << " + (1.0 - expr_" << baseReflectFraction
+				<< ") * pow(1.0 - saturate(dot(normalize(expr_" << normal << "), V)), expr_" << exponent << ")";
+		}
+		else
+		{
+			outputStream << "expr_" << baseReflectFraction << " + (1.0 - expr_" << baseReflectFraction
+				<< ") * pow(1.0 - saturate(dot(normalize(input.normal), V)), expr_" << exponent << ")";
+		}
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), ExpressionType::Float_1);
+	}
+
 	void MaterialCompilerD3D11::GeneratePixelShaderCode(PixelShaderType type)
 	{
 		m_pixelShaderStream.str("");
@@ -639,6 +711,8 @@ namespace mmo
 			<< "\tfloat fogEnd;		// Distance of fog end\n"
 			<< "\tfloat3 fogColor;	// Fog color\n"
 			<< "\trow_major matrix inverseCameraView;	// Inverse view matrix\n"
+			<< "\tfloat time;		// Time in seconds since game start\n"
+			<< "\tfloat3 _padding;	// Padding for alignment\n"
 			<< "};\n\n";
 
 		const auto& scalarParams = m_floatParameters;
@@ -1057,6 +1131,10 @@ namespace mmo
 					m_pixelShaderStream
 						<< "\tfloat3 color = ambient + Lo;\n";
 
+					// Add emissive color additively before tone mapping
+					m_pixelShaderStream
+						<< "\tcolor += emissiveColor;\n";
+
 					m_pixelShaderStream
 						<< "\tcolor = color / (color + 1.0f.xxx);\n"
 						<< "\tcolor = pow(color, (1.0f/2.2f).xxx);\n";
@@ -1105,9 +1183,9 @@ namespace mmo
 					m_pixelShaderStream
 						<< "\toutput.material = float4(metallic, roughness, specular, 1.0);\n";
 
-					// Emissive - use base color for unlit materials
+					// Emissive - use base color + emissive color for unlit materials
 					m_pixelShaderStream
-						<< "\toutput.emissive = float4(baseColor, 0.0);\n";
+						<< "\toutput.emissive = float4(baseColor + emissiveColor, 0.0);\n";
 				}
 				else
 				{
@@ -1144,8 +1222,9 @@ namespace mmo
 				}
 				else
 				{
+					// Add emissive color additively for unlit forward rendering
 					m_pixelShaderStream
-						<< "\toutputColor = float4(baseColor, opacity);\n";
+						<< "\toutputColor = float4(baseColor + emissiveColor, opacity);\n";
 				}
 
 				// End of main function
@@ -1202,11 +1281,6 @@ namespace mmo
 
 		std::ostringstream outputStream;
 
-		if (type == SamplerType::Normal)
-		{
-			outputStream << "(";
-		}
-
 		if (srgb)
 		{
 			outputStream << "pow(";
@@ -1228,12 +1302,22 @@ namespace mmo
 			outputStream << ", 2.2)";
 		}
 
+		outputStream.flush();
+
 		if (type == SamplerType::Normal)
 		{
-			outputStream << " * 2.0 - 1.0)";
-		}
+			// First, add the raw sample as a temporary expression
+			const ExpressionIndex rawSample = AddExpression(outputStream.str(), ExpressionType::Float_4);
 
-		outputStream.flush();
+			// Reconstruct the normal: read RG, remap to [-1,1], derive Z = sqrt(1 - x^2 - y^2)
+			// This works correctly for both BC5/RG8 (where B=0) and standard RGBA normal maps
+			std::ostringstream normalStream;
+			normalStream << "float4(expr_" << rawSample << ".rg * 2.0 - 1.0, "
+				<< "sqrt(saturate(1.0 - dot(expr_" << rawSample << ".rg * 2.0 - 1.0, expr_" << rawSample << ".rg * 2.0 - 1.0))), 0.0)";
+			normalStream.flush();
+
+			return AddExpression(normalStream.str(), ExpressionType::Float_4);
+		}
 
 		return AddExpression(outputStream.str(), ExpressionType::Float_4);
 	}

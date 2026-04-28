@@ -60,6 +60,14 @@ namespace mmo
 			return PixelFormat::R32G32B32A32;
 		case tex::v1_0::FLOAT_RGBA:
 			return PixelFormat::R32G32B32A32;
+		case tex::v1_0::R8:
+			return PixelFormat::R8;
+		case tex::v1_0::RG8:
+			return PixelFormat::RG8;
+		case tex::v1_0::BC4:
+			return PixelFormat::BC4;
+		case tex::v1_0::BC5:
+			return PixelFormat::BC5;
 		default:
 			return PixelFormat::Unknown;
 		}

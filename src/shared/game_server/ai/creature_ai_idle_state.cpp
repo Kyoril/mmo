@@ -5,6 +5,7 @@
 #include "objects/game_creature_s.h"
 #include "game_server/world/universe.h"
 #include "game_server/world/world_instance.h"
+#include <limits>
 
 namespace mmo
 {
@@ -19,6 +20,7 @@ namespace mmo
 	void CreatureAIIdleState::OnEnter()
 	{
 		CreatureAIState::OnEnter();
+		GetControlled().SetMovementMode(unit_movement_mode::Walk);
 
 		m_connections += m_waitCountdown.ended.connect(*this, &CreatureAIIdleState::OnWaitCountdownExpired);
 		m_connections += GetAI().GetControlled().GetMover().targetReached.connect(*this, &CreatureAIIdleState::OnTargetReached);
@@ -131,6 +133,7 @@ namespace mmo
 		ASSERT(m_unitWatcher);
 		m_unitWatcher.reset();
 
+		m_waitCountdown.Cancel();
 		m_connections.disconnect();
 
 		CreatureAIState::OnLeave();
@@ -138,6 +141,29 @@ namespace mmo
 
 	void CreatureAIIdleState::OnCreatureMovementChanged()
 	{
+		m_waitCountdown.Cancel();
+
+		if (GetControlled().GetMovementType() == creature_movement::None)
+		{
+			GetControlled().GetMover().StopMovement();
+			return;
+		}
+
+		if (GetControlled().GetMovementType() == creature_movement::Waypoints)
+		{
+			if (GetControlled().HasPatrolWaypoints())
+			{
+				m_nextPatrolWaypointIndex = FindClosestPatrolWaypointIndex();
+				AdvanceIdleMovement();
+			}
+			else
+			{
+				GetControlled().GetMover().StopMovement();
+			}
+
+			return;
+		}
+
 		if (GetControlled().GetMovementType() == creature_movement::Random)
 		{
 			OnTargetReached();
@@ -162,12 +188,94 @@ namespace mmo
 
 	void CreatureAIIdleState::OnWaitCountdownExpired()
 	{
-		MoveToRandomPointInRange();
+		AdvanceIdleMovement();
 	}
 
 	void CreatureAIIdleState::OnTargetReached()
 	{
-		m_waitCountdown.SetEnd(GetAsyncTimeMs() + 2000);
+		if (GetControlled().GetMovementType() == creature_movement::Waypoints)
+		{
+			const auto& patrolWaypoints = GetControlled().GetPatrolWaypoints();
+			if (patrolWaypoints.empty())
+			{
+				return;
+			}
+
+			const size_t waypointCount = patrolWaypoints.size();
+			const size_t reachedWaypointIndex = (m_nextPatrolWaypointIndex + waypointCount - 1) % waypointCount;
+			StartWait(patrolWaypoints[reachedWaypointIndex].waitTime);
+			return;
+		}
+
+		StartWait(2000);
+	}
+
+	void CreatureAIIdleState::AdvanceIdleMovement()
+	{
+		if (GetControlled().GetMovementType() == creature_movement::Waypoints)
+		{
+			MoveToNextPatrolWaypoint();
+			return;
+		}
+
+		if (GetControlled().GetMovementType() == creature_movement::Random)
+		{
+			MoveToRandomPointInRange();
+		}
+	}
+
+	void CreatureAIIdleState::MoveToNextPatrolWaypoint()
+	{
+		const auto& patrolWaypoints = GetControlled().GetPatrolWaypoints();
+		if (patrolWaypoints.empty())
+		{
+			return;
+		}
+
+		const size_t waypointIndex = m_nextPatrolWaypointIndex % patrolWaypoints.size();
+		const auto& waypoint = patrolWaypoints[waypointIndex];
+		m_nextPatrolWaypointIndex = (waypointIndex + 1) % patrolWaypoints.size();
+
+		if (GetControlled().GetSquaredDistanceTo(waypoint.position, true) <= 0.25f)
+		{
+			StartWait(waypoint.waitTime);
+			return;
+		}
+
+		const float walkSpeed = GetControlled().GetSpeed(movement_type::Walk);
+		if (!GetControlled().GetMover().MoveTo(waypoint.position, 0.0f))
+		{
+			StartWait(250);
+		}
+	}
+
+	size_t CreatureAIIdleState::FindClosestPatrolWaypointIndex() const
+	{
+		const auto& patrolWaypoints = GetControlled().GetPatrolWaypoints();
+		if (patrolWaypoints.empty())
+		{
+			return 0;
+		}
+
+		size_t closestWaypointIndex = 0;
+		float closestDistanceSq = std::numeric_limits<float>::max();
+
+		for (size_t waypointIndex = 0; waypointIndex < patrolWaypoints.size(); ++waypointIndex)
+		{
+			const float distanceSq = GetControlled().GetSquaredDistanceTo(patrolWaypoints[waypointIndex].position, true);
+			if (distanceSq < closestDistanceSq)
+			{
+				closestDistanceSq = distanceSq;
+				closestWaypointIndex = waypointIndex;
+			}
+		}
+
+		return closestWaypointIndex;
+	}
+
+	void CreatureAIIdleState::StartWait(const uint32 waitTimeMs)
+	{
+		m_waitCountdown.SetEnd(GetAsyncTimeMs() + waitTimeMs);
 	}
 
 	void CreatureAIIdleState::MoveToRandomPointInRange()

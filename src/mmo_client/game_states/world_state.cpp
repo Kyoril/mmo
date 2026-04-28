@@ -949,6 +949,8 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellStart, *this, &WorldState::OnSpellStart);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellGo, *this, &WorldState::OnSpellGo);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellFailure, *this, &WorldState::OnSpellFailure);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ChannelStart, *this, &WorldState::OnChannelStart);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ChannelUpdate, *this, &WorldState::OnChannelUpdate);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AttackStart, *this, &WorldState::OnAttackStart);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AttackStop, *this, &WorldState::OnAttackStop);
@@ -1611,6 +1613,13 @@ namespace mmo
 		}
 		else
 		{
+			// System messages (GUID 0) do not require a name lookup
+			if (type == ChatType::System)
+			{
+				FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SYSTEM", message);
+				return PacketParseResult::Pass;
+			}
+
 			m_cache.GetNameCache().Get(characterGuid, [this, type, message, flags](uint64, const String &name)
 									   {
 					String chatMessageType = "SAY";
@@ -1831,6 +1840,7 @@ namespace mmo
 		GameTime endTime;
 		uint32 pathSize;
 		std::optional<Radian> targetRotation;
+		UnitMovementMode movementMode = unit_movement_mode::Run;
 
 		if (!(packet >> io::read_packed_guid(guid) >> io::read<float>(startPosition.x) >> io::read<float>(startPosition.y) >> io::read<float>(startPosition.z) >> io::read<GameTime>(startTime) >> io::read<GameTime>(endTime) >> io::read<uint32>(pathSize) >> io::read<float>(endPosition.x) >> io::read<float>(endPosition.y) >> io::read<float>(endPosition.z)))
 		{
@@ -1852,6 +1862,17 @@ namespace mmo
 			}
 
 			targetRotation = Radian(rotation);
+		}
+
+		uint8 rawMovementMode = unit_movement_mode::Run;
+		if (!(packet >> io::read<uint8>(rawMovementMode)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (rawMovementMode < unit_movement_mode::Count_)
+		{
+			movementMode = static_cast<UnitMovementMode>(rawMovementMode);
 		}
 
 		// Find unit by guid
@@ -1898,7 +1919,7 @@ namespace mmo
 			}
 		}
 
-		unitPtr->SetMovementPath(path, endTime - startTime, targetRotation);
+		unitPtr->SetMovementPath(path, endTime - startTime, targetRotation, movementMode);
 
 		return PacketParseResult::Pass;
 	}
@@ -2083,6 +2104,7 @@ namespace mmo
 						pending->targetGuid = unitTargetGuid;
 						pending->visualization = visualization;
 						pending->hasCastSucceededAnimation = true;
+						pending->creationTime = GetAsyncTimeMs();
 						
 						// Capture raw pointer for use in lambdas before moving
 						PendingProjectile* pendingPtr = pending.get();
@@ -2166,7 +2188,18 @@ namespace mmo
 
 		if (casterUnit && targetUnit)
 		{
-			m_projectileManager->SpawnProjectile(*spell, pending->visualization, casterUnit.get(), targetUnit.get());
+			// Calculate how long the projectile was delayed by the animation
+			float animationDelay = 0.0f;
+			if (pending->creationTime > 0)
+			{
+				const GameTime now = GetAsyncTimeMs();
+				if (now > pending->creationTime)
+				{
+					animationDelay = static_cast<float>(now - pending->creationTime) / 1000.0f;
+				}
+			}
+
+			m_projectileManager->SpawnProjectile(*spell, pending->visualization, casterUnit.get(), targetUnit.get(), animationDelay);
 		}
 
 		// Remove this pending projectile from the list
@@ -2429,6 +2462,55 @@ namespace mmo
 			}
 			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", false);
 			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", errorMessage);
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnChannelStart(game::IncomingPacket &packet)
+	{
+		uint64 casterId;
+		uint32 spellId;
+		int32 duration;
+
+		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<int32>(duration)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		const auto *spell = m_project.spells.getById(spellId);
+		if (!spell)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		if (m_playerController->GetControlledUnit())
+		{
+			if (casterId == m_playerController->GetControlledUnit()->GetGuid() && duration > 0)
+			{
+				m_spellCast.OnChannelStart(*spell, static_cast<GameTime>(duration));
+			}
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnChannelUpdate(game::IncomingPacket &packet)
+	{
+		uint64 casterId;
+		GameTime timeLeft;
+
+		if (!(packet >> io::read_packed_guid(casterId) >> io::read<GameTime>(timeLeft)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (m_playerController->GetControlledUnit())
+		{
+			if (casterId == m_playerController->GetControlledUnit()->GetGuid())
+			{
+				m_spellCast.OnChannelUpdate(casterId, timeLeft);
+			}
 		}
 
 		return PacketParseResult::Pass;

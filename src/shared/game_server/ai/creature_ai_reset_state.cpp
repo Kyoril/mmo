@@ -20,6 +20,7 @@ namespace mmo
 		CreatureAIState::OnEnter();
 
 		auto& controlled = GetControlled();
+		controlled.SetMovementMode(unit_movement_mode::Run);
 
 		controlled.RaiseTrigger(trigger_event::OnReset);
 		controlled.RemoveLootRecipients();

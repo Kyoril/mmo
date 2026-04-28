@@ -242,6 +242,11 @@ namespace mmo
 				GroupLeave,
 				GroupDisband,
 
+				/// Sent by the group leader to change the group's loot method.
+				SetLootMethod,
+
+				UseObject,
+
 				/// Counter constant
 				Count_,
 			};

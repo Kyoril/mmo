@@ -17,11 +17,14 @@ namespace mmo
 	}
 
 	LootInstance::LootInstance(const proto::ItemManager& items, const ConditionMgr& conditionMgr, const uint64 lootGuid, const proto::LootEntry* entry,
-		const uint32 minGold, const uint32 maxGold, const std::vector<std::weak_ptr<GamePlayerS>>& lootRecipients)
+		const uint32 minGold, const uint32 maxGold, const std::vector<std::weak_ptr<GamePlayerS>>& lootRecipients,
+		const LootMethod lootMethod, const uint64 lootMasterGuid)
 		: m_itemManager(items)
 		, m_conditionMgr(conditionMgr)
 		, m_lootGuid(lootGuid)
 		, m_gold(0)
+		, m_lootMethod(lootMethod)
+		, m_lootMasterGuid(lootMasterGuid)
 	{
 		m_recipients.reserve(lootRecipients.size());
 		for (const auto& character : lootRecipients)
@@ -102,6 +105,18 @@ namespace mmo
 		// Generate gold
 		std::uniform_int_distribution goldDistribution(minGold, maxGold);
 		m_gold = goldDistribution(randomGenerator);
+
+		// RoundRobin pre-assignment — assign items to recipients in rotation using weakRecipients vector order.
+		// This preserves aggro/join order (first tagger is first) rather than GUID-sort order.
+		if (m_lootMethod == loot_method::RoundRobin && !m_recipients.empty())
+		{
+			uint32 recipientIndex = 0;
+			for (auto& item : m_items)
+			{
+				item.assignedRecipientGuid = m_recipients[recipientIndex % m_recipients.size()];
+				recipientIndex++;
+			}
+		}
 	}
 
 	bool LootInstance::IsEmpty() const
@@ -247,8 +262,29 @@ namespace mmo
 	bool LootInstance::TakeItem(uint8 slot, uint64 receiver)
 	{
 		// Check if slot is valid
-		if (slot >= m_items.size()) {
+		if (slot >= m_items.size())
+		{
 			return false;
+		}
+
+		// Loot method enforcement — single enforcement point, no bypass possible.
+		switch (m_lootMethod)
+		{
+		case loot_method::MasterLoot:
+			if (receiver != m_lootMasterGuid)
+			{
+				return false;
+			}
+			break;
+		case loot_method::RoundRobin:
+			if (m_items[slot].assignedRecipientGuid != 0 &&
+				receiver != m_items[slot].assignedRecipientGuid)
+			{
+				return false;
+			}
+			break;
+		default:
+			break;  // FreeForAll / GroupLoot — no per-item restriction
 		}
 
 		// Check if item was already looted

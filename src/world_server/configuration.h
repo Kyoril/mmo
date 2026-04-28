@@ -61,6 +61,8 @@ namespace mmo
 		String dataFolder;
 		/// Root map data folder used by the world server.
 		String mapFolder;
+		/// Root folder used by the world server for scripts.
+		String scriptFolder;
 		/// Whether to watch the data folders for changes.
 		bool watchDataForChanges;
 

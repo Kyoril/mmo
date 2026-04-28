@@ -484,6 +484,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 				RegisterPacketHandler(auth::realm_world_packet::TeleportRequest, *this, &RealmConnector::OnTeleportRequest);
 				RegisterPacketHandler(auth::realm_world_packet::PlayerGroupChanged, *this, &RealmConnector::OnPlayerGroupChanged);
 				RegisterPacketHandler(auth::realm_world_packet::PlayerGuildChanged, *this, &RealmConnector::OnPlayerGuildChanged);
+				RegisterPacketHandler(auth::realm_world_packet::PlayerGroupLootMethodChanged, *this, &RealmConnector::OnPlayerGroupLootMethodChanged);
 				RegisterPacketHandler(auth::realm_world_packet::InventoryOperationResult, *this, &RealmConnector::OnInventoryOperationResult);
 				
 				PropagateHostedMapIds();
@@ -516,20 +517,38 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		}
 		
 		DLOG("Player character " << log_hex_digit(characterData.characterId) << " wants to join world...");
+
+		// Determine if this is a dungeon/instanced map
+		const proto::MapEntry* mapEntry = m_project.maps.getById(characterData.mapId);
+		const bool isDungeonMap = mapEntry && mapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL;
 		
 		WorldInstance* instance = nullptr;
 		if (characterData.instanceId.is_nil())
 		{
-			instance = m_worldInstanceManager.GetInstanceByMap(characterData.mapId);
+			if (isDungeonMap)
+			{
+				// Dungeon maps with no instance id always get a new instance
+				DLOG("Creating new dungeon instance for map " << characterData.mapId);
+			}
+			else
+			{
+				// Global maps try to reuse existing instance
+				instance = m_worldInstanceManager.GetInstanceByMap(characterData.mapId);
+			}
 		}
 		else
 		{
 			instance = m_worldInstanceManager.GetInstanceById(characterData.instanceId);
 			if (!instance)
 			{
-				// TODO: Try to load instance id from instance storage
 				WLOG("Unable to find world instance by id " << characterData.instanceId);
-				instance = m_worldInstanceManager.GetInstanceByMap(characterData.mapId);
+
+				if (!isDungeonMap)
+				{
+					// For global maps, fall back to finding any instance by map
+					instance = m_worldInstanceManager.GetInstanceByMap(characterData.mapId);
+				}
+				// For dungeon maps, don't fall back - create a new instance below
 			}
 		}
 
@@ -899,6 +918,28 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		}
 
 		player->UpdateCharacterGuild(guildId);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnPlayerGroupLootMethodChanged(auth::IncomingPacket& packet)
+	{
+		uint64 characterId = 0;
+		uint8 lootMethod = 0;
+		uint64 lootMasterGuid = 0;
+		if (!(packet >> io::read<uint64>(characterId) >> io::read<uint8>(lootMethod) >> io::read<uint64>(lootMasterGuid)))
+		{
+			ELOG("Failed to read PLAYER_GROUP_LOOT_METHOD_CHANGED packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Player " << log_hex_digit(characterId) << " loot method changed to " << static_cast<uint32>(lootMethod));
+
+		const std::shared_ptr<Player> player = m_playerManager.GetPlayerByCharacterGuid(characterId);
+		if (player)
+		{
+			player->UpdateCharacterGroupLootMethod(static_cast<LootMethod>(lootMethod), lootMasterGuid);
+		}
+
 		return PacketParseResult::Pass;
 	}
 

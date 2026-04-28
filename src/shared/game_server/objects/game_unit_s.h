@@ -261,6 +261,7 @@ namespace mmo
 
 	namespace proto
 	{
+		class CombatSettings;
 		class FactionTemplateEntry;
 		class SpellEntry;
 	}
@@ -689,6 +690,17 @@ namespace mmo
 		/// @param spell The spell entry used to deal the damage.
 		void SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry &spell);
 
+		/// Sends the AttackerStateUpdate packet (melee white damage) to all nearby subscribers.
+		/// @param victimGuid The GUID of the victim unit.
+		/// @param hitInfo Bitmask of HitInfo flags describing the attack outcome.
+		/// @param victimState The VictimState value for the attack.
+		/// @param totalDamage The total damage dealt after reductions.
+		/// @param school The damage school.
+		/// @param absorbedDamage The amount of damage absorbed.
+		/// @param resistedDamage The amount of damage resisted.
+		/// @param blockedDamage The amount of damage blocked.
+		void SendAttackerStateUpdate(uint64 victimGuid, uint32 hitInfo, uint32 victimState, uint32 totalDamage, uint32 school, uint32 absorbedDamage, uint32 resistedDamage, uint32 blockedDamage);
+
 		/// Logs environmental damage dealt to a unit.
 		/// @param targetGuid The GUID of the target unit.
 		/// @param amount The amount of damage dealt.
@@ -940,6 +952,7 @@ namespace mmo
 		/// @returns true if the unit has an offhand weapon, false otherwise.
 		virtual bool HasOffhandWeapon() const;
 
+	public:
 		/// Gets the maximum skill value for a given level.
 		/// @param level The level to check.
 		/// @returns The maximum skill value as an int32.
@@ -1029,6 +1042,15 @@ public:
 		/// Stops attacking the current victim.
 		void StopAttack();
 
+		/// Gets the auto-attack spell for the current weapon configuration.
+		/// Returns nullptr if no auto-attack spell is configured (legacy behavior).
+		/// Override in subclasses to provide class-specific auto-attack spells.
+		virtual const proto::SpellEntry* GetAutoAttackSpell() const { return nullptr; }
+
+		/// Gets the combat settings containing configurable combat formula parameters.
+		/// Uses the project's combat settings if available, otherwise returns defaults.
+		const proto::CombatSettings& GetCombatSettings() const;
+
 		/// Sets the target of the unit.
 		/// @param targetGuid The GUID of the target.
 		void SetTarget(uint64 targetGuid);
@@ -1086,6 +1108,14 @@ public:
 		/// @param type The movement type.
 		/// @returns The current speed as a float.
 		float GetSpeed(const MovementType type) const;
+
+		/// @brief Returns the current server-controlled movement mode.
+		/// @return Walk or run mode.
+		[[nodiscard]] UnitMovementMode GetMovementMode() const;
+
+		/// @brief Sets the current server-controlled movement mode.
+		/// @param movementMode Walk or run mode.
+		void SetMovementMode(UnitMovementMode movementMode);
 
 		/// Called by spell auras to notify that a speed aura has been applied or misapplied.
 		/// If this unit is player controlled, a client notification is sent and the speed is
@@ -1177,11 +1207,13 @@ public:
 		/// @param powerType The type of power to regenerate.
 		virtual void RegeneratePower(PowerType powerType);
 
+	public:
 		/// Adds power to the unit.
 		/// @param powerType The type of power to add.
 		/// @param amount The amount of power to add.
 		virtual void AddPower(PowerType powerType, int32 amount);
 
+	protected:
 		/// Called when an attack swing event occurs.
 		/// @param attackSwingEvent The attack swing event.
 		void OnAttackSwingEvent(AttackSwingEvent attackSwingEvent) const;

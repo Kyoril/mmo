@@ -86,6 +86,9 @@ namespace mmo
 		/// Returns true if character data has been loaded for this player.
 		[[nodiscard]] bool HasCharacterGuid() const { return m_characterData.has_value(); }
 
+		/// Gets the character data for the active character.
+		[[nodiscard]] const CharacterData& GetCharacterData() const { return m_characterData.value(); }
+
 		/// Gets the active character guid, or 0 if not set.
 		[[nodiscard]] uint64 GetCharacterGuid() const { return m_characterData.has_value() ? m_characterData.value().characterId : 0; }
 
@@ -173,6 +176,24 @@ namespace mmo
 
 		/// Notifies the client about a character update from a world node.
 		void NotifyCharacterUpdate(uint32 mapId, InstanceId instanceId, const GamePlayerS &character);
+
+		/// Resolves the correct instance id for a given map, considering dungeon bindings and group state.
+		/// @param mapId The target map id.
+		/// @return The resolved instance id, or nil if no binding exists (new instance should be created).
+		InstanceId ResolveDungeonInstanceId(MapId mapId) const;
+
+		/// Stores a dungeon instance binding for this player.
+		/// @param mapId The dungeon map id.
+		/// @param instanceId The instance id to bind to.
+		void SetDungeonBinding(MapId mapId, InstanceId instanceId);
+
+		/// Clears the dungeon instance binding for a specific map.
+		/// @param mapId The map id to clear.
+		void ClearDungeonBinding(MapId mapId);
+
+		/// Clears any dungeon instance binding matching a specific instance id.
+		/// @param instanceId The instance id to clear.
+		void ClearDungeonBindingByInstanceId(InstanceId instanceId);
 
 	public:
 		/// Send an auth challenge packet to the client in order to ask it for authentication data.
@@ -410,6 +431,10 @@ namespace mmo
 		std::vector<FriendData> m_friendCache;
 		uint64 m_pendingFriendInvite = 0;
 
+		/// Per-player dungeon instance bindings (mapId -> instanceId).
+		/// Used when the player is solo (not in a group).
+		std::map<MapId, InstanceId> m_dungeonBindings;
+
 	private:
 		/// Closes the connection if still connected.
 		void Destroy();
@@ -447,6 +472,9 @@ namespace mmo
 		PacketParseResult OnGroupDecline(game::IncomingPacket &packet);
 		PacketParseResult OnGroupLeave(game::IncomingPacket& packet);
 		PacketParseResult OnGroupDisband(game::IncomingPacket& packet);
+
+		/// Handles a client request to change the group's loot method.
+		PacketParseResult OnSetLootMethod(game::IncomingPacket& packet);
 		PacketParseResult OnLogoutRequest(game::IncomingPacket &packet);
 
 		// Guild packet handlers

@@ -236,6 +236,15 @@ namespace mmo
 		m_character->Set<uint64>(object_fields::Guild, guildId);
 	}
 
+	void Player::UpdateCharacterGroupLootMethod(const LootMethod lootMethod, const uint64 lootMasterGuid)
+	{
+		if (m_character)
+		{
+			m_character->SetLootMethod(lootMethod);
+			m_character->SetLootMasterGuid(lootMasterGuid);
+		}
+	}
+
 	void Player::NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects)
 	{
 		// Prepare dynamic fields for world objects
@@ -513,7 +522,9 @@ namespace mmo
 			OnGossipHello(opCode, buffer.size(), reader);
 			break;
 
-		case game::client_realm_packet::Loot:
+		case game::client_realm_packet::UseObject:
+			OnGameObjectUse(opCode, buffer.size(), reader);
+			break;
 			OnLoot(opCode, buffer.size(), reader);
 			break;
 		case game::client_realm_packet::AutoStoreLootItem:
@@ -1111,6 +1122,7 @@ namespace mmo
 						<< io::write<uint32>(quest.rewardmoney());
 				}
 
+				packet << io::write<uint32>(quest.rewardxp());
 				packet << io::write<uint32>(quest.rewardspell());
 				packet.Finish();
 			});
@@ -2091,7 +2103,8 @@ namespace mmo
 				packet.Start(game::realm_client_packet::TrainerList);
 				packet
 					<< io::write<uint64>(trainerUnit.GetGuid())
-					<< io::write<uint16>(trainer.spells_size());
+					<< io::write<uint16>(trainer.spells_size())
+					<< io::write_dynamic_range<uint8>(trainer.title());
 
 				uint32 index = 0;
 				for (const auto& trainerSpellEntry : trainer.spells())

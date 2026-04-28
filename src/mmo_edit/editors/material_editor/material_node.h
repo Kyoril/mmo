@@ -2034,4 +2034,132 @@ namespace mmo
 
 		PropertyBase* m_properties[1] = { &m_materialFunctionPathProp };
 	};
+
+	/// @brief A node which provides the elapsed time in seconds since game start.
+	class TimeNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(TimeNode, "Time")
+
+		TimeNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+	private:
+		/// @brief The time output pin (float1).
+		MaterialPin m_output = { this, "Time" };
+
+		/// @brief List of output pins as an array.
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
+	/// @brief A node which rotates 2D texture coordinates around a center point.
+	class RotatorNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(RotatorNode, "Rotator")
+
+		RotatorNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		float m_centerX = 0.5f;
+		float m_centerY = 0.5f;
+		float m_rotation = 0.0f;
+
+		FloatProperty m_centerXProp { "Center X", m_centerX };
+		FloatProperty m_centerYProp { "Center Y", m_centerY };
+		FloatProperty m_rotationProp { "Rotation", m_rotation };
+
+		PropertyBase* m_properties[3] = { &m_centerXProp, &m_centerYProp, &m_rotationProp };
+
+		/// @brief The texture coordinate input pin (float2).
+		MaterialPin m_coordsInput = { this, "UVs" };
+
+		/// @brief The center of rotation input pin (float2), optional.
+		MaterialPin m_centerInput = { this, "Center" };
+
+		/// @brief The rotation angle input pin (float1), optional.
+		MaterialPin m_rotationInput = { this, "Rotation" };
+
+		/// @brief The rotated coordinate output pin (float2).
+		MaterialPin m_output = { this };
+
+		Pin* m_inputPins[3] = { &m_coordsInput, &m_centerInput, &m_rotationInput };
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
+	/// @brief A node which computes the Fresnel effect using the Schlick approximation.
+	class FresnelNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(FresnelNode, "Fresnel")
+
+		FresnelNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		float m_exponent = 5.0f;
+		float m_baseReflectFraction = 0.04f;
+
+		FloatProperty m_exponentProp { "Exponent", m_exponent };
+		FloatProperty m_baseReflectFractionProp { "Base Reflect Fraction", m_baseReflectFraction };
+
+		PropertyBase* m_properties[2] = { &m_exponentProp, &m_baseReflectFractionProp };
+
+		/// @brief Optional exponent input pin (float1).
+		MaterialPin m_exponentInput = { this, "Exponent" };
+
+		/// @brief Optional base reflect fraction input pin (float1).
+		MaterialPin m_baseReflectFractionInput = { this, "Base Reflect Fraction" };
+
+		/// @brief Optional normal input pin (float3). Defaults to vertex normal.
+		MaterialPin m_normalInput = { this, "Normal" };
+
+		/// @brief The Fresnel output pin (float1).
+		MaterialPin m_output = { this };
+
+		Pin* m_inputPins[3] = { &m_exponentInput, &m_baseReflectFractionInput, &m_normalInput };
+		Pin* m_outputPins[1] = { &m_output };
+	};
 }

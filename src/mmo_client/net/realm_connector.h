@@ -279,6 +279,12 @@ namespace mmo
 
 		void AutoStoreLootItem(uint8 lootSlot);
 
+		/// Sends a SetLootMethod packet to the realm server to change the group's loot method.
+		/// @param method The new loot method (0=FreeForAll, 1=RoundRobin, 2=MasterLoot, 3=GroupLoot).
+		/// @param masterGuid The loot master's character GUID (only meaningful for MasterLoot; 0 = server defaults to leader).
+		/// @param threshold The item quality threshold for the loot method.
+		void SetGroupLootMethod(uint8 method, uint64 masterGuid, uint8 threshold);
+
 		void AutoEquipItem(uint8 srcBag, uint8 srcSlot);
 
 		void SwapItem(uint8 srcBag, uint8 srcSlot, uint8 dstBag, uint8 dstSlot);
@@ -300,6 +306,10 @@ namespace mmo
 		/// Sends a loot release packet to the server, notifying it about the player's intention to release the loot.
 		///	@param lootObjectGuid The guid of the previously looted object.
 		void LootRelease(uint64 lootObjectGuid);
+
+		/// Sends a packet to the server requesting to use/interact with a specific world object.
+		///	@param objectGuid The guid of the world object to use.
+		void UseObject(uint64 objectGuid);
 
 		/// Sends a generic gossip dialog request packet to the server for a specific npc.
 		///	@param targetGuid The guid of the npc.

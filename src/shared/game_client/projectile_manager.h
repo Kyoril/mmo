@@ -19,6 +19,8 @@ namespace mmo
     class SceneNode;
     class Entity;
     class ParticleEmitter;
+    class Light;
+    class RibbonTrail;
     class GameUnitC;
     class IAudio;
 
@@ -37,15 +39,17 @@ namespace mmo
         /// @param scene The scene to create visual objects in.
         /// @param audio Audio system for sound playback (may be null).
         /// @param spell The spell entry containing speed and other data.
-        /// @param visualization The spell visualization containing projectile config.
+        /// @param projectileVisual The projectile visual configuration (may be null).
         /// @param startPosition The starting position of the projectile.
         /// @param target The target to track (uses IProjectileTarget interface).
+        /// @param animationDelay Seconds the projectile spawn was delayed by animation. Used to boost speed.
         Projectile(Scene &scene,
                    IAudio *audio,
                    const proto_client::SpellEntry &spell,
-                   const proto_client::SpellVisualization *visualization,
+                   const proto_client::ProjectileVisual *projectileVisual,
                    const Vector3 &startPosition,
-                   std::shared_ptr<IProjectileTarget> target);
+                   std::shared_ptr<IProjectileTarget> target,
+                   float animationDelay = 0.0f);
 
         ~Projectile();
 
@@ -82,19 +86,26 @@ namespace mmo
         Scene &m_scene;
         IAudio *m_audio;
         const proto_client::SpellEntry &m_spell;
-        const proto_client::SpellVisualization *m_visualization;
+        const proto_client::ProjectileVisual *m_projectileVisual;
         std::shared_ptr<IProjectileTarget> m_target;
 
         // Scene objects
         SceneNode *m_node;
         Entity *m_entity;
         ParticleEmitter *m_trailEmitter;
+        Light *m_light;
+        RibbonTrail *m_ribbonTrail;
+
+        // Light fade state
+        float m_lightTargetIntensity;
+        float m_lightFadeInTime;
 
         // Movement state
         Vector3 m_startPosition;
         Vector3 m_velocity;
         float m_travelTime;
         float m_totalDistance;
+        float m_speedMultiplier;
         bool m_hasHit;
 
         // Audio
@@ -114,10 +125,12 @@ namespace mmo
         /// @param visualization Spell visualization containing projectile config.
         /// @param caster Unit casting the spell.
         /// @param target Target unit.
+        /// @param animationDelay Seconds the spawn was delayed by animation.
         void SpawnProjectile(const proto_client::SpellEntry &spell,
                              const proto_client::SpellVisualization *visualization,
                              GameUnitC *caster,
-                             GameUnitC *target);
+                             GameUnitC *target,
+                             float animationDelay = 0.0f);
 
         /// @brief Spawn a new projectile using abstract targets.
         /// @param spell Spell entry containing speed and data.
