@@ -2,9 +2,11 @@
 
 #include "bot_login_connector.h"
 #include "bot_realm_connector.h"
+#include "bot_console_prompt.h"
 #include "bot_context.h"
 #include "bot_profile.h"
 #include "bot_profiles.h"
+#include "bot_startup_selection.h"
 #include "bot_startup_types.h"
 #include "bot_unit_watcher.h"
 
@@ -16,6 +18,7 @@
 #include "asio/io_service.hpp"
 
 #include "nlohmann/json.hpp"
+#include <cxxopts/cxxopts.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -146,16 +149,250 @@ namespace mmo
 		return true;
 	}
 
+	struct StartupCliOptions
+	{
+		fs::path configPath { "bot_config.json" };
+		std::string profileSelector;
+		bool profileProvided { false };
+		std::string characterSelector;
+		bool characterProvided { false };
+	};
+
+	enum class StartupProfileSelectionExit
+	{
+		Success,
+		DisplayedHelp,
+		Error,
+	};
+
+	std::string TrimCopy(std::string_view value)
+	{
+		size_t start = 0;
+		while (start < value.size() && std::isspace(static_cast<unsigned char>(value[start])) != 0)
+		{
+			++start;
+		}
+
+		size_t end = value.size();
+		while (end > start && std::isspace(static_cast<unsigned char>(value[end - 1])) != 0)
+		{
+			--end;
+		}
+
+		return std::string(value.substr(start, end - start));
+	}
+
+	std::string DescribeSelector(std::string_view selector)
+	{
+		const std::string trimmed = TrimCopy(selector);
+		return trimmed.empty() ? "<unspecified>" : trimmed;
+	}
+
+	StartupProfileSelectionExit ParseStartupOptions(int argc, char** argv, StartupCliOptions& outOptions)
+	{
+		cxxopts::Options options("mmo_bot", "Bot client for the mmo project.");
+		options.add_options()
+			("c,config", "Path to bot config JSON", cxxopts::value<std::string>()->default_value(outOptions.configPath.string()))
+			("profile", "Startup profile key override", cxxopts::value<std::string>())
+			("character", "Character name override", cxxopts::value<std::string>())
+			("h,help", "Show help");
+
+		try
+		{
+			auto results = options.parse(argc, argv);
+			if (results.count("help") > 0)
+			{
+				std::cout << options.help() << '\n';
+				return StartupProfileSelectionExit::DisplayedHelp;
+			}
+
+			outOptions.configPath = results["config"].as<std::string>();
+			if (results.count("profile") > 0)
+			{
+				outOptions.profileProvided = true;
+				outOptions.profileSelector = TrimCopy(results["profile"].as<std::string>());
+				if (outOptions.profileSelector.empty())
+				{
+					std::cerr << "Invalid --profile value: selector must not be empty." << '\n';
+					std::cerr << options.help() << '\n';
+					return StartupProfileSelectionExit::Error;
+				}
+			}
+
+			if (results.count("character") > 0)
+			{
+				outOptions.characterProvided = true;
+				outOptions.characterSelector = TrimCopy(results["character"].as<std::string>());
+				if (outOptions.characterSelector.empty())
+				{
+					std::cerr << "Invalid --character value: selector must not be empty." << '\n';
+					std::cerr << options.help() << '\n';
+					return StartupProfileSelectionExit::Error;
+				}
+			}
+		}
+		catch (const cxxopts::OptionException& e)
+		{
+			std::cerr << "Failed to parse command line: " << e.what() << '\n';
+			std::cerr << options.help() << '\n';
+			return StartupProfileSelectionExit::Error;
+		}
+
+		return StartupProfileSelectionExit::Success;
+	}
+
+	void LogProfileResolution(const StartupProfileResolution& resolution, size_t availableCount)
+	{
+		switch (resolution.kind)
+		{
+		case StartupProfileResolutionKind::Resolved:
+			ILOG("startup phase=profile_resolution outcome=resolved selector="
+				<< DescribeSelector(resolution.selector)
+				<< " resolved_profile=" << resolution.resolvedKey
+				<< " available_count=" << availableCount);
+			break;
+		case StartupProfileResolutionKind::NeedsPrompt:
+			ILOG("startup phase=profile_resolution outcome=prompt_required selector="
+				<< DescribeSelector(resolution.selector)
+				<< " available_count=" << resolution.candidateIndices.size());
+			break;
+		case StartupProfileResolutionKind::Invalid:
+			ELOG("startup phase=profile_resolution outcome=invalid selector="
+				<< DescribeSelector(resolution.selector)
+				<< " available_count=" << availableCount);
+			break;
+		}
+	}
+
+	std::vector<std::string> BuildPromptOptions(
+		const std::vector<StartupProfileEntry>& catalog,
+		const std::vector<size_t>& indices)
+	{
+		std::vector<std::string> options;
+		options.reserve(indices.size());
+		for (const size_t index : indices)
+		{
+			if (index < catalog.size())
+			{
+				options.push_back(catalog[index].key);
+			}
+		}
+		return options;
+	}
+
+	std::optional<size_t> PromptForProfileSelection(
+		const std::vector<StartupProfileEntry>& catalog,
+		const StartupProfileResolution& resolution)
+	{
+		const std::vector<std::string> promptOptions = BuildPromptOptions(catalog, resolution.candidateIndices);
+		const BotConsolePromptResult promptResult = PromptForSelection(
+			"profile",
+			promptOptions,
+			std::cin,
+			std::cout,
+			IsConsoleInputInteractive());
+
+		switch (promptResult.kind)
+		{
+		case BotConsolePromptResultKind::Selected:
+			if (promptResult.selectedIndex.has_value() && *promptResult.selectedIndex < resolution.candidateIndices.size())
+			{
+				const size_t resolvedIndex = resolution.candidateIndices[*promptResult.selectedIndex];
+				ILOG("startup phase=profile_resolution outcome=prompt_selected selector="
+					<< catalog[resolvedIndex].key
+					<< " available_count=" << resolution.candidateIndices.size());
+				return resolvedIndex;
+			}
+			break;
+		case BotConsolePromptResultKind::NonInteractive:
+			ELOG("startup phase=profile_resolution outcome=non_interactive_refusal selector="
+				<< DescribeSelector(resolution.selector)
+				<< " available_count=" << resolution.candidateIndices.size());
+			break;
+		case BotConsolePromptResultKind::Aborted:
+			ELOG("startup phase=profile_resolution outcome=prompt_aborted selector="
+				<< DescribeSelector(resolution.selector)
+				<< " available_count=" << resolution.candidateIndices.size());
+			break;
+		}
+
+		return std::nullopt;
+	}
+
+	bool ResolveConfiguredProfile(
+		BotConfig& config,
+		const StartupCliOptions& cliOptions,
+		BotProfilePtr& outProfile)
+	{
+		const std::vector<StartupProfileEntry> catalog = GetStartupProfileCatalog();
+		StartupProfileResolution resolution = ResolveStartupProfileSelection(
+			cliOptions.profileProvided ? cliOptions.profileSelector : std::string_view{},
+			config.profileName,
+			catalog);
+		LogProfileResolution(resolution, catalog.size());
+
+		if (resolution.kind == StartupProfileResolutionKind::NeedsPrompt)
+		{
+			const std::optional<size_t> promptedIndex = PromptForProfileSelection(catalog, resolution);
+			if (!promptedIndex.has_value())
+			{
+				return false;
+			}
+
+			resolution.kind = StartupProfileResolutionKind::Resolved;
+			resolution.resolvedIndex = *promptedIndex;
+			resolution.resolvedKey = catalog[*promptedIndex].key;
+		}
+		else if (resolution.kind == StartupProfileResolutionKind::Invalid)
+		{
+			std::cerr << "Valid profiles:";
+			for (const auto& entry : catalog)
+			{
+				std::cerr << ' ' << entry.key;
+			}
+			std::cerr << '\n';
+			return false;
+		}
+
+		if (!resolution.resolvedIndex.has_value())
+		{
+			ELOG("startup phase=profile_resolution outcome=missing_resolved_profile selector="
+				<< DescribeSelector(resolution.selector)
+				<< " available_count=" << catalog.size());
+			return false;
+		}
+
+		config.profileName = resolution.resolvedKey;
+		outProfile = CreateBotProfile(config.profileName, config);
+		if (!outProfile)
+		{
+			ELOG("startup phase=profile_resolution outcome=unknown_profile_factory selector="
+				<< config.profileName
+				<< " available_count=" << catalog.size());
+			return false;
+		}
+
+		return true;
+	}
+
+	void ApplyCliOverrides(BotConfig& config, const StartupCliOptions& cliOptions)
+	{
+		if (cliOptions.characterProvided)
+		{
+			config.characterName = cliOptions.characterSelector;
+		}
+	}
+
 	class BotSession
 	{
 	public:
-		explicit BotSession(BotConfig config)
+		BotSession(BotConfig config, BotProfilePtr profile)
 			: m_config(std::move(config))
 			, m_io()
 			, m_login(std::make_shared<BotLoginConnector>(m_io, m_config.loginHost, m_config.loginPort))
 			, m_realm(std::make_shared<BotRealmConnector>(m_io))
 			, m_context(std::make_shared<BotContext>(m_realm, m_config))
-			, m_profile(CreateProfile())
+			, m_profile(std::move(profile))
 		{
 			BindSignals();
 		}
@@ -217,44 +454,6 @@ namespace mmo
 
 			m_realm->close();
 			m_login->close();
-		}
-
-	private:
-		BotProfilePtr CreateProfile()
-		{
-			// Create profile based on configuration
-			if (m_config.profileName == "simple_greeter")
-			{
-				return std::make_shared<SimpleGreeterProfile>(m_config.greeting);
-			}
-			else if (m_config.profileName == "chatter")
-			{
-				// Example: Create a chatter bot with some test messages
-				std::vector<std::string> messages = {
-					"Hello!",
-					"How is everyone doing?",
-					"I'm a test bot!",
-					"This is pretty cool!"
-				};
-				return std::make_shared<ChatterProfile>(messages, 3000ms);
-			}
-			else if (m_config.profileName == "sequence")
-			{
-				return std::make_shared<SequenceProfile>();
-			}
-			else if (m_config.profileName == "unit_awareness")
-			{
-				return std::make_shared<UnitAwarenessProfile>();
-			}
-			else if (m_config.profileName == "combat")
-			{
-				return std::make_shared<CombatProfile>();
-			}
-			else
-			{
-				WLOG("Unknown profile '" << m_config.profileName << "', using simple_greeter");
-				return std::make_shared<SimpleGreeterProfile>(m_config.greeting);
-			}
 		}
 
 		void BindSignals()
@@ -559,20 +758,40 @@ namespace mmo
 	};
 }
 
-int main()
+int main(int argc, char** argv)
 {
 	using namespace mmo;
 
 	InitializeLogging();
 
-	const fs::path configPath = "bot_config.json";
+	StartupCliOptions cliOptions;
+	switch (ParseStartupOptions(argc, argv, cliOptions))
+	{
+	case StartupProfileSelectionExit::DisplayedHelp:
+		return 0;
+	case StartupProfileSelectionExit::Error:
+		return 1;
+	case StartupProfileSelectionExit::Success:
+		break;
+	}
+
+	ILOG("startup phase=config_load config_path=" << cliOptions.configPath);
+
 	BotConfig config;
-	if (!LoadConfig(configPath, config))
+	if (!LoadConfig(cliOptions.configPath, config))
 	{
 		return 1;
 	}
 
-	BotSession session(config);
+	ApplyCliOverrides(config, cliOptions);
+
+	BotProfilePtr profile;
+	if (!ResolveConfiguredProfile(config, cliOptions, profile))
+	{
+		return 1;
+	}
+
+	BotSession session(std::move(config), std::move(profile));
 	if (!session.Start())
 	{
 		return 1;

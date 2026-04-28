@@ -21,6 +21,7 @@ target_link_libraries(unit_tests
 
 target_sources(unit_tests PRIVATE
 	../mmo_bot/bot_startup_selection.cpp
+	../mmo_bot/bot_console_prompt.cpp
 )
 
 if (WIN32)

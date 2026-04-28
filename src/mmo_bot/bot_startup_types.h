@@ -31,7 +31,7 @@ namespace mmo
 		bool randomMove { false };
 		uint32 heartbeatMs { 5000 };
 
-		std::string profileName { "simple_greeter" };
+		std::string profileName;
 	};
 
 	struct StartupProfileEntry

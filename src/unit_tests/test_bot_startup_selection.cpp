@@ -1,7 +1,10 @@
 // Copyright (C) 2019 - 2026, Kyoril. All rights reserved.
 
 #include "catch.hpp"
+#include "mmo_bot/bot_console_prompt.h"
 #include "mmo_bot/bot_startup_selection.h"
+
+#include <sstream>
 
 namespace mmo
 {
@@ -182,56 +185,53 @@ namespace mmo
 		REQUIRE_FALSE(resolution.resolvedIndex.has_value());
 	}
 
-	TEST_CASE("Startup character selection requests a prompt for duplicate or malformed character names", "[bot][startup][character]")
+	TEST_CASE("Startup console prompt refuses selection when stdin is non-interactive", "[bot][startup][prompt]")
 	{
-		SECTION("duplicate names differing only by case")
-		{
-			const std::vector<CharacterView> availableCharacters = {
-				MakeCharacter(1, "BotOne"),
-				MakeCharacter(2, "botone"),
-			};
+		std::istringstream input("1\n");
+		std::ostringstream output;
 
-			const StartupCharacterResolution resolution = ResolveStartupCharacterSelection(
-				"BotOne",
-				"",
-				false,
-				availableCharacters);
+		const BotConsolePromptResult result = PromptForSelection(
+			"profile",
+			std::vector<std::string>{ "simple_greeter", "combat" },
+			input,
+			output,
+			false);
 
-			REQUIRE(resolution.kind == StartupCharacterResolutionKind::NeedsPrompt);
-			REQUIRE(resolution.candidateIndices == std::vector<size_t>{ 0, 1 });
-		}
+		REQUIRE(result.kind == BotConsolePromptResultKind::NonInteractive);
+		REQUIRE_FALSE(result.selectedIndex.has_value());
+	}
 
-		SECTION("empty name blocks auto-resolution")
-		{
-			const std::vector<CharacterView> availableCharacters = {
-				MakeCharacter(1, ""),
-			};
+	TEST_CASE("Startup console prompt re-prompts on malformed selections until a valid index is chosen", "[bot][startup][prompt]")
+	{
+		std::istringstream input("abc\n0\n3\n2\n");
+		std::ostringstream output;
 
-			const StartupCharacterResolution resolution = ResolveStartupCharacterSelection(
-				"",
-				" ",
-				false,
-				availableCharacters);
+		const BotConsolePromptResult result = PromptForSelection(
+			"profile",
+			std::vector<std::string>{ "simple_greeter", "combat" },
+			input,
+			output,
+			true);
 
-			REQUIRE(resolution.kind == StartupCharacterResolutionKind::NeedsPrompt);
-			REQUIRE(resolution.candidateIndices == std::vector<size_t>{ 0 });
-		}
+		REQUIRE(result.kind == BotConsolePromptResultKind::Selected);
+		REQUIRE(result.selectedIndex == 1);
+		REQUIRE(output.str().find("Select profile:") != std::string::npos);
+		REQUIRE(output.str().find("Invalid selection") != std::string::npos);
+	}
 
-		SECTION("empty name also blocks explicit selector resolution")
-		{
-			const std::vector<CharacterView> availableCharacters = {
-				MakeCharacter(1, "MageOne"),
-				MakeCharacter(2, ""),
-			};
+	TEST_CASE("Startup console prompt aborts when interactive input ends before a valid choice", "[bot][startup][prompt]")
+	{
+		std::istringstream input("");
+		std::ostringstream output;
 
-			const StartupCharacterResolution resolution = ResolveStartupCharacterSelection(
-				"MageOne",
-				"",
-				false,
-				availableCharacters);
+		const BotConsolePromptResult result = PromptForSelection(
+			"profile",
+			std::vector<std::string>{ "simple_greeter", "combat" },
+			input,
+			output,
+			true);
 
-			REQUIRE(resolution.kind == StartupCharacterResolutionKind::NeedsPrompt);
-			REQUIRE(resolution.candidateIndices == std::vector<size_t>{ 0, 1 });
-		}
+		REQUIRE(result.kind == BotConsolePromptResultKind::Aborted);
+		REQUIRE_FALSE(result.selectedIndex.has_value());
 	}
 }

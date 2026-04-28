@@ -85,19 +85,52 @@ bool continue = profile->Update(context);  // Execute queued actions
 profile->OnDeactivate(context);  // Clean up on exit
 ```
 
-### 4. **Configuration** (`bot_main.cpp`)
-Extended JSON configuration with profile selection:
+### 4. **Configuration and Startup Selection** (`bot_main.cpp`)
+Startup now resolves exactly one profile before the bot session begins networking.
 
+**Precedence:**
+1. `--profile <key>` CLI override
+2. `behavior.profile` in the JSON config
+3. interactive console prompt when multiple profiles are available
+4. clear non-zero exit when prompting is required but stdin is not interactive
+
+**CLI options:**
+- `--config <path>`: load a specific bot JSON file
+- `--profile <key>`: override the configured behavior profile
+- `--character <name>`: override the configured character selector
+
+**Example config:**
 ```json
 {
+  "login": {
+    "host": "mmo-dev.net",
+    "port": 3724,
+    "username": "your-account",
+    "password": "your-password"
+  },
+  "realm": {
+    "name": "Development",
+    "index": 0
+  },
+  "character": {
+    "name": "Bot",
+    "create_if_missing": true,
+    "race": 1,
+    "class": 1,
+    "gender": 0
+  },
   "behavior": {
     "greeting": "Hi",
-    "profile": "simple_greeter"
+    "random_move": false,
+    "heartbeat_ms": 5000,
+    "profile": "combat"
   }
 }
 ```
 
-Supported profiles: `simple_greeter`, `chatter`, `sequence`
+If `behavior.profile` is omitted or empty and more than one profile is registered, `mmo_bot` prompts for a numbered selection only when stdin is interactive. Non-interactive runs fail fast instead of silently falling back to `simple_greeter`.
+
+Supported profiles: `simple_greeter`, `chatter`, `sequence`, `unit_awareness`, `combat`
 
 ## Design Principles Applied
 
@@ -289,10 +322,12 @@ profile->QueueAction(std::make_shared<ChatMessageAction>("Test passed"));
 - Verify bot is in world (`context.IsWorldReady()`)
 - Check profile's `Update()` is being called regularly
 
-**Profile changes not working:**
+**Profile selection not working:**
+- Check that `behavior.profile` or `--profile` matches one of the registered startup profile keys
+- Omit the selector only when you expect an interactive prompt on a TTY
+- Non-interactive runs now fail instead of silently falling back to another profile
 - Regenerate CMake cache after adding new files
 - Rebuild the project completely
-- Check profile name in bot_config.json matches CreateProfile() cases
 
 ## Contributing
 
