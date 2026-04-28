@@ -3,10 +3,12 @@
 #pragma once
 
 #include "bot_startup_types.h"
+#include "bot_unit.h"
 
 #include "base/typedefs.h"
 #include "game/chat_type.h"
 #include "game/movement_info.h"
+#include "game/spell_target_map.h"
 #include "math/vector3.h"
 
 #include <chrono>
@@ -260,6 +262,25 @@ namespace mmo
 		/// Iterates over all known units.
 		/// @param callback The callback to invoke for each unit.
 		void ForEachUnit(const std::function<void(const BotUnit&)>& callback) const;
+
+		// ============================================================
+		// Combat Runtime State Methods
+		// ============================================================
+
+		PowerType GetSelfPowerType() const;
+		uint32 GetSelfPower() const;
+		uint32 GetSelfMaxPower() const;
+		float GetSelfPowerPercent() const;
+		bool HasKnownSpell(uint32 spellId) const;
+		std::vector<uint32> GetKnownSpellIds() const;
+		bool HasVisibleAura(uint32 spellId) const;
+		std::vector<BotUnit::AuraState> GetVisibleAuras() const;
+		bool IsSpellOnCooldown(uint32 spellId) const;
+		GameTime GetSpellCooldownRemaining(uint32 spellId) const;
+		std::vector<BotUnit::CooldownState> GetActiveSpellCooldowns() const;
+		BotUnit::CastState GetLastCastState() const;
+		std::string GetLastSpellStateIssue() const;
+		bool CastSpell(uint32 spellId, const SpellTargetMap& targetMap);
 
 		// ============================================================
 		// Combat Methods

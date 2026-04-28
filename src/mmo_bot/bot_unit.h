@@ -6,10 +6,14 @@
 #include "game/movement_info.h"
 #include "game/movement_type.h"
 #include "game/object_type_id.h"
+#include "game/spell.h"
 #include "math/vector3.h"
 
 #include <array>
+#include <map>
 #include <string>
+#include <unordered_set>
+#include <vector>
 
 namespace mmo
 {
@@ -20,6 +24,43 @@ namespace mmo
 	/// This class represents both players and creatures (NPCs) in the game world.
 	class BotUnit final
 	{
+	public:
+		struct AuraState final
+		{
+			uint32 spellId { 0 };
+			uint32 remainingMs { 0 };
+			uint64 casterGuid { 0 };
+			std::vector<int32> basePoints;
+		};
+
+		struct CooldownState final
+		{
+			uint32 spellId { 0 };
+			GameTime startedAtMs { 0 };
+			GameTime durationMs { 0 };
+			GameTime endsAtMs { 0 };
+		};
+
+		struct CastState final
+		{
+			enum class Status
+			{
+				None,
+				Pending,
+				Started,
+				Succeeded,
+				Failed,
+			};
+
+			Status status { Status::None };
+			uint32 spellId { 0 };
+			GameTime requestedAtMs { 0 };
+			GameTime updatedAtMs { 0 };
+			uint32 targetFlags { 0 };
+			uint64 unitTargetGuid { 0 };
+			SpellCastResult failureReason { spell_cast_result::CastOkay };
+		};
+
 	public:
 		/// @brief Default constructor.
 		BotUnit() = default;
@@ -114,6 +155,18 @@ namespace mmo
 		/// @return The health percentage.
 		float GetHealthPercent() const;
 
+		/// @brief Gets the active power type.
+		PowerType GetPowerType() const { return m_powerType; }
+
+		/// @brief Gets the current active power value.
+		uint32 GetPower() const { return m_power; }
+
+		/// @brief Gets the maximum active power value.
+		uint32 GetMaxPower() const { return m_maxPower; }
+
+		/// @brief Gets the active power as a percentage (0.0 to 1.0).
+		float GetPowerPercent() const;
+
 		/// @brief Gets the faction template ID.
 		/// @return The faction template ID.
 		uint32 GetFactionTemplate() const { return m_factionTemplate; }
@@ -133,6 +186,34 @@ namespace mmo
 		/// @brief Gets the GUID of the unit's current target.
 		/// @return The target GUID, or 0 if no target.
 		uint64 GetTargetGuid() const { return m_targetGuid; }
+
+		// ============================================================
+		// Spellbook & Combat Runtime State
+		// ============================================================
+
+		/// @brief Gets whether the unit knows a specific spell.
+		bool KnowsSpell(uint32 spellId) const;
+
+		/// @brief Gets the known spell ids.
+		std::vector<uint32> GetKnownSpellIds() const;
+
+		/// @brief Gets whether a visible aura with the given spell id is currently mirrored.
+		bool HasAura(uint32 spellId) const;
+
+		/// @brief Gets visible self auras mirrored from the realm stream.
+		const std::vector<AuraState>& GetVisibleAuras() const { return m_visibleAuras; }
+
+		/// @brief Gets whether a spell is currently considered on cooldown.
+		bool IsSpellOnCooldown(uint32 spellId, GameTime nowMs) const;
+
+		/// @brief Gets remaining cooldown time in milliseconds for a spell.
+		GameTime GetSpellCooldownRemaining(uint32 spellId, GameTime nowMs) const;
+
+		/// @brief Gets active cooldown snapshots that have not expired.
+		std::vector<CooldownState> GetActiveCooldowns(GameTime nowMs) const;
+
+		/// @brief Gets the last cast lifecycle state mirrored for this unit.
+		const CastState& GetLastCastState() const { return m_lastCastState; }
 
 		// ============================================================
 		// State Queries
@@ -227,6 +308,9 @@ namespace mmo
 		/// @brief Sets the maximum health.
 		void SetMaxHealth(uint32 maxHealth) { m_maxHealth = maxHealth; }
 
+		/// @brief Sets the active power snapshot.
+		void SetPower(PowerType powerType, uint32 power, uint32 maxPower);
+
 		/// @brief Sets the faction template ID.
 		void SetFactionTemplate(uint32 factionTemplate) { m_factionTemplate = factionTemplate; }
 
@@ -241,6 +325,39 @@ namespace mmo
 
 		/// @brief Sets the target GUID.
 		void SetTargetGuid(uint64 targetGuid) { m_targetGuid = targetGuid; }
+
+		/// @brief Replaces the known spellbook state.
+		void SetKnownSpells(const std::vector<uint32>& spellIds);
+
+		/// @brief Learns a single spell if it is not already known.
+		void LearnSpell(uint32 spellId);
+
+		/// @brief Removes a spell from the known spellbook and clears cooldown state for it.
+		void UnlearnSpell(uint32 spellId);
+
+		/// @brief Replaces the visible aura list.
+		void SetVisibleAuras(std::vector<AuraState> auras);
+
+		/// @brief Starts or refreshes a cooldown snapshot.
+		void SetSpellCooldown(uint32 spellId, GameTime nowMs, GameTime durationMs);
+
+		/// @brief Clears a cooldown snapshot.
+		void ClearSpellCooldown(uint32 spellId);
+
+		/// @brief Updates the mirrored last cast request to a pending state.
+		void SetLastCastPending(uint32 spellId, const uint32 targetFlags, uint64 unitTargetGuid, GameTime nowMs);
+
+		/// @brief Updates the mirrored last cast request to a cast-started state.
+		void SetLastCastStarted(uint32 spellId, const uint32 targetFlags, uint64 unitTargetGuid, GameTime nowMs);
+
+		/// @brief Updates the mirrored last cast request to a cast-succeeded state.
+		void SetLastCastSucceeded(uint32 spellId, const uint32 targetFlags, uint64 unitTargetGuid, GameTime nowMs);
+
+		/// @brief Updates the mirrored last cast request to a failed state.
+		void SetLastCastFailed(uint32 spellId, SpellCastResult result, GameTime nowMs);
+
+	private:
+		void SetLastCastState(CastState::Status status, uint32 spellId, uint32 targetFlags, uint64 unitTargetGuid, GameTime nowMs);
 
 	private:
 		// Identity
@@ -259,11 +376,20 @@ namespace mmo
 		uint32 m_level = 1;
 		uint32 m_health = 0;
 		uint32 m_maxHealth = 0;
+		PowerType m_powerType = power_type::Invalid_;
+		uint32 m_power = 0;
+		uint32 m_maxPower = 0;
 		uint32 m_factionTemplate = 0;
 		uint32 m_displayId = 0;
 		uint32 m_unitFlags = 0;
 		uint32 m_npcFlags = 0;
 		uint64 m_targetGuid = 0;
+
+		// Spellbook & combat runtime state
+		std::unordered_set<uint32> m_knownSpells;
+		std::vector<AuraState> m_visibleAuras;
+		std::map<uint32, CooldownState> m_spellCooldowns;
+		CastState m_lastCastState;
 	};
 
 }

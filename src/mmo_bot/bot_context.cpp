@@ -584,6 +584,103 @@ namespace mmo
 	}
 
 	// ============================================================
+	// Combat Runtime State Methods
+	// ============================================================
+
+	PowerType BotContext::GetSelfPowerType() const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->GetPowerType() : power_type::Invalid_;
+	}
+
+	uint32 BotContext::GetSelfPower() const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->GetPower() : 0;
+	}
+
+	uint32 BotContext::GetSelfMaxPower() const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->GetMaxPower() : 0;
+	}
+
+	float BotContext::GetSelfPowerPercent() const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->GetPowerPercent() : 0.0f;
+	}
+
+	bool BotContext::HasKnownSpell(uint32 spellId) const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->KnowsSpell(spellId) : false;
+	}
+
+	std::vector<uint32> BotContext::GetKnownSpellIds() const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->GetKnownSpellIds() : std::vector<uint32>{};
+	}
+
+	bool BotContext::HasVisibleAura(uint32 spellId) const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->HasAura(spellId) : false;
+	}
+
+	std::vector<BotUnit::AuraState> BotContext::GetVisibleAuras() const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->GetVisibleAuras() : std::vector<BotUnit::AuraState>{};
+	}
+
+	bool BotContext::IsSpellOnCooldown(uint32 spellId) const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->IsSpellOnCooldown(spellId, GetServerTime()) : false;
+	}
+
+	GameTime BotContext::GetSpellCooldownRemaining(uint32 spellId) const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->GetSpellCooldownRemaining(spellId, GetServerTime()) : 0;
+	}
+
+	std::vector<BotUnit::CooldownState> BotContext::GetActiveSpellCooldowns() const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->GetActiveCooldowns(GetServerTime()) : std::vector<BotUnit::CooldownState>{};
+	}
+
+	BotUnit::CastState BotContext::GetLastCastState() const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->GetLastCastState() : BotUnit::CastState{};
+	}
+
+	std::string BotContext::GetLastSpellStateIssue() const
+	{
+		if (!m_realmConnector)
+		{
+			return "";
+		}
+
+		return m_realmConnector->GetLastSpellStateIssue();
+	}
+
+	bool BotContext::CastSpell(uint32 spellId, const SpellTargetMap& targetMap)
+	{
+		if (!m_realmConnector)
+		{
+			WLOG("Cannot cast spell: No realm connector available");
+			return false;
+		}
+
+		return m_realmConnector->SendCastSpell(spellId, targetMap);
+	}
+
+	// ============================================================
 	// Combat Methods
 	// ============================================================
 

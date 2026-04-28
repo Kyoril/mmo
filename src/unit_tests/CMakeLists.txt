@@ -29,7 +29,12 @@ target_sources(unit_tests PRIVATE
 	../mmo_bot/bot_movement_math.cpp
 	../mmo_bot/bot_follow_policy.cpp
 	../mmo_bot/bot_companion_state_machine.cpp
+	../mmo_bot/bot_context.cpp
+	../mmo_bot/bot_realm_connector.cpp
+	../mmo_bot/bot_object_manager.cpp
+	../mmo_bot/bot_unit.cpp
 	../mmo_bot/bot_actions/follow_leader_action.cpp
+	test_bot_warrior_runtime.cpp
 )
 
 if (WIN32)

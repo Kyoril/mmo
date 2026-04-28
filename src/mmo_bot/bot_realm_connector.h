@@ -13,6 +13,7 @@
 #include "game/movement_info.h"
 #include "game/chat_type.h"
 #include "game/auto_attack.h"
+#include "game/spell_target_map.h"
 
 #include "asio/io_service.hpp"
 
@@ -101,6 +102,7 @@ namespace mmo
 
 		uint64 m_selectedCharacterGuid { 0 };
 		MovementInfo m_movementInfo;
+		std::string m_lastSpellStateIssue;
 
 		// Party state
 		std::vector<BotPartyMember> m_partyMembers;
@@ -211,6 +213,9 @@ namespace mmo
 		/// Gets the object manager containing all known units (const).
 		const BotObjectManager& GetObjectManager() const { return m_objectManager; }
 
+		/// Gets the latest spell-state issue mirrored by packet handling or cast validation.
+		const std::string& GetLastSpellStateIssue() const { return m_lastSpellStateIssue; }
+
 		// ============================================================
 		// Combat Methods
 		// ============================================================
@@ -222,13 +227,27 @@ namespace mmo
 		/// Stops auto-attack.
 		void SendAttackStop();
 
+		/// Sends a spell cast request using the standard spell target map contract.
+		/// @return True if the request was queued locally, false if it was rejected before send.
+		bool SendCastSpell(uint32 spellId, const SpellTargetMap& targetMap, bool autoFlush = true);
+
 		/// Checks if the bot is currently auto-attacking.
 		bool IsAutoAttacking() const { return m_isAutoAttacking; }
 
 		/// Gets the GUID of the current auto-attack target.
 		uint64 GetAutoAttackTarget() const { return m_autoAttackTargetGuid; }
 
+		/// Registers the world/runtime packet handlers without going through live auth.
+		/// Exposed to keep packet-level unit tests deterministic.
+		void PrimeWorldSessionForTesting(uint64 selectedGuid = 0);
+
 	private:
+		void RegisterWorldPacketHandlers();
+		BotUnit* GetSelfMutable();
+		const BotUnit* GetSelf() const;
+		void UpdateSpellStateIssue(const std::string& issue);
+		void ClearSpellStateIssue();
+
 		PacketParseResult OnAuthChallenge(game::IncomingPacket& packet);
 
 		PacketParseResult OnAuthSessionResponse(game::IncomingPacket& packet);
@@ -269,6 +288,15 @@ namespace mmo
 
 		/// @brief Handles movement packets from other units.
 		PacketParseResult OnMovementPacket(game::IncomingPacket& packet);
+
+		PacketParseResult OnInitialSpells(game::IncomingPacket& packet);
+		PacketParseResult OnLearnedSpell(game::IncomingPacket& packet);
+		PacketParseResult OnUnlearnedSpell(game::IncomingPacket& packet);
+		PacketParseResult OnSpellStart(game::IncomingPacket& packet);
+		PacketParseResult OnSpellGo(game::IncomingPacket& packet);
+		PacketParseResult OnSpellFailure(game::IncomingPacket& packet);
+		PacketParseResult OnSpellCooldown(game::IncomingPacket& packet);
+		PacketParseResult OnAuraUpdate(game::IncomingPacket& packet);
 
 		// ============================================================
 		// Combat Packet Handlers

@@ -2,6 +2,8 @@
 
 #include "bot_unit.h"
 
+#include <algorithm>
+
 namespace mmo
 {
 	BotUnit::BotUnit(const uint64 guid, const ObjectTypeId typeId)
@@ -53,6 +55,78 @@ namespace mmo
 		}
 
 		return static_cast<float>(m_health) / static_cast<float>(m_maxHealth);
+	}
+
+	float BotUnit::GetPowerPercent() const
+	{
+		if (m_maxPower == 0)
+		{
+			return 0.0f;
+		}
+
+		return static_cast<float>(m_power) / static_cast<float>(m_maxPower);
+	}
+
+	bool BotUnit::KnowsSpell(const uint32 spellId) const
+	{
+		return m_knownSpells.find(spellId) != m_knownSpells.end();
+	}
+
+	std::vector<uint32> BotUnit::GetKnownSpellIds() const
+	{
+		std::vector<uint32> spellIds;
+		spellIds.reserve(m_knownSpells.size());
+		for (const uint32 spellId : m_knownSpells)
+		{
+			spellIds.push_back(spellId);
+		}
+
+		std::sort(spellIds.begin(), spellIds.end());
+		return spellIds;
+	}
+
+	bool BotUnit::HasAura(const uint32 spellId) const
+	{
+		return std::find_if(m_visibleAuras.begin(), m_visibleAuras.end(), [spellId](const AuraState& aura)
+		{
+			return aura.spellId == spellId;
+		}) != m_visibleAuras.end();
+	}
+
+	bool BotUnit::IsSpellOnCooldown(const uint32 spellId, const GameTime nowMs) const
+	{
+		return GetSpellCooldownRemaining(spellId, nowMs) > 0;
+	}
+
+	GameTime BotUnit::GetSpellCooldownRemaining(const uint32 spellId, const GameTime nowMs) const
+	{
+		const auto it = m_spellCooldowns.find(spellId);
+		if (it == m_spellCooldowns.end())
+		{
+			return 0;
+		}
+
+		if (it->second.endsAtMs <= nowMs)
+		{
+			return 0;
+		}
+
+		return it->second.endsAtMs - nowMs;
+	}
+
+	std::vector<BotUnit::CooldownState> BotUnit::GetActiveCooldowns(const GameTime nowMs) const
+	{
+		std::vector<CooldownState> cooldowns;
+		cooldowns.reserve(m_spellCooldowns.size());
+		for (const auto& [spellId, cooldown] : m_spellCooldowns)
+		{
+			if (cooldown.endsAtMs > nowMs)
+			{
+				cooldowns.push_back(cooldown);
+			}
+		}
+
+		return cooldowns;
 	}
 
 	bool BotUnit::IsInCombat() const
@@ -223,6 +297,118 @@ namespace mmo
 	void BotUnit::SetSpeeds(const std::array<float, static_cast<size_t>(MovementType::Count)>& speeds)
 	{
 		m_speeds = speeds;
+	}
+
+	void BotUnit::SetPower(const PowerType powerType, const uint32 power, const uint32 maxPower)
+	{
+		m_powerType = powerType;
+		m_power = power;
+		m_maxPower = maxPower;
+	}
+
+	void BotUnit::SetKnownSpells(const std::vector<uint32>& spellIds)
+	{
+		m_knownSpells.clear();
+		for (const uint32 spellId : spellIds)
+		{
+			if (spellId != 0)
+			{
+				m_knownSpells.insert(spellId);
+			}
+		}
+	}
+
+	void BotUnit::LearnSpell(const uint32 spellId)
+	{
+		if (spellId != 0)
+		{
+			m_knownSpells.insert(spellId);
+		}
+	}
+
+	void BotUnit::UnlearnSpell(const uint32 spellId)
+	{
+		m_knownSpells.erase(spellId);
+		ClearSpellCooldown(spellId);
+	}
+
+	void BotUnit::SetVisibleAuras(std::vector<AuraState> auras)
+	{
+		m_visibleAuras = std::move(auras);
+	}
+
+	void BotUnit::SetSpellCooldown(const uint32 spellId, const GameTime nowMs, const GameTime durationMs)
+	{
+		if (spellId == 0)
+		{
+			return;
+		}
+
+		if (durationMs == 0)
+		{
+			ClearSpellCooldown(spellId);
+			return;
+		}
+
+		CooldownState cooldown;
+		cooldown.spellId = spellId;
+		cooldown.startedAtMs = nowMs;
+		cooldown.durationMs = durationMs;
+		cooldown.endsAtMs = nowMs + durationMs;
+		m_spellCooldowns[spellId] = cooldown;
+	}
+
+	void BotUnit::ClearSpellCooldown(const uint32 spellId)
+	{
+		m_spellCooldowns.erase(spellId);
+	}
+
+	void BotUnit::SetLastCastPending(const uint32 spellId, const uint32 targetFlags, const uint64 unitTargetGuid, const GameTime nowMs)
+	{
+		SetLastCastState(CastState::Status::Pending, spellId, targetFlags, unitTargetGuid, nowMs);
+		m_lastCastState.requestedAtMs = nowMs;
+		m_lastCastState.failureReason = spell_cast_result::CastOkay;
+	}
+
+	void BotUnit::SetLastCastStarted(const uint32 spellId, const uint32 targetFlags, const uint64 unitTargetGuid, const GameTime nowMs)
+	{
+		SetLastCastState(CastState::Status::Started, spellId, targetFlags, unitTargetGuid, nowMs);
+		if (m_lastCastState.requestedAtMs == 0)
+		{
+			m_lastCastState.requestedAtMs = nowMs;
+		}
+		m_lastCastState.failureReason = spell_cast_result::CastOkay;
+	}
+
+	void BotUnit::SetLastCastSucceeded(const uint32 spellId, const uint32 targetFlags, const uint64 unitTargetGuid, const GameTime nowMs)
+	{
+		SetLastCastState(CastState::Status::Succeeded, spellId, targetFlags, unitTargetGuid, nowMs);
+		if (m_lastCastState.requestedAtMs == 0)
+		{
+			m_lastCastState.requestedAtMs = nowMs;
+		}
+		m_lastCastState.failureReason = spell_cast_result::CastOkay;
+	}
+
+	void BotUnit::SetLastCastFailed(const uint32 spellId, const SpellCastResult result, const GameTime nowMs)
+	{
+		m_lastCastState.status = CastState::Status::Failed;
+		m_lastCastState.spellId = spellId;
+		m_lastCastState.updatedAtMs = nowMs;
+		if (m_lastCastState.requestedAtMs == 0)
+		{
+			m_lastCastState.requestedAtMs = nowMs;
+		}
+		m_lastCastState.failureReason = result;
+	}
+
+	void BotUnit::SetLastCastState(const CastState::Status status, const uint32 spellId, const uint32 targetFlags, const uint64 unitTargetGuid, const GameTime nowMs)
+	{
+		m_lastCastState.status = status;
+		m_lastCastState.spellId = spellId;
+		m_lastCastState.targetFlags = targetFlags;
+		m_lastCastState.unitTargetGuid = unitTargetGuid;
+		m_lastCastState.updatedAtMs = nowMs;
 	}
 
 }

@@ -10,7 +10,7 @@
 #include "base/clock.h"
 #include "base/constants.h"
 #include "base/random.h"
-#include "game/spell_target_map.h"
+#include "binary_io/string_sink.h"
 #include "log/default_log_levels.h"
 
 #include <algorithm>
@@ -44,6 +44,32 @@ namespace mmo
 			default:
 				return movement_type::Run;
 			}
+		}
+
+		bool IsCastTargetLocallyValid(const SpellTargetMap& targetMap)
+		{
+			const uint32 targetFlags = targetMap.GetTargetMap();
+			if ((targetFlags & spell_cast_target_flags::Unit) != 0 && targetMap.GetUnitTarget() == 0)
+			{
+				return false;
+			}
+
+			if ((targetFlags & spell_cast_target_flags::Object) != 0 && targetMap.GetGOTarget() == 0)
+			{
+				return false;
+			}
+
+			if ((targetFlags & spell_cast_target_flags::Item) != 0 && targetMap.GetItemTarget() == 0)
+			{
+				return false;
+			}
+
+			if ((targetFlags & spell_cast_target_flags::Corpse) != 0 && targetMap.GetCorpseTarget() == 0)
+			{
+				return false;
+			}
+
+			return true;
 		}
 	}
 
@@ -251,6 +277,174 @@ namespace mmo
 			});
 	}
 
+	bool BotRealmConnector::SendCastSpell(const uint32 spellId, const SpellTargetMap& targetMap, const bool autoFlush)
+	{
+		if (spellId == 0)
+		{
+			UpdateSpellStateIssue("cast_spell_invalid_spell_id");
+			if (BotUnit* self = GetSelfMutable())
+			{
+				self->SetLastCastFailed(0, spell_cast_result::FailedNotKnown, GetAsyncTimeMs());
+			}
+			return false;
+		}
+
+		if (!IsCastTargetLocallyValid(targetMap))
+		{
+			UpdateSpellStateIssue("cast_spell_invalid_target");
+			if (BotUnit* self = GetSelfMutable())
+			{
+				self->SetLastCastFailed(spellId, spell_cast_result::FailedBadTargets, GetAsyncTimeMs());
+			}
+			return false;
+		}
+
+		const GameTime nowMs = GetAsyncTimeMs();
+		if (BotUnit* self = GetSelfMutable())
+		{
+			if (!self->KnowsSpell(spellId))
+			{
+				UpdateSpellStateIssue("cast_spell_unknown_spell");
+				self->SetLastCastFailed(spellId, spell_cast_result::FailedNotKnown, nowMs);
+				return false;
+			}
+
+			self->SetLastCastPending(spellId, targetMap.GetTargetMap(), targetMap.GetUnitTarget(), nowMs);
+		}
+		ClearSpellStateIssue();
+
+		if (autoFlush)
+		{
+			sendSinglePacket([spellId, &targetMap](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::client_realm_packet::CastSpell);
+					packet << io::write<uint32>(spellId) << targetMap;
+					packet.Finish();
+				});
+		}
+		else
+		{
+			io::StringSink sink(getSendBuffer());
+			game::OutgoingPacket packet(sink);
+			packet.Start(game::client_realm_packet::CastSpell);
+			packet << io::write<uint32>(spellId) << targetMap;
+			packet.Finish();
+		}
+		return true;
+	}
+
+	void BotRealmConnector::PrimeWorldSessionForTesting(const uint64 selectedGuid)
+	{
+		if (selectedGuid != 0)
+		{
+			m_selectedCharacterGuid = selectedGuid;
+			m_objectManager.SetSelfGuid(selectedGuid);
+		}
+
+		RegisterWorldPacketHandlers();
+	}
+
+	BotUnit* BotRealmConnector::GetSelfMutable()
+	{
+		return m_objectManager.GetSelfMutable();
+	}
+
+	const BotUnit* BotRealmConnector::GetSelf() const
+	{
+		return m_objectManager.GetSelf();
+	}
+
+	void BotRealmConnector::UpdateSpellStateIssue(const std::string& issue)
+	{
+		m_lastSpellStateIssue = issue;
+		WLOG("bot spell-state issue=" << issue);
+	}
+
+	void BotRealmConnector::ClearSpellStateIssue()
+	{
+		m_lastSpellStateIssue.clear();
+	}
+
+	void BotRealmConnector::RegisterWorldPacketHandlers()
+	{
+		RegisterPacketHandler(game::realm_client_packet::CharEnum, *this, &BotRealmConnector::OnCharEnum);
+		RegisterPacketHandler(game::realm_client_packet::LoginVerifyWorld, *this, &BotRealmConnector::OnLoginVerifyWorld);
+		RegisterPacketHandler(game::realm_client_packet::EnterWorldFailed, *this, &BotRealmConnector::OnEnterWorldFailed);
+		RegisterPacketHandler(game::realm_client_packet::TimeSyncRequest, *this, &BotRealmConnector::OnTimeSyncRequest);
+		RegisterPacketHandler(game::realm_client_packet::TransferPending, *this, &BotRealmConnector::OnTransferPending);
+		RegisterPacketHandler(game::realm_client_packet::NewWorld, *this, &BotRealmConnector::OnNewWorld);
+		RegisterPacketHandler(game::realm_client_packet::CharCreateResponse, *this, &BotRealmConnector::OnCharCreateResponse);
+		RegisterPacketHandler(game::realm_client_packet::MoveTeleportAck, *this, &BotRealmConnector::OnMoveTeleport);
+		RegisterPacketHandler(game::realm_client_packet::ForceMoveSetWalkSpeed, *this, &BotRealmConnector::OnForceMovementSpeedChange);
+		RegisterPacketHandler(game::realm_client_packet::ForceMoveSetRunSpeed, *this, &BotRealmConnector::OnForceMovementSpeedChange);
+		RegisterPacketHandler(game::realm_client_packet::ForceMoveSetRunBackSpeed, *this, &BotRealmConnector::OnForceMovementSpeedChange);
+		RegisterPacketHandler(game::realm_client_packet::ForceMoveSetSwimSpeed, *this, &BotRealmConnector::OnForceMovementSpeedChange);
+		RegisterPacketHandler(game::realm_client_packet::ForceMoveSetSwimBackSpeed, *this, &BotRealmConnector::OnForceMovementSpeedChange);
+		RegisterPacketHandler(game::realm_client_packet::ForceMoveSetTurnRate, *this, &BotRealmConnector::OnForceMovementSpeedChange);
+		RegisterPacketHandler(game::realm_client_packet::ForceSetFlightSpeed, *this, &BotRealmConnector::OnForceMovementSpeedChange);
+		RegisterPacketHandler(game::realm_client_packet::ForceSetFlightBackSpeed, *this, &BotRealmConnector::OnForceMovementSpeedChange);
+
+		// Register party invitation handler
+		RegisterPacketHandler(game::realm_client_packet::GroupInvite, *this, &BotRealmConnector::OnGroupInvite);
+
+		// Register party state handlers
+		RegisterPacketHandler(game::realm_client_packet::GroupList, *this, &BotRealmConnector::OnGroupList);
+		RegisterPacketHandler(game::realm_client_packet::GroupDestroyed, *this, &BotRealmConnector::OnGroupDestroyed);
+		RegisterPacketHandler(game::realm_client_packet::GroupSetLeader, *this, &BotRealmConnector::OnGroupSetLeader);
+
+		// Register handlers for common packets that can be safely ignored by the bot
+		RegisterPacketHandler(game::realm_client_packet::UpdateObject, *this, &BotRealmConnector::OnUpdateObject);
+		RegisterPacketHandler(game::realm_client_packet::CompressedUpdateObject, *this, &BotRealmConnector::OnIgnoredPacket);  // TODO: Implement compression
+		RegisterPacketHandler(game::realm_client_packet::DestroyObjects, *this, &BotRealmConnector::OnDestroyObjects);
+		RegisterPacketHandler(game::realm_client_packet::NameQueryResult, *this, &BotRealmConnector::OnNameQueryResult);
+
+		// Movement packets - these contain position updates for other units
+		RegisterPacketHandler(game::realm_client_packet::MoveStartForward, *this, &BotRealmConnector::OnMovementPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveStartBackward, *this, &BotRealmConnector::OnMovementPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveStop, *this, &BotRealmConnector::OnMovementPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveStartStrafeLeft, *this, &BotRealmConnector::OnMovementPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveStartStrafeRight, *this, &BotRealmConnector::OnMovementPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveStopStrafe, *this, &BotRealmConnector::OnMovementPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveStartTurnLeft, *this, &BotRealmConnector::OnMovementPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveStartTurnRight, *this, &BotRealmConnector::OnMovementPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveStopTurn, *this, &BotRealmConnector::OnMovementPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveHeartBeat, *this, &BotRealmConnector::OnMovementPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveSetFacing, *this, &BotRealmConnector::OnMovementPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveJump, *this, &BotRealmConnector::OnMovementPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveFallLand, *this, &BotRealmConnector::OnMovementPacket);
+
+		// Spell/state packets
+		RegisterPacketHandler(game::realm_client_packet::InitialSpells, *this, &BotRealmConnector::OnInitialSpells);
+		RegisterPacketHandler(game::realm_client_packet::LearnedSpell, *this, &BotRealmConnector::OnLearnedSpell);
+		RegisterPacketHandler(game::realm_client_packet::UnlearnedSpell, *this, &BotRealmConnector::OnUnlearnedSpell);
+		RegisterPacketHandler(game::realm_client_packet::SpellStart, *this, &BotRealmConnector::OnSpellStart);
+		RegisterPacketHandler(game::realm_client_packet::SpellGo, *this, &BotRealmConnector::OnSpellGo);
+		RegisterPacketHandler(game::realm_client_packet::SpellFailure, *this, &BotRealmConnector::OnSpellFailure);
+		RegisterPacketHandler(game::realm_client_packet::SpellCooldown, *this, &BotRealmConnector::OnSpellCooldown);
+		RegisterPacketHandler(game::realm_client_packet::AuraUpdate, *this, &BotRealmConnector::OnAuraUpdate);
+
+		// These packets can be safely ignored
+		RegisterPacketHandler(game::realm_client_packet::ActionButtons, *this, &BotRealmConnector::OnIgnoredPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveSetWalkSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveSetRunSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveSetRunBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveSetSwimSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveSetSwimBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveSetTurnRate, *this, &BotRealmConnector::OnIgnoredPacket);
+		RegisterPacketHandler(game::realm_client_packet::SetFlightSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
+		RegisterPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
+		RegisterPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &BotRealmConnector::OnIgnoredPacket);
+		RegisterPacketHandler(game::realm_client_packet::CreatureMove, *this, &BotRealmConnector::OnIgnoredPacket);
+		RegisterPacketHandler(game::realm_client_packet::CastFailed, *this, &BotRealmConnector::OnIgnoredPacket);
+
+		// Combat packet handlers
+		RegisterPacketHandler(game::realm_client_packet::AttackStart, *this, &BotRealmConnector::OnAttackStart);
+		RegisterPacketHandler(game::realm_client_packet::AttackStop, *this, &BotRealmConnector::OnAttackStop);
+		RegisterPacketHandler(game::realm_client_packet::AttackSwingError, *this, &BotRealmConnector::OnAttackSwingError);
+		RegisterPacketHandler(game::realm_client_packet::AttackerStateUpdate, *this, &BotRealmConnector::OnAttackerStateUpdate);
+		RegisterPacketHandler(game::realm_client_packet::NonSpellDamageLog, *this, &BotRealmConnector::OnNonSpellDamageLog);
+	}
+
 	PacketParseResult BotRealmConnector::OnAuthChallenge(game::IncomingPacket& packet)
 	{
 		// No longer handle LogonChallenge packets during this session
@@ -312,75 +506,7 @@ namespace mmo
 
 		if (result == game::auth_result::Success)
 		{
-			RegisterPacketHandler(game::realm_client_packet::CharEnum, *this, &BotRealmConnector::OnCharEnum);
-			RegisterPacketHandler(game::realm_client_packet::LoginVerifyWorld, *this, &BotRealmConnector::OnLoginVerifyWorld);
-			RegisterPacketHandler(game::realm_client_packet::EnterWorldFailed, *this, &BotRealmConnector::OnEnterWorldFailed);
-			RegisterPacketHandler(game::realm_client_packet::TimeSyncRequest, *this, &BotRealmConnector::OnTimeSyncRequest);
-			RegisterPacketHandler(game::realm_client_packet::TransferPending, *this, &BotRealmConnector::OnTransferPending);
-			RegisterPacketHandler(game::realm_client_packet::NewWorld, *this, &BotRealmConnector::OnNewWorld);
-			RegisterPacketHandler(game::realm_client_packet::CharCreateResponse, *this, &BotRealmConnector::OnCharCreateResponse);
-			RegisterPacketHandler(game::realm_client_packet::MoveTeleportAck, *this, &BotRealmConnector::OnMoveTeleport);
-			RegisterPacketHandler(game::realm_client_packet::ForceMoveSetWalkSpeed, *this, &BotRealmConnector::OnForceMovementSpeedChange);
-			RegisterPacketHandler(game::realm_client_packet::ForceMoveSetRunSpeed, *this, &BotRealmConnector::OnForceMovementSpeedChange);
-			RegisterPacketHandler(game::realm_client_packet::ForceMoveSetRunBackSpeed, *this, &BotRealmConnector::OnForceMovementSpeedChange);
-			RegisterPacketHandler(game::realm_client_packet::ForceMoveSetSwimSpeed, *this, &BotRealmConnector::OnForceMovementSpeedChange);
-			RegisterPacketHandler(game::realm_client_packet::ForceMoveSetSwimBackSpeed, *this, &BotRealmConnector::OnForceMovementSpeedChange);
-			RegisterPacketHandler(game::realm_client_packet::ForceMoveSetTurnRate, *this, &BotRealmConnector::OnForceMovementSpeedChange);
-			RegisterPacketHandler(game::realm_client_packet::ForceSetFlightSpeed, *this, &BotRealmConnector::OnForceMovementSpeedChange);
-			RegisterPacketHandler(game::realm_client_packet::ForceSetFlightBackSpeed, *this, &BotRealmConnector::OnForceMovementSpeedChange);
-
-			// Register party invitation handler
-			RegisterPacketHandler(game::realm_client_packet::GroupInvite, *this, &BotRealmConnector::OnGroupInvite);
-
-			// Register party state handlers
-			RegisterPacketHandler(game::realm_client_packet::GroupList, *this, &BotRealmConnector::OnGroupList);
-			RegisterPacketHandler(game::realm_client_packet::GroupDestroyed, *this, &BotRealmConnector::OnGroupDestroyed);
-			RegisterPacketHandler(game::realm_client_packet::GroupSetLeader, *this, &BotRealmConnector::OnGroupSetLeader);
-
-			// Register handlers for common packets that can be safely ignored by the bot
-			RegisterPacketHandler(game::realm_client_packet::UpdateObject, *this, &BotRealmConnector::OnUpdateObject);
-			RegisterPacketHandler(game::realm_client_packet::CompressedUpdateObject, *this, &BotRealmConnector::OnIgnoredPacket);  // TODO: Implement compression
-			RegisterPacketHandler(game::realm_client_packet::DestroyObjects, *this, &BotRealmConnector::OnDestroyObjects);
-			RegisterPacketHandler(game::realm_client_packet::NameQueryResult, *this, &BotRealmConnector::OnNameQueryResult);
-
-			// Movement packets - these contain position updates for other units
-			RegisterPacketHandler(game::realm_client_packet::MoveStartForward, *this, &BotRealmConnector::OnMovementPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveStartBackward, *this, &BotRealmConnector::OnMovementPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveStop, *this, &BotRealmConnector::OnMovementPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveStartStrafeLeft, *this, &BotRealmConnector::OnMovementPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveStartStrafeRight, *this, &BotRealmConnector::OnMovementPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveStopStrafe, *this, &BotRealmConnector::OnMovementPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveStartTurnLeft, *this, &BotRealmConnector::OnMovementPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveStartTurnRight, *this, &BotRealmConnector::OnMovementPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveStopTurn, *this, &BotRealmConnector::OnMovementPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveHeartBeat, *this, &BotRealmConnector::OnMovementPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveSetFacing, *this, &BotRealmConnector::OnMovementPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveJump, *this, &BotRealmConnector::OnMovementPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveFallLand, *this, &BotRealmConnector::OnMovementPacket);
-
-			// These packets can be safely ignored
-			RegisterPacketHandler(game::realm_client_packet::AuraUpdate, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::InitialSpells, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::ActionButtons, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveSetWalkSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveSetRunSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveSetRunBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveSetSwimSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveSetSwimBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::MoveSetTurnRate, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::SetFlightSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::SpellCooldown, *this, &BotRealmConnector::OnIgnoredPacket);
-			RegisterPacketHandler(game::realm_client_packet::CreatureMove, *this, &BotRealmConnector::OnIgnoredPacket);
-
-			// Combat packet handlers
-			RegisterPacketHandler(game::realm_client_packet::AttackStart, *this, &BotRealmConnector::OnAttackStart);
-			RegisterPacketHandler(game::realm_client_packet::AttackStop, *this, &BotRealmConnector::OnAttackStop);
-			RegisterPacketHandler(game::realm_client_packet::AttackSwingError, *this, &BotRealmConnector::OnAttackSwingError);
-			RegisterPacketHandler(game::realm_client_packet::AttackerStateUpdate, *this, &BotRealmConnector::OnAttackerStateUpdate);
-			RegisterPacketHandler(game::realm_client_packet::NonSpellDamageLog, *this, &BotRealmConnector::OnNonSpellDamageLog);
-
+			RegisterWorldPacketHandlers();
 			RequestCharEnum();
 		}
 
@@ -1025,6 +1151,30 @@ namespace mmo
 			unit.SetTargetGuid(fieldMap.GetFieldValue<uint64>(object_fields::TargetUnit));
 		}
 
+		PowerType powerType = unit.GetPowerType();
+		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::PowerType))
+		{
+			const uint32 rawPowerType = fieldMap.GetFieldValue<uint32>(object_fields::PowerType);
+			powerType = rawPowerType < power_type::Count_ ? static_cast<PowerType>(rawPowerType) : power_type::Invalid_;
+		}
+
+		if (powerType != power_type::Invalid_)
+		{
+			const auto currentPowerField = static_cast<FieldMap<uint32>::FieldIndexType>(object_fields::Mana + static_cast<uint32>(powerType));
+			const auto maxPowerField = static_cast<FieldMap<uint32>::FieldIndexType>(object_fields::MaxMana + static_cast<uint32>(powerType));
+			uint32 power = unit.GetPower();
+			uint32 maxPower = unit.GetMaxPower();
+			if (creation || fieldMap.IsFieldMarkedAsChanged(currentPowerField))
+			{
+				power = fieldMap.GetFieldValue<uint32>(currentPowerField);
+			}
+			if (creation || fieldMap.IsFieldMarkedAsChanged(maxPowerField))
+			{
+				maxPower = fieldMap.GetFieldValue<uint32>(maxPowerField);
+			}
+			unit.SetPower(powerType, power, maxPower);
+		}
+
 		// Set position/movement - this should always be present for creation
 		if (updateFlags & object_update_flags::HasMovementInfo)
 		{
@@ -1081,6 +1231,262 @@ namespace mmo
 		// Emit update signal
 		UnitUpdated(*unit);
 
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnInitialSpells(game::IncomingPacket& packet)
+	{
+		BotUnit* self = GetSelfMutable();
+		if (!self)
+		{
+			UpdateSpellStateIssue("initial_spells_self_unavailable");
+			return PacketParseResult::Pass;
+		}
+
+		uint16 spellCount = 0;
+		if (!(packet >> io::read<uint16>(spellCount)))
+		{
+			UpdateSpellStateIssue("initial_spells_parse_failed");
+			return PacketParseResult::Pass;
+		}
+
+		std::vector<uint32> spellIds;
+		spellIds.reserve(spellCount);
+		for (uint16 i = 0; i < spellCount; ++i)
+		{
+			uint32 spellId = 0;
+			if (!(packet >> io::read<uint32>(spellId)))
+			{
+				UpdateSpellStateIssue("initial_spells_parse_failed");
+				return PacketParseResult::Pass;
+			}
+
+			spellIds.push_back(spellId);
+		}
+
+		self->SetKnownSpells(spellIds);
+		ClearSpellStateIssue();
+		UnitUpdated(*self);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnLearnedSpell(game::IncomingPacket& packet)
+	{
+		BotUnit* self = GetSelfMutable();
+		if (!self)
+		{
+			UpdateSpellStateIssue("learned_spell_self_unavailable");
+			return PacketParseResult::Pass;
+		}
+
+		uint32 spellId = 0;
+		if (!(packet >> io::read<uint32>(spellId)) || spellId == 0)
+		{
+			UpdateSpellStateIssue("learned_spell_parse_failed");
+			return PacketParseResult::Pass;
+		}
+
+		self->LearnSpell(spellId);
+		ClearSpellStateIssue();
+		UnitUpdated(*self);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnUnlearnedSpell(game::IncomingPacket& packet)
+	{
+		BotUnit* self = GetSelfMutable();
+		if (!self)
+		{
+			UpdateSpellStateIssue("unlearned_spell_self_unavailable");
+			return PacketParseResult::Pass;
+		}
+
+		uint32 spellId = 0;
+		if (!(packet >> io::read<uint32>(spellId)) || spellId == 0)
+		{
+			UpdateSpellStateIssue("unlearned_spell_parse_failed");
+			return PacketParseResult::Pass;
+		}
+
+		self->UnlearnSpell(spellId);
+		ClearSpellStateIssue();
+		UnitUpdated(*self);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnSpellStart(game::IncomingPacket& packet)
+	{
+		uint64 casterGuid = 0;
+		uint32 spellId = 0;
+		GameTime castTime = 0;
+		SpellTargetMap targetMap;
+		uint32 cooldownMs = 0;
+		if (!(packet >> io::read_packed_guid(casterGuid) >> io::read<uint32>(spellId) >> io::read<GameTime>(castTime) >> targetMap >> io::read<uint32>(cooldownMs)))
+		{
+			UpdateSpellStateIssue("spell_start_parse_failed");
+			return PacketParseResult::Pass;
+		}
+
+		if (casterGuid != m_selectedCharacterGuid)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		if (BotUnit* self = GetSelfMutable())
+		{
+			const GameTime nowMs = GetAsyncTimeMs();
+			self->SetLastCastStarted(spellId, targetMap.GetTargetMap(), targetMap.GetUnitTarget(), nowMs);
+			if (cooldownMs > 0)
+			{
+				self->SetSpellCooldown(spellId, nowMs, cooldownMs);
+			}
+			ClearSpellStateIssue();
+			UnitUpdated(*self);
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnSpellGo(game::IncomingPacket& packet)
+	{
+		uint64 casterGuid = 0;
+		uint32 spellId = 0;
+		GameTime gameTime = 0;
+		SpellTargetMap targetMap;
+		uint32 cooldownMs = 0;
+		if (!(packet >> io::read_packed_guid(casterGuid) >> io::read<uint32>(spellId) >> io::read<GameTime>(gameTime) >> targetMap >> io::read<uint32>(cooldownMs)))
+		{
+			UpdateSpellStateIssue("spell_go_parse_failed");
+			return PacketParseResult::Pass;
+		}
+
+		if (casterGuid != m_selectedCharacterGuid)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		if (BotUnit* self = GetSelfMutable())
+		{
+			const GameTime nowMs = GetAsyncTimeMs();
+			self->SetLastCastSucceeded(spellId, targetMap.GetTargetMap(), targetMap.GetUnitTarget(), nowMs);
+			if (cooldownMs > 0)
+			{
+				self->SetSpellCooldown(spellId, nowMs, cooldownMs);
+			}
+			ClearSpellStateIssue();
+			UnitUpdated(*self);
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnSpellFailure(game::IncomingPacket& packet)
+	{
+		uint64 casterGuid = 0;
+		uint32 spellId = 0;
+		GameTime gameTime = 0;
+		SpellCastResult result = spell_cast_result::CastOkay;
+		if (!(packet >> io::read_packed_guid(casterGuid) >> io::read<uint32>(spellId) >> io::read<GameTime>(gameTime) >> io::read<uint8>(result)))
+		{
+			UpdateSpellStateIssue("spell_failure_parse_failed");
+			return PacketParseResult::Pass;
+		}
+
+		if (casterGuid != m_selectedCharacterGuid)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		if (BotUnit* self = GetSelfMutable())
+		{
+			self->SetLastCastFailed(spellId, result, GetAsyncTimeMs());
+			ClearSpellStateIssue();
+			UnitUpdated(*self);
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnSpellCooldown(game::IncomingPacket& packet)
+	{
+		BotUnit* self = GetSelfMutable();
+		if (!self)
+		{
+			UpdateSpellStateIssue("spell_cooldown_self_unavailable");
+			return PacketParseResult::Pass;
+		}
+
+		uint32 spellId = 0;
+		uint32 cooldownMs = 0;
+		if (!(packet >> io::read<uint32>(spellId) >> io::read<uint32>(cooldownMs)) || spellId == 0)
+		{
+			UpdateSpellStateIssue("spell_cooldown_parse_failed");
+			return PacketParseResult::Pass;
+		}
+
+		const GameTime nowMs = GetAsyncTimeMs();
+		if (!self->KnowsSpell(spellId))
+		{
+			UpdateSpellStateIssue("spell_cooldown_unknown_spell");
+			return PacketParseResult::Pass;
+		}
+
+		self->SetSpellCooldown(spellId, nowMs, cooldownMs);
+		ClearSpellStateIssue();
+		UnitUpdated(*self);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnAuraUpdate(game::IncomingPacket& packet)
+	{
+		BotUnit* self = GetSelfMutable();
+		if (!self)
+		{
+			UpdateSpellStateIssue("aura_update_self_unavailable");
+			return PacketParseResult::Pass;
+		}
+
+		uint32 visibleAuraCount = 0;
+		if (!(packet >> io::read<uint32>(visibleAuraCount)))
+		{
+			UpdateSpellStateIssue("aura_update_parse_failed");
+			return PacketParseResult::Pass;
+		}
+
+		std::vector<BotUnit::AuraState> auras;
+		auras.reserve(visibleAuraCount);
+		for (uint32 i = 0; i < visibleAuraCount; ++i)
+		{
+			BotUnit::AuraState aura;
+			uint8 auraTypeCount = 0;
+			if (!(packet >> io::read<uint32>(aura.spellId)
+				>> io::read<uint32>(aura.remainingMs)
+				>> io::read_packed_guid(aura.casterGuid)
+				>> io::read<uint8>(auraTypeCount)))
+			{
+				UpdateSpellStateIssue("aura_update_parse_failed");
+				return PacketParseResult::Pass;
+			}
+
+			if (aura.spellId == 0)
+			{
+				UpdateSpellStateIssue("aura_update_invalid_spell_id");
+				return PacketParseResult::Pass;
+			}
+
+			aura.basePoints.resize(auraTypeCount);
+			if (!(packet >> io::read_range(aura.basePoints)))
+			{
+				UpdateSpellStateIssue("aura_update_parse_failed");
+				return PacketParseResult::Pass;
+			}
+
+			auras.push_back(std::move(aura));
+		}
+
+		self->SetVisibleAuras(std::move(auras));
+		ClearSpellStateIssue();
+		UnitUpdated(*self);
 		return PacketParseResult::Pass;
 	}
 
