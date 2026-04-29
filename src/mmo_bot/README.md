@@ -172,6 +172,50 @@ Supported profiles: `simple_greeter`, `chatter`, `sequence`, `unit_awareness`, `
 
 These diagnostics may include GUIDs, spell ids, spell names, health percentages, distances, reason codes, and anchor coordinates, but they must not include credentials or session secrets.
 
+### Integrated recovery proof
+
+The cold-start proof entrypoint for S07 is:
+
+```powershell
+powershell -NoProfile -File .\tools\verify_m002_s07_recovery.ps1
+```
+
+Run it from the repository root before a live session. The script is the canonical automated check for the assembled `party_follow` runtime and intentionally stops on the first failing step so the failing suite or inventory drift is obvious. It performs four checks in order:
+
+1. builds the Debug `unit_tests` and `mmo_bot` targets
+2. runs the focused warrior, cleric, mage, companion, and follow runtime suites with the same Windows-friendly executable invocation the slice used during development
+3. runs aggregate `ctest --test-dir build -C Debug --output-on-failure -R '^unit_tests$'` so the proof also passes through the registered test surface
+4. verifies the operator-facing diagnostics inventory in this README and the live runtime log prefixes in the companion runtime source
+
+Treat the proof as failed if any focused suite fails, if `ctest` fails after the focused suites pass, or if the documentation/runtime inventory no longer contains the expected recovery markers.
+
+### Acceptable conservative degradation vs regression
+
+The hardened S07 contract allows conservative holds when the runtime says *why* it held. These still count as acceptable behavior for M002 as long as they are explicit, one-shot, and the bot recovers once the underlying fault clears:
+
+- `follow_runtime_blocked` only when the bot's own runtime preconditions are invalid, such as `self_unavailable` or an invalid self position
+- `cast_failure_backoff` after a real server-reported cast failure so retry suppression is visible instead of silently spamming the same cast every tick
+- hold, regroup, or abort reasons tied to leader loss, stale combat anchors, `map_unresolved`, `nav_unavailable`, or missing authored class data
+- mage conservative holds when close-range recovery metadata is genuinely unavailable instead of speculatively casting the wrong spell
+
+Treat the session as regressed when the bot goes quiet during combat, keeps repeating the same failure without the deduped one-shot diagnostics, stops class execution on a merely recoverable follow abort, or loses `companion mode=` / `anchor decision=` correlation that lets a future agent explain the state transition.
+
+#### live session checklist
+
+Use one real party session after the automated proof passes. The goal is not perfect uptime; the goal is explicit, diagnosable behavior that either keeps contributing or holds conservatively for a named reason.
+
+1. **Startup**: launch `mmo_bot` with the `party_follow` profile and confirm the bot enters the world without profile-selection ambiguity or character-resolution surprises.
+2. **Out-of-combat following**: verify the bot trails the leader and emits `companion mode=` with travel/leader-follow context plus matching `anchor decision=` follow output.
+3. **Combat anchor switch**: pull combat and confirm the runtime switches to combat-anchor behavior instead of continuing pure travel follow.
+4. **Class contribution**: for the class under test, confirm at least one matching class-specific signal appears during combat:
+   - warrior: `warrior action=` or an explicit `warrior failure=`
+   - cleric: `cleric action=` or an explicit `cleric failure=`
+   - mage: `mage action=` or an explicit `mage failure=`
+5. **Recoverable follow fault**: trigger or observe a recoverable nav/map-style fault and confirm the follow reason is explicit (`map_unresolved`, nav loss, stale anchor, leader awareness loss, and similar) without the class runtime going brain-dead on that same tick.
+6. **Cast failure visibility**: if the server rejects a cast, confirm the runtime first surfaces the cast failure and then emits a one-shot `cast_failure_backoff` hold instead of retrying invisibly.
+7. **Conservative hold audit**: when the bot cannot act safely, confirm the hold/regroup/failure reason is specific enough to explain whether the issue was self state, leader state, spellbook/cooldown readiness, mana, or authored capability gaps.
+8. **Success bar**: count the live pass as good when the bot starts, follows, switches anchors, contributes by class when inputs are valid, and exposes explicit recovery/backoff diagnostics whenever it must hold. Count it as failed when it silently degrades, spams repeated undecorated failures, or stops contributing without a reason code.
+
 ## Design Principles Applied
 
 ### Clean Architecture
