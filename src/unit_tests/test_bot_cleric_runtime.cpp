@@ -21,6 +21,7 @@
 #include "asio/io_service.hpp"
 
 #include <functional>
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -296,6 +297,43 @@ namespace mmo
 		CHECK(logs.Contains("target_guid=" + std::to_string(ClericRuntimeFixture::kLeaderGuid)));
 	}
 
+	TEST_CASE("cleric runtime keeps healing through a recoverable map follow abort", "[bot-cleric][runtime]")
+	{
+		ClericRuntimeFixture fixture;
+		fixture.SeedCombatScene(475, 100, 90, true);
+		fixture.SeedKnownSpells({ fixture.capabilities.emergencyHeal->spellId, fixture.capabilities.efficientHeal->spellId, fixture.capabilities.damageFiller->spellId });
+		fixture.context.SetCurrentMapId(0);
+
+		CompanionFollowAction action;
+		LogCapture logs;
+
+		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
+		INFO(logs.Dump());
+		CHECK(fixture.context.GetLastCastState().status == BotUnit::CastState::Status::Pending);
+		CHECK(fixture.context.GetLastCastState().spellId == fixture.capabilities.emergencyHeal->spellId);
+		CHECK(logs.Contains("cleric action=cast_spell reason=ally_emergency_heal"));
+		CHECK(logs.Contains("follow_reason=map_unresolved"));
+	}
+
+	TEST_CASE("cleric runtime blocks conservatively on invalid self prerequisites", "[bot-cleric][runtime]")
+	{
+		ClericRuntimeFixture fixture;
+		fixture.SeedCombatScene(475, 100, 90, true);
+		fixture.SeedKnownSpells({ fixture.capabilities.emergencyHeal->spellId, fixture.capabilities.efficientHeal->spellId, fixture.capabilities.damageFiller->spellId });
+
+		MovementInfo invalidMovement = MakeMovementInfo(Vector3(std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f));
+		fixture.context.UpdateMovementInfo(invalidMovement);
+
+		CompanionFollowAction action;
+		LogCapture logs;
+
+		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
+		INFO(logs.Dump());
+		CHECK(fixture.context.GetLastCastState().status != BotUnit::CastState::Status::Pending);
+		CHECK(logs.Contains("cleric failure=follow_runtime_blocked"));
+		CHECK(logs.Contains("follow_reason=self_anchor_invalid"));
+	}
+
 	TEST_CASE("cleric runtime remembers missing injured allies and holds conservatively", "[bot-cleric][runtime]")
 	{
 		ClericRuntimeFixture fixture;
@@ -331,12 +369,21 @@ namespace mmo
 		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
 		CHECK(logs.Contains("cleric action=cast_spell reason=ally_emergency_heal"));
 
-		fixture.SendSpellFailure(fixture.capabilities.emergencyHeal->spellId, spell_cast_result::FailedMoving);
+		BotUnit* self = fixture.connector->GetObjectManager().GetSelfMutable();
+		REQUIRE(self != nullptr);
+		self->SetLastCastFailed(
+			fixture.capabilities.emergencyHeal->spellId,
+			spell_cast_result::FailedMoving,
+			fixture.context.GetServerTime());
+
+		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
 		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
 		INFO(logs.Dump());
 		CHECK(fixture.context.GetLastCastState().status == BotUnit::CastState::Status::Failed);
 		CHECK(logs.Contains("cleric failure=cast_failed"));
+		CHECK(logs.Contains("cleric failure=cast_failure_backoff"));
 		CHECK(logs.Contains("failure_code=" + std::to_string(static_cast<uint32>(spell_cast_result::FailedMoving))));
 		CHECK(logs.CountContaining("cleric action=cast_spell reason=ally_emergency_heal") == 1);
+		CHECK(logs.CountContaining("cleric failure=cast_failure_backoff") == 1);
 	}
 }

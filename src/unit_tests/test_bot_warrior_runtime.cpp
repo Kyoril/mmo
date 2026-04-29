@@ -21,6 +21,7 @@
 #include "asio/io_service.hpp"
 
 #include <initializer_list>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -268,7 +269,44 @@ namespace mmo
 		CHECK(logs.Contains("warrior failure=auto_attack_pending"));
 	}
 
-	TEST_CASE("warrior runtime casts a resolved opener and surfaces later server cast failures", "[bot-warrior][runtime]")
+	TEST_CASE("warrior runtime keeps contributing through a recoverable map follow abort", "[bot-warrior][runtime]")
+	{
+		WarriorRuntimeFixture fixture;
+		fixture.SeedCombatScene(12.0f, false, true, WarriorRuntimeFixture::kLeaderGuid);
+		fixture.SeedKnownSpells({ fixture.capabilities.gapCloser->spellId });
+		fixture.context.SetCurrentMapId(0);
+
+		CompanionFollowAction action;
+		LogCapture logs;
+
+		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
+		INFO(logs.Dump());
+		CHECK(fixture.context.GetLastCastState().status == BotUnit::CastState::Status::Pending);
+		CHECK(fixture.context.GetLastCastState().spellId == fixture.capabilities.gapCloser->spellId);
+		CHECK(logs.Contains("warrior action=cast_spell reason=charge_opener"));
+		CHECK(logs.Contains("follow_reason=map_unresolved"));
+	}
+
+	TEST_CASE("warrior runtime blocks conservatively on invalid self prerequisites", "[bot-warrior][runtime]")
+	{
+		WarriorRuntimeFixture fixture;
+		fixture.SeedCombatScene(12.0f, false, true, WarriorRuntimeFixture::kLeaderGuid);
+		fixture.SeedKnownSpells({ fixture.capabilities.gapCloser->spellId });
+
+		MovementInfo invalidMovement = MakeMovementInfo(Vector3(std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f));
+		fixture.context.UpdateMovementInfo(invalidMovement);
+
+		CompanionFollowAction action;
+		LogCapture logs;
+
+		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
+		INFO(logs.Dump());
+		CHECK(fixture.context.GetLastCastState().status != BotUnit::CastState::Status::Pending);
+		CHECK(logs.Contains("warrior failure=follow_runtime_blocked"));
+		CHECK(logs.Contains("follow_reason=self_anchor_invalid"));
+	}
+
+	TEST_CASE("warrior runtime surfaces cast failures and explicit retry backoff", "[bot-warrior][runtime]")
 	{
 		WarriorRuntimeFixture fixture;
 		fixture.SeedCombatScene(12.0f, false, true, WarriorRuntimeFixture::kLeaderGuid);
@@ -279,14 +317,23 @@ namespace mmo
 
 		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
 		CHECK(fixture.context.GetLastCastState().status == BotUnit::CastState::Status::Pending);
-		CHECK(fixture.context.GetLastCastState().spellId == fixture.capabilities.gapCloser->spellId);
-		CHECK(fixture.context.GetLastCastState().unitTargetGuid == WarriorRuntimeFixture::kEnemyGuid);
 		CHECK(logs.Contains("warrior action=cast_spell reason=charge_opener"));
 
-		fixture.SendSpellFailure(fixture.capabilities.gapCloser->spellId, spell_cast_result::FailedMoving);
+		BotUnit* self = fixture.connector->GetObjectManager().GetSelfMutable();
+		REQUIRE(self != nullptr);
+		self->SetLastCastFailed(
+			fixture.capabilities.gapCloser->spellId,
+			spell_cast_result::FailedMoving,
+			fixture.context.GetServerTime());
+
 		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
+		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
+		INFO(logs.Dump());
 		CHECK(fixture.context.GetLastCastState().status == BotUnit::CastState::Status::Failed);
 		CHECK(logs.Contains("warrior failure=cast_failed"));
+		CHECK(logs.Contains("warrior failure=cast_failure_backoff"));
 		CHECK(logs.Contains("failure_code=" + std::to_string(static_cast<uint32>(spell_cast_result::FailedMoving))));
+		CHECK(logs.CountContaining("warrior action=cast_spell reason=charge_opener") == 1);
+		CHECK(logs.CountContaining("warrior failure=cast_failure_backoff") == 1);
 	}
 }

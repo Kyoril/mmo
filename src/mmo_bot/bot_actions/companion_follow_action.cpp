@@ -62,6 +62,12 @@ namespace
 		return value.size() >= prefix.size() && value.substr(0, prefix.size()) == prefix;
 	}
 
+	[[nodiscard]] bool IsRuntimeHardBlocked(const CompanionFollowPreconditionFailure failure)
+	{
+		return failure == CompanionFollowPreconditionFailure::SelfUnavailable
+			|| failure == CompanionFollowPreconditionFailure::InvalidSelfPosition;
+	}
+
 	std::string JoinSpellIds(const std::unordered_set<uint32>& spellIds)
 	{
 		if (spellIds.empty())
@@ -994,8 +1000,7 @@ namespace mmo
 			m_pendingAutoAttackRequestedAt = 0;
 		}
 
-		if (input.preconditionFailure == CompanionFollowPreconditionFailure::SelfUnavailable
-			|| input.preconditionFailure == CompanionFollowPreconditionFailure::InvalidSelfPosition)
+		if (IsRuntimeHardBlocked(input.preconditionFailure))
 		{
 			std::ostringstream details;
 			details << BuildDecisionDetails(context, input, output)
@@ -1044,6 +1049,13 @@ namespace mmo
 			&& input.now >= lastCastState.updatedAtMs
 			&& input.now - lastCastState.updatedAtMs < kCastFailureBackoffMs)
 		{
+			std::ostringstream details;
+			details << BuildDecisionDetails(context, input, output)
+				<< " warrior_decision=hold"
+				<< " runtime_issue=cast_failure_backoff"
+				<< " spell_id=" << lastCastState.spellId
+				<< " failure_code=" << static_cast<uint32>(lastCastState.failureReason);
+			LogWarriorFailureOnce("cast_failure_backoff", details.str());
 			return;
 		}
 
@@ -1276,7 +1288,7 @@ namespace mmo
 			return;
 		}
 
-		if (input.preconditionFailure != CompanionFollowPreconditionFailure::None)
+		if (IsRuntimeHardBlocked(input.preconditionFailure))
 		{
 			std::ostringstream details;
 			details << BuildDecisionDetails(context, input, output)
@@ -1325,6 +1337,13 @@ namespace mmo
 			&& input.now >= lastCastState.updatedAtMs
 			&& input.now - lastCastState.updatedAtMs < kCastFailureBackoffMs)
 		{
+			std::ostringstream details;
+			details << BuildDecisionDetails(context, input, output)
+				<< " cleric_decision=hold"
+				<< " runtime_issue=cast_failure_backoff"
+				<< " spell_id=" << lastCastState.spellId
+				<< " failure_code=" << static_cast<uint32>(lastCastState.failureReason);
+			LogClericFailureOnce("cast_failure_backoff", details.str());
 			return;
 		}
 
@@ -1618,7 +1637,7 @@ namespace mmo
 			return;
 		}
 
-		if (input.preconditionFailure != CompanionFollowPreconditionFailure::None)
+		if (IsRuntimeHardBlocked(input.preconditionFailure))
 		{
 			std::ostringstream details;
 			details << BuildDecisionDetails(context, input, output)

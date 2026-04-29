@@ -21,6 +21,7 @@
 #include "asio/io_service.hpp"
 
 #include <functional>
+#include <limits>
 #include <memory>
 #include <string>
 #include <unordered_set>
@@ -299,6 +300,43 @@ namespace mmo
 		CHECK(logs.Contains("target_source=anchor_target"));
 	}
 
+	TEST_CASE("mage runtime keeps contributing through a recoverable map follow abort", "[bot-mage][runtime]")
+	{
+		MageRuntimeFixture fixture;
+		fixture.SeedCombatScene(500, 100, 24.0f);
+		fixture.SeedKnownSpells(fixture.KnownSpellIdsForRuntime());
+		fixture.context.SetCurrentMapId(0);
+
+		CompanionFollowAction action;
+		LogCapture logs;
+
+		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
+		INFO(logs.Dump());
+		CHECK(fixture.context.GetLastCastState().status == BotUnit::CastState::Status::Pending);
+		CHECK(fixture.context.GetLastCastState().spellId == fixture.capabilities.primaryNuke->spellId);
+		CHECK(logs.Contains("mage action=cast_spell reason=primary_nuke"));
+		CHECK(logs.Contains("follow_reason=map_unresolved"));
+	}
+
+	TEST_CASE("mage runtime blocks conservatively on invalid self prerequisites", "[bot-mage][runtime]")
+	{
+		MageRuntimeFixture fixture;
+		fixture.SeedCombatScene(500, 100, 24.0f);
+		fixture.SeedKnownSpells(fixture.KnownSpellIdsForRuntime());
+
+		MovementInfo invalidMovement = MakeMovementInfo(Vector3(std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f));
+		fixture.context.UpdateMovementInfo(invalidMovement);
+
+		CompanionFollowAction action;
+		LogCapture logs;
+
+		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
+		INFO(logs.Dump());
+		CHECK(fixture.context.GetLastCastState().status != BotUnit::CastState::Status::Pending);
+		CHECK(logs.Contains("mage failure=follow_runtime_blocked"));
+		CHECK(logs.Contains("follow_reason=self_anchor_invalid"));
+	}
+
 	TEST_CASE("mage runtime surfaces authored close-range recovery or an explicit hold reason", "[bot-mage][runtime]")
 	{
 		MageRuntimeFixture fixture;
@@ -375,11 +413,13 @@ namespace mmo
 			fixture.context.GetServerTime());
 
 		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
+		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
 		INFO(logs.Dump());
 		CHECK(fixture.context.GetLastCastState().status == BotUnit::CastState::Status::Failed);
 		CHECK(logs.Contains("mage failure=cast_failed"));
 		CHECK(logs.Contains("failure_code=" + std::to_string(static_cast<uint32>(spell_cast_result::FailedMoving))));
 		CHECK(logs.Contains("mage failure=cast_failure_backoff"));
 		CHECK(logs.CountContaining("mage action=cast_spell reason=primary_nuke") == 1);
+		CHECK(logs.CountContaining("mage failure=cast_failure_backoff") == 1);
 	}
 }
