@@ -144,6 +144,22 @@ namespace mmo
 		REQUIRE(service.GetLoadedMapCount() >= 1);
 	}
 
+	TEST_CASE("Bot nav service can infer a usable map id from navigable positions", "[bot-nav]")
+	{
+		BotNavService service;
+		REQUIRE(service.IsReady());
+
+		const std::optional<NavigableSample> sample = FindNavigableSample(service);
+		REQUIRE(sample.has_value());
+
+		const std::optional<uint32> inferredMapId = service.InferMapId(sample->start, sample->end);
+		REQUIRE(inferredMapId.has_value());
+
+		const BotPathResult result = service.FindPath(*inferredMapId, sample->start, sample->end);
+		REQUIRE(result.success);
+		CHECK(result.points.size() >= 2);
+	}
+
 	TEST_CASE("Bot nav service reports unknown map ids explicitly", "[bot-nav]")
 	{
 		BotNavService service;

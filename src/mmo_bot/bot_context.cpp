@@ -46,6 +46,23 @@ namespace mmo
 		m_hasCurrentMapId = mapId != 0;
 	}
 
+	void BotContext::UpdateCurrentMapIdFromWorldSync(const uint32 mapId)
+	{
+		if (mapId != 0)
+		{
+			SetCurrentMapId(mapId);
+			return;
+		}
+
+		if (m_hasCurrentMapId && m_currentMapId != 0)
+		{
+			return;
+		}
+
+		m_currentMapId = 0;
+		m_hasCurrentMapId = false;
+	}
+
 	void BotContext::SendChatMessage(const std::string& message, ChatType chatType, const std::string& target)
 	{
 		if (!m_realmConnector)

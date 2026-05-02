@@ -48,6 +48,7 @@ namespace mmo
 
 		[[nodiscard]] std::optional<std::string> ResolveMapDirectory(uint32 mapId) const;
 		[[nodiscard]] bool EnsureMapAvailable(uint32 mapId);
+		[[nodiscard]] std::optional<uint32> InferMapId(const Vector3& start, const Vector3& end);
 		[[nodiscard]] BotPathResult FindPath(uint32 mapId, const Vector3& start, const Vector3& end);
 
 	private:

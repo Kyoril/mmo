@@ -65,6 +65,10 @@ namespace mmo
 		/// Persists the authoritative current map id.
 		void SetCurrentMapId(uint32 mapId);
 
+		/// Updates the current map id from a world-sync packet.
+		/// A zero map id is treated as unknown and will not overwrite an already-known non-zero map.
+		void UpdateCurrentMapIdFromWorldSync(uint32 mapId);
+
 		/// Checks whether a current map id is known.
 		bool HasCurrentMapId() const { return m_hasCurrentMapId; }
 

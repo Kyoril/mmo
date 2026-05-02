@@ -646,6 +646,7 @@ namespace mmo
 					switch (resolution.kind)
 					{
 					case StartupCharacterResolutionKind::Resolved:
+					{
 						if (!resolution.resolvedIndex.has_value() || *resolution.resolvedIndex >= views.size())
 						{
 							ELOG("startup phase=character_resolution outcome=missing_resolved_character selector="
@@ -655,16 +656,21 @@ namespace mmo
 							return;
 						}
 
-						m_config.characterName = views[*resolution.resolvedIndex].GetName();
-						ILOG("Using existing character \"" << m_config.characterName << "\".");
-						m_realm->EnterWorld(views[*resolution.resolvedIndex]);
+						const CharacterView& selectedCharacter = views[*resolution.resolvedIndex];
+						m_config.characterName = selectedCharacter.GetName();
+						m_context->SetCurrentMapId(selectedCharacter.GetMapId());
+						ILOG("Using existing character \"" << m_config.characterName << "\" on startup map " << selectedCharacter.GetMapId() << ".");
+						m_realm->EnterWorld(selectedCharacter);
 						return;
+					}
 					case StartupCharacterResolutionKind::NeedsPrompt:
 						if (const std::optional<size_t> promptedIndex = PromptForCharacterSelection(views, resolution); promptedIndex.has_value())
 						{
-							m_config.characterName = views[*promptedIndex].GetName();
-							ILOG("Using selected character \"" << m_config.characterName << "\".");
-							m_realm->EnterWorld(views[*promptedIndex]);
+							const CharacterView& selectedCharacter = views[*promptedIndex];
+							m_config.characterName = selectedCharacter.GetName();
+							m_context->SetCurrentMapId(selectedCharacter.GetMapId());
+							ILOG("Using selected character \"" << m_config.characterName << "\" on startup map " << selectedCharacter.GetMapId() << ".");
+							m_realm->EnterWorld(selectedCharacter);
 							return;
 						}
 
@@ -720,13 +726,19 @@ namespace mmo
 
 			m_realm->VerifyNewWorld.connect([this](uint32 mapId, Vector3 position, float facing)
 				{
-					ILOG("Entered world on map " << mapId << " at position (" << position.x << ", " << position.y << ", " << position.z << ").");
-					
-					m_context->SetCurrentMapId(mapId);
-					m_context->UpdateMovementInfo(m_realm->GetMovementInfo());
-					if (m_navService)
+					m_context->UpdateCurrentMapIdFromWorldSync(mapId);
+					const uint32 effectiveMapId = m_context->GetCurrentMapId();
+					if (mapId == 0 && effectiveMapId != 0)
 					{
-						static_cast<void>(m_navService->EnsureMapAvailable(mapId));
+						WLOG("World verify reported map 0; preserving previously known map " << effectiveMapId);
+					}
+
+					ILOG("Entered world on map " << effectiveMapId << " at position (" << position.x << ", " << position.y << ", " << position.z << ").");
+					
+					m_context->UpdateMovementInfo(m_realm->GetMovementInfo());
+					if (m_navService && effectiveMapId != 0)
+					{
+						static_cast<void>(m_navService->EnsureMapAvailable(effectiveMapId));
 					}
 					
 					// Create the area watcher centered on the authoritative cached position.

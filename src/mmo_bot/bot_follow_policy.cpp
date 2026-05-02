@@ -135,7 +135,8 @@ namespace mmo
 
 	std::size_t BotFollowPolicy::FindSteeringWaypointIndex(const BotFollowSample& self, const BotFollowPath& path) const
 	{
-		for (std::size_t i = 0; i < path.points.size(); ++i)
+		const std::size_t startIndex = path.points.size() > 1 ? 1u : 0u;
+		for (std::size_t i = startIndex; i < path.points.size(); ++i)
 		{
 			if (PlanarDistance(self.position, path.points[i]) > m_config.waypointAcceptanceRadius)
 			{

@@ -135,12 +135,54 @@ namespace mmo
 		CHECK(decision.shouldStop);
 	}
 
+	TEST_CASE("follow policy does not steer back to the origin waypoint after making progress", "[bot-follow][policy]")
+	{
+		BotFollowPolicy policy;
+		BotFollowPolicyInput input = MakeInput();
+		input.self.position = Vector3(1.0f, 0.0f, 0.0f);
+		input.state.isMoving = true;
+		input.state.lastRepathAnchorPosition = input.anchor.position;
+		input.state.lastRepathTime = 900;
+
+		const BotFollowDecision decision = policy.Evaluate(input);
+		REQUIRE(decision.type == BotFollowDecisionType::Advance);
+		CHECK(decision.reason == "follow_path");
+		CHECK(decision.hasSteeringTarget);
+		CHECK(decision.steeringWaypointIndex == 1);
+		CHECK(decision.steeringTarget.x > 4.0f);
+		CHECK(decision.steeringTarget.x < 5.0f);
+	}
+
 	TEST_CASE("movement math keeps the bot facing convention stable", "[bot-follow][policy]")
 	{
 		CHECK(ComputeFacingTo(Vector3::Zero, Vector3(0.0f, 0.0f, 4.0f)).GetValueRadians() == Approx(0.0f).margin(0.0001f));
 		CHECK(ComputeFacingTo(Vector3::Zero, Vector3(4.0f, 0.0f, 0.0f)).GetValueRadians() == Approx(Pi * 0.5f).margin(0.0001f));
 		CHECK(ComputeFacingTo(Vector3::Zero, Vector3(-4.0f, 0.0f, 0.0f)).GetValueRadians() == Approx(-Pi * 0.5f).margin(0.0001f));
 		CHECK(SmallestAngleDelta(Radian(Pi - 0.05f), Radian(-Pi + 0.05f)) == Approx(0.10f).margin(0.0001f));
+	}
+
+	TEST_CASE("movement math computes a stable stand-off target from the self-to-anchor vector", "[bot-follow][policy]")
+	{
+		const Vector3 target = ComputeFollowStandOffTarget(
+			Vector3::Zero,
+			Vector3(10.0f, 0.0f, 0.0f),
+			Radian(0.0f),
+			true,
+			3.0f);
+		CHECK(target.x == Approx(7.0f).margin(0.0001f));
+		CHECK(target.z == Approx(0.0f).margin(0.0001f));
+	}
+
+	TEST_CASE("movement math falls back behind the anchor when self overlaps the leader", "[bot-follow][policy]")
+	{
+		const Vector3 target = ComputeFollowStandOffTarget(
+			Vector3(10.0f, 0.0f, 5.0f),
+			Vector3(10.0f, 0.0f, 5.0f),
+			Radian(0.0f),
+			true,
+			3.0f);
+		CHECK(target.x == Approx(10.0f).margin(0.0001f));
+		CHECK(target.z == Approx(2.0f).margin(0.0001f));
 	}
 
 	TEST_CASE("movement math trims sharp turns but leaves shallow turns alone", "[bot-follow][policy]")

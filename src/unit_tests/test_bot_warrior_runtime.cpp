@@ -269,7 +269,7 @@ namespace mmo
 		CHECK(logs.Contains("warrior failure=auto_attack_pending"));
 	}
 
-	TEST_CASE("warrior runtime keeps contributing through a recoverable map follow abort", "[bot-warrior][runtime]")
+	TEST_CASE("warrior runtime keeps contributing when map id is unresolved", "[bot-warrior][runtime]")
 	{
 		WarriorRuntimeFixture fixture;
 		fixture.SeedCombatScene(12.0f, false, true, WarriorRuntimeFixture::kLeaderGuid);
@@ -284,7 +284,7 @@ namespace mmo
 		CHECK(fixture.context.GetLastCastState().status == BotUnit::CastState::Status::Pending);
 		CHECK(fixture.context.GetLastCastState().spellId == fixture.capabilities.gapCloser->spellId);
 		CHECK(logs.Contains("warrior action=cast_spell reason=charge_opener"));
-		CHECK(logs.Contains("follow_reason=map_unresolved"));
+		CHECK_FALSE(logs.Contains("follow_reason=map_unresolved"));
 	}
 
 	TEST_CASE("warrior runtime blocks conservatively on invalid self prerequisites", "[bot-warrior][runtime]")

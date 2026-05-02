@@ -3,6 +3,7 @@
 #pragma once
 
 #include "../bot_profile.h"
+#include "../bot_actions/accept_party_invitation_action.h"
 #include "../bot_actions/companion_follow_action.h"
 
 namespace mmo
@@ -17,7 +18,8 @@ namespace mmo
 
 		bool OnPartyInvitation(BotContext& context, const std::string& inviterName) override
 		{
-			ILOG("Party follow profile accepting invitation from " << inviterName);
+			ILOG("Party follow profile queueing invitation acceptance from " << inviterName);
+			QueueUrgentAction(std::make_shared<AcceptPartyInvitationAction>(), context);
 			return true;
 		}
 

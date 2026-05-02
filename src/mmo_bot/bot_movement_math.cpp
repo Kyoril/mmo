@@ -112,6 +112,33 @@ namespace mmo
 		return Vector3(end.x - direction.x * clampedTrim, end.y, end.z - direction.z * clampedTrim);
 	}
 
+	Vector3 ComputeFollowStandOffTarget(
+		const Vector3& selfPosition,
+		const Vector3& anchorPosition,
+		const Radian& anchorFacing,
+		const bool anchorHasFacing,
+		const float desiredDistance)
+	{
+		if (desiredDistance <= 0.0f)
+		{
+			return anchorPosition;
+		}
+
+		const Radian normalizedFacing = NormalizeFacing(anchorFacing);
+		const Vector3 fallbackBehind(
+			-std::sin(normalizedFacing.GetValueRadians()),
+			0.0f,
+			-std::cos(normalizedFacing.GetValueRadians()));
+		const Vector3 offsetDirection = SafeNormalizePlanar(
+			selfPosition - anchorPosition,
+			anchorHasFacing ? fallbackBehind : Vector3::UnitZ);
+
+		return Vector3(
+			anchorPosition.x + offsetDirection.x * desiredDistance,
+			anchorPosition.y,
+			anchorPosition.z + offsetDirection.z * desiredDistance);
+	}
+
 	Vector3 ComputeSmoothedPathTarget(
 		const std::vector<Vector3>& points,
 		const std::size_t currentIndex,

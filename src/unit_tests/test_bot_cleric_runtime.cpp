@@ -297,7 +297,7 @@ namespace mmo
 		CHECK(logs.Contains("target_guid=" + std::to_string(ClericRuntimeFixture::kLeaderGuid)));
 	}
 
-	TEST_CASE("cleric runtime keeps healing through a recoverable map follow abort", "[bot-cleric][runtime]")
+	TEST_CASE("cleric runtime keeps healing when map id is unresolved", "[bot-cleric][runtime]")
 	{
 		ClericRuntimeFixture fixture;
 		fixture.SeedCombatScene(475, 100, 90, true);
@@ -312,7 +312,8 @@ namespace mmo
 		CHECK(fixture.context.GetLastCastState().status == BotUnit::CastState::Status::Pending);
 		CHECK(fixture.context.GetLastCastState().spellId == fixture.capabilities.emergencyHeal->spellId);
 		CHECK(logs.Contains("cleric action=cast_spell reason=ally_emergency_heal"));
-		CHECK(logs.Contains("follow_reason=map_unresolved"));
+		CHECK_FALSE(logs.Contains("follow_reason=map_unresolved"));
+		CHECK(logs.Contains("movement decision=repath reason=map_inferred"));
 	}
 
 	TEST_CASE("cleric runtime blocks conservatively on invalid self prerequisites", "[bot-cleric][runtime]")

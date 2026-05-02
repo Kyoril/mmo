@@ -1,5 +1,7 @@
 enable_testing()
 
+include_directories(../mmo_bot)
+
 # Add default executable
 add_exe(unit_tests)
 target_link_libraries(unit_tests 
@@ -41,6 +43,9 @@ target_sources(unit_tests PRIVATE
 	../mmo_bot/bot_mage_controller.cpp
 	../mmo_bot/bot_actions/follow_leader_action.cpp
 	../mmo_bot/bot_actions/companion_follow_action.cpp
+	test_bot_realm_spell_state.cpp
+	test_bot_party_follow_profile.cpp
+	test_bot_context.cpp
 	test_bot_companion_runtime.cpp
 	test_bot_follow_runtime.cpp
 	test_bot_warrior_runtime.cpp

@@ -148,11 +148,6 @@ namespace mmo
 				return input;
 			}
 
-			if (!context.HasCurrentMapId() || context.GetCurrentMapId() == 0)
-			{
-				input.preconditionFailure = FollowLeaderPreconditionFailure::MapUnavailable;
-			}
-
 			return input;
 		}
 
@@ -200,7 +195,24 @@ namespace mmo
 			}
 
 			LogDecisionOnce("repath", decision.reason, BuildDecisionDetails(context, input, decision));
-			const BotPathResult result = navService->FindPath(context.GetCurrentMapId(), input.self.position, input.anchor.position);
+			uint32 mapId = context.GetCurrentMapId();
+			const float desiredDistance = (m_controller.GetConfig().holdDistance + m_controller.GetConfig().leaveDistance) * 0.5f;
+			const Vector3 pathTarget = ComputeFollowStandOffTarget(
+				input.self.position,
+				input.anchor.position,
+				input.anchor.facing,
+				input.anchor.hasFacing,
+				desiredDistance);
+			if (mapId == 0)
+			{
+				if (const std::optional<uint32> inferredMapId = navService->InferMapId(input.self.position, pathTarget); inferredMapId.has_value())
+				{
+					mapId = *inferredMapId;
+					context.SetCurrentMapId(mapId);
+				}
+			}
+
+			const BotPathResult result = navService->FindPath(mapId, input.self.position, pathTarget);
 			if (!result.success)
 			{
 				StopMovement(context);

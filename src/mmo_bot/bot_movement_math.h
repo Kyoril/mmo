@@ -20,6 +20,12 @@ namespace mmo
 	[[nodiscard]] float SmallestAngleDelta(const Radian& a, const Radian& b);
 	[[nodiscard]] bool IsDegenerateSegment(const Vector3& start, const Vector3& end, float epsilon = 1e-3f);
 	[[nodiscard]] Vector3 TrimSegmentEnd(const Vector3& start, const Vector3& end, float trimDistance);
+	[[nodiscard]] Vector3 ComputeFollowStandOffTarget(
+		const Vector3& selfPosition,
+		const Vector3& anchorPosition,
+		const Radian& anchorFacing,
+		bool anchorHasFacing,
+		float desiredDistance);
 	[[nodiscard]] Vector3 ComputeSmoothedPathTarget(
 		const std::vector<Vector3>& points,
 		std::size_t currentIndex,

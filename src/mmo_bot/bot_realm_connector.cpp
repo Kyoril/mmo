@@ -1439,10 +1439,24 @@ namespace mmo
 
 	PacketParseResult BotRealmConnector::OnAuraUpdate(game::IncomingPacket& packet)
 	{
-		BotUnit* self = GetSelfMutable();
-		if (!self)
+		uint64 unitGuid = 0;
+		if (!(packet >> io::read_packed_guid(unitGuid)))
 		{
-			UpdateSpellStateIssue("aura_update_self_unavailable");
+			UpdateSpellStateIssue("aura_update_parse_failed");
+			return PacketParseResult::Pass;
+		}
+
+		BotUnit* unit = m_objectManager.GetUnitMutable(unitGuid);
+		if (!unit)
+		{
+			if (unitGuid == m_selectedCharacterGuid)
+			{
+				UpdateSpellStateIssue("aura_update_self_unavailable");
+			}
+			else
+			{
+				WLOG("Unable to find unit " << unitGuid << " for aura update!");
+			}
 			return PacketParseResult::Pass;
 		}
 
@@ -1484,9 +1498,12 @@ namespace mmo
 			auras.push_back(std::move(aura));
 		}
 
-		self->SetVisibleAuras(std::move(auras));
-		ClearSpellStateIssue();
-		UnitUpdated(*self);
+		unit->SetVisibleAuras(std::move(auras));
+		if (unitGuid == m_selectedCharacterGuid)
+		{
+			ClearSpellStateIssue();
+		}
+		UnitUpdated(*unit);
 		return PacketParseResult::Pass;
 	}
 

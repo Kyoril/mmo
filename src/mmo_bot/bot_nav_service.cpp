@@ -6,6 +6,7 @@
 #include "log/default_log_levels.h"
 #include "nav_mesh/map.h"
 
+#include <limits>
 #include <sstream>
 
 namespace fs = std::filesystem;
@@ -204,6 +205,68 @@ namespace mmo
 		result.success = true;
 		ClearDecisionDedup();
 		return result;
+	}
+
+	std::optional<uint32> BotNavService::InferMapId(const Vector3& start, const Vector3& end)
+	{
+		if (!m_ready)
+		{
+			return std::nullopt;
+		}
+
+		const auto& maps = m_project.maps.getTemplates();
+		std::optional<uint32> resolvedMapId;
+		size_t candidateCount = 0;
+		std::string resolvedDirectory;
+		size_t resolvedPointCount = std::numeric_limits<size_t>::max();
+
+		for (int mapIndex = 0; mapIndex < maps.entry_size(); ++mapIndex)
+		{
+			const auto& mapEntry = maps.entry(mapIndex);
+			if (mapEntry.directory().empty())
+			{
+				continue;
+			}
+
+			std::string mapDirectory;
+			std::string reason;
+			const std::shared_ptr<nav::Map> map = GetOrLoadMap(mapEntry.id(), mapDirectory, reason);
+			if (!map)
+			{
+				continue;
+			}
+
+			std::vector<Vector3> points;
+			if (!map->FindPath(start, end, points, true) || points.size() < 2)
+			{
+				continue;
+			}
+
+			++candidateCount;
+			if (!resolvedMapId.has_value() || points.size() < resolvedPointCount)
+			{
+				resolvedMapId = mapEntry.id();
+				resolvedDirectory = mapDirectory;
+				resolvedPointCount = points.size();
+			}
+		}
+
+		if (resolvedMapId.has_value())
+		{
+			std::ostringstream details;
+			details << "start_x=" << start.x
+				<< " start_y=" << start.y
+				<< " start_z=" << start.z
+				<< " end_x=" << end.x
+				<< " end_y=" << end.y
+				<< " end_z=" << end.z
+				<< " map_id=" << *resolvedMapId
+				<< " map_directory=" << resolvedDirectory
+				<< " candidate_count=" << candidateCount;
+			LogDecisionOnce("repath", "map_inferred", details.str(), false);
+		}
+
+		return resolvedMapId;
 	}
 
 	std::shared_ptr<nav::Map> BotNavService::GetOrLoadMap(uint32 mapId, std::string& outDirectory, std::string& outReason)

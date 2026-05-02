@@ -300,7 +300,7 @@ namespace mmo
 		CHECK(logs.Contains("target_source=anchor_target"));
 	}
 
-	TEST_CASE("mage runtime keeps contributing through a recoverable map follow abort", "[bot-mage][runtime]")
+	TEST_CASE("mage runtime keeps contributing when map id is unresolved", "[bot-mage][runtime]")
 	{
 		MageRuntimeFixture fixture;
 		fixture.SeedCombatScene(500, 100, 24.0f);
@@ -315,7 +315,8 @@ namespace mmo
 		CHECK(fixture.context.GetLastCastState().status == BotUnit::CastState::Status::Pending);
 		CHECK(fixture.context.GetLastCastState().spellId == fixture.capabilities.primaryNuke->spellId);
 		CHECK(logs.Contains("mage action=cast_spell reason=primary_nuke"));
-		CHECK(logs.Contains("follow_reason=map_unresolved"));
+		CHECK_FALSE(logs.Contains("follow_reason=map_unresolved"));
+		CHECK(logs.Contains("movement decision=repath reason=map_inferred"));
 	}
 
 	TEST_CASE("mage runtime blocks conservatively on invalid self prerequisites", "[bot-mage][runtime]")
