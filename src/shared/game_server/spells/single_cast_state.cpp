@@ -2171,11 +2171,13 @@ namespace mmo
 
 	void SingleCastState::OnTargetKilled(GameUnitS*)
 	{
+		auto strongThis = shared_from_this();
 		StopCast(spell_interrupt_flags::Any);
 	}
 
 	void SingleCastState::OnTargetDespawned(GameObjectS&)
 	{
+		auto strongThis = shared_from_this();
 		StopCast(spell_interrupt_flags::Any);
 	}
 

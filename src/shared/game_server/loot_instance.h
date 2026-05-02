@@ -106,6 +106,12 @@ namespace mmo
 		/// @param receiver The receivers GUID.
 		[[nodiscard]] bool ContainsLootFor(uint64 receiver);
 
+		/// Determines whether a specific receiver may loot a given slot right now.
+		/// @param slot The server-side loot slot index.
+		/// @param receiver The GUID of the player attempting to loot the slot.
+		/// @returns true if the slot may be looted by the receiver, false otherwise.
+		[[nodiscard]] bool CanLootItem(uint8 slot, uint64 receiver) const;
+
 		/// Gets the amount of remaining gold in this loot instance.
 		/// @returns The amount of gold in this loot instance.
 		[[nodiscard]] uint32 GetGold() const { return m_gold; }
@@ -133,6 +139,8 @@ namespace mmo
 	private:
 
 		void AddLootItem(const proto::LootDefinition& def);
+
+		[[nodiscard]] uint8 GetSlotType(uint8 slot, uint64 receiver) const;
 
 	private:
 

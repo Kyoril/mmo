@@ -181,3 +181,62 @@ TEST_CASE("LootInstance FreeForAll enforcement", "[loot_instance]")
 		REQUIRE(loot.TakeItem(0, anyGuid) == true);
 	}
 }
+
+TEST_CASE("LootInstance strategy-aware slot visibility", "[loot_instance]")
+{
+	asio::io_service ioService;
+	TimerQueue timerQueue(ioService);
+	proto::Project project;
+
+	auto* itemEntry = project.items.add(1);
+	itemEntry->set_id(1);
+	itemEntry->set_maxstack(20);
+
+	ConditionMgr conditionMgr(project.conditions);
+
+	const uint64 guidA = 1001;
+	const uint64 guidB = 1002;
+	auto playerA = MakePlayer(project, timerQueue, guidA);
+	auto playerB = MakePlayer(project, timerQueue, guidB);
+	std::vector<std::weak_ptr<GamePlayerS>> recipients = { playerA, playerB };
+
+	SECTION("LOOT-07: MasterLoot only exposes lootable slots to the master")
+	{
+		proto::LootEntry entry = MakeLootEntry(1);
+		LootInstance loot(
+			project.items,
+			conditionMgr,
+			45ULL,
+			&entry,
+			0, 0,
+			recipients,
+			loot_method::MasterLoot,
+			guidA);
+
+		REQUIRE(loot.CanLootItem(0, guidA) == true);
+		REQUIRE(loot.CanLootItem(0, guidB) == false);
+		REQUIRE(loot.ContainsLootFor(guidA) == true);
+		REQUIRE(loot.ContainsLootFor(guidB) == false);
+	}
+
+	SECTION("LOOT-08: RoundRobin exposes only the assigned slot to each recipient")
+	{
+		proto::LootEntry entry = MakeLootEntry(2);
+		LootInstance loot(
+			project.items,
+			conditionMgr,
+			46ULL,
+			&entry,
+			0, 0,
+			recipients,
+			loot_method::RoundRobin,
+			0);
+
+		REQUIRE(loot.CanLootItem(0, guidA) == true);
+		REQUIRE(loot.CanLootItem(0, guidB) == false);
+		REQUIRE(loot.CanLootItem(1, guidA) == false);
+		REQUIRE(loot.CanLootItem(1, guidB) == true);
+		REQUIRE(loot.ContainsLootFor(guidA) == true);
+		REQUIRE(loot.ContainsLootFor(guidB) == true);
+	}
+}

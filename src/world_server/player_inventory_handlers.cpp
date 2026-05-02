@@ -57,6 +57,13 @@ namespace mmo
 			return;
 		}
 
+		const auto playerGuid = m_character->GetGuid();
+		if (!m_loot->CanLootItem(lootSlot, playerGuid))
+		{
+			WLOG("Player " << log_hex_digit(playerGuid) << " is not allowed to loot slot " << static_cast<uint32>(lootSlot));
+			return;
+		}
+
 		const proto::ItemEntry *item = m_project.items.getById(lootItem->definition.item());
 		if (!item)
 		{
@@ -103,7 +110,6 @@ namespace mmo
 		}
 
 		// Consume this item
-		auto playerGuid = m_character->GetGuid();
 		m_loot->TakeItem(lootSlot, playerGuid);
 
 		// Notify in-sight group members that we looted this item

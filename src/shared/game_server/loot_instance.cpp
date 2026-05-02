@@ -186,14 +186,24 @@ namespace mmo
 		}
 
 		// Now check all items...
-		for (auto& item : m_items)
+		for (uint8 slot = 0; slot < m_items.size(); ++slot)
 		{
+			auto& item = m_items[slot];
+
 			// Item not looted?
 			if (!item.isLooted)
 			{
+				const uint8 slotType = GetSlotType(slot, receiver);
+				if (slotType != loot_slot_type::AllowLoot && slotType != loot_slot_type::Owner)
+				{
+					continue;
+				}
+
 				const auto* entry = m_itemManager.getById(item.definition.item());
 				if (!entry)
+				{
 					continue;
+				}
 
 				// Check if item is a shared item...
 				if (entry->flags() & item_flags::PartyLoot)
@@ -228,6 +238,17 @@ namespace mmo
 
 		// No lootable item is available for this player
 		return false;
+	}
+
+	bool LootInstance::CanLootItem(uint8 slot, uint64 receiver) const
+	{
+		if (slot >= m_items.size())
+		{
+			return false;
+		}
+
+		const uint8 slotType = GetSlotType(slot, receiver);
+		return slotType == loot_slot_type::AllowLoot || slotType == loot_slot_type::Owner;
 	}
 
 	void LootInstance::TakeGold()
@@ -267,24 +288,9 @@ namespace mmo
 			return false;
 		}
 
-		// Loot method enforcement — single enforcement point, no bypass possible.
-		switch (m_lootMethod)
+		if (!CanLootItem(slot, receiver))
 		{
-		case loot_method::MasterLoot:
-			if (receiver != m_lootMasterGuid)
-			{
-				return false;
-			}
-			break;
-		case loot_method::RoundRobin:
-			if (m_items[slot].assignedRecipientGuid != 0 &&
-				receiver != m_items[slot].assignedRecipientGuid)
-			{
-				return false;
-			}
-			break;
-		default:
-			break;  // FreeForAll / GroupLoot — no per-item restriction
+			return false;
 		}
 
 		// Check if item was already looted
@@ -361,6 +367,7 @@ namespace mmo
 				// Only write item entry if the item hasn't been looted yet
 				if (!isLooted)
 				{
+					const uint8 slotType = GetSlotType(slot, receiver);
 					writer
 						<< io::write<uint8>(slot)
 						<< io::write<uint32>(def.definition.item())
@@ -368,7 +375,7 @@ namespace mmo
 						<< io::write<uint32>(itemEntry->displayid())
 						<< io::write<uint32>(0)	// RandomSuffixIndex TODO
 						<< io::write<uint32>(0)	// RandomPropertyId TODO
-						<< io::write<uint8>(loot_slot_type::AllowLoot)
+						<< io::write<uint8>(slotType)
 						;
 					realCount++;
 				}
@@ -379,6 +386,36 @@ namespace mmo
 
 		// Overwrite real item count
 		writer.WritePOD(itemCountPos, realCount);
+	}
+
+	uint8 LootInstance::GetSlotType(uint8 slot, uint64 receiver) const
+	{
+		if (slot >= m_items.size())
+		{
+			return loot_slot_type::Locked;
+		}
+
+		switch (m_lootMethod)
+		{
+		case loot_method::MasterLoot:
+			if (receiver != m_lootMasterGuid)
+			{
+				return loot_slot_type::Master;
+			}
+			break;
+
+		case loot_method::RoundRobin:
+			if (m_items[slot].assignedRecipientGuid != 0 && receiver != m_items[slot].assignedRecipientGuid)
+			{
+				return loot_slot_type::Locked;
+			}
+			break;
+
+		default:
+			break;
+		}
+
+		return loot_slot_type::AllowLoot;
 	}
 
 	void LootInstance::AddLootItem(const proto::LootDefinition& def)

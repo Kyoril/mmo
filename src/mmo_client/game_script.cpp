@@ -1200,6 +1200,8 @@ namespace mmo
 																{ return this->LootSlotIsCoin(slot); }),
 					   luabind::def<std::function<bool(int32)>>("LootSlotIsItem", [this](int32 slot)
 																{ return this->LootSlotIsItem(slot); }),
+					   luabind::def<std::function<int32(int32)>>("GetLootSlotType", [this](int32 slot)
+											{ return this->GetLootSlotType(slot); }),
 					   luabind::def<std::function<const ItemInfo *(int32)>>("GetLootSlotItem", [this](int32 slot)
 																			{ return this->GetLootSlotItem(slot); }),
 					   luabind::def<std::function<void()>>("CloseLoot", [this]()
@@ -1559,6 +1561,19 @@ namespace mmo
 				return;
 			}
 
+			const LootClient::LootItem* item = m_lootClient.GetLootItem(serverSlot);
+			if (!item || item->count == 0)
+			{
+				ELOG("Unable to loot: Missing loot item for server slot " << serverSlot);
+				return;
+			}
+
+			if (item->lootType != loot_slot_type::AllowLoot && item->lootType != loot_slot_type::Owner)
+			{
+				FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "EQUIP_ERR_LOOT_CANT_LOOT_THAT_NOW");
+				return;
+			}
+
 			// Loot item from server slot
 			m_realmConnector.AutoStoreLootItem(serverSlot);
 		}
@@ -1623,6 +1638,33 @@ namespace mmo
 		}
 
 		return true;
+	}
+
+	int32 GameScript::GetLootSlotType(const uint32 slot) const
+	{
+		if (slot < 1)
+		{
+			return loot_slot_type::Locked;
+		}
+
+		if (m_lootClient.HasMoney() && slot == 1)
+		{
+			return loot_slot_type::AllowLoot;
+		}
+
+		const int32 serverSlot = MapUISlotToServerSlot(static_cast<int32>(slot));
+		if (serverSlot < 0)
+		{
+			return loot_slot_type::Locked;
+		}
+
+		const LootClient::LootItem* item = m_lootClient.GetLootItem(serverSlot);
+		if (!item || item->count == 0)
+		{
+			return loot_slot_type::Locked;
+		}
+
+		return item->lootType;
 	}
 
 	void GameScript::GetLootSlotInfo(uint32 slot, String &out_icon, String &out_text, int32 &out_count) const

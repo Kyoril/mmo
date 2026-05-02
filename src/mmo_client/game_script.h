@@ -106,6 +106,8 @@ namespace mmo
 
 		bool LootSlotIsCoin(uint32 slot) const;
 
+		int32 GetLootSlotType(uint32 slot) const;
+
 		void GetLootSlotInfo(uint32 slot, String& out_icon, String& out_text, int32& out_count) const;
 
 		const ItemInfo* GetLootSlotItem(uint32 slot) const;
