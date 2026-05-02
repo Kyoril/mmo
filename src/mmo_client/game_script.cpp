@@ -1235,7 +1235,7 @@ namespace mmo
 						   // handler (plan 05-01) defaults lootMasterGuid to the leader's
 						   // characterId when lootMethod==MasterLoot && lootMasterGuid==0.
 						   const uint64 masterGuid = 0;
-						   m_realmConnector.SetGroupLootMethod(static_cast<uint8>(method), masterGuid, 2);
+						   m_realmConnector.SetGroupLootMethod(static_cast<uint8>(method), masterGuid, 1);
 					   }),
 
 					   luabind::def<std::function<void(const char *, const char *)>>("SendChatMessage", [this](const char *message, const char *type)
