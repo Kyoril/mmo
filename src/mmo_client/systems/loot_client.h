@@ -56,11 +56,10 @@ namespace mmo
 
 		LootItem* GetLootItem(uint32 index);
 
-		/// Sends a loot-roll vote to the server.
-		/// @param lootGuid The loot source GUID.
-		/// @param slot The loot slot to vote on.
+		/// Sends a loot-roll vote to the server using a roll ID.
+		/// @param rollId The roll ID (maps to the stored lootGuid + slot internally).
 		/// @param vote The vote type (0=Pass, 1=Need, 2=Greed).
-		void SendLootRoll(uint64 lootGuid, uint8 slot, uint8 vote);
+		void SendLootRollByRollId(uint32 rollId, uint8 vote);
 
 		/// Returns a reference to the item cache.
 		DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& GetItemCache() { return m_itemCache; }
@@ -84,6 +83,8 @@ namespace mmo
 
 		PacketParseResult OnLootAllPassed(game::IncomingPacket& packet);
 
+		PacketParseResult OnLootRollResult(game::IncomingPacket& packet);
+
 	private:
 		RealmConnector& m_realmConnector;
 		DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& m_itemCache;
@@ -94,5 +95,18 @@ namespace mmo
 		std::vector<LootItem> m_lootItems;
 		String m_lootMoneyString;
 		uint32 m_itemInfoMissing = 0;
+
+		/// Data for an active loot roll (stores the GUID safely in C++).
+		struct RollData
+		{
+			uint64 lootGuid;
+			uint8 slot;
+		};
+
+		/// Maps roll IDs to their data.
+		std::map<uint32, RollData> m_activeRolls;
+
+		/// Next roll ID counter.
+		uint32 m_nextRollId = 1;
 	};
 }

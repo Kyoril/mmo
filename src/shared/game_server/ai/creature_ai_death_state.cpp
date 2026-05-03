@@ -319,6 +319,16 @@ namespace mmo
 							return;
 						}
 
+						// Find the winner's name
+						String winnerName = "Unknown";
+						controlled.ForEachSubscriberInSight([winnerGuid, &winnerName](TileSubscriber& subscriber)
+						{
+							if (subscriber.GetGameUnit().GetGuid() == winnerGuid)
+							{
+								winnerName = subscriber.GetGameUnit().GetName();
+							}
+						});
+
 						std::vector<char> wonBuffer;
 						io::VectorSink wonSink(wonBuffer);
 						game::OutgoingPacket wonPacket(wonSink);
@@ -329,7 +339,8 @@ namespace mmo
 							<< io::write<uint32>(itemId)
 							<< io::write<uint64>(winnerGuid)
 							<< io::write<uint8>(winningRoll)
-							<< io::write<uint8>(static_cast<uint8>(winningVote));
+							<< io::write<uint8>(static_cast<uint8>(winningVote))
+							<< io::write_dynamic_range<uint8>(winnerName);
 						wonPacket.Finish();
 
 						controlled.ForEachSubscriberInSight([&recipientSet, &wonPacket, &wonBuffer](TileSubscriber& subscriber)
@@ -436,6 +447,55 @@ namespace mmo
 							}
 
 							lootInstance->TakeItem(slot, winnerGuid);
+						});
+					});
+
+				m_onRollVoted = loot->rollVoted.connect([&controlled](uint64 lootGuid, uint8 slot, uint32 itemId, uint64 playerGuid, RollVote vote)
+					{
+						const std::shared_ptr<LootInstance> lootInstance = controlled.GetLoot();
+						if (!lootInstance)
+						{
+							return;
+						}
+
+						const std::set<uint64> recipientSet(lootInstance->GetRecipients().begin(), lootInstance->GetRecipients().end());
+
+						// Find the voter's name
+						String voterName = "Unknown";
+						controlled.ForEachSubscriberInSight([playerGuid, &voterName](TileSubscriber& subscriber)
+						{
+							if (subscriber.GetGameUnit().GetGuid() == playerGuid)
+							{
+								voterName = subscriber.GetGameUnit().GetName();
+							}
+						});
+
+						std::vector<char> buffer;
+						io::VectorSink sink(buffer);
+						game::OutgoingPacket outPacket(sink);
+						outPacket.Start(game::realm_client_packet::LootRollResult);
+						outPacket
+							<< io::write<uint64>(lootGuid)
+							<< io::write<uint8>(slot)
+							<< io::write<uint32>(itemId)
+							<< io::write<uint64>(playerGuid)
+							<< io::write<uint8>(static_cast<uint8>(vote))
+							<< io::write_dynamic_range<uint8>(voterName);
+						outPacket.Finish();
+
+						controlled.ForEachSubscriberInSight([&recipientSet, &outPacket, &buffer](TileSubscriber& subscriber)
+						{
+							if (!subscriber.GetGameUnit().IsPlayer())
+							{
+								return;
+							}
+
+							if (!recipientSet.contains(subscriber.GetGameUnit().GetGuid()))
+							{
+								return;
+							}
+
+							subscriber.SendPacket(outPacket, buffer);
 						});
 					});
 

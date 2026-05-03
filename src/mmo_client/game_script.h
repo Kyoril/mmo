@@ -112,8 +112,6 @@ namespace mmo
 
 		const ItemInfo* GetLootSlotItem(uint32 slot) const;
 
-		void ConfirmLootRoll(uint64 lootGuid, uint32 slot, uint32 vote) const;
-
 		void CloseLoot() const;
 
 		int32 GetContainerNumSlots(int32 container) const;

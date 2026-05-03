@@ -98,6 +98,14 @@ namespace mmo
 		/// @param winningVote The winning vote type.
 		signal<void(uint64 lootGuid, uint8 slot, uint32 itemId, uint64 winnerGuid, uint8 winningRoll, RollVote winningVote)> rollWon;
 
+		/// This signal is triggered when a player submits their vote for a loot roll.
+		/// @param lootGuid The loot source GUID.
+		/// @param slot The loot slot.
+		/// @param itemId The item entry id.
+		/// @param playerGuid The player who voted.
+		/// @param vote The vote type.
+		signal<void(uint64 lootGuid, uint8 slot, uint32 itemId, uint64 playerGuid, RollVote vote)> rollVoted;
+
 	public:
 		typedef std::map<uint32, uint32> PlayerItemLootEntry;
 		typedef std::map<uint64, PlayerItemLootEntry> PlayerLootEntries;

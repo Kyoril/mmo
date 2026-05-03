@@ -18,6 +18,7 @@ namespace mmo
 		m_packetHandlerConnections += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::StartLootRoll, *this, &LootClient::OnStartLootRoll);
 		m_packetHandlerConnections += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LootRollWon, *this, &LootClient::OnLootRollWon);
 		m_packetHandlerConnections += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LootAllPassed, *this, &LootClient::OnLootAllPassed);
+		m_packetHandlerConnections += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LootRollResult, *this, &LootClient::OnLootRollResult);
 	}
 
 	void LootClient::Shutdown()
@@ -310,8 +311,17 @@ namespace mmo
 		return m_lootMoney > 0;
 	}
 
-	void LootClient::SendLootRoll(uint64 lootGuid, uint8 slot, uint8 vote)
+	void LootClient::SendLootRollByRollId(uint32 rollId, uint8 vote)
 	{
+		auto it = m_activeRolls.find(rollId);
+		if (it == m_activeRolls.end())
+		{
+			return;
+		}
+
+		const uint64 lootGuid = it->second.lootGuid;
+		const uint8 slot = it->second.slot;
+
 		m_realmConnector.sendSinglePacket([lootGuid, slot, vote](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::client_realm_packet::LootRoll);
@@ -334,12 +344,14 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		m_itemCache.Get(itemId, [lootGuid, slot, itemId, rollTime](uint64, const ItemInfo& itemInfo)
+		const uint32 rollId = m_nextRollId++;
+		m_activeRolls[rollId] = { lootGuid, slot };
+
+		m_itemCache.Get(itemId, [rollId, itemId, rollTime](uint64, const ItemInfo& itemInfo)
 		{
 			FrameManager::Get().TriggerLuaEvent(
 				"START_LOOT_ROLL",
-				static_cast<uint64>(lootGuid),
-				static_cast<uint32>(slot),
+				static_cast<uint32>(rollId),
 				static_cast<uint32>(itemId),
 				static_cast<uint32>(rollTime),
 				itemInfo.name,
@@ -358,23 +370,35 @@ namespace mmo
 		uint64 winnerGuid = 0;
 		uint8 winningRoll = 0;
 		uint8 winningVote = 0;
-		if (!(packet >> io::read<uint64>(lootGuid) >> io::read<uint8>(slot) >> io::read<uint32>(itemId) >> io::read<uint64>(winnerGuid) >> io::read<uint8>(winningRoll) >> io::read<uint8>(winningVote)))
+		String winnerName;
+		if (!(packet >> io::read<uint64>(lootGuid) >> io::read<uint8>(slot) >> io::read<uint32>(itemId) >> io::read<uint64>(winnerGuid) >> io::read<uint8>(winningRoll) >> io::read<uint8>(winningVote) >> io::read_container<uint8>(winnerName)))
 		{
 			return PacketParseResult::Disconnect;
 		}
 
-		m_itemCache.Get(itemId, [lootGuid, slot, itemId, winnerGuid, winningRoll, winningVote](uint64, const ItemInfo& itemInfo)
+		// Find and remove the matching roll
+		uint32 rollId = 0;
+		for (auto it = m_activeRolls.begin(); it != m_activeRolls.end(); ++it)
+		{
+			if (it->second.lootGuid == lootGuid && it->second.slot == slot)
+			{
+				rollId = it->first;
+				m_activeRolls.erase(it);
+				break;
+			}
+		}
+
+		m_itemCache.Get(itemId, [rollId, itemId, winningRoll, winningVote, winnerName](uint64, const ItemInfo& itemInfo)
 		{
 			FrameManager::Get().TriggerLuaEvent(
 				"LOOT_ROLL_WON",
-				static_cast<uint64>(lootGuid),
-				static_cast<uint32>(slot),
+				static_cast<uint32>(rollId),
 				static_cast<uint32>(itemId),
-				static_cast<uint64>(winnerGuid),
 				static_cast<uint32>(winningRoll),
 				static_cast<uint32>(winningVote),
 				itemInfo.name,
-				static_cast<uint32>(itemInfo.quality));
+				static_cast<uint32>(itemInfo.quality),
+				winnerName);
 		});
 
 		return PacketParseResult::Pass;
@@ -390,11 +414,48 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		// Find and remove the matching roll
+		uint32 rollId = 0;
+		for (auto it = m_activeRolls.begin(); it != m_activeRolls.end(); ++it)
+		{
+			if (it->second.lootGuid == lootGuid && it->second.slot == slot)
+			{
+				rollId = it->first;
+				m_activeRolls.erase(it);
+				break;
+			}
+		}
+
 		FrameManager::Get().TriggerLuaEvent(
 			"LOOT_ROLL_ALL_PASSED",
-			static_cast<uint64>(lootGuid),
-			static_cast<uint32>(slot),
+			static_cast<uint32>(rollId),
 			static_cast<uint32>(itemId));
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult LootClient::OnLootRollResult(game::IncomingPacket& packet)
+	{
+		uint64 lootGuid = 0;
+		uint8 slot = 0;
+		uint32 itemId = 0;
+		uint64 playerGuid = 0;
+		uint8 vote = 0;
+		String playerName;
+		if (!(packet >> io::read<uint64>(lootGuid) >> io::read<uint8>(slot) >> io::read<uint32>(itemId) >> io::read<uint64>(playerGuid) >> io::read<uint8>(vote) >> io::read_container<uint8>(playerName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		m_itemCache.Get(itemId, [vote, playerName](uint64, const ItemInfo& itemInfo)
+		{
+			FrameManager::Get().TriggerLuaEvent(
+				"LOOT_ROLL_RESULT",
+				static_cast<uint32>(vote),
+				playerName,
+				itemInfo.name,
+				static_cast<uint32>(itemInfo.quality));
+		});
 
 		return PacketParseResult::Pass;
 	}

@@ -362,6 +362,7 @@ namespace mmo
 				StartLootRoll,
 				LootRollWon,
 				LootAllPassed,
+				LootRollResult,
 
 				MoveTeleportAck,
 

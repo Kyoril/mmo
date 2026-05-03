@@ -176,7 +176,7 @@ namespace mmo
 		GameObjectS* lootObject = m_character->GetWorldInstance()->FindObjectByGuid(lootGuid);
 		if (!lootObject)
 		{
-			WLOG("Player tried to roll on a non-existing loot object");
+			WLOG("Player tried to roll on a non-existing loot object (GUID: " << lootGuid << ", slot: " << static_cast<uint32>(slot) << ")");
 			return;
 		}
 

@@ -301,6 +301,11 @@ namespace mmo
 		}
 
 		rollData.votes[playerGuid] = vote;
+
+		// Fire signal to notify about the individual vote
+		const uint32 itemId = m_items[slot].definition.item();
+		rollVoted(m_lootGuid, slot, itemId, playerGuid, vote);
+
 		if (rollData.votes.size() >= rollData.eligiblePlayers.size())
 		{
 			ResolveRoll(slot);
