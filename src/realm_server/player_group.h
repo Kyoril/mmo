@@ -120,6 +120,9 @@ namespace mmo
 		/// Gets the groups loot method.
 		LootMethod GetLootMethod() const { return m_lootMethod; }
 
+		/// Gets the group's loot quality threshold.
+		[[nodiscard]] uint8 GetLootThreshold() const { return static_cast<uint8>(m_lootTreshold); }
+
 		/// Gets the loot master's GUID (valid when loot method is MasterLoot).
 		[[nodiscard]] uint64 GetLootMasterGuid() const { return m_lootMaster; }
 

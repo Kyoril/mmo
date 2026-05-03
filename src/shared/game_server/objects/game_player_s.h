@@ -16,6 +16,7 @@ namespace mmo
 {
 	struct QuestStatusData;
 	class GameItemS;
+		class PlayerGroup;
 
 	namespace proto
 	{
@@ -106,11 +107,25 @@ namespace mmo
 		/// Sets the characters group id.
 		void SetGroupId(uint64 groupId) { m_groupId = groupId; }
 
+		/// Gets the player's world-side group object.
+		/// @returns The synchronized world-side group object, or nullptr if the player is not in a group.
+		[[nodiscard]] PlayerGroup* GetGroup() const noexcept { return m_playerGroup; }
+
+		/// Sets the player's world-side group object.
+		/// @param group The synchronized world-side group object, or nullptr if the player left the group.
+		void SetGroup(PlayerGroup* group) noexcept { m_playerGroup = group; }
+
 		/// Gets the loot method for this player's group.
 		[[nodiscard]] LootMethod GetLootMethod() const noexcept { return m_lootMethod; }
 
 		/// Sets the loot method.
 		void SetLootMethod(const LootMethod method) noexcept { m_lootMethod = method; }
+
+		/// Gets the loot quality threshold mirrored onto the player.
+		[[nodiscard]] uint8 GetLootThreshold() const noexcept { return m_lootThreshold; }
+
+		/// Sets the loot quality threshold mirrored onto the player.
+		void SetLootThreshold(const uint8 threshold) noexcept { m_lootThreshold = threshold; }
 
 		/// Gets the loot master GUID for this player's group.
 		[[nodiscard]] uint64 GetLootMasterGuid() const noexcept { return m_lootMasterGuid; }
@@ -295,7 +310,9 @@ namespace mmo
 		std::set<uint32> m_rewardedQuestIds;
 		NetPlayerWatcher *m_netPlayerWatcher = nullptr;
 		uint64 m_groupId = 0;
+		PlayerGroup* m_playerGroup = nullptr;
 		LootMethod m_lootMethod = loot_method::FreeForAll;
+		uint8 m_lootThreshold = item_quality::Uncommon;
 		uint64 m_lootMasterGuid = 0;
 		AvatarConfiguration m_configuration;
 		std::weak_ptr<GameObjectS> m_lootObject;

@@ -28,5 +28,6 @@ namespace mmo
 
 	private:
 		scoped_connection m_onLootCleared;
+		scoped_connection m_onRollWon;
 	};
 }

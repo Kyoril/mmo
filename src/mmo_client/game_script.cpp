@@ -1204,6 +1204,8 @@ namespace mmo
 											{ return this->GetLootSlotType(slot); }),
 					   luabind::def<std::function<const ItemInfo *(int32)>>("GetLootSlotItem", [this](int32 slot)
 																			{ return this->GetLootSlotItem(slot); }),
+					   luabind::def<std::function<void(uint64, int32, int32)>>("ConfirmLootRoll", [this](uint64 lootGuid, int32 slot, int32 vote)
+											{ this->ConfirmLootRoll(lootGuid, static_cast<uint32>(slot), static_cast<uint32>(vote)); }),
 					   luabind::def<std::function<void()>>("CloseLoot", [this]()
 														   { this->CloseLoot(); }),
 					   luabind::def<std::function<void(int32, String &, String &, int32 &)>>("GetLootSlotInfo", [this](int32 slot, String &out_icon, String &out_text, int32 &out_count)
@@ -1665,6 +1667,11 @@ namespace mmo
 		}
 
 		return item->lootType;
+	}
+
+	void GameScript::ConfirmLootRoll(uint64 lootGuid, uint32 slot, uint32 vote) const
+	{
+		m_lootClient.SendLootRoll(lootGuid, static_cast<uint8>(slot), static_cast<uint8>(vote));
 	}
 
 	void GameScript::GetLootSlotInfo(uint32 slot, String &out_icon, String &out_text, int32 &out_count) const

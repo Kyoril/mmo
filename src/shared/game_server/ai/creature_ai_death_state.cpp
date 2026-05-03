@@ -6,6 +6,10 @@
 #include "game_server/ai/creature_ai.h"
 #include "game_server/objects/game_creature_s.h"
 #include "game_server/loot_instance.h"
+#include "game_server/player_group.h"
+#include "game_server/inventory_types.h"
+#include "game_server/world/tile_subscriber.h"
+#include "binary_io/vector_sink.h"
 #include "game/experience.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"
@@ -42,9 +46,15 @@ namespace mmo
 			uint32 sumLevel = 0;
 
 			GamePlayerS* maxLevelCharacter = nullptr;
+			std::shared_ptr<GamePlayerS> primaryLootRecipient;
 			std::map<uint64, std::shared_ptr<GamePlayerS>> lootRecipients;
-			controlled.ForEachLootRecipient([&controlled, &lootRecipients, &sumLevel, &maxLevelCharacter](const std::shared_ptr<GamePlayerS>& character)
+			controlled.ForEachLootRecipient([&controlled, &lootRecipients, &sumLevel, &maxLevelCharacter, &primaryLootRecipient](const std::shared_ptr<GamePlayerS>& character)
 				{
+					if (!primaryLootRecipient)
+					{
+						primaryLootRecipient = character;
+					}
+
 					// First add this to the sum of levels
 					const uint32 characterLevel = character->GetLevel();
 					sumLevel += characterLevel;
@@ -212,6 +222,77 @@ namespace mmo
 					groupLootMethod,
 					lootMasterGuid);
 
+				if (primaryLootRecipient)
+				{
+					loot->SetLootMethod(groupLootMethod, primaryLootRecipient->GetLootThreshold());
+
+					if ((groupLootMethod == loot_method::RoundRobin || groupLootMethod == loot_method::GroupLoot) && primaryLootRecipient->GetGroupId() != 0)
+					{
+						std::vector<uint64> nearbyGroupMembers;
+						std::set<uint64> nearbyGroupMemberSet;
+						for (const auto& recipient : lootRecipients)
+						{
+							if (recipient.second->GetGroupId() != primaryLootRecipient->GetGroupId())
+							{
+								continue;
+							}
+
+							nearbyGroupMembers.push_back(recipient.first);
+							nearbyGroupMemberSet.insert(recipient.first);
+						}
+
+						if (PlayerGroup* group = primaryLootRecipient->GetGroup())
+						{
+							loot->SetRoundRobinLooter(group->GetNextRoundRobinRecipient(nearbyGroupMembers));
+						}
+						else
+						{
+							loot->SetRoundRobinLooter(primaryLootRecipient->GetGuid());
+						}
+
+						if (groupLootMethod == loot_method::GroupLoot)
+						{
+							loot->SetupGroupRollItems(nearbyGroupMemberSet);
+
+							for (const auto& [slot, rollData] : loot->GetRollDataMap())
+							{
+								const LootItem* lootItem = loot->GetLootDefinition(slot);
+								if (!lootItem)
+								{
+									continue;
+								}
+
+								constexpr uint32 rollTime = 60000;
+								std::vector<char> buffer;
+								io::VectorSink sink(buffer);
+								game::OutgoingPacket packet(sink);
+								packet.Start(game::realm_client_packet::StartLootRoll);
+								packet
+									<< io::write<uint64>(controlled.GetGuid())
+									<< io::write<uint8>(slot)
+									<< io::write<uint32>(lootItem->definition.item())
+									<< io::write<uint32>(rollTime);
+								packet.Finish();
+
+								controlled.ForEachSubscriberInSight([&rollData, &packet, &buffer](TileSubscriber& subscriber)
+								{
+									if (!subscriber.GetGameUnit().IsPlayer())
+									{
+										return;
+									}
+
+									if (!rollData.eligiblePlayers.contains(subscriber.GetGameUnit().GetGuid()))
+									{
+										return;
+									}
+
+									subscriber.SendPacket(packet, buffer);
+								});
+							}
+						}
+					}
+				}
+
 				// 3 Minutes of despawn delay if creature still has loot
 				despawnDelay = constants::OneMinute * 3;
 
@@ -219,6 +300,165 @@ namespace mmo
 				m_onLootCleared = loot->cleared.connect([&controlled]()
 					{
 						controlled.RemoveFlag<uint32>(object_fields::Flags, unit_flags::Lootable);
+					});
+
+				m_onRollWon = loot->rollWon.connect([&controlled](uint64 lootGuid, uint8 slot, uint32 itemId, uint64 winnerGuid, uint8 winningRoll, RollVote winningVote)
+					{
+						const std::shared_ptr<LootInstance> lootInstance = controlled.GetLoot();
+						if (!lootInstance)
+						{
+							return;
+						}
+
+						const std::set<uint64> recipientSet(lootInstance->GetRecipients().begin(), lootInstance->GetRecipients().end());
+
+						if (winnerGuid == 0)
+						{
+							std::vector<char> buffer;
+							io::VectorSink sink(buffer);
+							game::OutgoingPacket packet(sink);
+							packet.Start(game::realm_client_packet::LootAllPassed);
+							packet
+								<< io::write<uint64>(lootGuid)
+								<< io::write<uint8>(slot)
+								<< io::write<uint32>(itemId);
+							packet.Finish();
+
+							controlled.ForEachSubscriberInSight([&recipientSet, &packet, &buffer](TileSubscriber& subscriber)
+							{
+								if (!subscriber.GetGameUnit().IsPlayer())
+								{
+									return;
+								}
+
+								if (!recipientSet.contains(subscriber.GetGameUnit().GetGuid()))
+								{
+									return;
+								}
+
+								subscriber.SendPacket(packet, buffer);
+							});
+							return;
+						}
+
+						std::vector<char> wonBuffer;
+						io::VectorSink wonSink(wonBuffer);
+						game::OutgoingPacket wonPacket(wonSink);
+						wonPacket.Start(game::realm_client_packet::LootRollWon);
+						wonPacket
+							<< io::write<uint64>(lootGuid)
+							<< io::write<uint8>(slot)
+							<< io::write<uint32>(itemId)
+							<< io::write<uint64>(winnerGuid)
+							<< io::write<uint8>(winningRoll)
+							<< io::write<uint8>(static_cast<uint8>(winningVote));
+						wonPacket.Finish();
+
+						controlled.ForEachSubscriberInSight([&recipientSet, &wonPacket, &wonBuffer](TileSubscriber& subscriber)
+						{
+							if (!subscriber.GetGameUnit().IsPlayer())
+							{
+								return;
+							}
+
+							if (!recipientSet.contains(subscriber.GetGameUnit().GetGuid()))
+							{
+								return;
+							}
+
+							subscriber.SendPacket(wonPacket, wonBuffer);
+						});
+
+						const proto::ItemEntry* itemEntry = controlled.GetProject().items.getById(itemId);
+						const LootItem* lootItem = lootInstance->GetLootDefinition(slot);
+						if (!itemEntry || !lootItem)
+						{
+							return;
+						}
+
+						controlled.ForEachSubscriberInSight([winnerGuid, itemEntry, lootItem, itemId, &controlled, &recipientSet, lootInstance, slot](TileSubscriber& subscriber)
+						{
+							if (!subscriber.GetGameUnit().IsPlayer())
+							{
+								return;
+							}
+
+							if (subscriber.GetGameUnit().GetGuid() != winnerGuid)
+							{
+								return;
+							}
+
+							auto& winner = subscriber.GetGameUnit().AsPlayer();
+							std::map<uint16, uint16> addedBySlot;
+							const auto result = winner.GetInventory().CreateItems(*itemEntry, lootItem->count, &addedBySlot);
+							if (result != inventory_change_failure::Okay)
+							{
+								ELOG("Failed to auto-deliver rolled item " << itemId << " to winner: " << result);
+								return;
+							}
+
+							for (const auto& [inventorySlot, amount] : addedBySlot)
+							{
+								const uint8 bag = static_cast<uint8>(inventorySlot >> 8);
+								const uint8 subslot = static_cast<uint8>(inventorySlot & 0xFF);
+
+								std::vector<char> pushBuffer;
+								io::VectorSink pushSink(pushBuffer);
+								game::OutgoingPacket pushPacket(pushSink);
+								pushPacket.Start(game::realm_client_packet::ItemPushResult);
+								pushPacket
+									<< io::write<uint64>(winnerGuid)
+									<< io::write<uint8>(1)
+									<< io::write<uint8>(0)
+									<< io::write<uint8>(bag)
+									<< io::write<uint8>(subslot)
+									<< io::write<uint32>(itemId)
+									<< io::write<uint16>(amount)
+									<< io::write<uint16>(amount);
+								pushPacket.Finish();
+								subscriber.SendPacket(pushPacket, pushBuffer);
+							}
+
+							for (const auto& [inventorySlot, amount] : addedBySlot)
+							{
+								std::vector<char> groupBuffer;
+								io::VectorSink groupSink(groupBuffer);
+								game::OutgoingPacket groupPacket(groupSink);
+								groupPacket.Start(game::realm_client_packet::ItemPushResult);
+								groupPacket
+									<< io::write<uint64>(winnerGuid)
+									<< io::write<uint8>(1)
+									<< io::write<uint8>(0)
+									<< io::write<uint8>(0xFF)
+									<< io::write<uint8>(0xFF)
+									<< io::write<uint32>(itemId)
+									<< io::write<uint16>(amount)
+									<< io::write<uint16>(0);
+								groupPacket.Finish();
+
+								controlled.ForEachSubscriberInSight([winnerGuid, &recipientSet, &groupPacket, &groupBuffer](TileSubscriber& other)
+								{
+									if (!other.GetGameUnit().IsPlayer())
+									{
+										return;
+									}
+
+									if (other.GetGameUnit().GetGuid() == winnerGuid)
+									{
+										return;
+									}
+
+									if (!recipientSet.contains(other.GetGameUnit().GetGuid()))
+									{
+										return;
+									}
+
+									other.SendPacket(groupPacket, groupBuffer);
+								});
+							}
+
+							lootInstance->TakeItem(slot, winnerGuid);
+						});
 					});
 
 				controlled.SetUnitLoot(std::move(loot));

@@ -18,6 +18,7 @@
 #include "game_server/objects/game_player_s.h"
 #include "game_protocol/game_protocol.h"
 #include "game_server/world_server_inventory_repository.h"
+#include "group_manager.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"
 
@@ -25,7 +26,7 @@
 namespace mmo
 {
 	RealmConnector::RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, PlayerManager& playerManager, WorldInstanceManager& worldInstanceManager,
-		const proto::Project& project, ConditionMgr& conditionMgr)
+		const proto::Project& project, ConditionMgr& conditionMgr, GroupManager& groupManager)
 		: auth::Connector(std::make_unique<asio::ip::tcp::socket>(io), nullptr)
 		, m_ioService(io)
 		, m_timerQueue(queue)
@@ -34,6 +35,7 @@ namespace mmo
 		, m_willReconnect(false)
 		, m_project(project)
 		, m_conditionMgr(conditionMgr)
+		, m_groupManager(groupManager)
 	{
 		UpdateHostedMapList(defaultHostedMapIds);
 
@@ -878,7 +880,9 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 	PacketParseResult RealmConnector::OnPlayerGroupChanged(auth::IncomingPacket& packet)
 	{
 		uint64 characterId, groupId;
-		if (!(packet >> io::read<uint64>(characterId) >> io::read<uint64>(groupId)))
+		uint8 lootMethod = 0;
+		uint8 lootThreshold = 0;
+		if (!(packet >> io::read<uint64>(characterId) >> io::read<uint64>(groupId) >> io::read<uint8>(lootMethod) >> io::read<uint8>(lootThreshold)))
 		{
 			ELOG("Failed to read PLAYER_GROUP_CHANGED packet");
 			return PacketParseResult::Disconnect;
@@ -894,7 +898,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 			return PacketParseResult::Pass;
 		}
 
-		player->UpdateCharacterGroup(groupId);
+		player->UpdateCharacterGroup(groupId, lootMethod, lootThreshold);
 		return PacketParseResult::Pass;
 	}
 
@@ -926,7 +930,8 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		uint64 characterId = 0;
 		uint8 lootMethod = 0;
 		uint64 lootMasterGuid = 0;
-		if (!(packet >> io::read<uint64>(characterId) >> io::read<uint8>(lootMethod) >> io::read<uint64>(lootMasterGuid)))
+		uint8 lootThreshold = 0;
+		if (!(packet >> io::read<uint64>(characterId) >> io::read<uint8>(lootMethod) >> io::read<uint64>(lootMasterGuid) >> io::read<uint8>(lootThreshold)))
 		{
 			ELOG("Failed to read PLAYER_GROUP_LOOT_METHOD_CHANGED packet");
 			return PacketParseResult::Disconnect;
@@ -937,7 +942,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		const std::shared_ptr<Player> player = m_playerManager.GetPlayerByCharacterGuid(characterId);
 		if (player)
 		{
-			player->UpdateCharacterGroupLootMethod(static_cast<LootMethod>(lootMethod), lootMasterGuid);
+			player->UpdateCharacterGroupLootMethod(static_cast<LootMethod>(lootMethod), lootMasterGuid, lootThreshold);
 		}
 
 		return PacketParseResult::Pass;

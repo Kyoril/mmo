@@ -110,16 +110,20 @@ namespace mmo
 		/// @param error The inventory error code to send.
 		void SendInventoryError(InventoryChangeFailure error) const;
 
-		/// Sends a group update to the realm server for this character.
-		void UpdateCharacterGroup(uint64 groupId);
+		/// Updates the group data stored on this player's GamePlayerS and synchronized world-side group object.
+		/// @param groupId The new group GUID, or 0 if the player is no longer grouped.
+		/// @param lootMethod The group's loot method.
+		/// @param lootThreshold The group's loot quality threshold.
+		void UpdateCharacterGroup(uint64 groupId, uint8 lootMethod = 0, uint8 lootThreshold = 0);
 
 		/// Sends a guild update to the realm server for this character.
 		void UpdateCharacterGuild(uint64 guildId);
 
-		/// Updates the loot method stored on this player's GamePlayerS, synchronized from the realm server.
+		/// Updates the loot method stored on this player's GamePlayerS and synchronized world-side group object.
 		/// @param lootMethod The new loot method.
 		/// @param lootMasterGuid The loot master GUID (0 if not MasterLoot).
-		void UpdateCharacterGroupLootMethod(LootMethod lootMethod, uint64 lootMasterGuid);
+		/// @param lootThreshold The group's loot quality threshold.
+		void UpdateCharacterGroupLootMethod(LootMethod lootMethod, uint64 lootMasterGuid, uint8 lootThreshold = 0);
 
 	public:
 		/// Gets the current tile index for the character.
@@ -274,6 +278,12 @@ namespace mmo
 		///	@param size The size of the packet content in bytes, excluding the packet header.
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnLootRelease(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's group-loot vote for a specific loot slot.
+		/// @param opCode The op code of the packet.
+		/// @param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packet content bytes.
+		void OnLootRoll(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		/// Handles the client's request to use an item from his inventory or of an equipped item. This will trigger the item's
 		///	assigned spells with trigger type set to "On Use" if any.

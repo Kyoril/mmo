@@ -520,14 +520,16 @@ namespace mmo
 			});
 	}
 
-	void World::NotifyPlayerGroupChanged(uint64 characterId, uint64 groupId)
+	void World::NotifyPlayerGroupChanged(uint64 characterId, uint64 groupId, uint8 lootMethod, uint8 lootThreshold)
 	{
-		GetConnection().sendSinglePacket([characterId, groupId](auth::OutgoingPacket& outPacket)
+		GetConnection().sendSinglePacket([characterId, groupId, lootMethod, lootThreshold](auth::OutgoingPacket& outPacket)
 			{
 				outPacket.Start(auth::realm_world_packet::PlayerGroupChanged);
 				outPacket
 					<< io::write<uint64>(characterId)
-					<< io::write<uint64>(groupId);
+					<< io::write<uint64>(groupId)
+					<< io::write<uint8>(lootMethod)
+					<< io::write<uint8>(lootThreshold);
 				outPacket.Finish();
 			});
 	}
@@ -544,15 +546,16 @@ namespace mmo
 			});
 	}
 
-	void World::NotifyPlayerGroupLootMethodChanged(const uint64 characterId, const uint8 lootMethod, const uint64 lootMasterGuid)
+	void World::NotifyPlayerGroupLootMethodChanged(const uint64 characterId, const uint8 lootMethod, const uint64 lootMasterGuid, const uint8 lootThreshold)
 	{
-		GetConnection().sendSinglePacket([characterId, lootMethod, lootMasterGuid](auth::OutgoingPacket& outPacket)
+		GetConnection().sendSinglePacket([characterId, lootMethod, lootMasterGuid, lootThreshold](auth::OutgoingPacket& outPacket)
 			{
 				outPacket.Start(auth::realm_world_packet::PlayerGroupLootMethodChanged);
 				outPacket
 					<< io::write<uint64>(characterId)
 					<< io::write<uint8>(lootMethod)
-					<< io::write<uint64>(lootMasterGuid);
+					<< io::write<uint64>(lootMasterGuid)
+					<< io::write<uint8>(lootThreshold);
 				outPacket.Finish();
 			});
 	}

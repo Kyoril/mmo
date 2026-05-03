@@ -30,6 +30,7 @@
 #include "game_server/world/universe.h"
 #include "proto_data/project.h"
 #include "assets/asset_registry.h"
+#include "group_manager.h"
 
 namespace mmo
 {
@@ -117,6 +118,7 @@ namespace mmo
 		ConditionMgr conditionMgr{ project.conditions };
 
 		PlayerManager playerManager;
+		GroupManager groupManager;
 		TriggerHandler triggerHandler{ project, playerManager, timerQueue };
 
 		// Initialize asset registry
@@ -166,7 +168,8 @@ namespace mmo
 				std::ref(playerManager),
 				std::ref(worldInstanceManager),
 				project,
-				conditionMgr);
+				conditionMgr,
+				groupManager);
 		realmConnector->Login(config.realmServerAddress, config.realmServerPort, config.realmServerAuthName, config.realmServerPassword);
 		realmConnector->SetFallDamageConfig(config.fallDamageMinHeight, config.fallDamageLethalHeight);
 

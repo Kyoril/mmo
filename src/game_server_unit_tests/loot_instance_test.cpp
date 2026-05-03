@@ -127,25 +127,23 @@ TEST_CASE("LootInstance RoundRobin enforcement", "[loot_instance]")
 		recipients,
 		loot_method::RoundRobin,
 		0);
+	loot.SetRoundRobinLooter(guidA);
 
-	SECTION("LOOT-03: Wrong player cannot take their non-assigned slot")
+	SECTION("LOOT-03: Non-designated player cannot take round-robin loot")
 	{
-		// Slot 0 is assigned to A; B should be rejected
 		REQUIRE(loot.TakeItem(0, guidB) == false);
 	}
 
-	SECTION("LOOT-04: Assigned player can take their slot")
+	SECTION("LOOT-04: Designated player can take round-robin loot")
 	{
-		// Slot 0 is assigned to A; A should be accepted
 		REQUIRE(loot.TakeItem(0, guidA) == true);
 	}
 
-	SECTION("LOOT-05: RoundRobin rotates assignment across slots")
+	SECTION("LOOT-05: Designated player can take multiple low-quality slots on this corpse")
 	{
-		// Slot 0 → A, slot 1 → B, slot 2 → A again
-		REQUIRE(loot.TakeItem(0, guidA) == true);  // A takes slot 0
-		REQUIRE(loot.TakeItem(1, guidB) == true);  // B takes slot 1
-		REQUIRE(loot.TakeItem(2, guidA) == true);  // A takes slot 2 (rotation wraps back)
+		REQUIRE(loot.TakeItem(0, guidA) == true);
+		REQUIRE(loot.TakeItem(1, guidA) == true);
+		REQUIRE(loot.TakeItem(2, guidA) == true);
 	}
 }
 
@@ -219,7 +217,7 @@ TEST_CASE("LootInstance strategy-aware slot visibility", "[loot_instance]")
 		REQUIRE(loot.ContainsLootFor(guidB) == false);
 	}
 
-	SECTION("LOOT-08: RoundRobin exposes only the assigned slot to each recipient")
+	SECTION("LOOT-08: RoundRobin exposes only the designated looter's slots")
 	{
 		proto::LootEntry entry = MakeLootEntry(2);
 		LootInstance loot(
@@ -231,12 +229,43 @@ TEST_CASE("LootInstance strategy-aware slot visibility", "[loot_instance]")
 			recipients,
 			loot_method::RoundRobin,
 			0);
+		loot.SetRoundRobinLooter(guidA);
 
 		REQUIRE(loot.CanLootItem(0, guidA) == true);
 		REQUIRE(loot.CanLootItem(0, guidB) == false);
-		REQUIRE(loot.CanLootItem(1, guidA) == false);
-		REQUIRE(loot.CanLootItem(1, guidB) == true);
+		REQUIRE(loot.CanLootItem(1, guidA) == true);
+		REQUIRE(loot.CanLootItem(1, guidB) == false);
+		REQUIRE(loot.ContainsLootFor(guidA) == true);
+		REQUIRE(loot.ContainsLootFor(guidB) == false);
+	}
+
+	SECTION("LOOT-09: GroupLoot marks threshold items as rolling until all votes are submitted")
+	{
+		itemEntry->set_quality(item_quality::Uncommon);
+
+		proto::LootEntry entry = MakeLootEntry(1);
+		LootInstance loot(
+			project.items,
+			conditionMgr,
+			47ULL,
+			&entry,
+			0, 0,
+			recipients,
+			loot_method::GroupLoot,
+			0);
+		loot.SetRoundRobinLooter(guidA);
+		loot.SetupGroupRollItems({ guidA, guidB });
+
 		REQUIRE(loot.ContainsLootFor(guidA) == true);
 		REQUIRE(loot.ContainsLootFor(guidB) == true);
+		REQUIRE(loot.CanLootItem(0, guidA) == false);
+		REQUIRE(loot.CanLootItem(0, guidB) == false);
+		REQUIRE(loot.GetRollDataMap().contains(0));
+
+		REQUIRE(loot.SubmitRollVote(0, guidA, roll_vote::Pass) == true);
+		REQUIRE(loot.GetRollDataMap().contains(0));
+		REQUIRE(loot.SubmitRollVote(0, guidB, roll_vote::Pass) == true);
+		REQUIRE(loot.GetRollDataMap().contains(0) == false);
+		REQUIRE(loot.IsEmpty() == true);
 	}
 }

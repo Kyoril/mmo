@@ -56,6 +56,12 @@ namespace mmo
 
 		LootItem* GetLootItem(uint32 index);
 
+		/// Sends a loot-roll vote to the server.
+		/// @param lootGuid The loot source GUID.
+		/// @param slot The loot slot to vote on.
+		/// @param vote The vote type (0=Pass, 1=Need, 2=Greed).
+		void SendLootRoll(uint64 lootGuid, uint8 slot, uint8 vote);
+
 	private:
 		PacketParseResult OnLootResponse(game::IncomingPacket& packet);
 
@@ -68,6 +74,12 @@ namespace mmo
 		PacketParseResult OnLootItemNotify(game::IncomingPacket& packet);
 
 		PacketParseResult OnLootClearMoney(game::IncomingPacket& packet);
+
+		PacketParseResult OnStartLootRoll(game::IncomingPacket& packet);
+
+		PacketParseResult OnLootRollWon(game::IncomingPacket& packet);
+
+		PacketParseResult OnLootAllPassed(game::IncomingPacket& packet);
 
 	private:
 		RealmConnector& m_realmConnector;

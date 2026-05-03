@@ -21,6 +21,7 @@ namespace mmo
 	struct QuestStatusData;
 	struct ItemData;
 	class GamePlayerS;
+	class GroupManager;
 
 	namespace proto
 	{
@@ -42,7 +43,7 @@ namespace mmo
 		/// @param queue A timer queue.
 		/// @param defaultHostedMapIds A set of map ids that can be hosted by default.
 		explicit RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, PlayerManager& playerManager, WorldInstanceManager& worldInstanceManager,
-			const proto::Project& project, ConditionMgr& conditionMgr);
+			const proto::Project& project, ConditionMgr& conditionMgr, GroupManager& groupManager);
 
 		/// Default destructor.
 		~RealmConnector() override;
@@ -209,6 +210,8 @@ namespace mmo
 
 		ConditionMgr& m_conditionMgr;
 
+		GroupManager& m_groupManager;
+
 		/// @brief Minimum fall distance in meters before fall damage starts being applied.
 		float m_fallDamageMinHeight{ 5.0f };
 
@@ -216,6 +219,10 @@ namespace mmo
 		float m_fallDamageLethalHeight{ 40.0f };
 
 	public:
+		/// Gets the synchronized world-side group manager.
+		/// @returns The world-side group manager.
+		[[nodiscard]] GroupManager& GetGroupManager() { return m_groupManager; }
+
 		// ~ Begin IConnectorListener
 		bool connectionEstablished(bool success) override;
 		void connectionLost() override;

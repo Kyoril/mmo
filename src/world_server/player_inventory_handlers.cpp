@@ -10,8 +10,10 @@
 #include "game_server/objects/game_player_s.h"
 #include "game/spell_target_map.h"
 #include "game_server/objects/game_bag_s.h"
+#include "game_server/loot_instance.h"
 #include "proto_data/project.h"
 #include "game/loot.h"
+#include "game/group.h"
 #include "game_server/inventory_command_factory.h"
 #include "game_server/inventory_types.h"
 
@@ -152,6 +154,40 @@ namespace mmo
 				}
 			});
 		}
+	}
+
+	void Player::OnLootRoll(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 lootGuid = 0;
+		uint8 slot = 0;
+		uint8 vote = 0;
+		if (!(contentReader >> io::read<uint64>(lootGuid) >> io::read<uint8>(slot) >> io::read<uint8>(vote)))
+		{
+			WLOG("Failed to read loot roll packet");
+			return;
+		}
+
+		if (vote > roll_vote::Greed)
+		{
+			WLOG("Invalid loot roll vote value: " << static_cast<uint32>(vote));
+			return;
+		}
+
+		GameObjectS* lootObject = m_character->GetWorldInstance()->FindObjectByGuid(lootGuid);
+		if (!lootObject)
+		{
+			WLOG("Player tried to roll on a non-existing loot object");
+			return;
+		}
+
+		const std::shared_ptr<LootInstance> loot = lootObject->GetLoot();
+		if (!loot)
+		{
+			WLOG("Loot object has no loot instance");
+			return;
+		}
+
+		loot->SubmitRollVote(slot, m_character->GetGuid(), static_cast<RollVote>(vote));
 	}
 
 	void Player::OnAutoEquipItem(uint16 opCode, uint32 size, io::Reader &contentReader)

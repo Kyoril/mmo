@@ -106,17 +106,6 @@ namespace mmo
 		std::uniform_int_distribution goldDistribution(minGold, maxGold);
 		m_gold = goldDistribution(randomGenerator);
 
-		// RoundRobin pre-assignment — assign items to recipients in rotation using weakRecipients vector order.
-		// This preserves aggro/join order (first tagger is first) rather than GUID-sort order.
-		if (m_lootMethod == loot_method::RoundRobin && !m_recipients.empty())
-		{
-			uint32 recipientIndex = 0;
-			for (auto& item : m_items)
-			{
-				item.assignedRecipientGuid = m_recipients[recipientIndex % m_recipients.size()];
-				recipientIndex++;
-			}
-		}
 	}
 
 	bool LootInstance::IsEmpty() const
@@ -194,7 +183,7 @@ namespace mmo
 			if (!item.isLooted)
 			{
 				const uint8 slotType = GetSlotType(slot, receiver);
-				if (slotType != loot_slot_type::AllowLoot && slotType != loot_slot_type::Owner)
+				if (slotType != loot_slot_type::AllowLoot && slotType != loot_slot_type::Owner && slotType != loot_slot_type::RollOngoing)
 				{
 					continue;
 				}
@@ -249,6 +238,75 @@ namespace mmo
 
 		const uint8 slotType = GetSlotType(slot, receiver);
 		return slotType == loot_slot_type::AllowLoot || slotType == loot_slot_type::Owner;
+	}
+
+	void LootInstance::SetupGroupRollItems(const std::set<uint64>& nearbyPlayers)
+	{
+		if (m_lootMethod != loot_method::GroupLoot)
+		{
+			return;
+		}
+
+		for (uint8 slot = 0; slot < m_items.size(); ++slot)
+		{
+			auto& item = m_items[slot];
+			const auto* entry = m_itemManager.getById(item.definition.item());
+			if (!entry)
+			{
+				continue;
+			}
+
+			if (entry->flags() & item_flags::PartyLoot)
+			{
+				continue;
+			}
+
+			if (entry->quality() < m_lootThreshold)
+			{
+				continue;
+			}
+
+			item.needsGroupRoll = true;
+			item.rollComplete = false;
+			item.rollWinner = 0;
+
+			LootRollData data;
+			data.eligiblePlayers = nearbyPlayers;
+			m_rollData[slot] = std::move(data);
+		}
+	}
+
+	bool LootInstance::SubmitRollVote(uint8 slot, uint64 playerGuid, RollVote vote)
+	{
+		if (slot >= m_items.size())
+		{
+			return false;
+		}
+
+		auto rollIt = m_rollData.find(slot);
+		if (rollIt == m_rollData.end())
+		{
+			return false;
+		}
+
+		auto& rollData = rollIt->second;
+		if (!rollData.eligiblePlayers.contains(playerGuid))
+		{
+			return false;
+		}
+
+		if (rollData.votes.contains(playerGuid))
+		{
+			return false;
+		}
+
+		rollData.votes[playerGuid] = vote;
+		if (rollData.votes.size() >= rollData.eligiblePlayers.size())
+		{
+			ResolveRoll(slot);
+		}
+
+		return true;
 	}
 
 	void LootInstance::TakeGold()
@@ -367,7 +425,32 @@ namespace mmo
 				// Only write item entry if the item hasn't been looted yet
 				if (!isLooted)
 				{
+					if (def.needsGroupRoll && !def.rollComplete)
+					{
+						auto rollIt = m_rollData.find(slot);
+						if (rollIt != m_rollData.end() && rollIt->second.eligiblePlayers.contains(receiver))
+						{
+							writer
+								<< io::write<uint8>(slot)
+								<< io::write<uint32>(def.definition.item())
+								<< io::write<uint32>(def.count)
+								<< io::write<uint32>(itemEntry->displayid())
+								<< io::write<uint32>(0)
+								<< io::write<uint32>(0)
+								<< io::write<uint8>(loot_slot_type::RollOngoing);
+							realCount++;
+						}
+						slot++;
+						continue;
+					}
+
 					const uint8 slotType = GetSlotType(slot, receiver);
+					if (slotType == loot_slot_type::Locked && def.rollComplete && def.rollWinner != receiver)
+					{
+						slot++;
+						continue;
+					}
+
 					writer
 						<< io::write<uint8>(slot)
 						<< io::write<uint32>(def.definition.item())
@@ -388,11 +471,112 @@ namespace mmo
 		writer.WritePOD(itemCountPos, realCount);
 	}
 
+	void LootInstance::ResolveRoll(uint8 slot)
+	{
+		if (slot >= m_items.size())
+		{
+			return;
+		}
+
+		auto rollIt = m_rollData.find(slot);
+		if (rollIt == m_rollData.end())
+		{
+			return;
+		}
+
+		auto& rollData = rollIt->second;
+		auto& item = m_items[slot];
+
+		uint64 winnerGuid = 0;
+		uint8 winningRoll = 0;
+		RollVote winningVote = roll_vote::Pass;
+
+		for (const auto& [playerGuid, vote] : rollData.votes)
+		{
+			if (vote != roll_vote::Need)
+			{
+				continue;
+			}
+
+			std::uniform_int_distribution<int> distribution(1, 100);
+			const uint8 rollValue = static_cast<uint8>(distribution(randomGenerator));
+			if (winnerGuid == 0 || rollValue > winningRoll)
+			{
+				winnerGuid = playerGuid;
+				winningRoll = rollValue;
+				winningVote = roll_vote::Need;
+			}
+		}
+
+		if (winnerGuid == 0)
+		{
+			for (const auto& [playerGuid, vote] : rollData.votes)
+			{
+				if (vote != roll_vote::Greed)
+				{
+					continue;
+				}
+
+				std::uniform_int_distribution<int> distribution(1, 100);
+				const uint8 rollValue = static_cast<uint8>(distribution(randomGenerator));
+				if (winnerGuid == 0 || rollValue > winningRoll)
+				{
+					winnerGuid = playerGuid;
+					winningRoll = rollValue;
+					winningVote = roll_vote::Greed;
+				}
+			}
+		}
+
+		item.rollComplete = true;
+		item.rollWinner = winnerGuid;
+		rollWon(m_lootGuid, slot, item.definition.item(), winnerGuid, winningRoll, winningVote);
+
+		if (winnerGuid == 0)
+		{
+			item.isLooted = true;
+			itemRemoved(slot);
+
+			if (IsEmpty())
+			{
+				cleared();
+			}
+		}
+
+		m_rollData.erase(rollIt);
+	}
+
 	uint8 LootInstance::GetSlotType(uint8 slot, uint64 receiver) const
 	{
 		if (slot >= m_items.size())
 		{
 			return loot_slot_type::Locked;
+		}
+
+		const auto& item = m_items[slot];
+		if (item.needsGroupRoll)
+		{
+			if (!item.rollComplete)
+			{
+				auto rollIt = m_rollData.find(slot);
+				if (rollIt != m_rollData.end() && rollIt->second.eligiblePlayers.contains(receiver))
+				{
+					return loot_slot_type::RollOngoing;
+				}
+
+				return loot_slot_type::Locked;
+			}
+
+			if (item.rollWinner != 0 && item.rollWinner != receiver)
+			{
+				return loot_slot_type::Locked;
+			}
+		}
+
+		const auto* itemEntry = m_itemManager.getById(item.definition.item());
+		if (itemEntry && (itemEntry->flags() & item_flags::PartyLoot))
+		{
+			return loot_slot_type::AllowLoot;
 		}
 
 		switch (m_lootMethod)
@@ -405,7 +589,8 @@ namespace mmo
 			break;
 
 		case loot_method::RoundRobin:
-			if (m_items[slot].assignedRecipientGuid != 0 && receiver != m_items[slot].assignedRecipientGuid)
+		case loot_method::GroupLoot:
+			if (m_roundRobinLooter != 0 && receiver != m_roundRobinLooter)
 			{
 				return loot_slot_type::Locked;
 			}

@@ -1119,7 +1119,7 @@ namespace mmo
 			// Not yet in a group - create a new one!
 			m_group = std::make_shared<PlayerGroup>(m_groupIdGenerator.GenerateId(), m_manager, m_database, m_timerQueue);
 			m_group->Create(m_characterData->characterId, m_characterData->name);
-			GetWorld()->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId());
+			GetWorld()->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId(), static_cast<uint8>(m_group->GetLootMethod()), static_cast<uint8>(m_group->GetLootThreshold()));
 		}
 		else if (!m_group->IsLeaderOrAssistant(m_characterData->characterId))
 		{
@@ -1213,7 +1213,7 @@ namespace mmo
 
 		const auto world = GetWorld();
 		ASSERT(world);
-		world->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId());
+		world->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId(), static_cast<uint8>(m_group->GetLootMethod()), static_cast<uint8>(m_group->GetLootThreshold()));
 
 		return PacketParseResult::Pass;
 	}
@@ -1298,7 +1298,7 @@ namespace mmo
 			{
 				if (const auto world = memberPlayer->GetWorld())
 				{
-					world->NotifyPlayerGroupLootMethodChanged(memberGuid, method, lootMasterGuid);
+					world->NotifyPlayerGroupLootMethodChanged(memberGuid, method, lootMasterGuid, lootThreshold);
 				}
 			}
 		}

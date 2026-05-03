@@ -154,6 +154,7 @@ namespace mmo
 				Loot,
 				LootMoney,
 				LootRelease,
+				LootRoll,
 
 				MoveJump,
 				MoveFallLand,
@@ -358,6 +359,9 @@ namespace mmo
 				LootMoneyNotify,
 				LootItemNotify,
 				LootClearMoney,
+				StartLootRoll,
+				LootRollWon,
+				LootAllPassed,
 
 				MoveTeleportAck,
 

@@ -18,6 +18,7 @@
 #include "game/vendor.h"
 #include "game_server/world/universe.h"
 #include "game_server/condition_mgr.h"
+#include "group_manager.h"
 
 namespace mmo
 {
@@ -184,12 +185,39 @@ namespace mmo
 		NotifyObjectsDespawned(objects);
 	}
 
-	void Player::UpdateCharacterGroup(uint64 groupId)
+	void Player::UpdateCharacterGroup(uint64 groupId, uint8 lootMethod, uint8 lootThreshold)
 	{
 		if (m_character)
 		{
 			uint64 oldGroup = m_character->GetGroupId();
 			m_character->SetGroupId(groupId);
+			m_character->SetLootThreshold(lootThreshold);
+
+			GroupManager& groupManager = m_connector.GetGroupManager();
+			if (oldGroup != 0)
+			{
+				if (const auto oldGroupObject = groupManager.GetGroup(oldGroup))
+				{
+					oldGroupObject->RemoveMember(m_character->GetGuid());
+				}
+				m_character->SetGroup(nullptr);
+			}
+
+			if (groupId != 0)
+			{
+				auto groupObject = groupManager.GetGroup(groupId);
+				if (!groupObject)
+				{
+					groupObject = groupManager.AddGroup(groupId);
+				}
+
+				if (groupObject)
+				{
+					groupObject->AddMember(m_character->GetGuid());
+					groupObject->SetLootMethod(static_cast<LootMethod>(lootMethod), lootThreshold);
+					m_character->SetGroup(groupObject.get());
+				}
+			}
 
 			m_character->Invalidate(object_fields::Health);
 			m_character->Invalidate(object_fields::MaxHealth);
@@ -236,12 +264,19 @@ namespace mmo
 		m_character->Set<uint64>(object_fields::Guild, guildId);
 	}
 
-	void Player::UpdateCharacterGroupLootMethod(const LootMethod lootMethod, const uint64 lootMasterGuid)
+	void Player::UpdateCharacterGroupLootMethod(const LootMethod lootMethod, const uint64 lootMasterGuid, const uint8 lootThreshold)
 	{
 		if (m_character)
 		{
 			m_character->SetLootMethod(lootMethod);
+			m_character->SetLootThreshold(lootThreshold);
 			m_character->SetLootMasterGuid(lootMasterGuid);
+
+			if (PlayerGroup* group = m_character->GetGroup())
+			{
+				group->SetLootMethod(lootMethod, lootThreshold);
+				group->SetLootMasterGuid(lootMasterGuid);
+			}
 		}
 	}
 
@@ -536,6 +571,9 @@ namespace mmo
 			break;
 		case game::client_realm_packet::LootRelease:
 			OnLootRelease(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::LootRoll:
+			OnLootRoll(opCode, buffer.size(), reader);
 			break;
 
 		case game::client_realm_packet::SellItem:
@@ -2454,6 +2492,34 @@ namespace mmo
 					packet.Finish();
 				});
 			return;
+		}
+
+		const uint64 roundRobinLooter = loot->GetRoundRobinLooter();
+		if (roundRobinLooter != 0 && roundRobinLooter != m_character->GetGuid())
+		{
+			bool hasItemsForDesignatedLooter = false;
+			for (const auto& item : loot->GetItems())
+			{
+				if (!item.isLooted && !item.needsGroupRoll)
+				{
+					hasItemsForDesignatedLooter = true;
+					break;
+				}
+			}
+
+			if (hasItemsForDesignatedLooter)
+			{
+				SendPacket([&lootObject](game::OutgoingPacket& packet)
+					{
+						packet.Start(game::realm_client_packet::LootResponse);
+						packet
+							<< io::write<uint64>(lootObject->GetGuid())
+							<< io::write<uint8>(loot_type::None)
+							<< io::write<uint8>(loot_error::Locked);
+						packet.Finish();
+					});
+				return;
+			}
 		}
 
 		OpenLootDialog(loot, lootObject);
