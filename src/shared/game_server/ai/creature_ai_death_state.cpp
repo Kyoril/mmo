@@ -205,8 +205,16 @@ namespace mmo
 				{
 					if (const auto firstPlayer = weakRecipients.front().lock())
 					{
-						groupLootMethod = firstPlayer->GetLootMethod();
-						lootMasterGuid = firstPlayer->GetLootMasterGuid();
+						if (PlayerGroup* group = firstPlayer->GetGroup())
+						{
+							groupLootMethod = group->GetLootMethod();
+							lootMasterGuid = group->GetLootMasterGuid();
+						}
+						else
+						{
+							groupLootMethod = firstPlayer->GetLootMethod();
+							lootMasterGuid = firstPlayer->GetLootMasterGuid();
+						}
 					}
 				}
 
@@ -224,7 +232,13 @@ namespace mmo
 
 				if (primaryLootRecipient)
 				{
-					loot->SetLootMethod(groupLootMethod, primaryLootRecipient->GetLootThreshold());
+					uint8 lootThreshold = primaryLootRecipient->GetLootThreshold();
+					if (PlayerGroup* group = primaryLootRecipient->GetGroup())
+					{
+						lootThreshold = group->GetLootThreshold();
+					}
+
+					loot->SetLootMethod(groupLootMethod, lootThreshold);
 
 					if ((groupLootMethod == loot_method::RoundRobin || groupLootMethod == loot_method::GroupLoot) && primaryLootRecipient->GetGroupId() != 0)
 					{
@@ -253,42 +267,6 @@ namespace mmo
 						if (groupLootMethod == loot_method::GroupLoot)
 						{
 							loot->SetupGroupRollItems(nearbyGroupMemberSet);
-
-							for (const auto& [slot, rollData] : loot->GetRollDataMap())
-							{
-								const LootItem* lootItem = loot->GetLootDefinition(slot);
-								if (!lootItem)
-								{
-									continue;
-								}
-
-								constexpr uint32 rollTime = 60000;
-								std::vector<char> buffer;
-								io::VectorSink sink(buffer);
-								game::OutgoingPacket packet(sink);
-								packet.Start(game::realm_client_packet::StartLootRoll);
-								packet
-									<< io::write<uint64>(controlled.GetGuid())
-									<< io::write<uint8>(slot)
-									<< io::write<uint32>(lootItem->definition.item())
-									<< io::write<uint32>(rollTime);
-								packet.Finish();
-
-								controlled.ForEachSubscriberInSight([&rollData, &packet, &buffer](TileSubscriber& subscriber)
-								{
-									if (!subscriber.GetGameUnit().IsPlayer())
-									{
-										return;
-									}
-
-									if (!rollData.eligiblePlayers.contains(subscriber.GetGameUnit().GetGuid()))
-									{
-										return;
-									}
-
-									subscriber.SendPacket(packet, buffer);
-								});
-							}
 						}
 					}
 				}

@@ -200,6 +200,15 @@ namespace mmo
 		/// Gets the active roll state map keyed by loot slot.
 		[[nodiscard]] const std::map<uint8, LootRollData>& GetRollDataMap() const noexcept { return m_rollData; }
 
+		/// Determines whether this loot instance still has any active group rolls.
+		[[nodiscard]] bool HasActiveRolls() const noexcept { return !m_rollData.empty(); }
+
+		/// Determines whether the roll UI/start packets were already emitted for this loot instance.
+		[[nodiscard]] bool AreRollsStarted() const noexcept { return m_rollsStarted; }
+
+		/// Marks the active rolls as started so packets are only emitted once.
+		void MarkRollsStarted() noexcept { m_rollsStarted = true; }
+
 		void Serialize(io::Writer& writer, uint64 receiver) const;
 
 	private:
@@ -224,5 +233,6 @@ namespace mmo
 		uint8 m_lootThreshold = item_quality::Uncommon;
 		uint64 m_lootMasterGuid = 0;
 		std::map<uint8, LootRollData> m_rollData;
+		bool m_rollsStarted = false;
 	};
 }

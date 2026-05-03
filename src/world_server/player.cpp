@@ -18,6 +18,8 @@
 #include "game/vendor.h"
 #include "game_server/world/universe.h"
 #include "game_server/condition_mgr.h"
+#include "game_server/world/tile_subscriber.h"
+#include "binary_io/vector_sink.h"
 #include "group_manager.h"
 
 namespace mmo
@@ -191,6 +193,7 @@ namespace mmo
 		{
 			uint64 oldGroup = m_character->GetGroupId();
 			m_character->SetGroupId(groupId);
+			m_character->SetLootMethod(static_cast<LootMethod>(lootMethod));
 			m_character->SetLootThreshold(lootThreshold);
 
 			GroupManager& groupManager = m_connector.GetGroupManager();
@@ -1036,6 +1039,47 @@ namespace mmo
 				});
 			}),
 		};
+
+		if (m_loot->HasActiveRolls() && !m_loot->AreRollsStarted())
+		{
+			m_loot->MarkRollsStarted();
+
+			for (const auto& [slot, rollData] : m_loot->GetRollDataMap())
+			{
+				const LootItem* lootItem = m_loot->GetLootDefinition(slot);
+				if (!lootItem)
+				{
+					continue;
+				}
+
+				constexpr uint32 rollTime = 60000;
+				std::vector<char> buffer;
+				io::VectorSink sink(buffer);
+				game::OutgoingPacket rollPacket(sink);
+				rollPacket.Start(game::realm_client_packet::StartLootRoll);
+				rollPacket
+					<< io::write<uint64>(source->GetGuid())
+					<< io::write<uint8>(slot)
+					<< io::write<uint32>(lootItem->definition.item())
+					<< io::write<uint32>(rollTime);
+				rollPacket.Finish();
+
+				source->ForEachSubscriberInSight([&rollData, &rollPacket, &buffer](TileSubscriber& subscriber)
+				{
+					if (!subscriber.GetGameUnit().IsPlayer())
+					{
+						return;
+					}
+
+					if (!rollData.eligiblePlayers.contains(subscriber.GetGameUnit().GetGuid()))
+					{
+						return;
+					}
+
+					subscriber.SendPacket(rollPacket, buffer);
+				});
+			}
+		}
 
 		// Send the actual loot data
 		SendPacket([&](game::OutgoingPacket& packet)
