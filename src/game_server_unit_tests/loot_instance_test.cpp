@@ -262,9 +262,9 @@ TEST_CASE("LootInstance strategy-aware slot visibility", "[loot_instance]")
 		REQUIRE(loot.CanLootItem(0, guidB) == false);
 		REQUIRE(loot.GetRollDataMap().contains(0));
 
-		REQUIRE(loot.SubmitRollVote(0, guidA, roll_vote::Pass) == true);
+		REQUIRE(loot.SubmitRollVote(0, guidA, roll_vote::Pass, "PlayerA") == true);
 		REQUIRE(loot.GetRollDataMap().contains(0));
-		REQUIRE(loot.SubmitRollVote(0, guidB, roll_vote::Pass) == true);
+		REQUIRE(loot.SubmitRollVote(0, guidB, roll_vote::Pass, "PlayerB") == true);
 		REQUIRE(loot.GetRollDataMap().contains(0) == false);
 
 		// All passed - item becomes free-for-all, not removed

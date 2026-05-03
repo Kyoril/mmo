@@ -266,6 +266,10 @@ namespace mmo
 
 		const String &GetName() const override;
 
+		/// @brief Sets the player's name.
+		/// @param name The name to set.
+		void SetName(const String& name) { m_name = name; }
+
 		std::shared_ptr<GameObjectS> GetLootObject() const { return m_lootObject.lock(); }
 
 		bool IsGameMaster() const override;
@@ -299,6 +303,7 @@ namespace mmo
 		}
 
 	private:
+		String m_name;
 		Inventory m_inventory;
 		const proto::ClassEntry *m_classEntry;
 		const proto::RaceEntry *m_raceEntry;

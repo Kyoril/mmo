@@ -89,7 +89,7 @@ namespace mmo
 		ms_groupsById[m_id] = shared_from_this();
 
 		auto handler = [](bool success){ };
-		m_database.asyncRequest(std::move(handler), &IDatabase::CreateGroup, m_id, m_leaderGUID);
+		m_database.asyncRequest(std::move(handler), &IDatabase::CreateGroup, m_id, m_leaderGUID, static_cast<uint8>(m_lootMethod), m_lootTreshold);
 	}
 
 	void PlayerGroup::NotifyMemberDisconnected(uint64 memberGuid)
@@ -113,6 +113,10 @@ namespace mmo
 		m_lootMethod = method;
 		m_lootTreshold = lootThreshold;
 		m_lootMaster = lootMaster;
+
+		// Persist to database
+		auto handler = [](bool success) {};
+		m_database.asyncRequest(std::move(handler), &IDatabase::SetGroupLootMethod, m_id, static_cast<uint8>(m_lootMethod), m_lootMaster, static_cast<uint8>(m_lootTreshold));
 	}
 
 	bool PlayerGroup::IsMember(const uint64 guid) const
@@ -526,6 +530,9 @@ namespace mmo
 
 		m_leaderGUID = groupData.leaderGuid;
 		m_leaderName = groupData.leaderName;
+		m_lootMethod = static_cast<LootMethod>(groupData.lootMethod);
+		m_lootTreshold = groupData.lootThreshold;
+		m_lootMaster = groupData.lootMaster;
 		m_loading = false;
 
 		bool leaderIsOnline = false;

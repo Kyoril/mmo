@@ -1886,9 +1886,7 @@ namespace mmo
 
 	const String &GamePlayerS::GetName() const
 	{
-		// TODO!
-		static const String unknown = "Unknown";
-		return unknown;
+		return m_name;
 	}
 
 	bool GamePlayerS::IsGameMaster() const

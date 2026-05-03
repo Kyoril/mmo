@@ -280,7 +280,7 @@ namespace mmo
 						controlled.RemoveFlag<uint32>(object_fields::Flags, unit_flags::Lootable);
 					});
 
-				m_onRollWon = loot->rollWon.connect([&controlled](uint64 lootGuid, uint8 slot, uint32 itemId, uint64 winnerGuid, uint8 winningRoll, RollVote winningVote)
+				m_onRollWon = loot->rollWon.connect([&controlled](uint64 lootGuid, uint8 slot, uint32 itemId, uint64 winnerGuid, uint8 winningRoll, RollVote winningVote, const String& winnerName)
 					{
 						const std::shared_ptr<LootInstance> lootInstance = controlled.GetLoot();
 						if (!lootInstance)
@@ -318,16 +318,6 @@ namespace mmo
 							});
 							return;
 						}
-
-						// Find the winner's name
-						String winnerName = "Unknown";
-						controlled.ForEachSubscriberInSight([winnerGuid, &winnerName](TileSubscriber& subscriber)
-						{
-							if (subscriber.GetGameUnit().GetGuid() == winnerGuid)
-							{
-								winnerName = subscriber.GetGameUnit().GetName();
-							}
-						});
 
 						std::vector<char> wonBuffer;
 						io::VectorSink wonSink(wonBuffer);
@@ -450,7 +440,7 @@ namespace mmo
 						});
 					});
 
-				m_onRollVoted = loot->rollVoted.connect([&controlled](uint64 lootGuid, uint8 slot, uint32 itemId, uint64 playerGuid, RollVote vote)
+				m_onRollVoted = loot->rollVoted.connect([&controlled](uint64 lootGuid, uint8 slot, uint32 itemId, uint64 playerGuid, RollVote vote, uint8 rollValue, const String& playerName)
 					{
 						const std::shared_ptr<LootInstance> lootInstance = controlled.GetLoot();
 						if (!lootInstance)
@@ -459,16 +449,6 @@ namespace mmo
 						}
 
 						const std::set<uint64> recipientSet(lootInstance->GetRecipients().begin(), lootInstance->GetRecipients().end());
-
-						// Find the voter's name
-						String voterName = "Unknown";
-						controlled.ForEachSubscriberInSight([playerGuid, &voterName](TileSubscriber& subscriber)
-						{
-							if (subscriber.GetGameUnit().GetGuid() == playerGuid)
-							{
-								voterName = subscriber.GetGameUnit().GetName();
-							}
-						});
 
 						std::vector<char> buffer;
 						io::VectorSink sink(buffer);
@@ -480,7 +460,8 @@ namespace mmo
 							<< io::write<uint32>(itemId)
 							<< io::write<uint64>(playerGuid)
 							<< io::write<uint8>(static_cast<uint8>(vote))
-							<< io::write_dynamic_range<uint8>(voterName);
+							<< io::write<uint8>(rollValue)
+							<< io::write_dynamic_range<uint8>(playerName);
 						outPacket.Finish();
 
 						controlled.ForEachSubscriberInSight([&recipientSet, &outPacket, &buffer](TileSubscriber& subscriber)

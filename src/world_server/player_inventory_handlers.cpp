@@ -187,7 +187,7 @@ namespace mmo
 			return;
 		}
 
-		loot->SubmitRollVote(slot, m_character->GetGuid(), static_cast<RollVote>(vote));
+		loot->SubmitRollVote(slot, m_character->GetGuid(), static_cast<RollVote>(vote), m_character->GetName());
 	}
 
 	void Player::OnAutoEquipItem(uint16 opCode, uint32 size, io::Reader &contentReader)

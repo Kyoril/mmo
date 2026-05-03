@@ -216,6 +216,8 @@ namespace mmo
 	{
 		m_memberObservers.clear();
 
+		const bool wasInGroup = !m_members.empty();
+
 		uint8 memberCount = 0;
 		if (!(packet 
 			>> io::read<uint8>(m_type)
@@ -255,7 +257,7 @@ namespace mmo
 				>> io::read<uint64>(newLootMaster)
 				>> io::read<uint8>(newLootThreshold);
 
-			if (m_lootMethod != newLootMethod || m_lootMaster != newLootMaster)
+			if (!wasInGroup || m_lootMethod != newLootMethod || m_lootMaster != newLootMaster || m_lootThreshold != newLootThreshold)
 			{
 				m_lootMethod = static_cast<LootMethod>(newLootMethod);
 				m_lootMaster = newLootMaster;

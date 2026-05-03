@@ -1243,6 +1243,9 @@ namespace mmo
 				   luabind::def<std::function<int32()>>("GetLootMethod", [this]()
 														{ return static_cast<int32>(m_partyInfo.GetLootMethod()); }),
 
+				   luabind::def<std::function<int32()>>("GetLootThreshold", [this]()
+														{ return static_cast<int32>(m_partyInfo.GetLootThreshold()); }),
+
 				   luabind::def<std::function<void(int32, const String&)>>("SetLootMethod",
 					   [this](const int32 method, const String& /*masterName*/)
 					   {

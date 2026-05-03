@@ -276,7 +276,7 @@ namespace mmo
 		}
 	}
 
-	bool LootInstance::SubmitRollVote(uint8 slot, uint64 playerGuid, RollVote vote)
+	bool LootInstance::SubmitRollVote(uint8 slot, uint64 playerGuid, RollVote vote, const String& playerName)
 	{
 		if (slot >= m_items.size())
 		{
@@ -301,10 +301,20 @@ namespace mmo
 		}
 
 		rollData.votes[playerGuid] = vote;
+		rollData.playerNames[playerGuid] = playerName;
+
+		// Generate roll value for Need/Greed votes
+		uint8 rollValue = 0;
+		if (vote == roll_vote::Need || vote == roll_vote::Greed)
+		{
+			std::uniform_int_distribution<int> distribution(1, 100);
+			rollValue = static_cast<uint8>(distribution(randomGenerator));
+			rollData.rollValues[playerGuid] = rollValue;
+		}
 
 		// Fire signal to notify about the individual vote
 		const uint32 itemId = m_items[slot].definition.item();
-		rollVoted(m_lootGuid, slot, itemId, playerGuid, vote);
+		rollVoted(m_lootGuid, slot, itemId, playerGuid, vote, rollValue, playerName);
 
 		if (rollData.votes.size() >= rollData.eligiblePlayers.size())
 		{
@@ -503,8 +513,7 @@ namespace mmo
 				continue;
 			}
 
-			std::uniform_int_distribution<int> distribution(1, 100);
-			const uint8 rollValue = static_cast<uint8>(distribution(randomGenerator));
+			const uint8 rollValue = rollData.rollValues.count(playerGuid) ? rollData.rollValues[playerGuid] : 0;
 			if (winnerGuid == 0 || rollValue > winningRoll)
 			{
 				winnerGuid = playerGuid;
@@ -522,8 +531,7 @@ namespace mmo
 					continue;
 				}
 
-				std::uniform_int_distribution<int> distribution(1, 100);
-				const uint8 rollValue = static_cast<uint8>(distribution(randomGenerator));
+				const uint8 rollValue = rollData.rollValues.count(playerGuid) ? rollData.rollValues[playerGuid] : 0;
 				if (winnerGuid == 0 || rollValue > winningRoll)
 				{
 					winnerGuid = playerGuid;
@@ -535,7 +543,14 @@ namespace mmo
 
 		item.rollComplete = true;
 		item.rollWinner = winnerGuid;
-		rollWon(m_lootGuid, slot, item.definition.item(), winnerGuid, winningRoll, winningVote);
+
+		String winnerName;
+		if (winnerGuid != 0 && rollData.playerNames.count(winnerGuid))
+		{
+			winnerName = rollData.playerNames[winnerGuid];
+		}
+
+		rollWon(m_lootGuid, slot, item.definition.item(), winnerGuid, winningRoll, winningVote, winnerName);
 
 		if (winnerGuid == 0)
 		{

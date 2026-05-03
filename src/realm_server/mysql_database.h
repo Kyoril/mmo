@@ -83,7 +83,10 @@ namespace mmo
 		void TeleportCharacterByName(String characterName, uint32 map, Vector3 position, Radian orientation) override;
 
 		/// @copydoc IDatabase::CreateGroup
-		void CreateGroup(uint64 id, uint64 leaderGuid) override;
+		void CreateGroup(uint64 id, uint64 leaderGuid, uint8 lootMethod, uint8 lootThreshold) override;
+
+		/// @copydoc IDatabase::SetGroupLootMethod
+		void SetGroupLootMethod(uint64 groupId, uint8 lootMethod, uint64 lootMaster, uint8 lootThreshold) override;
 
 		/// @copydoc IDatabase::SetGroupLeader
 		void SetGroupLeader(uint64 groupId, uint64 leaderGuid) override;

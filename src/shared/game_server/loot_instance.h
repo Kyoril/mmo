@@ -64,6 +64,8 @@ namespace mmo
 	struct LootRollData final
 	{
 		std::map<uint64, RollVote> votes;
+		std::map<uint64, uint8> rollValues;
+		std::map<uint64, String> playerNames;
 		std::set<uint64> eligiblePlayers;
 	};
 
@@ -96,7 +98,8 @@ namespace mmo
 		/// @param winnerGuid The winner GUID, or 0 if everyone passed.
 		/// @param winningRoll The winning roll value.
 		/// @param winningVote The winning vote type.
-		signal<void(uint64 lootGuid, uint8 slot, uint32 itemId, uint64 winnerGuid, uint8 winningRoll, RollVote winningVote)> rollWon;
+		/// @param winnerName The name of the winner.
+		signal<void(uint64 lootGuid, uint8 slot, uint32 itemId, uint64 winnerGuid, uint8 winningRoll, RollVote winningVote, const String& winnerName)> rollWon;
 
 		/// This signal is triggered when a player submits their vote for a loot roll.
 		/// @param lootGuid The loot source GUID.
@@ -104,7 +107,9 @@ namespace mmo
 		/// @param itemId The item entry id.
 		/// @param playerGuid The player who voted.
 		/// @param vote The vote type.
-		signal<void(uint64 lootGuid, uint8 slot, uint32 itemId, uint64 playerGuid, RollVote vote)> rollVoted;
+		/// @param rollValue The roll value (1-100 for Need/Greed, 0 for Pass).
+		/// @param playerName The name of the voting player.
+		signal<void(uint64 lootGuid, uint8 slot, uint32 itemId, uint64 playerGuid, RollVote vote, uint8 rollValue, const String& playerName)> rollVoted;
 
 	public:
 		typedef std::map<uint32, uint32> PlayerItemLootEntry;
@@ -196,8 +201,9 @@ namespace mmo
 		/// @param slot The slot being rolled on.
 		/// @param playerGuid The player casting the vote.
 		/// @param vote The vote type.
+		/// @param playerName The name of the voting player.
 		/// @returns true if the vote was accepted, false otherwise.
-		bool SubmitRollVote(uint8 slot, uint64 playerGuid, RollVote vote);
+		bool SubmitRollVote(uint8 slot, uint64 playerGuid, RollVote vote, const String& playerName);
 
 		/// Gets the loot recipients for this instance.
 		[[nodiscard]] const std::vector<uint64>& GetRecipients() const noexcept { return m_recipients; }

@@ -84,6 +84,15 @@ namespace mmo
 
 		String leaderName;
 
+		/// Loot method for the group.
+		uint8 lootMethod = 3;
+
+		/// Loot quality threshold.
+		uint8 lootThreshold = 2;
+
+		/// Loot master character guid.
+		uint64 lootMaster = 0;
+
 		/// Vector of guids of all group members, including the leader.
 		std::vector<GroupMemberData> members;
 	};
@@ -220,7 +229,10 @@ namespace mmo
 		virtual void TeleportCharacterByName(String characterName, uint32 map, Vector3 position, Radian orientation) = 0;
 
 		/// Creates a new group with the given leader.
-		virtual void CreateGroup(uint64 id, uint64 leaderGuid) = 0;
+		virtual void CreateGroup(uint64 id, uint64 leaderGuid, uint8 lootMethod, uint8 lootThreshold) = 0;
+
+		/// Updates the loot method settings for a group.
+		virtual void SetGroupLootMethod(uint64 groupId, uint8 lootMethod, uint64 lootMaster, uint8 lootThreshold) = 0;
 
 		/// Sets the leader of a group.
 		virtual void SetGroupLeader(uint64 groupId, uint64 leaderGuid) = 0;

@@ -1088,16 +1088,18 @@ namespace mmo
 		}
 	}
 
-	void MySQLDatabase::CreateGroup(uint64 id, uint64 leaderGuid)
+	void MySQLDatabase::CreateGroup(uint64 id, uint64 leaderGuid, uint8 lootMethod, uint8 lootThreshold)
 	{
 		try
 		{
 			mysql::Transaction transaction(m_connection);
 
 			if (!m_connection.Execute(std::format(
-				"INSERT INTO `group` (`id`, `leader`) VALUES ('{0}', '{1}')"
+				"INSERT INTO `group` (`id`, `leader`, `loot_method`, `loot_treshold`) VALUES ('{0}', '{1}', '{2}', '{3}')"
 				, id
 				, leaderGuid
+				, lootMethod
+				, lootThreshold
 			)))
 			{
 				PrintDatabaseError();
@@ -1130,6 +1132,20 @@ namespace mmo
 		{
 			ELOG("Could not create group: " << e.what());
 			throw;
+		}
+	}
+
+	void MySQLDatabase::SetGroupLootMethod(uint64 groupId, uint8 lootMethod, uint64 lootMaster, uint8 lootThreshold)
+	{
+		if (!m_connection.Execute(std::format(
+			"UPDATE `group` SET `loot_method` = '{0}', `loot_master` = {1}, `loot_treshold` = '{2}' WHERE `id` = '{3}' LIMIT 1"
+			, lootMethod
+			, lootMaster ? std::format("'{}'", lootMaster) : "NULL"
+			, lootThreshold
+			, groupId
+		)))
+		{
+			PrintDatabaseError();
 		}
 	}
 
@@ -1276,7 +1292,7 @@ namespace mmo
 	{
 		// Load group data
 		mysql::Select groupSelect(m_connection, std::format(
-			"SELECT `leader`, `name` FROM `group` g LEFT JOIN `characters` c ON `c`.`id` = `g`.`leader` WHERE `g`.`id` = '{0}' LIMIT 1"
+			"SELECT `leader`, `name`, `loot_method`, `loot_treshold`, `loot_master` FROM `group` g LEFT JOIN `characters` c ON `c`.`id` = `g`.`leader` WHERE `g`.`id` = '{0}' LIMIT 1"
 			, groupId
 		));
 		if (groupSelect.Success())
@@ -1287,6 +1303,9 @@ namespace mmo
 				GroupData groupData;
 				groupRow.GetField(0, groupData.leaderGuid);
 				groupRow.GetField(1, groupData.leaderName);
+				groupRow.GetField<uint8, uint16>(2, groupData.lootMethod);
+				groupRow.GetField<uint8, uint16>(3, groupData.lootThreshold);
+				groupRow.GetField(4, groupData.lootMaster);
 
 				// Load group members
 				mysql::Select memberSelect(m_connection, std::format(

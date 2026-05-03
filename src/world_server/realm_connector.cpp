@@ -603,6 +603,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		// Create the character object
 		auto characterObject = std::make_shared<GamePlayerS>(m_project, m_timerQueue);
 		characterObject->Initialize();
+		characterObject->SetName(characterData.name);
 		characterObject->SetConfiguration(characterData.configuration);
 		characterObject->Set(object_fields::Guid, characterData.characterId);
 

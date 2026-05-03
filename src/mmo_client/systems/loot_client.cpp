@@ -454,17 +454,19 @@ namespace mmo
 		uint32 itemId = 0;
 		uint64 playerGuid = 0;
 		uint8 vote = 0;
+		uint8 rollValue = 0;
 		String playerName;
-		if (!(packet >> io::read<uint64>(lootGuid) >> io::read<uint8>(slot) >> io::read<uint32>(itemId) >> io::read<uint64>(playerGuid) >> io::read<uint8>(vote) >> io::read_container<uint8>(playerName)))
+		if (!(packet >> io::read<uint64>(lootGuid) >> io::read<uint8>(slot) >> io::read<uint32>(itemId) >> io::read<uint64>(playerGuid) >> io::read<uint8>(vote) >> io::read<uint8>(rollValue) >> io::read_container<uint8>(playerName)))
 		{
 			return PacketParseResult::Disconnect;
 		}
 
-		m_itemCache.Get(itemId, [vote, playerName](uint64, const ItemInfo& itemInfo)
+		m_itemCache.Get(itemId, [vote, rollValue, playerName](uint64, const ItemInfo& itemInfo)
 		{
 			FrameManager::Get().TriggerLuaEvent(
 				"LOOT_ROLL_RESULT",
 				static_cast<uint32>(vote),
+				static_cast<uint32>(rollValue),
 				playerName,
 				itemInfo.name,
 				static_cast<uint32>(itemInfo.quality));

@@ -164,6 +164,11 @@ namespace mmo
 
 		ASSERT(group.IsLoaded());
 		group.SendUpdate();
+
+		if (auto world = GetWorld())
+		{
+			world->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId(), static_cast<uint8>(m_group->GetLootMethod()), static_cast<uint8>(m_group->GetLootThreshold()));
+		}
 	}
 
 	void Player::connectionLost()
@@ -2670,6 +2675,11 @@ namespace mmo
 			if (m_group->IsLoaded())
 			{
 				m_group->SendUpdate();
+
+				if (auto world = GetWorld())
+				{
+					world->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId(), static_cast<uint8>(m_group->GetLootMethod()), static_cast<uint8>(m_group->GetLootThreshold()));
+				}
 			}
 			else
 			{
