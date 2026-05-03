@@ -1206,6 +1206,15 @@ namespace mmo
 																			{ return this->GetLootSlotItem(slot); }),
 					   luabind::def<std::function<void(uint64, int32, int32)>>("ConfirmLootRoll", [this](uint64 lootGuid, int32 slot, int32 vote)
 											{ this->ConfirmLootRoll(lootGuid, static_cast<uint32>(slot), static_cast<uint32>(vote)); }),
+					   luabind::def<std::function<const char*(int32)>>("GetItemDisplayIcon", [this](int32 displayId) -> const char*
+											{
+												const auto* displayData = this->m_project.itemDisplays.getById(displayId);
+												if (displayData)
+												{
+													return displayData->icon().c_str();
+												}
+												return "";
+											}),
 					   luabind::def<std::function<void()>>("CloseLoot", [this]()
 														   { this->CloseLoot(); }),
 					   luabind::def<std::function<void(int32, String &, String &, int32 &)>>("GetLootSlotInfo", [this](int32 slot, String &out_icon, String &out_text, int32 &out_count)
