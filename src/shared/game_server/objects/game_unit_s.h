@@ -154,6 +154,9 @@ namespace mmo
 			/// Ranged attack power value modifier.
 			AttackPowerRanged,
 
+			/// Generic outgoing damage modifier.
+			Damage,
+
 			/// Main hand weapon damage modifier.
 			DamageMainHand,
 
@@ -506,6 +509,8 @@ namespace mmo
 		/// @param mod The unit modifier to calculate.
 		/// @returns The calculated modifier value as a float.
 		float GetCalculatedModifierValue(UnitMods mod) const;
+
+		float CalculateModifiedValue(UnitMods mod, float baseValue) const;
 
 		/// Sets the unit modifier value to the given value.
 		/// @param mod The unit modifier to set.

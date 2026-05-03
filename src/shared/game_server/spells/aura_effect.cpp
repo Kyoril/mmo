@@ -57,6 +57,8 @@ namespace mmo
 			break;
 		case AuraType::ModDamageDone:
 		case AuraType::ModDamageDonePct:
+		case AuraType::ModSpellDamageDone:
+		case AuraType::ModSpellDamageDonePct:
 			HandleModDamageDone(apply);
 			break;
 		case AuraType::ModHealingDone:
@@ -228,15 +230,18 @@ namespace mmo
 
 	void AuraEffect::HandleModDamageDone(const bool apply) const
 	{
-		m_container.GetOwner().UpdateModifierValue(unit_mods::SpellDamage,
-			m_effect.aura() == aura_type::ModDamageDone ? unit_mod_type::TotalValue : unit_mod_type::TotalPct,
+		const bool isPct = (m_effect.aura() == aura_type::ModDamageDonePct || m_effect.aura() == aura_type::ModSpellDamageDonePct);
+		const bool isSpellDamage = (m_effect.aura() == aura_type::ModSpellDamageDone || m_effect.aura() == aura_type::ModSpellDamageDonePct);
+
+		m_container.GetOwner().UpdateModifierValue(
+			isSpellDamage ? unit_mods::SpellDamage : unit_mods::Damage,
+			isPct ? unit_mod_type::TotalPct : unit_mod_type::TotalValue,
 			GetBasePoints(),
 			apply);
 	}
 
 	void AuraEffect::HandleModDamageTaken(bool apply) const
 	{
-
 	}
 
 	void AuraEffect::HandleModHealingDone(const bool apply) const
@@ -449,6 +454,12 @@ namespace mmo
 		if (m_casterSpellPower > 0.0f && m_effect.powerbonusfactor() > 0.0f && m_totalTicks > 0)
 		{
 			damage += static_cast<int32>(m_casterSpellPower * m_effect.powerbonusfactor() / static_cast<float>(m_totalTicks));
+		}
+
+		if (const auto* caster = strongContainer->GetCaster())
+		{
+			damage += static_cast<int32>(caster->GetModifierValue(unit_mods::Damage, unit_mod_type::TotalValue));
+			damage = static_cast<int32>(static_cast<float>(damage) * caster->GetModifierValue(unit_mods::Damage, unit_mod_type::TotalPct));
 		}
 
 		// Apply damage bonus from casters spell power

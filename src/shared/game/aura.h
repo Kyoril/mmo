@@ -126,6 +126,10 @@ namespace mmo
 			ModResistancePct,
 			ModStatPct,
 
+
+			ModSpellDamageDone,
+			ModSpellDamageDonePct,
+
 			Count_,
 			Invalid_ = Count_
 		};

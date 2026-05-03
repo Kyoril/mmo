@@ -161,6 +161,16 @@ namespace mmo
 		return (baseVal * basePct + totalVal) * totalPct;
 	}
 
+	float GameUnitS::CalculateModifiedValue(const UnitMods mod, const float baseValue) const
+	{
+		const float baseVal = GetModifierValue(mod, unit_mod_type::BaseValue) + baseValue;
+		const float basePct = GetModifierValue(mod, unit_mod_type::BasePct);
+		const float totalVal = GetModifierValue(mod, unit_mod_type::TotalValue);
+		const float totalPct = GetModifierValue(mod, unit_mod_type::TotalPct);
+
+		return (baseVal * basePct + totalVal) * totalPct;
+	}
+
 	void GameUnitS::SetModifierValue(UnitMods mod, UnitModType type, float value)
 	{
 		m_unitMods[mod][type] = value;
@@ -2457,6 +2467,10 @@ namespace mmo
 		// Calculate damage between minimum and maximum damage
 		std::uniform_real_distribution distribution(Get<float>(object_fields::MinDamage), Get<float>(object_fields::MaxDamage) + 1.0f);
 		float rawDamage = distribution(randomGenerator);
+
+		// Apply damage mods
+		rawDamage += CalculateModifiedValue(unit_mods::Damage, rawDamage);
+
 		uint32 totalDamage = static_cast<uint32>(rawDamage);
 
 		uint32 hitInfo = HitInfo::NormalSwing;

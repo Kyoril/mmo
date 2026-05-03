@@ -966,6 +966,10 @@ namespace mmo
 				damageAmount += static_cast<uint32>(spellDamage * effect.powerbonusfactor());
 			}
 
+			// Apply both Damage and SpellDamage mods to the damage amount!
+			damageAmount += m_cast.GetExecuter().CalculateModifiedValue(unit_mods::Damage, damageAmount);
+			damageAmount += m_cast.GetExecuter().CalculateModifiedValue(unit_mods::SpellDamage, damageAmount);
+
 			if (unitTarget.Damage(damageAmount, m_spell.spellschool(), &m_cast.GetExecuter(), damage_type::MagicalAbility) > 0)
 			{
 				float threat = static_cast<float>(damageAmount) * m_spell.threat_multiplier();
@@ -1778,7 +1782,6 @@ namespace mmo
 		// Auto-attack spells (AutoRepeat) use the full melee combat table and send
 		// AttackerStateUpdate (white damage text) instead of SpellDamageLog (yellow).
 		const bool isAutoAttack = (m_spell.attributes(1) & spell_attributes_b::AutoRepeat) != 0;
-
 		if (isAutoAttack)
 		{
 			// Roll the full melee combat table
@@ -1787,6 +1790,9 @@ namespace mmo
 			// Calculate base weapon damage
 			std::uniform_real_distribution distribution(minDamage + bonus, maxDamage + bonus + 1.0f);
 			uint32 totalDamage = static_cast<uint32>(distribution(randomGenerator));
+
+			// Apply damage mod
+			totalDamage += executer.CalculateModifiedValue(unit_mods::Damage, totalDamage);
 
 			uint32 hitInfo = hit_info::NormalSwing;
 			uint32 victimState = victim_state::Normal;

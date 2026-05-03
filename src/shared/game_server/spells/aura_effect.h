@@ -75,6 +75,8 @@ namespace mmo
 
 		void HandleModDamageDone(bool apply) const;
 
+		void HandleModSpellDamageDone(bool apply) const;
+
 		void HandleModDamageTaken(bool apply) const;
 
 		void HandleModHealingDone(bool apply) const;

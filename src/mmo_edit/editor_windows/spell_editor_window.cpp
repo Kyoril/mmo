@@ -225,7 +225,10 @@ namespace mmo
 		"ModVisibility",
 		"ModResistancePct",
 
-		"ModStatPct"
+		"ModStatPct",
+
+		"ModSpellDamageDone",
+		"ModSpellDamageDonePct"
 	};
 
 	static_assert(std::size(s_auraTypeNames) == aura_type::Count_, "Each aura type must have a string representation!");
