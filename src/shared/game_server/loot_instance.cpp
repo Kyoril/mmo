@@ -539,13 +539,9 @@ namespace mmo
 
 		if (winnerGuid == 0)
 		{
-			item.isLooted = true;
-			itemRemoved(slot);
-
-			if (IsEmpty())
-			{
-				cleared();
-			}
+			// All players passed - item becomes free-for-all (anyone can loot it)
+			// GetSlotType will return AllowLoot for all recipients since rollComplete is true
+			// and rollWinner is 0
 		}
 
 		m_rollData.erase(rollIt);
@@ -576,6 +572,9 @@ namespace mmo
 			{
 				return loot_slot_type::Locked;
 			}
+
+			// Roll is complete and receiver is the winner (or all passed) - allow looting
+			return loot_slot_type::AllowLoot;
 		}
 
 		const auto* itemEntry = m_itemManager.getById(item.definition.item());

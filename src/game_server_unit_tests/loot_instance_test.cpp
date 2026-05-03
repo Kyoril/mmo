@@ -266,6 +266,10 @@ TEST_CASE("LootInstance strategy-aware slot visibility", "[loot_instance]")
 		REQUIRE(loot.GetRollDataMap().contains(0));
 		REQUIRE(loot.SubmitRollVote(0, guidB, roll_vote::Pass) == true);
 		REQUIRE(loot.GetRollDataMap().contains(0) == false);
-		REQUIRE(loot.IsEmpty() == true);
+
+		// All passed - item becomes free-for-all, not removed
+		REQUIRE(loot.IsEmpty() == false);
+		REQUIRE(loot.CanLootItem(0, guidA) == true);
+		REQUIRE(loot.CanLootItem(0, guidB) == true);
 	}
 }

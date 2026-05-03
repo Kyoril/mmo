@@ -426,6 +426,19 @@ namespace mmo
 			}
 		}
 
+		// If loot window is open for this object, mark the item as free-for-all
+		if (m_requestedLootObject == lootGuid)
+		{
+			for (auto& lootItem : m_lootItems)
+			{
+				if (lootItem.slot == slot)
+				{
+					lootItem.lootType = loot_slot_type::AllowLoot;
+					break;
+				}
+			}
+		}
+
 		FrameManager::Get().TriggerLuaEvent(
 			"LOOT_ROLL_ALL_PASSED",
 			static_cast<uint32>(rollId),
