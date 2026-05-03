@@ -1215,6 +1215,10 @@ namespace mmo
 												}
 												return "";
 											}),
+					   luabind::def<std::function<const ItemInfo*(int32)>>("GetCachedItemInfo", [this](int32 itemId) -> const ItemInfo*
+											{
+												return this->m_lootClient.GetItemCache().Get(static_cast<uint64>(itemId));
+											}),
 					   luabind::def<std::function<void()>>("CloseLoot", [this]()
 														   { this->CloseLoot(); }),
 					   luabind::def<std::function<void(int32, String &, String &, int32 &)>>("GetLootSlotInfo", [this](int32 slot, String &out_icon, String &out_text, int32 &out_count)

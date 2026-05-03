@@ -62,6 +62,9 @@ namespace mmo
 		/// @param vote The vote type (0=Pass, 1=Need, 2=Greed).
 		void SendLootRoll(uint64 lootGuid, uint8 slot, uint8 vote);
 
+		/// Returns a reference to the item cache.
+		DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& GetItemCache() { return m_itemCache; }
+
 	private:
 		PacketParseResult OnLootResponse(game::IncomingPacket& packet);
 
