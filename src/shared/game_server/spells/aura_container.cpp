@@ -45,6 +45,7 @@ namespace mmo
 	AuraContainer::~AuraContainer()
 	{
 		m_expirationCountdown.Cancel();
+		m_areaAuraTick.Cancel();
 
 		if (m_applied)
 		{

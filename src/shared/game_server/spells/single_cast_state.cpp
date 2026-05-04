@@ -26,12 +26,6 @@ namespace mmo
 		, m_isProc(isProc)
 		, m_projectileStart(0)
 		, m_projectileEnd(0)
-		, m_connectedMeleeSignal(false)
-		, m_delayCounter(0)
-		, m_attackerProc(0)
-		, m_victimProc(0)
-		, m_canTrigger(false)
-		, m_instantsCast(false)
 		, m_delayedCast(false)
 		, m_itemGuid(itemGuid)
 		, m_context(cast, spell, m_target)
@@ -39,43 +33,16 @@ namespace mmo
 	{
 		m_effectTargetsScratch.reserve(8);
 
-		// Check if the executor is in the world
+		// Apply cast time modifier using a temporary so we avoid UB from reinterpret_cast on GameTime.
 		auto& executor = m_cast.GetExecuter();
-		const auto* worldInstance = m_context.GetWorldInstance();
+		int32 castTimeMod = static_cast<int32>(m_castTime);
+		executor.ApplySpellMod<int32>(spell_mod_op::CastTime, spell.id(), castTimeMod);
+		m_castTime = static_cast<GameTime>(std::max(0, castTimeMod));
 
-		// Apply cast time modifier
-		executor.ApplySpellMod<int32>(spell_mod_op::CastTime, spell.id(), reinterpret_cast<int32&>(m_castTime));
-
-		// This is a hack because cast time might become actually negative by modifiers which would be bad here!
-		if (static_cast<int32>(m_castTime) < 0)
-		{
-			m_castTime = 0;
-		}
-		
-		auto const casterId = executor.GetGuid();
-		const uint32 startCooldownMs = ShouldStartCooldownOnCastStart() ? static_cast<uint32>(CalculateFinalCooldown()) : 0;
-
-		if (worldInstance && !(m_spell.attributes(0) & spell_attributes::Passive) && !m_isProc && m_castTime > 0 && !IsChanneled())
-		{
-			m_context.SendPacketFromCaster(
-								[casterId, startCooldownMs, this](game::OutgoingPacket& out_packet)
-				{
-					out_packet.Start(game::realm_client_packet::SpellStart);
-					out_packet
-						<< io::write_packed_guid(casterId)
-						<< io::write<uint32>(m_spell.id())
-						<< io::write<GameTime>(m_castTime)
-						<< m_target
-						<< io::write<uint32>(startCooldownMs);
-					out_packet.Finish();
-				});
-		}
-
-		// Note: ChannelStart packet is sent in Activate() after validation succeeds,
-		// to avoid sending it for spells that will fail range or other checks.
-
-		const Vector3& location = m_cast.GetExecuter().GetPosition();
-		m_x = location.x, m_y = location.y, m_z = location.z;
+		const Vector3& location = executor.GetPosition();
+		m_x = location.x;
+		m_y = location.y;
+		m_z = location.z;
 
 		m_countdown.ended.connect([this]()
 			{
@@ -113,6 +80,26 @@ namespace mmo
 		}
 
 		ConnectTargetSignals(ResolveUnitTarget());
+
+		// Send SpellStart only after validation succeeds — avoids showing the cast bar for casts
+		// that will immediately fail, which caused client-side flicker with the old constructor approach.
+		if (m_context.GetWorldInstance() && !(m_spell.attributes(0) & spell_attributes::Passive) && !m_isProc && m_castTime > 0 && !IsChanneled())
+		{
+			const uint64 casterId = m_cast.GetExecuter().GetGuid();
+			const uint32 startCooldownMs = ShouldStartCooldownOnCastStart() ? static_cast<uint32>(CalculateFinalCooldown()) : 0;
+			m_context.SendPacketFromCaster(
+				[casterId, startCooldownMs, this](game::OutgoingPacket& out_packet)
+				{
+					out_packet.Start(game::realm_client_packet::SpellStart);
+					out_packet
+						<< io::write_packed_guid(casterId)
+						<< io::write<uint32>(m_spell.id())
+						<< io::write<GameTime>(m_castTime)
+						<< m_target
+						<< io::write<uint32>(startCooldownMs);
+					out_packet.Finish();
+				});
+		}
 
 		if (m_castTime > 0)
 		{
@@ -263,12 +250,10 @@ namespace mmo
 			ApplyCooldown(interruptCooldown, interruptCooldown);
 		}
 
-		const std::weak_ptr weakThis = shared_from_this();
-
-		if (weakThis.lock())
-		{
-			m_cast.SetState(std::make_shared<NoCastState>());
-		}
+		// Keep *this* alive across SetState: SetState activates the new NoCastState
+		// which may drop the last external reference to this SingleCastState.
+		auto strongThis = shared_from_this();
+		m_cast.SetState(std::make_shared<NoCastState>());
 	}
 
 	void SingleCastState::OnUserStartsMoving()
@@ -495,12 +480,22 @@ namespace mmo
 				return false;
 			}
 
-			auto removeItem = [this, item, itemSlot, &inv]() {
+			auto removeItem = [this, itemSlot]()
+			{
 				if (m_tookCastItem)
 				{
 					return;
 				}
 
+				// Re-look up the player and inventory here: the lambda may fire after ConsumeItem()
+				// has returned, so capturing &inv by reference would be a dangling reference.
+				GamePlayerS* owner = m_context.GetPlayerExecutor();
+				if (!owner)
+				{
+					return;
+				}
+
+				auto& inv = owner->GetInventory();
 				auto result = inv.RemoveItem(itemSlot, 1);
 				if (result != inventory_change_failure::Okay)
 				{
@@ -767,8 +762,6 @@ namespace mmo
 			ApplyCooldown(finalCD, m_spell.categorycooldown());
 		}
 
-		m_canTrigger = true;
-
 		// Make sure that the executer exists after all effects have been executed
 		auto strongCaster = std::static_pointer_cast<GameUnitS>(m_cast.GetExecuter().shared_from_this());
 
@@ -781,10 +774,15 @@ namespace mmo
 			m_delayedCast = true;
 		}
 		
-		// Apply aura containers to their respective owners
-		for(auto& [targetUnit, auraContainer] : m_targetAuraContainers)
+		// Apply aura containers to their respective owners. Lookup by GUID so stale raw
+		// pointers from units that died during effect processing are handled gracefully.
+		for (auto& [targetGuid, auraContainer] : m_targetAuraContainers)
 		{
-			targetUnit->ApplyAura(std::move(auraContainer));
+			GameUnitS* targetUnit = m_context.FindUnitByGuid(targetGuid);
+			if (targetUnit)
+			{
+				targetUnit->ApplyAura(std::move(auraContainer));
+			}
 		}
 
 		ASSERT(m_spell.attributes_size() >= 2);
@@ -967,8 +965,8 @@ namespace mmo
 			}
 
 			// Apply both Damage and SpellDamage mods to the damage amount!
-			damageAmount += m_cast.GetExecuter().CalculateModifiedValue(unit_mods::Damage, damageAmount);
-			damageAmount += m_cast.GetExecuter().CalculateModifiedValue(unit_mods::SpellDamage, damageAmount);
+			damageAmount = m_cast.GetExecuter().CalculateModifiedValue(unit_mods::Damage, damageAmount);
+			damageAmount = m_cast.GetExecuter().CalculateModifiedValue(unit_mods::SpellDamage, damageAmount);
 
 			if (unitTarget.Damage(damageAmount, m_spell.spellschool(), &m_cast.GetExecuter(), damage_type::MagicalAbility) > 0)
 			{
@@ -1792,7 +1790,7 @@ namespace mmo
 			uint32 totalDamage = static_cast<uint32>(distribution(randomGenerator));
 
 			// Apply damage mod
-			totalDamage += executer.CalculateModifiedValue(unit_mods::Damage, totalDamage);
+			totalDamage = executer.CalculateModifiedValue(unit_mods::Damage, totalDamage);
 
 			uint32 hitInfo = hit_info::NormalSwing;
 			uint32 victimState = victim_state::Normal;
@@ -1951,6 +1949,9 @@ namespace mmo
 			std::uniform_real_distribution distribution(minDamage + bonus, maxDamage + bonus + 1.0f);
 			uint32 totalDamage = static_cast<uint32>(distribution(randomGenerator));
 
+			// Apply damage mod
+			totalDamage = executer.CalculateModifiedValue(unit_mods::Damage, totalDamage);
+
 			// Physical damage is reduced by armor
 			if (school == spell_school::Normal)
 			{
@@ -1989,9 +1990,11 @@ namespace mmo
 
 	AuraContainer& SingleCastState::GetOrCreateAuraContainer(GameUnitS& target)
 	{
-		if (m_targetAuraContainers.contains(&target))
+		const uint64 targetGuid = target.GetGuid();
+		const auto it = m_targetAuraContainers.find(targetGuid);
+		if (it != m_targetAuraContainers.end())
 		{
-			return *m_targetAuraContainers[&target];
+			return *it->second;
 		}
 
 		GameTime duration = m_spell.duration();
@@ -1999,8 +2002,8 @@ namespace mmo
 		{
 			m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Duration, m_spell.id(), duration);
 		}
-		
-		auto& container = (m_targetAuraContainers[&target] = std::make_unique<AuraContainer>(target, m_cast.GetExecuter().GetGuid(), m_spell, duration, m_itemGuid));
+
+		auto& container = (m_targetAuraContainers[targetGuid] = std::make_unique<AuraContainer>(target, m_cast.GetExecuter().GetGuid(), m_spell, duration, m_itemGuid));
 		return *container;
 	}
 
@@ -2085,6 +2088,8 @@ namespace mmo
 			if (!m_context.GetWorldInstance())
 			{
 				m_hasFinished = true;
+				// Notify here so m_selfHold is released; without this the cast state leaks.
+				NotifyCastEnded(false);
 				return;
 			}
 
@@ -2093,7 +2098,9 @@ namespace mmo
 
 		m_hasFinished = true;
 
-		if (!Validate())
+		// Re-validate only the conditions that can change during a cast: target liveness and range.
+		// Player/caster requirements were already checked in Activate() and cannot change mid-cast.
+		if (!ValidateTargetRequirements(ResolveUnitTarget()))
 		{
 			return;
 		}

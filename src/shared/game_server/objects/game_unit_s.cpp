@@ -2469,7 +2469,7 @@ namespace mmo
 		float rawDamage = distribution(randomGenerator);
 
 		// Apply damage mods
-		rawDamage += CalculateModifiedValue(unit_mods::Damage, rawDamage);
+		rawDamage = CalculateModifiedValue(unit_mods::Damage, rawDamage);
 
 		uint32 totalDamage = static_cast<uint32>(rawDamage);
 

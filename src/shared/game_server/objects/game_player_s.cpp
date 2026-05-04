@@ -1799,6 +1799,8 @@ namespace mmo
 		// 1 dps per 14 attack power
 		const float attackTime = Get<uint32>(object_fields::BaseAttackTime) / 1000.0f;
 		baseValue = baseValue / 14.0f * attackTime;
+
+		Set<float>(object_fields::MinDamage, baseValue + minDamage);
 		Set<float>(object_fields::MaxDamage, baseValue + maxDamage);
 	}
 

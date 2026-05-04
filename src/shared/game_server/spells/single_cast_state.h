@@ -4,7 +4,7 @@
 
 #include "base/typedefs.h"
 
-#include <map>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "game_server/spells/aura_container.h"
@@ -168,35 +168,24 @@ namespace mmo
 		const proto::SpellEntry& m_spell;
 		SpellTargetMap m_target;
 		SpellCasting m_casting;
-		std::vector<uint32> m_meleeDamage;	// store damage results of melee effects
 		bool m_hasFinished;
 		Countdown m_countdown;
 		Countdown m_impactCountdown;
 		signal<void()> completedEffects;
 		scoped_connection m_completedEffectsExecution;
 		scoped_connection m_onTargetDied;
-		scoped_connection m_onTargetRemoved, m_damaged;
-		scoped_connection m_onThreatened;
-		scoped_connection m_onAttackError, m_removeAurasOnImmunity;
+		scoped_connection m_onTargetRemoved;
 		float m_x, m_y, m_z;
 		GameTime m_castTime;
 		GameTime m_castEnd;
 		bool m_isProc;
 		GameTime m_projectileStart, m_projectileEnd;
 		Vector3 m_projectileOrigin, m_projectileDest;
-		bool m_connectedMeleeSignal;
-		uint32 m_delayCounter;
 		std::unordered_set<uint64> m_affectedTargetGuids;
 		std::vector<GameObjectS*> m_effectTargetsScratch;
 		bool m_tookCastItem { false };
 		bool m_tookReagents { false };
-		uint32 m_attackerProc;
-		uint32 m_victimProc;
-		bool m_canTrigger;
-		HitResultMap m_hitResults;
-		std::vector<uint64> m_dynObjectsToDespawn;
-		bool m_instantsCast, m_delayedCast;
-		scoped_connection m_onChannelAuraRemoved;
+		bool m_delayedCast;
 		bool m_cooldownStartedOnCastStart { false };
 		GameTime m_cooldownStartedAtCastStartMs { 0 };
 		bool m_endNotified { false };
@@ -207,9 +196,9 @@ namespace mmo
 		void OnTargetKilled(GameUnitS*);
 		void OnTargetDespawned(GameObjectS&);
 		void OnUserDamaged();
-		void ExecuteMeleeAttack();	// deal damage stored in m_meleeDamage
+		void ExecuteMeleeAttack();
 
-		std::map<GameUnitS*, std::unique_ptr<AuraContainer>> m_targetAuraContainers;
+		std::unordered_map<uint64, std::unique_ptr<AuraContainer>> m_targetAuraContainers;
 		uint64 m_itemGuid;
 		SpellCastContext m_context;
 		SpellTargetResolver m_targetResolver;

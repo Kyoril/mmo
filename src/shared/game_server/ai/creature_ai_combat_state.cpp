@@ -1116,49 +1116,56 @@ namespace mmo
 	bool CreatureAICombatState::CastSpell(const CreatureSpell& spell, GameUnitS& target)
 	{
 		auto& controlled = GetControlled();
-		
-		// Setup spell target
+
+		// Cache spell data before casting (in case of reentrant calls)
+		const auto* spellEntry = spell.spell;
+		const uint32_t castTime = spellEntry->casttime();
+		const uint32_t cooldown = spellEntry->cooldown();
+
+		// Prevent reentrant ChooseNextAction during cast
+		if (castTime > 0)
+		{
+			m_isCasting = true;
+		}
+
 		SpellTargetMap targetMap;
 		targetMap.SetTargetMap(spell_cast_target_flags::Unit);
 		targetMap.SetUnitTarget(target.GetGuid());
-		
-		// Attempt to cast the spell - get both result and SpellCasting pointer
-		const auto castResult = controlled.CastSpell(targetMap, *spell.spell, spell.spell->casttime());
-		
+
+		const auto castResult = controlled.CastSpell(targetMap, *spellEntry, castTime);
+
 		if (castResult == spell_cast_result::CastOkay)
 		{
 			const auto currentTime = GetAsyncTimeMs();
-			
-			// Update spell cooldowns
+
 			for (auto& creatureSpell : m_availableSpells)
 			{
-				if (creatureSpell.spell == spell.spell)
+				if (creatureSpell.spell == spellEntry)
 				{
 					creatureSpell.lastCastTime = currentTime;
-					creatureSpell.cooldownEnd = currentTime + spell.spell->cooldown();
+					creatureSpell.cooldownEnd = currentTime + cooldown;
 					break;
 				}
 			}
-			
-			// For spells with cast time, set up casting state and stop movement
-			if (spell.spell->casttime() > 0)
+
+			if (castTime > 0)
 			{
-				// Set casting state immediately
-				m_isCasting = true;
 				m_lastSpellCastTime = currentTime;
-				
-				// Set up timeout as backup (cast time + buffer)
-				m_castingTimeoutEnd = currentTime + spell.spell->casttime() + 1000;
-				
-				// Stop movement and auto attack immediately
+				m_castingTimeoutEnd = currentTime + castTime + 1000;
 				controlled.GetMover().StopMovement();
 				m_movementState.Reset();
 				controlled.StopAttack();
 			}
-			
+
 			return true;
 		}
-		
+
+		// Cast failed - reset casting flag if we set it
+		if (castTime > 0)
+		{
+			m_isCasting = false;
+		}
+
 		return false;
 	}
 
