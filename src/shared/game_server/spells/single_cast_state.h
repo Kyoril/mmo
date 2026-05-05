@@ -14,6 +14,7 @@
 #include "game_server/spells/spell_cast.h"
 #include "game_server/spells/spell_cast_context.h"
 #include "game_server/spells/spell_target_resolver.h"
+#include "game_server/spells/channeling_cast_state.h"
 #include "game/spell.h"
 
 namespace mmo
@@ -62,7 +63,6 @@ namespace mmo
 		[[nodiscard]] bool ShouldStartCooldownOnCastStart() const;
 		[[nodiscard]] bool UsesGlobalCooldown() const;
 		void NotifyCastEnded(bool succeeded);
-		void EndChanneling(bool succeeded);
 		GameUnitS* ResolveUnitTarget() const;
 		void ConnectTargetSignals(GameUnitS* unitTarget);
 
@@ -74,11 +74,9 @@ namespace mmo
 
 		std::shared_ptr<GameUnitS> GetEffectUnitTarget(const proto::SpellEffect& effect);
 
-		/// Determines if this spell is a channeled spell.
-		bool IsChanneled() const { return m_spell.attributes(0) & spell_attributes::Channeled; }
-
 	private:
 
+	private:
 		bool ConsumeItem(bool delayed = true);
 
 		bool ConsumeReagents(bool delayed = true);

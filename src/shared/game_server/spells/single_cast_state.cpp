@@ -47,14 +47,7 @@ namespace mmo
 
 		m_countdown.ended.connect([this]()
 			{
-				if (IsChanneled())
-				{
-					this->FinishChanneling();
-				}
-				else
-				{
-					this->OnCastFinished();
-				}
+				this->OnCastFinished();
 			});
 	}
 
@@ -84,7 +77,7 @@ namespace mmo
 
 		// Send SpellStart only after validation succeeds — avoids showing the cast bar for casts
 		// that will immediately fail, which caused client-side flicker with the old constructor approach.
-		if (m_context.GetWorldInstance() && !(m_spell.attributes(0) & spell_attributes::Passive) && !m_isProc && m_castTime > 0 && !IsChanneled())
+		if (m_context.GetWorldInstance() && !(m_spell.attributes(0) & spell_attributes::Passive) && !m_isProc && m_castTime > 0)
 		{
 			const uint64 casterId = m_cast.GetExecuter().GetGuid();
 			const uint32 startCooldownMs = ShouldStartCooldownOnCastStart() ? static_cast<uint32>(CalculateFinalCooldown()) : 0;
@@ -108,7 +101,7 @@ namespace mmo
 			m_countdown.SetEnd(m_castEnd);
 
 			// For channeled spells, apply effects immediately when the channel starts
-			if (IsChanneled())
+			if (m_spell.attributes(0) & spell_attributes::Channeled)
 			{
 				// Send ChannelStart now that validation has passed
 				auto* worldInstance = m_context.GetWorldInstance();
@@ -131,21 +124,21 @@ namespace mmo
 				if (!ConsumePower())
 				{
 					m_countdown.Cancel();
-					EndChanneling(false);
+					NotifyCastEnded(false);
 					return;
 				}
 
 				if (!ConsumeReagents())
 				{
 					m_countdown.Cancel();
-					EndChanneling(false);
+					NotifyCastEnded(false);
 					return;
 				}
 
 				if (!ConsumeItem())
 				{
 					m_countdown.Cancel();
-					EndChanneling(false);
+					NotifyCastEnded(false);
 					return;
 				}
 
@@ -181,6 +174,19 @@ namespace mmo
 
 				ApplyAllEffects();
 				m_cast.GetExecuter().RaiseTrigger(trigger_event::OnSpellCast, { m_spell.id() }, &m_cast.GetExecuter());
+
+				// Transition to ChannelingCastState which owns the countdown from here on.
+				auto strongThis = shared_from_this();  // keep alive across SetState
+				m_countdown.Cancel();                  // stop SingleCastState countdown
+				const GameTime remaining = m_castEnd - GetAsyncTimeMs();
+				m_cast.SetState(std::make_shared<ChannelingCastState>(
+					m_cast, m_spell,
+					m_context,
+					remaining > 0 ? remaining : 0,
+					std::move(m_onTargetDied),
+					std::move(m_onTargetRemoved)));
+				// strongThis drops here — SingleCastState dies after return
+				return;
 			}
 		}
 		else
@@ -237,13 +243,7 @@ namespace mmo
 			break;
 		}
 
-		if (IsChanneled())
-		{
-			EndChanneling(false);
-		}
-
 		m_countdown.Cancel();
-		SendEndCast(result);
 		m_hasFinished = true;
 
 		if (interruptCooldown)
@@ -274,7 +274,7 @@ namespace mmo
 
 	void SingleCastState::FinishChanneling()
 	{
-		EndChanneling(true);
+		// No-op: FinishChanneling is now owned by ChannelingCastState after transition.
 	}
 
 	bool SingleCastState::Validate()
@@ -677,40 +677,6 @@ namespace mmo
 		m_selfHold.reset();
 	}
 
-	void SingleCastState::EndChanneling(bool succeeded)
-	{
-		if (!IsChanneled())
-		{
-			return;
-		}
-
-		// Nothing to do twice.
-		if (m_hasFinished)
-		{
-			return;
-		}
-
-		// Caster could have left the world
-		const auto* world = m_context.GetWorldInstance();
-		if (world)
-		{
-			const uint64 casterId = m_cast.GetExecuter().GetGuid();
-			m_context.SendPacketFromCaster(
-				[casterId](game::OutgoingPacket& out_packet)
-				{
-					out_packet.Start(game::realm_client_packet::ChannelUpdate);
-					out_packet
-						<< io::write_packed_guid(casterId)
-						<< io::write<GameTime>(0);
-					out_packet.Finish();
-				});
-		}
-
-		//m_cast.GetExecuter().Set<uint64>(object_fields::ChannelObject, 0);
-		//m_cast.GetExecuter().Set<uint32>(object_fields::ChannelSpell, 0);
-		m_hasFinished = true;
-		NotifyCastEnded(succeeded);
-	}
 
 	GameUnitS* SingleCastState::ResolveUnitTarget() const
 	{
