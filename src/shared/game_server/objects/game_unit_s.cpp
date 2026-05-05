@@ -629,23 +629,22 @@ namespace mmo
 			return spell_cast_result::FailedNotKnown;
 		}
 
-		const auto result = m_spellCast->StartCast(spell, target, castTimeMs, isProc, itemGuid);
-		if (result.first == spell_cast_result::CastOkay)
+		SpellCastResult r = m_spellCast->StartCast(spell, target, castTimeMs, isProc, itemGuid);
+		if (r == spell_cast_result::CastOkay)
 		{
 			startedCasting(spell);
 		}
 
 		// Reset auto attack timer if requested
-		if (result.first == spell_cast_result::CastOkay &&
-			m_attackSwingCountdown.IsRunning() &&
-			result.second)
+		if (r == spell_cast_result::CastOkay &&
+			m_attackSwingCountdown.IsRunning())
 		{
 			// Register for casts ended-event
 			if (castTimeMs > 0)
 			{
 				// Pause auto attack during spell cast
 				m_attackSwingCountdown.Cancel();
-				result.second->ended.connect(this, &GameUnitS::OnSpellCastEnded);
+				m_spellCast->ended.connect(this, &GameUnitS::OnSpellCastEnded);
 			}
 			else
 			{
@@ -654,7 +653,7 @@ namespace mmo
 			}
 		}
 
-		return result.first;
+		return r;
 	}
 
 	void GameUnitS::CancelCast(SpellInterruptFlags reason, GameTime interruptCooldown) const
