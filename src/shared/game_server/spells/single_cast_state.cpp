@@ -6,6 +6,7 @@
 #include "game_server/objects/game_player_s.h"
 #include "game_server/objects/game_world_object_s.h"
 #include "game_server/spells/no_cast_state.h"
+#include "game_server/spells/spell_effects.h"
 
 #include "base/utilities.h"
 #include "proto_data/project.h"
@@ -518,7 +519,7 @@ namespace mmo
 					{
 						if (delayed)
 						{
-							m_completedEffectsExecution = completedEffects.connect(removeItem);
+							m_postEffectCallbacks.push_back(removeItem);
 						}
 						else
 						{
@@ -798,7 +799,10 @@ namespace mmo
 		// Clear auras
 		m_targetAuraContainers.clear();
 
-		completedEffects();
+		{
+			auto callbacks = std::move(m_postEffectCallbacks);
+			for (auto& cb : callbacks) cb();
+		}
 
 		if (strongCaster->IsUnit())
 		{
@@ -863,51 +867,7 @@ namespace mmo
 
 	int32 SingleCastState::CalculateEffectBasePoints(const proto::SpellEffect& effect)
 	{
-		// TODO
-		const int32 comboPoints = 0;
-
-		int32 level = static_cast<int32>(m_cast.GetExecuter().Get<uint32>(object_fields::Level));
-		if (level > m_spell.maxlevel() && m_spell.maxlevel() > 0)
-		{
-			level = m_spell.maxlevel();
-		}
-		else if (level < m_spell.baselevel())
-		{
-			level = m_spell.baselevel();
-		}
-		level -= m_spell.spelllevel();
-
-		// Calculate the damage done
-		const float basePointsPerLevel = effect.pointsperlevel();
-		const float randomPointsPerLevel = effect.diceperlevel();
-		const int32 basePoints = effect.basepoints() + level * basePointsPerLevel;
-		const int32 randomPoints = effect.diesides() + level * randomPointsPerLevel;
-		const int32 comboDamage = effect.pointspercombopoint() * comboPoints;
-
-		std::uniform_int_distribution<int> distribution(effect.basedice(), randomPoints);
-		const int32 randomValue = (effect.basedice() >= randomPoints ? effect.basedice() : distribution(randomGenerator));
-
-		int32 outBasePoints = basePoints + randomValue + comboDamage;
-
-		// Apply spell base point modifications
-		m_cast.GetExecuter().ApplySpellMod(spell_mod_op::AllEffects, m_spell.id(), outBasePoints);
-
-		if (effect.type() == spell_effects::ApplyAura)
-		{
-			if (effect.aura() == aura_type::PeriodicDamage ||
-				effect.aura() == aura_type::PeriodicHeal)
-			{
-				m_cast.GetExecuter().ApplySpellMod(spell_mod_op::PeriodicBasePoints, m_spell.id(), outBasePoints);
-
-				// Also apply damage done bonus for now
-				if (effect.aura() == aura_type::PeriodicDamage)
-				{
-					m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Damage, m_spell.id(), outBasePoints);
-				}
-			}
-		}
-		
-		return outBasePoints;
+		return static_cast<int32>(SpellEffects::CalculateBasePoints(m_context, effect));
 	}
 
 	uint32 SingleCastState::GetSpellPointsTotal(const proto::SpellEffect& effect, uint32 spellPower, uint32 bonusPct)
@@ -922,832 +882,472 @@ namespace mmo
 
 	void SingleCastState::SpellEffectInstantKill(const proto::SpellEffect& effect)
 	{
-		auto unitTarget = GetEffectUnitTarget(effect);
-		if (!unitTarget)
-		{
-			return;
-		}
-
-		unitTarget->Kill(&m_cast.GetExecuter());
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleInstantKill(ctx);
 	}
 
 	void SingleCastState::SpellEffectDummy(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleDummy(ctx);
 	}
 
 	void SingleCastState::SpellEffectSchoolDamage(const proto::SpellEffect& effect)
 	{
-		auto& effectTargets = m_effectTargetsScratch;
-		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
-		{
-			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
-			return;
-		}
-
-		for (auto* targetObject : effectTargets)
-		{
-			if (!targetObject->IsUnit())
-			{
-				continue;
-			}
-
-			auto& unitTarget = targetObject->AsUnit();
-
-			// TODO: Do real calculation including crit chance, miss chance, resists, etc.
-			uint32 damageAmount = std::max<int32>(0, CalculateEffectBasePoints(effect));
-			m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Damage, m_spell.id(), damageAmount);
-
-			// Add spell power to damage
-			const float spellDamage = m_cast.GetExecuter().GetCalculatedModifierValue(unit_mods::SpellDamage);
-			if (spellDamage > 0.0f && effect.powerbonusfactor() > 0.0f)
-			{
-				damageAmount += static_cast<uint32>(spellDamage * effect.powerbonusfactor());
-			}
-
-			// Apply both Damage and SpellDamage mods to the damage amount!
-			damageAmount = m_cast.GetExecuter().CalculateModifiedValue(unit_mods::Damage, damageAmount);
-			damageAmount = m_cast.GetExecuter().CalculateModifiedValue(unit_mods::SpellDamage, damageAmount);
-
-			if (unitTarget.Damage(damageAmount, m_spell.spellschool(), &m_cast.GetExecuter(), damage_type::MagicalAbility) > 0)
-			{
-				float threat = static_cast<float>(damageAmount) * m_spell.threat_multiplier();
-				m_cast.GetExecuter().ApplySpellMod(spell_mod_op::Threat, m_spell.id(), threat);
-				unitTarget.threatened(m_cast.GetExecuter(), threat);
-			}
-
-			// Log spell damage to client
-			m_cast.GetExecuter().SpellDamageLog(unitTarget.GetGuid(), damageAmount, m_spell.spellschool(), DamageFlags::None, m_spell);
-			
-			// Trigger proc events for spell damage
-			m_cast.GetExecuter().TriggerProcEvent(spell_proc_flags::DoneSpellMagicDmgClassNeg, &unitTarget, damageAmount, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
-			unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMagicDmgClassNeg, &m_cast.GetExecuter(), damageAmount, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleSchoolDamage(ctx);
 	}
 
 	void SingleCastState::SpellEffectEnvironmentalDamage(const proto::SpellEffect& effect)
 	{
-		auto& effectTargets = m_effectTargetsScratch;
-		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
-		{
-			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
-			return;
-		}
-
-		for (auto* targetObject : effectTargets)
-		{
-			if (!targetObject->IsUnit())
-			{
-				continue;
-			}
-
-			auto& unitTarget = targetObject->AsUnit();
-
-			// Environmental damage uses base points as a percentage of max HP
-			const int32 basePoints = CalculateEffectBasePoints(effect);
-			const uint32 maxHealth = unitTarget.GetMaxHealth();
-			uint32 damageAmount = static_cast<uint32>(static_cast<float>(maxHealth) * static_cast<float>(basePoints) / 100.0f);
-			if (damageAmount < 1)
-			{
-				damageAmount = 1;
-			}
-
-			// Apply as physical damage (school from spell)
-			const uint32 actualDamage = unitTarget.Damage(damageAmount, m_spell.spellschool(), &m_cast.GetExecuter(), damage_type::PhysicalAbility);
-
-			// Determine environmental damage type from miscvaluea (0=Fall, 1=Drowning, 2=Lava, 3=Fire)
-			const auto envDamageType = static_cast<EnvironmentalDamageType>(effect.miscvaluea());
-
-			// Send environmental damage log to the target's net watcher
-			unitTarget.EnvironmentalDamageLog(unitTarget.GetGuid(), actualDamage, envDamageType);
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleEnvironmentalDamage(ctx);
 	}
 
 	void SingleCastState::SpellEffectTeleportUnits(const proto::SpellEffect& effect)
 	{
-		auto& effectTargets = m_effectTargetsScratch;
-		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
-		{
-			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
-			return;
-		}
-
-		for (auto* targetObject : effectTargets)
-		{
-			if (!targetObject->IsUnit())
-			{
-				continue;
-			}
-
-			auto& unitTarget = targetObject->AsUnit();
-			uint32 targetMap;
-			Vector3 targetLocation;
-			Radian targetRotation;
-
-			switch (effect.targetb())
-			{
-			case spell_effect_targets::DatabaseLocation:
-				targetMap = m_spell.targetmap();
-				targetLocation = { m_spell.targetx(), m_spell.targety(), m_spell.targetz() };
-				targetRotation = { m_spell.targeto() };
-				break;
-			case spell_effect_targets::CasterLocation:
-				targetMap = m_context.GetWorldInstance()->GetMapId();
-				targetLocation = m_cast.GetExecuter().GetPosition();
-				targetRotation = m_cast.GetExecuter().GetFacing();
-				break;
-			case spell_effect_targets::Home:
-				targetMap = m_cast.GetExecuter().GetBindMap();
-				targetLocation = m_cast.GetExecuter().GetBindPosition();
-				targetRotation = m_cast.GetExecuter().GetBindFacing();
-				break;
-			default:
-				WLOG("Unsupported teleport target location value for spell " << m_spell.id());
-				return;
-			}
-
-			if (targetMap != m_context.GetWorldInstance()->GetMapId())
-			{
-				WLOG("TODO: Teleport to different map is not yet implemented!");
-			}
-			else
-			{
-				unitTarget.TeleportOnMap(targetLocation, targetRotation);
-			}
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleTeleportUnits(ctx);
 	}
 
 	void SingleCastState::SpellEffectApplyAura(const proto::SpellEffect& effect)
 	{
-		// Okay, so we have an ApplyAura effect here. Here comes the thing:
-
-		// One spell can apply multiple auras, either on the same target or even on multiple targets.
-		// For example, a buff can apply two auras to the casting unit, which for example buffs the armor value and adds an on hit trigger effect to slow a potential attacker.
-
-		// Both these "auras" would be displayed as one aura icon on the casting unit in the UI because its the same spell that triggered both these auras.
-		// However, the game can also apply multiple auras. For example, a spell could apply one aura to the target and a second aura to the caster at the same time.
-		// These would be considered two auras in the UI and on the client, because it's on two targets.
-
-		// The same goes for auras that are applied to multiple targets at once, like an AoE HOT effect or something like that.
-
-		// So what we want to do in this ApplyAuraEffect is to create one AuraContainer for each target that is affected and add an aura to that container.
-		// After all effects have been processed, we then want to apply all created aura containers for their respective targets.
-
-		auto& effectTargets = m_effectTargetsScratch;
-		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
-		{
-			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
-			return;
-		}
-
-		if (effectTargets.empty())
-		{
-			WLOG("No targets found to for spell " << m_spell.id() << " [" << m_spell.name() << "] effect " << effect.index());
-			return;
-		}
-
-		for (auto* targetObject : effectTargets)
-		{
-			if (!targetObject->IsUnit())
-			{
-				continue;
-			}
-
-			MarkAffectedTarget(*targetObject);
-			auto& unitTarget = targetObject->AsUnit();
-
-			// Threaten target on aura application if the target is not ourself
-			if (unitTarget.GetGuid() != m_cast.GetExecuter().GetGuid())
-			{
-				unitTarget.threatened(m_cast.GetExecuter(), 0.0f);
-			}
-
-			auto& container = GetOrCreateAuraContainer(unitTarget);
-			container.AddAuraEffect(effect, CalculateEffectBasePoints(effect));
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleApplyAura(ctx);
 	}
 
 	void SingleCastState::SpellEffectPersistentAreaAura(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandlePersistentAreaAura(ctx);
 	}
 
 	void SingleCastState::SpellEffectDrainPower(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleDrainPower(ctx);
 	}
 
 	void SingleCastState::SpellEffectHeal(const proto::SpellEffect& effect)
 	{
-		auto& effectTargets = m_effectTargetsScratch;
-		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
-		{
-			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
-			return;
-		}
-
-		for (auto* targetObject : effectTargets)
-		{
-			if (!targetObject->IsUnit())
-			{
-				continue;
-			}
-
-			MarkAffectedTarget(*targetObject);
-			auto& unitTarget = targetObject->AsUnit();
-
-			// TODO: Do real calculation including crit chance, miss chance, resists, etc.
-			uint32 healingAmount = std::max<int32>(0, CalculateEffectBasePoints(effect));
-
-			// Add spell power to heal
-			const float spellHealing = m_cast.GetExecuter().GetCalculatedModifierValue(unit_mods::HealingDone);
-			if (spellHealing > 0.0f && effect.powerbonusfactor() > 0.0f)
-			{
-				healingAmount += static_cast<uint32>(spellHealing * effect.powerbonusfactor());
-			}
-
-			const float healingTakenBonus = unitTarget.GetCalculatedModifierValue(unit_mods::HealingTaken);
-			if (healingTakenBonus > 0.0f || -healingTakenBonus < healingAmount)
-			{
-				healingAmount += static_cast<uint32>(healingTakenBonus);
-			}
-			else
-			{
-				healingAmount = 0;
-			}
-
-			// Crit chance (TODO: Calculate crit chance)
-			float critChance = 5.0f;		// Default crit chance for healing spells
-			m_cast.GetExecuter().ApplySpellMod(spell_mod_op::CritChance, m_spell.id(), critChance);
-
-			bool isCrit = false;
-			if (critChance > 0.0f)
-			{
-				std::uniform_real_distribution<float> critDistribution(0.0f, 100.0f);
-				if (critDistribution(randomGenerator) < critChance)
-				{
-					// Crit heal (double healing amount)
-					healingAmount = static_cast<uint32>(healingAmount * 2.0f);
-					isCrit = true;
-				}
-			}
-
-			unitTarget.Heal(healingAmount, &m_cast.GetExecuter());
-
-			uint32 procFlags = proc_ex_flags::NormalHit;
-			if (isCrit)
-			{
-				procFlags |= proc_ex_flags::CriticalHit;
-			}
-
-			// Trigger proc events for healing
-			m_cast.GetExecuter().TriggerProcEvent(spell_proc_flags::DoneSpellMagicDmgClassPos, &unitTarget, healingAmount, procFlags, m_spell.spellschool(), false, m_spell.familyflags());
-			unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMagicDmgClassPos, &m_cast.GetExecuter(), healingAmount, procFlags, m_spell.spellschool(), false, m_spell.familyflags());
-
-			GameUnitS& caster = m_cast.GetExecuter();
-			const uint32 spellId = m_spell.id();
-			m_context.SendPacketFromCaster(
-				[&unitTarget, &caster, spellId, healingAmount, isCrit](game::OutgoingPacket& out_packet)
-				{
-					out_packet.Start(game::realm_client_packet::SpellHealLog);
-					out_packet
-						<< io::write_packed_guid(unitTarget.GetGuid())
-						<< io::write_packed_guid(caster.GetGuid())
-						<< io::write<uint32>(spellId)
-						<< io::write<uint32>(healingAmount)
-						<< io::write<uint8>(isCrit);
-					out_packet.Finish();
-				});
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleHeal(ctx);
 	}
 
 	void SingleCastState::SpellEffectBind(const proto::SpellEffect& effect)
 	{
-		auto& effectTargets = m_effectTargetsScratch;
-		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
-		{
-			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
-			return;
-		}
-
-		for (auto* targetObject : effectTargets)
-		{
-			if (!targetObject->IsUnit())
-			{
-				continue;
-			}
-
-			MarkAffectedTarget(*targetObject);
-			auto& unitTarget = targetObject->AsUnit();
-			unitTarget.SetBinding(
-				unitTarget.GetWorldInstance()->GetMapId(),
-				unitTarget.GetPosition(),
-				unitTarget.GetFacing());
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleBind(ctx);
 	}
 
 	void SingleCastState::SpellEffectQuestComplete(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleQuestComplete(ctx);
 	}
 
 	void SingleCastState::SpellEffectWeaponDamageNoSchool(const proto::SpellEffect& effect)
 	{
-		InternalSpellEffectWeaponDamage(effect, SpellSchool::Normal);
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleWeaponDamageNoSchool(ctx);
 	}
 
 	void SingleCastState::SpellEffectCreateItem(const proto::SpellEffect& effect)
 	{
-		// Get item entry
-		const auto* item = m_cast.GetExecuter().GetProject().items.getById(effect.itemtype());
-		if (!item)
-		{
-			ELOG("Could not find item by id " << effect.itemtype());
-			return;
-		}
-
-		auto& effectTargets = m_effectTargetsScratch;
-		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
-		{
-			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
-			return;
-		}
-
-		for (auto* targetObject : effectTargets)
-		{
-			if (!targetObject->IsPlayer())
-			{
-				continue;
-			}
-
-			MarkAffectedTarget(*targetObject);
-			auto& playerTarget = targetObject->AsPlayer();
-
-			const int32 itemCount = CalculateEffectBasePoints(effect);
-			if (itemCount <= 0)
-			{
-				WLOG("Effect base points of spell " << m_spell.id() << " resulted in <= 0, so no items could be created");
-				return;
-			}
-
-			const InventoryChangeFailure result = playerTarget.GetInventory().CreateItems(*item, itemCount);
-			if (result != inventory_change_failure::Okay)
-			{
-				ELOG("Failed to add item: " << result);
-				return;
-			}
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleCreateItem(ctx);
 	}
 
 	void SingleCastState::SpellEffectEnergize(const proto::SpellEffect& effect)
 	{
-		int32 powerType = effect.miscvaluea();
-		if (powerType < 0 || powerType > 2) 
-		{
-			return;
-		}
-
-		auto& effectTargets = m_effectTargetsScratch;
-		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
-		{
-			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
-			return;
-		}
-
-		for (auto* targetObject : effectTargets)
-		{
-			if (!targetObject->IsUnit())
-			{
-				continue;
-			}
-
-			MarkAffectedTarget(*targetObject);
-			auto& unitTarget = targetObject->AsUnit();
-			uint32 power = CalculateEffectBasePoints(effect);
-
-			uint32 curPower = unitTarget.Get<uint32>(object_fields::Mana + powerType);
-			uint32 maxPower = unitTarget.Get<uint32>(object_fields::MaxMana + powerType);
-			if (curPower + power > maxPower)
-			{
-				power = maxPower - curPower;
-				curPower = maxPower;
-			}
-			else
-			{
-				curPower += power;
-			}
-
-			unitTarget.Set<uint32>(object_fields::Mana + powerType, curPower);
-
-			GameUnitS& caster = m_cast.GetExecuter();
-			const uint32 spellId = m_spell.id();
-			m_context.SendPacketFromCaster(
-				[&unitTarget, &caster, spellId, powerType, power](game::OutgoingPacket& out_packet)
-				{
-					out_packet.Start(game::realm_client_packet::SpellEnergizeLog);
-					out_packet
-						<< io::write_packed_guid(unitTarget.GetGuid())
-						<< io::write_packed_guid(caster.GetGuid())
-						<< io::write<uint32>(spellId)
-						<< io::write<uint32>(powerType)
-						<< io::write<uint32>(power);
-					out_packet.Finish();
-				});
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleEnergize(ctx);
 	}
 
 	void SingleCastState::SpellEffectWeaponPercentDamage(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleWeaponPercentDamage(ctx);
 	}
 
 	void SingleCastState::SpellEffectOpenLock(const proto::SpellEffect& effect)
 	{
-		GamePlayerS* playerCaster = m_context.GetPlayerExecutor();
-		if (!playerCaster)
-		{
-			WLOG("Only players can open locks!");
-			return;
-		}
-
-		auto& effectTargets = m_effectTargetsScratch;
-		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
-		{
-			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
-			return;
-		}
-
-		for (auto* targetObject : effectTargets)
-		{
-			if (targetObject->IsWorldObject())
-			{
-				targetObject->AsObject().Use(*playerCaster);
-			}
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleOpenLock(ctx);
 	}
 
 	void SingleCastState::SpellEffectApplyAreaAuraParty(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleApplyAreaAuraParty(ctx);
 	}
 
 	void SingleCastState::SpellEffectDispel(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleDispel(ctx);
 	}
 
 	void SingleCastState::SpellEffectSummon(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleSummon(ctx);
 	}
 
 	void SingleCastState::SpellEffectSummonPet(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleSummonPet(ctx);
 	}
 
 	void SingleCastState::SpellEffectWeaponDamage(const proto::SpellEffect& effect)
 	{
-		InternalSpellEffectWeaponDamage(effect, static_cast<SpellSchool>(m_spell.spellschool()));
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleWeaponDamage(ctx);
 	}
 
 	void SingleCastState::SpellEffectProficiency(const proto::SpellEffect& effect)
 	{
-		auto& effectTargets = m_effectTargetsScratch;
-		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
-		{
-			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
-			return;
-		}
-
-		// Get proficiency ID from the effect's miscvaluea field
-		const uint32 proficiencyId = effect.miscvaluea();
-		if (proficiencyId == 0)
-		{
-			WLOG("Spell " << m_spell.id() << " has Proficiency effect with no proficiency ID");
-			return;
-		}
-
-		for (auto* targetObject : effectTargets)
-		{
-			if (!targetObject->IsUnit())
-			{
-				continue;
-			}
-
-			MarkAffectedTarget(*targetObject);
-			auto& unitTarget = targetObject->AsUnit();
-
-			// Add the proficiency by ID
-			unitTarget.AddProficiency(proficiencyId);
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleProficiency(ctx);
 	}
 
 	void SingleCastState::SpellEffectPowerBurn(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandlePowerBurn(ctx);
 	}
 
 	void SingleCastState::SpellEffectTriggerSpell(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleTriggerSpell(ctx);
 	}
 
 	void SingleCastState::SpellEffectScript(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleScript(ctx);
 	}
 
 	void SingleCastState::SpellEffectAddComboPoints(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleAddComboPoints(ctx);
 	}
 
 	void SingleCastState::SpellEffectDuel(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleDuel(ctx);
 	}
 
 	void SingleCastState::SpellEffectCharge(const proto::SpellEffect& effect)
 	{
-		auto& effectTargets = m_effectTargetsScratch;
-		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
-		{
-			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
-			return;
-		}
-
-		for (auto* targetObject : effectTargets)
-		{
-			if (!targetObject->IsUnit())
-			{
-				continue;
-			}
-
-			MarkAffectedTarget(*targetObject);
-			auto& unitTarget = targetObject->AsUnit();
-
-			auto& mover = m_cast.GetExecuter().GetMover();
-
-			const Radian orientation = unitTarget.GetAngle(m_cast.GetExecuter());
-
-			const Vector3 target = unitTarget.GetMover().GetCurrentLocation().GetRelativePosition(orientation.GetValueRadians(), m_cast.GetExecuter().GetMeleeReach() * 0.5f);
-			mover.MoveTo(target, 35.0f, m_cast.GetExecuter().GetMeleeReach() * 0.8f);
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleCharge(ctx);
 	}
 
 	void SingleCastState::SpellEffectAttackMe(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleAttackMe(ctx);
 	}
 
 	void SingleCastState::SpellEffectNormalizedWeaponDamage(const proto::SpellEffect& effect)
 	{
-		InternalSpellEffectWeaponDamage(effect, static_cast<SpellSchool>(m_spell.spellschool()));
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleNormalizedWeaponDamage(ctx);
 	}
 
 	void SingleCastState::SpellEffectStealBeneficialBuff(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleStealBeneficialBuff(ctx);
 	}
 
 	void SingleCastState::SpellEffectInterruptSpellCast(const proto::SpellEffect& effect)
 	{
-		auto& effectTargets = m_effectTargetsScratch;
-		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
-		{
-			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
-			return;
-		}
-
-		for (auto* targetObject : effectTargets)
-		{
-			if (!targetObject->IsUnit())
-			{
-				continue;
-			}
-
-			// Interrupt spell cast (and apply cooldown)
-			targetObject->AsUnit().CancelCast(spell_interrupt_flags::Interrupt, m_spell.duration());
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleInterruptSpellCast(ctx);
 	}
 
 	void SingleCastState::SpellEffectLearnSpell(const proto::SpellEffect& effect)
 	{
-		uint32 spellId = effect.triggerspell();
-		if (!spellId)
-		{
-			ELOG("No spell index to learn set for spell id " << m_spell.id());
-			return;
-		}
-
-		// Look for spell
-		const auto* spell = m_cast.GetExecuter().GetProject().spells.getById(spellId);
-		if (!spell)
-		{
-			ELOG("Unknown spell index to learn set for spell id " << m_spell.id() << ": " << spellId);
-			return;
-		}
-
-		auto& effectTargets = m_effectTargetsScratch;
-		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
-		{
-			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
-			return;
-		}
-
-		for (auto* targetObject : effectTargets)
-		{
-			if (!targetObject->IsUnit())
-			{
-				continue;
-			}
-
-			MarkAffectedTarget(*targetObject);
-			auto& unitTarget = targetObject->AsUnit();
-			unitTarget.AddSpell(spellId);
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleLearnSpell(ctx);
 	}
 
 	void SingleCastState::SpellEffectScriptEffect(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleScriptEffect(ctx);
 	}
 
 	void SingleCastState::SpellEffectDispelMechanic(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleDispelMechanic(ctx);
 	}
 
 	void SingleCastState::SpellEffectResurrect(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleResurrect(ctx);
 	}
 
 	void SingleCastState::SpellEffectResurrectNew(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleResurrectNew(ctx);
 	}
 
 	void SingleCastState::SpellEffectKnockBack(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleKnockBack(ctx);
 	}
 
 	void SingleCastState::SpellEffectSkill(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleSkill(ctx);
 	}
 
 	void SingleCastState::SpellEffectTransDoor(const proto::SpellEffect& effect)
 	{
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleTransDoor(ctx);
 	}
 
 	void SingleCastState::SpellEffectResetAttributePoints(const proto::SpellEffect& effect)
 	{
-		auto unitTarget = GetEffectUnitTarget(effect);
-		if (!unitTarget)
-		{
-			WLOG("Unable to resolve effect unit target!");
-			return;
-		}
-
-		MarkAffectedTarget(*unitTarget);
-
-		if (const std::shared_ptr<GamePlayerS> playerTarget = std::dynamic_pointer_cast<GamePlayerS>(unitTarget))
-		{
-			DLOG("Resetting attribute points for player!");
-			playerTarget->ResetAttributePoints();
-		}
-		else
-		{
-			WLOG("Target is not a player character!");
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleResetAttributePoints(ctx);
 	}
 
 	void SingleCastState::SpellEffectParry(const proto::SpellEffect& effect)
 	{
-		auto& effectTargets = m_effectTargetsScratch;
-		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
-		{
-			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
-			return;
-		}
-
-		for (auto* targetObject : effectTargets)
-		{
-			if (!targetObject->IsUnit())
-			{
-				continue;
-			}
-
-			MarkAffectedTarget(*targetObject);
-			auto& unitTarget = targetObject->AsUnit();
-			unitTarget.NotifyCanParry(true);
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleParry(ctx);
 	}
 
 	void SingleCastState::SpellEffectBlock(const proto::SpellEffect& effect)
 	{
-		auto& effectTargets = m_effectTargetsScratch;
-		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
-		{
-			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
-			return;
-		}
-
-		for (auto* targetObject : effectTargets)
-		{
-			if (!targetObject->IsUnit())
-			{
-				continue;
-			}
-
-			MarkAffectedTarget(*targetObject);
-			auto& unitTarget = targetObject->AsUnit();
-			unitTarget.NotifyCanBlock(true);
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleBlock(ctx);
 	}
 
 	void SingleCastState::SpellEffectDodge(const proto::SpellEffect& effect)
 	{
-		auto& effectTargets = m_effectTargetsScratch;
-		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
-		{
-			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
-			return;
-		}
-
-		for (auto* targetObject : effectTargets)
-		{
-			if (!targetObject->IsUnit())
-			{
-				continue;
-			}
-
-			MarkAffectedTarget(*targetObject);
-			auto& unitTarget = targetObject->AsUnit();
-			unitTarget.NotifyCanDodge(true);
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleDodge(ctx);
 	}
 
 	void SingleCastState::SpellEffectHealPct(const proto::SpellEffect& effect)
 	{
-		auto& effectTargets = m_effectTargetsScratch;
-		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
-		{
-			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
-			return;
-		}
-
-		for (auto* targetObject : effectTargets)
-		{
-			if (!targetObject->IsUnit())
-			{
-				continue;
-			}
-
-			MarkAffectedTarget(*targetObject);
-			auto& unitTarget = targetObject->AsUnit();
-
-			// TODO: Do real calculation including crit chance, miss chance, resists, etc.
-			int32 basePoints = CalculateEffectBasePoints(effect);
-			if (basePoints <= 0 || basePoints > 100)
-			{
-				WLOG("Spell " << m_spell.id() << " has invalid base points for spell Effect HealPct: " << basePoints << ". Will be clamped to 1-100.");
-				return;
-			}
-
-			basePoints = Clamp(basePoints, 1, 100);
-
-			const uint32 healAmount = static_cast<uint32>(floor(static_cast<float>(unitTarget.GetMaxHealth()) * (static_cast<float>(basePoints) / 100.0f)));
-			unitTarget.Heal(healAmount, &m_cast.GetExecuter());
-
-			// TODO: Heal log to show healing numbers at the clients
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleHealPct(ctx);
 	}
 
 	void SingleCastState::SpellEffectAddExtraAttacks(const proto::SpellEffect& effect)
 	{
-		const int32 numAttacks = CalculateEffectBasePoints(effect);
-		if (numAttacks <= 0)
-		{
-			WLOG("Unable to perform extra attacks, because base points of spell " << m_spell.id() << " rolled for " << numAttacks << " but have to be >= 1");
-			return;
-		}
-
-		for (int32 i = 0; i < numAttacks; ++i)
-		{
-			MarkAffectedTarget(m_cast.GetExecuter());
-			m_cast.GetExecuter().OnAttackSwing();
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleAddExtraAttacks(ctx);
 	}
 
 	void SingleCastState::SpellEffectResetTalents(const proto::SpellEffect& effect)
 	{
-		auto& effectTargets = m_effectTargetsScratch;
-		if (!GetEffectTargets(effect, effectTargets) || effectTargets.empty())
-		{
-			ELOG("Failed to cast spell effect: Unable to resolve effect targets");
-			return;
-		}
-
-		for (auto* targetObject : effectTargets)
-		{
-			if (!targetObject->IsUnit())
-			{
-				continue;
-			}
-
-			MarkAffectedTarget(*targetObject);
-
-			if (targetObject->IsPlayer())
-			{
-				targetObject->AsPlayer().ResetTalents();
-			}
-			else
-			{
-				WLOG("Target is not a player character!");
-			}
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleResetTalents(ctx);
 	}
 
 	bool SingleCastState::GetEffectTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets)
@@ -1762,230 +1362,12 @@ namespace mmo
 
 	void SingleCastState::InternalSpellEffectWeaponDamage(const proto::SpellEffect& effect, SpellSchool school)
 	{
-		auto unitTarget = GetEffectUnitTarget(effect);
-		if (!unitTarget)
-		{
-			return;
-		}
-
-		MarkAffectedTarget(*unitTarget);
-
-		auto& executer = m_cast.GetExecuter();
-		const float minDamage = executer.Get<float>(object_fields::MinDamage);
-		const float maxDamage = executer.Get<float>(object_fields::MaxDamage);
-		const uint32 casterLevel = executer.Get<uint32>(object_fields::Level);
-		const int32 bonus = CalculateEffectBasePoints(effect);
-		const auto& combatSettings = executer.GetCombatSettings();
-
-		// Auto-attack spells (AutoRepeat) use the full melee combat table and send
-		// AttackerStateUpdate (white damage text) instead of SpellDamageLog (yellow).
-		const bool isAutoAttack = (m_spell.attributes(1) & spell_attributes_b::AutoRepeat) != 0;
-		if (isAutoAttack)
-		{
-			// Roll the full melee combat table
-			const MeleeAttackOutcome outcome = executer.RollMeleeOutcomeAgainst(*unitTarget, weapon_attack::BaseAttack);
-
-			// Calculate base weapon damage
-			std::uniform_real_distribution distribution(minDamage + bonus, maxDamage + bonus + 1.0f);
-			uint32 totalDamage = static_cast<uint32>(distribution(randomGenerator));
-
-			// Apply damage mod
-			totalDamage = executer.CalculateModifiedValue(unit_mods::Damage, totalDamage);
-
-			uint32 hitInfo = hit_info::NormalSwing;
-			uint32 victimState = victim_state::Normal;
-			bool hit = true;
-
-			switch (outcome)
-			{
-			case melee_attack_outcome::Crit:
-				hitInfo |= hit_info::CriticalHit;
-				totalDamage = static_cast<uint32>(totalDamage * combatSettings.melee_crit_multiplier());
-				break;
-
-			case melee_attack_outcome::Crushing:
-				hitInfo |= hit_info::Crushing;
-				totalDamage = static_cast<uint32>(totalDamage * combatSettings.crushing_damage_multiplier());
-				break;
-
-			case melee_attack_outcome::Glancing:
-				hitInfo |= hit_info::Glancing;
-				{
-					const int32 skillDiff = unitTarget->GetMaxSkillValueForLevel(unitTarget->GetLevel()) - executer.GetMaxSkillValueForLevel(casterLevel);
-					float damageReduction = std::min(combatSettings.glancing_max_reduction(), static_cast<float>(skillDiff) * combatSettings.glancing_reduction_per_skill_diff());
-					float glancingMod = 1.0f - (damageReduction / 100.0f);
-					totalDamage = static_cast<uint32>(totalDamage * glancingMod);
-				}
-				break;
-
-			case melee_attack_outcome::Miss:
-				hitInfo |= hit_info::Miss;
-				victimState = victim_state::Normal;
-				hit = false;
-				totalDamage = 0;
-				break;
-
-			case melee_attack_outcome::Parry:
-				hitInfo |= hit_info::Miss;
-				victimState = victim_state::Parry;
-				hit = false;
-				totalDamage = 0;
-				break;
-
-			case melee_attack_outcome::Dodge:
-				hitInfo |= hit_info::Miss;
-				victimState = victim_state::Dodge;
-				hit = false;
-				totalDamage = 0;
-				break;
-
-			case melee_attack_outcome::Normal:
-				break;
-
-			default:
-				break;
-			}
-
-			// Check for block after hit determination
-			uint32 blockedDamage = 0;
-			if (hit && unitTarget->CanBlock() && unitTarget->IsFacingTowards(executer))
-			{
-				std::uniform_real_distribution blockChanceDist(0.0f, 100.0f);
-				if (blockChanceDist(randomGenerator) < unitTarget->BlockChance())
-				{
-					uint32 blockValue = combatSettings.default_block_value();
-					blockedDamage = std::min(blockValue, totalDamage);
-					totalDamage -= blockedDamage;
-
-					hitInfo |= hit_info::Block;
-					victimState = victim_state::Blocks;
-
-					unitTarget->OnBlock();
-				}
-			}
-
-			// Apply armor reduction for physical damage
-			if (hit && totalDamage > 0 && school == spell_school::Normal)
-			{
-				totalDamage = unitTarget->CalculateArmorReducedDamage(casterLevel, totalDamage);
-			}
-
-			// Apply spell mods
-			if (hit && totalDamage > 0)
-			{
-				executer.ApplySpellMod(spell_mod_op::Damage, m_spell.id(), totalDamage);
-			}
-
-			// Deal damage
-			uint32 absorbedDamage = 0;
-			if (hit && totalDamage > 0)
-			{
-				if (unitTarget->Damage(totalDamage, school, &executer, damage_type::AttackSwing) > 0)
-				{
-					unitTarget->threatened(executer, static_cast<float>(totalDamage));
-				}
-			}
-
-			// Trigger defense events
-			if (outcome == melee_attack_outcome::Parry)
-			{
-				unitTarget->OnParry();
-			}
-			else if (outcome == melee_attack_outcome::Dodge)
-			{
-				unitTarget->OnDodge();
-			}
-
-			// Send melee damage packet (white text) instead of SpellDamageLog (yellow text)
-			executer.SendAttackerStateUpdate(unitTarget->GetGuid(), hitInfo, victimState, totalDamage, school, absorbedDamage, 0, blockedDamage);
-
-			// Generate rage based on damage done
-			if (totalDamage > 0 && executer.Get<uint32>(object_fields::PowerType) == power_type::Rage)
-			{
-				const float rageConversion = static_cast<float>(
-					(combatSettings.rage_conversion_quadratic() * casterLevel * casterLevel) +
-					combatSettings.rage_conversion_linear() * casterLevel) +
-					combatSettings.rage_conversion_constant();
-				const float addRage = (static_cast<float>(totalDamage) / rageConversion) * combatSettings.rage_damage_factor();
-				executer.AddPower(power_type::Rage, addRage);
-			}
-
-			// Trigger melee auto-attack proc events
-			if (hit)
-			{
-				uint32 procEx = 0;
-				if (hitInfo & hit_info::CriticalHit)
-				{
-					procEx |= proc_ex_flags::CriticalHit;
-				}
-				else
-				{
-					procEx |= proc_ex_flags::NormalHit;
-				}
-
-				if (victimState == victim_state::Dodge)
-				{
-					procEx |= proc_ex_flags::Dodge;
-				}
-				else if (victimState == victim_state::Parry)
-				{
-					procEx |= proc_ex_flags::Parry;
-				}
-				else if (victimState == victim_state::Blocks)
-				{
-					procEx |= proc_ex_flags::Block;
-				}
-
-				executer.TriggerProcEvent(spell_proc_flags::DoneMeleeAutoAttack, unitTarget.get(), totalDamage, procEx, school, false);
-				unitTarget->TriggerProcEvent(spell_proc_flags::TakenMeleeAutoAttack, &executer, totalDamage, procEx, school, false);
-			}
-		}
-		else
-		{
-			// Regular weapon damage spell (e.g., Heroic Strike, Mortal Strike)
-			// Uses simplified crit roll and SpellDamageLog
-
-			// Calculate damage between minimum and maximum damage
-			std::uniform_real_distribution distribution(minDamage + bonus, maxDamage + bonus + 1.0f);
-			uint32 totalDamage = static_cast<uint32>(distribution(randomGenerator));
-
-			// Apply damage mod
-			totalDamage = executer.CalculateModifiedValue(unit_mods::Damage, totalDamage);
-
-			// Physical damage is reduced by armor
-			if (school == spell_school::Normal)
-			{
-				totalDamage = unitTarget->CalculateArmorReducedDamage(casterLevel, totalDamage);
-			}
-
-			executer.ApplySpellMod(spell_mod_op::Damage, m_spell.id(), totalDamage);
-
-			// Get configurable crit chance and multiplier from combat settings
-			float critChance = combatSettings.spell_weapon_default_crit_chance();
-			std::uniform_real_distribution critDistribution(0.0f, 100.0f);
-
-			executer.ApplySpellMod(spell_mod_op::CritChance, m_spell.id(), critChance);
-
-			bool isCrit = false;
-			if (critDistribution(randomGenerator) < critChance)
-			{
-				isCrit = true;
-				totalDamage = static_cast<uint32>(totalDamage * combatSettings.spell_weapon_crit_multiplier());
-			}
-
-			// Log spell damage to client
-			if (unitTarget->Damage(totalDamage, school, &executer, damage_type::PhysicalAbility) > 0)
-			{
-				float threat = static_cast<float>(totalDamage) * m_spell.threat_multiplier();
-				executer.ApplySpellMod(spell_mod_op::Threat, m_spell.id(), threat);
-				unitTarget->threatened(executer, threat);
-			}
-			executer.SpellDamageLog(unitTarget->GetGuid(), totalDamage, school, isCrit ? DamageFlags::Crit : DamageFlags::None, m_spell);
-
-			// Trigger proc events for spell damage
-			executer.TriggerProcEvent(spell_proc_flags::DoneSpellMeleeDmgClass, unitTarget.get(), totalDamage, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
-			unitTarget->TriggerProcEvent(spell_proc_flags::TakenSpellMeleeDmgClass, &executer, totalDamage, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
-		}
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
+		SpellEffects::HandleInternalWeaponDamage(ctx, school);
 	}
 
 	AuraContainer& SingleCastState::GetOrCreateAuraContainer(GameUnitS& target)

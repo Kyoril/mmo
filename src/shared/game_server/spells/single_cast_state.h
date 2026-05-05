@@ -4,8 +4,10 @@
 
 #include "base/typedefs.h"
 
+#include <functional>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "game_server/spells/aura_container.h"
 #include "game_server/objects/game_unit_s.h"
@@ -171,8 +173,10 @@ namespace mmo
 		bool m_hasFinished;
 		Countdown m_countdown;
 		Countdown m_impactCountdown;
-		signal<void()> completedEffects;
-		scoped_connection m_completedEffectsExecution;
+		// m_postEffectCallbacks: callbacks pushed by ConsumeItem(delayed=true) and drained at
+		// the end of ApplyAllEffects(). Accumulation-safe: the m_tookCastItem guard inside
+		// removeItem prevents double-removal even if ConsumeItem is called twice.
+		std::vector<std::function<void()>> m_postEffectCallbacks;
 		scoped_connection m_onTargetDied;
 		scoped_connection m_onTargetRemoved;
 		float m_x, m_y, m_z;
