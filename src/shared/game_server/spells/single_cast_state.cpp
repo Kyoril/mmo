@@ -189,16 +189,16 @@ namespace mmo
 		}
 	}
 
-	std::pair<SpellCastResult, SpellCasting*> SingleCastState::StartCast(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, const GameTime castTime, const bool doReplacePreviousCast, uint64 itemGuid)
+	SpellCastResult SingleCastState::StartCast(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, const GameTime castTime, const bool doReplacePreviousCast, uint64 itemGuid)
 	{
 		if (!m_hasFinished && !doReplacePreviousCast)
 		{
-			return std::make_pair(spell_cast_result::FailedSpellInProgress, &m_casting);
+			return spell_cast_result::FailedSpellInProgress;
 		}
 
 		FinishChanneling();
 
-		SpellCasting& casting = CastSpell(
+		CastSpell(
 			cast,
 			spell,
 			target,
@@ -206,7 +206,7 @@ namespace mmo
 			itemGuid,
 			false);
 
-		return std::make_pair(spell_cast_result::CastOkay, &casting);
+		return spell_cast_result::CastOkay;
 	}
 
 	void SingleCastState::StopCast(SpellInterruptFlags reason, const GameTime interruptCooldown)
@@ -673,7 +673,7 @@ namespace mmo
 		}
 
 		m_endNotified = true;
-		m_casting.ended(succeeded);
+		m_cast.ended(succeeded);
 		m_selfHold.reset();
 	}
 

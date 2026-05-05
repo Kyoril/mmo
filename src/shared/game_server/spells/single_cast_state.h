@@ -40,7 +40,7 @@ namespace mmo
 
 		void Activate() override;
 
-		std::pair<SpellCastResult, SpellCasting*> StartCast(
+		SpellCastResult StartCast(
 			SpellCast& cast,
 			const proto::SpellEntry& spell,
 			const SpellTargetMap& target,
@@ -53,11 +53,6 @@ namespace mmo
 		void OnUserStartsMoving() override;
 
 		void FinishChanneling() override;
-
-		SpellCasting& GetCasting()
-		{
-			return m_casting;
-		}
 
 	private:
 		bool Validate();
@@ -119,7 +114,6 @@ namespace mmo
 		SpellCast& m_cast;
 		const proto::SpellEntry& m_spell;
 		SpellTargetMap m_target;
-		SpellCasting m_casting;
 		bool m_hasFinished;
 		Countdown m_countdown;
 		Countdown m_impactCountdown;
