@@ -7,6 +7,7 @@
 namespace mmo
 {
 	class GameUnitS;
+	class GameObjectS;
 
 	class TileSubscriber
 	{

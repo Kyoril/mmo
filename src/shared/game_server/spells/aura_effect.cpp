@@ -24,8 +24,11 @@ namespace mmo
 		, m_effect(effect)
 		, m_tickCountdown(timers)
 	{
-		m_casterSpellPower = m_container.GetCaster()->GetCalculatedModifierValue(unit_mods::SpellDamage);
-		m_casterSpellHeal = m_container.GetCaster()->GetCalculatedModifierValue(unit_mods::HealingDone);
+		if (const auto* caster = m_container.GetCaster())
+		{
+			m_casterSpellPower = caster->GetCalculatedModifierValue(unit_mods::SpellDamage);
+			m_casterSpellHeal = caster->GetCalculatedModifierValue(unit_mods::HealingDone);
+		}
 
 		m_onTick = m_tickCountdown.ended.connect(this, &AuraEffect::OnTick);
 

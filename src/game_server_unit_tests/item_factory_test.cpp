@@ -131,6 +131,12 @@ namespace
 			return *this;
 		}
 
+		ItemEntryBuilder& WithInventoryType(inventory_type::Type invType)
+		{
+			m_entry.set_inventorytype(invType);
+			return *this;
+		}
+
 		proto::ItemEntry Build() const
 		{
 			return m_entry;
@@ -209,6 +215,7 @@ TEST_CASE("ItemFactory - Container creation", "[item_factory]")
 	{
 		const auto entry = ItemEntryBuilder()
 			.WithClass(mock_item_class::Container)
+			.WithInventoryType(inventory_type::Bag)
 			.WithContainerSlots(16)
 			.Build();
 
@@ -231,6 +238,7 @@ TEST_CASE("ItemFactory - Container creation", "[item_factory]")
 	{
 		const auto entry = ItemEntryBuilder()
 			.WithClass(mock_item_class::Quiver)
+			.WithInventoryType(inventory_type::Quiver)
 			.WithContainerSlots(20)
 			.Build();
 
@@ -344,6 +352,7 @@ TEST_CASE("ItemFactory - Container assignment", "[item_factory]")
 		// Create and setup a bag
 		const auto bagEntry = ItemEntryBuilder()
 			.WithClass(mock_item_class::Container)
+			.WithInventoryType(inventory_type::Bag)
 			.WithContainerSlots(16)
 			.Build();
 
