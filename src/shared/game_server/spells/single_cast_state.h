@@ -105,56 +105,6 @@ namespace mmo
 
 		void MeleeSpecialAttack(const proto::SpellEffect& effect, bool basepointsArePct);
 
-		// Spell effect handlers implemented in spell_effects.cpp and spell_effects_scripted.cpp
-
-		void SpellEffectInstantKill(const proto::SpellEffect& effect);
-		void SpellEffectDummy(const proto::SpellEffect& effect);
-		void SpellEffectSchoolDamage(const proto::SpellEffect& effect);
-		void SpellEffectEnvironmentalDamage(const proto::SpellEffect& effect);
-		void SpellEffectTeleportUnits(const proto::SpellEffect& effect);
-		void SpellEffectApplyAura(const proto::SpellEffect& effect);
-		void SpellEffectPersistentAreaAura(const proto::SpellEffect& effect);
-		void SpellEffectDrainPower(const proto::SpellEffect& effect);
-		void SpellEffectHeal(const proto::SpellEffect& effect);
-		void SpellEffectBind(const proto::SpellEffect& effect);
-		void SpellEffectQuestComplete(const proto::SpellEffect& effect);
-		void SpellEffectWeaponDamageNoSchool(const proto::SpellEffect& effect);
-		void SpellEffectCreateItem(const proto::SpellEffect& effect);
-		void SpellEffectEnergize(const proto::SpellEffect& effect);
-		void SpellEffectWeaponPercentDamage(const proto::SpellEffect& effect);
-		void SpellEffectOpenLock(const proto::SpellEffect& effect);
-		void SpellEffectApplyAreaAuraParty(const proto::SpellEffect& effect);
-		void SpellEffectDispel(const proto::SpellEffect& effect);
-		void SpellEffectSummon(const proto::SpellEffect& effect);
-		void SpellEffectSummonPet(const proto::SpellEffect& effect);
-		void SpellEffectWeaponDamage(const proto::SpellEffect& effect);
-		void SpellEffectProficiency(const proto::SpellEffect& effect);
-		void SpellEffectPowerBurn(const proto::SpellEffect& effect);
-		void SpellEffectTriggerSpell(const proto::SpellEffect& effect);
-		void SpellEffectScript(const proto::SpellEffect& effect);
-		void SpellEffectAddComboPoints(const proto::SpellEffect& effect);
-		void SpellEffectDuel(const proto::SpellEffect& effect);
-		void SpellEffectCharge(const proto::SpellEffect& effect);
-		void SpellEffectAttackMe(const proto::SpellEffect& effect);
-		void SpellEffectNormalizedWeaponDamage(const proto::SpellEffect& effect);
-		void SpellEffectStealBeneficialBuff(const proto::SpellEffect& effect);
-		void SpellEffectInterruptSpellCast(const proto::SpellEffect& effect);
-		void SpellEffectLearnSpell(const proto::SpellEffect& effect);
-		void SpellEffectScriptEffect(const proto::SpellEffect& effect);
-		void SpellEffectDispelMechanic(const proto::SpellEffect& effect);
-		void SpellEffectResurrect(const proto::SpellEffect& effect);
-		void SpellEffectResurrectNew(const proto::SpellEffect& effect);
-		void SpellEffectKnockBack(const proto::SpellEffect& effect);
-		void SpellEffectSkill(const proto::SpellEffect& effect);
-		void SpellEffectTransDoor(const proto::SpellEffect& effect);
-		void SpellEffectResetAttributePoints(const proto::SpellEffect& effect);
-		void SpellEffectParry(const proto::SpellEffect& effect);
-		void SpellEffectBlock(const proto::SpellEffect& effect);
-		void SpellEffectDodge(const proto::SpellEffect& effect);
-		void SpellEffectHealPct(const proto::SpellEffect& effect);
-		void SpellEffectAddExtraAttacks(const proto::SpellEffect& effect);
-		void SpellEffectResetTalents(const proto::SpellEffect& effect);
-
 	private:
 		bool GetEffectTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets);
 		void MarkAffectedTarget(GameObjectS& target);
@@ -207,6 +157,5 @@ namespace mmo
 		SpellCastContext m_context;
 		SpellTargetResolver m_targetResolver;
 
-		using EffectHandler = void (SingleCastState::*)(const proto::SpellEffect&);
 	};
 }

@@ -819,50 +819,55 @@ namespace mmo
 	void SingleCastState::ApplyEffect(const proto::SpellEffect& effect)
 	{
 		namespace se = spell_effects;
-		static const std::unordered_map<uint32, EffectHandler> kHandlers
+		using FreeHandler = void(*)(SpellEffectContext&);
+		static const std::unordered_map<uint32, FreeHandler> kHandlers
 		{
-			{se::Dummy, &SingleCastState::SpellEffectDummy},
-			{se::InstantKill, &SingleCastState::SpellEffectInstantKill},
-			{se::PowerDrain, &SingleCastState::SpellEffectDrainPower},
-			{se::Heal, &SingleCastState::SpellEffectHeal},
-			{se::Bind, &SingleCastState::SpellEffectBind},
-			{se::QuestComplete, &SingleCastState::SpellEffectQuestComplete},
-			{se::WeaponDamageNoSchool, &SingleCastState::SpellEffectWeaponDamageNoSchool},
-			{se::CreateItem, &SingleCastState::SpellEffectCreateItem},
-			{se::WeaponDamage, &SingleCastState::SpellEffectWeaponDamage},
-			{se::TeleportUnits, &SingleCastState::SpellEffectTeleportUnits},
-			{se::Energize, &SingleCastState::SpellEffectEnergize},
-			{se::WeaponPercentDamage, &SingleCastState::SpellEffectWeaponPercentDamage},
-			{se::OpenLock, &SingleCastState::SpellEffectOpenLock},
-			{se::Dispel, &SingleCastState::SpellEffectDispel},
-			{se::Summon, &SingleCastState::SpellEffectSummon},
-			{se::SummonPet, &SingleCastState::SpellEffectSummonPet},
-			{se::LearnSpell, &SingleCastState::SpellEffectLearnSpell},
-			{se::Resurrect, &SingleCastState::SpellEffectResurrect},
-			{se::ApplyAura, &SingleCastState::SpellEffectApplyAura},
-			{se::ApplyAreaAura, &SingleCastState::SpellEffectApplyAura},
-			{se::PersistentAreaAura, &SingleCastState::SpellEffectPersistentAreaAura},
-			{se::SchoolDamage, &SingleCastState::SpellEffectSchoolDamage},
-			{se::EnvironmentalDamage, &SingleCastState::SpellEffectEnvironmentalDamage},
-			{se::ResetAttributePoints, &SingleCastState::SpellEffectResetAttributePoints},
-			{se::Parry, &SingleCastState::SpellEffectParry},
-			{se::Block, &SingleCastState::SpellEffectBlock},
-			{se::Dodge, &SingleCastState::SpellEffectDodge},
-			{se::HealPct, &SingleCastState::SpellEffectHealPct},
-			{se::AddExtraAttacks, &SingleCastState::SpellEffectAddExtraAttacks},
-			{se::Charge, &SingleCastState::SpellEffectCharge},
-			{se::InterruptSpellCast, &SingleCastState::SpellEffectInterruptSpellCast},
-			{se::ResetTalents, &SingleCastState::SpellEffectResetTalents},
-			{se::Proficiency, &SingleCastState::SpellEffectProficiency}
+			{se::Dummy,                  SpellEffects::HandleDummy},
+			{se::InstantKill,            SpellEffects::HandleInstantKill},
+			{se::PowerDrain,             SpellEffects::HandleDrainPower},
+			{se::Heal,                   SpellEffects::HandleHeal},
+			{se::Bind,                   SpellEffects::HandleBind},
+			{se::QuestComplete,          SpellEffects::HandleQuestComplete},
+			{se::WeaponDamageNoSchool,   SpellEffects::HandleWeaponDamageNoSchool},
+			{se::CreateItem,             SpellEffects::HandleCreateItem},
+			{se::WeaponDamage,           SpellEffects::HandleWeaponDamage},
+			{se::TeleportUnits,          SpellEffects::HandleTeleportUnits},
+			{se::Energize,               SpellEffects::HandleEnergize},
+			{se::WeaponPercentDamage,    SpellEffects::HandleWeaponPercentDamage},
+			{se::OpenLock,               SpellEffects::HandleOpenLock},
+			{se::Dispel,                 SpellEffects::HandleDispel},
+			{se::Summon,                 SpellEffects::HandleSummon},
+			{se::SummonPet,              SpellEffects::HandleSummonPet},
+			{se::LearnSpell,             SpellEffects::HandleLearnSpell},
+			{se::Resurrect,              SpellEffects::HandleResurrect},
+			{se::ApplyAura,              SpellEffects::HandleApplyAura},
+			{se::ApplyAreaAura,          SpellEffects::HandleApplyAura},
+			{se::PersistentAreaAura,     SpellEffects::HandlePersistentAreaAura},
+			{se::SchoolDamage,           SpellEffects::HandleSchoolDamage},
+			{se::EnvironmentalDamage,    SpellEffects::HandleEnvironmentalDamage},
+			{se::ResetAttributePoints,   SpellEffects::HandleResetAttributePoints},
+			{se::Parry,                  SpellEffects::HandleParry},
+			{se::Block,                  SpellEffects::HandleBlock},
+			{se::Dodge,                  SpellEffects::HandleDodge},
+			{se::HealPct,                SpellEffects::HandleHealPct},
+			{se::AddExtraAttacks,        SpellEffects::HandleAddExtraAttacks},
+			{se::Charge,                 SpellEffects::HandleCharge},
+			{se::InterruptSpellCast,     SpellEffects::HandleInterruptSpellCast},
+			{se::ResetTalents,           SpellEffects::HandleResetTalents},
+			{se::Proficiency,            SpellEffects::HandleProficiency},
 		};
 
 		const auto it = kHandlers.find(effect.type());
-		if (it == kHandlers.end())
-		{
-			return;
-		}
+		if (it == kHandlers.end()) return;
 
-		(this->*(it->second))(effect);
+		std::vector<GameObjectS*> targets;
+		GetEffectTargets(effect, targets);
+		SpellEffectContext ctx{
+			m_context, effect, CalculateEffectBasePoints(effect), targets,
+			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
+			[this](GameObjectS& o) { MarkAffectedTarget(o); }
+		};
+		it->second(ctx);
 	}
 
 	int32 SingleCastState::CalculateEffectBasePoints(const proto::SpellEffect& effect)
@@ -880,475 +885,6 @@ namespace mmo
 		
 	}
 
-	void SingleCastState::SpellEffectInstantKill(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleInstantKill(ctx);
-	}
-
-	void SingleCastState::SpellEffectDummy(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleDummy(ctx);
-	}
-
-	void SingleCastState::SpellEffectSchoolDamage(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleSchoolDamage(ctx);
-	}
-
-	void SingleCastState::SpellEffectEnvironmentalDamage(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleEnvironmentalDamage(ctx);
-	}
-
-	void SingleCastState::SpellEffectTeleportUnits(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleTeleportUnits(ctx);
-	}
-
-	void SingleCastState::SpellEffectApplyAura(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleApplyAura(ctx);
-	}
-
-	void SingleCastState::SpellEffectPersistentAreaAura(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandlePersistentAreaAura(ctx);
-	}
-
-	void SingleCastState::SpellEffectDrainPower(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleDrainPower(ctx);
-	}
-
-	void SingleCastState::SpellEffectHeal(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleHeal(ctx);
-	}
-
-	void SingleCastState::SpellEffectBind(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleBind(ctx);
-	}
-
-	void SingleCastState::SpellEffectQuestComplete(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleQuestComplete(ctx);
-	}
-
-	void SingleCastState::SpellEffectWeaponDamageNoSchool(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleWeaponDamageNoSchool(ctx);
-	}
-
-	void SingleCastState::SpellEffectCreateItem(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleCreateItem(ctx);
-	}
-
-	void SingleCastState::SpellEffectEnergize(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleEnergize(ctx);
-	}
-
-	void SingleCastState::SpellEffectWeaponPercentDamage(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleWeaponPercentDamage(ctx);
-	}
-
-	void SingleCastState::SpellEffectOpenLock(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleOpenLock(ctx);
-	}
-
-	void SingleCastState::SpellEffectApplyAreaAuraParty(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleApplyAreaAuraParty(ctx);
-	}
-
-	void SingleCastState::SpellEffectDispel(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleDispel(ctx);
-	}
-
-	void SingleCastState::SpellEffectSummon(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleSummon(ctx);
-	}
-
-	void SingleCastState::SpellEffectSummonPet(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleSummonPet(ctx);
-	}
-
-	void SingleCastState::SpellEffectWeaponDamage(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleWeaponDamage(ctx);
-	}
-
-	void SingleCastState::SpellEffectProficiency(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleProficiency(ctx);
-	}
-
-	void SingleCastState::SpellEffectPowerBurn(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandlePowerBurn(ctx);
-	}
-
-	void SingleCastState::SpellEffectTriggerSpell(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleTriggerSpell(ctx);
-	}
-
-	void SingleCastState::SpellEffectScript(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleScript(ctx);
-	}
-
-	void SingleCastState::SpellEffectAddComboPoints(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleAddComboPoints(ctx);
-	}
-
-	void SingleCastState::SpellEffectDuel(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleDuel(ctx);
-	}
-
-	void SingleCastState::SpellEffectCharge(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleCharge(ctx);
-	}
-
-	void SingleCastState::SpellEffectAttackMe(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleAttackMe(ctx);
-	}
-
-	void SingleCastState::SpellEffectNormalizedWeaponDamage(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleNormalizedWeaponDamage(ctx);
-	}
-
-	void SingleCastState::SpellEffectStealBeneficialBuff(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleStealBeneficialBuff(ctx);
-	}
-
-	void SingleCastState::SpellEffectInterruptSpellCast(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleInterruptSpellCast(ctx);
-	}
-
-	void SingleCastState::SpellEffectLearnSpell(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleLearnSpell(ctx);
-	}
-
-	void SingleCastState::SpellEffectScriptEffect(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleScriptEffect(ctx);
-	}
-
-	void SingleCastState::SpellEffectDispelMechanic(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleDispelMechanic(ctx);
-	}
-
-	void SingleCastState::SpellEffectResurrect(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleResurrect(ctx);
-	}
-
-	void SingleCastState::SpellEffectResurrectNew(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleResurrectNew(ctx);
-	}
-
-	void SingleCastState::SpellEffectKnockBack(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleKnockBack(ctx);
-	}
-
-	void SingleCastState::SpellEffectSkill(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleSkill(ctx);
-	}
-
-	void SingleCastState::SpellEffectTransDoor(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleTransDoor(ctx);
-	}
-
-	void SingleCastState::SpellEffectResetAttributePoints(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleResetAttributePoints(ctx);
-	}
-
-	void SingleCastState::SpellEffectParry(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleParry(ctx);
-	}
-
-	void SingleCastState::SpellEffectBlock(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleBlock(ctx);
-	}
-
-	void SingleCastState::SpellEffectDodge(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleDodge(ctx);
-	}
-
-	void SingleCastState::SpellEffectHealPct(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleHealPct(ctx);
-	}
-
-	void SingleCastState::SpellEffectAddExtraAttacks(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleAddExtraAttacks(ctx);
-	}
-
-	void SingleCastState::SpellEffectResetTalents(const proto::SpellEffect& effect)
-	{
-		std::vector<GameObjectS*> targets;
-		GetEffectTargets(effect, targets);
-		SpellEffectContext ctx{ m_context, effect, CalculateEffectBasePoints(effect), targets,
-			[this](GameUnitS& u) -> AuraContainer& { return GetOrCreateAuraContainer(u); },
-			[this](GameObjectS& o) { MarkAffectedTarget(o); } };
-		SpellEffects::HandleResetTalents(ctx);
-	}
 
 	bool SingleCastState::GetEffectTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets)
 	{
