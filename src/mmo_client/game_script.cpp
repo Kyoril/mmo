@@ -761,8 +761,8 @@ namespace mmo
 	}
 
 	GameScript::GameScript(LoginConnector &loginConnector, RealmConnector &realmConnector, LootClient &lootClient, VendorClient &vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project &project, ActionBar &actionBar, SpellCast &spellCast, CooldownManager &cooldownManager, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, PartyInfo &partyInfo, CharCreateInfo &charCreateInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, GameTimeComponent &gameTime,
-						   TalentClient &talentClient)
-		: m_loginConnector(loginConnector), m_realmConnector(realmConnector), m_lootClient(lootClient), m_vendorClient(vendorClient), m_loginState(std::move(loginState)), m_project(project), m_actionBar(actionBar), m_spellCast(spellCast), m_cooldownManager(cooldownManager), m_trainerClient(trainerClient), m_questClient(questClient), m_audio(audio), m_partyInfo(partyInfo), m_charCreateInfo(charCreateInfo), m_charSelect(charSelect), m_guildClient(guildClient), m_friendClient(friendClient), m_gameTime(gameTime), m_talentClient(talentClient)
+						   TalentClient &talentClient, ICacheProvider &cacheProvider)
+		: m_loginConnector(loginConnector), m_realmConnector(realmConnector), m_lootClient(lootClient), m_vendorClient(vendorClient), m_loginState(std::move(loginState)), m_project(project), m_actionBar(actionBar), m_spellCast(spellCast), m_cooldownManager(cooldownManager), m_trainerClient(trainerClient), m_questClient(questClient), m_audio(audio), m_partyInfo(partyInfo), m_charCreateInfo(charCreateInfo), m_charSelect(charSelect), m_guildClient(guildClient), m_friendClient(friendClient), m_gameTime(gameTime), m_talentClient(talentClient), m_cacheProvider(cacheProvider)
 	{
 		// Initialize the cursor with project data for icon resolution
 		g_cursor.Initialize(m_project);
@@ -1279,7 +1279,18 @@ namespace mmo
 						   }),
 
 					   luabind::def<std::function<void()>>("RequestTimePlayed", [this]()
-														   { m_realmConnector.SendTimePlayedRequest(); }));
+														   { m_realmConnector.SendTimePlayedRequest(); }),
+
+					   luabind::def<std::function<luabind::object()>>("GetKnownPlayerNames", [this]() -> luabind::object
+					   {
+						   luabind::object result = luabind::newtable(m_luaState.get());
+						   int index = 1;
+						   m_cacheProvider.GetNameCache().ForEachCachedName([&](const String& name)
+						   {
+							   result[index++] = name;
+						   });
+						   return result;
+					   }));
 
 		m_charSelect.RegisterScriptFunctions(m_luaState.get());
 		m_charCreateInfo.RegisterScriptFunctions(m_luaState.get());
@@ -1288,6 +1299,7 @@ namespace mmo
 		m_friendClient.RegisterScriptFunctions(m_luaState.get());
 		m_questClient.RegisterScriptFunctions(m_luaState.get());
 		m_talentClient.RegisterScriptFunctions(m_luaState.get());
+
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;
 		luabind::globals(m_luaState.get())["realmConnector"] = &m_realmConnector;
 		luabind::globals(m_luaState.get())["gameData"] = &m_project;

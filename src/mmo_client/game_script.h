@@ -9,6 +9,8 @@
 
 #include <memory>
 
+#include "data/cache_provider.h"
+
 #include "base/typedefs.h"
 
 
@@ -77,7 +79,8 @@ namespace mmo
 		GuildClient& guildClient,
 		FriendClient& friendClient,
 		GameTimeComponent& gameTime,
-		TalentClient& talentClient);	public:
+		TalentClient& talentClient,
+		ICacheProvider& cacheProvider);	public:
 		/// Gets the current lua state
 		inline lua_State& GetLuaState() { ASSERT(m_luaState);  return *m_luaState; }
 
@@ -178,7 +181,9 @@ namespace mmo
 
 	GameTimeComponent& m_gameTime;
 
-	TalentClient& m_talentClient;	private:
+	TalentClient& m_talentClient;
+
+	ICacheProvider& m_cacheProvider;	private:
 		void Script_ReviveMe() const;
 	};
 

@@ -143,6 +143,14 @@ namespace mmo
 			return reader;
 		}
 
+		void ForEachCachedName(std::function<void(const T&)> callback) const
+		{
+			for (const auto& [id, value] : m_cache)
+			{
+				callback(value);
+			}
+		}
+
 	private:
 		RealmConnector& m_realmConnector;
 		std::unordered_map<uint64, T> m_cache;
