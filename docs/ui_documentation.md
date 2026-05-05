@@ -2,6 +2,8 @@
 
 This document describes the MMO UI system as implemented in `data/client/Interface` and the `frame_ui` library (`src/shared/frame_ui`). It is written for developers and AI agents who want to build or extend UI components safely and consistently.
 
+For agents making in-game UI changes specifically, read [GameUI Agent Playbook](gameui_agent_playbook.md) first. It turns the framework rules and existing `GameUI` patterns into a safer execution workflow.
+
 ## Table of Contents
 
 - [System Overview](#system-overview)

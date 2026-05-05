@@ -2,6 +2,8 @@
 
 These tutorials walk through existing UI components and show how to build similar ones from scratch.
 
+For a reliability-focused workflow for in-game UI edits, pair these examples with [GameUI Agent Playbook](gameui_agent_playbook.md).
+
 ## Tutorial 1: Action Bar Button
 
 References:
