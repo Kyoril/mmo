@@ -20,6 +20,8 @@ deps/assimp/
 
 # ── GSD baseline (auto-generated) ──
 .gsd
+.gsd.*/
+.gsd-*/
 .gsd-id
 .bg-shell/
 Thumbs.db
