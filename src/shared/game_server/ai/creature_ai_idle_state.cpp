@@ -136,6 +136,29 @@ namespace mmo
 		m_waitCountdown.Cancel();
 		m_connections.disconnect();
 
+		// Save the world position so the reset state can return here instead of spawn.
+		GetAI().SavePatrolReturnPosition(GetControlled().GetMover().GetCurrentLocation());
+
+		// Determine which waypoint the creature should resume from.
+		// m_chainProgressIndex tracks which waypoint in the chain the creature is heading
+		// toward (or has just reached). Save that patrol index as the resume point.
+		if (!m_currentChainWaypointIndices.empty())
+		{
+			if (m_chainProgressIndex < m_currentChainWaypointIndices.size())
+			{
+				GetAI().SavePatrolWaypointIndex(m_currentChainWaypointIndices[m_chainProgressIndex]);
+			}
+			else
+			{
+				// All waypoints in the chain were reached; save the post-chain index.
+				GetAI().SavePatrolWaypointIndex(m_nextPatrolWaypointIndex);
+			}
+		}
+		else
+		{
+			GetAI().SavePatrolWaypointIndex(m_nextPatrolWaypointIndex);
+		}
+
 		CreatureAIState::OnLeave();
 	}
 
@@ -153,7 +176,17 @@ namespace mmo
 		{
 			if (GetControlled().HasPatrolWaypoints())
 			{
-				m_nextPatrolWaypointIndex = FindClosestPatrolWaypointIndex();
+				if (GetAI().HasSavedPatrolWaypointIndex())
+				{
+					// Restore the chain start recorded when we left idle so the creature
+					// resumes in the same direction it was travelling.
+					m_nextPatrolWaypointIndex = GetAI().GetSavedPatrolWaypointIndex();
+					GetAI().ClearSavedPatrolWaypointIndex();
+				}
+				else
+				{
+					m_nextPatrolWaypointIndex = FindClosestPatrolWaypointIndex();
+				}
 				AdvanceIdleMovement();
 			}
 			else
@@ -176,6 +209,22 @@ namespace mmo
 		{
 			const auto& loc = GetControlled().GetPosition();
 			m_unitWatcher->SetShape(Circle(loc.x, loc.z, 40.0f));
+		}
+
+		// Track progress through the current waypoint chain so we know where to resume.
+		if (!m_currentChainWaypointIndices.empty() &&
+			m_chainProgressIndex < m_currentChainWaypointIndices.size())
+		{
+			const auto& patrolWaypoints = GetControlled().GetPatrolWaypoints();
+			const size_t wpIdx = m_currentChainWaypointIndices[m_chainProgressIndex];
+			const float distSq = GetControlled().GetSquaredDistanceTo(patrolWaypoints[wpIdx].position, true);
+
+			// If the creature is close to the current target waypoint, it has reached it.
+			// Advance progress to the next waypoint in the chain.
+			if (distSq <= 4.0f)
+			{
+				++m_chainProgressIndex;
+			}
 		}
 	}
 
@@ -232,18 +281,54 @@ namespace mmo
 			return;
 		}
 
-		const size_t waypointIndex = m_nextPatrolWaypointIndex % patrolWaypoints.size();
-		const auto& waypoint = patrolWaypoints[waypointIndex];
-		m_nextPatrolWaypointIndex = (waypointIndex + 1) % patrolWaypoints.size();
+		const size_t waypointCount = patrolWaypoints.size();
 
-		if (GetControlled().GetSquaredDistanceTo(waypoint.position, true) <= 0.25f)
+		// Collect consecutive waypoints into a single movement chain.
+		// We keep adding waypoints as long as the one we are leaving has no wait time.
+		// The chain always ends at (and includes) the first waypoint that has a wait time,
+		// or after a full loop if all waypoints have waitTime == 0.
+		std::vector<Vector3> chain;
+		size_t chainIndex = m_nextPatrolWaypointIndex % waypointCount;
+		// Record all waypoint indices in this chain for progress tracking.
+		m_currentChainWaypointIndices.clear();
+		m_chainProgressIndex = 0;
+		size_t stepsCollected = 0;
+
+		while (stepsCollected < waypointCount)
 		{
-			StartWait(waypoint.waitTime);
+			chain.push_back(patrolWaypoints[chainIndex].position);
+			m_currentChainWaypointIndices.push_back(chainIndex);
+			++stepsCollected;
+
+			// Stop collecting after the first waypoint that has a non-zero wait,
+			// because the creature should pause there.
+			if (patrolWaypoints[chainIndex].waitTime > 0)
+			{
+				chainIndex = (chainIndex + 1) % waypointCount;
+				break;
+			}
+
+			chainIndex = (chainIndex + 1) % waypointCount;
+		}
+
+		// Advance the index to point to the waypoint AFTER the last one in the chain.
+		m_nextPatrolWaypointIndex = chainIndex;
+
+		// If the creature is already standing on the first waypoint of the chain, skip it.
+		if (!chain.empty() && GetControlled().GetSquaredDistanceTo(chain.front(), true) <= 0.25f)
+		{
+			chain.erase(chain.begin());
+		}
+
+		if (chain.empty())
+		{
+			// Already at destination — treat as immediately arrived.
+			const size_t reachedIndex = (m_nextPatrolWaypointIndex + waypointCount - 1) % waypointCount;
+			StartWait(patrolWaypoints[reachedIndex].waitTime);
 			return;
 		}
 
-		const float walkSpeed = GetControlled().GetSpeed(movement_type::Walk);
-		if (!GetControlled().GetMover().MoveTo(waypoint.position, 0.0f))
+		if (!GetControlled().GetMover().MoveAlongWaypoints(chain, 0.0f))
 		{
 			StartWait(250);
 		}

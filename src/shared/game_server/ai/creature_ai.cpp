@@ -20,6 +20,11 @@ namespace mmo
 	CreatureAI::CreatureAI(GameCreatureS& controlled, const Home& home)
 		: m_controlled(controlled)
 		, m_home(home)
+		, m_evading(false)
+		, m_savedPatrolReturnPosition(Vector3::Zero)
+		, m_hasPatrolReturnPosition(false)
+		, m_savedPatrolWaypointIndex(0)
+		, m_hasPatrolWaypointSaved(false)
 	{
 		// Connect to spawn event
 		m_onSpawned = m_controlled.spawned.connect(this, &CreatureAI::OnSpawned);
@@ -31,6 +36,12 @@ namespace mmo
 
 	void CreatureAI::OnSpawned(WorldInstance& instance)
 	{
+		// Clear any saved patrol state from a previous life so the creature starts fresh.
+		m_hasPatrolReturnPosition = false;
+		m_savedPatrolReturnPosition = Vector3::Zero;
+		m_hasPatrolWaypointSaved = false;
+		m_savedPatrolWaypointIndex = 0;
+
 		m_onKilled = m_controlled.killed.connect([this](GameUnitS* killer)
 			{
 				// Check if a combat script prevents death (e.g., training dummies)
@@ -145,6 +156,50 @@ namespace mmo
 	void CreatureAI::SetHome(Home home)
 	{
 		m_home = std::move(home);
+	}
+
+	void CreatureAI::SavePatrolReturnPosition(const Vector3& position)
+	{
+		m_savedPatrolReturnPosition = position;
+		m_hasPatrolReturnPosition = true;
+	}
+
+	const Vector3& CreatureAI::GetSavedPatrolReturnPosition() const
+	{
+		return m_savedPatrolReturnPosition;
+	}
+
+	bool CreatureAI::HasSavedPatrolReturnPosition() const
+	{
+		return m_hasPatrolReturnPosition;
+	}
+
+	void CreatureAI::ClearSavedPatrolReturnPosition()
+	{
+		m_hasPatrolReturnPosition = false;
+		m_savedPatrolReturnPosition = Vector3::Zero;
+	}
+
+	void CreatureAI::SavePatrolWaypointIndex(const size_t index)
+	{
+		m_savedPatrolWaypointIndex = index;
+		m_hasPatrolWaypointSaved = true;
+	}
+
+	size_t CreatureAI::GetSavedPatrolWaypointIndex() const
+	{
+		return m_savedPatrolWaypointIndex;
+	}
+
+	bool CreatureAI::HasSavedPatrolWaypointIndex() const
+	{
+		return m_hasPatrolWaypointSaved;
+	}
+
+	void CreatureAI::ClearSavedPatrolWaypointIndex()
+	{
+		m_hasPatrolWaypointSaved = false;
+		m_savedPatrolWaypointIndex = 0;
 	}
 
 	void CreatureAI::OnThreatened(GameUnitS& threat, float amount)

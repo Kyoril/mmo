@@ -54,10 +54,18 @@ namespace mmo
 		/// the unit, but makes it walk / fly / swim to the target.
 		bool MoveTo(const Vector3& target, float customSpeed, float acceptanceRadius, const Radian* targetFacing = nullptr, const IShape* clipping = nullptr);
 
+		/// Moves this unit through a sequence of waypoints in one continuous movement
+		/// without stopping at intermediate points. A single movement packet is sent
+		/// covering the entire chain. The targetReached signal fires only when the last
+		/// waypoint is reached.
+		/// @param waypoints Ordered list of positions to visit; must not be empty.
+		/// @param acceptanceRadius Radius within which the final waypoint is considered reached.
+		/// @return True if movement was initiated successfully.
+		bool MoveAlongWaypoints(const std::vector<Vector3>& waypoints, float acceptanceRadius);
+
 		/// Stops the current movement if any.
 		void StopMovement();
 
-		/// Gets the new movement target.
 		const Vector3& GetTarget() const
 		{
 			return m_target;

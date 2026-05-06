@@ -323,6 +323,163 @@ namespace mmo
 		return true;
 	}
 
+	bool UnitMover::MoveAlongWaypoints(const std::vector<Vector3>& waypoints, float acceptanceRadius)
+	{
+		if (waypoints.empty())
+		{
+			return false;
+		}
+
+		if (waypoints.size() == 1)
+		{
+			return MoveTo(waypoints[0], acceptanceRadius);
+		}
+
+		auto& moved = GetMoved();
+		if (!moved.IsAlive() || moved.IsRooted())
+		{
+			return false;
+		}
+
+		auto currentLoc = GetCurrentLocation();
+
+		// Stop current movement
+		if (m_moveReached.IsRunning())
+		{
+			m_moveReached.Cancel();
+			m_moveUpdated.Cancel();
+
+			const Radian o = moved.GetAngle(waypoints[0].x, waypoints[0].z);
+			moved.Relocate(currentLoc, o);
+		}
+
+		auto* world = moved.GetWorldInstance();
+		if (!world)
+		{
+			return false;
+		}
+
+		auto* map = world->GetMapData();
+		if (!map)
+		{
+			return false;
+		}
+
+		const MovementType moveType = m_unit.GetMovementMode() == unit_movement_mode::Walk ? movement_type::Walk : movement_type::Run;
+		const float speed = m_unit.GetSpeed(moveType);
+
+		// Concatenate navmesh paths for all segments: currentLoc → wp[0] → wp[1] → … → wp[N]
+		std::vector<Vector3> fullPath;
+		Vector3 segmentStart = currentLoc;
+
+		for (size_t i = 0; i < waypoints.size(); ++i)
+		{
+			std::vector<Vector3> segPath;
+			if (!map->CalculatePath(segmentStart, waypoints[i], segPath) || segPath.empty())
+			{
+				return false;
+			}
+
+			// For segments after the first, skip the first point of the new segment since
+			// it duplicates (or nearly duplicates) the last point of the previous segment.
+			const size_t startIdx = (i == 0) ? 0 : 1;
+			for (size_t j = startIdx; j < segPath.size(); ++j)
+			{
+				fullPath.push_back(segPath[j]);
+			}
+
+			segmentStart = waypoints[i];
+		}
+
+		if (fullPath.empty())
+		{
+			return false;
+		}
+
+		// Apply acceptance radius to the final destination
+		if (acceptanceRadius > 0.0f && fullPath.size() >= 2)
+		{
+			Vector3& lastPoint = fullPath.back();
+			const Vector3& prevPoint = fullPath[fullPath.size() - 2];
+			const Vector3 diff = lastPoint - prevPoint;
+			const float dist = diff.GetLength();
+
+			if (dist <= acceptanceRadius)
+			{
+				fullPath.pop_back();
+			}
+			else
+			{
+				lastPoint -= diff * (acceptanceRadius / dist);
+			}
+		}
+
+		if (fullPath.empty())
+		{
+			return false;
+		}
+
+		// Clear the current movement path
+		m_path.Clear();
+		m_customSpeed = false;
+		m_start = currentLoc;
+
+		// Build timing across the full concatenated path
+		m_moveStart = GetAsyncTimeMs();
+		GameTime moveTime = m_moveStart;
+		for (uint32 i = 0; i < fullPath.size(); ++i)
+		{
+			const float dist = (i == 0)
+				? (fullPath[i] - currentLoc).GetLength()
+				: (fullPath[i] - fullPath[i - 1]).GetLength();
+			moveTime += static_cast<GameTime>((dist / speed) * constants::OneSecond);
+			m_path.AddPosition(moveTime, fullPath[i]);
+		}
+
+		m_target = fullPath.back();
+		m_moveEnd = moveTime;
+
+		auto movementInfo = moved.GetMovementInfo();
+		movementInfo.movementFlags &= movement_flags::WalkMode;
+		moved.ApplyMovementInfo(movementInfo);
+
+		// Send a single movement packet covering the full waypoint chain
+		TileIndex2D tile;
+		if (moved.GetTileIndex(tile))
+		{
+			std::vector<char> buffer;
+			io::VectorSink sink(buffer);
+			game::Protocol::OutgoingPacket packet(sink);
+			WriteCreatureMove(packet, moved.GetGuid(), currentLoc, fullPath, moved.GetMovementMode(), nullptr, m_moveStart, m_moveEnd);
+
+			ForEachSubscriberInSight(
+				moved.GetWorldInstance()->GetGrid(),
+				tile,
+				[&packet, &buffer, &moved](TileSubscriber& subscriber)
+				{
+					subscriber.SendPacket(packet, buffer);
+				});
+		}
+
+		m_customFacing.reset();
+
+		// Setup update timer if needed
+		const GameTime nextUpdate = m_moveStart + UnitMover::UpdateFrequency;
+		if (nextUpdate < m_moveEnd)
+		{
+			m_moveUpdated.SetEnd(nextUpdate);
+		}
+
+		// Setup arrival timer
+		m_moveReached.SetEnd(m_moveEnd);
+
+		// Raise signal
+		targetChanged();
+
+		return true;
+	}
+
+
 	void UnitMover::StopMovement()
 	{
 		if (!IsMoving())

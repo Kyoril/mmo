@@ -6,6 +6,7 @@
 #include "game_server/world/unit_watcher.h"
 #include "base/countdown.h"
 #include <cstddef>
+#include <vector>
 
 namespace mmo
 {
@@ -67,5 +68,10 @@ namespace mmo
 
 		std::unique_ptr<UnitWatcher> m_unitWatcher;
 		size_t m_nextPatrolWaypointIndex = 0;
+		/// Ordered patrol waypoint indices of the chain currently being traversed.
+		std::vector<size_t> m_currentChainWaypointIndices;
+		/// Current progress through the chain — the index into m_currentChainWaypointIndices
+		/// representing the waypoint the creature is currently heading toward.
+		size_t m_chainProgressIndex = 0;
 	};
 }

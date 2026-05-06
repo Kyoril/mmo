@@ -584,7 +584,7 @@ namespace mmo
 
 		{
 			auto lineOp = m_waypointPathObj->AddLineListOperation(
-				MaterialManager::Get().Load("Editor/Wireframe"));
+				MaterialManager::Get().Load("Editor/Wireframe.hmat"));
 
 			const int wpCount = m_selectedUnitSpawn->waypoints_size();
 			for (int i = 0; i < wpCount; ++i)
