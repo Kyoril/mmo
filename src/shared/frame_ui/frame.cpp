@@ -541,21 +541,55 @@ namespace mmo
 
 	void Frame::SetWidth(const float width)
 	{
+		if (m_pixelSize.width == width)
+		{
+			return;
+		}
+
 		m_pixelSize.width = width;
-		
+
+		// Mark this frame's own layout cache as dirty so GetAbsoluteFrameRect re-computes
+		m_needsLayout = true;
+
 		if (!AnchorsSatisfyWidth())
 		{
-			Invalidate();	
+			Invalidate();
+
+			// Invalidate siblings: any sibling may anchor its LEFT/RIGHT to this frame's edge
+			if (m_parent)
+			{
+				for (auto& sibling : m_parent->m_children)
+				{
+					sibling->Invalidate(true);
+				}
+			}
 		}
 	}
 
 	void Frame::SetHeight(const float height)
 	{
+		if (m_pixelSize.height == height)
+		{
+			return;
+		}
+
 		m_pixelSize.height = height;
+
+		// Mark this frame's own layout cache as dirty
+		m_needsLayout = true;
 
 		if (!AnchorsSatisfyHeight())
 		{
-			Invalidate();	
+			Invalidate();
+
+			// Invalidate siblings: any sibling may anchor its TOP/BOTTOM to this frame's edge
+			if (m_parent)
+			{
+				for (auto& sibling : m_parent->m_children)
+				{
+					sibling->Invalidate(true);
+				}
+			}
 		}
 	}
 
