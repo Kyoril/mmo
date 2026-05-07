@@ -118,6 +118,7 @@ namespace mmo
 				MMO_HANDLE_TRIGGER_ACTION(SetMount)
 				MMO_HANDLE_TRIGGER_ACTION(Despawn)
 				MMO_HANDLE_TRIGGER_ACTION(Teleport)
+				MMO_HANDLE_TRIGGER_ACTION(Emote)
 
 #undef MMO_HANDLE_TRIGGER_ACTION
 
@@ -252,6 +253,37 @@ namespace mmo
 
 		auto triggeringUnit = context.triggeringUnit.lock();
 		target->AsUnit().ChatYell(GetActionText(action, 0));
+
+		// Eventually play sound file
+		if (action.data_size() > 0)
+		{
+			PlaySoundEntry(action.data(0), target);
+		}
+	}
+
+	void TriggerHandler::HandleEmote(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		GameObjectS* target = GetActionTarget(action, context);
+		if (target == nullptr)
+		{
+			WLOG("TRIGGER_ACTION_EMOTE: No target found, action will be ignored");
+			return;
+		}
+
+		auto* world = GetWorldInstance(target);
+		if (!world)
+		{
+			return;
+		}
+
+		// Verify that "target" extends GameUnit class
+		if (!target->IsUnit())
+		{
+			WLOG("TRIGGER_ACTION_EMOTE: Needs a unit target, but target is no unit - action ignored");
+			return;
+		}
+
+		target->AsUnit().ChatEmote(GetActionText(action, 0));
 
 		// Eventually play sound file
 		if (action.data_size() > 0)

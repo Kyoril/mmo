@@ -686,6 +686,9 @@ namespace mmo
 		case ChatType::Yell:
 			m_character->ChatYell(message);
 			break;
+		case ChatType::Emote:
+			m_character->ChatEmote(message);
+			break;
 		default:
 			DLOG("TODO: Unsupported local chat type " << static_cast<int32>(type) << "!");
 		}
