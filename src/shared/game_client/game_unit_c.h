@@ -439,6 +439,8 @@ namespace mmo
 
 		void PlayOneShotAnimation(AnimationState *animState);
 
+		void SetLockedLoopAnimation(AnimationState* state);
+
 		/// @brief Cancel the currently playing one-shot animation and refresh movement state
 		void CancelOneShotAnimation();
 
@@ -620,6 +622,7 @@ namespace mmo
 		AnimationState *m_targetState = nullptr;
 		AnimationState *m_currentState = nullptr;
 		AnimationState *m_oneShotState = nullptr;
+		AnimationState *m_lockedLoopAnimState{nullptr};
 
 		SceneNode *m_questGiverNode = nullptr;
 		Entity *m_questGiverEntity = nullptr;
