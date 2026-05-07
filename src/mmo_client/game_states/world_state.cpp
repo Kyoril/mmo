@@ -2956,6 +2956,22 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		// Trigger AuraTick visualization event
+		if (const auto* spell = m_project.spells.getById(spellId))
+		{
+			GameUnitC* casterUnit = nullptr;
+			if (const auto caster = ObjectMgr::Get<GameUnitC>(casterGuid))
+			{
+				casterUnit = caster.get();
+			}
+
+			if (std::shared_ptr<GameUnitC> targetUnit = ObjectMgr::Get<GameUnitC>(targetGuid))
+			{
+				std::vector<GameUnitC*> targets { targetUnit.get() };
+				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::AuraTick, *spell, casterUnit, targets);
+			}
+		}
+
 		if (auraType == aura_type::PeriodicDamage ||
 			auraType == aura_type::PeriodicHeal)
 		{

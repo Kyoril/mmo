@@ -214,6 +214,6 @@ namespace mmo
     };
 
     // Free functions for aura visualization notifications (avoid circular includes)
-    void NotifyAuraVisualizationApplied(const proto_client::SpellEntry& spell, GameUnitC* target);
-    void NotifyAuraVisualizationRemoved(const proto_client::SpellEntry& spell, GameUnitC* target);
+    void NotifyAuraVisualizationApplied(const proto_client::SpellEntry& spell, GameUnitC* caster, GameUnitC* target);
+    void NotifyAuraVisualizationRemoved(const proto_client::SpellEntry& spell, GameUnitC* caster, GameUnitC* target);
 }

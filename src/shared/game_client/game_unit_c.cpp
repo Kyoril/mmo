@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <set>
+#include <unordered_map>
 
 #include "debug_interface.h"
 #include "net_client.h"
@@ -706,19 +707,19 @@ namespace mmo
 			return false;
 		}
 
-		// Track old auras for diffing (simple approach: remember spell ids)
-		std::set<uint32> oldAuraSpellIds;
+		// Track old auras for diffing (one entry per spell id).
+		std::unordered_map<uint32, uint64> oldAuraCasterIds;
 		for (const auto &aura : m_auras)
 		{
 			if (const auto *spell = aura->GetSpell())
 			{
-				oldAuraSpellIds.insert(spell->id());
+				oldAuraCasterIds.try_emplace(spell->id(), aura->GetCasterId());
 			}
 		}
 
 		m_auras.clear();
 
-		std::set<uint32> newAuraSpellIds;
+		std::unordered_map<uint32, uint64> newAuraCasterIds;
 		for (uint32 i = 0; i < visibleAuraCount; ++i)
 		{
 			uint32 spellId, duration;
@@ -748,30 +749,46 @@ namespace mmo
 
 			// Add aura
 			m_auras.push_back(std::make_unique<GameAuraC>(*this, *spell, casterId, duration));
-			newAuraSpellIds.insert(spellId);
+			newAuraCasterIds.try_emplace(spellId, casterId);
 		}
 
 		// Trigger visualization events for added/removed auras
-		for (uint32 spellId : newAuraSpellIds)
+		for (const auto &[spellId, casterId] : newAuraCasterIds)
 		{
-			if (oldAuraSpellIds.find(spellId) == oldAuraSpellIds.end())
+			if (oldAuraCasterIds.contains(spellId))
 			{
-				// Newly applied aura
-				if (const auto *spell = m_project.spells.getById(spellId))
+				continue;
+			}
+
+			// Newly applied aura
+			if (const auto *spell = m_project.spells.getById(spellId))
+			{
+				GameUnitC *caster = nullptr;
+				if (const auto casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
 				{
-					NotifyAuraVisualizationApplied(*spell, this);
+					caster = casterUnit.get();
 				}
+
+				NotifyAuraVisualizationApplied(*spell, caster, this);
 			}
 		}
-		for (uint32 spellId : oldAuraSpellIds)
+		for (const auto &[spellId, casterId] : oldAuraCasterIds)
 		{
-			if (newAuraSpellIds.find(spellId) == newAuraSpellIds.end())
+			if (newAuraCasterIds.contains(spellId))
 			{
-				// Removed aura
-				if (const auto *spell = m_project.spells.getById(spellId))
+				continue;
+			}
+
+			// Removed aura
+			if (const auto *spell = m_project.spells.getById(spellId))
+			{
+				GameUnitC *caster = nullptr;
+				if (const auto casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
 				{
-					NotifyAuraVisualizationRemoved(*spell, this);
+					caster = casterUnit.get();
 				}
+
+				NotifyAuraVisualizationRemoved(*spell, caster, this);
 			}
 		}
 
@@ -2797,6 +2814,8 @@ namespace mmo
 
 	void GameUnitC::AddSpellTint(uint32 spellId, const Vector4& tintColor)
 	{
+		DLOG("Add spell tint for spell id " << spellId);
+
 		// Add or update the tint for this spell
 		m_spellTints[spellId] = tintColor;
 		
@@ -2812,6 +2831,8 @@ namespace mmo
 
 	void GameUnitC::RemoveSpellTint(uint32 spellId)
 	{
+		DLOG("Remove spell tint for spell id " << spellId);
+
 		// Remove the tint for this spell
 		auto it = m_spellTints.find(spellId);
 		if (it != m_spellTints.end())

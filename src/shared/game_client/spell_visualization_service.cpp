@@ -1029,21 +1029,24 @@ namespace mmo
     }
 
     // Free functions for aura visualization notifications
-    void NotifyAuraVisualizationApplied(const proto_client::SpellEntry& spell, GameUnitC* target)
+    void NotifyAuraVisualizationApplied(const proto_client::SpellEntry& spell, GameUnitC* caster, GameUnitC* target)
     {
         if (target)
         {
             std::vector<GameUnitC*> targets { target };
-            SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::AuraApplied, spell, nullptr, targets);
+            SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::AuraApplied, spell, caster, targets);
+
+            // Start looping idle visualization for the aura duration
+            SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::AuraIdle, spell, caster, targets);
         }
     }
 
-    void NotifyAuraVisualizationRemoved(const proto_client::SpellEntry& spell, GameUnitC* target)
+    void NotifyAuraVisualizationRemoved(const proto_client::SpellEntry& spell, GameUnitC* caster, GameUnitC* target)
     {
         if (target)
         {
             std::vector<GameUnitC*> targets { target };
-            SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::AuraRemoved, spell, nullptr, targets);
+            SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::AuraRemoved, spell, caster, targets);
             // Stop looped sounds for this target when aura is removed
             SpellVisualizationService::Get().StopLoopedSoundForActor(target->GetGuid());
             // Remove tints for this spell on the target
