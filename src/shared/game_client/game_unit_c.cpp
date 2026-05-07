@@ -347,6 +347,12 @@ namespace mmo
 
 	void GameUnitC::UpdateMovementBasedAnimation()
 	{
+		// If a looped spell animation is locked, skip movement animation override
+		if (m_lockedLoopAnimState != nullptr)
+		{
+			return;
+		}
+
 		if (!m_unitMovement)
 		{
 			return;
@@ -431,6 +437,8 @@ namespace mmo
 				m_oneShotState->SetTimePosition(m_oneShotState->GetLength());
 			}
 
+			// Death clears any locked loop animation
+			m_lockedLoopAnimState = nullptr;
 			SetTargetAnimState(m_deathState);
 		}
 
@@ -2093,6 +2101,15 @@ namespace mmo
 		}
 	}
 
+	void GameUnitC::SetLockedLoopAnimation(AnimationState* state)
+	{
+		m_lockedLoopAnimState = state;
+		if (state != nullptr)
+		{
+			SetTargetAnimState(state);
+		}
+	}
+
 	void GameUnitC::PlayOneShotAnimation(AnimationState *animState)
 	{
 		if (!animState)
@@ -2105,6 +2122,9 @@ namespace mmo
 			WLOG("One shot animation has loop flag set to true, not playing!");
 			return;
 		}
+
+		// One-shot animations evict the locked loop
+		m_lockedLoopAnimState = nullptr;
 
 		if (m_oneShotState != nullptr)
 		{

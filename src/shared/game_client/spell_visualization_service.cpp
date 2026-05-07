@@ -112,6 +112,9 @@ namespace mmo
         // Handle terminating events - stop active animations and clean up
         if (caster != nullptr && isTerminatingEvent)
         {
+            // Clear any locked loop animation (e.g. cast channel animation)
+            caster->SetLockedLoopAnimation(nullptr);
+
             const uint64 casterGuid = caster->GetGuid();
             auto animIt = m_activeSpellAnimations.find(casterGuid);
             if (animIt != m_activeSpellAnimations.end() && animIt->second.spellId == spell.id())
@@ -333,8 +336,8 @@ namespace mmo
         // Play the animation
         if (isLooped)
         {
-            // For looped animations, set as target state (replaces current animation)
-            actor.SetTargetAnimState(animState);
+            // For looped animations, lock as the target state so movement animations can't evict it
+            actor.SetLockedLoopAnimation(animState);
         }
         else
         {
