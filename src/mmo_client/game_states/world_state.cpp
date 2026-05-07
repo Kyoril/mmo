@@ -1627,6 +1627,7 @@ namespace mmo
 					{
 					case ChatType::Channel: chatMessageType = "CHANNEL"; break;
 					case ChatType::Yell: chatMessageType = "YELL"; break;
+					case ChatType::Emote: chatMessageType = "EMOTE"; break;
 					case ChatType::Group: chatMessageType = "PARTY"; break;
 					case ChatType::Guild: chatMessageType = "GUILD"; break;
 					case ChatType::Whisper: chatMessageType = "WHISPER"; break;
