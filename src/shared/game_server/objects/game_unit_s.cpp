@@ -1248,6 +1248,7 @@ namespace mmo
 			chatDistance = 300.0f;
 			break;
 		case ChatType::Emote:
+		case ChatType::UnitEmote:
 			chatDistance = 50.0f;
 			break;
 		default:
