@@ -1147,6 +1147,11 @@ namespace mmo
 		DoLocalChatMessage(IsPlayer() ? ChatType::Yell : ChatType::UnitYell, message);
 	}
 
+	void GameUnitS::ChatEmote(const String& message)
+	{
+		DoLocalChatMessage(IsPlayer() ? ChatType::Emote : ChatType::UnitEmote, message);
+	}
+
 	void GameUnitS::NotifyRootChanged()
 	{
 		const bool wasRooted = IsRooted();

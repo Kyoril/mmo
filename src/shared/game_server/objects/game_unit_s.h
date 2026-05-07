@@ -847,6 +847,10 @@ namespace mmo
 		/// @param message The message to send.
 		void ChatYell(const String &message);
 
+		/// Sends a chat message of type "emote" from the unit.
+		/// @param message The message to send.
+		void ChatEmote(const String &message);
+
 		void NotifyRootChanged();
 
 		void NotifyStunChanged();
