@@ -583,7 +583,7 @@ namespace mmo
 		m_waypointPathNode->AttachObject(*m_waypointPathObj);
 
 		{
-			auto lineOp = m_waypointPathObj->AddLineListOperation(
+			const auto lineOp = m_waypointPathObj->AddLineListOperation(
 				MaterialManager::Get().Load("Editor/Wireframe.hmat"));
 
 			const int wpCount = m_selectedUnitSpawn->waypoints_size();
@@ -616,10 +616,10 @@ namespace mmo
 			markerNode->AttachObject(*markerObj);
 
 			{
-				auto markerOp = markerObj->AddLineListOperation(
-					MaterialManager::Get().Load("Editor/Wireframe"));
+				const auto markerOp = markerObj->AddLineListOperation(
+					MaterialManager::Get().Load("Editor/Wireframe.hmat"));
 
-				const float s = 0.5f;
+				constexpr float s = 0.5f;
 
 				markerOp->AddLine(center + Vector3(-s, 0.0f, 0.0f), center + Vector3(s, 0.0f, 0.0f));
 				markerOp->AddLine(center + Vector3(0.0f, -s, 0.0f), center + Vector3(0.0f, s, 0.0f));
