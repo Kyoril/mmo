@@ -1214,8 +1214,8 @@ namespace mmo
 				const bool inRange = distanceSq <= meleeRangeSq;
 				if (inRange)
 				{
-					const float distance = std::sqrtf(distanceSq);
-					const float acceptanceRadius = std::sqrtf(meleeRangeSq);
+					const float distance = std::sqrt(distanceSq);
+					const float acceptanceRadius = std::sqrt(meleeRangeSq);
 					DLOG("Creature " << controlled.GetGuid() << " stopped at engagement range: distance=" 
 						<< distance << " <= acceptanceRadius=" << acceptanceRadius);
 				}
@@ -1229,7 +1229,7 @@ namespace mmo
 				const bool inRange = distanceSq >= minRangeSq && distanceSq <= maxRangeSq;
 				if (inRange)
 				{
-					const float distance = std::sqrtf(distanceSq);
+					const float distance = std::sqrt(distanceSq);
 					const float acceptanceRadius = CASTER_OPTIMAL_RANGE;
 					DLOG("Creature " << controlled.GetGuid() << " stopped at engagement range: distance=" 
 						<< distance << " <= acceptanceRadius=" << acceptanceRadius);
