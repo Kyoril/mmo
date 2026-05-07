@@ -675,6 +675,8 @@ namespace mmo
 			return 0;
 		}
 
+		const uint32 prevHealthPct = static_cast<int32>(static_cast<float>(health) / static_cast<float>(GetMaxHealth()) * 100.0f);
+
 		if (IsPlayer() && instigator && instigator->IsPlayer())
 		{
 			SetInCombat(true, true);
@@ -702,7 +704,7 @@ namespace mmo
 
 		// Notify health dropped below
 		const uint32 healthPercent = static_cast<int32>(static_cast<float>(health) / static_cast<float>(GetMaxHealth()) * 100.0f);
-		RaiseTrigger(trigger_event::OnHealthDroppedBelow, {healthPercent}, instigator);
+		RaiseTrigger(trigger_event::OnHealthDroppedBelow, {healthPercent, prevHealthPct}, instigator);
 
 		// Generate rage when taking damage if rage is the power type
 		if (Get<uint32>(object_fields::PowerType) == power_type::Rage)

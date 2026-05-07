@@ -311,6 +311,30 @@ namespace mmo
 								continue;
 						}
 						break;
+					case trigger_event::OnHealthDroppedBelow:
+						{
+							if (data.size() < 2)
+							{
+								// Not enough data provided to evaluate health percentage triggers
+								ELOG("Not enough data provided for OnHealthDroppedBelow trigger evaluation. Expected current and previous health percentages.");
+								continue;
+							}
+
+							const uint32 healthPercent = data[0];
+							const uint32 prevHealthPercent = data[1];
+							if (prevHealthPercent <= triggerEvent.data(0))
+							{
+								// Skip trigger if previous health percentage was already below the trigger threshold
+								continue;
+							}
+
+							if (healthPercent > triggerEvent.data(0))
+							{
+								// Skip trigger if current health percentage is above the trigger threshold
+								continue;
+							}
+						}
+						break;
 					default:
 						break;
 					}

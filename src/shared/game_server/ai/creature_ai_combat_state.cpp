@@ -689,9 +689,6 @@ namespace mmo
 		const auto currentTime = GetAsyncTimeMs();
 		if (currentTime >= m_recalculationCountdown.GetEnd())
 		{
-			// Periodic recalculation countdown fired; forcing waypoint revalidation
-			DLOG("Periodic recalculation countdown fired; forcing waypoint revalidation");
-			
 			// Force movement revalidation by resetting movement state
 			// This will trigger a fresh MoveToOptimalRange() calculation
 			m_movementState.Reset();
