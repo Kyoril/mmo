@@ -27,6 +27,9 @@ namespace mmo
 		{
 			SetRequiredQuest(m_entry.requiredquest());
 		}
+
+		// Initialize lock type from data[0] (0 = no lock)
+		Set<uint32>(object_fields::LockEntry, m_entry.data_size() > 0 ? static_cast<uint32>(m_entry.data(0)) : 0u);
 	}
 
 	bool GameWorldObjectS::IsUsable(const GamePlayerS& player) const

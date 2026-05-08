@@ -51,6 +51,7 @@
 #include "shared/proto_data/item_classes.pb.h"
 #include "shared/proto_data/item_subclasses.pb.h"
 #include "shared/proto_data/combat_settings.pb.h"
+#include "shared/proto_data/lock_type.pb.h"
 
 namespace mmo
 {
@@ -100,6 +101,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::Proficiencies, mmo::proto::ProficiencyEntry> ProficiencyManager;
 		typedef TemplateManager<mmo::proto::ItemClasses, mmo::proto::ItemClassEntry> ItemClassManager;
 		typedef TemplateManager<mmo::proto::ItemSubclasses, mmo::proto::ItemSubclassEntry> ItemSubclassManager;
+		typedef TemplateManager<mmo::proto::LockTypes, mmo::proto::LockTypeEntry> LockTypeManager;
 
 		/// Gets the combat settings with all configurable combat formula parameters.
 		/// If no combat_settings file was loaded, defaults from the proto definition are used.
@@ -166,6 +168,9 @@ namespace mmo
 			ProficiencyManager proficiencies;
 			ItemClassManager itemClasses;
 			ItemSubclassManager itemSubclasses;
+
+			/// Lock type manager for object lock requirements.
+			LockTypeManager lockTypes;
 
 			/// Combat settings containing all configurable combat formula parameters.
 			CombatSettings combatSettings;
@@ -256,6 +261,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("proficiencies", proficiencies));
 				managers.push_back(ManagerEntry("item_classes", itemClasses));
 				managers.push_back(ManagerEntry("item_subclasses", itemSubclasses));
+				managers.push_back(ManagerEntry("lock_types", lockTypes));
 
 				virtual_dir::FileSystemReader virtualDirectory(realmDataPath);
 				if (!RealmProjectLoader::load(
@@ -336,6 +342,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("proficiencies", "proficiencies", proficiencies));
 				managers.push_back(ManagerEntry("item_classes", "item_classes", itemClasses));
 				managers.push_back(ManagerEntry("item_subclasses", "item_subclasses", itemSubclasses));
+				managers.push_back(ManagerEntry("lock_types", "lock_types", lockTypes));
 
 				if (!RealmProjectSaver::save(realmDataPath, managers))
 				{

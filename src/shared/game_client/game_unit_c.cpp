@@ -2834,8 +2834,6 @@ namespace mmo
 
 	void GameUnitC::AddSpellTint(uint32 spellId, const Vector4& tintColor)
 	{
-		DLOG("Add spell tint for spell id " << spellId);
-
 		// Add or update the tint for this spell
 		m_spellTints[spellId] = tintColor;
 		
@@ -2851,8 +2849,6 @@ namespace mmo
 
 	void GameUnitC::RemoveSpellTint(uint32 spellId)
 	{
-		DLOG("Remove spell tint for spell id " << spellId);
-
 		// Remove the tint for this spell
 		auto it = m_spellTints.find(spellId);
 		if (it != m_spellTints.end())
