@@ -30,6 +30,7 @@
 #include "map_editor_window.h"
 #include "object_editor_window.h"
 #include "zone_editor_window.h"
+#include "lock_type_editor_window.h"
 #include "unit_loot_editor_window.h"
 #include "trainer_editor_window.h"
 #include "vendor_editor_window.h"
@@ -233,6 +234,13 @@ namespace mmo
             "Spell Range Types",
             [this]() { OpenEditorWindow(std::type_index(typeid(RangeTypeEditorWindow))); },
             static_cast<int>(m_project.ranges.count())
+        });
+
+        gameplayCategory.editors.push_back({
+            std::type_index(typeid(LockTypeEditorWindow)),
+            "Lock Types",
+            [this]() { OpenEditorWindow(std::type_index(typeid(LockTypeEditorWindow))); },
+            static_cast<int>(m_project.lockTypes.count())
         });
         
         // Add editors to the character category

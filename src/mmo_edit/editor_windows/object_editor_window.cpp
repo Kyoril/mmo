@@ -86,6 +86,30 @@ namespace mmo
 				ImGui::EndTable();
 			}
 
+			// Object type dropdown
+			static const char* s_objectTypeNames[] = { "Chest", "Door" };
+			static_assert(std::size(s_objectTypeNames) == game_world_object_type::Count_,
+				"s_objectTypeNames must match game_world_object_type::Type");
+
+			int objectType = static_cast<int>(currentEntry.type());
+			if (objectType < 0 || objectType >= game_world_object_type::Count_)
+				objectType = 0;
+
+			if (ImGui::BeginCombo("Type", s_objectTypeNames[objectType]))
+			{
+				for (int i = 0; i < game_world_object_type::Count_; ++i)
+				{
+					const bool selected = (objectType == i);
+					if (ImGui::Selectable(s_objectTypeNames[i], selected))
+					{
+						currentEntry.set_type(static_cast<uint32>(i));
+					}
+					if (selected)
+						ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
+
 			static const char* s_objectLootEntry = "<None>";
 
 			uint32 lootEntryId = currentEntry.objectlootentry();
