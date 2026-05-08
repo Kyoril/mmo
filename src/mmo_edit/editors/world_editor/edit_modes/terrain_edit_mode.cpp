@@ -132,7 +132,7 @@ namespace mmo
 			}
 		}
 
-		ImGui::SliderFloat("Brush Radius", &m_terrainBrushSize, 0.01f, terrain::constants::VerticesPerTile);
+		ImGui::SliderFloat("Brush Radius", &m_terrainBrushSize, 0.01f, 256.0f);
 		ImGui::SliderFloat("Brush Hardness", &m_terrainBrushHardness, 0.0f, 1.0f);
 		ImGui::SliderFloat("Brush Power", &m_terrainBrushPower, 0.01f, 10.0f);
 
