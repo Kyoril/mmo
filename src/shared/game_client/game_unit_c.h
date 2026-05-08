@@ -20,6 +20,7 @@ namespace mmo
 {
 	class AnimationNotify;
 	class AnimationState;
+	class GameWorldObjectC;
 	class ManualRenderObject;
 	class NetClient;
 
@@ -169,7 +170,7 @@ namespace mmo
 
 		unit_stand_state::Type GetStandState() const { return static_cast<unit_stand_state::Type>(Get<int32>(object_fields::StandState)); }
 
-		const proto_client::SpellEntry *GetOpenSpell() const;
+		const proto_client::SpellEntry *GetOpenSpell(const GameWorldObjectC* target) const;
 
 		void OnLanded();
 

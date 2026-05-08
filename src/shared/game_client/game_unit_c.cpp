@@ -1,5 +1,6 @@
 #include "game_unit_c.h"
 #include "game_aura_c.h"
+#include "game_world_object_c_base.h"
 #include "spell_visualization_service.h"
 
 #include <algorithm>
@@ -2776,15 +2777,27 @@ namespace mmo
 		}
 	}
 
-	const proto_client::SpellEntry *GameUnitC::GetOpenSpell() const
+	const proto_client::SpellEntry *GameUnitC::GetOpenSpell(const GameWorldObjectC* target) const
 	{
+		const uint32 objectLockTypeId = target ? target->Get<uint32>(object_fields::LockEntry) : 0u;
+
 		for (const auto *spell : m_spells)
 		{
 			for (const auto &effect : spell->effects())
 			{
 				if (effect.type() == spell_effects::OpenLock)
 				{
-					return spell;
+					// If the object has no lock type (always-open sentinel), return the first OpenLock spell found.
+					if (objectLockTypeId == 0)
+					{
+						return spell;
+					}
+
+					// Match by lock type ID stored in miscvaluea.
+					if (static_cast<uint32>(effect.miscvaluea()) == objectLockTypeId)
+					{
+						return spell;
+					}
 				}
 			}
 		}
