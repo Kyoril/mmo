@@ -365,6 +365,11 @@ namespace mmo
 
 		bool IsTransforming() const override;
 
+		ManualRenderObject* CreateManualRenderObject(const String& name) override;
+		SceneNode* CreateChildSceneNode() override;
+		void DestroyManualRenderObject(const ManualRenderObject& obj) override;
+		void DestroySceneNode(const SceneNode& node) override;
+
 	private:
 		uint16 BuildPageIndex(uint8 x, uint8 y) const;
 

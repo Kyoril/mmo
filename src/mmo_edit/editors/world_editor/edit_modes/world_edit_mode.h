@@ -5,6 +5,8 @@
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
 #include "base/filesystem.h"
+#include "scene_graph/manual_render_object.h"
+#include "scene_graph/scene_node.h"
 
 namespace mmo
 {
@@ -73,6 +75,11 @@ namespace mmo
 		/// @param objectId Unique object ID (0 to auto-generate).
 		/// @return Pointer to the created world model instance, or nullptr on failure.
 		virtual WorldModelInstance* CreateWorldModelEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 objectId) = 0;
+
+		virtual ManualRenderObject* CreateManualRenderObject(const String& name) = 0;
+		virtual SceneNode* CreateChildSceneNode() = 0;
+		virtual void DestroyManualRenderObject(const ManualRenderObject& obj) = 0;
+		virtual void DestroySceneNode(const SceneNode& node) = 0;
 
 		virtual bool HasTerrain() const = 0;
 

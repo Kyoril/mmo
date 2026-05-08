@@ -2575,4 +2575,24 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 	{
 		return m_transformWidget && m_transformWidget->IsActive();
 	}
+
+	ManualRenderObject* WorldEditorInstance::CreateManualRenderObject(const String& name)
+	{
+		return m_scene.CreateManualRenderObject(name);
+	}
+
+	SceneNode* WorldEditorInstance::CreateChildSceneNode()
+	{
+		return m_scene.GetRootSceneNode().CreateChildSceneNode();
+	}
+
+	void WorldEditorInstance::DestroyManualRenderObject(const ManualRenderObject& obj)
+	{
+		m_scene.DestroyManualRenderObject(obj);
+	}
+
+	void WorldEditorInstance::DestroySceneNode(const SceneNode& node)
+	{
+		m_scene.DestroySceneNode(node);
+	}
 }
