@@ -915,39 +915,4 @@ namespace mmo
 
 		return nullptr;
 	}
-
-	void Player::OnGameObjectUse(uint16 opCode, uint32 size, io::Reader& contentReader)
-	{
-		// Read the object guid from the packet
-		uint64 objectGuid;
-		if (!(contentReader >> io::read<uint64>(objectGuid)))
-		{
-			ELOG("Failed to read UseObject packet - malformed packet");
-			return;
-		}
-
-		// World instance must exist
-		ASSERT(m_worldInstance);
-
-		// Find the world object in the current instance
-		GameWorldObjectS* worldObject = m_worldInstance->FindByGuid<GameWorldObjectS>(objectGuid);
-		if (!worldObject)
-		{
-			WLOG("UseObject: world object not found for guid " << log_hex_digit(objectGuid));
-			return;
-		}
-
-		// Distance check: object must be within 5.0f units
-		ASSERT(m_character);
-		const float dist = (worldObject->GetPosition() - m_character->GetPosition()).GetLength();
-		if (dist > 5.0f)
-		{
-			WLOG("UseObject: object " << log_hex_digit(objectGuid) << " is too far away (" << dist << ")");
-			return;
-		}
-
-		// Delegate to the world object; Use() performs IsUsable() check internally
-		// (checks Disabled flag, RequiresQuest flag, and active quest status)
-		worldObject->Use(*m_character);
-	}
 }

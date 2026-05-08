@@ -20,6 +20,7 @@
 #include "frame_ui/frame_mgr.h"
 #include "game/loot.h"
 #include "game_client/object_mgr.h"
+#include "game_client/game_world_object_c_base.h"
 #include "terrain/tile.h"
 
 namespace mmo
@@ -807,7 +808,16 @@ namespace mmo
 					}
 					else if (m_hoveredObject->IsWorldObject() && m_hoveredObject->IsUsable(m_controlledUnit->AsPlayer()))
 					{
-						m_connector.UseObject(m_hoveredObject->GetGuid());
+						GameWorldObjectC* worldObject = static_cast<GameWorldObjectC*>(m_hoveredObject);
+						const proto_client::SpellEntry* openSpell = m_controlledUnit->GetOpenSpell(worldObject);
+						if (openSpell)
+						{
+							m_spellCast.CastSpell(openSpell->id(), m_hoveredObject);
+						}
+						else
+						{
+							FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "LOCKED");
+						}
 					}
 				}
 			}

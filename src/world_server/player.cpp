@@ -560,9 +560,6 @@ namespace mmo
 			OnGossipHello(opCode, buffer.size(), reader);
 			break;
 
-		case game::client_realm_packet::UseObject:
-			OnGameObjectUse(opCode, buffer.size(), reader);
-			break;
 		case game::client_realm_packet::Loot:
 			OnLoot(opCode, buffer.size(), reader);
 			break;
