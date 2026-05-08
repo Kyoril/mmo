@@ -866,10 +866,16 @@ namespace mmo
 							   {
 					if (vx >= 0 && vy >= 0)
 					{
-						// Outer vertex
-						float height = GetHeightAt(vx, vy);
-						sumHeight += height;
-						heightCount++;
+						// Outer vertex — guard against unprepared pages returning 0
+						uint32 pageX2, pageZ2, localVX, localVZ;
+						GetPageAndLocalVertex(static_cast<uint32>(vx), pageX2, localVX);
+						GetPageAndLocalVertex(static_cast<uint32>(vy), pageZ2, localVZ);
+						Page* pg = GetPage(pageX2, pageZ2);
+						if (pg && pg->IsPrepared())
+						{
+							sumHeight += GetHeightAt(vx, vy);
+							heightCount++;
+						}
 					}
 					else
 					{
@@ -890,6 +896,7 @@ namespace mmo
 						}
 					} });
 
+			if (heightCount == 0) return;
 			const float avgHeight = sumHeight / static_cast<float>(heightCount);
 			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, avgHeight, power](const int32 vx, const int32 vy, const float factor)
 							   {
