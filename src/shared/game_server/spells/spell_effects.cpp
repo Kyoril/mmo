@@ -513,10 +513,19 @@ namespace mmo
 				return;
 			}
 
+			const uint32 spellLockTypeId = static_cast<uint32>(ctx.effect.miscvaluea());
+
 			for (auto* targetObject : ctx.effectTargets)
 			{
 				if (targetObject->IsWorldObject())
 				{
+					const uint32 objectLockTypeId = targetObject->AsObject().Get<uint32>(object_fields::LockEntry);
+					if (objectLockTypeId != 0 && objectLockTypeId != spellLockTypeId)
+					{
+						WLOG("OpenLock: lock type mismatch — spell requires " << spellLockTypeId << ", object has " << objectLockTypeId);
+						continue;
+					}
+
 					targetObject->AsObject().Use(*playerCaster);
 				}
 			}
