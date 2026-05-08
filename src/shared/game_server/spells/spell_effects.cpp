@@ -527,6 +527,14 @@ namespace mmo
 					}
 
 					targetObject->AsObject().Use(*playerCaster);
+
+					// One-time door unlock: if data[1] is set, change the active lock type
+					auto* worldObj = static_cast<GameWorldObjectS*>(targetObject);
+					const uint32 postUnlockLockType = worldObj->GetPostUnlockLockType();
+					if (postUnlockLockType != 0)
+					{
+						worldObj->Set<uint32>(object_fields::LockEntry, postUnlockLockType);
+					}
 				}
 			}
 		}

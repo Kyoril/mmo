@@ -134,6 +134,13 @@ namespace mmo
 		}
 	}
 
+	uint32 GameWorldObjectS::GetPostUnlockLockType() const
+	{
+		if (GetType() == GameWorldObjectType::Door && m_entry.data_size() > 1)
+			return static_cast<uint32>(m_entry.data(1));
+		return 0u;
+	}
+
 	const String& GameWorldObjectS::GetName() const
 	{
 		return m_entry.name();
