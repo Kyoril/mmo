@@ -1658,6 +1658,46 @@ namespace mmo
 					DrawHelpMarker("The type of environmental damage. Base Points represent the damage as a percentage of max HP.");
 					break;
 				}
+			case spell_effects::OpenLock:
+				{
+					const uint32 lockTypeId = effect.miscvaluea();
+
+					const auto* lockEntry = m_project.lockTypes.getById(lockTypeId);
+					const char* lockPreview = lockEntry != nullptr ? lockEntry->name().c_str() : "None";
+					if (ImGui::BeginCombo("Lock Type", lockPreview, ImGuiComboFlags_None))
+					{
+						ImGui::PushID(0);
+						const bool noneSelected = lockTypeId == 0;
+						if (ImGui::Selectable("None (0)", noneSelected))
+						{
+							effect.set_miscvaluea(0);
+						}
+						if (noneSelected)
+						{
+							ImGui::SetItemDefaultFocus();
+						}
+						ImGui::PopID();
+
+						for (int i = 0; i < m_project.lockTypes.count(); i++)
+						{
+							ImGui::PushID(i + 1);
+							const bool item_selected = m_project.lockTypes.getTemplates().entry(i).id() == lockTypeId;
+							const char* item_text = m_project.lockTypes.getTemplates().entry(i).name().c_str();
+							if (ImGui::Selectable(item_text, item_selected))
+							{
+								effect.set_miscvaluea(m_project.lockTypes.getTemplates().entry(i).id());
+							}
+							if (item_selected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+							ImGui::PopID();
+						}
+
+						ImGui::EndCombo();
+					}
+					break;
+				}
 			case spell_effects::Proficiency:
 				{
 					const uint32 proficiency = effect.miscvaluea();
