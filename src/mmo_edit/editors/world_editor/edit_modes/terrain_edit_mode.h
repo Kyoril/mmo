@@ -6,6 +6,8 @@
 #include "base/typedefs.h"
 #include "proto_data/project.h"
 #include "math/vector3.h"
+#include "scene_graph/manual_render_object.h"
+#include "scene_graph/scene_node.h"
 
 namespace mmo
 {
@@ -91,7 +93,7 @@ namespace mmo
 	{
 	public:
 		explicit TerrainEditMode(IWorldEditor& worldEditor, terrain::Terrain& terrain, const proto::ZoneManager& zones, Camera& camera);
-		~TerrainEditMode() override = default;
+		~TerrainEditMode() override;
 
 	public:
 		const char* GetName() const override;
@@ -124,6 +126,9 @@ namespace mmo
 		void SetBrushPosition(const Vector3& position);
 
 	private:
+		void UpdateBrushOverlay();
+
+	private:
 		terrain::Terrain& m_terrain;
 
 		const proto::ZoneManager& m_zones;
@@ -153,5 +158,11 @@ namespace mmo
 		uint32 m_selectedArea = 0;
 
 		uint32 m_selectedColor = 0xFFFFFFF;
+
+		ManualRenderObject* m_brushCircles = nullptr;
+		SceneNode*          m_brushCirclesNode = nullptr;
+		ManualRenderObject* m_vertexDots = nullptr;
+		SceneNode*          m_vertexDotsNode = nullptr;
+		bool                m_brushPositionValid = false;
 	};
 }
