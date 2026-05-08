@@ -146,6 +146,91 @@ namespace mmo
 
 		static const char* s_noneEntryString = "<None>";
 
+		if (const auto section = ScopedEditorSection("Lock", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			const uint32 objType = currentEntry.type();
+			const bool isChest = (objType == game_world_object_type::Chest);
+			const bool isDoor  = (objType == game_world_object_type::Door);
+
+			if (!isChest && !isDoor)
+			{
+				ImGui::TextDisabled("No lock properties for this object type.");
+			}
+			else
+			{
+				// Ensure data[] has at least 2 slots so we can always read/write data[0] and data[1].
+				while (currentEntry.data_size() < 2)
+					currentEntry.add_data(0);
+
+				// data[0] — default (active) lock type
+				{
+					const uint32 lockTypeId = currentEntry.data(0);
+					const auto* lockEntry = m_project.lockTypes.getById(lockTypeId);
+					const char* lockPreview = (lockEntry != nullptr) ? lockEntry->name().c_str() : "None (always open)";
+
+					if (ImGui::BeginCombo("Lock Type##data0", lockPreview))
+					{
+						ImGui::PushID(0);
+						if (ImGui::Selectable("None (always open)", lockTypeId == 0))
+							currentEntry.mutable_data()->Set(0, 0);
+						if (lockTypeId == 0) ImGui::SetItemDefaultFocus();
+						ImGui::PopID();
+
+						for (int i = 0; i < m_project.lockTypes.count(); ++i)
+						{
+							ImGui::PushID(i + 1);
+							const uint32 entryId = m_project.lockTypes.getTemplates().entry(i).id();
+							const bool selected = (entryId == lockTypeId);
+							const char* text = m_project.lockTypes.getTemplates().entry(i).name().c_str();
+							if (ImGui::Selectable(text, selected))
+								currentEntry.mutable_data()->Set(0, entryId);
+							if (selected) ImGui::SetItemDefaultFocus();
+							ImGui::PopID();
+						}
+						ImGui::EndCombo();
+					}
+					ImGui::SameLine();
+					ImGui::TextDisabled("(?)");
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip("The lock type required to open this object.\nSet to None to make it always accessible.");
+				}
+
+				// data[1] — post-unlock lock type (Door only)
+				if (isDoor)
+				{
+					const uint32 postUnlockId = currentEntry.data(1);
+					const auto* postEntry = m_project.lockTypes.getById(postUnlockId);
+					const char* postPreview = (postEntry != nullptr) ? postEntry->name().c_str() : "None (no change)";
+
+					if (ImGui::BeginCombo("Post-Unlock Lock Type##data1", postPreview))
+					{
+						ImGui::PushID(0);
+						if (ImGui::Selectable("None (no change)", postUnlockId == 0))
+							currentEntry.mutable_data()->Set(1, 0);
+						if (postUnlockId == 0) ImGui::SetItemDefaultFocus();
+						ImGui::PopID();
+
+						for (int i = 0; i < m_project.lockTypes.count(); ++i)
+						{
+							ImGui::PushID(i + 1);
+							const uint32 entryId = m_project.lockTypes.getTemplates().entry(i).id();
+							const bool selected = (entryId == postUnlockId);
+							const char* text = m_project.lockTypes.getTemplates().entry(i).name().c_str();
+							if (ImGui::Selectable(text, selected))
+								currentEntry.mutable_data()->Set(1, entryId);
+							if (selected) ImGui::SetItemDefaultFocus();
+							ImGui::PopID();
+						}
+						ImGui::EndCombo();
+					}
+					ImGui::SameLine();
+					ImGui::TextDisabled("(?)");
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip("After the first successful unlock, the door's active lock type\nchanges to this value. Set to None to keep the original lock type.");
+				}
+			}
+		}
+
 		if (const auto section = ScopedEditorSection("Factions", ImGuiTreeNodeFlags_None))
 		{
 			int32 factionTemplate = currentEntry.factionid();

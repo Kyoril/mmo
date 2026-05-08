@@ -251,6 +251,11 @@ namespace mmo
 			ApplyCooldown(interruptCooldown, interruptCooldown);
 		}
 
+		// Notify client that the cast was cancelled. SendEndCast sends SpellFailure and
+		// calls NotifyCastEnded (idempotent). This must happen before SetState so the
+		// world instance and context are still reachable from this SingleCastState.
+		SendEndCast(result);
+
 		// Keep *this* alive across SetState: SetState activates the new NoCastState
 		// which may drop the last external reference to this SingleCastState.
 		auto strongThis = shared_from_this();
