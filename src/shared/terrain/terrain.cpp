@@ -4,6 +4,7 @@
 
 #include <utility>
 
+#include "math/noise.h"
 #include "page.h"
 #include "tile.h"
 #include "game/constants.h"
@@ -855,6 +856,49 @@ namespace mmo
 							page->SetInnerHeightAt(localInnerX, localInnerZ, height);
 						}
 					} });
+		}
+
+		void Terrain::ApplyNoise(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, const float amplitude, const float frequency, const int octaves, const float persistence)
+		{
+			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, amplitude, frequency, octaves, persistence](const int32 vx, const int32 vy, const float factor)
+							   {
+				if (vx >= 0 && vy >= 0)
+				{
+					// Outer vertex — get world position and apply noise displacement
+					float worldX = 0.0f, worldZ = 0.0f;
+					GetGlobalVertexWorldPosition(vx, vy, &worldX, &worldZ);
+
+					float height = GetHeightAt(vx, vy);
+					height += amplitude * factor * noise::fBm(worldX * frequency, worldZ * frequency, octaves, persistence);
+					SetHeightAt(vx, vy, height);
+				}
+				else
+				{
+					// Inner vertex (encoded as negative indices)
+					const int32 ix = -vx - 1;
+					const int32 iz = -vy - 1;
+					const uint32 pageX = ix / (constants::OuterVerticesPerPageSide - 1);
+					const uint32 pageZ = iz / (constants::OuterVerticesPerPageSide - 1);
+					const uint32 localInnerX = ix % (constants::OuterVerticesPerPageSide - 1);
+					const uint32 localInnerZ = iz % (constants::OuterVerticesPerPageSide - 1);
+
+					Page* page = GetPage(pageX, pageZ);
+					if (page && page->IsPrepared())
+					{
+						// Compute inner vertex world position as average of surrounding outer corners
+						float v0x, v0z, v1x, v1z, v2x, v2z, v3x, v3z;
+						GetGlobalVertexWorldPosition(ix,     iz,     &v0x, &v0z);
+						GetGlobalVertexWorldPosition(ix + 1, iz,     &v1x, &v1z);
+						GetGlobalVertexWorldPosition(ix,     iz + 1, &v2x, &v2z);
+						GetGlobalVertexWorldPosition(ix + 1, iz + 1, &v3x, &v3z);
+						const float worldX = (v0x + v1x + v2x + v3x) * 0.25f;
+						const float worldZ = (v0z + v1z + v2z + v3z) * 0.25f;
+
+						float height = page->GetInnerHeightAt(localInnerX, localInnerZ);
+						height += amplitude * factor * noise::fBm(worldX * frequency, worldZ * frequency, octaves, persistence);
+						page->SetInnerHeightAt(localInnerX, localInnerZ, height);
+					}
+				} });
 		}
 
 		void Terrain::Smooth(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power)

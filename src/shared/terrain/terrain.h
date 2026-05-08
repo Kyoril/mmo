@@ -282,6 +282,17 @@ namespace mmo
 			/// @param targetHeight The target height to flatten to.
 			void Flatten(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power, float targetHeight);
 
+			/// @brief Applies Perlin noise-based height displacement in a brush area.
+			/// @param brushCenterX World X position of the brush center.
+			/// @param brushCenterZ World Z position of the brush center.
+			/// @param innerRadius The inner radius of the brush where full effect is applied.
+			/// @param outerRadius The outer radius of the brush where effect fades out.
+			/// @param amplitude Peak height displacement per application.
+			/// @param frequency Spatial frequency of the noise pattern.
+			/// @param octaves Number of fBm octave layers.
+			/// @param persistence Amplitude multiplier per octave (e.g. 0.5).
+			void ApplyNoise(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float amplitude, float frequency, int octaves, float persistence);
+
 			/// @brief Paints a texture layer on the terrain in a brush area.
 			/// @param layer The layer index (0-3) to paint.
 			/// @param brushCenterX World X position of the brush center.
