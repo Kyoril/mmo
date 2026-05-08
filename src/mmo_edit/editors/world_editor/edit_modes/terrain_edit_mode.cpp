@@ -41,7 +41,8 @@ namespace mmo
 	static const char* s_terrainDeformModeStrings[] = {
 		"Sculpt",
 		"Smooth",
-		"Flatten"
+		"Flatten",
+		"Noise"
 	};
 
 	static_assert(std::size(s_terrainDeformModeStrings) == static_cast<uint32>(TerrainDeformMode::Count_), "There needs to be one string per enum value to display!");
@@ -148,6 +149,14 @@ namespace mmo
 				}
 
 				ImGui::EndCombo();
+			}
+
+			if (m_deformMode == TerrainDeformMode::Noise)
+			{
+				ImGui::SliderFloat("Frequency", &m_noiseFrequency, 0.001f, 0.1f);
+				ImGui::SliderFloat("Amplitude", &m_noiseAmplitude, 0.1f, 50.0f);
+				ImGui::SliderInt("Octaves", &m_noiseOctaves, 1, 8);
+				ImGui::SliderFloat("Persistence", &m_noisePersistence, 0.1f, 0.9f);
 			}
 		}
 		else if (m_type == TerrainEditType::Paint)
@@ -260,6 +269,12 @@ namespace mmo
 				{
 					m_terrain.Flatten(m_brushPosition.x, m_brushPosition.z,
 						innerRadius, outerRadius, m_terrainBrushPower * factor * deltaSeconds, m_deformFlattenHeight);
+				} break;
+				case TerrainDeformMode::Noise:
+				{
+					m_terrain.ApplyNoise(m_brushPosition.x, m_brushPosition.z,
+						innerRadius, outerRadius, m_noiseAmplitude * factor, m_noiseFrequency,
+						m_noiseOctaves, m_noisePersistence);
 				} break;
 				}
 			}

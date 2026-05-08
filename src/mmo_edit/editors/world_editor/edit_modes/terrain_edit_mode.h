@@ -54,6 +54,8 @@ namespace mmo
 		/// Flatten the terrain, making all terrain tiles have the same height.
 		Flatten,
 
+		/// Apply Perlin noise to the terrain, varying height naturally.
+		Noise,
 
 		/// The total number of terrain deform modes. Always the last element!
 		Count_
@@ -150,6 +152,11 @@ namespace mmo
 		float m_terrainBrushHardness = 0.5f;
 
 		float m_terrainBrushPower = 10.0f;
+
+		float m_noiseFrequency = 0.01f;
+		float m_noiseAmplitude = 5.0f;
+		int   m_noiseOctaves = 4;
+		float m_noisePersistence = 0.5f;
 
 		uint8 m_terrainPaintLayer = 0;
 
