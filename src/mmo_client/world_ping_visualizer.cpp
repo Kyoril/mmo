@@ -210,18 +210,17 @@ namespace mmo
 	void WorldPingVisualizer::BuildIconMesh(PingSlot& slot)
 	{
 		const std::string nodeName = "PingIcon_" + std::to_string(m_nameCounter++);
-		slot.iconNode = &m_scene.CreateSceneNode(nodeName);
+		slot.iconNode = m_scene.GetRootSceneNode().CreateChildSceneNode(nodeName);
 		slot.iconNode->SetPosition(slot.worldPosition + Vector3(0.0f, kIconHeight, 0.0f));
 
 		slot.iconMesh = m_scene.CreateManualRenderObject(nodeName + "_mesh");
+		slot.iconMesh->SetCastShadows(false);
 		slot.iconNode->AttachObject(*slot.iconMesh);
 
 		auto tri = slot.iconMesh->AddTriangleListOperation(
 			MaterialManager::Get().Load("Interface/WorldPingIcon.hmat"));
 
-		// Quad in local space (XY plane); node rotation handles camera facing
 		const float h = kIconHalfSize;
-		// Triangle 1: TL, BL, TR
 		auto& t1 = tri->AddTriangle(
 			Vector3(-h,  h, 0.0f),
 			Vector3(-h, -h, 0.0f),
@@ -231,7 +230,6 @@ namespace mmo
 		t1.SetUV(1, 0.0f, 1.0f);
 		t1.SetUV(2, 1.0f, 0.0f);
 
-		// Triangle 2: BL, BR, TR
 		auto& t2 = tri->AddTriangle(
 			Vector3(-h, -h, 0.0f),
 			Vector3( h, -h, 0.0f),
@@ -240,6 +238,8 @@ namespace mmo
 		t2.SetUV(0, 0.0f, 1.0f);
 		t2.SetUV(1, 1.0f, 1.0f);
 		t2.SetUV(2, 1.0f, 0.0f);
+
+		slot.iconNode->UpdateBounds();
 	}
 
 	void WorldPingVisualizer::BuildLineMesh(PingSlot& slot)
@@ -250,9 +250,10 @@ namespace mmo
 		}
 
 		const std::string nodeName = "PingLine_" + std::to_string(m_nameCounter++);
-		slot.lineNode = &m_scene.CreateSceneNode(nodeName);
+		slot.lineNode = m_scene.GetRootSceneNode().CreateChildSceneNode(nodeName);
 
 		slot.lineMesh = m_scene.CreateManualRenderObject(nodeName + "_mesh");
+		slot.lineMesh->SetCastShadows(false);
 		slot.lineNode->AttachObject(*slot.lineMesh);
 
 		auto line = slot.lineMesh->AddLineListOperation(
@@ -262,6 +263,8 @@ namespace mmo
 			slot.worldPosition);
 		seg.SetStartColor(0xFF4488FF);
 		seg.SetEndColor(0xFF4488FF);
+
+		slot.lineNode->UpdateBounds();
 	}
 
 	void WorldPingVisualizer::FreeSlot(PingSlot& slot)
