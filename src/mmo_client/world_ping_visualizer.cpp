@@ -122,7 +122,7 @@ namespace mmo
 			{
 				slot.lastAlpha = quantized;
 				const uint32 iconColor = (static_cast<uint32>(quantized) << 24) | 0x00FFFFFF;
-				const uint32 lineColor  = (static_cast<uint32>(quantized) << 24) | 0x004488FF;
+				const uint32 lineColor  = (static_cast<uint32>(quantized) << 24) | 0x00FFFFFF;
 
 				if (slot.iconMesh)
 				{
@@ -154,7 +154,7 @@ namespace mmo
 				{
 					slot.lineMesh->Clear();
 					auto line = slot.lineMesh->AddLineListOperation(
-						MaterialManager::Get().Load("Models/Engine/Axis.hmat"));
+						MaterialManager::Get().Load("Interface/WorldPingLine.hmat"));
 					auto& seg = line->AddLine(
 						slot.worldPosition + Vector3(0.0f, kIconHeight - kIconHalfSize, 0.0f),
 						slot.worldPosition);
@@ -258,12 +258,12 @@ namespace mmo
 		slot.lineNode->AttachObject(*slot.lineMesh);
 
 		auto line = slot.lineMesh->AddLineListOperation(
-			MaterialManager::Get().Load("Models/Engine/Axis.hmat"));
+			MaterialManager::Get().Load("Interface/WorldPingLine.hmat"));
 		auto& seg = line->AddLine(
 			slot.worldPosition + Vector3(0.0f, kIconHeight - kIconHalfSize, 0.0f),
 			slot.worldPosition);
-		seg.SetStartColor(0xFF4488FF);
-		seg.SetEndColor(0xFF4488FF);
+		seg.SetStartColor(0xFFFFFFFF);
+		seg.SetEndColor(0xFFFFFFFF);
 
 		slot.lineNode->UpdateBounds();
 	}
