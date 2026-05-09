@@ -87,28 +87,6 @@ namespace mmo
 		for (auto &slot : addedBySlot)
 		{
 			OnItemAdded(slot.first, slot.second, true, false);
-
-			if (m_character->GetGroupId() != 0)
-			{
-				m_character->ForEachSubscriberInSight([&slot, this](TileSubscriber &subscriber)
-				{
-					if (subscriber.GetGameUnit().GetGuid() == m_character->GetGuid())
-					{
-						return;
-					}
-
-					if (!subscriber.GetGameUnit().IsPlayer())
-					{
-						return;
-					}
-
-					auto& player = subscriber.GetGameUnit().AsPlayer();
-					if (player.GetGroupId() == m_character->GetGroupId())
-					{
-						player.OnItemAdded(slot.first, slot.second, true, false);
-					}
-				});
-			}
 		}
 
 		// Consume this item
