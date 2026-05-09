@@ -50,6 +50,11 @@ namespace mmo
 
 		[[nodiscard]] SceneNode* GetRootNode() const { return m_controlledUnit ? m_controlledUnit->GetSceneNode() : nullptr; }
 
+		[[nodiscard]] GameObjectC* GetHoveredObject() const { return m_hoveredObject; }
+
+		[[nodiscard]] int32 GetMouseX() const { return m_x; }
+		[[nodiscard]] int32 GetMouseY() const { return m_y; }
+
 	private:
 		void SetupCamera();
 

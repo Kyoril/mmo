@@ -68,6 +68,11 @@
 #include "systems/inventory_client.h"
 
 #include "ui/minimap.h"
+#include "world_ping_visualizer.h"
+
+#include "luabind_lambda.h"
+#include "luabind/luabind.hpp"
+#include "scene_graph/movable_object.h"
 
 namespace mmo
 {
@@ -244,6 +249,7 @@ namespace mmo
 				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Impact, spell, nullptr, targets); });
 
 		m_debugPathVisualizer = std::make_unique<DebugPathVisualizer>(*m_scene);
+		m_worldPingVisualizer = std::make_unique<WorldPingVisualizer>(*m_scene);
 
 		// Register world renderer
 		FrameManager::Get().RegisterFrameRenderer("WorldRenderer", [this](const std::string &name)
@@ -339,6 +345,7 @@ namespace mmo
 
 	void WorldState::OnLeave()
 	{
+		m_worldPingVisualizer.reset();
 		m_debugPathVisualizer.reset();
 		m_foliage.reset();
 
@@ -428,10 +435,94 @@ namespace mmo
 		// Load ui file
 		FrameManager::Get().LoadUIFile("Interface/GameUI/GameUI.toc");
 
+		// Override/extend Lua globals that need WorldState context
+		RegisterWorldLuaFunctions();
+
 		if (ObjectMgr::GetActivePlayerGuid())
 		{
 			FrameManager::Get().TriggerLuaEvent("PLAYER_ENTER_WORLD");
 		}
+	}
+
+	void WorldState::RegisterWorldLuaFunctions()
+	{
+		lua_State* L = FrameManager::Get().GetLuaState();
+		if (!L)
+		{
+			return;
+		}
+
+		luabind::module(L)
+		[
+			// Override SendPing to do hovered-object check + terrain raycast before sending
+			luabind::def<std::function<void()>>("SendPing", [this]()
+			{
+				if (!m_playerController || !m_scene)
+				{
+					return;
+				}
+
+				// 1) Check hovered object (unit or game object)
+				GameObjectC* hovered = m_playerController->GetHoveredObject();
+				if (hovered && hovered->IsUnit())
+				{
+					m_realmConnector.SendPartyPingUnit(hovered->GetGuid());
+					return;
+				}
+
+				// 2) Terrain/collidable raycast using current mouse position
+				if (m_rayQuery)
+				{
+					const int32 mouseX = m_playerController->GetMouseX();
+					const int32 mouseY = m_playerController->GetMouseY();
+
+					int32 screenW = 1920, screenH = 1080;
+					GraphicsDevice::Get().GetViewport(nullptr, nullptr, &screenW, &screenH);
+
+					const float nx = static_cast<float>(mouseX) / static_cast<float>(screenW);
+					const float ny = static_cast<float>(mouseY) / static_cast<float>(screenH);
+
+					const Ray mouseRay = m_playerController->GetCamera().GetCameraToViewportRay(nx, ny, 1000.0f);
+
+					m_rayQuery->ClearResult();
+					m_rayQuery->SetSortByDistance(true);
+					m_rayQuery->SetQueryMask(1 << 6); // terrain + world models
+					m_rayQuery->SetRay(mouseRay);
+					m_rayQuery->Execute();
+
+					const auto& results = m_rayQuery->GetLastResult();
+					for (const auto& result : results)
+					{
+						if (!result.movable)
+						{
+							continue;
+						}
+
+						const ICollidable* collidable = result.movable->GetCollidable();
+						if (!collidable || !collidable->IsCollidable())
+						{
+							continue;
+						}
+
+						CollisionResult collision;
+						if (collidable->TestRayCollision(mouseRay, collision))
+						{
+							const Vector3 hitPoint = mouseRay.origin + mouseRay.GetDirection() * collision.penetrationDepth;
+							m_realmConnector.SendPartyPingPosition(hitPoint.x, hitPoint.z);
+							return;
+						}
+					}
+				}
+
+				// 3) Fallback: ping at player position
+				auto player = ObjectMgr::GetActivePlayer();
+				if (player)
+				{
+					const Vector3& pos = player->GetPosition();
+					m_realmConnector.SendPartyPingPosition(pos.x, pos.z);
+				}
+			})
+		];
 	}
 
 	void WorldState::OnTargetSelectionChanged(uint64 monitoredGuid)
@@ -578,6 +669,11 @@ namespace mmo
 		if (m_debugPathVisualizer)
 		{
 			m_debugPathVisualizer->Update(deltaSeconds);
+		}
+
+		if (m_worldPingVisualizer && m_playerController)
+		{
+			m_worldPingVisualizer->Update(deltaSeconds, m_playerController->GetCamera());
 		}
 
 		for (size_t i = 0; i < 20; ++i)
@@ -3000,6 +3096,10 @@ namespace mmo
 		// Clear pings — they belong to the old map
 		m_activePings.clear();
 		m_minimap.UpdatePings(m_activePings);
+		if (m_worldPingVisualizer)
+		{
+			m_worldPingVisualizer->Clear();
+		}
 
 		return PacketParseResult::Pass;
 	}
@@ -3094,36 +3194,76 @@ namespace mmo
 	PacketParseResult WorldState::OnPartyPing(game::IncomingPacket &packet)
 	{
 		uint64 senderGuid = 0;
-		float x = 0.0f, z = 0.0f;
-		if (!(packet >> io::read_packed_guid(senderGuid) >> io::read<float>(x) >> io::read<float>(z)))
+		uint8 pingType = 0;
+		if (!(packet >> io::read_packed_guid(senderGuid) >> io::read<uint8>(pingType)))
 		{
-			ELOG("Failed to read PartyPing packet!");
+			ELOG("Failed to read PartyPing packet header!");
 			return PacketParseResult::Disconnect;
 		}
 
 		static constexpr float kPingDuration = 5.0f;
 
-		// Replace existing ping from same sender, or add new one
-		bool found = false;
-		for (auto& ping : m_activePings)
+		if (pingType == 0)
 		{
-			if (ping.senderGuid == senderGuid)
+			// Position ping
+			float x = 0.0f, z = 0.0f;
+			if (!(packet >> io::read<float>(x) >> io::read<float>(z)))
 			{
-				ping.position = Vector3(x, 0.0f, z);
-				ping.remainingTime = kPingDuration;
-				found = true;
-				break;
+				ELOG("Failed to read PartyPing position payload!");
+				return PacketParseResult::Disconnect;
 			}
+
+			// Update minimap dots
+			bool found = false;
+			for (auto& ping : m_activePings)
+			{
+				if (ping.senderGuid == senderGuid)
+				{
+					ping.position = Vector3(x, 0.0f, z);
+					ping.remainingTime = kPingDuration;
+					found = true;
+					break;
+				}
+			}
+			if (!found)
+			{
+				m_activePings.push_back({ Vector3(x, 0.0f, z), kPingDuration, senderGuid });
+			}
+			m_minimap.UpdatePings(m_activePings);
+
+			// Update 3D world ping
+			if (m_worldPingVisualizer)
+			{
+				m_worldPingVisualizer->AddPositionPing(senderGuid, Vector3(x, 0.0f, z));
+			}
+
+			FrameManager::Get().TriggerLuaEvent("PARTY_PING", x, 0.0f, z);
 		}
-		if (!found)
+		else
 		{
-			m_activePings.push_back({ Vector3(x, 0.0f, z), kPingDuration, senderGuid });
+			// Unit ping
+			uint64 targetGuid = 0;
+			if (!(packet >> io::read_packed_guid(targetGuid)))
+			{
+				ELOG("Failed to read PartyPing unit guid!");
+				return PacketParseResult::Disconnect;
+			}
+
+			// Remove any minimap dot for this sender (unit pings don't show on minimap as a position)
+			m_activePings.erase(
+				std::remove_if(m_activePings.begin(), m_activePings.end(),
+					[senderGuid](const Minimap::PingDot& p) { return p.senderGuid == senderGuid; }),
+				m_activePings.end());
+			m_minimap.UpdatePings(m_activePings);
+
+			// Update 3D world ping
+			if (m_worldPingVisualizer)
+			{
+				m_worldPingVisualizer->AddUnitPing(senderGuid, targetGuid);
+			}
+
+			FrameManager::Get().TriggerLuaEvent("PARTY_PING_UNIT", targetGuid);
 		}
-
-		m_minimap.UpdatePings(m_activePings);
-
-		// Fire Lua event so UI can show a flash / sound
-		FrameManager::Get().TriggerLuaEvent("PARTY_PING", x, z);
 
 		return PacketParseResult::Pass;
 	}

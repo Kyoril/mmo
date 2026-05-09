@@ -179,6 +179,9 @@ namespace mmo
 
 		static luabind::object GetGlobal(const std::string& name);
 
+		/// Returns the raw Lua state. Use sparingly — prefer RegisterGlobal / TriggerLuaEvent.
+		lua_State* GetLuaState() const { return m_luaState; }
+
 	public:
 		/// Registers a new factory for a certain frame type.
 		void RegisterFrameFactory(const std::string& elementName, FrameFactory factory);

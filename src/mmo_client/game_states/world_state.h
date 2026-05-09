@@ -19,6 +19,7 @@
 #include "game_protocol/game_protocol.h"
 #include "scene_graph/axis_display.h"
 #include "ui/minimap.h"
+#include "world_ping_visualizer.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/world_grid.h"
 #include "scene_graph/animation_notify.h"
@@ -132,6 +133,9 @@ namespace mmo
 		// Player Mirror Handlers (called when certain field map values of the controlled player character were changed by the server)
 
 		void ReloadUI();
+
+		/// Registers WorldState-specific Lua globals (called from ReloadUI so they survive UI reload).
+		void RegisterWorldLuaFunctions();
 
 		void OnTargetSelectionChanged(uint64 monitoredGuid);
 
@@ -511,6 +515,9 @@ namespace mmo
 
 		/// Active pings received from the server, ticked down each frame.
 		std::vector<Minimap::PingDot> m_activePings;
+
+		/// 3D world ping visualizer.
+		std::unique_ptr<WorldPingVisualizer> m_worldPingVisualizer;
 
 		bool m_timeSyncResponseSent = false;
 

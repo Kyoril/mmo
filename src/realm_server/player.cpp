@@ -1284,36 +1284,57 @@ namespace mmo
 
 	PacketParseResult Player::OnPartyPing(game::IncomingPacket& packet)
 	{
-		float x = 0.0f, z = 0.0f;
-		if (!(packet >> io::read<float>(x) >> io::read<float>(z)))
+		uint8 pingType = 0;
+		if (!(packet >> io::read<uint8>(pingType)))
 		{
 			return PacketParseResult::Disconnect;
 		}
 
-		if (!m_group)
+		const uint64 senderGuid = m_characterData->characterId;
+
+		if (pingType == 0)
 		{
-			// Not in a party — echo back to self only
-			const uint64 senderGuid = m_characterData->characterId;
-			GetConnection().sendSinglePacket([senderGuid, x, z](game::OutgoingPacket& outPacket)
+			// Position ping
+			float x = 0.0f, z = 0.0f;
+			if (!(packet >> io::read<float>(x) >> io::read<float>(z)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			auto broadcast = [senderGuid, x, z](game::OutgoingPacket& outPacket)
 			{
 				outPacket.Start(game::realm_client_packet::PartyPing);
 				outPacket << io::write_packed_guid(senderGuid)
+						  << io::write<uint8>(0)
 						  << io::write<float>(x)
 						  << io::write<float>(z);
 				outPacket.Finish();
-			});
-			return PacketParseResult::Pass;
-		}
+			};
 
-		const uint64 senderGuid = m_characterData->characterId;
-		m_group->BroadcastPacket([senderGuid, x, z](game::OutgoingPacket& outPacket)
+			if (m_group) { m_group->BroadcastPacket(broadcast); }
+			else { GetConnection().sendSinglePacket(broadcast); }
+		}
+		else
 		{
-			outPacket.Start(game::realm_client_packet::PartyPing);
-			outPacket << io::write_packed_guid(senderGuid)
-					  << io::write<float>(x)
-					  << io::write<float>(z);
-			outPacket.Finish();
-		});
+			// Unit ping
+			uint64 targetGuid = 0;
+			if (!(packet >> io::read_packed_guid(targetGuid)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			auto broadcast = [senderGuid, targetGuid](game::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(game::realm_client_packet::PartyPing);
+				outPacket << io::write_packed_guid(senderGuid)
+						  << io::write<uint8>(1)
+						  << io::write_packed_guid(targetGuid);
+				outPacket.Finish();
+			};
+
+			if (m_group) { m_group->BroadcastPacket(broadcast); }
+			else { GetConnection().sendSinglePacket(broadcast); }
+		}
 
 		return PacketParseResult::Pass;
 	}
