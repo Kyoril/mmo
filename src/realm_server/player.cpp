@@ -1295,18 +1295,19 @@ namespace mmo
 		if (pingType == 0)
 		{
 			// Position ping
-			float x = 0.0f, z = 0.0f;
-			if (!(packet >> io::read<float>(x) >> io::read<float>(z)))
+			float x = 0.0f, y = 0.0f, z = 0.0f;
+			if (!(packet >> io::read<float>(x) >> io::read<float>(y) >> io::read<float>(z)))
 			{
 				return PacketParseResult::Disconnect;
 			}
 
-			auto broadcast = [senderGuid, x, z](game::OutgoingPacket& outPacket)
+			auto broadcast = [senderGuid, x, y, z](game::OutgoingPacket& outPacket)
 			{
 				outPacket.Start(game::realm_client_packet::PartyPing);
 				outPacket << io::write_packed_guid(senderGuid)
 						  << io::write<uint8>(0)
 						  << io::write<float>(x)
+						  << io::write<float>(y)
 						  << io::write<float>(z);
 				outPacket.Finish();
 			};

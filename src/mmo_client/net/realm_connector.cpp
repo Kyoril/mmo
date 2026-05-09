@@ -847,12 +847,13 @@ namespace mmo
 			});
 	}
 
-	void RealmConnector::SendPartyPingPosition(const float x, const float z)
+	void RealmConnector::SendPartyPingPosition(const float x, const float y, const float z)
 	{
-		sendSinglePacket([x, z](game::OutgoingPacket& packet) {
+		sendSinglePacket([x, y, z](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::PartyPing);
 			packet << io::write<uint8>(0)  // type: position
 				   << io::write<float>(x)
+				   << io::write<float>(y)
 				   << io::write<float>(z);
 			packet.Finish();
 		});

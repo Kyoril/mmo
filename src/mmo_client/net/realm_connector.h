@@ -416,7 +416,7 @@ namespace mmo
 		void DisbandGroup();
 
 		/// Sends a party ping at the given world position (x, z).
-		void SendPartyPingPosition(float x, float z);
+		void SendPartyPingPosition(float x, float y, float z);
 		void SendPartyPingUnit(uint64 unitGuid);
 
 		void RandomRoll(int32 min, int32 max);

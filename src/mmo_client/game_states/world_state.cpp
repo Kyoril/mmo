@@ -508,7 +508,7 @@ namespace mmo
 						if (collidable->TestRayCollision(mouseRay, collision))
 						{
 							const Vector3 hitPoint = mouseRay.origin + mouseRay.GetDirection() * collision.penetrationDepth;
-							m_realmConnector.SendPartyPingPosition(hitPoint.x, hitPoint.z);
+							m_realmConnector.SendPartyPingPosition(hitPoint.x, hitPoint.y, hitPoint.z);
 							return;
 						}
 					}
@@ -519,7 +519,7 @@ namespace mmo
 				if (player)
 				{
 					const Vector3& pos = player->GetPosition();
-					m_realmConnector.SendPartyPingPosition(pos.x, pos.z);
+					m_realmConnector.SendPartyPingPosition(pos.x, pos.y, pos.z);
 				}
 			})
 		];
@@ -3206,20 +3206,20 @@ namespace mmo
 		if (pingType == 0)
 		{
 			// Position ping
-			float x = 0.0f, z = 0.0f;
-			if (!(packet >> io::read<float>(x) >> io::read<float>(z)))
+			float x = 0.0f, y = 0.0f, z = 0.0f;
+			if (!(packet >> io::read<float>(x) >> io::read<float>(y) >> io::read<float>(z)))
 			{
 				ELOG("Failed to read PartyPing position payload!");
 				return PacketParseResult::Disconnect;
 			}
 
-			// Update minimap dots
+			// Update minimap dots (minimap only cares about XZ)
 			bool found = false;
 			for (auto& ping : m_activePings)
 			{
 				if (ping.senderGuid == senderGuid)
 				{
-					ping.position = Vector3(x, 0.0f, z);
+					ping.position = Vector3(x, y, z);
 					ping.remainingTime = kPingDuration;
 					found = true;
 					break;
@@ -3227,17 +3227,17 @@ namespace mmo
 			}
 			if (!found)
 			{
-				m_activePings.push_back({ Vector3(x, 0.0f, z), kPingDuration, senderGuid });
+				m_activePings.push_back({ Vector3(x, y, z), kPingDuration, senderGuid });
 			}
 			m_minimap.UpdatePings(m_activePings);
 
 			// Update 3D world ping
 			if (m_worldPingVisualizer)
 			{
-				m_worldPingVisualizer->AddPositionPing(senderGuid, Vector3(x, 0.0f, z));
+				m_worldPingVisualizer->AddPositionPing(senderGuid, Vector3(x, y, z));
 			}
 
-			FrameManager::Get().TriggerLuaEvent("PARTY_PING", x, 0.0f, z);
+			FrameManager::Get().TriggerLuaEvent("PARTY_PING", x, y, z);
 		}
 		else
 		{
