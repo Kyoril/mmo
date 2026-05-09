@@ -49,6 +49,34 @@ namespace mmo
 				1, 1);
 		}
 
+		// Quest giver icons: yellow ! for available, yellow ? for completable
+		m_questAvailableTexture = TextureManager::Get().CreateOrRetrieve("Interface/Icons/QuestExclamation.htex");
+		if (!m_questAvailableTexture)
+		{
+			// Fallback: reuse party dot texture with yellow tint
+			m_questAvailableTexture = m_partyMemberTexture;
+		}
+		if (m_questAvailableTexture)
+		{
+			m_questAvailableGeom.SetActiveTexture(m_questAvailableTexture);
+			GeometryHelper::CreateRect(m_questAvailableGeom, Color(1.0f, 0.9f, 0.0f, 1.0f),
+				Rect(-10.0f, -10.0f, 10.0f, 10.0f),
+				Rect(1.0f, 1.0f, 0.0f, 0.0f), 1, 1);
+		}
+
+		m_questCompletableTexture = TextureManager::Get().CreateOrRetrieve("Interface/Icons/QuestQuestion.htex");
+		if (!m_questCompletableTexture)
+		{
+			m_questCompletableTexture = m_partyMemberTexture;
+		}
+		if (m_questCompletableTexture)
+		{
+			m_questCompletableGeom.SetActiveTexture(m_questCompletableTexture);
+			GeometryHelper::CreateRect(m_questCompletableGeom, Color(1.0f, 1.0f, 0.0f, 1.0f),
+				Rect(-10.0f, -10.0f, 10.0f, 10.0f),
+				Rect(1.0f, 1.0f, 0.0f, 0.0f), 1, 1);
+		}
+
 		if (m_minimapRenderTexture)
 		{
 			m_initialized = true;
@@ -213,6 +241,21 @@ namespace mmo
 				m_partyMemberGeom.Draw();
 			}
 		}
+
+		// Render quest giver dots
+		if (!m_questGiverDots.empty())
+		{
+			const float dotScale = 1.0f / GetZoomFactor();
+			for (const QuestGiverDot& dot : m_questGiverDots)
+			{
+				GeometryBuffer& geom = (dot.type == QuestDotType::Available) ? m_questAvailableGeom : m_questCompletableGeom;
+				Matrix4 world = Matrix4::Identity;
+				world = world * Matrix4::GetTrans(Vector3(dot.position.x, dot.position.z, 0.0f));
+				world = world * Matrix4::GetScale(Vector3(dotScale, dotScale, 1.0f));
+				gx.SetTransformMatrix(World, world);
+				geom.Draw();
+			}
+		}
 		
 		m_minimapRenderTexture->Update();
 		gx.RestoreState();
@@ -243,6 +286,7 @@ namespace mmo
 		m_currentTileY = -1;
 		m_loadedTextures.clear();
 		m_partyPositions.clear();
+		m_questGiverDots.clear();
 
 		UpdatePlayerPosition(m_playerPosition, m_playerOrientation);
 	}
@@ -250,6 +294,11 @@ namespace mmo
 	void Minimap::UpdatePartyPositions(std::vector<Vector3> positions)
 	{
 		m_partyPositions = std::move(positions);
+	}
+
+	void Minimap::UpdateQuestGiverDots(std::vector<QuestGiverDot> dots)
+	{
+		m_questGiverDots = std::move(dots);
 	}
 
 	bool Minimap::GetTileCoordinates(const Vector3& worldPosition, int32& outTileX, int32& outTileY)

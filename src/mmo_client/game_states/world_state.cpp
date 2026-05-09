@@ -635,6 +635,29 @@ namespace mmo
 				}
 			}
 			m_minimap.UpdatePartyPositions(std::move(partyPositions));
+
+			// Gather quest giver dots for minimap
+			std::vector<Minimap::QuestGiverDot> questDots;
+			ObjectMgr::ForEachUnit([&questDots](GameUnitC& unit)
+			{
+				const QuestgiverStatus status = unit.GetQuestGiverStatus();
+				Minimap::QuestDotType dotType;
+				switch (status)
+				{
+				case questgiver_status::Available:
+				case questgiver_status::AvailableRep:
+					dotType = Minimap::QuestDotType::Available;
+					break;
+				case questgiver_status::Reward:
+				case questgiver_status::RewardRep:
+					dotType = Minimap::QuestDotType::Completable;
+					break;
+				default:
+					return; // Not shown on minimap
+				}
+				questDots.push_back({ unit.GetPosition(), dotType });
+			});
+			m_minimap.UpdateQuestGiverDots(std::move(questDots));
 		}
 
 		// Update projectiles

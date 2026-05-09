@@ -159,6 +159,7 @@ namespace mmo
 		bool OnAuraUpdate(io::Reader &reader);
 
 		void SetQuestGiverStatus(QuestgiverStatus status);
+		QuestgiverStatus GetQuestGiverStatus() const { return m_questGiverStatus; }
 
 		bool IsBeingMoved() const { return !m_movementPath.empty() && !m_pathCompleted; }
 
@@ -627,6 +628,7 @@ namespace mmo
 
 		SceneNode *m_questGiverNode = nullptr;
 		Entity *m_questGiverEntity = nullptr;
+		QuestgiverStatus m_questGiverStatus = questgiver_status::None;
 
 		AvatarConfiguration m_configuration;
 

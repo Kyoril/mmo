@@ -79,6 +79,21 @@ namespace mmo
 		/// @param positions World-space positions of all party members (excluding the local player).
 		void UpdatePartyPositions(std::vector<Vector3> positions);
 
+		enum class QuestDotType : uint8
+		{
+			Available,    ///< Yellow ! (new quest)
+			Completable,  ///< Yellow ? (quest ready to turn in)
+		};
+
+		struct QuestGiverDot
+		{
+			Vector3 position;
+			QuestDotType type;
+		};
+
+		/// @brief Updates the list of quest giver icons shown on the minimap.
+		void UpdateQuestGiverDots(std::vector<QuestGiverDot> dots);
+
 	private:
 		/// @brief Calculates the tile coordinates for a given world position.
 		/// @param worldPosition The world position to convert.
@@ -159,5 +174,11 @@ namespace mmo
 		TexturePtr m_partyMemberTexture;
 		GeometryBuffer m_partyMemberGeom;
 		std::vector<Vector3> m_partyPositions;
+
+		TexturePtr m_questAvailableTexture;
+		GeometryBuffer m_questAvailableGeom;
+		TexturePtr m_questCompletableTexture;
+		GeometryBuffer m_questCompletableGeom;
+		std::vector<QuestGiverDot> m_questGiverDots;
 	};
 }

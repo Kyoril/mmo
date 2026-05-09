@@ -658,6 +658,7 @@ namespace mmo
 
 	void GameUnitC::SetQuestGiverStatus(const QuestgiverStatus status)
 	{
+		m_questGiverStatus = status;
 		if (status == questgiver_status::None)
 		{
 			if (m_questGiverEntity)
