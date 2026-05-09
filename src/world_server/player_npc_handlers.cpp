@@ -120,6 +120,9 @@ namespace mmo
 
 		// Ensure that the gossip menu is closed
 		CloseGossip();
+
+		// Immediately refresh interactability of nearby world objects gated on this quest
+		RefreshQuestObjectInteractability(questId);
 	}
 
 	void Player::OnAbandonQuest(uint16 opCode, uint32 size, io::Reader& contentReader)
@@ -238,6 +241,8 @@ namespace mmo
 		// Reward this quest
 		if (bool result = m_character->RewardQuest(questGiverGuid, questId, rewardChoice))
 		{
+			// Immediately remove interactability from world objects gated on this quest
+			RefreshQuestObjectInteractability(questId);
 			// If the quest should perform a spell cast on the players character, we will do so now
 			if (quest->rewardspellcast())
 			{

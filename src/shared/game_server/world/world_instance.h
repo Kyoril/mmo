@@ -178,6 +178,20 @@ namespace mmo
 
 		bool IsPersistent() const { return m_mapEntry->instancetype() == proto::MapEntry_MapInstanceType_GLOBAL; }
 
+		/// Iterates all game objects currently in this world instance.
+		///	@param callback Callable receiving `GameObjectS&`; return false to stop early.
+		template<typename Callback>
+		void ForEachObject(Callback&& callback) const
+		{
+			for (const auto& [guid, obj] : m_objectsByGuid)
+			{
+				if (!callback(*obj))
+				{
+					break;
+				}
+			}
+		}
+
 		bool IsArena() const { return m_mapEntry->instancetype() == proto::MapEntry_MapInstanceType_ARENA; }
 
 		bool IsBattleground() const { return m_mapEntry->instancetype() == proto::MapEntry_MapInstanceType_BATTLEGROUND; }

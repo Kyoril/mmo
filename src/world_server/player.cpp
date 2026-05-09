@@ -283,6 +283,37 @@ namespace mmo
 		}
 	}
 
+	void Player::RefreshQuestObjectInteractability(const uint32 questId)
+	{
+		if (!m_worldInstance)
+		{
+			return;
+		}
+
+		// Gather all world objects in this instance that gate on questId
+		std::vector<GameObjectS*> affected;
+		m_worldInstance->ForEachObject([&](GameObjectS& obj) -> bool
+		{
+			if (obj.GetTypeId() != ObjectTypeId::Object)
+			{
+				return true;
+			}
+
+			GameWorldObjectS* worldObj = dynamic_cast<GameWorldObjectS*>(&obj);
+			if (worldObj && worldObj->GetRequiredQuestId() == questId)
+			{
+				affected.push_back(worldObj);
+			}
+
+			return true;
+		});
+
+		if (!affected.empty())
+		{
+			NotifyObjectsUpdated(affected);
+		}
+	}
+
 	void Player::NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects)
 	{
 		// Prepare dynamic fields for world objects

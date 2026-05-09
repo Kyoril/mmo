@@ -373,6 +373,11 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnAbandonQuest(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// Refreshes dynamic flags of world objects that gate on a quest, sending updates to this player.
+		///	Called after accepting or completing a quest to immediately reflect interactability changes.
+		///	@param questId The quest ID that changed status.
+		void RefreshQuestObjectInteractability(uint32 questId);
+
 		/// Handles the client's request to query a quest giver for an offered quest.
 		///	@param opCode The op code of the packet.
 		///	@param size The size of the packet content in bytes, excluding the packet header.
