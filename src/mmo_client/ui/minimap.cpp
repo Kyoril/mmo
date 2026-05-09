@@ -11,6 +11,8 @@
 
 namespace mmo
 {
+	/// Duration in seconds that a ping remains visible (fading out).
+	static constexpr float kPingDuration = 5.0f;
 	Minimap::Minimap(uint32 minimapSize)
 		: m_minimapSize(minimapSize)
 		, m_minimapRenderTexture(nullptr)
@@ -77,6 +79,9 @@ namespace mmo
 				Rect(-16.0f, -16.0f, 16.0f, 16.0f),
 				Rect(1.0f, 0.0f, 0.0f, 1.0f), 1, 1);
 		}
+
+		// Ping dot: reuse party dot texture with orange/red tint (rebuilt per-frame for alpha fade)
+		m_pingTexture = m_partyMemberTexture;
 
 		if (m_minimapRenderTexture)
 		{
@@ -259,6 +264,26 @@ namespace mmo
 			m_playerGeom.Draw();
 		}
 
+		// Render active pings (orange dots, alpha fades with remainingTime)
+		if (m_pingTexture && !m_pings.empty())
+		{
+			const float dotScale = 1.0f / GetZoomFactor();
+			for (const PingDot& ping : m_pings)
+			{
+				const float alpha = std::clamp(ping.remainingTime / kPingDuration, 0.0f, 1.0f);
+				m_pingGeom.Reset();
+				m_pingGeom.SetActiveTexture(m_pingTexture);
+				GeometryHelper::CreateRect(m_pingGeom, Color(1.0f, 0.3f, 0.0f, alpha),
+					Rect(-20.0f, -20.0f, 20.0f, 20.0f),
+					Rect(1.0f, 0.0f, 0.0f, 1.0f), 1, 1);
+				Matrix4 world = Matrix4::Identity;
+				world = world * Matrix4::GetTrans(Vector3(ping.position.x, ping.position.z, 0.0f));
+				world = world * Matrix4::GetScale(Vector3(dotScale, dotScale, 1.0f));
+				gx.SetTransformMatrix(World, world);
+				m_pingGeom.Draw();
+			}
+		}
+
 		m_minimapRenderTexture->Update();
 		gx.RestoreState();
 	}
@@ -289,6 +314,7 @@ namespace mmo
 		m_loadedTextures.clear();
 		m_partyPositions.clear();
 		m_questGiverDots.clear();
+		m_pings.clear();
 
 		UpdatePlayerPosition(m_playerPosition, m_playerOrientation);
 	}
@@ -302,7 +328,13 @@ namespace mmo
 	{
 		m_questGiverDots = std::move(dots);
 	}
-luabind::object Minimap::GetMinimapObjectsAt(lua_State* L, float u, float v) const
+
+	void Minimap::UpdatePings(std::vector<PingDot> pings)
+	{
+		m_pings = std::move(pings);
+	}
+
+	luabind::object Minimap::GetMinimapObjectsAt(lua_State* L, float u, float v) const
 	{
 		// Convert UV [0,1] to world position using current view bounds
 		const float zoomFactor = GetZoomFactor();

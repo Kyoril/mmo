@@ -18,6 +18,7 @@
 #include "game_client/game_object_c.h"
 #include "game_protocol/game_protocol.h"
 #include "scene_graph/axis_display.h"
+#include "ui/minimap.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/world_grid.h"
 #include "scene_graph/animation_notify.h"
@@ -74,7 +75,6 @@ namespace mmo
 	class FriendClient;
 	class TalentClient;
 	class Discord;
-	class Minimap;
 	class InventoryClient;
 	class CooldownManager;
 
@@ -327,6 +327,8 @@ namespace mmo
 
 		PacketParseResult OnPartyCommandResult(game::IncomingPacket &packet);
 
+		PacketParseResult OnPartyPing(game::IncomingPacket &packet);
+
 		PacketParseResult OnRandomRollResult(game::IncomingPacket &packet);
 
 		PacketParseResult OnSpellHealLog(game::IncomingPacket &packet);
@@ -506,6 +508,9 @@ namespace mmo
 		InventoryClient &m_inventoryClient;
 
 		bool m_worldLoaded = false;
+
+		/// Active pings received from the server, ticked down each frame.
+		std::vector<Minimap::PingDot> m_activePings;
 
 		bool m_timeSyncResponseSent = false;
 

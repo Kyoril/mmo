@@ -662,6 +662,20 @@ namespace mmo
 			m_minimap.UpdateQuestGiverDots(std::move(questDots));
 		}
 
+		// Tick ping timers and remove expired ones
+		if (!m_activePings.empty())
+		{
+			for (auto& ping : m_activePings)
+			{
+				ping.remainingTime -= deltaSeconds;
+			}
+			m_activePings.erase(
+				std::remove_if(m_activePings.begin(), m_activePings.end(),
+					[](const Minimap::PingDot& p) { return p.remainingTime <= 0.0f; }),
+				m_activePings.end());
+			m_minimap.UpdatePings(m_activePings);
+		}
+
 		// Update projectiles
 		if (m_projectileManager)
 		{
@@ -1040,6 +1054,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PartyCommandResult, *this, &WorldState::OnPartyCommandResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupInvite, *this, &WorldState::OnGroupInvite);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupDecline, *this, &WorldState::OnGroupDecline);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PartyPing, *this, &WorldState::OnPartyPing);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::RandomRollResult, *this, &WorldState::OnRandomRollResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AttackerStateUpdate, *this, &WorldState::OnAttackerStateUpdate);
@@ -2982,6 +2997,10 @@ namespace mmo
 		m_playerController->SetControlledUnit(nullptr);
 		ObjectMgr::RemoveAllObjects();
 
+		// Clear pings — they belong to the old map
+		m_activePings.clear();
+		m_minimap.UpdatePings(m_activePings);
+
 		return PacketParseResult::Pass;
 	}
 
@@ -3068,6 +3087,43 @@ namespace mmo
 				FrameManager::Get().TriggerLuaEvent("PARTY_LEFT");
 			}
 		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnPartyPing(game::IncomingPacket &packet)
+	{
+		uint64 senderGuid = 0;
+		float x = 0.0f, z = 0.0f;
+		if (!(packet >> io::read_packed_guid(senderGuid) >> io::read<float>(x) >> io::read<float>(z)))
+		{
+			ELOG("Failed to read PartyPing packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		static constexpr float kPingDuration = 5.0f;
+
+		// Replace existing ping from same sender, or add new one
+		bool found = false;
+		for (auto& ping : m_activePings)
+		{
+			if (ping.senderGuid == senderGuid)
+			{
+				ping.position = Vector3(x, 0.0f, z);
+				ping.remainingTime = kPingDuration;
+				found = true;
+				break;
+			}
+		}
+		if (!found)
+		{
+			m_activePings.push_back({ Vector3(x, 0.0f, z), kPingDuration, senderGuid });
+		}
+
+		m_minimap.UpdatePings(m_activePings);
+
+		// Fire Lua event so UI can show a flash / sound
+		FrameManager::Get().TriggerLuaEvent("PARTY_PING", x, z);
 
 		return PacketParseResult::Pass;
 	}

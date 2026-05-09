@@ -847,6 +847,15 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::SendPartyPing(float x, float z)
+	{
+		sendSinglePacket([x, z](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::PartyPing);
+			packet << io::write<float>(x) << io::write<float>(z);
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::RandomRoll(int32 min, int32 max)
 	{
 		sendSinglePacket([min, max](game::OutgoingPacket& packet) {

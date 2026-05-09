@@ -473,6 +473,9 @@ namespace mmo
 		PacketParseResult OnGroupLeave(game::IncomingPacket& packet);
 		PacketParseResult OnGroupDisband(game::IncomingPacket& packet);
 
+		/// Handles a party ping request from the client.
+		PacketParseResult OnPartyPing(game::IncomingPacket& packet);
+
 		/// Handles a client request to change the group's loot method.
 		PacketParseResult OnSetLootMethod(game::IncomingPacket& packet);
 		PacketParseResult OnLogoutRequest(game::IncomingPacket &packet);

@@ -415,6 +415,9 @@ namespace mmo
 
 		void DisbandGroup();
 
+		/// Sends a party ping at the given world position (x, z).
+		void SendPartyPing(float x, float z);
+
 		void RandomRoll(int32 min, int32 max);
 
 		void SendChatMessage(const String& message, ChatType chatType, const String& target);

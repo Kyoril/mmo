@@ -248,6 +248,9 @@ namespace mmo
 
 				UseObject,
 
+				/// Sent by the client to place a ping at their current world position, broadcast to party.
+				PartyPing,
+
 				/// Counter constant
 				Count_,
 			};
@@ -465,6 +468,9 @@ namespace mmo
 				FriendListUpdate,
 				FriendStatusChange,
 				FriendCommandResult,
+
+				/// Broadcast ping from a party member (sender guid, x, z world position).
+				PartyPing,
 
 				/// Counter constant
 				Count_,

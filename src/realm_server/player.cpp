@@ -1282,6 +1282,42 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult Player::OnPartyPing(game::IncomingPacket& packet)
+	{
+		float x = 0.0f, z = 0.0f;
+		if (!(packet >> io::read<float>(x) >> io::read<float>(z)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (!m_group)
+		{
+			// Not in a party — echo back to self only
+			const uint64 senderGuid = m_characterData->characterId;
+			GetConnection().sendSinglePacket([senderGuid, x, z](game::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(game::realm_client_packet::PartyPing);
+				outPacket << io::write_packed_guid(senderGuid)
+						  << io::write<float>(x)
+						  << io::write<float>(z);
+				outPacket.Finish();
+			});
+			return PacketParseResult::Pass;
+		}
+
+		const uint64 senderGuid = m_characterData->characterId;
+		m_group->BroadcastPacket([senderGuid, x, z](game::OutgoingPacket& outPacket)
+		{
+			outPacket.Start(game::realm_client_packet::PartyPing);
+			outPacket << io::write_packed_guid(senderGuid)
+					  << io::write<float>(x)
+					  << io::write<float>(z);
+			outPacket.Finish();
+		});
+
+		return PacketParseResult::Pass;
+	}
+
 	PacketParseResult Player::OnSetLootMethod(game::IncomingPacket& packet)
 	{
 		uint8 method = 0;
@@ -2564,6 +2600,7 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::GroupLeave, *this, &Player::OnGroupLeave);
 			RegisterPacketHandler(game::client_realm_packet::GroupDisband, *this, &Player::OnGroupDisband);
 			RegisterPacketHandler(game::client_realm_packet::SetLootMethod, *this, &Player::OnSetLootMethod);
+			RegisterPacketHandler(game::client_realm_packet::PartyPing, *this, &Player::OnPartyPing);
 
 #if MMO_WITH_DEV_COMMANDS
 			RegisterPacketHandler(game::client_realm_packet::CheatTeleportToPlayer, *this, &Player::OnCheatTeleportToPlayer);

@@ -1278,6 +1278,16 @@ namespace mmo
 							   m_realmConnector.DisbandGroup();
 						   }),
 
+					   luabind::def<std::function<void()>>("SendPing", [this]()
+						   {
+							   auto player = ObjectMgr::GetActivePlayer();
+							   if (player)
+							   {
+								   const Vector3& pos = player->GetPosition();
+								   m_realmConnector.SendPartyPing(pos.x, pos.z);
+							   }
+						   }),
+
 					   luabind::def<std::function<void()>>("RequestTimePlayed", [this]()
 														   { m_realmConnector.SendTimePlayedRequest(); }),
 

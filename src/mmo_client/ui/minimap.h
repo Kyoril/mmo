@@ -192,5 +192,21 @@ namespace mmo
 		TexturePtr m_questCompletableTexture;
 		GeometryBuffer m_questCompletableGeom;
 		std::vector<QuestGiverDot> m_questGiverDots;
+
+	public:
+		struct PingDot
+		{
+			Vector3 position;
+			float remainingTime;  ///< Seconds until this ping fades out.
+			uint64 senderGuid;    ///< GUID of the sender (for deduplication).
+		};
+
+		/// @brief Updates the list of active pings on the minimap.
+		void UpdatePings(std::vector<PingDot> pings);
+
+	private:
+		TexturePtr m_pingTexture;
+		GeometryBuffer m_pingGeom;
+		std::vector<PingDot> m_pings;
 	};
 }
