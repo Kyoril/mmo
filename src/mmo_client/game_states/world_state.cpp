@@ -3744,18 +3744,40 @@ namespace mmo
 		}
 		else
 		{
+			// The party member may not be in the local visible world (different cell / out of range).
+			// Try the in-memory object first; fall back to the name cache for out-of-range members.
 			std::shared_ptr<GameUnitC> unit = ObjectMgr::Get<GameUnitC>(characterGuid);
-			ASSERT(unit);
-
-			if (wasLooted)
+			if (unit)
 			{
-				FrameManager::Get().TriggerLuaEvent("MEMBER_LOOT_ITEM_RECEIVED", unit->GetName().c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
-				DLOG(unit->GetName() << " looted item " << itemInfo.name << " x" << amount);
+				const String &memberName = unit->GetName();
+				if (wasLooted)
+				{
+					FrameManager::Get().TriggerLuaEvent("MEMBER_LOOT_ITEM_RECEIVED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
+					DLOG(memberName << " looted item " << itemInfo.name << " x" << amount);
+				}
+				else
+				{
+					FrameManager::Get().TriggerLuaEvent("MEMBER_ITEM_RECEIVED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
+					DLOG(memberName << " received item " << itemInfo.name << " x" << amount);
+				}
 			}
 			else
 			{
-				FrameManager::Get().TriggerLuaEvent("MEMBER_ITEM_RECEIVED", unit->GetName().c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
-				DLOG(unit->GetName() << " received item " << itemInfo.name << " x" << amount);
+				// Unit not visible — look up the name asynchronously from the name cache.
+				m_cache.GetNameCache().Get(characterGuid,
+					[itemInfo, wasLooted, amount](uint64, const String &memberName)
+					{
+						if (wasLooted)
+						{
+							FrameManager::Get().TriggerLuaEvent("MEMBER_LOOT_ITEM_RECEIVED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
+							DLOG(memberName << " looted item " << itemInfo.name << " x" << amount);
+						}
+						else
+						{
+							FrameManager::Get().TriggerLuaEvent("MEMBER_ITEM_RECEIVED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
+							DLOG(memberName << " received item " << itemInfo.name << " x" << amount);
+						}
+					});
 			}
 		}
 	}
