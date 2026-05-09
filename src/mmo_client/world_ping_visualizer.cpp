@@ -154,9 +154,9 @@ namespace mmo
 				{
 					slot.lineMesh->Clear();
 					auto line = slot.lineMesh->AddLineListOperation(
-						MaterialManager::Get().Load("Editor/Wireframe.hmat"));
+						MaterialManager::Get().Load("Models/Engine/Axis.hmat"));
 					auto& seg = line->AddLine(
-						slot.worldPosition + Vector3(0.0f, kIconHeight, 0.0f),
+						slot.worldPosition + Vector3(0.0f, kIconHeight - kIconHalfSize, 0.0f),
 						slot.worldPosition);
 					seg.SetStartColor(lineColor);
 					seg.SetEndColor(lineColor);
@@ -257,9 +257,9 @@ namespace mmo
 		slot.lineNode->AttachObject(*slot.lineMesh);
 
 		auto line = slot.lineMesh->AddLineListOperation(
-			MaterialManager::Get().Load("Editor/Wireframe.hmat"));
+			MaterialManager::Get().Load("Models/Engine/Axis.hmat"));
 		auto& seg = line->AddLine(
-			slot.worldPosition + Vector3(0.0f, kIconHeight, 0.0f),
+			slot.worldPosition + Vector3(0.0f, kIconHeight - kIconHalfSize, 0.0f),
 			slot.worldPosition);
 		seg.SetStartColor(0xFF4488FF);
 		seg.SetEndColor(0xFF4488FF);
