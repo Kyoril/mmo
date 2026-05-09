@@ -383,6 +383,10 @@ namespace mmo
 				const Point uiScale = FrameManager::Get().GetUIScale();
 				return Point(mousePos.x / uiScale.x, mousePos.y / uiScale.y);
 			}),
+			luabind::def<std::function<Point()>>("GetUIScale", []()
+			{
+				return FrameManager::Get().GetUIScale();
+			}),
 
 			luabind::scope(
 				luabind::class_<AnchorPoint>("AnchorPoint")
