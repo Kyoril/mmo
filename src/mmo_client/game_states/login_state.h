@@ -21,6 +21,17 @@ namespace mmo
 	class RealmConnector;
 	class Discord;
 
+	/// Reason for returning to the login/character-select screen.
+	enum class LoginReturnReason
+	{
+		/// Player explicitly chose to log out — no error shown.
+		NormalLogout,
+		/// The realm server connection dropped unexpectedly.
+		RealmDisconnected,
+		/// Entering the game world failed (e.g. world server down).
+		EnterWorldFailed,
+	};
+
 	/// This class represents the initial game state where the player is asked to enter
 	/// his credentials in order to authenticate.
 	class LoginState final
@@ -32,6 +43,9 @@ namespace mmo
 	public:
 		/// The default name of the login state
 		static const std::string Name;
+
+		/// Set this before transitioning to LoginState so OnEnter knows why we came back.
+		static LoginReturnReason s_returnReason;
 
 	public:
 		// Inherited via IGameState

@@ -16,6 +16,8 @@
 #include "proto_data/project.h"
 
 #include <functional>
+#include <algorithm>
+#include <cctype>
 
 #include "guild_mgr.h"
 #include "friend_mgr.h"
@@ -321,6 +323,19 @@ namespace mmo
 		// Check input parameters for invalid values
 		if (characterName.empty() || characterName.size() > 12 || gender > 1)
 		{
+			GetConnection().sendSinglePacket([](game::OutgoingPacket &outPacket)
+											 {
+					outPacket.Start(game::realm_client_packet::CharCreateResponse);
+					outPacket << io::write<uint8>(game::char_create_result::Error);
+					outPacket.Finish(); });
+			return PacketParseResult::Pass;
+		}
+
+		// Reject names that contain anything other than letters (no spaces, digits, symbols)
+		if (characterName.size() < 3 ||
+			!std::all_of(characterName.begin(), characterName.end(), [](unsigned char c) { return std::isalpha(c); }))
+		{
+			WLOG("Character creation rejected: invalid name '" << characterName << "'");
 			GetConnection().sendSinglePacket([](game::OutgoingPacket &outPacket)
 											 {
 					outPacket.Start(game::realm_client_packet::CharCreateResponse);
@@ -2771,6 +2786,9 @@ namespace mmo
 		{
 		case auth::world_left_reason::Logout:
 			m_characterData.reset();
+			// Clear group and invite state so a fresh EnterWorld starts with no stale membership.
+			m_group.reset();
+			m_inviterGuid = 0;
 			EnableProxyPackets(false);
 			EnableEnterWorldPacket(true);
 			ILOG("Successfully logged out");
@@ -3963,8 +3981,9 @@ namespace mmo
 
 	void Player::HandleCharacterGroupOnDelete(uint64 charGuid)
 	{
-		// Check if the character is in any group by searching through all groups
-		// Since the character might not be currently online, we need to check the database
+		// Load character data to find their groupId, then clean up directly in the DB.
+		// We cannot rely on ms_groupsById because the group may not be in memory if all
+		// members are currently offline.
 		std::weak_ptr weakThis{shared_from_this()};
 		auto handler = [weakThis, charGuid](const std::optional<CharacterData> &characterData)
 		{
@@ -3982,39 +4001,65 @@ namespace mmo
 
 			const uint64 groupId = characterData->groupId;
 
-			// Find the group
+			// If the group is live in memory, use the group object so members get notified.
 			auto groupIt = PlayerGroup::ms_groupsById.find(groupId);
-			if (groupIt == PlayerGroup::ms_groupsById.end())
+			if (groupIt != PlayerGroup::ms_groupsById.end())
 			{
-				WLOG("Character " << charGuid << " is in group " << groupId << " which could not be found");
+				std::shared_ptr<PlayerGroup> group = groupIt->second;
+				if (group->GetLeader() == charGuid)
+				{
+					DLOG("Deleting leader " << charGuid << " of live group " << groupId << " — disbanding.");
+					group->Disband(false);
+				}
+				else
+				{
+					DLOG("Removing deleted character " << charGuid << " from live group " << groupId);
+					group->RemoveMember(charGuid);
+				}
 				return;
 			}
 
-			std::shared_ptr<PlayerGroup> group = groupIt->second;
-			if (!group->IsMember(charGuid))
-			{
-				WLOG("Character " << charGuid << " is not actually a member of group " << groupId);
-				return;
-			}
+			// Group is not in memory (all members offline). Load from DB to determine
+			// whether the deleted character was the leader, then update the DB directly.
+			strongThis->m_database.asyncRequest(
+				[weakThis2 = std::weak_ptr(strongThis), charGuid, groupId](const std::optional<GroupData> &groupData)
+				{
+					const auto s = weakThis2.lock();
+					if (!s) return;
 
-			// Check if the character is the group leader
-			if (group->GetLeader() == charGuid)
-			{
-				DLOG("Deleting character " << charGuid << " who is the leader of group " << groupId << ". Disbanding group.");
+					if (!groupData)
+					{
+						WLOG("Could not load group " << groupId << " from DB while cleaning up deleted character " << charGuid);
+						return;
+					}
 
-				// Character is the group leader, disband the group
-				group->Disband(false);
-			}
-			else
-			{
-				DLOG("Removing character " << charGuid << " from group " << groupId);
-
-				// Character is a regular member, just remove them from the group
-				group->RemoveMember(charGuid);
-			}
+					if (groupData->leaderGuid == charGuid)
+					{
+						// The deleted character was the leader — disband the whole group.
+						DLOG("Deleted character " << charGuid << " was leader of offline group " << groupId << " — disbanding.");
+						s->m_database.asyncRequest<void>(
+							[groupId](auto &&db) { db->DisbandGroup(groupId); },
+							[groupId](bool ok)
+							{
+								if (!ok) ELOG("Failed to disband group " << groupId << " after leader deletion");
+							});
+					}
+					else
+					{
+						// Regular member — just remove from group.
+						DLOG("Removing deleted character " << charGuid << " from offline group " << groupId);
+						s->m_database.asyncRequest<void>(
+							[groupId, charGuid](auto &&db) { db->RemoveGroupMember(groupId, charGuid); },
+							[groupId, charGuid](bool ok)
+							{
+								if (!ok) ELOG("Failed to remove character " << charGuid << " from group " << groupId << " after deletion");
+							});
+					}
+				},
+				&IDatabase::LoadGroup, groupId);
 		};
 
-		// Request character data to check group membership
+		// Request character data to get their groupId
 		m_database.asyncRequest(std::move(handler), &IDatabase::CharacterEnterWorld, charGuid, m_accountId);
 	}
 

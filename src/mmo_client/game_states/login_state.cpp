@@ -25,6 +25,7 @@ namespace mmo
 	uint32 g_mapId = 0;
 
 	const std::string LoginState::Name = "login";
+	LoginReturnReason LoginState::s_returnReason = LoginReturnReason::NormalLogout;
 	
 	/// This command will try to connect to the login server and make a login attempt using the
 	/// first parameter as username and the other parameters as password.
@@ -90,9 +91,25 @@ namespace mmo
 
 		if (m_realmConnector.IsConnected())
 		{
-			// TODO: Get real reason string if there is more than this one!
-			FrameManager::Get().TriggerLuaEvent("ENTER_WORLD_FAILED", "WORLD_SERVER_DOWN");
+			// Only show an error dialog when we came back due to an actual failure.
+			// Normal logouts and realm-side transitions return silently to char select.
+			switch (s_returnReason)
+			{
+			case LoginReturnReason::EnterWorldFailed:
+				FrameManager::Get().TriggerLuaEvent("ENTER_WORLD_FAILED", "WORLD_SERVER_DOWN");
+				break;
+			case LoginReturnReason::RealmDisconnected:
+				FrameManager::Get().TriggerLuaEvent("ENTER_WORLD_FAILED", "REALM_DISCONNECTED");
+				break;
+			case LoginReturnReason::NormalLogout:
+			default:
+				// No error — just show the character list silently.
+				break;
+			}
 		}
+
+		// Reset reason so subsequent re-entries default to no error.
+		s_returnReason = LoginReturnReason::NormalLogout;
 
 		// Play background music
 		m_musicSound = m_audio.CreateLoopedStream("Sound/Music/Genesis.ogg");

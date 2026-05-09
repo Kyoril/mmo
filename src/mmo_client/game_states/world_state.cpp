@@ -1085,12 +1085,14 @@ namespace mmo
 		// Trigger the lua event
 		FrameManager::Get().TriggerLuaEvent("REALM_DISCONNECTED");
 
-		// Go back to login state
+		// Go back to login state, flagging why we left
+		LoginState::s_returnReason = LoginReturnReason::RealmDisconnected;
 		GameStateMgr::Get().SetGameState(LoginState::Name);
 	}
 
 	void WorldState::OnEnterWorldFailed(game::player_login_response::Type error)
 	{
+		LoginState::s_returnReason = LoginReturnReason::EnterWorldFailed;
 		GameStateMgr::Get().SetGameState(LoginState::Name);
 	}
 
@@ -3242,7 +3244,8 @@ namespace mmo
 	{
 		ILOG("Successfully logged out of the game...");
 
-		// Go back to the login state
+		// Normal voluntary logout — return to char select without error.
+		LoginState::s_returnReason = LoginReturnReason::NormalLogout;
 		m_gameStateMgr.SetGameState(LoginState::Name);
 
 		return PacketParseResult::Pass;
