@@ -313,41 +313,6 @@ luabind::object Minimap::GetMinimapObjectsAt(lua_State* L, float u, float v) con
 		// V=0 is screen top = smaller world Z (north), V=1 = larger world Z (south) — normal mapping.
 		const float worldZ = (m_playerPosition.z - halfCoverage) + v * worldCoverage;
 
-		// DEBUG
-		static float s_debugTimer = 0.0f;
-		s_debugTimer += 0.016f;
-		if (s_debugTimer >= 2.0f)
-		{
-			s_debugTimer = 0.0f;
-			ILOG("MinimapHit: player=(" << m_playerPosition.x << "," << m_playerPosition.z
-				<< ") query=(" << worldX << "," << worldZ
-				<< ") coverage=" << worldCoverage << " zoom=" << zoomFactor
-				<< " partyDots=" << m_partyPositions.size()
-				<< " questDots=" << m_questGiverDots.size());
-			// Also log what UV each dot SHOULD be at under both V formulas
-			const float left = m_playerPosition.x - halfCoverage;
-			const float top = m_playerPosition.z - halfCoverage;
-			const float bottom = m_playerPosition.z + halfCoverage;
-			for (const auto& m : m_partyPositions)
-			{
-				const float du = (m.position.x - left) / worldCoverage;
-				const float dvNormal = (m.position.z - top) / worldCoverage;
-				const float dvFlipped = (bottom - m.position.z) / worldCoverage;
-				ILOG("  party \"" << m.name << "\" pos=(" << m.position.x << "," << m.position.z
-					<< ") uv_normal=(" << du << "," << dvNormal
-					<< ") uv_flipped=(" << du << "," << dvFlipped << ")");
-			}
-			for (const auto& d : m_questGiverDots)
-			{
-				const float du = (d.position.x - left) / worldCoverage;
-				const float dvNormal = (d.position.z - top) / worldCoverage;
-				const float dvFlipped = (bottom - d.position.z) / worldCoverage;
-				ILOG("  quest \"" << d.name << "\" pos=(" << d.position.x << "," << d.position.z
-					<< ") uv_normal=(" << du << "," << dvNormal
-					<< ") uv_flipped=(" << du << "," << dvFlipped << ")");
-			}
-		}
-
 		// Hit radius: dot is +-10 logical pixels; scale to world units
 		constexpr float kDotHalfSize = 10.0f;
 		const float hitRadius = kDotHalfSize / zoomFactor;
