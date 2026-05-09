@@ -44,13 +44,13 @@ namespace mmo
 			m_partyMemberTexture->SetTextureAddressMode(TextureAddressMode::Clamp);
 			m_partyMemberGeom.SetActiveTexture(m_partyMemberTexture);
 			GeometryHelper::CreateRect(m_partyMemberGeom, Color(0.4f, 0.6f, 1.0f, 1.0f),
-				Rect(-10.0f, -10.0f, 10.0f, 10.0f),
-				Rect(1.0f, 1.0f, 0.0f, 0.0f),
+				Rect(-16.0f, -16.0f, 16.0f, 16.0f),
+				Rect(1.0f, 0.0f, 0.0f, 1.0f),
 				1, 1);
 		}
 
 		// Quest giver icons: yellow ! for available, yellow ? for completable
-		m_questAvailableTexture = TextureManager::Get().CreateOrRetrieve("Interface/Icons/QuestExclamation.htex");
+		m_questAvailableTexture = TextureManager::Get().CreateOrRetrieve("Interface/Icons/Icon_QuestAvailable.htex");
 		if (!m_questAvailableTexture)
 		{
 			// Fallback: reuse party dot texture with yellow tint
@@ -60,11 +60,11 @@ namespace mmo
 		{
 			m_questAvailableGeom.SetActiveTexture(m_questAvailableTexture);
 			GeometryHelper::CreateRect(m_questAvailableGeom, Color(1.0f, 0.9f, 0.0f, 1.0f),
-				Rect(-10.0f, -10.0f, 10.0f, 10.0f),
-				Rect(1.0f, 1.0f, 0.0f, 0.0f), 1, 1);
+				Rect(-16.0f, -16.0f, 16.0f, 16.0f),
+				Rect(1.0f, 0.0f, 0.0f, 1.0f), 1, 1);
 		}
 
-		m_questCompletableTexture = TextureManager::Get().CreateOrRetrieve("Interface/Icons/QuestQuestion.htex");
+		m_questCompletableTexture = TextureManager::Get().CreateOrRetrieve("Interface/Icons/Icon_QuestCompleted.htex");
 		if (!m_questCompletableTexture)
 		{
 			m_questCompletableTexture = m_partyMemberTexture;
@@ -73,8 +73,8 @@ namespace mmo
 		{
 			m_questCompletableGeom.SetActiveTexture(m_questCompletableTexture);
 			GeometryHelper::CreateRect(m_questCompletableGeom, Color(1.0f, 1.0f, 0.0f, 1.0f),
-				Rect(-10.0f, -10.0f, 10.0f, 10.0f),
-				Rect(1.0f, 1.0f, 0.0f, 0.0f), 1, 1);
+				Rect(-16.0f, -16.0f, 16.0f, 16.0f),
+				Rect(1.0f, 0.0f, 0.0f, 1.0f), 1, 1);
 		}
 
 		if (m_minimapRenderTexture)
@@ -218,17 +218,6 @@ namespace mmo
 
 		m_geometryBuffer.Draw();
 
-		if (m_playerArrowTexture)
-		{
-			// Apply player rotation (TODO)
-			Matrix4 world = Matrix4::Identity;
-			world = world * Matrix4::GetTrans(Vector3(m_playerPosition.x, m_playerPosition.z, 0.0f));
-			world = world * Quaternion(m_playerOrientation, Vector3::NegativeUnitZ);
-			world = world * Matrix4::GetScale(Vector3(1.0f / GetZoomFactor(), 1.0f / GetZoomFactor(), 1.0f));
-			gx.SetTransformMatrix(World, world);
-			m_playerGeom.Draw();
-		}
-
 		if (m_partyMemberTexture && !m_partyPositions.empty())
 		{
 			const float dotScale = 1.0f / GetZoomFactor();
@@ -256,7 +245,18 @@ namespace mmo
 				geom.Draw();
 			}
 		}
-		
+
+		if (m_playerArrowTexture)
+		{
+			// Apply player rotation (TODO)
+			Matrix4 world = Matrix4::Identity;
+			world = world * Matrix4::GetTrans(Vector3(m_playerPosition.x, m_playerPosition.z, 0.0f));
+			world = world * Quaternion(m_playerOrientation, Vector3::NegativeUnitZ);
+			world = world * Matrix4::GetScale(Vector3(1.0f / GetZoomFactor(), 1.0f / GetZoomFactor(), 1.0f));
+			gx.SetTransformMatrix(World, world);
+			m_playerGeom.Draw();
+		}
+
 		m_minimapRenderTexture->Update();
 		gx.RestoreState();
 	}
