@@ -42,6 +42,11 @@ namespace mmo
 		if (m_partyMemberTexture)
 		{
 			m_partyMemberTexture->SetTextureAddressMode(TextureAddressMode::Clamp);
+			m_partyMemberGeom.SetActiveTexture(m_partyMemberTexture);
+			GeometryHelper::CreateRect(m_partyMemberGeom, Color(0.4f, 0.6f, 1.0f, 1.0f),
+				Rect(-10.0f, -10.0f, 10.0f, 10.0f),
+				Rect(1.0f, 1.0f, 0.0f, 0.0f),
+				1, 1);
 		}
 
 		if (m_minimapRenderTexture)
@@ -195,6 +200,19 @@ namespace mmo
 			gx.SetTransformMatrix(World, world);
 			m_playerGeom.Draw();
 		}
+
+		if (m_partyMemberTexture && !m_partyPositions.empty())
+		{
+			const float dotScale = 1.0f / GetZoomFactor();
+			for (const Vector3& pos : m_partyPositions)
+			{
+				Matrix4 world = Matrix4::Identity;
+				world = world * Matrix4::GetTrans(Vector3(pos.x, pos.z, 0.0f));
+				world = world * Matrix4::GetScale(Vector3(dotScale, dotScale, 1.0f));
+				gx.SetTransformMatrix(World, world);
+				m_partyMemberGeom.Draw();
+			}
+		}
 		
 		m_minimapRenderTexture->Update();
 		gx.RestoreState();
@@ -224,8 +242,14 @@ namespace mmo
 		m_currentTileX = -1;
 		m_currentTileY = -1;
 		m_loadedTextures.clear();
+		m_partyPositions.clear();
 
 		UpdatePlayerPosition(m_playerPosition, m_playerOrientation);
+	}
+
+	void Minimap::UpdatePartyPositions(std::vector<Vector3> positions)
+	{
+		m_partyPositions = std::move(positions);
 	}
 
 	bool Minimap::GetTileCoordinates(const Vector3& worldPosition, int32& outTileX, int32& outTileY)

@@ -12,6 +12,7 @@
 
 #include <map>
 #include <memory>
+#include <vector>
 
 struct lua_State;
 
@@ -73,6 +74,10 @@ namespace mmo
 		float GetZoomFactor() const;
 
 		void NotifyWorldChanged(const String& worldName);
+
+		/// @brief Updates the positions of party members for minimap rendering.
+		/// @param positions World-space positions of all party members (excluding the local player).
+		void UpdatePartyPositions(std::vector<Vector3> positions);
 
 	private:
 		/// @brief Calculates the tile coordinates for a given world position.
@@ -153,5 +158,6 @@ namespace mmo
 
 		TexturePtr m_partyMemberTexture;
 		GeometryBuffer m_partyMemberGeom;
+		std::vector<Vector3> m_partyPositions;
 	};
 }

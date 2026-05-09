@@ -17,6 +17,7 @@
 #include "game/object_type_id.h"
 
 #include <algorithm>
+#include <vector>
 #include <zstr/zstr.hpp>
 
 #include "systems/action_bar.h"
@@ -616,6 +617,24 @@ namespace mmo
 		if (const auto &controlled = m_playerController->GetControlledUnit())
 		{
 			m_minimap.UpdatePlayerPosition(controlled->GetPosition(), controlled->GetFacing());
+
+			// Gather visible party member positions for minimap dots
+			std::vector<Vector3> partyPositions;
+			const uint32 memberCount = m_partyInfo.GetMemberCount();
+			const uint64 selfGuid = controlled->GetGuid();
+			for (uint32 i = 0; i < memberCount; ++i)
+			{
+				const uint64 memberGuid = m_partyInfo.GetMemberGuid(static_cast<int32>(i));
+				if (memberGuid == selfGuid)
+				{
+					continue;
+				}
+				if (const auto memberUnit = ObjectMgr::Get<GameUnitC>(memberGuid))
+				{
+					partyPositions.push_back(memberUnit->GetPosition());
+				}
+			}
+			m_minimap.UpdatePartyPositions(std::move(partyPositions));
 		}
 
 		// Update projectiles
