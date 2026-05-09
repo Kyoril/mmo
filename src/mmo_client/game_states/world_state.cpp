@@ -698,15 +698,13 @@ namespace mmo
 			return;
 		}
 
-		static uint32 s_zoneId = 0;
-
 		const auto pos = unit->GetPosition();
 		const uint32 zoneId = m_worldInstance->GetTerrain()->GetArea(pos);
-		if (zoneId != s_zoneId)
+		if (zoneId != m_lastZoneId)
 		{
-			s_zoneId = zoneId;
+			m_lastZoneId = zoneId;
 
-			const proto_client::ZoneEntry *zone = m_project.zones.getById(s_zoneId);
+			const proto_client::ZoneEntry *zone = m_project.zones.getById(m_lastZoneId);
 			if (zone)
 			{
 				if (zone->parentzone() != 0)

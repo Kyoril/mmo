@@ -414,6 +414,7 @@ namespace mmo
 		std::unique_ptr<PlayerController> m_playerController;
 		std::unique_ptr<AxisDisplay> m_debugAxis;
 		std::unique_ptr<WorldGrid> m_worldGrid;
+		uint32 m_lastZoneId = UINT32_MAX;
 		IdGenerator<uint64> m_objectIdGenerator{1};
 		IAudio &m_audio;
 
