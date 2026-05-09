@@ -7,6 +7,7 @@
 #include "log/default_log_levels.h"
 
 #include "luabind_lambda.h"
+#include "lua/lua.hpp"
 
 namespace mmo
 {
@@ -102,7 +103,8 @@ namespace mmo
 			luabind::def_lambda("GetMinimapZoomLevel", [this]() { return GetZoomLevel(); }),
 			luabind::def_lambda("GetMinimapMinZoomLevel", [this]() { return 0; }),
 			luabind::def_lambda("GetMinimapMaxZoomLevel", [this]() { return GetMaxZoomLevel(); }),
-			luabind::def_lambda("SetMinimapZoomLevel", [this](int32 zoomLevel) { SetZoomLevel(zoomLevel); })
+			luabind::def_lambda("SetMinimapZoomLevel", [this](int32 zoomLevel) { SetZoomLevel(zoomLevel); }),
+			luabind::def_lambda("GetMinimapObjectsAt", [this](lua_State* L, float u, float v) { return GetMinimapObjectsAt(L, u, v); })
 		);
 	}
 
@@ -221,10 +223,10 @@ namespace mmo
 		if (m_partyMemberTexture && !m_partyPositions.empty())
 		{
 			const float dotScale = 1.0f / GetZoomFactor();
-			for (const Vector3& pos : m_partyPositions)
+			for (const PartyMemberDot& member : m_partyPositions)
 			{
 				Matrix4 world = Matrix4::Identity;
-				world = world * Matrix4::GetTrans(Vector3(pos.x, pos.z, 0.0f));
+				world = world * Matrix4::GetTrans(Vector3(member.position.x, member.position.z, 0.0f));
 				world = world * Matrix4::GetScale(Vector3(dotScale, dotScale, 1.0f));
 				gx.SetTransformMatrix(World, world);
 				m_partyMemberGeom.Draw();
@@ -291,15 +293,73 @@ namespace mmo
 		UpdatePlayerPosition(m_playerPosition, m_playerOrientation);
 	}
 
-	void Minimap::UpdatePartyPositions(std::vector<Vector3> positions)
+	void Minimap::UpdatePartyPositions(std::vector<PartyMemberDot> members)
 	{
-		m_partyPositions = std::move(positions);
+		m_partyPositions = std::move(members);
 	}
 
 	void Minimap::UpdateQuestGiverDots(std::vector<QuestGiverDot> dots)
 	{
 		m_questGiverDots = std::move(dots);
 	}
+	int Minimap::GetMinimapObjectsAt(lua_State* L, float u, float v) const
+	{
+		// Convert UV [0,1] to world position using current view bounds
+		const float zoomFactor = GetZoomFactor();
+		const float worldCoverage = static_cast<float>(m_minimapSize) / zoomFactor;
+		const float halfCoverage = worldCoverage * 0.5f;
+
+		const float worldX = (m_playerPosition.x - halfCoverage) + u * worldCoverage;
+		const float worldZ = (m_playerPosition.z - halfCoverage) + v * worldCoverage;
+
+		// Hit radius: dot is +-10 logical pixels; scale to world units
+		constexpr float kDotHalfSize = 10.0f;
+		const float hitRadius = kDotHalfSize / zoomFactor;
+		const float hitRadiusSq = hitRadius * hitRadius;
+
+		// Build result table
+		lua_newtable(L);
+		int index = 1;
+
+		auto distSq = [&](const Vector3& pos) -> float
+		{
+			const float dx = pos.x - worldX;
+			const float dz = pos.z - worldZ;
+			return dx * dx + dz * dz;
+		};
+
+		// Party members
+		for (const PartyMemberDot& member : m_partyPositions)
+		{
+			if (distSq(member.position) <= hitRadiusSq)
+			{
+				lua_newtable(L);
+				lua_pushstring(L, "party");
+				lua_setfield(L, -2, "type");
+				lua_pushstring(L, member.name.c_str());
+				lua_setfield(L, -2, "name");
+				lua_rawseti(L, -2, index++);
+			}
+		}
+
+		// Quest givers
+		for (const QuestGiverDot& dot : m_questGiverDots)
+		{
+			if (distSq(dot.position) <= hitRadiusSq)
+			{
+				lua_newtable(L);
+				lua_pushstring(L, "questgiver");
+				lua_setfield(L, -2, "type");
+				lua_pushstring(L, dot.name.c_str());
+				lua_setfield(L, -2, "name");
+				lua_rawseti(L, -2, index++);
+			}
+		}
+
+		return 1; // one return value: the table
+	}
+
+
 
 	bool Minimap::GetTileCoordinates(const Vector3& worldPosition, int32& outTileX, int32& outTileY)
 	{

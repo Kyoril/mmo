@@ -75,9 +75,20 @@ namespace mmo
 
 		void NotifyWorldChanged(const String& worldName);
 
+		struct PartyMemberDot
+		{
+			Vector3 position;
+			std::string name;
+		};
+
 		/// @brief Updates the positions of party members for minimap rendering.
-		/// @param positions World-space positions of all party members (excluding the local player).
-		void UpdatePartyPositions(std::vector<Vector3> positions);
+		void UpdatePartyPositions(std::vector<PartyMemberDot> members);
+
+		/// @brief Queries which minimap objects are near a given normalized UV coordinate.
+		/// @param u Horizontal position in [0,1] across the minimap texture.
+		/// @param v Vertical position in [0,1] across the minimap texture (0=top).
+		/// Returns a Lua table: array of {type="party"|"questgiver", name=string}.
+		int GetMinimapObjectsAt(lua_State* luaState, float u, float v) const;
 
 		enum class QuestDotType : uint8
 		{
@@ -89,6 +100,7 @@ namespace mmo
 		{
 			Vector3 position;
 			QuestDotType type;
+			std::string name;
 		};
 
 		/// @brief Updates the list of quest giver icons shown on the minimap.
@@ -173,7 +185,7 @@ namespace mmo
 
 		TexturePtr m_partyMemberTexture;
 		GeometryBuffer m_partyMemberGeom;
-		std::vector<Vector3> m_partyPositions;
+		std::vector<PartyMemberDot> m_partyPositions;
 
 		TexturePtr m_questAvailableTexture;
 		GeometryBuffer m_questAvailableGeom;

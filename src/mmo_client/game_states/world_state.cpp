@@ -619,19 +619,21 @@ namespace mmo
 			m_minimap.UpdatePlayerPosition(controlled->GetPosition(), controlled->GetFacing());
 
 			// Gather visible party member positions for minimap dots
-			std::vector<Vector3> partyPositions;
+			std::vector<Minimap::PartyMemberDot> partyPositions;
 			const uint32 memberCount = m_partyInfo.GetMemberCount();
 			const uint64 selfGuid = controlled->GetGuid();
 			for (uint32 i = 0; i < memberCount; ++i)
 			{
-				const uint64 memberGuid = m_partyInfo.GetMemberGuid(static_cast<int32>(i));
+				const int32 idx = static_cast<int32>(i);
+				const uint64 memberGuid = m_partyInfo.GetMemberGuid(idx);
 				if (memberGuid == selfGuid)
 				{
 					continue;
 				}
 				if (const auto memberUnit = ObjectMgr::Get<GameUnitC>(memberGuid))
 				{
-					partyPositions.push_back(memberUnit->GetPosition());
+					const auto* member = m_partyInfo.GetMember(idx);
+					partyPositions.push_back({ memberUnit->GetPosition(), member ? member->name : memberUnit->GetName() });
 				}
 			}
 			m_minimap.UpdatePartyPositions(std::move(partyPositions));
@@ -655,7 +657,7 @@ namespace mmo
 				default:
 					return; // Not shown on minimap
 				}
-				questDots.push_back({ unit.GetPosition(), dotType });
+				questDots.push_back({ unit.GetPosition(), dotType, unit.GetName() });
 			});
 			m_minimap.UpdateQuestGiverDots(std::move(questDots));
 		}
