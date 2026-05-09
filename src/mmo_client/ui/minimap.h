@@ -14,6 +14,8 @@
 #include <memory>
 #include <vector>
 
+#include "luabind/luabind.hpp"
+
 struct lua_State;
 
 namespace mmo
@@ -84,11 +86,9 @@ namespace mmo
 		/// @brief Updates the positions of party members for minimap rendering.
 		void UpdatePartyPositions(std::vector<PartyMemberDot> members);
 
-		/// @brief Queries which minimap objects are near a given normalized UV coordinate.
-		/// @param u Horizontal position in [0,1] across the minimap texture.
-		/// @param v Vertical position in [0,1] across the minimap texture (0=top).
+/// @brief Queries which minimap objects are near a given normalized UV coordinate.
 		/// Returns a Lua table: array of {type="party"|"questgiver", name=string}.
-		int GetMinimapObjectsAt(lua_State* luaState, float u, float v) const;
+		luabind::object GetMinimapObjectsAt(lua_State* luaState, float u, float v) const;
 
 		enum class QuestDotType : uint8
 		{

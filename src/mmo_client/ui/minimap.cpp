@@ -7,7 +7,7 @@
 #include "log/default_log_levels.h"
 
 #include "luabind_lambda.h"
-#include "lua/lua.hpp"
+#include "luabind/luabind.hpp"
 
 namespace mmo
 {
@@ -104,7 +104,7 @@ namespace mmo
 			luabind::def_lambda("GetMinimapMinZoomLevel", [this]() { return 0; }),
 			luabind::def_lambda("GetMinimapMaxZoomLevel", [this]() { return GetMaxZoomLevel(); }),
 			luabind::def_lambda("SetMinimapZoomLevel", [this](int32 zoomLevel) { SetZoomLevel(zoomLevel); }),
-			luabind::def_lambda("GetMinimapObjectsAt", [this](lua_State* L, float u, float v) { return GetMinimapObjectsAt(L, u, v); })
+			luabind::def<std::function<luabind::object(lua_State*, float, float)>>("GetMinimapObjectsAt", [this](lua_State* L, float u, float v) { return GetMinimapObjectsAt(L, u, v); })
 		);
 	}
 
@@ -302,7 +302,7 @@ namespace mmo
 	{
 		m_questGiverDots = std::move(dots);
 	}
-	int Minimap::GetMinimapObjectsAt(lua_State* L, float u, float v) const
+luabind::object Minimap::GetMinimapObjectsAt(lua_State* L, float u, float v) const
 	{
 		// Convert UV [0,1] to world position using current view bounds
 		const float zoomFactor = GetZoomFactor();
@@ -317,10 +317,6 @@ namespace mmo
 		const float hitRadius = kDotHalfSize / zoomFactor;
 		const float hitRadiusSq = hitRadius * hitRadius;
 
-		// Build result table
-		lua_newtable(L);
-		int index = 1;
-
 		auto distSq = [&](const Vector3& pos) -> float
 		{
 			const float dx = pos.x - worldX;
@@ -328,17 +324,18 @@ namespace mmo
 			return dx * dx + dz * dz;
 		};
 
+		luabind::object result = luabind::newtable(L);
+		int index = 1;
+
 		// Party members
 		for (const PartyMemberDot& member : m_partyPositions)
 		{
 			if (distSq(member.position) <= hitRadiusSq)
 			{
-				lua_newtable(L);
-				lua_pushstring(L, "party");
-				lua_setfield(L, -2, "type");
-				lua_pushstring(L, member.name.c_str());
-				lua_setfield(L, -2, "name");
-				lua_rawseti(L, -2, index++);
+				luabind::object entry = luabind::newtable(L);
+				entry["type"] = std::string("party");
+				entry["name"] = member.name;
+				result[index++] = entry;
 			}
 		}
 
@@ -347,16 +344,14 @@ namespace mmo
 		{
 			if (distSq(dot.position) <= hitRadiusSq)
 			{
-				lua_newtable(L);
-				lua_pushstring(L, "questgiver");
-				lua_setfield(L, -2, "type");
-				lua_pushstring(L, dot.name.c_str());
-				lua_setfield(L, -2, "name");
-				lua_rawseti(L, -2, index++);
+				luabind::object entry = luabind::newtable(L);
+				entry["type"] = std::string("questgiver");
+				entry["name"] = dot.name;
+				result[index++] = entry;
 			}
 		}
 
-		return 1; // one return value: the table
+		return result;
 	}
 
 
