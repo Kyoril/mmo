@@ -1,111 +1,95 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
-
 #pragma once
 
 #include "base/typedefs.h"
 #include "math/vector3.h"
-#include "scene_graph/scene.h"
-#include "scene_graph/scene_node.h"
-#include "scene_graph/manual_render_object.h"
-#include "game_client/game_object_c.h"
 
-#include <vector>
+#include <array>
 #include <memory>
+#include <string>
 
 namespace mmo
 {
+	class Scene;
+	class SceneNode;
+	class ManualRenderObject;
 	class Camera;
 
-	/// Maximum simultaneous pings visible in the world.
-	static constexpr int32 kMaxWorldPings = 4;
-
-	/// Duration in seconds a ping remains visible.
-	static constexpr float kWorldPingDuration = 5.0f;
-
-	/// Height of the billboard icon above the ping position (or unit).
-	static constexpr float kPingIconHeight = 3.0f;
-
-	/// Half-size (radius) of the billboard quad in world units.
-	static constexpr float kPingIconHalfSize = 0.5f;
-
-	/// Length of the vertical line descending from the icon to the ground.
-	/// Only drawn for position pings, not unit pings.
-	static constexpr float kPingLineLength = kPingIconHeight;
-
-	enum class PingTargetType : uint8
-	{
-		Position = 0,
-		Unit = 1
-	};
-
-	struct WorldPingEntry
-	{
-		/// Sender's character GUID (for deduplication).
-		uint64 senderGuid = 0;
-
-		/// What kind of ping this is.
-		PingTargetType type = PingTargetType::Position;
-
-		/// World-space ground position for Position pings.
-		Vector3 groundPosition;
-
-		/// GUID of the targeted unit (for Unit pings); 0 if Position ping.
-		uint64 targetUnitGuid = 0;
-
-		/// Seconds remaining until this ping disappears.
-		float remainingTime = kWorldPingDuration;
-
-		// --- Scene graph objects for this ping slot ---
-
-		/// Parent scene node; positioned at the ping location each frame.
-		SceneNode* node = nullptr;
-
-		/// Vertical line from icon down to ground (position pings only).
-		ManualRenderObject* lineObject = nullptr;
-
-		/// Billboard icon quad (always present).
-		ManualRenderObject* iconObject = nullptr;
-	};
-
-	/// Manages up to kMaxWorldPings simultaneous 3-D ping markers.
-	/// Each marker consists of:
-	///   - A billboard icon floating above the ping location
-	///   - A vertical coloured line from the icon to the ground (position pings)
+	/// Manages up to kMaxPings simultaneous 3D world ping markers.
 	///
-	/// Call Update() every frame so billboards face the camera and timers tick.
+	/// Each marker consists of:
+	///   - A billboard quad (icon with UV-mapped texture), parented to a SceneNode so
+	///     billboarding is achieved by rotating the node to match camera orientation each
+	///     frame — no vertex-buffer rebuild needed.
+	///   - An optional vertical line strip from the icon down to the ground (position pings
+	///     only; unit pings get the icon above the unit with no line).
+	///
+	/// Geometry is created once when a ping arrives and destroyed when it expires or is
+	/// replaced. Only node orientation updates happen per frame.
 	class WorldPingVisualizer
 	{
+	public:
+		static constexpr int32 kMaxPings = 4;
+		static constexpr float kPingDuration = 5.0f;
+		static constexpr float kIconHalfSize = 0.5f;  // half-width/height of billboard in world units
+		static constexpr float kIconHeight = 3.0f;    // above ground / above unit origin
+
+		enum class PingType { Position, Unit };
+
+		struct PingSlot
+		{
+			bool active = false;
+			PingType type = PingType::Position;
+			float remainingTime = 0.0f;
+			uint64 senderGuid = 0;
+			uint64 targetGuid = 0;          // unit pings only
+			Vector3 worldPosition;          // position pings: floor hit; unit pings: updated each frame
+
+			SceneNode* iconNode = nullptr;
+			ManualRenderObject* iconMesh = nullptr;
+			SceneNode* lineNode = nullptr;
+			ManualRenderObject* lineMesh = nullptr;  // null for unit pings
+			uint8 lastAlpha = 255;  // quantized alpha from last geometry rebuild
+		};
+
 	public:
 		explicit WorldPingVisualizer(Scene& scene);
 		~WorldPingVisualizer();
 
-		/// Add or refresh a position-based ping.
-		void AddPositionPing(uint64 senderGuid, const Vector3& groundPosition);
+		WorldPingVisualizer(const WorldPingVisualizer&) = delete;
+		WorldPingVisualizer& operator=(const WorldPingVisualizer&) = delete;
 
-		/// Add or refresh a unit-based ping (icon tracks the unit's world position).
-		void AddUnitPing(uint64 senderGuid, uint64 unitGuid);
+	public:
+		/// Add or replace a position ping from senderGuid at world XZ position.
+		void AddPositionPing(uint64 senderGuid, const Vector3& worldPos);
 
-		/// Update billboard orientation and tick timers. Call every frame.
+		/// Add or replace a unit ping from senderGuid targeting a unit by GUID.
+		void AddUnitPing(uint64 senderGuid, uint64 targetGuid);
+
+		/// Tick — expires pings, updates unit positions, orients billboards to camera.
 		void Update(float deltaSeconds, const Camera& camera);
 
-		/// Remove all pings (e.g., on map transition).
+		/// Destroy all active pings (called on map transfer / OnLeave).
 		void Clear();
 
 	private:
-		/// Find an existing entry for senderGuid, or grab the oldest slot.
-		WorldPingEntry& AcquireSlot(uint64 senderGuid);
+		/// Find the slot owned by senderGuid, or the oldest/inactive slot to evict.
+		int32 AcquireSlot(uint64 senderGuid);
 
-		/// Rebuild the geometry for the given entry based on its current position.
-		void RebuildGeometry(WorldPingEntry& entry);
+		/// Build billboard quad geometry for the given slot.
+		void BuildIconMesh(PingSlot& slot);
 
-		/// Destroy scene objects for the given entry (does not erase from vector).
-		void DestroyEntryObjects(WorldPingEntry& entry);
+		/// Build vertical line geometry for the given slot (position pings only).
+		void BuildLineMesh(PingSlot& slot);
+
+		/// Destroy all scene objects for a slot and reset it to inactive.
+		void FreeSlot(PingSlot& slot);
 
 	private:
 		Scene& m_scene;
-		std::vector<WorldPingEntry> m_pings;
+		std::array<PingSlot, kMaxPings> m_slots;
 
-		MaterialPtr m_lineMaterial;
-		MaterialPtr m_iconMaterial;
+		/// Counter used to generate unique node names.
+		uint32 m_nameCounter = 0;
 	};
 }

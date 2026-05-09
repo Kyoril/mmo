@@ -1,24 +1,19 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
-
 #include "world_ping_visualizer.h"
 
+#include "scene_graph/scene.h"
+#include "scene_graph/scene_node.h"
+#include "scene_graph/manual_render_object.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/material_manager.h"
-#include "frame_ui/color.h"
-#include "log/default_log_levels.h"
-
 #include "game_client/object_mgr.h"
 #include "game_client/game_unit_c.h"
-
-#include <algorithm>
 
 namespace mmo
 {
 	WorldPingVisualizer::WorldPingVisualizer(Scene& scene)
 		: m_scene(scene)
 	{
-		m_lineMaterial = MaterialManager::Get().Load("Editor/Wireframe.hmat");
-		m_iconMaterial = MaterialManager::Get().Load("Editor/Wireframe.hmat");
 	}
 
 	WorldPingVisualizer::~WorldPingVisualizer()
@@ -26,232 +21,279 @@ namespace mmo
 		Clear();
 	}
 
-	void WorldPingVisualizer::AddPositionPing(const uint64 senderGuid, const Vector3& groundPosition)
+	void WorldPingVisualizer::AddPositionPing(const uint64 senderGuid, const Vector3& worldPos)
 	{
-		WorldPingEntry& entry = AcquireSlot(senderGuid);
-		entry.senderGuid = senderGuid;
-		entry.type = PingTargetType::Position;
-		entry.groundPosition = groundPosition;
-		entry.targetUnitGuid = 0;
-		entry.remainingTime = kWorldPingDuration;
-
-		// Create scene node if not already allocated
-		if (!entry.node)
+		const int32 idx = AcquireSlot(senderGuid);
+		if (idx < 0)
 		{
-			entry.node = m_scene.GetRootSceneNode().CreateChildSceneNode();
+			return;
 		}
 
-		entry.node->SetPosition(groundPosition);
+		PingSlot& slot = m_slots[idx];
+		FreeSlot(slot);
 
-		// Ensure scene objects exist
-		if (!entry.lineObject)
-		{
-			static uint32 s_counter = 0;
-			const String name = "PingLine_" + std::to_string(s_counter++);
-			entry.lineObject = m_scene.CreateManualRenderObject(name);
-			if (entry.lineObject)
-			{
-				entry.lineObject->SetCastShadows(false);
-				entry.lineObject->SetQueryFlags(0);
-				entry.node->AttachObject(*entry.lineObject);
-			}
-		}
+		slot.active = true;
+		slot.type = PingType::Position;
+		slot.remainingTime = kPingDuration;
+		slot.senderGuid = senderGuid;
+		slot.targetGuid = 0;
+		slot.worldPosition = worldPos;
 
-		if (!entry.iconObject)
-		{
-			static uint32 s_counter = 0;
-			const String name = "PingIcon_" + std::to_string(s_counter++);
-			entry.iconObject = m_scene.CreateManualRenderObject(name);
-			if (entry.iconObject)
-			{
-				entry.iconObject->SetCastShadows(false);
-				entry.iconObject->SetQueryFlags(0);
-				entry.node->AttachObject(*entry.iconObject);
-			}
-		}
-
-		// Draw the vertical line immediately (it doesn't need per-frame rebuild)
-		if (entry.lineObject && m_lineMaterial)
-		{
-			entry.lineObject->Clear();
-			auto lineOp = entry.lineObject->AddLineListOperation(m_lineMaterial);
-			// Vertical line from ground up to icon height, in local space (node is at groundPosition)
-			auto& line = lineOp->AddLine(Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, kPingLineLength, 0.0f));
-			line.SetColor(Color(0.2f, 0.6f, 1.0f, 1.0f).GetARGB());
-			lineOp->Finish();
-		}
+		BuildIconMesh(slot);
+		BuildLineMesh(slot);
 	}
 
-	void WorldPingVisualizer::AddUnitPing(const uint64 senderGuid, const uint64 unitGuid)
+	void WorldPingVisualizer::AddUnitPing(const uint64 senderGuid, const uint64 targetGuid)
 	{
-		WorldPingEntry& entry = AcquireSlot(senderGuid);
-		entry.senderGuid = senderGuid;
-		entry.type = PingTargetType::Unit;
-		entry.targetUnitGuid = unitGuid;
-		entry.groundPosition = Vector3::Zero;
-		entry.remainingTime = kWorldPingDuration;
-
-		if (!entry.node)
+		const int32 idx = AcquireSlot(senderGuid);
+		if (idx < 0)
 		{
-			entry.node = m_scene.GetRootSceneNode().CreateChildSceneNode();
+			return;
 		}
 
-		// No line for unit pings — just icon
-		if (entry.lineObject)
+		PingSlot& slot = m_slots[idx];
+		FreeSlot(slot);
+
+		slot.active = true;
+		slot.type = PingType::Unit;
+		slot.remainingTime = kPingDuration;
+		slot.senderGuid = senderGuid;
+		slot.targetGuid = targetGuid;
+
+		// Resolve initial position from the unit if available
+		if (auto unit = ObjectMgr::Get<GameUnitC>(targetGuid))
 		{
-			entry.node->DetachObject(*entry.lineObject);
-			m_scene.DestroyManualRenderObject(*entry.lineObject);
-			entry.lineObject = nullptr;
+			slot.worldPosition = unit->GetPosition();
+		}
+		else
+		{
+			slot.worldPosition = Vector3::Zero;
 		}
 
-		if (!entry.iconObject)
-		{
-			static uint32 s_counter = 0;
-			const String name = "PingIcon_" + std::to_string(s_counter++);
-			entry.iconObject = m_scene.CreateManualRenderObject(name);
-			if (entry.iconObject)
-			{
-				entry.iconObject->SetCastShadows(false);
-				entry.iconObject->SetQueryFlags(0);
-				entry.node->AttachObject(*entry.iconObject);
-			}
-		}
+		BuildIconMesh(slot);
+		// No vertical line for unit pings
 	}
 
 	void WorldPingVisualizer::Update(const float deltaSeconds, const Camera& camera)
 	{
-		// Compute camera right and up in world space for billboard orientation
-		const Quaternion& camOri = camera.GetDerivedOrientation();
-		const Vector3 camRight = camOri * Vector3::UnitX;
-		const Vector3 camUp = camOri * Vector3::UnitY;
+		const Quaternion camOrientation = camera.GetDerivedOrientation();
 
-		for (auto& entry : m_pings)
+		for (auto& slot : m_slots)
 		{
-			if (entry.remainingTime <= 0.0f)
+			if (!slot.active)
 			{
 				continue;
 			}
 
-			entry.remainingTime -= deltaSeconds;
-
-			const float alpha = std::clamp(entry.remainingTime / kWorldPingDuration, 0.0f, 1.0f);
-			const Color pingColor(0.2f, 0.6f, 1.0f, alpha);
-			const uint32 colorARGB = pingColor.GetARGB();
-
-			// For unit pings: track the unit's current position
-			if (entry.type == PingTargetType::Unit && entry.node)
+			slot.remainingTime -= deltaSeconds;
+			if (slot.remainingTime <= 0.0f)
 			{
-				auto unit = ObjectMgr::Get<GameUnitC>(entry.targetUnitGuid);
-				if (unit && unit->GetSceneNode())
+				FreeSlot(slot);
+				continue;
+			}
+
+			// For unit pings: follow the unit's current world position
+			if (slot.type == PingType::Unit && slot.targetGuid != 0)
+			{
+				if (auto unit = ObjectMgr::Get<GameUnitC>(slot.targetGuid))
 				{
-					const Vector3& unitPos = unit->GetPosition();
-					entry.node->SetPosition(unitPos);
+					slot.worldPosition = unit->GetPosition();
 				}
 			}
 
-			// Rebuild billboard icon geometry (camera-facing quad, 2 triangles)
-			if (entry.iconObject && m_iconMaterial)
+			// Compute alpha (fade out over last second)
+			const float fadeStart = 1.0f;
+			const float alpha = slot.remainingTime < fadeStart
+				? slot.remainingTime / fadeStart
+				: 1.0f;
+			const uint8 a = static_cast<uint8>(alpha * 255.0f);
+
+			// Update icon node: position + camera-facing orientation
+			if (slot.iconNode)
 			{
-				entry.iconObject->Clear();
-				auto triOp = entry.iconObject->AddTriangleListOperation(m_iconMaterial);
+				const Vector3 iconWorldPos = slot.worldPosition + Vector3(0.0f, kIconHeight, 0.0f);
+				slot.iconNode->SetPosition(iconWorldPos);
+				slot.iconNode->SetOrientation(camOrientation);
+			}
 
-				// Icon floats kPingIconHeight above the node origin (local space)
-				const Vector3 iconCenter(0.0f, kPingIconHeight, 0.0f);
+			// Rebuild geometry only when quantized alpha changes (max every ~4 frames at 60fps)
+			const uint8 quantized = (a >> 2) << 2;  // 64 discrete steps
+			if (quantized != slot.lastAlpha)
+			{
+				slot.lastAlpha = quantized;
+				const uint32 iconColor = (static_cast<uint32>(quantized) << 24) | 0x00FFFFFF;
+				const uint32 lineColor  = (static_cast<uint32>(quantized) << 24) | 0x004488FF;
 
-				const Vector3 r = camRight * kPingIconHalfSize;
-				const Vector3 u = camUp * kPingIconHalfSize;
+				if (slot.iconMesh)
+				{
+					slot.iconMesh->Clear();
+					auto tri = slot.iconMesh->AddTriangleListOperation(
+						MaterialManager::Get().Load("Interface/WorldPingIcon.hmat"));
 
-				const Vector3 tl = iconCenter - r + u;
-				const Vector3 tr = iconCenter + r + u;
-				const Vector3 bl = iconCenter - r - u;
-				const Vector3 br = iconCenter + r - u;
+					const float h = kIconHalfSize;
+					auto& t1 = tri->AddTriangle(
+						Vector3(-h,  h, 0.0f),
+						Vector3(-h, -h, 0.0f),
+						Vector3( h,  h, 0.0f));
+					t1.SetColor(iconColor);
+					t1.SetUV(0, 0.0f, 0.0f);
+					t1.SetUV(1, 0.0f, 1.0f);
+					t1.SetUV(2, 1.0f, 0.0f);
 
-				auto& t1 = triOp->AddTriangle(tl, tr, bl);
-				t1.SetColor(colorARGB);
+					auto& t2 = tri->AddTriangle(
+						Vector3(-h, -h, 0.0f),
+						Vector3( h, -h, 0.0f),
+						Vector3( h,  h, 0.0f));
+					t2.SetColor(iconColor);
+					t2.SetUV(0, 0.0f, 1.0f);
+					t2.SetUV(1, 1.0f, 1.0f);
+					t2.SetUV(2, 1.0f, 0.0f);
+				}
 
-				auto& t2 = triOp->AddTriangle(tr, br, bl);
-				t2.SetColor(colorARGB);
-
-				triOp->Finish();
+				if (slot.lineMesh)
+				{
+					slot.lineMesh->Clear();
+					auto line = slot.lineMesh->AddLineListOperation(
+						MaterialManager::Get().Load("Editor/Wireframe.hmat"));
+					auto& seg = line->AddLine(
+						slot.worldPosition + Vector3(0.0f, kIconHeight, 0.0f),
+						slot.worldPosition);
+					seg.SetStartColor(lineColor);
+					seg.SetEndColor(lineColor);
+				}
 			}
 		}
-
-		// Remove expired entries
-		for (auto& entry : m_pings)
-		{
-			if (entry.remainingTime <= 0.0f)
-			{
-				DestroyEntryObjects(entry);
-			}
-		}
-		m_pings.erase(
-			std::remove_if(m_pings.begin(), m_pings.end(),
-				[](const WorldPingEntry& e) { return e.remainingTime <= 0.0f; }),
-			m_pings.end());
 	}
 
 	void WorldPingVisualizer::Clear()
 	{
-		for (auto& entry : m_pings)
+		for (auto& slot : m_slots)
 		{
-			DestroyEntryObjects(entry);
+			FreeSlot(slot);
 		}
-		m_pings.clear();
 	}
 
-	WorldPingEntry& WorldPingVisualizer::AcquireSlot(const uint64 senderGuid)
+	int32 WorldPingVisualizer::AcquireSlot(const uint64 senderGuid)
 	{
-		// Replace existing ping from same sender
-		for (auto& entry : m_pings)
+		// Reuse existing slot for this sender
+		for (int32 i = 0; i < kMaxPings; ++i)
 		{
-			if (entry.senderGuid == senderGuid)
+			if (m_slots[i].active && m_slots[i].senderGuid == senderGuid)
 			{
-				return entry;
+				return i;
 			}
 		}
 
-		// Room for a new slot?
-		if (static_cast<int32>(m_pings.size()) < kMaxWorldPings)
+		// Use first inactive slot
+		for (int32 i = 0; i < kMaxPings; ++i)
 		{
-			m_pings.emplace_back();
-			return m_pings.back();
+			if (!m_slots[i].active)
+			{
+				return i;
+			}
 		}
 
-		// Evict oldest (smallest remainingTime)
-		auto oldest = std::min_element(m_pings.begin(), m_pings.end(),
-			[](const WorldPingEntry& a, const WorldPingEntry& b)
-			{ return a.remainingTime < b.remainingTime; });
-
-		DestroyEntryObjects(*oldest);
-		*oldest = WorldPingEntry{};
-		return *oldest;
+		// Evict the slot with the least remaining time
+		int32 oldest = 0;
+		float minTime = m_slots[0].remainingTime;
+		for (int32 i = 1; i < kMaxPings; ++i)
+		{
+			if (m_slots[i].remainingTime < minTime)
+			{
+				minTime = m_slots[i].remainingTime;
+				oldest = i;
+			}
+		}
+		return oldest;
 	}
 
-	void WorldPingVisualizer::DestroyEntryObjects(WorldPingEntry& entry)
+	void WorldPingVisualizer::BuildIconMesh(PingSlot& slot)
 	{
-		if (entry.node)
+		const std::string nodeName = "PingIcon_" + std::to_string(m_nameCounter++);
+		slot.iconNode = &m_scene.CreateSceneNode(nodeName);
+		slot.iconNode->SetPosition(slot.worldPosition + Vector3(0.0f, kIconHeight, 0.0f));
+
+		slot.iconMesh = m_scene.CreateManualRenderObject(nodeName + "_mesh");
+		slot.iconNode->AttachObject(*slot.iconMesh);
+
+		auto tri = slot.iconMesh->AddTriangleListOperation(
+			MaterialManager::Get().Load("Interface/WorldPingIcon.hmat"));
+
+		// Quad in local space (XY plane); node rotation handles camera facing
+		const float h = kIconHalfSize;
+		// Triangle 1: TL, BL, TR
+		auto& t1 = tri->AddTriangle(
+			Vector3(-h,  h, 0.0f),
+			Vector3(-h, -h, 0.0f),
+			Vector3( h,  h, 0.0f));
+		t1.SetColor(0xFFFFFFFF);
+		t1.SetUV(0, 0.0f, 0.0f);
+		t1.SetUV(1, 0.0f, 1.0f);
+		t1.SetUV(2, 1.0f, 0.0f);
+
+		// Triangle 2: BL, BR, TR
+		auto& t2 = tri->AddTriangle(
+			Vector3(-h, -h, 0.0f),
+			Vector3( h, -h, 0.0f),
+			Vector3( h,  h, 0.0f));
+		t2.SetColor(0xFFFFFFFF);
+		t2.SetUV(0, 0.0f, 1.0f);
+		t2.SetUV(1, 1.0f, 1.0f);
+		t2.SetUV(2, 1.0f, 0.0f);
+	}
+
+	void WorldPingVisualizer::BuildLineMesh(PingSlot& slot)
+	{
+		if (slot.type != PingType::Position)
 		{
-			if (entry.lineObject)
-			{
-				entry.node->DetachObject(*entry.lineObject);
-				m_scene.DestroyManualRenderObject(*entry.lineObject);
-				entry.lineObject = nullptr;
-			}
-
-			if (entry.iconObject)
-			{
-				entry.node->DetachObject(*entry.iconObject);
-				m_scene.DestroyManualRenderObject(*entry.iconObject);
-				entry.iconObject = nullptr;
-			}
-
-			// Remove node from parent and delete it
-			if (entry.node->GetParent())
-			{
-				entry.node->GetParent()->RemoveChild(*entry.node);
-			}
-			m_scene.DestroySceneNode(*entry.node);
-			entry.node = nullptr;
+			return;
 		}
+
+		const std::string nodeName = "PingLine_" + std::to_string(m_nameCounter++);
+		slot.lineNode = &m_scene.CreateSceneNode(nodeName);
+
+		slot.lineMesh = m_scene.CreateManualRenderObject(nodeName + "_mesh");
+		slot.lineNode->AttachObject(*slot.lineMesh);
+
+		auto line = slot.lineMesh->AddLineListOperation(
+			MaterialManager::Get().Load("Editor/Wireframe.hmat"));
+		auto& seg = line->AddLine(
+			slot.worldPosition + Vector3(0.0f, kIconHeight, 0.0f),
+			slot.worldPosition);
+		seg.SetStartColor(0xFF4488FF);
+		seg.SetEndColor(0xFF4488FF);
+	}
+
+	void WorldPingVisualizer::FreeSlot(PingSlot& slot)
+	{
+		if (slot.iconMesh)
+		{
+			if (slot.iconNode) { slot.iconNode->DetachObject(*slot.iconMesh); }
+			m_scene.DestroyManualRenderObject(*slot.iconMesh);
+			slot.iconMesh = nullptr;
+		}
+		if (slot.iconNode)
+		{
+			m_scene.DestroySceneNode(*slot.iconNode);
+			slot.iconNode = nullptr;
+		}
+
+		if (slot.lineMesh)
+		{
+			if (slot.lineNode) { slot.lineNode->DetachObject(*slot.lineMesh); }
+			m_scene.DestroyManualRenderObject(*slot.lineMesh);
+			slot.lineMesh = nullptr;
+		}
+		if (slot.lineNode)
+		{
+			m_scene.DestroySceneNode(*slot.lineNode);
+			slot.lineNode = nullptr;
+		}
+
+		slot.active = false;
+		slot.senderGuid = 0;
+		slot.targetGuid = 0;
+		slot.remainingTime = 0.0f;
+		slot.lastAlpha = 255;
 	}
 }
