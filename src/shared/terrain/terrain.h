@@ -373,7 +373,6 @@ namespace mmo
 			/// @return True if the position is over a hole, false otherwise
 			[[nodiscard]] bool IsHoleAt(float x, float z) const;
 
-		private:
 			/// @brief Updates tiles in a specified region.
 			/// @param fromX The starting X coordinate.
 			/// @param fromZ The starting Z coordinate.
@@ -381,6 +380,7 @@ namespace mmo
 			/// @param toZ The ending Z coordinate.
 			void UpdateTiles(int fromX, int fromZ, int toX, int toZ);
 
+		private:
 			/// @brief Updates tile coverage information in a specified region.
 			/// @param fromX The starting X coordinate.
 			/// @param fromZ The starting Z coordinate.

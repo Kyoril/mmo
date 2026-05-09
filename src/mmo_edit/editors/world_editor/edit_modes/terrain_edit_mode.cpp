@@ -6,10 +6,16 @@
 
 #include <imgui.h>
 #include <cmath>
+#include <algorithm>
+#include <cfloat>
 
 #include "frame_ui/color.h"
 #include "scene_graph/material_manager.h"
 #include "math/vector3.h"
+#include "math/noise.h"
+#include "graphics/graphics_device.h"
+#include "graphics/texture_mgr.h"
+#include "graphics/buffer_base.h"
 
 
 namespace mmo
@@ -157,6 +163,67 @@ namespace mmo
 				ImGui::SliderFloat("Amplitude", &m_noiseAmplitude, 0.1f, 50.0f);
 				ImGui::SliderInt("Octaves", &m_noiseOctaves, 1, 8);
 				ImGui::SliderFloat("Persistence", &m_noisePersistence, 0.1f, 0.9f);
+
+				// Rebuild noise preview texture when parameters change
+				const bool paramsChanged =
+					m_noiseFrequency   != m_noisePreviewFrequency ||
+					m_noiseAmplitude   != m_noisePreviewAmplitude  ||
+					m_noiseOctaves     != m_noisePreviewOctaves    ||
+					m_noisePersistence != m_noisePreviewPersistence;
+
+				constexpr int kPreviewSize = 128;
+				if (paramsChanged || !m_noisePreviewTex)
+				{
+					m_noisePreviewFrequency   = m_noiseFrequency;
+					m_noisePreviewAmplitude   = m_noiseAmplitude;
+					m_noisePreviewOctaves     = m_noiseOctaves;
+					m_noisePreviewPersistence = m_noisePersistence;
+
+					if (!m_noisePreviewTex)
+					{
+						m_noisePreviewTex = TextureManager::Get().CreateManual(
+							"__NoisePreview__", kPreviewSize, kPreviewSize,
+							PixelFormat::R8G8B8A8, BufferUsage::DynamicWriteOnly);
+					}
+
+					if (m_noisePreviewTex)
+					{
+						std::vector<uint32> pixels(kPreviewSize * kPreviewSize);
+						// Sample fBm over the square, normalise to [0,1]
+						float minV = FLT_MAX, maxV = -FLT_MAX;
+						std::vector<float> raw(kPreviewSize * kPreviewSize);
+						for (int py = 0; py < kPreviewSize; ++py)
+						{
+							for (int px = 0; px < kPreviewSize; ++px)
+							{
+								const float fx = static_cast<float>(px) / kPreviewSize;
+								const float fz = static_cast<float>(py) / kPreviewSize;
+								const float v = noise::fBm(fx * m_noiseFrequency * 200.0f,
+								                           fz * m_noiseFrequency * 200.0f,
+								                           m_noiseOctaves,
+								                           m_noisePersistence);
+								raw[py * kPreviewSize + px] = v;
+								minV = std::min(minV, v);
+								maxV = std::max(maxV, v);
+							}
+						}
+						const float range = (maxV - minV) > 1e-6f ? (maxV - minV) : 1.0f;
+						for (int i = 0; i < kPreviewSize * kPreviewSize; ++i)
+						{
+							const uint8 g = static_cast<uint8>(((raw[i] - minV) / range) * 255.0f);
+							pixels[i] = 0xFF000000u | (g << 16) | (g << 8) | g; // ARGB grey
+						}
+						m_noisePreviewTex->UpdateFromMemory(pixels.data(), pixels.size() * sizeof(uint32));
+					}
+				}
+
+				if (m_noisePreviewTex && m_noisePreviewTex->GetTextureObject())
+				{
+					ImGui::Spacing();
+					ImGui::Text("Noise Preview:");
+					ImGui::Image(m_noisePreviewTex->GetTextureObject(),
+					             ImVec2(static_cast<float>(kPreviewSize), static_cast<float>(kPreviewSize)));
+				}
 			}
 		}
 		else if (m_type == TerrainEditType::Paint)
@@ -233,6 +300,16 @@ namespace mmo
 
 				ImGui::EndListBox();
 			}
+		}
+
+		ImGui::Separator();
+
+		if (ImGui::Button("Reset Inner Vertices to Interpolated Height", ImVec2(-1.0f, 0.0f)))
+		{
+			const int maxX = static_cast<int>(m_terrain.GetWidth() * (terrain::constants::OuterVerticesPerPageSide - 1)) - 1;
+			const int maxZ = static_cast<int>(m_terrain.GetHeight() * (terrain::constants::OuterVerticesPerPageSide - 1)) - 1;
+			m_terrain.UpdateInnerVertices(0, 0, maxX, maxZ);
+			m_terrain.UpdateTiles(0, 0, maxX, maxZ);
 		}
 	}
 
@@ -315,6 +392,20 @@ namespace mmo
 		WorldEditMode::OnMouseUp(x, y);
 	}
 
+	void TerrainEditMode::OnMouseWheel(const float delta)
+	{
+		if (ImGui::GetIO().KeyShift)
+		{
+			m_terrainBrushSize = std::max(0.01f, std::min(m_terrainBrushSize + delta * 2.0f, 256.0f));
+			UpdateBrushOverlay();
+		}
+		else if (ImGui::GetIO().KeyCtrl)
+		{
+			m_terrainBrushHardness = std::max(0.0f, std::min(m_terrainBrushHardness + delta * 0.05f, 1.0f));
+			UpdateBrushOverlay();
+		}
+	}
+
 	void TerrainEditMode::SetBrushPosition(const Vector3& position)
 	{
 		m_brushPosition = position;
@@ -338,9 +429,11 @@ namespace mmo
 			return;
 		}
 
+		// Circles and dots are both rendered in world space with the node at origin,
+		// so we always keep both nodes at Vector3::Zero and use absolute world positions.
 		if (m_brushCirclesNode)
 		{
-			m_brushCirclesNode->SetPosition(m_brushPosition);
+			m_brushCirclesNode->SetPosition(Vector3::Zero);
 		}
 		if (m_vertexDotsNode)
 		{
@@ -350,55 +443,67 @@ namespace mmo
 		const float outerRadius = m_terrainBrushSize;
 		const float innerRadius = std::max(0.05f, m_terrainBrushSize * m_terrainBrushHardness);
 
-		// Build circle geometry (relative to m_brushCirclesNode which sits at m_brushPosition)
+		const float brushCenterX = m_brushPosition.x;
+		const float brushCenterZ = m_brushPosition.z;
+
+		// Build circle geometry in world space, sampling terrain height for each vertex
+		// so the circles drape over the terrain instead of being flat.
 		if (m_brushCircles)
 		{
 			constexpr int kSegments = 64;
 			constexpr float k2Pi = 6.28318530718f;
 
 			MaterialPtr mat = MaterialManager::Get().Load("Editor/Wireframe.hmat");
-
 			auto lineOp = m_brushCircles->AddLineListOperation(mat);
+
 			for (int i = 0; i < kSegments; ++i)
 			{
 				const float a1 = (static_cast<float>(i)     / kSegments) * k2Pi;
 				const float a2 = (static_cast<float>(i + 1) / kSegments) * k2Pi;
 
-				// Inner circle (relative to node position)
-				const Vector3 iStart(innerRadius * std::cos(a1), 0.0f, innerRadius * std::sin(a1));
-				const Vector3 iEnd  (innerRadius * std::cos(a2), 0.0f, innerRadius * std::sin(a2));
-				lineOp->AddLine(iStart, iEnd);
+				// Inner circle — sample terrain height at each endpoint
+				{
+					const float ix1 = brushCenterX + innerRadius * std::cos(a1);
+					const float iz1 = brushCenterZ + innerRadius * std::sin(a1);
+					const float ix2 = brushCenterX + innerRadius * std::cos(a2);
+					const float iz2 = brushCenterZ + innerRadius * std::sin(a2);
+					const float iy1 = m_terrain.GetSmoothHeightAt(ix1, iz1) + 0.1f;
+					const float iy2 = m_terrain.GetSmoothHeightAt(ix2, iz2) + 0.1f;
+					lineOp->AddLine(Vector3(ix1, iy1, iz1), Vector3(ix2, iy2, iz2));
+				}
 
-				// Outer circle
-				const Vector3 oStart(outerRadius * std::cos(a1), 0.0f, outerRadius * std::sin(a1));
-				const Vector3 oEnd  (outerRadius * std::cos(a2), 0.0f, outerRadius * std::sin(a2));
-				lineOp->AddLine(oStart, oEnd);
+				// Outer circle — same treatment
+				{
+					const float ox1 = brushCenterX + outerRadius * std::cos(a1);
+					const float oz1 = brushCenterZ + outerRadius * std::sin(a1);
+					const float ox2 = brushCenterX + outerRadius * std::cos(a2);
+					const float oz2 = brushCenterZ + outerRadius * std::sin(a2);
+					const float oy1 = m_terrain.GetSmoothHeightAt(ox1, oz1) + 0.1f;
+					const float oy2 = m_terrain.GetSmoothHeightAt(ox2, oz2) + 0.1f;
+					lineOp->AddLine(Vector3(ox1, oy1, oz1), Vector3(ox2, oy2, oz2));
+				}
 			}
 		}
 
-		// Build vertex dot geometry (world-space lines, node at origin)
+		// Build vertex dot geometry — mirrors TerrainVertexBrush iteration exactly,
+		// covering both outer vertices and inner (cell-center) vertices.
 		if (m_vertexDots)
 		{
 			MaterialPtr mat = MaterialManager::Get().Load("Editor/Wireframe.hmat");
 			auto dotOp = m_vertexDots->AddLineListOperation(mat);
 
 			int dotCount = 0;
-			constexpr int kMaxDots = 2000;
+			constexpr int kMaxDots = 4000;
 			constexpr float kCrossHalf = 0.2f;
 
 			const bool holesMode = (m_type == TerrainEditType::Holes);
 
-			// Replicate TerrainVertexBrush vertex iteration using only public terrain API.
-			// Formula mirrors terrain.h's private TerrainVertexBrush implementation.
 			constexpr float scale = static_cast<float>(
 				terrain::constants::PageSize /
 				static_cast<double>(terrain::constants::OuterVerticesPerPageSide - 1));
 
 			const float halfTerrainWidth  = (m_terrain.GetWidth()  * static_cast<float>(terrain::constants::PageSize)) * 0.5f;
 			const float halfTerrainHeight = (m_terrain.GetHeight() * static_cast<float>(terrain::constants::PageSize)) * 0.5f;
-
-			const float brushCenterX = m_brushPosition.x;
-			const float brushCenterZ = m_brushPosition.z;
 
 			const float globalCenterX = (brushCenterX + halfTerrainWidth)  / scale;
 			const float globalCenterZ = (brushCenterZ + halfTerrainHeight) / scale;
@@ -413,6 +518,39 @@ namespace mmo
 			minVertZ = std::max(0, minVertZ);
 			maxVertZ = std::min<int>(maxVertZ, m_terrain.GetHeight() * (terrain::constants::OuterVerticesPerPageSide - 1));
 
+			// Helper to draw a dot at a world position with a colour determined by brush falloff
+			auto DrawDot = [&](const float worldX, const float worldZ, const float dist)
+			{
+				float factor;
+				if (dist <= innerRadius || outerRadius <= innerRadius)
+				{
+					factor = 1.0f;
+				}
+				else
+				{
+					factor = 1.0f - (dist - innerRadius) / (outerRadius - innerRadius);
+				}
+
+				if (holesMode && factor < 1.0f) return;
+
+				const float worldY = m_terrain.GetSmoothHeightAt(worldX, worldZ) + 0.15f;
+				// Green (factor=1, inner) → red (factor=0, outer)
+				const uint32 color = LerpColor(0xFF00FF00u, 0xFFFF0000u, 1.0f - factor);
+
+				auto& hLine = dotOp->AddLine(
+					Vector3(worldX - kCrossHalf, worldY, worldZ),
+					Vector3(worldX + kCrossHalf, worldY, worldZ));
+				hLine.SetColor(color);
+
+				auto& vLine = dotOp->AddLine(
+					Vector3(worldX, worldY, worldZ - kCrossHalf),
+					Vector3(worldX, worldY, worldZ + kCrossHalf));
+				vLine.SetColor(color);
+
+				++dotCount;
+			};
+
+			// --- Outer vertices ---
 			for (int vx = minVertX; vx <= maxVertX && dotCount < kMaxDots; ++vx)
 			{
 				for (int vz = minVertZ; vz <= maxVertZ && dotCount < kMaxDots; ++vz)
@@ -426,38 +564,43 @@ namespace mmo
 
 					if (dist > outerRadius) continue;
 
-					float factor;
-					if (dist <= innerRadius)
-					{
-						factor = 1.0f;
-					}
-					else if (outerRadius <= innerRadius)
-					{
-						factor = 1.0f;
-					}
-					else
-					{
-						factor = 1.0f - (dist - innerRadius) / (outerRadius - innerRadius);
-					}
+					DrawDot(worldX, worldZ, dist);
+				}
+			}
 
-					if (holesMode && factor < 1.0f) continue;
+			// --- Inner vertices (cell-center quads between outer vertices) ---
+			// Mirrors the inner-vertex loop in TerrainVertexBrush exactly.
+			const int minInnerX = std::max(0, minVertX - 1);
+			const int maxInnerX = std::min(
+				static_cast<int>(m_terrain.GetWidth()  * (terrain::constants::OuterVerticesPerPageSide - 1) - 1), maxVertX);
+			const int minInnerZ = std::max(0, minVertZ - 1);
+			const int maxInnerZ = std::min(
+				static_cast<int>(m_terrain.GetHeight() * (terrain::constants::OuterVerticesPerPageSide - 1) - 1), maxVertZ);
 
-					const float worldY = m_terrain.GetSmoothHeightAt(worldX, worldZ);
+			for (int ix = minInnerX; ix < maxInnerX && dotCount < kMaxDots; ++ix)
+			{
+				for (int iz = minInnerZ; iz < maxInnerZ && dotCount < kMaxDots; ++iz)
+				{
+					// Inner vertex position = average of the 4 surrounding outer-vertex world positions
+					const float v0x = ix       * scale - halfTerrainWidth;
+					const float v0z = iz       * scale - halfTerrainHeight;
+					const float v1x = (ix + 1) * scale - halfTerrainWidth;
+					const float v1z = iz       * scale - halfTerrainHeight;
+					const float v2x = ix       * scale - halfTerrainWidth;
+					const float v2z = (iz + 1) * scale - halfTerrainHeight;
+					const float v3x = (ix + 1) * scale - halfTerrainWidth;
+					const float v3z = (iz + 1) * scale - halfTerrainHeight;
 
-					// Green (factor=1 inner) → red (factor=0 outer)
-					const uint32 color = LerpColor(0xFF00FF00u, 0xFFFF0000u, 1.0f - factor);
+					const float worldX = (v0x + v1x + v2x + v3x) * 0.25f;
+					const float worldZ = (v0z + v1z + v2z + v3z) * 0.25f;
 
-					auto& hLine = dotOp->AddLine(
-						Vector3(worldX - kCrossHalf, worldY, worldZ),
-						Vector3(worldX + kCrossHalf, worldY, worldZ));
-					hLine.SetColor(color);
+					const float dx = worldX - brushCenterX;
+					const float dz = worldZ - brushCenterZ;
+					const float dist = std::sqrt(dx * dx + dz * dz);
 
-					auto& vLine = dotOp->AddLine(
-						Vector3(worldX, worldY, worldZ - kCrossHalf),
-						Vector3(worldX, worldY, worldZ + kCrossHalf));
-					vLine.SetColor(color);
+					if (dist > outerRadius) continue;
 
-					++dotCount;
+					DrawDot(worldX, worldZ, dist);
 				}
 			}
 		}

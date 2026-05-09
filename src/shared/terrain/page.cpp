@@ -123,8 +123,9 @@ namespace mmo
 					return false;
 				}
 
-				// If inner arrays were not provided (legacy v1), derive from outer grid
-				if (m_innerHeightmap.empty())
+					// If inner heights were not loaded from file (legacy page without IVCM chunk),
+				// derive them from the outer vertex grid so the terrain renders correctly.
+				if (!m_innerHeightmapFromFile)
 				{
 					const uint32 newSide = constants::InnerVerticesPerPageSide;
 					for (uint32 j = 0; j < newSide; ++j)
@@ -156,9 +157,10 @@ namespace mmo
 							m_innerColors[i + j * newSide] = avgColor.GetARGB();
 						}
 					}
-				}
 
-				m_changed = true;
+					// Mark as changed so the derived inner data is persisted on the next save
+					m_changed = true;
+				}
 			}
 			else
 			{
@@ -904,7 +906,9 @@ namespace mmo
 
 		bool Page::ReadMCIVChunk(io::Reader &reader, uint32 header, uint32 size)
 		{
-			return reader >> io::read_range(m_innerHeightmap);
+			const bool ok = reader >> io::read_range(m_innerHeightmap);
+			if (ok) m_innerHeightmapFromFile = true;
+			return ok;
 		}
 
 		bool Page::ReadMCINChunk(io::Reader &reader, uint32 header, uint32 size)
@@ -1343,10 +1347,10 @@ namespace mmo
 			{
 				AddChunkHandler(*constants::VertexChunk, true, *this, &Page::ReadMCVTChunk);
 				AddChunkHandler(*constants::NormalChunk, true, *this, &Page::ReadMCNMChunk);
-				// Inner v2 chunks
-				AddChunkHandler(*constants::InnerVertexChunk, true, *this, &Page::ReadMCIVChunk);
-				AddChunkHandler(*constants::InnerNormalChunk, true, *this, &Page::ReadMCINChunk);
-				AddChunkHandler(*constants::InnerVertexShadingChunk, true, *this, &Page::ReadMCISChunk);
+				// Inner v2 chunks (optional – absent in files saved before inner-vertex support was added)
+				AddChunkHandler(*constants::InnerVertexChunk, false, *this, &Page::ReadMCIVChunk);
+				AddChunkHandler(*constants::InnerNormalChunk, false, *this, &Page::ReadMCINChunk);
+				AddChunkHandler(*constants::InnerVertexShadingChunk, false, *this, &Page::ReadMCISChunk);
 				AddChunkHandler(*constants::HoleChunk, false, *this, &Page::ReadMCHLChunk);
 				AddChunkHandler(*constants::LayerChunk, true, *this, &Page::ReadMCLYChunk);
 				AddChunkHandler(*constants::AreaChunk, false, *this, &Page::ReadMCARChunk);

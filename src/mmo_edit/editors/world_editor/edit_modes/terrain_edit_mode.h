@@ -8,6 +8,7 @@
 #include "math/vector3.h"
 #include "scene_graph/manual_render_object.h"
 #include "scene_graph/scene_node.h"
+#include "graphics/texture.h"
 
 namespace mmo
 {
@@ -108,6 +109,8 @@ namespace mmo
 
 		void OnMouseUp(float x, float y) override;
 
+		void OnMouseWheel(float delta) override;
+
 	public:
 		void SetTerrainEditType(const TerrainEditType type) { m_type = type; }
 
@@ -171,5 +174,12 @@ namespace mmo
 		ManualRenderObject* m_vertexDots = nullptr;
 		SceneNode*          m_vertexDotsNode = nullptr;
 		bool                m_brushPositionValid = false;
+
+		// Noise preview texture (128×128 R8 grayscale, rebuilt when noise params change)
+		TexturePtr          m_noisePreviewTex;
+		float               m_noisePreviewFrequency = -1.0f; // sentinel: force first build
+		float               m_noisePreviewAmplitude = -1.0f;
+		int                 m_noisePreviewOctaves   = -1;
+		float               m_noisePreviewPersistence = -1.0f;
 	};
 }

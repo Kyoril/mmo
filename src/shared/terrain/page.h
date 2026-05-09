@@ -229,6 +229,7 @@ namespace mmo
 			bool m_loaded;
 			bool m_changed{false};
 			bool m_unloadRequested = false;
+			bool m_innerHeightmapFromFile = false; ///< True if inner heights were loaded from the IVCM chunk (not derived).
 			AABB m_boundingBox;
 		};
 	}

@@ -921,7 +921,7 @@ namespace mmo
 		}
 
 		m_debugNode->SetPosition(hitResult.second.position);
-		m_debugEntity->SetVisible(true);
+		// Debug entity (preview cube) intentionally hidden — brush circles & vertex dots handle visualization.
 	}
 
 	Entity *WorldEditorInstance::CreateMapEntity(const String &assetName, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale, uint64 objectId)

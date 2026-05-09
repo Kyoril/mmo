@@ -72,7 +72,7 @@ namespace mmo
             Texture *scaleIcon);
 
     private:
-        void HandleViewportInteractions(const ImVec2 &availableSpace);
+        void HandleViewportInteractions(const ImVec2 &availableSpace, WorldEditMode *currentEditMode = nullptr);
         void DrawViewportToolbar(const ImVec2 &availableSpace);
         void DrawSnapSettings();
         void DrawTransformButtons(const ImVec2 &availableSpace);

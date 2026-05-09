@@ -362,13 +362,11 @@ namespace mmo
 					const size_t globalX = m_startX + i;
 					const size_t globalZ = m_startZ + j;
 
-					// Sample height at the center position
-					// For now, we'll interpolate from the four surrounding outer vertices
-					const float h00 = m_page.GetHeightAt(globalX, globalZ);
-					const float h10 = m_page.GetHeightAt(globalX + 1, globalZ);
-					const float h01 = m_page.GetHeightAt(globalX, globalZ + 1);
-					const float h11 = m_page.GetHeightAt(globalX + 1, globalZ + 1);
-					const float height = (h00 + h10 + h01 + h11) * 0.25f;
+					// Read the stored inner vertex height from the page.
+					// The page-local inner index maps tile (m_tileX, m_tileY) × tile-local (i, j).
+					const size_t pageLocalInnerX = m_tileX * constants::InnerVerticesPerTileSide + i;
+					const size_t pageLocalInnerZ = m_tileY * constants::InnerVerticesPerTileSide + j;
+					const float height = m_page.GetInnerHeightAt(pageLocalInnerX, pageLocalInnerZ);
 
 					const float worldX = outerScale * (globalX + centerOffsetX);
 					const float worldZ = outerScale * (globalZ + centerOffsetZ);
@@ -528,13 +526,11 @@ namespace mmo
 					const size_t globalX = startX + i;
 					const size_t globalZ = startZ + j;
 
-					// Sample height at the center position
-					// For now, we'll interpolate from the four surrounding outer vertices
-					const float h00 = m_page.GetHeightAt(globalX, globalZ);
-					const float h10 = m_page.GetHeightAt(globalX + 1, globalZ);
-					const float h01 = m_page.GetHeightAt(globalX, globalZ + 1);
-					const float h11 = m_page.GetHeightAt(globalX + 1, globalZ + 1);
-					const float height = (h00 + h10 + h01 + h11) * 0.25f;
+					// Read the stored inner vertex height from the page.
+					// Page-local inner index maps tile (m_tileX, m_tileY) × tile-local (i, j).
+					const size_t pageLocalInnerX = m_tileX * constants::InnerVerticesPerTileSide + i;
+					const size_t pageLocalInnerZ = m_tileY * constants::InnerVerticesPerTileSide + j;
+					const float height = m_page.GetInnerHeightAt(pageLocalInnerX, pageLocalInnerZ);
 
 					const float worldX = outerScale * (globalX + centerOffsetX);
 					const float worldZ = outerScale * (globalZ + centerOffsetZ);

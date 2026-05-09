@@ -74,7 +74,7 @@ namespace mmo
 
             HandleViewportDragDrop(currentEditMode);
 
-            HandleViewportInteractions(availableSpace);
+            HandleViewportInteractions(availableSpace, currentEditMode);
             DrawViewportToolbar(availableSpace);
         }
         ImGui::End();
@@ -87,12 +87,30 @@ namespace mmo
         s_scaleIcon = scaleIcon;
     }
 
-    void ViewportPanel::HandleViewportInteractions(const ImVec2 &availableSpace)
+    void ViewportPanel::HandleViewportInteractions(const ImVec2 &availableSpace, WorldEditMode *currentEditMode)
     {
         m_hovering = ImGui::IsItemHovered();
         if (m_hovering)
         {
-            m_cameraSpeed = std::max(std::min(m_cameraSpeed + ImGui::GetIO().MouseWheel * 5.0f, 200.0f), 1.0f);
+            const float wheel = ImGui::GetIO().MouseWheel;
+            if (wheel != 0.0f)
+            {
+                const bool shiftHeld = ImGui::GetIO().KeyShift;
+                const bool ctrlHeld  = ImGui::GetIO().KeyCtrl;
+                const bool altHeld   = ImGui::GetIO().KeyAlt;
+
+                if ((shiftHeld || ctrlHeld) && currentEditMode)
+                {
+                    // Shift/Ctrl+wheel → forward to edit mode (brush size / hardness)
+                    currentEditMode->OnMouseWheel(wheel);
+                }
+                else if (!shiftHeld && !ctrlHeld && !altHeld)
+                {
+                    // Plain wheel → camera speed
+                    m_cameraSpeed = std::max(std::min(m_cameraSpeed + wheel * 5.0f, 200.0f), 1.0f);
+                }
+                // Alt+wheel intentionally unbound; any modifier suppresses camera speed change.
+            }
 
             m_leftButtonPressed = ImGui::IsMouseDown(ImGuiMouseButton_Left);
             m_rightButtonPressed = ImGui::IsMouseDown(ImGuiMouseButton_Right);

@@ -111,6 +111,8 @@ namespace mmo
 
 		virtual void OnMouseHold(float deltaSeconds) {}
 
+		virtual void OnMouseWheel(float delta) {}
+
 		virtual bool SupportsViewportDrop() const { return false; }
 
 		virtual void OnViewportDrop(float x, float y) {}
