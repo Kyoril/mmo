@@ -254,6 +254,7 @@ namespace mmo
 
 		slot.lineMesh = m_scene.CreateManualRenderObject(nodeName + "_mesh");
 		slot.lineMesh->SetCastShadows(false);
+		slot.lineMesh->SetRenderQueueGroup(Overlay);
 		slot.lineNode->AttachObject(*slot.lineMesh);
 
 		auto line = slot.lineMesh->AddLineListOperation(
