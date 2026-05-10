@@ -323,14 +323,12 @@ namespace mmo
 			visibleObjectsIt->second.Reset();
 			FindVisibleObjects(camera, visibleObjectsIt->second, shaderType == PixelShaderType::ShadowMap);
 
-			// Add particle emitters to render queue — skipped during GBuffer and ShadowMap
-			// passes because particles are transparent and must be rendered forward.
-			if (shaderType == PixelShaderType::Forward)
+			// Particle emitters use RenderQueueGroupId::Transparent and are therefore
+			// automatically excluded from GBuffer/ShadowMap passes by RenderVisibleObjects.
+			// No manual guard needed here.
+			for (auto& [name, emitter] : m_particleEmitters)
 			{
-				for (auto& [name, emitter] : m_particleEmitters)
-				{
-					emitter->PopulateRenderQueue(GetRenderQueue());
-				}
+				emitter->PopulateRenderQueue(GetRenderQueue());
 			}
 
 			// Add ribbon trails to render queue
@@ -343,53 +341,15 @@ namespace mmo
 		// Clear current render target
 		gx.SetFillMode(camera.GetFillMode());
 
-		// Enable depth test & write & set comparison method to less
+		// Depth state: opaque passes write depth; the forward transparent pass
+		// depth-tests against the GBuffer depth but must not overwrite it.
 		gx.SetDepthEnabled(true);
-		gx.SetDepthWriteEnabled(true);
+		gx.SetDepthWriteEnabled(!m_forwardTransparentOnly);
 		gx.SetDepthTestComparison(DepthTestMethod::Less);
 
 		gx.SetTransformMatrix(World, Matrix4::Identity);
 		gx.SetTransformMatrix(Projection, camera.GetProjectionMatrix());
 		gx.SetTransformMatrix(View, camera.GetViewMatrix());
-
-		RenderVisibleObjects();
-
-		m_activeCamera = nullptr;
-	}
-
-	void Scene::RenderParticles(Camera& camera)
-	{
-		if (m_particleEmitters.empty())
-		{
-			return;
-		}
-
-		auto& gx = GraphicsDevice::Get();
-
-		m_activeCamera = &camera;
-		RefreshCameraBuffer(camera);
-
-		m_renderableVisitor.targetScene = this;
-		m_renderableVisitor.scissoring = false;
-		m_pixelShaderType = PixelShaderType::Forward;
-
-		// Depth-test against opaque geometry (GBuffer depth is now bound as DSV),
-		// but do not write depth — particles are transparent.
-		gx.SetDepthEnabled(true);
-		gx.SetDepthWriteEnabled(false);
-		gx.SetDepthTestComparison(DepthTestMethod::Less);
-		gx.SetBlendMode(BlendMode::Alpha);
-
-		gx.SetTransformMatrix(World, Matrix4::Identity);
-		gx.SetTransformMatrix(Projection, camera.GetProjectionMatrix());
-		gx.SetTransformMatrix(View, camera.GetViewMatrix());
-
-		PrepareRenderQueue();
-
-		for (auto& [name, emitter] : m_particleEmitters)
-		{
-			emitter->PopulateRenderQueue(GetRenderQueue());
-		}
 
 		RenderVisibleObjects();
 
@@ -570,7 +530,29 @@ namespace mmo
 
 		for (auto& queue = GetRenderQueue(); auto& [groupId, group] : queue)
 		{
+			// Shadow maps skip background/sky groups (they have no geometry to cast shadows).
 			if (m_pixelShaderType == PixelShaderType::ShadowMap && groupId < RenderQueueGroupId::WorldGeometry1)
+			{
+				continue;
+			}
+
+			// GBuffer and ShadowMap passes only render opaque geometry.
+			// Transparent objects (Transparent group and above) are handled by a
+			// dedicated forward pass after deferred lighting.
+			if ((m_pixelShaderType == PixelShaderType::GBuffer || m_pixelShaderType == PixelShaderType::ShadowMap)
+				&& groupId >= RenderQueueGroupId::Transparent)
+			{
+				continue;
+			}
+
+			// The Forward pass is used exclusively for transparent objects.
+			// Skip opaque groups — they were already rendered in the GBuffer pass.
+			// Note: when Scene::Render is called directly with Forward (editor, model viewer)
+			// this skip does not apply because those callers never emit a GBuffer pass.
+			// We detect the deferred context via m_forwardTransparentOnly, which the
+			// deferred renderer sets before calling scene.Render with Forward.
+			if (m_pixelShaderType == PixelShaderType::Forward && m_forwardTransparentOnly
+				&& groupId < RenderQueueGroupId::Transparent)
 			{
 				continue;
 			}

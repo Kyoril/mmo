@@ -34,6 +34,11 @@ namespace mmo
 		/// Terrain renders after Main so the depth buffer already contains
 		/// buildings and other occluders, enabling GPU occlusion culling.
 		TerrainGeometry = 55,
+
+		/// Forward-rendered transparent objects (particles, ribbon trails, water surfaces).
+		/// Everything in this group and above is skipped during the GBuffer/ShadowMap passes
+		/// and rendered in a separate forward pass after deferred lighting.
+		Transparent = 60,
 		
         /// Penultimate queue (before overlays), used for skies if rendered last
 		SkiesLate = 95,

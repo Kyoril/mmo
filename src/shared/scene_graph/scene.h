@@ -370,12 +370,10 @@ namespace mmo
 		/// Renders the current scene by using a specific camera as the origin.
 		void Render(Camera& camera, PixelShaderType shaderType);
 
-		/// @brief Renders particle emitters and other transparent objects as a forward pass
-		/// on top of an already-rendered deferred scene. The caller is responsible for
-		/// setting the correct render target and ensuring the depth buffer is bound for
-		/// read-only depth testing (particles must depth-test against opaque geometry but
-		/// must not write depth themselves).
-		void RenderParticles(Camera& camera);
+		/// @brief Controls whether a Forward-type Scene::Render call should skip opaque
+		/// render queue groups (< Transparent). Used by the deferred renderer to avoid
+		/// re-rendering opaque geometry in the transparent pass.
+		void SetForwardTransparentOnly(bool value) { m_forwardTransparentOnly = value; }
 
 		void UpdateSceneGraph();
 		
@@ -631,6 +629,12 @@ namespace mmo
 		float m_fogEnd = 265.0f;
 
 		PixelShaderType m_pixelShaderType = PixelShaderType::Forward;
+
+		/// When true, Scene::RenderVisibleObjects skips groups below Transparent during
+		/// a Forward pass. Set by the deferred renderer before its transparent pass so
+		/// that opaque groups (already in the GBuffer) are not re-rendered.
+		/// Never set this in non-deferred contexts (editor, model viewer).
+		bool m_forwardTransparentOnly = false;
 
 		Vector3 m_ambientColor = Vector3(0.04f, 0.035f, 0.03f);
 

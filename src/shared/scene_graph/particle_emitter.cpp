@@ -313,6 +313,10 @@ namespace mmo
 		
 		// Reserve space for particles to avoid frequent reallocations
 		m_particles.reserve(m_parameters.maxParticles);
+
+		// Particles always render in the forward-transparent pass — they are not
+		// opaque G-buffer contributors.
+		SetRenderQueueGroup(RenderQueueGroupId::Transparent);
 	}
 
 	const String& ParticleEmitter::GetMovableType() const
