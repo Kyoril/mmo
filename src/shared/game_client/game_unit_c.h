@@ -23,6 +23,8 @@ namespace mmo
 	class GameWorldObjectC;
 	class ManualRenderObject;
 	class NetClient;
+	class ParticleEmitter;
+	class SceneNode;
 
 	namespace proto_client
 	{
@@ -193,6 +195,10 @@ namespace mmo
 
 	protected:
 		virtual void SetupSceneObjects() override;
+
+		/// @brief Creates or destroys the spark particle emitter based on the lootable flag.
+		/// @param active If true, creates and plays the emitter; if false, destroys it.
+		void UpdateSparkEmitter(bool active);
 
 		void OnEntryChanged();
 
@@ -696,5 +702,8 @@ namespace mmo
 
 		/// @brief Connections to animation notify signals.
 		scoped_connection_container m_animNotifyConnections;
+
+		ParticleEmitter* m_sparkEmitter = nullptr;
+		SceneNode* m_sparkEmitterNode = nullptr;
 	};
 }

@@ -28,6 +28,11 @@
 #include "scene_graph/entity.h"
 #include "scene_graph/skeleton.h"
 #include "scene_graph/animation.h"
+#include "scene_graph/particle_emitter.h"
+#include "scene_graph/particle_emitter_serializer.h"
+#include "assets/asset_registry.h"
+#include "binary_io/stream_source.h"
+#include "binary_io/reader.h"
 #include "graphics/material.h"
 #include "graphics/material_instance.h"
 #include "shared/client_data/proto_client/factions.pb.h"
@@ -44,6 +49,8 @@ namespace mmo
 
 	GameUnitC::~GameUnitC()
 	{
+		UpdateSparkEmitter(false);
+
 		// Ensure quest giver status is removed
 		SetQuestGiverStatus(questgiver_status::None);
 
@@ -57,6 +64,59 @@ namespace mmo
 									   const MovementInfo &movementInfo)
 	{
 		m_movementEventQueue.emplace(eventType, timestamp, movementInfo);
+	}
+
+	void GameUnitC::UpdateSparkEmitter(const bool active)
+	{
+		const std::string emitterName = "Spark_Unit_" + std::to_string(GetGuid());
+
+		if (active)
+		{
+			if (m_sparkEmitter)
+			{
+				return;
+			}
+
+			m_sparkEmitter = m_scene.CreateParticleEmitter(emitterName);
+			if (!m_sparkEmitter)
+			{
+				return;
+			}
+
+			const auto file = AssetRegistry::OpenFile("Particles/Sparkles.hpar");
+			if (file)
+			{
+				io::StreamSource source(*file);
+				io::Reader reader(source);
+				ParticleEmitterSerializer serializer;
+				ParticleEmitterParameters params;
+				if (serializer.Deserialize(params, reader))
+				{
+					m_sparkEmitter->SetParameters(params);
+				}
+			}
+
+			m_sparkEmitterNode = m_entityOffsetNode->CreateChildSceneNode(emitterName + "_Node");
+			m_sparkEmitterNode->AttachObject(*m_sparkEmitter);
+			m_sparkEmitter->Play();
+		}
+		else
+		{
+			if (!m_sparkEmitter)
+			{
+				return;
+			}
+
+			m_sparkEmitter->Stop();
+			m_scene.DestroyParticleEmitter(*m_sparkEmitter);
+			m_sparkEmitter = nullptr;
+
+			if (m_sparkEmitterNode)
+			{
+				m_scene.DestroySceneNode(*m_sparkEmitterNode);
+				m_sparkEmitterNode = nullptr;
+			}
+		}
 	}
 
 	void GameUnitC::AddYawInput(const Radian &value)
@@ -153,6 +213,11 @@ namespace mmo
 		if (complete || m_fieldMap.IsFieldMarkedAsChanged(object_fields::Entry))
 		{
 			OnEntryChanged();
+		}
+
+		if (complete || m_fieldMap.IsFieldMarkedAsChanged(object_fields::Flags))
+		{
+			UpdateSparkEmitter(CanBeLooted());
 		}
 
 		m_fieldMap.MarkAllAsUnchanged();
