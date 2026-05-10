@@ -10,6 +10,11 @@
 #include "scene_graph/mesh_manager.h"
 #include "game_player_c.h"
 #include "game/quest.h"
+#include "scene_graph/particle_emitter.h"
+#include "scene_graph/particle_emitter_serializer.h"
+#include "assets/asset_registry.h"
+#include "binary_io/stream_source.h"
+#include "binary_io/reader.h"
 
 namespace mmo
 {
@@ -65,6 +70,9 @@ namespace mmo
 
 			ASSERT(GetGuid() > 0);
 			SetupSceneObjects();
+
+			// Apply spark emitter for the initial (complete) update.
+			UpdateSparkEmitter((Get<uint32>(object_fields::DynamicObjectFlags) & dynamic_world_object_flags::Interactable) != 0);
 		}
 		else
 		{
@@ -87,6 +95,12 @@ namespace mmo
 			}
 
 			HandleFieldMapChanges();
+
+			// React to dynamic flag changes (e.g. server toggling Interactable on/off).
+			if (m_fieldMap.IsFieldMarkedAsChanged(object_fields::DynamicObjectFlags))
+			{
+				UpdateSparkEmitter((Get<uint32>(object_fields::DynamicObjectFlags) & dynamic_world_object_flags::Interactable) != 0);
+			}
 		}
 
 		if (complete || m_fieldMap.IsFieldMarkedAsChanged(object_fields::Entry))
@@ -177,5 +191,72 @@ namespace mmo
 		}
 
 		m_netDriver.GetObjectData(entryId, static_pointer_cast<GameWorldObjectC>(shared_from_this()));
+	}
+
+	GameWorldObjectC::~GameWorldObjectC()
+	{
+		// Destroy spark emitter before the scene nodes are torn down.
+		UpdateSparkEmitter(false);
+	}
+
+	void GameWorldObjectC::UpdateSparkEmitter(bool active)
+	{
+		if (active)
+		{
+			// Already active – nothing to do.
+			if (m_sparkEmitter)
+			{
+				return;
+			}
+
+			if (!m_entityOffsetNode)
+			{
+				return;
+			}
+
+			const String emitterName = "Spark_WO_" + std::to_string(GetGuid());
+			m_sparkEmitter = m_scene.CreateParticleEmitter(emitterName);
+			if (!m_sparkEmitter)
+			{
+				return;
+			}
+
+			// Load parameters from asset file (silent failure: use emitter defaults).
+			const auto file = AssetRegistry::OpenFile("Particles/Sparkles.hpar");
+			if (file)
+			{
+				io::StreamSource source(*file);
+				io::Reader reader(source);
+
+				ParticleEmitterSerializer serializer;
+				ParticleEmitterParameters params;
+				if (serializer.Deserialize(params, reader))
+				{
+					m_sparkEmitter->SetParameters(params);
+				}
+			}
+
+			m_sparkEmitterNode = m_entityOffsetNode->CreateChildSceneNode(emitterName + "_Node");
+			m_sparkEmitterNode->AttachObject(*m_sparkEmitter);
+			m_sparkEmitter->Play();
+		}
+		else
+		{
+			// Idempotent: nothing to destroy.
+			if (!m_sparkEmitter)
+			{
+				return;
+			}
+
+			m_sparkEmitter->Stop();
+			m_scene.DestroyParticleEmitter(*m_sparkEmitter);
+			m_sparkEmitter = nullptr;
+
+			if (m_sparkEmitterNode)
+			{
+				m_scene.DestroySceneNode(*m_sparkEmitterNode);
+				m_sparkEmitterNode = nullptr;
+			}
+		}
 	}
 }
