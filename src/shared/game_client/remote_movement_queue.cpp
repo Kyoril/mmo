@@ -13,8 +13,13 @@ namespace mmo
 	/// @brief Gravity constant used for jump arc simulation (m/s^2, positive = downward).
 	static constexpr float GRAVITY_ACCELERATION = 9.8f;
 
+	/// @brief Default interpolation buffer delay in milliseconds.
+	/// 150 ms comfortably covers typical internet RTT (up to ~300 ms one-way latency)
+	/// while being imperceptible in play, compared to the previous 500 ms conservative value.
+	static constexpr GameTime kRemoteMovementBufferDelayMs = 150;
+
 	RemoteMovementQueue::RemoteMovementQueue()
-		: m_bufferDelay(500)
+		: m_bufferDelay(kRemoteMovementBufferDelayMs)
 		, m_initialized(false)
 		, m_gravityScale(2.0f)
 	{
