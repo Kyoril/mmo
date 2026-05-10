@@ -234,6 +234,16 @@ namespace mmo
 		{
 			m_sceneNode->SetDerivedPosition(m_movementInfo.position);
 			m_sceneNode->SetDerivedOrientation(Quaternion(m_movementInfo.facing, Vector3::UnitY));
+
+			// Seed the remote movement queue with the spawn snapshot so the queue
+			// always has at least one anchor before the first movement packet arrives.
+			// Without this, Sample() would interpolate from timestamp 0 to the first
+			// packet timestamp, producing a large elapsed-time value that triggers
+			// immediate extrapolation and a visible position spike on first movement.
+			if (IsPlayer() && !IsControlledByLocalPlayer())
+			{
+				EnqueueRemoteMovement(m_movementInfo);
+			}
 		}
 	}
 
