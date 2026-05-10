@@ -501,6 +501,48 @@ namespace mmo
 			}
 		}
 
+		void Terrain::NotifyCameraPosition(const Vector3& pos)
+		{
+			// On the first call, just record the position and arm the detector for subsequent frames.
+			if (m_cameraPositionInitialized)
+			{
+				const Vector3 delta = pos - m_lastCameraPosition;
+				const float distSq = delta.Dot(delta);
+
+				if (distSq > kCameraJumpThresholdSq)
+				{
+					// Camera jumped — reset occlusion state on every prepared tile so that tiles
+					// that were hidden inside a building/interior re-appear immediately.
+					for (uint32 i = 0; i < m_width; ++i)
+					{
+						for (uint32 j = 0; j < m_height; ++j)
+						{
+							Page* page = m_pages(i, j).get();
+							if (!page || !page->IsPrepared())
+							{
+								continue;
+							}
+
+							for (uint32 x = 0; x < constants::TilesPerPage; ++x)
+							{
+								for (uint32 y = 0; y < constants::TilesPerPage; ++y)
+								{
+									Tile* tile = page->GetTile(x, y);
+									if (tile)
+									{
+										tile->ResetOcclusionState();
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+
+			m_lastCameraPosition = pos;
+			m_cameraPositionInitialized = true;
+		}
+
 		std::pair<bool, Terrain::RayIntersectsResult> Terrain::RayIntersects(const Ray &ray)
 		{
 			float closestHit = std::numeric_limits<float>::max();

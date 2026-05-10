@@ -790,6 +790,14 @@ namespace mmo
 			m_foliage->Update(m_playerController->GetCamera());
 		}
 
+		// Notify terrain of the current camera position so it can detect large single-frame
+		// displacements (building exit, teleport) and reset stale tile occlusion state.
+		if (m_worldLoaded && m_worldInstance->HasTerrain())
+		{
+			m_worldInstance->GetTerrain()->NotifyCameraPosition(
+				m_playerController->GetCamera().GetDerivedPosition());
+		}
+
 		// Position the sky dome to follow the player
 		if (m_skyComponent && m_playerController->GetRootNode())
 		{

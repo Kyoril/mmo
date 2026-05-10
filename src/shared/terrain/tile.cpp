@@ -303,6 +303,13 @@ namespace mmo
 			return m_page.GetTerrain();
 		}
 
+		void Tile::ResetOcclusionState()
+		{
+			m_occlusionVisible = true;
+			m_consecutiveOccludedFrames = 0;
+			m_occlusionSkippedFrames = 0;
+		}
+
 		void Tile::UpdateTerrain(size_t startx, size_t startz, size_t endx, size_t endz)
 		{
 			constexpr float outerScale = static_cast<float>(constants::TileSize / static_cast<double>(constants::OuterVerticesPerTileSide - 1));

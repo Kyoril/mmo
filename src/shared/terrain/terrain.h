@@ -380,6 +380,13 @@ namespace mmo
 			/// @param toZ The ending Z coordinate.
 			void UpdateTiles(int fromX, int fromZ, int toX, int toZ);
 
+			/// @brief Notifies the terrain of the current camera world position.
+			/// @details When the camera jumps more than sqrt(kCameraJumpThresholdSq) world units in a
+			///          single frame (e.g. building exit, teleport), all tile occlusion state is reset
+			///          so tiles that were occluded inside an interior re-appear immediately.
+			/// @param pos The current camera world position.
+			void NotifyCameraPosition(const Vector3& pos);
+
 		private:
 			/// @brief Updates tile coverage information in a specified region.
 			/// @param fromX The starting X coordinate.
@@ -627,6 +634,17 @@ namespace mmo
 			bool m_showWireframe = false;
 			MaterialPtr m_wireframeMaterial;
 			bool m_occlusionCullingEnabled { true };
+
+			/// @brief Camera position from the previous NotifyCameraPosition call.
+			Vector3 m_lastCameraPosition;
+
+			/// @brief True once NotifyCameraPosition has been called at least once.
+			///        Prevents false jump detection on the very first frame.
+			bool m_cameraPositionInitialized = false;
+
+			/// @brief Squared distance threshold above which a camera displacement is treated as a
+			///        jump and all tile occlusion state is reset. 2500 = 50 world-unit radius.
+			static constexpr float kCameraJumpThresholdSq = 2500.0f;
 		};
 	}
 
