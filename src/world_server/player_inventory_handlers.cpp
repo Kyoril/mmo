@@ -73,10 +73,15 @@ namespace mmo
 			return;
 		}
 
+		// Capture count and item metadata before TakeItem, because TakeItem may fire the
+		// loot-cleared signal synchronously which despawns the world object and destroys
+		// the LootInstance (and its m_items vector), making lootItem a dangling pointer.
+		const uint32 lootedCount = lootItem->count;
+
 		Inventory &inventory = m_character->GetInventory();
 
 		std::map<uint16, uint16> addedBySlot;
-		auto result = inventory.CreateItems(*item, lootItem->count, &addedBySlot);
+		auto result = inventory.CreateItems(*item, lootedCount, &addedBySlot);
 		if (result != inventory_change_failure::Okay)
 		{
 			ELOG("Failed to add item to inventory: " << result);
@@ -89,7 +94,7 @@ namespace mmo
 			OnItemAdded(slot.first, slot.second, true, false);
 		}
 
-		// Consume this item
+		// Consume this item — may destroy the LootInstance if this was the last item
 		m_loot->TakeItem(lootSlot, playerGuid);
 
 		// Notify in-sight group members that we looted this item
@@ -98,7 +103,8 @@ namespace mmo
 			const String characterName = m_character->GetName();
 			const uint32 itemId = item->id();
 			const uint8 itemQuality = static_cast<uint8>(item->quality());
-			const uint8 itemCount = static_cast<uint8>(lootItem->count);
+			const uint8 itemCount = static_cast<uint8>(lootedCount);
+			DLOG("[LootItemNotify] " << characterName << " looted item " << itemId << " count=" << static_cast<uint32>(itemCount));
 
 			m_character->ForEachSubscriberInSight([&characterName, itemId, itemQuality, itemCount, this](TileSubscriber& subscriber)
 			{

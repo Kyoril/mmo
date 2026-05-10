@@ -244,6 +244,8 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		DLOG("[LootItemNotify] Received: member=" << memberName << " item=" << itemId << " count=" << static_cast<uint32>(count));
+
 		m_itemCache.Get(itemId, [memberName, itemId, quality, count](uint64, const ItemInfo& itemInfo)
 		{
 			FrameManager::Get().TriggerLuaEvent("MEMBER_LOOT_ITEM_RECEIVED",
