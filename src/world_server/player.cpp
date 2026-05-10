@@ -2506,12 +2506,29 @@ namespace mmo
 			});
 	}
 
+	void Player::OnQuestObjectRequirementMet(const uint32 questId)
+	{
+		// The player just satisfied the object-use requirement for a specific world object.
+		// Refresh the interactability of all nearby objects gated on this quest so the client
+		// removes the use cursor immediately.
+		RefreshQuestObjectInteractability(questId);
+	}
+
 	void Player::OnQuestDataChanged(uint32 questId, const QuestStatusData& data)
 	{
 		// Send quest data packet to realm server so that it will be persisted in the database
 		m_connector.SendQuestData(m_character->GetGuid(), questId, data);
 
-		// Notify client about completed quest
+		// Refresh world object interactability whenever the quest status changes.
+		// - Complete: objects become non-interactable (all objectives satisfied).
+		// - Incomplete: objects become interactable again (e.g. quest items removed from inventory).
+		// In both cases, PrepareDynamicFieldsFor re-evaluates IsUsable per object and sends
+		// an UpdateObject packet with the correct DynamicObjectFlags to the client.
+		if (data.status == quest_status::Complete || data.status == quest_status::Incomplete)
+		{
+			RefreshQuestObjectInteractability(questId);
+		}
+
 		if (data.status == quest_status::Complete)
 		{
 			SendPacket([&questId](game::OutgoingPacket& packet) {

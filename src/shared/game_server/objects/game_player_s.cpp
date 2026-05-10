@@ -487,6 +487,35 @@ namespace mmo
 		return quest_status::Available;
 	}
 
+	bool GamePlayerS::IsQuestObjectRequirementMet(const uint32 questId, const uint32 objectEntryId) const
+	{
+		const auto it = m_quests.find(questId);
+		if (it == m_quests.end())
+		{
+			return false;
+		}
+
+		const auto* questEntry = GetProject().quests.getById(questId);
+		if (!questEntry)
+		{
+			return false;
+		}
+
+		uint8 reqIndex = 0;
+		for (const auto& req : questEntry->requirements())
+		{
+			if (req.objectid() == objectEntryId && req.objectcount() > 0)
+			{
+				// Requirement is met when the player has collected the required count.
+				return it->second.creatures[reqIndex] >= static_cast<uint16>(req.objectcount());
+			}
+			reqIndex++;
+		}
+
+		// No matching object requirement found — object is not gating on this quest.
+		return false;
+	}
+
 	bool GamePlayerS::AcceptQuest(const uint32 quest)
 	{
 		if (const QuestStatus status = GetQuestStatus(quest); status != quest_status::Available)
@@ -1160,6 +1189,13 @@ namespace mmo
 					m_netPlayerWatcher->OnQuestItemCredit(*quest, entry.id(), currentCount, requiredCount);
 				}
 
+				// Individual item requirement satisfied — refresh object interactability even
+				// if the overall quest is not yet complete (other objectives may remain open).
+				if (currentCount >= requiredCount && m_netPlayerWatcher)
+				{
+					m_netPlayerWatcher->OnQuestObjectRequirementMet(field.questId);
+				}
+
 				if (currentCount >= requiredCount)
 				{
 					validateQuest = true;
@@ -1300,6 +1336,13 @@ namespace mmo
 						if (m_netPlayerWatcher)
 						{
 							m_netPlayerWatcher->OnQuestKillCredit(*quest, target.GetGuid(), targetEntry, counter, req.objectcount());
+						}
+
+						// If this was the last use needed for this specific object requirement,
+						// tell the player watcher so it can refresh nearby object interactability.
+						if (counter >= req.objectcount() && m_netPlayerWatcher)
+						{
+							m_netPlayerWatcher->OnQuestObjectRequirementMet(field.questId);
 						}
 
 						if (FulfillsQuestRequirements(*quest))

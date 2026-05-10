@@ -47,9 +47,26 @@ namespace mmo
 			const uint32 requiredQuestId = GetRequiredQuestId();
 			if (requiredQuestId != 0)
 			{
-				// Player must have this quest active (incomplete status)
 				const QuestStatus status = player.GetQuestStatus(requiredQuestId);
+
+				// Quest is complete (all objectives done, not yet turned in) or already
+				// rewarded — player no longer needs to interact with these objects.
+				if (status == quest_status::Complete || status == quest_status::Rewarded)
+				{
+					return false;
+				}
+
+				// Quest not active at all — object is hidden.
 				if (status != quest_status::Incomplete)
+				{
+					return false;
+				}
+
+				// Quest is in progress. Check if the specific object-use requirement is
+				// already satisfied (player collected enough of this object entry).
+				// If so, the object becomes non-interactable even though the overall quest
+				// is still incomplete due to other open objectives.
+				if (player.IsQuestObjectRequirementMet(requiredQuestId, m_entry.id()))
 				{
 					return false;
 				}

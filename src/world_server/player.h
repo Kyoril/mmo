@@ -513,6 +513,8 @@ namespace mmo
 
 		void OnQuestItemCredit(const proto::QuestEntry&, uint32 entry, uint32 count, uint32 maxCount) override;
 
+		void OnQuestObjectRequirementMet(uint32 questId) override;
+
 		void OnQuestDataChanged(uint32 questId, const QuestStatusData& data) override;
 
 		void OnQuestCompleted(uint64 questgiverGuid, uint32 questId, uint32 rewardedXp, uint32 rewardMoney) override;

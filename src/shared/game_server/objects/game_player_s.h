@@ -35,6 +35,11 @@ namespace mmo
 
 		virtual void OnQuestItemCredit(const proto::QuestEntry &, uint32 entry, uint32 count, uint32 maxCount) = 0;
 
+		/// Called when a specific object-use requirement of a quest has been fully satisfied.
+		/// Implementations should refresh the interactability of nearby world objects gated on
+		/// this quest so the client stops showing the use cursor.
+		virtual void OnQuestObjectRequirementMet(uint32 questId) = 0;
+
 		virtual void OnQuestDataChanged(uint32 questId, const QuestStatusData &data) = 0;
 
 		virtual void OnQuestCompleted(uint64 questgiverGuid, uint32 questId, uint32 rewardedXp, uint32 rewardMoney) = 0;
@@ -148,6 +153,11 @@ namespace mmo
 		/// Gets the current status of a given quest by its id.
 		/// @returns Quest status.
 		QuestStatus GetQuestStatus(uint32 quest) const;
+
+		/// Returns true if the player has already met all object-use requirements for the given
+		/// object entry in the given quest. Used by GameWorldObjectS::IsUsable to hide the
+		/// interact cursor once the player no longer needs to use this particular object.
+		bool IsQuestObjectRequirementMet(uint32 questId, uint32 objectEntryId) const;
 
 		/// Accepts a new quest.
 		/// @returns false if this wasn't possible (maybe questlog was full or not all requirements are met).
