@@ -340,6 +340,14 @@ namespace mmo
 		m_selectionSceneQuery->Execute();
 
 		const auto& cameraHitResult = m_selectionSceneQuery->GetLastResult();
+
+		// Find the closest world-space hit across all candidate objects.
+		// penetrationDepth from TestRayCollision is in the entity's local space, so we cannot
+		// compare it directly against the world-space zoom distance.  Instead we use the
+		// world-space contactPoint that TestRayCollision already converts for us.
+		const Vector3 rayOrigin = cameraRay.origin;
+		float closestWorldHitDistance = std::numeric_limits<float>::max();
+
 		for (auto& result : cameraHitResult)
 		{
 			// Check if the movable object is collidable
@@ -352,19 +360,20 @@ namespace mmo
 			CollisionResult collisionResult;
 			if (collidable->TestRayCollision(cameraRay, collisionResult))
 			{
-				// The penetrationDepth field contains the distance along the ray to the hit point
-				const float hitDistance = collisionResult.penetrationDepth;
-
-				// If the current zoom is greater than the hit distance, adjust the zoom to place
-				// the camera just in front of the collision point with a small offset
-				if (zoom > hitDistance)
+				// Compute world-space distance from the ray origin to the contact point.
+				// This is correct regardless of the entity's scale or orientation.
+				const float worldHitDistance = (collisionResult.contactPoint - rayOrigin).GetLength();
+				if (worldHitDistance < closestWorldHitDistance)
 				{
-					const float safetyOffset = 0.1f; // Small offset to prevent clipping
-					zoom = std::max(0.0f, hitDistance - safetyOffset);
+					closestWorldHitDistance = worldHitDistance;
 				}
-
-				break;
 			}
+		}
+
+		if (closestWorldHitDistance < zoom)
+		{
+			const float safetyOffset = 0.1f; // Small offset to prevent clipping
+			zoom = std::max(0.0f, closestWorldHitDistance - safetyOffset);
 		}
 
 		m_desiredCameraLocation = m_cameraNode->GetOrientation() * (Vector3::UnitZ * zoom);
