@@ -1142,6 +1142,18 @@ namespace mmo
 
 		m_loot->closed(m_character->GetGuid());
 
+		// If the loot instance is empty (no items, no gold) and we have a source creature,
+		// clear the loot from it now so it stops being flagged as lootable. This handles
+		// the case where a creature intentionally has an empty loot instance (to motivate
+		// the player to check) — once the player closes the window, the flag should drop.
+		if (m_loot->IsEmpty() && m_lootSource)
+		{
+			if (const auto creature = std::dynamic_pointer_cast<GameCreatureS>(m_lootSource))
+			{
+				creature->SetUnitLoot(nullptr);
+			}
+		}
+
 		// Notify player
 		SendPacket([&](game::OutgoingPacket& packet)
 		{
