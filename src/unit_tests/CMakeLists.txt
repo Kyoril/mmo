@@ -2,6 +2,14 @@ enable_testing()
 
 # Add default executable
 add_exe(unit_tests)
+
+# Add remote_movement_queue.cpp directly rather than linking game_client, because
+# game_client -> frame_ui -> graphics pulls render dependencies that break the
+# headless unit_tests build. Only the two files needed for RemoteMovementQueue are added.
+target_sources(unit_tests PRIVATE
+	${CMAKE_CURRENT_SOURCE_DIR}/../shared/game_client/remote_movement_queue.cpp
+)
+
 target_link_libraries(unit_tests 
 	base 
 	base64 
