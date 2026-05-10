@@ -20,6 +20,8 @@ namespace mmo
 	{
 		m_header.width = width;
 		m_header.height = height;
+		m_header.format = tex::v1_0::RGBA;
+		m_mipCount = 1;
 	}
 
 	void TextureD3D11::FromRenderTexture(RenderTextureD3D11& renderTexture)
@@ -223,6 +225,7 @@ namespace mmo
 			break;
 		case BufferUsage::Dynamic:
 		case BufferUsage::StaticWriteOnly:
+		case BufferUsage::DynamicWriteOnly:
 			td.Usage = D3D11_USAGE_DYNAMIC;
 			break;
 		}
@@ -245,7 +248,30 @@ namespace mmo
 	{
 		ASSERT(data);
 		ASSERT(dataSize);
-		ASSERT(m_usage == BufferUsage::Dynamic || m_usage == BufferUsage::StaticWriteOnly);
+		ASSERT(m_usage == BufferUsage::Dynamic || m_usage == BufferUsage::StaticWriteOnly || m_usage == BufferUsage::DynamicWriteOnly);
+
+		// Lazily create the D3D11 texture on first upload. This covers textures created via
+		// CreateManual(width, height, usage) where no file data is available at construction time.
+		if (!m_texture)
+		{
+			ID3D11Device& dev = m_device;
+
+			D3D11_TEXTURE2D_DESC td;
+			ZeroMemory(&td, sizeof(td));
+			td.ArraySize = 1;
+			td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+			td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			td.Width = m_header.width;
+			td.Height = m_header.height;
+			td.MipLevels = 1;
+			td.SampleDesc.Count = 1;
+			td.SampleDesc.Quality = 0;
+			td.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+			td.Usage = D3D11_USAGE_DYNAMIC;   // required for Map(WRITE_DISCARD)
+
+			VERIFY(SUCCEEDED(dev.CreateTexture2D(&td, nullptr, &m_texture)));
+			CreateShaderResourceView();
+		}
 
 		D3D11_MAPPED_SUBRESOURCE mappedResource;
 

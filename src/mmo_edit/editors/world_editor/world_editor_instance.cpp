@@ -308,6 +308,9 @@ namespace mmo
 
 		m_transformWidget.reset();
 		m_mapEntities.clear();
+		// Destroy entity/world-model instances before clearing the scene — their
+		// destructors call DetachObject/DestroySceneNode which require live scene nodes.
+		m_entityFactory.reset();
 		m_worldGrid.reset();
 		m_scene.Clear();
 	}
