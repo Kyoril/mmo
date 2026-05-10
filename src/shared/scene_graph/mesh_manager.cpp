@@ -71,7 +71,11 @@ namespace mmo
 	MeshPtr MeshManager::CreateManual(const std::string& name)
 	{
 		const auto it = m_meshes.find(name);
-		ASSERT(it == m_meshes.end());
+		if (it != m_meshes.end())
+		{
+			// Mesh already exists (e.g. shared editor meshes created by multiple editor instances).
+			return it->second;
+		}
 
 		auto mesh = std::make_shared<Mesh>(name);
 		m_meshes[name] = mesh;
