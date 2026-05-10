@@ -101,6 +101,7 @@ namespace mmo
 	{
 		if (const auto cameraIt = m_cameras.find(name); cameraIt != m_cameras.end())
 		{
+			m_camVisibleObjectsMap.erase(cameraIt->second.get());
 			m_cameras.erase(cameraIt);
 		}
 	}

@@ -48,7 +48,7 @@ namespace mmo
 			m_partyMemberGeom.SetActiveTexture(m_partyMemberTexture);
 			GeometryHelper::CreateRect(m_partyMemberGeom, Color(0.4f, 0.6f, 1.0f, 1.0f),
 				Rect(-16.0f, -16.0f, 16.0f, 16.0f),
-				Rect(1.0f, 0.0f, 0.0f, 1.0f),
+				Rect(0.0f, 0.0f, 1.0f, 1.0f),
 				1, 1);
 		}
 
@@ -64,7 +64,7 @@ namespace mmo
 			m_questAvailableGeom.SetActiveTexture(m_questAvailableTexture);
 			GeometryHelper::CreateRect(m_questAvailableGeom, Color(1.0f, 0.9f, 0.0f, 1.0f),
 				Rect(-16.0f, -16.0f, 16.0f, 16.0f),
-				Rect(1.0f, 0.0f, 0.0f, 1.0f), 1, 1);
+				Rect(0.0f, 0.0f, 1.0f, 1.0f), 1, 1);
 		}
 
 		m_questCompletableTexture = TextureManager::Get().CreateOrRetrieve("Interface/Icons/Icon_QuestCompleted.htex");
@@ -77,7 +77,7 @@ namespace mmo
 			m_questCompletableGeom.SetActiveTexture(m_questCompletableTexture);
 			GeometryHelper::CreateRect(m_questCompletableGeom, Color(1.0f, 1.0f, 0.0f, 1.0f),
 				Rect(-16.0f, -16.0f, 16.0f, 16.0f),
-				Rect(1.0f, 0.0f, 0.0f, 1.0f), 1, 1);
+				Rect(0.0f, 0.0f, 1.0f, 1.0f), 1, 1);
 		}
 
 		// Ping dot: reuse party dot texture with orange/red tint (rebuilt per-frame for alpha fade)

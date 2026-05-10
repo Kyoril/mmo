@@ -17,7 +17,9 @@ namespace mmo
 	}
 
 	OctreeNode::~OctreeNode()
-	= default;
+	{
+		RemoveNodeAndChildren();
+	}
 
 	Node* OctreeNode::RemoveChild(const uint32 index)
 	{
