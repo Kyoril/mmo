@@ -212,11 +212,15 @@ namespace mmo
         RenderLightingPass(scene, camera);
 
         // Forward transparency pass: render particles on top of the lit scene.
-        // m_renderTexture is already the active render target from RenderLightingPass.
-        // Particles are sorted back-to-front within the emitter; we skip depth testing
-        // against opaque geometry for now (depth buffer not available as DSV here
-        // without a read-only depth stencil view — acceptable trade-off until RODSV support
-        // is added).
+        // Bind the final render texture (color) together with the GBuffer depth so
+        // particles depth-test against opaque geometry. The GBuffer depth was never bound
+        // as an SRV, so there is no hazard. Depth write is disabled — particles are
+        // transparent and must not corrupt the depth buffer.
+        {
+            RenderTexturePtr forwardColor = m_renderTexture;
+            m_device.SetRenderTargetsWithDepthStencil(&forwardColor, 1, m_gBuffer.GetDepthRTPtr());
+            m_device.SetViewport(0, 0, m_gBuffer.GetWidth(), m_gBuffer.GetHeight(), 0.0f, 1.0f);
+        }
         scene.RenderParticles(camera);
     }
 

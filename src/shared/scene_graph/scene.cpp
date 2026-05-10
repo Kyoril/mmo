@@ -373,10 +373,11 @@ namespace mmo
 		m_renderableVisitor.scissoring = false;
 		m_pixelShaderType = PixelShaderType::Forward;
 
-		// No depth buffer is available on the forward render target — disable depth
-		// test and write. Particles are already sorted back-to-front per emitter.
-		gx.SetDepthEnabled(false);
+		// Depth-test against opaque geometry (GBuffer depth is now bound as DSV),
+		// but do not write depth — particles are transparent.
+		gx.SetDepthEnabled(true);
 		gx.SetDepthWriteEnabled(false);
+		gx.SetDepthTestComparison(DepthTestMethod::Less);
 		gx.SetBlendMode(BlendMode::Alpha);
 
 		gx.SetTransformMatrix(World, Matrix4::Identity);
