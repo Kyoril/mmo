@@ -323,10 +323,14 @@ namespace mmo
 			visibleObjectsIt->second.Reset();
 			FindVisibleObjects(camera, visibleObjectsIt->second, shaderType == PixelShaderType::ShadowMap);
 
-			// Add particle emitters to render queue
-			for (auto& [name, emitter] : m_particleEmitters)
+			// Add particle emitters to render queue — skipped during GBuffer and ShadowMap
+			// passes because particles are transparent and must be rendered forward.
+			if (shaderType == PixelShaderType::Forward)
 			{
-				emitter->PopulateRenderQueue(GetRenderQueue());
+				for (auto& [name, emitter] : m_particleEmitters)
+				{
+					emitter->PopulateRenderQueue(GetRenderQueue());
+				}
 			}
 
 			// Add ribbon trails to render queue
@@ -347,6 +351,44 @@ namespace mmo
 		gx.SetTransformMatrix(World, Matrix4::Identity);
 		gx.SetTransformMatrix(Projection, camera.GetProjectionMatrix());
 		gx.SetTransformMatrix(View, camera.GetViewMatrix());
+
+		RenderVisibleObjects();
+
+		m_activeCamera = nullptr;
+	}
+
+	void Scene::RenderParticles(Camera& camera)
+	{
+		if (m_particleEmitters.empty())
+		{
+			return;
+		}
+
+		auto& gx = GraphicsDevice::Get();
+
+		m_activeCamera = &camera;
+		RefreshCameraBuffer(camera);
+
+		m_renderableVisitor.targetScene = this;
+		m_renderableVisitor.scissoring = false;
+		m_pixelShaderType = PixelShaderType::Forward;
+
+		// No depth buffer is available on the forward render target — disable depth
+		// test and write. Particles are already sorted back-to-front per emitter.
+		gx.SetDepthEnabled(false);
+		gx.SetDepthWriteEnabled(false);
+		gx.SetBlendMode(BlendMode::Alpha);
+
+		gx.SetTransformMatrix(World, Matrix4::Identity);
+		gx.SetTransformMatrix(Projection, camera.GetProjectionMatrix());
+		gx.SetTransformMatrix(View, camera.GetViewMatrix());
+
+		PrepareRenderQueue();
+
+		for (auto& [name, emitter] : m_particleEmitters)
+		{
+			emitter->PopulateRenderQueue(GetRenderQueue());
+		}
 
 		RenderVisibleObjects();
 

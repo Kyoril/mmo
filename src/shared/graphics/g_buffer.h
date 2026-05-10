@@ -45,6 +45,9 @@ namespace mmo
 		/// @return The depth render texture.
 		[[nodiscard]] RenderTexture& GetDepthRT() { return *m_depthRT; }
 
+		/// @brief Gets the depth render texture as a shared pointer.
+		[[nodiscard]] RenderTexturePtr GetDepthRTPtr() const { return m_depthRT; }
+
 		/// @brief Gets the size of the G-Buffer.
 		/// @return The size of the G-Buffer.
 		[[nodiscard]] Vector2 GetSize() const { return Vector2(static_cast<float>(m_width), static_cast<float>(m_height)); }

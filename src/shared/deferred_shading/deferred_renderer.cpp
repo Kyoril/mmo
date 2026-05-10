@@ -210,6 +210,14 @@ namespace mmo
 
         // Render the lighting pass
         RenderLightingPass(scene, camera);
+
+        // Forward transparency pass: render particles on top of the lit scene.
+        // m_renderTexture is already the active render target from RenderLightingPass.
+        // Particles are sorted back-to-front within the emitter; we skip depth testing
+        // against opaque geometry for now (depth buffer not available as DSV here
+        // without a read-only depth stencil view — acceptable trade-off until RODSV support
+        // is added).
+        scene.RenderParticles(camera);
     }
 
     void DeferredRenderer::RenderGeometryPass(Scene& scene, Camera& camera)

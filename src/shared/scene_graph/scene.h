@@ -370,6 +370,13 @@ namespace mmo
 		/// Renders the current scene by using a specific camera as the origin.
 		void Render(Camera& camera, PixelShaderType shaderType);
 
+		/// @brief Renders particle emitters and other transparent objects as a forward pass
+		/// on top of an already-rendered deferred scene. The caller is responsible for
+		/// setting the correct render target and ensuring the depth buffer is bound for
+		/// read-only depth testing (particles must depth-test against opaque geometry but
+		/// must not write depth themselves).
+		void RenderParticles(Camera& camera);
+
 		void UpdateSceneGraph();
 		
 		void RenderSingleObject(Renderable& renderable, uint32 groupId);

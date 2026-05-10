@@ -155,12 +155,16 @@ namespace mmo
 			const Vector3 rightOffset = right * halfSize;
 			const Vector3 upOffset = up * halfSize;
 
-			// Convert color from Vector4 (0-1) to uint32 ARGB format
+			// Convert color from Vector4 (0-1) to uint32 ABGR format.
+			// D3D11 maps ColorArgb to DXGI_FORMAT_R8G8B8A8_UNORM which reads bytes
+			// in memory order [R,G,B,A]. In little-endian a uint32 0xAABBGGRR lays
+			// out as bytes [RR,GG,BB,AA], so pack as ABGR (same convention as
+			// Color::GetABGR() used elsewhere in this codebase).
 			const uint32 color = 
 				(static_cast<uint32>(particle.color.w * 255.0f) << 24) | // Alpha
-				(static_cast<uint32>(particle.color.x * 255.0f) << 16) | // Red
+				(static_cast<uint32>(particle.color.z * 255.0f) << 16) | // Blue
 				(static_cast<uint32>(particle.color.y * 255.0f) << 8)  | // Green
-				(static_cast<uint32>(particle.color.z * 255.0f));        // Blue
+				(static_cast<uint32>(particle.color.x * 255.0f));        // Red
 
 			// Calculate sprite sheet UV coordinates if using sprite animation
 			const uint32 totalSprites = 1; // Will be implemented in Task 5
@@ -391,6 +395,20 @@ namespace mmo
 		if (m_particles.size() > params.maxParticles)
 		{
 			m_particles.resize(params.maxParticles);
+		}
+
+		// Load material from the parameters' materialName so callers don't have
+		// to perform this step separately after SetParameters.
+		if (!params.materialName.empty())
+		{
+			try
+			{
+				m_material = MaterialManager::Get().Load(params.materialName);
+			}
+			catch (const std::exception& e)
+			{
+				WLOG("ParticleEmitter: Failed to load material '" << params.materialName << "': " << e.what());
+			}
 		}
 	}
 
