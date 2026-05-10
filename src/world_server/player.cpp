@@ -290,23 +290,29 @@ namespace mmo
 			return;
 		}
 
-		// Gather all world objects in this instance that gate on questId
+		// Only send updates for objects the client already knows about (i.e. objects in currently
+		// visible tiles). Sending an UpdateObject packet for an object the client has never been
+		// told about causes the client to crash with an unknown-object error.
 		std::vector<GameObjectS*> affected;
-		m_worldInstance->ForEachObject([&](GameObjectS& obj) -> bool
-		{
-			if (obj.GetTypeId() != ObjectTypeId::Object)
+		ForEachTileInSight(
+			m_worldInstance->GetGrid(),
+			GetTileIndex(),
+			[&](VisibilityTile& tile)
 			{
-				return true;
-			}
+				for (auto* obj : tile.GetGameObjects())
+				{
+					if (!obj || obj->GetTypeId() != ObjectTypeId::Object)
+					{
+						continue;
+					}
 
-			GameWorldObjectS* worldObj = dynamic_cast<GameWorldObjectS*>(&obj);
-			if (worldObj && worldObj->GetRequiredQuestId() == questId)
-			{
-				affected.push_back(worldObj);
-			}
-
-			return true;
-		});
+					GameWorldObjectS* worldObj = dynamic_cast<GameWorldObjectS*>(obj);
+					if (worldObj && worldObj->GetRequiredQuestId() == questId)
+					{
+						affected.push_back(worldObj);
+					}
+				}
+			});
 
 		if (!affected.empty())
 		{
