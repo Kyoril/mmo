@@ -14,7 +14,8 @@ struct MockDatabase : IDatabase {
 
     std::optional<AccountData> GetAccountDataByName(std::string) override { return accountData; }
     std::optional<RealmAuthData> GetRealmAuthData(std::string) override { return std::nullopt; }
-    std::optional<std::tuple<uint64, std::string, uint8>> GetAccountSessionKey(std::string) override { return std::nullopt; }
+    std::optional<std::tuple<uint64, std::string, uint8>> sessionKeyResult = std::nullopt;
+    std::optional<std::tuple<uint64, std::string, uint8>> GetAccountSessionKey(std::string) override { return sessionKeyResult; }
     bool SetAccountGMLevel(std::string, uint8) override { return setGmLevelResult; }
     void PlayerLogin(uint64, const std::string&, const std::string&) override {}
     void PlayerLoginFailed(uint64, const std::string&) override {}
