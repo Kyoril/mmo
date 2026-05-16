@@ -387,11 +387,9 @@ namespace mmo
 		}
 		else if (!IsControlledByLocalPlayer() && !IsPlayer() && m_unitMovement)
 		{
-			// For idle non-player units (NPCs only), correct their ground height.
-			// This fixes floating NPCs that spawn at server navmesh heights
-			// which may not match the client's detailed collision geometry.
-			// Remote players are excluded because their height is managed by
-			// the RemoteMovementRenderer (dead reckoning + fall arc simulation).
+			// For idle non-player units (NPCs without a path), correct ground height.
+			// Remote players apply ground correction inside UpdateRemoteMovement()
+			// after their dead-reckoning position is written to the scene node.
 			m_unitMovement->CorrectGroundHeight();
 		}
 
@@ -696,6 +694,11 @@ namespace mmo
 			{
 				m_unitMovement->SetMovementMode(MovementMode::Walking);
 			}
+
+			// Snap the scene node to terrain height so remote players don't fall
+			// through the ground when the server navmesh height differs slightly
+			// from the client's collision geometry.
+			m_unitMovement->CorrectGroundHeight();
 		}
 
 		// Feed the input vector from interpolated movement flags so the animation
