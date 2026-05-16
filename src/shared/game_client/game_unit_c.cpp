@@ -278,7 +278,7 @@ namespace mmo
 		{
 			UpdateMovementInfo();
 
-			if (m_movementInfo.IsChangingPosition() && now > m_lastHeartbeat + (constants::OneSecond / 2))
+			if (m_movementInfo.IsChangingPosition() && now > m_lastHeartbeat + 100)
 			{
 				m_lastHeartbeat = now;
 				m_netDriver.OnMoveEvent(*this, MovementEvent(movement_event_type::Heartbeat, now, m_movementInfo));
