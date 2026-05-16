@@ -1296,6 +1296,18 @@ namespace mmo
 		}
 	}
 
+	void GameUnitC::ApplyRemoteFacing(const Radian &facing)
+	{
+		if (m_sceneNode)
+		{
+			m_sceneNode->SetOrientation(Quaternion(facing, Vector3::UnitY));
+		}
+		m_movementInfo.facing = facing;
+		// Update the most recent queued snapshot's facing so the interpolator
+		// uses the correct tangent direction, without adding a new waypoint.
+		m_remoteMovementQueue.UpdateLastSnapshotFacing(facing);
+	}
+
 	void GameUnitC::Jump()
 	{
 		m_pressedJump = true;

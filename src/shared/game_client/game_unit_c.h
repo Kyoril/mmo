@@ -254,6 +254,12 @@ namespace mmo
 		/// network event will be sent at a lower rate (e.g. the 10/s SetFacing throttle).
 		void SetFacingLocal(const Radian &facing);
 
+		/// Applies a facing-only update received from the network for a remote unit.
+		/// Does NOT enqueue a new movement snapshot — it only updates the scene node
+		/// orientation and the facing field of the most recent queued snapshot so that
+		/// interpolation uses the correct yaw without adding a spurious position waypoint.
+		void ApplyRemoteFacing(const Radian &facing);
+
 		void Jump();
 
 		void StopJumping();

@@ -1727,10 +1727,26 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		// Apply movement packet to remote units via the buffered queue
+		// Apply movement packet to remote units via the buffered queue.
+		// MoveSetFacing and MoveStopTurn only change orientation — they carry the
+		// current position but no displacement. Enqueueing them as full movement
+		// snapshots poisons the Hermite interpolation with near-duplicate position
+		// waypoints that produce zero-length chords but non-zero velocity tangents,
+		// causing jitter. Apply facing-only updates directly to the remote unit.
 		if (ObjectMgr::GetActivePlayerGuid() != characterGuid)
 		{
-			unitPtr->EnqueueRemoteMovement(movementInfo);
+			const uint16 opcode = packet.GetId();
+			if (opcode == game::realm_client_packet::MoveSetFacing ||
+			    opcode == game::realm_client_packet::MoveStopTurn)
+			{
+				// Facing-only: update scene node and remote movement queue's last
+				// snapshot facing without adding a new position waypoint.
+				unitPtr->ApplyRemoteFacing(movementInfo.facing);
+			}
+			else
+			{
+				unitPtr->EnqueueRemoteMovement(movementInfo);
+			}
 		}
 
 		return PacketParseResult::Pass;

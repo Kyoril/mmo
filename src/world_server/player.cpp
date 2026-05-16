@@ -1663,21 +1663,26 @@ namespace mmo
 
 		// Speed hack check: validate that the distance covered since the last known
 		// position is consistent with the player's allowed speed.
-		// Only checked on packets that advance position (heartbeat and stop packets)
-		// where we have two position snapshots to diff. Skip during falling (vertical
-		// velocity from jump arc is not constrained by run speed).
-		if ((opCode == game::realm_client_packet::MoveHeartBeat ||
-		     opCode == game::realm_client_packet::MoveStop ||
-		     opCode == game::realm_client_packet::MoveStopStrafe) &&
-		    !info.IsFalling() && prevMovementInfo.IsChangingPosition())
+		// Uses m_lastPositionPacketTimestamp / m_lastPositionPacketPos rather than
+		// prevMovementInfo.timestamp so that facing-only packets (MoveSetFacing,
+		// MoveStopTurn) don't reset the elapsed-time baseline to near-zero, which
+		// was causing false positive violations with implied speeds of 3000+ m/s.
+		const bool isPositionPacket =
+		    opCode == game::realm_client_packet::MoveHeartBeat ||
+		    opCode == game::realm_client_packet::MoveStop ||
+		    opCode == game::realm_client_packet::MoveStopStrafe ||
+		    opCode == game::realm_client_packet::MoveStartForward ||
+		    opCode == game::realm_client_packet::MoveStartBackward ||
+		    opCode == game::realm_client_packet::MoveStartStrafeLeft ||
+		    opCode == game::realm_client_packet::MoveStartStrafeRight;
+
+		if (isPositionPacket && !info.IsFalling() && m_lastPositionPacketTimestamp > 0)
 		{
-			const float dist = (info.position - m_character->GetPosition()).GetLength();
-			if (dist > 0.0f && info.timestamp > prevMovementInfo.timestamp)
+			const float dist = (info.position - m_lastPositionPacketPos).GetLength();
+			if (dist > 0.0f && info.timestamp > m_lastPositionPacketTimestamp)
 			{
-				// Compute elapsed time in seconds
-				const float elapsed = static_cast<float>(info.timestamp - prevMovementInfo.timestamp) / 1000.0f;
-				// Use the faster of run/strafe speed; add 20% server-side tolerance for
-				// latency jitter, frame-rate variation, and physics step rounding.
+				const float elapsed = static_cast<float>(info.timestamp - m_lastPositionPacketTimestamp) / 1000.0f;
+				// 20% tolerance for latency jitter, frame-rate variation, physics rounding.
 				const float maxSpeed = m_character->GetSpeed(movement_type::Run) * 1.20f;
 				const float impliedSpeed = dist / elapsed;
 
@@ -1689,9 +1694,15 @@ namespace mmo
 					    << " elapsed=" << elapsed
 					    << "s opcode=" << log_hex_digit(opCode));
 					// TODO: Accumulate and kick after N violations within M seconds.
-					// For now log only to establish baseline false-positive rate.
 				}
 			}
+		}
+
+		// Update position baseline for the next speed check
+		if (isPositionPacket)
+		{
+			m_lastPositionPacketTimestamp = info.timestamp;
+			m_lastPositionPacketPos = info.position;
 		}
 
 		m_character->ApplyMovementInfo(info);

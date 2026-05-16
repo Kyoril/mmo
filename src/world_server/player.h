@@ -574,6 +574,13 @@ namespace mmo
 		int64 m_timeOffset{ 0 };  // Client timestamp - Server timestamp
 		Countdown m_timeSyncTimer;
 
+		/// @brief Server-side timestamp and position of the last packet that carried
+		/// an authoritative position update (start/stop/heartbeat). Excludes facing-only
+		/// packets (MoveSetFacing, MoveStopTurn) so the speed check doesn't compute a
+		/// near-zero elapsed time after rapid facing updates.
+		GameTime m_lastPositionPacketTimestamp{ 0 };
+		Vector3 m_lastPositionPacketPos;
+
 		// Inventory persistence repository (World Server only)
 		std::shared_ptr<IInventoryRepository> m_inventoryRepo{ nullptr };
 
