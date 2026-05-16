@@ -168,5 +168,9 @@ namespace mmo
 
 		/// @brief Maximum number of snapshots to keep in the buffer.
 		static constexpr size_t MaxSnapshots = 60;
+
+		/// @brief Exponential moving average of inter-snapshot arrival interval (ms).
+		/// Starts at 100ms (the default buffer) so we don't start too aggressive.
+		GameTime m_avgIntervalMs = 100;
 	};
 }
