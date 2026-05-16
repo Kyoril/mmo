@@ -17,7 +17,7 @@ namespace mmo
         /// Initializes a new instance of the FriendMgr class.
         /// @param asyncDatabase Reference to the async database for loading friendships.
         /// @param playerManager Reference to the player manager for online status checks.
-        explicit FriendMgr(AsyncDatabase &asyncDatabase, PlayerManager &playerManager);
+        explicit FriendMgr(AsyncFriendDatabase &asyncDatabase, PlayerManager &playerManager);
 
     public:
         /// Loads all friendships from the database into memory.
@@ -57,7 +57,7 @@ namespace mmo
         void LoadCharacterFriends(uint64 characterId, std::function<void(const std::vector<FriendData> &)> callback);
 
     private:
-        AsyncDatabase &m_asyncDatabase;
+        AsyncFriendDatabase &m_asyncDatabase;
         PlayerManager &m_playerManager;
 
         /// Maps character guid to their list of friends.

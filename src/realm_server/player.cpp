@@ -1137,7 +1137,7 @@ namespace mmo
 		if (!m_group)
 		{
 			// Not yet in a group - create a new one!
-			m_group = std::make_shared<PlayerGroup>(m_groupIdGenerator.GenerateId(), m_manager, m_database, m_timerQueue);
+			m_group = std::make_shared<PlayerGroup>(m_groupIdGenerator.GenerateId(), m_manager, AsyncGroupDatabase{ m_database.GetDatabase(), m_database.GetAsyncWorker(), m_database.GetResultDispatcher() }, m_timerQueue);
 			m_group->Create(m_characterData->characterId, m_characterData->name);
 			GetWorld()->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId(), static_cast<uint8>(m_group->GetLootMethod()), static_cast<uint8>(m_group->GetLootThreshold()));
 		}

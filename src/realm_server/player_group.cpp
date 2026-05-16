@@ -10,10 +10,10 @@ namespace mmo
 	// Implementation. Will store all available player group instances by their id.
 	std::map<uint64, std::shared_ptr<PlayerGroup>> PlayerGroup::ms_groupsById;
 
-	PlayerGroup::PlayerGroup(const uint64 id, PlayerManager& playerManager, AsyncDatabase& database, TimerQueue& timers)
+	PlayerGroup::PlayerGroup(const uint64 id, PlayerManager& playerManager, AsyncGroupDatabase database, TimerQueue& timers)
 		: m_id(id)
 		, m_playerManager(playerManager)
-		, m_database(database)
+		, m_database(std::move(database))
 		, m_timers(timers)
 		, m_leaderGUID(0)
 		, m_type(group_type::Normal)
@@ -62,7 +62,7 @@ namespace mmo
 			}
 		};
 
-		m_database.asyncRequest(std::move(handler), &IDatabase::LoadGroup, m_id);
+		m_database.asyncRequest(std::move(handler), &IGroupDatabase::LoadGroup, m_id);
 
 		return true;
 	}
@@ -89,7 +89,7 @@ namespace mmo
 		ms_groupsById[m_id] = shared_from_this();
 
 		auto handler = [](bool success){ };
-		m_database.asyncRequest(std::move(handler), &IDatabase::CreateGroup, m_id, m_leaderGUID, static_cast<uint8>(m_lootMethod), m_lootTreshold);
+		m_database.asyncRequest(std::move(handler), &IGroupDatabase::CreateGroup, m_id, m_leaderGUID, static_cast<uint8>(m_lootMethod), m_lootTreshold);
 	}
 
 	void PlayerGroup::NotifyMemberDisconnected(uint64 memberGuid)
@@ -116,7 +116,7 @@ namespace mmo
 
 		// Persist to database
 		auto handler = [](bool success) {};
-		m_database.asyncRequest(std::move(handler), &IDatabase::SetGroupLootMethod, m_id, static_cast<uint8>(m_lootMethod), m_lootMaster, static_cast<uint8>(m_lootTreshold));
+		m_database.asyncRequest(std::move(handler), &IGroupDatabase::SetGroupLootMethod, m_id, static_cast<uint8>(m_lootMethod), m_lootMaster, static_cast<uint8>(m_lootTreshold));
 	}
 
 	bool PlayerGroup::IsMember(const uint64 guid) const
@@ -151,7 +151,7 @@ namespace mmo
 		});
 
 		auto handler = [](bool success) {};
-		m_database.asyncRequest(std::move(handler), &IDatabase::SetGroupLeader, m_id, m_leaderGUID);
+		m_database.asyncRequest(std::move(handler), &IGroupDatabase::SetGroupLeader, m_id, m_leaderGUID);
 	}
 
 	PartyResult PlayerGroup::AddMember(const uint64 memberGuid, const String& memberName)
@@ -214,7 +214,7 @@ namespace mmo
 
 		// Update database
 		auto handler = [](bool success) {};
-		m_database.asyncRequest(std::move(handler), &IDatabase::AddGroupMember, m_id, memberGuid);
+		m_database.asyncRequest(std::move(handler), &IGroupDatabase::AddGroupMember, m_id, memberGuid);
 
 		return party_result::Ok;
 	}
@@ -283,7 +283,7 @@ namespace mmo
 
 				// Remove from database
 				auto handler = [](bool success) {};
-				m_database.asyncRequest(std::move(handler), &IDatabase::RemoveGroupMember, m_id, guid);
+				m_database.asyncRequest(std::move(handler), &IGroupDatabase::RemoveGroupMember, m_id, guid);
 			}
 		}
 	}
@@ -408,7 +408,7 @@ namespace mmo
 
 		// Remove from database
 		auto handler = [](bool success) {};
-		m_database.asyncRequest(std::move(handler), &IDatabase::DisbandGroup, m_id);
+		m_database.asyncRequest(std::move(handler), &IGroupDatabase::DisbandGroup, m_id);
 
 		// Erase group from the global list of all groups
 		const auto it = ms_groupsById.find(m_id);

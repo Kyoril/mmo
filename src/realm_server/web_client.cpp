@@ -169,7 +169,7 @@ namespace mmo
 		const auto [s, v] = calculateSV(id, password);
 
 		// Execute
-		if (const auto result = m_service.GetDatabase().CreateWorkd(id, s.asHexStr(), v.asHexStr()))
+		if (const auto result = m_service.GetDatabase().CreateWorld(id, s.asHexStr(), v.asHexStr()))
 		{
 			if (*result == WorldCreationResult::WorldNameAlreadyInUse)
 			{

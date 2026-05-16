@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include "non_copyable.h"
 #include "log/log_exception.h"
 
 #include <functional>
@@ -65,7 +64,7 @@ namespace mmo
 	/// @tparam TDatabase The database interface type. Member-function pointers passed to
 	///         asyncRequest must be members of this type.
 	template <class TDatabase>
-	class AsyncDatabaseT : public NonCopyable
+	class AsyncDatabaseT
 	{
 	public:
 		typedef std::function<void(const std::function<void()> &)> ActionDispatcher;
@@ -128,6 +127,15 @@ namespace mmo
 			};
 			m_asyncWorker(std::move(processor));
 		}
+
+		/// Returns the underlying database reference.
+		TDatabase& GetDatabase() const { return m_database; }
+
+		/// Returns the async worker dispatcher (for constructing narrower wrappers).
+		const ActionDispatcher& GetAsyncWorker() const { return m_asyncWorker; }
+
+		/// Returns the result dispatcher (for constructing narrower wrappers).
+		const ActionDispatcher& GetResultDispatcher() const { return m_resultDispatcher; }
 
 	private:
 		TDatabase &m_database;

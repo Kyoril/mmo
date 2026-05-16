@@ -51,8 +51,8 @@ namespace mmo
 		/// @copydoc IDatabase::CharacterEnterWorld
 		std::optional<CharacterData> CharacterEnterWorld(uint64 characterId, uint64 accountId) override;
 
-		/// @copydoc IDatabase::CreateWorkd
-		std::optional<WorldCreationResult> CreateWorkd(const String& name, const String& s, const String& v) override;
+		/// @copydoc IDatabase::CreateWorld
+		std::optional<WorldCreationResult> CreateWorld(const String& name, const String& s, const String& v) override;
 
 		/// @copydoc IDatabase::ChatMessage
 		void ChatMessage(uint64 characterId, uint16 type, String message) override;

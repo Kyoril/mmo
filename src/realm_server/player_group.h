@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base/typedefs.h"
+#include "database.h"
 #include "game/group.h"
 
 #include <map>
@@ -38,7 +39,7 @@ namespace mmo
 	public:
 		/// Creates a new instance of a player group. Note that a group has to be
 		/// created using the create method before it will be valid.
-		explicit PlayerGroup(uint64 id, PlayerManager& playerManager, AsyncDatabase& database, TimerQueue& timers);
+		explicit PlayerGroup(uint64 id, PlayerManager& playerManager, AsyncGroupDatabase database, TimerQueue& timers);
 
 		/// Preloads group data asynchronously.
 		void Preload();
@@ -180,7 +181,7 @@ namespace mmo
 
 		uint64 m_id;
 		PlayerManager& m_playerManager;
-		AsyncDatabase& m_database;
+		AsyncGroupDatabase m_database;
 		TimerQueue& m_timers;
 		bool m_loading = false;
 		uint64 m_leaderGUID;

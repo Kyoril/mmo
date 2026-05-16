@@ -739,7 +739,7 @@ namespace mmo
 		return {};
 	}
 
-	std::optional<WorldCreationResult> MySQLDatabase::CreateWorkd(const String& name, const String& s, const String& v)
+	std::optional<WorldCreationResult> MySQLDatabase::CreateWorld(const String& name, const String& s, const String& v)
 	{
 		if (!m_connection.Execute("INSERT INTO world (name, s, v) VALUES ('"
 			+ m_connection.EscapeString(name) + "', '"
