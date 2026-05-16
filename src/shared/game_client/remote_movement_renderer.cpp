@@ -122,23 +122,27 @@ namespace mmo
 			m_renderedFacing = Radian(m_renderedFacing.GetValueRadians() - turnSpeed * deltaTime);
 		}
 
-		// ── 2. Dead-reckoning: advance rendered position ──────────────────────
+		// ── 2. Dead-reckoning: compute desired delta and advance position ──────
 		const Quaternion orientation(m_renderedFacing, Vector3::UnitY);
 		const Vector3 forward = orientation * Vector3::UnitX;
 		const Vector3 right   = orientation * Vector3::UnitZ;
 
+		const Vector3 posBeforeStep = m_renderedPos;
+		Vector3 desiredDelta = Vector3::Zero;
+
 		if (isFalling)
 		{
 			const Vector3 lateral = ComputeVelocity(forward, right, m_authFlags, runSpeed, backwardsSpeed);
-			m_renderedPos.x += lateral.x * deltaTime;
-			m_renderedPos.z += lateral.z * deltaTime;
+			desiredDelta.x = lateral.x * deltaTime;
+			desiredDelta.z = lateral.z * deltaTime;
 			StepFallArc(deltaTime);
-			m_renderedPos.y += m_fallVelocity.y * deltaTime;
+			desiredDelta.y = m_fallVelocity.y * deltaTime;
+			m_renderedPos += desiredDelta;
 		}
 		else
 		{
-			const Vector3 vel = ComputeVelocity(forward, right, m_authFlags, runSpeed, backwardsSpeed);
-			m_renderedPos += vel * deltaTime;
+			desiredDelta = ComputeVelocity(forward, right, m_authFlags, runSpeed, backwardsSpeed) * deltaTime;
+			m_renderedPos += desiredDelta;
 		}
 
 		// ── 3. Blend correction ───────────────────────────────────────────────
@@ -158,6 +162,7 @@ namespace mmo
 
 		// ── 4. Fill output ────────────────────────────────────────────────────
 		outState.position      = visualPos;
+		outState.desiredDelta  = desiredDelta;
 		outState.facing        = m_renderedFacing;
 		outState.movementFlags = m_authFlags;
 		outState.isFalling     = isFalling;

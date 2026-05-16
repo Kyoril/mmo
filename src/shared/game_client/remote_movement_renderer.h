@@ -34,7 +34,8 @@ namespace mmo
 	/// @brief Output state produced by the renderer each frame.
 	struct RemoteMovementState
 	{
-		Vector3 position;
+		Vector3 position;       ///< Visual position to apply to the scene node (includes blend offset)
+		Vector3 desiredDelta;   ///< Raw lateral movement this frame (before collision resolution)
 		Radian  facing;
 		uint32  movementFlags = 0;
 		bool    isFalling = false;
@@ -67,9 +68,16 @@ namespace mmo
 		/// @brief Returns true if at least one authoritative update has been received.
 		[[nodiscard]] bool IsInitialized() const { return m_initialized; }
 
+		/// @brief Returns the current dead-reckoned position (before blend offset).
+		[[nodiscard]] const Vector3& GetRenderedPos() const { return m_renderedPos; }
+
 		/// @brief Overrides the rendered Y position after external ground correction.
 		/// Dead reckoning continues from the corrected height next frame.
 		void SetRenderedY(const float y) { m_renderedPos.y = y; }
+
+		/// @brief Overrides the full rendered position (e.g. after collision resolution).
+		/// Dead reckoning continues from the corrected position next frame.
+		void SetRenderedPos(const Vector3& pos) { m_renderedPos = pos; }
 
 		/// @brief Resets all state (e.g. on despawn/teleport).
 		void Reset();

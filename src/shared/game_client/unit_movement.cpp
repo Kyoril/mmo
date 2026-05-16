@@ -266,6 +266,26 @@ namespace mmo
 		GetUpdatedNode().SetPosition(currentPos);
 	}
 
+	void UnitMovement::RemotePlayerMoveCollide(const Vector3& delta)
+	{
+		if (delta.IsZero())
+		{
+			return;
+		}
+
+		const Quaternion rot = GetUpdatedNode().GetOrientation();
+		CollisionHitResult hit;
+		const bool moved = SafeMoveNode(delta, rot, true, &hit);
+
+		if (!moved && hit.bBlockingHit)
+		{
+			// Slide along the wall normal so the character moves parallel to
+			// the surface rather than stopping dead — same behaviour as the
+			// local player against the same geometry.
+			SlideAlongSurface(delta, 1.0f, hit.Normal, hit, false);
+		}
+	}
+
 	Vector3 UnitMovement::ConstrainInputAcceleration(const Vector3& inputAcceleration) const
 	{
 		// walking or falling pawns ignore up/down sliding

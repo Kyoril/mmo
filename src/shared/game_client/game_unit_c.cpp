@@ -669,13 +669,36 @@ namespace mmo
 			return;
 		}
 
-		// Apply interpolated position and facing directly to the scene node
-		GetSceneNode()->SetDerivedPosition(state.position);
+		// Apply facing
 		GetSceneNode()->SetDerivedOrientation(Quaternion(state.facing, Vector3::UnitY));
+
+		// Apply lateral movement through SafeMoveNode so the capsule respects
+		// world geometry (walls, obstacles). This prevents remote players from
+		// visually penetrating walls they are colliding against locally.
+		// Only do the sweep when there is actual movement — zero-delta sweeps
+		// are a no-op but waste cycles.
+		if (!state.desiredDelta.IsZero())
+		{
+			// Apply lateral movement through a capsule sweep so the remote
+			// player character respects world geometry (walls, obstacles).
+			m_unitMovement->RemotePlayerMoveCollide(state.desiredDelta);
+
+			// Read back the actual position after collision resolution and sync
+			// it into the renderer so next frame's dead reckoning continues from
+			// the resolved (non-penetrating) position.
+			const Vector3 resolvedPos = GetSceneNode()->GetDerivedPosition();
+			m_remoteMovementRenderer.SetRenderedPos(resolvedPos);
+		}
+		else
+		{
+			// No movement — just place the scene node at the renderer's position
+			// (which may include a blend offset from a recent correction).
+			GetSceneNode()->SetDerivedPosition(state.position);
+		}
 
 		// Update movement info flags so animation system works correctly
 		m_movementInfo.movementFlags = state.movementFlags;
-		m_movementInfo.position = state.position;
+		m_movementInfo.position = GetSceneNode()->GetDerivedPosition();  // use resolved position
 		m_movementInfo.facing = state.facing;
 
 		// Handle falling/jumping state for animations

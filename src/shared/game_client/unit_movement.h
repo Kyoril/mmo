@@ -372,6 +372,12 @@ namespace mmo
 		/// @param deltaTime Time step for movement
 		void RemotePlayerMove(const Vector3& inputVector, float deltaTime);
 
+		/// @brief Moves the scene node by delta using a capsule sweep against world geometry.
+		/// If blocked, slides along the contact surface. Call after computing the desired
+		/// movement delta for a remote player to prevent them penetrating walls.
+		/// @param delta The desired movement vector for this frame.
+		void RemotePlayerMoveCollide(const Vector3& delta);
+
 		/// @brief Constrains input acceleration to valid movement parameters
 		/// @param inputAcceleration Raw input acceleration vector
 		/// @return Constrained acceleration vector
