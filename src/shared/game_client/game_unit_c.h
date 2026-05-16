@@ -14,7 +14,7 @@
 
 #include "unit_movement.h"
 #include "movement_event.h"
-#include "remote_movement_queue.h"
+#include "remote_movement_renderer.h"
 
 namespace mmo
 {
@@ -686,7 +686,7 @@ namespace mmo
 		std::queue<MovementEvent> m_movementEventQueue;
 
 		/// @brief Buffered movement queue for remote players.
-		RemoteMovementQueue m_remoteMovementQueue;
+		RemoteMovementRenderer m_remoteMovementRenderer;
 
 		GameTime m_lastHeartbeat = 0;
 

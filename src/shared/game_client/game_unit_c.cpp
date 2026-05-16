@@ -391,7 +391,7 @@ namespace mmo
 			// This fixes floating NPCs that spawn at server navmesh heights
 			// which may not match the client's detailed collision geometry.
 			// Remote players are excluded because their height is managed by
-			// the RemoteMovementQueue (including jump arcs).
+			// the RemoteMovementRenderer (dead reckoning + fall arc simulation).
 			m_unitMovement->CorrectGroundHeight();
 		}
 
@@ -654,22 +654,20 @@ namespace mmo
 
 	void GameUnitC::EnqueueRemoteMovement(const MovementInfo &movementInfo)
 	{
-		m_remoteMovementQueue.EnqueueSnapshot(movementInfo);
+		m_remoteMovementRenderer.OnAuthoritativeUpdate(movementInfo, false);
 	}
 
 	void GameUnitC::UpdateRemoteMovement(const float deltaTime)
 	{
-		const GameTime now = GetAsyncTimeMs();
-
 		RemoteMovementState state;
-		if (!m_remoteMovementQueue.Sample(
-			now,
+		if (!m_remoteMovementRenderer.Sample(
+			deltaTime,
 			GetSpeed(movement_type::Run),
 			GetSpeed(movement_type::Backwards),
 			GetSpeed(movement_type::Turn),
 			state))
 		{
-			// No snapshots yet, nothing to do
+			// Not yet initialized, nothing to do
 			return;
 		}
 
@@ -1303,9 +1301,13 @@ namespace mmo
 			m_sceneNode->SetOrientation(Quaternion(facing, Vector3::UnitY));
 		}
 		m_movementInfo.facing = facing;
-		// Update the most recent queued snapshot's facing so the interpolator
-		// uses the correct tangent direction, without adding a new waypoint.
-		m_remoteMovementQueue.UpdateLastSnapshotFacing(facing);
+
+		// Build a minimal MovementInfo for a facing-only update
+		MovementInfo info;
+		info.facing = facing;
+		info.position = m_movementInfo.position;
+		info.movementFlags = m_movementInfo.movementFlags;
+		m_remoteMovementRenderer.OnAuthoritativeUpdate(info, true);
 	}
 
 	void GameUnitC::Jump()
