@@ -9,8 +9,10 @@
 #include "auth_protocol/auth_connection.h"
 #include "base/signal.h"
 #include "base/big_number.h"
+#include "auth_protocol/srp_server.h"
 
 #include <memory>
+#include <optional>
 #include <functional>
 #include <map>
 #include <cassert>
@@ -92,14 +94,12 @@ namespace mmo
 
 	private:
 		BigNumber m_sessionKey;
-		BigNumber m_s, m_v;
-		BigNumber m_b, m_B;
-		BigNumber m_unk3;
+		std::optional<SrpServer> m_srp;
 		BigNumber m_reconnectProof;
 		BigNumber m_reconnectKey;
 		SHA1Hash m_m2;
 
-		/// Number of bytes used to store m_s.
+		/// Number of bytes used to store the SRP salt (s).
 		static constexpr int ByteCountS = 32;
 		/// Number of bytes used by a sha1 hash. Taken from OpenSSL.
 		static constexpr int ShaDigestLength = 20;

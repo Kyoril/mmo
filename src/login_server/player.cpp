@@ -218,6 +218,7 @@ namespace mmo
 			{
 				// The temporary result
 				auth::AuthResult authResult = auth::auth_result::FailWrongCredentials;
+				SrpChallenge challenge;
 				if (result)
 				{
 					if (result->banned == BanState::Temporarily)
@@ -233,8 +234,9 @@ namespace mmo
 					else
 					{
 						// Generate s and v bignumber values to calculate with
-						strongThis->m_s.setHexStr(result->s);
-						strongThis->m_v.setHexStr(result->v);
+						BigNumber s, v;
+						s.setHexStr(result->s);
+						v.setHexStr(result->v);
 
 						// Store account id
 						strongThis->m_accountId = result->id;
@@ -242,12 +244,8 @@ namespace mmo
 						// We are NOT banned so continue
 						authResult = auth::auth_result::Success;
 
-						strongThis->m_b.setRand(19 * 8);
-						const BigNumber gmod = constants::srp::g.modExp(strongThis->m_b, constants::srp::N);
-						strongThis->m_B = ((strongThis->m_v * 3) + gmod) % constants::srp::N;
-
-						assert(gmod.getNumBytes() <= 32);
-						strongThis->m_unk3.setRand(16 * 8);
+						strongThis->m_srp.emplace(std::move(s), std::move(v));
+						challenge = strongThis->m_srp->GenerateChallenge();
 
 						// Allow handling the logon proof packet now
 						strongThis->RegisterPacketHandler(auth::client_login_packet::LogonProof, *strongThis.get(), &Player::HandleLogonProof);
@@ -260,7 +258,7 @@ namespace mmo
 				}
 
 				// Send packet with result
-				strongThis->m_connection->sendSinglePacket([authResult, &strongThis](auth::OutgoingPacket& packet) {
+				strongThis->m_connection->sendSinglePacket([authResult, &strongThis, challenge = std::move(challenge)](auth::OutgoingPacket& packet) mutable {
 					packet.Start(auth::login_client_packet::LogonChallenge);
 					packet << io::write<uint8>(authResult);
 
@@ -268,7 +266,7 @@ namespace mmo
 					if (authResult == auth::auth_result::Success)
 					{
 						// Write B with 32 byte length and g
-						std::vector<uint8> B_ = strongThis->m_B.asByteArray(32);
+						std::vector<uint8> B_ = challenge.B.asByteArray(32);
 						packet
 							<< io::write_range(B_.begin(), B_.end())
 							<< io::write<uint8>(constants::srp::g.asUInt32());
@@ -278,7 +276,7 @@ namespace mmo
 						packet << io::write_range(N_.begin(), N_.end());
 
 						// Write s
-						const std::vector<uint8> s_ = strongThis->m_s.asByteArray();
+						const std::vector<uint8> s_ = challenge.s.asByteArray();
 						packet << io::write_range(s_.begin(), s_.end());
 					}
 
@@ -317,74 +315,24 @@ namespace mmo
 			ELOG("[Logon Proof] SRP safeguard failed");
 			return PacketParseResult::Disconnect;
 		}
-		
-		// Build hash
-		SHA1Hash hash = Sha1_BigNumbers({ A, m_B });
 
-		// Calculate u and S
-		BigNumber u{ hash.data(), hash.size() };
-		BigNumber S = (A * (m_v.modExp(u, constants::srp::N))).modExp(m_b, constants::srp::N);
-
-		// Build t
-		const std::vector<uint8> t = S.asByteArray(32);
-		std::array<uint8, 16> t1;
-		for (size_t i = 0; i < t1.size(); ++i)
+		// Guard: m_srp must have been initialised during challenge phase
+		if (!m_srp)
 		{
-			t1[i] = t[i * 2];
-		}
-		hash = sha1(reinterpret_cast<const char*>(t1.data()), t1.size());
-
-		std::array<uint8, 40> vK;
-		for (size_t i = 0; i < 20; ++i)
-		{
-			vK[i * 2] = hash[i];
-		}
-		for (size_t i = 0; i < 16; ++i)
-		{
-			t1[i] = t[i * 2 + 1];
+			ELOG("[Logon Proof] SRP state missing — no challenge was generated");
+			return PacketParseResult::Disconnect;
 		}
 
-		hash = sha1(reinterpret_cast<const char*>(t1.data()), t1.size());
-		for (size_t i = 0; i < 20; ++i)
-		{
-			vK[i * 2 + 1] = hash[i];
-		}
-
-		BigNumber K{ vK.data(), vK.size() };
-
-		SHA1Hash h;
-		h = Sha1_BigNumbers({ constants::srp::N });
-		hash = Sha1_BigNumbers({ constants::srp::g });
-		for (size_t i = 0; i < h.size(); ++i)
-		{
-			h[i] ^= hash[i];
-		}
-
-		BigNumber t3{ h.data(), h.size() };
-
-		HashGeneratorSha1 sha;
-		Sha1_Add_BigNumbers(sha, { t3 });
-		const auto t4 = sha1(reinterpret_cast<const char*>(m_accountName.data()), m_accountName.size());
-		sha.update(reinterpret_cast<const char*>(t4.data()), t4.size());
-		Sha1_Add_BigNumbers(sha, { m_s, A, m_B, K });
-		hash = sha.finalize();
+		// Delegate all SRP6-A math to SrpServer
+		auto srpResult = m_srp->VerifyProof(rec_A, rec_M1, m_accountName);
 
 		// Proof result which will be sent to the client
 		auth::AuthResult proofResult = auth::auth_result::FailWrongCredentials;
 
-		// Calculate M1 hash on server using values sent by the client and compare it against
-		// the M1 hash sent by the client to see if the passwords do match.
-		const BigNumber M1{ hash.data(), hash.size() };
-		auto sArr = M1.asByteArray(20);
-		if (std::equal(sArr.begin(), sArr.end(), rec_M1.begin()))
+		if (srpResult)
 		{
-			// Finish SRP6 by calculating the M2 hash value that is sent back to the client for
-			// verification as well.
-			m_m2 = Sha1_BigNumbers({ A, M1, K});
-
-			// Store the calculated session key value internally for later use, also store it in the 
-			// database maybe.
-			m_sessionKey = K;
+			m_m2 = srpResult->m2;
+			m_sessionKey = srpResult->K;
 
 			// Handler method
 			std::weak_ptr<Player> weakThis{ shared_from_this() };
@@ -415,7 +363,7 @@ namespace mmo
 
 			// Store session key in account database
 			m_database.asyncRequest<void>(
-				std::bind(&IDatabase::PlayerLogin, std::placeholders::_1, m_accountId, K.asHexStr(), m_address),
+				std::bind(&IDatabase::PlayerLogin, std::placeholders::_1, m_accountId, srpResult->K.asHexStr(), m_address),
 				std::move(handler));
 
 			// Stop here since we wait for the database callback
@@ -424,15 +372,15 @@ namespace mmo
 
 		// Log error
 		WLOG("Invalid password for account " << m_accountName);
-		
-		std::weak_ptr<Player> weakThis{ shared_from_this() };
-		auto loginFailedDbHandler = [weakThis, proofResult](const bool)
+
+		std::weak_ptr<Player> weakThis2{ shared_from_this() };
+		auto loginFailedDbHandler = [weakThis2, proofResult](const bool)
+		{
+			if (const auto strongThis = weakThis2.lock())
 			{
-				if (const auto strongThis = weakThis.lock())
-				{
-					strongThis->SendAuthProof(proofResult);
-				}
-			};
+				strongThis->SendAuthProof(proofResult);
+			}
+		};
 
 		// Store session key in account database
 		m_database.asyncRequest<void>(
