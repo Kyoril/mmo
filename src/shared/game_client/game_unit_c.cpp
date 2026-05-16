@@ -698,7 +698,13 @@ namespace mmo
 			// Snap the scene node to terrain height so remote players don't fall
 			// through the ground when the server navmesh height differs slightly
 			// from the client's collision geometry.
-			m_unitMovement->CorrectGroundHeight();
+			// Feed the corrected Y back into the renderer so dead reckoning
+			// continues from the snapped height — otherwise it overwrites the
+			// correction next frame with the original below-ground Y.
+			if (m_unitMovement->CorrectGroundHeight())
+			{
+				m_remoteMovementRenderer.SetRenderedY(GetSceneNode()->GetDerivedPosition().y);
+			}
 		}
 
 		// Feed the input vector from interpolated movement flags so the animation

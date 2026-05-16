@@ -35,7 +35,6 @@ namespace mmo
 			m_renderedPos        = info.position;
 			m_renderedFacing     = info.facing;
 			m_blendStartPos      = info.position;
-			m_blendTargetPos     = info.position;
 			m_blendTimeLeft      = 0.0f;
 			m_blendDuration      = 0.0f;
 
@@ -56,24 +55,25 @@ namespace mmo
 		}
 
 		// ── Position correction ───────────────────────────────────────────────
-		// Blend from current rendered position to the authoritative position over
-		// kCorrectionBlendSec seconds. This hides the snap while converging quickly.
+		// Only blend for large corrections (lag spikes, teleport artifacts).
+		// Small corrections from normal dead-reckoning drift are snapped directly —
+		// blending them causes 10Hz jitter because each 100ms heartbeat restarts
+		// the blend before the previous one finishes.
 		const float corrLen = (info.position - m_renderedPos).GetLength();
 		DLOG("[RemoteMovement] auth update corr=" << corrLen
 		    << "m flags=" << log_hex_digit(info.movementFlags));
 
-		if (corrLen < 0.01f)
+		if (corrLen < kSnapThreshold)
 		{
-			// Negligible correction — snap directly, no blend needed.
+			// Small correction — snap directly.
 			m_renderedPos     = info.position;
 			m_blendTimeLeft   = 0.0f;
 			m_blendDuration   = 0.0f;
 		}
 		else
 		{
-			// Start a blend from current rendered pos toward authoritative pos.
+			// Large correction (lag spike or teleport) — blend to avoid visual pop.
 			m_blendStartPos   = m_renderedPos;
-			m_blendTargetPos  = info.position;
 			m_blendDuration   = kCorrectionBlendSec;
 			m_blendTimeLeft   = kCorrectionBlendSec;
 		}
@@ -83,6 +83,9 @@ namespace mmo
 		m_authFlags      = info.movementFlags;
 		m_authTimestamp  = info.timestamp;
 		m_renderedFacing = info.facing;
+		// Always advance dead reckoning from the authoritative position.
+		// In blend mode, the visual smooths from blendStartPos toward m_renderedPos.
+		m_renderedPos    = info.position;
 
 		// Reset fall state
 		if (info.IsFalling())

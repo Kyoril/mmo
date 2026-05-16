@@ -67,6 +67,10 @@ namespace mmo
 		/// @brief Returns true if at least one authoritative update has been received.
 		[[nodiscard]] bool IsInitialized() const { return m_initialized; }
 
+		/// @brief Overrides the rendered Y position after external ground correction.
+		/// Dead reckoning continues from the corrected height next frame.
+		void SetRenderedY(const float y) { m_renderedPos.y = y; }
+
 		/// @brief Resets all state (e.g. on despawn/teleport).
 		void Reset();
 
@@ -95,15 +99,18 @@ namespace mmo
 		// ── Blend correction ───────────────────────────────────────────────────
 		/// @brief Start position of the current correction blend.
 		Vector3  m_blendStartPos;
-		/// @brief Target position of the current correction blend (= current dead-reckoned pos).
-		Vector3  m_blendTargetPos;
 		/// @brief Remaining blend time in seconds (0 = no active blend).
 		float    m_blendTimeLeft = 0.0f;
 		/// @brief Total duration of the current blend (for computing t).
 		float    m_blendDuration = 0.0f;
 
 		/// @brief Duration over which a correction is blended (seconds).
-		static constexpr float kCorrectionBlendSec = 0.08f;   // 80ms
+		static constexpr float kCorrectionBlendSec = 0.12f;   // 120ms
+
+		/// @brief Corrections below this distance are snapped directly (no blend).
+		/// Prevents 10Hz jitter from dead-reckoning drift at normal heartbeat rates.
+		/// Large corrections (lag spikes) above this threshold are blended smoothly.
+		static constexpr float kSnapThreshold = 0.5f;  // 0.5m
 
 		// ── Fall/jump state ────────────────────────────────────────────────────
 		Vector3  m_fallVelocity;
