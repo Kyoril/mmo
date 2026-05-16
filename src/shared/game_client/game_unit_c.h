@@ -249,6 +249,11 @@ namespace mmo
 		/// @brief Rotates the unit to face the specified direction.
 		void SetFacing(const Radian &facing);
 
+		/// Updates internal facing state and scene node orientation without queuing a
+		/// network packet. Use this for per-frame visual updates when the authoritative
+		/// network event will be sent at a lower rate (e.g. the 10/s SetFacing throttle).
+		void SetFacingLocal(const Radian &facing);
+
 		void Jump();
 
 		void StopJumping();

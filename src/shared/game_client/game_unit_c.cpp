@@ -1267,9 +1267,32 @@ namespace mmo
 				// cleared when actual movement starts (StartMove, StartStrafe, etc.)
 			}
 
-			m_lastHeartbeat = m_movementInfo.timestamp;
-
+			// Do NOT update m_lastHeartbeat here. SetFacing fires on every mouse-move
+			// frame while right-mouse rotating. Resetting the heartbeat timer here
+			// suppresses position heartbeats while the player is simultaneously moving,
+			// causing other clients to see the character walking in place and then
+			// snapping forward. Heartbeat timing is only the responsibility of
+			// movement-start/stop and the heartbeat check in Update().
 			QueueMovementEvent(movement_event_type::SetFacing, m_movementInfo.timestamp, m_movementInfo);
+		}
+	}
+
+	void GameUnitC::SetFacingLocal(const Radian &facing)
+	{
+		m_movementInfo.facing = facing;
+
+		if (m_sceneNode)
+		{
+			m_sceneNode->SetOrientation(Quaternion(facing, Vector3::UnitY));
+
+			// Keep m_movementInfo position in sync so the next SetFacing or Start*
+			// packet uses the correct current state. No network event is queued.
+			UpdateMovementInfo();
+
+			if (m_positionLocked)
+			{
+				m_movementInfo.position = m_syncedPosition;
+			}
 		}
 	}
 

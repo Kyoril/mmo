@@ -1612,12 +1612,27 @@ namespace mmo
 		}
 		else if (!prevMovementInfo.IsChangingPosition() && opCode != game::realm_client_packet::MoveSplineDone)
 		{
-			// Allow a generous tolerance for position drift from client-side physics
-			// (gravity, collision resolution, etc.) that can shift position between packets
-			const float positionTolerance = 1.0f;
+			// Position coherence check: when movement starts (player was stationary),
+			// the client must send the position from its last stop/lock — which should
+			// match the server's known position exactly (modulo floating-point physics).
+			//
+			// Tolerance rationale:
+			//   0.5f covers legitimate client-side physics jitter (gravity settling,
+			//   collision resolution rounding). Previously 1.0f was required because
+			//   SetFacing was suppressing heartbeats, so the server's last-known position
+			//   could be a full heartbeat interval (500ms) stale. That bug is now fixed.
+			//
+			// If this log fires frequently for legitimate movement, widen the tolerance
+			// slightly. Do NOT widen past ~0.75f without investigating the root cause.
+			const float positionTolerance = 0.5f;
+			const float drift = (info.position - m_character->GetPosition()).GetLength();
             if (!info.position.IsNearlyEqual(m_character->GetPosition(), positionTolerance))
             {
-                WLOG("[OPCode " << opCode << "] Position drift detected: server=" << m_character->GetPosition() << " client=" << info.position << " dist=" << (info.position - m_character->GetPosition()).GetLength());
+                WLOG("[AntiCheat] Position drift on movement start: server=" << m_character->GetPosition()
+                    << " client=" << info.position << " dist=" << drift
+                    << " opcode=" << log_hex_digit(opCode));
+				// TODO: Accumulate violations. After N violations within M seconds,
+				// kick the player. Not yet enforced to gather real-world drift baseline.
             }
 		}
 
@@ -1643,6 +1658,39 @@ namespace mmo
 			{
 				ELOG("User stops movement but was not moving")
 				return;
+			}
+		}
+
+		// Speed hack check: validate that the distance covered since the last known
+		// position is consistent with the player's allowed speed.
+		// Only checked on packets that advance position (heartbeat and stop packets)
+		// where we have two position snapshots to diff. Skip during falling (vertical
+		// velocity from jump arc is not constrained by run speed).
+		if ((opCode == game::realm_client_packet::MoveHeartBeat ||
+		     opCode == game::realm_client_packet::MoveStop ||
+		     opCode == game::realm_client_packet::MoveStopStrafe) &&
+		    !info.IsFalling() && prevMovementInfo.IsChangingPosition())
+		{
+			const float dist = (info.position - m_character->GetPosition()).GetLength();
+			if (dist > 0.0f && info.timestamp > prevMovementInfo.timestamp)
+			{
+				// Compute elapsed time in seconds
+				const float elapsed = static_cast<float>(info.timestamp - prevMovementInfo.timestamp) / 1000.0f;
+				// Use the faster of run/strafe speed; add 20% server-side tolerance for
+				// latency jitter, frame-rate variation, and physics step rounding.
+				const float maxSpeed = m_character->GetSpeed(movement_type::Run) * 1.20f;
+				const float impliedSpeed = dist / elapsed;
+
+				if (impliedSpeed > maxSpeed)
+				{
+					WLOG("[AntiCheat] Speed violation: implied=" << impliedSpeed
+					    << " max=" << maxSpeed
+					    << " dist=" << dist
+					    << " elapsed=" << elapsed
+					    << "s opcode=" << log_hex_digit(opCode));
+					// TODO: Accumulate and kick after N violations within M seconds.
+					// For now log only to establish baseline false-positive rate.
+				}
 			}
 		}
 

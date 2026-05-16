@@ -894,15 +894,20 @@ namespace mmo
 			const Radian facing = (m_controlledUnit->GetSceneNode()->GetOrientation() * m_cameraAnchorNode->GetOrientation()).GetYaw();
 			m_controlledUnit->GetSceneNode()->SetOrientation(Quaternion(facing, Vector3::UnitY));
 			m_cameraAnchorNode->SetOrientation(Quaternion::Identity);
-			m_controlledUnit->SetFacing(facing);
 
-			// Limit to 10 per second
+			// Rate-limit SetFacing network events to 10 per second.
+			// The scene node orientation is updated every frame above for smooth visuals.
+			// SetFacing() queues a network packet — flooding the server with per-frame
+			// facing updates wastes bandwidth and (before this fix) suppressed heartbeats.
 			if (GetAsyncTimeMs() >= m_nextSetFacing)
 			{
-				// Generate movement event instead of sending packet directly
-				const MovementInfo& movementInfo = m_controlledUnit->GetMovementInfo();
-				//m_movement.QueueMovementEvent(MovementEventType::SetFacing, GetAsyncTimeMs(), movementInfo);
+				m_controlledUnit->SetFacing(facing);
 				m_nextSetFacing = GetAsyncTimeMs() + 100;
+			}
+			else
+			{
+				// Update the internal facing without queuing a network event
+				m_controlledUnit->SetFacingLocal(facing);
 			}
 		}
 	}
