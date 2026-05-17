@@ -1631,8 +1631,14 @@ namespace mmo
                 WLOG("[AntiCheat] Position drift on movement start: server=" << m_character->GetPosition()
                     << " client=" << info.position << " dist=" << drift
                     << " opcode=" << log_hex_digit(opCode));
-				// TODO: Accumulate violations. After N violations within M seconds,
-				// kick the player. Not yet enforced to gather real-world drift baseline.
+				if (!m_character->HasPendingMovementChange()) {
+                    m_antiCheatTracker.RecordViolation(GetAsyncTimeMs());
+                    if (m_antiCheatTracker.ShouldKick(GetAsyncTimeMs())) {
+                        ELOG("[AntiCheat] Kicking player " << m_character->GetName()
+                            << " (GUID " << m_character->GetGuid() << "): excessive position drift");
+                        Kick();
+                    }
+                }
             }
 		}
 
@@ -1693,7 +1699,14 @@ namespace mmo
 					    << " dist=" << dist
 					    << " elapsed=" << elapsed
 					    << "s opcode=" << log_hex_digit(opCode));
-					// TODO: Accumulate and kick after N violations within M seconds.
+					if (!m_character->HasPendingMovementChange()) {
+                        m_antiCheatTracker.RecordViolation(GetAsyncTimeMs());
+                        if (m_antiCheatTracker.ShouldKick(GetAsyncTimeMs())) {
+                            ELOG("[AntiCheat] Kicking player " << m_character->GetName()
+                                << " (GUID " << m_character->GetGuid() << "): excessive speed hack");
+                            Kick();
+                        }
+                    }
 				}
 			}
 		}

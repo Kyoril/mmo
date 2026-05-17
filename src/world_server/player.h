@@ -14,6 +14,7 @@
 #include "game_protocol/game_protocol.h"
 #include "base/countdown.h"
 #include "base/clock.h"
+#include "anti_cheat_tracker.h"
 
 namespace mmo
 {
@@ -586,6 +587,9 @@ namespace mmo
 
 		// Inventory auto-save timer (every 5 minutes)
 		Countdown m_inventoryAutoSaveTimer;
+
+		/// @brief Tracks anti-cheat violations (position drift and speed hacks) for kick logic.
+		AntiCheatTracker m_antiCheatTracker;
 
 	public:
 		/// @brief Sends a time sync request to the client with incremented index.
