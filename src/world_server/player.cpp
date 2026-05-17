@@ -848,6 +848,11 @@ namespace mmo
 	{
 		DLOG("Player spawned on map " << instance.GetMapId() << ", instance " << instance.GetId() << "...");
 
+		// Reset speed-check baseline so the first position packet after zone entry
+		// does not produce a false-positive speed violation.
+		m_lastPositionPacketTimestamp = 0;
+		m_lastPositionPacketPos = {};
+
 		m_worldInstance = &instance;
 
 		// Ensure the inventory is initialized
@@ -1688,8 +1693,9 @@ namespace mmo
 			if (dist > 0.0f && info.timestamp > m_lastPositionPacketTimestamp)
 			{
 				const float elapsed = static_cast<float>(info.timestamp - m_lastPositionPacketTimestamp) / 1000.0f;
-				// 20% tolerance for latency jitter, frame-rate variation, physics rounding.
-				const float maxSpeed = m_character->GetSpeed(movement_type::Run) * 1.20f;
+				// 35% tolerance for latency jitter, frame-rate variation, physics rounding.
+				// Empirical: observed legitimate peak = 9.12 m/s (run=7.0); 1.35x = 9.45 gives headroom.
+				const float maxSpeed = m_character->GetSpeed(movement_type::Run) * 1.35f;
 				const float impliedSpeed = dist / elapsed;
 
 				if (impliedSpeed > maxSpeed)
