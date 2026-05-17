@@ -50,3 +50,5 @@ tmp/
 
 # ── GSD baseline (auto-generated) ──
 .mcp.json
+
+bin/Debug2/
