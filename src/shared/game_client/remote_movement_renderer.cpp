@@ -184,12 +184,30 @@ namespace mmo
 	                                                  const uint32 flags, const float runSpeed,
 	                                                  const float backwardsSpeed) const
 	{
-		Vector3 vel = Vector3::Zero;
-		if (flags & movement_flags::Forward)     vel += forward * runSpeed;
-		if (flags & movement_flags::Backward)    vel -= forward * backwardsSpeed;
-		if (flags & movement_flags::StrafeLeft)  vel -= right   * runSpeed;
-		if (flags & movement_flags::StrafeRight) vel += right   * runSpeed;
-		return vel;
+		Vector3 dir = Vector3::Zero;
+		if (flags & movement_flags::Forward)     dir += forward;
+		if (flags & movement_flags::Backward)    dir -= forward;
+		if (flags & movement_flags::StrafeLeft)  dir -= right;
+		if (flags & movement_flags::StrafeRight) dir += right;
+
+		// Normalize so diagonal movement (forward + strafe) doesn't exceed run speed.
+		// The local player's ScaleInputAcceleration clamps the input vector to length 1
+		// before multiplying by MaxAcceleration, so forward+strafe travels at exactly
+		// runSpeed, not runSpeed*sqrt(2).  Matching that here eliminates the systematic
+		// overshoot that caused heartbeat corrections to visibly pull back strafing players.
+		const float len = dir.GetLength();
+		if (len > 0.001f)
+		{
+			dir /= len;
+		}
+
+		// Pure backward (no forward key): use the slower backwards speed.
+		// Forward-only, strafe-only, or diagonal: use run speed.
+		const float speed = ((flags & movement_flags::Backward) && !(flags & movement_flags::Forward))
+			? backwardsSpeed
+			: runSpeed;
+
+		return dir * speed;
 	}
 
 	void RemoteMovementRenderer::StepFallArc(const float deltaTime)
