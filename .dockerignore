@@ -1,0 +1,11 @@
+# Exclude the host build directory to prevent CMakeCache conflicts
+# between Docker (Linux/gcc) and host (Windows/MSVC) builds.
+build/
+bin/
+
+# Common artifacts that don't belong in the Docker context
+*.log
+.git/
+.vs/
+.vscode/
+out/

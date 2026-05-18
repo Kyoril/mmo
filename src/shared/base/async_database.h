@@ -85,10 +85,11 @@ namespace mmo
 
 	public:
 		/// Fire-and-forget: calls a void member function with one argument on the DB thread.
-		template <class A0, class B0_>
-		void asyncRequest(void(TDatabase::*method)(A0), B0_ &&b0)
+		/// TBase allows passing method pointers from a base class of TDatabase.
+		template <class TBase, class A0, class B0_>
+		void asyncRequest(void(TBase::*method)(A0), B0_ &&b0)
 		{
-			auto request = std::bind(method, &m_database, std::forward<B0_>(b0));
+			auto request = std::bind(method, static_cast<TBase*>(&m_database), std::forward<B0_>(b0));
 			auto processor = [request]() -> void {
 				try
 				{
@@ -103,10 +104,11 @@ namespace mmo
 		}
 
 		/// Calls a returning member function with arguments on the DB thread; invokes handler on the main thread.
-		template <class ResultHandler, class Result, class... A0, class... Args>
-		void asyncRequest(ResultHandler &&handler, Result(TDatabase::*method)(A0...), Args&&... b0)
+		/// TBase allows passing method pointers from a base class of TDatabase.
+		template <class ResultHandler, class TBase, class Result, class... A0, class... Args>
+		void asyncRequest(ResultHandler &&handler, Result(TBase::*method)(A0...), Args&&... b0)
 		{
-			auto request = std::bind(method, &m_database, std::forward<Args>(b0)...);
+			auto request = std::bind(method, static_cast<TBase*>(&m_database), std::forward<Args>(b0)...);
 			auto processor = [this, request, handler]() -> void
 			{
 				detail::RequestProcessor<Result> proc;
