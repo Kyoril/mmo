@@ -12,12 +12,13 @@
 //      actually is.  Each frame we compute an error vector (m_renderedPos − m_scenePos)
 //      and apply a fraction of it — a smooth proportional correction — so the scene
 //      node converges to the dead-reckoned target without snapping.
-//   4. Facing updates (MoveSetFacing, MoveStopTurn) are applied immediately.
+//   4. Facing updates (MoveSetFacing) are applied immediately as facing-only.
+//      MoveStopTurn carries an authoritative position and resets dead-reckoning.
 //
-// With the heartbeat at 100ms the maximum dead-reckoning error is
-//   run_speed (7 m/s) × 0.1 s = 0.7 m.
-// kCorrectionSpeed (10 m/s) closes a 0.7 m gap in ~70 ms — fast enough to be
-// imperceptible but slow enough to avoid the 10 Hz snap-back jitter.
+// With the heartbeat at 500ms the maximum dead-reckoning error is
+//   run_speed (7 m/s) × 0.5 s = 3.5 m.
+// kCorrectionSpeed (20 m/s) closes a 3.5 m gap in ~175 ms — tracks
+// authoritative position closely without looking like a snap.
 
 #pragma once
 
@@ -117,7 +118,7 @@ namespace mmo
 
 		/// @brief Speed (m/s) at which m_scenePos is pulled toward m_renderedPos.
 		/// At 10 m/s a 0.7 m correction (max 100ms heartbeat drift) closes in ~70 ms.
-		static constexpr float kCorrectionSpeed = 10.0f;
+		static constexpr float kCorrectionSpeed = 20.0f;
 
 		/// @brief Corrections larger than this (e.g. teleports) are snapped instantly
 		/// rather than smoothed, so the player doesn't slide across the map.

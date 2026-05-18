@@ -1734,8 +1734,7 @@ namespace mmo
 			// (no position extrapolation reset) — the renderer handles this distinction.
 			const uint16 opcode = packet.GetId();
 			const bool facingOnly =
-			    opcode == game::realm_client_packet::MoveSetFacing ||
-			    opcode == game::realm_client_packet::MoveStopTurn;
+			    opcode == game::realm_client_packet::MoveSetFacing;
 
 			if (facingOnly)
 			{
