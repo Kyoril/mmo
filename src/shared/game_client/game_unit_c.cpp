@@ -683,6 +683,15 @@ namespace mmo
 		// are a no-op but waste cycles.
 		if (!state.desiredDelta.IsZero())
 		{
+			// Compute where dead-reckoning says the player *was* before this
+			// frame's delta was applied.  Sample() already added desiredDelta to
+			// m_renderedPos, so subtracting it gives the corrected start position.
+			// Setting the scene node there before the sweep ensures authoritative
+			// corrections (heartbeat snaps) actually take effect instead of being
+			// silently overwritten by SetRenderedPos on the next feedback cycle.
+			const Vector3 preCollisionPos = m_remoteMovementRenderer.GetRenderedPos() - state.desiredDelta;
+			GetSceneNode()->SetDerivedPosition(preCollisionPos);
+
 			// Apply lateral movement through a capsule sweep so the remote
 			// player character respects world geometry (walls, obstacles).
 			m_unitMovement->RemotePlayerMoveCollide(state.desiredDelta);

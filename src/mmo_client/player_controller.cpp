@@ -199,7 +199,20 @@ namespace mmo
 
 			if ((m_controlFlags & ControlFlags::StrafeSent) != 0)
 			{
-				return;
+				// Already strafing — check if direction changed. If so, send
+				// StopStrafe + StartStrafe in the new direction so the network
+				// and local physics stay consistent.
+				const bool currentlyLeft = (m_controlledUnit->GetMovementInfo().movementFlags & movement_flags::StrafeLeft) != 0;
+				if (currentlyLeft != left)
+				{
+					m_controlledUnit->StopStrafe();
+					SetControlBit(ControlFlags::StrafeSent, false);
+					// Fall through to start strafe in new direction (StrafeSent is now false)
+				}
+				else
+				{
+					return;
+				}
 			}
 
 			m_controlledUnit->StartStrafe(left);
