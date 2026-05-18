@@ -581,6 +581,7 @@ namespace mmo
 		/// near-zero elapsed time after rapid facing updates.
 		GameTime m_lastPositionPacketTimestamp{ 0 };
 		Vector3 m_lastPositionPacketPos;
+		uint32 m_lastPositionPacketFlags{ 0 };
 
 		// Inventory persistence repository (World Server only)
 		std::shared_ptr<IInventoryRepository> m_inventoryRepo{ nullptr };

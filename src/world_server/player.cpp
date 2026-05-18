@@ -852,6 +852,7 @@ namespace mmo
 		// does not produce a false-positive speed violation.
 		m_lastPositionPacketTimestamp = 0;
 		m_lastPositionPacketPos = {};
+		m_lastPositionPacketFlags = 0;
 
 		m_worldInstance = &instance;
 
@@ -1704,7 +1705,11 @@ namespace mmo
 					    << " max=" << maxSpeed
 					    << " dist=" << dist
 					    << " elapsed=" << elapsed
-					    << "s opcode=" << log_hex_digit(opCode));
+					    << "s opcode=" << log_hex_digit(opCode)
+					    << " flags=" << log_hex_digit(info.movementFlags)
+					    << " prevFlags=" << log_hex_digit(m_lastPositionPacketFlags)
+					    << " pos=(" << info.position.x << "," << info.position.y << "," << info.position.z << ")"
+					    << " prevPos=(" << m_lastPositionPacketPos.x << "," << m_lastPositionPacketPos.y << "," << m_lastPositionPacketPos.z << ")");
 					if (!m_character->HasPendingMovementChange()) {
                         m_antiCheatTracker.RecordViolation(GetAsyncTimeMs());
                         if (m_antiCheatTracker.ShouldKick(GetAsyncTimeMs())) {
@@ -1722,6 +1727,7 @@ namespace mmo
 		{
 			m_lastPositionPacketTimestamp = info.timestamp;
 			m_lastPositionPacketPos = info.position;
+			m_lastPositionPacketFlags = info.movementFlags;
 		}
 
 		m_character->ApplyMovementInfo(info);

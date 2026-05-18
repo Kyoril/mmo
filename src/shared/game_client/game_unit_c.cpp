@@ -280,6 +280,10 @@ namespace mmo
 
 			if (m_movementInfo.IsChangingPosition() && now > m_lastHeartbeat + 100)
 			{
+				// Heartbeat sends the current authoritative position to the server.
+				// Since the server baseline is now updated, any stale position lock
+				// from a previous stop packet is no longer valid — clear it.
+				m_positionLocked = false;
 				m_lastHeartbeat = now;
 				m_netDriver.OnMoveEvent(*this, MovementEvent(movement_event_type::Heartbeat, now, m_movementInfo));
 			}
