@@ -33,10 +33,8 @@ namespace mmo
 			m_authFlags          = info.movementFlags;
 			m_authTimestamp      = info.timestamp;
 			m_renderedPos        = info.position;
+			m_scenePos           = info.position;
 			m_renderedFacing     = info.facing;
-			m_blendStartPos      = info.position;
-			m_blendTimeLeft      = 0.0f;
-			m_blendDuration      = 0.0f;
 
 			if (info.IsFalling())
 			{
@@ -54,28 +52,17 @@ namespace mmo
 			return;
 		}
 
-		// ── Position correction ───────────────────────────────────────────────
-		// Only blend for large corrections (lag spikes, teleport artifacts).
-		// Small corrections from normal dead-reckoning drift are snapped directly —
-		// blending them causes 10Hz jitter because each 100ms heartbeat restarts
-		// the blend before the previous one finishes.
 		const float corrLen = (info.position - m_renderedPos).GetLength();
 		DLOG("[RemoteMovement] auth update corr=" << corrLen
 		    << "m flags=" << log_hex_digit(info.movementFlags));
 
-		if (corrLen < kSnapThreshold)
+		// Reset dead-reckoning to the authoritative position.
+		// m_scenePos (scene node) is NOT snapped here — the proportional correction
+		// loop in Sample() will smooth it toward m_renderedPos over the coming frames.
+		// Exception: very large corrections (teleports) snap both immediately.
+		if (corrLen >= kTeleportThreshold)
 		{
-			// Small correction — snap directly.
-			m_renderedPos     = info.position;
-			m_blendTimeLeft   = 0.0f;
-			m_blendDuration   = 0.0f;
-		}
-		else
-		{
-			// Large correction (lag spike or teleport) — blend to avoid visual pop.
-			m_blendStartPos   = m_renderedPos;
-			m_blendDuration   = kCorrectionBlendSec;
-			m_blendTimeLeft   = kCorrectionBlendSec;
+			m_scenePos = info.position;
 		}
 
 		m_authPos        = info.position;
@@ -83,11 +70,9 @@ namespace mmo
 		m_authFlags      = info.movementFlags;
 		m_authTimestamp  = info.timestamp;
 		m_renderedFacing = info.facing;
-		// Always advance dead reckoning from the authoritative position.
-		// In blend mode, the visual smooths from blendStartPos toward m_renderedPos.
 		m_renderedPos    = info.position;
 
-		// Reset fall state
+		// Reset fall state on any full authoritative update.
 		if (info.IsFalling())
 		{
 			m_fallVelocity     = info.jumpVelocity;
@@ -122,12 +107,11 @@ namespace mmo
 			m_renderedFacing = Radian(m_renderedFacing.GetValueRadians() - turnSpeed * deltaTime);
 		}
 
-		// ── 2. Dead-reckoning: compute desired delta and advance position ──────
+		// ── 2. Dead-reckoning: advance m_renderedPos (the authoritative target) ─
 		const Quaternion orientation(m_renderedFacing, Vector3::UnitY);
 		const Vector3 forward = orientation * Vector3::UnitX;
 		const Vector3 right   = orientation * Vector3::UnitZ;
 
-		const Vector3 posBeforeStep = m_renderedPos;
 		Vector3 desiredDelta = Vector3::Zero;
 
 		if (isFalling)
@@ -145,23 +129,40 @@ namespace mmo
 			m_renderedPos += desiredDelta;
 		}
 
-		// ── 3. Blend correction ───────────────────────────────────────────────
-		// While a blend is active, interpolate the VISUAL position from the
-		// pre-correction rendered pos toward the current dead-reckoned position.
-		// This smooths out the position pop when an authoritative update arrives.
-		Vector3 visualPos = m_renderedPos;
-		if (m_blendTimeLeft > 0.0f)
+		// ── 3. Smooth correction: pull m_scenePos toward m_renderedPos ────────
+		// Rather than snapping the scene node to the dead-reckoned position on
+		// every correction (which causes 10 Hz jitter), we apply a proportional
+		// correction each frame.  This closes normal heartbeat-drift gaps (≤ 0.7 m)
+		// in about 70 ms without visible snapping.
+		//
+		// The scene node will be placed at m_scenePos below; game_unit_c then runs
+		// RemotePlayerMoveCollide to resolve collisions from that position, and calls
+		// SetRenderedPos to write the post-collision result back into m_scenePos.
+		// This keeps the scene node and the correction loop in sync.
+		const Vector3 corrVec = m_renderedPos - m_scenePos;
+		const float corrLen = corrVec.GetLength();
+		if (corrLen > 0.001f)
 		{
-			m_blendTimeLeft = std::max(0.0f, m_blendTimeLeft - deltaTime);
-			const float t = (m_blendDuration > 0.0f)
-				? 1.0f - (m_blendTimeLeft / m_blendDuration)
-				: 1.0f;
-			// Blend from blendStart toward the current (dead-reckoned) authoritative pos
-			visualPos = m_blendStartPos + (m_renderedPos - m_blendStartPos) * t;
+			const float maxStep = kCorrectionSpeed * deltaTime;
+			if (corrLen <= maxStep)
+			{
+				// Close enough — snap the remaining gap this frame.
+				m_scenePos = m_renderedPos;
+			}
+			else
+			{
+				m_scenePos += corrVec * (maxStep / corrLen);
+			}
 		}
 
 		// ── 4. Fill output ────────────────────────────────────────────────────
-		outState.position      = visualPos;
+		// position: where game_unit_c should place the scene node before the
+		//   collision sweep.  This is m_scenePos (which has been nudged toward
+		//   m_renderedPos by the correction above) minus the delta that will be
+		//   applied this frame via RemotePlayerMoveCollide — so after the sweep
+		//   the scene node ends up at approximately m_scenePos.
+		// desiredDelta: the movement delta to pass to RemotePlayerMoveCollide.
+		outState.position      = m_scenePos - desiredDelta;
 		outState.desiredDelta  = desiredDelta;
 		outState.facing        = m_renderedFacing;
 		outState.movementFlags = m_authFlags;
@@ -174,8 +175,6 @@ namespace mmo
 	void RemoteMovementRenderer::Reset()
 	{
 		m_initialized        = false;
-		m_blendTimeLeft      = 0.0f;
-		m_blendDuration      = 0.0f;
 		m_fallVelocity       = Vector3::Zero;
 		m_fallTimeAccumSec   = 0.0f;
 		m_authFlags          = 0;

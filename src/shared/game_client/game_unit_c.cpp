@@ -278,7 +278,7 @@ namespace mmo
 		{
 			UpdateMovementInfo();
 
-			if (m_movementInfo.IsChangingPosition() && now > m_lastHeartbeat + 100)
+			if (m_movementInfo.IsChangingPosition() && now > m_lastHeartbeat + 500)
 			{
 				// Heartbeat sends the current authoritative position to the server.
 				// Since the server baseline is now updated, any stale position lock
@@ -683,29 +683,25 @@ namespace mmo
 		// are a no-op but waste cycles.
 		if (!state.desiredDelta.IsZero())
 		{
-			// Compute where dead-reckoning says the player *was* before this
-			// frame's delta was applied.  Sample() already added desiredDelta to
-			// m_renderedPos, so subtracting it gives the corrected start position.
-			// Setting the scene node there before the sweep ensures authoritative
-			// corrections (heartbeat snaps) actually take effect instead of being
-			// silently overwritten by SetRenderedPos on the next feedback cycle.
-			const Vector3 preCollisionPos = m_remoteMovementRenderer.GetRenderedPos() - state.desiredDelta;
-			GetSceneNode()->SetDerivedPosition(preCollisionPos);
+			// state.position is the pre-collision start point computed by the
+			// renderer (m_scenePos − desiredDelta).  Setting the scene node here
+			// ensures the capsule sweep begins from the smooth-correction position
+			// rather than wherever the scene node happened to be last frame.
+			GetSceneNode()->SetDerivedPosition(state.position);
 
 			// Apply lateral movement through a capsule sweep so the remote
 			// player character respects world geometry (walls, obstacles).
 			m_unitMovement->RemotePlayerMoveCollide(state.desiredDelta);
 
-			// Read back the actual position after collision resolution and sync
-			// it into the renderer so next frame's dead reckoning continues from
-			// the resolved (non-penetrating) position.
+			// Feed the collision-resolved position back into the renderer's
+			// scene-tracking state (m_scenePos) so the smooth correction loop
+			// stays in sync with the physical capsule position.
 			const Vector3 resolvedPos = GetSceneNode()->GetDerivedPosition();
 			m_remoteMovementRenderer.SetRenderedPos(resolvedPos);
 		}
 		else
 		{
-			// No movement — just place the scene node at the renderer's position
-			// (which may include a blend offset from a recent correction).
+			// No movement — place the scene node at the renderer's correction pos.
 			GetSceneNode()->SetDerivedPosition(state.position);
 		}
 
