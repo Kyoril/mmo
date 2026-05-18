@@ -129,29 +129,28 @@ namespace mmo
 			m_renderedPos += desiredDelta;
 		}
 
-		// ── 3. Smooth correction: pull m_scenePos toward m_renderedPos ────────
-		// Rather than snapping the scene node to the dead-reckoned position on
-		// every correction (which causes 10 Hz jitter), we apply a proportional
-		// correction each frame.  This closes normal heartbeat-drift gaps (≤ 0.7 m)
-		// in about 70 ms without visible snapping.
-		//
-		// The scene node will be placed at m_scenePos below; game_unit_c then runs
-		// RemotePlayerMoveCollide to resolve collisions from that position, and calls
-		// SetRenderedPos to write the post-collision result back into m_scenePos.
-		// This keeps the scene node and the correction loop in sync.
+		// ── 3. Smooth correction: exponentially decay m_scenePos toward m_renderedPos ─
+		// Use a critically-damped exponential blend rather than constant-speed chase.
+		// This means small drift errors (normal heartbeat arc mismatch) are absorbed
+		// gradually and invisibly, while large errors still converge within ~200 ms.
+		// Formula: scenePos = lerp(scenePos, renderedPos, 1 - exp(-k * dt))
+		// k = ln(2) / halfLife  →  k ≈ 6.93 for halfLife = 100ms.
+		// At k=6.93: a 3.5 m gap (500ms heartbeat worst-case) halves every 100ms.
+		//   t=100ms → 1.75 m remaining, t=200ms → 0.875 m, t=300ms → 0.44 m.
+		// Teleports (>= kTeleportThreshold) still snap instantly.
 		const Vector3 corrVec = m_renderedPos - m_scenePos;
 		const float corrLen = corrVec.GetLength();
 		if (corrLen > 0.001f)
 		{
-			const float maxStep = kCorrectionSpeed * deltaTime;
-			if (corrLen <= maxStep)
+			if (corrLen >= kTeleportThreshold)
 			{
-				// Close enough — snap the remaining gap this frame.
 				m_scenePos = m_renderedPos;
 			}
 			else
 			{
-				m_scenePos += corrVec * (maxStep / corrLen);
+				// alpha = 1 - exp(-k * dt), clamped to [0,1].
+				const float alpha = 1.0f - std::exp(-kCorrectionDecay * deltaTime);
+				m_scenePos += corrVec * alpha;
 			}
 		}
 

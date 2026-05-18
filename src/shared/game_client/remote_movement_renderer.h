@@ -17,8 +17,8 @@
 //
 // With the heartbeat at 500ms the maximum dead-reckoning error is
 //   run_speed (7 m/s) × 0.5 s = 3.5 m.
-// kCorrectionSpeed (20 m/s) closes a 3.5 m gap in ~175 ms — tracks
-// authoritative position closely without looking like a snap.
+// Exponential correction (halfLife = 100ms) absorbs small arc-drift silently
+// while still converging a 3.5 m gap to < 0.1 m within ~500 ms.
 
 #pragma once
 
@@ -116,12 +116,15 @@ namespace mmo
 
 		// ── Tuning constants ───────────────────────────────────────────────────
 
-		/// @brief Speed (m/s) at which m_scenePos is pulled toward m_renderedPos.
-		/// At 10 m/s a 0.7 m correction (max 100ms heartbeat drift) closes in ~70 ms.
-		static constexpr float kCorrectionSpeed = 20.0f;
+		/// @brief Exponential decay constant for position correction (per second).
+		/// alpha = 1 - exp(-kCorrectionDecay * dt) applied each frame.
+		/// kCorrectionDecay = ln(2) / halfLifeSec.
+		/// halfLife = 100ms → k ≈ 6.93: a gap halves every 100 ms.
+		/// Small drifts (< 0.1 m) are absorbed silently; a 3.5 m gap
+		/// (500ms heartbeat worst-case at 7 m/s) reaches < 0.1 m in ~500 ms.
+		static constexpr float kCorrectionDecay = 6.931f;   // ln(2) / 0.1s
 
-		/// @brief Corrections larger than this (e.g. teleports) are snapped instantly
-		/// rather than smoothed, so the player doesn't slide across the map.
+		/// @brief Corrections larger than this snap instantly (teleport / respawn).
 		static constexpr float kTeleportThreshold = 8.0f;   // 8 m
 
 		static constexpr float kGravity = -9.8f * 2.0f;  // matches UnitMovement gravity scale
