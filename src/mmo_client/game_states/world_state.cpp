@@ -17,6 +17,7 @@
 #include "game/object_type_id.h"
 
 #include <algorithm>
+#include <charconv>
 #include <vector>
 #include <zstr/zstr.hpp>
 
@@ -3407,6 +3408,31 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+// Safe parse helpers — use std::from_chars (no exceptions, no locale overhead).
+namespace {
+	template<typename T>
+	bool ParseUInt(const std::string& s, T& out)
+	{
+		const auto result = std::from_chars(s.data(), s.data() + s.size(), out);
+		return result.ec == std::errc{} && result.ptr == s.data() + s.size();
+	}
+
+	bool ParseFloat(const std::string& s, float& out)
+	{
+#if defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L
+		const auto result = std::from_chars(s.data(), s.data() + s.size(), out);
+		return result.ec == std::errc{} && result.ptr == s.data() + s.size();
+#else
+		// MSVC older than VS 2019 16.4 may lack floating-point from_chars.
+		// Fall back to strtof (sets errno, no exceptions).
+		char* end = nullptr;
+		errno = 0;
+		out = std::strtof(s.c_str(), &end);
+		return errno == 0 && end == s.c_str() + s.size();
+#endif
+	}
+}
+
 #ifdef MMO_WITH_DEV_COMMANDS
 	void WorldState::Command_LearnSpell(const std::string &cmd, const std::string &args) const
 	{
@@ -3450,7 +3476,8 @@ namespace mmo
 			return;
 		}
 
-		const uint32 entry = std::stoul(tokens[0]);
+		uint32 entry = 0;
+		if (!ParseUInt(tokens[0], entry)) { ELOG("Invalid entry id: " + tokens[0]); return; }
 		m_realmConnector.CreateMonster(entry);
 	}
 #endif
@@ -3479,7 +3506,7 @@ namespace mmo
 		}
 		else
 		{
-			guid = std::stoull(tokens[0]);
+			if (!ParseUInt(tokens[0], guid)) { ELOG("Invalid guid: " + tokens[0]); return; }
 		}
 
 		if (guid == 0)
@@ -3550,7 +3577,7 @@ namespace mmo
 		uint32 level = 1;
 		if (!tokens.empty())
 		{
-			level = std::stoul(tokens[0]);
+			if (!ParseUInt(tokens[0], level)) { ELOG("Invalid level value: " + tokens[0]); return; }
 		}
 
 		m_realmConnector.LevelUp(level);
@@ -3574,7 +3601,8 @@ namespace mmo
 			return;
 		}
 
-		const uint32 money = std::stoul(tokens[0]);
+		uint32 money = 0;
+		if (!ParseUInt(tokens[0], money)) { ELOG("Invalid money amount: " + tokens[0]); return; }
 		m_realmConnector.GiveMoney(money);
 	}
 #endif
@@ -3596,12 +3624,13 @@ namespace mmo
 			return;
 		}
 
-		const uint32 itemId = std::stoul(tokens[0]);
+		uint32 itemId = 0;
+		if (!ParseUInt(tokens[0], itemId)) { ELOG("Invalid item id: " + tokens[0]); return; }
 		uint32 count = 1;
 
 		if (tokens.size() > 1)
 		{
-			count = std::stoul(tokens[1]);
+			if (!ParseUInt(tokens[1], count)) { ELOG("Invalid count: " + tokens[1]); return; }
 		}
 
 		m_realmConnector.AddItem(itemId, count);
@@ -3628,27 +3657,29 @@ namespace mmo
 		Vector3 position = m_playerController->GetControlledUnit()->GetPosition();
 		Radian facing = m_playerController->GetControlledUnit()->GetFacing();
 
-		const uint32 mapId = std::stoul(tokens[0]);
+		uint32 mapId = 0;
+		if (!ParseUInt(tokens[0], mapId)) { ELOG("Invalid map id: " + tokens[0]); return; }
 
 		// Parse optional position
 		if (tokens.size() > 1)
 		{
-			position.x = std::stof(tokens[1]);
+			if (!ParseFloat(tokens[1], position.x)) { ELOG("Invalid x position: " + tokens[1]); return; }
 		}
 		if (tokens.size() > 2)
 		{
-			position.y = std::stof(tokens[2]);
+			if (!ParseFloat(tokens[2], position.y)) { ELOG("Invalid y position: " + tokens[2]); return; }
 		}
 		if (tokens.size() > 3)
 		{
-			position.z = std::stof(tokens[3]);
+			if (!ParseFloat(tokens[3], position.z)) { ELOG("Invalid z position: " + tokens[3]); return; }
 		}
 
 		if (tokens.size() > 4)
 		{
 			// Convert facing degree to radian
-			const Degree facingDegree(std::stof(tokens[4]));
-			facing = facingDegree;
+			float facingDeg = 0.0f;
+			if (!ParseFloat(tokens[4], facingDeg)) { ELOG("Invalid facing degree: " + tokens[4]); return; }
+			facing = Degree(facingDeg);
 		}
 
 		m_realmConnector.WorldPort(mapId, position, facing);
@@ -3672,7 +3703,9 @@ namespace mmo
 			return;
 		}
 
-		const float speed = std::min(50.0f, std::stof(tokens[0]));
+		float speed = 0.0f;
+		if (!ParseFloat(tokens[0], speed)) { ELOG("Invalid speed value: " + tokens[0]); return; }
+		speed = std::min(50.0f, speed);
 		if (speed <= 0.0f)
 		{
 			ELOG("Speed must be greater than 0!");
