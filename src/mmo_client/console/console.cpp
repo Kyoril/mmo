@@ -239,6 +239,7 @@ namespace mmo
 				"Textures.hpak",
 				"Worlds.hpak",
 				"Sound.hpak",
+				"Particles.hpak",
 				localeArchive,
 				localeArchive + ".hpak",
 			});	
