@@ -491,6 +491,12 @@ namespace mmo
 
 	void GameUnitC::UpdateAnimationStates(const float deltaTime, const bool isDead)
 	{
+		// Defensive: clear any pointers that have become stale due to a mesh swap
+		// that was not routed through OnDisplayIdChanged (race window, early-return, etc.)
+		if (!IsValidAnimState(m_currentState)) { m_currentState = nullptr; }
+		if (!IsValidAnimState(m_targetState))  { m_targetState  = nullptr; }
+		if (!IsValidAnimState(m_oneShotState)) { m_oneShotState = nullptr; }
+
 		// Handle one-shot animations
 		if (m_oneShotState)
 		{
@@ -2220,6 +2226,17 @@ namespace mmo
 
 	void GameUnitC::SetTargetAnimState(AnimationState *newTargetState)
 	{
+		// Discard any cached pointers that belong to a previous AnimationStateSet so
+		// we never call methods on freed memory after a mesh (model) swap.
+		if (!IsValidAnimState(m_currentState)) { m_currentState = nullptr; }
+		if (!IsValidAnimState(m_targetState))  { m_targetState  = nullptr; }
+
+		// If the requested state is itself stale or invalid, treat it as nullptr.
+		if (newTargetState && !IsValidAnimState(newTargetState))
+		{
+			newTargetState = nullptr;
+		}
+
 		if (m_targetState == newTargetState)
 		{
 			// Nothing to do here, we are already there
@@ -2267,7 +2284,7 @@ namespace mmo
 
 	void GameUnitC::PlayOneShotAnimation(AnimationState *animState)
 	{
-		if (!animState)
+		if (!animState || !IsValidAnimState(animState))
 		{
 			return;
 		}
@@ -2281,11 +2298,12 @@ namespace mmo
 		// One-shot animations evict the locked loop
 		m_lockedLoopAnimState = nullptr;
 
-		if (m_oneShotState != nullptr)
+		if (m_oneShotState != nullptr && IsValidAnimState(m_oneShotState))
 		{
 			m_oneShotState->SetEnabled(false);
 			m_oneShotState->SetWeight(0.0f);
 		}
+		m_oneShotState = nullptr;
 
 		m_oneShotState = animState;
 		m_oneShotState->SetEnabled(true);
@@ -2295,12 +2313,12 @@ namespace mmo
 
 	void GameUnitC::CancelOneShotAnimation()
 	{
-		if (m_oneShotState != nullptr)
+		if (m_oneShotState != nullptr && IsValidAnimState(m_oneShotState))
 		{
 			m_oneShotState->SetEnabled(false);
 			m_oneShotState->SetWeight(0.0f);
-			m_oneShotState = nullptr;
 		}
+		m_oneShotState = nullptr;
 
 		// Refresh movement animation to ensure proper state
 		RefreshMovementAnimation();
@@ -2394,18 +2412,8 @@ namespace mmo
 							{ return factionId == other.GetFaction()->id(); }) != m_factionTemplate->enemies().end();
 	}
 
-	void GameUnitC::OnDisplayIdChanged()
+	void GameUnitC::ClearAnimationStates()
 	{
-		const uint32 displayId = Get<uint32>(object_fields::DisplayId);
-		const proto_client::ModelDataEntry *modelEntry = ObjectMgr::GetModelData(displayId);
-		if (m_entity)
-			m_entity->SetVisible(modelEntry != nullptr);
-		if (!modelEntry)
-		{
-			return;
-		}
-
-		// Reset animation states
 		m_idleAnimState = nullptr;
 		m_walkAnimState = nullptr;
 		m_runAnimState = nullptr;
@@ -2422,7 +2430,35 @@ namespace mmo
 		m_jumpStartState = nullptr;
 		m_fallingState = nullptr;
 		m_landState = nullptr;
+	}
+
+	bool GameUnitC::IsValidAnimState(AnimationState* state) const
+	{
+		if (!state || !m_entity)
+		{
+			return false;
+		}
+
+		const AnimationStateSet* currentSet = m_entity->GetAllAnimationStates();
+		return currentSet != nullptr && state->GetParent() == currentSet;
+	}
+
+	void GameUnitC::OnDisplayIdChanged()
+	{
+		const uint32 displayId = Get<uint32>(object_fields::DisplayId);
+		const proto_client::ModelDataEntry *modelEntry = ObjectMgr::GetModelData(displayId);
+
+		// Always clear animation state pointers first so no stale pointer survives
+		// a mesh change, even when there is no valid model entry and we return early.
+		ClearAnimationStates();
 		m_customizationDefinition = nullptr;
+
+		if (m_entity)
+			m_entity->SetVisible(modelEntry != nullptr);
+		if (!modelEntry)
+		{
+			return;
+		}
 
 		String meshFile = modelEntry->filename();
 		if (modelEntry->flags() & model_data_flags::IsCustomizable)

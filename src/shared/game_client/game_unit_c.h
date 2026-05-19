@@ -525,6 +525,13 @@ namespace mmo
 	protected:
 		virtual void OnDisplayIdChanged();
 
+		/// Null every AnimationState* member so no stale pointer survives a mesh swap.
+		void ClearAnimationStates();
+
+		/// Returns true only when @p state still belongs to the current entity's
+		/// AnimationStateSet (i.e. the pointer is not dangling after a mesh change).
+		[[nodiscard]] bool IsValidAnimState(AnimationState* state) const;
+
 		void UpdateCollider();
 
 		Vector3 GetDefaultQuestGiverOffset();
