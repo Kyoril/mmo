@@ -2414,9 +2414,11 @@ namespace mmo
 		m_castReleaseState = nullptr;
 		m_unarmedAttackState = nullptr;
 		m_deathState = nullptr;
+		m_damageHitState = nullptr;
 		m_targetState = nullptr;
 		m_currentState = nullptr;
 		m_oneShotState = nullptr;
+		m_lockedLoopAnimState = nullptr;
 		m_jumpStartState = nullptr;
 		m_fallingState = nullptr;
 		m_landState = nullptr;
