@@ -1422,11 +1422,34 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		}
 
 		// Minimap configuration
-		const uint32 minimapSize = 256; // 512x512 pixels per minimap
+		const uint32 minimapSize = 256; // render resolution per page tile
 		const float pageSize = terrain::constants::PageSize;
 
 		auto &gx = GraphicsDevice::Get();
 		gx.CaptureState();
+
+		// -----------------------------------------------------------------------
+		// Hide editor-only support objects so they don't appear in the minimap.
+		// We record their previous visibility so we can restore it afterwards.
+		// -----------------------------------------------------------------------
+		const bool gridWasVisible = m_worldGrid && m_worldGrid->IsVisible();
+		if (m_worldGrid) m_worldGrid->SetVisible(false);
+
+		const bool debugBBWasVisible = m_debugBoundingBox && m_debugBoundingBox->IsVisible();
+		if (m_debugBoundingBox) m_debugBoundingBox->SetVisible(false);
+
+		// Hide all area-trigger render objects
+		std::vector<bool> areaTriggerWasVisible;
+		areaTriggerWasVisible.reserve(m_areaTriggerRenderObjects.size());
+		for (ManualRenderObject *ro : m_areaTriggerRenderObjects)
+		{
+			areaTriggerWasVisible.push_back(ro ? ro->IsVisible() : false);
+			if (ro) ro->SetVisible(false);
+		}
+
+		// Hide debug / preview entity (e.g. placement ghost)
+		const bool debugEntityWasVisible = m_debugEntity && m_debugEntity->IsVisible();
+		if (m_debugEntity) m_debugEntity->SetVisible(false);
 
 		Camera *renderCam = m_scene.CreateCamera("MinimapCamera");
 		renderCam->SetProjectionType(ProjectionType::Orthographic);
@@ -1478,11 +1501,19 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 					// Get the maximum height in this page to ensure we capture all entities
 					float maxHeight = terrainHeight;
 
-					// Check all map entities in this page to find the maximum height
+					// Check all map entities in this page to find the maximum height.
+					// Only consider WMO (WorldModel) entities — static mesh entities are
+					// excluded from the minimap entirely.
 					for (const auto &mapEntity : m_mapEntities)
 					{
 						if (mapEntity && &mapEntity->GetSceneNode())
 						{
+							// Skip non-WMO entities (static meshes, etc.)
+							if (!mapEntity->IsWorldModelEntity())
+							{
+								continue;
+							}
+
 							const Vector3 &entityPos = mapEntity->GetSceneNode().GetDerivedPosition();
 
 							// Check if this entity is within the current page bounds
@@ -1527,8 +1558,11 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 					minimapRT->Activate();
 					minimapRT->Clear(ClearFlags::All);
 
-					// Temporarily change entity render queue groups to match terrain for consistent rendering
+					// Temporarily change entity render queue groups to match terrain for consistent rendering.
+					// Only WMO (WorldModel) entities are considered; static mesh entities are hidden so
+					// they don't appear in the minimap at all.
 					std::vector<std::pair<MovableObject *, uint8>> originalRenderQueues;
+					std::vector<std::pair<MovableObject *, bool>> hiddenMeshEntities;
 					for (const auto &mapEntity : m_mapEntities)
 					{
 						if (mapEntity && &mapEntity->GetSceneNode())
@@ -1542,8 +1576,19 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 								MovableObject *movable = mapEntity->GetMovableObject();
 								if (movable)
 								{
-									originalRenderQueues.emplace_back(movable, movable->GetRenderQueueGroup());
-									movable->SetRenderQueueGroup(WorldGeometry1); // Same as terrain
+									if (mapEntity->IsWorldModelEntity())
+									{
+										// WMOs: move to terrain render queue so they render correctly
+										originalRenderQueues.emplace_back(movable, movable->GetRenderQueueGroup());
+										movable->SetRenderQueueGroup(WorldGeometry1); // Same as terrain
+									}
+									else
+									{
+										// Static mesh entities: hide them for this render pass
+										const bool wasVisible = movable->IsVisible();
+										hiddenMeshEntities.emplace_back(movable, wasVisible);
+										movable->SetVisible(false);
+									}
 								}
 							}
 						}
@@ -1558,6 +1603,12 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 					for (const auto &[movable, originalQueue] : originalRenderQueues)
 					{
 						movable->SetRenderQueueGroup(originalQueue);
+					}
+
+					// Restore visibility of hidden mesh entities
+					for (const auto &[movable, wasVisible] : hiddenMeshEntities)
+					{
+						movable->SetVisible(wasVisible);
 					}
 
 					// Create texture from render target
@@ -1578,35 +1629,30 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 						std::unique_ptr<std::ostream> outStream = AssetRegistry::CreateNewFile(minimapFilename);
 						if (outStream)
 						{
-							// Save texture using the engine's texture format
+							// Save texture using the engine's texture format.
+							// We use uncompressed RGBA instead of DXT1 to preserve maximum quality:
+							// DXT1 is lossy and introduces visible block artefacts on the fine details
+							// of terrain/WMO colours, while the file-size increase for a 256×256 tile
+							// is only ~32 KB per page — an acceptable trade-off.
 							io::StreamSink sink(*outStream);
 							tex::v1_0::Header header(tex::Version_1_0);
 							header.width = minimapSize;
 							header.height = minimapSize;
-							header.format = tex::v1_0::DXT1;
+							header.format = tex::v1_0::RGBA;
 							header.hasMips = false;
 
 							tex::v1_0::HeaderSaver saver(sink, header);
 
 							header.mipmapOffsets[0] = static_cast<uint32>(sink.Position());
 
-							// Copy pixel data from render texture
-							const uint32 pixelDataSize = minimapSize * minimapSize * 4; // RGBA
-
-							// Apply compression
-							const size_t compressedSize = pixelDataSize / 8;
-
+							// Copy raw pixel data from render texture (4 bytes per pixel, RGBA)
+							const uint32 pixelDataSize = minimapSize * minimapSize * 4;
 							std::vector<uint8> pixelData(pixelDataSize);
 							minimapTexture->CopyPixelDataTo(pixelData.data());
 
-							// Allocate buffer for compression
-							std::vector<uint8> buffer;
-							buffer.resize(compressedSize);
-
-							// Apply compression
-							rygCompress(buffer.data(), pixelData.data(), minimapSize, minimapSize, false);
-							header.mipmapLengths[0] = static_cast<uint32>(buffer.size());
-							sink.Write(reinterpret_cast<const char *>(buffer.data()), buffer.size());
+							// Write uncompressed RGBA data directly — no lossy block compression
+							header.mipmapLengths[0] = pixelDataSize;
+							sink.Write(reinterpret_cast<const char *>(pixelData.data()), pixelDataSize);
 							saver.finish();
 
 							processedPages++;
@@ -1630,6 +1676,18 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		// Cleanup
 		m_scene.DestroyCamera(*renderCam);
 		m_scene.DestroySceneNode(*camNode);
+
+		// Restore visibility of editor support objects that were hidden during minimap generation
+		if (m_worldGrid) m_worldGrid->SetVisible(gridWasVisible);
+		if (m_debugBoundingBox) m_debugBoundingBox->SetVisible(debugBBWasVisible);
+		for (size_t i = 0; i < m_areaTriggerRenderObjects.size(); ++i)
+		{
+			if (m_areaTriggerRenderObjects[i])
+			{
+				m_areaTriggerRenderObjects[i]->SetVisible(areaTriggerWasVisible[i]);
+			}
+		}
+		if (m_debugEntity) m_debugEntity->SetVisible(debugEntityWasVisible);
 
 		gx.RestoreState();
 	}
