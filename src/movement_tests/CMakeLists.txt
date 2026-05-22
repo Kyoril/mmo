@@ -9,6 +9,7 @@ target_sources(movement_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/test_helpers/triangle_collidable.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/test_helpers/test_game_unit.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/test_helpers/party_stubs.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/test_movement_stepup_jump.cpp
 )
 
 # mmo_client headers are needed for party stubs (symbols referenced from game_client/object_mgr)

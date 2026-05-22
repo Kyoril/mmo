@@ -18,6 +18,8 @@ namespace mmo
 		{
 			// Initialize the field map so field accesses don't assert.
 			InitializeFieldMap();
+			// Allow jumping so jump impulse tests work correctly.
+			GetUnitMovement()->SetJumpAllowed(true);
 		}
 
 		/// @brief Override the collider for testing (e.g. place capsule at specific position).

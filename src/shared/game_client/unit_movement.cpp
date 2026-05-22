@@ -1231,7 +1231,22 @@ namespace mmo
 
 			if (hit.bBlockingHit)
 			{
-				if (IsValidLandingSpot(GetUpdatedNode().GetPosition(), hit))
+				// If we're penetrating the floor from below and moving away (upward), don't land.
+				// This happens when the unit starts exactly on the floor surface and jumps upward —
+				// the initial capsule sweep reports a start-penetrating hit against the floor even
+				// though the unit is moving away from it.
+				const bool bMovingAwayFromHit = hit.bStartPenetrating &&
+					(m_velocity.Dot(hit.Normal) > 0.0f);
+
+				if (bMovingAwayFromHit)
+				{
+					// Move the unit slightly away from the surface so subsequent sweeps don't re-detect it.
+					const Vector3 escapeStep = hit.Normal * (GetCapsuleRadius() * 0.01f);
+					GetUpdatedNode().SetPosition(GetUpdatedNode().GetPosition() + escapeStep);
+					// Skip all hit handling — let the unit fly upward freely this iteration.
+					continue;
+				}
+				else if (IsValidLandingSpot(GetUpdatedNode().GetPosition(), hit))
 				{
 					remainingTime += subTimeTickRemaining;
 					ProcessLanded(hit, remainingTime, iterations);
@@ -1404,7 +1419,8 @@ namespace mmo
 							SafeMoveNode(sideDelta, pawnRotation, true, &hit);
 						}
 
-						if (bDitch || IsValidLandingSpot(GetUpdatedNode().GetPosition(), hit) || hit.Time == 0.f)
+						if (bDitch || IsValidLandingSpot(GetUpdatedNode().GetPosition(), hit) ||
+							(hit.Time == 0.f && m_velocity.Dot(hit.Normal) <= 0.0f))
 						{
 							remainingTime = 0.f;
 							ProcessLanded(hit, remainingTime, iterations);

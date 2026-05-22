@@ -1423,14 +1423,6 @@ namespace mmo
 			return;
 		}
 
-		// If this is the first jump, and we're already falling,
-		// then increment the JumpCount to compensate.
-		const bool bFirstJump = m_jumpCurrentCount == 0;
-		if (bFirstJump && m_unitMovement->IsFalling())
-		{
-			m_jumpCurrentCount++;
-		}
-
 		const bool bDidJump = CanJump() && m_unitMovement->DoJump();
 		if (bDidJump)
 		{
@@ -1459,14 +1451,7 @@ namespace mmo
 			// Ensure JumpHoldTime and JumpCount are valid.
 			if (!m_wasJumping || GetJumpMaxHoldTime() <= 0.0f)
 			{
-				if (m_jumpCurrentCount == 0 && m_unitMovement->IsFalling())
-				{
-					jumpIsAllowed = m_jumpCurrentCount + 1 < m_jumpMaxCount;
-				}
-				else
-				{
-					jumpIsAllowed = m_jumpCurrentCount < m_jumpMaxCount;
-				}
+				jumpIsAllowed = m_jumpCurrentCount < m_jumpMaxCount;
 			}
 			else
 			{
