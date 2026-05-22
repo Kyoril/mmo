@@ -567,7 +567,7 @@ namespace mmo
 
 	public:
 		/// Returns true if this unit is controlled by the local player
-		bool IsControlledByLocalPlayer() const;
+		virtual bool IsControlledByLocalPlayer() const;
 
 	protected:
 		NetClient &m_netDriver;

@@ -16,12 +16,20 @@ namespace mmo
 			const proto_client::Project& project, uint32 map)
 			: GameUnitC(scene, net, project, map)
 		{
+			// Initialize the field map so field accesses don't assert.
+			InitializeFieldMap();
 		}
 
 		/// @brief Override the collider for testing (e.g. place capsule at specific position).
 		void SetColliderForTest(const Capsule& c)
 		{
 			const_cast<Capsule&>(GetCollider()) = c;
+		}
+
+		/// @brief Report this unit as locally controlled so UnitMovement::Tick applies input.
+		bool IsControlledByLocalPlayer() const override
+		{
+			return true;
 		}
 	};
 }

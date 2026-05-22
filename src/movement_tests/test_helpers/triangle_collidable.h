@@ -1,6 +1,7 @@
 #pragma once
 
 #include "scene_graph/movable_object.h"
+#include "math/aabb.h"
 #include "math/capsule.h"
 #include "math/collision.h"
 #include "math/ray.h"
@@ -38,6 +39,16 @@ namespace mmo
 			static const String s_type = "TriangleCollidable";
 			return s_type;
 		}
+
+		const AABB& GetBoundingBox() const override
+		{
+			static const AABB s_aabb{ Vector3(-50.0f, -1.0f, -50.0f), Vector3(50.0f, 1.0f, 50.0f) };
+			return s_aabb;
+		}
+
+		float GetBoundingRadius() const override { return 100.0f; }
+
+		void VisitRenderables(Renderable::Visitor& /*visitor*/, bool /*debug*/ = false) override {}
 
 		void PopulateRenderQueue(RenderQueue& /*queue*/) override {}
 
