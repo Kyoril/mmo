@@ -63,10 +63,26 @@ namespace mmo
 
 		// Assert
 		const Vector3 pos = unit->GetPosition();
+		const Vector3 vel = unit->GetUnitMovement()->GetVelocity();
+
+		// The unit does not start at full speed: UnitMovement accelerates from rest using
+		// maxAcceleration=40.48 m/s² with groundFriction=8.0. Full run speed (7 m/s) is
+		// reached after ~11 ticks (≈0.18 s). The distance lost during the ramp-up is ~0.55 m,
+		// so the expected final position is runSpeed*2 - rampUpLoss ≈ 13.47 m, not 14.0 m.
+		// margin(0.05f) covers float32 accumulation noise over 120 ticks.
+		const float rampUpLoss = 0.55f; // distance lost to acceleration ramp-up (empirically confirmed)
+		const float expectedZ  = runSpeed * 2.0f - rampUpLoss;
+
+		INFO("pos.x = " << pos.x);
+		INFO("pos.y = " << pos.y);
+		INFO("pos.z = " << pos.z << "  (expected ~" << expectedZ << ")");
+		INFO("vel.z = " << vel.z << "  (expected ~" << runSpeed << " at steady state)");
+
 		REQUIRE(!std::isnan(pos.x));
 		REQUIRE(!std::isnan(pos.y));
 		REQUIRE(!std::isnan(pos.z));
-		REQUIRE(pos.z > 1.0f);         // moved forward at least 1 m in 2 seconds
-		REQUIRE(pos.y == Approx(0.0f).margin(0.1f)); // stayed on floor (feet at Y~0)
+		REQUIRE(pos.z == Approx(expectedZ).margin(0.05f)); // acceleration ramp-up reduces distance vs steady-state; margin covers float32 noise only
+		REQUIRE(vel.z == Approx(runSpeed).margin(0.01f));   // unit must be at (or very near) full run speed after 2 s
+		REQUIRE(pos.y == Approx(0.0f).margin(0.1f));        // stayed on floor (feet at Y~0)
 	}
 }
