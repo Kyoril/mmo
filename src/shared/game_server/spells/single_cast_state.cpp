@@ -350,6 +350,24 @@ namespace mmo
 			return false;
 		}
 
+		if (m_cast.GetExecuter().IsStunned() && !(m_spell.attributes_size() >= 2 && (m_spell.attributes(1) & spell_attributes_b::UsableWhileStunned)))
+		{
+			SendEndCast(spell_cast_result::FailedInterrupted);
+			return false;
+		}
+
+		if (m_cast.GetExecuter().IsSleeping() && !(m_spell.attributes_size() >= 2 && (m_spell.attributes(1) & spell_attributes_b::UsableWhileSleeping)))
+		{
+			SendEndCast(spell_cast_result::FailedInterrupted);
+			return false;
+		}
+
+		if (m_cast.GetExecuter().IsFeared() && !(m_spell.attributes_size() >= 2 && (m_spell.attributes(1) & spell_attributes_b::UsableWhileFeared)))
+		{
+			SendEndCast(spell_cast_result::FailedInterrupted);
+			return false;
+		}
+
 		if (HasAttributes(0, spell_attributes::DaytimeOnly) && !HasAttributes(0, spell_attributes::NightOnly))
 		{
 			// TODO

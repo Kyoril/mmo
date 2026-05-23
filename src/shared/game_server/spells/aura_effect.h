@@ -107,6 +107,8 @@ namespace mmo
 
 		void HandleModSleep(bool apply) const;
 
+		void HandleModDisorient(bool apply) const;
+
 		void HandleModVisibility(bool apply) const;
 
 	private:

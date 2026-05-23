@@ -69,6 +69,7 @@ namespace mmo
 			{ AuraType::ModSleep,              [](AuraEffect& self, bool apply){ self.HandleModSleep(apply); } },
 			{ AuraType::ModStun,               [](AuraEffect& self, bool apply){ self.HandleModStun(apply); } },
 			{ AuraType::ModFear,               [](AuraEffect& self, bool apply){ self.HandleModFear(apply); } },
+			{ AuraType::ModDisorient,          [](AuraEffect& self, bool apply){ self.HandleModDisorient(apply); } },
 			{ AuraType::ModVisibility,         [](AuraEffect& self, bool apply){ self.HandleModVisibility(apply); } },
 			{ AuraType::PeriodicTriggerSpell,  [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
 			{ AuraType::PeriodicHeal,          [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
@@ -328,12 +329,15 @@ namespace mmo
 			return;
 		}
 
+		if (apply) owner->IncrementStunCount();
+		else        owner->DecrementStunCount();
+
 		std::weak_ptr weakOwner = owner;
 		owner->GetWorldInstance()->GetUniverse().Post([weakOwner]()
 			{
-				if (const auto owner = weakOwner.lock())
+				if (const auto o = weakOwner.lock())
 				{
-					owner->NotifyStunChanged();
+					o->NotifyStunChanged();
 				}
 			});
 	}
@@ -347,12 +351,15 @@ namespace mmo
 			return;
 		}
 
+		if (apply) owner->IncrementFearCount();
+		else        owner->DecrementFearCount();
+
 		std::weak_ptr weakOwner = owner;
 		owner->GetWorldInstance()->GetUniverse().Post([weakOwner]()
 			{
-				if (const auto owner = weakOwner.lock())
+				if (const auto o = weakOwner.lock())
 				{
-					owner->NotifyFearChanged();
+					o->NotifyFearChanged();
 				}
 			});
 	}
@@ -366,12 +373,37 @@ namespace mmo
 			return;
 		}
 
+		if (apply) owner->IncrementSleepCount();
+		else        owner->DecrementSleepCount();
+
 		std::weak_ptr weakOwner = owner;
 		owner->GetWorldInstance()->GetUniverse().Post([weakOwner]()
 			{
-				if (const auto owner = weakOwner.lock())
+				if (const auto o = weakOwner.lock())
 				{
-					owner->NotifySleepChanged();
+					o->NotifySleepChanged();
+				}
+			});
+	}
+
+	void AuraEffect::HandleModDisorient(bool apply) const
+	{
+		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
+			m_container.GetOwner().shared_from_this());
+		if (!owner || !owner->GetWorldInstance())
+		{
+			return;
+		}
+
+		if (apply) owner->IncrementDisorientCount();
+		else        owner->DecrementDisorientCount();
+
+		std::weak_ptr weakOwner = owner;
+		owner->GetWorldInstance()->GetUniverse().Post([weakOwner]()
+			{
+				if (const auto o = weakOwner.lock())
+				{
+					o->NotifyDisorientChanged();
 				}
 			});
 	}

@@ -395,6 +395,10 @@ namespace mmo
 			/// Spell will auto-repeat on a timer (e.g. Auto Shot for ranged weapons).
 			/// The repeat interval is determined by the weapon's attack speed.
 			AutoRepeat = 1 << 3,
+
+			UsableWhileStunned = 1 << 4,
+			UsableWhileFeared = 1 << 5,
+			UsableWhileSleeping = 1 << 6,
 		};
 	}
 

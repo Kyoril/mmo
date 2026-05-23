@@ -526,6 +526,14 @@ namespace mmo
 
 		void OnRootChanged(bool applied, uint32 ackId) override;
 
+		void OnStunChanged(bool applied, uint32 ackId) override;
+
+		void OnSleepChanged(bool applied, uint32 ackId) override;
+
+		void OnFearChanged(bool applied, uint32 ackId) override;
+
+		void OnDisorientChanged(bool applied, uint32 ackId) override;
+
 		void OnProficiencyChanged(uint32 proficiencyId, bool added) override;
 
 	private:

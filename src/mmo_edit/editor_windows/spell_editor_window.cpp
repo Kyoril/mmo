@@ -221,6 +221,7 @@ namespace mmo
 		"ModSleep",
 		"ModStun",
 		"ModFear",
+		"ModDisorient",
 
 		"ModVisibility",
 		"ModResistancePct",

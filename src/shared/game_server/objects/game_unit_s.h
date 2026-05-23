@@ -42,7 +42,13 @@ namespace mmo
 			Charmed = 1 << 3,
 
 			/// Unit is feared.
-			Feared = 1 << 4
+			Feared = 1 << 4,
+
+			/// Unit is sleeping.
+			Sleeping = 1 << 5,
+
+			/// Unit is disoriented.
+			Disoriented = 1 << 6
 		};
 	}
 
@@ -305,6 +311,14 @@ namespace mmo
 
 		virtual void OnRootChanged(bool applied, uint32 ackId) = 0;
 
+		virtual void OnStunChanged(bool applied, uint32 ackId) = 0;
+
+		virtual void OnSleepChanged(bool applied, uint32 ackId) = 0;
+
+		virtual void OnFearChanged(bool applied, uint32 ackId) = 0;
+
+		virtual void OnDisorientChanged(bool applied, uint32 ackId) = 0;
+
 		virtual void OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff, int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints) = 0;
 
 		virtual void OnSpellModChanged(SpellModType type, uint8 effectIndex, SpellModOp op, int32 value) = 0;
@@ -352,7 +366,16 @@ namespace mmo
 		/// Character teleported
 		Teleport,
 		/// Character was knocked back
-		KnockBack
+		KnockBack,
+
+		/// Character is stunned or no longer stunned.
+		Stun,
+		/// Character is sleeping or no longer sleeping.
+		Sleep,
+		/// Character is feared or no longer feared.
+		Fear,
+		/// Character is disoriented or no longer disoriented.
+		Disorient
 	};
 
 	/// Bundles informations which are only used for knock back acks.
@@ -859,11 +882,18 @@ namespace mmo
 
 		void NotifyFearChanged();
 
+		void NotifyDisorientChanged();
+
 		/// Determines if a unit is rooted and should be able to move.
 		bool IsRooted() const
 		{
 			return (m_movementInfo.movementFlags & movement_flags::Rooted) != 0;
 		}
+
+		bool IsStunned() const { return (m_state & unit_state::Stunned) != 0; }
+		bool IsSleeping() const { return (m_state & unit_state::Sleeping) != 0; }
+		bool IsFeared() const { return (m_state & unit_state::Feared) != 0; }
+		bool IsDisoriented() const { return (m_state & unit_state::Disoriented) != 0; }
 
 		/// Called when a proc event occurs to check if any auras should proc
 		void TriggerProcEvent(SpellProcFlags eventFlags, GameUnitS *target = nullptr, uint32 damage = 0, uint32 procEx = 0, uint8 school = 0, bool isProc = false, uint64 familyFlags = 0);
@@ -1353,7 +1383,47 @@ public:
 		Countdown m_pvpCombatCountdown;
 		uint32 m_state = 0;
 
-		std::set<uint32> m_proficiencies;  ///< Set of proficiency IDs the character has
+		uint8 m_stunCount{0};
+		uint8 m_sleepCount{0};
+		uint8 m_fearCount{0};
+		uint8 m_disorientCount{0};
+
+	public:
+		void IncrementStunCount()
+		{
+			if (m_stunCount < 255) { ++m_stunCount; }
+		}
+		void DecrementStunCount()
+		{
+			if (m_stunCount > 0) { --m_stunCount; }
+		}
+		void IncrementSleepCount()
+		{
+			if (m_sleepCount < 255) { ++m_sleepCount; }
+		}
+		void DecrementSleepCount()
+		{
+			if (m_sleepCount > 0) { --m_sleepCount; }
+		}
+		void IncrementFearCount()
+		{
+			if (m_fearCount < 255) { ++m_fearCount; }
+		}
+		void DecrementFearCount()
+		{
+			if (m_fearCount > 0) { --m_fearCount; }
+		}
+		void IncrementDisorientCount()
+		{
+			if (m_disorientCount < 255) { ++m_disorientCount; }
+		}
+		void DecrementDisorientCount()
+		{
+			if (m_disorientCount > 0) { --m_disorientCount; }
+		}
+
+	protected:  ///< Set of proficiency IDs the character has
+		std::set<uint32> m_proficiencies;
 
 	private:
 		/// Serializes a GameUnitS object to a Writer for binary serialization.

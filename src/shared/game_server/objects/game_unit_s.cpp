@@ -1217,14 +1217,194 @@ namespace mmo
 
 	void GameUnitS::NotifyStunChanged()
 	{
+		const bool wasStunned = IsStunned();
+		const bool isStunned = (m_stunCount > 0);
+		if (isStunned)
+			m_state |= unit_state::Stunned;
+		else
+			m_state &= ~unit_state::Stunned;
+
+		if (wasStunned && !isStunned)
+		{
+			if (m_netUnitWatcher)
+			{
+				const uint32 ackId = GenerateAckId();
+				PendingMovementChange change;
+				change.counter = ackId;
+				change.changeType = MovementChangeType::Stun;
+				change.apply = false;
+				change.timestamp = GetAsyncTimeMs();
+				PushPendingMovementChange(change);
+				m_netUnitWatcher->OnStunChanged(false, ackId);
+			}
+			else
+			{
+				m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+			}
+		}
+		else if (!wasStunned && isStunned)
+		{
+			if (m_mover) m_mover->StopMovement();
+			if (m_netUnitWatcher)
+			{
+				const uint32 ackId = GenerateAckId();
+				PendingMovementChange change;
+				change.counter = ackId;
+				change.changeType = MovementChangeType::Stun;
+				change.apply = true;
+				change.timestamp = GetAsyncTimeMs();
+				PushPendingMovementChange(change);
+				m_netUnitWatcher->OnStunChanged(true, ackId);
+			}
+			else
+			{
+				m_movementInfo.movementFlags |= movement_flags::Rooted;
+			}
+		}
 	}
 
 	void GameUnitS::NotifySleepChanged()
 	{
+		const bool wasSleeping = IsSleeping();
+		const bool isSleeping = (m_sleepCount > 0);
+		if (isSleeping)
+			m_state |= unit_state::Sleeping;
+		else
+			m_state &= ~unit_state::Sleeping;
+
+		if (wasSleeping && !isSleeping)
+		{
+			if (m_netUnitWatcher)
+			{
+				const uint32 ackId = GenerateAckId();
+				PendingMovementChange change;
+				change.counter = ackId;
+				change.changeType = MovementChangeType::Sleep;
+				change.apply = false;
+				change.timestamp = GetAsyncTimeMs();
+				PushPendingMovementChange(change);
+				m_netUnitWatcher->OnSleepChanged(false, ackId);
+			}
+			else
+			{
+				m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+			}
+		}
+		else if (!wasSleeping && isSleeping)
+		{
+			if (m_mover) m_mover->StopMovement();
+			if (m_netUnitWatcher)
+			{
+				const uint32 ackId = GenerateAckId();
+				PendingMovementChange change;
+				change.counter = ackId;
+				change.changeType = MovementChangeType::Sleep;
+				change.apply = true;
+				change.timestamp = GetAsyncTimeMs();
+				PushPendingMovementChange(change);
+				m_netUnitWatcher->OnSleepChanged(true, ackId);
+			}
+			else
+			{
+				m_movementInfo.movementFlags |= movement_flags::Rooted;
+			}
+		}
 	}
 
 	void GameUnitS::NotifyFearChanged()
 	{
+		const bool wasFeared = IsFeared();
+		const bool isFeared = (m_fearCount > 0);
+		if (isFeared)
+			m_state |= unit_state::Feared;
+		else
+			m_state &= ~unit_state::Feared;
+
+		if (wasFeared && !isFeared)
+		{
+			if (m_netUnitWatcher)
+			{
+				const uint32 ackId = GenerateAckId();
+				PendingMovementChange change;
+				change.counter = ackId;
+				change.changeType = MovementChangeType::Fear;
+				change.apply = false;
+				change.timestamp = GetAsyncTimeMs();
+				PushPendingMovementChange(change);
+				m_netUnitWatcher->OnFearChanged(false, ackId);
+			}
+			else
+			{
+				m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+			}
+		}
+		else if (!wasFeared && isFeared)
+		{
+			if (m_mover) m_mover->StopMovement();
+			if (m_netUnitWatcher)
+			{
+				const uint32 ackId = GenerateAckId();
+				PendingMovementChange change;
+				change.counter = ackId;
+				change.changeType = MovementChangeType::Fear;
+				change.apply = true;
+				change.timestamp = GetAsyncTimeMs();
+				PushPendingMovementChange(change);
+				m_netUnitWatcher->OnFearChanged(true, ackId);
+			}
+			else
+			{
+				m_movementInfo.movementFlags |= movement_flags::Rooted;
+			}
+		}
+	}
+
+	void GameUnitS::NotifyDisorientChanged()
+	{
+		const bool wasDisoriented = IsDisoriented();
+		const bool isDisoriented = (m_disorientCount > 0);
+		if (isDisoriented)
+			m_state |= unit_state::Disoriented;
+		else
+			m_state &= ~unit_state::Disoriented;
+
+		if (wasDisoriented && !isDisoriented)
+		{
+			if (m_netUnitWatcher)
+			{
+				const uint32 ackId = GenerateAckId();
+				PendingMovementChange change;
+				change.counter = ackId;
+				change.changeType = MovementChangeType::Disorient;
+				change.apply = false;
+				change.timestamp = GetAsyncTimeMs();
+				PushPendingMovementChange(change);
+				m_netUnitWatcher->OnDisorientChanged(false, ackId);
+			}
+			else
+			{
+				m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+			}
+		}
+		else if (!wasDisoriented && isDisoriented)
+		{
+			if (m_mover) m_mover->StopMovement();
+			if (m_netUnitWatcher)
+			{
+				const uint32 ackId = GenerateAckId();
+				PendingMovementChange change;
+				change.counter = ackId;
+				change.changeType = MovementChangeType::Disorient;
+				change.apply = true;
+				change.timestamp = GetAsyncTimeMs();
+				PushPendingMovementChange(change);
+				m_netUnitWatcher->OnDisorientChanged(true, ackId);
+			}
+			else
+			{
+				m_movementInfo.movementFlags |= movement_flags::Rooted;
+			}
+		}
 	}
 
 	bool GameUnitS::CanUseWeapon(WeaponAttack attackType)

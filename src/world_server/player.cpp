@@ -2737,6 +2737,26 @@ namespace mmo
 			});
 	}
 
+	void Player::OnStunChanged(bool applied, uint32 ackId)
+	{
+		// TODO(S02): send MoveStun/MoveStunAck packet
+	}
+
+	void Player::OnSleepChanged(bool applied, uint32 ackId)
+	{
+		// TODO(S02): send MoveSleep/MoveSleepAck packet
+	}
+
+	void Player::OnFearChanged(bool applied, uint32 ackId)
+	{
+		// TODO(S02): send MoveFear/MoveFearAck packet
+	}
+
+	void Player::OnDisorientChanged(bool applied, uint32 ackId)
+	{
+		// TODO(S02): send MoveDisorient/MoveDisorientAck packet
+	}
+
 	void Player::OnProficiencyChanged(const uint32 proficiencyId, const bool added)
 	{
 		DLOG("Player " << m_character->GetName() << (added ? " gained" : " lost") << " proficiency " << proficiencyId);

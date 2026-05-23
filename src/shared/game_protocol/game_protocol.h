@@ -226,6 +226,11 @@ namespace mmo
 
 				MoveRootAck,
 
+				MoveStunAck,
+				MoveSleepAck,
+				MoveFearAck,
+				MoveDisorientAck,
+
 				LearnTalent,
 
 				TimePlayedRequest,
@@ -448,6 +453,11 @@ namespace mmo
 				MessageOfTheDay,
 
 				MoveRoot,
+
+				MoveStun,
+				MoveSleep,
+				MoveFear,
+				MoveDisorient,
 
 				/// Game time notification packet sent to the client
 				GameTimeInfo,
