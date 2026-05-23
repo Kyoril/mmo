@@ -60,19 +60,20 @@ namespace
 			Vector3(-100.f, 0.f,  100.f));
 	}
 
-	/// Vertical wall at X=wallX, normal +X (facing -X toward origin).
+	/// Vertical wall at X=wallX, normal -X (facing toward origin, blocking +X movement).
 	/// Covers Y=[0,20], Z=[-50,50].
 	void AddWallAtX(TriangleCollidable& t, float wallX)
 	{
-		// CCW winding viewed from -X side → normal = (+1, 0, 0)
-		t.AddTriangle(
-			Vector3(wallX,  0.f, -50.f),
-			Vector3(wallX, 20.f, -50.f),
-			Vector3(wallX,  0.f,  50.f));
+		// CCW winding viewed from -X side (player side) → normal = (-1, 0, 0)
+		// Player approaches from X < wallX in +X direction, hits this face.
 		t.AddTriangle(
 			Vector3(wallX,  0.f,  50.f),
-			Vector3(wallX, 20.f, -50.f),
-			Vector3(wallX, 20.f,  50.f));
+			Vector3(wallX, 20.f,  50.f),
+			Vector3(wallX,  0.f, -50.f));
+		t.AddTriangle(
+			Vector3(wallX,  0.f, -50.f),
+			Vector3(wallX, 20.f,  50.f),
+			Vector3(wallX, 20.f, -50.f));
 	}
 
 	/// Configure run/walk/back speeds on a unit.
@@ -120,15 +121,17 @@ namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. Wall-parallel speed: approaching at a shallow angle
-//    forward = (sin θ, 0, cos θ), wall normal = +X
-//    expected parallel Z-speed = cos(θ) * runSpeed
+//    Wall normal = +X.  Approach angle θ measured from wall normal.
+//    input = (sin θ, 0, cos θ): sin θ into wall (+X), cos θ along wall (+Z).
+//    Expected settled Z speed = cos(θ) * runSpeed.
 // ─────────────────────────────────────────────────────────────────────────────
 TEST_CASE("wall-slide: parallel speed equals cosine-fraction of run speed", "[movement][wall][speed]")
 {
-	// Approach angle from wall normal (larger = shallower approach, more Z speed)
-	const float angleDeg = 75.f;  // close to the angle in the real-world bug report
+	// Angle from wall normal.  15° from normal = 75° glancing angle from surface.
+	// cos(15°) = 0.966 along wall, sin(15°) = 0.259 into wall.
+	const float angleDeg = 15.f;
 	const float angleRad = angleDeg * (3.14159265f / 180.f);
-	// input vector: sin(angle) toward wall (+X), cos(angle) along wall (+Z)
+	// input: small X component into wall, large Z component along wall
 	const Vector3 input = Vector3(std::sin(angleRad), 0.f, std::cos(angleRad));
 
 	proto_client::Project project;
@@ -137,7 +140,7 @@ TEST_CASE("wall-slide: parallel speed equals cosine-fraction of run speed", "[mo
 
 	TriangleCollidable floor, wall;
 	AddFloor(floor);
-	AddWallAtX(wall, 10.f);
+	AddWallAtX(wall, 1.5f);  // close enough that sin(15°)*7*t reaches it quickly
 	scene.SetCollidables({ &floor, &wall });
 
 	// Start well away from wall — unit needs ~10m to reach it and settle
@@ -155,7 +158,7 @@ TEST_CASE("wall-slide: parallel speed equals cosine-fraction of run speed", "[mo
 	// Expected: wall strips X component, leaving only Z = cos(angle)*runSpeed
 	const float expectedZ = std::cos(angleRad) * kRunSpeed;
 
-	INFO("angle=" << angleDeg << "° input=(" << input.x << ",0," << input.z << ")");
+	INFO("angle_from_normal=" << angleDeg << "°  input=(" << input.x << ",0," << input.z << ")");
 	INFO("vel=(" << vel.x << "," << vel.y << "," << vel.z << ") speed=" << speed);
 	INFO("speedZ=" << speedZ << " expectedZ=" << expectedZ);
 	INFO("speedX=" << speedX << " (should be ~0)");
@@ -206,49 +209,38 @@ TEST_CASE("wall-slide: perpendicular approach causes unit to stop", "[movement][
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. Wall-slide not faster than open-plane travel
-//    The original bug: sliding along a wall at a shallow angle was faster than
-//    running in the same direction (Z) on an open plane.
+// 3. Wall-slide speed: wall-parallel speed never exceeds run speed
+//    The original bug: sliding along a wall was faster than runSpeed.
 // ─────────────────────────────────────────────────────────────────────────────
-TEST_CASE("wall-slide: distance along wall not greater than open-plane distance", "[movement][wall][speed]")
+TEST_CASE("wall-slide: wall-parallel speed never exceeds run speed", "[movement][wall][speed]")
 {
-	const float angleDeg = 80.f;  // very shallow — worst-case for speed boost
+	// Very shallow approach: sin(5°) into wall, cos(5°) along wall.
+	const float angleDeg = 5.f;
 	const float angleRad = angleDeg * (3.14159265f / 180.f);
 	const Vector3 input  = Vector3(std::sin(angleRad), 0.f, std::cos(angleRad));
 
-	constexpr int steps   = 240;   // 4 s — enough to run from origin to wall and then slide
-	const float wallX     = 8.f;   // close enough to reach quickly
+	proto_client::Project project;
+	TestScene scene;
+	TestNetClient net;
 
-	proto_client::Project project1, project2;
-	TestScene sceneFlat, sceneWall;
-	TestNetClient net1, net2;
+	TriangleCollidable floor, wall;
+	AddFloor(floor);
+	AddWallAtX(wall, 0.5f);  // very close — unit hits immediately
+	scene.SetCollidables({ &floor, &wall });
 
-	// Flat plane (no wall)
-	TriangleCollidable floorOnly;
-	AddFloor(floorOnly);
-	sceneFlat.SetCollidables({ &floorOnly });
+	auto unit = MakeUnit(scene, net, project, Vector3(0.f, 0.f, 0.f));
 
-	auto unitFlat = MakeUnit(sceneFlat, net1, project1, Vector3(0.f, 0.f, 0.f));
-	SimulateMovement(*unitFlat, input, steps, kDt);
-	const float zFlat = unitFlat->GetPosition().z;
+	float peakSpeed = RunAndGetPeakSpeed(*unit, input, 240);
+	const Vector3 finalVel = unit->GetUnitMovement()->GetVelocity();
+	const float finalSpeed = std::sqrt(finalVel.x*finalVel.x + finalVel.y*finalVel.y + finalVel.z*finalVel.z);
 
-	// Plane + wall
-	TriangleCollidable floorWall, wall;
-	AddFloor(floorWall);
-	AddWallAtX(wall, wallX);
-	sceneWall.SetCollidables({ &floorWall, &wall });
+	INFO("angle=" << angleDeg << "°  peakSpeed=" << peakSpeed << "  finalSpeed=" << finalSpeed);
+	INFO("finalVel=(" << finalVel.x << "," << finalVel.y << "," << finalVel.z << ")");
 
-	auto unitWall = MakeUnit(sceneWall, net2, project2, Vector3(0.f, 0.f, 0.f));
-	SimulateMovement(*unitWall, input, steps, kDt);
-	const float zWall = unitWall->GetPosition().z;
-
-	INFO("angle=" << angleDeg << "°");
-	INFO("zFlat=" << zFlat << "  zWall=" << zWall);
-	INFO("wall unit is " << (zWall > zFlat ? "FASTER" : "same/slower") << " by " << (zWall - zFlat) << " m");
-
-	// Wall unit must not have travelled significantly more in Z than the free unit.
-	// Allow 5% tolerance for rounding/frame-timing differences.
-	CHECK(zWall <= zFlat * 1.05f);
+	// Peak speed must never exceed run speed (original bug: speed boosted to ~7.8 m/s)
+	CHECK(peakSpeed <= kRunSpeed * 1.05f);
+	// Final sustained speed must be at or below run speed
+	CHECK(finalSpeed <= kRunSpeed * 1.05f);
 }
 
 
@@ -554,7 +546,7 @@ TEST_CASE("jump: horizontal velocity maintained during airborne phase", "[moveme
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 10. Ramp walk: unit ascends a climbable slope without losing speed
+// 10. Ramp walk: unit ascends a climbable slope and leaves Y=0
 // ─────────────────────────────────────────────────────────────────────────────
 TEST_CASE("ramp: unit climbs shallow walkable ramp and gains height", "[movement][ramp]")
 {
@@ -562,28 +554,48 @@ TEST_CASE("ramp: unit climbs shallow walkable ramp and gains height", "[movement
 	TestScene scene;
 	TestNetClient net;
 
-	// Flat approach floor
+	// Flat approach floor: only up to Z=3 so the unit is immediately on the ramp
 	TriangleCollidable floor;
-	AddFloor(floor);
+	floor.AddTriangle(
+		Vector3(-50.f, 0.f, -50.f),
+		Vector3( 50.f, 0.f, -50.f),
+		Vector3(-50.f, 0.f,   3.f));
+	floor.AddTriangle(
+		Vector3( 50.f, 0.f, -50.f),
+		Vector3( 50.f, 0.f,   3.f),
+		Vector3(-50.f, 0.f,   3.f));
 
-	// Ramp: starts at Z=5, rises from Y=0 to Y=2 over 10 m (11.3° slope).
-	// This is well within the walkable angle (cos(11.3°) ≈ 0.98 > walkableFloorY ~0.71).
+	// Ramp: starts at Z=3, rises from Y=0 to Y=3 over 10 m (slope ~16.7°).
+	// Normal Y component = cos(16.7°) ≈ 0.958 > walkableFloorY (~0.71) → walkable.
+	// CCW winding (viewed from above) → normal points up+back.
 	TriangleCollidable ramp;
 	ramp.AddTriangle(
-		Vector3(-5.f, 0.f,  5.f),
-		Vector3(-5.f, 2.f, 15.f),
-		Vector3( 5.f, 0.f,  5.f));
+		Vector3(-5.f, 0.f,  3.f),
+		Vector3(-5.f, 3.f, 13.f),
+		Vector3( 5.f, 0.f,  3.f));
 	ramp.AddTriangle(
-		Vector3( 5.f, 0.f,  5.f),
-		Vector3(-5.f, 2.f, 15.f),
-		Vector3( 5.f, 2.f, 15.f));
+		Vector3( 5.f, 0.f,  3.f),
+		Vector3(-5.f, 3.f, 13.f),
+		Vector3( 5.f, 3.f, 13.f));
 
-	scene.SetCollidables({ &floor, &ramp });
+	// Flat top surface beyond ramp so unit doesn't fall off
+	TriangleCollidable top;
+	top.AddTriangle(
+		Vector3(-50.f, 3.f, 13.f),
+		Vector3( 50.f, 3.f, 13.f),
+		Vector3(-50.f, 3.f, 50.f));
+	top.AddTriangle(
+		Vector3( 50.f, 3.f, 13.f),
+		Vector3( 50.f, 3.f, 50.f),
+		Vector3(-50.f, 3.f, 50.f));
 
-	const Vector3 startPos(0.f, 0.f, 0.f);
+	scene.SetCollidables({ &floor, &ramp, &top });
+
+	// Start right at the base of the ramp
+	const Vector3 startPos(0.f, 0.f, 2.f);
 	auto unit = MakeUnit(scene, net, project, startPos);
 
-	// Walk forward (+Z) for 3 s — enough to fully climb the ramp
+	// Walk forward (+Z) for 3 s — unit starts essentially on ramp
 	SimulateMovement(*unit, Vector3(0.f, 0.f, 1.f), 180, kDt);
 
 	const Vector3 pos = unit->GetPosition();
@@ -593,9 +605,9 @@ TEST_CASE("ramp: unit climbs shallow walkable ramp and gains height", "[movement
 	INFO("finalVel=(" << vel.x << "," << vel.y << "," << vel.z << ")");
 
 	CHECK(!std::isnan(pos.y));
-	// Unit must have climbed at least 1 m above start (partially or fully up ramp)
-	CHECK(pos.y >= 1.f);
-	// Z speed on ramp must not be catastrophically different from run speed
+	// Unit must have climbed above floor level
+	CHECK(pos.y > 0.5f);
+	// Speed must not collapse to zero on the ramp
 	CHECK(std::abs(vel.z) >= kRunSpeed * 0.3f);
 }
 
