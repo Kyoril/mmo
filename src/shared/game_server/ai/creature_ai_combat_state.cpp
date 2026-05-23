@@ -438,8 +438,8 @@ namespace mmo
 		auto& controlled = GetControlled();
 		auto& mover = controlled.GetMover();
 
-		// Nothing to do when rooted or casting
-		if (controlled.IsRooted() || m_isCasting)
+		// Nothing to do when rooted, under forced movement (fear/disorient), or casting
+		if (controlled.IsRooted() || controlled.IsUnderForcedMovement() || m_isCasting)
 		{
 			return false;
 		}
@@ -517,8 +517,8 @@ namespace mmo
 
 	bool CreatureAICombatState::ChaseTarget(GameUnitS& target)
 	{
-		// Don't move while casting
-		if (m_isCasting)
+		// Don't move while casting or under forced movement (fear/disorient controller)
+		if (m_isCasting || GetControlled().IsUnderForcedMovement())
 		{
 			return true; // Consider this successful - we're doing what we should be doing
 		}
@@ -1261,8 +1261,8 @@ namespace mmo
 		auto& controlled = GetControlled();
 		auto& mover = controlled.GetMover();
 		
-		// Nothing to do when rooted or casting
-		if (controlled.IsRooted() || m_isCasting)
+		// Nothing to do when rooted, under forced movement (fear/disorient), or casting
+		if (controlled.IsRooted() || controlled.IsUnderForcedMovement() || m_isCasting)
 		{
 			return false;
 		}

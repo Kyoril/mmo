@@ -261,6 +261,12 @@ namespace mmo
 
 	void CreatureAIIdleState::AdvanceIdleMovement()
 	{
+		// Don't issue idle wander/patrol moves while fear or disorient controller is driving movement
+		if (GetControlled().IsUnderForcedMovement())
+		{
+			return;
+		}
+
 		if (GetControlled().GetMovementType() == creature_movement::Waypoints)
 		{
 			MoveToNextPatrolWaypoint();
