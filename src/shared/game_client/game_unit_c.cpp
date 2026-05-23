@@ -2,6 +2,9 @@
 #include "game_aura_c.h"
 #include "game_world_object_c_base.h"
 #include "spell_visualization_service.h"
+#include "movement_log.h"
+
+#include <sstream>
 
 #include <algorithm>
 #include <set>
@@ -286,6 +289,12 @@ namespace mmo
 				m_positionLocked = false;
 				m_lastHeartbeat = now;
 				m_netDriver.OnMoveEvent(*this, MovementEvent(movement_event_type::Heartbeat, now, m_movementInfo));
+
+				const Vector3& pos = m_movementInfo.position;
+				MOVEMENT_EVENT("HEARTBEAT",
+					"pos=(" << pos.x << "," << pos.y << "," << pos.z << ")"
+					<< " flags=0x" << std::hex << m_movementInfo.movementFlags << std::dec
+					<< " facing=" << m_movementInfo.facing.GetValueRadians());
 			}
 		}
 
@@ -641,6 +650,15 @@ namespace mmo
 		// extrapolation continues until the next packet arrives.
 		GetSceneNode()->SetDerivedPosition(movementInfo.position);
 		GetSceneNode()->SetDerivedOrientation(Quaternion(Radian(movementInfo.facing), Vector3::UnitY));
+
+		if (IsControlledByLocalPlayer())
+		{
+			MOVEMENT_EVENT("APPLY_MOVE_INFO",
+				"pos=(" << movementInfo.position.x << "," << movementInfo.position.y << "," << movementInfo.position.z << ")"
+				<< " flags=0x" << std::hex << movementInfo.movementFlags << std::dec
+				<< " facing=" << movementInfo.facing.GetValueRadians()
+				<< " ts=" << movementInfo.timestamp);
+		}
 
 		// Handle falling state transitions
 		if (m_movementInfo.IsFalling())
@@ -1178,6 +1196,14 @@ namespace mmo
 
 		m_lastHeartbeat = m_movementInfo.timestamp;
 
+		{
+			const Vector3& p = m_movementInfo.position;
+			MOVEMENT_EVENT(forward ? "MOVE_START_FWD" : "MOVE_START_BWD",
+				"pos=(" << p.x << "," << p.y << "," << p.z << ")"
+				<< " flags=0x" << std::hex << m_movementInfo.movementFlags << std::dec
+				<< " facing=" << m_movementInfo.facing.GetValueRadians());
+		}
+
 		QueueMovementEvent(forward ? movement_event_type::StartMoveForward : movement_event_type::StartMoveBackward, m_movementInfo.timestamp, m_movementInfo);
 	}
 
@@ -1207,6 +1233,14 @@ namespace mmo
 
 		m_lastHeartbeat = m_movementInfo.timestamp;
 
+		{
+			const Vector3& p = m_movementInfo.position;
+			MOVEMENT_EVENT(left ? "STRAFE_START_L" : "STRAFE_START_R",
+				"pos=(" << p.x << "," << p.y << "," << p.z << ")"
+				<< " flags=0x" << std::hex << m_movementInfo.movementFlags << std::dec
+				<< " facing=" << m_movementInfo.facing.GetValueRadians());
+		}
+
 		QueueMovementEvent(left ? movement_event_type::StartStrafeLeft : movement_event_type::StartStrafeRight, m_movementInfo.timestamp, m_movementInfo);
 	}
 
@@ -1217,6 +1251,14 @@ namespace mmo
 		// Stop movement
 		UpdateMovementInfo();
 		m_lastHeartbeat = m_movementInfo.timestamp;
+
+		{
+			const Vector3& p = m_movementInfo.position;
+			MOVEMENT_EVENT("MOVE_STOP",
+				"pos=(" << p.x << "," << p.y << "," << p.z << ")"
+				<< " flags=0x" << std::hex << m_movementInfo.movementFlags << std::dec
+				<< " facing=" << m_movementInfo.facing.GetValueRadians());
+		}
 
 		QueueMovementEvent(movement_event_type::StopMove, m_movementInfo.timestamp, m_movementInfo);
 
@@ -1232,6 +1274,14 @@ namespace mmo
 		// Stop movement
 		UpdateMovementInfo();
 		m_lastHeartbeat = m_movementInfo.timestamp;
+
+		{
+			const Vector3& p = m_movementInfo.position;
+			MOVEMENT_EVENT("STRAFE_STOP",
+				"pos=(" << p.x << "," << p.y << "," << p.z << ")"
+				<< " flags=0x" << std::hex << m_movementInfo.movementFlags << std::dec
+				<< " facing=" << m_movementInfo.facing.GetValueRadians());
+		}
 
 		QueueMovementEvent(movement_event_type::StopStrafe, m_movementInfo.timestamp, m_movementInfo);
 
@@ -1266,6 +1316,14 @@ namespace mmo
 
 		m_lastHeartbeat = m_movementInfo.timestamp;
 
+		{
+			const Vector3& p = m_movementInfo.position;
+			MOVEMENT_EVENT(left ? "TURN_START_L" : "TURN_START_R",
+				"pos=(" << p.x << "," << p.y << "," << p.z << ")"
+				<< " flags=0x" << std::hex << m_movementInfo.movementFlags << std::dec
+				<< " facing=" << m_movementInfo.facing.GetValueRadians());
+		}
+
 		QueueMovementEvent(left ? movement_event_type::StartTurnLeft : movement_event_type::StartTurnRight, m_movementInfo.timestamp, m_movementInfo);
 	}
 
@@ -1285,6 +1343,14 @@ namespace mmo
 		}
 
 		m_lastHeartbeat = m_movementInfo.timestamp;
+
+		{
+			const Vector3& p = m_movementInfo.position;
+			MOVEMENT_EVENT("TURN_STOP",
+				"pos=(" << p.x << "," << p.y << "," << p.z << ")"
+				<< " flags=0x" << std::hex << m_movementInfo.movementFlags << std::dec
+				<< " facing=" << m_movementInfo.facing.GetValueRadians());
+		}
 
 		QueueMovementEvent(movement_event_type::StopTurn, m_movementInfo.timestamp, m_movementInfo);
 	}

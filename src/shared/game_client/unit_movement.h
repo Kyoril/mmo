@@ -956,6 +956,12 @@ namespace mmo
 
 		FindFloorResult m_currentFloor {};
 
+		// Set to the wall surface normal when ground movement is blocked by a vertical surface.
+		// Cleared at the start of each HandleWalking iteration. Used to project m_acceleration
+		// onto the wall plane before CalcVelocity so speed cannot exceed the wall-parallel component.
+		Vector3 m_wallContactNormal {};
+		bool m_hasWallContact = false;
+
 		bool m_justTeleported = true;
 
 		bool m_dontFallBelowJumpZVelocityDuringJump = true;

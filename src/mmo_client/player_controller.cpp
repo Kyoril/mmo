@@ -7,6 +7,7 @@
 #include "vector_sink.h"
 #include "net/realm_connector.h"
 #include "console/console_var.h"
+#include "game_client/movement_log.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/scene_node.h"
@@ -35,6 +36,8 @@ namespace mmo
 	static ConsoleVar* s_resetCameraPitchCVar = nullptr;
 	static ConsoleVar* s_showPlayerCollisionCVar = nullptr;
 
+	static ConsoleVar* s_logMovementCVar = nullptr;
+
 	extern Cursor g_cursor;
 
 	PlayerController::PlayerController(Scene& scene, RealmConnector& connector, LootClient& lootClient, VendorClient& vendorClient, TrainerClient& trainerClient, SpellCast& spellCast)
@@ -56,6 +59,9 @@ namespace mmo
 			s_resetCameraPitchCVar = ConsoleVarMgr::RegisterConsoleVar("ResetCameraVertically", "Gets or sets whether the camera pitch will be reset while moving.", "1");
 
 			s_showPlayerCollisionCVar = ConsoleVarMgr::RegisterConsoleVar("ShowPlayerCollision", "Gets or sets whether the player collision should be visible.", "0");
+
+			s_logMovementCVar = ConsoleVarMgr::RegisterConsoleVar("LogMovement",
+				"Set to 1 to write detailed movement events to Logs/Movement.log. 0 disables.", "0");
 		}
 
 		m_cvarConnections += {
@@ -75,6 +81,19 @@ namespace mmo
 					}
 
 					m_controlledUnit->SetCollisionVisibility(var.GetBoolValue());
+				},
+			s_logMovementCVar->Changed += [](ConsoleVar& var, const std::string&)
+				{
+					if (var.GetBoolValue())
+					{
+						MovementLog::Get().Open("Logs/Movement.log");
+						ILOG("Movement logs enabled");
+					}
+					else
+					{
+						MovementLog::Get().Close();
+						ILOG("Movement logs disabled");
+					}
 				}
 		};
 

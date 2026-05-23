@@ -1,7 +1,10 @@
 #include "unit_movement.h"
 
 #include "game_unit_c.h"
+#include "movement_log.h"
 #include "log/default_log_levels.h"
+
+#include <sstream>
 #include "base/guarded_value.h"
 #include "scene_graph/scene.h"
 #include "math/capsule.h"
@@ -123,6 +126,16 @@ namespace mmo
 
 		// Change position
 		RunSimulation(deltaTime, 0);
+
+		if (m_movedUnit.IsControlledByLocalPlayer())
+		{
+			const Vector3& p = GetUpdatedNode().GetPosition();
+			MOVEMENT_EVENT("MOVE_TICK_POST",
+				"pos=(" << p.x << "," << p.y << "," << p.z << ")"
+				<< " vel=(" << m_velocity.x << "," << m_velocity.y << "," << m_velocity.z << ")"
+				<< " speed=" << m_velocity.GetLength()
+				<< " mode=" << static_cast<int>(m_movementMode));
+		}
 
 #if defined(_DEBUG) && false
 		DEBUG_OUTPUT_STRING_EX("Position: " + GetUpdatedNode().GetPosition().ToString(), 0.f, s_stringColor);
@@ -540,6 +553,18 @@ namespace mmo
 			MaintainHorizontalGroundVelocity();
 			m_acceleration = Vector3::VectorPlaneProject(m_acceleration, -m_gravityDirection);
 
+			// If we were pressing against a wall last frame, project the input acceleration
+			// onto the wall plane before CalcVelocity. This prevents CalcVelocity from
+			// rebuilding the into-wall component each frame, which would otherwise let
+			// the wall-parallel speed exceed the geometrically correct fraction of max speed.
+			if (m_hasWallContact)
+			{
+				m_acceleration = Vector3::VectorPlaneProject(m_acceleration, m_wallContactNormal);
+			}
+
+			// Clear wall contact — MoveAlongFloor will re-set it if still blocked this tick.
+			m_hasWallContact = false;
+
 			// Apply acceleration
 			const bool bSkipForLedgeMove = triedLedgeMove;
 			if (!bSkipForLedgeMove)
@@ -665,6 +690,15 @@ namespace mmo
 				{
 					m_velocity = (GetUpdatedNode().GetPosition() - oldLocation) / timeTick;
 					MaintainHorizontalGroundVelocity();
+
+					// Clamp to max speed so wall-slide geometry can't boost velocity above the run cap.
+					// ComputeGroundMovementDelta / slide projection can return a displacement slightly
+					// larger than speed * dt; clamping here keeps it honest.
+					const float maxSpeed = GetMaxSpeed();
+					if (m_velocity.GetSquaredLength() > maxSpeed * maxSpeed)
+					{
+						m_velocity = m_velocity.NormalizedCopy() * maxSpeed;
+					}
 				}
 			}
 
@@ -1033,14 +1067,45 @@ namespace mmo
 
 		CollisionHitResult hit(1.f);
 		Vector3 rampVector = ComputeGroundMovementDelta(delta, m_currentFloor.HitResult, m_currentFloor.bLineTrace);
+
+		const Vector3 prePos = GetUpdatedNode().GetPosition();
+		MOVEMENT_EVENT("MOVE_TICK_PRE",
+			"pos=(" << prePos.x << "," << prePos.y << "," << prePos.z << ")"
+			<< " vel=(" << m_velocity.x << "," << m_velocity.y << "," << m_velocity.z << ")"
+			<< " delta=(" << delta.x << "," << delta.y << "," << delta.z << ")");
+
 		SafeMoveNode(rampVector, GetUpdatedNode().GetOrientation(), true, &hit);
 		float lastMoveTimeSlice = deltaSeconds;
+
+		if (hit.bBlockingHit || hit.bStartPenetrating)
+		{
+			const Vector3 postHitPos = GetUpdatedNode().GetPosition();
+			MOVEMENT_EVENT("WALL_HIT",
+				"pos_before=(" << prePos.x << "," << prePos.y << "," << prePos.z << ")"
+				<< " pos_after=(" << postHitPos.x << "," << postHitPos.y << "," << postHitPos.z << ")"
+				<< " hit_normal=(" << hit.Normal.x << "," << hit.Normal.y << "," << hit.Normal.z << ")"
+				<< " hit_time=" << hit.Time
+				<< " start_penetrating=" << hit.bStartPenetrating
+				<< " vel=(" << m_velocity.x << "," << m_velocity.y << "," << m_velocity.z << ")");
+		}
 
 		if (hit.bStartPenetrating)
 		{
 			// Allow this hit to be used as an impact we can deflect off, otherwise we do nothing the rest of the update and appear to hitch.
 			HandleImpact(hit);
-			SlideAlongSurface(delta, 1.f, hit.Normal, hit, true);
+			const Vector3 wallNormal = hit.Normal;
+			SlideAlongSurface(delta, 1.f, wallNormal, hit, true);
+
+			// Record wall contact and project both velocity and acceleration.
+			m_hasWallContact = true;
+			m_wallContactNormal = wallNormal;
+			m_velocity = Vector3::VectorPlaneProject(m_velocity, wallNormal);
+			m_acceleration = Vector3::VectorPlaneProject(m_acceleration, wallNormal);
+
+			const Vector3 postSlidePos = GetUpdatedNode().GetPosition();
+			MOVEMENT_EVENT("SLIDE_PENETRATION",
+				"pos=(" << postSlidePos.x << "," << postSlidePos.y << "," << postSlidePos.z << ")"
+				<< " vel=(" << m_velocity.x << "," << m_velocity.y << "," << m_velocity.z << ")");
 
 			if (hit.bStartPenetrating)
 			{
@@ -1071,6 +1136,27 @@ namespace mmo
 
 			if (hit.IsValidBlockingHit())
 			{
+				const Vector3 wallNormal = hit.Normal;
+
+				// Record wall contact so next frame's CalcVelocity projects acceleration correctly.
+				m_hasWallContact = true;
+				m_wallContactNormal = wallNormal;
+
+				// Project acceleration (already done redundantly here, but kept for the penetration
+				// path and any sub-iteration that calls MoveAlongFloor multiple times per tick).
+				m_acceleration = Vector3::VectorPlaneProject(m_acceleration, wallNormal);
+
+				// Project velocity onto the wall plane only when we have meaningful into-wall
+				// momentum: either (a) we just hit the wall this frame (hit.Time > 0) so we need
+				// to strip the impact impulse, or (b) the velocity still has a component pushing
+				// into the wall (dot < 0).  Sustained-contact frames where CalcVelocity already
+				// built the correct along-wall velocity are left untouched.
+				const float velIntoWall = m_velocity.Dot(wallNormal);
+				if (hit.Time > 0.f || velIntoWall < 0.f)
+				{
+					m_velocity = Vector3::VectorPlaneProject(m_velocity, wallNormal);
+				}
+
 				if (CanStepUp(hit))
 				{
 					// hit a barrier, try to step up
@@ -1079,7 +1165,13 @@ namespace mmo
 					if (!StepUp(GetGravityDirection(), delta * (1.f - percentTimeApplied), hit, outStepDownResult))
 					{
 						HandleImpact(hit, lastMoveTimeSlice, rampVector);
-						SlideAlongSurface(delta, 1.f - percentTimeApplied, hit.Normal, hit, true);
+						SlideAlongSurface(delta, 1.f - percentTimeApplied, wallNormal, hit, true);
+
+						const Vector3 postSlidePos = GetUpdatedNode().GetPosition();
+						MOVEMENT_EVENT("SLIDE_WALL",
+							"pos=(" << postSlidePos.x << "," << postSlidePos.y << "," << postSlidePos.z << ")"
+							<< " normal=(" << wallNormal.x << "," << wallNormal.y << "," << wallNormal.z << ")"
+							<< " vel=(" << m_velocity.x << "," << m_velocity.y << "," << m_velocity.z << ")");
 					}
 					else
 					{
