@@ -418,7 +418,9 @@ namespace mmo
 	void GameUnitC::UpdateTargetTracking() const
 	{
 		// Check if we should track a target
-		if (const auto target = m_targetUnit.lock(); !IsPlayer() && target)
+		// Skip yaw-tracking when the unit is rooted/stunned/sleeping — it can't
+		// act or move so it should not visually snap to face the target.
+		if (const auto target = m_targetUnit.lock(); !IsPlayer() && target && !IsRooted())
 		{
 			// Only rotate around the Y axis (yaw) to face the target
 			// Calculate the direction vector to the target in the horizontal plane
