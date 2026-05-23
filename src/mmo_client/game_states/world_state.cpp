@@ -1169,6 +1169,10 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LogoutResponse, *this, &WorldState::OnLogoutResponse);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MessageOfTheDay, *this, &WorldState::OnMessageOfTheDay);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveRoot, *this, &WorldState::OnMoveRoot);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStun, *this, &WorldState::OnMoveStun);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSleep, *this, &WorldState::OnMoveSleep);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveFear, *this, &WorldState::OnMoveFear);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveDisorient, *this, &WorldState::OnMoveDisorient);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &WorldState::OnGameTimeInfo);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetProficiency, *this, &WorldState::OnSetProficiency);
 
@@ -3405,6 +3409,126 @@ namespace mmo
 		player->ApplyMovementInfo(info);
 
 		m_realmConnector.SendMoveRootAck(ackId, info);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnMoveStun(game::IncomingPacket &packet)
+	{
+		uint32 ackId;
+		bool applied;
+		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
+		{
+			ELOG("Failed to read MoveStun packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		auto player = ObjectMgr::GetActivePlayer();
+		ASSERT(player);
+
+		MovementInfo info = player->GetMovementInfo();
+		if (applied)
+		{
+			info.movementFlags |= movement_flags::Rooted;
+			info.movementFlags &= ~movement_flags::Moving;
+			m_playerController->StopAllMovement();
+		}
+		else
+		{
+			info.movementFlags &= ~movement_flags::Rooted;
+		}
+		player->ApplyMovementInfo(info);
+
+		m_realmConnector.SendMoveStunAck(ackId, info);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnMoveSleep(game::IncomingPacket &packet)
+	{
+		uint32 ackId;
+		bool applied;
+		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
+		{
+			ELOG("Failed to read MoveSleep packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		auto player = ObjectMgr::GetActivePlayer();
+		ASSERT(player);
+
+		MovementInfo info = player->GetMovementInfo();
+		if (applied)
+		{
+			info.movementFlags |= movement_flags::Rooted;
+			info.movementFlags &= ~movement_flags::Moving;
+			m_playerController->StopAllMovement();
+		}
+		else
+		{
+			info.movementFlags &= ~movement_flags::Rooted;
+		}
+		player->ApplyMovementInfo(info);
+
+		m_realmConnector.SendMoveSleepAck(ackId, info);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnMoveFear(game::IncomingPacket &packet)
+	{
+		uint32 ackId;
+		bool applied;
+		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
+		{
+			ELOG("Failed to read MoveFear packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		auto player = ObjectMgr::GetActivePlayer();
+		ASSERT(player);
+
+		MovementInfo info = player->GetMovementInfo();
+		if (applied)
+		{
+			info.movementFlags |= movement_flags::Rooted;
+			info.movementFlags &= ~movement_flags::Moving;
+			m_playerController->StopAllMovement();
+		}
+		else
+		{
+			info.movementFlags &= ~movement_flags::Rooted;
+		}
+		player->ApplyMovementInfo(info);
+
+		m_realmConnector.SendMoveFearAck(ackId, info);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnMoveDisorient(game::IncomingPacket &packet)
+	{
+		uint32 ackId;
+		bool applied;
+		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
+		{
+			ELOG("Failed to read MoveDisorient packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		auto player = ObjectMgr::GetActivePlayer();
+		ASSERT(player);
+
+		MovementInfo info = player->GetMovementInfo();
+		if (applied)
+		{
+			info.movementFlags |= movement_flags::Rooted;
+			info.movementFlags &= ~movement_flags::Moving;
+			m_playerController->StopAllMovement();
+		}
+		else
+		{
+			info.movementFlags &= ~movement_flags::Rooted;
+		}
+		player->ApplyMovementInfo(info);
+
+		m_realmConnector.SendMoveDisorientAck(ackId, info);
 		return PacketParseResult::Pass;
 	}
 

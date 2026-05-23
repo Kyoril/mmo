@@ -705,6 +705,10 @@ namespace mmo
 		case game::client_realm_packet::ForceSetFlightBackSpeedAck:
 		case game::client_realm_packet::MoveTeleportAck:
 		case game::client_realm_packet::MoveRootAck:
+		case game::client_realm_packet::MoveStunAck:
+		case game::client_realm_packet::MoveSleepAck:
+		case game::client_realm_packet::MoveFearAck:
+		case game::client_realm_packet::MoveDisorientAck:
 			OnClientAck(opCode, buffer.size(), reader);
 			break;
 		}
@@ -1478,7 +1482,7 @@ namespace mmo
 		if (m_character->HasTimedOutPendingMovementChange())
 		{
 			ELOG("Player probably tried to skip or delay an ack packet");
-			//Kick();
+			Kick();
 			return;
 		}
 
@@ -2101,6 +2105,86 @@ namespace mmo
 				else if ((info.movementFlags & movement_flags::Rooted) != 0)
 				{
 					ELOG("Client acked root but player is not unrooted");
+					Kick();
+					return;
+				}
+			}
+			break;
+		case game::client_realm_packet::MoveStunAck:
+			if (change.changeType == MovementChangeType::Stun)
+			{
+				if (change.apply)
+				{
+					if ((info.movementFlags & movement_flags::Rooted) == 0)
+					{
+						ELOG("Client acked stun but player is not rooted");
+						Kick();
+						return;
+					}
+				}
+				else if ((info.movementFlags & movement_flags::Rooted) != 0)
+				{
+					ELOG("Client acked unstun but player is still rooted");
+					Kick();
+					return;
+				}
+			}
+			break;
+		case game::client_realm_packet::MoveSleepAck:
+			if (change.changeType == MovementChangeType::Sleep)
+			{
+				if (change.apply)
+				{
+					if ((info.movementFlags & movement_flags::Rooted) == 0)
+					{
+						ELOG("Client acked sleep but player is not rooted");
+						Kick();
+						return;
+					}
+				}
+				else if ((info.movementFlags & movement_flags::Rooted) != 0)
+				{
+					ELOG("Client acked unsleep but player is still rooted");
+					Kick();
+					return;
+				}
+			}
+			break;
+		case game::client_realm_packet::MoveFearAck:
+			if (change.changeType == MovementChangeType::Fear)
+			{
+				if (change.apply)
+				{
+					if ((info.movementFlags & movement_flags::Rooted) == 0)
+					{
+						ELOG("Client acked fear but player is not rooted");
+						Kick();
+						return;
+					}
+				}
+				else if ((info.movementFlags & movement_flags::Rooted) != 0)
+				{
+					ELOG("Client acked unfear but player is still rooted");
+					Kick();
+					return;
+				}
+			}
+			break;
+		case game::client_realm_packet::MoveDisorientAck:
+			if (change.changeType == MovementChangeType::Disorient)
+			{
+				if (change.apply)
+				{
+					if ((info.movementFlags & movement_flags::Rooted) == 0)
+					{
+						ELOG("Client acked disorient but player is not rooted");
+						Kick();
+						return;
+					}
+				}
+				else if ((info.movementFlags & movement_flags::Rooted) != 0)
+				{
+					ELOG("Client acked undisorient but player is still rooted");
 					Kick();
 					return;
 				}
@@ -2739,22 +2823,50 @@ namespace mmo
 
 	void Player::OnStunChanged(bool applied, uint32 ackId)
 	{
-		// TODO(S02): send MoveStun/MoveStunAck packet
+		SendPacket([applied, ackId](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::MoveStun);
+				packet
+					<< io::write<uint32>(ackId)
+					<< io::write<uint8>(applied);
+				packet.Finish();
+			});
 	}
 
 	void Player::OnSleepChanged(bool applied, uint32 ackId)
 	{
-		// TODO(S02): send MoveSleep/MoveSleepAck packet
+		SendPacket([applied, ackId](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::MoveSleep);
+				packet
+					<< io::write<uint32>(ackId)
+					<< io::write<uint8>(applied);
+				packet.Finish();
+			});
 	}
 
 	void Player::OnFearChanged(bool applied, uint32 ackId)
 	{
-		// TODO(S02): send MoveFear/MoveFearAck packet
+		SendPacket([applied, ackId](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::MoveFear);
+				packet
+					<< io::write<uint32>(ackId)
+					<< io::write<uint8>(applied);
+				packet.Finish();
+			});
 	}
 
 	void Player::OnDisorientChanged(bool applied, uint32 ackId)
 	{
-		// TODO(S02): send MoveDisorient/MoveDisorientAck packet
+		SendPacket([applied, ackId](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::MoveDisorient);
+				packet
+					<< io::write<uint32>(ackId)
+					<< io::write<uint8>(applied);
+				packet.Finish();
+			});
 	}
 
 	void Player::OnProficiencyChanged(const uint32 proficiencyId, const bool added)

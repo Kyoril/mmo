@@ -344,6 +344,10 @@ namespace mmo
 		PacketParseResult OnMessageOfTheDay(game::IncomingPacket &packet);
 
 		PacketParseResult OnMoveRoot(game::IncomingPacket &packet);
+		PacketParseResult OnMoveStun(game::IncomingPacket &packet);
+		PacketParseResult OnMoveSleep(game::IncomingPacket &packet);
+		PacketParseResult OnMoveFear(game::IncomingPacket &packet);
+		PacketParseResult OnMoveDisorient(game::IncomingPacket &packet);
 
 		/// @brief Handles the GameTimeInfo packet.
 		/// @param packet The incoming packet.

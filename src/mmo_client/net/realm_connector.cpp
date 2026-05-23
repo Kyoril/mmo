@@ -498,6 +498,42 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::SendMoveStunAck(uint32 ackId, const MovementInfo& movementInfo)
+	{
+		sendSinglePacket([ackId, &movementInfo](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::MoveStunAck);
+			packet << io::write<uint32>(ackId) << movementInfo;
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::SendMoveSleepAck(uint32 ackId, const MovementInfo& movementInfo)
+	{
+		sendSinglePacket([ackId, &movementInfo](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::MoveSleepAck);
+			packet << io::write<uint32>(ackId) << movementInfo;
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::SendMoveFearAck(uint32 ackId, const MovementInfo& movementInfo)
+	{
+		sendSinglePacket([ackId, &movementInfo](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::MoveFearAck);
+			packet << io::write<uint32>(ackId) << movementInfo;
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::SendMoveDisorientAck(uint32 ackId, const MovementInfo& movementInfo)
+	{
+		sendSinglePacket([ackId, &movementInfo](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::MoveDisorientAck);
+			packet << io::write<uint32>(ackId) << movementInfo;
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::AutoStoreLootItem(uint8 lootSlot)
 	{
 		sendSinglePacket([lootSlot](game::OutgoingPacket& packet) {
