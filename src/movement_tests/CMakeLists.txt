@@ -16,6 +16,7 @@ target_sources(movement_tests PRIVATE
 # mmo_client headers are needed for party stubs (symbols referenced from game_client/object_mgr)
 target_include_directories(movement_tests PRIVATE
 	${CMAKE_SOURCE_DIR}/src/mmo_client
+	$<TARGET_PROPERTY:freetype,INTERFACE_INCLUDE_DIRECTORIES>
 )
 
 target_link_libraries(movement_tests
