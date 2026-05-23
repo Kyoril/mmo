@@ -715,6 +715,16 @@ namespace mmo
 			return;
 		}
 
+		// Root suppression: unit can attack in melee but cannot chase.
+		// If the threat list is non-empty, keep the countdown alive and let
+		// UpdateVictim pick an in-range target (or idle) rather than resetting.
+		if (controlled.IsRooted() && !m_threat.empty())
+		{
+			UpdateVictim();
+			m_nextActionCountdown.SetEnd(GetAsyncTimeMs() + ACTION_INTERVAL_MS);
+			return;
+		}
+
 		// Determine our current victim (also starts auto-attack on new targets)
 		UpdateVictim();
 

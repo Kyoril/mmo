@@ -218,7 +218,7 @@ namespace mmo
 			OnEntryChanged();
 		}
 
-		if (complete || m_fieldMap.IsFieldMarkedAsChanged(object_fields::Flags))
+		if (!complete && m_fieldMap.IsFieldMarkedAsChanged(object_fields::Flags))
 		{
 			UpdateSparkEmitter(CanBeLooted());
 		}
@@ -231,6 +231,7 @@ namespace mmo
 		if (complete)
 		{
 			SetupSceneObjects();
+			UpdateSparkEmitter(CanBeLooted());
 		}
 
 		if (updateFlags & object_update_flags::HasMovementInfo)
