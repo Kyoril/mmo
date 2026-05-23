@@ -635,6 +635,7 @@ namespace mmo
 		AnimationState *m_walkAnimState{nullptr};
 		AnimationState *m_readyAnimState{nullptr};
 		AnimationState *m_runAnimState{nullptr};
+		AnimationState *m_runBackAnimState{nullptr};
 		AnimationState *m_deathState{nullptr};
 		AnimationState *m_unarmedAttackState{nullptr};
 		AnimationState *m_castReleaseState{nullptr};

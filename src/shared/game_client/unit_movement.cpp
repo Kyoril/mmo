@@ -458,16 +458,30 @@ namespace mmo
 
 	float UnitMovement::GetMaxSpeed() const
 	{
+		// Check if the unit is moving backward (but NOT forward at the same time)
+		// so we can apply the reduced backward speed cap.
+		const uint32 flags = m_movedUnit.GetMovementInfo().movementFlags;
+		const bool movingBackward = (flags & movement_flags::Backward) != 0 &&
+		                            (flags & movement_flags::Forward) == 0;
+
 		switch (m_movementMode)
 		{
 		case MovementMode::Walking:
-			return m_movedUnit.GetSpeed(movement_type::Run);
+			return movingBackward
+				? m_movedUnit.GetSpeed(movement_type::Backwards)
+				: m_movedUnit.GetSpeed(movement_type::Run);
 		case MovementMode::Falling:
-			return m_movedUnit.GetSpeed(movement_type::Run);
+			return movingBackward
+				? m_movedUnit.GetSpeed(movement_type::Backwards)
+				: m_movedUnit.GetSpeed(movement_type::Run);
 		case MovementMode::Swimming:
-			return m_movedUnit.GetSpeed(movement_type::Swim);
+			return movingBackward
+				? m_movedUnit.GetSpeed(movement_type::SwimBackwards)
+				: m_movedUnit.GetSpeed(movement_type::Swim);
 		case MovementMode::Flying:
-			return m_movedUnit.GetSpeed(movement_type::Flight);
+			return movingBackward
+				? m_movedUnit.GetSpeed(movement_type::FlightBackwards)
+				: m_movedUnit.GetSpeed(movement_type::Flight);
 		case MovementMode::None:
 		default:
 			return 0.f;

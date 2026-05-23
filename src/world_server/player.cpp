@@ -1695,8 +1695,14 @@ namespace mmo
 			{
 				const float elapsed = static_cast<float>(info.timestamp - m_lastPositionPacketTimestamp) / 1000.0f;
 				// 35% tolerance for latency jitter, frame-rate variation, physics rounding.
-				// Empirical: observed legitimate peak = 9.12 m/s (run=7.0); 1.35x = 9.45 gives headroom.
-				const float maxSpeed = m_character->GetSpeed(movement_type::Run) * 1.35f;
+				// When the player is moving backward, cap against the backward speed instead of run speed.
+				const bool wasMovingBackward =
+					(info.movementFlags & movement_flags::Backward) != 0 &&
+					(info.movementFlags & movement_flags::Forward) == 0;
+				const float baseSpeed = wasMovingBackward
+					? m_character->GetSpeed(movement_type::Backwards)
+					: m_character->GetSpeed(movement_type::Run);
+				const float maxSpeed = baseSpeed * 1.35f;
 				const float impliedSpeed = dist / elapsed;
 
 				if (impliedSpeed > maxSpeed)

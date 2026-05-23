@@ -474,10 +474,23 @@ namespace mmo
 		// Regular movement animations
 		if (m_unitMovement->IsMovingOnGround() && inputVector2DSize > 0.1f)
 		{
-			AnimationState* movementAnim = m_runAnimState;
+			// Detect backward movement: Backward flag set and Forward flag not set.
+			const bool movingBackward =
+				(m_movementInfo.movementFlags & movement_flags::Backward) != 0 &&
+				(m_movementInfo.movementFlags & movement_flags::Forward) == 0;
+
+			AnimationState* movementAnim;
 			if (m_walkAnimState && IsWalkModeEnabled())
 			{
 				movementAnim = m_walkAnimState;
+			}
+			else if (movingBackward && m_runBackAnimState)
+			{
+				movementAnim = m_runBackAnimState;
+			}
+			else
+			{
+				movementAnim = m_runAnimState;
 			}
 
 			SetTargetAnimState(movementAnim);
@@ -2468,6 +2481,7 @@ namespace mmo
 		m_idleAnimState = nullptr;
 		m_walkAnimState = nullptr;
 		m_runAnimState = nullptr;
+		m_runBackAnimState = nullptr;
 		m_readyAnimState = nullptr;
 		m_castingState = nullptr;
 		m_castReleaseState = nullptr;
@@ -2570,6 +2584,10 @@ namespace mmo
 			m_runAnimState = m_entity->GetAnimationState("Run");
 		}
 
+		if (m_entity->HasAnimationState("RunBack"))
+		{
+			m_runBackAnimState = m_entity->GetAnimationState("RunBack");
+		}
 		if (m_entity->HasAnimationState("UnarmedReady"))
 		{
 			m_readyAnimState = m_entity->GetAnimationState("UnarmedReady");
