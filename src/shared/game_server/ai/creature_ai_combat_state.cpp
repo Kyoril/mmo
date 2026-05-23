@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include "game_server/ai/creature_ai_combat_state.h"
 #include "game_server/ai/creature_ai.h"
@@ -410,6 +411,32 @@ namespace mmo
 		// Find the unit with the highest threat
 		GameUnitS* newVictim = GetTopThreatener();
 
+		// Root fallback: if rooted and top target is out of melee reach, find nearest in-range alternative.
+		if (newVictim && controlled.IsRooted())
+		{
+			const float reach = controlled.GetMeleeReach() + newVictim->GetMeleeReach();
+			const float dist = (controlled.GetPosition() - newVictim->GetPosition()).GetLength();
+			if (dist > reach)
+			{
+				// Scan threat list for the closest unit within melee reach.
+				GameUnitS* fallback = nullptr;
+				float bestDist = std::numeric_limits<float>::max();
+				for (const auto& pair : m_threat)
+				{
+					GameUnitS* candidate = pair.second.threatener.lock().get();
+					if (!candidate || !candidate->IsAlive()) continue;
+					const float r = controlled.GetMeleeReach() + candidate->GetMeleeReach();
+					const float d = (controlled.GetPosition() - candidate->GetPosition()).GetLength();
+					if (d <= r && d < bestDist)
+					{
+						bestDist = d;
+						fallback = candidate;
+					}
+				}
+				newVictim = fallback; // nullptr if no in-range unit
+			}
+		}
+
 		// Only switch victims if necessary
 		if (newVictim && newVictim != currentVictim)
 		{
@@ -669,6 +696,23 @@ namespace mmo
 
 			// Script returned false — fall through to default AI below.
 			// UpdateVictim is needed for the default AI path.
+		}
+
+		// Fear suppression: CC controller drives movement; suppress all attacks.
+		if (controlled.IsFeared())
+		{
+			controlled.StopAttack();
+			m_nextActionCountdown.SetEnd(GetAsyncTimeMs() + ACTION_INTERVAL_MS);
+			return;
+		}
+
+		// Sleep/stun suppression: unit cannot act; keep the countdown alive so
+		// combat resumes naturally on the next tick after the CC expires.
+		if (controlled.IsSleeping() || controlled.IsStunned())
+		{
+			controlled.StopAttack();
+			m_nextActionCountdown.SetEnd(GetAsyncTimeMs() + ACTION_INTERVAL_MS);
+			return;
 		}
 
 		// Determine our current victim (also starts auto-attack on new targets)
