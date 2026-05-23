@@ -2,6 +2,7 @@
 
 #include "game_unit_s.h"
 
+#include "game_server/cc_movement_controller.h"
 #include "game_server/world/each_tile_in_sight.h"
 #include "game_server/objects/game_player_s.h"
 #include "base/utilities.h"
@@ -52,6 +53,9 @@ namespace mmo
 	{
 		// Setup unit mover
 		m_mover = make_unique<UnitMover>(*this);
+
+		// Create CC movement controller (drives wander for feared/disoriented NPCs)
+		m_ccMovementController = std::make_unique<CCMovementController>(*this);
 
 		// Create spell caster
 		m_spellCast = std::make_unique<SpellCast>(m_timers, *this);
@@ -1186,6 +1190,9 @@ namespace mmo
 			{
 				// Immediately unrooted because not player controlled
 				m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				// Root lifted — resume CC wander if controller is still active
+				if (IsUnderForcedMovement())
+					m_ccMovementController->OnWanderTick();
 			}
 		}
 		else if (!wasRooted && isRooted)
@@ -1211,6 +1218,7 @@ namespace mmo
 			{
 				// Immediately rooted because not player controlled
 				m_movementInfo.movementFlags |= movement_flags::Rooted;
+				// Root applied — CC controller will pause via suppression check
 			}
 		}
 	}
@@ -1240,6 +1248,9 @@ namespace mmo
 			else
 			{
 				m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				// Stun lifted — resume CC wander if controller is still active
+				if (IsUnderForcedMovement())
+					m_ccMovementController->OnWanderTick();
 			}
 		}
 		else if (!wasStunned && isStunned)
@@ -1259,6 +1270,7 @@ namespace mmo
 			else
 			{
 				m_movementInfo.movementFlags |= movement_flags::Rooted;
+				// Stun applied — CC controller will pause via OnWanderTick suppression check
 			}
 		}
 	}
@@ -1288,6 +1300,9 @@ namespace mmo
 			else
 			{
 				m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				// Sleep lifted — resume CC wander if controller is still active
+				if (IsUnderForcedMovement())
+					m_ccMovementController->OnWanderTick();
 			}
 		}
 		else if (!wasSleeping && isSleeping)
@@ -1307,6 +1322,7 @@ namespace mmo
 			else
 			{
 				m_movementInfo.movementFlags |= movement_flags::Rooted;
+				// Sleep applied — CC controller will pause via suppression check
 			}
 		}
 	}
@@ -1336,6 +1352,10 @@ namespace mmo
 			else
 			{
 				m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				// Fear removed — stop CC movement; re-start for disorient if still active
+				StopCCMovement();
+				if (IsDisoriented())
+					StartCCMovement();
 			}
 		}
 		else if (!wasFeared && isFeared)
@@ -1355,6 +1375,8 @@ namespace mmo
 			else
 			{
 				m_movementInfo.movementFlags |= movement_flags::Rooted;
+				// Fear applied — start CC movement (fear has higher priority)
+				StartCCMovement();
 			}
 		}
 	}
@@ -1384,6 +1406,10 @@ namespace mmo
 			else
 			{
 				m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				// Disorient removed — stop CC movement; re-start for fear if still active
+				StopCCMovement();
+				if (IsFeared())
+					StartCCMovement();
 			}
 		}
 		else if (!wasDisoriented && isDisoriented)
@@ -1403,8 +1429,28 @@ namespace mmo
 			else
 			{
 				m_movementInfo.movementFlags |= movement_flags::Rooted;
+				// Disorient applied — start CC movement only if not already active (fear takes priority)
+				if (!IsUnderForcedMovement())
+					StartCCMovement();
 			}
 		}
+	}
+
+	bool GameUnitS::IsUnderForcedMovement() const
+	{
+		return m_ccMovementController && m_ccMovementController->IsActive();
+	}
+
+	void GameUnitS::StartCCMovement()
+	{
+		if (m_ccMovementController)
+			m_ccMovementController->Start();
+	}
+
+	void GameUnitS::StopCCMovement()
+	{
+		if (m_ccMovementController)
+			m_ccMovementController->Stop();
 	}
 
 	bool GameUnitS::CanUseWeapon(WeaponAttack attackType)

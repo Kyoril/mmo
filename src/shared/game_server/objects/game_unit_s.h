@@ -445,6 +445,9 @@ namespace mmo
 		};
 	}
 
+	// Forward declaration for the CC movement controller
+	class CCMovementController;
+
 	/// Represents a living object (unit) in the game world.
 	/// Units can move, cast spells, fight, and interact with other objects.
 	class GameUnitS
@@ -895,6 +898,10 @@ namespace mmo
 		bool IsFeared() const { return (m_state & unit_state::Feared) != 0; }
 		bool IsDisoriented() const { return (m_state & unit_state::Disoriented) != 0; }
 
+		/// Returns true while the CCMovementController is actively driving
+		/// forced wander movement (feared or disoriented non-player unit).
+		bool IsUnderForcedMovement() const;
+
 		/// Called when a proc event occurs to check if any auras should proc
 		void TriggerProcEvent(SpellProcFlags eventFlags, GameUnitS *target = nullptr, uint32 damage = 0, uint32 procEx = 0, uint8 school = 0, bool isProc = false, uint64 familyFlags = 0);
 
@@ -1278,6 +1285,12 @@ public:
 
 		void OnPvpCombatTimer();
 
+		/// Starts server-driven wander movement (fear / disorient) for non-player units.
+		void StartCCMovement();
+
+		/// Stops server-driven wander movement and resets the controller.
+		void StopCCMovement();
+
 		/// Sets the stand state of the unit.
 		/// @param standState The new stand state.
 		void SetStandState(const unit_stand_state::Type standState) { Set<uint32>(object_fields::StandState, standState); }
@@ -1330,6 +1343,7 @@ public:
 		TimerQueue &m_timers;
 		Countdown m_despawnCountdown;
 		std::unique_ptr<UnitMover> m_mover;
+		std::unique_ptr<CCMovementController> m_ccMovementController;
 		Countdown m_attackSwingCountdown;
 		GameTime m_lastMainHand = 0, m_lastOffHand = 0;
 		Countdown m_regenCountdown;
