@@ -44,7 +44,7 @@ namespace mmo
     {
     }
 
-    void ViewportPanel::Draw(const String &id, WorldEditMode *currentEditMode)
+    void ViewportPanel::Draw(const String &id, WorldEditMode *currentEditMode, bool waypointEditActive)
     {
         if (ImGui::Begin(id.c_str()))
         {
@@ -76,6 +76,23 @@ namespace mmo
 
             HandleViewportInteractions(availableSpace, currentEditMode);
             DrawViewportToolbar(availableSpace);
+
+            // Patrol edit submode banner
+            if (waypointEditActive)
+            {
+                ImGui::SetItemAllowOverlap();
+                const float bannerH = 30.0f;
+                ImGui::SetCursorPos(ImVec2(0.0f, availableSpace.y - bannerH));
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.7f, 0.3f, 0.1f, 0.75f));
+                if (ImGui::BeginChild("##patrol_banner", ImVec2(availableSpace.x, bannerH), false, ImGuiWindowFlags_NoScrollbar))
+                {
+                    ImGui::SetCursorPosY((bannerH - ImGui::GetTextLineHeight()) * 0.5f);
+                    ImGui::SetCursorPosX(8.0f);
+                    ImGui::TextUnformatted("PATROL WAYPOINT EDIT  |  Click to add  \xE2\x80\xA2  Drag to move  \xE2\x80\xA2  [Esc] to exit");
+                }
+                ImGui::EndChild();
+                ImGui::PopStyleColor();
+            }
         }
         ImGui::End();
     }

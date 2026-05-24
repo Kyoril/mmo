@@ -444,7 +444,7 @@ namespace mmo
 			{ SetEditMode(mode); });
 
 		m_worldSettingsPanel->Draw(worldSettingsId);
-		m_viewportPanel->Draw(viewportId, m_editMode);
+		m_viewportPanel->Draw(viewportId, m_editMode, m_spawnEditMode && m_editMode == m_spawnEditMode.get() && m_spawnEditMode->IsWaypointEditActive());
 		DrawSceneOutlinePanel(sceneOutlineId);
 
 		if (m_initDockLayout)
@@ -491,6 +491,13 @@ namespace mmo
 		else if (ImGui::IsKeyDown(ImGuiKey_F5))
 		{
 			SetEditMode(m_skyEditMode.get());
+		}
+
+		// Patrol submode — Escape exits
+		if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+		{
+			if (m_editMode == m_spawnEditMode.get() && m_spawnEditMode->IsWaypointEditActive())
+				m_spawnEditMode->SetWaypointEditActive(false);
 		}
 	}
 
@@ -2151,7 +2158,26 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 				ImGui::Separator();
 				ImGui::Text("Patrol Waypoints");
 				ImGui::Separator();
-				ImGui::TextDisabled("Click in the viewport to add waypoints.");
+				const bool editActive = m_spawnEditMode->IsWaypointEditActive();
+			if (editActive)
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.7f, 0.2f, 0.2f, 0.8f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.9f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.9f, 0.4f, 0.4f, 1.0f));
+				if (ImGui::Button("Exit Waypoint Edit", ImVec2(-1, 0)))
+					m_spawnEditMode->SetWaypointEditActive(false);
+				ImGui::PopStyleColor(3);
+				ImGui::TextDisabled("Click viewport to add/drag waypoints. [Esc] to exit.");
+			}
+			else
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 0.9f, 0.9f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
+				if (ImGui::Button("Edit Patrol Waypoints", ImVec2(-1, 0)))
+					m_spawnEditMode->SetWaypointEditActive(true);
+				ImGui::PopStyleColor(3);
+			}
 
 				bool waypointChanged = false;
 				int removeIndex = -1;

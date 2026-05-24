@@ -57,6 +57,9 @@ namespace mmo
 		/// @brief Returns true when a PATROL-movement spawn is selected and waypoint editing is active.
 		[[nodiscard]] bool IsWaypointEditActive() const { return m_waypointEditActive; }
 
+		/// @brief Explicitly enters or exits waypoint edit submode.
+		void SetWaypointEditActive(bool active);
+
 		/// @brief Returns true when a waypoint drag operation is in progress.
 		[[nodiscard]] bool IsDraggingWaypoint() const { return m_draggingWaypointIndex >= 0; }
 

@@ -509,21 +509,20 @@ namespace mmo
 
 	void SpawnEditMode::SetSelectedSpawn(proto::UnitSpawnEntry* spawn)
 	{
-		// Re-evaluate active state even when pointer is unchanged (movement type may have changed).
-		const bool newActive = spawn != nullptr &&
-			spawn->movement() == proto::UnitSpawnEntry_MovementType_PATROL;
-
-		if (m_selectedUnitSpawn == spawn && newActive == m_waypointEditActive)
-		{
+		if (m_selectedUnitSpawn == spawn)
 			return;
-		}
 
 		m_selectedUnitSpawn = spawn;
 		m_draggingWaypointIndex = -1;
 		m_hoveredWaypointIndex = -1;
-		m_waypointEditActive = newActive;
+		m_waypointEditActive = false;
 
 		RebuildWaypointVisualization();
+	}
+
+	void SpawnEditMode::SetWaypointEditActive(bool active)
+	{
+		m_waypointEditActive = active;
 	}
 
 	void SpawnEditMode::RebuildWaypointVisualization()

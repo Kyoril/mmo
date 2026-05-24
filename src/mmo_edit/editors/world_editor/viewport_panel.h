@@ -60,7 +60,7 @@ namespace mmo
         /// @brief Draws the viewport panel.
         /// @param id The ImGui window ID for the panel.
         /// @param currentEditMode The currently active edit mode (can be nullptr).
-        void Draw(const String &id, WorldEditMode *currentEditMode);
+        void Draw(const String &id, WorldEditMode *currentEditMode, bool waypointEditActive = false);
 
         /// @brief Sets the transform mode button icons.
         /// @param translateIcon Translate mode icon texture.
