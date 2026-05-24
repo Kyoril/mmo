@@ -1188,8 +1188,12 @@ namespace mmo
 			}
 			else
 			{
-				// Immediately unrooted because not player controlled
-				m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				// Immediately unrooted because not player controlled.
+				// Only clear the Rooted flag if no other CC effect is also using it.
+				if (!IsStunned() && !IsSleeping() && !IsFeared() && !IsDisoriented())
+				{
+					m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				}
 				// Root lifted — resume CC wander if controller is still active
 				if (IsUnderForcedMovement())
 					m_ccMovementController->OnWanderTick();
@@ -1247,7 +1251,13 @@ namespace mmo
 			}
 			else
 			{
-				m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				// Only clear the Rooted movement flag if no other CC effect or root aura
+				// is still keeping this unit suppressed.  If a real root aura is active,
+				// removing the stun must not un-root the unit.
+				if (!IsSleeping() && !IsFeared() && !IsDisoriented() && !HasAuraEffect(aura_type::ModRoot))
+				{
+					m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				}
 				// Stun lifted — resume CC wander if controller is still active
 				if (IsUnderForcedMovement())
 					m_ccMovementController->OnWanderTick();
@@ -1299,7 +1309,12 @@ namespace mmo
 			}
 			else
 			{
-				m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				// Only clear the Rooted movement flag if no other CC effect or root aura
+				// is still keeping this unit suppressed.
+				if (!IsStunned() && !IsFeared() && !IsDisoriented() && !HasAuraEffect(aura_type::ModRoot))
+				{
+					m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				}
 				// Sleep lifted — resume CC wander if controller is still active
 				if (IsUnderForcedMovement())
 					m_ccMovementController->OnWanderTick();
@@ -1351,7 +1366,12 @@ namespace mmo
 			}
 			else
 			{
-				m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				// Only clear the Rooted movement flag if no other CC or root aura still
+				// requires movement suppression.
+				if (!IsStunned() && !IsSleeping() && !IsDisoriented() && !HasAuraEffect(aura_type::ModRoot))
+				{
+					m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				}
 				// Fear removed — stop CC movement; re-start for disorient if still active
 				StopCCMovement();
 				if (IsDisoriented())
@@ -1405,7 +1425,12 @@ namespace mmo
 			}
 			else
 			{
-				m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				// Only clear the Rooted movement flag if no other CC or root aura still
+				// requires movement suppression.
+				if (!IsStunned() && !IsSleeping() && !IsFeared() && !HasAuraEffect(aura_type::ModRoot))
+				{
+					m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				}
 				// Disorient removed — stop CC movement; re-start for fear if still active
 				StopCCMovement();
 				if (IsFeared())
