@@ -2769,16 +2769,29 @@ namespace mmo
 		}
 
 		const auto it = configuration.chosenOptionPerGroup.find(group.GetId());
-		if (it == configuration.chosenOptionPerGroup.end())
+
+		// Determine which value to use: the configured one, or fall back to the
+		// first available option so that tagged sub-entities are not left hidden
+		// when the configuration is incomplete.
+		uint32 chosenValue = 0;
+		if (it != configuration.chosenOptionPerGroup.end())
 		{
-			// Nothing to do here because we have no value set
+			chosenValue = it->second;
+		}
+		else if (!group.possibleValues.empty())
+		{
+			chosenValue = group.possibleValues.front().valueId;
+		}
+		else
+		{
+			// No possible values defined — nothing to show
 			return;
 		}
 
 		// Now make each referenced sub entity visible
 		for (const auto &value : group.possibleValues)
 		{
-			if (value.valueId == it->second)
+			if (value.valueId == chosenValue)
 			{
 				for (const auto &subEntityName : value.visibleSubEntities)
 				{
