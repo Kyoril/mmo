@@ -120,7 +120,6 @@ namespace mmo
 			ModSleep,
 			ModStun,
 			ModFear,
-			ModDisorient,
 
 			ModVisibility,
 
@@ -130,6 +129,8 @@ namespace mmo
 
 			ModSpellDamageDone,
 			ModSpellDamageDonePct,
+
+			ModDisorient,
 
 			Count_,
 			Invalid_ = Count_
