@@ -450,14 +450,22 @@ namespace mmo
 		{
 			if (!newVictim->CanBeSeenBy(controlled))
 			{
-				controlled.StopAttack();
-				controlled.SetTarget(0);
-				m_movementState.Reset();
+				// Unit is invisible/stealthed - drop from threat list so the creature
+				// can reset if no other valid targets remain.
+				RemoveThreat(*newVictim);
 			}
 			else
 			{
 				controlled.StartAttack(std::static_pointer_cast<GameUnitS>(newVictim->shared_from_this()));
 				m_movementState.Reset(); // Reset movement when switching targets
+			}
+		}
+		else if (newVictim && newVictim == currentVictim)
+		{
+			// Existing victim — check if they've gone invisible/stealthed mid-combat.
+			if (!newVictim->CanBeSeenBy(controlled))
+			{
+				RemoveThreat(*newVictim);
 			}
 		}
 		else if (!newVictim)
