@@ -310,8 +310,8 @@ namespace mmo
 
 				static const char* s_movementTypeStrings[] = {
 					"Stationary",
-					"Patrol",
-					"Route"
+					"Random Movement",
+					"Patrol"
 				};
 
 				int movement = spawn->movement();

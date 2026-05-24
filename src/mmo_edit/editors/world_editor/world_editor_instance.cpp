@@ -2126,8 +2126,8 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 			static const char *s_movementModeStrings[] = {
 				"Stationary",
-				"Patrol",
-				"Route"};
+				"Random Movement",
+				"Patrol"};
 
 			if (ImGui::BeginCombo("Movement", s_movementModeStrings[selectable.GetEntry().movement()]))
 			{

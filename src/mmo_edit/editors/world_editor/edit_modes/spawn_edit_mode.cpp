@@ -413,7 +413,7 @@ namespace mmo
 			entry->set_respawn(true);
 			entry->set_respawndelay(30000);
 			entry->set_maxcount(1);
-			entry->set_movement(proto::UnitSpawnEntry_MovementType_PATROL);
+			entry->set_movement(proto::UnitSpawnEntry_MovementType_STATIONARY);
 			entry->set_isactive(true);
 
 			m_worldEditor.AddUnitSpawn(*entry, false);
