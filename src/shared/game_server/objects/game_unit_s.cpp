@@ -849,6 +849,29 @@ namespace mmo
 			}
 		}
 
+		// CategoryExclusive: remove all auras from the same caster in the same stacking category
+		if (static_cast<SpellStackingRule>(aura->GetSpell().stacking_rule()) == SpellStackingRule::CategoryExclusive)
+		{
+			const uint32 categoryId = aura->GetStackingCategoryId();
+			const uint64 casterId   = aura->GetCasterId();
+			if (categoryId > 0)
+			{
+				for (auto it = m_auras.begin(); it != m_auras.end();)
+				{
+					auto& existing = *it;
+					if (existing->GetStackingCategoryId() == categoryId &&
+						existing->GetCasterId() == casterId)
+					{
+						it = m_auras.erase(it);
+					}
+					else
+					{
+						++it;
+					}
+				}
+			}
+		}
+
 		// Remove existing auras that this aura should overwrite
 		for (auto it = m_auras.begin(); it != m_auras.end();)
 		{
