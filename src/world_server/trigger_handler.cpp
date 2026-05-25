@@ -1006,13 +1006,11 @@ namespace mmo
 			// Need to provide a name
 			if (action.targetname().empty()) return nullptr;
 
-			// Find it
-			/*auto* spawner = world->FindObjectSpawner(action.targetname());
+			// Find spawner by name and return first spawned object
+			auto* spawner = world->FindObjectSpawner(action.targetname());
 			if (!spawner) return nullptr;
 
-			// Return the first spawned game object
-			return (spawner->getSpawnedObjects().empty() ? nullptr : spawner->getSpawnedObjects()[0].get());*/
-			return nullptr;
+			return (spawner->getSpawnedObjects().empty() ? nullptr : spawner->getSpawnedObjects()[0].get());
 		}
 		case trigger_action_target::NamedCreature:
 		{

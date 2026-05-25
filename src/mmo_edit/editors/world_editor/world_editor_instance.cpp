@@ -2071,6 +2071,11 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 		if (ImGui::CollapsingHeader("Unit Spawn"))
 		{
+			// Optional name used for trigger target resolution (NamedCreature).
+			ImGui::InputText("Spawn Name", selectable.GetEntry().mutable_name());
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Optional unique name for this spawn point.\nUsed by trigger actions that target a 'Named Creature'.");
+
 			proto::UnitEntry *selectedUnit = m_editor.GetProject().units.getById(selectable.GetEntry().unitentry());
 			if (ImGui::BeginCombo("Unit", selectedUnit ? selectedUnit->name().c_str() : "(None)"))
 			{
@@ -2243,6 +2248,11 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 	{
 		if (ImGui::CollapsingHeader("Object Spawn"))
 		{
+			// Optional name used for trigger target resolution (NamedWorldObject).
+			ImGui::InputText("Spawn Name", selectable.GetEntry().mutable_name());
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Optional unique name for this spawn point.\nUsed by trigger actions that target a 'Named World Object'.");
+
 			proto::ObjectEntry *selectedObject = m_editor.GetProject().objects.getById(selectable.GetEntry().objectentry());
 			if (ImGui::BeginCombo("Object", selectedObject ? selectedObject->name().c_str() : "(None)"))
 			{
