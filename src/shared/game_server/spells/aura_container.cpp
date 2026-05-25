@@ -646,4 +646,25 @@ namespace mmo
 			aura->HandleProcEffect(target);
 		}
 	}
+
+	void AuraContainer::RefreshAura(const proto::SpellEntry& incomingSpell)
+	{
+		// Duration extension: remaining + base_duration, capped at effectiveMax
+		const GameTime now = static_cast<GameTime>(GetAsyncTimeMs());
+		const GameTime remaining = (m_expiration > now) ? (m_expiration - now) : 0;
+		const GameTime effectiveMax = (incomingSpell.maxduration() > 0)
+			? static_cast<GameTime>(incomingSpell.maxduration())
+			: m_duration;
+		const GameTime newExpiration = now + std::min(remaining + m_duration, effectiveMax);
+		m_expiration = newExpiration;
+		m_expirationCountdown.SetEnd(m_expiration);
+
+		// Stack count update: policy 0 = GrantReset (reset to max), else increment up to max
+		const uint32 maxStacks = (incomingSpell.stackamount() > 0) ? incomingSpell.stackamount() : 1u;
+		const bool grantReset = (incomingSpell.stack_reset_policy() == 0u);
+		if (grantReset)
+			m_stackCount = maxStacks;
+		else
+			m_stackCount = std::min(m_stackCount + 1u, maxStacks);
+	}
 }
