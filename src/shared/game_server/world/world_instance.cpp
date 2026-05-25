@@ -320,37 +320,39 @@ namespace mmo
 			TileIndex2D gridIndex;
 			if (!m_visibilityGrid->GetTilePosition(remove.GetPosition(), gridIndex[0], gridIndex[1]))
 			{
-				ELOG("Could not resolve grid location!");
-				return;
+				ELOG("Could not resolve grid location for object " << log_hex_digit(remove.GetGuid()) << " during removal — skipping tile cleanup");
 			}
-
-			auto* tile = m_visibilityGrid->GetTile(gridIndex);
-			if (!tile)
+			else
 			{
-				ELOG("Could not find tile!");
-				return;
-			}
-
-			tile->GetGameObjects().remove(&remove);
-			remove.OnDespawn();
-
-			ForEachTileInSight(
-				*m_visibilityGrid,
-				tile->GetPosition(),
-				[&remove](VisibilityTile& tile)
+				auto* tile = m_visibilityGrid->GetTile(gridIndex);
+				if (!tile)
 				{
-					std::vector objects{ &remove };
-					for (auto* subscriber : tile.GetWatchers())
-					{
-						// Only despawn if we were visible before
-						if (remove.IsUnit() && !remove.AsUnit().CanBeSeenBy(subscriber->GetGameUnit()))
-						{
-							continue; // Skip subscribers that cannot see this unit
-						}
+					ELOG("Could not find tile for object " << log_hex_digit(remove.GetGuid()) << " during removal — skipping tile cleanup");
+				}
+				else
+				{
+					tile->GetGameObjects().remove(&remove);
+					remove.OnDespawn();
 
-						subscriber->NotifyObjectsDespawned(objects);
-					}
-				});
+					ForEachTileInSight(
+						*m_visibilityGrid,
+						tile->GetPosition(),
+						[&remove](VisibilityTile& tile)
+						{
+							std::vector objects{ &remove };
+							for (auto* subscriber : tile.GetWatchers())
+							{
+								// Only despawn if we were visible before
+								if (remove.IsUnit() && !remove.AsUnit().CanBeSeenBy(subscriber->GetGameUnit()))
+								{
+									continue; // Skip subscribers that cannot see this unit
+								}
+
+								subscriber->NotifyObjectsDespawned(objects);
+							}
+						});
+				}
+			}
 		}
 
 		if (remove.destroy)
