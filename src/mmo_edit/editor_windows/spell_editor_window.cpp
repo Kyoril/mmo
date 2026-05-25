@@ -755,12 +755,20 @@ namespace mmo
 			DrawSectionHeader("Stacking Rule");
 
 			static const char* stackingRuleItems[] = {
-				"Always Stack",
-				"Never Stack",
-				"Stack by Caster",
-				"Replace Weaker",
-				"Replace Stronger",
-				"Stack by Intensity"
+				"Default",
+				"Unique Per Target",
+				"Unique Per Caster",
+				"Stackable Per Caster",
+				"Single Target Per Caster",
+				"Category Exclusive"
+			};
+			static const char* stackingRuleDescs[] = {
+				"Default: Uses the legacy OnlyOneStackTotal attribute flag to determine stacking. Same caster + same spell always overwrites; different casters stack unless the attribute is set.",
+				"Unique Per Target: Only one instance of this aura may exist on a target at a time, regardless of caster. Any caster applying it overwrites the existing one.",
+				"Unique Per Caster: Each caster may have at most one instance of this aura on any single target. A caster recasting on the same target overwrites their own aura; multiple casters stack independently.",
+				"Stackable Per Caster: Each caster maintains their own independent aura stack on the target. Multiple casters each add their own instance without interfering.",
+				"Single Target Per Caster: Each caster may only have this aura active on ONE target at a time. Casting on a new target removes it from the previous target. Use for crowd-control like Sleep or Polymorph.",
+				"Category Exclusive: Uses the Stacking Category field to group spells. Only one aura from the same category may be active on a target per caster. Useful when multiple spells (e.g. Sleep, Hibernate) should share a single-target limit."
 			};
 			int stackingRule = static_cast<int>(currentEntry.stacking_rule());
 			ImGui::SetNextItemWidth(250);
@@ -771,7 +779,7 @@ namespace mmo
 			ImGui::SameLine();
 			ImGui::Text("Stacking Rule");
 			ImGui::SameLine();
-			DrawHelpMarker("Determines how this aura stacks with other auras of the same category");
+			DrawHelpMarker(stackingRuleDescs[stackingRule < IM_ARRAYSIZE(stackingRuleDescs) ? stackingRule : 0]);
 
 			ImGui::Spacing();
 			DrawSectionHeader("Stacking Category");
