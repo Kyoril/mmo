@@ -356,6 +356,8 @@ namespace mmo
 
 		PacketParseResult OnSetProficiency(game::IncomingPacket &packet);
 
+		PacketParseResult OnSpellModChanged(game::IncomingPacket &packet);
+
 		PacketParseResult OnTimePlayedResponse(game::IncomingPacket &packet);
 
 		PacketParseResult OnTimeSyncRequest(game::IncomingPacket &packet);

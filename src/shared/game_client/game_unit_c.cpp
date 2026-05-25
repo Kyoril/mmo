@@ -3285,4 +3285,31 @@ namespace mmo
 		}
 	}
 
+	void GameUnitC::SetSpellMod(const uint8 type, const uint8 effectIndex, const uint8 op, const int32 value)
+	{
+		const uint32 key = (static_cast<uint32>(type) << 16) | (static_cast<uint32>(effectIndex) << 8) | static_cast<uint32>(op);
+		if (value == 0)
+		{
+			m_spellMods.erase(key);
+		}
+		else
+		{
+			m_spellMods[key] = value;
+		}
+	}
+
+	int32 GameUnitC::GetSpellModFlat(const uint8 op, const uint8 effectIndex) const
+	{
+		const uint32 key = (static_cast<uint32>(0) << 16) | (static_cast<uint32>(effectIndex) << 8) | static_cast<uint32>(op);
+		const auto it = m_spellMods.find(key);
+		return it != m_spellMods.end() ? it->second : 0;
+	}
+
+	int32 GameUnitC::GetSpellModPct(const uint8 op, const uint8 effectIndex) const
+	{
+		const uint32 key = (static_cast<uint32>(1) << 16) | (static_cast<uint32>(effectIndex) << 8) | static_cast<uint32>(op);
+		const auto it = m_spellMods.find(key);
+		return it != m_spellMods.end() ? it->second : 0;
+	}
+
 }

@@ -1176,6 +1176,8 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &WorldState::OnGameTimeInfo);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetProficiency, *this, &WorldState::OnSetProficiency);
 
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellModChanged, *this, &WorldState::OnSpellModChanged);
+
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TimePlayedResponse, *this, &WorldState::OnTimePlayedResponse);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TimeSyncRequest, *this, &WorldState::OnTimeSyncRequest);
 
@@ -4492,6 +4494,35 @@ namespace {
 
 		DLOG("Received TimeSyncRequest with index: " << syncIndex << ", responding with client time: " << clientTimestamp);
 		m_timeSyncResponseSent = true;
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnSpellModChanged(game::IncomingPacket& packet)
+	{
+		uint8 modType, effectIndex, modOp;
+		int32 value;
+		if (!(packet
+			>> io::read<uint8>(modType)
+			>> io::read<uint8>(effectIndex)
+			>> io::read<uint8>(modOp)
+			>> io::read<int32>(value)))
+		{
+			ELOG("Failed to read SpellModChanged packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Apply to the local controlled player
+		const auto player = ObjectMgr::GetActivePlayer();
+		if (!player)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		player->SetSpellMod(modType, effectIndex, modOp, value);
+
+		// Notify the UI so tooltips can refresh
+		FrameManager::Get().TriggerLuaEvent("SPELL_MOD_CHANGED", modOp);
 
 		return PacketParseResult::Pass;
 	}

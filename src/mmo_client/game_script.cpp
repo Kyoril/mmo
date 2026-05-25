@@ -1140,6 +1140,31 @@ namespace mmo
 					   luabind::def<std::function<bool(uint32)>>("IsSpellOnCooldown", [this](uint32 spellId)
 																 { return this->m_cooldownManager.IsOnCooldown(spellId); }),
 
+				   // Spell modifier queries — allow Lua tooltips to reflect server-side spell mods
+				   luabind::def<std::function<int32(uint32, uint32)>>("GetSpellModFlat", [](uint32 modOp, uint32 effectIndex) -> int32
+				   {
+					   const auto player = ObjectMgr::GetActivePlayer();
+					   if (!player) { return 0; }
+					   return player->GetSpellModFlat(static_cast<uint8>(modOp), static_cast<uint8>(effectIndex));
+				   }),
+				   luabind::def<std::function<int32(uint32, uint32)>>("GetSpellModPct", [](uint32 modOp, uint32 effectIndex) -> int32
+				   {
+					   const auto player = ObjectMgr::GetActivePlayer();
+					   if (!player) { return 0; }
+					   return player->GetSpellModPct(static_cast<uint8>(modOp), static_cast<uint8>(effectIndex));
+				   }),
+				   /// Returns the effective (mod-adjusted) cost for a spell.
+				   luabind::def<std::function<int32(uint32)>>("GetSpellEffectiveCost", [this](uint32 spellId) -> int32
+				   {
+					   const auto* spell = m_project.spells.getById(spellId);
+					   if (!spell) { return 0; }
+					   const auto player = ObjectMgr::GetActivePlayer();
+					   if (!player) { return spell->cost(); }
+					   int32 cost = spell->cost();
+					   cost = player->ApplySpellMod(static_cast<uint8>(spell_mod_op::Cost), cost);
+					   return std::max(0, cost);
+				   }),
+
 					   luabind::def<std::function<void(int32, const ItemInfo *&, String &, int32 &, int32 &, int32 &, bool &)>>("GetVendorItemInfo", [this](int32 slot, const ItemInfo *&out_item, String &out_icon, int32 &out_price, int32 &out_quantity, int32 &out_numAvailable, bool &out_usable)
 																																{ return this->GetVendorItemInfo(slot, out_item, out_icon, out_price, out_quantity, out_numAvailable, out_usable); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>, luabind::pure_out_value<7>>()),
 					   luabind::def_lambda("BuyVendorItem", [this](uint32 slot)

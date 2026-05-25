@@ -465,6 +465,10 @@ namespace mmo
 				SpellSuperceeded,
 				SetProficiency,
 
+				/// Sent to the client when a spell modifier changes on the player's character.
+				/// Contains: uint8 modType (Flat=0/Pct=1), uint8 effectIndex, uint8 modOp, int32 totalValue
+				SpellModChanged,
+
 				/// Environmental damage log packet (fall damage, drowning, lava, etc.)
 				EnvironmentalDamageLog,
 

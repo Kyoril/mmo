@@ -277,12 +277,22 @@ namespace mmo
 
 		SpellTargetMap targetMap{};
 
-		// Power check
-		if ((spell->powertype() != unit->GetPowerType() && spell->cost() != 0) ||
-			spell->cost() > unit->GetPower(unit->GetPowerType()))
+		// Power check — apply spell cost modifiers from server-communicated spell mods
+		if (spell->cost() != 0)
 		{
-			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_NO_POWER");
-			return;
+			int32 effectiveCost = spell->cost();
+			if (spell->powertype() == unit->GetPowerType())
+			{
+				// Apply flat then pct modifiers to the cost
+				effectiveCost = unit->ApplySpellMod(static_cast<uint8>(spell_mod_op::Cost), effectiveCost);
+				effectiveCost = std::max(0, effectiveCost);
+			}
+
+			if (spell->powertype() != unit->GetPowerType() || effectiveCost > unit->GetPower(unit->GetPowerType()))
+			{
+				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_NO_POWER");
+				return;
+			}
 		}
 
 		// Check if we need to provide a target unit

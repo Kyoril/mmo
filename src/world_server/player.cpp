@@ -2650,7 +2650,15 @@ namespace mmo
 
 	void Player::OnSpellModChanged(SpellModType type, uint8 effectIndex, SpellModOp op, int32 value)
 	{
-		// TODO
+		SendPacket([type, effectIndex, op, value](game::OutgoingPacket& packet) {
+			packet.Start(game::realm_client_packet::SpellModChanged);
+			packet
+				<< io::write<uint8>(static_cast<uint8>(type))
+				<< io::write<uint8>(effectIndex)
+				<< io::write<uint8>(static_cast<uint8>(op))
+				<< io::write<int32>(value);
+			packet.Finish();
+		});
 	}
 
 	void Player::OnQuestKillCredit(const proto::QuestEntry& quest, uint64 guid, uint32 entry, uint32 count, uint32 maxCount)

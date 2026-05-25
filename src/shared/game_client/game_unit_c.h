@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <queue>
 #include <set>
 
@@ -429,6 +430,32 @@ namespace mmo
 		bool IsCastingSpell() const { return false; }
 
 	public:
+		/// @brief Sets the total spell modifier value for a given type, effect index, and operation.
+		/// Called when the server notifies us of a spell mod change.
+		/// @param type 0 = Flat, 1 = Pct
+		/// @param effectIndex Spell effect bitmask index (0-63)
+		/// @param op Spell modifier operation (see spell_mod_op)
+		/// @param value Total modifier value (replaces previous value for this key)
+		void SetSpellMod(uint8 type, uint8 effectIndex, uint8 op, int32 value);
+
+		/// @brief Returns the total flat spell modifier for a given operation and effect index.
+		int32 GetSpellModFlat(uint8 op, uint8 effectIndex = 0) const;
+
+		/// @brief Returns the total percentage spell modifier for a given operation and effect index (as integer, e.g. -10 = -10%).
+		int32 GetSpellModPct(uint8 op, uint8 effectIndex = 0) const;
+
+		/// @brief Applies accumulated spell mods to a value (flat + pct).
+		template<typename T>
+		T ApplySpellMod(uint8 op, T value, uint8 effectIndex = 0) const
+		{
+			const int32 flatMod = GetSpellModFlat(op, effectIndex);
+			const int32 pctMod = GetSpellModPct(op, effectIndex);
+			T result = value + static_cast<T>(flatMod);
+			result = static_cast<T>(result * (1.0f + static_cast<float>(pctMod) * 0.01f));
+			return result;
+		}
+
+	public:
 		/// @brief Returns whether the unit is currently attacking any unit.
 		bool IsAttacking() const { return m_victim != 0; }
 
@@ -724,5 +751,9 @@ namespace mmo
 
 		ParticleEmitter* m_sparkEmitter = nullptr;
 		SceneNode* m_sparkEmitterNode = nullptr;
+
+		/// @brief Client-side spell modifier cache. 
+		/// Key: packed (type << 16 | effectIndex << 8 | op), Value: total modifier value.
+		std::map<uint32, int32> m_spellMods;
 	};
 }
