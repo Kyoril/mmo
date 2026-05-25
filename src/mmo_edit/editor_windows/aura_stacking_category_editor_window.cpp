@@ -10,6 +10,7 @@ namespace mmo
 		, m_host(host)
 	{
 		m_hasToolbarButton = false;
+		EditorWindowBase::SetVisible(false);
 	}
 
 	void AuraStackingCategoryEditorWindow::DrawDetailsImpl(proto::AuraStackingCategoryEntry& currentEntry)

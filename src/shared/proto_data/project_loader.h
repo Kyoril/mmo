@@ -62,11 +62,13 @@ namespace mmo
 
 				mmo::String name;
 				LoadFunction load;
+				bool optional = false;
 
 				template<typename T>
 				ManagerEntry(
 				    const mmo::String &name,
-				    T &manager
+				    T &manager,
+				    bool optional = false
 				)
 					: name(name)
 					, load([this, name, &manager](
@@ -76,6 +78,7 @@ namespace mmo
 				{
 					return this->loadManagerFromFile(file, fileName, context, manager, name);
 				})
+					, optional(optional)
 				{
 				}
 
@@ -131,6 +134,11 @@ namespace mmo
 					auto *table = fileTable.getTable(manager.name);
 					if (!table)
 					{
+						if (manager.optional)
+						{
+							WLOG("File info of optional manager '" << manager.name << "' is missing in the project - skipping");
+							continue;
+						}
 						success = false;
 
 						ELOG("File info of '" << manager.name << "' is missing in the project");
@@ -139,6 +147,11 @@ namespace mmo
 
 					if (!table->tryGetString("file", relativeFileName))
 					{
+						if (manager.optional)
+						{
+							WLOG("File name of optional manager '" << manager.name << "' is missing in the project - skipping");
+							continue;
+						}
 						success = false;
 
 						ELOG("File name of '" << manager.name << "' is missing in the project");
@@ -148,6 +161,11 @@ namespace mmo
 					const auto managerFile = directory.readFile(relativeFileName, false);
 					if (!managerFile)
 					{
+						if (manager.optional)
+						{
+							WLOG("Could not open file for optional manager '" << manager.name << "' ('" << relativeFileName << "') - skipping");
+							continue;
+						}
 						success = false;
 
 						ELOG("Could not open file '" << relativeFileName << "'");

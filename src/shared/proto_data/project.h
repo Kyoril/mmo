@@ -248,7 +248,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("faction_templates", factionTemplates));
 				managers.push_back(ManagerEntry("area_triggers", areaTriggers));
 				managers.push_back(ManagerEntry("spell_categories", spellCategories));
-				managers.push_back(ManagerEntry("aura_stacking_categories", auraStackingCategories));
+				managers.push_back(ManagerEntry("aura_stacking_categories", auraStackingCategories, true));
 				managers.push_back(ManagerEntry("combat_ratings", combatRatings));
 				managers.push_back(ManagerEntry("melee_crit_chance", meleeCritChance));
 				managers.push_back(ManagerEntry("spell_crit_chance", spellCritChance));
