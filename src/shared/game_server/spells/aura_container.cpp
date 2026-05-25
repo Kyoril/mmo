@@ -482,18 +482,12 @@ namespace mmo
 
 	bool AuraContainer::HasSameBaseSpellId(const proto::SpellEntry& spell) const
 	{
-		if (spell.baseid() == 0)
-		{
-			return false;
-		}
+		// Determine the effective base-spell IDs for both sides.
+		// A baseid of 0 means the spell itself is the base (rank 1 / standalone).
+		const uint32 myBaseId    = (GetBaseSpellId() != 0) ? GetBaseSpellId() : GetSpellId();
+		const uint32 otherBaseId = (spell.baseid()   != 0) ? spell.baseid()   : spell.id();
 
-		const uint32 baseSpellId = GetBaseSpellId();
-		if (baseSpellId == spell.baseid())
-		{
-			return true;
-		}
-
-		return false;
+		return myBaseId == otherBaseId;
 	}
 
 	GameUnitS* AuraContainer::GetCaster() const

@@ -403,3 +403,75 @@ TEST_CASE("SingleTargetPerCaster stale weak_ptr: expired target is silently disc
 	// target2 should now have the aura
 	CHECK(target2->HasAuraSpellFromCaster(600, casterGuid));
 }
+
+// ---------------------------------------------------------------------------
+// Group 4: UniquePerTarget bug-regression tests
+// ---------------------------------------------------------------------------
+
+TEST_CASE("UniquePerTarget baseid=0 (standalone): re-casting same spell replaces existing aura", "[spell_stacking][regression]")
+{
+	// Bug: HasSameBaseSpellId returned false when baseid==0, so UniquePerTarget
+	// fell through to Reject, allowing unlimited stacking of the same standalone spell.
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+
+	auto target = MakeUnit(project, timers);
+
+	proto::SpellEntry spell = MakeSpell();
+	spell.set_id(700);
+	// baseid intentionally NOT set (defaults to 0) — a standalone / rank-1 spell
+	spell.set_rank(1);
+	spell.set_stacking_rule(static_cast<uint32_t>(SpellStackingRule::UniquePerTarget));
+
+	const uint64 casterId = 1;
+
+	auto aura1 = std::make_shared<AuraContainer>(*target, casterId, spell, /*duration=*/5000, /*itemGuid=*/0);
+	target->ApplyAura(std::move(aura1));
+	CHECK(target->HasAuraSpellFromCaster(700, casterId));
+
+	// Cast the same spell again — should replace, not stack.
+	// Verify at the ShouldOverwriteAura level that baseid==0 spells match each other.
+	{
+		proto::SpellEntry spellCopy = spell;
+		AuraContainer existingContainer(*target, casterId, spell, /*duration=*/5000, /*itemGuid=*/0);
+		AuraContainer incomingContainer(*target, casterId, spellCopy, /*duration=*/5000, /*itemGuid=*/0);
+		CHECK(incomingContainer.ShouldOverwriteAura(existingContainer) == AuraApplicationResult::Replace);
+	}
+}
+
+TEST_CASE("UniquePerTarget shared stacking category: second spell evicts first regardless of spell id", "[spell_stacking][regression]")
+{
+	// Bug: Category-eviction only ran for CategoryExclusive. UniquePerTarget with a
+	// shared stacking_category_id never evicted the conflicting spell from a different id.
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+
+	auto target = MakeUnit(project, timers);
+
+	proto::SpellEntry spellA = MakeSpell();
+	spellA.set_id(800);
+	spellA.set_rank(1);
+	spellA.set_stacking_rule(static_cast<uint32_t>(SpellStackingRule::UniquePerTarget));
+	spellA.set_stacking_category_id(42);
+
+	proto::SpellEntry spellB = MakeSpell();
+	spellB.set_id(801);
+	spellB.set_rank(1);
+	spellB.set_stacking_rule(static_cast<uint32_t>(SpellStackingRule::UniquePerTarget));
+	spellB.set_stacking_category_id(42);
+
+	const uint64 casterId = 1;
+
+	auto auraA = std::make_shared<AuraContainer>(*target, casterId, spellA, /*duration=*/5000, /*itemGuid=*/0);
+	target->ApplyAura(std::move(auraA));
+	CHECK(target->HasAuraSpellFromCaster(800, casterId));
+
+	// Apply spellB (same category) — spellA must be evicted
+	auto auraB = std::make_shared<AuraContainer>(*target, casterId, spellB, /*duration=*/5000, /*itemGuid=*/0);
+	target->ApplyAura(std::move(auraB));
+
+	CHECK(target->HasAuraSpellFromCaster(801, casterId));
+	CHECK_FALSE(target->HasAuraSpellFromCaster(800, casterId));
+}

@@ -872,6 +872,28 @@ namespace mmo
 			}
 		}
 
+		// UniquePerTarget with a stacking category: evict ALL auras (any caster) in the same category.
+		// This enforces mutual exclusivity across different spells that share a category.
+		if (static_cast<SpellStackingRule>(aura->GetSpell().stacking_rule()) == SpellStackingRule::UniquePerTarget)
+		{
+			const uint32 categoryId = aura->GetStackingCategoryId();
+			if (categoryId > 0)
+			{
+				for (auto it = m_auras.begin(); it != m_auras.end();)
+				{
+					auto& existing = *it;
+					if (existing->GetStackingCategoryId() == categoryId)
+					{
+						it = m_auras.erase(it);
+					}
+					else
+					{
+						++it;
+					}
+				}
+			}
+		}
+
 		// Remove existing auras that this aura should overwrite
 		for (auto it = m_auras.begin(); it != m_auras.end();)
 		{
