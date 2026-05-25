@@ -44,8 +44,8 @@ message UnitSpawnEntry {
 	repeated Waypoint waypoints = 13;
 	enum MovementType {
 		STATIONARY = 0;
-		PATROL = 1;
-		ROUTE = 2;
+		RANDOM = 1;
+		PATROL = 2;
 	}
 	optional MovementType movement = 14 [default = STATIONARY];
 

@@ -172,7 +172,7 @@ namespace mmo
 			return;
 		}
 
-		if (GetControlled().GetMovementType() == creature_movement::Waypoints)
+		if (GetControlled().GetMovementType() == creature_movement::Patrol)
 		{
 			if (GetControlled().HasPatrolWaypoints())
 			{
@@ -242,7 +242,7 @@ namespace mmo
 
 	void CreatureAIIdleState::OnTargetReached()
 	{
-		if (GetControlled().GetMovementType() == creature_movement::Waypoints)
+		if (GetControlled().GetMovementType() == creature_movement::Patrol)
 		{
 			const auto& patrolWaypoints = GetControlled().GetPatrolWaypoints();
 			if (patrolWaypoints.empty())
@@ -267,7 +267,7 @@ namespace mmo
 			return;
 		}
 
-		if (GetControlled().GetMovementType() == creature_movement::Waypoints)
+		if (GetControlled().GetMovementType() == creature_movement::Patrol)
 		{
 			MoveToNextPatrolWaypoint();
 			return;

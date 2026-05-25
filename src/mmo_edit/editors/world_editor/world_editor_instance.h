@@ -40,6 +40,7 @@
 #include "details_panel.h"
 #include "world_settings_panel.h"
 #include "viewport_panel.h"
+#include "spawn_palette_panel.h"
 #include "entity_factory.h"
 
 namespace mmo
@@ -288,7 +289,7 @@ namespace mmo
 		// UI related methods
 		void HandleKeyboardShortcuts();
 		void DrawSceneOutlinePanel(const String &sceneOutlineId);
-		void InitializeDockLayout(ImGuiID dockspaceId, const String &viewportId, const String &detailsId, const String &worldSettingsId);
+		void InitializeDockLayout(ImGuiID dockspaceId, const String &viewportId, const String &detailsId, const String &worldSettingsId, const String &spawnPaletteId);
 
 		void OnTerrainMouseMoved(float viewportX, float viewportY);
 
@@ -478,6 +479,7 @@ namespace mmo
 		std::unique_ptr<WorldSettingsPanel> m_worldSettingsPanel;
 		std::unique_ptr<ViewportPanel> m_viewportPanel;
 		std::unique_ptr<SceneOutlineWindow> m_sceneOutlineWindow;
+		std::unique_ptr<SpawnPalettePanel> m_spawnPalettePanel;
 	};
 }
 

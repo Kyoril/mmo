@@ -191,6 +191,9 @@ namespace mmo
 			[this](WorldEditMode *mode)
 			{ SetEditMode(mode); });
 
+		// Create spawn palette panel
+		m_spawnPalettePanel = std::make_unique<SpawnPalettePanel>();
+
 		// Initialize deferred renderer BEFORE viewport panel since viewport panel takes a reference to it
 		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), m_scene, 640, 480);
 
@@ -425,6 +428,7 @@ namespace mmo
 		const String detailsId = "Details##" + GetAssetPath().string();
 		const String worldSettingsId = "World Settings##" + GetAssetPath().string();
 		const String sceneOutlineId = "Scene Outline##" + GetAssetPath().string();
+		const String spawnPaletteId = "Spawn Palette##" + GetAssetPath().string();
 
 		HandleKeyboardShortcuts();
 
@@ -444,12 +448,13 @@ namespace mmo
 			{ SetEditMode(mode); });
 
 		m_worldSettingsPanel->Draw(worldSettingsId);
+		m_spawnPalettePanel->Draw(spawnPaletteId, m_spawnEditMode.get());
 		m_viewportPanel->Draw(viewportId, m_editMode, m_spawnEditMode && m_editMode == m_spawnEditMode.get() && m_spawnEditMode->IsWaypointEditActive());
 		DrawSceneOutlinePanel(sceneOutlineId);
 
 		if (m_initDockLayout)
 		{
-			InitializeDockLayout(dockspaceId, viewportId, detailsId, worldSettingsId);
+			InitializeDockLayout(dockspaceId, viewportId, detailsId, worldSettingsId, spawnPaletteId);
 		}
 
 		ImGui::PopID();
@@ -501,7 +506,7 @@ namespace mmo
 		}
 	}
 
-	void WorldEditorInstance::InitializeDockLayout(ImGuiID dockspaceId, const String &viewportId, const String &detailsId, const String &worldSettingsId)
+	void WorldEditorInstance::InitializeDockLayout(ImGuiID dockspaceId, const String &viewportId, const String &detailsId, const String &worldSettingsId, const String &spawnPaletteId)
 	{
 		ImGui::DockBuilderRemoveNode(dockspaceId);
 		ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace | ImGuiDockNodeFlags_AutoHideTabBar); // Add empty node
@@ -522,6 +527,7 @@ namespace mmo
 		ImGui::DockBuilderDockWindow(sceneOutlineId.c_str(), sideTopId);
 		ImGui::DockBuilderDockWindow(detailsId.c_str(), sideId);
 		ImGui::DockBuilderDockWindow(worldSettingsId.c_str(), sideId);
+		ImGui::DockBuilderDockWindow(spawnPaletteId.c_str(), sideId);
 
 		ImGui::DockBuilderFinish(dockspaceId);
 		m_initDockLayout = false;

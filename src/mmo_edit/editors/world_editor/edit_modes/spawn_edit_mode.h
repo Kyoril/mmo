@@ -69,10 +69,16 @@ namespace mmo
 		/// @brief Destroys and rebuilds all waypoint visualization render objects from the current spawn.
 		void RebuildWaypointVisualization();
 
+	public:
+		proto::UnitManager& GetUnits() const { return m_units; }
+		proto::ObjectManager& GetObjects() const { return m_objects; }
+		const proto::UnitEntry* GetSelectedUnit() const { return m_selectedUnit; }
+		void SetSelectedUnit(const proto::UnitEntry* unit) { m_selectedUnit = unit; }
+		String ExtractWorldNameFromPath() const;
+
 	private:
 		void DetectMapEntry();
 		void CreateMapEntry(const String& worldName);
-		String ExtractWorldNameFromPath() const;
 
 		/// @brief Tests world-space position (worldX, worldY, worldZ) against every waypoint.
 		/// @param worldX World X coordinate to test.
