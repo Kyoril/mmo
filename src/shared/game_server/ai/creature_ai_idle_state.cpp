@@ -94,10 +94,31 @@ namespace mmo
 					// It's our ally - check if we should assist in combat
 					if (isVisible)
 					{
-						if (dist <= 8.0f)
+						if (dist <= 8.0f && unit.IsInCombat())
 						{
-							auto* victim = unit.GetVictim();
-							if (unit.IsInCombat() && victim != nullptr)
+							// Prefer the ally's current victim. When the victim field is
+							// cleared (e.g. because the ally is feared / stunned / sleeping)
+							// fall back to the ally's combat participant list. Combat participants
+							// are the players/units that have generated threat on this creature
+							// (populated in AddThreat regardless of CC state), so they remain
+							// valid even when SetTarget(0) has cleared the visual victim field.
+							GameUnitS* victim = unit.GetVictim();
+
+							if (victim == nullptr)
+							{
+								if (auto* allyCreature = dynamic_cast<GameCreatureS*>(&unit))
+								{
+									allyCreature->ForEachCombatParticipant([&](GameUnitS& participant)
+									{
+										if (victim == nullptr && controlled.UnitIsEnemy(participant))
+										{
+											victim = &participant;
+										}
+									});
+								}
+							}
+
+							if (victim != nullptr)
 							{
 								// Is the enemy of our friend our enemy?
 								if (!controlled.UnitIsEnemy(*victim))

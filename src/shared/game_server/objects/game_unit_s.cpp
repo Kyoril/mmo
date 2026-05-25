@@ -1297,8 +1297,19 @@ namespace mmo
 			}
 			else
 			{
-				// Immediately rooted because not player controlled
+				// Immediately rooted because not player controlled.
 				m_movementInfo.movementFlags |= movement_flags::Rooted;
+				// If the current victim is already out of melee reach, clear the visual target
+				// now. UpdateVictim will restore it when a target steps into range or root expires.
+				if (const auto victim = m_victim.lock())
+				{
+					const float reach = GetMeleeReach() + victim->GetMeleeReach();
+					const float dist = (GetPosition() - victim->GetPosition()).GetLength();
+					if (dist > reach)
+					{
+						Set<uint64>(object_fields::TargetUnit, 0);
+					}
+				}
 				// Root applied — CC controller will pause via suppression check
 			}
 		}
@@ -1357,7 +1368,9 @@ namespace mmo
 			else
 			{
 				m_movementInfo.movementFlags |= movement_flags::Rooted;
-				// Stun applied — CC controller will pause via OnWanderTick suppression check
+				// Stun applied — clear target and let combat AI restore it on recovery.
+				SetTarget(0);
+				// CC controller will pause via OnWanderTick suppression check
 			}
 		}
 	}
@@ -1414,7 +1427,9 @@ namespace mmo
 			else
 			{
 				m_movementInfo.movementFlags |= movement_flags::Rooted;
-				// Sleep applied — CC controller will pause via suppression check
+				// Sleep applied — clear target and let combat AI restore it on recovery.
+				SetTarget(0);
+				// CC controller will pause via suppression check
 			}
 		}
 	}
@@ -1471,7 +1486,12 @@ namespace mmo
 			}
 			else
 			{
-				m_movementInfo.movementFlags |= movement_flags::Rooted;
+				// NOTE: Do NOT set movement_flags::Rooted for fear. Feared NPCs wander
+				// randomly via CCMovementController — setting Rooted here would suppress
+				// the wander countdown immediately (IsRooted() is checked inside
+				// CCMovementController::Start/OnWanderTick).
+				// Clear the visual target so the unit no longer appears to be targeting anyone.
+				SetTarget(0);
 				// Fear applied — start CC movement (fear has higher priority)
 				StartCCMovement();
 			}
@@ -1530,7 +1550,10 @@ namespace mmo
 			}
 			else
 			{
-				m_movementInfo.movementFlags |= movement_flags::Rooted;
+				// NOTE: Do NOT set movement_flags::Rooted for disorient. Disoriented NPCs
+				// wander via CCMovementController — Rooted flag would suppress the wander.
+				// Clear the visual target so the unit no longer appears to be targeting anyone.
+				SetTarget(0);
 				// Disorient applied — start CC movement only if not already active (fear takes priority)
 				if (!IsUnderForcedMovement())
 					StartCCMovement();

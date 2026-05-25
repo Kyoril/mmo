@@ -412,8 +412,6 @@ namespace mmo
 		GameUnitS* newVictim = GetTopThreatener();
 
 		// Root fallback: if rooted and top target is out of melee reach, find nearest in-range alternative.
-		// Only switch to a fallback when one actually exists — never clear newVictim to nullptr here,
-		// because that would cause ChooseNextAction to call GetAI().Reset() and abort combat entirely.
 		if (newVictim && controlled.IsRooted())
 		{
 			const float reach = controlled.GetMeleeReach() + newVictim->GetMeleeReach();
@@ -435,12 +433,20 @@ namespace mmo
 						fallback = candidate;
 					}
 				}
-				// Only replace newVictim when a valid in-range fallback was found.
-				// If no unit is within reach, keep newVictim pointing to the top threatener
-				// so the creature remains in combat waiting for the target to come in range.
+
 				if (fallback != nullptr)
 				{
+					// In-range fallback found — attack it.
 					newVictim = fallback;
+				}
+				else
+				{
+					// No target in reach while rooted — clear the visual target so the unit
+					// doesn't appear to be targeting anyone.  Keep newVictim non-null so we
+					// don't abort combat; just idle until something walks in range.
+					controlled.SetTarget(0);
+					// Don't call StartAttack — nothing to attack right now.
+					return;
 				}
 			}
 		}
