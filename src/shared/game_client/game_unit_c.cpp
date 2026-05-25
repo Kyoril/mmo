@@ -3298,18 +3298,56 @@ namespace mmo
 		}
 	}
 
-	int32 GameUnitC::GetSpellModFlat(const uint8 op, const uint8 effectIndex) const
+	int32 GameUnitC::GetSpellModFlatForFlags(const uint8 op, const uint64 familyFlags) const
 	{
-		const uint32 key = (static_cast<uint32>(0) << 16) | (static_cast<uint32>(effectIndex) << 8) | static_cast<uint32>(op);
-		const auto it = m_spellMods.find(key);
-		return it != m_spellMods.end() ? it->second : 0;
+		if (familyFlags == 0)
+		{
+			return 0;
+		}
+
+		int32 total = 0;
+		for (uint8 eff = 0; eff < 64; ++eff)
+		{
+			if (!(familyFlags & (static_cast<uint64>(1) << eff)))
+			{
+				continue;
+			}
+
+			// type 0 = Flat
+			const uint32 key = (static_cast<uint32>(0) << 16) | (static_cast<uint32>(eff) << 8) | static_cast<uint32>(op);
+			const auto it = m_spellMods.find(key);
+			if (it != m_spellMods.end())
+			{
+				total += it->second;
+			}
+		}
+		return total;
 	}
 
-	int32 GameUnitC::GetSpellModPct(const uint8 op, const uint8 effectIndex) const
+	int32 GameUnitC::GetSpellModPctForFlags(const uint8 op, const uint64 familyFlags) const
 	{
-		const uint32 key = (static_cast<uint32>(1) << 16) | (static_cast<uint32>(effectIndex) << 8) | static_cast<uint32>(op);
-		const auto it = m_spellMods.find(key);
-		return it != m_spellMods.end() ? it->second : 0;
+		if (familyFlags == 0)
+		{
+			return 0;
+		}
+
+		int32 total = 0;
+		for (uint8 eff = 0; eff < 64; ++eff)
+		{
+			if (!(familyFlags & (static_cast<uint64>(1) << eff)))
+			{
+				continue;
+			}
+
+			// type 1 = Pct
+			const uint32 key = (static_cast<uint32>(1) << 16) | (static_cast<uint32>(eff) << 8) | static_cast<uint32>(op);
+			const auto it = m_spellMods.find(key);
+			if (it != m_spellMods.end())
+			{
+				total += it->second;
+			}
+		}
+		return total;
 	}
 
 }

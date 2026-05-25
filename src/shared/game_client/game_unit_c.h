@@ -433,23 +433,26 @@ namespace mmo
 		/// @brief Sets the total spell modifier value for a given type, effect index, and operation.
 		/// Called when the server notifies us of a spell mod change.
 		/// @param type 0 = Flat, 1 = Pct
-		/// @param effectIndex Spell effect bitmask index (0-63)
+		/// @param effectIndex Spell effect bitmask index (0-63) — a bit position in the spell familyflags mask
 		/// @param op Spell modifier operation (see spell_mod_op)
-		/// @param value Total modifier value (replaces previous value for this key)
+		/// @param value Total modifier value for this bit position
 		void SetSpellMod(uint8 type, uint8 effectIndex, uint8 op, int32 value);
 
-		/// @brief Returns the total flat spell modifier for a given operation and effect index.
-		int32 GetSpellModFlat(uint8 op, uint8 effectIndex = 0) const;
+		/// @brief Returns the total flat spell modifier for a given operation, summed across all effect
+		/// bit positions that are set in familyFlags. Mirrors server GetTotalSpellMods logic.
+		int32 GetSpellModFlatForFlags(uint8 op, uint64 familyFlags) const;
 
-		/// @brief Returns the total percentage spell modifier for a given operation and effect index (as integer, e.g. -10 = -10%).
-		int32 GetSpellModPct(uint8 op, uint8 effectIndex = 0) const;
+		/// @brief Returns the total percentage spell modifier for a given operation, summed across all
+		/// effect bit positions that are set in familyFlags. Mirrors server GetTotalSpellMods logic.
+		int32 GetSpellModPctForFlags(uint8 op, uint64 familyFlags) const;
 
-		/// @brief Applies accumulated spell mods to a value (flat + pct).
+		/// @brief Applies accumulated spell mods to a value (flat + pct), using the spell's familyflags
+		/// to select which stored effect-index totals apply.
 		template<typename T>
-		T ApplySpellMod(uint8 op, T value, uint8 effectIndex = 0) const
+		T ApplySpellModForFlags(uint8 op, T value, uint64 familyFlags) const
 		{
-			const int32 flatMod = GetSpellModFlat(op, effectIndex);
-			const int32 pctMod = GetSpellModPct(op, effectIndex);
+			const int32 flatMod = GetSpellModFlatForFlags(op, familyFlags);
+			const int32 pctMod = GetSpellModPctForFlags(op, familyFlags);
 			T result = value + static_cast<T>(flatMod);
 			result = static_cast<T>(result * (1.0f + static_cast<float>(pctMod) * 0.01f));
 			return result;

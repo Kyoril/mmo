@@ -1140,18 +1140,24 @@ namespace mmo
 					   luabind::def<std::function<bool(uint32)>>("IsSpellOnCooldown", [this](uint32 spellId)
 																 { return this->m_cooldownManager.IsOnCooldown(spellId); }),
 
-				   // Spell modifier queries — allow Lua tooltips to reflect server-side spell mods
-				   luabind::def<std::function<int32(uint32, uint32)>>("GetSpellModFlat", [](uint32 modOp, uint32 effectIndex) -> int32
+				   // Spell modifier queries — allow Lua tooltips to reflect server-side spell mods.
+				   // GetSpellModFlat/Pct take spellId and modOp; they look up the spell's familyflags
+				   // and sum across all matching effect-index bit positions, mirroring the server.
+				   luabind::def<std::function<int32(uint32, uint32)>>("GetSpellModFlat", [this](uint32 spellId, uint32 modOp) -> int32
 				   {
+					   const auto* spell = m_project.spells.getById(spellId);
+					   if (!spell) { return 0; }
 					   const auto player = ObjectMgr::GetActivePlayer();
 					   if (!player) { return 0; }
-					   return player->GetSpellModFlat(static_cast<uint8>(modOp), static_cast<uint8>(effectIndex));
+					   return player->GetSpellModFlatForFlags(static_cast<uint8>(modOp), spell->familyflags());
 				   }),
-				   luabind::def<std::function<int32(uint32, uint32)>>("GetSpellModPct", [](uint32 modOp, uint32 effectIndex) -> int32
+				   luabind::def<std::function<int32(uint32, uint32)>>("GetSpellModPct", [this](uint32 spellId, uint32 modOp) -> int32
 				   {
+					   const auto* spell = m_project.spells.getById(spellId);
+					   if (!spell) { return 0; }
 					   const auto player = ObjectMgr::GetActivePlayer();
 					   if (!player) { return 0; }
-					   return player->GetSpellModPct(static_cast<uint8>(modOp), static_cast<uint8>(effectIndex));
+					   return player->GetSpellModPctForFlags(static_cast<uint8>(modOp), spell->familyflags());
 				   }),
 				   /// Returns the effective (mod-adjusted) cost for a spell.
 				   luabind::def<std::function<int32(uint32)>>("GetSpellEffectiveCost", [this](uint32 spellId) -> int32
@@ -1161,7 +1167,7 @@ namespace mmo
 					   const auto player = ObjectMgr::GetActivePlayer();
 					   if (!player) { return spell->cost(); }
 					   int32 cost = spell->cost();
-					   cost = player->ApplySpellMod(static_cast<uint8>(spell_mod_op::Cost), cost);
+					   cost = player->ApplySpellModForFlags(static_cast<uint8>(spell_mod_op::Cost), cost, spell->familyflags());
 					   return std::max(0, cost);
 				   }),
 

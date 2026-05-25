@@ -283,8 +283,8 @@ namespace mmo
 			int32 effectiveCost = spell->cost();
 			if (spell->powertype() == unit->GetPowerType())
 			{
-				// Apply flat then pct modifiers to the cost
-				effectiveCost = unit->ApplySpellMod(static_cast<uint8>(spell_mod_op::Cost), effectiveCost);
+				// Apply flat then pct modifiers keyed by this spell's family flags
+				effectiveCost = unit->ApplySpellModForFlags(static_cast<uint8>(spell_mod_op::Cost), effectiveCost, spell->familyflags());
 				effectiveCost = std::max(0, effectiveCost);
 			}
 
