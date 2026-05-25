@@ -1170,6 +1170,41 @@ namespace mmo
 					   cost = player->ApplySpellModForFlags(static_cast<uint8>(spell_mod_op::Cost), cost, spell->familyflags());
 					   return std::max(0, cost);
 				   }),
+				   /// Returns the effective (mod-adjusted) cast time for a spell in milliseconds.
+				   luabind::def<std::function<int32(uint32)>>("GetSpellEffectiveCastTime", [this](uint32 spellId) -> int32
+				   {
+					   const auto* spell = m_project.spells.getById(spellId);
+					   if (!spell) { return 0; }
+					   const auto player = ObjectMgr::GetActivePlayer();
+					   if (!player) { return spell->casttime(); }
+					   int32 castTime = spell->casttime();
+					   castTime = player->ApplySpellModForFlags(static_cast<uint8>(spell_mod_op::CastTime), castTime, spell->familyflags());
+					   return std::max(0, castTime);
+				   }),
+				   /// Returns the effective (mod-adjusted) cooldown for a spell in milliseconds.
+				   luabind::def<std::function<int32(uint32)>>("GetSpellEffectiveCooldown", [this](uint32 spellId) -> int32
+				   {
+					   const auto* spell = m_project.spells.getById(spellId);
+					   if (!spell) { return 0; }
+					   const auto player = ObjectMgr::GetActivePlayer();
+					   if (!player) { return spell->cooldown(); }
+					   int32 cooldown = spell->cooldown();
+					   if (cooldown == 0) { return 0; }
+					   cooldown = player->ApplySpellModForFlags(static_cast<uint8>(spell_mod_op::Cooldown), cooldown, spell->familyflags());
+					   return std::max(0, cooldown);
+				   }),
+				   /// Returns the effective (mod-adjusted) duration for a spell in milliseconds.
+				   luabind::def<std::function<int32(uint32)>>("GetSpellEffectiveDuration", [this](uint32 spellId) -> int32
+				   {
+					   const auto* spell = m_project.spells.getById(spellId);
+					   if (!spell) { return 0; }
+					   const auto player = ObjectMgr::GetActivePlayer();
+					   if (!player) { return spell->duration(); }
+					   int32 duration = spell->duration();
+					   if (duration == 0) { return 0; }
+					   duration = player->ApplySpellModForFlags(static_cast<uint8>(spell_mod_op::Duration), duration, spell->familyflags());
+					   return std::max(0, duration);
+				   }),
 
 					   luabind::def<std::function<void(int32, const ItemInfo *&, String &, int32 &, int32 &, int32 &, bool &)>>("GetVendorItemInfo", [this](int32 slot, const ItemInfo *&out_item, String &out_icon, int32 &out_price, int32 &out_quantity, int32 &out_numAvailable, bool &out_usable)
 																																{ return this->GetVendorItemInfo(slot, out_item, out_icon, out_price, out_quantity, out_numAvailable, out_usable); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>, luabind::pure_out_value<7>>()),
