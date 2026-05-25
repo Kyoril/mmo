@@ -66,6 +66,12 @@ namespace mmo
 		return false;
 	}
 
+	uint8 AuraHandle::GetStackCount() const
+	{
+		if (!CheckNonNull()) return 1;
+		return Get()->GetStackCount();
+	}
+
 	bool AuraHandle::CheckNonNull() const
 	{
 		if (Get())

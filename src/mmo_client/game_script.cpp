@@ -973,7 +973,8 @@ namespace mmo
 							   .def("CanExpire", &AuraHandle::CanExpire)
 							   .def("GetDuration", &AuraHandle::GetDuration)
 						   .def("GetSpell", &AuraHandle::GetSpell)
-						   .def("IsNegative", &AuraHandle::IsNegative)),
+						   .def("IsNegative", &AuraHandle::IsNegative)
+					   .def("GetStackCount", &AuraHandle::GetStackCount)),
 
 				   luabind::scope(
 					   luabind::class_<ItemHandle>("ItemHandle")

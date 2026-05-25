@@ -186,6 +186,7 @@ namespace mmo
 			const auto& aura = m_auras[i];
 			writer << io::write<int32>(aura->GetBasePoints());
 		}
+		writer << io::write<uint8>(static_cast<uint8>(m_stackCount));
 	}
 
 	bool AuraContainer::HasEffect(const AuraType type) const

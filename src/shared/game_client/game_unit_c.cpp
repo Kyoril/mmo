@@ -911,8 +911,15 @@ namespace mmo
 				continue;
 			}
 
+			uint8 stackCount = 1;
+			if (!(reader >> io::read<uint8>(stackCount)))
+			{
+				ELOG("Failed to read aura stack count");
+				return false;
+			}
+
 			// Add aura
-			m_auras.push_back(std::make_unique<GameAuraC>(*this, *spell, casterId, duration));
+			m_auras.push_back(std::make_unique<GameAuraC>(*this, *spell, casterId, duration, stackCount));
 			newAuraCasterIds.try_emplace(spellId, casterId);
 		}
 
