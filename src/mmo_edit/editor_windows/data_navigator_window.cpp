@@ -16,6 +16,7 @@
 #include "item_subclass_editor_window.h"
 #include "item_class_editor_window.h"
 #include "range_type_editor_window.h"
+#include "aura_stacking_category_editor_window.h"
 #include "creature_editor_window.h"
 #include "class_editor_window.h"
 #include "unit_class_editor_window.h"
@@ -234,6 +235,13 @@ namespace mmo
             "Spell Range Types",
             [this]() { OpenEditorWindow(std::type_index(typeid(RangeTypeEditorWindow))); },
             static_cast<int>(m_project.ranges.count())
+        });
+
+        gameplayCategory.editors.push_back({
+            std::type_index(typeid(AuraStackingCategoryEditorWindow)),
+            "Aura Stacking Categories",
+            [this]() { OpenEditorWindow(std::type_index(typeid(AuraStackingCategoryEditorWindow))); },
+            static_cast<int>(m_project.auraStackingCategories.count())
         });
 
         gameplayCategory.editors.push_back({

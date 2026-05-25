@@ -83,7 +83,7 @@ namespace mmo
 				}
 				ImGui::PopStyleColor();
 
-				ImGui::BeginDisabled(m_currentItem == -1 || m_currentItem >= m_project.spells.count());
+				ImGui::BeginDisabled(m_currentItem == -1 || m_currentItem >= static_cast<int>(m_manager.count()));
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
 				if (ImGui::Button("Remove Selected", ImVec2(-1, 0)))
 				{
