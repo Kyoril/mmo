@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <set>
+#include <unordered_map>
 
 #include "game_server/spells/aura_container.h"
 #include "game/auto_attack.h"
@@ -1364,6 +1365,10 @@ public:
 		mutable Vector3 m_lastPosition;
 
 		stable_list<std::shared_ptr<AuraContainer>> m_auras;
+		// Maps base spell id → the previous target that had a SingleTargetPerCaster aura from our caster.
+		// Key: casterGuid*100000 + baseSpellId would be complex; instead keyed by (casterGuid ^ spellBaseId).
+		// Actually keyed by spellId → weak_ptr<GameUnitS> of previous target for SingleTargetPerCaster eviction.
+		std::unordered_map<uint32, std::weak_ptr<GameUnitS>> m_singleTargetAuras;
 
 		typedef std::array<float, unit_mod_type::End> UnitModTypeArray;
 		typedef std::array<UnitModTypeArray, unit_mods::End> UnitModArray;

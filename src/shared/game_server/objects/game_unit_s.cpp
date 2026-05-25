@@ -828,11 +828,39 @@ namespace mmo
 	{
 		ASSERT(aura);
 
-		// Remove existing auras first
+		// SingleTargetPerCaster: evict this aura from the previous target before applying here
+		if (static_cast<SpellStackingRule>(aura->GetSpell().stacking_rule()) == SpellStackingRule::SingleTargetPerCaster)
+		{
+			GameUnitS* caster = aura->GetCaster();
+			if (caster)
+			{
+				const uint32 baseSpellId = aura->GetBaseSpellId();
+				auto mapIt = caster->m_singleTargetAuras.find(baseSpellId);
+				if (mapIt != caster->m_singleTargetAuras.end())
+				{
+					if (auto prevTarget = mapIt->second.lock())
+					{
+						// Remove the old aura from the previous target
+						prevTarget->RemoveAllAurasFromCaster(aura->GetCasterId(), aura->GetSpellId());
+					}
+				}
+				// Record this unit as the new target for this spell
+				caster->m_singleTargetAuras[baseSpellId] = std::static_pointer_cast<GameUnitS>(shared_from_this());
+			}
+		}
+
+		// Remove existing auras that this aura should overwrite
 		for (auto it = m_auras.begin(); it != m_auras.end();)
 		{
-			if (auto &existingAura = *it; aura->ShouldOverwriteAura(*existingAura))
+			auto& existingAura = *it;
+			const auto result = aura->ShouldOverwriteAura(*existingAura);
+
+			switch (result)
 			{
+			case AuraApplicationResult::Extend:
+				// Stub: Extend falls through to Replace for now; S04 will add real accumulation logic
+				[[fallthrough]];
+			case AuraApplicationResult::Replace:
 				// Check if aura is same base spell but lower rank
 				if (aura->HasSameBaseSpellId(existingAura->GetSpell()) && aura->GetSpellRank() < existingAura->GetSpellRank())
 				{
@@ -844,10 +872,12 @@ namespace mmo
 				{
 					it = m_auras.erase(it);
 				}
-			}
-			else
-			{
+				break;
+
+			case AuraApplicationResult::Reject:
+			default:
 				++it;
+				break;
 			}
 		}
 

@@ -22,6 +22,7 @@ namespace mmo
 		, m_expirationCountdown(owner.GetTimers())
 		, m_itemGuid(itemGuid)
 		, m_areaAuraTick(owner.GetTimers())
+		, m_stackingCategoryId(spell.stacking_category_id())
 	{
 		m_areaAuraTickConnection = m_areaAuraTick.ended.connect(this, &AuraContainer::HandleAreaAuraTick);
 
@@ -410,36 +411,72 @@ namespace mmo
 		return multiplier;
 	}
 
-	bool AuraContainer::ShouldOverwriteAura(const AuraContainer& other) const
+	AuraApplicationResult AuraContainer::ShouldOverwriteAura(const AuraContainer& other) const
 	{
-		// NOTE: If we return true here, the other aura will be removed and replaced by this aura container instead
+		// NOTE: If we return Replace here, the other aura will be removed and replaced by this aura container instead
 
+		// Same aura instance is always a replace
 		if (&other == this)
 		{
-			return true;
+			return AuraApplicationResult::Replace;
 		}
 
+		const SpellStackingRule rule = static_cast<SpellStackingRule>(m_spell.stacking_rule());
 		const bool sameBaseSpellId = HasSameBaseSpellId(other.GetSpell());
 		const bool sameSpellId = sameBaseSpellId || (other.GetSpellId() == GetSpellId());
 		const bool onlyOneStackTotal = (m_spell.attributes(0) & spell_attributes::OnlyOneStackTotal) != 0;
 		const bool sameCaster = other.GetCasterId() == GetCasterId();
 		const bool sameItem = other.GetItemGuid() == GetItemGuid();
 
-		// Right now, same caster and same spell id means we overwrite the old aura with this one
-		// TODO: maybe add some settings here to explicitly allow stacking?
-		if (sameCaster && sameSpellId && sameItem)
+		switch (rule)
 		{
-			return true;
-		}
+		case SpellStackingRule::UniquePerTarget:
+			// Only one instance of this spell allowed on the target regardless of caster
+			if (sameBaseSpellId)
+			{
+				return AuraApplicationResult::Replace;
+			}
+			return AuraApplicationResult::Reject;
 
-		// Same spell but different casters: If we allow stacking for different casters
-		if (sameSpellId && !sameCaster && onlyOneStackTotal)
-		{
-			return true;
-		}
+		case SpellStackingRule::UniquePerCaster:
+			// One instance per caster; different casters may both have their copy
+			if (sameBaseSpellId && sameCaster)
+			{
+				return AuraApplicationResult::Replace;
+			}
+			return AuraApplicationResult::Reject;
 
-		// Should not overwrite, but create a whole new aura
-		return false;
+		case SpellStackingRule::StackablePerCaster:
+			// Fully stacking: never evict an existing aura
+			return AuraApplicationResult::Reject;
+
+		case SpellStackingRule::SingleTargetPerCaster:
+			// Pre-loop eviction of the previous target is handled in ApplyAura.
+			// Inside the loop on this target, treat like UniquePerCaster.
+			if (sameBaseSpellId && sameCaster)
+			{
+				return AuraApplicationResult::Replace;
+			}
+			return AuraApplicationResult::Reject;
+
+		case SpellStackingRule::CategoryExclusive:
+			// Category-level scan is owned by S03; per-spell entry, just reject here.
+			return AuraApplicationResult::Reject;
+
+		default:
+			// Default (0): legacy behaviour — same caster+spell+item overwrites; OnlyOneStackTotal overrides cross-caster
+			if (sameCaster && sameSpellId && sameItem)
+			{
+				return AuraApplicationResult::Replace;
+			}
+
+			if (sameSpellId && !sameCaster && onlyOneStackTotal)
+			{
+				return AuraApplicationResult::Replace;
+			}
+
+			return AuraApplicationResult::Reject;
+		}
 	}
 
 	bool AuraContainer::HasSameBaseSpellId(const proto::SpellEntry& spell) const

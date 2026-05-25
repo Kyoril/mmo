@@ -24,6 +24,25 @@ namespace mmo
 
 	class GameUnitS;
 
+	/// Defines how multiple instances of a spell's aura interact when applied to the same target.
+	enum class SpellStackingRule : uint32_t
+	{
+		Default              = 0,  ///< Fallback: same-caster/same-spell overwrites, different-caster stacks unless OnlyOneStackTotal.
+		UniquePerTarget      = 1,  ///< Only one instance may exist on the target regardless of caster.
+		UniquePerCaster      = 2,  ///< One instance per caster; a new cast from the same caster replaces the old one.
+		StackablePerCaster   = 3,  ///< Multiple instances from the same caster are allowed (fully stacking).
+		SingleTargetPerCaster = 4, ///< Caster may only have this aura on one target at a time; old target is evicted.
+		CategoryExclusive    = 5,  ///< Only one aura in the same stacking_category_id may be active (handled in S03).
+	};
+
+	/// Result returned by ShouldOverwriteAura to indicate what the caller should do with the existing aura.
+	enum class AuraApplicationResult
+	{
+		Replace, ///< Remove the existing aura and apply the new one.
+		Extend,  ///< Refresh/extend the existing aura (reserved for S04).
+		Reject,  ///< Keep the existing aura and discard the incoming one.
+	};
+
 	/// Holds and manages instances of auras for one unit.
 	class AuraContainer final : public NonCopyable, public std::enable_shared_from_this<AuraContainer>
 	{
@@ -139,6 +158,9 @@ namespace mmo
 		/// Gets the school that can trigger this proc (or 0 for any school)
 		uint32 GetProcSchool() const { return m_spell.procschool(); }
 
+		/// Gets the stacking category id cached from the spell entry at construction time.
+		uint32 GetStackingCategoryId() const { return m_stackingCategoryId; }
+
 		/// Gets the maximum number of base points for a specific aura type.
 		int32 GetMaximumBasePoints(AuraType type) const;
 
@@ -148,8 +170,8 @@ namespace mmo
 		/// Gets the total multiplier value for a specific aura type.
 		float GetTotalMultiplier(AuraType type) const;
 
-		/// Returns true if an aura container should be overwritten by this aura container.
-		bool ShouldOverwriteAura(const AuraContainer& other) const;
+		/// Determines how the existing aura (other) should be handled when this aura is applied.
+		AuraApplicationResult ShouldOverwriteAura(const AuraContainer& other) const;
 
 		const proto::SpellEntry& GetSpell() const { return m_spell; }
 
@@ -200,5 +222,7 @@ namespace mmo
 		uint32 m_lastProcTime = 0;                  // Last time the aura proc'ed (for cooldown)
 		bool m_procRegistered = false;              // Whether this aura has been registered for proc events
 		uint32 m_procChance = 0;
+
+		uint32 m_stackingCategoryId { 0 };          // Cached from m_spell.stacking_category_id() at construction
 	};
 }
