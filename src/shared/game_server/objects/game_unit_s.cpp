@@ -2782,9 +2782,14 @@ namespace mmo
 			return;
 		}
 
-		// Get the distance - use combined melee reach of both attacker and target
+		// Get the distance - use combined melee reach of both attacker and target.
+		// When both units are moving simultaneously (equal-speed chase), widen the
+		// effective range by a small bonus so auto-attacks connect reliably instead
+		// of the attacker perpetually trailing just outside range.
 		const float attackRange = GetMeleeReach() + victim->GetMeleeReach();
-		if (victim->GetSquaredDistanceTo(GetPosition(), false) > (attackRange * attackRange))
+		const bool bothMoving = GetMover().IsMoving() && victim->GetMover().IsMoving();
+		const float effectiveRange = attackRange + (bothMoving ? MELEE_CHASE_RANGE_BONUS : 0.0f);
+		if (victim->GetSquaredDistanceTo(GetPosition(), false) > (effectiveRange * effectiveRange))
 		{
 			OnAttackSwingEvent(AttackSwingEvent::OutOfRange);
 			m_attackSwingCountdown.SetEnd(GetAsyncTimeMs() + attackSwingErrorDelay);

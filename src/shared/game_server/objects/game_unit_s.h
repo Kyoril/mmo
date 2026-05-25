@@ -1458,6 +1458,11 @@ public:
 		/// @param object The GameUnitS object to deserialize into.
 		/// @returns Reference to the Reader for chaining.
 		friend io::Reader &operator>>(io::Reader &r, GameUnitS &object);
+
+		/// Extra melee range tolerance applied when both the attacker and victim are moving
+		/// (equal-speed chase). Prevents the attacker from perpetually trailing just outside
+		/// auto-attack range when neither unit is gaining ground on the other.
+		static constexpr float MELEE_CHASE_RANGE_BONUS = 1.5f;
 	};
 
 	io::Writer &operator<<(io::Writer &w, GameUnitS const &object);

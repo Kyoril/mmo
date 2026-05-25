@@ -458,8 +458,10 @@ namespace mmo
 		static constexpr uint32 RESET_TIMEOUT_MS = 10000;  // 10 seconds
 		static constexpr uint32 MAX_STUCK_COUNT = 20;
 		static constexpr uint32 ACTION_INTERVAL_MS = 500;
-		/// Movement target range factor (0.9 = move to 90% of attack range to stop in front of, not inside, the target)
-		static constexpr float COMBAT_RANGE_FACTOR = 0.9f;
+		/// Movement target range factor: stop at 95% of attack range so the creature
+		/// lands just inside auto-attack range without standing inside the target.
+		/// Previously 0.9 caused creatures to stop ~0.5-1 m outside attack range.
+		static constexpr float COMBAT_RANGE_FACTOR = 0.95f;
 		/// Optimal caster range (distance to maintain from target)
 		static constexpr float CASTER_OPTIMAL_RANGE = 20.0f;
 		/// Minimum distance to maintain from target for casters

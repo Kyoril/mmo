@@ -493,12 +493,13 @@ namespace mmo
 			return false;
 		}
 
-		// Use the actual attack range for consistency with OnAttackSwing()
+		// Use the actual attack range for consistency with OnAttackSwing() — 2D (flat) distance,
+		// matching the check in OnAttackSwing which uses withHeight=false.
 		const float attackRange = controlled.GetMeleeReach() + target.GetMeleeReach();
 		const float attackRangeSq = attackRange * attackRange;
 
-		// Check if we're already in attack range
-		const float currentDistanceSq = target.GetSquaredDistanceTo(mover.GetCurrentLocation(), true);
+		// Check if we're already in attack range (flat/2D, matching OnAttackSwing)
+		const float currentDistanceSq = target.GetSquaredDistanceTo(mover.GetCurrentLocation(), false);
 		if (currentDistanceSq <= attackRangeSq)
 		{
 			return false; // Already in range
@@ -508,7 +509,7 @@ namespace mmo
 		// This triggers recalculation when the player moves significantly (e.g., kiting away)
 		if (m_movementState.isMovingToCombat)
 		{
-			const float playerDistanceFromWaypointSq = target.GetSquaredDistanceTo(m_movementState.lastWaypointTarget, true);
+			const float playerDistanceFromWaypointSq = target.GetSquaredDistanceTo(m_movementState.lastWaypointTarget, false);
 			if (playerDistanceFromWaypointSq > PLAYER_POSITION_THRESHOLD)
 			{
 				DLOG("Recalculation: distance_sq=" << playerDistanceFromWaypointSq << " > threshold; triggering waypoint recompute");
@@ -524,7 +525,7 @@ namespace mmo
 			{
 				// Additional check: if target is moving toward us, we might intercept before reaching destination
 				const Vector3 ourDestination = mover.GetTarget();
-				const float distanceToDestinationSq = target.GetSquaredDistanceTo(ourDestination, true);
+				const float distanceToDestinationSq = target.GetSquaredDistanceTo(ourDestination, false);
 				
 				// If target is close to where we're going, continue current movement
 				if (distanceToDestinationSq <= attackRangeSq)
@@ -578,11 +579,10 @@ namespace mmo
 			return true; // Script says we can't move, treat as success
 		}
 
-		// Check if player has moved beyond our threshold distance from current waypoint target
-		// This detects kiting and triggers immediate waypoint recalculation
+		// Also update waypoint recalculation check to use flat distance (matching OnAttackSwing)
 		if (m_movementState.isMovingToCombat && !GetControlled().IsRooted())
 		{
-			const float playerDistanceFromWaypointSq = target.GetSquaredDistanceTo(m_movementState.lastWaypointTarget, true);
+			const float playerDistanceFromWaypointSq = target.GetSquaredDistanceTo(m_movementState.lastWaypointTarget, false);
 			if (playerDistanceFromWaypointSq > PLAYER_POSITION_THRESHOLD)
 			{
 				DLOG("Recalculation: distance_sq=" << playerDistanceFromWaypointSq << " > threshold; triggering waypoint recompute");
@@ -603,9 +603,10 @@ namespace mmo
 			return false; // AI reset, movement aborted
 		}
 
-		// Use consistent range calculation with ShouldMoveToTarget and OnAttackSwing
+		// Use consistent range calculation with ShouldMoveToTarget and OnAttackSwing.
+		// Stop just inside attack range (COMBAT_RANGE_FACTOR keeps the creature from
+		// standing inside the target while ensuring it's within auto-attack range).
 		const float attackRange = GetControlled().GetMeleeReach() + target.GetMeleeReach();
-		// Stop at 90% of attack range: close enough to attack but not inside the target
 		const float moveRange = attackRange * COMBAT_RANGE_FACTOR;
 
 		auto& mover = GetControlled().GetMover();
@@ -924,7 +925,7 @@ namespace mmo
 					// Immediate range check when we start moving - if we're already in range, stop
 					const float attackRange = controlled.GetMeleeReach() + victim->GetMeleeReach();
 					const float attackRangeSq = attackRange * attackRange;
-					const float currentDistanceSq = victim->GetSquaredDistanceTo(controlled.GetMover().GetCurrentLocation(), true);
+					const float currentDistanceSq = victim->GetSquaredDistanceTo(controlled.GetMover().GetCurrentLocation(), false);
 					
 					if (currentDistanceSq <= attackRangeSq)
 					{
@@ -1468,11 +1469,18 @@ namespace mmo
 
 		const float slotAngle = startAngle + static_cast<float>(ourSlot) * angleStep;
 
-		// Calculate offset position at the standoff distance from the target
+		// The destination must be the target's position itself — MoveTo(dest, acceptanceRadius)
+		// shortens the path by acceptanceRadius metres before dest. If we pre-offset dest by
+		// standoffDistance away from the target, MoveTo then stops an additional acceptanceRadius
+		// short of that, leaving the creature ~2× the intended range away.
+		//
+		// To steer the creature onto the correct arc slot we nudge the destination by a tiny
+		// amount in the slot direction. MoveTo will end up stopping acceptanceRadius before the
+		// target on that approach vector, placing the creature on the right side.
 		Vector3 formationPos;
-		formationPos.x = targetPos.x + std::cos(slotAngle) * standoffDistance;
-		formationPos.y = approachPosition.y; // Keep the original height
-		formationPos.z = targetPos.z + std::sin(slotAngle) * standoffDistance;
+		formationPos.x = targetPos.x + std::cos(slotAngle) * 0.5f;
+		formationPos.y = approachPosition.y;
+		formationPos.z = targetPos.z + std::sin(slotAngle) * 0.5f;
 
 		return formationPos;
 	}
