@@ -38,6 +38,7 @@
 #include "shared/proto_data/faction_templates.pb.h"
 #include "shared/proto_data/area_triggers.pb.h"
 #include "shared/proto_data/spell_categories.pb.h"
+#include "shared/proto_data/aura_stacking_categories.pb.h"
 #include "shared/proto_data/gtvalues.pb.h"
 #include "shared/proto_data/variables.pb.h"
 #include "shared/proto_data/gossip_menus.pb.h"
@@ -85,6 +86,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::FactionTemplates, mmo::proto::FactionTemplateEntry> FactionTemplateManager;
 		typedef TemplateManager<mmo::proto::AreaTriggers, mmo::proto::AreaTriggerEntry> AreaTriggerManager;
 		typedef TemplateManager<mmo::proto::SpellCategories, mmo::proto::SpellCategoryEntry> SpellCategoryManager;
+		typedef TemplateManager<mmo::proto::AuraStackingCategories, mmo::proto::AuraStackingCategoryEntry> AuraStackingCategoryManager;
 		typedef TemplateManager<mmo::proto::CombatRatings, mmo::proto::CombatRatingEntry> CombatRatingsManager;
 		typedef TemplateManager<mmo::proto::MeleeCritChance, mmo::proto::MeleeCritChanceEntry> MeleeCritChanceManager;
 		typedef TemplateManager<mmo::proto::SpellCritChance, mmo::proto::SpellCritChanceEntry> SpellCritChanceManager;
@@ -151,6 +153,7 @@ namespace mmo
 			FactionTemplateManager factionTemplates;
 			AreaTriggerManager areaTriggers;
 			SpellCategoryManager spellCategories;
+			AuraStackingCategoryManager auraStackingCategories;
 			CombatRatingsManager combatRatings;
 			MeleeCritChanceManager meleeCritChance;
 			SpellCritChanceManager spellCritChance;
@@ -245,6 +248,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("faction_templates", factionTemplates));
 				managers.push_back(ManagerEntry("area_triggers", areaTriggers));
 				managers.push_back(ManagerEntry("spell_categories", spellCategories));
+				managers.push_back(ManagerEntry("aura_stacking_categories", auraStackingCategories));
 				managers.push_back(ManagerEntry("combat_ratings", combatRatings));
 				managers.push_back(ManagerEntry("melee_crit_chance", meleeCritChance));
 				managers.push_back(ManagerEntry("spell_crit_chance", spellCritChance));
@@ -326,6 +330,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("faction_templates", "faction_templates", factionTemplates));
 				managers.push_back(ManagerEntry("area_triggers", "area_triggers", areaTriggers));
 				managers.push_back(ManagerEntry("spell_categories", "spell_categories", spellCategories));
+				managers.push_back(ManagerEntry("aura_stacking_categories", "aura_stacking_categories", auraStackingCategories));
 				managers.push_back(ManagerEntry("combat_ratings", "combat_ratings", combatRatings));
 				managers.push_back(ManagerEntry("melee_crit_chance", "melee_crit_chance", meleeCritChance));
 				managers.push_back(ManagerEntry("spell_crit_chance", "spell_crit_chance", spellCritChance));

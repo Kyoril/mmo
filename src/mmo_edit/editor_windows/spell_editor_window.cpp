@@ -746,6 +746,111 @@ namespace mmo
 			ImGui::Unindent();
 		}
 
+		if (ImGui::CollapsingHeader("Stacking", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::Indent();
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+
+			DrawSectionHeader("Stacking Rule");
+
+			static const char* stackingRuleItems[] = {
+				"Always Stack",
+				"Never Stack",
+				"Stack by Caster",
+				"Replace Weaker",
+				"Replace Stronger",
+				"Stack by Intensity"
+			};
+			int stackingRule = static_cast<int>(currentEntry.stacking_rule());
+			ImGui::SetNextItemWidth(250);
+			if (ImGui::Combo("##StackingRule", &stackingRule, stackingRuleItems, IM_ARRAYSIZE(stackingRuleItems)))
+			{
+				currentEntry.set_stacking_rule(static_cast<uint32>(stackingRule));
+			}
+			ImGui::SameLine();
+			ImGui::Text("Stacking Rule");
+			ImGui::SameLine();
+			DrawHelpMarker("Determines how this aura stacks with other auras of the same category");
+
+			ImGui::Spacing();
+			DrawSectionHeader("Stacking Category");
+
+			const bool hasStackingCategory = currentEntry.stacking_category_id() != 0;
+			const proto::AuraStackingCategoryEntry* currentStackingCategory = hasStackingCategory
+				? m_project.auraStackingCategories.getById(currentEntry.stacking_category_id())
+				: nullptr;
+			const String stackingCategoryPreview = currentStackingCategory ? currentStackingCategory->name() : "<None>";
+
+			ImGui::SetNextItemWidth(250);
+			if (ImGui::BeginCombo("##StackingCategory", stackingCategoryPreview.c_str(), ImGuiComboFlags_None))
+			{
+				ImGui::PushID(-1);
+				if (ImGui::Selectable("<None>", !hasStackingCategory))
+				{
+					currentEntry.set_stacking_category_id(0);
+				}
+				if (!hasStackingCategory)
+				{
+					ImGui::SetItemDefaultFocus();
+				}
+				ImGui::PopID();
+
+				for (const auto& cat : m_project.auraStackingCategories.getTemplates().entry())
+				{
+					ImGui::PushID(cat.id());
+					const bool item_selected = currentStackingCategory && currentStackingCategory->id() == cat.id();
+					const char* item_text = cat.name().c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						currentEntry.set_stacking_category_id(cat.id());
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+			ImGui::SameLine();
+			ImGui::Text("StackingCategory");
+			ImGui::SameLine();
+			DrawHelpMarker("Aura stacking category used to group auras for stacking evaluation");
+
+			ImGui::Spacing();
+			DrawSectionHeader("Stack Options");
+
+			bool extendDuration = currentEntry.extend_duration();
+			if (ImGui::Checkbox("ExtendDuration", &extendDuration))
+			{
+				currentEntry.set_extend_duration(extendDuration);
+			}
+			ImGui::SameLine();
+			DrawHelpMarker("When a duplicate aura is applied, extend the existing duration instead of replacing");
+
+			ImGui::Spacing();
+
+			static const char* stackResetPolicyItems[] = {
+				"Reset on Expire",
+				"Keep on Expire"
+			};
+			int stackResetPolicy = static_cast<int>(currentEntry.stack_reset_policy());
+			ImGui::SetNextItemWidth(250);
+			if (ImGui::Combo("##StackResetPolicy", &stackResetPolicy, stackResetPolicyItems, IM_ARRAYSIZE(stackResetPolicyItems)))
+			{
+				currentEntry.set_stack_reset_policy(static_cast<uint32>(stackResetPolicy));
+			}
+			ImGui::SameLine();
+			ImGui::Text("StackResetPolicy");
+			ImGui::SameLine();
+			DrawHelpMarker("Determines what happens to stack count when the aura expires");
+
+			ImGui::PopStyleVar(2);
+			ImGui::Unindent();
+		}
+
 		if (ImGui::CollapsingHeader("Classes / Races", ImGuiTreeNodeFlags_None))
 		{
 			ImGui::Indent();

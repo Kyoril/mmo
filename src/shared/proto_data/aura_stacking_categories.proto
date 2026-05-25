@@ -1,0 +1,11 @@
+syntax = "proto2";
+package mmo.proto;
+
+message AuraStackingCategoryEntry {
+	required uint32 id = 1;
+	required string name = 2;
+}
+
+message AuraStackingCategories {
+	repeated AuraStackingCategoryEntry entry = 1;
+}

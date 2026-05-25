@@ -35,6 +35,7 @@
 #include "editor_windows/class_editor_window.h"
 #include "editor_windows/unit_class_editor_window.h"
 #include "editor_windows/range_type_editor_window.h"
+#include "editor_windows/aura_stacking_category_editor_window.h"
 #include "editor_windows/lock_type_editor_window.h"
 #include "editor_windows/item_editor_window.h"
 #include "editor_windows/unit_loot_editor_window.h"
@@ -155,6 +156,7 @@ int main(int argc, char* arg[])
 	auto assetWindow = std::make_unique<mmo::AssetWindow>("Asset Browser", previewProviderManager, mainWindow);
 	mainWindow.AddEditorWindow(std::move(assetWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::RangeTypeEditorWindow>("Spell Range Type Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::AuraStackingCategoryEditorWindow>("Aura Stacking Category Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::LockTypeEditorWindow>("Lock Type Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::SpellEditorWindow>("Spell Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::SpellVisualizationEditorWindow>("Spell Visualization Editor", project, mainWindow, previewProviderManager, editorAudio.get()));
