@@ -161,6 +161,14 @@ namespace mmo
 		/// Gets the stacking category id cached from the spell entry at construction time.
 		uint32 GetStackingCategoryId() const { return m_stackingCategoryId; }
 
+		/// Gets the current stack count of the aura (always >= 1).
+		uint32 GetStackCount() const { return m_stackCount; }
+
+		/// Refreshes the aura's duration and stack count when re-applied (extend_duration=true).
+		/// Uses min(remaining + base_duration, effective_max_duration) for the new expiration.
+		/// Updates m_stackCount per the spell's stack_reset_policy.
+		void RefreshAura(const proto::SpellEntry& incomingSpell);
+
 		/// Gets the maximum number of base points for a specific aura type.
 		int32 GetMaximumBasePoints(AuraType type) const;
 
@@ -224,5 +232,6 @@ namespace mmo
 		uint32 m_procChance = 0;
 
 		uint32 m_stackingCategoryId { 0 };          // Cached from m_spell.stacking_category_id() at construction
+		uint32 m_stackCount { 1 };                  // Current stack count; incremented or reset by RefreshAura
 	};
 }
