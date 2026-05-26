@@ -72,6 +72,13 @@ namespace mmo
             ImGui::Image(m_deferredRenderer.GetFinalRenderTarget()->GetTextureObject(), availableSpace);
             ImGui::SetItemUsingMouseWheel();
 
+            // Let the active edit mode draw 2-D overlays on top of the 3-D scene.
+            if (currentEditMode)
+            {
+                ImDrawList* drawList = ImGui::GetWindowDrawList();
+                currentEditMode->DrawViewportOverlay(drawList, viewportPos, availableSpace);
+            }
+
             HandleViewportDragDrop(currentEditMode);
 
             HandleViewportInteractions(availableSpace, currentEditMode);

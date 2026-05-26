@@ -111,6 +111,8 @@ namespace mmo
 
 		void OnMouseWheel(float delta) override;
 
+		void DrawViewportOverlay(ImDrawList* drawList, const ImVec2& viewportMin, const ImVec2& viewportSize) override;
+
 	public:
 		void SetTerrainEditType(const TerrainEditType type) { m_type = type; }
 
@@ -132,6 +134,14 @@ namespace mmo
 
 	private:
 		void UpdateBrushOverlay();
+
+		/// Rebuilds the area-ID overlay that colours terrain tiles by their assigned zone.
+		/// Shows coloured tile outlines when in Area edit mode; clears them otherwise.
+		void UpdateAreaOverlay();
+
+		/// Returns a stable ARGB colour (0xAARRGGBB) for the given area ID.
+		/// Area ID 0 → neutral grey.  IDs 1+ cycle through a 16-colour palette.
+		static uint32 GetColorForAreaId(uint32 areaId);
 
 	private:
 		terrain::Terrain& m_terrain;
@@ -174,6 +184,12 @@ namespace mmo
 		ManualRenderObject* m_vertexDots = nullptr;
 		SceneNode*          m_vertexDotsNode = nullptr;
 		bool                m_brushPositionValid = false;
+
+		// Area-ID tile overlay — coloured outlines for each assigned terrain tile.
+		ManualRenderObject* m_areaOverlay = nullptr;
+		SceneNode*          m_areaOverlayNode = nullptr;
+		bool                m_areaOverlayDirty = false;      ///< Rebuilt on next mouse-up after painting.
+		TerrainEditType     m_lastTerrainType = TerrainEditType::Count_; ///< Detects mode switches.
 
 		// Noise preview texture (128×128 R8 grayscale, rebuilt when noise params change)
 		TexturePtr          m_noisePreviewTex;

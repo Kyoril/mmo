@@ -12,10 +12,13 @@
 #include "frame_ui/color.h"
 #include "scene_graph/material_manager.h"
 #include "math/vector3.h"
+#include "math/vector4.h"
+#include "math/matrix4.h"
 #include "math/noise.h"
 #include "graphics/graphics_device.h"
 #include "graphics/texture_mgr.h"
 #include "graphics/buffer_base.h"
+#include "scene_graph/camera.h"
 
 
 namespace mmo
@@ -31,6 +34,28 @@ namespace mmo
 				| (static_cast<uint32>(static_cast<uint8>(ag + static_cast<int>(bg - ag) * t)) << 8)
 				| static_cast<uint32>(static_cast<uint8>(ab + static_cast<int>(bb - ab) * t));
 		}
+
+		/// 16-entry colour palette used to render per-area tile overlays.
+		/// Colors are 0xAARRGGBB; all fully opaque.
+		static constexpr uint32 kAreaColorPalette[] = {
+			0xFF5599FFu, // 1  – Blue
+			0xFF55FF77u, // 2  – Green
+			0xFFFF5555u, // 3  – Red
+			0xFFFFDD44u, // 4  – Yellow
+			0xFFFF55CCu, // 5  – Pink
+			0xFF55FFFFu, // 6  – Cyan
+			0xFFFFAA44u, // 7  – Orange
+			0xFFAA55FFu, // 8  – Purple
+			0xFF44FFAAu, // 9  – Mint
+			0xFFFF5588u, // 10 – Rose
+			0xFF5566FFu, // 11 – Indigo
+			0xFFEEFF44u, // 12 – Lime
+			0xFFFFBB88u, // 13 – Peach
+			0xFF44FFCCu, // 14 – Aqua
+			0xFFBB55FFu, // 15 – Violet
+			0xFFFF55EEu, // 16 – Magenta
+		};
+		static constexpr uint32 kAreaColorPaletteSize = sizeof(kAreaColorPalette) / sizeof(kAreaColorPalette[0]);
 	}
 
 	static const char* s_terrainEditModeStrings[] = {
@@ -89,6 +114,19 @@ namespace mmo
 		{
 			m_vertexDotsNode->AttachObject(*m_vertexDots);
 		}
+
+		// Area-ID overlay: coloured tile outlines shown in Area edit mode.
+		m_areaOverlay = m_worldEditor.CreateManualRenderObject("TerrainAreaOverlay");
+		if (m_areaOverlay)
+		{
+			m_areaOverlay->SetCastShadows(false);
+		}
+
+		m_areaOverlayNode = m_worldEditor.CreateChildSceneNode();
+		if (m_areaOverlayNode && m_areaOverlay)
+		{
+			m_areaOverlayNode->AttachObject(*m_areaOverlay);
+		}
 	}
 
 	TerrainEditMode::~TerrainEditMode()
@@ -113,12 +151,132 @@ namespace mmo
 			m_worldEditor.DestroySceneNode(*m_vertexDotsNode);
 			m_vertexDotsNode = nullptr;
 		}
+		if (m_areaOverlay)
+		{
+			m_worldEditor.DestroyManualRenderObject(*m_areaOverlay);
+			m_areaOverlay = nullptr;
+		}
+		if (m_areaOverlayNode)
+		{
+			m_worldEditor.DestroySceneNode(*m_areaOverlayNode);
+			m_areaOverlayNode = nullptr;
+		}
 	}
 
 	const char* TerrainEditMode::GetName() const
 	{
 		static const char* s_name = "Terrain";
 		return s_name;
+	}
+
+	uint32 TerrainEditMode::GetColorForAreaId(const uint32 areaId)
+	{
+		if (areaId == 0)
+		{
+			return 0xFF888888u; // neutral grey for "no area"
+		}
+		return kAreaColorPalette[(areaId - 1) % kAreaColorPaletteSize];
+	}
+
+	void TerrainEditMode::UpdateAreaOverlay()
+	{
+		// The 3-D ManualRenderObject overlay is no longer used for area colouring
+		// (the material's pixel shader ignores vertex colour, rendering everything white).
+		// Area tile colours are now drawn as a 2-D ImGui screen-space overlay every frame
+		// via DrawViewportOverlay().  We only keep this function to clear the object so it
+		// does not accidentally show stale line geometry.
+		if (m_areaOverlay)
+		{
+			m_areaOverlay->Clear();
+		}
+	}
+
+	void TerrainEditMode::DrawViewportOverlay(ImDrawList* drawList, const ImVec2& viewportMin, const ImVec2& viewportSize)
+	{
+		if (m_type != TerrainEditType::Area || !drawList)
+		{
+			return;
+		}
+
+		// Build the combined view-projection matrix for this frame.
+		const Matrix4 viewProj = m_camera.GetProjectionMatrix() * m_camera.GetViewMatrix();
+
+		const float halfTerrainWidth  = m_terrain.GetWidth()  * static_cast<float>(terrain::constants::PageSize) * 0.5f;
+		const float halfTerrainHeight = m_terrain.GetHeight() * static_cast<float>(terrain::constants::PageSize) * 0.5f;
+		constexpr float tileSize = static_cast<float>(terrain::constants::TileSize);
+
+		const uint32 totalTilesX = m_terrain.GetWidth()  * terrain::constants::TilesPerPage;
+		const uint32 totalTilesY = m_terrain.GetHeight() * terrain::constants::TilesPerPage;
+
+		// Projects a single world-space point to screen-space.
+		// Returns false when the point is behind the camera (clip.w <= 0).
+		auto Project = [&](const Vector3& wp, ImVec2& sp) -> bool
+		{
+			const Vector4 clip = viewProj * Vector4(wp, 1.0f);
+			if (clip.w <= 0.0f)
+			{
+				return false;
+			}
+			const float ndcX =  clip.x / clip.w;
+			const float ndcY =  clip.y / clip.w;
+			sp.x = viewportMin.x + (ndcX * 0.5f + 0.5f) * viewportSize.x;
+			sp.y = viewportMin.y + (1.0f - (ndcY * 0.5f + 0.5f)) * viewportSize.y;
+			return true;
+		};
+
+		// Push a clip rect so overlay pixels never escape the 3-D viewport window.
+		drawList->PushClipRect(viewportMin,
+		                       ImVec2(viewportMin.x + viewportSize.x, viewportMin.y + viewportSize.y),
+		                       true /*intersect with current clip*/);
+
+		constexpr float yBias = 0.2f;
+
+		for (uint32 ty = 0; ty < totalTilesY; ++ty)
+		{
+			for (uint32 tx = 0; tx < totalTilesX; ++tx)
+			{
+				const uint32 areaId = m_terrain.GetAreaForTile(tx, ty);
+				if (areaId == 0)
+				{
+					continue;
+				}
+
+				// Palette colour (0xAARRGGBB).
+				const uint32 palCol = GetColorForAreaId(areaId);
+				const uint8  r = static_cast<uint8>((palCol >> 16) & 0xFF);
+				const uint8  g = static_cast<uint8>((palCol >>  8) & 0xFF);
+				const uint8  b = static_cast<uint8>( palCol        & 0xFF);
+
+				// Semi-transparent fill + fully-opaque border in the same colour.
+				const ImU32 fillCol   = IM_COL32(r, g, b, 70);
+				const ImU32 borderCol = IM_COL32(r, g, b, 220);
+
+				// World-space tile corners.
+				const float x1 =  tx      * tileSize - halfTerrainWidth;
+				const float x2 = (tx + 1) * tileSize - halfTerrainWidth;
+				const float z1 =  ty      * tileSize - halfTerrainHeight;
+				const float z2 = (ty + 1) * tileSize - halfTerrainHeight;
+
+				// Sample terrain height at each corner so the overlay follows the terrain.
+				const float yTL = m_terrain.GetSmoothHeightAt(x1, z1) + yBias;
+				const float yTR = m_terrain.GetSmoothHeightAt(x2, z1) + yBias;
+				const float yBL = m_terrain.GetSmoothHeightAt(x1, z2) + yBias;
+				const float yBR = m_terrain.GetSmoothHeightAt(x2, z2) + yBias;
+
+				// Project all four corners; skip if any is behind the camera.
+				ImVec2 sTL, sTR, sBL, sBR;
+				if (!Project({x1, yTL, z1}, sTL)) { continue; }
+				if (!Project({x2, yTR, z1}, sTR)) { continue; }
+				if (!Project({x1, yBL, z2}, sBL)) { continue; }
+				if (!Project({x2, yBR, z2}, sBR)) { continue; }
+
+				// Filled quad then border outline (TL → TR → BR → BL).
+				drawList->AddQuadFilled(sTL, sTR, sBR, sBL, fillCol);
+				drawList->AddQuad(sTL, sTR, sBR, sBL, borderCol, 1.5f);
+			}
+		}
+
+		drawList->PopClipRect();
 	}
 
 	void TerrainEditMode::DrawDetails()
@@ -137,6 +295,13 @@ namespace mmo
 			}
 
 			ImGui::EndCombo();
+		}
+
+		// Rebuild (or clear) the area overlay whenever the edit type changes.
+		if (m_type != m_lastTerrainType)
+		{
+			m_lastTerrainType = m_type;
+			UpdateAreaOverlay();
 		}
 
 		if (m_type == TerrainEditType::Deform)
@@ -280,21 +445,47 @@ namespace mmo
 
 		if (m_type == TerrainEditType::Area)
 		{
-			// Render a list of all zones
+			ImGui::TextDisabled("Colour key: each zone has a unique colour shown in the viewport.");
+
+			// Render a list of all zones.  Each entry shows a colour swatch that matches the
+			// tile-outline colour rendered in the 3-D viewport so users can see at a glance
+			// which tile belongs to which zone.
 			if (ImGui::BeginListBox("##areas"))
 			{
-				if (ImGui::Selectable("(None)", 0 == m_selectedArea))
+				// "(None)" entry – no swatch (grey placeholder keeps alignment tidy).
 				{
-					m_selectedArea = 0;
+					const ImVec4 greyCol(0.53f, 0.53f, 0.53f, 1.0f);
+					ImGui::ColorButton("##c0", greyCol,
+						ImGuiColorEditFlags_NoBorder | ImGuiColorEditFlags_NoTooltip,
+						ImVec2(12.0f, 12.0f));
+					ImGui::SameLine(0.0f, 4.0f);
+					if (ImGui::Selectable("(None)", 0 == m_selectedArea))
+					{
+						m_selectedArea = 0;
+					}
 				}
 
 				for (const auto& zone : m_zones.getTemplates().entry())
 				{
 					ImGui::PushID(zone.id());
+
+					// Colour swatch matching the viewport overlay.
+					const uint32 col32 = GetColorForAreaId(zone.id());
+					const ImVec4 imCol(
+						static_cast<float>((col32 >> 16) & 0xFF) / 255.0f,
+						static_cast<float>((col32 >>  8) & 0xFF) / 255.0f,
+						static_cast<float>( col32        & 0xFF) / 255.0f,
+						1.0f);
+					ImGui::ColorButton("##c", imCol,
+						ImGuiColorEditFlags_NoBorder | ImGuiColorEditFlags_NoTooltip,
+						ImVec2(12.0f, 12.0f));
+					ImGui::SameLine(0.0f, 4.0f);
+
 					if (ImGui::Selectable(zone.name().c_str(), zone.id() == m_selectedArea))
 					{
 						m_selectedArea = zone.id();
 					}
+
 					ImGui::PopID();
 				}
 
@@ -364,6 +555,7 @@ namespace mmo
 		else if (m_type == TerrainEditType::Area)
 		{
 			m_terrain.SetArea(m_brushPosition, m_selectedArea);
+			m_areaOverlayDirty = true; // overlay will be refreshed on mouse-up
 		}
 		else if (m_type == TerrainEditType::VertexShading)
 		{
@@ -390,6 +582,13 @@ namespace mmo
 	void TerrainEditMode::OnMouseUp(float x, float y)
 	{
 		WorldEditMode::OnMouseUp(x, y);
+
+		// Refresh the area overlay after a paint stroke finishes.
+		if (m_areaOverlayDirty)
+		{
+			UpdateAreaOverlay();
+			m_areaOverlayDirty = false;
+		}
 	}
 
 	void TerrainEditMode::OnMouseWheel(const float delta)

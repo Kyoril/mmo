@@ -8,6 +8,10 @@
 #include "scene_graph/manual_render_object.h"
 #include "scene_graph/scene_node.h"
 
+// Forward-declare ImGui types so we don't drag imgui.h into every translation unit.
+struct ImDrawList;
+struct ImVec2;
+
 namespace mmo
 {
 	namespace terrain
@@ -116,6 +120,13 @@ namespace mmo
 		virtual bool SupportsViewportDrop() const { return false; }
 
 		virtual void OnViewportDrop(float x, float y) {}
+
+		/// @brief Called every frame while this mode is active to draw 2-D overlays directly
+		///        onto the 3-D viewport using ImGui's draw list.
+		/// @param drawList   The ImGui draw list for the viewport window (use to call AddLine, AddQuad, etc.).
+		/// @param viewportMin  Top-left of the 3-D viewport in absolute screen coordinates.
+		/// @param viewportSize Width/height of the 3-D viewport in pixels.
+		virtual void DrawViewportOverlay(ImDrawList* /*drawList*/, const ImVec2& /*viewportMin*/, const ImVec2& /*viewportSize*/) {}
 
 	protected:
 		IWorldEditor& m_worldEditor;
