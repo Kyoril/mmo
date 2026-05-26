@@ -259,6 +259,12 @@ namespace mmo
 			}
 			m_sceneOutlineWindow->Update(); });
 
+		// Supply a duplication callback factory so scene-outline selections can duplicate via Alt+transform.
+		m_sceneOutlineWindow->SetEntityDuplicationFactory([this](MapEntity& entity) -> std::function<void(Selectable&)>
+		{
+			return MakeDuplicationCallback(entity);
+		});
+
 		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().units, m_editor.GetProject().objects);
 		m_skyEditMode = std::make_unique<SkyEditMode>(*this, *m_skyComponent);
 		m_areaTriggerEditMode = std::make_unique<AreaTriggerEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().areaTriggers);
@@ -968,6 +974,25 @@ namespace mmo
 			}
 		}
 		return worldModelInstance;
+	}
+
+	std::function<void(Selectable&)> WorldEditorInstance::MakeDuplicationCallback(MapEntity& entity)
+	{
+		const String assetName = entity.GetAssetName();
+		if (entity.IsWorldModelEntity())
+		{
+			return [this, assetName](Selectable& sel)
+			{
+				CreateWorldModelEntity(assetName, sel.GetPosition(), sel.GetOrientation(), sel.GetScale(), 0);
+			};
+		}
+		else
+		{
+			return [this, assetName](Selectable& sel)
+			{
+				CreateMapEntity(assetName, sel.GetPosition(), sel.GetOrientation(), sel.GetScale(), 0);
+			};
+		}
 	}
 
 	void WorldEditorInstance::OnMapEntityRemoved(MapEntity &entity)
@@ -1768,8 +1793,8 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 			if (entity.entityType == WorldEntityType::WorldModel)
 			{
-				// Create world model entity
-				WorldModelInstance *wmoInstance = m_entityFactory->CreateWorldModelEntity(
+				// Use the wrapper so the remove signal gets connected (consistent with mesh entity loading below).
+				WorldModelInstance *wmoInstance = CreateWorldModelEntity(
 					entity.meshName,
 					entity.position,
 					entity.rotation,

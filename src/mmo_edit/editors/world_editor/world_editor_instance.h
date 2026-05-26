@@ -3,6 +3,7 @@
 #pragma once
 
 #include "base/signal.h"
+#include <functional>
 #include <imgui.h>
 #include <thread>
 #include <asio/io_service.hpp>
@@ -307,6 +308,13 @@ namespace mmo
 		void SetMapEntry(proto::MapEntry *entry);
 
 	public:
+		/// @brief Creates a duplication callback for the given map entity.
+		/// The returned function, when invoked with the current selectable transform,
+		/// spawns a new copy of the entity at that transform.
+		/// @param entity The entity to duplicate.
+		/// @return A callable that creates a copy of entity when invoked.
+		std::function<void(Selectable&)> MakeDuplicationCallback(MapEntity& entity);
+
 		void OnPageAvailabilityChanged(const PageNeighborhood &page, bool isAvailable) override;
 
 		void EnsurePageIsLoaded(PagePosition pos);
