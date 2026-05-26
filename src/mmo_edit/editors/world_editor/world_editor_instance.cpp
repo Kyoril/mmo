@@ -330,27 +330,31 @@ namespace mmo
 
 		const float deltaTimeSeconds = ImGui::GetCurrentContext()->IO.DeltaTime;
 
-		if (ImGui::IsKeyPressed(ImGuiKey_F))
+		// Never fire keyboard shortcuts while an ImGui text-input widget has keyboard focus.
+		if (!ImGui::GetIO().WantTextInput)
 		{
-			if (m_selection.IsEmpty())
+			if (ImGui::IsKeyPressed(ImGuiKey_F))
 			{
-				m_cameraAnchor->SetPosition(Vector3::Zero);
+				if (m_selection.IsEmpty())
+				{
+					m_cameraAnchor->SetPosition(Vector3::Zero);
+				}
+				else
+				{
+					m_cameraAnchor->SetPosition(m_selection.GetSelectedObjects().back()->GetPosition());
+				}
+				m_cameraVelocity = Vector3::Zero;
 			}
-			else
-			{
-				m_cameraAnchor->SetPosition(m_selection.GetSelectedObjects().back()->GetPosition());
-			}
-			m_cameraVelocity = Vector3::Zero;
-		}
 
-		if (ImGui::IsKeyPressed(ImGuiKey_Z))
-		{
-			if (!m_selection.IsEmpty())
+			if (ImGui::IsKeyPressed(ImGuiKey_Z))
 			{
-				m_selection.GetSelectedObjects().back()->Translate(
-					-m_selection.GetSelectedObjects().back()->GetPosition());
+				if (!m_selection.IsEmpty())
+				{
+					m_selection.GetSelectedObjects().back()->Translate(
+						-m_selection.GetSelectedObjects().back()->GetPosition());
+				}
+				m_cameraVelocity = Vector3::Zero;
 			}
-			m_cameraVelocity = Vector3::Zero;
 		}
 
 		if (m_leftButtonPressed || m_rightButtonPressed)
@@ -468,6 +472,13 @@ namespace mmo
 
 	void WorldEditorInstance::HandleKeyboardShortcuts()
 	{
+		// Do not fire any editor shortcuts while an ImGui text-input widget (e.g. a
+		// value field in the details panel) has keyboard focus — the user is typing.
+		if (ImGui::GetIO().WantTextInput)
+		{
+			return;
+		}
+
 		if (ImGui::IsKeyPressed(ImGuiKey_LeftAlt, false))
 		{
 			m_transformWidget->SetCopyMode(true);

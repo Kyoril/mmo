@@ -277,6 +277,38 @@ namespace mmo
 		}
 
 		drawList->PopClipRect();
+
+		// When Alt is held, show an eyedropper-style highlight on the tile under the cursor.
+		if (ImGui::GetIO().KeyAlt && m_brushPositionValid)
+		{
+			int32 pickTileX = 0, pickTileZ = 0;
+			if (m_terrain.GetTileIndexByWorldPosition(m_brushPosition, pickTileX, pickTileZ)
+				&& pickTileX >= 0 && pickTileZ >= 0)
+			{
+				const float x1 =  static_cast<float>(pickTileX)      * tileSize - halfTerrainWidth;
+				const float x2 = (static_cast<float>(pickTileX) + 1) * tileSize - halfTerrainWidth;
+				const float z1 =  static_cast<float>(pickTileZ)      * tileSize - halfTerrainHeight;
+				const float z2 = (static_cast<float>(pickTileZ) + 1) * tileSize - halfTerrainHeight;
+
+				const float yTL = m_terrain.GetSmoothHeightAt(x1, z1) + yBias;
+				const float yTR = m_terrain.GetSmoothHeightAt(x2, z1) + yBias;
+				const float yBL = m_terrain.GetSmoothHeightAt(x1, z2) + yBias;
+				const float yBR = m_terrain.GetSmoothHeightAt(x2, z2) + yBias;
+
+				ImVec2 sTL, sTR, sBL, sBR;
+				if (Project({x1, yTL, z1}, sTL) && Project({x2, yTR, z1}, sTR)
+					&& Project({x1, yBL, z2}, sBL) && Project({x2, yBR, z2}, sBR))
+				{
+					// Bright white fill + thick yellow outline to signal eyedropper mode.
+					drawList->PushClipRect(viewportMin,
+					                       ImVec2(viewportMin.x + viewportSize.x, viewportMin.y + viewportSize.y),
+					                       true);
+					drawList->AddQuadFilled(sTL, sTR, sBR, sBL, IM_COL32(255, 255, 255, 50));
+					drawList->AddQuad(sTL, sTR, sBR, sBL, IM_COL32(255, 220, 0, 255), 2.5f);
+					drawList->PopClipRect();
+				}
+			}
+		}
 	}
 
 	void TerrainEditMode::DrawDetails()
@@ -446,6 +478,7 @@ namespace mmo
 		if (m_type == TerrainEditType::Area)
 		{
 			ImGui::TextDisabled("Colour key: each zone has a unique colour shown in the viewport.");
+			ImGui::TextDisabled("Hold Alt while clicking to pick the area of the tile under the cursor.");
 
 			// Render a list of all zones.  Each entry shows a colour swatch that matches the
 			// tile-outline colour rendered in the 3-D viewport so users can see at a glance
@@ -554,8 +587,16 @@ namespace mmo
 		}
 		else if (m_type == TerrainEditType::Area)
 		{
-			m_terrain.SetArea(m_brushPosition, m_selectedArea);
-			m_areaOverlayDirty = true; // overlay will be refreshed on mouse-up
+			if (ImGui::GetIO().KeyAlt)
+			{
+				// Alt held: eyedropper — pick the area ID of the tile under the cursor.
+				m_selectedArea = m_terrain.GetArea(m_brushPosition);
+			}
+			else
+			{
+				m_terrain.SetArea(m_brushPosition, m_selectedArea);
+				m_areaOverlayDirty = true; // overlay will be refreshed on mouse-up
+			}
 		}
 		else if (m_type == TerrainEditType::VertexShading)
 		{
