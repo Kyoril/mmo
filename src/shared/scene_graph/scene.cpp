@@ -304,7 +304,24 @@ namespace mmo
 			}
 		}
 
-		if (!m_frozen)
+		// In the deferred renderer, scene.Render is called twice per frame:
+		//   1. GBuffer pass  (m_forwardTransparentOnly = false) – builds the render queue and renders opaque geometry.
+		//   2. Forward transparent pass (m_forwardTransparentOnly = true) – renders only transparent groups.
+		//
+		// We must NOT rebuild the render queue during the transparent pass.  If we did,
+		// PopulateRenderQueue would be called a second time for every visible object in the
+		// same frame.  For terrain tiles this is catastrophic: the occlusion-culling state
+		// machine (consecutive-occluded-frame counter, skipped-frame counter, TryGetResult)
+		// runs twice per real frame, which:
+		//   • Halves the effective OcclusionGraceFrames threshold (tiles get culled twice as fast).
+		//   • Consumes the pending GPU query result in the forward pass so the next G-buffer
+		//     pass finds no result and the tile stays frozen in its culled state.
+		//   • Causes the "flicker every other frame / does not recover" artifact at the horizon.
+		//
+		// The forward transparent pass reuses the queue that was built during the G-buffer pass.
+		// RenderVisibleObjects already skips groups < Transparent when m_forwardTransparentOnly,
+		// so only particles, ribbon trails, and other transparent renderables are drawn.
+		if (!m_frozen && !m_forwardTransparentOnly)
 		{
 			PrepareRenderQueue();
 

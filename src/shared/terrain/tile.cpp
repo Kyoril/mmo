@@ -217,9 +217,24 @@ namespace mmo
 
 						if (m_consecutiveOccludedFrames >= OcclusionGraceFrames && !closeRange)
 						{
-							// Enough consecutive 0-pixel frames – tile is truly hidden.
-							m_occlusionVisible = false;
-							m_occlusionSkippedFrames = 0;
+							if (m_occlusionVisible)
+							{
+								// First transition: visible → confirmed occluded.
+								// Reset the skip counter so the retest cadence starts fresh
+								// from a clean state.
+								m_occlusionVisible = false;
+								m_occlusionSkippedFrames = 0;
+							}
+							// If the tile is already confirmed occluded (m_occlusionVisible is
+							// already false) we must NOT reset m_occlusionSkippedFrames here.
+							//
+							// Resetting it on every 0-pixel result disrupts the stagger-based
+							// retest cadence.  Because the reset is always followed immediately
+							// by "m_occlusionSkippedFrames++ → check % OcclusionRetestInterval",
+							// tiles whose stagger offset equals 1 would be retested EVERY frame
+							// (reset → 0++ → 1 == staggerOffset → retest each frame), and tiles
+							// with offset 2 would retest every 2 frames instead of 3.  This
+							// produces the "flicker every frame / does not recover" artifact.
 						}
 						// Otherwise: still in grace period, keep rendering & querying.
 					}
