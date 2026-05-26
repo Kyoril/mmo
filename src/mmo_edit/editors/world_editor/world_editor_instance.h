@@ -105,6 +105,9 @@ namespace mmo
 			}
 			if (m_worldModelInstance)
 			{
+				// Destroy all child scene objects (group geometry, doodads, lights)
+				// before detaching from the scene node, while the scene is still accessible.
+				m_worldModelInstance->Destroy(m_scene);
 				m_sceneNode.DetachObject(*m_worldModelInstance);
 				// World model instance will be deleted when the unique_ptr is destroyed
 			}

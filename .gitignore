@@ -54,3 +54,4 @@ tmp/
 bin/Debug2/
 /src/shared/deferred_shading/shaders/PS_DeferredLighting.h
 /src/shared/deferred_shading/shaders/VS_DeferredLighting.h
+*.local.json

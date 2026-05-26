@@ -96,6 +96,12 @@ namespace mmo
         /// @brief Resets the object spawn ID generator.
         void ResetObjectSpawnIdGenerator();
 
+        /// @brief Removes a world model instance from factory ownership.
+        /// The MapEntity destructor must have been called first (via ~MapEntity or std::erase_if)
+        /// so that Destroy() has already cleaned up child scene objects.
+        /// @param instance Raw pointer to the instance to remove.
+        void RemoveWorldModelInstance(WorldModelInstance* instance);
+
     private:
         Scene &m_scene;
         WorldEditor &m_editor;

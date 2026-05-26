@@ -972,6 +972,9 @@ namespace mmo
 
 	void WorldEditorInstance::OnMapEntityRemoved(MapEntity &entity)
 	{
+		// Capture WMO pointer before the erase destroys the MapEntity (and detaches the WMO).
+		WorldModelInstance* wmoToRemove = entity.IsWorldModelEntity() ? entity.GetWorldModelInstance() : nullptr;
+
 		std::erase_if(m_mapEntities, [&](const auto &mapEntity)
 					  {
 			if (mapEntity.get() == &entity)
@@ -995,6 +998,12 @@ namespace mmo
 			}
 
 			return false; });
+
+		// Release WMO instance from factory ownership now that ~MapEntity has run Destroy() on it.
+		if (wmoToRemove)
+		{
+			m_entityFactory->RemoveWorldModelInstance(wmoToRemove);
+		}
 	}
 
 	PagePosition WorldEditorInstance::GetPagePositionFromCamera() const
@@ -1814,6 +1823,50 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 	void WorldEditorInstance::UnloadPageEntities(uint8 x, uint8 y)
 	{
+		const PagePosition targetPos(x, y);
+
+		// Collect WMO raw pointers BEFORE erasing so we can release factory ownership
+		// after ~MapEntity has run (which calls Destroy() and detaches the WMO).
+		// Only unload unmodified entities — modified ones must stay alive so the user
+		// doesn't lose unsaved changes when paging back in.
+		std::vector<WorldModelInstance*> wmoToRemove;
+		for (const auto& mapEntity : m_mapEntities)
+		{
+			const auto& refPos = mapEntity->GetReferencePagePosition();
+			if (!refPos.has_value() || *refPos != targetPos)
+			{
+				continue;
+			}
+			if (mapEntity->IsModified())
+			{
+				continue;
+			}
+			if (mapEntity->IsWorldModelEntity())
+			{
+				wmoToRemove.push_back(mapEntity->GetWorldModelInstance());
+			}
+		}
+
+		// Erase unmodified map entities belonging to this page.
+		// ~MapEntity calls WorldModelInstance::Destroy() then detaches and destroys the scene node.
+		std::erase_if(m_mapEntities, [&targetPos](const auto& mapEntity)
+		{
+			const auto& refPos = mapEntity->GetReferencePagePosition();
+			return refPos.has_value() && *refPos == targetPos && !mapEntity->IsModified();
+		});
+
+		// Now free factory ownership of WMO instances (their child objects were already
+		// cleaned up by ~MapEntity above).
+		for (WorldModelInstance* wmo : wmoToRemove)
+		{
+			m_entityFactory->RemoveWorldModelInstance(wmo);
+		}
+
+		// Reflect the removal in the scene outline.
+		if (m_sceneOutlineWindow)
+		{
+			m_sceneOutlineWindow->Update();
+		}
 	}
 
 	void WorldEditorInstance::RemoveAllUnitSpawns()
