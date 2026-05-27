@@ -16,6 +16,7 @@
 #include "game_client/movement_event.h"
 
 #include "platform.h"
+#include "frame_ui/button.h"
 #include "mmo_client/systems/spell_cast.h"
 #include "mmo_client/systems/vendor_client.h"
 #include "frame_ui/frame_mgr.h"
@@ -701,30 +702,35 @@ namespace mmo
 			}
 		}
 
-		// Fire unit raycast
-		m_selectionSceneQuery->ClearResult();
-		m_selectionSceneQuery->SetSortByDistance(true);
-		m_selectionSceneQuery->SetQueryMask(0x00000002);
-		m_selectionSceneQuery->SetRay(m_defaultCamera->GetCameraToViewportRay(
-			static_cast<float>(m_x) / static_cast<float>(w),
-			static_cast<float>(m_y) / static_cast<float>(h), 1000.0f));
-		m_selectionSceneQuery->Execute();
-
-		GameObjectC* newHoveredObject = nullptr;
-
-		const auto& hitResult = m_selectionSceneQuery->GetLastResult();
-		if (!hitResult.empty())
+		// If FrameUI has no window which captures the mouse
+		const auto hoverFrame = FrameManager::Get().GetHoveredFrame();
+		if (!hoverFrame || !(hoverFrame->IsEnabled() && hoverFrame->GetType() == Button::Type))
 		{
-			Entity* entity = static_cast<Entity*>(hitResult[0].movable);
-			if (entity)
-			{
-				newHoveredObject = entity->GetUserObject<GameObjectC>();
-			}
-		}
+			// Fire unit raycast
+			m_selectionSceneQuery->ClearResult();
+			m_selectionSceneQuery->SetSortByDistance(true);
+			m_selectionSceneQuery->SetQueryMask(0x00000002);
+			m_selectionSceneQuery->SetRay(m_defaultCamera->GetCameraToViewportRay(
+				static_cast<float>(m_x) / static_cast<float>(w),
+				static_cast<float>(m_y) / static_cast<float>(h), 1000.0f));
+			m_selectionSceneQuery->Execute();
 
-		GameObjectC* previousObject = m_hoveredObject;
-		m_hoveredObject = newHoveredObject;
-		OnHoveredObjectChanged(previousObject);
+			GameObjectC* newHoveredObject = nullptr;
+
+			const auto& hitResult = m_selectionSceneQuery->GetLastResult();
+			if (!hitResult.empty())
+			{
+				Entity* entity = static_cast<Entity*>(hitResult[0].movable);
+				if (entity)
+				{
+					newHoveredObject = entity->GetUserObject<GameObjectC>();
+				}
+			}
+
+			GameObjectC* previousObject = m_hoveredObject;
+			m_hoveredObject = newHoveredObject;
+			OnHoveredObjectChanged(previousObject);
+		}
 	}
 
 	void PlayerController::OnMouseDown(const MouseButton button, const int32 x, const int32 y)

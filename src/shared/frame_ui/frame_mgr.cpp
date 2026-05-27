@@ -539,7 +539,7 @@ namespace mmo
 
 		// Register frame factories
 		s_frameMgr->RegisterFrameFactory("Frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>("Frame", name); });
-		s_frameMgr->RegisterFrameFactory("Button", [](const std::string& name) -> FramePtr { return std::make_shared<Button>("Button", name); });
+		s_frameMgr->RegisterFrameFactory("Button", [](const std::string& name) -> FramePtr { return std::make_shared<Button>(Button::Type, name); });
 		s_frameMgr->RegisterFrameFactory("Thumb", [](const std::string& name) -> FramePtr { return std::make_shared<Thumb>("Thumb", name); });
 		s_frameMgr->RegisterFrameFactory("ScrollBar", [](const std::string& name) -> FramePtr { return std::make_shared<ScrollBar>("ScrollBar", name); });
 		s_frameMgr->RegisterFrameFactory("TextField", [](const std::string& name) -> FramePtr { return std::make_shared<TextField>("TextField", name); });
