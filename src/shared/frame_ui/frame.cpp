@@ -6,6 +6,7 @@
 #include "default_renderer.h"
 
 #include "base/macros.h"
+#include "log/default_log_levels.h"
 
 #include <algorithm>
 
@@ -66,10 +67,6 @@ namespace mmo
 		other.m_onShow = m_onShow;
 		other.m_onHide = m_onHide;
 		other.m_onClick = m_onClick;
-
-		const bool isButtonTmpl = m_name == "ActionBarButtonTemplate";
-		const bool hasDrag = m_onDrag.is_valid();
-		const bool otherHasDrag = other.m_onDrag.is_valid();
 		other.m_onDrag = m_onDrag;
 
 		other.m_onDrop = m_onDrop;
@@ -1041,6 +1038,11 @@ namespace mmo
 	void Frame::SetOnDrag(const luabind::object& func)
 	{
 		m_onDrag = func;
+
+		if (func.is_valid())
+		{
+			SetDragEnabled(true);
+		}
 	}
 
 	void Frame::SetOnClick(const luabind::object& func)
@@ -1060,7 +1062,7 @@ namespace mmo
 
 	void Frame::SetDropEnabled(const bool enabled)
 	{
-		SetProperty("DragEnabled", enabled ? "true" : "false");
+		SetProperty("DropEnabled", enabled ? "true" : "false");
 	}
 
 	bool Frame::IsDragEnabled() const
@@ -1537,7 +1539,7 @@ namespace mmo
 	bool Frame::OnMouseUp(MouseButton button, int32 buttons, const Point & position)
 	{
 		bool consumed = false;
-		
+
 		if (const Rect frame = GetAbsoluteFrameRect(); frame.IsPointInRect(position))
 		{
 			// Trigger lua clicked event handler if there is any
@@ -1574,7 +1576,8 @@ namespace mmo
 			return;
 		}
 
-		if (position.DistanceTo(m_dragStartPosition) > 16.0f)
+		const float dist = position.DistanceTo(m_dragStartPosition);
+		if (dist > 16.0f)
 		{
 			m_isDragging = true;
 			OnDrag(m_dragButton, m_dragStartPosition);

@@ -436,6 +436,8 @@ namespace mmo
 					.property("id", &Frame::GetId, &Frame::SetId)
 					.def("SetOnEnterHandler", &Frame::SetOnEnter)
 					.def("SetOnLeaveHandler", &Frame::SetOnLeave)
+					.def("SetOnDragHandler", &Frame::SetOnDrag)
+					.def("SetOnDropHandler", &Frame::SetOnDrop)
 					.def("SetOpacity", &Frame::SetOpacity)
 					.def("GetOpacity", &Frame::GetOpacity)
 					.def("__eq", &Frame::IsEqualTo)
@@ -842,7 +844,7 @@ namespace mmo
 	bool FrameManager::NotifyMouseUp(MouseButton button, const Point & position)
 	{
 		bool consumed = false;
-		
+
 		// For mouse button up, we want to notify the same frame that received the corresponding
 		// MouseDown event, even if the new position doesn't hit the old frame. This is done so
 		// that the old frame can correctly update it's state.

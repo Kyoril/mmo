@@ -87,14 +87,17 @@ namespace mmo
 				FrameManager::Get().NotifyMouseMoved(Point(x, y));
 				return false;
 			});
+		// Connect with first=true so the UI handler runs before WorldState's handler.
+		// When a UI button is clicked, Button::OnMouseDown calls abort_emission(), which
+		// prevents WorldState::OnMouseDown from activating camera-mode / cursor capture.
 		m_connections += EventLoop::MouseDown.connect([](EMouseButton button, int32 x, int32 y)
 			{
 				return FrameManager::Get().NotifyMouseDown(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y));
-			});
+			}, true);
 		m_connections += EventLoop::MouseUp.connect([](EMouseButton button, int32 x, int32 y)
 			{
 				return FrameManager::Get().NotifyMouseUp(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y));
-			});
+			}, true);
 		m_connections += EventLoop::KeyDown.connect([](int32 key, bool)
 			{
 				FrameManager::Get().NotifyKeyDown(key);
