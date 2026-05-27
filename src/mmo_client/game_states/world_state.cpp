@@ -1982,36 +1982,10 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	Vector3 UnpackMovementVector(uint32 packed, const Vector3 &mid)
-	{
-		Vector3 p;
-
-		// Extract the x component
-		int x_diff = (packed & 0x7FF); // Extract lower 11 bits
-		if (x_diff > 0x3FF)
-		{					  // Handle negative values
-			x_diff |= ~0x7FF; // Extend sign bit
-		}
-		p.x = mid.x - (x_diff * 0.25f);
-
-		// Extract the y component
-		int y_diff = ((packed >> 11) & 0x7FF); // Extract next 11 bits
-		if (y_diff > 0x3FF)
-		{					  // Handle negative values
-			y_diff |= ~0x7FF; // Extend sign bit
-		}
-		p.y = mid.y - (y_diff * 0.25f);
-
-		// Extract the z component
-		int z_diff = ((packed >> 22) & 0x3FF); // Extract next 10 bits
-		if (z_diff > 0x1FF)
-		{					  // Handle negative values
-			z_diff |= ~0x3FF; // Extend sign bit
-		}
-		p.z = mid.z - (z_diff * 0.25f);
-
-		return p;
-	}
+	// UnpackMovementVector was removed — intermediate waypoints are now transmitted as
+	// raw floats (3 × float) instead of the old lossy 11/10-bit packed uint32 format.
+	// The packed format silently overflowed for routes longer than ~256 world-units
+	// from the (start+end)/2 midpoint, corrupting every waypoint on long NPC routes.
 
 	PacketParseResult WorldState::OnCreatureMove(game::IncomingPacket &packet)
 	{
@@ -2073,19 +2047,22 @@ namespace mmo
 		const bool isPlayer = unitPtr->GetTypeId() == ObjectTypeId::Player;
 		(void)isPlayer;
 
+		// Read intermediate waypoints written as raw floats.
+		// pathSize = total waypoints not counting startPosition; endPosition is #1.
+		// So there are (pathSize - 1) intermediate points to read.
+		// Previously this used a lossy 11/10-bit packed format relative to the
+		// route midpoint, which overflowed for long multi-waypoint NPC routes.
 		if (pathSize > 1)
 		{
-			const Vector3 mid = (startPosition + endPosition) * 0.5f;
-
-			for (uint32 i = 1; i < pathSize - 1; ++i)
+			for (uint32 i = 1; i < pathSize; ++i)  // pathSize-1 iterations (was pathSize-2, off by one)
 			{
-				uint32 packed;
-				if (!(packet >> io::read<uint32>(packed)))
+				Vector3 p;
+				if (!(packet >> io::read<float>(p.x) >> io::read<float>(p.y) >> io::read<float>(p.z)))
 				{
 					return PacketParseResult::Disconnect;
 				}
 
-				path.push_back(UnpackMovementVector(packed, mid));
+				path.push_back(p);
 			}
 		}
 

@@ -144,20 +144,18 @@ namespace mmo
 
 		out_packet << io::write<uint8>(movementMode);
 
-		// Write points in between (if any)
+		// Write intermediate points in between start and destination (if any).
+		// Each point is written as three raw floats to avoid the ±256-unit overflow
+		// that the old 11/10-bit packed format had for long multi-waypoint routes.
 		if (path.size() > 1)
 		{
-			// all other points are relative to the center of the path
-			const Vector3 mid = (oldPosition + pt) * 0.5f;
 			for (uint32 i = 1; i < path.size() - 1; ++i)
 			{
-				auto& p = path[i];
-				uint32 packed = 0;
-				packed |= ((int)((mid.x - p.x) / 0.25f) & 0x7FF);
-				packed |= ((int)((mid.y - p.y) / 0.25f) & 0x7FF) << 11;
-				packed |= ((int)((mid.z - p.z) / 0.25f) & 0x3FF) << 22;
+				const auto& p = path[i];
 				out_packet
-					<< io::write<uint32>(packed);
+					<< io::write<float>(p.x)
+					<< io::write<float>(p.y)
+					<< io::write<float>(p.z);
 			}
 		}
 
@@ -554,8 +552,12 @@ namespace mmo
 		// Take a sample of the current location
 		auto location = GetCurrentLocation();
 
-		// Remove all points that are too early
+		// Build the remaining path: start with the current interpolated position so that
+		// WriteCreatureMove's path[0]-skip logic (which treats path[0] as an approximate
+		// duplicate of oldPosition) does not discard the nearest real upcoming waypoint.
 		std::vector<Vector3> path;
+		path.push_back(location);  // treated as path[0] ≈ oldPosition; intentionally dropped
+
 		for (auto& p : m_path.GetPositions())
 		{
 			if (p.first < now)
@@ -566,7 +568,8 @@ namespace mmo
 			path.push_back(p.second);
 		}
 
-		if (path.empty())
+		// If there are no future waypoints beyond the injected start, nothing to send.
+		if (path.size() <= 1)
 			return;
 
 		Radian* customFacing = nullptr;
