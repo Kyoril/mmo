@@ -4,8 +4,10 @@
 
 #include "gender.h"
 #include "base/typedefs.h"
+#include "item.h"
 
 #include <algorithm>
+#include <array>
 
 #include "character_customization/customizable_avatar_definition.h"
 
@@ -92,6 +94,16 @@ namespace mmo
 
 		const AvatarConfiguration& GetConfiguration() const { return m_configuration; }
 
+		[[nodiscard]] const std::array<uint32, player_equipment_slots::Count_>& GetEquipmentDisplayIds() const { return m_equipmentDisplayIds; }
+
+		void SetEquipmentDisplayId(const uint8 slot, const uint32 displayId)
+		{
+			if (slot < player_equipment_slots::Count_)
+			{
+				m_equipmentDisplayIds[slot] = displayId;
+			}
+		}
+
 	private:
 		/// The character guid.
 		uint64 m_guid{};
@@ -116,8 +128,7 @@ namespace mmo
 
 		AvatarConfiguration m_configuration;
 
-		// TODO: Add more attributes of a character in here, for example item display id's
-		// for previewing a character's equipment, pet display id etc. etc.
+		std::array<uint32, player_equipment_slots::Count_> m_equipmentDisplayIds{};
 	};
 
 

@@ -4,10 +4,14 @@
 #include "game/character_view.h"
 #include "game/character_customization/customizable_avatar_definition.h"
 
+#include <unordered_map>
+
 struct lua_State;
 
 namespace mmo
 {
+	class Entity;
+	class TagPoint;
 	class Frame;
 	class ModelFrame;
 	class RealmConnector;
@@ -46,6 +50,16 @@ namespace mmo
 		void Apply(const ScalarParameterPropertyGroup& group, const AvatarConfiguration& configuration) override;
 
 	private:
+		void ClearItemAttachments();
+
+	private:
+		struct ItemAttachment
+		{
+			Entity* entity{ nullptr };
+			TagPoint* attachment{ nullptr };
+		};
+
+	private:
 		const proto_client::Project& m_project;
 
 		RealmConnector& m_realmConnector;
@@ -53,5 +67,7 @@ namespace mmo
 		ModelFrame* m_modelFrame = nullptr;
 
 		int32 m_selectedCharacter = -1;
+
+		std::unordered_map<uint32, ItemAttachment> m_itemAttachments;
 	};
 }

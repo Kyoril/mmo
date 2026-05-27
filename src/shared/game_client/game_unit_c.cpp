@@ -2843,6 +2843,7 @@ namespace mmo
 	void GameUnitC::Apply(const ScalarParameterPropertyGroup &group, const AvatarConfiguration &configuration)
 	{
 	}
+
 	void GameUnitC::SetCollisionVisibility(bool show)
 	{
 		if (show)

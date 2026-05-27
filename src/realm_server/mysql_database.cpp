@@ -200,6 +200,34 @@ namespace mmo
 					throw mysql::Exception("Could not load character customization data");
 				}
 
+				// Load equipment display IDs for the character selection preview.
+				// Absolute slot encoding: (bag << 8) | slot. Equipment slots are in
+				// bag 255 (0xFF), so absolute values are 0xFF00 through 0xFF12.
+				const uint32 equipBase = static_cast<uint32>(player_inventory_slots::Bag_0) << 8;
+				const uint32 equipEnd  = equipBase + player_equipment_slots::Count_;
+				mysql::Select equipSelect(m_connection,
+					"SELECT `slot`, `entry` FROM `character_items`"
+					" WHERE `owner`=" + std::to_string(guid) +
+					" AND `slot` >= " + std::to_string(equipBase) +
+					" AND `slot` < "  + std::to_string(equipEnd));
+				if (equipSelect.Success())
+				{
+					mysql::Row equipRow(equipSelect);
+					while (equipRow)
+					{
+						uint16 slot = 0;
+						uint32 entry = 0;
+						equipRow.GetField(0, slot);
+						equipRow.GetField(1, entry);
+						if (const auto* itemEntry = m_project.items.getById(entry))
+						{
+							// Low byte of the absolute slot is the equipment slot index (0-18)
+							view.SetEquipmentDisplayId(static_cast<uint8>(slot & 0xFF), itemEntry->displayid());
+						}
+						equipRow = mysql::Row::Next(equipSelect);
+					}
+				}
+
 				result.emplace_back(std::move(view));
 
 				// Next line entry

@@ -7,6 +7,7 @@
 #include "game_states/world_state.h"
 #include "net/realm_connector.h"
 #include "scene_graph/material_manager.h"
+#include "scene_graph/tag_point.h"
 #include "ui/model_frame.h"
 
 #include "luabind_lambda.h"
@@ -49,6 +50,13 @@ namespace mmo
 			return;
 		}
 
+		// Detach and destroy any item entities attached from the previous selection
+		ClearItemAttachments();
+
+		// Force entity recreation even when switching between same-race characters,
+		// so sub-entity visibility and material overrides are always reset to defaults
+		m_modelFrame->SetModelFile("");
+
 		const auto& view = m_realmConnector.GetCharacterViews()[index];
 
 		const proto_client::ModelDataEntry* model = m_project.models.getById(view.GetDisplayId());
@@ -70,8 +78,149 @@ namespace mmo
 			{
 				m_modelFrame->SetModelFile(definition->GetBaseMesh());
 				view.GetConfiguration().Apply(*this, *definition);
+
+				// Apply item display IDs for equipped gear
+				Entity* entity = m_modelFrame->GetEntity();
+				if (entity)
+				{
+					const auto& equipDisplayIds = view.GetEquipmentDisplayIds();
+					for (size_t slot = 0; slot < equipDisplayIds.size(); ++slot)
+					{
+						const uint32 displayId = equipDisplayIds[slot];
+						if (displayId == 0)
+						{
+							continue;
+						}
+
+						const auto* displayData = m_project.itemDisplays.getById(displayId);
+						if (!displayData)
+						{
+							continue;
+						}
+
+						for (const auto& variant : displayData->variants())
+						{
+							if (variant.model() != 0 && variant.model() != view.GetDisplayId())
+							{
+								continue;
+							}
+
+							for (const auto& subEntityName : variant.hidden_by_name())
+							{
+								if (SubEntity* sub = entity->GetSubEntity(subEntityName))
+								{
+									sub->SetVisible(false);
+								}
+							}
+
+							for (const auto& tag : variant.hidden_by_tag())
+							{
+								for (uint16 j = 0; j < entity->GetNumSubEntities(); ++j)
+								{
+									SubMesh& subMesh = entity->GetMesh()->GetSubMesh(j);
+									if (subMesh.HasTag(tag))
+									{
+										if (SubEntity* sub = entity->GetSubEntity(j))
+										{
+											sub->SetVisible(false);
+										}
+									}
+								}
+							}
+
+							for (const auto& subEntityName : variant.shown_by_name())
+							{
+								if (SubEntity* sub = entity->GetSubEntity(subEntityName))
+								{
+									sub->SetVisible(true);
+								}
+							}
+
+							for (const auto& tag : variant.shown_by_tag())
+							{
+								for (uint16 j = 0; j < entity->GetNumSubEntities(); ++j)
+								{
+									SubMesh& subMesh = entity->GetMesh()->GetSubMesh(j);
+									if (subMesh.HasTag(tag))
+									{
+										if (SubEntity* sub = entity->GetSubEntity(j))
+										{
+											sub->SetVisible(true);
+										}
+									}
+								}
+							}
+
+							for (const auto& [subEntityName, materialName] : variant.material_overrides())
+							{
+								if (SubEntity* sub = entity->GetSubEntity(subEntityName))
+								{
+									if (const MaterialPtr mat = MaterialManager::Get().Load(materialName))
+									{
+										sub->SetMaterial(mat);
+									}
+								}
+							}
+
+							if (!m_itemAttachments.contains(displayId) && variant.has_mesh() && !variant.mesh().empty())
+							{
+								const auto skeleton = entity->GetSkeleton();
+								if (skeleton && skeleton->HasBone(variant.attached_bone_default().bone_name()))
+								{
+									ItemAttachment attachment;
+									attachment.entity = m_modelFrame->GetScene().CreateEntity(
+										"Preview_ITEM_" + std::to_string(displayId), variant.mesh());
+									attachment.attachment = entity->AttachObjectToBone(
+										variant.attached_bone_default().bone_name(), *attachment.entity);
+									if (attachment.attachment)
+									{
+										attachment.attachment->SetPosition(Vector3(
+											variant.attached_bone_default().offset_x(),
+											variant.attached_bone_default().offset_y(),
+											variant.attached_bone_default().offset_z()));
+										attachment.attachment->SetOrientation(Quaternion(
+											variant.attached_bone_default().rotation_w(),
+											variant.attached_bone_default().rotation_x(),
+											variant.attached_bone_default().rotation_y(),
+											variant.attached_bone_default().rotation_z()));
+										attachment.attachment->SetScale(Vector3(
+											variant.attached_bone_default().scale_x(),
+											variant.attached_bone_default().scale_y(),
+											variant.attached_bone_default().scale_z()));
+									}
+									m_itemAttachments[displayId] = attachment;
+								}
+							}
+						}
+					}
+				}
 			}
 		}
+	}
+
+	void CharSelect::ClearItemAttachments()
+	{
+		if (m_itemAttachments.empty())
+		{
+			return;
+		}
+
+		Entity* entity = m_modelFrame ? m_modelFrame->GetEntity() : nullptr;
+
+		for (auto& [displayId, attachment] : m_itemAttachments)
+		{
+			if (entity && attachment.entity)
+			{
+				entity->DetachObjectFromBone(*attachment.entity);
+			}
+			if (attachment.entity)
+			{
+				m_modelFrame->GetScene().DestroyEntity(*attachment.entity);
+				attachment.entity = nullptr;
+			}
+		}
+
+		m_itemAttachments.clear();
 	}
 
 	int32 CharSelect::GetNumCharacters() const

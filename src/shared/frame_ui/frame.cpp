@@ -623,6 +623,11 @@ namespace mmo
 
 	float Frame::GetTextHeight()
 	{
+		if (m_text.empty())
+		{
+			return 0.0f;
+		}
+
 		const FontPtr font = GetFont();
 		if (!font)
 		{
