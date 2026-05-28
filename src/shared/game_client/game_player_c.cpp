@@ -90,6 +90,27 @@ namespace mmo
 			return;
 		}
 
+		// Guard against stale async callbacks: if this item is no longer in any visible
+		// equipment slot, a previous OnEquipmentChanged cycle already replaced the slot
+		// contents. Applying its display effects now would corrupt the current entity state
+		// (e.g. hiding hair sub-entities that were restored by a later Apply call).
+		{
+			static constexpr size_t kVisFields = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
+			bool isEquipped = false;
+			for (uint16 i = 0; i < 19; ++i)
+			{
+				if (Get<uint32>(object_fields::VisibleItem1_0 + i * kVisFields) == static_cast<uint32>(data.id))
+				{
+					isEquipped = true;
+					break;
+				}
+			}
+			if (!isEquipped)
+			{
+				return;
+			}
+		}
+
 		const auto* displayData = m_project.itemDisplays.getById(data.displayId);
 		if (!displayData)
 		{
