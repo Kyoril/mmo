@@ -46,6 +46,7 @@ namespace mmo
 	void Player::SetTradeSession(std::shared_ptr<TradeSession> session)
 	{
 		m_tradeSession = std::move(session);
+		UpdateTradeDistanceCheck();
 	}
 
 	void Player::CancelTradeSession(const uint8 reason)
@@ -69,7 +70,7 @@ namespace mmo
 		SendTradeSessionClosed(other, reason);
 
 		other.SetTradeSession(nullptr);
-		m_tradeSession = nullptr;
+		SetTradeSession(nullptr);
 	}
 
 	void Player::OnTradeInitiate(uint16 /*opCode*/, uint32 /*size*/, io::Reader& contentReader)

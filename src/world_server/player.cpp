@@ -35,6 +35,7 @@ namespace mmo
 		, m_conditionMgr(conditionMgr)
 		, m_timeSyncTimer(instance.GetUniverse().GetTimers())
 		, m_inventoryAutoSaveTimer(instance.GetUniverse().GetTimers())
+		, m_tradeDistanceCheckTimer(instance.GetUniverse().GetTimers())
 	{
 		m_character->SetNetUnitWatcher(this);
 		m_character->SetPlayerWatcher(this);
@@ -105,6 +106,36 @@ namespace mmo
 				m_timeSyncTimer.SetEnd(GetAsyncTimeMs() + constants::OneMinute * 2);
 			});
 
+		// Periodic trade distance check — fires every 2 s while a trade session is active.
+		m_tradeDistanceCheckTimer.ended.connect([this]()
+			{
+				if (!m_tradeSession || !m_character)
+				{
+					return;
+				}
+
+				const int myIndex = m_tradeSession->GetPlayerIndex(*this);
+				if (myIndex < 0)
+				{
+					return;
+				}
+
+				const int otherIndex = m_tradeSession->GetOtherIndex(myIndex);
+				const Player& other = m_tradeSession->GetPlayer(otherIndex);
+
+				const float distanceSq = m_character->GetSquaredDistanceTo(
+					other.GetCharacter().GetPosition(), true);
+
+				if (distanceSq > LootDistance * LootDistance)
+				{
+					CancelTradeSession(static_cast<uint8>(game::trade_close_reason::TooFarAway));
+					return;
+				}
+
+				// Reschedule for next check
+				m_tradeDistanceCheckTimer.SetEnd(GetAsyncTimeMs() + constants::OneSecond * 2);
+			});
+
 		// Setup inventory auto-save timer
 		m_inventoryAutoSaveTimer.ended.connect([this]()
 			{
@@ -125,6 +156,18 @@ namespace mmo
 				// Reschedule next auto-save (every 5 minutes)
 				m_inventoryAutoSaveTimer.SetEnd(GetAsyncTimeMs() + constants::OneMinute * 5);
 			});
+	}
+
+	void Player::UpdateTradeDistanceCheck()
+	{
+		if (m_tradeSession)
+		{
+			m_tradeDistanceCheckTimer.SetEnd(GetAsyncTimeMs() + constants::OneSecond * 2);
+		}
+		else
+		{
+			m_tradeDistanceCheckTimer.Cancel();
+		}
 	}
 
 	Player::~Player()

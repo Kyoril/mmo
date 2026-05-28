@@ -166,6 +166,9 @@ namespace mmo
 		/// @param session Shared trade session object.
 		void SetTradeSession(std::shared_ptr<TradeSession> session);
 
+		/// @brief Starts or stops the periodic trade distance check timer based on whether a session is active.
+		void UpdateTradeDistanceCheck();
+
 		/// @brief Returns the active trade session, or nullptr if none.
 		[[nodiscard]] std::shared_ptr<TradeSession> GetTradeSession() const { return m_tradeSession; }
 
@@ -663,6 +666,9 @@ namespace mmo
 
 		// Inventory auto-save timer (every 5 minutes)
 		Countdown m_inventoryAutoSaveTimer;
+
+		// Periodic trade distance check (fires every 2 s while trading)
+		Countdown m_tradeDistanceCheckTimer;
 
 		/// @brief Tracks anti-cheat violations (position drift and speed hacks) for kick logic.
 		AntiCheatTracker m_antiCheatTracker;
