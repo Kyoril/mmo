@@ -278,17 +278,19 @@ namespace mmo
 		return true;
 	}
 
-	void TradeSession::SendUpdateToPlayer(int recipientIndex) const
+	void TradeSession::SendUpdateToPlayer(int recipientIndex, int offerIndex) const
 	{
 		ASSERT(recipientIndex == 0 || recipientIndex == 1);
+		ASSERT(offerIndex == 0 || offerIndex == 1);
 
-		const int offerIndex = GetOtherIndex(recipientIndex);
 		const TradeOffer& offer = m_offers[offerIndex];
 		const Inventory& inv = m_players[offerIndex]->GetCharacter().GetInventory();
+		const uint8 isSelfOffer = (recipientIndex == offerIndex) ? 1 : 0;
 
-		m_players[recipientIndex]->SendPacket([&offer, &inv](game::OutgoingPacket& packet)
+		m_players[recipientIndex]->SendPacket([&offer, &inv, isSelfOffer](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::realm_client_packet::TradeUpdate);
+			packet << io::write<uint8>(isSelfOffer);
 
 			for (uint8 i = 0; i < TradeSlotCount; ++i)
 			{
@@ -338,8 +340,12 @@ namespace mmo
 	void TradeSession::NotifyOfferChanged()
 	{
 		InvalidateAcceptance();
-		SendUpdateToPlayer(0);
-		SendUpdateToPlayer(1);
+		// Each player receives both their own offer and the other's offer so the client
+		// always has authoritative data for both sides (isSelfOffer flag distinguishes them).
+		SendUpdateToPlayer(0, 0); // player 0 gets their own offer (isSelfOffer=1)
+		SendUpdateToPlayer(0, 1); // player 0 gets player 1's offer (isSelfOffer=0)
+		SendUpdateToPlayer(1, 1); // player 1 gets their own offer (isSelfOffer=1)
+		SendUpdateToPlayer(1, 0); // player 1 gets player 0's offer (isSelfOffer=0)
 		SendAcceptUpdateToBoth();
 	}
 }

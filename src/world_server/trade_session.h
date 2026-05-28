@@ -94,8 +94,10 @@ namespace mmo
 		/// @return true on full success, false if anything failed (caller must cancel).
 		bool Execute();
 
-		/// @brief Sends a TradeUpdate packet to the specified player (index 0 or 1) containing the other player's offer.
-		void SendUpdateToPlayer(int recipientIndex) const;
+		/// @brief Sends a TradeUpdate packet to the specified player containing the specified offer.
+		/// @param recipientIndex Which player (0 or 1) receives the packet.
+		/// @param offerIndex Which offer (0 or 1) to send. Matching recipientIndex means "self" offer.
+		void SendUpdateToPlayer(int recipientIndex, int offerIndex) const;
 
 		/// @brief Sends TradeAcceptUpdate to both players.
 		void SendAcceptUpdateToBoth() const;

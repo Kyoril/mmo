@@ -8,7 +8,6 @@
 #include "game_server/inventory.h"
 #include "game_server/inventory_types.h"
 #include "game/loot.h"
-#include "game/chat_type.h"
 #include "log/default_log_levels.h"
 
 namespace mmo
@@ -155,19 +154,8 @@ namespace mmo
 			packet.Finish();
 		});
 
-		// Confirm to initiator that the request was sent
+		// Confirm to initiator that the request was sent; client shows localized message.
 		SendTradeRequestResult(*this, game::trade_result::Success);
-
-		// Show chat message for initiator
-		const std::string& targetName = target->m_characterData.name;
-		SendPacket([&targetName](game::OutgoingPacket& packet)
-		{
-			packet.Start(game::realm_client_packet::ChatMessage);
-			packet << io::write<uint8>(static_cast<uint8>(ChatType::System));
-			packet << io::write<uint64>(0);
-			packet << io::write_string("You want to trade with " + targetName + ".");
-			packet.Finish();
-		});
 	}
 
 	void Player::OnTradeInviteAccept(uint16 /*opCode*/, uint32 /*size*/, io::Reader& /*contentReader*/)

@@ -191,6 +191,15 @@ namespace mmo
 
 	PacketParseResult TradeClient::OnTradeUpdate(game::IncomingPacket& packet)
 	{
+		uint8 isSelfOffer;
+		if (!(packet >> io::read<uint8>(isSelfOffer)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		auto& targetOffer = (isSelfOffer != 0) ? m_myOffer : m_otherOffer;
+		uint32& targetMoney = (isSelfOffer != 0) ? m_myMoney : m_otherMoney;
+
 		for (uint8 i = 0; i < ClientTradeSlotCount; ++i)
 		{
 			uint32 entry, count;
@@ -199,8 +208,8 @@ namespace mmo
 				return PacketParseResult::Disconnect;
 			}
 
-			m_otherOffer[i].itemEntry = entry;
-			m_otherOffer[i].itemCount = count;
+			targetOffer[i].itemEntry = entry;
+			targetOffer[i].itemCount = count;
 		}
 
 		uint32 money;
@@ -208,8 +217,10 @@ namespace mmo
 		{
 			return PacketParseResult::Disconnect;
 		}
-		m_otherMoney = money;
+		targetMoney = money;
 
+		// Only fire TRADE_UPDATE once after both self and other packets arrive.
+		// Fire on every packet — the Lua side re-reads both arrays anyway.
 		FrameManager::Get().TriggerLuaEvent("TRADE_UPDATE");
 
 		return PacketParseResult::Pass;
