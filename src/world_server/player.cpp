@@ -20,6 +20,7 @@
 #include "game_server/condition_mgr.h"
 #include "game_server/world/tile_subscriber.h"
 #include "binary_io/vector_sink.h"
+#include "binary_io/writer.h"
 #include "group_manager.h"
 
 namespace mmo
@@ -711,6 +712,31 @@ namespace mmo
 		case game::client_realm_packet::MoveDisorientAck:
 			OnClientAck(opCode, buffer.size(), reader);
 			break;
+
+		case game::client_realm_packet::TradeInitiate:
+			OnTradeInitiate(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::TradeCancelRequest:
+			OnTradeCancelRequest(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::TradeAddItem:
+			OnTradeAddItem(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::TradeRemoveItem:
+			OnTradeRemoveItem(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::TradeSetMoney:
+			OnTradeSetMoney(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::TradeAccept:
+			OnTradeAccept(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::TradeInviteAccept:
+			OnTradeInviteAccept(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::TradeInviteDecline:
+			OnTradeInviteDecline(opCode, buffer.size(), reader);
+			break;
 		}
 	}
 
@@ -952,6 +978,26 @@ namespace mmo
 	void Player::OnDespawned(GameObjectS& object)
 	{
 		m_spawned = false;
+
+		// Cancel any active trade session so the other player is notified
+		if (m_tradeSession)
+		{
+			const int myIndex = m_tradeSession->GetPlayerIndex(*this);
+			if (myIndex >= 0)
+			{
+				const int otherIndex = m_tradeSession->GetOtherIndex(myIndex);
+				Player& other = m_tradeSession->GetPlayer(otherIndex);
+				const uint8 disconnectedReason = static_cast<uint8>(game::trade_close_reason::Disconnected);
+				other.SendPacket([disconnectedReason](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::TradeSessionClosed);
+					packet << io::write<uint8>(disconnectedReason);
+					packet.Finish();
+				});
+				other.SetTradeSession(nullptr);
+			}
+			m_tradeSession = nullptr;
+		}
 
 		// No longer watch for network events
 		m_character->SetNetUnitWatcher(nullptr);

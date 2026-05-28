@@ -186,6 +186,12 @@ namespace mmo
 		auto &inv = m_character->GetInventory();
 
 		const InventorySlot absSrcSlot = InventorySlot::FromRelative(srcBag, srcSlot);
+
+		if (IsInventorySlotTradeLocked(absSrcSlot.GetAbsolute()))
+		{
+			SendInventoryError(inventory_change_failure::ItemLocked);
+			return;
+		}
 		auto item = inv.GetItemAtSlot(absSrcSlot.GetAbsolute());
 		if (!item)
 		{
@@ -332,6 +338,14 @@ namespace mmo
 			return;
 		}
 
+		const uint16 srcAbsolute = InventorySlot::FromRelative(srcBag, srcSlot).GetAbsolute();
+		const uint16 dstAbsolute = InventorySlot::FromRelative(dstBag, dstSlot).GetAbsolute();
+		if (IsInventorySlotTradeLocked(srcAbsolute) || IsInventorySlotTradeLocked(dstAbsolute))
+		{
+			SendInventoryError(inventory_change_failure::ItemLocked);
+			return;
+		}
+
 		const InventoryCommandFactory& factory = m_character->GetInventory().GetCommandFactory();
 
 		const std::unique_ptr<IInventoryCommand> command = factory.CreateSwapItems(
@@ -352,6 +366,14 @@ namespace mmo
 		if (!(contentReader >> io::read<uint8>(srcSlot) >> io::read<uint8>(dstSlot)))
 		{
 			WLOG("Failed to read source slot and destination slot");
+			return;
+		}
+
+		const uint16 srcAbsolute = InventorySlot::FromRelative(player_inventory_slots::Bag_0, srcSlot).GetAbsolute();
+		const uint16 dstAbsolute = InventorySlot::FromRelative(player_inventory_slots::Bag_0, dstSlot).GetAbsolute();
+		if (IsInventorySlotTradeLocked(srcAbsolute) || IsInventorySlotTradeLocked(dstAbsolute))
+		{
+			SendInventoryError(inventory_change_failure::ItemLocked);
 			return;
 		}
 
@@ -377,6 +399,13 @@ namespace mmo
 			return;
 		}
 
+		const uint16 srcAbsolute = InventorySlot::FromRelative(srcBag, srcSlot).GetAbsolute();
+		if (IsInventorySlotTradeLocked(srcAbsolute))
+		{
+			SendInventoryError(inventory_change_failure::ItemLocked);
+			return;
+		}
+
 		auto &inv = m_character->GetInventory();
 		auto &factory = inv.GetCommandFactory();
 
@@ -399,6 +428,13 @@ namespace mmo
 		if (!(contentReader >> io::read<uint8>(bag) >> io::read<uint8>(slot) >> io::read<uint8>(count)))
 		{
 			WLOG("Failed to read bag, slot and count");
+			return;
+		}
+
+		const uint16 absoluteSlot = InventorySlot::FromRelative(bag, slot).GetAbsolute();
+		if (IsInventorySlotTradeLocked(absoluteSlot))
+		{
+			SendInventoryError(inventory_change_failure::ItemLocked);
 			return;
 		}
 

@@ -15,6 +15,7 @@
 #include "base/countdown.h"
 #include "base/clock.h"
 #include "anti_cheat_tracker.h"
+#include "trade_session.h"
 
 namespace mmo
 {
@@ -64,6 +65,9 @@ namespace mmo
 	public:
 		/// @copydoc TileSubscriber::GetGameUnit
 		GameUnitS& GetGameUnit() const override { return *m_character; }
+
+		/// @brief Gets the player's character object.
+		[[nodiscard]] GamePlayerS& GetCharacter() const { return *m_character; }
 
 		/// Notifies the client about updated objects.
 		void NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects) override;
@@ -129,6 +133,69 @@ namespace mmo
 	public:
 		/// Gets the current tile index for the character.
 		TileIndex2D GetTileIndex() const;
+
+	private:
+		// Client Network Handlers, Implemented in player_trade_handlers.cpp
+
+		/// Handles the client's request to initiate a trade with the current target.
+		void OnTradeInitiate(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's request to cancel the active trade session.
+		void OnTradeCancelRequest(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client adding an inventory item to a trade slot.
+		void OnTradeAddItem(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client removing an item from a trade slot.
+		void OnTradeRemoveItem(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client setting the money amount offered in the trade.
+		void OnTradeSetMoney(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client accepting the current trade terms.
+		void OnTradeAccept(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the target player accepting a trade invitation.
+		void OnTradeInviteAccept(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the target player declining a trade invitation.
+		void OnTradeInviteDecline(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+	public:
+		/// @brief Opens a trade session for this player with the given partner.
+		/// @param session Shared trade session object.
+		void SetTradeSession(std::shared_ptr<TradeSession> session);
+
+		/// @brief Returns the active trade session, or nullptr if none.
+		[[nodiscard]] std::shared_ptr<TradeSession> GetTradeSession() const { return m_tradeSession; }
+
+		/// @brief Cancels the active trade session, notifying the other player.
+		/// @param reason The reason code to send in TradeSessionClosed.
+		void CancelTradeSession(uint8 reason);
+
+		/// @brief Returns true if the player is currently in a trade session.
+		[[nodiscard]] bool IsTrading() const { return m_tradeSession != nullptr; }
+
+		/// @brief Returns true if the given absolute inventory slot is locked by the active trade session.
+		[[nodiscard]] bool IsInventorySlotTradeLocked(uint16 absoluteSlot) const
+		{
+			if (!m_tradeSession)
+			{
+				return false;
+			}
+			const int myIndex = m_tradeSession->GetPlayerIndex(*this);
+			if (myIndex < 0)
+			{
+				return false;
+			}
+			return m_tradeSession->IsSlotLocked(myIndex, absoluteSlot);
+		}
+
+		/// @brief Returns the GUID of the player who sent a pending trade invitation, or 0 if none.
+		[[nodiscard]] ObjectGuid GetTradeInviterGuid() const { return m_tradeInviterGuid; }
+
+		/// @brief Sets a pending trade invite from the given player GUID.
+		void SetTradeInviterGuid(ObjectGuid guid) { m_tradeInviterGuid = guid; }
 
 	private:
 		void OnAreaTriggerTriggered(uint16 opCode, uint32 size, io::Reader& contentReader);
@@ -599,6 +666,12 @@ namespace mmo
 
 		/// @brief Tracks anti-cheat violations (position drift and speed hacks) for kick logic.
 		AntiCheatTracker m_antiCheatTracker;
+
+		/// @brief Active trade session, or nullptr if not trading.
+		std::shared_ptr<TradeSession> m_tradeSession{ nullptr };
+
+		/// @brief GUID of the player who sent us a pending trade invitation, or 0 if none.
+		ObjectGuid m_tradeInviterGuid{ 0 };
 
 	public:
 		/// @brief Sends a time sync request to the client with incremented index.

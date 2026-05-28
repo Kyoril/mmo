@@ -256,6 +256,30 @@ namespace mmo
 				/// Sent by the client to place a ping at their current world position, broadcast to party.
 				PartyPing,
 
+			/// Sent by the client to initiate a trade with the current target.
+			TradeInitiate,
+
+			/// Sent by the client to cancel the active trade session.
+			TradeCancelRequest,
+
+			/// Sent by the client to add an inventory item to a trade slot.
+			TradeAddItem,
+
+			/// Sent by the client to remove an item from a trade slot.
+			TradeRemoveItem,
+
+			/// Sent by the client to set the money amount offered in the trade.
+			TradeSetMoney,
+
+			/// Sent by the client to accept the current trade terms.
+			TradeAccept,
+
+			/// Sent by the target player to accept a trade invitation.
+			TradeInviteAccept,
+
+			/// Sent by the target player to decline a trade invitation.
+			TradeInviteDecline,
+
 				/// Counter constant
 				Count_,
 			};
@@ -489,8 +513,61 @@ namespace mmo
 				/// Broadcast ping from a party member (sender guid, x, z world position).
 				PartyPing,
 
+			/// Sent to the target player when someone requests a trade.
+			TradeInvite,
+
+			/// Sent to the initiating player with the result of the trade request.
+			TradeRequestResult,
+
+			/// Sent to both players when a trade session is successfully opened.
+			TradeSessionOpened,
+
+			/// Sent to both players when a trade session ends for any reason.
+			TradeSessionClosed,
+
+			/// Sent to a player when the other player's trade offer changes.
+			TradeUpdate,
+
+			/// Sent to both players when the acceptance state changes.
+			TradeAcceptUpdate,
+
 				/// Counter constant
 				Count_,
+			};
+		}
+
+		/// Result codes sent in TradeRequestResult.
+		namespace trade_result
+		{
+			enum Type
+			{
+				Success = 0,
+				TargetBusy = 1,
+				TooFarAway = 2,
+				PlayerNotFound = 3,
+				YouAreDead = 4,
+				TargetIsDead = 5,
+				AlreadyTrading = 6,
+				TargetAlreadyTrading = 7,
+				Hostile = 8,
+				TargetIsLoggingOut = 9,
+				YouAreInCombat = 10,
+				TargetIsInCombat = 11,
+				Declined = 12,
+			};
+		}
+
+		/// Reason codes sent in TradeSessionClosed.
+		namespace trade_close_reason
+		{
+			enum Type
+			{
+				Completed = 0,
+				Cancelled = 1,
+				TooFarAway = 2,
+				Death = 3,
+				Hostile = 4,
+				Disconnected = 5,
 			};
 		}
 

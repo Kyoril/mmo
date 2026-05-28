@@ -106,6 +106,8 @@ namespace mmo
 
 		bool ConsumeMoney(uint32 amount);
 
+		void AddMoney(uint32 amount);
+
 		/// Gets the characters group id.
 		uint64 GetGroupId() const { return m_groupId; }
 

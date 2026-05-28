@@ -415,6 +415,11 @@ namespace mmo
 		return true;
 	}
 
+	void GamePlayerS::AddMoney(const uint32 amount)
+	{
+		Set<uint32>(object_fields::Money, Get<uint32>(object_fields::Money) + amount);
+	}
+
 	QuestStatus GamePlayerS::GetQuestStatus(const uint32 quest) const
 	{
 		// Shortcut: rewarded quests are only stored with their id as we are not interested in anything else

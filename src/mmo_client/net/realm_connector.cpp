@@ -1064,4 +1064,81 @@ namespace mmo
 				packet.Finish();
 			});
 	}
+
+	void RealmConnector::InitiateTrade(const uint64 targetGuid)
+	{
+		sendSinglePacket([targetGuid](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::TradeInitiate);
+				packet << io::write<uint64>(targetGuid);
+				packet.Finish();
+			});
+	}
+
+	void RealmConnector::AcceptTradeInvite()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::TradeInviteAccept);
+				packet.Finish();
+			});
+	}
+
+	void RealmConnector::DeclineTradeInvite()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::TradeInviteDecline);
+				packet.Finish();
+			});
+	}
+
+	void RealmConnector::CancelTrade()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::TradeCancelRequest);
+				packet.Finish();
+			});
+	}
+
+	void RealmConnector::TradeAddItem(const uint8 tradeSlot, const uint16 inventorySlot)
+	{
+		sendSinglePacket([tradeSlot, inventorySlot](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::TradeAddItem);
+				packet << io::write<uint8>(tradeSlot);
+				packet << io::write<uint16>(inventorySlot);
+				packet.Finish();
+			});
+	}
+
+	void RealmConnector::TradeRemoveItem(const uint8 tradeSlot)
+	{
+		sendSinglePacket([tradeSlot](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::TradeRemoveItem);
+				packet << io::write<uint8>(tradeSlot);
+				packet.Finish();
+			});
+	}
+
+	void RealmConnector::TradeSetMoney(const uint32 amount)
+	{
+		sendSinglePacket([amount](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::TradeSetMoney);
+				packet << io::write<uint32>(amount);
+				packet.Finish();
+			});
+	}
+
+	void RealmConnector::AcceptTrade()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::TradeAccept);
+				packet.Finish();
+			});
+	}
 }

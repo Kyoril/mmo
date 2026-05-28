@@ -75,6 +75,7 @@ namespace mmo
 	class GuildClient;
 	class FriendClient;
 	class TalentClient;
+	class TradeClient;
 	class Discord;
 	class InventoryClient;
 	class CooldownManager;
@@ -113,7 +114,8 @@ namespace mmo
 			GameTimeComponent &gameTime,
 			TalentClient &talentClient,
 			Minimap &minimap,
-			InventoryClient &inventoryClient);
+			InventoryClient &inventoryClient,
+			TradeClient &tradeClient);
 
 	public:
 		/// @brief The default name of the world state
@@ -516,6 +518,8 @@ namespace mmo
 		Minimap &m_minimap;
 
 		InventoryClient &m_inventoryClient;
+
+		TradeClient &m_tradeClient;
 
 		bool m_worldLoaded = false;
 

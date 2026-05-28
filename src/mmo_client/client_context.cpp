@@ -17,6 +17,7 @@
 #include "systems/quest_client.h"
 #include "systems/spell_cast.h"
 #include "systems/talent_client.h"
+#include "systems/trade_client.h"
 #include "systems/trainer_client.h"
 #include "systems/vendor_client.h"
 #include "ui/minimap.h"

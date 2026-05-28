@@ -457,6 +457,30 @@ namespace mmo
 		/// @param triggerId The id of the area trigger that was entered.
 		void SendAreaTriggerTriggered(uint32 triggerId);
 
+		/// Sends a trade initiation request targeting the player with the given GUID.
+		void InitiateTrade(uint64 targetGuid);
+
+		/// Sends a trade invite acceptance.
+		void AcceptTradeInvite();
+
+		/// Sends a trade invite decline.
+		void DeclineTradeInvite();
+
+		/// Sends a trade session cancellation.
+		void CancelTrade();
+
+		/// Adds an inventory item to a trade slot.
+		void TradeAddItem(uint8 tradeSlot, uint16 inventorySlot);
+
+		/// Removes an item from a trade slot.
+		void TradeRemoveItem(uint8 tradeSlot);
+
+		/// Sets the money offered in the trade.
+		void TradeSetMoney(uint32 amount);
+
+		/// Accepts the current trade terms.
+		void AcceptTrade();
+
 	public:
 		/// Gets a constant list of character views.
 		const std::vector<CharacterView>& GetCharacterViews() const { return m_characterViews; }

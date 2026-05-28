@@ -136,6 +136,18 @@ The bulk of the engine logic lives here as static libraries consumed by all exec
 
 Server scripts live in `data/scripts/`. Register creature event hooks with `RegisterCreatureScript(entryId, scriptTable)`. The script table provides callbacks: `OnGossipHello`, `OnGossipSelect`, `OnQuestAccept`, `OnQuestComplete`, etc.
 
+
+## Localization
+
+UI strings are localized. Localized strings are in formatted text files located in data/client/Locales/<locale_code>/Localization.txt.
+
+UI lua files and xml files should not contain hardcoded strings, but string constants which then will be used as a key in Localization.txt.
+
+If you add or modify localized strings, add them in all locales (at least as a placeholder).
+
+Text property values in XML are automatically localized. In lua, you should use the `Localize("KEY")` method. If a key is not available in the current locales Localization.txt file, the KEY is printed as is.
+
+
 ### Game Data
 
 All static game data (spells, items, creatures, quests, maps, etc.) is defined in Protobuf schemas at `src/shared/proto_data/*.proto`. The compiled data is loaded by the realm and world servers at startup from `data/editor/`.

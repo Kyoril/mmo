@@ -21,6 +21,7 @@ namespace mmo
 	class CharSelect;
 	class CharCreateInfo;
 	class TalentClient;
+	class TradeClient;
 	class UnitHandle;
 	class PartyInfo;
 	class QuestClient;
@@ -80,7 +81,8 @@ namespace mmo
 		FriendClient& friendClient,
 		GameTimeComponent& gameTime,
 		TalentClient& talentClient,
-		ICacheProvider& cacheProvider);	public:
+		ICacheProvider& cacheProvider,
+		TradeClient& tradeClient);	public:
 		/// Gets the current lua state
 		inline lua_State& GetLuaState() { ASSERT(m_luaState);  return *m_luaState; }
 
@@ -183,7 +185,9 @@ namespace mmo
 
 	TalentClient& m_talentClient;
 
-	ICacheProvider& m_cacheProvider;	private:
+	ICacheProvider& m_cacheProvider;
+
+	TradeClient& m_tradeClient;	private:
 		void Script_ReviveMe() const;
 	};
 
