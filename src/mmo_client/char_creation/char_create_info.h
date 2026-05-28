@@ -54,6 +54,15 @@ namespace mmo
 
 		const char* GetCustomizationValue(const String& propertyName) const;
 
+		/// Returns true when the given race is not disabled on the current realm.
+		[[nodiscard]] bool IsRaceAvailable(int32 raceId) const;
+
+		/// Returns true when the given class is not disabled on the current realm.
+		[[nodiscard]] bool IsClassAvailable(int32 classId) const;
+
+		/// Returns true when at least one race and one class are available (character creation is possible).
+		[[nodiscard]] bool IsCharacterCreationAvailable() const;
+
 	private:
 		void RefreshModel();
 

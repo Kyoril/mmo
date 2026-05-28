@@ -26,7 +26,8 @@ namespace mmo
 			luabind::def_lambda("SetCharSelectModelFrame", [this](Frame* frame) { SetModelFrame(frame); }),
 			luabind::def_lambda("GetNumCharacters", [this]() { return GetNumCharacters(); }),
 			luabind::def_lambda("GetCharacterInfo", [this](int32 index) { return GetCharacterView(index); }),
-			luabind::def_lambda("SelectCharacter", [this](int32 index) { return SelectCharacter(index); })
+			luabind::def_lambda("SelectCharacter", [this](int32 index) { return SelectCharacter(index); }),
+			luabind::def_lambda("IsCharacterDisabled", [this](int32 index) { return IsCharacterDisabled(index); })
 		);
 	}
 
@@ -332,6 +333,18 @@ namespace mmo
 
 	void CharSelect::Apply(const ScalarParameterPropertyGroup& group, const AvatarConfiguration& configuration)
 	{
-		
+
+	}
+
+	bool CharSelect::IsCharacterDisabled(int32 index) const
+	{
+		if (index < 0 || index >= GetNumCharacters())
+		{
+			return false;
+		}
+
+		const auto& view = m_realmConnector.GetCharacterViews()[index];
+		return m_realmConnector.IsRaceDisabled(view.GetRaceId()) ||
+			   m_realmConnector.IsClassDisabled(view.GetClassId());
 	}
 }

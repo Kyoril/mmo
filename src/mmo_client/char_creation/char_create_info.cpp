@@ -43,7 +43,10 @@ namespace mmo
 					}
 
 					return names[index].c_str();
-				})
+				}),
+			luabind::def_lambda("IsRaceAvailable", [this](int32 raceId) { return IsRaceAvailable(raceId); }),
+			luabind::def_lambda("IsClassAvailable", [this](int32 classId) { return IsClassAvailable(classId); }),
+			luabind::def_lambda("IsCharacterCreationAvailable", [this]() { return IsCharacterCreationAvailable(); })
 		);
 	}
 
@@ -461,5 +464,43 @@ namespace mmo
 	void CharCreateInfo::Apply(const ScalarParameterPropertyGroup& group, const AvatarConfiguration& configuration)
 	{
 
+	}
+
+	bool CharCreateInfo::IsRaceAvailable(int32 raceId) const
+	{
+		return !m_realmConnector.IsRaceDisabled(static_cast<uint32>(raceId));
+	}
+
+	bool CharCreateInfo::IsClassAvailable(int32 classId) const
+	{
+		return !m_realmConnector.IsClassDisabled(static_cast<uint32>(classId));
+	}
+
+	bool CharCreateInfo::IsCharacterCreationAvailable() const
+	{
+		bool hasRace = false;
+		for (const auto& race : m_project.races.getTemplates().entry())
+		{
+			if (IsRaceAvailable(static_cast<int32>(race.id())))
+			{
+				hasRace = true;
+				break;
+			}
+		}
+
+		if (!hasRace)
+		{
+			return false;
+		}
+
+		for (const auto& cls : m_project.classes.getTemplates().entry())
+		{
+			if (IsClassAvailable(static_cast<int32>(cls.id())))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 }

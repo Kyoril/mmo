@@ -68,7 +68,7 @@ namespace mmo
 
 		constexpr uint32 MAX_FRIENDS = 50;
 
-		constexpr uint32 ProtocolVersion = 0x00000004;
+		constexpr uint32 ProtocolVersion = 0x00000005;
 
 		////////////////////////////////////////////////////////////////////////////////
 		// BEGIN: Client <-> Realm section
@@ -280,6 +280,9 @@ namespace mmo
 				LoginVerifyWorld = 0x05,
 				/// Entering the world failed.
 				EnterWorldFailed = 0x06,
+
+				/// Sent right after successful auth; contains disabled race and class IDs.
+				RealmConfig = 0x07,
 
 				/// [PROXY] Update game objects.
 				UpdateObject,
@@ -497,6 +500,7 @@ namespace mmo
 			{
 				NoWorldServer,
 				NoCharacter,
+				RaceOrClassDisabled,
 			};
 		};
 

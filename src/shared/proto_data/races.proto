@@ -44,6 +44,7 @@ message RaceEntry {
 	required float startposy = 15;
 	required float startposz = 16;
 	required float startrotation = 17;
+	optional bool disabled = 18;
 }
 
 message Races {

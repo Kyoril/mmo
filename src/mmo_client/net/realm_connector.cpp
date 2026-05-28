@@ -126,6 +126,7 @@ namespace mmo
 			RegisterPacketHandler(game::realm_client_packet::CharEnum, *this, &RealmConnector::OnCharEnum);
 			RegisterPacketHandler(game::realm_client_packet::LoginVerifyWorld, *this, &RealmConnector::OnLoginVerifyWorld);
 			RegisterPacketHandler(game::realm_client_packet::EnterWorldFailed, *this, &RealmConnector::OnEnterWorldFailed);
+			RegisterPacketHandler(game::realm_client_packet::RealmConfig, *this, &RealmConnector::OnRealmConfig);
 			
 			// And now, we ask for the character list
 			sendSinglePacket([](game::OutgoingPacket& outPacket)
@@ -189,6 +190,49 @@ namespace mmo
 
 		ELOG("Failed to enter world: " << response);
 		EnterWorldFailed(response);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnRealmConfig(game::IncomingPacket& packet)
+	{
+		m_disabledRaces.clear();
+		m_disabledClasses.clear();
+
+		uint8 numDisabledRaces = 0;
+		if (!(packet >> io::read<uint8>(numDisabledRaces)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		for (uint8 i = 0; i < numDisabledRaces; ++i)
+		{
+			uint8 raceId = 0;
+			if (!(packet >> io::read<uint8>(raceId)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+			m_disabledRaces.insert(raceId);
+		}
+
+		uint8 numDisabledClasses = 0;
+		if (!(packet >> io::read<uint8>(numDisabledClasses)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		for (uint8 i = 0; i < numDisabledClasses; ++i)
+		{
+			uint8 classId = 0;
+			if (!(packet >> io::read<uint8>(classId)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+			m_disabledClasses.insert(classId);
+		}
+
+		DLOG("Realm config received: " << static_cast<int>(numDisabledRaces) << " disabled race(s), "
+			<< static_cast<int>(numDisabledClasses) << " disabled class(es)");
 
 		return PacketParseResult::Pass;
 	}

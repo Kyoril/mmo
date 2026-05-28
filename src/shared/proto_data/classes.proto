@@ -65,6 +65,7 @@ message ClassEntry {
 	optional float spiritPerHealthRegen = 15;
 	
 	repeated AttackPowerStatSource armorStatSources = 16;
+	optional bool disabled = 23;
 
 	repeated uint32 xpToNextLevel = 17;
 

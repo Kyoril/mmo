@@ -93,6 +93,15 @@ namespace mmo
 				ImGui::EndTable();
 			}
 
+			{
+				bool disabled = currentEntry.disabled();
+				if (ImGui::Checkbox("Disabled (class locked on this realm)", &disabled))
+				{
+					currentEntry.set_disabled(disabled);
+				}
+			}
+			ImGui::Spacing();
+
 			int32 powerType = currentEntry.powertype();
 			if (ImGui::BeginCombo("Power Type", s_powerTypes[powerType].c_str(), ImGuiComboFlags_None))
 			{

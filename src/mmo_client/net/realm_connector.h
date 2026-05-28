@@ -16,6 +16,8 @@
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "math/vector3.h"
 
+#include <unordered_set>
+
 
 namespace mmo
 {
@@ -76,6 +78,10 @@ namespace mmo
 		/// Handles the EnterWorldFailed packet from the realm server.
 		///	@param packet The packet to parse.
 		PacketParseResult OnEnterWorldFailed(game::IncomingPacket& packet);
+
+		/// Handles the RealmConfig packet that carries disabled race and class IDs.
+		///	@param packet The packet to parse.
+		PacketParseResult OnRealmConfig(game::IncomingPacket& packet);
 
 	public:
 		// ~ Begin IConnectorListener
@@ -452,9 +458,21 @@ namespace mmo
 		/// Gets a constant list of character views.
 		const std::vector<CharacterView>& GetCharacterViews() const { return m_characterViews; }
 
+		/// Returns true if the given race ID is disabled on this realm.
+		bool IsRaceDisabled(uint32 raceId) const { return m_disabledRaces.count(raceId) > 0; }
+
+		/// Returns true if the given class ID is disabled on this realm.
+		bool IsClassDisabled(uint32 classId) const { return m_disabledClasses.count(classId) > 0; }
+
 	private:
 		/// A list of character views.
 		std::vector<CharacterView> m_characterViews;
+
+		/// Set of race IDs that are disabled on this realm.
+		std::unordered_set<uint32> m_disabledRaces;
+
+		/// Set of class IDs that are disabled on this realm.
+		std::unordered_set<uint32> m_disabledClasses;
 	};
 }
 

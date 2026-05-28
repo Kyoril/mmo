@@ -369,6 +369,29 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
+		// Reject disabled races and classes
+		if (classInstance->has_disabled() && classInstance->disabled())
+		{
+			WLOG("Character creation rejected: class " << log_hex_digit(characterClass) << " is disabled");
+			GetConnection().sendSinglePacket([](game::OutgoingPacket &outPacket)
+											 {
+					outPacket.Start(game::realm_client_packet::CharCreateResponse);
+					outPacket << io::write<uint8>(game::char_create_result::Disabled);
+					outPacket.Finish(); });
+			return PacketParseResult::Pass;
+		}
+
+		if (raceEntry->has_disabled() && raceEntry->disabled())
+		{
+			WLOG("Character creation rejected: race " << log_hex_digit(race) << " is disabled");
+			GetConnection().sendSinglePacket([](game::OutgoingPacket &outPacket)
+											 {
+					outPacket.Start(game::realm_client_packet::CharCreateResponse);
+					outPacket << io::write<uint8>(game::char_create_result::Disabled);
+					outPacket.Finish(); });
+			return PacketParseResult::Pass;
+		}
+
 		// Get model
 		const uint32 modelId = gender == 0 ? raceEntry->malemodel() : raceEntry->femalemodel();
 		const proto::ModelDataEntry *model = m_project.models.getById(modelId);
@@ -2448,6 +2471,42 @@ namespace mmo
 			packet << io::write<uint8>(game::auth_result::Success);	// TODO: Write real packet content
 			packet.Finish(); });
 
+		// Send RealmConfig: which races and classes are disabled
+		m_connection->sendSinglePacket([this](game::OutgoingPacket &packet)
+									   {
+			packet.Start(game::realm_client_packet::RealmConfig);
+
+			std::vector<uint8> disabledRaces;
+			for (const auto& race : m_project.races.getTemplates().entry())
+			{
+				if (race.has_disabled() && race.disabled())
+				{
+					disabledRaces.push_back(static_cast<uint8>(race.id()));
+				}
+			}
+
+			std::vector<uint8> disabledClasses;
+			for (const auto& cls : m_project.classes.getTemplates().entry())
+			{
+				if (cls.has_disabled() && cls.disabled())
+				{
+					disabledClasses.push_back(static_cast<uint8>(cls.id()));
+				}
+			}
+
+			packet << io::write<uint8>(static_cast<uint8>(disabledRaces.size()));
+			for (const uint8 id : disabledRaces)
+			{
+				packet << io::write<uint8>(id);
+			}
+			packet << io::write<uint8>(static_cast<uint8>(disabledClasses.size()));
+			for (const uint8 id : disabledClasses)
+			{
+				packet << io::write<uint8>(id);
+			}
+
+			packet.Finish(); });
+
 		// Enable CharEnum packets
 		RegisterPacketHandler(game::client_realm_packet::CharEnum, *this, &Player::OnCharEnum);
 		RegisterPacketHandler(game::client_realm_packet::CreateChar, *this, &Player::OnCreateChar);
@@ -2887,6 +2946,27 @@ namespace mmo
 
 		m_characterData = characterData;
 		m_characterData->isGameMaster = (m_gmLevel > 0);
+
+		// Server-side guard: reject enter-world if the character's race or class is disabled
+		const auto* raceEntry = m_project.races.getById(m_characterData->raceId);
+		if (raceEntry && raceEntry->has_disabled() && raceEntry->disabled())
+		{
+			WLOG("Blocked enter-world for character 0x" << std::hex << m_characterData->characterId << ": race " << m_characterData->raceId << " is disabled");
+			m_characterData.reset();
+			OnWorldJoinFailed(game::player_login_response::RaceOrClassDisabled);
+			EnableEnterWorldPacket(true);
+			return;
+		}
+
+		const auto* classEntry = m_project.classes.getById(m_characterData->classId);
+		if (classEntry && classEntry->has_disabled() && classEntry->disabled())
+		{
+			WLOG("Blocked enter-world for character 0x" << std::hex << m_characterData->characterId << ": class " << m_characterData->classId << " is disabled");
+			m_characterData.reset();
+			OnWorldJoinFailed(game::player_login_response::RaceOrClassDisabled);
+			EnableEnterWorldPacket(true);
+			return;
+		}
 
 		if (m_characterData->groupId != 0)
 		{

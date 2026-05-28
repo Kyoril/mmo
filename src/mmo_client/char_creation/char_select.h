@@ -42,6 +42,9 @@ namespace mmo
 
 		int32 GetSelectedCharacter() const { return m_selectedCharacter; }
 
+		/// Returns true when the character at the given index has a disabled race or class.
+		[[nodiscard]] bool IsCharacterDisabled(int32 index) const;
+
 	public:
 		void Apply(const VisibilitySetPropertyGroup& group, const AvatarConfiguration& configuration) override;
 
