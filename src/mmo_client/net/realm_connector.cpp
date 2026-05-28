@@ -311,6 +311,15 @@ namespace mmo
 		connect(m_realmAddress, m_realmPort, *this, m_ioService);
 	}
 
+	void RealmConnector::RequestCharacterList()
+	{
+		sendSinglePacket([](game::OutgoingPacket& outPacket)
+		{
+			outPacket.Start(game::client_realm_packet::CharEnum);
+			outPacket.Finish();
+		});
+	}
+
 	void RealmConnector::EnterWorld(const CharacterView & character)
 	{
 		const uint64 guid = character.GetGuid();

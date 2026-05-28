@@ -34,6 +34,9 @@ namespace mmo
 	void CharSelect::SetModelFrame(Frame* frame)
 	{
 		const auto modelFrame = dynamic_cast<ModelFrame*>(frame);
+		// Entity pointers in m_itemAttachments belong to the previous scene and are
+		// now dangling. Drop them before assigning the new frame.
+		m_itemAttachments.clear();
 		m_modelFrame = modelFrame;
 	}
 
@@ -206,7 +209,13 @@ namespace mmo
 			return;
 		}
 
-		Entity* entity = m_modelFrame ? m_modelFrame->GetEntity() : nullptr;
+		if (!m_modelFrame)
+		{
+			m_itemAttachments.clear();
+			return;
+		}
+
+		Entity* entity = m_modelFrame->GetEntity();
 
 		for (auto& [displayId, attachment] : m_itemAttachments)
 		{

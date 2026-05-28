@@ -91,21 +91,25 @@ namespace mmo
 
 		if (m_realmConnector.IsConnected())
 		{
-			// Only show an error dialog when we came back due to an actual failure.
-			// Normal logouts and realm-side transitions return silently to char select.
+			// Request a fresh character list from the server; the UI shows a loading dialog
+			// while waiting. On EnterWorldFailed, an error will be shown once the list loads.
+			m_realmConnector.RequestCharacterList();
+
 			switch (s_returnReason)
 			{
 			case LoginReturnReason::EnterWorldFailed:
-				FrameManager::Get().TriggerLuaEvent("ENTER_WORLD_FAILED", "WORLD_SERVER_DOWN");
-				break;
-			case LoginReturnReason::RealmDisconnected:
-				FrameManager::Get().TriggerLuaEvent("ENTER_WORLD_FAILED", "REALM_DISCONNECTED");
+				FrameManager::Get().TriggerLuaEvent("REQUEST_CHAR_LIST", "WORLD_SERVER_DOWN");
 				break;
 			case LoginReturnReason::NormalLogout:
 			default:
-				// No error — just show the character list silently.
+				FrameManager::Get().TriggerLuaEvent("REQUEST_CHAR_LIST");
 				break;
 			}
+		}
+		else if (s_returnReason == LoginReturnReason::RealmDisconnected)
+		{
+			// Realm dropped while in-world — land on login screen and show an error.
+			FrameManager::Get().TriggerLuaEvent("GLUE_REALM_DISCONNECTED");
 		}
 
 		// Reset reason so subsequent re-entries default to no error.

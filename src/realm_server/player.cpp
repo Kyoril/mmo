@@ -3065,11 +3065,51 @@ namespace mmo
 	void Player::OnWorldDestroyed(World &world)
 	{
 		EnableProxyPackets(false);
-
 		m_world.reset();
 		NotifyWorldNodeChanged(nullptr);
 
-		connectionLost();
+		// Save action bar before clearing character data
+		if (m_characterData && m_pendingButtons)
+		{
+			m_database.asyncRequest([](bool) {}, &IDatabase::SetCharacterActionButtons, m_characterData->characterId, m_actionButtons);
+			m_pendingButtons = false;
+		}
+
+		// Notify group that the player has disconnected from the world
+		if (m_group && m_characterData)
+		{
+			m_group->NotifyMemberDisconnected(m_characterData->characterId);
+		}
+
+		// Broadcast guild offline event
+		if (m_characterData && m_characterData->guildId != 0)
+		{
+			if (Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId))
+			{
+				guild->BroadcastEvent(guild_event::LoggedOut, m_characterData->characterId, m_characterData->name.c_str());
+			}
+		}
+
+		// Notify friends this player is offline
+		if (m_characterData)
+		{
+			m_friendMgr.NotifyFriendStatusChange(m_characterData->characterId, false);
+		}
+
+		// Clear in-world state so the client can re-enter char select
+		m_characterData.reset();
+		m_group.reset();
+		m_inviterGuid = 0;
+
+		EnableEnterWorldPacket(true);
+
+		// Keep the realm connection alive and tell the client the world server went down
+		m_connection->sendSinglePacket([](game::OutgoingPacket& outPacket)
+		{
+			outPacket.Start(game::realm_client_packet::EnterWorldFailed);
+			outPacket << io::write<uint8>(game::player_login_response::NoWorldServer);
+			outPacket.Finish();
+		});
 	}
 
 	void Player::NotifyWorldNodeChanged(World *worldNode)

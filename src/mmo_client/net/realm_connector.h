@@ -199,6 +199,9 @@ namespace mmo
 		/// @param sessionKey The session key.
 		void Connect(const std::string& realmAddress, uint16 realmPort, const std::string& accountName, const std::string& realmName, BigNumber sessionKey);
 
+		/// Sends a packet to the realm server requesting an up-to-date character list.
+		void RequestCharacterList();
+
 		/// Sends an enter world request using the given character.
 		void EnterWorld(const CharacterView& character);
 
