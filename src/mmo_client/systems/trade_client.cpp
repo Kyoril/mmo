@@ -25,6 +25,31 @@ namespace mmo
 
 	void TradeClient::Shutdown()
 	{
+		// If the UI is being reloaded while a session is active, cancel it so the
+		// server and the other player are not left hanging.  The server will send
+		// TradeSessionClosed back to both sides; the freshly reloaded Lua will
+		// receive that event through the newly registered handlers and clean up.
+		if (m_inSession)
+		{
+			m_connector.CancelTrade();
+		}
+		else if (m_pendingInviterGuid != 0)
+		{
+			// We received an invite we never answered; decline it so the inviter
+			// does not wait indefinitely.
+			m_connector.DeclineTradeInvite();
+		}
+
+		m_inSession = false;
+		m_otherOffer.fill({});
+		m_myOffer.fill({});
+		m_myMoney = 0;
+		m_otherMoney = 0;
+		m_myAccepted = false;
+		m_otherAccepted = false;
+		m_pendingInviterName.clear();
+		m_pendingInviterGuid = 0;
+
 		m_handlers.Clear();
 	}
 
