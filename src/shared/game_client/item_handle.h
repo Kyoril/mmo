@@ -75,6 +75,12 @@ namespace mmo
 
 		[[nodiscard]] int32 GetStatValue(int32 index) const;
 
+		/// Returns the binding type from the item entry (0=none, 1=BoP, 2=BoE, 3=BoU).
+		[[nodiscard]] uint32 GetBonding() const;
+
+		/// Returns true if this item instance is currently bound to a player.
+		[[nodiscard]] bool IsBound() const;
+
 	private:
 		[[nodiscard]] bool CheckNonNull() const;
 

@@ -600,8 +600,8 @@ namespace mmo
 				}
 
 				// Load item data
-				mysql::Select itemSelect(m_connection, 
-					"SELECT `entry`, `slot`, `creator`, `count`, `durability` FROM `character_items` WHERE `owner`=" + std::to_string(characterId));
+				mysql::Select itemSelect(m_connection,
+					"SELECT `entry`, `slot`, `creator`, `count`, `durability`, `flags` FROM `character_items` WHERE `owner`=" + std::to_string(characterId));
 				if (itemSelect.Success())
 				{
 					mysql::Row itemRow(itemSelect);
@@ -614,6 +614,7 @@ namespace mmo
 						itemRow.GetField(2, data.creator);
 						itemRow.GetField<uint8, uint16>(3, data.stackCount);
 						itemRow.GetField(4, data.durability);
+						itemRow.GetField(5, data.flags);
 						if (const auto* itemEntry = m_project.items.getById(data.entry))
 						{
 							// More than 15 minutes passed since last save?
@@ -1696,87 +1697,89 @@ namespace mmo
 		}
 	}
 
-void MySQLDatabase::SaveInventoryItems(uint64 characterId, const std::vector<ItemData>& items)
-{
-	try
+	void MySQLDatabase::SaveInventoryItems(uint64 characterId, const std::vector<ItemData>& items)
 	{
-		mysql::Transaction transaction(m_connection);
-
-		// CRITICAL: First, delete ALL existing items for this character
-		// This ensures items that were sold/destroyed are removed
-		// Buyback slots are never saved, so they won't be affected
-		std::ostringstream deleteStrm;
-		deleteStrm << "DELETE FROM `character_items` WHERE `owner` = " << characterId << ";";
-		
-		if (!m_connection.Execute(deleteStrm.str()))
+		try
 		{
-			PrintDatabaseError();
-			throw mysql::Exception("Could not delete existing inventory items!");
-		}
+			mysql::Transaction transaction(m_connection);
 
-		// If no items to save (empty inventory), we're done after deletion
-		if (items.empty())
-		{
-			transaction.Commit();
-			return;
-		}
-
-		// Now insert the current inventory state
-		// Use INSERT instead of REPLACE since we just deleted everything
-		std::ostringstream insertStrm;
-		insertStrm << "INSERT INTO `character_items` (`owner`, `slot`, `entry`, `creator`, `count`, `durability`) VALUES ";
-
-		bool isFirstItem = true;
-		for (const auto& item : items)
-		{
-			// Don't save buyback slots into the database!
-			if (InventorySlot::FromAbsolute(item.slot).IsBuyBack())
-			{
-				continue;
-			}
-
-			if (!isFirstItem)
-			{
-				insertStrm << ",";
-			}
-			else
-			{
-				isFirstItem = false;
-			}
-
-			insertStrm << "(" << characterId << "," << item.slot << "," << item.entry << ",";
-			if (item.creator == 0)
-			{
-				insertStrm << "NULL";
-			}
-			else
-			{
-				insertStrm << item.creator;
-			}
-			insertStrm << "," << static_cast<uint16>(item.stackCount) << "," << item.durability << ")";
-		}
-
-		insertStrm << ";";
-
-		// Only execute if we have items to save (after filtering buyback slots)
-		if (!isFirstItem)
-		{
-			if (!m_connection.Execute(insertStrm.str()))
+			// CRITICAL: First, delete ALL existing items for this character
+			// This ensures items that were sold/destroyed are removed
+			// Buyback slots are never saved, so they won't be affected
+			std::ostringstream deleteStrm;
+			deleteStrm << "DELETE FROM `character_items` WHERE `owner` = " << characterId << ";";
+			
+			if (!m_connection.Execute(deleteStrm.str()))
 			{
 				PrintDatabaseError();
-				throw mysql::Exception("Could not save inventory items!");
+				throw mysql::Exception("Could not delete existing inventory items!");
 			}
-			ILOG("Successfully saved inventory items for character " << characterId);
-		}
 
-		transaction.Commit();
+			// If no items to save (empty inventory), we're done after deletion
+			if (items.empty())
+			{
+				transaction.Commit();
+				return;
+			}
+
+			// Now insert the current inventory state
+			// Use INSERT instead of REPLACE since we just deleted everything
+			std::ostringstream insertStrm;
+			insertStrm << "INSERT INTO `character_items` (`owner`, `slot`, `entry`, `creator`, `count`, `durability`, `flags`) VALUES ";
+
+			bool isFirstItem = true;
+			for (const auto& item : items)
+			{
+				// Don't save buyback slots into the database!
+				if (InventorySlot::FromAbsolute(item.slot).IsBuyBack())
+				{
+					continue;
+				}
+
+				if (!isFirstItem)
+				{
+					insertStrm << ",";
+				}
+				else
+				{
+					isFirstItem = false;
+				}
+
+				insertStrm << "(" << characterId << "," << item.slot << "," << item.entry << ",";
+				if (item.creator == 0)
+				{
+					insertStrm << "NULL";
+				}
+				else
+				{
+					insertStrm << item.creator;
+				}
+				insertStrm << "," << static_cast<uint16>(item.stackCount) << "," << item.durability << "," << item.flags << ")";
+			}
+
+			insertStrm << ";";
+
+			// Only execute if we have items to save (after filtering buyback slots)
+			if (!isFirstItem)
+			{
+				if (!m_connection.Execute(insertStrm.str()))
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not save inventory items!");
+				}
+				ILOG("Successfully saved inventory items for character " << characterId);
+			}
+
+			transaction.Commit();
+		}
+		catch (const mysql::Exception& e)
+		{
+			ELOG("Failed to save inventory items for character " << characterId << ": " << e.what());
+			throw;
+		}
 	}
-	catch (const mysql::Exception& e)
-	{
-		ELOG("Failed to save inventory items for character " << characterId << ": " << e.what());
-		throw;
-	}
-}	void MySQLDatabase::DeleteInventoryItems(uint64 characterId, const std::vector<uint16>& slots)
+
+	void MySQLDatabase::DeleteInventoryItems(uint64 characterId, const std::vector<uint16>& slots)
 	{
 		if (slots.empty())
 		{

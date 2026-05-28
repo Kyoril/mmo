@@ -172,6 +172,12 @@ namespace mmo
 		ImColor(0.64f, 0.21f, 0.93f),
 		ImColor(1.0f, 0.5f, 0.0f)};
 
+	static const std::vector<String> s_itemBindingStrings = {
+		"No Binding",
+		"Binds When Picked Up",
+		"Binds When Equipped",
+		"Binds When Used"};
+
 	static const std::vector<String> s_inventoryTypeStrings = {
 		"NonEquip",
 		"Head",
@@ -551,15 +557,47 @@ namespace mmo
 			ImGui::SameLine();
 			DrawHelpMarker("Visual quality of the item (affects text color in tooltip)");
 
+			// Binding — BoE only relevant for equippable items; always allow setting it but note the constraint
+			int currentBinding = static_cast<int>(currentEntry.bonding());
+			if (ImGui::Combo("Binding", &currentBinding, [](void *, int idx, const char **out_text)
+				{
+					if (idx < 0 || idx >= static_cast<int>(s_itemBindingStrings.size()))
+					{
+						return false;
+					}
+					*out_text = s_itemBindingStrings[idx].c_str();
+					return true;
+				}, nullptr, static_cast<int>(s_itemBindingStrings.size()), -1))
+			{
+				currentEntry.set_bonding(currentBinding);
+			}
+			ImGui::SameLine();
+			DrawHelpMarker("When the item becomes bound to a player. Bind on Equip only has effect for equippable gear.");
+
 			ImGui::Spacing();
 			DrawSectionHeader("Tooltip Preview");
 
 			ImGui::BeginGroupPanel(nullptr, ImVec2(0, -1));
 			ImGui::TextColored(s_itemQualityColors[currentQuality].Value, currentEntry.name().c_str());
 
+			// Binding line (shown at the top, just like WoW tooltips)
+			const uint32 previewBinding = currentEntry.bonding();
+			if (previewBinding == item_binding::BindWhenPickedUp)
+			{
+				ImGui::TextUnformatted("Binds when picked up");
+			}
+			else if (previewBinding == item_binding::BindWhenEquipped)
+			{
+				ImGui::TextUnformatted("Binds when equipped");
+			}
+			else if (previewBinding == item_binding::BindWhenUsed)
+			{
+				ImGui::TextUnformatted("Binds when used");
+			}
+
 			// Determine if this is an equippable item based on inventory type
-			const bool isEquippable = (invType != inventory_type::NonEquip && 
-									   invType != inventory_type::Bag && 
+			const bool isEquippable = (invType != inventory_type::NonEquip &&
+									   invType != inventory_type::Bag &&
 									   invType != inventory_type::Quiver &&
 									   invType != inventory_type::Ammo);
 

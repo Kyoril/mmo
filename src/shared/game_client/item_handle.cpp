@@ -308,6 +308,22 @@ namespace mmo
 		return static_cast<int32>(info->stats[index].value);
 	}
 
+	uint32 ItemHandle::GetBonding() const
+	{
+		if (!CheckNonNull()) return 0;
+
+		const ItemInfo* info = Get()->GetEntry();
+		if (!info) return 0;
+
+		return info->bonding;
+	}
+
+	bool ItemHandle::IsBound() const
+	{
+		if (!CheckNonNull()) return false;
+		return (Get()->Get<uint32>(object_fields::ItemFlags) & item_flags::Bound) != 0;
+	}
+
 	bool ItemHandle::CheckNonNull() const
 	{
 		if (Get())

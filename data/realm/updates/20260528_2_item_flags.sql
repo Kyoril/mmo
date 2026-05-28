@@ -1,0 +1,2 @@
+ALTER TABLE `character_items`
+    ADD COLUMN `flags` INT UNSIGNED NOT NULL DEFAULT 0;

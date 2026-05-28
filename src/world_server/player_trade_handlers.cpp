@@ -5,6 +5,7 @@
 #include "trade_session.h"
 
 #include "game_server/objects/game_player_s.h"
+#include "game_server/objects/game_item_s.h"
 #include "game_server/inventory.h"
 #include "game_server/inventory_types.h"
 #include "game/loot.h"
@@ -294,6 +295,13 @@ namespace mmo
 		if (slot.IsEquipment() || slot.IsBagPack())
 		{
 			WLOG("Player tried to trade an equipped item or bag");
+			return;
+		}
+
+		// Disallow trading bound items
+		if (item->Get<uint32>(object_fields::ItemFlags) & item_flags::Bound)
+		{
+			WLOG("Player tried to trade a bound item");
 			return;
 		}
 
