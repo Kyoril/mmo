@@ -468,6 +468,18 @@ namespace mmo
 
 		[[nodiscard]] float GetOpacity(bool inherit = true) const;
 
+		/// Moves this frame to the end of its parent's child list so it renders on top of all siblings.
+		void BringToFront();
+
+		/// Moves this frame to the start of its parent's child list so it renders behind all siblings.
+		void SendToBack();
+
+		/// Sets the frame level used for render ordering among siblings. Higher values render on top.
+		void SetFrameLevel(int32 level);
+
+		/// Gets the frame level used for render ordering.
+		[[nodiscard]] int32 GetFrameLevel() const { return m_frameLevel; }
+
 	protected:
 		virtual void DrawSelf();
 
@@ -608,6 +620,8 @@ namespace mmo
 		float m_opacity{ 1.0f };
 
 		Color m_color { Color::White };
+
+		int32 m_frameLevel{ 0 };
 
 		bool m_clickable = true;
 

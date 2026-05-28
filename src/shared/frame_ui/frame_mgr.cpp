@@ -440,6 +440,10 @@ namespace mmo
 					.def("SetOnDropHandler", &Frame::SetOnDrop)
 					.def("SetOpacity", &Frame::SetOpacity)
 					.def("GetOpacity", &Frame::GetOpacity)
+					.def("BringToFront", &Frame::BringToFront)
+					.def("SendToBack", &Frame::SendToBack)
+					.def("SetFrameLevel", &Frame::SetFrameLevel)
+					.def("GetFrameLevel", &Frame::GetFrameLevel)
 					.def("__eq", &Frame::IsEqualTo)
 			),
 

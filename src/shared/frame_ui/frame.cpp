@@ -904,8 +904,18 @@ namespace mmo
 			return;
 		}
 
-		// Add to the list of children
-		m_children.push_back(frame);
+		// Insert before the first sibling with a strictly higher frameLevel so that
+		// same-level frames preserve their declaration order (stable sort).
+		auto it = m_children.end();
+		for (auto jt = m_children.begin(); jt != m_children.end(); ++jt)
+		{
+			if ((*jt)->m_frameLevel > frame->m_frameLevel)
+			{
+				it = jt;
+				break;
+			}
+		}
+		m_children.insert(it, frame);
 
 		// Register ourself as parent frame
 		frame->m_parent = this;
@@ -914,6 +924,63 @@ namespace mmo
 		{
 			frame->m_onLoad(frame.get());
 		}
+	}
+
+	void Frame::BringToFront()
+	{
+		if (!m_parent)
+		{
+			return;
+		}
+
+		auto& siblings = m_parent->m_children;
+		const auto self = shared_from_this();
+		siblings.erase(std::remove(siblings.begin(), siblings.end(), self), siblings.end());
+		siblings.push_back(self);
+	}
+
+	void Frame::SendToBack()
+	{
+		if (!m_parent)
+		{
+			return;
+		}
+
+		auto& siblings = m_parent->m_children;
+		const auto self = shared_from_this();
+		siblings.erase(std::remove(siblings.begin(), siblings.end(), self), siblings.end());
+		siblings.insert(siblings.begin(), self);
+	}
+
+	void Frame::SetFrameLevel(const int32 level)
+	{
+		if (m_frameLevel == level)
+		{
+			return;
+		}
+
+		m_frameLevel = level;
+
+		if (!m_parent)
+		{
+			return;
+		}
+
+		// Re-insert at the correct sorted position in the parent's child list.
+		auto& siblings = m_parent->m_children;
+		const auto self = shared_from_this();
+		siblings.erase(std::remove(siblings.begin(), siblings.end(), self), siblings.end());
+
+		auto it = siblings.end();
+		for (auto jt = siblings.begin(); jt != siblings.end(); ++jt)
+		{
+			if ((*jt)->m_frameLevel > m_frameLevel)
+			{
+				it = jt;
+				break;
+			}
+		}
+		siblings.insert(it, self);
 	}
 
 	void Frame::RemoveAllChildren()
