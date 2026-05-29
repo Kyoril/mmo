@@ -322,6 +322,13 @@ namespace mmo
 
 							const uint32 healthPercent = data[0];
 							const uint32 prevHealthPercent = data[1];
+
+							// Don't fire when the creature dies — OnKilled covers that case.
+							if (healthPercent == 0)
+							{
+								continue;
+							}
+
 							if (prevHealthPercent <= triggerEvent.data(0))
 							{
 								// Skip trigger if previous health percentage was already below the trigger threshold

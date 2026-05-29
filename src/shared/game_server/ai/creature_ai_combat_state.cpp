@@ -753,6 +753,10 @@ namespace mmo
 		if (controlled.IsRooted() && !m_threat.empty())
 		{
 			UpdateVictim();
+			if (const GameUnitS* rootedVictim = controlled.GetVictim())
+			{
+				controlled.SetFacing(controlled.GetAngle(*rootedVictim));
+			}
 			m_nextActionCountdown.SetEnd(GetAsyncTimeMs() + ACTION_INTERVAL_MS);
 			return;
 		}
@@ -775,6 +779,9 @@ namespace mmo
 			GetAI().Reset();
 			return;
 		}
+
+		// Face the victim on the server side (no network update needed; client renders creature facing automatically)
+		controlled.SetFacing(controlled.GetAngle(*victim));
 
 		// Update spell cooldowns
 		UpdateSpellCooldowns();
