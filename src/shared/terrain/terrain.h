@@ -638,13 +638,23 @@ namespace mmo
 			/// @brief Camera position from the previous NotifyCameraPosition call.
 			Vector3 m_lastCameraPosition;
 
+			/// @brief Camera position at the last occlusion-state reset. Used to detect gradual
+			///        transitions (e.g. walking through a building door) that don't produce a
+			///        single large per-frame displacement but do cross a meaningful distance.
+			Vector3 m_lastResetCameraPosition;
+
 			/// @brief True once NotifyCameraPosition has been called at least once.
 			///        Prevents false jump detection on the very first frame.
 			bool m_cameraPositionInitialized = false;
 
-			/// @brief Squared distance threshold above which a camera displacement is treated as a
-			///        jump and all tile occlusion state is reset. 2500 = 50 world-unit radius.
+			/// @brief Squared distance threshold above which a per-frame camera displacement is
+			///        treated as an instantaneous jump (teleport). sqrt(2500) = 50 world units.
 			static constexpr float kCameraJumpThresholdSq = 2500.0f;
+
+			/// @brief Squared distance threshold for cumulative displacement from the last reset
+			///        anchor. Covers gradual building-door exits (~5-10 unit walk-through) as
+			///        well as teleports. sqrt(400) = 20 world units from anchor.
+			static constexpr float kCameraWalkResetThresholdSq = 400.0f;
 		};
 	}
 

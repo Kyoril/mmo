@@ -503,44 +503,56 @@ namespace mmo
 
 		void Terrain::NotifyCameraPosition(const Vector3& pos)
 		{
-			// On the first call, just record the position and arm the detector for subsequent frames.
-			if (m_cameraPositionInitialized)
+			// On the first call, arm both detectors without triggering a reset.
+			if (!m_cameraPositionInitialized)
 			{
-				const Vector3 delta = pos - m_lastCameraPosition;
-				const float distSq = delta.Dot(delta);
+				m_lastCameraPosition = pos;
+				m_lastResetCameraPosition = pos;
+				m_cameraPositionInitialized = true;
+				return;
+			}
 
-				if (distSq > kCameraJumpThresholdSq)
+			const Vector3 frameDelta = pos - m_lastCameraPosition;
+			const float frameDistSq = frameDelta.Dot(frameDelta);
+
+			const Vector3 anchorDelta = pos - m_lastResetCameraPosition;
+			const float anchorDistSq = anchorDelta.Dot(anchorDelta);
+
+			// Trigger reset on either an instantaneous jump (teleport) OR cumulative
+			// walk distance from the last reset anchor (covers gradual building exits).
+			const bool shouldReset = (frameDistSq > kCameraJumpThresholdSq) ||
+			                         (anchorDistSq > kCameraWalkResetThresholdSq);
+
+			if (shouldReset)
+			{
+				for (uint32 i = 0; i < m_width; ++i)
 				{
-					// Camera jumped — reset occlusion state on every prepared tile so that tiles
-					// that were hidden inside a building/interior re-appear immediately.
-					for (uint32 i = 0; i < m_width; ++i)
+					for (uint32 j = 0; j < m_height; ++j)
 					{
-						for (uint32 j = 0; j < m_height; ++j)
+						Page* page = m_pages(i, j).get();
+						if (!page || !page->IsPrepared())
 						{
-							Page* page = m_pages(i, j).get();
-							if (!page || !page->IsPrepared())
-							{
-								continue;
-							}
+							continue;
+						}
 
-							for (uint32 x = 0; x < constants::TilesPerPage; ++x)
+						for (uint32 x = 0; x < constants::TilesPerPage; ++x)
+						{
+							for (uint32 y = 0; y < constants::TilesPerPage; ++y)
 							{
-								for (uint32 y = 0; y < constants::TilesPerPage; ++y)
+								Tile* tile = page->GetTile(x, y);
+								if (tile)
 								{
-									Tile* tile = page->GetTile(x, y);
-									if (tile)
-									{
-										tile->ResetOcclusionState();
-									}
+									tile->ResetOcclusionState();
 								}
 							}
 						}
 					}
 				}
+
+				m_lastResetCameraPosition = pos;
 			}
 
 			m_lastCameraPosition = pos;
-			m_cameraPositionInitialized = true;
 		}
 
 		std::pair<bool, Terrain::RayIntersectsResult> Terrain::RayIntersects(const Ray &ray)
