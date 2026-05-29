@@ -2181,9 +2181,10 @@ namespace mmo
 		{
 			if (castTime > 0)
 			{
-				// Trigger spell visualization for casting start
+				// Trigger spell visualization for casting start and looped casting animation
 				std::vector<GameUnitC *> targets;
 				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::StartCast, *spell, casterUnit.get(), targets);
+				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Casting, *spell, casterUnit.get(), targets);
 			}
 		}
 
@@ -2499,6 +2500,16 @@ namespace mmo
 		if (!spell)
 		{
 			return PacketParseResult::Pass;
+		}
+
+		if (const std::shared_ptr<GameUnitC> casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
+		{
+			if (duration > 0)
+			{
+				std::vector<GameUnitC *> targets;
+				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::StartCast, *spell, casterUnit.get(), targets);
+				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Casting, *spell, casterUnit.get(), targets);
+			}
 		}
 
 		if (m_playerController->GetControlledUnit())
