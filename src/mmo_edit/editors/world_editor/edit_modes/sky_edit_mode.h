@@ -42,15 +42,16 @@ namespace mmo
         float m_timeSpeed{1.0f};
 
         // Shadow settings cache
-        float m_shadowBias{0.0001f};
-        float m_normalBiasScale{0.02f};
-        float m_shadowSoftness{1.0f};
+        float m_shadowBias{0.00002f};
+        float m_normalBiasScale{0.2f};
+        float m_shadowSoftness{1.36f};
         float m_blockerSearchRadius{0.005f};
-        float m_lightSize{0.001f};
-        float m_depthBias{100.0f};
-        float m_slopeScaledDepthBias{2.0f};
-        bool m_useCascadedShadows{false};
+        float m_lightSize{0.0268f};
+        float m_depthBias{138.6f};
+        float m_slopeScaledDepthBias{0.1f};
+        bool m_useCascadedShadows{true};
         bool m_debugCascades{false};
         int m_shadowMapSize{2048};
+
     };
 }

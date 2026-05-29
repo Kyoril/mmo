@@ -182,16 +182,16 @@ namespace mmo
         /// @brief Whether to show cascade debug colors.
         bool m_debugCascades = false;
 
-        float m_depthBias = 100.0f;
-		float m_slopeScaledDepthBias = 2.0f;
+        float m_depthBias = 138.6f;
+		float m_slopeScaledDepthBias = 0.1f;
 		float m_depthBiasClamp = 0.0f;
 
         // Advanced shadow parameters
         float m_shadowBias = 0.00002f;         // Depth bias in shadow space (reduced for less peter panning)
-        float m_normalBiasScale = 0.07f;      // Normal-based bias scale factor (reduced)
+        float m_normalBiasScale = 0.2f;      // Normal-based bias scale factor (reduced)
         float m_shadowSoftness = 0.25f;        // Overall shadow softness
-        float m_blockerSearchRadius = 0.005f; // Search radius for blocker search phase
-        float m_lightSize = 0.021f;           // Size of the virtual light (smaller = sharper shadows)
+        float m_blockerSearchRadius = 0.03f; // Search radius for blocker search phase
+        float m_lightSize = 0.0268f;           // Size of the virtual light (smaller = sharper shadows)
         uint16 m_shadowMapSize = 2048;        // Size of the shadow map texture (increased for quality)
 
         /// @brief Cached light render statistics from the last frame.

@@ -415,12 +415,11 @@ namespace mmo
 		g_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), *g_scene, desc.width, desc.height);
 
 		// Optimize shadow settings for better quality
-		g_deferredRenderer->SetDepthBias(100.0f, 2.5f, 0.01f); // Hardware depth bias settings
-		g_deferredRenderer->SetShadowBias(0.00025f);           // Software depth bias in shadow space
-		g_deferredRenderer->SetNormalBiasScale(0.05f);         // Scale factor for normal-based bias
-		g_deferredRenderer->SetShadowSoftness(2.5f);           // Shadow softness for smooth edges
+		g_deferredRenderer->SetDepthBias(138.6f, 0.1f, 0.0f); // Hardware depth bias settings
+		g_deferredRenderer->SetShadowBias(0.00002f);           // Software depth bias in shadow space
+		g_deferredRenderer->SetNormalBiasScale(0.2f);         // Scale factor for normal-based bias
 		g_deferredRenderer->SetBlockerSearchRadius(0.03f);     // Blocker search radius for PCSS-style shadows
-		g_deferredRenderer->SetLightSize(0.005f);              // Virtual light size for penumbra simulation
+		g_deferredRenderer->SetLightSize(0.0268f);              // Virtual light size for penumbra simulation
 		
 		// Set shadow map information and direction in the scene
 		g_scene->SetShadowDirLightTextureOffset(0.5f);
