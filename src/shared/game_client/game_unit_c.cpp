@@ -1644,8 +1644,35 @@ namespace mmo
 
 	void GameUnitC::UpdatePathMovement(const float deltaTime)
 	{
-		if (m_movementPath.empty() || m_pathCompleted || m_pathTotalLength <= 0.0f)
+		if (m_movementPath.empty() || m_pathCompleted)
 		{
+			return;
+		}
+
+		// Zero-length path means "stop here" (e.g. a CreatureMove stop packet whose
+		// destination is exactly the client's current position). Complete immediately
+		// so UpdateMovementBasedAnimation can run and animations reset properly.
+		if (m_pathTotalLength <= 0.0f)
+		{
+			m_movementInfo.movementFlags &= ~movement_flags::Forward;
+			m_movementInfo.movementFlags &= ~movement_flags::Backward;
+			m_movementInfo.movementFlags &= ~movement_flags::StrafeLeft;
+			m_movementInfo.movementFlags &= ~movement_flags::StrafeRight;
+			m_movementInfo.movementFlags &= ~movement_flags::PositionChanging;
+
+			if (m_lockedLoopAnimState)
+			{
+				SetTargetAnimState(m_lockedLoopAnimState);
+			}
+			else if (m_idleAnimState)
+			{
+				SetTargetAnimState(m_idleAnimState);
+			}
+
+			m_pathCompleted = true;
+			m_movementPath.clear();
+			m_pathSegmentLengths.clear();
+			m_currentPathIndex = 0;
 			return;
 		}
 
@@ -1680,8 +1707,13 @@ namespace mmo
 			m_movementInfo.movementFlags &= ~movement_flags::StrafeRight;
 			m_movementInfo.movementFlags &= ~movement_flags::PositionChanging;
 
-			// Set idle animation for all units when path completes
-			if (m_idleAnimState)
+			// Set idle animation for all units when path completes, but don't override
+			// a locked spell cast animation (e.g. path completes just as casting begins)
+			if (m_lockedLoopAnimState)
+			{
+				SetTargetAnimState(m_lockedLoopAnimState);
+			}
+			else if (m_idleAnimState)
 			{
 				SetTargetAnimState(m_idleAnimState);
 			}
@@ -1757,7 +1789,8 @@ namespace mmo
 				movementAnim = m_walkAnimState;
 			}
 
-			if (movementAnim)
+			// Don't override a locked spell animation with the run animation
+			if (movementAnim && !m_lockedLoopAnimState)
 			{
 				SetTargetAnimState(movementAnim);
 			}

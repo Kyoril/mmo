@@ -476,6 +476,9 @@ namespace mmo
 		/// Signal fired when this unit begins casting a spell.
 		/// @param spell The spell entry being cast.
 		signal<void(const proto::SpellEntry &)> startedCasting;
+		/// Signal fired when this unit's spell cast ends (success or failure).
+		/// @param succeeded True if the cast completed successfully, false if interrupted.
+		signal<void(bool)> finishedCasting;
 		/// Signal fired when a unit trigger should be executed.
 		/// @param trigger The trigger entry to be executed.
 		/// @param unit The unit that is affected by the trigger.

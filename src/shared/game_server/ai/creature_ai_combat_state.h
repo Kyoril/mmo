@@ -355,6 +355,14 @@ namespace mmo
 		bool IsInOptimalRange(const GameUnitS& target) const;
 
 		/**
+		 * @brief Returns true if the target is within range of at least one available spell,
+		 *        ignoring cooldowns and power. Used to decide whether to reposition while waiting.
+		 * @param target The target to check.
+		 * @return True if in range for any spell.
+		 */
+		bool IsTargetInAnySpellRange(const GameUnitS& target) const;
+
+		/**
 		 * @brief Moves to optimal range based on combat behavior.
 		 * @param target The target to position for.
 		 * @return True if movement was initiated successfully.
@@ -446,6 +454,7 @@ namespace mmo
 		scoped_connection m_onUnitStateChanged;
 		scoped_connection m_onAutoAttackDone;
 		scoped_connection m_onSpellCastStarted;
+		scoped_connection m_onSpellCastEnded;
 		
 		// === Casting Timeout ===
 		GameTime m_castingTimeoutEnd;

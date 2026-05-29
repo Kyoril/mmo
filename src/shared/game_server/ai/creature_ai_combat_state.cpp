@@ -175,6 +175,7 @@ namespace mmo
 		m_onMoveTargetChanged.disconnect();
 		m_onUnitStateChanged.disconnect();
 		m_onSpellCastStarted.disconnect();
+		m_onSpellCastEnded.disconnect();
 
 		auto& controlled = GetControlled();
 		controlled.SetInCombat(false, false);
@@ -786,15 +787,18 @@ namespace mmo
 		// Update spell cooldowns
 		UpdateSpellCooldowns();
 
-		// Check if periodic recalculation countdown has fired
+		// Periodic recalculation: only reset movement state when the target has moved
+		// significantly from the position we were heading toward. Unconditional resets
+		// caused casters to restart their chase every 500 ms in short bursts.
 		const auto currentTime = GetAsyncTimeMs();
 		if (currentTime >= m_recalculationCountdown.GetEnd())
 		{
-			// Force movement revalidation by resetting movement state
-			// This will trigger a fresh MoveToOptimalRange() calculation
-			m_movementState.Reset();
-			
-			// Reset countdown for next interval
+			if (!m_movementState.isMovingToCombat ||
+				victim->GetSquaredDistanceTo(m_movementState.lastWaypointTarget, false) > PLAYER_POSITION_THRESHOLD)
+			{
+				m_movementState.Reset();
+			}
+
 			m_recalculationCountdown.SetEnd(currentTime + RECALCULATION_INTERVAL_MS);
 		}
 
@@ -810,52 +814,35 @@ namespace mmo
 
 		// === Default AI logic (runs when no script, or script returned false) ===
 
-		// For casters and ranged units, prioritize spell casting if possible
-		if ((m_combatBehavior == CombatBehavior::Caster || m_combatBehavior == CombatBehavior::Ranged) && 
-			CanCastSpells())
+		// Casters and ranged units always return from this block — they never fall
+		// through to the melee chase below, even when all spells are on cooldown.
+		if (m_combatBehavior == CombatBehavior::Caster || m_combatBehavior == CombatBehavior::Ranged)
 		{
-			// Try to cast a spell first
-			const CreatureSpell* bestSpell = SelectBestSpell(*victim);
-			if (bestSpell)
+			if (!m_isCasting)
 			{
-				// Check if we're in range for the spell
-				if (IsInOptimalRange(*victim))
+				// SelectBestSpell already validates cooldown, power, and range.
+				const CreatureSpell* bestSpell = SelectBestSpell(*victim);
+				if (bestSpell)
 				{
-					// Cast the spell
-					if (CastSpell(*bestSpell, *victim))
-					{
-						return; // Spell casting initiated, wait for next action
-					}
-				}
-				else
-				{
-					// Move to optimal range for spell casting (only if not casting)
-					if (!m_isCasting && !MoveToOptimalRange(*victim))
-					{
-						// Movement failed, fallback to melee if possible
-						if (m_combatBehavior == CombatBehavior::Caster)
-						{
-							ChaseTarget(*victim); // Emergency melee mode for casters
-						}
-					}
+					CastSpell(*bestSpell, *victim);
 					return;
 				}
+
+				// No spell castable right now. Reposition ONLY if the target is genuinely
+				// out of range for every spell. If spells are just on cooldown or there is
+				// no power, stand still and wait — do not needlessly close distance.
+				if (!IsTargetInAnySpellRange(*victim))
+				{
+					MoveToOptimalRange(*victim);
+				}
 			}
+			return;
 		}
 
-		// For melee units or when spells aren't available, use melee combat (only if not casting)
-		if (!m_isCasting && (m_combatBehavior == CombatBehavior::Melee || !CanCastSpells()))
+		// Melee units: chase the target
+		if (!m_isCasting)
 		{
-			// Attempt to chase the target (only moves if necessary)
 			ChaseTarget(*victim);
-		}
-		else if (!m_isCasting)
-		{
-			// Caster with no available spells - move to optimal range and wait
-			if (!IsInOptimalRange(*victim))
-			{
-				MoveToOptimalRange(*victim);
-			}
 		}
 	}
 
@@ -903,15 +890,25 @@ namespace mmo
 			{
 				m_isCasting = true;
 				m_lastSpellCastTime = GetAsyncTimeMs();
-				
+
 				// Update timeout with the actual spell's cast time
 				m_castingTimeoutEnd = m_lastSpellCastTime + spell.casttime() + 1000; // 1 second buffer
-				
+
 				// Ensure movement is stopped (safety check)
 				auto& controlled = GetControlled();
 				controlled.GetMover().StopMovement();
 				m_movementState.Reset();
 			}
+		});
+
+		// Watch for spell cast completion so the AI doesn't rely solely on a timeout
+		m_onSpellCastEnded = controlled.finishedCasting.connect([this](bool succeeded)
+		{
+			if (!m_isCasting)
+			{
+				return;
+			}
+			OnSpellCastEnded(succeeded);
 		});
 	}
 
@@ -1156,7 +1153,9 @@ namespace mmo
 		const auto& controlled = GetControlled();
 		const auto currentTime = GetAsyncTimeMs();
 		const auto currentPower = controlled.GetPower();
-		const auto distanceToTarget = controlled.GetSquaredDistanceTo(target.GetPosition(), true);
+		// Use the mover's interpolated position so range checks are accurate while
+		// the NPC is in motion — m_movementInfo.position is only updated every 500 ms.
+		const float distanceToTarget = (controlled.GetMover().GetCurrentLocation() - target.GetPosition()).GetSquaredLength();
 		
 		const CreatureSpell* bestSpell = nullptr;
 		uint32 highestPriority = 0;
@@ -1215,15 +1214,18 @@ namespace mmo
 	{
 		auto& controlled = GetControlled();
 
-		// Cache spell data before casting (in case of reentrant calls)
 		const auto* spellEntry = spell.spell;
 		const uint32_t castTime = spellEntry->casttime();
 		const uint32_t cooldown = spellEntry->cooldown();
 
-		// Prevent reentrant ChooseNextAction during cast
+		// Stop movement BEFORE calling CastSpell so the CreatureMove(stop) packet
+		// reaches the client before SpellStart — otherwise the client briefly shows
+		// the NPC moving while the cast animation is already playing.
 		if (castTime > 0)
 		{
 			m_isCasting = true;
+			controlled.GetMover().StopMovement();
+			m_movementState.Reset();
 		}
 
 		SpellTargetMap targetMap;
@@ -1250,15 +1252,13 @@ namespace mmo
 			{
 				m_lastSpellCastTime = currentTime;
 				m_castingTimeoutEnd = currentTime + castTime + 1000;
-				controlled.GetMover().StopMovement();
-				m_movementState.Reset();
 				controlled.StopAttack();
 			}
 
 			return true;
 		}
 
-		// Cast failed - reset casting flag if we set it
+		// Cast failed — reset casting state (movement already stopped, which is fine)
 		if (castTime > 0)
 		{
 			m_isCasting = false;
@@ -1339,6 +1339,27 @@ namespace mmo
 		return false;
 	}
 
+	bool CreatureAICombatState::IsTargetInAnySpellRange(const GameUnitS& target) const
+	{
+		if (m_availableSpells.empty())
+		{
+			return false;
+		}
+
+		const float distSq = (GetControlled().GetMover().GetCurrentLocation() - target.GetPosition()).GetSquaredLength();
+		for (const auto& creatureSpell : m_availableSpells)
+		{
+			const float minSq = creatureSpell.minRange * creatureSpell.minRange;
+			const float maxSq = creatureSpell.maxRange * creatureSpell.maxRange;
+			if (distSq >= minSq && distSq <= maxSq)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	/**
 	 * @brief Moves the creature to optimal combat range based on its behavior type.
 	 * 
@@ -1368,12 +1389,14 @@ namespace mmo
 			return false;
 		}
 		
-		const float currentDistanceSq = controlled.GetSquaredDistanceTo(target.GetPosition(), true);
-		
+		// Use the mover's interpolated position for accurate distance while moving.
+		const Vector3 currentPos = controlled.GetMover().GetCurrentLocation();
+		const float currentDistanceSq = (currentPos - target.GetPosition()).GetSquaredLength();
+
 		// Get threat targets for separation logic
 		const auto threatTargets = GetThreatTargets();
 		auto& separationManager = CreatureSeparationManager::Get();
-		
+
 		switch (m_combatBehavior)
 		{
 		case CombatBehavior::Melee:
@@ -1386,21 +1409,19 @@ namespace mmo
 			{
 				const float minRangeSq = CASTER_MIN_RANGE * CASTER_MIN_RANGE;
 				const float optimalRangeSq = CASTER_OPTIMAL_RANGE * CASTER_OPTIMAL_RANGE;
-				
+
 				// If too close, move away
 				if (currentDistanceSq < minRangeSq)
 				{
 					// Calculate position away from target
 					const Vector3 targetPos = target.GetPosition();
-					const Vector3 ourPos = controlled.GetPosition();
+					const Vector3 ourPos = currentPos;
 					const Vector3 direction = (ourPos - targetPos).NormalizedCopy();
 					Vector3 retreatPos = targetPos + direction * CASTER_OPTIMAL_RANGE;
-					
+
 					// Apply separation logic to avoid stacking with nearby creatures
 					retreatPos = separationManager.AdjustTargetForSeparation(controlled, retreatPos, threatTargets);
-					
-					// Use combat range factor for engagement range enforcement
-					// Stop at roughly CASTER_MIN_RANGE to ensure safe distance
+
 					const float retreatEngagementRange = CASTER_MIN_RANGE * COMBAT_RANGE_FACTOR;
 					if (mover.MoveTo(retreatPos, retreatEngagementRange))
 					{
@@ -1412,13 +1433,22 @@ namespace mmo
 				// If too far, move closer
 				else if (currentDistanceSq > optimalRangeSq)
 				{
+					// Already heading toward this target? Don't restart movement — let the
+					// existing path complete. Only recalculate when the target has moved.
+					if (mover.IsMoving() && m_movementState.isMovingToCombat)
+					{
+						const float targetMovedSq = (target.GetPosition() - m_movementState.lastWaypointTarget).GetSquaredLength();
+						if (targetMovedSq <= PLAYER_POSITION_THRESHOLD)
+						{
+							return true;
+						}
+					}
+
 					Vector3 targetPosition = PredictTargetPosition(target);
-					
+
 					// Apply separation logic to avoid stacking with nearby creatures
 					targetPosition = separationManager.AdjustTargetForSeparation(controlled, targetPosition, threatTargets);
-					
-					// Use combat range factor for engagement range enforcement
-					// Stop at roughly CASTER_OPTIMAL_RANGE to ensure proper spell casting distance
+
 					const float approachEngagementRange = CASTER_OPTIMAL_RANGE * COMBAT_RANGE_FACTOR;
 					if (mover.MoveTo(targetPosition, approachEngagementRange))
 					{
@@ -1429,7 +1459,7 @@ namespace mmo
 				}
 				else
 				{
-					// We're in optimal range, no movement needed
+					// In optimal range, no movement needed
 					return true;
 				}
 			}

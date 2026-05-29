@@ -639,20 +639,22 @@ namespace mmo
 			startedCasting(spell);
 		}
 
-		// Reset auto attack timer if requested
-		if (r == spell_cast_result::CastOkay &&
-			m_attackSwingCountdown.IsRunning())
+		if (r == spell_cast_result::CastOkay)
 		{
-			// Register for casts ended-event
 			if (castTimeMs > 0)
 			{
-				// Pause auto attack during spell cast
-				m_attackSwingCountdown.Cancel();
+				// Pause auto-attack while casting if it was running
+				if (m_attackSwingCountdown.IsRunning())
+				{
+					m_attackSwingCountdown.Cancel();
+				}
+				// Always connect ended signal so finishedCasting fires regardless of
+				// whether auto-attack was running (first-pull cast fix).
 				m_spellCast->ended.connect(this, &GameUnitS::OnSpellCastEnded);
 			}
-			else
+			else if (m_attackSwingCountdown.IsRunning())
 			{
-				// Cast already finished since it was an instant cast
+				// Instant cast: resume auto-attack
 				OnSpellCastEnded(true);
 			}
 		}
@@ -2531,6 +2533,8 @@ namespace mmo
 
 	void GameUnitS::OnSpellCastEnded(bool succeeded)
 	{
+		finishedCasting(succeeded);
+
 		if (std::shared_ptr<GameUnitS> victim = m_victim.lock())
 		{
 			m_lastMainHand = m_lastOffHand = GetAsyncTimeMs();
