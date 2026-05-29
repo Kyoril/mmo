@@ -384,7 +384,13 @@ namespace mmo
 		// Apply input acceleration
 		if (!zeroAcceleration)
 		{
-			const float NewMaxInputSpeed = IsExceedingMaxSpeed(maxInputSpeed) ? m_velocity.GetLength() : maxInputSpeed;
+			// When velocity already exceeds the speed cap (e.g. the cap was just
+			// reduced by a slow), use the new cap so the player decelerates to it.
+			// When velocity is over cap for a different reason (external impulse/boost),
+			// use current velocity length so player input doesn't accelerate further.
+			const float NewMaxInputSpeed = (IsExceedingMaxSpeed(maxInputSpeed) && !velocityOverMax)
+				? m_velocity.GetLength()
+				: maxInputSpeed;
 			m_velocity += m_acceleration * deltaTime;
 			m_velocity = m_velocity.GetClampedToMaxSize(NewMaxInputSpeed);
 		}

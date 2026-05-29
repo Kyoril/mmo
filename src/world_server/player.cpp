@@ -2331,6 +2331,10 @@ namespace mmo
 			// change and all following movement packets need to use these new speed
 			// values.
 			m_character->ApplySpeedChange(typeSent, receivedSpeed);
+			// Reset the speed-check baseline. Movement packets in-flight during the
+			// transition were sent at the old speed; comparing them against the new
+			// (possibly lower) cap would cause false positive violations.
+			m_lastPositionPacketTimestamp = 0;
 			break;
 		}
 	}

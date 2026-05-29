@@ -123,16 +123,30 @@ namespace mmo
 	{
 		GameObjectS::WriteObjectUpdateBlock(writer, creation);
 
-		// Speeds
+		// Speeds — if there is a pending forced speed change (ack not yet received),
+		// write the pending target speed so the object update does not overwrite the
+		// ForceMoveSetXxxSpeed the client already applied locally.
+		const auto getWriteSpeed = [this](MovementType type, MovementChangeType changeType) -> float
+		{
+			for (const auto& change : m_pendingMoveChanges)
+			{
+				if (change.changeType == changeType)
+				{
+					return change.speed;
+				}
+			}
+			return GetSpeed(type);
+		};
+
 		writer
-			<< io::write<float>(GetSpeed(movement_type::Walk))
-			<< io::write<float>(GetSpeed(movement_type::Run))
-			<< io::write<float>(GetSpeed(movement_type::Backwards))
-			<< io::write<float>(GetSpeed(movement_type::Swim))
-			<< io::write<float>(GetSpeed(movement_type::SwimBackwards))
-			<< io::write<float>(GetSpeed(movement_type::Flight))
-			<< io::write<float>(GetSpeed(movement_type::FlightBackwards))
-			<< io::write<float>(GetSpeed(movement_type::Turn));
+			<< io::write<float>(getWriteSpeed(movement_type::Walk,           MovementChangeType::SpeedChangeWalk))
+			<< io::write<float>(getWriteSpeed(movement_type::Run,            MovementChangeType::SpeedChangeRun))
+			<< io::write<float>(getWriteSpeed(movement_type::Backwards,      MovementChangeType::SpeedChangeRunBack))
+			<< io::write<float>(getWriteSpeed(movement_type::Swim,           MovementChangeType::SpeedChangeSwim))
+			<< io::write<float>(getWriteSpeed(movement_type::SwimBackwards,  MovementChangeType::SpeedChangeSwimBack))
+			<< io::write<float>(getWriteSpeed(movement_type::Flight,         MovementChangeType::SpeedChangeFlightSpeed))
+			<< io::write<float>(getWriteSpeed(movement_type::FlightBackwards,MovementChangeType::SpeedChangeFlightBackSpeed))
+			<< io::write<float>(getWriteSpeed(movement_type::Turn,           MovementChangeType::SpeedChangeTurnRate));
 	}
 
 	void GameUnitS::WriteValueUpdateBlock(io::Writer &writer, bool creation) const
@@ -910,6 +924,16 @@ namespace mmo
 				existingAura->RefreshAura(aura->GetSpell());
 				return;  // Exit ApplyAura entirely — existing aura stays, incoming dropped.
 			case AuraApplicationResult::Replace:
+				// Same spell, same caster: refresh duration in place instead of
+				// remove + re-add. Avoids sending a restore-then-slow speed pair to
+				// the client which would briefly restore full movement speed.
+				if (aura->GetSpellId() == existingAura->GetSpellId() &&
+					aura->GetCasterId() == existingAura->GetCasterId())
+				{
+					existingAura->RefreshAura(aura->GetSpell());
+					return;
+				}
+				// Genuine replacement (higher rank / OnlyOneStackTotal across casters).
 				// Check if aura is same base spell but lower rank
 				if (aura->HasSameBaseSpellId(existingAura->GetSpell()) && aura->GetSpellRank() < existingAura->GetSpellRank())
 				{
