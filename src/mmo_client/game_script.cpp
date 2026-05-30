@@ -1319,10 +1319,44 @@ namespace mmo
 					   [this](const int32 method, const String& /*masterName*/)
 					   {
 						   // MasterLoot: GUID 0 is a sentinel — the server-side OnSetLootMethod()
-						   // handler (plan 05-01) defaults lootMasterGuid to the leader's
-						   // characterId when lootMethod==MasterLoot && lootMasterGuid==0.
+						   // handler defaults lootMasterGuid to the leader's characterId when
+						   // lootMethod==MasterLoot && lootMasterGuid==0.
 						   const uint64 masterGuid = 0;
-						   m_realmConnector.SetGroupLootMethod(static_cast<uint8>(method), masterGuid, 2);
+						   m_realmConnector.SetGroupLootMethod(static_cast<uint8>(method), masterGuid, m_partyInfo.GetLootThreshold());
+					   }),
+
+				   // SetLootSettings(method, masterName, threshold) — full control in one call.
+				   // masterName is matched against current party members to resolve the GUID.
+				   luabind::def<std::function<void(int32, const String&, int32)>>("SetLootSettings",
+					   [this](const int32 method, const String& masterName, const int32 threshold)
+					   {
+						   uint64 masterGuid = 0;
+						   for (int32 i = 0; i < static_cast<int32>(m_partyInfo.GetMemberCount()); ++i)
+						   {
+							   const auto* member = m_partyInfo.GetMember(i);
+							   if (member && member->name == masterName)
+							   {
+								   masterGuid = member->guid;
+								   break;
+							   }
+						   }
+						   m_realmConnector.SetGroupLootMethod(static_cast<uint8>(method), masterGuid, static_cast<uint8>(threshold));
+					   }),
+
+				   luabind::def<std::function<std::string(int32)>>("GetPartyMemberName",
+					   [this](const int32 index) -> std::string
+					   {
+						   const auto* member = m_partyInfo.GetMember(index - 1);
+						   return member ? member->name : std::string{};
+					   }),
+
+				   luabind::def<std::function<int32()>>("GetLootMasterIndex",
+					   [this]() -> int32
+					   {
+						   const uint64 guid = m_partyInfo.GetLootMasterGuid();
+						   if (guid == 0) { return -1; }
+						   const int32 idx = m_partyInfo.GetMemberIndexByGuid(guid);
+						   return idx >= 0 ? idx + 1 : -1;
 					   }),
 
 					   luabind::def<std::function<void(const char *, const char *)>>("SendChatMessage", [this](const char *message, const char *type)

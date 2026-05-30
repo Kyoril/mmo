@@ -19,6 +19,8 @@
 #include <utility>
 
 #include "checkbox_renderer.h"
+#include "combo_box.h"
+#include "combo_box_renderer.h"
 #include "geometry_helper.h"
 #include "progress_bar.h"
 #include "expat/lib/expat.h"
@@ -310,6 +312,12 @@ namespace mmo
 			{
 				return std::make_unique<TextFieldRenderer>(name);
 			});
+
+			// ComboBoxRenderer
+			frameMgr.RegisterFrameRenderer("ComboBoxRenderer", [](const std::string& name)
+			{
+				return std::make_unique<ComboBoxRenderer>(name);
+			});
 		}
 	}
 
@@ -520,6 +528,25 @@ namespace mmo
 					.def("IsAtBottom", &ScrollingMessageFrame::IsAtBottom)
 					.def("ScrollToTop", &ScrollingMessageFrame::ScrollToTop)
 					.def("ScrollToBottom", &ScrollingMessageFrame::ScrollToBottom)
+			),
+
+			luabind::scope(
+				luabind::class_<ComboBox, Frame>("ComboBox")
+					.def("AddItem", &ComboBox::AddItem)
+					.def("ClearItems", &ComboBox::ClearItems)
+					.def("GetItemCount", &ComboBox::GetItemCount)
+					.def("GetItemText", &ComboBox::GetItemText)
+					.def("GetItemUserData", &ComboBox::GetItemUserData)
+					.def("GetSelectedIndex", &ComboBox::GetSelectedIndex)
+					.def("SetSelectedIndex", &ComboBox::SetSelectedIndex)
+					.def("GetSelectedText", &ComboBox::GetSelectedText)
+					.def("GetSelectedUserData", &ComboBox::GetSelectedUserData)
+					.def("IsOpen", &ComboBox::IsOpen)
+					.def("Open", &ComboBox::Open)
+					.def("Close", &ComboBox::Close)
+					.def("Toggle", &ComboBox::Toggle)
+					.def("SetOnClickedHandler", &ComboBox::SetOnClickedHandler)
+					.def("SetOnSelectionChanged", &ComboBox::SetOnSelectionChanged)
 			)
 		);
 
@@ -549,6 +576,7 @@ namespace mmo
 		s_frameMgr->RegisterFrameFactory("TextField", [](const std::string& name) -> FramePtr { return std::make_shared<TextField>("TextField", name); });
 		s_frameMgr->RegisterFrameFactory("ProgressBar", [](const std::string& name) -> FramePtr { return std::make_shared<ProgressBar>("ProgressBar", name); });
 		s_frameMgr->RegisterFrameFactory("ScrollingMessageFrame", [](const std::string& name) -> FramePtr { return std::make_shared<ScrollingMessageFrame>("ScrollingMessageFrame", name); });
+		s_frameMgr->RegisterFrameFactory("ComboBox", [](const std::string& name) -> FramePtr { return std::make_shared<ComboBox>(ComboBox::Type, name); });
 
 		// Load localization
 		localization.AddToLuaScript(s_frameMgr->m_luaState);
