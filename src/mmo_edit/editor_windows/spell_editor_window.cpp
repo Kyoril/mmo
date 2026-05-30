@@ -425,8 +425,8 @@ namespace mmo
 #define SLIDER_UINT64_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 64, min, max)
 
 
-		// Migration: Ensure spell has at least one attribute bitmap
-		if (currentEntry.attributes_size() < 1)
+		// Migration: Ensure spell has at least two attribute bitmaps (index 0 and 1).
+		while (currentEntry.attributes_size() < 2)
 		{
 			currentEntry.add_attributes(0);
 		}
@@ -1421,6 +1421,18 @@ namespace mmo
 
 				ImGui::TableNextColumn();
 				CHECKBOX_ATTR_PROP(1, "Auto Repeat", spell_attributes_b::AutoRepeat);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(1, "Usable While Stunned", spell_attributes_b::UsableWhileStunned);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(1, "Usable While Feared", spell_attributes_b::UsableWhileFeared);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(1, "Usable While Sleeping", spell_attributes_b::UsableWhileSleeping);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(1, "Ignore Line of Sight", spell_attributes_b::IgnoreLineOfSight);
 
 				ImGui::EndTable();
 			}

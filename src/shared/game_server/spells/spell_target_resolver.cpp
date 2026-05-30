@@ -5,6 +5,7 @@
 #include "game_server/spells/spell_cast_context.h"
 #include "game_server/world/world_instance.h"
 #include "game_server/objects/game_object_s.h"
+#include "game/spell.h"
 #include "log/default_log_levels.h"
 
 namespace mmo
@@ -150,6 +151,26 @@ namespace mmo
 		if (!(m_context.GetSpell().attributes(0) & spell_attributes::CanTargetDead) && !unit.IsAlive())
 		{
 			return false;
+		}
+
+		// Area-of-effect LOS check: each candidate must be visible from the caster.
+		// Skipped for the caster themselves, passive spells, and spells with IgnoreLineOfSight.
+		const bool isSelf     = (&unit == &m_context.GetExecutor());
+		const bool isPassive  = (m_context.GetSpell().attributes(0) & spell_attributes::Passive) != 0;
+		const bool ignoresLos = m_context.GetSpell().attributes_size() >= 2 &&
+		                        (m_context.GetSpell().attributes(1) & spell_attributes_b::IgnoreLineOfSight) != 0;
+
+		if (!isSelf && !isPassive && !ignoresLos)
+		{
+			const WorldInstance* world = m_context.GetWorldInstance();
+			if (world)
+			{
+				MapData* mapData = world->GetMapData();
+				if (mapData && !mapData->IsInLineOfSight(m_context.GetExecutor().GetPosition(), unit.GetPosition()))
+				{
+					return false;
+				}
+			}
 		}
 
 		return true;

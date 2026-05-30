@@ -9,6 +9,7 @@
 #include "game_server/spells/spell_effects.h"
 
 #include "base/utilities.h"
+#include "game_server/world/world_instance.h"
 #include "proto_data/project.h"
 
 #include <unordered_map>
@@ -467,6 +468,27 @@ namespace mmo
 				if (m_cast.GetExecuter().GetSquaredDistanceTo(unitTarget->GetPosition(), true) > range * range)
 				{
 					SendEndCast(spell_cast_result::FailedOutOfRange);
+					return false;
+				}
+			}
+		}
+
+		// Line of sight check — skipped for self-targeted spells, passive spells,
+		// and spells that explicitly carry the IgnoreLineOfSight attribute.
+		const bool targetIsSelf = (unitTarget == &m_cast.GetExecuter());
+		const bool isPassive    = (m_spell.attributes(0) & spell_attributes::Passive) != 0;
+		const bool ignoresLos   = m_spell.attributes_size() >= 2 &&
+		                          (m_spell.attributes(1) & spell_attributes_b::IgnoreLineOfSight) != 0;
+
+		if (unitTarget && !targetIsSelf && !isPassive && !ignoresLos)
+		{
+			if (const WorldInstance* world = m_context.GetWorldInstance())
+			{
+				MapData* mapData = world->GetMapData();
+				if (mapData && !mapData->IsInLineOfSight(m_cast.GetExecuter().GetPosition(),
+				                                         unitTarget->GetPosition()))
+				{
+					SendEndCast(spell_cast_result::FailedLineOfSight);
 					return false;
 				}
 			}

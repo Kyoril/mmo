@@ -271,6 +271,7 @@ namespace mmo
 			FailedTargetNotDead,
 			FailedUnitNotBehind,
 			FailedUnitNotInfront,
+			FailedLineOfSight,
 
 			/// Custom value used if no error occurred (will not be sent to the client)
 			CastOkay = 0xFF
@@ -400,8 +401,9 @@ namespace mmo
 			UsableWhileFeared = 1 << 5,
 			UsableWhileSleeping = 1 << 6,
 
-			/// Spell cast requires an unobstructed line of sight between caster and target.
-			RequiresLineOfSight = 1 << 7,
+			/// Spell can be cast regardless of line of sight between caster and target.
+			/// When absent, all unit-targeted spells require an unobstructed LOS.
+			IgnoreLineOfSight = 1 << 7,
 		};
 	}
 
