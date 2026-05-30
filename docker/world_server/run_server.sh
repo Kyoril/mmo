@@ -35,10 +35,11 @@ playerManager =
 	maxCount = 100
 )
 
-folders = 
+folders =
 (
 	data = "${DATA_DIR}"
 	maps = "${NAV_DIR}"
+	worldData = "${WORLD_DATA_DIR}"
 )
 
 log = 
