@@ -238,10 +238,14 @@ namespace mmo
 		if (m_indices.empty())
 			return;
 
+		// IntersectsAABB returns world-unit distances; ray.hitDistance is normalised
+		// to [0,1] by ray.GetLength() (as set by IntersectsTriangle).  Convert once.
+		const float invLen = (ray.GetLength() > 0.f) ? 1.0f / ray.GetLength() : 1.0f;
+
 		struct StackEntry
 		{
 			unsigned int node;
-			float dist;
+			float dist; // normalised [0,1]
 		};
 
 		StackEntry stack[50];
@@ -269,9 +273,9 @@ namespace mmo
 
 				float dist[2] = { max, max };
 				auto result1 = ray.IntersectsAABB(leftChild.bounds);
-				if (result1.first) dist[0] = result1.second;
+				if (result1.first) dist[0] = result1.second * invLen;
 				auto result2 = ray.IntersectsAABB(rightChild.bounds);
-				if (result2.first) dist[1] = result2.second;
+				if (result2.first) dist[1] = result2.second * invLen;
 
 				unsigned int closest = dist[1] < dist[0]; // 0 or 1
 				unsigned int furthest = closest ^ 1;
@@ -311,13 +315,16 @@ namespace mmo
 		auto& leftChild = m_nodes.at(node.children + 0);
 		auto& rightChild = m_nodes.at(node.children + 1);
 
+		// Normalise AABB distances to [0,1] to match ray.hitDistance units.
+		const float invLen = (ray.GetLength() > 0.f) ? 1.0f / ray.GetLength() : 1.0f;
+
 		float max = std::numeric_limits<float>::max();
 		float distance[2] = { max, max };
 
 		auto result1 = ray.IntersectsAABB(leftChild.bounds);
-		if (result1.first) distance[0] = result1.second;
+		if (result1.first) distance[0] = result1.second * invLen;
 		auto result2 = ray.IntersectsAABB(rightChild.bounds);
-		if (result2.first) distance[1] = result2.second;
+		if (result2.first) distance[1] = result2.second * invLen;
 
 		unsigned int closest = 0;
 		unsigned int furthest = 1;

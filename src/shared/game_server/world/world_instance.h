@@ -77,6 +77,8 @@ namespace mmo
 		}
 	};
 
+	class ServerCollisionMap;
+
 	class NavMapData final : public MapData
 	{
 	public:
@@ -92,6 +94,9 @@ namespace mmo
 
 	private:
 		std::shared_ptr<nav::Map> m_map;
+		/// Optional geometry-based collision map for accurate wall/object LOS.
+		/// Null when no world file was found or loading failed; nav mesh LOS is used as fallback.
+		std::unique_ptr<ServerCollisionMap> m_collisionMap;
 	};
 
 	class Universe;

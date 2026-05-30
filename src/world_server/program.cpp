@@ -121,8 +121,21 @@ namespace mmo
 		GroupManager groupManager;
 		TriggerHandler triggerHandler{ project, playerManager, timerQueue };
 
-		// Initialize asset registry
+		// Initialize asset registry with the nav mesh data folder.
 		AssetRegistry::Initialize(config.mapFolder, {});
+
+		// Optionally add the world asset folder (Worlds/, Meshes/, etc.) so the server
+		// can load collision geometry for line-of-sight checks.
+		if (!config.worldDataFolder.empty())
+		{
+			ILOG("Loading world asset data from: " << config.worldDataFolder);
+			AssetRegistry::AddArchivePackage(config.worldDataFolder);
+		}
+		else
+		{
+			WLOG("worldData folder not configured — server-side geometry LOS will be disabled. "
+				"Set folders.worldData in the world server config to enable it.");
+		}
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Database setup

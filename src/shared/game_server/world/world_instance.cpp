@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "world_instance.h"
+#include "server_collision_map.h"
 
 #include "game_server/world/creature_spawner.h"
 #include "game_server/world/each_tile_in_sight.h"
@@ -73,16 +74,51 @@ namespace mmo
 		// Load all map pages
 		DLOG("Loading nav map pages...");
 		m_map->LoadAllPages();
+
+		// Attempt to load world geometry for accurate 3D LOS. Falls back to nav mesh LOS
+		// if no world file is found (e.g. simple outdoor-only maps).
+		auto collisionMap = std::make_unique<ServerCollisionMap>(mapEntry.directory());
+		if (collisionMap->IsLoaded())
+		{
+			m_collisionMap = std::move(collisionMap);
+			DLOG("NavMapData: using geometry-based LOS for map '" << mapEntry.directory() << "'");
+		}
+		else
+		{
+			WLOG("NavMapData: geometry collision unavailable for map '"
+				<< mapEntry.directory() << "' — all IsInLineOfSight calls will return true (unblocked)");
+		}
 	}
 
 	bool NavMapData::IsInLineOfSight(const Vector3& posA, const Vector3& posB)
 	{
-		return m_map->LineOfSight(posA, posB);
+		if (!m_collisionMap)
+		{
+			// No geometry loaded — cannot determine LOS. Treat as unblocked.
+			return true;
+		}
+
+		// Raise both points to approximate eye level.
+		// 1.8 m is used for all unit types as a static approximation;
+		// per-unit model height can be substituted here later.
+		static const Vector3 eyeOffset(0.f, 1.8f, 0.f);
+		return m_collisionMap->LineOfSight(posA + eyeOffset, posB + eyeOffset);
 	}
 
 	bool NavMapData::IsInLineOfSightEx(const Vector3& posA, const Vector3& posB, Vector3& hitPoint)
 	{
-		return m_map->LineOfSightEx(posA, posB, hitPoint);
+		hitPoint = posB;
+
+		if (!m_collisionMap)
+		{
+			return true;
+		}
+
+		static const Vector3 eyeOffset(0.f, 1.8f, 0.f);
+		const bool result = m_collisionMap->LineOfSightEx(posA + eyeOffset, posB + eyeOffset, hitPoint);
+		// Lower the reported hit point back to ground level for consistent world-space display.
+		hitPoint -= eyeOffset;
+		return result;
 	}
 
 	bool NavMapData::CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const
