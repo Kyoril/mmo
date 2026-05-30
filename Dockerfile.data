@@ -4,3 +4,4 @@ WORKDIR /data
 COPY data/editor/data /data
 COPY data/editor/nav /nav
 COPY data/client/Worlds /client/Worlds
+COPY data/client/Models /client/Models
