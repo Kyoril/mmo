@@ -5,6 +5,7 @@
 #include <limits>
 
 #include "game_server/ai/creature_ai_combat_state.h"
+#include "game_server/world/world_instance.h"
 #include "game_server/ai/creature_ai.h"
 #include "game_server/ai/creature_combat_script.h"
 #include "game_server/ai/creature_combat_script_registry.h"
@@ -68,6 +69,8 @@ namespace mmo
 		, m_isRanged(false)
 		, m_canReset(false)
 		, m_castingTimeoutEnd(0)
+		, m_losBlocked(false)
+		, m_lastLosCheckTime(0)
 	{
 	}
 
@@ -186,6 +189,7 @@ namespace mmo
 		// Stop movement and reset movement state
 		controlled.GetMover().StopMovement();
 		m_movementState.Reset();
+		m_losBlocked = false;
 
 		// Clean up combat participants
 		for (auto& pair : m_threat)
@@ -474,6 +478,7 @@ namespace mmo
 			{
 				controlled.StartAttack(std::static_pointer_cast<GameUnitS>(newVictim->shared_from_this()));
 				m_movementState.Reset(); // Reset movement when switching targets
+				m_losBlocked = false;    // New target may be in LOS
 			}
 		}
 		else if (newVictim && newVictim == currentVictim)
@@ -811,6 +816,42 @@ namespace mmo
 
 		// Schedule next action check
 		m_nextActionCountdown.SetEnd(GetAsyncTimeMs() + actionInterval);
+
+		// === Line of sight recovery ===
+		// If the last spell cast was blocked by LOS, move toward the target until LOS is
+		// restored. Recheck every 500 ms to avoid spamming the collision system every tick.
+		if (m_losBlocked)
+		{
+			const GameTime now = GetAsyncTimeMs();
+			if (now - m_lastLosCheckTime >= 500)
+			{
+				m_lastLosCheckTime = now;
+				bool losNowClear = true;
+				const WorldInstance* world = controlled.GetWorldInstance();
+				if (world)
+				{
+					if (MapData* mapData = world->GetMapData())
+					{
+						losNowClear = mapData->IsInLineOfSight(controlled.GetPosition(), victim->GetPosition());
+					}
+				}
+
+				if (losNowClear)
+				{
+					m_losBlocked = false;
+					// Fall through to normal combat logic below.
+				}
+			}
+
+			if (m_losBlocked)
+			{
+				// LOS still blocked — move toward the target regardless of behavior type.
+				// ChaseTarget stops at melee range; once there, LOS is almost certainly clear
+				// and the 500 ms recheck above will lift the block.
+				ChaseTarget(*victim);
+				return;
+			}
+		}
 
 		// === Default AI logic (runs when no script, or script returned false) ===
 
@@ -1262,6 +1303,12 @@ namespace mmo
 		if (castTime > 0)
 		{
 			m_isCasting = false;
+		}
+
+		if (castResult == spell_cast_result::FailedLineOfSight)
+		{
+			m_losBlocked = true;
+			m_lastLosCheckTime = GetAsyncTimeMs();
 		}
 
 		return false;

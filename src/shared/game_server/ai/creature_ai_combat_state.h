@@ -459,6 +459,12 @@ namespace mmo
 		// === Casting Timeout ===
 		GameTime m_castingTimeoutEnd;
 
+		// === Line of Sight Recovery ===
+		/// Set when a spell cast fails due to LOS; cleared once LOS is restored.
+		bool m_losBlocked;
+		/// Timestamp of the last LOS recheck while m_losBlocked is true.
+		GameTime m_lastLosCheckTime;
+
 		// === Combat Script ===
 		std::unique_ptr<CreatureCombatScript> m_script;
 
