@@ -602,6 +602,9 @@ namespace mmo
 		case game::client_realm_packet::CheatSpeed:
 			OnCheatSpeed(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::CheatCheckLineOfSight:
+			OnCheatCheckLineOfSight(opCode, buffer.size(), reader);
+			break;
 #endif
 
 		case game::client_realm_packet::CastSpell:

@@ -225,6 +225,11 @@ namespace mmo
 		///	@param guid The guid of the object to select. Can be set to 0 to deselect the current target.
 		void SetSelection(uint64 guid);
 
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Requests a server-side line of sight check from the player's position to the given target.
+		/// The server responds with a DebugLineOfSightResult packet.
+		/// @param targetGuid The GUID of the unit to test line of sight against.
+		void CheckLineOfSight(uint64 targetGuid);
+
 		/// FROM CONSOLE COMMAND: GAME MASTER only. Spawns a temporary monster which will not respawn if it is despawned somehow or if the server is restarted.
 		///	@param entry The entry of the monster to spawn.
 		void CreateMonster(uint32 entry);

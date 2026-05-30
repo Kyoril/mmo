@@ -537,6 +537,11 @@ namespace mmo
 		void OnCheatWorldPort(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		void OnCheatSpeed(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// @brief Handles a client request for a debug line of sight check.
+		/// Reads the target GUID, performs an LOS check against the world nav mesh,
+		/// and sends back a DebugLineOfSightResult packet.
+		void OnCheatCheckLineOfSight(uint16 opCode, uint32 size, io::Reader& contentReader);
 #endif
 
 	private:

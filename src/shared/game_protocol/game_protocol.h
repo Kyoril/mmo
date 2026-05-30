@@ -280,6 +280,9 @@ namespace mmo
 			/// Sent by the target player to decline a trade invitation.
 			TradeInviteDecline,
 
+			/// Sent by the client to request a server-side line of sight check against the current target. Dev/debug only.
+			CheatCheckLineOfSight, // GAME MASTER
+
 				/// Counter constant
 				Count_,
 			};
@@ -530,6 +533,10 @@ namespace mmo
 
 			/// Sent to both players when the acceptance state changes.
 			TradeAcceptUpdate,
+
+			/// Sent to the client with the result of a CheatCheckLineOfSight request.
+			/// Contains: uint8 hasLos, 3×float from, 3×float to, 3×float hitPoint
+			DebugLineOfSightResult,
 
 				/// Counter constant
 				Count_,

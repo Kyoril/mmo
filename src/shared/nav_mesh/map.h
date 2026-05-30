@@ -64,6 +64,19 @@ namespace mmo::nav
 
 		bool FindPath(const Vector3& start, const Vector3& end, std::vector<Vector3>& output, bool allowPartial = false) const;
 
+		/// @brief Checks whether two world positions have an unobstructed line of sight on the nav mesh.
+		/// @param start The source position.
+		/// @param end The destination position.
+		/// @return true if nothing on the nav mesh blocks the ray between start and end.
+		bool LineOfSight(const Vector3& start, const Vector3& end) const;
+
+		/// @brief Like LineOfSight but also reports where the ray was blocked.
+		/// @param start The source position.
+		/// @param end The destination position.
+		/// @param hitPoint Receives the world position of the first obstruction (equals end when unobstructed).
+		/// @return true if the ray reaches end without obstruction.
+		bool LineOfSightEx(const Vector3& start, const Vector3& end, Vector3& hitPoint) const;
+
 		//bool FindHeight(const Vector3& source, float x, float z, float& y) const;
 
 		//bool FindHeights(float x, float z, std::vector<float>& output) const;

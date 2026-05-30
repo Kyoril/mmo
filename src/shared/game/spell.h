@@ -399,6 +399,9 @@ namespace mmo
 			UsableWhileStunned = 1 << 4,
 			UsableWhileFeared = 1 << 5,
 			UsableWhileSleeping = 1 << 6,
+
+			/// Spell cast requires an unobstructed line of sight between caster and target.
+			RequiresLineOfSight = 1 << 7,
 		};
 	}
 

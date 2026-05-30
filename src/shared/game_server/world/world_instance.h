@@ -31,7 +31,15 @@ namespace mmo
 	public:
 		virtual ~MapData() = default;
 
+		/// @brief Checks whether posA can see posB without obstruction.
 		virtual bool IsInLineOfSight(const Vector3& posA, const Vector3& posB) = 0;
+
+		/// @brief Like IsInLineOfSight but also reports the hit position when blocked.
+		/// @param posA Source position.
+		/// @param posB Destination position.
+		/// @param hitPoint Set to the obstruction point when returning false, or to posB when returning true.
+		/// @return true when the ray reaches posB unobstructed.
+		virtual bool IsInLineOfSightEx(const Vector3& posA, const Vector3& posB, Vector3& hitPoint) = 0;
 
 		virtual bool CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const = 0;
 
@@ -44,6 +52,12 @@ namespace mmo
 		~SimpleMapData() override = default;
 
 		bool IsInLineOfSight(const Vector3& posA, const Vector3& posB) override;
+
+		bool IsInLineOfSightEx(const Vector3& posA, const Vector3& posB, Vector3& hitPoint) override
+		{
+			hitPoint = posB;
+			return true;
+		}
 
 		bool CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const override
 		{
@@ -69,6 +83,8 @@ namespace mmo
 		explicit NavMapData(const proto::MapEntry& mapEntry);
 
 		bool IsInLineOfSight(const Vector3& posA, const Vector3& posB) override;
+
+		bool IsInLineOfSightEx(const Vector3& posA, const Vector3& posB, Vector3& hitPoint) override;
 
 		bool CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const override;
 

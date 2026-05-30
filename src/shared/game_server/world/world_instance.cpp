@@ -62,7 +62,7 @@ namespace mmo
 
 	bool SimpleMapData::IsInLineOfSight(const Vector3& posA, const Vector3& posB)
 	{
-		// TODO
+		// No geometry available — treat everything as visible.
 		return true;
 	}
 
@@ -77,8 +77,12 @@ namespace mmo
 
 	bool NavMapData::IsInLineOfSight(const Vector3& posA, const Vector3& posB)
 	{
-		// TODO
-		return true;
+		return m_map->LineOfSight(posA, posB);
+	}
+
+	bool NavMapData::IsInLineOfSightEx(const Vector3& posA, const Vector3& posB, Vector3& hitPoint)
+	{
+		return m_map->LineOfSightEx(posA, posB, hitPoint);
 	}
 
 	bool NavMapData::CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const

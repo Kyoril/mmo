@@ -1181,6 +1181,7 @@ namespace mmo
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TimePlayedResponse, *this, &WorldState::OnTimePlayedResponse);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TimeSyncRequest, *this, &WorldState::OnTimeSyncRequest);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::DebugLineOfSightResult, *this, &WorldState::OnDebugLineOfSightResult);
 
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
@@ -1217,6 +1218,8 @@ namespace mmo
 								 { Command_Summon(cmd, args); }, ConsoleCommandCategory::Gm, "Summons the named player to your location if such a player exists.");
 		Console::RegisterCommand("speed", [this](const std::string &cmd, const std::string &args)
 								 { Command_Speed(cmd, args); }, ConsoleCommandCategory::Gm, "Sets your movement speed to the new value in meters per second.");
+		Console::RegisterCommand("checklos", [this](const std::string &cmd, const std::string &args)
+								 { Command_CheckLineOfSight(cmd, args); }, ConsoleCommandCategory::Gm, "Performs a server-side line of sight check from your position to the selected target and visualizes the result.");
 #endif
 	}
 
@@ -1235,6 +1238,7 @@ namespace mmo
 		Console::UnregisterCommand("port");
 		Console::UnregisterCommand("summon");
 		Console::UnregisterCommand("speed");
+		Console::UnregisterCommand("checklos");
 #endif
 
 		m_tradeClient.Shutdown();
@@ -3886,6 +3890,54 @@ namespace {
 		m_realmConnector.TeleportToPlayer(tokens[0]);
 	}
 #endif
+
+#ifdef MMO_WITH_DEV_COMMANDS
+	void WorldState::Command_CheckLineOfSight(const std::string &cmd, const std::string &args) const
+	{
+		const auto player = ObjectMgr::GetActivePlayer();
+		if (!player)
+		{
+			ELOG("checklos: no active player");
+			return;
+		}
+
+		const uint64 targetGuid = player->Get<uint64>(object_fields::TargetUnit);
+		if (targetGuid == 0)
+		{
+			ELOG("checklos: no target selected — select a unit first");
+			return;
+		}
+
+		m_realmConnector.CheckLineOfSight(targetGuid);
+	}
+#endif
+
+	PacketParseResult WorldState::OnDebugLineOfSightResult(game::IncomingPacket &packet)
+	{
+		uint8 hasLos = 0;
+		Vector3 from, to, hitPoint;
+
+		if (!(packet
+			>> io::read<uint8>(hasLos)
+			>> io::read<float>(from.x) >> io::read<float>(from.y) >> io::read<float>(from.z)
+			>> io::read<float>(to.x)   >> io::read<float>(to.y)   >> io::read<float>(to.z)
+			>> io::read<float>(hitPoint.x) >> io::read<float>(hitPoint.y) >> io::read<float>(hitPoint.z)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("LOS result: " << (hasLos ? "CLEAR" : "BLOCKED")
+			<< "  from(" << from.x << "," << from.y << "," << from.z << ")"
+			<< "  to(" << to.x << "," << to.y << "," << to.z << ")"
+			<< "  hit(" << hitPoint.x << "," << hitPoint.y << "," << hitPoint.z << ")");
+
+		if (m_debugPathVisualizer)
+		{
+			m_debugPathVisualizer->ShowLineOfSight(from, to, hitPoint, hasLos != 0);
+		}
+
+		return PacketParseResult::Pass;
+	}
 
 	bool WorldState::LoadMap()
 	{

@@ -364,8 +364,12 @@ namespace mmo
 
 		PacketParseResult OnTimeSyncRequest(game::IncomingPacket &packet);
 
+		PacketParseResult OnDebugLineOfSightResult(game::IncomingPacket &packet);
+
 	private:
 #ifdef MMO_WITH_DEV_COMMANDS
+		void Command_CheckLineOfSight(const std::string &cmd, const std::string &args) const;
+
 		void Command_LearnSpell(const std::string &cmd, const std::string &args) const;
 
 		void Command_CreateMonster(const std::string &cmd, const std::string &args) const;

@@ -386,6 +386,15 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::CheckLineOfSight(uint64 targetGuid)
+	{
+		sendSinglePacket([targetGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatCheckLineOfSight);
+			packet << io::write<uint64>(targetGuid);
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::CreateMonster(uint32 entry)
 	{
 		sendSinglePacket([entry](game::OutgoingPacket& packet) {

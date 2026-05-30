@@ -80,7 +80,14 @@ namespace mmo
 						return true;
 					}
 
-					// TODO: Line of sight check
+					// Skip engagement when the creature cannot see the potential target.
+					if (MapData* mapData = GetAI().GetControlled().GetWorldInstance()->GetMapData())
+					{
+						if (!mapData->IsInLineOfSight(controlled.GetPosition(), unit.GetPosition()))
+						{
+							return true;
+						}
+					}
 
 					auto strongUnit = unit.shared_from_this();
 					auto strongThis = shared_from_this();
@@ -126,7 +133,14 @@ namespace mmo
 									return false;
 								}
 
-								// TODO: Line of sight check
+								// Only assist if we can actually see the ally being attacked.
+								if (MapData* mapData = GetAI().GetControlled().GetWorldInstance()->GetMapData())
+								{
+									if (!mapData->IsInLineOfSight(controlled.GetPosition(), unit.GetPosition()))
+									{
+										return true;
+									}
+								}
 
 								auto strongVictim = victim->shared_from_this();
 								auto strongThis = shared_from_this();
