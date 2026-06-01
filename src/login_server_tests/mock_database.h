@@ -24,6 +24,8 @@ struct MockDatabase : IDatabase {
     std::optional<RealmCreationResult> RealmCreate(const std::string&, const std::string&, uint16, const std::string&, const std::string&) override { return realmCreateResult; }
     void BanAccountByName(const std::string&, const std::string&, const std::string&) override {}
     void UnbanAccountByName(const std::string&, const std::string&) override {}
+    AccountListResult GetAccountList(const AccountListParams&) override { return {}; }
+    std::vector<RealmListEntry> GetRealmList() override { return {}; }
 };
 
 } // namespace mmo
