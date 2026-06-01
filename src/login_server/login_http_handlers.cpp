@@ -3,6 +3,7 @@
 #include "login_http_handlers.h"
 
 #include "database.h"
+#include "realm.h"
 #include "realm_manager.h"
 #include "player_manager.h"
 #include "base/sha1.h"
@@ -12,6 +13,7 @@
 #include "http/http_incoming_request.h"
 #include "log/default_log_levels.h"
 
+#include <algorithm>
 #include <regex>
 #include "nlohmann/json.hpp"
 
@@ -365,6 +367,121 @@ namespace mmo
 		catch (...)
 		{
 			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			SendJsonResponse(response, jsonResponse);
+		}
+	}
+
+	void LoginHttpHandlers::HandleListAccounts(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& args = request.getPathArguments();
+
+		AccountListParams params;
+
+		auto getArg = [&](const char* key, const std::string& fallback = "") -> std::string
+		{
+			auto it = args.find(key);
+			return it != args.end() ? it->second : fallback;
+		};
+
+		params.search = getArg("search");
+		params.searchField = getArg("search_field", "name");
+		params.sortBy = getArg("sort_by", "id");
+		params.sortAsc = getArg("sort_order", "asc") != "desc";
+		params.bannedOnly = getArg("banned_only") == "1";
+
+		try
+		{
+			params.page = static_cast<uint32>(std::max(1, std::atoi(getArg("page", "1").c_str())));
+			params.limit = static_cast<uint32>(std::clamp(std::atoi(getArg("limit", "100").c_str()), 1, 500));
+		}
+		catch (...)
+		{
+			params.page = 1;
+			params.limit = 100;
+		}
+
+		try
+		{
+			const auto result = m_database.GetAccountList(params);
+
+			json jsonAccounts = json::array();
+			for (const auto& acc : result.accounts)
+			{
+				json entry;
+				entry["id"] = std::to_string(acc.id);
+				entry["username"] = acc.username;
+				entry["email"] = acc.email.empty() ? nullptr : json(acc.email);
+				entry["created_at"] = acc.created_at.empty() ? nullptr : json(acc.created_at);
+				entry["last_login"] = acc.last_login.empty() ? nullptr : json(acc.last_login);
+				entry["last_ip"] = acc.last_ip.empty() ? nullptr : json(acc.last_ip);
+				entry["gm_level"] = static_cast<int>(acc.gm_level);
+				entry["ban_state"] = static_cast<int>(acc.ban_state);
+				entry["ban_expiration"] = acc.ban_expiration.empty() ? nullptr : json(acc.ban_expiration);
+				jsonAccounts.push_back(std::move(entry));
+			}
+
+			json jsonResponse;
+			jsonResponse["accounts"] = std::move(jsonAccounts);
+			jsonResponse["total"] = result.total;
+			jsonResponse["page"] = params.page;
+			jsonResponse["limit"] = params.limit;
+			SendJsonResponse(response, jsonResponse);
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			json jsonResponse;
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			SendJsonResponse(response, jsonResponse);
+		}
+	}
+
+	void LoginHttpHandlers::HandleListRealms(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		(void)request;
+
+		try
+		{
+			auto rows = m_database.GetRealmList();
+
+			// Mark realms that are currently connected via the RealmManager.
+			m_realmManager.ForEachRealm([&](const Realm& realm)
+			{
+				for (auto& row : rows)
+				{
+					if (row.id == realm.GetRealmId())
+					{
+						row.is_online = realm.IsAuthentificated();
+						break;
+					}
+				}
+			});
+
+			json jsonRealms = json::array();
+			for (const auto& r : rows)
+			{
+				json entry;
+				entry["id"] = r.id;
+				entry["name"] = r.name;
+				entry["address"] = r.address;
+				entry["port"] = r.port;
+				entry["last_login"] = r.last_login.empty() ? nullptr : json(r.last_login);
+				entry["last_ip"] = r.last_ip.empty() ? nullptr : json(r.last_ip);
+				entry["last_build"] = r.last_build.empty() ? nullptr : json(r.last_build);
+				entry["is_online"] = r.is_online;
+				jsonRealms.push_back(std::move(entry));
+			}
+
+			json jsonResponse;
+			jsonResponse["realms"] = std::move(jsonRealms);
+			jsonResponse["total"] = rows.size();
+			SendJsonResponse(response, jsonResponse);
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			json jsonResponse;
 			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
 			SendJsonResponse(response, jsonResponse);
 		}

@@ -70,6 +70,51 @@ namespace mmo
 		uint16 port;
 	};
 
+	/// Parameters for paginated account list queries.
+	struct AccountListParams
+	{
+		std::string search;
+		std::string searchField;   // "name", "email", "id"
+		std::string sortBy;        // "id", "username", "last_login", "created_at"
+		bool sortAsc = true;
+		bool bannedOnly = false;
+		uint32 page = 1;
+		uint32 limit = 100;
+	};
+
+	/// Single row returned by GetAccountList.
+	struct AccountListEntry
+	{
+		uint64 id = 0;
+		std::string username;
+		std::string email;
+		std::string created_at;
+		std::string last_login;
+		std::string last_ip;
+		uint8 gm_level = 0;
+		uint8 ban_state = 0;       // 0=none, 1=temp, 2=perm
+		std::string ban_expiration;
+	};
+
+	struct AccountListResult
+	{
+		std::vector<AccountListEntry> accounts;
+		uint64 total = 0;
+	};
+
+	/// Single row returned by GetRealmList.
+	struct RealmListEntry
+	{
+		uint32 id = 0;
+		std::string name;
+		std::string address;
+		uint16 port = 0;
+		std::string last_login;
+		std::string last_ip;
+		std::string last_build;
+		bool is_online = false;
+	};
+
 	/// Basic interface for a database system used by the login server.
 	struct IDatabase : public NonCopyable
 	{
@@ -135,6 +180,12 @@ namespace mmo
 		/// @param accountName Account name to unban.
 		/// @param reason Reason for the unban.
 		virtual void UnbanAccountByName(const std::string& accountName, const std::string& reason) = 0;
+
+		/// Returns a paginated, filtered, sorted list of accounts.
+		virtual AccountListResult GetAccountList(const AccountListParams& params) = 0;
+
+		/// Returns every registered realm row from the database.
+		virtual std::vector<RealmListEntry> GetRealmList() = 0;
 	};
 
 	/// Async database wrapper for the login server.

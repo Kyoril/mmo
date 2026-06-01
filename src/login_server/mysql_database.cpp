@@ -382,6 +382,150 @@ namespace mmo
 		}
 	}
 
+	AccountListResult MySQLDatabase::GetAccountList(const AccountListParams& params)
+	{
+		AccountListResult result;
+
+		// Whitelist sort columns to prevent SQL injection via the sort parameter.
+		const std::string sortColumn = [&]() -> std::string
+		{
+			if (params.sortBy == "username") return "a.username";
+			if (params.sortBy == "last_login") return "a.last_login";
+			if (params.sortBy == "created_at") return "a.created_at";
+			return "a.id";
+		}();
+		const std::string sortDir = params.sortAsc ? "ASC" : "DESC";
+
+		// Build WHERE clause additions.
+		std::string where;
+
+		if (!params.search.empty())
+		{
+			const std::string escaped = m_connection.EscapeString(params.search);
+			if (params.searchField == "email")
+			{
+				where += " AND ai.email LIKE '%" + escaped + "%'";
+			}
+			else if (params.searchField == "id")
+			{
+				where += " AND a.id = " + std::to_string(std::strtoull(params.search.c_str(), nullptr, 10));
+			}
+			else
+			{
+				where += " AND a.username LIKE '%" + escaped + "%'";
+			}
+		}
+
+		if (params.bannedOnly)
+		{
+			where += " AND (a.banned = 1 AND (a.ban_expiration IS NULL OR a.ban_expiration >= NOW()))";
+		}
+
+		// Count query.
+		const std::string countSql =
+			"SELECT COUNT(*) FROM `account` a "
+			"LEFT JOIN `account_info` ai ON ai.account = a.id "
+			"WHERE 1=1" + where;
+
+		{
+			mysql::Select countSelect(m_connection, countSql);
+			if (!countSelect.Success())
+			{
+				PrintDatabaseError();
+				return result;
+			}
+			mysql::Row row(countSelect);
+			if (row)
+			{
+				result.total = std::strtoull(row.GetField(0), nullptr, 10);
+			}
+		}
+
+		// Data query.
+		const uint32 offset = (params.page > 0 ? params.page - 1 : 0) * params.limit;
+		const std::string dataSql =
+			"SELECT a.id, a.username, "
+			"IFNULL(ai.email,'') AS email, "
+			"DATE_FORMAT(a.created_at,'%Y-%m-%dT%H:%i:%sZ') AS created_at, "
+			"IFNULL(DATE_FORMAT(a.last_login,'%Y-%m-%dT%H:%i:%sZ'),'') AS last_login, "
+			"IFNULL(a.last_ip,'') AS last_ip, "
+			"IFNULL(a.gm_level,0) AS gm_level, "
+			"CASE "
+			"  WHEN a.banned=1 AND a.ban_expiration IS NULL THEN 2 "
+			"  WHEN a.banned=1 AND a.ban_expiration>=NOW() THEN 1 "
+			"  ELSE 0 "
+			"END AS ban_state, "
+			"IFNULL(DATE_FORMAT(a.ban_expiration,'%Y-%m-%dT%H:%i:%sZ'),'') AS ban_expiration "
+			"FROM `account` a "
+			"LEFT JOIN `account_info` ai ON ai.account = a.id "
+			"WHERE 1=1" + where +
+			" ORDER BY " + sortColumn + " " + sortDir +
+			" LIMIT " + std::to_string(params.limit) +
+			" OFFSET " + std::to_string(offset);
+
+		mysql::Select dataSelect(m_connection, dataSql);
+		if (!dataSelect.Success())
+		{
+			PrintDatabaseError();
+			return result;
+		}
+
+		mysql::Row row(dataSelect);
+		while (row)
+		{
+			AccountListEntry entry;
+			entry.id = std::strtoull(row.GetField(0), nullptr, 10);
+			entry.username = row.GetField(1) ? row.GetField(1) : "";
+			entry.email = row.GetField(2) ? row.GetField(2) : "";
+			entry.created_at = row.GetField(3) ? row.GetField(3) : "";
+			entry.last_login = row.GetField(4) ? row.GetField(4) : "";
+			entry.last_ip = row.GetField(5) ? row.GetField(5) : "";
+			entry.gm_level = static_cast<uint8>(std::atoi(row.GetField(6)));
+			entry.ban_state = static_cast<uint8>(std::atoi(row.GetField(7)));
+			entry.ban_expiration = row.GetField(8) ? row.GetField(8) : "";
+			result.accounts.push_back(std::move(entry));
+			row = mysql::Row(dataSelect);
+		}
+
+		return result;
+	}
+
+	std::vector<RealmListEntry> MySQLDatabase::GetRealmList()
+	{
+		std::vector<RealmListEntry> realms;
+
+		mysql::Select select(m_connection,
+			"SELECT id, name, address, port, "
+			"IFNULL(DATE_FORMAT(last_login,'%Y-%m-%dT%H:%i:%sZ'),'') AS last_login, "
+			"IFNULL(last_ip,'') AS last_ip, "
+			"IFNULL(last_build,'') AS last_build "
+			"FROM `realm` ORDER BY id");
+
+		if (!select.Success())
+		{
+			PrintDatabaseError();
+			return realms;
+		}
+
+		mysql::Row row(select);
+		while (row)
+		{
+			RealmListEntry entry;
+			entry.id = static_cast<uint32>(std::atoi(row.GetField(0)));
+			entry.name = row.GetField(1) ? row.GetField(1) : "";
+			entry.address = row.GetField(2) ? row.GetField(2) : "";
+			entry.port = static_cast<uint16>(std::atoi(row.GetField(3)));
+			entry.last_login = row.GetField(4) ? row.GetField(4) : "";
+			entry.last_ip = row.GetField(5) ? row.GetField(5) : "";
+			entry.last_build = row.GetField(6) ? row.GetField(6) : "";
+			entry.is_online = false;  // Filled in by the HTTP handler via RealmManager.
+			realms.push_back(std::move(entry));
+			row = mysql::Row(select);
+		}
+
+		return realms;
+	}
+
 	void MySQLDatabase::PrintDatabaseError()
 	{
 		ELOG("Login database error: " << m_connection.GetErrorMessage());

@@ -62,6 +62,14 @@ namespace mmo
 				{
 					m_handlers.HandleGetGMLevel(request, response);
 				}
+				else if (url == "/accounts")
+				{
+					m_handlers.HandleListAccounts(request, response);
+				}
+				else if (url == "/realms")
+				{
+					m_handlers.HandleListRealms(request, response);
+				}
 				else
 				{
 					response.setStatus(net::http::OutgoingAnswer::NotFound);

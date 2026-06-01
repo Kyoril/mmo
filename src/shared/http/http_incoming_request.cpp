@@ -167,7 +167,7 @@ namespace mmo
 					std::vector<String> arguments;
 					for (std::string::size_type i = argumentStrings.find('&', lastPos); i != std::string::npos; i = argumentStrings.find('&', lastPos))
 					{
-						arguments.push_back(argumentStrings.substr(lastPos, i));
+						arguments.push_back(argumentStrings.substr(lastPos, i - lastPos));
 						lastPos = i + 1;
 					}
 

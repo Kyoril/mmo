@@ -30,6 +30,8 @@ namespace mmo
 		void HandleUnbanAccount(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 		void HandleGetGMLevel(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 		void HandleSetGMLevel(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void HandleListAccounts(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void HandleListRealms(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 
 	private:
 		IDatabase& m_database;

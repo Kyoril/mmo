@@ -59,6 +59,12 @@ namespace mmo
 		/// Removes a ban from an account by name.
 		void UnbanAccountByName(const std::string& accountName, const std::string& reason) override;
 
+		/// Returns a paginated, filtered, sorted list of accounts.
+		AccountListResult GetAccountList(const AccountListParams& params) override;
+
+		/// Returns every registered realm row from the database.
+		std::vector<RealmListEntry> GetRealmList() override;
+
 	private:
 		/// Logs the last database error to the default logger.
 		void PrintDatabaseError();
