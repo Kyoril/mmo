@@ -96,6 +96,63 @@ namespace mmo
 
 		String id = accountIdIt->second;
 		String password = accountPassIt->second;
+
+		if (id.length() < 3)
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "INVALID_PARAMETER";
+			jsonResponse["message"] = "Account name must be at least 3 characters long";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		if (id.length() > 16)
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "INVALID_PARAMETER";
+			jsonResponse["message"] = "Account name must not exceed 16 characters";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		bool hasLetter = false;
+		bool hasDigit = false;
+		bool validChars = true;
+		for (const char c : id)
+		{
+			if (std::isalpha(static_cast<unsigned char>(c)))
+			{
+				hasLetter = true;
+			}
+			else if (std::isdigit(static_cast<unsigned char>(c)))
+			{
+				hasDigit = true;
+			}
+			else
+			{
+				validChars = false;
+				break;
+			}
+		}
+
+		if (!validChars)
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "INVALID_PARAMETER";
+			jsonResponse["message"] = "Account name may only contain letters and digits";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		if (!hasLetter || !hasDigit)
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "INVALID_PARAMETER";
+			jsonResponse["message"] = "Account name must contain at least one letter and one digit";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
 		const auto [s, v] = calculateSV(id, password);
 
 		const auto result = m_database.AccountCreate(id, s.asHexStr(), v.asHexStr());
