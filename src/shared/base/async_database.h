@@ -109,10 +109,11 @@ namespace mmo
 		void asyncRequest(ResultHandler &&handler, Result(TBase::*method)(A0...), Args&&... b0)
 		{
 			auto request = std::bind(method, static_cast<TBase*>(&m_database), std::forward<Args>(b0)...);
-			auto processor = [this, request, handler]() -> void
+			auto resultDispatcher = m_resultDispatcher;
+			auto processor = [resultDispatcher, request, handler]() -> void
 			{
 				detail::RequestProcessor<Result> proc;
-				proc(m_resultDispatcher, request, handler);
+				proc(resultDispatcher, request, handler);
 			};
 			m_asyncWorker(processor);
 		}
@@ -121,11 +122,12 @@ namespace mmo
 		template <class Result, class ResultHandler, class RequestFunction>
 		void asyncRequest(RequestFunction &&request, ResultHandler &&handler)
 		{
-			auto processor = [this, request, handler]() -> void
+			auto resultDispatcher = m_resultDispatcher;
+			auto processor = [this, resultDispatcher, request, handler]() -> void
 			{
 				detail::RequestProcessor<Result> proc;
 				auto boundRequest = std::bind(request, &m_database);
-				proc(m_resultDispatcher, boundRequest, handler);
+				proc(resultDispatcher, boundRequest, handler);
 			};
 			m_asyncWorker(std::move(processor));
 		}
