@@ -3,6 +3,7 @@
 #include "game_script.h"
 #include "console/console.h"
 #include "net/login_connector.h"
+#include "ui/binding.h"
 #include "net/realm_connector.h"
 #include "game_states/game_state_mgr.h"
 #include "game_states/world_state.h"
@@ -1049,6 +1050,140 @@ namespace mmo
 					   luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 					   luabind::def("GetCVar", &Script_GetConsoleVar),
 					   luabind::def("SetCVar", &Script_SetConsoleVar),
+
+					   // Key bindings API
+					   luabind::def<std::function<luabind::object()>>("GetBindings", [this]() -> luabind::object
+					   {
+						   Bindings* b = Bindings::GetCurrent();
+						   if (!b)
+						   {
+							   return luabind::object();
+						   }
+
+						   luabind::object result = luabind::newtable(m_luaState.get());
+						   int i = 1;
+						   for (const auto& pair : b->GetAllBindings())
+						   {
+							   luabind::object entry = luabind::newtable(m_luaState.get());
+							   entry["name"] = pair.second.name;
+							   entry["description"] = pair.second.description;
+							   entry["category"] = pair.second.category;
+							   result[i++] = entry;
+						   }
+						   return result;
+					   }),
+
+					   luabind::def<std::function<luabind::object()>>("GetKeyBindings", [this]() -> luabind::object
+					   {
+						   Bindings* b = Bindings::GetCurrent();
+						   if (!b)
+						   {
+							   return luabind::object();
+						   }
+
+						   luabind::object result = luabind::newtable(m_luaState.get());
+						   for (const auto& pair : b->GetAllKeyBindings())
+						   {
+							   result[pair.first] = pair.second;
+						   }
+						   return result;
+					   }),
+
+					   luabind::def<std::function<luabind::object(const std::string&)>>("GetKeysForBinding", [this](const std::string& actionName) -> luabind::object
+					   {
+						   Bindings* b = Bindings::GetCurrent();
+						   if (!b)
+						   {
+							   return luabind::object();
+						   }
+
+						   luabind::object result = luabind::newtable(m_luaState.get());
+						   auto keys = b->GetKeysForAction(actionName);
+						   for (size_t i = 0; i < keys.size(); ++i)
+						   {
+							   result[static_cast<int>(i + 1)] = keys[i];
+						   }
+						   return result;
+					   }),
+
+					   luabind::def<std::function<const char*(const std::string&)>>("GetBindingForKey", [](const std::string& keyName) -> const char*
+					   {
+						   Bindings* b = Bindings::GetCurrent();
+						   if (!b)
+						   {
+							   return nullptr;
+						   }
+
+						   const auto& keyBindings = b->GetAllKeyBindings();
+						   const auto it = keyBindings.find(keyName);
+						   return (it != keyBindings.end()) ? it->second.c_str() : nullptr;
+					   }),
+
+					   luabind::def<std::function<const char*(const std::string&, const std::string&)>>("SetBinding", [](const std::string& keyName, const std::string& actionName) -> const char*
+					   {
+						   Bindings* b = Bindings::GetCurrent();
+						   if (!b)
+						   {
+							   return nullptr;
+						   }
+
+						   // Return the previous action bound to this key so Lua can refresh that row.
+						   static String s_prevAction;
+						   const auto& kb = b->GetAllKeyBindings();
+						   const auto it = kb.find(keyName);
+						   s_prevAction = (it != kb.end()) ? it->second : String{};
+
+						   b->Bind(keyName, actionName);
+						   return s_prevAction.empty() ? nullptr : s_prevAction.c_str();
+					   }),
+
+					   luabind::def<std::function<void(const std::string&)>>("UnbindKey", [](const std::string& keyName)
+					   {
+						   Bindings* b = Bindings::GetCurrent();
+						   if (b)
+						   {
+							   b->UnbindKey(keyName);
+						   }
+					   }),
+
+					   luabind::def<std::function<void()>>("SaveBindings", []()
+					   {
+						   Bindings* b = Bindings::GetCurrent();
+						   if (b)
+						   {
+							   b->SaveBindings();
+						   }
+					   }),
+
+					   luabind::def<std::function<void(luabind::object)>>("StartKeyCapture", [](luabind::object callback)
+					   {
+						   Bindings* b = Bindings::GetCurrent();
+						   if (!b)
+						   {
+							   return;
+						   }
+
+						   b->StartKeyCapture([callback](const String& keyName) mutable
+						   {
+							   try
+							   {
+								   callback(keyName);
+							   }
+							   catch (const luabind::error& e)
+							   {
+								   ELOG("StartKeyCapture callback error: " << e.what());
+							   }
+						   });
+					   }),
+
+					   luabind::def<std::function<void()>>("StopKeyCapture", []()
+					   {
+						   Bindings* b = Bindings::GetCurrent();
+						   if (b)
+						   {
+							   b->StopKeyCapture();
+						   }
+					   }),
 
 					   luabind::def<std::function<void()>>("EnterWorld", [this]
 														   {

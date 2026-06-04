@@ -1,3 +1,4 @@
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "binding.h"
 
@@ -8,8 +9,12 @@
 #include "log/default_log_levels.h"
 #include "xml_handler/xml_attributes.h"
 
+#include <fstream>
+
 namespace mmo
 {
+	Bindings* Bindings::s_instance = nullptr;
+
 	namespace
 	{
 		/// Executed when an element is started.
@@ -52,6 +57,7 @@ namespace mmo
 
 	void Bindings::Initialize(IInputControl& inputControl)
 	{
+		s_instance = this;
 		m_inputControl = &inputControl;
 
 		Console::RegisterCommand("bind", [this](const std::string& command, const std::string& args) {
@@ -73,6 +79,7 @@ namespace mmo
 		Console::UnregisterCommand("bind");
 
 		m_inputControl = nullptr;
+		s_instance = nullptr;
 	}
 
 	void Bindings::Load(const String& bindingsFile)
@@ -120,6 +127,12 @@ namespace mmo
 
 		// Load default bindings
 		Console::ExecuteCommand("run Config/DefaultBindings.cfg");
+
+		// Load user-saved bindings on top of defaults (optional, silent if missing)
+		if (AssetRegistry::OpenFile("Config/Bindings.cfg"))
+		{
+			Console::ExecuteCommand("run Config/Bindings.cfg");
+		}
 	}
 
 	void Bindings::Unload()
@@ -147,6 +160,19 @@ namespace mmo
 
 	bool Bindings::ExecuteKey(const String& keyName, BindingKeyState keyState)
 	{
+		// Key-capture mode: intercept the first Down event and deliver it to the callback.
+		if (m_capturePending && keyState == BindingKeyState::Down)
+		{
+			m_capturePending = false;
+			if (m_captureCallback)
+			{
+				KeyCaptureCallback cb = std::move(m_captureCallback);
+				m_captureCallback = nullptr;
+				cb(keyName);
+			}
+			return true;
+		}
+
 		const auto it = m_inputActionBindings.find(keyName);
 		if (it == m_inputActionBindings.end())
 		{
@@ -232,6 +258,51 @@ namespace mmo
 	void Bindings::RemoveBinding(const String& name)
 	{
 		m_bindings.erase(name);
+	}
+
+	std::vector<String> Bindings::GetKeysForAction(const String& actionName) const
+	{
+		std::vector<String> keys;
+		for (const auto& pair : m_inputActionBindings)
+		{
+			if (pair.second == actionName)
+			{
+				keys.push_back(pair.first);
+			}
+		}
+		return keys;
+	}
+
+	void Bindings::UnbindKey(const String& keyName)
+	{
+		m_inputActionBindings.erase(keyName);
+	}
+
+	void Bindings::SaveBindings()
+	{
+		std::fstream file("Config/Bindings.cfg", std::ios::out);
+		if (!file)
+		{
+			ELOG("Unable to save bindings file Config/Bindings.cfg!");
+			return;
+		}
+
+		for (const auto& pair : m_inputActionBindings)
+		{
+			file << "bind " << pair.first << " " << pair.second << "\n";
+		}
+	}
+
+	void Bindings::StartKeyCapture(KeyCaptureCallback callback)
+	{
+		m_capturePending = true;
+		m_captureCallback = std::move(callback);
+	}
+
+	void Bindings::StopKeyCapture()
+	{
+		m_capturePending = false;
+		m_captureCallback = nullptr;
 	}
 
 	void BindingXmlLoader::ElementStart(const std::string& element, const XmlAttributes& attributes)
