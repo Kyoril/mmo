@@ -395,7 +395,6 @@ namespace mmo
 			{
 				return FrameManager::Get().GetUIScale();
 			}),
-
 			luabind::scope(
 				luabind::class_<AnchorPoint>("AnchorPoint")
 			),
@@ -545,6 +544,8 @@ namespace mmo
 					.def("Open", &ComboBox::Open)
 					.def("Close", &ComboBox::Close)
 					.def("Toggle", &ComboBox::Toggle)
+					.def("SetPopupFrame", &ComboBox::SetPopupFrame)
+					.def("SetOnDismissHandler", &ComboBox::SetOnDismissHandler)
 					.def("SetOnClickedHandler", &ComboBox::SetOnClickedHandler)
 					.def("SetOnSelectionChanged", &ComboBox::SetOnSelectionChanged)
 			)
@@ -750,6 +751,7 @@ namespace mmo
 		m_framesByName.clear();
 		m_pressedKeys.clear();
 		m_inputCapture.reset();
+		m_activeComboBox.reset();
 
 		m_topFrame.reset();
 	}
@@ -847,7 +849,34 @@ namespace mmo
 	bool FrameManager::NotifyMouseDown(MouseButton button, const Point & position)
 	{
 		bool consumed = false;
-		
+
+		if (const auto activeCombo = m_activeComboBox.lock())
+		{
+			// Determine whether the click is inside the ComboBox widget itself or its popup frame.
+			const bool insideCombo = activeCombo->GetAbsoluteFrameRect().IsPointInRect(position);
+
+			bool insidePopup = false;
+			if (const auto popup = activeCombo->GetPopupFrame())
+			{
+				insidePopup = popup->IsVisible() && popup->GetAbsoluteFrameRect().IsPointInRect(position);
+			}
+
+			if (!insideCombo && !insidePopup)
+			{
+				// Click is outside both — dismiss the combo and consume the click so it does
+				// not bleed through to the game world.
+				activeCombo->Dismiss();
+				return true;
+			}
+
+			if (insidePopup && !insideCombo)
+			{
+				// Click landed inside the popup: clear the tracking so the normal path handles
+				// it (popup item click fires, which will call Close() via Lua).
+				m_activeComboBox.reset();
+			}
+		}
+
 		// Only works if we have a top frame
 		if (m_topFrame != nullptr)
 		{
@@ -958,6 +987,19 @@ namespace mmo
 		{
 			std::string errMsg = lua_tostring(m_luaState, -1);
 			ELOG("Lua Error: " << errMsg);
+		}
+	}
+
+	void FrameManager::SetActiveComboBox(std::shared_ptr<ComboBox> combo)
+	{
+		m_activeComboBox = combo;
+	}
+
+	void FrameManager::ClearActiveComboBox(const ComboBox* combo)
+	{
+		if (m_activeComboBox.lock().get() == combo)
+		{
+			m_activeComboBox.reset();
 		}
 	}
 

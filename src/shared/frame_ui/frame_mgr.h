@@ -24,8 +24,10 @@ extern "C"
 
 namespace mmo
 {
+	class ComboBox;
+
 	/// Handler for layout xml.
-	class FrameManager final 
+	class FrameManager final
 		: public NonCopyable
 	{
 	public:
@@ -173,6 +175,14 @@ namespace mmo
 		/// Sets the frame that is currently capturing the input.
 		void SetCaptureWindow(FramePtr capture);
 
+		/// Called by ComboBox::Open() to register itself as the currently active combo.
+		/// FrameManager will intercept the next mouse-down outside the combo/popup and dismiss it.
+		void SetActiveComboBox(std::shared_ptr<ComboBox> combo);
+
+		/// Called by ComboBox::Close() to deregister. Pass `this` so a stale close from a
+		/// previously-active combo cannot accidentally clear a newer one.
+		void ClearActiveComboBox(const ComboBox* combo);
+
 		void FrameRegisterEvent(FramePtr frame, const std::string& eventName);
 
 		void FrameUnregisterEvent(FramePtr frame, const std::string& eventName);
@@ -251,5 +261,8 @@ namespace mmo
 
 		/// Set of currently pressed keys to support modifier-aware controls.
 		std::unordered_set<Key> m_pressedKeys;
+
+		/// The ComboBox that is currently open and waiting for an outside-click dismiss.
+		std::weak_ptr<ComboBox> m_activeComboBox;
 	};
 }

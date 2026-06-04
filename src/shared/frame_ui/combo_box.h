@@ -57,6 +57,21 @@ namespace mmo
 		void Close();
 		void Toggle();
 
+		/// Associates the popup dropdown frame.  FrameManager uses this rect as the "safe
+		/// zone": clicks inside it are forwarded normally; clicks outside trigger Dismiss().
+		void SetPopupFrame(Frame* popup);
+
+		/// Returns the associated popup frame (may be nullptr).
+		[[nodiscard]] FramePtr GetPopupFrame() const { return m_popupFrame; }
+
+		/// Lua callback invoked by FrameManager when the user clicks outside the combo and
+		/// its popup.  The callback is responsible for hiding the popup frame.
+		void SetOnDismissHandler(const luabind::object& fn) { m_onDismissed = fn; }
+
+		/// Called by FrameManager on an outside click.  Closes C++ state then fires
+		/// the Lua dismiss handler so the popup frame can be hidden.
+		void Dismiss();
+
 		/// Lua callback fired when the combo bar is clicked.
 		void SetOnClickedHandler(const luabind::object& fn) { m_onClicked = fn; }
 
@@ -82,6 +97,8 @@ namespace mmo
 		bool m_hovered{ false };
 		bool m_pushed{ false };
 
+		FramePtr m_popupFrame;
+		luabind::object m_onDismissed;
 		luabind::object m_onClicked;
 		luabind::object m_onSelectionChanged;
 	};

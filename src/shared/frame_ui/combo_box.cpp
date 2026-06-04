@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "combo_box.h"
+#include "frame_mgr.h"
 
 #include "luabind_noboost/luabind/luabind.hpp"
 #include "log/default_log_levels.h"
@@ -112,16 +113,45 @@ namespace mmo
 		return GetItemUserData(m_selectedIndex);
 	}
 
+	void ComboBox::SetPopupFrame(Frame* popup)
+	{
+		m_popupFrame = popup ? popup->shared_from_this() : nullptr;
+	}
+
 	void ComboBox::Open()
 	{
 		m_isOpen = true;
 		Invalidate();
+		FrameManager::Get().SetActiveComboBox(std::static_pointer_cast<ComboBox>(shared_from_this()));
 	}
 
 	void ComboBox::Close()
 	{
+		if (!m_isOpen)
+		{
+			return;
+		}
+
 		m_isOpen = false;
 		Invalidate();
+		FrameManager::Get().ClearActiveComboBox(this);
+	}
+
+	void ComboBox::Dismiss()
+	{
+		Close();
+
+		if (m_onDismissed.is_valid())
+		{
+			try
+			{
+				m_onDismissed(this);
+			}
+			catch (const luabind::error& e)
+			{
+				ELOG("ComboBox::Dismiss lua error: " << e.what());
+			}
+		}
 	}
 
 	void ComboBox::Toggle()
