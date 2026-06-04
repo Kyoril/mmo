@@ -95,6 +95,8 @@ namespace mmo
 		ConsoleVar* s_gxVSyncCVar = nullptr;
 		ConsoleVar* s_gxApiCVar = nullptr;
 		ConsoleVar* s_gxPerfCVar = nullptr;
+		ConsoleVar* s_soundEnabledCVar = nullptr;
+		ConsoleVar* s_musicEnabledCVar = nullptr;
 
 		/// Helper struct for automatic gx cvar table.
 		struct GxCVarHelper
@@ -114,6 +116,8 @@ namespace mmo
 			{"gxVSync",			"Whether the application will run with vsync enabled.",	"1",		&s_gxVSyncCVar },
 
 			{ "perf", "Toggles whether performance counters are visible", "0", &s_gxPerfCVar },
+			{ "SoundEnabled", "Whether sound effects are enabled.", "1", &s_soundEnabledCVar },
+			{ "MusicEnabled", "Whether music is enabled.", "1", &s_musicEnabledCVar },
 
 			// TODO: Add more graphics cvars here that should be registered and unregistered automatically
 			// as well as being serialized when saving the graphics settings of the game.

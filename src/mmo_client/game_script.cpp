@@ -82,6 +82,19 @@ namespace mmo
 			return cvar->GetStringValue().c_str();
 		}
 
+		void Script_SetConsoleVar(const std::string &name, const std::string &value)
+		{
+			ConsoleVar *cvar = ConsoleVarMgr::FindConsoleVar(name);
+			if (cvar)
+			{
+				cvar->Set(value);
+			}
+			else
+			{
+				ConsoleVarMgr::RegisterConsoleVar(name, "", value);
+			}
+		}
+
 		bool Script_ClearTarget()
 		{
 			const auto player = ObjectMgr::GetActivePlayer();
@@ -1035,6 +1048,7 @@ namespace mmo
 
 					   luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 					   luabind::def("GetCVar", &Script_GetConsoleVar),
+					   luabind::def("SetCVar", &Script_SetConsoleVar),
 
 					   luabind::def<std::function<void()>>("EnterWorld", [this]
 														   {
