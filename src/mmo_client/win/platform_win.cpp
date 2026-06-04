@@ -2,6 +2,7 @@
 
 #include "platform_win.h"
 #include <Windows.h>
+#include <utility>
 
 namespace mmo
 {
@@ -88,5 +89,10 @@ namespace mmo
 	bool PlatformWin::IsShiftKeyDown()
 	{
 		return (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+	}
+
+	std::pair<int, int> PlatformWin::GetPrimaryDisplayResolution()
+	{
+		return { GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) };
 	}
 }

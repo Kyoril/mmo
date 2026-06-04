@@ -4,6 +4,7 @@
 #include "console_commands.h"
 #include "console_var.h"
 #include "event_loop.h"
+#include "platform.h"
 #include "screen.h"
 
 #include "base/assign_on_exit.h"
@@ -126,17 +127,8 @@ namespace mmo
 		/// Registers the automatically managed gx cvars from the table above.
 		void RegisterGraphicsCVars()
 		{
-			// Register console variables from the table, we'll set the resolution dynamically after device creation
 			std::for_each(s_gxCVars.cbegin(), s_gxCVars.cend(), [](const GxCVarHelper& x) {
-				std::string actualDefaultValue = x.defaultValue;
-				
-				// For gxResolution, use fallback if empty - will be updated after device creation
-				if (x.name == "gxResolution" && actualDefaultValue.empty())
-				{
-					actualDefaultValue = "1920x1080";  // Fallback, will be updated later
-				}
-				
-				ConsoleVar* output = ConsoleVarMgr::RegisterConsoleVar(x.name, x.description, actualDefaultValue);
+				ConsoleVar* output = ConsoleVarMgr::RegisterConsoleVar(x.name, x.description, x.defaultValue);
 
 				if (x.outputVar != nullptr)
 				{
@@ -272,18 +264,21 @@ namespace mmo
 		{
 			api = GraphicsApi::OpenGL;
 		}
+		// On first launch the resolution cvar is empty because no config has been saved yet.
+		// In that case, default to the native desktop resolution in fullscreen.
+		if (s_gxResolutionCVar->GetStringValue().empty())
+		{
+			const auto [w, h] = Platform::GetPrimaryDisplayResolution();
+			s_gxResolutionCVar->Set(std::to_string(w) + "x" + std::to_string(h));
+			s_gxWindowedCVar->Set("0");
+			ILOG("First launch: defaulting to native display resolution " << w << "x" << h << " fullscreen");
+		}
+
 		GraphicsDeviceDesc desc;
 		ExtractResolution(s_gxResolutionCVar->GetStringValue(), desc.width, desc.height);
 		desc.windowed = s_gxWindowedCVar->GetBoolValue();
 		desc.vsync = s_gxVSyncCVar->GetBoolValue();
 
-		// Validate fullscreen resolution and adjust if necessary
-		if (!desc.windowed)
-		{
-			// We need to create a temporary graphics device to get monitor info
-			// For now, we'll do this validation after device creation
-		}
-		
 		switch (api)
 		{
 #if PLATFORM_WINDOWS
@@ -307,33 +302,7 @@ namespace mmo
 		auto& device = GraphicsDevice::Get();
 		device.GetAutoCreatedWindow()->SetTitle("MMORPG");
 
-		// Now that we have a graphics device, update the resolution if it wasn't set properly
-		if (s_gxResolutionCVar->GetStringValue() == "1920x1080" || s_gxResolutionCVar->GetStringValue().empty())
-		{
-			const std::string monitorRes = device.GetPrimaryMonitorResolution();
-			s_gxResolutionCVar->Set(monitorRes);
-			ILOG("Set default resolution to monitor resolution: " << monitorRes);
-		}
-		
-		// Validate fullscreen resolution now that we have a graphics device
-		if (!desc.windowed)
-		{
-			if (!device.ValidateFullscreenResolution(desc.width, desc.height))
-			{
-				// Use monitor resolution for fullscreen if validation fails
-				const std::string monitorRes = device.GetPrimaryMonitorResolution();
-				uint16 newWidth, newHeight;
-				ExtractResolution(monitorRes, newWidth, newHeight);
-				if (newWidth != desc.width || newHeight != desc.height)
-				{
-					ILOG("Adjusted fullscreen resolution from " << desc.width << "x" << desc.height << 
-						 " to monitor resolution: " << newWidth << "x" << newHeight);
-					s_gxResolutionCVar->Set(monitorRes);
-				}
-			}
-		}
-		
-		device.GetAutoCreatedWindow()->Closed.connect([]() 
+		device.GetAutoCreatedWindow()->Closed.connect([]()
 		{
 			EventLoop::Terminate(0);
 		});
