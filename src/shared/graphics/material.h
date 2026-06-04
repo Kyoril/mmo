@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <array>
 #include <map>
 
 #include "base/typedefs.h"
@@ -232,9 +233,29 @@ namespace mmo
 
 		void SetPixelShaderCode(PixelShaderType shaderType, std::span<uint8> code);
 
+		/// @brief Sets vertex shader bytecode for a specific platform.
+		/// If the platform matches the current runtime platform the flat runtime
+		/// array is also updated so Update() picks up the new bytecode immediately.
+		void SetVertexShaderCode(std::string_view platform, VertexShaderType shaderType, std::span<uint8> code);
+
+		/// @brief Sets pixel shader bytecode for a specific platform.
+		void SetPixelShaderCode(std::string_view platform, PixelShaderType shaderType, std::span<uint8> code);
+
         [[nodiscard]] std::span<uint8 const> GetVertexShaderCode(VertexShaderType type) const { return { m_vertexShaderCode[static_cast<uint32_t>(type)]}; }
-		
+
 		[[nodiscard]] std::span<uint8 const> GetPixelShaderCode(PixelShaderType type = PixelShaderType::Forward) const { return { m_pixelShaderCode[static_cast<uint32_t>(type)] }; }
+
+		/// @brief Gets vertex shader bytecode stored for a specific platform.
+		[[nodiscard]] std::span<uint8 const> GetVertexShaderCode(std::string_view platform, VertexShaderType type) const;
+
+		/// @brief Gets pixel shader bytecode stored for a specific platform.
+		[[nodiscard]] std::span<uint8 const> GetPixelShaderCode(std::string_view platform, PixelShaderType type) const;
+
+		/// @brief Returns all per-platform vertex shader bytecodes (used by the serializer).
+		[[nodiscard]] const std::map<std::string, std::array<std::vector<uint8>, 6>>& GetAllVertexShaderCodes() const { return m_allVertexShaderCodes; }
+
+		/// @brief Returns all per-platform pixel shader bytecodes (used by the serializer).
+		[[nodiscard]] const std::map<std::string, std::array<std::vector<uint8>, 4>>& GetAllPixelShaderCodes() const { return m_allPixelShaderCodes; }
 
 		[[nodiscard]] bool IsDepthTestEnabled() const override { return m_depthTest; }
 		
@@ -315,6 +336,12 @@ namespace mmo
 		bool m_vertexShaderChanged { true };
 		std::vector<uint8> m_pixelShaderCode[4]; // Forward, GBuffer and ShadowMap
 		bool m_pixelShaderChanged[4] { true, true, true, true };
+
+		// Per-platform bytecode storage for multi-platform .hmat serialization (v0.5+).
+		// Keyed by platform ID (see shader_platform.h). The flat arrays above are a
+		// runtime mirror of the current-platform entry in these maps.
+		std::map<std::string, std::array<std::vector<uint8>, 6>> m_allVertexShaderCodes;
+		std::map<std::string, std::array<std::vector<uint8>, 4>> m_allPixelShaderCodes;
 		bool m_depthWrite { true };
 		bool m_depthTest { true };
 

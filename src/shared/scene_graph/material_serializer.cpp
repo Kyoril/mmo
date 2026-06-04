@@ -2,6 +2,7 @@
 
 #include "material_serializer.h"
 #include "graphics/material.h"
+#include "graphics/shader_platform.h"
 
 #include "base/chunk_writer.h"
 #include "binary_io/writer.h"
@@ -18,7 +19,7 @@ namespace mmo
 	static const ChunkMagic MaterialScalarParamChunk = MakeChunkMagic('RAPS');
 	static const ChunkMagic MaterialVectorParamChunk = MakeChunkMagic('RAPV');
 	static const ChunkMagic MaterialTextureParamChunk = MakeChunkMagic('RAPT');
-	
+
 	MaterialDeserializer::MaterialDeserializer(Material& material)
 		: ChunkReader(true)
 		, m_material(material)
@@ -57,6 +58,15 @@ namespace mmo
 				else
 				{
 					AddChunkHandler(*MaterialVertexShaderChunk, false, *this, &MaterialDeserializer::ReadMaterialVertexShaderChunk);
+				}
+
+				// v0.5: override shader chunk handlers with the platform-grouped versions.
+				// These registrations override the handlers added above so only the v0.5
+				// readers are active when reading a v0.5+ file.
+				if (version >= material_version::Version_0_5)
+				{
+					AddChunkHandler(*MaterialVertexShaderChunk, false, *this, &MaterialDeserializer::ReadMaterialVertexShaderChunkV05);
+					AddChunkHandler(*MaterialPixelShaderChunk, false, *this, &MaterialDeserializer::ReadMaterialPixelShaderChunkV05);
 				}
 			}
 			else
@@ -132,10 +142,8 @@ namespace mmo
 			return true;
 		}
 
-		// Read shader code
 		for (uint8 i = 0; i < shaderCount; ++i)
 		{
-			// TODO: Right now, we only care for hardcoded D3D_SM5 shader profile
 			String shaderProfile;
 			if (!(reader >> io::read_container<uint8>(shaderProfile)))
 			{
@@ -153,7 +161,7 @@ namespace mmo
 				continue;
 			}
 
-			if (shaderProfile != "D3D_SM5")
+			if (shaderProfile != shader_platform::LegacyD3DSM5)
 			{
 				DLOG("Found shader profile " << shaderProfile << " which is currently ignored");
 				reader >> io::skip(shaderCodeSize);
@@ -164,11 +172,12 @@ namespace mmo
 				shaderCode.resize(shaderCodeSize);
 				if (!(reader >> io::read_range(shaderCode)))
 				{
-					ELOG("Error while reading D3D_SM5 vertex shader code!");
+					ELOG("Error while reading D3D11 vertex shader code!");
 					return false;
 				}
 
-				m_material.SetVertexShaderCode(VertexShaderType::Default, { shaderCode });
+				// Legacy profile "D3D_SM5" is D3D11 bytecode.
+				m_material.SetVertexShaderCode(shader_platform::D3D11, VertexShaderType::Default, { shaderCode });
 			}
 		}
 
@@ -190,10 +199,8 @@ namespace mmo
 			return true;
 		}
 
-		// Read shader code
 		for (uint8 i = 0; i < shaderCount; ++i)
 		{
-			// TODO: Right now, we only care for hardcoded D3D_SM5 shader profile
 			String shaderProfile;
 			if (!(reader >> io::read_container<uint8>(shaderProfile)))
 			{
@@ -217,7 +224,7 @@ namespace mmo
 				continue;
 			}
 
-			if (shaderProfile != "D3D_SM5")
+			if (shaderProfile != shader_platform::LegacyD3DSM5)
 			{
 				DLOG("Found shader profile " << shaderProfile << " which is currently ignored");
 				reader >> io::skip(shaderCodeSize);
@@ -228,11 +235,72 @@ namespace mmo
 				shaderCode.resize(shaderCodeSize);
 				if (!(reader >> io::read_range(shaderCode)))
 				{
-					ELOG("Error while reading D3D_SM5 vertex shader code!");
+					ELOG("Error while reading D3D11 vertex shader code!");
 					return false;
 				}
 
-				m_material.SetVertexShaderCode(shaderType, { shaderCode });
+				// Legacy profile "D3D_SM5" is D3D11 bytecode.
+				m_material.SetVertexShaderCode(shader_platform::D3D11, shaderType, { shaderCode });
+			}
+		}
+
+		return reader;
+	}
+
+	bool MaterialDeserializer::ReadMaterialVertexShaderChunkV05(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		uint8 platformCount;
+		if (!(reader >> io::read<uint8>(platformCount)))
+		{
+			ELOG("Failed to read vertex shader platform count for material " << m_material.GetName());
+			return false;
+		}
+
+		for (uint8 p = 0; p < platformCount; ++p)
+		{
+			String platformId;
+			if (!(reader >> io::read_container<uint8>(platformId)))
+			{
+				ELOG("Failed to read vertex shader platform ID for material " << m_material.GetName());
+				return false;
+			}
+
+			uint8 shaderCount;
+			if (!(reader >> io::read<uint8>(shaderCount)))
+			{
+				ELOG("Failed to read vertex shader count for platform '" << platformId << "' in material " << m_material.GetName());
+				return false;
+			}
+
+			for (uint8 i = 0; i < shaderCount; ++i)
+			{
+				uint8 shaderTypeValue;
+				if (!(reader >> io::read<uint8>(shaderTypeValue)) || shaderTypeValue >= 6)
+				{
+					ELOG("Invalid vertex shader type index in material " << m_material.GetName());
+					return false;
+				}
+				const VertexShaderType shaderType = static_cast<VertexShaderType>(shaderTypeValue);
+
+				uint32 shaderCodeSize;
+				if (!(reader >> io::read<uint32>(shaderCodeSize)))
+				{
+					return false;
+				}
+
+				if (shaderCodeSize == 0)
+				{
+					continue;
+				}
+
+				std::vector<uint8> shaderCode(shaderCodeSize);
+				if (!(reader >> io::read_range(shaderCode)))
+				{
+					ELOG("Failed to read vertex shader bytecode for platform '" << platformId << "' in material " << m_material.GetName());
+					return false;
+				}
+
+				m_material.SetVertexShaderCode(platformId, shaderType, { shaderCode });
 			}
 		}
 
@@ -254,10 +322,8 @@ namespace mmo
 			return true;
 		}
 
-		// Read shader code
 		for (uint8 i = 0; i < shaderCount; ++i)
 		{
-			// TODO: Right now, we only care for hardcoded D3D_SM5 shader profile
 			String shaderProfile;
 			if (!(reader >> io::read_container<uint8>(shaderProfile)))
 			{
@@ -275,7 +341,7 @@ namespace mmo
 					shaderType = static_cast<PixelShaderType>(shaderTypeValue);
 				}
 			}
-			
+
 			uint32 shaderCodeSize;
 			if (!(reader >> io::read<uint32>(shaderCodeSize)))
 			{
@@ -287,7 +353,7 @@ namespace mmo
 				continue;
 			}
 
-			if (shaderProfile != "D3D_SM5")
+			if (shaderProfile != shader_platform::LegacyD3DSM5)
 			{
 				DLOG("Found shader profile " << shaderProfile << " which is currently ignored");
 				reader >> io::skip(shaderCodeSize);
@@ -298,11 +364,72 @@ namespace mmo
 				shaderCode.resize(shaderCodeSize);
 				if (!(reader >> io::read_range(shaderCode)))
 				{
-					ELOG("Error while reading D3D_SM5 pixel shader code!");
+					ELOG("Error while reading D3D11 pixel shader code!");
 					return false;
 				}
 
-				m_material.SetPixelShaderCode(shaderType, { shaderCode });
+				// Legacy profile "D3D_SM5" is D3D11 bytecode.
+				m_material.SetPixelShaderCode(shader_platform::D3D11, shaderType, { shaderCode });
+			}
+		}
+
+		return reader;
+	}
+
+	bool MaterialDeserializer::ReadMaterialPixelShaderChunkV05(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		uint8 platformCount;
+		if (!(reader >> io::read<uint8>(platformCount)))
+		{
+			ELOG("Failed to read pixel shader platform count for material " << m_material.GetName());
+			return false;
+		}
+
+		for (uint8 p = 0; p < platformCount; ++p)
+		{
+			String platformId;
+			if (!(reader >> io::read_container<uint8>(platformId)))
+			{
+				ELOG("Failed to read pixel shader platform ID for material " << m_material.GetName());
+				return false;
+			}
+
+			uint8 shaderCount;
+			if (!(reader >> io::read<uint8>(shaderCount)))
+			{
+				ELOG("Failed to read pixel shader count for platform '" << platformId << "' in material " << m_material.GetName());
+				return false;
+			}
+
+			for (uint8 i = 0; i < shaderCount; ++i)
+			{
+				uint8 shaderTypeValue;
+				if (!(reader >> io::read<uint8>(shaderTypeValue)) || shaderTypeValue >= 4)
+				{
+					ELOG("Invalid pixel shader type index in material " << m_material.GetName());
+					return false;
+				}
+				const PixelShaderType shaderType = static_cast<PixelShaderType>(shaderTypeValue);
+
+				uint32 shaderCodeSize;
+				if (!(reader >> io::read<uint32>(shaderCodeSize)))
+				{
+					return false;
+				}
+
+				if (shaderCodeSize == 0)
+				{
+					continue;
+				}
+
+				std::vector<uint8> shaderCode(shaderCodeSize);
+				if (!(reader >> io::read_range(shaderCode)))
+				{
+					ELOG("Failed to read pixel shader bytecode for platform '" << platformId << "' in material " << m_material.GetName());
+					return false;
+				}
+
+				m_material.SetPixelShaderCode(platformId, shaderType, { shaderCode });
 			}
 		}
 
@@ -359,7 +486,7 @@ namespace mmo
 			{
 				String name;
 				Vector4 defaultValue;
-				if ((reader >> io::read_container<uint8>(name) 
+				if ((reader >> io::read_container<uint8>(name)
 					>> io::read<float>(defaultValue.x)
 					>> io::read<float>(defaultValue.y)
 					>> io::read<float>(defaultValue.z)
@@ -382,7 +509,7 @@ namespace mmo
 			{
 				String name;
 				String defaultTexture;
-				if ((reader 
+				if ((reader
 					>> io::read_container<uint8>(name)
 					>> io::read_container<uint16>(defaultTexture)))
 				{
@@ -396,8 +523,8 @@ namespace mmo
 
 	void MaterialSerializer::Export(const Material& material, io::Writer& writer, MaterialVersion version)
 	{
-		version = material_version::Version_0_4_1;
-		
+		version = material_version::Version_0_5;
+
 		// File version chunk
 		{
 			ChunkWriter versionChunkWriter { MaterialChunkMagic, writer };
@@ -461,7 +588,7 @@ namespace mmo
 		// Texture parameters
 		if (!material.GetTextureParameters().empty())
 		{
-			ChunkWriter vectorParamChunkWriter{ MaterialTextureParamChunk, writer };
+			ChunkWriter textureParamChunkWriter{ MaterialTextureParamChunk, writer };
 			writer << io::write<uint8>(material.GetTextureParameters().size());
 			for (const auto& param : material.GetTextureParameters())
 			{
@@ -470,14 +597,14 @@ namespace mmo
 					<< io::write_dynamic_range<uint16>(param.texture);
 			}
 
-			vectorParamChunkWriter.Finish();
+			textureParamChunkWriter.Finish();
 		}
 
 		// Texture chunk
 		{
 			ChunkWriter textureChunkWriter { MaterialTextureChunk, writer };
 			writer << io::write<uint8>(material.GetTextureFiles().size());
-			for(const auto& textureFileName : material.GetTextureFiles())
+			for (const auto& textureFileName : material.GetTextureFiles())
 			{
 				writer << io::write_dynamic_range<uint8>(textureFileName);
 			}
@@ -485,51 +612,82 @@ namespace mmo
 			textureChunkWriter.Finish();
 		}
 
-		// Vertex Shader chunk
+		// Vertex shader chunk (v0.5 platform-grouped format)
 		{
 			ChunkWriter shaderChunkWriter { MaterialVertexShaderChunk, writer };
 
-			// TODO: Number of shaders to write
-			writer << io::write<uint8>(6);
+			const auto& allVS = material.GetAllVertexShaderCodes();
 
-			for (uint32 i = 0; i < 6; ++i)
+			// Count platforms that actually have at least one non-empty shader.
+			uint8 platformCount = 0;
+			for (const auto& [platformId, shaders] : allVS)
 			{
-				// TODO: Shader model
-				writer << io::write_dynamic_range<uint8>(String("D3D_SM5"));
-				writer << io::write<uint8>(i);
-				writer << io::write_dynamic_range<uint32>(material.GetVertexShaderCode(static_cast<VertexShaderType>(i)).begin(), material.GetVertexShaderCode(static_cast<VertexShaderType>(i)).end());
+				for (const auto& code : shaders)
+				{
+					if (!code.empty()) { ++platformCount; break; }
+				}
 			}
-			
+			writer << io::write<uint8>(platformCount);
+
+			for (const auto& [platformId, shaders] : allVS)
+			{
+				// Skip platforms with no compiled shaders.
+				bool hasAny = false;
+				for (const auto& code : shaders) { if (!code.empty()) { hasAny = true; break; } }
+				if (!hasAny) continue;
+
+				writer << io::write_dynamic_range<uint8>(platformId.begin(), platformId.end());
+
+				uint8 shaderCount = 0;
+				for (const auto& code : shaders) { if (!code.empty()) ++shaderCount; }
+				writer << io::write<uint8>(shaderCount);
+
+				for (uint8 i = 0; i < static_cast<uint8>(shaders.size()); ++i)
+				{
+					if (shaders[i].empty()) continue;
+					writer << io::write<uint8>(i);
+					writer << io::write_dynamic_range<uint32>(shaders[i].begin(), shaders[i].end());
+				}
+			}
 
 			shaderChunkWriter.Finish();
 		}
-		
-		// Pixel Shader chunk
+
+		// Pixel shader chunk (v0.5 platform-grouped format)
 		{
 			ChunkWriter shaderChunkWriter { MaterialPixelShaderChunk, writer };
 
-			// TODO: Number of shaders to write
-			writer << io::write<uint8>(4); // Forward and GBuffer
+			const auto& allPS = material.GetAllPixelShaderCodes();
 
-			// Forward shader
-			writer << io::write_dynamic_range<uint8>(String("D3D_SM5"));
-			writer << io::write<uint8>(static_cast<uint8>(PixelShaderType::Forward));
-			writer << io::write_dynamic_range<uint32>(material.GetPixelShaderCode(PixelShaderType::Forward).begin(), material.GetPixelShaderCode(PixelShaderType::Forward).end());
+			uint8 platformCount = 0;
+			for (const auto& [platformId, shaders] : allPS)
+			{
+				for (const auto& code : shaders)
+				{
+					if (!code.empty()) { ++platformCount; break; }
+				}
+			}
+			writer << io::write<uint8>(platformCount);
 
-			// GBuffer shader
-			writer << io::write_dynamic_range<uint8>(String("D3D_SM5"));
-			writer << io::write<uint8>(static_cast<uint8>(PixelShaderType::GBuffer));
-			writer << io::write_dynamic_range<uint32>(material.GetPixelShaderCode(PixelShaderType::GBuffer).begin(), material.GetPixelShaderCode(PixelShaderType::GBuffer).end());
+			for (const auto& [platformId, shaders] : allPS)
+			{
+				bool hasAny = false;
+				for (const auto& code : shaders) { if (!code.empty()) { hasAny = true; break; } }
+				if (!hasAny) continue;
 
-			// Shadowmap shader
-			writer << io::write_dynamic_range<uint8>(String("D3D_SM5"));
-			writer << io::write<uint8>(static_cast<uint8>(PixelShaderType::ShadowMap));
-			writer << io::write_dynamic_range<uint32>(material.GetPixelShaderCode(PixelShaderType::ShadowMap).begin(), material.GetPixelShaderCode(PixelShaderType::ShadowMap).end());
+				writer << io::write_dynamic_range<uint8>(platformId.begin(), platformId.end());
 
-			// UI shader
-			writer << io::write_dynamic_range<uint8>(String("D3D_SM5"));
-			writer << io::write<uint8>(static_cast<uint8>(PixelShaderType::UI));
-			writer << io::write_dynamic_range<uint32>(material.GetPixelShaderCode(PixelShaderType::UI).begin(), material.GetPixelShaderCode(PixelShaderType::UI).end());
+				uint8 shaderCount = 0;
+				for (const auto& code : shaders) { if (!code.empty()) ++shaderCount; }
+				writer << io::write<uint8>(shaderCount);
+
+				for (uint8 i = 0; i < static_cast<uint8>(shaders.size()); ++i)
+				{
+					if (shaders[i].empty()) continue;
+					writer << io::write<uint8>(i);
+					writer << io::write_dynamic_range<uint32>(shaders[i].begin(), shaders[i].end());
+				}
+			}
 
 			shaderChunkWriter.Finish();
 		}

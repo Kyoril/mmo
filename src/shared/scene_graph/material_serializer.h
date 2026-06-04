@@ -26,12 +26,17 @@ namespace mmo
 			Version_0_3 = 0x0300,
 			Version_0_4	= 0x0400,
 			Version_0_4_1 = 0x0401,
-		};	
+
+			/// Version 0.5: vertex and pixel shader chunks are grouped by platform ID.
+			/// Each entry stores the shader type index and bytecode without a legacy
+			/// profile string, so a single file can carry bytecodes for multiple GPUs.
+			Version_0_5 = 0x0500,
+		};
 	}
 
 	typedef material_version::Type MaterialVersion;
-	
-	
+
+
 	struct MaterialAttributes
 	{
 		uint8 twoSided { 0 };
@@ -39,7 +44,7 @@ namespace mmo
 		uint8 receiveShadows { 0 };
 		uint8 materialType { 0 };
 	};
-	
+
 	struct MaterialAttributesV2
 	{
 		uint8 twoSided { 0 };
@@ -55,7 +60,7 @@ namespace mmo
 	public:
 		void Export(const Material& material, io::Writer& writer, MaterialVersion version = material_version::Latest);
 	};
-	
+
 	/// @brief Implementation of the ChunkReader to read chunked material files.
 	class MaterialDeserializer : public ChunkReader
 	{
@@ -70,14 +75,20 @@ namespace mmo
 		bool ReadMaterialNameChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 		bool ReadMaterialAttributeChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
-		
+
 		bool ReadMaterialAttributeV2Chunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
-		
+
 		bool ReadMaterialVertexShaderChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 		bool ReadMaterialVertexShaderChunkV03(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
+		/// @brief Reads the v0.5 vertex shader chunk (platform-grouped format).
+		bool ReadMaterialVertexShaderChunkV05(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
 		bool ReadMaterialPixelShaderChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		/// @brief Reads the v0.5 pixel shader chunk (platform-grouped format).
+		bool ReadMaterialPixelShaderChunkV05(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 		bool ReadMaterialTextureChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
