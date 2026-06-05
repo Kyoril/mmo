@@ -1869,6 +1869,149 @@ namespace mmo
 		return reader;
 	}
 
+	const uint32 PannerNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 ReflectionVectorNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
+	const uint32 SmoothStepNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+
+	ExpressionIndex PannerNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			// UVs: use linked pin or fall back to uv0
+			ExpressionIndex uvsExpression = IndexNone;
+			if (m_uvsInput.IsLinked())
+			{
+				uvsExpression = m_uvsInput.GetLink()->GetNode()->Compile(compiler, m_uvsInput.GetLink());
+			}
+			else
+			{
+				uvsExpression = compiler.AddTextureCoordinate(0);
+			}
+
+			if (uvsExpression == IndexNone)
+			{
+				ELOG("Invalid UVs input for Panner node");
+				return IndexNone;
+			}
+
+			// Time: use linked pin or fall back to shader 'time' variable
+			ExpressionIndex timeExpression = IndexNone;
+			if (m_timeInput.IsLinked())
+			{
+				timeExpression = m_timeInput.GetLink()->GetNode()->Compile(compiler, m_timeInput.GetLink());
+			}
+			else
+			{
+				timeExpression = compiler.AddTime();
+			}
+
+			// Apply optional scalar speed multiplier to time
+			if (m_speedInput.IsLinked())
+			{
+				const ExpressionIndex speedScale = m_speedInput.GetLink()->GetNode()->Compile(compiler, m_speedInput.GetLink());
+				if (speedScale != IndexNone)
+				{
+					timeExpression = compiler.AddMultiply(timeExpression, speedScale);
+				}
+			}
+
+			// Build scroll direction from properties
+			std::ostringstream speedStream;
+			speedStream << "float2(" << m_speedX << ", " << m_speedY << ")";
+			const ExpressionIndex speedDirExpression = compiler.AddExpression(speedStream.str(), ExpressionType::Float_2);
+
+			// offset = direction * time
+			const ExpressionIndex offsetExpression = compiler.AddMultiply(speedDirExpression, timeExpression);
+
+			// result = UVs + offset
+			m_compiledExpressionId = compiler.AddAddition(uvsExpression, offsetExpression);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex ReflectionVectorNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			std::string normalCode;
+			if (m_normalInput.IsLinked())
+			{
+				const ExpressionIndex normalExpression = m_normalInput.GetLink()->GetNode()->Compile(compiler, m_normalInput.GetLink());
+				if (normalExpression == IndexNone)
+				{
+					ELOG("Invalid normal input for ReflectionVector node");
+					return IndexNone;
+				}
+				normalCode = "normalize(expr_" + std::to_string(normalExpression) + ".xyz)";
+			}
+			else
+			{
+				normalCode = "N";
+			}
+
+			// reflect(-V, N): V is the view direction (surface→camera), so -V is the incident ray
+			m_compiledExpressionId = compiler.AddExpression(
+				"reflect(-V, " + normalCode + ")",
+				ExpressionType::Float_3
+			);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex SmoothStepNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			if (!m_valueInput.IsLinked())
+			{
+				ELOG("Missing value input for SmoothStep node");
+				return IndexNone;
+			}
+
+			const ExpressionIndex valueExpression = m_valueInput.GetLink()->GetNode()->Compile(compiler, m_valueInput.GetLink());
+			if (valueExpression == IndexNone)
+			{
+				ELOG("Invalid value input for SmoothStep node");
+				return IndexNone;
+			}
+
+			// Edge0: optional, falls back to property default
+			ExpressionIndex edge0Expression = IndexNone;
+			if (m_edge0Input.IsLinked())
+			{
+				edge0Expression = m_edge0Input.GetLink()->GetNode()->Compile(compiler, m_edge0Input.GetLink());
+			}
+			else
+			{
+				edge0Expression = compiler.AddExpression(std::to_string(m_edge0), ExpressionType::Float_1);
+			}
+
+			// Edge1: optional, falls back to property default
+			ExpressionIndex edge1Expression = IndexNone;
+			if (m_edge1Input.IsLinked())
+			{
+				edge1Expression = m_edge1Input.GetLink()->GetNode()->Compile(compiler, m_edge1Input.GetLink());
+			}
+			else
+			{
+				edge1Expression = compiler.AddExpression(std::to_string(m_edge1), ExpressionType::Float_1);
+			}
+
+			const ExpressionType valueType = compiler.GetExpressionType(valueExpression);
+
+			m_compiledExpressionId = compiler.AddExpression(
+				"smoothstep(expr_" + std::to_string(edge0Expression) +
+				", expr_" + std::to_string(edge1Expression) +
+				", expr_" + std::to_string(valueExpression) + ")",
+				valueType
+			);
+		}
+
+		return m_compiledExpressionId;
+	}
+
 	ImColor GetIconColor(const PinType type)
 	{
 	    switch (type)

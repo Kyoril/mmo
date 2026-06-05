@@ -2,6 +2,7 @@
 
 #include "water_edit_mode.h"
 #include "terrain/terrain.h"
+#include "terrain/page.h"
 #include "terrain/constants.h"
 
 #include <imgui.h>
@@ -54,6 +55,21 @@ namespace mmo
 		{
 			m_brushCircleNode->AttachObject(*m_brushCircle);
 		}
+
+		m_waterWireframe = m_worldEditor.CreateManualRenderObject("WaterWireframeOverlay");
+		if (m_waterWireframe)
+		{
+			m_waterWireframe->SetCastShadows(false);
+			m_waterWireframe->SetQueryFlags(0);
+		}
+
+		m_waterWireframeNode = m_worldEditor.CreateChildSceneNode();
+		if (m_waterWireframeNode && m_waterWireframe)
+		{
+			m_waterWireframeNode->AttachObject(*m_waterWireframe);
+		}
+
+		UpdateWaterWireframe();
 	}
 
 	WaterEditMode::~WaterEditMode()
@@ -67,6 +83,16 @@ namespace mmo
 		{
 			m_worldEditor.DestroySceneNode(*m_brushCircleNode);
 			m_brushCircleNode = nullptr;
+		}
+		if (m_waterWireframe)
+		{
+			m_worldEditor.DestroyManualRenderObject(*m_waterWireframe);
+			m_waterWireframe = nullptr;
+		}
+		if (m_waterWireframeNode)
+		{
+			m_worldEditor.DestroySceneNode(*m_waterWireframeNode);
+			m_waterWireframeNode = nullptr;
 		}
 	}
 
@@ -267,6 +293,7 @@ namespace mmo
 	{
 		WorldEditMode::OnMouseUp(x, y);
 		m_rampActive = false;
+		UpdateWaterWireframe();
 	}
 
 	void WaterEditMode::OnMouseWheel(const float delta)
@@ -347,6 +374,91 @@ namespace mmo
 			const float y2 = m_terrain.GetSmoothHeightAt(x2, z2) + 0.2f;
 
 			lineOp->AddLine(Vector3(x1, y1, z1), Vector3(x2, y2, z2));
+		}
+	}
+
+	void WaterEditMode::UpdateWaterWireframe()
+	{
+		if (!m_waterWireframe)
+		{
+			return;
+		}
+
+		m_waterWireframe->Clear();
+
+		MaterialPtr mat = MaterialManager::Get().Load("Editor/Wireframe.hmat");
+		if (!mat)
+		{
+			return;
+		}
+
+		auto lineOp = m_waterWireframe->AddLineListOperation(mat);
+
+		const uint32 numPagesX = m_terrain.GetWidth();
+		const uint32 numPagesZ = m_terrain.GetHeight();
+		const float halfW = static_cast<float>(numPagesX * terrain::constants::PageSize) * 0.5f;
+		const float halfH = static_cast<float>(numPagesZ * terrain::constants::PageSize) * 0.5f;
+		const float tileSize = static_cast<float>(terrain::constants::TileSize);
+		const float quadSize = tileSize / 8.0f;
+
+		// Blue tint to distinguish the water wireframe from the terrain brush circle.
+		constexpr uint32 kWireColor = 0xFF0099FF;
+		constexpr float  kHeightBias = 0.08f;
+
+		for (uint32 px = 0; px < numPagesX; ++px)
+		{
+			for (uint32 pz = 0; pz < numPagesZ; ++pz)
+			{
+				terrain::Page* page = m_terrain.GetPage(px, pz);
+				if (!page || !page->IsLoaded())
+				{
+					continue;
+				}
+
+				const float pageOriginX = static_cast<float>(px) * static_cast<float>(terrain::constants::PageSize) - halfW;
+				const float pageOriginZ = static_cast<float>(pz) * static_cast<float>(terrain::constants::PageSize) - halfH;
+
+				for (uint32 tx = 0; tx < terrain::constants::TilesPerPage; ++tx)
+				{
+					for (uint32 tz = 0; tz < terrain::constants::TilesPerPage; ++tz)
+					{
+						const uint64 mask = page->GetWaterQuadMask(tx, tz);
+						if (mask == 0)
+						{
+							continue;
+						}
+
+						for (uint32 qz = 0; qz < 8; ++qz)
+						{
+							for (uint32 qx = 0; qx < 8; ++qx)
+							{
+								if (!(mask & (1ULL << (qx + qz * 8))))
+								{
+									continue;
+								}
+
+								const uint32 pvx = tx * 8 + qx;
+								const uint32 pvz = tz * 8 + qz;
+
+								const float wx0 = pageOriginX + static_cast<float>(pvx) * quadSize;
+								const float wz0 = pageOriginZ + static_cast<float>(pvz) * quadSize;
+								const float wx1 = wx0 + quadSize;
+								const float wz1 = wz0 + quadSize;
+
+								const float h00 = page->GetWaterVertexHeight(pvx,     pvz    ) + kHeightBias;
+								const float h10 = page->GetWaterVertexHeight(pvx + 1, pvz    ) + kHeightBias;
+								const float h01 = page->GetWaterVertexHeight(pvx,     pvz + 1) + kHeightBias;
+								const float h11 = page->GetWaterVertexHeight(pvx + 1, pvz + 1) + kHeightBias;
+
+								lineOp->AddLine(Vector3(wx0, h00, wz0), Vector3(wx1, h10, wz0)).SetColor(kWireColor);
+								lineOp->AddLine(Vector3(wx1, h10, wz0), Vector3(wx1, h11, wz1)).SetColor(kWireColor);
+								lineOp->AddLine(Vector3(wx1, h11, wz1), Vector3(wx0, h01, wz1)).SetColor(kWireColor);
+								lineOp->AddLine(Vector3(wx0, h01, wz1), Vector3(wx0, h00, wz0)).SetColor(kWireColor);
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 

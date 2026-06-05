@@ -2162,4 +2162,132 @@ namespace mmo
 		Pin* m_inputPins[3] = { &m_exponentInput, &m_baseReflectFractionInput, &m_normalInput };
 		Pin* m_outputPins[1] = { &m_output };
 	};
+
+	/// @brief A node that scrolls UV coordinates over time, useful for animated water surfaces.
+	class PannerNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(PannerNode, "Panner")
+
+		PannerNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		float m_speedX = 0.1f;
+		float m_speedY = 0.0f;
+
+		FloatProperty m_speedXProp { "Speed X", m_speedX };
+		FloatProperty m_speedYProp { "Speed Y", m_speedY };
+
+		PropertyBase* m_properties[2] = { &m_speedXProp, &m_speedYProp };
+
+		/// @brief Optional UV coordinate input (float2). Falls back to uv0 if unconnected.
+		MaterialPin m_uvsInput = { this, "UVs" };
+
+		/// @brief Optional scalar speed multiplier (float1).
+		MaterialPin m_speedInput = { this, "Speed" };
+
+		/// @brief Optional time override (float1). Falls back to shader 'time' if unconnected.
+		MaterialPin m_timeInput = { this, "Time" };
+
+		/// @brief Scrolled UV output (float2).
+		MaterialPin m_output = { this };
+
+		Pin* m_inputPins[3] = { &m_uvsInput, &m_speedInput, &m_timeInput };
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
+	/// @brief A node that computes the reflection vector of the camera ray around a surface normal.
+	class ReflectionVectorNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(ReflectionVectorNode, "Reflection Vector")
+
+		ReflectionVectorNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+	private:
+		/// @brief Optional world-space normal input (float3). Falls back to vertex normal N if unconnected.
+		MaterialPin m_normalInput = { this, "Normal" };
+
+		/// @brief Reflected direction output (float3).
+		MaterialPin m_output = { this };
+
+		Pin* m_inputPins[1] = { &m_normalInput };
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
+	/// @brief A node that applies smooth Hermite interpolation between two edges.
+	class SmoothStepNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(SmoothStepNode, "SmoothStep")
+
+		SmoothStepNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		float m_edge0 = 0.0f;
+		float m_edge1 = 1.0f;
+
+		FloatProperty m_edge0Prop { "Edge 0 Default", m_edge0 };
+		FloatProperty m_edge1Prop { "Edge 1 Default", m_edge1 };
+
+		PropertyBase* m_properties[2] = { &m_edge0Prop, &m_edge1Prop };
+
+		/// @brief Optional lower edge input (float1). Falls back to property default.
+		MaterialPin m_edge0Input = { this, "Edge 0 (Min)" };
+
+		/// @brief Optional upper edge input (float1). Falls back to property default.
+		MaterialPin m_edge1Input = { this, "Edge 1 (Max)" };
+
+		/// @brief The value to interpolate (float1).
+		MaterialPin m_valueInput = { this, "Value" };
+
+		/// @brief Smoothly interpolated output, same type as Value input.
+		MaterialPin m_output = { this };
+
+		Pin* m_inputPins[3] = { &m_edge0Input, &m_edge1Input, &m_valueInput };
+		Pin* m_outputPins[1] = { &m_output };
+	};
 }

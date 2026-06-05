@@ -49,7 +49,10 @@ namespace mmo
 			CameraPositionNode::GetStaticTypeInfo(),
 			TimeNode::GetStaticTypeInfo(),
 			RotatorNode::GetStaticTypeInfo(),
-			FresnelNode::GetStaticTypeInfo()
+			FresnelNode::GetStaticTypeInfo(),
+			PannerNode::GetStaticTypeInfo(),
+			ReflectionVectorNode::GetStaticTypeInfo(),
+			SmoothStepNode::GetStaticTypeInfo()
 		})
 	{
 		RebuildTypes();
