@@ -65,7 +65,7 @@ TEST_CASE("HandleCreateAccount", "[http_handlers]")
     {
         db.accountCreateResult = AccountCreationResult::Success;
         net::http::IncomingRequest req;
-        makePost("/account/create", "id=ACCT&password=PASS", req);
+        makePost("/account/create", "id=ACCT1&password=PASS", req);
         std::string resp = captureResponse(
             [&](const net::http::IncomingRequest& r, web::WebResponse& w){ handlers.HandleCreateAccount(r, w); }, req);
         REQUIRE(resp.find("HTTP/1.1 200") != std::string::npos);
@@ -95,7 +95,7 @@ TEST_CASE("HandleCreateAccount", "[http_handlers]")
     {
         db.accountCreateResult = AccountCreationResult::AccountNameAlreadyInUse;
         net::http::IncomingRequest req;
-        makePost("/account/create", "id=ACCT&password=PASS", req);
+        makePost("/account/create", "id=ACCT1&password=PASS", req);
         std::string resp = captureResponse(
             [&](const net::http::IncomingRequest& r, web::WebResponse& w){ handlers.HandleCreateAccount(r, w); }, req);
         REQUIRE(resp.find("409") != std::string::npos);
@@ -106,7 +106,7 @@ TEST_CASE("HandleCreateAccount", "[http_handlers]")
     {
         db.accountCreateResult = std::nullopt;
         net::http::IncomingRequest req;
-        makePost("/account/create", "id=ACCT&password=PASS", req);
+        makePost("/account/create", "id=ACCT1&password=PASS", req);
         std::string resp = captureResponse(
             [&](const net::http::IncomingRequest& r, web::WebResponse& w){ handlers.HandleCreateAccount(r, w); }, req);
         REQUIRE(resp.find("500") != std::string::npos);
