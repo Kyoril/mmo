@@ -161,7 +161,14 @@ namespace mmo
 				continue;
 			}
 
-			queue.AddRenderable(*operation, m_renderQueueId, m_renderQueuePriority);
+			uint8 queueId = m_renderQueueId;
+			const MaterialPtr mat = operation->GetMaterial();
+			if (mat && mat->IsTranslucent() && queueId < RenderQueueGroupId::Transparent)
+			{
+				queueId = RenderQueueGroupId::Transparent;
+			}
+
+			queue.AddRenderable(*operation, queueId, m_renderQueuePriority);
 		}
 	}
 
