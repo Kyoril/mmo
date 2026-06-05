@@ -6,6 +6,8 @@
 #include "player_manager.h"
 #include "base/non_copyable.h"
 
+#include <atomic>
+
 namespace mmo
 {
     /// Manages all friend relationships on the realm server.
@@ -69,6 +71,6 @@ namespace mmo
         std::map<uint64, uint32> m_friendCountByChar;
 
         /// Flag indicating whether all friendships have been loaded.
-        volatile bool m_loaded = false;
+        std::atomic<bool> m_loaded { false };
     };
 }

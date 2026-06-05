@@ -126,82 +126,87 @@ namespace mmo
 			return {};
 		}
 
+		// Windows virtual key code constants (matches VK_* values from winuser.h)
+		enum : Key
+		{
+			Key_Backspace    = 0x08,
+			Key_Tab          = 0x09,
+			Key_Enter        = 0x0D,
+			Key_Shift        = 0x10,
+			Key_Control      = 0x11,
+			Key_Pause        = 0x13,
+			Key_Accept       = 0x1E,
+			Key_Escape       = 0x1B,
+			Key_Space        = 0x20,
+			Key_PageUp       = 0x21,
+			Key_PageDown     = 0x22,
+			Key_End          = 0x23,
+			Key_Home         = 0x24,
+			Key_Left         = 0x25,
+			Key_Up           = 0x26,
+			Key_Right        = 0x27,
+			Key_Down         = 0x28,
+			Key_PrintScreen  = 0x2C,
+			Key_Insert       = 0x2D,
+			Key_Delete       = 0x2E,
+			Key_NumPad0      = 0x60,
+			Key_NumPad9      = 0x69,
+			Key_Multiply     = 0x6A,
+			Key_Add          = 0x6B,
+			Key_Subtract     = 0x6D,
+			Key_Divide       = 0x6F,
+			Key_F1           = 0x70,
+			Key_F24          = 0x87,
+			Key_ScrollLock   = 0x91,
+		};
+
 		String MapBindingKeyCode(const Key keyCode)
 		{
-			if (keyCode >= 0x70 && keyCode <= 0x87)
+			if (keyCode >= Key_F1 && keyCode <= Key_F24)
 			{
-				return String("F") + std::to_string(keyCode - 0x70 + 1);
+				return String("F") + std::to_string(keyCode - Key_F1 + 1);
 			}
 
-			// Convert numbers and letters to string
-			if (keyCode >= 'A' && keyCode <= 'Z' ||
-				keyCode >= '0' && keyCode <= '9')
+			if ((keyCode >= 'A' && keyCode <= 'Z') || (keyCode >= '0' && keyCode <= '9'))
 			{
 				return String(1, static_cast<char>(keyCode));
 			}
 
-			if (keyCode >= 0x60 && keyCode <= 0x69)
+			if (keyCode >= Key_NumPad0 && keyCode <= Key_NumPad9)
 			{
-				return String("NUM-") + String(1, static_cast<char>(keyCode - 0x60 + '0'));
+				return String("NUM-") + String(1, static_cast<char>(keyCode - Key_NumPad0 + '0'));
 			}
 
 			switch (keyCode)
 			{
-			case 0x20:
-				return "SPACE";
-			case 0x0D:
-				return "ENTER";
-			case 0x1B:
-				return "ESCAPE";
-			case 0x08:
-				return "BACKSPACE";
-			case 0x09:
-				return "TAB";
-			case 0x6B:
-				return "ADD";
-			case 0x6D:
-				return "SUBTRACT";
-			case 0x6A:
-				return "MULTIPLY";
-			case 0x6F:
-				return "DIVIDE";
-			case 0x1E:
-				return "ACCEPT";
-			case 0x2E:
-				return "DEL";
-			case 0x2D:
-				return "INSERT";
-			case 0x11:
-				return "CONTROL";
-			case 0x10:
-				return "SHIFT";
-			case 0x25:
-				return "LEFT";
-			case 0x27:
-				return "RIGHT";
-			case 0x26:
-				return "UP";
-			case 0x28:
-				return "DOWN";
-			case 0x21:
-				return "PAGEUP";
-			case 0x22:
-				return "PAGEDOWN";
-			case 0x23:
-				return "END";
-			case 0x24:
-				return "HOME";
-			case 0x2C:
-				return "PRINTSCREEN";
-			case 0x91:
-				return "SCROLLLOCK";
-			case 0x13:
-				return "PAUSE";
-			default:
-				break;
+			case Key_Space:       return "SPACE";
+			case Key_Enter:       return "ENTER";
+			case Key_Escape:      return "ESCAPE";
+			case Key_Backspace:   return "BACKSPACE";
+			case Key_Tab:         return "TAB";
+			case Key_Add:         return "ADD";
+			case Key_Subtract:    return "SUBTRACT";
+			case Key_Multiply:    return "MULTIPLY";
+			case Key_Divide:      return "DIVIDE";
+			case Key_Accept:      return "ACCEPT";
+			case Key_Delete:      return "DEL";
+			case Key_Insert:      return "INSERT";
+			case Key_Control:     return "CONTROL";
+			case Key_Shift:       return "SHIFT";
+			case Key_Left:        return "LEFT";
+			case Key_Right:       return "RIGHT";
+			case Key_Up:          return "UP";
+			case Key_Down:        return "DOWN";
+			case Key_PageUp:      return "PAGEUP";
+			case Key_PageDown:    return "PAGEDOWN";
+			case Key_End:         return "END";
+			case Key_Home:        return "HOME";
+			case Key_PrintScreen: return "PRINTSCREEN";
+			case Key_ScrollLock:  return "SCROLLLOCK";
+			case Key_Pause:       return "PAUSE";
+			default:              break;
 			}
 
-			// Convert lowercase to uppercase for simplicity
 			if (keyCode >= 'a' && keyCode <= 'z')
 			{
 				return String(1, static_cast<char>(keyCode - 'a' + 'A'));
@@ -216,7 +221,29 @@ namespace mmo
 	WorldState::WorldState(GameStateMgr &gameStateManager, RealmConnector &realmConnector, const proto_client::Project &project, TimerQueue &timers, LootClient &lootClient, VendorClient &vendorClient,
 						   ActionBar &actionBar, SpellCast &spellCast, CooldownManager &cooldownManager, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, PartyInfo &partyInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, ICacheProvider &cache, Discord &discord,
 						   GameTimeComponent &gameTime, TalentClient &talentClient, Minimap &minimap, InventoryClient &inventoryClient, TradeClient &tradeClient)
-		: GameState(gameStateManager), m_realmConnector(realmConnector), m_audio(audio), m_gameTime(gameTime), m_cache(cache), m_project(project), m_timers(timers), m_lootClient(lootClient), m_vendorClient(vendorClient), m_actionBar(actionBar), m_spellCast(spellCast), m_cooldownManager(cooldownManager), m_trainerClient(trainerClient), m_questClient(questClient), m_partyInfo(partyInfo), m_charSelect(charSelect), m_guildClient(guildClient), m_friendClient(friendClient), m_discord(discord), m_talentClient(talentClient), m_minimap(minimap), m_inventoryClient(inventoryClient), m_tradeClient(tradeClient)
+		: GameState(gameStateManager)
+		, m_realmConnector(realmConnector)
+		, m_audio(audio)
+		, m_gameTime(gameTime)
+		, m_cache(cache)
+		, m_project(project)
+		, m_timers(timers)
+		, m_lootClient(lootClient)
+		, m_vendorClient(vendorClient)
+		, m_actionBar(actionBar)
+		, m_spellCast(spellCast)
+		, m_cooldownManager(cooldownManager)
+		, m_trainerClient(trainerClient)
+		, m_questClient(questClient)
+		, m_partyInfo(partyInfo)
+		, m_charSelect(charSelect)
+		, m_guildClient(guildClient)
+		, m_friendClient(friendClient)
+		, m_discord(discord)
+		, m_talentClient(talentClient)
+		, m_minimap(minimap)
+		, m_inventoryClient(inventoryClient)
+		, m_tradeClient(tradeClient)
 	{
 		// TODO: Do we want to put these asset references in some sort of config setting or something?
 		ObjectMgr::SetUnitNameFontSettings(FontManager::Get().CreateOrRetrieve("Fonts/FRIZQT__.TTF", 24.0f, 1.0f), MaterialManager::Get().Load("Models/UnitNameFont.hmat"));
@@ -351,13 +378,14 @@ namespace mmo
 		m_debugPathVisualizer.reset();
 		m_foliage.reset();
 
-		m_audio.StopSound(&m_backgroundMusicChannel);
-		m_backgroundMusicChannel = InvalidChannel;
-		m_backgroundMusicSound = InvalidSound;
-
-		m_audio.StopSound(&m_ambienceChannel);
-		m_ambienceChannel = InvalidChannel;
-		m_ambienceSound = InvalidSound;
+		auto stopAudio = [this](SoundIndex &sound, ChannelIndex &channel)
+		{
+			m_audio.StopSound(&channel);
+			channel = InvalidChannel;
+			sound = InvalidSound;
+		};
+		stopAudio(m_backgroundMusicSound, m_backgroundMusicChannel);
+		stopAudio(m_ambienceSound, m_ambienceChannel);
 
 		m_rayQuery.reset();
 
@@ -385,7 +413,6 @@ namespace mmo
 
 		s_inputControl = nullptr;
 		m_playerController.reset();
-		m_worldInstance.reset();
 		m_worldGrid.reset();
 		m_debugAxis.reset();
 		m_scene->Clear();
@@ -800,33 +827,21 @@ namespace mmo
 				m_playerController->GetCamera().GetDerivedPosition());
 		}
 
-		// Position the sky dome to follow the player
-		if (m_skyComponent && m_playerController->GetRootNode())
-		{
-			m_skyComponent->SetPosition(m_playerController->GetRootNode()->GetPosition());
-		}
-
 		const auto pos = GetPagePositionFromCamera();
 		m_memoryPointOfView->UpdateCenter(pos);
 		m_visibleSection->UpdateCenter(pos);
 
 		CheckForZoneUpdate();
 
-		// Update world text frames
-		for (size_t i = 0; i < m_worldTextFrames.size();)
+		// Update world text frames then remove expired ones
+		for (auto &frame : m_worldTextFrames)
 		{
-			m_worldTextFrames[i]->Update(deltaSeconds);
-
-			// Maybe delete world text frame if it expired
-			if (m_worldTextFrames[i]->IsExpired())
-			{
-				m_worldTextFrames.erase(m_worldTextFrames.begin() + i);
-			}
-			else
-			{
-				++i;
-			}
+			frame->Update(deltaSeconds);
 		}
+		m_worldTextFrames.erase(
+			std::remove_if(m_worldTextFrames.begin(), m_worldTextFrames.end(),
+				[](const std::unique_ptr<WorldTextFrame> &frame) { return frame->IsExpired(); }),
+			m_worldTextFrames.end());
 	}
 
 	bool WorldState::OnMouseWheel(const int32 delta)
@@ -871,19 +886,13 @@ namespace mmo
 			const proto_client::ZoneEntry *zone = m_project.zones.getById(m_lastZoneId);
 			if (zone)
 			{
-				if (zone->parentzone() != 0)
+				const proto_client::ZoneEntry *parentZone =
+					(zone->parentzone() != 0) ? m_project.zones.getById(zone->parentzone()) : nullptr;
+
+				if (parentZone)
 				{
-					const proto_client::ZoneEntry *parentZone = m_project.zones.getById(zone->parentzone());
-					if (parentZone)
-					{
-						s_zoneName = parentZone->name();
-						s_subZoneName = zone->name();
-					}
-					else
-					{
-						s_zoneName = zone->name();
-						s_subZoneName.clear();
-					}
+					s_zoneName = parentZone->name();
+					s_subZoneName = zone->name();
 				}
 				else
 				{
@@ -1023,57 +1032,29 @@ namespace mmo
 			Vector3(halfTerrainSize, 1000.0f, halfTerrainSize)
 		));
 
-		// Load grass mesh and create layer
-		MeshPtr grassMesh = MeshManager::Get().Load("Models/FalwynPlains/Plants/Grass_01.hmsh");
-		if (grassMesh)
+		auto addFoliageLayer = [this](const char *name, const char *meshPath, float density, float minScale, float maxScale)
 		{
-			auto grassLayer = std::make_shared<FoliageLayer>("Grass", grassMesh);
+			MeshPtr mesh = MeshManager::Get().Load(meshPath);
+			if (!mesh)
+			{
+				return;
+			}
 
-			FoliageLayerSettings& layerSettings = grassLayer->GetSettings();
-			layerSettings.density = 4.0f;
-			layerSettings.minScale = 0.7f;
-			layerSettings.maxScale = 1.3f;
-			layerSettings.maxSlopeAngle = 35.0f;
-			layerSettings.fadeStartDistance = 40.0f;
-			layerSettings.fadeEndDistance = 60.0f;
-			layerSettings.castShadows = false;
+			auto layer = std::make_shared<FoliageLayer>(name, mesh);
+			FoliageLayerSettings &s = layer->GetSettings();
+			s.density = density;
+			s.minScale = minScale;
+			s.maxScale = maxScale;
+			s.maxSlopeAngle = 35.0f;
+			s.fadeStartDistance = 40.0f;
+			s.fadeEndDistance = 60.0f;
+			s.castShadows = false;
+			m_foliage->AddLayer(layer);
+		};
 
-			m_foliage->AddLayer(grassLayer);
-		}
-
-		MeshPtr grassMesh2 = MeshManager::Get().Load("Models/FalwynPlains/Plants/Grass_02.hmsh");
-		if (grassMesh2)
-		{
-			auto grassLayer2 = std::make_shared<FoliageLayer>("Grass02", grassMesh2);
-
-			FoliageLayerSettings& layerSettings = grassLayer2->GetSettings();
-			layerSettings.density = 0.7f;
-			layerSettings.minScale = 1.0f;
-			layerSettings.maxScale = 1.0f;
-			layerSettings.maxSlopeAngle = 35.0f;
-			layerSettings.fadeStartDistance = 40.0f;
-			layerSettings.fadeEndDistance = 60.0f;
-			layerSettings.castShadows = false;
-
-			m_foliage->AddLayer(grassLayer2);
-		}
-
-		MeshPtr flowerMesh = MeshManager::Get().Load("Models/FalwynPlains/Plants/Shrub_Flower_01.hmsh");
-		if (flowerMesh)
-		{
-			auto flowerLayer = std::make_shared<FoliageLayer>("Flowers", flowerMesh);
-
-			FoliageLayerSettings& layerSettings = flowerLayer->GetSettings();
-			layerSettings.density = 0.32f;
-			layerSettings.minScale = 1.0f;
-			layerSettings.maxScale = 1.0f;
-			layerSettings.maxSlopeAngle = 35.0f;
-			layerSettings.fadeStartDistance = 40.0f;
-			layerSettings.fadeEndDistance = 60.0f;
-			layerSettings.castShadows = false;
-
-			m_foliage->AddLayer(flowerLayer);
-		}
+		addFoliageLayer("Grass",    "Models/FalwynPlains/Plants/Grass_01.hmsh",       4.0f,  0.7f, 1.3f);
+		addFoliageLayer("Grass02",  "Models/FalwynPlains/Plants/Grass_02.hmsh",       0.7f,  1.0f, 1.0f);
+		addFoliageLayer("Flowers",  "Models/FalwynPlains/Plants/Shrub_Flower_01.hmsh",0.32f, 1.0f, 1.0f);
 	}
 
 	void WorldState::SetupPacketHandler()
@@ -3553,29 +3534,32 @@ namespace {
 		return errno == 0 && end == s.c_str() + s.size();
 #endif
 	}
-}
 
-#ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_LearnSpell(const std::string &cmd, const std::string &args) const
+	std::vector<std::string> ParseCommandArgs(const std::string& args)
 	{
 		std::istringstream iss(args);
 		std::vector<std::string> tokens;
 		std::string token;
 		while (iss >> token)
 		{
-			tokens.push_back(token);
+			tokens.push_back(std::move(token));
 		}
+		return tokens;
+	}
+}
 
+#ifdef MMO_WITH_DEV_COMMANDS
+	void WorldState::Command_LearnSpell(const std::string &cmd, const std::string &args) const
+	{
+		const auto tokens = ParseCommandArgs(args);
 		if (tokens.size() != 1)
 		{
 			ELOG("Usage: learnspell <entry>");
 			return;
 		}
 
-		std::istringstream strm(tokens[0]);
-
 		uint32 entry = 0;
-		strm >> entry;
+		if (!ParseUInt(tokens[0], entry)) { ELOG("Invalid entry id: " + tokens[0]); return; }
 
 		m_realmConnector.LearnSpell(entry);
 	}
@@ -3584,14 +3568,7 @@ namespace {
 #ifdef MMO_WITH_DEV_COMMANDS
 	void WorldState::Command_CreateMonster(const std::string &cmd, const std::string &args) const
 	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
-		{
-			tokens.push_back(token);
-		}
-
+		const auto tokens = ParseCommandArgs(args);
 		if (tokens.size() != 1)
 		{
 			ELOG("Usage: createmonster <entry>");
@@ -3607,14 +3584,7 @@ namespace {
 #ifdef MMO_WITH_DEV_COMMANDS
 	void WorldState::Command_DestroyMonster(const std::string &cmd, const std::string &args) const
 	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
-		{
-			tokens.push_back(token);
-		}
-
+		const auto tokens = ParseCommandArgs(args);
 		if (tokens.size() > 1)
 		{
 			ELOG("Usage: destroymonster <entry>");
@@ -3644,18 +3614,10 @@ namespace {
 #ifdef MMO_WITH_DEV_COMMANDS
 	void WorldState::Command_FaceMe(const std::string &cmd, const std::string &args) const
 	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
-		{
-			tokens.push_back(token);
-		}
-
 		const uint64 guid = m_playerController->GetControlledUnit()->Get<uint64>(object_fields::TargetUnit);
 		if (guid == 0)
 		{
-			ELOG("No target selected and no target guid provided to destroy!");
+			ELOG("No target selected!");
 			return;
 		}
 
@@ -3666,18 +3628,10 @@ namespace {
 #ifdef MMO_WITH_DEV_COMMANDS
 	void WorldState::Command_FollowMe(const std::string &cmd, const std::string &args) const
 	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
-		{
-			tokens.push_back(token);
-		}
-
 		const uint64 guid = m_playerController->GetControlledUnit()->Get<uint64>(object_fields::TargetUnit);
 		if (guid == 0)
 		{
-			ELOG("No target selected and no target guid provided to destroy!");
+			ELOG("No target selected!");
 			return;
 		}
 
@@ -3688,13 +3642,7 @@ namespace {
 #ifdef MMO_WITH_DEV_COMMANDS
 	void WorldState::Command_LevelUp(const std::string &cmd, const std::string &args) const
 	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
-		{
-			tokens.push_back(token);
-		}
+		const auto tokens = ParseCommandArgs(args);
 
 		uint32 level = 1;
 		if (!tokens.empty())
@@ -3709,14 +3657,7 @@ namespace {
 #ifdef MMO_WITH_DEV_COMMANDS
 	void WorldState::Command_GiveMoney(const std::string &cmd, const std::string &args) const
 	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
-		{
-			tokens.push_back(token);
-		}
-
+		const auto tokens = ParseCommandArgs(args);
 		if (tokens.empty())
 		{
 			ELOG("Usage: money <amount>");
@@ -3732,14 +3673,7 @@ namespace {
 #ifdef MMO_WITH_DEV_COMMANDS
 	void WorldState::Command_AddItem(const std::string &cmd, const std::string &args) const
 	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
-		{
-			tokens.push_back(token);
-		}
-
+		const auto tokens = ParseCommandArgs(args);
 		if (tokens.empty())
 		{
 			ELOG("Usage: additem <item_id> [<count>]");
@@ -3762,14 +3696,7 @@ namespace {
 #ifdef MMO_WITH_DEV_COMMANDS
 	void WorldState::Command_WorldPort(const std::string &cmd, const std::string &args) const
 	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
-		{
-			tokens.push_back(token);
-		}
-
+		const auto tokens = ParseCommandArgs(args);
 		if (tokens.empty())
 		{
 			ELOG("Usage: worldport <map_id> [<x>] [<y>] [<z>] [<facing degree>]");
@@ -3782,7 +3709,6 @@ namespace {
 		uint32 mapId = 0;
 		if (!ParseUInt(tokens[0], mapId)) { ELOG("Invalid map id: " + tokens[0]); return; }
 
-		// Parse optional position
 		if (tokens.size() > 1)
 		{
 			if (!ParseFloat(tokens[1], position.x)) { ELOG("Invalid x position: " + tokens[1]); return; }
@@ -3795,10 +3721,8 @@ namespace {
 		{
 			if (!ParseFloat(tokens[3], position.z)) { ELOG("Invalid z position: " + tokens[3]); return; }
 		}
-
 		if (tokens.size() > 4)
 		{
-			// Convert facing degree to radian
 			float facingDeg = 0.0f;
 			if (!ParseFloat(tokens[4], facingDeg)) { ELOG("Invalid facing degree: " + tokens[4]); return; }
 			facing = Degree(facingDeg);
@@ -3811,14 +3735,7 @@ namespace {
 #ifdef MMO_WITH_DEV_COMMANDS
 	void WorldState::Command_Speed(const std::string &cmd, const std::string &args) const
 	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
-		{
-			tokens.push_back(token);
-		}
-
+		const auto tokens = ParseCommandArgs(args);
 		if (tokens.empty())
 		{
 			ELOG("Usage: speed <speed>");
@@ -3841,23 +3758,10 @@ namespace {
 #ifdef MMO_WITH_DEV_COMMANDS
 	void WorldState::Command_Summon(const std::string &cmd, const std::string &args) const
 	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
-		{
-			tokens.push_back(token);
-		}
-
+		const auto tokens = ParseCommandArgs(args);
 		if (tokens.empty())
 		{
 			ELOG("Usage: summon <playername>");
-			return;
-		}
-
-		if (tokens[0].empty())
-		{
-			ELOG("Player name cannot be empty!");
 			return;
 		}
 
@@ -3868,23 +3772,10 @@ namespace {
 #ifdef MMO_WITH_DEV_COMMANDS
 	void WorldState::Command_Port(const std::string &cmd, const std::string &args) const
 	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
-		{
-			tokens.push_back(token);
-		}
-
+		const auto tokens = ParseCommandArgs(args);
 		if (tokens.empty())
 		{
 			ELOG("Usage: port <playername>");
-			return;
-		}
-
-		if (tokens[0].empty())
-		{
-			ELOG("Player name cannot be empty!");
 			return;
 		}
 
