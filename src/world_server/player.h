@@ -17,6 +17,8 @@
 #include "anti_cheat_tracker.h"
 #include "trade_session.h"
 
+#include <unordered_set>
+
 namespace mmo
 {
 	class ConditionMgr;
@@ -80,6 +82,9 @@ namespace mmo
 
 		/// @copydoc TileSubscriber::SendPacket
 		void SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer, bool flush = true) override;
+
+		/// @copydoc TileSubscriber::IsObjectKnown
+		bool IsObjectKnown(uint64 guid) const override { return m_spawnedGuids.contains(guid); }
 
 		/// Handles a proxy packet received from the realm server.
 		void HandleProxyPacket(game::client_realm_packet::Type opCode, std::vector<uint8>& buffer);
@@ -683,6 +688,10 @@ namespace mmo
 
 		/// @brief GUID of the player who sent us a pending trade invitation, or 0 if none.
 		ObjectGuid m_tradeInviterGuid{ 0 };
+
+		/// @brief Tracks the GUIDs of all objects currently spawned at this client.
+		/// Used to ASSERT that no object is spawned twice without an intermediate despawn.
+		std::unordered_set<uint64> m_spawnedGuids;
 
 	public:
 		/// @brief Sends a time sync request to the client with incremented index.

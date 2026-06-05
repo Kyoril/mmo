@@ -777,9 +777,9 @@ namespace mmo
 	Entity* Scene::CreateEntity(const String& entityName, const MeshPtr& mesh)
 	{
 		ASSERT(m_entities.find(entityName) == m_entities.end());
-    
+
 		auto [entityIt, created] = m_entities.emplace(entityName, std::make_unique<Entity>(entityName, mesh));
-		
+
 		return entityIt->second.get();
 	}
 

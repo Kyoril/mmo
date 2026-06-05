@@ -452,6 +452,23 @@ namespace mmo
 
 	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& objects)
 	{
+		// Assert that none of these GUIDs are already known to the client — receiving a
+		// second creation packet for the same GUID crashes the client (duplicate entity name
+		// in Scene::CreateEntity).  If this fires, the server sent a spawn without a prior despawn.
+		for (const auto* object : objects)
+		{
+			const uint64 guid = object->GetGuid();
+			if (m_spawnedGuids.contains(guid))
+			{
+				ELOG("Double-spawn detected: GUID " << log_hex_digit(guid)
+					<< " (type=" << static_cast<int>(object->GetTypeId()) << ")"
+					<< " is already known to client " << log_hex_digit(m_character->GetGuid())
+					<< " — server sent creation without prior destroy");
+				ASSERT(false && "Double-spawn: object already spawned at client without prior despawn");
+			}
+			m_spawnedGuids.insert(guid);
+		}
+
 		// Prepare dynamic fields for world objects
 		for (const auto& object : objects)
 		{
@@ -526,6 +543,11 @@ namespace mmo
 
 	void Player::NotifyObjectsDespawned(const std::vector<GameObjectS*>& objects)
 	{
+		for (const auto* object : objects)
+		{
+			m_spawnedGuids.erase(object->GetGuid());
+		}
+
 		const uint64 currentTarget = m_character->Get<uint64>(object_fields::TargetUnit);
 		if (currentTarget != 0)
 		{
@@ -1069,21 +1091,40 @@ namespace mmo
 			newTile.GetPosition(),
 			[this](VisibilityTile &tile)
 			{
-				if (tile.GetGameObjects().empty())
+				// Only despawn objects the client actually knows about.  Invisible units
+				// (e.g. those with a ModVisibility aura) are never sent as creation packets,
+				// so sending a destroy for them would cause a client disconnect.
+				std::vector<uint64> toDestroy;
+				toDestroy.reserve(tile.GetGameObjects().size());
+				for (const auto *object : tile.GetGameObjects())
+				{
+					if (m_spawnedGuids.contains(object->GetGuid()))
+					{
+						toDestroy.push_back(object->GetGuid());
+					}
+				}
+
+				if (toDestroy.empty())
 				{
 					return;
 				}
 
-				this->SendPacket([&tile](game::OutgoingPacket& outPacket)
+				this->SendPacket([&toDestroy](game::OutgoingPacket& outPacket)
 				{
 					outPacket.Start(game::realm_client_packet::DestroyObjects);
-					outPacket << io::write<uint16>(tile.GetGameObjects().size());
-					for (const auto *object : tile.GetGameObjects())
+					outPacket << io::write<uint16>(static_cast<uint16>(toDestroy.size()));
+					for (const uint64 guid : toDestroy)
 					{
-						outPacket << io::write_packed_guid(object->GetGuid());
+						outPacket << io::write_packed_guid(guid);
 					}
 					outPacket.Finish();
 				});
+
+				// Update our tracking — these objects are leaving the client's view
+				for (const uint64 guid : toDestroy)
+				{
+					m_spawnedGuids.erase(guid);
+				}
 			});
 
 		ForEachTileInSightWithout(
@@ -1108,7 +1149,16 @@ namespace mmo
 			{
 				continue;
 			}
-				
+
+			// Mirror the visibility check that AddGameObject already applies — don't send
+			// a creation packet for a unit the player cannot currently see (e.g. invisible
+			// due to a ModVisibility aura).  If that unit later becomes visible,
+			// UpdateVisibilityAndView will send the creation packet at that point.
+			if (obj->IsUnit() && !obj->AsUnit().CanBeSeenBy(*m_character))
+			{
+				continue;
+			}
+
 			objects.push_back(obj);
 		}
 

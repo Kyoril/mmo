@@ -1312,7 +1312,11 @@ public:
 
 		void SetVisibility(UnitVisibility x);
 
-		virtual void UpdateVisibilityAndView();
+		/// Recomputes which subscribers gained or lost visibility of this unit and sends
+		/// the appropriate spawn / despawn packets.  @p prevVisibility is the visibility
+		/// state that was in effect before the change; pass the same as the current value
+		/// to force a full-broadcast (e.g. on first spawn — but prefer AddGameObject for that).
+		virtual void UpdateVisibilityAndView(UnitVisibility prevVisibility);
 
 	protected:
 		/// Prepares the field map for the unit.
