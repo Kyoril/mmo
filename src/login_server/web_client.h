@@ -4,11 +4,6 @@
 
 #include "web_services/web_client.h"
 #include "login_http_handlers.h"
-#include "http/http_incoming_request.h"
-
-#include <functional>
-#include <string>
-#include <unordered_map>
 
 namespace mmo
 {
@@ -34,17 +29,11 @@ namespace mmo
 
 	private:
 
-		using RouteHandler = std::function<void(const net::http::IncomingRequest&, web::WebResponse&)>;
-
-		/// Registers a handler for the given HTTP method and path.
-		void RegisterRoute(net::http::IncomingRequest::Type method, std::string path, RouteHandler handler);
-
 		/// Handles a shutdown request.
 		void handleShutdown(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 
 	private:
 		WebService& m_service;
 		LoginHttpHandlers m_handlers;
-		std::unordered_map<std::string, RouteHandler> m_routes;
 	};
 }

@@ -77,8 +77,6 @@ namespace mmo
 	private:
 		void UpdateBrushOverlay();
 
-		void UpdateWaterWireframe();
-
 		void ApplyBrush();
 
 	private:
@@ -113,8 +111,5 @@ namespace mmo
 
 		ManualRenderObject* m_brushCircle = nullptr;
 		SceneNode*          m_brushCircleNode = nullptr;
-
-		ManualRenderObject* m_waterWireframe = nullptr;
-		SceneNode*          m_waterWireframeNode = nullptr;
 	};
 }

@@ -21,16 +21,6 @@ namespace mmo
 			const std::string jsonStr = jsonObject.dump();
 			response.finishWithContent("application/json", jsonStr.data(), jsonStr.size());
 		}
-
-		std::string MakeRouteKey(net::http::IncomingRequest::Type method, const std::string& path)
-		{
-			switch (method)
-			{
-				case net::http::IncomingRequest::Get:  return "GET " + path;
-				case net::http::IncomingRequest::Post: return "POST " + path;
-				default:                               return "UNKNOWN " + path;
-			}
-		}
 	}
 
 	WebClient::WebClient(WebService &webService, std::shared_ptr<Client> connection)
@@ -94,11 +84,6 @@ namespace mmo
 		});
 	}
 
-	void WebClient::RegisterRoute(net::http::IncomingRequest::Type method, std::string path, RouteHandler handler)
-	{
-		m_routes.emplace(MakeRouteKey(method, std::move(path)), std::move(handler));
-	}
-
 	void WebClient::handleRequest(const net::http::IncomingRequest &request,
 	                              web::WebResponse &response)
 	{
@@ -114,18 +99,7 @@ namespace mmo
 			return;
 		}
 
-		const auto key = MakeRouteKey(request.getType(), request.getPath());
-		const auto it = m_routes.find(key);
-		if (it != m_routes.end())
-		{
-			it->second(request, response);
-		}
-		else
-		{
-			response.setStatus(net::http::OutgoingAnswer::NotFound);
-			const String message = "The command '" + request.getPath() + "' does not exist";
-			response.finishWithContent("text/html", message.data(), message.size());
-		}
+		DispatchRoute(request, response);
 	}
 
 	void WebClient::handleShutdown(const net::http::IncomingRequest& request, web::WebResponse& response) const

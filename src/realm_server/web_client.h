@@ -10,7 +10,7 @@ namespace mmo
 	struct IDatabase;
 	class WebService;
 
-	class WebClient 
+	class WebClient
 		: public web::WebClient
 		, public std::enable_shared_from_this<WebClient>
 	{
@@ -39,6 +39,5 @@ namespace mmo
 
 	private:
 		WebService& m_service;
-		
 	};
 }
