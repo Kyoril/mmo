@@ -658,6 +658,14 @@ namespace mmo
 			<< "\treturn expression ? whenTrue : whenFalse;\n"
 			<< "}\n\n";
 
+		// ACES Film tone mapping — matches the deferred lighting pass so forward-rendered
+		// objects (translucent water, particles …) have a consistent look.
+		m_pixelShaderStream
+			<< "float3 ACESFilm(float3 x) {\n"
+			<< "\tfloat a = 2.51; float b = 0.03; float c = 2.43; float d = 0.59; float e = 0.14;\n"
+			<< "\treturn saturate((x*(a*x+b))/(x*(c*x+d)+e));\n"
+			<< "}\n\n";
+
 		if (type == PixelShaderType::GBuffer)
 		{
 			m_pixelShaderStream
@@ -713,6 +721,15 @@ namespace mmo
 			<< "\trow_major matrix inverseCameraView;	// Inverse view matrix\n"
 			<< "\tfloat time;		// Time in seconds since game start\n"
 			<< "\tfloat3 _padding;	// Padding for alignment\n"
+			// Forward lighting rows – mirrors PsCameraConstantBuffer rows 7-9.
+			// Populated by Scene::RefreshCameraBuffer from the scene's primary
+			// directional light so translucent materials see real sky lighting.
+			<< "\tfloat3 sunDirection;	// World-space direction toward the sun (normalised)\n"
+			<< "\tfloat sunIntensity;\n"
+			<< "\tfloat3 sunColor;\n"
+			<< "\tfloat _forwardPad0;\n"
+			<< "\tfloat3 ambientColor;\n"
+			<< "\tfloat _forwardPad1;\n"
 			<< "};\n\n";
 
 		const auto& scalarParams = m_floatParameters;
@@ -1096,10 +1113,14 @@ namespace mmo
 						<< "\tfloat3 F0 = 0.04;\n"
 						<< "\tF0 = lerp(F0, baseColor, metallic);\n\n";
 
+					// Sun direction, colour and intensity come from the CameraParameters
+					// cbuffer (rows 7-9), populated by Scene::RefreshCameraBuffer from the
+					// scene's primary directional light.  This replaces the old hardcoded
+					// values and makes forward-rendered objects react to the real sky.
 					m_pixelShaderStream
-						<< "\tfloat3 L = normalize(-float3(0.5, -1.0, 0.5));\n"	// LightDir
+						<< "\tfloat3 L = sunDirection;\n"					// toward-sun unit vector
 						<< "\tfloat3 H = normalize(V + L);\n"
-						<< "\tfloat3 radiance = float3(4.0, 4.0, 4.0);\n\n";		// Light color * attenuation
+						<< "\tfloat3 radiance = sunColor * sunIntensity;\n\n";
 
 					m_pixelShaderStream
 						<< "\tfloat NDF = DistributionGGX(N, H, roughness);\n"
@@ -1113,8 +1134,8 @@ namespace mmo
 
 					m_pixelShaderStream
 						<< "\tfloat3 numerator    = NDF * G * F;\n"
-						<< "\tfloat denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0)  + 0.0001;\n"
-						<< "\tfloat3 specularity     = numerator / denominator;\n";
+						<< "\tfloat denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;\n"
+						<< "\tfloat3 specularity = numerator / denominator;\n";
 
 					m_pixelShaderStream
 						<< "\tfloat NdotL = max(dot(N, L), 0.0);\n"
@@ -1124,8 +1145,8 @@ namespace mmo
 						<< "\tkS = fresnelSchlick(max(dot(N, V), 0.0), F0);\n"
 						<< "\tkD = 1.0f.xxx - kS;\n"
 						<< "\tkD *= 1.0 - metallic;\n"
-						<< "\tfloat3 irradiance = float3(0.1f, 0.25f, 0.3f);\n"
-						<< "\tfloat3 diffuse = irradiance * baseColor;\n"
+						// Use real scene ambient instead of the old static sky tint
+						<< "\tfloat3 diffuse = ambientColor * baseColor;\n"
 						<< "\tfloat3 ambient = (kD * diffuse) * ao;\n";
 
 					m_pixelShaderStream
@@ -1135,8 +1156,10 @@ namespace mmo
 					m_pixelShaderStream
 						<< "\tcolor += emissiveColor;\n";
 
+					// ACES Film tone mapping + gamma – identical to the deferred lighting
+					// pass so forward objects blend seamlessly with the deferred scene.
 					m_pixelShaderStream
-						<< "\tcolor = color / (color + 1.0f.xxx);\n"
+						<< "\tcolor = ACESFilm(color);\n"
 						<< "\tcolor = pow(color, (1.0f/2.2f).xxx);\n";
 
 					m_pixelShaderStream

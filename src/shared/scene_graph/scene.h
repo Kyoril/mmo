@@ -472,6 +472,13 @@ namespace mmo
 			m_ambientColor = color;
 		}
 
+		/// @brief Sets the primary directional light used for forward-rendered lighting.
+		/// Should be the scene's sun/moon light. Called by SkyComponent and DeferredRenderer.
+		void SetPrimaryDirectionalLight(Light* light) { m_primaryDirectionalLight = light; }
+
+		/// @brief Gets the primary directional light used for forward-rendered lighting.
+		[[nodiscard]] Light* GetPrimaryDirectionalLight() const { return m_primaryDirectionalLight; }
+
 		// ============================================================================
 		// Visible Light System - For efficient light gathering with frustum culling
 		// ============================================================================
@@ -637,6 +644,10 @@ namespace mmo
 		bool m_forwardTransparentOnly = false;
 
 		Vector3 m_ambientColor = Vector3(0.04f, 0.035f, 0.03f);
+
+		/// @brief Primary directional light for forward-rendered objects (e.g. translucent surfaces).
+		/// Set by SkyComponent or DeferredRenderer each frame.
+		Light* m_primaryDirectionalLight = nullptr;
 
 		std::unique_ptr<IDebugGeometry> m_debugGeometry;
 

@@ -367,6 +367,11 @@ namespace mmo
             m_lightStructuredBuffer->Update(shaderLights.data(), shaderLights.size());
         }
 
+        // Register the shadow-casting directional light as the scene's primary light so that
+        // forward-rendered translucent objects (water, particles …) use the real sun direction
+        // and colour instead of the previously hardcoded fallback values.
+        scene.SetPrimaryDirectionalLight(m_shadowCastingDirectionalLight);
+
         // Store statistics for external access
         m_lastLightStats = scene.GetLightRenderStats();
     }

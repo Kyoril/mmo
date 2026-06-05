@@ -12,6 +12,7 @@
 #include "render_operation.h"
 #include "world_model_instance.h"
 
+#include "light.h"
 #include "base/macros.h"
 #include "base/profiler.h"
 #include "graphics/graphics_device.h"
@@ -36,6 +37,7 @@ namespace mmo
 
 	struct alignas(16) PsCameraConstantBuffer
 	{
+		// Row 0–6: camera, fog, matrices, time (112 bytes — must stay layout-stable)
 		Vector3 cameraPosition;
 		float fogStart;
 		float fogEnd;
@@ -43,6 +45,17 @@ namespace mmo
 		Matrix4 inverseViewMatrix;
 		float time;
 		float _padding[3];
+
+		// Row 7–9: forward lighting (48 bytes added)
+		// Populated from the scene's primary directional light so that forward-rendered
+		// translucent objects (water, glass …) react to the actual sky/sun rather than
+		// hardcoded values inside the generated pixel shader.
+		Vector3 sunDirection;	// World-space direction *toward* the sun (normalised)
+		float sunIntensity;
+		Vector3 sunColor;
+		float _forwardPad0;
+		Vector3 ambientColor;	// Scene ambient (matches deferred AmbientColor cbuffer)
+		float _forwardPad1;
 	};
 
 	Scene::Scene()
@@ -888,6 +901,34 @@ namespace mmo
 		buffer._padding[0] = 0.0f;
 		buffer._padding[1] = 0.0f;
 		buffer._padding[2] = 0.0f;
+
+		// Forward lighting — populate from the primary directional light so that translucent
+		// forward-rendered objects (water, glass …) receive the real sky/sun lighting instead
+		// of the previously hardcoded placeholder values in the generated pixel shader.
+		if (m_primaryDirectionalLight != nullptr)
+		{
+			// GetDerivedDirection returns the LOCAL direction of the light (set by SkyComponent).
+			// Negate it so the shader receives a vector that points *toward* the light source.
+			const Vector3 rawDir = m_primaryDirectionalLight->GetDirection();
+			Vector3 towardSun = -rawDir;
+			towardSun.Normalize();
+			buffer.sunDirection = towardSun;
+			buffer.sunIntensity  = m_primaryDirectionalLight->GetIntensity();
+			const Vector4& col   = m_primaryDirectionalLight->GetColor();
+			buffer.sunColor      = Vector3(col.x, col.y, col.z);
+		}
+		else
+		{
+			// Sensible fallback so forward objects are never black with no sky set up.
+			buffer.sunDirection = Vector3(0.0f, 1.0f, 0.0f);
+			buffer.sunIntensity  = 1.0f;
+			buffer.sunColor      = Vector3(1.0f, 0.95f, 0.8f);
+		}
+
+		buffer.ambientColor   = m_ambientColor;
+		buffer._forwardPad0   = 0.0f;
+		buffer._forwardPad1   = 0.0f;
+
 		m_psCameraBuffer->Update(&buffer);
 	}
 

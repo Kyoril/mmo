@@ -327,5 +327,10 @@ namespace mmo
         // Update fog color based on horizon color
         m_scene.SetFogColor(Vector3(horizonColor.x, horizonColor.y, horizonColor.z));
         m_scene.SetAmbientColor(Vector3(ambientColor.x, ambientColor.y, ambientColor.z));
+
+        // Register the sun as the primary directional light so that forward-rendered
+        // translucent surfaces (water, glass …) pick up the correct sun direction and colour
+        // from the camera constant buffer instead of using hardcoded shader fallbacks.
+        m_scene.SetPrimaryDirectionalLight(m_sunLight);
     }
 }
