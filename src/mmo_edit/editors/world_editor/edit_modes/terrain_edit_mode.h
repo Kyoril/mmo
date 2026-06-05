@@ -13,6 +13,7 @@
 namespace mmo
 {
 	class Camera;
+	class WaterEditMode;
 
 	namespace terrain
 	{
@@ -38,6 +39,9 @@ namespace mmo
 
 		/// Allows you to create or remove holes in the terrain.
 		Holes,
+
+		/// Paint, erase, and adjust water on terrain tiles (sub-mode of terrain editing).
+		Water,
 
 		/// The total number of terrain editing types. Always the last element!
 		Count_
@@ -103,6 +107,8 @@ namespace mmo
 
 		void DrawDetails() override;
 
+		void OnMouseDown(float x, float y) override;
+
 		void OnMouseHold(float deltaSeconds) override;
 
 		void OnMouseMoved(float x, float y) override;
@@ -115,6 +121,8 @@ namespace mmo
 
 	public:
 		void SetTerrainEditType(const TerrainEditType type) { m_type = type; }
+
+		void SetWaterEditMode(WaterEditMode* waterMode) { m_waterEditMode = waterMode; }
 
 		[[nodiscard]] TerrainEditType GetTerrainEditType() const { return m_type; }
 
@@ -190,6 +198,8 @@ namespace mmo
 		SceneNode*          m_areaOverlayNode = nullptr;
 		bool                m_areaOverlayDirty = false;      ///< Rebuilt on next mouse-up after painting.
 		TerrainEditType     m_lastTerrainType = TerrainEditType::Count_; ///< Detects mode switches.
+
+		WaterEditMode*      m_waterEditMode = nullptr;
 
 		// Noise preview texture (128×128 R8 grayscale, rebuilt when noise params change)
 		TexturePtr          m_noisePreviewTex;

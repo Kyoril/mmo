@@ -373,6 +373,71 @@ namespace mmo
 			/// @return True if the position is over a hole, false otherwise
 			[[nodiscard]] bool IsHoleAt(float x, float z) const;
 
+			/// @brief Paint water on terrain tiles within a circular brush area.
+			/// @param brushCenterX World X position of the brush center.
+			/// @param brushCenterZ World Z position of the brush center.
+			/// @param radius Brush radius in world units.
+			/// @param waterHeight The water surface height to set on painted tiles.
+			/// @param type The liquid type to paint (Water/Ocean/Lava/Slime).
+			void FillWater(float brushCenterX, float brushCenterZ, float radius, float waterHeight, WaterType type);
+
+			/// @brief Remove water from terrain tiles within a circular brush area.
+			/// @param brushCenterX World X position of the brush center.
+			/// @param brushCenterZ World Z position of the brush center.
+			/// @param radius Brush radius in world units.
+			void EraseWater(float brushCenterX, float brushCenterZ, float radius);
+
+			/// @brief Raise the water height on tiles within a circular brush area.
+			/// @param brushCenterX World X position of the brush center.
+			/// @param brushCenterZ World Z position of the brush center.
+			/// @param radius Brush radius in world units.
+			/// @param amount Height delta to add per call (positive raises water).
+			void RaiseWater(float brushCenterX, float brushCenterZ, float radius, float amount);
+
+			/// @brief Lower the water height on tiles within a circular brush area.
+			/// @param brushCenterX World X position of the brush center.
+			/// @param brushCenterZ World Z position of the brush center.
+			/// @param radius Brush radius in world units.
+			/// @param amount Height delta to subtract per call.
+			void LowerWater(float brushCenterX, float brushCenterZ, float radius, float amount);
+
+			/// @brief Set all water vertex heights within a circular brush area to a fixed value.
+			/// @param brushCenterX World X position of the brush center.
+			/// @param brushCenterZ World Z position of the brush center.
+			/// @param radius Brush radius in world units.
+			/// @param height The target height.
+			void FlattenWater(float brushCenterX, float brushCenterZ, float radius, float height);
+
+			/// @brief Apply a directional height ramp to water vertices along a line segment.
+			/// Vertices within @p radius of the segment get heights interpolated between
+			/// @p startHeight (at the start point) and @p endHeight (at the end point).
+			/// @param startX World X of the ramp start.
+			/// @param startZ World Z of the ramp start.
+			/// @param endX   World X of the ramp end.
+			/// @param endZ   World Z of the ramp end.
+			/// @param radius Perpendicular influence radius around the ramp line.
+			/// @param startHeight Height applied at the start point.
+			/// @param endHeight   Height applied at the end point.
+			void RampWater(float startX, float startZ, float endX, float endZ, float radius, float startHeight, float endHeight);
+
+			/// @brief Get the water surface height at a world position.
+			/// @param x World X coordinate.
+			/// @param z World Z coordinate.
+			/// @return The bilinearly interpolated water height, or 0.0f if outside terrain bounds.
+			[[nodiscard]] float GetWaterHeightAtWorldPos(float x, float z) const;
+
+			/// @brief Returns true if there is water at the given world position.
+			/// @param x World X coordinate.
+			/// @param z World Z coordinate.
+			[[nodiscard]] bool HasWaterAtWorldPos(float x, float z) const;
+
+			/// @brief Set the water material name for all pages within a circular brush area.
+			/// @param brushCenterX World X position of the brush center.
+			/// @param brushCenterZ World Z position of the brush center.
+			/// @param radius Brush radius in world units.
+			/// @param materialName The asset path of the material to assign.
+			void SetWaterMaterial(float brushCenterX, float brushCenterZ, float radius, const String& materialName);
+
 			/// @brief Updates tiles in a specified region.
 			/// @param fromX The starting X coordinate.
 			/// @param fromZ The starting Z coordinate.

@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "terrain_edit_mode.h"
+#include "water_edit_mode.h"
 #include "terrain/terrain.h"
 #include "terrain/constants.h"
 
@@ -64,7 +65,8 @@ namespace mmo
 		"Paint",
 		"Area",
 		"Vertex Shading",
-		"Holes"
+		"Holes",
+		"Water"
 	};
 
 	static_assert(std::size(s_terrainEditModeStrings) == static_cast<uint32>(TerrainEditType::Count_), "There needs to be one string per enum value to display!");
@@ -193,6 +195,15 @@ namespace mmo
 
 	void TerrainEditMode::DrawViewportOverlay(ImDrawList* drawList, const ImVec2& viewportMin, const ImVec2& viewportSize)
 	{
+		if (m_type == TerrainEditType::Water)
+		{
+			if (m_waterEditMode)
+			{
+				m_waterEditMode->DrawViewportOverlay(drawList, viewportMin, viewportSize);
+			}
+			return;
+		}
+
 		if (m_type != TerrainEditType::Area || !drawList)
 		{
 			return;
@@ -332,8 +343,25 @@ namespace mmo
 		// Rebuild (or clear) the area overlay whenever the edit type changes.
 		if (m_type != m_lastTerrainType)
 		{
+			const TerrainEditType previousType = m_lastTerrainType;
 			m_lastTerrainType = m_type;
 			UpdateAreaOverlay();
+
+			// Clear the water brush circle when switching away from water mode.
+			if (previousType == TerrainEditType::Water && m_waterEditMode)
+			{
+				m_waterEditMode->ClearBrushPosition();
+			}
+		}
+
+		// Water editing is a sub-mode: delegate entirely to WaterEditMode.
+		if (m_type == TerrainEditType::Water)
+		{
+			if (m_waterEditMode)
+			{
+				m_waterEditMode->DrawDetails();
+			}
+			return;
 		}
 
 		if (m_type == TerrainEditType::Deform)
@@ -469,9 +497,12 @@ namespace mmo
 			}
 		}
 
-		ImGui::SliderFloat("Brush Radius", &m_terrainBrushSize, 0.01f, 256.0f);
-		ImGui::SliderFloat("Brush Hardness", &m_terrainBrushHardness, 0.0f, 1.0f);
-		ImGui::SliderFloat("Brush Power", &m_terrainBrushPower, 0.01f, 10.0f);
+		if (m_type != TerrainEditType::Water)
+		{
+			ImGui::SliderFloat("Brush Radius", &m_terrainBrushSize, 0.01f, 256.0f);
+			ImGui::SliderFloat("Brush Hardness", &m_terrainBrushHardness, 0.0f, 1.0f);
+			ImGui::SliderFloat("Brush Power", &m_terrainBrushPower, 0.01f, 10.0f);
+		}
 
 		ImGui::Separator();
 
@@ -537,9 +568,27 @@ namespace mmo
 		}
 	}
 
+	void TerrainEditMode::OnMouseDown(float x, float y)
+	{
+		WorldEditMode::OnMouseDown(x, y);
+		if (m_type == TerrainEditType::Water && m_waterEditMode)
+		{
+			m_waterEditMode->OnMouseDown(x, y);
+		}
+	}
+
 	void TerrainEditMode::OnMouseHold(const float deltaSeconds)
 	{
 		WorldEditMode::OnMouseHold(deltaSeconds);
+
+		if (m_type == TerrainEditType::Water)
+		{
+			if (m_waterEditMode)
+			{
+				m_waterEditMode->OnMouseHold(deltaSeconds);
+			}
+			return;
+		}
 
 		const float factor = ImGui::IsKeyDown(ImGuiKey_LeftShift) ? -1.0f : 1.0f;
 
@@ -614,6 +663,15 @@ namespace mmo
 	{
 		WorldEditMode::OnMouseMoved(x, y);
 
+		if (m_type == TerrainEditType::Water)
+		{
+			if (m_waterEditMode)
+			{
+				m_waterEditMode->OnMouseMoved(x, y);
+			}
+			return;
+		}
+
 		// Reset validity; WorldEditorInstance will call SetBrushPosition (which sets it true)
 		// only if the terrain raycast hits. If it misses, we stay false and the overlay clears.
 		m_brushPositionValid = false;
@@ -623,6 +681,15 @@ namespace mmo
 	void TerrainEditMode::OnMouseUp(float x, float y)
 	{
 		WorldEditMode::OnMouseUp(x, y);
+
+		if (m_type == TerrainEditType::Water)
+		{
+			if (m_waterEditMode)
+			{
+				m_waterEditMode->OnMouseUp(x, y);
+			}
+			return;
+		}
 
 		// Refresh the area overlay after a paint stroke finishes.
 		if (m_areaOverlayDirty)
@@ -634,6 +701,15 @@ namespace mmo
 
 	void TerrainEditMode::OnMouseWheel(const float delta)
 	{
+		if (m_type == TerrainEditType::Water)
+		{
+			if (m_waterEditMode)
+			{
+				m_waterEditMode->OnMouseWheel(delta);
+			}
+			return;
+		}
+
 		if (ImGui::GetIO().KeyShift)
 		{
 			m_terrainBrushSize = std::max(0.01f, std::min(m_terrainBrushSize + delta * 2.0f, 256.0f));
@@ -662,6 +738,12 @@ namespace mmo
 		if (m_vertexDots)
 		{
 			m_vertexDots->Clear();
+		}
+
+		// Water sub-mode uses its own brush circle; hide terrain overlay.
+		if (m_type == TerrainEditType::Water)
+		{
+			return;
 		}
 
 		if (!m_brushPositionValid)

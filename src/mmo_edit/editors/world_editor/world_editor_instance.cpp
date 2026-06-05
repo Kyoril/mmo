@@ -268,6 +268,8 @@ namespace mmo
 		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().units, m_editor.GetProject().objects);
 		m_skyEditMode = std::make_unique<SkyEditMode>(*this, *m_skyComponent);
 		m_areaTriggerEditMode = std::make_unique<AreaTriggerEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().areaTriggers);
+		m_waterEditMode = std::make_unique<WaterEditMode>(*this, *m_terrain, *m_camera);
+		m_terrainEditMode->SetWaterEditMode(m_waterEditMode.get());
 		m_editMode = nullptr;
 
 		m_selectionRaycaster = std::make_unique<SelectionRaycaster>(
@@ -514,6 +516,11 @@ namespace mmo
 		{
 			SetEditMode(m_skyEditMode.get());
 		}
+		else if (ImGui::IsKeyDown(ImGuiKey_F6) && m_hasTerrain)
+		{
+			SetEditMode(m_terrainEditMode.get());
+			m_terrainEditMode->SetTerrainEditType(TerrainEditType::Water);
+		}
 
 		// Patrol submode — Escape exits
 		if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
@@ -654,7 +661,8 @@ namespace mmo
 																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Paint &&
 																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Area &&
 																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::VertexShading &&
-																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Holes))))
+																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Holes &&
+																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Water))))
 			{
 				m_cameraAnchor->Yaw(-Degree(deltaX), TransformSpace::World);
 				m_cameraAnchor->Pitch(-Degree(deltaY), TransformSpace::Local);
@@ -943,6 +951,10 @@ namespace mmo
 
 		// TODO: Move this whole method into the terrain edit mode3
 		m_terrainEditMode->SetBrushPosition(hitResult.second.position);
+		if (m_terrainEditMode->GetTerrainEditType() == TerrainEditType::Water)
+		{
+			m_waterEditMode->SetBrushPosition(hitResult.second.position);
+		}
 		if (terrain::Tile *tile = hitResult.second.tile)
 		{
 			m_selectionRaycaster->UpdateDebugAABB(tile->GetWorldBoundingBox(true));
