@@ -100,7 +100,8 @@ namespace mmo
 			targetObject = m_character.get();
 		}
 
-		auto playerCharacter = reinterpret_cast<GamePlayerS*>(targetObject);
+		auto* playerCharacter = dynamic_cast<GamePlayerS*>(targetObject);
+		ASSERT(playerCharacter);
 		playerCharacter->AddSpell(spellId);
 	}
 #endif
@@ -131,8 +132,8 @@ namespace mmo
 			return;
 		}
 
-		// Stop movement immediately
-		GameUnitS* unit = reinterpret_cast<GameUnitS*>(object);
+		GameUnitS* unit = dynamic_cast<GameUnitS*>(object);
+		ASSERT(unit);
 		unit->GetMover().StopMovement();
 
 		// TODO
@@ -166,8 +167,8 @@ namespace mmo
 			return;
 		}
 
-		// Stop movement immediately
-		GameUnitS* unit = reinterpret_cast<GameUnitS*>(object);
+		GameUnitS* unit = dynamic_cast<GameUnitS*>(object);
+		ASSERT(unit);
 		unit->GetMover().StopMovement();
 
 		// TODO

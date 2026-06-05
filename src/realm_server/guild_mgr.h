@@ -6,6 +6,8 @@
 #include "base/non_copyable.h"
 #include "game/guild_info.h"
 
+#include <atomic>
+
 namespace mmo
 {
 	class GuildMgr;
@@ -169,6 +171,6 @@ namespace mmo
 
 		IdGenerator<uint64> m_idGenerator { 1 };
 
-		volatile bool m_guildsLoaded = false;
+		std::atomic<bool> m_guildsLoaded { false };
 	};
 }

@@ -53,7 +53,7 @@ namespace mmo
 		String m_group;
 		ResourceHandle m_handle { 0 };
 		std::atomic<LoadingState> m_loadingState { LoadingState::Unloaded };
-		volatile bool m_backgroundLoaded { false };
+		std::atomic<bool> m_backgroundLoaded { false };
 		uint64 m_size { 0 };
 		bool m_manual { false };
 		String m_origin;

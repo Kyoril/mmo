@@ -352,7 +352,7 @@ namespace mmo
 
                         // Unique label for drag-drop
                         char rowLabel[32];
-                        sprintf(rowLabel, "##subCondRow_%d", i);
+                        snprintf(rowLabel, sizeof(rowLabel), "##subCondRow_%d", i);
 
                         if (col == 0)
                         {
@@ -479,7 +479,7 @@ namespace mmo
                 ImGui::PushItemWidth(120);
                 static char idBuf[32] = "";
                 if (ImGui::IsWindowAppearing())
-                    sprintf(idBuf, "%u", pendingAddSubId);
+                    snprintf(idBuf, sizeof(idBuf), "%u", pendingAddSubId);
 
                 if (ImGui::InputText("##ManualSubId", idBuf, IM_ARRAYSIZE(idBuf), ImGuiInputTextFlags_CharsDecimal))
                 {

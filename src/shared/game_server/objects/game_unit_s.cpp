@@ -3037,65 +3037,63 @@ namespace mmo
 			return; // No change
 		}
 
+		const UnitVisibility prev = m_visibility;
 		m_visibility = x;
 		if (m_worldInstance)
 		{
-			UpdateVisibilityAndView();
+			UpdateVisibilityAndView(prev);
 		}
 	}
 
-	void GameUnitS::UpdateVisibilityAndView()
+	void GameUnitS::UpdateVisibilityAndView(UnitVisibility prevVisibility)
 	{
-		// Get current world instance and verify it exists
 		auto *worldInstance = GetWorldInstance();
 		if (!worldInstance)
 		{
 			return;
 		}
 
-		// Signal visibility change to world instance
-		// This will force an update of which clients can see this unit
-		bool isVisible = (m_visibility == unit_visibility::On);
+		// Only notify subscribers whose visibility of this unit actually changed.
+		// Sending NotifyObjectsSpawned to a subscriber that already received a spawn
+		// packet (because prevVisibility was already On) would cause the client to crash
+		// with a duplicate entity assertion in Scene::CreateEntity.
+		std::vector<TileSubscriber *> toSpawn;
+		std::vector<TileSubscriber *> toDespawn;
 
-		// Build visibility list based on current visibility state
-		std::vector<TileSubscriber *> visibleTo;
-		std::vector<TileSubscriber *> notVisibleTo;
-		ForEachSubscriberInSight([this, &visibleTo, &notVisibleTo](TileSubscriber &subscriber)
-								 {
-			if (CanBeSeenBy(subscriber.GetGameUnit()))
+		ForEachSubscriberInSight([this, prevVisibility, &toSpawn, &toDespawn](TileSubscriber &subscriber)
+		{
+			if (&subscriber.GetGameUnit() == this)
 			{
-				// And prevent self respawn
-				if (&subscriber.GetGameUnit() != this)
-				{
-					visibleTo.push_back(&subscriber);
-				}
+				return;
 			}
-			else
+
+			// Determine whether this subscriber could see the unit before and after the change.
+			// CanBeSeenBy() uses the already-updated m_visibility, so we reconstruct the
+			// previous answer manually from prevVisibility.
+			const bool couldSeeBefore = (prevVisibility == unit_visibility::On) || subscriber.GetGameUnit().IsGameMaster();
+			const bool canSeeNow = CanBeSeenBy(subscriber.GetGameUnit());
+
+			if (canSeeNow && !couldSeeBefore)
 			{
-				notVisibleTo.push_back(&subscriber);
-			} });
+				toSpawn.push_back(&subscriber);
+			}
+			else if (!canSeeNow && couldSeeBefore)
+			{
+				toDespawn.push_back(&subscriber);
+			}
+		});
 
 		std::vector<GameObjectS *> objects{1, this};
 
-		// Find subscribers who previously saw this unit but shouldn't anymore
-		// and remove this unit from their visible objects
-		for (auto it = notVisibleTo.begin(); it != notVisibleTo.end(); ++it)
+		for (auto *subscriber : toDespawn)
 		{
-			// This subscriber should no longer see this unit
-			// Send despawn packet
-			TileSubscriber *subscriber = *it;
 			subscriber->NotifyObjectsDespawned(objects);
 		}
 
-		// Add this unit to new subscribers' visible objects
-		for (auto *subscriber : visibleTo)
+		for (auto *subscriber : toSpawn)
 		{
-			// Send spawn packet to new subscriber
-			std::vector<GameObjectS *> objects = {this};
 			subscriber->NotifyObjectsSpawned(objects);
 		}
-
-		// TODO: Stop attacking units from attacking
 	}
 
 	void GameUnitS::TriggerProcEvent(SpellProcFlags eventFlags, GameUnitS *target, uint32 damage, uint32 procEx, uint8 school, bool isProc, uint64 familyFlags)

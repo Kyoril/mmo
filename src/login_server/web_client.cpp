@@ -5,11 +5,11 @@
 #include "web_service.h"
 #include "base/clock.h"
 #include "http/http_incoming_request.h"
+#include "http/http_outgoing_answer.h"
 #include "log/default_log_levels.h"
 
 #include "nlohmann/json.hpp"
 
-// Add a namespace alias for convenience
 using json = nlohmann::json;
 
 namespace mmo
@@ -17,10 +17,20 @@ namespace mmo
 	namespace
 	{
 		void SendJsonResponse(web::WebResponse &response, const json &jsonObject)
-        {
-            const std::string jsonStr = jsonObject.dump();
-            response.finishWithContent("application/json", jsonStr.data(), jsonStr.size());
-        }
+		{
+			const std::string jsonStr = jsonObject.dump();
+			response.finishWithContent("application/json", jsonStr.data(), jsonStr.size());
+		}
+
+		std::string MakeRouteKey(net::http::IncomingRequest::Type method, const std::string& path)
+		{
+			switch (method)
+			{
+				case net::http::IncomingRequest::Get:  return "GET " + path;
+				case net::http::IncomingRequest::Post: return "POST " + path;
+				default:                               return "UNKNOWN " + path;
+			}
+		}
 	}
 
 	WebClient::WebClient(WebService &webService, std::shared_ptr<Client> connection)
@@ -28,6 +38,65 @@ namespace mmo
 		, m_service(webService)
 		, m_handlers(webService.GetDatabase(), webService.GetRealmManager(), webService.GetPlayerManager())
 	{
+		using Type = net::http::IncomingRequest::Type;
+
+		RegisterRoute(Type::Get, "/uptime", [this](const net::http::IncomingRequest&, web::WebResponse& response)
+		{
+			const GameTime startTime = static_cast<WebService &>(getService()).GetStartTime();
+			json jsonResponse;
+			jsonResponse["uptime"] = gameTimeToSeconds<unsigned>(GetAsyncTimeMs() - startTime);
+			SendJsonResponse(response, jsonResponse);
+		});
+
+		RegisterRoute(Type::Get, "/gm-level", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleGetGMLevel(req, response);
+		});
+
+		RegisterRoute(Type::Get, "/accounts", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleListAccounts(req, response);
+		});
+
+		RegisterRoute(Type::Get, "/realms", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleListRealms(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/shutdown", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			handleShutdown(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/create-account", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleCreateAccount(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/create-realm", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleCreateRealm(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/ban-account", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleBanAccount(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/unban-account", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleUnbanAccount(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/gm-level", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleSetGMLevel(req, response);
+		});
+	}
+
+	void WebClient::RegisterRoute(net::http::IncomingRequest::Type method, std::string path, RouteHandler handler)
+	{
+		m_routes.emplace(MakeRouteKey(method, std::move(path)), std::move(handler));
 	}
 
 	void WebClient::handleRequest(const net::http::IncomingRequest &request,
@@ -45,78 +114,17 @@ namespace mmo
 			return;
 		}
 
-		const auto &url = request.getPath();
-		switch(request.getType())
+		const auto key = MakeRouteKey(request.getType(), request.getPath());
+		const auto it = m_routes.find(key);
+		if (it != m_routes.end())
 		{
-			case net::http::IncomingRequest::Get:
-			{
-				if (url == "/uptime")
-				{
-					const GameTime startTime = static_cast<WebService &>(getService()).GetStartTime();
-
-					json jsonResponse;
-					jsonResponse["uptime"] = gameTimeToSeconds<unsigned>(GetAsyncTimeMs() - startTime);
-					SendJsonResponse(response, jsonResponse);
-				}
-				else if (url == "/gm-level")
-				{
-					m_handlers.HandleGetGMLevel(request, response);
-				}
-				else if (url == "/accounts")
-				{
-					m_handlers.HandleListAccounts(request, response);
-				}
-				else if (url == "/realms")
-				{
-					m_handlers.HandleListRealms(request, response);
-				}
-				else
-				{
-					response.setStatus(net::http::OutgoingAnswer::NotFound);
-
-					const String message = "The command '" + url + "' does not exist";
-					response.finishWithContent("text/html", message.data(), message.size());
-				}
-				break;
-			}
-			case net::http::IncomingRequest::Post:
-			{
-				// Parse arguments
-				if (url == "/shutdown")
-				{
-					handleShutdown(request, response);
-				}
-				else if (url == "/create-account")
-				{
-					m_handlers.HandleCreateAccount(request, response);
-				}
-				else if (url == "/create-realm")
-				{
-					m_handlers.HandleCreateRealm(request, response);
-				}
-				else if (url == "/ban-account")
-				{
-					m_handlers.HandleBanAccount(request, response);
-				}
-				else if (url == "/unban-account")
-				{
-					m_handlers.HandleUnbanAccount(request, response);
-				}
-				else if (url == "/gm-level")
-				{
-					m_handlers.HandleSetGMLevel(request, response);
-				}
-				else
-				{
-					const String message = "The command '" + url + "' does not exist";
-					response.finishWithContent("text/html", message.data(), message.size());
-				}
-				break;
-			}
-			default:
-			{
-				break;
-			}
+			it->second(request, response);
+		}
+		else
+		{
+			response.setStatus(net::http::OutgoingAnswer::NotFound);
+			const String message = "The command '" + request.getPath() + "' does not exist";
+			response.finishWithContent("text/html", message.data(), message.size());
 		}
 	}
 

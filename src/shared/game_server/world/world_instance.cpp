@@ -590,7 +590,10 @@ namespace mmo
 
 			const std::vector objects{ &object };
 
-			// Send despawn packets
+			// Send despawn packets to subscribers that previously knew about this object
+			// but whose tile is no longer in sight of the new position.
+			// Guard with IsObjectKnown to avoid sending destroy for objects that were
+			// never spawned to the client (e.g. units that were invisible while in range).
 			ForEachTileInSightWithout(
 				*m_visibilityGrid,
 				oldTile->GetPosition(),
@@ -599,11 +602,15 @@ namespace mmo
 				{
 					const uint64 guid = object.GetGuid();
 
-					// Despawn this object for all subscribers
 					for (auto* subscriber : tile.GetWatchers().getElements())
 					{
-						// This is the subscribers own character - despawn all old objects and skip him
 						if (subscriber->GetGameUnit().GetGuid() == guid)
+						{
+							continue;
+						}
+
+						// Only despawn if the client was actually told about this object.
+						if (!subscriber->IsObjectKnown(guid))
 						{
 							continue;
 						}
@@ -615,21 +622,33 @@ namespace mmo
 			// Notify watchers about the pending tile change
 			object.tileChangePending(*oldTile, *newTile);
 
-			// Send spawn packets
+			// Send spawn packets to subscribers whose tile newly comes into sight.
+			// Mirror the CanBeSeenBy guard from AddGameObject so invisible units are
+			// never sent as creation packets here either.
 			ForEachTileInSightWithout(
 				*m_visibilityGrid,
 				newTile->GetPosition(),
 				oldTile->GetPosition(),
 				[&object, &objects](VisibilityTile& tile)
 				{
-					// Spawn this new object for all watchers of the new tile
 					for (auto* subscriber : tile.GetWatchers().getElements())
 					{
-						// TODO: Spawn conditions for watcher
-
-						// This is the subscribers own character - send all new objects to this subscriber
-						// and then skip him
 						if (subscriber->GetGameUnit().GetGuid() == object.GetGuid())
+						{
+							continue;
+						}
+
+						if (object.IsUnit() && !object.AsUnit().CanBeSeenBy(subscriber->GetGameUnit()))
+						{
+							continue;
+						}
+
+						// Only spawn if the client does not already know about this object.
+						// This guards against the case where the unit was spawned via
+						// SpawnTileObjects (player logged in / moved tiles) and then the
+						// creature moves to a tile that ForEachTileInSightWithout considers
+						// "new" without having first sent a despawn.
+						if (subscriber->IsObjectKnown(object.GetGuid()))
 						{
 							continue;
 						}
