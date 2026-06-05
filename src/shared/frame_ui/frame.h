@@ -14,6 +14,7 @@
 
 #include "imagery_section.h"
 #include "state_imagery.h"
+#include "frame_animation.h"
 
 #include "base/typedefs.h"
 #include "base/utilities.h"
@@ -468,6 +469,29 @@ namespace mmo
 
 		[[nodiscard]] float GetOpacity(bool inherit = true) const;
 
+		const Color& GetColor() const { return m_color; }
+
+		void SetColor(const Color& color) { m_color = color; Invalidate(); }
+
+	public:
+		/// Adds an owned animation to this frame. Replaces any existing animation with the same name.
+		void AddAnimation(std::unique_ptr<FrameAnimation> animation);
+
+		/// Returns the animation with the given name, or nullptr if none exists.
+		FrameAnimation* GetAnimation(const std::string& name);
+
+		/// Returns true if an animation with the given name exists on this frame.
+		bool HasAnimation(const std::string& name) const;
+
+		/// Starts playing the named animation from the beginning.
+		void PlayAnimation(const std::string& name);
+
+		/// Stops the named animation and resets its time to zero.
+		void StopAnimation(const std::string& name);
+
+		/// Returns true if the named animation is currently playing.
+		bool IsAnimationPlaying(const std::string& name) const;
+
 		/// Moves this frame to the end of its parent's child list so it renders on top of all siblings.
 		void BringToFront();
 
@@ -634,6 +658,9 @@ namespace mmo
 		MouseButton m_dragButton{ MouseButton::None };
 
 		Point m_dragStartPosition{ };
+
+		/// Owned named animations keyed by animation name.
+		std::map<std::string, std::unique_ptr<FrameAnimation>> m_animations;
 
 	protected:
 		scoped_connection_container m_propConnections;

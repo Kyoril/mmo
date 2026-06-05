@@ -28,6 +28,7 @@
 
 #include "luabind_noboost/luabind/luabind.hpp"
 #include "scrolling_message_frame.h"
+#include "frame_animation.h"
 #include "scroll_bar.h"
 #include "thumb.h"
 #include "luabind/operator.hpp"
@@ -404,6 +405,19 @@ namespace mmo
 			),
 
 			luabind::scope(
+				luabind::class_<FrameAnimation>("FrameAnimation")
+					.def("GetName", &FrameAnimation::GetName)
+					.def("GetDuration", &FrameAnimation::GetDuration)
+					.def("IsLooping", &FrameAnimation::IsLooping)
+					.def("IsPlaying", &FrameAnimation::IsPlaying)
+					.def("GetCurrentTime", &FrameAnimation::GetCurrentTime)
+					.def("SetOnStart", &FrameAnimation::SetOnStart)
+					.def("SetOnFinish", &FrameAnimation::SetOnFinish)
+					.def("SetOnStop", &FrameAnimation::SetOnStop)
+					.def("SetOnLoop", &FrameAnimation::SetOnLoop)
+			),
+
+			luabind::scope(
 				luabind::class_<Frame>("Frame")
 					.def("SetText", &Frame::SetText)
 					.def("GetText", &Frame::GetText)
@@ -451,6 +465,11 @@ namespace mmo
 					.def("SendToBack", &Frame::SendToBack)
 					.def("SetFrameLevel", &Frame::SetFrameLevel)
 					.def("GetFrameLevel", &Frame::GetFrameLevel)
+					.def("PlayAnimation", &Frame::PlayAnimation)
+					.def("StopAnimation", &Frame::StopAnimation)
+					.def("HasAnimation", &Frame::HasAnimation)
+					.def("IsAnimationPlaying", &Frame::IsAnimationPlaying)
+					.def("GetAnimation", &Frame::GetAnimation)
 					.def("__eq", &Frame::IsEqualTo)
 			),
 

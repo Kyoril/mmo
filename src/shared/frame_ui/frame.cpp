@@ -156,6 +156,20 @@ namespace mmo
 				copiedChild->SetAnchor(anchor.first, anchor.second->GetRelativePoint(), relativeTo, anchor.second->GetOffset());
 			}
 		}
+
+		// Build a name mapping from original child names to their cloned names so that
+		// animation tracks which target children can be updated to use the new names.
+		std::map<std::string, std::string> childNameRemap;
+		for (const auto& child : m_children)
+		{
+			childNameRemap[child->GetName()] = other.GetName() + "_" + child->GetName();
+		}
+
+		// Deep-copy all owned animations, remapping child target names.
+		for (const auto& [name, anim] : m_animations)
+		{
+			other.m_animations[name] = anim->Clone(&childNameRemap);
+		}
 	}
 
 	Property & Frame::AddProperty(const std::string& name, std::string defaultValue)
@@ -870,6 +884,12 @@ namespace mmo
 			return;
 		}
 
+		// Update all owned animations
+		for (auto& [name, anim] : m_animations)
+		{
+			anim->Update(elapsed, *this);
+		}
+
 		// Try to call the renderer's update method if we have a valid renderer
 		if (m_renderer != nullptr)
 		{
@@ -893,6 +913,56 @@ namespace mmo
 		{
 			child->Update(elapsed);
 		}
+	}
+
+	void Frame::AddAnimation(std::unique_ptr<FrameAnimation> animation)
+	{
+		if (!animation)
+		{
+			return;
+		}
+
+		const std::string name = animation->GetName();
+		m_animations[name] = std::move(animation);
+	}
+
+	FrameAnimation* Frame::GetAnimation(const std::string& name)
+	{
+		const auto it = m_animations.find(name);
+		return it != m_animations.end() ? it->second.get() : nullptr;
+	}
+
+	bool Frame::HasAnimation(const std::string& name) const
+	{
+		return m_animations.find(name) != m_animations.end();
+	}
+
+	void Frame::PlayAnimation(const std::string& name)
+	{
+		const auto it = m_animations.find(name);
+		if (it != m_animations.end())
+		{
+			it->second->Play();
+		}
+		else
+		{
+			WLOG("Animation '" << name << "' not found on frame '" << m_name << "'");
+		}
+	}
+
+	void Frame::StopAnimation(const std::string& name)
+	{
+		const auto it = m_animations.find(name);
+		if (it != m_animations.end())
+		{
+			it->second->Stop();
+		}
+	}
+
+	bool Frame::IsAnimationPlaying(const std::string& name) const
+	{
+		const auto it = m_animations.find(name);
+		return it != m_animations.end() && it->second->IsPlaying();
 	}
 
 	void Frame::AddChild(const Frame::Pointer frame)

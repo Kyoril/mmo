@@ -74,6 +74,18 @@ namespace mmo
 	static const std::string OnDragElement("OnDrag");
 	static const std::string OnDropElement("OnDrop");
 
+	static const std::string AnimationsElement("Animations");
+	static const std::string AnimationElement("Animation");
+	static const std::string AnimationNameAttribute("name");
+	static const std::string AnimationDurationAttribute("duration");
+	static const std::string AnimationLoopAttribute("loop");
+	static const std::string TrackElement("Track");
+	static const std::string TrackPropertyAttribute("property");
+	static const std::string TrackTargetAttribute("target");
+	static const std::string KeyframeElement("Keyframe");
+	static const std::string KeyframeTimeAttribute("time");
+	static const std::string KeyframeValueAttribute("value");
+
 	static const std::string PropertyElement("Property");
 	static const std::string PropertyNameAttribute("name");
 	static const std::string PropertyValueAttribute("value");
@@ -290,6 +302,22 @@ namespace mmo
 			{
 				ElementOnEscapePressedStart(attributes);
 			}
+			else if (element == AnimationsElement)
+			{
+				ElementAnimationsStart(attributes);
+			}
+			else if (element == AnimationElement)
+			{
+				ElementAnimationStart(attributes);
+			}
+			else if (element == TrackElement)
+			{
+				ElementTrackStart(attributes);
+			}
+			else if (element == KeyframeElement)
+			{
+				ElementKeyframeStart(attributes);
+			}
 			else
 			{
 				// We didn't find a valid frame event now a supported tag - output a warning for
@@ -452,6 +480,22 @@ namespace mmo
 			else if (element == OnDropElement)
 			{
 				ElementOnDropEnd();
+			}
+			else if (element == AnimationsElement)
+			{
+				ElementAnimationsEnd();
+			}
+			else if (element == AnimationElement)
+			{
+				ElementAnimationEnd();
+			}
+			else if (element == TrackElement)
+			{
+				ElementTrackEnd();
+			}
+			else if (element == KeyframeElement)
+			{
+				ElementKeyframeEnd();
 			}
 		}
 	}
@@ -1518,5 +1562,108 @@ namespace mmo
 				const luabind::object onDrop = FrameManager::Get().CompileFunction(frame->GetName() + ":OnDrop", script);
 				frame->SetOnDrop(onDrop);
 			});
+	}
+
+	void LayoutXmlLoader::ElementAnimationsStart(const XmlAttributes& attributes)
+	{
+		if (m_hasAnimationsTag || m_frames.empty() || m_hasAreaTag || m_hasVisualTag || m_scriptTag)
+		{
+			ELOG("Unexpected " << AnimationsElement << " element in file " << m_filename);
+			return;
+		}
+
+		m_hasAnimationsTag = true;
+	}
+
+	void LayoutXmlLoader::ElementAnimationsEnd()
+	{
+		m_hasAnimationsTag = false;
+	}
+
+	void LayoutXmlLoader::ElementAnimationStart(const XmlAttributes& attributes)
+	{
+		if (!m_hasAnimationsTag || m_currentAnimation || m_frames.empty())
+		{
+			ELOG("Unexpected " << AnimationElement << " element in file " << m_filename);
+			return;
+		}
+
+		const std::string name = attributes.GetValueAsString(AnimationNameAttribute);
+		if (name.empty())
+		{
+			ELOG("Animation element requires a 'name' attribute in file " << m_filename);
+			return;
+		}
+
+		const float duration = attributes.GetValueAsFloat(AnimationDurationAttribute, 1.0f);
+		const bool looping = attributes.GetValueAsBool(AnimationLoopAttribute, false);
+
+		m_currentAnimation = std::make_unique<FrameAnimation>(name, duration, looping);
+	}
+
+	void LayoutXmlLoader::ElementAnimationEnd()
+	{
+		if (!m_currentAnimation)
+		{
+			return;
+		}
+
+		if (!m_frames.empty())
+		{
+			m_frames.top()->AddAnimation(std::move(m_currentAnimation));
+		}
+
+		m_currentAnimation.reset();
+	}
+
+	void LayoutXmlLoader::ElementTrackStart(const XmlAttributes& attributes)
+	{
+		if (!m_currentAnimation || m_currentTrack)
+		{
+			ELOG("Unexpected " << TrackElement << " element in file " << m_filename);
+			return;
+		}
+
+		const std::string propertyName = attributes.GetValueAsString(TrackPropertyAttribute);
+		if (propertyName.empty())
+		{
+			ELOG("Track element requires a 'property' attribute in file " << m_filename);
+			return;
+		}
+
+		const std::string target = attributes.GetValueAsString(TrackTargetAttribute);
+		const FrameAnimationTrack::Property property = AnimationPropertyFromString(propertyName);
+
+		m_currentTrack = std::make_unique<FrameAnimationTrack>(property, target);
+	}
+
+	void LayoutXmlLoader::ElementTrackEnd()
+	{
+		if (!m_currentTrack || !m_currentAnimation)
+		{
+			return;
+		}
+
+		m_currentAnimation->AddTrack(std::move(*m_currentTrack));
+		m_currentTrack.reset();
+	}
+
+	void LayoutXmlLoader::ElementKeyframeStart(const XmlAttributes& attributes)
+	{
+		if (!m_currentTrack)
+		{
+			ELOG("Unexpected " << KeyframeElement << " element in file " << m_filename);
+			return;
+		}
+
+		const float time = attributes.GetValueAsFloat(KeyframeTimeAttribute, 0.0f);
+		const float value = attributes.GetValueAsFloat(KeyframeValueAttribute, 0.0f);
+
+		m_currentTrack->AddKeyframe(time, value);
+	}
+
+	void LayoutXmlLoader::ElementKeyframeEnd()
+	{
+		// Nothing to do — keyframes are added in Start.
 	}
 }
