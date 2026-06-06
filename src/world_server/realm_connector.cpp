@@ -606,13 +606,6 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		characterObject->SetName(characterData.name);
 		characterObject->SetConfiguration(characterData.configuration);
 		characterObject->Set(object_fields::Guid, characterData.characterId);
-
-		if (characterData.position.y < 0.0f)
-		{
-			WLOG("Player position height was too low, safeguard set it to 10");
-			characterData.position.y = 10.0f;
-		}
-
 		characterObject->Relocate(characterData.position, characterData.facing);
 
 		// Make character fall on login

@@ -226,6 +226,13 @@ namespace mmo
         // Capture the lit opaque scene into a separate texture *before* water draws over it, so
         // translucent materials can sample it for refraction. We cannot sample m_renderTexture
         // directly because the forward pass renders into it (read/write hazard).
+        // m_sceneColorCopy is never Activated as a render target and is not part of the G-buffer,
+        // so its deferred Resize() (which only flags m_resizePending) would otherwise never be
+        // applied. Without this, after the window resizes off the constructor size the copy stays
+        // at the wrong dimensions, CopyResource becomes a no-op (mismatched sizes), and t14 is left
+        // as uninitialized/stale garbage — producing broken refraction (e.g. a white wash).
+        m_sceneColorCopy->ApplyPendingResize();
+
 #ifdef WIN32
         {
             GraphicsDeviceD3D11& d3dDev = static_cast<GraphicsDeviceD3D11&>(GraphicsDevice::Get());

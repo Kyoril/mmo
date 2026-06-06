@@ -1283,20 +1283,12 @@ namespace mmo
 					m_pixelShaderStream
 						<< "\tfloat3 color = ambient + Lo;\n";
 
-					// Add emissive color additively before tone mapping
+					// Add emissive color additively. Distance fog and tone mapping are applied
+					// further below in the shared forward output block (after the lit/unlit
+					// branch) so that translucent materials fog in the exact same colour space
+					// as the deferred lighting pass and blend seamlessly into the fogged scene.
 					m_pixelShaderStream
 						<< "\tcolor += emissiveColor;\n";
-
-					// ACES Film tone mapping + gamma – identical to the deferred lighting
-					// pass so forward objects blend seamlessly with the deferred scene.
-					m_pixelShaderStream
-						<< "\tcolor = ACESFilm(color);\n"
-						<< "\tcolor = pow(color, (1.0f/2.2f).xxx);\n";
-
-					m_pixelShaderStream
-						<< "\tfloat distance = length(input.worldPos - cameraPos);\n"
-						<< "\tfloat fogFactor = saturate((distance - fogStart) / (fogEnd - fogStart));\n"
-						<< "\tcolor = lerp(color, fogColor, fogFactor);\n";
 				}
 			}
 
@@ -1368,18 +1360,37 @@ namespace mmo
 			}
 			else
 			{
-				// Forward rendering output
-				if (m_lit)
+				// Forward rendering output. Both lit and unlit materials converge here with a
+				// linear-space HDR `color`, so distance fog and tone mapping can be applied
+				// uniformly and identically to the deferred lighting pass. This is what lets
+				// translucent surfaces (water, etc.) fog out to the exact same colour as the
+				// opaque scene behind them instead of standing out as un-fogged patches.
+				if (!m_lit)
 				{
+					// Unlit materials have no lighting term; their colour is base + emissive.
+					// baseColor was linearised above (pow 2.2), so it shares the lit path's
+					// space and can go through the same fog + tone mapping below.
 					m_pixelShaderStream
-						<< "\toutputColor = float4(color, opacity);\n";
+						<< "\tfloat3 color = baseColor + emissiveColor;\n";
 				}
-				else
-				{
-					// Add emissive color additively for unlit forward rendering
-					m_pixelShaderStream
-						<< "\toutputColor = float4(baseColor + emissiveColor, opacity);\n";
-				}
+
+				// Distance fog in linear HDR space, *before* tone mapping + gamma — identical to
+				// the deferred lighting pass (PS_DeferredLighting). Applying fog here rather than
+				// after gamma makes forward fog converge to the same horizon colour as the
+				// deferred scene, so translucent objects integrate seamlessly into the fog.
+				m_pixelShaderStream
+					<< "\tfloat fogDistance = length(input.worldPos - cameraPos);\n"
+					<< "\tfloat fogFactor = saturate((fogDistance - fogStart) / (fogEnd - fogStart));\n"
+					<< "\tcolor = lerp(color, fogColor, fogFactor);\n";
+
+				// ACES Film tone mapping + gamma — identical to the deferred lighting pass so
+				// forward objects share the exact same response curve as the deferred scene.
+				m_pixelShaderStream
+					<< "\tcolor = ACESFilm(color);\n"
+					<< "\tcolor = pow(color, (1.0f/2.2f).xxx);\n";
+
+				m_pixelShaderStream
+					<< "\toutputColor = float4(color, opacity);\n";
 
 				// End of main function
 				m_pixelShaderStream
