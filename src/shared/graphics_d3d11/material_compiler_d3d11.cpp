@@ -679,6 +679,25 @@ namespace mmo
 		return AddExpression(outputStream.str(), valueType);
 	}
 
+	ExpressionIndex MaterialCompilerD3D11::AddSceneColor(const ExpressionIndex screenOffset)
+	{
+		m_needsSceneColor = true;
+
+		// Sample the captured opaque scene color at this pixel, optionally offset in screen pixels
+		// (used for refraction). Uses Load() so no sampler binding is required; the offset is added
+		// in pixel space before the integer cast.
+		std::ostringstream outputStream;
+		outputStream << "sceneColorTex.Load(int3((int2)(input.pos.xy";
+		if (screenOffset != IndexNone)
+		{
+			outputStream << " + expr_" << screenOffset << ".xy";
+		}
+		outputStream << "), 0)).rgb";
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), ExpressionType::Float_3);
+	}
+
 	void MaterialCompilerD3D11::GeneratePixelShaderCode(PixelShaderType type)
 	{
 		m_pixelShaderStream.str("");
@@ -903,6 +922,15 @@ namespace mmo
 			m_pixelShaderStream
 				<< "// Scene depth texture (G-buffer normal alpha)\n"
 				<< "Texture2D sceneDepthTex : register(t15);\n\n";
+		}
+
+		if (m_needsSceneColor)
+		{
+			// Reserved slot for the lit opaque scene color, captured before the translucent pass.
+			// The engine binds this before drawing translucent objects (used for refraction).
+			m_pixelShaderStream
+				<< "// Scene color texture (lit opaque scene captured before translucent pass)\n"
+				<< "Texture2D sceneColorTex : register(t14);\n\n";
 		}
 
 		if (m_lit && type != PixelShaderType::UI)

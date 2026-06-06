@@ -153,6 +153,12 @@ namespace mmo
 
         RenderTexturePtr m_renderTexture;
 
+        /// @brief A copy of the lit opaque scene color captured before the forward/translucent pass.
+        /// Bound as an SRV (register t14) so translucent materials can sample SceneColor for
+        /// refraction effects. Sampling the live m_renderTexture is impossible while water renders
+        /// into it (read/write hazard), hence the dedicated copy.
+        RenderTexturePtr m_sceneColorCopy;
+
         Light* m_shadowCastingDirectionalLight;
 
         /// @brief Shadow map render textures for each cascade.

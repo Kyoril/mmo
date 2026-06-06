@@ -320,6 +320,13 @@ namespace mmo
 		/// @return Index of the saturate expression (same type as input) or IndexNone in case of an error.
 		virtual ExpressionIndex AddSaturate(ExpressionIndex input) = 0;
 
+		/// @brief Adds a scene color expression that samples the lit opaque scene behind this pixel.
+		/// @details Requires the engine to bind the captured scene color at texture register t14.
+		///          Used primarily for refraction by offsetting the lookup in screen pixels.
+		/// @param screenOffset Optional screen-space offset in pixels (float2). IndexNone for no offset.
+		/// @return Index of the scene color expression (float3) or IndexNone in case of an error.
+		virtual ExpressionIndex AddSceneColor(ExpressionIndex screenOffset) = 0;
+
 	public:
 		void SetDepthTestEnabled(const bool enable) { m_depthTest = enable; }
 

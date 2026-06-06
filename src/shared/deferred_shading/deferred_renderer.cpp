@@ -16,6 +16,7 @@
 #   include "shaders/VS_DeferredLighting.h"
 #   include "shaders/PS_DeferredLighting.h"
 #   include "graphics_d3d11/graphics_device_d3d11.h"
+#   include "graphics_d3d11/render_texture_d3d11.h"
 #endif
 
 namespace mmo
@@ -91,6 +92,10 @@ namespace mmo
         // Create the render texture with 16-bit per channel format to reduce banding
         m_renderTexture = m_device.CreateRenderTexture("DeferredOutput", width, height, RenderTextureFlags::HasColorBuffer | RenderTextureFlags::ShaderResourceView, R16G16B16A16);
         ASSERT(m_renderTexture);
+
+        // Scene color copy (same HDR format) used as the refraction source for translucent materials.
+        m_sceneColorCopy = m_device.CreateRenderTexture("SceneColorCopy", width, height, RenderTextureFlags::HasColorBuffer | RenderTextureFlags::ShaderResourceView, R16G16B16A16);
+        ASSERT(m_sceneColorCopy);
 
         const uint32 color = 0xFFFFFFFF;
         const POS_COL_TEX_VERTEX vertices[6]{
@@ -174,6 +179,7 @@ namespace mmo
         // Resize the G-Buffer
         m_gBuffer.Resize(width, height);
 		m_renderTexture->Resize(width, height);
+		m_sceneColorCopy->Resize(width, height);
     }
 
     void DeferredRenderer::Render(Scene& scene, Camera& camera)
@@ -217,6 +223,19 @@ namespace mmo
         // objects depth-test against opaque geometry. Depth write is disabled in RenderParticles
         // via scene state — transparent objects must not corrupt the opaque depth buffer.
         // The GBuffer depth was never bound as an SRV, so there is no D3D11 resource hazard.
+        // Capture the lit opaque scene into a separate texture *before* water draws over it, so
+        // translucent materials can sample it for refraction. We cannot sample m_renderTexture
+        // directly because the forward pass renders into it (read/write hazard).
+#ifdef WIN32
+        {
+            GraphicsDeviceD3D11& d3dDev = static_cast<GraphicsDeviceD3D11&>(GraphicsDevice::Get());
+            ID3D11DeviceContext& d3dCtx = d3dDev;
+            auto* srcRt = static_cast<RenderTextureD3D11*>(m_renderTexture.get());
+            auto* dstRt = static_cast<RenderTextureD3D11*>(m_sceneColorCopy.get());
+            d3dCtx.CopyResource(dstRt->GetTex2D(), srcRt->GetTex2D());
+        }
+#endif
+
         {
             RenderTexturePtr forwardColor = m_renderTexture;
             m_device.SetRenderTargetsWithDepthStencil(&forwardColor, 1, m_gBuffer.GetDepthRTPtr());
@@ -229,13 +248,16 @@ namespace mmo
             // a render target during the forward pass, so sampling it here is hazard-free.
             // Materials declare this as Texture2D sceneDepthTex : register(t15).
             m_gBuffer.GetNormalRT().Bind(ShaderType::PixelShader, 15);
+
+            // Expose the lit scene color copy for refraction (Texture2D sceneColorTex : register(t14)).
+            m_sceneColorCopy->Bind(ShaderType::PixelShader, 14);
         }
         scene.SetForwardTransparentOnly(true);
         scene.Render(camera, PixelShaderType::Forward);
         scene.SetForwardTransparentOnly(false);
 
-        // Release the scene-depth SRV so it does not collide with the normal RT being bound as a
-        // render target in next frame's geometry pass.
+        // Release the scene SRVs so they do not collide with render targets bound in next frame.
+        m_device.BindTexture(nullptr, ShaderType::PixelShader, 14);
         m_device.BindTexture(nullptr, ShaderType::PixelShader, 15);
     }
 

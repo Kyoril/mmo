@@ -103,6 +103,9 @@ namespace mmo
 		/// @copydoc MaterialCompiler::AddSaturate
 		ExpressionIndex AddSaturate(ExpressionIndex input) override;
 
+		/// @copydoc MaterialCompiler::AddSceneColor
+		ExpressionIndex AddSceneColor(ExpressionIndex screenOffset) override;
+
 	protected:
 		/// @copydoc MaterialCompiler::GenerateVertexShaderCode
 		void GenerateVertexShaderCode(VertexShaderType type) override;

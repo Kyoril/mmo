@@ -2471,4 +2471,38 @@ namespace mmo
 		Pin* m_inputPins[1] = { &m_input };
 		Pin* m_outputPins[1] = { &m_output };
 	};
+
+	/// @brief A node that samples the lit opaque scene color behind the current pixel.
+	/// @details Requires the engine to bind the captured scene color at texture register t14.
+	///          The optional screen-space offset (in pixels) is used to create refraction.
+	class SceneColorNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(SceneColorNode, "Scene Color")
+
+		SceneColorNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+	private:
+		/// @brief Optional screen-space offset in pixels (float2) for refraction. Falls back to no offset.
+		MaterialPin m_offsetInput = { this, "UV Offset (px)" };
+
+		/// @brief Sampled scene color output (float3, RGB).
+		MaterialPin m_output = { this, "Scene Color" };
+
+		Pin* m_inputPins[1] = { &m_offsetInput };
+		Pin* m_outputPins[1] = { &m_output };
+	};
 }

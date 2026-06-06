@@ -58,7 +58,8 @@ namespace mmo
 			PixelDepthNode::GetStaticTypeInfo(),
 			SceneDepthNode::GetStaticTypeInfo(),
 			ScreenPositionNode::GetStaticTypeInfo(),
-			SaturateNode::GetStaticTypeInfo()
+			SaturateNode::GetStaticTypeInfo(),
+			SceneColorNode::GetStaticTypeInfo()
 		})
 	{
 		RebuildTypes();

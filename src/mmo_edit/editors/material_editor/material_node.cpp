@@ -2073,6 +2073,7 @@ namespace mmo
 	const uint32 PixelDepthNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
 	const uint32 SceneDepthNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
 	const uint32 ScreenPositionNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
+	const uint32 SceneColorNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
 
 	ExpressionIndex PixelDepthNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
@@ -2122,6 +2123,22 @@ namespace mmo
 			}
 
 			m_compiledExpressionId = compiler.AddSaturate(inputExpression);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex SceneColorNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			ExpressionIndex offsetExpression = IndexNone;
+			if (m_offsetInput.IsLinked())
+			{
+				offsetExpression = m_offsetInput.GetLink()->GetNode()->Compile(compiler, m_offsetInput.GetLink());
+			}
+
+			m_compiledExpressionId = compiler.AddSceneColor(offsetExpression);
 		}
 
 		return m_compiledExpressionId;
