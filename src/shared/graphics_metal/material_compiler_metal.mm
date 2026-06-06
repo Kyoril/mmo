@@ -156,4 +156,14 @@ namespace mmo
     {
         return IndexNone;
     }
+
+    ExpressionIndex MaterialCompilerMetal::AddGlobalScalarParameterExpression(std::string_view name)
+    {
+        return IndexNone;
+    }
+
+    ExpressionIndex MaterialCompilerMetal::AddGlobalVectorParameterExpression(std::string_view name)
+    {
+        return IndexNone;
+    }
 }

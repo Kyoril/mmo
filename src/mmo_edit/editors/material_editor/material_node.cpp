@@ -22,6 +22,8 @@ namespace mmo
 	const uint32 IfNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 	const uint32 ConstVectorNode::Color = ImColor(0.88f, 0.88f, 0.29f, 0.25f);
 	const uint32 VectorParameterNode::Color = ImColor(0.88f, 0.88f, 0.29f, 0.25f);
+	const uint32 GlobalScalarParameterNode::Color = ImColor(0.29f, 0.66f, 0.88f, 0.25f);
+	const uint32 GlobalVectorParameterNode::Color = ImColor(0.29f, 0.66f, 0.88f, 0.25f);
 	const uint32 MaterialNode::Color = ImColor(114.0f / 255.0f, 92.0f / 255.0f, 71.0f / 255.0f, 0.50f);
 	const uint32 TextureNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
 	const uint32 TextureParameterNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
@@ -826,6 +828,62 @@ namespace mmo
 		if (m_compiledExpressionId == IndexNone)
 		{
 			m_compiledExpressionId = compiler.AddVectorParameterExpression(m_name, Vector4(m_value.GetRed(), m_value.GetGreen(), m_value.GetBlue(), m_value.GetAlpha()));
+		}
+
+		if (outputPin && outputPin != &m_argb)
+		{
+			if (outputPin == &m_a)
+			{
+				return compiler.AddMask(m_compiledExpressionId, false, false, false, true);
+			}
+			if (outputPin == &m_r)
+			{
+				return compiler.AddMask(m_compiledExpressionId, true, false, false, false);
+			}
+			if (outputPin == &m_g)
+			{
+				return compiler.AddMask(m_compiledExpressionId, false, true, false, false);
+			}
+			if (outputPin == &m_b)
+			{
+				return compiler.AddMask(m_compiledExpressionId, false, false, true, false);
+			}
+			if (outputPin == &m_rgb)
+			{
+				return compiler.AddMask(m_compiledExpressionId, true, true, true, false);
+			}
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex GlobalScalarParameterNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_name.empty())
+		{
+			ELOG("Global Scalar Parameter node has no parameter name set!");
+			return IndexNone;
+		}
+
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddGlobalScalarParameterExpression(m_name);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex GlobalVectorParameterNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_name.empty())
+		{
+			ELOG("Global Vector Parameter node has no parameter name set!");
+			return IndexNone;
+		}
+
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddGlobalVectorParameterExpression(m_name);
 		}
 
 		if (outputPin && outputPin != &m_argb)
@@ -2007,6 +2065,63 @@ namespace mmo
 				", expr_" + std::to_string(valueExpression) + ")",
 				valueType
 			);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	const uint32 PixelDepthNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
+	const uint32 SceneDepthNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
+	const uint32 ScreenPositionNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
+
+	ExpressionIndex PixelDepthNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddPixelDepth();
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex SceneDepthNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddSceneDepth();
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex ScreenPositionNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddScreenPosition();
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex SaturateNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			if (!m_input.IsLinked())
+			{
+				ELOG("Missing input for Saturate node");
+				return IndexNone;
+			}
+
+			const ExpressionIndex inputExpression = m_input.GetLink()->GetNode()->Compile(compiler, m_input.GetLink());
+			if (inputExpression == IndexNone)
+			{
+				ELOG("Invalid input for Saturate node");
+				return IndexNone;
+			}
+
+			m_compiledExpressionId = compiler.AddSaturate(inputExpression);
 		}
 
 		return m_compiledExpressionId;

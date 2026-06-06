@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "base/utilities.h"
 #include "graphics/graphics_device.h"
+#include "graphics/global_shader_parameters.h"
 #include "log/default_log_levels.h"
 #include "database.h"
 #include "editor_windows/asset_window.h"
@@ -69,6 +70,9 @@ namespace mmo
 			mmo::AssetRegistry::Initialize(config.assetRegistryPath, {});
 
 			AssetRegistry::AddArchivePackage(std::filesystem::path(config.projectPath).parent_path() / "nav");
+
+			// Load the project-wide global shader parameter registry (missing file = empty registry).
+			GlobalShaderParameters::Get().LoadFromAsset(GlobalShaderParametersAssetPath);
 		}
 		else
 		{

@@ -166,6 +166,16 @@ namespace mmo
 
 		virtual ExpressionIndex AddVectorParameterExpression(std::string_view name, const Vector4& defaultValue) = 0;
 
+		/// @brief Adds a reference to a global scalar shader parameter (shared by all materials).
+		/// @param name Name of the global parameter as defined in the GlobalShaderParameters registry.
+		/// @return Index of the expression (Float_1) or IndexNone in case of an error.
+		virtual ExpressionIndex AddGlobalScalarParameterExpression(std::string_view name) = 0;
+
+		/// @brief Adds a reference to a global vector shader parameter (shared by all materials).
+		/// @param name Name of the global parameter as defined in the GlobalShaderParameters registry.
+		/// @return Index of the expression (Float_4) or IndexNone in case of an error.
+		virtual ExpressionIndex AddGlobalVectorParameterExpression(std::string_view name) = 0;
+
 		/// @brief Adds a multiply expression.
 		/// @param first The first expression for the multiply (left side).
 		/// @param second The second expression for the multiply (right side).
@@ -291,6 +301,25 @@ namespace mmo
 		/// @return Index of the Fresnel expression (float1) or IndexNone in case of an error.
 		virtual ExpressionIndex AddFresnel(ExpressionIndex exponent, ExpressionIndex baseReflectFraction, ExpressionIndex normal) = 0;
 
+		/// @brief Adds a pixel depth expression (linear view-space distance from camera to the current pixel).
+		/// @return Index of the pixel depth expression (float1) or IndexNone in case of an error.
+		virtual ExpressionIndex AddPixelDepth() = 0;
+
+		/// @brief Adds a scene depth expression (linear depth of the opaque scene at this pixel).
+		/// @details Requires the engine to bind the G-buffer normal render target at texture register t15.
+		///          The depth value is stored in the alpha channel of that texture.
+		/// @return Index of the scene depth expression (float1) or IndexNone in case of an error.
+		virtual ExpressionIndex AddSceneDepth() = 0;
+
+		/// @brief Adds a screen position expression (pixel-space screen coordinates of the current pixel).
+		/// @return Index of the screen position expression (float2) or IndexNone in case of an error.
+		virtual ExpressionIndex AddScreenPosition() = 0;
+
+		/// @brief Adds a saturate expression that clamps the input to [0,1].
+		/// @param input The input expression to saturate.
+		/// @return Index of the saturate expression (same type as input) or IndexNone in case of an error.
+		virtual ExpressionIndex AddSaturate(ExpressionIndex input) = 0;
+
 	public:
 		void SetDepthTestEnabled(const bool enable) { m_depthTest = enable; }
 
@@ -340,6 +369,10 @@ namespace mmo
 		bool m_translucent{ false };
 		bool m_twoSided { false };
 		bool m_userInterface{ false };
+
+		/// @brief Whether this material references at least one global shader parameter and thus
+		///        needs the shared GlobalParameters constant buffer declared in its shader.
+		bool m_usesGlobalParameters { false };
 
 	};
 }

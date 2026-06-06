@@ -8,6 +8,7 @@
 #include "binary_io/stream_sink.h"
 #include "binary_io/text_writer.h"
 #include "graphics/material.h"
+#include "graphics/global_shader_parameters.h"
 #include "graphics/shader_compiler.h"
 #include "log/default_log_levels.h"
 
@@ -645,6 +646,39 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_1);
 	}
 
+	ExpressionIndex MaterialCompilerD3D11::AddPixelDepth()
+	{
+		return AddExpression("length(input.viewPos.xyz)", ExpressionType::Float_1);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddSceneDepth()
+	{
+		m_needsSceneDepth = true;
+		return AddExpression("sceneDepthTex.Load(int3((int2)input.pos.xy, 0)).a", ExpressionType::Float_1);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddScreenPosition()
+	{
+		return AddExpression("float2(input.pos.xy)", ExpressionType::Float_2);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddSaturate(const ExpressionIndex input)
+	{
+		if (input == IndexNone)
+		{
+			WLOG("Missing input parameter for saturate");
+			return IndexNone;
+		}
+
+		const ExpressionType valueType = GetExpressionType(input);
+
+		std::ostringstream outputStream;
+		outputStream << "saturate(expr_" << input << ")";
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), valueType);
+	}
+
 	void MaterialCompilerD3D11::GeneratePixelShaderCode(PixelShaderType type)
 	{
 		m_pixelShaderStream.str("");
@@ -732,6 +766,55 @@ namespace mmo
 			<< "\tfloat _forwardPad1;\n"
 			<< "};\n\n";
 
+		// Global shader parameters - a single project-wide constant buffer shared by every material.
+		// It lives at a fixed reserved register (kGlobalShaderParametersPsSlot) so it never disturbs
+		// the dynamically assigned per-material parameter buffers below. The full registry set is
+		// declared (vectors first, then scalars) so the cbuffer offsets match the CPU buffer layout
+		// built by GlobalShaderParameters::BuildBufferData.
+		if (m_usesGlobalParameters)
+		{
+			const auto sanitize = [](std::string_view name) -> String
+			{
+				String copy(name);
+				std::replace(copy.begin(), copy.end(), ' ', '_');
+				return copy;
+			};
+
+			const auto& globalParams = GlobalShaderParameters::Get().GetParameters();
+
+			m_pixelShaderStream
+				<< "cbuffer GlobalParameters : register(b" << kGlobalShaderParametersPsSlot << ")\n"
+				<< "{\n";
+
+			bool wroteAny = false;
+			for (const auto& param : globalParams)
+			{
+				if (param.type == global_shader_parameter_type::Vector)
+				{
+					m_pixelShaderStream << "\tfloat4 g_" << sanitize(param.name) << ";\n";
+					wroteAny = true;
+				}
+			}
+			for (const auto& param : globalParams)
+			{
+				if (param.type == global_shader_parameter_type::Scalar)
+				{
+					m_pixelShaderStream << "\tfloat g_" << sanitize(param.name) << ";\n";
+					wroteAny = true;
+				}
+			}
+
+			if (!wroteAny)
+			{
+				// The material references a global that no longer exists in the registry. Emit a pad
+				// so the cbuffer stays valid; the dangling reference will fail to compile and warn.
+				m_pixelShaderStream << "\tfloat4 _globalPad;\n";
+			}
+
+			m_pixelShaderStream
+				<< "};\n\n";
+		}
+
 		const auto& scalarParams = m_floatParameters;
 		if (!scalarParams.empty())
 		{
@@ -811,6 +894,15 @@ namespace mmo
 					<< "Texture2D texparam" << i << ";\n"
 					<< "SamplerState paramsampler" << i << ";\n\n";
 			}
+		}
+
+		if (m_needsSceneDepth)
+		{
+			// Reserved slot for the opaque scene depth (G-buffer normal RT alpha channel).
+			// The engine binds this before drawing translucent objects.
+			m_pixelShaderStream
+				<< "// Scene depth texture (G-buffer normal alpha)\n"
+				<< "Texture2D sceneDepthTex : register(t15);\n\n";
 		}
 
 		if (m_lit && type != PixelShaderType::UI)
@@ -1074,8 +1166,19 @@ namespace mmo
 
 		if (type != PixelShaderType::GBuffer)
 		{
-			m_pixelShaderStream
-				<< "\tif (opacity <= 0.333) discard;\n";
+			if (m_translucent)
+			{
+				// Translucent materials blend smoothly via alpha, so only cull fully transparent
+				// pixels. Using the 0.333 alpha-test cutoff here would punch holes in soft edges
+				// such as depth-faded water shorelines, making low-opacity water vanish entirely.
+				m_pixelShaderStream
+					<< "\tif (opacity <= 0.0) discard;\n";
+			}
+			else
+			{
+				m_pixelShaderStream
+					<< "\tif (opacity <= 0.333) discard;\n";
+			}
 		}
 		else
 		{
@@ -1384,6 +1487,46 @@ namespace mmo
 
 		std::ostringstream outputStream;
 		outputStream << "v" << name;
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), ExpressionType::Float_4);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddGlobalScalarParameterExpression(std::string_view name)
+	{
+		if (name.empty())
+		{
+			WLOG("Missing name for global scalar parameter");
+			return IndexNone;
+		}
+
+		m_usesGlobalParameters = true;
+
+		String copy(name);
+		std::replace(copy.begin(), copy.end(), ' ', '_');
+
+		std::ostringstream outputStream;
+		outputStream << "g_" << copy;
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), ExpressionType::Float_1);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddGlobalVectorParameterExpression(std::string_view name)
+	{
+		if (name.empty())
+		{
+			WLOG("Missing name for global vector parameter");
+			return IndexNone;
+		}
+
+		m_usesGlobalParameters = true;
+
+		String copy(name);
+		std::replace(copy.begin(), copy.end(), ' ', '_');
+
+		std::ostringstream outputStream;
+		outputStream << "g_" << copy;
 		outputStream.flush();
 
 		return AddExpression(outputStream.str(), ExpressionType::Float_4);

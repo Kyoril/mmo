@@ -21,6 +21,7 @@
 #include "base/macros.h"
 #include "base/profiler.h"
 #include "graphics/depth_stencil_hash.h"
+#include "graphics/global_shader_parameters.h"
 #include "log/default_log_levels.h"
 #include "luabind/operator.hpp"
 #include "math/radian.h"
@@ -1315,6 +1316,15 @@ namespace mmo
 
 			ID3D11Buffer* buffers[] = { ((ConstantBufferD3D11*)buffer)->GetBuffer() };
 			m_immContext->PSSetConstantBuffers(psStartSlot++, 1, buffers);
+		}
+
+		// Bind the shared global shader parameter buffer to its fixed reserved register. This makes
+		// global shader variables available to every material. Binding it to a slot a shader doesn't
+		// declare is harmless, and we re-bind per operation so it survives state changes by other
+		// systems. The buffer itself is only rebuilt/re-uploaded when a global changes (see GetBuffer).
+		if (const ConstantBufferPtr globalParamBuffer = GlobalShaderParameters::Get().GetBuffer(*this))
+		{
+			globalParamBuffer->BindToStage(ShaderType::PixelShader, kGlobalShaderParametersPsSlot);
 		}
 
 		// Only update material parameter buffers when the material changed

@@ -94,6 +94,10 @@ namespace mmo
 
         ExpressionIndex AddVectorParameterExpression(std::string_view name, const Vector4& defaultValue) override;
 
+        ExpressionIndex AddGlobalScalarParameterExpression(std::string_view name) override;
+
+        ExpressionIndex AddGlobalVectorParameterExpression(std::string_view name) override;
+
 	protected:
 		/// @copydoc MaterialCompiler::GenerateVertexShaderCode
 		void GenerateVertexShaderCode(VertexShaderType type) override;

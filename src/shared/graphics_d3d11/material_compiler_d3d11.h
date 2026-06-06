@@ -99,6 +99,18 @@ namespace mmo
 		/// @copydoc MaterialCompiler::AddFresnel
 		ExpressionIndex AddFresnel(ExpressionIndex exponent, ExpressionIndex baseReflectFraction, ExpressionIndex normal) override;
 
+		/// @copydoc MaterialCompiler::AddPixelDepth
+		ExpressionIndex AddPixelDepth() override;
+
+		/// @copydoc MaterialCompiler::AddSceneDepth
+		ExpressionIndex AddSceneDepth() override;
+
+		/// @copydoc MaterialCompiler::AddScreenPosition
+		ExpressionIndex AddScreenPosition() override;
+
+		/// @copydoc MaterialCompiler::AddSaturate
+		ExpressionIndex AddSaturate(ExpressionIndex input) override;
+
 	protected:
 		/// @copydoc MaterialCompiler::GenerateVertexShaderCode
 		void GenerateVertexShaderCode(VertexShaderType type) override;
@@ -114,9 +126,16 @@ namespace mmo
 
 		ExpressionIndex AddVectorParameterExpression(std::string_view name, const Vector4& defaultValue) override;
 
+		ExpressionIndex AddGlobalScalarParameterExpression(std::string_view name) override;
+
+		ExpressionIndex AddGlobalVectorParameterExpression(std::string_view name) override;
+
 	public:
 		std::vector<mmo::ScalarParameterValue> m_floatParameters;
 		std::vector<mmo::VectorParameterValue> m_vectorParameters;
 		std::vector<mmo::TextureParameterValue> m_textureParameters;
+
+	private:
+		bool m_needsSceneDepth { false };
 	};
 }

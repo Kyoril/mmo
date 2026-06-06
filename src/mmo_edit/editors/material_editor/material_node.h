@@ -1173,6 +1173,79 @@ namespace mmo
 		Pin* m_OutputPins[6] = { &m_rgb, &m_r, &m_g, &m_b, &m_a, &m_argb };
 	};
 
+	/// @brief A node which references a global scalar shader parameter (shared by all materials).
+	class GlobalScalarParameterNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(GlobalScalarParameterNode, "Global Scalar Parameter")
+
+		GlobalScalarParameterNode(MaterialGraph& material)
+			: GraphNode(material)
+		{}
+
+		std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		[[nodiscard]] std::string_view GetName() const override { return m_name; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		String m_name;
+		StringProperty m_nameProperty{ "Name", m_name };
+
+		PropertyBase* m_properties[1] = { &m_nameProperty };
+
+		MaterialPin m_Float = { this };
+
+		Pin* m_OutputPins[1] = { &m_Float };
+	};
+
+	/// @brief A node which references a global vector shader parameter (shared by all materials).
+	class GlobalVectorParameterNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(GlobalVectorParameterNode, "Global Vector Parameter")
+
+		GlobalVectorParameterNode(MaterialGraph& material)
+			: GraphNode(material)
+		{}
+
+		std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		[[nodiscard]] std::string_view GetName() const override { return m_name; }
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		String m_name;
+		StringProperty m_nameProperty{ "Name", m_name };
+
+		PropertyBase* m_properties[1] = { &m_nameProperty };
+
+		MaterialPin m_rgb = { this, "RGB" };
+		MaterialPin m_r = { this, "R" };
+		MaterialPin m_g = { this, "G" };
+		MaterialPin m_b = { this, "B" };
+		MaterialPin m_a = { this, "A" };
+		MaterialPin m_argb = { this, "ARGB" };
+
+		Pin* m_OutputPins[6] = { &m_rgb, &m_r, &m_g, &m_b, &m_a, &m_argb };
+	};
+
 	/// @brief A node which adds an expression addition expression.
 	class AddNode final : public GraphNode
 	{
@@ -2288,6 +2361,114 @@ namespace mmo
 		MaterialPin m_output = { this };
 
 		Pin* m_inputPins[3] = { &m_edge0Input, &m_edge1Input, &m_valueInput };
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
+	/// @brief A node that outputs the linear view-space depth of the current pixel (distance from camera).
+	class PixelDepthNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(PixelDepthNode, "Pixel Depth")
+
+		PixelDepthNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+	private:
+		/// @brief Depth output (float1, world units from camera).
+		MaterialPin m_output = { this, "Depth" };
+
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
+	/// @brief A node that samples the linear depth of the opaque scene at the current pixel.
+	/// @details Requires the engine to bind the G-buffer normal render target at texture register t15.
+	class SceneDepthNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(SceneDepthNode, "Scene Depth")
+
+		SceneDepthNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+	private:
+		/// @brief Scene depth output (float1, world units from camera).
+		MaterialPin m_output = { this, "Depth" };
+
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
+	/// @brief A node that outputs the screen-space pixel coordinates of the current pixel.
+	class ScreenPositionNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(ScreenPositionNode, "Screen Position")
+
+		ScreenPositionNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+	private:
+		/// @brief Screen-space pixel coordinates output (float2, in pixels).
+		MaterialPin m_output = { this };
+
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
+	/// @brief A node that saturates (clamps to [0,1]) the input expression.
+	class SaturateNode final : public GraphNode
+	{
+	public:
+		MAT_NODE(SaturateNode, "Saturate")
+
+		SaturateNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+	private:
+		MaterialPin m_input = { this };
+		MaterialPin m_output = { this };
+
+		Pin* m_inputPins[1] = { &m_input };
 		Pin* m_outputPins[1] = { &m_output };
 	};
 }

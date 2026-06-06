@@ -12,6 +12,7 @@
 #include "frame_ui/frame_mgr.h"
 #include "frame_ui/geometry_buffer.h"
 #include "graphics/graphics_device.h"
+#include "graphics/global_shader_parameters.h"
 #include "log/default_log_levels.h"
 
 #include "assets/asset_registry.h"
@@ -305,6 +306,10 @@ namespace mmo
 		}
 		auto& device = GraphicsDevice::Get();
 		device.GetAutoCreatedWindow()->SetTitle("MMORPG");
+
+		// Load the project-wide global shader parameter registry so every material can reference
+		// the shared globals. A missing file simply leaves the registry empty.
+		GlobalShaderParameters::Get().LoadFromAsset(GlobalShaderParametersAssetPath);
 
 		device.GetAutoCreatedWindow()->Closed.connect([]()
 		{

@@ -221,10 +221,22 @@ namespace mmo
             RenderTexturePtr forwardColor = m_renderTexture;
             m_device.SetRenderTargetsWithDepthStencil(&forwardColor, 1, m_gBuffer.GetDepthRTPtr());
             m_device.SetViewport(0, 0, m_gBuffer.GetWidth(), m_gBuffer.GetHeight(), 0.0f, 1.0f);
+
+            // Expose the opaque scene's linear depth to forward/translucent materials so they can
+            // sample SceneDepth (depth-based effects like shoreline softening, depth-tinted water).
+            // The G-buffer normal RT stores linear view-space depth in its alpha channel (see the
+            // GBuffer pass: output.normal = float4(N * 0.5 + 0.5, linearDepth)). It is not bound as
+            // a render target during the forward pass, so sampling it here is hazard-free.
+            // Materials declare this as Texture2D sceneDepthTex : register(t15).
+            m_gBuffer.GetNormalRT().Bind(ShaderType::PixelShader, 15);
         }
         scene.SetForwardTransparentOnly(true);
         scene.Render(camera, PixelShaderType::Forward);
         scene.SetForwardTransparentOnly(false);
+
+        // Release the scene-depth SRV so it does not collide with the normal RT being bound as a
+        // render target in next frame's geometry pass.
+        m_device.BindTexture(nullptr, ShaderType::PixelShader, 15);
     }
 
     void DeferredRenderer::RenderGeometryPass(Scene& scene, Camera& camera)

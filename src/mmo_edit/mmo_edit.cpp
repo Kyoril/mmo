@@ -73,6 +73,7 @@
 #include "editors/world_model_editor/world_model_editor.h"
 #include "editors/color_curve_editor/color_curve_editor.h"
 #include "editors/particle_system_editor/particle_system_editor.h"
+#include "editors/global_shader_parameters_editor/global_shader_parameters_editor.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"
 
@@ -219,6 +220,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditor(std::make_unique<mmo::WorldModelEditor>(mainWindow, project));
 	mainWindow.AddEditor(std::make_unique<mmo::ColorCurveEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::ParticleSystemEditor>(mainWindow));
+	mainWindow.AddEditor(std::make_unique<mmo::GlobalShaderParametersEditor>(mainWindow));
 
 	// Run the database service thread
 	std::thread dbThread{ [&dbService]() { dbService.run(); } };

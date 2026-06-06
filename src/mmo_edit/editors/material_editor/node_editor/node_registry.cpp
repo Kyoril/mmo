@@ -36,6 +36,8 @@ namespace mmo
 			TextureParameterNode::GetStaticTypeInfo(),
 			ScalarParameterNode::GetStaticTypeInfo(),
 			VectorParameterNode::GetStaticTypeInfo(),
+			GlobalScalarParameterNode::GetStaticTypeInfo(),
+			GlobalVectorParameterNode::GetStaticTypeInfo(),
 			IfNode::GetStaticTypeInfo(),
 			SineNode::GetStaticTypeInfo(),
 			CosineNode::GetStaticTypeInfo(),
@@ -52,7 +54,11 @@ namespace mmo
 			FresnelNode::GetStaticTypeInfo(),
 			PannerNode::GetStaticTypeInfo(),
 			ReflectionVectorNode::GetStaticTypeInfo(),
-			SmoothStepNode::GetStaticTypeInfo()
+			SmoothStepNode::GetStaticTypeInfo(),
+			PixelDepthNode::GetStaticTypeInfo(),
+			SceneDepthNode::GetStaticTypeInfo(),
+			ScreenPositionNode::GetStaticTypeInfo(),
+			SaturateNode::GetStaticTypeInfo()
 		})
 	{
 		RebuildTypes();

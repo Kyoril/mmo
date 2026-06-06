@@ -1,5 +1,6 @@
 #include "sky_component.h"
 
+#include "global_shader_parameters.h"
 #include "assets/asset_registry.h"
 #include "binary_io/stream_source.h"
 #include "binary_io/reader.h"
@@ -332,5 +333,8 @@ namespace mmo
         // translucent surfaces (water, glass …) pick up the correct sun direction and colour
         // from the camera constant buffer instead of using hardcoded shader fallbacks.
         m_scene.SetPrimaryDirectionalLight(m_sunLight);
+
+        GlobalShaderParameters::Get().SetVector("SkyHorizonColor", horizonColor);
+        GlobalShaderParameters::Get().SetVector("SkyZenithColor", zenithColor);
     }
 }
