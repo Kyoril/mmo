@@ -41,8 +41,11 @@ namespace mmo
 	constexpr float SWIM_STOP_DEPTH = 0.7f;
 
 	/// Minimum submersion kept when the swimmer reaches the surface. The body cannot rise above
-	/// the water surface (capped here), but may dive freely below.
-	constexpr float SWIM_SURFACE_MARGIN = 0.5f;
+	/// this depth (capped here), but may dive freely below. Kept close to SWIM_START_DEPTH so the
+	/// surfaced waterline matches the depth at which the player begins swimming when wading in —
+	/// otherwise ascending or dropping into the water would leave the body floating too high
+	/// (waterline at the knees instead of the thighs).
+	constexpr float SWIM_SURFACE_MARGIN = 0.9f;
 
 	constexpr float MIN_FLOOR_DIST = 0.019f;
 	constexpr float MAX_FLOOR_DIST = 0.024f;
@@ -1449,6 +1452,12 @@ namespace mmo
 
 			m_acceleration = swimAccel.GetClampedToMaxSize(maxAccel);
 
+			// Recompute the analog input modifier from the full 3D swim acceleration. The value set
+			// in ControlledCharacterMove only considered horizontal input, so a purely vertical swim
+			// command (holding jump to ascend while idle) would otherwise leave the modifier at 0,
+			// driving maxInputSpeed to 0 in CalcVelocity and clamping the ascent velocity to nothing.
+			m_analogInputModifier = ComputeAnalogInputModifier();
+
 			// Velocity: fluid friction, no gravity.
 			CalcVelocity(timeTick, m_swimmingFriction, true, GetMaxBrakingDeceleration());
 
@@ -1480,15 +1489,33 @@ namespace mmo
 			// Surface cap: the body cannot rise above the water surface. Diving down is unrestricted
 			// except by geometry collision handled above.
 			Vector3 newPos = GetUpdatedNode().GetPosition();
-			if (GetGravitySpaceY(newPos) > maxFeetY)
+			const float newFeetY = GetGravitySpaceY(newPos);
+			if (newFeetY > maxFeetY)
 			{
-				SetGravitySpaceY(newPos, maxFeetY);
-				GetUpdatedNode().SetPosition(newPos);
-
-				// Remove any upward velocity so we don't keep fighting the cap.
-				if (GetGravitySpaceY(m_velocity) > 0.0f)
+				// Never push the feet below a walkable floor. In shallow water (e.g. wading out on a
+				// slope) the floor sits above the surface-margin cap; clamping all the way down to
+				// maxFeetY would bury the character in the terrain and trap it underwater instead of
+				// letting it stand and walk out. Clamp to the floor in that case so the exit-to-
+				// walking check (top of this function) can fire on the next tick.
+				float targetFeetY = maxFeetY;
+				FindFloorResult capFloor;
+				FindFloor(newPos, capFloor, nullptr);
+				if (capFloor.IsWalkableFloor())
 				{
-					m_velocity = ProjectToGravityFloor(m_velocity);
+					const float floorY = newFeetY - capFloor.GetDistanceToFloor();
+					targetFeetY = std::max(targetFeetY, floorY);
+				}
+
+				if (newFeetY > targetFeetY)
+				{
+					SetGravitySpaceY(newPos, targetFeetY);
+					GetUpdatedNode().SetPosition(newPos);
+
+					// Remove any upward velocity so we don't keep fighting the cap.
+					if (GetGravitySpaceY(m_velocity) > 0.0f)
+					{
+						m_velocity = ProjectToGravityFloor(m_velocity);
+					}
 				}
 			}
 

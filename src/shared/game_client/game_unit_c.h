@@ -188,9 +188,12 @@ namespace mmo
 		/// for the locally controlled player, emits a StopSwim movement event (network packet).
 		void OnStopSwimming();
 
-		/// @brief Visually pitches the character mesh by the current swim pitch while swimming, and
-		/// resets it to the default orientation otherwise. Lets the player see their dive angle.
-		void UpdateSwimMeshPitch();
+		/// @brief Visually pitches the character mesh by the current swim pitch while actively
+		/// swimming forward/backward, and smoothly returns it to level (0 pitch) when idle or out of
+		/// water. The control pitch itself is preserved; only the displayed mesh tilt is gated on
+		/// movement. Lets the player aim a dive while stationary and only tilt once they move.
+		/// @param deltaTime Frame time in seconds, used to interpolate the displayed pitch.
+		void UpdateSwimMeshPitch(float deltaTime);
 
 		/// @brief Queries the water surface height at the given world XZ position via the net driver.
 		/// @param x World X coordinate.
@@ -712,6 +715,13 @@ namespace mmo
 		AnimationState *m_jumpStartState{nullptr};
 		AnimationState *m_fallingState{nullptr};
 		AnimationState *m_landState{nullptr};
+		// Swim animation states (optional per mesh; fall back to run/idle/death when absent)
+		AnimationState *m_swimState{nullptr};
+		AnimationState *m_swimIdleState{nullptr};
+		AnimationState *m_swimDeathState{nullptr};
+		AnimationState *m_swimBackwardState{nullptr};
+		AnimationState *m_swimLeftState{nullptr};
+		AnimationState *m_swimRightState{nullptr};
 
 		AnimationState *m_targetState = nullptr;
 		AnimationState *m_currentState = nullptr;
@@ -791,6 +801,10 @@ namespace mmo
 
 		ParticleEmitter* m_sparkEmitter = nullptr;
 		SceneNode* m_sparkEmitterNode = nullptr;
+
+		/// @brief Smoothly interpolated swim pitch (radians) currently applied to the mesh. Blends
+		/// toward the control pitch while swimming and moving, and toward 0 when idle/out of water.
+		float m_swimMeshPitch = 0.0f;
 
 		/// @brief Client-side spell modifier cache. 
 		/// Key: packed (type << 16 | effectIndex << 8 | op), Value: total modifier value.

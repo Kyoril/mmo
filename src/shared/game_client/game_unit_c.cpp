@@ -7,6 +7,7 @@
 #include <sstream>
 
 #include <algorithm>
+#include <cmath>
 #include <set>
 #include <unordered_map>
 
@@ -342,7 +343,7 @@ namespace mmo
 		}
 
 		// Reflect the swim/dive pitch on the character mesh so the player can see their dive angle.
-		UpdateSwimMeshPitch();
+		UpdateSwimMeshPitch(deltaTime);
 
 		UpdateQuestGiverAndNameVisuals(deltaTime);
 
@@ -458,6 +459,57 @@ namespace mmo
 			return;
 		}
 
+		// Swimming animations take priority over the ground/idle and jump/fall logic below.
+		// Distinguish active swimming (horizontal stroke) from treading water. Holding jump to
+		// ascend without any horizontal input still counts as idle, so it stays in swim-idle.
+		if (m_movementInfo.IsSwimming())
+		{
+			const bool horizontallyMoving = (m_movementInfo.movementFlags &
+				(movement_flags::Forward | movement_flags::Backward |
+				 movement_flags::StrafeLeft | movement_flags::StrafeRight)) != 0;
+
+			AnimationState* swimAnim;
+			if (horizontallyMoving)
+			{
+				const uint32 mf = m_movementInfo.movementFlags;
+				const bool fwd = (mf & movement_flags::Forward) != 0;
+				const bool back = (mf & movement_flags::Backward) != 0;
+				const bool left = (mf & movement_flags::StrafeLeft) != 0;
+				const bool right = (mf & movement_flags::StrafeRight) != 0;
+
+				// Pick a directional swim stroke. Forward/backward take priority over pure strafing;
+				// each directional stroke is optional and falls back to the generic Swim below.
+				AnimationState* directional = nullptr;
+				if (back && !fwd)
+				{
+					directional = m_swimBackwardState;
+				}
+				else if (!fwd && !back && left && !right)
+				{
+					directional = m_swimLeftState;
+				}
+				else if (!fwd && !back && right && !left)
+				{
+					directional = m_swimRightState;
+				}
+
+				// Fall back: directional stroke -> generic swim -> swim-idle -> run.
+				swimAnim = directional ? directional
+					: (m_swimState ? m_swimState : (m_swimIdleState ? m_swimIdleState : m_runAnimState));
+			}
+			else
+			{
+				// Treading water / ascending in place: swim-idle, falling back to swim, then idle.
+				swimAnim = m_swimIdleState ? m_swimIdleState : (m_swimState ? m_swimState : m_idleAnimState);
+			}
+
+			if (swimAnim)
+			{
+				SetTargetAnimState(swimAnim);
+			}
+			return;
+		}
+
 		// Handle jumping animations first
 		if (m_unitMovement->IsFalling() && std::abs(m_unitMovement->GetVelocity().y) > 0.05f)
 		{
@@ -558,7 +610,12 @@ namespace mmo
 
 			// Death clears any locked loop animation
 			m_lockedLoopAnimState = nullptr;
-			SetTargetAnimState(m_deathState);
+
+			// Use the dedicated swimming death animation when dying in water; fall back to the
+			// regular death animation for meshes without one (or when not swimming).
+			AnimationState* deathAnim = (m_movementInfo.IsSwimming() && m_swimDeathState)
+				? m_swimDeathState : m_deathState;
+			SetTargetAnimState(deathAnim);
 		}
 
 		// Handle animation transitions
@@ -2548,6 +2605,12 @@ namespace mmo
 		m_jumpStartState = nullptr;
 		m_fallingState = nullptr;
 		m_landState = nullptr;
+		m_swimState = nullptr;
+		m_swimIdleState = nullptr;
+		m_swimDeathState = nullptr;
+		m_swimBackwardState = nullptr;
+		m_swimLeftState = nullptr;
+		m_swimRightState = nullptr;
 	}
 
 	bool GameUnitC::IsValidAnimState(AnimationState* state) const
@@ -2705,6 +2768,45 @@ namespace mmo
 		if (m_entity)
 		{
 			m_nameComponentNode->SetPosition(Vector3::UnitY * (m_entity->GetBoundingRadius()));
+		}
+
+		// Swim animation states. These are optional: meshes without them fall back to the
+		// regular run / idle / death animations (handled where the states are used).
+		if (m_entity->HasAnimationState("Swim"))
+		{
+			m_swimState = m_entity->GetAnimationState("Swim");
+			m_swimState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("SwimIdle"))
+		{
+			m_swimIdleState = m_entity->GetAnimationState("SwimIdle");
+			m_swimIdleState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("SwimDeath"))
+		{
+			m_swimDeathState = m_entity->GetAnimationState("SwimDeath");
+			m_swimDeathState->SetLoop(false);
+			m_swimDeathState->SetTimePosition(0.0f);
+		}
+
+		if (m_entity->HasAnimationState("SwimBackward"))
+		{
+			m_swimBackwardState = m_entity->GetAnimationState("SwimBackward");
+			m_swimBackwardState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("SwimLeft"))
+		{
+			m_swimLeftState = m_entity->GetAnimationState("SwimLeft");
+			m_swimLeftState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("SwimRight"))
+		{
+			m_swimRightState = m_entity->GetAnimationState("SwimRight");
+			m_swimRightState->SetLoop(true);
 		}
 
 		// Connect to animation notify signals for all animations
@@ -3192,7 +3294,7 @@ namespace mmo
 		return m_netDriver.QueryWaterAt(x, z, outSurfaceY);
 	}
 
-	void GameUnitC::UpdateSwimMeshPitch()
+	void GameUnitC::UpdateSwimMeshPitch(const float deltaTime)
 	{
 		if (!m_entityOffsetNode || !IsPlayer())
 		{
@@ -3203,15 +3305,28 @@ namespace mmo
 		Quaternion baseOffset;
 		baseOffset.FromAngleAxis(Degree(90.0f), Vector3::UnitY);
 
-		if (m_movementInfo.IsSwimming())
+		// The mesh only shows the dive angle while actively swimming forward/backward. When idle in
+		// the water the control pitch is preserved (so the player can pre-aim a dive), but the mesh
+		// is displayed level; it tilts once movement starts and returns to level when it stops.
+		const bool swimmingAndMoving = m_movementInfo.IsSwimming() &&
+			(m_movementInfo.movementFlags & (movement_flags::Forward | movement_flags::Backward)) != 0;
+		const float targetPitch = swimmingAndMoving ? m_movementInfo.pitch.GetValueRadians() : 0.0f;
+
+		// Smoothly interpolate the displayed pitch toward the target. Exponential blending keeps the
+		// transition frame-rate independent and visually smooth.
+		constexpr float pitchBlendRate = 8.0f;
+		const float blend = 1.0f - std::exp(-pitchBlendRate * std::max(deltaTime, 0.0f));
+		m_swimMeshPitch += (targetPitch - m_swimMeshPitch) * blend;
+
+		if (std::abs(m_swimMeshPitch) > 0.001f)
 		{
-			// Pitch the mesh about the body's local right axis (Z) by the swim pitch — the same axis
-			// and angle the swim physics uses for the dive direction, so the mesh visibly points
-			// where the character swims.
-			m_entityOffsetNode->SetOrientation(Quaternion(m_movementInfo.pitch, Vector3::UnitZ) * baseOffset);
+			// Pitch the mesh about the body's local right axis (Z) — the same axis the swim physics
+			// uses for the dive direction, so the mesh visibly points where the character swims.
+			m_entityOffsetNode->SetOrientation(Quaternion(Radian(m_swimMeshPitch), Vector3::UnitZ) * baseOffset);
 		}
 		else if (!m_entityOffsetNode->GetOrientation().Equals(baseOffset, Radian(0.001f)))
 		{
+			m_swimMeshPitch = 0.0f;
 			m_entityOffsetNode->SetOrientation(baseOffset);
 		}
 	}
