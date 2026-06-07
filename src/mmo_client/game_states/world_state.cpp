@@ -1077,6 +1077,8 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetFacing, *this, &WorldState::OnMovement);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveJump, *this, &WorldState::OnMovement);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveFallLand, *this, &WorldState::OnMovement);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartSwim, *this, &WorldState::OnMovement);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStopSwim, *this, &WorldState::OnMovement);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveEnded, *this, &WorldState::OnMovement);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSplineDone, *this, &WorldState::OnMovement);
 
@@ -4340,6 +4342,23 @@ namespace {
 			m_realmConnector.SendAreaTriggerTriggered(triggerId);
 			DLOG("Player entered area trigger " << triggerId);
 		}
+	}
+
+	bool WorldState::QueryWaterAt(const float x, const float z, float &outSurfaceY) const
+	{
+		if (!m_worldInstance)
+		{
+			return false;
+		}
+
+		terrain::Terrain *terrain = m_worldInstance->GetTerrain();
+		if (!terrain || !terrain->HasWaterAtWorldPos(x, z))
+		{
+			return false;
+		}
+
+		outSurfaceY = terrain->GetWaterHeightAtWorldPos(x, z);
+		return true;
 	}
 
 	void WorldState::SetSelectedTarget(uint64 guid)

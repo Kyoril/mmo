@@ -283,6 +283,14 @@ namespace mmo
 			/// Sent by the client to request a server-side line of sight check against the current target. Dev/debug only.
 			CheatCheckLineOfSight, // GAME MASTER
 
+			/// Sent by the client when the local player starts swimming (enters deep enough water).
+			/// This is the only packet permitted to add the Swimming movement flag.
+			MoveStartSwim,
+
+			/// Sent by the client when the local player stops swimming (leaves the water).
+			/// This is the only packet permitted to remove the Swimming movement flag.
+			MoveStopSwim,
+
 				/// Counter constant
 				Count_,
 			};
@@ -537,6 +545,12 @@ namespace mmo
 			/// Sent to the client with the result of a CheatCheckLineOfSight request.
 			/// Contains: uint8 hasLos, 3×float from, 3×float to, 3×float hitPoint
 			DebugLineOfSightResult,
+
+			/// [PROXY] A unit started swimming.
+			MoveStartSwim,
+
+			/// [PROXY] A unit stopped swimming.
+			MoveStopSwim,
 
 				/// Counter constant
 				Count_,

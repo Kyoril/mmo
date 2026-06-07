@@ -445,20 +445,13 @@ namespace mmo
 
 		/// @brief Checks if this unit can ever swim (based on capabilities)
 		/// @return True if swimming is possible, false otherwise
-		/// @note Currently always returns false - TODO: implement swimming capability check
-		[[nodiscard]] bool CanEverSwim() const
-		{
-			// TODO
-			return false;
-		}
+		[[nodiscard]] bool CanEverSwim() const;
 
-		/// @brief Checks if the unit is currently in water
+		/// @brief Checks if the unit is currently in water (cached from the last water query).
 		/// @return True if in water, false otherwise
-		/// @note Currently always returns false - TODO: implement water detection
 		[[nodiscard]] bool IsInWater() const
 		{
-			// TODO
-			return false;
+			return m_inWater;
 		}
 
 		/// @brief Checks if the unit can attempt to jump in its current state
@@ -691,6 +684,27 @@ namespace mmo
 		/// @param deltaTime Time step for movement calculations
 		/// @param iterations Number of simulation iterations
 		void HandleSwimming(float deltaTime, int32 iterations);
+
+		/// @brief Queries the water column at the given feet position.
+		/// @param feet The unit's feet (bottom-center) world position.
+		/// @param outSurfaceY Receives the water surface height when water is present.
+		/// @param outSubmersion Receives how far the water surface is above the feet (surfaceY - feetY).
+		/// @return True if there is water at the feet XZ position, false otherwise.
+		bool CheckWaterVolume(const Vector3& feet, float& outSurfaceY, float& outSubmersion) const;
+
+		/// @brief Updates the cached water state for the locally controlled player and triggers
+		/// a transition into swimming when the player wades into deep enough water.
+		void UpdateSwimState();
+
+		/// @brief Transitions the unit into swimming mode (sets flag + emits StartSwim packet).
+		void StartSwimming();
+
+		/// @brief Transitions the unit out of swimming mode (clears flag + emits StopSwim packet).
+		void StopSwimming();
+
+		/// @brief Returns the submersion depth required to start swimming.
+		/// @note Constant for now; intended to scale with unit height later.
+		[[nodiscard]] float GetSwimStartDepth() const;
 
 		/// @brief Handles movement logic when the unit is falling
 		/// @param deltaTime Time step for movement calculations
@@ -929,6 +943,15 @@ namespace mmo
 		float m_brakingDecelerationFalling = 0.0f;
 
 		float m_brakingDecelerationSwimming = 0.0f;
+
+		/// Fluid friction applied to velocity while swimming.
+		float m_swimmingFriction = 4.0f;
+
+		/// True when the locally controlled player is currently inside a water volume.
+		bool m_inWater = false;
+
+		/// Cached water surface height (world Y) at the unit's position while in water.
+		float m_waterSurfaceY = 0.0f;
 
 		float m_brakingDecelerationFlying = 0.0f;
 

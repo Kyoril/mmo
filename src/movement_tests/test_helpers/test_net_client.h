@@ -16,6 +16,7 @@ namespace mmo
 		void GetItemData(uint64 /*guid*/, std::weak_ptr<GamePlayerC> /*player*/) override {}
 		void GetObjectData(uint64 /*guid*/, std::weak_ptr<GameWorldObjectC> /*object*/) override {}
 		void OnMoveEvent(GameUnitC& /*unit*/, const MovementEvent& /*moveEvent*/) override {}
+		bool QueryWaterAt(float /*x*/, float /*z*/, float& /*outSurfaceY*/) const override { return false; }
 		void SetSelectedTarget(uint64 /*guid*/) override {}
 		void OnGuildChanged(std::weak_ptr<GamePlayerC> /*player*/, uint64 /*guildGuid*/) override {}
 	};

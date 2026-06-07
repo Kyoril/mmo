@@ -180,6 +180,21 @@ namespace mmo
 
 		void OnStartFalling();
 
+		/// @brief Called when the unit starts swimming. Sets the Swimming movement flag and,
+		/// for the locally controlled player, emits a StartSwim movement event (network packet).
+		void OnStartSwimming();
+
+		/// @brief Called when the unit stops swimming. Clears the Swimming movement flag and,
+		/// for the locally controlled player, emits a StopSwim movement event (network packet).
+		void OnStopSwimming();
+
+		/// @brief Queries the water surface height at the given world XZ position via the net driver.
+		/// @param x World X coordinate.
+		/// @param z World Z coordinate.
+		/// @param outSurfaceY Receives the water surface height (Y) when water is present.
+		/// @return True if there is water at the given position, false otherwise.
+		bool QueryWaterAt(float x, float z, float& outSurfaceY) const;
+
 		/// @brief Sets the visibility of the collision capsule debug visualization. Creates it on demand.
 		/// @param show True to show, false to hide.
 		void SetCollisionVisibility(bool show);
@@ -541,6 +556,10 @@ namespace mmo
 	public:
 		/// @brief Returns the current movement information of this unit.
 		[[nodiscard]] const MovementInfo &GetMovementInfo() const { return m_movementInfo; }
+
+		/// @brief Sets the unit's pitch value (used for swimming up/down). The pitch is serialized
+		/// in movement packets while the unit is swimming or flying.
+		void SetMovementPitch(const Radian &pitch) { m_movementInfo.pitch = pitch; }
 
 		const Capsule &GetCollider() const { return m_collider; }
 

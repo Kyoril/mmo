@@ -310,7 +310,12 @@ namespace mmo
 		info.timestamp = GetAsyncTimeMs();
 		info.position = m_controlledUnit->GetSceneNode()->GetDerivedPosition();
 		info.facing = m_controlledUnit->GetSceneNode()->GetDerivedOrientation().GetYaw();
-		info.pitch = Radian(0);
+		// Preserve pitch while swimming/flying (it drives vertical movement and is serialized);
+		// otherwise the unit has no meaningful pitch and we send zero.
+		if (!info.IsSwimming() && (info.movementFlags & movement_flags::Flying) == 0)
+		{
+			info.pitch = Radian(0);
+		}
 		m_connector.SendMovementUpdate(m_controlledUnit->GetGuid(), opCode, info);
 	}
 
@@ -616,6 +621,12 @@ namespace mmo
 		case MovementEventType::SetFacing:
 			SendMovementUpdateWithInfo(game::client_realm_packet::MoveSetFacing, movementEvent.movementInfo);
 			break;
+		case MovementEventType::StartSwim:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStartSwim, movementEvent.movementInfo);
+			break;
+		case MovementEventType::StopSwim:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStopSwim, movementEvent.movementInfo);
+			break;
 		default:
 			// Unknown event type
 			WLOG("Unsupported movement event type: " << static_cast<int>(movementEvent.eventType));
@@ -641,6 +652,13 @@ namespace mmo
 			MovePlayer();
 			StrafePlayer();
 			TurnPlayer();
+		}
+
+		// While swimming, the camera pitch drives the swim up/down direction. Feed it to the unit
+		// so the movement code and outgoing packets carry the current pitch.
+		if (m_controlledUnit->GetMovementInfo().IsSwimming())
+		{
+			m_controlledUnit->SetMovementPitch(m_cameraPitchNode->GetOrientation().GetPitch());
 		}
 
 		if (!(m_controlFlags & ControlFlags::TurnCamera) && !(m_controlFlags & ControlFlags::TurnPlayer))

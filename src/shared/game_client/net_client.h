@@ -38,6 +38,14 @@ namespace mmo
 
 		virtual void OnMoveEvent(GameUnitC& unit, const MovementEvent& moveEvent) = 0;
 
+		/// @brief Queries the water surface height at the given world XZ position.
+		/// Used by the client-side movement code to detect when a unit enters/leaves water.
+		/// @param x World X coordinate.
+		/// @param z World Z coordinate.
+		/// @param outSurfaceY Receives the water surface height (Y) when water is present.
+		/// @return True if there is water at the given position, false otherwise.
+		virtual bool QueryWaterAt(float x, float z, float& outSurfaceY) const = 0;
+
 		virtual void SetSelectedTarget(uint64 guid) = 0;
 
 		virtual void OnGuildChanged(std::weak_ptr<GamePlayerC> player, uint64 guildGuid) = 0;

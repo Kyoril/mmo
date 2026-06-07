@@ -2,6 +2,7 @@
 
 #include "world_instance.h"
 #include "server_collision_map.h"
+#include "server_water_map.h"
 
 #include "game_server/world/creature_spawner.h"
 #include "game_server/world/each_tile_in_sight.h"
@@ -88,7 +89,16 @@ namespace mmo
 			WLOG("NavMapData: geometry collision unavailable for map '"
 				<< mapEntry.directory() << "' — all IsInLineOfSight calls will return true (unblocked)");
 		}
+
+		// Load terrain water data for swim validation. Optional — null when the map has no water.
+		auto waterMap = std::make_unique<ServerWaterMap>(mapEntry.directory());
+		if (waterMap->IsLoaded())
+		{
+			m_waterMap = std::move(waterMap);
+		}
 	}
+
+	NavMapData::~NavMapData() = default;
 
 	bool NavMapData::IsInLineOfSight(const Vector3& posA, const Vector3& posB)
 	{
@@ -129,6 +139,16 @@ namespace mmo
 	bool NavMapData::FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const
 	{
 		return m_map->FindRandomPointAroundCircle(centerPosition, radius, randomPoint);
+	}
+
+	bool NavMapData::GetWaterSurface(const Vector3& pos, float& outSurfaceY) const
+	{
+		if (!m_waterMap)
+		{
+			return false;
+		}
+
+		return m_waterMap->GetWaterSurface(pos.x, pos.z, outSurfaceY);
 	}
 
 	WorldInstance::WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, const MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid, std::unique_ptr<UnitFinder> unitFinder, ITriggerHandler& triggerHandler, const ConditionMgr& conditionMgr)

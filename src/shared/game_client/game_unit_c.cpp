@@ -134,7 +134,11 @@ namespace mmo
 			ResetJumpState();
 		}
 
-		if (previousMovementMode == MovementMode::Falling && newMovementMode != MovementMode::Falling)
+		// Entering the water (Falling -> Swimming) is handled by OnStartSwimming, which emits its
+		// own StartSwim event. Don't emit a spurious Land event in that case.
+		if (previousMovementMode == MovementMode::Falling &&
+			newMovementMode != MovementMode::Falling &&
+			newMovementMode != MovementMode::Swimming)
 		{
 			UpdateMovementInfo();
 			m_movementInfo.movementFlags &= ~movement_flags::Falling;
@@ -3144,6 +3148,39 @@ namespace mmo
 		{
 			m_netDriver.OnMoveEvent(*this, MovementEvent(movement_event_type::Fall, m_movementInfo.timestamp, m_movementInfo));
 		}
+	}
+
+	void GameUnitC::OnStartSwimming()
+	{
+		const bool wasSwimming = (m_movementInfo.movementFlags & movement_flags::Swimming) != 0;
+
+		UpdateMovementInfo();
+		m_movementInfo.movementFlags |= movement_flags::Swimming;
+		// Swimming and falling are mutually exclusive movement states.
+		m_movementInfo.movementFlags &= ~movement_flags::Falling;
+
+		if (!wasSwimming)
+		{
+			m_netDriver.OnMoveEvent(*this, MovementEvent(movement_event_type::StartSwim, m_movementInfo.timestamp, m_movementInfo));
+		}
+	}
+
+	void GameUnitC::OnStopSwimming()
+	{
+		const bool wasSwimming = (m_movementInfo.movementFlags & movement_flags::Swimming) != 0;
+
+		UpdateMovementInfo();
+		m_movementInfo.movementFlags &= ~movement_flags::Swimming;
+
+		if (wasSwimming)
+		{
+			m_netDriver.OnMoveEvent(*this, MovementEvent(movement_event_type::StopSwim, m_movementInfo.timestamp, m_movementInfo));
+		}
+	}
+
+	bool GameUnitC::QueryWaterAt(const float x, const float z, float& outSurfaceY) const
+	{
+		return m_netDriver.QueryWaterAt(x, z, outSurfaceY);
 	}
 
 	void GameUnitC::PlayLandAnimation()

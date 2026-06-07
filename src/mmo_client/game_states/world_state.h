@@ -560,6 +560,8 @@ namespace mmo
 
 		void OnMoveEvent(GameUnitC &unit, const MovementEvent &moveEvent) override;
 
+		bool QueryWaterAt(float x, float z, float &outSurfaceY) const override;
+
 		void SetSelectedTarget(uint64 guid) override;
 
 		void OnGuildChanged(std::weak_ptr<GamePlayerC> player, uint64 guildGuid) override;

@@ -31,6 +31,19 @@ namespace mmo
 	#endif
 
 	constexpr float MIN_TICK_TIME = 1e-6f;
+
+	/// Submersion (water surface above feet) required before the player starts swimming.
+	/// Intended to scale with unit height later.
+	constexpr float SWIM_START_DEPTH = 1.0f;
+
+	/// While swimming, if submersion drops below this AND the unit is resting on walkable floor,
+	/// the player stops swimming and resumes walking (shallow water / wading out).
+	constexpr float SWIM_STOP_DEPTH = 0.7f;
+
+	/// Minimum submersion kept when the swimmer reaches the surface. The body cannot rise above
+	/// the water surface (capped here), but may dive freely below.
+	constexpr float SWIM_SURFACE_MARGIN = 0.5f;
+
 	constexpr float MIN_FLOOR_DIST = 0.019f;
 	constexpr float MAX_FLOOR_DIST = 0.024f;
 	constexpr float BRAKE_TO_STOP_VELOCITY = 0.1f;
@@ -126,6 +139,10 @@ namespace mmo
 
 		// Change position
 		RunSimulation(deltaTime, 0);
+
+		// Detect entering water (wading in) for the locally controlled player. Exiting water is
+		// handled inside HandleSwimming once the swim simulation is active.
+		UpdateSwimState();
 
 		if (m_movedUnit.IsControlledByLocalPlayer())
 		{
@@ -1250,10 +1267,211 @@ namespace mmo
 		return std::max(MIN_TICK_TIME, remainingTime);
 	}
 
-	void UnitMovement::HandleSwimming(float deltaTime, int32 iterations)
+	bool UnitMovement::CanEverSwim() const
 	{
-		// TODO
-		SetMovementMode(MovementMode::Falling);
+		// Players can swim; creatures currently cannot.
+		return m_movedUnit.IsPlayer();
+	}
+
+	float UnitMovement::GetSwimStartDepth() const
+	{
+		// Constant for now. TODO: scale with the unit's capsule height.
+		return SWIM_START_DEPTH;
+	}
+
+	bool UnitMovement::CheckWaterVolume(const Vector3& feet, float& outSurfaceY, float& outSubmersion) const
+	{
+		float surfaceY = 0.0f;
+		if (!m_movedUnit.QueryWaterAt(feet.x, feet.z, surfaceY))
+		{
+			outSurfaceY = 0.0f;
+			outSubmersion = 0.0f;
+			return false;
+		}
+
+		outSurfaceY = surfaceY;
+		// Gravity points straight down, so the gravity-space height equals the world Y of the feet.
+		outSubmersion = surfaceY - GetGravitySpaceY(feet);
+		return true;
+	}
+
+	void UnitMovement::UpdateSwimState()
+	{
+		if (!m_movedUnit.IsControlledByLocalPlayer() || !CanEverSwim())
+		{
+			return;
+		}
+
+		float surfaceY = 0.0f;
+		float submersion = 0.0f;
+		const bool inWater = CheckWaterVolume(GetUpdatedNode().GetPosition(), surfaceY, submersion);
+
+		m_inWater = inWater;
+		if (inWater)
+		{
+			m_waterSurfaceY = surfaceY;
+		}
+
+		// Begin swimming once we are submerged deep enough. Exiting is handled in HandleSwimming.
+		if (!IsSwimming() && inWater && submersion >= GetSwimStartDepth())
+		{
+			StartSwimming();
+		}
+	}
+
+	void UnitMovement::StartSwimming()
+	{
+		if (IsSwimming())
+		{
+			return;
+		}
+
+		// Switch physics mode first (clears floor/jump state), then set the network flag and emit
+		// the StartSwim packet. OnMovementModeChanged is guarded to not emit a Land event here.
+		SetMovementMode(MovementMode::Swimming);
+		m_movedUnit.OnStartSwimming();
+
+		// Swimming has no gravity contribution; drop any residual fall velocity.
+		m_velocity = ProjectToGravityFloor(m_velocity);
+	}
+
+	void UnitMovement::StopSwimming()
+	{
+		if (!IsSwimming())
+		{
+			return;
+		}
+
+		// Clear the network flag and emit the StopSwim packet, then let the walking floor check
+		// re-resolve to walking or falling depending on whether there is ground below.
+		m_movedUnit.OnStopSwimming();
+		m_inWater = false;
+		SetMovementMode(MovementMode::Walking);
+	}
+
+	void UnitMovement::HandleSwimming(const float deltaTime, int32 iterations)
+	{
+		if (deltaTime < MIN_TICK_TIME)
+		{
+			return;
+		}
+
+		// Refresh the water column at our current position.
+		const Vector3 feetStart = GetUpdatedNode().GetPosition();
+		float surfaceY = 0.0f;
+		float submersion = 0.0f;
+		const bool inWater = CheckWaterVolume(feetStart, surfaceY, submersion);
+
+		// Exit conditions:
+		//  - no water column at all (swam/walked out of the body of water), or
+		//  - the water is shallow here and there is walkable floor right beneath us (wading out).
+		if (!inWater)
+		{
+			StopSwimming();
+			RunSimulation(deltaTime, iterations);
+			return;
+		}
+
+		m_inWater = true;
+		m_waterSurfaceY = surfaceY;
+
+		if (submersion < SWIM_STOP_DEPTH)
+		{
+			FindFloorResult floor;
+			FindFloor(feetStart, floor, nullptr);
+			if (floor.IsWalkableFloor() && floor.GetDistanceToFloor() < MAX_FLOOR_DIST + 1.e-2f)
+			{
+				StopSwimming();
+				RunSimulation(deltaTime, iterations);
+				return;
+			}
+		}
+
+		const float maxFeetY = m_waterSurfaceY - SWIM_SURFACE_MARGIN;
+
+		float remainingTime = deltaTime;
+		while ((remainingTime >= MIN_TICK_TIME) && (iterations < m_maxSimulationIterations))
+		{
+			iterations++;
+			m_justTeleported = false;
+
+			const float timeTick = GetSimulationTimeStep(remainingTime, iterations);
+			remainingTime -= timeTick;
+
+			const Vector3 oldLocation = GetUpdatedNode().GetPosition();
+
+			// Build a 3D swim acceleration: tilt the horizontal input acceleration by the look pitch
+			// so swimming forward while looking up ascends and looking down dives.
+			Vector3 swimAccel = ProjectToGravityFloor(m_acceleration);
+			const float accelMag = swimAccel.GetLength();
+			const uint32 flags = m_movedUnit.GetMovementInfo().movementFlags;
+			if (accelMag > 1.e-4f && (flags & (movement_flags::Forward | movement_flags::Backward)) != 0)
+			{
+				const float pitch = m_movedUnit.GetMovementInfo().pitch.GetValueRadians();
+				// Rotate the horizontal acceleration about the unit's right axis by the look pitch.
+				const Vector3 rightAxis = m_movedUnit.GetRightVector();
+				const Quaternion pitchRot(Radian(pitch), rightAxis);
+				swimAccel = pitchRot * swimAccel;
+				// Preserve the input magnitude after rotation.
+				swimAccel = swimAccel.NormalizedCopy() * accelMag;
+			}
+			m_acceleration = swimAccel;
+
+			// Velocity: fluid friction, no gravity.
+			CalcVelocity(timeTick, m_swimmingFriction, true, GetMaxBrakingDeceleration());
+
+			Vector3 delta = m_velocity * timeTick;
+
+			if (!delta.IsNearlyEqual(Vector3::Zero, 1.e-4f))
+			{
+				CollisionHitResult hit(1.f);
+				SafeMoveNode(delta, GetUpdatedNode().GetOrientation(), true, &hit);
+
+				if (hit.bStartPenetrating)
+				{
+					HandleImpact(hit);
+					SlideAlongSurface(delta, 1.f, hit.Normal, hit, true);
+
+					const Vector3 adjustment = GetPenetrationAdjustment(hit);
+					if (!adjustment.IsZero())
+					{
+						ResolvePenetration(adjustment, hit, GetUpdatedNode().GetOrientation());
+					}
+				}
+				else if (hit.IsValidBlockingHit())
+				{
+					HandleImpact(hit, timeTick, delta);
+					SlideAlongSurface(delta, 1.f - hit.Time, hit.Normal, hit, true);
+				}
+			}
+
+			// Surface cap: the body cannot rise above the water surface. Diving down is unrestricted
+			// except by geometry collision handled above.
+			Vector3 newPos = GetUpdatedNode().GetPosition();
+			if (GetGravitySpaceY(newPos) > maxFeetY)
+			{
+				SetGravitySpaceY(newPos, maxFeetY);
+				GetUpdatedNode().SetPosition(newPos);
+
+				// Remove any upward velocity so we don't keep fighting the cap.
+				if (GetGravitySpaceY(m_velocity) > 0.0f)
+				{
+					m_velocity = ProjectToGravityFloor(m_velocity);
+				}
+			}
+
+			// Recompute velocity from the actual movement this tick.
+			if (!m_justTeleported && timeTick >= MIN_TICK_TIME)
+			{
+				m_velocity = (GetUpdatedNode().GetPosition() - oldLocation) / timeTick;
+			}
+
+			// If we didn't move at all, abort to avoid spinning the simulation.
+			if (GetUpdatedNode().GetPosition().IsNearlyEqual(oldLocation, 1.e-5f))
+			{
+				break;
+			}
+		}
 	}
 
 	void UnitMovement::HandleFalling(const float deltaTime, int32 iterations)
@@ -1915,14 +2133,10 @@ namespace mmo
 
 	void UnitMovement::SetPostLandedPhysics(const CollisionHitResult& hit)
 	{
-		if (CanEverSwim() && IsInWater())
-		{
-			SetMovementMode(MovementMode::Swimming);
-		}
-		else
-		{
-			SetMovementMode(MovementMode::Walking);
-		}
+		// Always resolve to walking on landing. Entering water is handled centrally by
+		// StartSwimming() (driven by UpdateSwimState) so the Swimming flag and the MoveStartSwim
+		// packet are always produced together — landing must never enter Swimming mode directly.
+		SetMovementMode(MovementMode::Walking);
 	}
 
 	bool UnitMovement::IsValidLandingSpot(const Vector3& capsuleLocation, const CollisionHitResult& hit) const

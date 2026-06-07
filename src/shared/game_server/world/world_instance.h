@@ -44,6 +44,12 @@ namespace mmo
 		virtual bool CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const = 0;
 
 		virtual bool FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const = 0;
+
+		/// @brief Gets the water surface height at the given world position, if water is present.
+		/// @param pos World position to query (only X/Z are used).
+		/// @param outSurfaceY Receives the water surface height (Y) when water is present.
+		/// @return True when there is water at the position, false otherwise.
+		virtual bool GetWaterSurface(const Vector3& pos, float& outSurfaceY) const = 0;
 	};
 
 	class SimpleMapData final : public MapData
@@ -75,14 +81,21 @@ namespace mmo
 
 			return true;
 		}
+
+		bool GetWaterSurface(const Vector3& /*pos*/, float& /*outSurfaceY*/) const override
+		{
+			return false;
+		}
 	};
 
 	class ServerCollisionMap;
+	class ServerWaterMap;
 
 	class NavMapData final : public MapData
 	{
 	public:
 		explicit NavMapData(const proto::MapEntry& mapEntry);
+		~NavMapData() override;
 
 		bool IsInLineOfSight(const Vector3& posA, const Vector3& posB) override;
 
@@ -92,11 +105,15 @@ namespace mmo
 
 		bool FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const override;
 
+		bool GetWaterSurface(const Vector3& pos, float& outSurfaceY) const override;
+
 	private:
 		std::shared_ptr<nav::Map> m_map;
 		/// Optional geometry-based collision map for accurate wall/object LOS.
 		/// Null when no world file was found or loading failed; nav mesh LOS is used as fallback.
 		std::unique_ptr<ServerCollisionMap> m_collisionMap;
+		/// Optional terrain water data for swim validation. Null when the map has no water.
+		std::unique_ptr<ServerWaterMap> m_waterMap;
 	};
 
 	class Universe;
