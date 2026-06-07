@@ -83,6 +83,13 @@ namespace mmo
 		/// @copydoc TileSubscriber::SendPacket
 		void SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer, bool flush = true) override;
 
+		/// @brief Sends an object update body to the client. The body (object count + update blocks)
+		///        is sent as a plain UpdateObject packet, or - if it exceeds a size threshold - as a
+		///        zlib-compressed CompressedUpdateObject packet to save bandwidth.
+		/// @param updateBody The serialized update body (without packet header).
+		/// @param flush Whether to flush the connection after sending.
+		void SendObjectUpdate(const std::vector<char>& updateBody, bool flush);
+
 		/// @copydoc TileSubscriber::IsObjectKnown
 		bool IsObjectKnown(uint64 guid) const override { return m_spawnedGuids.contains(guid); }
 

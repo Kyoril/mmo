@@ -149,12 +149,6 @@ namespace mmo
 			return;
 		}
 
-		// Warn if binding override
-		if (m_inputActionBindings.find(keyName) != m_inputActionBindings.end())
-		{
-			WLOG("Key '" << keyName << "' was already bound to input action '" << m_inputActionBindings[keyName] << "', previous binding will be removed");
-		}
-
 		m_inputActionBindings[keyName] = command;
 	}
 

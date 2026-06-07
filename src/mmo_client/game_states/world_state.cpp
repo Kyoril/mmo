@@ -21,6 +21,7 @@
 #include <charconv>
 #include <vector>
 #include <zstr/zstr.hpp>
+#include <zlib.h>
 
 #include "systems/action_bar.h"
 #include "systems/quest_client.h"
@@ -1452,6 +1453,11 @@ namespace mmo
 
 	PacketParseResult WorldState::OnUpdateObject(game::IncomingPacket &packet)
 	{
+		return HandleObjectUpdate(packet);
+	}
+
+	PacketParseResult WorldState::HandleObjectUpdate(io::Reader &packet)
+	{
 		uint16 numObjectUpdates;
 		if (!(packet >> io::read<uint16>(numObjectUpdates)))
 		{
@@ -1649,8 +1655,50 @@ namespace mmo
 
 	PacketParseResult WorldState::OnCompressedUpdateObject(game::IncomingPacket &packet)
 	{
-		TODO("Implement");
-		return PacketParseResult::Pass;
+		// Body layout: uint32 uncompressed size followed by the zlib-compressed UpdateObject body.
+		uint32 uncompressedSize;
+		if (!(packet >> io::read<uint32>(uncompressedSize)))
+		{
+			ELOG("Failed to read uncompressed size of compressed update object packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (uncompressedSize == 0)
+		{
+			ELOG("Compressed update object packet declares an empty payload!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// The remaining bytes of the packet body are the compressed payload.
+		const uint32 compressedSize = packet.GetSize() - sizeof(uint32);
+		if (compressedSize == 0)
+		{
+			ELOG("Compressed update object packet has no payload!");
+			return PacketParseResult::Disconnect;
+		}
+
+		std::vector<char> compressed(compressedSize);
+		if (packet.getSource()->read(compressed.data(), compressedSize) != compressedSize)
+		{
+			ELOG("Failed to read compressed update object payload!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Decompress into a buffer of the declared uncompressed size.
+		std::vector<char> decompressed(uncompressedSize);
+		uLongf destLen = uncompressedSize;
+		const int result = uncompress(reinterpret_cast<Bytef*>(decompressed.data()), &destLen,
+			reinterpret_cast<const Bytef*>(compressed.data()), static_cast<uLong>(compressedSize));
+		if (result != Z_OK || destLen != uncompressedSize)
+		{
+			ELOG("Failed to decompress update object packet (zlib error " << result << ")");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Parse the decompressed update body exactly like an uncompressed UpdateObject packet.
+		io::MemorySource decompressedSource(decompressed.data(), decompressed.data() + decompressed.size());
+		io::Reader reader(decompressedSource);
+		return HandleObjectUpdate(reader);
 	}
 
 	PacketParseResult WorldState::OnDestroyObjects(game::IncomingPacket &packet)

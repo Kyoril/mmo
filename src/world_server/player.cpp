@@ -23,6 +23,8 @@
 #include "binary_io/writer.h"
 #include "group_manager.h"
 
+#include <zlib.h>
+
 namespace mmo
 {
 	Player::Player(PlayerManager& playerManager, RealmConnector& realmConnector, std::shared_ptr<GamePlayerS> characterObject, CharacterData characterData, const proto::Project& project, WorldInstance& instance, ConditionMgr& conditionMgr)
@@ -381,14 +383,14 @@ namespace mmo
 
 		// Handle object field updates if any
 		{
-			// Prepare update packet
-			std::vector<char> buffer;
-			io::VectorSink sink(buffer);
+			// Build the update body (object count + update blocks) without a packet header so that
+			// SendObjectUpdate can decide whether to send it compressed or uncompressed.
+			std::vector<char> body;
+			io::VectorSink sink(body);
+			io::Writer writer(sink);
 
-			typename game::Protocol::OutgoingPacket packet(sink);
-			packet.Start(game::realm_client_packet::UpdateObject);
 			const size_t countPosition = sink.Position();
-			packet << io::write<uint16>(objects.size());
+			writer << io::write<uint16>(objects.size());
 
 			uint16 objectUpdateCount = objects.size();
 			for (const auto& object : objects)
@@ -399,16 +401,14 @@ namespace mmo
 					continue;
 				}
 
-				object->WriteObjectUpdateBlock(packet, false);
+				object->WriteObjectUpdateBlock(writer, false);
 			}
 
 			sink.Overwrite(countPosition, reinterpret_cast<const char*>(&objectUpdateCount), sizeof(uint16));
-			packet.Finish();
 
 			if (objectUpdateCount > 0)
 			{
-				// Send the proxy packet to the realm server
-				m_connector.SendProxyPacket(m_character->GetGuid(), packet.GetId(), packet.GetSize(), buffer, false);
+				SendObjectUpdate(body, false);
 			}
 		}
 		
@@ -482,17 +482,21 @@ namespace mmo
 			}
 		}
 
-		// Send spawn packet
-		SendPacket([&objects](game::OutgoingPacket& outPacket)
+		// Build the spawn body (object count + creation blocks) without a packet header so that
+		// SendObjectUpdate can decide whether to send it compressed or uncompressed.
 		{
-			outPacket.Start(game::realm_client_packet::UpdateObject);
-			outPacket << io::write<uint16>(objects.size());
+			std::vector<char> body;
+			io::VectorSink sink(body);
+			io::Writer writer(sink);
+
+			writer << io::write<uint16>(objects.size());
 			for (const auto& object : objects)
 			{
-				object->WriteObjectUpdateBlock(outPacket);
+				object->WriteObjectUpdateBlock(writer);
 			}
-			outPacket.Finish();
-		}, true);
+
+			SendObjectUpdate(body, true);
+		}
 
 		// Clear dynamic fields for world objects
 		for (const auto& object : objects)
@@ -576,6 +580,49 @@ namespace mmo
 
 	void Player::SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer, bool flush)
 	{
+		m_connector.SendProxyPacket(m_character->GetGuid(), packet.GetId(), packet.GetSize(), buffer, flush);
+	}
+
+	void Player::SendObjectUpdate(const std::vector<char>& updateBody, const bool flush)
+	{
+		// Update bodies larger than this threshold (in bytes) are zlib-compressed and sent as
+		// CompressedUpdateObject instead of UpdateObject to reduce bandwidth usage.
+		constexpr size_t compressionThreshold = 100;
+
+		std::vector<char> buffer;
+		io::VectorSink sink(buffer);
+		game::Protocol::OutgoingPacket packet(sink);
+
+		if (updateBody.size() > compressionThreshold)
+		{
+			// Compress the update body using zlib.
+			uLongf compressedSize = compressBound(static_cast<uLong>(updateBody.size()));
+			std::vector<Bytef> compressed(compressedSize);
+
+			const int result = compress2(compressed.data(), &compressedSize,
+				reinterpret_cast<const Bytef*>(updateBody.data()), static_cast<uLong>(updateBody.size()),
+				Z_BEST_SPEED);
+
+			if (result == Z_OK)
+			{
+				// CompressedUpdateObject body: uint32 uncompressed size followed by the zlib stream.
+				packet.Start(game::realm_client_packet::CompressedUpdateObject);
+				packet << io::write<uint32>(static_cast<uint32>(updateBody.size()));
+				packet.Sink().Write(reinterpret_cast<const char*>(compressed.data()), compressedSize);
+				packet.Finish();
+
+				m_connector.SendProxyPacket(m_character->GetGuid(), packet.GetId(), packet.GetSize(), buffer, flush);
+				return;
+			}
+
+			// Compression failed for some reason - fall back to sending the data uncompressed.
+			WLOG("Failed to compress object update (zlib error " << result << "), sending uncompressed");
+		}
+
+		packet.Start(game::realm_client_packet::UpdateObject);
+		packet.Sink().Write(updateBody.data(), updateBody.size());
+		packet.Finish();
+
 		m_connector.SendProxyPacket(m_character->GetGuid(), packet.GetId(), packet.GetSize(), buffer, flush);
 	}
 

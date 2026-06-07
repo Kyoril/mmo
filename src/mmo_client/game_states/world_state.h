@@ -257,6 +257,10 @@ namespace mmo
 
 		PacketParseResult OnCompressedUpdateObject(game::IncomingPacket &packet);
 
+		/// Parses an object update body (object count + update blocks) from the given reader.
+		/// Shared by OnUpdateObject and OnCompressedUpdateObject (the latter after decompression).
+		PacketParseResult HandleObjectUpdate(io::Reader &reader);
+
 		PacketParseResult OnDestroyObjects(game::IncomingPacket &packet);
 
 		PacketParseResult OnMovement(game::IncomingPacket &packet);
