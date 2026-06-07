@@ -341,6 +341,9 @@ namespace mmo
 			}
 		}
 
+		// Reflect the swim/dive pitch on the character mesh so the player can see their dive angle.
+		UpdateSwimMeshPitch();
+
 		UpdateQuestGiverAndNameVisuals(deltaTime);
 
 		const bool isDead = (GetHealth() <= 0) || GetStandState() == unit_stand_state::Dead;
@@ -3187,6 +3190,30 @@ namespace mmo
 	bool GameUnitC::QueryWaterAt(const float x, const float z, float& outSurfaceY) const
 	{
 		return m_netDriver.QueryWaterAt(x, z, outSurfaceY);
+	}
+
+	void GameUnitC::UpdateSwimMeshPitch()
+	{
+		if (!m_entityOffsetNode || !IsPlayer())
+		{
+			return;
+		}
+
+		// The mesh's base alignment (see GameObjectC::SetupSceneObjects) is a 90° yaw about Y.
+		Quaternion baseOffset;
+		baseOffset.FromAngleAxis(Degree(90.0f), Vector3::UnitY);
+
+		if (m_movementInfo.IsSwimming())
+		{
+			// Pitch the mesh about the body's local right axis (Z) by the swim pitch — the same axis
+			// and angle the swim physics uses for the dive direction, so the mesh visibly points
+			// where the character swims.
+			m_entityOffsetNode->SetOrientation(Quaternion(m_movementInfo.pitch, Vector3::UnitZ) * baseOffset);
+		}
+		else if (!m_entityOffsetNode->GetOrientation().Equals(baseOffset, Radian(0.001f)))
+		{
+			m_entityOffsetNode->SetOrientation(baseOffset);
+		}
 	}
 
 	void GameUnitC::PlayLandAnimation()

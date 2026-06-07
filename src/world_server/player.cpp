@@ -1686,7 +1686,11 @@ namespace mmo
 		}
 
 		// Did the client try to sneak in a FALLING flag without sending a jump packet?
-		if (info.IsFalling() && !prevMovementInfo.IsFalling() && opCode != game::client_realm_packet::MoveJump)
+		// MoveStopSwim is allowed to add the FALLING flag: leaving water into the air (e.g. swimming
+		// off the top of a waterfall) transitions directly from swimming into falling.
+		if (info.IsFalling() && !prevMovementInfo.IsFalling() &&
+			opCode != game::client_realm_packet::MoveJump &&
+			opCode != game::client_realm_packet::MoveStopSwim)
 		{
 			// Allow falling to start without a jump if the player was recently spawned or
 			// teleported cross-map (they may have spawned in the air)
@@ -1704,7 +1708,12 @@ namespace mmo
 			}
 		}
 		// Did the client try to remove a FALLING flag without sending a landing packet?
-		if (!info.IsFalling() && prevMovementInfo.IsFalling() && (opCode != game::client_realm_packet::MoveFallLand && opCode != game::client_realm_packet::MoveEnded))
+		// MoveStartSwim is allowed to remove the FALLING flag: falling into water transitions
+		// directly from falling into swimming (the water breaks the fall).
+		if (!info.IsFalling() && prevMovementInfo.IsFalling() &&
+			opCode != game::client_realm_packet::MoveFallLand &&
+			opCode != game::client_realm_packet::MoveEnded &&
+			opCode != game::client_realm_packet::MoveStartSwim)
 		{
 			ELOG("Client tried to remove FALLING flag in non-jump packet!");
 			//Kick();
@@ -1799,6 +1808,10 @@ namespace mmo
 				return;
 			}
 
+			// Entering the water breaks any ongoing fall (no fall damage from landing in water).
+			m_trackingFall = false;
+			m_pendingFallStart = false;
+
 			// Authoritative water check: the player must be in water deep enough to swim. The depth
 			// threshold mirrors the client's SWIM_START_DEPTH, with tolerance for surface jitter.
 			// Only enforced when the server actually has water data for this map; otherwise we trust
@@ -1830,6 +1843,15 @@ namespace mmo
 			{
 				ELOG("Stop swim packet did not remove the SWIMMING flag or player was not swimming");
 				return;
+			}
+
+			// Leaving the water directly into the air (waterfall): begin fall tracking so that the
+			// eventual landing applies fall damage from this point.
+			if (info.IsFalling())
+			{
+				m_fallStartHeight = info.position.y;
+				m_trackingFall = true;
+				m_pendingFallStart = false;
 			}
 		}
 		else if (info.IsSwimming())

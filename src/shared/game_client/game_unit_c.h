@@ -188,6 +188,10 @@ namespace mmo
 		/// for the locally controlled player, emits a StopSwim movement event (network packet).
 		void OnStopSwimming();
 
+		/// @brief Visually pitches the character mesh by the current swim pitch while swimming, and
+		/// resets it to the default orientation otherwise. Lets the player see their dive angle.
+		void UpdateSwimMeshPitch();
+
 		/// @brief Queries the water surface height at the given world XZ position via the net driver.
 		/// @param x World X coordinate.
 		/// @param z World Z coordinate.
