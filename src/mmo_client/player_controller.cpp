@@ -506,6 +506,13 @@ namespace mmo
 			return;
 		}
 
+		// Under water, the jump key swims the player upward instead of jumping.
+		if (m_controlledUnit->GetMovementInfo().IsSwimming())
+		{
+			m_swimAscend = true;
+			return;
+		}
+
 		m_controlledUnit->Jump();
 	}
 
@@ -515,6 +522,8 @@ namespace mmo
 		{
 			return;
 		}
+
+		m_swimAscend = false;
 
 		m_controlledUnit->StopJumping();
 	}
@@ -654,11 +663,19 @@ namespace mmo
 			TurnPlayer();
 		}
 
-		// While swimming, the camera pitch drives the swim up/down direction. Feed it to the unit
-		// so the movement code and outgoing packets carry the current pitch.
+		// Swim pitch / ascent. The character's dive pitch is controlled exclusively by right-mouse
+		// vertical drag (accumulated in OnMouseMove); the visual camera pitch never drives it.
+		// While not swimming, pitch is always treated as zero.
 		if (m_controlledUnit->GetMovementInfo().IsSwimming())
 		{
-			m_controlledUnit->SetMovementPitch(m_cameraPitchNode->GetOrientation().GetPitch());
+			m_controlledUnit->SetMovementPitch(m_swimPitch);
+			m_controlledUnit->SetSwimAscending(m_swimAscend);
+		}
+		else
+		{
+			m_swimPitch = Radian(0.0f);
+			m_controlledUnit->SetMovementPitch(Radian(0.0f));
+			m_controlledUnit->SetSwimAscending(false);
 		}
 
 		if (!(m_controlFlags & ControlFlags::TurnCamera) && !(m_controlFlags & ControlFlags::TurnPlayer))
@@ -943,6 +960,18 @@ namespace mmo
 			m_cameraPitchNode->Pitch(deltaPitch, TransformSpace::Local);
 
 			ClampCameraPitch();
+
+			// Only the RIGHT mouse button (TurnPlayer) drives the character's swim dive pitch — the
+			// left button (TurnCamera) just orbits the camera, like facing. Pitch is clamped and is
+			// only relevant while swimming.
+			if ((m_controlFlags & ControlFlags::TurnPlayer) != 0 &&
+				m_controlledUnit->GetMovementInfo().IsSwimming())
+			{
+				constexpr float maxSwimPitchDegrees = 80.0f;
+				m_swimPitch += deltaPitch;
+				m_swimPitch = Degree(Clamp(m_swimPitch.GetValueDegrees(),
+					-maxSwimPitchDegrees, maxSwimPitchDegrees));
+			}
 		}
 
 		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0 && m_controlledUnit->IsAlive() && !m_controlledUnit->IsBeingMoved() && std::abs(deltaX) > 0)

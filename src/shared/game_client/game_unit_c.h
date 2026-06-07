@@ -561,6 +561,20 @@ namespace mmo
 		/// in movement packets while the unit is swimming or flying.
 		void SetMovementPitch(const Radian &pitch) { m_movementInfo.pitch = pitch; }
 
+		/// @brief Sets or clears the Ascending movement flag (used to swim straight up while
+		/// holding the jump key under water).
+		void SetSwimAscending(const bool ascending)
+		{
+			if (ascending)
+			{
+				m_movementInfo.movementFlags |= movement_flags::Ascending;
+			}
+			else
+			{
+				m_movementInfo.movementFlags &= ~movement_flags::Ascending;
+			}
+		}
+
 		const Capsule &GetCollider() const { return m_collider; }
 
 		const proto_client::FactionEntry *GetFaction() const { return m_faction; }

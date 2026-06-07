@@ -50,6 +50,10 @@ namespace mmo
 		/// @param outSurfaceY Receives the water surface height (Y) when water is present.
 		/// @return True when there is water at the position, false otherwise.
 		virtual bool GetWaterSurface(const Vector3& pos, float& outSurfaceY) const = 0;
+
+		/// @brief Returns true if server-side water data is loaded for this map. When false, swim
+		/// validation is skipped (the server trusts the client) rather than rejecting all swimming.
+		virtual bool IsWaterDataAvailable() const = 0;
 	};
 
 	class SimpleMapData final : public MapData
@@ -86,6 +90,11 @@ namespace mmo
 		{
 			return false;
 		}
+
+		bool IsWaterDataAvailable() const override
+		{
+			return false;
+		}
 	};
 
 	class ServerCollisionMap;
@@ -106,6 +115,8 @@ namespace mmo
 		bool FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const override;
 
 		bool GetWaterSurface(const Vector3& pos, float& outSurfaceY) const override;
+
+		bool IsWaterDataAvailable() const override;
 
 	private:
 		std::shared_ptr<nav::Map> m_map;

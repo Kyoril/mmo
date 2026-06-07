@@ -151,6 +151,11 @@ namespace mmo
 		return m_waterMap->GetWaterSurface(pos.x, pos.z, outSurfaceY);
 	}
 
+	bool NavMapData::IsWaterDataAvailable() const
+	{
+		return m_waterMap != nullptr;
+	}
+
 	WorldInstance::WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, const MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid, std::unique_ptr<UnitFinder> unitFinder, ITriggerHandler& triggerHandler, const ConditionMgr& conditionMgr)
 		: m_universe(universe)
 		, m_objectIdGenerator(objectIdGenerator)

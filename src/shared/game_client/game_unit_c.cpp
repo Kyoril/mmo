@@ -286,7 +286,10 @@ namespace mmo
 		{
 			UpdateMovementInfo();
 
-			if (m_movementInfo.IsChangingPosition() && now > m_lastHeartbeat + 500)
+			// While swimming, send heartbeats even when no position-changing flag is set: buoyancy
+			// and the surface cap move the player vertically without a Forward/Strafe/etc. flag, so
+			// the server would otherwise desync from the client's depth.
+			if ((m_movementInfo.IsChangingPosition() || m_movementInfo.IsSwimming()) && now > m_lastHeartbeat + 500)
 			{
 				// Heartbeat sends the current authoritative position to the server.
 				// Since the server baseline is now updated, any stale position lock
@@ -3171,6 +3174,9 @@ namespace mmo
 
 		UpdateMovementInfo();
 		m_movementInfo.movementFlags &= ~movement_flags::Swimming;
+		// Pitch and the swim-up flag are only meaningful while swimming; reset them on exit.
+		m_movementInfo.movementFlags &= ~movement_flags::Ascending;
+		m_movementInfo.pitch = Radian(0.0f);
 
 		if (wasSwimming)
 		{

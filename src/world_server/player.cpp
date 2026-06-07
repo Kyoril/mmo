@@ -806,6 +806,8 @@ namespace mmo
 		case game::client_realm_packet::MoveSetFacing:
 		case game::client_realm_packet::MoveJump:
 		case game::client_realm_packet::MoveFallLand:
+		case game::client_realm_packet::MoveStartSwim:
+		case game::client_realm_packet::MoveStopSwim:
 		case game::client_realm_packet::MoveEnded:
 		case game::client_realm_packet::MoveSplineDone:
 			OnMovement(opCode, buffer.size(), reader);
@@ -1799,22 +1801,27 @@ namespace mmo
 
 			// Authoritative water check: the player must be in water deep enough to swim. The depth
 			// threshold mirrors the client's SWIM_START_DEPTH, with tolerance for surface jitter.
+			// Only enforced when the server actually has water data for this map; otherwise we trust
+			// the client (graceful degradation instead of rejecting all swimming).
 			constexpr float swimStartDepth = 1.0f;
 			constexpr float depthTolerance = 0.5f;
 
-			float surfaceY = 0.0f;
 			MapData* mapData = m_worldInstance->GetMapData();
-			const bool hasWater = mapData && mapData->GetWaterSurface(info.position, surfaceY);
-			if (!hasWater || (surfaceY - info.position.y) < (swimStartDepth - depthTolerance))
+			if (mapData && mapData->IsWaterDataAvailable())
 			{
-				ELOG("[AntiCheat] Player " << m_character->GetName()
-					<< " tried to start swimming outside of deep water at " << info.position);
-				m_antiCheatTracker.RecordViolation(GetAsyncTimeMs());
-				if (m_antiCheatTracker.ShouldKick(GetAsyncTimeMs()))
+				float surfaceY = 0.0f;
+				const bool hasWater = mapData->GetWaterSurface(info.position, surfaceY);
+				if (!hasWater || (surfaceY - info.position.y) < (swimStartDepth - depthTolerance))
 				{
-					Kick();
+					ELOG("[AntiCheat] Player " << m_character->GetName()
+						<< " tried to start swimming outside of deep water at " << info.position);
+					m_antiCheatTracker.RecordViolation(GetAsyncTimeMs());
+					if (m_antiCheatTracker.ShouldKick(GetAsyncTimeMs()))
+					{
+						Kick();
+					}
+					return;
 				}
-				return;
 			}
 		}
 		else if (opCode == game::client_realm_packet::MoveStopSwim)
@@ -1830,10 +1837,10 @@ namespace mmo
 			// Reinforcement check on regular movement packets: a swimming player must stay over
 			// water (leaving the water sends MoveStopSwim first). A hard miss is treated as a
 			// violation; the anti-cheat tracker only kicks once a threshold is exceeded so a single
-			// shoreline-edge race cannot cause a false kick.
+			// shoreline-edge race cannot cause a false kick. Only enforced when water data exists.
 			float surfaceY = 0.0f;
 			MapData* mapData = m_worldInstance->GetMapData();
-			if (mapData && !mapData->GetWaterSurface(info.position, surfaceY))
+			if (mapData && mapData->IsWaterDataAvailable() && !mapData->GetWaterSurface(info.position, surfaceY))
 			{
 				WLOG("[AntiCheat] Player " << m_character->GetName()
 					<< " is flagged swimming but is not over water at " << info.position);

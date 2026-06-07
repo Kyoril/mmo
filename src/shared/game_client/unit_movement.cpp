@@ -44,6 +44,15 @@ namespace mmo
 	/// the water surface (capped here), but may dive freely below.
 	constexpr float SWIM_SURFACE_MARGIN = 0.5f;
 
+	/// Dead-zone for diving: the player only starts diving when looking down enough that the
+	/// downward component of the pitched swim direction exceeds this fraction of the swim speed.
+	/// Below this (small pitch) the player keeps swimming along the surface.
+	constexpr float SWIM_DIVE_DEADZONE = 0.25f;
+
+	/// Upward buoyancy acceleration (as a fraction of max acceleration) applied while swimming and
+	/// neither diving nor actively swimming up. Makes the player float to / stick at the surface.
+	constexpr float SWIM_BUOYANCY_FRACTION = 0.6f;
+
 	constexpr float MIN_FLOOR_DIST = 0.019f;
 	constexpr float MAX_FLOOR_DIST = 0.024f;
 	constexpr float BRAKE_TO_STOP_VELOCITY = 0.1f;
@@ -1375,19 +1384,32 @@ namespace mmo
 		m_inWater = true;
 		m_waterSurfaceY = surfaceY;
 
-		if (submersion < SWIM_STOP_DEPTH)
+		// Stop swimming (resume walking) when the total water depth here is too shallow to swim, i.e.
+		// the player could stand with their head above water. Total depth = submersion + distance
+		// from the feet down to walkable floor. SWIM_STOP_DEPTH (< SWIM_START_DEPTH) gives hysteresis
+		// so wading in/out near the threshold doesn't flicker.
+		if (submersion < SWIM_START_DEPTH)
 		{
 			FindFloorResult floor;
 			FindFloor(feetStart, floor, nullptr);
-			if (floor.IsWalkableFloor() && floor.GetDistanceToFloor() < MAX_FLOOR_DIST + 1.e-2f)
+			if (floor.IsWalkableFloor())
 			{
-				StopSwimming();
-				RunSimulation(deltaTime, iterations);
-				return;
+				const float totalWaterDepth = submersion + floor.GetDistanceToFloor();
+				if (totalWaterDepth < SWIM_STOP_DEPTH)
+				{
+					StopSwimming();
+					RunSimulation(deltaTime, iterations);
+					return;
+				}
 			}
 		}
 
 		const float maxFeetY = m_waterSurfaceY - SWIM_SURFACE_MARGIN;
+
+		// Capture the horizontal input acceleration once: the sub-step loop mutates m_acceleration
+		// (adding the vertical dive/ascend/buoyancy components), so re-reading it would progressively
+		// shrink the horizontal part across iterations.
+		const Vector3 swimInputAccelH = ProjectToGravityFloor(m_acceleration);
 
 		float remainingTime = deltaTime;
 		while ((remainingTime >= MIN_TICK_TIME) && (iterations < m_maxSimulationIterations))
@@ -1400,22 +1422,50 @@ namespace mmo
 
 			const Vector3 oldLocation = GetUpdatedNode().GetPosition();
 
-			// Build a 3D swim acceleration: tilt the horizontal input acceleration by the look pitch
-			// so swimming forward while looking up ascends and looking down dives.
-			Vector3 swimAccel = ProjectToGravityFloor(m_acceleration);
-			const float accelMag = swimAccel.GetLength();
+			// Build a 3D swim acceleration.
+			//  - Horizontal movement comes from the forward/back/strafe input.
+			//  - Diving (downward) is driven by the character pitch, but only once the player looks
+			//    down past a dead-zone; small pitch keeps the player swimming along the surface.
+			//  - Swimming up is driven by the Ascending flag (the held jump key), like a vertical
+			//    strafe — pitch never moves the player upward.
+			//  - When neither diving nor swimming up, gentle buoyancy floats the player to the
+			//    surface so the default behaviour is "stick to the surface".
 			const uint32 flags = m_movedUnit.GetMovementInfo().movementFlags;
-			if (accelMag > 1.e-4f && (flags & (movement_flags::Forward | movement_flags::Backward)) != 0)
+			const float maxAccel = GetMaxAcceleration();
+
+			Vector3 swimAccel = swimInputAccelH;
+			const float horizMag = swimAccel.GetLength();
+
+			bool diving = false;
+			if (horizMag > 1.e-4f && (flags & (movement_flags::Forward | movement_flags::Backward)) != 0)
 			{
 				const float pitch = m_movedUnit.GetMovementInfo().pitch.GetValueRadians();
-				// Rotate the horizontal acceleration about the unit's right axis by the look pitch.
 				const Vector3 rightAxis = m_movedUnit.GetRightVector();
-				const Quaternion pitchRot(Radian(pitch), rightAxis);
-				swimAccel = pitchRot * swimAccel;
-				// Preserve the input magnitude after rotation.
-				swimAccel = swimAccel.NormalizedCopy() * accelMag;
+				const Vector3 tilted = Quaternion(Radian(pitch), rightAxis) * swimAccel;
+
+				// Only the downward part of the pitched direction is used (diving). This is robust to
+				// the pitch sign convention: we test the actual vertical component.
+				const float verticalComponent = GetGravitySpaceY(tilted); // >0 up, <0 down
+				if (verticalComponent < -horizMag * SWIM_DIVE_DEADZONE)
+				{
+					swimAccel = tilted.NormalizedCopy() * horizMag;
+					diving = true;
+				}
 			}
-			m_acceleration = swimAccel;
+
+			const bool ascending = (flags & movement_flags::Ascending) != 0;
+			if (ascending)
+			{
+				// Holding jump under water swims straight up.
+				swimAccel += (-GetGravityDirection()) * maxAccel;
+			}
+			else if (!diving)
+			{
+				// Float up to / stick at the surface when not actively diving.
+				swimAccel += (-GetGravityDirection()) * (maxAccel * SWIM_BUOYANCY_FRACTION);
+			}
+
+			m_acceleration = swimAccel.GetClampedToMaxSize(maxAccel);
 
 			// Velocity: fluid friction, no gravity.
 			CalcVelocity(timeTick, m_swimmingFriction, true, GetMaxBrakingDeceleration());
