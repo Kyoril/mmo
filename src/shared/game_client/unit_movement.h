@@ -942,7 +942,11 @@ namespace mmo
 
 		float m_brakingDecelerationFalling = 0.0f;
 
-		float m_brakingDecelerationSwimming = 0.0f;
+		/// Strong braking deceleration underwater so the swimmer stops quickly when input is
+		/// released, instead of drifting on for a long time. A non-zero value also enables the
+		/// snap-to-stop clamp (BRAKE_TO_STOP_VELOCITY) in ApplyVelocityBraking, removing the long
+		/// asymptotic velocity tail that friction-only decay leaves behind.
+		float m_brakingDecelerationSwimming = m_maxAcceleration * 2.0f;
 
 		/// Fluid friction applied to velocity while swimming.
 		float m_swimmingFriction = 4.0f;

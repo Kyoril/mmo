@@ -44,15 +44,6 @@ namespace mmo
 	/// the water surface (capped here), but may dive freely below.
 	constexpr float SWIM_SURFACE_MARGIN = 0.5f;
 
-	/// Dead-zone for diving: the player only starts diving when looking down enough that the
-	/// downward component of the pitched swim direction exceeds this fraction of the swim speed.
-	/// Below this (small pitch) the player keeps swimming along the surface.
-	constexpr float SWIM_DIVE_DEADZONE = 0.25f;
-
-	/// Upward buoyancy acceleration (as a fraction of max acceleration) applied while swimming and
-	/// neither diving nor actively swimming up. Makes the player float to / stick at the surface.
-	constexpr float SWIM_BUOYANCY_FRACTION = 0.6f;
-
 	constexpr float MIN_FLOOR_DIST = 0.019f;
 	constexpr float MAX_FLOOR_DIST = 0.024f;
 	constexpr float BRAKE_TO_STOP_VELOCITY = 0.1f;
@@ -1424,33 +1415,29 @@ namespace mmo
 
 			// Build a 3D swim acceleration.
 			//  - Horizontal movement comes from the forward/back/strafe input.
-			//  - Diving (downward) is driven by the character pitch, but only once the player looks
-			//    down past a dead-zone; small pitch keeps the player swimming along the surface.
-			//  - Swimming up is driven by the Ascending flag (the held jump key), like a vertical
-			//    strafe — pitch never moves the player upward.
-			//  - When neither diving nor swimming up, gentle buoyancy floats the player to the
-			//    surface so the default behaviour is "stick to the surface".
+			//  - Pitch tilts that movement continuously: looking up swims up, looking down dives,
+			//    looking level holds the current depth. This lets the player maintain a chosen depth
+			//    just by swimming level, instead of constantly fighting an upward buoyancy force.
+			//  - Swimming straight up is available via the Ascending flag (the held jump key),
+			//    independent of look direction.
+			//  - There is no automatic buoyancy: when the player stops, they hold their current
+			//    depth rather than drifting upward (which previously also triggered server-side
+			//    position drift warnings). Surfacing is always an explicit action (look up / ascend).
 			const uint32 flags = m_movedUnit.GetMovementInfo().movementFlags;
 			const float maxAccel = GetMaxAcceleration();
 
 			Vector3 swimAccel = swimInputAccelH;
 			const float horizMag = swimAccel.GetLength();
+			const bool hasHorizontalInput = horizMag > 1.e-4f &&
+				(flags & (movement_flags::Forward | movement_flags::Backward)) != 0;
 
-			bool diving = false;
-			if (horizMag > 1.e-4f && (flags & (movement_flags::Forward | movement_flags::Backward)) != 0)
+			if (hasHorizontalInput)
 			{
+				// Tilt the horizontal swim direction by the character pitch so the player swims
+				// exactly where they are looking (full 3D), including up, down, or level.
 				const float pitch = m_movedUnit.GetMovementInfo().pitch.GetValueRadians();
 				const Vector3 rightAxis = m_movedUnit.GetRightVector();
-				const Vector3 tilted = Quaternion(Radian(pitch), rightAxis) * swimAccel;
-
-				// Only the downward part of the pitched direction is used (diving). This is robust to
-				// the pitch sign convention: we test the actual vertical component.
-				const float verticalComponent = GetGravitySpaceY(tilted); // >0 up, <0 down
-				if (verticalComponent < -horizMag * SWIM_DIVE_DEADZONE)
-				{
-					swimAccel = tilted.NormalizedCopy() * horizMag;
-					diving = true;
-				}
+				swimAccel = (Quaternion(Radian(pitch), rightAxis) * swimAccel.NormalizedCopy()) * horizMag;
 			}
 
 			const bool ascending = (flags & movement_flags::Ascending) != 0;
@@ -1458,11 +1445,6 @@ namespace mmo
 			{
 				// Holding jump under water swims straight up.
 				swimAccel += (-GetGravityDirection()) * maxAccel;
-			}
-			else if (!diving)
-			{
-				// Float up to / stick at the surface when not actively diving.
-				swimAccel += (-GetGravityDirection()) * (maxAccel * SWIM_BUOYANCY_FRACTION);
 			}
 
 			m_acceleration = swimAccel.GetClampedToMaxSize(maxAccel);
