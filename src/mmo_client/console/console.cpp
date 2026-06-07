@@ -486,6 +486,16 @@ namespace mmo
 		const auto it = s_consoleCommands.find(command);
 		if (it == s_consoleCommands.end())
 		{
+			// No such command exists. Treat the input as a macro and try to run "<command>.cfg"
+			// instead. This allows defining reusable macros as cfg script files (e.g. typing
+			// "oakenshire" runs "oakenshire.cfg" which may contain a "worldport ..." command).
+			const std::string scriptFile = command + ".cfg";
+			if (AssetRegistry::OpenFile(scriptFile))
+			{
+				console_commands::ConsoleCommand_Run("run", scriptFile);
+				return;
+			}
+
 			ELOG("Unknown console command \"" << command << "\"");
 			return;
 		}
