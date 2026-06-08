@@ -98,6 +98,17 @@ namespace mmo
 			{
 				return FrameManager::Get().NotifyMouseUp(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y));
 			}, true);
+		// Connect with first=true so an open combo box popup under the cursor can consume the
+		// wheel (to scroll its list) before WorldState uses it to zoom the camera.
+		m_connections += EventLoop::MouseWheel.connect([](int32 delta)
+			{
+				if (FrameManager::Get().NotifyMouseWheel(delta))
+				{
+					abort_emission();
+					return true;
+				}
+				return false;
+			}, true);
 		m_connections += EventLoop::KeyDown.connect([](int32 key, bool)
 			{
 				FrameManager::Get().NotifyKeyDown(key);

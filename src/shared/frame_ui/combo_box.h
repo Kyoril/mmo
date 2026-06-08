@@ -49,6 +49,17 @@ namespace mmo
 		/// Returns the userData of the selected item, or an empty string.
 		[[nodiscard]] std::string GetSelectedUserData() const;
 
+		/// Sets the text color used to tint the item at the given 1-based index in the
+		/// dropdown popup. Color is an "AARRGGBB" hex string (same format as XML TextColor).
+		void SetItemColor(int32 index, const std::string& color);
+
+		/// Sets the maximum height (in virtual pixels) the dropdown popup may grow to before
+		/// it becomes scrollable. Also settable via the "MaxDropHeight" property.
+		void SetMaxDropHeight(float height);
+
+		/// Returns the maximum dropdown popup height in virtual pixels.
+		[[nodiscard]] float GetMaxDropHeight() const { return m_maxDropHeight; }
+
 		/// Returns true when the combo box is in the "open" state.
 		[[nodiscard]] bool IsOpen() const { return m_isOpen; }
 
@@ -78,6 +89,10 @@ namespace mmo
 		/// Lua callback fired with (self, index, text, userData) when selection changes.
 		void SetOnSelectionChanged(const luabind::object& fn) { m_onSelectionChanged = fn; }
 
+		/// Called by FrameManager when the mouse wheel is scrolled while the open popup is
+		/// hovered. Scrolls the dropdown contents. Returns true if the event was consumed.
+		bool OnPopupMouseWheel(int32 delta);
+
 		// Frame overrides
 		bool OnMouseDown(MouseButton button, int32 buttons, const Point& position) override;
 		bool OnMouseUp(MouseButton button, int32 buttons, const Point& position) override;
@@ -89,7 +104,20 @@ namespace mmo
 		{
 			std::string text;
 			std::string userData;
+			std::string color;
 		};
+
+		/// Builds the shared dropdown popup frame and populates it with item buttons.
+		void BuildPopup();
+
+		/// Hides the shared popup and removes the item buttons created for this combo box.
+		void DestroyPopup();
+
+		/// Repositions the item buttons according to the current scroll offset.
+		void ApplyScrollOffset();
+
+		/// Property change handler for "MaxDropHeight".
+		void OnMaxDropHeightChanged(const Property& property);
 
 		std::vector<Item> m_items;
 		int32 m_selectedIndex{ -1 };
@@ -101,5 +129,20 @@ namespace mmo
 		luabind::object m_onDismissed;
 		luabind::object m_onClicked;
 		luabind::object m_onSelectionChanged;
+
+		/// Maximum popup height in virtual pixels before the list becomes scrollable.
+		float m_maxDropHeight{ 600.0f };
+		/// Current vertical scroll offset of the dropdown content in virtual pixels.
+		float m_scrollOffset{ 0.0f };
+		/// Total height of all items in virtual pixels.
+		float m_contentHeight{ 0.0f };
+		/// Height of the visible viewport in virtual pixels.
+		float m_viewportHeight{ 0.0f };
+		/// The frame that clips the item buttons (the popup's inner container).
+		FramePtr m_dropContainer;
+		/// The item button frames currently shown in the popup.
+		std::vector<FramePtr> m_itemFrames;
+		/// Connections to the item buttons' Clicked signals.
+		scoped_connection_container m_itemConnections;
 	};
 }

@@ -133,6 +133,11 @@ namespace mmo
 		/// @return True if the event was consumed by the UI, false otherwise.
 		bool NotifyMouseUp(MouseButton button, const Point& position);
 
+		/// Notifies the FrameManager that the mouse wheel was scrolled.
+		/// @return True if the event was consumed by the UI (e.g. an open combo box popup
+		///         under the cursor scrolled), false otherwise.
+		bool NotifyMouseWheel(int32 delta);
+
 		/// Notifies the FrameManager that a key has been pressed.
 		void NotifyKeyDown(Key key);
 

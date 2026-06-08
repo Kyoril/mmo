@@ -567,6 +567,9 @@ namespace mmo
 					.def("SetOnDismissHandler", &ComboBox::SetOnDismissHandler)
 					.def("SetOnClickedHandler", &ComboBox::SetOnClickedHandler)
 					.def("SetOnSelectionChanged", &ComboBox::SetOnSelectionChanged)
+					.def("SetItemColor", &ComboBox::SetItemColor)
+					.def("SetMaxDropHeight", &ComboBox::SetMaxDropHeight)
+					.def("GetMaxDropHeight", &ComboBox::GetMaxDropHeight)
 			)
 		);
 
@@ -946,6 +949,23 @@ namespace mmo
 		}
 		
 		return consumed;
+	}
+
+	bool FrameManager::NotifyMouseWheel(const int32 delta)
+	{
+		// Route the wheel to an open combo box popup if the cursor is hovering over it.
+		if (const auto activeCombo = m_activeComboBox.lock())
+		{
+			if (const auto popup = activeCombo->GetPopupFrame())
+			{
+				if (popup->IsVisible() && popup->GetAbsoluteFrameRect().IsPointInRect(m_mousePos))
+				{
+					return activeCombo->OnPopupMouseWheel(delta);
+				}
+			}
+		}
+
+		return false;
 	}
 
 	void FrameManager::NotifyKeyDown(Key key)
