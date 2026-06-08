@@ -1522,9 +1522,16 @@ namespace mmo
 				return;
 			}
 
-			// Resolve material: use assigned name, then fall back to wireframe for visibility
+			// Resolve material. In minimap mode we deliberately ignore the assigned (translucent)
+			// water material: it samples the scene depth/refraction textures which are not bound
+			// during minimap generation and would render as garbage or fully transparent. Instead
+			// we use an opaque, unlit vertex-colour material so water shows up as a solid blue area.
 			MaterialPtr material;
-			if (!m_waterMaterialName.empty())
+			if (m_minimapWaterMode)
+			{
+				material = MaterialManager::Get().Load("Editor/MinimapWater.hmat");
+			}
+			else if (!m_waterMaterialName.empty())
 			{
 				material = MaterialManager::Get().Load(m_waterMaterialName);
 			}
@@ -1532,6 +1539,10 @@ namespace mmo
 			{
 				material = MaterialManager::Get().Load("Editor/Wireframe.hmat");
 			}
+
+			// Vertex colour applied to every water quad. The normal water material ignores this
+			// (it samples textures), but the minimap material renders it directly: opaque blue.
+			const uint32 waterColor = m_minimapWaterMode ? 0xFF3A6EA5u : 0xAAFFFFFFu;
 			if (!material)
 			{
 				return;
@@ -1594,27 +1605,40 @@ namespace mmo
 							{
 								auto& t1 = op->AddTriangle(vTL, vBL, vTR);
 								t1.SetUV(0, u1, v1); t1.SetUV(1, u1, v2); t1.SetUV(2, u2, v1);
-								t1.SetColor(0xAAFFFFFFu);
+								t1.SetColor(waterColor);
 
 								auto& t2 = op->AddTriangle(vTR, vBL, vBR);
 								t2.SetUV(0, u2, v1); t2.SetUV(1, u1, v2); t2.SetUV(2, u2, v2);
-								t2.SetColor(0xAAFFFFFFu);
+								t2.SetColor(waterColor);
 							}
 
 							// Bottom face (reversed winding so water is visible from below)
 							{
 								auto& t3 = op->AddTriangle(vTR, vBL, vTL);
 								t3.SetUV(0, u2, v1); t3.SetUV(1, u1, v2); t3.SetUV(2, u1, v1);
-								t3.SetColor(0xAAFFFFFFu);
+								t3.SetColor(waterColor);
 
 								auto& t4 = op->AddTriangle(vBR, vBL, vTR);
 								t4.SetUV(0, u2, v2); t4.SetUV(1, u1, v2); t4.SetUV(2, u2, v1);
-								t4.SetColor(0xAAFFFFFFu);
+								t4.SetColor(waterColor);
 							}
 						}
 					}
 				}
 			}
+		}
+
+		void Page::SetMinimapWaterMode(bool enabled)
+		{
+			if (m_minimapWaterMode == enabled)
+			{
+				return;
+			}
+
+			m_minimapWaterMode = enabled;
+
+			// Rebuild so the water geometry picks up the minimap (or normal) material and colour.
+			RebuildWaterMesh();
 		}
 
 		bool Page::ReadMCWLChunk(io::Reader& reader, uint32 header, uint32 size)

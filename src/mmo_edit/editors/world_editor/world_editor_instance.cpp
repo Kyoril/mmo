@@ -323,6 +323,11 @@ namespace mmo
 		// destructors call DetachObject/DestroySceneNode which require live scene nodes.
 		m_entityFactory.reset();
 		m_worldGrid.reset();
+		// Destroy the terrain before clearing the scene. Terrain pages own water render
+		// objects and page scene nodes that live in the scene; Scene::Clear() would destroy
+		// those first, leaving the pages with dangling pointers that crash in Page::Unload()
+		// when the terrain is finally destroyed as a member after this destructor body.
+		m_terrain.reset();
 		m_scene.Clear();
 	}
 
@@ -1561,6 +1566,11 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 						continue;
 					}
 
+					// Switch this page's water to an opaque, solid-colour material so it shows up on
+					// the minimap. The normal water material samples scene depth/refraction textures
+					// that are not bound during minimap generation and would otherwise be invisible.
+					page->SetMinimapWaterMode(true);
+
 					// Calculate world position for page centers
 					const float worldX = page->GetSceneNode()->GetDerivedPosition().x + pageSize * 0.5f;
 					const float worldZ = page->GetSceneNode()->GetDerivedPosition().z + pageSize * 0.5f;
@@ -1680,6 +1690,9 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 					{
 						movable->SetVisible(wasVisible);
 					}
+
+					// Restore the page's normal (translucent) water material now that the tile is rendered.
+					page->SetMinimapWaterMode(false);
 
 					// Create texture from render target
 					TexturePtr minimapTexture = minimapRT->StoreToTexture();

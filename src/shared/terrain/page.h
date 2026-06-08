@@ -172,6 +172,13 @@ namespace mmo
 			/// @brief Rebuild the water geometry render object. Must be called on the main thread.
 			void RebuildWaterMesh();
 
+			/// @brief Enable or disable minimap rendering mode for water.
+			/// In minimap mode the water mesh is rebuilt with an opaque, solid-colour material that
+			/// does not depend on the scene depth/refraction textures (which are not bound during
+			/// minimap generation), so water reliably shows up on the generated minimap tiles.
+			/// @param enabled True to switch to minimap water rendering, false to restore normal water.
+			void SetMinimapWaterMode(bool enabled);
+
 			/// @brief Check if an inner vertex is marked as a hole
 			/// @param localTileX Tile X coordinate (0-15)
 			/// @param localTileY Tile Y coordinate (0-15)
@@ -275,6 +282,8 @@ namespace mmo
 			String m_waterMaterialName;
 			/// Runtime render object for water quads (created on Load, destroyed on Destroy).
 			ManualRenderObject* m_waterRenderObject{nullptr};
+			/// When true, water is rebuilt with an opaque solid-colour material for minimap rendering.
+			bool m_minimapWaterMode{false};
 
 			int32 m_x;
 			int32 m_z;
