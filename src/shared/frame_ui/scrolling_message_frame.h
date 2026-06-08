@@ -48,6 +48,9 @@ namespace mmo
 		/// Handles mouse click events to check for hyperlink clicks
 		virtual bool OnMouseDown(MouseButton button, int32 buttons, const Point& position) override;
 
+		/// Scrolls the message list when the mouse wheel is used over the frame.
+		virtual bool OnMouseWheel(int32 delta) override;
+
 	private:
 		void PopulateGeometryBuffer() override;
 

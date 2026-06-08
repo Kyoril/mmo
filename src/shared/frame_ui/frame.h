@@ -387,7 +387,13 @@ namespace mmo
 
 		virtual void OnMouseMoved(const Point& position, const Point& delta);
 
-		/// 
+		/// Called when the mouse wheel is scrolled while this frame (or one of its children)
+		/// is hovered. The event bubbles up the parent chain until a frame consumes it.
+		/// @param delta Number of wheel notches; positive = wheel up, negative = wheel down.
+		/// @return True if the event was consumed, false to let it bubble up to the parent.
+		virtual bool OnMouseWheel(int32 delta) { return false; }
+
+		///
 		virtual void OnKeyDown(Key key) {}
 
 		/// 

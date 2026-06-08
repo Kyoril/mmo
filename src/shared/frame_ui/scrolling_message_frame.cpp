@@ -4,6 +4,7 @@
 #include "hyperlink.h"
 
 #include <algorithm>
+#include <cstdlib>
 
 namespace mmo
 {
@@ -382,6 +383,32 @@ namespace mmo
 		}
 
 		Invalidate(false);
+	}
+
+	bool ScrollingMessageFrame::OnMouseWheel(const int32 delta)
+	{
+		if (delta == 0)
+		{
+			return false;
+		}
+
+		// Scroll a few lines per wheel notch. Positive delta (wheel up) scrolls towards older
+		// messages, negative (wheel down) towards the most recent ones.
+		constexpr int linesPerNotch = 3;
+		const int steps = std::abs(delta) * linesPerNotch;
+		for (int i = 0; i < steps; ++i)
+		{
+			if (delta > 0)
+			{
+				ScrollUp();
+			}
+			else
+			{
+				ScrollDown();
+			}
+		}
+
+		return true;
 	}
 
 	bool ScrollingMessageFrame::OnMouseDown(MouseButton button, int32 buttons, const Point& position)

@@ -965,6 +965,19 @@ namespace mmo
 			}
 		}
 
+		// Otherwise dispatch to the hovered frame and let the event bubble up the parent chain
+		// until a frame consumes it (e.g. a ScrollingMessageFrame scrolling its contents).
+		Frame* frame = m_hoverFrame.get();
+		while (frame)
+		{
+			if (frame->OnMouseWheel(delta))
+			{
+				return true;
+			}
+
+			frame = frame->GetParent();
+		}
+
 		return false;
 	}
 
