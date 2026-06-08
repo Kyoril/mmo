@@ -563,7 +563,7 @@ namespace mmo
 		}
 		else
 		{
-			const bool isAttacking = (Get<uint32>(object_fields::Flags) & unit_flags::Attacking) != 0;
+			const bool isAttacking = IsWeaponDrawn();
 			AnimationState *idleAnim = m_idleAnimState;
 			if (isAttacking)
 			{
