@@ -23,6 +23,9 @@
 #include "graphics/depth_stencil_hash.h"
 #include "graphics/global_shader_parameters.h"
 #include "log/default_log_levels.h"
+
+#include <set>
+#include <string>
 #include "luabind/operator.hpp"
 #include "math/radian.h"
 #include "scene_graph/render_operation.h"
@@ -1275,6 +1278,15 @@ namespace mmo
 			// Don't use instanced rendering if we don't have the instanced shader
 			if (vsType == VertexShaderType::Instanced)
 			{
+				// Warn once per material so missing instanced variants (e.g. on older mesh
+				// materials reused for instanced foliage/trees) are diagnosable instead of
+				// silently rendering nothing. Recompiling/resaving the material adds the variant.
+				static std::set<std::string> s_warnedInstancedMaterials;
+				const std::string materialName = operation.material ? std::string(operation.material->GetName()) : std::string("<unknown>");
+				if (s_warnedInstancedMaterials.insert(materialName).second)
+				{
+					WLOG("Material '" << materialName << "' has no instanced vertex shader variant - instanced draw skipped (nothing rendered). Recompile/resave this material to enable instanced rendering.");
+				}
 				return; // Skip rendering - instanced shader required
 			}
 		}
