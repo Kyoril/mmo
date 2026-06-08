@@ -3,6 +3,7 @@
 #include <map>
 #include <queue>
 #include <set>
+#include <vector>
 
 #include "game_object_c.h"
 #include "game_aura_c.h"
@@ -525,6 +526,17 @@ namespace mmo
 
 		void NotifyHitEvent();
 
+		/// @brief Sets the animation states used for auto attacks based on the equipped weapon.
+		///	@param animNames Names of the skeleton animation states to choose from. One is picked at
+		///	random per swing. Names not present on the current mesh are ignored; when none remain,
+		///	auto attacks fall back to the unarmed attack animation.
+		void SetWeaponAttackAnimations(const std::vector<String>& animNames);
+
+		/// @brief Sets the combat-ready (attack idle) stance based on the equipped weapon.
+		///	@param animName Name of the skeleton animation state to hold while in combat. When empty
+		///	or not present on the current mesh, the unarmed ready animation is used instead.
+		void SetWeaponReadyAnimation(const String& animName);
+
 		/// Adds a proficiency by ID.
 		void AddProficiency(uint32 proficiencyId);
 
@@ -704,10 +716,12 @@ namespace mmo
 		AnimationState *m_idleAnimState{nullptr};
 		AnimationState *m_walkAnimState{nullptr};
 		AnimationState *m_readyAnimState{nullptr};
+		AnimationState *m_weaponReadyState{nullptr};
 		AnimationState *m_runAnimState{nullptr};
 		AnimationState *m_runBackAnimState{nullptr};
 		AnimationState *m_deathState{nullptr};
 		AnimationState *m_unarmedAttackState{nullptr};
+		std::vector<AnimationState*> m_weaponAttackStates;
 		AnimationState *m_castReleaseState{nullptr};
 		AnimationState *m_castingState{nullptr};
 		AnimationState *m_damageHitState{nullptr};

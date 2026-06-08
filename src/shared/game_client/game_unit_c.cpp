@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <random>
 #include <set>
 #include <unordered_map>
 
@@ -563,7 +564,13 @@ namespace mmo
 		else
 		{
 			const bool isAttacking = (Get<uint32>(object_fields::Flags) & unit_flags::Attacking) != 0;
-			AnimationState *idleAnim = isAttacking ? m_readyAnimState : m_idleAnimState;
+			AnimationState *idleAnim = m_idleAnimState;
+			if (isAttacking)
+			{
+				// Prefer the weapon-specific ready stance when one is set and valid for the current
+				// mesh; otherwise fall back to the unarmed ready animation.
+				idleAnim = IsValidAnimState(m_weaponReadyState) ? m_weaponReadyState : m_readyAnimState;
+			}
 
 			SetTargetAnimState(idleAnim);
 		}
@@ -2500,7 +2507,70 @@ namespace mmo
 
 	void GameUnitC::NotifyAttackSwingEvent()
 	{
-		PlayOneShotAnimation(m_unarmedAttackState);
+		// Collect the weapon attack states that are still valid for the current mesh.
+		std::vector<AnimationState*> candidates;
+		candidates.reserve(m_weaponAttackStates.size());
+		for (AnimationState* state : m_weaponAttackStates)
+		{
+			if (IsValidAnimState(state))
+			{
+				candidates.push_back(state);
+			}
+		}
+
+		// Fall back to the unarmed attack animation when no weapon animation is available.
+		if (candidates.empty())
+		{
+			PlayOneShotAnimation(m_unarmedAttackState);
+			return;
+		}
+
+		// Pick one of the weapon attack animations at random.
+		AnimationState* attackState = candidates.front();
+		if (candidates.size() > 1)
+		{
+			static std::random_device rd;
+			static std::mt19937 gen(rd());
+			std::uniform_int_distribution<size_t> dis(0, candidates.size() - 1);
+			attackState = candidates[dis(gen)];
+		}
+
+		PlayOneShotAnimation(attackState);
+	}
+
+	void GameUnitC::SetWeaponAttackAnimations(const std::vector<String>& animNames)
+	{
+		m_weaponAttackStates.clear();
+
+		if (!m_entity)
+		{
+			return;
+		}
+
+		for (const String& animName : animNames)
+		{
+			if (animName.empty() || !m_entity->HasAnimationState(animName))
+			{
+				continue;
+			}
+
+			AnimationState* state = m_entity->GetAnimationState(animName);
+			state->SetLoop(false);
+			m_weaponAttackStates.push_back(state);
+		}
+	}
+
+	void GameUnitC::SetWeaponReadyAnimation(const String& animName)
+	{
+		m_weaponReadyState = nullptr;
+
+		if (animName.empty() || !m_entity || !m_entity->HasAnimationState(animName))
+		{
+			return;
+		}
+
+		m_weaponReadyState = m_entity->GetAnimationState(animName);
+		m_weaponReadyState->SetLoop(true);
 	}
 
 	void GameUnitC::NotifyHitEvent()
@@ -2593,9 +2663,11 @@ namespace mmo
 		m_runAnimState = nullptr;
 		m_runBackAnimState = nullptr;
 		m_readyAnimState = nullptr;
+		m_weaponReadyState = nullptr;
 		m_castingState = nullptr;
 		m_castReleaseState = nullptr;
 		m_unarmedAttackState = nullptr;
+		m_weaponAttackStates.clear();
 		m_deathState = nullptr;
 		m_damageHitState = nullptr;
 		m_targetState = nullptr;

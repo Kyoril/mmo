@@ -8,6 +8,14 @@ message ItemSubclassEntry {
 	required uint32 itemclass = 3;
 	// The proficiency required to use items of this subclass (0 = none)
 	optional uint32 requiredproficiency = 4;
+	// Names of the skeleton animation states played for auto attacks with a weapon of this
+	// subclass (e.g. "SwordAttack01"). One is chosen at random per swing. Empty falls back to
+	// the unarmed attack animation.
+	repeated string attackanimation = 5;
+	// Name of the skeleton animation state used as the combat-ready (attack idle) stance while
+	// in combat with a weapon of this subclass (e.g. "SwordReady"). Empty falls back to the
+	// unarmed ready animation.
+	optional string readyanimation = 6;
 }
 
 message ItemSubclasses {

@@ -111,6 +111,26 @@ namespace mmo
 			}
 		}
 
+		// If this item occupies the main-hand slot, derive the auto attack animation from its
+		// weapon subclass. Non-weapon subclasses simply have no attack animation, which makes
+		// the unit fall back to the unarmed attack.
+		{
+			static constexpr size_t kVisFields = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
+			const uint32 mainHandEntry = Get<uint32>(object_fields::VisibleItem1_0 + player_equipment_slots::Mainhand * kVisFields);
+			if (mainHandEntry == static_cast<uint32>(data.id))
+			{
+				std::vector<String> attackAnimations;
+				String readyAnimation;
+				if (const auto* subclass = m_project.itemSubclasses.getById(data.itemSubclass))
+				{
+					attackAnimations.assign(subclass->attackanimation().begin(), subclass->attackanimation().end());
+					readyAnimation = subclass->readyanimation();
+				}
+				SetWeaponAttackAnimations(attackAnimations);
+				SetWeaponReadyAnimation(readyAnimation);
+			}
+		}
+
 		const auto* displayData = m_project.itemDisplays.getById(data.displayId);
 		if (!displayData)
 		{
@@ -329,6 +349,11 @@ namespace mmo
 		m_entity->ResetSubEntities();
 
 		ClearAllAttachments();
+
+		// Reset to unarmed; the main-hand weapon (if any) re-applies its attack and ready
+		// animations once its item data arrives via NotifyItemData.
+		SetWeaponAttackAnimations({});
+		SetWeaponReadyAnimation(String());
 
 		m_configuration.Apply(*this, *m_customizationDefinition);
 
