@@ -17,6 +17,10 @@
 #include "shared/graphics/structured_buffer.h"
 #include "shared/graphics/occlusion_query.h"
 
+#include <string>
+#include <utility>
+#include <vector>
+
 
 namespace mmo
 {
@@ -344,6 +348,13 @@ namespace mmo
 		/// @param height The desired height in pixels.
 		/// @return True if the resolution is supported, false otherwise.
 		virtual bool ValidateFullscreenResolution(uint16 width, uint16 height) const = 0;
+
+		/// Gets the list of display resolutions supported for fullscreen mode on the primary
+		/// output, sorted ascending (by width, then height) with duplicates removed.
+		/// The default implementation derives a list of common resolutions bounded by the
+		/// primary monitor; backends may override to query the actual display modes.
+		/// @return A list of supported {width, height} resolutions. At minimum the native one.
+		virtual std::vector<std::pair<uint16, uint16>> GetSupportedResolutions() const;
 
 	public:
 		RenderWindowPtr GetAutoCreatedWindow() const { return m_autoCreatedWindow; }

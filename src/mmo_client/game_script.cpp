@@ -43,6 +43,7 @@
 #include "game_client/item_handle.h"
 #include "game_client/unit_handle.h"
 #include "game/game_time_component.h"
+#include "graphics/graphics_device.h"
 #include "luabind/luabind.hpp"
 #include "luabind/iterator_policy.hpp"
 #include "luabind/out_value_policy.hpp"
@@ -1050,6 +1051,26 @@ namespace mmo
 					   luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 					   luabind::def("GetCVar", &Script_GetConsoleVar),
 					   luabind::def("SetCVar", &Script_SetConsoleVar),
+
+					   // Returns an array of supported fullscreen screen resolutions, each entry
+					   // being a table with { width, height, label = "WxH" }, sorted ascending.
+					   luabind::def<std::function<luabind::object()>>("GetScreenResolutions", [this]() -> luabind::object
+					   {
+						   luabind::object result = luabind::newtable(m_luaState.get());
+
+						   const auto resolutions = GraphicsDevice::Get().GetSupportedResolutions();
+						   int i = 1;
+						   for (const auto& res : resolutions)
+						   {
+							   luabind::object entry = luabind::newtable(m_luaState.get());
+							   entry["width"] = static_cast<int>(res.first);
+							   entry["height"] = static_cast<int>(res.second);
+							   entry["label"] = std::to_string(res.first) + "x" + std::to_string(res.second);
+							   result[i++] = entry;
+						   }
+
+						   return result;
+					   }),
 
 					   // Key bindings API
 					   luabind::def<std::function<luabind::object()>>("GetBindings", [this]() -> luabind::object

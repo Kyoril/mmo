@@ -26,6 +26,7 @@
 
 #include <set>
 #include <string>
+#include <algorithm>
 #include "luabind/operator.hpp"
 #include "math/radian.h"
 #include "scene_graph/render_operation.h"
@@ -1442,11 +1443,56 @@ namespace mmo
 		// For fullscreen, we should use exact monitor resolution for best performance
 		if (width != maxWidth || height != maxHeight)
 		{
-			WLOG("Fullscreen resolution " << width << "x" << height << 
-				 " differs from monitor resolution " << maxWidth << "x" << maxHeight << 
+			WLOG("Fullscreen resolution " << width << "x" << height <<
+				 " differs from monitor resolution " << maxWidth << "x" << maxHeight <<
 				 ". Consider using monitor resolution for optimal performance.");
 		}
-		
+
 		return true;
+	}
+
+	std::vector<std::pair<uint16, uint16>> GraphicsDeviceD3D11::GetSupportedResolutions() const
+	{
+		std::vector<std::pair<uint16, uint16>> result;
+
+		// Walk from the device up to its DXGI factory so we can enumerate the primary output's
+		// supported display modes for the back buffer format we render with.
+		ComPtr<IDXGIDevice> dxgiDevice;
+		ComPtr<IDXGIAdapter> adapter;
+		ComPtr<IDXGIOutput> output;
+		if (m_device &&
+			SUCCEEDED(m_device.As(&dxgiDevice)) &&
+			SUCCEEDED(dxgiDevice->GetAdapter(&adapter)) &&
+			SUCCEEDED(adapter->EnumOutputs(0, &output)))
+		{
+			const DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+			UINT modeCount = 0;
+			if (SUCCEEDED(output->GetDisplayModeList(format, 0, &modeCount, nullptr)) && modeCount > 0)
+			{
+				std::vector<DXGI_MODE_DESC> modes(modeCount);
+				if (SUCCEEDED(output->GetDisplayModeList(format, 0, &modeCount, modes.data())))
+				{
+					result.reserve(modeCount);
+					for (const DXGI_MODE_DESC& mode : modes)
+					{
+						result.emplace_back(static_cast<uint16>(mode.Width), static_cast<uint16>(mode.Height));
+					}
+
+					// Modes are returned per refresh rate / scanline order, so de-duplicate the
+					// width/height pairs and present them sorted ascending.
+					std::sort(result.begin(), result.end());
+					result.erase(std::unique(result.begin(), result.end()), result.end());
+				}
+			}
+		}
+
+		// Fall back to the common-resolution list if DXGI enumeration yielded nothing.
+		if (result.empty())
+		{
+			return GraphicsDevice::GetSupportedResolutions();
+		}
+
+		return result;
 	}
 }

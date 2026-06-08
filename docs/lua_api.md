@@ -36,6 +36,11 @@ This document provides a comprehensive reference of all Lua functions available 
 **Returns:** string - The value of the console variable, or nil if not found  
 **Description:** Returns the value of the specified console variable.
 
+### GetScreenResolutions
+**Parameters:** None  
+**Returns:** table - An array of resolution entries, each a table with `width` (number), `height` (number) and `label` (string, e.g. `"1920x1080"`), sorted ascending  
+**Description:** Returns the display resolutions supported for fullscreen mode by the active graphics device. The `label` field matches the format stored in the `gxResolution` console variable, so it can be passed directly to `SetCVar("gxResolution", label)`.
+
 ### EnterWorld
 **Parameters:** None  
 **Returns:** None  

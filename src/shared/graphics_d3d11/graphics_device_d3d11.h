@@ -135,6 +135,8 @@ namespace mmo
 		std::string GetPrimaryMonitorResolution() const override;
 
 		bool ValidateFullscreenResolution(uint16 width, uint16 height) const override;
+
+		std::vector<std::pair<uint16, uint16>> GetSupportedResolutions() const override;
 		// ~ End GraphicsDevice
 
 	public:

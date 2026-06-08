@@ -10,6 +10,8 @@
 
 #include <memory>
 #include <cassert>
+#include <algorithm>
+#include <string>
 
 #include "graphics_null/graphics_device_null.h"
 
@@ -307,5 +309,49 @@ namespace mmo
 				return;
 			}
 		}
+	}
+
+	std::vector<std::pair<uint16, uint16>> GraphicsDevice::GetSupportedResolutions() const
+	{
+		// A set of common 16:9, 16:10 and 4:3 resolutions used as a fallback when the backend
+		// does not enumerate actual display modes. Only those fitting the primary monitor are kept.
+		static const std::pair<uint16, uint16> commonResolutions[] = {
+			{ 1024, 768 }, { 1152, 864 }, { 1280, 720 }, { 1280, 800 }, { 1280, 1024 },
+			{ 1360, 768 }, { 1366, 768 }, { 1440, 900 }, { 1600, 900 }, { 1600, 1200 },
+			{ 1680, 1050 }, { 1920, 1080 }, { 1920, 1200 }, { 2560, 1080 }, { 2560, 1440 },
+			{ 2560, 1600 }, { 3440, 1440 }, { 3840, 2160 },
+		};
+
+		std::vector<std::pair<uint16, uint16>> result;
+		for (const auto& res : commonResolutions)
+		{
+			if (ValidateFullscreenResolution(res.first, res.second))
+			{
+				result.push_back(res);
+			}
+		}
+
+		// Always make sure the native monitor resolution is present.
+		uint16 nativeWidth = 0, nativeHeight = 0;
+		{
+			const std::string native = GetPrimaryMonitorResolution();
+			const auto xPos = native.find('x');
+			if (xPos != std::string::npos)
+			{
+				nativeWidth = static_cast<uint16>(std::stoul(native.substr(0, xPos)));
+				nativeHeight = static_cast<uint16>(std::stoul(native.substr(xPos + 1)));
+			}
+		}
+
+		if (nativeWidth > 0 && nativeHeight > 0)
+		{
+			result.emplace_back(nativeWidth, nativeHeight);
+		}
+
+		// Sort ascending and remove duplicates.
+		std::sort(result.begin(), result.end());
+		result.erase(std::unique(result.begin(), result.end()), result.end());
+
+		return result;
 	}
 }
