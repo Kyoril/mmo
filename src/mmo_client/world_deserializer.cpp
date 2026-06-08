@@ -400,6 +400,7 @@ namespace mmo
 					instance.rotation = source.rotation;
 					instance.scale = source.scale;
 					instance.pageIndex = pageIndex;
+					instance.collides = source.collides;
 					strong->m_foliage->AddInstance(instance);
 				}
 

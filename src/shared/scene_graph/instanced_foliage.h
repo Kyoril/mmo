@@ -4,6 +4,7 @@
 
 #include "foliage_chunk.h"
 #include "foliage_layer.h"
+#include "instanced_foliage_collision.h"
 #include "mesh.h"
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
@@ -47,6 +48,9 @@ namespace mmo
 
 		/// @brief The terrain page this instance belongs to (used for streaming and persistence).
 		uint16 pageIndex = 0;
+
+		/// @brief Whether this instance participates in collision queries (movement, camera, etc.).
+		bool collides = true;
 	};
 
 	/// @brief Renders large numbers of authored mesh instances (e.g. trees) using hardware instancing.
@@ -97,6 +101,10 @@ namespace mmo
 
 		/// @brief Looks up an instance by id.
 		[[nodiscard]] bool TryGetInstance(uint64 uniqueId, InstancedFoliageInstance& out) const;
+
+		/// @brief Sets whether an existing instance participates in collision, marking its cell dirty.
+		/// @return False if no such instance exists.
+		bool SetInstanceCollides(uint64 uniqueId, bool collides);
 
 		/// @brief Removes every instance belonging to the given terrain page (used when streaming pages out).
 		void UnloadPage(uint16 pageIndex);
@@ -171,10 +179,17 @@ namespace mmo
 			SceneNode* node = nullptr;
 		};
 
+		struct CollisionEntry
+		{
+			std::shared_ptr<InstancedFoliageCollision> collision;
+			SceneNode* node = nullptr;
+		};
+
 		struct Cell
 		{
 			SceneNode* node = nullptr;
 			std::vector<ChunkEntry> chunks;
+			std::vector<CollisionEntry> collisions;
 			std::unordered_set<uint64> instanceIds;
 		};
 

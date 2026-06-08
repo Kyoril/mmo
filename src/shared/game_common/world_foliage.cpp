@@ -85,6 +85,10 @@ namespace mmo
 
 		m_instances.reserve(m_instances.size() + instanceCount);
 
+		// The collision flag was introduced in version 0x0002. Files written by older editors
+		// default every instance to collidable, preserving the previous behaviour.
+		const bool hasCollisionFlag = m_version >= foliage_version::Version_0_0_0_2;
+
 		for (uint32 i = 0; i < instanceCount; ++i)
 		{
 			uint64 uniqueId = 0;
@@ -111,6 +115,13 @@ namespace mmo
 				return false;
 			}
 
+			uint8 collides = 1;
+			if (hasCollisionFlag && !(reader >> io::read<uint8>(collides)))
+			{
+				ELOG("Failed to read foliage instance collision flag, unexpected end of file!");
+				return false;
+			}
+
 			if (meshIndex >= m_meshNames.size())
 			{
 				ELOG("Foliage instance references unknown mesh name!");
@@ -127,6 +138,7 @@ namespace mmo
 			instance.position = position;
 			instance.rotation = rotation;
 			instance.scale = scale;
+			instance.collides = collides != 0;
 			m_instances.emplace_back(std::move(instance));
 		}
 
@@ -138,7 +150,7 @@ namespace mmo
 		// Version chunk.
 		{
 			ChunkWriter versionChunk(FoliageVersionChunk, writer);
-			writer << io::write<uint32>(foliage_version::Version_0_0_0_1);
+			writer << io::write<uint32>(foliage_version::Version_0_0_0_2);
 			versionChunk.Finish();
 		}
 
@@ -200,7 +212,8 @@ namespace mmo
 					<< io::write<float>(instance.rotation.z)
 					<< io::write<float>(instance.scale.x)
 					<< io::write<float>(instance.scale.y)
-					<< io::write<float>(instance.scale.z);
+					<< io::write<float>(instance.scale.z)
+					<< io::write<uint8>(instance.collides ? 1 : 0);
 			}
 
 			instanceChunk.Finish();

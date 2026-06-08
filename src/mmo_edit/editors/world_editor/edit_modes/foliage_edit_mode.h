@@ -126,6 +126,9 @@ namespace mmo
 
 		bool m_castShadows = true;
 
+		/// @brief Whether instances placed by the brush participate in collision (movement, camera).
+		bool m_collides = true;
+
 		Vector3 m_brushPosition{};
 		bool m_brushPositionValid = false;
 

@@ -1018,6 +1018,7 @@ namespace mmo
 					instance.position = source.position;
 					instance.rotation = source.rotation;
 					instance.scale = source.scale;
+					instance.collides = source.collides;
 					serialized.push_back(instance);
 				}
 
@@ -2148,6 +2149,7 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			instance.rotation = src.rotation;
 			instance.scale = src.scale;
 			instance.pageIndex = pageIndex;
+			instance.collides = src.collides;
 			m_foliage->AddInstance(instance);
 		}
 

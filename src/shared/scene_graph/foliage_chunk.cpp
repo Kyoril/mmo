@@ -258,23 +258,32 @@ namespace mmo
 
 	MaterialPtr FoliageChunk::GetMaterial() const
 	{
-		if (m_layer)
+		if (!m_layer)
 		{
-			// Prefer an explicitly configured layer material (used by grass). Otherwise fall
-			// back to the material of the submesh this chunk renders (used by authored trees,
-			// where each submesh keeps its own material).
-			if (const MaterialPtr& layerMaterial = m_layer->GetMaterial())
-			{
-				//return layerMaterial;
-			}
+			return nullptr;
+		}
 
-			const MeshPtr& mesh = m_layer->GetMesh();
-			const uint16 submeshIndex = m_layer->GetSubmeshIndex();
-			if (mesh && mesh->GetSubMeshCount() > submeshIndex)
+		const MeshPtr& mesh = m_layer->GetMesh();
+		const uint16 submeshIndex = m_layer->GetSubmeshIndex();
+
+		// For authored foliage (trees), prioritize the submesh's own material so that
+		// multi-material trees (bark, canopy, etc.) render correctly per-submesh.
+		// For procedural foliage (grass), submeshes also have their own materials.
+		if (mesh && mesh->GetSubMeshCount() > submeshIndex)
+		{
+			if (MaterialPtr& subMeshMaterial = mesh->GetSubMesh(submeshIndex).GetMaterial())
 			{
-				return mesh->GetSubMesh(submeshIndex).GetMaterial();
+				return subMeshMaterial;
 			}
 		}
+
+		// Fall back to layer material only if the submesh doesn't have one (edge case).
+		// This supports an explicit material set on the layer (rare for current use cases).
+		if (const MaterialPtr& layerMaterial = m_layer->GetMaterial())
+		{
+			return layerMaterial;
+		}
+
 		return nullptr;
 	}
 }

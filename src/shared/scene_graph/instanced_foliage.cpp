@@ -132,6 +132,24 @@ namespace mmo
 		return true;
 	}
 
+	bool InstancedFoliage::SetInstanceCollides(const uint64 uniqueId, const bool collides)
+	{
+		const auto it = m_instances.find(uniqueId);
+		if (it == m_instances.end())
+		{
+			return false;
+		}
+
+		if (it->second.instance.collides == collides)
+		{
+			return true;
+		}
+
+		it->second.instance.collides = collides;
+		m_dirtyCells.insert(it->second.cell);
+		return true;
+	}
+
 	bool InstancedFoliage::TryGetInstance(const uint64 uniqueId, InstancedFoliageInstance& out) const
 	{
 		const auto it = m_instances.find(uniqueId);
@@ -210,6 +228,19 @@ namespace mmo
 			}
 		}
 		cell.chunks.clear();
+
+		for (auto& entry : cell.collisions)
+		{
+			if (entry.collision)
+			{
+				entry.collision->DetachFromParent();
+			}
+			if (entry.node)
+			{
+				m_scene.DestroySceneNode(*entry.node);
+			}
+		}
+		cell.collisions.clear();
 	}
 
 	void InstancedFoliage::RebuildDirtyCells()
@@ -304,7 +335,54 @@ namespace mmo
 				chunk->SetScene(&m_scene);
 				chunk->SetVisible(m_visible);
 
+				// Render chunks carry no collision geometry of their own - collision is provided by a
+				// dedicated InstancedFoliageCollision proxy (built below). Exclude render chunks from
+				// scene queries entirely so movement/camera queries don't waste time on them.
+				chunk->SetQueryFlags(0);
+
 				cell.chunks.push_back(ChunkEntry{ chunk, chunkNode });
+			}
+
+			// Build a single collision proxy per mesh covering every collidable instance of that mesh.
+			// One proxy per mesh (not per submesh) avoids reporting the same instance's collision once
+			// per submesh, and only meshes that actually have a collision tree get one.
+			if (!mesh->GetCollisionTree().IsEmpty())
+			{
+				auto collision = std::make_shared<InstancedFoliageCollision>(
+					"FoliageCollision_" + meshName + "_" + std::to_string(coord.x) + "_" + std::to_string(coord.z),
+					mesh);
+
+				for (const uint64 id : ids)
+				{
+					const auto recordIt = m_instances.find(id);
+					if (recordIt == m_instances.end())
+					{
+						continue;
+					}
+
+					const InstancedFoliageInstance& instance = recordIt->second.instance;
+					if (!instance.collides)
+					{
+						continue;
+					}
+
+					collision->AddInstance(BuildTransform(instance.position, instance.rotation, instance.scale));
+				}
+
+				if (collision->GetInstanceCount() > 0)
+				{
+					collision->Finalize();
+
+					SceneNode* collisionNode = cell.node->CreateChildSceneNode();
+					collisionNode->AttachObject(*collision);
+					collision->SetScene(&m_scene);
+
+					// Match the query flags used by terrain tiles and static mesh entities so that the
+					// same movement/camera collision queries pick foliage up as solid world geometry.
+					collision->SetQueryFlags(1 << 6);
+
+					cell.collisions.push_back(CollisionEntry{ collision, collisionNode });
+				}
 			}
 		}
 	}

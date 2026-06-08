@@ -246,6 +246,7 @@ namespace mmo
 			instance.rotation = rotation;
 			instance.scale = Vector3(scale, scale, scale);
 			instance.pageIndex = PageIndexFromPosition(position);
+			instance.collides = m_collides;
 
 			if (m_foliage.AddInstance(instance))
 			{
@@ -345,6 +346,7 @@ namespace mmo
 		instance.rotation = Quaternion::Identity;
 		instance.scale = Vector3::UnitScale;
 		instance.pageIndex = PageIndexFromPosition(m_brushPosition);
+		instance.collides = m_collides;
 
 		if (m_foliage.AddInstance(instance))
 		{
@@ -424,6 +426,9 @@ namespace mmo
 		ImGui::InputText("Mesh", m_meshPath, sizeof(m_meshPath));
 		ImGui::TextDisabled("Drag a .hmsh from the Asset Browser onto the viewport to set the brush mesh.");
 
+		ImGui::Checkbox("Has collision", &m_collides);
+		ImGui::TextDisabled("Newly placed instances block movement and the camera. Disable for purely decorative, walkable foliage.");
+
 		if (m_brushMode != FoliageBrushMode::Select)
 		{
 			ImGui::Separator();
@@ -474,6 +479,14 @@ namespace mmo
 				{
 					instance.scale = Vector3(uniformScale, uniformScale, uniformScale);
 					changed = true;
+				}
+
+				bool instanceCollides = instance.collides;
+				if (ImGui::Checkbox("Has collision", &instanceCollides))
+				{
+					m_foliage.SetInstanceCollides(m_selectedInstance, instanceCollides);
+					m_dirtyPages.insert(instance.pageIndex);
+					m_foliage.RebuildDirtyCells();
 				}
 
 				if (changed)

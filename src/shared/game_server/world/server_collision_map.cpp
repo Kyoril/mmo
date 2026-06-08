@@ -338,6 +338,12 @@ namespace mmo
 			{
 				++foliageInstanceCount;
 
+				// Honor the per-instance collision flag - decorative foliage stays walkable server-side.
+				if (!instance.collides)
+				{
+					continue;
+				}
+
 				auto it = meshCache.find(instance.meshName);
 				if (it == meshCache.end())
 				{

@@ -37,6 +37,11 @@ namespace mmo
 
 		/// @brief World-space scale.
 		Vector3 scale = Vector3::UnitScale;
+
+		/// @brief Whether this instance participates in collision (capsule/ray queries, navmesh,
+		///        server-side collision). Some foliage (e.g. bushes, decorative grass tufts) is placed
+		///        purely visually and should be walkable, so this can be disabled per instance.
+		bool collides = true;
 	};
 
 	namespace foliage_version
@@ -46,6 +51,9 @@ namespace mmo
 			Latest = -1,
 
 			Version_0_0_0_1 = 0x0001,
+
+			/// @brief Adds a per-instance collision flag to each FINS record.
+			Version_0_0_0_2 = 0x0002,
 		};
 	}
 

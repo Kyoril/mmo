@@ -571,6 +571,12 @@ namespace mmo
 
             for (const auto& instance : loader.GetInstances())
             {
+                // Foliage explicitly flagged as non-colliding must not carve navmesh obstacles.
+                if (!instance.collides)
+                {
+                    continue;
+                }
+
                 if (GetMapEntityInstance(instance.uniqueId) != nullptr)
                 {
                     WLOG("Duplicate foliage instance id found: " << instance.uniqueId);
