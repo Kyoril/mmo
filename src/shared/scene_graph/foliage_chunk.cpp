@@ -265,7 +265,7 @@ namespace mmo
 			// where each submesh keeps its own material).
 			if (const MaterialPtr& layerMaterial = m_layer->GetMaterial())
 			{
-				return layerMaterial;
+				//return layerMaterial;
 			}
 
 			const MeshPtr& mesh = m_layer->GetMesh();
