@@ -19,7 +19,17 @@ namespace mmo
 		const int32 chunkX,
 		const int32 chunkZ,
 		const float chunkSize)
-		: m_parent(parent)
+		: FoliageChunk(layer, chunkX, chunkZ, chunkSize)
+	{
+		m_parent = &parent;
+	}
+
+	FoliageChunk::FoliageChunk(
+		const FoliageLayerPtr& layer,
+		const int32 chunkX,
+		const int32 chunkZ,
+		const float chunkSize)
+		: m_parent(nullptr)
 		, m_layer(layer)
 		, m_chunkX(chunkX)
 		, m_chunkZ(chunkZ)
@@ -75,14 +85,15 @@ namespace mmo
 
 		// Get the mesh from the layer
 		const auto& mesh = m_layer->GetMesh();
-		if (!mesh || mesh->GetSubMeshCount() == 0)
+		const uint16 submeshIndex = m_layer->GetSubmeshIndex();
+		if (!mesh || mesh->GetSubMeshCount() <= submeshIndex)
 		{
 			m_needsRebuild = false;
 			return;
 		}
 
-		// Clone vertex and index data from the first submesh
-		const auto& subMesh = mesh->GetSubMesh(0);
+		// Clone vertex and index data from the layer's submesh
+		const auto& subMesh = mesh->GetSubMesh(submeshIndex);
 
 		// Clone vertex data
 		if (subMesh.useSharedVertices && mesh->sharedVertexData)
@@ -249,7 +260,20 @@ namespace mmo
 	{
 		if (m_layer)
 		{
-			return m_layer->GetMaterial();
+			// Prefer an explicitly configured layer material (used by grass). Otherwise fall
+			// back to the material of the submesh this chunk renders (used by authored trees,
+			// where each submesh keeps its own material).
+			if (const MaterialPtr& layerMaterial = m_layer->GetMaterial())
+			{
+				return layerMaterial;
+			}
+
+			const MeshPtr& mesh = m_layer->GetMesh();
+			const uint16 submeshIndex = m_layer->GetSubmeshIndex();
+			if (mesh && mesh->GetSubMeshCount() > submeshIndex)
+			{
+				return mesh->GetSubMesh(submeshIndex).GetMaterial();
+			}
 		}
 		return nullptr;
 	}

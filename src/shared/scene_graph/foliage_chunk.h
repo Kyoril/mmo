@@ -51,6 +51,19 @@ namespace mmo
 			int32 chunkZ,
 			float chunkSize);
 
+		/// @brief Creates a new foliage chunk that is not owned by a procedural Foliage system.
+		/// @details Used by the authored (instanced) foliage system, which feeds explicit
+		///          instances rather than generating them procedurally.
+		/// @param layer The foliage layer this chunk renders.
+		/// @param chunkX X coordinate of the chunk in chunk space.
+		/// @param chunkZ Z coordinate of the chunk in chunk space.
+		/// @param chunkSize Size of the chunk in world units.
+		FoliageChunk(
+			const FoliageLayerPtr& layer,
+			int32 chunkX,
+			int32 chunkZ,
+			float chunkSize);
+
 		~FoliageChunk() override = default;
 
 	public:
@@ -107,8 +120,8 @@ namespace mmo
 			m_needsRebuild = true;
 		}
 
-		/// @brief Gets the parent foliage system.
-		[[nodiscard]] Foliage& GetParent() const
+		/// @brief Gets the parent foliage system, or nullptr for authored (instanced) chunks.
+		[[nodiscard]] Foliage* GetParent() const
 		{
 			return m_parent;
 		}
@@ -156,7 +169,7 @@ namespace mmo
 		[[nodiscard]] MaterialPtr GetMaterial() const override;
 
 	private:
-		Foliage& m_parent;
+		Foliage* m_parent;
 		FoliageLayerPtr m_layer;
 		int32 m_chunkX;
 		int32 m_chunkZ;

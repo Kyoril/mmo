@@ -99,6 +99,21 @@ namespace mmo
 		/// @param material The new material to use.
 		void SetMaterial(MaterialPtr material);
 
+		/// @brief Gets the submesh index of the mesh that this layer renders.
+		/// @details Defaults to 0. Used by multi-submesh meshes (e.g. trees) so that each
+		///          submesh can be rendered as its own instanced batch with its own material.
+		[[nodiscard]] uint16 GetSubmeshIndex() const
+		{
+			return m_submeshIndex;
+		}
+
+		/// @brief Sets the submesh index of the mesh that this layer renders.
+		/// @param submeshIndex The submesh index to render.
+		void SetSubmeshIndex(const uint16 submeshIndex)
+		{
+			m_submeshIndex = submeshIndex;
+		}
+
 		/// @brief Gets the current layer settings.
 		[[nodiscard]] const FoliageLayerSettings& GetSettings() const
 		{
@@ -178,6 +193,7 @@ namespace mmo
 		MeshPtr m_mesh;
 		MaterialPtr m_material;
 		FoliageLayerSettings m_settings;
+		uint16 m_submeshIndex = 0;
 		bool m_dirty = true;
 	};
 
