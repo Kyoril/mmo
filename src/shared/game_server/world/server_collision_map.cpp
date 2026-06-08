@@ -8,6 +8,7 @@
 #include "binary_io/stream_source.h"
 #include "binary_io/reader.h"
 #include "game_common/world_entity_loader.h"
+#include "game_common/world_foliage.h"
 #include "log/default_log_levels.h"
 #include "math/quaternion.h"
 #include "math/ray.h"
@@ -302,6 +303,64 @@ namespace mmo
 				++meshWithCollision;
 				AddInstance(it->second, instanceTransform);
 			}
+		}
+
+		// -----------------------------------------------------------------------
+		// Authored instanced foliage (trees) — same collision treatment as mesh
+		// entities, but stored per-page as .hfol files holding many instances each.
+		// -----------------------------------------------------------------------
+		const std::string foliageDir = "Worlds/" + mapName + "/" + mapName + "/Foliage/";
+		const std::vector<std::string> foliageFiles = AssetRegistry::ListFiles(foliageDir, "hfol");
+
+		uint32 foliageInstanceCount = 0, foliageWithCollision = 0;
+
+		for (const auto& foliageFilename : foliageFiles)
+		{
+			auto foliageFile = AssetRegistry::OpenFile(foliageFilename);
+			if (!foliageFile)
+			{
+				++readFailCount;
+				continue;
+			}
+
+			io::StreamSource foliageSource{ *foliageFile };
+			io::Reader foliageReader{ foliageSource };
+
+			WorldFoliageLoader foliageLoader;
+			if (!foliageLoader.Read(foliageReader))
+			{
+				WLOG("ServerCollisionMap: failed to read foliage file: " << foliageFilename);
+				++readFailCount;
+				continue;
+			}
+
+			for (const auto& instance : foliageLoader.GetInstances())
+			{
+				++foliageInstanceCount;
+
+				auto it = meshCache.find(instance.meshName);
+				if (it == meshCache.end())
+				{
+					it = meshCache.emplace(instance.meshName, LoadMeshTree(instance.meshName)).first;
+				}
+
+				if (!it->second || it->second->IsEmpty())
+				{
+					continue;
+				}
+
+				Matrix4 instanceTransform;
+				instanceTransform.MakeTransform(instance.position, instance.scale, instance.rotation);
+
+				++foliageWithCollision;
+				AddInstance(it->second, instanceTransform);
+			}
+		}
+
+		if (foliageInstanceCount > 0)
+		{
+			DLOG("ServerCollisionMap: " << foliageInstanceCount << " foliage instances ("
+				<< foliageWithCollision << " with collision)");
 		}
 
 		DLOG("ServerCollisionMap: " << meshCount << " mesh entities (" << meshWithCollision

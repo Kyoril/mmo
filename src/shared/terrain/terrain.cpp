@@ -380,6 +380,22 @@ namespace mmo
 			m_showWireframe = visible;
 		}
 
+		void Terrain::SetWaterVisible(const bool visible)
+		{
+			m_waterVisible = visible;
+
+			for (uint32 x = 0; x < m_width; ++x)
+			{
+				for (uint32 y = 0; y < m_height; ++y)
+				{
+					if (Page* page = m_pages(x, y).get())
+					{
+						page->SetWaterVisible(visible);
+					}
+				}
+			}
+		}
+
 		bool Terrain::GetTileIndexByWorldPosition(const Vector3 &position, int32 &x, int32 &y) const
 		{
 			const float halfTerrainWidth = (m_width * constants::PageSize) * 0.5f;

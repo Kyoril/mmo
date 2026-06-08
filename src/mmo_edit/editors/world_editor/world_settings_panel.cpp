@@ -16,8 +16,12 @@ namespace mmo
         bool &hasTerrain,
         WorldEditMode *&currentEditMode,
         WorldEditMode *terrainEditMode,
-        std::function<void(WorldEditMode *)> setEditModeCallback)
-        : m_terrain(terrain), m_hasTerrain(hasTerrain), m_currentEditMode(currentEditMode), m_terrainEditMode(terrainEditMode), m_setEditModeCallback(std::move(setEditModeCallback))
+        std::function<void(WorldEditMode *)> setEditModeCallback,
+        bool &showFoliage,
+        bool &showWater,
+        std::function<void(bool)> setFoliageVisibleCallback,
+        std::function<void(bool)> setWaterVisibleCallback)
+        : m_terrain(terrain), m_hasTerrain(hasTerrain), m_currentEditMode(currentEditMode), m_terrainEditMode(terrainEditMode), m_setEditModeCallback(std::move(setEditModeCallback)), m_showFoliage(showFoliage), m_showWater(showWater), m_setFoliageVisibleCallback(std::move(setFoliageVisibleCallback)), m_setWaterVisibleCallback(std::move(setWaterVisibleCallback))
     {
     }
 
@@ -77,6 +81,38 @@ namespace mmo
                 if (ImGui::Checkbox("Show Fog", &showFog))
                 {
                     m_terrain.GetScene().SetFogEnabled(showFog);
+                }
+
+                // Foliage rendering (authored trees) — mirrors the in-game client appearance.
+                // Hidden by default since dense foliage makes terrain editing harder.
+                bool showFoliage = m_showFoliage;
+                if (ImGui::Checkbox("Show Foliage", &showFoliage))
+                {
+                    m_showFoliage = showFoliage;
+                    if (m_setFoliageVisibleCallback)
+                    {
+                        m_setFoliageVisibleCallback(showFoliage);
+                    }
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Render authored foliage (trees) just as in the game client.");
+                }
+
+                // Water rendering — visible by default. Note that water is always shown while
+                // the water edit mode is active, regardless of this setting.
+                bool showWater = m_showWater;
+                if (ImGui::Checkbox("Show Water", &showWater))
+                {
+                    m_showWater = showWater;
+                    if (m_setWaterVisibleCallback)
+                    {
+                        m_setWaterVisibleCallback(showWater);
+                    }
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Show water surfaces. Water is always visible while editing water.");
                 }
 
                 // Fog fade range controls

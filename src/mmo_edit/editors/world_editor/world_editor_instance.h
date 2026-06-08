@@ -37,6 +37,8 @@
 #include "edit_modes/sky_edit_mode.h"
 #include "edit_modes/area_trigger_edit_mode.h"
 #include "edit_modes/water_edit_mode.h"
+#include "edit_modes/foliage_edit_mode.h"
+#include "scene_graph/instanced_foliage.h"
 #include "scene_outline_window.h"
 #include "grid_snap_settings.h"
 #include "details_panel.h"
@@ -56,6 +58,8 @@ namespace mmo
 	class Entity;
 	class Camera;
 	class SceneNode;
+	class InstancedFoliage;
+	class Foliage;
 
 	/// @brief Represents the type of a map entity.
 	enum class MapEntityType
@@ -392,6 +396,19 @@ namespace mmo
 
 		void UnloadPageEntities(uint8 x, uint8 y);
 
+		/// @brief Loads the authored foliage (.hfol) of a terrain page into the editor's foliage renderer.
+		/// @param x Page X coordinate.
+		/// @param y Page Y coordinate.
+		void LoadPageFoliage(uint8 x, uint8 y);
+
+		/// @brief Creates and configures the procedural grass system to mirror the game client.
+		void SetupGrass();
+
+		/// @brief Recomputes and applies the effective water visibility.
+		/// @details The water surface is shown when the "Show Water" setting is enabled, or whenever the
+		///          water edit mode is active (so water can always be edited), whichever applies.
+		void UpdateWaterVisibility();
+
 	public:
 		const std::filesystem::path GetWorldPath() const override { return m_assetPath; }
 
@@ -426,6 +443,21 @@ namespace mmo
 		bool m_hovering{false};
 
 		std::unique_ptr<terrain::Terrain> m_terrain;
+
+		/// @brief Hardware-instanced renderer for authored foliage (trees), mirroring the game client.
+		std::unique_ptr<InstancedFoliage> m_foliage;
+
+		/// @brief Procedural grass/vegetation system (the dense foliage seen in the client). Hidden by default.
+		std::unique_ptr<Foliage> m_grass;
+
+		/// @brief WYSIWYG setting: whether procedural grass is rendered in the editor. Hidden by default.
+		bool m_showFoliage{false};
+
+		/// @brief WYSIWYG setting: whether water surfaces are rendered in the editor. Visible by default.
+		bool m_showWater{true};
+
+		/// @brief Last effective water visibility pushed to the terrain (avoids redundant per-frame updates).
+		bool m_waterVisibilityApplied{true};
 
 		GridSnapSettings m_gridSnapSettings;
 
@@ -472,6 +504,7 @@ namespace mmo
 		std::unique_ptr<SkyEditMode> m_skyEditMode;
 		std::unique_ptr<AreaTriggerEditMode> m_areaTriggerEditMode;
 		std::unique_ptr<WaterEditMode> m_waterEditMode;
+		std::unique_ptr<FoliageEditMode> m_foliageEditMode;
 		std::unique_ptr<SkyComponent> m_skyComponent;
 		WorldEditMode *m_editMode{nullptr};
 

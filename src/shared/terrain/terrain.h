@@ -154,6 +154,16 @@ namespace mmo
 			/// @return True if the wireframe is visible, false otherwise.
 			bool IsWireframeVisible() const { return m_showWireframe; }
 
+			/// @brief Sets the visibility of all water surfaces across the terrain.
+			/// @details Applies to all currently loaded pages and is remembered so that pages
+			///          streamed in later inherit the same visibility.
+			/// @param visible True to render water surfaces, false to hide them.
+			void SetWaterVisible(bool visible);
+
+			/// @brief Checks whether water surfaces are visible.
+			/// @return True if water is visible, false otherwise.
+			[[nodiscard]] bool IsWaterVisible() const { return m_waterVisible; }
+
 			/// Returns the global tile index x and y for the given world position. Global tile index means that 0,0 is the top left corner of the terrain,
 			///	and that the maximum value for x and y is m_width * constants::TilesPerPage - 1 and m_height * constants::TilesPerPage - 1 respectively.
 			bool GetTileIndexByWorldPosition(const Vector3 &position, int32 &x, int32 &y) const;
@@ -697,6 +707,7 @@ namespace mmo
 			bool m_debugLod { false };
 			MaterialPtr m_defaultMaterial;
 			bool m_showWireframe = false;
+			bool m_waterVisible = true;
 			MaterialPtr m_wireframeMaterial;
 			bool m_occlusionCullingEnabled { true };
 

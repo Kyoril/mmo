@@ -172,6 +172,10 @@ namespace mmo
 			/// @brief Rebuild the water geometry render object. Must be called on the main thread.
 			void RebuildWaterMesh();
 
+			/// @brief Show or hide this page's water render object.
+			/// @param visible True to render the page's water surface, false to hide it.
+			void SetWaterVisible(bool visible);
+
 			/// @brief Enable or disable minimap rendering mode for water.
 			/// In minimap mode the water mesh is rebuilt with an opaque, solid-colour material that
 			/// does not depend on the scene depth/refraction textures (which are not bound during

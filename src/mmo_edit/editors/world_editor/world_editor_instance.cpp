@@ -23,7 +23,13 @@
 #include "game/character_customization/avatar_definition_mgr.h"
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "game_common/world_entity_loader.h"
+#include "game_common/world_foliage.h"
+#include "graphics/graphics_device.h"
 #include "graphics/texture_mgr.h"
+#include "scene_graph/instanced_foliage.h"
+#include "scene_graph/foliage.h"
+#include "scene_graph/foliage_layer.h"
+#include "terrain/constants.h"
 #include "nav_build/common.h"
 #include "scene_graph/mesh_manager.h"
 #include "terrain/page.h"
@@ -156,6 +162,16 @@ namespace mmo
 					   { return c == '\\' ? '/' : c; });
 		m_terrain->SetBaseFileName(baseFileName);
 
+		// Authored foliage (trees) is rendered through hardware-instanced cells, exactly like the
+		// game client, so the editor can preview the world WYSIWYG. Trees are authored map content
+		// (placed via the foliage edit mode) and are therefore always visible.
+		m_foliage = std::make_unique<InstancedFoliage>(m_scene, GraphicsDevice::Get(), static_cast<float>(terrain::constants::PageSize) / 4.0f);
+		m_foliage->SetVisible(true);
+
+		// Procedural grass mirrors the client's dense vegetation. It is controlled by the
+		// "Show Foliage" world setting and hidden by default so it does not obstruct editing.
+		SetupGrass();
+
 		m_debugNode = m_scene.GetRootSceneNode().CreateChildSceneNode();
 		m_debugEntity = m_scene.CreateEntity("TerrainDebug", "Editor/Joint.hmsh");
 		m_debugNode->AttachObject(*m_debugEntity);
@@ -189,7 +205,22 @@ namespace mmo
 			m_editMode,
 			m_terrainEditMode.get(),
 			[this](WorldEditMode *mode)
-			{ SetEditMode(mode); });
+			{ SetEditMode(mode); },
+			m_showFoliage,
+			m_showWater,
+			[this](bool visible)
+			{
+				if (m_grass)
+				{
+					m_grass->SetVisible(visible);
+					if (visible)
+					{
+						m_grass->RebuildAll();
+					}
+				}
+			},
+			[this](bool)
+			{ UpdateWaterVisibility(); });
 
 		// Create spawn palette panel
 		m_spawnPalettePanel = std::make_unique<SpawnPalettePanel>();
@@ -270,6 +301,10 @@ namespace mmo
 		m_areaTriggerEditMode = std::make_unique<AreaTriggerEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().areaTriggers);
 		m_waterEditMode = std::make_unique<WaterEditMode>(*this, *m_terrain, *m_camera);
 		m_terrainEditMode->SetWaterEditMode(m_waterEditMode.get());
+
+		// Brush-based authoring for the instanced foliage created above (m_foliage).
+		m_foliageEditMode = std::make_unique<FoliageEditMode>(*this, *m_foliage, m_terrain.get(), *m_camera);
+
 		m_editMode = nullptr;
 
 		m_selectionRaycaster = std::make_unique<SelectionRaycaster>(
@@ -322,6 +357,13 @@ namespace mmo
 		// Destroy entity/world-model instances before clearing the scene — their
 		// destructors call DetachObject/DestroySceneNode which require live scene nodes.
 		m_entityFactory.reset();
+		// The foliage edit mode holds a reference to m_foliage and owns brush scene objects;
+		// release it before the foliage it references and before Scene::Clear().
+		m_foliageEditMode.reset();
+		// Foliage owns scene nodes and render chunks; destroy it before Scene::Clear().
+		m_foliage.reset();
+		// Procedural grass also owns scene nodes and render chunks; destroy before Scene::Clear().
+		m_grass.reset();
 		m_worldGrid.reset();
 		// Destroy the terrain before clearing the scene. Terrain pages own water render
 		// objects and page scene nodes that live in the scene; Scene::Clear() would destroy
@@ -334,6 +376,15 @@ namespace mmo
 	void WorldEditorInstance::Render()
 	{
 		m_dispatcher.poll();
+
+		// Keep water visibility in sync with the active edit mode (water is forced visible while editing water).
+		UpdateWaterVisibility();
+
+		// Stream procedural grass chunks around the camera, mirroring the client (only when shown).
+		if (m_grass && m_grass->IsVisible() && m_camera)
+		{
+			m_grass->Update(*m_camera);
+		}
 
 		const float deltaTimeSeconds = ImGui::GetCurrentContext()->IO.DeltaTime;
 
@@ -451,6 +502,7 @@ namespace mmo
 
 		WorldEditMode *availableModes[] = {
 			m_entityEditMode.get(),
+			m_foliageEditMode.get(),
 			m_terrainEditMode.get(),
 			m_spawnEditMode.get(),
 			m_areaTriggerEditMode.get(),
@@ -662,7 +714,7 @@ namespace mmo
 			const bool isDraggingWaypoint = (m_editMode == m_spawnEditMode.get() && m_spawnEditMode->IsDraggingWaypoint());
 
 			// TODO: Move this into edit modes handling of OnMouseMoved
-			if (m_rightButtonPressed || (m_leftButtonPressed && !isDraggingWaypoint && (m_editMode != m_terrainEditMode.get() || (m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Deform &&
+			if (m_rightButtonPressed || (m_leftButtonPressed && !isDraggingWaypoint && m_editMode != m_foliageEditMode.get() && (m_editMode != m_terrainEditMode.get() || (m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Deform &&
 																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Paint &&
 																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Area &&
 																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::VertexShading &&
@@ -935,6 +987,54 @@ namespace mmo
 					page->Save();
 				}
 			}
+		}
+
+		// Save authored foliage. Each modified page is rewritten as a whole .hfol file (or deleted
+		// when it no longer holds any instances).
+		if (m_foliageEditMode && m_foliage)
+		{
+			for (const uint16 pageIndex : m_foliageEditMode->GetDirtyPages())
+			{
+				String fileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Foliage" / (std::to_string(pageIndex) + ".hfol")).string();
+				std::transform(fileName.begin(), fileName.end(), fileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
+
+				std::vector<InstancedFoliageInstance> pageInstances;
+				m_foliage->GetInstancesForPage(pageIndex, pageInstances);
+
+				if (pageInstances.empty())
+				{
+					// Page emptied — remove any existing file.
+					AssetRegistry::RemoveFile(fileName);
+					continue;
+				}
+
+				std::vector<FoliageInstance> serialized;
+				serialized.reserve(pageInstances.size());
+				for (const auto& source : pageInstances)
+				{
+					FoliageInstance instance;
+					instance.uniqueId = source.uniqueId;
+					instance.meshName = source.meshName;
+					instance.position = source.position;
+					instance.rotation = source.rotation;
+					instance.scale = source.scale;
+					serialized.push_back(instance);
+				}
+
+				auto filePtr = AssetRegistry::CreateNewFile(fileName);
+				if (!filePtr)
+				{
+					ELOG("Failed to write foliage file " << fileName);
+					continue;
+				}
+
+				io::StreamSink foliageSink{ *filePtr };
+				io::Writer foliageWriter{ foliageSink };
+				WorldFoliageSerializer::Write(foliageWriter, serialized);
+				foliageSink.Flush();
+			}
+
+			m_foliageEditMode->ClearDirtyPages();
 		}
 
 		return true;
@@ -1930,6 +2030,150 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		}
 	}
 
+	void WorldEditorInstance::SetupGrass()
+	{
+		m_grass = std::make_unique<Foliage>(m_scene, GraphicsDevice::Get());
+
+		// Sample the editor's terrain for height, normal, holes and base-layer influence, exactly
+		// like the client so foliage placement matches in-game.
+		m_grass->SetHeightQueryCallback([this](float x, float z, float& height, Vector3& normal) -> bool
+		{
+			if (!m_hasTerrain || !m_terrain)
+			{
+				return false;
+			}
+
+			if (m_terrain->IsHoleAt(x, z))
+			{
+				return false;
+			}
+
+			height = m_terrain->GetSmoothHeightAt(x, z);
+			normal = m_terrain->GetSmoothNormalAt(x, z);
+
+			// Reject steep slopes (cos(35°) ≈ 0.8191).
+			constexpr float maxSlopeCosine = 0.8191f;
+			if (normal.y < maxSlopeCosine)
+			{
+				return false;
+			}
+
+			// Only grow grass where the base terrain layer dominates.
+			constexpr float minLayer0Influence = 0.3f;
+			if (m_terrain->GetLayerValueAt(x, z, 0) < minLayer0Influence)
+			{
+				return false;
+			}
+
+			return true;
+		});
+
+		FoliageSettings settings;
+		settings.chunkSize = 32.0f;
+		settings.maxViewDistance = 50.0f;
+		settings.loadRadius = 3;
+		settings.frustumCulling = true;
+		settings.globalDensityMultiplier = 1.0f;
+		m_grass->SetSettings(settings);
+
+		// Terrain is centered at the origin and spans 64x64 pages.
+		constexpr float halfTerrainSize = 64.0f * terrain::constants::PageSize * 0.5f;
+		m_grass->SetBounds(AABB(
+			Vector3(-halfTerrainSize, -1000.0f, -halfTerrainSize),
+			Vector3(halfTerrainSize, 1000.0f, halfTerrainSize)));
+
+		const auto addGrassLayer = [this](const char* name, const char* meshPath, float density, float minScale, float maxScale)
+		{
+			MeshPtr mesh = MeshManager::Get().Load(meshPath);
+			if (!mesh)
+			{
+				return;
+			}
+
+			auto layer = std::make_shared<FoliageLayer>(name, mesh);
+			FoliageLayerSettings& s = layer->GetSettings();
+			s.density = density;
+			s.minScale = minScale;
+			s.maxScale = maxScale;
+			s.maxSlopeAngle = 35.0f;
+			s.fadeStartDistance = 40.0f;
+			s.fadeEndDistance = 60.0f;
+			s.castShadows = false;
+			m_grass->AddLayer(layer);
+		};
+
+		addGrassLayer("Grass",   "Models/FalwynPlains/Plants/Grass_01.hmsh",        4.0f,  0.7f, 1.3f);
+		addGrassLayer("Grass02", "Models/FalwynPlains/Plants/Grass_02.hmsh",        0.7f,  1.0f, 1.0f);
+		addGrassLayer("Flowers", "Models/FalwynPlains/Plants/Shrub_Flower_01.hmsh", 0.32f, 1.0f, 1.0f);
+
+		// Hidden by default; the "Show Foliage" world setting toggles it.
+		m_grass->SetVisible(m_showFoliage);
+	}
+
+	void WorldEditorInstance::LoadPageFoliage(const uint8 x, const uint8 y)
+	{
+		if (!m_foliage)
+		{
+			return;
+		}
+
+		const uint16 pageIndex = BuildPageIndex(x, y);
+
+		String fileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Foliage" / (std::to_string(pageIndex) + ".hfol")).string();
+		std::transform(fileName.begin(), fileName.end(), fileName.begin(), [](char c)
+					   { return c == '\\' ? '/' : c; });
+
+		// A page without authored foliage simply has no file - that is not an error.
+		std::unique_ptr<std::istream> filePtr = AssetRegistry::OpenFile(fileName);
+		if (!filePtr)
+		{
+			return;
+		}
+
+		io::StreamSource source{*filePtr};
+		io::Reader reader{source};
+		WorldFoliageLoader loader;
+		if (!loader.Read(reader))
+		{
+			ELOG("Failed to read foliage file " << fileName << "!");
+			return;
+		}
+
+		for (const auto &src : loader.GetInstances())
+		{
+			InstancedFoliageInstance instance;
+			instance.uniqueId = src.uniqueId;
+			instance.meshName = src.meshName;
+			instance.position = src.position;
+			instance.rotation = src.rotation;
+			instance.scale = src.scale;
+			instance.pageIndex = pageIndex;
+			m_foliage->AddInstance(instance);
+		}
+
+		m_foliage->RebuildDirtyCells();
+	}
+
+	void WorldEditorInstance::UpdateWaterVisibility()
+	{
+		if (!m_terrain)
+		{
+			return;
+		}
+
+		// Water is always shown while the water edit mode is active so it can be edited,
+		// regardless of the "Show Water" setting.
+		const bool inWaterEditMode = (m_editMode == m_terrainEditMode.get()
+			&& m_terrainEditMode->GetTerrainEditType() == TerrainEditType::Water);
+		const bool effective = m_showWater || inWaterEditMode;
+
+		if (effective != m_waterVisibilityApplied)
+		{
+			m_terrain->SetWaterVisible(effective);
+			m_waterVisibilityApplied = effective;
+		}
+	}
+
 	void WorldEditorInstance::RemoveAllUnitSpawns()
 	{
 		for (auto *entity : m_spawnEntities)
@@ -1973,10 +2217,17 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			EnsurePageIsLoaded(pos);
 
 			LoadPageEntities(pos.x(), pos.y());
+			LoadPageFoliage(pos.x(), pos.y());
 		}
 		else
 		{
 			UnloadPageEntities(pos.x(), pos.y());
+
+			if (m_foliage)
+			{
+				m_foliage->UnloadPage(BuildPageIndex(pos.x(), pos.y()));
+				m_foliage->RebuildDirtyCells();
+			}
 
 			terrainPage->Unload();
 		}

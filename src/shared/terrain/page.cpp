@@ -290,6 +290,12 @@ namespace mmo
 					m_pageNode->AttachObject(*m_waterRenderObject);
 				}
 
+				// Honour the terrain-wide water visibility setting for freshly streamed pages.
+				if (m_waterRenderObject)
+				{
+					m_waterRenderObject->SetVisible(m_terrain.IsWaterVisible());
+				}
+
 				RebuildWaterMesh();
 			}
 
@@ -1625,6 +1631,14 @@ namespace mmo
 						}
 					}
 				}
+			}
+		}
+
+		void Page::SetWaterVisible(const bool visible)
+		{
+			if (m_waterRenderObject)
+			{
+				m_waterRenderObject->SetVisible(visible);
 			}
 		}
 

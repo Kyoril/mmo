@@ -19,6 +19,7 @@ namespace mmo
 	class SceneNode;
 	class Scene;
 	class WorldModelInstance;
+	class InstancedFoliage;
 
 	namespace world_version
 	{
@@ -74,6 +75,12 @@ namespace mmo
 
 		void InternalLoadPageEntity(uint16 pageIndex, const String& filename);
 
+		/// @brief Loads the instanced foliage (.hfol) file for the given page, if present.
+		void LoadPageFoliage(uint8 x, uint8 y);
+
+		/// @brief Reads a page foliage file on the background thread and queues instance creation.
+		void InternalLoadPageFoliage(uint16 pageIndex, const String& filename);
+
 	private:
 		asio::io_service& m_workQueue;
 		asio::io_service& m_dispatcher;
@@ -101,6 +108,9 @@ namespace mmo
 		std::map<uint64, WorldModelPlacement> m_worldModels;
 
 		std::set<uint16> m_loadedPages;
+
+		/// @brief Hardware-instanced renderer for authored foliage (trees) loaded per page.
+		std::unique_ptr<InstancedFoliage> m_foliage;
 	};
 
 	/// @brief Supports deserializing a world from a file.
