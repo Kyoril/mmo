@@ -375,6 +375,18 @@ namespace mmo
 		/// re-rendering opaque geometry in the transparent pass.
 		void SetForwardTransparentOnly(bool value) { m_forwardTransparentOnly = value; }
 
+		/// @brief When set, Render() reuses the render queue built by a previous pass this frame
+		/// instead of rebuilding it (running FindVisibleObjects / occlusion culling again). Used by
+		/// the deferred renderer's depth pre-pass: the pre-pass builds the queue once and the
+		/// G-Buffer pass that follows reuses it. Rebuilding twice per frame would double-run the
+		/// terrain occlusion-culling state machine and cause horizon flicker.
+		void SetReuseRenderQueue(bool value) { m_reuseRenderQueue = value; }
+
+		/// @brief When set, a ShadowMap-typed Render() (used for the deferred depth pre-pass of the
+		/// main view) builds the full visible set rather than only shadow casters, so the queue can
+		/// be reused by the following G-Buffer pass without dropping non-shadow-casting objects.
+		void SetDepthPrepass(bool value) { m_depthPrepass = value; }
+
 		void UpdateSceneGraph();
 		
 		void RenderSingleObject(Renderable& renderable, uint32 groupId);
@@ -642,6 +654,8 @@ namespace mmo
 		/// that opaque groups (already in the GBuffer) are not re-rendered.
 		/// Never set this in non-deferred contexts (editor, model viewer).
 		bool m_forwardTransparentOnly = false;
+		bool m_reuseRenderQueue = false;
+		bool m_depthPrepass = false;
 
 		Vector3 m_ambientColor = Vector3(0.04f, 0.035f, 0.03f);
 

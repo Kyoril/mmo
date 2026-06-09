@@ -189,6 +189,8 @@ namespace mmo
 
 		void OnShadowQualityChanged(ConsoleVar &var, const std::string &oldValue);
 
+		void OnDepthPrepassChanged(ConsoleVar &var, const std::string &oldValue);
+
 		void OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue);
 
 		void OnFoliageDensityChanged(ConsoleVar &var, const std::string &oldValue);

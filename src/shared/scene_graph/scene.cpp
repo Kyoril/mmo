@@ -334,7 +334,7 @@ namespace mmo
 		// The forward transparent pass reuses the queue that was built during the G-buffer pass.
 		// RenderVisibleObjects already skips groups < Transparent when m_forwardTransparentOnly,
 		// so only particles, ribbon trails, and other transparent renderables are drawn.
-		if (!m_frozen && !m_forwardTransparentOnly)
+		if (!m_frozen && !m_forwardTransparentOnly && !m_reuseRenderQueue)
 		{
 			PrepareRenderQueue();
 
@@ -351,7 +351,10 @@ namespace mmo
 			const auto visibleObjectsIt = m_camVisibleObjectsMap.find(&camera);
 			ASSERT(visibleObjectsIt != m_camVisibleObjectsMap.end());
 			visibleObjectsIt->second.Reset();
-			FindVisibleObjects(camera, visibleObjectsIt->second, shaderType == PixelShaderType::ShadowMap);
+			// The depth pre-pass renders with the ShadowMap pixel shader but must capture the full
+			// visible set (not just shadow casters) so the G-Buffer pass can reuse the same queue.
+			const bool onlyShadowCasters = (shaderType == PixelShaderType::ShadowMap) && !m_depthPrepass;
+			FindVisibleObjects(camera, visibleObjectsIt->second, onlyShadowCasters);
 
 			// Particle emitters use RenderQueueGroupId::Transparent and are therefore
 			// automatically excluded from GBuffer/ShadowMap passes by RenderVisibleObjects.

@@ -57,7 +57,7 @@ namespace mmo
 		m_depthRT->Resize(width, height);
 	}
 
-	void GBuffer::Bind()
+	void GBuffer::Bind(const bool clearDepth)
 	{
 		// Create an array of render target pointers
 		RenderTexturePtr renderTargets[] = {
@@ -79,6 +79,19 @@ namespace mmo
 		// Set the viewport to match the G-Buffer size
 		m_device.SetViewport(0, 0, m_width, m_height, 0.0f, 1.0f);
 
+		if (clearDepth)
+		{
+			m_depthRT->Clear(ClearFlags::DepthStencil);
+		}
+	}
+
+	void GBuffer::BindDepthOnly()
+	{
+		m_depthRT->ApplyPendingResize();
+
+		// Bind only the depth target, no colour render targets.
+		m_device.SetRenderTargetsWithDepthStencil(nullptr, 0, m_depthRT);
+		m_device.SetViewport(0, 0, m_width, m_height, 0.0f, 1.0f);
 		m_depthRT->Clear(ClearFlags::DepthStencil);
 	}
 

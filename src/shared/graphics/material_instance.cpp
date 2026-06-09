@@ -182,9 +182,22 @@ namespace mmo
 
 		if (pixelShaderType != PixelShaderType::ShadowMap)
 		{
-			device.SetDepthEnabled(m_depthTest);
-			device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
-			device.SetDepthWriteEnabled(m_depthWrite);
+			if (pixelShaderType == PixelShaderType::GBuffer && device.IsGBufferDepthPrepass())
+			{
+				// A depth pre-pass already wrote the front-most depth. Test LessEqual with depth
+				// write off so occluded pixels are early-Z rejected before this shader runs.
+				// (Must match Material::Apply, or instanced renderables like terrain — which use a
+				// MaterialInstance — would test Less against the equal pre-pass depth and vanish.)
+				device.SetDepthEnabled(true);
+				device.SetDepthTestComparison(DepthTestMethod::LessEqual);
+				device.SetDepthWriteEnabled(false);
+			}
+			else
+			{
+				device.SetDepthEnabled(m_depthTest);
+				device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
+				device.SetDepthWriteEnabled(m_depthWrite);
+			}
 		}
 		else
 		{

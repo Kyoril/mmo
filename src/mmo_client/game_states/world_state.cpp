@@ -112,6 +112,8 @@ namespace mmo
 
 		static ConsoleVar *s_renderScaleVar = nullptr;
 
+		static ConsoleVar *s_depthPrepassVar = nullptr;
+
 		static ConsoleVar *s_foliageEnabledVar = nullptr;
 		static ConsoleVar *s_foliageDensityVar = nullptr;
 
@@ -1282,6 +1284,9 @@ namespace mmo
 		// GPUs. Read directly by WorldRenderer each frame, so no change handler is required here.
 		s_renderScaleVar = ConsoleVarMgr::RegisterConsoleVar("gxRenderScale", "3D render resolution scale (0.25 to 1.0). Lower values improve performance by rendering the world at a lower resolution and upscaling.", "1.0");
 
+		s_depthPrepassVar = ConsoleVarMgr::RegisterConsoleVar("gxDepthPrepass", "Render an opaque depth pre-pass before the G-Buffer pass. Reduces overdraw shading cost in scenes with heavy opaque overdraw (e.g. dense foliage). 1 = on, 0 = off.", "0");
+		m_cvarChangedSignals += s_depthPrepassVar->Changed.connect(this, &WorldState::OnDepthPrepassChanged);
+
 		s_terrainLodEnabledVar = ConsoleVarMgr::RegisterConsoleVar("TerrainLodEnabled", "Enable or disable terrain level of detail", "1");
 		m_cvarChangedSignals += s_terrainLodEnabledVar->Changed.connect(this, &WorldState::OnTerrainLodEnabledChanged);
 
@@ -1342,6 +1347,7 @@ namespace mmo
 
 		OnShadowTextureSizeChanged(*s_shadowTextureSizeVar, "");
 		OnShadowQualityChanged(*s_shadowQualityVar, "");
+		OnDepthPrepassChanged(*s_depthPrepassVar, "");
 		OnRenderShadowsChanged(*s_renderShadowsVar, "");
 		OnShadowBiasChanged(*s_depthBiasVar, "");
 		OnFoliageEnabledChanged(*s_foliageEnabledVar, "");
@@ -1358,6 +1364,7 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowTextureSize");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowQuality");
 		ConsoleVarMgr::UnregisterConsoleVar("gxRenderScale");
+		ConsoleVarMgr::UnregisterConsoleVar("gxDepthPrepass");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageEnabled");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageDensity");
 
@@ -4277,6 +4284,34 @@ namespace {
 		const int level = Clamp(var.GetIntValue(), 0, 2);
 		ILOG("Updating shadow quality to level " << level);
 		deferred->SetShadowQuality(level);
+	}
+
+	void WorldState::OnDepthPrepassChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
+		if (!worldFrame)
+		{
+			WLOG("World frame not found");
+			return;
+		}
+
+		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
+		if (!renderer)
+		{
+			WLOG("World frame has no renderer");
+			return;
+		}
+
+		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
+		if (!deferred)
+		{
+			WLOG("Deferred renderer not initialized");
+			return;
+		}
+
+		const bool enabled = var.GetIntValue() != 0;
+		ILOG("Depth pre-pass " << (enabled ? "enabled" : "disabled"));
+		deferred->SetDepthPrepassEnabled(enabled);
 	}
 
 	void WorldState::OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue)

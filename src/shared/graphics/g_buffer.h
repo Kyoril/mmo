@@ -64,7 +64,13 @@ namespace mmo
 		void Resize(uint32 width, uint32 height);
 
 		/// @brief Binds the G-Buffer for rendering.
-		void Bind();
+		/// @param clearDepth Whether to clear the depth buffer. Pass false when a depth pre-pass has
+		///        already populated depth and the following G-Buffer pass must test against it.
+		void Bind(bool clearDepth = true);
+
+		/// @brief Binds only the depth target (no colour targets) and clears it. Used for the
+		///        depth-only pre-pass that precedes the G-Buffer pass.
+		void BindDepthOnly();
 
 		/// @brief Unbinds the G-Buffer.
 		void Unbind();

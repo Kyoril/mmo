@@ -10,6 +10,7 @@
 #include "scene_graph/camera.h"
 #include "scene_graph/render_queue.h"
 #include "log/default_log_levels.h"
+#include "base/profiler.h"
 
 #ifdef WIN32
 #   include <Windows.h>
@@ -179,6 +180,112 @@ namespace mmo
         }
     }
 
+#ifdef _WIN32
+    void DeferredRenderer::InitGpuTimers()
+    {
+        if (m_gpuTimersInitialized)
+        {
+            return;
+        }
+
+        GraphicsDeviceD3D11& d3dDev = static_cast<GraphicsDeviceD3D11&>(GraphicsDevice::Get());
+        ID3D11Device& dev = d3dDev;
+
+        for (uint32 f = 0; f < GpuTimerFrameCount; ++f)
+        {
+            D3D11_QUERY_DESC disjointDesc = {};
+            disjointDesc.Query = D3D11_QUERY_TIMESTAMP_DISJOINT;
+            dev.CreateQuery(&disjointDesc, m_gpuDisjointQueries[f].GetAddressOf());
+
+            for (uint32 p = 0; p < GpuTimerPointCount; ++p)
+            {
+                D3D11_QUERY_DESC tsDesc = {};
+                tsDesc.Query = D3D11_QUERY_TIMESTAMP;
+                dev.CreateQuery(&tsDesc, m_gpuTimestampQueries[f][p].GetAddressOf());
+            }
+        }
+
+        m_gpuTimersInitialized = true;
+    }
+
+    void DeferredRenderer::GpuTimerBegin()
+    {
+        InitGpuTimers();
+
+        GraphicsDeviceD3D11& d3dDev = static_cast<GraphicsDeviceD3D11&>(GraphicsDevice::Get());
+        ID3D11DeviceContext& ctx = d3dDev;
+
+        const uint32 frame = m_gpuTimerWriteFrame;
+        ctx.Begin(m_gpuDisjointQueries[frame].Get());
+        ctx.End(m_gpuTimestampQueries[frame][0].Get()); // start timestamp
+    }
+
+    void DeferredRenderer::GpuTimerMark(const uint32 point)
+    {
+        if (point >= GpuTimerPointCount)
+        {
+            return;
+        }
+
+        GraphicsDeviceD3D11& d3dDev = static_cast<GraphicsDeviceD3D11&>(GraphicsDevice::Get());
+        ID3D11DeviceContext& ctx = d3dDev;
+        ctx.End(m_gpuTimestampQueries[m_gpuTimerWriteFrame][point].Get());
+    }
+
+    void DeferredRenderer::GpuTimerEndAndCollect()
+    {
+        GraphicsDeviceD3D11& d3dDev = static_cast<GraphicsDeviceD3D11&>(GraphicsDevice::Get());
+        ID3D11DeviceContext& ctx = d3dDev;
+
+        auto& profiler = Profiler::GetInstance();
+
+        const uint32 frame = m_gpuTimerWriteFrame;
+        ctx.End(m_gpuDisjointQueries[frame].Get());
+        m_gpuTimerFrameStarted[frame] = true;
+
+        // Read back a frame several frames in the past so the GPU is never stalled and all timestamps
+        // have resolved (some drivers report the disjoint query complete slightly before the last few
+        // timestamps in the region are retrievable, which is why we read well behind the write head).
+        const uint32 readFrame = (frame + 1) % GpuTimerFrameCount;
+        if (m_gpuTimerFrameStarted[readFrame])
+        {
+            D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjoint = {};
+            const HRESULT djHr = ctx.GetData(m_gpuDisjointQueries[readFrame].Get(), &disjoint, sizeof(disjoint), 0);
+
+            if (djHr == S_OK && disjoint.Frequency != 0)
+            {
+                UINT64 timestamps[GpuTimerPointCount] = {};
+                bool ready[GpuTimerPointCount] = {};
+                for (uint32 p = 0; p < GpuTimerPointCount; ++p)
+                {
+                    ready[p] = (ctx.GetData(m_gpuTimestampQueries[readFrame][p].Get(), &timestamps[p], sizeof(UINT64), 0) == S_OK);
+                }
+
+                const double freq = static_cast<double>(disjoint.Frequency);
+                auto emit = [&](const char* name, uint32 a, uint32 b)
+                {
+                    if (ready[a] && ready[b])
+                    {
+                        const double ms = (timestamps[b] > timestamps[a])
+                            ? (static_cast<double>(timestamps[b] - timestamps[a]) / freq) * 1000.0 : 0.0;
+                        profiler.AddTime(name, ms);
+                    }
+                };
+
+                // Named with a "GPU: " prefix so they group together in the perf overlay. Each pass is
+                // emitted independently so partial data still shows even if some timestamps lag.
+                emit("GPU: Shadows", 0, 1);
+                emit("GPU: GBuffer", 1, 2);
+                emit("GPU: Lighting", 2, 3);
+                emit("GPU: Forward", 3, 4);
+                emit("GPU: Total (passes)", 0, 4);
+            }
+        }
+
+        m_gpuTimerWriteFrame = (frame + 1) % GpuTimerFrameCount;
+    }
+#endif
+
     void DeferredRenderer::Resize(uint32 width, uint32 height)
     {
         // Resize the G-Buffer
@@ -191,6 +298,16 @@ namespace mmo
     {
         // Update the scene graph first to ensure all transforms are up-to-date
         scene.UpdateSceneGraph();
+
+#ifdef _WIN32
+        // Per-pass GPU timing is only collected while the perf overlay/profiler is enabled, so it
+        // costs nothing in normal play.
+        m_gpuTimingActiveThisFrame = Profiler::GetInstance().IsEnabled();
+        if (m_gpuTimingActiveThisFrame)
+        {
+            GpuTimerBegin();
+        }
+#endif
 
         // Traverse the scene graph and find all kind of lighting information for the current frame
         FindLights(scene, camera);
@@ -216,11 +333,23 @@ namespace mmo
             m_shadowBuffer->Update(&buffer);
         }
 
+#ifdef _WIN32
+        if (m_gpuTimingActiveThisFrame) { GpuTimerMark(1); } // after shadows
+#endif
+
         // Render the geometry pass
         RenderGeometryPass(scene, camera);
 
+#ifdef _WIN32
+        if (m_gpuTimingActiveThisFrame) { GpuTimerMark(2); } // after G-Buffer
+#endif
+
         // Render the lighting pass
         RenderLightingPass(scene, camera);
+
+#ifdef _WIN32
+        if (m_gpuTimingActiveThisFrame) { GpuTimerMark(3); } // after lighting
+#endif
 
         // Forward transparency pass: render objects in the Transparent queue group and above
         // (particles, ribbon trails, etc.) on top of the lit scene.
@@ -271,10 +400,46 @@ namespace mmo
         // Release the scene SRVs so they do not collide with render targets bound in next frame.
         m_device.BindTexture(nullptr, ShaderType::PixelShader, 14);
         m_device.BindTexture(nullptr, ShaderType::PixelShader, 15);
+
+#ifdef _WIN32
+        if (m_gpuTimingActiveThisFrame)
+        {
+            GpuTimerMark(4); // after forward/translucent pass (end of GPU frame work)
+            GpuTimerEndAndCollect();
+        }
+#endif
     }
 
     void DeferredRenderer::RenderGeometryPass(Scene& scene, Camera& camera)
     {
+        if (m_depthPrepassEnabled)
+        {
+            // 1) Depth-only pre-pass. Renders the front-most opaque depth using the cheap ShadowMap
+            //    pixel shader (which still alpha-tests foliage). This also builds the render queue
+            //    for the frame; SetDepthPrepass(true) makes it capture the full visible set (not
+            //    just shadow casters) so the G-Buffer pass below can reuse the same queue.
+            m_gBuffer.BindDepthOnly();
+            scene.SetDepthPrepass(true);
+            scene.Render(camera, PixelShaderType::ShadowMap);
+            scene.SetDepthPrepass(false);
+
+            // 2) G-Buffer pass. Keep the pre-pass depth (do not clear it), reuse the queue, and let
+            //    materials test LessEqual with depth-write off so occluded pixels are early-Z
+            //    rejected before the expensive G-Buffer shader runs.
+            m_gBuffer.Bind(false);
+            m_gBuffer.GetAlbedoRT().Clear(ClearFlags::Color);
+            m_gBuffer.GetNormalRT().Clear(ClearFlags::Color);
+            m_gBuffer.GetEmissiveRT().Clear(ClearFlags::Color);
+            m_gBuffer.GetMaterialRT().Clear(ClearFlags::Color);
+
+            m_device.SetGBufferDepthPrepass(true);
+            scene.SetReuseRenderQueue(true);
+            scene.Render(camera, PixelShaderType::GBuffer);
+            scene.SetReuseRenderQueue(false);
+            m_device.SetGBufferDepthPrepass(false);
+            return;
+        }
+
         // Bind the G-Buffer
         m_gBuffer.Bind();
 

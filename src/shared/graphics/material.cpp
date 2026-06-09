@@ -438,9 +438,21 @@ namespace mmo
 			// Only set depth state for non-UI domains to avoid interfering with 3D rendering
 			if (domain != MaterialDomain::UserInterface)
 			{
-				device.SetDepthEnabled(m_depthTest);
-				device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
-				device.SetDepthWriteEnabled(m_depthWrite);
+				if (pixelShaderType == PixelShaderType::GBuffer && device.IsGBufferDepthPrepass())
+				{
+					// A depth pre-pass has already written the front-most depth. Test LessEqual and
+					// do not write depth, so the hardware early-Z rejects occluded pixels before this
+					// (expensive, 4-target) shader runs — eliminating overdraw shading.
+					device.SetDepthEnabled(true);
+					device.SetDepthTestComparison(DepthTestMethod::LessEqual);
+					device.SetDepthWriteEnabled(false);
+				}
+				else
+				{
+					device.SetDepthEnabled(m_depthTest);
+					device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
+					device.SetDepthWriteEnabled(m_depthWrite);
+				}
 			}
 		}
 		else

@@ -325,6 +325,17 @@ namespace mmo
 
 		virtual void SetDepthTestComparison(DepthTestMethod comparison);
 
+		/// @brief Enables/disables "depth pre-pass" mode for the G-Buffer geometry pass.
+		/// @remark When active, opaque G-Buffer materials switch from (Less, depth-write on) to
+		///         (LessEqual, depth-write off) because a prior depth-only pass has already
+		///         populated the depth buffer with the front-most surface. This lets the hardware
+		///         early-Z reject occluded pixels before the expensive G-Buffer pixel shader runs,
+		///         eliminating overdraw shading. Has no effect when no pre-pass was rendered.
+		void SetGBufferDepthPrepass(bool active) { m_gbufferDepthPrepass = active; }
+
+		/// @brief Returns whether G-Buffer depth pre-pass mode is currently active.
+		[[nodiscard]] bool IsGBufferDepthPrepass() const { return m_gbufferDepthPrepass; }
+
 		virtual std::unique_ptr<MaterialCompiler> CreateMaterialCompiler() = 0;
 
 		virtual std::unique_ptr<ShaderCompiler> CreateShaderCompiler() = 0;
@@ -392,6 +403,7 @@ namespace mmo
 		bool m_restoreDepthWrite { false };
 		DepthTestMethod m_depthComparison { DepthTestMethod::Always };
 		DepthTestMethod m_restoreDepthComparison { DepthTestMethod::Always };
+		bool m_gbufferDepthPrepass { false };
 		std::vector<std::unique_ptr<VertexDeclaration>> m_vertexDeclarations;
 		std::vector<std::unique_ptr<VertexBufferBinding>> m_vertexBufferBindings;
 	};

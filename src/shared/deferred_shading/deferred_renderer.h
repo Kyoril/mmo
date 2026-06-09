@@ -126,6 +126,15 @@ namespace mmo
         /// @brief Gets the current PCF tap count used by the shadow filter.
         [[nodiscard]] uint32 GetPcfSampleCount() const { return m_pcfSampleCount; }
 
+        /// @brief Enables or disables the opaque depth pre-pass for the G-Buffer geometry pass.
+        /// @remark When enabled, a cheap depth-only pass populates the depth buffer first so the
+        ///         expensive G-Buffer shader only runs on visible (front-most) pixels — a large win
+        ///         in scenes with heavy opaque overdraw (e.g. overlapping alpha-tested foliage).
+        void SetDepthPrepassEnabled(bool enabled) { m_depthPrepassEnabled = enabled; }
+
+        /// @brief Returns whether the opaque depth pre-pass is enabled.
+        [[nodiscard]] bool IsDepthPrepassEnabled() const { return m_depthPrepassEnabled; }
+
         /// @brief Gets the light rendering statistics from the last frame.
         /// @return Reference to the light render statistics.
         const Scene::LightRenderStats& GetLightRenderStats() const { return m_lastLightStats; }
@@ -149,6 +158,21 @@ namespace mmo
 		void RenderShadowMap(Scene& scene, Camera& camera);
 
         void RenderCascadedShadowMaps(Scene& scene, Camera& camera);
+
+#ifdef _WIN32
+        /// @brief Creates the GPU timestamp queries used for per-pass GPU timing.
+        void InitGpuTimers();
+
+        /// @brief Issues the disjoint-begin and the start timestamp for the current frame.
+        void GpuTimerBegin();
+
+        /// @brief Records a timestamp marking the boundary between two passes.
+        /// @param point Index of the timestamp point (0 = start ... GpuTimerPointCount-1 = end).
+        void GpuTimerMark(uint32 point);
+
+        /// @brief Ends the disjoint query and reads back an older frame's results into the Profiler.
+        void GpuTimerEndAndCollect();
+#endif
 
     public:
         /// @brief Maximum number of lights that can be processed in a single pass.
@@ -227,8 +251,26 @@ namespace mmo
         float m_lightSize = 0.0268f;           // Size of the virtual light (smaller = sharper shadows)
         uint16 m_shadowMapSize = 2048;        // Size of the shadow map texture (increased for quality)
         uint32 m_pcfSampleCount = 16;         // PCF taps per shadow lookup (shadow quality preset)
+        bool m_depthPrepassEnabled = false;   // Opaque depth pre-pass before the G-Buffer pass
 
         /// @brief Cached light render statistics from the last frame.
         Scene::LightRenderStats m_lastLightStats;
+
+#ifdef _WIN32
+        // --- Per-pass GPU timing (only active while the profiler/perf overlay is enabled) ---
+        // Timestamp points: 0 = start, 1 = after shadows, 2 = after G-Buffer, 3 = after lighting,
+        // 4 = after the forward/translucent pass (end). Differences give per-pass GPU time.
+        static constexpr uint32 GpuTimerPointCount = 5;
+        // Deep ring so we read results back several frames late and never stall the GPU, and so
+        // that all timestamps in a frame have comfortably resolved before we poll them.
+        static constexpr uint32 GpuTimerFrameCount = 6;
+
+        ComPtr<ID3D11Query> m_gpuDisjointQueries[GpuTimerFrameCount];
+        ComPtr<ID3D11Query> m_gpuTimestampQueries[GpuTimerFrameCount][GpuTimerPointCount];
+        bool m_gpuTimerFrameStarted[GpuTimerFrameCount] = {};
+        uint32 m_gpuTimerWriteFrame = 0;
+        bool m_gpuTimersInitialized = false;
+        bool m_gpuTimingActiveThisFrame = false;
+#endif
     };
 }
