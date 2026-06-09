@@ -89,6 +89,8 @@ namespace mmo
 
 		void StopJump() override;
 
+		void ToggleWalkMode() override;
+
 		void OnHoveredObjectChanged(GameObjectC* previousHoveredUnit);
 
 		void ProcessMovementEvent(const MovementEvent& movementEvent);

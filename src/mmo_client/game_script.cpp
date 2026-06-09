@@ -402,6 +402,13 @@ namespace mmo
 			WorldState::GetInputControl()->ToggleControlBit(ControlFlags::Autorun);
 		}
 
+		void Script_ToggleWalkRun()
+		{
+			if (!WorldState::GetInputControl())
+				return;
+			WorldState::GetInputControl()->ToggleWalkMode();
+		}
+
 		void Script_MoveForwardStart()
 		{
 			if (!WorldState::GetInputControl())
@@ -1259,6 +1266,7 @@ namespace mmo
 					   luabind::def("StrafeRightStart", &Script_StrafeRightStart),
 					   luabind::def("StrafeRightStop", &Script_StrafeRightStop),
 					   luabind::def("ToggleAutoRun", &Script_ToggleAutoRun),
+				   luabind::def("ToggleWalkRun", &Script_ToggleWalkRun),
 
 					   luabind::def("Jump", &Script_Jump),
 					   luabind::def("StopJump", &Script_StopJump),

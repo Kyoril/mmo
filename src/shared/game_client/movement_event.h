@@ -42,6 +42,10 @@ namespace mmo
             StartSwim,
             /// @brief Player stopped swimming (left the water)
             StopSwim,
+            /// @brief Player switched to walk mode
+            StartWalk,
+            /// @brief Player switched to run mode
+            StopWalk,
 
             Count_
         };

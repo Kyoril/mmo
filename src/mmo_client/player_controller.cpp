@@ -528,6 +528,16 @@ namespace mmo
 		m_controlledUnit->StopJumping();
 	}
 
+	void PlayerController::ToggleWalkMode()
+	{
+		if (!m_controlledUnit)
+		{
+			return;
+		}
+
+		m_controlledUnit->ToggleWalkMode();
+	}
+
 	void PlayerController::OnHoveredObjectChanged(GameObjectC* previousHoveredUnit)
 	{
 		if (m_hoveredObject)
@@ -635,6 +645,12 @@ namespace mmo
 			break;
 		case MovementEventType::StopSwim:
 			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStopSwim, movementEvent.movementInfo);
+			break;
+		case MovementEventType::StartWalk:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStartWalk, movementEvent.movementInfo);
+			break;
+		case MovementEventType::StopWalk:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStopWalk, movementEvent.movementInfo);
 			break;
 		default:
 			// Unknown event type

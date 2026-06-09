@@ -808,6 +808,8 @@ namespace mmo
 		case game::client_realm_packet::MoveFallLand:
 		case game::client_realm_packet::MoveStartSwim:
 		case game::client_realm_packet::MoveStopSwim:
+		case game::client_realm_packet::MoveStartWalk:
+		case game::client_realm_packet::MoveStopWalk:
 		case game::client_realm_packet::MoveEnded:
 		case game::client_realm_packet::MoveSplineDone:
 			OnMovement(opCode, buffer.size(), reader);
@@ -1875,6 +1877,31 @@ namespace mmo
 			}
 		}
 
+		// WalkMode flag tamper checks: the WalkMode flag may only be added by MoveStartWalk and
+		// only removed by MoveStopWalk.
+		const bool prevWalking = (prevMovementInfo.movementFlags & movement_flags::WalkMode) != 0;
+		const bool nowWalking  = (info.movementFlags & movement_flags::WalkMode) != 0;
+		if (nowWalking && !prevWalking && opCode != game::client_realm_packet::MoveStartWalk)
+		{
+			ELOG("Client tried to apply WALKMODE flag in a non-startwalk packet!");
+			return;
+		}
+		if (!nowWalking && prevWalking && opCode != game::client_realm_packet::MoveStopWalk)
+		{
+			ELOG("Client tried to remove WALKMODE flag in a non-stopwalk packet!");
+			return;
+		}
+		if (opCode == game::client_realm_packet::MoveStartWalk && (!nowWalking || prevWalking))
+		{
+			ELOG("MoveStartWalk did not add the WALKMODE flag or player was already walking");
+			return;
+		}
+		if (opCode == game::client_realm_packet::MoveStopWalk && (nowWalking || !prevWalking))
+		{
+			ELOG("MoveStopWalk did not remove the WALKMODE flag or player was already running");
+			return;
+		}
+
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
 
 		// Translate client-side movement op codes into server side movement op codes for the receiving clients
@@ -1895,6 +1922,8 @@ namespace mmo
 		case game::client_realm_packet::MoveFallLand: opCode = game::realm_client_packet::MoveFallLand; break;
 		case game::client_realm_packet::MoveStartSwim: opCode = game::realm_client_packet::MoveStartSwim; break;
 		case game::client_realm_packet::MoveStopSwim: opCode = game::realm_client_packet::MoveStopSwim; break;
+		case game::client_realm_packet::MoveStartWalk: opCode = game::realm_client_packet::MoveStartWalk; break;
+		case game::client_realm_packet::MoveStopWalk: opCode = game::realm_client_packet::MoveStopWalk; break;
 		case game::client_realm_packet::MoveEnded: opCode = game::realm_client_packet::MoveEnded; break;
 		case game::client_realm_packet::MoveSplineDone: opCode = game::realm_client_packet::MoveSplineDone; break;
 		default:

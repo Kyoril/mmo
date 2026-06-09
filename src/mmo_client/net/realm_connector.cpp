@@ -37,6 +37,8 @@ namespace mmo
 		case game::client_realm_packet::MoveSetFacing: return "MOVE_SET_FACING";
 		case game::client_realm_packet::MoveHeartBeat: return "MOVE_HEARTBEAT";
 		case game::client_realm_packet::MoveEnded: return "MOVE_ENDED";
+		case game::client_realm_packet::MoveStartWalk: return "MOVE_START_WALK";
+		case game::client_realm_packet::MoveStopWalk: return "MOVE_STOP_WALK";
 		default: return "UNKNOWN";
 		}
 	}

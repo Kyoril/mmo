@@ -264,6 +264,9 @@ namespace mmo
 		/// @brief Stops strafing the unit.
 		void StopStrafe();
 
+		/// @brief Toggles between walk and run mode, queuing the appropriate movement event.
+		void ToggleWalkMode();
+
 		/// @brief Starts turning the unit to the left or right.
 		void StartTurn(bool left);
 
@@ -720,6 +723,10 @@ namespace mmo
 		// Animation stuff
 		AnimationState *m_idleAnimState{nullptr};
 		AnimationState *m_walkAnimState{nullptr};
+		AnimationState *m_walkLeftState{nullptr};
+		AnimationState *m_walkRightState{nullptr};
+		AnimationState *m_walkForwardLeftState{nullptr};
+		AnimationState *m_walkForwardRightState{nullptr};
 		AnimationState *m_readyAnimState{nullptr};
 		AnimationState *m_weaponReadyState{nullptr};
 		AnimationState *m_runAnimState{nullptr};

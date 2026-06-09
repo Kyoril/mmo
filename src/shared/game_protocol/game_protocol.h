@@ -291,6 +291,12 @@ namespace mmo
 			/// This is the only packet permitted to remove the Swimming movement flag.
 			MoveStopSwim,
 
+			/// Sent by the client when the player switches to walk mode (adds WalkMode flag).
+			MoveStartWalk,
+
+			/// Sent by the client when the player switches to run mode (removes WalkMode flag).
+			MoveStopWalk,
+
 				/// Counter constant
 				Count_,
 			};
@@ -551,6 +557,12 @@ namespace mmo
 
 			/// [PROXY] A unit stopped swimming.
 			MoveStopSwim,
+
+			/// [PROXY] A unit switched to walk mode.
+			MoveStartWalk,
+
+			/// [PROXY] A unit switched to run mode.
+			MoveStopWalk,
 
 				/// Counter constant
 				Count_,

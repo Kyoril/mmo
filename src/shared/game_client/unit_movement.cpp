@@ -493,8 +493,10 @@ namespace mmo
 		switch (m_movementMode)
 		{
 		case MovementMode::Walking:
-			return movingBackward
-				? m_movedUnit.GetSpeed(movement_type::Backwards)
+			if (movingBackward)
+				return m_movedUnit.GetSpeed(movement_type::Backwards);
+			return m_movedUnit.IsWalkModeEnabled()
+				? m_movedUnit.GetSpeed(movement_type::Walk)
 				: m_movedUnit.GetSpeed(movement_type::Run);
 		case MovementMode::Falling:
 			return movingBackward

@@ -317,9 +317,10 @@ namespace mmo
 		else
 		{
 			// Based on current movement info, update movement states
+			const float lateralSpeed = IsWalkModeEnabled() ? GetSpeed(movement_type::Walk) : GetSpeed(movement_type::Run);
 			if (m_movementInfo.movementFlags & movement_flags::Forward)
 			{
-				AddInputVector(GetForwardVector() * GetSpeed(movement_type::Run));
+				AddInputVector(GetForwardVector() * lateralSpeed);
 			}
 			if (m_movementInfo.movementFlags & movement_flags::Backward)
 			{
@@ -327,11 +328,11 @@ namespace mmo
 			}
 			if (m_movementInfo.movementFlags & movement_flags::StrafeLeft)
 			{
-				AddInputVector(-GetRightVector() * GetSpeed(movement_type::Run));
+				AddInputVector(-GetRightVector() * lateralSpeed);
 			}
 			if (m_movementInfo.movementFlags & movement_flags::StrafeRight)
 			{
-				AddInputVector(GetRightVector() * GetSpeed(movement_type::Run));
+				AddInputVector(GetRightVector() * lateralSpeed);
 			}
 			if (m_movementInfo.movementFlags & movement_flags::TurnLeft)
 			{
@@ -549,7 +550,26 @@ namespace mmo
 			AnimationState* movementAnim;
 			if (m_walkAnimState && IsWalkModeEnabled())
 			{
-				movementAnim = m_walkAnimState;
+				if (movingForward && strafeLeft && !strafeRight)
+				{
+					movementAnim = m_walkForwardLeftState ? m_walkForwardLeftState : m_walkAnimState;
+				}
+				else if (movingForward && strafeRight && !strafeLeft)
+				{
+					movementAnim = m_walkForwardRightState ? m_walkForwardRightState : m_walkAnimState;
+				}
+				else if (strafeLeft && !strafeRight && !movingForward && !movingBackward)
+				{
+					movementAnim = m_walkLeftState ? m_walkLeftState : m_walkAnimState;
+				}
+				else if (strafeRight && !strafeLeft && !movingForward && !movingBackward)
+				{
+					movementAnim = m_walkRightState ? m_walkRightState : m_walkAnimState;
+				}
+				else
+				{
+					movementAnim = m_walkAnimState;
+				}
 			}
 			else if (movingBackward && m_runBackAnimState)
 			{
@@ -876,9 +896,10 @@ namespace mmo
 		const Vector3 forward = orientation * Vector3::UnitX;
 		const Vector3 right = orientation * Vector3::UnitZ;
 
+		const float remoteLateralSpeed = IsWalkModeEnabled() ? GetSpeed(movement_type::Walk) : GetSpeed(movement_type::Run);
 		if (state.movementFlags & movement_flags::Forward)
 		{
-			AddInputVector(forward * GetSpeed(movement_type::Run));
+			AddInputVector(forward * remoteLateralSpeed);
 		}
 		if (state.movementFlags & movement_flags::Backward)
 		{
@@ -886,11 +907,11 @@ namespace mmo
 		}
 		if (state.movementFlags & movement_flags::StrafeLeft)
 		{
-			AddInputVector(-right * GetSpeed(movement_type::Run));
+			AddInputVector(-right * remoteLateralSpeed);
 		}
 		if (state.movementFlags & movement_flags::StrafeRight)
 		{
-			AddInputVector(right * GetSpeed(movement_type::Run));
+			AddInputVector(right * remoteLateralSpeed);
 		}
 
 		UpdateCollider();
@@ -1402,6 +1423,25 @@ namespace mmo
 		// Lock the position so the next start packet uses the same position
 		// This prevents drift from physics adjustments between stop and start
 		LockPositionForSync();
+	}
+
+	void GameUnitC::ToggleWalkMode()
+	{
+		const bool nowWalking = (m_movementInfo.movementFlags & movement_flags::WalkMode) == 0;
+
+		if (nowWalking)
+		{
+			m_movementInfo.movementFlags |= movement_flags::WalkMode;
+		}
+		else
+		{
+			m_movementInfo.movementFlags &= ~movement_flags::WalkMode;
+		}
+
+		UpdateMovementInfo();
+
+		QueueMovementEvent(nowWalking ? movement_event_type::StartWalk : movement_event_type::StopWalk,
+			m_movementInfo.timestamp, m_movementInfo);
 	}
 
 	void GameUnitC::StartTurn(const bool left)
@@ -2677,6 +2717,10 @@ namespace mmo
 	{
 		m_idleAnimState = nullptr;
 		m_walkAnimState = nullptr;
+		m_walkLeftState = nullptr;
+		m_walkRightState = nullptr;
+		m_walkForwardLeftState = nullptr;
+		m_walkForwardRightState = nullptr;
 		m_runAnimState = nullptr;
 		m_runBackAnimState = nullptr;
 		m_runLeftState = nullptr;
@@ -2786,6 +2830,30 @@ namespace mmo
 		if (m_entity->HasAnimationState("Walk"))
 		{
 			m_walkAnimState = m_entity->GetAnimationState("Walk");
+		}
+
+		if (m_entity->HasAnimationState("WalkLeft"))
+		{
+			m_walkLeftState = m_entity->GetAnimationState("WalkLeft");
+			m_walkLeftState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("WalkRight"))
+		{
+			m_walkRightState = m_entity->GetAnimationState("WalkRight");
+			m_walkRightState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("WalkForwardLeft"))
+		{
+			m_walkForwardLeftState = m_entity->GetAnimationState("WalkForwardLeft");
+			m_walkForwardLeftState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("WalkForwardRight"))
+		{
+			m_walkForwardRightState = m_entity->GetAnimationState("WalkForwardRight");
+			m_walkForwardRightState->SetLoop(true);
 		}
 
 		if (m_entity->HasAnimationState("Run"))
