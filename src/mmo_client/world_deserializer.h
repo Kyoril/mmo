@@ -50,6 +50,9 @@ namespace mmo
 
 		terrain::Terrain* GetTerrain() const { return m_terrain.get(); }
 
+		/// @brief Gets the hardware-instanced foliage (trees) renderer, or nullptr if not loaded.
+		InstancedFoliage* GetInstancedFoliage() const { return m_foliage.get(); }
+
 		void LoadPageEntities(uint8 x, uint8 y);
 
 		void UnloadPageEntities(uint8 x, uint8 y);

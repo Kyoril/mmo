@@ -1036,9 +1036,20 @@ namespace mmo
 				<< "\tfloat3x3 TBN = float3x3(T, B, N);\n";
 		}
 
-		for (const auto& code : m_expressions)
+		for (size_t exprIndex = 0; exprIndex < m_expressions.size(); ++exprIndex)
 		{
-			m_pixelShaderStream << "\t" << code;
+			// When debug comments are enabled, prefix each numbered expression with a comment that
+			// maps it back to the originating node in the material graph. This makes it much easier
+			// to align the generated expr_N statements with the visual node graph while debugging.
+			if (m_generateDebugComments)
+			{
+				if (const String* comment = GetExpressionComment(static_cast<ExpressionIndex>(exprIndex)))
+				{
+					m_pixelShaderStream << "\t// expr_" << exprIndex << "  <-  " << *comment << "\n";
+				}
+			}
+
+			m_pixelShaderStream << "\t" << m_expressions[exprIndex];
 		}
 
 		if (type != PixelShaderType::ShadowMap && type != PixelShaderType::UI)

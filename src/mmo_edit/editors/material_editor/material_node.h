@@ -535,6 +535,11 @@ namespace mmo
 
 		virtual ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) = 0;
 
+		/// @brief Gets the expression index this node compiled into during the last graph compilation,
+		///	       or IndexNone if the node did not produce an expression. Used to map nodes to the
+		///		   numbered expressions (expr_N) of the generated shader code for debugging.
+		[[nodiscard]] ExpressionIndex GetCompiledExpressionId() const { return m_compiledExpressionId; }
+
 		[[nodiscard]] virtual std::span<PropertyBase*> GetProperties() { return {}; }
 
 		virtual void NotifyCompilationStarted() { m_compiledExpressionId = IndexNone; }

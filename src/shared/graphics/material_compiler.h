@@ -81,11 +81,37 @@ namespace mmo
 		void Compile(Material& material, ShaderCompiler& shaderCompiler);
 
 	public:
-		/// @brief Gets the generated high level vertex shader code.
+		/// @brief Gets the generated high level vertex shader code of the last generated vertex shader type.
 		[[nodiscard]] const String& GetVertexShaderCode() const { return m_vertexShaderCode; }
+
+		/// @brief Gets the generated high level vertex shader code for a specific vertex shader type.
+		///	       Only valid after a call to @ref Compile, which generates and stores all variants.
+		[[nodiscard]] const String& GetVertexShaderCode(VertexShaderType type) const { return m_vertexShaderCodeByType[static_cast<int>(type)]; }
 
 		/// @brief Gets the generated high level pixel shader code.
 		[[nodiscard]] const String& GetPixelShaderCode(PixelShaderType type) const { return m_pixelShaderCode[(int)type]; }
+
+	public:
+		/// @brief Enables or disables generation of debug comments in the produced HLSL code.
+		///	       When enabled, generated numbered expressions (expr_N) are annotated with the
+		///		   node graph node they originated from (see @ref AnnotateExpression). This makes
+		///		   it much easier to map the generated shader code back to the visual node graph.
+		///		   Comments are stripped by the shader compiler and have no effect on the binary output.
+		void SetGenerateDebugComments(const bool enable) { m_generateDebugComments = enable; }
+
+		/// @brief Whether debug comment generation is currently enabled.
+		[[nodiscard]] bool IsGeneratingDebugComments() const { return m_generateDebugComments; }
+
+		/// @brief Associates a human readable comment with a generated expression index. Used to map
+		///	       a numbered expression (expr_N) back to the node in the material graph that produced it.
+		/// @param index The expression index to annotate.
+		/// @param comment The comment text to associate with the expression.
+		void AnnotateExpression(ExpressionIndex index, std::string_view comment);
+
+		/// @brief Gets the comment associated with a given expression index, or nullptr if none was set.
+		/// @param index The expression index to query.
+		/// @return Pointer to the associated comment or nullptr if there is none.
+		[[nodiscard]] const String* GetExpressionComment(ExpressionIndex index) const;
 
 	public:
 		/// @brief Adds a global shader function.
@@ -366,7 +392,14 @@ namespace mmo
 
 		Material* m_material { nullptr };
 		String m_vertexShaderCode;
+		String m_vertexShaderCodeByType[6];
 		String m_pixelShaderCode[4];
+
+		/// @brief Whether debug comments mapping expressions to graph nodes should be emitted.
+		bool m_generateDebugComments { false };
+
+		/// @brief Maps an expression index to a human readable comment (node name / id) for debugging.
+		std::map<ExpressionIndex, String> m_expressionComments;
 		//std::ostringstream m_vertexShaderStream;
 		std::ostringstream m_pixelShaderStream;
 

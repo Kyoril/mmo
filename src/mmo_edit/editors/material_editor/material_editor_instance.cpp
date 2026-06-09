@@ -720,13 +720,40 @@ namespace mmo
 		m_scene.Clear();
 	}
 
-	void MaterialEditorInstance::Compile() const
+	void MaterialEditorInstance::Compile()
 	{
 		const auto materialCompiler = GraphicsDevice::Get().CreateMaterialCompiler();
+
+		// Always emit debug comments so the shader code viewer can map the generated numbered
+		// expressions back to the nodes in the graph. Comments are stripped by the shader compiler
+		// and have no effect on the produced binary shader code.
+		materialCompiler->SetGenerateDebugComments(true);
+
 		m_graph->Compile(*materialCompiler);
+
+		// After the graph has been compiled, every node knows the expression index it produced.
+		// Annotate those expressions with the node name and id so the generated HLSL can be aligned
+		// with the visual node graph.
+		for (const auto* node : m_graph->GetNodes())
+		{
+			const ExpressionIndex exprId = node->GetCompiledExpressionId();
+			if (exprId == IndexNone)
+			{
+				continue;
+			}
+
+			std::ostringstream label;
+			const auto nodeName = node->GetName();
+			label << "Node \"" << (nodeName.empty() ? node->GetTypeInfo().displayName : nodeName)
+				<< "\" (#" << node->GetId() << ")";
+			materialCompiler->AnnotateExpression(exprId, label.str());
+		}
 
 		const auto shaderCompiler = GraphicsDevice::Get().CreateShaderCompiler();
 		materialCompiler->Compile(*m_material, *shaderCompiler);
+
+		// Keep the generated high level HLSL around so it can be inspected in the shader code panel.
+		CaptureGeneratedShaderCode(*materialCompiler);
 
 		m_material->Update();
 
@@ -736,6 +763,21 @@ namespace mmo
 		}
 
 		m_editor.GetPreviewManager().InvalidatePreview(m_assetPath.string());
+	}
+
+	void MaterialEditorInstance::CaptureGeneratedShaderCode(const MaterialCompiler& compiler)
+	{
+		for (int i = 0; i < static_cast<int>(m_vertexShaderCode.size()); ++i)
+		{
+			m_vertexShaderCode[i] = compiler.GetVertexShaderCode(static_cast<VertexShaderType>(i));
+		}
+
+		for (int i = 0; i < static_cast<int>(m_pixelShaderCode.size()); ++i)
+		{
+			m_pixelShaderCode[i] = compiler.GetPixelShaderCode(static_cast<PixelShaderType>(i));
+		}
+
+		m_shaderCodeCaptured = true;
 	}
 
 	bool MaterialEditorInstance::Save()
@@ -822,12 +864,14 @@ namespace mmo
 		const String previewId = "Preview##" + GetAssetPath().string();
 		const String detailsId = "Details##" + GetAssetPath().string();
 		const String graphId = "Material Graph##" + GetAssetPath().string();
+		const String shaderCodeId = "Shader Code##" + GetAssetPath().string();
 
 		DrawPreviewPanel(previewId);
 		DrawDetailsPanel(detailsId);
 		DrawGraphPanel(graphId);
-		
-		InitializeDockLayout(dockspaceId, previewId, detailsId, graphId);
+		DrawShaderCodePanel(shaderCodeId);
+
+		InitializeDockLayout(dockspaceId, previewId, detailsId, graphId, shaderCodeId);
 
 		ed::SetCurrentEditor(nullptr);
 		ImGui::PopID();
@@ -1054,7 +1098,83 @@ namespace mmo
 		ImGui::End();
 	}
 
-	void MaterialEditorInstance::InitializeDockLayout(ImGuiID dockspaceId, const String& previewId, const String& detailsId, const String& graphId)
+	const String& MaterialEditorInstance::GetSelectedShaderCode() const
+	{
+		static const String empty;
+
+		if (m_selectedShaderIndex < 0)
+		{
+			return empty;
+		}
+
+		if (m_selectedShaderIndex < static_cast<int>(m_vertexShaderCode.size()))
+		{
+			return m_vertexShaderCode[m_selectedShaderIndex];
+		}
+
+		const int pixelIndex = m_selectedShaderIndex - static_cast<int>(m_vertexShaderCode.size());
+		if (pixelIndex >= 0 && pixelIndex < static_cast<int>(m_pixelShaderCode.size()))
+		{
+			return m_pixelShaderCode[pixelIndex];
+		}
+
+		return empty;
+	}
+
+	void MaterialEditorInstance::DrawShaderCodePanel(const String& panelId)
+	{
+		// Labels match the ordering of VertexShaderType (0-5) followed by PixelShaderType (0-3),
+		// which is how the generated code is stored in m_vertexShaderCode / m_pixelShaderCode.
+		static const char* shaderNames[] = {
+			"Vertex Shader: Default",
+			"Vertex Shader: Skinned (Low)",
+			"Vertex Shader: Skinned (Medium)",
+			"Vertex Shader: Skinned (High)",
+			"Vertex Shader: UI",
+			"Vertex Shader: Instanced",
+			"Pixel Shader: Forward",
+			"Pixel Shader: GBuffer (Deferred)",
+			"Pixel Shader: Shadow Map",
+			"Pixel Shader: UI"
+		};
+
+		if (ImGui::Begin(panelId.c_str()))
+		{
+			if (ImGui::Button("Compile"))
+			{
+				Compile();
+			}
+
+			if (!m_shaderCodeCaptured)
+			{
+				ImGui::SameLine();
+				ImGui::TextDisabled("Press Compile to generate and inspect the shader HLSL.");
+			}
+			else
+			{
+				ImGui::SameLine();
+				ImGui::SetNextItemWidth(320.0f);
+				ImGui::Combo("##shaderSelect", &m_selectedShaderIndex, shaderNames, IM_ARRAYSIZE(shaderNames));
+
+				const String& code = GetSelectedShaderCode();
+
+				ImGui::SameLine();
+				if (ImGui::Button("Copy to Clipboard"))
+				{
+					ImGui::SetClipboardText(code.c_str());
+				}
+
+				// Read-only multiline text box so the generated HLSL can be viewed, selected and copied.
+				ImGui::InputTextMultiline("##shaderCode",
+					const_cast<char*>(code.c_str()), code.size() + 1,
+					ImVec2(-FLT_MIN, -FLT_MIN),
+					ImGuiInputTextFlags_ReadOnly);
+			}
+		}
+		ImGui::End();
+	}
+
+	void MaterialEditorInstance::InitializeDockLayout(ImGuiID dockspaceId, const String& previewId, const String& detailsId, const String& graphId, const String& shaderCodeId)
 	{
 		if (m_initDockLayout)
 		{
@@ -1065,8 +1185,11 @@ namespace mmo
 			auto mainId = dockspaceId;
 			auto sideId = ImGui::DockBuilderSplitNode(mainId, ImGuiDir_Left, 400.0f / ImGui::GetMainViewport()->Size.x, nullptr, &mainId);
 			auto sideTopId = ImGui::DockBuilderSplitNode(sideId, ImGuiDir_Up, 400.0f / ImGui::GetMainViewport()->Size.y, nullptr, &sideId);
-			
+
 			ImGui::DockBuilderDockWindow(graphId.c_str(), mainId);
+
+			// Dock the shader code viewer as a tab alongside the graph so it has plenty of room.
+			ImGui::DockBuilderDockWindow(shaderCodeId.c_str(), mainId);
 
 			ImGui::DockBuilderDockWindow(previewId.c_str(), sideTopId);
 			ImGui::DockBuilderDockWindow(detailsId.c_str(), sideId);

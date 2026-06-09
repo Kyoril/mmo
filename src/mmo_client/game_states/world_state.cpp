@@ -31,6 +31,7 @@
 #include "systems/trainer_client.h"
 #include "systems/vendor_client.h"
 #include "world_deserializer.h"
+#include "scene_graph/instanced_foliage.h"
 #include "base/erase_by_move.h"
 #include "base/profiler.h"
 #include "base/timer_queue.h"
@@ -113,6 +114,8 @@ namespace mmo
 		static ConsoleVar *s_renderScaleVar = nullptr;
 
 		static ConsoleVar *s_depthPrepassVar = nullptr;
+
+		static ConsoleVar *s_viewDistanceVar = nullptr;
 
 		static ConsoleVar *s_foliageEnabledVar = nullptr;
 		static ConsoleVar *s_foliageDensityVar = nullptr;
@@ -825,6 +828,18 @@ namespace mmo
 			m_foliage->Update(m_playerController->GetCamera());
 		}
 
+		// Cull distant authored instanced foliage (trees) by the configured view distance. Applying
+		// the cvar value here every frame keeps it correct regardless of page streaming / world
+		// reloads, and the cull itself only touches chunks whose visibility actually changed.
+		if (m_worldLoaded && m_worldInstance)
+		{
+			if (InstancedFoliage* trees = m_worldInstance->GetInstancedFoliage())
+			{
+				trees->SetViewDistance(s_viewDistanceVar ? s_viewDistanceVar->GetFloatValue() : 0.0f);
+				trees->UpdateViewDistance(m_playerController->GetCamera().GetDerivedPosition());
+			}
+		}
+
 		// Notify terrain of the current camera position so it can detect large single-frame
 		// displacements (building exit, teleport) and reset stale tile occlusion state.
 		if (m_worldLoaded && m_worldInstance->HasTerrain())
@@ -1284,8 +1299,13 @@ namespace mmo
 		// GPUs. Read directly by WorldRenderer each frame, so no change handler is required here.
 		s_renderScaleVar = ConsoleVarMgr::RegisterConsoleVar("gxRenderScale", "3D render resolution scale (0.25 to 1.0). Lower values improve performance by rendering the world at a lower resolution and upscaling.", "1.0");
 
-		s_depthPrepassVar = ConsoleVarMgr::RegisterConsoleVar("gxDepthPrepass", "Render an opaque depth pre-pass before the G-Buffer pass. Reduces overdraw shading cost in scenes with heavy opaque overdraw (e.g. dense foliage). 1 = on, 0 = off.", "0");
+		s_depthPrepassVar = ConsoleVarMgr::RegisterConsoleVar("gxDepthPrepass", "Render an opaque depth pre-pass before the G-Buffer pass. Reduces overdraw shading cost in scenes with heavy opaque overdraw (e.g. dense foliage). 1 = on, 0 = off.", "1");
 		m_cvarChangedSignals += s_depthPrepassVar->Changed.connect(this, &WorldState::OnDepthPrepassChanged);
+
+		// Distance (world units) beyond which authored instanced foliage (trees, bushes, rocks) is
+		// culled. Lower values cut the overdraw from dense forests. Read each frame in OnIdle, so no
+		// change handler is required. A very large value = unlimited (render everything).
+		s_viewDistanceVar = ConsoleVarMgr::RegisterConsoleVar("ViewDistance", "Maximum render distance for environment objects like trees (world units). Lower values improve performance in dense forests.", "600");
 
 		s_terrainLodEnabledVar = ConsoleVarMgr::RegisterConsoleVar("TerrainLodEnabled", "Enable or disable terrain level of detail", "1");
 		m_cvarChangedSignals += s_terrainLodEnabledVar->Changed.connect(this, &WorldState::OnTerrainLodEnabledChanged);
@@ -1365,6 +1385,7 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowQuality");
 		ConsoleVarMgr::UnregisterConsoleVar("gxRenderScale");
 		ConsoleVarMgr::UnregisterConsoleVar("gxDepthPrepass");
+		ConsoleVarMgr::UnregisterConsoleVar("ViewDistance");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageEnabled");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageDensity");
 

@@ -333,7 +333,9 @@ namespace mmo
 				SceneNode* chunkNode = cell.node->CreateChildSceneNode();
 				chunkNode->AttachObject(*chunk);
 				chunk->SetScene(&m_scene);
-				chunk->SetVisible(m_visible);
+				// Respect both the global visibility flag and the cell's current distance-cull state,
+				// so rebuilding a cell that is currently culled does not pop it back into view.
+				chunk->SetVisible(m_visible && cell.visibleByDistance);
 
 				// Render chunks carry no collision geometry of their own - collision is provided by a
 				// dedicated InstancedFoliageCollision proxy (built below). Exclude render chunks from
@@ -513,6 +515,53 @@ namespace mmo
 		m_visible = visible;
 		for (auto& [coord, cell] : m_cells)
 		{
+			// Distant cells must stay hidden even when globally enabled.
+			const bool cellVisible = visible && cell.visibleByDistance;
+			for (auto& entry : cell.chunks)
+			{
+				if (entry.chunk)
+				{
+					entry.chunk->SetVisible(cellVisible);
+				}
+			}
+		}
+	}
+
+	void InstancedFoliage::UpdateViewDistance(const Vector3& cameraPosition)
+	{
+		// When globally hidden, every chunk is already hidden; nothing to do.
+		if (!m_visible)
+		{
+			return;
+		}
+
+		const bool unlimited = (m_viewDistance <= 0.0f);
+
+		// Conservative cell radius (half-diagonal of a square cell) so a cell stays visible until it
+		// is fully beyond the cull distance, avoiding pop-in at cell edges.
+		const float cellRadius = m_chunkSize * 0.70710678f;
+		const float cullDistance = m_viewDistance + cellRadius;
+		const float maxDistSq = cullDistance * cullDistance;
+
+		for (auto& [coord, cell] : m_cells)
+		{
+			bool visible = true;
+			if (!unlimited)
+			{
+				const float centerX = (static_cast<float>(coord.x) + 0.5f) * m_chunkSize;
+				const float centerZ = (static_cast<float>(coord.z) + 0.5f) * m_chunkSize;
+				const float dx = centerX - cameraPosition.x;
+				const float dz = centerZ - cameraPosition.z;
+				visible = (dx * dx + dz * dz) <= maxDistSq;
+			}
+
+			// Only touch the chunks when the cell's visibility actually changed.
+			if (cell.visibleByDistance == visible)
+			{
+				continue;
+			}
+			cell.visibleByDistance = visible;
+
 			for (auto& entry : cell.chunks)
 			{
 				if (entry.chunk)

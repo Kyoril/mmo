@@ -145,6 +145,20 @@ namespace mmo
 			return m_visible;
 		}
 
+		/// @brief Sets the maximum distance (world units, measured on the XZ plane from the camera)
+		///        at which instanced foliage cells are rendered. Cells further away are hidden.
+		/// @param distance The cull distance. A value <= 0 disables distance culling (render all).
+		void SetViewDistance(float distance) { m_viewDistance = distance; }
+
+		/// @brief Gets the current view distance (0 = unlimited).
+		[[nodiscard]] float GetViewDistance() const { return m_viewDistance; }
+
+		/// @brief Culls foliage cells beyond the configured view distance from the camera. Cheap —
+		///        only toggles per-cell chunk visibility flags. Call once per frame. Does nothing
+		///        useful when view distance is unlimited or the system is globally hidden.
+		/// @param cameraPosition The current camera world position.
+		void UpdateViewDistance(const Vector3& cameraPosition);
+
 	private:
 		/// @brief Integer cell coordinate in cell space.
 		struct CellCoord
@@ -191,6 +205,7 @@ namespace mmo
 			std::vector<ChunkEntry> chunks;
 			std::vector<CollisionEntry> collisions;
 			std::unordered_set<uint64> instanceIds;
+			bool visibleByDistance = true; // Cached result of the last distance cull for this cell.
 		};
 
 		[[nodiscard]] CellCoord ToCell(const Vector3& position) const;
@@ -214,6 +229,7 @@ namespace mmo
 		float m_chunkSize;
 		bool m_castShadows = true;
 		bool m_visible = true;
+		float m_viewDistance = 0.0f; // 0 = unlimited (no distance culling)
 
 		std::map<uint64, Record> m_instances;
 		std::map<CellCoord, Cell> m_cells;
