@@ -82,8 +82,15 @@ namespace mmo
 		/// @brief Retrieves the sorted list of metrics from the last completed frame.
 		[[nodiscard]] const std::vector<PerformanceMetric>& GetMetrics() const { return m_metrics; }
 
-		/// @brief Returns the total frame time in milliseconds for the last completed frame.
+		/// @brief Returns the real frame time in milliseconds for the last completed frame.
+		/// @remark This is the wall-clock period between successive frames and therefore
+		///         includes Present()/VSync wait. It reflects the true displayed frame rate.
 		[[nodiscard]] double GetFrameTimeMs() const { return m_frameTimeMs; }
+
+		/// @brief Returns the CPU-side work time (Idle+Paint command building) for the last frame.
+		/// @remark Compare with GetFrameTimeMs(): if the real frame time is much larger than the
+		///         CPU time, the frame is GPU-bound (the CPU is waiting on Present/VSync).
+		[[nodiscard]] double GetCpuFrameTimeMs() const { return m_cpuFrameTimeMs; }
 
 		/// @brief Returns the current frames per second.
 		[[nodiscard]] double GetFPS() const { return m_fps; }
@@ -113,8 +120,17 @@ namespace mmo
 		/// Whether m_frameStartTime is valid (i.e. BeginFrame has been called at least once).
 		bool m_frameStartValid = false;
 
-		/// Total frame time of the last completed frame, in ms.
+		/// Timestamp of the previous BeginFrame, used to measure the real frame period.
+		std::chrono::high_resolution_clock::time_point m_lastFrameBeginTime;
+
+		/// Whether m_lastFrameBeginTime holds a valid timestamp yet.
+		bool m_lastFrameBeginValid = false;
+
+		/// Real frame time of the last completed frame, in ms (includes Present/VSync wait).
 		double m_frameTimeMs = 0.0;
+
+		/// CPU work time of the last frame (Idle+Paint), in ms — excludes Present/VSync.
+		double m_cpuFrameTimeMs = 0.0;
 
 		/// Current FPS derived from frame time.
 		double m_fps = 0.0;

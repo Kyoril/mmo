@@ -748,7 +748,6 @@ namespace mmo
 				<< "\tfloat4 normal : SV_Target1;    // RGB: Normal, A: Depth\n"
 				<< "\tfloat4 material : SV_Target2;  // R: Metallic, G: Roughness, B: Specular, A: Ambient Occlusion\n"
 				<< "\tfloat4 emissive : SV_Target3;  // RGB: Emissive, A: Unused\n"
-				<< "\tfloat4 viewRay : SV_Target4;  // RGB: ViewRay, A: Unused\n"
 				<< "};\n\n";
 		}
 
@@ -1310,9 +1309,6 @@ namespace mmo
 					m_pixelShaderStream
 						<< "\tfloat linearDepth = 0.0f;\n";	// TODO: Is that correct? Or maybe Z-Far?
 				}
-
-				m_pixelShaderStream
-					<< "\toutput.viewRay = float4(normalize(input.viewPos), 1.0);\n";
 
 				// For unlit materials, write base color to emissive instead of albedo
 				if (!m_lit)

@@ -16,7 +16,29 @@ namespace mmo
 			return;
 		}
 
-		m_frameStartTime = std::chrono::high_resolution_clock::now();
+		const auto now = std::chrono::high_resolution_clock::now();
+
+		// The real frame time is the wall-clock period between successive frame starts. Because
+		// BeginFrame runs at the top of OnIdle and the next BeginFrame only happens after the full
+		// loop iteration (Idle -> Paint -> Present/VSync), this period correctly includes the
+		// Present()/VSync wait that the old begin->end measurement missed. When the GPU is the
+		// bottleneck (e.g. an integrated GPU), this is the only honest frame-rate number.
+		if (m_lastFrameBeginValid)
+		{
+			m_frameTimeMs = std::chrono::duration<double, std::milli>(now - m_lastFrameBeginTime).count();
+			m_fps = (m_frameTimeMs > 0.0) ? (1000.0 / m_frameTimeMs) : 0.0;
+
+			// Update frame time history for rolling averages
+			m_frameTimeHistory.push_back(m_frameTimeMs);
+			while (m_frameTimeHistory.size() > MaxFrameTimeHistory)
+			{
+				m_frameTimeHistory.pop_front();
+			}
+		}
+		m_lastFrameBeginTime = now;
+		m_lastFrameBeginValid = true;
+
+		m_frameStartTime = now;
 		m_frameStartValid = true;
 		m_metricsMap.clear();
 	}
@@ -28,19 +50,12 @@ namespace mmo
 			return;
 		}
 
-		// Compute frame time
+		// Measure the CPU-side work time (command building) separately from the real frame time.
+		// A large gap between the two (real >> CPU) means the frame is GPU-bound.
 		if (m_frameStartValid)
 		{
 			const auto now = std::chrono::high_resolution_clock::now();
-			m_frameTimeMs = std::chrono::duration<double, std::milli>(now - m_frameStartTime).count();
-			m_fps = (m_frameTimeMs > 0.0) ? (1000.0 / m_frameTimeMs) : 0.0;
-
-			// Update frame time history for rolling averages
-			m_frameTimeHistory.push_back(m_frameTimeMs);
-			while (m_frameTimeHistory.size() > MaxFrameTimeHistory)
-			{
-				m_frameTimeHistory.pop_front();
-			}
+			m_cpuFrameTimeMs = std::chrono::duration<double, std::milli>(now - m_frameStartTime).count();
 		}
 
 		// Transfer the data from the map into a vector, updating history

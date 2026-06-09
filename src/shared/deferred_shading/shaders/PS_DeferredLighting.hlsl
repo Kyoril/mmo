@@ -16,7 +16,8 @@ Texture2D AlbedoTexture : register(t0);
 Texture2D NormalTexture : register(t1);
 Texture2D MaterialTexture : register(t2);
 Texture2D EmissiveTexture : register(t3);
-Texture2D ViewRayTexture : register(t4);
+// Slot t4 (formerly the ViewRay G-Buffer) is intentionally unused: the view-space ray is
+// reconstructed from InverseProjection and the screen UV in main() instead of being read back.
 
 // Cascade shadow maps
 Texture2D ShadowMapCascade0 : register(t5);
@@ -112,6 +113,9 @@ cbuffer ShadowBuffer : register(b3)
     uint CascadeCount;          // Number of active cascades
     uint DebugCascades;         // Whether to show cascade debug colors
     float CascadeBlendFactor;   // Blend factor for cascade transitions
+
+    uint PcfSampleCount;        // Number of PCF taps per shadow lookup (shadow quality)
+    float3 _ShadowPadding;
 };
 
 // Debug colors for cascade visualization
@@ -248,16 +252,18 @@ float PCF_FilterCascade(Texture2D shadowMap, float2 uv, float receiverDepth, flo
     float cosAngle = cos(angle);
     float sinAngle = sin(angle);
     float2x2 rot = float2x2(cosAngle, -sinAngle, sinAngle, cosAngle);
-    
-    // Use fixed 16 samples for consistent quality
-    [unroll]
-    for (int i = 0; i < 16; i++)
+
+    // Sample count is driven by the shadow-quality setting (clamped to the 16-entry Poisson disk).
+    // Fewer taps = cheaper but slightly noisier/harder shadow edges.
+    uint sampleCount = clamp(PcfSampleCount, 1u, 16u);
+    [loop]
+    for (uint i = 0; i < sampleCount; i++)
     {
         float2 offset = mul(rot, POISSON_DISK[i]) * filterRadius;
         sum += shadowMap.SampleCmpLevelZero(ShadowSampler, uv + offset, receiverDepth - ShadowBias);
     }
-    
-    return sum / 16.0f;
+
+    return sum / (float)sampleCount;
 }
 
 // Sample shadow from a specific cascade
@@ -462,10 +468,15 @@ float4 main(PS_INPUT input) : SV_TARGET
     float4 normalData = NormalTexture.Sample(PointSampler, input.TexCoord);
     float4 materialData = MaterialTexture.Sample(PointSampler, input.TexCoord);
     float4 emissiveData = EmissiveTexture.Sample(PointSampler, input.TexCoord);
-    float4 viewRayData = ViewRayTexture.Sample(PointSampler, input.TexCoord);
     float depth = normalData.a;
-    
-    float3 viewRay = normalize(viewRayData.xyz);
+
+    // Reconstruct the view-space ray direction for this pixel from the inverse projection matrix
+    // and the screen UV, replacing the former ViewRay G-Buffer target. The G-Buffer stored
+    // viewRay = normalize(viewPos) and depth = length(viewPos); unprojecting the pixel's NDC gives
+    // a point on the exact same ray from the camera, so its normalised direction is identical.
+    float2 ndc = float2(input.TexCoord.x * 2.0f - 1.0f, 1.0f - input.TexCoord.y * 2.0f);
+    float4 viewH = mul(float4(ndc, 1.0f, 1.0f), InverseProjection);
+    float3 viewRay = normalize(viewH.xyz / viewH.w);
     
     // Extract G-Buffer data
     float3 albedo = albedoData.rgb;

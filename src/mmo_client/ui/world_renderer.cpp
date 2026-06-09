@@ -9,6 +9,10 @@
 #include "frame_ui/geometry_helper.h"
 
 #include "base/profiler.h"
+#include "math/clamp.h"
+#include "console/console_var.h"
+
+#include <algorithm>
 
 namespace mmo
 {
@@ -37,11 +41,26 @@ namespace mmo
 		// Get the current frame rect
 		const auto frameRect = m_frame->GetAbsoluteFrameRect();
 
-		// Need to resize the render target first?
-		if (m_lastFrameRect.GetSize() != frameRect.GetSize())
+		// Resolve the render scale from the console variable. The 3D scene (G-Buffer, lighting and
+		// shadows) is rendered at frameSize * scale and then upscaled to the full frame size by the
+		// textured quad below, so lowering the scale is a large, near-linear performance win on
+		// fill-rate/bandwidth limited GPUs while leaving the UI rendered at native resolution.
+		static ConsoleVar* s_renderScaleVar = nullptr;
+		if (!s_renderScaleVar)
 		{
-			// Resize render target
-			m_deferredRenderer->Resize(static_cast<uint16>(frameRect.GetWidth()), static_cast<uint16>(frameRect.GetHeight()));
+			s_renderScaleVar = ConsoleVarMgr::FindConsoleVar("gxRenderScale");
+		}
+		const float renderScale = s_renderScaleVar ? Clamp(s_renderScaleVar->GetFloatValue(), 0.25f, 1.0f) : 1.0f;
+
+		const uint16 internalWidth = static_cast<uint16>(std::max(1.0f, frameRect.GetWidth() * renderScale));
+		const uint16 internalHeight = static_cast<uint16>(std::max(1.0f, frameRect.GetHeight() * renderScale));
+
+		// Resize the internal render target when either the frame size or the render scale changes.
+		if (m_internalWidth != internalWidth || m_internalHeight != internalHeight)
+		{
+			m_deferredRenderer->Resize(internalWidth, internalHeight);
+			m_internalWidth = internalWidth;
+			m_internalHeight = internalHeight;
 		}
 
 		// If frame rect mismatches or buffer empty...

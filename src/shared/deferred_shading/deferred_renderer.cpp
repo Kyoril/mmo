@@ -52,6 +52,11 @@ namespace mmo
         uint32 cascadeCount;        // Number of active cascades
         uint32 debugCascades;       // Whether to show cascade debug colors
         float cascadeBlendFactor;   // Blend factor for cascade transitions
+
+        uint32 pcfSampleCount;      // Number of PCF taps per shadow lookup (shadow quality)
+        float shadowPadding0;
+        float shadowPadding1;
+        float shadowPadding2;
     };
 
     // Light metadata constant buffer - small struct with just count and ambient color
@@ -277,8 +282,7 @@ namespace mmo
         m_gBuffer.GetNormalRT().Clear(ClearFlags::Color);
         m_gBuffer.GetEmissiveRT().Clear(ClearFlags::Color);
         m_gBuffer.GetMaterialRT().Clear(ClearFlags::Color);
-        m_gBuffer.GetViewRayRT().Clear(ClearFlags::Color);
-        
+
         // Render the scene using the camera
         scene.Render(camera, PixelShaderType::GBuffer);
     }
@@ -304,8 +308,9 @@ namespace mmo
         m_gBuffer.GetNormalRT().Bind(ShaderType::PixelShader, 1);
         m_gBuffer.GetMaterialRT().Bind(ShaderType::PixelShader, 2);
         m_gBuffer.GetEmissiveRT().Bind(ShaderType::PixelShader, 3);
-        m_gBuffer.GetViewRayRT().Bind(ShaderType::PixelShader, 4);
-        
+        // Slot 4 (former ViewRay G-Buffer) is no longer bound — the view ray is reconstructed
+        // analytically in the lighting shader from InverseProjection and the screen UV.
+
         // Bind all cascade shadow maps
         for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
         {
@@ -443,6 +448,7 @@ namespace mmo
         buffer.cascadeCount = 1;
         buffer.debugCascades = m_debugCascades ? 1 : 0;
         buffer.cascadeBlendFactor = 0.0f;
+        buffer.pcfSampleCount = m_pcfSampleCount;
         m_shadowBuffer->Update(&buffer);
 
         // Render the shadow map
@@ -476,8 +482,10 @@ namespace mmo
         m_device.SetSlopeScaledDepthBias(m_slopeScaledDepthBias);
         m_device.SetDepthBiasClamp(m_depthBiasClamp);
 
-        // Render each cascade
-        for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
+        // Render only the active cascades. Each cascade is a full re-submission of the scene
+        // geometry, so rendering fewer of them (a quality setting) is a direct CPU+GPU saving.
+        const uint32 activeCascades = m_cascadedShadowSetup->GetConfig().GetActiveCascadeCount();
+        for (uint32 i = 0; i < activeCascades; ++i)
         {
             if (!m_shadowCameras[i])
             {
@@ -509,9 +517,10 @@ namespace mmo
         buffer.shadowSoftness = m_shadowSoftness;
         buffer.blockerSearchRadius = m_blockerSearchRadius;
         buffer.lightSize = m_lightSize;
-        buffer.cascadeCount = NUM_SHADOW_CASCADES;
+        buffer.cascadeCount = activeCascades;
         buffer.debugCascades = m_debugCascades ? 1 : 0;
         buffer.cascadeBlendFactor = config.cascadeBlendFactor;
+        buffer.pcfSampleCount = m_pcfSampleCount;
         m_shadowBuffer->Update(&buffer);
 
         // Reset depth bias

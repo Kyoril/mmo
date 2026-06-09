@@ -99,6 +99,33 @@ namespace mmo
         void SetShadowMapSize(uint16 size);
         uint16 GetShadowMapSize() const { return m_shadowMapSize; }
 
+        /// @brief Applies a coarse shadow-quality preset that trades visual quality for performance.
+        /// @param level 0 = Low, 1 = Medium, 2 = High (anything higher is treated as High).
+        /// @remark This controls the number of rendered cascades (each is a full scene geometry
+        ///         re-submission) and the number of PCF taps in the lighting shader. It deliberately
+        ///         does not touch the shadow-map resolution, which has its own setting.
+        void SetShadowQuality(int level)
+        {
+            switch (level)
+            {
+            case 0: // Low: 2 cascades, 4 PCF taps
+                m_cascadedShadowSetup->GetConfig().activeCascadeCount = 2;
+                m_pcfSampleCount = 4;
+                break;
+            case 1: // Medium: 3 cascades, 8 PCF taps
+                m_cascadedShadowSetup->GetConfig().activeCascadeCount = 3;
+                m_pcfSampleCount = 8;
+                break;
+            default: // High: 4 cascades, 16 PCF taps
+                m_cascadedShadowSetup->GetConfig().activeCascadeCount = NUM_SHADOW_CASCADES;
+                m_pcfSampleCount = 16;
+                break;
+            }
+        }
+
+        /// @brief Gets the current PCF tap count used by the shadow filter.
+        [[nodiscard]] uint32 GetPcfSampleCount() const { return m_pcfSampleCount; }
+
         /// @brief Gets the light rendering statistics from the last frame.
         /// @return Reference to the light render statistics.
         const Scene::LightRenderStats& GetLightRenderStats() const { return m_lastLightStats; }
@@ -199,6 +226,7 @@ namespace mmo
         float m_blockerSearchRadius = 0.03f; // Search radius for blocker search phase
         float m_lightSize = 0.0268f;           // Size of the virtual light (smaller = sharper shadows)
         uint16 m_shadowMapSize = 2048;        // Size of the shadow map texture (increased for quality)
+        uint32 m_pcfSampleCount = 16;         // PCF taps per shadow lookup (shadow quality preset)
 
         /// @brief Cached light render statistics from the last frame.
         Scene::LightRenderStats m_lastLightStats;

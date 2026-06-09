@@ -48,5 +48,10 @@ namespace mmo
 		Camera* m_camera;
 
 		std::unique_ptr<DeferredRenderer> m_deferredRenderer;
+
+		/// Internal (pre-upscale) render resolution the deferred renderer is currently sized to.
+		/// Driven by the gxRenderScale console variable; the result is upscaled to the frame size.
+		uint16 m_internalWidth = 0;
+		uint16 m_internalHeight = 0;
 	};
 }

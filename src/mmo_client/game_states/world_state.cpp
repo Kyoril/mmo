@@ -108,6 +108,9 @@ namespace mmo
 		static ConsoleVar *s_slopeDepthBiasVar = nullptr;
 		static ConsoleVar *s_clampDepthBiasVar = nullptr;
 		static ConsoleVar *s_shadowTextureSizeVar = nullptr;
+		static ConsoleVar *s_shadowQualityVar = nullptr;
+
+		static ConsoleVar *s_renderScaleVar = nullptr;
 
 		static ConsoleVar *s_foliageEnabledVar = nullptr;
 		static ConsoleVar *s_foliageDensityVar = nullptr;
@@ -1271,6 +1274,14 @@ namespace mmo
 		s_shadowTextureSizeVar = ConsoleVarMgr::RegisterConsoleVar("ShadowTextureSize", "", "1");
 		m_cvarChangedSignals += s_shadowTextureSizeVar->Changed.connect(this, &WorldState::OnShadowTextureSizeChanged);
 
+		s_shadowQualityVar = ConsoleVarMgr::RegisterConsoleVar("ShadowQuality", "Shadow detail preset: 0 = Low (2 cascades, 4 PCF taps), 1 = Medium (3/8), 2 = High (4/16). Lower values improve performance.", "2");
+		m_cvarChangedSignals += s_shadowQualityVar->Changed.connect(this, &WorldState::OnShadowQualityChanged);
+
+		// Internal 3D render-scale: the world is rendered at this fraction of the frame size and then
+		// upscaled. 1.0 = native; lower values trade sharpness for a large performance gain on weak
+		// GPUs. Read directly by WorldRenderer each frame, so no change handler is required here.
+		s_renderScaleVar = ConsoleVarMgr::RegisterConsoleVar("gxRenderScale", "3D render resolution scale (0.25 to 1.0). Lower values improve performance by rendering the world at a lower resolution and upscaling.", "1.0");
+
 		s_terrainLodEnabledVar = ConsoleVarMgr::RegisterConsoleVar("TerrainLodEnabled", "Enable or disable terrain level of detail", "1");
 		m_cvarChangedSignals += s_terrainLodEnabledVar->Changed.connect(this, &WorldState::OnTerrainLodEnabledChanged);
 
@@ -1330,6 +1341,7 @@ namespace mmo
 				ILOG(m_scene->IsRenderingFrozen() ? "Culling is now frozen" : "Culling is no longer frozen"); }, ConsoleCommandCategory::Debug, "Toggles culling.");
 
 		OnShadowTextureSizeChanged(*s_shadowTextureSizeVar, "");
+		OnShadowQualityChanged(*s_shadowQualityVar, "");
 		OnRenderShadowsChanged(*s_renderShadowsVar, "");
 		OnShadowBiasChanged(*s_depthBiasVar, "");
 		OnFoliageEnabledChanged(*s_foliageEnabledVar, "");
@@ -1344,6 +1356,8 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowSlopeBias");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowClampBias");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowTextureSize");
+		ConsoleVarMgr::UnregisterConsoleVar("ShadowQuality");
+		ConsoleVarMgr::UnregisterConsoleVar("gxRenderScale");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageEnabled");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageDensity");
 
@@ -4235,6 +4249,34 @@ namespace {
 		const uint16 shadowTextureSize = s_shadowTexSizes[Clamp(s_shadowTextureSizeVar->GetIntValue(), 0, 3)];
 		ILOG("Updating shadow texture size to " << shadowTextureSize << "x" << shadowTextureSize);
 		deferred->SetShadowMapSize(shadowTextureSize);
+	}
+
+	void WorldState::OnShadowQualityChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
+		if (!worldFrame)
+		{
+			WLOG("World frame not found");
+			return;
+		}
+
+		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
+		if (!renderer)
+		{
+			WLOG("World frame has no renderer");
+			return;
+		}
+
+		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
+		if (!deferred)
+		{
+			WLOG("Deferred renderer not initialized");
+			return;
+		}
+
+		const int level = Clamp(var.GetIntValue(), 0, 2);
+		ILOG("Updating shadow quality to level " << level);
+		deferred->SetShadowQuality(level);
 	}
 
 	void WorldState::OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue)

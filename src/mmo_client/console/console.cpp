@@ -672,6 +672,7 @@ namespace mmo
 			const double fps = profiler.GetAverageFPS();
 			const double frameTime = profiler.GetAverageFrameTimeMs();
 			const double currentFrameTime = profiler.GetFrameTimeMs();
+			const double cpuFrameTime = profiler.GetCpuFrameTimeMs();
 
 			// Color the FPS value based on performance
 			argb_t fpsColor;
@@ -693,6 +694,20 @@ namespace mmo
 				strm << std::fixed << std::setprecision(1);
 				strm << "FPS: " << fps << "  Frame: " << frameTime << " ms (cur: " << currentFrameTime << " ms)";
 				s_consoleFont->DrawText(strm.str(), Point(xPadding, yOffset), *s_perfTextGeom, 1.0f, fpsColor);
+				yOffset += lineHeight;
+			}
+
+			// CPU work time vs real frame time. If CPU is much lower than the real frame time, the
+			// frame is GPU-bound (the CPU is idle waiting on Present/VSync).
+			{
+				const double gpuBound = currentFrameTime - cpuFrameTime;
+				std::ostringstream strm;
+				strm << std::fixed << std::setprecision(1);
+				strm << "CPU: " << cpuFrameTime << " ms   GPU-wait: " << (gpuBound > 0.0 ? gpuBound : 0.0) << " ms";
+				// Highlight in yellow when the GPU wait dominates the frame.
+				const bool gpuBoundDominant = gpuBound > cpuFrameTime;
+				s_consoleFont->DrawText(strm.str(), Point(xPadding, yOffset), *s_perfTextGeom, 1.0f,
+					gpuBoundDominant ? Color(1.0f, 1.0f, 0.0f) : Color(0.7f, 0.7f, 0.7f));
 				yOffset += lineHeight;
 			}
 
