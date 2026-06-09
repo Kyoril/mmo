@@ -540,10 +540,11 @@ namespace mmo
 		// Regular movement animations
 		if (m_unitMovement->IsMovingOnGround() && inputVector2DSize > 0.1f)
 		{
-			// Detect backward movement: Backward flag set and Forward flag not set.
-			const bool movingBackward =
-				(m_movementInfo.movementFlags & movement_flags::Backward) != 0 &&
-				(m_movementInfo.movementFlags & movement_flags::Forward) == 0;
+			const uint32 mf = m_movementInfo.movementFlags;
+			const bool movingForward  = (mf & movement_flags::Forward) != 0;
+			const bool movingBackward = (mf & movement_flags::Backward) != 0 && !movingForward;
+			const bool strafeLeft     = (mf & movement_flags::StrafeLeft) != 0;
+			const bool strafeRight    = (mf & movement_flags::StrafeRight) != 0;
 
 			AnimationState* movementAnim;
 			if (m_walkAnimState && IsWalkModeEnabled())
@@ -553,6 +554,22 @@ namespace mmo
 			else if (movingBackward && m_runBackAnimState)
 			{
 				movementAnim = m_runBackAnimState;
+			}
+			else if (movingForward && strafeLeft && !strafeRight)
+			{
+				movementAnim = m_runForwardLeftState ? m_runForwardLeftState : m_runAnimState;
+			}
+			else if (movingForward && strafeRight && !strafeLeft)
+			{
+				movementAnim = m_runForwardRightState ? m_runForwardRightState : m_runAnimState;
+			}
+			else if (strafeLeft && !strafeRight && !movingForward && !movingBackward)
+			{
+				movementAnim = m_runLeftState ? m_runLeftState : m_runAnimState;
+			}
+			else if (strafeRight && !strafeLeft && !movingForward && !movingBackward)
+			{
+				movementAnim = m_runRightState ? m_runRightState : m_runAnimState;
 			}
 			else
 			{
@@ -2662,6 +2679,10 @@ namespace mmo
 		m_walkAnimState = nullptr;
 		m_runAnimState = nullptr;
 		m_runBackAnimState = nullptr;
+		m_runLeftState = nullptr;
+		m_runRightState = nullptr;
+		m_runForwardLeftState = nullptr;
+		m_runForwardRightState = nullptr;
 		m_readyAnimState = nullptr;
 		m_weaponReadyState = nullptr;
 		m_castingState = nullptr;
@@ -2776,6 +2797,31 @@ namespace mmo
 		{
 			m_runBackAnimState = m_entity->GetAnimationState("RunBack");
 		}
+
+		if (m_entity->HasAnimationState("RunLeft"))
+		{
+			m_runLeftState = m_entity->GetAnimationState("RunLeft");
+			m_runLeftState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("RunRight"))
+		{
+			m_runRightState = m_entity->GetAnimationState("RunRight");
+			m_runRightState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("RunForwardLeft"))
+		{
+			m_runForwardLeftState = m_entity->GetAnimationState("RunForwardLeft");
+			m_runForwardLeftState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("RunForwardRight"))
+		{
+			m_runForwardRightState = m_entity->GetAnimationState("RunForwardRight");
+			m_runForwardRightState->SetLoop(true);
+		}
+
 		if (m_entity->HasAnimationState("UnarmedReady"))
 		{
 			m_readyAnimState = m_entity->GetAnimationState("UnarmedReady");

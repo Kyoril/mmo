@@ -724,6 +724,10 @@ namespace mmo
 		AnimationState *m_weaponReadyState{nullptr};
 		AnimationState *m_runAnimState{nullptr};
 		AnimationState *m_runBackAnimState{nullptr};
+		AnimationState *m_runLeftState{nullptr};
+		AnimationState *m_runRightState{nullptr};
+		AnimationState *m_runForwardLeftState{nullptr};
+		AnimationState *m_runForwardRightState{nullptr};
 		AnimationState *m_deathState{nullptr};
 		AnimationState *m_unarmedAttackState{nullptr};
 		std::vector<AnimationState*> m_weaponAttackStates;
