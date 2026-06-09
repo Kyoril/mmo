@@ -768,13 +768,55 @@ namespace mmo
 
 			GameObjectC* newHoveredObject = nullptr;
 
+			// When several objects sit under the cursor (e.g. corpses stacked after a pull),
+			// the closest hit is not always the most useful one to hover. Apply a priority so
+			// players can always grab their loot without waiting for corpses to despawn:
+			// lootable objects win over living units, which in turn win over dead/empty ones.
+			// Within the same priority tier the closest hit wins (the result is already sorted
+			// by distance, so the first match in a tier is the nearest).
 			const auto& hitResult = m_selectionSceneQuery->GetLastResult();
-			if (!hitResult.empty())
+
+			const auto hoverPriority = [](const GameObjectC& object) -> int
 			{
-				Entity* entity = static_cast<Entity*>(hitResult[0].movable);
-				if (entity)
+				if (object.CanBeLooted())
 				{
-					newHoveredObject = entity->GetUserObject<GameObjectC>();
+					return 3;
+				}
+
+				if (object.IsUnit() && object.AsUnit().IsAlive())
+				{
+					return 2;
+				}
+
+				return 1;
+			};
+
+			int bestPriority = 0;
+			for (const auto& hit : hitResult)
+			{
+				Entity* entity = static_cast<Entity*>(hit.movable);
+				if (!entity)
+				{
+					continue;
+				}
+
+				GameObjectC* candidate = entity->GetUserObject<GameObjectC>();
+				if (!candidate)
+				{
+					continue;
+				}
+
+				const int priority = hoverPriority(*candidate);
+				if (priority > bestPriority)
+				{
+					bestPriority = priority;
+					newHoveredObject = candidate;
+
+					// Highest tier reached — no farther candidate can beat a lootable hit.
+					if (bestPriority >= 3)
+					{
+						break;
+					}
 				}
 			}
 

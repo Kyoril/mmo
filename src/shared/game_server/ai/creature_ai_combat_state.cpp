@@ -606,9 +606,87 @@ namespace mmo
 			}
 		}
 
-		if (!ShouldMoveToTarget(target))
+		auto& controlled = GetControlled();
+		auto& mover = controlled.GetMover();
+
+		// Use consistent range calculation with ShouldMoveToTarget and OnAttackSwing.
+		const float attackRange = controlled.GetMeleeReach() + target.GetMeleeReach();
+		const float attackRangeSq = attackRange * attackRange;
+
+		// Park on a ring slightly inside auto-attack range so the creature ends up within range
+		// even after the separation offset nudges its slot outward.
+		const float standoff = attackRange * MELEE_RING_STANDOFF_FACTOR;
+
+		const Vector3 currentLoc = mover.GetCurrentLocation();
+		const bool inAttackRange = target.GetSquaredDistanceTo(currentLoc, false) <= attackRangeSq;
+
+		// Collect the other units attacking the same target. They drive both the formation
+		// slotting (how many of us there are) and the reactive separation (where they stand).
+		std::vector<GameUnitS*> siblingAttackers;
+		const uint64 ourGuid = controlled.GetGuid();
+		target.ForEachAttacker([&siblingAttackers, ourGuid, &target](const GameUnitS& attacker)
 		{
-			return true; // No movement needed
+			if (&attacker == &target || attacker.GetGuid() == ourGuid)
+			{
+				return;
+			}
+
+			siblingAttackers.push_back(const_cast<GameUnitS*>(&attacker));
+		});
+
+		// Determine our standoff slot: a real position on a ring around the (predicted) target,
+		// fanned out by our formation slot index so attackers don't share a bearing.
+		const Vector3 ringCentre = PredictTargetPosition(target);
+		Vector3 slotPosition = CalculateFormationPosition(target, ringCentre, standoff);
+
+		// Reactive separation: push the slot away from siblings standing too close. This catches
+		// the residual cases the fan can't (e.g. two creatures that rushed in from an almost
+		// identical angle, or got shoved together by terrain) and is overlap-safe.
+		if (!siblingAttackers.empty())
+		{
+			slotPosition = CreatureSeparationManager::Get().AdjustTargetForSeparation(
+				controlled, slotPosition, siblingAttackers);
+		}
+
+		// Re-project the (possibly separated) slot back onto the standoff ring so the creature is
+		// guaranteed to finish within attack range — the angular separation survives, the radial
+		// drift does not.
+		Vector3 toSlot = slotPosition - ringCentre;
+		toSlot.y = 0.0f;
+		const float slotRadius = toSlot.GetLength();
+		if (slotRadius > 1e-3f)
+		{
+			slotPosition = ringCentre + (toSlot / slotRadius) * standoff;
+		}
+		slotPosition.y = ringCentre.y;
+
+		// Decide whether a move is actually warranted.
+		if (inAttackRange)
+		{
+			// Already able to attack. Only reposition to de-stack: when a sibling is crowding us
+			// AND our slot is a meaningful distance away (dead-zone avoids on-screen jitter).
+			const float crowdingSq = CROWDING_DISTANCE * CROWDING_DISTANCE;
+			bool crowded = false;
+			for (const GameUnitS* sibling : siblingAttackers)
+			{
+				if (sibling && sibling->IsAlive() &&
+					sibling->GetSquaredDistanceTo(currentLoc, false) < crowdingSq)
+				{
+					crowded = true;
+					break;
+				}
+			}
+
+			const float slotMoveSq = (slotPosition - currentLoc).GetSquaredLength();
+			if (!crowded || slotMoveSq < REPOSITION_DEADZONE_SQ)
+			{
+				return true; // Comfortable where we are — stand and fight.
+			}
+		}
+		else if (!ShouldMoveToTarget(target))
+		{
+			// Out of range, but an in-progress path will already bring us in — let it run.
+			return true;
 		}
 
 		// Check if target is too far from home
@@ -618,26 +696,22 @@ namespace mmo
 			return false; // AI reset, movement aborted
 		}
 
-		// Use consistent range calculation with ShouldMoveToTarget and OnAttackSwing.
-		// Stop just inside attack range (COMBAT_RANGE_FACTOR keeps the creature from
-		// standing inside the target while ensuring it's within auto-attack range).
-		const float attackRange = GetControlled().GetMeleeReach() + target.GetMeleeReach();
-		const float moveRange = attackRange * COMBAT_RANGE_FACTOR;
+		// Move onto the slot. A small acceptance radius (vs. the old ~attackRange radius) means
+		// the bearing of the slot actually determines where we stop, which is what keeps
+		// attackers visibly separated instead of collapsing onto the same approach line.
+		const float acceptance = std::max(0.25f, attackRange * 0.1f);
 
-		auto& mover = GetControlled().GetMover();
-		
-		// Use predicted target position for better interception
-		Vector3 targetPosition = PredictTargetPosition(target);
+		// When repositioning while already in range, flag it so the targetChanged handler (which
+		// fires synchronously inside MoveTo) doesn't immediately cancel the de-stack move.
+		m_repositioningInRange = inAttackRange;
+		const bool moveStarted = mover.MoveTo(slotPosition, acceptance);
+		m_repositioningInRange = false;
 
-		// Apply formation offset so multiple creatures spread around the target
-		// instead of all stacking in the same spot
-		targetPosition = CalculateFormationPosition(target, targetPosition, moveRange);
-		
-		// Attempt to move to the formation-adjusted target position
-		if (mover.MoveTo(targetPosition, moveRange))
+		if (moveStarted)
 		{
-			// Successfully initiated movement
-			m_movementState.UpdateTarget(targetPosition, attackRange);
+			// Record the victim's actual position (not the slot) as the movement reference so the
+			// recalculation gating still measures "how far has the target moved since we planned".
+			m_movementState.UpdateTarget(target.GetPosition(), attackRange);
 			m_stuckCounter = 0;
 			return true;
 		}
@@ -976,12 +1050,14 @@ namespace mmo
 				
 				if (auto* victim = controlled.GetVictim())
 				{
-					// Immediate range check when we start moving - if we're already in range, stop
+					// Immediate range check when we start moving - if we're already in range, stop.
+					// Exception: a deliberate in-range reposition (de-stacking onto our formation
+					// slot) must be allowed to run, otherwise crowded creatures could never spread.
 					const float attackRange = controlled.GetMeleeReach() + victim->GetMeleeReach();
 					const float attackRangeSq = attackRange * attackRange;
 					const float currentDistanceSq = victim->GetSquaredDistanceTo(controlled.GetMover().GetCurrentLocation(), false);
-					
-					if (currentDistanceSq <= attackRangeSq)
+
+					if (currentDistanceSq <= attackRangeSq && !m_repositioningInRange)
 					{
 						// We're already in range, stop movement
 						controlled.GetMover().StopMovement();
@@ -1515,11 +1591,13 @@ namespace mmo
 		return !HandleMovementFailure();
 	}
 	
-	Vector3 CreatureAICombatState::CalculateFormationPosition(const GameUnitS& target, const Vector3& approachPosition, float standoffDistance) const
+	Vector3 CreatureAICombatState::CalculateFormationPosition(const GameUnitS& target, const Vector3& ringCentre, float standoffDistance) const
 	{
 		const auto& controlled = GetControlled();
-		
-		// Count how many other creatures are attacking the same target and determine our slot
+
+		// Count how many other creatures are attacking the same target and determine our slot.
+		// Iteration order over the attacker set is stable and identical for every attacker, so
+		// each creature derives the same total and a distinct slot index in [0, totalAttackers).
 		int totalAttackers = 0;
 		int ourSlot = 0;
 		const uint64 ourGuid = controlled.GetGuid();
@@ -1539,41 +1617,47 @@ namespace mmo
 			totalAttackers++;
 		});
 
-		// With 0 or 1 attackers, no formation needed - go straight at the target
-		if (totalAttackers <= 1)
+		// Base angle = the direction from the ring centre toward our own current position, so we
+		// approach from our side of the target instead of running around it. Fall back to the
+		// creature's facing if we are sitting exactly on the centre.
+		const Vector3 ourPos = controlled.GetMover().GetCurrentLocation();
+		Vector3 toUs = ourPos - ringCentre;
+		toUs.y = 0.0f;
+
+		float baseAngle;
+		if (toUs.GetSquaredLength() > 1e-4f)
 		{
-			return approachPosition;
+			baseAngle = std::atan2(toUs.z, toUs.x);
+		}
+		else
+		{
+			baseAngle = controlled.GetFacing().GetValueRadians();
 		}
 
-		// Calculate the base angle from target to the approach position
-		const Vector3 targetPos = target.GetPosition();
-		const Vector3 toApproach = approachPosition - targetPos;
-		const float baseAngle = std::atan2(toApproach.z, toApproach.x);
+		// A lone attacker simply parks on the ring straight along its approach direction.
+		float slotAngle = baseAngle;
+		if (totalAttackers > 1)
+		{
+			// Spread the attackers across an arc centred on the approach direction. The arc
+			// widens with the attacker count but is capped so creatures never end up behind a
+			// wall of allies; the per-creature slot index keeps every attacker on a distinct
+			// bearing even when they all rushed in from the exact same side.
+			const float totalSpread = std::min(
+				static_cast<float>(totalAttackers - 1) * FORMATION_ANGLE_STEP,
+				FORMATION_MAX_ANGLE);
+			const float startAngle = baseAngle - totalSpread * 0.5f;
+			const float angleStep = totalSpread / static_cast<float>(totalAttackers - 1);
 
-		// Spread creatures in a semicircle centered on the base approach angle.
-		// The spread increases with more attackers but is capped.
-		const float totalSpread = std::min(
-			static_cast<float>(totalAttackers - 1) * FORMATION_ANGLE_STEP,
-			FORMATION_MAX_ANGLE);
-		const float startAngle = baseAngle - totalSpread * 0.5f;
-		const float angleStep = (totalAttackers > 1)
-			? totalSpread / static_cast<float>(totalAttackers - 1)
-			: 0.0f;
+			slotAngle = startAngle + static_cast<float>(ourSlot) * angleStep;
+		}
 
-		const float slotAngle = startAngle + static_cast<float>(ourSlot) * angleStep;
-
-		// The destination must be the target's position itself — MoveTo(dest, acceptanceRadius)
-		// shortens the path by acceptanceRadius metres before dest. If we pre-offset dest by
-		// standoffDistance away from the target, MoveTo then stops an additional acceptanceRadius
-		// short of that, leaving the creature ~2× the intended range away.
-		//
-		// To steer the creature onto the correct arc slot we nudge the destination by a tiny
-		// amount in the slot direction. MoveTo will end up stopping acceptanceRadius before the
-		// target on that approach vector, placing the creature on the right side.
+		// Place the slot at the true combat distance on the ring. Because this is a real
+		// standoff position (not a 0.5 m nudge), the caller can reach it with a small acceptance
+		// radius and the bearing actually decides where the creature stands.
 		Vector3 formationPos;
-		formationPos.x = targetPos.x + std::cos(slotAngle) * 0.5f;
-		formationPos.y = approachPosition.y;
-		formationPos.z = targetPos.z + std::sin(slotAngle) * 0.5f;
+		formationPos.x = ringCentre.x + std::cos(slotAngle) * standoffDistance;
+		formationPos.y = ringCentre.y;
+		formationPos.z = ringCentre.z + std::sin(slotAngle) * standoffDistance;
 
 		return formationPos;
 	}

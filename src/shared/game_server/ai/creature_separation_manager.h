@@ -71,5 +71,12 @@ namespace mmo
 		 * @brief Maximum force magnitude applied per creature (strength of repulsion).
 		 */
 		static constexpr float SEPARATION_FORCE_MAGNITUDE = 1.0f;
+
+		/**
+		 * @brief Distance below which two creatures are treated as perfectly overlapping.
+		 * At this range the analytic repulsion direction is undefined, so a deterministic
+		 * GUID-derived push is used instead to guarantee stacked creatures split apart.
+		 */
+		static constexpr float OVERLAP_EPSILON = 0.05f;
 	};
 }
