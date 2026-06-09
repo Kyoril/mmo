@@ -109,6 +109,14 @@ namespace mmo
 
 				auto& unitTarget = targetObject->AsUnit();
 
+				// If the target is immune to this spell's damage school, report the immunity to
+				// clients (so the floating combat text shows "Immune") and skip damage entirely.
+				if (unitTarget.IsImmuneToSchool(spell.spellschool()))
+				{
+					executer.SpellDamageLog(unitTarget.GetGuid(), 0, spell.spellschool(), DamageFlags::Immune, spell);
+					continue;
+				}
+
 				// TODO: Do real calculation including crit chance, miss chance, resists, etc.
 				uint32 damageAmount = std::max<int32_t>(0, ctx.basePoints);
 				executer.ApplySpellMod(spell_mod_op::Damage, spell.id(), damageAmount);
@@ -982,6 +990,16 @@ namespace mmo
 					break;
 				}
 
+				// If the target is immune to this weapon's damage school, negate the swing entirely
+				// but still report it so the client can display an "Immune" floating combat text.
+				if (hit && unitTarget.IsImmuneToSchool(school))
+				{
+					hitInfo |= hit_info::Immune;
+					victimState = victim_state::IsImmune;
+					hit = false;
+					totalDamage = 0;
+				}
+
 				// Check for block after hit determination
 				uint32 blockedDamage = 0;
 				if (hit && unitTarget.CanBlock() && unitTarget.IsFacingTowards(executer))
@@ -1080,6 +1098,14 @@ namespace mmo
 			{
 				// Regular weapon damage spell (e.g., Heroic Strike, Mortal Strike)
 				// Uses simplified crit roll and SpellDamageLog
+
+				// If the target is immune to this weapon's damage school, report the immunity to
+				// clients (so the floating combat text shows "Immune") and skip damage entirely.
+				if (unitTarget.IsImmuneToSchool(school))
+				{
+					executer.SpellDamageLog(unitTarget.GetGuid(), 0, school, DamageFlags::Immune, spell);
+					return;
+				}
 
 				// Calculate damage between minimum and maximum damage
 				std::uniform_real_distribution distribution(minDamage + bonus, maxDamage + bonus + 1.0f);

@@ -695,6 +695,15 @@ namespace mmo
 			return 0;
 		}
 
+		// Check if the unit is immune to the damage school of this damage (e.g. granted by a
+		// DamageImmunity aura). Immune damage is fully negated - no health is lost, no threat is
+		// generated and no proc events are triggered. Callers are responsible for still sending the
+		// appropriate damage notification packet with an "immune" flag set.
+		if (IsImmuneToSchool(school))
+		{
+			return 0;
+		}
+
 		const uint32 prevHealthPct = static_cast<int32>(static_cast<float>(health) / static_cast<float>(GetMaxHealth()) * 100.0f);
 
 		if (IsPlayer() && instigator && instigator->IsPlayer())
@@ -2915,6 +2924,16 @@ namespace mmo
 		case MeleeAttackOutcome::Normal:
 			// Normal hit, no special flags needed
 			break;
+		}
+
+		// If the victim is immune to physical damage, negate the swing entirely but still report it
+		// so the client can display an "Immune" floating combat text.
+		if (hit && victim->IsImmuneToSchool(spell_school::Normal))
+		{
+			hitInfo |= hit_info::Immune;
+			victimState = victim_state::IsImmune;
+			hit = false;
+			totalDamage = 0;
 		}
 
 		// Check for block (in Classic, block applies after hit determination)

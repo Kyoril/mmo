@@ -111,6 +111,8 @@ namespace mmo
 
 		void HandleModVisibility(bool apply) const;
 
+		void HandleDamageImmunity(bool apply) const;
+
 	private:
 		void HandlePeriodicDamage() const;
 

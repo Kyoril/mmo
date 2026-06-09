@@ -230,7 +230,8 @@ namespace mmo
 		"ModSpellDamageDone",
 		"ModSpellDamageDonePct",
 
-		"ModDisorient"
+		"ModDisorient",
+		"DamageImmunity"
 	};
 
 	static_assert(std::size(s_auraTypeNames) == aura_type::Count_, "Each aura type must have a string representation!");
@@ -2137,6 +2138,12 @@ namespace mmo
 			}
 		}
 		break;
+
+		case aura_type::DamageImmunity:
+			// The immunity school is derived from the spell's own damage school, so there is no
+			// additional per-effect configuration required here.
+			ImGui::TextWrapped("Grants the target immunity to damage of this spell's school (see the spell's Damage School setting). Immune damage is fully negated but still reported to clients as \"Immune\".");
+			break;
 		}
 	}
 }

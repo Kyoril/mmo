@@ -124,6 +124,11 @@ namespace mmo
 			ModSpellDamageDonePct = 33,
 			ModDisorient          = 34,
 
+			/// Grants the target immunity to damage of the school of the aura's spell.
+			/// Damage of that school is fully negated, but still reported to clients with
+			/// an "immune" flag so the floating combat text can display "Immune".
+			DamageImmunity        = 35,
+
 			// Add new aura types HERE (append only — never insert above an existing entry).
 
 			Count_,

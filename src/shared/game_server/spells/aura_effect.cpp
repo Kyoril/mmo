@@ -71,6 +71,7 @@ namespace mmo
 			{ AuraType::ModFear,               [](AuraEffect& self, bool apply){ self.HandleModFear(apply); } },
 			{ AuraType::ModDisorient,          [](AuraEffect& self, bool apply){ self.HandleModDisorient(apply); } },
 			{ AuraType::ModVisibility,         [](AuraEffect& self, bool apply){ self.HandleModVisibility(apply); } },
+			{ AuraType::DamageImmunity,        [](AuraEffect& self, bool apply){ self.HandleDamageImmunity(apply); } },
 			{ AuraType::PeriodicTriggerSpell,  [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
 			{ AuraType::PeriodicHeal,          [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
 			{ AuraType::PeriodicEnergize,      [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
@@ -425,6 +426,22 @@ namespace mmo
 					owner->NotifyVisibilityChanged();
 				}
 			});
+	}
+
+	void AuraEffect::HandleDamageImmunity(bool apply) const
+	{
+		// The immunity school is determined by the school of the aura's spell. While the aura is
+		// active the owner is immune to all incoming damage of that school.
+		const uint32 school = m_container.GetSpell().spellschool();
+
+		if (apply)
+		{
+			m_container.GetOwner().AddSchoolImmunity(school);
+		}
+		else
+		{
+			m_container.GetOwner().RemoveSchoolImmunity(school);
+		}
 	}
 
 	void AuraEffect::HandlePeriodicDamage() const

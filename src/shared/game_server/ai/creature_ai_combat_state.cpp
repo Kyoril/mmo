@@ -1594,13 +1594,34 @@ namespace mmo
 	Vector3 CreatureAICombatState::CalculateFormationPosition(const GameUnitS& target, const Vector3& ringCentre, float standoffDistance) const
 	{
 		const auto& controlled = GetControlled();
-
-		// Count how many other creatures are attacking the same target and determine our slot.
-		// Iteration order over the attacker set is stable and identical for every attacker, so
-		// each creature derives the same total and a distinct slot index in [0, totalAttackers).
-		int totalAttackers = 0;
-		int ourSlot = 0;
 		const uint64 ourGuid = controlled.GetGuid();
+
+		constexpr float twoPi = 6.28318530718f;
+
+		auto bearingFromCentre = [&ringCentre](const Vector3& pos) -> float
+		{
+			float a = std::atan2(pos.z - ringCentre.z, pos.x - ringCentre.x);
+			if (a < 0.0f)
+			{
+				a += twoPi;
+			}
+			return a;
+		};
+
+		// Determine our angular RANK among the attackers around the target, and the total count.
+		//
+		// Crucially, the slot bearing is derived only from stable inputs — the attackers' coarse
+		// authoritative positions (updated ~2x/sec, not the smoothly-interpolated mover position)
+		// and GUID identity — NOT from this creature's own instantaneous motion. The previous
+		// version centred the fan on the creature's live bearing, which meant moving toward the
+		// slot shifted the slot, so attackers orbited the target forever instead of settling.
+		// Ranking by bearing keeps each creature close to the side it arrived from while still
+		// producing an evenly spaced ring, and it is a fixed point: once everyone sits on an even
+		// bearing, every rank maps back to its own position and all movement stops.
+		const float ourBearing = bearingFromCentre(controlled.GetPosition());
+
+		int totalAttackers = 0;
+		int rank = 0;
 
 		target.ForEachAttacker([&](const GameUnitS& attacker)
 		{
@@ -1609,51 +1630,34 @@ namespace mmo
 				return;
 			}
 
+			totalAttackers++;
+
 			if (attacker.GetGuid() == ourGuid)
 			{
-				ourSlot = totalAttackers;
+				return;
 			}
 
-			totalAttackers++;
+			const float otherBearing = bearingFromCentre(attacker.GetPosition());
+			if (otherBearing < ourBearing ||
+				(otherBearing == ourBearing && attacker.GetGuid() < ourGuid))
+			{
+				rank++;
+			}
 		});
 
-		// Base angle = the direction from the ring centre toward our own current position, so we
-		// approach from our side of the target instead of running around it. Fall back to the
-		// creature's facing if we are sitting exactly on the centre.
-		const Vector3 ourPos = controlled.GetMover().GetCurrentLocation();
-		Vector3 toUs = ourPos - ringCentre;
-		toUs.y = 0.0f;
-
-		float baseAngle;
-		if (toUs.GetSquaredLength() > 1e-4f)
-		{
-			baseAngle = std::atan2(toUs.z, toUs.x);
-		}
-		else
-		{
-			baseAngle = controlled.GetFacing().GetValueRadians();
-		}
-
-		// A lone attacker simply parks on the ring straight along its approach direction.
-		float slotAngle = baseAngle;
+		// A lone attacker just parks on its own bearing (no ring needed).
+		float slotAngle = ourBearing;
 		if (totalAttackers > 1)
 		{
-			// Spread the attackers across an arc centred on the approach direction. The arc
-			// widens with the attacker count but is capped so creatures never end up behind a
-			// wall of allies; the per-creature slot index keeps every attacker on a distinct
-			// bearing even when they all rushed in from the exact same side.
-			const float totalSpread = std::min(
-				static_cast<float>(totalAttackers - 1) * FORMATION_ANGLE_STEP,
-				FORMATION_MAX_ANGLE);
-			const float startAngle = baseAngle - totalSpread * 0.5f;
-			const float angleStep = totalSpread / static_cast<float>(totalAttackers - 1);
-
-			slotAngle = startAngle + static_cast<float>(ourSlot) * angleStep;
+			// Even distribution around a full circle, anchored to a fixed world axis so the ring
+			// does not rotate when the player turns or when creatures shuffle. Ranking assigns the
+			// east-most attacker to slot 0, the next counter-clockwise to slot 1, and so on.
+			slotAngle = static_cast<float>(rank) * (twoPi / static_cast<float>(totalAttackers));
 		}
 
-		// Place the slot at the true combat distance on the ring. Because this is a real
-		// standoff position (not a 0.5 m nudge), the caller can reach it with a small acceptance
-		// radius and the bearing actually decides where the creature stands.
+		// Place the slot at the true combat distance on the ring. Because this is a real standoff
+		// position (not a 0.5 m nudge), the caller can reach it with a small acceptance radius and
+		// the bearing actually decides where the creature stands.
 		Vector3 formationPos;
 		formationPos.x = ringCentre.x + std::cos(slotAngle) * standoffDistance;
 		formationPos.y = ringCentre.y;

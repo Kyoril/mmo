@@ -36,6 +36,7 @@
 #include "base/profiler.h"
 #include "base/timer_queue.h"
 #include "frame_ui/text_component.h"
+#include "frame_ui/localizer.h"
 #include "game/aura.h"
 #include "game/auto_attack.h"
 #include "game/chat_type.h"
@@ -2745,7 +2746,16 @@ namespace mmo
 		std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid);
 		if (target)
 		{
-			AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color(1.0f, 1.0f, 0.0f, 1.0f), 2.0f);
+			// If the target was immune to this spell's damage school, show a localized "Immune"
+			// text instead of a damage number.
+			if (flags & damage_flags::Immune)
+			{
+				AddWorldTextFrame(target->GetPosition(), Localize(FrameManager::Get().GetLocalization(), "COMBAT_IMMUNE"), Color(1.0f, 1.0f, 0.0f, 1.0f), 2.0f);
+			}
+			else
+			{
+				AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color(1.0f, 1.0f, 0.0f, 1.0f), 2.0f);
+			}
 		}
 
 		return PacketParseResult::Pass;
@@ -2802,7 +2812,11 @@ namespace mmo
 			if (ObjectMgr::GetActivePlayerGuid() == attackerGuid || ObjectMgr::GetActivePlayerGuid() == attackedGuid)
 			{
 				String damageText;
-				if (hitInfo & hit_info::Miss)
+				if ((hitInfo & hit_info::Immune) || victimState == victim_state::IsImmune)
+				{
+					damageText = Localize(FrameManager::Get().GetLocalization(), "COMBAT_IMMUNE");
+				}
+				else if (hitInfo & hit_info::Miss)
 				{
 					damageText = "MISSED"; // Localize
 				}

@@ -1414,7 +1414,33 @@ public:
 		uint8 m_fearCount{0};
 		uint8 m_disorientCount{0};
 
+		/// Reference counter per damage school. As long as a counter is greater than zero,
+		/// the unit is immune to damage of that school. Indexed by spell_school::Type.
+		uint8 m_schoolImmunity[spell_school::End]{};
+
 	public:
+		/// Adds a stack of damage immunity for the given damage school.
+		/// @param school The damage school (see spell_school::Type) to grant immunity to.
+		void AddSchoolImmunity(uint32 school)
+		{
+			if (school < spell_school::End && m_schoolImmunity[school] < 255) { ++m_schoolImmunity[school]; }
+		}
+
+		/// Removes a stack of damage immunity for the given damage school.
+		/// @param school The damage school (see spell_school::Type) to remove immunity from.
+		void RemoveSchoolImmunity(uint32 school)
+		{
+			if (school < spell_school::End && m_schoolImmunity[school] > 0) { --m_schoolImmunity[school]; }
+		}
+
+		/// Determines whether the unit is currently immune to damage of the given school.
+		/// @param school The damage school (see spell_school::Type) to test.
+		/// @returns true if the unit is immune to damage of that school.
+		bool IsImmuneToSchool(uint32 school) const
+		{
+			return school < spell_school::End && m_schoolImmunity[school] > 0;
+		}
+
 		void IncrementStunCount()
 		{
 			if (m_stunCount < 255) { ++m_stunCount; }

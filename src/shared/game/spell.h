@@ -558,6 +558,7 @@ namespace mmo
 			Crushing = 0x00000040,
 			NoAction = 0x00000080,
 			Block = 0x00000100,
+			Immune = 0x00000200,
 		};
 	}
 

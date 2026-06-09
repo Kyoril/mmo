@@ -21,9 +21,13 @@ namespace mmo
         {
             None = 0,
 
-            Crit = 1,
+            Crit = 0x01,
 
-            Crushing,
+            Crushing = 0x02,
+
+            /// The target was immune to the damage. The amount is zero and clients should
+            /// display a localized "Immune" text instead of a damage number.
+            Immune = 0x04,
         };
     }
 
