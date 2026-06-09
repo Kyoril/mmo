@@ -4031,6 +4031,22 @@ namespace {
 
 		FrameManager::Get().TriggerLuaEvent("ATTACK_SWING_ERROR", errorEvent);
 
+		// Terminal errors: stop auto attack and don't re-queue the error timer.
+		// OutOfRange/WrongFacing/NotStanding keep looping so auto attack resumes
+		// the moment the condition clears without the player having to re-click.
+		if (m_lastAttackSwingEvent == attack_swing_event::TargetDead ||
+			m_lastAttackSwingEvent == attack_swing_event::CantAttack)
+		{
+			m_lastAttackSwingEvent = attack_swing_event::Unknown;
+
+			if (m_playerController && m_playerController->GetControlledUnit())
+			{
+				m_playerController->GetControlledUnit()->StopAttack();
+			}
+
+			return;
+		}
+
 		EnqueueNextAttackSwingTimer();
 	}
 
