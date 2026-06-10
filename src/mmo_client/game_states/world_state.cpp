@@ -2812,25 +2812,28 @@ namespace mmo
 			if (ObjectMgr::GetActivePlayerGuid() == attackerGuid || ObjectMgr::GetActivePlayerGuid() == attackedGuid)
 			{
 				String damageText;
+				// Check the specific victim states (dodge/parry/block) before the generic Miss flag:
+				// the server sets hit_info::Miss for dodges and parries too (as a "no damage landed"
+				// marker), so checking Miss first would mask them as "MISSED".
 				if ((hitInfo & hit_info::Immune) || victimState == victim_state::IsImmune)
 				{
 					damageText = Localize(FrameManager::Get().GetLocalization(), "COMBAT_IMMUNE");
-				}
-				else if (hitInfo & hit_info::Miss)
-				{
-					damageText = "MISSED"; // Localize
-				}
-				else if (victimState == victim_state::Parry)
-				{
-					damageText = "PARRIED";
 				}
 				else if (victimState == victim_state::Dodge)
 				{
 					damageText = "DODGED";
 				}
+				else if (victimState == victim_state::Parry)
+				{
+					damageText = "PARRIED";
+				}
 				else if (victimState == victim_state::Blocks)
 				{
 					damageText = "BLOCKED";
+				}
+				else if (hitInfo & hit_info::Miss)
+				{
+					damageText = "MISSED"; // Localize
 				}
 				else
 				{
