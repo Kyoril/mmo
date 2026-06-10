@@ -280,6 +280,10 @@ namespace mmo
 			{
 				state->SetAnimation(animation.get());
 				state->SetSkeleton(this);
+
+				// Apply the persistent, authored playback speed so the engine plays the
+				// animation at the speed configured in the editor without any extra code.
+				state->SetPlayRate(animation->GetPlaybackSpeed());
 			}
 		}
 	}

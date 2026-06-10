@@ -22,7 +22,7 @@ namespace mmo
 	{
 		if (version == skeleton_version::Latest)
 		{
-			version = skeleton_version::Version_0_2;
+			version = skeleton_version::Version_0_3;
 		}
 
 		// Main chunk
@@ -106,6 +106,12 @@ namespace mmo
 					<< io::write<float>(animation->GetDuration())
 					<< io::write<float>(animation->GetBaseKeyFrameTime())
 					<< io::write_dynamic_range<uint8>(animation->GetBaseKeyFrameAnimationName());
+
+				// Persistent playback speed (added in version 0.3)
+				if (version >= skeleton_version::Version_0_3)
+				{
+					writer << io::write<float>(animation->GetPlaybackSpeed());
+				}
 
 				// Write tracks
 				writer << io::write<uint16>(animation->GetNumNodeTracks());
@@ -301,6 +307,19 @@ namespace mmo
 		}
 
 		anim.SetUseBaseKeyFrame(false, baseKeyFrameTime, baseKeyFrameAnimationName);
+
+		// Persistent playback speed (added in version 0.3). Older files default to 1.0.
+		if (m_version >= skeleton_version::Version_0_3)
+		{
+			float playbackSpeed;
+			if (!(reader >> io::read<float>(playbackSpeed)))
+			{
+				ELOG("Failed to read animation playback speed");
+				return false;
+			}
+
+			anim.SetPlaybackSpeed(playbackSpeed);
+		}
 
 		uint16 numTracks;
 		if (!(reader >> io::read<uint16>(numTracks)))
