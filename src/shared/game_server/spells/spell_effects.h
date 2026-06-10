@@ -112,7 +112,9 @@ namespace mmo
 
 		/// Internal helper: applies weapon damage in a given school.
 		/// Corresponds to SingleCastState::InternalSpellEffectWeaponDamage.
-		void HandleInternalWeaponDamage(SpellEffectContext& ctx, SpellSchool school);
+		/// @param basePointsArePct When true, the effect base points are interpreted as a
+		///        percentage of the weapon's damage (100 = 100%) instead of a flat bonus.
+		void HandleInternalWeaponDamage(SpellEffectContext& ctx, SpellSchool school, bool basePointsArePct = false);
 
 	} // namespace SpellEffects
 

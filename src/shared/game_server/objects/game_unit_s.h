@@ -1064,6 +1064,11 @@ public:
 		///	so we don't iterate through spell effects if we don't need to. If this is set to false, spell effects will be checked.
 		void NotifyCanDodge(bool gainedEffect);
 
+		/// Adds or removes a flat percentage bonus to this unit's dodge chance, typically driven by the ModDodgeChance aura.
+		///	@param amount The dodge chance bonus in percent (e.g. 5.0f for +5%).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyDodgeChanceBonus(float amount, bool apply) { m_dodgeChanceBonus += apply ? amount : -amount; }
+
 		/// Returns true if the unit has an active aura effect of the given type. Don't use this too often as it's iterating through all active auras,
 		///	which is not a constant complexity operation.
 		bool HasAuraEffect(AuraType type) const;
@@ -1399,6 +1404,9 @@ public:
 		SpellModsByOp m_spellModsByOp;
 
 		uint8 m_combatCapabilities = combat_capabilities::None;
+
+		/// Accumulated flat dodge chance bonus in percent from auras (ModDodgeChance).
+		float m_dodgeChanceBonus = 0.0f;
 
 		std::map<uint8, float> m_baseSpeeds;
 

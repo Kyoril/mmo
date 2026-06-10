@@ -101,7 +101,8 @@ namespace mmo
 		{ "Apply Area Aura", "Buff/Debuff", "Applies aura in an area" },
 		{ "Interrupt Spell Cast", "Combat", "Interrupts spell casting" },
 		{ "Reset Talents", "Utility", "Resets talent points" },
-		{ "Proficiency", "Utility", "Grants weapon proficiency" }
+		{ "Proficiency", "Utility", "Grants weapon proficiency" },
+		{ "Trigger Spell", "Utility", "Casts another spell, optionally on a proc chance taken from this spell's Proc Chance" }
 	};
 
 	static String s_spellEffectNames[] = {
@@ -157,7 +158,8 @@ namespace mmo
 		"Apply Area Aura",
 		"Interrupt Spell Cast",
 		"Reset Talents",
-		"Proficiency"
+		"Proficiency",
+		"Trigger Spell"
 	};
 
 	static_assert(std::size(s_spellEffectNames) == spell_effects::Count_, "Each spell effect must have a string representation!");
@@ -231,7 +233,8 @@ namespace mmo
 		"ModSpellDamageDonePct",
 
 		"ModDisorient",
-		"DamageImmunity"
+		"DamageImmunity",
+		"ModDodgeChance"
 	};
 
 	static_assert(std::size(s_auraTypeNames) == aura_type::Count_, "Each aura type must have a string representation!");
@@ -1902,6 +1905,7 @@ namespace mmo
 			}
 
 			if (currentEffectType == spell_effects::LearnSpell ||
+				currentEffectType == spell_effects::TriggerSpell ||
 				(currentEffectType == spell_effects::ApplyAura &&
 				(effect.aura() == aura_type::PeriodicTriggerSpell ||
 					effect.aura() == aura_type::ProcTriggerSpell)))

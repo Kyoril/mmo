@@ -866,6 +866,7 @@ namespace mmo
 			{se::InterruptSpellCast,     SpellEffects::HandleInterruptSpellCast},
 			{se::ResetTalents,           SpellEffects::HandleResetTalents},
 			{se::Proficiency,            SpellEffects::HandleProficiency},
+			{se::TriggerSpell,           SpellEffects::HandleTriggerSpell},
 		};
 
 		const auto it = kHandlers.find(effect.type());

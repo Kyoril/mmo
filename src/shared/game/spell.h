@@ -707,6 +707,7 @@ namespace mmo
 			InterruptSpellCast      = 50,
 			ResetTalents            = 51,
 			Proficiency             = 52,
+			TriggerSpell            = 53,
 
 			// Add new spell effect types HERE (append only — never insert above an existing entry).
 

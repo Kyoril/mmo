@@ -56,6 +56,10 @@ message CombatSettings {
 	// Default crit chance for weapon damage spells (used when no other source provides it).
 	optional float spell_weapon_default_crit_chance = 22 [default = 5.0];
 	optional float spell_weapon_crit_multiplier = 23 [default = 2.0];
+
+	// === Dodge ===
+	// Base chance for any unit to dodge an incoming melee attack, before stat and aura bonuses.
+	optional float base_dodge_chance = 24 [default = 5.0];
 }
 
 // Wrapper for loading

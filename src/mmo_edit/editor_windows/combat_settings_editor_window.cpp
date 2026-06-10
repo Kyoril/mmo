@@ -249,6 +249,19 @@ namespace mmo
 			}
 		}
 
+		// === Dodge ===
+		if (const auto section = ScopedEditorSection("Dodge", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::TextDisabled("Base chance for any unit to dodge an incoming melee attack, before stat and aura bonuses.");
+			ImGui::Spacing();
+
+			float baseDodgeChance = settings.base_dodge_chance();
+			if (DrawFloatSetting("Base Dodge Chance %", baseDodgeChance, defaults.base_dodge_chance()))
+			{
+				settings.set_base_dodge_chance(baseDodgeChance);
+			}
+		}
+
 		// === Spell Weapon Damage ===
 		if (const auto section = ScopedEditorSection("Spell Weapon Damage", ImGuiTreeNodeFlags_DefaultOpen))
 		{

@@ -113,6 +113,8 @@ namespace mmo
 
 		void HandleDamageImmunity(bool apply) const;
 
+		void HandleModDodgeChance(bool apply) const;
+
 	private:
 		void HandlePeriodicDamage() const;
 

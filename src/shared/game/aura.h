@@ -129,6 +129,10 @@ namespace mmo
 			/// an "immune" flag so the floating combat text can display "Immune".
 			DamageImmunity        = 35,
 
+			/// Increases the target's chance to dodge melee attacks. The aura's base points
+			/// are treated as a flat percentage (e.g. base points 5 = +5% dodge chance).
+			ModDodgeChance        = 36,
+
 			// Add new aura types HERE (append only — never insert above an existing entry).
 
 			Count_,

@@ -72,6 +72,7 @@ namespace mmo
 			{ AuraType::ModDisorient,          [](AuraEffect& self, bool apply){ self.HandleModDisorient(apply); } },
 			{ AuraType::ModVisibility,         [](AuraEffect& self, bool apply){ self.HandleModVisibility(apply); } },
 			{ AuraType::DamageImmunity,        [](AuraEffect& self, bool apply){ self.HandleDamageImmunity(apply); } },
+			{ AuraType::ModDodgeChance,        [](AuraEffect& self, bool apply){ self.HandleModDodgeChance(apply); } },
 			{ AuraType::PeriodicTriggerSpell,  [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
 			{ AuraType::PeriodicHeal,          [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
 			{ AuraType::PeriodicEnergize,      [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
@@ -442,6 +443,12 @@ namespace mmo
 		{
 			m_container.GetOwner().RemoveSchoolImmunity(school);
 		}
+	}
+
+	void AuraEffect::HandleModDodgeChance(bool apply) const
+	{
+		// Base points are treated as a flat percentage bonus to the owner's dodge chance.
+		m_container.GetOwner().ModifyDodgeChanceBonus(static_cast<float>(GetBasePoints()), apply);
 	}
 
 	void AuraEffect::HandlePeriodicDamage() const

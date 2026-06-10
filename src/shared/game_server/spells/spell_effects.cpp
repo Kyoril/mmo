@@ -12,6 +12,7 @@
 #include "base/utilities.h"
 
 #include "proto_data/project.h"
+#include "world/universe.h"
 
 namespace mmo
 {
@@ -504,7 +505,10 @@ namespace mmo
 			}
 		}
 
-		void HandleWeaponPercentDamage(SpellEffectContext& /*ctx*/) {}
+		void HandleWeaponPercentDamage(SpellEffectContext& ctx)
+		{
+			HandleInternalWeaponDamage(ctx, static_cast<SpellSchool>(ctx.castContext.GetSpell().spellschool()), true);
+		}
 
 		void HandleOpenLock(SpellEffectContext& ctx)
 		{
@@ -593,7 +597,80 @@ namespace mmo
 
 		void HandlePowerBurn(SpellEffectContext& /*ctx*/) {}
 
-		void HandleTriggerSpell(SpellEffectContext& /*ctx*/) {}
+		void HandleTriggerSpell(SpellEffectContext& ctx)
+		{
+			const uint32 triggerSpellId = ctx.effect.triggerspell();
+			if (!triggerSpellId)
+			{
+				ELOG("TriggerSpell effect has no trigger spell set for spell " << ctx.castContext.GetSpell().id());
+				return;
+			}
+
+			GameUnitS& executer = ctx.castContext.GetExecutor();
+
+			const proto::SpellEntry* triggerSpell = executer.GetProject().spells.getById(triggerSpellId);
+			if (!triggerSpell)
+			{
+				ELOG("Unable to find trigger spell " << triggerSpellId << " referenced by spell " << ctx.castContext.GetSpell().id());
+				return;
+			}
+
+			// Roll the proc chance taken from the casting spell. A value of 0 is treated
+			// as "always proc" so designers only need to set a proc chance when they
+			// actually want a chance-based trigger.
+			const uint32 procChance = ctx.castContext.GetSpell().procchance();
+			if (procChance > 0 && procChance < 100)
+			{
+				std::uniform_real_distribution<float> distribution(0.0f, 100.0f);
+				if (distribution(randomGenerator) > static_cast<float>(procChance))
+				{
+					// Failed the proc chance roll - nothing happens.
+					return;
+				}
+			}
+
+			// Determine the target for the triggered spell. If the effect resolved to a
+			// unit target other than the caster we forward it (so offensive triggers can
+			// hit the original victim); otherwise we cast it on the caster itself, which
+			// covers self-buffs like energy/health restoration.
+			SpellTargetMap targetMap;
+			GameUnitS* triggerTarget = nullptr;
+			for (auto* targetObject : ctx.effectTargets)
+			{
+				if (targetObject->IsUnit())
+				{
+					triggerTarget = &targetObject->AsUnit();
+					break;
+				}
+			}
+
+			if (triggerTarget && triggerTarget != &executer)
+			{
+				targetMap.SetUnitTarget(triggerTarget->GetGuid());
+				targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+			}
+			else
+			{
+				targetMap.SetTargetMap(spell_cast_target_flags::Self);
+			}
+
+			ctx.markAffectedTarget(executer);
+
+			// Defer the triggered cast to avoid re-entering the spell cast pipeline while
+			// the current effect is still being applied. This mirrors how aura procs
+			// trigger their spells.
+			WorldInstance* worldInstance = executer.GetWorldInstance();
+			if (!worldInstance)
+			{
+				return;
+			}
+
+			auto strongCaster = std::static_pointer_cast<GameUnitS>(executer.shared_from_this());
+			worldInstance->GetUniverse().Post([strongCaster, targetMap, triggerSpell]()
+				{
+					strongCaster->CastSpell(targetMap, *triggerSpell, 0, true, 0);
+				});
+		}
 
 		void HandleScript(SpellEffectContext& /*ctx*/) {}
 
@@ -887,7 +964,7 @@ namespace mmo
 			}
 		}
 
-		void HandleInternalWeaponDamage(SpellEffectContext& ctx, SpellSchool school)
+		void HandleInternalWeaponDamage(SpellEffectContext& ctx, SpellSchool school, bool basePointsArePct)
 		{
 			if (ctx.effectTargets.empty())
 			{
@@ -921,6 +998,21 @@ namespace mmo
 			const int32_t bonus = ctx.basePoints;
 			const auto& combatSettings = executer.GetCombatSettings();
 
+			// Rolls the base weapon damage for this swing. When the effect base points are a
+			// percentage (WeaponPercentDamage) the rolled weapon damage is scaled by that
+			// percentage; otherwise the base points are added as a flat bonus (WeaponDamage).
+			auto rollBaseWeaponDamage = [&]() -> uint32
+			{
+				if (basePointsArePct)
+				{
+					std::uniform_real_distribution<float> distribution(minDamage, maxDamage + 1.0f);
+					return static_cast<uint32>(distribution(randomGenerator) * (static_cast<float>(bonus) / 100.0f));
+				}
+
+				std::uniform_real_distribution<float> distribution(minDamage + bonus, maxDamage + bonus + 1.0f);
+				return static_cast<uint32>(distribution(randomGenerator));
+			};
+
 			// Auto-attack spells (AutoRepeat) use the full melee combat table and send
 			// AttackerStateUpdate (white damage text) instead of SpellDamageLog (yellow).
 			const bool isAutoAttack = (spell.attributes(1) & spell_attributes_b::AutoRepeat) != 0;
@@ -930,8 +1022,7 @@ namespace mmo
 				const MeleeAttackOutcome outcome = executer.RollMeleeOutcomeAgainst(unitTarget, weapon_attack::BaseAttack);
 
 				// Calculate base weapon damage
-				std::uniform_real_distribution distribution(minDamage + bonus, maxDamage + bonus + 1.0f);
-				uint32 totalDamage = static_cast<uint32>(distribution(randomGenerator));
+				uint32 totalDamage = rollBaseWeaponDamage();
 
 				// Apply damage mod
 				totalDamage = executer.CalculateModifiedValue(unit_mods::Damage, totalDamage);
@@ -1108,8 +1199,7 @@ namespace mmo
 				}
 
 				// Calculate damage between minimum and maximum damage
-				std::uniform_real_distribution distribution(minDamage + bonus, maxDamage + bonus + 1.0f);
-				uint32 totalDamage = static_cast<uint32>(distribution(randomGenerator));
+				uint32 totalDamage = rollBaseWeaponDamage();
 
 				// Apply damage mod
 				totalDamage = executer.CalculateModifiedValue(unit_mods::Damage, totalDamage);

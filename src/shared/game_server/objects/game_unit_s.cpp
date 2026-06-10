@@ -1770,15 +1770,15 @@ namespace mmo
 
 	float GameUnitS::DodgeChance() const
 	{
-		if (!CanDodge())
-			return 0.0f;
-
-		// Base dodge chance
-		float dodgeChance = 5.0f;
+		// Every unit can dodge melee attacks. The base chance is configurable via combat settings.
+		float dodgeChance = GetCombatSettings().base_dodge_chance();
 
 		// Add agility contribution - approximately 20 agility = 1% dodge
 		float agiContribution = GetCalculatedModifierValue(unit_mods::StatAgility) / 20.0f;
 		dodgeChance += agiContribution;
+
+		// Add flat dodge chance bonus from auras (ModDodgeChance), treated as percent.
+		dodgeChance += m_dodgeChanceBonus;
 
 		// Add dodge rating when equipment system is implemented
 		// TODO: Add equipment dodge rating
