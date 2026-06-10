@@ -1302,7 +1302,7 @@ namespace mmo
 		// GPUs. Read directly by WorldRenderer each frame, so no change handler is required here.
 		s_renderScaleVar = ConsoleVarMgr::RegisterConsoleVar("gxRenderScale", "3D render resolution scale (0.25 to 1.0). Lower values improve performance by rendering the world at a lower resolution and upscaling.", "1.0");
 
-		s_depthPrepassVar = ConsoleVarMgr::RegisterConsoleVar("gxDepthPrepass", "Render an opaque depth pre-pass before the G-Buffer pass. Reduces overdraw shading cost in scenes with heavy opaque overdraw (e.g. dense foliage). 1 = on, 0 = off.", "1");
+		s_depthPrepassVar = ConsoleVarMgr::RegisterConsoleVar("gxDepthPrepass", "Render an opaque depth pre-pass before the G-Buffer pass. Reduces overdraw shading cost in scenes with heavy opaque overdraw (e.g. dense foliage). 1 = on, 0 = off.", "0");
 		m_cvarChangedSignals += s_depthPrepassVar->Changed.connect(this, &WorldState::OnDepthPrepassChanged);
 
 		// Distance (world units) beyond which authored instanced foliage (trees, bushes, rocks) is
@@ -2700,8 +2700,9 @@ namespace mmo
 		SpellSchool school;
 		uint8 flags;
 		uint32 spellId;
+		uint32 blocked;
 
-		if (!(packet >> io::read_packed_guid(targetGuid) >> io::read<uint32>(spellId) >> io::read<uint32>(amount) >> io::read<uint8>(school) >> io::read<uint8>(flags)))
+		if (!(packet >> io::read_packed_guid(targetGuid) >> io::read<uint32>(spellId) >> io::read<uint32>(amount) >> io::read<uint8>(school) >> io::read<uint8>(flags) >> io::read<uint32>(blocked)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -2751,6 +2752,18 @@ namespace mmo
 			if (flags & damage_flags::Immune)
 			{
 				AddWorldTextFrame(target->GetPosition(), Localize(FrameManager::Get().GetLocalization(), "COMBAT_IMMUNE"), Color(1.0f, 1.0f, 0.0f, 1.0f), 2.0f);
+			}
+			else if (blocked > 0 && amount == 0)
+			{
+				// The block fully absorbed the ability damage.
+				AddWorldTextFrame(target->GetPosition(), Localize(FrameManager::Get().GetLocalization(), "COMBAT_BLOCKED"), Color(1.0f, 1.0f, 0.0f, 1.0f), 2.0f);
+			}
+			else if (blocked > 0)
+			{
+				// Partial block: show remaining damage and how much was blocked, e.g. "14 (5 blocked)".
+				const String blockedText = std::to_string(amount) + " (" + std::to_string(blocked) + " " +
+					Localize(FrameManager::Get().GetLocalization(), "COMBAT_BLOCKED_SUFFIX") + ")";
+				AddWorldTextFrame(target->GetPosition(), blockedText, Color(1.0f, 1.0f, 0.0f, 1.0f), 2.0f);
 			}
 			else
 			{
@@ -2829,7 +2842,17 @@ namespace mmo
 				}
 				else if (victimState == victim_state::Blocks)
 				{
-					damageText = "BLOCKED";
+					if (totalDamage == 0)
+					{
+						// The block fully absorbed the hit.
+						damageText = Localize(FrameManager::Get().GetLocalization(), "COMBAT_BLOCKED");
+					}
+					else
+					{
+						// Partial block: show remaining damage and how much was blocked, e.g. "14 (5 blocked)".
+						damageText = std::to_string(totalDamage) + " (" + std::to_string(blockedDamage) + " " +
+							Localize(FrameManager::Get().GetLocalization(), "COMBAT_BLOCKED_SUFFIX") + ")";
+					}
 				}
 				else if (hitInfo & hit_info::Miss)
 				{

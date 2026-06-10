@@ -31,7 +31,7 @@ namespace
 		void OnTeleport(uint32, const Vector3&, const Radian&) override {}
 		void OnAttackSwingEvent(AttackSwingEvent) override {}
 		void OnXpLog(uint32) override {}
-		void OnSpellDamageLog(uint64, uint32, uint8, DamageFlags, const proto::SpellEntry&) override {}
+		void OnSpellDamageLog(uint64, uint32, uint8, DamageFlags, const proto::SpellEntry&, uint32) override {}
 		void OnNonSpellDamageLog(uint64, uint32, DamageFlags) override {}
 		void OnEnvironmentalDamageLog(uint64, uint32, EnvironmentalDamageType) override {}
 		void OnSpeedChangeApplied(MovementType, float, uint32) override {}

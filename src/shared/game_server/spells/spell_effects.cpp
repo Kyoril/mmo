@@ -133,6 +133,17 @@ namespace mmo
 				damageAmount = executer.CalculateModifiedValue(unit_mods::Damage, damageAmount);
 				damageAmount = executer.CalculateModifiedValue(unit_mods::SpellDamage, damageAmount);
 
+				// Roll for a block. Only physical damage from the front can be blocked; the helper
+				// returns no block for other schools, so this is a no-op for magical spells.
+				uint32 blockedDamage = 0;
+				const BlockResult block = unitTarget.RollMeleeBlock(executer, static_cast<SpellSchool>(spell.spellschool()), damageAmount);
+				if (block.blocked)
+				{
+					blockedDamage = block.blockedAmount;
+					damageAmount -= blockedDamage;
+					unitTarget.OnBlock();
+				}
+
 				if (unitTarget.Damage(damageAmount, spell.spellschool(), &executer, damage_type::MagicalAbility) > 0)
 				{
 					float threat = static_cast<float>(damageAmount) * spell.threat_multiplier();
@@ -141,7 +152,7 @@ namespace mmo
 				}
 
 				// Log spell damage to client
-				executer.SpellDamageLog(unitTarget.GetGuid(), damageAmount, spell.spellschool(), DamageFlags::None, spell);
+				executer.SpellDamageLog(unitTarget.GetGuid(), damageAmount, spell.spellschool(), block.blocked ? DamageFlags::Block : DamageFlags::None, spell, blockedDamage);
 
 				// Trigger proc events for spell damage
 				executer.TriggerProcEvent(spell_proc_flags::DoneSpellMagicDmgClassNeg, &unitTarget, damageAmount, proc_ex_flags::NormalHit, spell.spellschool(), false, spell.familyflags());
@@ -860,6 +871,27 @@ namespace mmo
 			}
 		}
 
+		void HandleCriticalBlock(SpellEffectContext& ctx)
+		{
+			if (ctx.effectTargets.empty())
+			{
+				ELOG("Failed to cast spell effect: Unable to resolve effect targets");
+				return;
+			}
+
+			for (auto* targetObject : ctx.effectTargets)
+			{
+				if (!targetObject->IsUnit())
+				{
+					continue;
+				}
+
+				ctx.markAffectedTarget(*targetObject);
+				auto& unitTarget = targetObject->AsUnit();
+				unitTarget.NotifyCanCriticalBlock(true);
+			}
+		}
+
 		void HandleDodge(SpellEffectContext& ctx)
 		{
 			if (ctx.effectTargets.empty())
@@ -1091,15 +1123,14 @@ namespace mmo
 					totalDamage = 0;
 				}
 
-				// Check for block after hit determination
+				// Check for block after hit determination (physical, front attacks only).
 				uint32 blockedDamage = 0;
-				if (hit && unitTarget.CanBlock() && unitTarget.IsFacingTowards(executer))
+				if (hit)
 				{
-					std::uniform_real_distribution blockChanceDist(0.0f, 100.0f);
-					if (blockChanceDist(randomGenerator) < unitTarget.BlockChance())
+					const BlockResult block = unitTarget.RollMeleeBlock(executer, static_cast<SpellSchool>(school), totalDamage);
+					if (block.blocked)
 					{
-						uint32 blockValue = combatSettings.default_block_value();
-						blockedDamage = std::min(blockValue, totalDamage);
+						blockedDamage = block.blockedAmount;
 						totalDamage -= blockedDamage;
 
 						hitInfo |= hit_info::Block;
@@ -1225,6 +1256,20 @@ namespace mmo
 					totalDamage = static_cast<uint32>(totalDamage * combatSettings.spell_weapon_crit_multiplier());
 				}
 
+				// Roll for a block (physical front attacks only) — reduces the post-crit damage by a flat amount.
+				uint32 blockedDamage = 0;
+				const BlockResult block = unitTarget.RollMeleeBlock(executer, static_cast<SpellSchool>(school), totalDamage);
+				if (block.blocked)
+				{
+					blockedDamage = block.blockedAmount;
+					totalDamage -= blockedDamage;
+					unitTarget.OnBlock();
+				}
+
+				uint8 damageFlags = DamageFlags::None;
+				if (isCrit) damageFlags |= DamageFlags::Crit;
+				if (block.blocked) damageFlags |= DamageFlags::Block;
+
 				// Log spell damage to client
 				if (unitTarget.Damage(totalDamage, school, &executer, damage_type::PhysicalAbility) > 0)
 				{
@@ -1232,7 +1277,7 @@ namespace mmo
 					executer.ApplySpellMod(spell_mod_op::Threat, spell.id(), threat);
 					unitTarget.threatened(executer, threat);
 				}
-				executer.SpellDamageLog(unitTarget.GetGuid(), totalDamage, school, isCrit ? DamageFlags::Crit : DamageFlags::None, spell);
+				executer.SpellDamageLog(unitTarget.GetGuid(), totalDamage, school, static_cast<DamageFlags>(damageFlags), spell, blockedDamage);
 
 				// Trigger proc events for spell damage
 				executer.TriggerProcEvent(spell_proc_flags::DoneSpellMeleeDmgClass, &unitTarget, totalDamage, proc_ex_flags::NormalHit, spell.spellschool(), false, spell.familyflags());

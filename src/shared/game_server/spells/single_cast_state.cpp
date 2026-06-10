@@ -859,6 +859,7 @@ namespace mmo
 			{se::ResetAttributePoints,   SpellEffects::HandleResetAttributePoints},
 			{se::Parry,                  SpellEffects::HandleParry},
 			{se::Block,                  SpellEffects::HandleBlock},
+			{se::CriticalBlock,          SpellEffects::HandleCriticalBlock},
 			{se::Dodge,                  SpellEffects::HandleDodge},
 			{se::HealPct,                SpellEffects::HandleHealPct},
 			{se::AddExtraAttacks,        SpellEffects::HandleAddExtraAttacks},

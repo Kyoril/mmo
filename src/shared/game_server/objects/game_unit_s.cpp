@@ -578,6 +578,9 @@ namespace mmo
 			case spell_effects::Parry:
 				NotifyCanParry(false);
 				break;
+			case spell_effects::CriticalBlock:
+				NotifyCanCriticalBlock(false);
+				break;
 			}
 		}
 
@@ -783,14 +786,14 @@ namespace mmo
 	}
 
 	void GameUnitS::SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags,
-								   const proto::SpellEntry &spell)
+								   const proto::SpellEntry &spell, uint32 blocked)
 	{
 		if (!m_netUnitWatcher)
 		{
 			return;
 		}
 
-		m_netUnitWatcher->OnSpellDamageLog(targetGuid, amount, school, flags, spell);
+		m_netUnitWatcher->OnSpellDamageLog(targetGuid, amount, school, flags, spell, blocked);
 	}
 
 	void GameUnitS::SendAttackerStateUpdate(uint64 victimGuid, uint32 hitInfo, uint32 victimState,
@@ -1812,6 +1815,75 @@ namespace mmo
 		return std::max(0.0f, std::min(blockChance, 100.0f));
 	}
 
+	float GameUnitS::GetBlockValue() const
+	{
+		// Base unit only accounts for item-sourced block value (e.g. shields). Players add
+		// per-class attribute scaling on top via the GamePlayerS override.
+		return std::max(0.0f, GetCalculatedModifierValue(unit_mods::BlockValue));
+	}
+
+	float GameUnitS::CriticalBlockChance() const
+	{
+		if (!CanCriticalBlock())
+		{
+			return 0.0f;
+		}
+
+		return std::max(0.0f, std::min(GetCombatSettings().base_critical_block_chance(), 100.0f));
+	}
+
+	bool GameUnitS::CanBlockAttackFrom(const GameObjectS& attacker) const
+	{
+		// Attacks landing inside the rear cone behind the defender cannot be blocked or parried.
+		const float rearConeDeg = std::max(0.0f, std::min(GetCombatSettings().defense_block_rear_cone_degrees(), 360.0f));
+		const float frontArcDeg = 360.0f - rearConeDeg;
+		constexpr float degToRad = 3.1415926535f / 180.0f;
+		return IsInArc(attacker.GetPosition(), Radian(frontArcDeg * degToRad));
+	}
+
+	BlockResult GameUnitS::RollMeleeBlock(const GameUnitS& attacker, const SpellSchool school, const uint32 incomingDamage) const
+	{
+		BlockResult result;
+
+		// Only physical attacks can be blocked.
+		if (school != spell_school::Normal || incomingDamage == 0)
+		{
+			return result;
+		}
+
+		if (!CanBlock())
+		{
+			return result;
+		}
+
+		// Can't block attacks coming from behind.
+		if (!CanBlockAttackFrom(attacker))
+		{
+			return result;
+		}
+
+		std::uniform_real_distribution<float> chanceDist(0.0f, 100.0f);
+		if (chanceDist(randomGenerator) >= BlockChance())
+		{
+			return result;  // failed the block chance roll
+		}
+
+		result.blocked = true;
+
+		float blockValue = GetBlockValue();
+
+		// Roll for a critical block (increased block amount).
+		if (CanCriticalBlock() && chanceDist(randomGenerator) < CriticalBlockChance())
+		{
+			result.critical = true;
+			blockValue *= GetCombatSettings().critical_block_multiplier();
+		}
+
+		const uint32 blockAmount = static_cast<uint32>(std::max(0.0f, blockValue));
+		result.blockedAmount = std::min(blockAmount, incomingDamage);
+		return result;
+	}
+
 	void GameUnitS::NotifyCanBlock(const bool gainedEffect)
 	{
 		// If true, we take a shortcut: We simply trust the caller that the effect was gained and apply it instead of iterating over each aura effect
@@ -1869,6 +1941,26 @@ namespace mmo
 		else
 		{
 			m_combatCapabilities &= ~combat_capabilities::CanDodge;
+		}
+	}
+
+	void GameUnitS::NotifyCanCriticalBlock(const bool gainedEffect)
+	{
+		// If true, we take a shortcut: We simply trust the caller that the effect was gained and apply it instead of iterating over each spell effect
+		if (gainedEffect)
+		{
+			m_combatCapabilities |= combat_capabilities::CanCriticalBlock;
+			return;
+		}
+
+		// Effect was removed: Check if there is still one effect left and if so, ensure the CanCriticalBlock flag is set. Otherwise ensure its removed.
+		if (HasSpellEffect(spell_effects::CriticalBlock))
+		{
+			m_combatCapabilities |= combat_capabilities::CanCriticalBlock;
+		}
+		else
+		{
+			m_combatCapabilities &= ~combat_capabilities::CanCriticalBlock;
 		}
 	}
 
@@ -2950,16 +3042,16 @@ namespace mmo
 			totalDamage = 0;
 		}
 
-		// Check for block (in Classic, block applies after hit determination)
+		// Check for block (block applies after hit determination, only against physical front attacks).
+		// The block value comes from equipped items + per-class attribute scaling and may be critically
+		// increased; it reduces the damage by a flat amount instead of fully absorbing it.
 		uint32 blockedDamage = 0;
-		if (hit && victim->CanBlock() && victim->IsFacingTowards(*this))
+		if (hit)
 		{
-			std::uniform_real_distribution blockChanceDist(0.0f, 100.0f);
-			if (blockChanceDist(randomGenerator) < victim->BlockChance())
+			const BlockResult block = victim->RollMeleeBlock(*this, spell_school::Normal, totalDamage);
+			if (block.blocked)
 			{
-				// Block value from combat settings
-				uint32 blockValue = settings.default_block_value();
-				blockedDamage = std::min(blockValue, totalDamage);
+				blockedDamage = block.blockedAmount;
 				totalDamage -= blockedDamage;
 
 				hitInfo |= hit_info::Block;

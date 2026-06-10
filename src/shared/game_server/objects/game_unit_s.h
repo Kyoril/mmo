@@ -187,6 +187,10 @@ namespace mmo
 			// Healing Taken
 			HealingTaken,
 
+			/// Shield block value contributed by equipped items. Per-class attribute scaling is
+			/// added on top in GetBlockValue().
+			BlockValue,
+
 			End
 		};
 	}
@@ -298,7 +302,7 @@ namespace mmo
 
 		virtual void OnXpLog(uint32 amount) = 0;
 
-		virtual void OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry &spell) = 0;
+		virtual void OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry &spell, uint32 blocked = 0) = 0;
 
 		virtual void OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags) = 0;
 
@@ -442,12 +446,28 @@ namespace mmo
 			CanParry = 0x2,
 
 			/// The unit can dodge attacks.
-			CanDodge = 0x4
+			CanDodge = 0x4,
+
+			/// The unit can critically block attacks (block for an increased amount).
+			CanCriticalBlock = 0x8
 		};
 	}
 
 	// Forward declaration for the CC movement controller
 	class CCMovementController;
+
+	/// Result of rolling a block against an incoming physical attack.
+	struct BlockResult
+	{
+		/// True if the attack was blocked at all.
+		bool blocked = false;
+
+		/// True if the block was a critical block (block value increased by the crit multiplier).
+		bool critical = false;
+
+		/// Amount of damage absorbed by the block, already capped at the incoming damage.
+		uint32 blockedAmount = 0;
+	};
 
 	/// Represents a living object (unit) in the game world.
 	/// Units can move, cast spells, fight, and interact with other objects.
@@ -723,7 +743,8 @@ namespace mmo
 		/// @param school The damage school type.
 		/// @param flags The damage flags.
 		/// @param spell The spell entry used to deal the damage.
-		void SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry &spell);
+		/// @param blocked The amount of damage that was blocked (0 if not blocked).
+		void SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry &spell, uint32 blocked = 0);
 
 		/// Sends the AttackerStateUpdate packet (melee white damage) to all nearby subscribers.
 		/// @param victimGuid The GUID of the victim unit.
@@ -1040,6 +1061,27 @@ public:
 		/// Returns the block chance in percent, ranging from 0 to 100.0f. If the unit can't block at all, this will always return 0.
 		float BlockChance() const;
 
+		/// Returns the flat amount of damage this unit blocks when it blocks an attack, before any
+		/// critical-block multiplier. Base implementation only accounts for equipped item block value;
+		/// GamePlayerS adds per-class attribute scaling on top.
+		virtual float GetBlockValue() const;
+
+		/// Returns the chance in percent to critically block an attack (block for an increased amount).
+		/// Returns 0 if the unit can't critically block.
+		virtual float CriticalBlockChance() const;
+
+		/// Rolls whether this unit blocks an incoming physical attack from the given attacker.
+		/// Only physical (Normal school) attacks coming from the front can be blocked.
+		/// @param attacker The attacking unit (used for facing checks).
+		/// @param school The damage school of the incoming attack. Only Normal can be blocked.
+		/// @param incomingDamage The damage about to be applied; the blocked amount is capped to it.
+		/// @returns A BlockResult describing whether and how much was blocked.
+		BlockResult RollMeleeBlock(const GameUnitS& attacker, SpellSchool school, uint32 incomingDamage) const;
+
+		/// Returns true if attacks from the given attacker can be blocked/parried based on facing
+		/// (i.e. the attacker is not within the configurable rear cone behind this unit).
+		bool CanBlockAttackFrom(const GameObjectS& attacker) const;
+
 		/// Returns true if the unit can block attacks.
 		bool CanBlock() const { return (m_combatCapabilities & combat_capabilities::CanBlock) != 0; }
 
@@ -1068,6 +1110,14 @@ public:
 		///	@param amount The dodge chance bonus in percent (e.g. 5.0f for +5%).
 		///	@param apply true to add the bonus, false to remove it again.
 		void ModifyDodgeChanceBonus(float amount, bool apply) { m_dodgeChanceBonus += apply ? amount : -amount; }
+
+		/// Returns true if the unit can critically block attacks (unlocked via a CriticalBlock spell effect).
+		bool CanCriticalBlock() const { return (m_combatCapabilities & combat_capabilities::CanCriticalBlock) != 0; }
+
+		/// Re-evaluates if the unit can critically block based on spell effects.
+		///	@param gainedEffect Set this to true if you are sure the unit gained the capability (performance shortcut).
+		///	If false, spell effects are checked to determine whether the capability should remain.
+		void NotifyCanCriticalBlock(bool gainedEffect);
 
 		/// Returns true if the unit has an active aura effect of the given type. Don't use this too often as it's iterating through all active auras,
 		///	which is not a constant complexity operation.

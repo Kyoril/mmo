@@ -28,6 +28,10 @@ namespace mmo
             /// The target was immune to the damage. The amount is zero and clients should
             /// display a localized "Immune" text instead of a damage number.
             Immune = 0x04,
+
+            /// The attack was (partially) blocked. The blocked amount is reported separately;
+            /// clients show "X (Y blocked)" or a localized "Blocked" when fully absorbed.
+            Block = 0x08,
         };
     }
 

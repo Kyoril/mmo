@@ -266,6 +266,14 @@ namespace mmo
 
 		void UpdateArmor();
 
+		/// @copydoc GameUnitS::GetBlockValue
+		/// Adds per-class attribute scaling (blockvaluestatsources) on top of item block value.
+		float GetBlockValue() const override;
+
+		/// @copydoc GameUnitS::CriticalBlockChance
+		/// Adds per-class attribute scaling (critblockchancestatsources) on top of the base chance.
+		float CriticalBlockChance() const override;
+
 		void UpdateAttributePoints();
 
 		void UpdateTalentPoints();

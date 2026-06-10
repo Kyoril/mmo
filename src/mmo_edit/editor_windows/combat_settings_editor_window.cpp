@@ -262,6 +262,32 @@ namespace mmo
 			}
 		}
 
+		// === Block ===
+		if (const auto section = ScopedEditorSection("Block", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::TextDisabled("Block value comes from equipped item block stats plus per-class attribute scaling (see Class editor).");
+			ImGui::TextDisabled("A blocked physical attack is reduced by the block value instead of being fully absorbed.");
+			ImGui::Spacing();
+
+			float critBlockMultiplier = settings.critical_block_multiplier();
+			if (DrawFloatSetting("Critical Block Multiplier", critBlockMultiplier, defaults.critical_block_multiplier()))
+			{
+				settings.set_critical_block_multiplier(critBlockMultiplier);
+			}
+
+			float baseCritBlockChance = settings.base_critical_block_chance();
+			if (DrawFloatSetting("Base Critical Block Chance %", baseCritBlockChance, defaults.base_critical_block_chance()))
+			{
+				settings.set_base_critical_block_chance(baseCritBlockChance);
+			}
+
+			float rearConeDegrees = settings.defense_block_rear_cone_degrees();
+			if (DrawFloatSetting("Rear Cone (degrees, can't block)", rearConeDegrees, defaults.defense_block_rear_cone_degrees()))
+			{
+				settings.set_defense_block_rear_cone_degrees(rearConeDegrees);
+			}
+		}
+
 		// === Spell Weapon Damage ===
 		if (const auto section = ScopedEditorSection("Spell Weapon Damage", ImGuiTreeNodeFlags_DefaultOpen))
 		{

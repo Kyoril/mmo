@@ -582,7 +582,7 @@ namespace mmo
 
 		void OnXpLog(uint32 amount) override;
 
-		void OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell) override;
+		void OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell, uint32 blocked = 0) override;
 
 		void OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags) override;
 

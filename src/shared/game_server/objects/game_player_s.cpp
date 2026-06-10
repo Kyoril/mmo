@@ -300,6 +300,11 @@ namespace mmo
 				UpdateModifierValue(unit_mods::Armor, unit_mod_type::BaseValue, itemEntry.armor(), apply);
 			}
 
+			if (itemEntry.block())
+			{
+				UpdateModifierValue(unit_mods::BlockValue, unit_mod_type::BaseValue, itemEntry.block(), apply);
+			}
+
 			if (itemEntry.holyres() != 0)
 			{
 				UpdateModifierValue(unit_mods::ResistanceHoly, unit_mod_type::TotalValue, itemEntry.holyres(), apply);
@@ -1876,6 +1881,53 @@ namespace mmo
 		Set<int32>(object_fields::Armor, armor);
 		Set<int32>(object_fields::PosStatArmor, totalArmor > 0 ? totalArmor : 0); // TODO
 		Set<int32>(object_fields::NegStatArmor, totalArmor < 0 ? totalArmor : 0);
+	}
+
+	float GamePlayerS::GetBlockValue() const
+	{
+		// Item-sourced block value (e.g. shields).
+		float blockValue = GameUnitS::GetBlockValue();
+
+		// Add per-class attribute scaling (e.g. Strength contributes to block value).
+		if (m_classEntry)
+		{
+			for (int i = 0; i < m_classEntry->blockvaluestatsources_size(); ++i)
+			{
+				const auto& statSource = m_classEntry->blockvaluestatsources(i);
+				if (statSource.statid() < 5)
+				{
+					blockValue += static_cast<float>(Get<uint32>(object_fields::StatStamina + statSource.statid())) * statSource.factor();
+				}
+			}
+		}
+
+		return std::max(0.0f, blockValue);
+	}
+
+	float GamePlayerS::CriticalBlockChance() const
+	{
+		if (!CanCriticalBlock())
+		{
+			return 0.0f;
+		}
+
+		// Base critical block chance from combat settings.
+		float chance = GetCombatSettings().base_critical_block_chance();
+
+		// Add per-class attribute scaling.
+		if (m_classEntry)
+		{
+			for (int i = 0; i < m_classEntry->critblockchancestatsources_size(); ++i)
+			{
+				const auto& statSource = m_classEntry->critblockchancestatsources(i);
+				if (statSource.statid() < 5)
+				{
+					chance += static_cast<float>(Get<uint32>(object_fields::StatStamina + statSource.statid())) * statSource.factor();
+				}
+			}
+		}
+
+		return std::max(0.0f, std::min(chance, 100.0f));
 	}
 
 	void GamePlayerS::UpdateAttributePoints()

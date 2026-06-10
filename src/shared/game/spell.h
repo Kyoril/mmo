@@ -708,6 +708,7 @@ namespace mmo
 			ResetTalents            = 51,
 			Proficiency             = 52,
 			TriggerSpell            = 53,
+			CriticalBlock           = 54,
 
 			// Add new spell effect types HERE (append only — never insert above an existing entry).
 

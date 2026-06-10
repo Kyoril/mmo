@@ -102,7 +102,8 @@ namespace mmo
 		{ "Interrupt Spell Cast", "Combat", "Interrupts spell casting" },
 		{ "Reset Talents", "Utility", "Resets talent points" },
 		{ "Proficiency", "Utility", "Grants weapon proficiency" },
-		{ "Trigger Spell", "Utility", "Casts another spell, optionally on a proc chance taken from this spell's Proc Chance" }
+		{ "Trigger Spell", "Utility", "Casts another spell, optionally on a proc chance taken from this spell's Proc Chance" },
+		{ "Critical Block", "Combat", "Allows the unit to critically block (block for an increased amount)" }
 	};
 
 	static String s_spellEffectNames[] = {
@@ -159,7 +160,8 @@ namespace mmo
 		"Interrupt Spell Cast",
 		"Reset Talents",
 		"Proficiency",
-		"Trigger Spell"
+		"Trigger Spell",
+		"Critical Block"
 	};
 
 	static_assert(std::size(s_spellEffectNames) == spell_effects::Count_, "Each spell effect must have a string representation!");

@@ -2805,9 +2805,9 @@ namespace mmo
 			});
 	}
 
-	void Player::OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell)
+	void Player::OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell, uint32 blocked)
 	{
-		SendPacket([targetGuid, amount, school, flags, &spell](game::OutgoingPacket& packet)
+		SendPacket([targetGuid, amount, school, flags, &spell, blocked](game::OutgoingPacket& packet)
 			{
 				packet.Start(game::realm_client_packet::SpellDamageLog);
 				packet
@@ -2815,7 +2815,8 @@ namespace mmo
 					<< io::write<uint32>(spell.id())
 					<< io::write<uint32>(amount)
 					<< io::write<uint8>(school)
-					<< io::write<uint8>(flags);
+					<< io::write<uint8>(flags)
+					<< io::write<uint32>(blocked);
 				packet.Finish();
 			});
 	}

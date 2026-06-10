@@ -44,7 +44,7 @@ namespace
 		void OnTeleport(uint32 /*mapId*/, const Vector3& /*pos*/, const Radian& /*facing*/) override {}
 		void OnAttackSwingEvent(AttackSwingEvent /*error*/) override {}
 		void OnXpLog(uint32 /*amount*/) override {}
-		void OnSpellDamageLog(uint64 /*tgt*/, uint32 /*amt*/, uint8 /*school*/, DamageFlags /*flags*/, const proto::SpellEntry& /*spell*/) override {}
+		void OnSpellDamageLog(uint64 /*tgt*/, uint32 /*amt*/, uint8 /*school*/, DamageFlags /*flags*/, const proto::SpellEntry& /*spell*/, uint32 /*blocked*/) override {}
 		void OnNonSpellDamageLog(uint64 /*tgt*/, uint32 /*amt*/, DamageFlags /*flags*/) override {}
 		void OnEnvironmentalDamageLog(uint64 /*tgt*/, uint32 /*amt*/, EnvironmentalDamageType /*type*/) override {}
 		void OnSpeedChangeApplied(MovementType /*type*/, float /*speed*/, uint32 /*ackId*/) override {}

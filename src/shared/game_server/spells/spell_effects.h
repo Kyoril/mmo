@@ -105,6 +105,7 @@ namespace mmo
 		void HandleResetAttributePoints(SpellEffectContext& ctx);
 		void HandleParry(SpellEffectContext& ctx);
 		void HandleBlock(SpellEffectContext& ctx);
+		void HandleCriticalBlock(SpellEffectContext& ctx);
 		void HandleDodge(SpellEffectContext& ctx);
 		void HandleHealPct(SpellEffectContext& ctx);
 		void HandleAddExtraAttacks(SpellEffectContext& ctx);
