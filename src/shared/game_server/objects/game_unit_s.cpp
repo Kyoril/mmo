@@ -2553,13 +2553,27 @@ namespace mmo
 
 		killed(killer);
 
-		// For now, remove all auras
+		// Remove all auras on death, but keep passive auras (e.g. talents) active.
+		// Passive auras represent permanent modifiers like talent-based spell mods which
+		// must persist through death - otherwise the client (which mirrors spell mods via
+		// OnSpellModChanged) would lose them and tooltips would revert to base values, while
+		// the server would only restore them on the next passive spell activation (respawn).
+		std::vector<std::shared_ptr<AuraContainer>> aurasToRemove;
 		for (auto &aura : m_auras)
 		{
-			aura->SetApplied(false);
+			if (aura->GetSpell().attributes(0) & spell_attributes::Passive)
+			{
+				continue;
+			}
+
+			aurasToRemove.push_back(aura);
 		}
 
-		m_auras.clear();
+		for (auto &aura : aurasToRemove)
+		{
+			aura->SetApplied(false);
+			RemoveAura(aura);
+		}
 
 		RaiseTrigger(trigger_event::OnKilled, killer);
 	}
