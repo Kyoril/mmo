@@ -15,6 +15,25 @@ namespace mmo
 		{
 		}
 
+		/// @brief Resets the operation to defaults for reuse without releasing the heap storage of its
+		///        constant-buffer vectors. Reusing a single RenderOperation across draw calls (clearing
+		///        instead of reconstructing) avoids a per-draw-call heap allocation for these vectors,
+		///        which matters because RenderSingleObject runs once per visible object per pass.
+		void Reset(const uint32 renderGroupId)
+		{
+			m_renderGroupId = renderGroupId;
+			topology = TopologyType::TriangleList;
+			vertexFormat = VertexFormat::PosColor;
+			vertexData = nullptr;
+			indexData = nullptr;
+			material.reset();
+			pixelShaderType = PixelShaderType::Forward;
+			vertexConstantBuffers.clear();
+			pixelConstantBuffers.clear();
+			instanceBuffer = nullptr;
+			instanceCount = 0;
+		}
+
 	public:
 		TopologyType topology { TopologyType::TriangleList };
 

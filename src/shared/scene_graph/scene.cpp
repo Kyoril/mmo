@@ -299,24 +299,6 @@ namespace mmo
 
 		UpdateSceneGraph();
 
-		// Update particle emitters (self-timed)
-		{
-			PROFILE_SCOPE("ParticleEmitters::Update");
-			for (auto& [name, emitter] : m_particleEmitters)
-			{
-				emitter->Update();
-			}
-		}
-
-		// Update ribbon trails (self-timed)
-		{
-			PROFILE_SCOPE("RibbonTrails::Update");
-			for (auto& [name, trail] : m_ribbonTrails)
-			{
-				trail->Update();
-			}
-		}
-
 		// In the deferred renderer, scene.Render is called twice per frame:
 		//   1. GBuffer pass  (m_forwardTransparentOnly = false) – builds the render queue and renders opaque geometry.
 		//   2. Forward transparent pass (m_forwardTransparentOnly = true) – renders only transparent groups.
@@ -336,6 +318,27 @@ namespace mmo
 		// so only particles, ribbon trails, and other transparent renderables are drawn.
 		if (!m_frozen && !m_forwardTransparentOnly && !m_reuseRenderQueue)
 		{
+			// Particle emitters and ribbon trails are *simulation*, not just rendering: each
+			// Update() advances the system and re-sorts/re-uploads its GPU buffers. It must run
+			// exactly once per frame — during the primary opaque queue-build pass — and never during
+			// the shadow cascade passes (which would otherwise re-simulate and re-sort every emitter
+			// up to NUM_SHADOW_CASCADES extra times each frame). A shadow cascade pass is a
+			// ShadowMap-typed pass that is not the main-view depth pre-pass.
+			const bool isShadowCascadePass = (shaderType == PixelShaderType::ShadowMap) && !m_depthPrepass;
+			if (!isShadowCascadePass)
+			{
+				PROFILE_SCOPE("ParticleEmitters::Update");
+				for (auto& [name, emitter] : m_particleEmitters)
+				{
+					emitter->Update();
+				}
+
+				for (auto& [name, trail] : m_ribbonTrails)
+				{
+					trail->Update();
+				}
+			}
+
 			PrepareRenderQueue();
 
 			// Update portal culling for all WorldModelInstances BEFORE FindVisibleObjects
@@ -630,6 +633,95 @@ namespace mmo
 		}
 	}
 
+	void Scene::GatherShadowCasters(const AABB& worldRegion, std::vector<MovableObject*>& outCasters)
+	{
+		// Base (non-spatial) fallback: linear scan over entities. OctreeScene overrides this with an
+		// octree traversal. Preview/editor scenes that use this base path have few objects.
+		outCasters.clear();
+		outCasters.reserve(m_entities.size());
+
+		for (const auto& [name, entity] : m_entities)
+		{
+			MovableObject* obj = entity.get();
+			if (!obj->ShouldBeVisible() || !obj->IsCastingShadows())
+			{
+				continue;
+			}
+
+			if (!worldRegion.Intersects(obj->GetWorldBoundingBox(true)))
+			{
+				continue;
+			}
+
+			outCasters.push_back(obj);
+		}
+	}
+
+	void Scene::RenderShadowCasters(Camera& cascadeCamera, const std::vector<MovableObject*>& casters, float minCasterWorldRadius)
+	{
+		PROFILE_SCOPE("Scene::RenderShadowCasters");
+
+		m_pixelShaderType = PixelShaderType::ShadowMap;
+		m_activeCamera = &cascadeCamera;
+		m_renderableVisitor.targetScene = this;
+		m_renderableVisitor.scissoring = false;
+
+		// Build the render queue directly from the pre-gathered caster list — no octree walk. This is
+		// the per-cascade work that replaces a full FindVisibleObjects pass per cascade.
+		auto& queue = GetRenderQueue();
+		queue.Clear();
+
+		for (MovableObject* caster : casters)
+		{
+			// Mirror RenderQueue::ProcessVisibleObject's per-camera state (LOD / rendering-disabled)
+			// so shadow visibility matches the previous per-cascade Scene::Render path exactly.
+			caster->SetCurrentCamera(cascadeCamera);
+
+			if (!caster->IsVisible() || !caster->IsCastingShadows())
+			{
+				continue;
+			}
+
+			const AABB& worldBounds = caster->GetWorldBoundingBox(true);
+
+			// Sub-texel small-object culling: a caster smaller than the cascade's world texel size
+			// produces a shadow under one shadow-map texel, i.e. invisible. Skipping it is free.
+			if (minCasterWorldRadius > 0.0f)
+			{
+				const Vector3 extents = worldBounds.GetExtents();
+				const float worldRadius = std::max(extents.x, std::max(extents.y, extents.z));
+				if (worldRadius < minCasterWorldRadius)
+				{
+					continue;
+				}
+			}
+
+			if (!cascadeCamera.IsVisible(worldBounds))
+			{
+				continue;
+			}
+
+			caster->PopulateRenderQueue(queue);
+		}
+
+		// Shadow passes write depth with the cascade camera; match the state Scene::Render sets for a
+		// ShadowMap pass.
+		auto& gx = GraphicsDevice::Get();
+		gx.SetFillMode(cascadeCamera.GetFillMode());
+		gx.SetDepthEnabled(true);
+		gx.SetDepthWriteEnabled(true);
+		gx.SetDepthTestComparison(DepthTestMethod::Less);
+		gx.SetTransformMatrix(World, Matrix4::Identity);
+		gx.SetTransformMatrix(Projection, cascadeCamera.GetProjectionMatrix());
+		gx.SetTransformMatrix(View, cascadeCamera.GetViewMatrix());
+
+		RefreshCameraBuffer(cascadeCamera);
+
+		RenderVisibleObjects();
+
+		m_activeCamera = nullptr;
+	}
+
 	void Scene::NotifyLightsDirty()
 	{
 		++m_lightsDirtyCounter;
@@ -686,7 +778,10 @@ namespace mmo
 	{
 		PROFILE_SCOPE("RenderSingleObject");
 
-		RenderOperation op { groupId };
+		// Reuse a single RenderOperation (cleared, capacity retained) to avoid a per-draw heap
+		// allocation for its constant-buffer vectors.
+		RenderOperation& op = m_renderOp;
+		op.Reset(groupId);
 		renderable.PrepareRenderOperation(op);
 		op.pixelShaderType = m_pixelShaderType;
 

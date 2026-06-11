@@ -642,14 +642,40 @@ namespace mmo
         const auto& cascades = m_cascadedShadowSetup->GetCascades();
         const auto& config = m_cascadedShadowSetup->GetConfig();
 
+        const uint32 activeCascades = m_cascadedShadowSetup->GetConfig().GetActiveCascadeCount();
+
+        // Cull shadow casters ONCE for the whole shadow region, then reuse the list for every cascade.
+        // The gather region is the union of all active cascade frusta in world space, so it provably
+        // contains every caster any cascade could draw; each cascade below re-filters this list with
+        // its own (tight) frustum, so the rendered set — and therefore the shadows — are unchanged.
+        // This replaces N full octree walks (one per cascade) with a single walk plus N cheap linear
+        // filters over a much smaller list.
+        AABB gatherRegion;
+        gatherRegion.SetNull();
+        for (uint32 i = 0; i < activeCascades; ++i)
+        {
+            if (!m_shadowCameras[i])
+            {
+                continue;
+            }
+
+            const Vector3* corners = m_shadowCameras[i]->GetWorldSpaceCorners();
+            for (int c = 0; c < 8; ++c)
+            {
+                gatherRegion.Combine(corners[c]);
+            }
+        }
+
+        scene.GatherShadowCasters(gatherRegion, m_shadowCasterCache);
+
         // Setup depth bias
         m_device.SetDepthBias(m_depthBias);
         m_device.SetSlopeScaledDepthBias(m_slopeScaledDepthBias);
         m_device.SetDepthBiasClamp(m_depthBiasClamp);
 
-        // Render only the active cascades. Each cascade is a full re-submission of the scene
-        // geometry, so rendering fewer of them (a quality setting) is a direct CPU+GPU saving.
-        const uint32 activeCascades = m_cascadedShadowSetup->GetConfig().GetActiveCascadeCount();
+        // Render each active cascade by re-filtering the gathered caster list against the cascade's
+        // own frustum. Each cascade still draws into its own shadow map, but no longer re-walks the
+        // octree or re-runs full per-object visibility from scratch.
         for (uint32 i = 0; i < activeCascades; ++i)
         {
             if (!m_shadowCameras[i])
@@ -659,7 +685,16 @@ namespace mmo
 
             m_cascadeShadowMaps[i]->Activate();
             m_cascadeShadowMaps[i]->Clear(ClearFlags::Depth);
-            scene.Render(*m_shadowCameras[i], PixelShaderType::ShadowMap);
+
+            // Sub-texel small-object culling: a caster whose full world extent is below one shadow
+            // texel casts a shadow under a single texel — blurred away entirely by the 16-tap PCF —
+            // so skipping it has no visible effect. We compare the world half-extent against half a
+            // texel (full extent < 1 texel) to stay strictly on the lossless side. worldTexelSize
+            // grows with cascade distance, so distant cascades naturally skip more tiny casters while
+            // the near cascade keeps virtually everything.
+            const float minCasterWorldRadius = cascades[i].worldTexelSize * 0.5f;
+            scene.RenderShadowCasters(*m_shadowCameras[i], m_shadowCasterCache, minCasterWorldRadius);
+
             m_cascadeShadowMaps[i]->Update();
         }
 

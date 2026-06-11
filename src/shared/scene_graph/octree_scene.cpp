@@ -490,6 +490,71 @@ namespace mmo
 		}
 	}
 
+	void OctreeScene::GatherShadowCasters(const AABB& worldRegion, std::vector<MovableObject*>& outCasters)
+	{
+		outCasters.clear();
+
+		if (!m_octree || worldRegion.IsNull())
+		{
+			return;
+		}
+
+		GatherShadowCastersRecursive(*m_octree, worldRegion, outCasters);
+	}
+
+	void OctreeScene::GatherShadowCastersRecursive(Octree& octant, const AABB& worldRegion, std::vector<MovableObject*>& outCasters) const
+	{
+		if (octant.GetNumNodes() == 0)
+		{
+			return;
+		}
+
+		// Cull the whole octant against the region (loosened cull bounds, matching WalkOctree).
+		AABB octantBounds;
+		octant.GetCullBounds(octantBounds);
+		if (!worldRegion.Intersects(octantBounds))
+		{
+			return;
+		}
+
+		// Collect shadow casters attached to scene nodes in this octant. Per-cascade frustum culling
+		// and small-object culling happen later in RenderShadowCasters; here we only need the
+		// camera-independent filters (own visibility + casts-shadows + region overlap).
+		for (OctreeNode* sn : octant.m_nodes)
+		{
+			const uint32 numObjects = sn->GetNumAttachedObjects();
+			for (uint32 i = 0; i < numObjects; ++i)
+			{
+				MovableObject* obj = sn->GetAttachedObject(i);
+				if (!obj || !obj->ShouldBeVisible() || !obj->IsCastingShadows())
+				{
+					continue;
+				}
+
+				if (!worldRegion.Intersects(obj->GetWorldBoundingBox(true)))
+				{
+					continue;
+				}
+
+				outCasters.push_back(obj);
+			}
+		}
+
+		for (int x = 0; x < 2; ++x)
+		{
+			for (int y = 0; y < 2; ++y)
+			{
+				for (int z = 0; z < 2; ++z)
+				{
+					if (Octree* child = octant.m_children[x][y][z].get())
+					{
+						GatherShadowCastersRecursive(*child, worldRegion, outCasters);
+					}
+				}
+			}
+		}
+	}
+
 	std::unique_ptr<SceneNode> OctreeScene::CreateSceneNodeImpl()
 	{
 		return std::make_unique<OctreeNode>(*this);

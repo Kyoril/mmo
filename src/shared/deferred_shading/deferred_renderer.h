@@ -256,6 +256,11 @@ namespace mmo
         /// @brief Cached light render statistics from the last frame.
         Scene::LightRenderStats m_lastLightStats;
 
+        /// @brief Reusable scratch buffer of shadow casters gathered once per frame and shared across
+        ///        all cascades (see RenderCascadedShadowMaps). Kept as a member so its capacity is
+        ///        retained between frames instead of reallocating every frame.
+        std::vector<MovableObject*> m_shadowCasterCache;
+
 #ifdef _WIN32
         // --- Per-pass GPU timing (only active while the profiler/perf overlay is enabled) ---
         // Timestamp points: 0 = start, 1 = after shadows, 2 = after G-Buffer, 3 = after lighting,

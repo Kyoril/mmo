@@ -6,6 +6,7 @@
 
 #include "queued_renderable_visitor.h"
 #include "render_queue.h"
+#include "render_operation.h"
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
 #include "graphics/shader_types.h"
@@ -388,8 +389,27 @@ namespace mmo
 		void SetDepthPrepass(bool value) { m_depthPrepass = value; }
 
 		void UpdateSceneGraph();
-		
+
 		void RenderSingleObject(Renderable& renderable, uint32 groupId);
+
+		/// @brief Gathers every shadow-casting movable object whose world bounding box intersects the
+		///        given world-space region, in a single traversal. The cascaded shadow renderer calls
+		///        this once per frame (region = union of all cascade frusta) and then reuses the
+		///        resulting list for every cascade, instead of re-walking the scene once per cascade.
+		/// @param worldRegion World-space region that must contain every cascade volume.
+		/// @param outCasters Receives the gathered casters (cleared first).
+		virtual void GatherShadowCasters(const AABB& worldRegion, std::vector<MovableObject*>& outCasters);
+
+		/// @brief Renders a previously gathered caster list into the currently bound shadow map using
+		///        the given cascade camera. Casters are frustum-culled against the cascade camera and,
+		///        when minCasterWorldRadius > 0, casters whose world half-extent is below that radius
+		///        are skipped (sub-texel small-object culling for distant cascades). Reuses the scene
+		///        render queue and the normal RenderVisibleObjects path, so animated casters update
+		///        through the same (frame-cached) animation code as the main view pass.
+		/// @param cascadeCamera The orthographic shadow camera for this cascade.
+		/// @param casters The list produced by GatherShadowCasters.
+		/// @param minCasterWorldRadius Skip casters whose world half-extent is smaller than this (0 = keep all).
+		void RenderShadowCasters(Camera& cascadeCamera, const std::vector<MovableObject*>& casters, float minCasterWorldRadius);
 
 		ManualRenderObject* CreateManualRenderObject(const String& name);
 
@@ -602,6 +622,10 @@ namespace mmo
         SceneNodes m_sceneNodes;
 		SceneNode* m_rootNode { nullptr };
 		std::unique_ptr<RenderQueue> m_renderQueue;
+
+		/// Reused across draw calls by RenderSingleObject so its constant-buffer vectors keep their
+		/// capacity instead of reallocating every draw. Single-threaded submission only.
+		RenderOperation m_renderOp{ 0u };
 
 		typedef std::map<const Camera*, VisibleObjectsBoundsInfo> CamVisibleObjectsMap;
 		CamVisibleObjectsMap m_camVisibleObjectsMap;
