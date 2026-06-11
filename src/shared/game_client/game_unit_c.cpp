@@ -147,9 +147,16 @@ namespace mmo
 
 			m_netDriver.OnMoveEvent(*this, MovementEvent(movement_event_type::Land, m_movementInfo.timestamp, m_movementInfo));
 
-			// Lock the position so the next start packet uses the same position
-			// This prevents drift from physics adjustments between landing and next movement
-			LockPositionForSync();
+			// Lock the position so the next start packet uses the same position.
+			// This prevents drift from physics adjustments between landing and next movement.
+			// Only lock when no position-changing flag remains: when landing while running,
+			// the character keeps moving, and a locked (stale) position reported by the next
+			// start packet would make the server see a backward teleport followed by an
+			// impossibly fast catch-up — tripping the anti-cheat speed validation.
+			if (!m_movementInfo.IsChangingPosition())
+			{
+				LockPositionForSync();
+			}
 		}
 	}
 
@@ -287,6 +294,17 @@ namespace mmo
 		if (IsControlledByLocalPlayer())
 		{
 			UpdateMovementInfo();
+
+			// Safety net: a locked sync position is only meaningful while the character is
+			// actually standing still — it exists to absorb sub-tolerance physics settling
+			// between a stop and the next start. If the character has moved away from the
+			// locked position (e.g. a lock taken while another movement flag was still
+			// active), sending the stale position would desync the server's movement
+			// validation. Drop the lock as soon as it no longer matches reality.
+			if (m_positionLocked && !m_sceneNode->GetPosition().IsNearlyEqual(m_syncedPosition, 0.2f))
+			{
+				m_positionLocked = false;
+			}
 
 			// While swimming, send heartbeats even when no position-changing flag is set: the
 			// surface cap can move the player vertically without a Forward/Strafe/etc. flag, so the
@@ -1397,9 +1415,16 @@ namespace mmo
 
 		QueueMovementEvent(movement_event_type::StopMove, m_movementInfo.timestamp, m_movementInfo);
 
-		// Lock the position so the next start packet uses the same position
-		// This prevents drift from physics adjustments between stop and start
-		LockPositionForSync();
+		// Lock the position so the next start packet uses the same position.
+		// This prevents drift from physics adjustments between stop and start.
+		// Only lock when the character is now fully stationary: if it is still strafing
+		// (or falling), the position keeps changing and the locked position would be
+		// stale by the time the next start packet sends it, which the server's speed
+		// check would read as a backward teleport plus an impossibly fast catch-up.
+		if (!m_movementInfo.IsChangingPosition())
+		{
+			LockPositionForSync();
+		}
 	}
 
 	void GameUnitC::StopStrafe()
@@ -1420,9 +1445,16 @@ namespace mmo
 
 		QueueMovementEvent(movement_event_type::StopStrafe, m_movementInfo.timestamp, m_movementInfo);
 
-		// Lock the position so the next start packet uses the same position
-		// This prevents drift from physics adjustments between stop and start
-		LockPositionForSync();
+		// Lock the position so the next start packet uses the same position.
+		// This prevents drift from physics adjustments between stop and start.
+		// Only lock when the character is now fully stationary: stopping a strafe while
+		// still running forward keeps the position changing, and the locked position
+		// would be stale by the time the next start packet sends it — the server's
+		// speed check would read that as a teleport and record a violation.
+		if (!m_movementInfo.IsChangingPosition())
+		{
+			LockPositionForSync();
+		}
 	}
 
 	void GameUnitC::ToggleWalkMode()

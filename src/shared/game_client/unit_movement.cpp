@@ -244,6 +244,10 @@ namespace mmo
 		{
 			m_currentFloor.Clear();
 
+			// Step-up overshoot only makes sense while ground-walking; drop any
+			// outstanding debt so it can't shorten moves after landing or surfacing.
+			m_stepUpForwardDebt = 0.0f;
+
 			if (m_movementMode == MovementMode::Falling)
 			{
 				m_movedUnit.OnStartFalling();
@@ -308,14 +312,15 @@ namespace mmo
 
 		const Quaternion rot = GetUpdatedNode().GetOrientation();
 		CollisionHitResult hit;
-		const bool moved = SafeMoveNode(delta, rot, true, &hit);
+		SafeMoveNode(delta, rot, true, &hit);
 
-		if (!moved && hit.bBlockingHit)
+		// SafeMoveNode reports success even when it stopped at a blocking hit, so check
+		// the hit result itself. Slide the remaining fraction of the move along the wall
+		// so the character moves parallel to the surface rather than stopping dead —
+		// same behaviour as the local player against the same geometry.
+		if (hit.IsValidBlockingHit())
 		{
-			// Slide along the wall normal so the character moves parallel to
-			// the surface rather than stopping dead — same behaviour as the
-			// local player against the same geometry.
-			SlideAlongSurface(delta, 1.0f, hit.Normal, hit, false);
+			SlideAlongSurface(delta, 1.0f - hit.Time, hit.Normal, hit, false);
 		}
 	}
 
@@ -615,8 +620,30 @@ namespace mmo
 			}
 
 			// Compute move parameters
-			const Vector3 moveVelocity = m_velocity;
-			const Vector3 delta = moveVelocity * timeTick;
+			Vector3 moveVelocity = m_velocity;
+			Vector3 delta = moveVelocity * timeTick;
+
+			// Repay outstanding step-up overshoot: StepUp may advance the capsule farther than
+			// the intended move to clear a stair edge. Shrink subsequent moves (never by more
+			// than half, to keep motion visually continuous) until the overshoot is repaid, so
+			// the average ground speed stays at the input speed.
+			if (m_stepUpForwardDebt > 0.f)
+			{
+				const float deltaLen = delta.GetLength();
+				if (deltaLen > 1.e-6f)
+				{
+					const float repaid = std::min(m_stepUpForwardDebt, deltaLen * 0.5f);
+					const float scale = (deltaLen - repaid) / deltaLen;
+					moveVelocity *= scale;
+					delta *= scale;
+					m_stepUpForwardDebt -= repaid;
+
+					// Skip the displacement-based velocity recompute this tick so the shortened
+					// move doesn't read back as a loss of speed.
+					m_justTeleported = true;
+				}
+			}
+
 			const bool zeroDelta = delta.IsNearlyEqual(Vector3::Zero, 1.e-4f);
 			StepDownResult stepDownResult;
 
@@ -2128,6 +2155,22 @@ namespace mmo
 		// Don't recalculate velocity based on this height adjustment, if considering vertical adjustments.
 		m_justTeleported |= !m_maintainHorizontalGroundVelocity;
 
+		// If the forward sweep was boosted to clear the stair edge, the capsule advanced farther
+		// than the intended move. Remember the horizontal overshoot so HandleWalking repays it by
+		// shrinking subsequent ground moves — otherwise every stair at high frame rates teleports
+		// the character forward by the boost amount, which reads as a lurch and inflates the
+		// average ground speed past what the server expects for the unit's run speed.
+		if (didBoostForward)
+		{
+			const float intendedAdvance = ProjectToGravityFloor(delta).GetLength();
+			const float actualAdvance = ProjectToGravityFloor(GetUpdatedNode().GetPosition() - oldLocation).GetLength();
+			const float overshoot = actualAdvance - intendedAdvance;
+			if (overshoot > 0.f)
+			{
+				m_stepUpForwardDebt = std::min(m_stepUpForwardDebt + overshoot, GetCapsuleRadius());
+			}
+		}
+
 		MOVEMENT_LOG("StepUp: SUCCESS!");
 		return true;
 	}
@@ -2794,73 +2837,91 @@ namespace mmo
 		}
 
 		// Handle zero-distance case
-		const float totalDist = (endCapsule.GetPointA() - startCapsule.GetPointA()).GetLength();
+		const Vector3 sweepDelta = endCapsule.GetPointA() - startCapsule.GetPointA();
+		const float totalDist = sweepDelta.GetLength();
 		if (totalDist < 0.0001f)
 		{
 			return collidable->TestCapsuleCollision(startCapsule, collisionResults);
 		}
 
-		// Use binary search to find the first contact point.
-		// We search for the smallest t where collision occurs.
-		float minT = 0.0f;
-		float maxT = 1.0f;
-		
-		// First, check if there's any collision at the end position
-		std::vector<CollisionResult> endResults;
-		const bool hasEndCollision = collidable->TestCapsuleCollision(endCapsule, endResults);
-		if (!hasEndCollision)
+		const Vector3 capsuleAxis = startCapsule.GetPointB() - startCapsule.GetPointA();
+		const float radius = startCapsule.GetRadius();
+
+		std::vector<CollisionResult> testResults;
+		const auto testAtTime = [&](const float t) -> bool
 		{
-			// No collision throughout the entire sweep
+			const Vector3 testPos = startCapsule.GetPointA() + sweepDelta * t;
+			const Capsule testCapsule(testPos, testPos + capsuleAxis, radius);
+			testResults.clear();
+			return collidable->TestCapsuleCollision(testCapsule, testResults);
+		};
+
+		// Conservative forward stepping: sample the sweep at intervals no larger than half the
+		// capsule radius so thin geometry between start and end cannot be skipped. Testing only
+		// the end position would tunnel through any obstacle thinner than the sweep distance —
+		// e.g. a fall at terminal velocity covers several units per sub-step and would pass
+		// straight through a thin floor whose far side is free.
+		const float maxStepDist = std::max(0.05f, radius * 0.5f);
+		const int32 numSteps = std::min(32, std::max(1, static_cast<int32>(std::ceil(totalDist / maxStepDist))));
+
+		float lastFreeT = 0.0f;
+		float firstHitT = -1.0f;
+		std::vector<CollisionResult> hitResults;
+		for (int32 i = 1; i <= numSteps; ++i)
+		{
+			const float t = static_cast<float>(i) / static_cast<float>(numSteps);
+			if (testAtTime(t))
+			{
+				firstHitT = t;
+				hitResults = testResults;
+				break;
+			}
+			lastFreeT = t;
+		}
+
+		if (firstHitT < 0.0f)
+		{
+			// No contact anywhere along the sweep.
 			return false;
 		}
 
-		// Binary search for the first contact time
-		constexpr int maxIterations = 20;
-		constexpr float convergenceThreshold = 0.0005f;
-
-		for (int iter = 0; iter < maxIterations; ++iter)
+		// Binary search between the last free sample and the first overlapping sample to find
+		// the time of first contact.
+		float minT = lastFreeT;
+		float maxT = firstHitT;
+		constexpr int32 maxIterations = 12;
+		for (int32 iter = 0; iter < maxIterations; ++iter)
 		{
+			if ((maxT - minT) * totalDist < 0.001f)
+			{
+				break;
+			}
+
 			const float midT = (minT + maxT) * 0.5f;
-			const Vector3 testPos = startCapsule.GetPointA() + (endCapsule.GetPointA() - startCapsule.GetPointA()) * midT;
-
-			const Capsule testCapsule(
-				testPos,
-				testPos + (startCapsule.GetPointB() - startCapsule.GetPointA()),
-				startCapsule.GetRadius()
-			);
-
-			std::vector<CollisionResult> testResults;
-			if (collidable->TestCapsuleCollision(testCapsule, testResults))
+			if (testAtTime(midT))
 			{
 				maxT = midT;
-				for (auto& result : testResults)
-				{
-					result.distance = midT;
-				}
-				collisionResults = testResults;
+				hitResults = testResults;
 			}
 			else
 			{
 				minT = midT;
 			}
-
-			if (maxT - minT < convergenceThreshold)
-			{
-				break;
-			}
 		}
 
-		// After binary search, the actual first contact is at maxT (or very close to it).
-		// Use the last valid collision results which were stored when we found a collision.
-		// Ensure the distance/time is set to the converged maxT value for accuracy.
-		if (!collisionResults.empty())
+		// Report the last known free time rather than the overlapping one so the move resolves
+		// to a position that does not start the next sweep in penetration (recurring start-
+		// penetration is what caused jitter while sliding along walls). Keep it above zero: a
+		// distance of exactly 0 is reserved for genuine start-penetration (the start was tested
+		// free above), and would otherwise engage the depenetration machinery every frame while
+		// simply pressing against a wall.
+		const float contactT = std::max(minT, 1.0e-4f);
+		for (auto& result : hitResults)
 		{
-			for (auto& result : collisionResults)
-			{
-				result.distance = maxT;
-			}
+			result.distance = contactT;
 		}
 
+		collisionResults = std::move(hitResults);
 		return !collisionResults.empty();
 	}
 

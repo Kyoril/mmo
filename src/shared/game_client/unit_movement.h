@@ -967,6 +967,11 @@ namespace mmo
 
 		float m_maxStepHeight = 0.45f;
 
+		/// Horizontal distance the last step-up advanced the capsule beyond the intended move
+		/// (the forward sweep is boosted to reliably clear stair edges). Repaid by shrinking
+		/// subsequent ground moves so the average ground speed stays at the input speed.
+		float m_stepUpForwardDebt = 0.0f;
+
 		float m_jumpYVelocity = 8.0f;
 
 		float m_brakingFrictionFactor = 8.0f;
@@ -975,7 +980,11 @@ namespace mmo
 
 		float m_fallingLateralFriction = 0.0f;
 
-		float m_airControl = 0.1f;
+		/// Fraction of input acceleration available while airborne. 1.0 gives WoW-style full
+		/// mid-air steering (jumping players can freely redirect their jump). CalcVelocity
+		/// still clamps lateral air speed to the run-speed cap, so this cannot push the unit
+		/// past the maximum speed the server expects.
+		float m_airControl = 1.0f;
 
 		float m_airControlBoostMultiplier = 1.5f;
 
