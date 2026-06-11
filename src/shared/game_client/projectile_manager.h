@@ -18,7 +18,7 @@ namespace mmo
     class Scene;
     class SceneNode;
     class Entity;
-    class ParticleEmitter;
+    class ParticleSystem;
     class Light;
     class RibbonTrail;
     class GameUnitC;
@@ -92,7 +92,7 @@ namespace mmo
         // Scene objects
         SceneNode *m_node;
         Entity *m_entity;
-        ParticleEmitter *m_trailEmitter;
+        ParticleSystem *m_trailEmitter;
         Light *m_light;
         RibbonTrail *m_ribbonTrail;
 

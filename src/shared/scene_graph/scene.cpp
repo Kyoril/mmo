@@ -328,9 +328,25 @@ namespace mmo
 			if (!isShadowCascadePass)
 			{
 				PROFILE_SCOPE("ParticleEmitters::Update");
+
+				// Compute a single shared deltaTime for all particle systems this frame.
+				const auto particleNow = std::chrono::high_resolution_clock::now();
+				float particleDelta = 0.0f;
+				if (m_particleTimerInitialized)
+				{
+					particleDelta = std::chrono::duration_cast<std::chrono::microseconds>(
+						particleNow - m_lastParticleUpdate).count() / 1000000.0f;
+				}
+				m_lastParticleUpdate = particleNow;
+				m_particleTimerInitialized = true;
+
 				for (auto& [name, emitter] : m_particleEmitters)
 				{
-					emitter->Update();
+					// Systems flagged for manual update (e.g. the particle editor) advance themselves.
+					if (emitter->IsAutoUpdate())
+					{
+						emitter->Update(particleDelta);
+					}
 				}
 
 				for (auto& [name, trail] : m_ribbonTrails)

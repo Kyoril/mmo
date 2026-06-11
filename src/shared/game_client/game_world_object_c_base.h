@@ -8,7 +8,7 @@ namespace mmo
 	struct ObjectInfo;
 	class NetClient;
 	class GamePlayerC;
-	class ParticleEmitter;
+	class ParticleSystem;
 	class SceneNode;
 
 	/// @brief Object flags for world objects (stored in ObjectFlags field).
@@ -84,7 +84,7 @@ namespace mmo
 		std::unique_ptr<GameWorldObjectC_Type_Base> m_typeData;
 
 	private:
-		ParticleEmitter* m_sparkEmitter = nullptr;
+		ParticleSystem* m_sparkEmitter = nullptr;
 		SceneNode* m_sparkEmitterNode = nullptr;
 	};
 }

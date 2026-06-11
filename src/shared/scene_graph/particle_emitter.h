@@ -3,11 +3,16 @@
 /**
  * @file particle_emitter.h
  *
- * @brief Defines the core data structures for the particle system.
+ * @brief Core data structures and runtime classes for the particle system.
  *
- * This file contains the fundamental types used throughout the particle system,
- * including particle data, emitter shapes, and emitter parameters. These structures
- * are designed to be cache-friendly and serialization-ready.
+ * The system follows an Unreal-Niagara-inspired model:
+ *   - @ref ParticleSystem  is the scene object (a MovableObject) and owns one or more emitters.
+ *   - @ref EmitterInstance is the simulation of a single emitter (its own particle pool + renderable).
+ *   - @ref EmitterParameters is the serialized configuration of an emitter, grouped into
+ *     "modules" (Emitter / Emission / Spawn / Update / Render) that the editor presents as a stack.
+ *
+ * For backward compatibility @c ParticleEmitter is a type alias of @ref ParticleSystem and
+ * @c ParticleEmitterParameters is a type alias of @ref EmitterParameters.
  */
 
 #pragma once
@@ -15,8 +20,10 @@
 #include "base/typedefs.h"
 #include "math/vector3.h"
 #include "math/vector4.h"
+#include "math/matrix4.h"
 #include "math/aabb.h"
 #include "graphics/color_curve.h"
+#include "graphics/float_curve.h"
 #include "renderable.h"
 #include "graphics/vertex_index_data.h"
 #include "movable_object.h"
@@ -30,21 +37,18 @@ namespace mmo
 {
 	class Camera;
 	class GraphicsDevice;
-	class ParticleEmitter;
+	class EmitterInstance;
+	class ParticleSystem;
 	class RenderQueue;
 
 	/**
 	 * @struct Particle
-	 * @brief Represents a single particle in the system.
-	 *
-	 * This structure is designed to be exactly 64 bytes (one cache line) for
-	 * optimal CPU cache performance. All particle data is stored in a
-	 * structure-of-arrays (SoA) friendly format.
+	 * @brief Represents a single particle in the system. Two cache lines (80 bytes).
 	 */
 	struct Particle
 	{
-		Vector3 position;          ///< Current position of the particle in world space
-		float size;                ///< Current size of the particle
+		Vector3 position;          ///< Current position (world space, or emitter-local in Local sim space)
+		float size;                ///< Current size (baseSize * sizeOverLife)
 
 		Vector3 velocity;          ///< Current velocity vector
 		float rotation;            ///< Current rotation angle in radians
@@ -54,402 +58,339 @@ namespace mmo
 		float age;                 ///< Current age in seconds
 		float lifetime;            ///< Total lifetime in seconds
 		float angularVelocity;     ///< Rotation speed in radians per second
-		uint32 spriteIndex;        ///< Current sprite index for sprite sheet animation
+		uint32 spriteIndex;        ///< Current sprite frame index for sprite-sheet animation
 
-		/**
-		 * @brief Default constructor.
-		 */
+		float baseSize;            ///< Randomized base size chosen at spawn (multiplied by the size curve)
+		float randomPhase;         ///< Per-particle [0,1) value used for noise decorrelation / random start frame
+		float pad0;                ///< Reserved
+		float pad1;                ///< Reserved
+
 		Particle() = default;
 	};
 
-	// Compile-time verification of particle size
-	static_assert(sizeof(Particle) == 64, "Particle struct must be exactly 64 bytes for cache line alignment");
+	static_assert(sizeof(Particle) == 80, "Particle struct expected to be 80 bytes");
 
-	/**
-	 * @enum EmitterShape
-	 * @brief Defines the shape from which particles are spawned.
-	 *
-	 * The emitter shape determines the spatial distribution of newly
-	 * spawned particles.
-	 */
+	/// @brief Shape from which particles are spawned.
 	enum class EmitterShape : uint8
 	{
-		Point,    ///< Particles spawn from a single point
-		Sphere,   ///< Particles spawn from within a sphere volume
-		Box,      ///< Particles spawn from within a box volume
-		Cone      ///< Particles spawn from within a cone volume
+		Point,    ///< Single point
+		Sphere,   ///< Within a sphere volume
+		Box,      ///< Within a box volume
+		Cone      ///< Within a cone volume
+	};
+
+	/// @brief Space in which particles are simulated.
+	enum class SimulationSpace : uint8
+	{
+		/// @brief Particles live in world space; once spawned they ignore emitter movement (trails, smoke).
+		World,
+		/// @brief Particles live in emitter-local space and follow the emitter (auras on a moving hand).
+		Local
+	};
+
+	/// @brief How a particle quad is oriented when built.
+	enum class ParticleRenderMode : uint8
+	{
+		BillboardFacing,     ///< Always faces the camera (default)
+		VelocityAligned,     ///< Faces camera but the quad's up axis aligns with the velocity
+		Stretched,           ///< Velocity-aligned and stretched along velocity (slashes, streaks)
+		HorizontalBillboard  ///< Lies flat on the XZ plane (ground decals, shockwaves)
+	};
+
+	/// @brief Sprite-sheet animation mode.
+	enum class SpriteAnimationMode : uint8
+	{
+		None,            ///< Always use frame 0
+		AnimateOverLife, ///< Plays the sheet across the particle's lifetime
+		RandomStatic     ///< Picks one random frame at spawn and keeps it
+	};
+
+	/// @brief A scheduled instantaneous spawn of a number of particles.
+	struct EmitterBurst
+	{
+		float time { 0.0f };   ///< Time within the emitter cycle (seconds) at which the burst fires
+		uint32 count { 10 };   ///< Number of particles spawned by the burst
 	};
 
 	/**
-	 * @struct ParticleEmitterParameters
-	 * @brief Contains all parameters that define a particle emitter's behavior.
-	 *
-	 * This structure holds all the configuration data for a particle emitter,
-	 * including spawn rates, shapes, physical properties, and visual attributes.
-	 * All members are public to simplify serialization and editor access.
+	 * @struct EmitterParameters
+	 * @brief Full configuration of a single emitter (one "module stack").
 	 */
-	struct ParticleEmitterParameters
+	struct EmitterParameters
 	{
-		// Spawn parameters
+		// --- Emitter module ---
+		String name { "Emitter" };                       ///< Display name in the editor
+		bool enabled { true };                           ///< Whether the emitter simulates / renders
+		SimulationSpace simulationSpace { SimulationSpace::World };
+		bool loop { true };                              ///< Loop forever, or run a single cycle (one-shot)
+		float duration { 1.0f };                         ///< Length of one cycle in seconds (burst timing / one-shot)
+		float startDelay { 0.0f };                       ///< Delay before the emitter starts emitting
+		float warmupTime { 0.0f };                       ///< Pre-simulated time when (re)started, so it looks "already running"
+		float inheritVelocity { 0.0f };                  ///< Fraction of the emitter's own velocity added to new particles
 
-		/// Number of particles to spawn per second
-		float spawnRate { 10.0f };
+		// --- Emission module ---
+		float spawnRate { 10.0f };                       ///< Continuous spawns per second
+		uint32 maxParticles { 100 };                     ///< Hard cap on simultaneously alive particles
+		std::vector<EmitterBurst> bursts;                ///< Instantaneous bursts within a cycle
 
-		/// Maximum number of particles that can exist simultaneously
-		uint32 maxParticles { 100 };
-
-		// Shape parameters
-
-		/// Shape from which particles are spawned
+		// --- Shape module ---
 		EmitterShape shape { EmitterShape::Point };
+		Vector3 shapeExtents { Vector3::Zero };          ///< radius (sphere), full extents (box), {angleRad,height,baseRadius} (cone)
 
-		/// Dimensions of the emitter shape (radius for sphere, half-extents for box, etc.)
-		Vector3 shapeExtents { Vector3::Zero };
-
-		// Lifetime parameters
-
-		/// Minimum lifetime for spawned particles (in seconds)
+		// --- Spawn module ---
 		float minLifetime { 1.0f };
-
-		/// Maximum lifetime for spawned particles (in seconds)
 		float maxLifetime { 2.0f };
-
-		// Velocity parameters
-
-		/// Minimum initial velocity for spawned particles
 		Vector3 minVelocity { Vector3(0.0f, 1.0f, 0.0f) };
-
-		/// Maximum initial velocity for spawned particles
 		Vector3 maxVelocity { Vector3(0.0f, 2.0f, 0.0f) };
+		float minStartSpeed { 0.0f };                    ///< Extra speed along the shape's outward direction
+		float maxStartSpeed { 0.0f };
+		float minStartSize { 1.0f };
+		float maxStartSize { 1.0f };
+		float minStartRotation { 0.0f };                 ///< Radians
+		float maxStartRotation { 0.0f };
+		float minAngularVelocity { 0.0f };               ///< Radians/second
+		float maxAngularVelocity { 0.0f };
 
-		// Force parameters
+		// --- Update / forces module ---
+		Vector3 gravity { Vector3(0.0f, -9.81f, 0.0f) }; ///< Constant acceleration
+		float drag { 0.0f };                             ///< Linear damping (per second); velocity *= (1 - drag*dt)
+		float orbitalSpeed { 0.0f };                     ///< Swirl around the emitter's local Y axis (radians/second)
+		float radialAcceleration { 0.0f };               ///< Outward (+) / inward (-) acceleration from the emitter center
+		Vector3 attractorPosition { Vector3::Zero };     ///< Point attractor position (emitter-local)
+		float attractorStrength { 0.0f };                ///< Acceleration toward the attractor
+		float noiseAmplitude { 0.0f };                   ///< Turbulence/curl-noise strength
+		float noiseFrequency { 1.0f };                   ///< Turbulence spatial frequency
 
-		/// Constant acceleration applied to all particles (e.g., gravity)
-		Vector3 gravity { Vector3(0.0f, -9.81f, 0.0f) };
+		// --- Over-life curves ---
+		FloatCurve sizeOverLife;                         ///< Size multiplier over normalized life (default flat 1.0)
+		ColorCurve colorOverLifetime;                    ///< RGBA over normalized life
 
-		// Size parameters
-
-		/// Initial size of particles when spawned
-		float startSize { 1.0f };
-
-		/// Final size of particles when they die (interpolated over lifetime)
-		float endSize { 0.0f };
-
-		// Color parameters
-
-		/// Color animation curve over the particle's lifetime (0.0 = birth, 1.0 = death)
-		ColorCurve colorOverLifetime;
-
-		// Sprite sheet parameters
-
-		/// Number of columns in the sprite sheet texture
+		// --- Sprite sheet ---
 		uint32 spriteSheetColumns { 1 };
-
-		/// Number of rows in the sprite sheet texture
 		uint32 spriteSheetRows { 1 };
+		SpriteAnimationMode spriteAnimation { SpriteAnimationMode::None };
+		float spriteAnimationFps { 0.0f };               ///< 0 => one full sheet cycle across the particle's lifetime
 
-		/// Whether to animate sprites over the particle's lifetime
-		bool animateSprites { false };
+		// --- Render module ---
+		ParticleRenderMode renderMode { ParticleRenderMode::BillboardFacing };
+		float lengthScale { 1.0f };                      ///< Stretch factor along velocity for VelocityAligned / Stretched
+		String materialName;                             ///< Material used to render this emitter's particles
 
-		// Material parameters
-
-		/// Name of the material to use for rendering particles
-		String materialName;
-
-		/**
-		 * @brief Default constructor.
-		 *
-		 * Initializes all parameters to sensible default values.
-		 */
-		ParticleEmitterParameters()
+		EmitterParameters()
 		{
-			// Initialize color curve with a default white-to-transparent gradient
+			// Default size curve is a flat 1.0 multiplier (size driven by min/maxStartSize).
+			sizeOverLife = FloatCurve(1.0f, 1.0f);
+			// Default colour fades opaque white to transparent white.
 			colorOverLifetime = ColorCurve(
-				Vector4(1.0f, 1.0f, 1.0f, 1.0f),  // Start: opaque white
-				Vector4(1.0f, 1.0f, 1.0f, 0.0f)   // End: transparent white
-			);
+				Vector4(1.0f, 1.0f, 1.0f, 1.0f),
+				Vector4(1.0f, 1.0f, 1.0f, 0.0f));
 		}
+	};
+
+	/// @brief Backward-compatible alias for the previous flat parameter struct.
+	using ParticleEmitterParameters = EmitterParameters;
+
+	/**
+	 * @struct ParticleSystemParameters
+	 * @brief Configuration of a whole system: a collection of emitters.
+	 */
+	struct ParticleSystemParameters
+	{
+		std::vector<EmitterParameters> emitters;
+
+		ParticleSystemParameters() = default;
 	};
 
 	/**
 	 * @class ParticleRenderable
-	 * @brief Renderable implementation for rendering particles as billboards.
-	 *
-	 * This class handles the GPU rendering of particles by generating billboard
-	 * geometry (camera-facing quads) and managing vertex/index buffers. It follows
-	 * the pattern established by ManualRenderObject for dynamic geometry.
+	 * @brief Renders the particles of one @ref EmitterInstance as quads.
 	 */
 	class ParticleRenderable final : public Renderable
 	{
 	public:
-		/**
-		 * @brief Constructs a new particle renderable.
-		 * @param device The graphics device used to create GPU resources.
-		 * @param parent The parent particle emitter that owns this renderable.
-		 */
-		ParticleRenderable(GraphicsDevice& device, ParticleEmitter& parent);
-
-		/**
-		 * @brief Destructor.
-		 */
+		ParticleRenderable(GraphicsDevice& device, EmitterInstance& parent);
 		~ParticleRenderable() override = default;
 
 	public:
-		// Renderable interface implementation
-
-		/**
-		 * @brief Prepares the render operation for this renderable.
-		 * @param operation The render operation to configure.
-		 */
 		void PrepareRenderOperation(RenderOperation& operation) override;
-
-		/**
-		 * @brief Gets the world transformation matrix for this renderable.
-		 * @return The world transform matrix.
-		 */
 		[[nodiscard]] const Matrix4& GetWorldTransform() const override;
-
-		/**
-		 * @brief Gets the squared distance from the camera for sorting.
-		 * @param camera The camera to calculate distance from.
-		 * @return The squared view depth.
-		 */
 		[[nodiscard]] float GetSquaredViewDepth(const Camera& camera) const override;
-
-		/**
-		 * @brief Gets the material used to render particles.
-		 * @return The material pointer.
-		 */
 		[[nodiscard]] MaterialPtr GetMaterial() const override;
 
 	public:
-		// Particle-specific methods
-
-		/**
-		 * @brief Rebuilds vertex and index buffers from current particle data.
-		 *
-		 * Generates billboard geometry for each particle, creating 4 vertices per
-		 * particle positioned to face the camera. Uses dynamic buffers for efficient
-		 * per-frame updates.
-		 *
-		 * @param particles The list of particles to render.
-		 * @param camera The camera used to calculate billboard orientation.
-		 */
+		/// @brief Rebuilds the GPU buffers from current particle data for the given camera.
 		void RebuildBuffers(const std::vector<Particle>& particles, const Camera& camera);
 
-		/**
-		 * @brief Sorts particles back-to-front for correct alpha blending.
-		 *
-		 * Only sorts if the material uses alpha blending. Particles are sorted by
-		 * their distance from the camera to ensure correct rendering order.
-		 *
-		 * @param particles The particle list to sort (modified in-place).
-		 * @param camera The camera used to calculate distances.
-		 */
+		/// @brief Sorts particles back-to-front relative to the camera (for alpha blending).
 		void SortParticles(std::vector<Particle>& particles, const Camera& camera) const;
 
-		/**
-		 * @brief Checks if the renderable is ready to render.
-		 * @return True if vertex data has been initialized.
-		 */
-		[[nodiscard]] bool IsReady() const { return m_vertexData != nullptr; }
+		[[nodiscard]] bool IsReady() const { return m_vertexData != nullptr && m_vertexData->vertexCount > 0; }
 
 	private:
-		/**
-		 * @brief Creates the index buffer if it doesn't exist.
-		 *
-		 * The index buffer is shared and only created once, using the pattern
-		 * [0,1,2, 2,3,0] repeated for each particle quad.
-		 *
-		 * @param particleCount The number of particles to create indices for.
-		 */
 		void EnsureIndexBuffer(size_t particleCount);
 
 	private:
-		GraphicsDevice& m_device;                    ///< Graphics device for creating GPU resources
-		ParticleEmitter& m_parent;                   ///< Parent particle emitter
-		VertexBufferPtr m_vertexBuffer;              ///< Dynamic vertex buffer for particle quads
-		IndexBufferPtr m_indexBuffer;                ///< Shared index buffer for all quads
-		std::unique_ptr<VertexData> m_vertexData;    ///< Vertex data descriptor
-		std::unique_ptr<IndexData> m_indexData;      ///< Index data descriptor
-		size_t m_indexBufferCapacity { 0 };          ///< Current capacity of index buffer
+		GraphicsDevice& m_device;
+		EmitterInstance& m_parent;
+		VertexBufferPtr m_vertexBuffer;
+		IndexBufferPtr m_indexBuffer;
+		std::unique_ptr<VertexData> m_vertexData;
+		std::unique_ptr<IndexData> m_indexData;
+		size_t m_indexBufferCapacity { 0 };
 	};
 
 	/**
-	 * @class ParticleEmitter
-	 * @brief Main particle emitter class that manages particle lifecycle and rendering.
-	 *
-	 * This class inherits from MovableObject to integrate with the scene graph system.
-	 * It manages particle spawning, updating, and rendering using a self-timing mechanism
-	 * (since Scene::UpdateSceneGraph provides no deltaTime parameter).
+	 * @class EmitterInstance
+	 * @brief Simulates a single emitter: owns its particle pool, material and renderable.
 	 */
-	class ParticleEmitter final : public MovableObject
+	class EmitterInstance final
 	{
 	public:
-		/**
-		 * @brief Constructs a new particle emitter.
-		 * @param name Unique name for this emitter.
-		 * @param device Graphics device for creating GPU resources.
-		 */
-		explicit ParticleEmitter(const String& name, GraphicsDevice& device);
-
-		/**
-		 * @brief Destructor.
-		 */
-		~ParticleEmitter() override = default;
+		EmitterInstance(GraphicsDevice& device, ParticleSystem& system);
+		~EmitterInstance() = default;
 
 	public:
-		// MovableObject interface implementation
+		void SetParameters(const EmitterParameters& params);
+		[[nodiscard]] const EmitterParameters& GetParameters() const { return m_parameters; }
+		[[nodiscard]] EmitterParameters& GetParametersMutable() { return m_parameters; }
 
-		/**
-		 * @brief Gets the type name of this movable object.
-		 * @return "ParticleEmitter"
-		 */
+		void SetMaterial(const MaterialPtr& material) { m_material = material; }
+		[[nodiscard]] MaterialPtr GetMaterial() const { return m_material; }
+
+		/// @brief Advances the simulation.
+		/// @param deltaTime Frame time in seconds.
+		/// @param systemWorld World transform of the owning system's node.
+		/// @param systemWorldPos World position of the owning system.
+		/// @param systemVelocity World-space velocity of the owning system (for inheritance).
+		/// @param camera Camera used for sorting and billboard orientation (may be null).
+		void Update(float deltaTime, const Matrix4& systemWorld, const Vector3& systemWorldPos,
+			const Vector3& systemVelocity, const Camera* camera);
+
+		void Reset();
+		void Play() { m_emitting = true; }
+		void Stop() { m_emitting = false; }
+		[[nodiscard]] bool IsEmitting() const { return m_emitting; }
+
+		/// @brief True when a non-looping emitter has finished and all its particles are dead.
+		[[nodiscard]] bool IsFinished() const;
+
+		[[nodiscard]] const std::vector<Particle>& GetParticles() const { return m_particles; }
+		[[nodiscard]] size_t GetParticleCount() const { return m_particles.size(); }
+
+		[[nodiscard]] const Matrix4& GetWorldTransform() const { return m_renderTransform; }
+		[[nodiscard]] Vector3 GetEmitterWorldPosition() const { return m_emitterWorldPos; }
+
+		[[nodiscard]] ParticleRenderable* GetRenderable() const { return m_renderable.get(); }
+		[[nodiscard]] const AABB& GetBoundingBox() const { return m_boundingBox; }
+
+	private:
+		void SpawnOne(const Matrix4& systemWorld, const Vector3& systemWorldPos, const Vector3& systemVelocity);
+		void UpdateParticles(float deltaTime);
+		void UpdateBoundingBox();
+		[[nodiscard]] Vector3 GetSpawnPosition(Vector3& outDirection) const;
+		void SimulateWarmup(const Matrix4& systemWorld, const Vector3& systemWorldPos, const Vector3& systemVelocity);
+
+	private:
+		GraphicsDevice& m_device;
+		ParticleSystem& m_system;
+		EmitterParameters m_parameters;
+		std::vector<Particle> m_particles;
+		std::unique_ptr<ParticleRenderable> m_renderable;
+		MaterialPtr m_material;
+
+		float m_spawnAccumulator { 0.0f };
+		float m_age { 0.0f };          ///< Total time since (re)start (drives one-shot completion)
+		float m_cycleTime { 0.0f };    ///< Time within the current cycle (drives bursts / looping)
+		float m_noiseTime { 0.0f };    ///< Accumulated time used to evolve the turbulence field
+		std::vector<uint8> m_burstFired;
+		bool m_emitting { true };
+		bool m_warmedUp { false };
+
+		Matrix4 m_renderTransform { Matrix4::Identity };
+		Vector3 m_emitterWorldPos { Vector3::Zero };
+		mutable AABB m_boundingBox;
+	};
+
+	/**
+	 * @class ParticleSystem
+	 * @brief Scene object owning one or more @ref EmitterInstance objects.
+	 *
+	 * Replaces the former single-emitter @c ParticleEmitter; a backward-compatible alias is provided
+	 * along with convenience methods that operate on the first emitter.
+	 */
+	class ParticleSystem final : public MovableObject
+	{
+	public:
+		explicit ParticleSystem(const String& name, GraphicsDevice& device);
+		~ParticleSystem() override = default;
+
+	public:
+		// MovableObject interface
 		[[nodiscard]] const String& GetMovableType() const override;
-
-		/**
-		 * @brief Gets the local bounding box containing all particles.
-		 * @return The bounding box in local space.
-		 */
 		[[nodiscard]] const AABB& GetBoundingBox() const override;
-
-		/**
-		 * @brief Gets the bounding radius of all particles.
-		 * @return The bounding sphere radius.
-		 */
 		[[nodiscard]] float GetBoundingRadius() const override;
-
-		/**
-		 * @brief Adds this emitter's renderables to the render queue.
-		 * @param queue The render queue to populate.
-		 */
 		void PopulateRenderQueue(RenderQueue& queue) override;
-
-		/**
-		 * @brief Visits all renderables owned by this emitter.
-		 * @param visitor The visitor to accept.
-		 * @param debugRenderables Whether to include debug renderables.
-		 */
 		void VisitRenderables(Renderable::Visitor& visitor, bool debugRenderables) override;
 
 	public:
-		// Particle system interface
+		/// @brief Advances all emitters. Called once per frame by the scene.
+		void Update(float deltaTime);
 
-		/**
-		 * @brief Updates the particle system.
-		 *
-		 * Uses self-timing via std::chrono to calculate deltaTime since this is called
-		 * from Scene::UpdateSceneGraph which provides no deltaTime parameter.
-		 */
+		/// @brief Self-timed overload kept for callers that don't have a frame delta.
 		void Update();
 
-		/**
-		 * @brief Sets the emitter parameters.
-		 * @param params The new parameters to use.
-		 */
-		void SetParameters(const ParticleEmitterParameters& params);
+		// --- Multi-emitter API ---
+		void SetSystemParameters(const ParticleSystemParameters& params);
+		[[nodiscard]] ParticleSystemParameters GetSystemParameters() const;
+		[[nodiscard]] size_t GetEmitterCount() const { return m_emitters.size(); }
+		[[nodiscard]] EmitterInstance* GetEmitter(size_t index) const;
+		EmitterInstance* AddEmitter(const EmitterParameters& params = EmitterParameters());
+		void RemoveEmitter(size_t index);
+		void ClearEmitters();
 
-		/**
-		 * @brief Gets the current emitter parameters.
-		 * @return The emitter parameters.
-		 */
-		[[nodiscard]] const ParticleEmitterParameters& GetParameters() const { return m_parameters; }
+		// --- Backward-compatible single-emitter convenience (operate on emitter 0) ---
+		void SetParameters(const EmitterParameters& params);
+		[[nodiscard]] const EmitterParameters& GetParameters() const;
+		void SetMaterial(const MaterialPtr& material);
+		[[nodiscard]] MaterialPtr GetMaterial() const;
 
-		/**
-		 * @brief Starts emitting particles.
-		 */
 		void Play();
-
-		/**
-		 * @brief Stops emitting new particles (existing particles continue to live).
-		 */
 		void Stop();
-
-		/**
-		 * @brief Resets the emitter, clearing all particles.
-		 */
 		void Reset();
-
-		/**
-		 * @brief Checks if the emitter is currently playing.
-		 * @return True if playing, false otherwise.
-		 */
 		[[nodiscard]] bool IsPlaying() const { return m_isPlaying; }
 
-		/**
-		 * @brief Sets the material to use for rendering particles.
-		 * @param material The material pointer.
-		 */
-		void SetMaterial(const MaterialPtr& material) { m_material = material; }
+		/// @brief True when every emitter has finished (used to auto-destroy one-shot effects).
+		[[nodiscard]] bool IsFinished() const;
 
-		/**
-		 * @brief Gets the material used for rendering particles.
-		 * @return The material pointer.
-		 */
-		[[nodiscard]] MaterialPtr GetMaterial() const { return m_material; }
+		/// @brief When false the scene will not auto-advance this system; the owner drives Update()
+		/// manually (used by the particle editor for pause / sim-speed / scrubbing control).
+		void SetAutoUpdate(bool autoUpdate) { m_autoUpdate = autoUpdate; }
+		[[nodiscard]] bool IsAutoUpdate() const { return m_autoUpdate; }
 
-		/**
-		 * @brief Gets the derived position for rendering calculations.
-		 * @return The world space position of the emitter.
-		 */
 		[[nodiscard]] Vector3 GetDerivedPosition() const;
 
-		/**
-		 * @brief Gets a default particle material.
-		 * @param additive If true, returns additive blend material; if false, returns alpha blend material.
-		 * @return Material pointer, or nullptr if material failed to load.
-		 */
+		/// @brief Total live particle count across all emitters (editor stats).
+		[[nodiscard]] size_t GetTotalParticleCount() const;
+
+		/// @brief Gets a default particle material (additive or alpha).
 		[[nodiscard]] static MaterialPtr GetDefaultMaterial(bool additive = false);
 
 	private:
-		/**
-		 * @brief Spawns new particles based on spawn rate and deltaTime.
-		 * @param deltaTime Time elapsed since last spawn in seconds.
-		 */
-		void SpawnParticles(float deltaTime);
-
-		/**
-		 * @brief Updates all existing particles.
-		 * @param deltaTime Time elapsed since last update in seconds.
-		 */
-		void UpdateParticles(float deltaTime);
-
-		/**
-		 * @brief Updates the bounding box to contain all particles.
-		 */
 		void UpdateBoundingBox();
 
-		/**
-		 * @brief Gets a random spawn position based on emitter shape.
-		 * @return Position in local space.
-		 */
-		[[nodiscard]] Vector3 GetSpawnPosition() const;
-
-		/**
-		 * @brief Gets a random initial velocity within configured range.
-		 * @return Velocity vector.
-		 */
-		[[nodiscard]] Vector3 GetInitialVelocity() const;
-
-		/**
-		 * @brief Gets a random value between min and max.
-		 * @param min Minimum value.
-		 * @param max Maximum value.
-		 * @return Random value in range [min, max].
-		 */
-		[[nodiscard]] float RandomRange(float min, float max) const;
-
 	private:
-		GraphicsDevice& m_device;                                         ///< Graphics device for GPU resources
-		ParticleEmitterParameters m_parameters;                           ///< Emitter configuration
-		std::vector<Particle> m_particles;                                ///< Active particles
-		std::unique_ptr<ParticleRenderable> m_renderable;                 ///< Renderable for GPU rendering
-		MaterialPtr m_material;                                           ///< Material for rendering
-		float m_spawnAccumulator { 0.0f };                                ///< Accumulator for fractional particle spawning
-		bool m_isPlaying { false };                                       ///< Whether emitter is actively spawning
-		mutable AABB m_boundingBox;                                       ///< Bounding box containing all particles
-		std::chrono::high_resolution_clock::time_point m_lastUpdateTime;  ///< Last update timestamp for self-timing
+		GraphicsDevice& m_device;
+		std::vector<std::unique_ptr<EmitterInstance>> m_emitters;
+		bool m_isPlaying { false };
+		bool m_autoUpdate { true };
+		mutable AABB m_boundingBox;
+		std::chrono::high_resolution_clock::time_point m_lastUpdateTime;
+		Vector3 m_lastWorldPos { Vector3::Zero };
+		bool m_hasLastWorldPos { false };
 
-		static const String TYPE_NAME;                                    ///< "ParticleEmitter"
+		static const String TYPE_NAME;
 	};
+
+	/// @brief Backward-compatible alias: the scene object used to be called ParticleEmitter.
+	using ParticleEmitter = ParticleSystem;
 }

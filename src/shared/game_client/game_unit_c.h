@@ -25,7 +25,7 @@ namespace mmo
 	class GameWorldObjectC;
 	class ManualRenderObject;
 	class NetClient;
-	class ParticleEmitter;
+	class ParticleSystem;
 	class SceneNode;
 
 	namespace proto_client
@@ -829,7 +829,7 @@ namespace mmo
 		/// @brief Connections to animation notify signals.
 		scoped_connection_container m_animNotifyConnections;
 
-		ParticleEmitter* m_sparkEmitter = nullptr;
+		ParticleSystem* m_sparkEmitter = nullptr;
 		SceneNode* m_sparkEmitterNode = nullptr;
 
 		/// @brief Smoothly interpolated swim pitch (radians) currently applied to the mesh. Blends

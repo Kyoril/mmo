@@ -660,18 +660,18 @@ namespace mmo
                     continue;
                 }
 
-                // Load particle parameters from .hpfx file
+                // Load the particle system (one or more emitters) from the .hpar file.
                 const auto file = AssetRegistry::OpenFile(particlePath);
                 if (file)
                 {
                     io::StreamSource source(*file);
                     io::Reader reader(source);
 
-                    ParticleEmitterSerializer serializer;
-                    ParticleEmitterParameters params;
+                    ParticleSystemSerializer serializer;
+                    ParticleSystemParameters params;
                     if (serializer.Deserialize(params, reader))
                     {
-                        emitter->SetParameters(params);
+                        emitter->SetSystemParameters(params);
                     }
                 }
 

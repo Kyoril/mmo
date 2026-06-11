@@ -348,8 +348,9 @@ namespace mmo
 		params.maxParticles = 100;             // Max 100 particles alive at once
 		params.minLifetime = 2.0f;             // Particles live 2-4 seconds
 		params.maxLifetime = 4.0f;
-		params.startSize = 0.5f;               // Start at 0.5 units
-		params.endSize = 0.1f;                 // Fade to 0.1 units
+		params.minStartSize = 0.5f;            // Start at 0.5 units
+		params.maxStartSize = 0.5f;
+		params.sizeOverLife = FloatCurve(1.0f, 0.2f); // Fade to 0.1 units (0.5 * 0.2)
 		params.minVelocity = Vector3(-1.0f, 2.0f, -1.0f);  // Upward fountain
 		params.maxVelocity = Vector3(1.0f, 4.0f, 1.0f);
 		params.gravity = Vector3(0.0f, -2.0f, 0.0f);       // Gravity pulls down

@@ -641,6 +641,11 @@ namespace mmo
 		typedef std::map<String, std::unique_ptr<ParticleEmitter>> ParticleEmitterMap;
 		ParticleEmitterMap m_particleEmitters;
 
+		/// Wall-clock timestamp of the previous particle-system update, used to compute a single
+		/// shared deltaTime for all emitters per frame (avoids per-emitter timing drift).
+		std::chrono::high_resolution_clock::time_point m_lastParticleUpdate;
+		bool m_particleTimerInitialized { false };
+
 		typedef std::map<String, std::unique_ptr<RibbonTrail>> RibbonTrailMap;
 		RibbonTrailMap m_ribbonTrails;
 
