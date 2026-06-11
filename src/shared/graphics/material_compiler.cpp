@@ -33,7 +33,18 @@ namespace mmo
 		{
 			if (m_lit)
 			{
-				material.SetType(m_translucent ? MaterialType::Translucent : MaterialType::Opaque);
+				if (m_translucent)
+				{
+					material.SetType(MaterialType::Translucent);
+				}
+				else if (m_masked)
+				{
+					material.SetType(MaterialType::Masked);
+				}
+				else
+				{
+					material.SetType(MaterialType::Opaque);
+				}
 			}
 			else
 			{

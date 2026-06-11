@@ -587,8 +587,9 @@ namespace mmo
 		bool m_depthWrite { true };
 		bool m_lit { true };
 		bool m_translucent { false };
+		bool m_masked { false };
 		bool m_userInterface{ false };
-		
+
 		BoolProperty m_litProperty { "Lit", m_lit };
 		BoolProperty m_isTwoSidedProp { "Is Two Sided", m_isTwoSided };
 		BoolProperty m_receivesShadowProp { "Receives Shadows", m_receivesShadows };
@@ -597,9 +598,12 @@ namespace mmo
 		BoolProperty m_depthWriteProp { "Depth Write", m_depthWrite };
 		BoolProperty m_translucentProperty { "Translucent", m_translucent };
 		BoolProperty m_userInterfaceProp { "User Interface", m_userInterface };
+		BoolProperty m_maskedProperty { "Masked", m_masked };
 
-		PropertyBase* m_surfaceProperties[8] = { &m_litProperty, &m_isTwoSidedProp, &m_receivesShadowProp, &m_castShadowProp,
-			&m_depthTestProp, &m_depthWriteProp, &m_translucentProperty, &m_userInterfaceProp };
+		// Note: m_maskedProperty is intentionally kept last so that materials saved before the
+		// masked flag existed (which serialized 8 properties) still deserialize positionally.
+		PropertyBase* m_surfaceProperties[9] = { &m_litProperty, &m_isTwoSidedProp, &m_receivesShadowProp, &m_castShadowProp,
+			&m_depthTestProp, &m_depthWriteProp, &m_translucentProperty, &m_userInterfaceProp, &m_maskedProperty };
 		PropertyBase* m_userInterfaceProperties[1] = { &m_userInterfaceProp };
 
 	    MaterialPin m_baseColor = { this, "Base Color" };

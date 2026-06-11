@@ -34,7 +34,8 @@ namespace mmo
 		Scene& scene,
 		Camera& camera,
 		Light& light,
-		std::array<Camera*, NUM_SHADOW_CASCADES>& shadowCameras)
+		std::array<Camera*, NUM_SHADOW_CASCADES>& shadowCameras,
+		uint32 updateMask)
 	{
 		if (light.GetType() != LightType::Directional)
 		{
@@ -60,6 +61,19 @@ namespace mmo
 				continue;
 			}
 
+			// The split distance is cheap and stable; refresh it for every active cascade so the
+			// lighting shader's cascade selection stays correct even for cascades we skip this frame.
+			m_cascades[i].splitDistance = m_splitDistances[i + 1];
+
+			// Temporal staggering: if this cascade is not scheduled for an update this frame, leave its
+			// shadow camera (and therefore its view-projection matrix) exactly as it was. The deferred
+			// renderer will reuse last frame's depth map for it, and because the matrix is unchanged the
+			// cached map and the matrix in the shadow buffer stay consistent.
+			if ((updateMask & (1u << i)) == 0u)
+			{
+				continue;
+			}
+
 			Camera& shadowCam = *shadowCameras[i];
 
 			// Reset custom matrices
@@ -78,7 +92,6 @@ namespace mmo
 
 			// Store cascade data
 			m_cascades[i].viewProjection = viewProj;
-			m_cascades[i].splitDistance = m_splitDistances[i + 1];
 			m_cascades[i].worldTexelSize = worldTexelSize;
 
 			// Set up the shadow camera

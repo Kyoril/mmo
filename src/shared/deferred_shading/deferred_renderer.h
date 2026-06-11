@@ -68,6 +68,13 @@ namespace mmo
         /// @brief Checks if cascaded shadow maps are enabled.
         [[nodiscard]] bool IsCascadedShadowsEnabled() const { return m_useCascadedShadows; }
 
+        /// @brief Enables or disables temporal cascade staggering (distant cascades refreshed every few
+        ///        frames instead of every frame). Disabling refreshes every cascade every frame.
+        void SetTemporalShadowsEnabled(bool enabled) { m_temporalShadows = enabled; m_shadowFrameCounter = 0; }
+
+        /// @brief Checks whether temporal cascade staggering is enabled.
+        [[nodiscard]] bool IsTemporalShadowsEnabled() const { return m_temporalShadows; }
+
         /// @brief Enables or disables cascade debug visualization.
         void SetCascadeDebugVisualization(bool enabled) { m_debugCascades = enabled; }
 
@@ -121,6 +128,10 @@ namespace mmo
                 m_pcfSampleCount = 16;
                 break;
             }
+
+            // Force a full (non-staggered) refresh of every cascade for the next few frames so any
+            // newly-activated cascade's shadow map is initialised before it is sampled.
+            m_shadowFrameCounter = 0;
         }
 
         /// @brief Gets the current PCF tap count used by the shadow filter.
@@ -158,6 +169,20 @@ namespace mmo
 		void RenderShadowMap(Scene& scene, Camera& camera);
 
         void RenderCascadedShadowMaps(Scene& scene, Camera& camera);
+
+        /// @brief Returns the shadow-map resolution to use for a given cascade index. Distant cascades
+        ///        (index >= 2) render at half the base resolution (floored at 256) to cut shadow fill,
+        ///        since their large world coverage per texel makes the resolution loss hard to notice.
+        [[nodiscard]] uint16 GetCascadeShadowMapSize(uint32 cascadeIndex) const
+        {
+            if (cascadeIndex < 2)
+            {
+                return m_shadowMapSize;
+            }
+
+            const uint16 halfSize = m_shadowMapSize / 2;
+            return halfSize < 256 ? 256 : halfSize;
+        }
 
 #ifdef _WIN32
         /// @brief Creates the GPU timestamp queries used for per-pass GPU timing.
@@ -235,6 +260,15 @@ namespace mmo
 
         /// @brief Whether to use cascaded shadow maps.
         bool m_useCascadedShadows = true;
+
+        /// @brief When true, distant cascades are re-rendered only every few frames (temporal
+        ///        staggering) and reuse their previous depth map on the frames in between. The near
+        ///        cascade is always refreshed. Large GPU saving with only a small lag for distant
+        ///        moving-object shadows.
+        bool m_temporalShadows = true;
+
+        /// @brief Monotonic frame counter used to schedule which cascades refresh each frame.
+        uint32 m_shadowFrameCounter = 0;
 
         /// @brief Whether to show cascade debug colors.
         bool m_debugCascades = false;

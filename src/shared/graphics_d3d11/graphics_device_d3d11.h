@@ -56,6 +56,10 @@ namespace mmo
 
 		ShaderPtr CreateShader(ShaderType type, const void* shaderCode, size_t shaderCodeSize) override;
 
+		[[nodiscard]] bool SupportsNullPixelShaderForShadows() const override { return true; }
+
+		void BindNullPixelShader() override;
+
 		void SetDepthBias(float bias) override;
 
 		void SetSlopeScaledDepthBias(float bias) override;

@@ -419,8 +419,19 @@ namespace mmo
 			ASSERT(m_vertexShader[0]);
 			if (m_vertexShader[0]) m_vertexShader[0]->Set();
 
-			ASSERT(m_pixelShader[static_cast<uint32_t>(pixelShaderType)]);
-			if (m_pixelShader[static_cast<uint32_t>(pixelShaderType)]) m_pixelShader[static_cast<uint32_t>(pixelShaderType)]->Set();
+			// Opaque/unlit casters don't need a pixel shader to write shadow depth; binding none lets
+			// the GPU use its faster depth-only path. Masked materials still need the alpha-test shader
+			// to clip cut-out geometry, and other passes always bind their real shader.
+			if (pixelShaderType == PixelShaderType::ShadowMap && m_type != MaterialType::Masked
+				&& device.SupportsNullPixelShaderForShadows())
+			{
+				device.BindNullPixelShader();
+			}
+			else
+			{
+				ASSERT(m_pixelShader[static_cast<uint32_t>(pixelShaderType)]);
+				if (m_pixelShader[static_cast<uint32_t>(pixelShaderType)]) m_pixelShader[static_cast<uint32_t>(pixelShaderType)]->Set();
+			}
 			break;
 		}
 

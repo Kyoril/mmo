@@ -81,7 +81,10 @@ namespace mmo
 		/// @param camera The main view camera.
 		/// @param light The directional light casting shadows.
 		/// @param shadowCameras Array of shadow cameras (one per cascade).
-		void SetupCascades(Scene& scene, Camera& camera, Light& light, std::array<Camera*, NUM_SHADOW_CASCADES>& shadowCameras);
+		/// @param updateMask Bit i set => (re)fit cascade i this frame. Cascades whose bit is clear keep
+		///        their previous camera matrix untouched so the renderer can reuse last frame's shadow
+		///        map for them (temporal cascade staggering). Split distances are always refreshed.
+		void SetupCascades(Scene& scene, Camera& camera, Light& light, std::array<Camera*, NUM_SHADOW_CASCADES>& shadowCameras, uint32 updateMask = 0xFFFFFFFFu);
 
 		/// @brief Gets the cascade data for shader consumption.
 		[[nodiscard]] const std::array<ShadowCascade, NUM_SHADOW_CASCADES>& GetCascades() const { return m_cascades; }

@@ -203,6 +203,16 @@ namespace mmo
 		/// Creates a new shader of a certain type if supported.
 		virtual ShaderPtr CreateShader(ShaderType type, const void* shaderCode, size_t shaderCodeSize) = 0;
 
+		/// @brief Whether this backend can render depth-only with no pixel shader bound. When true,
+		///        opaque (non-alpha-tested) shadow casters bind no pixel shader, letting the GPU use
+		///        its faster depth-only path. Backends that don't support this keep binding the normal
+		///        shadow pixel shader (returned false by default).
+		[[nodiscard]] virtual bool SupportsNullPixelShaderForShadows() const { return false; }
+
+		/// @brief Unbinds the pixel shader (binds a null pixel shader). Only meaningful for depth-only
+		///        rendering on backends where SupportsNullPixelShaderForShadows() returns true.
+		virtual void BindNullPixelShader() {}
+
 		virtual void SetDepthBias(float bias) {}
 
 		virtual void SetSlopeScaledDepthBias(float bias) {}

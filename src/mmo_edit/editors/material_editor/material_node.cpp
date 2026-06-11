@@ -509,6 +509,7 @@ namespace mmo
 	{
 		compiler.SetLit(m_lit);
 		compiler.SetTranslucent(m_translucent);
+		compiler.SetMasked(m_masked);
 		compiler.SetDepthWriteEnabled(m_depthWrite);
 		compiler.SetDepthTestEnabled(m_depthTest);
 		compiler.SetTwoSided(m_isTwoSided);

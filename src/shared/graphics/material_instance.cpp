@@ -164,8 +164,19 @@ namespace mmo
 		default:
 			ASSERT(m_parent->GetVertexShader(VertexShaderType::Default));
 			if (m_parent->GetVertexShader(VertexShaderType::Default)) m_parent->GetVertexShader(VertexShaderType::Default)->Set();
-			ASSERT(m_parent->GetPixelShader(pixelShaderType));
-			if (m_parent->GetPixelShader(pixelShaderType)) m_parent->GetPixelShader(pixelShaderType)->Set();
+
+			// Opaque/unlit casters don't need a pixel shader to write shadow depth; binding none lets
+			// the GPU use its faster depth-only path. Masked materials still need the alpha-test shader.
+			if (pixelShaderType == PixelShaderType::ShadowMap && m_type != MaterialType::Masked
+				&& device.SupportsNullPixelShaderForShadows())
+			{
+				device.BindNullPixelShader();
+			}
+			else
+			{
+				ASSERT(m_parent->GetPixelShader(pixelShaderType));
+				if (m_parent->GetPixelShader(pixelShaderType)) m_parent->GetPixelShader(pixelShaderType)->Set();
+			}
 			break;
 		}
 

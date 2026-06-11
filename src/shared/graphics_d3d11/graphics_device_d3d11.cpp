@@ -768,6 +768,17 @@ namespace mmo
 		return nullptr;
 	}
 
+	void GraphicsDeviceD3D11::BindNullPixelShader()
+	{
+		if (m_currentPixelShader == nullptr)
+		{
+			return;
+		}
+
+		m_immContext->PSSetShader(nullptr, nullptr, 0);
+		m_currentPixelShader = nullptr;
+	}
+
 	void GraphicsDeviceD3D11::SetDepthBias(float bias)
 	{
 		m_rasterizerDesc.DepthBias = static_cast<int32>(bias);

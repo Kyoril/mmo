@@ -115,13 +115,16 @@ namespace mmo
 
         m_quadBuffer = m_device.CreateVertexBuffer(6, sizeof(POS_COL_TEX_VERTEX), BufferUsage::StaticWriteOnly, vertices);
         
-		// Create shadow maps for each cascade
+		// Create shadow maps for each cascade. Distant cascades cover a far larger world area per texel,
+        // so they are rendered at a lower resolution (see GetCascadeShadowMapSize) — this cuts shadow
+        // fill/overdraw for the cascades where the resolution loss is least noticeable.
         for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
         {
+            const uint16 cascadeSize = GetCascadeShadowMapSize(i);
             m_cascadeShadowMaps[i] = m_device.CreateRenderTexture(
-                "ShadowMapCascade" + std::to_string(i), 
-                m_shadowMapSize, 
-                m_shadowMapSize, 
+                "ShadowMapCascade" + std::to_string(i),
+                cascadeSize,
+                cascadeSize,
                 RenderTextureFlags::HasDepthBuffer | RenderTextureFlags::ShaderResourceView);
         }
         
@@ -635,26 +638,42 @@ namespace mmo
             return;
         }
 
-        // Setup all cascades
-        m_cascadedShadowSetup->SetupCascades(scene, camera, *m_shadowCastingDirectionalLight, m_shadowCameras);
+        const uint32 activeCascades = m_cascadedShadowSetup->GetConfig().GetActiveCascadeCount();
+
+        // Temporal cascade staggering: distant cascades change little frame-to-frame, so we re-render
+        // them only every few frames and reuse their previous depth map in between. Cascade 0 (near,
+        // highest detail) always refreshes. The staggered phases are chosen so at most one distant
+        // cascade refreshes on any given frame, which also smooths the per-frame cost. The first frames
+        // force a full update so every cascade's map is initialised before it is sampled.
+        ++m_shadowFrameCounter;
+        uint32 updateMask = (1u << activeCascades) - 1u; // default: all active cascades
+        if (m_temporalShadows && m_shadowFrameCounter > NUM_SHADOW_CASCADES)
+        {
+            updateMask = 1u << 0; // cascade 0 every frame
+            if ((m_shadowFrameCounter % 2u) == 0u) { updateMask |= 1u << 1; } // cascade 1 every 2 frames
+            if ((m_shadowFrameCounter % 3u) == 0u) { updateMask |= 1u << 2; } // cascade 2 every 3 frames (phase 0)
+            if ((m_shadowFrameCounter % 3u) == 1u) { updateMask |= 1u << 3; } // cascade 3 every 3 frames (phase 1)
+            updateMask &= (1u << activeCascades) - 1u;
+        }
+
+        // Setup the cascades scheduled to refresh this frame (others keep their cached camera matrix).
+        m_cascadedShadowSetup->SetupCascades(scene, camera, *m_shadowCastingDirectionalLight, m_shadowCameras, updateMask);
 
         // Get cascade data
         const auto& cascades = m_cascadedShadowSetup->GetCascades();
         const auto& config = m_cascadedShadowSetup->GetConfig();
 
-        const uint32 activeCascades = m_cascadedShadowSetup->GetConfig().GetActiveCascadeCount();
-
-        // Cull shadow casters ONCE for the whole shadow region, then reuse the list for every cascade.
-        // The gather region is the union of all active cascade frusta in world space, so it provably
-        // contains every caster any cascade could draw; each cascade below re-filters this list with
-        // its own (tight) frustum, so the rendered set — and therefore the shadows — are unchanged.
-        // This replaces N full octree walks (one per cascade) with a single walk plus N cheap linear
-        // filters over a much smaller list.
+        // Cull shadow casters ONCE for the cascades we will render this frame, then reuse the list for
+        // each of them. The gather region is the union of those cascades' frusta in world space, so it
+        // provably contains every caster any of them could draw; each cascade below re-filters this
+        // list with its own (tight) frustum, so the rendered set — and therefore the shadows — are
+        // unchanged. This replaces N full octree walks (one per cascade) with a single walk plus N
+        // cheap linear filters over a much smaller list.
         AABB gatherRegion;
         gatherRegion.SetNull();
         for (uint32 i = 0; i < activeCascades; ++i)
         {
-            if (!m_shadowCameras[i])
+            if (!m_shadowCameras[i] || (updateMask & (1u << i)) == 0u)
             {
                 continue;
             }
@@ -673,12 +692,11 @@ namespace mmo
         m_device.SetSlopeScaledDepthBias(m_slopeScaledDepthBias);
         m_device.SetDepthBiasClamp(m_depthBiasClamp);
 
-        // Render each active cascade by re-filtering the gathered caster list against the cascade's
-        // own frustum. Each cascade still draws into its own shadow map, but no longer re-walks the
-        // octree or re-runs full per-object visibility from scratch.
+        // Render each cascade scheduled this frame by re-filtering the gathered caster list against the
+        // cascade's own frustum. Cascades not scheduled this frame keep last frame's depth map.
         for (uint32 i = 0; i < activeCascades; ++i)
         {
-            if (!m_shadowCameras[i])
+            if (!m_shadowCameras[i] || (updateMask & (1u << i)) == 0u)
             {
                 continue;
             }
@@ -742,13 +760,17 @@ namespace mmo
         }
 
         m_shadowMapSize = size;
-        
-        // Resize all cascade shadow maps
+
+        // Resizing invalidates the cached cascade depth maps; force a full refresh of every cascade.
+        m_shadowFrameCounter = 0;
+
+        // Resize all cascade shadow maps (distant cascades use a reduced resolution).
         for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
         {
             if (m_cascadeShadowMaps[i])
             {
-                m_cascadeShadowMaps[i]->Resize(m_shadowMapSize, m_shadowMapSize);
+                const uint16 cascadeSize = GetCascadeShadowMapSize(i);
+                m_cascadeShadowMaps[i]->Resize(cascadeSize, cascadeSize);
                 m_cascadeShadowMaps[i]->ApplyPendingResize();
             }
         }

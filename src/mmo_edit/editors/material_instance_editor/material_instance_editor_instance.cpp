@@ -371,6 +371,25 @@ namespace mmo
 				m_material->SetWireframe(wireframe);
 			}
 
+			// Masked (binary alpha). Toggling this overrides the material type for this instance;
+			// clearing it falls back to the parent material's type.
+			bool masked = m_material->GetType() == MaterialType::Masked;
+			if (ImGui::Checkbox("Masked", &masked))
+			{
+				if (masked)
+				{
+					m_material->SetType(MaterialType::Masked);
+				}
+				else
+				{
+					m_material->SetType(m_material->GetParent() ? m_material->GetParent()->GetType() : MaterialType::Opaque);
+				}
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Render this material with binary (masked) alpha instead of the parent material's type");
+			}
+
 			ImGui::Unindent();
 		}
 	}

@@ -362,6 +362,8 @@ namespace mmo
 
 		void SetTranslucent(const bool enable) { m_translucent = enable; }
 
+		void SetMasked(const bool enable) { m_masked = enable; }
+
 		void SetTwoSided(const bool enable) { m_twoSided = enable; }
 
 		void SetIsUserInterface(const bool enable) { m_userInterface = enable; }
@@ -407,6 +409,7 @@ namespace mmo
 		bool m_depthTest { true };
 		bool m_depthWrite { true };
 		bool m_translucent{ false };
+		bool m_masked{ false };
 		bool m_twoSided { false };
 		bool m_userInterface{ false };
 
