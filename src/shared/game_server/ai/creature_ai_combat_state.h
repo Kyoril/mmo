@@ -445,10 +445,7 @@ namespace mmo
 		bool m_entered;
 		bool m_isRanged;
 		bool m_canReset;
-		/// Set for the duration of an intentional in-range reposition move (de-stacking) so the
-		/// targetChanged handler doesn't immediately cancel it as a redundant in-range move.
-		bool m_repositioningInRange = false;
-		
+
 		// === Event Connections ===
 		UnitSignals m_killedSignals;
 		UnitSignals2 m_miscSignals;
@@ -489,21 +486,10 @@ namespace mmo
 		static constexpr float CASTER_MIN_RANGE = 8.0f;
 		/// Maximum spell casting range
 		static constexpr float MAX_SPELL_RANGE = 30.0f;
-		/// Angular spread per creature in formation (radians, ~40 degrees)
-		static constexpr float FORMATION_ANGLE_STEP = 0.7f;
-		/// Maximum angular spread for the formation semicircle (radians, ~160 degrees)
-		static constexpr float FORMATION_MAX_ANGLE = 2.8f;
-		/// Fraction of attack range at which a melee creature parks on its formation arc.
+		/// Fraction of attack range at which a melee creature parks on its standoff ring.
 		/// Kept below COMBAT_RANGE_FACTOR so that the separation offset (which can nudge the
 		/// slot slightly outward) still leaves the creature inside auto-attack range.
 		static constexpr float MELEE_RING_STANDOFF_FACTOR = 0.8f;
-		/// Below this centre-to-centre distance two attackers are considered "crowded" and a
-		/// creature already in attack range will still slide to its formation slot to de-stack.
-		static constexpr float CROWDING_DISTANCE = 1.75f;
-		/// Dead-zone (squared metres): a creature in range won't re-issue a reposition move
-		/// unless its formation slot is at least this far from where it currently stands. Stops
-		/// the AI from spamming tiny corrective moves (which would look like jitter on screen).
-		static constexpr float REPOSITION_DEADZONE_SQ = 0.6f * 0.6f;
 		/// Distance threshold for waypoint recalculation when player moves (5m, stored as squared distance)
 		static constexpr float PLAYER_POSITION_THRESHOLD = 25.0f; // 5^2 = 25
 		/// Periodic recalculation interval (500ms for responsive positioning updates)

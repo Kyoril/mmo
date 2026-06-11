@@ -663,25 +663,15 @@ namespace mmo
 		// Decide whether a move is actually warranted.
 		if (inAttackRange)
 		{
-			// Already able to attack. Only reposition to de-stack: when a sibling is crowding us
-			// AND our slot is a meaningful distance away (dead-zone avoids on-screen jitter).
-			const float crowdingSq = CROWDING_DISTANCE * CROWDING_DISTANCE;
-			bool crowded = false;
-			for (const GameUnitS* sibling : siblingAttackers)
-			{
-				if (sibling && sibling->IsAlive() &&
-					sibling->GetSquaredDistanceTo(currentLoc, false) < crowdingSq)
-				{
-					crowded = true;
-					break;
-				}
-			}
-
-			const float slotMoveSq = (slotPosition - currentLoc).GetSquaredLength();
-			if (!crowded || slotMoveSq < REPOSITION_DEADZONE_SQ)
-			{
-				return true; // Comfortable where we are — stand and fight.
-			}
+			// Already able to attack — stand and fight. We deliberately do NOT slide to a formation
+			// slot to de-stack while in range. Players (especially melee classes) expect the
+			// creature they are fighting to stay put once it has reached them, not orbit around to
+			// satisfy a spacing rule — which previously left attackers next to or behind the player
+			// and made positions shuffle whenever the player moved. We accept some visual overlap
+			// between creatures here in exchange for stable, predictable positioning. De-stacking
+			// still happens naturally while creatures are *approaching* (the separation pass above
+			// only changes where an out-of-range creature stops).
+			return true;
 		}
 		else if (!ShouldMoveToTarget(target))
 		{
@@ -701,11 +691,7 @@ namespace mmo
 		// attackers visibly separated instead of collapsing onto the same approach line.
 		const float acceptance = std::max(0.25f, attackRange * 0.1f);
 
-		// When repositioning while already in range, flag it so the targetChanged handler (which
-		// fires synchronously inside MoveTo) doesn't immediately cancel the de-stack move.
-		m_repositioningInRange = inAttackRange;
 		const bool moveStarted = mover.MoveTo(slotPosition, acceptance);
-		m_repositioningInRange = false;
 
 		if (moveStarted)
 		{
@@ -1051,13 +1037,11 @@ namespace mmo
 				if (auto* victim = controlled.GetVictim())
 				{
 					// Immediate range check when we start moving - if we're already in range, stop.
-					// Exception: a deliberate in-range reposition (de-stacking onto our formation
-					// slot) must be allowed to run, otherwise crowded creatures could never spread.
 					const float attackRange = controlled.GetMeleeReach() + victim->GetMeleeReach();
 					const float attackRangeSq = attackRange * attackRange;
 					const float currentDistanceSq = victim->GetSquaredDistanceTo(controlled.GetMover().GetCurrentLocation(), false);
 
-					if (currentDistanceSq <= attackRangeSq && !m_repositioningInRange)
+					if (currentDistanceSq <= attackRangeSq)
 					{
 						// We're already in range, stop movement
 						controlled.GetMover().StopMovement();
@@ -1594,74 +1578,43 @@ namespace mmo
 	Vector3 CreatureAICombatState::CalculateFormationPosition(const GameUnitS& target, const Vector3& ringCentre, float standoffDistance) const
 	{
 		const auto& controlled = GetControlled();
-		const uint64 ourGuid = controlled.GetGuid();
 
-		constexpr float twoPi = 6.28318530718f;
-
-		auto bearingFromCentre = [&ringCentre](const Vector3& pos) -> float
-		{
-			float a = std::atan2(pos.z - ringCentre.z, pos.x - ringCentre.x);
-			if (a < 0.0f)
-			{
-				a += twoPi;
-			}
-			return a;
-		};
-
-		// Determine our angular RANK among the attackers around the target, and the total count.
+		// Stable, predictable standoff: approach the target along OUR OWN current bearing and stop
+		// on the ring. We deliberately do NOT assign rank-based slots spread around the target.
 		//
-		// Crucially, the slot bearing is derived only from stable inputs — the attackers' coarse
-		// authoritative positions (updated ~2x/sec, not the smoothly-interpolated mover position)
-		// and GUID identity — NOT from this creature's own instantaneous motion. The previous
-		// version centred the fan on the creature's live bearing, which meant moving toward the
-		// slot shifted the slot, so attackers orbited the target forever instead of settling.
-		// Ranking by bearing keeps each creature close to the side it arrived from while still
-		// producing an evenly spaced ring, and it is a fixed point: once everyone sits on an even
-		// bearing, every rank maps back to its own position and all movement stops.
-		const float ourBearing = bearingFromCentre(controlled.GetPosition());
+		// The previous implementation distributed attackers evenly around the full circle anchored
+		// to a fixed world axis. That had two player-facing problems:
+		//   1. A creature could be assigned a bearing on the far side of the target — i.e. behind a
+		//      melee player who expects their victim to stay in front of them.
+		//   2. Every time the player moved or the attacker count changed, the angular ranks shifted
+		//      and all attackers reshuffled to new bearings.
+		//
+		// Approaching radially keeps each creature on the side it actually came from, so a victim
+		// that reached the player from the front stays in front. It is also free of the orbiting
+		// feedback loop: walking straight toward the target preserves the bearing, so the slot does
+		// not chase the creature around the ring. Residual overlap between attackers arriving on a
+		// near-identical bearing is resolved by the reactive separation pass in the caller, which
+		// converges to a stable spread rather than continuously rotating.
+		Vector3 bearing = controlled.GetPosition() - ringCentre;
+		bearing.y = 0.0f;
 
-		int totalAttackers = 0;
-		int rank = 0;
-
-		target.ForEachAttacker([&](const GameUnitS& attacker)
+		const float dist = bearing.GetLength();
+		if (dist > 1e-3f)
 		{
-			if (&attacker == &target)
-			{
-				return;
-			}
-
-			totalAttackers++;
-
-			if (attacker.GetGuid() == ourGuid)
-			{
-				return;
-			}
-
-			const float otherBearing = bearingFromCentre(attacker.GetPosition());
-			if (otherBearing < ourBearing ||
-				(otherBearing == ourBearing && attacker.GetGuid() < ourGuid))
-			{
-				rank++;
-			}
-		});
-
-		// A lone attacker just parks on its own bearing (no ring needed).
-		float slotAngle = ourBearing;
-		if (totalAttackers > 1)
+			bearing /= dist;
+		}
+		else
 		{
-			// Even distribution around a full circle, anchored to a fixed world axis so the ring
-			// does not rotate when the player turns or when creatures shuffle. Ranking assigns the
-			// east-most attacker to slot 0, the next counter-clockwise to slot 1, and so on.
-			slotAngle = static_cast<float>(rank) * (twoPi / static_cast<float>(totalAttackers));
+			// Degenerate: we are virtually on top of the target. Fall back to our own facing so we
+			// pick a deterministic, stable direction instead of producing a NaN bearing.
+			const float facing = controlled.GetFacing().GetValueRadians();
+			bearing = Vector3(std::cos(facing), 0.0f, std::sin(facing));
 		}
 
-		// Place the slot at the true combat distance on the ring. Because this is a real standoff
-		// position (not a 0.5 m nudge), the caller can reach it with a small acceptance radius and
-		// the bearing actually decides where the creature stands.
 		Vector3 formationPos;
-		formationPos.x = ringCentre.x + std::cos(slotAngle) * standoffDistance;
+		formationPos.x = ringCentre.x + bearing.x * standoffDistance;
 		formationPos.y = ringCentre.y;
-		formationPos.z = ringCentre.z + std::sin(slotAngle) * standoffDistance;
+		formationPos.z = ringCentre.z + bearing.z * standoffDistance;
 
 		return formationPos;
 	}
