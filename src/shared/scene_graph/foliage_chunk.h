@@ -10,6 +10,7 @@
 #include "graphics/constant_buffer.h"
 #include "math/aabb.h"
 #include "math/matrix4.h"
+#include "math/vector4.h"
 
 #include <vector>
 
@@ -21,14 +22,20 @@ namespace mmo
 	class RenderQueue;
 
 	/// @brief Represents a single foliage instance's transform data for GPU instancing.
-	/// @details This structure is uploaded to the GPU as per-instance data.
+	/// @details This structure is uploaded to the GPU as per-instance data. The layout matches the
+	///          shared instanced vertex-shader input: a world matrix at TEXCOORD8-11 followed by a
+	///          per-instance tint at TEXCOORD12. Foliage leaves the tint white (no visual change),
+	///          while particle mesh emitters drive it from color-over-life.
 	struct FoliageInstanceData
 	{
 		/// @brief World transform matrix for this instance (4x4 = 64 bytes).
 		Matrix4 worldMatrix;
+
+		/// @brief Per-instance tint (RGBA). Defaults to opaque white so foliage renders unchanged.
+		Vector4 color { 1.0f, 1.0f, 1.0f, 1.0f };
 	};
 
-	static_assert(sizeof(FoliageInstanceData) == 64, "FoliageInstanceData size mismatch");
+	static_assert(sizeof(FoliageInstanceData) == 80, "FoliageInstanceData size mismatch");
 
 	/// @brief A chunk of terrain that contains batched foliage instances.
 	/// @details Each chunk manages a spatial region and renders all foliage instances

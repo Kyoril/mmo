@@ -56,10 +56,33 @@ deltaTime computed by the `Scene` (no per-emitter timing drift).
   - **Velocity Aligned** — quad's long axis follows velocity (still camera-facing).
   - **Stretched** — velocity-aligned and elongated by **Length Scale** (slashes, spark streaks).
   - **Horizontal Billboard** — flat on the ground plane (shockwaves, decals).
+  - **Mesh (3D Instanced)** — renders a real 3D mesh once per particle via GPU instancing
+    (debris, gibs, shards, a floating skull icon). See **Mesh particles** below.
 - **Sprite Sheet** — Columns/Rows + **Sprite Animation** (None / Animate Over Life / Random Static)
   for flipbook textures (blood, explosions). `Sprite FPS = 0` fits one full sheet across the lifetime.
+  (Billboard modes only.)
 - **Material** — `.hmat` used to render this emitter (drag-drop from the Asset Browser, or the
-  Additive / Alpha / Soft Additive quick buttons).
+  Additive / Alpha / Soft Additive quick buttons). (Billboard modes only.)
+
+### Mesh particles
+When **Render Mode** is **Mesh**, the emitter renders the chosen `.hmsh` once per live particle using
+the same GPU-instancing path as authored foliage — a single draw call per submesh, regardless of
+particle count. Drag a `.hmsh` from the Asset Browser onto the **Mesh** field in the Render module.
+
+Each particle drives a per-instance transform and tint:
+- **Position** translates the mesh.
+- **Size** (start size × size-over-life) scales the mesh uniformly. Authored at 1.0 = the mesh's
+  native scale.
+- **Rotation** (start rotation + angular velocity) spins the mesh around the up axis.
+- **Color-over-life** is sent as a per-instance tint and multiplied with the mesh material's vertex
+  colour, so meshes can fade/recolour over their lifetime just like billboards.
+
+The mesh's **own material(s)** are used (one renderable per submesh, so multi-material meshes work).
+That material must have an **instanced vertex-shader variant** — every material compiled by the current
+toolchain has one, but if a mesh particle renders nothing, open the material in the Material Editor and
+re-save it to regenerate the instanced variant (the world server logs a warning when an instanced draw
+is skipped for this reason). The simulation (shapes, forces, bursts, lifetime, warmup, local/world
+space) is identical to billboard emitters; only the render step differs.
 
 ## Using the editor
 

@@ -198,10 +198,14 @@ namespace mmo
 			WriteFloatCurveInline(writer, p.sizeOverLife);
 			WriteColorCurveInline(writer, p.colorOverLifetime);
 
+			// Mesh render module (added after v2.0). Trailing field: older readers stop at the
+			// chunk boundary and simply leave meshName empty.
+			writer << io::write_dynamic_range<uint16>(p.meshName);
+
 			emitterChunk.Finish();
 		}
 
-		bool ReadEmitter(io::Reader& reader, EmitterParameters& p)
+		bool ReadEmitter(io::Reader& reader, EmitterParameters& p, std::size_t chunkEnd)
 		{
 			uint8 u8 = 0;
 
@@ -272,6 +276,14 @@ namespace mmo
 			if (!ReadColorCurveInline(reader, p.colorOverLifetime))
 			{
 				return false;
+			}
+
+			// Optional trailing fields appended after v2.0. Only read them when the emitter chunk
+			// actually contains more bytes, so legacy v2.0 files (which end at the colour curve)
+			// keep loading without consuming bytes from the following chunk.
+			if (reader && reader.getSource()->position() < chunkEnd)
+			{
+				reader >> io::read_container<uint16>(p.meshName);
 			}
 
 			return static_cast<bool>(reader);
@@ -400,7 +412,7 @@ namespace mmo
 			else if (chunkMagic == *EmitterChunk)
 			{
 				EmitterParameters emitter;
-				if (!ReadEmitter(reader, emitter))
+				if (!ReadEmitter(reader, emitter, chunkEnd))
 				{
 					ELOG("Failed to read emitter chunk in particle system");
 					return false;

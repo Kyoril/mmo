@@ -1617,7 +1617,8 @@ namespace mmo
 		if (type == VertexShaderType::Instanced)
 		{
 			vertexShaderStream
-				<< "\tcolumn_major float4x4 instanceWorld : TEXCOORD8;\n";
+				<< "\tcolumn_major float4x4 instanceWorld : TEXCOORD8;\n"
+				<< "\tfloat4 instanceColor : TEXCOORD12;\n";
 		}
 
 		vertexShaderStream
@@ -1730,7 +1731,7 @@ namespace mmo
 				<< "\toutput.pos = mul(output.pos, matView);\n"
 				<< "\toutput.viewPos = output.pos;\n"
 				<< "\toutput.pos = mul(output.pos, matProj);\n"
-				<< "\toutput.color = input.color;\n";
+				<< "\toutput.color = input.color * input.instanceColor;\n";
 
 			if (m_lit)
 			{

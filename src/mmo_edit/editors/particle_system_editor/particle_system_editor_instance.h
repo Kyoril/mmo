@@ -60,6 +60,7 @@ namespace mmo
 		void DrawUpdateModule(EmitterParameters& e);
 		void DrawRenderModule(EmitterParameters& e);
 		void DrawMaterialPicker(EmitterParameters& e);
+		void DrawMeshPicker(EmitterParameters& e);
 
 		// Helpers
 		bool LoadParticleSystem();

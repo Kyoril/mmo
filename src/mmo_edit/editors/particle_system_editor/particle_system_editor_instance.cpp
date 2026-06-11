@@ -26,7 +26,7 @@ namespace mmo
 	{
 		const char* s_shapeNames[] = { "Point", "Sphere", "Box", "Cone" };
 		const char* s_simSpaceNames[] = { "World", "Local" };
-		const char* s_renderModeNames[] = { "Billboard (Face Camera)", "Velocity Aligned", "Stretched", "Horizontal Billboard" };
+		const char* s_renderModeNames[] = { "Billboard (Face Camera)", "Velocity Aligned", "Stretched", "Horizontal Billboard", "Mesh (3D Instanced)" };
 		const char* s_spriteAnimNames[] = { "None", "Animate Over Life", "Random Static" };
 
 		// Template ids
@@ -685,6 +685,15 @@ namespace mmo
 			MarkDirty();
 		}
 
+		// Mesh mode renders an instanced 3D mesh per particle; the billboard-only options
+		// (length scale, sprite sheet, billboard material) don't apply.
+		if (e.renderMode == ParticleRenderMode::Mesh)
+		{
+			ImGui::Separator();
+			DrawMeshPicker(e);
+			return;
+		}
+
 		if (e.renderMode == ParticleRenderMode::Stretched)
 		{
 			if (ImGui::DragFloat("Length Scale", &e.lengthScale, 0.05f, 1.0f, 50.0f)) MarkDirty();
@@ -752,6 +761,43 @@ namespace mmo
 			e.materialName = "Particles/SoftAdditive.hmat";
 			MarkDirty();
 		}
+	}
+
+	void ParticleSystemEditorInstance::DrawMeshPicker(EmitterParameters& e)
+	{
+		ImGui::Text("Mesh");
+		if (ImGui::InputText("##meshName", &e.meshName))
+		{
+			MarkDirty();
+		}
+
+		// Accept a mesh dropped from the asset browser.
+		if (ImGui::BeginDragDropTarget())
+		{
+			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
+			{
+				e.meshName = *static_cast<String*>(payload->Data);
+				MarkDirty();
+			}
+			ImGui::EndDragDropTarget();
+		}
+		ImGui::TextDisabled("Drag a .hmsh here from the Asset Browser");
+
+		if (!e.meshName.empty())
+		{
+			if (ImGui::Button("Clear Mesh"))
+			{
+				e.meshName.clear();
+				MarkDirty();
+			}
+		}
+
+		ImGui::Separator();
+		ImGui::TextWrapped(
+			"The mesh is drawn once per particle via GPU instancing. Particle size scales the mesh, "
+			"rotation spins it around the up axis, and color-over-life tints it (RGBA multiplied with "
+			"the mesh material). The mesh's own material is used — it must have an instanced shader "
+			"variant (re-save the material in the Material Editor if nothing renders).");
 	}
 
 	bool ParticleSystemEditorInstance::LoadParticleSystem()

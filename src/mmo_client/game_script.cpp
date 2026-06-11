@@ -1028,7 +1028,8 @@ namespace mmo
 							   .def("GetProficiency", &ItemHandle::GetProficiency)
 							   .def("GetStatValue", &ItemHandle::GetStatValue)
 							   .def("GetBonding", &ItemHandle::GetBonding)
-							   .def("IsBound", &ItemHandle::IsBound)),
+							   .def("IsBound", &ItemHandle::IsBound)
+							   .def("GetRequiredLevel", &ItemHandle::GetRequiredLevel)),
 
 						   luabind::scope(
 							   luabind::class_<proto_client::SpellEntry>("Spell")

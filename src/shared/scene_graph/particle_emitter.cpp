@@ -4,15 +4,21 @@
 
 #include "camera.h"
 #include "material_manager.h"
+#include "mesh.h"
+#include "mesh_manager.h"
+#include "sub_mesh.h"
 #include "movable_object.h"
 #include "node.h"
 #include "render_operation.h"
 #include "render_queue.h"
 #include "scene.h"
 #include "graphics/graphics_device.h"
+#include "graphics/material.h"
 #include "graphics/vertex_format.h"
 #include "graphics/vertex_declaration.h"
 #include "math/matrix4.h"
+#include "math/quaternion.h"
+#include "math/radian.h"
 #include "base/random.h"
 #include "log/default_log_levels.h"
 
@@ -385,6 +391,55 @@ namespace mmo
 	}
 
 	// ========================================================================
+	// ParticleMeshRenderable
+	// ========================================================================
+
+	ParticleMeshRenderable::ParticleMeshRenderable(EmitterInstance& parent, VertexData* vertexData,
+		IndexData* indexData, MaterialPtr material)
+		: m_parent(parent)
+		, m_vertexData(vertexData)
+		, m_indexData(indexData)
+		, m_material(std::move(material))
+	{
+	}
+
+	void ParticleMeshRenderable::PrepareRenderOperation(RenderOperation& operation)
+	{
+		operation.topology = TopologyType::TriangleList;
+		operation.vertexData = m_vertexData;
+		operation.indexData = m_indexData;
+		operation.material = m_material;
+
+		// Per-particle transform + tint are uploaded as instance data; the device selects the
+		// material's instanced vertex-shader variant when an instance buffer is present.
+		operation.instanceBuffer = m_parent.GetInstanceBuffer();
+		operation.instanceCount = m_parent.GetInstanceCount();
+	}
+
+	const Matrix4& ParticleMeshRenderable::GetWorldTransform() const
+	{
+		// Per-particle transforms live in the instance buffer; the base transform is identity.
+		return Matrix4::Identity;
+	}
+
+	float ParticleMeshRenderable::GetSquaredViewDepth(const Camera& camera) const
+	{
+		const Vector3 diff = m_parent.GetEmitterWorldPosition() - camera.GetDerivedPosition();
+		return diff.GetSquaredLength();
+	}
+
+	MaterialPtr ParticleMeshRenderable::GetMaterial() const
+	{
+		return m_material;
+	}
+
+	bool ParticleMeshRenderable::IsReady() const
+	{
+		return m_vertexData != nullptr && m_indexData != nullptr
+			&& m_parent.GetInstanceBuffer() != nullptr && m_parent.GetInstanceCount() > 0;
+	}
+
+	// ========================================================================
 	// EmitterInstance
 	// ========================================================================
 
@@ -425,6 +480,143 @@ namespace mmo
 		{
 			m_material = nullptr;
 		}
+
+		// Mesh render mode: clone the source mesh's geometry for GPU instancing.
+		m_meshMode = (m_parameters.renderMode == ParticleRenderMode::Mesh);
+		if (m_meshMode)
+		{
+			if (m_loadedMeshName != m_parameters.meshName || m_meshRenderables.empty())
+			{
+				RebuildMeshResources();
+			}
+		}
+		else if (!m_loadedMeshName.empty() || !m_meshRenderables.empty())
+		{
+			// Switched away from mesh mode: release the cloned geometry and instance buffer.
+			m_meshRenderables.clear();
+			m_meshVertexData.clear();
+			m_meshIndexData.clear();
+			m_mesh.reset();
+			m_loadedMeshName.clear();
+			m_instanceBuffer.reset();
+			m_instanceBufferCapacity = 0;
+			m_instanceCount = 0;
+		}
+	}
+
+	void EmitterInstance::RebuildMeshResources()
+	{
+		// Release renderables first so their raw pointers into the geometry vectors never dangle.
+		m_meshRenderables.clear();
+		m_meshVertexData.clear();
+		m_meshIndexData.clear();
+		m_mesh.reset();
+		m_loadedMeshName = m_parameters.meshName;
+
+		if (m_parameters.meshName.empty())
+		{
+			return;
+		}
+
+		try
+		{
+			m_mesh = MeshManager::Get().Load(m_parameters.meshName);
+		}
+		catch (const std::exception& e)
+		{
+			WLOG("EmitterInstance: failed to load mesh '" << m_parameters.meshName << "': " << e.what());
+			m_mesh.reset();
+		}
+
+		if (!m_mesh)
+		{
+			return;
+		}
+
+		const uint16 submeshCount = m_mesh->GetSubMeshCount();
+		for (uint16 i = 0; i < submeshCount; ++i)
+		{
+			SubMesh& subMesh = m_mesh->GetSubMesh(i);
+
+			std::unique_ptr<VertexData> vertexData;
+			if (subMesh.useSharedVertices && m_mesh->sharedVertexData)
+			{
+				vertexData.reset(m_mesh->sharedVertexData->Clone(false, &m_device));
+			}
+			else if (subMesh.vertexData)
+			{
+				vertexData.reset(subMesh.vertexData->Clone(false, &m_device));
+			}
+
+			std::unique_ptr<IndexData> indexData;
+			if (subMesh.indexData)
+			{
+				indexData.reset(subMesh.indexData->Clone(false));
+			}
+
+			if (!vertexData || !indexData)
+			{
+				continue;
+			}
+
+			auto renderable = std::make_unique<ParticleMeshRenderable>(
+				*this, vertexData.get(), indexData.get(), subMesh.GetMaterial());
+
+			m_meshVertexData.push_back(std::move(vertexData));
+			m_meshIndexData.push_back(std::move(indexData));
+			m_meshRenderables.push_back(std::move(renderable));
+		}
+	}
+
+	void EmitterInstance::RebuildInstanceBuffer(const Camera& camera)
+	{
+		m_instanceCount = 0;
+
+		const size_t particleCount = m_particles.size();
+		if (particleCount == 0)
+		{
+			return;
+		}
+
+		// Back-to-front sort for translucent mesh materials so per-particle alpha blends correctly.
+		const MaterialPtr firstMaterial = m_meshRenderables.empty() ? nullptr : m_meshRenderables.front()->GetMaterial();
+		if (firstMaterial && firstMaterial->IsTranslucent())
+		{
+			m_renderable->SortParticles(m_particles, camera);
+		}
+
+		if (!m_instanceBuffer || m_instanceBufferCapacity < particleCount)
+		{
+			size_t newCapacity = particleCount;
+			if (m_instanceBuffer && m_instanceBufferCapacity * 2 > newCapacity)
+			{
+				newCapacity = m_instanceBufferCapacity * 2;
+			}
+
+			m_instanceBuffer = m_device.CreateVertexBuffer(
+				newCapacity,
+				sizeof(ParticleMeshInstance),
+				BufferUsage::DynamicWriteOnlyDiscardable,
+				nullptr);
+			m_instanceBufferCapacity = newCapacity;
+		}
+
+		const Matrix4& bake = m_renderTransform;
+
+		auto* instances = static_cast<ParticleMeshInstance*>(m_instanceBuffer->Map(LockOptions::Discard));
+		for (size_t i = 0; i < particleCount; ++i)
+		{
+			const Particle& particle = m_particles[i];
+			const Vector3 worldPos = bake.TransformAffine(particle.position);
+			const Quaternion rotation(Radian(particle.rotation), Vector3::UnitY);
+			const float scale = (particle.size > 1e-4f) ? particle.size : 1e-4f;
+
+			instances[i].world.MakeTransform(worldPos, Vector3(scale, scale, scale), rotation);
+			instances[i].color = particle.color;
+		}
+		m_instanceBuffer->Unmap();
+
+		m_instanceCount = static_cast<uint32>(particleCount);
 	}
 
 	void EmitterInstance::Reset()
@@ -800,11 +992,18 @@ namespace mmo
 		// RebuildBuffers safely clears the buffers when the particle list is empty.
 		if (camera)
 		{
-			if (!m_particles.empty() && m_material && m_material->IsTranslucent())
+			if (IsMeshMode())
 			{
-				m_renderable->SortParticles(m_particles, *camera);
+				RebuildInstanceBuffer(*camera);
 			}
-			m_renderable->RebuildBuffers(m_particles, *camera);
+			else
+			{
+				if (!m_particles.empty() && m_material && m_material->IsTranslucent())
+				{
+					m_renderable->SortParticles(m_particles, *camera);
+				}
+				m_renderable->RebuildBuffers(m_particles, *camera);
+			}
 		}
 	}
 
@@ -1054,6 +1253,18 @@ namespace mmo
 				continue;
 			}
 
+			if (emitter->IsMeshMode())
+			{
+				for (const auto& meshRenderable : emitter->GetMeshRenderables())
+				{
+					if (meshRenderable && meshRenderable->GetMaterial() && meshRenderable->IsReady())
+					{
+						queue.AddRenderable(*meshRenderable, GetRenderQueueGroup(), 0);
+					}
+				}
+				continue;
+			}
+
 			ParticleRenderable* renderable = emitter->GetRenderable();
 			if (renderable && emitter->GetMaterial() && renderable->IsReady())
 			{
@@ -1066,6 +1277,18 @@ namespace mmo
 	{
 		for (auto& emitter : m_emitters)
 		{
+			if (emitter->IsMeshMode())
+			{
+				for (const auto& meshRenderable : emitter->GetMeshRenderables())
+				{
+					if (meshRenderable && meshRenderable->IsReady())
+					{
+						visitor.Visit(*meshRenderable, 0, false);
+					}
+				}
+				continue;
+			}
+
 			ParticleRenderable* renderable = emitter->GetRenderable();
 			if (renderable && renderable->IsReady())
 			{

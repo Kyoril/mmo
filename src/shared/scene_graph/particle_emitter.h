@@ -40,6 +40,8 @@ namespace mmo
 	class EmitterInstance;
 	class ParticleSystem;
 	class RenderQueue;
+	class Mesh;
+	class Material;
 
 	/**
 	 * @struct Particle
@@ -94,7 +96,8 @@ namespace mmo
 		BillboardFacing,     ///< Always faces the camera (default)
 		VelocityAligned,     ///< Faces camera but the quad's up axis aligns with the velocity
 		Stretched,           ///< Velocity-aligned and stretched along velocity (slashes, streaks)
-		HorizontalBillboard  ///< Lies flat on the XZ plane (ground decals, shockwaves)
+		HorizontalBillboard, ///< Lies flat on the XZ plane (ground decals, shockwaves)
+		Mesh                 ///< Renders a 3D mesh per particle via GPU instancing (debris, icons, shards)
 	};
 
 	/// @brief Sprite-sheet animation mode.
@@ -174,7 +177,10 @@ namespace mmo
 		// --- Render module ---
 		ParticleRenderMode renderMode { ParticleRenderMode::BillboardFacing };
 		float lengthScale { 1.0f };                      ///< Stretch factor along velocity for VelocityAligned / Stretched
-		String materialName;                             ///< Material used to render this emitter's particles
+		String materialName;                             ///< Material used to render this emitter's particles (billboard modes)
+
+		// --- Mesh render module (renderMode == Mesh) ---
+		String meshName;                                 ///< .hmsh rendered once per particle via GPU instancing
 
 		EmitterParameters()
 		{
@@ -240,6 +246,51 @@ namespace mmo
 	};
 
 	/**
+	 * @struct ParticleMeshInstance
+	 * @brief Per-particle instance data uploaded to the GPU when an emitter renders meshes.
+	 *
+	 * Layout matches the instanced vertex-shader input: a column-major world matrix at
+	 * TEXCOORD8-11 followed by an RGBA tint at TEXCOORD12.
+	 */
+	struct ParticleMeshInstance
+	{
+		Matrix4 world;   ///< World transform (translate * rotate * uniform scale) for this particle
+		Vector4 color;   ///< Per-particle tint (color-over-life), multiplied with the mesh vertex colour
+	};
+
+	static_assert(sizeof(ParticleMeshInstance) == 80, "ParticleMeshInstance must match the instanced VS input layout");
+
+	/**
+	 * @class ParticleMeshRenderable
+	 * @brief Renders one submesh of an emitter's mesh once per particle using GPU instancing.
+	 *
+	 * The geometry (vertex/index data) is cloned from the source mesh's submesh; the per-frame
+	 * instance buffer (transform + tint per live particle) is owned by the @ref EmitterInstance and
+	 * shared across all of its submesh renderables.
+	 */
+	class ParticleMeshRenderable final : public Renderable
+	{
+	public:
+		ParticleMeshRenderable(EmitterInstance& parent, VertexData* vertexData, IndexData* indexData,
+			MaterialPtr material);
+		~ParticleMeshRenderable() override = default;
+
+	public:
+		void PrepareRenderOperation(RenderOperation& operation) override;
+		[[nodiscard]] const Matrix4& GetWorldTransform() const override;
+		[[nodiscard]] float GetSquaredViewDepth(const Camera& camera) const override;
+		[[nodiscard]] MaterialPtr GetMaterial() const override;
+
+		[[nodiscard]] bool IsReady() const;
+
+	private:
+		EmitterInstance& m_parent;
+		VertexData* m_vertexData;
+		IndexData* m_indexData;
+		MaterialPtr m_material;
+	};
+
+	/**
 	 * @class EmitterInstance
 	 * @brief Simulates a single emitter: owns its particle pool, material and renderable.
 	 */
@@ -283,12 +334,30 @@ namespace mmo
 		[[nodiscard]] ParticleRenderable* GetRenderable() const { return m_renderable.get(); }
 		[[nodiscard]] const AABB& GetBoundingBox() const { return m_boundingBox; }
 
+		/// @brief True when this emitter renders meshes (renderMode == Mesh) and has valid geometry.
+		[[nodiscard]] bool IsMeshMode() const { return m_meshMode && !m_meshRenderables.empty(); }
+
+		/// @brief The per-particle instance buffer (transform + tint), valid only in mesh mode.
+		[[nodiscard]] VertexBuffer* GetInstanceBuffer() const { return m_instanceBuffer.get(); }
+
+		/// @brief Number of live instances currently in the instance buffer.
+		[[nodiscard]] uint32 GetInstanceCount() const { return m_instanceCount; }
+
+		/// @brief The submesh renderables used when rendering meshes (one per source submesh).
+		[[nodiscard]] const std::vector<std::unique_ptr<ParticleMeshRenderable>>& GetMeshRenderables() const { return m_meshRenderables; }
+
 	private:
 		void SpawnOne(const Matrix4& systemWorld, const Vector3& systemWorldPos, const Vector3& systemVelocity);
 		void UpdateParticles(float deltaTime);
 		void UpdateBoundingBox();
 		[[nodiscard]] Vector3 GetSpawnPosition(Vector3& outDirection) const;
 		void SimulateWarmup(const Matrix4& systemWorld, const Vector3& systemWorldPos, const Vector3& systemVelocity);
+
+		/// @brief (Re)loads the source mesh and clones its submesh geometry for instanced rendering.
+		void RebuildMeshResources();
+
+		/// @brief Rebuilds the per-particle GPU instance buffer (transform + tint) from live particles.
+		void RebuildInstanceBuffer(const Camera& camera);
 
 	private:
 		GraphicsDevice& m_device;
@@ -309,6 +378,17 @@ namespace mmo
 		Matrix4 m_renderTransform { Matrix4::Identity };
 		Vector3 m_emitterWorldPos { Vector3::Zero };
 		mutable AABB m_boundingBox;
+
+		// --- Mesh rendering resources (renderMode == Mesh) ---
+		bool m_meshMode { false };
+		String m_loadedMeshName;                                       ///< Tracks which mesh is currently cloned
+		std::shared_ptr<Mesh> m_mesh;                                  ///< Source mesh (keeps it alive)
+		std::vector<std::unique_ptr<VertexData>> m_meshVertexData;     ///< Cloned per-submesh vertex data
+		std::vector<std::unique_ptr<IndexData>> m_meshIndexData;       ///< Cloned per-submesh index data
+		std::vector<std::unique_ptr<ParticleMeshRenderable>> m_meshRenderables; ///< One renderable per submesh
+		VertexBufferPtr m_instanceBuffer;                              ///< Per-particle instance data
+		size_t m_instanceBufferCapacity { 0 };
+		uint32 m_instanceCount { 0 };
 	};
 
 	/**

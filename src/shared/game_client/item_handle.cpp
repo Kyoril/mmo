@@ -252,6 +252,16 @@ namespace mmo
 		return static_cast<int32>(info->maxdurability);
 	}
 
+	int32 ItemHandle::GetRequiredLevel() const
+	{
+		if (!CheckNonNull()) return 0;
+
+		const ItemInfo* info = Get()->GetEntry();
+		if (!info) return 0;
+
+		return static_cast<int32>(info->requiredlevel);
+	}
+
 	uint32 ItemHandle::GetSellPrice() const
 	{
 		if (!CheckNonNull()) return 0;
