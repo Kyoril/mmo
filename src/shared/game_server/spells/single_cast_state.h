@@ -102,6 +102,11 @@ namespace mmo
 		bool GetEffectTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets);
 		void MarkAffectedTarget(GameObjectS& target);
 
+		/// Evaluates the data-driven gating condition of a spell effect.
+		/// @return true if the effect should be applied (no condition, or the
+		///         condition evaluated true); false if the effect must be skipped.
+		bool EvaluateEffectCondition(const proto::SpellEffect& effect);
+
 	private:
 		void InternalSpellEffectWeaponDamage(const proto::SpellEffect& effect, SpellSchool school);
 

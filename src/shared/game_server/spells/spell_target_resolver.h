@@ -29,6 +29,7 @@ namespace mmo
 		bool ResolveSingleUnitTarget(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets) const;
 		bool ResolvePartyOrNearbyTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets) const;
 		bool ResolveAreaEnemyTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets) const;
+		bool ResolveSecondaryEnemyTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets) const;
 		bool CollectEnemyUnitsInRadius(const proto::SpellEffect& effect, float centerX, float centerZ, std::vector<GameObjectS*>& targets) const;
 		bool CanAddUnitTarget(const std::vector<GameObjectS*>& targets, const GameUnitS& unit) const;
 		bool ValidateEffectRadius(const proto::SpellEffect& effect) const;

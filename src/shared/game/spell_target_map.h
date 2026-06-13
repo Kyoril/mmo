@@ -58,11 +58,59 @@ namespace mmo
 			TargetAny,
 			Instigator,
 
+			/// Enemies located near the spell's primary unit target, excluding the
+			/// primary target itself. Candidates are gathered within the effect's
+			/// radius around the primary target and sorted by distance (nearest
+			/// first); the effect's chaintarget field caps how many are taken
+			/// (defaulting to 1 when unset). Because selection is deterministic,
+			/// multiple effects using this target type on the same cast resolve to
+			/// the same secondary unit(s) - e.g. an effect that deals damage and a
+			/// second effect that applies an aura will affect the same enemy.
+			TargetSecondaryEnemy,
+
 			Count_
 		};
 	}
 
 	typedef spell_effect_targets::Type SpellEffectTargets;
+
+	namespace spell_effect_condition
+	{
+		/// Data-driven gating predicate evaluated before a spell effect is applied.
+		/// Stored in SpellEffect::conditiontype. When the predicate is false the
+		/// effect is skipped without resolving targets or invoking its handler.
+		enum Type
+		{
+			/// No condition - the effect always applies.
+			None = 0,
+
+			/// Applies only if the condition unit has an aura cast by the spell's
+			/// caster whose source spell id equals SpellEffect::conditionvalue.
+			TargetHasAuraFromCaster = 1,
+
+			/// Applies only if the condition unit does NOT have an aura cast by the
+			/// spell's caster whose source spell id equals conditionvalue.
+			TargetMissingAuraFromCaster = 2,
+		};
+	}
+
+	typedef spell_effect_condition::Type SpellEffectCondition;
+
+	namespace spell_effect_condition_target
+	{
+		/// Selects which unit a SpellEffect condition is evaluated against.
+		/// Stored in SpellEffect::conditiontarget.
+		enum Type
+		{
+			/// The spell's primary unit target ("your target").
+			PrimaryTarget = 0,
+
+			/// The unit casting the spell.
+			Caster = 1,
+		};
+	}
+
+	typedef spell_effect_condition_target::Type SpellEffectConditionTarget;
 
 	class SpellTargetMap final
 	{

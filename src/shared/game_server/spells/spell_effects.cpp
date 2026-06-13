@@ -996,31 +996,11 @@ namespace mmo
 			}
 		}
 
-		void HandleInternalWeaponDamage(SpellEffectContext& ctx, SpellSchool school, bool basePointsArePct)
+		// Applies a single weapon-damage roll against one unit target. Caster-side
+		// values are recomputed per target so each victim gets an independent roll.
+		static void ApplyWeaponDamageSingleTarget(SpellEffectContext& ctx, SpellSchool school, bool basePointsArePct, GameUnitS& unitTarget)
 		{
-			if (ctx.effectTargets.empty())
-			{
-				return;
-			}
-
-			// Use the first unit target (matching original GetEffectUnitTarget single-target behavior)
-			GameUnitS* unitTargetPtr = nullptr;
-			for (auto* targetObject : ctx.effectTargets)
-			{
-				if (targetObject->IsUnit())
-				{
-					unitTargetPtr = &targetObject->AsUnit();
-					break;
-				}
-			}
-
-			if (!unitTargetPtr)
-			{
-				return;
-			}
-
-			ctx.markAffectedTarget(*unitTargetPtr);
-			GameUnitS& unitTarget = *unitTargetPtr;
+			ctx.markAffectedTarget(unitTarget);
 
 			auto& executer = ctx.castContext.GetExecutor();
 			const proto::SpellEntry& spell = ctx.castContext.GetSpell();
@@ -1282,6 +1262,28 @@ namespace mmo
 				// Trigger proc events for spell damage
 				executer.TriggerProcEvent(spell_proc_flags::DoneSpellMeleeDmgClass, &unitTarget, totalDamage, proc_ex_flags::NormalHit, spell.spellschool(), false, spell.familyflags());
 				unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMeleeDmgClass, &executer, totalDamage, proc_ex_flags::NormalHit, spell.spellschool(), false, spell.familyflags());
+			}
+		}
+
+		void HandleInternalWeaponDamage(SpellEffectContext& ctx, SpellSchool school, bool basePointsArePct)
+		{
+			if (ctx.effectTargets.empty())
+			{
+				return;
+			}
+
+			// Apply weapon damage to every resolved unit target. Single-target weapon
+			// spells resolve to exactly one unit; multi-target target types (such as
+			// TargetSecondaryEnemy or cleave-style area targets) resolve to several,
+			// and each victim takes a full, independent weapon-damage roll.
+			for (auto* targetObject : ctx.effectTargets)
+			{
+				if (!targetObject->IsUnit())
+				{
+					continue;
+				}
+
+				ApplyWeaponDamageSingleTarget(ctx, school, basePointsArePct, targetObject->AsUnit());
 			}
 		}
 

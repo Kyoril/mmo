@@ -303,7 +303,8 @@ namespace mmo
 		"Object Target",
 		"Cone Enemy",
 		"Target Any",
-		"Instigator"
+		"Instigator",
+		"Target Secondary Enemy"
 	};
 
 	static_assert(std::size(s_effectTargets) == spell_effect_targets::Count_, "One string per effect target has to exist!");
@@ -1720,6 +1721,76 @@ namespace mmo
 			}
 			ImGui::SameLine();
 			DrawHelpMarker("Area of effect radius in yards");
+
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+
+			// Conditional gating (data-driven). When set, the effect only applies
+			// if the condition holds for the chosen unit; otherwise it is skipped.
+			DrawSectionHeader("Conditional");
+			{
+				static const char* s_conditionTypes[] = {
+					"None",
+					"Target Has Aura From Caster",
+					"Target Missing Aura From Caster"
+				};
+				static const char* s_conditionTargets[] = {
+					"Primary Target",
+					"Caster"
+				};
+
+				int conditionType = static_cast<int>(effect.conditiontype());
+				if (conditionType < 0 || conditionType >= IM_ARRAYSIZE(s_conditionTypes))
+				{
+					conditionType = 0;
+				}
+				if (ImGui::Combo("Condition", &conditionType,
+					[](void*, int idx, const char** out_text)
+					{
+						if (idx < 0 || idx >= IM_ARRAYSIZE(s_conditionTypes))
+						{
+							return false;
+						}
+						*out_text = s_conditionTypes[idx];
+						return true;
+					}, nullptr, IM_ARRAYSIZE(s_conditionTypes)))
+				{
+					effect.set_conditiontype(static_cast<uint32>(conditionType));
+				}
+				ImGui::SameLine();
+				DrawHelpMarker("If set, this effect is only applied when the condition is satisfied. Otherwise it is skipped entirely.");
+
+				if (conditionType != 0)
+				{
+					int conditionTarget = static_cast<int>(effect.conditiontarget());
+					if (conditionTarget < 0 || conditionTarget >= IM_ARRAYSIZE(s_conditionTargets))
+					{
+						conditionTarget = 0;
+					}
+					if (ImGui::Combo("Condition Target", &conditionTarget,
+						[](void*, int idx, const char** out_text)
+						{
+							if (idx < 0 || idx >= IM_ARRAYSIZE(s_conditionTargets))
+							{
+								return false;
+							}
+							*out_text = s_conditionTargets[idx];
+							return true;
+						}, nullptr, IM_ARRAYSIZE(s_conditionTargets)))
+					{
+						effect.set_conditiontarget(static_cast<uint32>(conditionTarget));
+					}
+
+					int conditionValue = static_cast<int>(effect.conditionvalue());
+					if (ImGui::InputInt("Condition Aura Spell", &conditionValue))
+					{
+						effect.set_conditionvalue(static_cast<uint32>(std::max(0, conditionValue)));
+					}
+					ImGui::SameLine();
+					DrawHelpMarker("Spell id of the aura to look for on the condition target.");
+				}
+			}
 
 			ImGui::Spacing();
 			ImGui::Separator();

@@ -56,3 +56,5 @@ bin/Debug2/
 /src/shared/deferred_shading/shaders/VS_DeferredLighting.h
 *.local.json
 .claude/
+
+generated/

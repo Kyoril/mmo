@@ -873,6 +873,14 @@ namespace mmo
 		const auto it = kHandlers.find(effect.type());
 		if (it == kHandlers.end()) return;
 
+		// Data-driven conditional gating: skip the effect entirely when its
+		// condition (if any) is not satisfied. No targets are resolved and the
+		// handler is never invoked.
+		if (!EvaluateEffectCondition(effect))
+		{
+			return;
+		}
+
 		std::vector<GameObjectS*> targets;
 		GetEffectTargets(effect, targets);
 		SpellEffectContext ctx{
@@ -907,6 +915,50 @@ namespace mmo
 	void SingleCastState::MarkAffectedTarget(GameObjectS& target)
 	{
 		m_affectedTargetGuids.insert(target.GetGuid());
+	}
+
+	bool SingleCastState::EvaluateEffectCondition(const proto::SpellEffect& effect)
+	{
+		const uint32 conditionType = effect.conditiontype();
+		if (conditionType == spell_effect_condition::None)
+		{
+			return true;
+		}
+
+		// Resolve which unit the condition is evaluated against.
+		GameUnitS* conditionUnit = nullptr;
+		switch (effect.conditiontarget())
+		{
+		case spell_effect_condition_target::Caster:
+			conditionUnit = &m_cast.GetExecuter();
+			break;
+		case spell_effect_condition_target::PrimaryTarget:
+		default:
+			conditionUnit = m_context.FindUnitByGuid(m_target.GetUnitTarget());
+			break;
+		}
+
+		// A missing condition unit means the predicate cannot be satisfied; the
+		// safest behaviour is to skip the gated effect.
+		if (!conditionUnit)
+		{
+			return false;
+		}
+
+		const uint64 casterGuid = m_cast.GetExecuter().GetGuid();
+		switch (conditionType)
+		{
+		case spell_effect_condition::TargetHasAuraFromCaster:
+			return conditionUnit->HasAuraSpellFromCaster(effect.conditionvalue(), casterGuid);
+		case spell_effect_condition::TargetMissingAuraFromCaster:
+			return !conditionUnit->HasAuraSpellFromCaster(effect.conditionvalue(), casterGuid);
+		default:
+			// Unknown condition type - fail safe by not applying the effect so that
+			// authored data which relies on an unimplemented predicate does not
+			// silently behave as "always apply".
+			WLOG("Spell " << m_spell.id() << " effect " << effect.index() << " uses unknown condition type " << conditionType);
+			return false;
+		}
 	}
 
 	void SingleCastState::InternalSpellEffectWeaponDamage(const proto::SpellEffect& effect, SpellSchool school)
