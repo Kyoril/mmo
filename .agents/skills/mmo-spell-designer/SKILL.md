@@ -33,6 +33,12 @@ Apply the validated draft back into `data/editor/data/spells.data` with an autom
 ```powershell
 python .agents/skills/mmo-spell-designer/scripts/apply_spell_json.py F:\mmo\generated\spells\my_spell.json --project-root F:\mmo --backup
 ```
+
+Grant the resulting spell to a class at a chosen level:
+
+```powershell
+python .agents/skills/mmo-spell-designer/scripts/grant_class_spell.py --project-root F:\mmo --class-name Scout --spell-id 168 --level 10
+```
 </quick_start>
 
 <context>
@@ -48,7 +54,8 @@ python .agents/skills/mmo-spell-designer/scripts/apply_spell_json.py F:\mmo\gene
 3. For edits, export the closest existing spell to JSON with `scripts/export_spell_json.py` and modify the draft. For new spells, either export a similar spell as a template or author a fresh JSON wrapper with the same field names as `SpellEntry`.
 4. Validate the draft with `scripts/validate_spell_json.py`. Fix every reported problem before applying.
 5. Apply the JSON draft with `scripts/apply_spell_json.py` only after validation passes.
-6. After applying, inspect the resulting spell again and verify the critical references and effect wiring.
+6. If the spell is class-granted, add or update the class spell grant with `scripts/grant_class_spell.py`.
+7. After applying, inspect the resulting spell again and verify the critical references and effect wiring.
 </process>
 
 <validation>

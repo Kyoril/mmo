@@ -85,7 +85,7 @@ your target has your Wounding Strike the second enemy is wounded":
 - effect 1: `WeaponDamage`, `targeta = TargetSecondaryEnemy`, `radius = 8`, `chaintarget = 1`,
   `basepoints = 8`
 - effect 2: `TriggerSpell` (the Wounded spell), `targeta = TargetSecondaryEnemy`, `radius = 8`,
-  `chaintarget = 1`, `conditiontype = 1`, `conditionvalue = <Wounding Strike spell id>`,
+  `chaintarget = 1`, `conditiontype = 1`, `conditionvalue = <Wounded aura spell id>`,
   `conditiontarget = 0`
 </secondary_and_multi_target>
 

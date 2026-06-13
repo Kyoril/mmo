@@ -162,6 +162,40 @@ ITEM_TRIGGER_NAMES = {
     2: "OnHitChance",
 }
 
+SPELL_TARGET_NAMES = {
+    0: "Caster",
+    1: "NearbyEnemy",
+    2: "NearbyParty",
+    3: "NearbyAlly",
+    4: "Pet",
+    5: "TargetEnemy",
+    6: "SourceArea",
+    7: "TargetArea",
+    8: "Home",
+    9: "SourceAreaEnemy",
+    10: "TargetAreaEnemy",
+    11: "DatabaseLocation",
+    12: "CasterLocation",
+    13: "CasterAreaParty",
+    14: "TargetAlly",
+    15: "ObjectTarget",
+    16: "ConeEnemy",
+    17: "TargetAny",
+    18: "Instigator",
+    19: "TargetSecondaryEnemy",
+}
+
+SPELL_CONDITION_NAMES = {
+    0: "None",
+    1: "TargetHasAuraFromCaster",
+    2: "TargetMissingAuraFromCaster",
+}
+
+SPELL_CONDITION_TARGET_NAMES = {
+    0: "PrimaryTarget",
+    1: "Caster",
+}
+
 
 def load_catalogs(project_root: str | None = None) -> dict[str, object]:
     root = find_project_root(project_root)
@@ -204,8 +238,16 @@ def message_to_dict(message) -> dict:
 def effect_to_summary(effect) -> dict:
     data = message_to_dict(effect)
     data["type_name"] = SPELL_EFFECT_NAMES.get(effect.type, f"Unknown({effect.type})")
+    if effect.HasField("targeta"):
+        data["targeta_name"] = SPELL_TARGET_NAMES.get(effect.targeta, f"Unknown({effect.targeta})")
+    if effect.HasField("targetb"):
+        data["targetb_name"] = SPELL_TARGET_NAMES.get(effect.targetb, f"Unknown({effect.targetb})")
     if effect.HasField("aura"):
         data["aura_name"] = AURA_TYPE_NAMES.get(effect.aura, f"Unknown({effect.aura})")
+    if effect.HasField("conditiontype"):
+        data["conditiontype_name"] = SPELL_CONDITION_NAMES.get(effect.conditiontype, f"Unknown({effect.conditiontype})")
+    if effect.HasField("conditiontarget"):
+        data["conditiontarget_name"] = SPELL_CONDITION_TARGET_NAMES.get(effect.conditiontarget, f"Unknown({effect.conditiontarget})")
     return data
 
 
