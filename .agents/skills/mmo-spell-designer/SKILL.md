@@ -39,6 +39,18 @@ Grant the resulting spell to a class at a chosen level:
 ```powershell
 python .agents/skills/mmo-spell-designer/scripts/grant_class_spell.py --project-root F:\mmo --class-name Scout --spell-id 168 --level 10
 ```
+
+Inspect class talent tabs and current talent placements:
+
+```powershell
+python .agents/skills/mmo-spell-designer/scripts/inspect_spell_catalog.py --project-root F:\mmo --section talents --class-name Scout --pretty
+```
+
+Create or update a talent entry that points at the new rank spell:
+
+```powershell
+python .agents/skills/mmo-spell-designer/scripts/upsert_talent_entry.py --project-root F:\mmo --talent-id 900 --tab-id 3 --row 1 --column 2 --rank-spell-id 169
+```
 </quick_start>
 
 <context>
@@ -54,8 +66,8 @@ python .agents/skills/mmo-spell-designer/scripts/grant_class_spell.py --project-
 3. For edits, export the closest existing spell to JSON with `scripts/export_spell_json.py` and modify the draft. For new spells, either export a similar spell as a template or author a fresh JSON wrapper with the same field names as `SpellEntry`.
 4. Validate the draft with `scripts/validate_spell_json.py`. Fix every reported problem before applying.
 5. Apply the JSON draft with `scripts/apply_spell_json.py` only after validation passes.
-6. If the spell is class-granted, add or update the class spell grant with `scripts/grant_class_spell.py`.
-7. After applying, inspect the resulting spell again and verify the critical references and effect wiring.
+6. If the spell is class-granted, add or update the class spell grant with `scripts/grant_class_spell.py`. If the spell is talent-granted, inspect `talents.data` / `talent_tabs.data` and add or update the talent with `scripts/upsert_talent_entry.py`.
+7. After applying, inspect the resulting spell again and verify the critical references, effect wiring, and talent placement if applicable.
 </process>
 
 <validation>

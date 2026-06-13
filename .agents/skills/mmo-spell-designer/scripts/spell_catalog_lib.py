@@ -215,6 +215,8 @@ def load_catalogs(project_root: str | None = None) -> dict[str, object]:
         "items": parse("items.data", modules["items"].Items),
         "classes": parse("classes.data", modules["classes"].Classes),
         "races": parse("races.data", modules["races"].Races),
+        "talents": parse("talents.data", modules["talents"].Talents),
+        "talent_tabs": parse("talent_tabs.data", modules["talent_tabs"].TalentTabs),
         "spell_categories": parse("spell_categories.data", modules["spell_categories"].SpellCategories),
         "spell_visualizations": parse("spell_visualizations.data", modules["spell_visualizations"].SpellVisualizations),
         "proficiencies": parse("proficiencies.data", modules["proficiencies"].Proficiencies),
@@ -285,6 +287,8 @@ def build_indexes(catalogs: dict[str, object]) -> dict[str, dict]:
         "items": {entry.id: entry for entry in catalogs["items"].entry},
         "classes": {entry.id: entry for entry in catalogs["classes"].entry},
         "races": {entry.id: entry for entry in catalogs["races"].entry},
+        "talents": {entry.id: entry for entry in catalogs["talents"].entry},
+        "talent_tabs": {entry.id: entry for entry in catalogs["talent_tabs"].entry},
         "categories": {entry.id: entry for entry in catalogs["spell_categories"].entry},
         "visualizations": {entry.id: entry for entry in catalogs["spell_visualizations"].entry},
         "proficiencies": {entry.id: entry for entry in catalogs["proficiencies"].entry},
@@ -365,3 +369,41 @@ def spell_name_matches(spell, needle: str) -> bool:
 
 def dump_json(data) -> str:
     return json.dumps(data, indent=2, ensure_ascii=True)
+
+
+def summarize_talent_tab(tab) -> dict:
+    return {
+        "id": tab.id,
+        "name": tab.name,
+        "class_id": tab.class_id,
+        "icon": getattr(tab, "icon", ""),
+        "background": getattr(tab, "background", ""),
+    }
+
+
+def summarize_talent(talent, catalogs: dict[str, object], indexes: dict[str, dict]) -> dict:
+    rank_spells = []
+    for rank_index, spell_id in enumerate(talent.ranks):
+        spell = indexes["spells"].get(spell_id)
+        rank_spells.append(
+            {
+                "rank_index": rank_index,
+                "spell_id": spell_id,
+                "spell_name": spell.name if spell else None,
+            }
+        )
+
+    tab = indexes["talent_tabs"].get(talent.tab)
+    class_entry = indexes["classes"].get(tab.class_id) if tab else None
+
+    return {
+        "id": talent.id,
+        "tab": talent.tab,
+        "tab_name": tab.name if tab else None,
+        "class_id": tab.class_id if tab else None,
+        "class_name": class_entry.name if class_entry else None,
+        "row": talent.row,
+        "column": talent.column,
+        "rank_count": len(talent.ranks),
+        "ranks": rank_spells,
+    }

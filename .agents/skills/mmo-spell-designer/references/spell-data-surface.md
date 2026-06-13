@@ -94,6 +94,10 @@ Inspect these files when needed:
 
 - `classes.data` from `classes.proto`
   Use for class IDs, power types, spell families, and class-granted spells.
+- `talents.data` from `talents.proto`
+  Use for talent placement (`tab`, `row`, `column`) and rank spell chains.
+- `talent_tabs.data` from `talent_tabs.proto`
+  Use for class-specific talent trees and to identify the correct tab before placing a talent.
 - `races.data` from `races.proto`
   Use for race IDs and initial spell sources.
 - `items.data` from `items.proto`

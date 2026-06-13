@@ -1339,6 +1339,12 @@ public:
 		/// @returns The total multiplier as a float.
 		float GetTotalMultiplier(AuraType type) const;
 
+		/// Gets the incoming damage multiplier from active target-side auras for a specific attacker and damage class.
+		/// @param attacker The attacking unit causing the damage.
+		/// @param dmgClass The damage class of the incoming attack.
+		/// @returns A multiplicative factor where 1.10 means +10% damage taken.
+		float GetIncomingDamageTakenMultiplier(const GameUnitS* attacker, SpellDmgClass dmgClass) const;
+
 		/// Called when an attack swing occurs.
 		void OnAttackSwing();
 

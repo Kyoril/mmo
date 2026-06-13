@@ -144,6 +144,8 @@ namespace mmo
 					unitTarget.OnBlock();
 				}
 
+				damageAmount = static_cast<uint32>(static_cast<float>(damageAmount) * unitTarget.GetIncomingDamageTakenMultiplier(&executer, static_cast<SpellDmgClass>(spell.dmgclass())));
+
 				if (unitTarget.Damage(damageAmount, spell.spellschool(), &executer, damage_type::MagicalAbility) > 0)
 				{
 					float threat = static_cast<float>(damageAmount) * spell.threat_multiplier();
@@ -1130,6 +1132,7 @@ namespace mmo
 				if (hit && totalDamage > 0)
 				{
 					executer.ApplySpellMod(spell_mod_op::Damage, spell.id(), totalDamage);
+					totalDamage = static_cast<uint32>(static_cast<float>(totalDamage) * unitTarget.GetIncomingDamageTakenMultiplier(&executer, spell_dmg_class::Melee));
 				}
 
 				// Deal damage
@@ -1245,6 +1248,8 @@ namespace mmo
 					totalDamage -= blockedDamage;
 					unitTarget.OnBlock();
 				}
+
+				totalDamage = static_cast<uint32>(static_cast<float>(totalDamage) * unitTarget.GetIncomingDamageTakenMultiplier(&executer, spell_dmg_class::Melee));
 
 				uint8 damageFlags = DamageFlags::None;
 				if (isCrit) damageFlags |= DamageFlags::Crit;

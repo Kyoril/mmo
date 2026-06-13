@@ -1470,16 +1470,19 @@ namespace mmo
 			return false;
 		}
 
-		// Get current rank (0 if not learned yet)
-		const uint32 currentRank = GetTalentRank(talentId);
-		if (currentRank >= static_cast<uint32>(talentEntry->ranks_size()) - 1)
+		// Get current rank. Note that GetTalentRank() returns 0 both when the talent is
+		// not learned at all AND when it is learned at rank 0, so we use HasTalent() to
+		// disambiguate and treat an unlearned talent as rank -1.
+		const bool hasTalent = HasTalent(talentId);
+		const int32 currentRank = hasTalent ? static_cast<int32>(GetTalentRank(talentId)) : -1;
+		if (currentRank >= static_cast<int32>(talentEntry->ranks_size()) - 1)
 		{
-			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " rank " << rank << " which is lower than the current player talent rank!");
+			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " rank " << rank << " but it is already at max rank!");
 			return false; // Already at max rank
 		}
 
 		// Always need at least one talent point for higher ranks
-		const uint32 talentPointCost = HasTalent(talentId) ? (rank - currentRank) : rank + 1;
+		const uint32 talentPointCost = hasTalent ? (rank - static_cast<uint32>(currentRank)) : rank + 1;
 
 		// Check if player has enough talent points
 		uint32 availablePoints = GetAvailableTalentPoints();

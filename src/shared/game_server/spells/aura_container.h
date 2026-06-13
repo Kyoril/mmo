@@ -191,6 +191,10 @@ namespace mmo
 
 		GameUnitS* GetCaster() const;
 
+		const std::vector<std::shared_ptr<AuraEffect>>& GetAuraEffects() const { return m_auras; }
+
+		bool IsHostileTargetAura() const;
+
 		uint64 GetItemGuid() const { return m_itemGuid; }
 
 	private:

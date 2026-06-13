@@ -55,6 +55,7 @@ namespace mmo
 			{ AuraType::ModHealingDone,        [](AuraEffect& self, bool apply){ self.HandleModHealingDone(apply); } },
 			{ AuraType::ModHealingTaken,       [](AuraEffect& self, bool apply){ self.HandleModHealingTaken(apply); } },
 			{ AuraType::ModDamageTaken,        [](AuraEffect& self, bool apply){ self.HandleModDamageTaken(apply); } },
+			{ AuraType::ModDamageTakenPct,     [](AuraEffect& self, bool apply){ self.HandleModDamageTaken(apply); } },
 			{ AuraType::ModAttackSpeed,        [](AuraEffect& self, bool apply){ self.HandleModAttackSpeed(apply); } },
 			{ AuraType::ModAttackPower,        [](AuraEffect& self, bool apply){ self.HandleModAttackPower(apply); } },
 			{ AuraType::ModResistance,         [](AuraEffect& self, bool apply){ self.HandleModResistance(apply); } },
@@ -197,6 +198,8 @@ namespace mmo
 
 	void AuraEffect::HandleModDamageTaken(bool apply) const
 	{
+		// Incoming damage taken modifiers are evaluated dynamically in the damage pipeline
+		// so they can respect caster identity and damage-class filters.
 	}
 
 	void AuraEffect::HandleModHealingDone(const bool apply) const

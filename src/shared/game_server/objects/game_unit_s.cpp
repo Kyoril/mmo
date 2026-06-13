@@ -13,6 +13,14 @@
 
 namespace mmo
 {
+	namespace
+	{
+		float ApplyPctModifier(const float baseValue, const int32 pct)
+		{
+			return baseValue * ((100.0f + static_cast<float>(pct)) / 100.0f);
+		}
+	}
+
 	uint32 UnitStats::DeriveFromBaseWithFactor(const uint32 statValue, const uint32 baseValue, const uint32 factor)
 	{
 		// Check if just at minimum
@@ -2854,6 +2862,45 @@ namespace mmo
 		}
 
 		return multiplier;
+	}
+
+	float GameUnitS::GetIncomingDamageTakenMultiplier(const GameUnitS* attacker, const SpellDmgClass dmgClass) const
+	{
+		float multiplier = 1.0f;
+
+		for (const auto& aura : m_auras)
+		{
+			if (!aura || !aura->IsApplied())
+			{
+				continue;
+			}
+
+			const proto::SpellEntry& auraSpell = aura->GetSpell();
+			if (auraSpell.dmgclass() != spell_dmg_class::None && auraSpell.dmgclass() != dmgClass)
+			{
+				continue;
+			}
+
+			if (aura->IsHostileTargetAura())
+			{
+				if (!attacker || aura->GetCasterId() != attacker->GetGuid())
+				{
+					continue;
+				}
+			}
+
+			for (const auto& effect : aura->GetAuraEffects())
+			{
+				if (!effect || effect->GetType() != aura_type::ModDamageTakenPct)
+				{
+					continue;
+				}
+
+				multiplier = ApplyPctModifier(multiplier, effect->GetBasePoints());
+			}
+		}
+
+		return std::max(multiplier, 0.0f);
 	}
 
 	void GameUnitS::OnDespawnTimer()

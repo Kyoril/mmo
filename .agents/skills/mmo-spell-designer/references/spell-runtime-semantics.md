@@ -117,6 +117,8 @@ Relevant restrictions include:
 - alive or dead casting rules
 - stunned, feared, or sleeping usability flags
 - line-of-sight handling
+- talent-tier requirements in `GamePlayerS::LearnTalent()`: row `0` has no prerequisite, row `1`
+  requires 5 points in the same tab, row `2` requires 10, and so on
 
 Implication:
 

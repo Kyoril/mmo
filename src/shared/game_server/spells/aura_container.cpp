@@ -14,6 +14,26 @@
 
 namespace mmo
 {
+	namespace
+	{
+		bool IsHostileTargetType(const uint32 target)
+		{
+			switch (target)
+			{
+			case spell_effect_targets::NearbyEnemy:
+			case spell_effect_targets::TargetEnemy:
+			case spell_effect_targets::SourceAreaEnemy:
+			case spell_effect_targets::TargetAreaEnemy:
+			case spell_effect_targets::ConeEnemy:
+			case spell_effect_targets::TargetSecondaryEnemy:
+				return true;
+
+			default:
+				return false;
+			}
+		}
+	}
+
 	AuraContainer::AuraContainer(GameUnitS& owner, const uint64 casterId, const proto::SpellEntry& spell, const GameTime duration, const uint64 itemGuid)
 		: m_owner(owner)
 		, m_casterId(casterId)
@@ -510,6 +530,24 @@ namespace mmo
 		}
 		
 		return strongCaster.get();
+	}
+
+	bool AuraContainer::IsHostileTargetAura() const
+	{
+		for (const auto& aura : m_auras)
+		{
+			if (!aura)
+			{
+				continue;
+			}
+
+			if (IsHostileTargetType(aura->GetEffect().targeta()))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	bool AuraContainer::HandleProc(uint32 procFlags, uint32 procEx, GameUnitS* target, uint32 damage, uint8 school, bool triggerByAura, uint64 familyFlags)
