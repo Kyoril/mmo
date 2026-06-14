@@ -8,6 +8,7 @@
 #include "base/utilities.h"
 #include "binary_io/vector_sink.h"
 #include "game/chat_type.h"
+#include "game/loot.h"
 #include "proto_data/project.h"
 #include "shared/proto_data/combat_settings.pb.h"
 
@@ -315,7 +316,9 @@ namespace mmo
 
 	float GameUnitS::GetInteractionDistance() const
 	{
-		return 5.0f;
+		// Keep interaction range in sync with the loot range so the client-side
+		// pre-checks (which use LootDistance) and the server-side validation agree.
+		return LootDistance;
 	}
 
 	void GameUnitS::RaiseTrigger(trigger_event::Type e, GameUnitS *triggeringUnit)

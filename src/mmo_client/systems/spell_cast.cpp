@@ -12,6 +12,22 @@
 
 namespace mmo
 {
+	const char* GetNoPowerErrorKey(int32 powerType)
+	{
+		switch (powerType)
+		{
+		case power_type::Rage:
+			return "SPELL_CAST_FAILED_NO_POWER_RAGE";
+		case power_type::Energy:
+			return "SPELL_CAST_FAILED_NO_POWER_ENERGY";
+		case power_type::Health:
+			return "SPELL_CAST_FAILED_NO_POWER_HEALTH";
+		case power_type::Mana:
+		default:
+			return "SPELL_CAST_FAILED_NO_POWER_MANA";
+		}
+	}
+
 	SpellCast::SpellCast(RealmConnector& connector, const proto_client::SpellManager& spells, const proto_client::RangeManager& ranges)
 		: m_connector(connector)
 		, m_spells(spells)
@@ -290,7 +306,7 @@ namespace mmo
 
 			if (spell->powertype() != unit->GetPowerType() || effectiveCost > unit->GetPower(unit->GetPowerType()))
 			{
-				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_NO_POWER");
+				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", GetNoPowerErrorKey(spell->powertype()));
 				return;
 			}
 		}

@@ -58,6 +58,7 @@ namespace mmo
 		other.m_onUpdate = m_onUpdate;
 		other.m_needsLayout = true;
 		other.m_needsRedraw = true;
+		other.m_textHeightCacheValid = false;
 		other.m_onEnterPressed = m_onEnterPressed;
 		other.m_onTabPressed = m_onTabPressed;
 		other.m_onSpacePressed = m_onSpacePressed;
@@ -336,7 +337,7 @@ namespace mmo
 		// Apply new text and invalidate rendering
 		m_text = std::move(text);
 
-		// Notify observers
+		// Notify observers (also invalidates the cached text height)
 		OnTextChanged();
 
 		// Invalidate
@@ -649,8 +650,30 @@ namespace mmo
 		}
 
 		const Rect rect = GetAbsoluteFrameRect();
-		const uint32 lineCount = font->GetLineCount(m_text, rect, FrameManager::Get().GetUIScale().y);
+		const float width = rect.GetWidth();
+		const float scale = FrameManager::Get().GetUIScale().y;
+
+		// Computing the line count walks every glyph of the text, so cache the result.
+		// The height only depends on the text, the resolved font, the wrap width and the
+		// UI scale. Text changes invalidate the cache explicitly (see SetText); font,
+		// width and scale changes are detected by comparing against the cached inputs.
+		if (m_textHeightCacheValid &&
+			m_textHeightCacheFont == font.get() &&
+			m_textHeightCacheWidth == width &&
+			m_textHeightCacheScale == scale)
+		{
+			return m_textHeightCache;
+		}
+
+		const uint32 lineCount = font->GetLineCount(m_text, rect, scale);
 		const float result = font->GetHeight() * lineCount;
+
+		m_textHeightCache = result;
+		m_textHeightCacheFont = font.get();
+		m_textHeightCacheWidth = width;
+		m_textHeightCacheScale = scale;
+		m_textHeightCacheValid = true;
+
 		return result;
 	}
 
@@ -1537,6 +1560,11 @@ namespace mmo
 
 	void Frame::OnTextChanged()
 	{
+		// Any text mutation routes through here (SetText as well as the in-place
+		// edits in TextField), so this is the single point to drop the cached
+		// text height.
+		m_textHeightCacheValid = false;
+
 		// Invoke the signal
 		TextChanged();
 	}

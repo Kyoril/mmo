@@ -3,7 +3,10 @@
 #include "world_state.h"
 #include "client.h"
 #include "systems/loot_client.h"
+#include "systems/spell_cast.h"
 #include "systems/trade_client.h"
+
+#include <cstring>
 
 #include "event_loop.h"
 #include "game_state_mgr.h"
@@ -2564,6 +2567,13 @@ namespace mmo
 			if (result < std::size(s_spellCastResultStrings))
 			{
 				errorMessage = s_spellCastResultStrings[result];
+
+				// Refine the generic "no power" message so the UI names the actual
+				// resource the spell uses (mana, rage, energy, ...).
+				if (spell && std::strcmp(errorMessage, "SPELL_CAST_FAILED_NO_POWER") == 0)
+				{
+					errorMessage = GetNoPowerErrorKey(spell->powertype());
+				}
 			}
 			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", false);
 			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", errorMessage);

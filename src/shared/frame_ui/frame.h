@@ -598,6 +598,16 @@ namespace mmo
 		bool m_needsLayout;
 		/// The cached absolute frame rect.
 		Rect m_absRectCache;
+		/// Cached result of the last GetTextHeight() call.
+		float m_textHeightCache = 0.0f;
+		/// Whether m_textHeightCache holds a valid value (invalidated on text change).
+		bool m_textHeightCacheValid = false;
+		/// The font the cached text height was computed for.
+		const Font* m_textHeightCacheFont = nullptr;
+		/// The wrap width the cached text height was computed for.
+		float m_textHeightCacheWidth = 0.0f;
+		/// The UI scale the cached text height was computed for.
+		float m_textHeightCacheScale = 0.0f;
 		/// Contains all state imageries of this style by name.
 		std::map<std::string, StateImagery> m_stateImageriesByName;
 		/// Contains all state imagery sections of this style by name.
