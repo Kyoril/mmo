@@ -2567,10 +2567,10 @@ namespace mmo
 			const bool wasCastingThisSpell = m_spellCast.GetCastingSpellId() == spellId;
 			const bool castWasConfirmedByServer = m_spellCast.HasServerConfirmedCastStart(spellId);
 			m_spellCast.OnSpellFailure(spellId);
-			if (wasCastingThisSpell &&
-				castWasConfirmedByServer &&
-				spell &&
-				(spell->cooldownflags() & spell_cooldown_flags::StartOnCastStart) != 0)
+			// Clear any cooldown that was started at cast start: either an actual StartOnCastStart
+			// cooldown, or the display-preview cooldown (castTime + finalCooldown) that we start
+			// for spells with their own cooldown so the button doesn't show a GCD-then-swap glitch.
+			if (wasCastingThisSpell && castWasConfirmedByServer && spell)
 			{
 				m_cooldownManager.ClearCooldown(spellId);
 			}

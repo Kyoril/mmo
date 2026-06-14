@@ -85,7 +85,24 @@ namespace mmo
 		if (m_context.GetWorldInstance() && !(m_spell.attributes(0) & spell_attributes::Passive) && !m_isProc && m_castTime > 0)
 		{
 			const uint64 casterId = m_cast.GetExecuter().GetGuid();
-			const uint32 startCooldownMs = ShouldStartCooldownOnCastStart() ? static_cast<uint32>(CalculateFinalCooldown()) : 0;
+			// Determine the cooldown duration to communicate to the client at cast start.
+			// For StartOnCastStart spells the cooldown is already ticking on the server, so send the raw duration.
+			// For all other spells with a cooldown, send castTime + finalCooldown as a display preview: it starts
+			// now and expires at exactly the same moment the post-cast cooldown will expire, so the UI shows the
+			// spell's own sweep the whole time without a jarring GCD-then-swap visual glitch.
+			uint32 startCooldownMs = 0;
+			if (ShouldStartCooldownOnCastStart())
+			{
+				startCooldownMs = static_cast<uint32>(CalculateFinalCooldown());
+			}
+			else
+			{
+				const GameTime finalCd = CalculateFinalCooldown();
+				if (finalCd > 0)
+				{
+					startCooldownMs = static_cast<uint32>(m_castTime + finalCd);
+				}
+			}
 			m_context.SendPacketFromCaster(
 				[casterId, startCooldownMs, globalCooldownMs, this](game::OutgoingPacket& out_packet)
 				{

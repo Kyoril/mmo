@@ -180,7 +180,7 @@ namespace mmo
 				}
 				else
 				{
-					if (stackCount < maxStackSize - 2 && node.children < nodes.size() - 1)
+					if (stackCount < maxStackSize - 2 && node.children > current.nodeIndex && node.children + 1 < nodes.size())
 					{
 						stack[stackCount++] = { node.children };
 						stack[stackCount++] = { node.children + 1 };
@@ -296,7 +296,7 @@ namespace mmo
 				}
 				else
 				{
-					if (stackCount < maxStackSize - 2 && node.children < nodes.size() - 1)
+					if (stackCount < maxStackSize - 2 && node.children > current.nodeIndex && node.children + 1 < nodes.size())
 					{
 						stack[stackCount++] = { node.children };
 						stack[stackCount++] = { node.children + 1 };
