@@ -49,6 +49,25 @@ Quest `19` demonstrates the current multi-objective item turn-in pattern:
 - no exotic scripting
 - modest reward scaling for a low-level civic or labor quest
 </pattern>
+
+<pattern name="timed_or_failure_sensitive_quest">
+Timed quests and `StayAlive` quests should be authored with explicit failure narration and recovery intent:
+
+- use `timelimit` only when the failure state is part of the content, not as a generic urgency decoration
+- if failure matters to story flow, wire `failtriggers`
+- remember that a timed quest can fail after objectives are complete but before turn-in
+- `StayAlive` now really fails on player death, so only use it when the content can tolerate that friction
+</pattern>
+
+<pattern name="repeatable_quest">
+Repeatable content now supports three variants:
+
+- `Repeatable`: instantly available again after reward
+- `Daily`: available again after the configured daily reset
+- `Weekly`: available again after the configured weekly reset
+
+Prefer `Repeatable` for training, testing, or endlessly farmable civic tasks. Prefer `Daily` or `Weekly` only when you actually want a global cadence.
+</pattern>
 </live_patterns>
 
 <reward_guidance>
@@ -82,6 +101,7 @@ When extending a questline:
 
 - use `prevquestid` for hard unlock order
 - use handoff quests to move players between hubs, trainers, or thematic beats
+- use `nextchainquestid` when you want the same questgiver to immediately surface the follow-up after turn-in
 - keep each step's reward proportional to the player's travel, combat, and scripting friction
 - change the quest texture between steps instead of repeating the same kill count on a stronger mob without narrative or mechanical change
 </chain_guidance>
@@ -101,5 +121,9 @@ Do not design a "click this object five times" quest unless you also provide a s
 
 <pitfall name="unused_starttriggers">
 Do not put important start behavior into `starttriggers` and assume it will fire. Use provider unit triggers on `OnQuestAccept` instead.
+</pitfall>
+
+<pitfall name="auto_reward_assumption">
+Do not author a quest as if `AutoRewarded` guarantees automatic turn-in. Verify the runtime path or add explicit custom handling.
 </pitfall>
 </anti_patterns>

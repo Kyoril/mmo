@@ -24,6 +24,18 @@ Important `QuestEntry` fields in `quests.proto`:
 - trigger references: `starttriggers`, `failtriggers`, `rewardtriggers`
 </quest_entry_fields>
 
+<flag_surface>
+Quest flags that matter in current authoring:
+
+- `StayAlive`: fail the quest if the player dies before turn-in
+- `Sharable`: the quest can be shared
+- `AutoRewarded`: exposed by schema and editor, but verify runtime support before depending on it
+- `Daily`: rewarded quest stays locked until the next configured daily reset boundary
+- `Weekly`: rewarded quest stays locked until the next configured weekly reset boundary
+- `Exploration`: completion still needs an explicit trigger path
+- `Repeatable`: the quest becomes immediately available again after reward
+</flag_surface>
+
 <objective_runtime_limit>
 Quest progress uses the four packed `QuestField.counters` bytes in `src/shared/game/quest.h`. Treat four requirements as the real hard limit for counter-based objectives, even though protobuf itself would allow more rows.
 </objective_runtime_limit>
@@ -78,3 +90,7 @@ Relevant live area triggers:
 - area trigger `2` `New Area Trigger` uses trigger `12`, which completes quest `20`
 - area trigger `5` `Warrior Lv 10 Quest Start Trigger` uses trigger `16`, which starts the scripted arena flow for quest `22`
 </area_trigger_examples>
+
+<reset_schedule>
+Daily and weekly quest cooldowns are computed from world-server configuration, not from quest-local data. The global settings currently live in `src/world_server/configuration.h` and are pushed into `quest_reset` at startup.
+</reset_schedule>

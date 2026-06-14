@@ -12,6 +12,8 @@ Do not assume the `Exploration` quest flag is self-sufficient. `GamePlayerS::OnQ
 
 Do not model pure object-use quests as if the engine had a native "use object N times" counter. The current runtime increments object objective counters through `OnQuestSpellCastCredit` for spell-cast-on-object requirements, or through an explicit `CompleteQuest` trigger/script path. If a quest requirement uses `objectid` without a matching spell/trigger path, validate the design carefully.
 
+Do not assume the `AutoRewarded` flag is fully wired just because the editor exposes it. As of the current runtime, the flag is present in quest data and the editor UI, but normal quest completion still expects the usual reward-turn-in flow unless custom logic handles it.
+
 Default to cloning the closest live quest and editing the minimal set of fields instead of inventing quest data from scratch. Existing quests in this repository already cover handoff quests, kill quests, item collection quests, multi-objective turn-ins, trigger-completed scripted quests, and area-trigger exploration quests.
 
 When a quest needs new supporting units, items, or spells, invoke `mmo-npc-designer`, `mmo-item-designer`, or `mmo-spell-designer` first, then wire the confirmed IDs back into the quest draft.
@@ -21,6 +23,8 @@ When a quest needs new supporting units, items, or spells, invoke `mmo-npc-desig
 Create or edit MMO quests as data instead of code. This skill is designed for the actual quest system in this repository: `quests.data` for the quest row itself, `units.data` and `objects.data` for provider and turn-in wiring, `objects.data` for quest-gated interactables, `triggers.data` plus `area_triggers.data` for scripted or exploration completion, and the runtime behavior in `game_player_s.cpp`, `player_npc_handlers.cpp`, `player.cpp`, and `trigger_handler.cpp`.
 
 The skill supports both isolated quests and multi-step questlines. It can be used to create new quests, extend existing chains, fix broken reachability or turn-in wiring, rebalance rewards, and diagnose why a quest fails to progress at runtime.
+
+It also supports the newer quest-system additions in this repository: timed quests with offline-persistent deadlines, stay-alive failure quests, immediately repeatable quests, and daily or weekly quests that unlock again at the configured global reset times.
 </objective>
 
 <quick_start>

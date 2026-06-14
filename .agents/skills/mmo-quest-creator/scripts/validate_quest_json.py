@@ -85,6 +85,8 @@ def validate_document(doc: dict, project_root: Path) -> tuple[list[str], list[st
         add_error(errors, "quest.type must be one of 0, 1, 2")
     if len(quest_message.requirements) > 4:
         add_error(errors, "quest.requirements may contain at most 4 entries because runtime quest counters are packed into 4 slots")
+    if quest_message.HasField("timelimit") and quest_message.timelimit > 0 and quest_message.timelimit < 5:
+        add_warning(warnings, "quest.timelimit is very short; timed quests now fail offline and while complete-but-unturned-in")
 
     quest_ids = set(indexes["quests"])
     item_ids = set(indexes["items"])
@@ -119,6 +121,14 @@ def validate_document(doc: dict, project_root: Path) -> tuple[list[str], list[st
         add_error(errors, "quest.requiredraces must not be negative")
     if quest_message.requiredclasses < 0:
         add_error(errors, "quest.requiredclasses must not be negative")
+    if (quest_message.flags & 0x0040) and (quest_message.flags & 0x0080):
+        add_error(errors, "quest.flags must not combine Daily and Weekly on the same quest")
+    if (quest_message.flags & 0x0200) and ((quest_message.flags & 0x0040) or (quest_message.flags & 0x0080)):
+        add_warning(warnings, "quest.flags combines Repeatable with Daily or Weekly; Daily/Weekly already imply repeatability and usually make the plain Repeatable bit redundant")
+    if quest_message.flags & 0x0020:
+        add_warning(warnings, "quest uses AutoRewarded, but the normal quest runtime still does not auto-turn-in completed quests purely from that flag")
+    if (quest_message.flags & 0x0001) and quest_message.timelimit == 0:
+        add_warning(warnings, "quest uses StayAlive without a timer; confirm that death-based failure alone is intended")
 
     for reward_index, reward in enumerate(quest_message.rewarditemschoice):
         if reward.itemid not in item_ids:
@@ -187,7 +197,9 @@ def validate_document(doc: dict, project_root: Path) -> tuple[list[str], list[st
     if not providers.get("unit_ids", []) and not providers.get("object_ids", []):
         add_warning(warnings, "quest has no providers in the document; after apply it may become unreachable unless wired elsewhere")
     if not enders.get("unit_ids", []) and not enders.get("object_ids", []):
-        add_warning(warnings, "quest has no enders in the document; after apply it may become impossible to turn in unless it is auto-rewarded or rewarded elsewhere")
+        add_warning(warnings, "quest has no enders in the document; after apply it may become impossible to turn in without custom reward handling")
+    if quest_message.timelimit > 0 and not enders.get("unit_ids", []) and not enders.get("object_ids", []):
+        add_warning(warnings, "timed quest has no ender wiring; remember that timed quests can now expire after objectives are complete but before reward")
 
     attached_triggers_data = doc.get("attached_triggers", [])
     attached_area_triggers_data = doc.get("attached_area_triggers", [])

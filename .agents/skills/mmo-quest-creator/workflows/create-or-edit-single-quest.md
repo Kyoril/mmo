@@ -11,6 +11,8 @@ Read these reference files now:
 2. Author the quest row itself:
    - title, internal name, narrative text, and objective text
    - level gates, class or race restrictions, and prerequisite chain fields
+   - runtime-sensitive flags such as `StayAlive`, `Repeatable`, `Daily`, `Weekly`, `Exploration`, and `AutoRewarded`
+   - `timelimit` when the quest should fail after a fixed number of seconds, including while the player is offline
    - objective requirements, keeping within the four-requirement runtime limit
    - reward XP, money, items, optional items, spells, or spell casts
 3. Author the wiring in the same draft:

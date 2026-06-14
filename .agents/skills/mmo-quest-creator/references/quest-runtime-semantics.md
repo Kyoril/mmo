@@ -8,6 +8,7 @@ These notes describe how the current runtime evaluates quest availability, progr
 It currently checks:
 
 - whether the quest is already rewarded
+- whether a daily or weekly rewarded quest is still locked until its reset time
 - whether the quest exists
 - `maxlevel`
 - required race and class masks
@@ -26,6 +27,8 @@ It does not currently enforce every possible schema field. In particular, `requi
 - sets a quest timer from `timelimit`
 - places the quest in the quest log
 - auto-completes only if `FulfillsQuestRequirements` is already true
+
+Timed quests now persist their absolute deadline across logout. On login, `InitializeQuestTimers()` rearms countdowns and immediately fails any timed quest whose deadline already passed while the player was offline.
 
 Quest acceptance from an NPC also raises `trigger_event::OnQuestAccept` on the questgiver unit in `src/world_server/player_npc_handlers.cpp`. This is the live data-driven hook used today for quest-start scripting.
 </acceptance>
@@ -69,7 +72,20 @@ There is no native generic "use world object N times" increment path in `GameWor
 - removes the quest from the quest log and marks it rewarded
 
 `failtriggers` are also executed on quest failure.
+
+Repeatability now behaves in three different ways:
+
+- plain `Repeatable`: the quest becomes immediately available again after reward
+- `Daily`: the quest is treated as rewarded until the next global daily reset time
+- `Weekly`: the quest is treated as rewarded until the next global weekly reset time
 </completion_and_reward>
+
+<failure_paths>
+The runtime now has two important failure paths beyond manual abandonment:
+
+- timed quests fail when their countdown expires, even if objectives were already complete but the quest was not yet turned in
+- `StayAlive` quests fail when the player dies, through `FailQuestsOnDeath()`
+</failure_paths>
 
 <trigger_actions>
 Quest-relevant trigger actions in `src/world_server/trigger_handler.cpp`:
@@ -95,8 +111,13 @@ Non-obvious runtime caveats that matter when authoring:
 - `QuestEntry.starttriggers` are currently unused by runtime code.
 - `GamePlayerS::OnQuestExploration` is still TODO, so exploration quests need a trigger path that reaches `CompleteQuest`.
 - The current quest editor window does not expose object-use or spell-cast-on-object requirement fields even though the runtime supports them.
+- `AutoRewarded` is exposed in data and editor UI, but the normal quest runtime still does not auto-turn-in completed quests purely from that flag.
 - `rewardspellcast` is cast in `GamePlayerS::RewardQuest`, and the NPC reward handler also attempts to cast it again. Verify live behavior before depending on visible one-shot spell rewards.
 </important_caveats>
+
+<client_support>
+The client quest system now exposes `GetQuestLogTimeLeft(questId)` so UI can display timed-quest countdowns using the local reconstructed deadline.
+</client_support>
 
 <lua_hooks>
 Creature Lua scripts can also react to quest flow:
