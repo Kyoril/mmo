@@ -162,6 +162,13 @@ ITEM_TRIGGER_NAMES = {
     2: "OnHitChance",
 }
 
+TRAINER_TYPE_NAMES = {
+    0: "ClassTrainer",
+    1: "MountTrainer",
+    2: "SkillTrainer",
+    3: "PetTrainer",
+}
+
 SPELL_TARGET_NAMES = {
     0: "Caster",
     1: "NearbyEnemy",
@@ -215,6 +222,7 @@ def load_catalogs(project_root: str | None = None) -> dict[str, object]:
         "items": parse("items.data", modules["items"].Items),
         "classes": parse("classes.data", modules["classes"].Classes),
         "races": parse("races.data", modules["races"].Races),
+        "trainers": parse("trainers.data", modules["trainers"].Trainers),
         "talents": parse("talents.data", modules["talents"].Talents),
         "talent_tabs": parse("talent_tabs.data", modules["talent_tabs"].TalentTabs),
         "spell_categories": parse("spell_categories.data", modules["spell_categories"].SpellCategories),
@@ -287,6 +295,7 @@ def build_indexes(catalogs: dict[str, object]) -> dict[str, dict]:
         "items": {entry.id: entry for entry in catalogs["items"].entry},
         "classes": {entry.id: entry for entry in catalogs["classes"].entry},
         "races": {entry.id: entry for entry in catalogs["races"].entry},
+        "trainers": {entry.id: entry for entry in catalogs["trainers"].entry},
         "talents": {entry.id: entry for entry in catalogs["talents"].entry},
         "talent_tabs": {entry.id: entry for entry in catalogs["talent_tabs"].entry},
         "categories": {entry.id: entry for entry in catalogs["spell_categories"].entry},
@@ -333,6 +342,48 @@ def summarize_spell(spell, catalogs: dict[str, object], indexes: dict[str, dict]
         if sources:
             race_sources.append({"race_id": race_entry.id, "race_name": race_entry.name, "sources": sources})
 
+    trainer_sources = []
+    for trainer in catalogs["trainers"].entry:
+        for trainer_spell in trainer.spells:
+            if trainer_spell.spell == spell.id:
+                class_entry = indexes["classes"].get(trainer.classid) if trainer.HasField("classid") else None
+                trainer_sources.append(
+                    {
+                        "trainer_id": trainer.id,
+                        "trainer_name": trainer.name,
+                        "trainer_type": trainer.type,
+                        "trainer_type_name": TRAINER_TYPE_NAMES.get(trainer.type, f"Unknown({trainer.type})"),
+                        "class_id": trainer.classid if trainer.HasField("classid") else None,
+                        "class_name": class_entry.name if class_entry else None,
+                        "cost": trainer_spell.spellcost,
+                        "required_skill": trainer_spell.reqskill if trainer_spell.HasField("reqskill") else 0,
+                        "required_skill_value": trainer_spell.reqskillval if trainer_spell.HasField("reqskillval") else 0,
+                        "required_level": trainer_spell.reqlevel if trainer_spell.HasField("reqlevel") else 1,
+                    }
+                )
+
+    talent_sources = []
+    for talent in catalogs["talents"].entry:
+        matching_ranks = []
+        for rank_index, rank_spell_id in enumerate(talent.ranks):
+            if rank_spell_id == spell.id:
+                matching_ranks.append(rank_index)
+        if matching_ranks:
+            tab = indexes["talent_tabs"].get(talent.tab)
+            class_entry = indexes["classes"].get(tab.class_id) if tab else None
+            talent_sources.append(
+                {
+                    "talent_id": talent.id,
+                    "tab_id": talent.tab,
+                    "tab_name": tab.name if tab else None,
+                    "class_id": tab.class_id if tab else None,
+                    "class_name": class_entry.name if class_entry else None,
+                    "row": talent.row,
+                    "column": talent.column,
+                    "rank_indexes": matching_ranks,
+                }
+            )
+
     data = message_to_dict(spell)
     data["attribute_words"] = decode_attribute_words(list(spell.attributes))
     data["effects"] = [effect_to_summary(effect) for effect in spell.effects]
@@ -341,6 +392,8 @@ def summarize_spell(spell, catalogs: dict[str, object], indexes: dict[str, dict]
     data["item_references"] = item_refs
     data["class_sources"] = class_sources
     data["race_sources"] = race_sources
+    data["trainer_sources"] = trainer_sources
+    data["talent_sources"] = talent_sources
 
     if spell.category and spell.category in indexes["categories"]:
         data["category_name"] = indexes["categories"][spell.category].id
@@ -406,4 +459,35 @@ def summarize_talent(talent, catalogs: dict[str, object], indexes: dict[str, dic
         "column": talent.column,
         "rank_count": len(talent.ranks),
         "ranks": rank_spells,
+    }
+
+
+def summarize_trainer(trainer, catalogs: dict[str, object], indexes: dict[str, dict]) -> dict:
+    class_entry = indexes["classes"].get(trainer.classid) if trainer.HasField("classid") else None
+    spell_rows = []
+    for trainer_spell in trainer.spells:
+        spell = indexes["spells"].get(trainer_spell.spell)
+        skill = indexes["skills"].get(trainer_spell.reqskill) if trainer_spell.HasField("reqskill") else None
+        spell_rows.append(
+            {
+                "spell_id": trainer_spell.spell,
+                "spell_name": spell.name if spell else None,
+                "cost": trainer_spell.spellcost,
+                "required_skill": trainer_spell.reqskill if trainer_spell.HasField("reqskill") else 0,
+                "required_skill_name": skill.name if skill else None,
+                "required_skill_value": trainer_spell.reqskillval if trainer_spell.HasField("reqskillval") else 0,
+                "required_level": trainer_spell.reqlevel if trainer_spell.HasField("reqlevel") else 1,
+            }
+        )
+
+    return {
+        "id": trainer.id,
+        "name": trainer.name,
+        "type": trainer.type,
+        "type_name": TRAINER_TYPE_NAMES.get(trainer.type, f"Unknown({trainer.type})"),
+        "class_id": trainer.classid if trainer.HasField("classid") else None,
+        "class_name": class_entry.name if class_entry else None,
+        "title": trainer.title if trainer.HasField("title") else "",
+        "spell_count": len(trainer.spells),
+        "spells": spell_rows,
     }

@@ -94,8 +94,10 @@ Inspect these files when needed:
 
 - `classes.data` from `classes.proto`
   Use for class IDs, power types, spell families, and class-granted spells.
+- `trainers.data` from `trainers.proto`
+  Use for class trainers, trainer spell costs, level gates, and optional skill prerequisites when a spell should be learned from an NPC trainer.
 - `talents.data` from `talents.proto`
-  Use for talent placement (`tab`, `row`, `column`) and rank spell chains.
+  Use for talent placement (`tab`, `row`, `column`) and rank spell chains. A spell can appear as one or more talent rank spell IDs.
 - `talent_tabs.data` from `talent_tabs.proto`
   Use for class-specific talent trees and to identify the correct tab before placing a talent.
 - `races.data` from `races.proto`
@@ -140,6 +142,31 @@ Trigger meanings from `src/shared/game/item.h`:
 
 `OnEquip` spells are automatically cast when the item is equipped. If those casts apply auras, those auras are removed when the item is unequipped.
 </item_links>
+
+<trainer_links>
+Trainer-taught spells come from `TrainerEntry.spells` in `trainers.data`.
+
+Important fields:
+
+- `spell` is the taught spell ID.
+- `spellcost` is the training price.
+- `reqlevel` is the minimum player level and defaults to `1` when absent.
+- `reqskill` and `reqskillval` gate the spell behind a profession or skill requirement when used.
+
+Class trainers also carry `classid`, which should match the intended player class when adding class-specific trainer spells.
+</trainer_links>
+
+<talent_links>
+Talent-granted spells come from `TalentEntry.ranks` in `talents.data`.
+
+Important fields:
+
+- `tab` identifies the owning talent tree from `talent_tabs.data`.
+- `row` and `column` define the placement in the UI tree.
+- `ranks` is the ordered spell chain granted by the talent.
+
+When editing a talent, verify both the tree placement and the entire spell rank list so you do not accidentally break progression between ranks.
+</talent_links>
 
 <authoring_defaults>
 Prefer these habits:

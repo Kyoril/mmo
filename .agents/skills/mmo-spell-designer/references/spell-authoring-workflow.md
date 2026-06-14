@@ -26,8 +26,14 @@ Use this workflow when creating or editing a spell for this project. It is optim
 6. Apply the draft only after validation passes.
    Use `scripts/apply_spell_json.py --backup`.
 
-7. Re-inspect the applied spell and its linked references.
-   Confirm class or race masks, trigger spell wiring, reagent items, categories, auras, and item references if applicable.
+7. If the spell should be trainer-taught, inspect the target trainer first and then update `trainers.data`.
+   Use `scripts/inspect_spell_catalog.py --section trainers`, then `scripts/upsert_trainer_spell.py` or `scripts/remove_trainer_spell.py`.
+
+8. If the spell should be talent-granted, inspect the target tree first and then update `talents.data`.
+   Use `scripts/inspect_spell_catalog.py --section talents` or `--section talent_tabs`, then `scripts/upsert_talent_entry.py` or `scripts/edit_talent_ranks.py`.
+
+9. Re-inspect the applied spell and its linked references.
+   Confirm class or race masks, trigger spell wiring, reagent items, categories, auras, item references, trainer references, and talent references if applicable.
 </workflow>
 
 <heuristics>
@@ -37,6 +43,8 @@ Prefer these design shortcuts:
 - For a new proc aura, start from an existing proc aura and change only the trigger spell or proc gates.
 - For a new periodic effect, copy an existing spell with the same tick rhythm and aura family.
 - For an equipment-driven spell, inspect item `OnEquip` references that already do something similar.
+- For a trainer-taught spell, inspect an existing trainer spell row for the same class or profession and copy its cost or requirement pattern.
+- For a talent spell, inspect an existing neighboring talent in the same tree and copy its placement and rank-count pattern before changing spell IDs.
 </heuristics>
 
 <verification>

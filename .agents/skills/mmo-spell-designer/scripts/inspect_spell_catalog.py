@@ -15,6 +15,7 @@ from spell_catalog_lib import (
     summarize_spell,
     summarize_talent,
     summarize_talent_tab,
+    summarize_trainer,
 )
 
 
@@ -36,12 +37,14 @@ def main() -> int:
             "skills",
             "stacking",
             "ranges",
+            "trainers",
             "talents",
             "talent_tabs",
         ],
         default="spell",
     )
     parser.add_argument("--spell-id", type=int)
+    parser.add_argument("--trainer-id", type=int)
     parser.add_argument("--talent-id", type=int)
     parser.add_argument("--name-contains")
     parser.add_argument("--class-name")
@@ -118,6 +121,20 @@ def main() -> int:
         output = {
             "ranges": [{"id": entry.id, "name": entry.name, "range": entry.range} for entry in catalogs["ranges"].entry]
         }
+    elif args.section == "trainers":
+        trainers = list(catalogs["trainers"].entry)
+        if args.trainer_id is not None:
+            trainers = [entry for entry in trainers if entry.id == args.trainer_id]
+            if not trainers:
+                raise SystemExit(f"Trainer {args.trainer_id} not found")
+        if class_name_filter:
+            matching_classes = {entry.id for entry in catalogs["classes"].entry if entry.name.lower() == class_name_filter}
+            trainers = [
+                entry
+                for entry in trainers
+                if entry.HasField("classid") and entry.classid in matching_classes
+            ]
+        output = {"trainers": [summarize_trainer(entry, catalogs, indexes) for entry in trainers[: args.limit]]}
     elif args.section == "talent_tabs":
         tabs = list(catalogs["talent_tabs"].entry)
         if class_name_filter:
@@ -147,6 +164,7 @@ def main() -> int:
             "spells": [compact_spell(spell) for spell in spells[: args.limit]],
             "classes": [{"id": entry.id, "name": entry.name} for entry in catalogs["classes"].entry],
             "races": [{"id": entry.id, "name": entry.name} for entry in catalogs["races"].entry],
+            "trainers": [summarize_trainer(entry, catalogs, indexes) for entry in catalogs["trainers"].entry[: args.limit]],
             "talent_tabs": [summarize_talent_tab(entry) for entry in catalogs["talent_tabs"].entry[: args.limit]],
             "talents": [summarize_talent(entry, catalogs, indexes) for entry in catalogs["talents"].entry[: args.limit]],
             "proficiencies": [{"id": entry.id, "name": entry.name} for entry in catalogs["proficiencies"].entry],

@@ -6,7 +6,7 @@ description: Inspects, designs, validates, exports, and applies MMO spell data f
 <objective>
 Create or edit MMO spells as data instead of code. This skill uses the live project files under `data/editor/data/` as the source of truth, reads the spell protobuf schema and related catalogs, and helps an agent produce valid spell definitions that match the runtime behavior implemented by the server.
 
-The skill is optimized for the actual spell system in this repository: passive spells, item `OnEquip` spells, multi-effect spells, auras, periodic effects, proc-triggered spells, class and race masks, reagent requirements, visualization references, and stacking behavior.
+The skill is optimized for the actual spell system in this repository: passive spells, item `OnEquip` spells, multi-effect spells, auras, periodic effects, proc-triggered spells, class and race masks, reagent requirements, visualization references, stacking behavior, trainer-taught spells, and talent-granted spells.
 </objective>
 
 <quick_start>
@@ -40,6 +40,18 @@ Grant the resulting spell to a class at a chosen level:
 python .agents/skills/mmo-spell-designer/scripts/grant_class_spell.py --project-root F:\mmo --class-name Scout --spell-id 168 --level 10
 ```
 
+Inspect class trainers and their current teachable spells:
+
+```powershell
+python .agents/skills/mmo-spell-designer/scripts/inspect_spell_catalog.py --project-root F:\mmo --section trainers --class-name Scout --pretty
+```
+
+Add or update a trainer spell entry so players can learn the new spell from a trainer:
+
+```powershell
+python .agents/skills/mmo-spell-designer/scripts/upsert_trainer_spell.py --project-root F:\mmo --trainer-id 42 --spell-id 168 --cost 1500 --required-level 10
+```
+
 Inspect class talent tabs and current talent placements:
 
 ```powershell
@@ -50,6 +62,13 @@ Create or update a talent entry that points at the new rank spell:
 
 ```powershell
 python .agents/skills/mmo-spell-designer/scripts/upsert_talent_entry.py --project-root F:\mmo --talent-id 900 --tab-id 3 --row 1 --column 2 --rank-spell-id 169
+```
+
+Add or remove spell ranks on an existing talent entry without rebuilding the whole talent manually:
+
+```powershell
+python .agents/skills/mmo-spell-designer/scripts/edit_talent_ranks.py --project-root F:\mmo --talent-id 900 --add-rank-spell-id 170
+python .agents/skills/mmo-spell-designer/scripts/edit_talent_ranks.py --project-root F:\mmo --talent-id 900 --remove-rank-spell-id 169
 ```
 </quick_start>
 
@@ -62,17 +81,21 @@ python .agents/skills/mmo-spell-designer/scripts/upsert_talent_entry.py --projec
 
 <process>
 1. Read `references/spell-data-surface.md` and `references/spell-runtime-semantics.md`.
-2. Inspect live project data with `scripts/inspect_spell_catalog.py`. Confirm spell IDs, item IDs, class and race restrictions, proficiencies, categories, stacking categories, visualization IDs, reagent items, and any linked trigger spells.
+2. Inspect live project data with `scripts/inspect_spell_catalog.py`. Confirm spell IDs, item IDs, class and race restrictions, proficiencies, categories, stacking categories, visualization IDs, reagent items, linked trigger spells, trainer availability, and any talent references.
 3. For edits, export the closest existing spell to JSON with `scripts/export_spell_json.py` and modify the draft. For new spells, either export a similar spell as a template or author a fresh JSON wrapper with the same field names as `SpellEntry`.
 4. Validate the draft with `scripts/validate_spell_json.py`. Fix every reported problem before applying.
 5. Apply the JSON draft with `scripts/apply_spell_json.py` only after validation passes.
-6. If the spell is class-granted, add or update the class spell grant with `scripts/grant_class_spell.py`. If the spell is talent-granted, inspect `talents.data` / `talent_tabs.data` and add or update the talent with `scripts/upsert_talent_entry.py`.
-7. After applying, inspect the resulting spell again and verify the critical references, effect wiring, and talent placement if applicable.
+6. If the spell is class-granted, add or update the class spell grant with `scripts/grant_class_spell.py`.
+7. If the spell should be trainer-taught, inspect `trainers.data` and update the target trainer with `scripts/upsert_trainer_spell.py` or `scripts/remove_trainer_spell.py`.
+8. If the spell is talent-granted, inspect `talents.data` / `talent_tabs.data` and add or update the talent with `scripts/upsert_talent_entry.py` or adjust ranks with `scripts/edit_talent_ranks.py`.
+9. After applying, inspect the resulting spell again and verify the critical references, effect wiring, trainer teachability, and talent placement if applicable.
 </process>
 
 <validation>
 - Never invent referenced IDs. Confirm them from live project data.
 - Validate every draft before applying it.
+- For trainer work, verify trainer ID, class linkage, cost, level gates, and optional skill requirements from live data before writing.
+- For talent work, verify the talent tab, row, column, and every rank spell ID from live data before writing.
 - When a spell uses `ApplyAura` or `ApplyAreaAura`, verify the aura type, targets, duration, amplitude, proc fields, and removal conditions together.
 - When a spell is passive or item-driven, verify how it becomes active at runtime instead of assuming player manual casting.
 - When a spell triggers another spell, verify both the trigger spell reference and the proc conditions.
@@ -110,6 +133,7 @@ This skill is being used correctly when:
 - The agent inspected live spell data before proposing IDs or masks.
 - Spell drafts use the real `SpellEntry` field names and valid references.
 - Validation passes before any apply step.
+- Trainer and talent changes are anchored to the real `trainers.data`, `talents.data`, and `talent_tabs.data` entries instead of guessed IDs.
 - Passive, item-driven, aura, periodic, and proc semantics were checked against the runtime behavior in this repository.
 - The resulting spell can be iterated as data without touching C++ code unless the requested effect is genuinely unsupported by the current runtime handlers.
 </success_criteria>
