@@ -1,0 +1,4 @@
+interface:
+  display_name: "MMO Item Designer"
+  short_description: "Create MMO item JSON and matching icons"
+  default_prompt: "Use $mmo-item-designer to design a balanced item, generate import-ready JSON, and create its 128x128 PNG icon."
