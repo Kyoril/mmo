@@ -74,6 +74,10 @@ namespace mmo
 			}
 		}
 
+		// Trigger the global cooldown as soon as the cast begins. This covers both instant casts
+		// (which finish immediately) and cast-time spells (where the GCD runs alongside the cast).
+		const uint32 globalCooldownMs = static_cast<uint32>(TriggerGlobalCooldown());
+
 		ConnectTargetSignals(ResolveUnitTarget());
 
 		// Send SpellStart only after validation succeeds — avoids showing the cast bar for casts
@@ -83,7 +87,7 @@ namespace mmo
 			const uint64 casterId = m_cast.GetExecuter().GetGuid();
 			const uint32 startCooldownMs = ShouldStartCooldownOnCastStart() ? static_cast<uint32>(CalculateFinalCooldown()) : 0;
 			m_context.SendPacketFromCaster(
-				[casterId, startCooldownMs, this](game::OutgoingPacket& out_packet)
+				[casterId, startCooldownMs, globalCooldownMs, this](game::OutgoingPacket& out_packet)
 				{
 					out_packet.Start(game::realm_client_packet::SpellStart);
 					out_packet
@@ -91,7 +95,8 @@ namespace mmo
 						<< io::write<uint32>(m_spell.id())
 						<< io::write<GameTime>(m_castTime)
 						<< m_target
-						<< io::write<uint32>(startCooldownMs);
+						<< io::write<uint32>(startCooldownMs)
+						<< io::write<uint32>(globalCooldownMs);
 					out_packet.Finish();
 				});
 		}
@@ -159,6 +164,8 @@ namespace mmo
 
 					const GameTime cooldownMs = m_cooldownStartedOnCastStart ? 0 : CalculateFinalCooldown();
 
+					// Channeled spells have a cast time, so the global cooldown was already sent
+					// to the client via SpellStart. Avoid re-applying it here.
 					m_context.SendPacketFromCaster(
 						[chanCasterId, chanSpellId, &targetMap, cooldownMs](game::OutgoingPacket& out_packet)
 						{
@@ -168,7 +175,8 @@ namespace mmo
 								<< io::write<uint32>(chanSpellId)
 								<< io::write<GameTime>(GetAsyncTimeMs())
 								<< targetMap
-								<< io::write<uint32>(cooldownMs);
+								<< io::write<uint32>(cooldownMs)
+								<< io::write<uint32>(0);
 							out_packet.Finish();
 						});
 				}
@@ -678,20 +686,11 @@ namespace mmo
 
 	auto SingleCastState::ApplyCooldown(const GameTime cooldownTimeMs, const GameTime categoryCooldownTimeMs) -> void
 	{
-		if (UsesGlobalCooldown())
-		{
-			if (cooldownTimeMs > 0)
-			{
-				m_cast.GetExecuter().SetGlobalCooldown(cooldownTimeMs);
-			}
-			return;
-		}
-
 		if (cooldownTimeMs > 0)
 		{
 			m_cast.GetExecuter().SetCooldown(m_spell.id(), cooldownTimeMs);
 		}
-		
+
 		if (categoryCooldownTimeMs > 0)
 		{
 			m_cast.GetExecuter().SetSpellCategoryCooldown(m_spell.category(), categoryCooldownTimeMs);
@@ -705,9 +704,30 @@ namespace mmo
 			&& (m_spell.cooldownflags() & spell_cooldown_flags::StartOnCastStart) != 0;
 	}
 
-	bool SingleCastState::UsesGlobalCooldown() const
+	bool SingleCastState::IsAffectedByGlobalCooldown() const
 	{
-		return (m_spell.cooldownflags() & spell_cooldown_flags::UseGlobalCooldown) != 0;
+		// Procs/triggered casts never trigger or respect the global cooldown. Every other spell
+		// is affected unless it is explicitly flagged to opt out.
+		return !m_isProc
+			&& (m_spell.cooldownflags() & spell_cooldown_flags::NoGlobalCooldown) == 0;
+	}
+
+	GameTime SingleCastState::TriggerGlobalCooldown()
+	{
+		if (m_globalCooldownTriggered || !IsAffectedByGlobalCooldown())
+		{
+			return 0;
+		}
+
+		const GameTime gcd = m_cast.GetExecuter().GetGlobalCooldownDuration();
+		if (gcd > 0)
+		{
+			m_cast.GetExecuter().SetGlobalCooldown(gcd);
+		}
+
+		m_globalCooldownTriggered = true;
+		m_appliedGlobalCooldownMs = gcd;
+		return gcd;
 	}
 
 	void SingleCastState::NotifyCastEnded(bool succeeded)
@@ -1018,8 +1038,12 @@ namespace mmo
 			// Cooldown has already been started at cast start for flagged spells.
 			const GameTime cooldownMs = m_cooldownStartedOnCastStart ? 0 : CalculateFinalCooldown();
 
+			// For cast-time spells the global cooldown was already sent via SpellStart; only
+			// instant casts (no SpellStart) need to communicate it here.
+			const uint32 globalCooldownMs = (m_castTime == 0) ? static_cast<uint32>(m_appliedGlobalCooldownMs) : 0;
+
 			m_context.SendPacketFromCaster(
-				[casterId, spellId, &targetMap, cooldownMs](game::OutgoingPacket& out_packet)
+				[casterId, spellId, &targetMap, cooldownMs, globalCooldownMs](game::OutgoingPacket& out_packet)
 				{
 					out_packet.Start(game::realm_client_packet::SpellGo);
 					out_packet
@@ -1027,7 +1051,8 @@ namespace mmo
 						<< io::write<uint32>(spellId)
 						<< io::write<GameTime>(GetAsyncTimeMs())
 						<< targetMap
-						<< io::write<uint32>(cooldownMs);
+						<< io::write<uint32>(cooldownMs)
+						<< io::write<uint32>(globalCooldownMs);
 					out_packet.Finish();
 				});
 		}
@@ -1036,16 +1061,16 @@ namespace mmo
 			// Rollback cast-start cooldown if the cast did not succeed.
 			if (m_cooldownStartedOnCastStart)
 			{
-				if (UsesGlobalCooldown())
-				{
-					executer.SetGlobalCooldown(0);
-				}
-				else
-				{
-					executer.SetCooldown(m_spell.id(), 0);
-				}
+				executer.SetCooldown(m_spell.id(), 0);
 				m_cooldownStartedOnCastStart = false;
 				m_cooldownStartedAtCastStartMs = 0;
+			}
+
+			// Roll back the global cooldown that was triggered when the cast started.
+			if (m_globalCooldownTriggered)
+			{
+				executer.SetGlobalCooldown(0);
+				m_globalCooldownTriggered = false;
 			}
 
 			m_context.SendPacketFromCaster(

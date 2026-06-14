@@ -73,6 +73,13 @@ message CombatSettings {
 	// Size of the rear cone (in degrees, total width) from which incoming attacks cannot be
 	// blocked. Attacks landing inside this cone behind the defender ignore block entirely.
 	optional float defense_block_rear_cone_degrees = 27 [default = 90.0];
+
+	// === Global Cooldown ===
+	// Duration (in milliseconds) of the global cooldown triggered by casting a spell.
+	// Every spell triggers and respects the global cooldown unless it is explicitly flagged
+	// to ignore it (spell_cooldown_flags::NoGlobalCooldown). Procs/triggered spells never
+	// trigger or respect the global cooldown.
+	optional uint32 global_cooldown_ms = 28 [default = 1500];
 }
 
 // Wrapper for loading

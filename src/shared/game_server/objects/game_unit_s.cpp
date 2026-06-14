@@ -448,9 +448,11 @@ namespace mmo
 	auto GameUnitS::SpellHasCooldown(const uint32 spellId, uint32 spellCategory, const uint32 cooldownFlags) const -> bool
 	{
 		const auto now = GetAsyncTimeMs();
-		if ((cooldownFlags & spell_cooldown_flags::UseGlobalCooldown) != 0)
+
+		// Every spell respects the global cooldown unless it is explicitly flagged to ignore it.
+		if ((cooldownFlags & spell_cooldown_flags::NoGlobalCooldown) == 0 && m_globalCooldownEnd > now)
 		{
-			return m_globalCooldownEnd > now;
+			return true;
 		}
 
 		if (const auto it = m_spellCooldowns.find(spellId); it != m_spellCooldowns.end() && it->second > now)
@@ -651,6 +653,11 @@ namespace mmo
 		{
 			m_globalCooldownEnd = GetAsyncTimeMs() + cooldownTimeMs;
 		}
+	}
+
+	GameTime GameUnitS::GetGlobalCooldownDuration() const
+	{
+		return GetCombatSettings().global_cooldown_ms();
 	}
 
 	SpellCastResult GameUnitS::CastSpell(const SpellTargetMap &target, const proto::SpellEntry &spell, const uint32 castTimeMs, bool isProc, uint64 itemGuid)

@@ -34,14 +34,21 @@ namespace mmo
 		/// @brief Called when leaving the world to clear cooldowns.
 		void OnLeftWorld();
 
-		/// @brief Starts or updates a cooldown for a spell.
+		/// @brief Starts or updates the individual cooldown for a spell.
 		/// @param spellId The spell ID.
 		/// @param durationMs The cooldown duration in milliseconds.
 		void StartCooldown(uint32 spellId, GameTime durationMs);
 
-		/// @brief Clears the cooldown for a spell.
+		/// @brief Starts or updates the shared global cooldown.
+		/// @param durationMs The global cooldown duration in milliseconds.
+		void StartGlobalCooldown(GameTime durationMs);
+
+		/// @brief Clears the individual cooldown for a spell.
 		/// @param spellId The spell ID.
 		void ClearCooldown(uint32 spellId);
+
+		/// @brief Clears the shared global cooldown.
+		void ClearGlobalCooldown();
 
 		/// @brief Gets the cooldown progress for a spell.
 		/// @param spellId The spell ID.
@@ -71,7 +78,9 @@ namespace mmo
 		};
 
 	private:
-		[[nodiscard]] bool UsesGlobalCooldown(uint32 spellId) const;
+		/// @brief Whether the given spell is affected by the global cooldown.
+		/// Every spell is affected unless it is flagged spell_cooldown_flags::NoGlobalCooldown.
+		[[nodiscard]] bool IsAffectedByGlobalCooldown(uint32 spellId) const;
 		[[nodiscard]] float GetCooldownProgress(const CooldownInfo& info) const;
 		[[nodiscard]] float GetCooldownRemaining(const CooldownInfo& info) const;
 		[[nodiscard]] bool IsCooldownExpired(const CooldownInfo& info, GameTime now) const;

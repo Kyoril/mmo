@@ -710,6 +710,10 @@ namespace mmo
 		/// @param cooldownTimeMs The cooldown time in milliseconds.
 		void SetGlobalCooldown(GameTime cooldownTimeMs);
 
+		/// Gets the configured global cooldown duration in milliseconds (from combat settings).
+		/// @returns The global cooldown duration in milliseconds.
+		[[nodiscard]] GameTime GetGlobalCooldownDuration() const;
+
 		/// Casts a spell.
 		/// @param target The target map for the spell.
 		/// @param spell The spell entry to cast.

@@ -646,9 +646,9 @@ namespace mmo
 			ImGui::SameLine();
 			DrawHelpMarker("If enabled, cooldown starts when casting starts and is rolled back when the cast fails or is interrupted.");
 
-			CHECKBOX_FLAG_PROP(cooldownflags, "Use Global Cooldown", spell_cooldown_flags::UseGlobalCooldown);
+			CHECKBOX_FLAG_PROP(cooldownflags, "No Global Cooldown", spell_cooldown_flags::NoGlobalCooldown);
 			ImGui::SameLine();
-			DrawHelpMarker("If enabled, this spell uses shared global cooldown instead of an individual cooldown.");
+			DrawHelpMarker("By default every spell triggers and respects the global cooldown (configurable in Combat Settings). Enable this to make the spell ignore the global cooldown entirely - it will neither trigger it nor be blocked by it. The spell's 'Cooldown' value is always its own individual cooldown.");
 
 			ImGui::SetNextItemWidth(150);
 			SLIDER_UINT32_PROP(casttime, "##CastTime", 0, 100000);

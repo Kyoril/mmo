@@ -288,6 +288,20 @@ namespace mmo
 			}
 		}
 
+		// === Global Cooldown ===
+		if (const auto section = ScopedEditorSection("Global Cooldown", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::TextDisabled("Every spell triggers and respects the global cooldown unless it is flagged");
+			ImGui::TextDisabled("'No Global Cooldown' in the spell editor. Procs/triggered spells are exempt.");
+			ImGui::Spacing();
+
+			uint32 globalCooldown = settings.global_cooldown_ms();
+			if (DrawUint32Setting("Global Cooldown (ms)", globalCooldown, defaults.global_cooldown_ms()))
+			{
+				settings.set_global_cooldown_ms(globalCooldown);
+			}
+		}
+
 		// === Spell Weapon Damage ===
 		if (const auto section = ScopedEditorSection("Spell Weapon Damage", ImGuiTreeNodeFlags_DefaultOpen))
 		{

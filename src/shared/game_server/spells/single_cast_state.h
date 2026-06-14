@@ -61,7 +61,15 @@ namespace mmo
 		bool ValidateCasterRequirements();
 		bool ValidateTargetRequirements(GameUnitS* unitTarget);
 		[[nodiscard]] bool ShouldStartCooldownOnCastStart() const;
-		[[nodiscard]] bool UsesGlobalCooldown() const;
+
+		/// Whether this cast is subject to the global cooldown. Every cast triggers and respects
+		/// the global cooldown unless it is a proc/triggered cast or the spell is flagged
+		/// spell_cooldown_flags::NoGlobalCooldown.
+		[[nodiscard]] bool IsAffectedByGlobalCooldown() const;
+
+		/// Triggers the global cooldown on the caster if this cast is affected by it.
+		/// @returns The applied global cooldown duration in milliseconds (0 if not affected).
+		GameTime TriggerGlobalCooldown();
 		void NotifyCastEnded(bool succeeded);
 		GameUnitS* ResolveUnitTarget() const;
 		void ConnectTargetSignals(GameUnitS* unitTarget);
@@ -139,6 +147,8 @@ namespace mmo
 		bool m_delayedCast;
 		bool m_cooldownStartedOnCastStart { false };
 		GameTime m_cooldownStartedAtCastStartMs { 0 };
+		bool m_globalCooldownTriggered { false };
+		GameTime m_appliedGlobalCooldownMs { 0 };
 		bool m_endNotified { false };
 		std::shared_ptr<SingleCastState> m_selfHold;
 

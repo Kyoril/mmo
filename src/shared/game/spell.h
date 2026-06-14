@@ -121,8 +121,13 @@ namespace mmo
 			/// Spell cooldown starts when the cast starts instead of when cast succeeds.
 			StartOnCastStart = 1 << 0,
 
-			/// Spell participates in the global cooldown instead of using its own cooldown.
-			UseGlobalCooldown = 1 << 1
+			// Bit (1 << 1) was formerly UseGlobalCooldown. It is intentionally left reserved so
+			// old data that still has the bit set does not get reinterpreted as NoGlobalCooldown.
+
+			/// Spell is NOT affected by the global cooldown. By default every spell triggers and
+			/// respects the global cooldown; setting this flag opts the spell out entirely (it
+			/// neither triggers the global cooldown nor is blocked by an active one).
+			NoGlobalCooldown = 1 << 2
 		};
 	}
 

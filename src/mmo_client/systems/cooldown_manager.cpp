@@ -5,6 +5,8 @@
 #include "frame_ui/frame_mgr.h"
 #include "game/spell.h"
 
+#include <algorithm>
+
 namespace mmo
 {
 	CooldownManager::CooldownManager(const proto_client::SpellManager& spells)
@@ -32,15 +34,7 @@ namespace mmo
 			return;
 		}
 
-		const CooldownInfo info{ GetAsyncTimeMs(), durationMs };
-		if (UsesGlobalCooldown(spellId))
-		{
-			m_globalCooldown = info;
-		}
-		else
-		{
-			m_cooldowns[spellId] = info;
-		}
+		m_cooldowns[spellId] = CooldownInfo{ GetAsyncTimeMs(), durationMs };
 
 		// Fire signal
 		CooldownStarted(spellId, durationMs);
@@ -49,20 +43,26 @@ namespace mmo
 		FrameManager::Get().TriggerLuaEvent("SPELL_COOLDOWN_STARTED", spellId, durationMs);
 	}
 
-	void CooldownManager::ClearCooldown(const uint32 spellId)
+	void CooldownManager::StartGlobalCooldown(const GameTime durationMs)
 	{
-		bool wasCleared = false;
-		if (UsesGlobalCooldown(spellId))
+		if (durationMs == 0)
 		{
-			wasCleared = m_globalCooldown.has_value();
-			m_globalCooldown.reset();
-		}
-		else
-		{
-			wasCleared = m_cooldowns.erase(spellId) > 0;
+			ClearGlobalCooldown();
+			return;
 		}
 
-		if (wasCleared)
+		m_globalCooldown = CooldownInfo{ GetAsyncTimeMs(), durationMs };
+
+		// Fire signal (spell ID 0 represents the global cooldown).
+		CooldownStarted(0, durationMs);
+
+		// Trigger Lua event
+		FrameManager::Get().TriggerLuaEvent("SPELL_COOLDOWN_STARTED", 0, durationMs);
+	}
+
+	void CooldownManager::ClearCooldown(const uint32 spellId)
+	{
+		if (m_cooldowns.erase(spellId) > 0)
 		{
 			// Fire signal
 			CooldownEnded(spellId);
@@ -72,46 +72,56 @@ namespace mmo
 		}
 	}
 
+	void CooldownManager::ClearGlobalCooldown()
+	{
+		if (m_globalCooldown.has_value())
+		{
+			m_globalCooldown.reset();
+
+			// Fire signal (spell ID 0 represents the global cooldown).
+			CooldownEnded(0);
+
+			// Trigger Lua event
+			FrameManager::Get().TriggerLuaEvent("SPELL_COOLDOWN_ENDED", 0);
+		}
+	}
+
 	float CooldownManager::GetCooldownProgress(const uint32 spellId) const
 	{
-		if (UsesGlobalCooldown(spellId))
-		{
-			if (!m_globalCooldown.has_value())
-			{
-				return 1.0f;
-			}
+		// The effective progress is the lesser of the spell's own cooldown progress and the
+		// global cooldown progress (the one furthest from being ready dominates).
+		float progress = 1.0f;
 
-			return GetCooldownProgress(*m_globalCooldown);
+		if (const auto it = m_cooldowns.find(spellId); it != m_cooldowns.end())
+		{
+			progress = GetCooldownProgress(it->second);
 		}
 
-		const auto it = m_cooldowns.find(spellId);
-		if (it == m_cooldowns.end())
+		if (m_globalCooldown.has_value() && IsAffectedByGlobalCooldown(spellId))
 		{
-			return 1.0f;
+			progress = std::min(progress, GetCooldownProgress(*m_globalCooldown));
 		}
 
-		return GetCooldownProgress(it->second);
+		return progress;
 	}
 
 	float CooldownManager::GetCooldownRemaining(const uint32 spellId) const
 	{
-		if (UsesGlobalCooldown(spellId))
-		{
-			if (!m_globalCooldown.has_value())
-			{
-				return 0.0f;
-			}
+		// The effective remaining time is the greater of the spell's own cooldown and the
+		// global cooldown.
+		float remaining = 0.0f;
 
-			return GetCooldownRemaining(*m_globalCooldown);
+		if (const auto it = m_cooldowns.find(spellId); it != m_cooldowns.end())
+		{
+			remaining = GetCooldownRemaining(it->second);
 		}
 
-		const auto it = m_cooldowns.find(spellId);
-		if (it == m_cooldowns.end())
+		if (m_globalCooldown.has_value() && IsAffectedByGlobalCooldown(spellId))
 		{
-			return 0.0f;
+			remaining = std::max(remaining, GetCooldownRemaining(*m_globalCooldown));
 		}
 
-		return GetCooldownRemaining(it->second);
+		return remaining;
 	}
 
 	bool CooldownManager::IsOnCooldown(const uint32 spellId) const
@@ -148,7 +158,7 @@ namespace mmo
 		}
 	}
 
-	bool CooldownManager::UsesGlobalCooldown(const uint32 spellId) const
+	bool CooldownManager::IsAffectedByGlobalCooldown(const uint32 spellId) const
 	{
 		const auto* spell = m_spells.getById(spellId);
 		if (!spell)
@@ -156,7 +166,8 @@ namespace mmo
 			return false;
 		}
 
-		return (spell->cooldownflags() & spell_cooldown_flags::UseGlobalCooldown) != 0;
+		// Every spell is affected by the global cooldown unless it is explicitly flagged to opt out.
+		return (spell->cooldownflags() & spell_cooldown_flags::NoGlobalCooldown) == 0;
 	}
 
 	float CooldownManager::GetCooldownProgress(const CooldownInfo& info) const

@@ -2257,8 +2257,9 @@ namespace mmo
 		GameTime castTime;
 		SpellTargetMap targetMap;
 		uint32 cooldownMs = 0;
+		uint32 globalCooldownMs = 0;
 
-		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<GameTime>(castTime) >> targetMap >> io::read<uint32>(cooldownMs)))
+		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<GameTime>(castTime) >> targetMap >> io::read<uint32>(cooldownMs) >> io::read<uint32>(globalCooldownMs)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -2287,6 +2288,11 @@ namespace mmo
 				{
 					m_cooldownManager.StartCooldown(spellId, cooldownMs);
 				}
+
+				if (globalCooldownMs > 0)
+				{
+					m_cooldownManager.StartGlobalCooldown(globalCooldownMs);
+				}
 			}
 		}
 
@@ -2300,8 +2306,9 @@ namespace mmo
 		GameTime gameTime;
 		SpellTargetMap targetMap;
 		uint32 cooldownMs = 0;
+		uint32 globalCooldownMs = 0;
 
-		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<GameTime>(gameTime) >> targetMap >> io::read<uint32>(cooldownMs)))
+		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<GameTime>(gameTime) >> targetMap >> io::read<uint32>(cooldownMs) >> io::read<uint32>(globalCooldownMs)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -2416,6 +2423,11 @@ namespace mmo
 			if (cooldownMs > 0)
 			{
 				m_cooldownManager.StartCooldown(spellId, cooldownMs);
+			}
+
+			if (globalCooldownMs > 0)
+			{
+				m_cooldownManager.StartGlobalCooldown(globalCooldownMs);
 			}
 		}
 
@@ -2561,6 +2573,16 @@ namespace mmo
 				(spell->cooldownflags() & spell_cooldown_flags::StartOnCastStart) != 0)
 			{
 				m_cooldownManager.ClearCooldown(spellId);
+			}
+
+			// The server rolls back the global cooldown for a failed cast, so mirror that here:
+			// the GCD was applied when the (now-failed) cast was confirmed to have started.
+			if (wasCastingThisSpell &&
+				castWasConfirmedByServer &&
+				spell &&
+				(spell->cooldownflags() & spell_cooldown_flags::NoGlobalCooldown) == 0)
+			{
+				m_cooldownManager.ClearGlobalCooldown();
 			}
 
 			const char *errorMessage = s_unknown;
