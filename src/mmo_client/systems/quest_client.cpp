@@ -4,6 +4,7 @@
 #include "game/quest_info.h"
 #include "game_client/game_player_c.h"
 #include "game_client/object_mgr.h"
+#include "base/clock.h"
 
 #include "luabind_lambda.h"
 
@@ -104,6 +105,7 @@ namespace mmo
 			luabind::def_lambda("AcceptQuest", [this](uint32 questId) { AcceptQuest(questId); }),
 			luabind::def_lambda("GetNumQuestLogEntries", [this]() { return GetNumQuestLogEntries(); }),
 			luabind::def_lambda("GetQuestLogEntry", [this](uint32 index) { return GetQuestLogEntry(index); }),
+			luabind::def_lambda("GetQuestLogTimeLeft", [this](uint32 questId) { return GetQuestLogTimeLeft(questId); }),
 			luabind::def_lambda("GetNumGossipActions", [this]() { return GetNumGossipActions(); }),
 			luabind::def_lambda("GetGossipAction", [this](int32 index) { return GetGossipAction(index); }),
 			luabind::def_lambda("AbandonQuest", [this](uint32 questId) { AbandonQuest(questId); }),
@@ -201,6 +203,13 @@ namespace mmo
 				m_questLog[i].quest = nullptr;
 				m_questLog[i].status = static_cast<QuestStatus>(field.status);
 				std::memcpy(m_questLog[i].counters, field.counters, sizeof(m_questLog[i].counters));
+
+				// Compute a local countdown deadline from the remaining time sent by the server.
+				m_questLog[i].questTimer = field.questTimer;
+				m_questLog[i].deadlineMs = (field.questTimer > 0)
+					? (GetAsyncTimeMs() + static_cast<GameTime>(field.questTimer) * 1000)
+					: 0;
+
 				if (m_questLog[i].questId != 0)
 				{
 					m_questCache.Get(m_questLog[i].questId, [this, i](uint64 entry, const QuestInfo& info)
@@ -226,6 +235,16 @@ namespace mmo
 				// Update counters
 				m_questLog[i].status = static_cast<QuestStatus>(field.status);
 				std::memcpy(m_questLog[i].counters, field.counters, sizeof(m_questLog[i].counters));
+
+				// Only recompute the local deadline when the server's remaining-time value actually
+				// changes, otherwise the countdown would keep resetting on every quest log update.
+				if (m_questLog[i].questTimer != field.questTimer)
+				{
+					m_questLog[i].questTimer = field.questTimer;
+					m_questLog[i].deadlineMs = (field.questTimer > 0)
+						? (GetAsyncTimeMs() + static_cast<GameTime>(field.questTimer) * 1000)
+						: 0;
+				}
 			}
 
 			if(field.questId != 0)
@@ -261,6 +280,25 @@ namespace mmo
 		}
 
 		return m_questLog.data() + m_questLogQuests[index];
+	}
+
+	uint32 QuestClient::GetQuestLogTimeLeft(const uint32 questId) const
+	{
+		for (const auto& entry : m_questLog)
+		{
+			if (entry.questId == questId && entry.deadlineMs > 0)
+			{
+				const GameTime now = GetAsyncTimeMs();
+				if (entry.deadlineMs <= now)
+				{
+					return 0;
+				}
+
+				return static_cast<uint32>((entry.deadlineMs - now) / 1000);
+			}
+		}
+
+		return 0;
 	}
 
 	void QuestClient::ProcessQuestText(String& questText)

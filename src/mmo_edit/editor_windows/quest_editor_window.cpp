@@ -264,8 +264,33 @@ namespace mmo
 				ImGui::SameLine();
 				DrawHelpMarker("Exploration-based quest");
 
+				ImGui::TableNextColumn();
+				CHECKBOX_FLAG_PROP(flags, "Auto Rewarded", quest_flags::AutoRewarded);
+				ImGui::SameLine();
+				DrawHelpMarker("Quest is automatically rewarded on completion");
+
+				ImGui::TableNextColumn();
+				CHECKBOX_FLAG_PROP(flags, "Repeatable", quest_flags::Repeatable);
+				ImGui::SameLine();
+				DrawHelpMarker("Quest can be repeated immediately after turn-in");
+
+				ImGui::TableNextColumn();
+				CHECKBOX_FLAG_PROP(flags, "Daily", quest_flags::Daily);
+				ImGui::SameLine();
+				DrawHelpMarker("Repeatable once per day (resets at the configured daily reset time)");
+
+				ImGui::TableNextColumn();
+				CHECKBOX_FLAG_PROP(flags, "Weekly", quest_flags::Weekly);
+				ImGui::SameLine();
+				DrawHelpMarker("Repeatable once per week (resets at the configured weekly reset time)");
+
 				ImGui::EndTable();
 			}
+
+			ImGui::Spacing();
+			SLIDER_UINT32_PROP(timelimit, "Time Limit (seconds)", 0, 86400);
+			ImGui::SameLine();
+			DrawHelpMarker("If greater than 0, the quest fails if not turned in within this many seconds. The deadline keeps counting while offline.");
 
 			ImGui::Spacing();
 			ImGui::Spacing();

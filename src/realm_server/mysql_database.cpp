@@ -695,7 +695,15 @@ namespace mmo
 
 						if (data.status == quest_status::Rewarded)
 						{
-							result.rewardedQuestIds.push_back(questId);
+							if (data.expiration > 0)
+							{
+								// Daily/weekly quest that is on cooldown until its stored reset time.
+								result.repeatableQuestResets[questId] = data.expiration;
+							}
+							else
+							{
+								result.rewardedQuestIds.push_back(questId);
+							}
 						}
 						else
 						{

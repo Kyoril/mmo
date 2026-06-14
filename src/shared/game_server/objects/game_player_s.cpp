@@ -3,9 +3,11 @@
 #include "game_player_s.h"
 
 #include <algorithm>
+#include <ctime>
 
 #include "game_item_s.h"
 #include "quest_status_data.h"
+#include "game_server/quest_reset.h"
 #include "base/utilities.h"
 #include "proto_data/project.h"
 #include "game/item.h"
@@ -427,8 +429,17 @@ namespace mmo
 
 	QuestStatus GamePlayerS::GetQuestStatus(const uint32 quest) const
 	{
-		// Shortcut: rewarded quests are only stored with their id as we are not interested in anything else
-		if (m_rewardedQuestIds.contains(quest))
+		// Daily/weekly quests are locked until their next reset boundary has passed.
+		if (const auto rit = m_repeatableResets.find(quest); rit != m_repeatableResets.end())
+		{
+			if (static_cast<GameTime>(::time(nullptr)) < rit->second)
+			{
+				return quest_status::Rewarded;
+			}
+			// Reset has passed: fall through and re-evaluate availability below.
+		}
+		// Shortcut: rewarded (non-repeatable) quests are only stored with their id as we are not interested in anything else
+		else if (m_rewardedQuestIds.contains(quest))
 		{
 			return quest_status::Rewarded;
 		}
@@ -588,19 +599,21 @@ namespace mmo
 					}
 				}
 
-				// Quest timer
-				uint32 questTimer = 0;
+				// Quest timer: store an absolute deadline (unix seconds) and send the remaining
+				// time to the client so it can run a local countdown.
+				uint32 remainingSeconds = 0;
 				if (questEntry->timelimit() > 0)
 				{
-					questTimer = GetAsyncTimeMs() + questEntry->timelimit();
-					data.expiration = questTimer;
+					const GameTime now = static_cast<GameTime>(::time(nullptr));
+					data.expiration = now + questEntry->timelimit();
+					remainingSeconds = questEntry->timelimit();
 				}
 
 				// Set quest log
 				QuestField field;
 				field.questId = quest;
 				field.status = quest_status::Incomplete;
-				field.questTimer = questTimer;
+				field.questTimer = remainingSeconds;
 
 				// Complete if no requirements
 				if (FulfillsQuestRequirements(*questEntry))
@@ -613,6 +626,12 @@ namespace mmo
 				Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
 				if (m_netPlayerWatcher)
 					m_netPlayerWatcher->OnQuestDataChanged(quest, data);
+
+				// Start the fail countdown for timed quests.
+				if (data.expiration > 0)
+				{
+					ArmQuestTimer(quest, data.expiration);
+				}
 
 				return true;
 			}
@@ -631,6 +650,7 @@ namespace mmo
 			if (questLogField.questId == quest)
 			{
 				m_quests.erase(quest);
+				CancelQuestTimer(quest);
 
 				// Reset quest log
 				Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), QuestField());
@@ -738,7 +758,11 @@ namespace mmo
 				continue;
 			}
 
-			if (it->second.status != quest_status::Incomplete)
+			// A quest can fail while still in progress or even after its objectives are met but
+			// before it has been turned in (e.g. a timed quest that ran out, or death on a
+			// "stay alive" quest).
+			if (it->second.status != quest_status::Incomplete &&
+				it->second.status != quest_status::Complete)
 			{
 				continue;
 			}
@@ -746,6 +770,11 @@ namespace mmo
 			// Set quest status to Failed
 			it->second.status = quest_status::Failed;
 			field.status = quest_status::Failed;
+
+			// A failed quest no longer has a running timer.
+			field.questTimer = 0;
+			it->second.expiration = 0;
+			CancelQuestTimer(quest);
 
 			// Update quest log field
 			Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
@@ -964,13 +993,43 @@ namespace mmo
 			}
 		}
 
-		// Quest was rewarded
-		it->second.status = quest_status::Rewarded;
-		if (m_netPlayerWatcher)
-			m_netPlayerWatcher->OnQuestDataChanged(quest, it->second);
+		// A rewarded quest no longer has a running timer.
+		CancelQuestTimer(quest);
 
-		m_rewardedQuestIds.insert(entry->id());
-		it = m_quests.erase(it);
+		const uint32 questFlags = entry->flags();
+		if (IsIntervalQuest(questFlags))
+		{
+			// Daily/weekly quests become available again only after the next global reset boundary.
+			const GameTime now = static_cast<GameTime>(::time(nullptr));
+			const GameTime resetTime = (questFlags & quest_flags::Weekly)
+				? GetNextWeeklyResetTime(now)
+				: GetNextDailyResetTime(now);
+
+			m_repeatableResets[entry->id()] = resetTime;
+
+			it->second.status = quest_status::Rewarded;
+			it->second.expiration = resetTime;
+			if (m_netPlayerWatcher)
+				m_netPlayerWatcher->OnQuestDataChanged(quest, it->second);
+		}
+		else if (questFlags & quest_flags::Repeatable)
+		{
+			// Plain repeatable quests are immediately available again; drop all persisted state.
+			it->second.status = quest_status::Available;
+			if (m_netPlayerWatcher)
+				m_netPlayerWatcher->OnQuestDataChanged(quest, QuestStatusData());
+		}
+		else
+		{
+			// Quest was rewarded
+			it->second.status = quest_status::Rewarded;
+			if (m_netPlayerWatcher)
+				m_netPlayerWatcher->OnQuestDataChanged(quest, it->second);
+
+			m_rewardedQuestIds.insert(entry->id());
+		}
+
+		m_quests.erase(it);
 
 		if (m_netPlayerWatcher)
 			m_netPlayerWatcher->OnQuestCompleted(questgiverGuid, quest, rewardXp, money);
@@ -1425,6 +1484,100 @@ namespace mmo
 			m_netPlayerWatcher->OnQuestDataChanged(questId, completed);
 	}
 
+	void GamePlayerS::NotifyRepeatableQuestReset(const uint32 questId, const GameTime resetTime)
+	{
+		m_repeatableResets[questId] = resetTime;
+	}
+
+	void GamePlayerS::ArmQuestTimer(const uint32 questId, const GameTime expirationUnix)
+	{
+		// Drop any previous timer for this quest.
+		CancelQuestTimer(questId);
+
+		const GameTime now = static_cast<GameTime>(::time(nullptr));
+		if (expirationUnix <= now)
+		{
+			// Deadline already passed (e.g. it expired while the player was offline).
+			FailQuest(questId);
+			return;
+		}
+
+		const GameTime remainingMs = (expirationUnix - now) * 1000;
+
+		QuestTimer timer;
+		timer.countdown = std::make_unique<Countdown>(GetTimers());
+		timer.onExpired = timer.countdown->ended.connect([this, questId]()
+		{
+			FailQuest(questId);
+		});
+		timer.countdown->SetEnd(GetAsyncTimeMs() + remainingMs);
+
+		m_questTimers[questId] = std::move(timer);
+	}
+
+	void GamePlayerS::CancelQuestTimer(const uint32 questId)
+	{
+		if (const auto it = m_questTimers.find(questId); it != m_questTimers.end())
+		{
+			if (it->second.countdown)
+			{
+				it->second.countdown->Cancel();
+			}
+			m_questTimers.erase(it);
+		}
+	}
+
+	void GamePlayerS::InitializeQuestTimers()
+	{
+		for (const auto &[questId, data] : m_quests)
+		{
+			if (data.expiration == 0)
+			{
+				continue;
+			}
+
+			if (data.status != quest_status::Incomplete &&
+				data.status != quest_status::Complete)
+			{
+				continue;
+			}
+
+			// ArmQuestTimer fails the quest immediately if the deadline already passed.
+			ArmQuestTimer(questId, data.expiration);
+		}
+	}
+
+	void GamePlayerS::FailQuestsOnDeath()
+	{
+		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
+		{
+			const QuestField field = Get<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)));
+			if (field.questId == 0)
+			{
+				continue;
+			}
+
+			const auto *entry = GetProject().quests.getById(field.questId);
+			if (!entry)
+			{
+				continue;
+			}
+
+			if ((entry->flags() & quest_flags::StayAlive) != 0)
+			{
+				FailQuest(field.questId);
+			}
+		}
+	}
+
+	void GamePlayerS::OnKilled(GameUnitS *killer)
+	{
+		GameUnitS::OnKilled(killer);
+
+		// Quests that require the player to stay alive fail upon death.
+		FailQuestsOnDeath();
+	}
+
 	void GamePlayerS::SetQuestData(uint32 questId, const QuestStatusData &data)
 	{
 		m_quests[questId] = data;
@@ -1436,7 +1589,10 @@ namespace mmo
 			{
 				field.questId = questId;
 				field.status = data.status;
-				field.questTimer = data.expiration;
+				// Send the remaining time (seconds) rather than the absolute deadline so the client
+				// can run a local countdown.
+				const GameTime now = static_cast<GameTime>(::time(nullptr));
+				field.questTimer = (data.expiration > now) ? static_cast<uint32>(data.expiration - now) : 0;
 				for (uint8 j = 0; j < 4; ++j)
 				{
 					field.counters[j] = data.creatures[j];

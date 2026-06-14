@@ -161,6 +161,9 @@ namespace mmo
 			{
 				fallDamageMinHeight = static_cast<float>(gameplay->getInteger("fallDamageMinHeight", static_cast<unsigned>(fallDamageMinHeight)));
 				fallDamageLethalHeight = static_cast<float>(gameplay->getInteger("fallDamageLethalHeight", static_cast<unsigned>(fallDamageLethalHeight)));
+				dailyQuestResetHour = gameplay->getInteger("dailyQuestResetHour", dailyQuestResetHour);
+				weeklyQuestResetWeekday = gameplay->getInteger("weeklyQuestResetWeekday", weeklyQuestResetWeekday);
+				weeklyQuestResetHour = gameplay->getInteger("weeklyQuestResetHour", weeklyQuestResetHour);
 			}
 
 			if (const Table *const log = global.getTable("log"))
@@ -283,6 +286,9 @@ namespace mmo
 			sff::write::Table<Char> gameplay(global, "gameplay", sff::write::MultiLine);
 			gameplay.addKey("fallDamageMinHeight", static_cast<unsigned>(fallDamageMinHeight));
 			gameplay.addKey("fallDamageLethalHeight", static_cast<unsigned>(fallDamageLethalHeight));
+			gameplay.addKey("dailyQuestResetHour", dailyQuestResetHour);
+			gameplay.addKey("weeklyQuestResetWeekday", weeklyQuestResetWeekday);
+			gameplay.addKey("weeklyQuestResetHour", weeklyQuestResetHour);
 			gameplay.Finish();
 		}
 

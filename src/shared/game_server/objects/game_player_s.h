@@ -4,6 +4,8 @@
 
 #include <set>
 #include <vector>
+#include <map>
+#include <memory>
 
 #include "game_unit_s.h"
 #include "game_server/inventory.h"
@@ -205,6 +207,17 @@ namespace mmo
 
 		void NotifyQuestRewarded(uint32 questId);
 
+		/// Marks a daily/weekly quest as rewarded with a pending reset time. Called when character
+		/// data is loaded so that interval-repeatable quests stay locked until their next reset.
+		/// @param questId The quest id.
+		/// @param resetTime The unix timestamp (seconds) at which the quest becomes available again.
+		void NotifyRepeatableQuestReset(uint32 questId, GameTime resetTime);
+
+		/// (Re-)arms the fail countdowns of all timed quests in the quest log. Quests whose deadline
+		/// already passed (e.g. while the player was offline) are failed immediately. Must be called
+		/// after the quest status data has been applied on login.
+		void InitializeQuestTimers();
+
 		void SetQuestData(uint32 questId, const QuestStatusData &data);
 
 		/// Tries to learn a given rank of a talent.
@@ -306,6 +319,8 @@ namespace mmo
 		void RecalculateTotalAttributePointsConsumed(const uint32 attribute);
 
 	protected:
+		void OnKilled(GameUnitS *killer) override;
+
 		void OnSpellLearned(const proto::SpellEntry &spell) override
 		{
 			spellLearned(*this, spell);
@@ -323,6 +338,20 @@ namespace mmo
 		}
 
 	private:
+		/// Arms a fail-countdown for a timed quest based on its absolute expiration time.
+		/// If the deadline has already passed, the quest is failed immediately instead.
+		/// @param questId The quest id.
+		/// @param expirationUnix The deadline as a unix timestamp in seconds.
+		void ArmQuestTimer(uint32 questId, GameTime expirationUnix);
+
+		/// Cancels and removes any running fail-countdown for the given quest.
+		/// @param questId The quest id.
+		void CancelQuestTimer(uint32 questId);
+
+		/// Fails all quests in the quest log that have the StayAlive flag set. Called on death.
+		void FailQuestsOnDeath();
+
+	private:
 		String m_name;
 		Inventory m_inventory;
 		const proto::ClassEntry *m_classEntry;
@@ -333,6 +362,19 @@ namespace mmo
 		uint32 m_totalTalentPointsAtLevel;
 		std::map<uint32, QuestStatusData> m_quests;
 		std::set<uint32> m_rewardedQuestIds;
+
+		/// Daily/weekly quests that have been rewarded, mapped to the unix timestamp (seconds) at
+		/// which they become available again.
+		std::map<uint32, GameTime> m_repeatableResets;
+
+		/// Running fail-countdowns for timed quests, keyed by quest id. Created on accept/login and
+		/// destroyed on reward/abandon/fail.
+		struct QuestTimer
+		{
+			std::unique_ptr<Countdown> countdown;
+			scoped_connection onExpired;
+		};
+		std::map<uint32, QuestTimer> m_questTimers;
 		NetPlayerWatcher *m_netPlayerWatcher = nullptr;
 		uint64 m_groupId = 0;
 		PlayerGroup* m_playerGroup = nullptr;

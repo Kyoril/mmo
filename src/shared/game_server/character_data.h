@@ -74,6 +74,9 @@ namespace mmo
 		std::array<uint32, 5> attributePointsSpent;
 
 		std::vector<uint32> rewardedQuestIds;
+		/// Daily/weekly quests that have been rewarded, mapped to the unix timestamp (seconds) at
+		/// which they become available again.
+		std::map<uint32, GameTime> repeatableQuestResets;
 		std::map<uint32, QuestStatusData> questStatus;
 		std::map<uint32, uint8> talentRanks;
 
@@ -165,6 +168,24 @@ namespace mmo
 			data.talentRanks[talentId] = rank;
 		}
 
+		uint16 numRepeatableResets;
+		if (!(reader >> io::read<uint16>(numRepeatableResets)))
+		{
+			return reader;
+		}
+
+		for (uint16 i = 0; i < numRepeatableResets; ++i)
+		{
+			uint32 questId;
+			GameTime resetTime;
+			if (!(reader >> io::read<uint32>(questId) >> io::read<uint64>(resetTime)))
+			{
+				return reader;
+			}
+
+			data.repeatableQuestResets[questId] = resetTime;
+		}
+
 		return reader;
 	}
 	
@@ -216,6 +237,12 @@ namespace mmo
 		for (const auto& [talentId, rank] : data.talentRanks)
 		{
 			writer << io::write<uint32>(talentId) << io::write<uint8>(rank);
+		}
+
+		writer << io::write<uint16>(data.repeatableQuestResets.size());
+		for (const auto& [questId, resetTime] : data.repeatableQuestResets)
+		{
+			writer << io::write<uint32>(questId) << io::write<uint64>(resetTime);
 		}
 
 		return writer;

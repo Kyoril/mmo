@@ -14,6 +14,7 @@
 #include "game_server/world/world_instance_manager.h"
 #include "player_manager.h"
 #include "game_server/condition_mgr.h"
+#include "game_server/quest_reset.h"
 #include "trigger_handler.h"
 #include "lua_script_mgr.h"
 
@@ -79,6 +80,15 @@ namespace mmo
 		if (!config.load(configFileName))
 		{
 			return 1;
+		}
+
+		// Apply the global quest reset schedule (daily/weekly).
+		{
+			QuestResetConfig questResetConfig;
+			questResetConfig.dailyResetHour = config.dailyQuestResetHour;
+			questResetConfig.weeklyResetWeekday = config.weeklyQuestResetWeekday;
+			questResetConfig.weeklyResetHour = config.weeklyQuestResetHour;
+			SetQuestResetConfig(questResetConfig);
 		}
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////

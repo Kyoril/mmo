@@ -3451,10 +3451,29 @@ namespace mmo
 			return;
 		}
 
+		// Drop any previous representation of this quest so the cached state stays consistent.
+		std::erase(m_characterData->rewardedQuestIds, questId);
+		m_characterData->questStatus.erase(questId);
+		m_characterData->repeatableQuestResets.erase(questId);
+
+		if (questData.status == quest_status::Available)
+		{
+			// Quest was abandoned or a plain-repeatable quest became available again: no cached
+			// state needs to be retained.
+			return;
+		}
+
 		if (questData.status == quest_status::Rewarded)
 		{
-			m_characterData->rewardedQuestIds.push_back(questId);
-			m_characterData->questStatus.erase(questId);
+			if (questData.expiration > 0)
+			{
+				// Daily/weekly quest on cooldown until its reset time.
+				m_characterData->repeatableQuestResets[questId] = questData.expiration;
+			}
+			else
+			{
+				m_characterData->rewardedQuestIds.push_back(questId);
+			}
 		}
 		else
 		{

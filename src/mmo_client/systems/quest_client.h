@@ -74,6 +74,13 @@ namespace mmo
 		const QuestInfo* quest = nullptr;
 		QuestStatus status = QuestStatus::Incomplete;
 		uint8 counters[4] = { 0, 0, 0, 0 };
+
+		/// The remaining time (seconds) as reported by the last server field update. 0 = no timer.
+		uint32 questTimer = 0;
+
+		/// Local client clock deadline (GetAsyncTimeMs domain) computed when questTimer last changed.
+		/// 0 = no timer running. Used to drive a smooth local countdown.
+		GameTime deadlineMs = 0;
 	};
 
 	struct GossipMenuAction
@@ -122,6 +129,11 @@ namespace mmo
 		[[nodiscard]] uint32 GetNumQuestLogEntries() const { return m_questLogQuests.size(); }
 
 		const QuestLogEntry* GetQuestLogEntry(uint32 index) const;
+
+		/// Gets the remaining time (in seconds) of a timed quest in the quest log.
+		/// @param questId The quest id.
+		/// @returns Remaining seconds, or 0 if the quest has no timer / already expired.
+		uint32 GetQuestLogTimeLeft(uint32 questId) const;
 
 		void RefreshQuestGiverStatus();
 

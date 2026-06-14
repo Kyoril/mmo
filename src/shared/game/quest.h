@@ -69,10 +69,32 @@ namespace mmo
 
 			/// Quest is not auto completed but needs an event to complete.
 			Exploration = 0x0100,
+
+			/// This quest can be repeated without any time restriction (immediately available again
+			/// after being rewarded). Daily and Weekly imply repeatability as well.
+			Repeatable = 0x0200,
 		};
 	}
 
 	typedef quest_flags::Type QuestFlags;
+
+	/// Determines whether a quest with the given flags can be repeated at all
+	/// (either without restriction or on a daily/weekly interval).
+	/// @param flags The quest flags bitmask.
+	/// @returns True if the quest is repeatable in any form.
+	constexpr bool IsRepeatableQuest(const uint32 flags)
+	{
+		return (flags & (quest_flags::Repeatable | quest_flags::Daily | quest_flags::Weekly)) != 0;
+	}
+
+	/// Determines whether a quest with the given flags resets on a fixed interval (daily/weekly)
+	/// rather than being immediately repeatable.
+	/// @param flags The quest flags bitmask.
+	/// @returns True if the quest resets on a daily or weekly interval.
+	constexpr bool IsIntervalQuest(const uint32 flags)
+	{
+		return (flags & (quest_flags::Daily | quest_flags::Weekly)) != 0;
+	}
 
 	namespace quest_status
 	{

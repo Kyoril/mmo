@@ -77,6 +77,15 @@ namespace mmo
 		/// @brief Fall distance in meters at which fall damage becomes lethal (100% of max HP).
 		float fallDamageLethalHeight{ 40.0f };
 
+		/// @brief Hour of day [0, 23] (UTC/server time) at which daily quests reset.
+		uint32 dailyQuestResetHour{ 3 };
+
+		/// @brief Weekday [0 = Sunday, 6 = Saturday] on which weekly quests reset.
+		uint32 weeklyQuestResetWeekday{ 3 };
+
+		/// @brief Hour of day [0, 23] (UTC/server time) at which weekly quests reset.
+		uint32 weeklyQuestResetHour{ 3 };
+
 		/// Creates a configuration instance with default values.
 		explicit Configuration();
 		/// Loads configuration values from the given file.

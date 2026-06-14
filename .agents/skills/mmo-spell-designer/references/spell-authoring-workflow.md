@@ -20,6 +20,9 @@ Use this workflow when creating or editing a spell for this project. It is optim
    - proc fields
    - visualization or category references
 
+   Special case:
+   - For `ModStat` / `ModStatPct` auras, verify `miscvaluea` against `src/mmo_edit/editor_windows/spell_editor_window.cpp` instead of `stat_constants.proto`. The valid spell aura mapping is `0=Stamina`, `1=Strength`, `2=Agility`, `3=Intellect`, `4=Spirit`.
+
 5. Validate the JSON draft.
    Use `scripts/validate_spell_json.py`.
 

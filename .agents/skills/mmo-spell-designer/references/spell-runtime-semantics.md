@@ -76,6 +76,20 @@ Aura handlers currently support patterns such as:
 - damage immunity
 </auras>
 
+<stat_aura_indices>
+`AuraEffect::HandleModStat()` and `HandleModStatPct()` interpret `effect.miscvaluea` as a raw stat index and route it through `GameUnitS::GetUnitModByStat()`.
+
+Authoritative mapping for spell auras:
+
+- `0 = Stamina`
+- `1 = Strength`
+- `2 = Agility`
+- `3 = Intellect`
+- `4 = Spirit`
+
+This is the same order shown in `src/mmo_edit/editor_windows/spell_editor_window.cpp` for the `ModStat` / `ModStatPct` combo box. It is intentionally different from `proto::StatConstants.StatType`, so do not copy enum numbers from `stat_constants.proto` into spell aura `miscvaluea`.
+</stat_aura_indices>
+
 <procs>
 Proc behavior is split across spell-level proc fields and aura effect logic.
 

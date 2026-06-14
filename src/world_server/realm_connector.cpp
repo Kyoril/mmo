@@ -627,11 +627,20 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 			characterObject->NotifyQuestRewarded(questId);
 		}
 
+		// Mark daily/weekly quests that are still on cooldown
+		for (const auto& [questId, resetTime] : characterData.repeatableQuestResets)
+		{
+			characterObject->NotifyRepeatableQuestReset(questId, resetTime);
+		}
+
 		// Set quest status data
 		for (const auto& questData : characterData.questStatus)
 		{
 			characterObject->SetQuestData(questData.first, questData.second);
 		}
+
+		// Re-arm fail countdowns for timed quests (and fail any that expired while offline)
+		characterObject->InitializeQuestTimers();
 
 		characterObject->SetBinding(characterData.bindMap, characterData.bindPosition, characterData.bindFacing);
 
