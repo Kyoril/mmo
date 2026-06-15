@@ -10,6 +10,8 @@
 #include "scene_graph/scene_node.h"
 #include "graphics/texture.h"
 
+#include <vector>
+
 namespace mmo
 {
 	class Camera;
@@ -151,6 +153,17 @@ namespace mmo
 		/// Area ID 0 → neutral grey.  IDs 1+ cycle through a 16-colour palette.
 		static uint32 GetColorForAreaId(uint32 areaId);
 
+		/// Loads a brush mask image (PNG/JPG/BMP/TGA/PSD) from disk. The red channel is used as
+		/// a greyscale mask. Returns true on success and refreshes the preview texture.
+		bool LoadBrushMask(const String& path);
+
+		/// Rebuilds the small preview texture shown for the currently loaded brush mask.
+		void UpdateBrushMaskPreview();
+
+		/// Samples the loaded brush mask at normalized coordinates (u, v) in [0, 1], applying the
+		/// current rotation and invert settings. Returns a value in [0, 1]; out-of-range coords → 0.
+		[[nodiscard]] float SampleBrushMask(float u, float v) const;
+
 	private:
 		terrain::Terrain& m_terrain;
 
@@ -180,6 +193,17 @@ namespace mmo
 		float m_noisePersistence = 0.5f;
 
 		uint8 m_terrainPaintLayer = 0;
+
+		// Brush mask: an imported greyscale image used as a paint stencil/pattern.
+		bool                m_useBrushMask = false;
+		bool                m_brushMaskInvert = false;
+		float               m_brushMaskRotation = 0.0f;   ///< Degrees, applied around the mask center.
+		int                 m_brushMaskWidth = 0;
+		int                 m_brushMaskHeight = 0;
+		std::vector<float>  m_brushMaskData;              ///< Row-major normalized [0,1] mask values.
+		String              m_brushMaskName;              ///< File name shown in the UI.
+		TexturePtr          m_brushMaskPreviewTex;
+		bool                m_brushMaskPreviewInvert = false; ///< Invert state baked into the preview.
 
 		Vector3 m_brushPosition{};
 

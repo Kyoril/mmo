@@ -21,6 +21,13 @@
 #include "graphics/buffer_base.h"
 #include "scene_graph/camera.h"
 
+#include "file_dialog/file_dialog.h"
+#include "log/default_log_levels.h"
+
+#include <filesystem>
+
+#include "stb_image/stb_image.h"
+
 
 namespace mmo
 {
@@ -469,6 +476,62 @@ namespace mmo
 
 				ImGui::EndCombo();
 			}
+
+			// --- Brush mask (stencil/pattern painting) ---
+			ImGui::Separator();
+			ImGui::Checkbox("Use Brush Mask", &m_useBrushMask);
+			ImGui::SameLine();
+			ImGui::TextDisabled("(?)");
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Import a greyscale image (red channel used as mask) to paint\n"
+					"patterns into the splat layers. The mask modulates the brush falloff.");
+			}
+
+			if (ImGui::Button("Import Mask..."))
+			{
+				const std::vector<FileDialogFilter> filters = {
+					FileDialogFilter("Image files", "*.png;*.jpg;*.jpeg;*.bmp;*.tga;*.psd"),
+				};
+				const std::optional<String> path = FileDialog::ShowOpen("Import Brush Mask", filters);
+				if (path)
+				{
+					if (LoadBrushMask(*path))
+					{
+						m_useBrushMask = true;
+					}
+				}
+			}
+
+			if (!m_brushMaskData.empty())
+			{
+				ImGui::SameLine();
+				if (ImGui::Button("Clear Mask"))
+				{
+					m_brushMaskData.clear();
+					m_brushMaskWidth = m_brushMaskHeight = 0;
+					m_brushMaskName.clear();
+					m_brushMaskPreviewTex.reset();
+					m_useBrushMask = false;
+				}
+
+				ImGui::TextDisabled("%s (%dx%d)", m_brushMaskName.c_str(), m_brushMaskWidth, m_brushMaskHeight);
+
+				ImGui::Checkbox("Invert Mask", &m_brushMaskInvert);
+				ImGui::SliderFloat("Mask Rotation", &m_brushMaskRotation, 0.0f, 360.0f, "%.0f deg");
+
+				if (m_brushMaskPreviewInvert != m_brushMaskInvert)
+				{
+					UpdateBrushMaskPreview();
+				}
+
+				if (m_brushMaskPreviewTex && m_brushMaskPreviewTex->GetTextureObject())
+				{
+					ImGui::Spacing();
+					ImGui::Text("Mask Preview:");
+					ImGui::Image(m_brushMaskPreviewTex->GetTextureObject(), ImVec2(96.0f, 96.0f));
+				}
+			}
 		}
 		else if (m_type == TerrainEditType::Holes)
 		{
@@ -631,8 +694,18 @@ namespace mmo
 		}
 		else if (m_type == TerrainEditType::Paint)
 		{
-			m_terrain.Paint(m_terrainPaintLayer, m_brushPosition.x, m_brushPosition.z,
-				innerRadius, outerRadius, m_terrainBrushPower * factor * deltaSeconds);
+			if (m_useBrushMask && !m_brushMaskData.empty())
+			{
+				const terrain::BrushMaskSampler sampler =
+					[this](const float u, const float v) { return SampleBrushMask(u, v); };
+				m_terrain.Paint(m_terrainPaintLayer, m_brushPosition.x, m_brushPosition.z,
+					innerRadius, outerRadius, m_terrainBrushPower * factor * deltaSeconds, &sampler);
+			}
+			else
+			{
+				m_terrain.Paint(m_terrainPaintLayer, m_brushPosition.x, m_brushPosition.z,
+					innerRadius, outerRadius, m_terrainBrushPower * factor * deltaSeconds);
+			}
 		}
 		else if (m_type == TerrainEditType::Area)
 		{
@@ -926,5 +999,142 @@ namespace mmo
 				}
 			}
 		}
+	}
+
+	bool TerrainEditMode::LoadBrushMask(const String& path)
+	{
+		int x = 0, y = 0, channels = 0;
+		// Force RGBA so the red channel is always at byte offset 0 regardless of source format.
+		uint8* data = stbi_load(path.c_str(), &x, &y, &channels, 4);
+		if (!data)
+		{
+			ELOG("Failed to load brush mask image '" << path << "': " << (stbi_failure_reason() ? stbi_failure_reason() : "unknown error"));
+			return false;
+		}
+
+		if (x <= 0 || y <= 0)
+		{
+			ELOG("Brush mask image has invalid dimensions");
+			stbi_image_free(data);
+			return false;
+		}
+
+		m_brushMaskWidth = x;
+		m_brushMaskHeight = y;
+		m_brushMaskData.resize(static_cast<size_t>(x) * static_cast<size_t>(y));
+		for (size_t i = 0; i < m_brushMaskData.size(); ++i)
+		{
+			// Red channel as greyscale mask.
+			m_brushMaskData[i] = data[i * 4] / 255.0f;
+		}
+
+		stbi_image_free(data);
+
+		m_brushMaskName = std::filesystem::path(path).filename().string();
+
+		// Force a preview rebuild for the freshly loaded mask.
+		m_brushMaskPreviewTex.reset();
+		UpdateBrushMaskPreview();
+
+		ILOG("Loaded terrain brush mask '" << m_brushMaskName << "' (" << x << "x" << y << ")");
+		return true;
+	}
+
+	void TerrainEditMode::UpdateBrushMaskPreview()
+	{
+		if (m_brushMaskData.empty() || m_brushMaskWidth <= 0 || m_brushMaskHeight <= 0)
+		{
+			m_brushMaskPreviewTex.reset();
+			return;
+		}
+
+		constexpr int kPreviewSize = 96;
+
+		if (!m_brushMaskPreviewTex)
+		{
+			m_brushMaskPreviewTex = TextureManager::Get().CreateManual(
+				"__TerrainBrushMaskPreview__", kPreviewSize, kPreviewSize,
+				PixelFormat::R8G8B8A8, BufferUsage::DynamicWriteOnly);
+		}
+
+		if (!m_brushMaskPreviewTex)
+		{
+			return;
+		}
+
+		std::vector<uint32> pixels(static_cast<size_t>(kPreviewSize) * kPreviewSize);
+		for (int py = 0; py < kPreviewSize; ++py)
+		{
+			for (int px = 0; px < kPreviewSize; ++px)
+			{
+				// Nearest-sample the source mask into the fixed-size preview.
+				const int sx = std::min(m_brushMaskWidth - 1, px * m_brushMaskWidth / kPreviewSize);
+				const int sy = std::min(m_brushMaskHeight - 1, py * m_brushMaskHeight / kPreviewSize);
+				float value = m_brushMaskData[static_cast<size_t>(sy) * m_brushMaskWidth + sx];
+				if (m_brushMaskInvert)
+				{
+					value = 1.0f - value;
+				}
+
+				const uint8 g = static_cast<uint8>(std::max(0.0f, std::min(1.0f, value)) * 255.0f);
+				pixels[static_cast<size_t>(py) * kPreviewSize + px] = 0xFF000000u | (g << 16) | (g << 8) | g;
+			}
+		}
+
+		m_brushMaskPreviewTex->UpdateFromMemory(pixels.data(), pixels.size() * sizeof(uint32));
+		m_brushMaskPreviewInvert = m_brushMaskInvert;
+	}
+
+	float TerrainEditMode::SampleBrushMask(float u, float v) const
+	{
+		if (m_brushMaskData.empty() || m_brushMaskWidth <= 0 || m_brushMaskHeight <= 0)
+		{
+			return 1.0f;
+		}
+
+		// Rotate the sample coordinates around the mask center.
+		if (m_brushMaskRotation != 0.0f)
+		{
+			constexpr float kDegToRad = 3.14159265358979323846f / 180.0f;
+			const float rad = m_brushMaskRotation * kDegToRad;
+			const float c = std::cos(rad);
+			const float s = std::sin(rad);
+			const float cu = u - 0.5f;
+			const float cv = v - 0.5f;
+			u = 0.5f + (cu * c - cv * s);
+			v = 0.5f + (cu * s + cv * c);
+		}
+
+		// Anything outside the footprint contributes nothing.
+		if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f)
+		{
+			return 0.0f;
+		}
+
+		// Bilinear sample of the mask.
+		const float fx = u * static_cast<float>(m_brushMaskWidth - 1);
+		const float fy = v * static_cast<float>(m_brushMaskHeight - 1);
+		const int x0 = static_cast<int>(std::floor(fx));
+		const int y0 = static_cast<int>(std::floor(fy));
+		const int x1 = std::min(x0 + 1, m_brushMaskWidth - 1);
+		const int y1 = std::min(y0 + 1, m_brushMaskHeight - 1);
+		const float tx = fx - static_cast<float>(x0);
+		const float ty = fy - static_cast<float>(y0);
+
+		auto at = [this](const int x, const int y) -> float
+		{
+			return m_brushMaskData[static_cast<size_t>(y) * m_brushMaskWidth + x];
+		};
+
+		const float top = at(x0, y0) * (1.0f - tx) + at(x1, y0) * tx;
+		const float bottom = at(x0, y1) * (1.0f - tx) + at(x1, y1) * tx;
+		float value = top * (1.0f - ty) + bottom * ty;
+
+		if (m_brushMaskInvert)
+		{
+			value = 1.0f - value;
+		}
+
+		return value;
 	}
 }

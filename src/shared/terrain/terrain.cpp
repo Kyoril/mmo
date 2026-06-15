@@ -1088,19 +1088,41 @@ namespace mmo
 			}
 		}
 
-		void Terrain::Paint(const uint8 layer, const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, const float power)
+		void Terrain::Paint(const uint8 layer, const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, const float power, const BrushMaskSampler* maskSampler)
 		{
-			TerrainPixelBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, layer, power](const int32 vx, const int32 vy, const float factor)
+			// Footprint origin and inverse extent for mapping pixel world positions to mask UVs.
+			const float maskExtent = outerRadius * 2.0f;
+			const float invMaskExtent = maskExtent > 0.0f ? 1.0f / maskExtent : 0.0f;
+			const float maskOriginX = brushCenterX - outerRadius;
+			const float maskOriginZ = brushCenterZ - outerRadius;
+
+			TerrainPixelBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [&](const int32 vx, const int32 vy, const float radialFactor)
 							  {
+					float factor = radialFactor;
+
+					// Modulate the radial falloff with the optional brush mask sampled at this pixel.
+					if (maskSampler && *maskSampler)
+					{
+						float worldX, worldZ;
+						GetGlobalPixelWorldPosition(vx, vy, &worldX, &worldZ);
+						const float u = (worldX - maskOriginX) * invMaskExtent;
+						const float v = (worldZ - maskOriginZ) * invMaskExtent;
+						factor *= (*maskSampler)(u, v);
+						if (factor <= 0.0f)
+						{
+							return;
+						}
+					}
+
 					const uint32 layers = GetLayersAt(vx, vy);
 
-					Vector4 v;
-					v.x = ((layers >> 0) & 0xFF) / 255.0f;
-					v.y = ((layers >> 8) & 0xFF) / 255.0f;
-					v.z = ((layers >> 16) & 0xFF) / 255.0f;
-					v.w = ((layers >> 24) & 0xFF) / 255.0f;
+					Vector4 lv;
+					lv.x = ((layers >> 0) & 0xFF) / 255.0f;
+					lv.y = ((layers >> 8) & 0xFF) / 255.0f;
+					lv.z = ((layers >> 16) & 0xFF) / 255.0f;
+					lv.w = ((layers >> 24) & 0xFF) / 255.0f;
 
-					float value = v[layer];
+					float value = lv[layer];
 					value += power * factor;
 
 					SetLayerAt(vx, vy, layer, Clamp(value, 0.0f, 1.0f)); });

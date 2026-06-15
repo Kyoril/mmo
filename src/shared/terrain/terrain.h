@@ -7,6 +7,7 @@
 #include "math/vector3.h"
 
 #include <memory>
+#include <functional>
 
 #include "graphics/material.h"
 
@@ -25,6 +26,15 @@ namespace mmo
 		class Page;
 
 		typedef uint16 TileId;
+
+		/// @brief Optional brush mask sampler used by Terrain::Paint.
+		///
+		/// Invoked once per affected terrain pixel with normalized coordinates (u, v) in the
+		/// range [0, 1] spanning the brush's square footprint (side length = 2 * outerRadius,
+		/// centered on the brush). It must return a multiplier in [0, 1] that is applied on top
+		/// of the radial brush falloff, allowing an imported greyscale image to be used as a
+		/// stencil/pattern for layer painting. Coordinates outside the footprint should return 0.
+		using BrushMaskSampler = std::function<float(float u, float v)>;
 
 		class Terrain final
 		{
@@ -310,7 +320,9 @@ namespace mmo
 			/// @param innerRadius The inner radius of the brush where full effect is applied.
 			/// @param outerRadius The outer radius of the brush where effect fades out.
 			/// @param power The strength of the painting effect.
-			void Paint(uint8 layer, float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power);
+			/// @param maskSampler Optional brush mask. When non-null, its return value modulates the
+			///        radial brush falloff per pixel, letting an imported image act as a paint stencil.
+			void Paint(uint8 layer, float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power, const BrushMaskSampler* maskSampler = nullptr);
 
 			/// @brief Colors the terrain vertices in a brush area.
 			/// @param brushCenterX World X position of the brush center.

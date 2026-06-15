@@ -1627,6 +1627,10 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		const bool debugEntityWasVisible = m_debugEntity && m_debugEntity->IsVisible();
 		if (m_debugEntity) m_debugEntity->SetVisible(false);
 
+		// Hide authored tree foliage so it does not appear on the minimap.
+		const bool foliageWasVisible = m_foliage && m_foliage->IsVisible();
+		if (m_foliage) m_foliage->SetVisible(false);
+
 		Camera *renderCam = m_scene.CreateCamera("MinimapCamera");
 		renderCam->SetProjectionType(ProjectionType::Orthographic);
 		renderCam->SetOrthoWindow(pageSize, pageSize);
@@ -1872,6 +1876,7 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			}
 		}
 		if (m_debugEntity) m_debugEntity->SetVisible(debugEntityWasVisible);
+		if (m_foliage) m_foliage->SetVisible(foliageWasVisible);
 
 		gx.RestoreState();
 	}

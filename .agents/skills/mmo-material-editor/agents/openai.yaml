@@ -1,0 +1,4 @@
+interface:
+  display_name: "MMO Material Editor"
+  short_description: "Inspect and safely edit MMO texture and material assets"
+  default_prompt: "Use $mmo-material-editor to inspect or edit an HTEX, HMAT, or HMI asset."
