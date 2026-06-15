@@ -66,6 +66,7 @@ def load_modules(project_root: Path) -> dict[str, object]:
         "classes": "classes_pb2",
         "races": "races_pb2",
         "quests": "quests_pb2",
+        "zones": "zones_pb2",
         "conditions": "conditions_pb2",
         "triggers": "triggers_pb2",
         "spells": "spells_pb2",

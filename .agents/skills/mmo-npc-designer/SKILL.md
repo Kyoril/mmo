@@ -53,6 +53,13 @@ Apply spawn updates from the same JSON only when intended:
 ```powershell
 python .agents/skills/mmo-npc-designer/scripts/apply_npc_json.py F:\mmo\generated\npcs\warrior_trainer.json --project-root F:\mmo --apply-spawns --backup
 ```
+
+Inspect terrain height and zone bindings before placing or moving spawns:
+
+```powershell
+python .agents/skills/mmo-npc-designer/scripts/inspect_terrain.py --project-root F:\mmo --map-id 0 --world-x 150 --world-z 450 --pretty
+python .agents/skills/mmo-npc-designer/scripts/inspect_terrain.py --project-root F:\mmo --map-id 0 --zone-name Oakenshire --pretty
+```
 </quick_start>
 
 <routing>
@@ -88,6 +95,7 @@ Read these references as directed by the active workflow:
 This skill is being used correctly when:
 
 - The agent inspected live unit, faction, model, loot, spell, gossip, and spawn data before proposing IDs.
+- The agent inspected live terrain height and zone coverage before placing or moving map spawns.
 - Interactable behavior is driven by linked trainer, vendor, gossip, and quest data instead of guessed `npcflags`.
 - Hostility decisions are anchored to live faction templates and factions.
 - Combat spell, auto-attack, stat-system, loot, trigger, and script choices are checked against the runtime behavior in this repository.

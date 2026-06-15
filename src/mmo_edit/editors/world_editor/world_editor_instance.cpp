@@ -225,6 +225,9 @@ namespace mmo
 		// Create spawn palette panel
 		m_spawnPalettePanel = std::make_unique<SpawnPalettePanel>();
 
+		// Create spawn list panel (dockable browser of all placed spawns)
+		m_spawnListPanel = std::make_unique<SpawnListPanel>();
+
 		// Initialize deferred renderer BEFORE viewport panel since viewport panel takes a reference to it
 		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), m_scene, 640, 480);
 
@@ -393,15 +396,7 @@ namespace mmo
 		{
 			if (ImGui::IsKeyPressed(ImGuiKey_F))
 			{
-				if (m_selection.IsEmpty())
-				{
-					m_cameraAnchor->SetPosition(Vector3::Zero);
-				}
-				else
-				{
-					m_cameraAnchor->SetPosition(m_selection.GetSelectedObjects().back()->GetPosition());
-				}
-				m_cameraVelocity = Vector3::Zero;
+				FocusSelection();
 			}
 
 			if (ImGui::IsKeyPressed(ImGuiKey_Z))
@@ -497,6 +492,7 @@ namespace mmo
 		const String worldSettingsId = "World Settings##" + GetAssetPath().string();
 		const String sceneOutlineId = "Scene Outline##" + GetAssetPath().string();
 		const String spawnPaletteId = "Spawn Palette##" + GetAssetPath().string();
+		const String spawnListId = "Spawns##" + GetAssetPath().string();
 
 		HandleKeyboardShortcuts();
 
@@ -518,12 +514,17 @@ namespace mmo
 
 		m_worldSettingsPanel->Draw(worldSettingsId);
 		m_spawnPalettePanel->Draw(spawnPaletteId, m_spawnEditMode.get());
+
+		// The placed-spawn browser is only populated while spawn editing is the active mode, because
+		// spawns are only instantiated in the scene during that mode (and selection needs those entities).
+		m_spawnListPanel->Draw(spawnListId, (m_editMode == m_spawnEditMode.get()) ? m_spawnEditMode.get() : nullptr);
+
 		m_viewportPanel->Draw(viewportId, m_editMode, m_spawnEditMode && m_editMode == m_spawnEditMode.get() && m_spawnEditMode->IsWaypointEditActive());
 		DrawSceneOutlinePanel(sceneOutlineId);
 
 		if (m_initDockLayout)
 		{
-			InitializeDockLayout(dockspaceId, viewportId, detailsId, worldSettingsId, spawnPaletteId);
+			InitializeDockLayout(dockspaceId, viewportId, detailsId, worldSettingsId, spawnPaletteId, spawnListId);
 		}
 
 		ImGui::PopID();
@@ -587,7 +588,7 @@ namespace mmo
 		}
 	}
 
-	void WorldEditorInstance::InitializeDockLayout(ImGuiID dockspaceId, const String &viewportId, const String &detailsId, const String &worldSettingsId, const String &spawnPaletteId)
+	void WorldEditorInstance::InitializeDockLayout(ImGuiID dockspaceId, const String &viewportId, const String &detailsId, const String &worldSettingsId, const String &spawnPaletteId, const String &spawnListId)
 	{
 		ImGui::DockBuilderRemoveNode(dockspaceId);
 		ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace | ImGuiDockNodeFlags_AutoHideTabBar); // Add empty node
@@ -606,6 +607,9 @@ namespace mmo
 
 		ImGui::DockBuilderDockWindow(viewportId.c_str(), mainId);
 		ImGui::DockBuilderDockWindow(sceneOutlineId.c_str(), sideTopId);
+		// The placed-spawn browser shares the top-side dock node with the Scene Outline, so they
+		// become tabs in the same region.
+		ImGui::DockBuilderDockWindow(spawnListId.c_str(), sideTopId);
 		ImGui::DockBuilderDockWindow(detailsId.c_str(), sideId);
 		ImGui::DockBuilderDockWindow(worldSettingsId.c_str(), sideId);
 		ImGui::DockBuilderDockWindow(spawnPaletteId.c_str(), sideId);
@@ -1371,6 +1375,114 @@ namespace mmo
 				map->mutable_objectspawns()->erase(it);
 			}
 		}
+	}
+
+	void WorldEditorInstance::SelectUnitSpawn(proto::UnitSpawnEntry& spawn)
+	{
+		// Find the scene entity that represents this spawn.
+		const auto entityIt = std::find_if(m_spawnEntities.begin(), m_spawnEntities.end(), [&spawn](const Entity* entity)
+		{
+			return entity->GetUserObject<const proto::UnitSpawnEntry>() == &spawn;
+		});
+
+		if (entityIt == m_spawnEntities.end())
+		{
+			WLOG("Unable to select unit spawn: no scene entity found");
+			return;
+		}
+
+		Entity* entity = *entityIt;
+
+		m_selection.Clear();
+		m_debugBoundingBox->Clear();
+
+		auto removalCallback = [this](const proto::UnitSpawnEntry& s)
+		{
+			RemoveUnitSpawn(s);
+		};
+
+		m_selection.AddSelectable(std::make_unique<SelectedUnitSpawn>(
+			spawn,
+			m_editor.GetProject().units,
+			m_editor.GetProject().models,
+			*entity->GetParentSceneNode()->GetParentSceneNode(),
+			*entity,
+			nullptr,
+			removalCallback));
+
+		m_selectionRaycaster->UpdateDebugAABB(entity->GetWorldBoundingBox());
+	}
+
+	void WorldEditorInstance::SelectObjectSpawn(proto::ObjectSpawnEntry& spawn)
+	{
+		// Find the scene entity that represents this spawn.
+		const auto entityIt = std::find_if(m_spawnEntities.begin(), m_spawnEntities.end(), [&spawn](const Entity* entity)
+		{
+			return entity->GetUserObject<const proto::ObjectSpawnEntry>() == &spawn;
+		});
+
+		if (entityIt == m_spawnEntities.end())
+		{
+			WLOG("Unable to select object spawn: no scene entity found");
+			return;
+		}
+
+		Entity* entity = *entityIt;
+
+		m_selection.Clear();
+		m_debugBoundingBox->Clear();
+
+		auto removalCallback = [this](const proto::ObjectSpawnEntry& s)
+		{
+			RemoveObjectSpawn(s);
+		};
+
+		m_selection.AddSelectable(std::make_unique<SelectedObjectSpawn>(
+			spawn,
+			m_editor.GetProject().objects,
+			m_editor.GetProject().objectDisplays,
+			*entity->GetParentSceneNode()->GetParentSceneNode(),
+			*entity,
+			nullptr,
+			removalCallback));
+
+		m_selectionRaycaster->UpdateDebugAABB(entity->GetWorldBoundingBox());
+	}
+
+	const void* WorldEditorInstance::GetSelectedSpawnEntry() const
+	{
+		if (m_selection.IsEmpty())
+		{
+			return nullptr;
+		}
+
+		// Walk the active selection and extract the proto entry of a selected spawn (if any).
+		struct SpawnEntryExtractor final : SelectableVisitor
+		{
+			const void* entry = nullptr;
+
+			void Visit(SelectedMapEntity&) override {}
+			void Visit(SelectedTerrainTile&) override {}
+			void Visit(SelectedUnitSpawn& selectable) override { entry = &selectable.GetEntry(); }
+			void Visit(SelectedObjectSpawn& selectable) override { entry = &selectable.GetEntry(); }
+			void Visit(SelectedAreaTrigger&) override {}
+		} extractor;
+
+		m_selection.GetSelectedObjects().back()->Visit(extractor);
+		return extractor.entry;
+	}
+
+	void WorldEditorInstance::FocusSelection()
+	{
+		if (m_selection.IsEmpty())
+		{
+			m_cameraAnchor->SetPosition(Vector3::Zero);
+		}
+		else
+		{
+			m_cameraAnchor->SetPosition(m_selection.GetSelectedObjects().back()->GetPosition());
+		}
+		m_cameraVelocity = Vector3::Zero;
 	}
 
 	void WorldEditorInstance::AddAreaTrigger(proto::AreaTriggerEntry &trigger, bool select)

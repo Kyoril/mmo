@@ -52,6 +52,24 @@ namespace mmo
 
 		virtual void RemoveObjectSpawn(const proto::ObjectSpawnEntry& spawn) = 0;
 
+		/// @brief Selects an already-placed unit spawn (e.g. picked from a list) so it becomes the
+		///        active selection and can be focused with the "F" key.
+		/// @param spawn The unit spawn entry to select.
+		virtual void SelectUnitSpawn(proto::UnitSpawnEntry& spawn) = 0;
+
+		/// @brief Selects an already-placed object spawn (e.g. picked from a list) so it becomes the
+		///        active selection and can be focused with the "F" key.
+		/// @param spawn The object spawn entry to select.
+		virtual void SelectObjectSpawn(proto::ObjectSpawnEntry& spawn) = 0;
+
+		/// @brief Returns the proto entry pointer (UnitSpawnEntry or ObjectSpawnEntry) of the currently
+		///        selected spawn, or nullptr if no spawn is selected. Used purely to highlight list entries.
+		virtual const void* GetSelectedSpawnEntry() const = 0;
+
+		/// @brief Moves the camera to focus on the current selection (identical to pressing the "F" key).
+		///        Does nothing if the selection is empty.
+		virtual void FocusSelection() = 0;
+
 		virtual void AddAreaTrigger(proto::AreaTriggerEntry& trigger, bool select) = 0;
 
 		virtual void RemoveAllAreaTriggers() = 0;

@@ -45,6 +45,7 @@
 #include "world_settings_panel.h"
 #include "viewport_panel.h"
 #include "spawn_palette_panel.h"
+#include "spawn_list_panel.h"
 #include "entity_factory.h"
 
 namespace mmo
@@ -298,7 +299,7 @@ namespace mmo
 		// UI related methods
 		void HandleKeyboardShortcuts();
 		void DrawSceneOutlinePanel(const String &sceneOutlineId);
-		void InitializeDockLayout(ImGuiID dockspaceId, const String &viewportId, const String &detailsId, const String &worldSettingsId, const String &spawnPaletteId);
+		void InitializeDockLayout(ImGuiID dockspaceId, const String &viewportId, const String &detailsId, const String &worldSettingsId, const String &spawnPaletteId, const String &spawnListId);
 
 		void OnTerrainMouseMoved(float viewportX, float viewportY);
 
@@ -361,6 +362,14 @@ namespace mmo
 		void RemoveUnitSpawn(const proto::UnitSpawnEntry& spawn) override;
 
 		void RemoveObjectSpawn(const proto::ObjectSpawnEntry& spawn) override;
+
+		void SelectUnitSpawn(proto::UnitSpawnEntry& spawn) override;
+
+		void SelectObjectSpawn(proto::ObjectSpawnEntry& spawn) override;
+
+		const void* GetSelectedSpawnEntry() const override;
+
+		void FocusSelection() override;
 
 		void AddAreaTrigger(proto::AreaTriggerEntry &trigger, bool select = true) override;
 
@@ -526,6 +535,7 @@ namespace mmo
 		std::unique_ptr<ViewportPanel> m_viewportPanel;
 		std::unique_ptr<SceneOutlineWindow> m_sceneOutlineWindow;
 		std::unique_ptr<SpawnPalettePanel> m_spawnPalettePanel;
+		std::unique_ptr<SpawnListPanel> m_spawnListPanel;
 	};
 }
 
