@@ -90,14 +90,10 @@ namespace mmo
 			packet.Finish();
 		});
 
-
-		// Initialize connection encryption afterward
-		HMACHash cryptKey;
-		game::Crypt::GenerateKey(cryptKey, m_sessionKey);
-
-		game::Crypt& crypt = GetCrypt();
-		crypt.SetKey(cryptKey.data(), cryptKey.size());
-		crypt.Init();
+		// NOTE: Connection encryption is NOT initialized here. The AuthSessionResponse packet is sent
+		// unencrypted by the realm so that it can also deliver an authentication *failure* (where the
+		// realm never receives a session key from the login server and thus cannot encrypt). Encryption
+		// is initialized in OnAuthSessionResponse once we know the session was accepted.
 
 		// Debug log
 		ILOG("[Realm] Handshaking...");
@@ -118,18 +114,27 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		// Authentication has been successful!
+		// Notify the UI about the authentication result
 		AuthenticationResult(result);
 
 		// Was this a success?
 		if (result == game::auth_result::Success)
 		{
+			// The session was accepted: initialize connection encryption now. Everything after the
+			// (unencrypted) AuthSessionResponse is encrypted on both sides.
+			HMACHash cryptKey;
+			game::Crypt::GenerateKey(cryptKey, m_sessionKey);
+
+			game::Crypt& crypt = GetCrypt();
+			crypt.SetKey(cryptKey.data(), cryptKey.size());
+			crypt.Init();
+
 			// From here on, we accept CharEnum packets
 			RegisterPacketHandler(game::realm_client_packet::CharEnum, *this, &RealmConnector::OnCharEnum);
 			RegisterPacketHandler(game::realm_client_packet::LoginVerifyWorld, *this, &RealmConnector::OnLoginVerifyWorld);
 			RegisterPacketHandler(game::realm_client_packet::EnterWorldFailed, *this, &RealmConnector::OnEnterWorldFailed);
 			RegisterPacketHandler(game::realm_client_packet::RealmConfig, *this, &RealmConnector::OnRealmConfig);
-			
+
 			// And now, we ask for the character list
 			sendSinglePacket([](game::OutgoingPacket& outPacket)
 			{
@@ -137,8 +142,17 @@ namespace mmo
 				// This packet is empty
 				outPacket.Finish();
 			});
+
+			return PacketParseResult::Pass;
 		}
 
+		// Authentication was rejected by the realm (e.g. not allowed to connect). The UI has already
+		// been notified above and will show an error dialog. Close the connection cleanly via close()
+		// instead of returning Disconnect: the Disconnect path resets the underlying socket to null,
+		// which would crash the next ConnectToRealm() call (access violation in connect()/is_open()).
+		// close() keeps the socket object alive so the player can return to the realm list and connect
+		// again.
+		close();
 		return PacketParseResult::Pass;
 	}
 

@@ -87,6 +87,15 @@ namespace mmo
 
 		bool Page::Prepare()
 		{
+			// A fresh load has been requested for this page (Prepare is always called from the
+			// "page became available" path before the EnsurePageIsLoaded streaming loop starts).
+			// Clear any leftover unload cancellation from a previous streaming cycle that was
+			// aborted mid-load. Without this, the very first Load() of the new cycle would consume
+			// the stale m_unloadRequested flag, return true early and stop the loop, leaving the
+			// page prepared but empty (no tiles). The player would then fall through the ground and
+			// the page would never finish loading until the next visibility toggle.
+			m_unloadRequested = false;
+
 			if (IsPrepared() || IsPreparing())
 			{
 				return true;

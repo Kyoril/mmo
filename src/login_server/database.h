@@ -102,6 +102,41 @@ namespace mmo
 		uint64 total = 0;
 	};
 
+	/// A feature definition from the catalog.
+	struct FeatureDefinition
+	{
+		uint32 id = 0;
+		std::string name;
+		std::string description;
+		std::string created_at;
+	};
+
+	/// An active feature granted to an account (id + key).
+	struct AccountFeature
+	{
+		uint32 id = 0;
+		std::string key;
+		std::string expiration;   // empty means it never expires
+	};
+
+	/// A single feature requirement declared by a realm.
+	struct RealmFeatureRequirement
+	{
+		uint32 featureId = 0;
+		std::string featureName;
+		bool requireVisibility = false;
+		bool requireLogin = false;
+	};
+
+	/// All data needed to validate and finish a client auth session on a realm.
+	struct AccountAuthData
+	{
+		uint64 id = 0;
+		std::string sessionKey;
+		uint8 gmLevel = 0;
+		std::vector<AccountFeature> features;
+	};
+
 	/// Single row returned by GetRealmList.
 	struct RealmListEntry
 	{
@@ -186,6 +221,54 @@ namespace mmo
 
 		/// Returns every registered realm row from the database.
 		virtual std::vector<RealmListEntry> GetRealmList() = 0;
+
+		/// Returns the whole feature catalog.
+		virtual std::vector<FeatureDefinition> GetFeatures() = 0;
+
+		/// Creates a new feature in the catalog.
+		/// @param name Unique feature key.
+		/// @param description Optional human readable description.
+		/// @returns The new feature id on success, an empty optional if the name is already in use.
+		virtual std::optional<uint32> CreateFeature(const std::string& name, const std::string& description) = 0;
+
+		/// Deletes a feature from the catalog by its id (also removes account grants and realm requirements via cascade).
+		/// @returns true if a feature was deleted.
+		virtual bool DeleteFeature(uint32 featureId) = 0;
+
+		/// Resolves a feature by name. @returns The feature id or empty optional if not found.
+		virtual std::optional<uint32> GetFeatureIdByName(const std::string& name) = 0;
+
+		/// Resolves an account id by name. @returns The account id or empty optional if not found.
+		virtual std::optional<uint64> GetAccountIdByName(const std::string& name) = 0;
+
+		/// Grants a feature to one or more accounts.
+		/// @param featureId The feature to grant.
+		/// @param accountIds The accounts that should receive the feature.
+		/// @param expiration Optional expiration timestamp (empty means permanent).
+		virtual bool GrantFeature(uint32 featureId, const std::vector<uint64>& accountIds, const std::string& expiration) = 0;
+
+		/// Revokes a feature from one or more accounts.
+		virtual bool RevokeFeature(uint32 featureId, const std::vector<uint64>& accountIds) = 0;
+
+		/// Returns the active (non-expired) features granted to an account.
+		virtual std::vector<AccountFeature> GetActiveAccountFeatures(uint64 accountId) = 0;
+
+		/// Sets (inserts or updates) a realm feature requirement.
+		virtual bool SetRealmFeatureRequirement(uint32 realmId, uint32 featureId, bool requireVisibility, bool requireLogin) = 0;
+
+		/// Removes a realm feature requirement.
+		virtual bool RemoveRealmFeatureRequirement(uint32 realmId, uint32 featureId) = 0;
+
+		/// Returns all feature requirements declared by a realm.
+		virtual std::vector<RealmFeatureRequirement> GetRealmFeatureRequirements(uint32 realmId) = 0;
+
+		/// Returns the realm id by name. @returns The realm id or empty optional if not found.
+		virtual std::optional<uint32> GetRealmIdByName(const std::string& name) = 0;
+
+		/// Retrieves all data needed to validate and finish a client auth session, including the
+		/// account's active feature keys.
+		/// @param accountName Name of the account.
+		virtual std::optional<AccountAuthData> GetAccountAuthData(std::string accountName) = 0;
 	};
 
 	/// Async database wrapper for the login server.

@@ -8,6 +8,7 @@
 #include "log/default_log_levels.h"
 #include "auth_protocol/auth_protocol.h"
 
+#include <algorithm>
 #include <functional>
 
 #include "player.h"
@@ -406,19 +407,32 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	void World::Join(CharacterData characterData, JoinWorldCallback callback)
+	void World::Join(CharacterData characterData, const std::vector<std::string>& accountFeatures, JoinWorldCallback callback)
 	{
 		// TODO: What if we already have a waiting callback? Right now we just discard the old one
 		if (callback)
 		{
 			std::scoped_lock lock { m_joinCallbackMutex };
-			m_joinCallbacks.emplace(characterData.characterId, std::move(callback));	
+			m_joinCallbacks.emplace(characterData.characterId, std::move(callback));
 		}
-		
-		GetConnection().sendSinglePacket([characterData](auth::OutgoingPacket& outPacket)
+
+		GetConnection().sendSinglePacket([characterData, accountFeatures](auth::OutgoingPacket& outPacket)
 		{
 			outPacket.Start(auth::realm_world_packet::PlayerCharacterJoin);
 			outPacket << characterData;
+
+			// Append the account's active feature keys so world systems can query them.
+			outPacket << io::write<uint8>(static_cast<uint8>(std::min<size_t>(accountFeatures.size(), 0xFF)));
+			size_t written = 0;
+			for (const auto& feature : accountFeatures)
+			{
+				if (written++ >= 0xFF)
+				{
+					break;
+				}
+				outPacket << io::write_dynamic_range<uint8>(feature);
+			}
+
 			outPacket.Finish();
 		});
 	}

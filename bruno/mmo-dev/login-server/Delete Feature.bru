@@ -1,0 +1,20 @@
+meta {
+  name: Delete Feature
+  type: http
+  seq: 11
+}
+
+post {
+  url: http://localhost:8090/delete-feature
+  body: formUrlEncoded
+  auth: inherit
+}
+
+body:form-urlencoded {
+  feature: PLAYTEST_ACCESS
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -108,6 +108,15 @@ namespace mmo
 		/// Checks if the player has a specific GM level or higher.
 		bool HasGMLevel(uint8 level) const { return m_gmLevel >= level; }
 
+		/// Gets the active account feature keys (entitlements) of this player's account.
+		const std::vector<std::string>& GetAccountFeatures() const { return m_accountFeatures; }
+
+		/// Checks whether this player's account has been granted a specific feature.
+		bool HasAccountFeature(const std::string& key) const
+		{
+			return std::find(m_accountFeatures.begin(), m_accountFeatures.end(), key) != m_accountFeatures.end();
+		}
+
 		/// Gets the active character name.
 		[[nodiscard]] const String &GetCharacterName() const { return m_characterData->name; }
 
@@ -395,6 +404,7 @@ namespace mmo
 		/// Session key of the game client, retrieved by login server on successful login request.
 		BigNumber m_sessionKey;
 		uint8 m_gmLevel = 0; // GM level of the player account (0: normal player, 1+: GM levels)
+		std::vector<std::string> m_accountFeatures; // Active account feature keys (entitlements) granted to the account
 		ActionButtons m_actionButtons;
 		bool m_pendingButtons = false;
 		InstanceId m_instanceId{};

@@ -11,6 +11,7 @@
 #include "base/weak_ptr_function.h"
 #include "log/default_log_levels.h"
 
+#include <algorithm>
 #include <functional>
 
 namespace mmo
@@ -118,14 +119,18 @@ namespace mmo
 			uint16 realmCount = 0;
 
 			// Iterate through every realm and write it's data to the outgoing packet
-			m_realmManager.ForEachRealm([&realmCount, &packet](const Realm& realm) {
+			m_realmManager.ForEachRealm([&realmCount, &packet, this](const Realm& realm) {
 				// Skip this realm if it is not authenticated
 				if (!realm.IsAuthentificated())
 				{
 					return;
 				}
 
-				// TODO: Probably check if the realm is otherwise not eligible? Account level / security groups / supported client versions?
+				// Skip realms the account is not allowed to see based on its feature requirements.
+				if (!realm.IsVisibleTo(m_accountFeatureIds))
+				{
+					return;
+				}
 
 				// Write realm data
 				packet 
@@ -143,6 +148,26 @@ namespace mmo
 			packet.Sink().Overwrite(realmCountPos, reinterpret_cast<const char*>(&realmCount), sizeof(realmCount));
 
 			// Finish the packet
+			packet.Finish();
+		});
+	}
+
+	void Player::SendAccountFeatures(const std::vector<std::string>& featureKeys)
+	{
+		m_connection->sendSinglePacket([&featureKeys](auth::OutgoingPacket& packet) {
+			packet.Start(auth::login_client_packet::AccountFeatures);
+
+			packet << io::write<uint8>(static_cast<uint8>(std::min<size_t>(featureKeys.size(), 0xFF)));
+			size_t written = 0;
+			for (const auto& key : featureKeys)
+			{
+				if (written++ >= 0xFF)
+				{
+					break;
+				}
+				packet << io::write_dynamic_range<uint8>(key);
+			}
+
 			packet.Finish();
 		});
 	}
@@ -351,8 +376,31 @@ namespace mmo
 						strongThis->RegisterPacketHandler(auth::client_login_packet::RealmList, *strongThis.get(), &Player::OnRealmList);
 						strongThis->SendAuthProof(auth::AuthResult::Success);
 
-						// Send the realm list as well
-						strongThis->SendRealmList();
+						// Load the account's active features before sending the realm list, so realm
+						// visibility can be filtered and the features can be pushed to the client.
+						std::weak_ptr<Player> weakInner{ strongThis };
+						auto featureHandler = [weakInner](std::vector<AccountFeature> features)
+						{
+							if (const auto inner = weakInner.lock())
+							{
+								inner->m_accountFeatureIds.clear();
+								std::vector<std::string> featureKeys;
+								featureKeys.reserve(features.size());
+								for (const auto& feature : features)
+								{
+									inner->m_accountFeatureIds.insert(feature.id);
+									featureKeys.push_back(feature.key);
+								}
+
+								// Push the active feature keys to the client...
+								inner->SendAccountFeatures(featureKeys);
+
+								// ...then send the (now filtered) realm list.
+								inner->SendRealmList();
+							}
+						};
+
+						strongThis->m_database.asyncRequest(std::move(featureHandler), &IDatabase::GetActiveAccountFeatures, strongThis->m_accountId);
 					}
 					else
 					{

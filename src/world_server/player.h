@@ -17,7 +17,10 @@
 #include "anti_cheat_tracker.h"
 #include "trade_session.h"
 
+#include <algorithm>
+#include <string>
 #include <unordered_set>
+#include <vector>
 
 namespace mmo
 {
@@ -70,6 +73,18 @@ namespace mmo
 
 		/// @brief Gets the player's character object.
 		[[nodiscard]] GamePlayerS& GetCharacter() const { return *m_character; }
+
+		/// Sets the active account feature keys (entitlements) for this player's account.
+		void SetAccountFeatures(std::vector<std::string> features) { m_accountFeatures = std::move(features); }
+
+		/// Gets the active account feature keys (entitlements) of this player's account.
+		[[nodiscard]] const std::vector<std::string>& GetAccountFeatures() const { return m_accountFeatures; }
+
+		/// Checks whether this player's account has been granted a specific feature.
+		[[nodiscard]] bool HasAccountFeature(const std::string& key) const
+		{
+			return std::find(m_accountFeatures.begin(), m_accountFeatures.end(), key) != m_accountFeatures.end();
+		}
 
 		/// Notifies the client about updated objects.
 		void NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects) override;
@@ -629,6 +644,7 @@ namespace mmo
 		std::shared_ptr<GamePlayerS> m_character;
 		WorldInstance* m_worldInstance { nullptr };
 		CharacterData m_characterData;
+		std::vector<std::string> m_accountFeatures;	// Active account feature keys (entitlements) granted to the account
 		scoped_connection_container m_characterConnections;
 		const proto::Project& m_project;
 		AttackSwingEvent m_lastAttackSwingEvent{ attack_swing_event::Unknown };

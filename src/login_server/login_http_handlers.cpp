@@ -14,7 +14,10 @@
 #include "log/default_log_levels.h"
 
 #include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <regex>
+#include <sstream>
 #include "nlohmann/json.hpp"
 
 using json = nlohmann::json;
@@ -58,6 +61,45 @@ namespace mmo
 				R"(^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])\s(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])$)"
 			);
 			return std::regex_match(dateTime, dateTimeRegex);
+		}
+
+		/// Splits a comma-separated list into trimmed, non-empty tokens.
+		std::vector<std::string> splitCsv(const std::string& input)
+		{
+			std::vector<std::string> tokens;
+			std::string token;
+			std::istringstream stream(input);
+			while (std::getline(stream, token, ','))
+			{
+				// Trim surrounding whitespace
+				const auto first = token.find_first_not_of(" \t\r\n");
+				if (first == std::string::npos)
+				{
+					continue;
+				}
+				const auto last = token.find_last_not_of(" \t\r\n");
+				tokens.push_back(token.substr(first, last - first + 1));
+			}
+			return tokens;
+		}
+
+		bool isAllDigits(const std::string& value)
+		{
+			return !value.empty() && std::all_of(value.begin(), value.end(), [](unsigned char c) { return std::isdigit(c) != 0; });
+		}
+
+		/// Resolves a feature reference (a name or a numeric id) to a feature id.
+		std::optional<uint32> resolveFeatureId(IDatabase& db, const std::string& reference)
+		{
+			if (auto byName = db.GetFeatureIdByName(reference))
+			{
+				return byName;
+			}
+			if (isAllDigits(reference))
+			{
+				return static_cast<uint32>(std::strtoul(reference.c_str(), nullptr, 10));
+			}
+			return {};
 		}
 	}
 
@@ -622,6 +664,571 @@ namespace mmo
 				jsonResponse["message"] = "Failed to update GM level for account '" + name + "'";
 				SendJsonResponse(response, jsonResponse);
 			}
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			SendJsonResponse(response, jsonResponse);
+		}
+	}
+
+	void LoginHttpHandlers::HandleListFeatures(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		(void)request;
+
+		try
+		{
+			const auto features = m_database.GetFeatures();
+
+			json jsonFeatures = json::array();
+			for (const auto& feature : features)
+			{
+				json entry;
+				entry["id"] = feature.id;
+				entry["name"] = feature.name;
+				entry["description"] = feature.description.empty() ? nullptr : json(feature.description);
+				entry["created_at"] = feature.created_at.empty() ? nullptr : json(feature.created_at);
+				jsonFeatures.push_back(std::move(entry));
+			}
+
+			json jsonResponse;
+			jsonResponse["features"] = std::move(jsonFeatures);
+			jsonResponse["total"] = features.size();
+			SendJsonResponse(response, jsonResponse);
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			json jsonResponse;
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			SendJsonResponse(response, jsonResponse);
+		}
+	}
+
+	void LoginHttpHandlers::HandleCreateFeature(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPostFormArguments();
+		const auto nameIt = arguments.find("name");
+		const auto descriptionIt = arguments.find("description");
+
+		json jsonResponse;
+
+		if (nameIt == arguments.end() || nameIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'name'";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		const String name = nameIt->second;
+		if (name.length() > 64)
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "INVALID_PARAMETER";
+			jsonResponse["message"] = "Parameter 'name' must not exceed 64 characters";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		const String description = descriptionIt == arguments.end() ? "" : descriptionIt->second;
+
+		try
+		{
+			const auto result = m_database.CreateFeature(name, description);
+			if (!result)
+			{
+				response.setStatus(net::http::OutgoingAnswer::Conflict);
+				jsonResponse["status"] = "FEATURE_NAME_ALREADY_IN_USE";
+				jsonResponse["message"] = "A feature with the name '" + name + "' already exists!";
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+
+			jsonResponse["status"] = "SUCCESS";
+			jsonResponse["id"] = *result;
+			jsonResponse["name"] = name;
+			SendJsonResponse(response, jsonResponse);
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			SendJsonResponse(response, jsonResponse);
+		}
+	}
+
+	void LoginHttpHandlers::HandleDeleteFeature(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPostFormArguments();
+		const auto featureIt = arguments.find("feature");
+
+		json jsonResponse;
+
+		if (featureIt == arguments.end() || featureIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'feature'";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		try
+		{
+			const auto featureId = resolveFeatureId(m_database, featureIt->second);
+			if (!featureId)
+			{
+				response.setStatus(net::http::OutgoingAnswer::NotFound);
+				jsonResponse["status"] = "FEATURE_DOES_NOT_EXIST";
+				jsonResponse["message"] = "A feature '" + featureIt->second + "' does not exist!";
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+
+			if (m_database.DeleteFeature(*featureId))
+			{
+				jsonResponse["status"] = "SUCCESS";
+				SendJsonResponse(response, jsonResponse);
+			}
+			else
+			{
+				response.setStatus(net::http::OutgoingAnswer::NotFound);
+				jsonResponse["status"] = "FEATURE_DOES_NOT_EXIST";
+				jsonResponse["message"] = "A feature '" + featureIt->second + "' does not exist!";
+				SendJsonResponse(response, jsonResponse);
+			}
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			SendJsonResponse(response, jsonResponse);
+		}
+	}
+
+	void LoginHttpHandlers::HandleGrantFeature(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPostFormArguments();
+		const auto featureIt = arguments.find("feature");
+		const auto accountNamesIt = arguments.find("account_names");
+		const auto expirationIt = arguments.find("expiration");
+
+		json jsonResponse;
+
+		if (featureIt == arguments.end() || featureIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'feature'";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		if (accountNamesIt == arguments.end() || accountNamesIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'account_names' (comma separated)";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		if (expirationIt != arguments.end() && !expirationIt->second.empty() && !isValidDateTime(expirationIt->second))
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "INVALID_PARAMETER";
+			jsonResponse["message"] = "Parameter 'expiration' must be formatted like this: 'YYYY-MM-DD HH:MM:SS'";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		const String expiration = expirationIt == arguments.end() ? "" : expirationIt->second;
+
+		try
+		{
+			const auto featureId = resolveFeatureId(m_database, featureIt->second);
+			if (!featureId)
+			{
+				response.setStatus(net::http::OutgoingAnswer::NotFound);
+				jsonResponse["status"] = "FEATURE_DOES_NOT_EXIST";
+				jsonResponse["message"] = "A feature '" + featureIt->second + "' does not exist!";
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+
+			std::vector<uint64> accountIds;
+			json unknownAccounts = json::array();
+			for (const auto& accountName : splitCsv(accountNamesIt->second))
+			{
+				if (const auto accountId = m_database.GetAccountIdByName(accountName))
+				{
+					accountIds.push_back(*accountId);
+				}
+				else
+				{
+					unknownAccounts.push_back(accountName);
+				}
+			}
+
+			if (accountIds.empty())
+			{
+				response.setStatus(net::http::OutgoingAnswer::NotFound);
+				jsonResponse["status"] = "NO_VALID_ACCOUNTS";
+				jsonResponse["message"] = "None of the provided account names exist!";
+				jsonResponse["unknown_accounts"] = std::move(unknownAccounts);
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+
+			if (!m_database.GrantFeature(*featureId, accountIds, expiration))
+			{
+				response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+				jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+
+			jsonResponse["status"] = "SUCCESS";
+			jsonResponse["granted"] = accountIds.size();
+			jsonResponse["unknown_accounts"] = std::move(unknownAccounts);
+			SendJsonResponse(response, jsonResponse);
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			SendJsonResponse(response, jsonResponse);
+		}
+	}
+
+	void LoginHttpHandlers::HandleRevokeFeature(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPostFormArguments();
+		const auto featureIt = arguments.find("feature");
+		const auto accountNamesIt = arguments.find("account_names");
+
+		json jsonResponse;
+
+		if (featureIt == arguments.end() || featureIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'feature'";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		if (accountNamesIt == arguments.end() || accountNamesIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'account_names' (comma separated)";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		try
+		{
+			const auto featureId = resolveFeatureId(m_database, featureIt->second);
+			if (!featureId)
+			{
+				response.setStatus(net::http::OutgoingAnswer::NotFound);
+				jsonResponse["status"] = "FEATURE_DOES_NOT_EXIST";
+				jsonResponse["message"] = "A feature '" + featureIt->second + "' does not exist!";
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+
+			std::vector<uint64> accountIds;
+			json unknownAccounts = json::array();
+			for (const auto& accountName : splitCsv(accountNamesIt->second))
+			{
+				if (const auto accountId = m_database.GetAccountIdByName(accountName))
+				{
+					accountIds.push_back(*accountId);
+				}
+				else
+				{
+					unknownAccounts.push_back(accountName);
+				}
+			}
+
+			if (!accountIds.empty() && !m_database.RevokeFeature(*featureId, accountIds))
+			{
+				response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+				jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+
+			jsonResponse["status"] = "SUCCESS";
+			jsonResponse["revoked"] = accountIds.size();
+			jsonResponse["unknown_accounts"] = std::move(unknownAccounts);
+			SendJsonResponse(response, jsonResponse);
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			SendJsonResponse(response, jsonResponse);
+		}
+	}
+
+	void LoginHttpHandlers::HandleGetAccountFeatures(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPathArguments();
+		const auto accountNameIt = arguments.find("account_name");
+
+		json jsonResponse;
+
+		if (accountNameIt == arguments.end() || accountNameIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'account_name'";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		const String name = accountNameIt->second;
+
+		try
+		{
+			const auto accountId = m_database.GetAccountIdByName(name);
+			if (!accountId)
+			{
+				response.setStatus(net::http::OutgoingAnswer::NotFound);
+				jsonResponse["status"] = "ACCOUNT_DOES_NOT_EXIST";
+				jsonResponse["message"] = "An account with the name '" + name + "' does not exist!";
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+
+			const auto features = m_database.GetActiveAccountFeatures(*accountId);
+
+			json jsonFeatures = json::array();
+			for (const auto& feature : features)
+			{
+				json entry;
+				entry["id"] = feature.id;
+				entry["name"] = feature.key;
+				entry["expiration"] = feature.expiration.empty() ? nullptr : json(feature.expiration);
+				jsonFeatures.push_back(std::move(entry));
+			}
+
+			jsonResponse["status"] = "SUCCESS";
+			jsonResponse["account_name"] = name;
+			jsonResponse["features"] = std::move(jsonFeatures);
+			SendJsonResponse(response, jsonResponse);
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			SendJsonResponse(response, jsonResponse);
+		}
+	}
+
+	void LoginHttpHandlers::HandleSetRealmFeatureRequirement(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPostFormArguments();
+		const auto realmIt = arguments.find("realm");
+		const auto featureIt = arguments.find("feature");
+		const auto visibilityIt = arguments.find("require_visibility");
+		const auto loginIt = arguments.find("require_login");
+
+		json jsonResponse;
+
+		if (realmIt == arguments.end() || realmIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'realm'";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		if (featureIt == arguments.end() || featureIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'feature'";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		const bool requireVisibility = visibilityIt != arguments.end() && (visibilityIt->second == "1" || visibilityIt->second == "true");
+		const bool requireLogin = loginIt != arguments.end() && (loginIt->second == "1" || loginIt->second == "true");
+
+		if (!requireVisibility && !requireLogin)
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "INVALID_PARAMETER";
+			jsonResponse["message"] = "At least one of 'require_visibility' or 'require_login' must be set. Use the remove endpoint to clear a requirement.";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		try
+		{
+			std::optional<uint32> realmId = isAllDigits(realmIt->second)
+				? std::optional<uint32>(static_cast<uint32>(std::strtoul(realmIt->second.c_str(), nullptr, 10)))
+				: m_database.GetRealmIdByName(realmIt->second);
+			if (!realmId)
+			{
+				response.setStatus(net::http::OutgoingAnswer::NotFound);
+				jsonResponse["status"] = "REALM_DOES_NOT_EXIST";
+				jsonResponse["message"] = "A realm '" + realmIt->second + "' does not exist!";
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+
+			const auto featureId = resolveFeatureId(m_database, featureIt->second);
+			if (!featureId)
+			{
+				response.setStatus(net::http::OutgoingAnswer::NotFound);
+				jsonResponse["status"] = "FEATURE_DOES_NOT_EXIST";
+				jsonResponse["message"] = "A feature '" + featureIt->second + "' does not exist!";
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+
+			if (!m_database.SetRealmFeatureRequirement(*realmId, *featureId, requireVisibility, requireLogin))
+			{
+				response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+				jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+
+			// Refresh the cached requirements on the connected realm (if any) so the change takes effect immediately.
+			m_realmManager.NotifyRealmRequirementsChanged(*realmId);
+
+			jsonResponse["status"] = "SUCCESS";
+			SendJsonResponse(response, jsonResponse);
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			SendJsonResponse(response, jsonResponse);
+		}
+	}
+
+	void LoginHttpHandlers::HandleRemoveRealmFeatureRequirement(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPostFormArguments();
+		const auto realmIt = arguments.find("realm");
+		const auto featureIt = arguments.find("feature");
+
+		json jsonResponse;
+
+		if (realmIt == arguments.end() || realmIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'realm'";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		if (featureIt == arguments.end() || featureIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'feature'";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		try
+		{
+			std::optional<uint32> realmId = isAllDigits(realmIt->second)
+				? std::optional<uint32>(static_cast<uint32>(std::strtoul(realmIt->second.c_str(), nullptr, 10)))
+				: m_database.GetRealmIdByName(realmIt->second);
+			if (!realmId)
+			{
+				response.setStatus(net::http::OutgoingAnswer::NotFound);
+				jsonResponse["status"] = "REALM_DOES_NOT_EXIST";
+				jsonResponse["message"] = "A realm '" + realmIt->second + "' does not exist!";
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+
+			const auto featureId = resolveFeatureId(m_database, featureIt->second);
+			if (!featureId)
+			{
+				response.setStatus(net::http::OutgoingAnswer::NotFound);
+				jsonResponse["status"] = "FEATURE_DOES_NOT_EXIST";
+				jsonResponse["message"] = "A feature '" + featureIt->second + "' does not exist!";
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+
+			m_database.RemoveRealmFeatureRequirement(*realmId, *featureId);
+			m_realmManager.NotifyRealmRequirementsChanged(*realmId);
+
+			jsonResponse["status"] = "SUCCESS";
+			SendJsonResponse(response, jsonResponse);
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			SendJsonResponse(response, jsonResponse);
+		}
+	}
+
+	void LoginHttpHandlers::HandleGetRealmFeatureRequirements(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPathArguments();
+		const auto realmIt = arguments.find("realm");
+
+		json jsonResponse;
+
+		if (realmIt == arguments.end() || realmIt->second.empty())
+		{
+			response.setStatus(net::http::OutgoingAnswer::BadRequest);
+			jsonResponse["status"] = "MISSING_PARAMETER";
+			jsonResponse["message"] = "Missing parameter 'realm'";
+			SendJsonResponse(response, jsonResponse);
+			return;
+		}
+
+		try
+		{
+			std::optional<uint32> realmId = isAllDigits(realmIt->second)
+				? std::optional<uint32>(static_cast<uint32>(std::strtoul(realmIt->second.c_str(), nullptr, 10)))
+				: m_database.GetRealmIdByName(realmIt->second);
+			if (!realmId)
+			{
+				response.setStatus(net::http::OutgoingAnswer::NotFound);
+				jsonResponse["status"] = "REALM_DOES_NOT_EXIST";
+				jsonResponse["message"] = "A realm '" + realmIt->second + "' does not exist!";
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+
+			const auto requirements = m_database.GetRealmFeatureRequirements(*realmId);
+
+			json jsonRequirements = json::array();
+			for (const auto& requirement : requirements)
+			{
+				json entry;
+				entry["feature_id"] = requirement.featureId;
+				entry["feature_name"] = requirement.featureName;
+				entry["require_visibility"] = requirement.requireVisibility;
+				entry["require_login"] = requirement.requireLogin;
+				jsonRequirements.push_back(std::move(entry));
+			}
+
+			jsonResponse["status"] = "SUCCESS";
+			jsonResponse["realm_id"] = *realmId;
+			jsonResponse["requirements"] = std::move(jsonRequirements);
+			SendJsonResponse(response, jsonResponse);
 		}
 		catch (...)
 		{

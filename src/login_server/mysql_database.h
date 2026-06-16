@@ -65,6 +65,20 @@ namespace mmo
 		/// Returns every registered realm row from the database.
 		std::vector<RealmListEntry> GetRealmList() override;
 
+		std::vector<FeatureDefinition> GetFeatures() override;
+		std::optional<uint32> CreateFeature(const std::string& name, const std::string& description) override;
+		bool DeleteFeature(uint32 featureId) override;
+		std::optional<uint32> GetFeatureIdByName(const std::string& name) override;
+		std::optional<uint64> GetAccountIdByName(const std::string& name) override;
+		bool GrantFeature(uint32 featureId, const std::vector<uint64>& accountIds, const std::string& expiration) override;
+		bool RevokeFeature(uint32 featureId, const std::vector<uint64>& accountIds) override;
+		std::vector<AccountFeature> GetActiveAccountFeatures(uint64 accountId) override;
+		bool SetRealmFeatureRequirement(uint32 realmId, uint32 featureId, bool requireVisibility, bool requireLogin) override;
+		bool RemoveRealmFeatureRequirement(uint32 realmId, uint32 featureId) override;
+		std::vector<RealmFeatureRequirement> GetRealmFeatureRequirements(uint32 realmId) override;
+		std::optional<uint32> GetRealmIdByName(const std::string& name) override;
+		std::optional<AccountAuthData> GetAccountAuthData(std::string accountName) override;
+
 	private:
 		/// Logs the last database error to the default logger.
 		void PrintDatabaseError();

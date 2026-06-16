@@ -1,0 +1,20 @@
+meta {
+  name: Get Realm Feature Requirements
+  type: http
+  seq: 17
+}
+
+get {
+  url: http://localhost:8090/realm-feature-requirements?realm=LOCALHOST
+  body: none
+  auth: inherit
+}
+
+params:query {
+  realm: LOCALHOST
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

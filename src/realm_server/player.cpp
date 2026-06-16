@@ -242,7 +242,7 @@ namespace mmo
 
 		// Setup a weak callback handler
 		std::weak_ptr weakThis{shared_from_this()};
-		auto callbackHandler = [weakThis](const bool succeeded, const uint64 accountId, const uint8 gmLevel, const BigNumber &sessionKey)
+		auto callbackHandler = [weakThis](const bool succeeded, const uint64 accountId, const uint8 gmLevel, const BigNumber &sessionKey, const std::vector<std::string>& features)
 		{
 			// Obtain strong reference to see if the client connection is still valid
 			if (const auto strongThis = weakThis.lock())
@@ -250,15 +250,25 @@ namespace mmo
 				// Handle success cases
 				if (succeeded)
 				{
-					// Store session key and GM level
+					// Store session key, GM level and account features
 					strongThis->m_accountId = accountId;
 					strongThis->m_gmLevel = gmLevel;
+					strongThis->m_accountFeatures = features;
 					strongThis->InitializeSession(sessionKey);
 				}
 				else
 				{
-					// TODO: Send response to the game client
+					// The login server denied this client (e.g. missing a required realm feature, or an
+					// invalid session). Notify the game client so it can show an error and return to the
+					// realm list. The client closes the connection upon receiving this failure.
 					DLOG("CLIENT_AUTH_SESSION: Error");
+
+					strongThis->m_connection->sendSinglePacket([](game::OutgoingPacket& packet)
+					{
+						packet.Start(game::realm_client_packet::AuthSessionResponse);
+						packet << io::write<uint8>(game::auth_result::FailNoAccess);
+						packet.Finish();
+					});
 				}
 			}
 		};
@@ -1096,7 +1106,7 @@ namespace mmo
 
 		std::weak_ptr weakThis = shared_from_this();
 		std::weak_ptr weakWorld = world;
-		world->Join(*m_characterData, [weakThis, weakWorld](const InstanceId instanceId, const bool success)
+		world->Join(*m_characterData, m_accountFeatures, [weakThis, weakWorld](const InstanceId instanceId, const bool success)
 					{
 				const auto strongThis = weakThis.lock();
 				if (!strongThis)
@@ -2458,18 +2468,20 @@ namespace mmo
 		// Notify about success
 		DLOG("CLIENT_AUTH_SESSION: Success!");
 
-		// Initialize encryption
-		HMACHash hash;
-		m_connection->GetCrypt().GenerateKey(hash, m_sessionKey);
-		m_connection->GetCrypt().SetKey(hash.data(), hash.size());
-		m_connection->GetCrypt().Init();
-
-		// Send the response to the client
+		// Send the (unencrypted) success response to the client. The AuthSessionResponse is always sent
+		// unencrypted so that the failure case - where we never receive a session key and cannot encrypt -
+		// can be delivered the same way. Encryption is initialized right after, for all following packets.
 		m_connection->sendSinglePacket([](game::OutgoingPacket &packet)
 									   {
 			packet.Start(game::realm_client_packet::AuthSessionResponse);
 			packet << io::write<uint8>(game::auth_result::Success);	// TODO: Write real packet content
 			packet.Finish(); });
+
+		// Initialize encryption for all packets following the AuthSessionResponse.
+		HMACHash hash;
+		m_connection->GetCrypt().GenerateKey(hash, m_sessionKey);
+		m_connection->GetCrypt().SetKey(hash.data(), hash.size());
+		m_connection->GetCrypt().Init();
 
 		// Send RealmConfig: which races and classes are disabled
 		m_connection->sendSinglePacket([this](game::OutgoingPacket &packet)
@@ -3051,7 +3063,7 @@ namespace mmo
 		// Send join request
 		std::weak_ptr weakThis = shared_from_this();
 		std::weak_ptr weakWorld = world;
-		world->Join(*m_characterData, [weakThis, weakWorld](const InstanceId instanceId, const bool success)
+		world->Join(*m_characterData, m_accountFeatures, [weakThis, weakWorld](const InstanceId instanceId, const bool success)
 					{
 			const auto strongThis = weakThis.lock();
 			if (!strongThis)

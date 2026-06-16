@@ -15,6 +15,8 @@
 #include <optional>
 #include <functional>
 #include <map>
+#include <set>
+#include <vector>
 #include <cassert>
 
 
@@ -86,6 +88,7 @@ namespace mmo
 		uint8 m_version3;						// Patch version: 0.0.X.00000
 		uint16 m_build;							// Build version: 0.0.0.XXXXX
 		uint64 m_accountId;						// Account ID
+		std::set<uint32> m_accountFeatureIds;	// Active account feature ids (loaded after login; used for realm visibility)
 		std::map<uint8, PacketHandler> m_packetHandlers;
 		std::mutex m_packetHandlerMutex;
 
@@ -117,6 +120,8 @@ namespace mmo
 	private:
 		void SendAuthProof(auth::AuthResult result);
 		void SendRealmList();
+		/// Sends the active account feature keys (entitlements) to the client.
+		void SendAccountFeatures(const std::vector<std::string>& featureKeys);
 
 	private:
 

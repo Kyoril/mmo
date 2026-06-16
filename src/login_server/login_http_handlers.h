@@ -33,6 +33,17 @@ namespace mmo
 		void HandleListAccounts(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 		void HandleListRealms(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 
+		// Account feature endpoints.
+		void HandleListFeatures(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void HandleCreateFeature(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void HandleDeleteFeature(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void HandleGrantFeature(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void HandleRevokeFeature(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void HandleGetAccountFeatures(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void HandleSetRealmFeatureRequirement(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void HandleRemoveRealmFeatureRequirement(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void HandleGetRealmFeatureRequirements(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+
 	private:
 		IDatabase& m_database;
 		RealmManager& m_realmManager;

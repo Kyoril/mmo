@@ -72,7 +72,7 @@ namespace mmo
 		const String& GetWorldName() const { return m_worldName; }
 
 		/// Requests a character to join this world node.
-		void Join(CharacterData characterData, JoinWorldCallback callback);
+		void Join(CharacterData characterData, const std::vector<std::string>& accountFeatures, JoinWorldCallback callback);
 
 		/// Requests a character to leave this world node.
 		void Leave(ObjectGuid characterGuid, auth::WorldLeftReason reason);

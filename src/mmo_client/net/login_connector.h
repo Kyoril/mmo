@@ -11,7 +11,10 @@
 
 #include "asio/io_service.hpp"
 
+#include <algorithm>
 #include <mutex>
+#include <string>
+#include <vector>
 
 
 namespace mmo
@@ -28,6 +31,9 @@ namespace mmo
 
 		/// Signal that is fired when the client received a realm list packet.
 		signal<void()> RealmListUpdated;
+
+		/// Signal that is fired when the client received the active account feature keys (entitlements).
+		signal<void()> AccountFeaturesUpdated;
 
 	private:
 		// Internal io service
@@ -60,6 +66,9 @@ namespace mmo
 
 		/// Realm list infos.
 		std::vector<RealmData> m_realms;
+
+		/// Active account feature keys (entitlements) granted to the logged in account.
+		std::vector<std::string> m_accountFeatures;
 	public:
 		/// Initializes a new instance of the TestConnector class.
 		/// @param io The io service to be used in order to create the internal socket.
@@ -75,6 +84,15 @@ namespace mmo
 
 		/// Gets the account name.
 		const std::string& GetAccountName() const { return m_accountName; }
+
+		/// Gets the active account feature keys (entitlements) of the logged in account.
+		const std::vector<std::string>& GetAccountFeatures() const { return m_accountFeatures; }
+
+		/// Checks whether the logged in account has been granted a specific feature.
+		bool HasAccountFeature(const std::string& key) const
+		{
+			return std::find(m_accountFeatures.begin(), m_accountFeatures.end(), key) != m_accountFeatures.end();
+		}
 
 	public:
 		// ~ Begin IConnectorListener
@@ -96,6 +114,9 @@ namespace mmo
 
 		/// Handles the RealmList packet from the login server.
 		PacketParseResult OnRealmList(auth::IncomingPacket &packet);
+
+		/// Handles the AccountFeatures packet from the login server.
+		PacketParseResult OnAccountFeatures(auth::IncomingPacket &packet);
 
 	public:
 		/// Tries to connect to the default login server. After a connection has been established,

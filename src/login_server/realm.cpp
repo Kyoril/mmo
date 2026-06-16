@@ -9,8 +9,10 @@
 #include "base/weak_ptr_function.h"
 #include "log/default_log_levels.h"
 
+#include <algorithm>
 #include <iomanip>
 #include <functional>
+#include <set>
 
 namespace mmo
 {
@@ -118,7 +120,7 @@ namespace mmo
 		});
 	}
 
-	void Realm::SendAuthSessionResult(uint64 requestId, auth::AuthResult result, uint64 accountId, uint8 gmLevel, BigNumber sessionKey)
+	void Realm::SendAuthSessionResult(uint64 requestId, auth::AuthResult result, uint64 accountId, uint8 gmLevel, BigNumber sessionKey, const std::vector<std::string>& features)
 	{
 		if (result == auth::auth_result::Success)
 		{
@@ -127,13 +129,13 @@ namespace mmo
 		}
 		else
 		{
-			// Warn about this, as this might mean that someone is trying to log in on a realm without 
+			// Warn about this, as this might mean that someone is trying to log in on a realm without
 			// having a valid session key.
 			WLOG("Auth session hash mismatch, client could not sign in on realm " << m_realmName << "!");
 		}
 
 		// Send response packet to the realm server
-		m_connection->sendSinglePacket([requestId, result, accountId, gmLevel, &sessionKey](auth::OutgoingPacket& packet) {
+		m_connection->sendSinglePacket([requestId, result, accountId, gmLevel, &sessionKey, &features](auth::OutgoingPacket& packet) {
 			packet.Start(auth::login_realm_packet::ClientAuthSessionResponse);
 			packet
 				<< io::write<uint64>(requestId)
@@ -145,10 +147,64 @@ namespace mmo
 					<< io::write<uint64>(accountId)
 					<< io::write<uint8>(gmLevel)  // Add GM level to the packet
 					<< io::write_dynamic_range<uint16>(sessionKey.asByteArray());
+
+				// Append the account's active feature keys so the realm/world can query them.
+				packet << io::write<uint8>(static_cast<uint8>(std::min<size_t>(features.size(), 0xFF)));
+				size_t written = 0;
+				for (const auto& feature : features)
+				{
+					if (written++ >= 0xFF)
+					{
+						break;
+					}
+					packet << io::write_dynamic_range<uint8>(feature);
+				}
 			}
 
 			packet.Finish();
 		});
+	}
+
+	void Realm::ReloadRequirements()
+	{
+		std::weak_ptr<Realm> weakThis{ shared_from_this() };
+		auto handler = [weakThis](std::vector<RealmFeatureRequirement> requirements)
+		{
+			if (auto strongThis = weakThis.lock())
+			{
+				strongThis->m_requirements = std::move(requirements);
+			}
+		};
+
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetRealmFeatureRequirements, m_realmId);
+	}
+
+	bool Realm::IsVisibleTo(const std::set<uint32>& accountFeatures) const
+	{
+		for (const auto& requirement : m_requirements)
+		{
+			if (requirement.requireVisibility && accountFeatures.find(requirement.featureId) == accountFeatures.end())
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	bool Realm::CanLoginWith(const std::set<uint32>& accountFeatures) const
+	{
+		for (const auto& requirement : m_requirements)
+		{
+			// Logging in requires both login- and visibility-gated features.
+			if ((requirement.requireLogin || requirement.requireVisibility) &&
+				accountFeatures.find(requirement.featureId) == accountFeatures.end())
+			{
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	void Realm::QueueNextPingTimeoutCheck()
@@ -403,6 +459,9 @@ namespace mmo
 						strongThis->m_lastPing = GetAsyncTimeMs();
 						strongThis->QueueNextPingTimeoutCheck();
 
+						// Load this realm's feature requirements so we can gate visibility and login.
+						strongThis->ReloadRequirements();
+
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
 						//strongThis->RegisterPacketHandler(auth::client_packet::RealmList, std::bind(&Realm::HandleRealmList, strongThis.get(), std::placeholders::_1));
@@ -469,7 +528,7 @@ namespace mmo
 
 		// Database handler method will validate the client hash
 		std::weak_ptr<Realm> weakThis{ shared_from_this() };
-		auto handler = [weakThis, requestId, accountName, clientSeed, serverSeed, clientHash](std::optional<std::tuple<uint64, std::string, uint8>> result)
+		auto handler = [weakThis, requestId, accountName, clientSeed, serverSeed, clientHash](std::optional<AccountAuthData> result)
 		{
 			if (auto strongThis = weakThis.lock())
 			{
@@ -477,21 +536,21 @@ namespace mmo
 				BigNumber sessionKey;
 				uint64 accountId = 0;
 				uint8 gmLevel = 0;
+				std::vector<std::string> featureKeys;
 
 				// The result that will be sent
 				auth::AuthResult authResult = auth::auth_result::Success;
 				if (result.has_value())
 				{
-					accountId = std::get<0>(*result);
-					std::string sessionKeyStr = std::get<1>(*result);
-					gmLevel = std::get<2>(*result);
+					accountId = result->id;
+					gmLevel = result->gmLevel;
 
 					// Reconstruct the client hash to verify that the data sent is valid
 					HashGeneratorSha1 gen;
 					gen.update(accountName.data(), accountName.length());
 					gen.update(serverSeed);
 					gen.update(clientSeed);
-					Sha1_Add_BigNumbers(gen, { BigNumber(sessionKeyStr) });
+					Sha1_Add_BigNumbers(gen, { BigNumber(result->sessionKey) });
 					SHA1Hash checkHash = gen.finalize();
 
 					// Verify that both hashes match
@@ -501,8 +560,26 @@ namespace mmo
 					}
 					else
 					{
-						// Store the session key on match
-						sessionKey.setHexStr(sessionKeyStr);
+						// Build the set of active feature ids and the key list to forward.
+						std::set<uint32> featureIds;
+						for (const auto& feature : result->features)
+						{
+							featureIds.insert(feature.id);
+							featureKeys.push_back(feature.key);
+						}
+
+						// Gate login on this realm's feature requirements.
+						if (!strongThis->CanLoginWith(featureIds))
+						{
+							WLOG("Account " << accountName << " is missing a required feature to log in to realm " << strongThis->m_realmName);
+							authResult = auth::auth_result::FailNoAccess;
+							featureKeys.clear();
+						}
+						else
+						{
+							// Store the session key on match
+							sessionKey.setHexStr(result->sessionKey);
+						}
 					}
 				}
 				else
@@ -511,12 +588,12 @@ namespace mmo
 				}
 
 				// Send the response
-				strongThis->SendAuthSessionResult(requestId, authResult, accountId, gmLevel, sessionKey);
+				strongThis->SendAuthSessionResult(requestId, authResult, accountId, gmLevel, sessionKey, featureKeys);
 			}
 		};
 
-		// Now do a database request by account name to retrieve the session key
-		m_database.asyncRequest(std::move(handler), &IDatabase::GetAccountSessionKey, std::move(accountName));
+		// Now do a database request by account name to retrieve the session key and feature data
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetAccountAuthData, std::move(accountName));
 
 		return PacketParseResult::Pass;
 	}

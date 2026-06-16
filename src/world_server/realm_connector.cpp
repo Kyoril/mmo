@@ -517,7 +517,27 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 			ELOG("Failed to read PLAYER_CHARACTER_JOIN packet");
 			return PacketParseResult::Disconnect;
 		}
-		
+
+		// Read the account's active feature keys (entitlements).
+		std::vector<std::string> accountFeatures;
+		uint8 featureCount = 0;
+		if (!(packet >> io::read<uint8>(featureCount)))
+		{
+			ELOG("Failed to read PLAYER_CHARACTER_JOIN packet");
+			return PacketParseResult::Disconnect;
+		}
+		accountFeatures.reserve(featureCount);
+		for (uint8 i = 0; i < featureCount; ++i)
+		{
+			std::string key;
+			if (!(packet >> io::read_container<uint8>(key)))
+			{
+				ELOG("Failed to read PLAYER_CHARACTER_JOIN packet");
+				return PacketParseResult::Disconnect;
+			}
+			accountFeatures.push_back(std::move(key));
+		}
+
 		DLOG("Player character " << log_hex_digit(characterData.characterId) << " wants to join world...");
 
 		// Determine if this is a dungeon/instanced map
@@ -680,6 +700,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 
 		// Create a new player object
 		auto player = std::make_shared<Player>(m_playerManager, *this, characterObject, characterData, m_project, *instance, m_conditionMgr);
+		player->SetAccountFeatures(std::move(accountFeatures));
 		player->SetFallDamageConfig(m_fallDamageMinHeight, m_fallDamageLethalHeight);
 		m_playerManager.AddPlayer(player);
 

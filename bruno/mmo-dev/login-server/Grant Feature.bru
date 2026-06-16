@@ -1,0 +1,22 @@
+meta {
+  name: Grant Feature
+  type: http
+  seq: 12
+}
+
+post {
+  url: http://localhost:8090/grant-feature
+  body: formUrlEncoded
+  auth: inherit
+}
+
+body:form-urlencoded {
+  feature: PLAYTEST_ACCESS
+  account_names: KYORIL
+  ~expiration: 2026-12-31 23:59:59
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -82,6 +82,52 @@ namespace mmo
 		{
 			m_handlers.HandleSetGMLevel(req, response);
 		});
+
+		// Account feature endpoints
+		RegisterRoute(Type::Get, "/features", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleListFeatures(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/create-feature", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleCreateFeature(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/delete-feature", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleDeleteFeature(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/grant-feature", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleGrantFeature(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/revoke-feature", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleRevokeFeature(req, response);
+		});
+
+		RegisterRoute(Type::Get, "/account-features", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleGetAccountFeatures(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/realm-feature-requirement", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleSetRealmFeatureRequirement(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/remove-realm-feature-requirement", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleRemoveRealmFeatureRequirement(req, response);
+		});
+
+		RegisterRoute(Type::Get, "/realm-feature-requirements", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleGetRealmFeatureRequirements(req, response);
+		});
 	}
 
 	void WebClient::handleRequest(const net::http::IncomingRequest &request,

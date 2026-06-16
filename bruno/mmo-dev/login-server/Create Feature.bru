@@ -1,0 +1,21 @@
+meta {
+  name: Create Feature
+  type: http
+  seq: 10
+}
+
+post {
+  url: http://localhost:8090/create-feature
+  body: formUrlEncoded
+  auth: inherit
+}
+
+body:form-urlencoded {
+  name: PLAYTEST_ACCESS
+  description: Grants access to the private playtest realm.
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

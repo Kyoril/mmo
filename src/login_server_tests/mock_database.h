@@ -26,6 +26,20 @@ struct MockDatabase : IDatabase {
     void UnbanAccountByName(const std::string&, const std::string&) override {}
     AccountListResult GetAccountList(const AccountListParams&) override { return {}; }
     std::vector<RealmListEntry> GetRealmList() override { return {}; }
+
+    std::vector<FeatureDefinition> GetFeatures() override { return {}; }
+    std::optional<uint32> CreateFeature(const std::string&, const std::string&) override { return std::nullopt; }
+    bool DeleteFeature(uint32) override { return true; }
+    std::optional<uint32> GetFeatureIdByName(const std::string&) override { return std::nullopt; }
+    std::optional<uint64> GetAccountIdByName(const std::string&) override { return std::nullopt; }
+    bool GrantFeature(uint32, const std::vector<uint64>&, const std::string&) override { return true; }
+    bool RevokeFeature(uint32, const std::vector<uint64>&) override { return true; }
+    std::vector<AccountFeature> GetActiveAccountFeatures(uint64) override { return {}; }
+    bool SetRealmFeatureRequirement(uint32, uint32, bool, bool) override { return true; }
+    bool RemoveRealmFeatureRequirement(uint32, uint32) override { return true; }
+    std::vector<RealmFeatureRequirement> GetRealmFeatureRequirements(uint32) override { return {}; }
+    std::optional<uint32> GetRealmIdByName(const std::string&) override { return std::nullopt; }
+    std::optional<AccountAuthData> GetAccountAuthData(std::string) override { return std::nullopt; }
 };
 
 } // namespace mmo
