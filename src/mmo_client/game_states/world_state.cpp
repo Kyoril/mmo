@@ -1024,8 +1024,8 @@ namespace mmo
 			normal = terrain->GetSmoothNormalAt(x, z);
 
 			// Check slope - if normal.y is too low, slope is too steep
-			// cos(35°) ≈ 0.8191f, so normal.y must be >= 0.8191f for walkable terrain
-			constexpr float maxSlopeCosine = 0.8191f; // 35 degrees
+			// cos(25°) ≈ 0.90f, so normal.y must be >= 0.90f for walkable terrain
+			constexpr float maxSlopeCosine = 0.90f; // 25 degrees
 			if (normal.y < maxSlopeCosine)
 			{
 				return false;
@@ -1069,9 +1069,10 @@ namespace mmo
 			auto layer = std::make_shared<FoliageLayer>(name, mesh);
 			FoliageLayerSettings &s = layer->GetSettings();
 			s.density = density;
+			s.randomYawRotation = true;
 			s.minScale = minScale;
 			s.maxScale = maxScale;
-			s.maxSlopeAngle = 35.0f;
+			s.maxSlopeAngle = 25.0f;
 			s.fadeStartDistance = 40.0f;
 			s.fadeEndDistance = 60.0f;
 			s.castShadows = false;
