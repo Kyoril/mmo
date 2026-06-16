@@ -28,7 +28,10 @@ namespace mmo
 	{
 		void SendJsonResponse(web::WebResponse& response, const json& jsonObject)
 		{
-			const std::string jsonStr = jsonObject.dump();
+			// Use the 'replace' error handler so that strings containing invalid UTF-8 (e.g. corrupt
+			// data coming from the database) are serialized with the Unicode replacement character
+			// instead of throwing type_error.316, which would otherwise abort the server.
+			const std::string jsonStr = jsonObject.dump(-1, ' ', false, json::error_handler_t::replace);
 			response.finishWithContent("application/json", jsonStr.data(), jsonStr.size());
 		}
 
