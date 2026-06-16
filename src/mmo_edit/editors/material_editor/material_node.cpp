@@ -85,6 +85,18 @@ namespace mmo
 		{
 			context.AddPostLoadAction([this, link]()
 			{
+				// Only re-establish links from the input side. Each input pin stores its single
+				// source, so the input pins fully describe the graph's connectivity - including an
+				// output that fans out to several inputs. Restoring links from output pins as well is
+				// not just redundant: an output only remembers the *last* input it was linked to, so
+				// LinkTo()'s unlink-on-relink would tear down the other inputs sharing that output
+				// while post-load actions run, intermittently dropping connections depending on the
+				// order in which the nodes happened to be saved.
+				if (!IsInput())
+				{
+					return true;
+				}
+
 				const auto pin = m_node->GetMaterial()->FindPin(link);
 				if (!pin)
 				{
@@ -98,7 +110,7 @@ namespace mmo
 					}
 				}
 
-				return true;	
+				return true;
 			});
 		}
 
@@ -317,22 +329,31 @@ namespace mmo
 		writer
 			<< io::write<uint32>(m_id);
 
+		// Read the *live* node position and size directly from the node editor rather than from the
+		// serialized state snapshot (m_NodesState). That snapshot is only refreshed when an editor
+		// state is applied/loaded - it is NOT updated when the user drags a node around or when a node
+		// is created at runtime. Reading it here caused freshly created nodes to be saved at (0, 0) and
+		// dragged nodes to be saved at their original pre-drag position, which is why nodes jumped to
+		// strange positions after reloading a material. GetNodePosition/GetNodeSize return the current
+		// bounds straight from the editor's live node objects.
 		float posX = 0.0f, posY = 0.0f, sizeX = 0.0f, sizeY = 0.0f;
-		const auto editorContext = reinterpret_cast<ed::Detail::EditorContext*>(ed::GetCurrentEditor());
-		if (editorContext)
+		if (ed::GetCurrentEditor())
 		{
-			ed::Detail::EditorState& state = editorContext->GetState();
-			const auto nodeStateIt = state.m_NodesState.m_Nodes.find(m_id);
-			if (nodeStateIt != state.m_NodesState.m_Nodes.end())
+			const ImVec2 position = ed::GetNodePosition(m_id);
+			const ImVec2 size = ed::GetNodeSize(m_id);
+
+			// GetNodePosition returns (FLT_MAX, FLT_MAX) when the node is not known to the editor yet
+			// (i.e. it has never been committed/rendered). In that case we keep (0, 0).
+			if (position.x != FLT_MAX && position.y != FLT_MAX)
 			{
-				posX = nodeStateIt->second.m_Location.x;
-				posY = nodeStateIt->second.m_Location.y;
-				sizeX = nodeStateIt->second.m_Size.x;
-				sizeY = nodeStateIt->second.m_Size.y;
+				posX = position.x;
+				posY = position.y;
+				sizeX = size.x;
+				sizeY = size.y;
 			}
 			else
 			{
-				WLOG("Node state not found, empty state will be saved");
+				WLOG("Node " << m_id << " has no editor position yet, empty state will be saved");
 			}
 		}
 		else
