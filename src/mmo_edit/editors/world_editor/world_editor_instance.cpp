@@ -522,6 +522,9 @@ namespace mmo
 		m_viewportPanel->Draw(viewportId, m_editMode, m_spawnEditMode && m_editMode == m_spawnEditMode.get() && m_spawnEditMode->IsWaypointEditActive());
 		DrawSceneOutlinePanel(sceneOutlineId);
 
+		const String minimapId = "World Map##" + GetAssetPath().string();
+		DrawMinimapPanel(minimapId);
+
 		if (m_initDockLayout)
 		{
 			InitializeDockLayout(dockspaceId, viewportId, detailsId, worldSettingsId, spawnPaletteId, spawnListId);
@@ -604,9 +607,12 @@ namespace mmo
 
 		// Create the scene outline ID string
 		const String sceneOutlineId = "Scene Outline##" + GetAssetPath().string();
+		const String minimapId = "World Map##" + GetAssetPath().string();
 
 		ImGui::DockBuilderDockWindow(viewportId.c_str(), mainId);
 		ImGui::DockBuilderDockWindow(sceneOutlineId.c_str(), sideTopId);
+		// The minimap teleport panel shares the side dock region with the details/settings panels.
+		ImGui::DockBuilderDockWindow(minimapId.c_str(), sideId);
 		// The placed-spawn browser shares the top-side dock node with the Scene Outline, so they
 		// become tabs in the same region.
 		ImGui::DockBuilderDockWindow(spawnListId.c_str(), sideTopId);
@@ -1485,6 +1491,22 @@ namespace mmo
 		m_cameraVelocity = Vector3::Zero;
 	}
 
+	void WorldEditorInstance::MoveCameraToWorldPosition(const float worldX, const float worldZ)
+	{
+		// Sample the terrain height at the target location so the camera anchor sits on the ground,
+		// mirroring the behaviour of FocusSelection. Fall back to 0 when the terrain isn't available
+		// (e.g. the page hasn't streamed in yet) — the page loader will react to the new camera
+		// position regardless.
+		float height = 0.0f;
+		if (m_terrain && m_hasTerrain)
+		{
+			height = m_terrain->GetSmoothHeightAt(worldX, worldZ);
+		}
+
+		m_cameraAnchor->SetPosition(Vector3(worldX, height, worldZ));
+		m_cameraVelocity = Vector3::Zero;
+	}
+
 	void WorldEditorInstance::AddAreaTrigger(proto::AreaTriggerEntry &trigger, bool select)
 	{
 		// Create manual render object for visualization
@@ -1699,6 +1721,38 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		{
 			m_sceneOutlineWindow->Draw(sceneOutlineId.c_str());
 		}
+	}
+
+	void WorldEditorInstance::DrawMinimapPanel(const String &id)
+	{
+		if (ImGui::Begin(id.c_str()))
+		{
+			// Bind the panel to this world's minimaps on first draw.
+			if (!m_minimapWorldSet)
+			{
+				m_minimapPanel.SetWorld(m_assetPath.filename().replace_extension().string());
+				m_minimapWorldSet = true;
+			}
+
+			if (ImGui::Button("Refresh"))
+			{
+				m_minimapPanel.Refresh();
+			}
+			ImGui::SameLine();
+			ImGui::TextDisabled("Scroll to zoom, right-drag to pan, click a tile to teleport");
+
+			// Highlight the page the camera is currently over.
+			const PagePosition camPage = GetPagePositionFromCamera();
+			m_minimapPanel.SetHighlightPage(static_cast<int32>(camPage.x()), static_cast<int32>(camPage.y()));
+
+			if (m_minimapPanel.Draw(ImGui::GetContentRegionAvail()))
+			{
+				float worldX, worldZ;
+				m_minimapPanel.GetSelectedWorldCenter(worldX, worldZ);
+				MoveCameraToWorldPosition(worldX, worldZ);
+			}
+		}
+		ImGui::End();
 	}
 
 	void WorldEditorInstance::GenerateMinimaps()
@@ -1991,6 +2045,9 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		if (m_foliage) m_foliage->SetVisible(foliageWasVisible);
 
 		gx.RestoreState();
+
+		// Force the minimap teleport panel to reload the freshly generated tiles.
+		m_minimapPanel.Refresh();
 	}
 
 	Camera &WorldEditorInstance::GetCamera() const

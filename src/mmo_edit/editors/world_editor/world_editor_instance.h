@@ -47,6 +47,7 @@
 #include "spawn_palette_panel.h"
 #include "spawn_list_panel.h"
 #include "entity_factory.h"
+#include "minimap_grid_view.h"
 
 namespace mmo
 {
@@ -431,6 +432,18 @@ namespace mmo
 		/// Filenames are encoded using page coordinates: (x << 8) | y.
 		void GenerateMinimaps();
 
+		/// @brief Moves the editor camera so it focuses the given world location (X/Z plane). The
+		///        height is sampled from the terrain when available. Used by the minimap location
+		///        picker and the in-editor minimap teleport panel.
+		/// @param worldX Target world X coordinate.
+		/// @param worldZ Target world Z coordinate.
+		void MoveCameraToWorldPosition(float worldX, float worldZ);
+
+	private:
+		/// @brief Draws the dockable "World Map" panel which shows the world's minimap grid and lets
+		///        the user quickly teleport the camera by clicking a tile.
+		void DrawMinimapPanel(const String& id);
+
 	private:
 		WorldEditor &m_editor;
 		scoped_connection m_renderConnection;
@@ -536,6 +549,12 @@ namespace mmo
 		std::unique_ptr<SceneOutlineWindow> m_sceneOutlineWindow;
 		std::unique_ptr<SpawnPalettePanel> m_spawnPalettePanel;
 		std::unique_ptr<SpawnListPanel> m_spawnListPanel;
+
+		/// @brief Minimap grid used by the "World Map" panel to teleport the camera.
+		MinimapGridView m_minimapPanel;
+		/// @brief Whether the minimap panel's world name has been set yet (deferred until first draw
+		///        because the asset path is known at construction but minimaps may not exist yet).
+		bool m_minimapWorldSet{ false };
 	};
 }
 

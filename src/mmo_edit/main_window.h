@@ -106,7 +106,9 @@ namespace mmo
 		const Path& GetCurrentPath() const override { return m_selectedPath; }
 		
 		bool OpenAsset(const Path& assetPath) override;
-		
+
+		bool OpenAssetAtWorldLocation(const Path& assetPath, float worldX, float worldZ) override;
+
 		void SetActiveEditorInstance(EditorInstance* instance) override;
 		
 		void EditorInstanceClosed(EditorInstance& instance) override;

@@ -837,6 +837,34 @@ namespace mmo
 		return false;
 	}
 
+	bool MainWindow::OpenAssetAtWorldLocation(const Path& assetPath, const float worldX, const float worldZ)
+	{
+		auto extension = assetPath.extension().string();
+		std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+
+		for (const auto& editor : m_editors)
+		{
+			if (!editor->CanLoadAsset(extension))
+			{
+				continue;
+			}
+
+			// Inform the editor about the requested camera target before opening so it can apply it
+			// to the (possibly newly created) instance.
+			editor->SetPendingCameraTarget(assetPath, Vector3(worldX, 0.0f, worldZ));
+
+			const bool result = editor->OpenAsset(assetPath);
+			if (result)
+			{
+				m_uninitializedEditorInstances.emplace_back(assetPath.filename().string());
+			}
+			return result;
+		}
+
+		WLOG("No editor available for asset " << assetPath);
+		return false;
+	}
+
 	void MainWindow::SetActiveEditorInstance(EditorInstance* instance)
 	{
 		m_activeEditorInstance = instance;
