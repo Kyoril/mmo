@@ -209,11 +209,7 @@ namespace mmo
 		RegisterCommand("list", console_commands::ConsoleCommand_List, ConsoleCommandCategory::Default, "Shows all available console commands.");
 		RegisterCommand("clear", ConsoleCommand_Clear, ConsoleCommandCategory::Default, "Clears the console text.");
 
-#ifdef MMO_WITH_DEV_COMMANDS
-		// TODO: Remove this command entirely — it exists solely to test crash-report pipeline.
-		RegisterCommand("crash", console_commands::ConsoleCommand_Crash, ConsoleCommandCategory::Default, "Intentionally crashes the client (dev only, for crash-report pipeline testing).");
-#endif
-		
+
 		ConsoleVarMgr::Initialize();
 		
 		s_dataPathCVar = ConsoleVarMgr::RegisterConsoleVar("dataPath", "The path of the client data directory.", (std::filesystem::current_path() / "Data").string());

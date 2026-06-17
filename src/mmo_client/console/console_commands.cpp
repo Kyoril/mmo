@@ -58,13 +58,4 @@ namespace mmo::console_commands
 		EventLoop::Terminate(0);
 	}
 
-#ifdef MMO_WITH_DEV_COMMANDS
-	// TODO: Remove this command entirely — it exists solely to test crash-report pipeline.
-	void ConsoleCommand_Crash(const std::string& cmd, const std::string& args)
-	{
-		volatile int* nullPtr = nullptr;
-		*nullPtr = 0;
-	}
-#endif
-
 }
