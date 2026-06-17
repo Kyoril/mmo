@@ -298,6 +298,23 @@ namespace mmo
 			return layerValue / 255.0f;
 		}
 
+		MaterialPtr Terrain::GetBaseMaterialAt(const float x, const float z)
+		{
+			int32 tileX, tileZ;
+			if (!GetTileIndexByWorldPosition(Vector3(x, 0.0f, z), tileX, tileZ))
+			{
+				return nullptr;
+			}
+
+			Tile* tile = GetTile(tileX, tileZ);
+			if (!tile)
+			{
+				return nullptr;
+			}
+
+			return tile->GetBaseMaterial();
+		}
+
 		Vector3 Terrain::GetVectorAt(uint32 x, uint32 z)
 		{
 			return Vector3();

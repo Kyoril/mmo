@@ -21,13 +21,33 @@ namespace mmo
 	class Camera;
 	class GraphicsDevice;
 
-	/// @brief Callback function type for getting terrain height at a position.
+	class Material;
+
+	/// @brief Result of sampling the terrain at a candidate foliage position.
+	struct FoliagePlacementSample
+	{
+		/// @brief True if the position is valid for placement (on terrain, not a hole, etc.).
+		bool valid = false;
+
+		/// @brief Terrain height at the position.
+		float height = 0.0f;
+
+		/// @brief Terrain surface normal at the position.
+		Vector3 normal = Vector3::UnitY;
+
+		/// @brief Base material of the terrain tile at the position (may be null).
+		const Material* baseMaterial = nullptr;
+
+		/// @brief Coverage of each of the four terrain layers at the position (0-1).
+		float coverage[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	};
+
+	/// @brief Callback function type for sampling terrain data at a position.
 	/// @param x World X coordinate.
 	/// @param z World Z coordinate.
-	/// @param outHeight Output height value.
-	/// @param outNormal Output surface normal.
-	/// @return True if a valid height was found, false otherwise.
-	using HeightQueryCallback = std::function<bool(float x, float z, float& outHeight, Vector3& outNormal)>;
+	/// @param outSample Output sample populated with height, normal, material and coverage.
+	/// @return True if a valid sample was produced, false otherwise.
+	using TerrainSampleCallback = std::function<bool(float x, float z, FoliagePlacementSample& outSample)>;
 
 	/// @brief Settings for the foliage system.
 	struct FoliageSettings
@@ -97,9 +117,9 @@ namespace mmo
 		/// @param settings The new settings to apply.
 		void SetSettings(const FoliageSettings& settings);
 
-		/// @brief Sets the height query callback for terrain sampling.
-		/// @param callback Function to query terrain height and normal.
-		void SetHeightQueryCallback(HeightQueryCallback callback);
+		/// @brief Sets the terrain sample callback used for foliage placement.
+		/// @param callback Function to query terrain height, normal, material and coverage.
+		void SetTerrainSampleCallback(TerrainSampleCallback callback);
 
 		/// @brief Adds a new foliage layer.
 		/// @param layer The layer to add.
@@ -131,6 +151,11 @@ namespace mmo
 		/// @brief Rebuilds all foliage chunks.
 		/// @details Call this after modifying layer settings.
 		void RebuildAll();
+
+		/// @brief Forces the next Update() to re-evaluate which chunks are active.
+		/// @details Use after adding or removing layers while the camera is stationary so that
+		///          new layers get chunks created (and removed ones cleaned up) immediately.
+		void InvalidateActiveChunks();
 
 		/// @brief Rebuilds foliage in a specific world region.
 		/// @param region The AABB region to rebuild.
@@ -217,7 +242,7 @@ namespace mmo
 		SceneNode* m_rootNode = nullptr;
 
 		FoliageSettings m_settings;
-		HeightQueryCallback m_heightQuery;
+		TerrainSampleCallback m_terrainSample;
 
 		std::vector<FoliageLayerPtr> m_layers;
 

@@ -109,6 +109,12 @@ namespace mmo
 			/// @return Layer value as a float (0.0 to 1.0).
 			[[nodiscard]] float GetLayerValueAt(float x, float z, uint8 layer) const;
 
+			/// @brief Gets the base material of the terrain tile at a world position.
+			/// @param x World X coordinate.
+			/// @param z World Z coordinate.
+			/// @return The tile's base material, or nullptr if no loaded tile covers the position.
+			[[nodiscard]] MaterialPtr GetBaseMaterialAt(float x, float z);
+
 			/// @brief Gets the smoothly interpolated height at a world position.
 			/// @param x World X coordinate.
 			/// @param z World Z coordinate.

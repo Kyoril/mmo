@@ -15,6 +15,7 @@
 #include <memory>
 
 #include "constant_buffer.h"
+#include "material_foliage.h"
 #include "math/vector3.h"
 #include "math/vector4.h"
 
@@ -321,6 +322,22 @@ namespace mmo
 
 		const std::vector<TextureParameterValue>& GetTextureParameters() const override { return m_textureParameters; }
 
+	public:
+		/// @brief Gets the data-driven terrain foliage entries carried by this material.
+		[[nodiscard]] const std::vector<MaterialFoliageEntry>& GetFoliageEntries() const { return m_foliage; }
+
+		/// @brief Gets mutable access to the terrain foliage entries (used by the editor).
+		[[nodiscard]] std::vector<MaterialFoliageEntry>& GetFoliageEntries() { return m_foliage; }
+
+		/// @brief Replaces all terrain foliage entries.
+		void SetFoliageEntries(std::vector<MaterialFoliageEntry> entries) { m_foliage = std::move(entries); }
+
+		/// @brief Appends a single terrain foliage entry.
+		void AddFoliageEntry(const MaterialFoliageEntry& entry) { m_foliage.push_back(entry); }
+
+		/// @brief Removes all terrain foliage entries.
+		void ClearFoliageEntries() { m_foliage.clear(); }
+
 	private:
 		String m_name;
 		bool m_twoSided { false };
@@ -355,6 +372,9 @@ namespace mmo
 		bool m_bufferDataDirty[3] { true, true, true };
 		ConstantBufferPtr m_parameterBuffers[3]{ nullptr, nullptr, nullptr };
 		std::map<String, TexturePtr> m_textureParamTextures;
+
+		/// Data-driven terrain foliage definitions (serialized via the MFOL chunk, v0.6+).
+		std::vector<MaterialFoliageEntry> m_foliage;
 	};
 
 	typedef std::shared_ptr<MaterialInterface> MaterialPtr;

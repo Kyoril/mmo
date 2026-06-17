@@ -31,6 +31,10 @@ namespace mmo
 			/// Each entry stores the shader type index and bytecode without a legacy
 			/// profile string, so a single file can carry bytecodes for multiple GPUs.
 			Version_0_5 = 0x0500,
+
+			/// Version 0.6: adds an optional MFOL chunk carrying data-driven terrain
+			/// foliage entries (mesh + per-layer scatter settings).
+			Version_0_6 = 0x0600,
 		};
 	}
 
@@ -97,6 +101,9 @@ namespace mmo
 		bool ReadMaterialVectorParamChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 		bool ReadMaterialTextureParamChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		/// @brief Reads the v0.6 terrain foliage chunk (MFOL).
+		bool ReadMaterialFoliageChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 	private:
 		Material& m_material;

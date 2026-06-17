@@ -2209,9 +2209,10 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 	{
 		m_grass = std::make_unique<Foliage>(m_scene, GraphicsDevice::Get());
 
-		// Sample the editor's terrain for height, normal, holes and base-layer influence, exactly
-		// like the client so foliage placement matches in-game.
-		m_grass->SetHeightQueryCallback([this](float x, float z, float& height, Vector3& normal) -> bool
+		// Sample the editor's terrain for height, normal, holes, material and coverage, exactly
+		// like the client so foliage placement matches in-game. Placement rules are data-driven
+		// per terrain material; this only resolves raw terrain data at a point.
+		m_grass->SetTerrainSampleCallback([this](float x, float z, FoliagePlacementSample& out) -> bool
 		{
 			if (!m_hasTerrain || !m_terrain)
 			{
@@ -2223,23 +2224,20 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 				return false;
 			}
 
-			height = m_terrain->GetSmoothHeightAt(x, z);
-			normal = m_terrain->GetSmoothNormalAt(x, z);
+			out.height = m_terrain->GetSmoothHeightAt(x, z);
+			out.normal = m_terrain->GetSmoothNormalAt(x, z);
 
-			// Reject steep slopes (cos(35°) ≈ 0.8191).
-			constexpr float maxSlopeCosine = 0.8191f;
-			if (normal.y < maxSlopeCosine)
+			if (const MaterialPtr material = m_terrain->GetBaseMaterialAt(x, z))
 			{
-				return false;
+				out.baseMaterial = material->GetBaseMaterial().get();
 			}
 
-			// Only grow grass where the base terrain layer dominates.
-			constexpr float minLayer0Influence = 0.3f;
-			if (m_terrain->GetLayerValueAt(x, z, 0) < minLayer0Influence)
+			for (uint8 layer = 0; layer < 4; ++layer)
 			{
-				return false;
+				out.coverage[layer] = m_terrain->GetLayerValueAt(x, z, layer);
 			}
 
+			out.valid = true;
 			return true;
 		});
 
@@ -2257,32 +2255,161 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			Vector3(-halfTerrainSize, -1000.0f, -halfTerrainSize),
 			Vector3(halfTerrainSize, 1000.0f, halfTerrainSize)));
 
-		const auto addGrassLayer = [this](const char* name, const char* meshPath, float density, float minScale, float maxScale)
-		{
-			MeshPtr mesh = MeshManager::Get().Load(meshPath);
-			if (!mesh)
-			{
-				return;
-			}
-
-			auto layer = std::make_shared<FoliageLayer>(name, mesh);
-			FoliageLayerSettings& s = layer->GetSettings();
-			s.density = density;
-			s.minScale = minScale;
-			s.maxScale = maxScale;
-			s.maxSlopeAngle = 35.0f;
-			s.fadeStartDistance = 40.0f;
-			s.fadeEndDistance = 60.0f;
-			s.castShadows = false;
-			m_grass->AddLayer(layer);
-		};
-
-		addGrassLayer("Grass",   "Models/FalwynPlains/Plants/Grass_01.hmsh",        4.0f,  0.7f, 1.3f);
-		addGrassLayer("Grass02", "Models/FalwynPlains/Plants/Grass_02.hmsh",        0.7f,  1.0f, 1.0f);
-		addGrassLayer("Flowers", "Models/FalwynPlains/Plants/Shrub_Flower_01.hmsh", 0.32f, 1.0f, 1.0f);
+		// Foliage layers are registered dynamically from the foliage definitions carried by the
+		// terrain materials of each loaded terrain page. See RegisterPageFoliage / UnregisterPageFoliage.
 
 		// Hidden by default; the "Show Foliage" world setting toggles it.
 		m_grass->SetVisible(m_showFoliage);
+	}
+
+	void WorldEditorInstance::RegisterPageFoliage(const uint32 pageX, const uint32 pageY)
+	{
+		if (!m_grass || !m_terrain)
+		{
+			return;
+		}
+
+		terrain::Page* page = m_terrain->GetPage(pageX, pageY);
+		if (!page || !page->IsLoaded())
+		{
+			return;
+		}
+
+		const uint16 pageIndex = static_cast<uint16>(pageX + pageY * 64);
+
+		// A page may be reported available more than once; rebuild its contribution from scratch.
+		UnregisterPageFoliage(pageX, pageY);
+
+		std::vector<FoliageLayerKey> contributed;
+		bool addedAnyLayer = false;
+
+		for (uint32 tileY = 0; tileY < terrain::constants::TilesPerPage; ++tileY)
+		{
+			for (uint32 tileX = 0; tileX < terrain::constants::TilesPerPage; ++tileX)
+			{
+				terrain::Tile* tile = page->GetTile(tileX, tileY);
+				if (!tile)
+				{
+					continue;
+				}
+
+				const MaterialPtr baseMaterial = tile->GetBaseMaterial();
+				if (!baseMaterial)
+				{
+					continue;
+				}
+
+				Material* material = baseMaterial->GetBaseMaterial().get();
+				if (!material || material->GetFoliageEntries().empty())
+				{
+					continue;
+				}
+
+				for (const MaterialFoliageEntry& entry : material->GetFoliageEntries())
+				{
+					const FoliageLayerKey key{ material, entry.layerIndex, entry.meshPath };
+
+					if (std::find(contributed.begin(), contributed.end(), key) != contributed.end())
+					{
+						continue;
+					}
+					contributed.push_back(key);
+
+					auto it = m_foliageRegistry.find(key);
+					if (it != m_foliageRegistry.end())
+					{
+						++it->second.refCount;
+						continue;
+					}
+
+					MeshPtr mesh = MeshManager::Get().Load(entry.meshPath);
+					if (!mesh)
+					{
+						WLOG("Foliage mesh '" << entry.meshPath << "' could not be loaded for material " << material->GetName());
+						m_foliageRegistry.emplace(key, RegisteredFoliageLayer{ nullptr, 1 });
+						continue;
+					}
+
+					const String layerName = String(material->GetName()) + "#" +
+						std::to_string(static_cast<int>(entry.layerIndex)) + "#" + entry.meshPath;
+
+					auto layer = std::make_shared<FoliageLayer>(layerName, mesh);
+					FoliageLayerSettings& s = layer->GetSettings();
+					s.density = entry.density;
+					s.minScale = entry.minScale;
+					s.maxScale = entry.maxScale;
+					s.maxSlopeAngle = entry.maxSlopeAngle;
+					s.minHeight = entry.minHeight;
+					s.maxHeight = entry.maxHeight;
+					s.fadeStartDistance = entry.fadeStartDistance;
+					s.fadeEndDistance = entry.fadeEndDistance;
+					s.randomYawRotation = entry.randomYaw;
+					s.alignToNormal = entry.alignToNormal;
+					s.castShadows = entry.castShadows;
+					s.terrainLayerIndex = static_cast<int32>(entry.layerIndex);
+					s.minCoverage = entry.minCoverage;
+					s.terrainMaterial = material;
+
+					m_grass->AddLayer(layer);
+					m_foliageRegistry.emplace(key, RegisteredFoliageLayer{ layer, 1 });
+					addedAnyLayer = true;
+				}
+			}
+		}
+
+		if (!contributed.empty())
+		{
+			m_pageFoliageKeys[pageIndex] = std::move(contributed);
+		}
+
+		if (addedAnyLayer)
+		{
+			m_grass->InvalidateActiveChunks();
+		}
+	}
+
+	void WorldEditorInstance::UnregisterPageFoliage(const uint32 pageX, const uint32 pageY)
+	{
+		const uint16 pageIndex = static_cast<uint16>(pageX + pageY * 64);
+
+		auto pageIt = m_pageFoliageKeys.find(pageIndex);
+		if (pageIt == m_pageFoliageKeys.end())
+		{
+			return;
+		}
+
+		bool removedAnyLayer = false;
+
+		for (const FoliageLayerKey& key : pageIt->second)
+		{
+			auto it = m_foliageRegistry.find(key);
+			if (it == m_foliageRegistry.end())
+			{
+				continue;
+			}
+
+			if (it->second.refCount > 0)
+			{
+				--it->second.refCount;
+			}
+
+			if (it->second.refCount == 0)
+			{
+				if (it->second.layer && m_grass)
+				{
+					m_grass->RemoveLayer(it->second.layer->GetName());
+					removedAnyLayer = true;
+				}
+				m_foliageRegistry.erase(it);
+			}
+		}
+
+		m_pageFoliageKeys.erase(pageIt);
+
+		if (removedAnyLayer && m_grass)
+		{
+			m_grass->InvalidateActiveChunks();
+		}
 	}
 
 	void WorldEditorInstance::LoadPageFoliage(const uint8 x, const uint8 y)
@@ -2394,10 +2521,12 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 			LoadPageEntities(pos.x(), pos.y());
 			LoadPageFoliage(pos.x(), pos.y());
+			RegisterPageFoliage(pos.x(), pos.y());
 		}
 		else
 		{
 			UnloadPageEntities(pos.x(), pos.y());
+			UnregisterPageFoliage(pos.x(), pos.y());
 
 			if (m_foliage)
 			{

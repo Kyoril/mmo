@@ -19,6 +19,7 @@ namespace mmo
 	static const ChunkMagic MaterialScalarParamChunk = MakeChunkMagic('RAPS');
 	static const ChunkMagic MaterialVectorParamChunk = MakeChunkMagic('RAPV');
 	static const ChunkMagic MaterialTextureParamChunk = MakeChunkMagic('RAPT');
+	static const ChunkMagic MaterialFoliageChunk = MakeChunkMagic('LOFM');
 
 	MaterialDeserializer::MaterialDeserializer(Material& material)
 		: ChunkReader(true)
@@ -67,6 +68,11 @@ namespace mmo
 				{
 					AddChunkHandler(*MaterialVertexShaderChunk, false, *this, &MaterialDeserializer::ReadMaterialVertexShaderChunkV05);
 					AddChunkHandler(*MaterialPixelShaderChunk, false, *this, &MaterialDeserializer::ReadMaterialPixelShaderChunkV05);
+				}
+
+				if (version >= material_version::Version_0_6)
+				{
+					AddChunkHandler(*MaterialFoliageChunk, false, *this, &MaterialDeserializer::ReadMaterialFoliageChunk);
 				}
 			}
 			else
@@ -521,9 +527,51 @@ namespace mmo
 		return reader;
 	}
 
+	bool MaterialDeserializer::ReadMaterialFoliageChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		m_material.ClearFoliageEntries();
+
+		uint16 numEntries;
+		if (!(reader >> io::read<uint16>(numEntries)))
+		{
+			return false;
+		}
+
+		for (uint16 i = 0; i < numEntries; ++i)
+		{
+			MaterialFoliageEntry entry{};
+			uint8 randomYaw = 0, alignToNormal = 0, castShadows = 0;
+			if (!(reader
+				>> io::read<uint8>(entry.layerIndex)
+				>> io::read_container<uint16>(entry.meshPath)
+				>> io::read<float>(entry.density)
+				>> io::read<float>(entry.minCoverage)
+				>> io::read<float>(entry.minScale)
+				>> io::read<float>(entry.maxScale)
+				>> io::read<float>(entry.maxSlopeAngle)
+				>> io::read<float>(entry.minHeight)
+				>> io::read<float>(entry.maxHeight)
+				>> io::read<float>(entry.fadeStartDistance)
+				>> io::read<float>(entry.fadeEndDistance)
+				>> io::read<uint8>(randomYaw)
+				>> io::read<uint8>(alignToNormal)
+				>> io::read<uint8>(castShadows)))
+			{
+				return false;
+			}
+
+			entry.randomYaw = randomYaw != 0;
+			entry.alignToNormal = alignToNormal != 0;
+			entry.castShadows = castShadows != 0;
+			m_material.AddFoliageEntry(entry);
+		}
+
+		return reader;
+	}
+
 	void MaterialSerializer::Export(const Material& material, io::Writer& writer, MaterialVersion version)
 	{
-		version = material_version::Version_0_5;
+		version = material_version::Version_0_6;
 
 		// File version chunk
 		{
@@ -690,6 +738,33 @@ namespace mmo
 			}
 
 			shaderChunkWriter.Finish();
+		}
+
+		// Terrain foliage chunk (v0.6+). Only written when the material carries foliage entries.
+		if (!material.GetFoliageEntries().empty())
+		{
+			ChunkWriter foliageChunkWriter { MaterialFoliageChunk, writer };
+			writer << io::write<uint16>(static_cast<uint16>(material.GetFoliageEntries().size()));
+			for (const auto& entry : material.GetFoliageEntries())
+			{
+				writer
+					<< io::write<uint8>(entry.layerIndex)
+					<< io::write_dynamic_range<uint16>(entry.meshPath.begin(), entry.meshPath.end())
+					<< io::write<float>(entry.density)
+					<< io::write<float>(entry.minCoverage)
+					<< io::write<float>(entry.minScale)
+					<< io::write<float>(entry.maxScale)
+					<< io::write<float>(entry.maxSlopeAngle)
+					<< io::write<float>(entry.minHeight)
+					<< io::write<float>(entry.maxHeight)
+					<< io::write<float>(entry.fadeStartDistance)
+					<< io::write<float>(entry.fadeEndDistance)
+					<< io::write<uint8>(entry.randomYaw ? 1 : 0)
+					<< io::write<uint8>(entry.alignToNormal ? 1 : 0)
+					<< io::write<uint8>(entry.castShadows ? 1 : 0);
+			}
+
+			foliageChunkWriter.Finish();
 		}
 	}
 }

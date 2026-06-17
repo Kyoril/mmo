@@ -943,6 +943,12 @@ namespace mmo
 		if (ImGui::Begin(panelId.c_str(), nullptr))
 		{
 			DrawPropertyTable();
+
+			// Terrain foliage authoring is only relevant for materials (not material functions).
+			if (m_material && GetAssetPath().extension() != ".hmf")
+			{
+				DrawFoliageSection();
+			}
 		}
 		ImGui::End();
 	}
@@ -965,6 +971,85 @@ namespace mmo
 			ImGui::EndTable();
 		}
 		ImGui::PopStyleVar();
+	}
+
+	void MaterialEditorInstance::DrawFoliageSection()
+	{
+		if (!ImGui::CollapsingHeader("Terrain Foliage"))
+		{
+			return;
+		}
+
+		ImGui::TextWrapped("Foliage scattered on terrain tiles using this material. Each entry is bound to "
+			"a terrain layer (1-4) and grows where that layer's coverage is high.");
+
+		auto& entries = m_material->GetFoliageEntries();
+
+		static const char* s_layerNames[] = { "Layer 1", "Layer 2", "Layer 3", "Layer 4" };
+
+		int removeIndex = -1;
+		for (int i = 0; i < static_cast<int>(entries.size()); ++i)
+		{
+			MaterialFoliageEntry& entry = entries[i];
+
+			ImGui::PushID(i);
+
+			const String headerLabel = "Foliage " + std::to_string(i + 1) +
+				(entry.meshPath.empty() ? "" : (" - " + entry.meshPath));
+			if (ImGui::TreeNodeEx("foliageEntry", ImGuiTreeNodeFlags_DefaultOpen, "%s", headerLabel.c_str()))
+			{
+				// Mesh field (accepts a .hmsh drag-drop payload).
+				ImGui::InputText("Mesh", &entry.meshPath, ImGuiInputTextFlags_ReadOnly);
+				if (ImGui::BeginDragDropTarget())
+				{
+					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
+					{
+						entry.meshPath = *static_cast<String*>(payload->Data);
+					}
+					ImGui::EndDragDropTarget();
+				}
+				ImGui::SameLine();
+				ImGui::TextDisabled("(drop .hmsh)");
+
+				int layerIndex = static_cast<int>(entry.layerIndex);
+				if (ImGui::Combo("Terrain Layer", &layerIndex, s_layerNames, IM_ARRAYSIZE(s_layerNames)))
+				{
+					entry.layerIndex = static_cast<uint8>(std::clamp(layerIndex, 0, 3));
+				}
+
+				ImGui::DragFloat("Density", &entry.density, 0.05f, 0.0f, 100.0f);
+				ImGui::SliderFloat("Min Coverage", &entry.minCoverage, 0.0f, 1.0f);
+				ImGui::DragFloatRange2("Scale", &entry.minScale, &entry.maxScale, 0.01f, 0.01f, 10.0f);
+				ImGui::SliderFloat("Max Slope", &entry.maxSlopeAngle, 0.0f, 90.0f);
+				ImGui::DragFloatRange2("Height Range", &entry.minHeight, &entry.maxHeight, 1.0f, -10000.0f, 10000.0f);
+				ImGui::DragFloatRange2("Fade Distance", &entry.fadeStartDistance, &entry.fadeEndDistance, 1.0f, 0.0f, 10000.0f);
+				ImGui::Checkbox("Random Yaw", &entry.randomYaw);
+				ImGui::SameLine();
+				ImGui::Checkbox("Align To Normal", &entry.alignToNormal);
+				ImGui::SameLine();
+				ImGui::Checkbox("Cast Shadows", &entry.castShadows);
+
+				if (ImGui::Button("Remove"))
+				{
+					removeIndex = i;
+				}
+
+				ImGui::TreePop();
+			}
+
+			ImGui::PopID();
+			ImGui::Separator();
+		}
+
+		if (removeIndex >= 0)
+		{
+			entries.erase(entries.begin() + removeIndex);
+		}
+
+		if (ImGui::Button("Add Foliage Entry"))
+		{
+			entries.emplace_back();
+		}
 	}
 
 	void MaterialEditorInstance::DrawNodeProperties(GraphNode* node)

@@ -39,7 +39,12 @@
 #include "edit_modes/water_edit_mode.h"
 #include "edit_modes/foliage_edit_mode.h"
 #include "scene_graph/instanced_foliage.h"
+#include "scene_graph/foliage.h"
 #include "scene_outline_window.h"
+
+#include <map>
+#include <tuple>
+#include <vector>
 #include "grid_snap_settings.h"
 #include "details_panel.h"
 #include "world_settings_panel.h"
@@ -414,6 +419,12 @@ namespace mmo
 		/// @brief Creates and configures the procedural grass system to mirror the game client.
 		void SetupGrass();
 
+		/// @brief Registers procedural foliage layers from the tile materials of a loaded terrain page.
+		void RegisterPageFoliage(uint32 pageX, uint32 pageY);
+
+		/// @brief Ref-decrements (and removes when unused) the foliage layers a terrain page contributed.
+		void UnregisterPageFoliage(uint32 pageX, uint32 pageY);
+
 		/// @brief Recomputes and applies the effective water visibility.
 		/// @details The water surface is shown when the "Show Water" setting is enabled, or whenever the
 		///          water edit mode is active (so water can always be edited), whichever applies.
@@ -471,6 +482,22 @@ namespace mmo
 
 		/// @brief Procedural grass/vegetation system (the dense foliage seen in the client). Hidden by default.
 		std::unique_ptr<Foliage> m_grass;
+
+		/// Key identifying a distinct procedural foliage layer derived from terrain material data.
+		using FoliageLayerKey = std::tuple<const Material*, uint8, String>;
+
+		/// A runtime foliage layer registered from terrain material data, ref-counted by loaded pages.
+		struct RegisteredFoliageLayer
+		{
+			FoliageLayerPtr layer;
+			uint32 refCount = 0;
+		};
+
+		/// All currently registered material-driven foliage layers, keyed by FoliageLayerKey.
+		std::map<FoliageLayerKey, RegisteredFoliageLayer> m_foliageRegistry;
+
+		/// Per terrain page, the set of foliage layer keys it contributed.
+		std::map<uint16, std::vector<FoliageLayerKey>> m_pageFoliageKeys;
 
 		/// @brief WYSIWYG setting: whether procedural grass is rendered in the editor. Hidden by default.
 		bool m_showFoliage{false};

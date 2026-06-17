@@ -91,6 +91,9 @@ namespace mmo
 		void DrawPreviewViewport();
 		void DrawPropertyTable();
 		void DrawNodeProperties(GraphNode* node);
+
+		/// @brief Draws the data-driven terrain foliage authoring section in the details panel.
+		void DrawFoliageSection();
 		void DrawVariableSelector(NamedVariableGetNode* node);
 		void DrawPropertyEditor(PropertyBase* prop);
 		

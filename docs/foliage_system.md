@@ -32,10 +32,17 @@ Foliage (main system)
 // Create foliage system
 Foliage foliage(scene, graphicsDevice);
 
-// Configure terrain height query callback
-foliage.SetHeightQueryCallback([&terrain](float x, float z, float& height, Vector3& normal) {
-    height = terrain.GetSmoothHeightAt(x, z);
-    normal = terrain.GetSmoothNormalAt(x, z);
+// Configure the terrain sample callback (height, normal, material, per-layer coverage)
+foliage.SetTerrainSampleCallback([&terrain](float x, float z, FoliagePlacementSample& out) {
+    out.height = terrain.GetSmoothHeightAt(x, z);
+    out.normal = terrain.GetSmoothNormalAt(x, z);
+    if (const MaterialPtr mat = terrain.GetBaseMaterialAt(x, z)) {
+        out.baseMaterial = mat->GetBaseMaterial().get();
+    }
+    for (uint8 layer = 0; layer < 4; ++layer) {
+        out.coverage[layer] = terrain.GetLayerValueAt(x, z, layer);
+    }
+    out.valid = true;
     return true;
 });
 
@@ -167,30 +174,42 @@ float4x4 GetInstanceWorldMatrix(VSInput input)
 
 ## Extending the System
 
-### Custom Height Queries
+### Custom Terrain Samples
 
-The system uses a callback for terrain height queries, making it flexible for different terrain implementations:
+The system uses a callback to sample terrain data, making it flexible for different terrain implementations:
 
 ```cpp
 // For custom terrain
-foliage.SetHeightQueryCallback([](float x, float z, float& height, Vector3& normal) {
+foliage.SetTerrainSampleCallback([](float x, float z, FoliagePlacementSample& out) {
     // Query your terrain system
-    height = myCustomTerrain.GetHeight(x, z);
-    normal = myCustomTerrain.GetNormal(x, z);
+    out.height = myCustomTerrain.GetHeight(x, z);
+    out.normal = myCustomTerrain.GetNormal(x, z);
+    out.valid = true;
     return true;
 });
 
 // For entity-based placement (future feature)
-foliage.SetHeightQueryCallback([](float x, float z, float& height, Vector3& normal) {
+foliage.SetTerrainSampleCallback([](float x, float z, FoliagePlacementSample& out) {
     // Ray cast against entities
     Ray ray(Vector3(x, 1000.0f, z), Vector3::NegativeUnitY);
-    if (RaycastEntities(ray, height, normal))
+    if (RaycastEntities(ray, out.height, out.normal))
     {
+        out.valid = true;
         return true;
     }
     return false;
 });
 ```
+
+### Data-Driven Terrain Foliage
+
+In the game client and world editor, foliage layers are not created by hand. Instead each terrain
+material (`.hmat`) carries `MaterialFoliageEntry` definitions (mesh + per-layer scatter settings),
+authored in the material editor's "Terrain Foliage" panel. As terrain pages stream in, the client
+and editor read each tile's base material and register a `FoliageLayer` per entry, bound to a
+terrain layer index (0-3). A `FoliageLayer` whose `terrainLayerIndex >= 0` is only scattered where
+that layer's coverage meets `minCoverage`, and density tapers with coverage. See
+`WorldState::RegisterPageFoliage`.
 
 ### Multiple Layers
 
@@ -230,7 +249,7 @@ const std::vector<FoliageLayerPtr>& GetLayers() const;
 
 // Configuration
 void SetSettings(const FoliageSettings& settings);
-void SetHeightQueryCallback(HeightQueryCallback callback);
+void SetTerrainSampleCallback(TerrainSampleCallback callback);
 void SetBounds(const AABB& bounds);
 void SetVisible(bool visible);
 

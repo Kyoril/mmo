@@ -41,6 +41,10 @@
 #include "debug_path_visualizer.h"
 #include "scene_graph/foliage.h"
 
+#include <map>
+#include <tuple>
+#include <vector>
+
 namespace mmo
 {
 	class ConsoleVar;
@@ -79,6 +83,7 @@ namespace mmo
 	class Discord;
 	class InventoryClient;
 	class CooldownManager;
+	class Material;
 
 	/// This class represents the initial game state where the player is asked to enter
 	/// his credentials in order to authenticate.
@@ -229,6 +234,16 @@ namespace mmo
 		void SetupWorldScene();
 
 		void SetupFoliage();
+
+		/// @brief Registers procedural foliage layers from the tile materials of a loaded terrain page.
+		/// @param pageX The terrain page X index.
+		/// @param pageY The terrain page Y index.
+		void RegisterPageFoliage(uint32 pageX, uint32 pageY);
+
+		/// @brief Ref-decrements (and removes when unused) the foliage layers a terrain page contributed.
+		/// @param pageX The terrain page X index.
+		/// @param pageY The terrain page Y index.
+		void UnregisterPageFoliage(uint32 pageX, uint32 pageY);
 
 		void SetupPacketHandler();
 
@@ -526,6 +541,25 @@ namespace mmo
 
 		/// Foliage system for rendering grass and other vegetation
 		std::unique_ptr<Foliage> m_foliage;
+
+		/// Key identifying a distinct procedural foliage layer derived from terrain material data:
+		/// the terrain base material, the bound layer index and the mesh asset.
+		using FoliageLayerKey = std::tuple<const Material*, uint8, String>;
+
+		/// A runtime foliage layer registered from terrain material data, ref-counted by the number
+		/// of loaded terrain pages whose tiles reference it.
+		struct RegisteredFoliageLayer
+		{
+			FoliageLayerPtr layer;
+			uint32 refCount = 0;
+		};
+
+		/// All currently registered material-driven foliage layers, keyed by FoliageLayerKey.
+		std::map<FoliageLayerKey, RegisteredFoliageLayer> m_foliageRegistry;
+
+		/// Per terrain page (index = x + y * 64), the set of foliage layer keys it contributed,
+		/// so they can be ref-decremented when the page unloads.
+		std::map<uint16, std::vector<FoliageLayerKey>> m_pageFoliageKeys;
 
 		TalentClient &m_talentClient;
 

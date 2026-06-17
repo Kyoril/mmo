@@ -460,10 +460,11 @@ namespace mmo
 
 		g_foliage = std::make_unique<Foliage>(*g_scene, GraphicsDevice::Get());
 
-		g_foliage->SetHeightQueryCallback([](float x, float z, float& height, Vector3& normal)
+		g_foliage->SetTerrainSampleCallback([](float x, float z, FoliagePlacementSample& out)
 			{
-				height = 0.0f;
-				normal = Vector3::UnitY;
+				out.height = 0.0f;
+				out.normal = Vector3::UnitY;
+				out.valid = true;
 				return true;
 			});
 

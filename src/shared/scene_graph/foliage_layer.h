@@ -51,6 +51,17 @@ namespace mmo
 
 		/// @brief Seed for random number generation. 0 means use time-based seed.
 		uint32 randomSeed = 0;
+
+		/// @brief Terrain layer index (0-3) this foliage is bound to. -1 means no layer gating
+		///        (placed wherever the terrain sample is valid).
+		int32 terrainLayerIndex = -1;
+
+		/// @brief Minimum coverage of the bound terrain layer required for placement (0-1).
+		float minCoverage = 0.0f;
+
+		/// @brief Optional terrain base material this layer is bound to. When set, foliage is only
+		///        placed on tiles using this material. nullptr means any material.
+		const Material* terrainMaterial = nullptr;
 	};
 
 	/// @brief Represents a single type of foliage (mesh + material + settings).

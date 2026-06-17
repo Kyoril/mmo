@@ -53,6 +53,7 @@
 #include "terrain/page.h"
 #include "terrain/constants.h"
 #include "terrain/terrain.h"
+#include "terrain/tile.h"
 #include "systems/guild_client.h"
 #include "systems/friend_client.h"
 #include "systems/talent_client.h"
@@ -391,6 +392,8 @@ namespace mmo
 		m_worldPingVisualizer.reset();
 		m_debugPathVisualizer.reset();
 		m_foliage.reset();
+		m_foliageRegistry.clear();
+		m_pageFoliageKeys.clear();
 
 		auto stopAudio = [this](SoundIndex &sound, ChannelIndex &channel)
 		{
@@ -998,8 +1001,9 @@ namespace mmo
 	{
 		m_foliage = std::make_unique<Foliage>(*m_scene, GraphicsDevice::Get());
 
-		// Set up height query callback that checks terrain height, normal, and holes
-		m_foliage->SetHeightQueryCallback([this](float x, float z, float& height, Vector3& normal) -> bool
+		// Set up the terrain sample callback. Placement rules (slope, height, coverage, material)
+		// are now data-driven per terrain material; this only resolves raw terrain data at a point.
+		m_foliage->SetTerrainSampleCallback([this](float x, float z, FoliagePlacementSample& out) -> bool
 		{
 			// Check if world instance and terrain are available
 			if (!m_worldInstance || !m_worldInstance->HasTerrain())
@@ -1019,25 +1023,20 @@ namespace mmo
 				return false;
 			}
 
-			// Get height and normal from terrain
-			height = terrain->GetSmoothHeightAt(x, z);
-			normal = terrain->GetSmoothNormalAt(x, z);
+			out.height = terrain->GetSmoothHeightAt(x, z);
+			out.normal = terrain->GetSmoothNormalAt(x, z);
 
-			// Check slope - if normal.y is too low, slope is too steep
-			// cos(25°) ≈ 0.90f, so normal.y must be >= 0.90f for walkable terrain
-			constexpr float maxSlopeCosine = 0.90f; // 25 degrees
-			if (normal.y < maxSlopeCosine)
+			if (const MaterialPtr material = terrain->GetBaseMaterialAt(x, z))
 			{
-				return false;
+				out.baseMaterial = material->GetBaseMaterial().get();
 			}
 
-			// Only render foliage where terrain layer 0 has > 30% influence
-			constexpr float minLayer0Influence = 0.3f;
-			if (terrain->GetLayerValueAt(x, z, 0) < minLayer0Influence)
+			for (uint8 layer = 0; layer < 4; ++layer)
 			{
-				return false;
+				out.coverage[layer] = terrain->GetLayerValueAt(x, z, layer);
 			}
 
+			out.valid = true;
 			return true;
 		});
 
@@ -1058,30 +1057,169 @@ namespace mmo
 			Vector3(halfTerrainSize, 1000.0f, halfTerrainSize)
 		));
 
-		auto addFoliageLayer = [this](const char *name, const char *meshPath, float density, float minScale, float maxScale)
+		// Foliage layers are no longer hardcoded; they are registered dynamically from the foliage
+		// definitions carried by the terrain materials of each streamed-in terrain page. See
+		// RegisterPageFoliage / UnregisterPageFoliage.
+	}
+
+	void WorldState::RegisterPageFoliage(const uint32 pageX, const uint32 pageY)
+	{
+		if (!m_foliage || !m_worldInstance || !m_worldInstance->HasTerrain())
 		{
-			MeshPtr mesh = MeshManager::Get().Load(meshPath);
-			if (!mesh)
+			return;
+		}
+
+		terrain::Terrain* terrain = m_worldInstance->GetTerrain();
+		if (!terrain)
+		{
+			return;
+		}
+
+		terrain::Page* page = terrain->GetPage(pageX, pageY);
+		if (!page || !page->IsLoaded())
+		{
+			return;
+		}
+
+		const uint16 pageIndex = static_cast<uint16>(pageX + pageY * 64);
+
+		// A page may be reported available more than once; rebuild its contribution from scratch.
+		UnregisterPageFoliage(pageX, pageY);
+
+		std::vector<FoliageLayerKey> contributed;
+		bool addedAnyLayer = false;
+
+		for (uint32 tileY = 0; tileY < terrain::constants::TilesPerPage; ++tileY)
+		{
+			for (uint32 tileX = 0; tileX < terrain::constants::TilesPerPage; ++tileX)
 			{
-				return;
+				terrain::Tile* tile = page->GetTile(tileX, tileY);
+				if (!tile)
+				{
+					continue;
+				}
+
+				const MaterialPtr baseMaterial = tile->GetBaseMaterial();
+				if (!baseMaterial)
+				{
+					continue;
+				}
+
+				Material* material = baseMaterial->GetBaseMaterial().get();
+				if (!material || material->GetFoliageEntries().empty())
+				{
+					continue;
+				}
+
+				for (const MaterialFoliageEntry& entry : material->GetFoliageEntries())
+				{
+					const FoliageLayerKey key{ material, entry.layerIndex, entry.meshPath };
+
+					// Only count each distinct key once per page.
+					if (std::find(contributed.begin(), contributed.end(), key) != contributed.end())
+					{
+						continue;
+					}
+					contributed.push_back(key);
+
+					auto it = m_foliageRegistry.find(key);
+					if (it != m_foliageRegistry.end())
+					{
+						// Layer already exists (referenced by another loaded page); just ref-count it.
+						++it->second.refCount;
+						continue;
+					}
+
+					MeshPtr mesh = MeshManager::Get().Load(entry.meshPath);
+					if (!mesh)
+					{
+						WLOG("Foliage mesh '" << entry.meshPath << "' could not be loaded for material " << material->GetName());
+						// Still record the key (with no layer) so ref-counting stays balanced.
+						m_foliageRegistry.emplace(key, RegisteredFoliageLayer{ nullptr, 1 });
+						continue;
+					}
+
+					const String layerName = String(material->GetName()) + "#" +
+						std::to_string(static_cast<int>(entry.layerIndex)) + "#" + entry.meshPath;
+
+					auto layer = std::make_shared<FoliageLayer>(layerName, mesh);
+					FoliageLayerSettings& s = layer->GetSettings();
+					s.density = entry.density;
+					s.minScale = entry.minScale;
+					s.maxScale = entry.maxScale;
+					s.maxSlopeAngle = entry.maxSlopeAngle;
+					s.minHeight = entry.minHeight;
+					s.maxHeight = entry.maxHeight;
+					s.fadeStartDistance = entry.fadeStartDistance;
+					s.fadeEndDistance = entry.fadeEndDistance;
+					s.randomYawRotation = entry.randomYaw;
+					s.alignToNormal = entry.alignToNormal;
+					s.castShadows = entry.castShadows;
+					s.terrainLayerIndex = static_cast<int32>(entry.layerIndex);
+					s.minCoverage = entry.minCoverage;
+					s.terrainMaterial = material;
+
+					m_foliage->AddLayer(layer);
+					m_foliageRegistry.emplace(key, RegisteredFoliageLayer{ layer, 1 });
+					addedAnyLayer = true;
+				}
+			}
+		}
+
+		if (!contributed.empty())
+		{
+			m_pageFoliageKeys[pageIndex] = std::move(contributed);
+		}
+
+		if (addedAnyLayer)
+		{
+			// Make sure new layers get chunks created near the camera right away.
+			m_foliage->InvalidateActiveChunks();
+		}
+	}
+
+	void WorldState::UnregisterPageFoliage(const uint32 pageX, const uint32 pageY)
+	{
+		const uint16 pageIndex = static_cast<uint16>(pageX + pageY * 64);
+
+		auto pageIt = m_pageFoliageKeys.find(pageIndex);
+		if (pageIt == m_pageFoliageKeys.end())
+		{
+			return;
+		}
+
+		bool removedAnyLayer = false;
+
+		for (const FoliageLayerKey& key : pageIt->second)
+		{
+			auto it = m_foliageRegistry.find(key);
+			if (it == m_foliageRegistry.end())
+			{
+				continue;
 			}
 
-			auto layer = std::make_shared<FoliageLayer>(name, mesh);
-			FoliageLayerSettings &s = layer->GetSettings();
-			s.density = density;
-			s.randomYawRotation = true;
-			s.minScale = minScale;
-			s.maxScale = maxScale;
-			s.maxSlopeAngle = 25.0f;
-			s.fadeStartDistance = 40.0f;
-			s.fadeEndDistance = 60.0f;
-			s.castShadows = false;
-			m_foliage->AddLayer(layer);
-		};
+			if (it->second.refCount > 0)
+			{
+				--it->second.refCount;
+			}
 
-		addFoliageLayer("Grass",    "Models/FalwynPlains/Plants/Grass_01.hmsh",       4.0f,  0.7f, 1.3f);
-		addFoliageLayer("Grass02",  "Models/FalwynPlains/Plants/Grass_02.hmsh",       0.7f,  1.0f, 1.0f);
-		addFoliageLayer("Flowers",  "Models/FalwynPlains/Plants/Shrub_Flower_01.hmsh",0.32f, 1.0f, 1.0f);
+			if (it->second.refCount == 0)
+			{
+				if (it->second.layer && m_foliage)
+				{
+					m_foliage->RemoveLayer(it->second.layer->GetName());
+					removedAnyLayer = true;
+				}
+				m_foliageRegistry.erase(it);
+			}
+		}
+
+		m_pageFoliageKeys.erase(pageIt);
+
+		if (removedAnyLayer && m_foliage)
+		{
+			m_foliage->InvalidateActiveChunks();
+		}
 	}
 
 	void WorldState::SetupPacketHandler()
@@ -4251,9 +4389,13 @@ namespace {
 			{
 				page->Prepare();
 				EnsurePageIsLoaded(pos);
+
+				// Register data-driven foliage from this page's tile materials now that it is loaded.
+				RegisterPageFoliage(pos.x(), pos.y());
 			}
 			else
 			{
+				UnregisterPageFoliage(pos.x(), pos.y());
 				page->Unload();
 			}
 		}
@@ -4284,6 +4426,11 @@ namespace {
 		{
 			m_dispatcher.post([pos, this]()
 							  { EnsurePageIsLoaded(pos); });
+		}
+		else
+		{
+			// Tile materials are now available; (re)register this page's data-driven foliage.
+			RegisterPageFoliage(pos.x(), pos.y());
 		}
 	}
 
