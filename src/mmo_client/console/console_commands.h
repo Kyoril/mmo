@@ -37,7 +37,9 @@ namespace mmo
 		void ConsoleCommand_List(const std::string& cmd, const std::string& args);
 
 #ifdef MMO_WITH_DEV_COMMANDS
-		// TODO: Add console commands in here which are only available to developers
+		// TODO: Remove this command entirely — it exists solely to test crash-report pipeline.
+		/// @brief Intentionally crashes the client by dereferencing a null pointer.
+		void ConsoleCommand_Crash(const std::string& cmd, const std::string& args);
 #endif
 	}
 }
