@@ -24,7 +24,11 @@ namespace mmo
 			Latest = -1,
 
 			Version_0_1 = 0x0100,
-		};	
+
+			/// Version 0.2: adds an optional MFOL chunk carrying an instance-level terrain foliage
+			/// override (replaces the parent material's foliage when present).
+			Version_0_2 = 0x0200,
+		};
 	}
 
 	typedef material_instance_version::Type MaterialInstanceVersion;
@@ -59,6 +63,9 @@ namespace mmo
 		bool ReadMaterialVectorParamChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 		bool ReadMaterialTextureParamChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		/// @brief Reads the v0.2 instance foliage override chunk (MFOL).
+		bool ReadMaterialFoliageChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 	private:
 		MaterialInstance& m_materialInstance;

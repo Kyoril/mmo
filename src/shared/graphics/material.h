@@ -171,6 +171,11 @@ namespace mmo
 		virtual bool IsWireframe() const = 0;
 
 		virtual void SetWireframe(bool value) = 0;
+
+		/// @brief Gets the effective data-driven terrain foliage entries for this material.
+		/// @details For a base material this is its own list; for an instance it is the instance's
+		///          override list if set, otherwise the parent's effective list.
+		[[nodiscard]] virtual const std::vector<MaterialFoliageEntry>& GetFoliageEntries() const = 0;
 	};
 
 	/// @brief This class represents a material which describes how geometry in the scene
@@ -324,7 +329,7 @@ namespace mmo
 
 	public:
 		/// @brief Gets the data-driven terrain foliage entries carried by this material.
-		[[nodiscard]] const std::vector<MaterialFoliageEntry>& GetFoliageEntries() const { return m_foliage; }
+		[[nodiscard]] const std::vector<MaterialFoliageEntry>& GetFoliageEntries() const override { return m_foliage; }
 
 		/// @brief Gets mutable access to the terrain foliage entries (used by the editor).
 		[[nodiscard]] std::vector<MaterialFoliageEntry>& GetFoliageEntries() { return m_foliage; }

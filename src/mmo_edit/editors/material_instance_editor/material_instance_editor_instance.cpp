@@ -8,6 +8,7 @@
 #include "imgui_node_editor_internal.inl"
 #include "imgui/misc/cpp/imgui_stdlib.h"
 
+#include <algorithm>
 #include <cinttypes>
 
 #include "material_instance_editor.h"
@@ -271,6 +272,11 @@ namespace mmo
 
 			// Texture Parameters Section
 			DrawTextureParametersSection();
+
+			ImGui::Spacing();
+
+			// Terrain Foliage Override Section
+			DrawFoliageSection();
 		}
 		else
 		{
@@ -535,6 +541,106 @@ namespace mmo
 
 			ImGui::Unindent();
 		}
+	}
+
+	void MaterialInstanceEditorInstance::DrawFoliageSection()
+	{
+		static const std::set<String> s_meshExtensions = { ".hmsh" };
+		static const char* s_layerNames[] = { "Layer 1", "Layer 2", "Layer 3", "Layer 4" };
+
+		if (!ImGui::CollapsingHeader("Terrain Foliage"))
+		{
+			return;
+		}
+
+		ImGui::Indent();
+
+		bool overriding = m_material->IsOverridingFoliage();
+		if (ImGui::Checkbox("Override parent foliage", &overriding))
+		{
+			if (overriding && m_material->GetOwnFoliageEntries().empty())
+			{
+				// Seed the override with the parent's current foliage so authoring starts from the
+				// inherited set instead of an empty list.
+				if (m_material->GetParent())
+				{
+					m_material->SetOwnFoliageEntries(m_material->GetParent()->GetFoliageEntries());
+				}
+			}
+			m_material->SetOverrideFoliage(overriding);
+		}
+
+		if (!overriding)
+		{
+			const size_t inherited = m_material->GetParent() ? m_material->GetParent()->GetFoliageEntries().size() : 0;
+			ImGui::TextDisabled("Inheriting %zu foliage entr%s from the parent material.", inherited, inherited == 1 ? "y" : "ies");
+			ImGui::Unindent();
+			return;
+		}
+
+		ImGui::TextWrapped("This instance defines its own foliage, replacing the parent's. Lets you reuse "
+			"the parent's complex shader while scattering different vegetation.");
+
+		auto& entries = m_material->GetOwnFoliageEntries();
+
+		int removeIndex = -1;
+		for (int i = 0; i < static_cast<int>(entries.size()); ++i)
+		{
+			MaterialFoliageEntry& entry = entries[i];
+
+			ImGui::PushID(i);
+
+			const String headerLabel = "Foliage " + std::to_string(i + 1) +
+				(entry.meshPath.empty() ? "" : (" - " + entry.meshPath));
+			if (ImGui::TreeNodeEx("foliageEntry", ImGuiTreeNodeFlags_DefaultOpen, "%s", headerLabel.c_str()))
+			{
+				String meshPath = entry.meshPath;
+				if (AssetPickerWidget::Draw("##mesh", meshPath, s_meshExtensions, &m_editor.GetPreviewManager(), nullptr, 64.0f))
+				{
+					entry.meshPath = meshPath;
+				}
+
+				int layerIndex = static_cast<int>(entry.layerIndex);
+				if (ImGui::Combo("Terrain Layer", &layerIndex, s_layerNames, IM_ARRAYSIZE(s_layerNames)))
+				{
+					entry.layerIndex = static_cast<uint8>(std::clamp(layerIndex, 0, 3));
+				}
+
+				ImGui::DragFloat("Density", &entry.density, 0.05f, 0.0f, 100.0f);
+				ImGui::SliderFloat("Min Coverage", &entry.minCoverage, 0.0f, 1.0f);
+				ImGui::DragFloatRange2("Scale", &entry.minScale, &entry.maxScale, 0.01f, 0.01f, 10.0f);
+				ImGui::SliderFloat("Max Slope", &entry.maxSlopeAngle, 0.0f, 90.0f);
+				ImGui::DragFloatRange2("Height Range", &entry.minHeight, &entry.maxHeight, 1.0f, -10000.0f, 10000.0f);
+				ImGui::DragFloatRange2("Fade Distance", &entry.fadeStartDistance, &entry.fadeEndDistance, 1.0f, 0.0f, 10000.0f);
+				ImGui::Checkbox("Random Yaw", &entry.randomYaw);
+				ImGui::SameLine();
+				ImGui::Checkbox("Align To Normal", &entry.alignToNormal);
+				ImGui::SameLine();
+				ImGui::Checkbox("Cast Shadows", &entry.castShadows);
+
+				if (ImGui::Button("Remove"))
+				{
+					removeIndex = i;
+				}
+
+				ImGui::TreePop();
+			}
+
+			ImGui::PopID();
+			ImGui::Separator();
+		}
+
+		if (removeIndex >= 0)
+		{
+			entries.erase(entries.begin() + removeIndex);
+		}
+
+		if (ImGui::Button("Add Foliage Entry"))
+		{
+			entries.emplace_back();
+		}
+
+		ImGui::Unindent();
 	}
 
 	void MaterialInstanceEditorInstance::ChangeParentMaterial(const String& newParentPath)

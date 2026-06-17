@@ -23,6 +23,7 @@
 #include "stream_sink.h"
 #include "assets/asset_registry.h"
 #include "base/chunk_writer.h"
+#include "editor_windows/asset_picker_widget.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/material_serializer.h"
 #include "scene_graph/material_manager.h"
@@ -975,6 +976,7 @@ namespace mmo
 
 	void MaterialEditorInstance::DrawFoliageSection()
 	{
+		static const std::set<String> s_meshExtensions = { ".hmsh" };
 		if (!ImGui::CollapsingHeader("Terrain Foliage"))
 		{
 			return;
@@ -999,17 +1001,12 @@ namespace mmo
 			if (ImGui::TreeNodeEx("foliageEntry", ImGuiTreeNodeFlags_DefaultOpen, "%s", headerLabel.c_str()))
 			{
 				// Mesh field (accepts a .hmsh drag-drop payload).
-				ImGui::InputText("Mesh", &entry.meshPath, ImGuiInputTextFlags_ReadOnly);
-				if (ImGui::BeginDragDropTarget())
+				String meshPath = entry.meshPath;
+				if (AssetPickerWidget::Draw("##mesh", meshPath, s_meshExtensions, &m_editor.GetPreviewManager(), nullptr, 64.0f))
 				{
-					if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
-					{
-						entry.meshPath = *static_cast<String*>(payload->Data);
-					}
-					ImGui::EndDragDropTarget();
+					entry.meshPath = meshPath;
 				}
-				ImGui::SameLine();
-				ImGui::TextDisabled("(drop .hmsh)");
+
 
 				int layerIndex = static_cast<int>(entry.layerIndex);
 				if (ImGui::Combo("Terrain Layer", &layerIndex, s_layerNames, IM_ARRAYSIZE(s_layerNames)))

@@ -83,7 +83,7 @@ namespace mmo
 	class Discord;
 	class InventoryClient;
 	class CooldownManager;
-	class Material;
+	class MaterialInterface;
 
 	/// This class represents the initial game state where the player is asked to enter
 	/// his credentials in order to authenticate.
@@ -543,8 +543,8 @@ namespace mmo
 		std::unique_ptr<Foliage> m_foliage;
 
 		/// Key identifying a distinct procedural foliage layer derived from terrain material data:
-		/// the terrain base material, the bound layer index and the mesh asset.
-		using FoliageLayerKey = std::tuple<const Material*, uint8, String>;
+		/// the painted terrain material (base or instance), the bound layer index and the mesh asset.
+		using FoliageLayerKey = std::tuple<const MaterialInterface*, uint8, String>;
 
 		/// A runtime foliage layer registered from terrain material data, ref-counted by the number
 		/// of loaded terrain pages whose tiles reference it.

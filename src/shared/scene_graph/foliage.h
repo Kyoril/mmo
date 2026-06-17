@@ -21,7 +21,7 @@ namespace mmo
 	class Camera;
 	class GraphicsDevice;
 
-	class Material;
+	class MaterialInterface;
 
 	/// @brief Result of sampling the terrain at a candidate foliage position.
 	struct FoliagePlacementSample
@@ -35,8 +35,9 @@ namespace mmo
 		/// @brief Terrain surface normal at the position.
 		Vector3 normal = Vector3::UnitY;
 
-		/// @brief Base material of the terrain tile at the position (may be null).
-		const Material* baseMaterial = nullptr;
+		/// @brief The terrain tile's assigned material at the position (the painted .hmat or .hmi,
+		///        not the per-tile wrapper). May be null. Used to gate foliage per material/instance.
+		const MaterialInterface* baseMaterial = nullptr;
 
 		/// @brief Coverage of each of the four terrain layers at the position (0-1).
 		float coverage[4] = { 0.0f, 0.0f, 0.0f, 0.0f };

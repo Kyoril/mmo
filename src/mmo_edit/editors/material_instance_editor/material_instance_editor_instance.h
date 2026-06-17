@@ -72,6 +72,9 @@ namespace mmo
 		/// @brief Draws the material properties section.
 		void DrawMaterialPropertiesSection();
 
+		/// @brief Draws the terrain foliage override section.
+		void DrawFoliageSection();
+
 		/// @brief Changes the parent material and refreshes parameters.
 		/// @param newParentPath The path to the new parent material.
 		void ChangeParentMaterial(const String& newParentPath);

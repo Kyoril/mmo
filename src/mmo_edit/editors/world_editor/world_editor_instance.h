@@ -483,8 +483,9 @@ namespace mmo
 		/// @brief Procedural grass/vegetation system (the dense foliage seen in the client). Hidden by default.
 		std::unique_ptr<Foliage> m_grass;
 
-		/// Key identifying a distinct procedural foliage layer derived from terrain material data.
-		using FoliageLayerKey = std::tuple<const Material*, uint8, String>;
+		/// Key identifying a distinct procedural foliage layer derived from terrain material data
+		/// (the painted .hmat or .hmi, the bound layer index and the mesh asset).
+		using FoliageLayerKey = std::tuple<const MaterialInterface*, uint8, String>;
 
 		/// A runtime foliage layer registered from terrain material data, ref-counted by loaded pages.
 		struct RegisteredFoliageLayer

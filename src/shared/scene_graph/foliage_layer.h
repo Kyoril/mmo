@@ -59,9 +59,11 @@ namespace mmo
 		/// @brief Minimum coverage of the bound terrain layer required for placement (0-1).
 		float minCoverage = 0.0f;
 
-		/// @brief Optional terrain base material this layer is bound to. When set, foliage is only
-		///        placed on tiles using this material. nullptr means any material.
-		const Material* terrainMaterial = nullptr;
+		/// @brief Optional terrain material this layer is bound to (the painted .hmat or .hmi).
+		///        When set, foliage is only placed on tiles using this exact material. nullptr means
+		///        any material. Distinguishes instances so two instances of the same base material
+		///        can carry different foliage.
+		const MaterialInterface* terrainMaterial = nullptr;
 	};
 
 	/// @brief Represents a single type of foliage (mesh + material + settings).

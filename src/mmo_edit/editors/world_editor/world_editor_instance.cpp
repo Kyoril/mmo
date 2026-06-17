@@ -2229,7 +2229,8 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 			if (const MaterialPtr material = m_terrain->GetBaseMaterialAt(x, z))
 			{
-				out.baseMaterial = material->GetBaseMaterial().get();
+				// Use the painted material directly (not the root) so per-instance foliage gating works.
+				out.baseMaterial = material.get();
 			}
 
 			for (uint8 layer = 0; layer < 4; ++layer)
@@ -2293,14 +2294,17 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 					continue;
 				}
 
-				const MaterialPtr baseMaterial = tile->GetBaseMaterial();
-				if (!baseMaterial)
+				// The tile's assigned material (the painted .hmat or .hmi). Reading foliage from this
+				// interface respects per-instance overrides; gating on its pointer distinguishes
+				// instances that share the same base material.
+				const MaterialPtr paintedMaterial = tile->GetBaseMaterial();
+				if (!paintedMaterial)
 				{
 					continue;
 				}
 
-				Material* material = baseMaterial->GetBaseMaterial().get();
-				if (!material || material->GetFoliageEntries().empty())
+				MaterialInterface* material = paintedMaterial.get();
+				if (material->GetFoliageEntries().empty())
 				{
 					continue;
 				}
