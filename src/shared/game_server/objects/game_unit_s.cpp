@@ -333,6 +333,10 @@ namespace mmo
 
 	void GameUnitS::OnDespawn()
 	{
+		// Capture persistable auras before clearing them: the despawn fires the despawned signal
+		// (via GameObjectS::OnDespawn) which is what triggers a character save, by which point the
+		// live aura list would otherwise already be empty.
+		m_despawnAuraSnapshot = GetPersistentAuras();
 		m_auras.clear();
 
 		GameObjectS::OnDespawn();
@@ -1108,6 +1112,127 @@ namespace mmo
 
 		// Write actual visible aura count
 		writer.Sink().Overwrite(countPos, reinterpret_cast<const char *>(&visibleAuraCount), sizeof(uint32));
+	}
+
+	std::vector<PersistentAuraData> GameUnitS::GetPersistentAuras() const
+	{
+		std::vector<PersistentAuraData> result;
+
+		for (const auto& aura : m_auras)
+		{
+			if (!aura)
+			{
+				continue;
+			}
+
+			const proto::SpellEntry& spell = aura->GetSpell();
+
+			// Only non-passive auras that are not granted by equipment are persisted.
+			if (spell.attributes(0) & spell_attributes::Passive)
+			{
+				continue;
+			}
+
+			if (aura->GetItemGuid() != 0)
+			{
+				continue;
+			}
+
+			// Skip auras that are about to expire (an expiring aura with no remaining time would
+			// otherwise be misinterpreted as a non-expiring aura on restore).
+			const GameTime remaining = aura->GetRemainingTime();
+			if (aura->DoesExpire() && remaining == 0)
+			{
+				continue;
+			}
+
+			PersistentAuraData data;
+			data.spellId = spell.id();
+			data.casterId = aura->GetCasterId();
+			data.remainingDuration = remaining;
+			data.stackCount = aura->GetStackCount();
+
+			for (const auto& effect : aura->GetAuraEffects())
+			{
+				PersistentAuraEffect effectData;
+				effectData.effectIndex = effect->GetEffect().index();
+				effectData.basePoints = effect->GetBasePoints();
+				data.effects.push_back(effectData);
+			}
+
+			result.push_back(std::move(data));
+		}
+
+		// If the live aura list has already been cleared (e.g. during despawn) but we captured a
+		// snapshot just before, fall back to that so a save can still persist the auras.
+		if (result.empty() && !m_despawnAuraSnapshot.empty())
+		{
+			return m_despawnAuraSnapshot;
+		}
+
+		return result;
+	}
+
+	std::vector<PersistentCooldownData> GameUnitS::GetPersistentCooldowns() const
+	{
+		std::vector<PersistentCooldownData> result;
+
+		const GameTime now = GetAsyncTimeMs();
+		for (const auto& [spellId, end] : m_spellCooldowns)
+		{
+			if (end <= now)
+			{
+				continue;
+			}
+
+			PersistentCooldownData data;
+			data.spellId = spellId;
+			data.remainingMs = end - now;
+			result.push_back(data);
+		}
+
+		return result;
+	}
+
+	void GameUnitS::RestorePersistentAuras(const std::vector<PersistentAuraData>& auras)
+	{
+		for (const auto& data : auras)
+		{
+			const proto::SpellEntry* spell = GetProject().spells.getById(data.spellId);
+			if (!spell)
+			{
+				WLOG("Unable to restore persisted aura: unknown spell " << data.spellId);
+				continue;
+			}
+
+			auto container = std::make_shared<AuraContainer>(*this, data.casterId, *spell, data.remainingDuration, 0);
+
+			for (const auto& effectData : data.effects)
+			{
+				if (effectData.effectIndex >= static_cast<uint32>(spell->effects_size()))
+				{
+					continue;
+				}
+
+				container->AddAuraEffect(spell->effects(effectData.effectIndex), effectData.basePoints);
+			}
+
+			container->SetStackCount(data.stackCount);
+			ApplyAura(std::move(container));
+		}
+	}
+
+	void GameUnitS::RestorePersistentCooldowns(const std::vector<PersistentCooldownData>& cooldowns)
+	{
+		for (const auto& data : cooldowns)
+		{
+			if (data.remainingMs == 0)
+			{
+				continue;
+			}
+
+			SetCooldown(data.spellId, data.remainingMs);
+		}
 	}
 
 	void GameUnitS::NotifyManaUsed()

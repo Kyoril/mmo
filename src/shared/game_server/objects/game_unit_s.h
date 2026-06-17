@@ -7,6 +7,7 @@
 #include <unordered_map>
 
 #include "game_server/spells/aura_container.h"
+#include "game_server/persistent_aura.h"
 #include "game/auto_attack.h"
 #include "game_object_s.h"
 #include "game_server/i_player_validator_context.h"
@@ -821,6 +822,25 @@ namespace mmo
 		/// @param writer The writer to write the packet to.
 		void BuildAuraPacket(io::Writer &writer) const;
 
+		/// Collects all auras that should be persisted across world instances. Only non-passive
+		/// auras that were not granted by equipment and have not yet expired are returned.
+		/// @returns A snapshot of the persistable auras.
+		std::vector<PersistentAuraData> GetPersistentAuras() const;
+
+		/// Collects all active spell cooldowns as remaining-millisecond snapshots. Cooldowns that
+		/// have already elapsed are skipped.
+		/// @returns A snapshot of the active spell cooldowns.
+		std::vector<PersistentCooldownData> GetPersistentCooldowns() const;
+
+		/// Re-applies a set of persisted auras (as produced by GetPersistentAuras). Auras whose
+		/// spell can no longer be resolved are skipped.
+		/// @param auras The persisted auras to restore.
+		void RestorePersistentAuras(const std::vector<PersistentAuraData>& auras);
+
+		/// Restores spell cooldowns from remaining-millisecond snapshots.
+		/// @param cooldowns The persisted cooldowns to restore.
+		void RestorePersistentCooldowns(const std::vector<PersistentCooldownData>& cooldowns);
+
 		/// Notifies that mana has been used.
 		void NotifyManaUsed();
 
@@ -1437,6 +1457,10 @@ public:
 		mutable Vector3 m_lastPosition;
 
 		stable_list<std::shared_ptr<AuraContainer>> m_auras;
+
+		// Snapshot of persistable auras captured in OnDespawn just before m_auras is cleared, so a
+		// save triggered by the despawn (logout/teleport) can still serialize them.
+		std::vector<PersistentAuraData> m_despawnAuraSnapshot;
 		// Maps base spell id → the previous target that had a SingleTargetPerCaster aura from our caster.
 		// Key: casterGuid*100000 + baseSpellId would be complex; instead keyed by (casterGuid ^ spellBaseId).
 		// Actually keyed by spellId → weak_ptr<GameUnitS> of previous target for SingleTargetPerCaster eviction.

@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <ctime>
 
 #include "player.h"
 #include "player_manager.h"
@@ -757,6 +758,33 @@ namespace mmo
 			player.GetTalents(),
 			timePlayed
 			);
+
+		// Persist auras (remaining-duration based) exactly as received.
+		m_database.asyncRequest([characterGuid](bool result)
+			{
+				if (!result)
+				{
+					WLOG("Failed to persist auras for character " << log_hex_digit(characterGuid));
+				}
+			}, &IDatabase::UpdateCharacterAuras, characterGuid, player.GetDeserializedAuras());
+
+		// Persist cooldowns using realtime: convert each remaining-millisecond snapshot into an
+		// absolute wall-clock end timestamp (seconds) so offline time continues to elapse.
+		const GameTime nowSeconds = static_cast<GameTime>(std::time(nullptr));
+		std::vector<std::pair<uint32, GameTime>> cooldownEnds;
+		cooldownEnds.reserve(player.GetDeserializedCooldowns().size());
+		for (const auto& cooldown : player.GetDeserializedCooldowns())
+		{
+			cooldownEnds.emplace_back(cooldown.spellId, nowSeconds + (cooldown.remainingMs + 999) / 1000);
+		}
+
+		m_database.asyncRequest([characterGuid](bool result)
+			{
+				if (!result)
+				{
+					WLOG("Failed to persist cooldowns for character " << log_hex_digit(characterGuid));
+				}
+			}, &IDatabase::UpdateCharacterCooldowns, characterGuid, std::move(cooldownEnds));
 
 		return PacketParseResult::Pass;
 	}

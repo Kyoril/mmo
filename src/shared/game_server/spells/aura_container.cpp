@@ -193,6 +193,18 @@ namespace mmo
 		return m_duration > 0 && m_expiration <= GetAsyncTimeMs();
 	}
 
+	GameTime AuraContainer::GetRemainingTime() const
+	{
+		if (m_duration == 0)
+		{
+			// Aura does not expire.
+			return 0;
+		}
+
+		const GameTime now = GetAsyncTimeMs();
+		return m_expiration > now ? m_expiration - now : 0;
+	}
+
 	void AuraContainer::WriteAuraUpdate(io::Writer& writer) const
 	{
 		const uint32 now = GetAsyncTimeMs();

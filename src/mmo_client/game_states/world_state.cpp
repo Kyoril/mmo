@@ -1263,6 +1263,7 @@ namespace mmo
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellStart, *this, &WorldState::OnSpellStart);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellGo, *this, &WorldState::OnSpellGo);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellCooldown, *this, &WorldState::OnSpellCooldown);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellFailure, *this, &WorldState::OnSpellFailure);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ChannelStart, *this, &WorldState::OnChannelStart);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ChannelUpdate, *this, &WorldState::OnChannelUpdate);
@@ -2576,6 +2577,32 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult WorldState::OnSpellCooldown(game::IncomingPacket& packet)
+	{
+		uint16 count = 0;
+		if (!(packet >> io::read<uint16>(count)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		for (uint16 i = 0; i < count; ++i)
+		{
+			uint32 spellId = 0;
+			uint32 remainingMs = 0;
+			if (!(packet >> io::read<uint32>(spellId) >> io::read<uint32>(remainingMs)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			if (remainingMs > 0)
+			{
+				m_cooldownManager.StartCooldown(spellId, remainingMs);
+			}
+		}
+
+		return PacketParseResult::Pass;
+	}
+
 	void WorldState::SpawnPendingProjectile(PendingProjectile* pending)
 	{
 		if (!pending || !m_projectileManager)
@@ -2951,6 +2978,20 @@ namespace mmo
 			}
 		}
 
+		if (amount > 0)
+		{
+			if (const auto player = ObjectMgr::GetActivePlayer())
+			{
+				FrameManager::Get().TriggerLuaEvent("DAMAGE_DONE",
+					ObjectMgr::GetActivePlayerGuid(),
+					player->GetName(),
+					targetGuid,
+					target ? target->GetName() : String(),
+					amount,
+					"SPELL");
+			}
+		}
+
 		return PacketParseResult::Pass;
 	}
 
@@ -2969,6 +3010,20 @@ namespace mmo
 		if (target)
 		{
 			AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color::White, (flags & damage_flags::Crit) != 0 ? 4.0f : 2.0f);
+		}
+
+		if (amount > 0)
+		{
+			if (const auto player = ObjectMgr::GetActivePlayer())
+			{
+				FrameManager::Get().TriggerLuaEvent("DAMAGE_DONE",
+					ObjectMgr::GetActivePlayerGuid(),
+					player->GetName(),
+					targetGuid,
+					target ? target->GetName() : String(),
+					amount,
+					"NON_SPELL");
+			}
 		}
 
 		// TODO: Separate packet for this!
@@ -3045,6 +3100,17 @@ namespace mmo
 
 				AddWorldTextFrame(attacked->GetPosition(), damageText, ObjectMgr::GetActivePlayerGuid() == attackedGuid ? Color(1.0f, 0.0f, 0.0f) : Color::White, (hitInfo & hit_info::CriticalHit) != 0 ? 4.0f : 2.0f);
 			}
+		}
+
+		if (totalDamage > 0 && ObjectMgr::GetActivePlayerGuid() == attackerGuid && attacker)
+		{
+			FrameManager::Get().TriggerLuaEvent("DAMAGE_DONE",
+				attackerGuid,
+				attacker->GetName(),
+				attackedGuid,
+				attacked ? attacked->GetName() : String(),
+				totalDamage,
+				"MELEE");
 		}
 
 		return PacketParseResult::Pass;
@@ -3326,6 +3392,20 @@ namespace mmo
 				{
 					AddWorldTextFrame(target->GetPosition(), std::to_string(amount), color, 2.0f);
 				}
+			}
+
+			if (auraType == aura_type::PeriodicDamage && amount > 0 && casterGuid == ObjectMgr::GetActivePlayerGuid())
+			{
+				const std::shared_ptr<GameUnitC> caster = ObjectMgr::Get<GameUnitC>(casterGuid);
+				const std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid);
+
+				FrameManager::Get().TriggerLuaEvent("DAMAGE_DONE",
+					casterGuid,
+					caster ? caster->GetName() : String(),
+					targetGuid,
+					target ? target->GetName() : String(),
+					amount,
+					"PERIODIC");
 			}
 		}
 

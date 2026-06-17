@@ -164,6 +164,13 @@ namespace mmo
 		/// Gets the current stack count of the aura (always >= 1).
 		uint32 GetStackCount() const { return m_stackCount; }
 
+		/// Overrides the current stack count (used when restoring a persisted aura). Clamped to >= 1.
+		void SetStackCount(uint32 stackCount) { m_stackCount = (stackCount < 1) ? 1 : stackCount; }
+
+		/// Gets the remaining duration of the aura in milliseconds. Returns 0 for auras that do
+		/// not expire as well as for auras whose duration has already elapsed.
+		GameTime GetRemainingTime() const;
+
 		/// Refreshes the aura's duration and stack count when re-applied (extend_duration=true).
 		/// Uses min(remaining + base_duration, effective_max_duration) for the new expiration.
 		/// Updates m_stackCount per the spell's stack_reset_policy.

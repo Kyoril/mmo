@@ -2228,6 +2228,22 @@ namespace mmo
 			w << io::write<uint8>(rank);
 		}
 
+		// Write persistable auras (non-passive, non-equipment) as remaining-duration snapshots.
+		const std::vector<PersistentAuraData> persistentAuras = object.GetPersistentAuras();
+		w << io::write<uint16>(static_cast<uint16>(persistentAuras.size()));
+		for (const auto& aura : persistentAuras)
+		{
+			w << aura;
+		}
+
+		// Write active spell cooldowns as remaining-millisecond snapshots.
+		const std::vector<PersistentCooldownData> persistentCooldowns = object.GetPersistentCooldowns();
+		w << io::write<uint16>(static_cast<uint16>(persistentCooldowns.size()));
+		for (const auto& cooldown : persistentCooldowns)
+		{
+			w << cooldown;
+		}
+
 		return w;
 	}
 
@@ -2265,6 +2281,31 @@ namespace mmo
 			r >> io::read<uint8>(rank);
 
 			object.m_talents[talentId] = rank;
+		}
+
+		// Read persisted auras into a transient snapshot (the realm server forwards/persists these
+		// rather than applying them to this reconstructed object).
+		uint16 auraCount = 0;
+		r >> io::read<uint16>(auraCount);
+		object.m_deserializedAuras.clear();
+		object.m_deserializedAuras.reserve(auraCount);
+		for (uint16 i = 0; i < auraCount; ++i)
+		{
+			PersistentAuraData aura;
+			r >> aura;
+			object.m_deserializedAuras.push_back(std::move(aura));
+		}
+
+		// Read persisted cooldowns into a transient snapshot.
+		uint16 cooldownCount = 0;
+		r >> io::read<uint16>(cooldownCount);
+		object.m_deserializedCooldowns.clear();
+		object.m_deserializedCooldowns.reserve(cooldownCount);
+		for (uint16 i = 0; i < cooldownCount; ++i)
+		{
+			PersistentCooldownData cooldown;
+			r >> cooldown;
+			object.m_deserializedCooldowns.push_back(cooldown);
 		}
 
 		for (uint32 i = 0; i < 5; ++i)

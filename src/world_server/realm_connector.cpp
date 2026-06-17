@@ -708,7 +708,9 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		auto inventoryRepo = std::make_shared<WorldServerInventoryRepository>(*this, characterData.characterId);
 		player->SetInventoryRepository(inventoryRepo);
 
-		// Enter the world using the character object
+		// Enter the world using the character object. Persisted auras/cooldowns are restored in
+		// Player::OnSpawned (triggered by AddGameObject) so they are part of the spawn packet and
+		// the client can be informed of active cooldowns.
 		instance->AddGameObject(*characterObject);
 
 		// For now just tell the realm server that we joined

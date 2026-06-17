@@ -259,6 +259,14 @@ namespace mmo
 		/// @return Reference to the talent map containing talent IDs and their ranks.
 		const std::unordered_map<uint32, uint32> &GetTalents() const { return m_talents; }
 
+		/// Gets the persistent auras read from a serialized character (only populated when this
+		/// object was reconstructed via operator>>, e.g. on the realm server).
+		const std::vector<PersistentAuraData>& GetDeserializedAuras() const { return m_deserializedAuras; }
+
+		/// Gets the persistent cooldowns read from a serialized character (only populated when this
+		/// object was reconstructed via operator>>, e.g. on the realm server).
+		const std::vector<PersistentCooldownData>& GetDeserializedCooldowns() const { return m_deserializedCooldowns; }
+
 	protected:
 		/// @brief Returns the auto-attack spell configured for this player's class, if any.
 		/// @return Pointer to the auto-attack spell entry, or nullptr if not configured.
@@ -385,6 +393,11 @@ namespace mmo
 		std::weak_ptr<GameObjectS> m_lootObject;
 		bool m_isGameMaster = false;
 		std::unordered_map<uint32, uint32> m_talents;
+
+		/// Persistent aura/cooldown snapshots populated by operator>> when reconstructing a
+		/// character (realm side). Live auras/cooldowns are accessed via GameUnitS instead.
+		std::vector<PersistentAuraData> m_deserializedAuras;
+		std::vector<PersistentCooldownData> m_deserializedCooldowns;
 
 	private:
 		friend io::Writer &operator<<(io::Writer &w, GamePlayerS const &object);

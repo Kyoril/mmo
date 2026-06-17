@@ -1005,6 +1005,11 @@ namespace mmo
 
 		m_worldInstance = &instance;
 
+		// Restore persisted auras and cooldowns before the spawn packet is built so the auras are
+		// included in the initial object creation packet sent below.
+		m_character->RestorePersistentAuras(m_characterData.auras);
+		m_character->RestorePersistentCooldowns(m_characterData.cooldowns);
+
 		// Ensure the inventory is initialized
 		std::vector<GameObjectS*> objects;
 		objects.push_back(m_character.get());
@@ -1044,6 +1049,25 @@ namespace mmo
 			}
 			packet.Finish();
 		}, false);
+
+		// Inform the client about any active spell cooldowns (restored above) so the action bar
+		// shows the remaining cooldown right after spawning.
+		const std::vector<PersistentCooldownData> activeCooldowns = m_character->GetPersistentCooldowns();
+		if (!activeCooldowns.empty())
+		{
+			SendPacket([&activeCooldowns](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::SpellCooldown);
+				packet << io::write<uint16>(static_cast<uint16>(activeCooldowns.size()));
+				for (const auto& cooldown : activeCooldowns)
+				{
+					packet
+						<< io::write<uint32>(cooldown.spellId)
+						<< io::write<uint32>(static_cast<uint32>(cooldown.remainingMs));
+				}
+				packet.Finish();
+			}, false);
+		}
 
 		// Cast passive spells after spawn, so that SpellMods are sent AFTER the spawn packet
 		SpellTargetMap target;

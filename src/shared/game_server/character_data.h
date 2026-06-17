@@ -12,6 +12,7 @@
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "game_server/inventory.h"
 #include "game_server/quest_status_data.h"
+#include "game_server/persistent_aura.h"
 
 namespace mmo
 {
@@ -91,6 +92,11 @@ namespace mmo
 		bool isGameMaster = false;
 
 		uint32 timePlayed = 0;
+
+		/// Persisted non-passive, non-equipment auras to restore on the next world instance.
+		std::vector<PersistentAuraData> auras;
+		/// Persisted spell cooldowns (as remaining milliseconds at transfer time).
+		std::vector<PersistentCooldownData> cooldowns;
 	};
 
 	inline io::Reader& operator>>(io::Reader& reader, CharacterData& data)
@@ -186,6 +192,44 @@ namespace mmo
 			data.repeatableQuestResets[questId] = resetTime;
 		}
 
+		uint16 numAuras;
+		if (!(reader >> io::read<uint16>(numAuras)))
+		{
+			return reader;
+		}
+
+		data.auras.clear();
+		data.auras.reserve(numAuras);
+		for (uint16 i = 0; i < numAuras; ++i)
+		{
+			PersistentAuraData aura;
+			if (!(reader >> aura))
+			{
+				return reader;
+			}
+
+			data.auras.push_back(std::move(aura));
+		}
+
+		uint16 numCooldowns;
+		if (!(reader >> io::read<uint16>(numCooldowns)))
+		{
+			return reader;
+		}
+
+		data.cooldowns.clear();
+		data.cooldowns.reserve(numCooldowns);
+		for (uint16 i = 0; i < numCooldowns; ++i)
+		{
+			PersistentCooldownData cooldown;
+			if (!(reader >> cooldown))
+			{
+				return reader;
+			}
+
+			data.cooldowns.push_back(cooldown);
+		}
+
 		return reader;
 	}
 	
@@ -243,6 +287,18 @@ namespace mmo
 		for (const auto& [questId, resetTime] : data.repeatableQuestResets)
 		{
 			writer << io::write<uint32>(questId) << io::write<uint64>(resetTime);
+		}
+
+		writer << io::write<uint16>(data.auras.size());
+		for (const auto& aura : data.auras)
+		{
+			writer << aura;
+		}
+
+		writer << io::write<uint16>(data.cooldowns.size());
+		for (const auto& cooldown : data.cooldowns)
+		{
+			writer << cooldown;
 		}
 
 		return writer;

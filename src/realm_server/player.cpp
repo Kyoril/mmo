@@ -2369,6 +2369,10 @@ namespace mmo
 			m_characterData->talentRanks[talentId] = static_cast<uint8>(rank);
 		}
 		m_characterData->isGameMaster = (m_gmLevel > 0);
+
+		// Carry persisted auras and cooldowns so a subsequent world-node transfer restores them.
+		m_characterData->auras = character.GetDeserializedAuras();
+		m_characterData->cooldowns = character.GetDeserializedCooldowns();
 	}
 
 	InstanceId Player::ResolveDungeonInstanceId(const MapId mapId) const

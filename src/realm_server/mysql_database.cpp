@@ -15,6 +15,8 @@
 #include "proto_data/project.h"
 #include "virtual_dir/file_system_reader.h"
 #include <format>
+#include <ctime>
+#include <sstream>
 
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "game_server/character_data.h"
@@ -744,6 +746,127 @@ namespace mmo
 					throw mysql::Exception("Could not load character talents");
 				}
 
+				// Load persisted auras (header rows; stored as remaining duration so offline time
+				// does not elapse). The `slot` maps each header to its child effect rows below.
+				std::unordered_map<uint32, size_t> auraSlotToIndex;
+				mysql::Select auraSelect(m_connection,
+					"SELECT `slot`, `spell`, `caster`, `remaining_duration`, `stacks`, `realtime` "
+					"FROM `character_auras` WHERE `character_id`=" + std::to_string(characterId));
+				if (auraSelect.Success())
+				{
+					mysql::Row auraRow(auraSelect);
+					while (auraRow)
+					{
+						uint32 slot = 0;
+						auraRow.GetField(0, slot);
+
+						PersistentAuraData aura;
+						auraRow.GetField(1, aura.spellId);
+						auraRow.GetField(2, aura.casterId);
+						auraRow.GetField(3, aura.remainingDuration);
+
+						uint32 stacks = 1;
+						auraRow.GetField(4, stacks);
+						aura.stackCount = (stacks < 1) ? 1 : stacks;
+
+						uint8 realtime = 0;
+						auraRow.GetField<uint8, uint16>(5, realtime);
+						aura.realtime = (realtime != 0);
+
+						auraSlotToIndex[slot] = result.auras.size();
+						result.auras.push_back(std::move(aura));
+						auraRow = mysql::Row::Next(auraSelect);
+					}
+				}
+				else
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not load character auras");
+				}
+
+				// Load aura effect rows and attach them to their parent aura by slot.
+				mysql::Select auraEffectSelect(m_connection,
+					"SELECT `slot`, `effect_index`, `base_points` "
+					"FROM `character_aura_effects` WHERE `character_id`=" + std::to_string(characterId));
+				if (auraEffectSelect.Success())
+				{
+					mysql::Row effectRow(auraEffectSelect);
+					while (effectRow)
+					{
+						uint32 slot = 0;
+						PersistentAuraEffect effect;
+						effectRow.GetField(0, slot);
+						effectRow.GetField(1, effect.effectIndex);
+						effectRow.GetField(2, effect.basePoints);
+
+						const auto it = auraSlotToIndex.find(slot);
+						if (it != auraSlotToIndex.end())
+						{
+							result.auras[it->second].effects.push_back(effect);
+						}
+
+						effectRow = mysql::Row::Next(auraEffectSelect);
+					}
+				}
+				else
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not load character aura effects");
+				}
+
+				// Load persisted spell cooldowns (realtime). Expired cooldowns are dropped and pruned.
+				const GameTime nowSeconds = static_cast<GameTime>(::time(nullptr));
+				std::vector<uint32> expiredCooldownSpells;
+				mysql::Select cooldownSelect(m_connection,
+					"SELECT `spell`, `end_time` FROM `character_spell_cooldowns` WHERE `character_id`=" + std::to_string(characterId));
+				if (cooldownSelect.Success())
+				{
+					mysql::Row cooldownRow(cooldownSelect);
+					while (cooldownRow)
+					{
+						uint32 spellId = 0;
+						GameTime endTime = 0;
+						cooldownRow.GetField(0, spellId);
+						cooldownRow.GetField(1, endTime);
+
+						if (endTime > nowSeconds)
+						{
+							PersistentCooldownData cooldown;
+							cooldown.spellId = spellId;
+							cooldown.remainingMs = (endTime - nowSeconds) * 1000;
+							result.cooldowns.push_back(cooldown);
+						}
+						else
+						{
+							expiredCooldownSpells.push_back(spellId);
+						}
+
+						cooldownRow = mysql::Row::Next(cooldownSelect);
+					}
+				}
+				else
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not load character cooldowns");
+				}
+
+				// Prune expired cooldown rows so they don't accumulate over time.
+				if (!expiredCooldownSpells.empty())
+				{
+					std::ostringstream deleteStream;
+					deleteStream << "DELETE FROM `character_spell_cooldowns` WHERE `character_id`=" << characterId << " AND `spell` IN (";
+					for (size_t i = 0; i < expiredCooldownSpells.size(); ++i)
+					{
+						if (i > 0)
+						{
+							deleteStream << ",";
+						}
+						deleteStream << expiredCooldownSpells[i];
+					}
+					deleteStream << ");";
+					m_connection.Execute(deleteStream.str());
+				}
+
 				// Load guild membership
 				mysql::Select guildSelect(m_connection, std::format("SELECT `guild_id` FROM `guild_members` WHERE `guid`='{0}' LIMIT 1", characterId));
 				if (guildSelect.Success())
@@ -917,6 +1040,117 @@ namespace mmo
 				// There was an error
 				PrintDatabaseError();
 				throw mysql::Exception("Could not update character talent data!");
+			}
+		}
+
+		transaction.Commit();
+	}
+
+	void MySQLDatabase::UpdateCharacterAuras(uint64 characterId, const std::vector<PersistentAuraData>& auras)
+	{
+		mysql::Transaction transaction(m_connection);
+
+		// Replace the full aura set for this character. Deleting the header rows cascades to
+		// `character_aura_effects`, so the child rows are removed automatically.
+		if (!m_connection.Execute(std::format(
+			"DELETE FROM `character_auras` WHERE `character_id`={0};", characterId)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Could not delete character aura data!");
+		}
+
+		if (!auras.empty())
+		{
+			std::ostringstream headerStrm;
+			headerStrm << "INSERT INTO `character_auras` (`character_id`, `slot`, `spell`, `caster`, `remaining_duration`, `stacks`, `realtime`) VALUES ";
+
+			std::ostringstream effectStrm;
+			effectStrm << "INSERT INTO `character_aura_effects` (`character_id`, `slot`, `effect_index`, `base_points`) VALUES ";
+
+			uint32 slot = 0;
+			bool isFirstAura = true;
+			bool hasEffects = false;
+			for (const auto& aura : auras)
+			{
+				if (!isFirstAura) headerStrm << ",";
+				else isFirstAura = false;
+
+				headerStrm << "(" << characterId
+					<< "," << slot
+					<< "," << aura.spellId
+					<< "," << aura.casterId
+					<< "," << aura.remainingDuration
+					<< "," << aura.stackCount
+					<< "," << (aura.realtime ? 1 : 0)
+					<< ")";
+
+				for (const auto& effect : aura.effects)
+				{
+					// Avoid a leading comma before the very first effect row across all auras.
+					if (hasEffects) effectStrm << ",";
+
+					effectStrm << "(" << characterId
+						<< "," << slot
+						<< "," << effect.effectIndex
+						<< "," << effect.basePoints
+						<< ")";
+
+					hasEffects = true;
+				}
+
+				++slot;
+			}
+			headerStrm << ";";
+			effectStrm << ";";
+
+			// Header rows must be inserted before the child effect rows (foreign key dependency).
+			if (!m_connection.Execute(headerStrm.str()))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception("Could not update character aura data!");
+			}
+
+			if (hasEffects && !m_connection.Execute(effectStrm.str()))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception("Could not update character aura effect data!");
+			}
+		}
+
+		transaction.Commit();
+	}
+
+	void MySQLDatabase::UpdateCharacterCooldowns(uint64 characterId, const std::vector<std::pair<uint32, GameTime>>& cooldownEnds)
+	{
+		mysql::Transaction transaction(m_connection);
+
+		// Replace the full cooldown set for this character.
+		if (!m_connection.Execute(std::format(
+			"DELETE FROM `character_spell_cooldowns` WHERE `character_id`={0};", characterId)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Could not delete character cooldown data!");
+		}
+
+		if (!cooldownEnds.empty())
+		{
+			std::ostringstream strm;
+			strm << "INSERT INTO `character_spell_cooldowns` (`character_id`, `spell`, `end_time`) VALUES ";
+
+			bool isFirstItem = true;
+			for (const auto& [spellId, endTime] : cooldownEnds)
+			{
+				if (!isFirstItem) strm << ",";
+				else isFirstItem = false;
+
+				strm << "(" << characterId << "," << spellId << "," << endTime << ")";
+			}
+			strm << ";";
+
+			if (!m_connection.Execute(strm.str()))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception("Could not update character cooldown data!");
 			}
 		}
 
