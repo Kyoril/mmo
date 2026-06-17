@@ -1267,6 +1267,105 @@ namespace mmo
 		Pin* m_OutputPins[6] = { &m_rgb, &m_r, &m_g, &m_b, &m_a, &m_argb };
 	};
 
+	/// @brief A node which captures an input value under a named, colored "variable" so the same value
+	///	       can be referenced elsewhere in the graph through a NamedVariableGetNode, without a visible
+	///		   link. This is purely an authoring convenience to keep large graphs readable.
+	class NamedVariableSetNode final : public GraphNode
+	{
+	public:
+		MAT_NODE(NamedVariableSetNode, "Set Variable")
+
+		NamedVariableSetNode(MaterialGraph& material)
+			: GraphNode(material)
+			, m_variableName("Variable")
+			, m_color(0.16f, 0.63f, 0.93f, 1.0f)
+		{}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+
+		[[nodiscard]] uint32 GetColor() override
+		{
+			return IM_COL32(
+				static_cast<int>(m_color.GetRed() * 255.0f),
+				static_cast<int>(m_color.GetGreen() * 255.0f),
+				static_cast<int>(m_color.GetBlue() * 255.0f),
+				static_cast<int>(m_color.GetAlpha() * 255.0f));
+		}
+
+		[[nodiscard]] std::string_view GetName() const override
+		{
+			return m_variableName.empty() ? std::string_view("Set Variable") : std::string_view(m_variableName);
+		}
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+		/// @brief Gets the name this variable is published under.
+		[[nodiscard]] const String& GetVariableName() const { return m_variableName; }
+
+		/// @brief Gets the authoring color used for this variable's set and get nodes.
+		[[nodiscard]] const Color& GetVariableColor() const { return m_color; }
+
+	private:
+		String m_variableName;
+		Color m_color;
+
+		StringProperty m_nameProperty{ "Name", m_variableName };
+		ColorProperty m_colorProperty{ "Color", m_color };
+
+		PropertyBase* m_properties[2] = { &m_nameProperty, &m_colorProperty };
+
+		MaterialPin m_input = { this, "Value" };
+		Pin* m_inputPins[1] = { &m_input };
+	};
+
+	/// @brief A node which references a NamedVariableSetNode by name and outputs the value captured there,
+	///	       without a visible link. Inherits the referenced set node's authoring color so related nodes
+	///		   are visually grouped.
+	class NamedVariableGetNode final : public GraphNode
+	{
+	public:
+		MAT_NODE(NamedVariableGetNode, "Get Variable")
+
+		NamedVariableGetNode(MaterialGraph& material)
+			: GraphNode(material)
+		{}
+
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override;
+
+		[[nodiscard]] std::string_view GetName() const override
+		{
+			return m_variableName.empty() ? std::string_view("Get Variable") : std::string_view(m_variableName);
+		}
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+		/// @brief Gets the name of the variable this node reads from.
+		[[nodiscard]] const String& GetVariableName() const { return m_variableName; }
+
+		/// @brief Selects which variable this node reads from. Routed through the property so that
+		///	       value-changed notifications still fire.
+		void SetVariableName(const String& name) { m_nameProperty.SetValue(name); }
+
+	private:
+		/// @brief Finds the set node in the owning graph whose variable name matches this node, or nullptr.
+		[[nodiscard]] NamedVariableSetNode* FindDeclaration() const;
+
+	private:
+		String m_variableName;
+		StringProperty m_nameProperty{ "Variable", m_variableName };
+
+		PropertyBase* m_properties[1] = { &m_nameProperty };
+
+		MaterialPin m_output = { this };
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
 	/// @brief A node which adds an expression addition expression.
 	class AddNode final : public GraphNode
 	{

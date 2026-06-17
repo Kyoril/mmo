@@ -937,6 +937,75 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
+	ExpressionIndex NamedVariableSetNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			if (!m_input.IsLinked())
+			{
+				ELOG("Set Variable node '" << m_variableName << "' has no input value connected!");
+				return IndexNone;
+			}
+
+			m_compiledExpressionId = m_input.GetLink()->GetNode()->Compile(compiler, m_input.GetLink());
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	NamedVariableSetNode* NamedVariableGetNode::FindDeclaration() const
+	{
+		if (m_variableName.empty() || !m_material)
+		{
+			return nullptr;
+		}
+
+		const uint32 setTypeId = NamedVariableSetNode::GetStaticTypeInfo().id;
+		for (GraphNode* node : m_material->GetNodes())
+		{
+			if (node->GetTypeInfo().id != setTypeId)
+			{
+				continue;
+			}
+
+			auto* setNode = static_cast<NamedVariableSetNode*>(node);
+			if (setNode->GetVariableName() == m_variableName)
+			{
+				return setNode;
+			}
+		}
+
+		return nullptr;
+	}
+
+	uint32 NamedVariableGetNode::GetColor()
+	{
+		if (NamedVariableSetNode* declaration = FindDeclaration())
+		{
+			return declaration->GetColor();
+		}
+
+		// Unresolved reference: neutral grey so the broken link is visually obvious.
+		return IM_COL32(128, 128, 128, 255);
+	}
+
+	ExpressionIndex NamedVariableGetNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			NamedVariableSetNode* declaration = FindDeclaration();
+			if (!declaration)
+			{
+				ELOG("Get Variable node references unknown variable '" << m_variableName << "'!");
+				return IndexNone;
+			}
+
+			m_compiledExpressionId = declaration->Compile(compiler, nullptr);
+		}
+
+		return m_compiledExpressionId;
+	}
+
 	ExpressionIndex AddNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)

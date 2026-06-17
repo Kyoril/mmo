@@ -26,6 +26,7 @@ namespace mmo
 	struct NodeTypeInfo;
 	class MaterialGraph;
 	class GraphNode;
+	class NamedVariableGetNode;
 	class Pin;
 	class MaterialCompiler;
 
@@ -90,6 +91,7 @@ namespace mmo
 		void DrawPreviewViewport();
 		void DrawPropertyTable();
 		void DrawNodeProperties(GraphNode* node);
+		void DrawVariableSelector(NamedVariableGetNode* node);
 		void DrawPropertyEditor(PropertyBase* prop);
 		
 		// Layout management

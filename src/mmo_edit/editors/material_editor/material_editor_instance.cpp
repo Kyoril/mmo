@@ -16,6 +16,7 @@
 #include "node_editor/node_layout.h"
 #include "node_editor/node_pin_icons.h"
 
+#include <algorithm>
 #include <cinttypes>
 
 #include "material_editor.h"
@@ -968,6 +969,14 @@ namespace mmo
 
 	void MaterialEditorInstance::DrawNodeProperties(GraphNode* node)
 	{
+		// The "Get Variable" node selects its source from the set of variables currently declared in the
+		// graph, so render its single property as a dropdown of declared names instead of a free text field.
+		if (node->GetTypeInfo().id == NamedVariableGetNode::GetStaticTypeInfo().id)
+		{
+			DrawVariableSelector(static_cast<NamedVariableGetNode*>(node));
+			return;
+		}
+
 		for (auto* prop : node->GetProperties())
 		{
 			ImGui::TableNextRow();
@@ -980,6 +989,55 @@ namespace mmo
 			ImGui::SetNextItemWidth(-FLT_MIN);
 
 			DrawPropertyEditor(prop);
+		}
+	}
+
+	void MaterialEditorInstance::DrawVariableSelector(NamedVariableGetNode* node)
+	{
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::AlignTextToFramePadding();
+		const ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
+		ImGui::TreeNodeEx("Field", flags, "Variable");
+
+		ImGui::TableSetColumnIndex(1);
+		ImGui::SetNextItemWidth(-FLT_MIN);
+
+		// Collect the names of all variables currently declared via Set Variable nodes.
+		std::vector<String> names;
+		const uint32 setTypeId = NamedVariableSetNode::GetStaticTypeInfo().id;
+		for (GraphNode* graphNode : m_graph->GetNodes())
+		{
+			if (graphNode->GetTypeInfo().id != setTypeId)
+			{
+				continue;
+			}
+
+			const String& name = static_cast<NamedVariableSetNode*>(graphNode)->GetVariableName();
+			if (!name.empty() && std::find(names.begin(), names.end(), name) == names.end())
+			{
+				names.push_back(name);
+			}
+		}
+
+		const String& current = node->GetVariableName();
+		const char* preview = current.empty() ? "(None)" : current.c_str();
+		if (ImGui::BeginCombo("##variable_selector", preview))
+		{
+			for (const String& name : names)
+			{
+				const bool selected = (name == current);
+				if (ImGui::Selectable(name.c_str(), selected))
+				{
+					node->SetVariableName(name);
+				}
+				if (selected)
+				{
+					ImGui::SetItemDefaultFocus();
+				}
+			}
+
+			ImGui::EndCombo();
 		}
 	}
 
