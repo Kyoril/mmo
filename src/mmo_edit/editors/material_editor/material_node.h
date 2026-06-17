@@ -542,6 +542,13 @@ namespace mmo
 
 		[[nodiscard]] virtual std::span<PropertyBase*> GetProperties() { return {}; }
 
+		/// @brief Gets the properties that should be (de)serialized for this node. By default this is
+		///	       identical to GetProperties(). Nodes whose *visible* property set changes at runtime
+		///		   (for example depending on a flag) must override this to return a stable set, otherwise
+		///		   the serialized property count would change with the node's state and values would be
+		///		   read back into the wrong properties on load.
+		[[nodiscard]] virtual std::span<PropertyBase*> GetSerializedProperties() { return GetProperties(); }
+
 		virtual void NotifyCompilationStarted() { m_compiledExpressionId = IndexNone; }
 
 	protected:
@@ -569,6 +576,11 @@ namespace mmo
 		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 
 		std::span<PropertyBase*> GetProperties() override;
+
+		// GetProperties() returns a reduced set when this is a user interface material, so the
+		// serialized set must stay stable (and complete) regardless of the m_userInterface flag,
+		// otherwise the property count - and therefore the loaded values - would depend on state.
+		std::span<PropertyBase*> GetSerializedProperties() override { return m_surfaceProperties; }
 
 		const MaterialPin& GetBaseColorPin() const { return m_baseColor; }
 		const MaterialPin& GetMetallicPin() const { return m_metallic; }

@@ -381,13 +381,14 @@ namespace mmo
 			pin->Serialize(writer);
 		}
 		
+		const auto serializedProperties = GetSerializedProperties();
 		writer
-			<< io::write<uint8>(GetProperties().size());
-		for(const auto& prop : GetProperties())
+			<< io::write<uint8>(serializedProperties.size());
+		for(const auto& prop : serializedProperties)
 		{
 			prop->Serialize(writer);
 		}
-		
+
 		return writer;
 	}
 
@@ -453,14 +454,15 @@ namespace mmo
 			return reader;
 		}
 		
-		for (uint32 i = 0; i < GetProperties().size() && i < numProperties; ++i)
+		const auto serializedProperties = GetSerializedProperties();
+		for (uint32 i = 0; i < serializedProperties.size() && i < numProperties; ++i)
 		{
-			if (!(GetProperties()[i]->Deserialize(reader)))
+			if (!(serializedProperties[i]->Deserialize(reader)))
 			{
 				return reader;
 			}
 		}
-		
+
 		return reader;
 	}
 
