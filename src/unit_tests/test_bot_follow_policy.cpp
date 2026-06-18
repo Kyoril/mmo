@@ -123,6 +123,27 @@ namespace mmo
 		CHECK(decision.shouldRepath);
 	}
 
+	TEST_CASE("follow policy stops when the current path is exhausted", "[bot-follow][policy]")
+	{
+		BotFollowPolicy policy;
+		BotFollowPolicyInput input = MakeInput();
+		input.anchor.position = Vector3(5.0f, 0.0f, 6.0f);
+		input.self.position = Vector3(5.0f, 0.0f, 2.0f);
+		input.path.points = {
+			Vector3(4.8f, 0.0f, 1.8f),
+			Vector3(5.0f, 0.0f, 2.0f),
+		};
+		input.state.isMoving = true;
+		input.state.lastRepathAnchorPosition = input.anchor.position;
+		input.state.lastRepathTime = 900;
+
+		const BotFollowDecision decision = policy.Evaluate(input);
+		REQUIRE(decision.type == BotFollowDecisionType::Hold);
+		CHECK(decision.reason == "path_exhausted");
+		CHECK(decision.shouldStop);
+		CHECK_FALSE(decision.shouldRepath);
+	}
+
 	TEST_CASE("follow policy holds conservatively when anchor data is missing", "[bot-follow][policy]")
 	{
 		BotFollowPolicy policy;

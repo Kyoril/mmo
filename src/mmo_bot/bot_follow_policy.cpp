@@ -93,9 +93,8 @@ namespace mmo
 		const std::size_t waypointIndex = FindSteeringWaypointIndex(input.self, input.path);
 		if (waypointIndex == kNoWaypoint)
 		{
-			decision.type = BotFollowDecisionType::Repath;
+			decision.type = BotFollowDecisionType::Hold;
 			decision.reason = "path_exhausted";
-			decision.shouldRepath = true;
 			return decision;
 		}
 

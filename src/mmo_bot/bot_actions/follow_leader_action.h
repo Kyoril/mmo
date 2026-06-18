@@ -87,6 +87,7 @@ namespace mmo
 			m_path.points.clear();
 			m_state = {};
 			m_lastHeartbeat = 0;
+			m_lastSimulationTime = 0;
 			m_lastDecisionKey.clear();
 		}
 
@@ -231,6 +232,9 @@ namespace mmo
 			m_state.lastRepathTime = input.now;
 			m_state.hasLastDistanceToAnchor = true;
 			m_state.lastDistanceToAnchor = decision.distanceToAnchor;
+			m_state.hasLastProgressPosition = false;
+			m_state.lastProgressTime = 0;
+			m_lastSimulationTime = input.now;
 		}
 
 		void AdvanceAlongPath(BotContext& context, const FollowLeaderControllerInput& input, const BotFollowDecision& decision)
@@ -261,13 +265,12 @@ namespace mmo
 				context.SendMovementUpdate(game::client_realm_packet::MoveStartForward, movement);
 				m_state.isMoving = true;
 				m_lastHeartbeat = input.now;
+				m_lastSimulationTime = input.now;
+				m_state.hasLastProgressPosition = true;
+				m_state.lastProgressPosition = movement.position;
+				m_state.lastProgressTime = input.now;
 				m_state.hasLastDistanceToAnchor = true;
 				m_state.lastDistanceToAnchor = decision.distanceToAnchor;
-				return;
-			}
-
-			if (input.now - m_lastHeartbeat < kHeartbeatIntervalMs)
-			{
 				return;
 			}
 
@@ -275,12 +278,17 @@ namespace mmo
 			Vector3 delta = decision.steeringTarget - currentPosition;
 			delta.y = 0.0f;
 			const float distance = delta.GetLength();
-			const float elapsedSeconds = static_cast<float>(input.now - m_lastHeartbeat) / 1000.0f;
-			if (distance > 0.001f && movement.IsChangingPosition())
+			const GameTime elapsedMs = input.now >= m_lastSimulationTime ? input.now - m_lastSimulationTime : 0;
+			const float elapsedSeconds = static_cast<float>(elapsedMs) / 1000.0f;
+			if (elapsedMs > 0 && distance > 0.001f && movement.IsChangingPosition())
 			{
 				const Vector3 direction = delta / distance;
 				const float stepDistance = std::min(m_moveSpeed * elapsedSeconds, distance);
 				movement.position = currentPosition + (direction * stepDistance);
+				movement.facing = ComputeFacingTo(currentPosition, decision.steeringTarget, movement.facing);
+				movement.timestamp = input.now;
+				context.UpdateMovementInfo(movement);
+				m_lastSimulationTime = input.now;
 				if (stepDistance > 0.0f)
 				{
 					m_state.hasLastProgressPosition = true;
@@ -289,9 +297,12 @@ namespace mmo
 				}
 			}
 
-			movement.timestamp = input.now;
-			context.SendMovementUpdate(game::client_realm_packet::MoveHeartBeat, movement);
-			m_lastHeartbeat = input.now;
+			if (input.now >= m_lastHeartbeat && input.now - m_lastHeartbeat >= kHeartbeatIntervalMs)
+			{
+				movement.timestamp = input.now;
+				context.SendMovementUpdate(game::client_realm_packet::MoveHeartBeat, movement);
+				m_lastHeartbeat = input.now;
+			}
 			m_state.isMoving = true;
 			m_state.hasLastDistanceToAnchor = true;
 			m_state.lastDistanceToAnchor = decision.distanceToAnchor;
@@ -309,6 +320,7 @@ namespace mmo
 			movement.timestamp = context.GetServerTime();
 			context.SendMovementUpdate(game::client_realm_packet::MoveStop, movement);
 			m_state.isMoving = false;
+			m_lastSimulationTime = 0;
 		}
 
 		[[nodiscard]] std::string BuildDecisionDetails(BotContext& context, const FollowLeaderControllerInput& input, const BotFollowDecision& decision) const
@@ -363,6 +375,7 @@ namespace mmo
 		BotFollowState m_state;
 		BotFollowPath m_path;
 		GameTime m_lastHeartbeat { 0 };
+		GameTime m_lastSimulationTime { 0 };
 		float m_moveSpeed { 7.0f };
 		std::string m_lastDecisionKey;
 	};

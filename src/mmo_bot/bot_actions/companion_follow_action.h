@@ -156,6 +156,7 @@ namespace mmo
 		BotFollowState m_state;
 		BotFollowPath m_path;
 		GameTime m_lastHeartbeat { 0 };
+		GameTime m_lastSimulationTime { 0 };
 		float m_moveSpeed { 7.0f };
 		std::string m_lastModeLogKey;
 		std::string m_lastAnchorLogKey;
