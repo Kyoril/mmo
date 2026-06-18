@@ -14,6 +14,7 @@ target_link_libraries(mmo_bot
     assets
     proto_data
     nav_mesh
+    zlibstatic
     ${OPENSSL_LIBRARIES}
 )
 

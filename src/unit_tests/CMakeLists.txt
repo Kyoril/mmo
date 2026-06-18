@@ -33,7 +33,8 @@ target_link_libraries(unit_tests
 	game_server
 	assets
 	proto_data
-	nav_mesh)
+	nav_mesh
+	zlibstatic)
 
 target_sources(unit_tests PRIVATE
 	../mmo_bot/bot_startup_selection.cpp

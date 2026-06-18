@@ -15,6 +15,8 @@
 #include "game/auto_attack.h"
 #include "game/spell_target_map.h"
 
+#include "binary_io/reader.h"
+
 #include "asio/io_service.hpp"
 
 namespace mmo
@@ -27,6 +29,17 @@ namespace mmo
 		uint8 group { 0 };
 		bool assistant { false };
 		uint32 status { 0 };
+		uint16 health { 0 };
+		uint16 maxHealth { 0 };
+		uint8 powerType { 0 };
+		uint16 power { 0 };
+		uint16 maxPower { 0 };
+		uint16 level { 0 };
+		Vector3 position { Vector3::Zero };
+		bool hasHealth { false };
+		bool hasPower { false };
+		bool hasLevel { false };
+		bool hasPosition { false };
 	};
 
 	/// Minimal realm connector variant that tolerates unknown packets and exposes the hooks needed for the bot.
@@ -187,6 +200,9 @@ namespace mmo
 		/// Gets a party member by index.
 		const BotPartyMember* GetPartyMember(uint32 index) const;
 
+		/// Gets a party member by GUID.
+		const BotPartyMember* GetPartyMemberByGuid(uint64 guid) const;
+
 		/// Gets all party member GUIDs.
 		std::vector<uint64> GetPartyMemberGuids() const;
 
@@ -280,7 +296,13 @@ namespace mmo
 
 		PacketParseResult OnGroupSetLeader(game::IncomingPacket& packet);
 
+		PacketParseResult OnPartyMemberStats(game::IncomingPacket& packet);
+
 		PacketParseResult OnUpdateObject(game::IncomingPacket& packet);
+
+		PacketParseResult OnCompressedUpdateObject(game::IncomingPacket& packet);
+
+		PacketParseResult HandleObjectUpdate(io::Reader& reader);
 
 		PacketParseResult OnDestroyObjects(game::IncomingPacket& packet);
 

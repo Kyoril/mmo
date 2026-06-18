@@ -4,8 +4,10 @@
 
 #include "../bot_movement_math.h"
 #include "../bot_nav_service.h"
+#include "../bot_realm_connector.h"
 #include "../bot_unit.h"
 
+#include "game/group.h"
 #include "game_protocol/game_protocol.h"
 #include "log/default_log_levels.h"
 
@@ -189,6 +191,40 @@ namespace
 			if (member.label.empty())
 			{
 				member.label = unit->GetName();
+			}
+		}
+		else if (member.isSelf && context.HasAuthoritativeMovementInfo())
+		{
+			const MovementInfo& movement = context.GetMovementInfo();
+			member.position = movement.position;
+			member.hasPosition = true;
+			member.facing = movement.facing;
+			member.hasFacing = true;
+			member.isAlive = true;
+			member.isAware = true;
+			member.isInCombat = false;
+		}
+		else if (const auto realmConnector = context.GetRealmConnector())
+		{
+			if (const BotPartyMember* partyMember = realmConnector->GetPartyMemberByGuid(guid))
+			{
+				const bool isOnline = (partyMember->status & group_member_status::Online) != 0;
+				const bool isDead = (partyMember->status & group_member_status::Dead) != 0;
+				member.position = partyMember->position;
+				member.hasPosition = partyMember->hasPosition;
+				member.isAlive = !isDead && (!partyMember->hasHealth || partyMember->health > 0);
+				member.isAware = isOnline && partyMember->hasPosition;
+				member.isInCombat = false;
+				if (member.label.empty())
+				{
+					member.label = partyMember->name;
+				}
+			}
+			else
+			{
+				member.isAlive = true;
+				member.isAware = false;
+				member.isInCombat = false;
 			}
 		}
 		else

@@ -4,18 +4,23 @@
 
 #include "version.h"
 #include "game/field_map.h"
+#include "game/group.h"
 #include "game/movement_info.h"
 #include "game/object_type_id.h"
 
 #include "base/clock.h"
 #include "base/constants.h"
 #include "base/random.h"
+#include "binary_io/memory_source.h"
 #include "binary_io/string_sink.h"
 #include "log/default_log_levels.h"
 
 #include <algorithm>
 #include <iomanip>
 #include <mutex>
+#include <vector>
+
+#include <zlib.h>
 
 namespace mmo
 {
@@ -391,10 +396,11 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::GroupList, *this, &BotRealmConnector::OnGroupList);
 		RegisterPacketHandler(game::realm_client_packet::GroupDestroyed, *this, &BotRealmConnector::OnGroupDestroyed);
 		RegisterPacketHandler(game::realm_client_packet::GroupSetLeader, *this, &BotRealmConnector::OnGroupSetLeader);
+		RegisterPacketHandler(game::realm_client_packet::PartyMemberStats, *this, &BotRealmConnector::OnPartyMemberStats);
 
 		// Register handlers for common packets that can be safely ignored by the bot
 		RegisterPacketHandler(game::realm_client_packet::UpdateObject, *this, &BotRealmConnector::OnUpdateObject);
-		RegisterPacketHandler(game::realm_client_packet::CompressedUpdateObject, *this, &BotRealmConnector::OnIgnoredPacket);  // TODO: Implement compression
+		RegisterPacketHandler(game::realm_client_packet::CompressedUpdateObject, *this, &BotRealmConnector::OnCompressedUpdateObject);
 		RegisterPacketHandler(game::realm_client_packet::DestroyObjects, *this, &BotRealmConnector::OnDestroyObjects);
 		RegisterPacketHandler(game::realm_client_packet::NameQueryResult, *this, &BotRealmConnector::OnNameQueryResult);
 
@@ -723,6 +729,21 @@ namespace mmo
 		return &m_partyMembers[index];
 	}
 
+	const BotPartyMember* BotRealmConnector::GetPartyMemberByGuid(const uint64 guid) const
+	{
+		if (!m_inParty || guid == 0)
+		{
+			return nullptr;
+		}
+
+		const auto it = std::find_if(m_partyMembers.begin(), m_partyMembers.end(), [guid](const BotPartyMember& member)
+		{
+			return member.guid == guid;
+		});
+
+		return it != m_partyMembers.end() ? &*it : nullptr;
+	}
+
 	std::vector<uint64> BotRealmConnector::GetPartyMemberGuids() const
 	{
 		std::vector<uint64> guids;
@@ -806,6 +827,8 @@ namespace mmo
 
 		const bool wasInParty = m_inParty;
 
+		const std::vector<BotPartyMember> previousMembers = m_partyMembers;
+
 		// Read party members
 		m_partyMembers.clear();
 		m_partyMembers.resize(memberCount);
@@ -824,6 +847,25 @@ namespace mmo
 				return PacketParseResult::Disconnect;
 			}
 			m_partyMembers[i].name = memberName;
+
+			const auto previous = std::find_if(previousMembers.begin(), previousMembers.end(), [guid = m_partyMembers[i].guid](const BotPartyMember& member)
+			{
+				return member.guid == guid;
+			});
+			if (previous != previousMembers.end())
+			{
+				m_partyMembers[i].health = previous->health;
+				m_partyMembers[i].maxHealth = previous->maxHealth;
+				m_partyMembers[i].powerType = previous->powerType;
+				m_partyMembers[i].power = previous->power;
+				m_partyMembers[i].maxPower = previous->maxPower;
+				m_partyMembers[i].level = previous->level;
+				m_partyMembers[i].position = previous->position;
+				m_partyMembers[i].hasHealth = previous->hasHealth;
+				m_partyMembers[i].hasPower = previous->hasPower;
+				m_partyMembers[i].hasLevel = previous->hasLevel;
+				m_partyMembers[i].hasPosition = previous->hasPosition;
+			}
 		}
 
 		// Read leader guid
@@ -862,22 +904,131 @@ namespace mmo
 
 	PacketParseResult BotRealmConnector::OnGroupSetLeader(game::IncomingPacket& packet)
 	{
-		String newLeaderName;
-		if (!(packet >> io::read_container<uint8>(newLeaderName)))
+		uint64 newLeaderGuid = 0;
+		if (!(packet >> io::read<uint64>(newLeaderGuid)))
 		{
 			ELOG("Failed to read GroupSetLeader packet!");
 			return PacketParseResult::Disconnect;
 		}
 
-		// Find the member with this name and update leader guid
-		for (const auto& member : m_partyMembers)
+		m_partyLeaderGuid = newLeaderGuid;
+		ILOG("Party leader changed to " << newLeaderGuid);
+		PartyJoined(m_partyLeaderGuid, static_cast<uint32>(m_partyMembers.size()));
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnPartyMemberStats(game::IncomingPacket& packet)
+	{
+		uint64 playerGuid = 0;
+		uint32 updateFlags = 0;
+		if (!(packet >> io::read_packed_guid(playerGuid) >> io::read<uint32>(updateFlags)))
 		{
-			if (member.name == newLeaderName)
+			ELOG("Failed to read PartyMemberStats header!");
+			return PacketParseResult::Disconnect;
+		}
+
+		const auto it = std::find_if(m_partyMembers.begin(), m_partyMembers.end(), [playerGuid](const BotPartyMember& member)
+		{
+			return member.guid == playerGuid;
+		});
+		if (it == m_partyMembers.end())
+		{
+			WLOG("Unable to find party member " << playerGuid << " for party member stats update");
+			return PacketParseResult::Pass;
+		}
+
+		BotPartyMember& member = *it;
+		if (updateFlags & group_update_flags::Status)
+		{
+			uint16 status = 0;
+			if (!(packet >> io::read<uint16>(status)))
 			{
-				m_partyLeaderGuid = member.guid;
-				ILOG("Party leader changed to " << newLeaderName);
-				break;
+				ELOG("Failed to read PartyMemberStats status");
+				return PacketParseResult::Disconnect;
 			}
+			member.status = status;
+		}
+
+		if (updateFlags & group_update_flags::CurrentHP)
+		{
+			if (!(packet >> io::read<uint16>(member.health)))
+			{
+				ELOG("Failed to read PartyMemberStats health");
+				return PacketParseResult::Disconnect;
+			}
+			member.hasHealth = true;
+		}
+
+		if (updateFlags & group_update_flags::MaxHP)
+		{
+			if (!(packet >> io::read<uint16>(member.maxHealth)))
+			{
+				ELOG("Failed to read PartyMemberStats max health");
+				return PacketParseResult::Disconnect;
+			}
+			member.hasHealth = true;
+		}
+
+		if (updateFlags & group_update_flags::PowerType)
+		{
+			if (!(packet >> io::read<uint8>(member.powerType)))
+			{
+				ELOG("Failed to read PartyMemberStats power type");
+				return PacketParseResult::Disconnect;
+			}
+			member.hasPower = true;
+		}
+
+		if (updateFlags & group_update_flags::CurrentPower)
+		{
+			if (!(packet >> io::read<uint16>(member.power)))
+			{
+				ELOG("Failed to read PartyMemberStats power");
+				return PacketParseResult::Disconnect;
+			}
+			member.hasPower = true;
+		}
+
+		if (updateFlags & group_update_flags::MaxPower)
+		{
+			if (!(packet >> io::read<uint16>(member.maxPower)))
+			{
+				ELOG("Failed to read PartyMemberStats max power");
+				return PacketParseResult::Disconnect;
+			}
+			member.hasPower = true;
+		}
+
+		if (updateFlags & group_update_flags::Level)
+		{
+			if (!(packet >> io::read<uint16>(member.level)))
+			{
+				ELOG("Failed to read PartyMemberStats level");
+				return PacketParseResult::Disconnect;
+			}
+			member.hasLevel = true;
+		}
+
+		if (updateFlags & group_update_flags::Zone)
+		{
+			if (!(packet >> io::skip<uint16>()))
+			{
+				ELOG("Failed to read PartyMemberStats zone");
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		if (updateFlags & group_update_flags::Position)
+		{
+			if (!(packet
+				>> io::read<float>(member.position.x)
+				>> io::read<float>(member.position.y)
+				>> io::read<float>(member.position.z)))
+			{
+				ELOG("Failed to read PartyMemberStats position");
+				return PacketParseResult::Disconnect;
+			}
+			member.hasPosition = true;
 		}
 
 		return PacketParseResult::Pass;
@@ -885,8 +1036,60 @@ namespace mmo
 
 	PacketParseResult BotRealmConnector::OnUpdateObject(game::IncomingPacket& packet)
 	{
+		return HandleObjectUpdate(packet);
+	}
+
+	PacketParseResult BotRealmConnector::OnCompressedUpdateObject(game::IncomingPacket& packet)
+	{
+		uint32 uncompressedSize = 0;
+		if (!(packet >> io::read<uint32>(uncompressedSize)))
+		{
+			ELOG("Failed to read uncompressed size of compressed update object packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (uncompressedSize == 0)
+		{
+			ELOG("Compressed update object packet declares an empty payload!");
+			return PacketParseResult::Disconnect;
+		}
+
+		const uint32 compressedSize = packet.GetSize() - sizeof(uint32);
+		if (compressedSize == 0)
+		{
+			ELOG("Compressed update object packet has no payload!");
+			return PacketParseResult::Disconnect;
+		}
+
+		std::vector<char> compressed(compressedSize);
+		if (packet.getSource()->read(compressed.data(), compressedSize) != compressedSize)
+		{
+			ELOG("Failed to read compressed update object payload!");
+			return PacketParseResult::Disconnect;
+		}
+
+		std::vector<char> decompressed(uncompressedSize);
+		uLongf destLen = uncompressedSize;
+		const int result = uncompress(
+			reinterpret_cast<Bytef*>(decompressed.data()),
+			&destLen,
+			reinterpret_cast<const Bytef*>(compressed.data()),
+			static_cast<uLong>(compressedSize));
+		if (result != Z_OK || destLen != uncompressedSize)
+		{
+			ELOG("Failed to decompress update object packet (zlib error " << result << ")");
+			return PacketParseResult::Disconnect;
+		}
+
+		io::MemorySource decompressedSource(decompressed.data(), decompressed.data() + decompressed.size());
+		io::Reader reader(decompressedSource);
+		return HandleObjectUpdate(reader);
+	}
+
+	PacketParseResult BotRealmConnector::HandleObjectUpdate(io::Reader& reader)
+	{
 		uint16 numObjectUpdates;
-		if (!(packet >> io::read<uint16>(numObjectUpdates)))
+		if (!(reader >> io::read<uint16>(numObjectUpdates)))
 		{
 			ELOG("Failed to read UpdateObject count");
 			return PacketParseResult::Disconnect;
@@ -896,7 +1099,7 @@ namespace mmo
 		{
 			ObjectTypeId typeId;
 			uint8 creation;
-			if (!(packet >> io::read<uint8>(typeId) >> io::read<uint8>(creation)))
+			if (!(reader >> io::read<uint8>(typeId) >> io::read<uint8>(creation)))
 			{
 				ELOG("Failed to read object update header #" << i);
 				return PacketParseResult::Disconnect;
@@ -907,7 +1110,7 @@ namespace mmo
 			{
 				// Skip this object - we need to read the data to advance the stream
 				// but we don't store non-unit types
-				if (!ParseObjectUpdate(packet, creation != 0, typeId))
+				if (!ParseObjectUpdate(reader, creation != 0, typeId))
 				{
 					ELOG("Failed to skip non-unit object #" << i << " (type: " << static_cast<int>(typeId) << ")");
 					return PacketParseResult::Disconnect;
@@ -915,7 +1118,7 @@ namespace mmo
 				continue;
 			}
 
-			if (!ParseObjectUpdate(packet, creation != 0, typeId))
+			if (!ParseObjectUpdate(reader, creation != 0, typeId))
 			{
 				ELOG("Failed to parse object update #" << i << " (type: " << static_cast<int>(typeId) << ")");
 				return PacketParseResult::Disconnect;
