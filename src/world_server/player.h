@@ -14,6 +14,13 @@
 #include "game_protocol/game_protocol.h"
 #include "base/countdown.h"
 #include "base/clock.h"
+#include "anti_cheat_tracker.h"
+#include "trade_session.h"
+
+#include <algorithm>
+#include <string>
+#include <unordered_set>
+#include <vector>
 
 namespace mmo
 {
@@ -64,6 +71,21 @@ namespace mmo
 		/// @copydoc TileSubscriber::GetGameUnit
 		GameUnitS& GetGameUnit() const override { return *m_character; }
 
+		/// @brief Gets the player's character object.
+		[[nodiscard]] GamePlayerS& GetCharacter() const { return *m_character; }
+
+		/// Sets the active account feature keys (entitlements) for this player's account.
+		void SetAccountFeatures(std::vector<std::string> features) { m_accountFeatures = std::move(features); }
+
+		/// Gets the active account feature keys (entitlements) of this player's account.
+		[[nodiscard]] const std::vector<std::string>& GetAccountFeatures() const { return m_accountFeatures; }
+
+		/// Checks whether this player's account has been granted a specific feature.
+		[[nodiscard]] bool HasAccountFeature(const std::string& key) const
+		{
+			return std::find(m_accountFeatures.begin(), m_accountFeatures.end(), key) != m_accountFeatures.end();
+		}
+
 		/// Notifies the client about updated objects.
 		void NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects) override;
 
@@ -75,6 +97,16 @@ namespace mmo
 
 		/// @copydoc TileSubscriber::SendPacket
 		void SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer, bool flush = true) override;
+
+		/// @brief Sends an object update body to the client. The body (object count + update blocks)
+		///        is sent as a plain UpdateObject packet, or - if it exceeds a size threshold - as a
+		///        zlib-compressed CompressedUpdateObject packet to save bandwidth.
+		/// @param updateBody The serialized update body (without packet header).
+		/// @param flush Whether to flush the connection after sending.
+		void SendObjectUpdate(const std::vector<char>& updateBody, bool flush);
+
+		/// @copydoc TileSubscriber::IsObjectKnown
+		bool IsObjectKnown(uint64 guid) const override { return m_spawnedGuids.contains(guid); }
 
 		/// Handles a proxy packet received from the realm server.
 		void HandleProxyPacket(game::client_realm_packet::Type opCode, std::vector<uint8>& buffer);
@@ -110,20 +142,90 @@ namespace mmo
 		/// @param error The inventory error code to send.
 		void SendInventoryError(InventoryChangeFailure error) const;
 
-		/// Sends a group update to the realm server for this character.
-		void UpdateCharacterGroup(uint64 groupId);
+		/// Updates the group data stored on this player's GamePlayerS and synchronized world-side group object.
+		/// @param groupId The new group GUID, or 0 if the player is no longer grouped.
+		/// @param lootMethod The group's loot method.
+		/// @param lootThreshold The group's loot quality threshold.
+		void UpdateCharacterGroup(uint64 groupId, uint8 lootMethod = 0, uint8 lootThreshold = 0);
 
 		/// Sends a guild update to the realm server for this character.
 		void UpdateCharacterGuild(uint64 guildId);
 
-		/// Updates the loot method stored on this player's GamePlayerS, synchronized from the realm server.
+		/// Updates the loot method stored on this player's GamePlayerS and synchronized world-side group object.
 		/// @param lootMethod The new loot method.
 		/// @param lootMasterGuid The loot master GUID (0 if not MasterLoot).
-		void UpdateCharacterGroupLootMethod(LootMethod lootMethod, uint64 lootMasterGuid);
+		/// @param lootThreshold The group's loot quality threshold.
+		void UpdateCharacterGroupLootMethod(LootMethod lootMethod, uint64 lootMasterGuid, uint8 lootThreshold = 0);
 
 	public:
 		/// Gets the current tile index for the character.
 		TileIndex2D GetTileIndex() const;
+
+	private:
+		// Client Network Handlers, Implemented in player_trade_handlers.cpp
+
+		/// Handles the client's request to initiate a trade with the current target.
+		void OnTradeInitiate(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's request to cancel the active trade session.
+		void OnTradeCancelRequest(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client adding an inventory item to a trade slot.
+		void OnTradeAddItem(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client removing an item from a trade slot.
+		void OnTradeRemoveItem(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client setting the money amount offered in the trade.
+		void OnTradeSetMoney(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client accepting the current trade terms.
+		void OnTradeAccept(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the target player accepting a trade invitation.
+		void OnTradeInviteAccept(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the target player declining a trade invitation.
+		void OnTradeInviteDecline(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+	public:
+		/// @brief Opens a trade session for this player with the given partner.
+		/// @param session Shared trade session object.
+		void SetTradeSession(std::shared_ptr<TradeSession> session);
+
+		/// @brief Starts or stops the periodic trade distance check timer based on whether a session is active.
+		void UpdateTradeDistanceCheck();
+
+		/// @brief Returns the active trade session, or nullptr if none.
+		[[nodiscard]] std::shared_ptr<TradeSession> GetTradeSession() const { return m_tradeSession; }
+
+		/// @brief Cancels the active trade session, notifying the other player.
+		/// @param reason The reason code to send in TradeSessionClosed.
+		void CancelTradeSession(uint8 reason);
+
+		/// @brief Returns true if the player is currently in a trade session.
+		[[nodiscard]] bool IsTrading() const { return m_tradeSession != nullptr; }
+
+		/// @brief Returns true if the given absolute inventory slot is locked by the active trade session.
+		[[nodiscard]] bool IsInventorySlotTradeLocked(uint16 absoluteSlot) const
+		{
+			if (!m_tradeSession)
+			{
+				return false;
+			}
+			const int myIndex = m_tradeSession->GetPlayerIndex(*this);
+			if (myIndex < 0)
+			{
+				return false;
+			}
+			return m_tradeSession->IsSlotLocked(myIndex, absoluteSlot);
+		}
+
+		/// @brief Returns the GUID of the player who sent a pending trade invitation, or 0 if none.
+		[[nodiscard]] ObjectGuid GetTradeInviterGuid() const { return m_tradeInviterGuid; }
+
+		/// @brief Sets a pending trade invite from the given player GUID.
+		void SetTradeInviterGuid(ObjectGuid guid) { m_tradeInviterGuid = guid; }
 
 	private:
 		void OnAreaTriggerTriggered(uint16 opCode, uint32 size, io::Reader& contentReader);
@@ -275,6 +377,12 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnLootRelease(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// Handles the client's group-loot vote for a specific loot slot.
+		/// @param opCode The op code of the packet.
+		/// @param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packet content bytes.
+		void OnLootRoll(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 		/// Handles the client's request to use an item from his inventory or of an equipped item. This will trigger the item's
 		///	assigned spells with trigger type set to "On Use" if any.
 		///	@param opCode The op code of the packet.
@@ -345,10 +453,6 @@ namespace mmo
 		/// Handles the client's request to use a world object (door, chest, etc.).
 		/// Validates distance and object state, then calls GameWorldObjectS::Use().
 		///	@param opCode The op code of the packet.
-		///	@param size The size of the packet content in bytes, excluding the packet header.
-		/// @param contentReader Reader object used to read the packets content bytes.
-		void OnGameObjectUse(uint16 opCode, uint32 size, io::Reader& contentReader);
-
 		/// Handles the client's request to ask for an npc's quest dialog. This is expected to be sent when the npc is just a quest giver / quest acceptor and nothing more.
 		///	@param opCode The op code of the packet.
 		///	@param size The size of the packet content in bytes, excluding the packet header.
@@ -366,6 +470,11 @@ namespace mmo
 		///	@param size The size of the packet content in bytes, excluding the packet header.
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnAbandonQuest(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Refreshes dynamic flags of world objects that gate on a quest, sending updates to this player.
+		///	Called after accepting or completing a quest to immediately reflect interactability changes.
+		///	@param questId The quest ID that changed status.
+		void RefreshQuestObjectInteractability(uint32 questId);
 
 		/// Handles the client's request to query a quest giver for an offered quest.
 		///	@param opCode The op code of the packet.
@@ -455,6 +564,11 @@ namespace mmo
 		void OnCheatWorldPort(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		void OnCheatSpeed(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// @brief Handles a client request for a debug line of sight check.
+		/// Reads the target GUID, performs an LOS check against the world nav mesh,
+		/// and sends back a DebugLineOfSightResult packet.
+		void OnCheatCheckLineOfSight(uint16 opCode, uint32 size, io::Reader& contentReader);
 #endif
 
 	private:
@@ -483,7 +597,7 @@ namespace mmo
 
 		void OnXpLog(uint32 amount) override;
 
-		void OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell) override;
+		void OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell, uint32 blocked = 0) override;
 
 		void OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags) override;
 
@@ -502,6 +616,8 @@ namespace mmo
 
 		void OnQuestItemCredit(const proto::QuestEntry&, uint32 entry, uint32 count, uint32 maxCount) override;
 
+		void OnQuestObjectRequirementMet(uint32 questId) override;
+
 		void OnQuestDataChanged(uint32 questId, const QuestStatusData& data) override;
 
 		void OnQuestCompleted(uint64 questgiverGuid, uint32 questId, uint32 rewardedXp, uint32 rewardMoney) override;
@@ -512,6 +628,14 @@ namespace mmo
 
 		void OnRootChanged(bool applied, uint32 ackId) override;
 
+		void OnStunChanged(bool applied, uint32 ackId) override;
+
+		void OnSleepChanged(bool applied, uint32 ackId) override;
+
+		void OnFearChanged(bool applied, uint32 ackId) override;
+
+		void OnDisorientChanged(bool applied, uint32 ackId) override;
+
 		void OnProficiencyChanged(uint32 proficiencyId, bool added) override;
 
 	private:
@@ -520,6 +644,7 @@ namespace mmo
 		std::shared_ptr<GamePlayerS> m_character;
 		WorldInstance* m_worldInstance { nullptr };
 		CharacterData m_characterData;
+		std::vector<std::string> m_accountFeatures;	// Active account feature keys (entitlements) granted to the account
 		scoped_connection_container m_characterConnections;
 		const proto::Project& m_project;
 		AttackSwingEvent m_lastAttackSwingEvent{ attack_swing_event::Unknown };
@@ -561,11 +686,35 @@ namespace mmo
 		int64 m_timeOffset{ 0 };  // Client timestamp - Server timestamp
 		Countdown m_timeSyncTimer;
 
+		/// @brief Server-side timestamp and position of the last packet that carried
+		/// an authoritative position update (start/stop/heartbeat). Excludes facing-only
+		/// packets (MoveSetFacing, MoveStopTurn) so the speed check doesn't compute a
+		/// near-zero elapsed time after rapid facing updates.
+		GameTime m_lastPositionPacketTimestamp{ 0 };
+		Vector3 m_lastPositionPacketPos;
+		uint32 m_lastPositionPacketFlags{ 0 };
+
 		// Inventory persistence repository (World Server only)
 		std::shared_ptr<IInventoryRepository> m_inventoryRepo{ nullptr };
 
 		// Inventory auto-save timer (every 5 minutes)
 		Countdown m_inventoryAutoSaveTimer;
+
+		// Periodic trade distance check (fires every 2 s while trading)
+		Countdown m_tradeDistanceCheckTimer;
+
+		/// @brief Tracks anti-cheat violations (position drift and speed hacks) for kick logic.
+		AntiCheatTracker m_antiCheatTracker;
+
+		/// @brief Active trade session, or nullptr if not trading.
+		std::shared_ptr<TradeSession> m_tradeSession{ nullptr };
+
+		/// @brief GUID of the player who sent us a pending trade invitation, or 0 if none.
+		ObjectGuid m_tradeInviterGuid{ 0 };
+
+		/// @brief Tracks the GUIDs of all objects currently spawned at this client.
+		/// Used to ASSERT that no object is spawned twice without an intermediate despawn.
+		std::unordered_set<uint64> m_spawnedGuids;
 
 	public:
 		/// @brief Sends a time sync request to the client with incremented index.

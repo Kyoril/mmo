@@ -40,6 +40,8 @@ namespace mmo
 
 		[[nodiscard]] bool IsNegative() const;
 
+		[[nodiscard]] uint8 GetStackCount() const;
+
 	private:
 		[[nodiscard]] bool CheckNonNull() const;
 	};

@@ -878,9 +878,16 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 				item->Set<uint64>(object_fields::Creator, data.creator);
 				item->Set<uint64>(object_fields::Contained, m_owner.GetGuid());
 				item->Set<uint32>(object_fields::Durability, data.durability);
+				// Restore persisted flags (includes the Bound flag for BoP and previously-equipped BoE items).
+				// Re-derive BindWhenPickedUp in case the DB row predates the flags column.
+				uint32 restoredFlags = data.flags;
 				if (entry->bonding() == item_binding::BindWhenPickedUp)
 				{
-					item->AddFlag<uint32>(object_fields::ItemFlags, item_flags::Bound);
+					restoredFlags |= item_flags::Bound;
+				}
+				if (restoredFlags != 0)
+				{
+					item->AddFlag<uint32>(object_fields::ItemFlags, restoredFlags);
 				}
 
 				// Add this item to the inventory slot
@@ -1075,6 +1082,7 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 				data.durability = pair.second->Get<uint32>(object_fields::Durability);
 				data.randomPropertyIndex = 0;
 				data.randomSuffixIndex = 0;
+				data.flags = pair.second->Get<uint32>(object_fields::ItemFlags);
 				w << data;
 			}
 		}
@@ -1554,6 +1562,7 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 			data.durability = item->Get<uint32>(object_fields::Durability);
 			data.randomPropertyIndex = 0; // TODO: Implement if needed
 			data.randomSuffixIndex = 0;	  // TODO: Implement if needed
+			data.itemFlags = item->Get<uint32>(object_fields::ItemFlags);
 
 			items.push_back(data);
 		}

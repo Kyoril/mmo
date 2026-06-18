@@ -227,36 +227,38 @@ TEST_CASE("ItemValidator - ValidateItemRequirements", "[item_validator]")
 	project.proficiencies.add(mock_prof::Cloth);
 	project.proficiencies.add(mock_prof::Plate);
 
-	// Set up item subclasses with required proficiencies
-	auto* oneHandSwordSubclass = project.itemSubclasses.add(mock_item_subclass_weapon::OneHandedSword);
-	if (oneHandSwordSubclass)
+	// ItemSubclass IDs must be unique within the TemplateManager, but the validator
+	// matches by (itemclass, subclass id). Use a compound key: itemclass*100 + subclass
+	// so armor and weapon subclasses with the same logical subclass id don't collide.
+	auto addSubclass = [&](uint32 itemClass, uint32 subclassId, uint32 profId) -> proto::ItemSubclassEntry*
 	{
-		oneHandSwordSubclass->set_requiredproficiency(mock_prof::OneHandSword);
-	}
-	
-	auto* twoHandAxeSubclass = project.itemSubclasses.add(mock_item_subclass_weapon::TwoHandedAxe);
-	if (twoHandAxeSubclass)
-	{
-		twoHandAxeSubclass->set_requiredproficiency(mock_prof::TwoHandAxe);
-	}
-	
-	auto* clothSubclass = project.itemSubclasses.add(mock_item_subclass_armor::Cloth);
-	if (clothSubclass)
-	{
-		clothSubclass->set_requiredproficiency(mock_prof::Cloth);
-	}
-	
-	auto* plateSubclass = project.itemSubclasses.add(mock_item_subclass_armor::Plate);
-	if (plateSubclass)
-	{
-		plateSubclass->set_requiredproficiency(mock_prof::Plate);
-	}
-	
-	auto* leatherSubclass = project.itemSubclasses.add(mock_item_subclass_armor::Leather);
-	if (leatherSubclass)
-	{
-		leatherSubclass->set_requiredproficiency(mock_prof::Leather);
-	}
+		const uint32 managerKey = itemClass * 100 + subclassId;
+		auto* sc = project.itemSubclasses.add(managerKey);
+		if (sc)
+		{
+			sc->set_itemclass(itemClass);
+			// Override the id set by add() to match the logical subclass id so
+			// validator's loop find() matches entry.subclass().
+			// Note: TemplateManager::add() sets id = managerKey via set_id().
+			// We need sc->id() == subclassId for the validator match, so re-set it.
+			// However, the map key is managerKey — the validator iterates entry() and
+			// matches on sc.id() == entry.subclass() && sc.itemclass() == entry.itemclass(),
+			// so we must set the entry's id to subclassId.
+			sc->set_id(subclassId);
+			if (profId > 0)
+			{
+				sc->set_requiredproficiency(profId);
+			}
+		}
+		return sc;
+	};
+
+	addSubclass(mock_item_class::Weapon, mock_item_subclass_weapon::OneHandedSword, mock_prof::OneHandSword);
+	addSubclass(mock_item_class::Weapon, mock_item_subclass_weapon::TwoHandedAxe,   mock_prof::TwoHandAxe);
+	addSubclass(mock_item_class::Weapon, mock_item_subclass_weapon::TwoHandedSword, mock_prof::TwoHandSword);
+	addSubclass(mock_item_class::Armor,  mock_item_subclass_armor::Cloth,           mock_prof::Cloth);
+	addSubclass(mock_item_class::Armor,  mock_item_subclass_armor::Leather,         mock_prof::Leather);
+	addSubclass(mock_item_class::Armor,  mock_item_subclass_armor::Plate,           mock_prof::Plate);
 
 	MockPlayerValidatorContext player;
 	ItemValidator validator(player, project);

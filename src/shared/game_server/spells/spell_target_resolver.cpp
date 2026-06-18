@@ -5,7 +5,12 @@
 #include "game_server/spells/spell_cast_context.h"
 #include "game_server/world/world_instance.h"
 #include "game_server/objects/game_object_s.h"
+#include "game/spell.h"
 #include "log/default_log_levels.h"
+
+#include <algorithm>
+#include <utility>
+#include <vector>
 
 namespace mmo
 {
@@ -152,6 +157,26 @@ namespace mmo
 			return false;
 		}
 
+		// Area-of-effect LOS check: each candidate must be visible from the caster.
+		// Skipped for the caster themselves, passive spells, and spells with IgnoreLineOfSight.
+		const bool isSelf     = (&unit == &m_context.GetExecutor());
+		const bool isPassive  = (m_context.GetSpell().attributes(0) & spell_attributes::Passive) != 0;
+		const bool ignoresLos = m_context.GetSpell().attributes_size() >= 2 &&
+		                        (m_context.GetSpell().attributes(1) & spell_attributes_b::IgnoreLineOfSight) != 0;
+
+		if (!isSelf && !isPassive && !ignoresLos)
+		{
+			const WorldInstance* world = m_context.GetWorldInstance();
+			if (world)
+			{
+				MapData* mapData = world->GetMapData();
+				if (mapData && !mapData->IsInLineOfSight(m_context.GetExecutor().GetPosition(), unit.GetPosition()))
+				{
+					return false;
+				}
+			}
+		}
+
 		return true;
 	}
 
@@ -280,6 +305,79 @@ namespace mmo
 		return false;
 	}
 
+	bool SpellTargetResolver::ResolveSecondaryEnemyTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets) const
+	{
+		if (!ValidateEffectRadius(effect))
+		{
+			return false;
+		}
+
+		// The "secondary enemy" target type is anchored on the spell's primary unit
+		// target. Without a primary target there is nothing to gather neighbours
+		// around, so the effect resolves to no targets.
+		GameUnitS* primaryTarget = m_context.FindUnitByGuid(m_context.GetTarget().GetUnitTarget());
+		if (!primaryTarget)
+		{
+			return false;
+		}
+
+		auto* world = m_context.GetWorldInstance();
+		if (!world)
+		{
+			return false;
+		}
+
+		// chaintarget controls how many secondary enemies are taken. Default to a
+		// single secondary target when the field is left at 0.
+		const uint32 maxSecondary = effect.chaintarget() > 0 ? effect.chaintarget() : 1;
+
+		const uint64 primaryGuid = primaryTarget->GetGuid();
+		const Vector3& primaryPos = primaryTarget->GetPosition();
+
+		// Gather every eligible enemy in range of the primary target (excluding the
+		// primary target itself) together with its squared distance to the primary,
+		// then sort nearest-first. Deterministic ordering guarantees that two effects
+		// using this target type within the same cast pick the same unit(s).
+		std::vector<std::pair<float, GameUnitS*>> candidates;
+		world->GetUnitFinder().FindUnits(Circle(primaryPos.x, primaryPos.z, effect.radius()), [this, &targets, &candidates, primaryGuid, &primaryPos](GameUnitS& unit)
+		{
+			if (unit.GetGuid() == primaryGuid)
+			{
+				return true;
+			}
+
+			if (m_context.GetExecutor().UnitIsFriendly(unit))
+			{
+				return true;
+			}
+
+			if (!CanAddUnitTarget(targets, unit))
+			{
+				return true;
+			}
+
+			const Vector3& unitPos = unit.GetPosition();
+			const float dx = unitPos.x - primaryPos.x;
+			const float dz = unitPos.z - primaryPos.z;
+			candidates.emplace_back(dx * dx + dz * dz, &unit);
+			return true;
+		});
+
+		std::sort(candidates.begin(), candidates.end(),
+			[](const std::pair<float, GameUnitS*>& a, const std::pair<float, GameUnitS*>& b)
+			{
+				return a.first < b.first;
+			});
+
+		const uint32 count = std::min<uint32>(maxSecondary, static_cast<uint32>(candidates.size()));
+		for (uint32 i = 0; i < count; ++i)
+		{
+			targets.push_back(candidates[i].second);
+		}
+
+		return true;
+	}
+
 	bool SpellTargetResolver::ResolveEffectTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets) const
 	{
 		PrepareTargetsBuffer(targets);
@@ -302,6 +400,8 @@ namespace mmo
 		case spell_effect_targets::TargetAreaEnemy:
 		case spell_effect_targets::SourceAreaEnemy:
 			return ResolveAreaEnemyTargets(effect, targets);
+		case spell_effect_targets::TargetSecondaryEnemy:
+			return ResolveSecondaryEnemyTargets(effect, targets);
 		default:
 			return false;
 		}

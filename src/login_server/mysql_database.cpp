@@ -382,6 +382,439 @@ namespace mmo
 		}
 	}
 
+	AccountListResult MySQLDatabase::GetAccountList(const AccountListParams& params)
+	{
+		AccountListResult result;
+
+		// Whitelist sort columns to prevent SQL injection via the sort parameter.
+		const std::string sortColumn = [&]() -> std::string
+		{
+			if (params.sortBy == "username") return "a.username";
+			if (params.sortBy == "last_login") return "a.last_login";
+			if (params.sortBy == "created_at") return "a.created_at";
+			return "a.id";
+		}();
+		const std::string sortDir = params.sortAsc ? "ASC" : "DESC";
+
+		// Build WHERE clause additions.
+		std::string where;
+
+		if (!params.search.empty())
+		{
+			const std::string escaped = m_connection.EscapeString(params.search);
+			if (params.searchField == "email")
+			{
+				where += " AND ai.email LIKE '%" + escaped + "%'";
+			}
+			else if (params.searchField == "id")
+			{
+				where += " AND a.id = " + std::to_string(std::strtoull(params.search.c_str(), nullptr, 10));
+			}
+			else
+			{
+				where += " AND a.username LIKE '%" + escaped + "%'";
+			}
+		}
+
+		if (params.bannedOnly)
+		{
+			where += " AND (a.banned = 1 AND (a.ban_expiration IS NULL OR a.ban_expiration >= NOW()))";
+		}
+
+		// Count query.
+		const std::string countSql =
+			"SELECT COUNT(*) FROM `account` a "
+			"LEFT JOIN `account_info` ai ON ai.account = a.id "
+			"WHERE 1=1" + where;
+
+		{
+			mysql::Select countSelect(m_connection, countSql);
+			if (!countSelect.Success())
+			{
+				PrintDatabaseError();
+				return result;
+			}
+			mysql::Row row(countSelect);
+			if (row)
+			{
+				result.total = std::strtoull(row.GetField(0), nullptr, 10);
+			}
+		}
+
+		// Data query.
+		const uint32 offset = (params.page > 0 ? params.page - 1 : 0) * params.limit;
+		const std::string dataSql =
+			"SELECT a.id, a.username, "
+			"IFNULL(ai.email,'') AS email, "
+			"DATE_FORMAT(a.created_at,'%Y-%m-%dT%H:%i:%sZ') AS created_at, "
+			"IFNULL(DATE_FORMAT(a.last_login,'%Y-%m-%dT%H:%i:%sZ'),'') AS last_login, "
+			"IFNULL(a.last_ip,'') AS last_ip, "
+			"IFNULL(a.gm_level,0) AS gm_level, "
+			"CASE "
+			"  WHEN a.banned=1 AND a.ban_expiration IS NULL THEN 2 "
+			"  WHEN a.banned=1 AND a.ban_expiration>=NOW() THEN 1 "
+			"  ELSE 0 "
+			"END AS ban_state, "
+			"IFNULL(DATE_FORMAT(a.ban_expiration,'%Y-%m-%dT%H:%i:%sZ'),'') AS ban_expiration "
+			"FROM `account` a "
+			"LEFT JOIN `account_info` ai ON ai.account = a.id "
+			"WHERE 1=1" + where +
+			" ORDER BY " + sortColumn + " " + sortDir +
+			" LIMIT " + std::to_string(params.limit) +
+			" OFFSET " + std::to_string(offset);
+
+		mysql::Select dataSelect(m_connection, dataSql);
+		if (!dataSelect.Success())
+		{
+			PrintDatabaseError();
+			return result;
+		}
+
+		mysql::Row row(dataSelect);
+		while (row)
+		{
+			AccountListEntry entry;
+			entry.id = std::strtoull(row.GetField(0), nullptr, 10);
+			entry.username = row.GetField(1) ? row.GetField(1) : "";
+			entry.email = row.GetField(2) ? row.GetField(2) : "";
+			entry.created_at = row.GetField(3) ? row.GetField(3) : "";
+			entry.last_login = row.GetField(4) ? row.GetField(4) : "";
+			entry.last_ip = row.GetField(5) ? row.GetField(5) : "";
+			entry.gm_level = static_cast<uint8>(std::atoi(row.GetField(6)));
+			entry.ban_state = static_cast<uint8>(std::atoi(row.GetField(7)));
+			entry.ban_expiration = row.GetField(8) ? row.GetField(8) : "";
+			result.accounts.push_back(std::move(entry));
+			row = mysql::Row(dataSelect);
+		}
+
+		return result;
+	}
+
+	std::vector<RealmListEntry> MySQLDatabase::GetRealmList()
+	{
+		std::vector<RealmListEntry> realms;
+
+		mysql::Select select(m_connection,
+			"SELECT id, name, address, port, "
+			"IFNULL(DATE_FORMAT(last_login,'%Y-%m-%dT%H:%i:%sZ'),'') AS last_login, "
+			"IFNULL(last_ip,'') AS last_ip, "
+			"IFNULL(last_build,'') AS last_build "
+			"FROM `realm` ORDER BY id");
+
+		if (!select.Success())
+		{
+			PrintDatabaseError();
+			return realms;
+		}
+
+		mysql::Row row(select);
+		while (row)
+		{
+			RealmListEntry entry;
+			entry.id = static_cast<uint32>(std::atoi(row.GetField(0)));
+			entry.name = row.GetField(1) ? row.GetField(1) : "";
+			entry.address = row.GetField(2) ? row.GetField(2) : "";
+			entry.port = static_cast<uint16>(std::atoi(row.GetField(3)));
+			entry.last_login = row.GetField(4) ? row.GetField(4) : "";
+			entry.last_ip = row.GetField(5) ? row.GetField(5) : "";
+			entry.last_build = row.GetField(6) ? row.GetField(6) : "";
+			entry.is_online = false;  // Filled in by the HTTP handler via RealmManager.
+			realms.push_back(std::move(entry));
+			row = mysql::Row(select);
+		}
+
+		return realms;
+	}
+
+	std::vector<FeatureDefinition> MySQLDatabase::GetFeatures()
+	{
+		std::vector<FeatureDefinition> features;
+
+		mysql::Select select(m_connection,
+			"SELECT id, name, IFNULL(description,''), "
+			"IFNULL(DATE_FORMAT(created_at,'%Y-%m-%dT%H:%i:%sZ'),'') "
+			"FROM `feature` ORDER BY name");
+		if (!select.Success())
+		{
+			PrintDatabaseError();
+			return features;
+		}
+
+		mysql::Row row(select);
+		while (row)
+		{
+			FeatureDefinition entry;
+			entry.id = static_cast<uint32>(std::strtoul(row.GetField(0), nullptr, 10));
+			entry.name = row.GetField(1) ? row.GetField(1) : "";
+			entry.description = row.GetField(2) ? row.GetField(2) : "";
+			entry.created_at = row.GetField(3) ? row.GetField(3) : "";
+			features.push_back(std::move(entry));
+			row = mysql::Row(select);
+		}
+
+		return features;
+	}
+
+	std::optional<uint32> MySQLDatabase::CreateFeature(const std::string& name, const std::string& description)
+	{
+		const std::string descValue = description.empty() ? "NULL" : "'" + m_connection.EscapeString(description) + "'";
+
+		if (!m_connection.Execute("INSERT INTO `feature` (name, description) VALUES ('"
+			+ m_connection.EscapeString(name) + "', " + descValue + ")"))
+		{
+			const auto errorCode = m_connection.GetErrorCode();
+			if (errorCode == 1062)
+			{
+				// Name already in use
+				return {};
+			}
+
+			PrintDatabaseError();
+			throw mysql::Exception("Could not insert feature");
+		}
+
+		return static_cast<uint32>(mysql_insert_id(m_connection.GetHandle()));
+	}
+
+	bool MySQLDatabase::DeleteFeature(uint32 featureId)
+	{
+		if (!m_connection.Execute("DELETE FROM `feature` WHERE id = " + std::to_string(featureId) + " LIMIT 1"))
+		{
+			PrintDatabaseError();
+			return false;
+		}
+
+		return mysql_affected_rows(m_connection.GetHandle()) > 0;
+	}
+
+	std::optional<uint32> MySQLDatabase::GetFeatureIdByName(const std::string& name)
+	{
+		mysql::Select select(m_connection, "SELECT id FROM `feature` WHERE name = '" + m_connection.EscapeString(name) + "' LIMIT 1");
+		if (select.Success())
+		{
+			mysql::Row row(select);
+			if (row)
+			{
+				return static_cast<uint32>(std::strtoul(row.GetField(0), nullptr, 10));
+			}
+		}
+		else
+		{
+			PrintDatabaseError();
+		}
+
+		return {};
+	}
+
+	std::optional<uint64> MySQLDatabase::GetAccountIdByName(const std::string& name)
+	{
+		mysql::Select select(m_connection, "SELECT id FROM `account` WHERE username = '" + m_connection.EscapeString(name) + "' LIMIT 1");
+		if (select.Success())
+		{
+			mysql::Row row(select);
+			if (row)
+			{
+				return std::strtoull(row.GetField(0), nullptr, 10);
+			}
+		}
+		else
+		{
+			PrintDatabaseError();
+		}
+
+		return {};
+	}
+
+	bool MySQLDatabase::GrantFeature(uint32 featureId, const std::vector<uint64>& accountIds, const std::string& expiration)
+	{
+		if (accountIds.empty())
+		{
+			return true;
+		}
+
+		const std::string expirationValue = expiration.empty() ? "NULL" : "'" + m_connection.EscapeString(expiration) + "'";
+
+		std::ostringstream query;
+		query << "INSERT INTO `account_feature` (account_id, feature_id, expiration) VALUES ";
+		for (size_t i = 0; i < accountIds.size(); ++i)
+		{
+			if (i > 0)
+			{
+				query << ", ";
+			}
+			query << "(" << accountIds[i] << ", " << featureId << ", " << expirationValue << ")";
+		}
+		query << " ON DUPLICATE KEY UPDATE expiration = VALUES(expiration), granted_at = NOW()";
+
+		if (!m_connection.Execute(query.str()))
+		{
+			PrintDatabaseError();
+			return false;
+		}
+
+		return true;
+	}
+
+	bool MySQLDatabase::RevokeFeature(uint32 featureId, const std::vector<uint64>& accountIds)
+	{
+		if (accountIds.empty())
+		{
+			return true;
+		}
+
+		std::ostringstream query;
+		query << "DELETE FROM `account_feature` WHERE feature_id = " << featureId << " AND account_id IN (";
+		for (size_t i = 0; i < accountIds.size(); ++i)
+		{
+			if (i > 0)
+			{
+				query << ", ";
+			}
+			query << accountIds[i];
+		}
+		query << ")";
+
+		if (!m_connection.Execute(query.str()))
+		{
+			PrintDatabaseError();
+			return false;
+		}
+
+		return true;
+	}
+
+	std::vector<AccountFeature> MySQLDatabase::GetActiveAccountFeatures(uint64 accountId)
+	{
+		std::vector<AccountFeature> features;
+
+		mysql::Select select(m_connection,
+			"SELECT f.id, f.name, IFNULL(DATE_FORMAT(af.expiration,'%Y-%m-%dT%H:%i:%sZ'),'') "
+			"FROM `account_feature` af "
+			"INNER JOIN `feature` f ON f.id = af.feature_id "
+			"WHERE af.account_id = " + std::to_string(accountId) +
+			" AND (af.expiration IS NULL OR af.expiration > NOW()) "
+			"ORDER BY f.name");
+		if (!select.Success())
+		{
+			PrintDatabaseError();
+			return features;
+		}
+
+		mysql::Row row(select);
+		while (row)
+		{
+			AccountFeature entry;
+			entry.id = static_cast<uint32>(std::strtoul(row.GetField(0), nullptr, 10));
+			entry.key = row.GetField(1) ? row.GetField(1) : "";
+			entry.expiration = row.GetField(2) ? row.GetField(2) : "";
+			features.push_back(std::move(entry));
+			row = mysql::Row(select);
+		}
+
+		return features;
+	}
+
+	bool MySQLDatabase::SetRealmFeatureRequirement(uint32 realmId, uint32 featureId, bool requireVisibility, bool requireLogin)
+	{
+		std::ostringstream query;
+		query << "INSERT INTO `realm_feature_requirement` (realm_id, feature_id, require_visibility, require_login) VALUES ("
+			<< realmId << ", " << featureId << ", " << (requireVisibility ? 1 : 0) << ", " << (requireLogin ? 1 : 0) << ") "
+			"ON DUPLICATE KEY UPDATE require_visibility = VALUES(require_visibility), require_login = VALUES(require_login)";
+
+		if (!m_connection.Execute(query.str()))
+		{
+			PrintDatabaseError();
+			return false;
+		}
+
+		return true;
+	}
+
+	bool MySQLDatabase::RemoveRealmFeatureRequirement(uint32 realmId, uint32 featureId)
+	{
+		if (!m_connection.Execute("DELETE FROM `realm_feature_requirement` WHERE realm_id = "
+			+ std::to_string(realmId) + " AND feature_id = " + std::to_string(featureId) + " LIMIT 1"))
+		{
+			PrintDatabaseError();
+			return false;
+		}
+
+		return mysql_affected_rows(m_connection.GetHandle()) > 0;
+	}
+
+	std::vector<RealmFeatureRequirement> MySQLDatabase::GetRealmFeatureRequirements(uint32 realmId)
+	{
+		std::vector<RealmFeatureRequirement> requirements;
+
+		mysql::Select select(m_connection,
+			"SELECT rfr.feature_id, f.name, rfr.require_visibility, rfr.require_login "
+			"FROM `realm_feature_requirement` rfr "
+			"INNER JOIN `feature` f ON f.id = rfr.feature_id "
+			"WHERE rfr.realm_id = " + std::to_string(realmId) +
+			" ORDER BY f.name");
+		if (!select.Success())
+		{
+			PrintDatabaseError();
+			return requirements;
+		}
+
+		mysql::Row row(select);
+		while (row)
+		{
+			RealmFeatureRequirement entry;
+			entry.featureId = static_cast<uint32>(std::strtoul(row.GetField(0), nullptr, 10));
+			entry.featureName = row.GetField(1) ? row.GetField(1) : "";
+			entry.requireVisibility = std::atoi(row.GetField(2)) != 0;
+			entry.requireLogin = std::atoi(row.GetField(3)) != 0;
+			requirements.push_back(std::move(entry));
+			row = mysql::Row(select);
+		}
+
+		return requirements;
+	}
+
+	std::optional<uint32> MySQLDatabase::GetRealmIdByName(const std::string& name)
+	{
+		mysql::Select select(m_connection, "SELECT id FROM `realm` WHERE name = '" + m_connection.EscapeString(name) + "' LIMIT 1");
+		if (select.Success())
+		{
+			mysql::Row row(select);
+			if (row)
+			{
+				return static_cast<uint32>(std::strtoul(row.GetField(0), nullptr, 10));
+			}
+		}
+		else
+		{
+			PrintDatabaseError();
+		}
+
+		return {};
+	}
+
+	std::optional<AccountAuthData> MySQLDatabase::GetAccountAuthData(std::string accountName)
+	{
+		mysql::Select select(m_connection, "SELECT id, k, gm_level FROM account WHERE username = '" + m_connection.EscapeString(accountName) + "' LIMIT 1");
+		if (!select.Success())
+		{
+			PrintDatabaseError();
+			return {};
+		}
+
+		mysql::Row row(select);
+		if (!row)
+		{
+			return {};
+		}
+
+		AccountAuthData data;
+		data.id = std::strtoull(row.GetField(0), nullptr, 10);
+		data.sessionKey = row.GetField(1) ? row.GetField(1) : "";
+		data.gmLevel = static_cast<uint8>(std::atoi(row.GetField(2)));
+		data.features = GetActiveAccountFeatures(data.id);
+		return data;
+	}
+
 	void MySQLDatabase::PrintDatabaseError()
 	{
 		ELOG("Login database error: " << m_connection.GetErrorMessage());

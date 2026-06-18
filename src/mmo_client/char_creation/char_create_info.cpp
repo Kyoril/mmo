@@ -43,7 +43,18 @@ namespace mmo
 					}
 
 					return names[index].c_str();
-				})
+				}),
+			luabind::def_lambda("IsRaceAvailable", [this](int32 raceId) { return IsRaceAvailable(raceId); }),
+			luabind::def_lambda("IsClassAvailable", [this](int32 classId) { return IsClassAvailable(classId); }),
+			luabind::def_lambda("IsCharacterCreationAvailable", [this]() { return IsCharacterCreationAvailable(); }),
+			luabind::def_lambda("GetNumRaces", [this]() { return GetNumRaces(); }),
+			luabind::def_lambda("GetRaceId", [this](int32 index) { return GetRaceId(index); }),
+			luabind::def_lambda("GetRaceName", [this](int32 index) -> const char* { return GetRaceName(index); }),
+			luabind::def_lambda("GetNumClasses", [this]() { return GetNumClasses(); }),
+			luabind::def_lambda("GetClassId", [this](int32 index) { return GetClassId(index); }),
+			luabind::def_lambda("GetClassName", [this](int32 index) -> const char* { return GetClassEntryName(index); }),
+			luabind::def_lambda("GetClassNameById", [this](int32 classId) -> const char* { return GetClassNameById(classId); }),
+			luabind::def_lambda("GetRaceNameById", [this](int32 raceId) -> const char* { return GetRaceNameById(raceId); })
 		);
 	}
 
@@ -461,5 +472,115 @@ namespace mmo
 	void CharCreateInfo::Apply(const ScalarParameterPropertyGroup& group, const AvatarConfiguration& configuration)
 	{
 
+	}
+
+	bool CharCreateInfo::IsRaceAvailable(int32 raceId) const
+	{
+		return !m_realmConnector.IsRaceDisabled(static_cast<uint32>(raceId));
+	}
+
+	bool CharCreateInfo::IsClassAvailable(int32 classId) const
+	{
+		return !m_realmConnector.IsClassDisabled(static_cast<uint32>(classId));
+	}
+
+	bool CharCreateInfo::IsCharacterCreationAvailable() const
+	{
+		bool hasRace = false;
+		for (const auto& race : m_project.races.getTemplates().entry())
+		{
+			if (IsRaceAvailable(static_cast<int32>(race.id())))
+			{
+				hasRace = true;
+				break;
+			}
+		}
+
+		if (!hasRace)
+		{
+			return false;
+		}
+
+		for (const auto& cls : m_project.classes.getTemplates().entry())
+		{
+			if (IsClassAvailable(static_cast<int32>(cls.id())))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	int32 CharCreateInfo::GetNumRaces() const
+	{
+		return static_cast<int32>(m_project.races.count());
+	}
+
+	int32 CharCreateInfo::GetRaceId(int32 index) const
+	{
+		if (index < 0 || index >= GetNumRaces())
+		{
+			return -1;
+		}
+
+		return static_cast<int32>(m_project.races.getTemplates().entry(index).id());
+	}
+
+	const char* CharCreateInfo::GetRaceName(int32 index) const
+	{
+		if (index < 0 || index >= GetNumRaces())
+		{
+			return nullptr;
+		}
+
+		return m_project.races.getTemplates().entry(index).name().c_str();
+	}
+
+	int32 CharCreateInfo::GetNumClasses() const
+	{
+		return static_cast<int32>(m_project.classes.count());
+	}
+
+	int32 CharCreateInfo::GetClassId(int32 index) const
+	{
+		if (index < 0 || index >= GetNumClasses())
+		{
+			return -1;
+		}
+
+		return static_cast<int32>(m_project.classes.getTemplates().entry(index).id());
+	}
+
+	const char* CharCreateInfo::GetClassEntryName(int32 index) const
+	{
+		if (index < 0 || index >= GetNumClasses())
+		{
+			return nullptr;
+		}
+
+		return m_project.classes.getTemplates().entry(index).name().c_str();
+	}
+
+	const char* CharCreateInfo::GetClassNameById(int32 classId) const
+	{
+		const auto* entry = m_project.classes.getById(static_cast<uint32>(classId));
+		if (!entry)
+		{
+			return nullptr;
+		}
+
+		return entry->name().c_str();
+	}
+
+	const char* CharCreateInfo::GetRaceNameById(int32 raceId) const
+	{
+		const auto* entry = m_project.races.getById(static_cast<uint32>(raceId));
+		if (!entry)
+		{
+			return nullptr;
+		}
+
+		return entry->name().c_str();
 	}
 }

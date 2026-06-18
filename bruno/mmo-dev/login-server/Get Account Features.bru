@@ -1,0 +1,20 @@
+meta {
+  name: Get Account Features
+  type: http
+  seq: 14
+}
+
+get {
+  url: http://localhost:8090/account-features?account_name=KYORIL
+  body: none
+  auth: inherit
+}
+
+params:query {
+  account_name: KYORIL
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

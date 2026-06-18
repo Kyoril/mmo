@@ -18,6 +18,8 @@
 #include "game_client/game_object_c.h"
 #include "game_protocol/game_protocol.h"
 #include "scene_graph/axis_display.h"
+#include "ui/minimap.h"
+#include "world_ping_visualizer.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/world_grid.h"
 #include "scene_graph/animation_notify.h"
@@ -38,6 +40,10 @@
 #include "game_client/net_client.h"
 #include "debug_path_visualizer.h"
 #include "scene_graph/foliage.h"
+
+#include <map>
+#include <tuple>
+#include <vector>
 
 namespace mmo
 {
@@ -72,11 +78,13 @@ namespace mmo
 	class PartyInfo;
 	class GuildClient;
 	class FriendClient;
+	class ChannelClient;
 	class TalentClient;
+	class TradeClient;
 	class Discord;
-	class Minimap;
 	class InventoryClient;
 	class CooldownManager;
+	class MaterialInterface;
 
 	/// This class represents the initial game state where the player is asked to enter
 	/// his credentials in order to authenticate.
@@ -112,7 +120,9 @@ namespace mmo
 			GameTimeComponent &gameTime,
 			TalentClient &talentClient,
 			Minimap &minimap,
-			InventoryClient &inventoryClient);
+			InventoryClient &inventoryClient,
+			TradeClient &tradeClient,
+			ChannelClient &channelClient);
 
 	public:
 		/// @brief The default name of the world state
@@ -132,6 +142,9 @@ namespace mmo
 		// Player Mirror Handlers (called when certain field map values of the controlled player character were changed by the server)
 
 		void ReloadUI();
+
+		/// Registers WorldState-specific Lua globals (called from ReloadUI so they survive UI reload).
+		void RegisterWorldLuaFunctions();
 
 		void OnTargetSelectionChanged(uint64 monitoredGuid);
 
@@ -181,6 +194,12 @@ namespace mmo
 
 		void OnShadowTextureSizeChanged(ConsoleVar &var, const std::string &oldValue);
 
+		void OnShadowQualityChanged(ConsoleVar &var, const std::string &oldValue);
+
+		void OnShadowTemporalChanged(ConsoleVar &var, const std::string &oldValue);
+
+		void OnDepthPrepassChanged(ConsoleVar &var, const std::string &oldValue);
+
 		void OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue);
 
 		void OnFoliageDensityChanged(ConsoleVar &var, const std::string &oldValue);
@@ -218,6 +237,16 @@ namespace mmo
 
 		void SetupFoliage();
 
+		/// @brief Registers procedural foliage layers from the tile materials of a loaded terrain page.
+		/// @param pageX The terrain page X index.
+		/// @param pageY The terrain page Y index.
+		void RegisterPageFoliage(uint32 pageX, uint32 pageY);
+
+		/// @brief Ref-decrements (and removes when unused) the foliage layers a terrain page contributed.
+		/// @param pageX The terrain page X index.
+		/// @param pageY The terrain page Y index.
+		void UnregisterPageFoliage(uint32 pageX, uint32 pageY);
+
 		void SetupPacketHandler();
 
 		void RemovePacketHandler();
@@ -251,6 +280,10 @@ namespace mmo
 
 		PacketParseResult OnCompressedUpdateObject(game::IncomingPacket &packet);
 
+		/// Parses an object update body (object count + update blocks) from the given reader.
+		/// Shared by OnUpdateObject and OnCompressedUpdateObject (the latter after decompression).
+		PacketParseResult HandleObjectUpdate(io::Reader &reader);
+
 		PacketParseResult OnDestroyObjects(game::IncomingPacket &packet);
 
 		PacketParseResult OnMovement(game::IncomingPacket &packet);
@@ -274,6 +307,8 @@ namespace mmo
 		PacketParseResult OnSpellStart(game::IncomingPacket &packet);
 
 		PacketParseResult OnSpellGo(game::IncomingPacket &packet);
+
+		PacketParseResult OnSpellCooldown(game::IncomingPacket &packet);
 
 		PacketParseResult OnSpellFailure(game::IncomingPacket &packet);
 
@@ -327,6 +362,8 @@ namespace mmo
 
 		PacketParseResult OnPartyCommandResult(game::IncomingPacket &packet);
 
+		PacketParseResult OnPartyPing(game::IncomingPacket &packet);
+
 		PacketParseResult OnRandomRollResult(game::IncomingPacket &packet);
 
 		PacketParseResult OnSpellHealLog(game::IncomingPacket &packet);
@@ -338,6 +375,10 @@ namespace mmo
 		PacketParseResult OnMessageOfTheDay(game::IncomingPacket &packet);
 
 		PacketParseResult OnMoveRoot(game::IncomingPacket &packet);
+		PacketParseResult OnMoveStun(game::IncomingPacket &packet);
+		PacketParseResult OnMoveSleep(game::IncomingPacket &packet);
+		PacketParseResult OnMoveFear(game::IncomingPacket &packet);
+		PacketParseResult OnMoveDisorient(game::IncomingPacket &packet);
 
 		/// @brief Handles the GameTimeInfo packet.
 		/// @param packet The incoming packet.
@@ -346,12 +387,18 @@ namespace mmo
 
 		PacketParseResult OnSetProficiency(game::IncomingPacket &packet);
 
+		PacketParseResult OnSpellModChanged(game::IncomingPacket &packet);
+
 		PacketParseResult OnTimePlayedResponse(game::IncomingPacket &packet);
 
 		PacketParseResult OnTimeSyncRequest(game::IncomingPacket &packet);
 
+		PacketParseResult OnDebugLineOfSightResult(game::IncomingPacket &packet);
+
 	private:
 #ifdef MMO_WITH_DEV_COMMANDS
+		void Command_CheckLineOfSight(const std::string &cmd, const std::string &args) const;
+
 		void Command_LearnSpell(const std::string &cmd, const std::string &args) const;
 
 		void Command_CreateMonster(const std::string &cmd, const std::string &args) const;
@@ -414,6 +461,7 @@ namespace mmo
 		std::unique_ptr<PlayerController> m_playerController;
 		std::unique_ptr<AxisDisplay> m_debugAxis;
 		std::unique_ptr<WorldGrid> m_worldGrid;
+		uint32 m_lastZoneId = UINT32_MAX;
 		IdGenerator<uint64> m_objectIdGenerator{1};
 		IAudio &m_audio;
 
@@ -489,6 +537,7 @@ namespace mmo
 		CharSelect &m_charSelect;
 		GuildClient &m_guildClient;
 		FriendClient &m_friendClient;
+		ChannelClient &m_channelClient;
 
 		scoped_connection_container m_cvarChangedSignals;
 		Discord &m_discord;
@@ -498,13 +547,40 @@ namespace mmo
 		/// Foliage system for rendering grass and other vegetation
 		std::unique_ptr<Foliage> m_foliage;
 
+		/// Key identifying a distinct procedural foliage layer derived from terrain material data:
+		/// the painted terrain material (base or instance), the bound layer index and the mesh asset.
+		using FoliageLayerKey = std::tuple<const MaterialInterface*, uint8, String>;
+
+		/// A runtime foliage layer registered from terrain material data, ref-counted by the number
+		/// of loaded terrain pages whose tiles reference it.
+		struct RegisteredFoliageLayer
+		{
+			FoliageLayerPtr layer;
+			uint32 refCount = 0;
+		};
+
+		/// All currently registered material-driven foliage layers, keyed by FoliageLayerKey.
+		std::map<FoliageLayerKey, RegisteredFoliageLayer> m_foliageRegistry;
+
+		/// Per terrain page (index = x + y * 64), the set of foliage layer keys it contributed,
+		/// so they can be ref-decremented when the page unloads.
+		std::map<uint16, std::vector<FoliageLayerKey>> m_pageFoliageKeys;
+
 		TalentClient &m_talentClient;
 
 		Minimap &m_minimap;
 
 		InventoryClient &m_inventoryClient;
 
+		TradeClient &m_tradeClient;
+
 		bool m_worldLoaded = false;
+
+		/// Active pings received from the server, ticked down each frame.
+		std::vector<Minimap::PingDot> m_activePings;
+
+		/// 3D world ping visualizer.
+		std::unique_ptr<WorldPingVisualizer> m_worldPingVisualizer;
 
 		bool m_timeSyncResponseSent = false;
 
@@ -528,6 +604,8 @@ namespace mmo
 		void GetItemData(uint64 guid, std::weak_ptr<GamePlayerC> player) override;
 
 		void OnMoveEvent(GameUnitC &unit, const MovementEvent &moveEvent) override;
+
+		bool QueryWaterAt(float x, float z, float &outSurfaceY) const override;
 
 		void SetSelectedTarget(uint64 guid) override;
 

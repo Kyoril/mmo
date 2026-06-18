@@ -30,9 +30,11 @@ namespace mmo
 	class PartyInfo;
 	class GuildClient;
 	class FriendClient;
+	class ChannelClient;
 	class CharCreateInfo;
 	class CharSelect;
 	class TalentClient;
+	class TradeClient;
 	class Discord;
 	class GameTimeComponent;
 	class ClientRuntime;
@@ -86,9 +88,11 @@ namespace mmo
 		std::unique_ptr<PartyInfo> partyInfo;
 		std::unique_ptr<GuildClient> guildClient;
 		std::unique_ptr<FriendClient> friendClient;
+		std::unique_ptr<ChannelClient> channelClient;
 		std::unique_ptr<CharCreateInfo> charCreateInfo;
 		std::unique_ptr<CharSelect> charSelect;
 		std::unique_ptr<TalentClient> talentClient;
+		std::unique_ptr<TradeClient> tradeClient;
 		std::unique_ptr<Discord> discord;
 		/// @brief Loaded client project data (DB/content metadata).
 		std::unique_ptr<proto_client::Project> project;

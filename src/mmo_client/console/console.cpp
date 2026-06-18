@@ -4,6 +4,7 @@
 #include "console_commands.h"
 #include "console_var.h"
 #include "event_loop.h"
+#include "platform.h"
 #include "screen.h"
 
 #include "base/assign_on_exit.h"
@@ -11,6 +12,7 @@
 #include "frame_ui/frame_mgr.h"
 #include "frame_ui/geometry_buffer.h"
 #include "graphics/graphics_device.h"
+#include "graphics/global_shader_parameters.h"
 #include "log/default_log_levels.h"
 
 #include "assets/asset_registry.h"
@@ -94,6 +96,8 @@ namespace mmo
 		ConsoleVar* s_gxVSyncCVar = nullptr;
 		ConsoleVar* s_gxApiCVar = nullptr;
 		ConsoleVar* s_gxPerfCVar = nullptr;
+		ConsoleVar* s_soundEnabledCVar = nullptr;
+		ConsoleVar* s_musicEnabledCVar = nullptr;
 
 		/// Helper struct for automatic gx cvar table.
 		struct GxCVarHelper
@@ -113,6 +117,8 @@ namespace mmo
 			{"gxVSync",			"Whether the application will run with vsync enabled.",	"1",		&s_gxVSyncCVar },
 
 			{ "perf", "Toggles whether performance counters are visible", "0", &s_gxPerfCVar },
+			{ "SoundEnabled", "Whether sound effects are enabled.", "1", &s_soundEnabledCVar },
+			{ "MusicEnabled", "Whether music is enabled.", "1", &s_musicEnabledCVar },
 
 			// TODO: Add more graphics cvars here that should be registered and unregistered automatically
 			// as well as being serialized when saving the graphics settings of the game.
@@ -126,17 +132,8 @@ namespace mmo
 		/// Registers the automatically managed gx cvars from the table above.
 		void RegisterGraphicsCVars()
 		{
-			// Register console variables from the table, we'll set the resolution dynamically after device creation
 			std::for_each(s_gxCVars.cbegin(), s_gxCVars.cend(), [](const GxCVarHelper& x) {
-				std::string actualDefaultValue = x.defaultValue;
-				
-				// For gxResolution, use fallback if empty - will be updated after device creation
-				if (x.name == "gxResolution" && actualDefaultValue.empty())
-				{
-					actualDefaultValue = "1920x1080";  // Fallback, will be updated later
-				}
-				
-				ConsoleVar* output = ConsoleVarMgr::RegisterConsoleVar(x.name, x.description, actualDefaultValue);
+				ConsoleVar* output = ConsoleVarMgr::RegisterConsoleVar(x.name, x.description, x.defaultValue);
 
 				if (x.outputVar != nullptr)
 				{
@@ -211,7 +208,8 @@ namespace mmo
 		RegisterCommand("quit", console_commands::ConsoleCommand_Quit, ConsoleCommandCategory::Default, "Shutdown the game client immediately.");
 		RegisterCommand("list", console_commands::ConsoleCommand_List, ConsoleCommandCategory::Default, "Shows all available console commands.");
 		RegisterCommand("clear", ConsoleCommand_Clear, ConsoleCommandCategory::Default, "Clears the console text.");
-		
+
+
 		ConsoleVarMgr::Initialize();
 		
 		s_dataPathCVar = ConsoleVarMgr::RegisterConsoleVar("dataPath", "The path of the client data directory.", (std::filesystem::current_path() / "Data").string());
@@ -239,6 +237,7 @@ namespace mmo
 				"Textures.hpak",
 				"Worlds.hpak",
 				"Sound.hpak",
+				"Particles.hpak",
 				localeArchive,
 				localeArchive + ".hpak",
 			});	
@@ -271,18 +270,21 @@ namespace mmo
 		{
 			api = GraphicsApi::OpenGL;
 		}
+		// On first launch the resolution cvar is empty because no config has been saved yet.
+		// In that case, default to the native desktop resolution in fullscreen.
+		if (s_gxResolutionCVar->GetStringValue().empty())
+		{
+			const auto [w, h] = Platform::GetPrimaryDisplayResolution();
+			s_gxResolutionCVar->Set(std::to_string(w) + "x" + std::to_string(h));
+			s_gxWindowedCVar->Set("0");
+			ILOG("First launch: defaulting to native display resolution " << w << "x" << h << " fullscreen");
+		}
+
 		GraphicsDeviceDesc desc;
 		ExtractResolution(s_gxResolutionCVar->GetStringValue(), desc.width, desc.height);
 		desc.windowed = s_gxWindowedCVar->GetBoolValue();
 		desc.vsync = s_gxVSyncCVar->GetBoolValue();
 
-		// Validate fullscreen resolution and adjust if necessary
-		if (!desc.windowed)
-		{
-			// We need to create a temporary graphics device to get monitor info
-			// For now, we'll do this validation after device creation
-		}
-		
 		switch (api)
 		{
 #if PLATFORM_WINDOWS
@@ -306,33 +308,11 @@ namespace mmo
 		auto& device = GraphicsDevice::Get();
 		device.GetAutoCreatedWindow()->SetTitle("MMORPG");
 
-		// Now that we have a graphics device, update the resolution if it wasn't set properly
-		if (s_gxResolutionCVar->GetStringValue() == "1920x1080" || s_gxResolutionCVar->GetStringValue().empty())
-		{
-			const std::string monitorRes = device.GetPrimaryMonitorResolution();
-			s_gxResolutionCVar->Set(monitorRes);
-			ILOG("Set default resolution to monitor resolution: " << monitorRes);
-		}
-		
-		// Validate fullscreen resolution now that we have a graphics device
-		if (!desc.windowed)
-		{
-			if (!device.ValidateFullscreenResolution(desc.width, desc.height))
-			{
-				// Use monitor resolution for fullscreen if validation fails
-				const std::string monitorRes = device.GetPrimaryMonitorResolution();
-				uint16 newWidth, newHeight;
-				ExtractResolution(monitorRes, newWidth, newHeight);
-				if (newWidth != desc.width || newHeight != desc.height)
-				{
-					ILOG("Adjusted fullscreen resolution from " << desc.width << "x" << desc.height << 
-						 " to monitor resolution: " << newWidth << "x" << newHeight);
-					s_gxResolutionCVar->Set(monitorRes);
-				}
-			}
-		}
-		
-		device.GetAutoCreatedWindow()->Closed.connect([]() 
+		// Load the project-wide global shader parameter registry so every material can reference
+		// the shared globals. A missing file simply leaves the registry empty.
+		GlobalShaderParameters::Get().LoadFromAsset(GlobalShaderParametersAssetPath);
+
+		device.GetAutoCreatedWindow()->Closed.connect([]()
 		{
 			EventLoop::Terminate(0);
 		});
@@ -507,6 +487,16 @@ namespace mmo
 		const auto it = s_consoleCommands.find(command);
 		if (it == s_consoleCommands.end())
 		{
+			// No such command exists. Treat the input as a macro and try to run "<command>.cfg"
+			// instead. This allows defining reusable macros as cfg script files (e.g. typing
+			// "oakenshire" runs "oakenshire.cfg" which may contain a "worldport ..." command).
+			const std::string scriptFile = command + ".cfg";
+			if (AssetRegistry::OpenFile(scriptFile))
+			{
+				console_commands::ConsoleCommand_Run("run", scriptFile);
+				return;
+			}
+
 			ELOG("Unknown console command \"" << command << "\"");
 			return;
 		}
@@ -683,6 +673,7 @@ namespace mmo
 			const double fps = profiler.GetAverageFPS();
 			const double frameTime = profiler.GetAverageFrameTimeMs();
 			const double currentFrameTime = profiler.GetFrameTimeMs();
+			const double cpuFrameTime = profiler.GetCpuFrameTimeMs();
 
 			// Color the FPS value based on performance
 			argb_t fpsColor;
@@ -704,6 +695,20 @@ namespace mmo
 				strm << std::fixed << std::setprecision(1);
 				strm << "FPS: " << fps << "  Frame: " << frameTime << " ms (cur: " << currentFrameTime << " ms)";
 				s_consoleFont->DrawText(strm.str(), Point(xPadding, yOffset), *s_perfTextGeom, 1.0f, fpsColor);
+				yOffset += lineHeight;
+			}
+
+			// CPU work time vs real frame time. If CPU is much lower than the real frame time, the
+			// frame is GPU-bound (the CPU is idle waiting on Present/VSync).
+			{
+				const double gpuBound = currentFrameTime - cpuFrameTime;
+				std::ostringstream strm;
+				strm << std::fixed << std::setprecision(1);
+				strm << "CPU: " << cpuFrameTime << " ms   GPU-wait: " << (gpuBound > 0.0 ? gpuBound : 0.0) << " ms";
+				// Highlight in yellow when the GPU wait dominates the frame.
+				const bool gpuBoundDominant = gpuBound > cpuFrameTime;
+				s_consoleFont->DrawText(strm.str(), Point(xPadding, yOffset), *s_perfTextGeom, 1.0f,
+					gpuBoundDominant ? Color(1.0f, 1.0f, 0.0f) : Color(0.7f, 0.7f, 0.7f));
 				yOffset += lineHeight;
 			}
 

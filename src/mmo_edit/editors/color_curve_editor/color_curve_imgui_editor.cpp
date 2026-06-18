@@ -1578,17 +1578,17 @@ namespace mmo
                 );
                   // Format with better precision for key positions
                 if (std::abs(time) < 0.001f)
-                    sprintf(label, "0.0");
+                    snprintf(label, sizeof(label), "0.0");
                 else if (std::abs(time - 0.5f) < 0.001f)
-                    sprintf(label, "0.5");
+                    snprintf(label, sizeof(label), "0.5");
                 else if (std::abs(time - 1.0f) < 0.001f)
-                    sprintf(label, "1.0");
+                    snprintf(label, sizeof(label), "1.0");
                 else if (std::abs(time + 0.5f) < 0.001f)
-                    sprintf(label, "-0.5");
+                    snprintf(label, sizeof(label), "-0.5");
                 else if (std::abs(time + 1.0f) < 0.001f)
-                    sprintf(label, "-1.0");
+                    snprintf(label, sizeof(label), "-1.0");
                 else
-                    sprintf(label, "%.2f", time);
+                    snprintf(label, sizeof(label), "%.2f", time);
                 ImVec2 textSize = ImGui::CalcTextSize(label);
                 drawList->AddText(
                     ImVec2(x - textSize.x / 2, canvasPos.y - textSize.y - 8),
@@ -1654,13 +1654,13 @@ namespace mmo
                 );
                   // Format with better precision for key positions
                 if (std::abs(value) < 0.001f)
-                    sprintf(label, "0.0");
+                    snprintf(label, sizeof(label), "0.0");
                 else if (std::abs(value - 0.5f) < 0.001f)
-                    sprintf(label, "0.5");
+                    snprintf(label, sizeof(label), "0.5");
                 else if (std::abs(value - 1.0f) < 0.001f)
-                    sprintf(label, "1.0");
+                    snprintf(label, sizeof(label), "1.0");
                 else
-                    sprintf(label, "%.2f", value);
+                    snprintf(label, sizeof(label), "%.2f", value);
                 
                 ImVec2 textSize = ImGui::CalcTextSize(label);
                 drawList->AddText(

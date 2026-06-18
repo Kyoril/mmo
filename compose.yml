@@ -33,7 +33,7 @@ services:
     volumes:
       - data-volume:/server_data
     # This service doesn't need to stay running; it just provides the data
-    command: ["/bin/sh", "-c", "mkdir -p /server_data/data; mkdir -p /server_data/nav; cp -r /data/* /server_data/data; cp -r /nav/* /server_data/nav; true"]
+    command: ["/bin/sh", "-c", "mkdir -p /server_data/data; mkdir -p /server_data/nav; mkdir -p /server_data/client/Worlds; cp -r /data/* /server_data/data; cp -r /nav/* /server_data/nav; cp -r /client/Worlds /server_data/client/; true"]
     
   login_server:
     image: kyoril/mmo_login_server:latest
@@ -105,6 +105,7 @@ services:
       - HOSTED_MAP_IDS=0,1
       - DATA_DIR=/server-data/data
       - NAV_DIR=/server-data/nav
+      - WORLD_DATA_DIR=/server-data/client
     extra_hosts:
       host.docker.internal: "172.17.0.1"
     networks:

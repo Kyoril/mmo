@@ -21,7 +21,12 @@
 #include "base/macros.h"
 #include "base/profiler.h"
 #include "graphics/depth_stencil_hash.h"
+#include "graphics/global_shader_parameters.h"
 #include "log/default_log_levels.h"
+
+#include <set>
+#include <string>
+#include <algorithm>
 #include "luabind/operator.hpp"
 #include "math/radian.h"
 #include "scene_graph/render_operation.h"
@@ -763,6 +768,17 @@ namespace mmo
 		return nullptr;
 	}
 
+	void GraphicsDeviceD3D11::BindNullPixelShader()
+	{
+		if (m_currentPixelShader == nullptr)
+		{
+			return;
+		}
+
+		m_immContext->PSSetShader(nullptr, nullptr, 0);
+		m_currentPixelShader = nullptr;
+	}
+
 	void GraphicsDeviceD3D11::SetDepthBias(float bias)
 	{
 		m_rasterizerDesc.DepthBias = static_cast<int32>(bias);
@@ -1274,6 +1290,15 @@ namespace mmo
 			// Don't use instanced rendering if we don't have the instanced shader
 			if (vsType == VertexShaderType::Instanced)
 			{
+				// Warn once per material so missing instanced variants (e.g. on older mesh
+				// materials reused for instanced foliage/trees) are diagnosable instead of
+				// silently rendering nothing. Recompiling/resaving the material adds the variant.
+				static std::set<std::string> s_warnedInstancedMaterials;
+				const std::string materialName = operation.material ? std::string(operation.material->GetName()) : std::string("<unknown>");
+				if (s_warnedInstancedMaterials.insert(materialName).second)
+				{
+					WLOG("Material '" << materialName << "' has no instanced vertex shader variant - instanced draw skipped (nothing rendered). Recompile/resave this material to enable instanced rendering.");
+				}
 				return; // Skip rendering - instanced shader required
 			}
 		}
@@ -1315,6 +1340,15 @@ namespace mmo
 
 			ID3D11Buffer* buffers[] = { ((ConstantBufferD3D11*)buffer)->GetBuffer() };
 			m_immContext->PSSetConstantBuffers(psStartSlot++, 1, buffers);
+		}
+
+		// Bind the shared global shader parameter buffer to its fixed reserved register. This makes
+		// global shader variables available to every material. Binding it to a slot a shader doesn't
+		// declare is harmless, and we re-bind per operation so it survives state changes by other
+		// systems. The buffer itself is only rebuilt/re-uploaded when a global changes (see GetBuffer).
+		if (const ConstantBufferPtr globalParamBuffer = GlobalShaderParameters::Get().GetBuffer(*this))
+		{
+			globalParamBuffer->BindToStage(ShaderType::PixelShader, kGlobalShaderParametersPsSlot);
 		}
 
 		// Only update material parameter buffers when the material changed
@@ -1420,11 +1454,56 @@ namespace mmo
 		// For fullscreen, we should use exact monitor resolution for best performance
 		if (width != maxWidth || height != maxHeight)
 		{
-			WLOG("Fullscreen resolution " << width << "x" << height << 
-				 " differs from monitor resolution " << maxWidth << "x" << maxHeight << 
+			WLOG("Fullscreen resolution " << width << "x" << height <<
+				 " differs from monitor resolution " << maxWidth << "x" << maxHeight <<
 				 ". Consider using monitor resolution for optimal performance.");
 		}
-		
+
 		return true;
+	}
+
+	std::vector<std::pair<uint16, uint16>> GraphicsDeviceD3D11::GetSupportedResolutions() const
+	{
+		std::vector<std::pair<uint16, uint16>> result;
+
+		// Walk from the device up to its DXGI factory so we can enumerate the primary output's
+		// supported display modes for the back buffer format we render with.
+		ComPtr<IDXGIDevice> dxgiDevice;
+		ComPtr<IDXGIAdapter> adapter;
+		ComPtr<IDXGIOutput> output;
+		if (m_device &&
+			SUCCEEDED(m_device.As(&dxgiDevice)) &&
+			SUCCEEDED(dxgiDevice->GetAdapter(&adapter)) &&
+			SUCCEEDED(adapter->EnumOutputs(0, &output)))
+		{
+			const DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+			UINT modeCount = 0;
+			if (SUCCEEDED(output->GetDisplayModeList(format, 0, &modeCount, nullptr)) && modeCount > 0)
+			{
+				std::vector<DXGI_MODE_DESC> modes(modeCount);
+				if (SUCCEEDED(output->GetDisplayModeList(format, 0, &modeCount, modes.data())))
+				{
+					result.reserve(modeCount);
+					for (const DXGI_MODE_DESC& mode : modes)
+					{
+						result.emplace_back(static_cast<uint16>(mode.Width), static_cast<uint16>(mode.Height));
+					}
+
+					// Modes are returned per refresh rate / scanline order, so de-duplicate the
+					// width/height pairs and present them sorted ascending.
+					std::sort(result.begin(), result.end());
+					result.erase(std::unique(result.begin(), result.end()), result.end());
+				}
+			}
+		}
+
+		// Fall back to the common-resolution list if DXGI enumeration yielded nothing.
+		if (result.empty())
+		{
+			return GraphicsDevice::GetSupportedResolutions();
+		}
+
+		return result;
 	}
 }

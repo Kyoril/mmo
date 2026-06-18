@@ -4,6 +4,7 @@
 #include "material_compiler.h"
 #include "graphics/graphics_device.h"
 #include "graphics/shader_compiler.h"
+#include "graphics/shader_platform.h"
 #include "graphics/texture_mgr.h"
 #include "log/default_log_levels.h"
 
@@ -29,14 +30,63 @@ namespace mmo
 
 	void Material::SetVertexShaderCode(VertexShaderType vertexShaderType, std::span<uint8> code)
 	{
-		m_vertexShaderCode[static_cast<uint32_t>(vertexShaderType)].assign(code.begin(), code.end());
+		const uint32_t idx = static_cast<uint32_t>(vertexShaderType);
+		m_vertexShaderCode[idx].assign(code.begin(), code.end());
 		m_vertexShaderChanged = true;
+		// Mirror into the per-platform map so Export() can find the bytecode.
+		m_allVertexShaderCodes[std::string(shader_platform::GetCurrentPlatform())][idx].assign(code.begin(), code.end());
 	}
 
 	void Material::SetPixelShaderCode(PixelShaderType shaderType, std::span<uint8> code)
 	{
-		m_pixelShaderCode[static_cast<uint32_t>(shaderType)].assign(code.begin(), code.end());
-		m_pixelShaderChanged[static_cast<uint32_t>(shaderType)] = true;
+		const uint32_t idx = static_cast<uint32_t>(shaderType);
+		m_pixelShaderCode[idx].assign(code.begin(), code.end());
+		m_pixelShaderChanged[idx] = true;
+		// Mirror into the per-platform map so Export() can find the bytecode.
+		m_allPixelShaderCodes[std::string(shader_platform::GetCurrentPlatform())][idx].assign(code.begin(), code.end());
+	}
+
+	void Material::SetVertexShaderCode(std::string_view platform, VertexShaderType shaderType, std::span<uint8> code)
+	{
+		const uint32_t idx = static_cast<uint32_t>(shaderType);
+		m_allVertexShaderCodes[std::string(platform)][idx].assign(code.begin(), code.end());
+		// If this is the running platform, also refresh the runtime flat array for Update().
+		if (platform == shader_platform::GetCurrentPlatform())
+		{
+			m_vertexShaderCode[idx].assign(code.begin(), code.end());
+			m_vertexShaderChanged = true;
+		}
+	}
+
+	void Material::SetPixelShaderCode(std::string_view platform, PixelShaderType shaderType, std::span<uint8> code)
+	{
+		const uint32_t idx = static_cast<uint32_t>(shaderType);
+		m_allPixelShaderCodes[std::string(platform)][idx].assign(code.begin(), code.end());
+		if (platform == shader_platform::GetCurrentPlatform())
+		{
+			m_pixelShaderCode[idx].assign(code.begin(), code.end());
+			m_pixelShaderChanged[idx] = true;
+		}
+	}
+
+	std::span<uint8 const> Material::GetVertexShaderCode(std::string_view platform, VertexShaderType type) const
+	{
+		const auto it = m_allVertexShaderCodes.find(std::string(platform));
+		if (it != m_allVertexShaderCodes.end())
+		{
+			return { it->second[static_cast<uint32_t>(type)] };
+		}
+		return {};
+	}
+
+	std::span<uint8 const> Material::GetPixelShaderCode(std::string_view platform, PixelShaderType type) const
+	{
+		const auto it = m_allPixelShaderCodes.find(std::string(platform));
+		if (it != m_allPixelShaderCodes.end())
+		{
+			return { it->second[static_cast<uint32_t>(type)] };
+		}
+		return {};
 	}
 
 	ConstantBufferPtr Material::GetParameterBuffer(MaterialParameterType type, GraphicsDevice& device)
@@ -323,7 +373,7 @@ namespace mmo
 			shaderCompiler.Compile(vertexInput, vertexOutput);
 			if (vertexOutput.succeeded)
 			{
-				m_vertexShaderCode[i] = vertexOutput.code.data;
+				SetVertexShaderCode(static_cast<VertexShaderType>(i), { vertexOutput.code.data });
 				m_vertexShader[i] = std::move(GraphicsDevice::Get().CreateShader(ShaderType::VertexShader, vertexOutput.code.data.data(), vertexOutput.code.data.size()));
 			}
 			else
@@ -332,14 +382,14 @@ namespace mmo
 				return false;
 			}
 		}
-		
+
 		// Compile pixel shader (forward rendering)
 		ShaderCompileResult pixelOutput;
 		ShaderCompileInput pixelInput { compiler.GetPixelShaderCode(PixelShaderType::Forward), ShaderType::PixelShader };
 		shaderCompiler.Compile(pixelInput, pixelOutput);
 		if (pixelOutput.succeeded)
 		{
-			m_pixelShaderCode[static_cast<uint32_t>(PixelShaderType::Forward)] = pixelOutput.code.data;
+			SetPixelShaderCode(PixelShaderType::Forward, { pixelOutput.code.data });
 			m_pixelShader[static_cast<uint32_t>(PixelShaderType::Forward)] = std::move(GraphicsDevice::Get().CreateShader(ShaderType::PixelShader, pixelOutput.code.data.data(), pixelOutput.code.data.size()));
 		}
 		else
@@ -369,8 +419,19 @@ namespace mmo
 			ASSERT(m_vertexShader[0]);
 			if (m_vertexShader[0]) m_vertexShader[0]->Set();
 
-			ASSERT(m_pixelShader[static_cast<uint32_t>(pixelShaderType)]);
-			if (m_pixelShader[static_cast<uint32_t>(pixelShaderType)]) m_pixelShader[static_cast<uint32_t>(pixelShaderType)]->Set();
+			// Opaque/unlit casters don't need a pixel shader to write shadow depth; binding none lets
+			// the GPU use its faster depth-only path. Masked materials still need the alpha-test shader
+			// to clip cut-out geometry, and other passes always bind their real shader.
+			if (pixelShaderType == PixelShaderType::ShadowMap && m_type != MaterialType::Masked
+				&& device.SupportsNullPixelShaderForShadows())
+			{
+				device.BindNullPixelShader();
+			}
+			else
+			{
+				ASSERT(m_pixelShader[static_cast<uint32_t>(pixelShaderType)]);
+				if (m_pixelShader[static_cast<uint32_t>(pixelShaderType)]) m_pixelShader[static_cast<uint32_t>(pixelShaderType)]->Set();
+			}
 			break;
 		}
 
@@ -388,9 +449,21 @@ namespace mmo
 			// Only set depth state for non-UI domains to avoid interfering with 3D rendering
 			if (domain != MaterialDomain::UserInterface)
 			{
-				device.SetDepthEnabled(m_depthTest);
-				device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
-				device.SetDepthWriteEnabled(m_depthWrite);
+				if (pixelShaderType == PixelShaderType::GBuffer && device.IsGBufferDepthPrepass())
+				{
+					// A depth pre-pass has already written the front-most depth. Test LessEqual and
+					// do not write depth, so the hardware early-Z rejects occluded pixels before this
+					// (expensive, 4-target) shader runs — eliminating overdraw shading.
+					device.SetDepthEnabled(true);
+					device.SetDepthTestComparison(DepthTestMethod::LessEqual);
+					device.SetDepthWriteEnabled(false);
+				}
+				else
+				{
+					device.SetDepthEnabled(m_depthTest);
+					device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
+					device.SetDepthWriteEnabled(m_depthWrite);
+				}
 			}
 		}
 		else

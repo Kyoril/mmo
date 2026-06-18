@@ -100,6 +100,18 @@ namespace mmo
 		/// @brief Returns whether the queue has been initialized with at least one snapshot.
 		[[nodiscard]] bool IsInitialized() const { return m_initialized; }
 
+		/// @brief Updates the facing of the most recent snapshot without adding a new one.
+		/// Used for MoveSetFacing packets that only change orientation, not position.
+		/// This keeps the Hermite interpolator's tangent directions current without
+		/// introducing a spurious zero-displacement waypoint.
+		void UpdateLastSnapshotFacing(Radian facing)
+		{
+			if (!m_snapshots.empty())
+			{
+				m_snapshots.back().facing = facing;
+			}
+		}
+
 		/// @brief Clears all buffered snapshots and resets state.
 		void Clear();
 
@@ -156,5 +168,9 @@ namespace mmo
 
 		/// @brief Maximum number of snapshots to keep in the buffer.
 		static constexpr size_t MaxSnapshots = 60;
+
+		/// @brief Exponential moving average of inter-snapshot arrival interval (ms).
+		/// Starts at 100ms (the default buffer) so we don't start too aggressive.
+		GameTime m_avgIntervalMs = 100;
 	};
 }

@@ -348,8 +348,9 @@ namespace mmo
 		params.maxParticles = 100;             // Max 100 particles alive at once
 		params.minLifetime = 2.0f;             // Particles live 2-4 seconds
 		params.maxLifetime = 4.0f;
-		params.startSize = 0.5f;               // Start at 0.5 units
-		params.endSize = 0.1f;                 // Fade to 0.1 units
+		params.minStartSize = 0.5f;            // Start at 0.5 units
+		params.maxStartSize = 0.5f;
+		params.sizeOverLife = FloatCurve(1.0f, 0.2f); // Fade to 0.1 units (0.5 * 0.2)
 		params.minVelocity = Vector3(-1.0f, 2.0f, -1.0f);  // Upward fountain
 		params.maxVelocity = Vector3(1.0f, 4.0f, 1.0f);
 		params.gravity = Vector3(0.0f, -2.0f, 0.0f);       // Gravity pulls down
@@ -415,12 +416,11 @@ namespace mmo
 		g_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), *g_scene, desc.width, desc.height);
 
 		// Optimize shadow settings for better quality
-		g_deferredRenderer->SetDepthBias(100.0f, 2.5f, 0.01f); // Hardware depth bias settings
-		g_deferredRenderer->SetShadowBias(0.00025f);           // Software depth bias in shadow space
-		g_deferredRenderer->SetNormalBiasScale(0.05f);         // Scale factor for normal-based bias
-		g_deferredRenderer->SetShadowSoftness(2.5f);           // Shadow softness for smooth edges
+		g_deferredRenderer->SetDepthBias(138.6f, 0.1f, 0.0f); // Hardware depth bias settings
+		g_deferredRenderer->SetShadowBias(0.00002f);           // Software depth bias in shadow space
+		g_deferredRenderer->SetNormalBiasScale(0.2f);         // Scale factor for normal-based bias
 		g_deferredRenderer->SetBlockerSearchRadius(0.03f);     // Blocker search radius for PCSS-style shadows
-		g_deferredRenderer->SetLightSize(0.005f);              // Virtual light size for penumbra simulation
+		g_deferredRenderer->SetLightSize(0.0268f);              // Virtual light size for penumbra simulation
 		
 		// Set shadow map information and direction in the scene
 		g_scene->SetShadowDirLightTextureOffset(0.5f);
@@ -460,10 +460,11 @@ namespace mmo
 
 		g_foliage = std::make_unique<Foliage>(*g_scene, GraphicsDevice::Get());
 
-		g_foliage->SetHeightQueryCallback([](float x, float z, float& height, Vector3& normal)
+		g_foliage->SetTerrainSampleCallback([](float x, float z, FoliagePlacementSample& out)
 			{
-				height = 0.0f;
-				normal = Vector3::UnitY;
+				out.height = 0.0f;
+				out.normal = Vector3::UnitY;
+				out.valid = true;
 				return true;
 			});
 

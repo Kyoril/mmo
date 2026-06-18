@@ -75,6 +75,8 @@ namespace mmo
 
 		void HandleModDamageDone(bool apply) const;
 
+		void HandleModSpellDamageDone(bool apply) const;
+
 		void HandleModDamageTaken(bool apply) const;
 
 		void HandleModHealingDone(bool apply) const;
@@ -105,7 +107,13 @@ namespace mmo
 
 		void HandleModSleep(bool apply) const;
 
+		void HandleModDisorient(bool apply) const;
+
 		void HandleModVisibility(bool apply) const;
+
+		void HandleDamageImmunity(bool apply) const;
+
+		void HandleModDodgeChance(bool apply) const;
 
 	private:
 		void HandlePeriodicDamage() const;

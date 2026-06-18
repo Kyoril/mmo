@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include "game_server/ai/creature_ai_combat_state.h"
+#include "game_server/world/world_instance.h"
 #include "game_server/ai/creature_ai.h"
 #include "game_server/ai/creature_combat_script.h"
 #include "game_server/ai/creature_combat_script_registry.h"
@@ -67,6 +69,8 @@ namespace mmo
 		, m_isRanged(false)
 		, m_canReset(false)
 		, m_castingTimeoutEnd(0)
+		, m_losBlocked(false)
+		, m_lastLosCheckTime(0)
 	{
 	}
 
@@ -100,6 +104,15 @@ namespace mmo
 		if (initiator)
 		{
 			AddThreat(*initiator, 0.0f);
+
+			// Register the combat initiator as a loot recipient immediately on combat
+			// entry. This ensures that if the creature dies in the same frame it enters
+			// combat (i.e. a one-shot from idle), the death state still finds a tagged
+			// creature and distributes XP and loot correctly.
+			if (initiator->IsPlayer() && !controlled.IsTagged())
+			{
+				controlled.AddLootRecipient(initiator->GetGuid());
+			}
 		}
 		m_combatInitiator.reset();
 
@@ -165,6 +178,7 @@ namespace mmo
 		m_onMoveTargetChanged.disconnect();
 		m_onUnitStateChanged.disconnect();
 		m_onSpellCastStarted.disconnect();
+		m_onSpellCastEnded.disconnect();
 
 		auto& controlled = GetControlled();
 		controlled.SetInCombat(false, false);
@@ -175,6 +189,7 @@ namespace mmo
 		// Stop movement and reset movement state
 		controlled.GetMover().StopMovement();
 		m_movementState.Reset();
+		m_losBlocked = false;
 
 		// Clean up combat participants
 		for (auto& pair : m_threat)
@@ -410,19 +425,68 @@ namespace mmo
 		// Find the unit with the highest threat
 		GameUnitS* newVictim = GetTopThreatener();
 
+		// Root fallback: if rooted and top target is out of melee reach, find nearest in-range alternative.
+		if (newVictim && controlled.IsRooted())
+		{
+			const float reach = controlled.GetMeleeReach() + newVictim->GetMeleeReach();
+			const float dist = (controlled.GetPosition() - newVictim->GetPosition()).GetLength();
+			if (dist > reach)
+			{
+				// Scan threat list for the closest unit within melee reach.
+				GameUnitS* fallback = nullptr;
+				float bestDist = std::numeric_limits<float>::max();
+				for (const auto& pair : m_threat)
+				{
+					GameUnitS* candidate = pair.second.threatener.lock().get();
+					if (!candidate || !candidate->IsAlive()) continue;
+					const float r = controlled.GetMeleeReach() + candidate->GetMeleeReach();
+					const float d = (controlled.GetPosition() - candidate->GetPosition()).GetLength();
+					if (d <= r && d < bestDist)
+					{
+						bestDist = d;
+						fallback = candidate;
+					}
+				}
+
+				if (fallback != nullptr)
+				{
+					// In-range fallback found — attack it.
+					newVictim = fallback;
+				}
+				else
+				{
+					// No target in reach while rooted — clear the visual target so the unit
+					// doesn't appear to be targeting anyone.  Keep newVictim non-null so we
+					// don't abort combat; just idle until something walks in range.
+					controlled.SetTarget(0);
+					// Don't call StartAttack — nothing to attack right now.
+					return;
+				}
+			}
+		}
+
 		// Only switch victims if necessary
 		if (newVictim && newVictim != currentVictim)
 		{
 			if (!newVictim->CanBeSeenBy(controlled))
 			{
-				controlled.StopAttack();
-				controlled.SetTarget(0);
-				m_movementState.Reset();
+				// Unit is invisible/stealthed - drop from threat list so the creature
+				// can reset if no other valid targets remain.
+				RemoveThreat(*newVictim);
 			}
 			else
 			{
 				controlled.StartAttack(std::static_pointer_cast<GameUnitS>(newVictim->shared_from_this()));
 				m_movementState.Reset(); // Reset movement when switching targets
+				m_losBlocked = false;    // New target may be in LOS
+			}
+		}
+		else if (newVictim && newVictim == currentVictim)
+		{
+			// Existing victim — check if they've gone invisible/stealthed mid-combat.
+			if (!newVictim->CanBeSeenBy(controlled))
+			{
+				RemoveThreat(*newVictim);
 			}
 		}
 		else if (!newVictim)
@@ -438,18 +502,19 @@ namespace mmo
 		auto& controlled = GetControlled();
 		auto& mover = controlled.GetMover();
 
-		// Nothing to do when rooted or casting
-		if (controlled.IsRooted() || m_isCasting)
+		// Nothing to do when rooted, under forced movement (fear/disorient), or casting
+		if (controlled.IsRooted() || controlled.IsUnderForcedMovement() || m_isCasting)
 		{
 			return false;
 		}
 
-		// Use the actual attack range for consistency with OnAttackSwing()
+		// Use the actual attack range for consistency with OnAttackSwing() — 2D (flat) distance,
+		// matching the check in OnAttackSwing which uses withHeight=false.
 		const float attackRange = controlled.GetMeleeReach() + target.GetMeleeReach();
 		const float attackRangeSq = attackRange * attackRange;
 
-		// Check if we're already in attack range
-		const float currentDistanceSq = target.GetSquaredDistanceTo(mover.GetCurrentLocation(), true);
+		// Check if we're already in attack range (flat/2D, matching OnAttackSwing)
+		const float currentDistanceSq = target.GetSquaredDistanceTo(mover.GetCurrentLocation(), false);
 		if (currentDistanceSq <= attackRangeSq)
 		{
 			return false; // Already in range
@@ -459,7 +524,7 @@ namespace mmo
 		// This triggers recalculation when the player moves significantly (e.g., kiting away)
 		if (m_movementState.isMovingToCombat)
 		{
-			const float playerDistanceFromWaypointSq = target.GetSquaredDistanceTo(m_movementState.lastWaypointTarget, true);
+			const float playerDistanceFromWaypointSq = target.GetSquaredDistanceTo(m_movementState.lastWaypointTarget, false);
 			if (playerDistanceFromWaypointSq > PLAYER_POSITION_THRESHOLD)
 			{
 				DLOG("Recalculation: distance_sq=" << playerDistanceFromWaypointSq << " > threshold; triggering waypoint recompute");
@@ -475,7 +540,7 @@ namespace mmo
 			{
 				// Additional check: if target is moving toward us, we might intercept before reaching destination
 				const Vector3 ourDestination = mover.GetTarget();
-				const float distanceToDestinationSq = target.GetSquaredDistanceTo(ourDestination, true);
+				const float distanceToDestinationSq = target.GetSquaredDistanceTo(ourDestination, false);
 				
 				// If target is close to where we're going, continue current movement
 				if (distanceToDestinationSq <= attackRangeSq)
@@ -517,8 +582,8 @@ namespace mmo
 
 	bool CreatureAICombatState::ChaseTarget(GameUnitS& target)
 	{
-		// Don't move while casting
-		if (m_isCasting)
+		// Don't move while casting or under forced movement (fear/disorient controller)
+		if (m_isCasting || GetControlled().IsUnderForcedMovement())
 		{
 			return true; // Consider this successful - we're doing what we should be doing
 		}
@@ -529,11 +594,10 @@ namespace mmo
 			return true; // Script says we can't move, treat as success
 		}
 
-		// Check if player has moved beyond our threshold distance from current waypoint target
-		// This detects kiting and triggers immediate waypoint recalculation
+		// Also update waypoint recalculation check to use flat distance (matching OnAttackSwing)
 		if (m_movementState.isMovingToCombat && !GetControlled().IsRooted())
 		{
-			const float playerDistanceFromWaypointSq = target.GetSquaredDistanceTo(m_movementState.lastWaypointTarget, true);
+			const float playerDistanceFromWaypointSq = target.GetSquaredDistanceTo(m_movementState.lastWaypointTarget, false);
 			if (playerDistanceFromWaypointSq > PLAYER_POSITION_THRESHOLD)
 			{
 				DLOG("Recalculation: distance_sq=" << playerDistanceFromWaypointSq << " > threshold; triggering waypoint recompute");
@@ -542,9 +606,77 @@ namespace mmo
 			}
 		}
 
-		if (!ShouldMoveToTarget(target))
+		auto& controlled = GetControlled();
+		auto& mover = controlled.GetMover();
+
+		// Use consistent range calculation with ShouldMoveToTarget and OnAttackSwing.
+		const float attackRange = controlled.GetMeleeReach() + target.GetMeleeReach();
+		const float attackRangeSq = attackRange * attackRange;
+
+		// Park on a ring slightly inside auto-attack range so the creature ends up within range
+		// even after the separation offset nudges its slot outward.
+		const float standoff = attackRange * MELEE_RING_STANDOFF_FACTOR;
+
+		const Vector3 currentLoc = mover.GetCurrentLocation();
+		const bool inAttackRange = target.GetSquaredDistanceTo(currentLoc, false) <= attackRangeSq;
+
+		// Collect the other units attacking the same target. They drive both the formation
+		// slotting (how many of us there are) and the reactive separation (where they stand).
+		std::vector<GameUnitS*> siblingAttackers;
+		const uint64 ourGuid = controlled.GetGuid();
+		target.ForEachAttacker([&siblingAttackers, ourGuid, &target](const GameUnitS& attacker)
 		{
-			return true; // No movement needed
+			if (&attacker == &target || attacker.GetGuid() == ourGuid)
+			{
+				return;
+			}
+
+			siblingAttackers.push_back(const_cast<GameUnitS*>(&attacker));
+		});
+
+		// Determine our standoff slot: a real position on a ring around the (predicted) target,
+		// fanned out by our formation slot index so attackers don't share a bearing.
+		const Vector3 ringCentre = PredictTargetPosition(target);
+		Vector3 slotPosition = CalculateFormationPosition(target, ringCentre, standoff);
+
+		// Reactive separation: push the slot away from siblings standing too close. This catches
+		// the residual cases the fan can't (e.g. two creatures that rushed in from an almost
+		// identical angle, or got shoved together by terrain) and is overlap-safe.
+		if (!siblingAttackers.empty())
+		{
+			slotPosition = CreatureSeparationManager::Get().AdjustTargetForSeparation(
+				controlled, slotPosition, siblingAttackers);
+		}
+
+		// Re-project the (possibly separated) slot back onto the standoff ring so the creature is
+		// guaranteed to finish within attack range — the angular separation survives, the radial
+		// drift does not.
+		Vector3 toSlot = slotPosition - ringCentre;
+		toSlot.y = 0.0f;
+		const float slotRadius = toSlot.GetLength();
+		if (slotRadius > 1e-3f)
+		{
+			slotPosition = ringCentre + (toSlot / slotRadius) * standoff;
+		}
+		slotPosition.y = ringCentre.y;
+
+		// Decide whether a move is actually warranted.
+		if (inAttackRange)
+		{
+			// Already able to attack — stand and fight. We deliberately do NOT slide to a formation
+			// slot to de-stack while in range. Players (especially melee classes) expect the
+			// creature they are fighting to stay put once it has reached them, not orbit around to
+			// satisfy a spacing rule — which previously left attackers next to or behind the player
+			// and made positions shuffle whenever the player moved. We accept some visual overlap
+			// between creatures here in exchange for stable, predictable positioning. De-stacking
+			// still happens naturally while creatures are *approaching* (the separation pass above
+			// only changes where an out-of-range creature stops).
+			return true;
+		}
+		else if (!ShouldMoveToTarget(target))
+		{
+			// Out of range, but an in-progress path will already bring us in — let it run.
+			return true;
 		}
 
 		// Check if target is too far from home
@@ -554,25 +686,18 @@ namespace mmo
 			return false; // AI reset, movement aborted
 		}
 
-		// Use consistent range calculation with ShouldMoveToTarget and OnAttackSwing
-		const float attackRange = GetControlled().GetMeleeReach() + target.GetMeleeReach();
-		// Stop at 90% of attack range: close enough to attack but not inside the target
-		const float moveRange = attackRange * COMBAT_RANGE_FACTOR;
+		// Move onto the slot. A small acceptance radius (vs. the old ~attackRange radius) means
+		// the bearing of the slot actually determines where we stop, which is what keeps
+		// attackers visibly separated instead of collapsing onto the same approach line.
+		const float acceptance = std::max(0.25f, attackRange * 0.1f);
 
-		auto& mover = GetControlled().GetMover();
-		
-		// Use predicted target position for better interception
-		Vector3 targetPosition = PredictTargetPosition(target);
+		const bool moveStarted = mover.MoveTo(slotPosition, acceptance);
 
-		// Apply formation offset so multiple creatures spread around the target
-		// instead of all stacking in the same spot
-		targetPosition = CalculateFormationPosition(target, targetPosition, moveRange);
-		
-		// Attempt to move to the formation-adjusted target position
-		if (mover.MoveTo(targetPosition, moveRange))
+		if (moveStarted)
 		{
-			// Successfully initiated movement
-			m_movementState.UpdateTarget(targetPosition, attackRange);
+			// Record the victim's actual position (not the slot) as the movement reference so the
+			// recalculation gating still measures "how far has the target moved since we planned".
+			m_movementState.UpdateTarget(target.GetPosition(), attackRange);
 			m_stuckCounter = 0;
 			return true;
 		}
@@ -671,6 +796,37 @@ namespace mmo
 			// UpdateVictim is needed for the default AI path.
 		}
 
+		// Fear suppression: CC controller drives movement; suppress all attacks.
+		if (controlled.IsFeared())
+		{
+			controlled.StopAttack();
+			m_nextActionCountdown.SetEnd(GetAsyncTimeMs() + ACTION_INTERVAL_MS);
+			return;
+		}
+
+		// Sleep/stun suppression: unit cannot act; keep the countdown alive so
+		// combat resumes naturally on the next tick after the CC expires.
+		if (controlled.IsSleeping() || controlled.IsStunned())
+		{
+			controlled.StopAttack();
+			m_nextActionCountdown.SetEnd(GetAsyncTimeMs() + ACTION_INTERVAL_MS);
+			return;
+		}
+
+		// Root suppression: unit can attack in melee but cannot chase.
+		// If the threat list is non-empty, keep the countdown alive and let
+		// UpdateVictim pick an in-range target (or idle) rather than resetting.
+		if (controlled.IsRooted() && !m_threat.empty())
+		{
+			UpdateVictim();
+			if (const GameUnitS* rootedVictim = controlled.GetVictim())
+			{
+				controlled.SetFacing(controlled.GetAngle(*rootedVictim));
+			}
+			m_nextActionCountdown.SetEnd(GetAsyncTimeMs() + ACTION_INTERVAL_MS);
+			return;
+		}
+
 		// Determine our current victim (also starts auto-attack on new targets)
 		UpdateVictim();
 
@@ -678,25 +834,36 @@ namespace mmo
 		GameUnitS* victim = controlled.GetVictim();
 		if (!victim || !victim->IsAlive())
 		{
+			// If the threat list is still non-empty, don't reset immediately — perhaps
+			// the target briefly became unreachable or invisible.  Reschedule and try
+			// again on the next tick so transient conditions don't abort combat.
+			if (!m_threat.empty())
+			{
+				m_nextActionCountdown.SetEnd(GetAsyncTimeMs() + ACTION_INTERVAL_MS);
+				return;
+			}
 			GetAI().Reset();
 			return;
 		}
 
+		// Face the victim on the server side (no network update needed; client renders creature facing automatically)
+		controlled.SetFacing(controlled.GetAngle(*victim));
+
 		// Update spell cooldowns
 		UpdateSpellCooldowns();
 
-		// Check if periodic recalculation countdown has fired
+		// Periodic recalculation: only reset movement state when the target has moved
+		// significantly from the position we were heading toward. Unconditional resets
+		// caused casters to restart their chase every 500 ms in short bursts.
 		const auto currentTime = GetAsyncTimeMs();
 		if (currentTime >= m_recalculationCountdown.GetEnd())
 		{
-			// Periodic recalculation countdown fired; forcing waypoint revalidation
-			DLOG("Periodic recalculation countdown fired; forcing waypoint revalidation");
-			
-			// Force movement revalidation by resetting movement state
-			// This will trigger a fresh MoveToOptimalRange() calculation
-			m_movementState.Reset();
-			
-			// Reset countdown for next interval
+			if (!m_movementState.isMovingToCombat ||
+				victim->GetSquaredDistanceTo(m_movementState.lastWaypointTarget, false) > PLAYER_POSITION_THRESHOLD)
+			{
+				m_movementState.Reset();
+			}
+
 			m_recalculationCountdown.SetEnd(currentTime + RECALCULATION_INTERVAL_MS);
 		}
 
@@ -710,54 +877,73 @@ namespace mmo
 		// Schedule next action check
 		m_nextActionCountdown.SetEnd(GetAsyncTimeMs() + actionInterval);
 
+		// === Line of sight recovery ===
+		// If the last spell cast was blocked by LOS, move toward the target until LOS is
+		// restored. Recheck every 500 ms to avoid spamming the collision system every tick.
+		if (m_losBlocked)
+		{
+			const GameTime now = GetAsyncTimeMs();
+			if (now - m_lastLosCheckTime >= 500)
+			{
+				m_lastLosCheckTime = now;
+				bool losNowClear = true;
+				const WorldInstance* world = controlled.GetWorldInstance();
+				if (world)
+				{
+					if (MapData* mapData = world->GetMapData())
+					{
+						losNowClear = mapData->IsInLineOfSight(controlled.GetPosition(), victim->GetPosition());
+					}
+				}
+
+				if (losNowClear)
+				{
+					m_losBlocked = false;
+					// Fall through to normal combat logic below.
+				}
+			}
+
+			if (m_losBlocked)
+			{
+				// LOS still blocked — move toward the target regardless of behavior type.
+				// ChaseTarget stops at melee range; once there, LOS is almost certainly clear
+				// and the 500 ms recheck above will lift the block.
+				ChaseTarget(*victim);
+				return;
+			}
+		}
+
 		// === Default AI logic (runs when no script, or script returned false) ===
 
-		// For casters and ranged units, prioritize spell casting if possible
-		if ((m_combatBehavior == CombatBehavior::Caster || m_combatBehavior == CombatBehavior::Ranged) && 
-			CanCastSpells())
+		// Casters and ranged units always return from this block — they never fall
+		// through to the melee chase below, even when all spells are on cooldown.
+		if (m_combatBehavior == CombatBehavior::Caster || m_combatBehavior == CombatBehavior::Ranged)
 		{
-			// Try to cast a spell first
-			const CreatureSpell* bestSpell = SelectBestSpell(*victim);
-			if (bestSpell)
+			if (!m_isCasting)
 			{
-				// Check if we're in range for the spell
-				if (IsInOptimalRange(*victim))
+				// SelectBestSpell already validates cooldown, power, and range.
+				const CreatureSpell* bestSpell = SelectBestSpell(*victim);
+				if (bestSpell)
 				{
-					// Cast the spell
-					if (CastSpell(*bestSpell, *victim))
-					{
-						return; // Spell casting initiated, wait for next action
-					}
-				}
-				else
-				{
-					// Move to optimal range for spell casting (only if not casting)
-					if (!m_isCasting && !MoveToOptimalRange(*victim))
-					{
-						// Movement failed, fallback to melee if possible
-						if (m_combatBehavior == CombatBehavior::Caster)
-						{
-							ChaseTarget(*victim); // Emergency melee mode for casters
-						}
-					}
+					CastSpell(*bestSpell, *victim);
 					return;
 				}
+
+				// No spell castable right now. Reposition ONLY if the target is genuinely
+				// out of range for every spell. If spells are just on cooldown or there is
+				// no power, stand still and wait — do not needlessly close distance.
+				if (!IsTargetInAnySpellRange(*victim))
+				{
+					MoveToOptimalRange(*victim);
+				}
 			}
+			return;
 		}
 
-		// For melee units or when spells aren't available, use melee combat (only if not casting)
-		if (!m_isCasting && (m_combatBehavior == CombatBehavior::Melee || !CanCastSpells()))
+		// Melee units: chase the target
+		if (!m_isCasting)
 		{
-			// Attempt to chase the target (only moves if necessary)
 			ChaseTarget(*victim);
-		}
-		else if (!m_isCasting)
-		{
-			// Caster with no available spells - move to optimal range and wait
-			if (!IsInOptimalRange(*victim))
-			{
-				MoveToOptimalRange(*victim);
-			}
 		}
 	}
 
@@ -805,15 +991,25 @@ namespace mmo
 			{
 				m_isCasting = true;
 				m_lastSpellCastTime = GetAsyncTimeMs();
-				
+
 				// Update timeout with the actual spell's cast time
 				m_castingTimeoutEnd = m_lastSpellCastTime + spell.casttime() + 1000; // 1 second buffer
-				
+
 				// Ensure movement is stopped (safety check)
 				auto& controlled = GetControlled();
 				controlled.GetMover().StopMovement();
 				m_movementState.Reset();
 			}
+		});
+
+		// Watch for spell cast completion so the AI doesn't rely solely on a timeout
+		m_onSpellCastEnded = controlled.finishedCasting.connect([this](bool succeeded)
+		{
+			if (!m_isCasting)
+			{
+				return;
+			}
+			OnSpellCastEnded(succeeded);
 		});
 	}
 
@@ -840,11 +1036,11 @@ namespace mmo
 				
 				if (auto* victim = controlled.GetVictim())
 				{
-					// Immediate range check when we start moving - if we're already in range, stop
+					// Immediate range check when we start moving - if we're already in range, stop.
 					const float attackRange = controlled.GetMeleeReach() + victim->GetMeleeReach();
 					const float attackRangeSq = attackRange * attackRange;
-					const float currentDistanceSq = victim->GetSquaredDistanceTo(controlled.GetMover().GetCurrentLocation(), true);
-					
+					const float currentDistanceSq = victim->GetSquaredDistanceTo(controlled.GetMover().GetCurrentLocation(), false);
+
 					if (currentDistanceSq <= attackRangeSq)
 					{
 						// We're already in range, stop movement
@@ -1058,7 +1254,9 @@ namespace mmo
 		const auto& controlled = GetControlled();
 		const auto currentTime = GetAsyncTimeMs();
 		const auto currentPower = controlled.GetPower();
-		const auto distanceToTarget = controlled.GetSquaredDistanceTo(target.GetPosition(), true);
+		// Use the mover's interpolated position so range checks are accurate while
+		// the NPC is in motion — m_movementInfo.position is only updated every 500 ms.
+		const float distanceToTarget = (controlled.GetMover().GetCurrentLocation() - target.GetPosition()).GetSquaredLength();
 		
 		const CreatureSpell* bestSpell = nullptr;
 		uint32 highestPriority = 0;
@@ -1116,49 +1314,63 @@ namespace mmo
 	bool CreatureAICombatState::CastSpell(const CreatureSpell& spell, GameUnitS& target)
 	{
 		auto& controlled = GetControlled();
-		
-		// Setup spell target
+
+		const auto* spellEntry = spell.spell;
+		const uint32_t castTime = spellEntry->casttime();
+		const uint32_t cooldown = spellEntry->cooldown();
+
+		// Stop movement BEFORE calling CastSpell so the CreatureMove(stop) packet
+		// reaches the client before SpellStart — otherwise the client briefly shows
+		// the NPC moving while the cast animation is already playing.
+		if (castTime > 0)
+		{
+			m_isCasting = true;
+			controlled.GetMover().StopMovement();
+			m_movementState.Reset();
+		}
+
 		SpellTargetMap targetMap;
 		targetMap.SetTargetMap(spell_cast_target_flags::Unit);
 		targetMap.SetUnitTarget(target.GetGuid());
-		
-		// Attempt to cast the spell - get both result and SpellCasting pointer
-		const auto castResult = controlled.CastSpell(targetMap, *spell.spell, spell.spell->casttime());
-		
+
+		const auto castResult = controlled.CastSpell(targetMap, *spellEntry, castTime);
+
 		if (castResult == spell_cast_result::CastOkay)
 		{
 			const auto currentTime = GetAsyncTimeMs();
-			
-			// Update spell cooldowns
+
 			for (auto& creatureSpell : m_availableSpells)
 			{
-				if (creatureSpell.spell == spell.spell)
+				if (creatureSpell.spell == spellEntry)
 				{
 					creatureSpell.lastCastTime = currentTime;
-					creatureSpell.cooldownEnd = currentTime + spell.spell->cooldown();
+					creatureSpell.cooldownEnd = currentTime + cooldown;
 					break;
 				}
 			}
-			
-			// For spells with cast time, set up casting state and stop movement
-			if (spell.spell->casttime() > 0)
+
+			if (castTime > 0)
 			{
-				// Set casting state immediately
-				m_isCasting = true;
 				m_lastSpellCastTime = currentTime;
-				
-				// Set up timeout as backup (cast time + buffer)
-				m_castingTimeoutEnd = currentTime + spell.spell->casttime() + 1000;
-				
-				// Stop movement and auto attack immediately
-				controlled.GetMover().StopMovement();
-				m_movementState.Reset();
+				m_castingTimeoutEnd = currentTime + castTime + 1000;
 				controlled.StopAttack();
 			}
-			
+
 			return true;
 		}
-		
+
+		// Cast failed — reset casting state (movement already stopped, which is fine)
+		if (castTime > 0)
+		{
+			m_isCasting = false;
+		}
+
+		if (castResult == spell_cast_result::FailedLineOfSight)
+		{
+			m_losBlocked = true;
+			m_lastLosCheckTime = GetAsyncTimeMs();
+		}
+
 		return false;
 	}
 
@@ -1207,8 +1419,8 @@ namespace mmo
 				const bool inRange = distanceSq <= meleeRangeSq;
 				if (inRange)
 				{
-					const float distance = std::sqrtf(distanceSq);
-					const float acceptanceRadius = std::sqrtf(meleeRangeSq);
+					const float distance = std::sqrt(distanceSq);
+					const float acceptanceRadius = std::sqrt(meleeRangeSq);
 					DLOG("Creature " << controlled.GetGuid() << " stopped at engagement range: distance=" 
 						<< distance << " <= acceptanceRadius=" << acceptanceRadius);
 				}
@@ -1222,7 +1434,7 @@ namespace mmo
 				const bool inRange = distanceSq >= minRangeSq && distanceSq <= maxRangeSq;
 				if (inRange)
 				{
-					const float distance = std::sqrtf(distanceSq);
+					const float distance = std::sqrt(distanceSq);
 					const float acceptanceRadius = CASTER_OPTIMAL_RANGE;
 					DLOG("Creature " << controlled.GetGuid() << " stopped at engagement range: distance=" 
 						<< distance << " <= acceptanceRadius=" << acceptanceRadius);
@@ -1231,6 +1443,27 @@ namespace mmo
 			}
 		}
 		
+		return false;
+	}
+
+	bool CreatureAICombatState::IsTargetInAnySpellRange(const GameUnitS& target) const
+	{
+		if (m_availableSpells.empty())
+		{
+			return false;
+		}
+
+		const float distSq = (GetControlled().GetMover().GetCurrentLocation() - target.GetPosition()).GetSquaredLength();
+		for (const auto& creatureSpell : m_availableSpells)
+		{
+			const float minSq = creatureSpell.minRange * creatureSpell.minRange;
+			const float maxSq = creatureSpell.maxRange * creatureSpell.maxRange;
+			if (distSq >= minSq && distSq <= maxSq)
+			{
+				return true;
+			}
+		}
+
 		return false;
 	}
 
@@ -1257,18 +1490,20 @@ namespace mmo
 		auto& controlled = GetControlled();
 		auto& mover = controlled.GetMover();
 		
-		// Nothing to do when rooted or casting
-		if (controlled.IsRooted() || m_isCasting)
+		// Nothing to do when rooted, under forced movement (fear/disorient), or casting
+		if (controlled.IsRooted() || controlled.IsUnderForcedMovement() || m_isCasting)
 		{
 			return false;
 		}
 		
-		const float currentDistanceSq = controlled.GetSquaredDistanceTo(target.GetPosition(), true);
-		
+		// Use the mover's interpolated position for accurate distance while moving.
+		const Vector3 currentPos = controlled.GetMover().GetCurrentLocation();
+		const float currentDistanceSq = (currentPos - target.GetPosition()).GetSquaredLength();
+
 		// Get threat targets for separation logic
 		const auto threatTargets = GetThreatTargets();
 		auto& separationManager = CreatureSeparationManager::Get();
-		
+
 		switch (m_combatBehavior)
 		{
 		case CombatBehavior::Melee:
@@ -1281,21 +1516,19 @@ namespace mmo
 			{
 				const float minRangeSq = CASTER_MIN_RANGE * CASTER_MIN_RANGE;
 				const float optimalRangeSq = CASTER_OPTIMAL_RANGE * CASTER_OPTIMAL_RANGE;
-				
+
 				// If too close, move away
 				if (currentDistanceSq < minRangeSq)
 				{
 					// Calculate position away from target
 					const Vector3 targetPos = target.GetPosition();
-					const Vector3 ourPos = controlled.GetPosition();
+					const Vector3 ourPos = currentPos;
 					const Vector3 direction = (ourPos - targetPos).NormalizedCopy();
 					Vector3 retreatPos = targetPos + direction * CASTER_OPTIMAL_RANGE;
-					
+
 					// Apply separation logic to avoid stacking with nearby creatures
 					retreatPos = separationManager.AdjustTargetForSeparation(controlled, retreatPos, threatTargets);
-					
-					// Use combat range factor for engagement range enforcement
-					// Stop at roughly CASTER_MIN_RANGE to ensure safe distance
+
 					const float retreatEngagementRange = CASTER_MIN_RANGE * COMBAT_RANGE_FACTOR;
 					if (mover.MoveTo(retreatPos, retreatEngagementRange))
 					{
@@ -1307,13 +1540,22 @@ namespace mmo
 				// If too far, move closer
 				else if (currentDistanceSq > optimalRangeSq)
 				{
+					// Already heading toward this target? Don't restart movement — let the
+					// existing path complete. Only recalculate when the target has moved.
+					if (mover.IsMoving() && m_movementState.isMovingToCombat)
+					{
+						const float targetMovedSq = (target.GetPosition() - m_movementState.lastWaypointTarget).GetSquaredLength();
+						if (targetMovedSq <= PLAYER_POSITION_THRESHOLD)
+						{
+							return true;
+						}
+					}
+
 					Vector3 targetPosition = PredictTargetPosition(target);
-					
+
 					// Apply separation logic to avoid stacking with nearby creatures
 					targetPosition = separationManager.AdjustTargetForSeparation(controlled, targetPosition, threatTargets);
-					
-					// Use combat range factor for engagement range enforcement
-					// Stop at roughly CASTER_OPTIMAL_RANGE to ensure proper spell casting distance
+
 					const float approachEngagementRange = CASTER_OPTIMAL_RANGE * COMBAT_RANGE_FACTOR;
 					if (mover.MoveTo(targetPosition, approachEngagementRange))
 					{
@@ -1324,7 +1566,7 @@ namespace mmo
 				}
 				else
 				{
-					// We're in optimal range, no movement needed
+					// In optimal range, no movement needed
 					return true;
 				}
 			}
@@ -1333,58 +1575,46 @@ namespace mmo
 		return !HandleMovementFailure();
 	}
 	
-	Vector3 CreatureAICombatState::CalculateFormationPosition(const GameUnitS& target, const Vector3& approachPosition, float standoffDistance) const
+	Vector3 CreatureAICombatState::CalculateFormationPosition(const GameUnitS& target, const Vector3& ringCentre, float standoffDistance) const
 	{
 		const auto& controlled = GetControlled();
-		
-		// Count how many other creatures are attacking the same target and determine our slot
-		int totalAttackers = 0;
-		int ourSlot = 0;
-		const uint64 ourGuid = controlled.GetGuid();
 
-		target.ForEachAttacker([&](const GameUnitS& attacker)
+		// Stable, predictable standoff: approach the target along OUR OWN current bearing and stop
+		// on the ring. We deliberately do NOT assign rank-based slots spread around the target.
+		//
+		// The previous implementation distributed attackers evenly around the full circle anchored
+		// to a fixed world axis. That had two player-facing problems:
+		//   1. A creature could be assigned a bearing on the far side of the target — i.e. behind a
+		//      melee player who expects their victim to stay in front of them.
+		//   2. Every time the player moved or the attacker count changed, the angular ranks shifted
+		//      and all attackers reshuffled to new bearings.
+		//
+		// Approaching radially keeps each creature on the side it actually came from, so a victim
+		// that reached the player from the front stays in front. It is also free of the orbiting
+		// feedback loop: walking straight toward the target preserves the bearing, so the slot does
+		// not chase the creature around the ring. Residual overlap between attackers arriving on a
+		// near-identical bearing is resolved by the reactive separation pass in the caller, which
+		// converges to a stable spread rather than continuously rotating.
+		Vector3 bearing = controlled.GetPosition() - ringCentre;
+		bearing.y = 0.0f;
+
+		const float dist = bearing.GetLength();
+		if (dist > 1e-3f)
 		{
-			if (&attacker == &target)
-			{
-				return;
-			}
-
-			if (attacker.GetGuid() == ourGuid)
-			{
-				ourSlot = totalAttackers;
-			}
-
-			totalAttackers++;
-		});
-
-		// With 0 or 1 attackers, no formation needed - go straight at the target
-		if (totalAttackers <= 1)
+			bearing /= dist;
+		}
+		else
 		{
-			return approachPosition;
+			// Degenerate: we are virtually on top of the target. Fall back to our own facing so we
+			// pick a deterministic, stable direction instead of producing a NaN bearing.
+			const float facing = controlled.GetFacing().GetValueRadians();
+			bearing = Vector3(std::cos(facing), 0.0f, std::sin(facing));
 		}
 
-		// Calculate the base angle from target to the approach position
-		const Vector3 targetPos = target.GetPosition();
-		const Vector3 toApproach = approachPosition - targetPos;
-		const float baseAngle = std::atan2(toApproach.z, toApproach.x);
-
-		// Spread creatures in a semicircle centered on the base approach angle.
-		// The spread increases with more attackers but is capped.
-		const float totalSpread = std::min(
-			static_cast<float>(totalAttackers - 1) * FORMATION_ANGLE_STEP,
-			FORMATION_MAX_ANGLE);
-		const float startAngle = baseAngle - totalSpread * 0.5f;
-		const float angleStep = (totalAttackers > 1)
-			? totalSpread / static_cast<float>(totalAttackers - 1)
-			: 0.0f;
-
-		const float slotAngle = startAngle + static_cast<float>(ourSlot) * angleStep;
-
-		// Calculate offset position at the standoff distance from the target
 		Vector3 formationPos;
-		formationPos.x = targetPos.x + std::cos(slotAngle) * standoffDistance;
-		formationPos.y = approachPosition.y; // Keep the original height
-		formationPos.z = targetPos.z + std::sin(slotAngle) * standoffDistance;
+		formationPos.x = ringCentre.x + bearing.x * standoffDistance;
+		formationPos.y = ringCentre.y;
+		formationPos.z = ringCentre.z + bearing.z * standoffDistance;
 
 		return formationPos;
 	}

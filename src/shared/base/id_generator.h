@@ -22,19 +22,21 @@ namespace mmo
 		{
 		}
 
-		IdGenerator(IdGenerator&& other)
-			: m_nextId(std::move(other.m_nextId))
+		IdGenerator(IdGenerator&& other) noexcept
+			: m_initial(other.m_initial)
+			, m_nextId(other.m_nextId)
 		{
 		}
 
-		IdGenerator& operator=(IdGenerator&& other)
+		IdGenerator& operator=(IdGenerator&& other) noexcept
 		{
 			if (this == &other)
 			{
 				return *this;
 			}
 
-			m_nextId = std::move(other.m_nextId);
+			m_initial = other.m_initial;
+			m_nextId = other.m_nextId;
 		    return *this;
 		}
 

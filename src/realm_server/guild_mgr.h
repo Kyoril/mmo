@@ -6,6 +6,8 @@
 #include "base/non_copyable.h"
 #include "game/guild_info.h"
 
+#include <atomic>
+
 namespace mmo
 {
 	class GuildMgr;
@@ -16,7 +18,7 @@ namespace mmo
 	{
 	public:
 		/// Creates a guild instance.
-		Guild(GuildMgr& manager, PlayerManager& playerManager, AsyncDatabase& database, uint64 id, String name, uint64 leaderGuid)
+		Guild(GuildMgr& manager, PlayerManager& playerManager, AsyncGuildDatabase& database, uint64 id, String name, uint64 leaderGuid)
 			: m_manager(manager)
 			, m_playerManager(playerManager)
 			, m_database(database)
@@ -116,7 +118,7 @@ namespace mmo
 	private:
 		GuildMgr& m_manager;
 		PlayerManager& m_playerManager;
-		AsyncDatabase& m_database;
+		AsyncGuildDatabase& m_database;
 		uint64 m_id;
 		String m_name;
 		uint64 m_leaderGuid;
@@ -131,7 +133,7 @@ namespace mmo
 	{
 	public:
 		/// Creates a guild manager.
-		explicit GuildMgr(AsyncDatabase& asyncDatabase, PlayerManager& playerManager);
+		explicit GuildMgr(AsyncGuildDatabase& asyncDatabase, PlayerManager& playerManager);
 
 	public:
 		/// Loads all guilds from the database into memory.
@@ -159,7 +161,7 @@ namespace mmo
 		bool AddGuild(const GuildData& info);
 
 	private:
-		AsyncDatabase& m_asyncDatabase;
+		AsyncGuildDatabase& m_asyncDatabase;
 
 		PlayerManager& m_playerManager;
 
@@ -169,6 +171,6 @@ namespace mmo
 
 		IdGenerator<uint64> m_idGenerator { 1 };
 
-		volatile bool m_guildsLoaded = false;
+		std::atomic<bool> m_guildsLoaded { false };
 	};
 }

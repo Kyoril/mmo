@@ -44,7 +44,7 @@ namespace mmo
     {
     }
 
-    void ViewportPanel::Draw(const String &id, WorldEditMode *currentEditMode)
+    void ViewportPanel::Draw(const String &id, WorldEditMode *currentEditMode, bool waypointEditActive)
     {
         if (ImGui::Begin(id.c_str()))
         {
@@ -72,10 +72,34 @@ namespace mmo
             ImGui::Image(m_deferredRenderer.GetFinalRenderTarget()->GetTextureObject(), availableSpace);
             ImGui::SetItemUsingMouseWheel();
 
+            // Let the active edit mode draw 2-D overlays on top of the 3-D scene.
+            if (currentEditMode)
+            {
+                ImDrawList* drawList = ImGui::GetWindowDrawList();
+                currentEditMode->DrawViewportOverlay(drawList, viewportPos, availableSpace);
+            }
+
             HandleViewportDragDrop(currentEditMode);
 
-            HandleViewportInteractions(availableSpace);
+            HandleViewportInteractions(availableSpace, currentEditMode);
             DrawViewportToolbar(availableSpace);
+
+            // Patrol edit submode banner
+            if (waypointEditActive)
+            {
+                ImGui::SetItemAllowOverlap();
+                const float bannerH = 30.0f;
+                ImGui::SetCursorPos(ImVec2(0.0f, availableSpace.y - bannerH));
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.7f, 0.3f, 0.1f, 0.75f));
+                if (ImGui::BeginChild("##patrol_banner", ImVec2(availableSpace.x, bannerH), false, ImGuiWindowFlags_NoScrollbar))
+                {
+                    ImGui::SetCursorPosY((bannerH - ImGui::GetTextLineHeight()) * 0.5f);
+                    ImGui::SetCursorPosX(8.0f);
+                    ImGui::TextUnformatted("PATROL WAYPOINT EDIT  |  Click to add  \xE2\x80\xA2  Drag to move  \xE2\x80\xA2  [Esc] to exit");
+                }
+                ImGui::EndChild();
+                ImGui::PopStyleColor();
+            }
         }
         ImGui::End();
     }
@@ -87,12 +111,30 @@ namespace mmo
         s_scaleIcon = scaleIcon;
     }
 
-    void ViewportPanel::HandleViewportInteractions(const ImVec2 &availableSpace)
+    void ViewportPanel::HandleViewportInteractions(const ImVec2 &availableSpace, WorldEditMode *currentEditMode)
     {
         m_hovering = ImGui::IsItemHovered();
         if (m_hovering)
         {
-            m_cameraSpeed = std::max(std::min(m_cameraSpeed + ImGui::GetIO().MouseWheel * 5.0f, 200.0f), 1.0f);
+            const float wheel = ImGui::GetIO().MouseWheel;
+            if (wheel != 0.0f)
+            {
+                const bool shiftHeld = ImGui::GetIO().KeyShift;
+                const bool ctrlHeld  = ImGui::GetIO().KeyCtrl;
+                const bool altHeld   = ImGui::GetIO().KeyAlt;
+
+                if ((shiftHeld || ctrlHeld) && currentEditMode)
+                {
+                    // Shift/Ctrl+wheel → forward to edit mode (brush size / hardness)
+                    currentEditMode->OnMouseWheel(wheel);
+                }
+                else if (!shiftHeld && !ctrlHeld && !altHeld)
+                {
+                    // Plain wheel → camera speed
+                    m_cameraSpeed = std::max(std::min(m_cameraSpeed + wheel * 5.0f, 200.0f), 1.0f);
+                }
+                // Alt+wheel intentionally unbound; any modifier suppresses camera speed change.
+            }
 
             m_leftButtonPressed = ImGui::IsMouseDown(ImGuiMouseButton_Left);
             m_rightButtonPressed = ImGui::IsMouseDown(ImGuiMouseButton_Right);

@@ -23,6 +23,7 @@
 #include "systems/action_bar.h"
 #include "systems/cooldown_manager.h"
 #include "systems/friend_client.h"
+#include "systems/channel_client.h"
 #include "systems/guild_client.h"
 #include "systems/inventory_client.h"
 #include "systems/loot_client.h"
@@ -30,6 +31,7 @@
 #include "systems/quest_client.h"
 #include "systems/spell_cast.h"
 #include "systems/talent_client.h"
+#include "systems/trade_client.h"
 #include "systems/trainer_client.h"
 #include "systems/vendor_client.h"
 #include "ui/minimap.h"
@@ -197,10 +199,12 @@ namespace mmo
 		context.partyInfo = std::make_unique<PartyInfo>(realmConnector, context.clientCache->GetNameCache());
 		context.guildClient = std::make_unique<GuildClient>(realmConnector, context.clientCache->GetGuildCache(), context.project->races, context.project->classes);
 		context.friendClient = std::make_unique<FriendClient>(realmConnector, context.project->races, context.project->classes);
+		context.channelClient = std::make_unique<ChannelClient>(realmConnector);
 		context.spellCast = std::make_unique<SpellCast>(realmConnector, context.project->spells, context.project->ranges);
 		context.cooldownManager = std::make_unique<CooldownManager>(context.project->spells);
 		context.actionBar = std::make_unique<ActionBar>(realmConnector, context.project->spells, context.clientCache->GetItemCache(), *context.spellCast);
 		context.talentClient = std::make_unique<TalentClient>(context.project->talentTabs, context.project->talents, context.project->spells, realmConnector);
+		context.tradeClient = std::make_unique<TradeClient>(realmConnector);
 	}
 
 	/// @copydoc ClientApplication::InitializeStatesAndScripts
@@ -212,10 +216,10 @@ namespace mmo
 
 		const auto worldState = std::make_shared<WorldState>(gameStateMgr, realmConnector, *context.project, *context.timerQueue, *context.lootClient, *context.vendorClient,
 			*context.actionBar, *context.spellCast, *context.cooldownManager, *context.trainerClient, *context.questClient, *context.audio, *context.partyInfo, *context.charSelect, *context.guildClient, *context.friendClient, *context.clientCache, *context.discord, *context.gameTime, *context.talentClient,
-			*context.minimap, *context.inventoryClient);
+			*context.minimap, *context.inventoryClient, *context.tradeClient, *context.channelClient);
 		gameStateMgr.AddGameState(worldState);
 
-		context.gameScript = std::make_unique<GameScript>(loginConnector, realmConnector, *context.lootClient, *context.vendorClient, loginState, *context.project, *context.actionBar, *context.spellCast, *context.cooldownManager, *context.trainerClient, *context.questClient, *context.audio, *context.partyInfo, *context.charCreateInfo, *context.charSelect, *context.guildClient, *context.friendClient, *context.gameTime, *context.talentClient);
+		context.gameScript = std::make_unique<GameScript>(loginConnector, realmConnector, *context.lootClient, *context.vendorClient, loginState, *context.project, *context.actionBar, *context.spellCast, *context.cooldownManager, *context.trainerClient, *context.questClient, *context.audio, *context.partyInfo, *context.charCreateInfo, *context.charSelect, *context.guildClient, *context.friendClient, *context.gameTime, *context.talentClient, *context.clientCache, *context.tradeClient, *context.channelClient);
 		context.minimap->RegisterScriptFunctions(&context.gameScript->GetLuaState());
 	}
 
@@ -312,6 +316,7 @@ namespace mmo
 	void ClientApplication::ResetContext(ClientContext& context)
 	{
 		context.talentClient.reset();
+		context.tradeClient.reset();
 		context.actionBar.reset();
 		context.spellCast.reset();
 		context.cooldownManager.reset();

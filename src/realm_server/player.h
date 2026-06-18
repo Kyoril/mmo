@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <limits>
 #include <vector>
+#include <set>
 
 #include "login_connector.h"
 #include "game/action_button.h"
@@ -27,6 +28,8 @@ namespace mmo
 {
 	class GuildMgr;
 	class FriendMgr;
+	class ChannelMgr;
+	class ChatChannel;
 }
 
 namespace mmo
@@ -66,7 +69,8 @@ namespace mmo
 			const proto::Project &project,
 			IdGenerator<uint64> &groupIdGenerator,
 			GuildMgr &guildMgr,
-			FriendMgr &friendMgr);
+			FriendMgr &friendMgr,
+			ChannelMgr &channelMgr);
 		/// Disconnects the player if still connected.
 		void Kick();
 
@@ -107,6 +111,15 @@ namespace mmo
 
 		/// Checks if the player has a specific GM level or higher.
 		bool HasGMLevel(uint8 level) const { return m_gmLevel >= level; }
+
+		/// Gets the active account feature keys (entitlements) of this player's account.
+		const std::vector<std::string>& GetAccountFeatures() const { return m_accountFeatures; }
+
+		/// Checks whether this player's account has been granted a specific feature.
+		bool HasAccountFeature(const std::string& key) const
+		{
+			return std::find(m_accountFeatures.begin(), m_accountFeatures.end(), key) != m_accountFeatures.end();
+		}
 
 		/// Gets the active character name.
 		[[nodiscard]] const String &GetCharacterName() const { return m_characterData->name; }
@@ -395,6 +408,7 @@ namespace mmo
 		/// Session key of the game client, retrieved by login server on successful login request.
 		BigNumber m_sessionKey;
 		uint8 m_gmLevel = 0; // GM level of the player account (0: normal player, 1+: GM levels)
+		std::vector<std::string> m_accountFeatures; // Active account feature keys (entitlements) granted to the account
 		ActionButtons m_actionButtons;
 		bool m_pendingButtons = false;
 		InstanceId m_instanceId{};
@@ -430,6 +444,11 @@ namespace mmo
 		FriendMgr &m_friendMgr;
 		std::vector<FriendData> m_friendCache;
 		uint64 m_pendingFriendInvite = 0;
+
+		// Chat channels
+		ChannelMgr &m_channelMgr;
+		/// Global ids of the chat channels this player is currently a member of.
+		std::set<uint32> m_chatChannels;
 
 		/// Per-player dungeon instance bindings (mapId -> instanceId).
 		/// Used when the player is solo (not in a group).
@@ -473,6 +492,9 @@ namespace mmo
 		PacketParseResult OnGroupLeave(game::IncomingPacket& packet);
 		PacketParseResult OnGroupDisband(game::IncomingPacket& packet);
 
+		/// Handles a party ping request from the client.
+		PacketParseResult OnPartyPing(game::IncomingPacket& packet);
+
 		/// Handles a client request to change the group's loot method.
 		PacketParseResult OnSetLootMethod(game::IncomingPacket& packet);
 		PacketParseResult OnLogoutRequest(game::IncomingPacket &packet);
@@ -496,7 +518,28 @@ namespace mmo
 		PacketParseResult OnFriendRemove(game::IncomingPacket &packet);
 		PacketParseResult OnFriendListRequest(game::IncomingPacket &packet);
 
+		// Chat channel packet handlers
+		PacketParseResult OnChannelJoin(game::IncomingPacket &packet);
+		PacketParseResult OnChannelLeave(game::IncomingPacket &packet);
+
 	private:
+		// Chat channel helpers
+		/// Joins the character into the given channel (in-memory + persistence) and notifies the client.
+		/// @param persist When true, the membership change is written to the database.
+		void JoinChatChannel(ChatChannel& channel, bool persist);
+
+		/// Removes the character from the given channel and notifies the client.
+		void LeaveChatChannel(ChatChannel& channel, bool persist);
+
+		/// Sends the full list of currently joined channels to the client.
+		void SendChannelList();
+
+		/// Loads the character's persisted channel memberships and joins the effective set.
+		void LoadAndJoinChatChannels();
+
+		/// Removes the character from all channels it is in (e.g. on logout). Does not persist.
+		void LeaveAllChatChannels();
+
 		// Helper methods for character deletion
 		void HandleCharacterGuildOnDelete(uint64 charGuid);
 		void HandleCharacterGroupOnDelete(uint64 charGuid);

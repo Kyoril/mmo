@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "base/utilities.h"
 #include "graphics/graphics_device.h"
+#include "graphics/global_shader_parameters.h"
 #include "log/default_log_levels.h"
 #include "database.h"
 #include "editor_windows/asset_window.h"
@@ -69,6 +70,9 @@ namespace mmo
 			mmo::AssetRegistry::Initialize(config.assetRegistryPath, {});
 
 			AssetRegistry::AddArchivePackage(std::filesystem::path(config.projectPath).parent_path() / "nav");
+
+			// Load the project-wide global shader parameter registry (missing file = empty registry).
+			GlobalShaderParameters::Get().LoadFromAsset(GlobalShaderParametersAssetPath);
 		}
 		else
 		{
@@ -820,6 +824,34 @@ namespace mmo
 			{
 				continue;
 			}
+
+			const bool result = editor->OpenAsset(assetPath);
+			if (result)
+			{
+				m_uninitializedEditorInstances.emplace_back(assetPath.filename().string());
+			}
+			return result;
+		}
+
+		WLOG("No editor available for asset " << assetPath);
+		return false;
+	}
+
+	bool MainWindow::OpenAssetAtWorldLocation(const Path& assetPath, const float worldX, const float worldZ)
+	{
+		auto extension = assetPath.extension().string();
+		std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+
+		for (const auto& editor : m_editors)
+		{
+			if (!editor->CanLoadAsset(extension))
+			{
+				continue;
+			}
+
+			// Inform the editor about the requested camera target before opening so it can apply it
+			// to the (possibly newly created) instance.
+			editor->SetPendingCameraTarget(assetPath, Vector3(worldX, 0.0f, worldZ));
 
 			const bool result = editor->OpenAsset(assetPath);
 			if (result)

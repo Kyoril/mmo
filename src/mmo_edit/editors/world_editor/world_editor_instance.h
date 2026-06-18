@@ -3,6 +3,7 @@
 #pragma once
 
 #include "base/signal.h"
+#include <functional>
 #include <imgui.h>
 #include <thread>
 #include <asio/io_service.hpp>
@@ -35,12 +36,23 @@
 #include "edit_modes/navigation_edit_mode.h"
 #include "edit_modes/sky_edit_mode.h"
 #include "edit_modes/area_trigger_edit_mode.h"
+#include "edit_modes/water_edit_mode.h"
+#include "edit_modes/foliage_edit_mode.h"
+#include "scene_graph/instanced_foliage.h"
+#include "scene_graph/foliage.h"
 #include "scene_outline_window.h"
+
+#include <map>
+#include <tuple>
+#include <vector>
 #include "grid_snap_settings.h"
 #include "details_panel.h"
 #include "world_settings_panel.h"
 #include "viewport_panel.h"
+#include "spawn_palette_panel.h"
+#include "spawn_list_panel.h"
 #include "entity_factory.h"
+#include "minimap_grid_view.h"
 
 namespace mmo
 {
@@ -53,6 +65,8 @@ namespace mmo
 	class Entity;
 	class Camera;
 	class SceneNode;
+	class InstancedFoliage;
+	class Foliage;
 
 	/// @brief Represents the type of a map entity.
 	enum class MapEntityType
@@ -104,6 +118,9 @@ namespace mmo
 			}
 			if (m_worldModelInstance)
 			{
+				// Destroy all child scene objects (group geometry, doodads, lights)
+				// before detaching from the scene node, while the scene is still accessible.
+				m_worldModelInstance->Destroy(m_scene);
 				m_sceneNode.DetachObject(*m_worldModelInstance);
 				// World model instance will be deleted when the unique_ptr is destroyed
 			}
@@ -288,7 +305,7 @@ namespace mmo
 		// UI related methods
 		void HandleKeyboardShortcuts();
 		void DrawSceneOutlinePanel(const String &sceneOutlineId);
-		void InitializeDockLayout(ImGuiID dockspaceId, const String &viewportId, const String &detailsId, const String &worldSettingsId);
+		void InitializeDockLayout(ImGuiID dockspaceId, const String &viewportId, const String &detailsId, const String &worldSettingsId, const String &spawnPaletteId, const String &spawnListId);
 
 		void OnTerrainMouseMoved(float viewportX, float viewportY);
 
@@ -303,6 +320,13 @@ namespace mmo
 		void SetMapEntry(proto::MapEntry *entry);
 
 	public:
+		/// @brief Creates a duplication callback for the given map entity.
+		/// The returned function, when invoked with the current selectable transform,
+		/// spawns a new copy of the entity at that transform.
+		/// @param entity The entity to duplicate.
+		/// @return A callable that creates a copy of entity when invoked.
+		std::function<void(Selectable&)> MakeDuplicationCallback(MapEntity& entity);
+
 		void OnPageAvailabilityChanged(const PageNeighborhood &page, bool isAvailable) override;
 
 		void EnsurePageIsLoaded(PagePosition pos);
@@ -345,6 +369,14 @@ namespace mmo
 
 		void RemoveObjectSpawn(const proto::ObjectSpawnEntry& spawn) override;
 
+		void SelectUnitSpawn(proto::UnitSpawnEntry& spawn) override;
+
+		void SelectObjectSpawn(proto::ObjectSpawnEntry& spawn) override;
+
+		const void* GetSelectedSpawnEntry() const override;
+
+		void FocusSelection() override;
+
 		void AddAreaTrigger(proto::AreaTriggerEntry &trigger, bool select = true) override;
 
 		void RemoveAllAreaTriggers() override;
@@ -365,6 +397,11 @@ namespace mmo
 
 		bool IsTransforming() const override;
 
+		ManualRenderObject* CreateManualRenderObject(const String& name) override;
+		SceneNode* CreateChildSceneNode() override;
+		void DestroyManualRenderObject(const ManualRenderObject& obj) override;
+		void DestroySceneNode(const SceneNode& node) override;
+
 	private:
 		uint16 BuildPageIndex(uint8 x, uint8 y) const;
 
@@ -373,6 +410,25 @@ namespace mmo
 		void LoadPageEntities(uint8 x, uint8 y);
 
 		void UnloadPageEntities(uint8 x, uint8 y);
+
+		/// @brief Loads the authored foliage (.hfol) of a terrain page into the editor's foliage renderer.
+		/// @param x Page X coordinate.
+		/// @param y Page Y coordinate.
+		void LoadPageFoliage(uint8 x, uint8 y);
+
+		/// @brief Creates and configures the procedural grass system to mirror the game client.
+		void SetupGrass();
+
+		/// @brief Registers procedural foliage layers from the tile materials of a loaded terrain page.
+		void RegisterPageFoliage(uint32 pageX, uint32 pageY);
+
+		/// @brief Ref-decrements (and removes when unused) the foliage layers a terrain page contributed.
+		void UnregisterPageFoliage(uint32 pageX, uint32 pageY);
+
+		/// @brief Recomputes and applies the effective water visibility.
+		/// @details The water surface is shown when the "Show Water" setting is enabled, or whenever the
+		///          water edit mode is active (so water can always be edited), whichever applies.
+		void UpdateWaterVisibility();
 
 	public:
 		const std::filesystem::path GetWorldPath() const override { return m_assetPath; }
@@ -386,6 +442,18 @@ namespace mmo
 		/// render-to-texture, then saves the result as a texture file in the "minimaps" folder.
 		/// Filenames are encoded using page coordinates: (x << 8) | y.
 		void GenerateMinimaps();
+
+		/// @brief Moves the editor camera so it focuses the given world location (X/Z plane). The
+		///        height is sampled from the terrain when available. Used by the minimap location
+		///        picker and the in-editor minimap teleport panel.
+		/// @param worldX Target world X coordinate.
+		/// @param worldZ Target world Z coordinate.
+		void MoveCameraToWorldPosition(float worldX, float worldZ);
+
+	private:
+		/// @brief Draws the dockable "World Map" panel which shows the world's minimap grid and lets
+		///        the user quickly teleport the camera by clicking a tile.
+		void DrawMinimapPanel(const String& id);
 
 	private:
 		WorldEditor &m_editor;
@@ -408,6 +476,38 @@ namespace mmo
 		bool m_hovering{false};
 
 		std::unique_ptr<terrain::Terrain> m_terrain;
+
+		/// @brief Hardware-instanced renderer for authored foliage (trees), mirroring the game client.
+		std::unique_ptr<InstancedFoliage> m_foliage;
+
+		/// @brief Procedural grass/vegetation system (the dense foliage seen in the client). Hidden by default.
+		std::unique_ptr<Foliage> m_grass;
+
+		/// Key identifying a distinct procedural foliage layer derived from terrain material data
+		/// (the painted .hmat or .hmi, the bound layer index and the mesh asset).
+		using FoliageLayerKey = std::tuple<const MaterialInterface*, uint8, String>;
+
+		/// A runtime foliage layer registered from terrain material data, ref-counted by loaded pages.
+		struct RegisteredFoliageLayer
+		{
+			FoliageLayerPtr layer;
+			uint32 refCount = 0;
+		};
+
+		/// All currently registered material-driven foliage layers, keyed by FoliageLayerKey.
+		std::map<FoliageLayerKey, RegisteredFoliageLayer> m_foliageRegistry;
+
+		/// Per terrain page, the set of foliage layer keys it contributed.
+		std::map<uint16, std::vector<FoliageLayerKey>> m_pageFoliageKeys;
+
+		/// @brief WYSIWYG setting: whether procedural grass is rendered in the editor. Hidden by default.
+		bool m_showFoliage{false};
+
+		/// @brief WYSIWYG setting: whether water surfaces are rendered in the editor. Visible by default.
+		bool m_showWater{true};
+
+		/// @brief Last effective water visibility pushed to the terrain (avoids redundant per-frame updates).
+		bool m_waterVisibilityApplied{true};
 
 		GridSnapSettings m_gridSnapSettings;
 
@@ -453,6 +553,8 @@ namespace mmo
 		std::unique_ptr<NavigationEditMode> m_navigationEditMode;
 		std::unique_ptr<SkyEditMode> m_skyEditMode;
 		std::unique_ptr<AreaTriggerEditMode> m_areaTriggerEditMode;
+		std::unique_ptr<WaterEditMode> m_waterEditMode;
+		std::unique_ptr<FoliageEditMode> m_foliageEditMode;
 		std::unique_ptr<SkyComponent> m_skyComponent;
 		WorldEditMode *m_editMode{nullptr};
 
@@ -473,6 +575,14 @@ namespace mmo
 		std::unique_ptr<WorldSettingsPanel> m_worldSettingsPanel;
 		std::unique_ptr<ViewportPanel> m_viewportPanel;
 		std::unique_ptr<SceneOutlineWindow> m_sceneOutlineWindow;
+		std::unique_ptr<SpawnPalettePanel> m_spawnPalettePanel;
+		std::unique_ptr<SpawnListPanel> m_spawnListPanel;
+
+		/// @brief Minimap grid used by the "World Map" panel to teleport the camera.
+		MinimapGridView m_minimapPanel;
+		/// @brief Whether the minimap panel's world name has been set yet (deferred until first draw
+		///        because the asset path is known at construction but minimaps may not exist yet).
+		bool m_minimapWorldSet{ false };
 	};
 }
 

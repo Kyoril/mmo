@@ -68,6 +68,40 @@ namespace mmo
 		/// @param home The new home position of the controlled unit.
 		void SetHome(Home home);
 
+		/// Saves the world position the creature occupied when it left the patrol route
+		/// (e.g. when entering combat). The reset state uses this to return the creature
+		/// to the route rather than back to its spawn position.
+		/// @param position The position to save.
+		void SavePatrolReturnPosition(const Vector3& position);
+
+		/// Gets the saved patrol return position.
+		/// @return The saved position.
+		[[nodiscard]] const Vector3& GetSavedPatrolReturnPosition() const;
+
+		/// Returns whether a patrol return position has been saved.
+		/// @return True if a saved position is available.
+		[[nodiscard]] bool HasSavedPatrolReturnPosition() const;
+
+		/// Clears any previously saved patrol return position.
+		void ClearSavedPatrolReturnPosition();
+
+		/// Saves the patrol waypoint index to resume from after leaving idle
+		/// (e.g. entering combat). Stores the first waypoint of the chain the
+		/// creature was traversing so direction is preserved on resume.
+		/// @param index Zero-based waypoint index.
+		void SavePatrolWaypointIndex(size_t index);
+
+		/// Gets the saved patrol waypoint index.
+		/// @return The saved index.
+		[[nodiscard]] size_t GetSavedPatrolWaypointIndex() const;
+
+		/// Returns whether a patrol waypoint index has been saved.
+		/// @return True if a saved index is available.
+		[[nodiscard]] bool HasSavedPatrolWaypointIndex() const;
+
+		/// Clears any previously saved patrol waypoint index.
+		void ClearSavedPatrolWaypointIndex();
+
 		/// Enters the idle state.
 		void Idle();
 
@@ -115,6 +149,10 @@ namespace mmo
 		scoped_connection m_onKilled;
 		scoped_connection m_onDespawned;
 		bool m_evading;
+		Vector3 m_savedPatrolReturnPosition;
+		bool m_hasPatrolReturnPosition;
+		size_t m_savedPatrolWaypointIndex;
+		bool m_hasPatrolWaypointSaved;
 		
 	};
 }

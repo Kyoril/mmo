@@ -59,8 +59,13 @@ namespace mmo
 
 		/// Root data folder used by the world server.
 		String dataFolder;
-		/// Root map data folder used by the world server.
+		/// Root map data folder used by the world server (nav mesh / .map / .nav files).
 		String mapFolder;
+		/// Path to the world asset data folder (Worlds/, Meshes/, etc.).
+		/// Required for server-side line-of-sight collision geometry loading.
+		/// Typically points to the same directory as the client's data/client folder.
+		/// Leave empty to disable geometry-based LOS (all LOS calls will return unblocked).
+		String worldDataFolder;
 		/// Root folder used by the world server for scripts.
 		String scriptFolder;
 		/// Whether to watch the data folders for changes.
@@ -71,6 +76,15 @@ namespace mmo
 
 		/// @brief Fall distance in meters at which fall damage becomes lethal (100% of max HP).
 		float fallDamageLethalHeight{ 40.0f };
+
+		/// @brief Hour of day [0, 23] (UTC/server time) at which daily quests reset.
+		uint32 dailyQuestResetHour{ 3 };
+
+		/// @brief Weekday [0 = Sunday, 6 = Saturday] on which weekly quests reset.
+		uint32 weeklyQuestResetWeekday{ 3 };
+
+		/// @brief Hour of day [0, 23] (UTC/server time) at which weekly quests reset.
+		uint32 weeklyQuestResetHour{ 3 };
 
 		/// Creates a configuration instance with default values.
 		explicit Configuration();

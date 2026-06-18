@@ -508,7 +508,7 @@ namespace mmo
 					ImGui::SetTooltip("Particle systems to spawn for this kit.\nIf Attach Bone is set, particles are attached to that bone via TagPoints.");
 				}
 
-				static const std::set<String> particleExtensions = {".hpfx"};
+				static const std::set<String> particleExtensions = {".hpar"};
 				std::vector<int> particlesToRemove;
 
 				for (int i = 0; i < kit.particles_size(); ++i)
@@ -944,7 +944,7 @@ namespace mmo
 
 			// Trail particle
 			std::string trailParticle = projectile.has_trail_particle() ? projectile.trail_particle() : "";
-			static const std::set<String> particleExtensions = {".hpfx"};
+			static const std::set<String> particleExtensions = {".hpar"};
 			if (AssetPickerWidget::Draw("Trail Particle", trailParticle, particleExtensions, &m_previewManager, nullptr, 64.0f))
 			{
 				projectile.set_trail_particle(trailParticle);
@@ -1221,7 +1221,7 @@ namespace mmo
 
 			// Impact particle (asset picker instead of plain text input)
 			std::string impactParticle = projectile.has_impact_particle() ? projectile.impact_particle() : "";
-			static const std::set<String> impactParticleExtensions = {".hpfx"};
+			static const std::set<String> impactParticleExtensions = {".hpar"};
 			if (AssetPickerWidget::Draw("Impact Particle", impactParticle, impactParticleExtensions, &m_previewManager, nullptr, 64.0f))
 			{
 				projectile.set_impact_particle(impactParticle);

@@ -17,6 +17,7 @@
 namespace mmo
 {
 	class SceneNode;
+	class ManualRenderObject;
 }
 
 namespace mmo
@@ -134,6 +135,54 @@ namespace mmo
 
 			SceneNode *GetSceneNode() const { return m_pageNode; }
 
+			/// @brief Get the 8×8 water quad presence mask for a local tile.
+			/// Each bit qx + qz*8 is 1 if the corresponding water quad is present.
+			uint64 GetWaterQuadMask(uint32 localTileX, uint32 localTileY) const;
+
+			/// @brief Overwrite the full 8×8 quad mask for a local tile.
+			void SetWaterQuadMask(uint32 localTileX, uint32 localTileY, uint64 mask);
+
+			/// @brief Set or clear a single water quad bit (qx, qz in [0..7]).
+			void SetWaterQuadBit(uint32 localTileX, uint32 localTileY, uint32 qx, uint32 qz, bool hasWater);
+
+			/// @brief Get the water surface height at a page-level outer vertex position.
+			float GetWaterVertexHeight(uint32 pageVertX, uint32 pageVertZ) const;
+
+			/// @brief Set the water surface height at a page-level outer vertex position.
+			void SetWaterVertexHeight(uint32 pageVertX, uint32 pageVertZ, float height);
+
+			/// @brief Get the water type for a local tile.
+			WaterType GetWaterType(uint32 localTileX, uint32 localTileY) const;
+
+			/// @brief Set the water type for a local tile.
+			void SetWaterType(uint32 localTileX, uint32 localTileY, WaterType type);
+
+			/// @brief Returns true if the tile has any active water quads.
+			bool HasWater(uint32 localTileX, uint32 localTileY) const;
+
+			/// @brief Remove all water quads from a local tile and reset its type.
+			void ClearWater(uint32 localTileX, uint32 localTileY);
+
+			/// @brief Get the material name used for all water in this page.
+			const String& GetWaterMaterialName() const { return m_waterMaterialName; }
+
+			/// @brief Set the material name used for all water in this page.
+			void SetWaterMaterialName(const String& name);
+
+			/// @brief Rebuild the water geometry render object. Must be called on the main thread.
+			void RebuildWaterMesh();
+
+			/// @brief Show or hide this page's water render object.
+			/// @param visible True to render the page's water surface, false to hide it.
+			void SetWaterVisible(bool visible);
+
+			/// @brief Enable or disable minimap rendering mode for water.
+			/// In minimap mode the water mesh is rebuilt with an opaque, solid-colour material that
+			/// does not depend on the scene depth/refraction textures (which are not bound during
+			/// minimap generation), so water reliably shows up on the generated minimap tiles.
+			/// @param enabled True to switch to minimap water rendering, false to restore normal water.
+			void SetMinimapWaterMode(bool enabled);
+
 			/// @brief Check if an inner vertex is marked as a hole
 			/// @param localTileX Tile X coordinate (0-15)
 			/// @param localTileY Tile Y coordinate (0-15)
@@ -157,6 +206,10 @@ namespace mmo
 			uint64 GetTileHoleMap(uint32 localTileX, uint32 localTileY) const;
 
 		private:
+			bool ReadMCWLChunk(io::Reader &reader, uint32 header, uint32 size);
+
+			bool ReadMCWQChunk(io::Reader &reader, uint32 header, uint32 size);
+
 			bool ReadMCVRChunk(io::Reader &reader, uint32 header, uint32 size);
 
 			bool ReadMCMTChunk(io::Reader &reader, uint32 header, uint32 size);
@@ -222,6 +275,20 @@ namespace mmo
 			/// Each bit represents one inner vertex (1 = hole, 0 = solid)
 			std::vector<uint64> m_holeMap;
 
+			/// Water quad masks: one uint64 per tile (16x16). Bit (qx + qz*8) = 1 if that 8x8 sub-quad has water.
+			std::vector<uint64> m_waterQuadMasks;
+			/// Water vertex heights: one float per page outer vertex (129x129 = OuterVerticesPerPageSide^2).
+			/// Indexed as pvx + pvz * OuterVerticesPerPageSide.
+			std::vector<float> m_waterVertexHeights;
+			/// Water types: one WaterType byte per tile (16x16), default None.
+			std::vector<uint8> m_waterTypes;
+			/// Optional material name applied to all water geometry in this page.
+			String m_waterMaterialName;
+			/// Runtime render object for water quads (created on Load, destroyed on Destroy).
+			ManualRenderObject* m_waterRenderObject{nullptr};
+			/// When true, water is rebuilt with an opaque solid-colour material for minimap rendering.
+			bool m_minimapWaterMode{false};
+
 			int32 m_x;
 			int32 m_z;
 			bool m_preparing;
@@ -229,6 +296,7 @@ namespace mmo
 			bool m_loaded;
 			bool m_changed{false};
 			bool m_unloadRequested = false;
+			bool m_innerHeightmapFromFile = false; ///< True if inner heights were loaded from the IVCM chunk (not derived).
 			AABB m_boundingBox;
 		};
 	}

@@ -16,6 +16,8 @@
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "math/vector3.h"
 
+#include <unordered_set>
+
 
 namespace mmo
 {
@@ -76,6 +78,10 @@ namespace mmo
 		/// Handles the EnterWorldFailed packet from the realm server.
 		///	@param packet The packet to parse.
 		PacketParseResult OnEnterWorldFailed(game::IncomingPacket& packet);
+
+		/// Handles the RealmConfig packet that carries disabled race and class IDs.
+		///	@param packet The packet to parse.
+		PacketParseResult OnRealmConfig(game::IncomingPacket& packet);
 
 	public:
 		// ~ Begin IConnectorListener
@@ -193,6 +199,9 @@ namespace mmo
 		/// @param sessionKey The session key.
 		void Connect(const std::string& realmAddress, uint16 realmPort, const std::string& accountName, const std::string& realmName, BigNumber sessionKey);
 
+		/// Sends a packet to the realm server requesting an up-to-date character list.
+		void RequestCharacterList();
+
 		/// Sends an enter world request using the given character.
 		void EnterWorld(const CharacterView& character);
 
@@ -215,6 +224,11 @@ namespace mmo
 		/// Sends a packet to the server to set the selected target object of the currently controlled player.
 		///	@param guid The guid of the object to select. Can be set to 0 to deselect the current target.
 		void SetSelection(uint64 guid);
+
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Requests a server-side line of sight check from the player's position to the given target.
+		/// The server responds with a DebugLineOfSightResult packet.
+		/// @param targetGuid The GUID of the unit to test line of sight against.
+		void CheckLineOfSight(uint64 targetGuid);
 
 		/// FROM CONSOLE COMMAND: GAME MASTER only. Spawns a temporary monster which will not respawn if it is despawned somehow or if the server is restarted.
 		///	@param entry The entry of the monster to spawn.
@@ -276,6 +290,10 @@ namespace mmo
 		void SendMoveTeleportAck(uint32 ackId, const MovementInfo& movementInfo);
 
 		void SendMoveRootAck(uint32 ackId, const MovementInfo& movementInfo);
+		void SendMoveStunAck(uint32 ackId, const MovementInfo& movementInfo);
+		void SendMoveSleepAck(uint32 ackId, const MovementInfo& movementInfo);
+		void SendMoveFearAck(uint32 ackId, const MovementInfo& movementInfo);
+		void SendMoveDisorientAck(uint32 ackId, const MovementInfo& movementInfo);
 
 		void AutoStoreLootItem(uint8 lootSlot);
 
@@ -306,10 +324,6 @@ namespace mmo
 		/// Sends a loot release packet to the server, notifying it about the player's intention to release the loot.
 		///	@param lootObjectGuid The guid of the previously looted object.
 		void LootRelease(uint64 lootObjectGuid);
-
-		/// Sends a packet to the server requesting to use/interact with a specific world object.
-		///	@param objectGuid The guid of the world object to use.
-		void UseObject(uint64 objectGuid);
 
 		/// Sends a generic gossip dialog request packet to the server for a specific npc.
 		///	@param targetGuid The guid of the npc.
@@ -419,6 +433,10 @@ namespace mmo
 
 		void DisbandGroup();
 
+		/// Sends a party ping at the given world position (x, z).
+		void SendPartyPingPosition(float x, float y, float z);
+		void SendPartyPingUnit(uint64 unitGuid);
+
 		void RandomRoll(int32 min, int32 max);
 
 		void SendChatMessage(const String& message, ChatType chatType, const String& target);
@@ -444,13 +462,49 @@ namespace mmo
 		/// @param triggerId The id of the area trigger that was entered.
 		void SendAreaTriggerTriggered(uint32 triggerId);
 
+		/// Sends a trade initiation request targeting the player with the given GUID.
+		void InitiateTrade(uint64 targetGuid);
+
+		/// Sends a trade invite acceptance.
+		void AcceptTradeInvite();
+
+		/// Sends a trade invite decline.
+		void DeclineTradeInvite();
+
+		/// Sends a trade session cancellation.
+		void CancelTrade();
+
+		/// Adds an inventory item to a trade slot.
+		void TradeAddItem(uint8 tradeSlot, uint16 inventorySlot);
+
+		/// Removes an item from a trade slot.
+		void TradeRemoveItem(uint8 tradeSlot);
+
+		/// Sets the money offered in the trade.
+		void TradeSetMoney(uint32 amount);
+
+		/// Accepts the current trade terms.
+		void AcceptTrade();
+
 	public:
 		/// Gets a constant list of character views.
 		const std::vector<CharacterView>& GetCharacterViews() const { return m_characterViews; }
 
+		/// Returns true if the given race ID is disabled on this realm.
+		bool IsRaceDisabled(uint32 raceId) const { return m_disabledRaces.count(raceId) > 0; }
+
+		/// Returns true if the given class ID is disabled on this realm.
+		bool IsClassDisabled(uint32 classId) const { return m_disabledClasses.count(classId) > 0; }
+
 	private:
 		/// A list of character views.
 		std::vector<CharacterView> m_characterViews;
+
+		/// Set of race IDs that are disabled on this realm.
+		std::unordered_set<uint32> m_disabledRaces;
+
+		/// Set of class IDs that are disabled on this realm.
+		std::unordered_set<uint32> m_disabledClasses;
 	};
 }
 

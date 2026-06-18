@@ -132,6 +132,10 @@ namespace mmo
 				ImGui::EndTable();
 			}
 
+			DrawSectionHeader("Availability");
+			CHECKBOX_BOOL_PROP(disabled, "Disabled (race locked on this realm)");
+			ImGui::Spacing();
+
 			DrawSectionHeader("Gameplay Defaults");
 			int32 factionTemplate = currentEntry.factiontemplate();
 

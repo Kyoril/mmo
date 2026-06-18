@@ -65,6 +65,7 @@ message ClassEntry {
 	optional float spiritPerHealthRegen = 15;
 	
 	repeated AttackPowerStatSource armorStatSources = 16;
+	optional bool disabled = 23;
 
 	repeated uint32 xpToNextLevel = 17;
 
@@ -83,6 +84,14 @@ message ClassEntry {
 	// Auto-attack spell used for ranged auto-attacks (e.g. Auto Shot with a bow).
 	// If 0, no ranged auto-attack is performed.
 	optional uint32 ranged_auto_attack_spell = 22;
+
+	// Primary attribute sources contributing to the unit's shield block value.
+	// Each source adds (statValue * factor) to the block value (e.g. Strength * 0.264).
+	repeated AttackPowerStatSource blockvaluestatsources = 24;
+
+	// Primary attribute sources contributing to the unit's critical block chance (in percent).
+	// Each source adds (statValue * factor) to the critical block chance.
+	repeated AttackPowerStatSource critblockchancestatsources = 25;
 }
 
 message Classes {

@@ -14,6 +14,7 @@
 
 #include "imagery_section.h"
 #include "state_imagery.h"
+#include "frame_animation.h"
 
 #include "base/typedefs.h"
 #include "base/utilities.h"
@@ -386,7 +387,13 @@ namespace mmo
 
 		virtual void OnMouseMoved(const Point& position, const Point& delta);
 
-		/// 
+		/// Called when the mouse wheel is scrolled while this frame (or one of its children)
+		/// is hovered. The event bubbles up the parent chain until a frame consumes it.
+		/// @param delta Number of wheel notches; positive = wheel up, negative = wheel down.
+		/// @return True if the event was consumed, false to let it bubble up to the parent.
+		virtual bool OnMouseWheel(int32 delta) { return false; }
+
+		///
 		virtual void OnKeyDown(Key key) {}
 
 		/// 
@@ -467,6 +474,41 @@ namespace mmo
 		void SetOpacity(const float opacity) { m_opacity = Clamp(opacity, 0.0f, 1.0f); Invalidate(); }
 
 		[[nodiscard]] float GetOpacity(bool inherit = true) const;
+
+		const Color& GetColor() const { return m_color; }
+
+		void SetColor(const Color& color) { m_color = color; Invalidate(); }
+
+	public:
+		/// Adds an owned animation to this frame. Replaces any existing animation with the same name.
+		void AddAnimation(std::unique_ptr<FrameAnimation> animation);
+
+		/// Returns the animation with the given name, or nullptr if none exists.
+		FrameAnimation* GetAnimation(const std::string& name);
+
+		/// Returns true if an animation with the given name exists on this frame.
+		bool HasAnimation(const std::string& name) const;
+
+		/// Starts playing the named animation from the beginning.
+		void PlayAnimation(const std::string& name);
+
+		/// Stops the named animation and resets its time to zero.
+		void StopAnimation(const std::string& name);
+
+		/// Returns true if the named animation is currently playing.
+		bool IsAnimationPlaying(const std::string& name) const;
+
+		/// Moves this frame to the end of its parent's child list so it renders on top of all siblings.
+		void BringToFront();
+
+		/// Moves this frame to the start of its parent's child list so it renders behind all siblings.
+		void SendToBack();
+
+		/// Sets the frame level used for render ordering among siblings. Higher values render on top.
+		void SetFrameLevel(int32 level);
+
+		/// Gets the frame level used for render ordering.
+		[[nodiscard]] int32 GetFrameLevel() const { return m_frameLevel; }
 
 	protected:
 		virtual void DrawSelf();
@@ -556,6 +598,16 @@ namespace mmo
 		bool m_needsLayout;
 		/// The cached absolute frame rect.
 		Rect m_absRectCache;
+		/// Cached result of the last GetTextHeight() call.
+		float m_textHeightCache = 0.0f;
+		/// Whether m_textHeightCache holds a valid value (invalidated on text change).
+		bool m_textHeightCacheValid = false;
+		/// The font the cached text height was computed for.
+		const Font* m_textHeightCacheFont = nullptr;
+		/// The wrap width the cached text height was computed for.
+		float m_textHeightCacheWidth = 0.0f;
+		/// The UI scale the cached text height was computed for.
+		float m_textHeightCacheScale = 0.0f;
 		/// Contains all state imageries of this style by name.
 		std::map<std::string, StateImagery> m_stateImageriesByName;
 		/// Contains all state imagery sections of this style by name.
@@ -609,6 +661,8 @@ namespace mmo
 
 		Color m_color { Color::White };
 
+		int32 m_frameLevel{ 0 };
+
 		bool m_clickable = true;
 
 		bool m_dragEnabled = false;
@@ -620,6 +674,9 @@ namespace mmo
 		MouseButton m_dragButton{ MouseButton::None };
 
 		Point m_dragStartPosition{ };
+
+		/// Owned named animations keyed by animation name.
+		std::map<std::string, std::unique_ptr<FrameAnimation>> m_animations;
 
 	protected:
 		scoped_connection_container m_propConnections;

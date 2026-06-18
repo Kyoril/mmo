@@ -6,11 +6,12 @@
 
 namespace mmo
 {
-	GameAuraC::GameAuraC(GameUnitC& owner, const proto_client::SpellEntry& spell, const uint64 caster, const GameTime expiration)
+	GameAuraC::GameAuraC(GameUnitC& owner, const proto_client::SpellEntry& spell, const uint64 caster, const GameTime expiration, const uint8 stackCount)
 		: m_spell(&spell)
 		, m_expiration(0)
 		, m_casterId(caster)
 		, m_targetId(owner.GetGuid())
+		, m_stackCount(stackCount)
 	{
 		if (expiration > 0)
 		{

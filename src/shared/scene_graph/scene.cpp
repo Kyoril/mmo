@@ -12,6 +12,7 @@
 #include "render_operation.h"
 #include "world_model_instance.h"
 
+#include "light.h"
 #include "base/macros.h"
 #include "base/profiler.h"
 #include "graphics/graphics_device.h"
@@ -36,6 +37,7 @@ namespace mmo
 
 	struct alignas(16) PsCameraConstantBuffer
 	{
+		// Row 0–6: camera, fog, matrices, time (112 bytes — must stay layout-stable)
 		Vector3 cameraPosition;
 		float fogStart;
 		float fogEnd;
@@ -43,6 +45,17 @@ namespace mmo
 		Matrix4 inverseViewMatrix;
 		float time;
 		float _padding[3];
+
+		// Row 7–9: forward lighting (48 bytes added)
+		// Populated from the scene's primary directional light so that forward-rendered
+		// translucent objects (water, glass …) react to the actual sky/sun rather than
+		// hardcoded values inside the generated pixel shader.
+		Vector3 sunDirection;	// World-space direction *toward* the sun (normalised)
+		float sunIntensity;
+		Vector3 sunColor;
+		float _forwardPad0;
+		Vector3 ambientColor;	// Scene ambient (matches deferred AmbientColor cbuffer)
+		float _forwardPad1;
 	};
 
 	Scene::Scene()
@@ -101,6 +114,7 @@ namespace mmo
 	{
 		if (const auto cameraIt = m_cameras.find(name); cameraIt != m_cameras.end())
 		{
+			m_camVisibleObjectsMap.erase(cameraIt->second.get());
 			m_cameras.erase(cameraIt);
 		}
 	}
@@ -285,26 +299,62 @@ namespace mmo
 
 		UpdateSceneGraph();
 
-		// Update particle emitters (self-timed)
+		// In the deferred renderer, scene.Render is called twice per frame:
+		//   1. GBuffer pass  (m_forwardTransparentOnly = false) – builds the render queue and renders opaque geometry.
+		//   2. Forward transparent pass (m_forwardTransparentOnly = true) – renders only transparent groups.
+		//
+		// We must NOT rebuild the render queue during the transparent pass.  If we did,
+		// PopulateRenderQueue would be called a second time for every visible object in the
+		// same frame.  For terrain tiles this is catastrophic: the occlusion-culling state
+		// machine (consecutive-occluded-frame counter, skipped-frame counter, TryGetResult)
+		// runs twice per real frame, which:
+		//   • Halves the effective OcclusionGraceFrames threshold (tiles get culled twice as fast).
+		//   • Consumes the pending GPU query result in the forward pass so the next G-buffer
+		//     pass finds no result and the tile stays frozen in its culled state.
+		//   • Causes the "flicker every other frame / does not recover" artifact at the horizon.
+		//
+		// The forward transparent pass reuses the queue that was built during the G-buffer pass.
+		// RenderVisibleObjects already skips groups < Transparent when m_forwardTransparentOnly,
+		// so only particles, ribbon trails, and other transparent renderables are drawn.
+		if (!m_frozen && !m_forwardTransparentOnly && !m_reuseRenderQueue)
 		{
-			PROFILE_SCOPE("ParticleEmitters::Update");
-			for (auto& [name, emitter] : m_particleEmitters)
+			// Particle emitters and ribbon trails are *simulation*, not just rendering: each
+			// Update() advances the system and re-sorts/re-uploads its GPU buffers. It must run
+			// exactly once per frame — during the primary opaque queue-build pass — and never during
+			// the shadow cascade passes (which would otherwise re-simulate and re-sort every emitter
+			// up to NUM_SHADOW_CASCADES extra times each frame). A shadow cascade pass is a
+			// ShadowMap-typed pass that is not the main-view depth pre-pass.
+			const bool isShadowCascadePass = (shaderType == PixelShaderType::ShadowMap) && !m_depthPrepass;
+			if (!isShadowCascadePass)
 			{
-				emitter->Update();
-			}
-		}
+				PROFILE_SCOPE("ParticleEmitters::Update");
 
-		// Update ribbon trails (self-timed)
-		{
-			PROFILE_SCOPE("RibbonTrails::Update");
-			for (auto& [name, trail] : m_ribbonTrails)
-			{
-				trail->Update();
-			}
-		}
+				// Compute a single shared deltaTime for all particle systems this frame.
+				const auto particleNow = std::chrono::high_resolution_clock::now();
+				float particleDelta = 0.0f;
+				if (m_particleTimerInitialized)
+				{
+					particleDelta = std::chrono::duration_cast<std::chrono::microseconds>(
+						particleNow - m_lastParticleUpdate).count() / 1000000.0f;
+				}
+				m_lastParticleUpdate = particleNow;
+				m_particleTimerInitialized = true;
 
-		if (!m_frozen)
-		{
+				for (auto& [name, emitter] : m_particleEmitters)
+				{
+					// Systems flagged for manual update (e.g. the particle editor) advance themselves.
+					if (emitter->IsAutoUpdate())
+					{
+						emitter->Update(particleDelta);
+					}
+				}
+
+				for (auto& [name, trail] : m_ribbonTrails)
+				{
+					trail->Update();
+				}
+			}
+
 			PrepareRenderQueue();
 
 			// Update portal culling for all WorldModelInstances BEFORE FindVisibleObjects
@@ -320,9 +370,14 @@ namespace mmo
 			const auto visibleObjectsIt = m_camVisibleObjectsMap.find(&camera);
 			ASSERT(visibleObjectsIt != m_camVisibleObjectsMap.end());
 			visibleObjectsIt->second.Reset();
-			FindVisibleObjects(camera, visibleObjectsIt->second, shaderType == PixelShaderType::ShadowMap);
+			// The depth pre-pass renders with the ShadowMap pixel shader but must capture the full
+			// visible set (not just shadow casters) so the G-Buffer pass can reuse the same queue.
+			const bool onlyShadowCasters = (shaderType == PixelShaderType::ShadowMap) && !m_depthPrepass;
+			FindVisibleObjects(camera, visibleObjectsIt->second, onlyShadowCasters);
 
-			// Add particle emitters to render queue
+			// Particle emitters use RenderQueueGroupId::Transparent and are therefore
+			// automatically excluded from GBuffer/ShadowMap passes by RenderVisibleObjects.
+			// No manual guard needed here.
 			for (auto& [name, emitter] : m_particleEmitters)
 			{
 				emitter->PopulateRenderQueue(GetRenderQueue());
@@ -338,9 +393,10 @@ namespace mmo
 		// Clear current render target
 		gx.SetFillMode(camera.GetFillMode());
 
-		// Enable depth test & write & set comparison method to less
+		// Depth state: opaque passes write depth; the forward transparent pass
+		// depth-tests against the GBuffer depth but must not overwrite it.
 		gx.SetDepthEnabled(true);
-		gx.SetDepthWriteEnabled(true);
+		gx.SetDepthWriteEnabled(!m_forwardTransparentOnly);
 		gx.SetDepthTestComparison(DepthTestMethod::Less);
 
 		gx.SetTransformMatrix(World, Matrix4::Identity);
@@ -526,7 +582,29 @@ namespace mmo
 
 		for (auto& queue = GetRenderQueue(); auto& [groupId, group] : queue)
 		{
+			// Shadow maps skip background/sky groups (they have no geometry to cast shadows).
 			if (m_pixelShaderType == PixelShaderType::ShadowMap && groupId < RenderQueueGroupId::WorldGeometry1)
+			{
+				continue;
+			}
+
+			// GBuffer and ShadowMap passes only render opaque geometry.
+			// Transparent objects (Transparent group and above) are handled by a
+			// dedicated forward pass after deferred lighting.
+			if ((m_pixelShaderType == PixelShaderType::GBuffer || m_pixelShaderType == PixelShaderType::ShadowMap)
+				&& groupId >= RenderQueueGroupId::Transparent)
+			{
+				continue;
+			}
+
+			// The Forward pass is used exclusively for transparent objects.
+			// Skip opaque groups — they were already rendered in the GBuffer pass.
+			// Note: when Scene::Render is called directly with Forward (editor, model viewer)
+			// this skip does not apply because those callers never emit a GBuffer pass.
+			// We detect the deferred context via m_forwardTransparentOnly, which the
+			// deferred renderer sets before calling scene.Render with Forward.
+			if (m_pixelShaderType == PixelShaderType::Forward && m_forwardTransparentOnly
+				&& groupId < RenderQueueGroupId::Transparent)
 			{
 				continue;
 			}
@@ -569,6 +647,95 @@ namespace mmo
 		{
 			RenderObjects(priorityGroup->GetSolids());
 		}
+	}
+
+	void Scene::GatherShadowCasters(const AABB& worldRegion, std::vector<MovableObject*>& outCasters)
+	{
+		// Base (non-spatial) fallback: linear scan over entities. OctreeScene overrides this with an
+		// octree traversal. Preview/editor scenes that use this base path have few objects.
+		outCasters.clear();
+		outCasters.reserve(m_entities.size());
+
+		for (const auto& [name, entity] : m_entities)
+		{
+			MovableObject* obj = entity.get();
+			if (!obj->ShouldBeVisible() || !obj->IsCastingShadows())
+			{
+				continue;
+			}
+
+			if (!worldRegion.Intersects(obj->GetWorldBoundingBox(true)))
+			{
+				continue;
+			}
+
+			outCasters.push_back(obj);
+		}
+	}
+
+	void Scene::RenderShadowCasters(Camera& cascadeCamera, const std::vector<MovableObject*>& casters, float minCasterWorldRadius)
+	{
+		PROFILE_SCOPE("Scene::RenderShadowCasters");
+
+		m_pixelShaderType = PixelShaderType::ShadowMap;
+		m_activeCamera = &cascadeCamera;
+		m_renderableVisitor.targetScene = this;
+		m_renderableVisitor.scissoring = false;
+
+		// Build the render queue directly from the pre-gathered caster list — no octree walk. This is
+		// the per-cascade work that replaces a full FindVisibleObjects pass per cascade.
+		auto& queue = GetRenderQueue();
+		queue.Clear();
+
+		for (MovableObject* caster : casters)
+		{
+			// Mirror RenderQueue::ProcessVisibleObject's per-camera state (LOD / rendering-disabled)
+			// so shadow visibility matches the previous per-cascade Scene::Render path exactly.
+			caster->SetCurrentCamera(cascadeCamera);
+
+			if (!caster->IsVisible() || !caster->IsCastingShadows())
+			{
+				continue;
+			}
+
+			const AABB& worldBounds = caster->GetWorldBoundingBox(true);
+
+			// Sub-texel small-object culling: a caster smaller than the cascade's world texel size
+			// produces a shadow under one shadow-map texel, i.e. invisible. Skipping it is free.
+			if (minCasterWorldRadius > 0.0f)
+			{
+				const Vector3 extents = worldBounds.GetExtents();
+				const float worldRadius = std::max(extents.x, std::max(extents.y, extents.z));
+				if (worldRadius < minCasterWorldRadius)
+				{
+					continue;
+				}
+			}
+
+			if (!cascadeCamera.IsVisible(worldBounds))
+			{
+				continue;
+			}
+
+			caster->PopulateRenderQueue(queue);
+		}
+
+		// Shadow passes write depth with the cascade camera; match the state Scene::Render sets for a
+		// ShadowMap pass.
+		auto& gx = GraphicsDevice::Get();
+		gx.SetFillMode(cascadeCamera.GetFillMode());
+		gx.SetDepthEnabled(true);
+		gx.SetDepthWriteEnabled(true);
+		gx.SetDepthTestComparison(DepthTestMethod::Less);
+		gx.SetTransformMatrix(World, Matrix4::Identity);
+		gx.SetTransformMatrix(Projection, cascadeCamera.GetProjectionMatrix());
+		gx.SetTransformMatrix(View, cascadeCamera.GetViewMatrix());
+
+		RefreshCameraBuffer(cascadeCamera);
+
+		RenderVisibleObjects();
+
+		m_activeCamera = nullptr;
 	}
 
 	void Scene::NotifyLightsDirty()
@@ -627,7 +794,10 @@ namespace mmo
 	{
 		PROFILE_SCOPE("RenderSingleObject");
 
-		RenderOperation op { groupId };
+		// Reuse a single RenderOperation (cleared, capacity retained) to avoid a per-draw heap
+		// allocation for its constant-buffer vectors.
+		RenderOperation& op = m_renderOp;
+		op.Reset(groupId);
 		renderable.PrepareRenderOperation(op);
 		op.pixelShaderType = m_pixelShaderType;
 
@@ -734,9 +904,9 @@ namespace mmo
 	Entity* Scene::CreateEntity(const String& entityName, const MeshPtr& mesh)
 	{
 		ASSERT(m_entities.find(entityName) == m_entities.end());
-    
+
 		auto [entityIt, created] = m_entities.emplace(entityName, std::make_unique<Entity>(entityName, mesh));
-		
+
 		return entityIt->second.get();
 	}
 
@@ -845,6 +1015,34 @@ namespace mmo
 		buffer._padding[0] = 0.0f;
 		buffer._padding[1] = 0.0f;
 		buffer._padding[2] = 0.0f;
+
+		// Forward lighting — populate from the primary directional light so that translucent
+		// forward-rendered objects (water, glass …) receive the real sky/sun lighting instead
+		// of the previously hardcoded placeholder values in the generated pixel shader.
+		if (m_primaryDirectionalLight != nullptr)
+		{
+			// GetDerivedDirection returns the LOCAL direction of the light (set by SkyComponent).
+			// Negate it so the shader receives a vector that points *toward* the light source.
+			const Vector3 rawDir = m_primaryDirectionalLight->GetDirection();
+			Vector3 towardSun = -rawDir;
+			towardSun.Normalize();
+			buffer.sunDirection = towardSun;
+			buffer.sunIntensity  = m_primaryDirectionalLight->GetIntensity();
+			const Vector4& col   = m_primaryDirectionalLight->GetColor();
+			buffer.sunColor      = Vector3(col.x, col.y, col.z);
+		}
+		else
+		{
+			// Sensible fallback so forward objects are never black with no sky set up.
+			buffer.sunDirection = Vector3(0.0f, 1.0f, 0.0f);
+			buffer.sunIntensity  = 1.0f;
+			buffer.sunColor      = Vector3(1.0f, 0.95f, 0.8f);
+		}
+
+		buffer.ambientColor   = m_ambientColor;
+		buffer._forwardPad0   = 0.0f;
+		buffer._forwardPad1   = 0.0f;
+
 		m_psCameraBuffer->Update(&buffer);
 	}
 

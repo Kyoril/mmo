@@ -37,6 +37,7 @@ namespace mmo
 		, realmServerPassword("")
 		, dataFolder("data")
 		, mapFolder("nav")
+		, worldDataFolder("")
 		, scriptFolder("data/scripts")
 		, watchDataForChanges(true)
 	{
@@ -151,6 +152,7 @@ namespace mmo
 			{
 				dataFolder = folders->getString("data", dataFolder);
 				mapFolder = folders->getString("maps", mapFolder);
+				worldDataFolder = folders->getString("worldData", worldDataFolder);
 				scriptFolder = folders->getString("scripts", scriptFolder);
 				watchDataForChanges = detail::parseBoolean(*folders, "watchDataForChanges", watchDataForChanges);
 			}
@@ -159,6 +161,9 @@ namespace mmo
 			{
 				fallDamageMinHeight = static_cast<float>(gameplay->getInteger("fallDamageMinHeight", static_cast<unsigned>(fallDamageMinHeight)));
 				fallDamageLethalHeight = static_cast<float>(gameplay->getInteger("fallDamageLethalHeight", static_cast<unsigned>(fallDamageLethalHeight)));
+				dailyQuestResetHour = gameplay->getInteger("dailyQuestResetHour", dailyQuestResetHour);
+				weeklyQuestResetWeekday = gameplay->getInteger("weeklyQuestResetWeekday", weeklyQuestResetWeekday);
+				weeklyQuestResetHour = gameplay->getInteger("weeklyQuestResetHour", weeklyQuestResetHour);
 			}
 
 			if (const Table *const log = global.getTable("log"))
@@ -259,6 +264,7 @@ namespace mmo
 			sff::write::Table<Char> folders(global, "folders", sff::write::MultiLine);
 			folders.addKey("data", dataFolder);
 			folders.addKey("maps", mapFolder);
+			folders.addKey("worldData", worldDataFolder);
 			folders.addKey("scripts", scriptFolder);
 			folders.addKey("watchDataForChanges", watchDataForChanges);
 			folders.Finish();
@@ -280,6 +286,9 @@ namespace mmo
 			sff::write::Table<Char> gameplay(global, "gameplay", sff::write::MultiLine);
 			gameplay.addKey("fallDamageMinHeight", static_cast<unsigned>(fallDamageMinHeight));
 			gameplay.addKey("fallDamageLethalHeight", static_cast<unsigned>(fallDamageLethalHeight));
+			gameplay.addKey("dailyQuestResetHour", dailyQuestResetHour);
+			gameplay.addKey("weeklyQuestResetWeekday", weeklyQuestResetWeekday);
+			gameplay.addKey("weeklyQuestResetHour", weeklyQuestResetHour);
 			gameplay.Finish();
 		}
 

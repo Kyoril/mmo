@@ -9,7 +9,7 @@ namespace mmo
 {
 	io::Writer& operator<<(io::Writer& writer, const CharacterView& characterView)
 	{
-		return writer
+		writer
 			<< io::write<uint64>(characterView.m_guid)
 			<< io::write_dynamic_range<uint8>(characterView.m_name)
 			<< io::write<uint8>(characterView.m_level)
@@ -21,11 +21,18 @@ namespace mmo
 			<< io::write<uint8>(characterView.m_dead ? 1 : 0)
 			<< io::write<uint32>(characterView.m_displayId)
 			<< characterView.m_configuration;
+
+		for (uint8 i = 0; i < player_equipment_slots::Count_; ++i)
+		{
+			writer << io::write<uint32>(characterView.m_equipmentDisplayIds[i]);
+		}
+
+		return writer;
 	}
 
 	io::Reader& operator>>(io::Reader& reader, CharacterView& outCharacterView)
 	{
-		return reader
+		reader
 			>> io::read<uint64>(outCharacterView.m_guid)
 			>> io::read_container<uint8>(outCharacterView.m_name)
 			>> io::read<uint8>(outCharacterView.m_level)
@@ -37,5 +44,12 @@ namespace mmo
 			>> io::read<uint8>(outCharacterView.m_dead)
 			>> io::read<uint32>(outCharacterView.m_displayId)
 			>> outCharacterView.m_configuration;
+
+		for (uint8 i = 0; i < player_equipment_slots::Count_; ++i)
+		{
+			reader >> io::read<uint32>(outCharacterView.m_equipmentDisplayIds[i]);
+		}
+
+		return reader;
 	}
 }

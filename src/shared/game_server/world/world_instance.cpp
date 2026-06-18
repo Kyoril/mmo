@@ -1,6 +1,8 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "world_instance.h"
+#include "server_collision_map.h"
+#include "server_water_map.h"
 
 #include "game_server/world/creature_spawner.h"
 #include "game_server/world/each_tile_in_sight.h"
@@ -62,7 +64,7 @@ namespace mmo
 
 	bool SimpleMapData::IsInLineOfSight(const Vector3& posA, const Vector3& posB)
 	{
-		// TODO
+		// No geometry available — treat everything as visible.
 		return true;
 	}
 
@@ -73,12 +75,60 @@ namespace mmo
 		// Load all map pages
 		DLOG("Loading nav map pages...");
 		m_map->LoadAllPages();
+
+		// Attempt to load world geometry for accurate 3D LOS. Falls back to nav mesh LOS
+		// if no world file is found (e.g. simple outdoor-only maps).
+		auto collisionMap = std::make_unique<ServerCollisionMap>(mapEntry.directory());
+		if (collisionMap->IsLoaded())
+		{
+			m_collisionMap = std::move(collisionMap);
+			DLOG("NavMapData: using geometry-based LOS for map '" << mapEntry.directory() << "'");
+		}
+		else
+		{
+			WLOG("NavMapData: geometry collision unavailable for map '"
+				<< mapEntry.directory() << "' — all IsInLineOfSight calls will return true (unblocked)");
+		}
+
+		// Load terrain water data for swim validation. Optional — null when the map has no water.
+		auto waterMap = std::make_unique<ServerWaterMap>(mapEntry.directory());
+		if (waterMap->IsLoaded())
+		{
+			m_waterMap = std::move(waterMap);
+		}
 	}
+
+	NavMapData::~NavMapData() = default;
 
 	bool NavMapData::IsInLineOfSight(const Vector3& posA, const Vector3& posB)
 	{
-		// TODO
-		return true;
+		if (!m_collisionMap)
+		{
+			// No geometry loaded — cannot determine LOS. Treat as unblocked.
+			return true;
+		}
+
+		// Raise both points to approximate eye level.
+		// 1.8 m is used for all unit types as a static approximation;
+		// per-unit model height can be substituted here later.
+		static const Vector3 eyeOffset(0.f, 1.8f, 0.f);
+		return m_collisionMap->LineOfSight(posA + eyeOffset, posB + eyeOffset);
+	}
+
+	bool NavMapData::IsInLineOfSightEx(const Vector3& posA, const Vector3& posB, Vector3& hitPoint)
+	{
+		hitPoint = posB;
+
+		if (!m_collisionMap)
+		{
+			return true;
+		}
+
+		static const Vector3 eyeOffset(0.f, 1.8f, 0.f);
+		const bool result = m_collisionMap->LineOfSightEx(posA + eyeOffset, posB + eyeOffset, hitPoint);
+		// Lower the reported hit point back to ground level for consistent world-space display.
+		hitPoint -= eyeOffset;
+		return result;
 	}
 
 	bool NavMapData::CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const
@@ -89,6 +139,21 @@ namespace mmo
 	bool NavMapData::FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const
 	{
 		return m_map->FindRandomPointAroundCircle(centerPosition, radius, randomPoint);
+	}
+
+	bool NavMapData::GetWaterSurface(const Vector3& pos, float& outSurfaceY) const
+	{
+		if (!m_waterMap)
+		{
+			return false;
+		}
+
+		return m_waterMap->GetWaterSurface(pos.x, pos.z, outSurfaceY);
+	}
+
+	bool NavMapData::IsWaterDataAvailable() const
+	{
+		return m_waterMap != nullptr;
 	}
 
 	WorldInstance::WorldInstance(WorldInstanceManager& manager, Universe& universe, IdGenerator<uint64>& objectIdGenerator, const proto::Project& project, const MapId mapId, std::unique_ptr<VisibilityGrid> visibilityGrid, std::unique_ptr<UnitFinder> unitFinder, ITriggerHandler& triggerHandler, const ConditionMgr& conditionMgr)
@@ -320,37 +385,39 @@ namespace mmo
 			TileIndex2D gridIndex;
 			if (!m_visibilityGrid->GetTilePosition(remove.GetPosition(), gridIndex[0], gridIndex[1]))
 			{
-				ELOG("Could not resolve grid location!");
-				return;
+				ELOG("Could not resolve grid location for object " << log_hex_digit(remove.GetGuid()) << " during removal — skipping tile cleanup");
 			}
-
-			auto* tile = m_visibilityGrid->GetTile(gridIndex);
-			if (!tile)
+			else
 			{
-				ELOG("Could not find tile!");
-				return;
-			}
-
-			tile->GetGameObjects().remove(&remove);
-			remove.OnDespawn();
-
-			ForEachTileInSight(
-				*m_visibilityGrid,
-				tile->GetPosition(),
-				[&remove](VisibilityTile& tile)
+				auto* tile = m_visibilityGrid->GetTile(gridIndex);
+				if (!tile)
 				{
-					std::vector objects{ &remove };
-					for (auto* subscriber : tile.GetWatchers())
-					{
-						// Only despawn if we were visible before
-						if (remove.IsUnit() && !remove.AsUnit().CanBeSeenBy(subscriber->GetGameUnit()))
-						{
-							continue; // Skip subscribers that cannot see this unit
-						}
+					ELOG("Could not find tile for object " << log_hex_digit(remove.GetGuid()) << " during removal — skipping tile cleanup");
+				}
+				else
+				{
+					tile->GetGameObjects().remove(&remove);
+					remove.OnDespawn();
 
-						subscriber->NotifyObjectsDespawned(objects);
-					}
-				});
+					ForEachTileInSight(
+						*m_visibilityGrid,
+						tile->GetPosition(),
+						[&remove](VisibilityTile& tile)
+						{
+							std::vector objects{ &remove };
+							for (auto* subscriber : tile.GetWatchers())
+							{
+								// Only despawn if we were visible before
+								if (remove.IsUnit() && !remove.AsUnit().CanBeSeenBy(subscriber->GetGameUnit()))
+								{
+									continue; // Skip subscribers that cannot see this unit
+								}
+
+								subscriber->NotifyObjectsDespawned(objects);
+							}
+						});
+				}
+			}
 		}
 
 		if (remove.destroy)
@@ -548,7 +615,10 @@ namespace mmo
 
 			const std::vector objects{ &object };
 
-			// Send despawn packets
+			// Send despawn packets to subscribers that previously knew about this object
+			// but whose tile is no longer in sight of the new position.
+			// Guard with IsObjectKnown to avoid sending destroy for objects that were
+			// never spawned to the client (e.g. units that were invisible while in range).
 			ForEachTileInSightWithout(
 				*m_visibilityGrid,
 				oldTile->GetPosition(),
@@ -557,11 +627,15 @@ namespace mmo
 				{
 					const uint64 guid = object.GetGuid();
 
-					// Despawn this object for all subscribers
 					for (auto* subscriber : tile.GetWatchers().getElements())
 					{
-						// This is the subscribers own character - despawn all old objects and skip him
 						if (subscriber->GetGameUnit().GetGuid() == guid)
+						{
+							continue;
+						}
+
+						// Only despawn if the client was actually told about this object.
+						if (!subscriber->IsObjectKnown(guid))
 						{
 							continue;
 						}
@@ -573,21 +647,33 @@ namespace mmo
 			// Notify watchers about the pending tile change
 			object.tileChangePending(*oldTile, *newTile);
 
-			// Send spawn packets
+			// Send spawn packets to subscribers whose tile newly comes into sight.
+			// Mirror the CanBeSeenBy guard from AddGameObject so invisible units are
+			// never sent as creation packets here either.
 			ForEachTileInSightWithout(
 				*m_visibilityGrid,
 				newTile->GetPosition(),
 				oldTile->GetPosition(),
 				[&object, &objects](VisibilityTile& tile)
 				{
-					// Spawn this new object for all watchers of the new tile
 					for (auto* subscriber : tile.GetWatchers().getElements())
 					{
-						// TODO: Spawn conditions for watcher
-
-						// This is the subscribers own character - send all new objects to this subscriber
-						// and then skip him
 						if (subscriber->GetGameUnit().GetGuid() == object.GetGuid())
+						{
+							continue;
+						}
+
+						if (object.IsUnit() && !object.AsUnit().CanBeSeenBy(subscriber->GetGameUnit()))
+						{
+							continue;
+						}
+
+						// Only spawn if the client does not already know about this object.
+						// This guards against the case where the unit was spawned via
+						// SpawnTileObjects (player logged in / moved tiles) and then the
+						// creature moves to a tile that ForEachTileInSightWithout considers
+						// "new" without having first sent a despawn.
+						if (subscriber->IsObjectKnown(object.GetGuid()))
 						{
 							continue;
 						}

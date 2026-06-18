@@ -1,6 +1,8 @@
 
 #pragma once
 
+#include <utility>
+
 namespace mmo
 {
 	class PlatformOsX
@@ -25,5 +27,8 @@ namespace mmo
         static void SetCursorPos(int x, int y);
 
 		static bool IsShiftKeyDown();
+
+		/// Returns the primary display resolution in pixels as {width, height}.
+		static std::pair<int, int> GetPrimaryDisplayResolution();
 	};
 }

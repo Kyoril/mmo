@@ -12,6 +12,7 @@
 
 #include "base/utilities.h"
 #include "game_common/world_entity_loader.h"
+#include "game_common/world_foliage.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/mesh_serializer.h"
 #include "scene_graph/world_model.h"
@@ -544,6 +545,62 @@ namespace mmo
         }
 
 		DLOG("Loaded " << m_loadedMapEntityInstances.size() << " map entities and " << m_loadedWorldModelEntityInstances.size() << " world model entities!");
+
+        // Load instanced foliage (trees). Each .hfol page file holds many instances which are
+        // treated exactly like mesh entities for navmesh generation.
+        DLOG("Loading map foliage...");
+        const std::vector<std::string> foliageFiles = AssetRegistry::ListFiles("Worlds/" + Name + "/" + Name + "/Foliage/", "hfol");
+        uint32 foliageInstances = 0;
+        for (const auto& foliageFilename : foliageFiles)
+        {
+            std::unique_ptr<std::istream> filePtr = AssetRegistry::OpenFile(foliageFilename);
+            if (!filePtr)
+            {
+                ELOG("Failed to load foliage file " << foliageFilename << ": File can not be opened");
+                continue;
+            }
+
+            io::StreamSource foliageSource{ *filePtr };
+            io::Reader foliageReader{ foliageSource };
+            WorldFoliageLoader loader;
+            if (!loader.Read(foliageReader))
+            {
+                ELOG("Failed to load foliage file " << foliageFilename << ": Failed to read file");
+                continue;
+            }
+
+            for (const auto& instance : loader.GetInstances())
+            {
+                // Foliage explicitly flagged as non-colliding must not carve navmesh obstacles.
+                if (!instance.collides)
+                {
+                    continue;
+                }
+
+                if (GetMapEntityInstance(instance.uniqueId) != nullptr)
+                {
+                    WLOG("Duplicate foliage instance id found: " << instance.uniqueId);
+                    continue;
+                }
+
+                const MapEntity* entity = GetMapEntity(instance.meshName);
+                if (!entity)
+                {
+                    continue;
+                }
+
+                Matrix4 transform;
+                transform.MakeTransform(instance.position, instance.scale, instance.rotation);
+
+                AABB bounds = entity->Bounds;
+                bounds.Transform(transform);
+
+                InsertMapEntityInstance(instance.uniqueId, std::make_unique<MapEntityInstance>(entity, bounds, transform));
+                ++foliageInstances;
+            }
+        }
+
+        DLOG("Loaded " << foliageInstances << " foliage instances for navmesh generation!");
     }
 
     bool Map::HasPage(int x, int y) const

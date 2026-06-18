@@ -51,14 +51,20 @@ namespace mmo
 		/// @copydoc IDatabase::CharacterEnterWorld
 		std::optional<CharacterData> CharacterEnterWorld(uint64 characterId, uint64 accountId) override;
 
-		/// @copydoc IDatabase::CreateWorkd
-		std::optional<WorldCreationResult> CreateWorkd(const String& name, const String& s, const String& v) override;
+		/// @copydoc IDatabase::CreateWorld
+		std::optional<WorldCreationResult> CreateWorld(const String& name, const String& s, const String& v) override;
 
 		/// @copydoc IDatabase::ChatMessage
 		void ChatMessage(uint64 characterId, uint16 type, String message) override;
 
 		/// @copydoc IDatabase::UpdateCharacter
 		void UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position, const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money, uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing, std::array<uint32, 5> attributePointsSpent, const std::vector<uint32>& spellIds, const std::unordered_map<uint32, uint32>& talentRanks, uint32 timePlayed) override;
+
+		/// @copydoc IDatabase::UpdateCharacterAuras
+		void UpdateCharacterAuras(uint64 characterId, const std::vector<PersistentAuraData>& auras) override;
+
+		/// @copydoc IDatabase::UpdateCharacterCooldowns
+		void UpdateCharacterCooldowns(uint64 characterId, const std::vector<std::pair<uint32, GameTime>>& cooldownEnds) override;
 
 		/// @copydoc IDatabase::GetActionButtons
 		std::optional<ActionButtons> GetActionButtons(uint64 characterId) override;
@@ -83,7 +89,10 @@ namespace mmo
 		void TeleportCharacterByName(String characterName, uint32 map, Vector3 position, Radian orientation) override;
 
 		/// @copydoc IDatabase::CreateGroup
-		void CreateGroup(uint64 id, uint64 leaderGuid) override;
+		void CreateGroup(uint64 id, uint64 leaderGuid, uint8 lootMethod, uint8 lootThreshold) override;
+
+		/// @copydoc IDatabase::SetGroupLootMethod
+		void SetGroupLootMethod(uint64 groupId, uint8 lootMethod, uint64 lootMaster, uint8 lootThreshold) override;
 
 		/// @copydoc IDatabase::SetGroupLeader
 		void SetGroupLeader(uint64 groupId, uint64 leaderGuid) override;
@@ -150,6 +159,12 @@ namespace mmo
 
 		/// @copydoc IDatabase::DeleteInventoryItems
 		void DeleteInventoryItems(uint64 characterId, const std::vector<uint16>& slots) override;
+
+		/// @copydoc IDatabase::LoadCharacterChannelStates
+		std::optional<std::vector<CharacterChannelState>> LoadCharacterChannelStates(uint64 characterId) override;
+
+		/// @copydoc IDatabase::SetCharacterChannelState
+		void SetCharacterChannelState(uint64 characterId, uint32 channelId, uint8 status) override;
 
 	private:
 		/// Logs the last database error to the default logger.

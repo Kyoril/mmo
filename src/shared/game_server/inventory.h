@@ -55,9 +55,10 @@ namespace mmo
 		uint16 durability;
 		uint16 randomPropertyIndex;
 		uint16 randomSuffixIndex;
+		uint32 flags;
 
 		ItemData()
-			: entry(0), slot(0), stackCount(0), creator(0), contained(0), durability(0), randomPropertyIndex(0), randomSuffixIndex(0)
+			: entry(0), slot(0), stackCount(0), creator(0), contained(0), durability(0), randomPropertyIndex(0), randomSuffixIndex(0), flags(0)
 		{
 		}
 	};

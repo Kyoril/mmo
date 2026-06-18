@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <array>
 #include <map>
 
 #include "base/typedefs.h"
@@ -14,6 +15,7 @@
 #include <memory>
 
 #include "constant_buffer.h"
+#include "material_foliage.h"
 #include "math/vector3.h"
 #include "math/vector4.h"
 
@@ -169,6 +171,11 @@ namespace mmo
 		virtual bool IsWireframe() const = 0;
 
 		virtual void SetWireframe(bool value) = 0;
+
+		/// @brief Gets the effective data-driven terrain foliage entries for this material.
+		/// @details For a base material this is its own list; for an instance it is the instance's
+		///          override list if set, otherwise the parent's effective list.
+		[[nodiscard]] virtual const std::vector<MaterialFoliageEntry>& GetFoliageEntries() const = 0;
 	};
 
 	/// @brief This class represents a material which describes how geometry in the scene
@@ -232,9 +239,29 @@ namespace mmo
 
 		void SetPixelShaderCode(PixelShaderType shaderType, std::span<uint8> code);
 
+		/// @brief Sets vertex shader bytecode for a specific platform.
+		/// If the platform matches the current runtime platform the flat runtime
+		/// array is also updated so Update() picks up the new bytecode immediately.
+		void SetVertexShaderCode(std::string_view platform, VertexShaderType shaderType, std::span<uint8> code);
+
+		/// @brief Sets pixel shader bytecode for a specific platform.
+		void SetPixelShaderCode(std::string_view platform, PixelShaderType shaderType, std::span<uint8> code);
+
         [[nodiscard]] std::span<uint8 const> GetVertexShaderCode(VertexShaderType type) const { return { m_vertexShaderCode[static_cast<uint32_t>(type)]}; }
-		
+
 		[[nodiscard]] std::span<uint8 const> GetPixelShaderCode(PixelShaderType type = PixelShaderType::Forward) const { return { m_pixelShaderCode[static_cast<uint32_t>(type)] }; }
+
+		/// @brief Gets vertex shader bytecode stored for a specific platform.
+		[[nodiscard]] std::span<uint8 const> GetVertexShaderCode(std::string_view platform, VertexShaderType type) const;
+
+		/// @brief Gets pixel shader bytecode stored for a specific platform.
+		[[nodiscard]] std::span<uint8 const> GetPixelShaderCode(std::string_view platform, PixelShaderType type) const;
+
+		/// @brief Returns all per-platform vertex shader bytecodes (used by the serializer).
+		[[nodiscard]] const std::map<std::string, std::array<std::vector<uint8>, 6>>& GetAllVertexShaderCodes() const { return m_allVertexShaderCodes; }
+
+		/// @brief Returns all per-platform pixel shader bytecodes (used by the serializer).
+		[[nodiscard]] const std::map<std::string, std::array<std::vector<uint8>, 4>>& GetAllPixelShaderCodes() const { return m_allPixelShaderCodes; }
 
 		[[nodiscard]] bool IsDepthTestEnabled() const override { return m_depthTest; }
 		
@@ -300,6 +327,22 @@ namespace mmo
 
 		const std::vector<TextureParameterValue>& GetTextureParameters() const override { return m_textureParameters; }
 
+	public:
+		/// @brief Gets the data-driven terrain foliage entries carried by this material.
+		[[nodiscard]] const std::vector<MaterialFoliageEntry>& GetFoliageEntries() const override { return m_foliage; }
+
+		/// @brief Gets mutable access to the terrain foliage entries (used by the editor).
+		[[nodiscard]] std::vector<MaterialFoliageEntry>& GetFoliageEntries() { return m_foliage; }
+
+		/// @brief Replaces all terrain foliage entries.
+		void SetFoliageEntries(std::vector<MaterialFoliageEntry> entries) { m_foliage = std::move(entries); }
+
+		/// @brief Appends a single terrain foliage entry.
+		void AddFoliageEntry(const MaterialFoliageEntry& entry) { m_foliage.push_back(entry); }
+
+		/// @brief Removes all terrain foliage entries.
+		void ClearFoliageEntries() { m_foliage.clear(); }
+
 	private:
 		String m_name;
 		bool m_twoSided { false };
@@ -315,6 +358,12 @@ namespace mmo
 		bool m_vertexShaderChanged { true };
 		std::vector<uint8> m_pixelShaderCode[4]; // Forward, GBuffer and ShadowMap
 		bool m_pixelShaderChanged[4] { true, true, true, true };
+
+		// Per-platform bytecode storage for multi-platform .hmat serialization (v0.5+).
+		// Keyed by platform ID (see shader_platform.h). The flat arrays above are a
+		// runtime mirror of the current-platform entry in these maps.
+		std::map<std::string, std::array<std::vector<uint8>, 6>> m_allVertexShaderCodes;
+		std::map<std::string, std::array<std::vector<uint8>, 4>> m_allPixelShaderCodes;
 		bool m_depthWrite { true };
 		bool m_depthTest { true };
 
@@ -328,6 +377,9 @@ namespace mmo
 		bool m_bufferDataDirty[3] { true, true, true };
 		ConstantBufferPtr m_parameterBuffers[3]{ nullptr, nullptr, nullptr };
 		std::map<String, TexturePtr> m_textureParamTextures;
+
+		/// Data-driven terrain foliage definitions (serialized via the MFOL chunk, v0.6+).
+		std::vector<MaterialFoliageEntry> m_foliage;
 	};
 
 	typedef std::shared_ptr<MaterialInterface> MaterialPtr;

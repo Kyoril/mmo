@@ -22,7 +22,10 @@ namespace mmo
 	{
 		// Load the texture file
 		m_texture = TextureManager::Get().CreateOrRetrieve(m_filename);
-		ASSERT(m_texture);
+		if (!m_texture)
+		{
+			ELOG("Failed to texture '" << m_filename << "' for frame '" << m_frame->GetName() << "'");
+		}
 
 		m_borderSizeRect = Rect(borderInset, borderInset, borderInset, borderInset);
 	}
@@ -46,6 +49,12 @@ namespace mmo
 
 	void BorderComponent::Render(const Rect& area, const Color& color)
 	{
+		// Nothing to render at all
+		if (!m_texture)
+		{
+			return;
+		}
+
 		// Bind the texture object
 		ASSERT(m_frame);
 		m_frame->GetGeometryBuffer().SetActiveTexture(m_texture);
@@ -137,6 +146,12 @@ namespace mmo
 
 	Size BorderComponent::GetSize() const
 	{
+		// No size if no texture
+		if (!m_texture)
+		{
+			return Size::Zero;
+		}
+
 		const uint16 realWidth = m_texture->GetWidth();
 		const uint16 realHeight = m_texture->GetHeight();
 

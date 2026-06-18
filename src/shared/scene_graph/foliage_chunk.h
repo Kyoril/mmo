@@ -10,6 +10,7 @@
 #include "graphics/constant_buffer.h"
 #include "math/aabb.h"
 #include "math/matrix4.h"
+#include "math/vector4.h"
 
 #include <vector>
 
@@ -21,14 +22,20 @@ namespace mmo
 	class RenderQueue;
 
 	/// @brief Represents a single foliage instance's transform data for GPU instancing.
-	/// @details This structure is uploaded to the GPU as per-instance data.
+	/// @details This structure is uploaded to the GPU as per-instance data. The layout matches the
+	///          shared instanced vertex-shader input: a world matrix at TEXCOORD8-11 followed by a
+	///          per-instance tint at TEXCOORD12. Foliage leaves the tint white (no visual change),
+	///          while particle mesh emitters drive it from color-over-life.
 	struct FoliageInstanceData
 	{
 		/// @brief World transform matrix for this instance (4x4 = 64 bytes).
 		Matrix4 worldMatrix;
+
+		/// @brief Per-instance tint (RGBA). Defaults to opaque white so foliage renders unchanged.
+		Vector4 color { 1.0f, 1.0f, 1.0f, 1.0f };
 	};
 
-	static_assert(sizeof(FoliageInstanceData) == 64, "FoliageInstanceData size mismatch");
+	static_assert(sizeof(FoliageInstanceData) == 80, "FoliageInstanceData size mismatch");
 
 	/// @brief A chunk of terrain that contains batched foliage instances.
 	/// @details Each chunk manages a spatial region and renders all foliage instances
@@ -46,6 +53,19 @@ namespace mmo
 		/// @param chunkSize Size of the chunk in world units.
 		FoliageChunk(
 			Foliage& parent,
+			const FoliageLayerPtr& layer,
+			int32 chunkX,
+			int32 chunkZ,
+			float chunkSize);
+
+		/// @brief Creates a new foliage chunk that is not owned by a procedural Foliage system.
+		/// @details Used by the authored (instanced) foliage system, which feeds explicit
+		///          instances rather than generating them procedurally.
+		/// @param layer The foliage layer this chunk renders.
+		/// @param chunkX X coordinate of the chunk in chunk space.
+		/// @param chunkZ Z coordinate of the chunk in chunk space.
+		/// @param chunkSize Size of the chunk in world units.
+		FoliageChunk(
 			const FoliageLayerPtr& layer,
 			int32 chunkX,
 			int32 chunkZ,
@@ -107,8 +127,8 @@ namespace mmo
 			m_needsRebuild = true;
 		}
 
-		/// @brief Gets the parent foliage system.
-		[[nodiscard]] Foliage& GetParent() const
+		/// @brief Gets the parent foliage system, or nullptr for authored (instanced) chunks.
+		[[nodiscard]] Foliage* GetParent() const
 		{
 			return m_parent;
 		}
@@ -156,7 +176,7 @@ namespace mmo
 		[[nodiscard]] MaterialPtr GetMaterial() const override;
 
 	private:
-		Foliage& m_parent;
+		Foliage* m_parent;
 		FoliageLayerPtr m_layer;
 		int32 m_chunkX;
 		int32 m_chunkZ;

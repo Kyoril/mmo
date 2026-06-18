@@ -330,7 +330,7 @@ namespace mmo
 				"SetRespawnState", "CastSpell", "Delay", "MoveTo", "SetCombatMovement",
 				"StopAutoAttack", "CancelCast", "SetStandState", "SetVirtualEquipmentSlot",
 				"SetPhase", "SetSpellCooldown", "QuestKillCredit", "QuestEventOrExploration",
-				"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player"
+				"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player", "Emote"
 			};
 
 			// Select the trigger action type.
@@ -864,6 +864,34 @@ namespace mmo
 				ImGui::TextDisabled("No additional parameters required for this action.");
 				break;
 			}
+			case trigger_actions::Emote:
+			{
+				// Data: <SOUND-ID>; Texts: <TEXT>
+				int soundId = (action.data_size() > 0) ? action.data(0) : 0;
+				ImGui::SetNextItemWidth(150);
+				if (ImGui::InputInt("##SoundId", &soundId))
+				{
+					if (action.data_size() > 0)
+						action.set_data(0, soundId);
+					else
+						action.add_data(soundId);
+				}
+				ImGui::SameLine();
+				ImGui::Text("Sound ID");
+
+				std::string text = (action.texts_size() > 0) ? action.texts(0) : "";
+				ImGui::SetNextItemWidth(-1);
+				if (ImGui::InputText("##Text", &text))
+				{
+					if (action.texts_size() > 0)
+						action.set_texts(0, text);
+					else
+						action.add_texts(text);
+				}
+				ImGui::SameLine();
+				ImGui::Text("Text");
+				break;
+			}
 			default:
 			{
 				ImGui::TextDisabled("Unknown action type.");
@@ -1142,7 +1170,7 @@ namespace mmo
 					"SetRespawnState", "CastSpell", "Delay", "MoveTo", "SetCombatMovement",
 					"StopAutoAttack", "CancelCast", "SetStandState", "SetVirtualEquipmentSlot",
 					"SetPhase", "SetSpellCooldown", "QuestKillCredit", "QuestEventOrExploration",
-					"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player"
+					"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player", "Emote"
 				};
 
 				const char* actionTypeName = (action.action() >= 0 && action.action() < static_cast<int>(std::size(s_actionTypeNames)))

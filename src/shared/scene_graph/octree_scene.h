@@ -155,8 +155,14 @@ namespace mmo
 		/// @return Vector of visible lights sorted by priority.
 		std::vector<VisibleLightInfo> GatherVisibleLights(const Camera& camera, uint32 maxLights = 0) override;
 
+		void GatherShadowCasters(const AABB& worldRegion, std::vector<MovableObject*>& outCasters) override;
+
 	protected:
 		void FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds, bool onlyShadowCasters) override;
+
+		/// Recursive helper for GatherShadowCasters: collects shadow casters in octants that intersect
+		/// the region.
+		void GatherShadowCastersRecursive(Octree& octant, const AABB& worldRegion, std::vector<MovableObject*>& outCasters) const;
 
 		void WalkOctree(Camera& camera, RenderQueue& queue, Octree& octant, VisibleObjectsBoundsInfo& visibleBounds, 
 			bool foundVisible, bool onlyShadowCasters, const CachedFrustumPlanes& cachedPlanes);

@@ -93,6 +93,15 @@ namespace mmo
 				ImGui::EndTable();
 			}
 
+			{
+				bool disabled = currentEntry.disabled();
+				if (ImGui::Checkbox("Disabled (class locked on this realm)", &disabled))
+				{
+					currentEntry.set_disabled(disabled);
+				}
+			}
+			ImGui::Spacing();
+
 			int32 powerType = currentEntry.powertype();
 			if (ImGui::BeginCombo("Power Type", s_powerTypes[powerType].c_str(), ImGuiComboFlags_None))
 			{
@@ -719,6 +728,148 @@ namespace mmo
 					if (DrawDangerButton("Remove"))
 					{
 						currentEntry.mutable_armorstatsources()->erase(currentEntry.mutable_armorstatsources()->begin() + index);
+						index--;
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndTable();
+			}
+		}
+
+		if (const auto section = ScopedEditorSection("Block Value", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::TextDisabled("Each source adds (statValue * factor) to the shield block value, on top of equipped item block.");
+			ImGui::Text("Block Value Stat Source");
+
+			if (DrawSuccessButton("Add##addBlockValueStat", ImVec2(-1, 0)))
+			{
+				auto* newEntry = currentEntry.add_blockvaluestatsources();
+				newEntry->set_statid(0);
+				newEntry->set_factor(1.0f);
+			}
+
+			if (ImGui::BeginTable("blockValueStatSources", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+			{
+				ImGui::TableSetupColumn("Stat", ImGuiTableColumnFlags_DefaultSort);
+				ImGui::TableSetupColumn("Factor", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableHeadersRow();
+
+				for (int index = 0; index < currentEntry.blockvaluestatsources_size(); ++index)
+				{
+					auto* currentSource = currentEntry.mutable_blockvaluestatsources(index);
+
+					static String s_statNames[] = {
+						"Stamina",
+						"Strength",
+						"Agility",
+						"Intellect",
+						"Spirit"
+					};
+
+					ImGui::PushID(index);
+					ImGui::TableNextRow();
+
+					ImGui::TableNextColumn();
+
+					int statId = currentSource->statid();
+					if (ImGui::Combo("##stat", &statId, [](void*, int index, const char** out_text) -> bool
+						{
+							if (index < 0 || index > 4)
+							{
+								*out_text = "";
+								return false;
+							}
+
+							*out_text = s_statNames[index].c_str();
+							return true;
+						}, nullptr, 5))
+					{
+						currentSource->set_statid(statId);
+					}
+
+					ImGui::TableNextColumn();
+
+					float factor = currentSource->factor();
+					if (ImGui::InputFloat("##factor", &factor)) currentSource->set_factor(factor);
+
+					ImGui::SameLine();
+
+					if (DrawDangerButton("Remove"))
+					{
+						currentEntry.mutable_blockvaluestatsources()->erase(currentEntry.mutable_blockvaluestatsources()->begin() + index);
+						index--;
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndTable();
+			}
+		}
+
+		if (const auto section = ScopedEditorSection("Critical Block Chance", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::TextDisabled("Each source adds (statValue * factor) percent to the critical block chance, on top of the base chance from combat settings.");
+			ImGui::Text("Critical Block Chance Stat Source");
+
+			if (DrawSuccessButton("Add##addCritBlockStat", ImVec2(-1, 0)))
+			{
+				auto* newEntry = currentEntry.add_critblockchancestatsources();
+				newEntry->set_statid(0);
+				newEntry->set_factor(1.0f);
+			}
+
+			if (ImGui::BeginTable("critBlockChanceStatSources", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+			{
+				ImGui::TableSetupColumn("Stat", ImGuiTableColumnFlags_DefaultSort);
+				ImGui::TableSetupColumn("Factor", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableHeadersRow();
+
+				for (int index = 0; index < currentEntry.critblockchancestatsources_size(); ++index)
+				{
+					auto* currentSource = currentEntry.mutable_critblockchancestatsources(index);
+
+					static String s_statNames[] = {
+						"Stamina",
+						"Strength",
+						"Agility",
+						"Intellect",
+						"Spirit"
+					};
+
+					ImGui::PushID(index);
+					ImGui::TableNextRow();
+
+					ImGui::TableNextColumn();
+
+					int statId = currentSource->statid();
+					if (ImGui::Combo("##stat", &statId, [](void*, int index, const char** out_text) -> bool
+						{
+							if (index < 0 || index > 4)
+							{
+								*out_text = "";
+								return false;
+							}
+
+							*out_text = s_statNames[index].c_str();
+							return true;
+						}, nullptr, 5))
+					{
+						currentSource->set_statid(statId);
+					}
+
+					ImGui::TableNextColumn();
+
+					float factor = currentSource->factor();
+					if (ImGui::InputFloat("##factor", &factor)) currentSource->set_factor(factor);
+
+					ImGui::SameLine();
+
+					if (DrawDangerButton("Remove"))
+					{
+						currentEntry.mutable_critblockchancestatsources()->erase(currentEntry.mutable_critblockchancestatsources()->begin() + index);
 						index--;
 					}
 

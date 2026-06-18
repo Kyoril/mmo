@@ -295,6 +295,7 @@ namespace mmo
 			Triangle(const Vector3& v1, const Vector3& v2, const Vector3& v3)
 				: m_points{ v1, v2, v3 }
 				, m_colors{ 0xffffffff, 0xffffffff, 0xffffffff }
+				, m_uvs{ {0.0f,0.0f}, {0.0f,0.0f}, {0.0f,0.0f} }
 			{
 			}
 
@@ -315,15 +316,30 @@ namespace mmo
 				m_colors[index] = color;
 			}
 
+			/// Sets per-vertex UV coordinates.
+			///	@param index Vertex index (0-2).
+			///	@param u Horizontal texture coordinate.
+			///	@param v Vertical texture coordinate.
+			void SetUV(const uint8_t index, const float u, const float v)
+			{
+				assert(index < 3 && "Index out of range!");
+				m_uvs[index][0] = u;
+				m_uvs[index][1] = v;
+			}
+
 			/// Gets the start position of the line.
 			[[nodiscard]] const Vector3& GetPosition(const uint8_t index) const { assert(index < 3); return m_points[index]; }
 
 			/// Gets the start color of the line.
 			[[nodiscard]] uint32 GetColor(const uint8_t index) const { assert(index < 3); return m_colors[index]; }
 
+			/// Gets the UV coordinates for a vertex.
+			[[nodiscard]] const float* GetUV(const uint8_t index) const { assert(index < 3); return m_uvs[index]; }
+
 		private:
 			Vector3 m_points[3];
 			uint32 m_colors[3];
+			float m_uvs[3][2];
 		};
 
 	public:
@@ -363,7 +379,8 @@ namespace mmo
 			{
 				for (uint8_t i = 0; i < 3; ++i)
 				{
-					const POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX v1{ triangle.GetPosition(i), triangle.GetColor(i), Vector3::UnitY, Vector3::UnitY, Vector3::UnitY, 0.0f, 0.0f };
+					const float* uv = triangle.GetUV(i);
+					const POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX v1{ triangle.GetPosition(i), triangle.GetColor(i), Vector3::UnitY, Vector3::UnitY, Vector3::UnitY, uv[0], uv[1] };
 					vertices.emplace_back(v1);
 
 					if (firstVertex)

@@ -68,7 +68,7 @@ namespace mmo
 
 		constexpr uint32 MAX_FRIENDS = 50;
 
-		constexpr uint32 ProtocolVersion = 0x00000004;
+		constexpr uint32 ProtocolVersion = 0x00000005;
 
 		////////////////////////////////////////////////////////////////////////////////
 		// BEGIN: Client <-> Realm section
@@ -154,6 +154,7 @@ namespace mmo
 				Loot,
 				LootMoney,
 				LootRelease,
+				LootRoll,
 
 				MoveJump,
 				MoveFallLand,
@@ -225,6 +226,11 @@ namespace mmo
 
 				MoveRootAck,
 
+				MoveStunAck,
+				MoveSleepAck,
+				MoveFearAck,
+				MoveDisorientAck,
+
 				LearnTalent,
 
 				TimePlayedRequest,
@@ -246,6 +252,56 @@ namespace mmo
 				SetLootMethod,
 
 				UseObject,
+
+				/// Sent by the client to place a ping at their current world position, broadcast to party.
+				PartyPing,
+
+			/// Sent by the client to initiate a trade with the current target.
+			TradeInitiate,
+
+			/// Sent by the client to cancel the active trade session.
+			TradeCancelRequest,
+
+			/// Sent by the client to add an inventory item to a trade slot.
+			TradeAddItem,
+
+			/// Sent by the client to remove an item from a trade slot.
+			TradeRemoveItem,
+
+			/// Sent by the client to set the money amount offered in the trade.
+			TradeSetMoney,
+
+			/// Sent by the client to accept the current trade terms.
+			TradeAccept,
+
+			/// Sent by the target player to accept a trade invitation.
+			TradeInviteAccept,
+
+			/// Sent by the target player to decline a trade invitation.
+			TradeInviteDecline,
+
+			/// Sent by the client to request a server-side line of sight check against the current target. Dev/debug only.
+			CheatCheckLineOfSight, // GAME MASTER
+
+			/// Sent by the client when the local player starts swimming (enters deep enough water).
+			/// This is the only packet permitted to add the Swimming movement flag.
+			MoveStartSwim,
+
+			/// Sent by the client when the local player stops swimming (leaves the water).
+			/// This is the only packet permitted to remove the Swimming movement flag.
+			MoveStopSwim,
+
+			/// Sent by the client when the player switches to walk mode (adds WalkMode flag).
+			MoveStartWalk,
+
+			/// Sent by the client when the player switches to run mode (removes WalkMode flag).
+			MoveStopWalk,
+
+				/// Sent by the client to join a chat channel by name.
+				ChannelJoin,
+
+				/// Sent by the client to leave a chat channel by its global id.
+				ChannelLeave,
 
 				/// Counter constant
 				Count_,
@@ -271,6 +327,9 @@ namespace mmo
 				LoginVerifyWorld = 0x05,
 				/// Entering the world failed.
 				EnterWorldFailed = 0x06,
+
+				/// Sent right after successful auth; contains disabled race and class IDs.
+				RealmConfig = 0x07,
 
 				/// [PROXY] Update game objects.
 				UpdateObject,
@@ -358,6 +417,10 @@ namespace mmo
 				LootMoneyNotify,
 				LootItemNotify,
 				LootClearMoney,
+				StartLootRoll,
+				LootRollWon,
+				LootAllPassed,
+				LootRollResult,
 
 				MoveTeleportAck,
 
@@ -441,11 +504,20 @@ namespace mmo
 
 				MoveRoot,
 
+				MoveStun,
+				MoveSleep,
+				MoveFear,
+				MoveDisorient,
+
 				/// Game time notification packet sent to the client
 				GameTimeInfo,
 
 				SpellSuperceeded,
 				SetProficiency,
+
+				/// Sent to the client when a spell modifier changes on the player's character.
+				/// Contains: uint8 modType (Flat=0/Pct=1), uint8 effectIndex, uint8 modOp, int32 totalValue
+				SpellModChanged,
 
 				/// Environmental damage log packet (fall damage, drowning, lava, etc.)
 				EnvironmentalDamageLog,
@@ -461,8 +533,106 @@ namespace mmo
 				FriendStatusChange,
 				FriendCommandResult,
 
+				/// Broadcast ping from a party member (sender guid, x, z world position).
+				PartyPing,
+
+			/// Sent to the target player when someone requests a trade.
+			TradeInvite,
+
+			/// Sent to the initiating player with the result of the trade request.
+			TradeRequestResult,
+
+			/// Sent to both players when a trade session is successfully opened.
+			TradeSessionOpened,
+
+			/// Sent to both players when a trade session ends for any reason.
+			TradeSessionClosed,
+
+			/// Sent to a player when the other player's trade offer changes.
+			TradeUpdate,
+
+			/// Sent to both players when the acceptance state changes.
+			TradeAcceptUpdate,
+
+			/// Sent to the client with the result of a CheatCheckLineOfSight request.
+			/// Contains: uint8 hasLos, 3×float from, 3×float to, 3×float hitPoint
+			DebugLineOfSightResult,
+
+			/// [PROXY] A unit started swimming.
+			MoveStartSwim,
+
+			/// [PROXY] A unit stopped swimming.
+			MoveStopSwim,
+
+			/// [PROXY] A unit switched to walk mode.
+			MoveStartWalk,
+
+			/// [PROXY] A unit switched to run mode.
+			MoveStopWalk,
+
+				/// Sent to the client with the full list of chat channels it is currently a member
+				/// of (e.g. on login). Payload: uint8 count, then per channel: uint32 id,
+				/// dynamic<uint8> name, uint32 flags.
+				ChannelList,
+
+				/// Sent to the client when a single channel membership changes (join/leave) or a
+				/// join request fails. Payload: uint8 notifyType (see channel_notify), uint32 id,
+				/// dynamic<uint8> name.
+				ChannelNotify,
+
 				/// Counter constant
 				Count_,
+			};
+		}
+
+		/// Notification types sent in the ChannelNotify packet.
+		namespace channel_notify
+		{
+			enum Type
+			{
+				/// The character successfully joined the channel.
+				Joined = 0,
+				/// The character left the channel.
+				Left = 1,
+				/// A join request failed because no channel with the given name exists.
+				DoesNotExist = 2,
+				/// A join request was ignored because the character is already a member.
+				AlreadyMember = 3,
+			};
+		}
+
+		/// Result codes sent in TradeRequestResult.
+		namespace trade_result
+		{
+			enum Type
+			{
+				Success = 0,
+				TargetBusy = 1,
+				TooFarAway = 2,
+				PlayerNotFound = 3,
+				YouAreDead = 4,
+				TargetIsDead = 5,
+				AlreadyTrading = 6,
+				TargetAlreadyTrading = 7,
+				Hostile = 8,
+				TargetIsLoggingOut = 9,
+				YouAreInCombat = 10,
+				TargetIsInCombat = 11,
+				Declined = 12,
+			};
+		}
+
+		/// Reason codes sent in TradeSessionClosed.
+		namespace trade_close_reason
+		{
+			enum Type
+			{
+				Completed = 0,
+				Cancelled = 1,
+				TooFarAway = 2,
+				Death = 3,
+				Hostile = 4,
+				Disconnected = 5,
 			};
 		}
 
@@ -472,6 +642,7 @@ namespace mmo
 			{
 				NoWorldServer,
 				NoCharacter,
+				RaceOrClassDisabled,
 			};
 		};
 

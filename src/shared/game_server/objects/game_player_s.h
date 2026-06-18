@@ -4,6 +4,8 @@
 
 #include <set>
 #include <vector>
+#include <map>
+#include <memory>
 
 #include "game_unit_s.h"
 #include "game_server/inventory.h"
@@ -16,6 +18,7 @@ namespace mmo
 {
 	struct QuestStatusData;
 	class GameItemS;
+		class PlayerGroup;
 
 	namespace proto
 	{
@@ -33,6 +36,11 @@ namespace mmo
 		virtual void OnQuestKillCredit(const proto::QuestEntry &, uint64 guid, uint32 entry, uint32 count, uint32 maxCount) = 0;
 
 		virtual void OnQuestItemCredit(const proto::QuestEntry &, uint32 entry, uint32 count, uint32 maxCount) = 0;
+
+		/// Called when a specific object-use requirement of a quest has been fully satisfied.
+		/// Implementations should refresh the interactability of nearby world objects gated on
+		/// this quest so the client stops showing the use cursor.
+		virtual void OnQuestObjectRequirementMet(uint32 questId) = 0;
 
 		virtual void OnQuestDataChanged(uint32 questId, const QuestStatusData &data) = 0;
 
@@ -100,17 +108,33 @@ namespace mmo
 
 		bool ConsumeMoney(uint32 amount);
 
+		void AddMoney(uint32 amount);
+
 		/// Gets the characters group id.
 		uint64 GetGroupId() const { return m_groupId; }
 
 		/// Sets the characters group id.
 		void SetGroupId(uint64 groupId) { m_groupId = groupId; }
 
+		/// Gets the player's world-side group object.
+		/// @returns The synchronized world-side group object, or nullptr if the player is not in a group.
+		[[nodiscard]] PlayerGroup* GetGroup() const noexcept { return m_playerGroup; }
+
+		/// Sets the player's world-side group object.
+		/// @param group The synchronized world-side group object, or nullptr if the player left the group.
+		void SetGroup(PlayerGroup* group) noexcept { m_playerGroup = group; }
+
 		/// Gets the loot method for this player's group.
 		[[nodiscard]] LootMethod GetLootMethod() const noexcept { return m_lootMethod; }
 
 		/// Sets the loot method.
 		void SetLootMethod(const LootMethod method) noexcept { m_lootMethod = method; }
+
+		/// Gets the loot quality threshold mirrored onto the player.
+		[[nodiscard]] uint8 GetLootThreshold() const noexcept { return m_lootThreshold; }
+
+		/// Sets the loot quality threshold mirrored onto the player.
+		void SetLootThreshold(const uint8 threshold) noexcept { m_lootThreshold = threshold; }
 
 		/// Gets the loot master GUID for this player's group.
 		[[nodiscard]] uint64 GetLootMasterGuid() const noexcept { return m_lootMasterGuid; }
@@ -133,6 +157,11 @@ namespace mmo
 		/// Gets the current status of a given quest by its id.
 		/// @returns Quest status.
 		QuestStatus GetQuestStatus(uint32 quest) const;
+
+		/// Returns true if the player has already met all object-use requirements for the given
+		/// object entry in the given quest. Used by GameWorldObjectS::IsUsable to hide the
+		/// interact cursor once the player no longer needs to use this particular object.
+		bool IsQuestObjectRequirementMet(uint32 questId, uint32 objectEntryId) const;
 
 		/// Accepts a new quest.
 		/// @returns false if this wasn't possible (maybe questlog was full or not all requirements are met).
@@ -178,6 +207,17 @@ namespace mmo
 
 		void NotifyQuestRewarded(uint32 questId);
 
+		/// Marks a daily/weekly quest as rewarded with a pending reset time. Called when character
+		/// data is loaded so that interval-repeatable quests stay locked until their next reset.
+		/// @param questId The quest id.
+		/// @param resetTime The unix timestamp (seconds) at which the quest becomes available again.
+		void NotifyRepeatableQuestReset(uint32 questId, GameTime resetTime);
+
+		/// (Re-)arms the fail countdowns of all timed quests in the quest log. Quests whose deadline
+		/// already passed (e.g. while the player was offline) are failed immediately. Must be called
+		/// after the quest status data has been applied on login.
+		void InitializeQuestTimers();
+
 		void SetQuestData(uint32 questId, const QuestStatusData &data);
 
 		/// Tries to learn a given rank of a talent.
@@ -219,6 +259,14 @@ namespace mmo
 		/// @return Reference to the talent map containing talent IDs and their ranks.
 		const std::unordered_map<uint32, uint32> &GetTalents() const { return m_talents; }
 
+		/// Gets the persistent auras read from a serialized character (only populated when this
+		/// object was reconstructed via operator>>, e.g. on the realm server).
+		const std::vector<PersistentAuraData>& GetDeserializedAuras() const { return m_deserializedAuras; }
+
+		/// Gets the persistent cooldowns read from a serialized character (only populated when this
+		/// object was reconstructed via operator>>, e.g. on the realm server).
+		const std::vector<PersistentCooldownData>& GetDeserializedCooldowns() const { return m_deserializedCooldowns; }
+
 	protected:
 		/// @brief Returns the auto-attack spell configured for this player's class, if any.
 		/// @return Pointer to the auto-attack spell entry, or nullptr if not configured.
@@ -239,6 +287,14 @@ namespace mmo
 
 		void UpdateArmor();
 
+		/// @copydoc GameUnitS::GetBlockValue
+		/// Adds per-class attribute scaling (blockvaluestatsources) on top of item block value.
+		float GetBlockValue() const override;
+
+		/// @copydoc GameUnitS::CriticalBlockChance
+		/// Adds per-class attribute scaling (critblockchancestatsources) on top of the base chance.
+		float CriticalBlockChance() const override;
+
 		void UpdateAttributePoints();
 
 		void UpdateTalentPoints();
@@ -250,6 +306,10 @@ namespace mmo
 		}
 
 		const String &GetName() const override;
+
+		/// @brief Sets the player's name.
+		/// @param name The name to set.
+		void SetName(const String& name) { m_name = name; }
 
 		std::shared_ptr<GameObjectS> GetLootObject() const { return m_lootObject.lock(); }
 
@@ -267,6 +327,8 @@ namespace mmo
 		void RecalculateTotalAttributePointsConsumed(const uint32 attribute);
 
 	protected:
+		void OnKilled(GameUnitS *killer) override;
+
 		void OnSpellLearned(const proto::SpellEntry &spell) override
 		{
 			spellLearned(*this, spell);
@@ -284,6 +346,21 @@ namespace mmo
 		}
 
 	private:
+		/// Arms a fail-countdown for a timed quest based on its absolute expiration time.
+		/// If the deadline has already passed, the quest is failed immediately instead.
+		/// @param questId The quest id.
+		/// @param expirationUnix The deadline as a unix timestamp in seconds.
+		void ArmQuestTimer(uint32 questId, GameTime expirationUnix);
+
+		/// Cancels and removes any running fail-countdown for the given quest.
+		/// @param questId The quest id.
+		void CancelQuestTimer(uint32 questId);
+
+		/// Fails all quests in the quest log that have the StayAlive flag set. Called on death.
+		void FailQuestsOnDeath();
+
+	private:
+		String m_name;
 		Inventory m_inventory;
 		const proto::ClassEntry *m_classEntry;
 		const proto::RaceEntry *m_raceEntry;
@@ -293,14 +370,34 @@ namespace mmo
 		uint32 m_totalTalentPointsAtLevel;
 		std::map<uint32, QuestStatusData> m_quests;
 		std::set<uint32> m_rewardedQuestIds;
+
+		/// Daily/weekly quests that have been rewarded, mapped to the unix timestamp (seconds) at
+		/// which they become available again.
+		std::map<uint32, GameTime> m_repeatableResets;
+
+		/// Running fail-countdowns for timed quests, keyed by quest id. Created on accept/login and
+		/// destroyed on reward/abandon/fail.
+		struct QuestTimer
+		{
+			std::unique_ptr<Countdown> countdown;
+			scoped_connection onExpired;
+		};
+		std::map<uint32, QuestTimer> m_questTimers;
 		NetPlayerWatcher *m_netPlayerWatcher = nullptr;
 		uint64 m_groupId = 0;
+		PlayerGroup* m_playerGroup = nullptr;
 		LootMethod m_lootMethod = loot_method::FreeForAll;
+		uint8 m_lootThreshold = item_quality::Uncommon;
 		uint64 m_lootMasterGuid = 0;
 		AvatarConfiguration m_configuration;
 		std::weak_ptr<GameObjectS> m_lootObject;
 		bool m_isGameMaster = false;
 		std::unordered_map<uint32, uint32> m_talents;
+
+		/// Persistent aura/cooldown snapshots populated by operator>> when reconstructing a
+		/// character (realm side). Live auras/cooldowns are accessed via GameUnitS instead.
+		std::vector<PersistentAuraData> m_deserializedAuras;
+		std::vector<PersistentCooldownData> m_deserializedCooldowns;
 
 	private:
 		friend io::Writer &operator<<(io::Writer &w, GamePlayerS const &object);

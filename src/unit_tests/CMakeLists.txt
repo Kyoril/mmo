@@ -4,6 +4,17 @@ include_directories(../mmo_bot)
 
 # Add default executable
 add_exe(unit_tests)
+
+# Add remote_movement_queue.cpp directly rather than linking game_client, because
+# game_client -> frame_ui -> graphics pulls render dependencies that break the
+# headless unit_tests build. Only the two files needed for RemoteMovementQueue are added.
+# Likewise, float_curve.cpp lives in the graphics library (only linked on Windows via
+# graphics_d3d11) but has no render dependencies, so add it directly for the headless build.
+target_sources(unit_tests PRIVATE
+	${CMAKE_CURRENT_SOURCE_DIR}/../shared/game_client/remote_movement_queue.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../shared/graphics/float_curve.cpp
+)
+
 target_link_libraries(unit_tests 
 	base 
 	base64 

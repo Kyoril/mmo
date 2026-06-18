@@ -12,6 +12,22 @@
 
 namespace mmo
 {
+	const char* GetNoPowerErrorKey(int32 powerType)
+	{
+		switch (powerType)
+		{
+		case power_type::Rage:
+			return "SPELL_CAST_FAILED_NO_POWER_RAGE";
+		case power_type::Energy:
+			return "SPELL_CAST_FAILED_NO_POWER_ENERGY";
+		case power_type::Health:
+			return "SPELL_CAST_FAILED_NO_POWER_HEALTH";
+		case power_type::Mana:
+		default:
+			return "SPELL_CAST_FAILED_NO_POWER_MANA";
+		}
+	}
+
 	SpellCast::SpellCast(RealmConnector& connector, const proto_client::SpellManager& spells, const proto_client::RangeManager& ranges)
 		: m_connector(connector)
 		, m_spells(spells)
@@ -277,12 +293,22 @@ namespace mmo
 
 		SpellTargetMap targetMap{};
 
-		// Power check
-		if ((spell->powertype() != unit->GetPowerType() && spell->cost() != 0) ||
-			spell->cost() > unit->GetPower(unit->GetPowerType()))
+		// Power check — apply spell cost modifiers from server-communicated spell mods
+		if (spell->cost() != 0)
 		{
-			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_NO_POWER");
-			return;
+			int32 effectiveCost = spell->cost();
+			if (spell->powertype() == unit->GetPowerType())
+			{
+				// Apply flat then pct modifiers keyed by this spell's family flags
+				effectiveCost = unit->ApplySpellModForFlags(static_cast<uint8>(spell_mod_op::Cost), effectiveCost, spell->familyflags());
+				effectiveCost = std::max(0, effectiveCost);
+			}
+
+			if (spell->powertype() != unit->GetPowerType() || effectiveCost > unit->GetPower(unit->GetPowerType()))
+			{
+				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", GetNoPowerErrorKey(spell->powertype()));
+				return;
+			}
 		}
 
 		// Check if we need to provide a target unit

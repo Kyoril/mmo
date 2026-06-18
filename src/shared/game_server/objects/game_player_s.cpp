@@ -3,9 +3,11 @@
 #include "game_player_s.h"
 
 #include <algorithm>
+#include <ctime>
 
 #include "game_item_s.h"
 #include "quest_status_data.h"
+#include "game_server/quest_reset.h"
 #include "base/utilities.h"
 #include "proto_data/project.h"
 #include "game/item.h"
@@ -300,6 +302,11 @@ namespace mmo
 				UpdateModifierValue(unit_mods::Armor, unit_mod_type::BaseValue, itemEntry.armor(), apply);
 			}
 
+			if (itemEntry.block())
+			{
+				UpdateModifierValue(unit_mods::BlockValue, unit_mod_type::BaseValue, itemEntry.block(), apply);
+			}
+
 			if (itemEntry.holyres() != 0)
 			{
 				UpdateModifierValue(unit_mods::ResistanceHoly, unit_mod_type::TotalValue, itemEntry.holyres(), apply);
@@ -415,10 +422,24 @@ namespace mmo
 		return true;
 	}
 
+	void GamePlayerS::AddMoney(const uint32 amount)
+	{
+		Set<uint32>(object_fields::Money, Get<uint32>(object_fields::Money) + amount);
+	}
+
 	QuestStatus GamePlayerS::GetQuestStatus(const uint32 quest) const
 	{
-		// Shortcut: rewarded quests are only stored with their id as we are not interested in anything else
-		if (m_rewardedQuestIds.contains(quest))
+		// Daily/weekly quests are locked until their next reset boundary has passed.
+		if (const auto rit = m_repeatableResets.find(quest); rit != m_repeatableResets.end())
+		{
+			if (static_cast<GameTime>(::time(nullptr)) < rit->second)
+			{
+				return quest_status::Rewarded;
+			}
+			// Reset has passed: fall through and re-evaluate availability below.
+		}
+		// Shortcut: rewarded (non-repeatable) quests are only stored with their id as we are not interested in anything else
+		else if (m_rewardedQuestIds.contains(quest))
 		{
 			return quest_status::Rewarded;
 		}
@@ -487,6 +508,35 @@ namespace mmo
 		return quest_status::Available;
 	}
 
+	bool GamePlayerS::IsQuestObjectRequirementMet(const uint32 questId, const uint32 objectEntryId) const
+	{
+		const auto it = m_quests.find(questId);
+		if (it == m_quests.end())
+		{
+			return false;
+		}
+
+		const auto* questEntry = GetProject().quests.getById(questId);
+		if (!questEntry)
+		{
+			return false;
+		}
+
+		uint8 reqIndex = 0;
+		for (const auto& req : questEntry->requirements())
+		{
+			if (req.objectid() == objectEntryId && req.objectcount() > 0)
+			{
+				// Requirement is met when the player has collected the required count.
+				return it->second.creatures[reqIndex] >= static_cast<uint16>(req.objectcount());
+			}
+			reqIndex++;
+		}
+
+		// No matching object requirement found — object is not gating on this quest.
+		return false;
+	}
+
 	bool GamePlayerS::AcceptQuest(const uint32 quest)
 	{
 		if (const QuestStatus status = GetQuestStatus(quest); status != quest_status::Available)
@@ -549,19 +599,21 @@ namespace mmo
 					}
 				}
 
-				// Quest timer
-				uint32 questTimer = 0;
+				// Quest timer: store an absolute deadline (unix seconds) and send the remaining
+				// time to the client so it can run a local countdown.
+				uint32 remainingSeconds = 0;
 				if (questEntry->timelimit() > 0)
 				{
-					questTimer = GetAsyncTimeMs() + questEntry->timelimit();
-					data.expiration = questTimer;
+					const GameTime now = static_cast<GameTime>(::time(nullptr));
+					data.expiration = now + questEntry->timelimit();
+					remainingSeconds = questEntry->timelimit();
 				}
 
 				// Set quest log
 				QuestField field;
 				field.questId = quest;
 				field.status = quest_status::Incomplete;
-				field.questTimer = questTimer;
+				field.questTimer = remainingSeconds;
 
 				// Complete if no requirements
 				if (FulfillsQuestRequirements(*questEntry))
@@ -574,6 +626,12 @@ namespace mmo
 				Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
 				if (m_netPlayerWatcher)
 					m_netPlayerWatcher->OnQuestDataChanged(quest, data);
+
+				// Start the fail countdown for timed quests.
+				if (data.expiration > 0)
+				{
+					ArmQuestTimer(quest, data.expiration);
+				}
 
 				return true;
 			}
@@ -592,6 +650,7 @@ namespace mmo
 			if (questLogField.questId == quest)
 			{
 				m_quests.erase(quest);
+				CancelQuestTimer(quest);
 
 				// Reset quest log
 				Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), QuestField());
@@ -699,7 +758,11 @@ namespace mmo
 				continue;
 			}
 
-			if (it->second.status != quest_status::Incomplete)
+			// A quest can fail while still in progress or even after its objectives are met but
+			// before it has been turned in (e.g. a timed quest that ran out, or death on a
+			// "stay alive" quest).
+			if (it->second.status != quest_status::Incomplete &&
+				it->second.status != quest_status::Complete)
 			{
 				continue;
 			}
@@ -707,6 +770,11 @@ namespace mmo
 			// Set quest status to Failed
 			it->second.status = quest_status::Failed;
 			field.status = quest_status::Failed;
+
+			// A failed quest no longer has a running timer.
+			field.questTimer = 0;
+			it->second.expiration = 0;
+			CancelQuestTimer(quest);
 
 			// Update quest log field
 			Set<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)), field);
@@ -925,13 +993,43 @@ namespace mmo
 			}
 		}
 
-		// Quest was rewarded
-		it->second.status = quest_status::Rewarded;
-		if (m_netPlayerWatcher)
-			m_netPlayerWatcher->OnQuestDataChanged(quest, it->second);
+		// A rewarded quest no longer has a running timer.
+		CancelQuestTimer(quest);
 
-		m_rewardedQuestIds.insert(entry->id());
-		it = m_quests.erase(it);
+		const uint32 questFlags = entry->flags();
+		if (IsIntervalQuest(questFlags))
+		{
+			// Daily/weekly quests become available again only after the next global reset boundary.
+			const GameTime now = static_cast<GameTime>(::time(nullptr));
+			const GameTime resetTime = (questFlags & quest_flags::Weekly)
+				? GetNextWeeklyResetTime(now)
+				: GetNextDailyResetTime(now);
+
+			m_repeatableResets[entry->id()] = resetTime;
+
+			it->second.status = quest_status::Rewarded;
+			it->second.expiration = resetTime;
+			if (m_netPlayerWatcher)
+				m_netPlayerWatcher->OnQuestDataChanged(quest, it->second);
+		}
+		else if (questFlags & quest_flags::Repeatable)
+		{
+			// Plain repeatable quests are immediately available again; drop all persisted state.
+			it->second.status = quest_status::Available;
+			if (m_netPlayerWatcher)
+				m_netPlayerWatcher->OnQuestDataChanged(quest, QuestStatusData());
+		}
+		else
+		{
+			// Quest was rewarded
+			it->second.status = quest_status::Rewarded;
+			if (m_netPlayerWatcher)
+				m_netPlayerWatcher->OnQuestDataChanged(quest, it->second);
+
+			m_rewardedQuestIds.insert(entry->id());
+		}
+
+		m_quests.erase(it);
 
 		if (m_netPlayerWatcher)
 			m_netPlayerWatcher->OnQuestCompleted(questgiverGuid, quest, rewardXp, money);
@@ -1160,6 +1258,13 @@ namespace mmo
 					m_netPlayerWatcher->OnQuestItemCredit(*quest, entry.id(), currentCount, requiredCount);
 				}
 
+				// Individual item requirement satisfied — refresh object interactability even
+				// if the overall quest is not yet complete (other objectives may remain open).
+				if (currentCount >= requiredCount && m_netPlayerWatcher)
+				{
+					m_netPlayerWatcher->OnQuestObjectRequirementMet(field.questId);
+				}
+
 				if (currentCount >= requiredCount)
 				{
 					validateQuest = true;
@@ -1302,6 +1407,13 @@ namespace mmo
 							m_netPlayerWatcher->OnQuestKillCredit(*quest, target.GetGuid(), targetEntry, counter, req.objectcount());
 						}
 
+						// If this was the last use needed for this specific object requirement,
+						// tell the player watcher so it can refresh nearby object interactability.
+						if (counter >= req.objectcount() && m_netPlayerWatcher)
+						{
+							m_netPlayerWatcher->OnQuestObjectRequirementMet(field.questId);
+						}
+
 						if (FulfillsQuestRequirements(*quest))
 						{
 							it->second.status = quest_status::Complete;
@@ -1372,6 +1484,100 @@ namespace mmo
 			m_netPlayerWatcher->OnQuestDataChanged(questId, completed);
 	}
 
+	void GamePlayerS::NotifyRepeatableQuestReset(const uint32 questId, const GameTime resetTime)
+	{
+		m_repeatableResets[questId] = resetTime;
+	}
+
+	void GamePlayerS::ArmQuestTimer(const uint32 questId, const GameTime expirationUnix)
+	{
+		// Drop any previous timer for this quest.
+		CancelQuestTimer(questId);
+
+		const GameTime now = static_cast<GameTime>(::time(nullptr));
+		if (expirationUnix <= now)
+		{
+			// Deadline already passed (e.g. it expired while the player was offline).
+			FailQuest(questId);
+			return;
+		}
+
+		const GameTime remainingMs = (expirationUnix - now) * 1000;
+
+		QuestTimer timer;
+		timer.countdown = std::make_unique<Countdown>(GetTimers());
+		timer.onExpired = timer.countdown->ended.connect([this, questId]()
+		{
+			FailQuest(questId);
+		});
+		timer.countdown->SetEnd(GetAsyncTimeMs() + remainingMs);
+
+		m_questTimers[questId] = std::move(timer);
+	}
+
+	void GamePlayerS::CancelQuestTimer(const uint32 questId)
+	{
+		if (const auto it = m_questTimers.find(questId); it != m_questTimers.end())
+		{
+			if (it->second.countdown)
+			{
+				it->second.countdown->Cancel();
+			}
+			m_questTimers.erase(it);
+		}
+	}
+
+	void GamePlayerS::InitializeQuestTimers()
+	{
+		for (const auto &[questId, data] : m_quests)
+		{
+			if (data.expiration == 0)
+			{
+				continue;
+			}
+
+			if (data.status != quest_status::Incomplete &&
+				data.status != quest_status::Complete)
+			{
+				continue;
+			}
+
+			// ArmQuestTimer fails the quest immediately if the deadline already passed.
+			ArmQuestTimer(questId, data.expiration);
+		}
+	}
+
+	void GamePlayerS::FailQuestsOnDeath()
+	{
+		for (uint8 i = 0; i < MaxQuestLogSize; ++i)
+		{
+			const QuestField field = Get<QuestField>(object_fields::QuestLogSlot_1 + i * (sizeof(QuestField) / sizeof(uint32)));
+			if (field.questId == 0)
+			{
+				continue;
+			}
+
+			const auto *entry = GetProject().quests.getById(field.questId);
+			if (!entry)
+			{
+				continue;
+			}
+
+			if ((entry->flags() & quest_flags::StayAlive) != 0)
+			{
+				FailQuest(field.questId);
+			}
+		}
+	}
+
+	void GamePlayerS::OnKilled(GameUnitS *killer)
+	{
+		GameUnitS::OnKilled(killer);
+
+		// Quests that require the player to stay alive fail upon death.
+		FailQuestsOnDeath();
+	}
+
 	void GamePlayerS::SetQuestData(uint32 questId, const QuestStatusData &data)
 	{
 		m_quests[questId] = data;
@@ -1383,7 +1589,10 @@ namespace mmo
 			{
 				field.questId = questId;
 				field.status = data.status;
-				field.questTimer = data.expiration;
+				// Send the remaining time (seconds) rather than the absolute deadline so the client
+				// can run a local countdown.
+				const GameTime now = static_cast<GameTime>(::time(nullptr));
+				field.questTimer = (data.expiration > now) ? static_cast<uint32>(data.expiration - now) : 0;
 				for (uint8 j = 0; j < 4; ++j)
 				{
 					field.counters[j] = data.creatures[j];
@@ -1417,16 +1626,19 @@ namespace mmo
 			return false;
 		}
 
-		// Get current rank (0 if not learned yet)
-		const uint32 currentRank = GetTalentRank(talentId);
-		if (currentRank >= static_cast<uint32>(talentEntry->ranks_size()) - 1)
+		// Get current rank. Note that GetTalentRank() returns 0 both when the talent is
+		// not learned at all AND when it is learned at rank 0, so we use HasTalent() to
+		// disambiguate and treat an unlearned talent as rank -1.
+		const bool hasTalent = HasTalent(talentId);
+		const int32 currentRank = hasTalent ? static_cast<int32>(GetTalentRank(talentId)) : -1;
+		if (currentRank >= static_cast<int32>(talentEntry->ranks_size()) - 1)
 		{
-			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " rank " << rank << " which is lower than the current player talent rank!");
+			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " rank " << rank << " but it is already at max rank!");
 			return false; // Already at max rank
 		}
 
 		// Always need at least one talent point for higher ranks
-		const uint32 talentPointCost = HasTalent(talentId) ? (rank - currentRank) : rank + 1;
+		const uint32 talentPointCost = hasTalent ? (rank - static_cast<uint32>(currentRank)) : rank + 1;
 
 		// Check if player has enough talent points
 		uint32 availablePoints = GetAvailableTalentPoints();
@@ -1830,6 +2042,53 @@ namespace mmo
 		Set<int32>(object_fields::NegStatArmor, totalArmor < 0 ? totalArmor : 0);
 	}
 
+	float GamePlayerS::GetBlockValue() const
+	{
+		// Item-sourced block value (e.g. shields).
+		float blockValue = GameUnitS::GetBlockValue();
+
+		// Add per-class attribute scaling (e.g. Strength contributes to block value).
+		if (m_classEntry)
+		{
+			for (int i = 0; i < m_classEntry->blockvaluestatsources_size(); ++i)
+			{
+				const auto& statSource = m_classEntry->blockvaluestatsources(i);
+				if (statSource.statid() < 5)
+				{
+					blockValue += static_cast<float>(Get<uint32>(object_fields::StatStamina + statSource.statid())) * statSource.factor();
+				}
+			}
+		}
+
+		return std::max(0.0f, blockValue);
+	}
+
+	float GamePlayerS::CriticalBlockChance() const
+	{
+		if (!CanCriticalBlock())
+		{
+			return 0.0f;
+		}
+
+		// Base critical block chance from combat settings.
+		float chance = GetCombatSettings().base_critical_block_chance();
+
+		// Add per-class attribute scaling.
+		if (m_classEntry)
+		{
+			for (int i = 0; i < m_classEntry->critblockchancestatsources_size(); ++i)
+			{
+				const auto& statSource = m_classEntry->critblockchancestatsources(i);
+				if (statSource.statid() < 5)
+				{
+					chance += static_cast<float>(Get<uint32>(object_fields::StatStamina + statSource.statid())) * statSource.factor();
+				}
+			}
+		}
+
+		return std::max(0.0f, std::min(chance, 100.0f));
+	}
+
 	void GamePlayerS::UpdateAttributePoints()
 	{
 		// Calculate available attribute points
@@ -1886,9 +2145,7 @@ namespace mmo
 
 	const String &GamePlayerS::GetName() const
 	{
-		// TODO!
-		static const String unknown = "Unknown";
-		return unknown;
+		return m_name;
 	}
 
 	bool GamePlayerS::IsGameMaster() const
@@ -1971,6 +2228,22 @@ namespace mmo
 			w << io::write<uint8>(rank);
 		}
 
+		// Write persistable auras (non-passive, non-equipment) as remaining-duration snapshots.
+		const std::vector<PersistentAuraData> persistentAuras = object.GetPersistentAuras();
+		w << io::write<uint16>(static_cast<uint16>(persistentAuras.size()));
+		for (const auto& aura : persistentAuras)
+		{
+			w << aura;
+		}
+
+		// Write active spell cooldowns as remaining-millisecond snapshots.
+		const std::vector<PersistentCooldownData> persistentCooldowns = object.GetPersistentCooldowns();
+		w << io::write<uint16>(static_cast<uint16>(persistentCooldowns.size()));
+		for (const auto& cooldown : persistentCooldowns)
+		{
+			w << cooldown;
+		}
+
 		return w;
 	}
 
@@ -2008,6 +2281,31 @@ namespace mmo
 			r >> io::read<uint8>(rank);
 
 			object.m_talents[talentId] = rank;
+		}
+
+		// Read persisted auras into a transient snapshot (the realm server forwards/persists these
+		// rather than applying them to this reconstructed object).
+		uint16 auraCount = 0;
+		r >> io::read<uint16>(auraCount);
+		object.m_deserializedAuras.clear();
+		object.m_deserializedAuras.reserve(auraCount);
+		for (uint16 i = 0; i < auraCount; ++i)
+		{
+			PersistentAuraData aura;
+			r >> aura;
+			object.m_deserializedAuras.push_back(std::move(aura));
+		}
+
+		// Read persisted cooldowns into a transient snapshot.
+		uint16 cooldownCount = 0;
+		r >> io::read<uint16>(cooldownCount);
+		object.m_deserializedCooldowns.clear();
+		object.m_deserializedCooldowns.reserve(cooldownCount);
+		for (uint16 i = 0; i < cooldownCount; ++i)
+		{
+			PersistentCooldownData cooldown;
+			r >> cooldown;
+			object.m_deserializedCooldowns.push_back(cooldown);
 		}
 
 		for (uint32 i = 0; i < 5; ++i)

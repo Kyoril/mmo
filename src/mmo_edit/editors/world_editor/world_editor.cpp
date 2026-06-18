@@ -122,21 +122,43 @@ namespace mmo
 		}
 	}
 
+	void WorldEditor::SetPendingCameraTarget(const Path& asset, const Vector3& worldLocation)
+	{
+		m_pendingCameraTarget = std::make_pair(asset, worldLocation);
+	}
+
 	std::shared_ptr<EditorInstance> WorldEditor::OpenAssetImpl(const Path& asset)
 	{
+		std::shared_ptr<EditorInstance> result;
+
 		const auto it = m_instances.find(asset);
 		if (it != m_instances.end())
 		{
-			return it->second;
+			result = it->second;
 		}
-
-		const auto instance = m_instances.emplace(asset, std::make_shared<WorldEditorInstance>(m_host, *this, asset));
-		if (!instance.second)
+		else
 		{
-			ELOG("Failed to open model editor instance");
-			return nullptr;
+			const auto instance = m_instances.emplace(asset, std::make_shared<WorldEditorInstance>(m_host, *this, asset));
+			if (!instance.second)
+			{
+				ELOG("Failed to open model editor instance");
+				return nullptr;
+			}
+
+			result = instance.first->second;
 		}
 
-		return instance.first->second;
+		// Apply a pending camera target if one was requested for this asset (e.g. from the map editor's
+		// minimap location picker).
+		if (m_pendingCameraTarget && m_pendingCameraTarget->first == asset)
+		{
+			if (auto* worldInstance = static_cast<WorldEditorInstance*>(result.get()))
+			{
+				worldInstance->MoveCameraToWorldPosition(m_pendingCameraTarget->second.x, m_pendingCameraTarget->second.z);
+			}
+			m_pendingCameraTarget.reset();
+		}
+
+		return result;
 	}
 }

@@ -13,12 +13,6 @@ namespace mmo
 {
 	class GameUnitS;
 
-	class SpellCasting
-	{
-	public:
-		signal<void(bool)> ended;
-	};
-
 	class SpellCast;
 
 	class CastState
@@ -28,7 +22,7 @@ namespace mmo
 
 		virtual void Activate() = 0;
 
-		virtual std::pair<SpellCastResult, SpellCasting*> StartCast(
+		virtual SpellCastResult StartCast(
 			SpellCast& cast,
 			const proto::SpellEntry& spell,
 			const SpellTargetMap& target,
@@ -44,7 +38,7 @@ namespace mmo
 		virtual void FinishChanneling() = 0;
 	};
 
-	SpellCasting& CastSpell(
+	void CastSpell(
 		SpellCast& cast,
 		const proto::SpellEntry& spell,
 		const SpellTargetMap& target,
@@ -62,7 +56,7 @@ namespace mmo
 
 		TimerQueue& GetTimerQueue() const { return m_timerQueue; }
 
-		std::pair<SpellCastResult, SpellCasting*> StartCast(
+		SpellCastResult StartCast(
 			const proto::SpellEntry& spell,
 			const SpellTargetMap& target,
 			GameTime castTime,
@@ -78,6 +72,9 @@ namespace mmo
 		void FinishChanneling();
 
 		int32 CalculatePowerCost(const proto::SpellEntry& spell) const;
+
+	public:
+		signal<void(bool)> ended;
 
 	private:
 

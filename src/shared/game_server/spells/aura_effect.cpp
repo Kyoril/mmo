@@ -3,6 +3,8 @@
 #include "aura_effect.h"
 
 #include <algorithm>
+#include <functional>
+#include <unordered_map>
 
 #include "aura_container.h"
 #include "spell_cast.h"
@@ -22,8 +24,11 @@ namespace mmo
 		, m_effect(effect)
 		, m_tickCountdown(timers)
 	{
-		m_casterSpellPower = m_container.GetCaster()->GetCalculatedModifierValue(unit_mods::SpellDamage);
-		m_casterSpellHeal = m_container.GetCaster()->GetCalculatedModifierValue(unit_mods::HealingDone);
+		if (const auto* caster = m_container.GetCaster())
+		{
+			m_casterSpellPower = caster->GetCalculatedModifierValue(unit_mods::SpellDamage);
+			m_casterSpellHeal = caster->GetCalculatedModifierValue(unit_mods::HealingDone);
+		}
 
 		m_onTick = m_tickCountdown.ended.connect(this, &AuraEffect::OnTick);
 
@@ -40,89 +45,42 @@ namespace mmo
 			OnTick();
 		}
 
-		switch (GetType())
-		{
-		case AuraType::ModStat:
-			HandleModStat(apply);
-			break;
-		case AuraType::ModStatPct:
-			HandleModStatPct(apply);
-			break;
-		case AuraType::ModHealth:
-			break;
-		case AuraType::ModMana:
-			break;
-		case AuraType::ProcTriggerSpell:
-			// Nothing to be done here
-			break;
-		case AuraType::ModDamageDone:
-		case AuraType::ModDamageDonePct:
-			HandleModDamageDone(apply);
-			break;
-		case AuraType::ModHealingDone:
-			HandleModHealingDone(apply);
-			break;
-		case AuraType::ModHealingTaken:
-			HandleModHealingTaken(apply);
-			break;
-		case AuraType::ModDamageTaken:
-			HandleModDamageTaken(apply);
-			break;
-		case AuraType::ModAttackSpeed:
-			HandleModAttackSpeed(apply);
-			break;
-		case AuraType::ModAttackPower:
-			HandleModAttackPower(apply);
-			break;
-		case AuraType::ModResistance:
-			HandleModResistance(apply);
-			break;
-		case AuraType::ModResistancePct:
-			HandleModResistancePct(apply);
-			break;
-		case AuraType::ModSpeedAlways:
-		case AuraType::ModIncreaseSpeed:
-			HandleRunSpeedModifier(apply);
-			break;
-		case AuraType::ModDecreaseSpeed:
-		case AuraType::ModSpeedNonStacking:
-			HandleRunSpeedModifier(apply);
-			HandleSwimSpeedModifier(apply);
-			HandleFlySpeedModifier(apply);
-			break;
-
-		case AuraType::AddFlatModifier:
-		case AuraType::AddPctModifier:
-			HandleAddModifier(apply);
-			break;
-
-		case AuraType::ModRoot:
-			HandleModRoot(apply);
-			break;
-		case AuraType::ModSleep:
-			HandleModSleep(apply);
-			break;
-		case AuraType::ModStun:
-			HandleModStun(apply);
-			break;
-		case AuraType::ModFear:
-			HandleModFear(apply);
-			break;
-
-		case AuraType::ModVisibility:
-			HandleModVisibility(apply);
-			break;
-
-		case AuraType::PeriodicTriggerSpell:
-		case AuraType::PeriodicHeal:
-		case AuraType::PeriodicEnergize:
-		case AuraType::PeriodicDamage:
-			if (apply)
-			{
-				HandlePeriodicBase();
-			}
-			break;
-		}
+		static const std::unordered_map<AuraType, std::function<void(AuraEffect&, bool)>> kHandlers = {
+			{ AuraType::ModStat,               [](AuraEffect& self, bool apply){ self.HandleModStat(apply); } },
+			{ AuraType::ModStatPct,            [](AuraEffect& self, bool apply){ self.HandleModStatPct(apply); } },
+			{ AuraType::ModDamageDone,         [](AuraEffect& self, bool apply){ self.HandleModDamageDone(apply); } },
+			{ AuraType::ModDamageDonePct,      [](AuraEffect& self, bool apply){ self.HandleModDamageDone(apply); } },
+			{ AuraType::ModSpellDamageDone,    [](AuraEffect& self, bool apply){ self.HandleModDamageDone(apply); } },
+			{ AuraType::ModSpellDamageDonePct, [](AuraEffect& self, bool apply){ self.HandleModDamageDone(apply); } },
+			{ AuraType::ModHealingDone,        [](AuraEffect& self, bool apply){ self.HandleModHealingDone(apply); } },
+			{ AuraType::ModHealingTaken,       [](AuraEffect& self, bool apply){ self.HandleModHealingTaken(apply); } },
+			{ AuraType::ModDamageTaken,        [](AuraEffect& self, bool apply){ self.HandleModDamageTaken(apply); } },
+			{ AuraType::ModDamageTakenPct,     [](AuraEffect& self, bool apply){ self.HandleModDamageTaken(apply); } },
+			{ AuraType::ModAttackSpeed,        [](AuraEffect& self, bool apply){ self.HandleModAttackSpeed(apply); } },
+			{ AuraType::ModAttackPower,        [](AuraEffect& self, bool apply){ self.HandleModAttackPower(apply); } },
+			{ AuraType::ModResistance,         [](AuraEffect& self, bool apply){ self.HandleModResistance(apply); } },
+			{ AuraType::ModResistancePct,      [](AuraEffect& self, bool apply){ self.HandleModResistancePct(apply); } },
+			{ AuraType::ModSpeedAlways,        [](AuraEffect& self, bool apply){ self.HandleRunSpeedModifier(apply); } },
+			{ AuraType::ModIncreaseSpeed,      [](AuraEffect& self, bool apply){ self.HandleRunSpeedModifier(apply); } },
+			{ AuraType::ModDecreaseSpeed,      [](AuraEffect& self, bool apply){ self.HandleRunSpeedModifier(apply); self.HandleSwimSpeedModifier(apply); self.HandleFlySpeedModifier(apply); } },
+			{ AuraType::ModSpeedNonStacking,   [](AuraEffect& self, bool apply){ self.HandleRunSpeedModifier(apply); self.HandleSwimSpeedModifier(apply); self.HandleFlySpeedModifier(apply); } },
+			{ AuraType::AddFlatModifier,       [](AuraEffect& self, bool apply){ self.HandleAddModifier(apply); } },
+			{ AuraType::AddPctModifier,        [](AuraEffect& self, bool apply){ self.HandleAddModifier(apply); } },
+			{ AuraType::ModRoot,               [](AuraEffect& self, bool apply){ self.HandleModRoot(apply); } },
+			{ AuraType::ModSleep,              [](AuraEffect& self, bool apply){ self.HandleModSleep(apply); } },
+			{ AuraType::ModStun,               [](AuraEffect& self, bool apply){ self.HandleModStun(apply); } },
+			{ AuraType::ModFear,               [](AuraEffect& self, bool apply){ self.HandleModFear(apply); } },
+			{ AuraType::ModDisorient,          [](AuraEffect& self, bool apply){ self.HandleModDisorient(apply); } },
+			{ AuraType::ModVisibility,         [](AuraEffect& self, bool apply){ self.HandleModVisibility(apply); } },
+			{ AuraType::DamageImmunity,        [](AuraEffect& self, bool apply){ self.HandleDamageImmunity(apply); } },
+			{ AuraType::ModDodgeChance,        [](AuraEffect& self, bool apply){ self.HandleModDodgeChance(apply); } },
+			{ AuraType::PeriodicTriggerSpell,  [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
+			{ AuraType::PeriodicHeal,          [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
+			{ AuraType::PeriodicEnergize,      [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
+			{ AuraType::PeriodicDamage,        [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
+		};
+		const auto it = kHandlers.find(GetType());
+		if (it != kHandlers.end()) { it->second(*this, apply); }
 	}
 
 	void AuraEffect::HandlePeriodicBase()
@@ -228,15 +186,20 @@ namespace mmo
 
 	void AuraEffect::HandleModDamageDone(const bool apply) const
 	{
-		m_container.GetOwner().UpdateModifierValue(unit_mods::SpellDamage,
-			m_effect.aura() == aura_type::ModDamageDone ? unit_mod_type::TotalValue : unit_mod_type::TotalPct,
+		const bool isPct = (m_effect.aura() == aura_type::ModDamageDonePct || m_effect.aura() == aura_type::ModSpellDamageDonePct);
+		const bool isSpellDamage = (m_effect.aura() == aura_type::ModSpellDamageDone || m_effect.aura() == aura_type::ModSpellDamageDonePct);
+
+		m_container.GetOwner().UpdateModifierValue(
+			isSpellDamage ? unit_mods::SpellDamage : unit_mods::Damage,
+			isPct ? unit_mod_type::TotalPct : unit_mod_type::TotalValue,
 			GetBasePoints(),
 			apply);
 	}
 
 	void AuraEffect::HandleModDamageTaken(bool apply) const
 	{
-
+		// Incoming damage taken modifiers are evaluated dynamically in the damage pipeline
+		// so they can respect caster identity and damage-class filters.
 	}
 
 	void AuraEffect::HandleModHealingDone(const bool apply) const
@@ -371,12 +334,15 @@ namespace mmo
 			return;
 		}
 
+		if (apply) owner->IncrementStunCount();
+		else        owner->DecrementStunCount();
+
 		std::weak_ptr weakOwner = owner;
 		owner->GetWorldInstance()->GetUniverse().Post([weakOwner]()
 			{
-				if (const auto owner = weakOwner.lock())
+				if (const auto o = weakOwner.lock())
 				{
-					owner->NotifyStunChanged();
+					o->NotifyStunChanged();
 				}
 			});
 	}
@@ -390,12 +356,15 @@ namespace mmo
 			return;
 		}
 
+		if (apply) owner->IncrementFearCount();
+		else        owner->DecrementFearCount();
+
 		std::weak_ptr weakOwner = owner;
 		owner->GetWorldInstance()->GetUniverse().Post([weakOwner]()
 			{
-				if (const auto owner = weakOwner.lock())
+				if (const auto o = weakOwner.lock())
 				{
-					owner->NotifyFearChanged();
+					o->NotifyFearChanged();
 				}
 			});
 	}
@@ -409,12 +378,37 @@ namespace mmo
 			return;
 		}
 
+		if (apply) owner->IncrementSleepCount();
+		else        owner->DecrementSleepCount();
+
 		std::weak_ptr weakOwner = owner;
 		owner->GetWorldInstance()->GetUniverse().Post([weakOwner]()
 			{
-				if (const auto owner = weakOwner.lock())
+				if (const auto o = weakOwner.lock())
 				{
-					owner->NotifySleepChanged();
+					o->NotifySleepChanged();
+				}
+			});
+	}
+
+	void AuraEffect::HandleModDisorient(bool apply) const
+	{
+		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
+			m_container.GetOwner().shared_from_this());
+		if (!owner || !owner->GetWorldInstance())
+		{
+			return;
+		}
+
+		if (apply) owner->IncrementDisorientCount();
+		else        owner->DecrementDisorientCount();
+
+		std::weak_ptr weakOwner = owner;
+		owner->GetWorldInstance()->GetUniverse().Post([weakOwner]()
+			{
+				if (const auto o = weakOwner.lock())
+				{
+					o->NotifyDisorientChanged();
 				}
 			});
 	}
@@ -438,6 +432,28 @@ namespace mmo
 			});
 	}
 
+	void AuraEffect::HandleDamageImmunity(bool apply) const
+	{
+		// The immunity school is determined by the school of the aura's spell. While the aura is
+		// active the owner is immune to all incoming damage of that school.
+		const uint32 school = m_container.GetSpell().spellschool();
+
+		if (apply)
+		{
+			m_container.GetOwner().AddSchoolImmunity(school);
+		}
+		else
+		{
+			m_container.GetOwner().RemoveSchoolImmunity(school);
+		}
+	}
+
+	void AuraEffect::HandleModDodgeChance(bool apply) const
+	{
+		// Base points are treated as a flat percentage bonus to the owner's dodge chance.
+		m_container.GetOwner().ModifyDodgeChanceBonus(static_cast<float>(GetBasePoints()), apply);
+	}
+
 	void AuraEffect::HandlePeriodicDamage() const
 	{
 		auto strongContainer = m_container.shared_from_this();
@@ -449,6 +465,12 @@ namespace mmo
 		if (m_casterSpellPower > 0.0f && m_effect.powerbonusfactor() > 0.0f && m_totalTicks > 0)
 		{
 			damage += static_cast<int32>(m_casterSpellPower * m_effect.powerbonusfactor() / static_cast<float>(m_totalTicks));
+		}
+
+		if (const auto* caster = strongContainer->GetCaster())
+		{
+			damage += static_cast<int32>(caster->GetModifierValue(unit_mods::Damage, unit_mod_type::TotalValue));
+			damage = static_cast<int32>(static_cast<float>(damage) * caster->GetModifierValue(unit_mods::Damage, unit_mod_type::TotalPct));
 		}
 
 		// Apply damage bonus from casters spell power
@@ -784,21 +806,14 @@ namespace mmo
 			m_tickCount++;
 		}
 
-		switch (GetType())
-		{
-		case aura_type::PeriodicDamage:
-			HandlePeriodicDamage();
-			break;
-		case aura_type::PeriodicHeal:
-			HandlePeriodicHeal();
-			break;
-		case aura_type::PeriodicEnergize:
-			HandlePeriodicEnergize();
-			break;
-		case aura_type::PeriodicTriggerSpell:
-			HandlePeriodicTriggerSpell();
-			break;
-		}
+		static const std::unordered_map<AuraType, std::function<void(AuraEffect&)>> kTickHandlers = {
+			{ aura_type::PeriodicDamage,       [](AuraEffect& self){ self.HandlePeriodicDamage(); } },
+			{ aura_type::PeriodicHeal,         [](AuraEffect& self){ self.HandlePeriodicHeal(); } },
+			{ aura_type::PeriodicEnergize,     [](AuraEffect& self){ self.HandlePeriodicEnergize(); } },
+			{ aura_type::PeriodicTriggerSpell, [](AuraEffect& self){ self.HandlePeriodicTriggerSpell(); } },
+		};
+		const auto tickIt = kTickHandlers.find(GetType());
+		if (tickIt != kTickHandlers.end()) { tickIt->second(*this); }
 
 		// Start another tick
 		if (m_tickCount < m_totalTicks)

@@ -3,6 +3,7 @@
 #include "font.h"
 
 #include "base/macros.h"
+#include "log/default_log_levels.h"
 #include "assets/asset_registry.h"
 #include "graphics/graphics_device.h"
 #include "frame_ui/inline_color.h"
@@ -58,7 +59,11 @@ namespace mmo
 	{
 		// Try to load the font file
 		auto filePtr = AssetRegistry::OpenFile(filename);
-		ASSERT(filePtr);
+		if (!filePtr)
+		{
+			ELOG("Failed to open font file '" << filename << "' - asset not found");
+			return false;
+		}
 
 		// Initialize data
 		filePtr->seekg(0, std::ios::end);

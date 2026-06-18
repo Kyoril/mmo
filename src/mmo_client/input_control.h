@@ -46,5 +46,7 @@ namespace mmo
 		virtual void Jump() = 0;
 
 		virtual void StopJump() = 0;
+
+		virtual void ToggleWalkMode() = 0;
 	};
 }

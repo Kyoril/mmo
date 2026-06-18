@@ -10,8 +10,10 @@
 #include "game_server/objects/game_player_s.h"
 #include "game/spell_target_map.h"
 #include "game_server/objects/game_bag_s.h"
+#include "game_server/loot_instance.h"
 #include "proto_data/project.h"
 #include "game/loot.h"
+#include "game/group.h"
 #include "game_server/inventory_command_factory.h"
 #include "game_server/inventory_types.h"
 
@@ -57,6 +59,13 @@ namespace mmo
 			return;
 		}
 
+		const auto playerGuid = m_character->GetGuid();
+		if (!m_loot->CanLootItem(lootSlot, playerGuid))
+		{
+			WLOG("Player " << log_hex_digit(playerGuid) << " is not allowed to loot slot " << static_cast<uint32>(lootSlot));
+			return;
+		}
+
 		const proto::ItemEntry *item = m_project.items.getById(lootItem->definition.item());
 		if (!item)
 		{
@@ -64,10 +73,15 @@ namespace mmo
 			return;
 		}
 
+		// Capture count and item metadata before TakeItem, because TakeItem may fire the
+		// loot-cleared signal synchronously which despawns the world object and destroys
+		// the LootInstance (and its m_items vector), making lootItem a dangling pointer.
+		const uint32 lootedCount = lootItem->count;
+
 		Inventory &inventory = m_character->GetInventory();
 
 		std::map<uint16, uint16> addedBySlot;
-		auto result = inventory.CreateItems(*item, lootItem->count, &addedBySlot);
+		auto result = inventory.CreateItems(*item, lootedCount, &addedBySlot);
 		if (result != inventory_change_failure::Okay)
 		{
 			ELOG("Failed to add item to inventory: " << result);
@@ -78,32 +92,9 @@ namespace mmo
 		for (auto &slot : addedBySlot)
 		{
 			OnItemAdded(slot.first, slot.second, true, false);
-
-			if (m_character->GetGroupId() != 0)
-			{
-				m_character->ForEachSubscriberInSight([&slot, this](TileSubscriber &subscriber)
-				{
-					if (subscriber.GetGameUnit().GetGuid() == m_character->GetGuid())
-					{
-						return;
-					}
-
-					if (!subscriber.GetGameUnit().IsPlayer())
-					{
-						return;
-					}
-
-					auto& player = subscriber.GetGameUnit().AsPlayer();
-					if (player.GetGroupId() == m_character->GetGroupId())
-					{
-						player.OnItemAdded(slot.first, slot.second, true, false);
-					}
-				});
-			}
 		}
 
-		// Consume this item
-		auto playerGuid = m_character->GetGuid();
+		// Consume this item — may destroy the LootInstance if this was the last item
 		m_loot->TakeItem(lootSlot, playerGuid);
 
 		// Notify in-sight group members that we looted this item
@@ -112,7 +103,8 @@ namespace mmo
 			const String characterName = m_character->GetName();
 			const uint32 itemId = item->id();
 			const uint8 itemQuality = static_cast<uint8>(item->quality());
-			const uint8 itemCount = static_cast<uint8>(lootItem->count);
+			const uint8 itemCount = static_cast<uint8>(lootedCount);
+			DLOG("[LootItemNotify] " << characterName << " looted item " << itemId << " count=" << static_cast<uint32>(itemCount));
 
 			m_character->ForEachSubscriberInSight([&characterName, itemId, itemQuality, itemCount, this](TileSubscriber& subscriber)
 			{
@@ -148,6 +140,40 @@ namespace mmo
 		}
 	}
 
+	void Player::OnLootRoll(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 lootGuid = 0;
+		uint8 slot = 0;
+		uint8 vote = 0;
+		if (!(contentReader >> io::read<uint64>(lootGuid) >> io::read<uint8>(slot) >> io::read<uint8>(vote)))
+		{
+			WLOG("Failed to read loot roll packet");
+			return;
+		}
+
+		if (vote > roll_vote::Greed)
+		{
+			WLOG("Invalid loot roll vote value: " << static_cast<uint32>(vote));
+			return;
+		}
+
+		GameObjectS* lootObject = m_character->GetWorldInstance()->FindObjectByGuid(lootGuid);
+		if (!lootObject)
+		{
+			WLOG("Player tried to roll on a non-existing loot object (GUID: " << lootGuid << ", slot: " << static_cast<uint32>(slot) << ")");
+			return;
+		}
+
+		const std::shared_ptr<LootInstance> loot = lootObject->GetLoot();
+		if (!loot)
+		{
+			WLOG("Loot object has no loot instance");
+			return;
+		}
+
+		loot->SubmitRollVote(slot, m_character->GetGuid(), static_cast<RollVote>(vote), m_character->GetName());
+	}
+
 	void Player::OnAutoEquipItem(uint16 opCode, uint32 size, io::Reader &contentReader)
 	{
 		uint8 srcBag, srcSlot;
@@ -160,6 +186,12 @@ namespace mmo
 		auto &inv = m_character->GetInventory();
 
 		const InventorySlot absSrcSlot = InventorySlot::FromRelative(srcBag, srcSlot);
+
+		if (IsInventorySlotTradeLocked(absSrcSlot.GetAbsolute()))
+		{
+			SendInventoryError(inventory_change_failure::ItemLocked);
+			return;
+		}
 		auto item = inv.GetItemAtSlot(absSrcSlot.GetAbsolute());
 		if (!item)
 		{
@@ -306,6 +338,14 @@ namespace mmo
 			return;
 		}
 
+		const uint16 srcAbsolute = InventorySlot::FromRelative(srcBag, srcSlot).GetAbsolute();
+		const uint16 dstAbsolute = InventorySlot::FromRelative(dstBag, dstSlot).GetAbsolute();
+		if (IsInventorySlotTradeLocked(srcAbsolute) || IsInventorySlotTradeLocked(dstAbsolute))
+		{
+			SendInventoryError(inventory_change_failure::ItemLocked);
+			return;
+		}
+
 		const InventoryCommandFactory& factory = m_character->GetInventory().GetCommandFactory();
 
 		const std::unique_ptr<IInventoryCommand> command = factory.CreateSwapItems(
@@ -326,6 +366,14 @@ namespace mmo
 		if (!(contentReader >> io::read<uint8>(srcSlot) >> io::read<uint8>(dstSlot)))
 		{
 			WLOG("Failed to read source slot and destination slot");
+			return;
+		}
+
+		const uint16 srcAbsolute = InventorySlot::FromRelative(player_inventory_slots::Bag_0, srcSlot).GetAbsolute();
+		const uint16 dstAbsolute = InventorySlot::FromRelative(player_inventory_slots::Bag_0, dstSlot).GetAbsolute();
+		if (IsInventorySlotTradeLocked(srcAbsolute) || IsInventorySlotTradeLocked(dstAbsolute))
+		{
+			SendInventoryError(inventory_change_failure::ItemLocked);
 			return;
 		}
 
@@ -351,6 +399,13 @@ namespace mmo
 			return;
 		}
 
+		const uint16 srcAbsolute = InventorySlot::FromRelative(srcBag, srcSlot).GetAbsolute();
+		if (IsInventorySlotTradeLocked(srcAbsolute))
+		{
+			SendInventoryError(inventory_change_failure::ItemLocked);
+			return;
+		}
+
 		auto &inv = m_character->GetInventory();
 		auto &factory = inv.GetCommandFactory();
 
@@ -373,6 +428,13 @@ namespace mmo
 		if (!(contentReader >> io::read<uint8>(bag) >> io::read<uint8>(slot) >> io::read<uint8>(count)))
 		{
 			WLOG("Failed to read bag, slot and count");
+			return;
+		}
+
+		const uint16 absoluteSlot = InventorySlot::FromRelative(bag, slot).GetAbsolute();
+		if (IsInventorySlotTradeLocked(absoluteSlot))
+		{
+			SendInventoryError(inventory_change_failure::ItemLocked);
 			return;
 		}
 

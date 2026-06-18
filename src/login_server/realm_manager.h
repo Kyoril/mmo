@@ -49,6 +49,10 @@ namespace mmo
 		/// Notifies all realms that an account has been banned.
 		void NotifyAccountBanned(uint64 accountId);
 
+		/// Notifies a connected realm that its feature requirements changed, prompting it to reload
+		/// them from the database. Does nothing if the realm is not currently connected.
+		void NotifyRealmRequirementsChanged(uint32 realmId);
+
 		/// Executes a function callback for each realm.
 		template<class Functor>
 		void ForEachRealm(Functor f)

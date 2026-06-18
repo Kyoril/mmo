@@ -25,7 +25,7 @@ namespace mmo
 		{
 			None = 0,
 			Random = 1,
-			Waypoints = 2,
+			Patrol = 2,
 
 			Invalid,
 			Count_ = Invalid

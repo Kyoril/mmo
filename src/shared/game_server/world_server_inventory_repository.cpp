@@ -18,6 +18,7 @@ namespace mmo
         data.durability = static_cast<uint16>(item.durability);  // Narrowing conversion
         data.randomPropertyIndex = static_cast<uint16>(item.randomPropertyIndex);
         data.randomSuffixIndex = static_cast<uint16>(item.randomSuffixIndex);
+        data.flags = item.itemFlags;
         return data;
     }
 
@@ -32,6 +33,7 @@ namespace mmo
         item.durability = data.durability;
         item.randomPropertyIndex = data.randomPropertyIndex;
         item.randomSuffixIndex = data.randomSuffixIndex;
+        item.itemFlags = data.flags;
         return item;
     }
 

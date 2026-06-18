@@ -56,6 +56,30 @@ message CombatSettings {
 	// Default crit chance for weapon damage spells (used when no other source provides it).
 	optional float spell_weapon_default_crit_chance = 22 [default = 5.0];
 	optional float spell_weapon_crit_multiplier = 23 [default = 2.0];
+
+	// === Dodge ===
+	// Base chance for any unit to dodge an incoming melee attack, before stat and aura bonuses.
+	optional float base_dodge_chance = 24 [default = 5.0];
+
+	// === Block ===
+	// NOTE: default_block_value (field 15) is no longer used. Block value is now derived from
+	// equipped item block stats plus per-class attribute scaling (see ClassEntry block sources).
+
+	// Multiplier applied to the block value when a block critically blocks (e.g. 2.0 = double).
+	optional float critical_block_multiplier = 25 [default = 2.0];
+	// Base chance (in percent) to critically block, before per-class attribute scaling.
+	// Only relevant for units that can critically block (unlocked via a CriticalBlock spell effect).
+	optional float base_critical_block_chance = 26 [default = 5.0];
+	// Size of the rear cone (in degrees, total width) from which incoming attacks cannot be
+	// blocked. Attacks landing inside this cone behind the defender ignore block entirely.
+	optional float defense_block_rear_cone_degrees = 27 [default = 90.0];
+
+	// === Global Cooldown ===
+	// Duration (in milliseconds) of the global cooldown triggered by casting a spell.
+	// Every spell triggers and respects the global cooldown unless it is explicitly flagged
+	// to ignore it (spell_cooldown_flags::NoGlobalCooldown). Procs/triggered spells never
+	// trigger or respect the global cooldown.
+	optional uint32 global_cooldown_ms = 28 [default = 1500];
 }
 
 // Wrapper for loading

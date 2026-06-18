@@ -1,9 +1,16 @@
 #include "game_unit_c.h"
 #include "game_aura_c.h"
+#include "game_world_object_c_base.h"
 #include "spell_visualization_service.h"
+#include "movement_log.h"
+
+#include <sstream>
 
 #include <algorithm>
+#include <cmath>
+#include <random>
 #include <set>
+#include <unordered_map>
 
 #include "debug_interface.h"
 #include "net_client.h"
@@ -26,6 +33,11 @@
 #include "scene_graph/entity.h"
 #include "scene_graph/skeleton.h"
 #include "scene_graph/animation.h"
+#include "scene_graph/particle_emitter.h"
+#include "scene_graph/particle_emitter_serializer.h"
+#include "assets/asset_registry.h"
+#include "binary_io/stream_source.h"
+#include "binary_io/reader.h"
 #include "graphics/material.h"
 #include "graphics/material_instance.h"
 #include "shared/client_data/proto_client/factions.pb.h"
@@ -42,6 +54,8 @@ namespace mmo
 
 	GameUnitC::~GameUnitC()
 	{
+		UpdateSparkEmitter(false);
+
 		// Ensure quest giver status is removed
 		SetQuestGiverStatus(questgiver_status::None);
 
@@ -57,6 +71,59 @@ namespace mmo
 		m_movementEventQueue.emplace(eventType, timestamp, movementInfo);
 	}
 
+	void GameUnitC::UpdateSparkEmitter(const bool active)
+	{
+		const std::string emitterName = "Spark_Unit_" + std::to_string(GetGuid());
+
+		if (active)
+		{
+			if (m_sparkEmitter)
+			{
+				return;
+			}
+
+			m_sparkEmitter = m_scene.CreateParticleEmitter(emitterName);
+			if (!m_sparkEmitter)
+			{
+				return;
+			}
+
+			const auto file = AssetRegistry::OpenFile("Particles/Sparkles.hpar");
+			if (file)
+			{
+				io::StreamSource source(*file);
+				io::Reader reader(source);
+				ParticleEmitterSerializer serializer;
+				ParticleEmitterParameters params;
+				if (serializer.Deserialize(params, reader))
+				{
+					m_sparkEmitter->SetParameters(params);
+				}
+			}
+
+			m_sparkEmitterNode = m_entityOffsetNode->CreateChildSceneNode(emitterName + "_Node");
+			m_sparkEmitterNode->AttachObject(*m_sparkEmitter);
+			m_sparkEmitter->Play();
+		}
+		else
+		{
+			if (!m_sparkEmitter)
+			{
+				return;
+			}
+
+			m_sparkEmitter->Stop();
+			m_scene.DestroyParticleEmitter(*m_sparkEmitter);
+			m_sparkEmitter = nullptr;
+
+			if (m_sparkEmitterNode)
+			{
+				m_scene.DestroySceneNode(*m_sparkEmitterNode);
+				m_sparkEmitterNode = nullptr;
+			}
+		}
+	}
+
 	void GameUnitC::AddYawInput(const Radian &value)
 	{
 		m_yawInput += value;
@@ -69,16 +136,27 @@ namespace mmo
 			ResetJumpState();
 		}
 
-		if (previousMovementMode == MovementMode::Falling && newMovementMode != MovementMode::Falling)
+		// Entering the water (Falling -> Swimming) is handled by OnStartSwimming, which emits its
+		// own StartSwim event. Don't emit a spurious Land event in that case.
+		if (previousMovementMode == MovementMode::Falling &&
+			newMovementMode != MovementMode::Falling &&
+			newMovementMode != MovementMode::Swimming)
 		{
 			UpdateMovementInfo();
 			m_movementInfo.movementFlags &= ~movement_flags::Falling;
 
 			m_netDriver.OnMoveEvent(*this, MovementEvent(movement_event_type::Land, m_movementInfo.timestamp, m_movementInfo));
 
-			// Lock the position so the next start packet uses the same position
-			// This prevents drift from physics adjustments between landing and next movement
-			LockPositionForSync();
+			// Lock the position so the next start packet uses the same position.
+			// This prevents drift from physics adjustments between landing and next movement.
+			// Only lock when no position-changing flag remains: when landing while running,
+			// the character keeps moving, and a locked (stale) position reported by the next
+			// start packet would make the server see a backward teleport followed by an
+			// impossibly fast catch-up — tripping the anti-cheat speed validation.
+			if (!m_movementInfo.IsChangingPosition())
+			{
+				LockPositionForSync();
+			}
 		}
 	}
 
@@ -153,6 +231,11 @@ namespace mmo
 			OnEntryChanged();
 		}
 
+		if (!complete && m_fieldMap.IsFieldMarkedAsChanged(object_fields::Flags))
+		{
+			UpdateSparkEmitter(CanBeLooted());
+		}
+
 		m_fieldMap.MarkAllAsUnchanged();
 
 		reader >> io::read<float>(m_unitSpeed[movement_type::Walk]) >> io::read<float>(m_unitSpeed[movement_type::Run]) >> io::read<float>(m_unitSpeed[movement_type::Backwards]) >> io::read<float>(m_unitSpeed[movement_type::Swim]) >> io::read<float>(m_unitSpeed[movement_type::SwimBackwards]) >> io::read<float>(m_unitSpeed[movement_type::Flight]) >> io::read<float>(m_unitSpeed[movement_type::FlightBackwards]) >> io::read<float>(m_unitSpeed[movement_type::Turn]);
@@ -161,12 +244,23 @@ namespace mmo
 		if (complete)
 		{
 			SetupSceneObjects();
+			UpdateSparkEmitter(CanBeLooted());
 		}
 
 		if (updateFlags & object_update_flags::HasMovementInfo)
 		{
 			m_sceneNode->SetDerivedPosition(m_movementInfo.position);
 			m_sceneNode->SetDerivedOrientation(Quaternion(m_movementInfo.facing, Vector3::UnitY));
+
+			// Seed the remote movement queue with the spawn snapshot so the queue
+			// always has at least one anchor before the first movement packet arrives.
+			// Without this, Sample() would interpolate from timestamp 0 to the first
+			// packet timestamp, producing a large elapsed-time value that triggers
+			// immediate extrapolation and a visible position spike on first movement.
+			if (IsPlayer() && !IsControlledByLocalPlayer())
+			{
+				EnqueueRemoteMovement(m_movementInfo);
+			}
 		}
 	}
 
@@ -201,10 +295,34 @@ namespace mmo
 		{
 			UpdateMovementInfo();
 
-			if (m_movementInfo.IsChangingPosition() && now > m_lastHeartbeat + (constants::OneSecond / 2))
+			// Safety net: a locked sync position is only meaningful while the character is
+			// actually standing still — it exists to absorb sub-tolerance physics settling
+			// between a stop and the next start. If the character has moved away from the
+			// locked position (e.g. a lock taken while another movement flag was still
+			// active), sending the stale position would desync the server's movement
+			// validation. Drop the lock as soon as it no longer matches reality.
+			if (m_positionLocked && !m_sceneNode->GetPosition().IsNearlyEqual(m_syncedPosition, 0.2f))
 			{
+				m_positionLocked = false;
+			}
+
+			// While swimming, send heartbeats even when no position-changing flag is set: the
+			// surface cap can move the player vertically without a Forward/Strafe/etc. flag, so the
+			// periodic heartbeat keeps the server in sync with the client's depth.
+			if ((m_movementInfo.IsChangingPosition() || m_movementInfo.IsSwimming()) && now > m_lastHeartbeat + 500)
+			{
+				// Heartbeat sends the current authoritative position to the server.
+				// Since the server baseline is now updated, any stale position lock
+				// from a previous stop packet is no longer valid — clear it.
+				m_positionLocked = false;
 				m_lastHeartbeat = now;
 				m_netDriver.OnMoveEvent(*this, MovementEvent(movement_event_type::Heartbeat, now, m_movementInfo));
+
+				const Vector3& pos = m_movementInfo.position;
+				MOVEMENT_EVENT("HEARTBEAT",
+					"pos=(" << pos.x << "," << pos.y << "," << pos.z << ")"
+					<< " flags=0x" << std::hex << m_movementInfo.movementFlags << std::dec
+					<< " facing=" << m_movementInfo.facing.GetValueRadians());
 			}
 		}
 
@@ -217,9 +335,10 @@ namespace mmo
 		else
 		{
 			// Based on current movement info, update movement states
+			const float lateralSpeed = IsWalkModeEnabled() ? GetSpeed(movement_type::Walk) : GetSpeed(movement_type::Run);
 			if (m_movementInfo.movementFlags & movement_flags::Forward)
 			{
-				AddInputVector(GetForwardVector() * GetSpeed(movement_type::Run));
+				AddInputVector(GetForwardVector() * lateralSpeed);
 			}
 			if (m_movementInfo.movementFlags & movement_flags::Backward)
 			{
@@ -227,11 +346,11 @@ namespace mmo
 			}
 			if (m_movementInfo.movementFlags & movement_flags::StrafeLeft)
 			{
-				AddInputVector(-GetRightVector() * GetSpeed(movement_type::Run));
+				AddInputVector(-GetRightVector() * lateralSpeed);
 			}
 			if (m_movementInfo.movementFlags & movement_flags::StrafeRight)
 			{
-				AddInputVector(GetRightVector() * GetSpeed(movement_type::Run));
+				AddInputVector(GetRightVector() * lateralSpeed);
 			}
 			if (m_movementInfo.movementFlags & movement_flags::TurnLeft)
 			{
@@ -242,6 +361,9 @@ namespace mmo
 				AddYawInput(Radian(GetSpeed(movement_type::Turn) * -1.0f));
 			}
 		}
+
+		// Reflect the swim/dive pitch on the character mesh so the player can see their dive angle.
+		UpdateSwimMeshPitch(deltaTime);
 
 		UpdateQuestGiverAndNameVisuals(deltaTime);
 
@@ -310,11 +432,9 @@ namespace mmo
 		}
 		else if (!IsControlledByLocalPlayer() && !IsPlayer() && m_unitMovement)
 		{
-			// For idle non-player units (NPCs only), correct their ground height.
-			// This fixes floating NPCs that spawn at server navmesh heights
-			// which may not match the client's detailed collision geometry.
-			// Remote players are excluded because their height is managed by
-			// the RemoteMovementQueue (including jump arcs).
+			// For idle non-player units (NPCs without a path), correct ground height.
+			// Remote players apply ground correction inside UpdateRemoteMovement()
+			// after their dead-reckoning position is written to the scene node.
 			m_unitMovement->CorrectGroundHeight();
 		}
 
@@ -329,7 +449,9 @@ namespace mmo
 	void GameUnitC::UpdateTargetTracking() const
 	{
 		// Check if we should track a target
-		if (const auto target = m_targetUnit.lock(); !IsPlayer() && target)
+		// Skip yaw-tracking when the unit is rooted/stunned/sleeping — it can't
+		// act or move so it should not visually snap to face the target.
+		if (const auto target = m_targetUnit.lock(); !IsPlayer() && target && !IsRooted())
 		{
 			// Only rotate around the Y axis (yaw) to face the target
 			// Calculate the direction vector to the target in the horizontal plane
@@ -346,8 +468,65 @@ namespace mmo
 
 	void GameUnitC::UpdateMovementBasedAnimation()
 	{
+		// If a looped spell animation is locked, skip movement animation override
+		if (m_lockedLoopAnimState != nullptr)
+		{
+			return;
+		}
+
 		if (!m_unitMovement)
 		{
+			return;
+		}
+
+		// Swimming animations take priority over the ground/idle and jump/fall logic below.
+		// Distinguish active swimming (horizontal stroke) from treading water. Holding jump to
+		// ascend without any horizontal input still counts as idle, so it stays in swim-idle.
+		if (m_movementInfo.IsSwimming())
+		{
+			const bool horizontallyMoving = (m_movementInfo.movementFlags &
+				(movement_flags::Forward | movement_flags::Backward |
+				 movement_flags::StrafeLeft | movement_flags::StrafeRight)) != 0;
+
+			AnimationState* swimAnim;
+			if (horizontallyMoving)
+			{
+				const uint32 mf = m_movementInfo.movementFlags;
+				const bool fwd = (mf & movement_flags::Forward) != 0;
+				const bool back = (mf & movement_flags::Backward) != 0;
+				const bool left = (mf & movement_flags::StrafeLeft) != 0;
+				const bool right = (mf & movement_flags::StrafeRight) != 0;
+
+				// Pick a directional swim stroke. Forward/backward take priority over pure strafing;
+				// each directional stroke is optional and falls back to the generic Swim below.
+				AnimationState* directional = nullptr;
+				if (back && !fwd)
+				{
+					directional = m_swimBackwardState;
+				}
+				else if (!fwd && !back && left && !right)
+				{
+					directional = m_swimLeftState;
+				}
+				else if (!fwd && !back && right && !left)
+				{
+					directional = m_swimRightState;
+				}
+
+				// Fall back: directional stroke -> generic swim -> swim-idle -> run.
+				swimAnim = directional ? directional
+					: (m_swimState ? m_swimState : (m_swimIdleState ? m_swimIdleState : m_runAnimState));
+			}
+			else
+			{
+				// Treading water / ascending in place: swim-idle, falling back to swim, then idle.
+				swimAnim = m_swimIdleState ? m_swimIdleState : (m_swimState ? m_swimState : m_idleAnimState);
+			}
+
+			if (swimAnim)
+			{
+				SetTargetAnimState(swimAnim);
+			}
 			return;
 		}
 
@@ -380,18 +559,73 @@ namespace mmo
 		// Regular movement animations
 		if (m_unitMovement->IsMovingOnGround() && inputVector2DSize > 0.1f)
 		{
-			AnimationState* movementAnim = m_runAnimState;
+			const uint32 mf = m_movementInfo.movementFlags;
+			const bool movingForward  = (mf & movement_flags::Forward) != 0;
+			const bool movingBackward = (mf & movement_flags::Backward) != 0 && !movingForward;
+			const bool strafeLeft     = (mf & movement_flags::StrafeLeft) != 0;
+			const bool strafeRight    = (mf & movement_flags::StrafeRight) != 0;
+
+			AnimationState* movementAnim;
 			if (m_walkAnimState && IsWalkModeEnabled())
 			{
-				movementAnim = m_walkAnimState;
+				if (movingForward && strafeLeft && !strafeRight)
+				{
+					movementAnim = m_walkForwardLeftState ? m_walkForwardLeftState : m_walkAnimState;
+				}
+				else if (movingForward && strafeRight && !strafeLeft)
+				{
+					movementAnim = m_walkForwardRightState ? m_walkForwardRightState : m_walkAnimState;
+				}
+				else if (strafeLeft && !strafeRight && !movingForward && !movingBackward)
+				{
+					movementAnim = m_walkLeftState ? m_walkLeftState : m_walkAnimState;
+				}
+				else if (strafeRight && !strafeLeft && !movingForward && !movingBackward)
+				{
+					movementAnim = m_walkRightState ? m_walkRightState : m_walkAnimState;
+				}
+				else
+				{
+					movementAnim = m_walkAnimState;
+				}
+			}
+			else if (movingBackward && m_runBackAnimState)
+			{
+				movementAnim = m_runBackAnimState;
+			}
+			else if (movingForward && strafeLeft && !strafeRight)
+			{
+				movementAnim = m_runForwardLeftState ? m_runForwardLeftState : m_runAnimState;
+			}
+			else if (movingForward && strafeRight && !strafeLeft)
+			{
+				movementAnim = m_runForwardRightState ? m_runForwardRightState : m_runAnimState;
+			}
+			else if (strafeLeft && !strafeRight && !movingForward && !movingBackward)
+			{
+				movementAnim = m_runLeftState ? m_runLeftState : m_runAnimState;
+			}
+			else if (strafeRight && !strafeLeft && !movingForward && !movingBackward)
+			{
+				movementAnim = m_runRightState ? m_runRightState : m_runAnimState;
+			}
+			else
+			{
+				movementAnim = m_runAnimState;
 			}
 
 			SetTargetAnimState(movementAnim);
 		}
 		else
 		{
-			const bool isAttacking = (Get<uint32>(object_fields::Flags) & unit_flags::Attacking) != 0;
-			AnimationState *idleAnim = isAttacking ? m_readyAnimState : m_idleAnimState;
+			const bool isAttacking = IsWeaponDrawn();
+			AnimationState *idleAnim = m_idleAnimState;
+			if (isAttacking)
+			{
+				// Prefer the weapon-specific ready stance when one is set and valid for the current
+				// mesh; otherwise fall back to the unarmed ready animation.
+				idleAnim = IsValidAnimState(m_weaponReadyState) ? m_weaponReadyState : m_readyAnimState;
+			}
 
 			SetTargetAnimState(idleAnim);
 		}
@@ -406,6 +640,12 @@ namespace mmo
 
 	void GameUnitC::UpdateAnimationStates(const float deltaTime, const bool isDead)
 	{
+		// Defensive: clear any pointers that have become stale due to a mesh swap
+		// that was not routed through OnDisplayIdChanged (race window, early-return, etc.)
+		if (!IsValidAnimState(m_currentState)) { m_currentState = nullptr; }
+		if (!IsValidAnimState(m_targetState))  { m_targetState  = nullptr; }
+		if (!IsValidAnimState(m_oneShotState)) { m_oneShotState = nullptr; }
+
 		// Handle one-shot animations
 		if (m_oneShotState)
 		{
@@ -430,7 +670,14 @@ namespace mmo
 				m_oneShotState->SetTimePosition(m_oneShotState->GetLength());
 			}
 
-			SetTargetAnimState(m_deathState);
+			// Death clears any locked loop animation
+			m_lockedLoopAnimState = nullptr;
+
+			// Use the dedicated swimming death animation when dying in water; fall back to the
+			// regular death animation for meshes without one (or when not swimming).
+			AnimationState* deathAnim = (m_movementInfo.IsSwimming() && m_swimDeathState)
+				? m_swimDeathState : m_deathState;
+			SetTargetAnimState(deathAnim);
 		}
 
 		// Handle animation transitions
@@ -549,6 +796,15 @@ namespace mmo
 		GetSceneNode()->SetDerivedPosition(movementInfo.position);
 		GetSceneNode()->SetDerivedOrientation(Quaternion(Radian(movementInfo.facing), Vector3::UnitY));
 
+		if (IsControlledByLocalPlayer())
+		{
+			MOVEMENT_EVENT("APPLY_MOVE_INFO",
+				"pos=(" << movementInfo.position.x << "," << movementInfo.position.y << "," << movementInfo.position.z << ")"
+				<< " flags=0x" << std::hex << movementInfo.movementFlags << std::dec
+				<< " facing=" << movementInfo.facing.GetValueRadians()
+				<< " ts=" << movementInfo.timestamp);
+		}
+
 		// Handle falling state transitions
 		if (m_movementInfo.IsFalling())
 		{
@@ -569,32 +825,58 @@ namespace mmo
 
 	void GameUnitC::EnqueueRemoteMovement(const MovementInfo &movementInfo)
 	{
-		m_remoteMovementQueue.EnqueueSnapshot(movementInfo);
+		m_remoteMovementRenderer.OnAuthoritativeUpdate(movementInfo, false);
 	}
 
 	void GameUnitC::UpdateRemoteMovement(const float deltaTime)
 	{
-		const GameTime now = GetAsyncTimeMs();
-
 		RemoteMovementState state;
-		if (!m_remoteMovementQueue.Sample(
-			now,
+		if (!m_remoteMovementRenderer.Sample(
+			deltaTime,
 			GetSpeed(movement_type::Run),
 			GetSpeed(movement_type::Backwards),
 			GetSpeed(movement_type::Turn),
 			state))
 		{
-			// No snapshots yet, nothing to do
+			// Not yet initialized, nothing to do
 			return;
 		}
 
-		// Apply interpolated position and facing directly to the scene node
-		GetSceneNode()->SetDerivedPosition(state.position);
+		// Apply facing
 		GetSceneNode()->SetDerivedOrientation(Quaternion(state.facing, Vector3::UnitY));
+
+		// Apply lateral movement through SafeMoveNode so the capsule respects
+		// world geometry (walls, obstacles). This prevents remote players from
+		// visually penetrating walls they are colliding against locally.
+		// Only do the sweep when there is actual movement — zero-delta sweeps
+		// are a no-op but waste cycles.
+		if (!state.desiredDelta.IsZero())
+		{
+			// state.position is the pre-collision start point computed by the
+			// renderer (m_scenePos − desiredDelta).  Setting the scene node here
+			// ensures the capsule sweep begins from the smooth-correction position
+			// rather than wherever the scene node happened to be last frame.
+			GetSceneNode()->SetDerivedPosition(state.position);
+
+			// Apply lateral movement through a capsule sweep so the remote
+			// player character respects world geometry (walls, obstacles).
+			m_unitMovement->RemotePlayerMoveCollide(state.desiredDelta);
+
+			// Feed the collision-resolved position back into the renderer's
+			// scene-tracking state (m_scenePos) so the smooth correction loop
+			// stays in sync with the physical capsule position.
+			const Vector3 resolvedPos = GetSceneNode()->GetDerivedPosition();
+			m_remoteMovementRenderer.SetRenderedPos(resolvedPos);
+		}
+		else
+		{
+			// No movement — place the scene node at the renderer's correction pos.
+			GetSceneNode()->SetDerivedPosition(state.position);
+		}
 
 		// Update movement info flags so animation system works correctly
 		m_movementInfo.movementFlags = state.movementFlags;
-		m_movementInfo.position = state.position;
+		m_movementInfo.position = GetSceneNode()->GetDerivedPosition();  // use resolved position
 		m_movementInfo.facing = state.facing;
 
 		// Handle falling/jumping state for animations
@@ -613,6 +895,17 @@ namespace mmo
 			{
 				m_unitMovement->SetMovementMode(MovementMode::Walking);
 			}
+
+			// Snap the scene node to terrain height so remote players don't fall
+			// through the ground when the server navmesh height differs slightly
+			// from the client's collision geometry.
+			// Feed the corrected Y back into the renderer so dead reckoning
+			// continues from the snapped height — otherwise it overwrites the
+			// correction next frame with the original below-ground Y.
+			if (m_unitMovement->CorrectGroundHeight())
+			{
+				m_remoteMovementRenderer.SetRenderedY(GetSceneNode()->GetDerivedPosition().y);
+			}
 		}
 
 		// Feed the input vector from interpolated movement flags so the animation
@@ -621,9 +914,10 @@ namespace mmo
 		const Vector3 forward = orientation * Vector3::UnitX;
 		const Vector3 right = orientation * Vector3::UnitZ;
 
+		const float remoteLateralSpeed = IsWalkModeEnabled() ? GetSpeed(movement_type::Walk) : GetSpeed(movement_type::Run);
 		if (state.movementFlags & movement_flags::Forward)
 		{
-			AddInputVector(forward * GetSpeed(movement_type::Run));
+			AddInputVector(forward * remoteLateralSpeed);
 		}
 		if (state.movementFlags & movement_flags::Backward)
 		{
@@ -631,11 +925,11 @@ namespace mmo
 		}
 		if (state.movementFlags & movement_flags::StrafeLeft)
 		{
-			AddInputVector(-right * GetSpeed(movement_type::Run));
+			AddInputVector(-right * remoteLateralSpeed);
 		}
 		if (state.movementFlags & movement_flags::StrafeRight)
 		{
-			AddInputVector(right * GetSpeed(movement_type::Run));
+			AddInputVector(right * remoteLateralSpeed);
 		}
 
 		UpdateCollider();
@@ -648,6 +942,7 @@ namespace mmo
 
 	void GameUnitC::SetQuestGiverStatus(const QuestgiverStatus status)
 	{
+		m_questGiverStatus = status;
 		if (status == questgiver_status::None)
 		{
 			if (m_questGiverEntity)
@@ -706,19 +1001,19 @@ namespace mmo
 			return false;
 		}
 
-		// Track old auras for diffing (simple approach: remember spell ids)
-		std::set<uint32> oldAuraSpellIds;
+		// Track old auras for diffing (one entry per spell id).
+		std::unordered_map<uint32, uint64> oldAuraCasterIds;
 		for (const auto &aura : m_auras)
 		{
 			if (const auto *spell = aura->GetSpell())
 			{
-				oldAuraSpellIds.insert(spell->id());
+				oldAuraCasterIds.try_emplace(spell->id(), aura->GetCasterId());
 			}
 		}
 
 		m_auras.clear();
 
-		std::set<uint32> newAuraSpellIds;
+		std::unordered_map<uint32, uint64> newAuraCasterIds;
 		for (uint32 i = 0; i < visibleAuraCount; ++i)
 		{
 			uint32 spellId, duration;
@@ -746,32 +1041,55 @@ namespace mmo
 				continue;
 			}
 
+			uint8 stackCount = 1;
+			if (!(reader >> io::read<uint8>(stackCount)))
+			{
+				ELOG("Failed to read aura stack count");
+				return false;
+			}
+
 			// Add aura
-			m_auras.push_back(std::make_unique<GameAuraC>(*this, *spell, casterId, duration));
-			newAuraSpellIds.insert(spellId);
+			m_auras.push_back(std::make_unique<GameAuraC>(*this, *spell, casterId, duration, stackCount));
+			newAuraCasterIds.try_emplace(spellId, casterId);
 		}
 
 		// Trigger visualization events for added/removed auras
-		for (uint32 spellId : newAuraSpellIds)
+		for (const auto &[spellId, casterId] : newAuraCasterIds)
 		{
-			if (oldAuraSpellIds.find(spellId) == oldAuraSpellIds.end())
+			if (oldAuraCasterIds.contains(spellId))
 			{
-				// Newly applied aura
-				if (const auto *spell = m_project.spells.getById(spellId))
+				continue;
+			}
+
+			// Newly applied aura
+			if (const auto *spell = m_project.spells.getById(spellId))
+			{
+				GameUnitC *caster = nullptr;
+				if (const auto casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
 				{
-					NotifyAuraVisualizationApplied(*spell, this);
+					caster = casterUnit.get();
 				}
+
+				NotifyAuraVisualizationApplied(*spell, caster, this);
 			}
 		}
-		for (uint32 spellId : oldAuraSpellIds)
+		for (const auto &[spellId, casterId] : oldAuraCasterIds)
 		{
-			if (newAuraSpellIds.find(spellId) == newAuraSpellIds.end())
+			if (newAuraCasterIds.contains(spellId))
 			{
-				// Removed aura
-				if (const auto *spell = m_project.spells.getById(spellId))
+				continue;
+			}
+
+			// Removed aura
+			if (const auto *spell = m_project.spells.getById(spellId))
+			{
+				GameUnitC *caster = nullptr;
+				if (const auto casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
 				{
-					NotifyAuraVisualizationRemoved(*spell, this);
+					caster = casterUnit.get();
 				}
+
+				NotifyAuraVisualizationRemoved(*spell, caster, this);
 			}
 		}
 
@@ -1031,6 +1349,14 @@ namespace mmo
 
 		m_lastHeartbeat = m_movementInfo.timestamp;
 
+		{
+			const Vector3& p = m_movementInfo.position;
+			MOVEMENT_EVENT(forward ? "MOVE_START_FWD" : "MOVE_START_BWD",
+				"pos=(" << p.x << "," << p.y << "," << p.z << ")"
+				<< " flags=0x" << std::hex << m_movementInfo.movementFlags << std::dec
+				<< " facing=" << m_movementInfo.facing.GetValueRadians());
+		}
+
 		QueueMovementEvent(forward ? movement_event_type::StartMoveForward : movement_event_type::StartMoveBackward, m_movementInfo.timestamp, m_movementInfo);
 	}
 
@@ -1060,6 +1386,14 @@ namespace mmo
 
 		m_lastHeartbeat = m_movementInfo.timestamp;
 
+		{
+			const Vector3& p = m_movementInfo.position;
+			MOVEMENT_EVENT(left ? "STRAFE_START_L" : "STRAFE_START_R",
+				"pos=(" << p.x << "," << p.y << "," << p.z << ")"
+				<< " flags=0x" << std::hex << m_movementInfo.movementFlags << std::dec
+				<< " facing=" << m_movementInfo.facing.GetValueRadians());
+		}
+
 		QueueMovementEvent(left ? movement_event_type::StartStrafeLeft : movement_event_type::StartStrafeRight, m_movementInfo.timestamp, m_movementInfo);
 	}
 
@@ -1071,11 +1405,26 @@ namespace mmo
 		UpdateMovementInfo();
 		m_lastHeartbeat = m_movementInfo.timestamp;
 
+		{
+			const Vector3& p = m_movementInfo.position;
+			MOVEMENT_EVENT("MOVE_STOP",
+				"pos=(" << p.x << "," << p.y << "," << p.z << ")"
+				<< " flags=0x" << std::hex << m_movementInfo.movementFlags << std::dec
+				<< " facing=" << m_movementInfo.facing.GetValueRadians());
+		}
+
 		QueueMovementEvent(movement_event_type::StopMove, m_movementInfo.timestamp, m_movementInfo);
 
-		// Lock the position so the next start packet uses the same position
-		// This prevents drift from physics adjustments between stop and start
-		LockPositionForSync();
+		// Lock the position so the next start packet uses the same position.
+		// This prevents drift from physics adjustments between stop and start.
+		// Only lock when the character is now fully stationary: if it is still strafing
+		// (or falling), the position keeps changing and the locked position would be
+		// stale by the time the next start packet sends it, which the server's speed
+		// check would read as a backward teleport plus an impossibly fast catch-up.
+		if (!m_movementInfo.IsChangingPosition())
+		{
+			LockPositionForSync();
+		}
 	}
 
 	void GameUnitC::StopStrafe()
@@ -1086,11 +1435,45 @@ namespace mmo
 		UpdateMovementInfo();
 		m_lastHeartbeat = m_movementInfo.timestamp;
 
+		{
+			const Vector3& p = m_movementInfo.position;
+			MOVEMENT_EVENT("STRAFE_STOP",
+				"pos=(" << p.x << "," << p.y << "," << p.z << ")"
+				<< " flags=0x" << std::hex << m_movementInfo.movementFlags << std::dec
+				<< " facing=" << m_movementInfo.facing.GetValueRadians());
+		}
+
 		QueueMovementEvent(movement_event_type::StopStrafe, m_movementInfo.timestamp, m_movementInfo);
 
-		// Lock the position so the next start packet uses the same position
-		// This prevents drift from physics adjustments between stop and start
-		LockPositionForSync();
+		// Lock the position so the next start packet uses the same position.
+		// This prevents drift from physics adjustments between stop and start.
+		// Only lock when the character is now fully stationary: stopping a strafe while
+		// still running forward keeps the position changing, and the locked position
+		// would be stale by the time the next start packet sends it — the server's
+		// speed check would read that as a teleport and record a violation.
+		if (!m_movementInfo.IsChangingPosition())
+		{
+			LockPositionForSync();
+		}
+	}
+
+	void GameUnitC::ToggleWalkMode()
+	{
+		const bool nowWalking = (m_movementInfo.movementFlags & movement_flags::WalkMode) == 0;
+
+		if (nowWalking)
+		{
+			m_movementInfo.movementFlags |= movement_flags::WalkMode;
+		}
+		else
+		{
+			m_movementInfo.movementFlags &= ~movement_flags::WalkMode;
+		}
+
+		UpdateMovementInfo();
+
+		QueueMovementEvent(nowWalking ? movement_event_type::StartWalk : movement_event_type::StopWalk,
+			m_movementInfo.timestamp, m_movementInfo);
 	}
 
 	void GameUnitC::StartTurn(const bool left)
@@ -1119,6 +1502,14 @@ namespace mmo
 
 		m_lastHeartbeat = m_movementInfo.timestamp;
 
+		{
+			const Vector3& p = m_movementInfo.position;
+			MOVEMENT_EVENT(left ? "TURN_START_L" : "TURN_START_R",
+				"pos=(" << p.x << "," << p.y << "," << p.z << ")"
+				<< " flags=0x" << std::hex << m_movementInfo.movementFlags << std::dec
+				<< " facing=" << m_movementInfo.facing.GetValueRadians());
+		}
+
 		QueueMovementEvent(left ? movement_event_type::StartTurnLeft : movement_event_type::StartTurnRight, m_movementInfo.timestamp, m_movementInfo);
 	}
 
@@ -1138,6 +1529,14 @@ namespace mmo
 		}
 
 		m_lastHeartbeat = m_movementInfo.timestamp;
+
+		{
+			const Vector3& p = m_movementInfo.position;
+			MOVEMENT_EVENT("TURN_STOP",
+				"pos=(" << p.x << "," << p.y << "," << p.z << ")"
+				<< " flags=0x" << std::hex << m_movementInfo.movementFlags << std::dec
+				<< " facing=" << m_movementInfo.facing.GetValueRadians());
+		}
 
 		QueueMovementEvent(movement_event_type::StopTurn, m_movementInfo.timestamp, m_movementInfo);
 	}
@@ -1165,10 +1564,49 @@ namespace mmo
 				// cleared when actual movement starts (StartMove, StartStrafe, etc.)
 			}
 
-			m_lastHeartbeat = m_movementInfo.timestamp;
-
+			// Do NOT update m_lastHeartbeat here. SetFacing fires on every mouse-move
+			// frame while right-mouse rotating. Resetting the heartbeat timer here
+			// suppresses position heartbeats while the player is simultaneously moving,
+			// causing other clients to see the character walking in place and then
+			// snapping forward. Heartbeat timing is only the responsibility of
+			// movement-start/stop and the heartbeat check in Update().
 			QueueMovementEvent(movement_event_type::SetFacing, m_movementInfo.timestamp, m_movementInfo);
 		}
+	}
+
+	void GameUnitC::SetFacingLocal(const Radian &facing)
+	{
+		m_movementInfo.facing = facing;
+
+		if (m_sceneNode)
+		{
+			m_sceneNode->SetOrientation(Quaternion(facing, Vector3::UnitY));
+
+			// Keep m_movementInfo position in sync so the next SetFacing or Start*
+			// packet uses the correct current state. No network event is queued.
+			UpdateMovementInfo();
+
+			if (m_positionLocked)
+			{
+				m_movementInfo.position = m_syncedPosition;
+			}
+		}
+	}
+
+	void GameUnitC::ApplyRemoteFacing(const Radian &facing)
+	{
+		if (m_sceneNode)
+		{
+			m_sceneNode->SetOrientation(Quaternion(facing, Vector3::UnitY));
+		}
+		m_movementInfo.facing = facing;
+
+		// Build a minimal MovementInfo for a facing-only update
+		MovementInfo info;
+		info.facing = facing;
+		info.position = m_movementInfo.position;
+		info.movementFlags = m_movementInfo.movementFlags;
+		m_remoteMovementRenderer.OnAuthoritativeUpdate(info, true);
 	}
 
 	void GameUnitC::Jump()
@@ -1237,14 +1675,6 @@ namespace mmo
 			return;
 		}
 
-		// If this is the first jump, and we're already falling,
-		// then increment the JumpCount to compensate.
-		const bool bFirstJump = m_jumpCurrentCount == 0;
-		if (bFirstJump && m_unitMovement->IsFalling())
-		{
-			m_jumpCurrentCount++;
-		}
-
 		const bool bDidJump = CanJump() && m_unitMovement->DoJump();
 		if (bDidJump)
 		{
@@ -1273,14 +1703,7 @@ namespace mmo
 			// Ensure JumpHoldTime and JumpCount are valid.
 			if (!m_wasJumping || GetJumpMaxHoldTime() <= 0.0f)
 			{
-				if (m_jumpCurrentCount == 0 && m_unitMovement->IsFalling())
-				{
-					jumpIsAllowed = m_jumpCurrentCount + 1 < m_jumpMaxCount;
-				}
-				else
-				{
-					jumpIsAllowed = m_jumpCurrentCount < m_jumpMaxCount;
-				}
+				jumpIsAllowed = m_jumpCurrentCount < m_jumpMaxCount;
 			}
 			else
 			{
@@ -1384,8 +1807,35 @@ namespace mmo
 
 	void GameUnitC::UpdatePathMovement(const float deltaTime)
 	{
-		if (m_movementPath.empty() || m_pathCompleted || m_pathTotalLength <= 0.0f)
+		if (m_movementPath.empty() || m_pathCompleted)
 		{
+			return;
+		}
+
+		// Zero-length path means "stop here" (e.g. a CreatureMove stop packet whose
+		// destination is exactly the client's current position). Complete immediately
+		// so UpdateMovementBasedAnimation can run and animations reset properly.
+		if (m_pathTotalLength <= 0.0f)
+		{
+			m_movementInfo.movementFlags &= ~movement_flags::Forward;
+			m_movementInfo.movementFlags &= ~movement_flags::Backward;
+			m_movementInfo.movementFlags &= ~movement_flags::StrafeLeft;
+			m_movementInfo.movementFlags &= ~movement_flags::StrafeRight;
+			m_movementInfo.movementFlags &= ~movement_flags::PositionChanging;
+
+			if (m_lockedLoopAnimState)
+			{
+				SetTargetAnimState(m_lockedLoopAnimState);
+			}
+			else if (m_idleAnimState)
+			{
+				SetTargetAnimState(m_idleAnimState);
+			}
+
+			m_pathCompleted = true;
+			m_movementPath.clear();
+			m_pathSegmentLengths.clear();
+			m_currentPathIndex = 0;
 			return;
 		}
 
@@ -1420,8 +1870,13 @@ namespace mmo
 			m_movementInfo.movementFlags &= ~movement_flags::StrafeRight;
 			m_movementInfo.movementFlags &= ~movement_flags::PositionChanging;
 
-			// Set idle animation for all units when path completes
-			if (m_idleAnimState)
+			// Set idle animation for all units when path completes, but don't override
+			// a locked spell cast animation (e.g. path completes just as casting begins)
+			if (m_lockedLoopAnimState)
+			{
+				SetTargetAnimState(m_lockedLoopAnimState);
+			}
+			else if (m_idleAnimState)
 			{
 				SetTargetAnimState(m_idleAnimState);
 			}
@@ -1497,7 +1952,8 @@ namespace mmo
 				movementAnim = m_walkAnimState;
 			}
 
-			if (movementAnim)
+			// Don't override a locked spell animation with the run animation
+			if (movementAnim && !m_lockedLoopAnimState)
 			{
 				SetTargetAnimState(movementAnim);
 			}
@@ -2040,6 +2496,17 @@ namespace mmo
 
 	void GameUnitC::SetTargetAnimState(AnimationState *newTargetState)
 	{
+		// Discard any cached pointers that belong to a previous AnimationStateSet so
+		// we never call methods on freed memory after a mesh (model) swap.
+		if (!IsValidAnimState(m_currentState)) { m_currentState = nullptr; }
+		if (!IsValidAnimState(m_targetState))  { m_targetState  = nullptr; }
+
+		// If the requested state is itself stale or invalid, treat it as nullptr.
+		if (newTargetState && !IsValidAnimState(newTargetState))
+		{
+			newTargetState = nullptr;
+		}
+
 		if (m_targetState == newTargetState)
 		{
 			// Nothing to do here, we are already there
@@ -2076,9 +2543,18 @@ namespace mmo
 		}
 	}
 
+	void GameUnitC::SetLockedLoopAnimation(AnimationState* state)
+	{
+		m_lockedLoopAnimState = state;
+		if (state != nullptr)
+		{
+			SetTargetAnimState(state);
+		}
+	}
+
 	void GameUnitC::PlayOneShotAnimation(AnimationState *animState)
 	{
-		if (!animState)
+		if (!animState || !IsValidAnimState(animState))
 		{
 			return;
 		}
@@ -2089,11 +2565,15 @@ namespace mmo
 			return;
 		}
 
-		if (m_oneShotState != nullptr)
+		// One-shot animations evict the locked loop
+		m_lockedLoopAnimState = nullptr;
+
+		if (m_oneShotState != nullptr && IsValidAnimState(m_oneShotState))
 		{
 			m_oneShotState->SetEnabled(false);
 			m_oneShotState->SetWeight(0.0f);
 		}
+		m_oneShotState = nullptr;
 
 		m_oneShotState = animState;
 		m_oneShotState->SetEnabled(true);
@@ -2103,12 +2583,12 @@ namespace mmo
 
 	void GameUnitC::CancelOneShotAnimation()
 	{
-		if (m_oneShotState != nullptr)
+		if (m_oneShotState != nullptr && IsValidAnimState(m_oneShotState))
 		{
 			m_oneShotState->SetEnabled(false);
 			m_oneShotState->SetWeight(0.0f);
-			m_oneShotState = nullptr;
 		}
+		m_oneShotState = nullptr;
 
 		// Refresh movement animation to ensure proper state
 		RefreshMovementAnimation();
@@ -2116,7 +2596,70 @@ namespace mmo
 
 	void GameUnitC::NotifyAttackSwingEvent()
 	{
-		PlayOneShotAnimation(m_unarmedAttackState);
+		// Collect the weapon attack states that are still valid for the current mesh.
+		std::vector<AnimationState*> candidates;
+		candidates.reserve(m_weaponAttackStates.size());
+		for (AnimationState* state : m_weaponAttackStates)
+		{
+			if (IsValidAnimState(state))
+			{
+				candidates.push_back(state);
+			}
+		}
+
+		// Fall back to the unarmed attack animation when no weapon animation is available.
+		if (candidates.empty())
+		{
+			PlayOneShotAnimation(m_unarmedAttackState);
+			return;
+		}
+
+		// Pick one of the weapon attack animations at random.
+		AnimationState* attackState = candidates.front();
+		if (candidates.size() > 1)
+		{
+			static std::random_device rd;
+			static std::mt19937 gen(rd());
+			std::uniform_int_distribution<size_t> dis(0, candidates.size() - 1);
+			attackState = candidates[dis(gen)];
+		}
+
+		PlayOneShotAnimation(attackState);
+	}
+
+	void GameUnitC::SetWeaponAttackAnimations(const std::vector<String>& animNames)
+	{
+		m_weaponAttackStates.clear();
+
+		if (!m_entity)
+		{
+			return;
+		}
+
+		for (const String& animName : animNames)
+		{
+			if (animName.empty() || !m_entity->HasAnimationState(animName))
+			{
+				continue;
+			}
+
+			AnimationState* state = m_entity->GetAnimationState(animName);
+			state->SetLoop(false);
+			m_weaponAttackStates.push_back(state);
+		}
+	}
+
+	void GameUnitC::SetWeaponReadyAnimation(const String& animName)
+	{
+		m_weaponReadyState = nullptr;
+
+		if (animName.empty() || !m_entity || !m_entity->HasAnimationState(animName))
+		{
+			return;
+		}
+
+		m_weaponReadyState = m_entity->GetAnimationState(animName);
+		m_weaponReadyState->SetLoop(true);
 	}
 
 	void GameUnitC::NotifyHitEvent()
@@ -2202,33 +2745,70 @@ namespace mmo
 							{ return factionId == other.GetFaction()->id(); }) != m_factionTemplate->enemies().end();
 	}
 
+	void GameUnitC::ClearAnimationStates()
+	{
+		m_idleAnimState = nullptr;
+		m_walkAnimState = nullptr;
+		m_walkLeftState = nullptr;
+		m_walkRightState = nullptr;
+		m_walkForwardLeftState = nullptr;
+		m_walkForwardRightState = nullptr;
+		m_runAnimState = nullptr;
+		m_runBackAnimState = nullptr;
+		m_runLeftState = nullptr;
+		m_runRightState = nullptr;
+		m_runForwardLeftState = nullptr;
+		m_runForwardRightState = nullptr;
+		m_readyAnimState = nullptr;
+		m_weaponReadyState = nullptr;
+		m_castingState = nullptr;
+		m_castReleaseState = nullptr;
+		m_unarmedAttackState = nullptr;
+		m_weaponAttackStates.clear();
+		m_deathState = nullptr;
+		m_damageHitState = nullptr;
+		m_targetState = nullptr;
+		m_currentState = nullptr;
+		m_oneShotState = nullptr;
+		m_lockedLoopAnimState = nullptr;
+		m_jumpStartState = nullptr;
+		m_fallingState = nullptr;
+		m_landState = nullptr;
+		m_swimState = nullptr;
+		m_swimIdleState = nullptr;
+		m_swimDeathState = nullptr;
+		m_swimBackwardState = nullptr;
+		m_swimLeftState = nullptr;
+		m_swimRightState = nullptr;
+	}
+
+	bool GameUnitC::IsValidAnimState(AnimationState* state) const
+	{
+		if (!state || !m_entity)
+		{
+			return false;
+		}
+
+		const AnimationStateSet* currentSet = m_entity->GetAllAnimationStates();
+		return currentSet != nullptr && state->GetParent() == currentSet;
+	}
+
 	void GameUnitC::OnDisplayIdChanged()
 	{
 		const uint32 displayId = Get<uint32>(object_fields::DisplayId);
 		const proto_client::ModelDataEntry *modelEntry = ObjectMgr::GetModelData(displayId);
+
+		// Always clear animation state pointers first so no stale pointer survives
+		// a mesh change, even when there is no valid model entry and we return early.
+		ClearAnimationStates();
+		m_customizationDefinition = nullptr;
+
 		if (m_entity)
 			m_entity->SetVisible(modelEntry != nullptr);
 		if (!modelEntry)
 		{
 			return;
 		}
-
-		// Reset animation states
-		m_idleAnimState = nullptr;
-		m_walkAnimState = nullptr;
-		m_runAnimState = nullptr;
-		m_readyAnimState = nullptr;
-		m_castingState = nullptr;
-		m_castReleaseState = nullptr;
-		m_unarmedAttackState = nullptr;
-		m_deathState = nullptr;
-		m_targetState = nullptr;
-		m_currentState = nullptr;
-		m_oneShotState = nullptr;
-		m_jumpStartState = nullptr;
-		m_fallingState = nullptr;
-		m_landState = nullptr;
-		m_customizationDefinition = nullptr;
 
 		String meshFile = modelEntry->filename();
 		if (modelEntry->flags() & model_data_flags::IsCustomizable)
@@ -2284,9 +2864,62 @@ namespace mmo
 			m_walkAnimState = m_entity->GetAnimationState("Walk");
 		}
 
+		if (m_entity->HasAnimationState("WalkLeft"))
+		{
+			m_walkLeftState = m_entity->GetAnimationState("WalkLeft");
+			m_walkLeftState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("WalkRight"))
+		{
+			m_walkRightState = m_entity->GetAnimationState("WalkRight");
+			m_walkRightState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("WalkForwardLeft"))
+		{
+			m_walkForwardLeftState = m_entity->GetAnimationState("WalkForwardLeft");
+			m_walkForwardLeftState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("WalkForwardRight"))
+		{
+			m_walkForwardRightState = m_entity->GetAnimationState("WalkForwardRight");
+			m_walkForwardRightState->SetLoop(true);
+		}
+
 		if (m_entity->HasAnimationState("Run"))
 		{
 			m_runAnimState = m_entity->GetAnimationState("Run");
+		}
+
+		if (m_entity->HasAnimationState("RunBack"))
+		{
+			m_runBackAnimState = m_entity->GetAnimationState("RunBack");
+		}
+
+		if (m_entity->HasAnimationState("RunLeft"))
+		{
+			m_runLeftState = m_entity->GetAnimationState("RunLeft");
+			m_runLeftState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("RunRight"))
+		{
+			m_runRightState = m_entity->GetAnimationState("RunRight");
+			m_runRightState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("RunForwardLeft"))
+		{
+			m_runForwardLeftState = m_entity->GetAnimationState("RunForwardLeft");
+			m_runForwardLeftState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("RunForwardRight"))
+		{
+			m_runForwardRightState = m_entity->GetAnimationState("RunForwardRight");
+			m_runForwardRightState->SetLoop(true);
 		}
 
 		if (m_entity->HasAnimationState("UnarmedReady"))
@@ -2353,6 +2986,45 @@ namespace mmo
 		if (m_entity)
 		{
 			m_nameComponentNode->SetPosition(Vector3::UnitY * (m_entity->GetBoundingRadius()));
+		}
+
+		// Swim animation states. These are optional: meshes without them fall back to the
+		// regular run / idle / death animations (handled where the states are used).
+		if (m_entity->HasAnimationState("Swim"))
+		{
+			m_swimState = m_entity->GetAnimationState("Swim");
+			m_swimState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("SwimIdle"))
+		{
+			m_swimIdleState = m_entity->GetAnimationState("SwimIdle");
+			m_swimIdleState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("SwimDeath"))
+		{
+			m_swimDeathState = m_entity->GetAnimationState("SwimDeath");
+			m_swimDeathState->SetLoop(false);
+			m_swimDeathState->SetTimePosition(0.0f);
+		}
+
+		if (m_entity->HasAnimationState("SwimBackward"))
+		{
+			m_swimBackwardState = m_entity->GetAnimationState("SwimBackward");
+			m_swimBackwardState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("SwimLeft"))
+		{
+			m_swimLeftState = m_entity->GetAnimationState("SwimLeft");
+			m_swimLeftState->SetLoop(true);
+		}
+
+		if (m_entity->HasAnimationState("SwimRight"))
+		{
+			m_swimRightState = m_entity->GetAnimationState("SwimRight");
+			m_swimRightState->SetLoop(true);
 		}
 
 		// Connect to animation notify signals for all animations
@@ -2467,16 +3139,29 @@ namespace mmo
 		}
 
 		const auto it = configuration.chosenOptionPerGroup.find(group.GetId());
-		if (it == configuration.chosenOptionPerGroup.end())
+
+		// Determine which value to use: the configured one, or fall back to the
+		// first available option so that tagged sub-entities are not left hidden
+		// when the configuration is incomplete.
+		uint32 chosenValue = 0;
+		if (it != configuration.chosenOptionPerGroup.end())
 		{
-			// Nothing to do here because we have no value set
+			chosenValue = it->second;
+		}
+		else if (!group.possibleValues.empty())
+		{
+			chosenValue = group.possibleValues.front().valueId;
+		}
+		else
+		{
+			// No possible values defined — nothing to show
 			return;
 		}
 
 		// Now make each referenced sub entity visible
 		for (const auto &value : group.possibleValues)
 		{
-			if (value.valueId == it->second)
+			if (value.valueId == chosenValue)
 			{
 				for (const auto &subEntityName : value.visibleSubEntities)
 				{
@@ -2521,6 +3206,7 @@ namespace mmo
 	void GameUnitC::Apply(const ScalarParameterPropertyGroup &group, const AvatarConfiguration &configuration)
 	{
 	}
+
 	void GameUnitC::SetCollisionVisibility(bool show)
 	{
 		if (show)
@@ -2739,15 +3425,27 @@ namespace mmo
 		}
 	}
 
-	const proto_client::SpellEntry *GameUnitC::GetOpenSpell() const
+	const proto_client::SpellEntry *GameUnitC::GetOpenSpell(const GameWorldObjectC* target) const
 	{
+		const uint32 objectLockTypeId = target ? target->Get<uint32>(object_fields::LockEntry) : 0u;
+
 		for (const auto *spell : m_spells)
 		{
 			for (const auto &effect : spell->effects())
 			{
 				if (effect.type() == spell_effects::OpenLock)
 				{
-					return spell;
+					// If the object has no lock type (always-open sentinel), return the first OpenLock spell found.
+					if (objectLockTypeId == 0)
+					{
+						return spell;
+					}
+
+					// Match by lock type ID stored in miscvaluea.
+					if (static_cast<uint32>(effect.miscvaluea()) == objectLockTypeId)
+					{
+						return spell;
+					}
 				}
 			}
 		}
@@ -2775,6 +3473,79 @@ namespace mmo
 		if (!wasFalling)
 		{
 			m_netDriver.OnMoveEvent(*this, MovementEvent(movement_event_type::Fall, m_movementInfo.timestamp, m_movementInfo));
+		}
+	}
+
+	void GameUnitC::OnStartSwimming()
+	{
+		const bool wasSwimming = (m_movementInfo.movementFlags & movement_flags::Swimming) != 0;
+
+		UpdateMovementInfo();
+		m_movementInfo.movementFlags |= movement_flags::Swimming;
+		// Swimming and falling are mutually exclusive movement states.
+		m_movementInfo.movementFlags &= ~movement_flags::Falling;
+
+		if (!wasSwimming)
+		{
+			m_netDriver.OnMoveEvent(*this, MovementEvent(movement_event_type::StartSwim, m_movementInfo.timestamp, m_movementInfo));
+		}
+	}
+
+	void GameUnitC::OnStopSwimming()
+	{
+		const bool wasSwimming = (m_movementInfo.movementFlags & movement_flags::Swimming) != 0;
+
+		UpdateMovementInfo();
+		m_movementInfo.movementFlags &= ~movement_flags::Swimming;
+		// Pitch and the swim-up flag are only meaningful while swimming; reset them on exit.
+		m_movementInfo.movementFlags &= ~movement_flags::Ascending;
+		m_movementInfo.pitch = Radian(0.0f);
+
+		if (wasSwimming)
+		{
+			m_netDriver.OnMoveEvent(*this, MovementEvent(movement_event_type::StopSwim, m_movementInfo.timestamp, m_movementInfo));
+		}
+	}
+
+	bool GameUnitC::QueryWaterAt(const float x, const float z, float& outSurfaceY) const
+	{
+		return m_netDriver.QueryWaterAt(x, z, outSurfaceY);
+	}
+
+	void GameUnitC::UpdateSwimMeshPitch(const float deltaTime)
+	{
+		if (!m_entityOffsetNode || !IsPlayer())
+		{
+			return;
+		}
+
+		// The mesh's base alignment (see GameObjectC::SetupSceneObjects) is a 90° yaw about Y.
+		Quaternion baseOffset;
+		baseOffset.FromAngleAxis(Degree(90.0f), Vector3::UnitY);
+
+		// The mesh only shows the dive angle while actively swimming forward/backward. When idle in
+		// the water the control pitch is preserved (so the player can pre-aim a dive), but the mesh
+		// is displayed level; it tilts once movement starts and returns to level when it stops.
+		const bool swimmingAndMoving = m_movementInfo.IsSwimming() &&
+			(m_movementInfo.movementFlags & (movement_flags::Forward | movement_flags::Backward)) != 0;
+		const float targetPitch = swimmingAndMoving ? m_movementInfo.pitch.GetValueRadians() : 0.0f;
+
+		// Smoothly interpolate the displayed pitch toward the target. Exponential blending keeps the
+		// transition frame-rate independent and visually smooth.
+		constexpr float pitchBlendRate = 8.0f;
+		const float blend = 1.0f - std::exp(-pitchBlendRate * std::max(deltaTime, 0.0f));
+		m_swimMeshPitch += (targetPitch - m_swimMeshPitch) * blend;
+
+		if (std::abs(m_swimMeshPitch) > 0.001f)
+		{
+			// Pitch the mesh about the body's local right axis (Z) — the same axis the swim physics
+			// uses for the dive direction, so the mesh visibly points where the character swims.
+			m_entityOffsetNode->SetOrientation(Quaternion(Radian(m_swimMeshPitch), Vector3::UnitZ) * baseOffset);
+		}
+		else if (!m_entityOffsetNode->GetOrientation().Equals(baseOffset, Radian(0.001f)))
+		{
+			m_swimMeshPitch = 0.0f;
+			m_entityOffsetNode->SetOrientation(baseOffset);
 		}
 	}
 
@@ -2949,6 +3720,71 @@ namespace mmo
 				state.tintInstance->SetVectorParameter("Tint", blendedTint);
 			}
 		}
+	}
+
+	void GameUnitC::SetSpellMod(const uint8 type, const uint8 effectIndex, const uint8 op, const int32 value)
+	{
+		const uint32 key = (static_cast<uint32>(type) << 16) | (static_cast<uint32>(effectIndex) << 8) | static_cast<uint32>(op);
+		if (value == 0)
+		{
+			m_spellMods.erase(key);
+		}
+		else
+		{
+			m_spellMods[key] = value;
+		}
+	}
+
+	int32 GameUnitC::GetSpellModFlatForFlags(const uint8 op, const uint64 familyFlags) const
+	{
+		if (familyFlags == 0)
+		{
+			return 0;
+		}
+
+		int32 total = 0;
+		for (uint8 eff = 0; eff < 64; ++eff)
+		{
+			if (!(familyFlags & (static_cast<uint64>(1) << eff)))
+			{
+				continue;
+			}
+
+			// type 0 = Flat
+			const uint32 key = (static_cast<uint32>(0) << 16) | (static_cast<uint32>(eff) << 8) | static_cast<uint32>(op);
+			const auto it = m_spellMods.find(key);
+			if (it != m_spellMods.end())
+			{
+				total += it->second;
+			}
+		}
+		return total;
+	}
+
+	int32 GameUnitC::GetSpellModPctForFlags(const uint8 op, const uint64 familyFlags) const
+	{
+		if (familyFlags == 0)
+		{
+			return 0;
+		}
+
+		int32 total = 0;
+		for (uint8 eff = 0; eff < 64; ++eff)
+		{
+			if (!(familyFlags & (static_cast<uint64>(1) << eff)))
+			{
+				continue;
+			}
+
+			// type 1 = Pct
+			const uint32 key = (static_cast<uint32>(1) << 16) | (static_cast<uint32>(eff) << 8) | static_cast<uint32>(op);
+			const auto it = m_spellMods.find(key);
+			if (it != m_spellMods.end())
+			{
+				total += it->second;
+			}
+		}
+		return total;
 	}
 
 }

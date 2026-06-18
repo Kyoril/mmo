@@ -34,7 +34,15 @@ namespace mmo
         void SetRenameCallback(std::function<void(uint64, const std::string&)> callback);
 
         // Set the callback to be called when an object's category is changed
-        void SetCategoryChangeCallback(std::function<void(uint64, const std::string&)> callback);    private:
+        void SetCategoryChangeCallback(std::function<void(uint64, const std::string&)> callback);
+
+        /// @brief Provides a factory that produces per-entity duplication callbacks.
+        /// When set, selections made in this window will carry a proper Duplicate() handler
+        /// so that Alt+transform spawns a copy rather than being a no-op.
+        using EntityDuplicationFactory = std::function<std::function<void(Selectable&)>(MapEntity&)>;
+        void SetEntityDuplicationFactory(EntityDuplicationFactory factory);
+
+    private:
         struct SceneOutlineEntry 
         {
             uint64 id;
@@ -59,6 +67,7 @@ namespace mmo
         std::function<void(uint64)> m_deleteCallback;
         std::function<void(uint64, const std::string&)> m_renameCallback;
         std::function<void(uint64, const std::string&)> m_categoryChangeCallback;
+        EntityDuplicationFactory m_entityDuplicationFactory;
         std::chrono::steady_clock::time_point m_lastRebuildTime;
         TexturePtr m_folderTexture;  // Folder icon texture
           // UI state tracking variables

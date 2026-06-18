@@ -35,6 +35,8 @@
 #include "editor_windows/class_editor_window.h"
 #include "editor_windows/unit_class_editor_window.h"
 #include "editor_windows/range_type_editor_window.h"
+#include "editor_windows/aura_stacking_category_editor_window.h"
+#include "editor_windows/lock_type_editor_window.h"
 #include "editor_windows/item_editor_window.h"
 #include "editor_windows/unit_loot_editor_window.h"
 #include "editor_windows/faction_editor_window.h"
@@ -42,6 +44,7 @@
 #include "editor_windows/model_editor_window.h"
 #include "editor_windows/race_editor_window.h"
 #include "editor_windows/proficiency_editor_window.h"
+#include "editor_windows/chat_channel_editor_window.h"
 #include "editor_windows/item_subclass_editor_window.h"
 #include "editor_windows/item_class_editor_window.h"
 #include "editor_windows/trainer_editor_window.h"
@@ -71,6 +74,7 @@
 #include "editors/world_model_editor/world_model_editor.h"
 #include "editors/color_curve_editor/color_curve_editor.h"
 #include "editors/particle_system_editor/particle_system_editor.h"
+#include "editors/global_shader_parameters_editor/global_shader_parameters_editor.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"
 
@@ -154,6 +158,8 @@ int main(int argc, char* arg[])
 	auto assetWindow = std::make_unique<mmo::AssetWindow>("Asset Browser", previewProviderManager, mainWindow);
 	mainWindow.AddEditorWindow(std::move(assetWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::RangeTypeEditorWindow>("Spell Range Type Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::AuraStackingCategoryEditorWindow>("Aura Stacking Category Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::LockTypeEditorWindow>("Lock Type Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::SpellEditorWindow>("Spell Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::SpellVisualizationEditorWindow>("Spell Visualization Editor", project, mainWindow, previewProviderManager, editorAudio.get()));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::QuestEditorWindow>("Quest Editor", project, mainWindow));
@@ -165,6 +171,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::UnitClassEditorWindow>("Unit Class Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::RaceEditorWindow>("Race Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ProficiencyEditorWindow>("Proficiency Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::ChatChannelEditorWindow>("Chat Channel Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ModelEditorWindow>("Model Data Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ItemEditorWindow>("Item Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ItemClassEditorWindow>("Item Class Editor", project, mainWindow));
@@ -215,6 +222,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditor(std::make_unique<mmo::WorldModelEditor>(mainWindow, project));
 	mainWindow.AddEditor(std::make_unique<mmo::ColorCurveEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::ParticleSystemEditor>(mainWindow));
+	mainWindow.AddEditor(std::make_unique<mmo::GlobalShaderParametersEditor>(mainWindow));
 
 	// Run the database service thread
 	std::thread dbThread{ [&dbService]() { dbService.run(); } };

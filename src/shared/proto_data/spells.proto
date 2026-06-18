@@ -43,6 +43,17 @@ message SpellEffect {
 	optional float dmgmultiplier = 23 [default = 1.0];
 	optional int32 powerbonustype = 24 [default = 0];
 	optional float powerbonusfactor = 25 [default = 0.0];
+
+	// Data-driven conditional gating. When conditiontype != 0, this effect is only
+	// applied if the condition evaluates to true; otherwise the effect is skipped
+	// entirely (no targets resolved, no handler invoked). See spell_effect_condition.
+	optional uint32 conditiontype = 26 [default = 0];
+	// Parameter for the condition. Meaning depends on conditiontype. For the aura
+	// conditions this is the spell id of the aura to look for.
+	optional uint32 conditionvalue = 27 [default = 0];
+	// Which unit the condition is evaluated against. See spell_effect_condition_target
+	// (0 = the spell's primary target, 1 = the caster).
+	optional uint32 conditiontarget = 28 [default = 0];
 }
 
 message SpellEntry {
@@ -125,6 +136,10 @@ message SpellEntry {
 	// Bit 0 (1): cooldown starts when casting starts instead of on successful cast.
 	// Bit 1 (2): spell uses shared global cooldown instead of an individual cooldown.
 	optional uint32 cooldownflags = 70 [default = 0];
+	optional uint32 stacking_rule = 71 [default = 0];
+	optional uint32 stacking_category_id = 72 [default = 0];
+	optional bool extend_duration = 73 [default = false];
+	optional uint32 stack_reset_policy = 74 [default = 0];
 }
 
 message Spells {

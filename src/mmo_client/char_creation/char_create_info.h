@@ -54,6 +54,39 @@ namespace mmo
 
 		const char* GetCustomizationValue(const String& propertyName) const;
 
+		/// Returns true when the given race is not disabled on the current realm.
+		[[nodiscard]] bool IsRaceAvailable(int32 raceId) const;
+
+		/// Returns true when the given class is not disabled on the current realm.
+		[[nodiscard]] bool IsClassAvailable(int32 classId) const;
+
+		/// Returns true when at least one race and one class are available (character creation is possible).
+		[[nodiscard]] bool IsCharacterCreationAvailable() const;
+
+		/// Returns the total number of races defined in the project data.
+		[[nodiscard]] int32 GetNumRaces() const;
+
+		/// Returns the race ID at the given proto-list index, or -1 if out of range.
+		[[nodiscard]] int32 GetRaceId(int32 index) const;
+
+		/// Returns the display name of the race at the given proto-list index, or nullptr if out of range.
+		[[nodiscard]] const char* GetRaceName(int32 index) const;
+
+		/// Returns the total number of classes defined in the project data.
+		[[nodiscard]] int32 GetNumClasses() const;
+
+		/// Returns the class ID at the given proto-list index, or -1 if out of range.
+		[[nodiscard]] int32 GetClassId(int32 index) const;
+
+		/// Returns the display name of the class at the given proto-list index, or nullptr if out of range.
+		[[nodiscard]] const char* GetClassEntryName(int32 index) const;
+
+		/// Returns the display name of the class with the given ID, or nullptr if not found.
+		[[nodiscard]] const char* GetClassNameById(int32 classId) const;
+
+		/// Returns the display name of the race with the given ID, or nullptr if not found.
+		[[nodiscard]] const char* GetRaceNameById(int32 raceId) const;
+
 	private:
 		void RefreshModel();
 

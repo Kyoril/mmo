@@ -4,6 +4,7 @@
 #include "cursor.h"
 #include "spell_cast.h"
 #include "frame_ui/frame_mgr.h"
+#include "game/spell.h"
 #include "game/spell_target_map.h"
 #include "game_client/game_bag_c.h"
 #include "game_client/object_mgr.h"
@@ -98,7 +99,7 @@ namespace mmo
 				return false;
 			}
 
-			if (spell->cost() > 0 && player->GetPower(spell->powertype()) < spell->cost())
+			if (spell->cost() > 0 && player->GetPower(spell->powertype()) < static_cast<int32>(player->ApplySpellModForFlags(static_cast<uint8>(spell_mod_op::Cost), spell->cost(), spell->familyflags())))
 			{
 				return false;
 			}

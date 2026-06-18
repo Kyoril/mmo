@@ -186,13 +186,21 @@ namespace mmo
 		{
 			requiredProficiencyId = entry.requiredproficiency();
 		}
-		// Otherwise, check item subclass for required proficiency
+		// Otherwise, check item subclass for required proficiency.
+		// Subclass IDs are not globally unique — they are unique per item class.
+		// We must match on both itemclass and subclass id.
 		else if (entry.subclass() > 0)
 		{
-			const auto* subclass = m_project.itemSubclasses.getById(entry.subclass());
-			if (subclass && subclass->has_requiredproficiency() && subclass->requiredproficiency() > 0)
+			for (const auto& sc : m_project.itemSubclasses.getTemplates().entry())
 			{
-				requiredProficiencyId = subclass->requiredproficiency();
+				if (sc.id() == entry.subclass() && sc.itemclass() == entry.itemclass())
+				{
+					if (sc.has_requiredproficiency() && sc.requiredproficiency() > 0)
+					{
+						requiredProficiencyId = sc.requiredproficiency();
+					}
+					break;
+				}
 			}
 		}
 

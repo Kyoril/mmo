@@ -46,6 +46,10 @@ namespace mmo
 	public:
 		GameWorldObjectType GetType() const { return static_cast<GameWorldObjectType>(Get<uint32>(object_fields::ObjectTypeId)); }
 
+		/// @brief Returns the lock type to apply after a one-time unlock succeeds.
+		/// @return data[1] cast to uint32 if this is a Door with data_size > 1, otherwise 0.
+		uint32 GetPostUnlockLockType() const;
+
 		/// @brief Checks if this object can be used by the given player.
 		/// @param player The player attempting to use the object.
 		/// @return true if the object is usable, false otherwise.

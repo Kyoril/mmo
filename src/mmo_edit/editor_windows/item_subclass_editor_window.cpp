@@ -100,6 +100,50 @@ namespace mmo
 				ImGui::EndTable();
 			}
 		}
+
+		if (const auto section = ScopedEditorSection("Attack Animations", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::TextDisabled("Skeleton animation states used for auto attacks (e.g. \"SwordAttack01\").\nOne is chosen at random per swing. Empty list = unarmed attack.");
+
+			int removeIndex = -1;
+			for (int i = 0; i < currentEntry.attackanimation_size(); ++i)
+			{
+				ImGui::PushID(i);
+				ImGui::InputText("##animname", currentEntry.mutable_attackanimation(i));
+				ImGui::SameLine();
+				if (ImGui::Button("Remove"))
+				{
+					removeIndex = i;
+				}
+				ImGui::PopID();
+			}
+
+			if (removeIndex >= 0)
+			{
+				currentEntry.mutable_attackanimation()->DeleteSubrange(removeIndex, 1);
+			}
+
+			if (ImGui::Button("Add Attack Animation"))
+			{
+				currentEntry.add_attackanimation();
+			}
+
+			ImGui::Separator();
+
+			String readyAnimation = currentEntry.has_readyanimation() ? currentEntry.readyanimation() : String();
+			if (ImGui::InputText("Ready Animation", &readyAnimation))
+			{
+				if (readyAnimation.empty())
+				{
+					currentEntry.clear_readyanimation();
+				}
+				else
+				{
+					currentEntry.set_readyanimation(readyAnimation);
+				}
+			}
+			ImGui::TextDisabled("Combat-ready (attack idle) stance held while in combat (e.g. \"SwordReady\"). Empty = unarmed ready.");
+		}
 	}
 
 	void ItemSubclassEditorWindow::OnNewEntry(proto::TemplateManager<proto::ItemSubclasses, proto::ItemSubclassEntry>::EntryType& entry)

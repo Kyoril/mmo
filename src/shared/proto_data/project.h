@@ -38,6 +38,7 @@
 #include "shared/proto_data/faction_templates.pb.h"
 #include "shared/proto_data/area_triggers.pb.h"
 #include "shared/proto_data/spell_categories.pb.h"
+#include "shared/proto_data/aura_stacking_categories.pb.h"
 #include "shared/proto_data/gtvalues.pb.h"
 #include "shared/proto_data/variables.pb.h"
 #include "shared/proto_data/gossip_menus.pb.h"
@@ -51,6 +52,8 @@
 #include "shared/proto_data/item_classes.pb.h"
 #include "shared/proto_data/item_subclasses.pb.h"
 #include "shared/proto_data/combat_settings.pb.h"
+#include "shared/proto_data/lock_type.pb.h"
+#include "shared/proto_data/chat_channels.pb.h"
 
 namespace mmo
 {
@@ -84,6 +87,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::FactionTemplates, mmo::proto::FactionTemplateEntry> FactionTemplateManager;
 		typedef TemplateManager<mmo::proto::AreaTriggers, mmo::proto::AreaTriggerEntry> AreaTriggerManager;
 		typedef TemplateManager<mmo::proto::SpellCategories, mmo::proto::SpellCategoryEntry> SpellCategoryManager;
+		typedef TemplateManager<mmo::proto::AuraStackingCategories, mmo::proto::AuraStackingCategoryEntry> AuraStackingCategoryManager;
 		typedef TemplateManager<mmo::proto::CombatRatings, mmo::proto::CombatRatingEntry> CombatRatingsManager;
 		typedef TemplateManager<mmo::proto::MeleeCritChance, mmo::proto::MeleeCritChanceEntry> MeleeCritChanceManager;
 		typedef TemplateManager<mmo::proto::SpellCritChance, mmo::proto::SpellCritChanceEntry> SpellCritChanceManager;
@@ -100,6 +104,8 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::Proficiencies, mmo::proto::ProficiencyEntry> ProficiencyManager;
 		typedef TemplateManager<mmo::proto::ItemClasses, mmo::proto::ItemClassEntry> ItemClassManager;
 		typedef TemplateManager<mmo::proto::ItemSubclasses, mmo::proto::ItemSubclassEntry> ItemSubclassManager;
+		typedef TemplateManager<mmo::proto::LockTypes, mmo::proto::LockTypeEntry> LockTypeManager;
+		typedef TemplateManager<mmo::proto::ChatChannels, mmo::proto::ChatChannelEntry> ChatChannelManager;
 
 		/// Gets the combat settings with all configurable combat formula parameters.
 		/// If no combat_settings file was loaded, defaults from the proto definition are used.
@@ -149,6 +155,7 @@ namespace mmo
 			FactionTemplateManager factionTemplates;
 			AreaTriggerManager areaTriggers;
 			SpellCategoryManager spellCategories;
+			AuraStackingCategoryManager auraStackingCategories;
 			CombatRatingsManager combatRatings;
 			MeleeCritChanceManager meleeCritChance;
 			SpellCritChanceManager spellCritChance;
@@ -166,6 +173,12 @@ namespace mmo
 			ProficiencyManager proficiencies;
 			ItemClassManager itemClasses;
 			ItemSubclassManager itemSubclasses;
+
+			/// Lock type manager for object lock requirements.
+			LockTypeManager lockTypes;
+
+			/// Well-known chat channel definitions.
+			ChatChannelManager chatChannels;
 
 			/// Combat settings containing all configurable combat formula parameters.
 			CombatSettings combatSettings;
@@ -240,6 +253,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("faction_templates", factionTemplates));
 				managers.push_back(ManagerEntry("area_triggers", areaTriggers));
 				managers.push_back(ManagerEntry("spell_categories", spellCategories));
+				managers.push_back(ManagerEntry("aura_stacking_categories", auraStackingCategories, true));
 				managers.push_back(ManagerEntry("combat_ratings", combatRatings));
 				managers.push_back(ManagerEntry("melee_crit_chance", meleeCritChance));
 				managers.push_back(ManagerEntry("spell_crit_chance", spellCritChance));
@@ -256,6 +270,8 @@ namespace mmo
 				managers.push_back(ManagerEntry("proficiencies", proficiencies));
 				managers.push_back(ManagerEntry("item_classes", itemClasses));
 				managers.push_back(ManagerEntry("item_subclasses", itemSubclasses));
+				managers.push_back(ManagerEntry("lock_types", lockTypes));
+				managers.push_back(ManagerEntry("chat_channels", chatChannels, true));
 
 				virtual_dir::FileSystemReader virtualDirectory(realmDataPath);
 				if (!RealmProjectLoader::load(
@@ -320,6 +336,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("faction_templates", "faction_templates", factionTemplates));
 				managers.push_back(ManagerEntry("area_triggers", "area_triggers", areaTriggers));
 				managers.push_back(ManagerEntry("spell_categories", "spell_categories", spellCategories));
+				managers.push_back(ManagerEntry("aura_stacking_categories", "aura_stacking_categories", auraStackingCategories));
 				managers.push_back(ManagerEntry("combat_ratings", "combat_ratings", combatRatings));
 				managers.push_back(ManagerEntry("melee_crit_chance", "melee_crit_chance", meleeCritChance));
 				managers.push_back(ManagerEntry("spell_crit_chance", "spell_crit_chance", spellCritChance));
@@ -336,6 +353,8 @@ namespace mmo
 				managers.push_back(ManagerEntry("proficiencies", "proficiencies", proficiencies));
 				managers.push_back(ManagerEntry("item_classes", "item_classes", itemClasses));
 				managers.push_back(ManagerEntry("item_subclasses", "item_subclasses", itemSubclasses));
+				managers.push_back(ManagerEntry("lock_types", "lock_types", lockTypes));
+				managers.push_back(ManagerEntry("chat_channels", "chat_channels", chatChannels));
 
 				if (!RealmProjectSaver::save(realmDataPath, managers))
 				{

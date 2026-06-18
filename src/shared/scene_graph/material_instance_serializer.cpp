@@ -19,6 +19,7 @@ namespace mmo
 	static const ChunkMagic MaterialScalarParamChunk = MakeChunkMagic('RAPS');
 	static const ChunkMagic MaterialVectorParamChunk = MakeChunkMagic('RAPV');
 	static const ChunkMagic MaterialTextureParamChunk = MakeChunkMagic('RAPT');
+	static const ChunkMagic MaterialFoliageChunk = MakeChunkMagic('LOFM');
 	
 	MaterialInstanceDeserializer::MaterialInstanceDeserializer(MaterialInstance& materialInstance)
 		: ChunkReader(true)
@@ -44,6 +45,11 @@ namespace mmo
 				AddChunkHandler(*MaterialScalarParamChunk, false, *this, &MaterialInstanceDeserializer::ReadMaterialScalarParamChunk);
 				AddChunkHandler(*MaterialVectorParamChunk, false, *this, &MaterialInstanceDeserializer::ReadMaterialVectorParamChunk);
 				AddChunkHandler(*MaterialTextureParamChunk, false, *this, &MaterialInstanceDeserializer::ReadMaterialTextureParamChunk);
+
+				if (version >= material_instance_version::Version_0_2)
+				{
+					AddChunkHandler(*MaterialFoliageChunk, false, *this, &MaterialInstanceDeserializer::ReadMaterialFoliageChunk);
+				}
 			}
 			else
 			{
@@ -189,9 +195,57 @@ namespace mmo
 		return reader;
 	}
 
+	bool MaterialInstanceDeserializer::ReadMaterialFoliageChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		uint16 numEntries;
+		if (!(reader >> io::read<uint16>(numEntries)))
+		{
+			return false;
+		}
+
+		std::vector<MaterialFoliageEntry> entries;
+		entries.reserve(numEntries);
+
+		for (uint16 i = 0; i < numEntries; ++i)
+		{
+			MaterialFoliageEntry entry{};
+			uint8 randomYaw = 0, alignToNormal = 0, castShadows = 0;
+			if (!(reader
+				>> io::read<uint8>(entry.layerIndex)
+				>> io::read_container<uint16>(entry.meshPath)
+				>> io::read<float>(entry.density)
+				>> io::read<float>(entry.minCoverage)
+				>> io::read<float>(entry.minScale)
+				>> io::read<float>(entry.maxScale)
+				>> io::read<float>(entry.maxSlopeAngle)
+				>> io::read<float>(entry.minHeight)
+				>> io::read<float>(entry.maxHeight)
+				>> io::read<float>(entry.fadeStartDistance)
+				>> io::read<float>(entry.fadeEndDistance)
+				>> io::read<uint8>(randomYaw)
+				>> io::read<uint8>(alignToNormal)
+				>> io::read<uint8>(castShadows)))
+			{
+				return false;
+			}
+
+			entry.randomYaw = randomYaw != 0;
+			entry.alignToNormal = alignToNormal != 0;
+			entry.castShadows = castShadows != 0;
+			entries.push_back(entry);
+		}
+
+		// Presence of this chunk means the instance overrides the parent's foliage.
+		m_materialInstance.SetOwnFoliageEntries(std::move(entries));
+		m_materialInstance.SetOverrideFoliage(true);
+		return reader;
+	}
+
 	void MaterialInstanceSerializer::Export(const MaterialInstance& materialInstance, io::Writer& writer, MaterialInstanceVersion version)
 	{
-		version = material_instance_version::Version_0_1;
+		version = materialInstance.IsOverridingFoliage()
+			? material_instance_version::Version_0_2
+			: material_instance_version::Version_0_1;
 		
 		// File version chunk
 		{
@@ -276,5 +330,34 @@ namespace mmo
 			textureParamChunk.Finish();
 		}
 
+		// Instance foliage override (v0.2+). Written only when this instance overrides foliage; the
+		// effective list then equals the instance's own override list.
+		if (materialInstance.IsOverridingFoliage())
+		{
+			const auto& entries = materialInstance.GetFoliageEntries();
+
+			ChunkWriter foliageChunkWriter{ MaterialFoliageChunk, writer };
+			writer << io::write<uint16>(static_cast<uint16>(entries.size()));
+			for (const auto& entry : entries)
+			{
+				writer
+					<< io::write<uint8>(entry.layerIndex)
+					<< io::write_dynamic_range<uint16>(entry.meshPath.begin(), entry.meshPath.end())
+					<< io::write<float>(entry.density)
+					<< io::write<float>(entry.minCoverage)
+					<< io::write<float>(entry.minScale)
+					<< io::write<float>(entry.maxScale)
+					<< io::write<float>(entry.maxSlopeAngle)
+					<< io::write<float>(entry.minHeight)
+					<< io::write<float>(entry.maxHeight)
+					<< io::write<float>(entry.fadeStartDistance)
+					<< io::write<float>(entry.fadeEndDistance)
+					<< io::write<uint8>(entry.randomYaw ? 1 : 0)
+					<< io::write<uint8>(entry.alignToNormal ? 1 : 0)
+					<< io::write<uint8>(entry.castShadows ? 1 : 0);
+			}
+
+			foliageChunkWriter.Finish();
+		}
 	}
 }

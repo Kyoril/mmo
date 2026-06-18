@@ -33,7 +33,18 @@ namespace mmo
 		{
 			if (m_lit)
 			{
-				material.SetType(m_translucent ? MaterialType::Translucent : MaterialType::Opaque);
+				if (m_translucent)
+				{
+					material.SetType(MaterialType::Translucent);
+				}
+				else if (m_masked)
+				{
+					material.SetType(MaterialType::Masked);
+				}
+				else
+				{
+					material.SetType(MaterialType::Opaque);
+				}
 			}
 			else
 			{
@@ -49,6 +60,10 @@ namespace mmo
 		{
 			m_vertexShaderCode.clear();
 			GenerateVertexShaderCode(static_cast<VertexShaderType>(i));
+
+			// Keep a copy of each generated variant around so the high level HLSL can be inspected
+			// (e.g. by the material editor's shader code viewer) after compilation has finished.
+			m_vertexShaderCodeByType[i] = m_vertexShaderCode;
 
 			ShaderCompileInput vertexInput;
 			vertexInput.shaderCode = m_vertexShaderCode;
@@ -152,6 +167,27 @@ namespace mmo
 		m_material = nullptr;
 	}
 	
+	void MaterialCompiler::AnnotateExpression(const ExpressionIndex index, const std::string_view comment)
+	{
+		if (index == IndexNone)
+		{
+			return;
+		}
+
+		m_expressionComments[index] = String(comment);
+	}
+
+	const String* MaterialCompiler::GetExpressionComment(const ExpressionIndex index) const
+	{
+		const auto it = m_expressionComments.find(index);
+		if (it == m_expressionComments.end())
+		{
+			return nullptr;
+		}
+
+		return &it->second;
+	}
+
 	ExpressionType MaterialCompiler::GetExpressionType(ExpressionIndex index)
 	{
 		if (index < 0 || index >= m_expressionTypes.size())

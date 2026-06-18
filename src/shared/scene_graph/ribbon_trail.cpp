@@ -134,12 +134,15 @@ namespace mmo
 			// Interpolate color
 			const Vector4 color = params.initialColor + (params.finalColor - params.initialColor) * clampedT;
 
-			// Convert color from Vector4 (0-1) to uint32 ARGB format
+			// Convert color from Vector4 (0-1) to packed uint32. The Diffuse vertex
+			// element (ColorArgb) is uploaded in ABGR byte order on the GPU, matching
+			// the convention used by the particle emitter, so Red goes in the low byte
+			// and Blue in bits 16-23. Packing it the other way swaps Red and Blue.
 			const uint32 colorArgb =
 				(static_cast<uint32>(color.w * 255.0f) << 24) |  // Alpha
-				(static_cast<uint32>(color.x * 255.0f) << 16) |  // Red
+				(static_cast<uint32>(color.z * 255.0f) << 16) |  // Blue
 				(static_cast<uint32>(color.y * 255.0f) << 8) |   // Green
-				(static_cast<uint32>(color.z * 255.0f));         // Blue
+				(static_cast<uint32>(color.x * 255.0f));         // Red
 
 			// Calculate the ribbon direction
 			Vector3 direction;

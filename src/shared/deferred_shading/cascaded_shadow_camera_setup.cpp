@@ -34,7 +34,8 @@ namespace mmo
 		Scene& scene,
 		Camera& camera,
 		Light& light,
-		std::array<Camera*, NUM_SHADOW_CASCADES>& shadowCameras)
+		std::array<Camera*, NUM_SHADOW_CASCADES>& shadowCameras,
+		uint32 updateMask)
 	{
 		if (light.GetType() != LightType::Directional)
 		{
@@ -51,10 +52,24 @@ namespace mmo
 		Vector3 lightDir = light.GetDerivedDirection();
 		lightDir.Normalize();
 
-		// Setup each cascade
-		for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
+		// Setup each active cascade (inactive cascades are neither set up nor rendered).
+		const uint32 activeCascades = m_config.GetActiveCascadeCount();
+		for (uint32 i = 0; i < activeCascades; ++i)
 		{
 			if (!shadowCameras[i])
+			{
+				continue;
+			}
+
+			// The split distance is cheap and stable; refresh it for every active cascade so the
+			// lighting shader's cascade selection stays correct even for cascades we skip this frame.
+			m_cascades[i].splitDistance = m_splitDistances[i + 1];
+
+			// Temporal staggering: if this cascade is not scheduled for an update this frame, leave its
+			// shadow camera (and therefore its view-projection matrix) exactly as it was. The deferred
+			// renderer will reuse last frame's depth map for it, and because the matrix is unchanged the
+			// cached map and the matrix in the shadow buffer stay consistent.
+			if ((updateMask & (1u << i)) == 0u)
 			{
 				continue;
 			}
@@ -77,7 +92,6 @@ namespace mmo
 
 			// Store cascade data
 			m_cascades[i].viewProjection = viewProj;
-			m_cascades[i].splitDistance = m_splitDistances[i + 1];
 			m_cascades[i].worldTexelSize = worldTexelSize;
 
 			// Set up the shadow camera
@@ -171,6 +185,11 @@ namespace mmo
 			}
 		}
 
+		// Distribute the splits over exactly the active number of cascades so that reducing the
+		// cascade count (a quality setting) keeps the same overall shadow distance, just with coarser
+		// near-camera resolution.
+		const uint32 count = m_config.GetActiveCascadeCount();
+
 		m_splitDistances[0] = nearClip;
 
 		if (useManualSplits)
@@ -184,9 +203,9 @@ namespace mmo
 		else
 		{
 			// Calculate split distances using practical split scheme (mix of uniform and logarithmic)
-			for (uint32 i = 1; i <= NUM_SHADOW_CASCADES; ++i)
+			for (uint32 i = 1; i <= count; ++i)
 			{
-				const float p = static_cast<float>(i) / static_cast<float>(NUM_SHADOW_CASCADES);
+				const float p = static_cast<float>(i) / static_cast<float>(count);
 
 				// Logarithmic split
 				const float logSplit = nearClip * std::pow(farClip / nearClip, p);
@@ -199,8 +218,12 @@ namespace mmo
 			}
 		}
 
-		// Ensure the last split exactly matches the far clip
-		m_splitDistances[NUM_SHADOW_CASCADES] = farClip;
+		// Ensure the last active split exactly matches the far clip, and pin any unused trailing
+		// splits to the far clip as well so stale data never leaks into the shader.
+		for (uint32 i = count; i <= NUM_SHADOW_CASCADES; ++i)
+		{
+			m_splitDistances[i] = farClip;
+		}
 	}
 
 	void CascadedShadowCameraSetup::GetFrustumCornersWorldSpace(

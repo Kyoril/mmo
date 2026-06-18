@@ -112,6 +112,9 @@ namespace mmo
         // Handle terminating events - stop active animations and clean up
         if (caster != nullptr && isTerminatingEvent)
         {
+            // Clear any locked loop animation (e.g. cast channel animation)
+            caster->SetLockedLoopAnimation(nullptr);
+
             const uint64 casterGuid = caster->GetGuid();
             auto animIt = m_activeSpellAnimations.find(casterGuid);
             if (animIt != m_activeSpellAnimations.end() && animIt->second.spellId == spell.id())
@@ -333,8 +336,8 @@ namespace mmo
         // Play the animation
         if (isLooped)
         {
-            // For looped animations, set as target state (replaces current animation)
-            actor.SetTargetAnimState(animState);
+            // For looped animations, lock as the target state so movement animations can't evict it
+            actor.SetLockedLoopAnimation(animState);
         }
         else
         {
@@ -657,18 +660,18 @@ namespace mmo
                     continue;
                 }
 
-                // Load particle parameters from .hpfx file
+                // Load the particle system (one or more emitters) from the .hpar file.
                 const auto file = AssetRegistry::OpenFile(particlePath);
                 if (file)
                 {
                     io::StreamSource source(*file);
                     io::Reader reader(source);
 
-                    ParticleEmitterSerializer serializer;
-                    ParticleEmitterParameters params;
+                    ParticleSystemSerializer serializer;
+                    ParticleSystemParameters params;
                     if (serializer.Deserialize(params, reader))
                     {
-                        emitter->SetParameters(params);
+                        emitter->SetSystemParameters(params);
                     }
                 }
 
@@ -1029,21 +1032,24 @@ namespace mmo
     }
 
     // Free functions for aura visualization notifications
-    void NotifyAuraVisualizationApplied(const proto_client::SpellEntry& spell, GameUnitC* target)
+    void NotifyAuraVisualizationApplied(const proto_client::SpellEntry& spell, GameUnitC* caster, GameUnitC* target)
     {
         if (target)
         {
             std::vector<GameUnitC*> targets { target };
-            SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::AuraApplied, spell, nullptr, targets);
+            SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::AuraApplied, spell, caster, targets);
+
+            // Start looping idle visualization for the aura duration
+            SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::AuraIdle, spell, caster, targets);
         }
     }
 
-    void NotifyAuraVisualizationRemoved(const proto_client::SpellEntry& spell, GameUnitC* target)
+    void NotifyAuraVisualizationRemoved(const proto_client::SpellEntry& spell, GameUnitC* caster, GameUnitC* target)
     {
         if (target)
         {
             std::vector<GameUnitC*> targets { target };
-            SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::AuraRemoved, spell, nullptr, targets);
+            SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::AuraRemoved, spell, caster, targets);
             // Stop looped sounds for this target when aura is removed
             SpellVisualizationService::Get().StopLoopedSoundForActor(target->GetGuid());
             // Remove tints for this spell on the target

@@ -402,7 +402,10 @@ namespace mmo
 			/// @brief Per-player dynamic flags (e.g., Interactable based on quest status).
 			DynamicObjectFlags,
 
-			WorldObjectFieldCount = DynamicObjectFlags + 1
+			/// @brief 32 bit lock type ID for this world object (0 = no lock).
+			LockEntry,
+
+			WorldObjectFieldCount = DynamicObjectFlags + 2
 		};
 	}
 }

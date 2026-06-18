@@ -68,6 +68,13 @@ namespace mmo
         /// @brief Checks if cascaded shadow maps are enabled.
         [[nodiscard]] bool IsCascadedShadowsEnabled() const { return m_useCascadedShadows; }
 
+        /// @brief Enables or disables temporal cascade staggering (distant cascades refreshed every few
+        ///        frames instead of every frame). Disabling refreshes every cascade every frame.
+        void SetTemporalShadowsEnabled(bool enabled) { m_temporalShadows = enabled; m_shadowFrameCounter = 0; }
+
+        /// @brief Checks whether temporal cascade staggering is enabled.
+        [[nodiscard]] bool IsTemporalShadowsEnabled() const { return m_temporalShadows; }
+
         /// @brief Enables or disables cascade debug visualization.
         void SetCascadeDebugVisualization(bool enabled) { m_debugCascades = enabled; }
 
@@ -99,6 +106,46 @@ namespace mmo
         void SetShadowMapSize(uint16 size);
         uint16 GetShadowMapSize() const { return m_shadowMapSize; }
 
+        /// @brief Applies a coarse shadow-quality preset that trades visual quality for performance.
+        /// @param level 0 = Low, 1 = Medium, 2 = High (anything higher is treated as High).
+        /// @remark This controls the number of rendered cascades (each is a full scene geometry
+        ///         re-submission) and the number of PCF taps in the lighting shader. It deliberately
+        ///         does not touch the shadow-map resolution, which has its own setting.
+        void SetShadowQuality(int level)
+        {
+            switch (level)
+            {
+            case 0: // Low: 2 cascades, 4 PCF taps
+                m_cascadedShadowSetup->GetConfig().activeCascadeCount = 2;
+                m_pcfSampleCount = 4;
+                break;
+            case 1: // Medium: 3 cascades, 8 PCF taps
+                m_cascadedShadowSetup->GetConfig().activeCascadeCount = 3;
+                m_pcfSampleCount = 8;
+                break;
+            default: // High: 4 cascades, 16 PCF taps
+                m_cascadedShadowSetup->GetConfig().activeCascadeCount = NUM_SHADOW_CASCADES;
+                m_pcfSampleCount = 16;
+                break;
+            }
+
+            // Force a full (non-staggered) refresh of every cascade for the next few frames so any
+            // newly-activated cascade's shadow map is initialised before it is sampled.
+            m_shadowFrameCounter = 0;
+        }
+
+        /// @brief Gets the current PCF tap count used by the shadow filter.
+        [[nodiscard]] uint32 GetPcfSampleCount() const { return m_pcfSampleCount; }
+
+        /// @brief Enables or disables the opaque depth pre-pass for the G-Buffer geometry pass.
+        /// @remark When enabled, a cheap depth-only pass populates the depth buffer first so the
+        ///         expensive G-Buffer shader only runs on visible (front-most) pixels — a large win
+        ///         in scenes with heavy opaque overdraw (e.g. overlapping alpha-tested foliage).
+        void SetDepthPrepassEnabled(bool enabled) { m_depthPrepassEnabled = enabled; }
+
+        /// @brief Returns whether the opaque depth pre-pass is enabled.
+        [[nodiscard]] bool IsDepthPrepassEnabled() const { return m_depthPrepassEnabled; }
+
         /// @brief Gets the light rendering statistics from the last frame.
         /// @return Reference to the light render statistics.
         const Scene::LightRenderStats& GetLightRenderStats() const { return m_lastLightStats; }
@@ -122,6 +169,35 @@ namespace mmo
 		void RenderShadowMap(Scene& scene, Camera& camera);
 
         void RenderCascadedShadowMaps(Scene& scene, Camera& camera);
+
+        /// @brief Returns the shadow-map resolution to use for a given cascade index. Distant cascades
+        ///        (index >= 2) render at half the base resolution (floored at 256) to cut shadow fill,
+        ///        since their large world coverage per texel makes the resolution loss hard to notice.
+        [[nodiscard]] uint16 GetCascadeShadowMapSize(uint32 cascadeIndex) const
+        {
+            if (cascadeIndex < 2)
+            {
+                return m_shadowMapSize;
+            }
+
+            const uint16 halfSize = m_shadowMapSize / 2;
+            return halfSize < 256 ? 256 : halfSize;
+        }
+
+#ifdef _WIN32
+        /// @brief Creates the GPU timestamp queries used for per-pass GPU timing.
+        void InitGpuTimers();
+
+        /// @brief Issues the disjoint-begin and the start timestamp for the current frame.
+        void GpuTimerBegin();
+
+        /// @brief Records a timestamp marking the boundary between two passes.
+        /// @param point Index of the timestamp point (0 = start ... GpuTimerPointCount-1 = end).
+        void GpuTimerMark(uint32 point);
+
+        /// @brief Ends the disjoint query and reads back an older frame's results into the Profiler.
+        void GpuTimerEndAndCollect();
+#endif
 
     public:
         /// @brief Maximum number of lights that can be processed in a single pass.
@@ -153,6 +229,12 @@ namespace mmo
 
         RenderTexturePtr m_renderTexture;
 
+        /// @brief A copy of the lit opaque scene color captured before the forward/translucent pass.
+        /// Bound as an SRV (register t14) so translucent materials can sample SceneColor for
+        /// refraction effects. Sampling the live m_renderTexture is impossible while water renders
+        /// into it (read/write hazard), hence the dedicated copy.
+        RenderTexturePtr m_sceneColorCopy;
+
         Light* m_shadowCastingDirectionalLight;
 
         /// @brief Shadow map render textures for each cascade.
@@ -179,22 +261,55 @@ namespace mmo
         /// @brief Whether to use cascaded shadow maps.
         bool m_useCascadedShadows = true;
 
+        /// @brief When true, distant cascades are re-rendered only every few frames (temporal
+        ///        staggering) and reuse their previous depth map on the frames in between. The near
+        ///        cascade is always refreshed. Large GPU saving with only a small lag for distant
+        ///        moving-object shadows.
+        bool m_temporalShadows = true;
+
+        /// @brief Monotonic frame counter used to schedule which cascades refresh each frame.
+        uint32 m_shadowFrameCounter = 0;
+
         /// @brief Whether to show cascade debug colors.
         bool m_debugCascades = false;
 
-        float m_depthBias = 100.0f;
-		float m_slopeScaledDepthBias = 2.0f;
+        float m_depthBias = 138.6f;
+		float m_slopeScaledDepthBias = 0.1f;
 		float m_depthBiasClamp = 0.0f;
 
         // Advanced shadow parameters
         float m_shadowBias = 0.00002f;         // Depth bias in shadow space (reduced for less peter panning)
-        float m_normalBiasScale = 0.07f;      // Normal-based bias scale factor (reduced)
+        float m_normalBiasScale = 0.2f;      // Normal-based bias scale factor (reduced)
         float m_shadowSoftness = 0.25f;        // Overall shadow softness
-        float m_blockerSearchRadius = 0.005f; // Search radius for blocker search phase
-        float m_lightSize = 0.021f;           // Size of the virtual light (smaller = sharper shadows)
+        float m_blockerSearchRadius = 0.03f; // Search radius for blocker search phase
+        float m_lightSize = 0.0268f;           // Size of the virtual light (smaller = sharper shadows)
         uint16 m_shadowMapSize = 2048;        // Size of the shadow map texture (increased for quality)
+        uint32 m_pcfSampleCount = 16;         // PCF taps per shadow lookup (shadow quality preset)
+        bool m_depthPrepassEnabled = false;   // Opaque depth pre-pass before the G-Buffer pass
 
         /// @brief Cached light render statistics from the last frame.
         Scene::LightRenderStats m_lastLightStats;
+
+        /// @brief Reusable scratch buffer of shadow casters gathered once per frame and shared across
+        ///        all cascades (see RenderCascadedShadowMaps). Kept as a member so its capacity is
+        ///        retained between frames instead of reallocating every frame.
+        std::vector<MovableObject*> m_shadowCasterCache;
+
+#ifdef _WIN32
+        // --- Per-pass GPU timing (only active while the profiler/perf overlay is enabled) ---
+        // Timestamp points: 0 = start, 1 = after shadows, 2 = after G-Buffer, 3 = after lighting,
+        // 4 = after the forward/translucent pass (end). Differences give per-pass GPU time.
+        static constexpr uint32 GpuTimerPointCount = 5;
+        // Deep ring so we read results back several frames late and never stall the GPU, and so
+        // that all timestamps in a frame have comfortably resolved before we poll them.
+        static constexpr uint32 GpuTimerFrameCount = 6;
+
+        ComPtr<ID3D11Query> m_gpuDisjointQueries[GpuTimerFrameCount];
+        ComPtr<ID3D11Query> m_gpuTimestampQueries[GpuTimerFrameCount][GpuTimerPointCount];
+        bool m_gpuTimerFrameStarted[GpuTimerFrameCount] = {};
+        uint32 m_gpuTimerWriteFrame = 0;
+        bool m_gpuTimersInitialized = false;
+        bool m_gpuTimingActiveThisFrame = false;
+#endif
     };
 }

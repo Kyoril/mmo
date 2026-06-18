@@ -7,9 +7,12 @@
 #include "assets/asset_registry.h"
 #include "base/chunk_writer.h"
 #include "game_common/world_entity_loader.h"
+#include "game_common/world_foliage.h"
 #include "game_states/login_state.h"
+#include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/entity.h"
+#include "scene_graph/instanced_foliage.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/scene_node.h"
 #include "scene_graph/scene.h"
@@ -68,6 +71,9 @@ namespace mmo
 		, m_scene(scene)
 		, m_rootNode(rootNode)
 	{
+		// Authored foliage (trees) is rendered through hardware-instanced cells that are a few
+		// terrain tiles wide so that each cell batches enough instances to be worth instancing.
+		m_foliage = std::make_unique<InstancedFoliage>(scene, GraphicsDevice::Get(), static_cast<float>(terrain::constants::PageSize) / 4.0f);
 	}
 
 	void ClientWorldInstance::LoadPageEntities(uint8 x, uint8 y)
@@ -95,6 +101,8 @@ namespace mmo
 		}
 
 		m_loadedPages.insert(pageIndex);
+
+		LoadPageFoliage(x, y);
 	}
 
 	void ClientWorldInstance::UnloadPageEntities(uint8 x, uint8 y)
@@ -139,6 +147,11 @@ namespace mmo
 			it = m_worldModels.erase(it);
 		}
 
+		if (m_foliage)
+		{
+			m_foliage->UnloadPage(pageIndex);
+		}
+
 		m_loadedPages.erase(BuildPageIndex(x, y));
 	}
 
@@ -168,6 +181,11 @@ namespace mmo
 				m_scene.DestroySceneNode(*it->second.node);
 			}
 			it = m_worldModels.erase(it);
+		}
+
+		if (m_foliage)
+		{
+			m_foliage->Clear();
 		}
 
 		m_loadedPages.clear();
@@ -316,6 +334,78 @@ namespace mmo
 						}
 					}
 				}
+			});
+	}
+
+	void ClientWorldInstance::LoadPageFoliage(const uint8 x, const uint8 y)
+	{
+		const uint16 pageIndex = BuildPageIndex(x, y);
+
+		String fileName = (std::filesystem::path(m_name) / "Foliage" / (std::to_string(pageIndex) + ".hfol")).string();
+		std::transform(fileName.begin(), fileName.end(), fileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
+
+		std::weak_ptr weak = weak_from_this();
+		m_workQueue.post([weak, pageIndex, fileName]()
+			{
+				const auto strong = weak.lock();
+				if (!strong)
+				{
+					return;
+				}
+
+				strong->InternalLoadPageFoliage(pageIndex, fileName);
+			});
+	}
+
+	void ClientWorldInstance::InternalLoadPageFoliage(const uint16 pageIndex, const String& filename)
+	{
+		// A page without authored foliage simply has no file - that is not an error.
+		std::unique_ptr<std::istream> filePtr = AssetRegistry::OpenFile(filename);
+		if (!filePtr)
+		{
+			return;
+		}
+
+		io::StreamSource source{ *filePtr };
+		io::Reader reader{ source };
+		WorldFoliageLoader loader;
+		if (!loader.Read(reader))
+		{
+			ELOG("Failed to read foliage file " << filename << "!");
+			return;
+		}
+
+		auto instances = std::make_shared<std::vector<FoliageInstance>>(loader.TakeInstances());
+
+		std::weak_ptr weak = weak_from_this();
+		m_dispatcher.post([weak, pageIndex, instances]()
+			{
+				const auto strong = weak.lock();
+				if (!strong || !strong->m_foliage)
+				{
+					return;
+				}
+
+				if (!strong->m_loadedPages.contains(pageIndex))
+				{
+					return;
+				}
+
+				for (const auto& source : *instances)
+				{
+					InstancedFoliageInstance instance;
+					instance.uniqueId = source.uniqueId;
+					instance.meshName = source.meshName;
+					instance.position = source.position;
+					instance.rotation = source.rotation;
+					instance.scale = source.scale;
+					instance.pageIndex = pageIndex;
+					instance.collides = source.collides;
+					strong->m_foliage->AddInstance(instance);
+				}
+
+				// Build the GPU buffers for the cells touched by this page on the main thread.
+				strong->m_foliage->RebuildDirtyCells();
 			});
 	}
 

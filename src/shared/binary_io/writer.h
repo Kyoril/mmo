@@ -319,4 +319,30 @@ namespace io
 	{
 		return detail::WritablePackedGuid(plain_guid);
 	}
+
+	namespace detail
+	{
+		/// Writes a null-terminated string (matches io::read_string on the reader side).
+		struct WriteString
+		{
+			const std::string& value;
+			explicit WriteString(const std::string& v) : value(v) {}
+		};
+
+		inline Writer& operator<<(Writer& w, const WriteString& surr)
+		{
+			for (char c : surr.value)
+			{
+				w << c;
+			}
+			w << static_cast<char>(0);
+			return w;
+		}
+	}
+
+	/// Writes a null-terminated string. Symmetric with io::read_string.
+	inline detail::WriteString write_string(const std::string& value)
+	{
+		return detail::WriteString(value);
+	}
 }

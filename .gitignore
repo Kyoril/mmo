@@ -20,6 +20,8 @@ deps/assimp/
 
 # ── GSD baseline (auto-generated) ──
 .gsd
+.gsd.*/
+.gsd-*/
 .gsd-id
 .bg-shell/
 Thumbs.db
@@ -48,3 +50,12 @@ tmp/
 
 # ── GSD baseline (auto-generated) ──
 .mcp.json
+
+bin/Debug2/
+/src/shared/deferred_shading/shaders/PS_DeferredLighting.h
+/src/shared/deferred_shading/shaders/VS_DeferredLighting.h
+*.local.json
+.claude/
+
+generated/
+artifacts/

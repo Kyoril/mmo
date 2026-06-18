@@ -101,6 +101,18 @@ namespace mmo
 			Entity* entity{ nullptr };
 			TagPoint* tagPoint{ nullptr };
 		};
+
+		// Mirrors the runtime bone selection (GamePlayerC::SelectBoneAttachment): prefer the
+		// state-specific bone, fall back to the default, then to whatever is defined.
+		const proto::ItemDisplayBoneAttachment* SelectPreviewBone(const proto::ItemDisplayVariant& variant, const bool drawn)
+		{
+			if (drawn && variant.has_attached_bone_drawn()) return &variant.attached_bone_drawn();
+			if (!drawn && variant.has_attached_bone_sheath()) return &variant.attached_bone_sheath();
+			if (variant.has_attached_bone_default()) return &variant.attached_bone_default();
+			if (variant.has_attached_bone_drawn()) return &variant.attached_bone_drawn();
+			if (variant.has_attached_bone_sheath()) return &variant.attached_bone_sheath();
+			return nullptr;
+		}
 	}
 
 	class ItemDisplayPreview final : public CustomizationPropertyGroupApplier
@@ -157,7 +169,10 @@ namespace mmo
 				if (serialized != m_lastEntrySerialized)
 				{
 					m_lastEntrySerialized = serialized;
-					m_rebuildRequested = true;
+					// Editing the entry (bones, visibility, materials) only needs the attachments
+					// and sub-entities re-applied, not a full mesh rebuild. This keeps the camera
+					// steady while tweaking transforms.
+					m_applyRequested = true;
 				}
 			}
 
@@ -216,8 +231,26 @@ namespace mmo
 				ImGui::TextDisabled("Auto model: %s", effectiveModel ? effectiveModel->name().c_str() : "(All)");
 			}
 
+			DrawSectionHeader("Weapon State");
+			ImGui::TextDisabled("Preview how attached weapons sit when sheathed (out of combat) vs. drawn (in combat).");
+			int drawState = m_previewDrawn ? 1 : 0;
+			bool drawStateChanged = false;
+			drawStateChanged |= ImGui::RadioButton("Sheathed", &drawState, 0);
+			ImGui::SameLine();
+			drawStateChanged |= ImGui::RadioButton("Drawn", &drawState, 1);
+			if (drawStateChanged)
+			{
+				m_previewDrawn = (drawState == 1);
+				m_applyRequested = true;
+			}
+
 			if (ImGui::Button("Reload Preview", ImVec2(140.0f, 0.0f))) m_rebuildRequested = true;
 			RebuildPreviewIfNeeded(project);
+			if (m_applyRequested)
+			{
+				m_applyRequested = false;
+				ApplyPreview();
+			}
 			ImGui::Separator();
 			DrawViewport();
 
@@ -306,12 +339,19 @@ namespace mmo
 		proto::ItemDisplayEntry* m_currentEntry{ nullptr };
 		String m_lastEntrySerialized;
 		bool m_rebuildRequested{ true };
+
+		/// Which weapon state the preview attaches in: false = sheathed (out of combat), true = drawn.
+		bool m_previewDrawn{ false };
+		/// Set when only the attachments need re-applying (e.g. the draw-state toggle changed) without
+		/// a full entity rebuild.
+		bool m_applyRequested{ false };
 	};
 
 	void ItemDisplayPreview::RebuildPreviewIfNeeded(const proto::Project& project)
 	{
 		if (!m_rebuildRequested) return;
 		m_rebuildRequested = false;
+		m_applyRequested = false; // A full rebuild re-applies attachments below.
 		ClearAttachments();
 		if (m_entity)
 		{
@@ -433,18 +473,20 @@ namespace mmo
 				}
 			}
 
-			if (variant.has_mesh() && !variant.mesh().empty() && variant.has_attached_bone_default())
+			if (variant.has_mesh() && !variant.mesh().empty())
 			{
-				if (m_entity->GetSkeleton() && m_entity->GetSkeleton()->HasBone(variant.attached_bone_default().bone_name()))
+				// Attach to the bone for the previewed draw state, matching runtime behavior.
+				const auto* bone = SelectPreviewBone(variant, m_previewDrawn);
+				if (bone && m_entity->GetSkeleton() && m_entity->GetSkeleton()->HasBone(bone->bone_name()))
 				{
 					PreviewAttachment attachment;
 					attachment.entity = m_scene.CreateEntity(m_entity->GetName() + "_ITEM_" + std::to_string(attachmentCounter++), variant.mesh());
-					attachment.tagPoint = m_entity->AttachObjectToBone(variant.attached_bone_default().bone_name(), *attachment.entity);
+					attachment.tagPoint = m_entity->AttachObjectToBone(bone->bone_name(), *attachment.entity);
 					if (attachment.tagPoint)
 					{
-						attachment.tagPoint->SetPosition(Vector3(variant.attached_bone_default().offset_x(), variant.attached_bone_default().offset_y(), variant.attached_bone_default().offset_z()));
-						attachment.tagPoint->SetOrientation(Quaternion(variant.attached_bone_default().rotation_w(), variant.attached_bone_default().rotation_x(), variant.attached_bone_default().rotation_y(), variant.attached_bone_default().rotation_z()));
-						attachment.tagPoint->SetScale(Vector3(variant.attached_bone_default().scale_x(), variant.attached_bone_default().scale_y(), variant.attached_bone_default().scale_z()));
+						attachment.tagPoint->SetPosition(Vector3(bone->offset_x(), bone->offset_y(), bone->offset_z()));
+						attachment.tagPoint->SetOrientation(Quaternion(bone->rotation_w(), bone->rotation_x(), bone->rotation_y(), bone->rotation_z()));
+						attachment.tagPoint->SetScale(Vector3(bone->scale_x(), bone->scale_y(), bone->scale_z()));
 					}
 					m_attachments.push_back(attachment);
 				}

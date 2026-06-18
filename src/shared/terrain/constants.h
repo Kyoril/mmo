@@ -8,6 +8,17 @@ namespace mmo
 {
 	namespace terrain
 	{
+		/// @brief Liquid type stored per terrain tile.
+		enum class WaterType : uint8
+		{
+			None   = 0,
+			Water  = 1,
+			Ocean  = 2,
+			Lava   = 3,
+			Slime  = 4,
+			Count_
+		};
+
 		namespace constants
 		{
 			// New terrain structure: each tile has 9x9 outer vertices + 8x8 inner vertices

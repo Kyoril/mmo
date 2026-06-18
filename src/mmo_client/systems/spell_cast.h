@@ -13,6 +13,13 @@ namespace mmo
 	class GameObjectC;
 	class RealmConnector;
 
+	/// @brief Returns the localization key for the "not enough power" spell cast
+	///        failure message that matches the given power type, so that the UI
+	///        shows the correct resource name (mana, rage, energy, ...).
+	/// @param powerType The power type value (see mmo::power_type::Type).
+	/// @return A localization key string usable with Localize().
+	const char* GetNoPowerErrorKey(int32 powerType);
+
 	/// This class allows for spell casting support.
 	class SpellCast final : public NonCopyable
 	{

@@ -13,8 +13,20 @@ namespace mmo
 	/// @brief Gravity constant used for jump arc simulation (m/s^2, positive = downward).
 	static constexpr float GRAVITY_ACCELERATION = 9.8f;
 
+	/// @brief Default interpolation buffer delay in milliseconds.
+	/// Covers ~100ms one-way internet latency. Adaptive jitter tracking can
+	/// raise this at runtime for high-latency connections.
+	static constexpr GameTime kRemoteMovementBufferDelayMs = 100;
+
+	/// @brief Minimum buffer delay in milliseconds, enforced even on localhost.
+	/// 50ms ensures we nearly always have a next snapshot available for interpolation.
+	static constexpr GameTime kMinBufferDelayMs = 50;
+
+	/// @brief Maximum buffer delay cap.
+	static constexpr GameTime kMaxBufferDelayMs = 400;
+
 	RemoteMovementQueue::RemoteMovementQueue()
-		: m_bufferDelay(500)
+		: m_bufferDelay(kRemoteMovementBufferDelayMs)
 		, m_initialized(false)
 		, m_gravityScale(2.0f)
 	{
@@ -34,6 +46,31 @@ namespace mmo
 		snapshot.movementFlags = info.movementFlags;
 		snapshot.jumpVelocity = info.jumpVelocity;
 		snapshot.fallTime = info.fallTime;
+
+		// Adaptive jitter tracking: measure inter-arrival jitter and adjust the
+		// buffer delay so we almost always have a next snapshot available.
+		// Target: bufferDelay = measured_interval * 1.5, clamped to [kMin, kMax].
+		// This makes the queue self-tune to near-zero on localhost and expand
+		// automatically on high-latency connections.
+		if (m_initialized && !m_snapshots.empty())
+		{
+			const GameTime prevTs = m_snapshots.back().timestamp;
+			if (snapshot.timestamp > prevTs)
+			{
+				const GameTime interval = snapshot.timestamp - prevTs;
+				// Exponential moving average of inter-arrival interval (α=0.25)
+				m_avgIntervalMs = static_cast<GameTime>(
+					m_avgIntervalMs * 3 / 4 + interval / 4);
+				// Target = 1.5× average interval, clamped
+				const GameTime target = std::max(kMinBufferDelayMs,
+				    std::min(kMaxBufferDelayMs, m_avgIntervalMs * 3 / 2));
+				// Smoothly move toward target (avoid sudden jumps)
+				if (target > m_bufferDelay)
+					m_bufferDelay = std::min(m_bufferDelay + 5, target);
+				else if (target < m_bufferDelay)
+					m_bufferDelay = std::max(m_bufferDelay - 2, target);
+			}
+		}
 
 		// Insert in order. Normally packets arrive in order, but just in case:
 		if (m_snapshots.empty() || snapshot.timestamp >= m_snapshots.back().timestamp)
@@ -172,6 +209,14 @@ namespace mmo
 				m1 = m1 * (chordLength / m1Len);
 			}
 
+			// For stop↔move transitions (one endpoint has zero velocity), the h11
+			// basis term is negative in the middle of [0,1] and will pull the spline
+			// backward even after chord clamping. Use linear interpolation for these
+			// transitions — it's visually cleaner than a cubic that reverses.
+			const bool v0Zero = v0.GetLength() < 0.001f;
+			const bool v1Zero = v1.GetLength() < 0.001f;
+			const bool useLinear = v0Zero || v1Zero;
+
 			const bool prevFalling = (prev->movementFlags & movement_flags::Falling) != 0;
 
 			if (prevFalling)
@@ -181,13 +226,20 @@ namespace mmo
 				Vector3 simVel;
 				SimulateJumpArc(*prev, elapsed, simPos, simVel);
 
-				// Hermite spline for lateral (X/Z) movement
+				// Lateral: linear for stop↔move, Hermite otherwise
 				const Vector3 p0(prev->position.x, 0.0f, prev->position.z);
 				const Vector3 p1(next->position.x, 0.0f, next->position.z);
-				const Vector3 lm0(m0.x, 0.0f, m0.z);
-				const Vector3 lm1(m1.x, 0.0f, m1.z);
-
-				const Vector3 lateralPos = p0 * h00 + lm0 * h10 + p1 * h01 + lm1 * h11;
+				Vector3 lateralPos;
+				if (useLinear)
+				{
+					lateralPos = p0 + (p1 - p0) * t;
+				}
+				else
+				{
+					const Vector3 lm0(m0.x, 0.0f, m0.z);
+					const Vector3 lm1(m1.x, 0.0f, m1.z);
+					lateralPos = p0 * h00 + lm0 * h10 + p1 * h01 + lm1 * h11;
+				}
 
 				outState.position = Vector3(lateralPos.x, simPos.y, lateralPos.z);
 				outState.velocity = simVel;
@@ -195,8 +247,17 @@ namespace mmo
 			}
 			else
 			{
-				// Full Hermite spline interpolation for grounded movement
-				outState.position = prev->position * h00 + m0 * h10 + next->position * h01 + m1 * h11;
+				if (useLinear)
+				{
+					// Linear interpolation for stop↔move transitions to avoid
+					// Hermite backward-pull artifacts.
+					outState.position = prev->position + (next->position - prev->position) * t;
+				}
+				else
+				{
+					// Full Hermite spline interpolation for steady-state movement.
+					outState.position = prev->position * h00 + m0 * h10 + next->position * h01 + m1 * h11;
+				}
 				outState.velocity = v0 + (v1 - v0) * t;
 				outState.isFalling = false;
 			}
@@ -276,6 +337,8 @@ namespace mmo
 	{
 		m_snapshots.clear();
 		m_initialized = false;
+		m_avgIntervalMs = kRemoteMovementBufferDelayMs;
+		m_bufferDelay = kRemoteMovementBufferDelayMs;
 	}
 
 	void RemoteMovementQueue::ExtrapolateFromSnapshot(const RemoteMovementSnapshot& snapshot, const float elapsed,

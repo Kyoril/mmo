@@ -4,6 +4,7 @@
 #include "game/quest_info.h"
 #include "game_client/game_player_c.h"
 #include "game_client/object_mgr.h"
+#include "base/clock.h"
 
 #include "luabind_lambda.h"
 
@@ -104,6 +105,7 @@ namespace mmo
 			luabind::def_lambda("AcceptQuest", [this](uint32 questId) { AcceptQuest(questId); }),
 			luabind::def_lambda("GetNumQuestLogEntries", [this]() { return GetNumQuestLogEntries(); }),
 			luabind::def_lambda("GetQuestLogEntry", [this](uint32 index) { return GetQuestLogEntry(index); }),
+			luabind::def_lambda("GetQuestLogTimeLeft", [this](uint32 questId) { return GetQuestLogTimeLeft(questId); }),
 			luabind::def_lambda("GetNumGossipActions", [this]() { return GetNumGossipActions(); }),
 			luabind::def_lambda("GetGossipAction", [this](int32 index) { return GetGossipAction(index); }),
 			luabind::def_lambda("AbandonQuest", [this](uint32 questId) { AbandonQuest(questId); }),
@@ -201,6 +203,13 @@ namespace mmo
 				m_questLog[i].quest = nullptr;
 				m_questLog[i].status = static_cast<QuestStatus>(field.status);
 				std::memcpy(m_questLog[i].counters, field.counters, sizeof(m_questLog[i].counters));
+
+				// Compute a local countdown deadline from the remaining time sent by the server.
+				m_questLog[i].questTimer = field.questTimer;
+				m_questLog[i].deadlineMs = (field.questTimer > 0)
+					? (GetAsyncTimeMs() + static_cast<GameTime>(field.questTimer) * 1000)
+					: 0;
+
 				if (m_questLog[i].questId != 0)
 				{
 					m_questCache.Get(m_questLog[i].questId, [this, i](uint64 entry, const QuestInfo& info)
@@ -208,6 +217,9 @@ namespace mmo
 						if (m_questLog[i].questId == entry)
 						{
 							m_questLog[i].quest = &info;
+							// Quest data just arrived asynchronously — re-notify the UI so the
+							// tracker and quest log can render now that quest is resolved.
+							FrameManager::Get().TriggerLuaEvent("QUEST_LOG_UPDATE");
 						}
 					});
 				}
@@ -223,6 +235,16 @@ namespace mmo
 				// Update counters
 				m_questLog[i].status = static_cast<QuestStatus>(field.status);
 				std::memcpy(m_questLog[i].counters, field.counters, sizeof(m_questLog[i].counters));
+
+				// Only recompute the local deadline when the server's remaining-time value actually
+				// changes, otherwise the countdown would keep resetting on every quest log update.
+				if (m_questLog[i].questTimer != field.questTimer)
+				{
+					m_questLog[i].questTimer = field.questTimer;
+					m_questLog[i].deadlineMs = (field.questTimer > 0)
+						? (GetAsyncTimeMs() + static_cast<GameTime>(field.questTimer) * 1000)
+						: 0;
+				}
 			}
 
 			if(field.questId != 0)
@@ -258,6 +280,25 @@ namespace mmo
 		}
 
 		return m_questLog.data() + m_questLogQuests[index];
+	}
+
+	uint32 QuestClient::GetQuestLogTimeLeft(const uint32 questId) const
+	{
+		for (const auto& entry : m_questLog)
+		{
+			if (entry.questId == questId && entry.deadlineMs > 0)
+			{
+				const GameTime now = GetAsyncTimeMs();
+				if (entry.deadlineMs <= now)
+				{
+					return 0;
+				}
+
+				return static_cast<uint32>((entry.deadlineMs - now) / 1000);
+			}
+		}
+
+		return 0;
 	}
 
 	void QuestClient::ProcessQuestText(String& questText)
@@ -339,7 +380,9 @@ namespace mmo
 		const QuestInfo* quest = m_questCache.Get(questId);
 		if (!quest)
 		{
-			ELOG("Unknown quest " << questId);
+			// Quest data not in cache yet — a server response is in flight.
+			// This is a normal async race on login; not an error.
+			DLOG("Quest " << questId << " not yet in cache, deferring objective text build");
 			return;
 		}
 
@@ -358,19 +401,30 @@ namespace mmo
 			const CreatureInfo* creatureEntry = m_creatureCache.Get(creature.creatureId);
 			if (!creatureEntry)
 			{
-				ELOG("Unknown creature " << creature.creatureId);
+				// Not in cache yet — register a callback to rebuild when data arrives.
+				DLOG("Creature " << creature.creatureId << " not yet in cache, deferring objective text");
+				m_creatureCache.Get(creature.creatureId, [this, questId](uint64, const CreatureInfo&)
+				{
+					if (m_selectedQuestLogQuest == questId)
+					{
+						QuestLogSelectQuest(questId);
+						FrameManager::Get().TriggerLuaEvent("QUEST_LOG_UPDATE");
+					}
+				});
+				++counter;
 				continue;
 			}
 
 			if (monstersKilledFormat)
 			{
 				ASSERT(counter < 4);
-				snprintf(buffer, 512, monstersKilledFormat->c_str(), creatureEntry->name.c_str(), questLogEntryIt->counters[counter++], creature.count);
+				snprintf(buffer, 512, monstersKilledFormat->c_str(), creatureEntry->name.c_str(), questLogEntryIt->counters[counter], creature.count);
 			}
 			else
 			{
 				snprintf(buffer, 512, "QUEST_MONSTERS_KILLED");
 			}
+			++counter;
 
 			m_questObjectiveTexts.emplace_back(buffer);
 		}
@@ -380,7 +434,16 @@ namespace mmo
 			const ItemInfo* itemEntry = m_itemCache.Get(item.itemId);
 			if (!itemEntry)
 			{
-				ELOG("Unknown item " << item.itemId);
+				// Not in cache yet — register a callback to rebuild when data arrives.
+				DLOG("Item " << item.itemId << " not yet in cache, deferring objective text");
+				m_itemCache.Get(item.itemId, [this, questId](uint64, const ItemInfo&)
+				{
+					if (m_selectedQuestLogQuest == questId)
+					{
+						QuestLogSelectQuest(questId);
+						FrameManager::Get().TriggerLuaEvent("QUEST_LOG_UPDATE");
+					}
+				});
 				continue;
 			}
 
@@ -905,6 +968,10 @@ namespace mmo
 			char buffer[512];
 			snprintf(buffer, 512, format->c_str(), item ? item->name.c_str() : "UNKNOWN", count, maxCount);
 			FrameManager::Get().TriggerLuaEvent("UI_INFO_MESSAGE", buffer);
+
+			// Item counts come from inventory, not mirrored quest fields, so the quest log
+			// mirror change never fires for item objectives. Notify the tracker explicitly.
+			FrameManager::Get().TriggerLuaEvent("QUEST_LOG_UPDATE");
 		}
 			break;
 		case game::realm_client_packet::QuestUpdateAddKill:

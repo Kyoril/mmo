@@ -1207,11 +1207,26 @@ namespace mmo
 						}
 
 						ImGui::SameLine();
-						float playRate = m_animState->GetPlayRate();
+						// Edit the persistent playback speed stored on the animation itself. This is
+						// serialized with the skeleton and applied automatically by the engine, so it
+						// is not just a preview setting. The preview state is updated in lock-step.
+						Animation* speedAnim = m_entity->GetSkeleton()->GetAnimation(m_animState->GetAnimationName());
+						float playbackSpeed = speedAnim ? speedAnim->GetPlaybackSpeed() : m_animState->GetPlayRate();
 						ImGui::SetNextItemWidth(100);
-						if (ImGui::DragFloat("Speed", &playRate, 0.01f, 0.1f, 5.0f, "%.2f"))
+						if (ImGui::DragFloat("Speed", &playbackSpeed, 0.01f, 0.1f, 5.0f, "%.2f"))
 						{
-							m_animState->SetPlayRate(playRate);
+							if (speedAnim)
+							{
+								speedAnim->SetPlaybackSpeed(playbackSpeed);
+							}
+							m_animState->SetPlayRate(playbackSpeed);
+						}
+						ImGui::SameLine();
+						ImGui::TextDisabled("(?)");
+						if (ImGui::IsItemHovered())
+						{
+							ImGui::SetTooltip("Persistent playback speed. Saved with the skeleton and\n"
+								"applied automatically in the engine. Save the mesh to keep changes.");
 						}
 
 						// Animation info

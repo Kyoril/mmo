@@ -3,6 +3,7 @@
 
 #include "terrain.h"
 #include "scene_graph/scene.h"
+#include "scene_graph/manual_render_object.h"
 #include "scene_graph/scene_node.h"
 
 #include <sstream>
@@ -34,6 +35,8 @@ namespace mmo
 			static const ChunkMagic InnerNormalChunk = MakeChunkMagic('INCM');
 			static const ChunkMagic InnerVertexShadingChunk = MakeChunkMagic('ISCM');
 			static const ChunkMagic HoleChunk = MakeChunkMagic('LOHM');
+			static const ChunkMagic WaterChunk = MakeChunkMagic('WCLM');     // legacy v1
+			static const ChunkMagic WaterQuadChunk = MakeChunkMagic('QWCM'); // current v2
 		}
 
 		namespace
@@ -68,6 +71,13 @@ namespace mmo
 		{
 			Unload();
 
+			// Destroy the water render object before the scene node it is attached to
+			if (m_waterRenderObject)
+			{
+				m_terrain.GetScene().DestroyManualRenderObject(*m_waterRenderObject);
+				m_waterRenderObject = nullptr;
+			}
+
 			if (m_pageNode != nullptr)
 			{
 				m_terrain.GetScene().DestroySceneNode(*m_pageNode);
@@ -77,6 +87,15 @@ namespace mmo
 
 		bool Page::Prepare()
 		{
+			// A fresh load has been requested for this page (Prepare is always called from the
+			// "page became available" path before the EnsurePageIsLoaded streaming loop starts).
+			// Clear any leftover unload cancellation from a previous streaming cycle that was
+			// aborted mid-load. Without this, the very first Load() of the new cycle would consume
+			// the stale m_unloadRequested flag, return true early and stop the loop, leaving the
+			// page prepared but empty (no tiles). The player would then fall through the ground and
+			// the page would never finish loading until the next visibility toggle.
+			m_unloadRequested = false;
+
 			if (IsPrepared() || IsPreparing())
 			{
 				return true;
@@ -95,6 +114,12 @@ namespace mmo
 			m_colors.resize(outerVertexCount, 0xffffffff);
 			// Initialize hole map (one 64-bit value per tile, all zeros = no holes)
 			m_holeMap.resize(constants::TilesPerPage * constants::TilesPerPage, 0);
+
+			// Initialize water data (one entry per tile, defaults = no water)
+			const size_t tileCount = constants::TilesPerPage * constants::TilesPerPage;
+			m_waterQuadMasks.assign(tileCount, 0ULL);
+			m_waterVertexHeights.assign(constants::OuterVerticesPerPageSide * constants::OuterVerticesPerPageSide, 0.0f);
+			m_waterTypes.assign(tileCount, static_cast<uint8>(WaterType::None));
 
 			// Allocate inner arrays for editor precision (8*TilesPerPage per side)
 			const size_t innerVertexCount = constants::InnerVerticesPerPageSide * constants::InnerVerticesPerPageSide;
@@ -123,8 +148,9 @@ namespace mmo
 					return false;
 				}
 
-				// If inner arrays were not provided (legacy v1), derive from outer grid
-				if (m_innerHeightmap.empty())
+					// If inner heights were not loaded from file (legacy page without IVCM chunk),
+				// derive them from the outer vertex grid so the terrain renders correctly.
+				if (!m_innerHeightmapFromFile)
 				{
 					const uint32 newSide = constants::InnerVerticesPerPageSide;
 					for (uint32 j = 0; j < newSide; ++j)
@@ -156,9 +182,10 @@ namespace mmo
 							m_innerColors[i + j * newSide] = avgColor.GetARGB();
 						}
 					}
-				}
 
-				m_changed = true;
+					// Mark as changed so the derived inner data is persisted on the next save
+					m_changed = true;
+				}
 			}
 			else
 			{
@@ -257,6 +284,28 @@ namespace mmo
 			if (allTilesLoaded)
 			{
 				m_loaded = true;
+
+				// Create or re-attach the water render object (must be on main thread)
+				if (!m_waterRenderObject)
+				{
+					const String waterName = "Water_" + std::to_string(m_x) + "_" + std::to_string(m_z);
+					m_waterRenderObject = m_terrain.GetScene().CreateManualRenderObject(waterName);
+					m_waterRenderObject->SetQueryFlags(0);
+					m_waterRenderObject->SetCastShadows(false);
+				}
+
+				if (m_waterRenderObject && !m_waterRenderObject->GetParentSceneNode())
+				{
+					m_pageNode->AttachObject(*m_waterRenderObject);
+				}
+
+				// Honour the terrain-wide water visibility setting for freshly streamed pages.
+				if (m_waterRenderObject)
+				{
+					m_waterRenderObject->SetVisible(m_terrain.IsWaterVisible());
+				}
+
+				RebuildWaterMesh();
 			}
 
 			UpdateBoundingBox();
@@ -280,6 +329,12 @@ namespace mmo
 				tile->DetachFromParent();
 			}
 
+			// Detach water render object so it is invisible while the page is unloaded
+			if (m_waterRenderObject)
+			{
+				m_waterRenderObject->DetachFromParent();
+			}
+
 			m_loaded = false;
 			m_Tiles.clear();
 		}
@@ -296,11 +351,22 @@ namespace mmo
 				Unload();
 			}
 
+			// Destroy the water render object (GPU resource) along with the page data
+			if (m_waterRenderObject)
+			{
+				m_terrain.GetScene().DestroyManualRenderObject(*m_waterRenderObject);
+				m_waterRenderObject = nullptr;
+			}
+
 			// Unload all loaded data so we will have to reload it again later
 			m_heightmap.clear();
 			m_normals.clear();
 			m_materials.clear();
 			m_layers.clear();
+			m_waterQuadMasks.clear();
+			m_waterVertexHeights.clear();
+			m_waterTypes.clear();
+			m_waterMaterialName.clear();
 
 			m_prepared = false;
 			m_preparing = false;
@@ -837,6 +903,37 @@ namespace mmo
 				}
 			}
 
+			// Water quad data — new format: sparse quad masks + shared vertex heights
+			{
+				std::vector<uint16> waterTileIndices;
+				for (uint16 i = 0; i < static_cast<uint16>(m_waterQuadMasks.size()); ++i)
+				{
+					if (m_waterQuadMasks[i] != 0)
+					{
+						waterTileIndices.push_back(i);
+					}
+				}
+
+				if (!waterTileIndices.empty() || !m_waterMaterialName.empty())
+				{
+					ChunkWriter waterChunkWriter{constants::WaterQuadChunk, writer};
+					writer << io::write<uint16>(static_cast<uint16>(waterTileIndices.size()));
+					for (const uint16 idx : waterTileIndices)
+					{
+						writer << io::write<uint16>(idx)
+						       << io::write<uint8>(m_waterTypes[idx])
+						       << io::write<uint64>(m_waterQuadMasks[idx]);
+					}
+					// Write all page-level water vertex heights (129x129)
+					for (const float h : m_waterVertexHeights)
+					{
+						writer << io::write<float>(h);
+					}
+					writer << io::write_dynamic_range<uint16>(m_waterMaterialName);
+					waterChunkWriter.Finish();
+				}
+			}
+
 			// Zones
 			{
 				ChunkWriter areaChunk{constants::AreaChunk, writer};
@@ -904,7 +1001,9 @@ namespace mmo
 
 		bool Page::ReadMCIVChunk(io::Reader &reader, uint32 header, uint32 size)
 		{
-			return reader >> io::read_range(m_innerHeightmap);
+			const bool ok = reader >> io::read_range(m_innerHeightmap);
+			if (ok) m_innerHeightmapFromFile = true;
+			return ok;
 		}
 
 		bool Page::ReadMCINChunk(io::Reader &reader, uint32 header, uint32 size)
@@ -1310,6 +1409,363 @@ namespace mmo
 			return m_holeMap[localTileX + localTileY * constants::TilesPerPage];
 		}
 
+		uint64 Page::GetWaterQuadMask(uint32 localTileX, uint32 localTileY) const
+		{
+			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
+			{
+				return 0;
+			}
+			return m_waterQuadMasks[localTileX + localTileY * constants::TilesPerPage];
+		}
+
+		void Page::SetWaterQuadMask(uint32 localTileX, uint32 localTileY, uint64 mask)
+		{
+			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
+			{
+				return;
+			}
+			m_waterQuadMasks[localTileX + localTileY * constants::TilesPerPage] = mask;
+			m_changed = true;
+		}
+
+		void Page::SetWaterQuadBit(uint32 localTileX, uint32 localTileY, uint32 qx, uint32 qz, bool hasWater)
+		{
+			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage ||
+				qx >= 8 || qz >= 8)
+			{
+				return;
+			}
+
+			const uint32 tileIdx = localTileX + localTileY * constants::TilesPerPage;
+			const uint64 bit = 1ULL << (qx + qz * 8);
+
+			if (hasWater)
+			{
+				m_waterQuadMasks[tileIdx] |= bit;
+			}
+			else
+			{
+				m_waterQuadMasks[tileIdx] &= ~bit;
+			}
+
+			m_changed = true;
+		}
+
+		float Page::GetWaterVertexHeight(uint32 pageVertX, uint32 pageVertZ) const
+		{
+			if (pageVertX >= constants::OuterVerticesPerPageSide || pageVertZ >= constants::OuterVerticesPerPageSide)
+			{
+				return 0.0f;
+			}
+			return m_waterVertexHeights[pageVertX + pageVertZ * constants::OuterVerticesPerPageSide];
+		}
+
+		void Page::SetWaterVertexHeight(uint32 pageVertX, uint32 pageVertZ, float height)
+		{
+			if (pageVertX >= constants::OuterVerticesPerPageSide || pageVertZ >= constants::OuterVerticesPerPageSide)
+			{
+				return;
+			}
+			m_waterVertexHeights[pageVertX + pageVertZ * constants::OuterVerticesPerPageSide] = height;
+			m_changed = true;
+		}
+
+		WaterType Page::GetWaterType(uint32 localTileX, uint32 localTileY) const
+		{
+			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
+			{
+				return WaterType::None;
+			}
+			return static_cast<WaterType>(m_waterTypes[localTileX + localTileY * constants::TilesPerPage]);
+		}
+
+		void Page::SetWaterType(uint32 localTileX, uint32 localTileY, WaterType type)
+		{
+			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
+			{
+				return;
+			}
+			m_waterTypes[localTileX + localTileY * constants::TilesPerPage] = static_cast<uint8>(type);
+			m_changed = true;
+		}
+
+		bool Page::HasWater(uint32 localTileX, uint32 localTileY) const
+		{
+			return GetWaterQuadMask(localTileX, localTileY) != 0;
+		}
+
+		void Page::ClearWater(uint32 localTileX, uint32 localTileY)
+		{
+			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
+			{
+				return;
+			}
+			const uint32 idx = localTileX + localTileY * constants::TilesPerPage;
+			m_waterQuadMasks[idx] = 0;
+			m_waterTypes[idx] = static_cast<uint8>(WaterType::None);
+			m_changed = true;
+		}
+
+		void Page::SetWaterMaterialName(const String& name)
+		{
+			m_waterMaterialName = name;
+			m_changed = true;
+		}
+
+		void Page::RebuildWaterMesh()
+		{
+			if (!m_waterRenderObject)
+			{
+				return;
+			}
+
+			m_waterRenderObject->Clear();
+
+			// Check if any tile has active water quads
+			bool hasWater = false;
+			for (const uint64 mask : m_waterQuadMasks)
+			{
+				if (mask != 0)
+				{
+					hasWater = true;
+					break;
+				}
+			}
+
+			if (!hasWater)
+			{
+				return;
+			}
+
+			// Resolve material. In minimap mode we deliberately ignore the assigned (translucent)
+			// water material: it samples the scene depth/refraction textures which are not bound
+			// during minimap generation and would render as garbage or fully transparent. Instead
+			// we use an opaque, unlit vertex-colour material so water shows up as a solid blue area.
+			MaterialPtr material;
+			if (m_minimapWaterMode)
+			{
+				material = MaterialManager::Get().Load("Editor/MinimapWater.hmat");
+			}
+			else if (!m_waterMaterialName.empty())
+			{
+				material = MaterialManager::Get().Load(m_waterMaterialName);
+			}
+			if (!material)
+			{
+				material = MaterialManager::Get().Load("Editor/Wireframe.hmat");
+			}
+
+			// Vertex colour applied to every water quad. The normal water material ignores this
+			// (it samples textures), but the minimap material renders it directly: opaque blue.
+			const uint32 waterColor = m_minimapWaterMode ? 0xFF3A6EA5u : 0xAAFFFFFFu;
+			if (!material)
+			{
+				return;
+			}
+
+			auto op = m_waterRenderObject->AddTriangleListOperation(material);
+
+			// Each outer vertex step in local page space: TileSize / 8 sub-quads per tile side
+			constexpr float quadSize = static_cast<float>(constants::TileSize) / 8.0f;
+			constexpr uint32 pvSide = constants::OuterVerticesPerPageSide;
+
+			// World offset used only for UV tiling so texture is continuous across pages
+			const float worldOffsetX = static_cast<float>((m_x - 32) * constants::PageSize);
+			const float worldOffsetZ = static_cast<float>((m_z - 32) * constants::PageSize);
+			constexpr float uvScale = 1.0f / 16.0f;
+
+			for (uint32 tz = 0; tz < constants::TilesPerPage; ++tz)
+			{
+				for (uint32 tx = 0; tx < constants::TilesPerPage; ++tx)
+				{
+					const uint64 mask = m_waterQuadMasks[tx + tz * constants::TilesPerPage];
+					if (mask == 0)
+					{
+						continue;
+					}
+
+					for (uint32 qz = 0; qz < 8; ++qz)
+					{
+						for (uint32 qx = 0; qx < 8; ++qx)
+						{
+							if (!(mask & (1ULL << (qx + qz * 8))))
+							{
+								continue;
+							}
+
+							const uint32 pvx0 = tx * 8 + qx;
+							const uint32 pvz0 = tz * 8 + qz;
+
+							const float yTL = m_waterVertexHeights[ pvx0      + pvz0      * pvSide];
+							const float yTR = m_waterVertexHeights[(pvx0 + 1) + pvz0      * pvSide];
+							const float yBL = m_waterVertexHeights[ pvx0      + (pvz0+1)  * pvSide];
+							const float yBR = m_waterVertexHeights[(pvx0 + 1) + (pvz0+1)  * pvSide];
+
+							const float lx1 = pvx0       * quadSize;
+							const float lz1 = pvz0       * quadSize;
+							const float lx2 = (pvx0 + 1) * quadSize;
+							const float lz2 = (pvz0 + 1) * quadSize;
+
+							const float u1 = (worldOffsetX + lx1) * uvScale;
+							const float u2 = (worldOffsetX + lx2) * uvScale;
+							const float v1 = (worldOffsetZ + lz1) * uvScale;
+							const float v2 = (worldOffsetZ + lz2) * uvScale;
+
+							const Vector3 vTL(lx1, yTL, lz1);
+							const Vector3 vTR(lx2, yTR, lz1);
+							const Vector3 vBR(lx2, yBR, lz2);
+							const Vector3 vBL(lx1, yBL, lz2);
+
+							// Top face (CCW winding = front-facing from above)
+							{
+								auto& t1 = op->AddTriangle(vTL, vBL, vTR);
+								t1.SetUV(0, u1, v1); t1.SetUV(1, u1, v2); t1.SetUV(2, u2, v1);
+								t1.SetColor(waterColor);
+
+								auto& t2 = op->AddTriangle(vTR, vBL, vBR);
+								t2.SetUV(0, u2, v1); t2.SetUV(1, u1, v2); t2.SetUV(2, u2, v2);
+								t2.SetColor(waterColor);
+							}
+
+							// Bottom face (reversed winding so water is visible from below)
+							{
+								auto& t3 = op->AddTriangle(vTR, vBL, vTL);
+								t3.SetUV(0, u2, v1); t3.SetUV(1, u1, v2); t3.SetUV(2, u1, v1);
+								t3.SetColor(waterColor);
+
+								auto& t4 = op->AddTriangle(vBR, vBL, vTR);
+								t4.SetUV(0, u2, v2); t4.SetUV(1, u1, v2); t4.SetUV(2, u2, v1);
+								t4.SetColor(waterColor);
+							}
+						}
+					}
+				}
+			}
+		}
+
+		void Page::SetWaterVisible(const bool visible)
+		{
+			if (m_waterRenderObject)
+			{
+				m_waterRenderObject->SetVisible(visible);
+			}
+		}
+
+		void Page::SetMinimapWaterMode(bool enabled)
+		{
+			if (m_minimapWaterMode == enabled)
+			{
+				return;
+			}
+
+			m_minimapWaterMode = enabled;
+
+			// Rebuild so the water geometry picks up the minimap (or normal) material and colour.
+			RebuildWaterMesh();
+		}
+
+		bool Page::ReadMCWLChunk(io::Reader& reader, uint32 header, uint32 size)
+		{
+			// Legacy v1 format: per-tile flat height + type.
+			// Convert to new format: all 64 quads present, flat vertex heights.
+			uint16 count;
+			if (!(reader >> io::read<uint16>(count)))
+			{
+				ELOG("Failed to read water tile count from page " << m_x << "x" << m_z);
+				return false;
+			}
+
+			for (uint16 i = 0; i < count; ++i)
+			{
+				uint16 tileIndex;
+				float  height;
+				uint8  type;
+
+				if (!(reader >> io::read<uint16>(tileIndex) >> io::read<float>(height) >> io::read<uint8>(type)))
+				{
+					ELOG("Failed to read water tile entry from page " << m_x << "x" << m_z);
+					return false;
+				}
+
+				if (tileIndex < static_cast<uint16>(m_waterQuadMasks.size()))
+				{
+					// Convert: all 64 quads present, uniform flat height across 9x9 vertices
+					m_waterQuadMasks[tileIndex] = 0xFFFFFFFFFFFFFFFFULL;
+					m_waterTypes[tileIndex]     = type;
+
+					const uint32 tx = tileIndex % constants::TilesPerPage;
+					const uint32 tz = tileIndex / constants::TilesPerPage;
+					for (uint32 vz = 0; vz <= 8; ++vz)
+					{
+						for (uint32 vx = 0; vx <= 8; ++vx)
+						{
+							const uint32 pvx = tx * 8 + vx;
+							const uint32 pvz = tz * 8 + vz;
+							if (pvx < constants::OuterVerticesPerPageSide && pvz < constants::OuterVerticesPerPageSide)
+							{
+								m_waterVertexHeights[pvx + pvz * constants::OuterVerticesPerPageSide] = height;
+							}
+						}
+					}
+				}
+			}
+
+			// Optional material name
+			if (reader)
+			{
+				reader >> io::read_container<uint16>(m_waterMaterialName);
+			}
+
+			return reader;
+		}
+
+		bool Page::ReadMCWQChunk(io::Reader& reader, uint32 header, uint32 size)
+		{
+			// New v2 water format: sparse quad masks + shared 129x129 vertex heights
+			uint16 count;
+			if (!(reader >> io::read<uint16>(count)))
+			{
+				ELOG("Failed to read water quad tile count from page " << m_x << "x" << m_z);
+				return false;
+			}
+
+			for (uint16 i = 0; i < count; ++i)
+			{
+				uint16 tileIndex;
+				uint8  type;
+				uint64 mask;
+
+				if (!(reader >> io::read<uint16>(tileIndex) >> io::read<uint8>(type) >> io::read<uint64>(mask)))
+				{
+					ELOG("Failed to read water quad tile entry from page " << m_x << "x" << m_z);
+					return false;
+				}
+
+				if (tileIndex < static_cast<uint16>(m_waterQuadMasks.size()))
+				{
+					m_waterQuadMasks[tileIndex] = mask;
+					m_waterTypes[tileIndex]     = type;
+				}
+			}
+
+			// Read all page-level water vertex heights (129x129)
+			for (float& h : m_waterVertexHeights)
+			{
+				if (!(reader >> io::read<float>(h)))
+				{
+					break;
+				}
+			}
+
+			// Optional material name
+			if (reader)
+			{
+				reader >> io::read_container<uint16>(m_waterMaterialName);
+			}
+
+			return reader;
+		}
+
 		bool Page::ReadMCVRChunk(io::Reader &reader, uint32 header, uint32 size)
 		{
 			uint32 version;
@@ -1343,14 +1799,17 @@ namespace mmo
 			{
 				AddChunkHandler(*constants::VertexChunk, true, *this, &Page::ReadMCVTChunk);
 				AddChunkHandler(*constants::NormalChunk, true, *this, &Page::ReadMCNMChunk);
-				// Inner v2 chunks
-				AddChunkHandler(*constants::InnerVertexChunk, true, *this, &Page::ReadMCIVChunk);
-				AddChunkHandler(*constants::InnerNormalChunk, true, *this, &Page::ReadMCINChunk);
-				AddChunkHandler(*constants::InnerVertexShadingChunk, true, *this, &Page::ReadMCISChunk);
+				// Inner v2 chunks (optional – absent in files saved before inner-vertex support was added)
+				AddChunkHandler(*constants::InnerVertexChunk, false, *this, &Page::ReadMCIVChunk);
+				AddChunkHandler(*constants::InnerNormalChunk, false, *this, &Page::ReadMCINChunk);
+				AddChunkHandler(*constants::InnerVertexShadingChunk, false, *this, &Page::ReadMCISChunk);
 				AddChunkHandler(*constants::HoleChunk, false, *this, &Page::ReadMCHLChunk);
 				AddChunkHandler(*constants::LayerChunk, true, *this, &Page::ReadMCLYChunk);
 				AddChunkHandler(*constants::AreaChunk, false, *this, &Page::ReadMCARChunk);
 				AddChunkHandler(*constants::VertexShadingChunk, false, *this, &Page::ReadMCVSChunk);
+				// Water chunks (optional — absent in files without liquid data)
+				AddChunkHandler(*constants::WaterChunk,     false, *this, &Page::ReadMCWLChunk); // legacy
+				AddChunkHandler(*constants::WaterQuadChunk, false, *this, &Page::ReadMCWQChunk); // current
 			}
 
 			return reader;

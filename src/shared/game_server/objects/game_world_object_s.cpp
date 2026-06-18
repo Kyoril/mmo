@@ -27,6 +27,9 @@ namespace mmo
 		{
 			SetRequiredQuest(m_entry.requiredquest());
 		}
+
+		// Initialize lock type from data[0] (0 = no lock)
+		Set<uint32>(object_fields::LockEntry, m_entry.data_size() > 0 ? static_cast<uint32>(m_entry.data(0)) : 0u);
 	}
 
 	bool GameWorldObjectS::IsUsable(const GamePlayerS& player) const
@@ -44,9 +47,26 @@ namespace mmo
 			const uint32 requiredQuestId = GetRequiredQuestId();
 			if (requiredQuestId != 0)
 			{
-				// Player must have this quest active (incomplete status)
 				const QuestStatus status = player.GetQuestStatus(requiredQuestId);
+
+				// Quest is complete (all objectives done, not yet turned in) or already
+				// rewarded — player no longer needs to interact with these objects.
+				if (status == quest_status::Complete || status == quest_status::Rewarded)
+				{
+					return false;
+				}
+
+				// Quest not active at all — object is hidden.
 				if (status != quest_status::Incomplete)
+				{
+					return false;
+				}
+
+				// Quest is in progress. Check if the specific object-use requirement is
+				// already satisfied (player collected enough of this object entry).
+				// If so, the object becomes non-interactable even though the overall quest
+				// is still incomplete due to other open objectives.
+				if (player.IsQuestObjectRequirementMet(requiredQuestId, m_entry.id()))
 				{
 					return false;
 				}
@@ -129,6 +149,13 @@ namespace mmo
 			WLOG("Player tried to use world object with unhandled type " << static_cast<uint32>(GetType()));
 			break;
 		}
+	}
+
+	uint32 GameWorldObjectS::GetPostUnlockLockType() const
+	{
+		if (GetType() == GameWorldObjectType::Door && m_entry.data_size() > 1)
+			return static_cast<uint32>(m_entry.data(1));
+		return 0u;
 	}
 
 	const String& GameWorldObjectS::GetName() const

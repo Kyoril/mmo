@@ -6,6 +6,7 @@
 #include "default_renderer.h"
 
 #include "base/macros.h"
+#include "log/default_log_levels.h"
 
 #include <algorithm>
 
@@ -57,6 +58,7 @@ namespace mmo
 		other.m_onUpdate = m_onUpdate;
 		other.m_needsLayout = true;
 		other.m_needsRedraw = true;
+		other.m_textHeightCacheValid = false;
 		other.m_onEnterPressed = m_onEnterPressed;
 		other.m_onTabPressed = m_onTabPressed;
 		other.m_onSpacePressed = m_onSpacePressed;
@@ -66,10 +68,6 @@ namespace mmo
 		other.m_onShow = m_onShow;
 		other.m_onHide = m_onHide;
 		other.m_onClick = m_onClick;
-
-		const bool isButtonTmpl = m_name == "ActionBarButtonTemplate";
-		const bool hasDrag = m_onDrag.is_valid();
-		const bool otherHasDrag = other.m_onDrag.is_valid();
 		other.m_onDrag = m_onDrag;
 
 		other.m_onDrop = m_onDrop;
@@ -158,6 +156,20 @@ namespace mmo
 
 				copiedChild->SetAnchor(anchor.first, anchor.second->GetRelativePoint(), relativeTo, anchor.second->GetOffset());
 			}
+		}
+
+		// Build a name mapping from original child names to their cloned names so that
+		// animation tracks which target children can be updated to use the new names.
+		std::map<std::string, std::string> childNameRemap;
+		for (const auto& child : m_children)
+		{
+			childNameRemap[child->GetName()] = other.GetName() + "_" + child->GetName();
+		}
+
+		// Deep-copy all owned animations, remapping child target names.
+		for (const auto& [name, anim] : m_animations)
+		{
+			other.m_animations[name] = anim->Clone(&childNameRemap);
 		}
 	}
 
@@ -325,7 +337,7 @@ namespace mmo
 		// Apply new text and invalidate rendering
 		m_text = std::move(text);
 
-		// Notify observers
+		// Notify observers (also invalidates the cached text height)
 		OnTextChanged();
 
 		// Invalidate
@@ -541,21 +553,55 @@ namespace mmo
 
 	void Frame::SetWidth(const float width)
 	{
+		if (m_pixelSize.width == width)
+		{
+			return;
+		}
+
 		m_pixelSize.width = width;
-		
+
+		// Mark this frame's own layout cache as dirty so GetAbsoluteFrameRect re-computes
+		m_needsLayout = true;
+
 		if (!AnchorsSatisfyWidth())
 		{
-			Invalidate();	
+			Invalidate();
+
+			// Invalidate siblings: any sibling may anchor its LEFT/RIGHT to this frame's edge
+			if (m_parent)
+			{
+				for (auto& sibling : m_parent->m_children)
+				{
+					sibling->Invalidate(true);
+				}
+			}
 		}
 	}
 
 	void Frame::SetHeight(const float height)
 	{
+		if (m_pixelSize.height == height)
+		{
+			return;
+		}
+
 		m_pixelSize.height = height;
+
+		// Mark this frame's own layout cache as dirty
+		m_needsLayout = true;
 
 		if (!AnchorsSatisfyHeight())
 		{
-			Invalidate();	
+			Invalidate();
+
+			// Invalidate siblings: any sibling may anchor its TOP/BOTTOM to this frame's edge
+			if (m_parent)
+			{
+				for (auto& sibling : m_parent->m_children)
+				{
+					sibling->Invalidate(true);
+				}
+			}
 		}
 	}
 
@@ -592,6 +638,11 @@ namespace mmo
 
 	float Frame::GetTextHeight()
 	{
+		if (m_text.empty())
+		{
+			return 0.0f;
+		}
+
 		const FontPtr font = GetFont();
 		if (!font)
 		{
@@ -599,8 +650,30 @@ namespace mmo
 		}
 
 		const Rect rect = GetAbsoluteFrameRect();
-		const uint32 lineCount = font->GetLineCount(m_text, rect, FrameManager::Get().GetUIScale().y);
+		const float width = rect.GetWidth();
+		const float scale = FrameManager::Get().GetUIScale().y;
+
+		// Computing the line count walks every glyph of the text, so cache the result.
+		// The height only depends on the text, the resolved font, the wrap width and the
+		// UI scale. Text changes invalidate the cache explicitly (see SetText); font,
+		// width and scale changes are detected by comparing against the cached inputs.
+		if (m_textHeightCacheValid &&
+			m_textHeightCacheFont == font.get() &&
+			m_textHeightCacheWidth == width &&
+			m_textHeightCacheScale == scale)
+		{
+			return m_textHeightCache;
+		}
+
+		const uint32 lineCount = font->GetLineCount(m_text, rect, scale);
 		const float result = font->GetHeight() * lineCount;
+
+		m_textHeightCache = result;
+		m_textHeightCacheFont = font.get();
+		m_textHeightCacheWidth = width;
+		m_textHeightCacheScale = scale;
+		m_textHeightCacheValid = true;
+
 		return result;
 	}
 
@@ -834,6 +907,12 @@ namespace mmo
 			return;
 		}
 
+		// Update all owned animations
+		for (auto& [name, anim] : m_animations)
+		{
+			anim->Update(elapsed, *this);
+		}
+
 		// Try to call the renderer's update method if we have a valid renderer
 		if (m_renderer != nullptr)
 		{
@@ -859,6 +938,56 @@ namespace mmo
 		}
 	}
 
+	void Frame::AddAnimation(std::unique_ptr<FrameAnimation> animation)
+	{
+		if (!animation)
+		{
+			return;
+		}
+
+		const std::string name = animation->GetName();
+		m_animations[name] = std::move(animation);
+	}
+
+	FrameAnimation* Frame::GetAnimation(const std::string& name)
+	{
+		const auto it = m_animations.find(name);
+		return it != m_animations.end() ? it->second.get() : nullptr;
+	}
+
+	bool Frame::HasAnimation(const std::string& name) const
+	{
+		return m_animations.find(name) != m_animations.end();
+	}
+
+	void Frame::PlayAnimation(const std::string& name)
+	{
+		const auto it = m_animations.find(name);
+		if (it != m_animations.end())
+		{
+			it->second->Play();
+		}
+		else
+		{
+			WLOG("Animation '" << name << "' not found on frame '" << m_name << "'");
+		}
+	}
+
+	void Frame::StopAnimation(const std::string& name)
+	{
+		const auto it = m_animations.find(name);
+		if (it != m_animations.end())
+		{
+			it->second->Stop();
+		}
+	}
+
+	bool Frame::IsAnimationPlaying(const std::string& name) const
+	{
+		const auto it = m_animations.find(name);
+		return it != m_animations.end() && it->second->IsPlaying();
+	}
+
 	void Frame::AddChild(const Frame::Pointer frame)
 	{
 		// We can't add ourself as child frame
@@ -868,8 +997,18 @@ namespace mmo
 			return;
 		}
 
-		// Add to the list of children
-		m_children.push_back(frame);
+		// Insert before the first sibling with a strictly higher frameLevel so that
+		// same-level frames preserve their declaration order (stable sort).
+		auto it = m_children.end();
+		for (auto jt = m_children.begin(); jt != m_children.end(); ++jt)
+		{
+			if ((*jt)->m_frameLevel > frame->m_frameLevel)
+			{
+				it = jt;
+				break;
+			}
+		}
+		m_children.insert(it, frame);
 
 		// Register ourself as parent frame
 		frame->m_parent = this;
@@ -878,6 +1017,63 @@ namespace mmo
 		{
 			frame->m_onLoad(frame.get());
 		}
+	}
+
+	void Frame::BringToFront()
+	{
+		if (!m_parent)
+		{
+			return;
+		}
+
+		auto& siblings = m_parent->m_children;
+		const auto self = shared_from_this();
+		siblings.erase(std::remove(siblings.begin(), siblings.end(), self), siblings.end());
+		siblings.push_back(self);
+	}
+
+	void Frame::SendToBack()
+	{
+		if (!m_parent)
+		{
+			return;
+		}
+
+		auto& siblings = m_parent->m_children;
+		const auto self = shared_from_this();
+		siblings.erase(std::remove(siblings.begin(), siblings.end(), self), siblings.end());
+		siblings.insert(siblings.begin(), self);
+	}
+
+	void Frame::SetFrameLevel(const int32 level)
+	{
+		if (m_frameLevel == level)
+		{
+			return;
+		}
+
+		m_frameLevel = level;
+
+		if (!m_parent)
+		{
+			return;
+		}
+
+		// Re-insert at the correct sorted position in the parent's child list.
+		auto& siblings = m_parent->m_children;
+		const auto self = shared_from_this();
+		siblings.erase(std::remove(siblings.begin(), siblings.end(), self), siblings.end());
+
+		auto it = siblings.end();
+		for (auto jt = siblings.begin(); jt != siblings.end(); ++jt)
+		{
+			if ((*jt)->m_frameLevel > m_frameLevel)
+			{
+				it = jt;
+				break;
+			}
+		}
+		siblings.insert(it, self);
 	}
 
 	void Frame::RemoveAllChildren()
@@ -1007,6 +1203,11 @@ namespace mmo
 	void Frame::SetOnDrag(const luabind::object& func)
 	{
 		m_onDrag = func;
+
+		if (func.is_valid())
+		{
+			SetDragEnabled(true);
+		}
 	}
 
 	void Frame::SetOnClick(const luabind::object& func)
@@ -1026,7 +1227,7 @@ namespace mmo
 
 	void Frame::SetDropEnabled(const bool enabled)
 	{
-		SetProperty("DragEnabled", enabled ? "true" : "false");
+		SetProperty("DropEnabled", enabled ? "true" : "false");
 	}
 
 	bool Frame::IsDragEnabled() const
@@ -1359,6 +1560,11 @@ namespace mmo
 
 	void Frame::OnTextChanged()
 	{
+		// Any text mutation routes through here (SetText as well as the in-place
+		// edits in TextField), so this is the single point to drop the cached
+		// text height.
+		m_textHeightCacheValid = false;
+
 		// Invoke the signal
 		TextChanged();
 	}
@@ -1503,7 +1709,7 @@ namespace mmo
 	bool Frame::OnMouseUp(MouseButton button, int32 buttons, const Point & position)
 	{
 		bool consumed = false;
-		
+
 		if (const Rect frame = GetAbsoluteFrameRect(); frame.IsPointInRect(position))
 		{
 			// Trigger lua clicked event handler if there is any
@@ -1540,7 +1746,8 @@ namespace mmo
 			return;
 		}
 
-		if (position.DistanceTo(m_dragStartPosition) > 16.0f)
+		const float dist = position.DistanceTo(m_dragStartPosition);
+		if (dist > 16.0f)
 		{
 			m_isDragging = true;
 			OnDrag(m_dragButton, m_dragStartPosition);

@@ -301,6 +301,11 @@ namespace mmo
 			/// @return The number of cached entries.
 			size_t GetLodCacheUsage() const;
 
+			/// @brief Resets all occlusion state so the tile is treated as visible on the next frame.
+			/// @details Called when the camera jumps a large distance (building exit, teleport) to
+			///          prevent stale occluded state from hiding tiles that are now visible.
+			void ResetOcclusionState();
+
 		};
 	}
 }

@@ -10,11 +10,16 @@
 
 #include "assets/asset_registry.h"
 #include "editor_imgui_helpers.h"
+#include "file_dialog/file_dialog.h"
 #include "game/aura.h"
 #include "game/item.h"
 #include "game/spell.h"
 #include "graphics/texture_mgr.h"
 #include "log/default_log_levels.h"
+
+#include "nlohmann/json.hpp"
+
+#include <fstream>
 
 namespace ImGui
 {
@@ -172,6 +177,12 @@ namespace mmo
 		ImColor(0.64f, 0.21f, 0.93f),
 		ImColor(1.0f, 0.5f, 0.0f)};
 
+	static const std::vector<String> s_itemBindingStrings = {
+		"No Binding",
+		"Binds When Picked Up",
+		"Binds When Equipped",
+		"Binds When Used"};
+
 	static const std::vector<String> s_inventoryTypeStrings = {
 		"NonEquip",
 		"Head",
@@ -237,6 +248,450 @@ namespace mmo
 		"HasteRating",
 		"ExpertiseRating"};
 
+	namespace
+	{
+		/// Identifier written into exported files so the importer can reject foreign JSON.
+		constexpr const char *s_itemJsonFormat = "mmo-item";
+		/// Schema version of the exported item JSON. Bump when the layout changes incompatibly.
+		constexpr int s_itemJsonVersion = 1;
+
+		/// Serializes a single item entry into a JSON document.
+		/// Note: graphics (display data) and linked spell definitions are referenced by ID only;
+		/// their underlying assets are intentionally not exported. When adding new proto fields,
+		/// update both this function and JsonToItemEntry below.
+		nlohmann::json ItemEntryToJson(const proto::ItemEntry &entry)
+		{
+			using nlohmann::json;
+
+			json item = json::object();
+
+#define EXPORT_FIELD(field) item[#field] = entry.field();
+			EXPORT_FIELD(name)
+			EXPORT_FIELD(description)
+			EXPORT_FIELD(itemclass)
+			EXPORT_FIELD(subclass)
+			EXPORT_FIELD(displayid)
+			EXPORT_FIELD(quality)
+			EXPORT_FIELD(flags)
+			EXPORT_FIELD(buycount)
+			EXPORT_FIELD(buyprice)
+			EXPORT_FIELD(sellprice)
+			EXPORT_FIELD(inventorytype)
+			EXPORT_FIELD(allowedclasses)
+			EXPORT_FIELD(allowedraces)
+			EXPORT_FIELD(itemlevel)
+			EXPORT_FIELD(requiredlevel)
+			EXPORT_FIELD(requiredskill)
+			EXPORT_FIELD(requiredskillrank)
+			EXPORT_FIELD(requiredspell)
+			EXPORT_FIELD(requiredhonorrank)
+			EXPORT_FIELD(requiredcityrank)
+			EXPORT_FIELD(requiredrep)
+			EXPORT_FIELD(requiredreprank)
+			EXPORT_FIELD(maxcount)
+			EXPORT_FIELD(maxstack)
+			EXPORT_FIELD(containerslots)
+			EXPORT_FIELD(armor)
+			EXPORT_FIELD(holyres)
+			EXPORT_FIELD(fireres)
+			EXPORT_FIELD(natureres)
+			EXPORT_FIELD(frostres)
+			EXPORT_FIELD(shadowres)
+			EXPORT_FIELD(arcaneres)
+			EXPORT_FIELD(delay)
+			EXPORT_FIELD(ammotype)
+			EXPORT_FIELD(bonding)
+			EXPORT_FIELD(lockid)
+			EXPORT_FIELD(sheath)
+			EXPORT_FIELD(randomproperty)
+			EXPORT_FIELD(randomsuffix)
+			EXPORT_FIELD(block)
+			EXPORT_FIELD(itemset)
+			EXPORT_FIELD(durability)
+			EXPORT_FIELD(area)
+			EXPORT_FIELD(map)
+			EXPORT_FIELD(bagfamily)
+			EXPORT_FIELD(material)
+			EXPORT_FIELD(totemcategory)
+			EXPORT_FIELD(socketbonus)
+			EXPORT_FIELD(gemproperties)
+			EXPORT_FIELD(disenchantskillval)
+			EXPORT_FIELD(disenchantid)
+			EXPORT_FIELD(foodtype)
+			EXPORT_FIELD(minlootgold)
+			EXPORT_FIELD(maxlootgold)
+			EXPORT_FIELD(duration)
+			EXPORT_FIELD(extraflags)
+			EXPORT_FIELD(lootentry)
+			EXPORT_FIELD(questentry)
+			EXPORT_FIELD(rangedrange)
+			EXPORT_FIELD(skill)
+			EXPORT_FIELD(requiredproficiency)
+#undef EXPORT_FIELD
+
+			// Weapon damage (single optional sub message)
+			if (entry.has_damage())
+			{
+				json damage = json::object();
+				damage["mindmg"] = entry.damage().mindmg();
+				damage["maxdmg"] = entry.damage().maxdmg();
+				damage["type"] = entry.damage().type();
+				item["damage"] = damage;
+			}
+
+			// Stat bonuses
+			json stats = json::array();
+			for (int i = 0; i < entry.stats_size(); ++i)
+			{
+				json stat = json::object();
+				stat["type"] = entry.stats(i).type();
+				stat["value"] = entry.stats(i).value();
+				stats.push_back(std::move(stat));
+			}
+			item["stats"] = std::move(stats);
+
+			// Item spells (referenced by spell ID)
+			json spells = json::array();
+			for (int i = 0; i < entry.spells_size(); ++i)
+			{
+				const auto &src = entry.spells(i);
+				json spell = json::object();
+				spell["spell"] = src.spell();
+				spell["trigger"] = src.trigger();
+				spell["charges"] = src.charges();
+				spell["procrate"] = src.procrate();
+				spell["cooldown"] = src.cooldown();
+				spell["category"] = src.category();
+				spell["categorycooldown"] = src.categorycooldown();
+				spells.push_back(std::move(spell));
+			}
+			item["spells"] = std::move(spells);
+
+			// Sockets
+			json sockets = json::array();
+			for (int i = 0; i < entry.sockets_size(); ++i)
+			{
+				json socket = json::object();
+				socket["color"] = entry.sockets(i).color();
+				socket["content"] = entry.sockets(i).content();
+				sockets.push_back(std::move(socket));
+			}
+			item["sockets"] = std::move(sockets);
+
+			// Localized strings
+			json nameLoc = json::array();
+			for (int i = 0; i < entry.name_loc_size(); ++i)
+			{
+				nameLoc.push_back(entry.name_loc(i));
+			}
+			item["name_loc"] = std::move(nameLoc);
+
+			json descriptionLoc = json::array();
+			for (int i = 0; i < entry.description_loc_size(); ++i)
+			{
+				descriptionLoc.push_back(entry.description_loc(i));
+			}
+			item["description_loc"] = std::move(descriptionLoc);
+
+			json doc = json::object();
+			doc["format"] = s_itemJsonFormat;
+			doc["version"] = s_itemJsonVersion;
+			doc["item"] = std::move(item);
+			return doc;
+		}
+
+		/// Validates a JSON document and, on success, builds a complete item entry from it.
+		/// @param doc Parsed JSON document (the full file, including the format wrapper).
+		/// @param keepId The ID assigned to the produced entry (so an import never changes IDs).
+		/// @param outEntry Receives the fully populated entry on success; left untouched on failure.
+		/// @param outError Receives a human readable error message on failure.
+		/// @return True on success, false if validation failed.
+		bool JsonToItemEntry(const nlohmann::json &doc, uint32 keepId, proto::ItemEntry &outEntry, String &outError)
+		{
+			using nlohmann::json;
+
+			if (!doc.is_object())
+			{
+				outError = "Root of the file must be a JSON object.";
+				return false;
+			}
+
+			if (doc.contains("format") && doc["format"].is_string() && doc["format"].get<std::string>() != s_itemJsonFormat)
+			{
+				outError = "This file is not an item export (unexpected 'format' value).";
+				return false;
+			}
+
+			if (doc.contains("version") && doc["version"].is_number_integer() && doc["version"].get<int>() > s_itemJsonVersion)
+			{
+				outError = "This file was created by a newer editor version and cannot be imported.";
+				return false;
+			}
+
+			if (!doc.contains("item") || !doc["item"].is_object())
+			{
+				outError = "Missing 'item' object in the file.";
+				return false;
+			}
+
+			const json &item = doc["item"];
+
+			proto::ItemEntry temp;
+			temp.set_id(keepId);
+
+			// Name is required.
+			if (!item.contains("name") || !item["name"].is_string() || item["name"].get<std::string>().empty())
+			{
+				outError = "Item must have a non-empty 'name'.";
+				return false;
+			}
+			temp.set_name(item["name"].get<std::string>());
+
+#define IMPORT_NUM(field, ctype)                                                       \
+	if (item.contains(#field) && !item[#field].is_null())                              \
+	{                                                                                  \
+		if (!item[#field].is_number())                                                 \
+		{                                                                              \
+			outError = "Field '" #field "' must be a number.";                         \
+			return false;                                                              \
+		}                                                                              \
+		temp.set_##field(item[#field].get<ctype>());                                   \
+	}
+#define IMPORT_STR(field)                                                              \
+	if (item.contains(#field) && !item[#field].is_null())                              \
+	{                                                                                  \
+		if (!item[#field].is_string())                                                 \
+		{                                                                              \
+			outError = "Field '" #field "' must be a string.";                         \
+			return false;                                                              \
+		}                                                                              \
+		temp.set_##field(item[#field].get<std::string>());                             \
+	}
+
+			IMPORT_STR(description)
+			IMPORT_NUM(itemclass, uint32)
+			IMPORT_NUM(subclass, uint32)
+			IMPORT_NUM(displayid, uint32)
+			IMPORT_NUM(quality, uint32)
+			IMPORT_NUM(flags, uint32)
+			IMPORT_NUM(buycount, uint32)
+			IMPORT_NUM(buyprice, uint32)
+			IMPORT_NUM(sellprice, uint32)
+			IMPORT_NUM(inventorytype, uint32)
+			IMPORT_NUM(allowedclasses, int32)
+			IMPORT_NUM(allowedraces, int32)
+			IMPORT_NUM(itemlevel, uint32)
+			IMPORT_NUM(requiredlevel, uint32)
+			IMPORT_NUM(requiredskill, uint32)
+			IMPORT_NUM(requiredskillrank, uint32)
+			IMPORT_NUM(requiredspell, uint32)
+			IMPORT_NUM(requiredhonorrank, uint32)
+			IMPORT_NUM(requiredcityrank, uint32)
+			IMPORT_NUM(requiredrep, uint32)
+			IMPORT_NUM(requiredreprank, uint32)
+			IMPORT_NUM(maxcount, uint32)
+			IMPORT_NUM(maxstack, uint32)
+			IMPORT_NUM(containerslots, uint32)
+			IMPORT_NUM(armor, uint32)
+			IMPORT_NUM(holyres, uint32)
+			IMPORT_NUM(fireres, uint32)
+			IMPORT_NUM(natureres, uint32)
+			IMPORT_NUM(frostres, uint32)
+			IMPORT_NUM(shadowres, uint32)
+			IMPORT_NUM(arcaneres, uint32)
+			IMPORT_NUM(delay, uint32)
+			IMPORT_NUM(ammotype, uint32)
+			IMPORT_NUM(bonding, uint32)
+			IMPORT_NUM(lockid, uint32)
+			IMPORT_NUM(sheath, uint32)
+			IMPORT_NUM(randomproperty, uint32)
+			IMPORT_NUM(randomsuffix, uint32)
+			IMPORT_NUM(block, uint32)
+			IMPORT_NUM(itemset, uint32)
+			IMPORT_NUM(durability, uint32)
+			IMPORT_NUM(area, uint32)
+			IMPORT_NUM(map, int32)
+			IMPORT_NUM(bagfamily, int32)
+			IMPORT_NUM(material, int32)
+			IMPORT_NUM(totemcategory, int32)
+			IMPORT_NUM(socketbonus, uint32)
+			IMPORT_NUM(gemproperties, uint32)
+			IMPORT_NUM(disenchantskillval, uint32)
+			IMPORT_NUM(disenchantid, uint32)
+			IMPORT_NUM(foodtype, uint32)
+			IMPORT_NUM(minlootgold, uint32)
+			IMPORT_NUM(maxlootgold, uint32)
+			IMPORT_NUM(duration, uint32)
+			IMPORT_NUM(extraflags, uint32)
+			IMPORT_NUM(lootentry, uint32)
+			IMPORT_NUM(questentry, uint32)
+			IMPORT_NUM(rangedrange, float)
+			IMPORT_NUM(skill, uint32)
+			IMPORT_NUM(requiredproficiency, uint32)
+#undef IMPORT_NUM
+#undef IMPORT_STR
+
+			// Weapon damage
+			if (item.contains("damage") && !item["damage"].is_null())
+			{
+				const json &damage = item["damage"];
+				if (!damage.is_object() ||
+					!damage.contains("mindmg") || !damage["mindmg"].is_number() ||
+					!damage.contains("maxdmg") || !damage["maxdmg"].is_number())
+				{
+					outError = "'damage' must be an object with numeric 'mindmg' and 'maxdmg'.";
+					return false;
+				}
+
+				auto *dmg = temp.mutable_damage();
+				dmg->set_mindmg(damage["mindmg"].get<float>());
+				dmg->set_maxdmg(damage["maxdmg"].get<float>());
+				if (damage.contains("type") && damage["type"].is_number())
+				{
+					dmg->set_type(damage["type"].get<uint32>());
+				}
+			}
+
+			// Stat bonuses
+			if (item.contains("stats") && !item["stats"].is_null())
+			{
+				if (!item["stats"].is_array())
+				{
+					outError = "'stats' must be an array.";
+					return false;
+				}
+
+				for (const json &stat : item["stats"])
+				{
+					if (!stat.is_object() ||
+						!stat.contains("type") || !stat["type"].is_number() ||
+						!stat.contains("value") || !stat["value"].is_number())
+					{
+						outError = "Each entry in 'stats' must have numeric 'type' and 'value'.";
+						return false;
+					}
+
+					auto *out = temp.add_stats();
+					out->set_type(stat["type"].get<uint32>());
+					out->set_value(stat["value"].get<int32>());
+				}
+			}
+
+			// Item spells
+			if (item.contains("spells") && !item["spells"].is_null())
+			{
+				if (!item["spells"].is_array())
+				{
+					outError = "'spells' must be an array.";
+					return false;
+				}
+
+				for (const json &spell : item["spells"])
+				{
+					if (!spell.is_object() || !spell.contains("spell") || !spell["spell"].is_number())
+					{
+						outError = "Each entry in 'spells' must have a numeric 'spell' ID.";
+						return false;
+					}
+
+					auto *out = temp.add_spells();
+					out->set_spell(spell["spell"].get<uint32>());
+					if (spell.contains("trigger") && spell["trigger"].is_number())
+					{
+						out->set_trigger(spell["trigger"].get<uint32>());
+					}
+					if (spell.contains("charges") && spell["charges"].is_number())
+					{
+						out->set_charges(spell["charges"].get<uint32>());
+					}
+					if (spell.contains("procrate") && spell["procrate"].is_number())
+					{
+						out->set_procrate(spell["procrate"].get<float>());
+					}
+					if (spell.contains("cooldown") && spell["cooldown"].is_number())
+					{
+						out->set_cooldown(spell["cooldown"].get<int32>());
+					}
+					if (spell.contains("category") && spell["category"].is_number())
+					{
+						out->set_category(spell["category"].get<int32>());
+					}
+					if (spell.contains("categorycooldown") && spell["categorycooldown"].is_number())
+					{
+						out->set_categorycooldown(spell["categorycooldown"].get<int32>());
+					}
+				}
+			}
+
+			// Sockets
+			if (item.contains("sockets") && !item["sockets"].is_null())
+			{
+				if (!item["sockets"].is_array())
+				{
+					outError = "'sockets' must be an array.";
+					return false;
+				}
+
+				for (const json &socket : item["sockets"])
+				{
+					if (!socket.is_object() ||
+						!socket.contains("color") || !socket["color"].is_number() ||
+						!socket.contains("content") || !socket["content"].is_number())
+					{
+						outError = "Each entry in 'sockets' must have numeric 'color' and 'content'.";
+						return false;
+					}
+
+					auto *out = temp.add_sockets();
+					out->set_color(socket["color"].get<int32>());
+					out->set_content(socket["content"].get<int32>());
+				}
+			}
+
+			// Localized strings
+			if (item.contains("name_loc") && !item["name_loc"].is_null())
+			{
+				if (!item["name_loc"].is_array())
+				{
+					outError = "'name_loc' must be an array of strings.";
+					return false;
+				}
+
+				for (const json &value : item["name_loc"])
+				{
+					if (!value.is_string())
+					{
+						outError = "'name_loc' must only contain strings.";
+						return false;
+					}
+					temp.add_name_loc(value.get<std::string>());
+				}
+			}
+
+			if (item.contains("description_loc") && !item["description_loc"].is_null())
+			{
+				if (!item["description_loc"].is_array())
+				{
+					outError = "'description_loc' must be an array of strings.";
+					return false;
+				}
+
+				for (const json &value : item["description_loc"])
+				{
+					if (!value.is_string())
+					{
+						outError = "'description_loc' must only contain strings.";
+						return false;
+					}
+					temp.add_description_loc(value.get<std::string>());
+				}
+			}
+
+			outEntry = std::move(temp);
+			return true;
+		}
+	}
+
 	ItemEditorWindow::ItemEditorWindow(const String &name, proto::Project &project, EditorHost &host)
 		: EditorEntryWindowBase(project, project.items, name), m_host(host)
 	{
@@ -276,6 +731,57 @@ namespace mmo
 		ImGui::PopStyleColor();
 		ImGui::SameLine();
 		DrawHelpMarker("Create a copy of this item with a new ID");
+
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.4f, 0.8f));
+		if (ImGui::Button("Export JSON", ImVec2(120, 0)))
+		{
+			ExportItemToFile(currentEntry);
+		}
+		ImGui::PopStyleColor();
+		ImGui::SameLine();
+		DrawHelpMarker("Export this item's data to a JSON file (graphics and spell definitions are referenced by ID only)");
+
+		ImGui::SameLine();
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.5f, 0.2f, 0.8f));
+		if (ImGui::Button("Import JSON", ImVec2(120, 0)))
+		{
+			ImportItemFromFile(currentEntry);
+		}
+		ImGui::PopStyleColor();
+		ImGui::SameLine();
+		DrawHelpMarker("Replace this item's data with the contents of a JSON file (the item's ID is preserved)");
+
+		// Render the result of the most recent import/export operation.
+		if (m_openImportExportPopup)
+		{
+			ImGui::OpenPopup("Item Import/Export");
+			m_openImportExportPopup = false;
+		}
+
+		if (ImGui::BeginPopupModal("Item Import/Export", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			if (m_importExportFailed)
+			{
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
+				ImGui::TextWrapped("Failed: %s", m_importExportMessage.c_str());
+				ImGui::PopStyleColor();
+			}
+			else
+			{
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 1.0f, 0.4f, 1.0f));
+				ImGui::TextWrapped("%s", m_importExportMessage.c_str());
+				ImGui::PopStyleColor();
+			}
+
+			ImGui::Spacing();
+			if (ImGui::Button("OK", ImVec2(120, 0)))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+		}
 
 #define SLIDER_UNSIGNED_PROP(name, label, datasize, min, max)                               \
 	{                                                                                       \
@@ -531,6 +1037,19 @@ namespace mmo
 			}
 
 			ImGui::Spacing();
+			DrawSectionHeader("Requirements");
+
+			ImGui::SetNextItemWidth(150);
+			SLIDER_UINT32_PROP(requiredlevel, "Required Level", 0, 255);
+			ImGui::SameLine();
+			DrawHelpMarker("Minimum character level required to use or equip this item. 0 = no requirement");
+
+			ImGui::SetNextItemWidth(150);
+			SLIDER_UINT32_PROP(itemlevel, "Item Level", 0, 100000000);
+			ImGui::SameLine();
+			DrawHelpMarker("Item level, used for stat budgets and comparisons");
+
+			ImGui::Spacing();
 			DrawSectionHeader("Display Properties");
 
 			// Quality
@@ -551,15 +1070,47 @@ namespace mmo
 			ImGui::SameLine();
 			DrawHelpMarker("Visual quality of the item (affects text color in tooltip)");
 
+			// Binding — BoE only relevant for equippable items; always allow setting it but note the constraint
+			int currentBinding = static_cast<int>(currentEntry.bonding());
+			if (ImGui::Combo("Binding", &currentBinding, [](void *, int idx, const char **out_text)
+				{
+					if (idx < 0 || idx >= static_cast<int>(s_itemBindingStrings.size()))
+					{
+						return false;
+					}
+					*out_text = s_itemBindingStrings[idx].c_str();
+					return true;
+				}, nullptr, static_cast<int>(s_itemBindingStrings.size()), -1))
+			{
+				currentEntry.set_bonding(currentBinding);
+			}
+			ImGui::SameLine();
+			DrawHelpMarker("When the item becomes bound to a player. Bind on Equip only has effect for equippable gear.");
+
 			ImGui::Spacing();
 			DrawSectionHeader("Tooltip Preview");
 
 			ImGui::BeginGroupPanel(nullptr, ImVec2(0, -1));
 			ImGui::TextColored(s_itemQualityColors[currentQuality].Value, currentEntry.name().c_str());
 
+			// Binding line (shown at the top, just like WoW tooltips)
+			const uint32 previewBinding = currentEntry.bonding();
+			if (previewBinding == item_binding::BindWhenPickedUp)
+			{
+				ImGui::TextUnformatted("Binds when picked up");
+			}
+			else if (previewBinding == item_binding::BindWhenEquipped)
+			{
+				ImGui::TextUnformatted("Binds when equipped");
+			}
+			else if (previewBinding == item_binding::BindWhenUsed)
+			{
+				ImGui::TextUnformatted("Binds when used");
+			}
+
 			// Determine if this is an equippable item based on inventory type
-			const bool isEquippable = (invType != inventory_type::NonEquip && 
-									   invType != inventory_type::Bag && 
+			const bool isEquippable = (invType != inventory_type::NonEquip &&
+									   invType != inventory_type::Bag &&
 									   invType != inventory_type::Quiver &&
 									   invType != inventory_type::Ammo);
 
@@ -1017,5 +1568,114 @@ namespace mmo
 			ImGui::PopStyleVar(2);
 			ImGui::Unindent();
 		}
+	}
+
+	void ItemEditorWindow::ExportItemToFile(const EntryType &entry)
+	{
+		// Build a sane default file name from the item's name.
+		String suggestedName = entry.name();
+		for (char &c : suggestedName)
+		{
+			if (c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' ||
+				c == '"' || c == '<' || c == '>' || c == '|')
+			{
+				c = '_';
+			}
+		}
+		if (suggestedName.empty())
+		{
+			suggestedName = "item_" + std::to_string(entry.id());
+		}
+
+		const std::vector<FileDialogFilter> filters = { FileDialogFilter("Item JSON", "*.json") };
+		const std::optional<String> path = FileDialog::ShowSave("Export Item", filters, suggestedName, "json");
+		if (!path)
+		{
+			// User cancelled the dialog.
+			return;
+		}
+
+		std::ofstream file(*path, std::ios::out | std::ios::trunc | std::ios::binary);
+		if (!file)
+		{
+			m_importExportFailed = true;
+			m_importExportMessage = "Could not open '" + *path + "' for writing.";
+			m_openImportExportPopup = true;
+			ELOG("Failed to open item export file: " << *path);
+			return;
+		}
+
+		const nlohmann::json doc = ItemEntryToJson(entry);
+		file << doc.dump(2);
+		file.close();
+
+		if (!file)
+		{
+			m_importExportFailed = true;
+			m_importExportMessage = "An error occurred while writing '" + *path + "'.";
+			m_openImportExportPopup = true;
+			ELOG("Failed while writing item export file: " << *path);
+			return;
+		}
+
+		m_importExportFailed = false;
+		m_importExportMessage = "Item exported to:\n" + *path;
+		m_openImportExportPopup = true;
+		ILOG("Exported item " << entry.id() << " to " << *path);
+	}
+
+	void ItemEditorWindow::ImportItemFromFile(EntryType &entry)
+	{
+		const std::vector<FileDialogFilter> filters = { FileDialogFilter("Item JSON", "*.json") };
+		const std::optional<String> path = FileDialog::ShowOpen("Import Item", filters);
+		if (!path)
+		{
+			// User cancelled the dialog.
+			return;
+		}
+
+		std::ifstream file(*path, std::ios::in | std::ios::binary);
+		if (!file)
+		{
+			m_importExportFailed = true;
+			m_importExportMessage = "Could not open '" + *path + "' for reading.";
+			m_openImportExportPopup = true;
+			ELOG("Failed to open item import file: " << *path);
+			return;
+		}
+
+		nlohmann::json doc;
+		try
+		{
+			file >> doc;
+		}
+		catch (const nlohmann::json::exception &e)
+		{
+			m_importExportFailed = true;
+			m_importExportMessage = String("Invalid JSON: ") + e.what();
+			m_openImportExportPopup = true;
+			WLOG("Failed to parse item import file '" << *path << "': " << e.what());
+			return;
+		}
+
+		// Validate and build the imported entry first; only commit it if everything is valid,
+		// so a failed import never corrupts the currently selected item.
+		proto::ItemEntry imported;
+		String error;
+		if (!JsonToItemEntry(doc, entry.id(), imported, error))
+		{
+			m_importExportFailed = true;
+			m_importExportMessage = error;
+			m_openImportExportPopup = true;
+			WLOG("Item import validation failed for '" << *path << "': " << error);
+			return;
+		}
+
+		entry.CopyFrom(imported);
+
+		m_importExportFailed = false;
+		m_importExportMessage = "Item imported successfully from:\n" + *path;
+		m_openImportExportPopup = true;
+		ILOG("Imported item " << entry.id() << " from " << *path);
 	}
 }

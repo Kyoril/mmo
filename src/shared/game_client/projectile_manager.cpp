@@ -11,12 +11,16 @@
 #include "scene_graph/scene_node.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/particle_emitter.h"
+#include "scene_graph/particle_emitter_serializer.h"
 #include "scene_graph/light.h"
 #include "scene_graph/ribbon_trail.h"
 #include "scene_graph/material_manager.h"
 #include "shared/client_data/proto_client/spells.pb.h"
 #include "shared/client_data/proto_client/spell_visualizations.pb.h"
 #include "shared/audio/audio.h"
+#include "assets/asset_registry.h"
+#include "binary_io/stream_source.h"
+#include "binary_io/reader.h"
 #include "base/macros.h"
 
 namespace mmo
@@ -79,8 +83,23 @@ namespace mmo
 
 				if (m_trailEmitter)
 				{
+					// Load the particle system (one or more emitters) from the .hpar file.
+					// Without this the emitter renders nothing, so no trail would appear.
+					const auto file = AssetRegistry::OpenFile(projVis.trail_particle());
+					if (file)
+					{
+						io::StreamSource source(*file);
+						io::Reader reader(source);
+
+						ParticleSystemSerializer serializer;
+						ParticleSystemParameters params;
+						if (serializer.Deserialize(params, reader))
+						{
+							m_trailEmitter->SetSystemParameters(params);
+						}
+					}
+
 					m_node->AttachObject(*m_trailEmitter);
-					// TODO: Load particle parameters from data
 					m_trailEmitter->Play();
 				}
 			}

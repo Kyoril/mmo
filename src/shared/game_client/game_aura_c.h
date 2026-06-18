@@ -27,7 +27,7 @@ namespace mmo
 		/// @param spell The spell that created this aura.
 		/// @param caster The GUID of the unit that cast the spell.
 		/// @param expiration The expiration time in milliseconds (0 for permanent auras).
-		explicit GameAuraC(GameUnitC& owner, const proto_client::SpellEntry& spell, uint64 caster, GameTime expiration);
+		explicit GameAuraC(GameUnitC& owner, const proto_client::SpellEntry& spell, uint64 caster, GameTime expiration, uint8 stackCount = 1);
 
 		/// @brief Destructor that ensures the aura is properly cleaned up.
 		~GameAuraC() override;
@@ -72,6 +72,13 @@ namespace mmo
 			return m_targetId; 
 		}
 
+		/// @brief Gets the stack count of this aura.
+		/// @return The number of stacks (1 if not stacking).
+		uint8 GetStackCount() const
+		{
+			return m_stackCount;
+		}
+
 	private:
 		/// @brief Pointer to the spell that created this aura.
 		const proto_client::SpellEntry* m_spell;
@@ -84,6 +91,9 @@ namespace mmo
 
 		/// @brief GUID of the unit this aura is applied to.
 		uint64 m_targetId;
+
+		/// @brief Number of stacks of this aura (1 if not stacking).
+		uint8 m_stackCount;
 
 		/// @brief Connection to the owner's removed signal.
 		scoped_connection m_onOwnerRemoved;

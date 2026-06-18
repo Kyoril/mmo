@@ -3,6 +3,10 @@
 #include "world_state.h"
 #include "client.h"
 #include "systems/loot_client.h"
+#include "systems/spell_cast.h"
+#include "systems/trade_client.h"
+
+#include <cstring>
 
 #include "event_loop.h"
 #include "game_state_mgr.h"
@@ -17,7 +21,9 @@
 #include "game/object_type_id.h"
 
 #include <algorithm>
+#include <vector>
 #include <zstr/zstr.hpp>
+#include <zlib.h>
 
 #include "systems/action_bar.h"
 #include "systems/quest_client.h"
@@ -27,10 +33,12 @@
 #include "systems/trainer_client.h"
 #include "systems/vendor_client.h"
 #include "world_deserializer.h"
+#include "scene_graph/instanced_foliage.h"
 #include "base/erase_by_move.h"
 #include "base/profiler.h"
 #include "base/timer_queue.h"
 #include "frame_ui/text_component.h"
+#include "frame_ui/localizer.h"
 #include "game/aura.h"
 #include "game/auto_attack.h"
 #include "game/chat_type.h"
@@ -44,8 +52,10 @@
 #include "terrain/page.h"
 #include "terrain/constants.h"
 #include "terrain/terrain.h"
+#include "terrain/tile.h"
 #include "systems/guild_client.h"
 #include "systems/friend_client.h"
+#include "systems/channel_client.h"
 #include "systems/talent_client.h"
 #include "game/object_info.h"
 #include "game/guild_info.h"
@@ -67,6 +77,11 @@
 #include "systems/inventory_client.h"
 
 #include "ui/minimap.h"
+#include "world_ping_visualizer.h"
+
+#include "luabind_lambda.h"
+#include "luabind/luabind.hpp"
+#include "scene_graph/movable_object.h"
 
 namespace mmo
 {
@@ -99,6 +114,14 @@ namespace mmo
 		static ConsoleVar *s_slopeDepthBiasVar = nullptr;
 		static ConsoleVar *s_clampDepthBiasVar = nullptr;
 		static ConsoleVar *s_shadowTextureSizeVar = nullptr;
+		static ConsoleVar *s_shadowQualityVar = nullptr;
+		static ConsoleVar *s_shadowTemporalVar = nullptr;
+
+		static ConsoleVar *s_renderScaleVar = nullptr;
+
+		static ConsoleVar *s_depthPrepassVar = nullptr;
+
+		static ConsoleVar *s_viewDistanceVar = nullptr;
 
 		static ConsoleVar *s_foliageEnabledVar = nullptr;
 		static ConsoleVar *s_foliageDensityVar = nullptr;
@@ -118,82 +141,87 @@ namespace mmo
 			return {};
 		}
 
+		// Windows virtual key code constants (matches VK_* values from winuser.h)
+		enum : Key
+		{
+			Key_Backspace    = 0x08,
+			Key_Tab          = 0x09,
+			Key_Enter        = 0x0D,
+			Key_Shift        = 0x10,
+			Key_Control      = 0x11,
+			Key_Pause        = 0x13,
+			Key_Accept       = 0x1E,
+			Key_Escape       = 0x1B,
+			Key_Space        = 0x20,
+			Key_PageUp       = 0x21,
+			Key_PageDown     = 0x22,
+			Key_End          = 0x23,
+			Key_Home         = 0x24,
+			Key_Left         = 0x25,
+			Key_Up           = 0x26,
+			Key_Right        = 0x27,
+			Key_Down         = 0x28,
+			Key_PrintScreen  = 0x2C,
+			Key_Insert       = 0x2D,
+			Key_Delete       = 0x2E,
+			Key_NumPad0      = 0x60,
+			Key_NumPad9      = 0x69,
+			Key_Multiply     = 0x6A,
+			Key_Add          = 0x6B,
+			Key_Subtract     = 0x6D,
+			Key_Divide       = 0x6F,
+			Key_F1           = 0x70,
+			Key_F24          = 0x87,
+			Key_ScrollLock   = 0x91,
+		};
+
 		String MapBindingKeyCode(const Key keyCode)
 		{
-			if (keyCode >= 0x70 && keyCode <= 0x87)
+			if (keyCode >= Key_F1 && keyCode <= Key_F24)
 			{
-				return String("F") + std::to_string(keyCode - 0x70 + 1);
+				return String("F") + std::to_string(keyCode - Key_F1 + 1);
 			}
 
-			// Convert numbers and letters to string
-			if (keyCode >= 'A' && keyCode <= 'Z' ||
-				keyCode >= '0' && keyCode <= '9')
+			if ((keyCode >= 'A' && keyCode <= 'Z') || (keyCode >= '0' && keyCode <= '9'))
 			{
 				return String(1, static_cast<char>(keyCode));
 			}
 
-			if (keyCode >= 0x60 && keyCode <= 0x69)
+			if (keyCode >= Key_NumPad0 && keyCode <= Key_NumPad9)
 			{
-				return String("NUM-") + String(1, static_cast<char>(keyCode - 0x60 + '0'));
+				return String("NUM-") + String(1, static_cast<char>(keyCode - Key_NumPad0 + '0'));
 			}
 
 			switch (keyCode)
 			{
-			case 0x20:
-				return "SPACE";
-			case 0x0D:
-				return "ENTER";
-			case 0x1B:
-				return "ESCAPE";
-			case 0x08:
-				return "BACKSPACE";
-			case 0x09:
-				return "TAB";
-			case 0x6B:
-				return "ADD";
-			case 0x6D:
-				return "SUBTRACT";
-			case 0x6A:
-				return "MULTIPLY";
-			case 0x6F:
-				return "DIVIDE";
-			case 0x1E:
-				return "ACCEPT";
-			case 0x2E:
-				return "DEL";
-			case 0x2D:
-				return "INSERT";
-			case 0x11:
-				return "CONTROL";
-			case 0x10:
-				return "SHIFT";
-			case 0x25:
-				return "LEFT";
-			case 0x27:
-				return "RIGHT";
-			case 0x26:
-				return "UP";
-			case 0x28:
-				return "DOWN";
-			case 0x21:
-				return "PAGEUP";
-			case 0x22:
-				return "PAGEDOWN";
-			case 0x23:
-				return "END";
-			case 0x24:
-				return "HOME";
-			case 0x2C:
-				return "PRINTSCREEN";
-			case 0x91:
-				return "SCROLLLOCK";
-			case 0x13:
-				return "PAUSE";
-			default:
-				break;
+			case Key_Space:       return "SPACE";
+			case Key_Enter:       return "ENTER";
+			case Key_Escape:      return "ESCAPE";
+			case Key_Backspace:   return "BACKSPACE";
+			case Key_Tab:         return "TAB";
+			case Key_Add:         return "ADD";
+			case Key_Subtract:    return "SUBTRACT";
+			case Key_Multiply:    return "MULTIPLY";
+			case Key_Divide:      return "DIVIDE";
+			case Key_Accept:      return "ACCEPT";
+			case Key_Delete:      return "DEL";
+			case Key_Insert:      return "INSERT";
+			case Key_Control:     return "CONTROL";
+			case Key_Shift:       return "SHIFT";
+			case Key_Left:        return "LEFT";
+			case Key_Right:       return "RIGHT";
+			case Key_Up:          return "UP";
+			case Key_Down:        return "DOWN";
+			case Key_PageUp:      return "PAGEUP";
+			case Key_PageDown:    return "PAGEDOWN";
+			case Key_End:         return "END";
+			case Key_Home:        return "HOME";
+			case Key_PrintScreen: return "PRINTSCREEN";
+			case Key_ScrollLock:  return "SCROLLLOCK";
+			case Key_Pause:       return "PAUSE";
+			default:              break;
 			}
 
-			// Convert lowercase to uppercase for simplicity
 			if (keyCode >= 'a' && keyCode <= 'z')
 			{
 				return String(1, static_cast<char>(keyCode - 'a' + 'A'));
@@ -207,8 +235,31 @@ namespace mmo
 
 	WorldState::WorldState(GameStateMgr &gameStateManager, RealmConnector &realmConnector, const proto_client::Project &project, TimerQueue &timers, LootClient &lootClient, VendorClient &vendorClient,
 						   ActionBar &actionBar, SpellCast &spellCast, CooldownManager &cooldownManager, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, PartyInfo &partyInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, ICacheProvider &cache, Discord &discord,
-						   GameTimeComponent &gameTime, TalentClient &talentClient, Minimap &minimap, InventoryClient &inventoryClient)
-		: GameState(gameStateManager), m_realmConnector(realmConnector), m_audio(audio), m_gameTime(gameTime), m_cache(cache), m_project(project), m_timers(timers), m_lootClient(lootClient), m_vendorClient(vendorClient), m_actionBar(actionBar), m_spellCast(spellCast), m_cooldownManager(cooldownManager), m_trainerClient(trainerClient), m_questClient(questClient), m_partyInfo(partyInfo), m_charSelect(charSelect), m_guildClient(guildClient), m_friendClient(friendClient), m_discord(discord), m_talentClient(talentClient), m_minimap(minimap), m_inventoryClient(inventoryClient)
+						   GameTimeComponent &gameTime, TalentClient &talentClient, Minimap &minimap, InventoryClient &inventoryClient, TradeClient &tradeClient, ChannelClient &channelClient)
+		: GameState(gameStateManager)
+		, m_realmConnector(realmConnector)
+		, m_audio(audio)
+		, m_gameTime(gameTime)
+		, m_cache(cache)
+		, m_project(project)
+		, m_timers(timers)
+		, m_lootClient(lootClient)
+		, m_vendorClient(vendorClient)
+		, m_actionBar(actionBar)
+		, m_spellCast(spellCast)
+		, m_cooldownManager(cooldownManager)
+		, m_trainerClient(trainerClient)
+		, m_questClient(questClient)
+		, m_partyInfo(partyInfo)
+		, m_charSelect(charSelect)
+		, m_guildClient(guildClient)
+		, m_friendClient(friendClient)
+		, m_discord(discord)
+		, m_talentClient(talentClient)
+		, m_minimap(minimap)
+		, m_inventoryClient(inventoryClient)
+		, m_tradeClient(tradeClient)
+		, m_channelClient(channelClient)
 	{
 		// TODO: Do we want to put these asset references in some sort of config setting or something?
 		ObjectMgr::SetUnitNameFontSettings(FontManager::Get().CreateOrRetrieve("Fonts/FRIZQT__.TTF", 24.0f, 1.0f), MaterialManager::Get().Load("Models/UnitNameFont.hmat"));
@@ -243,6 +294,7 @@ namespace mmo
 				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Impact, spell, nullptr, targets); });
 
 		m_debugPathVisualizer = std::make_unique<DebugPathVisualizer>(*m_scene);
+		m_worldPingVisualizer = std::make_unique<WorldPingVisualizer>(*m_scene);
 
 		// Register world renderer
 		FrameManager::Get().RegisterFrameRenderer("WorldRenderer", [this](const std::string &name)
@@ -338,16 +390,20 @@ namespace mmo
 
 	void WorldState::OnLeave()
 	{
+		m_worldPingVisualizer.reset();
 		m_debugPathVisualizer.reset();
 		m_foliage.reset();
+		m_foliageRegistry.clear();
+		m_pageFoliageKeys.clear();
 
-		m_audio.StopSound(&m_backgroundMusicChannel);
-		m_backgroundMusicChannel = InvalidChannel;
-		m_backgroundMusicSound = InvalidSound;
-
-		m_audio.StopSound(&m_ambienceChannel);
-		m_ambienceChannel = InvalidChannel;
-		m_ambienceSound = InvalidSound;
+		auto stopAudio = [this](SoundIndex &sound, ChannelIndex &channel)
+		{
+			m_audio.StopSound(&channel);
+			channel = InvalidChannel;
+			sound = InvalidSound;
+		};
+		stopAudio(m_backgroundMusicSound, m_backgroundMusicChannel);
+		stopAudio(m_ambienceSound, m_ambienceChannel);
 
 		m_rayQuery.reset();
 
@@ -375,7 +431,6 @@ namespace mmo
 
 		s_inputControl = nullptr;
 		m_playerController.reset();
-		m_worldInstance.reset();
 		m_worldGrid.reset();
 		m_debugAxis.reset();
 		m_scene->Clear();
@@ -427,10 +482,94 @@ namespace mmo
 		// Load ui file
 		FrameManager::Get().LoadUIFile("Interface/GameUI/GameUI.toc");
 
+		// Override/extend Lua globals that need WorldState context
+		RegisterWorldLuaFunctions();
+
 		if (ObjectMgr::GetActivePlayerGuid())
 		{
 			FrameManager::Get().TriggerLuaEvent("PLAYER_ENTER_WORLD");
 		}
+	}
+
+	void WorldState::RegisterWorldLuaFunctions()
+	{
+		lua_State* L = FrameManager::Get().GetLuaState();
+		if (!L)
+		{
+			return;
+		}
+
+		luabind::module(L)
+		[
+			// Override SendPing to do hovered-object check + terrain raycast before sending
+			luabind::def<std::function<void()>>("SendPing", [this]()
+			{
+				if (!m_playerController || !m_scene)
+				{
+					return;
+				}
+
+				// 1) Check hovered object (unit or game object)
+				GameObjectC* hovered = m_playerController->GetHoveredObject();
+				if (hovered && hovered->IsUnit())
+				{
+					m_realmConnector.SendPartyPingUnit(hovered->GetGuid());
+					return;
+				}
+
+				// 2) Terrain/collidable raycast using current mouse position
+				if (m_rayQuery)
+				{
+					const int32 mouseX = m_playerController->GetMouseX();
+					const int32 mouseY = m_playerController->GetMouseY();
+
+					int32 screenW = 1920, screenH = 1080;
+					GraphicsDevice::Get().GetViewport(nullptr, nullptr, &screenW, &screenH);
+
+					const float nx = static_cast<float>(mouseX) / static_cast<float>(screenW);
+					const float ny = static_cast<float>(mouseY) / static_cast<float>(screenH);
+
+					const Ray mouseRay = m_playerController->GetCamera().GetCameraToViewportRay(nx, ny, 1000.0f);
+
+					m_rayQuery->ClearResult();
+					m_rayQuery->SetSortByDistance(true);
+					m_rayQuery->SetQueryMask(1 << 6); // terrain + world models
+					m_rayQuery->SetRay(mouseRay);
+					m_rayQuery->Execute();
+
+					const auto& results = m_rayQuery->GetLastResult();
+					for (const auto& result : results)
+					{
+						if (!result.movable)
+						{
+							continue;
+						}
+
+						const ICollidable* collidable = result.movable->GetCollidable();
+						if (!collidable || !collidable->IsCollidable())
+						{
+							continue;
+						}
+
+						CollisionResult collision;
+						if (collidable->TestRayCollision(mouseRay, collision))
+						{
+							const Vector3 hitPoint = mouseRay.origin + mouseRay.GetDirection() * collision.penetrationDepth;
+							m_realmConnector.SendPartyPingPosition(hitPoint.x, hitPoint.y, hitPoint.z);
+							return;
+						}
+					}
+				}
+
+				// 3) Fallback: ping at player position
+				auto player = ObjectMgr::GetActivePlayer();
+				if (player)
+				{
+					const Vector3& pos = player->GetPosition();
+					m_realmConnector.SendPartyPingPosition(pos.x, pos.y, pos.z);
+				}
+			})
+		];
 	}
 
 	void WorldState::OnTargetSelectionChanged(uint64 monitoredGuid)
@@ -579,6 +718,11 @@ namespace mmo
 			m_debugPathVisualizer->Update(deltaSeconds);
 		}
 
+		if (m_worldPingVisualizer && m_playerController)
+		{
+			m_worldPingVisualizer->Update(deltaSeconds, m_playerController->GetCamera());
+		}
+
 		for (size_t i = 0; i < 20; ++i)
 		{
 			if (!m_dispatcher.poll_one())
@@ -616,6 +760,63 @@ namespace mmo
 		if (const auto &controlled = m_playerController->GetControlledUnit())
 		{
 			m_minimap.UpdatePlayerPosition(controlled->GetPosition(), controlled->GetFacing());
+
+			// Gather visible party member positions for minimap dots
+			std::vector<Minimap::PartyMemberDot> partyPositions;
+			const uint32 memberCount = m_partyInfo.GetMemberCount();
+			const uint64 selfGuid = controlled->GetGuid();
+			for (uint32 i = 0; i < memberCount; ++i)
+			{
+				const int32 idx = static_cast<int32>(i);
+				const uint64 memberGuid = m_partyInfo.GetMemberGuid(idx);
+				if (memberGuid == selfGuid)
+				{
+					continue;
+				}
+				if (const auto memberUnit = ObjectMgr::Get<GameUnitC>(memberGuid))
+				{
+					const auto* member = m_partyInfo.GetMember(idx);
+					partyPositions.push_back({ memberUnit->GetPosition(), member ? member->name : memberUnit->GetName() });
+				}
+			}
+			m_minimap.UpdatePartyPositions(std::move(partyPositions));
+
+			// Gather quest giver dots for minimap
+			std::vector<Minimap::QuestGiverDot> questDots;
+			ObjectMgr::ForEachUnit([&questDots](GameUnitC& unit)
+			{
+				const QuestgiverStatus status = unit.GetQuestGiverStatus();
+				Minimap::QuestDotType dotType;
+				switch (status)
+				{
+				case questgiver_status::Available:
+				case questgiver_status::AvailableRep:
+					dotType = Minimap::QuestDotType::Available;
+					break;
+				case questgiver_status::Reward:
+				case questgiver_status::RewardRep:
+					dotType = Minimap::QuestDotType::Completable;
+					break;
+				default:
+					return; // Not shown on minimap
+				}
+				questDots.push_back({ unit.GetPosition(), dotType, unit.GetName() });
+			});
+			m_minimap.UpdateQuestGiverDots(std::move(questDots));
+		}
+
+		// Tick ping timers and remove expired ones
+		if (!m_activePings.empty())
+		{
+			for (auto& ping : m_activePings)
+			{
+				ping.remainingTime -= deltaSeconds;
+			}
+			m_activePings.erase(
+				std::remove_if(m_activePings.begin(), m_activePings.end(),
+					[](const Minimap::PingDot& p) { return p.remainingTime <= 0.0f; }),
+				m_activePings.end());
+			m_minimap.UpdatePings(m_activePings);
 		}
 
 		// Update projectiles
@@ -636,10 +837,24 @@ namespace mmo
 			m_foliage->Update(m_playerController->GetCamera());
 		}
 
-		// Position the sky dome to follow the player
-		if (m_skyComponent && m_playerController->GetRootNode())
+		// Cull distant authored instanced foliage (trees) by the configured view distance. Applying
+		// the cvar value here every frame keeps it correct regardless of page streaming / world
+		// reloads, and the cull itself only touches chunks whose visibility actually changed.
+		if (m_worldLoaded && m_worldInstance)
 		{
-			m_skyComponent->SetPosition(m_playerController->GetRootNode()->GetPosition());
+			if (InstancedFoliage* trees = m_worldInstance->GetInstancedFoliage())
+			{
+				trees->SetViewDistance(s_viewDistanceVar ? s_viewDistanceVar->GetFloatValue() : 0.0f);
+				trees->UpdateViewDistance(m_playerController->GetCamera().GetDerivedPosition());
+			}
+		}
+
+		// Notify terrain of the current camera position so it can detect large single-frame
+		// displacements (building exit, teleport) and reset stale tile occlusion state.
+		if (m_worldLoaded && m_worldInstance->HasTerrain())
+		{
+			m_worldInstance->GetTerrain()->NotifyCameraPosition(
+				m_playerController->GetCamera().GetDerivedPosition());
 		}
 
 		const auto pos = GetPagePositionFromCamera();
@@ -648,21 +863,15 @@ namespace mmo
 
 		CheckForZoneUpdate();
 
-		// Update world text frames
-		for (size_t i = 0; i < m_worldTextFrames.size();)
+		// Update world text frames then remove expired ones
+		for (auto &frame : m_worldTextFrames)
 		{
-			m_worldTextFrames[i]->Update(deltaSeconds);
-
-			// Maybe delete world text frame if it expired
-			if (m_worldTextFrames[i]->IsExpired())
-			{
-				m_worldTextFrames.erase(m_worldTextFrames.begin() + i);
-			}
-			else
-			{
-				++i;
-			}
+			frame->Update(deltaSeconds);
 		}
+		m_worldTextFrames.erase(
+			std::remove_if(m_worldTextFrames.begin(), m_worldTextFrames.end(),
+				[](const std::unique_ptr<WorldTextFrame> &frame) { return frame->IsExpired(); }),
+			m_worldTextFrames.end());
 	}
 
 	bool WorldState::OnMouseWheel(const int32 delta)
@@ -698,30 +907,22 @@ namespace mmo
 			return;
 		}
 
-		static uint32 s_zoneId = 0;
-
 		const auto pos = unit->GetPosition();
 		const uint32 zoneId = m_worldInstance->GetTerrain()->GetArea(pos);
-		if (zoneId != s_zoneId)
+		if (zoneId != m_lastZoneId)
 		{
-			s_zoneId = zoneId;
+			m_lastZoneId = zoneId;
 
-			const proto_client::ZoneEntry *zone = m_project.zones.getById(s_zoneId);
+			const proto_client::ZoneEntry *zone = m_project.zones.getById(m_lastZoneId);
 			if (zone)
 			{
-				if (zone->parentzone() != 0)
+				const proto_client::ZoneEntry *parentZone =
+					(zone->parentzone() != 0) ? m_project.zones.getById(zone->parentzone()) : nullptr;
+
+				if (parentZone)
 				{
-					const proto_client::ZoneEntry *parentZone = m_project.zones.getById(zone->parentzone());
-					if (parentZone)
-					{
-						s_zoneName = parentZone->name();
-						s_subZoneName = zone->name();
-					}
-					else
-					{
-						s_zoneName = zone->name();
-						s_subZoneName.clear();
-					}
+					s_zoneName = parentZone->name();
+					s_subZoneName = zone->name();
 				}
 				else
 				{
@@ -801,8 +1002,9 @@ namespace mmo
 	{
 		m_foliage = std::make_unique<Foliage>(*m_scene, GraphicsDevice::Get());
 
-		// Set up height query callback that checks terrain height, normal, and holes
-		m_foliage->SetHeightQueryCallback([this](float x, float z, float& height, Vector3& normal) -> bool
+		// Set up the terrain sample callback. Placement rules (slope, height, coverage, material)
+		// are now data-driven per terrain material; this only resolves raw terrain data at a point.
+		m_foliage->SetTerrainSampleCallback([this](float x, float z, FoliagePlacementSample& out) -> bool
 		{
 			// Check if world instance and terrain are available
 			if (!m_worldInstance || !m_worldInstance->HasTerrain())
@@ -822,25 +1024,21 @@ namespace mmo
 				return false;
 			}
 
-			// Get height and normal from terrain
-			height = terrain->GetSmoothHeightAt(x, z);
-			normal = terrain->GetSmoothNormalAt(x, z);
+			out.height = terrain->GetSmoothHeightAt(x, z);
+			out.normal = terrain->GetSmoothNormalAt(x, z);
 
-			// Check slope - if normal.y is too low, slope is too steep
-			// cos(35°) ≈ 0.8191f, so normal.y must be >= 0.8191f for walkable terrain
-			constexpr float maxSlopeCosine = 0.8191f; // 35 degrees
-			if (normal.y < maxSlopeCosine)
+			if (const MaterialPtr material = terrain->GetBaseMaterialAt(x, z))
 			{
-				return false;
+				// Use the painted material directly (not the root) so per-instance foliage gating works.
+				out.baseMaterial = material.get();
 			}
 
-			// Only render foliage where terrain layer 0 has > 30% influence
-			constexpr float minLayer0Influence = 0.3f;
-			if (terrain->GetLayerValueAt(x, z, 0) < minLayer0Influence)
+			for (uint8 layer = 0; layer < 4; ++layer)
 			{
-				return false;
+				out.coverage[layer] = terrain->GetLayerValueAt(x, z, layer);
 			}
 
+			out.valid = true;
 			return true;
 		});
 
@@ -861,56 +1059,171 @@ namespace mmo
 			Vector3(halfTerrainSize, 1000.0f, halfTerrainSize)
 		));
 
-		// Load grass mesh and create layer
-		MeshPtr grassMesh = MeshManager::Get().Load("Models/FalwynPlains/Plants/Grass_01.hmsh");
-		if (grassMesh)
+		// Foliage layers are no longer hardcoded; they are registered dynamically from the foliage
+		// definitions carried by the terrain materials of each streamed-in terrain page. See
+		// RegisterPageFoliage / UnregisterPageFoliage.
+	}
+
+	void WorldState::RegisterPageFoliage(const uint32 pageX, const uint32 pageY)
+	{
+		if (!m_foliage || !m_worldInstance || !m_worldInstance->HasTerrain())
 		{
-			auto grassLayer = std::make_shared<FoliageLayer>("Grass", grassMesh);
-
-			FoliageLayerSettings& layerSettings = grassLayer->GetSettings();
-			layerSettings.density = 4.0f;
-			layerSettings.minScale = 0.7f;
-			layerSettings.maxScale = 1.3f;
-			layerSettings.maxSlopeAngle = 35.0f;
-			layerSettings.fadeStartDistance = 40.0f;
-			layerSettings.fadeEndDistance = 60.0f;
-			layerSettings.castShadows = false;
-
-			m_foliage->AddLayer(grassLayer);
+			return;
 		}
 
-		MeshPtr grassMesh2 = MeshManager::Get().Load("Models/FalwynPlains/Plants/Grass_02.hmsh");
-		if (grassMesh2)
+		terrain::Terrain* terrain = m_worldInstance->GetTerrain();
+		if (!terrain)
 		{
-			auto grassLayer2 = std::make_shared<FoliageLayer>("Grass02", grassMesh2);
-
-			FoliageLayerSettings& layerSettings = grassLayer2->GetSettings();
-			layerSettings.density = 0.7f;
-			layerSettings.minScale = 1.0f;
-			layerSettings.maxScale = 1.0f;
-			layerSettings.maxSlopeAngle = 35.0f;
-			layerSettings.fadeStartDistance = 40.0f;
-			layerSettings.fadeEndDistance = 60.0f;
-			layerSettings.castShadows = false;
-
-			m_foliage->AddLayer(grassLayer2);
+			return;
 		}
 
-		MeshPtr flowerMesh = MeshManager::Get().Load("Models/FalwynPlains/Plants/Shrub_Flower_01.hmsh");
-		if (flowerMesh)
+		terrain::Page* page = terrain->GetPage(pageX, pageY);
+		if (!page || !page->IsLoaded())
 		{
-			auto flowerLayer = std::make_shared<FoliageLayer>("Flowers", flowerMesh);
+			return;
+		}
 
-			FoliageLayerSettings& layerSettings = flowerLayer->GetSettings();
-			layerSettings.density = 0.32f;
-			layerSettings.minScale = 1.0f;
-			layerSettings.maxScale = 1.0f;
-			layerSettings.maxSlopeAngle = 35.0f;
-			layerSettings.fadeStartDistance = 40.0f;
-			layerSettings.fadeEndDistance = 60.0f;
-			layerSettings.castShadows = false;
+		const uint16 pageIndex = static_cast<uint16>(pageX + pageY * 64);
 
-			m_foliage->AddLayer(flowerLayer);
+		// A page may be reported available more than once; rebuild its contribution from scratch.
+		UnregisterPageFoliage(pageX, pageY);
+
+		std::vector<FoliageLayerKey> contributed;
+		bool addedAnyLayer = false;
+
+		for (uint32 tileY = 0; tileY < terrain::constants::TilesPerPage; ++tileY)
+		{
+			for (uint32 tileX = 0; tileX < terrain::constants::TilesPerPage; ++tileX)
+			{
+				terrain::Tile* tile = page->GetTile(tileX, tileY);
+				if (!tile)
+				{
+					continue;
+				}
+
+				// The tile's assigned material (the painted .hmat or .hmi). Reading foliage from this
+				// interface respects per-instance overrides; gating on its pointer distinguishes
+				// instances that share the same base material.
+				const MaterialPtr paintedMaterial = tile->GetBaseMaterial();
+				if (!paintedMaterial)
+				{
+					continue;
+				}
+
+				MaterialInterface* material = paintedMaterial.get();
+				if (material->GetFoliageEntries().empty())
+				{
+					continue;
+				}
+
+				for (const MaterialFoliageEntry& entry : material->GetFoliageEntries())
+				{
+					const FoliageLayerKey key{ material, entry.layerIndex, entry.meshPath };
+
+					// Only count each distinct key once per page.
+					if (std::find(contributed.begin(), contributed.end(), key) != contributed.end())
+					{
+						continue;
+					}
+					contributed.push_back(key);
+
+					auto it = m_foliageRegistry.find(key);
+					if (it != m_foliageRegistry.end())
+					{
+						// Layer already exists (referenced by another loaded page); just ref-count it.
+						++it->second.refCount;
+						continue;
+					}
+
+					MeshPtr mesh = MeshManager::Get().Load(entry.meshPath);
+					if (!mesh)
+					{
+						WLOG("Foliage mesh '" << entry.meshPath << "' could not be loaded for material " << material->GetName());
+						// Still record the key (with no layer) so ref-counting stays balanced.
+						m_foliageRegistry.emplace(key, RegisteredFoliageLayer{ nullptr, 1 });
+						continue;
+					}
+
+					const String layerName = String(material->GetName()) + "#" +
+						std::to_string(static_cast<int>(entry.layerIndex)) + "#" + entry.meshPath;
+
+					auto layer = std::make_shared<FoliageLayer>(layerName, mesh);
+					FoliageLayerSettings& s = layer->GetSettings();
+					s.density = entry.density;
+					s.minScale = entry.minScale;
+					s.maxScale = entry.maxScale;
+					s.maxSlopeAngle = entry.maxSlopeAngle;
+					s.minHeight = entry.minHeight;
+					s.maxHeight = entry.maxHeight;
+					s.fadeStartDistance = entry.fadeStartDistance;
+					s.fadeEndDistance = entry.fadeEndDistance;
+					s.randomYawRotation = entry.randomYaw;
+					s.alignToNormal = entry.alignToNormal;
+					s.castShadows = entry.castShadows;
+					s.terrainLayerIndex = static_cast<int32>(entry.layerIndex);
+					s.minCoverage = entry.minCoverage;
+					s.terrainMaterial = material;
+
+					m_foliage->AddLayer(layer);
+					m_foliageRegistry.emplace(key, RegisteredFoliageLayer{ layer, 1 });
+					addedAnyLayer = true;
+				}
+			}
+		}
+
+		if (!contributed.empty())
+		{
+			m_pageFoliageKeys[pageIndex] = std::move(contributed);
+		}
+
+		if (addedAnyLayer)
+		{
+			// Make sure new layers get chunks created near the camera right away.
+			m_foliage->InvalidateActiveChunks();
+		}
+	}
+
+	void WorldState::UnregisterPageFoliage(const uint32 pageX, const uint32 pageY)
+	{
+		const uint16 pageIndex = static_cast<uint16>(pageX + pageY * 64);
+
+		auto pageIt = m_pageFoliageKeys.find(pageIndex);
+		if (pageIt == m_pageFoliageKeys.end())
+		{
+			return;
+		}
+
+		bool removedAnyLayer = false;
+
+		for (const FoliageLayerKey& key : pageIt->second)
+		{
+			auto it = m_foliageRegistry.find(key);
+			if (it == m_foliageRegistry.end())
+			{
+				continue;
+			}
+
+			if (it->second.refCount > 0)
+			{
+				--it->second.refCount;
+			}
+
+			if (it->second.refCount == 0)
+			{
+				if (it->second.layer && m_foliage)
+				{
+					m_foliage->RemoveLayer(it->second.layer->GetName());
+					removedAnyLayer = true;
+				}
+				m_foliageRegistry.erase(it);
+			}
+		}
+
+		m_pageFoliageKeys.erase(pageIt);
+
+		if (removedAnyLayer && m_foliage)
+		{
+			m_foliage->InvalidateActiveChunks();
 		}
 	}
 
@@ -933,6 +1246,10 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetFacing, *this, &WorldState::OnMovement);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveJump, *this, &WorldState::OnMovement);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveFallLand, *this, &WorldState::OnMovement);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartSwim, *this, &WorldState::OnMovement);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStopSwim, *this, &WorldState::OnMovement);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartWalk, *this, &WorldState::OnMovement);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStopWalk, *this, &WorldState::OnMovement);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveEnded, *this, &WorldState::OnMovement);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSplineDone, *this, &WorldState::OnMovement);
 
@@ -948,6 +1265,7 @@ namespace mmo
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellStart, *this, &WorldState::OnSpellStart);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellGo, *this, &WorldState::OnSpellGo);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellCooldown, *this, &WorldState::OnSpellCooldown);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellFailure, *this, &WorldState::OnSpellFailure);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ChannelStart, *this, &WorldState::OnChannelStart);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ChannelUpdate, *this, &WorldState::OnChannelUpdate);
@@ -998,6 +1316,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PartyCommandResult, *this, &WorldState::OnPartyCommandResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupInvite, *this, &WorldState::OnGroupInvite);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupDecline, *this, &WorldState::OnGroupDecline);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PartyPing, *this, &WorldState::OnPartyPing);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::RandomRollResult, *this, &WorldState::OnRandomRollResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AttackerStateUpdate, *this, &WorldState::OnAttackerStateUpdate);
@@ -1007,11 +1326,18 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LogoutResponse, *this, &WorldState::OnLogoutResponse);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MessageOfTheDay, *this, &WorldState::OnMessageOfTheDay);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveRoot, *this, &WorldState::OnMoveRoot);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStun, *this, &WorldState::OnMoveStun);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSleep, *this, &WorldState::OnMoveSleep);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveFear, *this, &WorldState::OnMoveFear);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveDisorient, *this, &WorldState::OnMoveDisorient);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &WorldState::OnGameTimeInfo);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetProficiency, *this, &WorldState::OnSetProficiency);
 
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellModChanged, *this, &WorldState::OnSpellModChanged);
+
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TimePlayedResponse, *this, &WorldState::OnTimePlayedResponse);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TimeSyncRequest, *this, &WorldState::OnTimeSyncRequest);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::DebugLineOfSightResult, *this, &WorldState::OnDebugLineOfSightResult);
 
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
@@ -1020,8 +1346,10 @@ namespace mmo
 		m_partyInfo.Initialize();
 		m_guildClient.Initialize();
 		m_friendClient.Initialize();
+		m_channelClient.Initialize();
 		m_talentClient.Initialize();
 		m_inventoryClient.Initialize();
+		m_tradeClient.Initialize();
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("createmonster", [this](const std::string &cmd, const std::string &args)
 								 { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
@@ -1047,6 +1375,8 @@ namespace mmo
 								 { Command_Summon(cmd, args); }, ConsoleCommandCategory::Gm, "Summons the named player to your location if such a player exists.");
 		Console::RegisterCommand("speed", [this](const std::string &cmd, const std::string &args)
 								 { Command_Speed(cmd, args); }, ConsoleCommandCategory::Gm, "Sets your movement speed to the new value in meters per second.");
+		Console::RegisterCommand("checklos", [this](const std::string &cmd, const std::string &args)
+								 { Command_CheckLineOfSight(cmd, args); }, ConsoleCommandCategory::Gm, "Performs a server-side line of sight check from your position to the selected target and visualizes the result.");
 #endif
 	}
 
@@ -1065,11 +1395,14 @@ namespace mmo
 		Console::UnregisterCommand("port");
 		Console::UnregisterCommand("summon");
 		Console::UnregisterCommand("speed");
+		Console::UnregisterCommand("checklos");
 #endif
 
+		m_tradeClient.Shutdown();
 		m_inventoryClient.Shutdown();
 		m_talentClient.Shutdown();
 		m_guildClient.Shutdown();
+		m_channelClient.Shutdown();
 		m_partyInfo.Shutdown();
 		m_questClient.Shutdown();
 		m_trainerClient.Shutdown();
@@ -1085,12 +1418,14 @@ namespace mmo
 		// Trigger the lua event
 		FrameManager::Get().TriggerLuaEvent("REALM_DISCONNECTED");
 
-		// Go back to login state
+		// Go back to login state, flagging why we left
+		LoginState::s_returnReason = LoginReturnReason::RealmDisconnected;
 		GameStateMgr::Get().SetGameState(LoginState::Name);
 	}
 
 	void WorldState::OnEnterWorldFailed(game::player_login_response::Type error)
 	{
+		LoginState::s_returnReason = LoginReturnReason::EnterWorldFailed;
 		GameStateMgr::Get().SetGameState(LoginState::Name);
 	}
 
@@ -1100,15 +1435,34 @@ namespace mmo
 		s_renderShadowsVar = ConsoleVarMgr::RegisterConsoleVar("RenderShadows", "Determines whether or not shadows should be rendered", "1");
 		m_cvarChangedSignals += s_renderShadowsVar->Changed.connect(this, &WorldState::OnRenderShadowsChanged);
 
-		s_depthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowDepthBias", "", "50");
+		s_depthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowDepthBias", "", "138.6");
 		m_cvarChangedSignals += s_depthBiasVar->Changed.connect(this, &WorldState::OnShadowBiasChanged);
-		s_slopeDepthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowSlopeBias", "", "1.5");
+		s_slopeDepthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowSlopeBias", "", "0.1");
 		m_cvarChangedSignals += s_slopeDepthBiasVar->Changed.connect(this, &WorldState::OnShadowBiasChanged);
-		s_clampDepthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowClampBias", "", "0.005");
+		s_clampDepthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowClampBias", "", "0.0");
 		m_cvarChangedSignals += s_clampDepthBiasVar->Changed.connect(this, &WorldState::OnShadowBiasChanged);
 
 		s_shadowTextureSizeVar = ConsoleVarMgr::RegisterConsoleVar("ShadowTextureSize", "", "1");
 		m_cvarChangedSignals += s_shadowTextureSizeVar->Changed.connect(this, &WorldState::OnShadowTextureSizeChanged);
+
+		s_shadowQualityVar = ConsoleVarMgr::RegisterConsoleVar("ShadowQuality", "Shadow detail preset: 0 = Low (2 cascades, 4 PCF taps), 1 = Medium (3/8), 2 = High (4/16). Lower values improve performance.", "2");
+		m_cvarChangedSignals += s_shadowQualityVar->Changed.connect(this, &WorldState::OnShadowQualityChanged);
+
+		s_shadowTemporalVar = ConsoleVarMgr::RegisterConsoleVar("ShadowTemporal", "Temporal cascade staggering: 1 = distant cascades refresh every few frames (faster), 0 = every cascade every frame.", "1");
+		m_cvarChangedSignals += s_shadowTemporalVar->Changed.connect(this, &WorldState::OnShadowTemporalChanged);
+
+		// Internal 3D render-scale: the world is rendered at this fraction of the frame size and then
+		// upscaled. 1.0 = native; lower values trade sharpness for a large performance gain on weak
+		// GPUs. Read directly by WorldRenderer each frame, so no change handler is required here.
+		s_renderScaleVar = ConsoleVarMgr::RegisterConsoleVar("gxRenderScale", "3D render resolution scale (0.25 to 1.0). Lower values improve performance by rendering the world at a lower resolution and upscaling.", "1.0");
+
+		s_depthPrepassVar = ConsoleVarMgr::RegisterConsoleVar("gxDepthPrepass", "Render an opaque depth pre-pass before the G-Buffer pass. Reduces overdraw shading cost in scenes with heavy opaque overdraw (e.g. dense foliage). 1 = on, 0 = off.", "0");
+		m_cvarChangedSignals += s_depthPrepassVar->Changed.connect(this, &WorldState::OnDepthPrepassChanged);
+
+		// Distance (world units) beyond which authored instanced foliage (trees, bushes, rocks) is
+		// culled. Lower values cut the overdraw from dense forests. Read each frame in OnIdle, so no
+		// change handler is required. A very large value = unlimited (render everything).
+		s_viewDistanceVar = ConsoleVarMgr::RegisterConsoleVar("ViewDistance", "Maximum render distance for environment objects like trees (world units). Lower values improve performance in dense forests.", "600");
 
 		s_terrainLodEnabledVar = ConsoleVarMgr::RegisterConsoleVar("TerrainLodEnabled", "Enable or disable terrain level of detail", "1");
 		m_cvarChangedSignals += s_terrainLodEnabledVar->Changed.connect(this, &WorldState::OnTerrainLodEnabledChanged);
@@ -1169,6 +1523,9 @@ namespace mmo
 				ILOG(m_scene->IsRenderingFrozen() ? "Culling is now frozen" : "Culling is no longer frozen"); }, ConsoleCommandCategory::Debug, "Toggles culling.");
 
 		OnShadowTextureSizeChanged(*s_shadowTextureSizeVar, "");
+		OnShadowQualityChanged(*s_shadowQualityVar, "");
+		OnShadowTemporalChanged(*s_shadowTemporalVar, "");
+		OnDepthPrepassChanged(*s_depthPrepassVar, "");
 		OnRenderShadowsChanged(*s_renderShadowsVar, "");
 		OnShadowBiasChanged(*s_depthBiasVar, "");
 		OnFoliageEnabledChanged(*s_foliageEnabledVar, "");
@@ -1183,6 +1540,11 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowSlopeBias");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowClampBias");
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowTextureSize");
+		ConsoleVarMgr::UnregisterConsoleVar("ShadowQuality");
+		ConsoleVarMgr::UnregisterConsoleVar("ShadowTemporal");
+		ConsoleVarMgr::UnregisterConsoleVar("gxRenderScale");
+		ConsoleVarMgr::UnregisterConsoleVar("gxDepthPrepass");
+		ConsoleVarMgr::UnregisterConsoleVar("ViewDistance");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageEnabled");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageDensity");
 
@@ -1293,6 +1655,11 @@ namespace mmo
 	}
 
 	PacketParseResult WorldState::OnUpdateObject(game::IncomingPacket &packet)
+	{
+		return HandleObjectUpdate(packet);
+	}
+
+	PacketParseResult WorldState::HandleObjectUpdate(io::Reader &packet)
 	{
 		uint16 numObjectUpdates;
 		if (!(packet >> io::read<uint16>(numObjectUpdates)))
@@ -1491,8 +1858,50 @@ namespace mmo
 
 	PacketParseResult WorldState::OnCompressedUpdateObject(game::IncomingPacket &packet)
 	{
-		TODO("Implement");
-		return PacketParseResult::Pass;
+		// Body layout: uint32 uncompressed size followed by the zlib-compressed UpdateObject body.
+		uint32 uncompressedSize;
+		if (!(packet >> io::read<uint32>(uncompressedSize)))
+		{
+			ELOG("Failed to read uncompressed size of compressed update object packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (uncompressedSize == 0)
+		{
+			ELOG("Compressed update object packet declares an empty payload!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// The remaining bytes of the packet body are the compressed payload.
+		const uint32 compressedSize = packet.GetSize() - sizeof(uint32);
+		if (compressedSize == 0)
+		{
+			ELOG("Compressed update object packet has no payload!");
+			return PacketParseResult::Disconnect;
+		}
+
+		std::vector<char> compressed(compressedSize);
+		if (packet.getSource()->read(compressed.data(), compressedSize) != compressedSize)
+		{
+			ELOG("Failed to read compressed update object payload!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Decompress into a buffer of the declared uncompressed size.
+		std::vector<char> decompressed(uncompressedSize);
+		uLongf destLen = uncompressedSize;
+		const int result = uncompress(reinterpret_cast<Bytef*>(decompressed.data()), &destLen,
+			reinterpret_cast<const Bytef*>(compressed.data()), static_cast<uLong>(compressedSize));
+		if (result != Z_OK || destLen != uncompressedSize)
+		{
+			ELOG("Failed to decompress update object packet (zlib error " << result << ")");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Parse the decompressed update body exactly like an uncompressed UpdateObject packet.
+		io::MemorySource decompressedSource(decompressed.data(), decompressed.data() + decompressed.size());
+		io::Reader reader(decompressedSource);
+		return HandleObjectUpdate(reader);
 	}
 
 	PacketParseResult WorldState::OnDestroyObjects(game::IncomingPacket &packet)
@@ -1564,10 +1973,23 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		// Apply movement packet to remote units via the buffered queue
 		if (ObjectMgr::GetActivePlayerGuid() != characterGuid)
 		{
-			unitPtr->EnqueueRemoteMovement(movementInfo);
+			// Route all movement to the dead-reckoning renderer.
+			// MoveSetFacing and MoveStopTurn are treated as facing-only updates
+			// (no position extrapolation reset) — the renderer handles this distinction.
+			const uint16 opcode = packet.GetId();
+			const bool facingOnly =
+			    opcode == game::realm_client_packet::MoveSetFacing;
+
+			if (facingOnly)
+			{
+				unitPtr->ApplyRemoteFacing(movementInfo.facing);
+			}
+			else
+			{
+				unitPtr->EnqueueRemoteMovement(movementInfo);
+			}
 		}
 
 		return PacketParseResult::Pass;
@@ -1620,13 +2042,34 @@ namespace mmo
 				return PacketParseResult::Pass;
 			}
 
-			m_cache.GetNameCache().Get(characterGuid, [this, type, message, flags](uint64, const String &name)
+			// Channel messages carry the global channel id so the client can resolve the local
+			// channel number and name for display.
+			uint32 channelId = 0;
+			if (type == ChatType::Channel)
+			{
+				if (!(packet >> io::read<uint32>(channelId)))
+				{
+					return PacketParseResult::Disconnect;
+				}
+			}
+
+			m_cache.GetNameCache().Get(characterGuid, [this, type, message, flags, channelId](uint64, const String &name)
 									   {
+					if (type == ChatType::Channel)
+					{
+						// The channel chat event provides the local channel id, the speaker name
+						// and the message; ChatFrame.lua resolves the channel name and number.
+						const int32 localId = m_channelClient.GetLocalId(channelId);
+						const String channelName = m_channelClient.GetChannelNameByGlobalId(channelId);
+						FrameManager::Get().TriggerLuaEvent("CHAT_MSG_CHANNEL", localId, channelName, name, message);
+						return;
+					}
+
 					String chatMessageType = "SAY";
 					switch (type)
 					{
-					case ChatType::Channel: chatMessageType = "CHANNEL"; break;
 					case ChatType::Yell: chatMessageType = "YELL"; break;
+					case ChatType::Emote: chatMessageType = "EMOTE"; break;
 					case ChatType::Group: chatMessageType = "PARTY"; break;
 					case ChatType::Guild: chatMessageType = "GUILD"; break;
 					case ChatType::Whisper: chatMessageType = "WHISPER"; break;
@@ -1798,36 +2241,10 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	Vector3 UnpackMovementVector(uint32 packed, const Vector3 &mid)
-	{
-		Vector3 p;
-
-		// Extract the x component
-		int x_diff = (packed & 0x7FF); // Extract lower 11 bits
-		if (x_diff > 0x3FF)
-		{					  // Handle negative values
-			x_diff |= ~0x7FF; // Extend sign bit
-		}
-		p.x = mid.x - (x_diff * 0.25f);
-
-		// Extract the y component
-		int y_diff = ((packed >> 11) & 0x7FF); // Extract next 11 bits
-		if (y_diff > 0x3FF)
-		{					  // Handle negative values
-			y_diff |= ~0x7FF; // Extend sign bit
-		}
-		p.y = mid.y - (y_diff * 0.25f);
-
-		// Extract the z component
-		int z_diff = ((packed >> 22) & 0x3FF); // Extract next 10 bits
-		if (z_diff > 0x1FF)
-		{					  // Handle negative values
-			z_diff |= ~0x3FF; // Extend sign bit
-		}
-		p.z = mid.z - (z_diff * 0.25f);
-
-		return p;
-	}
+	// UnpackMovementVector was removed — intermediate waypoints are now transmitted as
+	// raw floats (3 × float) instead of the old lossy 11/10-bit packed uint32 format.
+	// The packed format silently overflowed for routes longer than ~256 world-units
+	// from the (start+end)/2 midpoint, corrupting every waypoint on long NPC routes.
 
 	PacketParseResult WorldState::OnCreatureMove(game::IncomingPacket &packet)
 	{
@@ -1889,19 +2306,22 @@ namespace mmo
 		const bool isPlayer = unitPtr->GetTypeId() == ObjectTypeId::Player;
 		(void)isPlayer;
 
+		// Read intermediate waypoints written as raw floats.
+		// pathSize = total waypoints not counting startPosition; endPosition is #1.
+		// So there are (pathSize - 1) intermediate points to read.
+		// Previously this used a lossy 11/10-bit packed format relative to the
+		// route midpoint, which overflowed for long multi-waypoint NPC routes.
 		if (pathSize > 1)
 		{
-			const Vector3 mid = (startPosition + endPosition) * 0.5f;
-
-			for (uint32 i = 1; i < pathSize - 1; ++i)
+			for (uint32 i = 1; i < pathSize; ++i)  // pathSize-1 iterations (was pathSize-2, off by one)
 			{
-				uint32 packed;
-				if (!(packet >> io::read<uint32>(packed)))
+				Vector3 p;
+				if (!(packet >> io::read<float>(p.x) >> io::read<float>(p.y) >> io::read<float>(p.z)))
 				{
 					return PacketParseResult::Disconnect;
 				}
 
-				path.push_back(UnpackMovementVector(packed, mid));
+				path.push_back(p);
 			}
 		}
 
@@ -2004,8 +2424,9 @@ namespace mmo
 		GameTime castTime;
 		SpellTargetMap targetMap;
 		uint32 cooldownMs = 0;
+		uint32 globalCooldownMs = 0;
 
-		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<GameTime>(castTime) >> targetMap >> io::read<uint32>(cooldownMs)))
+		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<GameTime>(castTime) >> targetMap >> io::read<uint32>(cooldownMs) >> io::read<uint32>(globalCooldownMs)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -2017,9 +2438,10 @@ namespace mmo
 		{
 			if (castTime > 0)
 			{
-				// Trigger spell visualization for casting start
+				// Trigger spell visualization for casting start and looped casting animation
 				std::vector<GameUnitC *> targets;
 				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::StartCast, *spell, casterUnit.get(), targets);
+				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Casting, *spell, casterUnit.get(), targets);
 			}
 		}
 
@@ -2032,6 +2454,11 @@ namespace mmo
 				if (cooldownMs > 0)
 				{
 					m_cooldownManager.StartCooldown(spellId, cooldownMs);
+				}
+
+				if (globalCooldownMs > 0)
+				{
+					m_cooldownManager.StartGlobalCooldown(globalCooldownMs);
 				}
 			}
 		}
@@ -2046,8 +2473,9 @@ namespace mmo
 		GameTime gameTime;
 		SpellTargetMap targetMap;
 		uint32 cooldownMs = 0;
+		uint32 globalCooldownMs = 0;
 
-		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<GameTime>(gameTime) >> targetMap >> io::read<uint32>(cooldownMs)))
+		if (!(packet >> io::read_packed_guid(casterId) >> io::read<uint32>(spellId) >> io::read<GameTime>(gameTime) >> targetMap >> io::read<uint32>(cooldownMs) >> io::read<uint32>(globalCooldownMs)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -2163,6 +2591,37 @@ namespace mmo
 			{
 				m_cooldownManager.StartCooldown(spellId, cooldownMs);
 			}
+
+			if (globalCooldownMs > 0)
+			{
+				m_cooldownManager.StartGlobalCooldown(globalCooldownMs);
+			}
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnSpellCooldown(game::IncomingPacket& packet)
+	{
+		uint16 count = 0;
+		if (!(packet >> io::read<uint16>(count)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		for (uint16 i = 0; i < count; ++i)
+		{
+			uint32 spellId = 0;
+			uint32 remainingMs = 0;
+			if (!(packet >> io::read<uint32>(spellId) >> io::read<uint32>(remainingMs)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			if (remainingMs > 0)
+			{
+				m_cooldownManager.StartCooldown(spellId, remainingMs);
+			}
 		}
 
 		return PacketParseResult::Pass;
@@ -2253,171 +2712,25 @@ namespace mmo
 		static const char *s_spellCastResultStrings[] = {
 			"SPELL_CAST_FAILED_AFFECTING_COMBAT",
 			"SPELL_CAST_FAILED_ALREADY_AT_FULL_HEALTH",
-			"SPELL_CAST_FAILED_ALREADY_AT_FULL_MANA",
 			"SPELL_CAST_FAILED_ALREADY_AT_FULL_POWER",
-			"SPELL_CAST_FAILED_ALREADY_BEING_TAMED",
-			"SPELL_CAST_FAILED_ALREADY_HAVE_CHARM",
-			"SPELL_CAST_FAILED_ALREADY_HAVE_SUMMON",
-			"SPELL_CAST_FAILED_ALREADY_OPEN",
-			"SPELL_CAST_FAILED_AURA_BOUNCED",
-			"SPELL_CAST_FAILED_AUTOTRACK_INTERRUPTED",
-			"SPELL_CAST_FAILED_BAD_IMPLICIT_TARGETS",
 			"SPELL_CAST_FAILED_BAD_TARGETS",
-			"SPELL_CAST_FAILED_CANT_BE_CHARMED",
-			"SPELL_CAST_FAILED_CANT_BE_DISENCHANTED",
-			"SPELL_CAST_FAILED_CANT_BE_DISENCHANTED_SKILL",
-			"SPELL_CAST_FAILED_CANT_BE_PROSPECTED",
-			"SPELL_CAST_FAILED_CANT_CAST_ON_TAPPED",
-			"SPELL_CAST_FAILED_CANT_DUEL_WHILE_INVISIBLE",
-			"SPELL_CAST_FAILED_CANT_DUEL_WHILE_STEALTHED",
-			"SPELL_CAST_FAILED_CANT_STEALTH",
-			"SPELL_CAST_FAILED_CASTER_AURASTATE",
 			"SPELL_CAST_FAILED_CASTER_DEAD",
-			"SPELL_CAST_FAILED_CHARMED",
-			"SPELL_CAST_FAILED_CHEST_IN_USE",
-			"SPELL_CAST_FAILED_CONFUSED",
-			"SPELL_CAST_FAILED_DONT_REPORT",
-			"SPELL_CAST_FAILED_EQUIPPED_ITEM",
-			"SPELL_CAST_FAILED_EQUIPPED_ITEM_CLASS",
-			"SPELL_CAST_FAILED_EQUIPPED_ITEM_CLASS_MAINHAND",
-			"SPELL_CAST_FAILED_EQUIPPED_ITEM_CLASS_OFFHAND",
 			"SPELL_CAST_FAILED_ERROR",
-			"SPELL_CAST_FAILED_FIZZLE",
-			"SPELL_CAST_FAILED_FLEEING",
-			"SPELL_CAST_FAILED_FOOD_LOW_LEVEL",
-			"SPELL_CAST_FAILED_HIGH_LEVEL",
-			"SPELL_CAST_FAILED_HUNGER_SATIATED",
-			"SPELL_CAST_FAILED_IMMUNE",
 			"SPELL_CAST_FAILED_INTERRUPTED",
-			"SPELL_CAST_FAILED_INTERRUPTED_COMBAT",
-			"SPELL_CAST_FAILED_ITEM_ALREADY_ENCHANTED",
-			"SPELL_CAST_FAILED_ITEM_GONE",
-			"SPELL_CAST_FAILED_ITEM_NOT_FOUND",
-			"SPELL_CAST_FAILED_ITEM_NOT_READY",
 			"SPELL_CAST_FAILED_LEVEL_REQUIREMENT",
-			"SPELL_CAST_FAILED_LINE_OF_SIGHT",
-			"SPELL_CAST_FAILED_LOW_LEVEL",
-			"SPELL_CAST_FAILED_LOW_CAST_LEVEL",
-			"SPELL_CAST_FAILED_MAINHAND_EMPTY",
 			"SPELL_CAST_FAILED_MOVING",
-			"SPELL_CAST_FAILED_NEED_AMMO",
-			"SPELL_CAST_FAILED_NEED_AMMO_POUCH",
-			"SPELL_CAST_FAILED_NEED_EXOTIC_AMMO",
-			"SPELL_CAST_FAILED_NO_PATH",
-			"SPELL_CAST_FAILED_NOT_BEHIND",
-			"SPELL_CAST_FAILED_NOT_FISHABLE",
-			"SPELL_CAST_FAILED_NOT_FLYING",
-			"SPELL_CAST_FAILED_NOT_HERE",
-			"SPELL_CAST_FAILED_NOT_INFRONT",
-			"SPELL_CAST_FAILED_NOT_IN_CONTROL",
 			"SPELL_CAST_FAILED_NOT_KNOWN",
-			"SPELL_CAST_FAILED_NOT_MOUNTED",
-			"SPELL_CAST_FAILED_NOT_ON_TAXI",
-			"SPELL_CAST_FAILED_NOT_ON_TRANSPORT",
 			"SPELL_CAST_FAILED_NOT_READY",
-			"SPELL_CAST_FAILED_NOT_SHAPESHIFT",
-			"SPELL_CAST_FAILED_NOT_STANDING",
-			"SPELL_CAST_FAILED_NOT_TRADABLE",
-			"SPELL_CAST_FAILED_NOT_TRADING",
-			"SPELL_CAST_FAILED_NOT_UNSHEATHED",
-			"SPELL_CAST_FAILED_NOT_WHILE_GHOST",
-			"SPELL_CAST_FAILED_NO_AMMO",
-			"SPELL_CAST_FAILED_NO_CHARGES_REMAIN",
-			"SPELL_CAST_FAILED_NO_COMBO_POINTS",
-			"SPELL_CAST_FAILED_NO_DUELING",
-			"SPELL_CAST_FAILED_NO_ENDURANCE",
-			"SPELL_CAST_FAILED_NO_FISH",
-			"SPELL_CAST_FAILED_NO_ITEMS_WHILE_SHAPESHIFTED",
-			"SPELL_CAST_FAILED_NO_MOUNTS_ALLOWED",
-			"SPELL_CAST_FAILED_NO_PET",
 			"SPELL_CAST_FAILED_NO_POWER",
-			"SPELL_CAST_FAILED_NOTHING_TO_DISPEL",
-			"SPELL_CAST_FAILED_NOTHING_TO_STEAL",
-			"SPELL_CAST_FAILED_ONLY_ABOVE_WATER",
-			"SPELL_CAST_FAILED_ONLY_DAYTIME",
 			"SPELL_CAST_FAILED_ONLY_INDOORS",
-			"SPELL_CAST_FAILED_ONLY_MOUNTED",
-			"SPELL_CAST_FAILED_ONLY_NIGHTTIME",
-			"SPELL_CAST_FAILED_ONLY_OUTDOORS",
-			"SPELL_CAST_FAILED_ONLY_SHAPESHIFTED",
 			"SPELL_CAST_FAILED_ONLY_STEALTHED",
-			"SPELL_CAST_FAILED_ONLY_UNDERWATER",
 			"SPELL_CAST_FAILED_OUT_OF_RANGE",
-			"SPELL_CAST_FAILED_PACIFIED",
-			"SPELL_CAST_FAILED_POSSESSED",
 			"SPELL_CAST_FAILED_REAGENTS",
-			"SPELL_CAST_FAILED_REQUIRES_AREA",
-			"SPELL_CAST_FAILED_REQUIRES_SPELL_FOCUS",
-			"SPELL_CAST_FAILED_ROOTED",
-			"SPELL_CAST_FAILED_SILENCED",
 			"SPELL_CAST_FAILED_SPELL_IN_PROGRESS",
-			"SPELL_CAST_FAILED_SELL_LEARNED",
-			"SPELL_CAST_FAILED_SPELL_UNAVAILABLE",
-			"SPELL_CAST_FAILED_STUNNED",
-			"SPELL_CAST_FAILED_TARGETS_DEAD",
-			"SPELL_CAST_FAILED_TARGET_AFFECTING_COMBAT",
-			"SPELL_CAST_FAILED_TARGET_AURA_STATE",
-			"SPELL_CAST_FAILED_TARGET_DUELING",
-			"SPELL_CAST_FAILED_TARGET_ENEMY",
-			"SPELL_CAST_FAILED_TARGET_ENRAGED",
-			"SPELL_CAST_FAILED_TARGET_FRIENDLY",
-			"SPELL_CAST_FAILED_TARGET_IN_COMBAT",
-			"SPELL_CAST_FAILED_TARGET_IS_PLAYER",
-			"SPELL_CAST_FAILED_TARGET_IS_PLAYER_CONTROLLED",
 			"SPELL_CAST_FAILED_TARGET_NOT_DEAD",
-			"SPELL_CAST_FAILED_TARGET_NOT_IN_PARTY",
-			"SPELL_CAST_FAILED_TARGET_NOT_LOOTED",
-			"SPELL_CAST_FAILED_TARGET_NOT_PLAYER",
-			"SPELL_CAST_FAILED_TARGET_NO_POCKETS",
-			"SPELL_CAST_FAILED_TARGET_NO_WEAPONS",
-			"SPELL_CAST_FAILED_TARGET_UNSKINNABLE",
-			"SPELL_CAST_FAILED_THIRST_SATISFIED",
-			"SPELL_CAST_FAILED_TOO_CLOSE",
-			"SPELL_CAST_FAILED_TOO_MANY_OF_ITEM",
-			"SPELL_CAST_FAILED_TOTEM_CATEGORY",
-			"SPELL_CAST_FAILED_TOTEMS",
-			"SPELL_CAST_FAILED_TRAINING_POINTS",
-			"SPELL_CAST_FAILED_TRY_AGAIN",
 			"SPELL_CAST_FAILED_UNIT_NOT_BEHIND",
 			"SPELL_CAST_FAILED_UNIT_NOT_INFRONT",
-			"SPELL_CAST_FAILED_WRONG_PET_FOOD",
-			"SPELL_CAST_FAILED_NOT_WHILE_FATIGUED",
-			"SPELL_CAST_FAILED_TARGET_NOT_IN_INSTANCE",
-			"SPELL_CAST_FAILED_NOT_WHILE_TRADING",
-			"SPELL_CAST_FAILED_TARGET_NOT_IN_RAID",
-			"SPELL_CAST_FAILED_DISENCHANT_WHILE_LOOTING",
-			"SPELL_CAST_FAILED_PROSPECT_WHILE_LOOTING",
-			"SPELL_CAST_FAILED_PROSPECT_NEED_MORE",
-			"SPELL_CAST_FAILED_TARGET_FREE_FOR_ALL",
-			"SPELL_CAST_FAILED_NO_EDIBLE_CORPSES",
-			"SPELL_CAST_FAILED_ONLY_BATTLEGROUNDS",
-			"SPELL_CAST_FAILED_TARGET_NOT_GHOSTS",
-			"SPELL_CAST_FAILED_TOO_MANY_SKILLS",
-			"SPELL_CAST_FAILED_TRANSFORM_UNUSABLE",
-			"SPELL_CAST_FAILED_WRONG_WEATHER",
-			"SPELL_CAST_FAILED_DAMAGE_IMMUNE",
-			"SPELL_CAST_FAILED_PREVENTED_BY_MECHANIC",
-			"SPELL_CAST_FAILED_PLAY_TIME",
-			"SPELL_CAST_FAILED_REPUTATION",
-			"SPELL_CAST_FAILED_MIN_SKILL",
-			"SPELL_CAST_FAILED_NOT_IN_ARENA",
-			"SPELL_CAST_FAILED_NOT_ON_SHAPESHIFTED",
-			"SPELL_CAST_FAILED_NOT_ON_STEALTHED",
-			"SPELL_CAST_FAILED_NOT_ON_DAMAGE_IMMUNE",
-			"SPELL_CAST_FAILED_NOT_ON_MOUNTED",
-			"SPELL_CAST_FAILED_TOO_SHALLOW",
-			"SPELL_CAST_FAILED_TARGET_NOT_IN_SANCTUARY",
-			"SPELL_CAST_FAILED_TARGET_IS_TRIVIAL",
-			"SPELL_CAST_FAILED_BM_OR_INVIS_GOD",
-			"SPELL_CAST_FAILED_EXPERT_RIDING_REQUIREMENT",
-			"SPELL_CAST_FAILED_ARTISAN_RIDING_REQUIREMENT",
-			"SPELL_CAST_FAILED_NOT_IDLE",
-			"SPELL_CAST_FAILED_NOT_INACTIVE",
-			"SPELL_CAST_FAILED_PARTIAL_PLAY_TIME",
-			"SPELL_CAST_FAILED_NO_PLAY_TIME",
-			"SPELL_CAST_FAILED_NOT_IN_BATTLEGROUND",
-			"SPELL_CAST_FAILED_ONLY_IN_ARENA",
-			"SPELL_CAST_FAILED_TARGET_LOCKED_TO_RAID_INSTANCE"};
+			"SPELL_CAST_FAILED_LINE_OF_SIGHT"};
 
 		static const char *s_unknown = "UNKNOWN";
 
@@ -2447,18 +2760,35 @@ namespace mmo
 			const bool wasCastingThisSpell = m_spellCast.GetCastingSpellId() == spellId;
 			const bool castWasConfirmedByServer = m_spellCast.HasServerConfirmedCastStart(spellId);
 			m_spellCast.OnSpellFailure(spellId);
+			// Clear any cooldown that was started at cast start: either an actual StartOnCastStart
+			// cooldown, or the display-preview cooldown (castTime + finalCooldown) that we start
+			// for spells with their own cooldown so the button doesn't show a GCD-then-swap glitch.
+			if (wasCastingThisSpell && castWasConfirmedByServer && spell)
+			{
+				m_cooldownManager.ClearCooldown(spellId);
+			}
+
+			// The server rolls back the global cooldown for a failed cast, so mirror that here:
+			// the GCD was applied when the (now-failed) cast was confirmed to have started.
 			if (wasCastingThisSpell &&
 				castWasConfirmedByServer &&
 				spell &&
-				(spell->cooldownflags() & spell_cooldown_flags::StartOnCastStart) != 0)
+				(spell->cooldownflags() & spell_cooldown_flags::NoGlobalCooldown) == 0)
 			{
-				m_cooldownManager.ClearCooldown(spellId);
+				m_cooldownManager.ClearGlobalCooldown();
 			}
 
 			const char *errorMessage = s_unknown;
 			if (result < std::size(s_spellCastResultStrings))
 			{
 				errorMessage = s_spellCastResultStrings[result];
+
+				// Refine the generic "no power" message so the UI names the actual
+				// resource the spell uses (mana, rage, energy, ...).
+				if (spell && std::strcmp(errorMessage, "SPELL_CAST_FAILED_NO_POWER") == 0)
+				{
+					errorMessage = GetNoPowerErrorKey(spell->powertype());
+				}
 			}
 			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", false);
 			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", errorMessage);
@@ -2482,6 +2812,16 @@ namespace mmo
 		if (!spell)
 		{
 			return PacketParseResult::Pass;
+		}
+
+		if (const std::shared_ptr<GameUnitC> casterUnit = ObjectMgr::Get<GameUnitC>(casterId))
+		{
+			if (duration > 0)
+			{
+				std::vector<GameUnitC *> targets;
+				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::StartCast, *spell, casterUnit.get(), targets);
+				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Casting, *spell, casterUnit.get(), targets);
+			}
 		}
 
 		if (m_playerController->GetControlledUnit())
@@ -2591,8 +2931,9 @@ namespace mmo
 		SpellSchool school;
 		uint8 flags;
 		uint32 spellId;
+		uint32 blocked;
 
-		if (!(packet >> io::read_packed_guid(targetGuid) >> io::read<uint32>(spellId) >> io::read<uint32>(amount) >> io::read<uint8>(school) >> io::read<uint8>(flags)))
+		if (!(packet >> io::read_packed_guid(targetGuid) >> io::read<uint32>(spellId) >> io::read<uint32>(amount) >> io::read<uint8>(school) >> io::read<uint8>(flags) >> io::read<uint32>(blocked)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -2637,7 +2978,42 @@ namespace mmo
 		std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid);
 		if (target)
 		{
-			AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color(1.0f, 1.0f, 0.0f, 1.0f), 2.0f);
+			// If the target was immune to this spell's damage school, show a localized "Immune"
+			// text instead of a damage number.
+			if (flags & damage_flags::Immune)
+			{
+				AddWorldTextFrame(target->GetPosition(), Localize(FrameManager::Get().GetLocalization(), "COMBAT_IMMUNE"), Color(1.0f, 1.0f, 0.0f, 1.0f), 2.0f);
+			}
+			else if (blocked > 0 && amount == 0)
+			{
+				// The block fully absorbed the ability damage.
+				AddWorldTextFrame(target->GetPosition(), Localize(FrameManager::Get().GetLocalization(), "COMBAT_BLOCKED"), Color(1.0f, 1.0f, 0.0f, 1.0f), 2.0f);
+			}
+			else if (blocked > 0)
+			{
+				// Partial block: show remaining damage and how much was blocked, e.g. "14 (5 blocked)".
+				const String blockedText = std::to_string(amount) + " (" + std::to_string(blocked) + " " +
+					Localize(FrameManager::Get().GetLocalization(), "COMBAT_BLOCKED_SUFFIX") + ")";
+				AddWorldTextFrame(target->GetPosition(), blockedText, Color(1.0f, 1.0f, 0.0f, 1.0f), 2.0f);
+			}
+			else
+			{
+				AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color(1.0f, 1.0f, 0.0f, 1.0f), 2.0f);
+			}
+		}
+
+		if (amount > 0)
+		{
+			if (const auto player = ObjectMgr::GetActivePlayer())
+			{
+				FrameManager::Get().TriggerLuaEvent("DAMAGE_DONE",
+					ObjectMgr::GetActivePlayerGuid(),
+					player->GetName(),
+					targetGuid,
+					target ? target->GetName() : String(),
+					amount,
+					"SPELL");
+			}
 		}
 
 		return PacketParseResult::Pass;
@@ -2658,6 +3034,20 @@ namespace mmo
 		if (target)
 		{
 			AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color::White, (flags & damage_flags::Crit) != 0 ? 4.0f : 2.0f);
+		}
+
+		if (amount > 0)
+		{
+			if (const auto player = ObjectMgr::GetActivePlayer())
+			{
+				FrameManager::Get().TriggerLuaEvent("DAMAGE_DONE",
+					ObjectMgr::GetActivePlayerGuid(),
+					player->GetName(),
+					targetGuid,
+					target ? target->GetName() : String(),
+					amount,
+					"NON_SPELL");
+			}
 		}
 
 		// TODO: Separate packet for this!
@@ -2694,21 +3084,38 @@ namespace mmo
 			if (ObjectMgr::GetActivePlayerGuid() == attackerGuid || ObjectMgr::GetActivePlayerGuid() == attackedGuid)
 			{
 				String damageText;
-				if (hitInfo & hit_info::Miss)
+				// Check the specific victim states (dodge/parry/block) before the generic Miss flag:
+				// the server sets hit_info::Miss for dodges and parries too (as a "no damage landed"
+				// marker), so checking Miss first would mask them as "MISSED".
+				if ((hitInfo & hit_info::Immune) || victimState == victim_state::IsImmune)
 				{
-					damageText = "MISSED"; // Localize
-				}
-				else if (victimState == victim_state::Parry)
-				{
-					damageText = "PARRIED";
+					damageText = Localize(FrameManager::Get().GetLocalization(), "COMBAT_IMMUNE");
 				}
 				else if (victimState == victim_state::Dodge)
 				{
 					damageText = "DODGED";
 				}
+				else if (victimState == victim_state::Parry)
+				{
+					damageText = "PARRIED";
+				}
 				else if (victimState == victim_state::Blocks)
 				{
-					damageText = "BLOCKED";
+					if (totalDamage == 0)
+					{
+						// The block fully absorbed the hit.
+						damageText = Localize(FrameManager::Get().GetLocalization(), "COMBAT_BLOCKED");
+					}
+					else
+					{
+						// Partial block: show remaining damage and how much was blocked, e.g. "14 (5 blocked)".
+						damageText = std::to_string(totalDamage) + " (" + std::to_string(blockedDamage) + " " +
+							Localize(FrameManager::Get().GetLocalization(), "COMBAT_BLOCKED_SUFFIX") + ")";
+					}
+				}
+				else if (hitInfo & hit_info::Miss)
+				{
+					damageText = "MISSED"; // Localize
 				}
 				else
 				{
@@ -2717,6 +3124,17 @@ namespace mmo
 
 				AddWorldTextFrame(attacked->GetPosition(), damageText, ObjectMgr::GetActivePlayerGuid() == attackedGuid ? Color(1.0f, 0.0f, 0.0f) : Color::White, (hitInfo & hit_info::CriticalHit) != 0 ? 4.0f : 2.0f);
 			}
+		}
+
+		if (totalDamage > 0 && ObjectMgr::GetActivePlayerGuid() == attackerGuid && attacker)
+		{
+			FrameManager::Get().TriggerLuaEvent("DAMAGE_DONE",
+				attackerGuid,
+				attacker->GetName(),
+				attackedGuid,
+				attacked ? attacked->GetName() : String(),
+				totalDamage,
+				"MELEE");
 		}
 
 		return PacketParseResult::Pass;
@@ -2956,6 +3374,22 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		// Trigger AuraTick visualization event
+		if (const auto* spell = m_project.spells.getById(spellId))
+		{
+			GameUnitC* casterUnit = nullptr;
+			if (const auto caster = ObjectMgr::Get<GameUnitC>(casterGuid))
+			{
+				casterUnit = caster.get();
+			}
+
+			if (std::shared_ptr<GameUnitC> targetUnit = ObjectMgr::Get<GameUnitC>(targetGuid))
+			{
+				std::vector<GameUnitC*> targets { targetUnit.get() };
+				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::AuraTick, *spell, casterUnit, targets);
+			}
+		}
+
 		if (auraType == aura_type::PeriodicDamage ||
 			auraType == aura_type::PeriodicHeal)
 		{
@@ -2982,6 +3416,20 @@ namespace mmo
 				{
 					AddWorldTextFrame(target->GetPosition(), std::to_string(amount), color, 2.0f);
 				}
+			}
+
+			if (auraType == aura_type::PeriodicDamage && amount > 0 && casterGuid == ObjectMgr::GetActivePlayerGuid())
+			{
+				const std::shared_ptr<GameUnitC> caster = ObjectMgr::Get<GameUnitC>(casterGuid);
+				const std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid);
+
+				FrameManager::Get().TriggerLuaEvent("DAMAGE_DONE",
+					casterGuid,
+					caster ? caster->GetName() : String(),
+					targetGuid,
+					target ? target->GetName() : String(),
+					amount,
+					"PERIODIC");
 			}
 		}
 
@@ -3067,6 +3515,14 @@ namespace mmo
 		// Remove all objects at once
 		m_playerController->SetControlledUnit(nullptr);
 		ObjectMgr::RemoveAllObjects();
+
+		// Clear pings — they belong to the old map
+		m_activePings.clear();
+		m_minimap.UpdatePings(m_activePings);
+		if (m_worldPingVisualizer)
+		{
+			m_worldPingVisualizer->Clear();
+		}
 
 		return PacketParseResult::Pass;
 	}
@@ -3158,6 +3614,83 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult WorldState::OnPartyPing(game::IncomingPacket &packet)
+	{
+		uint64 senderGuid = 0;
+		uint8 pingType = 0;
+		if (!(packet >> io::read_packed_guid(senderGuid) >> io::read<uint8>(pingType)))
+		{
+			ELOG("Failed to read PartyPing packet header!");
+			return PacketParseResult::Disconnect;
+		}
+
+		static constexpr float kPingDuration = 5.0f;
+
+		if (pingType == 0)
+		{
+			// Position ping
+			float x = 0.0f, y = 0.0f, z = 0.0f;
+			if (!(packet >> io::read<float>(x) >> io::read<float>(y) >> io::read<float>(z)))
+			{
+				ELOG("Failed to read PartyPing position payload!");
+				return PacketParseResult::Disconnect;
+			}
+
+			// Update minimap dots (minimap only cares about XZ)
+			bool found = false;
+			for (auto& ping : m_activePings)
+			{
+				if (ping.senderGuid == senderGuid)
+				{
+					ping.position = Vector3(x, y, z);
+					ping.remainingTime = kPingDuration;
+					found = true;
+					break;
+				}
+			}
+			if (!found)
+			{
+				m_activePings.push_back({ Vector3(x, y, z), kPingDuration, senderGuid });
+			}
+			m_minimap.UpdatePings(m_activePings);
+
+			// Update 3D world ping
+			if (m_worldPingVisualizer)
+			{
+				m_worldPingVisualizer->AddPositionPing(senderGuid, Vector3(x, y, z));
+			}
+
+			FrameManager::Get().TriggerLuaEvent("PARTY_PING", x, y, z);
+		}
+		else
+		{
+			// Unit ping
+			uint64 targetGuid = 0;
+			if (!(packet >> io::read_packed_guid(targetGuid)))
+			{
+				ELOG("Failed to read PartyPing unit guid!");
+				return PacketParseResult::Disconnect;
+			}
+
+			// Remove any minimap dot for this sender (unit pings don't show on minimap as a position)
+			m_activePings.erase(
+				std::remove_if(m_activePings.begin(), m_activePings.end(),
+					[senderGuid](const Minimap::PingDot& p) { return p.senderGuid == senderGuid; }),
+				m_activePings.end());
+			m_minimap.UpdatePings(m_activePings);
+
+			// Update 3D world ping
+			if (m_worldPingVisualizer)
+			{
+				m_worldPingVisualizer->AddUnitPing(senderGuid, targetGuid);
+			}
+
+			FrameManager::Get().TriggerLuaEvent("PARTY_PING_UNIT", targetGuid);
+		}
+
+		return PacketParseResult::Pass;
+	}
+
 	PacketParseResult WorldState::OnRandomRollResult(game::IncomingPacket &packet)
 	{
 		uint64 playerGuid;
@@ -3225,7 +3758,8 @@ namespace mmo
 	{
 		ILOG("Successfully logged out of the game...");
 
-		// Go back to the login state
+		// Normal voluntary logout — return to char select without error.
+		LoginState::s_returnReason = LoginReturnReason::NormalLogout;
 		m_gameStateMgr.SetGameState(LoginState::Name);
 
 		return PacketParseResult::Pass;
@@ -3275,335 +3809,152 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-#ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_LearnSpell(const std::string &cmd, const std::string &args) const
+	PacketParseResult WorldState::OnMoveStun(game::IncomingPacket &packet)
 	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
+		uint32 ackId;
+		bool applied;
+		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
 		{
-			tokens.push_back(token);
+			ELOG("Failed to read MoveStun packet!");
+			return PacketParseResult::Disconnect;
 		}
 
-		if (tokens.size() != 1)
+		auto player = ObjectMgr::GetActivePlayer();
+		ASSERT(player);
+
+		MovementInfo info = player->GetMovementInfo();
+		if (applied)
 		{
-			ELOG("Usage: learnspell <entry>");
-			return;
-		}
-
-		std::istringstream strm(tokens[0]);
-
-		uint32 entry = 0;
-		strm >> entry;
-
-		m_realmConnector.LearnSpell(entry);
-	}
-#endif
-
-#ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_CreateMonster(const std::string &cmd, const std::string &args) const
-	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
-		{
-			tokens.push_back(token);
-		}
-
-		if (tokens.size() != 1)
-		{
-			ELOG("Usage: createmonster <entry>");
-			return;
-		}
-
-		const uint32 entry = std::stoul(tokens[0]);
-		m_realmConnector.CreateMonster(entry);
-	}
-#endif
-
-#ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_DestroyMonster(const std::string &cmd, const std::string &args) const
-	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
-		{
-			tokens.push_back(token);
-		}
-
-		if (tokens.size() > 1)
-		{
-			ELOG("Usage: destroymonster <entry>");
-			return;
-		}
-
-		uint64 guid = 0;
-		if (tokens.empty())
-		{
-			guid = m_playerController->GetControlledUnit()->Get<uint64>(object_fields::TargetUnit);
+			info.movementFlags |= movement_flags::Rooted;
+			info.movementFlags &= ~movement_flags::Moving;
+			m_playerController->StopAllMovement();
 		}
 		else
 		{
-			guid = std::stoull(tokens[0]);
+			info.movementFlags &= ~movement_flags::Rooted;
 		}
+		player->ApplyMovementInfo(info);
 
-		if (guid == 0)
-		{
-			ELOG("No target selected and no target guid provided to destroy!");
-			return;
-		}
-
-		m_realmConnector.DestroyMonster(guid);
+		m_realmConnector.SendMoveStunAck(ackId, info);
+		return PacketParseResult::Pass;
 	}
-#endif
 
-#ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_FaceMe(const std::string &cmd, const std::string &args) const
+	PacketParseResult WorldState::OnMoveSleep(game::IncomingPacket &packet)
 	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
+		uint32 ackId;
+		bool applied;
+		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
 		{
-			tokens.push_back(token);
+			ELOG("Failed to read MoveSleep packet!");
+			return PacketParseResult::Disconnect;
 		}
 
-		const uint64 guid = m_playerController->GetControlledUnit()->Get<uint64>(object_fields::TargetUnit);
-		if (guid == 0)
-		{
-			ELOG("No target selected and no target guid provided to destroy!");
-			return;
-		}
+		auto player = ObjectMgr::GetActivePlayer();
+		ASSERT(player);
 
-		m_realmConnector.FaceMe(guid);
+		MovementInfo info = player->GetMovementInfo();
+		if (applied)
+		{
+			info.movementFlags |= movement_flags::Rooted;
+			info.movementFlags &= ~movement_flags::Moving;
+			m_playerController->StopAllMovement();
+		}
+		else
+		{
+			info.movementFlags &= ~movement_flags::Rooted;
+		}
+		player->ApplyMovementInfo(info);
+
+		m_realmConnector.SendMoveSleepAck(ackId, info);
+		return PacketParseResult::Pass;
 	}
-#endif
 
-#ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_FollowMe(const std::string &cmd, const std::string &args) const
+	PacketParseResult WorldState::OnMoveFear(game::IncomingPacket &packet)
 	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
+		uint32 ackId;
+		bool applied;
+		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
 		{
-			tokens.push_back(token);
+			ELOG("Failed to read MoveFear packet!");
+			return PacketParseResult::Disconnect;
 		}
 
-		const uint64 guid = m_playerController->GetControlledUnit()->Get<uint64>(object_fields::TargetUnit);
-		if (guid == 0)
-		{
-			ELOG("No target selected and no target guid provided to destroy!");
-			return;
-		}
+		auto player = ObjectMgr::GetActivePlayer();
+		ASSERT(player);
 
-		m_realmConnector.FollowMe(guid);
+		MovementInfo info = player->GetMovementInfo();
+		if (applied)
+		{
+			info.movementFlags |= movement_flags::Rooted;
+			info.movementFlags &= ~movement_flags::Moving;
+			m_playerController->StopAllMovement();
+		}
+		else
+		{
+			info.movementFlags &= ~movement_flags::Rooted;
+		}
+		player->ApplyMovementInfo(info);
+
+		m_realmConnector.SendMoveFearAck(ackId, info);
+		return PacketParseResult::Pass;
 	}
-#endif
 
-#ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_LevelUp(const std::string &cmd, const std::string &args) const
+	PacketParseResult WorldState::OnMoveDisorient(game::IncomingPacket &packet)
 	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
+		uint32 ackId;
+		bool applied;
+		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
 		{
-			tokens.push_back(token);
+			ELOG("Failed to read MoveDisorient packet!");
+			return PacketParseResult::Disconnect;
 		}
 
-		uint32 level = 1;
-		if (!tokens.empty())
-		{
-			level = std::stoul(tokens[0]);
-		}
+		auto player = ObjectMgr::GetActivePlayer();
+		ASSERT(player);
 
-		m_realmConnector.LevelUp(level);
+		MovementInfo info = player->GetMovementInfo();
+		if (applied)
+		{
+			info.movementFlags |= movement_flags::Rooted;
+			info.movementFlags &= ~movement_flags::Moving;
+			m_playerController->StopAllMovement();
+		}
+		else
+		{
+			info.movementFlags &= ~movement_flags::Rooted;
+		}
+		player->ApplyMovementInfo(info);
+
+		m_realmConnector.SendMoveDisorientAck(ackId, info);
+		return PacketParseResult::Pass;
 	}
-#endif
 
-#ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_GiveMoney(const std::string &cmd, const std::string &args) const
+	PacketParseResult WorldState::OnDebugLineOfSightResult(game::IncomingPacket &packet)
 	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
+		uint8 hasLos = 0;
+		Vector3 from, to, hitPoint;
+
+		if (!(packet
+			>> io::read<uint8>(hasLos)
+			>> io::read<float>(from.x) >> io::read<float>(from.y) >> io::read<float>(from.z)
+			>> io::read<float>(to.x)   >> io::read<float>(to.y)   >> io::read<float>(to.z)
+			>> io::read<float>(hitPoint.x) >> io::read<float>(hitPoint.y) >> io::read<float>(hitPoint.z)))
 		{
-			tokens.push_back(token);
+			return PacketParseResult::Disconnect;
 		}
 
-		if (tokens.empty())
+		DLOG("LOS result: " << (hasLos ? "CLEAR" : "BLOCKED")
+			<< "  from(" << from.x << "," << from.y << "," << from.z << ")"
+			<< "  to(" << to.x << "," << to.y << "," << to.z << ")"
+			<< "  hit(" << hitPoint.x << "," << hitPoint.y << "," << hitPoint.z << ")");
+
+		if (m_debugPathVisualizer)
 		{
-			ELOG("Usage: money <amount>");
-			return;
+			m_debugPathVisualizer->ShowLineOfSight(from, to, hitPoint, hasLos != 0);
 		}
 
-		const uint32 money = std::stoul(tokens[0]);
-		m_realmConnector.GiveMoney(money);
+		return PacketParseResult::Pass;
 	}
-#endif
-
-#ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_AddItem(const std::string &cmd, const std::string &args) const
-	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
-		{
-			tokens.push_back(token);
-		}
-
-		if (tokens.empty())
-		{
-			ELOG("Usage: additem <item_id> [<count>]");
-			return;
-		}
-
-		const uint32 itemId = std::stoul(tokens[0]);
-		uint32 count = 1;
-
-		if (tokens.size() > 1)
-		{
-			count = std::stoul(tokens[1]);
-		}
-
-		m_realmConnector.AddItem(itemId, count);
-	}
-#endif
-
-#ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_WorldPort(const std::string &cmd, const std::string &args) const
-	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
-		{
-			tokens.push_back(token);
-		}
-
-		if (tokens.empty())
-		{
-			ELOG("Usage: worldport <map_id> [<x>] [<y>] [<z>] [<facing degree>]");
-			return;
-		}
-
-		Vector3 position = m_playerController->GetControlledUnit()->GetPosition();
-		Radian facing = m_playerController->GetControlledUnit()->GetFacing();
-
-		const uint32 mapId = std::stoul(tokens[0]);
-
-		// Parse optional position
-		if (tokens.size() > 1)
-		{
-			position.x = std::stof(tokens[1]);
-		}
-		if (tokens.size() > 2)
-		{
-			position.y = std::stof(tokens[2]);
-		}
-		if (tokens.size() > 3)
-		{
-			position.z = std::stof(tokens[3]);
-		}
-
-		if (tokens.size() > 4)
-		{
-			// Convert facing degree to radian
-			const Degree facingDegree(std::stof(tokens[4]));
-			facing = facingDegree;
-		}
-
-		m_realmConnector.WorldPort(mapId, position, facing);
-	}
-#endif
-
-#ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_Speed(const std::string &cmd, const std::string &args) const
-	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
-		{
-			tokens.push_back(token);
-		}
-
-		if (tokens.empty())
-		{
-			ELOG("Usage: speed <speed>");
-			return;
-		}
-
-		const float speed = std::min(50.0f, std::stof(tokens[0]));
-		if (speed <= 0.0f)
-		{
-			ELOG("Speed must be greater than 0!");
-			return;
-		}
-
-		m_realmConnector.SetSpeed(speed);
-	}
-#endif
-
-#ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_Summon(const std::string &cmd, const std::string &args) const
-	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
-		{
-			tokens.push_back(token);
-		}
-
-		if (tokens.empty())
-		{
-			ELOG("Usage: summon <playername>");
-			return;
-		}
-
-		if (tokens[0].empty())
-		{
-			ELOG("Player name cannot be empty!");
-			return;
-		}
-
-		m_realmConnector.SummonPlayer(tokens[0]);
-	}
-#endif
-
-#ifdef MMO_WITH_DEV_COMMANDS
-	void WorldState::Command_Port(const std::string &cmd, const std::string &args) const
-	{
-		std::istringstream iss(args);
-		std::vector<std::string> tokens;
-		std::string token;
-		while (iss >> token)
-		{
-			tokens.push_back(token);
-		}
-
-		if (tokens.empty())
-		{
-			ELOG("Usage: port <playername>");
-			return;
-		}
-
-		if (tokens[0].empty())
-		{
-			ELOG("Player name cannot be empty!");
-			return;
-		}
-
-		m_realmConnector.TeleportToPlayer(tokens[0]);
-	}
-#endif
 
 	bool WorldState::LoadMap()
 	{
@@ -3697,6 +4048,22 @@ namespace mmo
 
 		FrameManager::Get().TriggerLuaEvent("ATTACK_SWING_ERROR", errorEvent);
 
+		// Terminal errors: stop auto attack and don't re-queue the error timer.
+		// OutOfRange/WrongFacing/NotStanding keep looping so auto attack resumes
+		// the moment the condition clears without the player having to re-click.
+		if (m_lastAttackSwingEvent == attack_swing_event::TargetDead ||
+			m_lastAttackSwingEvent == attack_swing_event::CantAttack)
+		{
+			m_lastAttackSwingEvent = attack_swing_event::Unknown;
+
+			if (m_playerController && m_playerController->GetControlledUnit())
+			{
+				m_playerController->GetControlledUnit()->StopAttack();
+			}
+
+			return;
+		}
+
 		EnqueueNextAttackSwingTimer();
 	}
 
@@ -3724,18 +4091,40 @@ namespace mmo
 		}
 		else
 		{
+			// The party member may not be in the local visible world (different cell / out of range).
+			// Try the in-memory object first; fall back to the name cache for out-of-range members.
 			std::shared_ptr<GameUnitC> unit = ObjectMgr::Get<GameUnitC>(characterGuid);
-			ASSERT(unit);
-
-			if (wasLooted)
+			if (unit)
 			{
-				FrameManager::Get().TriggerLuaEvent("MEMBER_LOOT_ITEM_RECEIVED", unit->GetName().c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
-				DLOG(unit->GetName() << " looted item " << itemInfo.name << " x" << amount);
+				const String &memberName = unit->GetName();
+				if (wasLooted)
+				{
+					FrameManager::Get().TriggerLuaEvent("MEMBER_LOOT_ITEM_RECEIVED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
+					DLOG(memberName << " looted item " << itemInfo.name << " x" << amount);
+				}
+				else
+				{
+					FrameManager::Get().TriggerLuaEvent("MEMBER_ITEM_RECEIVED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
+					DLOG(memberName << " received item " << itemInfo.name << " x" << amount);
+				}
 			}
 			else
 			{
-				FrameManager::Get().TriggerLuaEvent("MEMBER_ITEM_RECEIVED", unit->GetName().c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
-				DLOG(unit->GetName() << " received item " << itemInfo.name << " x" << amount);
+				// Unit not visible — look up the name asynchronously from the name cache.
+				m_cache.GetNameCache().Get(characterGuid,
+					[itemInfo, wasLooted, amount](uint64, const String &memberName)
+					{
+						if (wasLooted)
+						{
+							FrameManager::Get().TriggerLuaEvent("MEMBER_LOOT_ITEM_RECEIVED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
+							DLOG(memberName << " looted item " << itemInfo.name << " x" << amount);
+						}
+						else
+						{
+							FrameManager::Get().TriggerLuaEvent("MEMBER_ITEM_RECEIVED", memberName.c_str(), itemInfo.name.c_str(), itemInfo.id, itemInfo.quality, amount);
+							DLOG(memberName << " received item " << itemInfo.name << " x" << amount);
+						}
+					});
 			}
 		}
 	}
@@ -3814,9 +4203,13 @@ namespace mmo
 			{
 				page->Prepare();
 				EnsurePageIsLoaded(pos);
+
+				// Register data-driven foliage from this page's tile materials now that it is loaded.
+				RegisterPageFoliage(pos.x(), pos.y());
 			}
 			else
 			{
+				UnregisterPageFoliage(pos.x(), pos.y());
 				page->Unload();
 			}
 		}
@@ -3847,6 +4240,11 @@ namespace mmo
 		{
 			m_dispatcher.post([pos, this]()
 							  { EnsurePageIsLoaded(pos); });
+		}
+		else
+		{
+			// Tile materials are now available; (re)register this page's data-driven foliage.
+			RegisterPageFoliage(pos.x(), pos.y());
 		}
 	}
 
@@ -3937,6 +4335,90 @@ namespace mmo
 		const uint16 shadowTextureSize = s_shadowTexSizes[Clamp(s_shadowTextureSizeVar->GetIntValue(), 0, 3)];
 		ILOG("Updating shadow texture size to " << shadowTextureSize << "x" << shadowTextureSize);
 		deferred->SetShadowMapSize(shadowTextureSize);
+	}
+
+	void WorldState::OnShadowQualityChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
+		if (!worldFrame)
+		{
+			WLOG("World frame not found");
+			return;
+		}
+
+		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
+		if (!renderer)
+		{
+			WLOG("World frame has no renderer");
+			return;
+		}
+
+		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
+		if (!deferred)
+		{
+			WLOG("Deferred renderer not initialized");
+			return;
+		}
+
+		const int level = Clamp(var.GetIntValue(), 0, 2);
+		ILOG("Updating shadow quality to level " << level);
+		deferred->SetShadowQuality(level);
+	}
+
+	void WorldState::OnShadowTemporalChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
+		if (!worldFrame)
+		{
+			WLOG("World frame not found");
+			return;
+		}
+
+		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
+		if (!renderer)
+		{
+			WLOG("World frame has no renderer");
+			return;
+		}
+
+		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
+		if (!deferred)
+		{
+			WLOG("Deferred renderer not initialized");
+			return;
+		}
+
+		const bool enabled = var.GetIntValue() != 0;
+		ILOG("Temporal shadow staggering " << (enabled ? "enabled" : "disabled"));
+		deferred->SetTemporalShadowsEnabled(enabled);
+	}
+
+	void WorldState::OnDepthPrepassChanged(ConsoleVar &var, const std::string &oldValue)
+	{
+		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
+		if (!worldFrame)
+		{
+			WLOG("World frame not found");
+			return;
+		}
+
+		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
+		if (!renderer)
+		{
+			WLOG("World frame has no renderer");
+			return;
+		}
+
+		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
+		if (!deferred)
+		{
+			WLOG("Deferred renderer not initialized");
+			return;
+		}
+
+		const bool enabled = var.GetIntValue() != 0;
+		ILOG("Depth pre-pass " << (enabled ? "enabled" : "disabled"));
+		deferred->SetDepthPrepassEnabled(enabled);
 	}
 
 	void WorldState::OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue)
@@ -4044,6 +4526,23 @@ namespace mmo
 			m_realmConnector.SendAreaTriggerTriggered(triggerId);
 			DLOG("Player entered area trigger " << triggerId);
 		}
+	}
+
+	bool WorldState::QueryWaterAt(const float x, const float z, float &outSurfaceY) const
+	{
+		if (!m_worldInstance)
+		{
+			return false;
+		}
+
+		terrain::Terrain *terrain = m_worldInstance->GetTerrain();
+		if (!terrain || !terrain->HasWaterAtWorldPos(x, z))
+		{
+			return false;
+		}
+
+		outSurfaceY = terrain->GetWaterHeightAtWorldPos(x, z);
+		return true;
 	}
 
 	void WorldState::SetSelectedTarget(uint64 guid)
@@ -4181,6 +4680,35 @@ namespace mmo
 
 		DLOG("Received TimeSyncRequest with index: " << syncIndex << ", responding with client time: " << clientTimestamp);
 		m_timeSyncResponseSent = true;
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnSpellModChanged(game::IncomingPacket& packet)
+	{
+		uint8 modType, effectIndex, modOp;
+		int32 value;
+		if (!(packet
+			>> io::read<uint8>(modType)
+			>> io::read<uint8>(effectIndex)
+			>> io::read<uint8>(modOp)
+			>> io::read<int32>(value)))
+		{
+			ELOG("Failed to read SpellModChanged packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Apply to the local controlled player
+		const auto player = ObjectMgr::GetActivePlayer();
+		if (!player)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		player->SetSpellMod(modType, effectIndex, modOp, value);
+
+		// Notify the UI so tooltips can refresh
+		FrameManager::Get().TriggerLuaEvent("SPELL_MOD_CHANGED", modOp);
 
 		return PacketParseResult::Pass;
 	}

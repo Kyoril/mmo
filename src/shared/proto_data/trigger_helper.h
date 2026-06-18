@@ -163,6 +163,10 @@ namespace mmo
 			/// Targets: PLAYER; Data: <MAP-ID>, <X>, <Y>, <Z>, [<FACING>]; Texts: NONE;
 			Teleport = 22,
 
+			/// Makes a unit perform an emote.
+			/// Targets: UNIT; Data: <SOUND-ID>; Texts: <TEXT>;
+			Emote = 23,
+
 			Invalid,
 			Count_ = Invalid
 		};

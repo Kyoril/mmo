@@ -15,6 +15,8 @@
 #include "proto_data/project.h"
 #include "virtual_dir/file_system_reader.h"
 #include <format>
+#include <ctime>
+#include <sstream>
 
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "game_server/character_data.h"
@@ -198,6 +200,34 @@ namespace mmo
 				{
 					PrintDatabaseError();
 					throw mysql::Exception("Could not load character customization data");
+				}
+
+				// Load equipment display IDs for the character selection preview.
+				// Absolute slot encoding: (bag << 8) | slot. Equipment slots are in
+				// bag 255 (0xFF), so absolute values are 0xFF00 through 0xFF12.
+				const uint32 equipBase = static_cast<uint32>(player_inventory_slots::Bag_0) << 8;
+				const uint32 equipEnd  = equipBase + player_equipment_slots::Count_;
+				mysql::Select equipSelect(m_connection,
+					"SELECT `slot`, `entry` FROM `character_items`"
+					" WHERE `owner`=" + std::to_string(guid) +
+					" AND `slot` >= " + std::to_string(equipBase) +
+					" AND `slot` < "  + std::to_string(equipEnd));
+				if (equipSelect.Success())
+				{
+					mysql::Row equipRow(equipSelect);
+					while (equipRow)
+					{
+						uint16 slot = 0;
+						uint32 entry = 0;
+						equipRow.GetField(0, slot);
+						equipRow.GetField(1, entry);
+						if (const auto* itemEntry = m_project.items.getById(entry))
+						{
+							// Low byte of the absolute slot is the equipment slot index (0-18)
+							view.SetEquipmentDisplayId(static_cast<uint8>(slot & 0xFF), itemEntry->displayid());
+						}
+						equipRow = mysql::Row::Next(equipSelect);
+					}
 				}
 
 				result.emplace_back(std::move(view));
@@ -572,8 +602,8 @@ namespace mmo
 				}
 
 				// Load item data
-				mysql::Select itemSelect(m_connection, 
-					"SELECT `entry`, `slot`, `creator`, `count`, `durability` FROM `character_items` WHERE `owner`=" + std::to_string(characterId));
+				mysql::Select itemSelect(m_connection,
+					"SELECT `entry`, `slot`, `creator`, `count`, `durability`, `flags` FROM `character_items` WHERE `owner`=" + std::to_string(characterId));
 				if (itemSelect.Success())
 				{
 					mysql::Row itemRow(itemSelect);
@@ -586,6 +616,7 @@ namespace mmo
 						itemRow.GetField(2, data.creator);
 						itemRow.GetField<uint8, uint16>(3, data.stackCount);
 						itemRow.GetField(4, data.durability);
+						itemRow.GetField(5, data.flags);
 						if (const auto* itemEntry = m_project.items.getById(data.entry))
 						{
 							// More than 15 minutes passed since last save?
@@ -666,7 +697,15 @@ namespace mmo
 
 						if (data.status == quest_status::Rewarded)
 						{
-							result.rewardedQuestIds.push_back(questId);
+							if (data.expiration > 0)
+							{
+								// Daily/weekly quest that is on cooldown until its stored reset time.
+								result.repeatableQuestResets[questId] = data.expiration;
+							}
+							else
+							{
+								result.rewardedQuestIds.push_back(questId);
+							}
 						}
 						else
 						{
@@ -707,6 +746,127 @@ namespace mmo
 					throw mysql::Exception("Could not load character talents");
 				}
 
+				// Load persisted auras (header rows; stored as remaining duration so offline time
+				// does not elapse). The `slot` maps each header to its child effect rows below.
+				std::unordered_map<uint32, size_t> auraSlotToIndex;
+				mysql::Select auraSelect(m_connection,
+					"SELECT `slot`, `spell`, `caster`, `remaining_duration`, `stacks`, `realtime` "
+					"FROM `character_auras` WHERE `character_id`=" + std::to_string(characterId));
+				if (auraSelect.Success())
+				{
+					mysql::Row auraRow(auraSelect);
+					while (auraRow)
+					{
+						uint32 slot = 0;
+						auraRow.GetField(0, slot);
+
+						PersistentAuraData aura;
+						auraRow.GetField(1, aura.spellId);
+						auraRow.GetField(2, aura.casterId);
+						auraRow.GetField(3, aura.remainingDuration);
+
+						uint32 stacks = 1;
+						auraRow.GetField(4, stacks);
+						aura.stackCount = (stacks < 1) ? 1 : stacks;
+
+						uint8 realtime = 0;
+						auraRow.GetField<uint8, uint16>(5, realtime);
+						aura.realtime = (realtime != 0);
+
+						auraSlotToIndex[slot] = result.auras.size();
+						result.auras.push_back(std::move(aura));
+						auraRow = mysql::Row::Next(auraSelect);
+					}
+				}
+				else
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not load character auras");
+				}
+
+				// Load aura effect rows and attach them to their parent aura by slot.
+				mysql::Select auraEffectSelect(m_connection,
+					"SELECT `slot`, `effect_index`, `base_points` "
+					"FROM `character_aura_effects` WHERE `character_id`=" + std::to_string(characterId));
+				if (auraEffectSelect.Success())
+				{
+					mysql::Row effectRow(auraEffectSelect);
+					while (effectRow)
+					{
+						uint32 slot = 0;
+						PersistentAuraEffect effect;
+						effectRow.GetField(0, slot);
+						effectRow.GetField(1, effect.effectIndex);
+						effectRow.GetField(2, effect.basePoints);
+
+						const auto it = auraSlotToIndex.find(slot);
+						if (it != auraSlotToIndex.end())
+						{
+							result.auras[it->second].effects.push_back(effect);
+						}
+
+						effectRow = mysql::Row::Next(auraEffectSelect);
+					}
+				}
+				else
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not load character aura effects");
+				}
+
+				// Load persisted spell cooldowns (realtime). Expired cooldowns are dropped and pruned.
+				const GameTime nowSeconds = static_cast<GameTime>(::time(nullptr));
+				std::vector<uint32> expiredCooldownSpells;
+				mysql::Select cooldownSelect(m_connection,
+					"SELECT `spell`, `end_time` FROM `character_spell_cooldowns` WHERE `character_id`=" + std::to_string(characterId));
+				if (cooldownSelect.Success())
+				{
+					mysql::Row cooldownRow(cooldownSelect);
+					while (cooldownRow)
+					{
+						uint32 spellId = 0;
+						GameTime endTime = 0;
+						cooldownRow.GetField(0, spellId);
+						cooldownRow.GetField(1, endTime);
+
+						if (endTime > nowSeconds)
+						{
+							PersistentCooldownData cooldown;
+							cooldown.spellId = spellId;
+							cooldown.remainingMs = (endTime - nowSeconds) * 1000;
+							result.cooldowns.push_back(cooldown);
+						}
+						else
+						{
+							expiredCooldownSpells.push_back(spellId);
+						}
+
+						cooldownRow = mysql::Row::Next(cooldownSelect);
+					}
+				}
+				else
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not load character cooldowns");
+				}
+
+				// Prune expired cooldown rows so they don't accumulate over time.
+				if (!expiredCooldownSpells.empty())
+				{
+					std::ostringstream deleteStream;
+					deleteStream << "DELETE FROM `character_spell_cooldowns` WHERE `character_id`=" << characterId << " AND `spell` IN (";
+					for (size_t i = 0; i < expiredCooldownSpells.size(); ++i)
+					{
+						if (i > 0)
+						{
+							deleteStream << ",";
+						}
+						deleteStream << expiredCooldownSpells[i];
+					}
+					deleteStream << ");";
+					m_connection.Execute(deleteStream.str());
+				}
+
 				// Load guild membership
 				mysql::Select guildSelect(m_connection, std::format("SELECT `guild_id` FROM `guild_members` WHERE `guid`='{0}' LIMIT 1", characterId));
 				if (guildSelect.Success())
@@ -739,7 +899,7 @@ namespace mmo
 		return {};
 	}
 
-	std::optional<WorldCreationResult> MySQLDatabase::CreateWorkd(const String& name, const String& s, const String& v)
+	std::optional<WorldCreationResult> MySQLDatabase::CreateWorld(const String& name, const String& s, const String& v)
 	{
 		if (!m_connection.Execute("INSERT INTO world (name, s, v) VALUES ('"
 			+ m_connection.EscapeString(name) + "', '"
@@ -880,6 +1040,117 @@ namespace mmo
 				// There was an error
 				PrintDatabaseError();
 				throw mysql::Exception("Could not update character talent data!");
+			}
+		}
+
+		transaction.Commit();
+	}
+
+	void MySQLDatabase::UpdateCharacterAuras(uint64 characterId, const std::vector<PersistentAuraData>& auras)
+	{
+		mysql::Transaction transaction(m_connection);
+
+		// Replace the full aura set for this character. Deleting the header rows cascades to
+		// `character_aura_effects`, so the child rows are removed automatically.
+		if (!m_connection.Execute(std::format(
+			"DELETE FROM `character_auras` WHERE `character_id`={0};", characterId)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Could not delete character aura data!");
+		}
+
+		if (!auras.empty())
+		{
+			std::ostringstream headerStrm;
+			headerStrm << "INSERT INTO `character_auras` (`character_id`, `slot`, `spell`, `caster`, `remaining_duration`, `stacks`, `realtime`) VALUES ";
+
+			std::ostringstream effectStrm;
+			effectStrm << "INSERT INTO `character_aura_effects` (`character_id`, `slot`, `effect_index`, `base_points`) VALUES ";
+
+			uint32 slot = 0;
+			bool isFirstAura = true;
+			bool hasEffects = false;
+			for (const auto& aura : auras)
+			{
+				if (!isFirstAura) headerStrm << ",";
+				else isFirstAura = false;
+
+				headerStrm << "(" << characterId
+					<< "," << slot
+					<< "," << aura.spellId
+					<< "," << aura.casterId
+					<< "," << aura.remainingDuration
+					<< "," << aura.stackCount
+					<< "," << (aura.realtime ? 1 : 0)
+					<< ")";
+
+				for (const auto& effect : aura.effects)
+				{
+					// Avoid a leading comma before the very first effect row across all auras.
+					if (hasEffects) effectStrm << ",";
+
+					effectStrm << "(" << characterId
+						<< "," << slot
+						<< "," << effect.effectIndex
+						<< "," << effect.basePoints
+						<< ")";
+
+					hasEffects = true;
+				}
+
+				++slot;
+			}
+			headerStrm << ";";
+			effectStrm << ";";
+
+			// Header rows must be inserted before the child effect rows (foreign key dependency).
+			if (!m_connection.Execute(headerStrm.str()))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception("Could not update character aura data!");
+			}
+
+			if (hasEffects && !m_connection.Execute(effectStrm.str()))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception("Could not update character aura effect data!");
+			}
+		}
+
+		transaction.Commit();
+	}
+
+	void MySQLDatabase::UpdateCharacterCooldowns(uint64 characterId, const std::vector<std::pair<uint32, GameTime>>& cooldownEnds)
+	{
+		mysql::Transaction transaction(m_connection);
+
+		// Replace the full cooldown set for this character.
+		if (!m_connection.Execute(std::format(
+			"DELETE FROM `character_spell_cooldowns` WHERE `character_id`={0};", characterId)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Could not delete character cooldown data!");
+		}
+
+		if (!cooldownEnds.empty())
+		{
+			std::ostringstream strm;
+			strm << "INSERT INTO `character_spell_cooldowns` (`character_id`, `spell`, `end_time`) VALUES ";
+
+			bool isFirstItem = true;
+			for (const auto& [spellId, endTime] : cooldownEnds)
+			{
+				if (!isFirstItem) strm << ",";
+				else isFirstItem = false;
+
+				strm << "(" << characterId << "," << spellId << "," << endTime << ")";
+			}
+			strm << ";";
+
+			if (!m_connection.Execute(strm.str()))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception("Could not update character cooldown data!");
 			}
 		}
 
@@ -1088,16 +1359,18 @@ namespace mmo
 		}
 	}
 
-	void MySQLDatabase::CreateGroup(uint64 id, uint64 leaderGuid)
+	void MySQLDatabase::CreateGroup(uint64 id, uint64 leaderGuid, uint8 lootMethod, uint8 lootThreshold)
 	{
 		try
 		{
 			mysql::Transaction transaction(m_connection);
 
 			if (!m_connection.Execute(std::format(
-				"INSERT INTO `group` (`id`, `leader`) VALUES ('{0}', '{1}')"
+				"INSERT INTO `group` (`id`, `leader`, `loot_method`, `loot_treshold`) VALUES ('{0}', '{1}', '{2}', '{3}')"
 				, id
 				, leaderGuid
+				, lootMethod
+				, lootThreshold
 			)))
 			{
 				PrintDatabaseError();
@@ -1130,6 +1403,20 @@ namespace mmo
 		{
 			ELOG("Could not create group: " << e.what());
 			throw;
+		}
+	}
+
+	void MySQLDatabase::SetGroupLootMethod(uint64 groupId, uint8 lootMethod, uint64 lootMaster, uint8 lootThreshold)
+	{
+		if (!m_connection.Execute(std::format(
+			"UPDATE `group` SET `loot_method` = '{0}', `loot_master` = {1}, `loot_treshold` = '{2}' WHERE `id` = '{3}' LIMIT 1"
+			, lootMethod
+			, lootMaster ? std::format("'{}'", lootMaster) : "NULL"
+			, lootThreshold
+			, groupId
+		)))
+		{
+			PrintDatabaseError();
 		}
 	}
 
@@ -1276,7 +1563,7 @@ namespace mmo
 	{
 		// Load group data
 		mysql::Select groupSelect(m_connection, std::format(
-			"SELECT `leader`, `name` FROM `group` g LEFT JOIN `characters` c ON `c`.`id` = `g`.`leader` WHERE `g`.`id` = '{0}' LIMIT 1"
+			"SELECT `leader`, `name`, `loot_method`, `loot_treshold`, `loot_master` FROM `group` g LEFT JOIN `characters` c ON `c`.`id` = `g`.`leader` WHERE `g`.`id` = '{0}' LIMIT 1"
 			, groupId
 		));
 		if (groupSelect.Success())
@@ -1287,6 +1574,9 @@ namespace mmo
 				GroupData groupData;
 				groupRow.GetField(0, groupData.leaderGuid);
 				groupRow.GetField(1, groupData.leaderName);
+				groupRow.GetField<uint8, uint16>(2, groupData.lootMethod);
+				groupRow.GetField<uint8, uint16>(3, groupData.lootThreshold);
+				groupRow.GetField(4, groupData.lootMaster);
 
 				// Load group members
 				mysql::Select memberSelect(m_connection, std::format(
@@ -1618,6 +1908,68 @@ namespace mmo
 		return false;
 	}
 
+	std::optional<std::vector<CharacterChannelState>> MySQLDatabase::LoadCharacterChannelStates(uint64 characterId)
+	{
+		std::vector<CharacterChannelState> result;
+
+		mysql::Select select(m_connection, std::format(
+			"SELECT `channel_id`, `status` FROM `character_chat_channels` WHERE `character_id` = '{0}'"
+			, characterId
+		));
+
+		if (select.Success())
+		{
+			mysql::Row row(select);
+			while (row)
+			{
+				CharacterChannelState state;
+				row.GetField(0, state.channelId);
+				uint32 status = 0;
+				row.GetField(1, status);
+				state.status = static_cast<uint8>(status);
+				result.emplace_back(state);
+
+				row = mysql::Row::Next(select);
+			}
+		}
+		else
+		{
+			// There was an error
+			PrintDatabaseError();
+			return {};
+		}
+
+		return result;
+	}
+
+	void MySQLDatabase::SetCharacterChannelState(uint64 characterId, uint32 channelId, uint8 status)
+	{
+		try
+		{
+			mysql::Transaction transaction(m_connection);
+
+			// Upsert: a character has at most one membership row per channel.
+			if (!m_connection.Execute(std::format(
+				"INSERT INTO `character_chat_channels` (`character_id`, `channel_id`, `status`) VALUES ('{0}', '{1}', '{2}') "
+				"ON DUPLICATE KEY UPDATE `status` = '{2}'"
+				, characterId
+				, channelId
+				, static_cast<uint32>(status)
+			)))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			transaction.Commit();
+		}
+		catch (const mysql::Exception& e)
+		{
+			ELOG("Could not set character chat channel state: " << e.what());
+			throw;
+		}
+	}
+
 	std::optional<String> MySQLDatabase::GetMessageOfTheDay()
 	{
 		mysql::Select select(m_connection, "SELECT `message` FROM `realm_motd` WHERE `id` = 1 LIMIT 1");
@@ -1649,87 +2001,89 @@ namespace mmo
 		}
 	}
 
-void MySQLDatabase::SaveInventoryItems(uint64 characterId, const std::vector<ItemData>& items)
-{
-	try
+	void MySQLDatabase::SaveInventoryItems(uint64 characterId, const std::vector<ItemData>& items)
 	{
-		mysql::Transaction transaction(m_connection);
-
-		// CRITICAL: First, delete ALL existing items for this character
-		// This ensures items that were sold/destroyed are removed
-		// Buyback slots are never saved, so they won't be affected
-		std::ostringstream deleteStrm;
-		deleteStrm << "DELETE FROM `character_items` WHERE `owner` = " << characterId << ";";
-		
-		if (!m_connection.Execute(deleteStrm.str()))
+		try
 		{
-			PrintDatabaseError();
-			throw mysql::Exception("Could not delete existing inventory items!");
-		}
+			mysql::Transaction transaction(m_connection);
 
-		// If no items to save (empty inventory), we're done after deletion
-		if (items.empty())
-		{
-			transaction.Commit();
-			return;
-		}
-
-		// Now insert the current inventory state
-		// Use INSERT instead of REPLACE since we just deleted everything
-		std::ostringstream insertStrm;
-		insertStrm << "INSERT INTO `character_items` (`owner`, `slot`, `entry`, `creator`, `count`, `durability`) VALUES ";
-
-		bool isFirstItem = true;
-		for (const auto& item : items)
-		{
-			// Don't save buyback slots into the database!
-			if (InventorySlot::FromAbsolute(item.slot).IsBuyBack())
-			{
-				continue;
-			}
-
-			if (!isFirstItem)
-			{
-				insertStrm << ",";
-			}
-			else
-			{
-				isFirstItem = false;
-			}
-
-			insertStrm << "(" << characterId << "," << item.slot << "," << item.entry << ",";
-			if (item.creator == 0)
-			{
-				insertStrm << "NULL";
-			}
-			else
-			{
-				insertStrm << item.creator;
-			}
-			insertStrm << "," << static_cast<uint16>(item.stackCount) << "," << item.durability << ")";
-		}
-
-		insertStrm << ";";
-
-		// Only execute if we have items to save (after filtering buyback slots)
-		if (!isFirstItem)
-		{
-			if (!m_connection.Execute(insertStrm.str()))
+			// CRITICAL: First, delete ALL existing items for this character
+			// This ensures items that were sold/destroyed are removed
+			// Buyback slots are never saved, so they won't be affected
+			std::ostringstream deleteStrm;
+			deleteStrm << "DELETE FROM `character_items` WHERE `owner` = " << characterId << ";";
+			
+			if (!m_connection.Execute(deleteStrm.str()))
 			{
 				PrintDatabaseError();
-				throw mysql::Exception("Could not save inventory items!");
+				throw mysql::Exception("Could not delete existing inventory items!");
 			}
-			ILOG("Successfully saved inventory items for character " << characterId);
-		}
 
-		transaction.Commit();
+			// If no items to save (empty inventory), we're done after deletion
+			if (items.empty())
+			{
+				transaction.Commit();
+				return;
+			}
+
+			// Now insert the current inventory state
+			// Use INSERT instead of REPLACE since we just deleted everything
+			std::ostringstream insertStrm;
+			insertStrm << "INSERT INTO `character_items` (`owner`, `slot`, `entry`, `creator`, `count`, `durability`, `flags`) VALUES ";
+
+			bool isFirstItem = true;
+			for (const auto& item : items)
+			{
+				// Don't save buyback slots into the database!
+				if (InventorySlot::FromAbsolute(item.slot).IsBuyBack())
+				{
+					continue;
+				}
+
+				if (!isFirstItem)
+				{
+					insertStrm << ",";
+				}
+				else
+				{
+					isFirstItem = false;
+				}
+
+				insertStrm << "(" << characterId << "," << item.slot << "," << item.entry << ",";
+				if (item.creator == 0)
+				{
+					insertStrm << "NULL";
+				}
+				else
+				{
+					insertStrm << item.creator;
+				}
+				insertStrm << "," << static_cast<uint16>(item.stackCount) << "," << item.durability << "," << item.flags << ")";
+			}
+
+			insertStrm << ";";
+
+			// Only execute if we have items to save (after filtering buyback slots)
+			if (!isFirstItem)
+			{
+				if (!m_connection.Execute(insertStrm.str()))
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not save inventory items!");
+				}
+				ILOG("Successfully saved inventory items for character " << characterId);
+			}
+
+			transaction.Commit();
+		}
+		catch (const mysql::Exception& e)
+		{
+			ELOG("Failed to save inventory items for character " << characterId << ": " << e.what());
+			throw;
+		}
 	}
-	catch (const mysql::Exception& e)
-	{
-		ELOG("Failed to save inventory items for character " << characterId << ": " << e.what());
-		throw;
-	}
-}	void MySQLDatabase::DeleteInventoryItems(uint64 characterId, const std::vector<uint16>& slots)
+
+	void MySQLDatabase::DeleteInventoryItems(uint64 characterId, const std::vector<uint16>& slots)
 	{
 		if (slots.empty())
 		{

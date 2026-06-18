@@ -26,7 +26,16 @@ namespace mmo
 		virtual const Path& GetCurrentPath() const = 0;
 		
 		virtual bool OpenAsset(const Path& assetPath) = 0;
-		
+
+		/// @brief Opens an asset and, for editors that support it (e.g. the world editor), positions
+		///        the camera/view at the given world location. Editors that don't support this fall
+		///        back to a regular OpenAsset.
+		/// @param assetPath The asset to open.
+		/// @param worldX Target world X coordinate.
+		/// @param worldZ Target world Z coordinate.
+		/// @return True if the asset could be opened.
+		virtual bool OpenAssetAtWorldLocation(const Path& assetPath, float worldX, float worldZ) { return OpenAsset(assetPath); }
+
 		virtual void AddEditorWindow(std::unique_ptr<EditorWindowBase> editorWindow) = 0;
 
 		virtual void RemoveEditorWindow(const String& name) = 0;

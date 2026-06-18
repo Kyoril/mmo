@@ -56,6 +56,10 @@ namespace mmo
 
 		ShaderPtr CreateShader(ShaderType type, const void* shaderCode, size_t shaderCodeSize) override;
 
+		[[nodiscard]] bool SupportsNullPixelShaderForShadows() const override { return true; }
+
+		void BindNullPixelShader() override;
+
 		void SetDepthBias(float bias) override;
 
 		void SetSlopeScaledDepthBias(float bias) override;
@@ -135,6 +139,8 @@ namespace mmo
 		std::string GetPrimaryMonitorResolution() const override;
 
 		bool ValidateFullscreenResolution(uint16 width, uint16 height) const override;
+
+		std::vector<std::pair<uint16, uint16>> GetSupportedResolutions() const override;
 		// ~ End GraphicsDevice
 
 	public:

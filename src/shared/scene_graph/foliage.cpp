@@ -53,9 +53,9 @@ namespace mmo
 		}
 	}
 
-	void Foliage::SetHeightQueryCallback(HeightQueryCallback callback)
+	void Foliage::SetTerrainSampleCallback(TerrainSampleCallback callback)
 	{
-		m_heightQuery = std::move(callback);
+		m_terrainSample = std::move(callback);
 	}
 
 	void Foliage::AddLayer(const FoliageLayerPtr& layer)
@@ -226,6 +226,13 @@ namespace mmo
 		m_lastCameraPosition = Vector3(std::numeric_limits<float>::max(), 0.0f, std::numeric_limits<float>::max());
 	}
 
+	void Foliage::InvalidateActiveChunks()
+	{
+		// Force UpdateActiveChunks() to run fully on the next Update() instead of early-returning
+		// because the camera hasn't moved.
+		m_lastCameraPosition = Vector3(std::numeric_limits<float>::max(), 0.0f, std::numeric_limits<float>::max());
+	}
+
 	void Foliage::RebuildRegion(const AABB& region)
 	{
 		// Find chunks that intersect this region
@@ -278,7 +285,7 @@ namespace mmo
 
 	void Foliage::GenerateChunkInstances(FoliageChunk& chunk, const FoliageLayer& layer)
 	{
-		if (!m_heightQuery)
+		if (!m_terrainSample)
 		{
 			return;
 		}
@@ -322,6 +329,9 @@ namespace mmo
 			: static_cast<uint32>(chunk.GetChunkX() * 73856093 ^ chunk.GetChunkZ() * 19349663);
 		std::mt19937 rng(seed);
 		std::uniform_real_distribution<float> posDist(0.0f, chunkSize);
+		std::uniform_real_distribution<float> unitDist(0.0f, 1.0f);
+
+		const int32 terrainLayerIndex = settings.terrainLayerIndex;
 
 		// Generate instances
 		for (int32 i = 0; i < instanceCount; ++i)
@@ -332,14 +342,37 @@ namespace mmo
 			const float worldX = chunkWorldX + localX;
 			const float worldZ = chunkWorldZ + localZ;
 
-			// Query terrain height and normal
-			float height = 0.0f;
-			Vector3 normal(0.0f, 1.0f, 0.0f);
-			
-			if (!m_heightQuery(worldX, worldZ, height, normal))
+			// Sample terrain (height, normal, material, coverage)
+			FoliagePlacementSample sample;
+			if (!m_terrainSample(worldX, worldZ, sample) || !sample.valid)
 			{
 				continue;
 			}
+
+			// Gate by bound terrain material.
+			if (settings.terrainMaterial != nullptr && sample.baseMaterial != settings.terrainMaterial)
+			{
+				continue;
+			}
+
+			// Gate by bound terrain layer coverage. Coverage also tapers density at layer edges:
+			// a candidate is kept with probability equal to the coverage value.
+			if (terrainLayerIndex >= 0 && terrainLayerIndex < 4)
+			{
+				const float coverage = sample.coverage[terrainLayerIndex];
+				if (coverage < settings.minCoverage)
+				{
+					continue;
+				}
+
+				if (unitDist(rng) > coverage)
+				{
+					continue;
+				}
+			}
+
+			const float height = sample.height;
+			const Vector3& normal = sample.normal;
 
 			// Calculate slope angle
 			const float slopeAngle = std::acos(std::clamp(normal.y, -1.0f, 1.0f)) * (180.0f / 3.14159265f);

@@ -217,9 +217,24 @@ namespace mmo
 
 						if (m_consecutiveOccludedFrames >= OcclusionGraceFrames && !closeRange)
 						{
-							// Enough consecutive 0-pixel frames – tile is truly hidden.
-							m_occlusionVisible = false;
-							m_occlusionSkippedFrames = 0;
+							if (m_occlusionVisible)
+							{
+								// First transition: visible → confirmed occluded.
+								// Reset the skip counter so the retest cadence starts fresh
+								// from a clean state.
+								m_occlusionVisible = false;
+								m_occlusionSkippedFrames = 0;
+							}
+							// If the tile is already confirmed occluded (m_occlusionVisible is
+							// already false) we must NOT reset m_occlusionSkippedFrames here.
+							//
+							// Resetting it on every 0-pixel result disrupts the stagger-based
+							// retest cadence.  Because the reset is always followed immediately
+							// by "m_occlusionSkippedFrames++ → check % OcclusionRetestInterval",
+							// tiles whose stagger offset equals 1 would be retested EVERY frame
+							// (reset → 0++ → 1 == staggerOffset → retest each frame), and tiles
+							// with offset 2 would retest every 2 frames instead of 3.  This
+							// produces the "flicker every frame / does not recover" artifact.
 						}
 						// Otherwise: still in grace period, keep rendering & querying.
 					}
@@ -303,6 +318,13 @@ namespace mmo
 			return m_page.GetTerrain();
 		}
 
+		void Tile::ResetOcclusionState()
+		{
+			m_occlusionVisible = true;
+			m_consecutiveOccludedFrames = 0;
+			m_occlusionSkippedFrames = 0;
+		}
+
 		void Tile::UpdateTerrain(size_t startx, size_t startz, size_t endx, size_t endz)
 		{
 			constexpr float outerScale = static_cast<float>(constants::TileSize / static_cast<double>(constants::OuterVerticesPerTileSide - 1));
@@ -362,13 +384,11 @@ namespace mmo
 					const size_t globalX = m_startX + i;
 					const size_t globalZ = m_startZ + j;
 
-					// Sample height at the center position
-					// For now, we'll interpolate from the four surrounding outer vertices
-					const float h00 = m_page.GetHeightAt(globalX, globalZ);
-					const float h10 = m_page.GetHeightAt(globalX + 1, globalZ);
-					const float h01 = m_page.GetHeightAt(globalX, globalZ + 1);
-					const float h11 = m_page.GetHeightAt(globalX + 1, globalZ + 1);
-					const float height = (h00 + h10 + h01 + h11) * 0.25f;
+					// Read the stored inner vertex height from the page.
+					// The page-local inner index maps tile (m_tileX, m_tileY) × tile-local (i, j).
+					const size_t pageLocalInnerX = m_tileX * constants::InnerVerticesPerTileSide + i;
+					const size_t pageLocalInnerZ = m_tileY * constants::InnerVerticesPerTileSide + j;
+					const float height = m_page.GetInnerHeightAt(pageLocalInnerX, pageLocalInnerZ);
 
 					const float worldX = outerScale * (globalX + centerOffsetX);
 					const float worldZ = outerScale * (globalZ + centerOffsetZ);
@@ -528,13 +548,11 @@ namespace mmo
 					const size_t globalX = startX + i;
 					const size_t globalZ = startZ + j;
 
-					// Sample height at the center position
-					// For now, we'll interpolate from the four surrounding outer vertices
-					const float h00 = m_page.GetHeightAt(globalX, globalZ);
-					const float h10 = m_page.GetHeightAt(globalX + 1, globalZ);
-					const float h01 = m_page.GetHeightAt(globalX, globalZ + 1);
-					const float h11 = m_page.GetHeightAt(globalX + 1, globalZ + 1);
-					const float height = (h00 + h10 + h01 + h11) * 0.25f;
+					// Read the stored inner vertex height from the page.
+					// Page-local inner index maps tile (m_tileX, m_tileY) × tile-local (i, j).
+					const size_t pageLocalInnerX = m_tileX * constants::InnerVerticesPerTileSide + i;
+					const size_t pageLocalInnerZ = m_tileY * constants::InnerVerticesPerTileSide + j;
+					const float height = m_page.GetInnerHeightAt(pageLocalInnerX, pageLocalInnerZ);
 
 					const float worldX = outerScale * (globalX + centerOffsetX);
 					const float worldZ = outerScale * (globalZ + centerOffsetZ);

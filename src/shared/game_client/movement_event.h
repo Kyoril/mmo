@@ -38,6 +38,14 @@ namespace mmo
             StopTurn,
             /// @brief Player set facing direction
             SetFacing,
+            /// @brief Player started swimming (entered deep enough water)
+            StartSwim,
+            /// @brief Player stopped swimming (left the water)
+            StopSwim,
+            /// @brief Player switched to walk mode
+            StartWalk,
+            /// @brief Player switched to run mode
+            StopWalk,
 
             Count_
         };

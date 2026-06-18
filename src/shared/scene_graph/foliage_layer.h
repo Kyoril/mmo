@@ -51,6 +51,19 @@ namespace mmo
 
 		/// @brief Seed for random number generation. 0 means use time-based seed.
 		uint32 randomSeed = 0;
+
+		/// @brief Terrain layer index (0-3) this foliage is bound to. -1 means no layer gating
+		///        (placed wherever the terrain sample is valid).
+		int32 terrainLayerIndex = -1;
+
+		/// @brief Minimum coverage of the bound terrain layer required for placement (0-1).
+		float minCoverage = 0.0f;
+
+		/// @brief Optional terrain material this layer is bound to (the painted .hmat or .hmi).
+		///        When set, foliage is only placed on tiles using this exact material. nullptr means
+		///        any material. Distinguishes instances so two instances of the same base material
+		///        can carry different foliage.
+		const MaterialInterface* terrainMaterial = nullptr;
 	};
 
 	/// @brief Represents a single type of foliage (mesh + material + settings).
@@ -98,6 +111,21 @@ namespace mmo
 		/// @brief Sets the material used for rendering.
 		/// @param material The new material to use.
 		void SetMaterial(MaterialPtr material);
+
+		/// @brief Gets the submesh index of the mesh that this layer renders.
+		/// @details Defaults to 0. Used by multi-submesh meshes (e.g. trees) so that each
+		///          submesh can be rendered as its own instanced batch with its own material.
+		[[nodiscard]] uint16 GetSubmeshIndex() const
+		{
+			return m_submeshIndex;
+		}
+
+		/// @brief Sets the submesh index of the mesh that this layer renders.
+		/// @param submeshIndex The submesh index to render.
+		void SetSubmeshIndex(const uint16 submeshIndex)
+		{
+			m_submeshIndex = submeshIndex;
+		}
 
 		/// @brief Gets the current layer settings.
 		[[nodiscard]] const FoliageLayerSettings& GetSettings() const
@@ -178,6 +206,7 @@ namespace mmo
 		MeshPtr m_mesh;
 		MaterialPtr m_material;
 		FoliageLayerSettings m_settings;
+		uint16 m_submeshIndex = 0;
 		bool m_dirty = true;
 	};
 

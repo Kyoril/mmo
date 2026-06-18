@@ -91,6 +91,49 @@ namespace mmo
         m_remainingTime = duration;
     }
 
+    void DebugPathVisualizer::ShowLineOfSight(const Vector3& from, const Vector3& to, const Vector3& hitPoint, bool hasLos, float duration)
+    {
+        ClearPath();
+
+        // Begin defining the path object
+        {
+            ManualRenderOperationRef<ManualLineListOperation> lineOp = m_pathObject->AddLineListOperation(
+                MaterialManager::Get().Load("Models/Engine/Axis.hmat"));
+
+            if (hasLos)
+            {
+                // Green line: full ray is clear.
+                lineOp->AddLine(from, to).SetColor(0xff00ff00);
+            }
+            else
+            {
+                // Red line from origin to hit point.
+                lineOp->AddLine(from, hitPoint).SetColor(0xffff0000);
+
+                // Dim yellow line from hit point to target (blocked portion).
+                lineOp->AddLine(hitPoint, to).SetColor(0xff888800);
+
+                // X marker at hit point to make it obvious.
+                constexpr float s = 0.4f;
+                lineOp->AddLine(hitPoint + Vector3(-s, 0.f, 0.f), hitPoint + Vector3(s, 0.f, 0.f)).SetColor(0xffff4400);
+                lineOp->AddLine(hitPoint + Vector3(0.f, 0.f, -s), hitPoint + Vector3(0.f, 0.f, s)).SetColor(0xffff4400);
+                lineOp->AddLine(hitPoint + Vector3(-s, s, 0.f), hitPoint + Vector3(s, -s, 0.f)).SetColor(0xffff4400);
+                lineOp->AddLine(hitPoint + Vector3(s, s, 0.f), hitPoint + Vector3(-s, -s, 0.f)).SetColor(0xffff4400);
+            }
+
+            // Small cross at origin (blue) and at target (white).
+            constexpr float m = 0.3f;
+            lineOp->AddLine(from + Vector3(-m, 0.f, 0.f), from + Vector3(m, 0.f, 0.f)).SetColor(0xff0088ff);
+            lineOp->AddLine(from + Vector3(0.f, 0.f, -m), from + Vector3(0.f, 0.f, m)).SetColor(0xff0088ff);
+            lineOp->AddLine(to + Vector3(-m, 0.f, 0.f), to + Vector3(m, 0.f, 0.f)).SetColor(0xffffffff);
+            lineOp->AddLine(to + Vector3(0.f, 0.f, -m), to + Vector3(0.f, 0.f, m)).SetColor(0xffffffff);
+        }
+
+        m_pathNode->SetVisible(true);
+        m_pathNode->UpdateBounds();
+        m_remainingTime = duration;
+    }
+
     void DebugPathVisualizer::ClearPath()
     {
         m_pathObject->Clear();

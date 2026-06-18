@@ -39,11 +39,12 @@ namespace mmo
 		/// @return The emissive render texture.
 		[[nodiscard]] RenderTexture& GetEmissiveRT() { return *m_emissiveRT; }
 
-		[[nodiscard]] RenderTexture& GetViewRayRT() { return *m_viewRayRT; }
-
 		/// @brief Gets the depth render texture.
 		/// @return The depth render texture.
 		[[nodiscard]] RenderTexture& GetDepthRT() { return *m_depthRT; }
+
+		/// @brief Gets the depth render texture as a shared pointer.
+		[[nodiscard]] RenderTexturePtr GetDepthRTPtr() const { return m_depthRT; }
 
 		/// @brief Gets the size of the G-Buffer.
 		/// @return The size of the G-Buffer.
@@ -63,7 +64,13 @@ namespace mmo
 		void Resize(uint32 width, uint32 height);
 
 		/// @brief Binds the G-Buffer for rendering.
-		void Bind();
+		/// @param clearDepth Whether to clear the depth buffer. Pass false when a depth pre-pass has
+		///        already populated depth and the following G-Buffer pass must test against it.
+		void Bind(bool clearDepth = true);
+
+		/// @brief Binds only the depth target (no colour targets) and clears it. Used for the
+		///        depth-only pre-pass that precedes the G-Buffer pass.
+		void BindDepthOnly();
 
 		/// @brief Unbinds the G-Buffer.
 		void Unbind();
@@ -89,8 +96,6 @@ namespace mmo
 
 		/// @brief The emissive render texture (RGB: Emissive, A: Unused).
 		RenderTexturePtr m_emissiveRT;
-
-		RenderTexturePtr m_viewRayRT;
 
 		/// @brief The depth render texture.
 		RenderTexturePtr m_depthRT;

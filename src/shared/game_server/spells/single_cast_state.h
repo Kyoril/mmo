@@ -4,14 +4,17 @@
 
 #include "base/typedefs.h"
 
-#include <map>
+#include <functional>
+#include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "game_server/spells/aura_container.h"
 #include "game_server/objects/game_unit_s.h"
 #include "game_server/spells/spell_cast.h"
 #include "game_server/spells/spell_cast_context.h"
 #include "game_server/spells/spell_target_resolver.h"
+#include "game_server/spells/channeling_cast_state.h"
 #include "game/spell.h"
 
 namespace mmo
@@ -38,7 +41,7 @@ namespace mmo
 
 		void Activate() override;
 
-		std::pair<SpellCastResult, SpellCasting*> StartCast(
+		SpellCastResult StartCast(
 			SpellCast& cast,
 			const proto::SpellEntry& spell,
 			const SpellTargetMap& target,
@@ -52,20 +55,22 @@ namespace mmo
 
 		void FinishChanneling() override;
 
-		SpellCasting& GetCasting()
-		{
-			return m_casting;
-		}
-
 	private:
 		bool Validate();
 		bool ValidatePlayerRequirements();
 		bool ValidateCasterRequirements();
 		bool ValidateTargetRequirements(GameUnitS* unitTarget);
 		[[nodiscard]] bool ShouldStartCooldownOnCastStart() const;
-		[[nodiscard]] bool UsesGlobalCooldown() const;
+
+		/// Whether this cast is subject to the global cooldown. Every cast triggers and respects
+		/// the global cooldown unless it is a proc/triggered cast or the spell is flagged
+		/// spell_cooldown_flags::NoGlobalCooldown.
+		[[nodiscard]] bool IsAffectedByGlobalCooldown() const;
+
+		/// Triggers the global cooldown on the caster if this cast is affected by it.
+		/// @returns The applied global cooldown duration in milliseconds (0 if not affected).
+		GameTime TriggerGlobalCooldown();
 		void NotifyCastEnded(bool succeeded);
-		void EndChanneling(bool succeeded);
 		GameUnitS* ResolveUnitTarget() const;
 		void ConnectTargetSignals(GameUnitS* unitTarget);
 
@@ -77,11 +82,9 @@ namespace mmo
 
 		std::shared_ptr<GameUnitS> GetEffectUnitTarget(const proto::SpellEffect& effect);
 
-		/// Determines if this spell is a channeled spell.
-		bool IsChanneled() const { return m_spell.attributes(0) & spell_attributes::Channeled; }
-
 	private:
 
+	private:
 		bool ConsumeItem(bool delayed = true);
 
 		bool ConsumeReagents(bool delayed = true);
@@ -103,59 +106,14 @@ namespace mmo
 
 		void MeleeSpecialAttack(const proto::SpellEffect& effect, bool basepointsArePct);
 
-		// Spell effect handlers implemented in spell_effects.cpp and spell_effects_scripted.cpp
-
-		void SpellEffectInstantKill(const proto::SpellEffect& effect);
-		void SpellEffectDummy(const proto::SpellEffect& effect);
-		void SpellEffectSchoolDamage(const proto::SpellEffect& effect);
-		void SpellEffectEnvironmentalDamage(const proto::SpellEffect& effect);
-		void SpellEffectTeleportUnits(const proto::SpellEffect& effect);
-		void SpellEffectApplyAura(const proto::SpellEffect& effect);
-		void SpellEffectPersistentAreaAura(const proto::SpellEffect& effect);
-		void SpellEffectDrainPower(const proto::SpellEffect& effect);
-		void SpellEffectHeal(const proto::SpellEffect& effect);
-		void SpellEffectBind(const proto::SpellEffect& effect);
-		void SpellEffectQuestComplete(const proto::SpellEffect& effect);
-		void SpellEffectWeaponDamageNoSchool(const proto::SpellEffect& effect);
-		void SpellEffectCreateItem(const proto::SpellEffect& effect);
-		void SpellEffectEnergize(const proto::SpellEffect& effect);
-		void SpellEffectWeaponPercentDamage(const proto::SpellEffect& effect);
-		void SpellEffectOpenLock(const proto::SpellEffect& effect);
-		void SpellEffectApplyAreaAuraParty(const proto::SpellEffect& effect);
-		void SpellEffectDispel(const proto::SpellEffect& effect);
-		void SpellEffectSummon(const proto::SpellEffect& effect);
-		void SpellEffectSummonPet(const proto::SpellEffect& effect);
-		void SpellEffectWeaponDamage(const proto::SpellEffect& effect);
-		void SpellEffectProficiency(const proto::SpellEffect& effect);
-		void SpellEffectPowerBurn(const proto::SpellEffect& effect);
-		void SpellEffectTriggerSpell(const proto::SpellEffect& effect);
-		void SpellEffectScript(const proto::SpellEffect& effect);
-		void SpellEffectAddComboPoints(const proto::SpellEffect& effect);
-		void SpellEffectDuel(const proto::SpellEffect& effect);
-		void SpellEffectCharge(const proto::SpellEffect& effect);
-		void SpellEffectAttackMe(const proto::SpellEffect& effect);
-		void SpellEffectNormalizedWeaponDamage(const proto::SpellEffect& effect);
-		void SpellEffectStealBeneficialBuff(const proto::SpellEffect& effect);
-		void SpellEffectInterruptSpellCast(const proto::SpellEffect& effect);
-		void SpellEffectLearnSpell(const proto::SpellEffect& effect);
-		void SpellEffectScriptEffect(const proto::SpellEffect& effect);
-		void SpellEffectDispelMechanic(const proto::SpellEffect& effect);
-		void SpellEffectResurrect(const proto::SpellEffect& effect);
-		void SpellEffectResurrectNew(const proto::SpellEffect& effect);
-		void SpellEffectKnockBack(const proto::SpellEffect& effect);
-		void SpellEffectSkill(const proto::SpellEffect& effect);
-		void SpellEffectTransDoor(const proto::SpellEffect& effect);
-		void SpellEffectResetAttributePoints(const proto::SpellEffect& effect);
-		void SpellEffectParry(const proto::SpellEffect& effect);
-		void SpellEffectBlock(const proto::SpellEffect& effect);
-		void SpellEffectDodge(const proto::SpellEffect& effect);
-		void SpellEffectHealPct(const proto::SpellEffect& effect);
-		void SpellEffectAddExtraAttacks(const proto::SpellEffect& effect);
-		void SpellEffectResetTalents(const proto::SpellEffect& effect);
-
 	private:
 		bool GetEffectTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets);
 		void MarkAffectedTarget(GameObjectS& target);
+
+		/// Evaluates the data-driven gating condition of a spell effect.
+		/// @return true if the effect should be applied (no condition, or the
+		///         condition evaluated true); false if the effect must be skipped.
+		bool EvaluateEffectCondition(const proto::SpellEffect& effect);
 
 	private:
 		void InternalSpellEffectWeaponDamage(const proto::SpellEffect& effect, SpellSchool school);
@@ -167,38 +125,30 @@ namespace mmo
 		SpellCast& m_cast;
 		const proto::SpellEntry& m_spell;
 		SpellTargetMap m_target;
-		SpellCasting m_casting;
-		std::vector<uint32> m_meleeDamage;	// store damage results of melee effects
 		bool m_hasFinished;
 		Countdown m_countdown;
 		Countdown m_impactCountdown;
-		signal<void()> completedEffects;
-		scoped_connection m_completedEffectsExecution;
+		// m_postEffectCallbacks: callbacks pushed by ConsumeItem(delayed=true) and drained at
+		// the end of ApplyAllEffects(). Accumulation-safe: the m_tookCastItem guard inside
+		// removeItem prevents double-removal even if ConsumeItem is called twice.
+		std::vector<std::function<void()>> m_postEffectCallbacks;
 		scoped_connection m_onTargetDied;
-		scoped_connection m_onTargetRemoved, m_damaged;
-		scoped_connection m_onThreatened;
-		scoped_connection m_onAttackError, m_removeAurasOnImmunity;
+		scoped_connection m_onTargetRemoved;
 		float m_x, m_y, m_z;
 		GameTime m_castTime;
 		GameTime m_castEnd;
 		bool m_isProc;
 		GameTime m_projectileStart, m_projectileEnd;
 		Vector3 m_projectileOrigin, m_projectileDest;
-		bool m_connectedMeleeSignal;
-		uint32 m_delayCounter;
 		std::unordered_set<uint64> m_affectedTargetGuids;
 		std::vector<GameObjectS*> m_effectTargetsScratch;
 		bool m_tookCastItem { false };
 		bool m_tookReagents { false };
-		uint32 m_attackerProc;
-		uint32 m_victimProc;
-		bool m_canTrigger;
-		HitResultMap m_hitResults;
-		std::vector<uint64> m_dynObjectsToDespawn;
-		bool m_instantsCast, m_delayedCast;
-		scoped_connection m_onChannelAuraRemoved;
+		bool m_delayedCast;
 		bool m_cooldownStartedOnCastStart { false };
 		GameTime m_cooldownStartedAtCastStartMs { 0 };
+		bool m_globalCooldownTriggered { false };
+		GameTime m_appliedGlobalCooldownMs { 0 };
 		bool m_endNotified { false };
 		std::shared_ptr<SingleCastState> m_selfHold;
 
@@ -207,13 +157,12 @@ namespace mmo
 		void OnTargetKilled(GameUnitS*);
 		void OnTargetDespawned(GameObjectS&);
 		void OnUserDamaged();
-		void ExecuteMeleeAttack();	// deal damage stored in m_meleeDamage
+		void ExecuteMeleeAttack();
 
-		std::map<GameUnitS*, std::unique_ptr<AuraContainer>> m_targetAuraContainers;
+		std::unordered_map<uint64, std::unique_ptr<AuraContainer>> m_targetAuraContainers;
 		uint64 m_itemGuid;
 		SpellCastContext m_context;
 		SpellTargetResolver m_targetResolver;
 
-		using EffectHandler = void (SingleCastState::*)(const proto::SpellEffect&);
 	};
 }

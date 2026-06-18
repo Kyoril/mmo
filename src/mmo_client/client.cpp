@@ -34,6 +34,7 @@
 #include <iostream>
 #include <fstream>
 #include <memory>
+#include <set>
 
 #include "game_states/world_state.h"
 
@@ -115,6 +116,25 @@ void LogStackTrace(CONTEXT *context, std::ostringstream &output)
 	line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
 	DWORD displacement;
 
+	// Helper that resolves a module's short name from its base address. We prefer the name reported by
+	// DbgHelp, falling back to the on-disk image name. This keeps frame lines and the MODULES table consistent.
+	auto getModuleName = [process](DWORD64 base, std::string& outName) -> bool
+	{
+		IMAGEHLP_MODULE64 modInfo = {};
+		modInfo.SizeOfStruct = sizeof(IMAGEHLP_MODULE64);
+		if (base != 0 && SymGetModuleInfo64(process, base, &modInfo))
+		{
+			outName = modInfo.ModuleName;
+			return true;
+		}
+		return false;
+	};
+
+	// Remember every module we touch so we can dump their PDB signatures afterwards. The backend uses
+	// (module name + RVA) together with the PDB GUID/age to resolve symbols from its private symbol store,
+	// so the client never has to ship a PDB.
+	std::set<DWORD64> moduleBases;
+
 	// Walk the stack
 	for (int frameNum = 0; frameNum < 30; frameNum++)
 	{
@@ -132,25 +152,92 @@ void LogStackTrace(CONTEXT *context, std::ostringstream &output)
 		if (!result || stack.AddrPC.Offset == 0)
 			break;
 
+		const DWORD64 address = stack.AddrPC.Offset;
+		const DWORD64 moduleBase = SymGetModuleBase64(process, address);
+
 		output << "Frame " << frameNum << ": ";
 
-		// Try to get symbol name
-		if (SymFromAddr(process, stack.AddrPC.Offset, NULL, symbol))
+		// Emit a module-relative address (RVA). This is the stable identifier that survives ASLR and lets the
+		// backend map the frame back to a function without symbols being present on the crashing machine.
+		std::string moduleName;
+		if (moduleBase != 0 && getModuleName(moduleBase, moduleName))
 		{
-			output << symbol->Name << " (0x" << std::hex << stack.AddrPC.Offset << std::dec << ")";
+			moduleBases.insert(moduleBase);
+			const DWORD64 rva = address - moduleBase;
+			output << moduleName << "+0x" << std::hex << rva << std::dec;
 		}
 		else
 		{
-			output << "Unknown (0x" << std::hex << stack.AddrPC.Offset << std::dec << ")";
+			output << "<unknown module>";
 		}
 
-		// Try to get line info
-		if (SymGetLineFromAddr64(process, stack.AddrPC.Offset, &displacement, &line))
+		// Absolute address kept for reference / cross-checking.
+		output << " (0x" << std::hex << address << std::dec << ")";
+
+		// If the crashing machine happens to have matching symbols (e.g. a developer build), include the
+		// resolved name and source location inline. On customer machines these simply won't resolve.
+		if (SymFromAddr(process, address, NULL, symbol))
+		{
+			output << " " << symbol->Name;
+		}
+		if (SymGetLineFromAddr64(process, address, &displacement, &line))
 		{
 			output << " at " << line.FileName << ":" << line.LineNumber;
 		}
 
 		output << "\r\n";
+	}
+
+	// Dump the module table with PDB signatures. Each entry gives the backend everything it needs to pick the
+	// exact matching PDB from its symbol store: the PDB id (GUID + age, formatted as the canonical symsrv
+	// directory name) plus the image base/size. The PDB signature is read from the loaded image's debug
+	// directory, so it is available even when the PDB itself is not present on the machine.
+	output << "\r\n";
+	output << "-----------------------------------------------\r\n";
+	output << "MODULES\r\n";
+	output << "-----------------------------------------------\r\n";
+
+	for (const DWORD64 base : moduleBases)
+	{
+		IMAGEHLP_MODULE64 modInfo = {};
+		modInfo.SizeOfStruct = sizeof(IMAGEHLP_MODULE64);
+		if (!SymGetModuleInfo64(process, base, &modInfo))
+		{
+			continue;
+		}
+
+		// Format the PDB GUID as 32 upper-case hex digits (no braces), then append the age as upper-case hex
+		// with no leading zeros. Concatenated, this is exactly the <GUID><AGE> folder name used by symsrv:
+		//   symbols\mmo_client.pdb\<pdbid>\mmo_client.pdb
+		const GUID& g = modInfo.PdbSig70;
+		char pdbId[48] = { 0 };
+		sprintf_s(pdbId, sizeof(pdbId),
+			"%08X%04X%04X%02X%02X%02X%02X%02X%02X%02X%02X%X",
+			g.Data1, g.Data2, g.Data3,
+			g.Data4[0], g.Data4[1], g.Data4[2], g.Data4[3],
+			g.Data4[4], g.Data4[5], g.Data4[6], g.Data4[7],
+			modInfo.PdbAge);
+
+		// The PDB file name as recorded in the image (CVData holds the original link-time path for RSDS records).
+		std::string pdbName = "unknown.pdb";
+		if (modInfo.CVData[0] != 0)
+		{
+			const char* path = modInfo.CVData;
+			const char* slash = strrchr(path, '\\');
+			const char* fwd = strrchr(path, '/');
+			if (fwd > slash)
+			{
+				slash = fwd;
+			}
+			pdbName = slash ? slash + 1 : path;
+		}
+
+		output << modInfo.ModuleName
+			<< "  base=0x" << std::hex << base << std::dec
+			<< "  size=0x" << std::hex << modInfo.ImageSize << std::dec
+			<< "  pdb=" << pdbName
+			<< "  pdbid=" << pdbId
+			<< "\r\n";
 	}
 
 	SymCleanup(process);

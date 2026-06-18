@@ -152,7 +152,15 @@ namespace mmo
 		}
 
 		m_enabled = enabled;
-		m_parent->NotifyAnimationStateEnabled(this, enabled);
+
+		// Guard against a dangling parent pointer. This should never happen in
+		// well-formed code, but a defensive check prevents a hard crash in case
+		// an AnimationState* cached by GameUnitC outlives its AnimationStateSet.
+		ASSERT(m_parent != nullptr);
+		if (m_parent)
+		{
+			m_parent->NotifyAnimationStateEnabled(this, enabled);
+		}
 	}
 
 	bool AnimationState::operator==(const AnimationState& rhs) const

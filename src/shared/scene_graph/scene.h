@@ -6,6 +6,7 @@
 
 #include "queued_renderable_visitor.h"
 #include "render_queue.h"
+#include "render_operation.h"
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
 #include "graphics/shader_types.h"
@@ -370,9 +371,45 @@ namespace mmo
 		/// Renders the current scene by using a specific camera as the origin.
 		void Render(Camera& camera, PixelShaderType shaderType);
 
+		/// @brief Controls whether a Forward-type Scene::Render call should skip opaque
+		/// render queue groups (< Transparent). Used by the deferred renderer to avoid
+		/// re-rendering opaque geometry in the transparent pass.
+		void SetForwardTransparentOnly(bool value) { m_forwardTransparentOnly = value; }
+
+		/// @brief When set, Render() reuses the render queue built by a previous pass this frame
+		/// instead of rebuilding it (running FindVisibleObjects / occlusion culling again). Used by
+		/// the deferred renderer's depth pre-pass: the pre-pass builds the queue once and the
+		/// G-Buffer pass that follows reuses it. Rebuilding twice per frame would double-run the
+		/// terrain occlusion-culling state machine and cause horizon flicker.
+		void SetReuseRenderQueue(bool value) { m_reuseRenderQueue = value; }
+
+		/// @brief When set, a ShadowMap-typed Render() (used for the deferred depth pre-pass of the
+		/// main view) builds the full visible set rather than only shadow casters, so the queue can
+		/// be reused by the following G-Buffer pass without dropping non-shadow-casting objects.
+		void SetDepthPrepass(bool value) { m_depthPrepass = value; }
+
 		void UpdateSceneGraph();
-		
+
 		void RenderSingleObject(Renderable& renderable, uint32 groupId);
+
+		/// @brief Gathers every shadow-casting movable object whose world bounding box intersects the
+		///        given world-space region, in a single traversal. The cascaded shadow renderer calls
+		///        this once per frame (region = union of all cascade frusta) and then reuses the
+		///        resulting list for every cascade, instead of re-walking the scene once per cascade.
+		/// @param worldRegion World-space region that must contain every cascade volume.
+		/// @param outCasters Receives the gathered casters (cleared first).
+		virtual void GatherShadowCasters(const AABB& worldRegion, std::vector<MovableObject*>& outCasters);
+
+		/// @brief Renders a previously gathered caster list into the currently bound shadow map using
+		///        the given cascade camera. Casters are frustum-culled against the cascade camera and,
+		///        when minCasterWorldRadius > 0, casters whose world half-extent is below that radius
+		///        are skipped (sub-texel small-object culling for distant cascades). Reuses the scene
+		///        render queue and the normal RenderVisibleObjects path, so animated casters update
+		///        through the same (frame-cached) animation code as the main view pass.
+		/// @param cascadeCamera The orthographic shadow camera for this cascade.
+		/// @param casters The list produced by GatherShadowCasters.
+		/// @param minCasterWorldRadius Skip casters whose world half-extent is smaller than this (0 = keep all).
+		void RenderShadowCasters(Camera& cascadeCamera, const std::vector<MovableObject*>& casters, float minCasterWorldRadius);
 
 		ManualRenderObject* CreateManualRenderObject(const String& name);
 
@@ -466,6 +503,13 @@ namespace mmo
 		{
 			m_ambientColor = color;
 		}
+
+		/// @brief Sets the primary directional light used for forward-rendered lighting.
+		/// Should be the scene's sun/moon light. Called by SkyComponent and DeferredRenderer.
+		void SetPrimaryDirectionalLight(Light* light) { m_primaryDirectionalLight = light; }
+
+		/// @brief Gets the primary directional light used for forward-rendered lighting.
+		[[nodiscard]] Light* GetPrimaryDirectionalLight() const { return m_primaryDirectionalLight; }
 
 		// ============================================================================
 		// Visible Light System - For efficient light gathering with frustum culling
@@ -579,6 +623,10 @@ namespace mmo
 		SceneNode* m_rootNode { nullptr };
 		std::unique_ptr<RenderQueue> m_renderQueue;
 
+		/// Reused across draw calls by RenderSingleObject so its constant-buffer vectors keep their
+		/// capacity instead of reallocating every draw. Single-threaded submission only.
+		RenderOperation m_renderOp{ 0u };
+
 		typedef std::map<const Camera*, VisibleObjectsBoundsInfo> CamVisibleObjectsMap;
 		CamVisibleObjectsMap m_camVisibleObjectsMap;
 
@@ -592,6 +640,11 @@ namespace mmo
 
 		typedef std::map<String, std::unique_ptr<ParticleEmitter>> ParticleEmitterMap;
 		ParticleEmitterMap m_particleEmitters;
+
+		/// Wall-clock timestamp of the previous particle-system update, used to compute a single
+		/// shared deltaTime for all emitters per frame (avoids per-emitter timing drift).
+		std::chrono::high_resolution_clock::time_point m_lastParticleUpdate;
+		bool m_particleTimerInitialized { false };
 
 		typedef std::map<String, std::unique_ptr<RibbonTrail>> RibbonTrailMap;
 		RibbonTrailMap m_ribbonTrails;
@@ -625,7 +678,19 @@ namespace mmo
 
 		PixelShaderType m_pixelShaderType = PixelShaderType::Forward;
 
+		/// When true, Scene::RenderVisibleObjects skips groups below Transparent during
+		/// a Forward pass. Set by the deferred renderer before its transparent pass so
+		/// that opaque groups (already in the GBuffer) are not re-rendered.
+		/// Never set this in non-deferred contexts (editor, model viewer).
+		bool m_forwardTransparentOnly = false;
+		bool m_reuseRenderQueue = false;
+		bool m_depthPrepass = false;
+
 		Vector3 m_ambientColor = Vector3(0.04f, 0.035f, 0.03f);
+
+		/// @brief Primary directional light for forward-rendered objects (e.g. translucent surfaces).
+		/// Set by SkyComponent or DeferredRenderer each frame.
+		Light* m_primaryDirectionalLight = nullptr;
 
 		std::unique_ptr<IDebugGeometry> m_debugGeometry;
 

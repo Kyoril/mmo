@@ -19,7 +19,7 @@ namespace mmo
 {
     class GameUnitC;
     class AnimationState;
-    class ParticleEmitter;
+    class ParticleSystem;
     class Light;
     class RibbonTrail;
     class SceneNode;
@@ -184,7 +184,7 @@ namespace mmo
         {
             uint32 spellId{ 0 };
             uint64 actorGuid{ 0 };
-            std::vector<ParticleEmitter*> particles;
+            std::vector<ParticleSystem*> particles;
             std::vector<Light*> lights;
             std::vector<RibbonTrail*> ribbonTrails;
             std::vector<SceneNode*> effectNodes;
@@ -214,6 +214,6 @@ namespace mmo
     };
 
     // Free functions for aura visualization notifications (avoid circular includes)
-    void NotifyAuraVisualizationApplied(const proto_client::SpellEntry& spell, GameUnitC* target);
-    void NotifyAuraVisualizationRemoved(const proto_client::SpellEntry& spell, GameUnitC* target);
+    void NotifyAuraVisualizationApplied(const proto_client::SpellEntry& spell, GameUnitC* caster, GameUnitC* target);
+    void NotifyAuraVisualizationRemoved(const proto_client::SpellEntry& spell, GameUnitC* caster, GameUnitC* target);
 }

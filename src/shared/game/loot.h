@@ -5,8 +5,19 @@
 
 namespace mmo
 {
-	// Loot distance is 5 meters.
-	constexpr float LootDistance = 5.0f;
+	// Loot / interaction distance.
+	//
+	// This must be at least as large as the maximum melee auto-attack engagement
+	// range, otherwise a creature can chase and attack the player from further
+	// away than the player is allowed to loot it once it dies, producing spurious
+	// "too far away to loot" errors for a corpse the player was just fighting.
+	//
+	// A default-scale creature and player each have a melee reach of ~2.5 yards
+	// (see GameUnitS::GetMeleeReach), giving a combined reach of ~5.0 yards. While
+	// both units are moving the auto-attack range is additionally widened by
+	// MELEE_CHASE_RANGE_BONUS (1.5 yards), so a creature can land hits from up to
+	// ~6.5 yards. The loot distance is therefore set to cover that full range.
+	constexpr float LootDistance = 6.5f;
 
 	namespace loot_error
 	{

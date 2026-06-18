@@ -3,6 +3,7 @@
 #include "game_script.h"
 #include "console/console.h"
 #include "net/login_connector.h"
+#include "ui/binding.h"
 #include "net/realm_connector.h"
 #include "game_states/game_state_mgr.h"
 #include "game_states/world_state.h"
@@ -22,6 +23,7 @@
 #include "loading_screen.h"
 #include "systems/guild_client.h"
 #include "systems/friend_client.h"
+#include "systems/channel_client.h"
 #include "systems/loot_client.h"
 #include "luabind_lambda.h"
 #include "platform.h"
@@ -30,7 +32,7 @@
 #include "systems/vendor_client.h"
 #include "systems/party_info.h"
 #include "systems/talent_client.h"
-#include "systems/talent_client.h"
+#include "systems/trade_client.h"
 #include "game/aura.h"
 #include "game/item.h"
 #include "game/spell.h"
@@ -42,6 +44,7 @@
 #include "game_client/item_handle.h"
 #include "game_client/unit_handle.h"
 #include "game/game_time_component.h"
+#include "graphics/graphics_device.h"
 #include "luabind/luabind.hpp"
 #include "luabind/iterator_policy.hpp"
 #include "luabind/out_value_policy.hpp"
@@ -80,6 +83,19 @@ namespace mmo
 			}
 
 			return cvar->GetStringValue().c_str();
+		}
+
+		void Script_SetConsoleVar(const std::string &name, const std::string &value)
+		{
+			ConsoleVar *cvar = ConsoleVarMgr::FindConsoleVar(name);
+			if (cvar)
+			{
+				cvar->Set(value);
+			}
+			else
+			{
+				ConsoleVarMgr::RegisterConsoleVar(name, "", value);
+			}
 		}
 
 		bool Script_ClearTarget()
@@ -385,6 +401,13 @@ namespace mmo
 			if (!WorldState::GetInputControl())
 				return;
 			WorldState::GetInputControl()->ToggleControlBit(ControlFlags::Autorun);
+		}
+
+		void Script_ToggleWalkRun()
+		{
+			if (!WorldState::GetInputControl())
+				return;
+			WorldState::GetInputControl()->ToggleWalkMode();
 		}
 
 		void Script_MoveForwardStart()
@@ -761,8 +784,8 @@ namespace mmo
 	}
 
 	GameScript::GameScript(LoginConnector &loginConnector, RealmConnector &realmConnector, LootClient &lootClient, VendorClient &vendorClient, std::shared_ptr<LoginState> loginState, const proto_client::Project &project, ActionBar &actionBar, SpellCast &spellCast, CooldownManager &cooldownManager, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, PartyInfo &partyInfo, CharCreateInfo &charCreateInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, GameTimeComponent &gameTime,
-						   TalentClient &talentClient)
-		: m_loginConnector(loginConnector), m_realmConnector(realmConnector), m_lootClient(lootClient), m_vendorClient(vendorClient), m_loginState(std::move(loginState)), m_project(project), m_actionBar(actionBar), m_spellCast(spellCast), m_cooldownManager(cooldownManager), m_trainerClient(trainerClient), m_questClient(questClient), m_audio(audio), m_partyInfo(partyInfo), m_charCreateInfo(charCreateInfo), m_charSelect(charSelect), m_guildClient(guildClient), m_friendClient(friendClient), m_gameTime(gameTime), m_talentClient(talentClient)
+						   TalentClient &talentClient, ICacheProvider &cacheProvider, TradeClient &tradeClient, ChannelClient &channelClient)
+		: m_loginConnector(loginConnector), m_realmConnector(realmConnector), m_lootClient(lootClient), m_vendorClient(vendorClient), m_loginState(std::move(loginState)), m_project(project), m_actionBar(actionBar), m_spellCast(spellCast), m_cooldownManager(cooldownManager), m_trainerClient(trainerClient), m_questClient(questClient), m_audio(audio), m_partyInfo(partyInfo), m_charCreateInfo(charCreateInfo), m_charSelect(charSelect), m_guildClient(guildClient), m_friendClient(friendClient), m_channelClient(channelClient), m_gameTime(gameTime), m_talentClient(talentClient), m_cacheProvider(cacheProvider), m_tradeClient(tradeClient)
 	{
 		// Initialize the cursor with project data for icon resolution
 		g_cursor.Initialize(m_project);
@@ -973,7 +996,8 @@ namespace mmo
 							   .def("CanExpire", &AuraHandle::CanExpire)
 							   .def("GetDuration", &AuraHandle::GetDuration)
 						   .def("GetSpell", &AuraHandle::GetSpell)
-						   .def("IsNegative", &AuraHandle::IsNegative)),
+						   .def("IsNegative", &AuraHandle::IsNegative)
+					   .def("GetStackCount", &AuraHandle::GetStackCount)),
 
 				   luabind::scope(
 					   luabind::class_<ItemHandle>("ItemHandle")
@@ -1003,7 +1027,10 @@ namespace mmo
 							   .def("GetDescription", &ItemHandle::GetDescription)
 							   .def("GetMinDamage", &ItemHandle::GetMinDamage)
 							   .def("GetProficiency", &ItemHandle::GetProficiency)
-							   .def("GetStatValue", &ItemHandle::GetStatValue)),
+							   .def("GetStatValue", &ItemHandle::GetStatValue)
+							   .def("GetBonding", &ItemHandle::GetBonding)
+							   .def("IsBound", &ItemHandle::IsBound)
+							   .def("GetRequiredLevel", &ItemHandle::GetRequiredLevel)),
 
 						   luabind::scope(
 							   luabind::class_<proto_client::SpellEntry>("Spell")
@@ -1032,6 +1059,161 @@ namespace mmo
 
 					   luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 					   luabind::def("GetCVar", &Script_GetConsoleVar),
+					   luabind::def("SetCVar", &Script_SetConsoleVar),
+
+					   // Returns an array of supported fullscreen screen resolutions, each entry
+					   // being a table with { width, height, label = "WxH" }, sorted ascending.
+					   luabind::def<std::function<luabind::object()>>("GetScreenResolutions", [this]() -> luabind::object
+					   {
+						   luabind::object result = luabind::newtable(m_luaState.get());
+
+						   const auto resolutions = GraphicsDevice::Get().GetSupportedResolutions();
+						   int i = 1;
+						   for (const auto& res : resolutions)
+						   {
+							   luabind::object entry = luabind::newtable(m_luaState.get());
+							   entry["width"] = static_cast<int>(res.first);
+							   entry["height"] = static_cast<int>(res.second);
+							   entry["label"] = std::to_string(res.first) + "x" + std::to_string(res.second);
+							   result[i++] = entry;
+						   }
+
+						   return result;
+					   }),
+
+					   // Key bindings API
+					   luabind::def<std::function<luabind::object()>>("GetBindings", [this]() -> luabind::object
+					   {
+						   Bindings* b = Bindings::GetCurrent();
+						   if (!b)
+						   {
+							   return luabind::object();
+						   }
+
+						   luabind::object result = luabind::newtable(m_luaState.get());
+						   int i = 1;
+						   for (const auto& pair : b->GetAllBindings())
+						   {
+							   luabind::object entry = luabind::newtable(m_luaState.get());
+							   entry["name"] = pair.second.name;
+							   entry["description"] = pair.second.description;
+							   entry["category"] = pair.second.category;
+							   result[i++] = entry;
+						   }
+						   return result;
+					   }),
+
+					   luabind::def<std::function<luabind::object()>>("GetKeyBindings", [this]() -> luabind::object
+					   {
+						   Bindings* b = Bindings::GetCurrent();
+						   if (!b)
+						   {
+							   return luabind::object();
+						   }
+
+						   luabind::object result = luabind::newtable(m_luaState.get());
+						   for (const auto& pair : b->GetAllKeyBindings())
+						   {
+							   result[pair.first] = pair.second;
+						   }
+						   return result;
+					   }),
+
+					   luabind::def<std::function<luabind::object(const std::string&)>>("GetKeysForBinding", [this](const std::string& actionName) -> luabind::object
+					   {
+						   Bindings* b = Bindings::GetCurrent();
+						   if (!b)
+						   {
+							   return luabind::object();
+						   }
+
+						   luabind::object result = luabind::newtable(m_luaState.get());
+						   auto keys = b->GetKeysForAction(actionName);
+						   for (size_t i = 0; i < keys.size(); ++i)
+						   {
+							   result[static_cast<int>(i + 1)] = keys[i];
+						   }
+						   return result;
+					   }),
+
+					   luabind::def<std::function<const char*(const std::string&)>>("GetBindingForKey", [](const std::string& keyName) -> const char*
+					   {
+						   Bindings* b = Bindings::GetCurrent();
+						   if (!b)
+						   {
+							   return nullptr;
+						   }
+
+						   const auto& keyBindings = b->GetAllKeyBindings();
+						   const auto it = keyBindings.find(keyName);
+						   return (it != keyBindings.end()) ? it->second.c_str() : nullptr;
+					   }),
+
+					   luabind::def<std::function<const char*(const std::string&, const std::string&)>>("SetBinding", [](const std::string& keyName, const std::string& actionName) -> const char*
+					   {
+						   Bindings* b = Bindings::GetCurrent();
+						   if (!b)
+						   {
+							   return nullptr;
+						   }
+
+						   // Return the previous action bound to this key so Lua can refresh that row.
+						   static String s_prevAction;
+						   const auto& kb = b->GetAllKeyBindings();
+						   const auto it = kb.find(keyName);
+						   s_prevAction = (it != kb.end()) ? it->second : String{};
+
+						   b->Bind(keyName, actionName);
+						   return s_prevAction.empty() ? nullptr : s_prevAction.c_str();
+					   }),
+
+					   luabind::def<std::function<void(const std::string&)>>("UnbindKey", [](const std::string& keyName)
+					   {
+						   Bindings* b = Bindings::GetCurrent();
+						   if (b)
+						   {
+							   b->UnbindKey(keyName);
+						   }
+					   }),
+
+					   luabind::def<std::function<void()>>("SaveBindings", []()
+					   {
+						   Bindings* b = Bindings::GetCurrent();
+						   if (b)
+						   {
+							   b->SaveBindings();
+						   }
+					   }),
+
+					   luabind::def<std::function<void(luabind::object)>>("StartKeyCapture", [](luabind::object callback)
+					   {
+						   Bindings* b = Bindings::GetCurrent();
+						   if (!b)
+						   {
+							   return;
+						   }
+
+						   b->StartKeyCapture([callback](const String& keyName) mutable
+						   {
+							   try
+							   {
+								   callback(keyName);
+							   }
+							   catch (const luabind::error& e)
+							   {
+								   ELOG("StartKeyCapture callback error: " << e.what());
+							   }
+						   });
+					   }),
+
+					   luabind::def<std::function<void()>>("StopKeyCapture", []()
+					   {
+						   Bindings* b = Bindings::GetCurrent();
+						   if (b)
+						   {
+							   b->StopKeyCapture();
+						   }
+					   }),
 
 					   luabind::def<std::function<void()>>("EnterWorld", [this]
 														   {
@@ -1086,6 +1268,7 @@ namespace mmo
 					   luabind::def("StrafeRightStart", &Script_StrafeRightStart),
 					   luabind::def("StrafeRightStop", &Script_StrafeRightStop),
 					   luabind::def("ToggleAutoRun", &Script_ToggleAutoRun),
+				   luabind::def("ToggleWalkRun", &Script_ToggleWalkRun),
 
 					   luabind::def("Jump", &Script_Jump),
 					   luabind::def("StopJump", &Script_StopJump),
@@ -1138,6 +1321,72 @@ namespace mmo
 																  { return this->m_cooldownManager.GetCooldownRemaining(spellId); }),
 					   luabind::def<std::function<bool(uint32)>>("IsSpellOnCooldown", [this](uint32 spellId)
 																 { return this->m_cooldownManager.IsOnCooldown(spellId); }),
+
+				   // Spell modifier queries — allow Lua tooltips to reflect server-side spell mods.
+				   // GetSpellModFlat/Pct take spellId and modOp; they look up the spell's familyflags
+				   // and sum across all matching effect-index bit positions, mirroring the server.
+				   luabind::def<std::function<int32(uint32, uint32)>>("GetSpellModFlat", [this](uint32 spellId, uint32 modOp) -> int32
+				   {
+					   const auto* spell = m_project.spells.getById(spellId);
+					   if (!spell) { return 0; }
+					   const auto player = ObjectMgr::GetActivePlayer();
+					   if (!player) { return 0; }
+					   return player->GetSpellModFlatForFlags(static_cast<uint8>(modOp), spell->familyflags());
+				   }),
+				   luabind::def<std::function<int32(uint32, uint32)>>("GetSpellModPct", [this](uint32 spellId, uint32 modOp) -> int32
+				   {
+					   const auto* spell = m_project.spells.getById(spellId);
+					   if (!spell) { return 0; }
+					   const auto player = ObjectMgr::GetActivePlayer();
+					   if (!player) { return 0; }
+					   return player->GetSpellModPctForFlags(static_cast<uint8>(modOp), spell->familyflags());
+				   }),
+				   /// Returns the effective (mod-adjusted) cost for a spell.
+				   luabind::def<std::function<int32(uint32)>>("GetSpellEffectiveCost", [this](uint32 spellId) -> int32
+				   {
+					   const auto* spell = m_project.spells.getById(spellId);
+					   if (!spell) { return 0; }
+					   const auto player = ObjectMgr::GetActivePlayer();
+					   if (!player) { return spell->cost(); }
+					   int32 cost = spell->cost();
+					   cost = player->ApplySpellModForFlags(static_cast<uint8>(spell_mod_op::Cost), cost, spell->familyflags());
+					   return std::max(0, cost);
+				   }),
+				   /// Returns the effective (mod-adjusted) cast time for a spell in milliseconds.
+				   luabind::def<std::function<int32(uint32)>>("GetSpellEffectiveCastTime", [this](uint32 spellId) -> int32
+				   {
+					   const auto* spell = m_project.spells.getById(spellId);
+					   if (!spell) { return 0; }
+					   const auto player = ObjectMgr::GetActivePlayer();
+					   if (!player) { return spell->casttime(); }
+					   int32 castTime = spell->casttime();
+					   castTime = player->ApplySpellModForFlags(static_cast<uint8>(spell_mod_op::CastTime), castTime, spell->familyflags());
+					   return std::max(0, castTime);
+				   }),
+				   /// Returns the effective (mod-adjusted) cooldown for a spell in milliseconds.
+				   luabind::def<std::function<int32(uint32)>>("GetSpellEffectiveCooldown", [this](uint32 spellId) -> int32
+				   {
+					   const auto* spell = m_project.spells.getById(spellId);
+					   if (!spell) { return 0; }
+					   const auto player = ObjectMgr::GetActivePlayer();
+					   if (!player) { return spell->cooldown(); }
+					   int32 cooldown = spell->cooldown();
+					   if (cooldown == 0) { return 0; }
+					   cooldown = player->ApplySpellModForFlags(static_cast<uint8>(spell_mod_op::Cooldown), cooldown, spell->familyflags());
+					   return std::max(0, cooldown);
+				   }),
+				   /// Returns the effective (mod-adjusted) duration for a spell in milliseconds.
+				   luabind::def<std::function<int32(uint32)>>("GetSpellEffectiveDuration", [this](uint32 spellId) -> int32
+				   {
+					   const auto* spell = m_project.spells.getById(spellId);
+					   if (!spell) { return 0; }
+					   const auto player = ObjectMgr::GetActivePlayer();
+					   if (!player) { return spell->duration(); }
+					   int32 duration = spell->duration();
+					   if (duration == 0) { return 0; }
+					   duration = player->ApplySpellModForFlags(static_cast<uint8>(spell_mod_op::Duration), duration, spell->familyflags());
+					   return std::max(0, duration);
+				   }),
 
 					   luabind::def<std::function<void(int32, const ItemInfo *&, String &, int32 &, int32 &, int32 &, bool &)>>("GetVendorItemInfo", [this](int32 slot, const ItemInfo *&out_item, String &out_icon, int32 &out_price, int32 &out_quantity, int32 &out_numAvailable, bool &out_usable)
 																																{ return this->GetVendorItemInfo(slot, out_item, out_icon, out_price, out_quantity, out_numAvailable, out_usable); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>, luabind::pure_out_value<7>>()),
@@ -1200,8 +1449,25 @@ namespace mmo
 																{ return this->LootSlotIsCoin(slot); }),
 					   luabind::def<std::function<bool(int32)>>("LootSlotIsItem", [this](int32 slot)
 																{ return this->LootSlotIsItem(slot); }),
+					   luabind::def<std::function<int32(int32)>>("GetLootSlotType", [this](int32 slot)
+											{ return this->GetLootSlotType(slot); }),
 					   luabind::def<std::function<const ItemInfo *(int32)>>("GetLootSlotItem", [this](int32 slot)
 																			{ return this->GetLootSlotItem(slot); }),
+					   luabind::def<std::function<void(int32, int32)>>("ConfirmLootRoll", [this](int32 rollId, int32 vote)
+											{ m_lootClient.SendLootRollByRollId(static_cast<uint32>(rollId), static_cast<uint8>(vote)); }),
+					   luabind::def<std::function<const char*(int32)>>("GetItemDisplayIcon", [this](int32 displayId) -> const char*
+											{
+												const auto* displayData = this->m_project.itemDisplays.getById(displayId);
+												if (displayData)
+												{
+													return displayData->icon().c_str();
+												}
+												return "";
+											}),
+					   luabind::def<std::function<const ItemInfo*(int32)>>("GetCachedItemInfo", [this](int32 itemId) -> const ItemInfo*
+											{
+												return this->m_lootClient.GetItemCache().Get(static_cast<uint64>(itemId));
+											}),
 					   luabind::def<std::function<void()>>("CloseLoot", [this]()
 														   { this->CloseLoot(); }),
 					   luabind::def<std::function<void(int32, String &, String &, int32 &)>>("GetLootSlotInfo", [this](int32 slot, String &out_icon, String &out_text, int32 &out_count)
@@ -1226,14 +1492,51 @@ namespace mmo
 				   luabind::def<std::function<int32()>>("GetLootMethod", [this]()
 														{ return static_cast<int32>(m_partyInfo.GetLootMethod()); }),
 
+				   luabind::def<std::function<int32()>>("GetLootThreshold", [this]()
+														{ return static_cast<int32>(m_partyInfo.GetLootThreshold()); }),
+
 				   luabind::def<std::function<void(int32, const String&)>>("SetLootMethod",
 					   [this](const int32 method, const String& /*masterName*/)
 					   {
 						   // MasterLoot: GUID 0 is a sentinel — the server-side OnSetLootMethod()
-						   // handler (plan 05-01) defaults lootMasterGuid to the leader's
-						   // characterId when lootMethod==MasterLoot && lootMasterGuid==0.
+						   // handler defaults lootMasterGuid to the leader's characterId when
+						   // lootMethod==MasterLoot && lootMasterGuid==0.
 						   const uint64 masterGuid = 0;
-						   m_realmConnector.SetGroupLootMethod(static_cast<uint8>(method), masterGuid, 2);
+						   m_realmConnector.SetGroupLootMethod(static_cast<uint8>(method), masterGuid, m_partyInfo.GetLootThreshold());
+					   }),
+
+				   // SetLootSettings(method, masterName, threshold) — full control in one call.
+				   // masterName is matched against current party members to resolve the GUID.
+				   luabind::def<std::function<void(int32, const String&, int32)>>("SetLootSettings",
+					   [this](const int32 method, const String& masterName, const int32 threshold)
+					   {
+						   uint64 masterGuid = 0;
+						   for (int32 i = 0; i < static_cast<int32>(m_partyInfo.GetMemberCount()); ++i)
+						   {
+							   const auto* member = m_partyInfo.GetMember(i);
+							   if (member && member->name == masterName)
+							   {
+								   masterGuid = member->guid;
+								   break;
+							   }
+						   }
+						   m_realmConnector.SetGroupLootMethod(static_cast<uint8>(method), masterGuid, static_cast<uint8>(threshold));
+					   }),
+
+				   luabind::def<std::function<std::string(int32)>>("GetPartyMemberName",
+					   [this](const int32 index) -> std::string
+					   {
+						   const auto* member = m_partyInfo.GetMember(index - 1);
+						   return member ? member->name : std::string{};
+					   }),
+
+				   luabind::def<std::function<int32()>>("GetLootMasterIndex",
+					   [this]() -> int32
+					   {
+						   const uint64 guid = m_partyInfo.GetLootMasterGuid();
+						   if (guid == 0) { return -1; }
+						   const int32 idx = m_partyInfo.GetMemberIndexByGuid(guid);
+						   return idx >= 0 ? idx + 1 : -1;
 					   }),
 
 					   luabind::def<std::function<void(const char *, const char *)>>("SendChatMessage", [this](const char *message, const char *type)
@@ -1259,15 +1562,29 @@ namespace mmo
 						   }),
 
 					   luabind::def<std::function<void()>>("RequestTimePlayed", [this]()
-														   { m_realmConnector.SendTimePlayedRequest(); }));
+														   { m_realmConnector.SendTimePlayedRequest(); }),
+
+					   luabind::def<std::function<luabind::object()>>("GetKnownPlayerNames", [this]() -> luabind::object
+					   {
+						   luabind::object result = luabind::newtable(m_luaState.get());
+						   int index = 1;
+						   m_cacheProvider.GetNameCache().ForEachCachedName([&](const String& name)
+						   {
+							   result[index++] = name;
+						   });
+						   return result;
+					   }));
 
 		m_charSelect.RegisterScriptFunctions(m_luaState.get());
 		m_charCreateInfo.RegisterScriptFunctions(m_luaState.get());
 		m_vendorClient.RegisterScriptFunctions(m_luaState.get());
 		m_guildClient.RegisterScriptFunctions(m_luaState.get());
 		m_friendClient.RegisterScriptFunctions(m_luaState.get());
+		m_channelClient.RegisterScriptFunctions(m_luaState.get());
 		m_questClient.RegisterScriptFunctions(m_luaState.get());
 		m_talentClient.RegisterScriptFunctions(m_luaState.get());
+		m_tradeClient.RegisterScriptFunctions(m_luaState.get());
+
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;
 		luabind::globals(m_luaState.get())["realmConnector"] = &m_realmConnector;
 		luabind::globals(m_luaState.get())["gameData"] = &m_project;
@@ -1559,6 +1876,19 @@ namespace mmo
 				return;
 			}
 
+			const LootClient::LootItem* item = m_lootClient.GetLootItem(serverSlot);
+			if (!item || item->count == 0)
+			{
+				ELOG("Unable to loot: Missing loot item for server slot " << serverSlot);
+				return;
+			}
+
+			if (item->lootType != loot_slot_type::AllowLoot && item->lootType != loot_slot_type::Owner)
+			{
+				FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "EQUIP_ERR_LOOT_CANT_LOOT_THAT_NOW");
+				return;
+			}
+
 			// Loot item from server slot
 			m_realmConnector.AutoStoreLootItem(serverSlot);
 		}
@@ -1623,6 +1953,33 @@ namespace mmo
 		}
 
 		return true;
+	}
+
+	int32 GameScript::GetLootSlotType(const uint32 slot) const
+	{
+		if (slot < 1)
+		{
+			return loot_slot_type::Locked;
+		}
+
+		if (m_lootClient.HasMoney() && slot == 1)
+		{
+			return loot_slot_type::AllowLoot;
+		}
+
+		const int32 serverSlot = MapUISlotToServerSlot(static_cast<int32>(slot));
+		if (serverSlot < 0)
+		{
+			return loot_slot_type::Locked;
+		}
+
+		const LootClient::LootItem* item = m_lootClient.GetLootItem(serverSlot);
+		if (!item || item->count == 0)
+		{
+			return loot_slot_type::Locked;
+		}
+
+		return item->lootType;
 	}
 
 	void GameScript::GetLootSlotInfo(uint32 slot, String &out_icon, String &out_text, int32 &out_count) const

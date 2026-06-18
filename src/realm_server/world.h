@@ -72,7 +72,7 @@ namespace mmo
 		const String& GetWorldName() const { return m_worldName; }
 
 		/// Requests a character to join this world node.
-		void Join(CharacterData characterData, JoinWorldCallback callback);
+		void Join(CharacterData characterData, const std::vector<std::string>& accountFeatures, JoinWorldCallback callback);
 
 		/// Requests a character to leave this world node.
 		void Leave(ObjectGuid characterGuid, auth::WorldLeftReason reason);
@@ -116,7 +116,11 @@ namespace mmo
 		void SendTeleportRequest(uint64 characterId, uint32 mapId, const Vector3& position, const Radian& facing);
 
 		/// Notifies the world node that a character's group changed.
-		void NotifyPlayerGroupChanged(uint64 characterId, uint64 groupId);
+		/// @param characterId The character whose group changed.
+		/// @param groupId The new group id, or 0 if no group.
+		/// @param lootMethod The group's loot method.
+		/// @param lootThreshold The group's loot quality threshold.
+		void NotifyPlayerGroupChanged(uint64 characterId, uint64 groupId, uint8 lootMethod = 0, uint8 lootThreshold = 0);
 
 		/// Notifies the world node that a character's guild changed.
 		void NotifyPlayerGuildChanged(uint64 characterId, uint64 guildId);
@@ -125,7 +129,8 @@ namespace mmo
 		/// @param characterId The character whose group loot method changed.
 		/// @param lootMethod The new loot method (sent as uint8 over the wire).
 		/// @param lootMasterGuid The new loot master GUID (0 if not MasterLoot).
-		void NotifyPlayerGroupLootMethodChanged(uint64 characterId, uint8 lootMethod, uint64 lootMasterGuid);
+		/// @param lootThreshold The group's loot quality threshold.
+		void NotifyPlayerGroupLootMethodChanged(uint64 characterId, uint8 lootMethod, uint64 lootMasterGuid, uint8 lootThreshold);
 
 	private:
 		TimerQueue& m_timerQueue;

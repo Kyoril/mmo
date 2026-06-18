@@ -4,11 +4,24 @@
 #include "web_service.h"
 #include "base/clock.h"
 #include "log/default_log_levels.h"
+#include "base/typedefs.h"
 
 namespace mmo
 {
 	namespace web
 	{
+		namespace
+		{
+			std::string MakeRouteKey(net::http::IncomingRequest::Type method, const std::string& path)
+			{
+				switch (method)
+				{
+					case net::http::IncomingRequest::Get:  return "GET " + path;
+					case net::http::IncomingRequest::Post: return "POST " + path;
+					default:                               return "UNKNOWN " + path;
+				}
+			}
+		}
 		WebClient::WebClient(WebService &webService, std::shared_ptr<Client> connection)
 			: m_webService(webService)
 			, m_connection(connection)
@@ -58,6 +71,27 @@ namespace mmo
 		{
 			assert(m_connection);
 			return *m_connection;
+		}
+
+		void WebClient::RegisterRoute(net::http::IncomingRequest::Type method, std::string path, RouteHandler handler)
+		{
+			m_routes.emplace(MakeRouteKey(method, std::move(path)), std::move(handler));
+		}
+
+		void WebClient::DispatchRoute(const net::http::IncomingRequest& request, WebResponse& response)
+		{
+			const auto key = MakeRouteKey(request.getType(), request.getPath());
+			const auto it = m_routes.find(key);
+			if (it != m_routes.end())
+			{
+				it->second(request, response);
+			}
+			else
+			{
+				response.setStatus(net::http::OutgoingAnswer::NotFound);
+				const String message = "The command '" + request.getPath() + "' does not exist";
+				response.finishWithContent("text/html", message.data(), message.size());
+			}
 		}
 	}
 }

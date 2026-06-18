@@ -9,10 +9,14 @@
 #include "auth_protocol/auth_connection.h"
 #include "base/signal.h"
 #include "base/big_number.h"
+#include "auth_protocol/srp_server.h"
 
 #include <memory>
+#include <optional>
 #include <functional>
 #include <map>
+#include <set>
+#include <vector>
 #include <cassert>
 
 
@@ -84,6 +88,7 @@ namespace mmo
 		uint8 m_version3;						// Patch version: 0.0.X.00000
 		uint16 m_build;							// Build version: 0.0.0.XXXXX
 		uint64 m_accountId;						// Account ID
+		std::set<uint32> m_accountFeatureIds;	// Active account feature ids (loaded after login; used for realm visibility)
 		std::map<uint8, PacketHandler> m_packetHandlers;
 		std::mutex m_packetHandlerMutex;
 
@@ -92,14 +97,12 @@ namespace mmo
 
 	private:
 		BigNumber m_sessionKey;
-		BigNumber m_s, m_v;
-		BigNumber m_b, m_B;
-		BigNumber m_unk3;
+		std::optional<SrpServer> m_srp;
 		BigNumber m_reconnectProof;
 		BigNumber m_reconnectKey;
 		SHA1Hash m_m2;
 
-		/// Number of bytes used to store m_s.
+		/// Number of bytes used to store the SRP salt (s).
 		static constexpr int ByteCountS = 32;
 		/// Number of bytes used by a sha1 hash. Taken from OpenSSL.
 		static constexpr int ShaDigestLength = 20;
@@ -117,6 +120,8 @@ namespace mmo
 	private:
 		void SendAuthProof(auth::AuthResult result);
 		void SendRealmList();
+		/// Sends the active account feature keys (entitlements) to the client.
+		void SendAccountFeatures(const std::vector<std::string>& featureKeys);
 
 	private:
 

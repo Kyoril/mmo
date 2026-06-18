@@ -3,6 +3,7 @@
 #pragma once
 
 #include "web_services/web_client.h"
+#include "login_http_handlers.h"
 
 namespace mmo
 {
@@ -10,7 +11,7 @@ namespace mmo
 	struct IDatabase;
 	class WebService;
 
-	class WebClient 
+	class WebClient
 		: public web::WebClient
 		, public std::enable_shared_from_this<WebClient>
 	{
@@ -30,20 +31,9 @@ namespace mmo
 
 		/// Handles a shutdown request.
 		void handleShutdown(const net::http::IncomingRequest& request, web::WebResponse& response) const;
-		/// Handles an account creation request.
-		void handleCreateAccount(const net::http::IncomingRequest& request, web::WebResponse& response) const;
-		/// Handles a realm creation request.
-		void handleCreateRealm(const net::http::IncomingRequest& request, web::WebResponse& response) const;
-		/// Handles a ban request.
-		void handleBanAccount(const net::http::IncomingRequest& request, web::WebResponse& response) const;
-		/// Handles an unban request.
-		void handleUnbanAccount(const net::http::IncomingRequest& request, web::WebResponse& response) const;
-		/// Handles a GM level query request.
-		void handleGetGMLevel(const net::http::IncomingRequest& request, web::WebResponse& response) const;
-		/// Handles a GM level update request.
-		void handleSetGMLevel(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 
 	private:
 		WebService& m_service;
+		LoginHttpHandlers m_handlers;
 	};
 }

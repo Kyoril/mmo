@@ -224,6 +224,23 @@ namespace mmo
 			inputElements.push_back(instanceElement);
 		}
 
+		// Add per-instance tint colour (float4 = 16 bytes) following the matrix.
+		// This matches the HLSL: float4 instanceColor : TEXCOORD12
+		// Shaders that don't consume it simply ignore the extra layout element. Instance buffers
+		// that carry only a 64-byte matrix must not bind it; all engine instance buffers
+		// (foliage, particles) use the 80-byte {matrix, colour} layout.
+		{
+			D3D11_INPUT_ELEMENT_DESC colorElement;
+			colorElement.SemanticName = "TEXCOORD";
+			colorElement.SemanticIndex = 12;
+			colorElement.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+			colorElement.InputSlot = instanceSlot;
+			colorElement.AlignedByteOffset = 64;
+			colorElement.InputSlotClass = D3D11_INPUT_PER_INSTANCE_DATA;
+			colorElement.InstanceDataStepRate = 1;
+			inputElements.push_back(colorElement);
+		}
+
 		const auto& microcode = boundVertexProgram.GetByteCode();
 		
 		ComPtr<ID3D11InputLayout> inputLayout;

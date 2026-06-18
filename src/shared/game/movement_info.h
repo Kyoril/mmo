@@ -175,6 +175,8 @@ namespace mmo
 		bool IsPitching() const { return (movementFlags & movement_flags::Pitching) != 0; }
 
 		bool IsFalling() const { return (movementFlags & movement_flags::Falling) != 0; }
+
+		bool IsSwimming() const { return (movementFlags & movement_flags::Swimming) != 0; }
 	};
 
 	inline io::Writer& operator<<(io::Writer& writer, const MovementInfo& info)

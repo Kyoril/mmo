@@ -7,6 +7,7 @@
 #include "math/vector3.h"
 
 #include <memory>
+#include <functional>
 
 #include "graphics/material.h"
 
@@ -25,6 +26,15 @@ namespace mmo
 		class Page;
 
 		typedef uint16 TileId;
+
+		/// @brief Optional brush mask sampler used by Terrain::Paint.
+		///
+		/// Invoked once per affected terrain pixel with normalized coordinates (u, v) in the
+		/// range [0, 1] spanning the brush's square footprint (side length = 2 * outerRadius,
+		/// centered on the brush). It must return a multiplier in [0, 1] that is applied on top
+		/// of the radial brush falloff, allowing an imported greyscale image to be used as a
+		/// stencil/pattern for layer painting. Coordinates outside the footprint should return 0.
+		using BrushMaskSampler = std::function<float(float u, float v)>;
 
 		class Terrain final
 		{
@@ -99,6 +109,12 @@ namespace mmo
 			/// @return Layer value as a float (0.0 to 1.0).
 			[[nodiscard]] float GetLayerValueAt(float x, float z, uint8 layer) const;
 
+			/// @brief Gets the base material of the terrain tile at a world position.
+			/// @param x World X coordinate.
+			/// @param z World Z coordinate.
+			/// @return The tile's base material, or nullptr if no loaded tile covers the position.
+			[[nodiscard]] MaterialPtr GetBaseMaterialAt(float x, float z);
+
 			/// @brief Gets the smoothly interpolated height at a world position.
 			/// @param x World X coordinate.
 			/// @param z World Z coordinate.
@@ -153,6 +169,16 @@ namespace mmo
 			/// @brief Checks if the wireframe overlay is visible.
 			/// @return True if the wireframe is visible, false otherwise.
 			bool IsWireframeVisible() const { return m_showWireframe; }
+
+			/// @brief Sets the visibility of all water surfaces across the terrain.
+			/// @details Applies to all currently loaded pages and is remembered so that pages
+			///          streamed in later inherit the same visibility.
+			/// @param visible True to render water surfaces, false to hide them.
+			void SetWaterVisible(bool visible);
+
+			/// @brief Checks whether water surfaces are visible.
+			/// @return True if water is visible, false otherwise.
+			[[nodiscard]] bool IsWaterVisible() const { return m_waterVisible; }
 
 			/// Returns the global tile index x and y for the given world position. Global tile index means that 0,0 is the top left corner of the terrain,
 			///	and that the maximum value for x and y is m_width * constants::TilesPerPage - 1 and m_height * constants::TilesPerPage - 1 respectively.
@@ -282,6 +308,17 @@ namespace mmo
 			/// @param targetHeight The target height to flatten to.
 			void Flatten(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power, float targetHeight);
 
+			/// @brief Applies Perlin noise-based height displacement in a brush area.
+			/// @param brushCenterX World X position of the brush center.
+			/// @param brushCenterZ World Z position of the brush center.
+			/// @param innerRadius The inner radius of the brush where full effect is applied.
+			/// @param outerRadius The outer radius of the brush where effect fades out.
+			/// @param amplitude Peak height displacement per application.
+			/// @param frequency Spatial frequency of the noise pattern.
+			/// @param octaves Number of fBm octave layers.
+			/// @param persistence Amplitude multiplier per octave (e.g. 0.5).
+			void ApplyNoise(float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float amplitude, float frequency, int octaves, float persistence);
+
 			/// @brief Paints a texture layer on the terrain in a brush area.
 			/// @param layer The layer index (0-3) to paint.
 			/// @param brushCenterX World X position of the brush center.
@@ -289,7 +326,9 @@ namespace mmo
 			/// @param innerRadius The inner radius of the brush where full effect is applied.
 			/// @param outerRadius The outer radius of the brush where effect fades out.
 			/// @param power The strength of the painting effect.
-			void Paint(uint8 layer, float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power);
+			/// @param maskSampler Optional brush mask. When non-null, its return value modulates the
+			///        radial brush falloff per pixel, letting an imported image act as a paint stencil.
+			void Paint(uint8 layer, float brushCenterX, float brushCenterZ, float innerRadius, float outerRadius, float power, const BrushMaskSampler* maskSampler = nullptr);
 
 			/// @brief Colors the terrain vertices in a brush area.
 			/// @param brushCenterX World X position of the brush center.
@@ -362,7 +401,71 @@ namespace mmo
 			/// @return True if the position is over a hole, false otherwise
 			[[nodiscard]] bool IsHoleAt(float x, float z) const;
 
-		private:
+			/// @brief Paint water on terrain tiles within a circular brush area.
+			/// @param brushCenterX World X position of the brush center.
+			/// @param brushCenterZ World Z position of the brush center.
+			/// @param radius Brush radius in world units.
+			/// @param waterHeight The water surface height to set on painted tiles.
+			/// @param type The liquid type to paint (Water/Ocean/Lava/Slime).
+			void FillWater(float brushCenterX, float brushCenterZ, float radius, float waterHeight, WaterType type);
+
+			/// @brief Remove water from terrain tiles within a circular brush area.
+			/// @param brushCenterX World X position of the brush center.
+			/// @param brushCenterZ World Z position of the brush center.
+			/// @param radius Brush radius in world units.
+			void EraseWater(float brushCenterX, float brushCenterZ, float radius);
+
+			/// @brief Raise the water height on tiles within a circular brush area.
+			/// @param brushCenterX World X position of the brush center.
+			/// @param brushCenterZ World Z position of the brush center.
+			/// @param radius Brush radius in world units.
+			/// @param amount Height delta to add per call (positive raises water).
+			void RaiseWater(float brushCenterX, float brushCenterZ, float radius, float amount);
+
+			/// @brief Lower the water height on tiles within a circular brush area.
+			/// @param brushCenterX World X position of the brush center.
+			/// @param brushCenterZ World Z position of the brush center.
+			/// @param radius Brush radius in world units.
+			/// @param amount Height delta to subtract per call.
+			void LowerWater(float brushCenterX, float brushCenterZ, float radius, float amount);
+
+			/// @brief Set all water vertex heights within a circular brush area to a fixed value.
+			/// @param brushCenterX World X position of the brush center.
+			/// @param brushCenterZ World Z position of the brush center.
+			/// @param radius Brush radius in world units.
+			/// @param height The target height.
+			void FlattenWater(float brushCenterX, float brushCenterZ, float radius, float height);
+
+			/// @brief Apply a directional height ramp to water vertices along a line segment.
+			/// Vertices within @p radius of the segment get heights interpolated between
+			/// @p startHeight (at the start point) and @p endHeight (at the end point).
+			/// @param startX World X of the ramp start.
+			/// @param startZ World Z of the ramp start.
+			/// @param endX   World X of the ramp end.
+			/// @param endZ   World Z of the ramp end.
+			/// @param radius Perpendicular influence radius around the ramp line.
+			/// @param startHeight Height applied at the start point.
+			/// @param endHeight   Height applied at the end point.
+			void RampWater(float startX, float startZ, float endX, float endZ, float radius, float startHeight, float endHeight);
+
+			/// @brief Get the water surface height at a world position.
+			/// @param x World X coordinate.
+			/// @param z World Z coordinate.
+			/// @return The bilinearly interpolated water height, or 0.0f if outside terrain bounds.
+			[[nodiscard]] float GetWaterHeightAtWorldPos(float x, float z) const;
+
+			/// @brief Returns true if there is water at the given world position.
+			/// @param x World X coordinate.
+			/// @param z World Z coordinate.
+			[[nodiscard]] bool HasWaterAtWorldPos(float x, float z) const;
+
+			/// @brief Set the water material name for all pages within a circular brush area.
+			/// @param brushCenterX World X position of the brush center.
+			/// @param brushCenterZ World Z position of the brush center.
+			/// @param radius Brush radius in world units.
+			/// @param materialName The asset path of the material to assign.
+			void SetWaterMaterial(float brushCenterX, float brushCenterZ, float radius, const String& materialName);
+
 			/// @brief Updates tiles in a specified region.
 			/// @param fromX The starting X coordinate.
 			/// @param fromZ The starting Z coordinate.
@@ -370,6 +473,14 @@ namespace mmo
 			/// @param toZ The ending Z coordinate.
 			void UpdateTiles(int fromX, int fromZ, int toX, int toZ);
 
+			/// @brief Notifies the terrain of the current camera world position.
+			/// @details When the camera jumps more than sqrt(kCameraJumpThresholdSq) world units in a
+			///          single frame (e.g. building exit, teleport), all tile occlusion state is reset
+			///          so tiles that were occluded inside an interior re-appear immediately.
+			/// @param pos The current camera world position.
+			void NotifyCameraPosition(const Vector3& pos);
+
+		private:
 			/// @brief Updates tile coverage information in a specified region.
 			/// @param fromX The starting X coordinate.
 			/// @param fromZ The starting Z coordinate.
@@ -614,8 +725,30 @@ namespace mmo
 			bool m_debugLod { false };
 			MaterialPtr m_defaultMaterial;
 			bool m_showWireframe = false;
+			bool m_waterVisible = true;
 			MaterialPtr m_wireframeMaterial;
 			bool m_occlusionCullingEnabled { true };
+
+			/// @brief Camera position from the previous NotifyCameraPosition call.
+			Vector3 m_lastCameraPosition;
+
+			/// @brief Camera position at the last occlusion-state reset. Used to detect gradual
+			///        transitions (e.g. walking through a building door) that don't produce a
+			///        single large per-frame displacement but do cross a meaningful distance.
+			Vector3 m_lastResetCameraPosition;
+
+			/// @brief True once NotifyCameraPosition has been called at least once.
+			///        Prevents false jump detection on the very first frame.
+			bool m_cameraPositionInitialized = false;
+
+			/// @brief Squared distance threshold above which a per-frame camera displacement is
+			///        treated as an instantaneous jump (teleport). sqrt(2500) = 50 world units.
+			static constexpr float kCameraJumpThresholdSq = 2500.0f;
+
+			/// @brief Squared distance threshold for cumulative displacement from the last reset
+			///        anchor. Covers gradual building-door exits (~5-10 unit walk-through) as
+			///        well as teleports. sqrt(400) = 20 world units from anchor.
+			static constexpr float kCameraWalkResetThresholdSq = 400.0f;
 		};
 	}
 

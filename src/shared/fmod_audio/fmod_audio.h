@@ -8,6 +8,7 @@
 #include <fmod/inc/fmod.hpp>
 #include <fmod/inc/fmod_errors.h>
 
+#include <deque>
 #include <vector>
 
 namespace mmo
@@ -140,7 +141,7 @@ namespace mmo
 
 	private:
 
-		typedef std::vector<FMODSoundInstance> SoundInstanceVector;
+		typedef std::deque<FMODSoundInstance> SoundInstanceVector;
 		typedef SoundInstanceVector::iterator SoundInstanceVectorItr;
 
 		SoundIndex m_nextSoundInstanceIndex;

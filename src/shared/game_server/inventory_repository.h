@@ -31,9 +31,10 @@ namespace mmo
         uint32 durability;          ///< Current durability
         uint32 randomPropertyIndex; ///< Random property index
         uint32 randomSuffixIndex;   ///< Random suffix index
+        uint32 itemFlags;           ///< Item instance flags (e.g. Bound)
 
         InventoryItemData() noexcept
-            : entry(0), slot(0), stackCount(1), creator(0), contained(0), durability(0), randomPropertyIndex(0), randomSuffixIndex(0)
+            : entry(0), slot(0), stackCount(1), creator(0), contained(0), durability(0), randomPropertyIndex(0), randomSuffixIndex(0), itemFlags(0)
         {
         }
     };

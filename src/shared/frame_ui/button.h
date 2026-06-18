@@ -26,6 +26,9 @@ namespace mmo
 		: public Frame
 	{
 	public:
+		static const String Type;
+
+	public:
 		explicit Button(const std::string& type, const std::string& name);
 		virtual ~Button() = default;
 
