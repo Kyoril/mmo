@@ -478,14 +478,6 @@ namespace mmo
 			packet.Finish();
 			});
 
-		// Initialize connection encryption afterward
-		HMACHash cryptKey;
-		game::Crypt::GenerateKey(cryptKey, m_sessionKey);
-
-		game::Crypt& crypt = GetCrypt();
-		crypt.SetKey(cryptKey.data(), cryptKey.size());
-		crypt.Init();
-
 		ILOG("[Realm] Handshaking...");
 		return PacketParseResult::Pass;
 	}
@@ -506,6 +498,13 @@ namespace mmo
 
 		if (result == game::auth_result::Success)
 		{
+			HMACHash cryptKey;
+			game::Crypt::GenerateKey(cryptKey, m_sessionKey);
+
+			game::Crypt& crypt = GetCrypt();
+			crypt.SetKey(cryptKey.data(), cryptKey.size());
+			crypt.Init();
+
 			RegisterWorldPacketHandlers();
 			RequestCharEnum();
 		}

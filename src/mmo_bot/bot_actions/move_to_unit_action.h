@@ -4,6 +4,7 @@
 
 #include "bot_action.h"
 #include "bot_context.h"
+#include "bot_movement_math.h"
 #include "bot_unit.h"
 
 #include "base/clock.h"
@@ -123,9 +124,7 @@ namespace mmo
 				{
 					direction /= dist; // Normalize
 
-					// Calculate new facing angle
-					const Radian newFacing(std::atan2(direction.x, direction.z));
-					info.facing = newFacing;
+					info.facing = ComputeFacingTo(currentPos, targetPos, info.facing);
 
 					// If not moving yet, start moving
 					if (!m_isMoving)

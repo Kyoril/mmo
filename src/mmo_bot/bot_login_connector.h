@@ -25,6 +25,8 @@ namespace mmo
 		signal<void(auth::AuthResult)> AuthenticationResult;
 		/// Fired when the realm list was received.
 		signal<void()> RealmListUpdated;
+		/// Fired when the account feature list was received.
+		signal<void()> AccountFeaturesUpdated;
 
 	private:
 		asio::io_service& m_ioService;
@@ -58,6 +60,8 @@ namespace mmo
 
 		/// Realm list infos.
 		std::vector<RealmData> m_realms;
+		/// Active account feature keys (entitlements) granted to the logged in account.
+		std::vector<std::string> m_accountFeatures;
 
 	public:
 		BotLoginConnector(asio::io_service& io, std::string host, uint16 port = constants::DefaultLoginPlayerPort);
@@ -65,6 +69,9 @@ namespace mmo
 
 		/// Gets realm data.
 		const std::vector<RealmData>& GetRealms() const { return m_realms; }
+
+		/// Gets active account feature keys.
+		const std::vector<std::string>& GetAccountFeatures() const { return m_accountFeatures; }
 
 		/// Gets the session key.
 		const BigNumber& GetSessionKey() const { return m_sessionKey; }
@@ -101,5 +108,8 @@ namespace mmo
 
 		/// Handles the RealmList packet from the login server.
 		PacketParseResult OnRealmList(auth::IncomingPacket& packet);
+
+		/// Handles the AccountFeatures packet from the login server.
+		PacketParseResult OnAccountFeatures(auth::IncomingPacket& packet);
 	};
 }

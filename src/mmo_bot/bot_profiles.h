@@ -12,6 +12,7 @@
 #include "bot_profiles/unit_awareness_profile.h"
 #include "bot_profiles/combat_profile.h"
 #include "bot_profiles/party_follow_profile.h"
+#include "bot_profiles/random_circle_profile.h"
 #include "bot_startup_types.h"
 
 #include <string_view>
@@ -30,6 +31,7 @@ namespace mmo
 			{ "unit_awareness" },
 			{ "combat" },
 			{ "party_follow" },
+			{ "random_circle" },
 		};
 	}
 
@@ -65,6 +67,10 @@ namespace mmo
 		if (key == "party_follow")
 		{
 			return std::make_shared<PartyFollowProfile>();
+		}
+		if (key == "random_circle")
+		{
+			return std::make_shared<RandomCircleProfile>();
 		}
 
 		return nullptr;

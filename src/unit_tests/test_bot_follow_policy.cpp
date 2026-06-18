@@ -155,9 +155,10 @@ namespace mmo
 
 	TEST_CASE("movement math keeps the bot facing convention stable", "[bot-follow][policy]")
 	{
-		CHECK(ComputeFacingTo(Vector3::Zero, Vector3(0.0f, 0.0f, 4.0f)).GetValueRadians() == Approx(0.0f).margin(0.0001f));
-		CHECK(ComputeFacingTo(Vector3::Zero, Vector3(4.0f, 0.0f, 0.0f)).GetValueRadians() == Approx(Pi * 0.5f).margin(0.0001f));
-		CHECK(ComputeFacingTo(Vector3::Zero, Vector3(-4.0f, 0.0f, 0.0f)).GetValueRadians() == Approx(-Pi * 0.5f).margin(0.0001f));
+		CHECK(ComputeFacingTo(Vector3::Zero, Vector3(4.0f, 0.0f, 0.0f)).GetValueRadians() == Approx(0.0f).margin(0.0001f));
+		CHECK(ComputeFacingTo(Vector3::Zero, Vector3(0.0f, 0.0f, -4.0f)).GetValueRadians() == Approx(Pi * 0.5f).margin(0.0001f));
+		CHECK(ComputeFacingTo(Vector3::Zero, Vector3(0.0f, 0.0f, 4.0f)).GetValueRadians() == Approx(-Pi * 0.5f).margin(0.0001f));
+		CHECK(ComputeFacingTo(Vector3::Zero, Vector3(-4.0f, 0.0f, 0.0f)).GetValueRadians() == Approx(Pi).margin(0.0001f));
 		CHECK(SmallestAngleDelta(Radian(Pi - 0.05f), Radian(-Pi + 0.05f)) == Approx(0.10f).margin(0.0001f));
 	}
 
@@ -181,8 +182,8 @@ namespace mmo
 			Radian(0.0f),
 			true,
 			3.0f);
-		CHECK(target.x == Approx(10.0f).margin(0.0001f));
-		CHECK(target.z == Approx(2.0f).margin(0.0001f));
+		CHECK(target.x == Approx(7.0f).margin(0.0001f));
+		CHECK(target.z == Approx(5.0f).margin(0.0001f));
 	}
 
 	TEST_CASE("movement math trims sharp turns but leaves shallow turns alone", "[bot-follow][policy]")

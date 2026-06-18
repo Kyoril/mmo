@@ -268,8 +268,9 @@ namespace mmo
 
 			ILOG("[Login] Handshake successful!");
 
-			// From here on, we accept RealmList packets
+			// From here on, we accept RealmList packets and pushed account feature keys.
 			RegisterPacketHandler(mmo::auth::login_client_packet::RealmList, *this, &BotLoginConnector::OnRealmList);
+			RegisterPacketHandler(mmo::auth::login_client_packet::AccountFeatures, *this, &BotLoginConnector::OnAccountFeatures);
 
 			// Authentication was successful
 			AuthenticationResult(auth::AuthResult::Success);
@@ -323,11 +324,39 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult BotLoginConnector::OnAccountFeatures(auth::IncomingPacket& packet)
+	{
+		m_accountFeatures.clear();
+
+		uint8 featureCount = 0;
+		if (!(packet >> io::read<uint8>(featureCount)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		m_accountFeatures.reserve(featureCount);
+		for (uint8 i = 0; (i < featureCount) && packet; ++i)
+		{
+			std::string key;
+			if (!(packet >> io::read_container<uint8>(key)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			m_accountFeatures.emplace_back(std::move(key));
+		}
+
+		ILOG("Account features: " << m_accountFeatures.size());
+		AccountFeaturesUpdated();
+		return PacketParseResult::Pass;
+	}
+
 	void BotLoginConnector::Connect(const std::string& username, const std::string& password)
 	{
 		ClearPacketHandlers();
 
 		m_realms.clear();
+		m_accountFeatures.clear();
 
 		// Apply username and convert it to uppercase letters
 		m_accountName = username;

@@ -39,6 +39,7 @@ target_sources(unit_tests PRIVATE
 	../mmo_bot/bot_startup_selection.cpp
 	../mmo_bot/bot_console_prompt.cpp
 	../mmo_bot/bot_nav_service.cpp
+	../mmo_bot/bot_movement_controller.cpp
 	../mmo_bot/bot_movement_math.cpp
 	../mmo_bot/bot_follow_policy.cpp
 	../mmo_bot/bot_companion_state_machine.cpp
@@ -59,6 +60,7 @@ target_sources(unit_tests PRIVATE
 	test_bot_context.cpp
 	test_bot_companion_runtime.cpp
 	test_bot_follow_runtime.cpp
+	test_bot_movement_controller.cpp
 	test_bot_warrior_runtime.cpp
 	test_bot_warrior_spellbook.cpp
 	test_bot_warrior_controller.cpp

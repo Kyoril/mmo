@@ -3,6 +3,7 @@
 #include "bot_context.h"
 #include "bot_realm_connector.h"
 #include "bot_object_manager.h"
+#include "bot_movement_math.h"
 #include "bot_unit.h"
 
 #include "base/clock.h"
@@ -786,16 +787,8 @@ namespace mmo
 			return;
 		}
 
-		// Calculate direction to target using our cached position
-		const Vector3 myPos = m_cachedMovementInfo.position;
-		const Vector3 direction = targetPosition - myPos;
-		
-		// Calculate yaw angle (facing direction in the XZ plane)
-		// atan2(x, z) gives the angle from the Z axis (forward)
-		const Radian newFacing(std::atan2(direction.x, direction.z));
-
 		MovementInfo info = GetMovementInfo();
-		info.facing = newFacing;
+		info.facing = ComputeFacingTo(m_cachedMovementInfo.position, targetPosition, info.facing);
 		info.timestamp = GetServerTime();
 		SendMovementUpdate(game::client_realm_packet::MoveSetFacing, info);
 	}
@@ -831,9 +824,6 @@ namespace mmo
 
 	Radian BotContext::GetAngleTo(const Vector3& targetPosition) const
 	{
-		// Use cached movement info position
-		const Vector3 myPos = m_cachedMovementInfo.position;
-		const Vector3 direction = targetPosition - myPos;
-		return Radian(std::atan2(direction.x, direction.z));
+		return ComputeFacingTo(m_cachedMovementInfo.position, targetPosition, m_cachedMovementInfo.facing);
 	}
 }
