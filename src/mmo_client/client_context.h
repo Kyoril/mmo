@@ -30,6 +30,7 @@ namespace mmo
 	class PartyInfo;
 	class GuildClient;
 	class FriendClient;
+	class ChannelClient;
 	class CharCreateInfo;
 	class CharSelect;
 	class TalentClient;
@@ -87,6 +88,7 @@ namespace mmo
 		std::unique_ptr<PartyInfo> partyInfo;
 		std::unique_ptr<GuildClient> guildClient;
 		std::unique_ptr<FriendClient> friendClient;
+		std::unique_ptr<ChannelClient> channelClient;
 		std::unique_ptr<CharCreateInfo> charCreateInfo;
 		std::unique_ptr<CharSelect> charSelect;
 		std::unique_ptr<TalentClient> talentClient;

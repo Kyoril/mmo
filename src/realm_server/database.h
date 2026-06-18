@@ -150,6 +150,20 @@ namespace mmo
 		uint32 classId;
 	};
 
+	/// Represents a single character's persisted membership decision for one chat channel.
+	/// The persisted state is a delta from the channel's default behaviour: for a
+	/// join-by-default channel only an explicit "left" (status == 0) is meaningful, while
+	/// for any other channel only an explicit "joined" (status == 1) is meaningful. This
+	/// lets channels that are created/renamed/deleted later resolve cleanly at login time.
+	struct CharacterChannelState
+	{
+		/// Global id of the channel (matches the proto ChatChannelEntry id).
+		uint32 channelId;
+
+		/// 1 = the character is a member, 0 = the character has explicitly left.
+		uint8 status;
+	};
+
 	// -------------------------------------------------------------------------
 	// Focused sub-interfaces (Interface Segregation Principle)
 	// -------------------------------------------------------------------------
@@ -287,6 +301,19 @@ namespace mmo
 		virtual void ChatMessage(uint64 characterId, uint16 type, String message) = 0;
 	};
 
+	/// Chat channel membership operations.
+	struct IChatChannelDatabase
+	{
+		virtual ~IChatChannelDatabase() = default;
+
+		/// Loads the persisted channel membership deltas for a single character.
+		virtual std::optional<std::vector<CharacterChannelState>> LoadCharacterChannelStates(uint64 characterId) = 0;
+
+		/// Persists a single character's membership decision for one channel (upsert).
+		/// @param status 1 if the character joined the channel, 0 if the character left it.
+		virtual void SetCharacterChannelState(uint64 characterId, uint32 channelId, uint8 status) = 0;
+	};
+
 	// -------------------------------------------------------------------------
 	// Composite interface — still used by MySQLDatabase and legacy call sites
 	// that depend on a single database reference.
@@ -303,6 +330,7 @@ namespace mmo
 		, public IFriendDatabase
 		, public IMOTDDatabase
 		, public IChatDatabase
+		, public IChatChannelDatabase
 	{
 		virtual ~IDatabase() override;
 	};
@@ -325,6 +353,7 @@ namespace mmo
 	using AsyncCharacterDatabase = AsyncDatabaseT<ICharacterDatabase>;
 	using AsyncWorldNodeDatabase = AsyncDatabaseT<IWorldNodeDatabase>;
 	using AsyncChatDatabase     = AsyncDatabaseT<IChatDatabase>;
+	using AsyncChatChannelDatabase = AsyncDatabaseT<IChatChannelDatabase>;
 
 	typedef std::function<void()> Action;
 }

@@ -18,6 +18,7 @@ namespace mmo
 {
 	class GuildClient;
 	class FriendClient;
+	class ChannelClient;
 	class CharSelect;
 	class CharCreateInfo;
 	class TalentClient;
@@ -82,7 +83,8 @@ namespace mmo
 		GameTimeComponent& gameTime,
 		TalentClient& talentClient,
 		ICacheProvider& cacheProvider,
-		TradeClient& tradeClient);	public:
+		TradeClient& tradeClient,
+		ChannelClient& channelClient);	public:
 		/// Gets the current lua state
 		inline lua_State& GetLuaState() { ASSERT(m_luaState);  return *m_luaState; }
 
@@ -180,6 +182,8 @@ namespace mmo
 	GuildClient& m_guildClient;
 
 	FriendClient& m_friendClient;
+
+	ChannelClient& m_channelClient;
 
 	GameTimeComponent& m_gameTime;
 

@@ -53,6 +53,7 @@
 #include "shared/proto_data/item_subclasses.pb.h"
 #include "shared/proto_data/combat_settings.pb.h"
 #include "shared/proto_data/lock_type.pb.h"
+#include "shared/proto_data/chat_channels.pb.h"
 
 namespace mmo
 {
@@ -104,6 +105,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::ItemClasses, mmo::proto::ItemClassEntry> ItemClassManager;
 		typedef TemplateManager<mmo::proto::ItemSubclasses, mmo::proto::ItemSubclassEntry> ItemSubclassManager;
 		typedef TemplateManager<mmo::proto::LockTypes, mmo::proto::LockTypeEntry> LockTypeManager;
+		typedef TemplateManager<mmo::proto::ChatChannels, mmo::proto::ChatChannelEntry> ChatChannelManager;
 
 		/// Gets the combat settings with all configurable combat formula parameters.
 		/// If no combat_settings file was loaded, defaults from the proto definition are used.
@@ -174,6 +176,9 @@ namespace mmo
 
 			/// Lock type manager for object lock requirements.
 			LockTypeManager lockTypes;
+
+			/// Well-known chat channel definitions.
+			ChatChannelManager chatChannels;
 
 			/// Combat settings containing all configurable combat formula parameters.
 			CombatSettings combatSettings;
@@ -266,6 +271,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("item_classes", itemClasses));
 				managers.push_back(ManagerEntry("item_subclasses", itemSubclasses));
 				managers.push_back(ManagerEntry("lock_types", lockTypes));
+				managers.push_back(ManagerEntry("chat_channels", chatChannels, true));
 
 				virtual_dir::FileSystemReader virtualDirectory(realmDataPath);
 				if (!RealmProjectLoader::load(
@@ -348,6 +354,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("item_classes", "item_classes", itemClasses));
 				managers.push_back(ManagerEntry("item_subclasses", "item_subclasses", itemSubclasses));
 				managers.push_back(ManagerEntry("lock_types", "lock_types", lockTypes));
+				managers.push_back(ManagerEntry("chat_channels", "chat_channels", chatChannels));
 
 				if (!RealmProjectSaver::save(realmDataPath, managers))
 				{

@@ -78,6 +78,7 @@ namespace mmo
 	class PartyInfo;
 	class GuildClient;
 	class FriendClient;
+	class ChannelClient;
 	class TalentClient;
 	class TradeClient;
 	class Discord;
@@ -120,7 +121,8 @@ namespace mmo
 			TalentClient &talentClient,
 			Minimap &minimap,
 			InventoryClient &inventoryClient,
-			TradeClient &tradeClient);
+			TradeClient &tradeClient,
+			ChannelClient &channelClient);
 
 	public:
 		/// @brief The default name of the world state
@@ -535,6 +537,7 @@ namespace mmo
 		CharSelect &m_charSelect;
 		GuildClient &m_guildClient;
 		FriendClient &m_friendClient;
+		ChannelClient &m_channelClient;
 
 		scoped_connection_container m_cvarChangedSignals;
 		Discord &m_discord;

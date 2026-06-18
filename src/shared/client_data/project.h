@@ -28,6 +28,7 @@
 #include "shared/client_data/proto_client/proficiencies.pb.h"
 #include "shared/client_data/proto_client/item_classes.pb.h"
 #include "shared/client_data/proto_client/item_subclasses.pb.h"
+#include "shared/client_data/proto_client/chat_channels.pb.h"
 
 namespace mmo
 {
@@ -53,6 +54,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto_client::Proficiencies, mmo::proto_client::ProficiencyEntry> ProficiencyManager;
 		typedef TemplateManager<mmo::proto_client::ItemClasses, mmo::proto_client::ItemClassEntry> ItemClassManager;
 		typedef TemplateManager<mmo::proto_client::ItemSubclasses, mmo::proto_client::ItemSubclassEntry> ItemSubclassManager;
+		typedef TemplateManager<mmo::proto_client::ChatChannels, mmo::proto_client::ChatChannelEntry> ChatChannelManager;
 
 		/// This class contains contains all the static game data like item templates.
 		class Project final
@@ -88,6 +90,7 @@ namespace mmo
 			ProficiencyManager proficiencies;
 			ItemClassManager itemClasses;
 			ItemSubclassManager itemSubclasses;
+			ChatChannelManager chatChannels;
 
 		private:
 
@@ -151,6 +154,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("proficiencies", proficiencies));
 				managers.push_back(ManagerEntry("item_classes", itemClasses));
 				managers.push_back(ManagerEntry("item_subclasses", itemSubclasses));
+				managers.push_back(ManagerEntry("chat_channels", chatChannels, true));
 
 				if (!ClientProjectLoader::load(
 				            directory,
@@ -200,6 +204,7 @@ namespace mmo
 				managers.emplace_back("proficiencies", "proficiencies", proficiencies);
 				managers.emplace_back("item_classes", "item_classes", itemClasses);
 				managers.emplace_back("item_subclasses", "item_subclasses", itemSubclasses);
+				managers.emplace_back("chat_channels", "chat_channels", chatChannels);
 
 				if (!ClientProjectSaver::save(realmDataPath, managers))
 				{

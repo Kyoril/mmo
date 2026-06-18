@@ -55,6 +55,7 @@
 #include "terrain/tile.h"
 #include "systems/guild_client.h"
 #include "systems/friend_client.h"
+#include "systems/channel_client.h"
 #include "systems/talent_client.h"
 #include "game/object_info.h"
 #include "game/guild_info.h"
@@ -234,7 +235,7 @@ namespace mmo
 
 	WorldState::WorldState(GameStateMgr &gameStateManager, RealmConnector &realmConnector, const proto_client::Project &project, TimerQueue &timers, LootClient &lootClient, VendorClient &vendorClient,
 						   ActionBar &actionBar, SpellCast &spellCast, CooldownManager &cooldownManager, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, PartyInfo &partyInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, ICacheProvider &cache, Discord &discord,
-						   GameTimeComponent &gameTime, TalentClient &talentClient, Minimap &minimap, InventoryClient &inventoryClient, TradeClient &tradeClient)
+						   GameTimeComponent &gameTime, TalentClient &talentClient, Minimap &minimap, InventoryClient &inventoryClient, TradeClient &tradeClient, ChannelClient &channelClient)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
 		, m_audio(audio)
@@ -258,6 +259,7 @@ namespace mmo
 		, m_minimap(minimap)
 		, m_inventoryClient(inventoryClient)
 		, m_tradeClient(tradeClient)
+		, m_channelClient(channelClient)
 	{
 		// TODO: Do we want to put these asset references in some sort of config setting or something?
 		ObjectMgr::SetUnitNameFontSettings(FontManager::Get().CreateOrRetrieve("Fonts/FRIZQT__.TTF", 24.0f, 1.0f), MaterialManager::Get().Load("Models/UnitNameFont.hmat"));
@@ -1344,6 +1346,7 @@ namespace mmo
 		m_partyInfo.Initialize();
 		m_guildClient.Initialize();
 		m_friendClient.Initialize();
+		m_channelClient.Initialize();
 		m_talentClient.Initialize();
 		m_inventoryClient.Initialize();
 		m_tradeClient.Initialize();
@@ -1399,6 +1402,7 @@ namespace mmo
 		m_inventoryClient.Shutdown();
 		m_talentClient.Shutdown();
 		m_guildClient.Shutdown();
+		m_channelClient.Shutdown();
 		m_partyInfo.Shutdown();
 		m_questClient.Shutdown();
 		m_trainerClient.Shutdown();
@@ -2038,12 +2042,32 @@ namespace mmo
 				return PacketParseResult::Pass;
 			}
 
-			m_cache.GetNameCache().Get(characterGuid, [this, type, message, flags](uint64, const String &name)
+			// Channel messages carry the global channel id so the client can resolve the local
+			// channel number and name for display.
+			uint32 channelId = 0;
+			if (type == ChatType::Channel)
+			{
+				if (!(packet >> io::read<uint32>(channelId)))
+				{
+					return PacketParseResult::Disconnect;
+				}
+			}
+
+			m_cache.GetNameCache().Get(characterGuid, [this, type, message, flags, channelId](uint64, const String &name)
 									   {
+					if (type == ChatType::Channel)
+					{
+						// The channel chat event provides the local channel id, the speaker name
+						// and the message; ChatFrame.lua resolves the channel name and number.
+						const int32 localId = m_channelClient.GetLocalId(channelId);
+						const String channelName = m_channelClient.GetChannelNameByGlobalId(channelId);
+						FrameManager::Get().TriggerLuaEvent("CHAT_MSG_CHANNEL", localId, channelName, name, message);
+						return;
+					}
+
 					String chatMessageType = "SAY";
 					switch (type)
 					{
-					case ChatType::Channel: chatMessageType = "CHANNEL"; break;
 					case ChatType::Yell: chatMessageType = "YELL"; break;
 					case ChatType::Emote: chatMessageType = "EMOTE"; break;
 					case ChatType::Group: chatMessageType = "PARTY"; break;

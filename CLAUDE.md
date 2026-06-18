@@ -136,6 +136,14 @@ The bulk of the engine logic lives here as static libraries consumed by all exec
 
 Server scripts live in `data/scripts/`. Register creature event hooks with `RegisterCreatureScript(entryId, scriptTable)`. The script table provides callbacks: `OnGossipHello`, `OnGossipSelect`, `OnQuestAccept`, `OnQuestComplete`, etc.
 
+## Database Migrations
+
+Modifying the databases for the login server or realm server are automated. To create a new database migration you create a new .sql file with mysql syntax to do the db migration. The filename needs to be in the format "YYYYMMDD_OrderNumber_ChangeDescriptionShort", where OrderNumber is just used to ensure execution order in case of multiple migrations at the same date.
+
+The file name is added to the databases "history" table with the filename (without .sql) as the migration names already applied.
+
+When you create a database migration, and you want to also include the changes in the "*_db_full.sql", you need to add the INSERT call in the history table there as well, otherwise the server will try to apply the update you already applied a second time on server launch, which might fail (due to tables already existing, or being in a wrong state).
+
 
 ## Localization
 

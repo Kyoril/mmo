@@ -1908,6 +1908,68 @@ namespace mmo
 		return false;
 	}
 
+	std::optional<std::vector<CharacterChannelState>> MySQLDatabase::LoadCharacterChannelStates(uint64 characterId)
+	{
+		std::vector<CharacterChannelState> result;
+
+		mysql::Select select(m_connection, std::format(
+			"SELECT `channel_id`, `status` FROM `character_chat_channels` WHERE `character_id` = '{0}'"
+			, characterId
+		));
+
+		if (select.Success())
+		{
+			mysql::Row row(select);
+			while (row)
+			{
+				CharacterChannelState state;
+				row.GetField(0, state.channelId);
+				uint32 status = 0;
+				row.GetField(1, status);
+				state.status = static_cast<uint8>(status);
+				result.emplace_back(state);
+
+				row = mysql::Row::Next(select);
+			}
+		}
+		else
+		{
+			// There was an error
+			PrintDatabaseError();
+			return {};
+		}
+
+		return result;
+	}
+
+	void MySQLDatabase::SetCharacterChannelState(uint64 characterId, uint32 channelId, uint8 status)
+	{
+		try
+		{
+			mysql::Transaction transaction(m_connection);
+
+			// Upsert: a character has at most one membership row per channel.
+			if (!m_connection.Execute(std::format(
+				"INSERT INTO `character_chat_channels` (`character_id`, `channel_id`, `status`) VALUES ('{0}', '{1}', '{2}') "
+				"ON DUPLICATE KEY UPDATE `status` = '{2}'"
+				, characterId
+				, channelId
+				, static_cast<uint32>(status)
+			)))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			transaction.Commit();
+		}
+		catch (const mysql::Exception& e)
+		{
+			ELOG("Could not set character chat channel state: " << e.what());
+			throw;
+		}
+	}
+
 	std::optional<String> MySQLDatabase::GetMessageOfTheDay()
 	{
 		mysql::Select select(m_connection, "SELECT `message` FROM `realm_motd` WHERE `id` = 1 LIMIT 1");

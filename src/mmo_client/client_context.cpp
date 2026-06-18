@@ -9,6 +9,7 @@
 #include "client_ui_runtime.h"
 #include "systems/action_bar.h"
 #include "systems/cooldown_manager.h"
+#include "systems/channel_client.h"
 #include "systems/friend_client.h"
 #include "systems/guild_client.h"
 #include "systems/inventory_client.h"

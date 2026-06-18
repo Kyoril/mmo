@@ -160,6 +160,12 @@ namespace mmo
 		/// @copydoc IDatabase::DeleteInventoryItems
 		void DeleteInventoryItems(uint64 characterId, const std::vector<uint16>& slots) override;
 
+		/// @copydoc IDatabase::LoadCharacterChannelStates
+		std::optional<std::vector<CharacterChannelState>> LoadCharacterChannelStates(uint64 characterId) override;
+
+		/// @copydoc IDatabase::SetCharacterChannelState
+		void SetCharacterChannelState(uint64 characterId, uint32 channelId, uint8 status) override;
+
 	private:
 		/// Logs the last database error to the default logger.
 		void PrintDatabaseError();

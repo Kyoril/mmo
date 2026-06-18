@@ -297,6 +297,12 @@ namespace mmo
 			/// Sent by the client when the player switches to run mode (removes WalkMode flag).
 			MoveStopWalk,
 
+				/// Sent by the client to join a chat channel by name.
+				ChannelJoin,
+
+				/// Sent by the client to leave a chat channel by its global id.
+				ChannelLeave,
+
 				/// Counter constant
 				Count_,
 			};
@@ -564,8 +570,34 @@ namespace mmo
 			/// [PROXY] A unit switched to run mode.
 			MoveStopWalk,
 
+				/// Sent to the client with the full list of chat channels it is currently a member
+				/// of (e.g. on login). Payload: uint8 count, then per channel: uint32 id,
+				/// dynamic<uint8> name, uint32 flags.
+				ChannelList,
+
+				/// Sent to the client when a single channel membership changes (join/leave) or a
+				/// join request fails. Payload: uint8 notifyType (see channel_notify), uint32 id,
+				/// dynamic<uint8> name.
+				ChannelNotify,
+
 				/// Counter constant
 				Count_,
+			};
+		}
+
+		/// Notification types sent in the ChannelNotify packet.
+		namespace channel_notify
+		{
+			enum Type
+			{
+				/// The character successfully joined the channel.
+				Joined = 0,
+				/// The character left the channel.
+				Left = 1,
+				/// A join request failed because no channel with the given name exists.
+				DoesNotExist = 2,
+				/// A join request was ignored because the character is already a member.
+				AlreadyMember = 3,
 			};
 		}
 

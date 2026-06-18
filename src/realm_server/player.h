@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <limits>
 #include <vector>
+#include <set>
 
 #include "login_connector.h"
 #include "game/action_button.h"
@@ -27,6 +28,8 @@ namespace mmo
 {
 	class GuildMgr;
 	class FriendMgr;
+	class ChannelMgr;
+	class ChatChannel;
 }
 
 namespace mmo
@@ -66,7 +69,8 @@ namespace mmo
 			const proto::Project &project,
 			IdGenerator<uint64> &groupIdGenerator,
 			GuildMgr &guildMgr,
-			FriendMgr &friendMgr);
+			FriendMgr &friendMgr,
+			ChannelMgr &channelMgr);
 		/// Disconnects the player if still connected.
 		void Kick();
 
@@ -441,6 +445,11 @@ namespace mmo
 		std::vector<FriendData> m_friendCache;
 		uint64 m_pendingFriendInvite = 0;
 
+		// Chat channels
+		ChannelMgr &m_channelMgr;
+		/// Global ids of the chat channels this player is currently a member of.
+		std::set<uint32> m_chatChannels;
+
 		/// Per-player dungeon instance bindings (mapId -> instanceId).
 		/// Used when the player is solo (not in a group).
 		std::map<MapId, InstanceId> m_dungeonBindings;
@@ -509,7 +518,28 @@ namespace mmo
 		PacketParseResult OnFriendRemove(game::IncomingPacket &packet);
 		PacketParseResult OnFriendListRequest(game::IncomingPacket &packet);
 
+		// Chat channel packet handlers
+		PacketParseResult OnChannelJoin(game::IncomingPacket &packet);
+		PacketParseResult OnChannelLeave(game::IncomingPacket &packet);
+
 	private:
+		// Chat channel helpers
+		/// Joins the character into the given channel (in-memory + persistence) and notifies the client.
+		/// @param persist When true, the membership change is written to the database.
+		void JoinChatChannel(ChatChannel& channel, bool persist);
+
+		/// Removes the character from the given channel and notifies the client.
+		void LeaveChatChannel(ChatChannel& channel, bool persist);
+
+		/// Sends the full list of currently joined channels to the client.
+		void SendChannelList();
+
+		/// Loads the character's persisted channel memberships and joins the effective set.
+		void LoadAndJoinChatChannels();
+
+		/// Removes the character from all channels it is in (e.g. on logout). Does not persist.
+		void LeaveAllChatChannels();
+
 		// Helper methods for character deletion
 		void HandleCharacterGuildOnDelete(uint64 charGuid);
 		void HandleCharacterGroupOnDelete(uint64 charGuid);

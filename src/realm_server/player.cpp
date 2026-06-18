@@ -21,6 +21,7 @@
 
 #include "guild_mgr.h"
 #include "friend_mgr.h"
+#include "chat_channel_mgr.h"
 #include "player_group.h"
 #include "base/utilities.h"
 #include "game/chat_type.h"
@@ -43,8 +44,9 @@ namespace mmo
 		const proto::Project &project,
 		IdGenerator<uint64> &groupIdGenerator,
 		GuildMgr &guildMgr,
-		FriendMgr &friendMgr)
-		: m_timerQueue(timerQueue), m_manager(playerManager), m_worldManager(worldManager), m_loginConnector(loginConnector), m_database(database), m_project(project), m_groupIdGenerator(groupIdGenerator), m_connection(std::move(connection)), m_address(std::move(address)), m_accountId(0), m_guildMgr(guildMgr), m_friendMgr(friendMgr)
+		FriendMgr &friendMgr,
+		ChannelMgr &channelMgr)
+		: m_timerQueue(timerQueue), m_manager(playerManager), m_worldManager(worldManager), m_loginConnector(loginConnector), m_database(database), m_project(project), m_groupIdGenerator(groupIdGenerator), m_connection(std::move(connection)), m_address(std::move(address)), m_accountId(0), m_guildMgr(guildMgr), m_friendMgr(friendMgr), m_channelMgr(channelMgr)
 	{
 		// Generate random seed for packet header encryption & decryption
 		std::uniform_int_distribution<uint32> dist;
@@ -97,6 +99,10 @@ namespace mmo
 		{
 			m_friendMgr.NotifyFriendStatusChange(m_characterData->characterId, false);
 		}
+
+		// Remove the player from any chat channels it is in (in-memory only; persisted
+		// membership is unaffected so the player rejoins the same channels next login).
+		LeaveAllChatChannels();
 
 		if (const auto strongWorld = m_world.lock())
 		{
@@ -904,8 +910,30 @@ namespace mmo
 			break;
 
 		case ChatType::Channel:
-			WLOG("Chat channels are not implemented yet!");
+		{
+			// The client sends the global channel id as the target string.
+			uint32 channelId = 0;
+			try
+			{
+				channelId = static_cast<uint32>(std::stoul(targetName));
+			}
+			catch (const std::exception&)
+			{
+				WLOG("Received channel chat message with invalid channel id '" << targetName << "'");
+				break;
+			}
+
+			ChatChannel* channel = m_channelMgr.GetChannelById(channelId);
+			if (!channel || !channel->IsMember(m_characterData->characterId))
+			{
+				// Not a member (or channel no longer exists) — silently ignore.
+				break;
+			}
+
+			// Buffer the message for batched delivery to all online members.
+			m_channelMgr.QueueMessage(channelId, m_characterData->characterId, message);
 			break;
+		}
 
 		default:
 			ELOG("Unsupported chat type received from player: " << log_hex_digit(chatType));
@@ -1520,6 +1548,219 @@ namespace mmo
 				guild->WriteRoster(packet);
 				packet.Finish(); });
 
+		return PacketParseResult::Pass;
+	}
+
+	// Chat channel implementations
+
+	void Player::LoadAndJoinChatChannels()
+	{
+		if (!m_characterData)
+		{
+			return;
+		}
+
+		const uint64 characterId = m_characterData->characterId;
+		std::weak_ptr weakThis = shared_from_this();
+		auto handler = [weakThis, characterId](const std::optional<std::vector<CharacterChannelState>>& states)
+		{
+			const auto strongThis = weakThis.lock();
+			if (!strongThis)
+			{
+				return;
+			}
+
+			const std::vector<CharacterChannelState> resolved = states.value_or(std::vector<CharacterChannelState>{});
+			const std::vector<uint32> effective = strongThis->m_channelMgr.GetEffectiveChannels(resolved);
+
+			// Register into each channel without persisting (these memberships already reflect
+			// the persisted state) and without per-channel notifications - the client gets the
+			// complete list below in a single packet.
+			for (const uint32 channelId : effective)
+			{
+				if (strongThis->m_channelMgr.GetChannelById(channelId) != nullptr)
+				{
+					strongThis->m_chatChannels.insert(channelId);
+					strongThis->m_channelMgr.RegisterMember(channelId, characterId);
+				}
+			}
+
+			strongThis->SendChannelList();
+		};
+
+		m_database.asyncRequest(std::move(handler), &IDatabase::LoadCharacterChannelStates, characterId);
+	}
+
+	void Player::SendChannelList()
+	{
+		SendPacket([this](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::ChannelList);
+			packet << io::write<uint8>(static_cast<uint8>(m_chatChannels.size()));
+			for (const uint32 channelId : m_chatChannels)
+			{
+				ChatChannel* channel = m_channelMgr.GetChannelById(channelId);
+				const String name = channel ? channel->GetName() : String();
+				const uint32 flags = channel ? channel->GetFlags() : 0;
+				packet
+					<< io::write<uint32>(channelId)
+					<< io::write_dynamic_range<uint8>(name)
+					<< io::write<uint32>(flags);
+			}
+			packet.Finish();
+		});
+	}
+
+	void Player::JoinChatChannel(ChatChannel& channel, bool persist)
+	{
+		if (!m_characterData)
+		{
+			return;
+		}
+
+		const uint32 channelId = channel.GetId();
+		m_chatChannels.insert(channelId);
+		m_channelMgr.RegisterMember(channelId, m_characterData->characterId);
+
+		if (persist)
+		{
+			m_database.asyncRequest([](bool) {}, &IDatabase::SetCharacterChannelState, m_characterData->characterId, channelId, static_cast<uint8>(1));
+		}
+
+		const String name = channel.GetName();
+		SendPacket([channelId, name](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::ChannelNotify);
+			packet
+				<< io::write<uint8>(game::channel_notify::Joined)
+				<< io::write<uint32>(channelId)
+				<< io::write_dynamic_range<uint8>(name);
+			packet.Finish();
+		});
+	}
+
+	void Player::LeaveChatChannel(ChatChannel& channel, bool persist)
+	{
+		if (!m_characterData)
+		{
+			return;
+		}
+
+		const uint32 channelId = channel.GetId();
+		m_chatChannels.erase(channelId);
+		m_channelMgr.UnregisterMember(channelId, m_characterData->characterId);
+
+		if (persist)
+		{
+			m_database.asyncRequest([](bool) {}, &IDatabase::SetCharacterChannelState, m_characterData->characterId, channelId, static_cast<uint8>(0));
+		}
+
+		const String name = channel.GetName();
+		SendPacket([channelId, name](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::ChannelNotify);
+			packet
+				<< io::write<uint8>(game::channel_notify::Left)
+				<< io::write<uint32>(channelId)
+				<< io::write_dynamic_range<uint8>(name);
+			packet.Finish();
+		});
+	}
+
+	void Player::LeaveAllChatChannels()
+	{
+		if (!m_characterData)
+		{
+			m_chatChannels.clear();
+			return;
+		}
+
+		for (const uint32 channelId : m_chatChannels)
+		{
+			m_channelMgr.UnregisterMember(channelId, m_characterData->characterId);
+		}
+		m_chatChannels.clear();
+	}
+
+	PacketParseResult Player::OnChannelJoin(game::IncomingPacket& packet)
+	{
+		String channelName;
+		if (!(packet >> io::read_container<uint8>(channelName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (!m_characterData)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		ChatChannel* channel = m_channelMgr.GetChannelByName(channelName);
+		if (!channel)
+		{
+			// No such well-known channel — tell the client the join failed.
+			SendPacket([channelName](game::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(game::realm_client_packet::ChannelNotify);
+				outPacket
+					<< io::write<uint8>(game::channel_notify::DoesNotExist)
+					<< io::write<uint32>(0)
+					<< io::write_dynamic_range<uint8>(channelName);
+				outPacket.Finish();
+			});
+			return PacketParseResult::Pass;
+		}
+
+		if (m_chatChannels.find(channel->GetId()) != m_chatChannels.end())
+		{
+			const String name = channel->GetName();
+			const uint32 channelId = channel->GetId();
+			SendPacket([channelId, name](game::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(game::realm_client_packet::ChannelNotify);
+				outPacket
+					<< io::write<uint8>(game::channel_notify::AlreadyMember)
+					<< io::write<uint32>(channelId)
+					<< io::write_dynamic_range<uint8>(name);
+				outPacket.Finish();
+			});
+			return PacketParseResult::Pass;
+		}
+
+		JoinChatChannel(*channel, true);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnChannelLeave(game::IncomingPacket& packet)
+	{
+		uint32 channelId = 0;
+		if (!(packet >> io::read<uint32>(channelId)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (!m_characterData)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		if (m_chatChannels.find(channelId) == m_chatChannels.end())
+		{
+			// Not a member — nothing to do.
+			return PacketParseResult::Pass;
+		}
+
+		ChatChannel* channel = m_channelMgr.GetChannelById(channelId);
+		if (!channel)
+		{
+			// Channel no longer exists in game data but the player still had it: drop the
+			// stale membership and persist the leave so it doesn't reappear.
+			m_chatChannels.erase(channelId);
+			m_database.asyncRequest([](bool) {}, &IDatabase::SetCharacterChannelState, m_characterData->characterId, channelId, static_cast<uint8>(0));
+			return PacketParseResult::Pass;
+		}
+
+		LeaveChatChannel(*channel, true);
 		return PacketParseResult::Pass;
 	}
 
@@ -2713,6 +2954,8 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::GroupDisband, *this, &Player::OnGroupDisband);
 			RegisterPacketHandler(game::client_realm_packet::SetLootMethod, *this, &Player::OnSetLootMethod);
 			RegisterPacketHandler(game::client_realm_packet::PartyPing, *this, &Player::OnPartyPing);
+			RegisterPacketHandler(game::client_realm_packet::ChannelJoin, *this, &Player::OnChannelJoin);
+			RegisterPacketHandler(game::client_realm_packet::ChannelLeave, *this, &Player::OnChannelLeave);
 
 #if MMO_WITH_DEV_COMMANDS
 			RegisterPacketHandler(game::client_realm_packet::CheatTeleportToPlayer, *this, &Player::OnCheatTeleportToPlayer);
@@ -2743,6 +2986,9 @@ namespace mmo
 			ClearPacketHandler(game::client_realm_packet::GuildMotd);
 			ClearPacketHandler(game::client_realm_packet::GuildAccept);
 			ClearPacketHandler(game::client_realm_packet::GuildDecline);
+
+			ClearPacketHandler(game::client_realm_packet::ChannelJoin);
+			ClearPacketHandler(game::client_realm_packet::ChannelLeave);
 
 #if MMO_WITH_DEV_COMMANDS
 			ClearPacketHandler(game::client_realm_packet::CheatTeleportToPlayer);
@@ -2832,6 +3078,9 @@ namespace mmo
 		// Load friend list and notify friends of online status
 		LoadFriendList();
 		m_friendMgr.NotifyFriendStatusChange(m_characterData->characterId, true);
+
+		// Join the character's effective chat channels and send the channel list to the client.
+		LoadAndJoinChatChannels();
 
 		// If we have a group, either it is already loaded (in which case we just send the group data to all members) or we wait for it to load
 		if (m_group)

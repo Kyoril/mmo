@@ -22,6 +22,7 @@
 #include "unit_class_editor_window.h"
 #include "race_editor_window.h"
 #include "proficiency_editor_window.h"
+#include "chat_channel_editor_window.h"
 #include "faction_editor_window.h"
 #include "faction_template_editor_window.h"
 #include "gossip_editor_window.h"
@@ -378,6 +379,13 @@ namespace mmo
             "Combat Settings",
             [this]() { OpenEditorWindow(std::type_index(typeid(CombatSettingsEditorWindow))); },
             0
+        });
+
+        miscCategory.editors.push_back({
+            std::type_index(typeid(ChatChannelEditorWindow)),
+            "Chat Channels",
+            [this]() { OpenEditorWindow(std::type_index(typeid(ChatChannelEditorWindow))); },
+            static_cast<int>(m_project.chatChannels.count())
         });
         
         // Add all categories to the main list
