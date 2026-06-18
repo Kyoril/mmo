@@ -8,12 +8,14 @@
 #include "imgui_node_editor_internal.inl"
 #include "imgui/misc/cpp/imgui_stdlib.h"
 
+#include <algorithm>
 #include <cinttypes>
 
 #include "material_instance_editor.h"
 #include "stream_sink.h"
 #include "assets/asset_registry.h"
 #include "base/chunk_writer.h"
+#include "editor_windows/asset_picker_widget.h"
 #include "log/default_log_levels.h"
 #include "preview_providers/preview_provider_manager.h"
 #include "scene_graph/material_instance_serializer.h"
@@ -23,6 +25,8 @@
 
 namespace mmo
 {
+	const std::set<String> MaterialInstanceEditorInstance::s_parentMaterialExtensions = { ".hmat" };
+	const std::set<String> MaterialInstanceEditorInstance::s_textureExtensions = { ".htex" };
     void MaterialInstanceEditorInstance::RenderMaterialPreview()
     {
 		if (m_lastAvailViewportSize.x <= 0.0f || m_lastAvailViewportSize.y <= 0.0f) return;
@@ -161,93 +165,7 @@ namespace mmo
 		
 		if (ImGui::Begin(detailsId.c_str(), nullptr))
 		{
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
-
-			if (m_material)
-			{
-				// Scalar parameters
-				if (ImGui::CollapsingHeader("Scalar Parameters", ImGuiTreeNodeFlags_DefaultOpen))
-				{
-					ImGui::PushID("ScalarParameters");
-
-					for (const auto& param : m_material->GetScalarParameters())
-					{
-						float value = param.value;
-						if (ImGui::InputFloat(param.name.c_str(), &value))
-						{
-							m_material->SetScalarParameter(param.name, value);
-						}
-					}
-
-					ImGui::PopID();
-				}
-
-				if (ImGui::CollapsingHeader("Vector Parameters", ImGuiTreeNodeFlags_DefaultOpen))
-				{
-					ImGui::PushID("VectorParameters");
-
-					for (const auto& param : m_material->GetVectorParameters())
-					{
-						float values[4] = { param.value.x, param.value.y, param.value.z, param.value.w };
-						if (ImGui::ColorEdit4(param.name.c_str(), values, ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_Float))
-						{
-							m_material->SetVectorParameter(param.name, Vector4(values[0], values[1], values[2], values[3]));
-						}
-					}
-
-					ImGui::PopID();
-				}
-
-				if (ImGui::CollapsingHeader("Texture Parameters", ImGuiTreeNodeFlags_DefaultOpen))
-				{
-					ImGui::PushID("TextureParameters");
-
-					for (const auto& param : m_material->GetTextureParameters())
-					{
-						if (ImGui::BeginCombo(param.name.c_str(), !param.texture.empty() ? param.texture.c_str() : "(None)", ImGuiComboFlags_HeightLargest))
-						{
-							if (!ImGui::IsAnyItemActive() && !ImGui::IsMouseClicked(0))
-							{
-								ImGui::SetKeyboardFocusHere(0);
-							}
-							m_assetFilter.Draw("##asset_filter");
-
-							if (ImGui::BeginChild("##asset_scroll_area", ImVec2(0, 400)))
-							{
-								const auto files = AssetRegistry::ListFiles(".htex");
-								for (auto& file : files)
-								{
-									if (m_assetFilter.IsActive())
-									{
-										if (!m_assetFilter.PassFilter(file.c_str()))
-										{
-											continue;
-										}
-									}
-
-									ImGui::PushID(file.c_str());
-									if (ImGui::Selectable(Path(file).filename().string().c_str()))
-									{
-										m_material->SetTextureParameter(param.name, file);
-
-										m_assetFilter.Clear();
-										ImGui::CloseCurrentPopup();
-									}
-									ImGui::PopID();
-								}
-							}
-							ImGui::EndChild();
-
-							ImGui::EndCombo();
-						}
-					}
-
-					ImGui::PopID();
-				}
-
-			}
-
-		    ImGui::PopStyleVar();
+			DrawDetailsPanel(detailsId);
 		}
 		ImGui::End();
 		
@@ -309,5 +227,457 @@ namespace mmo
 
 		m_lastMouseX = x;
 		m_lastMouseY = y;
+	}
+
+	void MaterialInstanceEditorInstance::DrawDetailsPanel(const String& id)
+	{
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+
+		// Save Button
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.4f, 0.9f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.9f, 0.5f, 1.0f));
+		if (ImGui::Button("Save Material Instance", ImVec2(-1, 0)))
+		{
+			Save();
+		}
+		ImGui::PopStyleColor(3);
+
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		if (m_material)
+		{
+			// Parent Material Section
+			DrawParentMaterialSection();
+
+			ImGui::Spacing();
+
+			// Material Properties Section
+			DrawMaterialPropertiesSection();
+
+			ImGui::Spacing();
+
+			// Scalar Parameters Section
+			DrawScalarParametersSection();
+
+			ImGui::Spacing();
+
+			// Vector Parameters Section
+			DrawVectorParametersSection();
+
+			ImGui::Spacing();
+
+			// Texture Parameters Section
+			DrawTextureParametersSection();
+
+			ImGui::Spacing();
+
+			// Terrain Foliage Override Section
+			DrawFoliageSection();
+		}
+		else
+		{
+			ImGui::TextDisabled("No material instance loaded");
+		}
+
+		ImGui::PopStyleVar(2);
+	}
+
+	void MaterialInstanceEditorInstance::DrawParentMaterialSection()
+	{
+		if (ImGui::CollapsingHeader("Parent Material", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::Indent();
+
+			ImGui::TextDisabled("The parent material defines the shaders and default parameters.");
+			ImGui::Spacing();
+
+			// Get current parent material name
+			String parentMaterialPath;
+			if (m_material->GetParent())
+			{
+				parentMaterialPath = m_material->GetParent()->GetName();
+			}
+
+			// Parent material picker
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Parent:");
+
+			if (AssetPickerWidget::Draw("##parentMaterial", parentMaterialPath, s_parentMaterialExtensions, &m_editor.GetPreviewManager(), nullptr, 64.0f))
+			{
+				if (!parentMaterialPath.empty())
+				{
+					ChangeParentMaterial(parentMaterialPath);
+				}
+			}
+
+			// Show parent material info
+			if (m_material->GetParent())
+			{
+				ImGui::Spacing();
+				ImGui::TextDisabled("Base Material: %s", m_material->GetBaseMaterial() ? std::string(m_material->GetBaseMaterial()->GetName()).c_str() : "None");
+			}
+
+			ImGui::Unindent();
+		}
+	}
+
+	void MaterialInstanceEditorInstance::DrawMaterialPropertiesSection()
+	{
+		if (ImGui::CollapsingHeader("Material Properties", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::Indent();
+
+			// Two-sided
+			bool twoSided = m_material->IsTwoSided();
+			if (ImGui::Checkbox("Two Sided", &twoSided))
+			{
+				m_material->SetTwoSided(twoSided);
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Disable backface culling for this material");
+			}
+
+			// Cast Shadows
+			bool castShadows = m_material->IsCastingShadows();
+			if (ImGui::Checkbox("Cast Shadows", &castShadows))
+			{
+				m_material->SetCastShadows(castShadows);
+			}
+
+			// Receive Shadows
+			bool receiveShadows = m_material->IsReceivingShadows();
+			if (ImGui::Checkbox("Receive Shadows", &receiveShadows))
+			{
+				m_material->SetReceivesShadows(receiveShadows);
+			}
+
+			// Depth Test
+			bool depthTest = m_material->IsDepthTestEnabled();
+			if (ImGui::Checkbox("Depth Test", &depthTest))
+			{
+				m_material->SetDepthTestEnabled(depthTest);
+			}
+
+			// Depth Write
+			bool depthWrite = m_material->IsDepthWriteEnabled();
+			if (ImGui::Checkbox("Depth Write", &depthWrite))
+			{
+				m_material->SetDepthWriteEnabled(depthWrite);
+			}
+
+			// Wireframe
+			bool wireframe = m_material->IsWireframe();
+			if (ImGui::Checkbox("Wireframe", &wireframe))
+			{
+				m_material->SetWireframe(wireframe);
+			}
+
+			// Masked (binary alpha). Toggling this overrides the material type for this instance;
+			// clearing it falls back to the parent material's type.
+			bool masked = m_material->GetType() == MaterialType::Masked;
+			if (ImGui::Checkbox("Masked", &masked))
+			{
+				if (masked)
+				{
+					m_material->SetType(MaterialType::Masked);
+				}
+				else
+				{
+					m_material->SetType(m_material->GetParent() ? m_material->GetParent()->GetType() : MaterialType::Opaque);
+				}
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Render this material with binary (masked) alpha instead of the parent material's type");
+			}
+
+			ImGui::Unindent();
+		}
+	}
+
+	void MaterialInstanceEditorInstance::DrawScalarParametersSection()
+	{
+		const auto& scalarParams = m_material->GetScalarParameters();
+		
+		String headerLabel = "Scalar Parameters";
+		if (!scalarParams.empty())
+		{
+			headerLabel += " (" + std::to_string(scalarParams.size()) + ")";
+		}
+
+		if (ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::Indent();
+
+			if (scalarParams.empty())
+			{
+				ImGui::TextDisabled("No scalar parameters defined in parent material");
+			}
+			else
+			{
+				for (const auto& param : scalarParams)
+				{
+					ImGui::PushID(param.name.c_str());
+
+					ImGui::Text("%s", param.name.c_str());
+
+					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
+					
+					float value = param.value;
+					ImGui::SetNextItemWidth(-1);
+					if (ImGui::DragFloat("##value", &value, 0.01f))
+					{
+						m_material->SetScalarParameter(param.name, value);
+					}
+
+					ImGui::PopStyleColor();
+					ImGui::PopID();
+				}
+			}
+
+			ImGui::Unindent();
+		}
+	}
+
+	void MaterialInstanceEditorInstance::DrawVectorParametersSection()
+	{
+		const auto& vectorParams = m_material->GetVectorParameters();
+		
+		String headerLabel = "Vector Parameters";
+		if (!vectorParams.empty())
+		{
+			headerLabel += " (" + std::to_string(vectorParams.size()) + ")";
+		}
+
+		if (ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::Indent();
+
+			if (vectorParams.empty())
+			{
+				ImGui::TextDisabled("No vector parameters defined in parent material");
+			}
+			else
+			{
+				for (const auto& param : vectorParams)
+				{
+					ImGui::PushID(param.name.c_str());
+
+					ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
+
+					float values[4] = { param.value.x, param.value.y, param.value.z, param.value.w };
+					
+					// Use color edit for color-like vectors
+					if (ImGui::ColorEdit4(param.name.c_str(), values, ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR))
+					{
+						m_material->SetVectorParameter(param.name, Vector4(values[0], values[1], values[2], values[3]));
+					}
+
+					ImGui::PopStyleColor();
+					ImGui::PopID();
+				}
+			}
+
+			ImGui::Unindent();
+		}
+	}
+
+	void MaterialInstanceEditorInstance::DrawTextureParametersSection()
+	{
+		const auto& textureParams = m_material->GetTextureParameters();
+		
+		String headerLabel = "Texture Parameters";
+		if (!textureParams.empty())
+		{
+			headerLabel += " (" + std::to_string(textureParams.size()) + ")";
+		}
+
+		if (ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::Indent();
+
+			if (textureParams.empty())
+			{
+				ImGui::TextDisabled("No texture parameters defined in parent material");
+			}
+			else
+			{
+				for (const auto& param : textureParams)
+				{
+					ImGui::PushID(param.name.c_str());
+
+					// Parameter name header
+					ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.22f, 0.22f, 0.25f, 1.0f));
+					ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.27f, 0.27f, 0.3f, 1.0f));
+					ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.32f, 0.32f, 0.35f, 1.0f));
+
+					const bool isOpen = ImGui::CollapsingHeader(param.name.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+
+					ImGui::PopStyleColor(3);
+
+					if (isOpen)
+					{
+						ImGui::Indent();
+
+						String texturePath = param.texture;
+						if (AssetPickerWidget::Draw("##texture", texturePath, s_textureExtensions, &m_editor.GetPreviewManager(), nullptr, 64.0f))
+						{
+							m_material->SetTextureParameter(param.name, texturePath);
+						}
+
+						ImGui::Unindent();
+					}
+
+					ImGui::PopID();
+
+					ImGui::Spacing();
+				}
+			}
+
+			ImGui::Unindent();
+		}
+	}
+
+	void MaterialInstanceEditorInstance::DrawFoliageSection()
+	{
+		static const std::set<String> s_meshExtensions = { ".hmsh" };
+		static const char* s_layerNames[] = { "Layer 1", "Layer 2", "Layer 3", "Layer 4" };
+
+		if (!ImGui::CollapsingHeader("Terrain Foliage"))
+		{
+			return;
+		}
+
+		ImGui::Indent();
+
+		bool overriding = m_material->IsOverridingFoliage();
+		if (ImGui::Checkbox("Override parent foliage", &overriding))
+		{
+			if (overriding && m_material->GetOwnFoliageEntries().empty())
+			{
+				// Seed the override with the parent's current foliage so authoring starts from the
+				// inherited set instead of an empty list.
+				if (m_material->GetParent())
+				{
+					m_material->SetOwnFoliageEntries(m_material->GetParent()->GetFoliageEntries());
+				}
+			}
+			m_material->SetOverrideFoliage(overriding);
+		}
+
+		if (!overriding)
+		{
+			const size_t inherited = m_material->GetParent() ? m_material->GetParent()->GetFoliageEntries().size() : 0;
+			ImGui::TextDisabled("Inheriting %zu foliage entr%s from the parent material.", inherited, inherited == 1 ? "y" : "ies");
+			ImGui::Unindent();
+			return;
+		}
+
+		ImGui::TextWrapped("This instance defines its own foliage, replacing the parent's. Lets you reuse "
+			"the parent's complex shader while scattering different vegetation.");
+
+		auto& entries = m_material->GetOwnFoliageEntries();
+
+		int removeIndex = -1;
+		for (int i = 0; i < static_cast<int>(entries.size()); ++i)
+		{
+			MaterialFoliageEntry& entry = entries[i];
+
+			ImGui::PushID(i);
+
+			const String headerLabel = "Foliage " + std::to_string(i + 1) +
+				(entry.meshPath.empty() ? "" : (" - " + entry.meshPath));
+			if (ImGui::TreeNodeEx("foliageEntry", ImGuiTreeNodeFlags_DefaultOpen, "%s", headerLabel.c_str()))
+			{
+				String meshPath = entry.meshPath;
+				if (AssetPickerWidget::Draw("##mesh", meshPath, s_meshExtensions, &m_editor.GetPreviewManager(), nullptr, 64.0f))
+				{
+					entry.meshPath = meshPath;
+				}
+
+				int layerIndex = static_cast<int>(entry.layerIndex);
+				if (ImGui::Combo("Terrain Layer", &layerIndex, s_layerNames, IM_ARRAYSIZE(s_layerNames)))
+				{
+					entry.layerIndex = static_cast<uint8>(std::clamp(layerIndex, 0, 3));
+				}
+
+				ImGui::DragFloat("Density", &entry.density, 0.05f, 0.0f, 100.0f);
+				ImGui::SliderFloat("Min Coverage", &entry.minCoverage, 0.0f, 1.0f);
+				ImGui::DragFloatRange2("Scale", &entry.minScale, &entry.maxScale, 0.01f, 0.01f, 10.0f);
+				ImGui::SliderFloat("Max Slope", &entry.maxSlopeAngle, 0.0f, 90.0f);
+				ImGui::DragFloatRange2("Height Range", &entry.minHeight, &entry.maxHeight, 1.0f, -10000.0f, 10000.0f);
+				ImGui::DragFloatRange2("Fade Distance", &entry.fadeStartDistance, &entry.fadeEndDistance, 1.0f, 0.0f, 10000.0f);
+				ImGui::Checkbox("Random Yaw", &entry.randomYaw);
+				ImGui::SameLine();
+				ImGui::Checkbox("Align To Normal", &entry.alignToNormal);
+				ImGui::SameLine();
+				ImGui::Checkbox("Cast Shadows", &entry.castShadows);
+
+				if (ImGui::Button("Remove"))
+				{
+					removeIndex = i;
+				}
+
+				ImGui::TreePop();
+			}
+
+			ImGui::PopID();
+			ImGui::Separator();
+		}
+
+		if (removeIndex >= 0)
+		{
+			entries.erase(entries.begin() + removeIndex);
+		}
+
+		if (ImGui::Button("Add Foliage Entry"))
+		{
+			entries.emplace_back();
+		}
+
+		ImGui::Unindent();
+	}
+
+	void MaterialInstanceEditorInstance::ChangeParentMaterial(const String& newParentPath)
+	{
+		if (newParentPath.empty())
+		{
+			return;
+		}
+
+		// Load the new parent material
+		MaterialPtr newParent = std::static_pointer_cast<Material>(MaterialManager::Get().Load(newParentPath));
+		if (!newParent)
+		{
+			ELOG("Failed to load parent material: " << newParentPath);
+			return;
+		}
+
+		// Get current parent for comparison
+		MaterialPtr currentParent = m_material->GetParent();
+		if (currentParent && std::string(currentParent->GetName()) == newParentPath)
+		{
+			// Same parent, no change needed
+			return;
+		}
+
+		ILOG("Changing parent material to: " << newParentPath);
+
+		// Set the new parent - this will reset parameters to parent defaults
+		m_material->SetParent(newParent);
+
+		// Refresh parameters from the new parent
+		m_material->RefreshParametersFromBase();
+
+		// Update the entity's material to reflect changes
+		if (m_entity)
+		{
+			m_entity->SetMaterial(m_material);
+		}
 	}
 }

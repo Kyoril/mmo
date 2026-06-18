@@ -44,8 +44,8 @@ message UnitSpawnEntry {
 	repeated Waypoint waypoints = 13;
 	enum MovementType {
 		STATIONARY = 0;
-		PATROL = 1;
-		ROUTE = 2;
+		RANDOM = 1;
+		PATROL = 2;
 	}
 	optional MovementType movement = 14 [default = STATIONARY];
 
@@ -68,6 +68,9 @@ message ObjectSpawnEntry {
 	optional bool isactive = 9 [default = true];
 
 	required ObjectSpawnLocation location = 10;
+
+	optional uint32 loot_entry = 11 [default = 0];   // 0 = use base ObjectEntry.objectlootentry
+	optional uint32 trigger_id = 12 [default = 0];    // 0 = use base ObjectEntry.triggers
 }
 
 message MapEntry {

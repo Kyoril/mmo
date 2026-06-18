@@ -16,6 +16,8 @@
 #include "proto_data/project.h"
 
 #include <functional>
+#include <algorithm>
+#include <cctype>
 
 #include "guild_mgr.h"
 #include "friend_mgr.h"
@@ -164,6 +166,11 @@ namespace mmo
 
 		ASSERT(group.IsLoaded());
 		group.SendUpdate();
+
+		if (auto world = GetWorld())
+		{
+			world->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId(), static_cast<uint8>(m_group->GetLootMethod()), static_cast<uint8>(m_group->GetLootThreshold()));
+		}
 	}
 
 	void Player::connectionLost()
@@ -235,7 +242,7 @@ namespace mmo
 
 		// Setup a weak callback handler
 		std::weak_ptr weakThis{shared_from_this()};
-		auto callbackHandler = [weakThis](const bool succeeded, const uint64 accountId, const uint8 gmLevel, const BigNumber &sessionKey)
+		auto callbackHandler = [weakThis](const bool succeeded, const uint64 accountId, const uint8 gmLevel, const BigNumber &sessionKey, const std::vector<std::string>& features)
 		{
 			// Obtain strong reference to see if the client connection is still valid
 			if (const auto strongThis = weakThis.lock())
@@ -243,15 +250,25 @@ namespace mmo
 				// Handle success cases
 				if (succeeded)
 				{
-					// Store session key and GM level
+					// Store session key, GM level and account features
 					strongThis->m_accountId = accountId;
 					strongThis->m_gmLevel = gmLevel;
+					strongThis->m_accountFeatures = features;
 					strongThis->InitializeSession(sessionKey);
 				}
 				else
 				{
-					// TODO: Send response to the game client
+					// The login server denied this client (e.g. missing a required realm feature, or an
+					// invalid session). Notify the game client so it can show an error and return to the
+					// realm list. The client closes the connection upon receiving this failure.
 					DLOG("CLIENT_AUTH_SESSION: Error");
+
+					strongThis->m_connection->sendSinglePacket([](game::OutgoingPacket& packet)
+					{
+						packet.Start(game::realm_client_packet::AuthSessionResponse);
+						packet << io::write<uint8>(game::auth_result::FailNoAccess);
+						packet.Finish();
+					});
 				}
 			}
 		};
@@ -324,6 +341,19 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
+		// Reject names that contain anything other than letters (no spaces, digits, symbols)
+		if (characterName.size() < 3 ||
+			!std::all_of(characterName.begin(), characterName.end(), [](unsigned char c) { return std::isalpha(c); }))
+		{
+			WLOG("Character creation rejected: invalid name '" << characterName << "'");
+			GetConnection().sendSinglePacket([](game::OutgoingPacket &outPacket)
+											 {
+					outPacket.Start(game::realm_client_packet::CharCreateResponse);
+					outPacket << io::write<uint8>(game::char_create_result::Error);
+					outPacket.Finish(); });
+			return PacketParseResult::Pass;
+		}
+
 		// Check if given character class exists
 		const auto *classInstance = m_project.classes.getById(characterClass);
 		if (classInstance == nullptr)
@@ -345,6 +375,29 @@ namespace mmo
 											 {
 					outPacket.Start(game::realm_client_packet::CharCreateResponse);
 					outPacket << io::write<uint8>(game::char_create_result::Error);
+					outPacket.Finish(); });
+			return PacketParseResult::Pass;
+		}
+
+		// Reject disabled races and classes
+		if (classInstance->has_disabled() && classInstance->disabled())
+		{
+			WLOG("Character creation rejected: class " << log_hex_digit(characterClass) << " is disabled");
+			GetConnection().sendSinglePacket([](game::OutgoingPacket &outPacket)
+											 {
+					outPacket.Start(game::realm_client_packet::CharCreateResponse);
+					outPacket << io::write<uint8>(game::char_create_result::Disabled);
+					outPacket.Finish(); });
+			return PacketParseResult::Pass;
+		}
+
+		if (raceEntry->has_disabled() && raceEntry->disabled())
+		{
+			WLOG("Character creation rejected: race " << log_hex_digit(race) << " is disabled");
+			GetConnection().sendSinglePacket([](game::OutgoingPacket &outPacket)
+											 {
+					outPacket.Start(game::realm_client_packet::CharCreateResponse);
+					outPacket << io::write<uint8>(game::char_create_result::Disabled);
 					outPacket.Finish(); });
 			return PacketParseResult::Pass;
 		}
@@ -663,7 +716,7 @@ namespace mmo
 			// Require GM level 2
 			if (!HasGMLevel(2))
 			{
-				WLOG("Player " << m_characterData->name << " attempted to use a teleport command without sufficient privileges");
+				WLOG("Player " << m_characterData->name << " attempted to use a GM command without sufficient privileges");
 				return PacketParseResult::Pass;
 			}
 			break;
@@ -698,9 +751,20 @@ namespace mmo
 
 		uint8 chatType;
 		std::string message;
+		std::string targetName;
+
 		if (!(packet >> io::read<uint8>(chatType) >> io::read_limited_string<512>(message)))
 		{
 			return PacketParseResult::Disconnect;
+		}
+
+		if (static_cast<ChatType>(chatType) == ChatType::Whisper
+			|| static_cast<ChatType>(chatType) == ChatType::Channel)
+		{
+			if (!(packet >> io::read_container<uint8>(targetName)))
+			{
+				return PacketParseResult::Disconnect;
+			}
 		}
 
 		// Switch chat type
@@ -780,8 +844,63 @@ namespace mmo
 		}
 		break;
 
+		case ChatType::Whisper:
+		{
+			if (targetName.empty())
+			{
+				WLOG("Whisper received with empty target name, ignoring.");
+				break;
+			}
+
+			Player* target = m_manager.GetPlayerByCharacterName(targetName);
+			if (target == nullptr)
+			{
+				// Target not found — send system error back to sender; skip DB log for failed whispers
+				const std::string errorMsg = "No player named '" + targetName + "' is currently online.";
+				SendPacket([this, &errorMsg](game::OutgoingPacket &outPacket)
+				{
+					outPacket.Start(game::realm_client_packet::ChatMessage);
+					outPacket
+						<< io::write_packed_guid(0)
+						<< io::write<uint8>(ChatType::System)
+						<< io::write_range(errorMsg) << io::write<uint8>(0)
+						<< io::write<uint8>(0)
+						<< io::write<uint8>(0);
+					outPacket.Finish();
+				});
+				return PacketParseResult::Pass;
+			}
+
+			target->SendPacket([this, &message, chatType](game::OutgoingPacket &outPacket)
+			{
+				outPacket.Start(game::realm_client_packet::ChatMessage);
+				outPacket
+					<< io::write_packed_guid(m_characterData->characterId)
+					<< io::write<uint8>(chatType)
+					<< io::write_range(message) << io::write<uint8>(0)
+					<< io::write<uint8>(0)
+					<< io::write<uint8>(0);
+				outPacket.Finish();
+			});
+		}
+		break;
+
 		case ChatType::Raid:
-			WLOG("Raid chat is not implemented yet!");
+			if (!m_group || !m_group->IsMember(m_characterData->characterId))
+			{
+				WLOG("Player tried to send raid chat message without being in a group!");
+				break;
+			}
+			m_group->BroadcastPacket([this, &message, chatType](game::OutgoingPacket &outPacket)
+									 {
+					outPacket.Start(game::realm_client_packet::ChatMessage);
+					outPacket
+						<< io::write_packed_guid(m_characterData->characterId)
+						<< io::write<uint8>(chatType)
+						<< io::write_range(message)
+						<< io::write<uint8>(0)
+						<< io::write<uint8>(0);
+					outPacket.Finish(); });
 			break;
 
 		case ChatType::Channel:
@@ -962,8 +1081,18 @@ namespace mmo
 		m_characterData->position = m_transferPosition;
 		m_characterData->facing = m_transferFacing;
 
+		// Resolve the correct instance id based on map type
+		InstanceId targetInstanceId{};
+		const proto::MapEntry* mapEntry = m_project.maps.getById(m_transferMap);
+		if (mapEntry && mapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL)
+		{
+			// Dungeon/raid map: resolve instance from group or personal bindings
+			targetInstanceId = ResolveDungeonInstanceId(m_transferMap);
+			DLOG("Resolved dungeon instance id for transfer map " << m_transferMap << ": " << targetInstanceId);
+		}
+
 		// Find a new world node
-		std::shared_ptr<World> world = m_worldManager.GetIdealWorldNode(m_transferMap, InstanceId());
+		std::shared_ptr<World> world = m_worldManager.GetIdealWorldNode(m_transferMap, targetInstanceId);
 		if (!world)
 		{
 			// World does not exist
@@ -972,9 +1101,12 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
+		// Set the resolved instance id on character data so the world server receives it
+		m_characterData->instanceId = targetInstanceId;
+
 		std::weak_ptr weakThis = shared_from_this();
 		std::weak_ptr weakWorld = world;
-		world->Join(*m_characterData, [weakThis, weakWorld](const InstanceId instanceId, const bool success)
+		world->Join(*m_characterData, m_accountFeatures, [weakThis, weakWorld](const InstanceId instanceId, const bool success)
 					{
 				const auto strongThis = weakThis.lock();
 				if (!strongThis)
@@ -1038,9 +1170,9 @@ namespace mmo
 		if (!m_group)
 		{
 			// Not yet in a group - create a new one!
-			m_group = std::make_shared<PlayerGroup>(m_groupIdGenerator.GenerateId(), m_manager, m_database, m_timerQueue);
+			m_group = std::make_shared<PlayerGroup>(m_groupIdGenerator.GenerateId(), m_manager, AsyncGroupDatabase{ m_database.GetDatabase(), m_database.GetAsyncWorker(), m_database.GetResultDispatcher() }, m_timerQueue);
 			m_group->Create(m_characterData->characterId, m_characterData->name);
-			GetWorld()->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId());
+			GetWorld()->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId(), static_cast<uint8>(m_group->GetLootMethod()), static_cast<uint8>(m_group->GetLootThreshold()));
 		}
 		else if (!m_group->IsLeaderOrAssistant(m_characterData->characterId))
 		{
@@ -1134,7 +1266,7 @@ namespace mmo
 
 		const auto world = GetWorld();
 		ASSERT(world);
-		world->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId());
+		world->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId(), static_cast<uint8>(m_group->GetLootMethod()), static_cast<uint8>(m_group->GetLootThreshold()));
 
 		return PacketParseResult::Pass;
 	}
@@ -1179,6 +1311,108 @@ namespace mmo
 		}
 
 		m_group->Disband(false);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnPartyPing(game::IncomingPacket& packet)
+	{
+		uint8 pingType = 0;
+		if (!(packet >> io::read<uint8>(pingType)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		const uint64 senderGuid = m_characterData->characterId;
+
+		if (pingType == 0)
+		{
+			// Position ping
+			float x = 0.0f, y = 0.0f, z = 0.0f;
+			if (!(packet >> io::read<float>(x) >> io::read<float>(y) >> io::read<float>(z)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			auto broadcast = [senderGuid, x, y, z](game::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(game::realm_client_packet::PartyPing);
+				outPacket << io::write_packed_guid(senderGuid)
+						  << io::write<uint8>(0)
+						  << io::write<float>(x)
+						  << io::write<float>(y)
+						  << io::write<float>(z);
+				outPacket.Finish();
+			};
+
+			if (m_group) { m_group->BroadcastPacket(broadcast); }
+			else { GetConnection().sendSinglePacket(broadcast); }
+		}
+		else
+		{
+			// Unit ping
+			uint64 targetGuid = 0;
+			if (!(packet >> io::read_packed_guid(targetGuid)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			auto broadcast = [senderGuid, targetGuid](game::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(game::realm_client_packet::PartyPing);
+				outPacket << io::write_packed_guid(senderGuid)
+						  << io::write<uint8>(1)
+						  << io::write_packed_guid(targetGuid);
+				outPacket.Finish();
+			};
+
+			if (m_group) { m_group->BroadcastPacket(broadcast); }
+			else { GetConnection().sendSinglePacket(broadcast); }
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnSetLootMethod(game::IncomingPacket& packet)
+	{
+		uint8 method = 0;
+		uint64 lootMasterGuid = 0;
+		uint8 lootThreshold = 2;
+		if (!(packet >> io::read<uint8>(method) >> io::read<uint64>(lootMasterGuid) >> io::read<uint8>(lootThreshold)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Only the group leader may change loot method
+		if (!m_group || m_group->GetLeader() != m_characterData->characterId)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		const auto lootMethod = static_cast<LootMethod>(method);
+
+		// MasterLoot sentinel: GUID 0 means "leader self-assigns as loot master" (client sends 0 by design)
+		if (lootMethod == loot_method::MasterLoot && lootMasterGuid == 0)
+		{
+			lootMasterGuid = m_characterData->characterId;
+		}
+
+		m_group->SetLootMethod(lootMethod, lootMasterGuid, lootThreshold);
+
+		// CRITICAL: SendUpdate() must be called so all clients receive the updated GroupList packet
+		m_group->SendUpdate();
+
+		// Sync loot method to world server for every group member so creature_ai_death_state can read it
+		for (const auto& [memberGuid, memberSlot] : m_group->GetMembers())
+		{
+			if (const auto memberPlayer = m_manager.GetPlayerByCharacterGuid(memberGuid))
+			{
+				if (const auto world = memberPlayer->GetWorld())
+				{
+					world->NotifyPlayerGroupLootMethodChanged(memberGuid, method, lootMasterGuid, lootThreshold);
+				}
+			}
+		}
 
 		return PacketParseResult::Pass;
 	}
@@ -2135,6 +2369,87 @@ namespace mmo
 			m_characterData->talentRanks[talentId] = static_cast<uint8>(rank);
 		}
 		m_characterData->isGameMaster = (m_gmLevel > 0);
+
+		// Carry persisted auras and cooldowns so a subsequent world-node transfer restores them.
+		m_characterData->auras = character.GetDeserializedAuras();
+		m_characterData->cooldowns = character.GetDeserializedCooldowns();
+	}
+
+	InstanceId Player::ResolveDungeonInstanceId(const MapId mapId) const
+	{
+		const proto::MapEntry* mapEntry = m_project.maps.getById(mapId);
+		if (!mapEntry)
+		{
+			return {};
+		}
+
+		// Global maps don't need special instance resolution
+		if (mapEntry->instancetype() == proto::MapEntry_MapInstanceType_GLOBAL)
+		{
+			return {};
+		}
+
+		// For dungeon/raid maps, check group binding first, then personal binding
+		if (m_group && m_group->IsCreated())
+		{
+			const InstanceId groupInstance = m_group->InstanceBindingForMap(mapId);
+			if (!groupInstance.is_nil())
+			{
+				return groupInstance;
+			}
+
+			// No group binding yet - check if the leader is currently inside that
+			// dungeon.  If so, adopt the leader's instance as the group binding so
+			// that other members entering the dungeon join the same instance.
+			const uint64 leaderGuid = m_group->GetLeader();
+			if (leaderGuid != 0 && leaderGuid != GetCharacterGuid())
+			{
+				Player* leader = m_manager.GetPlayerByCharacterGuid(leaderGuid);
+				if (leader && leader->HasCharacterGuid())
+				{
+					const auto& leaderData = leader->GetCharacterData();
+					if (leaderData.mapId == mapId && !leaderData.instanceId.is_nil())
+					{
+						m_group->AddInstanceBinding(leaderData.instanceId, mapId);
+						return leaderData.instanceId;
+					}
+				}
+			}
+		}
+
+		// Check personal dungeon binding
+		const auto it = m_dungeonBindings.find(mapId);
+		if (it != m_dungeonBindings.end())
+		{
+			return it->second;
+		}
+
+		return {};
+	}
+
+	void Player::SetDungeonBinding(const MapId mapId, const InstanceId instanceId)
+	{
+		m_dungeonBindings[mapId] = instanceId;
+	}
+
+	void Player::ClearDungeonBinding(const MapId mapId)
+	{
+		m_dungeonBindings.erase(mapId);
+	}
+
+	void Player::ClearDungeonBindingByInstanceId(const InstanceId instanceId)
+	{
+		for (auto it = m_dungeonBindings.begin(); it != m_dungeonBindings.end(); )
+		{
+			if (it->second == instanceId)
+			{
+				it = m_dungeonBindings.erase(it);
+			}
+			else
+			{
+				++it;
+			}
+		}
 	}
 
 	void Player::SendAuthChallenge()
@@ -2157,17 +2472,55 @@ namespace mmo
 		// Notify about success
 		DLOG("CLIENT_AUTH_SESSION: Success!");
 
-		// Initialize encryption
+		// Send the (unencrypted) success response to the client. The AuthSessionResponse is always sent
+		// unencrypted so that the failure case - where we never receive a session key and cannot encrypt -
+		// can be delivered the same way. Encryption is initialized right after, for all following packets.
+		m_connection->sendSinglePacket([](game::OutgoingPacket &packet)
+									   {
+			packet.Start(game::realm_client_packet::AuthSessionResponse);
+			packet << io::write<uint8>(game::auth_result::Success);	// TODO: Write real packet content
+			packet.Finish(); });
+
+		// Initialize encryption for all packets following the AuthSessionResponse.
 		HMACHash hash;
 		m_connection->GetCrypt().GenerateKey(hash, m_sessionKey);
 		m_connection->GetCrypt().SetKey(hash.data(), hash.size());
 		m_connection->GetCrypt().Init();
 
-		// Send the response to the client
-		m_connection->sendSinglePacket([](game::OutgoingPacket &packet)
+		// Send RealmConfig: which races and classes are disabled
+		m_connection->sendSinglePacket([this](game::OutgoingPacket &packet)
 									   {
-			packet.Start(game::realm_client_packet::AuthSessionResponse);
-			packet << io::write<uint8>(game::auth_result::Success);	// TODO: Write real packet content
+			packet.Start(game::realm_client_packet::RealmConfig);
+
+			std::vector<uint8> disabledRaces;
+			for (const auto& race : m_project.races.getTemplates().entry())
+			{
+				if (race.has_disabled() && race.disabled())
+				{
+					disabledRaces.push_back(static_cast<uint8>(race.id()));
+				}
+			}
+
+			std::vector<uint8> disabledClasses;
+			for (const auto& cls : m_project.classes.getTemplates().entry())
+			{
+				if (cls.has_disabled() && cls.disabled())
+				{
+					disabledClasses.push_back(static_cast<uint8>(cls.id()));
+				}
+			}
+
+			packet << io::write<uint8>(static_cast<uint8>(disabledRaces.size()));
+			for (const uint8 id : disabledRaces)
+			{
+				packet << io::write<uint8>(id);
+			}
+			packet << io::write<uint8>(static_cast<uint8>(disabledClasses.size()));
+			for (const uint8 id : disabledClasses)
+			{
+				packet << io::write<uint8>(id);
+			}
+
 			packet.Finish(); });
 
 		// Enable CharEnum packets
@@ -2237,6 +2590,10 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveSetFacing, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveJump, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveFallLand, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStartSwim, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStopSwim, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStartWalk, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MoveStopWalk, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::SetSelection, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CastSpell, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CancelCast, *this, &Player::OnProxyPacket);
@@ -2272,6 +2629,7 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::Loot, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::LootMoney, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::LootRelease, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::LootRoll, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::GossipHello, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::SellItem, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::BuyItem, *this, &Player::OnProxyPacket);
@@ -2293,6 +2651,16 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TimePlayedRequest, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TimeSyncResponse, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::AreaTriggerTriggered, *this, &Player::OnProxyPacket);
+
+			// Trade packet handlers (proxied to world node)
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TradeInitiate, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TradeCancelRequest, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TradeAddItem, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TradeRemoveItem, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TradeSetMoney, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TradeAccept, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TradeInviteAccept, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TradeInviteDecline, *this, &Player::OnProxyPacket);
 
 			// Guild packet handlers
 			RegisterPacketHandler(game::client_realm_packet::GuildInvite, *this, &Player::OnGuildInvite);
@@ -2325,6 +2693,7 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatAddItem, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatWorldPort, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatSpeed, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatCheckLineOfSight, *this, &Player::OnProxyPacket);
 #endif
 
 			RegisterPacketHandler(game::client_realm_packet::ChatMessage, *this, &Player::OnChatMessage);
@@ -2342,6 +2711,8 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::LogoutRequest, *this, &Player::OnLogoutRequest);
 			RegisterPacketHandler(game::client_realm_packet::GroupLeave, *this, &Player::OnGroupLeave);
 			RegisterPacketHandler(game::client_realm_packet::GroupDisband, *this, &Player::OnGroupDisband);
+			RegisterPacketHandler(game::client_realm_packet::SetLootMethod, *this, &Player::OnSetLootMethod);
+			RegisterPacketHandler(game::client_realm_packet::PartyPing, *this, &Player::OnPartyPing);
 
 #if MMO_WITH_DEV_COMMANDS
 			RegisterPacketHandler(game::client_realm_packet::CheatTeleportToPlayer, *this, &Player::OnCheatTeleportToPlayer);
@@ -2406,6 +2777,24 @@ namespace mmo
 		ASSERT(m_characterData);
 		m_characterData->instanceId = instanceId;
 
+		// Store dungeon instance binding if applicable
+		const proto::MapEntry* mapEntry = m_project.maps.getById(m_characterData->mapId);
+		if (mapEntry && mapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL && !instanceId.is_nil())
+		{
+			if (m_group && m_group->IsCreated())
+			{
+				// Assign to group (ownership goes to group leader)
+				m_group->AddInstanceBinding(instanceId, m_characterData->mapId);
+				DLOG("Stored dungeon instance binding for group " << m_group->GetId() << " on map " << m_characterData->mapId);
+			}
+			else
+			{
+				// Assign to this player personally
+				SetDungeonBinding(m_characterData->mapId, instanceId);
+				DLOG("Stored personal dungeon instance binding on map " << m_characterData->mapId);
+			}
+		}
+
 		m_connection->sendSinglePacket([&](game::OutgoingPacket &outPacket)
 									   {
 			outPacket.Start(game::realm_client_packet::LoginVerifyWorld);
@@ -2450,6 +2839,11 @@ namespace mmo
 			if (m_group->IsLoaded())
 			{
 				m_group->SendUpdate();
+
+				if (auto world = GetWorld())
+				{
+					world->NotifyPlayerGroupChanged(m_characterData->characterId, m_group->GetId(), static_cast<uint8>(m_group->GetLootMethod()), static_cast<uint8>(m_group->GetLootThreshold()));
+				}
 			}
 			else
 			{
@@ -2479,6 +2873,24 @@ namespace mmo
 
 		ASSERT(m_characterData);
 		m_characterData->instanceId = instanceId;
+
+		// Store dungeon instance binding if applicable
+		const proto::MapEntry* transferMapEntry = m_project.maps.getById(m_characterData->mapId);
+		if (transferMapEntry && transferMapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL && !instanceId.is_nil())
+		{
+			if (m_group && m_group->IsCreated())
+			{
+				// Assign to group (ownership goes to group leader)
+				m_group->AddInstanceBinding(instanceId, m_characterData->mapId);
+				DLOG("Stored dungeon instance binding for group " << m_group->GetId() << " on map " << m_characterData->mapId);
+			}
+			else
+			{
+				// Assign to this player personally
+				SetDungeonBinding(m_characterData->mapId, instanceId);
+				DLOG("Stored personal dungeon instance binding on map " << m_characterData->mapId);
+			}
+		}
 	}
 
 	void Player::OnWorldJoinFailed(const game::player_login_response::Type response)
@@ -2523,6 +2935,9 @@ namespace mmo
 		{
 		case auth::world_left_reason::Logout:
 			m_characterData.reset();
+			// Clear group and invite state so a fresh EnterWorld starts with no stale membership.
+			m_group.reset();
+			m_inviterGuid = 0;
 			EnableProxyPackets(false);
 			EnableEnterWorldPacket(true);
 			ILOG("Successfully logged out");
@@ -2563,6 +2978,27 @@ namespace mmo
 		m_characterData = characterData;
 		m_characterData->isGameMaster = (m_gmLevel > 0);
 
+		// Server-side guard: reject enter-world if the character's race or class is disabled
+		const auto* raceEntry = m_project.races.getById(m_characterData->raceId);
+		if (raceEntry && raceEntry->has_disabled() && raceEntry->disabled())
+		{
+			WLOG("Blocked enter-world for character 0x" << std::hex << m_characterData->characterId << ": race " << m_characterData->raceId << " is disabled");
+			m_characterData.reset();
+			OnWorldJoinFailed(game::player_login_response::RaceOrClassDisabled);
+			EnableEnterWorldPacket(true);
+			return;
+		}
+
+		const auto* classEntry = m_project.classes.getById(m_characterData->classId);
+		if (classEntry && classEntry->has_disabled() && classEntry->disabled())
+		{
+			WLOG("Blocked enter-world for character 0x" << std::hex << m_characterData->characterId << ": class " << m_characterData->classId << " is disabled");
+			m_characterData.reset();
+			OnWorldJoinFailed(game::player_login_response::RaceOrClassDisabled);
+			EnableEnterWorldPacket(true);
+			return;
+		}
+
 		if (m_characterData->groupId != 0)
 		{
 			auto groupIt = PlayerGroup::ms_groupsById.find(m_characterData->groupId);
@@ -2602,6 +3038,20 @@ namespace mmo
 
 		// TODO: Persist added spells back in database
 
+		// Resolve the correct instance id based on map type (dungeon vs global)
+		const proto::MapEntry* mapEntry = m_project.maps.getById(m_characterData->mapId);
+		if (mapEntry && mapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL)
+		{
+			// Dungeon/raid map: resolve instance from group or personal bindings
+			m_characterData->instanceId = ResolveDungeonInstanceId(m_characterData->mapId);
+			DLOG("Resolved dungeon instance id for map " << m_characterData->mapId << ": " << m_characterData->instanceId);
+		}
+		else
+		{
+			// Global map: clear instance id to use the singleton behavior
+			m_characterData->instanceId = InstanceId{};
+		}
+
 		// Find a world node for the character's map id and instance id
 		auto world = m_worldManager.GetIdealWorldNode(m_characterData->mapId, m_characterData->instanceId);
 		if (!world)
@@ -2617,7 +3067,7 @@ namespace mmo
 		// Send join request
 		std::weak_ptr weakThis = shared_from_this();
 		std::weak_ptr weakWorld = world;
-		world->Join(*m_characterData, [weakThis, weakWorld](const InstanceId instanceId, const bool success)
+		world->Join(*m_characterData, m_accountFeatures, [weakThis, weakWorld](const InstanceId instanceId, const bool success)
 					{
 			const auto strongThis = weakThis.lock();
 			if (!strongThis)
@@ -2646,11 +3096,51 @@ namespace mmo
 	void Player::OnWorldDestroyed(World &world)
 	{
 		EnableProxyPackets(false);
-
 		m_world.reset();
 		NotifyWorldNodeChanged(nullptr);
 
-		connectionLost();
+		// Save action bar before clearing character data
+		if (m_characterData && m_pendingButtons)
+		{
+			m_database.asyncRequest([](bool) {}, &IDatabase::SetCharacterActionButtons, m_characterData->characterId, m_actionButtons);
+			m_pendingButtons = false;
+		}
+
+		// Notify group that the player has disconnected from the world
+		if (m_group && m_characterData)
+		{
+			m_group->NotifyMemberDisconnected(m_characterData->characterId);
+		}
+
+		// Broadcast guild offline event
+		if (m_characterData && m_characterData->guildId != 0)
+		{
+			if (Guild* guild = m_guildMgr.GetGuild(m_characterData->guildId))
+			{
+				guild->BroadcastEvent(guild_event::LoggedOut, m_characterData->characterId, m_characterData->name.c_str());
+			}
+		}
+
+		// Notify friends this player is offline
+		if (m_characterData)
+		{
+			m_friendMgr.NotifyFriendStatusChange(m_characterData->characterId, false);
+		}
+
+		// Clear in-world state so the client can re-enter char select
+		m_characterData.reset();
+		m_group.reset();
+		m_inviterGuid = 0;
+
+		EnableEnterWorldPacket(true);
+
+		// Keep the realm connection alive and tell the client the world server went down
+		m_connection->sendSinglePacket([](game::OutgoingPacket& outPacket)
+		{
+			outPacket.Start(game::realm_client_packet::EnterWorldFailed);
+			outPacket << io::write<uint8>(game::player_login_response::NoWorldServer);
+			outPacket.Finish();
+		});
 	}
 
 	void Player::NotifyWorldNodeChanged(World *worldNode)
@@ -2977,10 +3467,29 @@ namespace mmo
 			return;
 		}
 
+		// Drop any previous representation of this quest so the cached state stays consistent.
+		std::erase(m_characterData->rewardedQuestIds, questId);
+		m_characterData->questStatus.erase(questId);
+		m_characterData->repeatableQuestResets.erase(questId);
+
+		if (questData.status == quest_status::Available)
+		{
+			// Quest was abandoned or a plain-repeatable quest became available again: no cached
+			// state needs to be retained.
+			return;
+		}
+
 		if (questData.status == quest_status::Rewarded)
 		{
-			m_characterData->rewardedQuestIds.push_back(questId);
-			m_characterData->questStatus.erase(questId);
+			if (questData.expiration > 0)
+			{
+				// Daily/weekly quest on cooldown until its reset time.
+				m_characterData->repeatableQuestResets[questId] = questData.expiration;
+			}
+			else
+			{
+				m_characterData->rewardedQuestIds.push_back(questId);
+			}
 		}
 		else
 		{
@@ -3610,8 +4119,20 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		// TODO: Set the guild MOTD
-		ELOG("Set guild MOTD functionality not implemented yet");
+		guild->SetMotd(motd);
+
+		// Broadcast to all online guild members
+		guild->BroadcastEvent(guild_event::Motd, 0, motd.c_str());
+
+		// Persist to database — MUST use asyncRequest (no synchronous DB calls on main thread)
+		auto dbHandler = [](bool success)
+		{
+			if (!success)
+			{
+				ELOG("Failed to persist guild MOTD");
+			}
+		};
+		m_database.asyncRequest(std::move(dbHandler), &IDatabase::SetGuildMotd, m_characterData->guildId, motd);
 
 		return PacketParseResult::Pass;
 	}
@@ -3689,8 +4210,9 @@ namespace mmo
 
 	void Player::HandleCharacterGroupOnDelete(uint64 charGuid)
 	{
-		// Check if the character is in any group by searching through all groups
-		// Since the character might not be currently online, we need to check the database
+		// Load character data to find their groupId, then clean up directly in the DB.
+		// We cannot rely on ms_groupsById because the group may not be in memory if all
+		// members are currently offline.
 		std::weak_ptr weakThis{shared_from_this()};
 		auto handler = [weakThis, charGuid](const std::optional<CharacterData> &characterData)
 		{
@@ -3708,39 +4230,65 @@ namespace mmo
 
 			const uint64 groupId = characterData->groupId;
 
-			// Find the group
+			// If the group is live in memory, use the group object so members get notified.
 			auto groupIt = PlayerGroup::ms_groupsById.find(groupId);
-			if (groupIt == PlayerGroup::ms_groupsById.end())
+			if (groupIt != PlayerGroup::ms_groupsById.end())
 			{
-				WLOG("Character " << charGuid << " is in group " << groupId << " which could not be found");
+				std::shared_ptr<PlayerGroup> group = groupIt->second;
+				if (group->GetLeader() == charGuid)
+				{
+					DLOG("Deleting leader " << charGuid << " of live group " << groupId << " — disbanding.");
+					group->Disband(false);
+				}
+				else
+				{
+					DLOG("Removing deleted character " << charGuid << " from live group " << groupId);
+					group->RemoveMember(charGuid);
+				}
 				return;
 			}
 
-			std::shared_ptr<PlayerGroup> group = groupIt->second;
-			if (!group->IsMember(charGuid))
-			{
-				WLOG("Character " << charGuid << " is not actually a member of group " << groupId);
-				return;
-			}
+			// Group is not in memory (all members offline). Load from DB to determine
+			// whether the deleted character was the leader, then update the DB directly.
+			strongThis->m_database.asyncRequest(
+				[weakThis2 = std::weak_ptr(strongThis), charGuid, groupId](const std::optional<GroupData> &groupData)
+				{
+					const auto s = weakThis2.lock();
+					if (!s) return;
 
-			// Check if the character is the group leader
-			if (group->GetLeader() == charGuid)
-			{
-				DLOG("Deleting character " << charGuid << " who is the leader of group " << groupId << ". Disbanding group.");
+					if (!groupData)
+					{
+						WLOG("Could not load group " << groupId << " from DB while cleaning up deleted character " << charGuid);
+						return;
+					}
 
-				// Character is the group leader, disband the group
-				group->Disband(false);
-			}
-			else
-			{
-				DLOG("Removing character " << charGuid << " from group " << groupId);
-
-				// Character is a regular member, just remove them from the group
-				group->RemoveMember(charGuid);
-			}
+					if (groupData->leaderGuid == charGuid)
+					{
+						// The deleted character was the leader — disband the whole group.
+						DLOG("Deleted character " << charGuid << " was leader of offline group " << groupId << " — disbanding.");
+						s->m_database.asyncRequest<void>(
+							[groupId](auto &&db) { db->DisbandGroup(groupId); },
+							[groupId](bool ok)
+							{
+								if (!ok) ELOG("Failed to disband group " << groupId << " after leader deletion");
+							});
+					}
+					else
+					{
+						// Regular member — just remove from group.
+						DLOG("Removing deleted character " << charGuid << " from offline group " << groupId);
+						s->m_database.asyncRequest<void>(
+							[groupId, charGuid](auto &&db) { db->RemoveGroupMember(groupId, charGuid); },
+							[groupId, charGuid](bool ok)
+							{
+								if (!ok) ELOG("Failed to remove character " << charGuid << " from group " << groupId << " after deletion");
+							});
+					}
+				},
+				&IDatabase::LoadGroup, groupId);
 		};
 
-		// Request character data to check group membership
+		// Request character data to get their groupId
 		m_database.asyncRequest(std::move(handler), &IDatabase::CharacterEnterWorld, charGuid, m_accountId);
 	}
 

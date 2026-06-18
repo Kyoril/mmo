@@ -4,6 +4,7 @@
 #include "hyperlink.h"
 
 #include <algorithm>
+#include <cstdlib>
 
 namespace mmo
 {
@@ -86,7 +87,7 @@ namespace mmo
 
 	bool ScrollingMessageFrame::IsAtBottom() const
 	{
-		return m_linePosition >= m_lineCache.size() - m_linePosition;
+		return m_linePosition >= (int)(m_lineCache.size()) - m_visibleLineCount;
 	}
 
 	const ScrollingMessageFrame::Message& ScrollingMessageFrame::GetMessageAt(size_t index) const
@@ -238,11 +239,34 @@ namespace mmo
 						
 						if (currentWidth + charWidth > maxWidth && !currentLine.empty())
 						{
-							// Line would be too long, break here
-							wrappedLinesWithPositions.push_back({currentLine, {lineStartPos, currentOriginalPos}});
-							currentLine = c;
-							currentWidth = charWidth;
-							lineStartPos = currentOriginalPos;
+							// Try to backtrack to the last space for a word boundary break
+							std::size_t spaceIdx = currentLine.rfind(' ');
+							if (spaceIdx != std::string::npos)
+							{
+								// Push the part before the space as the completed line
+								wrappedLinesWithPositions.push_back({currentLine.substr(0, spaceIdx), {lineStartPos, currentOriginalPos - (currentLine.length() - spaceIdx)}});
+								// Carry the word after the space onto the next line, plus the new char
+								std::string carried = currentLine.substr(spaceIdx + 1) + c;
+								lineStartPos = currentOriginalPos - (currentLine.length() - spaceIdx - 1);
+								// Recalculate width of the carried text + new char
+								currentWidth = 0.0f;
+								for (char cc : carried)
+								{
+									if (const FontGlyph* cg = font->GetGlyphData(cc))
+									{
+										currentWidth += cg->GetAdvance(textScale);
+									}
+								}
+								currentLine = carried;
+							}
+							else
+							{
+								// No space found — fall back to char-break
+								wrappedLinesWithPositions.push_back({currentLine, {lineStartPos, currentOriginalPos}});
+								currentLine = c;
+								currentWidth = charWidth;
+								lineStartPos = currentOriginalPos;
+							}
 						}
 						else
 						{
@@ -359,6 +383,32 @@ namespace mmo
 		}
 
 		Invalidate(false);
+	}
+
+	bool ScrollingMessageFrame::OnMouseWheel(const int32 delta)
+	{
+		if (delta == 0)
+		{
+			return false;
+		}
+
+		// Scroll a few lines per wheel notch. Positive delta (wheel up) scrolls towards older
+		// messages, negative (wheel down) towards the most recent ones.
+		constexpr int linesPerNotch = 3;
+		const int steps = std::abs(delta) * linesPerNotch;
+		for (int i = 0; i < steps; ++i)
+		{
+			if (delta > 0)
+			{
+				ScrollUp();
+			}
+			else
+			{
+				ScrollDown();
+			}
+		}
+
+		return true;
 	}
 
 	bool ScrollingMessageFrame::OnMouseDown(MouseButton button, int32 buttons, const Point& position)

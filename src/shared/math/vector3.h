@@ -481,10 +481,10 @@ namespace mmo
 		}
 
 		const float squaredLength = GetSquaredLength();
-		if (squaredLength > sqrtf(maxSize))
+		if (squaredLength > maxSize * maxSize)
 		{
 			const float scale = maxSize * (1.0f / sqrtf(squaredLength));
-			return { x * scale,  y * scale, z * scale };
+			return { x * scale, y * scale, z * scale };
 		}
 
 		return *this;

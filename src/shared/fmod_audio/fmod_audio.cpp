@@ -437,7 +437,7 @@ namespace mmo
 		}
 
 		FMOD::Channel* channel;
-		assert((sound > 0) && (static_cast<size_t>(sound) < m_soundInstanceVector.capacity()));
+		assert((sound > 0) && (static_cast<size_t>(sound) < m_soundInstanceVector.size()));
 
 		FMODSoundInstance& instance = m_soundInstanceVector[sound];
 		FMOD_RESULT result = m_system->playSound(instance.GetFMODSound(), nullptr, true, &channel);
@@ -544,7 +544,7 @@ namespace mmo
 		SoundIndex vectorIndex;
 		SoundIndex vectorCapacity;
 
-		vectorCapacity = m_soundInstanceVector.capacity();
+		vectorCapacity = m_soundInstanceVector.size();
 		for (vectorIndex = 0; vectorIndex < vectorCapacity; vectorIndex++)
 		{
 			const FMODSoundInstance &instance = m_soundInstanceVector[vectorIndex];
@@ -601,7 +601,7 @@ namespace mmo
 			return 0.0f;
 		}
 
-		ASSERT((sound > 0) && (static_cast<size_t>(sound) < m_soundInstanceVector.capacity()));
+		ASSERT((sound > 0) && (static_cast<size_t>(sound) < m_soundInstanceVector.size()));
 
 		unsigned int   soundLength;   // length in milliseconds
 		FMOD_RESULT    result;
@@ -646,15 +646,16 @@ namespace mmo
 
 	void FMODAudio::IncrementNextSoundInstanceIndex()
 	{
-		SoundIndex oldVectorCapacity = m_soundInstanceVector.capacity();
 		m_nextSoundInstanceIndex++;
 
-		if (m_nextSoundInstanceIndex < oldVectorCapacity)
+		// Grow the deque if the new index doesn't exist yet.
+		// std::deque guarantees that push_back never invalidates pointers or
+		// references to existing elements, so FMOD streaming callbacks that hold
+		// a FMODSoundInstance* are safe across this growth.
+		while (m_nextSoundInstanceIndex >= m_soundInstanceVector.size())
 		{
-			return;
+			m_soundInstanceVector.emplace_back();
 		}
-
-		m_soundInstanceVector.resize(oldVectorCapacity * 2);
 	}
 
 	FMOD_RESULT F_CALLBACK FMODAudio::FMODFileOpenCallback(const char *name, unsigned int *filesize, void **handle, void *userdata)
@@ -695,6 +696,12 @@ namespace mmo
 		FMODSoundInstance *soundInstance;
 		soundInstance = static_cast<FMODSoundInstance *>(handle);
 
+		if (!soundInstance->GetStream())
+		{
+			*bytesread = 0;
+			return FMOD_ERR_FILE_EOF;
+		}
+
 		soundInstance->GetStream()->read((char*)buffer, sizebytes);
 		*bytesread = static_cast<unsigned int>(soundInstance->GetStream()->gcount());
 		if (*bytesread < sizebytes)
@@ -711,6 +718,12 @@ namespace mmo
 		FMODSoundInstance *soundInstance;
 
 		soundInstance = static_cast<FMODSoundInstance *>(handle);
+
+		if (!soundInstance->GetStream())
+		{
+			return FMOD_ERR_FILE_EOF;
+		}
+
 		soundInstance->GetStream()->seekg(pos, std::ios::beg);
 
 		return FMOD_OK;
@@ -781,7 +794,7 @@ namespace mmo
 
 	void FMODAudio::ReleaseSoundIndex(SoundIndex index)
 	{
-		if (index != InvalidSound && index < m_soundInstanceVector.capacity())
+		if (index != InvalidSound && index < m_soundInstanceVector.size())
 		{
 			// Release the FMOD sound object before clearing
 			FMODSoundInstance& instance = m_soundInstanceVector[index];

@@ -38,22 +38,73 @@ namespace mmo
 	{
 		// Top toolbar with actions
 		const bool hasWorldFile = !currentEntry.directory().empty();
+		const String worldName = currentEntry.directory();
+
+		// Keep the minimap grid bound to the currently selected map's world.
+		if (worldName != m_minimapWorld)
+		{
+			m_minimapGrid.SetWorld(worldName);
+			m_minimapWorld = worldName;
+		}
+
 		ImGui::BeginDisabled(!hasWorldFile);
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
-		if (ImGui::Button("Open in World Editor", ImVec2(180, 0)))
+		if (DrawPrimaryButton("Open in World Editor", ImVec2(180, 0)))
 		{
 			// Construct the world file path: Worlds/{name}/{name}.hwld
-			const String worldName = currentEntry.directory();
 			const String worldFilePath = "Worlds/" + worldName + "/" + worldName + ".hwld";
-			m_host.OpenAsset(worldFilePath);
+
+			// If the user picked a location on the minimap grid, open the editor focused there;
+			// otherwise fall back to the world origin (0, 0, 0).
+			if (m_minimapGrid.HasSelection())
+			{
+				float worldX, worldZ;
+				m_minimapGrid.GetSelectedWorldCenter(worldX, worldZ);
+				m_host.OpenAssetAtWorldLocation(worldFilePath, worldX, worldZ);
+			}
+			else
+			{
+				m_host.OpenAsset(worldFilePath);
+			}
 		}
-		ImGui::PopStyleColor();
 		ImGui::EndDisabled();
 		ImGui::SameLine();
 		DrawHelpMarker(hasWorldFile ? "Open this map's world file in the World Editor" : "No world file path specified");
 
 		ImGui::Separator();
 		ImGui::Spacing();
+
+		// Minimap-based start location picker.
+		if (ImGui::CollapsingHeader("Start Location (World Map)", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::Indent();
+
+			if (ImGui::SmallButton("Refresh Minimaps"))
+			{
+				m_minimapGrid.Refresh();
+			}
+			ImGui::SameLine();
+			if (m_minimapGrid.HasSelection())
+			{
+				float worldX, worldZ;
+				m_minimapGrid.GetSelectedWorldCenter(worldX, worldZ);
+				ImGui::Text("Selected page (%d, %d) -> world (%.0f, %.0f)",
+					m_minimapGrid.GetSelectedPageX(), m_minimapGrid.GetSelectedPageY(), worldX, worldZ);
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Clear"))
+				{
+					m_minimapGrid.ClearSelection();
+				}
+			}
+			else
+			{
+				ImGui::TextDisabled("Click a tile to pick a start location (defaults to origin)");
+			}
+
+			m_minimapGrid.Draw(ImVec2(-1.0f, 360.0f));
+
+			ImGui::Unindent();
+			ImGui::Spacing();
+		}
 
 		if (ImGui::CollapsingHeader("Map Information", ImGuiTreeNodeFlags_DefaultOpen))
 		{
@@ -125,8 +176,7 @@ namespace mmo
 
 			static int currentCreatureSpawn = -1;
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
-			if (ImGui::Button("+ Add Creature Spawn", ImVec2(-1, 0)))
+			if (DrawSuccessButton("+ Add Creature Spawn", ImVec2(-1, 0)))
 			{
 				auto* spawn = currentEntry.mutable_unitspawns()->Add();
 				spawn->set_positionx(0.0f);
@@ -140,16 +190,12 @@ namespace mmo
 				spawn->set_respawndelay(30 * 1000);
 				spawn->set_isactive(true);
 			}
-			ImGui::PopStyleColor();
-
 			ImGui::BeginDisabled(currentCreatureSpawn == -1 || currentCreatureSpawn >= currentEntry.unitspawns_size());
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-			if (ImGui::Button("Remove Spawn", ImVec2(-1, 0)))
+			if (DrawDangerButton("Remove Spawn", ImVec2(-1, 0)))
 			{
 				currentEntry.mutable_unitspawns()->erase(currentEntry.mutable_unitspawns()->begin() + currentCreatureSpawn);
 				currentCreatureSpawn = -1;
 			}
-			ImGui::PopStyleColor();
 			ImGui::EndDisabled();
 
 			ImGui::Spacing();
@@ -317,8 +363,8 @@ namespace mmo
 
 				static const char* s_movementTypeStrings[] = {
 					"Stationary",
-					"Patrol",
-					"Route"
+					"Random Movement",
+					"Patrol"
 				};
 
 				int movement = spawn->movement();

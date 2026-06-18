@@ -611,6 +611,68 @@ namespace mmo::nav
 		return false;
 	}
 
+	bool Map::LineOfSight(const Vector3& start, const Vector3& end) const
+	{
+		Vector3 unused;
+		return LineOfSightEx(start, end, unused);
+	}
+
+	bool Map::LineOfSightEx(const Vector3& start, const Vector3& end, Vector3& hitPoint) const
+	{
+		hitPoint = end;
+
+		// Trivially clear when positions are identical.
+		const float dx = end.x - start.x;
+		const float dz = end.z - start.z;
+		const float dy = end.y - start.y;
+		if (dx * dx + dz * dz + dy * dy < 0.0001f)
+		{
+			return true;
+		}
+
+		// NOTE: This raycast operates on the Detour navigation mesh polygon graph.
+		// It detects LOS blockage only where the ray crosses a non-traversable
+		// polygon boundary (i.e. a gap in the walkable surface). It does NOT model
+		// walls, pillars, or any geometry that doesn't create a gap in the nav mesh.
+		// For accurate interior/wall LOS a separate collision mesh is required.
+		const float startPos[3] = { start.x, start.y, start.z };
+		const float endPos[3]   = { end.x,   end.y,   end.z   };
+
+		constexpr float extents[] = { 2.f, 4.f, 2.f };
+
+		dtPolyRef startRef;
+		if (!dtStatusSucceed(m_navQuery.findNearestPoly(startPos, extents, &m_queryFilter, &startRef, nullptr)) || !startRef)
+		{
+			// Can't locate start on nav mesh — assume clear.
+			return true;
+		}
+
+		float hitT = 0.f;
+		float hitNormal[3] = {};
+		dtPolyRef polys[MaxPathPolys];
+		int npolys = 0;
+
+		const dtStatus status = m_navQuery.raycast(
+			startRef, startPos, endPos, &m_queryFilter,
+			&hitT, hitNormal, polys, &npolys, MaxPathPolys);
+
+		if (dtStatusFailed(status))
+		{
+			return true;
+		}
+
+		if (hitT < 1.0f)
+		{
+			// Ray was blocked; compute the exact hit position.
+			hitPoint.x = startPos[0] + hitT * (endPos[0] - startPos[0]);
+			hitPoint.y = startPos[1] + hitT * (endPos[1] - startPos[1]);
+			hitPoint.z = startPos[2] + hitT * (endPos[2] - startPos[2]);
+			return false;
+		}
+
+		return true;
+	}
+
 	const Tile* Map::GetTile(float x, float y) const
 	{
 		// find the tile corresponding to this (x, y)

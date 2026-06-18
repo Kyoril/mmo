@@ -10,6 +10,8 @@ namespace mmo
 {
 	static const std::string ButtonClickedEvent("OnClicked");
 
+	const String Button::Type("Button");
+
 	Button::Button(const std::string & type, const std::string & name)
 		: Frame(type, name)
 	{

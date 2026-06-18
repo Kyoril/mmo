@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "creature_editor_window.h"
+#include "editor_imgui_helpers.h"
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
@@ -173,7 +174,7 @@ namespace mmo
 		// ----- Buttons (Add/Remove) -----
 
 		// "Add" button triggers a pop-up
-		if (ImGui::Button("Add"))
+		if (DrawSuccessButton("Add"))
 		{
 			// Reset our new ID, open popup
 			pendingAddMenuId = 0;
@@ -187,7 +188,7 @@ namespace mmo
 			&& selectedIndex < unitEntry.gossip_menus_size());
 		if (!canRemove)
 			ImGui::BeginDisabled();
-		if (ImGui::Button("Remove") && canRemove)
+		if (DrawDangerButton("Remove") && canRemove)
 		{
 			auto* menus = unitEntry.mutable_gossip_menus();
 
@@ -266,7 +267,7 @@ namespace mmo
 			ImGui::Separator();
 
 			// Confirm / Cancel
-			if (ImGui::Button("OK", ImVec2(120, 0)))
+			if (DrawSuccessButton("OK", ImVec2(120, 0)))
 			{
 				// Insert the chosen ID
 				unitEntry.add_gossip_menus(pendingAddMenuId);
@@ -277,7 +278,7 @@ namespace mmo
 				openAddPopup = false;
 			}
 			ImGui::SameLine();
-			if (ImGui::Button("Cancel", ImVec2(120, 0)))
+			if (DrawNeutralButton("Cancel", ImVec2(120, 0)))
 			{
 				ImGui::CloseCurrentPopup();
 				openAddPopup = false;
@@ -289,7 +290,7 @@ namespace mmo
 
 	void CreatureEditorWindow::DrawDetailsImpl(EntryType& currentEntry)
 	{
-		if (ImGui::Button("Duplicate Creature"))
+		if (DrawPrimaryButton("Duplicate Creature"))
 		{
 			proto::UnitEntry* copied = m_project.units.add();
 			const uint32 newId = copied->id();
@@ -330,7 +331,7 @@ namespace mmo
 #define SLIDER_UINT32_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 32, min, max)
 #define SLIDER_UINT64_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 64, min, max)
 
-		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Basic", ImGuiTreeNodeFlags_None))
 		{
 			if (ImGui::BeginTable("table", 4, ImGuiTableFlags_None))
 			{
@@ -391,7 +392,7 @@ namespace mmo
 
 		static const char* s_noneEntryString = "<None>";
 
-		if (ImGui::CollapsingHeader("Factions", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Factions", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			int32 factionTemplate = currentEntry.factiontemplate();
 
@@ -418,7 +419,7 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Npcs", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Npcs", ImGuiTreeNodeFlags_None))
 		{
 			int32 currentTrainer = currentEntry.trainerentry();
 
@@ -474,14 +475,14 @@ namespace mmo
 			RenderGossipMenus(m_project.gossipMenus, currentEntry);
 		}
 
-		if (ImGui::CollapsingHeader("Quests", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Quests", ImGuiTreeNodeFlags_None))
 		{
 			ImGui::InputTextMultiline("Greeting Text", currentEntry.mutable_greeting_text());
 
 			ImGui::Text("Offers Quests");
 
 			// Add button
-			if (ImGui::Button("Add Offered Quest", ImVec2(-1, 0)))
+			if (DrawSuccessButton("Add Offered Quest", ImVec2(-1, 0)))
 			{
 				currentEntry.add_quests(0);
 			}
@@ -523,7 +524,7 @@ namespace mmo
 
 					ImGui::SameLine();
 
-					if (ImGui::Button("Remove"))
+					if (DrawDangerButton("Remove"))
 					{
 						currentEntry.mutable_quests()->erase(currentEntry.mutable_quests()->begin() + index);
 						index--;
@@ -539,7 +540,7 @@ namespace mmo
 			ImGui::Text("Completes Quests");
 
 			// Add button
-			if (ImGui::Button("Add Completed Quest", ImVec2(-1, 0)))
+			if (DrawSuccessButton("Add Completed Quest", ImVec2(-1, 0)))
 			{
 				currentEntry.add_end_quests(0);
 			}
@@ -581,7 +582,7 @@ namespace mmo
 
 					ImGui::SameLine();
 
-					if (ImGui::Button("Remove"))
+					if (DrawDangerButton("Remove"))
 					{
 						currentEntry.mutable_end_quests()->erase(currentEntry.mutable_end_quests()->begin() + index);
 						index--;
@@ -596,7 +597,7 @@ namespace mmo
 
 		}
 
-		if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Visuals", ImGuiTreeNodeFlags_None))
 		{
 			SLIDER_FLOAT_PROP(scale, "Scale", 0.01f, 10.0f);
 
@@ -651,7 +652,7 @@ namespace mmo
 
 		bool useStatSystem = currentEntry.usestatbasedsystem();
 
-		if (ImGui::CollapsingHeader("Level & Stats", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Level & Stats", ImGuiTreeNodeFlags_None))
 		{
 			ImGui::PushID("Level");
 			ImGui::BeginGroupPanel("Level");
@@ -679,7 +680,7 @@ namespace mmo
 			ImGui::BeginGroupPanel("Experience");
 			SLIDER_UINT32_PROP(minlevelxp, "Min Level XP", 0, 10000000);
 			SLIDER_UINT32_PROP(maxlevelxp, "Max Level XP", 0, 10000000);
-			if (ImGui::Button("Calculate XP"))
+			if (DrawPrimaryButton("Calculate XP"))
 			{
 				const float eliteFactor = currentEntry.rank() > 0 ? 2.0f : 1.0f;
 				currentEntry.set_minlevelxp((currentEntry.minlevel() * 5 + 45) * eliteFactor);
@@ -697,7 +698,7 @@ namespace mmo
 		}
 
 		// New Stat-Based System Section
-		if (ImGui::CollapsingHeader("Stat-Based System (v2)", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Stat-Based System (v2)", ImGuiTreeNodeFlags_None))
 		{
 			// Enable/Disable checkbox
 			if (ImGui::Checkbox("Use Stat-Based System", &useStatSystem))
@@ -800,12 +801,14 @@ namespace mmo
 				// Preview calculated stats at different levels
 				uint32 unitClassId = currentEntry.unitclassid();
 				const auto* unitClass = m_project.unitClasses.getById(unitClassId);
-				if (unitClass != nullptr && ImGui::CollapsingHeader("Calculated Stats Preview"))
+				if (unitClass != nullptr)
 				{
-					ImGui::TextWrapped("Preview of final stats at different levels (calculated from unit class + base stats + scaling):");
-					
-					if (ImGui::BeginTable("calculated_preview_table", 9, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+					if (const auto section = ScopedEditorSection("Calculated Stats Preview"))
 					{
+						ImGui::TextWrapped("Preview of final stats at different levels (calculated from unit class + base stats + scaling):");
+					
+						if (ImGui::BeginTable("calculated_preview_table", 9, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+						{
 						ImGui::TableSetupColumn("Level", ImGuiTableColumnFlags_WidthFixed, 50.0f);
 						ImGui::TableSetupColumn("Health", ImGuiTableColumnFlags_WidthFixed, 80.0f);
 						ImGui::TableSetupColumn("Mana", ImGuiTableColumnFlags_WidthFixed, 80.0f);
@@ -961,12 +964,12 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Creature Spells", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Creature Spells", ImGuiTreeNodeFlags_None))
 		{
 			static const char* s_itemNone = "<None>";
 
 			// Add button
-			if (ImGui::Button("Add", ImVec2(-1, 0)))
+			if (DrawSuccessButton("Add", ImVec2(-1, 0)))
 			{
 				auto* newEntry = currentEntry.add_creaturespells();
 				newEntry->set_spellid(0);
@@ -1066,7 +1069,7 @@ namespace mmo
 
 					ImGui::SameLine();
 
-					if (ImGui::Button("Remove"))
+					if (DrawDangerButton("Remove"))
 					{
 						currentEntry.mutable_creaturespells()->erase(currentEntry.mutable_creaturespells()->begin() + index);
 						index--;
@@ -1075,13 +1078,23 @@ namespace mmo
 					ImGui::PopID();
 				}
 
-				ImGui::EndTable();
-			}
-		}
+							ImGui::EndTable();
+						}
+					}
+				}
 
-		if (ImGui::CollapsingHeader("Scripting", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Scripting", ImGuiTreeNodeFlags_None))
 		{
 			static const char* s_none = "<None>";
+
+			// Combat Script Name field
+			ImGui::InputText("Combat Script", currentEntry.mutable_script_name());
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Name of the combat script to use (e.g. 'training_dummy', 'example_dungeon_boss').\nLeave empty for default AI behavior.");
+			}
+
+			ImGui::Separator();
 
 			// Display existing triggers in a table
 			if (ImGui::BeginTable("TriggerTable", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
@@ -1109,7 +1122,7 @@ namespace mmo
 
 					// Actions Column
 					ImGui::TableNextColumn();
-					if (ImGui::Button("Remove"))
+					if (DrawDangerButton("Remove"))
 					{
 						// Remove trigger
 						auto* triggers = currentEntry.mutable_triggers();
@@ -1124,7 +1137,7 @@ namespace mmo
 			}
 
 			// Add trigger button
-			if (ImGui::Button("Add Trigger"))
+			if (DrawSuccessButton("Add Trigger"))
 			{
 				ImGui::OpenPopup("AddTriggerPopup");
 			}
@@ -1168,7 +1181,7 @@ namespace mmo
 				ImGui::Separator();
 
 				// Confirm and Cancel buttons
-				if (ImGui::Button("OK", ImVec2(120, 0)))
+				if (DrawSuccessButton("OK", ImVec2(120, 0)))
 				{
 					if (selectedTriggerId != -1)
 					{
@@ -1181,7 +1194,7 @@ namespace mmo
 					ImGui::CloseCurrentPopup();
 				}
 				ImGui::SameLine();
-				if (ImGui::Button("Cancel", ImVec2(120, 0)))
+				if (DrawNeutralButton("Cancel", ImVec2(120, 0)))
 				{
 					// Reset selection and close the popup.
 					selectedTriggerId = -1;

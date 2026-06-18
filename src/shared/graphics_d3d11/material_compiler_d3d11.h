@@ -90,6 +90,30 @@ namespace mmo
 		/// @copydoc MaterialCompiler::AddTransform
 		ExpressionIndex AddTransform(ExpressionIndex input, Space sourceSpace, Space targetSpace) override;
 
+		/// @copydoc MaterialCompiler::AddTime
+		ExpressionIndex AddTime() override;
+
+		/// @copydoc MaterialCompiler::AddRotator
+		ExpressionIndex AddRotator(ExpressionIndex coordinates, ExpressionIndex center, ExpressionIndex rotation) override;
+
+		/// @copydoc MaterialCompiler::AddFresnel
+		ExpressionIndex AddFresnel(ExpressionIndex exponent, ExpressionIndex baseReflectFraction, ExpressionIndex normal) override;
+
+		/// @copydoc MaterialCompiler::AddPixelDepth
+		ExpressionIndex AddPixelDepth() override;
+
+		/// @copydoc MaterialCompiler::AddSceneDepth
+		ExpressionIndex AddSceneDepth() override;
+
+		/// @copydoc MaterialCompiler::AddScreenPosition
+		ExpressionIndex AddScreenPosition() override;
+
+		/// @copydoc MaterialCompiler::AddSaturate
+		ExpressionIndex AddSaturate(ExpressionIndex input) override;
+
+		/// @copydoc MaterialCompiler::AddSceneColor
+		ExpressionIndex AddSceneColor(ExpressionIndex screenOffset) override;
+
 	protected:
 		/// @copydoc MaterialCompiler::GenerateVertexShaderCode
 		void GenerateVertexShaderCode(VertexShaderType type) override;
@@ -105,9 +129,17 @@ namespace mmo
 
 		ExpressionIndex AddVectorParameterExpression(std::string_view name, const Vector4& defaultValue) override;
 
+		ExpressionIndex AddGlobalScalarParameterExpression(std::string_view name) override;
+
+		ExpressionIndex AddGlobalVectorParameterExpression(std::string_view name) override;
+
 	public:
 		std::vector<mmo::ScalarParameterValue> m_floatParameters;
 		std::vector<mmo::VectorParameterValue> m_vectorParameters;
 		std::vector<mmo::TextureParameterValue> m_textureParameters;
+
+	private:
+		bool m_needsSceneDepth { false };
+		bool m_needsSceneColor { false };
 	};
 }

@@ -14,6 +14,7 @@
 #include "log/log_entry.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/particle_emitter.h"
+#include "scene_graph/ribbon_trail.h"
 #include "terrain/page.h"
 #include "terrain/terrain.h"
 
@@ -35,6 +36,10 @@ namespace mmo
 
 	SceneNode* g_particleNode = nullptr;
 	ParticleEmitter* g_particleEmitter = nullptr;
+
+	SceneNode* g_ribbonTrailNode = nullptr;
+	RibbonTrail* g_ribbonTrail = nullptr;
+	float g_ribbonOrbitAngle = 0.0f;
 
 	SceneNode* g_sunLightNode = nullptr;
 	Light* g_sunLight = nullptr;
@@ -101,6 +106,19 @@ namespace mmo
 		if (g_foliage)
 		{
 			g_foliage->Update(*g_camera);
+		}
+
+		// Update ribbon trail orbit position (simulates a weapon swing or orbiting projectile)
+		if (g_ribbonTrailNode)
+		{
+			g_ribbonOrbitAngle += elapsedTime * 3.0f;  // Rotate at 3 radians per second
+			const float orbitRadius = 4.0f;
+			const float height = 3.0f + ::sin(g_ribbonOrbitAngle * 0.5f) * 1.5f;
+			g_ribbonTrailNode->SetPosition(Vector3(
+				::cos(g_ribbonOrbitAngle) * orbitRadius,
+				height,
+				::sin(g_ribbonOrbitAngle) * orbitRadius
+			));
 		}
 	}
 
@@ -191,6 +209,23 @@ namespace mmo
 					else
 					{
 						g_particleEmitter->Play();
+					}
+				}
+			}
+
+			if (key == 'Y')
+			{
+				// Toggle ribbon trail
+				if (g_ribbonTrail)
+				{
+					if (g_ribbonTrail->IsPlaying())
+					{
+						g_ribbonTrail->Stop();
+					}
+					else
+					{
+						g_ribbonTrail->Reset();
+						g_ribbonTrail->Play();
 					}
 				}
 			}
@@ -313,8 +348,9 @@ namespace mmo
 		params.maxParticles = 100;             // Max 100 particles alive at once
 		params.minLifetime = 2.0f;             // Particles live 2-4 seconds
 		params.maxLifetime = 4.0f;
-		params.startSize = 0.5f;               // Start at 0.5 units
-		params.endSize = 0.1f;                 // Fade to 0.1 units
+		params.minStartSize = 0.5f;            // Start at 0.5 units
+		params.maxStartSize = 0.5f;
+		params.sizeOverLife = FloatCurve(1.0f, 0.2f); // Fade to 0.1 units (0.5 * 0.2)
 		params.minVelocity = Vector3(-1.0f, 2.0f, -1.0f);  // Upward fountain
 		params.maxVelocity = Vector3(1.0f, 4.0f, 1.0f);
 		params.gravity = Vector3(0.0f, -2.0f, 0.0f);       // Gravity pulls down
@@ -340,16 +376,51 @@ namespace mmo
 		// Start playing automatically
 		g_particleEmitter->Play();
 
+		// ==================== Ribbon Trail Demo ====================
+		// Create a ribbon trail that will orbit around the scene
+		g_ribbonTrail = g_scene->CreateRibbonTrail("TestRibbonTrail");
+		g_ribbonTrailNode = g_scene->GetRootSceneNode().CreateChildSceneNode("RibbonTrailNode", Vector3(4.0f, 3.0f, 0.0f));
+		g_ribbonTrailNode->AttachObject(*g_ribbonTrail);
+
+		// Configure ribbon trail parameters for a sword-swing style effect
+		RibbonTrailParameters ribbonParams;
+		ribbonParams.maxSegments = 48;            // Maximum segments in the trail
+		ribbonParams.segmentInterval = 0.016f;    // Add segment every ~16ms (60 fps)
+		ribbonParams.segmentLifetime = 0.5f;      // Trail fades over 0.5 seconds
+		ribbonParams.initialWidth = 1.5f;         // Wide at the emitter
+		ribbonParams.finalWidth = 0.0f;           // Taper to nothing
+		ribbonParams.initialColor = Vector4(0.2f, 0.6f, 1.0f, 1.0f);   // Bright cyan-blue
+		ribbonParams.finalColor = Vector4(0.1f, 0.2f, 0.8f, 0.0f);     // Fade to transparent blue
+		ribbonParams.faceCamera = true;           // Billboard mode
+		ribbonParams.textureRepeat = 1.0f;        // One texture repeat along length
+		ribbonParams.minSegmentDistance = 0.05f;  // Minimum movement to add segment
+
+		g_ribbonTrail->SetParameters(ribbonParams);
+
+		// Use the particle material for ribbon trail (or create a dedicated one)
+		MaterialPtr ribbonMaterial = RibbonTrail::GetDefaultMaterial(true);
+		if (ribbonMaterial)
+		{
+			g_ribbonTrail->SetMaterial(ribbonMaterial);
+		}
+		else if (particleMaterial)
+		{
+			// Fallback to particle material
+			g_ribbonTrail->SetMaterial(particleMaterial);
+		}
+
+		// Start the ribbon trail
+		g_ribbonTrail->Play();
+
 		// Create deferred renderer
 		g_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), *g_scene, desc.width, desc.height);
 
 		// Optimize shadow settings for better quality
-		g_deferredRenderer->SetDepthBias(100.0f, 2.5f, 0.01f); // Hardware depth bias settings
-		g_deferredRenderer->SetShadowBias(0.00025f);           // Software depth bias in shadow space
-		g_deferredRenderer->SetNormalBiasScale(0.05f);         // Scale factor for normal-based bias
-		g_deferredRenderer->SetShadowSoftness(2.5f);           // Shadow softness for smooth edges
+		g_deferredRenderer->SetDepthBias(138.6f, 0.1f, 0.0f); // Hardware depth bias settings
+		g_deferredRenderer->SetShadowBias(0.00002f);           // Software depth bias in shadow space
+		g_deferredRenderer->SetNormalBiasScale(0.2f);         // Scale factor for normal-based bias
 		g_deferredRenderer->SetBlockerSearchRadius(0.03f);     // Blocker search radius for PCSS-style shadows
-		g_deferredRenderer->SetLightSize(0.005f);              // Virtual light size for penumbra simulation
+		g_deferredRenderer->SetLightSize(0.0268f);              // Virtual light size for penumbra simulation
 		
 		// Set shadow map information and direction in the scene
 		g_scene->SetShadowDirLightTextureOffset(0.5f);
@@ -389,10 +460,11 @@ namespace mmo
 
 		g_foliage = std::make_unique<Foliage>(*g_scene, GraphicsDevice::Get());
 
-		g_foliage->SetHeightQueryCallback([](float x, float z, float& height, Vector3& normal)
+		g_foliage->SetTerrainSampleCallback([](float x, float z, FoliagePlacementSample& out)
 			{
-				height = 0.0f;
-				normal = Vector3::UnitY;
+				out.height = 0.0f;
+				out.normal = Vector3::UnitY;
+				out.valid = true;
 				return true;
 			});
 
@@ -432,6 +504,17 @@ namespace mmo
 	{
 		g_foliage.reset();
 		g_terrain.reset();
+
+		if (g_ribbonTrail)
+		{
+			g_scene->DestroyRibbonTrail(*g_ribbonTrail);
+			g_ribbonTrail = nullptr;
+		}
+		if (g_ribbonTrailNode)
+		{
+			g_scene->DestroySceneNode(*g_ribbonTrailNode);
+			g_ribbonTrailNode = nullptr;
+		}
 
 		if (g_particleEmitter)
 		{

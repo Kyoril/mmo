@@ -4,6 +4,7 @@
 
 #include "frame.h"
 #include "frame_layer.h"
+#include "frame_animation.h"
 
 #include "xml_handler/xml_handler.h"
 
@@ -108,6 +109,15 @@ namespace mmo
 		void ElementOnDropStart(const XmlAttributes& attributes);
 		void ElementOnDropEnd();
 
+		void ElementAnimationsStart(const XmlAttributes& attributes);
+		void ElementAnimationsEnd();
+		void ElementAnimationStart(const XmlAttributes& attributes);
+		void ElementAnimationEnd();
+		void ElementTrackStart(const XmlAttributes& attributes);
+		void ElementTrackEnd();
+		void ElementKeyframeStart(const XmlAttributes& attributes);
+		void ElementKeyframeEnd();
+
 	private:
 		/// Stack of added frames.
 		std::stack<FramePtr> m_frames;
@@ -143,5 +153,9 @@ namespace mmo
 		std::vector<std::string> m_scriptsToLoad;
 
 		Rect m_insetRect;
+
+		bool m_hasAnimationsTag = false;
+		std::unique_ptr<FrameAnimation> m_currentAnimation;
+		std::unique_ptr<FrameAnimationTrack> m_currentTrack;
 	};
 }

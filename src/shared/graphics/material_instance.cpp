@@ -164,8 +164,19 @@ namespace mmo
 		default:
 			ASSERT(m_parent->GetVertexShader(VertexShaderType::Default));
 			if (m_parent->GetVertexShader(VertexShaderType::Default)) m_parent->GetVertexShader(VertexShaderType::Default)->Set();
-			ASSERT(m_parent->GetPixelShader(pixelShaderType));
-			if (m_parent->GetPixelShader(pixelShaderType)) m_parent->GetPixelShader(pixelShaderType)->Set();
+
+			// Opaque/unlit casters don't need a pixel shader to write shadow depth; binding none lets
+			// the GPU use its faster depth-only path. Masked materials still need the alpha-test shader.
+			if (pixelShaderType == PixelShaderType::ShadowMap && m_type != MaterialType::Masked
+				&& device.SupportsNullPixelShaderForShadows())
+			{
+				device.BindNullPixelShader();
+			}
+			else
+			{
+				ASSERT(m_parent->GetPixelShader(pixelShaderType));
+				if (m_parent->GetPixelShader(pixelShaderType)) m_parent->GetPixelShader(pixelShaderType)->Set();
+			}
 			break;
 		}
 
@@ -182,8 +193,22 @@ namespace mmo
 
 		if (pixelShaderType != PixelShaderType::ShadowMap)
 		{
-			device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
-			device.SetDepthWriteEnabled(m_depthWrite);
+			if (pixelShaderType == PixelShaderType::GBuffer && device.IsGBufferDepthPrepass())
+			{
+				// A depth pre-pass already wrote the front-most depth. Test LessEqual with depth
+				// write off so occluded pixels are early-Z rejected before this shader runs.
+				// (Must match Material::Apply, or instanced renderables like terrain — which use a
+				// MaterialInstance — would test Less against the equal pre-pass depth and vanish.)
+				device.SetDepthEnabled(true);
+				device.SetDepthTestComparison(DepthTestMethod::LessEqual);
+				device.SetDepthWriteEnabled(false);
+			}
+			else
+			{
+				device.SetDepthEnabled(m_depthTest);
+				device.SetDepthTestComparison(m_depthTest ? DepthTestMethod::Less : DepthTestMethod::Always);
+				device.SetDepthWriteEnabled(m_depthWrite);
+			}
 		}
 		else
 		{
@@ -192,7 +217,14 @@ namespace mmo
 			device.SetDepthTestComparison(DepthTestMethod::LessEqual);
 		}
 
-		if (m_type == MaterialType::Translucent || m_type == MaterialType::Masked || m_type == MaterialType::UserInterface)
+		// G-Buffer pass must always use opaque blending - the G-Buffer stores material
+		// properties (normals, roughness, depth) that are meaningless when alpha-blended.
+		// Opacity masking is handled by shader discard.
+		if (pixelShaderType == PixelShaderType::GBuffer || pixelShaderType == PixelShaderType::ShadowMap)
+		{
+			device.SetBlendMode(BlendMode::Opaque);
+		}
+		else if (m_type == MaterialType::Translucent || m_type == MaterialType::UserInterface)
 		{
 			device.SetBlendMode(BlendMode::Alpha);
 		}

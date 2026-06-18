@@ -7,15 +7,13 @@
 
 namespace mmo
 {
-    // Forward declarations
-    class AsyncDatabase;
 
     /// A class that manages the Message of the Day functionality
     class MOTDManager final
     {
     public:
         /// Initializes the MOTD manager with a database reference
-        MOTDManager(AsyncDatabase& database);
+        MOTDManager(AsyncMOTDDatabase& database);
 
         /// Loads the MOTD from the database asynchronously
         void LoadMessageOfTheDay();
@@ -35,7 +33,7 @@ namespace mmo
 
     private:
         /// Reference to the database
-        AsyncDatabase& m_database;
+        AsyncMOTDDatabase& m_database;
 
         /// Currently cached MOTD
         String m_motd;

@@ -41,6 +41,10 @@ namespace mmo
 
 		[[nodiscard]] const std::vector<TrainerSpellEntry>& GetTrainerSpells() const { return m_trainerSpells; }
 
+		/// @brief Returns the trainer entry's title string (e.g. "Class Trainer", "Riding Instructor").
+		/// @return The trainer title, or empty string if not set.
+		[[nodiscard]] const String& GetTrainerTitle() const { return m_trainerTitle; }
+
 		void BuySpell(uint32 index) const;
 
 		void OnSpellLearned(uint32 spellId);
@@ -59,5 +63,6 @@ namespace mmo
 
 		std::vector<TrainerSpellEntry> m_trainerSpells;
 		uint64 m_trainerGuid = 0;
+		String m_trainerTitle;
 	};
 }

@@ -4,6 +4,7 @@
 
 #include "base/typedefs.h"
 #include "creature_ai_state.h"
+#include "creature_combat_script.h"
 #include "base/countdown.h"
 #include "objects/game_unit_s.h"
 #include "math/vector3.h"
@@ -113,6 +114,8 @@ namespace mmo
 			float combatRange;
 			/// Whether we are currently moving to a valid combat position.
 			bool isMovingToCombat;
+			/// Last recorded waypoint target position (for player movement detection).
+			Vector3 lastWaypointTarget;
 
 			/**
 			 * @brief Constructs a new movement state.
@@ -121,6 +124,7 @@ namespace mmo
 				: targetPosition(Vector3::Zero)
 				, combatRange(0.0f)
 				, isMovingToCombat(false)
+				, lastWaypointTarget(Vector3::Zero)
 			{
 			}
 
@@ -193,6 +197,44 @@ namespace mmo
 		 * @param succeeded Whether the spell cast succeeded.
 		 */
 		void OnSpellCastEnded(bool succeeded);
+
+		// === Script Support API ===
+
+		/**
+		 * @brief Gets all living units currently on the threat list.
+		 * @return Vector of pointers to alive threat targets.
+		 */
+		std::vector<GameUnitS*> GetThreatTargets() const;
+
+		/**
+		 * @brief Whether the creature is currently casting a spell.
+		 * @return True if casting.
+		 */
+		bool IsCasting() const { return m_isCasting; }
+
+		/**
+		 * @brief Gets the number of units on the threat list.
+		 * @return Number of threat entries.
+		 */
+		uint32 GetThreatCount() const { return static_cast<uint32>(m_threat.size()); }
+
+		/**
+		 * @brief Adds threat from a script context.
+		 * @param threatener The threatening unit.
+		 * @param amount Threat amount (can be negative to reduce).
+		 */
+		void AddThreatFromScript(GameUnitS& threatener, float amount);
+
+		/**
+		 * @brief Resets all threat values to zero (called from scripts).
+		 */
+		void ResetAllThreatFromScript();
+
+		/**
+		 * @brief Gets the active combat script, if any.
+		 * @return Pointer to the combat script, or nullptr.
+		 */
+		CreatureCombatScript* GetScript() const { return m_script.get(); }
 
 	private:
 		// === Threat Management ===
@@ -313,6 +355,14 @@ namespace mmo
 		bool IsInOptimalRange(const GameUnitS& target) const;
 
 		/**
+		 * @brief Returns true if the target is within range of at least one available spell,
+		 *        ignoring cooldowns and power. Used to decide whether to reposition while waiting.
+		 * @param target The target to check.
+		 * @return True if in range for any spell.
+		 */
+		bool IsTargetInAnySpellRange(const GameUnitS& target) const;
+
+		/**
 		 * @brief Moves to optimal range based on combat behavior.
 		 * @param target The target to position for.
 		 * @return True if movement was initiated successfully.
@@ -330,6 +380,26 @@ namespace mmo
 		 * @return True if AI should reset, false otherwise.
 		 */
 		bool ShouldResetAI(const GameUnitS* victim) const;
+
+		/**
+		 * @brief Calculates an actual standoff position on a ring around the target.
+		 *
+		 * When multiple creatures attack the same target, each attacker is assigned a unique
+		 * angular slot on a circle of radius @p standoffDistance centred on @p ringCentre, so
+		 * they fan out around the target instead of stacking on the same spot. The fan is
+		 * centred on this creature's own approach direction so it keeps attacking from its side
+		 * rather than running around the target.
+		 *
+		 * Unlike the previous implementation, the returned point sits at the real combat
+		 * distance (not a tiny nudge near the target), so the caller can move to it with a small
+		 * acceptance radius and the angular slot actually determines where the creature ends up.
+		 *
+		 * @param target The target being attacked (used to enumerate the other attackers).
+		 * @param ringCentre The centre of the standoff ring (typically the predicted target pos).
+		 * @param standoffDistance The radius of the ring (distance from the target to stop at).
+		 * @return A world-space position on the standoff ring for this creature's slot.
+		 */
+		Vector3 CalculateFormationPosition(const GameUnitS& target, const Vector3& ringCentre, float standoffDistance) const;
 
 		// === Initialization Helpers ===
 
@@ -367,6 +437,7 @@ namespace mmo
 		// === Timing and Counters ===
 		GameTime m_lastThreatTime;
 		Countdown m_nextActionCountdown;
+		Countdown m_recalculationCountdown;
 		uint32 m_stuckCounter;
 		
 		// === Flags ===
@@ -374,7 +445,7 @@ namespace mmo
 		bool m_entered;
 		bool m_isRanged;
 		bool m_canReset;
-		
+
 		// === Event Connections ===
 		UnitSignals m_killedSignals;
 		UnitSignals2 m_miscSignals;
@@ -386,21 +457,42 @@ namespace mmo
 		scoped_connection m_onUnitStateChanged;
 		scoped_connection m_onAutoAttackDone;
 		scoped_connection m_onSpellCastStarted;
+		scoped_connection m_onSpellCastEnded;
 		
 		// === Casting Timeout ===
 		GameTime m_castingTimeoutEnd;
-				// === Constants ===
+
+		// === Line of Sight Recovery ===
+		/// Set when a spell cast fails due to LOS; cleared once LOS is restored.
+		bool m_losBlocked;
+		/// Timestamp of the last LOS recheck while m_losBlocked is true.
+		GameTime m_lastLosCheckTime;
+
+		// === Combat Script ===
+		std::unique_ptr<CreatureCombatScript> m_script;
+
+		// === Constants ===
 		static constexpr float RESET_DISTANCE_SQ = 60.0f * 60.0f;
 		static constexpr uint32 RESET_TIMEOUT_MS = 10000;  // 10 seconds
 		static constexpr uint32 MAX_STUCK_COUNT = 20;
 		static constexpr uint32 ACTION_INTERVAL_MS = 500;
-		/// Movement target range factor (0.75 = move to 75% of attack range to ensure we're close enough)
-		static constexpr float COMBAT_RANGE_FACTOR = 0.75f;
+		/// Movement target range factor: stop at 95% of attack range so the creature
+		/// lands just inside auto-attack range without standing inside the target.
+		/// Previously 0.9 caused creatures to stop ~0.5-1 m outside attack range.
+		static constexpr float COMBAT_RANGE_FACTOR = 0.95f;
 		/// Optimal caster range (distance to maintain from target)
 		static constexpr float CASTER_OPTIMAL_RANGE = 20.0f;
 		/// Minimum distance to maintain from target for casters
 		static constexpr float CASTER_MIN_RANGE = 8.0f;
 		/// Maximum spell casting range
 		static constexpr float MAX_SPELL_RANGE = 30.0f;
+		/// Fraction of attack range at which a melee creature parks on its standoff ring.
+		/// Kept below COMBAT_RANGE_FACTOR so that the separation offset (which can nudge the
+		/// slot slightly outward) still leaves the creature inside auto-attack range.
+		static constexpr float MELEE_RING_STANDOFF_FACTOR = 0.8f;
+		/// Distance threshold for waypoint recalculation when player moves (5m, stored as squared distance)
+		static constexpr float PLAYER_POSITION_THRESHOLD = 25.0f; // 5^2 = 25
+		/// Periodic recalculation interval (500ms for responsive positioning updates)
+		static constexpr uint32 RECALCULATION_INTERVAL_MS = 500;
 	};
 }

@@ -265,6 +265,9 @@ namespace mmo
 
 				// Allow the client to handle the realm list packet
 				RegisterPacketHandler(mmo::auth::login_client_packet::RealmList, *this, &LoginConnector::OnRealmList);
+
+				// The login server pushes the account's active feature keys right after the proof.
+				RegisterPacketHandler(mmo::auth::login_client_packet::AccountFeatures, *this, &LoginConnector::OnAccountFeatures);
 			}
 			else
 			{
@@ -329,11 +332,45 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult LoginConnector::OnAccountFeatures(auth::IncomingPacket & packet)
+	{
+		// Clear previously stored features
+		m_accountFeatures.clear();
+
+		// Read the feature count
+		uint8 featureCount = 0;
+		if (!(packet >> io::read<uint8>(featureCount)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+		m_accountFeatures.reserve(featureCount);
+
+		// Read each feature key
+		for (uint8 i = 0; (i < featureCount) && packet; ++i)
+		{
+			std::string key;
+			if (!(packet >> io::read_container<uint8>(key)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+			m_accountFeatures.emplace_back(std::move(key));
+		}
+
+		ILOG("Account features: " << m_accountFeatures.size());
+
+		// Trigger signal
+		AccountFeaturesUpdated();
+
+		// Continue
+		return PacketParseResult::Pass;
+	}
+
 	void LoginConnector::Connect(const std::string & username, const std::string & password)
 	{
 		ClearPacketHandlers();
 
 		m_realms.clear();
+		m_accountFeatures.clear();
 
 		// Apply username and convert it to uppercase letters
 		m_accountName = username;

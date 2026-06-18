@@ -61,6 +61,16 @@ namespace mmo
 
 		void SetDuration(const float duration) { m_duration = duration; }
 
+		/// Gets the persistent playback speed multiplier for this animation. A value of 1.0 plays
+		/// the animation at its authored speed, 2.0 plays it twice as fast, 0.5 at half speed.
+		/// This is stored with the skeleton and applied automatically by the engine whenever an
+		/// AnimationState is created for this animation.
+		float GetPlaybackSpeed() const { return m_playbackSpeed; }
+
+		/// Sets the persistent playback speed multiplier for this animation. The value is clamped
+		/// to a small positive minimum to avoid a stalled animation.
+		void SetPlaybackSpeed(const float playbackSpeed) { m_playbackSpeed = std::max(playbackSpeed, 0.0016f); }
+
 		void Apply(float timePos, float weight = 1.0f, float scale = 1.0f);
 
 		void ApplyToNode(Node* node, float timePos, float weight = 1.0, float scale = 1.0f);
@@ -143,6 +153,8 @@ namespace mmo
 	protected:
 		String m_name;
 		float m_duration;
+		/// Persistent playback speed multiplier, serialized with the skeleton. Defaults to 1.0.
+		float m_playbackSpeed{ 1.0f };
 		InterpolationMode m_interpolationMode;
 		RotationInterpolationMode m_rotationInterpolationMode;
 		static InterpolationMode s_defaultInterpolationMode;

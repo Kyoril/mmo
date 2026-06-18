@@ -2,19 +2,14 @@
 
 #include "web_client.h"
 
-#include "database.h"
 #include "web_service.h"
 #include "base/clock.h"
 #include "http/http_incoming_request.h"
-#include "player_manager.h"
-#include "player.h"
+#include "http/http_outgoing_answer.h"
 #include "log/default_log_levels.h"
-#include "realm_manager.h"
 
-#include <regex>
 #include "nlohmann/json.hpp"
 
-// Add a namespace alias for convenience
 using json = nlohmann::json;
 
 namespace mmo
@@ -22,16 +17,119 @@ namespace mmo
 	namespace
 	{
 		void SendJsonResponse(web::WebResponse &response, const json &jsonObject)
-        {
-            const std::string jsonStr = jsonObject.dump();
-            response.finishWithContent("application/json", jsonStr.data(), jsonStr.size());
-        }
+		{
+			// 'replace' error handler: serialize invalid UTF-8 with the replacement character
+			// rather than throwing type_error.316 and aborting the server.
+			const std::string jsonStr = jsonObject.dump(-1, ' ', false, json::error_handler_t::replace);
+			response.finishWithContent("application/json", jsonStr.data(), jsonStr.size());
+		}
 	}
 
 	WebClient::WebClient(WebService &webService, std::shared_ptr<Client> connection)
 		: web::WebClient(webService, connection)
 		, m_service(webService)
+		, m_handlers(webService.GetDatabase(), webService.GetRealmManager(), webService.GetPlayerManager())
 	{
+		using Type = net::http::IncomingRequest::Type;
+
+		RegisterRoute(Type::Get, "/uptime", [this](const net::http::IncomingRequest&, web::WebResponse& response)
+		{
+			const GameTime startTime = static_cast<WebService &>(getService()).GetStartTime();
+			json jsonResponse;
+			jsonResponse["uptime"] = gameTimeToSeconds<unsigned>(GetAsyncTimeMs() - startTime);
+			SendJsonResponse(response, jsonResponse);
+		});
+
+		RegisterRoute(Type::Get, "/gm-level", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleGetGMLevel(req, response);
+		});
+
+		RegisterRoute(Type::Get, "/accounts", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleListAccounts(req, response);
+		});
+
+		RegisterRoute(Type::Get, "/realms", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleListRealms(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/shutdown", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			handleShutdown(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/create-account", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleCreateAccount(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/create-realm", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleCreateRealm(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/ban-account", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleBanAccount(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/unban-account", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleUnbanAccount(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/gm-level", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleSetGMLevel(req, response);
+		});
+
+		// Account feature endpoints
+		RegisterRoute(Type::Get, "/features", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleListFeatures(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/create-feature", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleCreateFeature(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/delete-feature", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleDeleteFeature(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/grant-feature", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleGrantFeature(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/revoke-feature", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleRevokeFeature(req, response);
+		});
+
+		RegisterRoute(Type::Get, "/account-features", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleGetAccountFeatures(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/realm-feature-requirement", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleSetRealmFeatureRequirement(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/remove-realm-feature-requirement", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleRemoveRealmFeatureRequirement(req, response);
+		});
+
+		RegisterRoute(Type::Get, "/realm-feature-requirements", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleGetRealmFeatureRequirements(req, response);
+		});
 	}
 
 	void WebClient::handleRequest(const net::http::IncomingRequest &request,
@@ -49,71 +147,7 @@ namespace mmo
 			return;
 		}
 
-		const auto &url = request.getPath();
-		switch(request.getType())
-		{
-			case net::http::IncomingRequest::Get:
-			{
-				if (url == "/uptime")
-				{
-					const GameTime startTime = static_cast<WebService &>(getService()).GetStartTime();
-
-					json jsonResponse;
-					jsonResponse["uptime"] = gameTimeToSeconds<unsigned>(GetAsyncTimeMs() - startTime);
-					SendJsonResponse(response, jsonResponse);
-				}
-				else if (url == "/gm-level")
-				{
-					handleGetGMLevel(request, response);
-				}
-				else
-				{
-					response.setStatus(net::http::OutgoingAnswer::NotFound);
-
-					const String message = "The command '" + url + "' does not exist";
-					response.finishWithContent("text/html", message.data(), message.size());
-				}
-				break;
-			}
-			case net::http::IncomingRequest::Post:
-			{
-				// Parse arguments
-				if (url == "/shutdown")
-				{
-					handleShutdown(request, response);
-				}
-				else if (url == "/create-account")
-				{
-					handleCreateAccount(request, response);
-				}
-				else if (url == "/create-realm")
-				{
-					handleCreateRealm(request, response);
-				}
-				else if (url == "/ban-account")
-				{
-					handleBanAccount(request, response);
-				}
-				else if (url == "/unban-account")
-				{
-					handleUnbanAccount(request, response);
-				}
-				else if (url == "/gm-level")
-				{
-					handleSetGMLevel(request, response);
-				}
-				else
-				{
-					const String message = "The command '" + url + "' does not exist";
-					response.finishWithContent("text/html", message.data(), message.size());
-				}
-				break;
-			}
-			default:
-			{
-				break;
-			}
-		}
+		DispatchRoute(request, response);
 	}
 
 	void WebClient::handleShutdown(const net::http::IncomingRequest& request, web::WebResponse& response) const
@@ -123,449 +157,5 @@ namespace mmo
 
 		auto& ioService = getService().getIOService();
 		ioService.stop();
-	}
-
-	std::pair<BigNumber, BigNumber> calculateSV(String& id, String& password)
-	{
-		std::transform(id.begin(), id.end(), id.begin(), ::toupper);
-		std::transform(password.begin(), password.end(), password.begin(), ::toupper);
-
-		// Calculate auth hash
-		const std::string authString = id + ":" + password;
-		const SHA1Hash authHash = sha1(authString.c_str(), authString.size());
-
-		BigNumber s;
-		s.setRand(32 * 8);
-
-		HashGeneratorSha1 gen;
-
-		// Calculate x
-		BigNumber x;
-		gen.update((const char*)s.asByteArray().data(), s.getNumBytes());
-		gen.update((const char*)authHash.data(), authHash.size());
-		const SHA1Hash x_hash = gen.finalize();
-		x.setBinary(x_hash.data(), x_hash.size());
-
-		// Calculate v
-		BigNumber v = constants::srp::g.modExp(x, constants::srp::N);
-		return std::make_pair(s, v);
-	}
-
-	void WebClient::handleCreateAccount(const net::http::IncomingRequest& request, web::WebResponse& response) const
-	{
-		const auto& arguments = request.getPostFormArguments();
-		const auto accountIdIt = arguments.find("id");
-		const auto accountPassIt = arguments.find("password");
-
-		json jsonResponse;
-
-		if (accountIdIt == arguments.end())
-		{
-			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			jsonResponse["status"] = "MISSING_PARAMETER";
-			jsonResponse["message"] = "Missing parameter 'id'";
-			SendJsonResponse(response, jsonResponse);
-			return;
-		}
-
-		if (accountPassIt == arguments.end())
-		{
-			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			jsonResponse["status"] = "MISSING_PARAMETER";
-			jsonResponse["message"] = "Missing parameter 'password'";
-			SendJsonResponse(response, jsonResponse);
-			return;
-		}
-
-		// Generate salt and verifier data
-		String id = accountIdIt->second;
-		String password = accountPassIt->second;
-		const auto [s, v] = calculateSV(id, password);
-		
-		// Execute
-		const auto result = m_service.GetDatabase().AccountCreate(id, s.asHexStr(), v.asHexStr());
-		if (result)
-		{
-			if (*result == AccountCreationResult::AccountNameAlreadyInUse)
-			{
-				response.setStatus(net::http::OutgoingAnswer::Conflict);
-				jsonResponse["status"] = "ACCOUNT_NAME_ALREADY_IN_USE";
-				jsonResponse["message"] = "Account name already in use";
-				SendJsonResponse(response, jsonResponse);
-				return;
-			}
-
-			if(*result == AccountCreationResult::Success)
-			{
-				SendJsonResponse(response, jsonResponse);
-				return;
-			}
-		}
-
-		response.setStatus(net::http::OutgoingAnswer::InternalServerError);
-		jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
-		SendJsonResponse(response, jsonResponse);
-	}
-
-	void WebClient::handleCreateRealm(const net::http::IncomingRequest& request, web::WebResponse& response) const
-	{
-		const auto& arguments = request.getPostFormArguments();
-		const auto accountIdIt = arguments.find("id");
-		const auto accountPassIt = arguments.find("password");
-		const auto addressIt = arguments.find("address");
-		const auto portIt = arguments.find("port");
-
-		json jsonResponse;
-
-		if (accountIdIt == arguments.end() || accountIdIt->second.empty())
-		{
-			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			jsonResponse["status"] = "MISSING_PARAMETER";
-			jsonResponse["message"] = "Missing parameter 'id'";
-			SendJsonResponse(response, jsonResponse);
-			return;
-		}
-
-		if (accountPassIt == arguments.end() || accountPassIt->second.empty())
-		{
-			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			jsonResponse["status"] = "MISSING_PARAMETER";
-			jsonResponse["message"] = "Missing parameter 'password'";
-			SendJsonResponse(response, jsonResponse);
-			return;
-		}
-
-		if (addressIt == arguments.end() || addressIt->second.empty())
-		{
-			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			jsonResponse["status"] = "MISSING_PARAMETER";
-			jsonResponse["message"] = "Missing parameter 'address'";
-			SendJsonResponse(response, jsonResponse);
-			return;
-		}
-
-		if (portIt == arguments.end() || portIt->second.empty())
-		{
-			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			jsonResponse["status"] = "MISSING_PARAMETER";
-			jsonResponse["message"] = "Missing parameter 'port'";
-			SendJsonResponse(response, jsonResponse);
-			return;
-		}
-
-		const String address = addressIt->second;
-		const auto port = static_cast<uint16>(std::atoi(portIt->second.c_str()));
-
-		// Generate salt and verifier data
-		String id = accountIdIt->second;
-		String password = accountPassIt->second;
-		const auto [s, v] = calculateSV(id, password);
-
-		// Execute
-		const auto result = m_service.GetDatabase().RealmCreate(id, address, port, s.asHexStr(), v.asHexStr());
-		if (result)
-		{
-			if (*result == RealmCreationResult::RealmNameAlreadyInUse)
-			{
-				response.setStatus(net::http::OutgoingAnswer::Conflict);
-				jsonResponse["status"] = "REALM_NAME_ALREADY_IN_USE";
-				jsonResponse["message"] = "Realm name already in use";
-                SendJsonResponse(response, jsonResponse);
-				return;
-			}
-
-			if (*result == RealmCreationResult::Success)
-			{
-				SendJsonResponse(response, jsonResponse);
-				return;
-			}
-		}
-
-		response.setStatus(net::http::OutgoingAnswer::InternalServerError);
-		jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
-		SendJsonResponse(response, jsonResponse);
-	}
-
-	namespace
-	{
-		bool isValidDateTime(const std::string& dateTime)
-		{
-			// Regular expression for "YYYY-MM-DD HH:MM:SS" format
-			std::regex dateTimeRegex(
-				R"(^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])\s(0[0-9]|1[0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])$)"
-			);
-
-			return std::regex_match(dateTime, dateTimeRegex);
-		}
-	}
-	
-	void WebClient::handleBanAccount(const net::http::IncomingRequest& request, web::WebResponse& response) const
-	{
-		const auto& arguments = request.getPostFormArguments();
-		const auto accountNameIt = arguments.find("account_name");
-		const auto expirationIt = arguments.find("expiration");
-		const auto reasonIt = arguments.find("reason");
-
-		json jsonResponse;
-		if (accountNameIt == arguments.end() || accountNameIt->second.empty())
-		{
-			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			jsonResponse["status"] = "MISSING_PARAMETER";
-			jsonResponse["message"] = "Missing parameter 'account_name'";
-			SendJsonResponse(response, jsonResponse);
-			return;
-		}
-
-		if (expirationIt != arguments.end() && !isValidDateTime(expirationIt->second))
-		{
-			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			jsonResponse["status"] = "INVALID_PARAMETER";
-			jsonResponse["message"] = "Parameter 'expiration' must be formatted like this: 'YYYY-MM-DD HH:MM:SS'";
-			SendJsonResponse(response, jsonResponse);
-			return;
-		}
-
-		if (reasonIt != arguments.end() && reasonIt->second.length() > 256)
-		{
-			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			jsonResponse["status"] = "INVALID_PARAMETER";
-			jsonResponse["message"] = "Parameter 'reason' must not exceed a length of 256 characters!";
-			SendJsonResponse(response, jsonResponse);
-			return;
-		}
-
-		const String name = accountNameIt->second;
-		const String expiration = expirationIt == arguments.end() ? "" : expirationIt->second;
-		const String reason = reasonIt == arguments.end() ? "" : reasonIt->second;
-
-		try
-		{
-			std::optional<AccountData> account = m_service.GetDatabase().GetAccountDataByName(name);
-			if (!account)
-			{
-				response.setStatus(net::http::OutgoingAnswer::NotFound);
-				jsonResponse["status"] = "ACCOUNT_DOES_NOT_EXIST";
-				jsonResponse["message"] = "An account with the name '" + name + "' does not exist!";
-				SendJsonResponse(response, jsonResponse);
-				return;
-			}
-
-			if (account->banned != BanState::None)
-			{
-				response.setStatus(net::http::OutgoingAnswer::Conflict);
-				jsonResponse["status"] = "ACCOUNT_ALREADY_BANNED";
-				jsonResponse["message"] = "The account '" + name + "' is already banned!";
-				SendJsonResponse(response, jsonResponse);
-				return;
-			}
-
-			m_service.GetDatabase().BanAccountByName(name, expiration, reason);
-			jsonResponse["status"] = "SUCCESS";
-			SendJsonResponse(response, jsonResponse);
-
-			// Notify subscribers
-			m_service.GetRealmManager().NotifyAccountBanned(account->id);
-			m_service.GetPlayerManager().KickPlayerByAccountId(account->id);
-		}
-		catch(...)
-		{
-			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
-			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
-			SendJsonResponse(response, jsonResponse);
-		}
-	}
-
-	void WebClient::handleUnbanAccount(const net::http::IncomingRequest& request, web::WebResponse& response) const
-	{
-		const auto& arguments = request.getPostFormArguments();
-		const auto accountNameIt = arguments.find("account_name");
-		const auto reasonIt = arguments.find("reason");
-
-		json jsonResponse;
-
-		if (accountNameIt == arguments.end() || accountNameIt->second.empty())
-		{
-			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			jsonResponse["status"] = "MISSING_PARAMETER";
-			jsonResponse["message"] = "Missing parameter 'account_name'";
-			SendJsonResponse(response, jsonResponse);
-			return;
-		}
-
-		if (reasonIt != arguments.end() && reasonIt->second.length() > 256)
-		{
-			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			jsonResponse["status"] = "INVALID_PARAMETER";
-			jsonResponse["message"] = "Parameter 'reason' must not exceed a length of 256 characters!";
-			SendJsonResponse(response, jsonResponse);
-			return;
-		}
-
-		const String name = accountNameIt->second;
-		const String reason = reasonIt == arguments.end() ? "" : reasonIt->second;
-
-		try
-		{
-			m_service.GetDatabase().UnbanAccountByName(name, reason);
-			jsonResponse["status"] = "SUCCESS";
-			SendJsonResponse(response, jsonResponse);
-		}
-		catch (...)
-		{
-			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
-			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
-			SendJsonResponse(response, jsonResponse);
-		}
-	}
-
-	void WebClient::handleGetGMLevel(const net::http::IncomingRequest& request, web::WebResponse& response) const
-	{
-		const auto& arguments = request.getPathArguments();
-		const auto accountNameIt = arguments.find("account_name");
-
-		json jsonResponse;
-
-		if (accountNameIt == arguments.end() || accountNameIt->second.empty())
-		{
-			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			jsonResponse["status"] = "MISSING_PARAMETER";
-			jsonResponse["message"] = "Missing parameter 'account_name'";
-			SendJsonResponse(response, jsonResponse);
-			return;
-		}
-
-		const String name = accountNameIt->second;
-
-		try
-		{
-			// First check if the account exists
-			std::optional<AccountData> account = m_service.GetDatabase().GetAccountDataByName(name);
-			if (!account)
-			{
-				response.setStatus(net::http::OutgoingAnswer::NotFound);
-				jsonResponse["status"] = "ACCOUNT_DOES_NOT_EXIST";
-				jsonResponse["message"] = "An account with the name '" + name + "' does not exist!";
-				SendJsonResponse(response, jsonResponse);
-				return;
-			}
-
-			// Get the account session key which includes GM level
-			auto result = m_service.GetDatabase().GetAccountSessionKey(name);
-			if (result)
-			{
-				// The third element in the tuple is the GM level
-				uint8 gmLevel = std::get<2>(*result);
-
-				jsonResponse["status"] = "SUCCESS";
-				jsonResponse["account_name"] = name;
-				jsonResponse["gm_level"] = static_cast<int>(gmLevel);
-				SendJsonResponse(response, jsonResponse);
-			}
-			else
-			{
-				response.setStatus(net::http::OutgoingAnswer::InternalServerError);
-				jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
-				jsonResponse["message"] = "Failed to retrieve GM level information";
-				SendJsonResponse(response, jsonResponse);
-			}
-		}
-		catch (...)
-		{
-			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
-			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
-			SendJsonResponse(response, jsonResponse);
-		}
-	}
-
-	void WebClient::handleSetGMLevel(const net::http::IncomingRequest& request, web::WebResponse& response) const
-	{
-		const auto& arguments = request.getPostFormArguments();
-		const auto accountNameIt = arguments.find("account_name");
-		const auto gmLevelIt = arguments.find("gm_level");
-
-		json jsonResponse;
-
-		if (accountNameIt == arguments.end() || accountNameIt->second.empty())
-		{
-			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			jsonResponse["status"] = "MISSING_PARAMETER";
-			jsonResponse["message"] = "Missing parameter 'account_name'";
-			SendJsonResponse(response, jsonResponse);
-			return;
-		}
-
-		if (gmLevelIt == arguments.end() || gmLevelIt->second.empty())
-		{
-			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			jsonResponse["status"] = "MISSING_PARAMETER";
-			jsonResponse["message"] = "Missing parameter 'gm_level'";
-			SendJsonResponse(response, jsonResponse);
-			return;
-		}
-
-		const String name = accountNameIt->second;
-		int gmLevel = 0;
-		
-		try
-		{
-			gmLevel = std::stoi(gmLevelIt->second);
-		}
-		catch (...)
-		{
-			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			jsonResponse["status"] = "INVALID_PARAMETER";
-			jsonResponse["message"] = "Parameter 'gm_level' must be a valid integer number";
-			SendJsonResponse(response, jsonResponse);
-			return;
-		}
-
-		if (gmLevel < 0 || gmLevel > 255)
-		{
-			response.setStatus(net::http::OutgoingAnswer::BadRequest);
-			jsonResponse["status"] = "INVALID_PARAMETER";
-			jsonResponse["message"] = "Parameter 'gm_level' must be between 0 and 255";
-			SendJsonResponse(response, jsonResponse);
-			return;
-		}
-
-		try
-		{
-			// First check if the account exists
-			std::optional<AccountData> account = m_service.GetDatabase().GetAccountDataByName(name);
-			if (!account)
-			{
-				response.setStatus(net::http::OutgoingAnswer::NotFound);
-				jsonResponse["status"] = "ACCOUNT_DOES_NOT_EXIST";
-				jsonResponse["message"] = "An account with the name '" + name + "' does not exist!";
-				SendJsonResponse(response, jsonResponse);
-				return;
-			}
-
-			// Update the GM level in the database
-			if (m_service.GetDatabase().SetAccountGMLevel(name, static_cast<uint8>(gmLevel)))
-			{
-				// Notify players who might be connected that their GM level changed
-				// We need to kick by account ID, not by name
-				m_service.GetPlayerManager().KickPlayerByAccountId(account->id);
-
-				jsonResponse["status"] = "SUCCESS";
-				jsonResponse["account_name"] = name;
-				jsonResponse["gm_level"] = gmLevel;
-				SendJsonResponse(response, jsonResponse);
-			}
-			else
-			{
-				response.setStatus(net::http::OutgoingAnswer::InternalServerError);
-				jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
-				jsonResponse["message"] = "Failed to update GM level for account '" + name + "'";
-				SendJsonResponse(response, jsonResponse);
-			}
-		}
-		catch (...)
-		{
-			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
-			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
-			SendJsonResponse(response, jsonResponse);
-		}
 	}
 }

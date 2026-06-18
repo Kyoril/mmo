@@ -89,4 +89,10 @@ namespace mmo
     {
         return false;
     }
+
+    std::pair<int, int> PlatformOsX::GetPrimaryDisplayResolution()
+    {
+        NSRect frame = [[NSScreen mainScreen] frame];
+        return { static_cast<int>(frame.size.width), static_cast<int>(frame.size.height) };
+    }
 }

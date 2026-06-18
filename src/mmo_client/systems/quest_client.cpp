@@ -4,6 +4,7 @@
 #include "game/quest_info.h"
 #include "game_client/game_player_c.h"
 #include "game_client/object_mgr.h"
+#include "base/clock.h"
 
 #include "luabind_lambda.h"
 
@@ -77,6 +78,13 @@ namespace mmo
 			),
 
 			luabind::scope(
+				luabind::class_<QuestRewardItemDisplay>("QuestRewardItemDisplay")
+				.def_readonly("itemId", &QuestRewardItemDisplay::itemId)
+				.def_readonly("count", &QuestRewardItemDisplay::count)
+				.def_readonly("displayId", &QuestRewardItemDisplay::displayId)
+			),
+
+			luabind::scope(
 				luabind::class_<QuestDetails>("QuestDetails")
 				.def_readonly("id", &QuestDetails::questId)
 				.def_readonly("title", &QuestDetails::questTitle)
@@ -97,6 +105,7 @@ namespace mmo
 			luabind::def_lambda("AcceptQuest", [this](uint32 questId) { AcceptQuest(questId); }),
 			luabind::def_lambda("GetNumQuestLogEntries", [this]() { return GetNumQuestLogEntries(); }),
 			luabind::def_lambda("GetQuestLogEntry", [this](uint32 index) { return GetQuestLogEntry(index); }),
+			luabind::def_lambda("GetQuestLogTimeLeft", [this](uint32 questId) { return GetQuestLogTimeLeft(questId); }),
 			luabind::def_lambda("GetNumGossipActions", [this]() { return GetNumGossipActions(); }),
 			luabind::def_lambda("GetGossipAction", [this](int32 index) { return GetGossipAction(index); }),
 			luabind::def_lambda("AbandonQuest", [this](uint32 questId) { AbandonQuest(questId); }),
@@ -107,7 +116,11 @@ namespace mmo
 			luabind::def_lambda("GetQuestObjectiveText", [this](uint32 index) { return GetQuestObjectiveText(index); }),
 			luabind::def_lambda("GossipAction", [this](int32 index) { return ExecuteGossipAction(index); }),
 			luabind::def_lambda("GetQuestDetailsText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->description; ProcessQuestText(questText); return questText; }),
-			luabind::def_lambda("GetQuestObjectivesText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->summary; ProcessQuestText(questText); return questText; })
+			luabind::def_lambda("GetQuestObjectivesText", [this](const QuestInfo* quest) -> String { if (!quest) { return ""; } String questText = quest->summary; ProcessQuestText(questText); return questText; }),
+			luabind::def_lambda("GetQuestRewardItemCount", [this]() -> uint32 { return static_cast<uint32>(m_questDetails.rewardItems.size()); }),
+			luabind::def_lambda("GetQuestRewardItem", [this](uint32 index) -> const QuestRewardItemDisplay* { if (index >= m_questDetails.rewardItems.size()) { return nullptr; } return &m_questDetails.rewardItems[index]; }),
+			luabind::def_lambda("GetQuestRewardChoiceItemCount", [this]() -> uint32 { return static_cast<uint32>(m_questDetails.rewardItemsChoice.size()); }),
+			luabind::def_lambda("GetQuestRewardChoiceItem", [this](uint32 index) -> const QuestRewardItemDisplay* { if (index >= m_questDetails.rewardItemsChoice.size()) { return nullptr; } return &m_questDetails.rewardItemsChoice[index]; })
 		);
 	}
 
@@ -190,6 +203,13 @@ namespace mmo
 				m_questLog[i].quest = nullptr;
 				m_questLog[i].status = static_cast<QuestStatus>(field.status);
 				std::memcpy(m_questLog[i].counters, field.counters, sizeof(m_questLog[i].counters));
+
+				// Compute a local countdown deadline from the remaining time sent by the server.
+				m_questLog[i].questTimer = field.questTimer;
+				m_questLog[i].deadlineMs = (field.questTimer > 0)
+					? (GetAsyncTimeMs() + static_cast<GameTime>(field.questTimer) * 1000)
+					: 0;
+
 				if (m_questLog[i].questId != 0)
 				{
 					m_questCache.Get(m_questLog[i].questId, [this, i](uint64 entry, const QuestInfo& info)
@@ -197,6 +217,9 @@ namespace mmo
 						if (m_questLog[i].questId == entry)
 						{
 							m_questLog[i].quest = &info;
+							// Quest data just arrived asynchronously — re-notify the UI so the
+							// tracker and quest log can render now that quest is resolved.
+							FrameManager::Get().TriggerLuaEvent("QUEST_LOG_UPDATE");
 						}
 					});
 				}
@@ -212,6 +235,16 @@ namespace mmo
 				// Update counters
 				m_questLog[i].status = static_cast<QuestStatus>(field.status);
 				std::memcpy(m_questLog[i].counters, field.counters, sizeof(m_questLog[i].counters));
+
+				// Only recompute the local deadline when the server's remaining-time value actually
+				// changes, otherwise the countdown would keep resetting on every quest log update.
+				if (m_questLog[i].questTimer != field.questTimer)
+				{
+					m_questLog[i].questTimer = field.questTimer;
+					m_questLog[i].deadlineMs = (field.questTimer > 0)
+						? (GetAsyncTimeMs() + static_cast<GameTime>(field.questTimer) * 1000)
+						: 0;
+				}
 			}
 
 			if(field.questId != 0)
@@ -247,6 +280,25 @@ namespace mmo
 		}
 
 		return m_questLog.data() + m_questLogQuests[index];
+	}
+
+	uint32 QuestClient::GetQuestLogTimeLeft(const uint32 questId) const
+	{
+		for (const auto& entry : m_questLog)
+		{
+			if (entry.questId == questId && entry.deadlineMs > 0)
+			{
+				const GameTime now = GetAsyncTimeMs();
+				if (entry.deadlineMs <= now)
+				{
+					return 0;
+				}
+
+				return static_cast<uint32>((entry.deadlineMs - now) / 1000);
+			}
+		}
+
+		return 0;
 	}
 
 	void QuestClient::ProcessQuestText(String& questText)
@@ -328,7 +380,9 @@ namespace mmo
 		const QuestInfo* quest = m_questCache.Get(questId);
 		if (!quest)
 		{
-			ELOG("Unknown quest " << questId);
+			// Quest data not in cache yet — a server response is in flight.
+			// This is a normal async race on login; not an error.
+			DLOG("Quest " << questId << " not yet in cache, deferring objective text build");
 			return;
 		}
 
@@ -347,19 +401,30 @@ namespace mmo
 			const CreatureInfo* creatureEntry = m_creatureCache.Get(creature.creatureId);
 			if (!creatureEntry)
 			{
-				ELOG("Unknown creature " << creature.creatureId);
+				// Not in cache yet — register a callback to rebuild when data arrives.
+				DLOG("Creature " << creature.creatureId << " not yet in cache, deferring objective text");
+				m_creatureCache.Get(creature.creatureId, [this, questId](uint64, const CreatureInfo&)
+				{
+					if (m_selectedQuestLogQuest == questId)
+					{
+						QuestLogSelectQuest(questId);
+						FrameManager::Get().TriggerLuaEvent("QUEST_LOG_UPDATE");
+					}
+				});
+				++counter;
 				continue;
 			}
 
 			if (monstersKilledFormat)
 			{
 				ASSERT(counter < 4);
-				snprintf(buffer, 512, monstersKilledFormat->c_str(), creatureEntry->name.c_str(), questLogEntryIt->counters[counter++], creature.count);
+				snprintf(buffer, 512, monstersKilledFormat->c_str(), creatureEntry->name.c_str(), questLogEntryIt->counters[counter], creature.count);
 			}
 			else
 			{
 				snprintf(buffer, 512, "QUEST_MONSTERS_KILLED");
 			}
+			++counter;
 
 			m_questObjectiveTexts.emplace_back(buffer);
 		}
@@ -369,7 +434,16 @@ namespace mmo
 			const ItemInfo* itemEntry = m_itemCache.Get(item.itemId);
 			if (!itemEntry)
 			{
-				ELOG("Unknown item " << item.itemId);
+				// Not in cache yet — register a callback to rebuild when data arrives.
+				DLOG("Item " << item.itemId << " not yet in cache, deferring objective text");
+				m_itemCache.Get(item.itemId, [this, questId](uint64, const ItemInfo&)
+				{
+					if (m_selectedQuestLogQuest == questId)
+					{
+						QuestLogSelectQuest(questId);
+						FrameManager::Get().TriggerLuaEvent("QUEST_LOG_UPDATE");
+					}
+				});
 				continue;
 			}
 
@@ -533,6 +607,13 @@ namespace mmo
 		// Raise UI event to show the quest list window to the user
 		FrameManager::Get().TriggerLuaEvent("QUEST_GREETING");
 
+		// Fire GOSSIP_SHOW for pure gossip menus (no quest list) — coexists with QUEST_GREETING per Research Pitfall 5
+		// Quest givers only receive QUEST_GREETING (showQuests != 0)
+		if (!showQuests)
+		{
+			FrameManager::Get().TriggerLuaEvent("GOSSIP_SHOW");
+		}
+
 		return PacketParseResult::Pass;
 	}
 
@@ -640,7 +721,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		if (rewardItemsChoiceCount > 0)
+		for (uint32 i = 0; i < rewardItemsChoiceCount; ++i)
 		{
 			uint32 itemId, count, displayId;
 			if (!(packet >> io::read<uint32>(itemId) >> io::read<uint32>(count) >> io::read<uint32>(displayId)))
@@ -648,6 +729,8 @@ namespace mmo
 				ELOG("Failed to read QuestGiverQuestDetails packet");
 				return PacketParseResult::Disconnect;
 			}
+
+			m_questDetails.rewardItemsChoice.push_back({ itemId, count, displayId });
 
 			if (itemId != 0)
 			{
@@ -661,7 +744,7 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		if (rewardItemsCount > 0)
+		for (uint32 i = 0; i < rewardItemsCount; ++i)
 		{
 			uint32 itemId, count, displayId;
 			if (!(packet >> io::read<uint32>(itemId) >> io::read<uint32>(count) >> io::read<uint32>(displayId)))
@@ -670,6 +753,8 @@ namespace mmo
 				return PacketParseResult::Disconnect;
 			}
 
+			m_questDetails.rewardItems.push_back({ itemId, count, displayId });
+
 			if (itemId != 0)
 			{
 				m_itemCache.Get(itemId);
@@ -677,7 +762,7 @@ namespace mmo
 		}
 
 		uint32 rewardSpellId = 0;
-		if (!(packet >> io::read<uint32>(m_questDetails.rewardMoney) >> io::read<uint32>(rewardSpellId)))
+		if (!(packet >> io::read<uint32>(m_questDetails.rewardMoney) >> io::read<uint32>(m_questDetails.rewardXp) >> io::read<uint32>(rewardSpellId)))
 		{
 			ELOG("Failed to read QuestGiverQuestDetails packet");
 			return PacketParseResult::Disconnect;
@@ -746,6 +831,69 @@ namespace mmo
 			ELOG("Failed to read QuestGiverOfferReward packet");
 			return PacketParseResult::Disconnect;
 		}
+
+		// Read reward items choice
+		uint32 rewardItemsChoiceCount;
+		if (!(packet >> io::read<uint32>(rewardItemsChoiceCount)))
+		{
+			ELOG("Failed to read QuestGiverOfferReward packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		for (uint32 i = 0; i < rewardItemsChoiceCount; ++i)
+		{
+			uint32 itemId, count, displayId;
+			if (!(packet >> io::read<uint32>(itemId) >> io::read<uint32>(count) >> io::read<uint32>(displayId)))
+			{
+				ELOG("Failed to read QuestGiverOfferReward packet");
+				return PacketParseResult::Disconnect;
+			}
+
+			m_questDetails.rewardItemsChoice.push_back({ itemId, count, displayId });
+
+			if (itemId != 0)
+			{
+				m_itemCache.Get(itemId);
+			}
+		}
+
+		// Read reward items
+		uint32 rewardItemsCount;
+		if (!(packet >> io::read<uint32>(rewardItemsCount)))
+		{
+			ELOG("Failed to read QuestGiverOfferReward packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		for (uint32 i = 0; i < rewardItemsCount; ++i)
+		{
+			uint32 itemId, count, displayId;
+			if (!(packet >> io::read<uint32>(itemId) >> io::read<uint32>(count) >> io::read<uint32>(displayId)))
+			{
+				ELOG("Failed to read QuestGiverOfferReward packet");
+				return PacketParseResult::Disconnect;
+			}
+
+			m_questDetails.rewardItems.push_back({ itemId, count, displayId });
+
+			if (itemId != 0)
+			{
+				m_itemCache.Get(itemId);
+			}
+		}
+
+		// Read reward money, XP, and spell
+		uint32 rewardSpellId = 0;
+		if (!(packet >> io::read<uint32>(m_questDetails.rewardMoney) >> io::read<uint32>(m_questDetails.rewardXp) >> io::read<uint32>(rewardSpellId)))
+		{
+			ELOG("Failed to read QuestGiverOfferReward packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		m_questDetails.rewardSpell = (rewardSpellId != 0) ? m_spells.getById(rewardSpellId) : nullptr;
+
+		// Ensure we have the quest in the cache
+		m_questCache.Get(m_questDetails.questId);
 
 		// Process quest text
 		ProcessQuestText(m_questDetails.questOfferRewardText);
@@ -820,6 +968,10 @@ namespace mmo
 			char buffer[512];
 			snprintf(buffer, 512, format->c_str(), item ? item->name.c_str() : "UNKNOWN", count, maxCount);
 			FrameManager::Get().TriggerLuaEvent("UI_INFO_MESSAGE", buffer);
+
+			// Item counts come from inventory, not mirrored quest fields, so the quest log
+			// mirror change never fires for item objectives. Notify the tracker explicitly.
+			FrameManager::Get().TriggerLuaEvent("QUEST_LOG_UPDATE");
 		}
 			break;
 		case game::realm_client_packet::QuestUpdateAddKill:
@@ -876,6 +1028,9 @@ namespace mmo
 
 	PacketParseResult QuestClient::OnGossipComplete(game::IncomingPacket& packet)
 	{
+		// Notify Lua that the gossip session has ended (per CONTEXT.md locked decision: Fire GOSSIP_CLOSED following VendorClient pattern)
+		FrameManager::Get().TriggerLuaEvent("GOSSIP_CLOSED");
+
 		CloseQuest();
 
 		return PacketParseResult::Pass;

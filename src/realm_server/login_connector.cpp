@@ -82,11 +82,12 @@ namespace mmo
 			std::scoped_lock lock{ m_authSessionReqMutex };
 
 			const BigNumber emptyKey = { 0 };
+			const std::vector<std::string> emptyFeatures;
 
 			// Execute all callbacks with "false" result
 			for (const auto& pair : m_pendingClientAuthSessionReqs)
 			{
-				pair.second.callback(false, 0, 0, emptyKey);
+				pair.second.callback(false, 0, 0, emptyKey, emptyFeatures);
 			}
 
 			// Finally clear pending requests
@@ -406,6 +407,9 @@ namespace mmo
 		// Will store the session key on success packet
 		BigNumber sessionKey;
 
+		// Will store the active account feature keys on success packet
+		std::vector<std::string> features;
+
 		// This scope exists to minimize the time of the lock
 		{
 			// Find the respective pending request
@@ -419,7 +423,7 @@ namespace mmo
 				return PacketParseResult::Pass;
 			}
 
-			// Try to read the session key
+			// Try to read the session key and feature list
 			if (result == auth::auth_result::Success)
 			{
 				std::vector<uint8> sessionKeyData;
@@ -431,17 +435,37 @@ namespace mmo
 
 				// Generate SessionKey BigNumber from binary data
 				sessionKey.setBinary(sessionKeyData);
+
+				// Read the active account feature keys
+				uint8 featureCount = 0;
+				if (!(packet >> io::read<uint8>(featureCount)))
+				{
+					ELOG("Failed to read ClientAuthSessionResponse packet from login server!");
+					return PacketParseResult::Disconnect;
+				}
+
+				features.reserve(featureCount);
+				for (uint8 i = 0; i < featureCount; ++i)
+				{
+					std::string key;
+					if (!(packet >> io::read_container<uint8>(key)))
+					{
+						ELOG("Failed to read ClientAuthSessionResponse packet from login server!");
+						return PacketParseResult::Disconnect;
+					}
+					features.push_back(std::move(key));
+				}
 			}
 
 			// Execute the callback
 			callback = std::move(it->second.callback);
 			m_pendingClientAuthSessionReqs.erase(it);
 		}
-		
+
 		// Execute the callback
 		if (callback)
 		{
-			callback(result == auth::auth_result::Success, accountId, gmLevel, sessionKey);
+			callback(result == auth::auth_result::Success, accountId, gmLevel, sessionKey, features);
 		}
 
 		return PacketParseResult::Pass;

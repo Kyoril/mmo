@@ -7,6 +7,7 @@
 namespace mmo
 {
 	class GameUnitS;
+	class GameObjectS;
 
 	class TileSubscriber
 	{
@@ -29,5 +30,10 @@ namespace mmo
 		virtual bool HasReceivedTimeSyncResponse() const = 0;
 
 		virtual void SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer, bool flush = true) = 0;
+
+		/// Returns true if the client behind this subscriber has already received a creation
+		/// packet for the given object GUID and has not yet received a destroy packet.
+		/// Used to guard against sending spurious spawn or despawn packets.
+		virtual bool IsObjectKnown(uint64 guid) const { return false; }
 	};
 }

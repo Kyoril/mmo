@@ -83,48 +83,57 @@ namespace mmo
 
 	namespace aura_type
 	{
+		// WARNING: These values are serialized as raw integers in binary spell data files (spells.data).
+		// The numeric assignments MUST NEVER change and entries MUST NEVER be reordered or removed.
+		// New aura types must ALWAYS be appended before Count_ with the next sequential value.
 		enum Type
 		{
-			None,
+			None                  = 0,
+			Dummy                 = 1,
+			PeriodicHeal          = 2,
+			ModAttackSpeed        = 3,
+			ModDamageDone         = 4,
+			ModDamageTaken        = 5,
+			ModHealth             = 6,
+			ModMana               = 7,
+			ModResistance         = 8,
+			PeriodicTriggerSpell  = 9,
+			PeriodicEnergize      = 10,
+			ModStat               = 11,
+			ProcTriggerSpell      = 12,
+			PeriodicDamage        = 13,
+			ModIncreaseSpeed      = 14,
+			ModDecreaseSpeed      = 15,
+			ModSpeedAlways        = 16,
+			ModSpeedNonStacking   = 17,
+			AddFlatModifier       = 18,
+			AddPctModifier        = 19,
+			ModHealingDone        = 20,
+			ModAttackPower        = 21,
+			ModHealingTaken       = 22,
+			ModDamageDonePct      = 23,
+			ModDamageTakenPct     = 24,
+			ModRoot               = 25,
+			ModSleep              = 26,
+			ModStun               = 27,
+			ModFear               = 28,
+			ModVisibility         = 29,
+			ModResistancePct      = 30,
+			ModStatPct            = 31,
+			ModSpellDamageDone    = 32,
+			ModSpellDamageDonePct = 33,
+			ModDisorient          = 34,
 
-			Dummy,
-			PeriodicHeal,
-			ModAttackSpeed,
-			ModDamageDone,
-			ModDamageTaken,
-			ModHealth,
-			ModMana,
-			ModResistance,
-			PeriodicTriggerSpell,
-			PeriodicEnergize,
-			ModStat,
-			ProcTriggerSpell,
-			PeriodicDamage,
-			ModIncreaseSpeed,
-			ModDecreaseSpeed,
-			ModSpeedAlways,
-			ModSpeedNonStacking,
+			/// Grants the target immunity to damage of the school of the aura's spell.
+			/// Damage of that school is fully negated, but still reported to clients with
+			/// an "immune" flag so the floating combat text can display "Immune".
+			DamageImmunity        = 35,
 
-			AddFlatModifier,
-			AddPctModifier,
+			/// Increases the target's chance to dodge melee attacks. The aura's base points
+			/// are treated as a flat percentage (e.g. base points 5 = +5% dodge chance).
+			ModDodgeChance        = 36,
 
-			ModHealingDone,
-			ModAttackPower,
-
-			ModHealingTaken,
-
-			ModDamageDonePct,
-			ModDamageTakenPct,
-
-			ModRoot,
-			ModSleep,
-			ModStun,
-			ModFear,
-
-			ModVisibility,
-
-			ModResistancePct,
-			ModStatPct,
+			// Add new aura types HERE (append only — never insert above an existing entry).
 
 			Count_,
 			Invalid_ = Count_

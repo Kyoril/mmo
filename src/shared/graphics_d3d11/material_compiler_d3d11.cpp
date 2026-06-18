@@ -8,6 +8,7 @@
 #include "binary_io/stream_sink.h"
 #include "binary_io/text_writer.h"
 #include "graphics/material.h"
+#include "graphics/global_shader_parameters.h"
 #include "graphics/shader_compiler.h"
 #include "log/default_log_levels.h"
 
@@ -99,11 +100,6 @@ namespace mmo
 
 		std::ostringstream outputStream;
 
-		if (type == SamplerType::Normal)
-		{
-			outputStream << "(";
-		}
-
 		if (srgb)
 		{
 			outputStream << "pow(";
@@ -125,12 +121,22 @@ namespace mmo
 			outputStream << ", 2.2)";
 		}
 
+		outputStream.flush();
+
 		if (type == SamplerType::Normal)
 		{
-			outputStream << " * 2.0 - 1.0)";
-		}
+			// First, add the raw sample as a temporary expression
+			const ExpressionIndex rawSample = AddExpression(outputStream.str(), ExpressionType::Float_4);
 
-		outputStream.flush();
+			// Reconstruct the normal: read RG, remap to [-1,1], derive Z = sqrt(1 - x^2 - y^2)
+			// This works correctly for both BC5/RG8 (where B=0) and standard RGBA normal maps
+			std::ostringstream normalStream;
+			normalStream << "float4(expr_" << rawSample << ".rg * 2.0 - 1.0, "
+				<< "sqrt(saturate(1.0 - dot(expr_" << rawSample << ".rg * 2.0 - 1.0, expr_" << rawSample << ".rg * 2.0 - 1.0))), 0.0)";
+			normalStream.flush();
+
+			return AddExpression(normalStream.str(), ExpressionType::Float_4);
+		}
 
 		return AddExpression(outputStream.str(), ExpressionType::Float_4);
 	}
@@ -573,6 +579,125 @@ namespace mmo
 		return AddExpression(outputStream.str(), outputType);
 	}
 
+	ExpressionIndex MaterialCompilerD3D11::AddTime()
+	{
+		return AddExpression("time", ExpressionType::Float_1);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddRotator(ExpressionIndex coordinates, ExpressionIndex center, ExpressionIndex rotation)
+	{
+		if (coordinates == IndexNone)
+		{
+			WLOG("Missing coordinates input for Rotator");
+			return IndexNone;
+		}
+
+		if (center == IndexNone)
+		{
+			WLOG("Missing center input for Rotator");
+			return IndexNone;
+		}
+
+		if (rotation == IndexNone)
+		{
+			WLOG("Missing rotation input for Rotator");
+			return IndexNone;
+		}
+
+		std::ostringstream outputStream;
+		outputStream << "(float2("
+			<< "cos(expr_" << rotation << ") * (expr_" << coordinates << ".x - expr_" << center << ".x) - sin(expr_" << rotation << ") * (expr_" << coordinates << ".y - expr_" << center << ".y) + expr_" << center << ".x, "
+			<< "sin(expr_" << rotation << ") * (expr_" << coordinates << ".x - expr_" << center << ".x) + cos(expr_" << rotation << ") * (expr_" << coordinates << ".y - expr_" << center << ".y) + expr_" << center << ".y"
+			<< "))";
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), ExpressionType::Float_2);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddFresnel(ExpressionIndex exponent, ExpressionIndex baseReflectFraction, ExpressionIndex normal)
+	{
+		if (exponent == IndexNone)
+		{
+			WLOG("Missing exponent input for Fresnel");
+			return IndexNone;
+		}
+
+		if (baseReflectFraction == IndexNone)
+		{
+			WLOG("Missing base reflect fraction input for Fresnel");
+			return IndexNone;
+		}
+
+		// Fresnel = base + (1 - base) * pow(1 - saturate(dot(N, V)), exponent)
+		// V is the normalized view direction, available in the shader as 'V'
+		std::ostringstream outputStream;
+		if (normal != IndexNone)
+		{
+			outputStream << "expr_" << baseReflectFraction << " + (1.0 - expr_" << baseReflectFraction
+				<< ") * pow(1.0 - saturate(dot(normalize(expr_" << normal << "), V)), expr_" << exponent << ")";
+		}
+		else
+		{
+			outputStream << "expr_" << baseReflectFraction << " + (1.0 - expr_" << baseReflectFraction
+				<< ") * pow(1.0 - saturate(dot(normalize(input.normal), V)), expr_" << exponent << ")";
+		}
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), ExpressionType::Float_1);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddPixelDepth()
+	{
+		return AddExpression("length(input.viewPos.xyz)", ExpressionType::Float_1);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddSceneDepth()
+	{
+		m_needsSceneDepth = true;
+		return AddExpression("sceneDepthTex.Load(int3((int2)input.pos.xy, 0)).a", ExpressionType::Float_1);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddScreenPosition()
+	{
+		return AddExpression("float2(input.pos.xy)", ExpressionType::Float_2);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddSaturate(const ExpressionIndex input)
+	{
+		if (input == IndexNone)
+		{
+			WLOG("Missing input parameter for saturate");
+			return IndexNone;
+		}
+
+		const ExpressionType valueType = GetExpressionType(input);
+
+		std::ostringstream outputStream;
+		outputStream << "saturate(expr_" << input << ")";
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), valueType);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddSceneColor(const ExpressionIndex screenOffset)
+	{
+		m_needsSceneColor = true;
+
+		// Sample the captured opaque scene color at this pixel, optionally offset in screen pixels
+		// (used for refraction). Uses Load() so no sampler binding is required; the offset is added
+		// in pixel space before the integer cast.
+		std::ostringstream outputStream;
+		outputStream << "sceneColorTex.Load(int3((int2)(input.pos.xy";
+		if (screenOffset != IndexNone)
+		{
+			outputStream << " + expr_" << screenOffset << ".xy";
+		}
+		outputStream << "), 0)).rgb";
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), ExpressionType::Float_3);
+	}
+
 	void MaterialCompilerD3D11::GeneratePixelShaderCode(PixelShaderType type)
 	{
 		m_pixelShaderStream.str("");
@@ -584,6 +709,14 @@ namespace mmo
 		m_pixelShaderStream
 			<< "float select(bool expression, float whenTrue, float whenFalse) {\n"
 			<< "\treturn expression ? whenTrue : whenFalse;\n"
+			<< "}\n\n";
+
+		// ACES Film tone mapping — matches the deferred lighting pass so forward-rendered
+		// objects (translucent water, particles …) have a consistent look.
+		m_pixelShaderStream
+			<< "float3 ACESFilm(float3 x) {\n"
+			<< "\tfloat a = 2.51; float b = 0.03; float c = 2.43; float d = 0.59; float e = 0.14;\n"
+			<< "\treturn saturate((x*(a*x+b))/(x*(c*x+d)+e));\n"
 			<< "}\n\n";
 
 		if (type == PixelShaderType::GBuffer)
@@ -615,7 +748,6 @@ namespace mmo
 				<< "\tfloat4 normal : SV_Target1;    // RGB: Normal, A: Depth\n"
 				<< "\tfloat4 material : SV_Target2;  // R: Metallic, G: Roughness, B: Specular, A: Ambient Occlusion\n"
 				<< "\tfloat4 emissive : SV_Target3;  // RGB: Emissive, A: Unused\n"
-				<< "\tfloat4 viewRay : SV_Target4;  // RGB: ViewRay, A: Unused\n"
 				<< "};\n\n";
 		}
 
@@ -639,7 +771,67 @@ namespace mmo
 			<< "\tfloat fogEnd;		// Distance of fog end\n"
 			<< "\tfloat3 fogColor;	// Fog color\n"
 			<< "\trow_major matrix inverseCameraView;	// Inverse view matrix\n"
+			<< "\tfloat time;		// Time in seconds since game start\n"
+			<< "\tfloat3 _padding;	// Padding for alignment\n"
+			// Forward lighting rows – mirrors PsCameraConstantBuffer rows 7-9.
+			// Populated by Scene::RefreshCameraBuffer from the scene's primary
+			// directional light so translucent materials see real sky lighting.
+			<< "\tfloat3 sunDirection;	// World-space direction toward the sun (normalised)\n"
+			<< "\tfloat sunIntensity;\n"
+			<< "\tfloat3 sunColor;\n"
+			<< "\tfloat _forwardPad0;\n"
+			<< "\tfloat3 ambientColor;\n"
+			<< "\tfloat _forwardPad1;\n"
 			<< "};\n\n";
+
+		// Global shader parameters - a single project-wide constant buffer shared by every material.
+		// It lives at a fixed reserved register (kGlobalShaderParametersPsSlot) so it never disturbs
+		// the dynamically assigned per-material parameter buffers below. The full registry set is
+		// declared (vectors first, then scalars) so the cbuffer offsets match the CPU buffer layout
+		// built by GlobalShaderParameters::BuildBufferData.
+		if (m_usesGlobalParameters)
+		{
+			const auto sanitize = [](std::string_view name) -> String
+			{
+				String copy(name);
+				std::replace(copy.begin(), copy.end(), ' ', '_');
+				return copy;
+			};
+
+			const auto& globalParams = GlobalShaderParameters::Get().GetParameters();
+
+			m_pixelShaderStream
+				<< "cbuffer GlobalParameters : register(b" << kGlobalShaderParametersPsSlot << ")\n"
+				<< "{\n";
+
+			bool wroteAny = false;
+			for (const auto& param : globalParams)
+			{
+				if (param.type == global_shader_parameter_type::Vector)
+				{
+					m_pixelShaderStream << "\tfloat4 g_" << sanitize(param.name) << ";\n";
+					wroteAny = true;
+				}
+			}
+			for (const auto& param : globalParams)
+			{
+				if (param.type == global_shader_parameter_type::Scalar)
+				{
+					m_pixelShaderStream << "\tfloat g_" << sanitize(param.name) << ";\n";
+					wroteAny = true;
+				}
+			}
+
+			if (!wroteAny)
+			{
+				// The material references a global that no longer exists in the registry. Emit a pad
+				// so the cbuffer stays valid; the dangling reference will fail to compile and warn.
+				m_pixelShaderStream << "\tfloat4 _globalPad;\n";
+			}
+
+			m_pixelShaderStream
+				<< "};\n\n";
+		}
 
 		const auto& scalarParams = m_floatParameters;
 		if (!scalarParams.empty())
@@ -720,6 +912,24 @@ namespace mmo
 					<< "Texture2D texparam" << i << ";\n"
 					<< "SamplerState paramsampler" << i << ";\n\n";
 			}
+		}
+
+		if (m_needsSceneDepth)
+		{
+			// Reserved slot for the opaque scene depth (G-buffer normal RT alpha channel).
+			// The engine binds this before drawing translucent objects.
+			m_pixelShaderStream
+				<< "// Scene depth texture (G-buffer normal alpha)\n"
+				<< "Texture2D sceneDepthTex : register(t15);\n\n";
+		}
+
+		if (m_needsSceneColor)
+		{
+			// Reserved slot for the lit opaque scene color, captured before the translucent pass.
+			// The engine binds this before drawing translucent objects (used for refraction).
+			m_pixelShaderStream
+				<< "// Scene color texture (lit opaque scene captured before translucent pass)\n"
+				<< "Texture2D sceneColorTex : register(t14);\n\n";
 		}
 
 		if (m_lit && type != PixelShaderType::UI)
@@ -826,9 +1036,20 @@ namespace mmo
 				<< "\tfloat3x3 TBN = float3x3(T, B, N);\n";
 		}
 
-		for (const auto& code : m_expressions)
+		for (size_t exprIndex = 0; exprIndex < m_expressions.size(); ++exprIndex)
 		{
-			m_pixelShaderStream << "\t" << code;
+			// When debug comments are enabled, prefix each numbered expression with a comment that
+			// maps it back to the originating node in the material graph. This makes it much easier
+			// to align the generated expr_N statements with the visual node graph while debugging.
+			if (m_generateDebugComments)
+			{
+				if (const String* comment = GetExpressionComment(static_cast<ExpressionIndex>(exprIndex)))
+				{
+					m_pixelShaderStream << "\t// expr_" << exprIndex << "  <-  " << *comment << "\n";
+				}
+			}
+
+			m_pixelShaderStream << "\t" << m_expressions[exprIndex];
 		}
 
 		if (type != PixelShaderType::ShadowMap && type != PixelShaderType::UI)
@@ -959,7 +1180,7 @@ namespace mmo
 			}
 
 			// Emissive color
-			m_pixelShaderStream << "\tfloat3 emissiveColor = float3(1.0, 1.0, 1.0);\n\n";
+			m_pixelShaderStream << "\tfloat3 emissiveColor = float3(0.0, 0.0, 0.0);\n\n";
 			if (m_emissiveExpression != IndexNone)
 			{
 				const auto expressionType = GetExpressionType(m_emissiveExpression);
@@ -971,11 +1192,11 @@ namespace mmo
 				{
 					if (expressionType == ExpressionType::Float_2)
 					{
-						m_pixelShaderStream << "\tbaseColor = float3(expr_" << m_emissiveExpression << ", 1.0);\n\n";
+						m_pixelShaderStream << "\temissiveColor = float3(expr_" << m_emissiveExpression << ", 1.0);\n\n";
 					}
 					else if (expressionType == ExpressionType::Float_4)
 					{
-						m_pixelShaderStream << "\tbaseColor = expr_" << m_emissiveExpression << ".rgb;\n\n";
+						m_pixelShaderStream << "\temissiveColor = expr_" << m_emissiveExpression << ".rgb;\n\n";
 					}
 				}
 			}
@@ -983,8 +1204,19 @@ namespace mmo
 
 		if (type != PixelShaderType::GBuffer)
 		{
-			m_pixelShaderStream
-				<< "\tif (opacity <= 0.333) discard;\n";
+			if (m_translucent)
+			{
+				// Translucent materials blend smoothly via alpha, so only cull fully transparent
+				// pixels. Using the 0.333 alpha-test cutoff here would punch holes in soft edges
+				// such as depth-faded water shorelines, making low-opacity water vanish entirely.
+				m_pixelShaderStream
+					<< "\tif (opacity <= 0.0) discard;\n";
+			}
+			else
+			{
+				m_pixelShaderStream
+					<< "\tif (opacity <= 0.333) discard;\n";
+			}
 		}
 		else
 		{
@@ -1022,10 +1254,14 @@ namespace mmo
 						<< "\tfloat3 F0 = 0.04;\n"
 						<< "\tF0 = lerp(F0, baseColor, metallic);\n\n";
 
+					// Sun direction, colour and intensity come from the CameraParameters
+					// cbuffer (rows 7-9), populated by Scene::RefreshCameraBuffer from the
+					// scene's primary directional light.  This replaces the old hardcoded
+					// values and makes forward-rendered objects react to the real sky.
 					m_pixelShaderStream
-						<< "\tfloat3 L = normalize(-float3(0.5, -1.0, 0.5));\n"	// LightDir
+						<< "\tfloat3 L = sunDirection;\n"					// toward-sun unit vector
 						<< "\tfloat3 H = normalize(V + L);\n"
-						<< "\tfloat3 radiance = float3(4.0, 4.0, 4.0);\n\n";		// Light color * attenuation
+						<< "\tfloat3 radiance = sunColor * sunIntensity;\n\n";
 
 					m_pixelShaderStream
 						<< "\tfloat NDF = DistributionGGX(N, H, roughness);\n"
@@ -1039,8 +1275,8 @@ namespace mmo
 
 					m_pixelShaderStream
 						<< "\tfloat3 numerator    = NDF * G * F;\n"
-						<< "\tfloat denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0)  + 0.0001;\n"
-						<< "\tfloat3 specularity     = numerator / denominator;\n";
+						<< "\tfloat denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;\n"
+						<< "\tfloat3 specularity = numerator / denominator;\n";
 
 					m_pixelShaderStream
 						<< "\tfloat NdotL = max(dot(N, L), 0.0);\n"
@@ -1050,21 +1286,19 @@ namespace mmo
 						<< "\tkS = fresnelSchlick(max(dot(N, V), 0.0), F0);\n"
 						<< "\tkD = 1.0f.xxx - kS;\n"
 						<< "\tkD *= 1.0 - metallic;\n"
-						<< "\tfloat3 irradiance = float3(0.1f, 0.25f, 0.3f);\n"
-						<< "\tfloat3 diffuse = irradiance * baseColor;\n"
+						// Use real scene ambient instead of the old static sky tint
+						<< "\tfloat3 diffuse = ambientColor * baseColor;\n"
 						<< "\tfloat3 ambient = (kD * diffuse) * ao;\n";
 
 					m_pixelShaderStream
 						<< "\tfloat3 color = ambient + Lo;\n";
 
+					// Add emissive color additively. Distance fog and tone mapping are applied
+					// further below in the shared forward output block (after the lit/unlit
+					// branch) so that translucent materials fog in the exact same colour space
+					// as the deferred lighting pass and blend seamlessly into the fogged scene.
 					m_pixelShaderStream
-						<< "\tcolor = color / (color + 1.0f.xxx);\n"
-						<< "\tcolor = pow(color, (1.0f/2.2f).xxx);\n";
-
-					m_pixelShaderStream
-						<< "\tfloat distance = length(input.worldPos - cameraPos);\n"
-						<< "\tfloat fogFactor = saturate((distance - fogStart) / (fogEnd - fogStart));\n"
-						<< "\tcolor = lerp(color, fogColor, fogFactor);\n";
+						<< "\tcolor += emissiveColor;\n";
 				}
 			}
 
@@ -1087,9 +1321,6 @@ namespace mmo
 						<< "\tfloat linearDepth = 0.0f;\n";	// TODO: Is that correct? Or maybe Z-Far?
 				}
 
-				m_pixelShaderStream
-					<< "\toutput.viewRay = float4(normalize(input.viewPos), 1.0);\n";
-
 				// For unlit materials, write base color to emissive instead of albedo
 				if (!m_lit)
 				{
@@ -1105,9 +1336,9 @@ namespace mmo
 					m_pixelShaderStream
 						<< "\toutput.material = float4(metallic, roughness, specular, 1.0);\n";
 
-					// Emissive - use base color for unlit materials
+					// Emissive - use base color + emissive color for unlit materials
 					m_pixelShaderStream
-						<< "\toutput.emissive = float4(baseColor, 0.0);\n";
+						<< "\toutput.emissive = float4(baseColor + emissiveColor, 0.0);\n";
 				}
 				else
 				{
@@ -1125,7 +1356,7 @@ namespace mmo
 
 					// Emissive - empty for lit materials
 					m_pixelShaderStream
-						<< "\toutput.emissive = float4(0.0, 0.0, 0.0, 0.0);\n";
+						<< "\toutput.emissive = float4(emissiveColor, 0.0);\n";
 				}
 
 				// Return G-Buffer output
@@ -1136,17 +1367,37 @@ namespace mmo
 			}
 			else
 			{
-				// Forward rendering output
-				if (m_lit)
+				// Forward rendering output. Both lit and unlit materials converge here with a
+				// linear-space HDR `color`, so distance fog and tone mapping can be applied
+				// uniformly and identically to the deferred lighting pass. This is what lets
+				// translucent surfaces (water, etc.) fog out to the exact same colour as the
+				// opaque scene behind them instead of standing out as un-fogged patches.
+				if (!m_lit)
 				{
+					// Unlit materials have no lighting term; their colour is base + emissive.
+					// baseColor was linearised above (pow 2.2), so it shares the lit path's
+					// space and can go through the same fog + tone mapping below.
 					m_pixelShaderStream
-						<< "\toutputColor = float4(color, opacity);\n";
+						<< "\tfloat3 color = baseColor + emissiveColor;\n";
 				}
-				else
-				{
-					m_pixelShaderStream
-						<< "\toutputColor = float4(baseColor, opacity);\n";
-				}
+
+				// Distance fog in linear HDR space, *before* tone mapping + gamma — identical to
+				// the deferred lighting pass (PS_DeferredLighting). Applying fog here rather than
+				// after gamma makes forward fog converge to the same horizon colour as the
+				// deferred scene, so translucent objects integrate seamlessly into the fog.
+				m_pixelShaderStream
+					<< "\tfloat fogDistance = length(input.worldPos - cameraPos);\n"
+					<< "\tfloat fogFactor = saturate((fogDistance - fogStart) / (fogEnd - fogStart));\n"
+					<< "\tcolor = lerp(color, fogColor, fogFactor);\n";
+
+				// ACES Film tone mapping + gamma — identical to the deferred lighting pass so
+				// forward objects share the exact same response curve as the deferred scene.
+				m_pixelShaderStream
+					<< "\tcolor = ACESFilm(color);\n"
+					<< "\tcolor = pow(color, (1.0f/2.2f).xxx);\n";
+
+				m_pixelShaderStream
+					<< "\toutputColor = float4(color, opacity);\n";
 
 				// End of main function
 				m_pixelShaderStream
@@ -1202,11 +1453,6 @@ namespace mmo
 
 		std::ostringstream outputStream;
 
-		if (type == SamplerType::Normal)
-		{
-			outputStream << "(";
-		}
-
 		if (srgb)
 		{
 			outputStream << "pow(";
@@ -1228,12 +1474,22 @@ namespace mmo
 			outputStream << ", 2.2)";
 		}
 
+		outputStream.flush();
+
 		if (type == SamplerType::Normal)
 		{
-			outputStream << " * 2.0 - 1.0)";
-		}
+			// First, add the raw sample as a temporary expression
+			const ExpressionIndex rawSample = AddExpression(outputStream.str(), ExpressionType::Float_4);
 
-		outputStream.flush();
+			// Reconstruct the normal: read RG, remap to [-1,1], derive Z = sqrt(1 - x^2 - y^2)
+			// This works correctly for both BC5/RG8 (where B=0) and standard RGBA normal maps
+			std::ostringstream normalStream;
+			normalStream << "float4(expr_" << rawSample << ".rg * 2.0 - 1.0, "
+				<< "sqrt(saturate(1.0 - dot(expr_" << rawSample << ".rg * 2.0 - 1.0, expr_" << rawSample << ".rg * 2.0 - 1.0))), 0.0)";
+			normalStream.flush();
+
+			return AddExpression(normalStream.str(), ExpressionType::Float_4);
+		}
 
 		return AddExpression(outputStream.str(), ExpressionType::Float_4);
 	}
@@ -1282,6 +1538,46 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_4);
 	}
 
+	ExpressionIndex MaterialCompilerD3D11::AddGlobalScalarParameterExpression(std::string_view name)
+	{
+		if (name.empty())
+		{
+			WLOG("Missing name for global scalar parameter");
+			return IndexNone;
+		}
+
+		m_usesGlobalParameters = true;
+
+		String copy(name);
+		std::replace(copy.begin(), copy.end(), ' ', '_');
+
+		std::ostringstream outputStream;
+		outputStream << "g_" << copy;
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), ExpressionType::Float_1);
+	}
+
+	ExpressionIndex MaterialCompilerD3D11::AddGlobalVectorParameterExpression(std::string_view name)
+	{
+		if (name.empty())
+		{
+			WLOG("Missing name for global vector parameter");
+			return IndexNone;
+		}
+
+		m_usesGlobalParameters = true;
+
+		String copy(name);
+		std::replace(copy.begin(), copy.end(), ' ', '_');
+
+		std::ostringstream outputStream;
+		outputStream << "g_" << copy;
+		outputStream.flush();
+
+		return AddExpression(outputStream.str(), ExpressionType::Float_4);
+	}
+
 	void MaterialCompilerD3D11::GenerateVertexShaderCode(VertexShaderType type)
 	{
 		std::ostringstream vertexShaderStream;
@@ -1321,7 +1617,8 @@ namespace mmo
 		if (type == VertexShaderType::Instanced)
 		{
 			vertexShaderStream
-				<< "\tcolumn_major float4x4 instanceWorld : TEXCOORD8;\n";
+				<< "\tcolumn_major float4x4 instanceWorld : TEXCOORD8;\n"
+				<< "\tfloat4 instanceColor : TEXCOORD12;\n";
 		}
 
 		vertexShaderStream
@@ -1434,7 +1731,7 @@ namespace mmo
 				<< "\toutput.pos = mul(output.pos, matView);\n"
 				<< "\toutput.viewPos = output.pos;\n"
 				<< "\toutput.pos = mul(output.pos, matProj);\n"
-				<< "\toutput.color = input.color;\n";
+				<< "\toutput.color = input.color * input.instanceColor;\n";
 
 			if (m_lit)
 			{

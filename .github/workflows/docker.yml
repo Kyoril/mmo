@@ -37,6 +37,10 @@ jobs:
             dockerfile: ./Dockerfile.world_server
             image: mmo_world_server
             context: .
+          - service: data
+            dockerfile: ./Dockerfile.data
+            image: mmo_data
+            context: .
     
     steps:
     - name: Check out the repo

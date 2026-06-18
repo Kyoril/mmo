@@ -101,6 +101,14 @@ namespace mmo
 
         const String uniqueId = "WorldModel_" + std::to_string(objectId);
 
+        // Guard against duplicate IDs (e.g. modified WMOs kept in memory while page is reloaded).
+        const auto existingIt = std::find_if(m_worldModelInstances.begin(), m_worldModelInstances.end(),
+            [&uniqueId](const std::unique_ptr<WorldModelInstance>& wmo) { return wmo->GetName() == uniqueId; });
+        if (existingIt != m_worldModelInstances.end())
+        {
+            return existingIt->get();
+        }
+
         // Load the world model
         WorldModelPtr worldModel = WorldModelManager::Get().Load(assetName);
         if (!worldModel)
@@ -283,5 +291,13 @@ namespace mmo
     void EntityFactory::ResetObjectSpawnIdGenerator()
     {
         m_objectSpawnIdGenerator.Reset();
+    }
+
+    void EntityFactory::RemoveWorldModelInstance(WorldModelInstance* instance)
+    {
+        std::erase_if(m_worldModelInstances, [instance](const std::unique_ptr<WorldModelInstance>& ptr)
+        {
+            return ptr.get() == instance;
+        });
     }
 }

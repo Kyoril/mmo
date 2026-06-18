@@ -16,6 +16,7 @@ namespace mmo
 		, m_renderObject(m_scene.CreateManualRenderObject(name))
 	{
 		m_renderObject->SetRenderQueueGroup(Background);
+		m_renderObject->SetCastShadows(false);
 
 		m_scene.GetRootSceneNode().AddChild(*m_sceneNode);
 		m_sceneNode->AttachObject(*m_renderObject);
@@ -23,6 +24,24 @@ namespace mmo
 		m_gridRendering = m_renderObject->objectRendering.connect(this, &WorldGrid::BeforeGridRendering);
 
 		SetupGrid();
+	}
+
+	WorldGrid::~WorldGrid()
+	{
+		// Disconnect signal before destroying the render object
+		m_gridRendering.disconnect();
+
+		if (m_renderObject)
+		{
+			if (m_sceneNode) { m_sceneNode->DetachObject(*m_renderObject); }
+			m_scene.DestroyManualRenderObject(*m_renderObject);
+			m_renderObject = nullptr;
+		}
+		if (m_sceneNode)
+		{
+			m_scene.DestroySceneNode(*m_sceneNode);
+			m_sceneNode = nullptr;
+		}
 	}
 	
 	Vector3 WorldGrid::SnapToGrid(const Vector3& position)

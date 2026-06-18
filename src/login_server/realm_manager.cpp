@@ -95,4 +95,18 @@ namespace mmo
 			realm->NotifyAccountBanned(accountId);
 		}
 	}
+
+	void RealmManager::NotifyRealmRequirementsChanged(uint32 realmId)
+	{
+		std::scoped_lock scopedLock{ m_realmsMutex };
+
+		for (const auto& realm : m_realms)
+		{
+			if (realm->IsAuthentificated() && realm->GetRealmId() == realmId)
+			{
+				realm->ReloadRequirements();
+				break;
+			}
+		}
+	}
 }

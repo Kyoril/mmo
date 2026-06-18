@@ -56,7 +56,7 @@ namespace mmo
 		// If found, draw the state imagery
 		if (imagery)
 		{
-			imagery->Render(m_frame->GetAbsoluteFrameRect(), Color::White);
+			imagery->Render(m_frame->GetAbsoluteFrameRect(), colorOverride.value_or(Color::White));
 		}
 
 		// TODO: Draw the text field selection background
@@ -142,7 +142,7 @@ namespace mmo
 					Rect caretRect{ 0.0f, 0.0f, 2.0f, frameRect.GetHeight()};
 					caretRect.Offset(m_frame->GetAbsoluteFrameRect().GetPosition() + 
 						Point(cursorX + textAreaOffsets.left * scale.height, textAreaOffsets.top * scale.height));
-					caretImagery->Render(caretRect, Color(1.0f, 1.0f, 1.0f, 0.75f));
+					caretImagery->Render(caretRect, colorOverride.value_or(Color::White));
 				}
 			}
 		}

@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "faction_template_editor_window.h"
+#include "editor_imgui_helpers.h"
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
@@ -76,7 +77,7 @@ namespace mmo
 
 		static const char* s_factionNone = "<None>";
 
-		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Basic", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			if (ImGui::BeginTable("table", 3, ImGuiTableFlags_None))
 			{
@@ -126,7 +127,7 @@ namespace mmo
 
 		static const char* s_none = "<None>";
 
-		if (ImGui::CollapsingHeader("Friends", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Friends", ImGuiTreeNodeFlags_None))
 		{
 			// Add button
 			if (ImGui::Button("Add Friend", ImVec2(-1, 0)))
@@ -189,7 +190,7 @@ namespace mmo
 			}
 		}
 
-		if (ImGui::CollapsingHeader("Enemies", ImGuiTreeNodeFlags_None))
+		if (const auto section = ScopedEditorSection("Enemies", ImGuiTreeNodeFlags_None))
 		{
 			// Add button
 			if (ImGui::Button("Add Enemy", ImVec2(-1, 0)))

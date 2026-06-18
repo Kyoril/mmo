@@ -7,9 +7,12 @@
 #include "log/default_log_levels.h"
 
 #include "luabind_lambda.h"
+#include "luabind/luabind.hpp"
 
 namespace mmo
 {
+	/// Duration in seconds that a ping remains visible (fading out).
+	static constexpr float kPingDuration = 5.0f;
 	Minimap::Minimap(uint32 minimapSize)
 		: m_minimapSize(minimapSize)
 		, m_minimapRenderTexture(nullptr)
@@ -42,7 +45,43 @@ namespace mmo
 		if (m_partyMemberTexture)
 		{
 			m_partyMemberTexture->SetTextureAddressMode(TextureAddressMode::Clamp);
+			m_partyMemberGeom.SetActiveTexture(m_partyMemberTexture);
+			GeometryHelper::CreateRect(m_partyMemberGeom, Color(0.4f, 0.6f, 1.0f, 1.0f),
+				Rect(-16.0f, -16.0f, 16.0f, 16.0f),
+				Rect(0.0f, 0.0f, 1.0f, 1.0f),
+				1, 1);
 		}
+
+		// Quest giver icons: yellow ! for available, yellow ? for completable
+		m_questAvailableTexture = TextureManager::Get().CreateOrRetrieve("Interface/Icons/Icon_QuestAvailable.htex");
+		if (!m_questAvailableTexture)
+		{
+			// Fallback: reuse party dot texture with yellow tint
+			m_questAvailableTexture = m_partyMemberTexture;
+		}
+		if (m_questAvailableTexture)
+		{
+			m_questAvailableGeom.SetActiveTexture(m_questAvailableTexture);
+			GeometryHelper::CreateRect(m_questAvailableGeom, Color(1.0f, 0.9f, 0.0f, 1.0f),
+				Rect(-16.0f, -16.0f, 16.0f, 16.0f),
+				Rect(0.0f, 0.0f, 1.0f, 1.0f), 1, 1);
+		}
+
+		m_questCompletableTexture = TextureManager::Get().CreateOrRetrieve("Interface/Icons/Icon_QuestCompleted.htex");
+		if (!m_questCompletableTexture)
+		{
+			m_questCompletableTexture = m_partyMemberTexture;
+		}
+		if (m_questCompletableTexture)
+		{
+			m_questCompletableGeom.SetActiveTexture(m_questCompletableTexture);
+			GeometryHelper::CreateRect(m_questCompletableGeom, Color(1.0f, 1.0f, 0.0f, 1.0f),
+				Rect(-16.0f, -16.0f, 16.0f, 16.0f),
+				Rect(0.0f, 0.0f, 1.0f, 1.0f), 1, 1);
+		}
+
+		// Ping dot: reuse party dot texture with orange/red tint (rebuilt per-frame for alpha fade)
+		m_pingTexture = m_partyMemberTexture;
 
 		if (m_minimapRenderTexture)
 		{
@@ -69,7 +108,8 @@ namespace mmo
 			luabind::def_lambda("GetMinimapZoomLevel", [this]() { return GetZoomLevel(); }),
 			luabind::def_lambda("GetMinimapMinZoomLevel", [this]() { return 0; }),
 			luabind::def_lambda("GetMinimapMaxZoomLevel", [this]() { return GetMaxZoomLevel(); }),
-			luabind::def_lambda("SetMinimapZoomLevel", [this](int32 zoomLevel) { SetZoomLevel(zoomLevel); })
+			luabind::def_lambda("SetMinimapZoomLevel", [this](int32 zoomLevel) { SetZoomLevel(zoomLevel); }),
+			luabind::def<std::function<luabind::object(lua_State*, float, float)>>("GetMinimapObjectsAt", [this](lua_State* L, float u, float v) { return GetMinimapObjectsAt(L, u, v); })
 		);
 	}
 
@@ -185,6 +225,34 @@ namespace mmo
 
 		m_geometryBuffer.Draw();
 
+		if (m_partyMemberTexture && !m_partyPositions.empty())
+		{
+			const float dotScale = 1.0f / GetZoomFactor();
+			for (const PartyMemberDot& member : m_partyPositions)
+			{
+				Matrix4 world = Matrix4::Identity;
+				world = world * Matrix4::GetTrans(Vector3(member.position.x, member.position.z, 0.0f));
+				world = world * Matrix4::GetScale(Vector3(dotScale, dotScale, 1.0f));
+				gx.SetTransformMatrix(World, world);
+				m_partyMemberGeom.Draw();
+			}
+		}
+
+		// Render quest giver dots
+		if (!m_questGiverDots.empty())
+		{
+			const float dotScale = 1.0f / GetZoomFactor();
+			for (const QuestGiverDot& dot : m_questGiverDots)
+			{
+				GeometryBuffer& geom = (dot.type == QuestDotType::Available) ? m_questAvailableGeom : m_questCompletableGeom;
+				Matrix4 world = Matrix4::Identity;
+				world = world * Matrix4::GetTrans(Vector3(dot.position.x, dot.position.z, 0.0f));
+				world = world * Matrix4::GetScale(Vector3(dotScale, dotScale, 1.0f));
+				gx.SetTransformMatrix(World, world);
+				geom.Draw();
+			}
+		}
+
 		if (m_playerArrowTexture)
 		{
 			// Apply player rotation (TODO)
@@ -195,7 +263,27 @@ namespace mmo
 			gx.SetTransformMatrix(World, world);
 			m_playerGeom.Draw();
 		}
-		
+
+		// Render active pings (orange dots, alpha fades with remainingTime)
+		if (m_pingTexture && !m_pings.empty())
+		{
+			const float dotScale = 1.0f / GetZoomFactor();
+			for (const PingDot& ping : m_pings)
+			{
+				const float alpha = std::clamp(ping.remainingTime / kPingDuration, 0.0f, 1.0f);
+				m_pingGeom.Reset();
+				m_pingGeom.SetActiveTexture(m_pingTexture);
+				GeometryHelper::CreateRect(m_pingGeom, Color(1.0f, 0.3f, 0.0f, alpha),
+					Rect(-20.0f, -20.0f, 20.0f, 20.0f),
+					Rect(1.0f, 0.0f, 0.0f, 1.0f), 1, 1);
+				Matrix4 world = Matrix4::Identity;
+				world = world * Matrix4::GetTrans(Vector3(ping.position.x, ping.position.z, 0.0f));
+				world = world * Matrix4::GetScale(Vector3(dotScale, dotScale, 1.0f));
+				gx.SetTransformMatrix(World, world);
+				m_pingGeom.Draw();
+			}
+		}
+
 		m_minimapRenderTexture->Update();
 		gx.RestoreState();
 	}
@@ -224,9 +312,82 @@ namespace mmo
 		m_currentTileX = -1;
 		m_currentTileY = -1;
 		m_loadedTextures.clear();
+		m_partyPositions.clear();
+		m_questGiverDots.clear();
+		m_pings.clear();
 
 		UpdatePlayerPosition(m_playerPosition, m_playerOrientation);
 	}
+
+	void Minimap::UpdatePartyPositions(std::vector<PartyMemberDot> members)
+	{
+		m_partyPositions = std::move(members);
+	}
+
+	void Minimap::UpdateQuestGiverDots(std::vector<QuestGiverDot> dots)
+	{
+		m_questGiverDots = std::move(dots);
+	}
+
+	void Minimap::UpdatePings(std::vector<PingDot> pings)
+	{
+		m_pings = std::move(pings);
+	}
+
+	luabind::object Minimap::GetMinimapObjectsAt(lua_State* L, float u, float v) const
+	{
+		// Convert UV [0,1] to world position using current view bounds
+		const float zoomFactor = GetZoomFactor();
+		const float worldCoverage = static_cast<float>(m_minimapSize) / zoomFactor;
+		const float halfCoverage = worldCoverage * 0.5f;
+
+		const float worldX = (m_playerPosition.x - halfCoverage) + u * worldCoverage;
+		// V=0 is screen top = smaller world Z (north), V=1 = larger world Z (south) — normal mapping.
+		const float worldZ = (m_playerPosition.z - halfCoverage) + v * worldCoverage;
+
+		// Hit radius: dot is +-10 logical pixels; scale to world units
+		constexpr float kDotHalfSize = 10.0f;
+		const float hitRadius = kDotHalfSize / zoomFactor;
+		const float hitRadiusSq = hitRadius * hitRadius;
+
+		auto distSq = [&](const Vector3& pos) -> float
+		{
+			const float dx = pos.x - worldX;
+			const float dz = pos.z - worldZ;
+			return dx * dx + dz * dz;
+		};
+
+		luabind::object result = luabind::newtable(L);
+		int index = 1;
+
+		// Party members
+		for (const PartyMemberDot& member : m_partyPositions)
+		{
+			if (distSq(member.position) <= hitRadiusSq)
+			{
+				luabind::object entry = luabind::newtable(L);
+				entry["type"] = std::string("party");
+				entry["name"] = member.name;
+				result[index++] = entry;
+			}
+		}
+
+		// Quest givers
+		for (const QuestGiverDot& dot : m_questGiverDots)
+		{
+			if (distSq(dot.position) <= hitRadiusSq)
+			{
+				luabind::object entry = luabind::newtable(L);
+				entry["type"] = std::string("questgiver");
+				entry["name"] = dot.name;
+				result[index++] = entry;
+			}
+		}
+
+		return result;
+	}
+
+
 
 	bool Minimap::GetTileCoordinates(const Vector3& worldPosition, int32& outTileX, int32& outTileY)
 	{

@@ -7,13 +7,21 @@
 #include "each_tile_in_sight.h"
 #include "vector_sink.h"
 #include "log/default_log_levels.h"
+#include "game/object_type_id.h"
+#include "game_server/objects/game_object_s.h"
 
 namespace mmo
 {
     bool WorldInstance::HasPlayers() const
     {
-        // TODO
-        return true;
+        for (const auto& [guid, object] : m_objectsByGuid)
+        {
+            if (object && object->GetTypeId() == ObjectTypeId::Player)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     void WorldInstance::BroadcastGameTime()

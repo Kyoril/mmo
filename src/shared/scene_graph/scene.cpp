@@ -1,7 +1,8 @@
-// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+// Copyright (C) 2019 - 2026, Kyoril. All rights reserved.
 
 #include "scene.h"
 
+#include <algorithm>
 #include <ranges>
 
 #include "camera.h"
@@ -11,7 +12,9 @@
 #include "render_operation.h"
 #include "world_model_instance.h"
 
+#include "light.h"
 #include "base/macros.h"
+#include "base/profiler.h"
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
 
@@ -34,11 +37,25 @@ namespace mmo
 
 	struct alignas(16) PsCameraConstantBuffer
 	{
+		// Row 0–6: camera, fog, matrices, time (112 bytes — must stay layout-stable)
 		Vector3 cameraPosition;
 		float fogStart;
 		float fogEnd;
 		Vector3 fogColor;
 		Matrix4 inverseViewMatrix;
+		float time;
+		float _padding[3];
+
+		// Row 7–9: forward lighting (48 bytes added)
+		// Populated from the scene's primary directional light so that forward-rendered
+		// translucent objects (water, glass …) react to the actual sky/sun rather than
+		// hardcoded values inside the generated pixel shader.
+		Vector3 sunDirection;	// World-space direction *toward* the sun (normalised)
+		float sunIntensity;
+		Vector3 sunColor;
+		float _forwardPad0;
+		Vector3 ambientColor;	// Scene ambient (matches deferred AmbientColor cbuffer)
+		float _forwardPad1;
 	};
 
 	Scene::Scene()
@@ -97,6 +114,7 @@ namespace mmo
 	{
 		if (const auto cameraIt = m_cameras.find(name); cameraIt != m_cameras.end())
 		{
+			m_camVisibleObjectsMap.erase(cameraIt->second.get());
 			m_cameras.erase(cameraIt);
 		}
 	}
@@ -178,6 +196,45 @@ namespace mmo
 		return emitters;
 	}
 
+	RibbonTrail* Scene::CreateRibbonTrail(const String& name)
+	{
+		ASSERT(!name.empty());
+		ASSERT(m_ribbonTrails.find(name) == m_ribbonTrails.end());
+
+		auto trail = std::make_unique<RibbonTrail>(name, GraphicsDevice::Get());
+		trail->SetScene(this);
+
+		auto [iterator, inserted] = m_ribbonTrails.emplace(name, std::move(trail));
+		return iterator->second.get();
+	}
+
+	void Scene::DestroyRibbonTrail(const RibbonTrail& trail)
+	{
+		DestroyRibbonTrail(trail.GetName());
+	}
+
+	void Scene::DestroyRibbonTrail(const String& name)
+	{
+		const auto trailIt = m_ribbonTrails.find(name);
+		if (trailIt != m_ribbonTrails.end())
+		{
+			m_ribbonTrails.erase(trailIt);
+		}
+	}
+
+	std::vector<RibbonTrail*> Scene::GetAllRibbonTrails() const
+	{
+		std::vector<RibbonTrail*> trails;
+		trails.reserve(m_ribbonTrails.size());
+
+		for (const auto& [name, trail] : m_ribbonTrails)
+		{
+			trails.push_back(trail.get());
+		}
+
+		return trails;
+	}
+
 	bool Scene::HasEntity(const String& name) const
 	{
 		return m_entities.find(name) != m_entities.end();
@@ -224,6 +281,8 @@ namespace mmo
 
 	void Scene::Render(Camera& camera, PixelShaderType shaderType)
 	{
+		PROFILE_SCOPE("Scene::Render");
+
 		m_pixelShaderType = shaderType;
 
 		auto& gx = GraphicsDevice::Get();
@@ -240,14 +299,62 @@ namespace mmo
 
 		UpdateSceneGraph();
 
-		// Update particle emitters (self-timed)
-		for (auto& [name, emitter] : m_particleEmitters)
+		// In the deferred renderer, scene.Render is called twice per frame:
+		//   1. GBuffer pass  (m_forwardTransparentOnly = false) – builds the render queue and renders opaque geometry.
+		//   2. Forward transparent pass (m_forwardTransparentOnly = true) – renders only transparent groups.
+		//
+		// We must NOT rebuild the render queue during the transparent pass.  If we did,
+		// PopulateRenderQueue would be called a second time for every visible object in the
+		// same frame.  For terrain tiles this is catastrophic: the occlusion-culling state
+		// machine (consecutive-occluded-frame counter, skipped-frame counter, TryGetResult)
+		// runs twice per real frame, which:
+		//   • Halves the effective OcclusionGraceFrames threshold (tiles get culled twice as fast).
+		//   • Consumes the pending GPU query result in the forward pass so the next G-buffer
+		//     pass finds no result and the tile stays frozen in its culled state.
+		//   • Causes the "flicker every other frame / does not recover" artifact at the horizon.
+		//
+		// The forward transparent pass reuses the queue that was built during the G-buffer pass.
+		// RenderVisibleObjects already skips groups < Transparent when m_forwardTransparentOnly,
+		// so only particles, ribbon trails, and other transparent renderables are drawn.
+		if (!m_frozen && !m_forwardTransparentOnly && !m_reuseRenderQueue)
 		{
-			emitter->Update();
-		}
+			// Particle emitters and ribbon trails are *simulation*, not just rendering: each
+			// Update() advances the system and re-sorts/re-uploads its GPU buffers. It must run
+			// exactly once per frame — during the primary opaque queue-build pass — and never during
+			// the shadow cascade passes (which would otherwise re-simulate and re-sort every emitter
+			// up to NUM_SHADOW_CASCADES extra times each frame). A shadow cascade pass is a
+			// ShadowMap-typed pass that is not the main-view depth pre-pass.
+			const bool isShadowCascadePass = (shaderType == PixelShaderType::ShadowMap) && !m_depthPrepass;
+			if (!isShadowCascadePass)
+			{
+				PROFILE_SCOPE("ParticleEmitters::Update");
 
-		if (!m_frozen)
-		{
+				// Compute a single shared deltaTime for all particle systems this frame.
+				const auto particleNow = std::chrono::high_resolution_clock::now();
+				float particleDelta = 0.0f;
+				if (m_particleTimerInitialized)
+				{
+					particleDelta = std::chrono::duration_cast<std::chrono::microseconds>(
+						particleNow - m_lastParticleUpdate).count() / 1000000.0f;
+				}
+				m_lastParticleUpdate = particleNow;
+				m_particleTimerInitialized = true;
+
+				for (auto& [name, emitter] : m_particleEmitters)
+				{
+					// Systems flagged for manual update (e.g. the particle editor) advance themselves.
+					if (emitter->IsAutoUpdate())
+					{
+						emitter->Update(particleDelta);
+					}
+				}
+
+				for (auto& [name, trail] : m_ribbonTrails)
+				{
+					trail->Update();
+				}
+			}
+
 			PrepareRenderQueue();
 
 			// Update portal culling for all WorldModelInstances BEFORE FindVisibleObjects
@@ -263,21 +370,33 @@ namespace mmo
 			const auto visibleObjectsIt = m_camVisibleObjectsMap.find(&camera);
 			ASSERT(visibleObjectsIt != m_camVisibleObjectsMap.end());
 			visibleObjectsIt->second.Reset();
-			FindVisibleObjects(camera, visibleObjectsIt->second, shaderType == PixelShaderType::ShadowMap);
+			// The depth pre-pass renders with the ShadowMap pixel shader but must capture the full
+			// visible set (not just shadow casters) so the G-Buffer pass can reuse the same queue.
+			const bool onlyShadowCasters = (shaderType == PixelShaderType::ShadowMap) && !m_depthPrepass;
+			FindVisibleObjects(camera, visibleObjectsIt->second, onlyShadowCasters);
 
-			// Add particle emitters to render queue
+			// Particle emitters use RenderQueueGroupId::Transparent and are therefore
+			// automatically excluded from GBuffer/ShadowMap passes by RenderVisibleObjects.
+			// No manual guard needed here.
 			for (auto& [name, emitter] : m_particleEmitters)
 			{
 				emitter->PopulateRenderQueue(GetRenderQueue());
+			}
+
+			// Add ribbon trails to render queue
+			for (auto& [name, trail] : m_ribbonTrails)
+			{
+				trail->PopulateRenderQueue(GetRenderQueue());
 			}
 		}
 		
 		// Clear current render target
 		gx.SetFillMode(camera.GetFillMode());
 
-		// Enable depth test & write & set comparison method to less
+		// Depth state: opaque passes write depth; the forward transparent pass
+		// depth-tests against the GBuffer depth but must not overwrite it.
 		gx.SetDepthEnabled(true);
-		gx.SetDepthWriteEnabled(true);
+		gx.SetDepthWriteEnabled(!m_forwardTransparentOnly);
 		gx.SetDepthTestComparison(DepthTestMethod::Less);
 
 		gx.SetTransformMatrix(World, Matrix4::Identity);
@@ -291,6 +410,8 @@ namespace mmo
 
 	void Scene::UpdateSceneGraph()
 	{
+		PROFILE_SCOPE("UpdateSceneGraph");
+
 		GetRootSceneNode().Update(true, false);
 	}
 
@@ -319,13 +440,171 @@ namespace mmo
 		return lights;
 	}
 
+	std::vector<Scene::VisibleLightInfo> Scene::GatherVisibleLights(const Camera& camera, uint32 maxLights)
+	{
+		// Reset statistics
+		m_lightRenderStats = LightRenderStats{};
+		m_lightRenderStats.totalLightsInScene = static_cast<uint32>(m_lights.size());
+
+		std::vector<VisibleLightInfo> visibleLights;
+		visibleLights.reserve(m_lights.size());
+
+		const Vector3 cameraPosition = camera.GetDerivedPosition();
+
+		// Gather all visible lights
+		for (const auto& [name, light] : m_lights)
+		{
+			if (!light->IsVisible())
+			{
+				continue;
+			}
+
+			VisibleLightInfo info;
+			info.light = light.get();
+			info.type = light->GetType();
+			info.color = Vector3(light->GetColor().x, light->GetColor().y, light->GetColor().z);
+			info.intensity = light->GetIntensity();
+			info.range = light->GetRange();
+			info.castsShadows = light->IsCastingShadows();
+
+			// Handle different light types
+			if (info.type == LightType::Directional)
+			{
+				// Directional lights are always visible (no position-based culling)
+				info.position = Vector3::Zero;
+				info.direction = light->GetDerivedDirection();
+				info.spotAngle = 0.0f;
+				info.priority = 1000.0f;  // Directional lights have highest priority
+				++m_lightRenderStats.directionalLights;
+			}
+			else
+			{
+				info.position = light->GetDerivedPosition();
+				
+				// Frustum culling for point and spot lights
+				const Sphere lightSphere(info.position, info.range);
+				if (!camera.IsVisible(lightSphere))
+				{
+					continue;  // Light is outside the view frustum
+				}
+
+				if (info.type == LightType::Point)
+				{
+					info.direction = Vector3(0.0f, -1.0f, 0.0f);  // Default direction for point lights
+					info.spotAngle = 0.0f;
+					++m_lightRenderStats.pointLights;
+				}
+				else // Spot light
+				{
+					info.direction = light->GetDerivedDirection();
+					info.spotAngle = light->GetOuterConeAngle();
+					++m_lightRenderStats.spotLights;
+				}
+
+				// Calculate priority based on distance and range
+				info.priority = CalculateLightPriority(*light, cameraPosition);
+			}
+
+			if (info.castsShadows)
+			{
+				++m_lightRenderStats.shadowCastingLights;
+			}
+
+			visibleLights.push_back(info);
+		}
+
+		m_lightRenderStats.visibleLights = static_cast<uint32>(visibleLights.size());
+
+		// Sort by priority (higher priority first)
+		// Directional lights always come first, then by calculated priority
+		std::sort(visibleLights.begin(), visibleLights.end(), 
+			[](const VisibleLightInfo& a, const VisibleLightInfo& b)
+			{
+				// Directional lights always first
+				if (a.type == LightType::Directional && b.type != LightType::Directional)
+				{
+					return true;
+				}
+				if (a.type != LightType::Directional && b.type == LightType::Directional)
+				{
+					return false;
+				}
+				// Then sort by priority (higher first)
+				return a.priority > b.priority;
+			});
+
+		// Limit the number of lights if requested
+		if (maxLights > 0 && visibleLights.size() > maxLights)
+		{
+			visibleLights.resize(maxLights);
+		}
+
+		m_lightRenderStats.lightsRendered = static_cast<uint32>(visibleLights.size());
+
+		return visibleLights;
+	}
+
+	float Scene::CalculateLightPriority(const Light& light, const Vector3& cameraPosition) const
+	{
+		// Priority factors:
+		// 1. Distance from camera (closer = higher priority)
+		// 2. Light range (larger range = higher priority)
+		// 3. Light intensity (brighter = higher priority)
+
+		const Vector3 lightPosition = light.GetDerivedPosition();
+		const float distanceSquared = (lightPosition - cameraPosition).GetSquaredLength();
+		const float range = light.GetRange();
+		const float intensity = light.GetIntensity();
+
+		// Avoid division by zero
+		const float distance = std::sqrt(distanceSquared) + 0.001f;
+
+		// Priority formula:
+		// - Closer lights get higher priority (inverse distance)
+		// - Larger lights get higher priority (range factor)
+		// - Brighter lights get higher priority (intensity factor)
+		// - Lights within their range get a bonus
+		const float distanceFactor = range / distance;
+		const float rangeFactor = range * 0.1f;  // Normalize range contribution
+		const float intensityFactor = intensity;
+
+		// If the camera is within the light's range, give it a significant priority boost
+		const float withinRangeBonus = (distance < range) ? 10.0f : 1.0f;
+
+		return (distanceFactor + rangeFactor + intensityFactor) * withinRangeBonus;
+	}
+
 	void Scene::RenderVisibleObjects()
 	{
+		PROFILE_SCOPE("RenderVisibleObjects");
+
 		m_renderQueue->SortByMaterial();
 
 		for (auto& queue = GetRenderQueue(); auto& [groupId, group] : queue)
 		{
+			// Shadow maps skip background/sky groups (they have no geometry to cast shadows).
 			if (m_pixelShaderType == PixelShaderType::ShadowMap && groupId < RenderQueueGroupId::WorldGeometry1)
+			{
+				continue;
+			}
+
+			// GBuffer and ShadowMap passes only render opaque geometry.
+			// Transparent objects (Transparent group and above) are handled by a
+			// dedicated forward pass after deferred lighting.
+			if ((m_pixelShaderType == PixelShaderType::GBuffer || m_pixelShaderType == PixelShaderType::ShadowMap)
+				&& groupId >= RenderQueueGroupId::Transparent)
+			{
+				continue;
+			}
+
+			// The Forward pass is used exclusively for transparent objects.
+			// Skip opaque groups — they were already rendered in the GBuffer pass.
+			// Note: when Scene::Render is called directly with Forward (editor, model viewer)
+			// this skip does not apply because those callers never emit a GBuffer pass.
+			// We detect the deferred context via m_forwardTransparentOnly, which the
+			// deferred renderer sets before calling scene.Render with Forward.
+			if (m_pixelShaderType == PixelShaderType::Forward && m_forwardTransparentOnly
+				&& groupId < RenderQueueGroupId::Transparent)
 			{
 				continue;
 			}
@@ -352,6 +631,8 @@ namespace mmo
 
 	void Scene::FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds, bool onlyShadowCasters)
 	{
+		PROFILE_SCOPE("FindVisibleObjects");
+
 		GetRootSceneNode().FindVisibleObjects(camera, GetRenderQueue(), visibleObjectBounds, true, onlyShadowCasters);
 	}
 
@@ -366,6 +647,95 @@ namespace mmo
 		{
 			RenderObjects(priorityGroup->GetSolids());
 		}
+	}
+
+	void Scene::GatherShadowCasters(const AABB& worldRegion, std::vector<MovableObject*>& outCasters)
+	{
+		// Base (non-spatial) fallback: linear scan over entities. OctreeScene overrides this with an
+		// octree traversal. Preview/editor scenes that use this base path have few objects.
+		outCasters.clear();
+		outCasters.reserve(m_entities.size());
+
+		for (const auto& [name, entity] : m_entities)
+		{
+			MovableObject* obj = entity.get();
+			if (!obj->ShouldBeVisible() || !obj->IsCastingShadows())
+			{
+				continue;
+			}
+
+			if (!worldRegion.Intersects(obj->GetWorldBoundingBox(true)))
+			{
+				continue;
+			}
+
+			outCasters.push_back(obj);
+		}
+	}
+
+	void Scene::RenderShadowCasters(Camera& cascadeCamera, const std::vector<MovableObject*>& casters, float minCasterWorldRadius)
+	{
+		PROFILE_SCOPE("Scene::RenderShadowCasters");
+
+		m_pixelShaderType = PixelShaderType::ShadowMap;
+		m_activeCamera = &cascadeCamera;
+		m_renderableVisitor.targetScene = this;
+		m_renderableVisitor.scissoring = false;
+
+		// Build the render queue directly from the pre-gathered caster list — no octree walk. This is
+		// the per-cascade work that replaces a full FindVisibleObjects pass per cascade.
+		auto& queue = GetRenderQueue();
+		queue.Clear();
+
+		for (MovableObject* caster : casters)
+		{
+			// Mirror RenderQueue::ProcessVisibleObject's per-camera state (LOD / rendering-disabled)
+			// so shadow visibility matches the previous per-cascade Scene::Render path exactly.
+			caster->SetCurrentCamera(cascadeCamera);
+
+			if (!caster->IsVisible() || !caster->IsCastingShadows())
+			{
+				continue;
+			}
+
+			const AABB& worldBounds = caster->GetWorldBoundingBox(true);
+
+			// Sub-texel small-object culling: a caster smaller than the cascade's world texel size
+			// produces a shadow under one shadow-map texel, i.e. invisible. Skipping it is free.
+			if (minCasterWorldRadius > 0.0f)
+			{
+				const Vector3 extents = worldBounds.GetExtents();
+				const float worldRadius = std::max(extents.x, std::max(extents.y, extents.z));
+				if (worldRadius < minCasterWorldRadius)
+				{
+					continue;
+				}
+			}
+
+			if (!cascadeCamera.IsVisible(worldBounds))
+			{
+				continue;
+			}
+
+			caster->PopulateRenderQueue(queue);
+		}
+
+		// Shadow passes write depth with the cascade camera; match the state Scene::Render sets for a
+		// ShadowMap pass.
+		auto& gx = GraphicsDevice::Get();
+		gx.SetFillMode(cascadeCamera.GetFillMode());
+		gx.SetDepthEnabled(true);
+		gx.SetDepthWriteEnabled(true);
+		gx.SetDepthTestComparison(DepthTestMethod::Less);
+		gx.SetTransformMatrix(World, Matrix4::Identity);
+		gx.SetTransformMatrix(Projection, cascadeCamera.GetProjectionMatrix());
+		gx.SetTransformMatrix(View, cascadeCamera.GetViewMatrix());
+
+		RefreshCameraBuffer(cascadeCamera);
+
+		RenderVisibleObjects();
+
+		m_activeCamera = nullptr;
 	}
 
 	void Scene::NotifyLightsDirty()
@@ -422,7 +792,12 @@ namespace mmo
 
 	void Scene::RenderSingleObject(Renderable& renderable, uint32 groupId)
 	{
-		RenderOperation op { groupId };
+		PROFILE_SCOPE("RenderSingleObject");
+
+		// Reuse a single RenderOperation (cleared, capacity retained) to avoid a per-draw heap
+		// allocation for its constant-buffer vectors.
+		RenderOperation& op = m_renderOp;
+		op.Reset(groupId);
 		renderable.PrepareRenderOperation(op);
 		op.pixelShaderType = m_pixelShaderType;
 
@@ -447,7 +822,12 @@ namespace mmo
 
 		gx.SetTransformMatrix(World, renderable.GetWorldTransform());
 
+		// Reserve space to avoid heap allocation on push_back
 		ASSERT(m_psCameraBuffer);
+		if (op.pixelConstantBuffers.empty())
+		{
+			op.pixelConstantBuffers.reserve(4);
+		}
 		op.pixelConstantBuffers.push_back(m_psCameraBuffer.get());
 
 		// Bind vertex layout
@@ -524,9 +904,9 @@ namespace mmo
 	Entity* Scene::CreateEntity(const String& entityName, const MeshPtr& mesh)
 	{
 		ASSERT(m_entities.find(entityName) == m_entities.end());
-    
+
 		auto [entityIt, created] = m_entities.emplace(entityName, std::make_unique<Entity>(entityName, mesh));
-		
+
 		return entityIt->second.get();
 	}
 
@@ -618,6 +998,10 @@ namespace mmo
 
 	void Scene::RefreshCameraBuffer(const Camera& camera)
 	{
+		// Update elapsed time
+		const auto now = std::chrono::steady_clock::now();
+		m_elapsedTime = std::chrono::duration<float>(now - m_startTime).count();
+
 		PsCameraConstantBuffer buffer;
 		buffer.cameraPosition = camera.GetDerivedPosition();
 
@@ -627,6 +1011,38 @@ namespace mmo
 
 		buffer.fogColor = m_fogColor;
 		buffer.inverseViewMatrix = camera.GetViewMatrix().Inverse();
+		buffer.time = m_elapsedTime;
+		buffer._padding[0] = 0.0f;
+		buffer._padding[1] = 0.0f;
+		buffer._padding[2] = 0.0f;
+
+		// Forward lighting — populate from the primary directional light so that translucent
+		// forward-rendered objects (water, glass …) receive the real sky/sun lighting instead
+		// of the previously hardcoded placeholder values in the generated pixel shader.
+		if (m_primaryDirectionalLight != nullptr)
+		{
+			// GetDerivedDirection returns the LOCAL direction of the light (set by SkyComponent).
+			// Negate it so the shader receives a vector that points *toward* the light source.
+			const Vector3 rawDir = m_primaryDirectionalLight->GetDirection();
+			Vector3 towardSun = -rawDir;
+			towardSun.Normalize();
+			buffer.sunDirection = towardSun;
+			buffer.sunIntensity  = m_primaryDirectionalLight->GetIntensity();
+			const Vector4& col   = m_primaryDirectionalLight->GetColor();
+			buffer.sunColor      = Vector3(col.x, col.y, col.z);
+		}
+		else
+		{
+			// Sensible fallback so forward objects are never black with no sky set up.
+			buffer.sunDirection = Vector3(0.0f, 1.0f, 0.0f);
+			buffer.sunIntensity  = 1.0f;
+			buffer.sunColor      = Vector3(1.0f, 0.95f, 0.8f);
+		}
+
+		buffer.ambientColor   = m_ambientColor;
+		buffer._forwardPad0   = 0.0f;
+		buffer._forwardPad1   = 0.0f;
+
 		m_psCameraBuffer->Update(&buffer);
 	}
 

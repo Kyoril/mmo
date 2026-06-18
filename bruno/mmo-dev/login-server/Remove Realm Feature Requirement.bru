@@ -1,0 +1,21 @@
+meta {
+  name: Remove Realm Feature Requirement
+  type: http
+  seq: 16
+}
+
+post {
+  url: http://localhost:8090/remove-realm-feature-requirement
+  body: formUrlEncoded
+  auth: inherit
+}
+
+body:form-urlencoded {
+  realm: LOCALDOCKERREALM
+  feature: PLAYTEST_ACCESS
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

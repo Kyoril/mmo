@@ -542,7 +542,12 @@ namespace mmo
     {
         m_categoryChangeCallback = std::move(callback);
     }
-    
+
+    void SceneOutlineWindow::SetEntityDuplicationFactory(EntityDuplicationFactory factory)
+    {
+        m_entityDuplicationFactory = std::move(factory);
+    }
+
     void SceneOutlineWindow::BuildEntryList()
     {
         m_entries.clear();
@@ -786,7 +791,7 @@ namespace mmo
                     
                     if (entry.entityPtr)
                     {
-                        m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*entry.entityPtr, [](Selectable&) {}));
+                        m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*entry.entityPtr, m_entityDuplicationFactory ? m_entityDuplicationFactory(*entry.entityPtr) : std::function<void(Selectable&)>{}));
                         m_selectedEntityIds.push_back(entry.id);
                         m_lastSelectedEntityId = entry.id;
                     }
@@ -835,7 +840,7 @@ namespace mmo
                         // Add the clicked entity
                         if (entry.entityPtr) 
                         {
-                            m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*entry.entityPtr, [](Selectable&) {}));
+                            m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*entry.entityPtr, m_entityDuplicationFactory ? m_entityDuplicationFactory(*entry.entityPtr) : std::function<void(Selectable&)>{}));
                             m_selectedEntityIds.push_back(entry.id);
                             m_lastSelectedEntityId = entry.id;
                         }
@@ -869,7 +874,7 @@ namespace mmo
                             // Not selected, so select it
                             if (entry.entityPtr)
                             {
-                                m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*entry.entityPtr, [](Selectable&) {}));
+                                m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*entry.entityPtr, m_entityDuplicationFactory ? m_entityDuplicationFactory(*entry.entityPtr) : std::function<void(Selectable&)>{}));
                                 m_selectedEntityIds.push_back(entry.id);
                                 m_lastSelectedEntityId = entry.id;
                             }
@@ -947,7 +952,7 @@ namespace mmo
                                             // Check if this item is already selected
                                             if (std::find(m_selectedEntityIds.begin(), m_selectedEntityIds.end(), e.id) == m_selectedEntityIds.end())
                                             {
-                                                m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*e.entityPtr, [](Selectable&) {}));
+                                                m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*e.entityPtr, m_entityDuplicationFactory ? m_entityDuplicationFactory(*e.entityPtr) : std::function<void(Selectable&)>{}));
                                                 m_selectedEntityIds.push_back(e.id);
                                             }
                                         }
@@ -962,7 +967,7 @@ namespace mmo
                                     m_selection.Clear();
                                     m_selectedEntityIds.clear();
                                 }
-                                m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*entry.entityPtr, [](Selectable&) {}));
+                                m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*entry.entityPtr, m_entityDuplicationFactory ? m_entityDuplicationFactory(*entry.entityPtr) : std::function<void(Selectable&)>{}));
                                 m_selectedEntityIds.push_back(entry.id);
                             }
                             

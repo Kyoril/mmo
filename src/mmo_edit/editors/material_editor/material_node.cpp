@@ -22,6 +22,8 @@ namespace mmo
 	const uint32 IfNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 	const uint32 ConstVectorNode::Color = ImColor(0.88f, 0.88f, 0.29f, 0.25f);
 	const uint32 VectorParameterNode::Color = ImColor(0.88f, 0.88f, 0.29f, 0.25f);
+	const uint32 GlobalScalarParameterNode::Color = ImColor(0.29f, 0.66f, 0.88f, 0.25f);
+	const uint32 GlobalVectorParameterNode::Color = ImColor(0.29f, 0.66f, 0.88f, 0.25f);
 	const uint32 MaterialNode::Color = ImColor(114.0f / 255.0f, 92.0f / 255.0f, 71.0f / 255.0f, 0.50f);
 	const uint32 TextureNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
 	const uint32 TextureParameterNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
@@ -38,6 +40,9 @@ namespace mmo
 	const uint32 ArcCosineNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 	const uint32 ArcSineNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 	const uint32 ArcTangentNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 TimeNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
+	const uint32 RotatorNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 FresnelNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
 
 	Pin::Pin(GraphNode* node, const PinType type, const std::string_view name)
 		: m_id(node ? node->GetMaterial()->MakePinId(this) : 0)
@@ -80,6 +85,18 @@ namespace mmo
 		{
 			context.AddPostLoadAction([this, link]()
 			{
+				// Only re-establish links from the input side. Each input pin stores its single
+				// source, so the input pins fully describe the graph's connectivity - including an
+				// output that fans out to several inputs. Restoring links from output pins as well is
+				// not just redundant: an output only remembers the *last* input it was linked to, so
+				// LinkTo()'s unlink-on-relink would tear down the other inputs sharing that output
+				// while post-load actions run, intermittently dropping connections depending on the
+				// order in which the nodes happened to be saved.
+				if (!IsInput())
+				{
+					return true;
+				}
+
 				const auto pin = m_node->GetMaterial()->FindPin(link);
 				if (!pin)
 				{
@@ -93,7 +110,7 @@ namespace mmo
 					}
 				}
 
-				return true;	
+				return true;
 			});
 		}
 
@@ -312,22 +329,31 @@ namespace mmo
 		writer
 			<< io::write<uint32>(m_id);
 
+		// Read the *live* node position and size directly from the node editor rather than from the
+		// serialized state snapshot (m_NodesState). That snapshot is only refreshed when an editor
+		// state is applied/loaded - it is NOT updated when the user drags a node around or when a node
+		// is created at runtime. Reading it here caused freshly created nodes to be saved at (0, 0) and
+		// dragged nodes to be saved at their original pre-drag position, which is why nodes jumped to
+		// strange positions after reloading a material. GetNodePosition/GetNodeSize return the current
+		// bounds straight from the editor's live node objects.
 		float posX = 0.0f, posY = 0.0f, sizeX = 0.0f, sizeY = 0.0f;
-		const auto editorContext = reinterpret_cast<ed::Detail::EditorContext*>(ed::GetCurrentEditor());
-		if (editorContext)
+		if (ed::GetCurrentEditor())
 		{
-			ed::Detail::EditorState& state = editorContext->GetState();
-			const auto nodeStateIt = state.m_NodesState.m_Nodes.find(m_id);
-			if (nodeStateIt != state.m_NodesState.m_Nodes.end())
+			const ImVec2 position = ed::GetNodePosition(m_id);
+			const ImVec2 size = ed::GetNodeSize(m_id);
+
+			// GetNodePosition returns (FLT_MAX, FLT_MAX) when the node is not known to the editor yet
+			// (i.e. it has never been committed/rendered). In that case we keep (0, 0).
+			if (position.x != FLT_MAX && position.y != FLT_MAX)
 			{
-				posX = nodeStateIt->second.m_Location.x;
-				posY = nodeStateIt->second.m_Location.y;
-				sizeX = nodeStateIt->second.m_Size.x;
-				sizeY = nodeStateIt->second.m_Size.y;
+				posX = position.x;
+				posY = position.y;
+				sizeX = size.x;
+				sizeY = size.y;
 			}
 			else
 			{
-				WLOG("Node state not found, empty state will be saved");
+				WLOG("Node " << m_id << " has no editor position yet, empty state will be saved");
 			}
 		}
 		else
@@ -355,13 +381,14 @@ namespace mmo
 			pin->Serialize(writer);
 		}
 		
+		const auto serializedProperties = GetSerializedProperties();
 		writer
-			<< io::write<uint8>(GetProperties().size());
-		for(const auto& prop : GetProperties())
+			<< io::write<uint8>(serializedProperties.size());
+		for(const auto& prop : serializedProperties)
 		{
 			prop->Serialize(writer);
 		}
-		
+
 		return writer;
 	}
 
@@ -427,14 +454,15 @@ namespace mmo
 			return reader;
 		}
 		
-		for (uint32 i = 0; i < GetProperties().size() && i < numProperties; ++i)
+		const auto serializedProperties = GetSerializedProperties();
+		for (uint32 i = 0; i < serializedProperties.size() && i < numProperties; ++i)
 		{
-			if (!(GetProperties()[i]->Deserialize(reader)))
+			if (!(serializedProperties[i]->Deserialize(reader)))
 			{
 				return reader;
 			}
 		}
-		
+
 		return reader;
 	}
 
@@ -504,6 +532,7 @@ namespace mmo
 	{
 		compiler.SetLit(m_lit);
 		compiler.SetTranslucent(m_translucent);
+		compiler.SetMasked(m_masked);
 		compiler.SetDepthWriteEnabled(m_depthWrite);
 		compiler.SetDepthTestEnabled(m_depthTest);
 		compiler.SetTwoSided(m_isTwoSided);
@@ -852,6 +881,131 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
+	ExpressionIndex GlobalScalarParameterNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_name.empty())
+		{
+			ELOG("Global Scalar Parameter node has no parameter name set!");
+			return IndexNone;
+		}
+
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddGlobalScalarParameterExpression(m_name);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex GlobalVectorParameterNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_name.empty())
+		{
+			ELOG("Global Vector Parameter node has no parameter name set!");
+			return IndexNone;
+		}
+
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddGlobalVectorParameterExpression(m_name);
+		}
+
+		if (outputPin && outputPin != &m_argb)
+		{
+			if (outputPin == &m_a)
+			{
+				return compiler.AddMask(m_compiledExpressionId, false, false, false, true);
+			}
+			if (outputPin == &m_r)
+			{
+				return compiler.AddMask(m_compiledExpressionId, true, false, false, false);
+			}
+			if (outputPin == &m_g)
+			{
+				return compiler.AddMask(m_compiledExpressionId, false, true, false, false);
+			}
+			if (outputPin == &m_b)
+			{
+				return compiler.AddMask(m_compiledExpressionId, false, false, true, false);
+			}
+			if (outputPin == &m_rgb)
+			{
+				return compiler.AddMask(m_compiledExpressionId, true, true, true, false);
+			}
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex NamedVariableSetNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			if (!m_input.IsLinked())
+			{
+				ELOG("Set Variable node '" << m_variableName << "' has no input value connected!");
+				return IndexNone;
+			}
+
+			m_compiledExpressionId = m_input.GetLink()->GetNode()->Compile(compiler, m_input.GetLink());
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	NamedVariableSetNode* NamedVariableGetNode::FindDeclaration() const
+	{
+		if (m_variableName.empty() || !m_material)
+		{
+			return nullptr;
+		}
+
+		const uint32 setTypeId = NamedVariableSetNode::GetStaticTypeInfo().id;
+		for (GraphNode* node : m_material->GetNodes())
+		{
+			if (node->GetTypeInfo().id != setTypeId)
+			{
+				continue;
+			}
+
+			auto* setNode = static_cast<NamedVariableSetNode*>(node);
+			if (setNode->GetVariableName() == m_variableName)
+			{
+				return setNode;
+			}
+		}
+
+		return nullptr;
+	}
+
+	uint32 NamedVariableGetNode::GetColor()
+	{
+		if (NamedVariableSetNode* declaration = FindDeclaration())
+		{
+			return declaration->GetColor();
+		}
+
+		// Unresolved reference: neutral grey so the broken link is visually obvious.
+		return IM_COL32(128, 128, 128, 255);
+	}
+
+	ExpressionIndex NamedVariableGetNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			NamedVariableSetNode* declaration = FindDeclaration();
+			if (!declaration)
+			{
+				ELOG("Get Variable node references unknown variable '" << m_variableName << "'!");
+				return IndexNone;
+			}
+
+			m_compiledExpressionId = declaration->Compile(compiler, nullptr);
+		}
+
+		return m_compiledExpressionId;
+	}
+
 	ExpressionIndex AddNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
 		if (m_compiledExpressionId == IndexNone)
@@ -1112,6 +1266,107 @@ namespace mmo
 		if (m_compiledExpressionId == IndexNone)
 		{
 			m_compiledExpressionId = compiler.AddCameraPosition();
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex TimeNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddTime();
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex RotatorNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			// Coordinates input is required
+			ExpressionIndex coordsExpression = IndexNone;
+			if (m_coordsInput.IsLinked())
+			{
+				coordsExpression = m_coordsInput.GetLink()->GetNode()->Compile(compiler, m_coordsInput.GetLink());
+			}
+			else
+			{
+				ELOG("Missing coordinates input for Rotator node");
+				return IndexNone;
+			}
+
+			// Center input: use linked pin or fall back to property defaults
+			ExpressionIndex centerExpression = IndexNone;
+			if (m_centerInput.IsLinked())
+			{
+				centerExpression = m_centerInput.GetLink()->GetNode()->Compile(compiler, m_centerInput.GetLink());
+			}
+			else
+			{
+				std::ostringstream defaultCenter;
+				defaultCenter << "float2(" << m_centerX << ", " << m_centerY << ")";
+				centerExpression = compiler.AddExpression(defaultCenter.str(), ExpressionType::Float_2);
+			}
+
+			// Rotation input: use linked pin or fall back to property default
+			ExpressionIndex rotationExpression = IndexNone;
+			if (m_rotationInput.IsLinked())
+			{
+				rotationExpression = m_rotationInput.GetLink()->GetNode()->Compile(compiler, m_rotationInput.GetLink());
+			}
+			else
+			{
+				std::ostringstream defaultRotation;
+				defaultRotation << m_rotation;
+				rotationExpression = compiler.AddExpression(defaultRotation.str(), ExpressionType::Float_1);
+			}
+
+			m_compiledExpressionId = compiler.AddRotator(coordsExpression, centerExpression, rotationExpression);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex FresnelNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			// Exponent input: use linked pin or fall back to property default
+			ExpressionIndex exponentExpression = IndexNone;
+			if (m_exponentInput.IsLinked())
+			{
+				exponentExpression = m_exponentInput.GetLink()->GetNode()->Compile(compiler, m_exponentInput.GetLink());
+			}
+			else
+			{
+				std::ostringstream defaultExponent;
+				defaultExponent << m_exponent;
+				exponentExpression = compiler.AddExpression(defaultExponent.str(), ExpressionType::Float_1);
+			}
+
+			// Base reflect fraction input: use linked pin or fall back to property default
+			ExpressionIndex baseReflectExpression = IndexNone;
+			if (m_baseReflectFractionInput.IsLinked())
+			{
+				baseReflectExpression = m_baseReflectFractionInput.GetLink()->GetNode()->Compile(compiler, m_baseReflectFractionInput.GetLink());
+			}
+			else
+			{
+				std::ostringstream defaultBaseReflect;
+				defaultBaseReflect << m_baseReflectFraction;
+				baseReflectExpression = compiler.AddExpression(defaultBaseReflect.str(), ExpressionType::Float_1);
+			}
+
+			// Normal input: use linked pin or IndexNone (compiler will use default vertex normal)
+			ExpressionIndex normalExpression = IndexNone;
+			if (m_normalInput.IsLinked())
+			{
+				normalExpression = m_normalInput.GetLink()->GetNode()->Compile(compiler, m_normalInput.GetLink());
+			}
+
+			m_compiledExpressionId = compiler.AddFresnel(exponentExpression, baseReflectExpression, normalExpression);
 		}
 
 		return m_compiledExpressionId;
@@ -1763,6 +2018,223 @@ namespace mmo
 			});
 
 		return reader;
+	}
+
+	const uint32 PannerNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 ReflectionVectorNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
+	const uint32 SmoothStepNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+
+	ExpressionIndex PannerNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			// UVs: use linked pin or fall back to uv0
+			ExpressionIndex uvsExpression = IndexNone;
+			if (m_uvsInput.IsLinked())
+			{
+				uvsExpression = m_uvsInput.GetLink()->GetNode()->Compile(compiler, m_uvsInput.GetLink());
+			}
+			else
+			{
+				uvsExpression = compiler.AddTextureCoordinate(0);
+			}
+
+			if (uvsExpression == IndexNone)
+			{
+				ELOG("Invalid UVs input for Panner node");
+				return IndexNone;
+			}
+
+			// Time: use linked pin or fall back to shader 'time' variable
+			ExpressionIndex timeExpression = IndexNone;
+			if (m_timeInput.IsLinked())
+			{
+				timeExpression = m_timeInput.GetLink()->GetNode()->Compile(compiler, m_timeInput.GetLink());
+			}
+			else
+			{
+				timeExpression = compiler.AddTime();
+			}
+
+			// Apply optional scalar speed multiplier to time
+			if (m_speedInput.IsLinked())
+			{
+				const ExpressionIndex speedScale = m_speedInput.GetLink()->GetNode()->Compile(compiler, m_speedInput.GetLink());
+				if (speedScale != IndexNone)
+				{
+					timeExpression = compiler.AddMultiply(timeExpression, speedScale);
+				}
+			}
+
+			// Build scroll direction from properties
+			std::ostringstream speedStream;
+			speedStream << "float2(" << m_speedX << ", " << m_speedY << ")";
+			const ExpressionIndex speedDirExpression = compiler.AddExpression(speedStream.str(), ExpressionType::Float_2);
+
+			// offset = direction * time
+			const ExpressionIndex offsetExpression = compiler.AddMultiply(speedDirExpression, timeExpression);
+
+			// result = UVs + offset
+			m_compiledExpressionId = compiler.AddAddition(uvsExpression, offsetExpression);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex ReflectionVectorNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			std::string normalCode;
+			if (m_normalInput.IsLinked())
+			{
+				const ExpressionIndex normalExpression = m_normalInput.GetLink()->GetNode()->Compile(compiler, m_normalInput.GetLink());
+				if (normalExpression == IndexNone)
+				{
+					ELOG("Invalid normal input for ReflectionVector node");
+					return IndexNone;
+				}
+				normalCode = "normalize(expr_" + std::to_string(normalExpression) + ".xyz)";
+			}
+			else
+			{
+				normalCode = "N";
+			}
+
+			// reflect(-V, N): V is the view direction (surface→camera), so -V is the incident ray
+			m_compiledExpressionId = compiler.AddExpression(
+				"reflect(-V, " + normalCode + ")",
+				ExpressionType::Float_3
+			);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex SmoothStepNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			if (!m_valueInput.IsLinked())
+			{
+				ELOG("Missing value input for SmoothStep node");
+				return IndexNone;
+			}
+
+			const ExpressionIndex valueExpression = m_valueInput.GetLink()->GetNode()->Compile(compiler, m_valueInput.GetLink());
+			if (valueExpression == IndexNone)
+			{
+				ELOG("Invalid value input for SmoothStep node");
+				return IndexNone;
+			}
+
+			// Edge0: optional, falls back to property default
+			ExpressionIndex edge0Expression = IndexNone;
+			if (m_edge0Input.IsLinked())
+			{
+				edge0Expression = m_edge0Input.GetLink()->GetNode()->Compile(compiler, m_edge0Input.GetLink());
+			}
+			else
+			{
+				edge0Expression = compiler.AddExpression(std::to_string(m_edge0), ExpressionType::Float_1);
+			}
+
+			// Edge1: optional, falls back to property default
+			ExpressionIndex edge1Expression = IndexNone;
+			if (m_edge1Input.IsLinked())
+			{
+				edge1Expression = m_edge1Input.GetLink()->GetNode()->Compile(compiler, m_edge1Input.GetLink());
+			}
+			else
+			{
+				edge1Expression = compiler.AddExpression(std::to_string(m_edge1), ExpressionType::Float_1);
+			}
+
+			const ExpressionType valueType = compiler.GetExpressionType(valueExpression);
+
+			m_compiledExpressionId = compiler.AddExpression(
+				"smoothstep(expr_" + std::to_string(edge0Expression) +
+				", expr_" + std::to_string(edge1Expression) +
+				", expr_" + std::to_string(valueExpression) + ")",
+				valueType
+			);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	const uint32 PixelDepthNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
+	const uint32 SceneDepthNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
+	const uint32 ScreenPositionNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
+	const uint32 SceneColorNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
+
+	ExpressionIndex PixelDepthNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddPixelDepth();
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex SceneDepthNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddSceneDepth();
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex ScreenPositionNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			m_compiledExpressionId = compiler.AddScreenPosition();
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex SaturateNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			if (!m_input.IsLinked())
+			{
+				ELOG("Missing input for Saturate node");
+				return IndexNone;
+			}
+
+			const ExpressionIndex inputExpression = m_input.GetLink()->GetNode()->Compile(compiler, m_input.GetLink());
+			if (inputExpression == IndexNone)
+			{
+				ELOG("Invalid input for Saturate node");
+				return IndexNone;
+			}
+
+			m_compiledExpressionId = compiler.AddSaturate(inputExpression);
+		}
+
+		return m_compiledExpressionId;
+	}
+
+	ExpressionIndex SceneColorNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			ExpressionIndex offsetExpression = IndexNone;
+			if (m_offsetInput.IsLinked())
+			{
+				offsetExpression = m_offsetInput.GetLink()->GetNode()->Compile(compiler, m_offsetInput.GetLink());
+			}
+
+			m_compiledExpressionId = compiler.AddSceneColor(offsetExpression);
+		}
+
+		return m_compiledExpressionId;
 	}
 
 	ImColor GetIconColor(const PinType type)

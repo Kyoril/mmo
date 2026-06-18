@@ -2,8 +2,10 @@
 
 #include "terrain.h"
 
+#include <set>
 #include <utility>
 
+#include "math/noise.h"
 #include "page.h"
 #include "tile.h"
 #include "game/constants.h"
@@ -296,6 +298,23 @@ namespace mmo
 			return layerValue / 255.0f;
 		}
 
+		MaterialPtr Terrain::GetBaseMaterialAt(const float x, const float z)
+		{
+			int32 tileX, tileZ;
+			if (!GetTileIndexByWorldPosition(Vector3(x, 0.0f, z), tileX, tileZ))
+			{
+				return nullptr;
+			}
+
+			Tile* tile = GetTile(tileX, tileZ);
+			if (!tile)
+			{
+				return nullptr;
+			}
+
+			return tile->GetBaseMaterial();
+		}
+
 		Vector3 Terrain::GetVectorAt(uint32 x, uint32 z)
 		{
 			return Vector3();
@@ -378,6 +397,22 @@ namespace mmo
 			m_showWireframe = visible;
 		}
 
+		void Terrain::SetWaterVisible(const bool visible)
+		{
+			m_waterVisible = visible;
+
+			for (uint32 x = 0; x < m_width; ++x)
+			{
+				for (uint32 y = 0; y < m_height; ++y)
+				{
+					if (Page* page = m_pages(x, y).get())
+					{
+						page->SetWaterVisible(visible);
+					}
+				}
+			}
+		}
+
 		bool Terrain::GetTileIndexByWorldPosition(const Vector3 &position, int32 &x, int32 &y) const
 		{
 			const float halfTerrainWidth = (m_width * constants::PageSize) * 0.5f;
@@ -428,6 +463,11 @@ namespace mmo
 		bool Terrain::IsLodEnabled() const
 		{
 			return m_lodEnabled;
+		}
+
+		void Terrain::SetOcclusionCullingEnabled(bool enabled)
+		{
+			m_occlusionCullingEnabled = enabled;
 		}
 
 		void Terrain::SetDebugLodIsVisible(bool visible)
@@ -493,6 +533,60 @@ namespace mmo
 					m_pages(i, j)->UpdateTileSelectionQuery();
 				}
 			}
+		}
+
+		void Terrain::NotifyCameraPosition(const Vector3& pos)
+		{
+			// On the first call, arm both detectors without triggering a reset.
+			if (!m_cameraPositionInitialized)
+			{
+				m_lastCameraPosition = pos;
+				m_lastResetCameraPosition = pos;
+				m_cameraPositionInitialized = true;
+				return;
+			}
+
+			const Vector3 frameDelta = pos - m_lastCameraPosition;
+			const float frameDistSq = frameDelta.Dot(frameDelta);
+
+			const Vector3 anchorDelta = pos - m_lastResetCameraPosition;
+			const float anchorDistSq = anchorDelta.Dot(anchorDelta);
+
+			// Trigger reset on either an instantaneous jump (teleport) OR cumulative
+			// walk distance from the last reset anchor (covers gradual building exits).
+			const bool shouldReset = (frameDistSq > kCameraJumpThresholdSq) ||
+			                         (anchorDistSq > kCameraWalkResetThresholdSq);
+
+			if (shouldReset)
+			{
+				for (uint32 i = 0; i < m_width; ++i)
+				{
+					for (uint32 j = 0; j < m_height; ++j)
+					{
+						Page* page = m_pages(i, j).get();
+						if (!page || !page->IsPrepared())
+						{
+							continue;
+						}
+
+						for (uint32 x = 0; x < constants::TilesPerPage; ++x)
+						{
+							for (uint32 y = 0; y < constants::TilesPerPage; ++y)
+							{
+								Tile* tile = page->GetTile(x, y);
+								if (tile)
+								{
+									tile->ResetOcclusionState();
+								}
+							}
+						}
+					}
+				}
+
+				m_lastResetCameraPosition = pos;
+			}
+
+			m_lastCameraPosition = pos;
 		}
 
 		std::pair<bool, Terrain::RayIntersectsResult> Terrain::RayIntersects(const Ray &ray)
@@ -852,6 +946,49 @@ namespace mmo
 					} });
 		}
 
+		void Terrain::ApplyNoise(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, const float amplitude, const float frequency, const int octaves, const float persistence)
+		{
+			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, amplitude, frequency, octaves, persistence](const int32 vx, const int32 vy, const float factor)
+							   {
+				if (vx >= 0 && vy >= 0)
+				{
+					// Outer vertex — get world position and apply noise displacement
+					float worldX = 0.0f, worldZ = 0.0f;
+					GetGlobalVertexWorldPosition(vx, vy, &worldX, &worldZ);
+
+					float height = GetHeightAt(vx, vy);
+					height += amplitude * factor * noise::fBm(worldX * frequency, worldZ * frequency, octaves, persistence);
+					SetHeightAt(vx, vy, height);
+				}
+				else
+				{
+					// Inner vertex (encoded as negative indices)
+					const int32 ix = -vx - 1;
+					const int32 iz = -vy - 1;
+					const uint32 pageX = ix / (constants::OuterVerticesPerPageSide - 1);
+					const uint32 pageZ = iz / (constants::OuterVerticesPerPageSide - 1);
+					const uint32 localInnerX = ix % (constants::OuterVerticesPerPageSide - 1);
+					const uint32 localInnerZ = iz % (constants::OuterVerticesPerPageSide - 1);
+
+					Page* page = GetPage(pageX, pageZ);
+					if (page && page->IsPrepared())
+					{
+						// Compute inner vertex world position as average of surrounding outer corners
+						float v0x, v0z, v1x, v1z, v2x, v2z, v3x, v3z;
+						GetGlobalVertexWorldPosition(ix,     iz,     &v0x, &v0z);
+						GetGlobalVertexWorldPosition(ix + 1, iz,     &v1x, &v1z);
+						GetGlobalVertexWorldPosition(ix,     iz + 1, &v2x, &v2z);
+						GetGlobalVertexWorldPosition(ix + 1, iz + 1, &v3x, &v3z);
+						const float worldX = (v0x + v1x + v2x + v3x) * 0.25f;
+						const float worldZ = (v0z + v1z + v2z + v3z) * 0.25f;
+
+						float height = page->GetInnerHeightAt(localInnerX, localInnerZ);
+						height += amplitude * factor * noise::fBm(worldX * frequency, worldZ * frequency, octaves, persistence);
+						page->SetInnerHeightAt(localInnerX, localInnerZ, height);
+					}
+				} });
+		}
+
 		void Terrain::Smooth(const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, float power)
 		{
 			// First collect average height value
@@ -861,10 +998,16 @@ namespace mmo
 							   {
 					if (vx >= 0 && vy >= 0)
 					{
-						// Outer vertex
-						float height = GetHeightAt(vx, vy);
-						sumHeight += height;
-						heightCount++;
+						// Outer vertex — guard against unprepared pages returning 0
+						uint32 pageX2, pageZ2, localVX, localVZ;
+						GetPageAndLocalVertex(static_cast<uint32>(vx), pageX2, localVX);
+						GetPageAndLocalVertex(static_cast<uint32>(vy), pageZ2, localVZ);
+						Page* pg = GetPage(pageX2, pageZ2);
+						if (pg && pg->IsPrepared())
+						{
+							sumHeight += GetHeightAt(vx, vy);
+							heightCount++;
+						}
 					}
 					else
 					{
@@ -885,6 +1028,7 @@ namespace mmo
 						}
 					} });
 
+			if (heightCount == 0) return;
 			const float avgHeight = sumHeight / static_cast<float>(heightCount);
 			TerrainVertexBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, avgHeight, power](const int32 vx, const int32 vy, const float factor)
 							   {
@@ -961,19 +1105,41 @@ namespace mmo
 			}
 		}
 
-		void Terrain::Paint(const uint8 layer, const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, const float power)
+		void Terrain::Paint(const uint8 layer, const float brushCenterX, const float brushCenterZ, const float innerRadius, const float outerRadius, const float power, const BrushMaskSampler* maskSampler)
 		{
-			TerrainPixelBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [this, layer, power](const int32 vx, const int32 vy, const float factor)
+			// Footprint origin and inverse extent for mapping pixel world positions to mask UVs.
+			const float maskExtent = outerRadius * 2.0f;
+			const float invMaskExtent = maskExtent > 0.0f ? 1.0f / maskExtent : 0.0f;
+			const float maskOriginX = brushCenterX - outerRadius;
+			const float maskOriginZ = brushCenterZ - outerRadius;
+
+			TerrainPixelBrush(brushCenterX, brushCenterZ, innerRadius, outerRadius, true, &GetBrushIntensityLinear, [&](const int32 vx, const int32 vy, const float radialFactor)
 							  {
+					float factor = radialFactor;
+
+					// Modulate the radial falloff with the optional brush mask sampled at this pixel.
+					if (maskSampler && *maskSampler)
+					{
+						float worldX, worldZ;
+						GetGlobalPixelWorldPosition(vx, vy, &worldX, &worldZ);
+						const float u = (worldX - maskOriginX) * invMaskExtent;
+						const float v = (worldZ - maskOriginZ) * invMaskExtent;
+						factor *= (*maskSampler)(u, v);
+						if (factor <= 0.0f)
+						{
+							return;
+						}
+					}
+
 					const uint32 layers = GetLayersAt(vx, vy);
 
-					Vector4 v;
-					v.x = ((layers >> 0) & 0xFF) / 255.0f;
-					v.y = ((layers >> 8) & 0xFF) / 255.0f;
-					v.z = ((layers >> 16) & 0xFF) / 255.0f;
-					v.w = ((layers >> 24) & 0xFF) / 255.0f;
+					Vector4 lv;
+					lv.x = ((layers >> 0) & 0xFF) / 255.0f;
+					lv.y = ((layers >> 8) & 0xFF) / 255.0f;
+					lv.z = ((layers >> 16) & 0xFF) / 255.0f;
+					lv.w = ((layers >> 24) & 0xFF) / 255.0f;
 
-					float value = v[layer];
+					float value = lv[layer];
 					value += power * factor;
 
 					SetLayerAt(vx, vy, layer, Clamp(value, 0.0f, 1.0f)); });
@@ -1536,6 +1702,377 @@ namespace mmo
 							}
 						}
 					}
+				}
+			}
+		}
+
+		// -----------------------------------------------------------------------
+		// Water brush helpers
+		// -----------------------------------------------------------------------
+		namespace
+		{
+			// Call fn(page, tileX, tileZ, qx, qz) for every 8x8 water quad whose center
+			// is within radius of (cx, cz).
+			template <typename Fn>
+			void ForEachWaterQuad(Terrain& terrain, float cx, float cz, float radius, Fn fn)
+			{
+				const float halfW = static_cast<float>(terrain.GetWidth()  * constants::PageSize) * 0.5f;
+				const float halfH = static_cast<float>(terrain.GetHeight() * constants::PageSize) * 0.5f;
+
+				const int32 minPageX = std::max(0, static_cast<int32>(std::floor((cx - radius + halfW) / constants::PageSize)));
+				const int32 maxPageX = std::min(static_cast<int32>(terrain.GetWidth())  - 1, static_cast<int32>(std::floor((cx + radius + halfW) / constants::PageSize)));
+				const int32 minPageZ = std::max(0, static_cast<int32>(std::floor((cz - radius + halfH) / constants::PageSize)));
+				const int32 maxPageZ = std::min(static_cast<int32>(terrain.GetHeight()) - 1, static_cast<int32>(std::floor((cz + radius + halfH) / constants::PageSize)));
+
+				constexpr float tileSizeF = static_cast<float>(constants::TileSize);
+				constexpr float quadSizeF = tileSizeF / 8.0f;
+				const float radiusSq = radius * radius;
+
+				for (int32 pz = minPageZ; pz <= maxPageZ; ++pz)
+				{
+					for (int32 px = minPageX; px <= maxPageX; ++px)
+					{
+						Page* page = terrain.GetPage(px, pz);
+						if (!page)
+						{
+							continue;
+						}
+
+						const float pageOriginX = static_cast<float>((px - 32) * constants::PageSize);
+						const float pageOriginZ = static_cast<float>((pz - 32) * constants::PageSize);
+
+						for (uint32 tz = 0; tz < constants::TilesPerPage; ++tz)
+						{
+							for (uint32 tx = 0; tx < constants::TilesPerPage; ++tx)
+							{
+								for (uint32 qz = 0; qz < 8; ++qz)
+								{
+									for (uint32 qx = 0; qx < 8; ++qx)
+									{
+										// Quad center in world space
+										const float qcx = pageOriginX + (tx + (qx + 0.5f) / 8.0f) * tileSizeF;
+										const float qcz = pageOriginZ + (tz + (qz + 0.5f) / 8.0f) * tileSizeF;
+										const float dx = qcx - cx;
+										const float dz = qcz - cz;
+										if (dx * dx + dz * dz <= radiusSq)
+										{
+											fn(*page, tx, tz, qx, qz);
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+
+			// Call fn(page, pvx, pvz, worldX, worldZ) for every page outer vertex
+			// whose world position is within radius of (cx, cz).
+			template <typename Fn>
+			void ForEachWaterVertex(Terrain& terrain, float cx, float cz, float radius, Fn fn)
+			{
+				const float halfW = static_cast<float>(terrain.GetWidth()  * constants::PageSize) * 0.5f;
+				const float halfH = static_cast<float>(terrain.GetHeight() * constants::PageSize) * 0.5f;
+
+				const int32 minPageX = std::max(0, static_cast<int32>(std::floor((cx - radius + halfW) / constants::PageSize)));
+				const int32 maxPageX = std::min(static_cast<int32>(terrain.GetWidth())  - 1, static_cast<int32>(std::floor((cx + radius + halfW) / constants::PageSize)));
+				const int32 minPageZ = std::max(0, static_cast<int32>(std::floor((cz - radius + halfH) / constants::PageSize)));
+				const int32 maxPageZ = std::min(static_cast<int32>(terrain.GetHeight()) - 1, static_cast<int32>(std::floor((cz + radius + halfH) / constants::PageSize)));
+
+				constexpr float spacing = static_cast<float>(constants::TileSize) / 8.0f;
+				constexpr uint32 pvSide = constants::OuterVerticesPerPageSide;
+				const float radiusSq = radius * radius;
+
+				for (int32 pz = minPageZ; pz <= maxPageZ; ++pz)
+				{
+					for (int32 px = minPageX; px <= maxPageX; ++px)
+					{
+						Page* page = terrain.GetPage(px, pz);
+						if (!page)
+						{
+							continue;
+						}
+
+						const float pageOriginX = static_cast<float>((px - 32) * constants::PageSize);
+						const float pageOriginZ = static_cast<float>((pz - 32) * constants::PageSize);
+
+						for (uint32 pvz = 0; pvz < pvSide; ++pvz)
+						{
+							for (uint32 pvx = 0; pvx < pvSide; ++pvx)
+							{
+								const float worldX = pageOriginX + pvx * spacing;
+								const float worldZ = pageOriginZ + pvz * spacing;
+								const float dx = worldX - cx;
+								const float dz = worldZ - cz;
+								if (dx * dx + dz * dz <= radiusSq)
+								{
+									fn(*page, pvx, pvz, worldX, worldZ);
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		float Terrain::GetWaterHeightAtWorldPos(float x, float z) const
+		{
+			const float halfW = static_cast<float>(m_width  * constants::PageSize) * 0.5f;
+			const float halfH = static_cast<float>(m_height * constants::PageSize) * 0.5f;
+			const int32 pageX = static_cast<int32>(std::floor((x + halfW) / constants::PageSize));
+			const int32 pageZ = static_cast<int32>(std::floor((z + halfH) / constants::PageSize));
+			if (pageX < 0 || pageZ < 0 || pageX >= static_cast<int32>(m_width) || pageZ >= static_cast<int32>(m_height))
+			{
+				return 0.0f;
+			}
+			const Page* page = GetPage(pageX, pageZ);
+			if (!page)
+			{
+				return 0.0f;
+			}
+
+			const float pageOriginX = static_cast<float>((pageX - 32) * constants::PageSize);
+			const float pageOriginZ = static_cast<float>((pageZ - 32) * constants::PageSize);
+			constexpr float spacing = static_cast<float>(constants::TileSize) / 8.0f;
+
+			// Bilinear interpolation of the water vertex height grid
+			const float localX = (x - pageOriginX) / spacing;
+			const float localZ = (z - pageOriginZ) / spacing;
+			const int pvx0 = std::max(0, std::min(static_cast<int>(localX), static_cast<int>(constants::OuterVerticesPerPageSide) - 2));
+			const int pvz0 = std::max(0, std::min(static_cast<int>(localZ), static_cast<int>(constants::OuterVerticesPerPageSide) - 2));
+
+			const float fx = localX - pvx0;
+			const float fz = localZ - pvz0;
+			const float h00 = page->GetWaterVertexHeight(pvx0,     pvz0);
+			const float h10 = page->GetWaterVertexHeight(pvx0 + 1, pvz0);
+			const float h01 = page->GetWaterVertexHeight(pvx0,     pvz0 + 1);
+			const float h11 = page->GetWaterVertexHeight(pvx0 + 1, pvz0 + 1);
+
+			return h00 * (1.0f - fx) * (1.0f - fz)
+			     + h10 * fx           * (1.0f - fz)
+			     + h01 * (1.0f - fx)  * fz
+			     + h11 * fx           * fz;
+		}
+
+		bool Terrain::HasWaterAtWorldPos(float x, float z) const
+		{
+			const float halfW = static_cast<float>(m_width  * constants::PageSize) * 0.5f;
+			const float halfH = static_cast<float>(m_height * constants::PageSize) * 0.5f;
+			const int32 pageX = static_cast<int32>(std::floor((x + halfW) / constants::PageSize));
+			const int32 pageZ = static_cast<int32>(std::floor((z + halfH) / constants::PageSize));
+			if (pageX < 0 || pageZ < 0 || pageX >= static_cast<int32>(m_width) || pageZ >= static_cast<int32>(m_height))
+			{
+				return false;
+			}
+			const Page* page = GetPage(pageX, pageZ);
+			if (!page)
+			{
+				return false;
+			}
+
+			const float pageOriginX = static_cast<float>((pageX - 32) * constants::PageSize);
+			const float pageOriginZ = static_cast<float>((pageZ - 32) * constants::PageSize);
+			const float tileSizeF   = static_cast<float>(constants::TileSize);
+			const float quadSizeF   = tileSizeF / 8.0f;
+			const auto  tileX = static_cast<uint32>((x - pageOriginX) / tileSizeF);
+			const auto  tileZ = static_cast<uint32>((z - pageOriginZ) / tileSizeF);
+			if (tileX >= constants::TilesPerPage || tileZ >= constants::TilesPerPage)
+			{
+				return false;
+			}
+
+			const float tileLocalX = (x - pageOriginX) - tileX * tileSizeF;
+			const float tileLocalZ = (z - pageOriginZ) - tileZ * tileSizeF;
+			const uint32 qx = std::min(static_cast<uint32>(tileLocalX / quadSizeF), 7u);
+			const uint32 qz = std::min(static_cast<uint32>(tileLocalZ / quadSizeF), 7u);
+
+			const uint64 mask = page->GetWaterQuadMask(tileX, tileZ);
+			return (mask & (1ULL << (qx + qz * 8))) != 0;
+		}
+
+		void Terrain::FillWater(float brushCenterX, float brushCenterZ, float radius, float waterHeight, WaterType type)
+		{
+			std::set<Page*> dirtyPages;
+
+			ForEachWaterQuad(*this, brushCenterX, brushCenterZ, radius,
+				[type, waterHeight, &dirtyPages](Page& page, uint32 tx, uint32 tz, uint32 qx, uint32 qz)
+				{
+					page.SetWaterQuadBit(tx, tz, qx, qz, true);
+					if (page.GetWaterType(tx, tz) == WaterType::None)
+					{
+						page.SetWaterType(tx, tz, type);
+					}
+
+					// Set all 4 outer corner vertex heights for this quad
+					const uint32 pvx0 = tx * 8 + qx;
+					const uint32 pvz0 = tz * 8 + qz;
+					page.SetWaterVertexHeight(pvx0,     pvz0,     waterHeight);
+					page.SetWaterVertexHeight(pvx0 + 1, pvz0,     waterHeight);
+					page.SetWaterVertexHeight(pvx0,     pvz0 + 1, waterHeight);
+					page.SetWaterVertexHeight(pvx0 + 1, pvz0 + 1, waterHeight);
+
+					dirtyPages.insert(&page);
+				});
+
+			for (Page* p : dirtyPages)
+			{
+				p->RebuildWaterMesh();
+			}
+		}
+
+		void Terrain::EraseWater(float brushCenterX, float brushCenterZ, float radius)
+		{
+			std::set<Page*> dirtyPages;
+
+			ForEachWaterQuad(*this, brushCenterX, brushCenterZ, radius,
+				[&dirtyPages](Page& page, uint32 tx, uint32 tz, uint32 qx, uint32 qz)
+				{
+					page.SetWaterQuadBit(tx, tz, qx, qz, false);
+					if (!page.HasWater(tx, tz))
+					{
+						page.SetWaterType(tx, tz, WaterType::None);
+					}
+					dirtyPages.insert(&page);
+				});
+
+			for (Page* p : dirtyPages)
+			{
+				p->RebuildWaterMesh();
+			}
+		}
+
+		void Terrain::RaiseWater(float brushCenterX, float brushCenterZ, float radius, float amount)
+		{
+			std::set<Page*> dirtyPages;
+
+			ForEachWaterVertex(*this, brushCenterX, brushCenterZ, radius,
+				[amount, &dirtyPages](Page& page, uint32 pvx, uint32 pvz, float, float)
+				{
+					page.SetWaterVertexHeight(pvx, pvz, page.GetWaterVertexHeight(pvx, pvz) + amount);
+					dirtyPages.insert(&page);
+				});
+
+			for (Page* p : dirtyPages)
+			{
+				p->RebuildWaterMesh();
+			}
+		}
+
+		void Terrain::LowerWater(float brushCenterX, float brushCenterZ, float radius, float amount)
+		{
+			std::set<Page*> dirtyPages;
+
+			ForEachWaterVertex(*this, brushCenterX, brushCenterZ, radius,
+				[amount, &dirtyPages](Page& page, uint32 pvx, uint32 pvz, float, float)
+				{
+					page.SetWaterVertexHeight(pvx, pvz, page.GetWaterVertexHeight(pvx, pvz) - amount);
+					dirtyPages.insert(&page);
+				});
+
+			for (Page* p : dirtyPages)
+			{
+				p->RebuildWaterMesh();
+			}
+		}
+
+		void Terrain::FlattenWater(float brushCenterX, float brushCenterZ, float radius, float height)
+		{
+			std::set<Page*> dirtyPages;
+
+			ForEachWaterVertex(*this, brushCenterX, brushCenterZ, radius,
+				[height, &dirtyPages](Page& page, uint32 pvx, uint32 pvz, float, float)
+				{
+					page.SetWaterVertexHeight(pvx, pvz, height);
+					dirtyPages.insert(&page);
+				});
+
+			for (Page* p : dirtyPages)
+			{
+				p->RebuildWaterMesh();
+			}
+		}
+
+		void Terrain::RampWater(float startX, float startZ, float endX, float endZ, float radius, float startHeight, float endHeight)
+		{
+			const float dx  = endX - startX;
+			const float dz  = endZ - startZ;
+			const float len = std::sqrt(dx * dx + dz * dz);
+
+			if (len < 0.001f)
+			{
+				FlattenWater((startX + endX) * 0.5f, (startZ + endZ) * 0.5f, radius, (startHeight + endHeight) * 0.5f);
+				return;
+			}
+
+			const float invLen = 1.0f / len;
+			const float dirX   = dx * invLen;
+			const float dirZ   = dz * invLen;
+
+			// Search circle covers the entire capsule (half-span + radius)
+			const float midX       = (startX + endX) * 0.5f;
+			const float midZ       = (startZ + endZ) * 0.5f;
+			const float searchRadius = len * 0.5f + radius;
+
+			std::set<Page*> dirtyPages;
+
+			ForEachWaterVertex(*this, midX, midZ, searchRadius,
+				[&](Page& page, uint32 pvx, uint32 pvz, float worldX, float worldZ)
+				{
+					// Project vertex onto ramp axis
+					const float relX = worldX - startX;
+					const float relZ = worldZ - startZ;
+					const float proj = relX * dirX + relZ * dirZ;
+
+					// Nearest point on ramp segment
+					const float clampedProj = std::max(0.0f, std::min(proj, len));
+					const float nearX = startX + clampedProj * dirX;
+					const float nearZ = startZ + clampedProj * dirZ;
+
+					// Perpendicular distance to the segment
+					const float perpDx   = worldX - nearX;
+					const float perpDz   = worldZ - nearZ;
+					const float perpDist = std::sqrt(perpDx * perpDx + perpDz * perpDz);
+
+					if (perpDist <= radius)
+					{
+						const float t = std::max(0.0f, std::min(proj * invLen, 1.0f));
+						page.SetWaterVertexHeight(pvx, pvz, startHeight + (endHeight - startHeight) * t);
+						dirtyPages.insert(&page);
+					}
+				});
+
+			for (Page* p : dirtyPages)
+			{
+				p->RebuildWaterMesh();
+			}
+		}
+
+		void Terrain::SetWaterMaterial(float brushCenterX, float brushCenterZ, float radius, const String& materialName)
+		{
+			const float halfW = static_cast<float>(m_width  * constants::PageSize) * 0.5f;
+			const float halfH = static_cast<float>(m_height * constants::PageSize) * 0.5f;
+
+			const float minX = brushCenterX - radius;
+			const float maxX = brushCenterX + radius;
+			const float minZ = brushCenterZ - radius;
+			const float maxZ = brushCenterZ + radius;
+
+			const int32 minPageX = std::max(0, static_cast<int32>(std::floor((minX + halfW) / constants::PageSize)));
+			const int32 maxPageX = std::min(static_cast<int32>(m_width)  - 1, static_cast<int32>(std::floor((maxX + halfW) / constants::PageSize)));
+			const int32 minPageZ = std::max(0, static_cast<int32>(std::floor((minZ + halfH) / constants::PageSize)));
+			const int32 maxPageZ = std::min(static_cast<int32>(m_height) - 1, static_cast<int32>(std::floor((maxZ + halfH) / constants::PageSize)));
+
+			for (int32 pageZ = minPageZ; pageZ <= maxPageZ; ++pageZ)
+			{
+				for (int32 pageX = minPageX; pageX <= maxPageX; ++pageX)
+				{
+					Page *page = GetPage(pageX, pageZ);
+					if (!page)
+					{
+						continue;
+					}
+					page->SetWaterMaterialName(materialName);
+					page->RebuildWaterMesh();
 				}
 			}
 		}

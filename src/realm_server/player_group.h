@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base/typedefs.h"
+#include "database.h"
 #include "game/group.h"
 
 #include <map>
@@ -20,6 +21,7 @@ namespace mmo
 	struct IDatabase;
 	class PlayerManager;
 
+	/// Represents a party/raid group and its membership state.
 	class PlayerGroup final : public std::enable_shared_from_this<PlayerGroup>
 	{
 	public:
@@ -37,8 +39,9 @@ namespace mmo
 	public:
 		/// Creates a new instance of a player group. Note that a group has to be
 		/// created using the create method before it will be valid.
-		explicit PlayerGroup(uint64 id, PlayerManager& playerManager, AsyncDatabase& database, TimerQueue& timers);
+		explicit PlayerGroup(uint64 id, PlayerManager& playerManager, AsyncGroupDatabase database, TimerQueue& timers);
 
+		/// Preloads group data asynchronously.
 		void Preload();
 
 		/// Restores the group from the database.
@@ -64,26 +67,32 @@ namespace mmo
 		/// Adds a new member to the group. The group member has to be invited first.
 		PartyResult AddMember(uint64 memberGuid, const String& memberName);
 
-		/// 
+		/// Gets a member guid by character name.
 		uint64 GetMemberGuid(const String& name) const;
 
-		/// 
+		/// Removes a member from the group.
 		void RemoveMember(uint64 guid);
 
-		/// 
+		/// Removes an invite for the given guid.
 		bool RemoveInvite(uint64 guid);
 
 		/// Sends a group update message to all members of the group.
 		void SendUpdate();
 
-		/// 
+		/// Disbands the group.
 		void Disband(bool silent);
 
-		/// 
+		/// Returns the instance binding for a map, if any.
 		InstanceId InstanceBindingForMap(uint32 map);
 
-		/// 
+		/// Adds an instance binding for a map.
 		bool AddInstanceBinding(InstanceId instance, uint32 map);
+
+		/// Removes the instance binding for a specific map.
+		void RemoveInstanceBinding(uint32 map);
+
+		/// Removes any instance binding that matches a specific instance id.
+		void RemoveInstanceBindingByInstanceId(InstanceId instanceId);
 
 		/// Converts the group into a raid group.
 		void ConvertToRaidGroup();
@@ -100,6 +109,9 @@ namespace mmo
 		/// Returns the number of group members.
 		size_t GetMemberCount() const { return m_members.size(); }
 
+		/// Returns a const reference to the map of group members, keyed by character GUID.
+		const MembersByGUID& GetMembers() const { return m_members; }
+
 		/// Determines whether this group has been created.
 		bool IsCreated() const { return m_leaderGUID != 0; }
 
@@ -109,12 +121,19 @@ namespace mmo
 		/// Gets the groups loot method.
 		LootMethod GetLootMethod() const { return m_lootMethod; }
 
+		/// Gets the group's loot quality threshold.
+		[[nodiscard]] uint8 GetLootThreshold() const { return static_cast<uint8>(m_lootTreshold); }
+
+		/// Gets the loot master's GUID (valid when loot method is MasterLoot).
+		[[nodiscard]] uint64 GetLootMasterGuid() const { return m_lootMaster; }
+
 		/// Gets the group leaders GUID.
 		uint64 GetLeader() const { return m_leaderGUID; }
 
 		/// Gets the group id.
 		uint64 GetId() const { return m_id; }
 
+		/// Returns true if the group has finished loading.
 		bool IsLoaded() const { return m_leaderGUID != 0 && !m_loading; }
 
 		/// Broadcasts a network packet to all party mambers.
@@ -162,7 +181,7 @@ namespace mmo
 
 		uint64 m_id;
 		PlayerManager& m_playerManager;
-		AsyncDatabase& m_database;
+		AsyncGroupDatabase m_database;
 		TimerQueue& m_timers;
 		bool m_loading = false;
 		uint64 m_leaderGUID;

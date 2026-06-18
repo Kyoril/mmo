@@ -17,16 +17,12 @@
 #include "log/default_log_levels.h"
 #include "log/log_std_stream.h"
 #include "assets/asset_registry.h"
-#include "base/filesystem.h"
 
 #include "event_loop.h"
 #include "console/console.h"
 #include "net/login_connector.h"
 #include "net/realm_connector.h"
 #include "game_states/game_state_mgr.h"
-#include "game_states/login_state.h"
-#include "game_script.h"
-#include "ui/model_frame.h"
 #include "ui/model_renderer.h"
 
 #ifdef _WIN32
@@ -37,464 +33,28 @@
 
 #include <iostream>
 #include <fstream>
-#include <thread>
 #include <memory>
+#include <set>
 
-#include "data/client_cache.h"
-#include "cursor.h"
-#include "systems/loot_client.h"
-#include "stream_sink.h"
-#include "systems/vendor_client.h"
 #include "game_states/world_state.h"
-#include "base/timer_queue.h"
 
 #include "base/executable_path.h"
 #include "client_data/project.h"
 
-#include "systems/action_bar.h"
-#include "systems/spell_cast.h"
-#include "systems/cooldown_manager.h"
-#include "systems/trainer_client.h"
-#include "systems/quest_client.h"
-#include "systems/party_info.h"
-#include "systems/guild_client.h"
-#include "systems/friend_client.h"
-#include "systems/talent_client.h"
 #include "systems/inventory_client.h"
 
 #include "ui/minimap.h"
 
-#include "char_creation/char_create_info.h"
-#include "char_creation/char_select.h"
 #include "base/create_process.h"
 #include "game_client/object_mgr.h"
-#include "ui/unit_model_frame.h"
-
-#include "luabind/luabind.hpp"
-#include "luabind/iterator_policy.hpp"
-#include "luabind/out_value_policy.hpp"
-#include "ui/minimap_frame.h"
-#include "ui/cooldown_frame.h"
-
-////////////////////////////////////////////////////////////////
-// Network handler
+#include "client_context.h"
+#include "client_application.h"
 
 namespace mmo
 {
-	static asio::io_service s_timerService;
-
 	void DispatchOnGameThread(std::function<void()> &&f)
 	{
-		s_timerService.post(std::move(f));
-	}
-}
-
-namespace mmo
-{
-	// The io service used for networking
-	static std::unique_ptr<asio::io_service> s_networkIO;
-	static std::unique_ptr<asio::io_service::work> s_networkWork;
-	static std::shared_ptr<LoginConnector> s_loginConnector;
-	static std::shared_ptr<RealmConnector> s_realmConnector;
-
-	/// Runs the network thread to handle incoming packets.
-	void NetWorkProc()
-	{
-		// Run the network thread
-		s_networkIO->poll_one();
-	}
-
-	/// Initializes the login connector and starts one or multiple network
-	/// threads to handle network events. Should be called from the main
-	/// thread.
-	void NetInit()
-	{
-		s_networkIO = std::make_unique<asio::io_service>();
-
-		// Keep the worker busy until this object is destroyed
-		s_networkWork = std::make_unique<asio::io_service::work>(*s_networkIO);
-
-		// Create the login connector instance
-		s_loginConnector = std::make_shared<LoginConnector>(*s_networkIO);
-		s_realmConnector = std::make_shared<RealmConnector>(*s_networkIO);
-	}
-
-	/// Destroy the login connector, cuts all opened connections and waits
-	/// for all network threads to stop running. Thus, this method should
-	/// be called from the main thread.
-	void NetDestroy()
-	{
-		// Close the realm connector
-		if (s_realmConnector)
-		{
-			s_realmConnector->resetListener();
-			s_realmConnector->close();
-		}
-
-		// Close the login connector
-		if (s_loginConnector)
-		{
-			s_loginConnector->resetListener();
-			s_loginConnector->close();
-		}
-
-		// Destroy the work object that keeps the worker busy so that
-		// it can actually exit
-		s_networkWork.reset();
-		s_networkIO->stop();
-
-		// Wait for the network thread to stop running
-		s_networkIO->reset();
-
-		s_realmConnector.reset();
-		s_loginConnector.reset();
-	}
-}
-
-////////////////////////////////////////////////////////////////
-// FrameUI stuff
-
-namespace mmo
-{
-	static scoped_connection_container s_frameUiConnections;
-	static std::unique_ptr<GameScript> s_gameScript;
-	static Localization s_localization;
-	static std::unique_ptr<Minimap> s_minimap;
-
-	extern Cursor g_cursor;
-
-	/// Initializes everything related to FrameUI.
-	bool InitializeFrameUi()
-	{
-		if (const auto window = GraphicsDevice::Get().GetAutoCreatedWindow())
-		{
-			s_frameUiConnections += window->Resized.connect([](uint16 width, uint16 height)
-															{ FrameManager::Get().NotifyScreenSizeChanged(width, height); });
-		}
-
-		if (!s_localization.LoadFromFile())
-		{
-			ELOG("Failed to initialize localization!");
-		}
-
-		// Initialize the frame manager
-		FrameManager::Initialize(&s_gameScript->GetLuaState(), s_localization);
-
-		// Register model renderer
-		FrameManager::Get().RegisterFrameRenderer("ModelRenderer", [](const std::string &name)
-												  { return std::make_unique<ModelRenderer>(name); });
-
-		// Register model frame type
-		FrameManager::Get().RegisterFrameFactory("Model", [](const std::string &name)
-												 { return std::make_shared<ModelFrame>(name); });
-		FrameManager::Get().RegisterFrameFactory("UnitModel", [](const std::string &name)
-												 { return std::make_shared<UnitModelFrame>(name); });
-		FrameManager::Get().RegisterFrameFactory("Minimap", [](const std::string &name)
-												 { return std::make_shared<MinimapFrame>(name, *s_minimap); });
-		FrameManager::Get().RegisterFrameFactory("Cooldown", [](const std::string &name)
-												 { return std::make_shared<CooldownFrame>(name); });
-
-		// Setup cursor graphics
-		g_cursor.LoadCursorTypeFromTexture(CursorType::Pointer, "Interface/Cursor/pointer001.htex");
-		g_cursor.LoadCursorTypeFromTexture(CursorType::Interact, "Interface/Cursor/gears001.htex");
-		g_cursor.LoadCursorTypeFromTexture(CursorType::Attack, "Interface/Cursor/sword001.htex");
-		g_cursor.LoadCursorTypeFromTexture(CursorType::Loot, "Interface/Cursor/bag001.htex");
-		g_cursor.LoadCursorTypeFromTexture(CursorType::Gossip, "Interface/Cursor/talk001.htex");
-		g_cursor.SetCursorType(CursorType::Pointer);
-
-		// Connect idle event
-		s_frameUiConnections += EventLoop::Idle.connect([](float deltaSeconds, GameTime timestamp)
-														{ FrameManager::Get().Update(deltaSeconds); });
-
-		// Watch for mouse events
-		s_frameUiConnections += EventLoop::MouseMove.connect([](int32 x, int32 y)
-															 {
-			FrameManager::Get().NotifyMouseMoved(Point(x, y));
-			return false; });
-		s_frameUiConnections += EventLoop::MouseDown.connect([](EMouseButton button, int32 x, int32 y)
-															 {
-			// Returns true if the UI consumed the event, preventing further processing
-			return FrameManager::Get().NotifyMouseDown(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y)); });
-		s_frameUiConnections += EventLoop::MouseUp.connect([](EMouseButton button, int32 x, int32 y)
-														   {
-			// Returns true if the UI consumed the event, preventing further processing
-			return FrameManager::Get().NotifyMouseUp(static_cast<MouseButton>(1 << static_cast<int32>(button)), Point(x, y)); });
-
-		s_frameUiConnections += EventLoop::KeyDown.connect([](int32 key, bool)
-														   {
-			FrameManager::Get().NotifyKeyDown(key);
-			return true; });
-		s_frameUiConnections += EventLoop::KeyChar.connect([](uint16 codepoint)
-														   {
-			FrameManager::Get().NotifyKeyChar(codepoint);
-			return false; });
-		s_frameUiConnections += EventLoop::KeyUp.connect([](int32 key)
-														 {
-			FrameManager::Get().NotifyKeyUp(key);
-			return false; });
-
-		// Expose model frame methods to lua
-
-		LUABIND_MODULE(&s_gameScript->GetLuaState(),
-					   luabind::scope(
-						   luabind::class_<ModelFrame, Frame>("ModelFrame")
-							   .def("SetModelFile", &ModelFrame::SetModelFile)
-							   .def("Yaw", &ModelFrame::Yaw)
-							   .def("SetZoom", &ModelFrame::SetZoom)
-							   .def("GetZoom", &ModelFrame::GetZoom)
-							   .def("GetYaw", &ModelFrame::GetYaw)
-							   .def("ResetYaw", &ModelFrame::ResetYaw)
-							   .def("InvalidateModel", &ModelFrame::InvalidateModel)
-							   .def("SetAutoRender", &ModelFrame::SetAutoRender)),
-
-					   luabind::scope(
-						   luabind::class_<UnitModelFrame, ModelFrame>("UnitModelFrame")
-							   .def("SetUnit", &UnitModelFrame::SetUnit)),
-
-					   luabind::scope(
-						   luabind::class_<CooldownFrame, Frame>("CooldownFrame")
-							   .def("SetProgress", &CooldownFrame::SetProgress)
-							   .def("GetProgress", &CooldownFrame::GetProgress)));
-
-		return true;
-	}
-
-	/// Destroys everything related to FrameUI.
-	void DestroyFrameUI()
-	{
-		// Disconnect FrameUI connections
-		s_frameUiConnections.disconnect();
-
-		// Unregister model renderer
-		FrameManager::Get().RemoveFrameRenderer("ModelRenderer");
-		FrameManager::Get().UnregisterFrameFactory("Model");
-		FrameManager::Get().UnregisterFrameFactory("UnitModel");
-		FrameManager::Get().UnregisterFrameFactory("Cooldown");
-
-		// Destroy the frame manager
-		FrameManager::Destroy();
-	}
-}
-
-////////////////////////////////////////////////////////////////
-// Initialization and destruction
-
-namespace mmo
-{
-	static std::ofstream s_logFile;
-	static scoped_connection s_logConn;
-
-	static std::unique_ptr<TimerQueue> s_timerQueue;
-	static scoped_connection s_timerConnection;
-
-	static proto_client::Project s_project;
-
-	static std::unique_ptr<IAudio> s_audio;
-
-	std::unique_ptr<LootClient> s_lootClient;
-	std::unique_ptr<VendorClient> s_vendorClient;
-	std::unique_ptr<TrainerClient> s_trainerClient;
-	std::unique_ptr<InventoryClient> s_inventoryClient;
-
-	std::unique_ptr<ClientCache> s_clientCache;
-
-	static std::unique_ptr<ActionBar> s_actionBar;
-	static std::unique_ptr<SpellCast> s_spellCast;
-	static std::unique_ptr<CooldownManager> s_cooldownManager;
-	static std::unique_ptr<QuestClient> s_questClient;
-	static std::unique_ptr<PartyInfo> s_partyInfo;
-	static std::unique_ptr<GuildClient> s_guildClient;
-	static std::unique_ptr<FriendClient> s_friendClient;
-
-	static std::unique_ptr<CharCreateInfo> s_charCreateInfo;
-	static std::unique_ptr<CharSelect> s_charSelect;
-	static std::unique_ptr<TalentClient> s_talentClient;
-
-	static std::unique_ptr<Discord> s_discord;
-
-	static GameTimeComponent s_gameTime;
-
-	/// Initializes the global game systems.
-	bool InitializeGlobal()
-	{
-		s_timerQueue = std::make_unique<TimerQueue>(s_timerService);
-
-		// Receive the current working directory
-		std::error_code error;
-		const auto currentPath = std::filesystem::current_path(error);
-		if (error)
-		{
-			ELOG("Could not obtain working directory: " << error);
-			return false;
-		}
-
-		// Ensure the logs directory exists
-		std::filesystem::create_directories(currentPath / "Logs");
-		std::filesystem::create_directories(currentPath / "Config");
-
-		// Setup the log file connection after opening the log file
-		s_logFile.open((currentPath / "Logs" / "Client.log").string().c_str(), std::ios::out);
-		if (s_logFile)
-		{
-			s_logConn = g_DefaultLog.signal().connect(
-				[](const LogEntry &entry)
-				{
-					printLogEntry(s_logFile, entry, g_DefaultFileLogOptions);
-				});
-		}
-
-		// Initialize the event loop
-		EventLoop::Initialize();
-
-		// Initialize the console client which also loads the config file
-		Console::Initialize("Config/Config.cfg");
-
-		// Initialize network threads
-		NetInit();
-
-#ifdef _WIN32
-		s_audio = std::make_unique<FMODAudio>();
-#else
-		s_audio = std::make_unique<NullAudio>();
-#endif
-		s_audio->Create();
-
-		// Run service
-		s_timerConnection = EventLoop::Idle.connect([&](float, const mmo::GameTime &)
-													{
-				NetWorkProc();
-				s_timerService.poll_one(); });
-
-		// Verify the connector instances have been initialized
-		ASSERT(s_loginConnector && s_realmConnector);
-
-		// Load game data
-		if (!s_project.load("ClientDB"))
-		{
-			ELOG("Failed to load project files!");
-			return false;
-		}
-
-		s_clientCache = std::make_unique<ClientCache>(*s_realmConnector);
-		if (!s_clientCache->Load())
-		{
-			ELOG("Failed to load the client cache!");
-			return false;
-		}
-
-		s_discord = std::make_unique<Discord>();
-		s_discord->Initialize();
-
-		// Setup minimap
-		s_minimap = std::make_unique<Minimap>(256);
-
-		s_charCreateInfo = std::make_unique<CharCreateInfo>(s_project, *s_realmConnector);
-		s_charSelect = std::make_unique<CharSelect>(s_project, *s_realmConnector);
-
-		// Initialize loot client
-		s_lootClient = std::make_unique<LootClient>(*s_realmConnector, s_clientCache->GetItemCache());
-		s_vendorClient = std::make_unique<VendorClient>(*s_realmConnector, s_clientCache->GetItemCache());
-		s_trainerClient = std::make_unique<TrainerClient>(*s_realmConnector, s_project.spells);
-		s_inventoryClient = std::make_unique<InventoryClient>(*s_realmConnector);
-		s_questClient = std::make_unique<QuestClient>(*s_realmConnector, s_clientCache->GetQuestCache(), s_project.spells, s_clientCache->GetItemCache(), s_clientCache->GetCreatureCache(), s_localization);
-		s_partyInfo = std::make_unique<PartyInfo>(*s_realmConnector, s_clientCache->GetNameCache());
-		s_guildClient = std::make_unique<GuildClient>(*s_realmConnector, s_clientCache->GetGuildCache(), s_project.races, s_project.classes);
-		s_friendClient = std::make_unique<FriendClient>(*s_realmConnector, s_project.races, s_project.classes);
-		s_spellCast = std::make_unique<SpellCast>(*s_realmConnector, s_project.spells, s_project.ranges);
-		s_cooldownManager = std::make_unique<CooldownManager>();
-		s_actionBar = std::make_unique<ActionBar>(*s_realmConnector, s_project.spells, s_clientCache->GetItemCache(), *s_spellCast);
-		s_talentClient = std::make_unique<TalentClient>(s_project.talentTabs, s_project.talents, s_project.spells, *s_realmConnector);
-
-		GameStateMgr &gameStateMgr = GameStateMgr::Get();
-
-		// Register game states
-		const auto loginState = std::make_shared<LoginState>(gameStateMgr, *s_loginConnector, *s_realmConnector, *s_timerQueue, *s_audio, *s_discord);
-		gameStateMgr.AddGameState(loginState);
-
-		const auto worldState = std::make_shared<WorldState>(gameStateMgr, *s_realmConnector, s_project, *s_timerQueue, *s_lootClient, *s_vendorClient,
-															 *s_actionBar, *s_spellCast, *s_cooldownManager, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charSelect, *s_guildClient, *s_friendClient, *s_clientCache, *s_discord, s_gameTime, *s_talentClient,
-															 *s_minimap, *s_inventoryClient);
-		gameStateMgr.AddGameState(worldState);
-
-		// Initialize the game script instance
-		s_gameScript = std::make_unique<GameScript>(*s_loginConnector, *s_realmConnector, *s_lootClient, *s_vendorClient, loginState, s_project, *s_actionBar, *s_spellCast, *s_cooldownManager, *s_trainerClient, *s_questClient, *s_audio, *s_partyInfo, *s_charCreateInfo, *s_charSelect, *s_guildClient, *s_friendClient, s_gameTime, *s_talentClient);
-		s_minimap->RegisterScriptFunctions(&s_gameScript->GetLuaState());
-
-		// Setup FrameUI library
-		if (!InitializeFrameUi())
-		{
-			return false;
-		}
-
-		// Enter login state
-		gameStateMgr.SetGameState(LoginState::Name);
-
-		// Run the RunOnce script
-		Console::ExecuteCommand("run Config/RunOnce.cfg");
-
-		const auto window = GraphicsDevice::Get().GetAutoCreatedWindow();
-		if (window)
-		{
-			FrameManager::Get().NotifyScreenSizeChanged(window->GetWidth(), window->GetHeight());
-		}
-
-		// TODO: Initialize other systems
-
-		return true;
-	}
-
-	/// Destroys the global game systems.
-	void DestroyGlobal()
-	{
-		s_minimap.reset();
-		s_timerConnection.disconnect();
-
-		// Remove all registered game states and also leave the current game state.
-		GameStateMgr::Get().RemoveAllGameStates();
-
-		// Shutdown client systems
-		if (s_lootClient)
-			s_lootClient->Shutdown();
-		if (s_vendorClient)
-			s_vendorClient->Shutdown();
-		if (s_trainerClient)
-			s_trainerClient->Shutdown();
-		if (s_inventoryClient)
-			s_inventoryClient->Shutdown();
-		if (s_questClient)
-			s_questClient->Shutdown();
-		if (s_partyInfo)
-			s_partyInfo->Shutdown();
-		if (s_guildClient)
-			s_guildClient->Shutdown();
-		if (s_friendClient)
-			s_friendClient->Shutdown();
-		s_vendorClient.reset();
-		s_lootClient.reset();
-		s_trainerClient.reset();
-		s_inventoryClient.reset();
-
-		DestroyFrameUI();
-
-		// Reset game script instance
-		s_gameScript.reset();
-
-		// Destroy the network thread
-		NetDestroy();
-
-		ASSERT(s_clientCache);
-		s_clientCache->Save();
-
-		s_audio.reset();
-
-		// Destroy the graphics device object
-		Console::Destroy();
-		EventLoop::Destroy();
-		AssetRegistry::Destroy();
-
-		// Destroy log
-		s_logConn.disconnect();
-		s_logFile.close();
+		GetClientContext().timerService.post(std::move(f));
 	}
 }
 
@@ -508,15 +68,11 @@ namespace mmo
 	{
 		// TODO: Do something with command line arguments
 
-		// Initialize the game systems, and on success, run the main event loop
-		if (InitializeGlobal())
+		ClientApplication app;
+		if (app.Start())
 		{
-			// Run the event loop
 			EventLoop::Run();
-
-			// After finishing the main even loop, destroy everything that has
-			// being initialized so far
-			DestroyGlobal();
+			app.Stop();
 		}
 
 		return 0;
@@ -560,6 +116,25 @@ void LogStackTrace(CONTEXT *context, std::ostringstream &output)
 	line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
 	DWORD displacement;
 
+	// Helper that resolves a module's short name from its base address. We prefer the name reported by
+	// DbgHelp, falling back to the on-disk image name. This keeps frame lines and the MODULES table consistent.
+	auto getModuleName = [process](DWORD64 base, std::string& outName) -> bool
+	{
+		IMAGEHLP_MODULE64 modInfo = {};
+		modInfo.SizeOfStruct = sizeof(IMAGEHLP_MODULE64);
+		if (base != 0 && SymGetModuleInfo64(process, base, &modInfo))
+		{
+			outName = modInfo.ModuleName;
+			return true;
+		}
+		return false;
+	};
+
+	// Remember every module we touch so we can dump their PDB signatures afterwards. The backend uses
+	// (module name + RVA) together with the PDB GUID/age to resolve symbols from its private symbol store,
+	// so the client never has to ship a PDB.
+	std::set<DWORD64> moduleBases;
+
 	// Walk the stack
 	for (int frameNum = 0; frameNum < 30; frameNum++)
 	{
@@ -577,25 +152,92 @@ void LogStackTrace(CONTEXT *context, std::ostringstream &output)
 		if (!result || stack.AddrPC.Offset == 0)
 			break;
 
+		const DWORD64 address = stack.AddrPC.Offset;
+		const DWORD64 moduleBase = SymGetModuleBase64(process, address);
+
 		output << "Frame " << frameNum << ": ";
 
-		// Try to get symbol name
-		if (SymFromAddr(process, stack.AddrPC.Offset, NULL, symbol))
+		// Emit a module-relative address (RVA). This is the stable identifier that survives ASLR and lets the
+		// backend map the frame back to a function without symbols being present on the crashing machine.
+		std::string moduleName;
+		if (moduleBase != 0 && getModuleName(moduleBase, moduleName))
 		{
-			output << symbol->Name << " (0x" << std::hex << stack.AddrPC.Offset << std::dec << ")";
+			moduleBases.insert(moduleBase);
+			const DWORD64 rva = address - moduleBase;
+			output << moduleName << "+0x" << std::hex << rva << std::dec;
 		}
 		else
 		{
-			output << "Unknown (0x" << std::hex << stack.AddrPC.Offset << std::dec << ")";
+			output << "<unknown module>";
 		}
 
-		// Try to get line info
-		if (SymGetLineFromAddr64(process, stack.AddrPC.Offset, &displacement, &line))
+		// Absolute address kept for reference / cross-checking.
+		output << " (0x" << std::hex << address << std::dec << ")";
+
+		// If the crashing machine happens to have matching symbols (e.g. a developer build), include the
+		// resolved name and source location inline. On customer machines these simply won't resolve.
+		if (SymFromAddr(process, address, NULL, symbol))
+		{
+			output << " " << symbol->Name;
+		}
+		if (SymGetLineFromAddr64(process, address, &displacement, &line))
 		{
 			output << " at " << line.FileName << ":" << line.LineNumber;
 		}
 
 		output << "\r\n";
+	}
+
+	// Dump the module table with PDB signatures. Each entry gives the backend everything it needs to pick the
+	// exact matching PDB from its symbol store: the PDB id (GUID + age, formatted as the canonical symsrv
+	// directory name) plus the image base/size. The PDB signature is read from the loaded image's debug
+	// directory, so it is available even when the PDB itself is not present on the machine.
+	output << "\r\n";
+	output << "-----------------------------------------------\r\n";
+	output << "MODULES\r\n";
+	output << "-----------------------------------------------\r\n";
+
+	for (const DWORD64 base : moduleBases)
+	{
+		IMAGEHLP_MODULE64 modInfo = {};
+		modInfo.SizeOfStruct = sizeof(IMAGEHLP_MODULE64);
+		if (!SymGetModuleInfo64(process, base, &modInfo))
+		{
+			continue;
+		}
+
+		// Format the PDB GUID as 32 upper-case hex digits (no braces), then append the age as upper-case hex
+		// with no leading zeros. Concatenated, this is exactly the <GUID><AGE> folder name used by symsrv:
+		//   symbols\mmo_client.pdb\<pdbid>\mmo_client.pdb
+		const GUID& g = modInfo.PdbSig70;
+		char pdbId[48] = { 0 };
+		sprintf_s(pdbId, sizeof(pdbId),
+			"%08X%04X%04X%02X%02X%02X%02X%02X%02X%02X%02X%X",
+			g.Data1, g.Data2, g.Data3,
+			g.Data4[0], g.Data4[1], g.Data4[2], g.Data4[3],
+			g.Data4[4], g.Data4[5], g.Data4[6], g.Data4[7],
+			modInfo.PdbAge);
+
+		// The PDB file name as recorded in the image (CVData holds the original link-time path for RSDS records).
+		std::string pdbName = "unknown.pdb";
+		if (modInfo.CVData[0] != 0)
+		{
+			const char* path = modInfo.CVData;
+			const char* slash = strrchr(path, '\\');
+			const char* fwd = strrchr(path, '/');
+			if (fwd > slash)
+			{
+				slash = fwd;
+			}
+			pdbName = slash ? slash + 1 : path;
+		}
+
+		output << modInfo.ModuleName
+			<< "  base=0x" << std::hex << base << std::dec
+			<< "  size=0x" << std::hex << modInfo.ImageSize << std::dec
+			<< "  pdb=" << pdbName
+			<< "  pdbid=" << pdbId
+			<< "\r\n";
 	}
 
 	SymCleanup(process);
@@ -748,9 +390,9 @@ LONG WINAPI ExceptionFilterWin32(_In_ struct _EXCEPTION_POINTERS *ExceptionInfo)
 	}
 
 	// Flush log file first
-	if (mmo::s_logFile.is_open())
+	if (mmo::GetClientContext().logFile.is_open())
 	{
-		mmo::s_logFile.flush();
+		mmo::GetClientContext().logFile.flush();
 	}
 
 	// Call error sender executable

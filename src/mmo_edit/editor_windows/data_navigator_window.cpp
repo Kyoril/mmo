@@ -16,6 +16,7 @@
 #include "item_subclass_editor_window.h"
 #include "item_class_editor_window.h"
 #include "range_type_editor_window.h"
+#include "aura_stacking_category_editor_window.h"
 #include "creature_editor_window.h"
 #include "class_editor_window.h"
 #include "unit_class_editor_window.h"
@@ -30,9 +31,11 @@
 #include "map_editor_window.h"
 #include "object_editor_window.h"
 #include "zone_editor_window.h"
+#include "lock_type_editor_window.h"
 #include "unit_loot_editor_window.h"
 #include "trainer_editor_window.h"
 #include "vendor_editor_window.h"
+#include "combat_settings_editor_window.h"
 
 namespace mmo
 {
@@ -233,6 +236,20 @@ namespace mmo
             [this]() { OpenEditorWindow(std::type_index(typeid(RangeTypeEditorWindow))); },
             static_cast<int>(m_project.ranges.count())
         });
+
+        gameplayCategory.editors.push_back({
+            std::type_index(typeid(AuraStackingCategoryEditorWindow)),
+            "Aura Stacking Categories",
+            [this]() { OpenEditorWindow(std::type_index(typeid(AuraStackingCategoryEditorWindow))); },
+            static_cast<int>(m_project.auraStackingCategories.count())
+        });
+
+        gameplayCategory.editors.push_back({
+            std::type_index(typeid(LockTypeEditorWindow)),
+            "Lock Types",
+            [this]() { OpenEditorWindow(std::type_index(typeid(LockTypeEditorWindow))); },
+            static_cast<int>(m_project.lockTypes.count())
+        });
         
         // Add editors to the character category
         characterCategory.editors.push_back({
@@ -355,6 +372,13 @@ namespace mmo
             [this]() { OpenEditorWindow(std::type_index(typeid(GossipEditorWindow))); },
             static_cast<int>(m_project.gossipMenus.count())
             });
+
+        miscCategory.editors.push_back({
+            std::type_index(typeid(CombatSettingsEditorWindow)),
+            "Combat Settings",
+            [this]() { OpenEditorWindow(std::type_index(typeid(CombatSettingsEditorWindow))); },
+            0
+        });
         
         // Add all categories to the main list
         m_categories.push_back(std::move(gameplayCategory));

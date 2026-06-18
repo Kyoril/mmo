@@ -19,6 +19,8 @@
 #include <utility>
 
 #include "checkbox_renderer.h"
+#include "combo_box.h"
+#include "combo_box_renderer.h"
 #include "geometry_helper.h"
 #include "progress_bar.h"
 #include "expat/lib/expat.h"
@@ -26,6 +28,7 @@
 
 #include "luabind_noboost/luabind/luabind.hpp"
 #include "scrolling_message_frame.h"
+#include "frame_animation.h"
 #include "scroll_bar.h"
 #include "thumb.h"
 #include "luabind/operator.hpp"
@@ -310,6 +313,12 @@ namespace mmo
 			{
 				return std::make_unique<TextFieldRenderer>(name);
 			});
+
+			// ComboBoxRenderer
+			frameMgr.RegisterFrameRenderer("ComboBoxRenderer", [](const std::string& name)
+			{
+				return std::make_unique<ComboBoxRenderer>(name);
+			});
 		}
 	}
 
@@ -383,13 +392,29 @@ namespace mmo
 				const Point uiScale = FrameManager::Get().GetUIScale();
 				return Point(mousePos.x / uiScale.x, mousePos.y / uiScale.y);
 			}),
-
+			luabind::def<std::function<Point()>>("GetUIScale", []()
+			{
+				return FrameManager::Get().GetUIScale();
+			}),
 			luabind::scope(
 				luabind::class_<AnchorPoint>("AnchorPoint")
 			),
 
 			luabind::scope(
 				luabind::class_<ButtonState>("ButtonState")
+			),
+
+			luabind::scope(
+				luabind::class_<FrameAnimation>("FrameAnimation")
+					.def("GetName", &FrameAnimation::GetName)
+					.def("GetDuration", &FrameAnimation::GetDuration)
+					.def("IsLooping", &FrameAnimation::IsLooping)
+					.def("IsPlaying", &FrameAnimation::IsPlaying)
+					.def("GetCurrentTime", &FrameAnimation::GetCurrentTime)
+					.def("SetOnStart", &FrameAnimation::SetOnStart)
+					.def("SetOnFinish", &FrameAnimation::SetOnFinish)
+					.def("SetOnStop", &FrameAnimation::SetOnStop)
+					.def("SetOnLoop", &FrameAnimation::SetOnLoop)
 			),
 
 			luabind::scope(
@@ -432,8 +457,19 @@ namespace mmo
 					.property("id", &Frame::GetId, &Frame::SetId)
 					.def("SetOnEnterHandler", &Frame::SetOnEnter)
 					.def("SetOnLeaveHandler", &Frame::SetOnLeave)
+					.def("SetOnDragHandler", &Frame::SetOnDrag)
+					.def("SetOnDropHandler", &Frame::SetOnDrop)
 					.def("SetOpacity", &Frame::SetOpacity)
 					.def("GetOpacity", &Frame::GetOpacity)
+					.def("BringToFront", &Frame::BringToFront)
+					.def("SendToBack", &Frame::SendToBack)
+					.def("SetFrameLevel", &Frame::SetFrameLevel)
+					.def("GetFrameLevel", &Frame::GetFrameLevel)
+					.def("PlayAnimation", &Frame::PlayAnimation)
+					.def("StopAnimation", &Frame::StopAnimation)
+					.def("HasAnimation", &Frame::HasAnimation)
+					.def("IsAnimationPlaying", &Frame::IsAnimationPlaying)
+					.def("GetAnimation", &Frame::GetAnimation)
 					.def("__eq", &Frame::IsEqualTo)
 			),
 
@@ -510,6 +546,30 @@ namespace mmo
 					.def("IsAtBottom", &ScrollingMessageFrame::IsAtBottom)
 					.def("ScrollToTop", &ScrollingMessageFrame::ScrollToTop)
 					.def("ScrollToBottom", &ScrollingMessageFrame::ScrollToBottom)
+			),
+
+			luabind::scope(
+				luabind::class_<ComboBox, Frame>("ComboBox")
+					.def("AddItem", &ComboBox::AddItem)
+					.def("ClearItems", &ComboBox::ClearItems)
+					.def("GetItemCount", &ComboBox::GetItemCount)
+					.def("GetItemText", &ComboBox::GetItemText)
+					.def("GetItemUserData", &ComboBox::GetItemUserData)
+					.def("GetSelectedIndex", &ComboBox::GetSelectedIndex)
+					.def("SetSelectedIndex", &ComboBox::SetSelectedIndex)
+					.def("GetSelectedText", &ComboBox::GetSelectedText)
+					.def("GetSelectedUserData", &ComboBox::GetSelectedUserData)
+					.def("IsOpen", &ComboBox::IsOpen)
+					.def("Open", &ComboBox::Open)
+					.def("Close", &ComboBox::Close)
+					.def("Toggle", &ComboBox::Toggle)
+					.def("SetPopupFrame", &ComboBox::SetPopupFrame)
+					.def("SetOnDismissHandler", &ComboBox::SetOnDismissHandler)
+					.def("SetOnClickedHandler", &ComboBox::SetOnClickedHandler)
+					.def("SetOnSelectionChanged", &ComboBox::SetOnSelectionChanged)
+					.def("SetItemColor", &ComboBox::SetItemColor)
+					.def("SetMaxDropHeight", &ComboBox::SetMaxDropHeight)
+					.def("GetMaxDropHeight", &ComboBox::GetMaxDropHeight)
 			)
 		);
 
@@ -533,12 +593,13 @@ namespace mmo
 
 		// Register frame factories
 		s_frameMgr->RegisterFrameFactory("Frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>("Frame", name); });
-		s_frameMgr->RegisterFrameFactory("Button", [](const std::string& name) -> FramePtr { return std::make_shared<Button>("Button", name); });
+		s_frameMgr->RegisterFrameFactory("Button", [](const std::string& name) -> FramePtr { return std::make_shared<Button>(Button::Type, name); });
 		s_frameMgr->RegisterFrameFactory("Thumb", [](const std::string& name) -> FramePtr { return std::make_shared<Thumb>("Thumb", name); });
 		s_frameMgr->RegisterFrameFactory("ScrollBar", [](const std::string& name) -> FramePtr { return std::make_shared<ScrollBar>("ScrollBar", name); });
 		s_frameMgr->RegisterFrameFactory("TextField", [](const std::string& name) -> FramePtr { return std::make_shared<TextField>("TextField", name); });
 		s_frameMgr->RegisterFrameFactory("ProgressBar", [](const std::string& name) -> FramePtr { return std::make_shared<ProgressBar>("ProgressBar", name); });
 		s_frameMgr->RegisterFrameFactory("ScrollingMessageFrame", [](const std::string& name) -> FramePtr { return std::make_shared<ScrollingMessageFrame>("ScrollingMessageFrame", name); });
+		s_frameMgr->RegisterFrameFactory("ComboBox", [](const std::string& name) -> FramePtr { return std::make_shared<ComboBox>(ComboBox::Type, name); });
 
 		// Load localization
 		localization.AddToLuaScript(s_frameMgr->m_luaState);
@@ -710,7 +771,9 @@ namespace mmo
 		m_inputCapture = nullptr;
 		m_mouseDownFrames.clear();
 		m_framesByName.clear();
+		m_pressedKeys.clear();
 		m_inputCapture.reset();
+		m_activeComboBox.reset();
 
 		m_topFrame.reset();
 	}
@@ -808,7 +871,34 @@ namespace mmo
 	bool FrameManager::NotifyMouseDown(MouseButton button, const Point & position)
 	{
 		bool consumed = false;
-		
+
+		if (const auto activeCombo = m_activeComboBox.lock())
+		{
+			// Determine whether the click is inside the ComboBox widget itself or its popup frame.
+			const bool insideCombo = activeCombo->GetAbsoluteFrameRect().IsPointInRect(position);
+
+			bool insidePopup = false;
+			if (const auto popup = activeCombo->GetPopupFrame())
+			{
+				insidePopup = popup->IsVisible() && popup->GetAbsoluteFrameRect().IsPointInRect(position);
+			}
+
+			if (!insideCombo && !insidePopup)
+			{
+				// Click is outside both — dismiss the combo and consume the click so it does
+				// not bleed through to the game world.
+				activeCombo->Dismiss();
+				return true;
+			}
+
+			if (insidePopup && !insideCombo)
+			{
+				// Click landed inside the popup: clear the tracking so the normal path handles
+				// it (popup item click fires, which will call Close() via Lua).
+				m_activeComboBox.reset();
+			}
+		}
+
 		// Only works if we have a top frame
 		if (m_topFrame != nullptr)
 		{
@@ -837,7 +927,7 @@ namespace mmo
 	bool FrameManager::NotifyMouseUp(MouseButton button, const Point & position)
 	{
 		bool consumed = false;
-		
+
 		// For mouse button up, we want to notify the same frame that received the corresponding
 		// MouseDown event, even if the new position doesn't hit the old frame. This is done so
 		// that the old frame can correctly update it's state.
@@ -861,8 +951,40 @@ namespace mmo
 		return consumed;
 	}
 
+	bool FrameManager::NotifyMouseWheel(const int32 delta)
+	{
+		// Route the wheel to an open combo box popup if the cursor is hovering over it.
+		if (const auto activeCombo = m_activeComboBox.lock())
+		{
+			if (const auto popup = activeCombo->GetPopupFrame())
+			{
+				if (popup->IsVisible() && popup->GetAbsoluteFrameRect().IsPointInRect(m_mousePos))
+				{
+					return activeCombo->OnPopupMouseWheel(delta);
+				}
+			}
+		}
+
+		// Otherwise dispatch to the hovered frame and let the event bubble up the parent chain
+		// until a frame consumes it (e.g. a ScrollingMessageFrame scrolling its contents).
+		Frame* frame = m_hoverFrame.get();
+		while (frame)
+		{
+			if (frame->OnMouseWheel(delta))
+			{
+				return true;
+			}
+
+			frame = frame->GetParent();
+		}
+
+		return false;
+	}
+
 	void FrameManager::NotifyKeyDown(Key key)
 	{
+		m_pressedKeys.insert(key);
+
 		// We need an active input capture to handle key down events
 		if (!m_inputCapture)
 		{
@@ -887,6 +1009,8 @@ namespace mmo
 
 	void FrameManager::NotifyKeyUp(Key key)
 	{
+		m_pressedKeys.erase(key);
+
 		// We need an active input capture to handle key up events
 		if (!m_inputCapture)
 		{
@@ -895,6 +1019,11 @@ namespace mmo
 
 		// Forward the event
 		m_inputCapture->OnKeyUp(key);
+	}
+
+	bool FrameManager::IsKeyDown(Key key) const
+	{
+		return m_pressedKeys.find(key) != m_pressedKeys.end();
 	}
 
 	void FrameManager::NotifyScreenSizeChanged(float width, float height)
@@ -910,6 +1039,19 @@ namespace mmo
 		{
 			std::string errMsg = lua_tostring(m_luaState, -1);
 			ELOG("Lua Error: " << errMsg);
+		}
+	}
+
+	void FrameManager::SetActiveComboBox(std::shared_ptr<ComboBox> combo)
+	{
+		m_activeComboBox = combo;
+	}
+
+	void FrameManager::ClearActiveComboBox(const ComboBox* combo)
+	{
+		if (m_activeComboBox.lock().get() == combo)
+		{
+			m_activeComboBox.reset();
 		}
 	}
 

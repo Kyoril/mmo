@@ -20,6 +20,7 @@ namespace mmo
 		CreatureAIState::OnEnter();
 
 		auto& controlled = GetControlled();
+		controlled.SetMovementMode(unit_movement_mode::Run);
 
 		controlled.RaiseTrigger(trigger_event::OnReset);
 		controlled.RemoveLootRecipients();
@@ -38,8 +39,18 @@ namespace mmo
 			}
 			});
 
-		const auto facing = Radian(GetAI().GetHome().orientation);
-		controlled.GetMover().MoveTo(GetAI().GetHome().position, 0.0f, &facing);
+		if (GetAI().HasSavedPatrolReturnPosition())
+		{
+			// Return to where the creature was on its patrol route when combat started
+			// rather than all the way back to the spawn point.
+			const Vector3 returnPos = GetAI().GetSavedPatrolReturnPosition();
+			controlled.GetMover().MoveTo(returnPos, 0.0f);
+		}
+		else
+		{
+			const auto facing = Radian(GetAI().GetHome().orientation);
+			controlled.GetMover().MoveTo(GetAI().GetHome().position, 0.0f, &facing);
+		}
 	}
 
 	void CreatureAIResetState::OnLeave()
@@ -48,6 +59,9 @@ namespace mmo
 
 		m_onHomeReached.disconnect();
 		controlled.RaiseTrigger(trigger_event::OnReachedHome);
+
+		// Consumed — the idle state will now use the saved waypoint index to resume.
+		GetAI().ClearSavedPatrolReturnPosition();
 
 		// Fully heal unit
 		if (controlled.IsAlive())

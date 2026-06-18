@@ -8,6 +8,7 @@
 
 #include "editor_host.h"
 #include "proto_data/project.h"
+#include "minimap_grid_view.h"
 
 namespace mmo
 {
@@ -29,5 +30,10 @@ namespace mmo
 
 	private:
 		EditorHost& m_host;
+
+		/// @brief Minimap grid used to pick the start location before opening the world editor.
+		MinimapGridView m_minimapGrid;
+		/// @brief The world name the minimap grid is currently bound to (used to detect entry changes).
+		String m_minimapWorld;
 	};
 }

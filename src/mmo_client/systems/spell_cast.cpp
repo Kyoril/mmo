@@ -4,6 +4,7 @@
 #include "shared/game_client/spell_visualization_service.h"
 
 #include "frame_ui/frame_mgr.h"
+#include "game/spell.h"
 #include "game/spell_target_map.h"
 #include "game_client/game_player_c.h"
 #include "game_client/object_mgr.h"
@@ -11,6 +12,22 @@
 
 namespace mmo
 {
+	const char* GetNoPowerErrorKey(int32 powerType)
+	{
+		switch (powerType)
+		{
+		case power_type::Rage:
+			return "SPELL_CAST_FAILED_NO_POWER_RAGE";
+		case power_type::Energy:
+			return "SPELL_CAST_FAILED_NO_POWER_ENERGY";
+		case power_type::Health:
+			return "SPELL_CAST_FAILED_NO_POWER_HEALTH";
+		case power_type::Mana:
+		default:
+			return "SPELL_CAST_FAILED_NO_POWER_MANA";
+		}
+	}
+
 	SpellCast::SpellCast(RealmConnector& connector, const proto_client::SpellManager& spells, const proto_client::RangeManager& ranges)
 		: m_connector(connector)
 		, m_spells(spells)
@@ -71,6 +88,7 @@ namespace mmo
 	void SpellCast::OnEnterWorld()
 	{
 		m_spellCastId = 0;
+		m_serverConfirmedCastStart = false;
 
 		// Register packet handlers
 	}
@@ -79,6 +97,8 @@ namespace mmo
 	{
 		// We are no longer casting a spell
 		m_spellCastId = 0;
+		m_serverConfirmedCastStart = false;
+		m_channelingSpellId = 0;
 	}
 
 	void SpellCast::OnSpellStart(const proto_client::SpellEntry& spell, GameTime castTime)
@@ -93,11 +113,23 @@ namespace mmo
 		}
 
 		m_spellCastId = spell.id();
+		m_serverConfirmedCastStart = true;
 		FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_START", &spell, castTime);
 	}
 
 	void SpellCast::OnSpellGo(uint32 spellId)
 	{
+		// For channeled spells, SpellGo is received at the start of channeling.
+		// Don't clear the cast state since the channel is still active.
+		if (IsChanneling() && m_channelingSpellId == spellId)
+		{
+			if (const auto* spell = m_spells.getById(spellId))
+			{
+				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::CastSucceeded, *spell, ObjectMgr::GetActivePlayer().get(), {});
+			}
+			return;
+		}
+
 		if (GetCastingSpellId() != spellId)
 		{
 			return;
@@ -110,10 +142,26 @@ namespace mmo
 
 		FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", true);
 		m_spellCastId = 0;
+		m_serverConfirmedCastStart = false;
 	}
 
 	void SpellCast::OnSpellFailure(uint32 spellId)
 	{
+		// If the channeled spell fails, clear the channel state as well
+		if (IsChanneling() && m_channelingSpellId == spellId)
+		{
+			if (const auto* spell = m_spells.getById(spellId))
+			{
+				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::CancelCast, *spell, ObjectMgr::GetActivePlayer().get(), {});
+			}
+
+			m_channelingSpellId = 0;
+			m_spellCastId = 0;
+			m_serverConfirmedCastStart = false;
+			FrameManager::Get().TriggerLuaEvent("PLAYER_CHANNEL_STOP");
+			return;
+		}
+
 		if (GetCastingSpellId() != spellId)
 		{
 			return;
@@ -125,6 +173,40 @@ namespace mmo
 		}
 
 		m_spellCastId = 0;
+		m_serverConfirmedCastStart = false;
+	}
+
+	void SpellCast::OnChannelStart(const proto_client::SpellEntry& spell, GameTime duration)
+	{
+		// Visualization: start cast for channeled spell
+		SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::StartCast, spell, ObjectMgr::GetActivePlayer().get(), {});
+
+		if (duration > 0)
+		{
+			SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Casting, spell, ObjectMgr::GetActivePlayer().get(), {});
+		}
+
+		m_spellCastId = spell.id();
+		m_channelingSpellId = spell.id();
+		m_serverConfirmedCastStart = true;
+		FrameManager::Get().TriggerLuaEvent("PLAYER_CHANNEL_START", &spell, duration);
+	}
+
+	void SpellCast::OnChannelUpdate(uint64 casterGuid, GameTime timeLeft)
+	{
+		if (!IsChanneling())
+		{
+			return;
+		}
+
+		if (timeLeft == 0)
+		{
+			// Channel ended
+			FrameManager::Get().TriggerLuaEvent("PLAYER_CHANNEL_STOP");
+			m_channelingSpellId = 0;
+			m_spellCastId = 0;
+			m_serverConfirmedCastStart = false;
+		}
 	}
 
 	bool SpellCast::SetSpellTargetMap(SpellTargetMap& targetMap, const proto_client::SpellEntry& spell)
@@ -211,12 +293,22 @@ namespace mmo
 
 		SpellTargetMap targetMap{};
 
-		// Power check
-		if ((spell->powertype() != unit->GetPowerType() && spell->cost() != 0) ||
-			spell->cost() > unit->GetPower(unit->GetPowerType()))
+		// Power check — apply spell cost modifiers from server-communicated spell mods
+		if (spell->cost() != 0)
 		{
-			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_NO_POWER");
-			return;
+			int32 effectiveCost = spell->cost();
+			if (spell->powertype() == unit->GetPowerType())
+			{
+				// Apply flat then pct modifiers keyed by this spell's family flags
+				effectiveCost = unit->ApplySpellModForFlags(static_cast<uint8>(spell_mod_op::Cost), effectiveCost, spell->familyflags());
+				effectiveCost = std::max(0, effectiveCost);
+			}
+
+			if (spell->powertype() != unit->GetPowerType() || effectiveCost > unit->GetPower(unit->GetPowerType()))
+			{
+				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", GetNoPowerErrorKey(spell->powertype()));
+				return;
+			}
 		}
 
 		// Check if we need to provide a target unit
@@ -342,12 +434,13 @@ namespace mmo
 
 		// Send network packet to start casting the spell
 		m_spellCastId = spellId;
+		m_serverConfirmedCastStart = false;
 		m_connector.CastSpell(spellId, targetMap);
 	}
 
 	bool SpellCast::CancelCast()
 	{
-		// Check if we are currently casting a spell
+		// Check if we are currently casting or channeling a spell
 		if (!IsCasting())
 		{
 			return false;
@@ -356,6 +449,8 @@ namespace mmo
 		// Send network packet to stop casting the spell
 		m_connector.CancelCast();
 		m_spellCastId = 0;
+		m_serverConfirmedCastStart = false;
+		m_channelingSpellId = 0;
 		return true;
 	}
 
@@ -364,8 +459,23 @@ namespace mmo
 		return m_spellCastId != 0;
 	}
 
+	bool SpellCast::IsChanneling() const
+	{
+		return m_channelingSpellId != 0;
+	}
+
 	uint32 SpellCast::GetCastingSpellId() const
 	{
 		return m_spellCastId;
+	}
+
+	uint32 SpellCast::GetChannelingSpellId() const
+	{
+		return m_channelingSpellId;
+	}
+
+	bool SpellCast::HasServerConfirmedCastStart(const uint32 spellId) const
+	{
+		return m_serverConfirmedCastStart && m_spellCastId == spellId;
 	}
 }

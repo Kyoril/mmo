@@ -15,6 +15,12 @@ namespace mmo
 			}
 			return false;
 		}
+
+		const CombatSettings& GetDefaultCombatSettings()
+		{
+			static const CombatSettings defaultSettings;
+			return defaultSettings;
+		}
 	}
 	
 }

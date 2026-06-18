@@ -82,6 +82,11 @@ namespace mmo
 		/// @param context The context in which the action is executed.
 		void HandleYell(const proto::TriggerAction& action, TriggerContext& context);
 
+		/// Handles an "emote" action.
+		/// @param action The trigger action to handle.
+		/// @param context The context in which the action is executed.
+		void HandleEmote(const proto::TriggerAction& action, TriggerContext& context);
+
 		/// Handles setting the state of a world object.
 		/// @param action The trigger action to handle.
 		/// @param context The context in which the action is executed.

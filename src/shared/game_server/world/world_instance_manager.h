@@ -11,6 +11,7 @@
 #include <memory>
 #include <vector>
 #include <mutex>
+#include <map>
 
 #include "game_server/trigger_handler.h"
 #include "base/signal.h"
@@ -52,10 +53,17 @@ namespace mmo
 		/// Gets any world instance by a map id.
 		WorldInstance* GetInstanceByMap(MapId mapId);
 
+		/// Destroys a world instance by its id. Fires the instanceDestroyed signal.
+		/// @param instanceId The id of the instance to destroy.
+		void DestroyInstance(InstanceId instanceId);
+
 	private:
 		void OnUpdate();
 
 		void Update(const RegularUpdate& update);
+
+		/// Checks for empty dungeon instances and destroys them after the timeout.
+		void CheckEmptyDungeonInstances();
 
 		void ScheduleNextUpdate();
 
@@ -74,5 +82,11 @@ namespace mmo
 		std::mutex m_worldInstanceMutex;
 
 		ITriggerHandler& m_triggerHandler;
+
+		/// Tracks when dungeon instances became empty (instanceId -> timestamp).
+		std::map<InstanceId, GameTime> m_emptyDungeonTimestamps;
+
+		/// How long an empty dungeon instance survives before being destroyed (in milliseconds).
+		static constexpr GameTime EmptyDungeonTimeout = 15 * 60 * 1000; // 15 minutes
 	};
 }

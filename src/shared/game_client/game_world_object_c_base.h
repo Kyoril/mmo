@@ -8,6 +8,8 @@ namespace mmo
 	struct ObjectInfo;
 	class NetClient;
 	class GamePlayerC;
+	class ParticleSystem;
+	class SceneNode;
 
 	/// @brief Object flags for world objects (stored in ObjectFlags field).
 	namespace world_object_flags
@@ -39,7 +41,7 @@ namespace mmo
 	{
 	public:
 		explicit GameWorldObjectC(Scene& scene, const proto_client::Project& project, NetClient& netDriver, uint32 map);
-		virtual ~GameWorldObjectC() override = default;
+		virtual ~GameWorldObjectC() override;
 
 		void InitializeFieldMap() override;
 
@@ -72,8 +74,17 @@ namespace mmo
 		virtual GameWorldObjectType GetType() const { return static_cast<GameWorldObjectType>(Get<uint32>(object_fields::ObjectTypeId)); }
 
 	protected:
+		/// @brief Creates or destroys the spark particle emitter based on the interactable flag.
+		/// @param active If true, creates and plays the emitter; if false, destroys it.
+		void UpdateSparkEmitter(bool active);
+
+	protected:
 		NetClient& m_netDriver;
 		const ObjectInfo* m_entry = nullptr;
 		std::unique_ptr<GameWorldObjectC_Type_Base> m_typeData;
+
+	private:
+		ParticleSystem* m_sparkEmitter = nullptr;
+		SceneNode* m_sparkEmitterNode = nullptr;
 	};
 }

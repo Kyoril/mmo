@@ -321,7 +321,8 @@ namespace mmo
 					}
 
 					m_guildName = guild.name;
-					m_guildMotd = "TODO";
+					// MOTD is populated from the guild roster packet and the Motd guild event,
+					// not from the guild query cache. Do not hardcode it here.
 				});
 		}
 	}
@@ -482,6 +483,16 @@ namespace mmo
 		const char* arg1 = args.size() >= 1 ? args[0].c_str() : nullptr;
 		const char* arg2 = args.size() >= 2 ? args[1].c_str() : nullptr;
 		const char* arg3 = args.size() >= 3 ? args[2].c_str() : nullptr;
+
+		// Live-update MOTD when the leader changes it while the player is online
+		if (event == guild_event::Motd)
+		{
+			if (!args.empty())
+			{
+				m_guildMotd = args[0];
+			}
+		}
+
 		FrameManager::Get().TriggerLuaEvent("GUILD_EVENT", s_eventStrings[static_cast<size_t>(event)], arg1, arg2, arg3);
 
 		return PacketParseResult::Pass;
@@ -492,6 +503,12 @@ namespace mmo
 		uint32 memberCount;
 		uint32 rankCount;
 		if (!(packet >> io::read<uint32>(memberCount) >> io::read<uint32>(rankCount)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Read MOTD — written by WriteRoster() after the counts, before the ranks
+		if (!(packet >> io::read_container<uint16>(m_guildMotd)))
 		{
 			return PacketParseResult::Disconnect;
 		}

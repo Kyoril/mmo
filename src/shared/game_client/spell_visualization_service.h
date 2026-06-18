@@ -6,8 +6,10 @@
 #include <map>
 #include <cstdint>
 #include <string>
+#include <functional>
 
 #include "base/typedefs.h"
+#include "base/signal.h"
 #include "shared/audio/audio.h"
 #include "shared/client_data/proto_client/spells.pb.h"
 #include "shared/client_data/proto_client/spell_visualizations.pb.h"
@@ -17,6 +19,10 @@ namespace mmo
 {
     class GameUnitC;
     class AnimationState;
+    class ParticleSystem;
+    class Light;
+    class RibbonTrail;
+    class SceneNode;
 
     namespace proto_client
     {
@@ -64,8 +70,18 @@ namespace mmo
         /// \brief Stop any looped sound currently playing for an actor (e.g., on cancel/success/death).
         void StopLoopedSoundForActor(uint64 actorGuid);
 
+        /// \brief Fade out any looped sound currently playing for an actor (smooth transition).
+        void FadeOutLoopedSoundForActor(uint64 actorGuid);
+
+        /// \brief Update sound fading (call each frame).
+        /// \param deltaTime Time since last update.
+        void Update(float deltaTime);
+
         /// \brief Remove tint from an actor for a specific spell (public for aura removal).
         void RemoveTintFromActor(GameUnitC& actor, uint32 spellId);
+
+        /// \brief Remove all active spell effects (particles, lights, ribbons) for a given actor and spell.
+        void CleanupEffectsForActor(uint64 actorGuid, uint32 spellId);
 
     private:
         SpellVisualizationService() = default;
@@ -78,11 +94,21 @@ namespace mmo
         void ApplyKitToActor(const proto_client::SpellVisualization& vis,
                              const proto_client::SpellKit& kit,
                              GameUnitC& actor,
-                             uint32 spellId);
+                             uint32 spellId,
+                             bool instantEvent = false);
 
         void ApplyAnimationToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
 
         void ApplyTintToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
+
+        /// \brief Spawn particle emitters defined in a kit, optionally attached to a bone.
+        void ApplyParticlesToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
+
+        /// \brief Spawn a point light defined in a kit, optionally attached to a bone.
+        void ApplyLightToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId, bool instantEvent = false);
+
+        /// \brief Spawn a ribbon trail defined in a kit, optionally attached to a bone.
+        void ApplyRibbonTrailToActor(const proto_client::SpellKit& kit, GameUnitC& actor, uint32 spellId);
 
         static uint32 ToProtoEventValue(Event e);
 
@@ -93,11 +119,36 @@ namespace mmo
             ChannelIndex audioHandle;
             uint32 spellId;
             Event event;
+            float currentVolume;
+            float targetVolume;
+            float fadeSpeed;
             
             LoopedSoundHandle() 
                 : audioHandle(InvalidChannel)
                 , spellId(0)
                 , event(Event::StartCast)
+                , currentVolume(0.0f)
+                , targetVolume(1.0f)
+                , fadeSpeed(3.0f)
+            {
+            }
+        };
+
+        /// \brief Structure to track a one-shot sound with fading.
+        struct FadingSound
+        {
+            ChannelIndex channel;
+            float currentVolume;
+            float targetVolume;
+            float fadeSpeed;
+            bool markedForRemoval;
+            
+            FadingSound()
+                : channel(InvalidChannel)
+                , currentVolume(0.0f)
+                , targetVolume(1.0f)
+                , fadeSpeed(3.0f)
+                , markedForRemoval(false)
             {
             }
         };
@@ -122,11 +173,47 @@ namespace mmo
         /// \brief Map actor guid -> looped sound handle for proper cleanup on cancel/success/aura removal.
         mutable std::map<uint64, LoopedSoundHandle> m_loopedSounds;
         
+        /// \brief One-shot sounds with fading.
+        mutable std::vector<FadingSound> m_fadingSounds;
+        
         /// \brief Map actor guid -> active spell animation for cancellation on same-spell events.
         mutable std::map<uint64, ActiveSpellAnimation> m_activeSpellAnimations;
+
+        /// \brief Structure to track active visual effects (particles, lights, ribbon trails) per actor.
+        struct ActiveSpellEffect
+        {
+            uint32 spellId{ 0 };
+            uint64 actorGuid{ 0 };
+            std::vector<ParticleSystem*> particles;
+            std::vector<Light*> lights;
+            std::vector<RibbonTrail*> ribbonTrails;
+            std::vector<SceneNode*> effectNodes;
+        };
+
+        /// \brief All active spell effects across all actors.
+        mutable std::vector<ActiveSpellEffect> m_activeEffects;
+
+        /// \brief Tracks a light that is fading in or out.
+        struct FadingLight
+        {
+            Light* light{ nullptr };
+            uint64 actorGuid{ 0 };
+            float currentIntensity{ 0.0f };
+            float targetIntensity{ 0.0f };
+            float fadeInSpeed{ 0.0f };
+            float fadeOutSpeed{ 0.0f };
+            bool fadingOut{ false };
+            bool autoFadeOut{ false };
+        };
+
+        /// \brief Active lights with fade state.
+        mutable std::vector<FadingLight> m_fadingLights;
+
+        /// \brief Counter for generating unique effect names.
+        mutable uint32 m_effectCounter{ 0 };
     };
 
     // Free functions for aura visualization notifications (avoid circular includes)
-    void NotifyAuraVisualizationApplied(const proto_client::SpellEntry& spell, GameUnitC* target);
-    void NotifyAuraVisualizationRemoved(const proto_client::SpellEntry& spell, GameUnitC* target);
+    void NotifyAuraVisualizationApplied(const proto_client::SpellEntry& spell, GameUnitC* caster, GameUnitC* target);
+    void NotifyAuraVisualizationRemoved(const proto_client::SpellEntry& spell, GameUnitC* caster, GameUnitC* target);
 }

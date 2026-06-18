@@ -3,7 +3,7 @@
 
 namespace mmo
 {
-    MOTDManager::MOTDManager(AsyncDatabase& database)
+    MOTDManager::MOTDManager(AsyncMOTDDatabase& database)
         : m_database(database)
         , m_motd("Welcome to the server!")  // Default MOTD until loaded from database
     {
@@ -31,7 +31,7 @@ namespace mmo
         };
 
         // Queue the async database request
-        m_database.asyncRequest(std::move(handler), &IDatabase::GetMessageOfTheDay);
+        m_database.asyncRequest(std::move(handler), &IMOTDDatabase::GetMessageOfTheDay);
     }
 
     bool MOTDManager::SetMessageOfTheDay(const String& motd)
@@ -53,7 +53,7 @@ namespace mmo
                 {
                     WLOG("Failed to update Message of the Day in the database");
                 }
-            }, &IDatabase::SetMessageOfTheDay, motd);
+            }, &IMOTDDatabase::SetMessageOfTheDay, motd);
 
             return true;
         }

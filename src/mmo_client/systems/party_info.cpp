@@ -216,6 +216,8 @@ namespace mmo
 	{
 		m_memberObservers.clear();
 
+		const bool wasInGroup = !m_members.empty();
+
 		uint8 memberCount = 0;
 		if (!(packet 
 			>> io::read<uint8>(m_type)
@@ -245,12 +247,27 @@ namespace mmo
 		}
 
 		packet >> io::read<uint64>(m_leaderGuid);
-		if (members.size() > 1)
+		if (memberCount > 0)
 		{
+			uint8 newLootMethod = 0;
+			uint64 newLootMaster = 0;
+			uint8 newLootThreshold = 0;
 			packet
-				>> io::read<uint8>(m_lootMethod)
-				>> io::read<uint64>(m_lootMaster)
-				>> io::read<uint8>(m_lootThreshold);
+				>> io::read<uint8>(newLootMethod)
+				>> io::read<uint64>(newLootMaster)
+				>> io::read<uint8>(newLootThreshold);
+
+			if (!wasInGroup || m_lootMethod != newLootMethod || m_lootMaster != newLootMaster || m_lootThreshold != newLootThreshold)
+			{
+				m_lootMethod = static_cast<LootMethod>(newLootMethod);
+				m_lootMaster = newLootMaster;
+				m_lootThreshold = newLootThreshold;
+				FrameManager::Get().TriggerLuaEvent("PARTY_LOOT_METHOD_CHANGED");
+			}
+			else
+			{
+				m_lootThreshold = newLootThreshold;
+			}
 		}
 
 		// Now we need to determine which members are new, which ones are gone and so on

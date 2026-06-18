@@ -544,9 +544,6 @@ namespace mmo
 
                 for (const auto& meshRef : group->GetMeshRefs())
                 {
-                    DLOG("  MeshRef: path='" << meshRef.meshPath << "' (len=" << meshRef.meshPath.size() 
-                         << ") name='" << meshRef.name << "' (len=" << meshRef.name.size() << ")");
-                    
                     // Write mesh path
                     writer << io::write<uint32>(static_cast<uint32>(meshRef.meshPath.size()));
                     writer.Sink().Write(meshRef.meshPath.c_str(), meshRef.meshPath.size() + 1);
@@ -1236,9 +1233,6 @@ namespace mmo
                     meshRef.rotation = Quaternion(rw, rx, ry, rz);
                     meshRef.scale = Vector3(sx, sy, sz);
                     meshRef.visible = visible != 0;
-
-                    DLOG("  MeshRef[" << i << "]: path='" << meshRef.meshPath << "' name='" << meshRef.name << "'");
-
                     group.AddMeshRef(meshRef);
                 }
             }

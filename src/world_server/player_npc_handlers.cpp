@@ -9,6 +9,7 @@
 #include "game_server/objects/game_object_s.h"
 #include "game_server/objects/game_player_s.h"
 #include "game_server/objects/game_bag_s.h"
+#include "game_server/objects/game_world_object_s.h"
 #include "proto_data/project.h"
 #include "game/loot.h"
 #include "game/vendor.h"
@@ -119,6 +120,9 @@ namespace mmo
 
 		// Ensure that the gossip menu is closed
 		CloseGossip();
+
+		// Immediately refresh interactability of nearby world objects gated on this quest
+		RefreshQuestObjectInteractability(questId);
 	}
 
 	void Player::OnAbandonQuest(uint16 opCode, uint32 size, io::Reader& contentReader)
@@ -237,6 +241,8 @@ namespace mmo
 		// Reward this quest
 		if (bool result = m_character->RewardQuest(questGiverGuid, questId, rewardChoice))
 		{
+			// Immediately remove interactability from world objects gated on this quest
+			RefreshQuestObjectInteractability(questId);
 			// If the quest should perform a spell cast on the players character, we will do so now
 			if (quest->rewardspellcast())
 			{
@@ -250,7 +256,11 @@ namespace mmo
 				}
 			}
 
-			// Try to find next quest and if there is one, send quest details
+			// Quality of life: keep the conversation going after a turn-in instead of just closing
+			// the dialog.
+
+			// 1) If this quest has a follow-up in the chain that this NPC offers and the player is
+			//    eligible for, jump straight into its details (saves the player two extra clicks).
 			if (uint32 nextQuestId = quest->nextchainquestid(); nextQuestId &&
 				questGiverObject->ProvidesQuest(nextQuestId) &&
 				m_character->GetQuestStatus(nextQuestId) == quest_status::Available)
@@ -258,8 +268,75 @@ namespace mmo
 				if (const auto* nextQuestEntry = m_project.quests.getById(nextQuestId))
 				{
 					SendQuestDetails(questGiverGuid, *nextQuestEntry);
+					return;
 				}
 			}
+
+			// 2) Otherwise inspect the quests this NPC still has for the player. This mirrors the
+			//    set shown by SerializeQuestList (turn-ins + newly available quests).
+			uint32 singleAvailableQuest = 0;
+			uint32 singleCompletableQuest = 0;
+			uint32 relevantQuestCount = 0;
+
+			for (const auto& endQuestId : questGiver->GetEntry().end_quests())
+			{
+				const QuestStatus status = m_character->GetQuestStatus(endQuestId);
+				if (status == quest_status::Incomplete || status == quest_status::Complete)
+				{
+					relevantQuestCount++;
+					if (status == quest_status::Complete)
+					{
+						singleCompletableQuest = endQuestId;
+					}
+				}
+			}
+
+			for (const auto& offeredQuestId : questGiver->GetEntry().quests())
+			{
+				if (m_character->GetQuestStatus(offeredQuestId) == quest_status::Available)
+				{
+					relevantQuestCount++;
+					singleAvailableQuest = offeredQuestId;
+				}
+			}
+
+			// Nothing left to talk about: let the dialog close.
+			if (relevantQuestCount == 0)
+			{
+				return;
+			}
+
+			// Exactly one relevant quest that the player can act on right now: open it directly.
+			if (relevantQuestCount == 1)
+			{
+				if (singleAvailableQuest != 0)
+				{
+					if (const auto* nextQuestEntry = m_project.quests.getById(singleAvailableQuest))
+					{
+						SendQuestDetails(questGiverGuid, *nextQuestEntry);
+						return;
+					}
+				}
+				else if (singleCompletableQuest != 0)
+				{
+					if (const auto* completableEntry = m_project.quests.getById(singleCompletableQuest))
+					{
+						SendQuestReward(questGiverGuid, *completableEntry);
+						return;
+					}
+				}
+			}
+
+			// More than one relevant quest (or a single in-progress one): reopen the quest list.
+			std::vector<char> buffer;
+			io::VectorSink sink(buffer);
+			typename game::Protocol::OutgoingPacket listPacket(sink);
+			listPacket.Start(game::realm_client_packet::QuestGiverQuestList);
+			listPacket << io::write<uint64>(questGiverGuid) << io::write_dynamic_range<uint16>(questGiver->GetEntry().greeting_text());
+			SerializeQuestList(*questGiver, listPacket);
+			listPacket.Finish();
+
+			m_connector.SendProxyPacket(m_character->GetGuid(), listPacket.GetId(), listPacket.GetSize(), buffer);
 		}
 	}
 

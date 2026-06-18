@@ -7,6 +7,7 @@
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
+#include "imgui_node_editor.h"
 
 #include <iomanip>
 #include <sstream>
@@ -308,13 +309,11 @@ namespace mmo
 			ImGui::Separator();
 
 			// Provide a button to remove this event.
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-			if (ImGui::Button("Remove Event", ImVec2(-1, 0)))
+			if (DrawDangerButton("Remove Event", ImVec2(-1, 0)))
 			{
 				// Removing an event invalidates the indices, so break out after removal.
 				currentEntry.mutable_newevents()->DeleteSubrange(eventIndex, 1);
 			}
-			ImGui::PopStyleColor();
 
 			ImGui::PopStyleVar();
 		}
@@ -331,7 +330,7 @@ namespace mmo
 				"SetRespawnState", "CastSpell", "Delay", "MoveTo", "SetCombatMovement",
 				"StopAutoAttack", "CancelCast", "SetStandState", "SetVirtualEquipmentSlot",
 				"SetPhase", "SetSpellCooldown", "QuestKillCredit", "QuestEventOrExploration",
-				"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player"
+				"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player", "Emote"
 			};
 
 			// Select the trigger action type.
@@ -865,6 +864,34 @@ namespace mmo
 				ImGui::TextDisabled("No additional parameters required for this action.");
 				break;
 			}
+			case trigger_actions::Emote:
+			{
+				// Data: <SOUND-ID>; Texts: <TEXT>
+				int soundId = (action.data_size() > 0) ? action.data(0) : 0;
+				ImGui::SetNextItemWidth(150);
+				if (ImGui::InputInt("##SoundId", &soundId))
+				{
+					if (action.data_size() > 0)
+						action.set_data(0, soundId);
+					else
+						action.add_data(soundId);
+				}
+				ImGui::SameLine();
+				ImGui::Text("Sound ID");
+
+				std::string text = (action.texts_size() > 0) ? action.texts(0) : "";
+				ImGui::SetNextItemWidth(-1);
+				if (ImGui::InputText("##Text", &text))
+				{
+					if (action.texts_size() > 0)
+						action.set_texts(0, text);
+					else
+						action.add_texts(text);
+				}
+				ImGui::SameLine();
+				ImGui::Text("Text");
+				break;
+			}
 			default:
 			{
 				ImGui::TextDisabled("Unknown action type.");
@@ -876,13 +903,11 @@ namespace mmo
 			ImGui::Separator();
 
 			// Provide a remove button for this action.
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-			if (ImGui::Button("Remove Action", ImVec2(-1, 0)))
+			if (DrawDangerButton("Remove Action", ImVec2(-1, 0)))
 			{
 				// Removing an element from a repeated field invalidates indices so break out after removal.
 				currentEntry.mutable_actions()->DeleteSubrange(actionIndex, 1);
 			}
-			ImGui::PopStyleColor();
 
 			ImGui::PopStyleVar();
 		}
@@ -896,6 +921,15 @@ namespace mmo
 
 		m_hasToolbarButton = false;
 		m_toolbarButtonText = "Triggers";
+	}
+
+	TriggerEditorWindow::~TriggerEditorWindow()
+	{
+		if (m_nodeEditorCtx)
+		{
+			ax::NodeEditor::DestroyEditor(m_nodeEditorCtx);
+			m_nodeEditorCtx = nullptr;
+		}
 	}
 
 	void TriggerEditorWindow::DrawDetailsImpl(proto::TriggerEntry& currentEntry)
@@ -942,6 +976,31 @@ namespace mmo
 	}
 #define SLIDER_UINT32_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 32, min, max)
 #define SLIDER_UINT64_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 64, min, max)
+
+		// Handle a pending node-click jump (set by DrawChainView last frame).
+		if (m_jumpToTriggerId != 0)
+		{
+			m_showChainView = false;
+			SelectEntryById(m_jumpToTriggerId);
+			m_jumpToTriggerId = 0;
+			return;
+		}
+
+		// Chain View / Edit View toggle button.
+		if (ImGui::Button(m_showChainView ? "Edit View" : "Chain View"))
+		{
+			m_showChainView = !m_showChainView;
+		}
+
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		// When Chain View is active, render the node graph and return early.
+		if (m_showChainView)
+		{
+			DrawChainView(m_manager.getTemplates());
+			return;
+		}
 
 		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
 		{
@@ -1046,12 +1105,10 @@ namespace mmo
 
 			ImGui::Spacing();
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
-			if (ImGui::Button("+ Add Event", ImVec2(-1, 0)))
+			if (DrawSuccessButton("+ Add Event", ImVec2(-1, 0)))
 			{
 				ImGui::OpenPopup("Event Details");
 			}
-			ImGui::PopStyleColor();
 
 			ImGui::PopStyleVar(2);
 			ImGui::Unindent();
@@ -1077,8 +1134,7 @@ namespace mmo
 
 			static int currentAction = -1;
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
-			if (ImGui::Button("+ Add Action", ImVec2(-1, 0)))
+			if (DrawSuccessButton("+ Add Action", ImVec2(-1, 0)))
 			{
 				auto* newAction = currentEntry.add_actions();
 				newAction->set_action(0);
@@ -1086,16 +1142,13 @@ namespace mmo
 				newAction->set_targetname("");
 				currentAction = currentEntry.actions_size() - 1;
 			}
-			ImGui::PopStyleColor();
 
 			ImGui::BeginDisabled(currentAction == -1 || currentAction >= currentEntry.actions_size());
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-			if (ImGui::Button("Remove Action", ImVec2(-1, 0)))
+			if (DrawDangerButton("Remove Action", ImVec2(-1, 0)))
 			{
 				currentEntry.mutable_actions()->erase(currentEntry.mutable_actions()->begin() + currentAction);
 				currentAction = -1;
 			}
-			ImGui::PopStyleColor();
 			ImGui::EndDisabled();
 
 			ImGui::Spacing();
@@ -1117,7 +1170,7 @@ namespace mmo
 					"SetRespawnState", "CastSpell", "Delay", "MoveTo", "SetCombatMovement",
 					"StopAutoAttack", "CancelCast", "SetStandState", "SetVirtualEquipmentSlot",
 					"SetPhase", "SetSpellCooldown", "QuestKillCredit", "QuestEventOrExploration",
-					"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player"
+					"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player", "Emote"
 				};
 
 				const char* actionTypeName = (action.action() >= 0 && action.action() < static_cast<int>(std::size(s_actionTypeNames)))
@@ -1209,25 +1262,109 @@ namespace mmo
 			ImGui::Separator();
 			ImGui::Spacing();
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
-			if (ImGui::Button("Add", ImVec2(120, 0)))
+			if (DrawSuccessButton("Add", ImVec2(120, 0)))
 			{
 				auto& event = *currentEntry.add_newevents();
 				event.set_type(trigger_event::Type(selectedEventType));
 				ImGui::CloseCurrentPopup();
 			}
-			ImGui::PopStyleColor();
 
 			ImGui::SameLine();
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
-			if (ImGui::Button("Cancel", ImVec2(120, 0)))
+			if (DrawNeutralButton("Cancel", ImVec2(120, 0)))
 			{
 				ImGui::CloseCurrentPopup();
 			}
-			ImGui::PopStyleColor();
 
 			ImGui::EndPopup();
 		}
+	}
+
+	void TriggerEditorWindow::DrawChainView(const proto::Triggers& triggers)
+	{
+		// Lazy-create the editor context on first use.
+		if (!m_nodeEditorCtx)
+		{
+			ax::NodeEditor::Config config;
+			config.SettingsFile = nullptr; // Do not persist layout to file.
+			m_nodeEditorCtx = ax::NodeEditor::CreateEditor(&config);
+		}
+
+		ax::NodeEditor::SetCurrentEditor(m_nodeEditorCtx);
+		ax::NodeEditor::Begin("TriggerChain", ImVec2(0.0f, 0.0f));
+
+		// Draw one node per TriggerEntry.
+		for (int i = 0; i < triggers.entry_size(); ++i)
+		{
+			const auto& trigger = triggers.entry(i);
+			const ax::NodeEditor::NodeId nodeId(trigger.id());
+
+			ax::NodeEditor::BeginNode(nodeId);
+
+			ImGui::Text("[%u] %s", trigger.id(), trigger.name().c_str());
+			ImGui::Dummy(ImVec2(160.0f, 0.0f)); // Enforce minimum node width.
+
+			// Stats row: event and action counts.
+			ImGui::TextDisabled("%d event(s)  %d action(s)",
+				trigger.newevents_size(), trigger.actions_size());
+
+			// Input pin (left) and output pin (right).
+			const ax::NodeEditor::PinId inputPin(trigger.id() * 3 + 1);
+			const ax::NodeEditor::PinId outputPin(trigger.id() * 3 + 2);
+
+			ax::NodeEditor::BeginPin(inputPin, ax::NodeEditor::PinKind::Input);
+			ImGui::Text(">");
+			ax::NodeEditor::EndPin();
+
+			ImGui::SameLine();
+			ImGui::SetCursorPosX(ax::NodeEditor::GetNodeSize(nodeId).x - 24.0f);
+
+			ax::NodeEditor::BeginPin(outputPin, ax::NodeEditor::PinKind::Output);
+			ImGui::Text(">");
+			ax::NodeEditor::EndPin();
+
+			ax::NodeEditor::EndNode();
+		}
+
+		// Draw directed edges for Trigger actions (trigger_actions::Trigger == 0).
+		// Target trigger ID is stored in action.data(0).
+		for (int i = 0; i < triggers.entry_size(); ++i)
+		{
+			const auto& trigger = triggers.entry(i);
+
+			for (int j = 0; j < trigger.actions_size(); ++j)
+			{
+				const auto& action = trigger.actions(j);
+
+				if (action.action() == trigger_actions::Trigger && action.data_size() > 0)
+				{
+					const uint32 targetId = static_cast<uint32>(action.data(0));
+
+					if (targetId != 0)
+					{
+						const uint32 linkId = (trigger.id() << 16) | (targetId & 0xFFFFu);
+
+						ax::NodeEditor::Link(
+							ax::NodeEditor::LinkId(linkId),
+							ax::NodeEditor::PinId(trigger.id() * 3 + 2),  // source output pin
+							ax::NodeEditor::PinId(targetId * 3 + 1)        // target input pin
+						);
+					}
+				}
+			}
+		}
+
+		// Detect node selection and queue a switch back to Edit mode.
+		{
+			ax::NodeEditor::NodeId selectedNode;
+
+			if (ax::NodeEditor::GetSelectedNodes(&selectedNode, 1) > 0)
+			{
+				m_jumpToTriggerId = static_cast<uint32>(selectedNode.Get());
+			}
+		}
+
+		ax::NodeEditor::End();
+		ax::NodeEditor::SetCurrentEditor(nullptr);
 	}
 }

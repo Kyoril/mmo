@@ -10,13 +10,11 @@
 
 namespace mmo
 {
-	SpellCasting& CastSpell(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, GameTime castTime, uint64 itemGuid)
+	void CastSpell(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, GameTime castTime, uint64 itemGuid, bool isProc)
 	{
-		auto newState = std::make_shared<SingleCastState>(cast, spell, target, castTime, false, itemGuid);
+		auto newState = std::make_shared<SingleCastState>(cast, spell, target, castTime, isProc, itemGuid);
 
-		auto& casting = newState->GetCasting();
 		cast.SetState(std::move(newState));
-		return casting;
 	}
 
 	SpellCast::SpellCast(TimerQueue& timer, GameUnitS& executor)
@@ -26,7 +24,7 @@ namespace mmo
 	{
 	}
 
-	std::pair<SpellCastResult, SpellCasting*> SpellCast::StartCast(const proto::SpellEntry& spell, const SpellTargetMap& target, const GameTime castTime, bool isProc, uint64 itemGuid)
+	SpellCastResult SpellCast::StartCast(const proto::SpellEntry& spell, const SpellTargetMap& target, const GameTime castTime, bool isProc, uint64 itemGuid)
 	{
 		ASSERT(m_castState);
 
@@ -36,14 +34,14 @@ namespace mmo
 		if (!instance)
 		{
 			ELOG("Caster is not in a world instance");
-			return std::make_pair(spell_cast_result::FailedError, nullptr);
+			return spell_cast_result::FailedError;
 		}
 
 		const auto* map = instance->GetMapData();
 		if (!map)
 		{
 			ELOG("World instance has no map data loaded");
-			return std::make_pair(spell_cast_result::FailedError, nullptr);
+			return spell_cast_result::FailedError;
 		}
 
 		// Check for focus object
@@ -58,20 +56,16 @@ namespace mmo
 		}
 
 		// Check for cooldown
-		if (m_executor.SpellHasCooldown(spell.id(), spell.category()))
+		if (!isProc && m_executor.SpellHasCooldown(spell.id(), spell.category(), spell.cooldownflags()))
 		{
-			return std::make_pair(spell_cast_result::FailedNotReady, nullptr);
+			return spell_cast_result::FailedNotReady;
 		}
 
 		// Check if we have enough resources for that spell
 		if (isProc)
 		{
-			const auto newCastState = std::make_shared<SingleCastState>(
-				*this, spell, std::move(target), castTime, true, itemGuid
-			);
-			newCastState->Activate();
-
-			return std::make_pair(spell_cast_result::CastOkay, nullptr);
+			CastSpell(*this, spell, target, castTime, itemGuid, true);
+			return spell_cast_result::CastOkay;
 		}
 
 		return m_castState->StartCast(

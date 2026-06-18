@@ -1,0 +1,88 @@
+syntax = "proto2";
+package mmo.proto;
+
+// CombatSettings contains configurable combat formula parameters.
+// These values are loaded once and used by the server to calculate combat outcomes.
+// Game designers can tweak these values without requiring code changes.
+message CombatSettings {
+
+	// === Armor Reduction Formula ===
+	// Formula: armor / (armor + armor_constant + armor_level_factor * attacker_level)
+	// Result is clamped to [0, max_armor_reduction_pct].
+	optional float armor_constant = 1 [default = 400.0];
+	optional float armor_level_factor = 2 [default = 85.0];
+	optional float max_armor_reduction_pct = 3 [default = 0.75];
+
+	// === Melee Crit ===
+	optional float melee_crit_multiplier = 4 [default = 2.0];
+
+	// === Crushing Blow ===
+	// Only happens when attacker level >= victim level + crushing_level_threshold.
+	optional float crushing_damage_multiplier = 5 [default = 1.5];
+	optional uint32 crushing_level_threshold = 6 [default = 4];
+	optional float crushing_base_chance = 7 [default = 15.0];
+	optional float crushing_chance_per_level = 8 [default = 2.0];
+	optional float crushing_max_chance = 9 [default = 25.0];
+
+	// === Glancing Blow ===
+	// Glancing blow chance when attacking higher-level targets.
+	optional float glancing_base_chance = 10 [default = 10.0];
+	optional float glancing_chance_per_level = 11 [default = 5.0];
+	optional float glancing_max_chance = 12 [default = 40.0];
+	// Damage reduction: min(glancing_max_reduction, skill_diff * glancing_reduction_per_skill_diff)
+	optional float glancing_reduction_per_skill_diff = 13 [default = 0.6];
+	optional float glancing_max_reduction = 14 [default = 30.0];
+
+	// === Block ===
+	optional uint32 default_block_value = 15 [default = 30];
+
+	// === Rage Generation ===
+	// Formula: (damage / rage_conversion_value) * rage_damage_factor
+	// rage_conversion_value = rage_conversion_quadratic * level^2 + rage_conversion_linear * level + rage_conversion_constant
+	optional float rage_conversion_quadratic = 16 [default = 0.0091107836];
+	optional float rage_conversion_linear = 17 [default = 3.225598133];
+	optional float rage_conversion_constant = 18 [default = 4.2652911];
+	optional float rage_damage_factor = 19 [default = 7.5];
+
+	// === Auto Attack Error Retry ===
+	// Delay in ms before retrying an auto attack that failed (e.g. out of range, wrong facing).
+	optional uint32 attack_swing_error_delay_ms = 20 [default = 200];
+
+	// === Parry Haste ===
+	// After parrying, the next auto attack swing is accelerated to this many ms.
+	optional uint32 parry_haste_min_swing_ms = 21 [default = 300];
+
+	// === Spell Weapon Damage ===
+	// Default crit chance for weapon damage spells (used when no other source provides it).
+	optional float spell_weapon_default_crit_chance = 22 [default = 5.0];
+	optional float spell_weapon_crit_multiplier = 23 [default = 2.0];
+
+	// === Dodge ===
+	// Base chance for any unit to dodge an incoming melee attack, before stat and aura bonuses.
+	optional float base_dodge_chance = 24 [default = 5.0];
+
+	// === Block ===
+	// NOTE: default_block_value (field 15) is no longer used. Block value is now derived from
+	// equipped item block stats plus per-class attribute scaling (see ClassEntry block sources).
+
+	// Multiplier applied to the block value when a block critically blocks (e.g. 2.0 = double).
+	optional float critical_block_multiplier = 25 [default = 2.0];
+	// Base chance (in percent) to critically block, before per-class attribute scaling.
+	// Only relevant for units that can critically block (unlocked via a CriticalBlock spell effect).
+	optional float base_critical_block_chance = 26 [default = 5.0];
+	// Size of the rear cone (in degrees, total width) from which incoming attacks cannot be
+	// blocked. Attacks landing inside this cone behind the defender ignore block entirely.
+	optional float defense_block_rear_cone_degrees = 27 [default = 90.0];
+
+	// === Global Cooldown ===
+	// Duration (in milliseconds) of the global cooldown triggered by casting a spell.
+	// Every spell triggers and respects the global cooldown unless it is explicitly flagged
+	// to ignore it (spell_cooldown_flags::NoGlobalCooldown). Procs/triggered spells never
+	// trigger or respect the global cooldown.
+	optional uint32 global_cooldown_ms = 28 [default = 1500];
+}
+
+// Wrapper for loading
+message CombatSettingsFile {
+	optional CombatSettings settings = 1;
+}

@@ -1,7 +1,9 @@
 #pragma once
 
+#include <map>
 #include <queue>
 #include <set>
+#include <vector>
 
 #include "game_object_c.h"
 #include "game_aura_c.h"
@@ -14,11 +16,17 @@
 
 #include "unit_movement.h"
 #include "movement_event.h"
+#include "remote_movement_renderer.h"
 
 namespace mmo
 {
+	class AnimationNotify;
+	class AnimationState;
+	class GameWorldObjectC;
 	class ManualRenderObject;
 	class NetClient;
+	class ParticleSystem;
+	class SceneNode;
 
 	namespace proto_client
 	{
@@ -37,7 +45,11 @@ namespace mmo
 	class GameUnitC : public GameObjectC, public CustomizationPropertyGroupApplier
 	{
 	public:
+		/// @brief Signal emitted when movement ends.
 		signal<void(GameUnitC &, const MovementInfo &)> movementEnded;
+
+		/// @brief Signal emitted when an animation notify is triggered on this unit.
+		signal<void(GameUnitC&, const AnimationNotify&, const String&, const AnimationState&)> animationNotifyTriggered;
 
 	public:
 		/// @brief Creates a instance of the GameUnitC class.
@@ -115,6 +127,12 @@ namespace mmo
 		/// @brief Updates animation based on movement state
 		void UpdateMovementBasedAnimation();
 
+		/// @brief Returns the current walk/run mode replicated from the server.
+		[[nodiscard]] UnitMovementMode GetMovementMode() const { return GetUnitMovementModeFromFlags(m_movementInfo.movementFlags); }
+
+		/// @brief Returns true if walk mode is currently enabled.
+		[[nodiscard]] bool IsWalkModeEnabled() const { return GetMovementMode() == unit_movement_mode::Walk; }
+
 		/// @brief Updates animation states (transitions, blending, etc.)
 		void UpdateAnimationStates(const float deltaTime, const bool isDead);
 
@@ -129,12 +147,23 @@ namespace mmo
 
 		virtual void ApplyMovementInfo(const MovementInfo &movementInfo);
 
+		/// @brief Enqueues a movement snapshot for a remote player into the buffered queue.
+		/// This should be called instead of ApplyMovementInfo for non-local players.
+		/// @param movementInfo The movement info from the network packet.
+		void EnqueueRemoteMovement(const MovementInfo &movementInfo);
+
+		/// @brief Processes the remote movement queue and updates the unit's visual state.
+		/// Called every frame for remote players.
+		/// @param deltaTime The time elapsed since the last frame.
+		void UpdateRemoteMovement(float deltaTime);
+
 		/// @copydoc GameObjectC::InitializeFieldMap
 		virtual void InitializeFieldMap() override;
 
 		bool OnAuraUpdate(io::Reader &reader);
 
 		void SetQuestGiverStatus(QuestgiverStatus status);
+		QuestgiverStatus GetQuestGiverStatus() const { return m_questGiverStatus; }
 
 		bool IsBeingMoved() const { return !m_movementPath.empty() && !m_pathCompleted; }
 
@@ -146,11 +175,33 @@ namespace mmo
 
 		unit_stand_state::Type GetStandState() const { return static_cast<unit_stand_state::Type>(Get<int32>(object_fields::StandState)); }
 
-		const proto_client::SpellEntry *GetOpenSpell() const;
+		const proto_client::SpellEntry *GetOpenSpell(const GameWorldObjectC* target) const;
 
 		void OnLanded();
 
 		void OnStartFalling();
+
+		/// @brief Called when the unit starts swimming. Sets the Swimming movement flag and,
+		/// for the locally controlled player, emits a StartSwim movement event (network packet).
+		void OnStartSwimming();
+
+		/// @brief Called when the unit stops swimming. Clears the Swimming movement flag and,
+		/// for the locally controlled player, emits a StopSwim movement event (network packet).
+		void OnStopSwimming();
+
+		/// @brief Visually pitches the character mesh by the current swim pitch while actively
+		/// swimming forward/backward, and smoothly returns it to level (0 pitch) when idle or out of
+		/// water. The control pitch itself is preserved; only the displayed mesh tilt is gated on
+		/// movement. Lets the player aim a dive while stationary and only tilt once they move.
+		/// @param deltaTime Frame time in seconds, used to interpolate the displayed pitch.
+		void UpdateSwimMeshPitch(float deltaTime);
+
+		/// @brief Queries the water surface height at the given world XZ position via the net driver.
+		/// @param x World X coordinate.
+		/// @param z World Z coordinate.
+		/// @param outSurfaceY Receives the water surface height (Y) when water is present.
+		/// @return True if there is water at the given position, false otherwise.
+		bool QueryWaterAt(float x, float z, float& outSurfaceY) const;
 
 		/// @brief Sets the visibility of the collision capsule debug visualization. Creates it on demand.
 		/// @param show True to show, false to hide.
@@ -169,6 +220,10 @@ namespace mmo
 	protected:
 		virtual void SetupSceneObjects() override;
 
+		/// @brief Creates or destroys the spark particle emitter based on the lootable flag.
+		/// @param active If true, creates and plays the emitter; if false, destroys it.
+		void UpdateSparkEmitter(bool active);
+
 		void OnEntryChanged();
 
 		void OnScaleChanged() const;
@@ -178,6 +233,9 @@ namespace mmo
 		void SetQuestGiverMesh(const String &meshName);
 
 		virtual void RefreshUnitName();
+
+		/// @brief Connects to animation notify signals on all animations for this unit.
+		void ConnectAnimationNotifySignals();
 
 	public:
 		/// @brief Locks the current position as the synced position.
@@ -206,6 +264,9 @@ namespace mmo
 		/// @brief Stops strafing the unit.
 		void StopStrafe();
 
+		/// @brief Toggles between walk and run mode, queuing the appropriate movement event.
+		void ToggleWalkMode();
+
 		/// @brief Starts turning the unit to the left or right.
 		void StartTurn(bool left);
 
@@ -214,6 +275,17 @@ namespace mmo
 
 		/// @brief Rotates the unit to face the specified direction.
 		void SetFacing(const Radian &facing);
+
+		/// Updates internal facing state and scene node orientation without queuing a
+		/// network packet. Use this for per-frame visual updates when the authoritative
+		/// network event will be sent at a lower rate (e.g. the 10/s SetFacing throttle).
+		void SetFacingLocal(const Radian &facing);
+
+		/// Applies a facing-only update received from the network for a remote unit.
+		/// Does NOT enqueue a new movement snapshot — it only updates the scene node
+		/// orientation and the facing field of the most recent queued snapshot so that
+		/// interpolation uses the correct yaw without adding a spurious position waypoint.
+		void ApplyRemoteFacing(const Radian &facing);
 
 		void Jump();
 
@@ -240,7 +312,7 @@ namespace mmo
 		void SetJumpForceTimeRemining(float remaining) { m_jumpForceTimeRemaining = remaining; }
 
 		/// @brief Makes the unit follow a given path of points.
-		void SetMovementPath(const std::vector<Vector3> &points, GameTime moveTime, const std::optional<Radian> &targetRotation);
+		void SetMovementPath(const std::vector<Vector3> &points, GameTime moveTime, const std::optional<Radian> &targetRotation, UnitMovementMode movementMode);
 
 		void SetSpeed(const movement_type::Type type, float speed) { m_unitSpeed[type] = speed; }
 
@@ -384,6 +456,35 @@ namespace mmo
 		bool IsCastingSpell() const { return false; }
 
 	public:
+		/// @brief Sets the total spell modifier value for a given type, effect index, and operation.
+		/// Called when the server notifies us of a spell mod change.
+		/// @param type 0 = Flat, 1 = Pct
+		/// @param effectIndex Spell effect bitmask index (0-63) — a bit position in the spell familyflags mask
+		/// @param op Spell modifier operation (see spell_mod_op)
+		/// @param value Total modifier value for this bit position
+		void SetSpellMod(uint8 type, uint8 effectIndex, uint8 op, int32 value);
+
+		/// @brief Returns the total flat spell modifier for a given operation, summed across all effect
+		/// bit positions that are set in familyFlags. Mirrors server GetTotalSpellMods logic.
+		int32 GetSpellModFlatForFlags(uint8 op, uint64 familyFlags) const;
+
+		/// @brief Returns the total percentage spell modifier for a given operation, summed across all
+		/// effect bit positions that are set in familyFlags. Mirrors server GetTotalSpellMods logic.
+		int32 GetSpellModPctForFlags(uint8 op, uint64 familyFlags) const;
+
+		/// @brief Applies accumulated spell mods to a value (flat + pct), using the spell's familyflags
+		/// to select which stored effect-index totals apply.
+		template<typename T>
+		T ApplySpellModForFlags(uint8 op, T value, uint64 familyFlags) const
+		{
+			const int32 flatMod = GetSpellModFlatForFlags(op, familyFlags);
+			const int32 pctMod = GetSpellModPctForFlags(op, familyFlags);
+			T result = value + static_cast<T>(flatMod);
+			result = static_cast<T>(result * (1.0f + static_cast<float>(pctMod) * 0.01f));
+			return result;
+		}
+
+	public:
 		/// @brief Returns whether the unit is currently attacking any unit.
 		bool IsAttacking() const { return m_victim != 0; }
 
@@ -403,6 +504,11 @@ namespace mmo
 
 		bool IsInCombat() const { return (Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0; }
 
+		/// @brief Returns true while the unit holds its weapon(s) drawn (combat-ready stance). This
+		///	mirrors the flag that drives the combat-ready animation, so the drawn weapon model and
+		///	the ready pose stay in sync.
+		bool IsWeaponDrawn() const { return (Get<uint32>(object_fields::Flags) & unit_flags::Attacking) != 0; }
+
 		float GetSpeed(const movement_type::Type type) const { return m_unitSpeed[type]; }
 
 		void SetCreatureInfo(const CreatureInfo &creatureInfo);
@@ -413,8 +519,13 @@ namespace mmo
 
 		void PlayOneShotAnimation(AnimationState *animState);
 
+		void SetLockedLoopAnimation(AnimationState* state);
+
 		/// @brief Cancel the currently playing one-shot animation and refresh movement state
 		void CancelOneShotAnimation();
+
+		/// @brief Returns true if a one-shot animation is currently playing.
+		bool IsPlayingOneShotAnimation() const { return m_oneShotState != nullptr && m_oneShotState->GetWeight() > 0.0f; }
 
 		/// @brief Force an update of movement-based animations (e.g., after canceling spell animations)
 		void RefreshMovementAnimation();
@@ -422,6 +533,17 @@ namespace mmo
 		void NotifyAttackSwingEvent();
 
 		void NotifyHitEvent();
+
+		/// @brief Sets the animation states used for auto attacks based on the equipped weapon.
+		///	@param animNames Names of the skeleton animation states to choose from. One is picked at
+		///	random per swing. Names not present on the current mesh are ignored; when none remain,
+		///	auto attacks fall back to the unarmed attack animation.
+		void SetWeaponAttackAnimations(const std::vector<String>& animNames);
+
+		/// @brief Sets the combat-ready (attack idle) stance based on the equipped weapon.
+		///	@param animName Name of the skeleton animation state to hold while in combat. When empty
+		///	or not present on the current mesh, the unarmed ready animation is used instead.
+		void SetWeaponReadyAnimation(const String& animName);
 
 		/// Adds a proficiency by ID.
 		void AddProficiency(uint32 proficiencyId);
@@ -462,6 +584,24 @@ namespace mmo
 		/// @brief Returns the current movement information of this unit.
 		[[nodiscard]] const MovementInfo &GetMovementInfo() const { return m_movementInfo; }
 
+		/// @brief Sets the unit's pitch value (used for swimming up/down). The pitch is serialized
+		/// in movement packets while the unit is swimming or flying.
+		void SetMovementPitch(const Radian &pitch) { m_movementInfo.pitch = pitch; }
+
+		/// @brief Sets or clears the Ascending movement flag (used to swim straight up while
+		/// holding the jump key under water).
+		void SetSwimAscending(const bool ascending)
+		{
+			if (ascending)
+			{
+				m_movementInfo.movementFlags |= movement_flags::Ascending;
+			}
+			else
+			{
+				m_movementInfo.movementFlags &= ~movement_flags::Ascending;
+			}
+		}
+
 		const Capsule &GetCollider() const { return m_collider; }
 
 		const proto_client::FactionEntry *GetFaction() const { return m_faction; }
@@ -474,6 +614,13 @@ namespace mmo
 
 	protected:
 		virtual void OnDisplayIdChanged();
+
+		/// Null every AnimationState* member so no stale pointer survives a mesh swap.
+		void ClearAnimationStates();
+
+		/// Returns true only when @p state still belongs to the current entity's
+		/// AnimationStateSet (i.e. the pointer is not dangling after a mesh change).
+		[[nodiscard]] bool IsValidAnimState(AnimationState* state) const;
 
 		void UpdateCollider();
 
@@ -505,10 +652,12 @@ namespace mmo
 		bool IsFollowingPath() const { return !m_movementPath.empty() && !m_pathCompleted; }
 
 		/// Calculates position along the path based on distance traveled
-		Vector3 CalculatePositionAlongPath(float distance) const;
+		/// Applies easing at waypoint turns for smooth transitions
+		Vector3 CalculatePositionAlongPath(float distance);
 
+	public:
 		/// Returns true if this unit is controlled by the local player
-		bool IsControlledByLocalPlayer() const;
+		virtual bool IsControlledByLocalPlayer() const;
 
 	protected:
 		NetClient &m_netDriver;
@@ -527,11 +676,23 @@ namespace mmo
 		bool m_pathCompleted = false;
 		GameTime m_pathStartTime = 0;			 // When the path movement started
 		float m_pathTotalLength = 0.0f;			 // Total length of all path segments
+		float m_pathMoveSpeed = 0.0f;			 // Movement speed derived from server path duration
 		std::vector<float> m_pathSegmentLengths; // Length of each segment for time calculation
 
 		// Path gravity simulation
 		float m_pathVerticalVelocity = 0.0f; // Current vertical velocity for gravity
 		bool m_pathOnGround = true;			 // Whether unit is on ground during path movement
+
+		// Easing state tracking for smooth path transitions
+		float m_easingProgress = 0.0f;		 // Current easing progress [0, 1] within waypoint transition
+		float m_easingTransitionDistance = 0.0f; // Distance being eased for current turn
+
+		/// @brief Detects if there's a turn between two consecutive path segments
+		/// @param prevPoint Previous waypoint
+		/// @param currPoint Current waypoint
+		/// @param nextPoint Next waypoint
+		/// @return True if a turn is detected (angle > threshold)
+		bool DetectTurnBetweenSegments(const Vector3& prevPoint, const Vector3& currPoint, const Vector3& nextPoint) const;
 
 		std::vector<const proto_client::SpellEntry *> m_spells;
 		std::vector<const proto_client::SpellEntry *> m_spellBookSpells;
@@ -561,10 +722,22 @@ namespace mmo
 	protected:
 		// Animation stuff
 		AnimationState *m_idleAnimState{nullptr};
+		AnimationState *m_walkAnimState{nullptr};
+		AnimationState *m_walkLeftState{nullptr};
+		AnimationState *m_walkRightState{nullptr};
+		AnimationState *m_walkForwardLeftState{nullptr};
+		AnimationState *m_walkForwardRightState{nullptr};
 		AnimationState *m_readyAnimState{nullptr};
+		AnimationState *m_weaponReadyState{nullptr};
 		AnimationState *m_runAnimState{nullptr};
+		AnimationState *m_runBackAnimState{nullptr};
+		AnimationState *m_runLeftState{nullptr};
+		AnimationState *m_runRightState{nullptr};
+		AnimationState *m_runForwardLeftState{nullptr};
+		AnimationState *m_runForwardRightState{nullptr};
 		AnimationState *m_deathState{nullptr};
 		AnimationState *m_unarmedAttackState{nullptr};
+		std::vector<AnimationState*> m_weaponAttackStates;
 		AnimationState *m_castReleaseState{nullptr};
 		AnimationState *m_castingState{nullptr};
 		AnimationState *m_damageHitState{nullptr};
@@ -572,13 +745,22 @@ namespace mmo
 		AnimationState *m_jumpStartState{nullptr};
 		AnimationState *m_fallingState{nullptr};
 		AnimationState *m_landState{nullptr};
+		// Swim animation states (optional per mesh; fall back to run/idle/death when absent)
+		AnimationState *m_swimState{nullptr};
+		AnimationState *m_swimIdleState{nullptr};
+		AnimationState *m_swimDeathState{nullptr};
+		AnimationState *m_swimBackwardState{nullptr};
+		AnimationState *m_swimLeftState{nullptr};
+		AnimationState *m_swimRightState{nullptr};
 
 		AnimationState *m_targetState = nullptr;
 		AnimationState *m_currentState = nullptr;
 		AnimationState *m_oneShotState = nullptr;
+		AnimationState *m_lockedLoopAnimState{nullptr};
 
 		SceneNode *m_questGiverNode = nullptr;
 		Entity *m_questGiverEntity = nullptr;
+		QuestgiverStatus m_questGiverStatus = questgiver_status::None;
 
 		AvatarConfiguration m_configuration;
 
@@ -618,6 +800,9 @@ namespace mmo
 
 		std::queue<MovementEvent> m_movementEventQueue;
 
+		/// @brief Buffered movement queue for remote players.
+		RemoteMovementRenderer m_remoteMovementRenderer;
+
 		GameTime m_lastHeartbeat = 0;
 
 		/// @brief Whether the position is currently locked due to a stop packet being sent.
@@ -640,5 +825,19 @@ namespace mmo
 
 		/// @brief Map of SubEntity -> material state (only populated when tinting is active).
 		std::map<class SubEntity*, SubEntityMaterialState> m_tintMaterialStates;
+
+		/// @brief Connections to animation notify signals.
+		scoped_connection_container m_animNotifyConnections;
+
+		ParticleSystem* m_sparkEmitter = nullptr;
+		SceneNode* m_sparkEmitterNode = nullptr;
+
+		/// @brief Smoothly interpolated swim pitch (radians) currently applied to the mesh. Blends
+		/// toward the control pitch while swimming and moving, and toward 0 when idle/out of water.
+		float m_swimMeshPitch = 0.0f;
+
+		/// @brief Client-side spell modifier cache. 
+		/// Key: packed (type << 16 | effectIndex << 8 | op), Value: total modifier value.
+		std::map<uint32, int32> m_spellMods;
 	};
 }

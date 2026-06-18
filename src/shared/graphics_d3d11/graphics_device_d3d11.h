@@ -16,12 +16,17 @@ using Microsoft::WRL::ComPtr;
 namespace mmo
 {
 	class VertexShaderD3D11;
+	class PixelShaderD3D11;
 	D3D11_MAP MapLockOptionsToD3D11(LockOptions options);
 
 	/// This is the d3d11 implementation of the graphics device class.
 	class GraphicsDeviceD3D11 final
 		: public GraphicsDevice
 	{
+		friend class VertexShaderD3D11;
+		friend class PixelShaderD3D11;
+		friend class VertexDeclarationD3D11;
+
 	public:
 		GraphicsDeviceD3D11();
 
@@ -47,7 +52,13 @@ namespace mmo
 
 		ConstantBufferPtr CreateConstantBuffer(size_t size, const void* initialData) override;
 
+		StructuredBufferPtr CreateStructuredBuffer(size_t elementSize, size_t elementCount, const void* initialData) override;
+
 		ShaderPtr CreateShader(ShaderType type, const void* shaderCode, size_t shaderCodeSize) override;
+
+		[[nodiscard]] bool SupportsNullPixelShaderForShadows() const override { return true; }
+
+		void BindNullPixelShader() override;
 
 		void SetDepthBias(float bias) override;
 
@@ -117,6 +128,8 @@ namespace mmo
 
 		void Render(const RenderOperation& operation) override;
 
+		OcclusionQueryPtr CreateOcclusionQuery() override;
+
 		void SetHardwareCursor(void* osCursorData) override;
 
 		void* GetHardwareCursor() override;
@@ -126,6 +139,8 @@ namespace mmo
 		std::string GetPrimaryMonitorResolution() const override;
 
 		bool ValidateFullscreenResolution(uint16 width, uint16 height) const override;
+
+		std::vector<std::pair<uint16, uint16>> GetSupportedResolutions() const override;
 		// ~ End GraphicsDevice
 
 	public:
@@ -240,12 +255,14 @@ namespace mmo
 		D3D11_RASTERIZER_DESC m_rasterizerDesc;
 		bool m_rasterizerDescChanged = false;
 		size_t m_rasterizerHash = 0;
+		ID3D11RasterizerState* m_currentRasterizerState = nullptr;
 		D3D11_SAMPLER_DESC m_samplerDesc;
 		bool m_samplerDescChanged = false;
 		size_t m_samplerHash = 0;
 		D3D11_DEPTH_STENCIL_DESC m_depthStencilDesc;
 		size_t m_depthStencilHash = 0;
 		bool m_depthStencilChanged = false;
+		ID3D11DepthStencilState* m_currentDepthStencilState = nullptr;
 
 #ifdef _DEBUG
 		ComPtr<ID3D11Debug> m_d3dDebug;
@@ -260,8 +277,22 @@ namespace mmo
 		HCURSOR m_hardwareCursor = nullptr;
 
 		Texture* m_textureSlots[16]{ };
-		ShaderBase* m_vertexShader { nullptr };
-		ShaderBase* m_pixelShader { nullptr };
+
+		/// Currently bound vertex shader (for caching to avoid redundant VSSetShader calls).
+		ShaderBase* m_currentVertexShader { nullptr };
+
+		/// Currently bound pixel shader (for caching to avoid redundant PSSetShader calls).
+		ShaderBase* m_currentPixelShader { nullptr };
+
+		/// Last bound material pointer. When consecutive draws use the same material,
+		/// we skip Material::Apply entirely since shaders/textures/state are already set.
+		MaterialInterface* m_lastBoundMaterial { nullptr };
+
+		/// Last pixel shader type used with the last bound material.
+		PixelShaderType m_lastBoundPixelShaderType { PixelShaderType::Forward };
+
+		/// Cache for vertex declaration -> hasBlendIndices to avoid linear search per draw call.
+		std::unordered_map<VertexDeclaration*, bool> m_blendIndicesCache;
 
 		ID3D11InputLayout* m_lastInputLayout{ nullptr };
 		uint64 m_batchCount = 0;

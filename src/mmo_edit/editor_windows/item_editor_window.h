@@ -26,6 +26,13 @@ namespace mmo
 
 		void OnNewEntry(EntryType& entry) override;
 
+		/// Opens a save dialog and writes the given item to a JSON file.
+		void ExportItemToFile(const EntryType& entry);
+
+		/// Opens an open dialog, validates the chosen JSON file and, on success,
+		/// overwrites the given item with its contents (keeping the original ID).
+		void ImportItemFromFile(EntryType& entry);
+
 	public:
 		bool IsDockable() const override { return true; }
 
@@ -35,5 +42,12 @@ namespace mmo
 		EditorHost& m_host;
 		std::vector<String> m_textures;
 		std::map<std::string, TexturePtr> m_iconCache;
+
+		/// Message shown in the import/export result popup.
+		String m_importExportMessage;
+		/// Whether the last import/export result represents an error (controls coloring).
+		bool m_importExportFailed = false;
+		/// Set to true to open the import/export result popup on the next frame.
+		bool m_openImportExportPopup = false;
 	};
 }

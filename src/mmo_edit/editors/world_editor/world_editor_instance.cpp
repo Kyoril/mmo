@@ -22,8 +22,14 @@
 #include "game/object_type_id.h"
 #include "game/character_customization/avatar_definition_mgr.h"
 #include "game/character_customization/customizable_avatar_definition.h"
-#include "game_client/world_entity_loader.h"
+#include "game_common/world_entity_loader.h"
+#include "game_common/world_foliage.h"
+#include "graphics/graphics_device.h"
 #include "graphics/texture_mgr.h"
+#include "scene_graph/instanced_foliage.h"
+#include "scene_graph/foliage.h"
+#include "scene_graph/foliage_layer.h"
+#include "terrain/constants.h"
 #include "nav_build/common.h"
 #include "scene_graph/mesh_manager.h"
 #include "terrain/page.h"
@@ -156,6 +162,16 @@ namespace mmo
 					   { return c == '\\' ? '/' : c; });
 		m_terrain->SetBaseFileName(baseFileName);
 
+		// Authored foliage (trees) is rendered through hardware-instanced cells, exactly like the
+		// game client, so the editor can preview the world WYSIWYG. Trees are authored map content
+		// (placed via the foliage edit mode) and are therefore always visible.
+		m_foliage = std::make_unique<InstancedFoliage>(m_scene, GraphicsDevice::Get(), static_cast<float>(terrain::constants::PageSize) / 4.0f);
+		m_foliage->SetVisible(true);
+
+		// Procedural grass mirrors the client's dense vegetation. It is controlled by the
+		// "Show Foliage" world setting and hidden by default so it does not obstruct editing.
+		SetupGrass();
+
 		m_debugNode = m_scene.GetRootSceneNode().CreateChildSceneNode();
 		m_debugEntity = m_scene.CreateEntity("TerrainDebug", "Editor/Joint.hmsh");
 		m_debugNode->AttachObject(*m_debugEntity);
@@ -189,7 +205,28 @@ namespace mmo
 			m_editMode,
 			m_terrainEditMode.get(),
 			[this](WorldEditMode *mode)
-			{ SetEditMode(mode); });
+			{ SetEditMode(mode); },
+			m_showFoliage,
+			m_showWater,
+			[this](bool visible)
+			{
+				if (m_grass)
+				{
+					m_grass->SetVisible(visible);
+					if (visible)
+					{
+						m_grass->RebuildAll();
+					}
+				}
+			},
+			[this](bool)
+			{ UpdateWaterVisibility(); });
+
+		// Create spawn palette panel
+		m_spawnPalettePanel = std::make_unique<SpawnPalettePanel>();
+
+		// Create spawn list panel (dockable browser of all placed spawns)
+		m_spawnListPanel = std::make_unique<SpawnListPanel>();
 
 		// Initialize deferred renderer BEFORE viewport panel since viewport panel takes a reference to it
 		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), m_scene, 640, 480);
@@ -256,9 +293,21 @@ namespace mmo
 			}
 			m_sceneOutlineWindow->Update(); });
 
+		// Supply a duplication callback factory so scene-outline selections can duplicate via Alt+transform.
+		m_sceneOutlineWindow->SetEntityDuplicationFactory([this](MapEntity& entity) -> std::function<void(Selectable&)>
+		{
+			return MakeDuplicationCallback(entity);
+		});
+
 		m_spawnEditMode = std::make_unique<SpawnEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().units, m_editor.GetProject().objects);
 		m_skyEditMode = std::make_unique<SkyEditMode>(*this, *m_skyComponent);
 		m_areaTriggerEditMode = std::make_unique<AreaTriggerEditMode>(*this, m_editor.GetProject().maps, m_editor.GetProject().areaTriggers);
+		m_waterEditMode = std::make_unique<WaterEditMode>(*this, *m_terrain, *m_camera);
+		m_terrainEditMode->SetWaterEditMode(m_waterEditMode.get());
+
+		// Brush-based authoring for the instanced foliage created above (m_foliage).
+		m_foliageEditMode = std::make_unique<FoliageEditMode>(*this, *m_foliage, m_terrain.get(), *m_camera);
+
 		m_editMode = nullptr;
 
 		m_selectionRaycaster = std::make_unique<SelectionRaycaster>(
@@ -308,7 +357,22 @@ namespace mmo
 
 		m_transformWidget.reset();
 		m_mapEntities.clear();
+		// Destroy entity/world-model instances before clearing the scene — their
+		// destructors call DetachObject/DestroySceneNode which require live scene nodes.
+		m_entityFactory.reset();
+		// The foliage edit mode holds a reference to m_foliage and owns brush scene objects;
+		// release it before the foliage it references and before Scene::Clear().
+		m_foliageEditMode.reset();
+		// Foliage owns scene nodes and render chunks; destroy it before Scene::Clear().
+		m_foliage.reset();
+		// Procedural grass also owns scene nodes and render chunks; destroy before Scene::Clear().
+		m_grass.reset();
 		m_worldGrid.reset();
+		// Destroy the terrain before clearing the scene. Terrain pages own water render
+		// objects and page scene nodes that live in the scene; Scene::Clear() would destroy
+		// those first, leaving the pages with dangling pointers that crash in Page::Unload()
+		// when the terrain is finally destroyed as a member after this destructor body.
+		m_terrain.reset();
 		m_scene.Clear();
 	}
 
@@ -316,29 +380,34 @@ namespace mmo
 	{
 		m_dispatcher.poll();
 
-		const float deltaTimeSeconds = ImGui::GetCurrentContext()->IO.DeltaTime;
+		// Keep water visibility in sync with the active edit mode (water is forced visible while editing water).
+		UpdateWaterVisibility();
 
-		if (ImGui::IsKeyPressed(ImGuiKey_F))
+		// Stream procedural grass chunks around the camera, mirroring the client (only when shown).
+		if (m_grass && m_grass->IsVisible() && m_camera)
 		{
-			if (m_selection.IsEmpty())
-			{
-				m_cameraAnchor->SetPosition(Vector3::Zero);
-			}
-			else
-			{
-				m_cameraAnchor->SetPosition(m_selection.GetSelectedObjects().back()->GetPosition());
-			}
-			m_cameraVelocity = Vector3::Zero;
+			m_grass->Update(*m_camera);
 		}
 
-		if (ImGui::IsKeyPressed(ImGuiKey_Z))
+		const float deltaTimeSeconds = ImGui::GetCurrentContext()->IO.DeltaTime;
+
+		// Never fire keyboard shortcuts while an ImGui text-input widget has keyboard focus.
+		if (!ImGui::GetIO().WantTextInput)
 		{
-			if (!m_selection.IsEmpty())
+			if (ImGui::IsKeyPressed(ImGuiKey_F))
 			{
-				m_selection.GetSelectedObjects().back()->Translate(
-					-m_selection.GetSelectedObjects().back()->GetPosition());
+				FocusSelection();
 			}
-			m_cameraVelocity = Vector3::Zero;
+
+			if (ImGui::IsKeyPressed(ImGuiKey_Z))
+			{
+				if (!m_selection.IsEmpty())
+				{
+					m_selection.GetSelectedObjects().back()->Translate(
+						-m_selection.GetSelectedObjects().back()->GetPosition());
+				}
+				m_cameraVelocity = Vector3::Zero;
+			}
 		}
 
 		if (m_leftButtonPressed || m_rightButtonPressed)
@@ -422,11 +491,14 @@ namespace mmo
 		const String detailsId = "Details##" + GetAssetPath().string();
 		const String worldSettingsId = "World Settings##" + GetAssetPath().string();
 		const String sceneOutlineId = "Scene Outline##" + GetAssetPath().string();
+		const String spawnPaletteId = "Spawn Palette##" + GetAssetPath().string();
+		const String spawnListId = "Spawns##" + GetAssetPath().string();
 
 		HandleKeyboardShortcuts();
 
 		WorldEditMode *availableModes[] = {
 			m_entityEditMode.get(),
+			m_foliageEditMode.get(),
 			m_terrainEditMode.get(),
 			m_spawnEditMode.get(),
 			m_areaTriggerEditMode.get(),
@@ -441,12 +513,21 @@ namespace mmo
 			{ SetEditMode(mode); });
 
 		m_worldSettingsPanel->Draw(worldSettingsId);
-		m_viewportPanel->Draw(viewportId, m_editMode);
+		m_spawnPalettePanel->Draw(spawnPaletteId, m_spawnEditMode.get());
+
+		// The placed-spawn browser is only populated while spawn editing is the active mode, because
+		// spawns are only instantiated in the scene during that mode (and selection needs those entities).
+		m_spawnListPanel->Draw(spawnListId, (m_editMode == m_spawnEditMode.get()) ? m_spawnEditMode.get() : nullptr);
+
+		m_viewportPanel->Draw(viewportId, m_editMode, m_spawnEditMode && m_editMode == m_spawnEditMode.get() && m_spawnEditMode->IsWaypointEditActive());
 		DrawSceneOutlinePanel(sceneOutlineId);
+
+		const String minimapId = "World Map##" + GetAssetPath().string();
+		DrawMinimapPanel(minimapId);
 
 		if (m_initDockLayout)
 		{
-			InitializeDockLayout(dockspaceId, viewportId, detailsId, worldSettingsId);
+			InitializeDockLayout(dockspaceId, viewportId, detailsId, worldSettingsId, spawnPaletteId, spawnListId);
 		}
 
 		ImGui::PopID();
@@ -454,6 +535,13 @@ namespace mmo
 
 	void WorldEditorInstance::HandleKeyboardShortcuts()
 	{
+		// Do not fire any editor shortcuts while an ImGui text-input widget (e.g. a
+		// value field in the details panel) has keyboard focus — the user is typing.
+		if (ImGui::GetIO().WantTextInput)
+		{
+			return;
+		}
+
 		if (ImGui::IsKeyPressed(ImGuiKey_LeftAlt, false))
 		{
 			m_transformWidget->SetCopyMode(true);
@@ -489,9 +577,21 @@ namespace mmo
 		{
 			SetEditMode(m_skyEditMode.get());
 		}
+		else if (ImGui::IsKeyDown(ImGuiKey_F6) && m_hasTerrain)
+		{
+			SetEditMode(m_terrainEditMode.get());
+			m_terrainEditMode->SetTerrainEditType(TerrainEditType::Water);
+		}
+
+		// Patrol submode — Escape exits
+		if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+		{
+			if (m_editMode == m_spawnEditMode.get() && m_spawnEditMode->IsWaypointEditActive())
+				m_spawnEditMode->SetWaypointEditActive(false);
+		}
 	}
 
-	void WorldEditorInstance::InitializeDockLayout(ImGuiID dockspaceId, const String &viewportId, const String &detailsId, const String &worldSettingsId)
+	void WorldEditorInstance::InitializeDockLayout(ImGuiID dockspaceId, const String &viewportId, const String &detailsId, const String &worldSettingsId, const String &spawnPaletteId, const String &spawnListId)
 	{
 		ImGui::DockBuilderRemoveNode(dockspaceId);
 		ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace | ImGuiDockNodeFlags_AutoHideTabBar); // Add empty node
@@ -507,11 +607,18 @@ namespace mmo
 
 		// Create the scene outline ID string
 		const String sceneOutlineId = "Scene Outline##" + GetAssetPath().string();
+		const String minimapId = "World Map##" + GetAssetPath().string();
 
 		ImGui::DockBuilderDockWindow(viewportId.c_str(), mainId);
 		ImGui::DockBuilderDockWindow(sceneOutlineId.c_str(), sideTopId);
+		// The minimap teleport panel shares the side dock region with the details/settings panels.
+		ImGui::DockBuilderDockWindow(minimapId.c_str(), sideId);
+		// The placed-spawn browser shares the top-side dock node with the Scene Outline, so they
+		// become tabs in the same region.
+		ImGui::DockBuilderDockWindow(spawnListId.c_str(), sideTopId);
 		ImGui::DockBuilderDockWindow(detailsId.c_str(), sideId);
 		ImGui::DockBuilderDockWindow(worldSettingsId.c_str(), sideId);
+		ImGui::DockBuilderDockWindow(spawnPaletteId.c_str(), sideId);
 
 		ImGui::DockBuilderFinish(dockspaceId);
 		m_initDockLayout = false;
@@ -533,6 +640,13 @@ namespace mmo
 		{
 			const auto mousePos = ImGui::GetMousePos();
 			m_transformWidget->OnMousePressed(button, (mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x, (mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+
+			if (button == 0 && m_editMode)
+			{
+				m_editMode->OnMouseDown(
+					(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+					(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+			}
 		}
 	}
 
@@ -574,9 +688,14 @@ namespace mmo
 			{
 				if (!widgetWasActive && button == 0 && m_hovering)
 				{
-					m_selectionRaycaster->PerformSpawnSelection(
-						(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
-						(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+					// Skip spawn selection raycasting while waypoint editing is active;
+					// clicks are consumed by the waypoint add / drag logic instead.
+					if (!m_spawnEditMode->IsWaypointEditActive())
+					{
+						m_selectionRaycaster->PerformSpawnSelection(
+							(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+							(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+					}
 				}
 			}
 			else if (m_editMode == m_terrainEditMode.get())
@@ -601,12 +720,16 @@ namespace mmo
 			const int16 deltaX = static_cast<int16>(x) - m_lastMouseX;
 			const int16 deltaY = static_cast<int16>(y) - m_lastMouseY;
 
+			// Skip camera rotation when the spawn editor is actively dragging a waypoint.
+			const bool isDraggingWaypoint = (m_editMode == m_spawnEditMode.get() && m_spawnEditMode->IsDraggingWaypoint());
+
 			// TODO: Move this into edit modes handling of OnMouseMoved
-			if (m_rightButtonPressed || (m_leftButtonPressed && (m_editMode != m_terrainEditMode.get() || (m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Deform &&
+			if (m_rightButtonPressed || (m_leftButtonPressed && !isDraggingWaypoint && m_editMode != m_foliageEditMode.get() && (m_editMode != m_terrainEditMode.get() || (m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Deform &&
 																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Paint &&
 																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Area &&
 																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::VertexShading &&
-																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Holes))))
+																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Holes &&
+																										   m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Water))))
 			{
 				m_cameraAnchor->Yaw(-Degree(deltaX), TransformSpace::World);
 				m_cameraAnchor->Pitch(-Degree(deltaY), TransformSpace::Local);
@@ -620,6 +743,13 @@ namespace mmo
 		m_transformWidget->OnMouseMoved(
 			(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
 			(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+
+		if (m_editMode)
+		{
+			m_editMode->OnMouseMoved(
+				(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+				(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
+		}
 
 		if (m_editMode == m_terrainEditMode.get())
 		{
@@ -869,6 +999,55 @@ namespace mmo
 			}
 		}
 
+		// Save authored foliage. Each modified page is rewritten as a whole .hfol file (or deleted
+		// when it no longer holds any instances).
+		if (m_foliageEditMode && m_foliage)
+		{
+			for (const uint16 pageIndex : m_foliageEditMode->GetDirtyPages())
+			{
+				String fileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Foliage" / (std::to_string(pageIndex) + ".hfol")).string();
+				std::transform(fileName.begin(), fileName.end(), fileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
+
+				std::vector<InstancedFoliageInstance> pageInstances;
+				m_foliage->GetInstancesForPage(pageIndex, pageInstances);
+
+				if (pageInstances.empty())
+				{
+					// Page emptied — remove any existing file.
+					AssetRegistry::RemoveFile(fileName);
+					continue;
+				}
+
+				std::vector<FoliageInstance> serialized;
+				serialized.reserve(pageInstances.size());
+				for (const auto& source : pageInstances)
+				{
+					FoliageInstance instance;
+					instance.uniqueId = source.uniqueId;
+					instance.meshName = source.meshName;
+					instance.position = source.position;
+					instance.rotation = source.rotation;
+					instance.scale = source.scale;
+					instance.collides = source.collides;
+					serialized.push_back(instance);
+				}
+
+				auto filePtr = AssetRegistry::CreateNewFile(fileName);
+				if (!filePtr)
+				{
+					ELOG("Failed to write foliage file " << fileName);
+					continue;
+				}
+
+				io::StreamSink foliageSink{ *filePtr };
+				io::Writer foliageWriter{ foliageSink };
+				WorldFoliageSerializer::Write(foliageWriter, serialized);
+				foliageSink.Flush();
+			}
+
+			m_foliageEditMode->ClearDirtyPages();
+		}
+
 		return true;
 	}
 
@@ -888,6 +1067,10 @@ namespace mmo
 
 		// TODO: Move this whole method into the terrain edit mode3
 		m_terrainEditMode->SetBrushPosition(hitResult.second.position);
+		if (m_terrainEditMode->GetTerrainEditType() == TerrainEditType::Water)
+		{
+			m_waterEditMode->SetBrushPosition(hitResult.second.position);
+		}
 		if (terrain::Tile *tile = hitResult.second.tile)
 		{
 			m_selectionRaycaster->UpdateDebugAABB(tile->GetWorldBoundingBox(true));
@@ -899,7 +1082,7 @@ namespace mmo
 		}
 
 		m_debugNode->SetPosition(hitResult.second.position);
-		m_debugEntity->SetVisible(true);
+		// Debug entity (preview cube) intentionally hidden — brush circles & vertex dots handle visualization.
 	}
 
 	Entity *WorldEditorInstance::CreateMapEntity(const String &assetName, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale, uint64 objectId)
@@ -932,8 +1115,30 @@ namespace mmo
 		return worldModelInstance;
 	}
 
+	std::function<void(Selectable&)> WorldEditorInstance::MakeDuplicationCallback(MapEntity& entity)
+	{
+		const String assetName = entity.GetAssetName();
+		if (entity.IsWorldModelEntity())
+		{
+			return [this, assetName](Selectable& sel)
+			{
+				CreateWorldModelEntity(assetName, sel.GetPosition(), sel.GetOrientation(), sel.GetScale(), 0);
+			};
+		}
+		else
+		{
+			return [this, assetName](Selectable& sel)
+			{
+				CreateMapEntity(assetName, sel.GetPosition(), sel.GetOrientation(), sel.GetScale(), 0);
+			};
+		}
+	}
+
 	void WorldEditorInstance::OnMapEntityRemoved(MapEntity &entity)
 	{
+		// Capture WMO pointer before the erase destroys the MapEntity (and detaches the WMO).
+		WorldModelInstance* wmoToRemove = entity.IsWorldModelEntity() ? entity.GetWorldModelInstance() : nullptr;
+
 		std::erase_if(m_mapEntities, [&](const auto &mapEntity)
 					  {
 			if (mapEntity.get() == &entity)
@@ -957,6 +1162,12 @@ namespace mmo
 			}
 
 			return false; });
+
+		// Release WMO instance from factory ownership now that ~MapEntity has run Destroy() on it.
+		if (wmoToRemove)
+		{
+			m_entityFactory->RemoveWorldModelInstance(wmoToRemove);
+		}
 	}
 
 	PagePosition WorldEditorInstance::GetPagePositionFromCamera() const
@@ -1170,6 +1381,130 @@ namespace mmo
 				map->mutable_objectspawns()->erase(it);
 			}
 		}
+	}
+
+	void WorldEditorInstance::SelectUnitSpawn(proto::UnitSpawnEntry& spawn)
+	{
+		// Find the scene entity that represents this spawn.
+		const auto entityIt = std::find_if(m_spawnEntities.begin(), m_spawnEntities.end(), [&spawn](const Entity* entity)
+		{
+			return entity->GetUserObject<const proto::UnitSpawnEntry>() == &spawn;
+		});
+
+		if (entityIt == m_spawnEntities.end())
+		{
+			WLOG("Unable to select unit spawn: no scene entity found");
+			return;
+		}
+
+		Entity* entity = *entityIt;
+
+		m_selection.Clear();
+		m_debugBoundingBox->Clear();
+
+		auto removalCallback = [this](const proto::UnitSpawnEntry& s)
+		{
+			RemoveUnitSpawn(s);
+		};
+
+		m_selection.AddSelectable(std::make_unique<SelectedUnitSpawn>(
+			spawn,
+			m_editor.GetProject().units,
+			m_editor.GetProject().models,
+			*entity->GetParentSceneNode()->GetParentSceneNode(),
+			*entity,
+			nullptr,
+			removalCallback));
+
+		m_selectionRaycaster->UpdateDebugAABB(entity->GetWorldBoundingBox());
+	}
+
+	void WorldEditorInstance::SelectObjectSpawn(proto::ObjectSpawnEntry& spawn)
+	{
+		// Find the scene entity that represents this spawn.
+		const auto entityIt = std::find_if(m_spawnEntities.begin(), m_spawnEntities.end(), [&spawn](const Entity* entity)
+		{
+			return entity->GetUserObject<const proto::ObjectSpawnEntry>() == &spawn;
+		});
+
+		if (entityIt == m_spawnEntities.end())
+		{
+			WLOG("Unable to select object spawn: no scene entity found");
+			return;
+		}
+
+		Entity* entity = *entityIt;
+
+		m_selection.Clear();
+		m_debugBoundingBox->Clear();
+
+		auto removalCallback = [this](const proto::ObjectSpawnEntry& s)
+		{
+			RemoveObjectSpawn(s);
+		};
+
+		m_selection.AddSelectable(std::make_unique<SelectedObjectSpawn>(
+			spawn,
+			m_editor.GetProject().objects,
+			m_editor.GetProject().objectDisplays,
+			*entity->GetParentSceneNode()->GetParentSceneNode(),
+			*entity,
+			nullptr,
+			removalCallback));
+
+		m_selectionRaycaster->UpdateDebugAABB(entity->GetWorldBoundingBox());
+	}
+
+	const void* WorldEditorInstance::GetSelectedSpawnEntry() const
+	{
+		if (m_selection.IsEmpty())
+		{
+			return nullptr;
+		}
+
+		// Walk the active selection and extract the proto entry of a selected spawn (if any).
+		struct SpawnEntryExtractor final : SelectableVisitor
+		{
+			const void* entry = nullptr;
+
+			void Visit(SelectedMapEntity&) override {}
+			void Visit(SelectedTerrainTile&) override {}
+			void Visit(SelectedUnitSpawn& selectable) override { entry = &selectable.GetEntry(); }
+			void Visit(SelectedObjectSpawn& selectable) override { entry = &selectable.GetEntry(); }
+			void Visit(SelectedAreaTrigger&) override {}
+		} extractor;
+
+		m_selection.GetSelectedObjects().back()->Visit(extractor);
+		return extractor.entry;
+	}
+
+	void WorldEditorInstance::FocusSelection()
+	{
+		if (m_selection.IsEmpty())
+		{
+			m_cameraAnchor->SetPosition(Vector3::Zero);
+		}
+		else
+		{
+			m_cameraAnchor->SetPosition(m_selection.GetSelectedObjects().back()->GetPosition());
+		}
+		m_cameraVelocity = Vector3::Zero;
+	}
+
+	void WorldEditorInstance::MoveCameraToWorldPosition(const float worldX, const float worldZ)
+	{
+		// Sample the terrain height at the target location so the camera anchor sits on the ground,
+		// mirroring the behaviour of FocusSelection. Fall back to 0 when the terrain isn't available
+		// (e.g. the page hasn't streamed in yet) — the page loader will react to the new camera
+		// position regardless.
+		float height = 0.0f;
+		if (m_terrain && m_hasTerrain)
+		{
+			height = m_terrain->GetSmoothHeightAt(worldX, worldZ);
+		}
+
+		m_cameraAnchor->SetPosition(Vector3(worldX, height, worldZ));
+		m_cameraVelocity = Vector3::Zero;
 	}
 
 	void WorldEditorInstance::AddAreaTrigger(proto::AreaTriggerEntry &trigger, bool select)
@@ -1388,6 +1723,38 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		}
 	}
 
+	void WorldEditorInstance::DrawMinimapPanel(const String &id)
+	{
+		if (ImGui::Begin(id.c_str()))
+		{
+			// Bind the panel to this world's minimaps on first draw.
+			if (!m_minimapWorldSet)
+			{
+				m_minimapPanel.SetWorld(m_assetPath.filename().replace_extension().string());
+				m_minimapWorldSet = true;
+			}
+
+			if (ImGui::Button("Refresh"))
+			{
+				m_minimapPanel.Refresh();
+			}
+			ImGui::SameLine();
+			ImGui::TextDisabled("Scroll to zoom, right-drag to pan, click a tile to teleport");
+
+			// Highlight the page the camera is currently over.
+			const PagePosition camPage = GetPagePositionFromCamera();
+			m_minimapPanel.SetHighlightPage(static_cast<int32>(camPage.x()), static_cast<int32>(camPage.y()));
+
+			if (m_minimapPanel.Draw(ImGui::GetContentRegionAvail()))
+			{
+				float worldX, worldZ;
+				m_minimapPanel.GetSelectedWorldCenter(worldX, worldZ);
+				MoveCameraToWorldPosition(worldX, worldZ);
+			}
+		}
+		ImGui::End();
+	}
+
 	void WorldEditorInstance::GenerateMinimaps()
 	{
 		if (!m_terrain || !m_hasTerrain)
@@ -1397,11 +1764,38 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		}
 
 		// Minimap configuration
-		const uint32 minimapSize = 256; // 512x512 pixels per minimap
+		const uint32 minimapSize = 256; // render resolution per page tile
 		const float pageSize = terrain::constants::PageSize;
 
 		auto &gx = GraphicsDevice::Get();
 		gx.CaptureState();
+
+		// -----------------------------------------------------------------------
+		// Hide editor-only support objects so they don't appear in the minimap.
+		// We record their previous visibility so we can restore it afterwards.
+		// -----------------------------------------------------------------------
+		const bool gridWasVisible = m_worldGrid && m_worldGrid->IsVisible();
+		if (m_worldGrid) m_worldGrid->SetVisible(false);
+
+		const bool debugBBWasVisible = m_debugBoundingBox && m_debugBoundingBox->IsVisible();
+		if (m_debugBoundingBox) m_debugBoundingBox->SetVisible(false);
+
+		// Hide all area-trigger render objects
+		std::vector<bool> areaTriggerWasVisible;
+		areaTriggerWasVisible.reserve(m_areaTriggerRenderObjects.size());
+		for (ManualRenderObject *ro : m_areaTriggerRenderObjects)
+		{
+			areaTriggerWasVisible.push_back(ro ? ro->IsVisible() : false);
+			if (ro) ro->SetVisible(false);
+		}
+
+		// Hide debug / preview entity (e.g. placement ghost)
+		const bool debugEntityWasVisible = m_debugEntity && m_debugEntity->IsVisible();
+		if (m_debugEntity) m_debugEntity->SetVisible(false);
+
+		// Hide authored tree foliage so it does not appear on the minimap.
+		const bool foliageWasVisible = m_foliage && m_foliage->IsVisible();
+		if (m_foliage) m_foliage->SetVisible(false);
 
 		Camera *renderCam = m_scene.CreateCamera("MinimapCamera");
 		renderCam->SetProjectionType(ProjectionType::Orthographic);
@@ -1443,6 +1837,11 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 						continue;
 					}
 
+					// Switch this page's water to an opaque, solid-colour material so it shows up on
+					// the minimap. The normal water material samples scene depth/refraction textures
+					// that are not bound during minimap generation and would otherwise be invisible.
+					page->SetMinimapWaterMode(true);
+
 					// Calculate world position for page centers
 					const float worldX = page->GetSceneNode()->GetDerivedPosition().x + pageSize * 0.5f;
 					const float worldZ = page->GetSceneNode()->GetDerivedPosition().z + pageSize * 0.5f;
@@ -1453,11 +1852,19 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 					// Get the maximum height in this page to ensure we capture all entities
 					float maxHeight = terrainHeight;
 
-					// Check all map entities in this page to find the maximum height
+					// Check all map entities in this page to find the maximum height.
+					// Only consider WMO (WorldModel) entities — static mesh entities are
+					// excluded from the minimap entirely.
 					for (const auto &mapEntity : m_mapEntities)
 					{
 						if (mapEntity && &mapEntity->GetSceneNode())
 						{
+							// Skip non-WMO entities (static meshes, etc.)
+							if (!mapEntity->IsWorldModelEntity())
+							{
+								continue;
+							}
+
 							const Vector3 &entityPos = mapEntity->GetSceneNode().GetDerivedPosition();
 
 							// Check if this entity is within the current page bounds
@@ -1502,8 +1909,11 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 					minimapRT->Activate();
 					minimapRT->Clear(ClearFlags::All);
 
-					// Temporarily change entity render queue groups to match terrain for consistent rendering
+					// Temporarily change entity render queue groups to match terrain for consistent rendering.
+					// Only WMO (WorldModel) entities are considered; static mesh entities are hidden so
+					// they don't appear in the minimap at all.
 					std::vector<std::pair<MovableObject *, uint8>> originalRenderQueues;
+					std::vector<std::pair<MovableObject *, bool>> hiddenMeshEntities;
 					for (const auto &mapEntity : m_mapEntities)
 					{
 						if (mapEntity && &mapEntity->GetSceneNode())
@@ -1517,8 +1927,19 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 								MovableObject *movable = mapEntity->GetMovableObject();
 								if (movable)
 								{
-									originalRenderQueues.emplace_back(movable, movable->GetRenderQueueGroup());
-									movable->SetRenderQueueGroup(WorldGeometry1); // Same as terrain
+									if (mapEntity->IsWorldModelEntity())
+									{
+										// WMOs: move to terrain render queue so they render correctly
+										originalRenderQueues.emplace_back(movable, movable->GetRenderQueueGroup());
+										movable->SetRenderQueueGroup(WorldGeometry1); // Same as terrain
+									}
+									else
+									{
+										// Static mesh entities: hide them for this render pass
+										const bool wasVisible = movable->IsVisible();
+										hiddenMeshEntities.emplace_back(movable, wasVisible);
+										movable->SetVisible(false);
+									}
 								}
 							}
 						}
@@ -1534,6 +1955,15 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 					{
 						movable->SetRenderQueueGroup(originalQueue);
 					}
+
+					// Restore visibility of hidden mesh entities
+					for (const auto &[movable, wasVisible] : hiddenMeshEntities)
+					{
+						movable->SetVisible(wasVisible);
+					}
+
+					// Restore the page's normal (translucent) water material now that the tile is rendered.
+					page->SetMinimapWaterMode(false);
 
 					// Create texture from render target
 					TexturePtr minimapTexture = minimapRT->StoreToTexture();
@@ -1553,35 +1983,30 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 						std::unique_ptr<std::ostream> outStream = AssetRegistry::CreateNewFile(minimapFilename);
 						if (outStream)
 						{
-							// Save texture using the engine's texture format
+							// Save texture using the engine's texture format.
+							// We use uncompressed RGBA instead of DXT1 to preserve maximum quality:
+							// DXT1 is lossy and introduces visible block artefacts on the fine details
+							// of terrain/WMO colours, while the file-size increase for a 256×256 tile
+							// is only ~32 KB per page — an acceptable trade-off.
 							io::StreamSink sink(*outStream);
 							tex::v1_0::Header header(tex::Version_1_0);
 							header.width = minimapSize;
 							header.height = minimapSize;
-							header.format = tex::v1_0::DXT1;
+							header.format = tex::v1_0::RGBA;
 							header.hasMips = false;
 
 							tex::v1_0::HeaderSaver saver(sink, header);
 
 							header.mipmapOffsets[0] = static_cast<uint32>(sink.Position());
 
-							// Copy pixel data from render texture
-							const uint32 pixelDataSize = minimapSize * minimapSize * 4; // RGBA
-
-							// Apply compression
-							const size_t compressedSize = pixelDataSize / 8;
-
+							// Copy raw pixel data from render texture (4 bytes per pixel, RGBA)
+							const uint32 pixelDataSize = minimapSize * minimapSize * 4;
 							std::vector<uint8> pixelData(pixelDataSize);
 							minimapTexture->CopyPixelDataTo(pixelData.data());
 
-							// Allocate buffer for compression
-							std::vector<uint8> buffer;
-							buffer.resize(compressedSize);
-
-							// Apply compression
-							rygCompress(buffer.data(), pixelData.data(), minimapSize, minimapSize, false);
-							header.mipmapLengths[0] = static_cast<uint32>(buffer.size());
-							sink.Write(reinterpret_cast<const char *>(buffer.data()), buffer.size());
+							// Write uncompressed RGBA data directly — no lossy block compression
+							header.mipmapLengths[0] = pixelDataSize;
+							sink.Write(reinterpret_cast<const char *>(pixelData.data()), pixelDataSize);
 							saver.finish();
 
 							processedPages++;
@@ -1606,7 +2031,23 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		m_scene.DestroyCamera(*renderCam);
 		m_scene.DestroySceneNode(*camNode);
 
+		// Restore visibility of editor support objects that were hidden during minimap generation
+		if (m_worldGrid) m_worldGrid->SetVisible(gridWasVisible);
+		if (m_debugBoundingBox) m_debugBoundingBox->SetVisible(debugBBWasVisible);
+		for (size_t i = 0; i < m_areaTriggerRenderObjects.size(); ++i)
+		{
+			if (m_areaTriggerRenderObjects[i])
+			{
+				m_areaTriggerRenderObjects[i]->SetVisible(areaTriggerWasVisible[i]);
+			}
+		}
+		if (m_debugEntity) m_debugEntity->SetVisible(debugEntityWasVisible);
+		if (m_foliage) m_foliage->SetVisible(foliageWasVisible);
+
 		gx.RestoreState();
+
+		// Force the minimap teleport panel to reload the freshly generated tiles.
+		m_minimapPanel.Refresh();
 	}
 
 	Camera &WorldEditorInstance::GetCamera() const
@@ -1663,8 +2104,8 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 			if (entity.entityType == WorldEntityType::WorldModel)
 			{
-				// Create world model entity
-				WorldModelInstance *wmoInstance = m_entityFactory->CreateWorldModelEntity(
+				// Use the wrapper so the remove signal gets connected (consistent with mesh entity loading below).
+				WorldModelInstance *wmoInstance = CreateWorldModelEntity(
 					entity.meshName,
 					entity.position,
 					entity.rotation,
@@ -1718,6 +2159,326 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 	void WorldEditorInstance::UnloadPageEntities(uint8 x, uint8 y)
 	{
+		const PagePosition targetPos(x, y);
+
+		// Collect WMO raw pointers BEFORE erasing so we can release factory ownership
+		// after ~MapEntity has run (which calls Destroy() and detaches the WMO).
+		// Only unload unmodified entities — modified ones must stay alive so the user
+		// doesn't lose unsaved changes when paging back in.
+		std::vector<WorldModelInstance*> wmoToRemove;
+		for (const auto& mapEntity : m_mapEntities)
+		{
+			const auto& refPos = mapEntity->GetReferencePagePosition();
+			if (!refPos.has_value() || *refPos != targetPos)
+			{
+				continue;
+			}
+			if (mapEntity->IsModified())
+			{
+				continue;
+			}
+			if (mapEntity->IsWorldModelEntity())
+			{
+				wmoToRemove.push_back(mapEntity->GetWorldModelInstance());
+			}
+		}
+
+		// Erase unmodified map entities belonging to this page.
+		// ~MapEntity calls WorldModelInstance::Destroy() then detaches and destroys the scene node.
+		std::erase_if(m_mapEntities, [&targetPos](const auto& mapEntity)
+		{
+			const auto& refPos = mapEntity->GetReferencePagePosition();
+			return refPos.has_value() && *refPos == targetPos && !mapEntity->IsModified();
+		});
+
+		// Now free factory ownership of WMO instances (their child objects were already
+		// cleaned up by ~MapEntity above).
+		for (WorldModelInstance* wmo : wmoToRemove)
+		{
+			m_entityFactory->RemoveWorldModelInstance(wmo);
+		}
+
+		// Reflect the removal in the scene outline.
+		if (m_sceneOutlineWindow)
+		{
+			m_sceneOutlineWindow->Update();
+		}
+	}
+
+	void WorldEditorInstance::SetupGrass()
+	{
+		m_grass = std::make_unique<Foliage>(m_scene, GraphicsDevice::Get());
+
+		// Sample the editor's terrain for height, normal, holes, material and coverage, exactly
+		// like the client so foliage placement matches in-game. Placement rules are data-driven
+		// per terrain material; this only resolves raw terrain data at a point.
+		m_grass->SetTerrainSampleCallback([this](float x, float z, FoliagePlacementSample& out) -> bool
+		{
+			if (!m_hasTerrain || !m_terrain)
+			{
+				return false;
+			}
+
+			if (m_terrain->IsHoleAt(x, z))
+			{
+				return false;
+			}
+
+			out.height = m_terrain->GetSmoothHeightAt(x, z);
+			out.normal = m_terrain->GetSmoothNormalAt(x, z);
+
+			if (const MaterialPtr material = m_terrain->GetBaseMaterialAt(x, z))
+			{
+				// Use the painted material directly (not the root) so per-instance foliage gating works.
+				out.baseMaterial = material.get();
+			}
+
+			for (uint8 layer = 0; layer < 4; ++layer)
+			{
+				out.coverage[layer] = m_terrain->GetLayerValueAt(x, z, layer);
+			}
+
+			out.valid = true;
+			return true;
+		});
+
+		FoliageSettings settings;
+		settings.chunkSize = 32.0f;
+		settings.maxViewDistance = 50.0f;
+		settings.loadRadius = 3;
+		settings.frustumCulling = true;
+		settings.globalDensityMultiplier = 1.0f;
+		m_grass->SetSettings(settings);
+
+		// Terrain is centered at the origin and spans 64x64 pages.
+		constexpr float halfTerrainSize = 64.0f * terrain::constants::PageSize * 0.5f;
+		m_grass->SetBounds(AABB(
+			Vector3(-halfTerrainSize, -1000.0f, -halfTerrainSize),
+			Vector3(halfTerrainSize, 1000.0f, halfTerrainSize)));
+
+		// Foliage layers are registered dynamically from the foliage definitions carried by the
+		// terrain materials of each loaded terrain page. See RegisterPageFoliage / UnregisterPageFoliage.
+
+		// Hidden by default; the "Show Foliage" world setting toggles it.
+		m_grass->SetVisible(m_showFoliage);
+	}
+
+	void WorldEditorInstance::RegisterPageFoliage(const uint32 pageX, const uint32 pageY)
+	{
+		if (!m_grass || !m_terrain)
+		{
+			return;
+		}
+
+		terrain::Page* page = m_terrain->GetPage(pageX, pageY);
+		if (!page || !page->IsLoaded())
+		{
+			return;
+		}
+
+		const uint16 pageIndex = static_cast<uint16>(pageX + pageY * 64);
+
+		// A page may be reported available more than once; rebuild its contribution from scratch.
+		UnregisterPageFoliage(pageX, pageY);
+
+		std::vector<FoliageLayerKey> contributed;
+		bool addedAnyLayer = false;
+
+		for (uint32 tileY = 0; tileY < terrain::constants::TilesPerPage; ++tileY)
+		{
+			for (uint32 tileX = 0; tileX < terrain::constants::TilesPerPage; ++tileX)
+			{
+				terrain::Tile* tile = page->GetTile(tileX, tileY);
+				if (!tile)
+				{
+					continue;
+				}
+
+				// The tile's assigned material (the painted .hmat or .hmi). Reading foliage from this
+				// interface respects per-instance overrides; gating on its pointer distinguishes
+				// instances that share the same base material.
+				const MaterialPtr paintedMaterial = tile->GetBaseMaterial();
+				if (!paintedMaterial)
+				{
+					continue;
+				}
+
+				MaterialInterface* material = paintedMaterial.get();
+				if (material->GetFoliageEntries().empty())
+				{
+					continue;
+				}
+
+				for (const MaterialFoliageEntry& entry : material->GetFoliageEntries())
+				{
+					const FoliageLayerKey key{ material, entry.layerIndex, entry.meshPath };
+
+					if (std::find(contributed.begin(), contributed.end(), key) != contributed.end())
+					{
+						continue;
+					}
+					contributed.push_back(key);
+
+					auto it = m_foliageRegistry.find(key);
+					if (it != m_foliageRegistry.end())
+					{
+						++it->second.refCount;
+						continue;
+					}
+
+					MeshPtr mesh = MeshManager::Get().Load(entry.meshPath);
+					if (!mesh)
+					{
+						WLOG("Foliage mesh '" << entry.meshPath << "' could not be loaded for material " << material->GetName());
+						m_foliageRegistry.emplace(key, RegisteredFoliageLayer{ nullptr, 1 });
+						continue;
+					}
+
+					const String layerName = String(material->GetName()) + "#" +
+						std::to_string(static_cast<int>(entry.layerIndex)) + "#" + entry.meshPath;
+
+					auto layer = std::make_shared<FoliageLayer>(layerName, mesh);
+					FoliageLayerSettings& s = layer->GetSettings();
+					s.density = entry.density;
+					s.minScale = entry.minScale;
+					s.maxScale = entry.maxScale;
+					s.maxSlopeAngle = entry.maxSlopeAngle;
+					s.minHeight = entry.minHeight;
+					s.maxHeight = entry.maxHeight;
+					s.fadeStartDistance = entry.fadeStartDistance;
+					s.fadeEndDistance = entry.fadeEndDistance;
+					s.randomYawRotation = entry.randomYaw;
+					s.alignToNormal = entry.alignToNormal;
+					s.castShadows = entry.castShadows;
+					s.terrainLayerIndex = static_cast<int32>(entry.layerIndex);
+					s.minCoverage = entry.minCoverage;
+					s.terrainMaterial = material;
+
+					m_grass->AddLayer(layer);
+					m_foliageRegistry.emplace(key, RegisteredFoliageLayer{ layer, 1 });
+					addedAnyLayer = true;
+				}
+			}
+		}
+
+		if (!contributed.empty())
+		{
+			m_pageFoliageKeys[pageIndex] = std::move(contributed);
+		}
+
+		if (addedAnyLayer)
+		{
+			m_grass->InvalidateActiveChunks();
+		}
+	}
+
+	void WorldEditorInstance::UnregisterPageFoliage(const uint32 pageX, const uint32 pageY)
+	{
+		const uint16 pageIndex = static_cast<uint16>(pageX + pageY * 64);
+
+		auto pageIt = m_pageFoliageKeys.find(pageIndex);
+		if (pageIt == m_pageFoliageKeys.end())
+		{
+			return;
+		}
+
+		bool removedAnyLayer = false;
+
+		for (const FoliageLayerKey& key : pageIt->second)
+		{
+			auto it = m_foliageRegistry.find(key);
+			if (it == m_foliageRegistry.end())
+			{
+				continue;
+			}
+
+			if (it->second.refCount > 0)
+			{
+				--it->second.refCount;
+			}
+
+			if (it->second.refCount == 0)
+			{
+				if (it->second.layer && m_grass)
+				{
+					m_grass->RemoveLayer(it->second.layer->GetName());
+					removedAnyLayer = true;
+				}
+				m_foliageRegistry.erase(it);
+			}
+		}
+
+		m_pageFoliageKeys.erase(pageIt);
+
+		if (removedAnyLayer && m_grass)
+		{
+			m_grass->InvalidateActiveChunks();
+		}
+	}
+
+	void WorldEditorInstance::LoadPageFoliage(const uint8 x, const uint8 y)
+	{
+		if (!m_foliage)
+		{
+			return;
+		}
+
+		const uint16 pageIndex = BuildPageIndex(x, y);
+
+		String fileName = (m_assetPath.parent_path() / m_assetPath.filename().replace_extension() / "Foliage" / (std::to_string(pageIndex) + ".hfol")).string();
+		std::transform(fileName.begin(), fileName.end(), fileName.begin(), [](char c)
+					   { return c == '\\' ? '/' : c; });
+
+		// A page without authored foliage simply has no file - that is not an error.
+		std::unique_ptr<std::istream> filePtr = AssetRegistry::OpenFile(fileName);
+		if (!filePtr)
+		{
+			return;
+		}
+
+		io::StreamSource source{*filePtr};
+		io::Reader reader{source};
+		WorldFoliageLoader loader;
+		if (!loader.Read(reader))
+		{
+			ELOG("Failed to read foliage file " << fileName << "!");
+			return;
+		}
+
+		for (const auto &src : loader.GetInstances())
+		{
+			InstancedFoliageInstance instance;
+			instance.uniqueId = src.uniqueId;
+			instance.meshName = src.meshName;
+			instance.position = src.position;
+			instance.rotation = src.rotation;
+			instance.scale = src.scale;
+			instance.pageIndex = pageIndex;
+			instance.collides = src.collides;
+			m_foliage->AddInstance(instance);
+		}
+
+		m_foliage->RebuildDirtyCells();
+	}
+
+	void WorldEditorInstance::UpdateWaterVisibility()
+	{
+		if (!m_terrain)
+		{
+			return;
+		}
+
+		// Water is always shown while the water edit mode is active so it can be edited,
+		// regardless of the "Show Water" setting.
+		const bool inWaterEditMode = (m_editMode == m_terrainEditMode.get()
+			&& m_terrainEditMode->GetTerrainEditType() == TerrainEditType::Water);
+		const bool effective = m_showWater || inWaterEditMode;
+
+		if (effective != m_waterVisibilityApplied)
+		{
+			m_terrain->SetWaterVisible(effective);
+			m_waterVisibilityApplied = effective;
+		}
 	}
 
 	void WorldEditorInstance::RemoveAllUnitSpawns()
@@ -1763,10 +2524,19 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			EnsurePageIsLoaded(pos);
 
 			LoadPageEntities(pos.x(), pos.y());
+			LoadPageFoliage(pos.x(), pos.y());
+			RegisterPageFoliage(pos.x(), pos.y());
 		}
 		else
 		{
 			UnloadPageEntities(pos.x(), pos.y());
+			UnregisterPageFoliage(pos.x(), pos.y());
+
+			if (m_foliage)
+			{
+				m_foliage->UnloadPage(BuildPageIndex(pos.x(), pos.y()));
+				m_foliage->RebuildDirtyCells();
+			}
 
 			terrainPage->Unload();
 		}
@@ -1969,8 +2739,17 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 	void WorldEditorInstance::Visit(SelectedUnitSpawn &selectable)
 	{
+		// Notify the spawn edit mode which spawn is currently shown so it can
+		// enable waypoint editing when movement type is PATROL.
+		m_spawnEditMode->SetSelectedSpawn(&selectable.GetEntry());
+
 		if (ImGui::CollapsingHeader("Unit Spawn"))
 		{
+			// Optional name used for trigger target resolution (NamedCreature).
+			ImGui::InputText("Spawn Name", selectable.GetEntry().mutable_name());
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Optional unique name for this spawn point.\nUsed by trigger actions that target a 'Named Creature'.");
+
 			proto::UnitEntry *selectedUnit = m_editor.GetProject().units.getById(selectable.GetEntry().unitentry());
 			if (ImGui::BeginCombo("Unit", selectedUnit ? selectedUnit->name().c_str() : "(None)"))
 			{
@@ -2039,8 +2818,8 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 			static const char *s_movementModeStrings[] = {
 				"Stationary",
-				"Patrol",
-				"Route"};
+				"Random Movement",
+				"Patrol"};
 
 			if (ImGui::BeginCombo("Movement", s_movementModeStrings[selectable.GetEntry().movement()]))
 			{
@@ -2057,6 +2836,85 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 				ImGui::EndCombo();
 			}
+
+			// --- Patrol Waypoints section (only when PATROL movement is selected) ---
+			if (selectable.GetEntry().movement() == proto::UnitSpawnEntry_MovementType_PATROL)
+			{
+				ImGui::Separator();
+				ImGui::Text("Patrol Waypoints");
+				ImGui::Separator();
+				const bool editActive = m_spawnEditMode->IsWaypointEditActive();
+			if (editActive)
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.7f, 0.2f, 0.2f, 0.8f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 0.9f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.9f, 0.4f, 0.4f, 1.0f));
+				if (ImGui::Button("Exit Waypoint Edit", ImVec2(-1, 0)))
+					m_spawnEditMode->SetWaypointEditActive(false);
+				ImGui::PopStyleColor(3);
+				ImGui::TextDisabled("Click viewport to add/drag waypoints. [Esc] to exit.");
+			}
+			else
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 0.9f, 0.9f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.4f, 0.7f, 1.0f, 1.0f));
+				if (ImGui::Button("Edit Patrol Waypoints", ImVec2(-1, 0)))
+					m_spawnEditMode->SetWaypointEditActive(true);
+				ImGui::PopStyleColor(3);
+			}
+
+				bool waypointChanged = false;
+				int removeIndex = -1;
+
+				for (int i = 0; i < selectable.GetEntry().waypoints_size(); ++i)
+				{
+					auto* wp = selectable.GetEntry().mutable_waypoints(i);
+
+					ImGui::PushID(i);
+
+					ImGui::Text("[%d]", i + 1);
+					ImGui::SameLine();
+
+					float waitTime = static_cast<float>(wp->waittime());
+					ImGui::SetNextItemWidth(120.0f);
+					if (ImGui::InputFloat("Wait (ms)", &waitTime, 0.0f, 0.0f, "%.0f"))
+					{
+						wp->set_waittime(static_cast<uint32>(waitTime));
+						waypointChanged = true;
+					}
+
+					ImGui::SameLine();
+
+					if (ImGui::SmallButton("X"))
+					{
+						removeIndex = i;
+					}
+
+					ImGui::PopID();
+				}
+
+				if (removeIndex >= 0)
+				{
+					selectable.GetEntry().mutable_waypoints()->erase(
+						selectable.GetEntry().mutable_waypoints()->begin() + removeIndex);
+					waypointChanged = true;
+				}
+
+				if (selectable.GetEntry().waypoints_size() > 0)
+				{
+					if (ImGui::Button("Clear All"))
+					{
+						selectable.GetEntry().mutable_waypoints()->Clear();
+						waypointChanged = true;
+					}
+				}
+
+				if (waypointChanged)
+				{
+					m_spawnEditMode->RebuildWaypointVisualization();
+				}
+			}
 		}
 	}
 
@@ -2064,6 +2922,11 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 	{
 		if (ImGui::CollapsingHeader("Object Spawn"))
 		{
+			// Optional name used for trigger target resolution (NamedWorldObject).
+			ImGui::InputText("Spawn Name", selectable.GetEntry().mutable_name());
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Optional unique name for this spawn point.\nUsed by trigger actions that target a 'Named World Object'.");
+
 			proto::ObjectEntry *selectedObject = m_editor.GetProject().objects.getById(selectable.GetEntry().objectentry());
 			if (ImGui::BeginCombo("Object", selectedObject ? selectedObject->name().c_str() : "(None)"))
 			{
@@ -2116,6 +2979,27 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			if (ImGui::SliderInt("Animation Progress", (int *)&animProgress, 0, 100))
 			{
 				selectable.GetEntry().set_animprogress(animProgress);
+			}
+
+			// Per-spawn loot entry override (0 = use base ObjectEntry.objectlootentry)
+			uint32 lootEntry = selectable.GetEntry().loot_entry();
+			if (ImGui::InputScalar("Loot Entry", ImGuiDataType_U32, &lootEntry))
+			{
+				selectable.GetEntry().set_loot_entry(lootEntry);
+			}
+
+			// Per-spawn trigger override
+			// Show base trigger count from ObjectEntry as read-only info
+			const proto::ObjectEntry* objEntry = m_editor.GetProject().objects.getById(selectable.GetEntry().objectentry());
+			if (objEntry && objEntry->triggers_size() > 0)
+			{
+				ImGui::TextDisabled("Base: %d trigger(s)", objEntry->triggers_size());
+			}
+
+			uint32 triggerId = selectable.GetEntry().trigger_id();
+			if (ImGui::InputScalar("Trigger ID", ImGuiDataType_U32, &triggerId))
+			{
+				selectable.GetEntry().set_trigger_id(triggerId);
 			}
 		}
 	}
@@ -2456,10 +3340,36 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 	{
 		m_debugBoundingBox->SetVisible(false);
 		m_selection.Clear();
+
+		// Clear spawn edit mode's selected spawn so waypoint visualization is removed.
+		if (m_spawnEditMode)
+		{
+			m_spawnEditMode->SetSelectedSpawn(nullptr);
+		}
 	}
 
 	bool WorldEditorInstance::IsTransforming() const
 	{
 		return m_transformWidget && m_transformWidget->IsActive();
+	}
+
+	ManualRenderObject* WorldEditorInstance::CreateManualRenderObject(const String& name)
+	{
+		return m_scene.CreateManualRenderObject(name);
+	}
+
+	SceneNode* WorldEditorInstance::CreateChildSceneNode()
+	{
+		return m_scene.GetRootSceneNode().CreateChildSceneNode();
+	}
+
+	void WorldEditorInstance::DestroyManualRenderObject(const ManualRenderObject& obj)
+	{
+		m_scene.DestroyManualRenderObject(obj);
+	}
+
+	void WorldEditorInstance::DestroySceneNode(const SceneNode& node)
+	{
+		m_scene.DestroySceneNode(node);
 	}
 }

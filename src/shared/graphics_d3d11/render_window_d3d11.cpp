@@ -230,8 +230,9 @@ namespace mmo
 		m_width = m_pendingWidth;
 		m_height = m_pendingHeight;
 
-		// Resize buffers
-		VERIFY(SUCCEEDED(m_swapChain->ResizeBuffers(2, m_width, m_height, DXGI_FORMAT_R8G8B8A8_UNORM, m_device.HasTearingSupport() ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0)));
+		// Resize buffers (keep the triple-buffered count from CreateSwapChain — passing 0 preserves
+		// the existing buffer count, but we pass 3 explicitly to match and stay robust to changes).
+		VERIFY(SUCCEEDED(m_swapChain->ResizeBuffers(3, m_width, m_height, DXGI_FORMAT_R8G8B8A8_UNORM, m_device.HasTearingSupport() ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0)));
 
 		// Recreate size dependent resources
 		CreateSizeDependantResources();
@@ -314,7 +315,10 @@ namespace mmo
 		// We now can create a swap chain using the factory
 		DXGI_SWAP_CHAIN_DESC scd;
 		ZeroMemory(&scd, sizeof(scd));
-		scd.BufferCount = 2;
+		// Triple-buffer so the GPU can render ahead. With the flip model and VSync enabled, a
+		// 2-buffer chain drops straight to 30fps the moment a 60Hz frame is missed (no room to work
+		// ahead); a third buffer lets frames queue, softening that hard half-rate cliff.
+		scd.BufferCount = 3;
 		scd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 		scd.BufferDesc.Width = m_width;
 		scd.BufferDesc.Height = m_height;

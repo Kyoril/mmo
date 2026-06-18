@@ -2,6 +2,7 @@
 
 #include "textfield.h"
 
+#include "clipboard.h"
 #include "frame_mgr.h"
 #include "inline_color.h"
 #include "text_component.h"
@@ -13,6 +14,14 @@
 
 namespace mmo
 {
+	namespace
+	{
+		constexpr Key VK_CONTROL = 0x11;
+		constexpr Key VK_C = 0x43;
+		constexpr Key VK_V = 0x56;
+		constexpr Key VK_X = 0x58;
+	}
+
 	TextField::TextField(const std::string& type, const std::string& name)
 		: Frame(type, name)
 		, m_masked(false)
@@ -422,6 +431,28 @@ namespace mmo
 	{
 		abort_emission();
 
+		const bool controlDown = FrameManager::Get().IsKeyDown(VK_CONTROL);
+		if (controlDown)
+		{
+			if (key == VK_C)
+			{
+				CopyToClipboard();
+				return;
+			}
+
+			if (key == VK_X)
+			{
+				CutToClipboard();
+				return;
+			}
+
+			if (key == VK_V)
+			{
+				PasteFromClipboard();
+				return;
+			}
+		}
+
 		if (!AcceptsTab() && key == 0x09)        // VK_TAB
 		{
 			return;
@@ -644,6 +675,120 @@ namespace mmo
 		Frame::OnKeyUp(key);
 
 		abort_emission();
+	}
+
+	void TextField::CopyToClipboard()
+	{
+		UpdateParsedText();
+		const std::string& textToCopy = m_masked ? m_text : m_parsedText.plainText;
+		Clipboard::SetText(textToCopy);
+	}
+
+	void TextField::CutToClipboard()
+	{
+		UpdateParsedText();
+		const std::string& textToCopy = m_masked ? m_text : m_parsedText.plainText;
+		if (!Clipboard::SetText(textToCopy))
+		{
+			return;
+		}
+
+		m_text.clear();
+		m_cursor = 0;
+		OnTextChanged();
+		EnsureCursorVisible();
+		m_needsLayout = true;
+		m_needsRedraw = true;
+	}
+
+	void TextField::PasteFromClipboard()
+	{
+		const auto clipboardText = Clipboard::GetText();
+		if (!clipboardText || clipboardText->empty())
+		{
+			return;
+		}
+
+		std::string filteredText;
+		filteredText.reserve(clipboardText->size());
+
+		for (std::size_t bytePos = 0; bytePos < clipboardText->size();)
+		{
+			const std::size_t prevBytePos = bytePos;
+			const uint32_t codepoint = utf8::next_codepoint(*clipboardText, bytePos);
+			if (bytePos <= prevBytePos)
+			{
+				++bytePos;
+				continue;
+			}
+
+			if (codepoint == '\r' || codepoint == '\n')
+			{
+				continue;
+			}
+
+			if (!AcceptsTab() && codepoint == '\t')
+			{
+				continue;
+			}
+
+			if (codepoint == 0)
+			{
+				continue;
+			}
+
+			utf8::append_codepoint(filteredText, codepoint);
+		}
+
+		if (filteredText.empty())
+		{
+			return;
+		}
+
+		InsertTextAtCursor(filteredText);
+	}
+
+	void TextField::InsertTextAtCursor(const std::string& utf8Text)
+	{
+		if (utf8Text.empty())
+		{
+			return;
+		}
+
+		UpdateParsedText();
+
+		// Don't insert text in the middle of a hyperlink token.
+		const int hyperlinkIndex = FindHyperlinkAtPosition(m_cursor);
+		if (hyperlinkIndex >= 0)
+		{
+			m_cursor = static_cast<int32>(m_parsedText.hyperlinks[hyperlinkIndex].plainTextEnd);
+		}
+
+		if (m_parsedText.hyperlinks.empty())
+		{
+			const std::size_t rawTextLength = utf8::length(m_text);
+			if (m_cursor >= static_cast<int32>(rawTextLength))
+			{
+				m_text.append(utf8Text);
+			}
+			else
+			{
+				const std::size_t insertBytePos = utf8::byte_index(m_text, static_cast<std::size_t>(m_cursor));
+				m_text.insert(insertBytePos, utf8Text);
+			}
+		}
+		else
+		{
+			const std::string prefix = RebuildTextForPlainLength(static_cast<std::size_t>(m_cursor));
+			const std::string suffix = RebuildTextFromPlainPosition(static_cast<std::size_t>(m_cursor));
+			m_text = prefix + utf8Text + suffix;
+		}
+
+		m_cursor += static_cast<int32>(utf8::length(utf8Text));
+		OnTextChanged();
+		EnsureCursorVisible();
+		m_needsLayout = true;
+		m_needsRedraw = true;
 	}
 
 	void TextField::OnInputCaptured()

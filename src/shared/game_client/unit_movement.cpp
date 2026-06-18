@@ -1,7 +1,10 @@
 #include "unit_movement.h"
 
 #include "game_unit_c.h"
+#include "movement_log.h"
 #include "log/default_log_levels.h"
+
+#include <sstream>
 #include "base/guarded_value.h"
 #include "scene_graph/scene.h"
 #include "math/capsule.h"
@@ -28,6 +31,22 @@ namespace mmo
 	#endif
 
 	constexpr float MIN_TICK_TIME = 1e-6f;
+
+	/// Submersion (water surface above feet) required before the player starts swimming.
+	/// Intended to scale with unit height later.
+	constexpr float SWIM_START_DEPTH = 1.0f;
+
+	/// While swimming, if submersion drops below this AND the unit is resting on walkable floor,
+	/// the player stops swimming and resumes walking (shallow water / wading out).
+	constexpr float SWIM_STOP_DEPTH = 0.7f;
+
+	/// Minimum submersion kept when the swimmer reaches the surface. The body cannot rise above
+	/// this depth (capped here), but may dive freely below. Kept close to SWIM_START_DEPTH so the
+	/// surfaced waterline matches the depth at which the player begins swimming when wading in —
+	/// otherwise ascending or dropping into the water would leave the body floating too high
+	/// (waterline at the knees instead of the thighs).
+	constexpr float SWIM_SURFACE_MARGIN = 0.9f;
+
 	constexpr float MIN_FLOOR_DIST = 0.019f;
 	constexpr float MAX_FLOOR_DIST = 0.024f;
 	constexpr float BRAKE_TO_STOP_VELOCITY = 0.1f;
@@ -91,9 +110,13 @@ namespace mmo
 	{
 		const Vector3 inputVector = m_movedUnit.ConsumeInputVector();
 
-		if (m_movedUnit.IsPlayer())
+		if (m_movedUnit.IsControlledByLocalPlayer())
 		{
 			ControlledCharacterMove(inputVector, deltaSeconds);
+		}
+		else if (m_movedUnit.IsPlayer())
+		{
+			RemotePlayerMove(inputVector, deltaSeconds);
 		}
 	}
 
@@ -119,6 +142,20 @@ namespace mmo
 
 		// Change position
 		RunSimulation(deltaTime, 0);
+
+		// Detect entering water (wading in) for the locally controlled player. Exiting water is
+		// handled inside HandleSwimming once the swim simulation is active.
+		UpdateSwimState();
+
+		if (m_movedUnit.IsControlledByLocalPlayer())
+		{
+			const Vector3& p = GetUpdatedNode().GetPosition();
+			MOVEMENT_EVENT("MOVE_TICK_POST",
+				"pos=(" << p.x << "," << p.y << "," << p.z << ")"
+				<< " vel=(" << m_velocity.x << "," << m_velocity.y << "," << m_velocity.z << ")"
+				<< " speed=" << m_velocity.GetLength()
+				<< " mode=" << static_cast<int>(m_movementMode));
+		}
 
 #if defined(_DEBUG) && false
 		DEBUG_OUTPUT_STRING_EX("Position: " + GetUpdatedNode().GetPosition().ToString(), 0.f, s_stringColor);
@@ -207,6 +244,10 @@ namespace mmo
 		{
 			m_currentFloor.Clear();
 
+			// Step-up overshoot only makes sense while ground-walking; drop any
+			// outstanding debt so it can't shorten moves after landing or surfacing.
+			m_stepUpForwardDebt = 0.0f;
+
 			if (m_movementMode == MovementMode::Falling)
 			{
 				m_movedUnit.OnStartFalling();
@@ -229,6 +270,58 @@ namespace mmo
 		m_analogInputModifier = ComputeAnalogInputModifier();
 
 		PerformMovement(deltaTime);
+	}
+
+	void UnitMovement::RemotePlayerMove(const Vector3& inputVector, const float deltaTime)
+	{
+		if (deltaTime < MIN_TICK_TIME)
+		{
+			return;
+		}
+
+		// Apply rotation from turn flags
+		GetUpdatedNode().Yaw(m_movedUnit.ConsumeRotation() * deltaTime, TransformSpace::World);
+
+		Vector3 currentPos = GetUpdatedNode().GetPosition();
+
+		// Extrapolate lateral position from movement flags.
+		// The input vector already contains direction * speed from the Update() loop.
+		if (!inputVector.IsZero())
+		{
+			const Vector3 lateralInput = Vector3::VectorPlaneProject(inputVector, -GetGravityDirection());
+			currentPos += lateralInput * deltaTime;
+		}
+
+		// Simulate gravity while falling so jumps look correct on other clients.
+		if (m_movementMode == MovementMode::Falling)
+		{
+			const Vector3 gravity = -GetGravityDirection() * GetGravityY();
+			m_velocity = NewFallVelocity(m_velocity, gravity, deltaTime);
+			currentPos += m_velocity * deltaTime;
+		}
+
+		GetUpdatedNode().SetPosition(currentPos);
+	}
+
+	void UnitMovement::RemotePlayerMoveCollide(const Vector3& delta)
+	{
+		if (delta.IsZero())
+		{
+			return;
+		}
+
+		const Quaternion rot = GetUpdatedNode().GetOrientation();
+		CollisionHitResult hit;
+		SafeMoveNode(delta, rot, true, &hit);
+
+		// SafeMoveNode reports success even when it stopped at a blocking hit, so check
+		// the hit result itself. Slide the remaining fraction of the move along the wall
+		// so the character moves parallel to the surface rather than stopping dead —
+		// same behaviour as the local player against the same geometry.
+		if (hit.IsValidBlockingHit())
+		{
+			SlideAlongSurface(delta, 1.0f - hit.Time, hit.Normal, hit, false);
+		}
 	}
 
 	Vector3 UnitMovement::ConstrainInputAcceleration(const Vector3& inputAcceleration) const
@@ -316,7 +409,13 @@ namespace mmo
 		// Apply input acceleration
 		if (!zeroAcceleration)
 		{
-			const float NewMaxInputSpeed = IsExceedingMaxSpeed(maxInputSpeed) ? m_velocity.GetLength() : maxInputSpeed;
+			// When velocity already exceeds the speed cap (e.g. the cap was just
+			// reduced by a slow), use the new cap so the player decelerates to it.
+			// When velocity is over cap for a different reason (external impulse/boost),
+			// use current velocity length so player input doesn't accelerate further.
+			const float NewMaxInputSpeed = (IsExceedingMaxSpeed(maxInputSpeed) && !velocityOverMax)
+				? m_velocity.GetLength()
+				: maxInputSpeed;
 			m_velocity += m_acceleration * deltaTime;
 			m_velocity = m_velocity.GetClampedToMaxSize(NewMaxInputSpeed);
 		}
@@ -390,16 +489,32 @@ namespace mmo
 
 	float UnitMovement::GetMaxSpeed() const
 	{
+		// Check if the unit is moving backward (but NOT forward at the same time)
+		// so we can apply the reduced backward speed cap.
+		const uint32 flags = m_movedUnit.GetMovementInfo().movementFlags;
+		const bool movingBackward = (flags & movement_flags::Backward) != 0 &&
+		                            (flags & movement_flags::Forward) == 0;
+
 		switch (m_movementMode)
 		{
 		case MovementMode::Walking:
-			return m_movedUnit.GetSpeed(movement_type::Run);
+			if (movingBackward)
+				return m_movedUnit.GetSpeed(movement_type::Backwards);
+			return m_movedUnit.IsWalkModeEnabled()
+				? m_movedUnit.GetSpeed(movement_type::Walk)
+				: m_movedUnit.GetSpeed(movement_type::Run);
 		case MovementMode::Falling:
-			return m_movedUnit.GetSpeed(movement_type::Run);
+			return movingBackward
+				? m_movedUnit.GetSpeed(movement_type::Backwards)
+				: m_movedUnit.GetSpeed(movement_type::Run);
 		case MovementMode::Swimming:
-			return m_movedUnit.GetSpeed(movement_type::Swim);
+			return movingBackward
+				? m_movedUnit.GetSpeed(movement_type::SwimBackwards)
+				: m_movedUnit.GetSpeed(movement_type::Swim);
 		case MovementMode::Flying:
-			return m_movedUnit.GetSpeed(movement_type::Flight);
+			return movingBackward
+				? m_movedUnit.GetSpeed(movement_type::FlightBackwards)
+				: m_movedUnit.GetSpeed(movement_type::Flight);
 		case MovementMode::None:
 		default:
 			return 0.f;
@@ -485,6 +600,18 @@ namespace mmo
 			MaintainHorizontalGroundVelocity();
 			m_acceleration = Vector3::VectorPlaneProject(m_acceleration, -m_gravityDirection);
 
+			// If we were pressing against a wall last frame, project the input acceleration
+			// onto the wall plane before CalcVelocity. This prevents CalcVelocity from
+			// rebuilding the into-wall component each frame, which would otherwise let
+			// the wall-parallel speed exceed the geometrically correct fraction of max speed.
+			if (m_hasWallContact)
+			{
+				m_acceleration = Vector3::VectorPlaneProject(m_acceleration, m_wallContactNormal);
+			}
+
+			// Clear wall contact — MoveAlongFloor will re-set it if still blocked this tick.
+			m_hasWallContact = false;
+
 			// Apply acceleration
 			const bool bSkipForLedgeMove = triedLedgeMove;
 			if (!bSkipForLedgeMove)
@@ -493,8 +620,30 @@ namespace mmo
 			}
 
 			// Compute move parameters
-			const Vector3 moveVelocity = m_velocity;
-			const Vector3 delta = moveVelocity * timeTick;
+			Vector3 moveVelocity = m_velocity;
+			Vector3 delta = moveVelocity * timeTick;
+
+			// Repay outstanding step-up overshoot: StepUp may advance the capsule farther than
+			// the intended move to clear a stair edge. Shrink subsequent moves (never by more
+			// than half, to keep motion visually continuous) until the overshoot is repaid, so
+			// the average ground speed stays at the input speed.
+			if (m_stepUpForwardDebt > 0.f)
+			{
+				const float deltaLen = delta.GetLength();
+				if (deltaLen > 1.e-6f)
+				{
+					const float repaid = std::min(m_stepUpForwardDebt, deltaLen * 0.5f);
+					const float scale = (deltaLen - repaid) / deltaLen;
+					moveVelocity *= scale;
+					delta *= scale;
+					m_stepUpForwardDebt -= repaid;
+
+					// Skip the displacement-based velocity recompute this tick so the shortened
+					// move doesn't read back as a loss of speed.
+					m_justTeleported = true;
+				}
+			}
+
 			const bool zeroDelta = delta.IsNearlyEqual(Vector3::Zero, 1.e-4f);
 			StepDownResult stepDownResult;
 
@@ -610,6 +759,15 @@ namespace mmo
 				{
 					m_velocity = (GetUpdatedNode().GetPosition() - oldLocation) / timeTick;
 					MaintainHorizontalGroundVelocity();
+
+					// Clamp to max speed so wall-slide geometry can't boost velocity above the run cap.
+					// ComputeGroundMovementDelta / slide projection can return a displacement slightly
+					// larger than speed * dt; clamping here keeps it honest.
+					const float maxSpeed = GetMaxSpeed();
+					if (m_velocity.GetSquaredLength() > maxSpeed * maxSpeed)
+					{
+						m_velocity = m_velocity.NormalizedCopy() * maxSpeed;
+					}
 				}
 			}
 
@@ -978,14 +1136,45 @@ namespace mmo
 
 		CollisionHitResult hit(1.f);
 		Vector3 rampVector = ComputeGroundMovementDelta(delta, m_currentFloor.HitResult, m_currentFloor.bLineTrace);
+
+		const Vector3 prePos = GetUpdatedNode().GetPosition();
+		MOVEMENT_EVENT("MOVE_TICK_PRE",
+			"pos=(" << prePos.x << "," << prePos.y << "," << prePos.z << ")"
+			<< " vel=(" << m_velocity.x << "," << m_velocity.y << "," << m_velocity.z << ")"
+			<< " delta=(" << delta.x << "," << delta.y << "," << delta.z << ")");
+
 		SafeMoveNode(rampVector, GetUpdatedNode().GetOrientation(), true, &hit);
 		float lastMoveTimeSlice = deltaSeconds;
+
+		if (hit.bBlockingHit || hit.bStartPenetrating)
+		{
+			const Vector3 postHitPos = GetUpdatedNode().GetPosition();
+			MOVEMENT_EVENT("WALL_HIT",
+				"pos_before=(" << prePos.x << "," << prePos.y << "," << prePos.z << ")"
+				<< " pos_after=(" << postHitPos.x << "," << postHitPos.y << "," << postHitPos.z << ")"
+				<< " hit_normal=(" << hit.Normal.x << "," << hit.Normal.y << "," << hit.Normal.z << ")"
+				<< " hit_time=" << hit.Time
+				<< " start_penetrating=" << hit.bStartPenetrating
+				<< " vel=(" << m_velocity.x << "," << m_velocity.y << "," << m_velocity.z << ")");
+		}
 
 		if (hit.bStartPenetrating)
 		{
 			// Allow this hit to be used as an impact we can deflect off, otherwise we do nothing the rest of the update and appear to hitch.
 			HandleImpact(hit);
-			SlideAlongSurface(delta, 1.f, hit.Normal, hit, true);
+			const Vector3 wallNormal = hit.Normal;
+			SlideAlongSurface(delta, 1.f, wallNormal, hit, true);
+
+			// Record wall contact and project both velocity and acceleration.
+			m_hasWallContact = true;
+			m_wallContactNormal = wallNormal;
+			m_velocity = Vector3::VectorPlaneProject(m_velocity, wallNormal);
+			m_acceleration = Vector3::VectorPlaneProject(m_acceleration, wallNormal);
+
+			const Vector3 postSlidePos = GetUpdatedNode().GetPosition();
+			MOVEMENT_EVENT("SLIDE_PENETRATION",
+				"pos=(" << postSlidePos.x << "," << postSlidePos.y << "," << postSlidePos.z << ")"
+				<< " vel=(" << m_velocity.x << "," << m_velocity.y << "," << m_velocity.z << ")");
 
 			if (hit.bStartPenetrating)
 			{
@@ -1016,6 +1205,27 @@ namespace mmo
 
 			if (hit.IsValidBlockingHit())
 			{
+				const Vector3 wallNormal = hit.Normal;
+
+				// Record wall contact so next frame's CalcVelocity projects acceleration correctly.
+				m_hasWallContact = true;
+				m_wallContactNormal = wallNormal;
+
+				// Project acceleration (already done redundantly here, but kept for the penetration
+				// path and any sub-iteration that calls MoveAlongFloor multiple times per tick).
+				m_acceleration = Vector3::VectorPlaneProject(m_acceleration, wallNormal);
+
+				// Project velocity onto the wall plane only when we have meaningful into-wall
+				// momentum: either (a) we just hit the wall this frame (hit.Time > 0) so we need
+				// to strip the impact impulse, or (b) the velocity still has a component pushing
+				// into the wall (dot < 0).  Sustained-contact frames where CalcVelocity already
+				// built the correct along-wall velocity are left untouched.
+				const float velIntoWall = m_velocity.Dot(wallNormal);
+				if (hit.Time > 0.f || velIntoWall < 0.f)
+				{
+					m_velocity = Vector3::VectorPlaneProject(m_velocity, wallNormal);
+				}
+
 				if (CanStepUp(hit))
 				{
 					// hit a barrier, try to step up
@@ -1024,7 +1234,13 @@ namespace mmo
 					if (!StepUp(GetGravityDirection(), delta * (1.f - percentTimeApplied), hit, outStepDownResult))
 					{
 						HandleImpact(hit, lastMoveTimeSlice, rampVector);
-						SlideAlongSurface(delta, 1.f - percentTimeApplied, hit.Normal, hit, true);
+						SlideAlongSurface(delta, 1.f - percentTimeApplied, wallNormal, hit, true);
+
+						const Vector3 postSlidePos = GetUpdatedNode().GetPosition();
+						MOVEMENT_EVENT("SLIDE_WALL",
+							"pos=(" << postSlidePos.x << "," << postSlidePos.y << "," << postSlidePos.z << ")"
+							<< " normal=(" << wallNormal.x << "," << wallNormal.y << "," << wallNormal.z << ")"
+							<< " vel=(" << m_velocity.x << "," << m_velocity.y << "," << m_velocity.z << ")");
 					}
 					else
 					{
@@ -1083,10 +1299,267 @@ namespace mmo
 		return std::max(MIN_TICK_TIME, remainingTime);
 	}
 
-	void UnitMovement::HandleSwimming(float deltaTime, int32 iterations)
+	bool UnitMovement::CanEverSwim() const
 	{
-		// TODO
-		SetMovementMode(MovementMode::Falling);
+		// Players can swim; creatures currently cannot.
+		return m_movedUnit.IsPlayer();
+	}
+
+	float UnitMovement::GetSwimStartDepth() const
+	{
+		// Constant for now. TODO: scale with the unit's capsule height.
+		return SWIM_START_DEPTH;
+	}
+
+	bool UnitMovement::CheckWaterVolume(const Vector3& feet, float& outSurfaceY, float& outSubmersion) const
+	{
+		float surfaceY = 0.0f;
+		if (!m_movedUnit.QueryWaterAt(feet.x, feet.z, surfaceY))
+		{
+			outSurfaceY = 0.0f;
+			outSubmersion = 0.0f;
+			return false;
+		}
+
+		outSurfaceY = surfaceY;
+		// Gravity points straight down, so the gravity-space height equals the world Y of the feet.
+		outSubmersion = surfaceY - GetGravitySpaceY(feet);
+		return true;
+	}
+
+	void UnitMovement::UpdateSwimState()
+	{
+		if (!m_movedUnit.IsControlledByLocalPlayer() || !CanEverSwim())
+		{
+			return;
+		}
+
+		float surfaceY = 0.0f;
+		float submersion = 0.0f;
+		const bool inWater = CheckWaterVolume(GetUpdatedNode().GetPosition(), surfaceY, submersion);
+
+		m_inWater = inWater;
+		if (inWater)
+		{
+			m_waterSurfaceY = surfaceY;
+		}
+
+		// Begin swimming once we are submerged deep enough. Exiting is handled in HandleSwimming.
+		if (!IsSwimming() && inWater && submersion >= GetSwimStartDepth())
+		{
+			StartSwimming();
+		}
+	}
+
+	void UnitMovement::StartSwimming()
+	{
+		if (IsSwimming())
+		{
+			return;
+		}
+
+		// Switch physics mode first (clears floor/jump state), then set the network flag and emit
+		// the StartSwim packet. OnMovementModeChanged is guarded to not emit a Land event here.
+		SetMovementMode(MovementMode::Swimming);
+		m_movedUnit.OnStartSwimming();
+
+		// Swimming has no gravity contribution; drop any residual fall velocity.
+		m_velocity = ProjectToGravityFloor(m_velocity);
+	}
+
+	void UnitMovement::StopSwimming()
+	{
+		if (!IsSwimming())
+		{
+			return;
+		}
+
+		// Clear the network flag and emit the StopSwim packet, then let the walking floor check
+		// re-resolve to walking or falling depending on whether there is ground below.
+		m_movedUnit.OnStopSwimming();
+		m_inWater = false;
+		SetMovementMode(MovementMode::Walking);
+	}
+
+	void UnitMovement::HandleSwimming(const float deltaTime, int32 iterations)
+	{
+		if (deltaTime < MIN_TICK_TIME)
+		{
+			return;
+		}
+
+		// Refresh the water column at our current position.
+		const Vector3 feetStart = GetUpdatedNode().GetPosition();
+		float surfaceY = 0.0f;
+		float submersion = 0.0f;
+		const bool inWater = CheckWaterVolume(feetStart, surfaceY, submersion);
+
+		// Exit conditions:
+		//  - no water column at all (swam/walked out of the body of water), or
+		//  - the water is shallow here and there is walkable floor right beneath us (wading out).
+		if (!inWater)
+		{
+			StopSwimming();
+			RunSimulation(deltaTime, iterations);
+			return;
+		}
+
+		m_inWater = true;
+		m_waterSurfaceY = surfaceY;
+
+		// Stop swimming (resume walking) when the total water depth here is too shallow to swim, i.e.
+		// the player could stand with their head above water. Total depth = submersion + distance
+		// from the feet down to walkable floor. SWIM_STOP_DEPTH (< SWIM_START_DEPTH) gives hysteresis
+		// so wading in/out near the threshold doesn't flicker.
+		if (submersion < SWIM_START_DEPTH)
+		{
+			FindFloorResult floor;
+			FindFloor(feetStart, floor, nullptr);
+			if (floor.IsWalkableFloor())
+			{
+				const float totalWaterDepth = submersion + floor.GetDistanceToFloor();
+				if (totalWaterDepth < SWIM_STOP_DEPTH)
+				{
+					StopSwimming();
+					RunSimulation(deltaTime, iterations);
+					return;
+				}
+			}
+		}
+
+		const float maxFeetY = m_waterSurfaceY - SWIM_SURFACE_MARGIN;
+
+		// Capture the horizontal input acceleration once: the sub-step loop mutates m_acceleration
+		// (adding the vertical dive/ascend/buoyancy components), so re-reading it would progressively
+		// shrink the horizontal part across iterations.
+		const Vector3 swimInputAccelH = ProjectToGravityFloor(m_acceleration);
+
+		float remainingTime = deltaTime;
+		while ((remainingTime >= MIN_TICK_TIME) && (iterations < m_maxSimulationIterations))
+		{
+			iterations++;
+			m_justTeleported = false;
+
+			const float timeTick = GetSimulationTimeStep(remainingTime, iterations);
+			remainingTime -= timeTick;
+
+			const Vector3 oldLocation = GetUpdatedNode().GetPosition();
+
+			// Build a 3D swim acceleration.
+			//  - Horizontal movement comes from the forward/back/strafe input.
+			//  - Pitch tilts that movement continuously: looking up swims up, looking down dives,
+			//    looking level holds the current depth. This lets the player maintain a chosen depth
+			//    just by swimming level, instead of constantly fighting an upward buoyancy force.
+			//  - Swimming straight up is available via the Ascending flag (the held jump key),
+			//    independent of look direction.
+			//  - There is no automatic buoyancy: when the player stops, they hold their current
+			//    depth rather than drifting upward (which previously also triggered server-side
+			//    position drift warnings). Surfacing is always an explicit action (look up / ascend).
+			const uint32 flags = m_movedUnit.GetMovementInfo().movementFlags;
+			const float maxAccel = GetMaxAcceleration();
+
+			Vector3 swimAccel = swimInputAccelH;
+			const float horizMag = swimAccel.GetLength();
+			const bool hasHorizontalInput = horizMag > 1.e-4f &&
+				(flags & (movement_flags::Forward | movement_flags::Backward)) != 0;
+
+			if (hasHorizontalInput)
+			{
+				// Tilt the horizontal swim direction by the character pitch so the player swims
+				// exactly where they are looking (full 3D), including up, down, or level.
+				const float pitch = m_movedUnit.GetMovementInfo().pitch.GetValueRadians();
+				const Vector3 rightAxis = m_movedUnit.GetRightVector();
+				swimAccel = (Quaternion(Radian(pitch), rightAxis) * swimAccel.NormalizedCopy()) * horizMag;
+			}
+
+			const bool ascending = (flags & movement_flags::Ascending) != 0;
+			if (ascending)
+			{
+				// Holding jump under water swims straight up.
+				swimAccel += (-GetGravityDirection()) * maxAccel;
+			}
+
+			m_acceleration = swimAccel.GetClampedToMaxSize(maxAccel);
+
+			// Recompute the analog input modifier from the full 3D swim acceleration. The value set
+			// in ControlledCharacterMove only considered horizontal input, so a purely vertical swim
+			// command (holding jump to ascend while idle) would otherwise leave the modifier at 0,
+			// driving maxInputSpeed to 0 in CalcVelocity and clamping the ascent velocity to nothing.
+			m_analogInputModifier = ComputeAnalogInputModifier();
+
+			// Velocity: fluid friction, no gravity.
+			CalcVelocity(timeTick, m_swimmingFriction, true, GetMaxBrakingDeceleration());
+
+			Vector3 delta = m_velocity * timeTick;
+
+			if (!delta.IsNearlyEqual(Vector3::Zero, 1.e-4f))
+			{
+				CollisionHitResult hit(1.f);
+				SafeMoveNode(delta, GetUpdatedNode().GetOrientation(), true, &hit);
+
+				if (hit.bStartPenetrating)
+				{
+					HandleImpact(hit);
+					SlideAlongSurface(delta, 1.f, hit.Normal, hit, true);
+
+					const Vector3 adjustment = GetPenetrationAdjustment(hit);
+					if (!adjustment.IsZero())
+					{
+						ResolvePenetration(adjustment, hit, GetUpdatedNode().GetOrientation());
+					}
+				}
+				else if (hit.IsValidBlockingHit())
+				{
+					HandleImpact(hit, timeTick, delta);
+					SlideAlongSurface(delta, 1.f - hit.Time, hit.Normal, hit, true);
+				}
+			}
+
+			// Surface cap: the body cannot rise above the water surface. Diving down is unrestricted
+			// except by geometry collision handled above.
+			Vector3 newPos = GetUpdatedNode().GetPosition();
+			const float newFeetY = GetGravitySpaceY(newPos);
+			if (newFeetY > maxFeetY)
+			{
+				// Never push the feet below a walkable floor. In shallow water (e.g. wading out on a
+				// slope) the floor sits above the surface-margin cap; clamping all the way down to
+				// maxFeetY would bury the character in the terrain and trap it underwater instead of
+				// letting it stand and walk out. Clamp to the floor in that case so the exit-to-
+				// walking check (top of this function) can fire on the next tick.
+				float targetFeetY = maxFeetY;
+				FindFloorResult capFloor;
+				FindFloor(newPos, capFloor, nullptr);
+				if (capFloor.IsWalkableFloor())
+				{
+					const float floorY = newFeetY - capFloor.GetDistanceToFloor();
+					targetFeetY = std::max(targetFeetY, floorY);
+				}
+
+				if (newFeetY > targetFeetY)
+				{
+					SetGravitySpaceY(newPos, targetFeetY);
+					GetUpdatedNode().SetPosition(newPos);
+
+					// Remove any upward velocity so we don't keep fighting the cap.
+					if (GetGravitySpaceY(m_velocity) > 0.0f)
+					{
+						m_velocity = ProjectToGravityFloor(m_velocity);
+					}
+				}
+			}
+
+			// Recompute velocity from the actual movement this tick.
+			if (!m_justTeleported && timeTick >= MIN_TICK_TIME)
+			{
+				m_velocity = (GetUpdatedNode().GetPosition() - oldLocation) / timeTick;
+			}
+
+			// If we didn't move at all, abort to avoid spinning the simulation.
+			if (GetUpdatedNode().GetPosition().IsNearlyEqual(oldLocation, 1.e-5f))
+			{
+				break;
+			}
+		}
 	}
 
 	void UnitMovement::HandleFalling(const float deltaTime, int32 iterations)
@@ -1176,7 +1649,22 @@ namespace mmo
 
 			if (hit.bBlockingHit)
 			{
-				if (IsValidLandingSpot(GetUpdatedNode().GetPosition(), hit))
+				// If we're penetrating the floor from below and moving away (upward), don't land.
+				// This happens when the unit starts exactly on the floor surface and jumps upward —
+				// the initial capsule sweep reports a start-penetrating hit against the floor even
+				// though the unit is moving away from it.
+				const bool bMovingAwayFromHit = hit.bStartPenetrating &&
+					(m_velocity.Dot(hit.Normal) > 0.0f);
+
+				if (bMovingAwayFromHit)
+				{
+					// Move the unit slightly away from the surface so subsequent sweeps don't re-detect it.
+					const Vector3 escapeStep = hit.Normal * (GetCapsuleRadius() * 0.01f);
+					GetUpdatedNode().SetPosition(GetUpdatedNode().GetPosition() + escapeStep);
+					// Skip all hit handling — let the unit fly upward freely this iteration.
+					continue;
+				}
+				else if (IsValidLandingSpot(GetUpdatedNode().GetPosition(), hit))
 				{
 					remainingTime += subTimeTickRemaining;
 					ProcessLanded(hit, remainingTime, iterations);
@@ -1349,7 +1837,8 @@ namespace mmo
 							SafeMoveNode(sideDelta, pawnRotation, true, &hit);
 						}
 
-						if (bDitch || IsValidLandingSpot(GetUpdatedNode().GetPosition(), hit) || hit.Time == 0.f)
+						if (bDitch || IsValidLandingSpot(GetUpdatedNode().GetPosition(), hit) ||
+							(hit.Time == 0.f && m_velocity.Dot(hit.Normal) <= 0.0f))
 						{
 							remainingTime = 0.f;
 							ProcessLanded(hit, remainingTime, iterations);
@@ -1666,6 +2155,22 @@ namespace mmo
 		// Don't recalculate velocity based on this height adjustment, if considering vertical adjustments.
 		m_justTeleported |= !m_maintainHorizontalGroundVelocity;
 
+		// If the forward sweep was boosted to clear the stair edge, the capsule advanced farther
+		// than the intended move. Remember the horizontal overshoot so HandleWalking repays it by
+		// shrinking subsequent ground moves — otherwise every stair at high frame rates teleports
+		// the character forward by the boost amount, which reads as a lurch and inflates the
+		// average ground speed past what the server expects for the unit's run speed.
+		if (didBoostForward)
+		{
+			const float intendedAdvance = ProjectToGravityFloor(delta).GetLength();
+			const float actualAdvance = ProjectToGravityFloor(GetUpdatedNode().GetPosition() - oldLocation).GetLength();
+			const float overshoot = actualAdvance - intendedAdvance;
+			if (overshoot > 0.f)
+			{
+				m_stepUpForwardDebt = std::min(m_stepUpForwardDebt + overshoot, GetCapsuleRadius());
+			}
+		}
+
 		MOVEMENT_LOG("StepUp: SUCCESS!");
 		return true;
 	}
@@ -1732,14 +2237,10 @@ namespace mmo
 
 	void UnitMovement::SetPostLandedPhysics(const CollisionHitResult& hit)
 	{
-		if (CanEverSwim() && IsInWater())
-		{
-			SetMovementMode(MovementMode::Swimming);
-		}
-		else
-		{
-			SetMovementMode(MovementMode::Walking);
-		}
+		// Always resolve to walking on landing. Entering water is handled centrally by
+		// StartSwimming() (driven by UpdateSwimState) so the Swimming flag and the MoveStartSwim
+		// packet are always produced together — landing must never enter Swimming mode directly.
+		SetMovementMode(MovementMode::Walking);
 	}
 
 	bool UnitMovement::IsValidLandingSpot(const Vector3& capsuleLocation, const CollisionHitResult& hit) const
@@ -2336,73 +2837,91 @@ namespace mmo
 		}
 
 		// Handle zero-distance case
-		const float totalDist = (endCapsule.GetPointA() - startCapsule.GetPointA()).GetLength();
+		const Vector3 sweepDelta = endCapsule.GetPointA() - startCapsule.GetPointA();
+		const float totalDist = sweepDelta.GetLength();
 		if (totalDist < 0.0001f)
 		{
 			return collidable->TestCapsuleCollision(startCapsule, collisionResults);
 		}
 
-		// Use binary search to find the first contact point.
-		// We search for the smallest t where collision occurs.
-		float minT = 0.0f;
-		float maxT = 1.0f;
-		
-		// First, check if there's any collision at the end position
-		std::vector<CollisionResult> endResults;
-		const bool hasEndCollision = collidable->TestCapsuleCollision(endCapsule, endResults);
-		if (!hasEndCollision)
+		const Vector3 capsuleAxis = startCapsule.GetPointB() - startCapsule.GetPointA();
+		const float radius = startCapsule.GetRadius();
+
+		std::vector<CollisionResult> testResults;
+		const auto testAtTime = [&](const float t) -> bool
 		{
-			// No collision throughout the entire sweep
+			const Vector3 testPos = startCapsule.GetPointA() + sweepDelta * t;
+			const Capsule testCapsule(testPos, testPos + capsuleAxis, radius);
+			testResults.clear();
+			return collidable->TestCapsuleCollision(testCapsule, testResults);
+		};
+
+		// Conservative forward stepping: sample the sweep at intervals no larger than half the
+		// capsule radius so thin geometry between start and end cannot be skipped. Testing only
+		// the end position would tunnel through any obstacle thinner than the sweep distance —
+		// e.g. a fall at terminal velocity covers several units per sub-step and would pass
+		// straight through a thin floor whose far side is free.
+		const float maxStepDist = std::max(0.05f, radius * 0.5f);
+		const int32 numSteps = std::min(32, std::max(1, static_cast<int32>(std::ceil(totalDist / maxStepDist))));
+
+		float lastFreeT = 0.0f;
+		float firstHitT = -1.0f;
+		std::vector<CollisionResult> hitResults;
+		for (int32 i = 1; i <= numSteps; ++i)
+		{
+			const float t = static_cast<float>(i) / static_cast<float>(numSteps);
+			if (testAtTime(t))
+			{
+				firstHitT = t;
+				hitResults = testResults;
+				break;
+			}
+			lastFreeT = t;
+		}
+
+		if (firstHitT < 0.0f)
+		{
+			// No contact anywhere along the sweep.
 			return false;
 		}
 
-		// Binary search for the first contact time
-		constexpr int maxIterations = 20;
-		constexpr float convergenceThreshold = 0.0005f;
-
-		for (int iter = 0; iter < maxIterations; ++iter)
+		// Binary search between the last free sample and the first overlapping sample to find
+		// the time of first contact.
+		float minT = lastFreeT;
+		float maxT = firstHitT;
+		constexpr int32 maxIterations = 12;
+		for (int32 iter = 0; iter < maxIterations; ++iter)
 		{
+			if ((maxT - minT) * totalDist < 0.001f)
+			{
+				break;
+			}
+
 			const float midT = (minT + maxT) * 0.5f;
-			const Vector3 testPos = startCapsule.GetPointA() + (endCapsule.GetPointA() - startCapsule.GetPointA()) * midT;
-
-			const Capsule testCapsule(
-				testPos,
-				testPos + (startCapsule.GetPointB() - startCapsule.GetPointA()),
-				startCapsule.GetRadius()
-			);
-
-			std::vector<CollisionResult> testResults;
-			if (collidable->TestCapsuleCollision(testCapsule, testResults))
+			if (testAtTime(midT))
 			{
 				maxT = midT;
-				for (auto& result : testResults)
-				{
-					result.distance = midT;
-				}
-				collisionResults = testResults;
+				hitResults = testResults;
 			}
 			else
 			{
 				minT = midT;
 			}
-
-			if (maxT - minT < convergenceThreshold)
-			{
-				break;
-			}
 		}
 
-		// After binary search, the actual first contact is at maxT (or very close to it).
-		// Use the last valid collision results which were stored when we found a collision.
-		// Ensure the distance/time is set to the converged maxT value for accuracy.
-		if (!collisionResults.empty())
+		// Report the last known free time rather than the overlapping one so the move resolves
+		// to a position that does not start the next sweep in penetration (recurring start-
+		// penetration is what caused jitter while sliding along walls). Keep it above zero: a
+		// distance of exactly 0 is reserved for genuine start-penetration (the start was tested
+		// free above), and would otherwise engage the depenetration machinery every frame while
+		// simply pressing against a wall.
+		const float contactT = std::max(minT, 1.0e-4f);
+		for (auto& result : hitResults)
 		{
-			for (auto& result : collisionResults)
-			{
-				result.distance = maxT;
-			}
+			result.distance = contactT;
 		}
 
+		collisionResults = std::move(hitResults);
 		return !collisionResults.empty();
 	}
 

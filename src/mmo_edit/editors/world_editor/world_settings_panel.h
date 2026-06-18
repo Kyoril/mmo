@@ -27,12 +27,20 @@ namespace mmo
         /// @param currentEditMode Pointer to current edit mode (used to check terrain mode).
         /// @param terrainEditMode Pointer to terrain edit mode for comparison.
         /// @param setEditModeCallback Callback to change edit mode when terrain is disabled.
+        /// @param showFoliage Reference to the "show foliage" setting flag.
+        /// @param showWater Reference to the "show water" setting flag.
+        /// @param setFoliageVisibleCallback Callback invoked when the foliage visibility toggle changes.
+        /// @param setWaterVisibleCallback Callback invoked when the water visibility toggle changes.
         explicit WorldSettingsPanel(
             terrain::Terrain &terrain,
             bool &hasTerrain,
             WorldEditMode *&currentEditMode,
             WorldEditMode *terrainEditMode,
-            std::function<void(WorldEditMode *)> setEditModeCallback);
+            std::function<void(WorldEditMode *)> setEditModeCallback,
+            bool &showFoliage,
+            bool &showWater,
+            std::function<void(bool)> setFoliageVisibleCallback,
+            std::function<void(bool)> setWaterVisibleCallback);
 
         ~WorldSettingsPanel() override = default;
 
@@ -47,5 +55,9 @@ namespace mmo
         WorldEditMode *&m_currentEditMode;
         WorldEditMode *m_terrainEditMode;
         std::function<void(WorldEditMode *)> m_setEditModeCallback;
+        bool &m_showFoliage;
+        bool &m_showWater;
+        std::function<void(bool)> m_setFoliageVisibleCallback;
+        std::function<void(bool)> m_setWaterVisibleCallback;
     };
 }

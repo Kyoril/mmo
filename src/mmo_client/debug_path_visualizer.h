@@ -1,3 +1,5 @@
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+
 #pragma once
 
 #include "scene_graph/scene.h"
@@ -13,16 +15,20 @@ namespace mmo
     class DebugPathVisualizer
     {
     public:
-        DebugPathVisualizer(Scene& scene);
+        explicit DebugPathVisualizer(Scene& scene);
         ~DebugPathVisualizer();
 
-        // Show path visualization
+        /// Show a movement path as a series of connected red lines.
         void ShowPath(const std::vector<Vector3>& path, float duration = 10.0f);
 
-        // Clear current path visualization
+        /// Show a line-of-sight debug ray.
+        /// When hasLos is true a single green line from->to is drawn.
+        /// When hasLos is false a red line from->hitPoint and a dim yellow line
+        /// hitPoint->to are drawn, with an X marker at hitPoint.
+        void ShowLineOfSight(const Vector3& from, const Vector3& to, const Vector3& hitPoint, bool hasLos, float duration = 10.0f);
+
         void ClearPath();
 
-        // Update method to handle automatic expiration
         void Update(float deltaSeconds);
 
     private:

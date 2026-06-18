@@ -11,7 +11,7 @@ namespace mmo
 	public:
 		void Activate() override;
 
-		std::pair<SpellCastResult, SpellCasting*> StartCast(
+		SpellCastResult StartCast(
 			SpellCast& cast,
 			const proto::SpellEntry& spell,
 			const SpellTargetMap& target,

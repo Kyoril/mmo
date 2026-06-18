@@ -9,6 +9,7 @@
 #include "game_server/world/world_instance.h"
 #include "base/linear_set.h"
 #include "game/quest.h"
+#include <vector>
 
 namespace mmo
 {
@@ -24,7 +25,7 @@ namespace mmo
 		{
 			None = 0,
 			Random = 1,
-			Waypoints = 2,
+			Patrol = 2,
 
 			Invalid,
 			Count_ = Invalid
@@ -37,6 +38,11 @@ namespace mmo
 	class GameCreatureS final : public GameUnitS
 	{
 	public:
+		struct PatrolWaypoint final
+		{
+			Vector3 position;
+			uint32 waitTime = 0;
+		};
 
 		typedef LinearSet<uint64> LootRecipients;
 		typedef std::function<const Vector3& ()> RandomPointProc;
@@ -148,6 +154,35 @@ namespace mmo
 
 		void SetMovementType(CreatureMovement movementType);
 
+		/// @brief Replaces the creature's patrol waypoint list.
+		/// @param patrolWaypoints Ordered list of patrol waypoints to follow while idle.
+		void SetPatrolWaypoints(std::vector<PatrolWaypoint> patrolWaypoints);
+
+		/// @brief Returns the patrol waypoint list.
+		/// @return Ordered list of patrol waypoints configured for this creature.
+		[[nodiscard]] const std::vector<PatrolWaypoint>& GetPatrolWaypoints() const { return m_patrolWaypoints; }
+
+		/// @brief Returns whether this creature has patrol waypoints configured.
+		/// @return True if at least one patrol waypoint is available.
+		[[nodiscard]] bool HasPatrolWaypoints() const { return !m_patrolWaypoints.empty(); }
+
+		/// @brief Returns whether combat movement is enabled.
+		/// @return True if combat movement is enabled, false otherwise.
+		bool IsCombatMovementEnabled() const { return m_combatMovementEnabled; }
+
+		/// @brief Sets whether combat movement is enabled.
+		/// @param enabled True to enable combat movement, false to disable.
+		void SetCombatMovement(bool enabled) { m_combatMovementEnabled = enabled; }
+
+		/// @brief Returns the creature's AI controller.
+		/// @return Pointer to the AI, or nullptr if not initialized.
+		CreatureAI* GetAI() const { return m_ai.get(); }
+
+		/// @brief Sets the creature's AI combat phase via the active combat script.
+		/// @param phase The phase number to set.
+		/// @return True if the phase was set successfully, false if the creature has no combat script.
+		bool SetCombatPhase(uint32 phase);
+
 		void RefreshStats() override;
 
 		/// Executes a callback function for every valid combat participant.
@@ -172,6 +207,12 @@ namespace mmo
 		}
 
 		const String& GetName() const override;
+
+	protected:
+		/// @brief Returns the auto-attack spell configured for this creature, if any.
+		/// @return Pointer to the auto-attack spell entry, or nullptr if not configured.
+		const proto::SpellEntry* GetAutoAttackSpell() const override;
+
 	private:
 
 		/// Calculates and applies stats using the new stat-based system
@@ -182,8 +223,10 @@ namespace mmo
 		const proto::UnitEntry* m_entry;
 		scoped_connection m_onSpawned;
 		std::set<uint64> m_combatParticipantGuids;
-		CreatureMovement m_movement;
+		CreatureMovement m_movement = creature_movement::None;
+		std::vector<PatrolWaypoint> m_patrolWaypoints;
 		LootRecipients m_lootRecipients;
 		float m_healthPercent = 1.0f;
+		bool m_combatMovementEnabled = true;
 	};
 }

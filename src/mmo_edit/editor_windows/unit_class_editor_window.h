@@ -94,6 +94,12 @@ namespace mmo
 		void DrawCombatSection(EntryType& currentEntry);
 
 		/**
+		 * @brief Draws a calculated stat preview panel for a selected level.
+		 * @param currentEntry The unit class entry being edited.
+		 */
+		void DrawPreviewSection(EntryType& currentEntry);
+
+		/**
 		 * @brief Draws a stat source editor for attack power, health, mana, or armor.
 		 * @param label The label for this stat source section.
 		 * @param statSources The repeated field containing stat sources.

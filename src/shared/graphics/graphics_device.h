@@ -14,6 +14,12 @@
 #include "material_compiler.h"
 #include "vertex_declaration.h"
 #include "shared/graphics/constant_buffer.h"
+#include "shared/graphics/structured_buffer.h"
+#include "shared/graphics/occlusion_query.h"
+
+#include <string>
+#include <utility>
+#include <vector>
 
 
 namespace mmo
@@ -187,8 +193,25 @@ namespace mmo
 		/// Creates a new constant buffer.
 		virtual ConstantBufferPtr CreateConstantBuffer(size_t size, const void* initialData = nullptr) = 0;
 
+		/// @brief Creates a new structured buffer.
+		/// @param elementSize The size of a single element in bytes.
+		/// @param elementCount The maximum number of elements the buffer can hold.
+		/// @param initialData Optional initial data to populate the buffer with.
+		/// @return A shared pointer to the newly created structured buffer.
+		virtual StructuredBufferPtr CreateStructuredBuffer(size_t elementSize, size_t elementCount, const void* initialData = nullptr) = 0;
+
 		/// Creates a new shader of a certain type if supported.
 		virtual ShaderPtr CreateShader(ShaderType type, const void* shaderCode, size_t shaderCodeSize) = 0;
+
+		/// @brief Whether this backend can render depth-only with no pixel shader bound. When true,
+		///        opaque (non-alpha-tested) shadow casters bind no pixel shader, letting the GPU use
+		///        its faster depth-only path. Backends that don't support this keep binding the normal
+		///        shadow pixel shader (returned false by default).
+		[[nodiscard]] virtual bool SupportsNullPixelShaderForShadows() const { return false; }
+
+		/// @brief Unbinds the pixel shader (binds a null pixel shader). Only meaningful for depth-only
+		///        rendering on backends where SupportsNullPixelShaderForShadows() returns true.
+		virtual void BindNullPixelShader() {}
 
 		virtual void SetDepthBias(float bias) {}
 
@@ -197,6 +220,10 @@ namespace mmo
 		virtual void SetDepthBiasClamp(float bias) {}
 
 		virtual void Render(const RenderOperation& operation) {}
+
+		/// @brief Creates a GPU occlusion query object for visibility testing.
+		/// @return A unique pointer to the occlusion query, or nullptr if not supported.
+		virtual OcclusionQueryPtr CreateOcclusionQuery() { return nullptr; }
 
 		/// @brief Draws non-indexed primitives.
 		/// @param vertexCount Number of vertices to draw.
@@ -308,6 +335,17 @@ namespace mmo
 
 		virtual void SetDepthTestComparison(DepthTestMethod comparison);
 
+		/// @brief Enables/disables "depth pre-pass" mode for the G-Buffer geometry pass.
+		/// @remark When active, opaque G-Buffer materials switch from (Less, depth-write on) to
+		///         (LessEqual, depth-write off) because a prior depth-only pass has already
+		///         populated the depth buffer with the front-most surface. This lets the hardware
+		///         early-Z reject occluded pixels before the expensive G-Buffer pixel shader runs,
+		///         eliminating overdraw shading. Has no effect when no pre-pass was rendered.
+		void SetGBufferDepthPrepass(bool active) { m_gbufferDepthPrepass = active; }
+
+		/// @brief Returns whether G-Buffer depth pre-pass mode is currently active.
+		[[nodiscard]] bool IsGBufferDepthPrepass() const { return m_gbufferDepthPrepass; }
+
 		virtual std::unique_ptr<MaterialCompiler> CreateMaterialCompiler() = 0;
 
 		virtual std::unique_ptr<ShaderCompiler> CreateShaderCompiler() = 0;
@@ -331,6 +369,13 @@ namespace mmo
 		/// @param height The desired height in pixels.
 		/// @return True if the resolution is supported, false otherwise.
 		virtual bool ValidateFullscreenResolution(uint16 width, uint16 height) const = 0;
+
+		/// Gets the list of display resolutions supported for fullscreen mode on the primary
+		/// output, sorted ascending (by width, then height) with duplicates removed.
+		/// The default implementation derives a list of common resolutions bounded by the
+		/// primary monitor; backends may override to query the actual display modes.
+		/// @return A list of supported {width, height} resolutions. At minimum the native one.
+		virtual std::vector<std::pair<uint16, uint16>> GetSupportedResolutions() const;
 
 	public:
 		RenderWindowPtr GetAutoCreatedWindow() const { return m_autoCreatedWindow; }
@@ -368,6 +413,7 @@ namespace mmo
 		bool m_restoreDepthWrite { false };
 		DepthTestMethod m_depthComparison { DepthTestMethod::Always };
 		DepthTestMethod m_restoreDepthComparison { DepthTestMethod::Always };
+		bool m_gbufferDepthPrepass { false };
 		std::vector<std::unique_ptr<VertexDeclaration>> m_vertexDeclarations;
 		std::vector<std::unique_ptr<VertexBufferBinding>> m_vertexBufferBindings;
 	};

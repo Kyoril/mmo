@@ -8,18 +8,19 @@ namespace mmo
 	{
 	}
 
-	std::pair<SpellCastResult, SpellCasting*> NoCastState::StartCast(SpellCast& cast, const proto::SpellEntry& spell,
+	SpellCastResult NoCastState::StartCast(SpellCast& cast, const proto::SpellEntry& spell,
 		const SpellTargetMap& target, GameTime castTime, bool doReplacePreviousCast, uint64 itemGuid)
 	{
-		SpellCasting& casting = CastSpell(
+		CastSpell(
 			cast,
 			spell,
-			std::move(target),
+			target,
 			castTime,
-			itemGuid
+			itemGuid,
+			false
 		);
 
-		return std::make_pair(spell_cast_result::CastOkay, &casting);
+		return spell_cast_result::CastOkay;
 	}
 
 	void NoCastState::StopCast(SpellInterruptFlags reason, GameTime interruptCooldown)

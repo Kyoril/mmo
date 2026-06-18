@@ -7,6 +7,7 @@
 #include "vector_sink.h"
 #include "net/realm_connector.h"
 #include "console/console_var.h"
+#include "game_client/movement_log.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/scene_node.h"
@@ -15,11 +16,13 @@
 #include "game_client/movement_event.h"
 
 #include "platform.h"
+#include "frame_ui/button.h"
 #include "mmo_client/systems/spell_cast.h"
 #include "mmo_client/systems/vendor_client.h"
 #include "frame_ui/frame_mgr.h"
 #include "game/loot.h"
 #include "game_client/object_mgr.h"
+#include "game_client/game_world_object_c_base.h"
 #include "terrain/tile.h"
 
 namespace mmo
@@ -33,6 +36,8 @@ namespace mmo
 	static ConsoleVar* s_resetCameraYawCVar = nullptr;
 	static ConsoleVar* s_resetCameraPitchCVar = nullptr;
 	static ConsoleVar* s_showPlayerCollisionCVar = nullptr;
+
+	static ConsoleVar* s_logMovementCVar = nullptr;
 
 	extern Cursor g_cursor;
 
@@ -55,6 +60,9 @@ namespace mmo
 			s_resetCameraPitchCVar = ConsoleVarMgr::RegisterConsoleVar("ResetCameraVertically", "Gets or sets whether the camera pitch will be reset while moving.", "1");
 
 			s_showPlayerCollisionCVar = ConsoleVarMgr::RegisterConsoleVar("ShowPlayerCollision", "Gets or sets whether the player collision should be visible.", "0");
+
+			s_logMovementCVar = ConsoleVarMgr::RegisterConsoleVar("LogMovement",
+				"Set to 1 to write detailed movement events to Logs/Movement.log. 0 disables.", "0");
 		}
 
 		m_cvarConnections += {
@@ -74,6 +82,19 @@ namespace mmo
 					}
 
 					m_controlledUnit->SetCollisionVisibility(var.GetBoolValue());
+				},
+			s_logMovementCVar->Changed += [](ConsoleVar& var, const std::string&)
+				{
+					if (var.GetBoolValue())
+					{
+						MovementLog::Get().Open("Logs/Movement.log");
+						ILOG("Movement logs enabled");
+					}
+					else
+					{
+						MovementLog::Get().Close();
+						ILOG("Movement logs disabled");
+					}
 				}
 		};
 
@@ -198,7 +219,20 @@ namespace mmo
 
 			if ((m_controlFlags & ControlFlags::StrafeSent) != 0)
 			{
-				return;
+				// Already strafing — check if direction changed. If so, send
+				// StopStrafe + StartStrafe in the new direction so the network
+				// and local physics stay consistent.
+				const bool currentlyLeft = (m_controlledUnit->GetMovementInfo().movementFlags & movement_flags::StrafeLeft) != 0;
+				if (currentlyLeft != left)
+				{
+					m_controlledUnit->StopStrafe();
+					SetControlBit(ControlFlags::StrafeSent, false);
+					// Fall through to start strafe in new direction (StrafeSent is now false)
+				}
+				else
+				{
+					return;
+				}
 			}
 
 			m_controlledUnit->StartStrafe(left);
@@ -276,7 +310,12 @@ namespace mmo
 		info.timestamp = GetAsyncTimeMs();
 		info.position = m_controlledUnit->GetSceneNode()->GetDerivedPosition();
 		info.facing = m_controlledUnit->GetSceneNode()->GetDerivedOrientation().GetYaw();
-		info.pitch = Radian(0);
+		// Preserve pitch while swimming/flying (it drives vertical movement and is serialized);
+		// otherwise the unit has no meaningful pitch and we send zero.
+		if (!info.IsSwimming() && (info.movementFlags & movement_flags::Flying) == 0)
+		{
+			info.pitch = Radian(0);
+		}
 		m_connector.SendMovementUpdate(m_controlledUnit->GetGuid(), opCode, info);
 	}
 
@@ -339,6 +378,14 @@ namespace mmo
 		m_selectionSceneQuery->Execute();
 
 		const auto& cameraHitResult = m_selectionSceneQuery->GetLastResult();
+
+		// Find the closest world-space hit across all candidate objects.
+		// penetrationDepth from TestRayCollision is in the entity's local space, so we cannot
+		// compare it directly against the world-space zoom distance.  Instead we use the
+		// world-space contactPoint that TestRayCollision already converts for us.
+		const Vector3 rayOrigin = cameraRay.origin;
+		float closestWorldHitDistance = std::numeric_limits<float>::max();
+
 		for (auto& result : cameraHitResult)
 		{
 			// Check if the movable object is collidable
@@ -351,19 +398,20 @@ namespace mmo
 			CollisionResult collisionResult;
 			if (collidable->TestRayCollision(cameraRay, collisionResult))
 			{
-				// The penetrationDepth field contains the distance along the ray to the hit point
-				const float hitDistance = collisionResult.penetrationDepth;
-
-				// If the current zoom is greater than the hit distance, adjust the zoom to place
-				// the camera just in front of the collision point with a small offset
-				if (zoom > hitDistance)
+				// Compute world-space distance from the ray origin to the contact point.
+				// This is correct regardless of the entity's scale or orientation.
+				const float worldHitDistance = (collisionResult.contactPoint - rayOrigin).GetLength();
+				if (worldHitDistance < closestWorldHitDistance)
 				{
-					const float safetyOffset = 0.1f; // Small offset to prevent clipping
-					zoom = std::max(0.0f, hitDistance - safetyOffset);
+					closestWorldHitDistance = worldHitDistance;
 				}
-
-				break;
 			}
+		}
+
+		if (closestWorldHitDistance < zoom)
+		{
+			const float safetyOffset = 0.1f; // Small offset to prevent clipping
+			zoom = std::max(0.0f, closestWorldHitDistance - safetyOffset);
 		}
 
 		m_desiredCameraLocation = m_cameraNode->GetOrientation() * (Vector3::UnitZ * zoom);
@@ -458,6 +506,13 @@ namespace mmo
 			return;
 		}
 
+		// Under water, the jump key swims the player upward instead of jumping.
+		if (m_controlledUnit->GetMovementInfo().IsSwimming())
+		{
+			m_swimAscend = true;
+			return;
+		}
+
 		m_controlledUnit->Jump();
 	}
 
@@ -468,7 +523,19 @@ namespace mmo
 			return;
 		}
 
+		m_swimAscend = false;
+
 		m_controlledUnit->StopJumping();
+	}
+
+	void PlayerController::ToggleWalkMode()
+	{
+		if (!m_controlledUnit)
+		{
+			return;
+		}
+
+		m_controlledUnit->ToggleWalkMode();
 	}
 
 	void PlayerController::OnHoveredObjectChanged(GameObjectC* previousHoveredUnit)
@@ -573,6 +640,18 @@ namespace mmo
 		case MovementEventType::SetFacing:
 			SendMovementUpdateWithInfo(game::client_realm_packet::MoveSetFacing, movementEvent.movementInfo);
 			break;
+		case MovementEventType::StartSwim:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStartSwim, movementEvent.movementInfo);
+			break;
+		case MovementEventType::StopSwim:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStopSwim, movementEvent.movementInfo);
+			break;
+		case MovementEventType::StartWalk:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStartWalk, movementEvent.movementInfo);
+			break;
+		case MovementEventType::StopWalk:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStopWalk, movementEvent.movementInfo);
+			break;
 		default:
 			// Unknown event type
 			WLOG("Unsupported movement event type: " << static_cast<int>(movementEvent.eventType));
@@ -598,6 +677,21 @@ namespace mmo
 			MovePlayer();
 			StrafePlayer();
 			TurnPlayer();
+		}
+
+		// Swim pitch / ascent. The character's dive pitch is controlled exclusively by right-mouse
+		// vertical drag (accumulated in OnMouseMove); the visual camera pitch never drives it.
+		// While not swimming, pitch is always treated as zero.
+		if (m_controlledUnit->GetMovementInfo().IsSwimming())
+		{
+			m_controlledUnit->SetMovementPitch(m_swimPitch);
+			m_controlledUnit->SetSwimAscending(m_swimAscend);
+		}
+		else
+		{
+			m_swimPitch = Radian(0.0f);
+			m_controlledUnit->SetMovementPitch(Radian(0.0f));
+			m_controlledUnit->SetSwimAscending(false);
 		}
 
 		if (!(m_controlFlags & ControlFlags::TurnCamera) && !(m_controlFlags & ControlFlags::TurnPlayer))
@@ -659,30 +753,77 @@ namespace mmo
 			}
 		}
 
-		// Fire unit raycast
-		m_selectionSceneQuery->ClearResult();
-		m_selectionSceneQuery->SetSortByDistance(true);
-		m_selectionSceneQuery->SetQueryMask(0x00000002);
-		m_selectionSceneQuery->SetRay(m_defaultCamera->GetCameraToViewportRay(
-			static_cast<float>(m_x) / static_cast<float>(w),
-			static_cast<float>(m_y) / static_cast<float>(h), 1000.0f));
-		m_selectionSceneQuery->Execute();
-
-		GameObjectC* newHoveredObject = nullptr;
-
-		const auto& hitResult = m_selectionSceneQuery->GetLastResult();
-		if (!hitResult.empty())
+		// If FrameUI has no window which captures the mouse
+		const auto hoverFrame = FrameManager::Get().GetHoveredFrame();
+		if (!hoverFrame || !(hoverFrame->IsEnabled() && hoverFrame->GetType() == Button::Type))
 		{
-			Entity* entity = static_cast<Entity*>(hitResult[0].movable);
-			if (entity)
-			{
-				newHoveredObject = entity->GetUserObject<GameObjectC>();
-			}
-		}
+			// Fire unit raycast
+			m_selectionSceneQuery->ClearResult();
+			m_selectionSceneQuery->SetSortByDistance(true);
+			m_selectionSceneQuery->SetQueryMask(0x00000002);
+			m_selectionSceneQuery->SetRay(m_defaultCamera->GetCameraToViewportRay(
+				static_cast<float>(m_x) / static_cast<float>(w),
+				static_cast<float>(m_y) / static_cast<float>(h), 1000.0f));
+			m_selectionSceneQuery->Execute();
 
-		GameObjectC* previousObject = m_hoveredObject;
-		m_hoveredObject = newHoveredObject;
-		OnHoveredObjectChanged(previousObject);
+			GameObjectC* newHoveredObject = nullptr;
+
+			// When several objects sit under the cursor (e.g. corpses stacked after a pull),
+			// the closest hit is not always the most useful one to hover. Apply a priority so
+			// players can always grab their loot without waiting for corpses to despawn:
+			// lootable objects win over living units, which in turn win over dead/empty ones.
+			// Within the same priority tier the closest hit wins (the result is already sorted
+			// by distance, so the first match in a tier is the nearest).
+			const auto& hitResult = m_selectionSceneQuery->GetLastResult();
+
+			const auto hoverPriority = [](const GameObjectC& object) -> int
+			{
+				if (object.CanBeLooted())
+				{
+					return 3;
+				}
+
+				if (object.IsUnit() && object.AsUnit().IsAlive())
+				{
+					return 2;
+				}
+
+				return 1;
+			};
+
+			int bestPriority = 0;
+			for (const auto& hit : hitResult)
+			{
+				Entity* entity = static_cast<Entity*>(hit.movable);
+				if (!entity)
+				{
+					continue;
+				}
+
+				GameObjectC* candidate = entity->GetUserObject<GameObjectC>();
+				if (!candidate)
+				{
+					continue;
+				}
+
+				const int priority = hoverPriority(*candidate);
+				if (priority > bestPriority)
+				{
+					bestPriority = priority;
+					newHoveredObject = candidate;
+
+					// Highest tier reached — no farther candidate can beat a lootable hit.
+					if (bestPriority >= 3)
+					{
+						break;
+					}
+				}
+			}
+
+			GameObjectC* previousObject = m_hoveredObject;
+			m_hoveredObject = newHoveredObject;
+			OnHoveredObjectChanged(previousObject);
+		}
 	}
 
 	void PlayerController::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
@@ -807,14 +948,15 @@ namespace mmo
 					}
 					else if (m_hoveredObject->IsWorldObject() && m_hoveredObject->IsUsable(m_controlledUnit->AsPlayer()))
 					{
-						const proto_client::SpellEntry* unlockSpell = m_controlledUnit->GetOpenSpell();
-						if (!unlockSpell)
+						GameWorldObjectC* worldObject = static_cast<GameWorldObjectC*>(m_hoveredObject);
+						const proto_client::SpellEntry* openSpell = m_controlledUnit->GetOpenSpell(worldObject);
+						if (openSpell)
 						{
-							FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "ERR_CANT_OPEN");
+							m_spellCast.CastSpell(openSpell->id(), m_hoveredObject);
 						}
 						else
 						{
-							m_spellCast.CastSpell(unlockSpell->id(), m_hoveredObject);
+							FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "LOCKED");
 						}
 					}
 				}
@@ -876,6 +1018,18 @@ namespace mmo
 			m_cameraPitchNode->Pitch(deltaPitch, TransformSpace::Local);
 
 			ClampCameraPitch();
+
+			// Only the RIGHT mouse button (TurnPlayer) drives the character's swim dive pitch — the
+			// left button (TurnCamera) just orbits the camera, like facing. Pitch is clamped and is
+			// only relevant while swimming.
+			if ((m_controlFlags & ControlFlags::TurnPlayer) != 0 &&
+				m_controlledUnit->GetMovementInfo().IsSwimming())
+			{
+				constexpr float maxSwimPitchDegrees = 80.0f;
+				m_swimPitch += deltaPitch;
+				m_swimPitch = Degree(Clamp(m_swimPitch.GetValueDegrees(),
+					-maxSwimPitchDegrees, maxSwimPitchDegrees));
+			}
 		}
 
 		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0 && m_controlledUnit->IsAlive() && !m_controlledUnit->IsBeingMoved() && std::abs(deltaX) > 0)
@@ -883,15 +1037,20 @@ namespace mmo
 			const Radian facing = (m_controlledUnit->GetSceneNode()->GetOrientation() * m_cameraAnchorNode->GetOrientation()).GetYaw();
 			m_controlledUnit->GetSceneNode()->SetOrientation(Quaternion(facing, Vector3::UnitY));
 			m_cameraAnchorNode->SetOrientation(Quaternion::Identity);
-			m_controlledUnit->SetFacing(facing);
 
-			// Limit to 10 per second
+			// Rate-limit SetFacing network events to 10 per second.
+			// The scene node orientation is updated every frame above for smooth visuals.
+			// SetFacing() queues a network packet — flooding the server with per-frame
+			// facing updates wastes bandwidth and (before this fix) suppressed heartbeats.
 			if (GetAsyncTimeMs() >= m_nextSetFacing)
 			{
-				// Generate movement event instead of sending packet directly
-				const MovementInfo& movementInfo = m_controlledUnit->GetMovementInfo();
-				//m_movement.QueueMovementEvent(MovementEventType::SetFacing, GetAsyncTimeMs(), movementInfo);
+				m_controlledUnit->SetFacing(facing);
 				m_nextSetFacing = GetAsyncTimeMs() + 100;
+			}
+			else
+			{
+				// Update the internal facing without queuing a network event
+				m_controlledUnit->SetFacingLocal(facing);
 			}
 		}
 	}

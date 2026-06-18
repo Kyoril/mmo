@@ -2,6 +2,12 @@
 # in templated header files which are used to show version informations in the 
 # compiled applications.
 
+# Defaults in case git is not available (e.g. Docker builds without .git)
+set(MMO_GIT_COMMIT "UNKNOWN")
+set(MMO_GIT_REVISION 0)
+set(MMO_GIT_LASTCHANGE "UNKNOWN")
+set(MMO_GIT_BRANCH "UNKNOWN")
+
 # Version header
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
 	find_package(Git)
@@ -30,11 +36,20 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
 			OUTPUT_VARIABLE "MMO_GIT_BRANCH"
 			ERROR_QUIET
 			OUTPUT_STRIP_TRAILING_WHITESPACE)
-	else(GIT_FOUND)
-		set(MMO_GIT_COMMIT "UNKNOWN")
-		set(MMO_GIT_REVISION 0)
-		set(MMO_GIT_LASTCHANGE "UNKNOWN")
-		set(MMO_GIT_BRANCH "UNKNOWN")
+		# Fall back to safe defaults if git commands returned empty results
+		# (e.g. when building inside Docker where the .git history is unavailable)
+		if(NOT MMO_GIT_COMMIT)
+			set(MMO_GIT_COMMIT "UNKNOWN")
+		endif()
+		if(NOT MMO_GIT_REVISION)
+			set(MMO_GIT_REVISION 0)
+		endif()
+		if(NOT MMO_GIT_LASTCHANGE)
+			set(MMO_GIT_LASTCHANGE "UNKNOWN")
+		endif()
+		if(NOT MMO_GIT_BRANCH)
+			set(MMO_GIT_BRANCH "UNKNOWN")
+		endif()
 	endif(GIT_FOUND)
 endif()
 

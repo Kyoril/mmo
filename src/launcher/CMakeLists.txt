@@ -29,6 +29,7 @@ add_executable(launcher MACOSX_BUNDLE ${codeFiles})
 ELSE()
 add_executable(launcher WIN32 launcher.rc ${codeFiles})
 ENDIF()
+mmo_deploy_runtime_dependencies(launcher)
 
 IF(APPLE)
     SET_SOURCE_FILES_PROPERTIES(

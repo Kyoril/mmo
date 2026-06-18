@@ -16,12 +16,14 @@
 #include "node_editor/node_layout.h"
 #include "node_editor/node_pin_icons.h"
 
+#include <algorithm>
 #include <cinttypes>
 
 #include "material_editor.h"
 #include "stream_sink.h"
 #include "assets/asset_registry.h"
 #include "base/chunk_writer.h"
+#include "editor_windows/asset_picker_widget.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/material_serializer.h"
 #include "scene_graph/material_manager.h"
@@ -720,13 +722,40 @@ namespace mmo
 		m_scene.Clear();
 	}
 
-	void MaterialEditorInstance::Compile() const
+	void MaterialEditorInstance::Compile()
 	{
 		const auto materialCompiler = GraphicsDevice::Get().CreateMaterialCompiler();
+
+		// Always emit debug comments so the shader code viewer can map the generated numbered
+		// expressions back to the nodes in the graph. Comments are stripped by the shader compiler
+		// and have no effect on the produced binary shader code.
+		materialCompiler->SetGenerateDebugComments(true);
+
 		m_graph->Compile(*materialCompiler);
+
+		// After the graph has been compiled, every node knows the expression index it produced.
+		// Annotate those expressions with the node name and id so the generated HLSL can be aligned
+		// with the visual node graph.
+		for (const auto* node : m_graph->GetNodes())
+		{
+			const ExpressionIndex exprId = node->GetCompiledExpressionId();
+			if (exprId == IndexNone)
+			{
+				continue;
+			}
+
+			std::ostringstream label;
+			const auto nodeName = node->GetName();
+			label << "Node \"" << (nodeName.empty() ? node->GetTypeInfo().displayName : nodeName)
+				<< "\" (#" << node->GetId() << ")";
+			materialCompiler->AnnotateExpression(exprId, label.str());
+		}
 
 		const auto shaderCompiler = GraphicsDevice::Get().CreateShaderCompiler();
 		materialCompiler->Compile(*m_material, *shaderCompiler);
+
+		// Keep the generated high level HLSL around so it can be inspected in the shader code panel.
+		CaptureGeneratedShaderCode(*materialCompiler);
 
 		m_material->Update();
 
@@ -736,6 +765,21 @@ namespace mmo
 		}
 
 		m_editor.GetPreviewManager().InvalidatePreview(m_assetPath.string());
+	}
+
+	void MaterialEditorInstance::CaptureGeneratedShaderCode(const MaterialCompiler& compiler)
+	{
+		for (int i = 0; i < static_cast<int>(m_vertexShaderCode.size()); ++i)
+		{
+			m_vertexShaderCode[i] = compiler.GetVertexShaderCode(static_cast<VertexShaderType>(i));
+		}
+
+		for (int i = 0; i < static_cast<int>(m_pixelShaderCode.size()); ++i)
+		{
+			m_pixelShaderCode[i] = compiler.GetPixelShaderCode(static_cast<PixelShaderType>(i));
+		}
+
+		m_shaderCodeCaptured = true;
 	}
 
 	bool MaterialEditorInstance::Save()
@@ -822,12 +866,14 @@ namespace mmo
 		const String previewId = "Preview##" + GetAssetPath().string();
 		const String detailsId = "Details##" + GetAssetPath().string();
 		const String graphId = "Material Graph##" + GetAssetPath().string();
+		const String shaderCodeId = "Shader Code##" + GetAssetPath().string();
 
 		DrawPreviewPanel(previewId);
 		DrawDetailsPanel(detailsId);
 		DrawGraphPanel(graphId);
-		
-		InitializeDockLayout(dockspaceId, previewId, detailsId, graphId);
+		DrawShaderCodePanel(shaderCodeId);
+
+		InitializeDockLayout(dockspaceId, previewId, detailsId, graphId, shaderCodeId);
 
 		ed::SetCurrentEditor(nullptr);
 		ImGui::PopID();
@@ -898,6 +944,12 @@ namespace mmo
 		if (ImGui::Begin(panelId.c_str(), nullptr))
 		{
 			DrawPropertyTable();
+
+			// Terrain foliage authoring is only relevant for materials (not material functions).
+			if (m_material && GetAssetPath().extension() != ".hmf")
+			{
+				DrawFoliageSection();
+			}
 		}
 		ImGui::End();
 	}
@@ -922,8 +974,91 @@ namespace mmo
 		ImGui::PopStyleVar();
 	}
 
+	void MaterialEditorInstance::DrawFoliageSection()
+	{
+		static const std::set<String> s_meshExtensions = { ".hmsh" };
+		if (!ImGui::CollapsingHeader("Terrain Foliage"))
+		{
+			return;
+		}
+
+		ImGui::TextWrapped("Foliage scattered on terrain tiles using this material. Each entry is bound to "
+			"a terrain layer (1-4) and grows where that layer's coverage is high.");
+
+		auto& entries = m_material->GetFoliageEntries();
+
+		static const char* s_layerNames[] = { "Layer 1", "Layer 2", "Layer 3", "Layer 4" };
+
+		int removeIndex = -1;
+		for (int i = 0; i < static_cast<int>(entries.size()); ++i)
+		{
+			MaterialFoliageEntry& entry = entries[i];
+
+			ImGui::PushID(i);
+
+			const String headerLabel = "Foliage " + std::to_string(i + 1) +
+				(entry.meshPath.empty() ? "" : (" - " + entry.meshPath));
+			if (ImGui::TreeNodeEx("foliageEntry", ImGuiTreeNodeFlags_DefaultOpen, "%s", headerLabel.c_str()))
+			{
+				// Mesh field (accepts a .hmsh drag-drop payload).
+				String meshPath = entry.meshPath;
+				if (AssetPickerWidget::Draw("##mesh", meshPath, s_meshExtensions, &m_editor.GetPreviewManager(), nullptr, 64.0f))
+				{
+					entry.meshPath = meshPath;
+				}
+
+
+				int layerIndex = static_cast<int>(entry.layerIndex);
+				if (ImGui::Combo("Terrain Layer", &layerIndex, s_layerNames, IM_ARRAYSIZE(s_layerNames)))
+				{
+					entry.layerIndex = static_cast<uint8>(std::clamp(layerIndex, 0, 3));
+				}
+
+				ImGui::DragFloat("Density", &entry.density, 0.05f, 0.0f, 100.0f);
+				ImGui::SliderFloat("Min Coverage", &entry.minCoverage, 0.0f, 1.0f);
+				ImGui::DragFloatRange2("Scale", &entry.minScale, &entry.maxScale, 0.01f, 0.01f, 10.0f);
+				ImGui::SliderFloat("Max Slope", &entry.maxSlopeAngle, 0.0f, 90.0f);
+				ImGui::DragFloatRange2("Height Range", &entry.minHeight, &entry.maxHeight, 1.0f, -10000.0f, 10000.0f);
+				ImGui::DragFloatRange2("Fade Distance", &entry.fadeStartDistance, &entry.fadeEndDistance, 1.0f, 0.0f, 10000.0f);
+				ImGui::Checkbox("Random Yaw", &entry.randomYaw);
+				ImGui::SameLine();
+				ImGui::Checkbox("Align To Normal", &entry.alignToNormal);
+				ImGui::SameLine();
+				ImGui::Checkbox("Cast Shadows", &entry.castShadows);
+
+				if (ImGui::Button("Remove"))
+				{
+					removeIndex = i;
+				}
+
+				ImGui::TreePop();
+			}
+
+			ImGui::PopID();
+			ImGui::Separator();
+		}
+
+		if (removeIndex >= 0)
+		{
+			entries.erase(entries.begin() + removeIndex);
+		}
+
+		if (ImGui::Button("Add Foliage Entry"))
+		{
+			entries.emplace_back();
+		}
+	}
+
 	void MaterialEditorInstance::DrawNodeProperties(GraphNode* node)
 	{
+		// The "Get Variable" node selects its source from the set of variables currently declared in the
+		// graph, so render its single property as a dropdown of declared names instead of a free text field.
+		if (node->GetTypeInfo().id == NamedVariableGetNode::GetStaticTypeInfo().id)
+		{
+			DrawVariableSelector(static_cast<NamedVariableGetNode*>(node));
+			return;
+		}
+
 		for (auto* prop : node->GetProperties())
 		{
 			ImGui::TableNextRow();
@@ -936,6 +1071,55 @@ namespace mmo
 			ImGui::SetNextItemWidth(-FLT_MIN);
 
 			DrawPropertyEditor(prop);
+		}
+	}
+
+	void MaterialEditorInstance::DrawVariableSelector(NamedVariableGetNode* node)
+	{
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::AlignTextToFramePadding();
+		const ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
+		ImGui::TreeNodeEx("Field", flags, "Variable");
+
+		ImGui::TableSetColumnIndex(1);
+		ImGui::SetNextItemWidth(-FLT_MIN);
+
+		// Collect the names of all variables currently declared via Set Variable nodes.
+		std::vector<String> names;
+		const uint32 setTypeId = NamedVariableSetNode::GetStaticTypeInfo().id;
+		for (GraphNode* graphNode : m_graph->GetNodes())
+		{
+			if (graphNode->GetTypeInfo().id != setTypeId)
+			{
+				continue;
+			}
+
+			const String& name = static_cast<NamedVariableSetNode*>(graphNode)->GetVariableName();
+			if (!name.empty() && std::find(names.begin(), names.end(), name) == names.end())
+			{
+				names.push_back(name);
+			}
+		}
+
+		const String& current = node->GetVariableName();
+		const char* preview = current.empty() ? "(None)" : current.c_str();
+		if (ImGui::BeginCombo("##variable_selector", preview))
+		{
+			for (const String& name : names)
+			{
+				const bool selected = (name == current);
+				if (ImGui::Selectable(name.c_str(), selected))
+				{
+					node->SetVariableName(name);
+				}
+				if (selected)
+				{
+					ImGui::SetItemDefaultFocus();
+				}
+			}
+
+			ImGui::EndCombo();
 		}
 	}
 
@@ -1054,7 +1238,83 @@ namespace mmo
 		ImGui::End();
 	}
 
-	void MaterialEditorInstance::InitializeDockLayout(ImGuiID dockspaceId, const String& previewId, const String& detailsId, const String& graphId)
+	const String& MaterialEditorInstance::GetSelectedShaderCode() const
+	{
+		static const String empty;
+
+		if (m_selectedShaderIndex < 0)
+		{
+			return empty;
+		}
+
+		if (m_selectedShaderIndex < static_cast<int>(m_vertexShaderCode.size()))
+		{
+			return m_vertexShaderCode[m_selectedShaderIndex];
+		}
+
+		const int pixelIndex = m_selectedShaderIndex - static_cast<int>(m_vertexShaderCode.size());
+		if (pixelIndex >= 0 && pixelIndex < static_cast<int>(m_pixelShaderCode.size()))
+		{
+			return m_pixelShaderCode[pixelIndex];
+		}
+
+		return empty;
+	}
+
+	void MaterialEditorInstance::DrawShaderCodePanel(const String& panelId)
+	{
+		// Labels match the ordering of VertexShaderType (0-5) followed by PixelShaderType (0-3),
+		// which is how the generated code is stored in m_vertexShaderCode / m_pixelShaderCode.
+		static const char* shaderNames[] = {
+			"Vertex Shader: Default",
+			"Vertex Shader: Skinned (Low)",
+			"Vertex Shader: Skinned (Medium)",
+			"Vertex Shader: Skinned (High)",
+			"Vertex Shader: UI",
+			"Vertex Shader: Instanced",
+			"Pixel Shader: Forward",
+			"Pixel Shader: GBuffer (Deferred)",
+			"Pixel Shader: Shadow Map",
+			"Pixel Shader: UI"
+		};
+
+		if (ImGui::Begin(panelId.c_str()))
+		{
+			if (ImGui::Button("Compile"))
+			{
+				Compile();
+			}
+
+			if (!m_shaderCodeCaptured)
+			{
+				ImGui::SameLine();
+				ImGui::TextDisabled("Press Compile to generate and inspect the shader HLSL.");
+			}
+			else
+			{
+				ImGui::SameLine();
+				ImGui::SetNextItemWidth(320.0f);
+				ImGui::Combo("##shaderSelect", &m_selectedShaderIndex, shaderNames, IM_ARRAYSIZE(shaderNames));
+
+				const String& code = GetSelectedShaderCode();
+
+				ImGui::SameLine();
+				if (ImGui::Button("Copy to Clipboard"))
+				{
+					ImGui::SetClipboardText(code.c_str());
+				}
+
+				// Read-only multiline text box so the generated HLSL can be viewed, selected and copied.
+				ImGui::InputTextMultiline("##shaderCode",
+					const_cast<char*>(code.c_str()), code.size() + 1,
+					ImVec2(-FLT_MIN, -FLT_MIN),
+					ImGuiInputTextFlags_ReadOnly);
+			}
+		}
+		ImGui::End();
+	}
+
+	void MaterialEditorInstance::InitializeDockLayout(ImGuiID dockspaceId, const String& previewId, const String& detailsId, const String& graphId, const String& shaderCodeId)
 	{
 		if (m_initDockLayout)
 		{
@@ -1065,8 +1325,11 @@ namespace mmo
 			auto mainId = dockspaceId;
 			auto sideId = ImGui::DockBuilderSplitNode(mainId, ImGuiDir_Left, 400.0f / ImGui::GetMainViewport()->Size.x, nullptr, &mainId);
 			auto sideTopId = ImGui::DockBuilderSplitNode(sideId, ImGuiDir_Up, 400.0f / ImGui::GetMainViewport()->Size.y, nullptr, &sideId);
-			
+
 			ImGui::DockBuilderDockWindow(graphId.c_str(), mainId);
+
+			// Dock the shader code viewer as a tab alongside the graph so it has plenty of room.
+			ImGui::DockBuilderDockWindow(shaderCodeId.c_str(), mainId);
 
 			ImGui::DockBuilderDockWindow(previewId.c_str(), sideTopId);
 			ImGui::DockBuilderDockWindow(detailsId.c_str(), sideId);

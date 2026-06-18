@@ -98,7 +98,15 @@ namespace mmo
 
 		// Search for global index
 		const auto it = std::ranges::lower_bound(m_keyFrameTimes, timePos);
-		return {timePos, static_cast<uint32>(std::distance(m_keyFrameTimes.begin(), it))};
+
+		// If time is past all keyframes, return without a key index
+		// so GetKeyFramesAtTime falls back to manual search
+		if (it == m_keyFrameTimes.end())
+		{
+			return { timePos };
+		}
+
+		return { timePos, static_cast<uint32>(std::distance(m_keyFrameTimes.begin(), it)) };
 	}
 
 	bool Animation::HasNodeTrack(const uint16 handle) const

@@ -4,6 +4,7 @@
 
 #include "base/macros.h"
 
+#include <algorithm>
 #include <vector>
 #include <stdexcept>
 
@@ -19,6 +20,8 @@ namespace mmo
 	{
 		m_header.width = width;
 		m_header.height = height;
+		m_header.format = tex::v1_0::RGBA;
+		m_mipCount = 1;
 	}
 
 	void TextureD3D11::FromRenderTexture(RenderTextureD3D11& renderTexture)
@@ -100,6 +103,18 @@ namespace mmo
 		case tex::v1_0::DXT5:
 			td.Format = DXGI_FORMAT_BC3_UNORM;
 			break;
+		case tex::v1_0::R8:
+			td.Format = DXGI_FORMAT_R8_UNORM;
+			break;
+		case tex::v1_0::RG8:
+			td.Format = DXGI_FORMAT_R8G8_UNORM;
+			break;
+		case tex::v1_0::BC4:
+			td.Format = DXGI_FORMAT_BC4_UNORM;
+			break;
+		case tex::v1_0::BC5:
+			td.Format = DXGI_FORMAT_BC5_UNORM;
+			break;
 		default:
 			throw std::runtime_error("Unsupported texture format for d3d11 texture!");
 			break;
@@ -124,7 +139,7 @@ namespace mmo
 			// Calculate size of mip level
 			const int32 width = m_header.width >> mipLevel;
 			const int32 height = m_header.height >> mipLevel;
-			if (width <= 1 || height <= 1 || mipData[mipLevel].size() == 0)
+			if (width < 1 || height < 1 || mipData[mipLevel].size() == 0)
 			{
 				break;
 			}
@@ -140,6 +155,20 @@ namespace mmo
 				data[mipLevel].SysMemPitch = 16 * (width / 4);
 				data[mipLevel].SysMemSlicePitch = data[mipLevel].SysMemPitch * (height / 4);
 				break;
+			case tex::v1_0::BC4:
+				data[mipLevel].SysMemPitch = std::max(1, (width + 3) / 4) * 8;
+				data[mipLevel].SysMemSlicePitch = data[mipLevel].SysMemPitch * std::max(1, (height + 3) / 4);
+				break;
+			case tex::v1_0::BC5:
+				data[mipLevel].SysMemPitch = std::max(1, (width + 3) / 4) * 16;
+				data[mipLevel].SysMemSlicePitch = data[mipLevel].SysMemPitch * std::max(1, (height + 3) / 4);
+				break;
+			case tex::v1_0::R8:
+				data[mipLevel].SysMemPitch = sizeof(uint8) * width;
+				break;
+			case tex::v1_0::RG8:
+				data[mipLevel].SysMemPitch = sizeof(uint8) * 2 * width;
+				break;
 			default:
 				data[mipLevel].SysMemPitch = sizeof(uint32) * width;
 				break;
@@ -151,6 +180,11 @@ namespace mmo
 			}
 
 			actualMipLevelCount++;
+
+			if (width <= 1 || height <= 1)
+			{
+				break;
+			}
 		}
 
 		td.MipLevels = actualMipLevelCount;
@@ -191,6 +225,7 @@ namespace mmo
 			break;
 		case BufferUsage::Dynamic:
 		case BufferUsage::StaticWriteOnly:
+		case BufferUsage::DynamicWriteOnly:
 			td.Usage = D3D11_USAGE_DYNAMIC;
 			break;
 		}
@@ -213,7 +248,30 @@ namespace mmo
 	{
 		ASSERT(data);
 		ASSERT(dataSize);
-		ASSERT(m_usage == BufferUsage::Dynamic || m_usage == BufferUsage::StaticWriteOnly);
+		ASSERT(m_usage == BufferUsage::Dynamic || m_usage == BufferUsage::StaticWriteOnly || m_usage == BufferUsage::DynamicWriteOnly);
+
+		// Lazily create the D3D11 texture on first upload. This covers textures created via
+		// CreateManual(width, height, usage) where no file data is available at construction time.
+		if (!m_texture)
+		{
+			ID3D11Device& dev = m_device;
+
+			D3D11_TEXTURE2D_DESC td;
+			ZeroMemory(&td, sizeof(td));
+			td.ArraySize = 1;
+			td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+			td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			td.Width = m_header.width;
+			td.Height = m_header.height;
+			td.MipLevels = 1;
+			td.SampleDesc.Count = 1;
+			td.SampleDesc.Quality = 0;
+			td.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+			td.Usage = D3D11_USAGE_DYNAMIC;   // required for Map(WRITE_DISCARD)
+
+			VERIFY(SUCCEEDED(dev.CreateTexture2D(&td, nullptr, &m_texture)));
+			CreateShaderResourceView();
+		}
 
 		D3D11_MAPPED_SUBRESOURCE mappedResource;
 
@@ -225,13 +283,20 @@ namespace mmo
 
 	uint32 TextureD3D11::GetMemorySize() const
 	{
-		// For now, all textures are uncompressed RGBAs
 		switch (m_header.format)
 		{
 		case tex::v1_0::DXT1:
 			return (m_header.width * m_header.height * sizeof(uint32)) / 8;
 		case tex::v1_0::DXT5:
 			return (m_header.width * m_header.height * sizeof(uint32)) / 4;
+		case tex::v1_0::R8:
+			return m_header.width * m_header.height * sizeof(uint8);
+		case tex::v1_0::RG8:
+			return m_header.width * m_header.height * sizeof(uint8) * 2;
+		case tex::v1_0::BC4:
+			return std::max(1, (m_header.width + 3) / 4) * std::max(1, (m_header.height + 3) / 4) * 8;
+		case tex::v1_0::BC5:
+			return std::max(1, (m_header.width + 3) / 4) * std::max(1, (m_header.height + 3) / 4) * 16;
 		default:
 			return m_header.width * m_header.height * sizeof(uint32);
 		}
@@ -267,8 +332,48 @@ namespace mmo
 			return;
 		}
 
-		// Copy pixel data to buffer
-		memcpy(destination, mappedResource.pData, GetPixelDataSize());
+		// Copy pixel data row-by-row to account for driver-specific row pitch padding.
+		const uint8* srcData = static_cast<const uint8*>(mappedResource.pData);
+		const UINT srcRowPitch = mappedResource.RowPitch;
+
+		UINT dstRowPitch = 0;
+		UINT rowCount = 0;
+		switch (textureDesc.Format)
+		{
+		case DXGI_FORMAT_R8G8B8A8_UNORM:
+			dstRowPitch = textureDesc.Width * 4;
+			rowCount = textureDesc.Height;
+			break;
+		case DXGI_FORMAT_BC1_UNORM:
+		{
+			const UINT blocksWide = std::max(1u, (textureDesc.Width + 3u) / 4u);
+			dstRowPitch = blocksWide * 8u;
+			rowCount = std::max(1u, (textureDesc.Height + 3u) / 4u);
+			break;
+		}
+		case DXGI_FORMAT_BC3_UNORM:
+		{
+			const UINT blocksWide = std::max(1u, (textureDesc.Width + 3u) / 4u);
+			dstRowPitch = blocksWide * 16u;
+			rowCount = std::max(1u, (textureDesc.Height + 3u) / 4u);
+			break;
+		}
+		default:
+			// Fall back to the previous behavior for unknown formats.
+			memcpy(destination, mappedResource.pData, GetPixelDataSize());
+			context->Unmap(stagingTexture, 0);
+			stagingTexture->Release();
+			context->Release();
+			return;
+		}
+
+		uint8* dstData = destination;
+		for (UINT row = 0; row < rowCount; ++row)
+		{
+			memcpy(dstData, srcData, dstRowPitch);
+			srcData += srcRowPitch;
+			dstData += dstRowPitch;
+		}
 
 		context->Unmap(stagingTexture, 0);
 		stagingTexture->Release();
@@ -291,6 +396,12 @@ namespace mmo
 
 		switch (m_header.format)
 		{
+		case tex::v1_0::R8:
+			srvd.Format = DXGI_FORMAT_R8_UNORM;
+			break;
+		case tex::v1_0::RG8:
+			srvd.Format = DXGI_FORMAT_R8G8_UNORM;
+			break;
 		case tex::v1_0::RGB:
 		case tex::v1_0::RGBA:
 			srvd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -300,6 +411,12 @@ namespace mmo
 			break;
 		case tex::v1_0::DXT5:
 			srvd.Format = DXGI_FORMAT_BC3_UNORM;
+			break;
+		case tex::v1_0::BC4:
+			srvd.Format = DXGI_FORMAT_BC4_UNORM;
+			break;
+		case tex::v1_0::BC5:
+			srvd.Format = DXGI_FORMAT_BC5_UNORM;
 			break;
 		default:
 			throw std::runtime_error("Unsupported texture format for d3d11 texture!");

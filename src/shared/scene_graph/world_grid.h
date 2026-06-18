@@ -18,6 +18,9 @@ namespace mmo
 		/// @param name A unique name for the world grid objects.
 		explicit WorldGrid(Scene& scene, const String& name);
 
+		/// @brief Destructor. Cleans up scene nodes and render objects.
+		~WorldGrid();
+
 	public:
 		/// @brief Snaps a given world position to the world grid.
 		/// @param position The world position to snap.

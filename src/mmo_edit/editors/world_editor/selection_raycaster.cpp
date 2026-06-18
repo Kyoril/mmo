@@ -315,9 +315,13 @@ namespace mmo
             // Select the closest entity if we found one
             if (closestMovable && closestMapEntity)
             {
-                // Note: Duplication callback will be provided by WorldEditorInstance
-                // since it requires CreateMapEntity and GenerateUniqueId
-                m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*closestMapEntity, nullptr));
+                // Build a duplication callback via the world editor instance so that Alt+transform works.
+                std::function<void(Selectable&)> dupCallback;
+                if (m_worldEditorInstance)
+                {
+                    dupCallback = m_worldEditorInstance->MakeDuplicationCallback(*closestMapEntity);
+                }
+                m_selection.AddSelectable(std::make_unique<SelectedMapEntity>(*closestMapEntity, std::move(dupCallback)));
                 UpdateDebugAABB(closestMovable->GetWorldBoundingBox());
             }
         }

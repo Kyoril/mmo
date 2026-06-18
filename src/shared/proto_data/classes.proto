@@ -65,12 +65,33 @@ message ClassEntry {
 	optional float spiritPerHealthRegen = 15;
 	
 	repeated AttackPowerStatSource armorStatSources = 16;
+	optional bool disabled = 23;
 
 	repeated uint32 xpToNextLevel = 17;
 
 	repeated HealthStatSource healthStatSources = 18;
 	
 	repeated ManaStatSource manaStatSources = 19;
+
+	// Auto-attack spell used when melee auto-attacking with the main hand weapon.
+	// If 0, the unit has no melee auto-attack.
+	optional uint32 mainhand_auto_attack_spell = 20;
+
+	// Auto-attack spell used when auto-attacking with an off-hand weapon.
+	// If 0, no off-hand auto-attack is performed.
+	optional uint32 offhand_auto_attack_spell = 21;
+
+	// Auto-attack spell used for ranged auto-attacks (e.g. Auto Shot with a bow).
+	// If 0, no ranged auto-attack is performed.
+	optional uint32 ranged_auto_attack_spell = 22;
+
+	// Primary attribute sources contributing to the unit's shield block value.
+	// Each source adds (statValue * factor) to the block value (e.g. Strength * 0.264).
+	repeated AttackPowerStatSource blockvaluestatsources = 24;
+
+	// Primary attribute sources contributing to the unit's critical block chance (in percent).
+	// Each source adds (statValue * factor) to the critical block chance.
+	repeated AttackPowerStatSource critblockchancestatsources = 25;
 }
 
 message Classes {

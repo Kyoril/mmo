@@ -5,6 +5,8 @@
 #include "base/utilities.h"
 #include "proto_data/project.h"
 #include "game_server/world/world_instance.h"
+#include "game_server/ai/creature_ai.h"
+#include "ai/creature_ai_combat_state.h"
 #include "binary_io/vector_sink.h"
 
 namespace mmo
@@ -309,6 +311,37 @@ namespace mmo
 								continue;
 						}
 						break;
+					case trigger_event::OnHealthDroppedBelow:
+						{
+							if (data.size() < 2)
+							{
+								// Not enough data provided to evaluate health percentage triggers
+								ELOG("Not enough data provided for OnHealthDroppedBelow trigger evaluation. Expected current and previous health percentages.");
+								continue;
+							}
+
+							const uint32 healthPercent = data[0];
+							const uint32 prevHealthPercent = data[1];
+
+							// Don't fire when the creature dies — OnKilled covers that case.
+							if (healthPercent == 0)
+							{
+								continue;
+							}
+
+							if (prevHealthPercent <= triggerEvent.data(0))
+							{
+								// Skip trigger if previous health percentage was already below the trigger threshold
+								continue;
+							}
+
+							if (healthPercent > triggerEvent.data(0))
+							{
+								// Skip trigger if current health percentage is above the trigger threshold
+								continue;
+							}
+						}
+						break;
 					default:
 						break;
 					}
@@ -340,6 +373,12 @@ namespace mmo
 			}
 		}
 	}
+
+	void GameCreatureS::SetPatrolWaypoints(std::vector<PatrolWaypoint> patrolWaypoints)
+	{
+		m_patrolWaypoints = std::move(patrolWaypoints);
+	}
+
 	void GameCreatureS::RefreshStats()
 	{
 		GameUnitS::RefreshStats();
@@ -582,5 +621,38 @@ namespace mmo
 	const String& GameCreatureS::GetName() const
 	{
 		return m_entry ? m_entry->name() : m_originalEntry.name();
+	}
+
+	const proto::SpellEntry* GameCreatureS::GetAutoAttackSpell() const
+	{
+		if (m_entry && m_entry->has_auto_attack_spell())
+		{
+			return m_project.spells.getById(m_entry->auto_attack_spell());
+		}
+
+		return nullptr;
+	}
+
+	bool GameCreatureS::SetCombatPhase(uint32 phase)
+	{
+		if (!m_ai)
+		{
+			return false;
+		}
+
+		auto* combatState = dynamic_cast<CreatureAICombatState*>(m_ai->GetCurrentState());
+		if (!combatState)
+		{
+			return false;
+		}
+
+		auto* script = combatState->GetScript();
+		if (!script)
+		{
+			return false;
+		}
+
+		script->SetPhase(phase);
+		return true;
 	}
 }

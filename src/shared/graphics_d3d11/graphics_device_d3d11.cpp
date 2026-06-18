@@ -3,6 +3,8 @@
 #include "graphics_device_d3d11.h"
 
 #include "constant_buffer_d3d11.h"
+#include "occlusion_query_d3d11.h"
+#include "structured_buffer_d3d11.h"
 #include "index_buffer_d3d11.h"
 #include "material_compiler_d3d11.h"
 #include "pixel_shader_d3d11.h"
@@ -17,8 +19,14 @@
 #include "vertex_declaration_d3d11.h"
 
 #include "base/macros.h"
+#include "base/profiler.h"
 #include "graphics/depth_stencil_hash.h"
+#include "graphics/global_shader_parameters.h"
 #include "log/default_log_levels.h"
+
+#include <set>
+#include <string>
+#include <algorithm>
 #include "luabind/operator.hpp"
 #include "math/radian.h"
 #include "scene_graph/render_operation.h"
@@ -370,7 +378,8 @@ namespace mmo
 		// Activate new state if requested
 		if (set)
 		{
-			m_immContext->RSSetState(state.Get());
+			m_currentRasterizerState = state.Get();
+			m_immContext->RSSetState(m_currentRasterizerState);
 		}
 	}
 
@@ -395,8 +404,12 @@ namespace mmo
 		}
 		else
 		{
-			// State exists, so activate it
-			m_immContext->RSSetState(it->second.Get());
+			// Only set if actually different from current bound state
+			if (m_currentRasterizerState != it->second.Get())
+			{
+				m_currentRasterizerState = it->second.Get();
+				m_immContext->RSSetState(m_currentRasterizerState);
+			}
 		}
 	}
 
@@ -416,16 +429,16 @@ namespace mmo
 					it = m_depthStencilStates.emplace(hash, depthStencilState).first;
 					ASSERT(it != m_depthStencilStates.end());
 				}
-				
-				m_immContext->OMSetDepthStencilState(it->second.Get(), 0);
+
+				// Only issue the API call if the state object actually changed
+				if (m_currentDepthStencilState != it->second.Get())
+				{
+					m_currentDepthStencilState = it->second.Get();
+					m_immContext->OMSetDepthStencilState(m_currentDepthStencilState, 0);
+				}
 				m_depthStencilHash = hash;
 			}
-			else
-			{
-				const auto it = m_depthStencilStates.find(m_depthStencilHash);
-				ASSERT(it != m_depthStencilStates.end());
-				m_immContext->OMSetDepthStencilState(it->second.Get(), 0);
-			}
+			// else: hash matches, state is already bound — skip redundant API call
 
 			m_depthStencilChanged = false;
 		}
@@ -607,8 +620,11 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::Reset()
 	{
-		// Clear the state
-		m_immContext->ClearState();
+		PROFILE_SCOPE("D3D11::Reset");
+
+		// Instead of ClearState() which nukes ALL GPU state and forces full rebinding,
+		// we only reset the specific state we need to. This avoids the driver having to
+		// re-validate every single binding on the next draw call.
 
 		m_vertexFormat = VertexFormat::Last;
 		m_blendMode = BlendMode::Undefined;
@@ -620,10 +636,15 @@ namespace mmo
 		m_rasterizerDesc.SlopeScaledDepthBias = 0.0f;
 		m_rasterizerDescChanged = true;
 
-		// Force depth stencil state to be re-applied since ClearState() unbinds it
+		// Force depth stencil state to be re-applied
 		m_depthStencilChanged = true;
 
 		m_lastInputLayout = nullptr;
+		m_currentRasterizerState = nullptr;
+		m_currentDepthStencilState = nullptr;
+		m_currentVertexShader = nullptr;
+		m_currentPixelShader = nullptr;
+		m_lastBoundMaterial = nullptr;
 
 		m_lastFrameBatchCount = m_batchCount;
 		m_batchCount = 0;
@@ -647,6 +668,7 @@ namespace mmo
 			m_textureSlots[i] = nullptr;
 		}
 
+		// Unbind shaders explicitly (cheaper than ClearState)
 		m_immContext->VSSetShader(nullptr, nullptr, 0);
 		m_immContext->PSSetShader(nullptr, nullptr, 0);
 
@@ -726,6 +748,11 @@ namespace mmo
 		return std::make_shared<ConstantBufferD3D11>(*this, *this, size, initialData);
 	}
 
+	StructuredBufferPtr GraphicsDeviceD3D11::CreateStructuredBuffer(size_t elementSize, size_t elementCount, const void* initialData)
+	{
+		return std::make_shared<StructuredBufferD3D11>(*this, *this, elementSize, elementCount, initialData);
+	}
+
 	ShaderPtr GraphicsDeviceD3D11::CreateShader(const ShaderType type, const void * shaderCode, size_t shaderCodeSize)
 	{
 		switch (type)
@@ -739,6 +766,17 @@ namespace mmo
 		}
 
 		return nullptr;
+	}
+
+	void GraphicsDeviceD3D11::BindNullPixelShader()
+	{
+		if (m_currentPixelShader == nullptr)
+		{
+			return;
+		}
+
+		m_immContext->PSSetShader(nullptr, nullptr, 0);
+		m_currentPixelShader = nullptr;
 	}
 
 	void GraphicsDeviceD3D11::SetDepthBias(float bias)
@@ -1198,6 +1236,8 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::Render(const RenderOperation& operation)
 	{
+		PROFILE_SCOPE("D3D11::Render");
+
 		GraphicsDevice::Render(operation);
 
 		ASSERT(operation.material);
@@ -1206,8 +1246,16 @@ namespace mmo
 			return;
 		}
 
-		// Apply material
-		operation.material->Apply(*this, MaterialDomain::Surface, operation.pixelShaderType);
+		// Only re-apply material if it changed since the last draw call.
+		// Material sorting in the render queue ensures consecutive draws often share materials.
+		MaterialInterface* materialPtr = operation.material.get();
+		const bool materialChanged = (materialPtr != m_lastBoundMaterial || operation.pixelShaderType != m_lastBoundPixelShaderType);
+		if (materialChanged)
+		{
+			operation.material->Apply(*this, MaterialDomain::Surface, operation.pixelShaderType);
+			m_lastBoundMaterial = materialPtr;
+			m_lastBoundPixelShaderType = operation.pixelShaderType;
+		}
 		
 		// Determine which vertex shader type to use
 		const bool isInstanced = (operation.instanceBuffer != nullptr && operation.instanceCount > 0);
@@ -1219,7 +1267,19 @@ namespace mmo
 		}
 		else
 		{
-			const bool hasVertexAnimData = (operation.vertexData->vertexDeclaration->FindElementBySemantic(VertexElementSemantic::BlendIndices) != nullptr);
+			// Use cached BlendIndices lookup to avoid linear search per draw call
+			VertexDeclaration* vertexDecl = operation.vertexData->vertexDeclaration;
+			auto cacheIt = m_blendIndicesCache.find(vertexDecl);
+			bool hasVertexAnimData;
+			if (cacheIt != m_blendIndicesCache.end())
+			{
+				hasVertexAnimData = cacheIt->second;
+			}
+			else
+			{
+				hasVertexAnimData = (vertexDecl->FindElementBySemantic(VertexElementSemantic::BlendIndices) != nullptr);
+				m_blendIndicesCache[vertexDecl] = hasVertexAnimData;
+			}
 			vsType = hasVertexAnimData ? VertexShaderType::SkinnedHigh : VertexShaderType::Default;
 		}
 		
@@ -1230,20 +1290,26 @@ namespace mmo
 			// Don't use instanced rendering if we don't have the instanced shader
 			if (vsType == VertexShaderType::Instanced)
 			{
+				// Warn once per material so missing instanced variants (e.g. on older mesh
+				// materials reused for instanced foliage/trees) are diagnosable instead of
+				// silently rendering nothing. Recompiling/resaving the material adds the variant.
+				static std::set<std::string> s_warnedInstancedMaterials;
+				const std::string materialName = operation.material ? std::string(operation.material->GetName()) : std::string("<unknown>");
+				if (s_warnedInstancedMaterials.insert(materialName).second)
+				{
+					WLOG("Material '" << materialName << "' has no instanced vertex shader variant - instanced draw skipped (nothing rendered). Recompile/resave this material to enable instanced rendering.");
+				}
 				return; // Skip rendering - instanced shader required
 			}
-		}
-
-		// By now we should have a vertex shader
-		if (vertexShader)
-		{
-			vertexShader->Set();
 		}
 
 		if (!vertexShader)
 		{
 			return;
 		}
+
+		// Set vertex shader (caching is handled inside Set())
+		vertexShader->Set();
 
 		// Bind vertex buffers
 		for (const auto& bindings = operation.vertexData->vertexBufferBinding->GetBindings(); const auto & [slot, vertexBuffer] : bindings)
@@ -1266,7 +1332,7 @@ namespace mmo
 			m_immContext->VSSetConstantBuffers(startSlot++, 1, buffers);
 		}
 
-		// Bind additional constant buffers if any
+		// Bind additional pixel constant buffers if any
 		int psStartSlot = 1;
 		for (auto& buffer : operation.pixelConstantBuffers)
 		{
@@ -1275,17 +1341,31 @@ namespace mmo
 			ID3D11Buffer* buffers[] = { ((ConstantBufferD3D11*)buffer)->GetBuffer() };
 			m_immContext->PSSetConstantBuffers(psStartSlot++, 1, buffers);
 		}
-		if (const ConstantBufferPtr scalarBuffer = operation.material->GetParameterBuffer(MaterialParameterType::Scalar, *this))
+
+		// Bind the shared global shader parameter buffer to its fixed reserved register. This makes
+		// global shader variables available to every material. Binding it to a slot a shader doesn't
+		// declare is harmless, and we re-bind per operation so it survives state changes by other
+		// systems. The buffer itself is only rebuilt/re-uploaded when a global changes (see GetBuffer).
+		if (const ConstantBufferPtr globalParamBuffer = GlobalShaderParameters::Get().GetBuffer(*this))
 		{
-			scalarBuffer->BindToStage(ShaderType::PixelShader, psStartSlot++);
+			globalParamBuffer->BindToStage(ShaderType::PixelShader, kGlobalShaderParametersPsSlot);
 		}
-		if (const ConstantBufferPtr vectorBuffer = operation.material->GetParameterBuffer(MaterialParameterType::Vector, *this))
+
+		// Only update material parameter buffers when the material changed
+		if (materialChanged)
 		{
-			vectorBuffer->BindToStage(ShaderType::PixelShader, psStartSlot++);
+			if (const ConstantBufferPtr scalarBuffer = operation.material->GetParameterBuffer(MaterialParameterType::Scalar, *this))
+			{
+				scalarBuffer->BindToStage(ShaderType::PixelShader, psStartSlot++);
+			}
+			if (const ConstantBufferPtr vectorBuffer = operation.material->GetParameterBuffer(MaterialParameterType::Vector, *this))
+			{
+				vectorBuffer->BindToStage(ShaderType::PixelShader, psStartSlot++);
+			}
 		}
 
 		SetFaceCullMode(operation.material->IsTwoSided() ? FaceCullMode::None : FaceCullMode::Front);	// ???
-		SetBlendMode(operation.material->IsTranslucent() ? BlendMode::Alpha : BlendMode::Opaque);
+		//SetBlendMode(operation.material->IsTranslucent() ? BlendMode::Alpha : BlendMode::Opaque);
 
 		// Handle instanced rendering
 		if (isInstanced)
@@ -1335,6 +1415,11 @@ namespace mmo
 		}
 	}
 
+	OcclusionQueryPtr GraphicsDeviceD3D11::CreateOcclusionQuery()
+	{
+		return std::make_unique<OcclusionQueryD3D11>(*m_device.Get(), *m_immContext.Get());
+	}
+
 	void GraphicsDeviceD3D11::SetHardwareCursor(void* osCursorData)
 	{
 		m_hardwareCursor = static_cast<HCURSOR>(osCursorData);
@@ -1369,11 +1454,56 @@ namespace mmo
 		// For fullscreen, we should use exact monitor resolution for best performance
 		if (width != maxWidth || height != maxHeight)
 		{
-			WLOG("Fullscreen resolution " << width << "x" << height << 
-				 " differs from monitor resolution " << maxWidth << "x" << maxHeight << 
+			WLOG("Fullscreen resolution " << width << "x" << height <<
+				 " differs from monitor resolution " << maxWidth << "x" << maxHeight <<
 				 ". Consider using monitor resolution for optimal performance.");
 		}
-		
+
 		return true;
+	}
+
+	std::vector<std::pair<uint16, uint16>> GraphicsDeviceD3D11::GetSupportedResolutions() const
+	{
+		std::vector<std::pair<uint16, uint16>> result;
+
+		// Walk from the device up to its DXGI factory so we can enumerate the primary output's
+		// supported display modes for the back buffer format we render with.
+		ComPtr<IDXGIDevice> dxgiDevice;
+		ComPtr<IDXGIAdapter> adapter;
+		ComPtr<IDXGIOutput> output;
+		if (m_device &&
+			SUCCEEDED(m_device.As(&dxgiDevice)) &&
+			SUCCEEDED(dxgiDevice->GetAdapter(&adapter)) &&
+			SUCCEEDED(adapter->EnumOutputs(0, &output)))
+		{
+			const DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+			UINT modeCount = 0;
+			if (SUCCEEDED(output->GetDisplayModeList(format, 0, &modeCount, nullptr)) && modeCount > 0)
+			{
+				std::vector<DXGI_MODE_DESC> modes(modeCount);
+				if (SUCCEEDED(output->GetDisplayModeList(format, 0, &modeCount, modes.data())))
+				{
+					result.reserve(modeCount);
+					for (const DXGI_MODE_DESC& mode : modes)
+					{
+						result.emplace_back(static_cast<uint16>(mode.Width), static_cast<uint16>(mode.Height));
+					}
+
+					// Modes are returned per refresh rate / scanline order, so de-duplicate the
+					// width/height pairs and present them sorted ascending.
+					std::sort(result.begin(), result.end());
+					result.erase(std::unique(result.begin(), result.end()), result.end());
+				}
+			}
+		}
+
+		// Fall back to the common-resolution list if DXGI enumeration yielded nothing.
+		if (result.empty())
+		{
+			return GraphicsDevice::GetSupportedResolutions();
+		}
+
+		return result;
 	}
 }

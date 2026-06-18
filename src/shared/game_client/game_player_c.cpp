@@ -44,6 +44,8 @@ namespace mmo
 
 			m_guildChangedHandler = RegisterMirrorHandler(object_fields::Guild, 2, *this, &GamePlayerC::OnGuildChanged);
 			OnGuildChanged(GetGuid());
+
+			m_unitFlagsChangedHandler = RegisterMirrorHandler(object_fields::Flags, 1, *this, &GamePlayerC::OnUnitFlagsChanged);
 		}
 
 		m_netDriver.GetPlayerName(GetGuid(), std::static_pointer_cast<GamePlayerC>(shared_from_this()));
@@ -88,6 +90,47 @@ namespace mmo
 		if (data.displayId == 0)
 		{
 			return;
+		}
+
+		// Guard against stale async callbacks: if this item is no longer in any visible
+		// equipment slot, a previous OnEquipmentChanged cycle already replaced the slot
+		// contents. Applying its display effects now would corrupt the current entity state
+		// (e.g. hiding hair sub-entities that were restored by a later Apply call).
+		{
+			static constexpr size_t kVisFields = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
+			bool isEquipped = false;
+			for (uint16 i = 0; i < 19; ++i)
+			{
+				if (Get<uint32>(object_fields::VisibleItem1_0 + i * kVisFields) == static_cast<uint32>(data.id))
+				{
+					isEquipped = true;
+					break;
+				}
+			}
+			if (!isEquipped)
+			{
+				return;
+			}
+		}
+
+		// If this item occupies the main-hand slot, derive the auto attack animation from its
+		// weapon subclass. Non-weapon subclasses simply have no attack animation, which makes
+		// the unit fall back to the unarmed attack.
+		{
+			static constexpr size_t kVisFields = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
+			const uint32 mainHandEntry = Get<uint32>(object_fields::VisibleItem1_0 + player_equipment_slots::Mainhand * kVisFields);
+			if (mainHandEntry == static_cast<uint32>(data.id))
+			{
+				std::vector<String> attackAnimations;
+				String readyAnimation;
+				if (const auto* subclass = m_project.itemSubclasses.getById(data.itemSubclass))
+				{
+					attackAnimations.assign(subclass->attackanimation().begin(), subclass->attackanimation().end());
+					readyAnimation = subclass->readyanimation();
+				}
+				SetWeaponAttackAnimations(attackAnimations);
+				SetWeaponReadyAnimation(readyAnimation);
+			}
 		}
 
 		const auto* displayData = m_project.itemDisplays.getById(data.displayId);
@@ -183,12 +226,16 @@ namespace mmo
 			{
 				if (variant.has_mesh() && !variant.mesh().empty())
 				{
-					if (m_entity->GetSkeleton()->HasBone(variant.attached_bone_default().bone_name()))
+					// Pick the bone for the current draw state (drawn while in combat, sheathed
+					// otherwise). Weapons define both; armor only defines the default bone.
+					const auto* bone = SelectBoneAttachment(variant, IsWeaponDrawn());
+					if (bone && m_entity->GetSkeleton()->HasBone(bone->bone_name()))
 					{
 						ItemAttachment attachment;
+						attachment.variant = &variant;
 						attachment.entity = m_scene.CreateEntity(m_entity->GetName() + "_ITEM_" + std::to_string(data.displayId), variant.mesh());
-						attachment.attachment = m_entity->AttachObjectToBone(variant.attached_bone_default().bone_name(), *attachment.entity);
-						attachment.attachment->SetScale(Vector3(variant.attached_bone_default().scale_x(), variant.attached_bone_default().scale_y(), variant.attached_bone_default().scale_z()));
+						attachment.attachment = m_entity->AttachObjectToBone(bone->bone_name(), *attachment.entity);
+						ApplyBoneTransform(attachment.attachment, *bone);
 						m_itemAttachments[data.displayId] = attachment;
 					}
 				}
@@ -291,6 +338,94 @@ namespace mmo
 		m_itemAttachments.clear();
 	}
 
+	const proto_client::ItemDisplayBoneAttachment* GamePlayerC::SelectBoneAttachment(const proto_client::ItemDisplayVariant& variant, const bool drawn)
+	{
+		if (drawn && variant.has_attached_bone_drawn())
+		{
+			return &variant.attached_bone_drawn();
+		}
+
+		if (!drawn && variant.has_attached_bone_sheath())
+		{
+			return &variant.attached_bone_sheath();
+		}
+
+		if (variant.has_attached_bone_default())
+		{
+			return &variant.attached_bone_default();
+		}
+
+		// No default defined: use whichever state-specific bone exists so the item still attaches.
+		if (variant.has_attached_bone_drawn())
+		{
+			return &variant.attached_bone_drawn();
+		}
+
+		if (variant.has_attached_bone_sheath())
+		{
+			return &variant.attached_bone_sheath();
+		}
+
+		return nullptr;
+	}
+
+	void GamePlayerC::ApplyBoneTransform(TagPoint* tagPoint, const proto_client::ItemDisplayBoneAttachment& bone)
+	{
+		if (!tagPoint)
+		{
+			return;
+		}
+
+		tagPoint->SetPosition(Vector3(bone.offset_x(), bone.offset_y(), bone.offset_z()));
+		tagPoint->SetOrientation(Quaternion(bone.rotation_w(), bone.rotation_x(), bone.rotation_y(), bone.rotation_z()));
+		tagPoint->SetScale(Vector3(bone.scale_x(), bone.scale_y(), bone.scale_z()));
+	}
+
+	void GamePlayerC::OnUnitFlagsChanged(uint64)
+	{
+		const bool drawn = IsWeaponDrawn();
+		if (drawn == m_weaponsDrawn)
+		{
+			return;
+		}
+
+		m_weaponsDrawn = drawn;
+		RefreshWeaponAttachmentBones();
+	}
+
+	void GamePlayerC::RefreshWeaponAttachmentBones()
+	{
+		if (!m_entity)
+		{
+			return;
+		}
+
+		for (auto& [displayId, attachment] : m_itemAttachments)
+		{
+			if (!attachment.variant || !attachment.entity)
+			{
+				continue;
+			}
+
+			// Only items that define a drawn or sheathed bone (i.e. weapons) move between states.
+			if (!attachment.variant->has_attached_bone_drawn() && !attachment.variant->has_attached_bone_sheath())
+			{
+				continue;
+			}
+
+			const auto* bone = SelectBoneAttachment(*attachment.variant, m_weaponsDrawn);
+			if (!bone || !m_entity->GetSkeleton()->HasBone(bone->bone_name()))
+			{
+				continue;
+			}
+
+			// Re-attach the existing entity to the bone for the new draw state.
+			m_entity->DetachObjectFromBone(attachment.entity->GetName());
+			attachment.attachment = m_entity->AttachObjectToBone(bone->bone_name(), *attachment.entity);
+			ApplyBoneTransform(attachment.attachment, *bone);
+		}
+	}
+
 	void GamePlayerC::OnEquipmentChanged(uint64)
 	{
 		// First ensure customization options are applied to properly display the character
@@ -303,6 +438,15 @@ namespace mmo
 		m_entity->ResetSubEntities();
 
 		ClearAllAttachments();
+
+		// Capture the current draw state as the baseline; attachments are (re)created against it as
+		// their item data arrives, so a later flag flip is detected correctly.
+		m_weaponsDrawn = IsWeaponDrawn();
+
+		// Reset to unarmed; the main-hand weapon (if any) re-applies its attack and ready
+		// animations once its item data arrives via NotifyItemData.
+		SetWeaponAttackAnimations({});
+		SetWeaponReadyAnimation(String());
 
 		m_configuration.Apply(*this, *m_customizationDefinition);
 

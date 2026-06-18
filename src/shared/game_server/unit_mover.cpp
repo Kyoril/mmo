@@ -73,7 +73,7 @@ namespace mmo
 							strongUnit->Relocate(target, o);
 
 							auto info = strongUnit->GetMovementInfo();
-							info.movementFlags = movement_flags::None;
+							info.movementFlags &= movement_flags::WalkMode;
 							strongUnit->ApplyMovementInfo(info);
 						}
 					});
@@ -96,7 +96,8 @@ namespace mmo
 
 	bool UnitMover::MoveTo(const Vector3& target, float acceptanceRadius, const Radian* targetFacing, const IShape* clipping/* = nullptr*/)
 	{
-		const bool result = MoveTo(target, m_unit.GetSpeed(movement_type::Run), acceptanceRadius, targetFacing, clipping);
+		const MovementType moveType = m_unit.GetMovementMode() == unit_movement_mode::Walk ? movement_type::Walk : movement_type::Run;
+		const bool result = MoveTo(target, m_unit.GetSpeed(moveType), acceptanceRadius, targetFacing, clipping);
 		m_customSpeed = false;
 		return result;
 	}
@@ -106,6 +107,7 @@ namespace mmo
 		uint64 guid,
 		const Vector3& oldPosition,
 		const std::vector<Vector3>& path,
+		UnitMovementMode movementMode,
 		const Radian* targetFacing,
 		GameTime startTime,
 		GameTime endTime
@@ -140,20 +142,20 @@ namespace mmo
 			out_packet << io::write<uint8>(0);
 		}
 
-		// Write points in between (if any)
+		out_packet << io::write<uint8>(movementMode);
+
+		// Write intermediate points in between start and destination (if any).
+		// Each point is written as three raw floats to avoid the ±256-unit overflow
+		// that the old 11/10-bit packed format had for long multi-waypoint routes.
 		if (path.size() > 1)
 		{
-			// all other points are relative to the center of the path
-			const Vector3 mid = (oldPosition + pt) * 0.5f;
 			for (uint32 i = 1; i < path.size() - 1; ++i)
 			{
-				auto& p = path[i];
-				uint32 packed = 0;
-				packed |= ((int)((mid.x - p.x) / 0.25f) & 0x7FF);
-				packed |= ((int)((mid.y - p.y) / 0.25f) & 0x7FF) << 11;
-				packed |= ((int)((mid.z - p.z) / 0.25f) & 0x3FF) << 22;
+				const auto& p = path[i];
 				out_packet
-					<< io::write<uint32>(packed);
+					<< io::write<float>(p.x)
+					<< io::write<float>(p.y)
+					<< io::write<float>(p.z);
 			}
 		}
 
@@ -264,7 +266,7 @@ namespace mmo
 		m_moveEnd = moveTime;
 
 		auto movementInfo = moved.GetMovementInfo();
-		movementInfo.movementFlags = movement_flags::None;
+		movementInfo.movementFlags &= movement_flags::WalkMode;
 		moved.ApplyMovementInfo(movementInfo);
 
 		// Send movement packet
@@ -274,7 +276,7 @@ namespace mmo
 			std::vector<char> buffer;
 			io::VectorSink sink(buffer);
 			game::Protocol::OutgoingPacket packet(sink);
-			WriteCreatureMove(packet, moved.GetGuid(), currentLoc, path, targetFacing, m_moveStart, m_moveEnd);
+			WriteCreatureMove(packet, moved.GetGuid(), currentLoc, path, moved.GetMovementMode(), targetFacing, m_moveStart, m_moveEnd);
 
 			ForEachSubscriberInSight(
 				moved.GetWorldInstance()->GetGrid(),
@@ -319,6 +321,163 @@ namespace mmo
 		return true;
 	}
 
+	bool UnitMover::MoveAlongWaypoints(const std::vector<Vector3>& waypoints, float acceptanceRadius)
+	{
+		if (waypoints.empty())
+		{
+			return false;
+		}
+
+		if (waypoints.size() == 1)
+		{
+			return MoveTo(waypoints[0], acceptanceRadius);
+		}
+
+		auto& moved = GetMoved();
+		if (!moved.IsAlive() || moved.IsRooted())
+		{
+			return false;
+		}
+
+		auto currentLoc = GetCurrentLocation();
+
+		// Stop current movement
+		if (m_moveReached.IsRunning())
+		{
+			m_moveReached.Cancel();
+			m_moveUpdated.Cancel();
+
+			const Radian o = moved.GetAngle(waypoints[0].x, waypoints[0].z);
+			moved.Relocate(currentLoc, o);
+		}
+
+		auto* world = moved.GetWorldInstance();
+		if (!world)
+		{
+			return false;
+		}
+
+		auto* map = world->GetMapData();
+		if (!map)
+		{
+			return false;
+		}
+
+		const MovementType moveType = m_unit.GetMovementMode() == unit_movement_mode::Walk ? movement_type::Walk : movement_type::Run;
+		const float speed = m_unit.GetSpeed(moveType);
+
+		// Concatenate navmesh paths for all segments: currentLoc → wp[0] → wp[1] → … → wp[N]
+		std::vector<Vector3> fullPath;
+		Vector3 segmentStart = currentLoc;
+
+		for (size_t i = 0; i < waypoints.size(); ++i)
+		{
+			std::vector<Vector3> segPath;
+			if (!map->CalculatePath(segmentStart, waypoints[i], segPath) || segPath.empty())
+			{
+				return false;
+			}
+
+			// For segments after the first, skip the first point of the new segment since
+			// it duplicates (or nearly duplicates) the last point of the previous segment.
+			const size_t startIdx = (i == 0) ? 0 : 1;
+			for (size_t j = startIdx; j < segPath.size(); ++j)
+			{
+				fullPath.push_back(segPath[j]);
+			}
+
+			segmentStart = waypoints[i];
+		}
+
+		if (fullPath.empty())
+		{
+			return false;
+		}
+
+		// Apply acceptance radius to the final destination
+		if (acceptanceRadius > 0.0f && fullPath.size() >= 2)
+		{
+			Vector3& lastPoint = fullPath.back();
+			const Vector3& prevPoint = fullPath[fullPath.size() - 2];
+			const Vector3 diff = lastPoint - prevPoint;
+			const float dist = diff.GetLength();
+
+			if (dist <= acceptanceRadius)
+			{
+				fullPath.pop_back();
+			}
+			else
+			{
+				lastPoint -= diff * (acceptanceRadius / dist);
+			}
+		}
+
+		if (fullPath.empty())
+		{
+			return false;
+		}
+
+		// Clear the current movement path
+		m_path.Clear();
+		m_customSpeed = false;
+		m_start = currentLoc;
+
+		// Build timing across the full concatenated path
+		m_moveStart = GetAsyncTimeMs();
+		GameTime moveTime = m_moveStart;
+		for (uint32 i = 0; i < fullPath.size(); ++i)
+		{
+			const float dist = (i == 0)
+				? (fullPath[i] - currentLoc).GetLength()
+				: (fullPath[i] - fullPath[i - 1]).GetLength();
+			moveTime += static_cast<GameTime>((dist / speed) * constants::OneSecond);
+			m_path.AddPosition(moveTime, fullPath[i]);
+		}
+
+		m_target = fullPath.back();
+		m_moveEnd = moveTime;
+
+		auto movementInfo = moved.GetMovementInfo();
+		movementInfo.movementFlags &= movement_flags::WalkMode;
+		moved.ApplyMovementInfo(movementInfo);
+
+		// Send a single movement packet covering the full waypoint chain
+		TileIndex2D tile;
+		if (moved.GetTileIndex(tile))
+		{
+			std::vector<char> buffer;
+			io::VectorSink sink(buffer);
+			game::Protocol::OutgoingPacket packet(sink);
+			WriteCreatureMove(packet, moved.GetGuid(), currentLoc, fullPath, moved.GetMovementMode(), nullptr, m_moveStart, m_moveEnd);
+
+			ForEachSubscriberInSight(
+				moved.GetWorldInstance()->GetGrid(),
+				tile,
+				[&packet, &buffer, &moved](TileSubscriber& subscriber)
+				{
+					subscriber.SendPacket(packet, buffer);
+				});
+		}
+
+		m_customFacing.reset();
+
+		// Setup update timer if needed
+		const GameTime nextUpdate = m_moveStart + UnitMover::UpdateFrequency;
+		if (nextUpdate < m_moveEnd)
+		{
+			m_moveUpdated.SetEnd(nextUpdate);
+		}
+
+		// Setup arrival timer
+		m_moveReached.SetEnd(m_moveEnd);
+
+		// Raise signal
+		targetChanged();
+
+		return true;
+	}
+
+
 	void UnitMover::StopMovement()
 	{
 		if (!IsMoving())
@@ -352,7 +511,7 @@ namespace mmo
 			std::vector<char> buffer;
 			io::VectorSink sink(buffer);
 			game::Protocol::OutgoingPacket packet(sink);
-			WriteCreatureMove(packet, moved.GetGuid(), currentLoc, { currentLoc }, nullptr, now, now);
+			WriteCreatureMove(packet, moved.GetGuid(), currentLoc, { currentLoc }, moved.GetMovementMode(), nullptr, now, now);
 
 			ForEachSubscriberInSight(
 				moved.GetWorldInstance()->GetGrid(),
@@ -393,8 +552,12 @@ namespace mmo
 		// Take a sample of the current location
 		auto location = GetCurrentLocation();
 
-		// Remove all points that are too early
+		// Build the remaining path: start with the current interpolated position so that
+		// WriteCreatureMove's path[0]-skip logic (which treats path[0] as an approximate
+		// duplicate of oldPosition) does not discard the nearest real upcoming waypoint.
 		std::vector<Vector3> path;
+		path.push_back(location);  // treated as path[0] ≈ oldPosition; intentionally dropped
+
 		for (auto& p : m_path.GetPositions())
 		{
 			if (p.first < now)
@@ -405,7 +568,8 @@ namespace mmo
 			path.push_back(p.second);
 		}
 
-		if (path.empty())
+		// If there are no future waypoints beyond the injected start, nothing to send.
+		if (path.size() <= 1)
 			return;
 
 		Radian* customFacing = nullptr;
@@ -417,7 +581,7 @@ namespace mmo
 		std::vector<char> buffer;
 		io::VectorSink sink(buffer);
 		game::Protocol::OutgoingPacket packet(sink);
-		WriteCreatureMove(packet, GetMoved().GetGuid(), location, path, customFacing, now, m_moveEnd);
+		WriteCreatureMove(packet, GetMoved().GetGuid(), location, path, GetMoved().GetMovementMode(), customFacing, now, m_moveEnd);
 		subscriber.SendPacket(packet, buffer);
 	}
 }

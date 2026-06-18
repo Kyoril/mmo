@@ -3,6 +3,8 @@
 #include "camera.h"
 #include "log/default_log_levels.h"
 
+#include <algorithm>
+
 namespace mmo
 {
 	// Implementation of CachedFrustumPlanes
@@ -276,6 +278,118 @@ namespace mmo
 		}
 	}
 
+	std::vector<Scene::VisibleLightInfo> OctreeScene::GatherVisibleLights(const Camera& camera, uint32 maxLights)
+	{
+		// Reset statistics
+		m_lightRenderStats = LightRenderStats{};
+		
+		const auto& lights = GetLightMap();
+		m_lightRenderStats.totalLightsInScene = static_cast<uint32>(lights.size());
+
+		std::vector<VisibleLightInfo> visibleLights;
+		visibleLights.reserve(lights.size());
+
+		const Vector3 cameraPosition = camera.GetDerivedPosition();
+
+		// Cache frustum planes for efficient culling
+		CachedFrustumPlanes cachedPlanes(camera);
+
+		// Gather all visible lights using cached frustum planes
+		for (const auto& [name, light] : lights)
+		{
+			if (!light->IsVisible())
+			{
+				continue;
+			}
+
+			VisibleLightInfo info;
+			info.light = light.get();
+			info.type = light->GetType();
+			info.color = Vector3(light->GetColor().x, light->GetColor().y, light->GetColor().z);
+			info.intensity = light->GetIntensity();
+			info.range = light->GetRange();
+			info.castsShadows = light->IsCastingShadows();
+
+			// Handle different light types
+			if (info.type == LightType::Directional)
+			{
+				// Directional lights are always visible (no position-based culling)
+				info.position = Vector3::Zero;
+				info.direction = light->GetDerivedDirection();
+				info.spotAngle = 0.0f;
+				info.priority = 1000.0f;  // Directional lights have highest priority
+				++m_lightRenderStats.directionalLights;
+			}
+			else
+			{
+				info.position = light->GetDerivedPosition();
+				
+				// Frustum culling for point and spot lights using cached planes
+				// Create a bounding box for the light's sphere of influence
+				const Vector3 halfExtent(info.range, info.range, info.range);
+				AABB lightBounds(info.position - halfExtent, info.position + halfExtent);
+				
+				if (!cachedPlanes.IsVisible(lightBounds))
+				{
+					continue;  // Light is outside the view frustum
+				}
+
+				if (info.type == LightType::Point)
+				{
+					info.direction = Vector3(0.0f, -1.0f, 0.0f);  // Default direction for point lights
+					info.spotAngle = 0.0f;
+					++m_lightRenderStats.pointLights;
+				}
+				else // Spot light
+				{
+					info.direction = light->GetDerivedDirection();
+					info.spotAngle = light->GetOuterConeAngle();
+					++m_lightRenderStats.spotLights;
+				}
+
+				// Calculate priority based on distance and range
+				info.priority = CalculateLightPriority(*light, cameraPosition);
+			}
+
+			if (info.castsShadows)
+			{
+				++m_lightRenderStats.shadowCastingLights;
+			}
+
+			visibleLights.push_back(info);
+		}
+
+		m_lightRenderStats.visibleLights = static_cast<uint32>(visibleLights.size());
+
+		// Sort by priority (higher priority first)
+		// Directional lights always come first, then by calculated priority
+		std::sort(visibleLights.begin(), visibleLights.end(), 
+			[](const VisibleLightInfo& a, const VisibleLightInfo& b)
+			{
+				// Directional lights always first
+				if (a.type == LightType::Directional && b.type != LightType::Directional)
+				{
+					return true;
+				}
+				if (a.type != LightType::Directional && b.type == LightType::Directional)
+				{
+					return false;
+				}
+				// Then sort by priority (higher first)
+				return a.priority > b.priority;
+			});
+
+		// Limit the number of lights if requested
+		if (maxLights > 0 && visibleLights.size() > maxLights)
+		{
+			visibleLights.resize(maxLights);
+		}
+
+		m_lightRenderStats.lightsRendered = static_cast<uint32>(visibleLights.size());
+
+		return visibleLights;
+	}
+
 	void OctreeScene::FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds, bool onlyShadowCasters)
 	{
 		GetRenderQueue().Clear();
@@ -370,6 +484,71 @@ namespace mmo
 					if (Octree* child = octant.m_children[x][y][z].get())
 					{
 						WalkOctree(camera, queue, *child, visibleBounds, childFoundVisible, onlyShadowCasters, cachedPlanes);
+					}
+				}
+			}
+		}
+	}
+
+	void OctreeScene::GatherShadowCasters(const AABB& worldRegion, std::vector<MovableObject*>& outCasters)
+	{
+		outCasters.clear();
+
+		if (!m_octree || worldRegion.IsNull())
+		{
+			return;
+		}
+
+		GatherShadowCastersRecursive(*m_octree, worldRegion, outCasters);
+	}
+
+	void OctreeScene::GatherShadowCastersRecursive(Octree& octant, const AABB& worldRegion, std::vector<MovableObject*>& outCasters) const
+	{
+		if (octant.GetNumNodes() == 0)
+		{
+			return;
+		}
+
+		// Cull the whole octant against the region (loosened cull bounds, matching WalkOctree).
+		AABB octantBounds;
+		octant.GetCullBounds(octantBounds);
+		if (!worldRegion.Intersects(octantBounds))
+		{
+			return;
+		}
+
+		// Collect shadow casters attached to scene nodes in this octant. Per-cascade frustum culling
+		// and small-object culling happen later in RenderShadowCasters; here we only need the
+		// camera-independent filters (own visibility + casts-shadows + region overlap).
+		for (OctreeNode* sn : octant.m_nodes)
+		{
+			const uint32 numObjects = sn->GetNumAttachedObjects();
+			for (uint32 i = 0; i < numObjects; ++i)
+			{
+				MovableObject* obj = sn->GetAttachedObject(i);
+				if (!obj || !obj->ShouldBeVisible() || !obj->IsCastingShadows())
+				{
+					continue;
+				}
+
+				if (!worldRegion.Intersects(obj->GetWorldBoundingBox(true)))
+				{
+					continue;
+				}
+
+				outCasters.push_back(obj);
+			}
+		}
+
+		for (int x = 0; x < 2; ++x)
+		{
+			for (int y = 0; y < 2; ++y)
+			{
+				for (int z = 0; z < 2; ++z)
+				{
+					if (Octree* child = octant.m_children[x][y][z].get())
+					{
+						GatherShadowCastersRecursive(*child, worldRegion, outCasters);
 					}
 				}
 			}

@@ -34,6 +34,12 @@ namespace mmo
 			Looting = 0x00000004,
 
 			Attacking = 0x00000008,
+
+			/// Unit is immune to all damage.
+			Immune = 0x00000010,
+
+			/// Unit cannot be targeted or attacked.
+			NotAttackable = 0x00000020,
 		};
 	}
 
@@ -230,7 +236,19 @@ namespace mmo
 			NpcFlags,
 			StandState,
 
-			UnitFieldCount = StandState + 1,
+			/// @brief 32 bit mount display id for mounted state.
+			MountDisplayId,
+
+			/// @brief 32 bit virtual equipment display id for slot 0.
+			VirtualItem0,
+
+			/// @brief 32 bit virtual equipment display id for slot 1.
+			VirtualItem1,
+
+			/// @brief 32 bit virtual equipment display id for slot 2.
+			VirtualItem2,
+
+			UnitFieldCount = VirtualItem2 + 1,
 		};
 
 #define VISIBLE_ITEM_FIELDS(index, offset) \
@@ -384,7 +402,10 @@ namespace mmo
 			/// @brief Per-player dynamic flags (e.g., Interactable based on quest status).
 			DynamicObjectFlags,
 
-			WorldObjectFieldCount = DynamicObjectFlags + 1
+			/// @brief 32 bit lock type ID for this world object (0 = no lock).
+			LockEntry,
+
+			WorldObjectFieldCount = DynamicObjectFlags + 2
 		};
 	}
 }

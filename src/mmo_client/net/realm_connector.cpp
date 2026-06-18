@@ -37,6 +37,8 @@ namespace mmo
 		case game::client_realm_packet::MoveSetFacing: return "MOVE_SET_FACING";
 		case game::client_realm_packet::MoveHeartBeat: return "MOVE_HEARTBEAT";
 		case game::client_realm_packet::MoveEnded: return "MOVE_ENDED";
+		case game::client_realm_packet::MoveStartWalk: return "MOVE_START_WALK";
+		case game::client_realm_packet::MoveStopWalk: return "MOVE_STOP_WALK";
 		default: return "UNKNOWN";
 		}
 	}
@@ -88,14 +90,10 @@ namespace mmo
 			packet.Finish();
 		});
 
-
-		// Initialize connection encryption afterward
-		HMACHash cryptKey;
-		game::Crypt::GenerateKey(cryptKey, m_sessionKey);
-
-		game::Crypt& crypt = GetCrypt();
-		crypt.SetKey(cryptKey.data(), cryptKey.size());
-		crypt.Init();
+		// NOTE: Connection encryption is NOT initialized here. The AuthSessionResponse packet is sent
+		// unencrypted by the realm so that it can also deliver an authentication *failure* (where the
+		// realm never receives a session key from the login server and thus cannot encrypt). Encryption
+		// is initialized in OnAuthSessionResponse once we know the session was accepted.
 
 		// Debug log
 		ILOG("[Realm] Handshaking...");
@@ -116,17 +114,27 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		// Authentication has been successful!
+		// Notify the UI about the authentication result
 		AuthenticationResult(result);
 
 		// Was this a success?
 		if (result == game::auth_result::Success)
 		{
+			// The session was accepted: initialize connection encryption now. Everything after the
+			// (unencrypted) AuthSessionResponse is encrypted on both sides.
+			HMACHash cryptKey;
+			game::Crypt::GenerateKey(cryptKey, m_sessionKey);
+
+			game::Crypt& crypt = GetCrypt();
+			crypt.SetKey(cryptKey.data(), cryptKey.size());
+			crypt.Init();
+
 			// From here on, we accept CharEnum packets
 			RegisterPacketHandler(game::realm_client_packet::CharEnum, *this, &RealmConnector::OnCharEnum);
 			RegisterPacketHandler(game::realm_client_packet::LoginVerifyWorld, *this, &RealmConnector::OnLoginVerifyWorld);
 			RegisterPacketHandler(game::realm_client_packet::EnterWorldFailed, *this, &RealmConnector::OnEnterWorldFailed);
-			
+			RegisterPacketHandler(game::realm_client_packet::RealmConfig, *this, &RealmConnector::OnRealmConfig);
+
 			// And now, we ask for the character list
 			sendSinglePacket([](game::OutgoingPacket& outPacket)
 			{
@@ -134,8 +142,17 @@ namespace mmo
 				// This packet is empty
 				outPacket.Finish();
 			});
+
+			return PacketParseResult::Pass;
 		}
 
+		// Authentication was rejected by the realm (e.g. not allowed to connect). The UI has already
+		// been notified above and will show an error dialog. Close the connection cleanly via close()
+		// instead of returning Disconnect: the Disconnect path resets the underlying socket to null,
+		// which would crash the next ConnectToRealm() call (access violation in connect()/is_open()).
+		// close() keeps the socket object alive so the player can return to the realm list and connect
+		// again.
+		close();
 		return PacketParseResult::Pass;
 	}
 
@@ -189,6 +206,49 @@ namespace mmo
 
 		ELOG("Failed to enter world: " << response);
 		EnterWorldFailed(response);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnRealmConfig(game::IncomingPacket& packet)
+	{
+		m_disabledRaces.clear();
+		m_disabledClasses.clear();
+
+		uint8 numDisabledRaces = 0;
+		if (!(packet >> io::read<uint8>(numDisabledRaces)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		for (uint8 i = 0; i < numDisabledRaces; ++i)
+		{
+			uint8 raceId = 0;
+			if (!(packet >> io::read<uint8>(raceId)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+			m_disabledRaces.insert(raceId);
+		}
+
+		uint8 numDisabledClasses = 0;
+		if (!(packet >> io::read<uint8>(numDisabledClasses)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		for (uint8 i = 0; i < numDisabledClasses; ++i)
+		{
+			uint8 classId = 0;
+			if (!(packet >> io::read<uint8>(classId)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+			m_disabledClasses.insert(classId);
+		}
+
+		DLOG("Realm config received: " << static_cast<int>(numDisabledRaces) << " disabled race(s), "
+			<< static_cast<int>(numDisabledClasses) << " disabled class(es)");
 
 		return PacketParseResult::Pass;
 	}
@@ -267,6 +327,15 @@ namespace mmo
 		connect(m_realmAddress, m_realmPort, *this, m_ioService);
 	}
 
+	void RealmConnector::RequestCharacterList()
+	{
+		sendSinglePacket([](game::OutgoingPacket& outPacket)
+		{
+			outPacket.Start(game::client_realm_packet::CharEnum);
+			outPacket.Finish();
+		});
+	}
+
 	void RealmConnector::EnterWorld(const CharacterView & character)
 	{
 		const uint64 guid = character.GetGuid();
@@ -329,6 +398,15 @@ namespace mmo
 		sendSinglePacket([guid](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::SetSelection);
 			packet << io::write<uint64>(guid);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::CheckLineOfSight(uint64 targetGuid)
+	{
+		sendSinglePacket([targetGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatCheckLineOfSight);
+			packet << io::write<uint64>(targetGuid);
 			packet.Finish();
 			});
 	}
@@ -498,6 +576,42 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::SendMoveStunAck(uint32 ackId, const MovementInfo& movementInfo)
+	{
+		sendSinglePacket([ackId, &movementInfo](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::MoveStunAck);
+			packet << io::write<uint32>(ackId) << movementInfo;
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::SendMoveSleepAck(uint32 ackId, const MovementInfo& movementInfo)
+	{
+		sendSinglePacket([ackId, &movementInfo](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::MoveSleepAck);
+			packet << io::write<uint32>(ackId) << movementInfo;
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::SendMoveFearAck(uint32 ackId, const MovementInfo& movementInfo)
+	{
+		sendSinglePacket([ackId, &movementInfo](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::MoveFearAck);
+			packet << io::write<uint32>(ackId) << movementInfo;
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::SendMoveDisorientAck(uint32 ackId, const MovementInfo& movementInfo)
+	{
+		sendSinglePacket([ackId, &movementInfo](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::MoveDisorientAck);
+			packet << io::write<uint32>(ackId) << movementInfo;
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::AutoStoreLootItem(uint8 lootSlot)
 	{
 		sendSinglePacket([lootSlot](game::OutgoingPacket& packet) {
@@ -506,6 +620,19 @@ namespace mmo
 				<< io::write<uint8>(lootSlot);
 			packet.Finish();
 			});
+	}
+
+	void RealmConnector::SetGroupLootMethod(const uint8 method, const uint64 masterGuid, const uint8 threshold)
+	{
+		sendSinglePacket([method, masterGuid, threshold](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::SetLootMethod);
+			packet
+				<< io::write<uint8>(method)
+				<< io::write<uint64>(masterGuid)
+				<< io::write<uint8>(threshold);
+			packet.Finish();
+		});
 	}
 
 	void RealmConnector::AutoEquipItem(uint8 srcBag, uint8 srcSlot)
@@ -834,6 +961,28 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::SendPartyPingPosition(const float x, const float y, const float z)
+	{
+		sendSinglePacket([x, y, z](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::PartyPing);
+			packet << io::write<uint8>(0)  // type: position
+				   << io::write<float>(x)
+				   << io::write<float>(y)
+				   << io::write<float>(z);
+			packet.Finish();
+		});
+	}
+
+	void RealmConnector::SendPartyPingUnit(const uint64 unitGuid)
+	{
+		sendSinglePacket([unitGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::PartyPing);
+			packet << io::write<uint8>(1)  // type: unit
+				   << io::write_packed_guid(unitGuid);
+			packet.Finish();
+		});
+	}
+
 	void RealmConnector::RandomRoll(int32 min, int32 max)
 	{
 		sendSinglePacket([min, max](game::OutgoingPacket& packet) {
@@ -937,6 +1086,83 @@ namespace mmo
 			{
 				packet.Start(game::client_realm_packet::AreaTriggerTriggered);
 				packet << io::write<uint32>(triggerId);
+				packet.Finish();
+			});
+	}
+
+	void RealmConnector::InitiateTrade(const uint64 targetGuid)
+	{
+		sendSinglePacket([targetGuid](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::TradeInitiate);
+				packet << io::write<uint64>(targetGuid);
+				packet.Finish();
+			});
+	}
+
+	void RealmConnector::AcceptTradeInvite()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::TradeInviteAccept);
+				packet.Finish();
+			});
+	}
+
+	void RealmConnector::DeclineTradeInvite()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::TradeInviteDecline);
+				packet.Finish();
+			});
+	}
+
+	void RealmConnector::CancelTrade()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::TradeCancelRequest);
+				packet.Finish();
+			});
+	}
+
+	void RealmConnector::TradeAddItem(const uint8 tradeSlot, const uint16 inventorySlot)
+	{
+		sendSinglePacket([tradeSlot, inventorySlot](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::TradeAddItem);
+				packet << io::write<uint8>(tradeSlot);
+				packet << io::write<uint16>(inventorySlot);
+				packet.Finish();
+			});
+	}
+
+	void RealmConnector::TradeRemoveItem(const uint8 tradeSlot)
+	{
+		sendSinglePacket([tradeSlot](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::TradeRemoveItem);
+				packet << io::write<uint8>(tradeSlot);
+				packet.Finish();
+			});
+	}
+
+	void RealmConnector::TradeSetMoney(const uint32 amount)
+	{
+		sendSinglePacket([amount](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::TradeSetMoney);
+				packet << io::write<uint32>(amount);
+				packet.Finish();
+			});
+	}
+
+	void RealmConnector::AcceptTrade()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::TradeAccept);
 				packet.Finish();
 			});
 	}

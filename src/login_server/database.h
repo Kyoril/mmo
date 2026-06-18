@@ -4,6 +4,7 @@
 
 #include "base/typedefs.h"
 #include "base/non_copyable.h"
+#include "base/async_database.h"
 #include "log/log_exception.h"
 #include <functional>
 #include <exception>
@@ -69,6 +70,86 @@ namespace mmo
 		uint16 port;
 	};
 
+	/// Parameters for paginated account list queries.
+	struct AccountListParams
+	{
+		std::string search;
+		std::string searchField;   // "name", "email", "id"
+		std::string sortBy;        // "id", "username", "last_login", "created_at"
+		bool sortAsc = true;
+		bool bannedOnly = false;
+		uint32 page = 1;
+		uint32 limit = 100;
+	};
+
+	/// Single row returned by GetAccountList.
+	struct AccountListEntry
+	{
+		uint64 id = 0;
+		std::string username;
+		std::string email;
+		std::string created_at;
+		std::string last_login;
+		std::string last_ip;
+		uint8 gm_level = 0;
+		uint8 ban_state = 0;       // 0=none, 1=temp, 2=perm
+		std::string ban_expiration;
+	};
+
+	struct AccountListResult
+	{
+		std::vector<AccountListEntry> accounts;
+		uint64 total = 0;
+	};
+
+	/// A feature definition from the catalog.
+	struct FeatureDefinition
+	{
+		uint32 id = 0;
+		std::string name;
+		std::string description;
+		std::string created_at;
+	};
+
+	/// An active feature granted to an account (id + key).
+	struct AccountFeature
+	{
+		uint32 id = 0;
+		std::string key;
+		std::string expiration;   // empty means it never expires
+	};
+
+	/// A single feature requirement declared by a realm.
+	struct RealmFeatureRequirement
+	{
+		uint32 featureId = 0;
+		std::string featureName;
+		bool requireVisibility = false;
+		bool requireLogin = false;
+	};
+
+	/// All data needed to validate and finish a client auth session on a realm.
+	struct AccountAuthData
+	{
+		uint64 id = 0;
+		std::string sessionKey;
+		uint8 gmLevel = 0;
+		std::vector<AccountFeature> features;
+	};
+
+	/// Single row returned by GetRealmList.
+	struct RealmListEntry
+	{
+		uint32 id = 0;
+		std::string name;
+		std::string address;
+		uint16 port = 0;
+		std::string last_login;
+		std::string last_ip;
+		std::string last_build;
+		bool is_online = false;
+	};
+
 	/// Basic interface for a database system used by the login server.
 	struct IDatabase : public NonCopyable
 	{
@@ -98,165 +179,104 @@ namespace mmo
 		/// @param ip The current ip of the player.
 		virtual void PlayerLogin(uint64 accountId, const std::string& sessionKey, const std::string& ip) = 0;
 
-		/// @brief 
-		/// @param accountId 
-		/// @param ip 
+		/// Records a failed login attempt for the account.
+		/// @param accountId ID of the account that failed to log in.
+		/// @param ip The current ip of the player.
 		virtual void PlayerLoginFailed(uint64 accountId, const std::string& ip) = 0;
 
-		/// @brief 
-		/// @param realmId 
-		/// @param sessionKey 
-		/// @param ip 
-		/// @param build 
+		/// Writes realm session data to the database after a successful login.
+		/// @param realmId ID of the realm to modify.
+		/// @param sessionKey The new session key (hex str).
+		/// @param ip The current ip of the realm.
+		/// @param build The realm build string.
 		virtual void RealmLogin(uint32 realmId, const std::string& sessionKey, const std::string& ip, const std::string& build) = 0;
 
+		/// Creates a new account with the given salted password verifier.
+		/// @param id Account name (typically normalized to uppercase).
+		/// @param s SRP salt value.
+		/// @param v SRP verifier value.
 		virtual std::optional<AccountCreationResult> AccountCreate(const std::string& id, const std::string& s, const std::string& v) = 0;
 
+		/// Creates a new realm with the given connection info and SRP values.
+		/// @param name Realm name.
+		/// @param address Realm public address.
+		/// @param port Realm public port.
+		/// @param s SRP salt value.
+		/// @param v SRP verifier value.
 		virtual std::optional<RealmCreationResult> RealmCreate(const std::string& name, const std::string& address, uint16 port, const std::string& s, const std::string& v) = 0;
 
+		/// Bans an account by name.
+		/// @param accountName Account name to ban.
+		/// @param expiration Expiration timestamp string.
+		/// @param reason Reason for the ban.
 		virtual void BanAccountByName(const std::string& accountName, const std::string& expiration, const std::string& reason) = 0;
 
+		/// Removes a ban from an account by name.
+		/// @param accountName Account name to unban.
+		/// @param reason Reason for the unban.
 		virtual void UnbanAccountByName(const std::string& accountName, const std::string& reason) = 0;
+
+		/// Returns a paginated, filtered, sorted list of accounts.
+		virtual AccountListResult GetAccountList(const AccountListParams& params) = 0;
+
+		/// Returns every registered realm row from the database.
+		virtual std::vector<RealmListEntry> GetRealmList() = 0;
+
+		/// Returns the whole feature catalog.
+		virtual std::vector<FeatureDefinition> GetFeatures() = 0;
+
+		/// Creates a new feature in the catalog.
+		/// @param name Unique feature key.
+		/// @param description Optional human readable description.
+		/// @returns The new feature id on success, an empty optional if the name is already in use.
+		virtual std::optional<uint32> CreateFeature(const std::string& name, const std::string& description) = 0;
+
+		/// Deletes a feature from the catalog by its id (also removes account grants and realm requirements via cascade).
+		/// @returns true if a feature was deleted.
+		virtual bool DeleteFeature(uint32 featureId) = 0;
+
+		/// Resolves a feature by name. @returns The feature id or empty optional if not found.
+		virtual std::optional<uint32> GetFeatureIdByName(const std::string& name) = 0;
+
+		/// Resolves an account id by name. @returns The account id or empty optional if not found.
+		virtual std::optional<uint64> GetAccountIdByName(const std::string& name) = 0;
+
+		/// Grants a feature to one or more accounts.
+		/// @param featureId The feature to grant.
+		/// @param accountIds The accounts that should receive the feature.
+		/// @param expiration Optional expiration timestamp (empty means permanent).
+		virtual bool GrantFeature(uint32 featureId, const std::vector<uint64>& accountIds, const std::string& expiration) = 0;
+
+		/// Revokes a feature from one or more accounts.
+		virtual bool RevokeFeature(uint32 featureId, const std::vector<uint64>& accountIds) = 0;
+
+		/// Returns the active (non-expired) features granted to an account.
+		virtual std::vector<AccountFeature> GetActiveAccountFeatures(uint64 accountId) = 0;
+
+		/// Sets (inserts or updates) a realm feature requirement.
+		virtual bool SetRealmFeatureRequirement(uint32 realmId, uint32 featureId, bool requireVisibility, bool requireLogin) = 0;
+
+		/// Removes a realm feature requirement.
+		virtual bool RemoveRealmFeatureRequirement(uint32 realmId, uint32 featureId) = 0;
+
+		/// Returns all feature requirements declared by a realm.
+		virtual std::vector<RealmFeatureRequirement> GetRealmFeatureRequirements(uint32 realmId) = 0;
+
+		/// Returns the realm id by name. @returns The realm id or empty optional if not found.
+		virtual std::optional<uint32> GetRealmIdByName(const std::string& name) = 0;
+
+		/// Retrieves all data needed to validate and finish a client auth session, including the
+		/// account's active feature keys.
+		/// @param accountName Name of the account.
+		virtual std::optional<AccountAuthData> GetAccountAuthData(std::string accountName) = 0;
 	};
 
-
-	namespace detail
-	{
-		template <class Result>
-		struct RequestProcessor
-		{
-			template <class ResultDispatcher, class Request, class ResultHandler>
-			void operator ()(const ResultDispatcher &dispatcher,
-				const Request &request,
-				const ResultHandler &handler) const
-			{
-				Result result;
-
-				try
-				{
-					result = request();
-				}
-				catch (const std::exception &ex)
-				{
-					defaultLogException(ex);
-					return;
-				}
-
-				dispatcher(std::bind<void>(handler, std::move(result)));
-			}
-		};
-
-		template <>
-		struct RequestProcessor<void>
-		{
-			template <class ResultDispatcher, class Request, class ResultHandler>
-			void operator ()(const ResultDispatcher &dispatcher,
-				const Request &request,
-				const ResultHandler &handler) const
-			{
-				bool succeeded = false;
-				try
-				{
-					request();
-					succeeded = true;
-				}
-				catch (const std::exception &ex)
-				{
-					defaultLogException(ex);
-					return;
-				}
-
-				dispatcher(std::bind<void>(handler, succeeded));
-			}
-		};
-	}
-
-	struct NullHandler
-	{
-		virtual void operator()()
-		{
-		}
-	};
-
-	static constexpr NullHandler dbNullHandler;
-
-	/// Helper class for async database operations
-	class AsyncDatabase final : public NonCopyable
+	/// Async database wrapper for the login server.
+	/// Inherits from the shared AsyncDatabaseT template, bound to this server's IDatabase interface.
+	class AsyncDatabase final : public AsyncDatabaseT<IDatabase>
 	{
 	public:
-		typedef std::function<void(const std::function<void()> &)> ActionDispatcher;
-
-		/// Initializes this class by assigning a database and worker callbacks.
-		/// 
-		/// @param database The linked database which will be passed in to database operations.
-		/// @param asyncWorker Callback which should queue a request to the async worker queue.
-		/// @param resultDispatcher Callback which should queue a result callback to the main worker queue.
-		explicit AsyncDatabase(IDatabase &database,
-			ActionDispatcher asyncWorker,
-			ActionDispatcher resultDispatcher);
-
-	public:
-		/// Performs an async database request and allows passing exactly one argument to the database request.
-		/// 
-		/// @param method A request callback which will be executed on the database thread without blocking the caller.
-		/// @param b0 Argument which will be forwarded to the handler.
-		template <class A0, class B0_>
-		void asyncRequest(void(IDatabase::*method)(A0), B0_ &&b0)
-		{
-			auto request = std::bind(method, &m_database, std::forward<B0_>(b0));
-			auto processor = [request]() -> void {
-				try
-				{
-					request();
-				}
-				catch (const std::exception& ex)
-				{
-					defaultLogException(ex);
-				}
-			};
-			m_asyncWorker(processor);
-		}
-
-		/// Performs an async database request and allows passing exactly one argument to the database request.
-		/// 
-		/// @param handler A handler callback which will be executed after the request was successful.
-		/// @param method A request callback which will be executed on the database thread without blocking the caller.
-		/// @param b0 Argument which will be forwarded to the handler.
-		template <class ResultHandler, class Result, class A0, class... Args>
-		void asyncRequest(ResultHandler &&handler, Result(IDatabase::*method)(A0), Args&&... b0)
-		{
-			auto request = std::bind(method, &m_database, std::forward<Args>(b0)...);
-			auto processor = [this, request, handler]() -> void
-			{
-				detail::RequestProcessor<Result> proc;
-				proc(m_resultDispatcher, request, handler);
-			};
-			m_asyncWorker(processor);
-		}
-
-		/// Performs an async database request.
-		/// 
-		/// @param request A request callback which will be executed on the database thread without blocking the caller.
-		/// @param handler A handler callback which will be executed after the request was successful.
-		template <class Result, class ResultHandler, class RequestFunction>
-		void asyncRequest(RequestFunction &&request, ResultHandler &&handler)
-		{
-			auto processor = [this, request, handler]() -> void
-			{
-				detail::RequestProcessor<Result> proc;
-				auto boundRequest = std::bind(request, &m_database);
-				proc(m_resultDispatcher, boundRequest, handler);
-			};
-			m_asyncWorker(std::move(processor));
-		}
-
-	private:
-		/// The database instance to perform 
-		IDatabase &m_database;
-		/// Callback which will queue a request to the async worker queue.
-		const ActionDispatcher m_asyncWorker;
-		/// Callback which will queue a result callback to the main worker queue.
-		const ActionDispatcher m_resultDispatcher;
+		using AsyncDatabaseT<IDatabase>::AsyncDatabaseT;
 	};
 
 	typedef std::function<void()> Action;

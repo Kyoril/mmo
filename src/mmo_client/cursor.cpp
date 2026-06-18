@@ -73,41 +73,50 @@ namespace mmo
 
 		void* bitmapData;
 		HBITMAP hBitmap = CreateDIBSection(nullptr, &bmi, DIB_RGB_COLORS, &bitmapData, nullptr, 0);
-		if (hBitmap)
+		if (!hBitmap)
 		{
-			// Copy texture data row by row (to account for possible row pitch differences)
-			uint8_t* srcData = static_cast<uint8_t*>(pixelData.data());
-			uint8_t* destData = static_cast<uint8_t*>(bitmapData);
+			return nullptr;
+		}
 
-			for (UINT y = 0; y < texture->GetHeight(); ++y) {
+		// Copy texture data row by row (to account for possible row pitch differences)
+		uint8_t* srcData = static_cast<uint8_t*>(pixelData.data());
+		uint8_t* destData = static_cast<uint8_t*>(bitmapData);
 
-				if (format == R8G8B8A8)
+		for (UINT y = 0; y < texture->GetHeight(); ++y) {
+
+			if (format == R8G8B8A8)
+			{
+				// Ensure RGBA to BGRA conversion before copy
+				for (UINT x = 0; x < texture->GetWidth(); ++x)
 				{
-					// Ensure RGBA to BGRA conversion before copy
-					for (UINT x = 0; x < texture->GetWidth(); ++x)
-					{
-						destData[0] = srcData[2];  // B
-						destData[1] = srcData[1];  // G
-						destData[2] = srcData[0];  // R
-						destData[3] = srcData[3];  // A
+					destData[0] = srcData[2];  // B
+					destData[1] = srcData[1];  // G
+					destData[2] = srcData[0];  // R
+					destData[3] = srcData[3];  // A
 
-						srcData += 4;
-						destData += 4;
-					}
+					srcData += 4;
+					destData += 4;
 				}
-				else
-				{
-					// We can copy data simply as is
-					memcpy(destData, srcData, texture->GetWidth() * 4);
+			}
+			else
+			{
+				// We can copy data simply as is
+				memcpy(destData, srcData, texture->GetWidth() * 4);
 
-					srcData += texture->GetWidth() * 4;
-					destData += texture->GetWidth() * 4;
-				}
+				srcData += texture->GetWidth() * 4;
+				destData += texture->GetWidth() * 4;
 			}
 		}
 
 		// Step 6: Create a monochrome mask for transparency
-		HBITMAP hMask = CreateBitmap(texture->GetWidth(), texture->GetHeight(), 1, 1, nullptr);
+		const UINT maskStride = (texture->GetWidth() + 7u) / 8u;
+		std::vector<uint8> maskBits(maskStride * texture->GetHeight(), 0);
+		HBITMAP hMask = CreateBitmap(texture->GetWidth(), texture->GetHeight(), 1, 1, maskBits.data());
+		if (!hMask)
+		{
+			DeleteObject(hBitmap);
+			return nullptr;
+		}
 
 		// Step 7: Set up ICONINFO and create cursor
 		ICONINFO iconInfo = {};
@@ -138,9 +147,10 @@ namespace mmo
 #ifdef WIN32
 		// Create HCURSOR from texture ptr
 		g_cursors[type] = CreateCursorFromD3D11Texture(tex);
+		return g_cursors[type] != nullptr;
 #endif
 
-		return false;
+		return true;
 	}
 	void Cursor::Clear()
 	{

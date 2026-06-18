@@ -9,6 +9,19 @@
 
 namespace mmo
 {
+	namespace unit_movement_mode
+	{
+		enum Type : uint8
+		{
+			Run = 0,
+			Walk = 1,
+
+			Count_
+		};
+	}
+
+	using UnitMovementMode = unit_movement_mode::Type;
+
 	namespace movement_flags
 	{
 		/// @brief Enumerates movement flags.
@@ -106,6 +119,23 @@ namespace mmo
 				PitchUp | PitchDown,
 		};
 	}
+
+	inline UnitMovementMode GetUnitMovementModeFromFlags(const uint32 movementFlags)
+	{
+		return (movementFlags & movement_flags::WalkMode) != 0 ? unit_movement_mode::Walk : unit_movement_mode::Run;
+	}
+
+	inline void SetUnitMovementModeOnFlags(uint32& movementFlags, const UnitMovementMode movementMode)
+	{
+		if (movementMode == unit_movement_mode::Walk)
+		{
+			movementFlags |= movement_flags::WalkMode;
+		}
+		else
+		{
+			movementFlags &= ~movement_flags::WalkMode;
+		}
+	}
 	
 
 	/// @brief Class which contains a snapshot of a units movement info.
@@ -145,6 +175,8 @@ namespace mmo
 		bool IsPitching() const { return (movementFlags & movement_flags::Pitching) != 0; }
 
 		bool IsFalling() const { return (movementFlags & movement_flags::Falling) != 0; }
+
+		bool IsSwimming() const { return (movementFlags & movement_flags::Swimming) != 0; }
 	};
 
 	inline io::Writer& operator<<(io::Writer& writer, const MovementInfo& info)

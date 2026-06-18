@@ -14,6 +14,26 @@
 
 namespace mmo
 {
+	namespace
+	{
+		bool IsHostileTargetType(const uint32 target)
+		{
+			switch (target)
+			{
+			case spell_effect_targets::NearbyEnemy:
+			case spell_effect_targets::TargetEnemy:
+			case spell_effect_targets::SourceAreaEnemy:
+			case spell_effect_targets::TargetAreaEnemy:
+			case spell_effect_targets::ConeEnemy:
+			case spell_effect_targets::TargetSecondaryEnemy:
+				return true;
+
+			default:
+				return false;
+			}
+		}
+	}
+
 	AuraContainer::AuraContainer(GameUnitS& owner, const uint64 casterId, const proto::SpellEntry& spell, const GameTime duration, const uint64 itemGuid)
 		: m_owner(owner)
 		, m_casterId(casterId)
@@ -22,6 +42,7 @@ namespace mmo
 		, m_expirationCountdown(owner.GetTimers())
 		, m_itemGuid(itemGuid)
 		, m_areaAuraTick(owner.GetTimers())
+		, m_stackingCategoryId(spell.stacking_category_id())
 	{
 		m_areaAuraTickConnection = m_areaAuraTick.ended.connect(this, &AuraContainer::HandleAreaAuraTick);
 
@@ -45,6 +66,7 @@ namespace mmo
 	AuraContainer::~AuraContainer()
 	{
 		m_expirationCountdown.Cancel();
+		m_areaAuraTick.Cancel();
 
 		if (m_applied)
 		{
@@ -171,6 +193,18 @@ namespace mmo
 		return m_duration > 0 && m_expiration <= GetAsyncTimeMs();
 	}
 
+	GameTime AuraContainer::GetRemainingTime() const
+	{
+		if (m_duration == 0)
+		{
+			// Aura does not expire.
+			return 0;
+		}
+
+		const GameTime now = GetAsyncTimeMs();
+		return m_expiration > now ? m_expiration - now : 0;
+	}
+
 	void AuraContainer::WriteAuraUpdate(io::Writer& writer) const
 	{
 		const uint32 now = GetAsyncTimeMs();
@@ -184,6 +218,7 @@ namespace mmo
 			const auto& aura = m_auras[i];
 			writer << io::write<int32>(aura->GetBasePoints());
 		}
+		writer << io::write<uint8>(static_cast<uint8>(m_stackCount));
 	}
 
 	bool AuraContainer::HasEffect(const AuraType type) const
@@ -409,52 +444,82 @@ namespace mmo
 		return multiplier;
 	}
 
-	bool AuraContainer::ShouldOverwriteAura(const AuraContainer& other) const
+	AuraApplicationResult AuraContainer::ShouldOverwriteAura(const AuraContainer& other) const
 	{
-		// NOTE: If we return true here, the other aura will be removed and replaced by this aura container instead
+		// NOTE: If we return Replace here, the other aura will be removed and replaced by this aura container instead
 
+		// Same aura instance is always a replace
 		if (&other == this)
 		{
-			return true;
+			return AuraApplicationResult::Replace;
 		}
 
+		const SpellStackingRule rule = static_cast<SpellStackingRule>(m_spell.stacking_rule());
 		const bool sameBaseSpellId = HasSameBaseSpellId(other.GetSpell());
 		const bool sameSpellId = sameBaseSpellId || (other.GetSpellId() == GetSpellId());
 		const bool onlyOneStackTotal = (m_spell.attributes(0) & spell_attributes::OnlyOneStackTotal) != 0;
 		const bool sameCaster = other.GetCasterId() == GetCasterId();
 		const bool sameItem = other.GetItemGuid() == GetItemGuid();
 
-		// Right now, same caster and same spell id means we overwrite the old aura with this one
-		// TODO: maybe add some settings here to explicitly allow stacking?
-		if (sameCaster && sameSpellId && sameItem)
+		switch (rule)
 		{
-			return true;
-		}
+		case SpellStackingRule::UniquePerTarget:
+			// Only one instance of this spell allowed on the target regardless of caster
+			if (sameBaseSpellId)
+			{
+				return AuraApplicationResult::Replace;
+			}
+			return AuraApplicationResult::Reject;
 
-		// Same spell but different casters: If we allow stacking for different casters
-		if (sameSpellId && !sameCaster && onlyOneStackTotal)
-		{
-			return true;
-		}
+		case SpellStackingRule::UniquePerCaster:
+			// One instance per caster; different casters may both have their copy
+			if (sameBaseSpellId && sameCaster)
+			{
+				return AuraApplicationResult::Replace;
+			}
+			return AuraApplicationResult::Reject;
 
-		// Should not overwrite, but create a whole new aura
-		return false;
+		case SpellStackingRule::StackablePerCaster:
+			// Fully stacking: never evict an existing aura
+			return AuraApplicationResult::Reject;
+
+		case SpellStackingRule::SingleTargetPerCaster:
+			// Pre-loop eviction of the previous target is handled in ApplyAura.
+			// Inside the loop on this target, treat like UniquePerCaster.
+			if (sameBaseSpellId && sameCaster)
+			{
+				return AuraApplicationResult::Replace;
+			}
+			return AuraApplicationResult::Reject;
+
+		case SpellStackingRule::CategoryExclusive:
+			// Category-level scan is owned by S03; per-spell entry, just reject here.
+			return AuraApplicationResult::Reject;
+
+		default:
+			// Default (0): legacy behaviour — same caster+spell+item overwrites; OnlyOneStackTotal overrides cross-caster
+			if (sameCaster && sameSpellId && sameItem)
+			{
+				return AuraApplicationResult::Replace;
+			}
+
+			if (sameSpellId && !sameCaster && onlyOneStackTotal)
+			{
+				return AuraApplicationResult::Replace;
+			}
+
+			return AuraApplicationResult::Reject;
+		}
 	}
 
 	bool AuraContainer::HasSameBaseSpellId(const proto::SpellEntry& spell) const
 	{
-		if (spell.baseid() == 0)
-		{
-			return false;
-		}
+		// Determine the effective base-spell IDs for both sides.
+		// A baseid of 0 means the spell itself is the base (rank 1 / standalone).
+		const uint32 myBaseId    = (GetBaseSpellId() != 0) ? GetBaseSpellId() : GetSpellId();
+		const uint32 otherBaseId = (spell.baseid()   != 0) ? spell.baseid()   : spell.id();
 
-		const uint32 baseSpellId = GetBaseSpellId();
-		if (baseSpellId == spell.baseid())
-		{
-			return true;
-		}
-
-		return false;
+		return myBaseId == otherBaseId;
 	}
 
 	GameUnitS* AuraContainer::GetCaster() const
@@ -477,6 +542,24 @@ namespace mmo
 		}
 		
 		return strongCaster.get();
+	}
+
+	bool AuraContainer::IsHostileTargetAura() const
+	{
+		for (const auto& aura : m_auras)
+		{
+			if (!aura)
+			{
+				continue;
+			}
+
+			if (IsHostileTargetType(aura->GetEffect().targeta()))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	bool AuraContainer::HandleProc(uint32 procFlags, uint32 procEx, GameUnitS* target, uint32 damage, uint8 school, bool triggerByAura, uint64 familyFlags)
@@ -607,5 +690,26 @@ namespace mmo
 		{
 			aura->HandleProcEffect(target);
 		}
+	}
+
+	void AuraContainer::RefreshAura(const proto::SpellEntry& incomingSpell)
+	{
+		// Duration extension: remaining + base_duration, capped at effectiveMax
+		const GameTime now = static_cast<GameTime>(GetAsyncTimeMs());
+		const GameTime remaining = (m_expiration > now) ? (m_expiration - now) : 0;
+		const GameTime effectiveMax = (incomingSpell.maxduration() > 0)
+			? static_cast<GameTime>(incomingSpell.maxduration())
+			: m_duration;
+		const GameTime newExpiration = now + std::min(remaining + m_duration, effectiveMax);
+		m_expiration = newExpiration;
+		m_expirationCountdown.SetEnd(m_expiration);
+
+		// Stack count update: policy 0 = GrantReset (reset to max), else increment up to max
+		const uint32 maxStacks = (incomingSpell.stackamount() > 0) ? incomingSpell.stackamount() : 1u;
+		const bool grantReset = (incomingSpell.stack_reset_policy() == 0u);
+		if (grantReset)
+			m_stackCount = maxStacks;
+		else
+			m_stackCount = std::min(m_stackCount + 1u, maxStacks);
 	}
 }

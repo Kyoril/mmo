@@ -1,0 +1,21 @@
+meta {
+  name: Revoke Feature
+  type: http
+  seq: 13
+}
+
+post {
+  url: http://localhost:8090/revoke-feature
+  body: formUrlEncoded
+  auth: inherit
+}
+
+body:form-urlencoded {
+  feature: PLAYTEST_ACCESS
+  account_names: KYORIL,LOCALDEV
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

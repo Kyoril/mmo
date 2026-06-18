@@ -12,6 +12,8 @@
 #include "asio/io_service.hpp"
 
 #include <functional>
+#include <string>
+#include <vector>
 
 #include "base/countdown.h"
 
@@ -34,7 +36,8 @@ namespace mmo
 	{
 	public:
 		/// Represents a callback for pending client auth session responses from the login server.
-		typedef std::function<void(bool, uint64, uint8, BigNumber)> ClientAuthSessionCallback;
+		/// Parameters: success, account id, GM level, session key, active account feature keys.
+		typedef std::function<void(bool, uint64, uint8, BigNumber, const std::vector<std::string>&)> ClientAuthSessionCallback;
 
 	private:
 		/// Contains data passed by a ClientAuthSession packet.

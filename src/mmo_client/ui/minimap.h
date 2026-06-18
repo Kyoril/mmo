@@ -12,6 +12,9 @@
 
 #include <map>
 #include <memory>
+#include <vector>
+
+#include "luabind/luabind.hpp"
 
 struct lua_State;
 
@@ -73,6 +76,35 @@ namespace mmo
 		float GetZoomFactor() const;
 
 		void NotifyWorldChanged(const String& worldName);
+
+		struct PartyMemberDot
+		{
+			Vector3 position;
+			std::string name;
+		};
+
+		/// @brief Updates the positions of party members for minimap rendering.
+		void UpdatePartyPositions(std::vector<PartyMemberDot> members);
+
+/// @brief Queries which minimap objects are near a given normalized UV coordinate.
+		/// Returns a Lua table: array of {type="party"|"questgiver", name=string}.
+		luabind::object GetMinimapObjectsAt(lua_State* luaState, float u, float v) const;
+
+		enum class QuestDotType : uint8
+		{
+			Available,    ///< Yellow ! (new quest)
+			Completable,  ///< Yellow ? (quest ready to turn in)
+		};
+
+		struct QuestGiverDot
+		{
+			Vector3 position;
+			QuestDotType type;
+			std::string name;
+		};
+
+		/// @brief Updates the list of quest giver icons shown on the minimap.
+		void UpdateQuestGiverDots(std::vector<QuestGiverDot> dots);
 
 	private:
 		/// @brief Calculates the tile coordinates for a given world position.
@@ -153,5 +185,28 @@ namespace mmo
 
 		TexturePtr m_partyMemberTexture;
 		GeometryBuffer m_partyMemberGeom;
+		std::vector<PartyMemberDot> m_partyPositions;
+
+		TexturePtr m_questAvailableTexture;
+		GeometryBuffer m_questAvailableGeom;
+		TexturePtr m_questCompletableTexture;
+		GeometryBuffer m_questCompletableGeom;
+		std::vector<QuestGiverDot> m_questGiverDots;
+
+	public:
+		struct PingDot
+		{
+			Vector3 position;
+			float remainingTime;  ///< Seconds until this ping fades out.
+			uint64 senderGuid;    ///< GUID of the sender (for deduplication).
+		};
+
+		/// @brief Updates the list of active pings on the minimap.
+		void UpdatePings(std::vector<PingDot> pings);
+
+	private:
+		TexturePtr m_pingTexture;
+		GeometryBuffer m_pingGeom;
+		std::vector<PingDot> m_pings;
 	};
 }

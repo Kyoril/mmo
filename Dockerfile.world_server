@@ -3,13 +3,13 @@ FROM ubuntu:latest AS builder
 WORKDIR /app
 COPY . /app
 
-RUN apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:ubuntu-toolchain-r/ppa && apt-get update && apt-get install -y gcc-13 g++-13 cmake git zlib1g-dev libssl-dev libmariadb-dev-compat uuid-dev
+RUN apt-get update && apt-get install -y software-properties-common && add-apt-repository ppa:ubuntu-toolchain-r/ppa && apt-get update && apt-get install -y gcc-13 g++-13 cmake git zlib1g-dev libzstd-dev libssl-dev libmariadb-dev-compat uuid-dev
 
 ENV CC=gcc-13
 ENV CXX=g++-13
-RUN mkdir -p build && \
-	cd build && \
-	cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DMMO_WITH_DEV_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release /app && \
+RUN mkdir -p docker-build && \
+	cd docker-build && \
+	cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DMMO_OPENSSL_STATIC=OFF -DMMO_WITH_DEV_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release /app && \
 	make -j4 world_server
 
 

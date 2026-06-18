@@ -31,6 +31,13 @@ namespace mmo
 		bool isActive;
 	};
 
+	struct QuestRewardItemDisplay
+	{
+		uint32 itemId = 0;
+		uint32 count = 0;
+		uint32 displayId = 0;
+	};
+
 	struct QuestDetails
 	{
 		uint32 questId = 0;
@@ -40,10 +47,11 @@ namespace mmo
 		String questRequestItemsText;
 		String questOfferRewardText;
 		uint32 suggestedPlayerCount = 0;
-		// TODO: Rewarded item count
 		uint32 rewardXp = 0;
 		uint32 rewardMoney = 0;
 		const proto_client::SpellEntry* rewardSpell = nullptr;
+		std::vector<QuestRewardItemDisplay> rewardItemsChoice;
+		std::vector<QuestRewardItemDisplay> rewardItems;
 
 		void Clear()
 		{
@@ -55,6 +63,8 @@ namespace mmo
 			rewardXp = 0;
 			rewardMoney = 0;
 			rewardSpell = nullptr;
+			rewardItemsChoice.clear();
+			rewardItems.clear();
 		}
 	};
 
@@ -64,6 +74,13 @@ namespace mmo
 		const QuestInfo* quest = nullptr;
 		QuestStatus status = QuestStatus::Incomplete;
 		uint8 counters[4] = { 0, 0, 0, 0 };
+
+		/// The remaining time (seconds) as reported by the last server field update. 0 = no timer.
+		uint32 questTimer = 0;
+
+		/// Local client clock deadline (GetAsyncTimeMs domain) computed when questTimer last changed.
+		/// 0 = no timer running. Used to drive a smooth local countdown.
+		GameTime deadlineMs = 0;
 	};
 
 	struct GossipMenuAction
@@ -112,6 +129,11 @@ namespace mmo
 		[[nodiscard]] uint32 GetNumQuestLogEntries() const { return m_questLogQuests.size(); }
 
 		const QuestLogEntry* GetQuestLogEntry(uint32 index) const;
+
+		/// Gets the remaining time (in seconds) of a timed quest in the quest log.
+		/// @param questId The quest id.
+		/// @returns Remaining seconds, or 0 if the quest has no timer / already expired.
+		uint32 GetQuestLogTimeLeft(uint32 questId) const;
 
 		void RefreshQuestGiverStatus();
 

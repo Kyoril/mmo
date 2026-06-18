@@ -71,8 +71,10 @@ namespace mmo
 		/// Gets the name of this world.
 		const String& GetWorldName() const { return m_worldName; }
 
-		void Join(CharacterData characterData, JoinWorldCallback callback);
+		/// Requests a character to join this world node.
+		void Join(CharacterData characterData, const std::vector<std::string>& accountFeatures, JoinWorldCallback callback);
 
+		/// Requests a character to leave this world node.
 		void Leave(ObjectGuid characterGuid, auth::WorldLeftReason reason);
 
 	public:
@@ -107,13 +109,28 @@ namespace mmo
 		/// Sends a local chat message to the world on behalf of a player.
 		void LocalChatMessage(uint64 playerGuid, ChatType chatType, const std::string& message) const;
 
+		/// Requests the character's current location asynchronously.
 		void SendFetchLocationRequestAsync(uint64 characterId, uint64 ackId);
 
+		/// Requests a teleport for the given character.
 		void SendTeleportRequest(uint64 characterId, uint32 mapId, const Vector3& position, const Radian& facing);
 
-		void NotifyPlayerGroupChanged(uint64 characterId, uint64 groupId);
+		/// Notifies the world node that a character's group changed.
+		/// @param characterId The character whose group changed.
+		/// @param groupId The new group id, or 0 if no group.
+		/// @param lootMethod The group's loot method.
+		/// @param lootThreshold The group's loot quality threshold.
+		void NotifyPlayerGroupChanged(uint64 characterId, uint64 groupId, uint8 lootMethod = 0, uint8 lootThreshold = 0);
 
+		/// Notifies the world node that a character's guild changed.
 		void NotifyPlayerGuildChanged(uint64 characterId, uint64 guildId);
+
+		/// Notifies the world node of a loot method change for all group members on this world.
+		/// @param characterId The character whose group loot method changed.
+		/// @param lootMethod The new loot method (sent as uint8 over the wire).
+		/// @param lootMasterGuid The new loot master GUID (0 if not MasterLoot).
+		/// @param lootThreshold The group's loot quality threshold.
+		void NotifyPlayerGroupLootMethodChanged(uint64 characterId, uint8 lootMethod, uint64 lootMasterGuid, uint8 lootThreshold);
 
 	private:
 		TimerQueue& m_timerQueue;

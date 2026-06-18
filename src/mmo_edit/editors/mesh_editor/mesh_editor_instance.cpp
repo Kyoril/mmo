@@ -1207,11 +1207,26 @@ namespace mmo
 						}
 
 						ImGui::SameLine();
-						float playRate = m_animState->GetPlayRate();
+						// Edit the persistent playback speed stored on the animation itself. This is
+						// serialized with the skeleton and applied automatically by the engine, so it
+						// is not just a preview setting. The preview state is updated in lock-step.
+						Animation* speedAnim = m_entity->GetSkeleton()->GetAnimation(m_animState->GetAnimationName());
+						float playbackSpeed = speedAnim ? speedAnim->GetPlaybackSpeed() : m_animState->GetPlayRate();
 						ImGui::SetNextItemWidth(100);
-						if (ImGui::DragFloat("Speed", &playRate, 0.01f, 0.1f, 5.0f, "%.2f"))
+						if (ImGui::DragFloat("Speed", &playbackSpeed, 0.01f, 0.1f, 5.0f, "%.2f"))
 						{
-							m_animState->SetPlayRate(playRate);
+							if (speedAnim)
+							{
+								speedAnim->SetPlaybackSpeed(playbackSpeed);
+							}
+							m_animState->SetPlayRate(playbackSpeed);
+						}
+						ImGui::SameLine();
+						ImGui::TextDisabled("(?)");
+						if (ImGui::IsItemHovered())
+						{
+							ImGui::SetTooltip("Persistent playback speed. Saved with the skeleton and\n"
+								"applied automatically in the engine. Save the mesh to keep changes.");
 						}
 
 						// Animation info
@@ -1254,10 +1269,10 @@ namespace mmo
 										notify->SetName(notifyName);
 									}
 									
-									const char* types[] = { "Footstep", "PlaySound" };
+									const char* types[] = { "Footstep", "PlaySound", "SpellGo" };
 									int currentType = static_cast<int>(notify->GetType());
 									
-									if (ImGui::Combo("Type", &currentType, types, 2))
+									if (ImGui::Combo("Type", &currentType, types, 3))
 									{
 										// Type change requires recreating the notify
 										auto newNotify = AnimationNotifyFactory::Create(static_cast<AnimationNotifyType>(currentType));
@@ -1300,9 +1315,9 @@ namespace mmo
 								ImGui::Spacing();
 								
 								// Default notify type selector
-								const char* defaultTypes[] = { "Footstep", "PlaySound" };
+								const char* defaultTypes[] = { "Footstep", "PlaySound", "SpellGo" };
 								int defaultType = static_cast<int>(m_newNotifyType);
-								if (ImGui::Combo("New Notify Type", &defaultType, defaultTypes, 2))
+								if (ImGui::Combo("New Notify Type", &defaultType, defaultTypes, 3))
 								{
 									m_newNotifyType = static_cast<AnimationNotifyType>(defaultType);
 								}

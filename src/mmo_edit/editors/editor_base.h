@@ -8,6 +8,8 @@
 #include "base/signal.h"
 #include "base/typedefs.h"
 
+#include "math/vector3.h"
+
 #include <vector>
 #include <memory>
 
@@ -53,6 +55,12 @@ namespace mmo
 		virtual void AddCreationContextMenuItems() { };
 
 		virtual void AddAssetActions(const String& asset) { };
+
+		/// @brief Informs the editor that the next asset opened at the given path should position its
+		///        camera / view at the given world location. Editors that don't support this can ignore it.
+		/// @param asset The asset path that the target applies to.
+		/// @param worldLocation The world-space location to focus when the asset is opened.
+		virtual void SetPendingCameraTarget(const Path& asset, const Vector3& worldLocation) { }
 
 	public:
 		/// @brief Gets the editor host.

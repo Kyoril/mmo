@@ -209,6 +209,18 @@ namespace mmo
             CreateBonesFromNode(scene, scene->mRootNode);
             msBoneCount = 0;
             CreateBoneHierarchy(scene, scene->mRootNode);
+
+            // The mesh has skin deformers, but none of the referenced bones exist as
+            // nodes in the scene graph, so no bones could be created. This typically
+            // happens when a skinned mesh is exported from the modelling tool (e.g. 3ds Max)
+            // without also selecting/exporting the bones. Import the mesh without a skeleton
+            // instead of producing an empty (invalid) one.
+            if (m_skeleton->GetNumBones() == 0)
+            {
+                WLOG("FBX references skin bones but none were exported as nodes in the file; "
+                    "importing mesh without a skeleton. Re-export from your modelling tool with the bones included to keep skinning.");
+                m_skeleton.reset();
+            }
         }
 
         LoadDataFromNode(scene, scene->mRootNode, m_mesh.get(), importTransform);
@@ -412,13 +424,21 @@ namespace mmo
 	            if (aiBone* bone = aiMesh->mBones[i]; nullptr != bone)
                 {
                     String boneName = bone->mName.data;
+
+                    Bone* skeletonBone = m_skeleton->GetBone(boneName);
+                    if (!skeletonBone)
+                    {
+                        WLOG("Mesh references bone '" << boneName << "' which is not present in the skeleton; skipping its weights");
+                        continue;
+                    }
+
                     for (uint32 weightIdx = 0; weightIdx < bone->mNumWeights; weightIdx++)
                     {
                         aiVertexWeight aiWeight = bone->mWeights[weightIdx];
 
                         VertexBoneAssignment vba;
                         vba.vertexIndex = aiWeight.mVertexId;
-                        vba.boneIndex = m_skeleton->GetBone(boneName)->GetHandle();
+                        vba.boneIndex = skeletonBone->GetHandle();
                         vba.weight = aiWeight.mWeight;
 
                         submesh.AddBoneAssignment(vba);
@@ -546,7 +566,10 @@ namespace mmo
 
                     // Flag all children of this node as needed
                     node = mScene->mRootNode->FindNode(bone->mName.data);
-                    MarkAllChildNodesAsNeeded(node);
+                    if (node)
+                    {
+                        MarkAllChildNodesAsNeeded(node);
+                    }
                 }
             }
         }
@@ -687,6 +710,11 @@ namespace mmo
 
 	void FbxImport::MarkAllChildNodesAsNeeded(const aiNode* pNode)
 	{
+        if (!pNode)
+        {
+            return;
+        }
+
         FlagNodeAsNeeded(pNode->mName.data);
 
         // Traverse all child nodes of the current node instance

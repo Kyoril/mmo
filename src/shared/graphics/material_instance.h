@@ -133,6 +133,32 @@ namespace mmo
 
 		void SetWireframe(bool value) override { m_wireframe = value; }
 
+	public:
+		/// @brief Gets the effective foliage entries: the instance's override list when overriding,
+		///        otherwise the parent material's effective list.
+		[[nodiscard]] const std::vector<MaterialFoliageEntry>& GetFoliageEntries() const override
+		{
+			if (m_overrideFoliage)
+			{
+				return m_foliage;
+			}
+
+			ASSERT(m_parent);
+			return m_parent->GetFoliageEntries();
+		}
+
+		/// @brief Gets mutable access to the instance's own (override) foliage entries.
+		[[nodiscard]] std::vector<MaterialFoliageEntry>& GetOwnFoliageEntries() { return m_foliage; }
+
+		/// @brief Replaces the instance's own (override) foliage entries.
+		void SetOwnFoliageEntries(std::vector<MaterialFoliageEntry> entries) { m_foliage = std::move(entries); }
+
+		/// @brief Whether this instance overrides the parent's foliage with its own list.
+		[[nodiscard]] bool IsOverridingFoliage() const { return m_overrideFoliage; }
+
+		/// @brief Enables or disables foliage override for this instance.
+		void SetOverrideFoliage(const bool value) { m_overrideFoliage = value; }
+
 	private:
 		String m_name;
 		MaterialPtr m_parent;
@@ -149,6 +175,11 @@ namespace mmo
 		std::vector<VectorParameterValue> m_vectorParameters;
 		std::vector<TextureParameterValue> m_textureParameters;
 		std::unordered_map<String, TexturePtr> m_textureParamTextures;
+
+		/// Instance-level foliage override. Only used when m_overrideFoliage is true; otherwise the
+		/// parent material's foliage entries apply.
+		std::vector<MaterialFoliageEntry> m_foliage;
+		bool m_overrideFoliage = false;
 
 		bool m_bufferLayoutDirty[3]{ true, true, true };
 		bool m_bufferDataDirty[3]{ true, true, true };

@@ -16,7 +16,7 @@ namespace mmo
 			typedef auth::OutgoingPacket OutgoingPacket;
 		};
 
-		constexpr uint32 ProtocolVersion = 0x00000002;
+		constexpr uint32 ProtocolVersion = 0x00000003;
 
 		////////////////////////////////////////////////////////////////////////////////
 		// BEGIN: Client <-> Login section
@@ -55,6 +55,9 @@ namespace mmo
 				ReconnectProof		= 0x03,
 				/// Packet contains realm list data.
 				RealmList			= 0x04,
+				/// Pushed by the login server right after a successful LogonProof. Contains the list of
+				/// active account feature keys (entitlements) granted to the account.
+				AccountFeatures		= 0x05,
 			};
 		}
 
@@ -73,7 +76,8 @@ namespace mmo
 				LogonProof = 0x01,
 
 				/// Sent as response to a realms ClientAuthSession packet and contains authentication results (succeeded or failed,
-				/// as well as additional client session details that might be required).
+				/// as well as additional client session details that might be required). On success the packet also carries
+				/// the list of active account feature keys (entitlements) so the realm/world can query them.
 				ClientAuthSessionResponse = 0x02,
 
 				/// Notifies the realm that an account has been banned, which allows the realm to close the connection to the player client.
@@ -131,6 +135,9 @@ namespace mmo
 				PlayerGroupChanged,
 
 				PlayerGuildChanged,
+
+				/// Sent by the realm server to notify a world node of a group loot method change.
+				PlayerGroupLootMethodChanged,
 
 				/// Sent as response to inventory operation requests (save/delete).
 				InventoryOperationResult,

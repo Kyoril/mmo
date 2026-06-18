@@ -1,6 +1,7 @@
 #pragma once
 
 #include "graphics/vertex_index_data.h"
+#include "graphics/occlusion_query.h"
 #include "scene_graph/movable_object.h"
 #include "scene_graph/renderable.h"
 
@@ -101,6 +102,12 @@ namespace mmo
 			/// @param camera The camera being used for rendering.
 			/// @return True if the tile should be rendered, false otherwise.
 			bool PreRender(Scene& scene, GraphicsDevice& graphicsDevice, Camera& camera) override;
+
+			/// @brief Called after the tile has been rendered. Used to end occlusion queries.
+			/// @param scene The scene that was rendered.
+			/// @param graphicsDevice The graphics device used for rendering.
+			/// @param camera The camera used for rendering.
+			void PostRender(Scene& scene, GraphicsDevice& graphicsDevice, Camera& camera) override;
 
 			/// @brief Indicates whether this tile currently contains renderable terrain geometry.
 			/// @details When all inner cells of the tile are marked as holes, no triangles are generated
@@ -224,6 +231,39 @@ namespace mmo
 			uint32 m_currentLod = 0;
 			uint32 m_currentStitchKey = 0;
 
+			/// @brief GPU occlusion query for this tile. Created lazily on first render.
+			OcclusionQueryPtr m_occlusionQuery;
+
+			/// @brief Whether this tile is confirmed occluded and should be skipped.
+			/// @details A tile starts visible and only transitions to occluded after
+			///          receiving OcclusionGraceFrames consecutive 0-pixel query results.
+			///          This hysteresis prevents flickering from transient occlusion.
+			bool m_occlusionVisible = true;
+
+			/// @brief Number of consecutive frames the occlusion query returned 0 pixels.
+			/// @details The tile continues to render while this counter is below
+			///          OcclusionGraceFrames, providing a grace period during which
+			///          fresh query data is collected every frame.
+			uint32 m_consecutiveOccludedFrames = 0;
+
+			/// @brief Number of frames this tile has been skipped since being confirmed occluded.
+			///        Used to trigger periodic re-tests.
+			uint32 m_occlusionSkippedFrames = 0;
+
+			/// @brief Stagger offset for re-testing occluded tiles.
+			///        Distributes retest load across frames.
+			uint32 m_occlusionStaggerOffset = 0;
+
+			/// @brief Number of consecutive 0-pixel query frames required before a tile
+			///        is actually hidden. During the grace period the tile keeps rendering
+			///        and issuing queries, so transient occlusion is resolved without pop.
+			static constexpr uint32 OcclusionGraceFrames = 5;
+
+			/// @brief How many frames a confirmed-occluded tile can be skipped before
+			///        re-testing visibility. Lower values detect reappearance faster but
+			///        cost more GPU time. 3 frames is a good balance.
+			static constexpr uint32 OcclusionRetestInterval = 3;
+
 		public:
 			/// @brief Tests collision between a capsule and this terrain tile.
 			///        Uses spatial culling to optimize performance by only testing triangles
@@ -260,6 +300,11 @@ namespace mmo
 			/// @brief Gets the number of LOD index buffer combinations currently cached.
 			/// @return The number of cached entries.
 			size_t GetLodCacheUsage() const;
+
+			/// @brief Resets all occlusion state so the tile is treated as visible on the next frame.
+			/// @details Called when the camera jumps a large distance (building exit, teleport) to
+			///          prevent stale occluded state from hiding tiles that are now visible.
+			void ResetOcclusionState();
 
 		};
 	}

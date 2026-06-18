@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "condition_editor_window.h"
+#include "editor_imgui_helpers.h"
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
@@ -209,7 +210,7 @@ namespace mmo
 #define SLIDER_UINT32_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 32, min, max)
 #define SLIDER_UINT64_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 64, min, max)
 
-		if (ImGui::CollapsingHeader("Basic", ImGuiTreeNodeFlags_DefaultOpen))
+		if (const auto section = ScopedEditorSection("Basic", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			if (ImGui::BeginTable("table", 3, ImGuiTableFlags_None))
 			{
@@ -351,7 +352,7 @@ namespace mmo
 
                         // Unique label for drag-drop
                         char rowLabel[32];
-                        sprintf(rowLabel, "##subCondRow_%d", i);
+                        snprintf(rowLabel, sizeof(rowLabel), "##subCondRow_%d", i);
 
                         if (col == 0)
                         {
@@ -478,7 +479,7 @@ namespace mmo
                 ImGui::PushItemWidth(120);
                 static char idBuf[32] = "";
                 if (ImGui::IsWindowAppearing())
-                    sprintf(idBuf, "%u", pendingAddSubId);
+                    snprintf(idBuf, sizeof(idBuf), "%u", pendingAddSubId);
 
                 if (ImGui::InputText("##ManualSubId", idBuf, IM_ARRAYSIZE(idBuf), ImGuiInputTextFlags_CharsDecimal))
                 {

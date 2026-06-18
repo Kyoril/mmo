@@ -1,0 +1,23 @@
+meta {
+  name: Set Realm Feature Requirement
+  type: http
+  seq: 15
+}
+
+post {
+  url: http://localhost:8090/realm-feature-requirement
+  body: formUrlEncoded
+  auth: inherit
+}
+
+body:form-urlencoded {
+  realm: LOCALHOST
+  feature: PLAYTEST_ACCESS
+  require_visibility: 0
+  require_login: 1
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

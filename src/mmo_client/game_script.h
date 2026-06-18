@@ -9,6 +9,8 @@
 
 #include <memory>
 
+#include "data/cache_provider.h"
+
 #include "base/typedefs.h"
 
 
@@ -19,6 +21,7 @@ namespace mmo
 	class CharSelect;
 	class CharCreateInfo;
 	class TalentClient;
+	class TradeClient;
 	class UnitHandle;
 	class PartyInfo;
 	class QuestClient;
@@ -77,7 +80,9 @@ namespace mmo
 		GuildClient& guildClient,
 		FriendClient& friendClient,
 		GameTimeComponent& gameTime,
-		TalentClient& talentClient);	public:
+		TalentClient& talentClient,
+		ICacheProvider& cacheProvider,
+		TradeClient& tradeClient);	public:
 		/// Gets the current lua state
 		inline lua_State& GetLuaState() { ASSERT(m_luaState);  return *m_luaState; }
 
@@ -105,6 +110,8 @@ namespace mmo
 		bool LootSlotIsItem(uint32 slot) const;
 
 		bool LootSlotIsCoin(uint32 slot) const;
+
+		int32 GetLootSlotType(uint32 slot) const;
 
 		void GetLootSlotInfo(uint32 slot, String& out_icon, String& out_text, int32& out_count) const;
 
@@ -176,7 +183,11 @@ namespace mmo
 
 	GameTimeComponent& m_gameTime;
 
-	TalentClient& m_talentClient;	private:
+	TalentClient& m_talentClient;
+
+	ICacheProvider& m_cacheProvider;
+
+	TradeClient& m_tradeClient;	private:
 		void Script_ReviveMe() const;
 	};
 

@@ -18,6 +18,12 @@
 #include "game/vendor.h"
 #include "game_server/world/universe.h"
 #include "game_server/condition_mgr.h"
+#include "game_server/world/tile_subscriber.h"
+#include "binary_io/vector_sink.h"
+#include "binary_io/writer.h"
+#include "group_manager.h"
+
+#include <zlib.h>
 
 namespace mmo
 {
@@ -31,6 +37,7 @@ namespace mmo
 		, m_conditionMgr(conditionMgr)
 		, m_timeSyncTimer(instance.GetUniverse().GetTimers())
 		, m_inventoryAutoSaveTimer(instance.GetUniverse().GetTimers())
+		, m_tradeDistanceCheckTimer(instance.GetUniverse().GetTimers())
 	{
 		m_character->SetNetUnitWatcher(this);
 		m_character->SetPlayerWatcher(this);
@@ -101,6 +108,36 @@ namespace mmo
 				m_timeSyncTimer.SetEnd(GetAsyncTimeMs() + constants::OneMinute * 2);
 			});
 
+		// Periodic trade distance check — fires every 2 s while a trade session is active.
+		m_tradeDistanceCheckTimer.ended.connect([this]()
+			{
+				if (!m_tradeSession || !m_character)
+				{
+					return;
+				}
+
+				const int myIndex = m_tradeSession->GetPlayerIndex(*this);
+				if (myIndex < 0)
+				{
+					return;
+				}
+
+				const int otherIndex = m_tradeSession->GetOtherIndex(myIndex);
+				const Player& other = m_tradeSession->GetPlayer(otherIndex);
+
+				const float distanceSq = m_character->GetSquaredDistanceTo(
+					other.GetCharacter().GetPosition(), true);
+
+				if (distanceSq > LootDistance * LootDistance)
+				{
+					CancelTradeSession(static_cast<uint8>(game::trade_close_reason::TooFarAway));
+					return;
+				}
+
+				// Reschedule for next check
+				m_tradeDistanceCheckTimer.SetEnd(GetAsyncTimeMs() + constants::OneSecond * 2);
+			});
+
 		// Setup inventory auto-save timer
 		m_inventoryAutoSaveTimer.ended.connect([this]()
 			{
@@ -121,6 +158,18 @@ namespace mmo
 				// Reschedule next auto-save (every 5 minutes)
 				m_inventoryAutoSaveTimer.SetEnd(GetAsyncTimeMs() + constants::OneMinute * 5);
 			});
+	}
+
+	void Player::UpdateTradeDistanceCheck()
+	{
+		if (m_tradeSession)
+		{
+			m_tradeDistanceCheckTimer.SetEnd(GetAsyncTimeMs() + constants::OneSecond * 2);
+		}
+		else
+		{
+			m_tradeDistanceCheckTimer.Cancel();
+		}
 	}
 
 	Player::~Player()
@@ -184,12 +233,40 @@ namespace mmo
 		NotifyObjectsDespawned(objects);
 	}
 
-	void Player::UpdateCharacterGroup(uint64 groupId)
+	void Player::UpdateCharacterGroup(uint64 groupId, uint8 lootMethod, uint8 lootThreshold)
 	{
 		if (m_character)
 		{
 			uint64 oldGroup = m_character->GetGroupId();
 			m_character->SetGroupId(groupId);
+			m_character->SetLootMethod(static_cast<LootMethod>(lootMethod));
+			m_character->SetLootThreshold(lootThreshold);
+
+			GroupManager& groupManager = m_connector.GetGroupManager();
+			if (oldGroup != 0)
+			{
+				if (const auto oldGroupObject = groupManager.GetGroup(oldGroup))
+				{
+					oldGroupObject->RemoveMember(m_character->GetGuid());
+				}
+				m_character->SetGroup(nullptr);
+			}
+
+			if (groupId != 0)
+			{
+				auto groupObject = groupManager.GetGroup(groupId);
+				if (!groupObject)
+				{
+					groupObject = groupManager.AddGroup(groupId);
+				}
+
+				if (groupObject)
+				{
+					groupObject->AddMember(m_character->GetGuid());
+					groupObject->SetLootMethod(static_cast<LootMethod>(lootMethod), lootThreshold);
+					m_character->SetGroup(groupObject.get());
+				}
+			}
 
 			m_character->Invalidate(object_fields::Health);
 			m_character->Invalidate(object_fields::MaxHealth);
@@ -236,6 +313,59 @@ namespace mmo
 		m_character->Set<uint64>(object_fields::Guild, guildId);
 	}
 
+	void Player::UpdateCharacterGroupLootMethod(const LootMethod lootMethod, const uint64 lootMasterGuid, const uint8 lootThreshold)
+	{
+		if (m_character)
+		{
+			m_character->SetLootMethod(lootMethod);
+			m_character->SetLootThreshold(lootThreshold);
+			m_character->SetLootMasterGuid(lootMasterGuid);
+
+			if (PlayerGroup* group = m_character->GetGroup())
+			{
+				group->SetLootMethod(lootMethod, lootThreshold);
+				group->SetLootMasterGuid(lootMasterGuid);
+			}
+		}
+	}
+
+	void Player::RefreshQuestObjectInteractability(const uint32 questId)
+	{
+		if (!m_worldInstance)
+		{
+			return;
+		}
+
+		// Only send updates for objects the client already knows about (i.e. objects in currently
+		// visible tiles). Sending an UpdateObject packet for an object the client has never been
+		// told about causes the client to crash with an unknown-object error.
+		std::vector<GameObjectS*> affected;
+		ForEachTileInSight(
+			m_worldInstance->GetGrid(),
+			GetTileIndex(),
+			[&](VisibilityTile& tile)
+			{
+				for (auto* obj : tile.GetGameObjects())
+				{
+					if (!obj || obj->GetTypeId() != ObjectTypeId::Object)
+					{
+						continue;
+					}
+
+					GameWorldObjectS* worldObj = dynamic_cast<GameWorldObjectS*>(obj);
+					if (worldObj && worldObj->GetRequiredQuestId() == questId)
+					{
+						affected.push_back(worldObj);
+					}
+				}
+			});
+
+		if (!affected.empty())
+		{
+			NotifyObjectsUpdated(affected);
+		}
+	}
+
 	void Player::NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects)
 	{
 		// Prepare dynamic fields for world objects
@@ -253,14 +383,14 @@ namespace mmo
 
 		// Handle object field updates if any
 		{
-			// Prepare update packet
-			std::vector<char> buffer;
-			io::VectorSink sink(buffer);
+			// Build the update body (object count + update blocks) without a packet header so that
+			// SendObjectUpdate can decide whether to send it compressed or uncompressed.
+			std::vector<char> body;
+			io::VectorSink sink(body);
+			io::Writer writer(sink);
 
-			typename game::Protocol::OutgoingPacket packet(sink);
-			packet.Start(game::realm_client_packet::UpdateObject);
 			const size_t countPosition = sink.Position();
-			packet << io::write<uint16>(objects.size());
+			writer << io::write<uint16>(objects.size());
 
 			uint16 objectUpdateCount = objects.size();
 			for (const auto& object : objects)
@@ -271,16 +401,14 @@ namespace mmo
 					continue;
 				}
 
-				object->WriteObjectUpdateBlock(packet, false);
+				object->WriteObjectUpdateBlock(writer, false);
 			}
 
 			sink.Overwrite(countPosition, reinterpret_cast<const char*>(&objectUpdateCount), sizeof(uint16));
-			packet.Finish();
 
 			if (objectUpdateCount > 0)
 			{
-				// Send the proxy packet to the realm server
-				m_connector.SendProxyPacket(m_character->GetGuid(), packet.GetId(), packet.GetSize(), buffer, false);
+				SendObjectUpdate(body, false);
 			}
 		}
 		
@@ -324,6 +452,23 @@ namespace mmo
 
 	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& objects)
 	{
+		// Assert that none of these GUIDs are already known to the client — receiving a
+		// second creation packet for the same GUID crashes the client (duplicate entity name
+		// in Scene::CreateEntity).  If this fires, the server sent a spawn without a prior despawn.
+		for (const auto* object : objects)
+		{
+			const uint64 guid = object->GetGuid();
+			if (m_spawnedGuids.contains(guid))
+			{
+				ELOG("Double-spawn detected: GUID " << log_hex_digit(guid)
+					<< " (type=" << static_cast<int>(object->GetTypeId()) << ")"
+					<< " is already known to client " << log_hex_digit(m_character->GetGuid())
+					<< " — server sent creation without prior destroy");
+				ASSERT(false && "Double-spawn: object already spawned at client without prior despawn");
+			}
+			m_spawnedGuids.insert(guid);
+		}
+
 		// Prepare dynamic fields for world objects
 		for (const auto& object : objects)
 		{
@@ -337,17 +482,21 @@ namespace mmo
 			}
 		}
 
-		// Send spawn packet
-		SendPacket([&objects](game::OutgoingPacket& outPacket)
+		// Build the spawn body (object count + creation blocks) without a packet header so that
+		// SendObjectUpdate can decide whether to send it compressed or uncompressed.
 		{
-			outPacket.Start(game::realm_client_packet::UpdateObject);
-			outPacket << io::write<uint16>(objects.size());
+			std::vector<char> body;
+			io::VectorSink sink(body);
+			io::Writer writer(sink);
+
+			writer << io::write<uint16>(objects.size());
 			for (const auto& object : objects)
 			{
-				object->WriteObjectUpdateBlock(outPacket);
+				object->WriteObjectUpdateBlock(writer);
 			}
-			outPacket.Finish();
-		}, true);
+
+			SendObjectUpdate(body, true);
+		}
 
 		// Clear dynamic fields for world objects
 		for (const auto& object : objects)
@@ -398,6 +547,11 @@ namespace mmo
 
 	void Player::NotifyObjectsDespawned(const std::vector<GameObjectS*>& objects)
 	{
+		for (const auto* object : objects)
+		{
+			m_spawnedGuids.erase(object->GetGuid());
+		}
+
 		const uint64 currentTarget = m_character->Get<uint64>(object_fields::TargetUnit);
 		if (currentTarget != 0)
 		{
@@ -426,6 +580,49 @@ namespace mmo
 
 	void Player::SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer, bool flush)
 	{
+		m_connector.SendProxyPacket(m_character->GetGuid(), packet.GetId(), packet.GetSize(), buffer, flush);
+	}
+
+	void Player::SendObjectUpdate(const std::vector<char>& updateBody, const bool flush)
+	{
+		// Update bodies larger than this threshold (in bytes) are zlib-compressed and sent as
+		// CompressedUpdateObject instead of UpdateObject to reduce bandwidth usage.
+		constexpr size_t compressionThreshold = 100;
+
+		std::vector<char> buffer;
+		io::VectorSink sink(buffer);
+		game::Protocol::OutgoingPacket packet(sink);
+
+		if (updateBody.size() > compressionThreshold)
+		{
+			// Compress the update body using zlib.
+			uLongf compressedSize = compressBound(static_cast<uLong>(updateBody.size()));
+			std::vector<Bytef> compressed(compressedSize);
+
+			const int result = compress2(compressed.data(), &compressedSize,
+				reinterpret_cast<const Bytef*>(updateBody.data()), static_cast<uLong>(updateBody.size()),
+				Z_BEST_SPEED);
+
+			if (result == Z_OK)
+			{
+				// CompressedUpdateObject body: uint32 uncompressed size followed by the zlib stream.
+				packet.Start(game::realm_client_packet::CompressedUpdateObject);
+				packet << io::write<uint32>(static_cast<uint32>(updateBody.size()));
+				packet.Sink().Write(reinterpret_cast<const char*>(compressed.data()), compressedSize);
+				packet.Finish();
+
+				m_connector.SendProxyPacket(m_character->GetGuid(), packet.GetId(), packet.GetSize(), buffer, flush);
+				return;
+			}
+
+			// Compression failed for some reason - fall back to sending the data uncompressed.
+			WLOG("Failed to compress object update (zlib error " << result << "), sending uncompressed");
+		}
+
+		packet.Start(game::realm_client_packet::UpdateObject);
+		packet.Sink().Write(updateBody.data(), updateBody.size());
+		packet.Finish();
+
 		m_connector.SendProxyPacket(m_character->GetGuid(), packet.GetId(), packet.GetSize(), buffer, flush);
 	}
 
@@ -473,6 +670,9 @@ namespace mmo
 			break;
 		case game::client_realm_packet::CheatSpeed:
 			OnCheatSpeed(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatCheckLineOfSight:
+			OnCheatCheckLineOfSight(opCode, buffer.size(), reader);
 			break;
 #endif
 
@@ -524,6 +724,9 @@ namespace mmo
 			break;
 		case game::client_realm_packet::LootRelease:
 			OnLootRelease(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::LootRoll:
+			OnLootRoll(opCode, buffer.size(), reader);
 			break;
 
 		case game::client_realm_packet::SellItem:
@@ -603,6 +806,10 @@ namespace mmo
 		case game::client_realm_packet::MoveSetFacing:
 		case game::client_realm_packet::MoveJump:
 		case game::client_realm_packet::MoveFallLand:
+		case game::client_realm_packet::MoveStartSwim:
+		case game::client_realm_packet::MoveStopSwim:
+		case game::client_realm_packet::MoveStartWalk:
+		case game::client_realm_packet::MoveStopWalk:
 		case game::client_realm_packet::MoveEnded:
 		case game::client_realm_packet::MoveSplineDone:
 			OnMovement(opCode, buffer.size(), reader);
@@ -618,7 +825,36 @@ namespace mmo
 		case game::client_realm_packet::ForceSetFlightBackSpeedAck:
 		case game::client_realm_packet::MoveTeleportAck:
 		case game::client_realm_packet::MoveRootAck:
+		case game::client_realm_packet::MoveStunAck:
+		case game::client_realm_packet::MoveSleepAck:
+		case game::client_realm_packet::MoveFearAck:
+		case game::client_realm_packet::MoveDisorientAck:
 			OnClientAck(opCode, buffer.size(), reader);
+			break;
+
+		case game::client_realm_packet::TradeInitiate:
+			OnTradeInitiate(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::TradeCancelRequest:
+			OnTradeCancelRequest(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::TradeAddItem:
+			OnTradeAddItem(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::TradeRemoveItem:
+			OnTradeRemoveItem(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::TradeSetMoney:
+			OnTradeSetMoney(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::TradeAccept:
+			OnTradeAccept(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::TradeInviteAccept:
+			OnTradeInviteAccept(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::TradeInviteDecline:
+			OnTradeInviteDecline(opCode, buffer.size(), reader);
 			break;
 		}
 	}
@@ -632,6 +868,9 @@ namespace mmo
 			break;
 		case ChatType::Yell:
 			m_character->ChatYell(message);
+			break;
+		case ChatType::Emote:
+			m_character->ChatEmote(message);
 			break;
 		default:
 			DLOG("TODO: Unsupported local chat type " << static_cast<int32>(type) << "!");
@@ -758,7 +997,18 @@ namespace mmo
 	{
 		DLOG("Player spawned on map " << instance.GetMapId() << ", instance " << instance.GetId() << "...");
 
+		// Reset speed-check baseline so the first position packet after zone entry
+		// does not produce a false-positive speed violation.
+		m_lastPositionPacketTimestamp = 0;
+		m_lastPositionPacketPos = {};
+		m_lastPositionPacketFlags = 0;
+
 		m_worldInstance = &instance;
+
+		// Restore persisted auras and cooldowns before the spawn packet is built so the auras are
+		// included in the initial object creation packet sent below.
+		m_character->RestorePersistentAuras(m_characterData.auras);
+		m_character->RestorePersistentCooldowns(m_characterData.cooldowns);
 
 		// Ensure the inventory is initialized
 		std::vector<GameObjectS*> objects;
@@ -799,6 +1049,25 @@ namespace mmo
 			}
 			packet.Finish();
 		}, false);
+
+		// Inform the client about any active spell cooldowns (restored above) so the action bar
+		// shows the remaining cooldown right after spawning.
+		const std::vector<PersistentCooldownData> activeCooldowns = m_character->GetPersistentCooldowns();
+		if (!activeCooldowns.empty())
+		{
+			SendPacket([&activeCooldowns](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::SpellCooldown);
+				packet << io::write<uint16>(static_cast<uint16>(activeCooldowns.size()));
+				for (const auto& cooldown : activeCooldowns)
+				{
+					packet
+						<< io::write<uint32>(cooldown.spellId)
+						<< io::write<uint32>(static_cast<uint32>(cooldown.remainingMs));
+				}
+				packet.Finish();
+			}, false);
+		}
 
 		// Cast passive spells after spawn, so that SpellMods are sent AFTER the spawn packet
 		SpellTargetMap target;
@@ -843,11 +1112,35 @@ namespace mmo
 		// Lets track the session start time		
     	m_sessionStartTime = std::chrono::steady_clock::now();
 		m_spawned = true;
+
+		// Allow the client to transition into falling state without a jump packet.
+		// This handles the case where the player spawns in the air (e.g., cross-map teleport).
+		m_pendingFallStart = true;
 	}
 
 	void Player::OnDespawned(GameObjectS& object)
 	{
 		m_spawned = false;
+
+		// Cancel any active trade session so the other player is notified
+		if (m_tradeSession)
+		{
+			const int myIndex = m_tradeSession->GetPlayerIndex(*this);
+			if (myIndex >= 0)
+			{
+				const int otherIndex = m_tradeSession->GetOtherIndex(myIndex);
+				Player& other = m_tradeSession->GetPlayer(otherIndex);
+				const uint8 disconnectedReason = static_cast<uint8>(game::trade_close_reason::Disconnected);
+				other.SendPacket([disconnectedReason](game::OutgoingPacket& packet)
+				{
+					packet.Start(game::realm_client_packet::TradeSessionClosed);
+					packet << io::write<uint8>(disconnectedReason);
+					packet.Finish();
+				});
+				other.SetTradeSession(nullptr);
+			}
+			m_tradeSession = nullptr;
+		}
 
 		// No longer watch for network events
 		m_character->SetNetUnitWatcher(nullptr);
@@ -873,21 +1166,40 @@ namespace mmo
 			newTile.GetPosition(),
 			[this](VisibilityTile &tile)
 			{
-				if (tile.GetGameObjects().empty())
+				// Only despawn objects the client actually knows about.  Invisible units
+				// (e.g. those with a ModVisibility aura) are never sent as creation packets,
+				// so sending a destroy for them would cause a client disconnect.
+				std::vector<uint64> toDestroy;
+				toDestroy.reserve(tile.GetGameObjects().size());
+				for (const auto *object : tile.GetGameObjects())
+				{
+					if (m_spawnedGuids.contains(object->GetGuid()))
+					{
+						toDestroy.push_back(object->GetGuid());
+					}
+				}
+
+				if (toDestroy.empty())
 				{
 					return;
 				}
 
-				this->SendPacket([&tile](game::OutgoingPacket& outPacket)
+				this->SendPacket([&toDestroy](game::OutgoingPacket& outPacket)
 				{
 					outPacket.Start(game::realm_client_packet::DestroyObjects);
-					outPacket << io::write<uint16>(tile.GetGameObjects().size());
-					for (const auto *object : tile.GetGameObjects())
+					outPacket << io::write<uint16>(static_cast<uint16>(toDestroy.size()));
+					for (const uint64 guid : toDestroy)
 					{
-						outPacket << io::write_packed_guid(object->GetGuid());
+						outPacket << io::write_packed_guid(guid);
 					}
 					outPacket.Finish();
 				});
+
+				// Update our tracking — these objects are leaving the client's view
+				for (const uint64 guid : toDestroy)
+				{
+					m_spawnedGuids.erase(guid);
+				}
 			});
 
 		ForEachTileInSightWithout(
@@ -912,7 +1224,16 @@ namespace mmo
 			{
 				continue;
 			}
-				
+
+			// Mirror the visibility check that AddGameObject already applies — don't send
+			// a creation packet for a unit the player cannot currently see (e.g. invisible
+			// due to a ModVisibility aura).  If that unit later becomes visible,
+			// UpdateVisibilityAndView will send the creation packet at that point.
+			if (obj->IsUnit() && !obj->AsUnit().CanBeSeenBy(*m_character))
+			{
+				continue;
+			}
+
 			objects.push_back(obj);
 		}
 
@@ -983,6 +1304,47 @@ namespace mmo
 			}),
 		};
 
+		if (m_loot->HasActiveRolls() && !m_loot->AreRollsStarted())
+		{
+			m_loot->MarkRollsStarted();
+
+			for (const auto& [slot, rollData] : m_loot->GetRollDataMap())
+			{
+				const LootItem* lootItem = m_loot->GetLootDefinition(slot);
+				if (!lootItem)
+				{
+					continue;
+				}
+
+				constexpr uint32 rollTime = 60000;
+				std::vector<char> buffer;
+				io::VectorSink sink(buffer);
+				game::OutgoingPacket rollPacket(sink);
+				rollPacket.Start(game::realm_client_packet::StartLootRoll);
+				rollPacket
+					<< io::write<uint64>(source->GetGuid())
+					<< io::write<uint8>(slot)
+					<< io::write<uint32>(lootItem->definition.item())
+					<< io::write<uint32>(rollTime);
+				rollPacket.Finish();
+
+				source->ForEachSubscriberInSight([&rollData, &rollPacket, &buffer](TileSubscriber& subscriber)
+				{
+					if (!subscriber.GetGameUnit().IsPlayer())
+					{
+						return;
+					}
+
+					if (!rollData.eligiblePlayers.contains(subscriber.GetGameUnit().GetGuid()))
+					{
+						return;
+					}
+
+					subscriber.SendPacket(rollPacket, buffer);
+				});
+			}
+		}
+
 		// Send the actual loot data
 		SendPacket([&](game::OutgoingPacket& packet)
 		{
@@ -1006,6 +1368,18 @@ namespace mmo
 		}
 
 		m_loot->closed(m_character->GetGuid());
+
+		// If the loot instance is empty (no items, no gold) and we have a source creature,
+		// clear the loot from it now so it stops being flagged as lootable. This handles
+		// the case where a creature intentionally has an empty loot instance (to motivate
+		// the player to check) — once the player closes the window, the flag should drop.
+		if (m_loot->IsEmpty() && m_lootSource)
+		{
+			if (const auto creature = std::dynamic_pointer_cast<GameCreatureS>(m_lootSource))
+			{
+				creature->SetUnitLoot(nullptr);
+			}
+		}
 
 		// Notify player
 		SendPacket([&](game::OutgoingPacket& packet)
@@ -1107,6 +1481,7 @@ namespace mmo
 						<< io::write<uint32>(quest.rewardmoney());
 				}
 
+				packet << io::write<uint32>(quest.rewardxp());
 				packet << io::write<uint32>(quest.rewardspell());
 				packet.Finish();
 			});
@@ -1324,7 +1699,7 @@ namespace mmo
 		if (m_character->HasTimedOutPendingMovementChange())
 		{
 			ELOG("Player probably tried to skip or delay an ack packet");
-			//Kick();
+			Kick();
 			return;
 		}
 
@@ -1337,14 +1712,34 @@ namespace mmo
 		}
 
 		// Did the client try to sneak in a FALLING flag without sending a jump packet?
-		if (info.IsFalling() && !prevMovementInfo.IsFalling() && opCode != game::client_realm_packet::MoveJump)
+		// MoveStopSwim is allowed to add the FALLING flag: leaving water into the air (e.g. swimming
+		// off the top of a waterfall) transitions directly from swimming into falling.
+		if (info.IsFalling() && !prevMovementInfo.IsFalling() &&
+			opCode != game::client_realm_packet::MoveJump &&
+			opCode != game::client_realm_packet::MoveStopSwim)
 		{
-			ELOG("Client tried to apply FALLING flag in non-jump packet!");
-			//Kick();
-			return;
+			// Allow falling to start without a jump if the player was recently spawned or
+			// teleported cross-map (they may have spawned in the air)
+			if (m_pendingFallStart)
+			{
+				m_pendingFallStart = false;
+				m_fallStartHeight = info.position.y;
+				m_trackingFall = true;
+			}
+			else
+			{
+				ELOG("Client tried to apply FALLING flag in non-jump packet!");
+				//Kick();
+				return;
+			}
 		}
 		// Did the client try to remove a FALLING flag without sending a landing packet?
-		if (!info.IsFalling() && prevMovementInfo.IsFalling() && (opCode != game::client_realm_packet::MoveFallLand && opCode != game::client_realm_packet::MoveEnded))
+		// MoveStartSwim is allowed to remove the FALLING flag: falling into water transitions
+		// directly from falling into swimming (the water breaks the fall).
+		if (!info.IsFalling() && prevMovementInfo.IsFalling() &&
+			opCode != game::client_realm_packet::MoveFallLand &&
+			opCode != game::client_realm_packet::MoveEnded &&
+			opCode != game::client_realm_packet::MoveStartSwim)
 		{
 			ELOG("Client tried to remove FALLING flag in non-jump packet!");
 			//Kick();
@@ -1359,6 +1754,11 @@ namespace mmo
 				//Kick();
 				return;
 			}
+
+			// Record the Y position at the start of the jump/fall for fall damage calculation
+			m_fallStartHeight = info.position.y;
+			m_trackingFall = true;
+			m_pendingFallStart = false;
 		}
 		else if (opCode == game::client_realm_packet::MoveFallLand)
 		{
@@ -1368,6 +1768,162 @@ namespace mmo
 				//Kick();
 				return;
 			}
+
+			// Calculate and apply fall damage on landing
+			if (m_trackingFall && m_character->IsAlive())
+			{
+				const float fallDistance = m_fallStartHeight - info.position.y;
+				if (fallDistance > m_fallDamageMinHeight)
+				{
+					// Calculate damage as a percentage of max HP, scaling linearly from 0% at minHeight to 100% at lethalHeight
+					const float damageRange = m_fallDamageLethalHeight - m_fallDamageMinHeight;
+					float damagePct = 0.0f;
+					if (damageRange > 0.0f)
+					{
+						damagePct = (fallDistance - m_fallDamageMinHeight) / damageRange;
+					}
+
+					// Clamp to 0..1 range (100% at lethal height or beyond)
+					if (damagePct > 1.0f)
+					{
+						damagePct = 1.0f;
+					}
+
+					const uint32 maxHealth = m_character->GetMaxHealth();
+					uint32 fallDamage = static_cast<uint32>(static_cast<float>(maxHealth) * damagePct);
+					if (fallDamage > 0)
+					{
+						// Apply fall damage as physical damage with no instigator
+						const uint32 actualDamage = m_character->Damage(fallDamage, static_cast<uint32>(DamageSchool::Physical), nullptr, damage_type::PhysicalAbility);
+
+						// Send environmental damage log to the client
+						m_character->EnvironmentalDamageLog(m_character->GetGuid(), actualDamage, environmental_damage_type::Fall);
+					}
+				}
+			}
+
+			m_trackingFall = false;
+		}
+
+		// Clear the pending fall start flag if the player is on the ground
+		// (they landed normally or were never in the air after spawn/teleport)
+		if (!info.IsFalling() && m_pendingFallStart)
+		{
+			m_pendingFallStart = false;
+		}
+
+		// Swimming flag tamper checks (mirrors the FALLING-flag checks above): the Swimming flag may
+		// only be added by a MoveStartSwim packet and only removed by a MoveStopSwim packet.
+		if (info.IsSwimming() && !prevMovementInfo.IsSwimming() && opCode != game::client_realm_packet::MoveStartSwim)
+		{
+			ELOG("Client tried to apply SWIMMING flag in a non-startswim packet!");
+			return;
+		}
+		if (!info.IsSwimming() && prevMovementInfo.IsSwimming() &&
+			opCode != game::client_realm_packet::MoveStopSwim && opCode != game::client_realm_packet::MoveEnded)
+		{
+			ELOG("Client tried to remove SWIMMING flag in a non-stopswim packet!");
+			return;
+		}
+
+		if (opCode == game::client_realm_packet::MoveStartSwim)
+		{
+			if (prevMovementInfo.IsSwimming() || !info.IsSwimming())
+			{
+				ELOG("Start swim packet did not add the SWIMMING flag or player was already swimming");
+				return;
+			}
+
+			// Entering the water breaks any ongoing fall (no fall damage from landing in water).
+			m_trackingFall = false;
+			m_pendingFallStart = false;
+
+			// Authoritative water check: the player must be in water deep enough to swim. The depth
+			// threshold mirrors the client's SWIM_START_DEPTH, with tolerance for surface jitter.
+			// Only enforced when the server actually has water data for this map; otherwise we trust
+			// the client (graceful degradation instead of rejecting all swimming).
+			constexpr float swimStartDepth = 1.0f;
+			constexpr float depthTolerance = 0.5f;
+
+			MapData* mapData = m_worldInstance->GetMapData();
+			if (mapData && mapData->IsWaterDataAvailable())
+			{
+				float surfaceY = 0.0f;
+				const bool hasWater = mapData->GetWaterSurface(info.position, surfaceY);
+				if (!hasWater || (surfaceY - info.position.y) < (swimStartDepth - depthTolerance))
+				{
+					ELOG("[AntiCheat] Player " << m_character->GetName()
+						<< " tried to start swimming outside of deep water at " << info.position);
+					m_antiCheatTracker.RecordViolation(GetAsyncTimeMs());
+					if (m_antiCheatTracker.ShouldKick(GetAsyncTimeMs()))
+					{
+						Kick();
+					}
+					return;
+				}
+			}
+		}
+		else if (opCode == game::client_realm_packet::MoveStopSwim)
+		{
+			if (!prevMovementInfo.IsSwimming() || info.IsSwimming())
+			{
+				ELOG("Stop swim packet did not remove the SWIMMING flag or player was not swimming");
+				return;
+			}
+
+			// Leaving the water directly into the air (waterfall): begin fall tracking so that the
+			// eventual landing applies fall damage from this point.
+			if (info.IsFalling())
+			{
+				m_fallStartHeight = info.position.y;
+				m_trackingFall = true;
+				m_pendingFallStart = false;
+			}
+		}
+		else if (info.IsSwimming())
+		{
+			// Reinforcement check on regular movement packets: a swimming player must stay over
+			// water (leaving the water sends MoveStopSwim first). A hard miss is treated as a
+			// violation; the anti-cheat tracker only kicks once a threshold is exceeded so a single
+			// shoreline-edge race cannot cause a false kick. Only enforced when water data exists.
+			float surfaceY = 0.0f;
+			MapData* mapData = m_worldInstance->GetMapData();
+			if (mapData && mapData->IsWaterDataAvailable() && !mapData->GetWaterSurface(info.position, surfaceY))
+			{
+				WLOG("[AntiCheat] Player " << m_character->GetName()
+					<< " is flagged swimming but is not over water at " << info.position);
+				m_antiCheatTracker.RecordViolation(GetAsyncTimeMs());
+				if (m_antiCheatTracker.ShouldKick(GetAsyncTimeMs()))
+				{
+					Kick();
+				}
+				return;
+			}
+		}
+
+		// WalkMode flag tamper checks: the WalkMode flag may only be added by MoveStartWalk and
+		// only removed by MoveStopWalk.
+		const bool prevWalking = (prevMovementInfo.movementFlags & movement_flags::WalkMode) != 0;
+		const bool nowWalking  = (info.movementFlags & movement_flags::WalkMode) != 0;
+		if (nowWalking && !prevWalking && opCode != game::client_realm_packet::MoveStartWalk)
+		{
+			ELOG("Client tried to apply WALKMODE flag in a non-startwalk packet!");
+			return;
+		}
+		if (!nowWalking && prevWalking && opCode != game::client_realm_packet::MoveStopWalk)
+		{
+			ELOG("Client tried to remove WALKMODE flag in a non-stopwalk packet!");
+			return;
+		}
+		if (opCode == game::client_realm_packet::MoveStartWalk && (!nowWalking || prevWalking))
+		{
+			ELOG("MoveStartWalk did not add the WALKMODE flag or player was already walking");
+			return;
+		}
+		if (opCode == game::client_realm_packet::MoveStopWalk && (nowWalking || !prevWalking))
+		{
+			ELOG("MoveStopWalk did not remove the WALKMODE flag or player was already running");
+			return;
 		}
 
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
@@ -1388,6 +1944,10 @@ namespace mmo
 		case game::client_realm_packet::MoveSetFacing: opCode = game::realm_client_packet::MoveSetFacing; break;
 		case game::client_realm_packet::MoveJump: opCode = game::realm_client_packet::MoveJump; break;
 		case game::client_realm_packet::MoveFallLand: opCode = game::realm_client_packet::MoveFallLand; break;
+		case game::client_realm_packet::MoveStartSwim: opCode = game::realm_client_packet::MoveStartSwim; break;
+		case game::client_realm_packet::MoveStopSwim: opCode = game::realm_client_packet::MoveStopSwim; break;
+		case game::client_realm_packet::MoveStartWalk: opCode = game::realm_client_packet::MoveStartWalk; break;
+		case game::client_realm_packet::MoveStopWalk: opCode = game::realm_client_packet::MoveStopWalk; break;
 		case game::client_realm_packet::MoveEnded: opCode = game::realm_client_packet::MoveEnded; break;
 		case game::client_realm_packet::MoveSplineDone: opCode = game::realm_client_packet::MoveSplineDone; break;
 		default:
@@ -1406,14 +1966,33 @@ namespace mmo
 		}
 		else if (!prevMovementInfo.IsChangingPosition() && opCode != game::realm_client_packet::MoveSplineDone)
 		{
-			const float positionTolerance = 0.01f; // Small tolerance for floating point precision
+			// Position coherence check: when movement starts (player was stationary),
+			// the client must send the position from its last stop/lock — which should
+			// match the server's known position exactly (modulo floating-point physics).
+			//
+			// Tolerance rationale:
+			//   0.5f covers legitimate client-side physics jitter (gravity settling,
+			//   collision resolution rounding). Previously 1.0f was required because
+			//   SetFacing was suppressing heartbeats, so the server's last-known position
+			//   could be a full heartbeat interval (500ms) stale. That bug is now fixed.
+			//
+			// If this log fires frequently for legitimate movement, widen the tolerance
+			// slightly. Do NOT widen past ~0.75f without investigating the root cause.
+			const float positionTolerance = 0.5f;
+			const float drift = (info.position - m_character->GetPosition()).GetLength();
             if (!info.position.IsNearlyEqual(m_character->GetPosition(), positionTolerance))
             {
-                ELOG("[OPCode " << opCode << "] Pos changed on client while it should not be able to do so based on server info");
-                ELOG("\tS: " << m_character->GetPosition());
-                ELOG("\tC: " << info.position);
-                ELOG("\tDistance: " << (info.position - m_character->GetPosition()).GetLength());
-                //return;
+                WLOG("[AntiCheat] Position drift on movement start: server=" << m_character->GetPosition()
+                    << " client=" << info.position << " dist=" << drift
+                    << " opcode=" << log_hex_digit(opCode));
+				if (!m_character->HasPendingMovementChange()) {
+                    m_antiCheatTracker.RecordViolation(GetAsyncTimeMs());
+                    if (m_antiCheatTracker.ShouldKick(GetAsyncTimeMs())) {
+                        ELOG("[AntiCheat] Kicking player " << m_character->GetName()
+                            << " (GUID " << m_character->GetGuid() << "): excessive position drift");
+                        Kick();
+                    }
+                }
             }
 		}
 
@@ -1440,6 +2019,69 @@ namespace mmo
 				ELOG("User stops movement but was not moving")
 				return;
 			}
+		}
+
+		// Speed hack check: validate that the distance covered since the last known
+		// position is consistent with the player's allowed speed.
+		// Uses m_lastPositionPacketTimestamp / m_lastPositionPacketPos rather than
+		// prevMovementInfo.timestamp so that facing-only packets (MoveSetFacing,
+		// MoveStopTurn) don't reset the elapsed-time baseline to near-zero, which
+		// was causing false positive violations with implied speeds of 3000+ m/s.
+		const bool isPositionPacket =
+		    opCode == game::realm_client_packet::MoveHeartBeat ||
+		    opCode == game::realm_client_packet::MoveStop ||
+		    opCode == game::realm_client_packet::MoveStopStrafe ||
+		    opCode == game::realm_client_packet::MoveStartForward ||
+		    opCode == game::realm_client_packet::MoveStartBackward ||
+		    opCode == game::realm_client_packet::MoveStartStrafeLeft ||
+		    opCode == game::realm_client_packet::MoveStartStrafeRight;
+
+		if (isPositionPacket && !info.IsFalling() && m_lastPositionPacketTimestamp > 0)
+		{
+			const float dist = (info.position - m_lastPositionPacketPos).GetLength();
+			if (dist > 0.0f && info.timestamp > m_lastPositionPacketTimestamp)
+			{
+				const float elapsed = static_cast<float>(info.timestamp - m_lastPositionPacketTimestamp) / 1000.0f;
+				// 35% tolerance for latency jitter, frame-rate variation, physics rounding.
+				// When the player is moving backward, cap against the backward speed instead of run speed.
+				const bool wasMovingBackward =
+					(info.movementFlags & movement_flags::Backward) != 0 &&
+					(info.movementFlags & movement_flags::Forward) == 0;
+				const float baseSpeed = wasMovingBackward
+					? m_character->GetSpeed(movement_type::Backwards)
+					: m_character->GetSpeed(movement_type::Run);
+				const float maxSpeed = baseSpeed * 1.35f;
+				const float impliedSpeed = dist / elapsed;
+
+				if (impliedSpeed > maxSpeed)
+				{
+					WLOG("[AntiCheat] Speed violation: implied=" << impliedSpeed
+					    << " max=" << maxSpeed
+					    << " dist=" << dist
+					    << " elapsed=" << elapsed
+					    << "s opcode=" << log_hex_digit(opCode)
+					    << " flags=" << log_hex_digit(info.movementFlags)
+					    << " prevFlags=" << log_hex_digit(m_lastPositionPacketFlags)
+					    << " pos=(" << info.position.x << "," << info.position.y << "," << info.position.z << ")"
+					    << " prevPos=(" << m_lastPositionPacketPos.x << "," << m_lastPositionPacketPos.y << "," << m_lastPositionPacketPos.z << ")");
+					if (!m_character->HasPendingMovementChange()) {
+                        m_antiCheatTracker.RecordViolation(GetAsyncTimeMs());
+                        if (m_antiCheatTracker.ShouldKick(GetAsyncTimeMs())) {
+                            ELOG("[AntiCheat] Kicking player " << m_character->GetName()
+                                << " (GUID " << m_character->GetGuid() << "): excessive speed hack");
+                            Kick();
+                        }
+                    }
+				}
+			}
+		}
+
+		// Update position baseline for the next speed check
+		if (isPositionPacket)
+		{
+			m_lastPositionPacketTimestamp = info.timestamp;
+			m_lastPositionPacketPos = info.position;
+			m_lastPositionPacketFlags = info.movementFlags;
 		}
 
 		m_character->ApplyMovementInfo(info);
@@ -1471,7 +2113,7 @@ namespace mmo
 				io::VectorSink sink{ buffer };
 				game::OutgoingPacket movementPacket{ sink };
 				movementPacket.Start(opCode);
-				movementPacket << io::write<uint64>(characterGuid) << info;
+				movementPacket << io::write<uint64>(characterGuid) << copy;
 				movementPacket.Finish();
 
 				watcher->SendPacket(movementPacket, buffer);
@@ -1812,6 +2454,86 @@ namespace mmo
 				}
 			}
 			break;
+		case game::client_realm_packet::MoveStunAck:
+			if (change.changeType == MovementChangeType::Stun)
+			{
+				if (change.apply)
+				{
+					if ((info.movementFlags & movement_flags::Rooted) == 0)
+					{
+						ELOG("Client acked stun but player is not rooted");
+						Kick();
+						return;
+					}
+				}
+				else if ((info.movementFlags & movement_flags::Rooted) != 0)
+				{
+					ELOG("Client acked unstun but player is still rooted");
+					Kick();
+					return;
+				}
+			}
+			break;
+		case game::client_realm_packet::MoveSleepAck:
+			if (change.changeType == MovementChangeType::Sleep)
+			{
+				if (change.apply)
+				{
+					if ((info.movementFlags & movement_flags::Rooted) == 0)
+					{
+						ELOG("Client acked sleep but player is not rooted");
+						Kick();
+						return;
+					}
+				}
+				else if ((info.movementFlags & movement_flags::Rooted) != 0)
+				{
+					ELOG("Client acked unsleep but player is still rooted");
+					Kick();
+					return;
+				}
+			}
+			break;
+		case game::client_realm_packet::MoveFearAck:
+			if (change.changeType == MovementChangeType::Fear)
+			{
+				if (change.apply)
+				{
+					if ((info.movementFlags & movement_flags::Rooted) == 0)
+					{
+						ELOG("Client acked fear but player is not rooted");
+						Kick();
+						return;
+					}
+				}
+				else if ((info.movementFlags & movement_flags::Rooted) != 0)
+				{
+					ELOG("Client acked unfear but player is still rooted");
+					Kick();
+					return;
+				}
+			}
+			break;
+		case game::client_realm_packet::MoveDisorientAck:
+			if (change.changeType == MovementChangeType::Disorient)
+			{
+				if (change.apply)
+				{
+					if ((info.movementFlags & movement_flags::Rooted) == 0)
+					{
+						ELOG("Client acked disorient but player is not rooted");
+						Kick();
+						return;
+					}
+				}
+				else if ((info.movementFlags & movement_flags::Rooted) != 0)
+				{
+					ELOG("Client acked undisorient but player is still rooted");
+					Kick();
+					return;
+				}
+			}
+			break;
 		case game::client_realm_packet::MoveTeleportAck:
 			if (change.changeType != MovementChangeType::Teleport)
 			{
@@ -1835,6 +2557,12 @@ namespace mmo
 			}
 
 			DLOG("Received teleport ack towards " << change.teleportInfo.x << "," << change.teleportInfo.y << "," << change.teleportInfo.z);
+
+			// Start tracking fall damage from the teleport position since the player
+			// is now falling after the teleport (Falling flag is always sent in teleport)
+			m_fallStartHeight = info.position.y;
+			m_trackingFall = true;
+			m_pendingFallStart = false;
 			break;
 		}
 
@@ -1858,6 +2586,10 @@ namespace mmo
 			// change and all following movement packets need to use these new speed
 			// values.
 			m_character->ApplySpeedChange(typeSent, receivedSpeed);
+			// Reset the speed-check baseline. Movement packets in-flight during the
+			// transition were sent at the old speed; comparing them against the new
+			// (possibly lower) cap would cause false positive violations.
+			m_lastPositionPacketTimestamp = 0;
 			break;
 		}
 	}
@@ -2025,7 +2757,8 @@ namespace mmo
 				packet.Start(game::realm_client_packet::TrainerList);
 				packet
 					<< io::write<uint64>(trainerUnit.GetGuid())
-					<< io::write<uint16>(trainer.spells_size());
+					<< io::write<uint16>(trainer.spells_size())
+					<< io::write_dynamic_range<uint8>(trainer.title());
 
 				uint32 index = 0;
 				for (const auto& trainerSpellEntry : trainer.spells())
@@ -2096,9 +2829,9 @@ namespace mmo
 			});
 	}
 
-	void Player::OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell)
+	void Player::OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell, uint32 blocked)
 	{
-		SendPacket([targetGuid, amount, school, flags, &spell](game::OutgoingPacket& packet)
+		SendPacket([targetGuid, amount, school, flags, &spell, blocked](game::OutgoingPacket& packet)
 			{
 				packet.Start(game::realm_client_packet::SpellDamageLog);
 				packet
@@ -2106,7 +2839,8 @@ namespace mmo
 					<< io::write<uint32>(spell.id())
 					<< io::write<uint32>(amount)
 					<< io::write<uint8>(school)
-					<< io::write<uint8>(flags);
+					<< io::write<uint8>(flags)
+					<< io::write<uint32>(blocked);
 				packet.Finish();
 			});
 	}
@@ -2122,6 +2856,25 @@ namespace mmo
 					<< io::write<uint8>(flags);
 				packet.Finish();
 			});
+	}
+
+	void Player::OnEnvironmentalDamageLog(uint64 targetGuid, uint32 amount, EnvironmentalDamageType type)
+	{
+		SendPacket([targetGuid, amount, type](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::EnvironmentalDamageLog);
+				packet
+					<< io::write_packed_guid(targetGuid)
+					<< io::write<uint32>(amount)
+					<< io::write<uint8>(type);
+				packet.Finish();
+			});
+	}
+
+	void Player::SetFallDamageConfig(float minHeight, float lethalHeight)
+	{
+		m_fallDamageMinHeight = minHeight;
+		m_fallDamageLethalHeight = lethalHeight;
 	}
 
 	void Player::OnSpeedChangeApplied(MovementType type, float speed, uint32 ackId)
@@ -2246,7 +2999,15 @@ namespace mmo
 
 	void Player::OnSpellModChanged(SpellModType type, uint8 effectIndex, SpellModOp op, int32 value)
 	{
-		// TODO
+		SendPacket([type, effectIndex, op, value](game::OutgoingPacket& packet) {
+			packet.Start(game::realm_client_packet::SpellModChanged);
+			packet
+				<< io::write<uint8>(static_cast<uint8>(type))
+				<< io::write<uint8>(effectIndex)
+				<< io::write<uint8>(static_cast<uint8>(op))
+				<< io::write<int32>(value);
+			packet.Finish();
+		});
 	}
 
 	void Player::OnQuestKillCredit(const proto::QuestEntry& quest, uint64 guid, uint32 entry, uint32 count, uint32 maxCount)
@@ -2276,12 +3037,29 @@ namespace mmo
 			});
 	}
 
+	void Player::OnQuestObjectRequirementMet(const uint32 questId)
+	{
+		// The player just satisfied the object-use requirement for a specific world object.
+		// Refresh the interactability of all nearby objects gated on this quest so the client
+		// removes the use cursor immediately.
+		RefreshQuestObjectInteractability(questId);
+	}
+
 	void Player::OnQuestDataChanged(uint32 questId, const QuestStatusData& data)
 	{
 		// Send quest data packet to realm server so that it will be persisted in the database
 		m_connector.SendQuestData(m_character->GetGuid(), questId, data);
 
-		// Notify client about completed quest
+		// Refresh world object interactability whenever the quest status changes.
+		// - Complete: objects become non-interactable (all objectives satisfied).
+		// - Incomplete: objects become interactable again (e.g. quest items removed from inventory).
+		// In both cases, PrepareDynamicFieldsFor re-evaluates IsUsable per object and sends
+		// an UpdateObject packet with the correct DynamicObjectFlags to the client.
+		if (data.status == quest_status::Complete || data.status == quest_status::Incomplete)
+		{
+			RefreshQuestObjectInteractability(questId);
+		}
+
 		if (data.status == quest_status::Complete)
 		{
 			SendPacket([&questId](game::OutgoingPacket& packet) {
@@ -2357,6 +3135,34 @@ namespace mmo
 			return;
 		}
 
+		const uint64 roundRobinLooter = loot->GetRoundRobinLooter();
+		if (roundRobinLooter != 0 && roundRobinLooter != m_character->GetGuid())
+		{
+			bool hasItemsForDesignatedLooter = false;
+			for (const auto& item : loot->GetItems())
+			{
+				if (!item.isLooted && !item.needsGroupRoll)
+				{
+					hasItemsForDesignatedLooter = true;
+					break;
+				}
+			}
+
+			if (hasItemsForDesignatedLooter)
+			{
+				SendPacket([&lootObject](game::OutgoingPacket& packet)
+					{
+						packet.Start(game::realm_client_packet::LootResponse);
+						packet
+							<< io::write<uint64>(lootObject->GetGuid())
+							<< io::write<uint8>(loot_type::None)
+							<< io::write<uint8>(loot_error::Locked);
+						packet.Finish();
+					});
+				return;
+			}
+		}
+
 		OpenLootDialog(loot, lootObject);
 	}
 
@@ -2365,6 +3171,54 @@ namespace mmo
 		SendPacket([applied, ackId](game::OutgoingPacket& packet)
 			{
 				packet.Start(game::realm_client_packet::MoveRoot);
+				packet
+					<< io::write<uint32>(ackId)
+					<< io::write<uint8>(applied);
+				packet.Finish();
+			});
+	}
+
+	void Player::OnStunChanged(bool applied, uint32 ackId)
+	{
+		SendPacket([applied, ackId](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::MoveStun);
+				packet
+					<< io::write<uint32>(ackId)
+					<< io::write<uint8>(applied);
+				packet.Finish();
+			});
+	}
+
+	void Player::OnSleepChanged(bool applied, uint32 ackId)
+	{
+		SendPacket([applied, ackId](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::MoveSleep);
+				packet
+					<< io::write<uint32>(ackId)
+					<< io::write<uint8>(applied);
+				packet.Finish();
+			});
+	}
+
+	void Player::OnFearChanged(bool applied, uint32 ackId)
+	{
+		SendPacket([applied, ackId](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::MoveFear);
+				packet
+					<< io::write<uint32>(ackId)
+					<< io::write<uint8>(applied);
+				packet.Finish();
+			});
+	}
+
+	void Player::OnDisorientChanged(bool applied, uint32 ackId)
+	{
+		SendPacket([applied, ackId](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::MoveDisorient);
 				packet
 					<< io::write<uint32>(ackId)
 					<< io::write<uint8>(applied);

@@ -95,6 +95,11 @@ namespace mmo
 		virtual void PopulateGeometryBuffer() override;
 
 	private:
+		void CopyToClipboard();
+		void CutToClipboard();
+		void PasteFromClipboard();
+		void InsertTextAtCursor(const std::string& utf8Text);
+
 		/// 
 		void OnMaskedPropChanged(const Property& property);
 		void OnAcceptTabChanged(const Property& property);

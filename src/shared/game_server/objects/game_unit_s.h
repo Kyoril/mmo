@@ -4,8 +4,10 @@
 
 #include <memory>
 #include <set>
+#include <unordered_map>
 
 #include "game_server/spells/aura_container.h"
+#include "game_server/persistent_aura.h"
 #include "game/auto_attack.h"
 #include "game_object_s.h"
 #include "game_server/i_player_validator_context.h"
@@ -42,7 +44,13 @@ namespace mmo
 			Charmed = 1 << 3,
 
 			/// Unit is feared.
-			Feared = 1 << 4
+			Feared = 1 << 4,
+
+			/// Unit is sleeping.
+			Sleeping = 1 << 5,
+
+			/// Unit is disoriented.
+			Disoriented = 1 << 6
 		};
 	}
 
@@ -154,6 +162,9 @@ namespace mmo
 			/// Ranged attack power value modifier.
 			AttackPowerRanged,
 
+			/// Generic outgoing damage modifier.
+			Damage,
+
 			/// Main hand weapon damage modifier.
 			DamageMainHand,
 
@@ -176,6 +187,10 @@ namespace mmo
 
 			// Healing Taken
 			HealingTaken,
+
+			/// Shield block value contributed by equipped items. Per-class attribute scaling is
+			/// added on top in GetBlockValue().
+			BlockValue,
 
 			End
 		};
@@ -261,6 +276,7 @@ namespace mmo
 
 	namespace proto
 	{
+		class CombatSettings;
 		class FactionTemplateEntry;
 		class SpellEntry;
 	}
@@ -287,13 +303,27 @@ namespace mmo
 
 		virtual void OnXpLog(uint32 amount) = 0;
 
-		virtual void OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry &spell) = 0;
+		virtual void OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry &spell, uint32 blocked = 0) = 0;
 
 		virtual void OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags) = 0;
+
+		/// @brief Called when environmental damage is dealt to a unit.
+		/// @param targetGuid The GUID of the target unit.
+		/// @param amount The amount of damage dealt.
+		/// @param type The type of environmental damage.
+		virtual void OnEnvironmentalDamageLog(uint64 targetGuid, uint32 amount, EnvironmentalDamageType type) = 0;
 
 		virtual void OnSpeedChangeApplied(MovementType type, float speed, uint32 ackId) = 0;
 
 		virtual void OnRootChanged(bool applied, uint32 ackId) = 0;
+
+		virtual void OnStunChanged(bool applied, uint32 ackId) = 0;
+
+		virtual void OnSleepChanged(bool applied, uint32 ackId) = 0;
+
+		virtual void OnFearChanged(bool applied, uint32 ackId) = 0;
+
+		virtual void OnDisorientChanged(bool applied, uint32 ackId) = 0;
 
 		virtual void OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff, int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints) = 0;
 
@@ -342,7 +372,16 @@ namespace mmo
 		/// Character teleported
 		Teleport,
 		/// Character was knocked back
-		KnockBack
+		KnockBack,
+
+		/// Character is stunned or no longer stunned.
+		Stun,
+		/// Character is sleeping or no longer sleeping.
+		Sleep,
+		/// Character is feared or no longer feared.
+		Fear,
+		/// Character is disoriented or no longer disoriented.
+		Disorient
 	};
 
 	/// Bundles informations which are only used for knock back acks.
@@ -408,9 +447,28 @@ namespace mmo
 			CanParry = 0x2,
 
 			/// The unit can dodge attacks.
-			CanDodge = 0x4
+			CanDodge = 0x4,
+
+			/// The unit can critically block attacks (block for an increased amount).
+			CanCriticalBlock = 0x8
 		};
 	}
+
+	// Forward declaration for the CC movement controller
+	class CCMovementController;
+
+	/// Result of rolling a block against an incoming physical attack.
+	struct BlockResult
+	{
+		/// True if the attack was blocked at all.
+		bool blocked = false;
+
+		/// True if the block was a critical block (block value increased by the crit multiplier).
+		bool critical = false;
+
+		/// Amount of damage absorbed by the block, already capped at the incoming damage.
+		uint32 blockedAmount = 0;
+	};
 
 	/// Represents a living object (unit) in the game world.
 	/// Units can move, cast spells, fight, and interact with other objects.
@@ -439,6 +497,9 @@ namespace mmo
 		/// Signal fired when this unit begins casting a spell.
 		/// @param spell The spell entry being cast.
 		signal<void(const proto::SpellEntry &)> startedCasting;
+		/// Signal fired when this unit's spell cast ends (success or failure).
+		/// @param succeeded True if the cast completed successfully, false if interrupted.
+		signal<void(bool)> finishedCasting;
 		/// Signal fired when a unit trigger should be executed.
 		/// @param trigger The trigger entry to be executed.
 		/// @param unit The unit that is affected by the trigger.
@@ -499,6 +560,8 @@ namespace mmo
 		/// @param mod The unit modifier to calculate.
 		/// @returns The calculated modifier value as a float.
 		float GetCalculatedModifierValue(UnitMods mod) const;
+
+		float CalculateModifiedValue(UnitMods mod, float baseValue) const;
 
 		/// Sets the unit modifier value to the given value.
 		/// @param mod The unit modifier to set.
@@ -604,8 +667,9 @@ namespace mmo
 		/// Checks if a spell has a cooldown.
 		/// @param spellId The ID of the spell.
 		/// @param spellCategory The category of the spell.
+		/// @param cooldownFlags Cooldown behavior flags from the spell definition.
 		/// @returns true if the spell has a cooldown, false otherwise.
-		bool SpellHasCooldown(uint32 spellId, uint32 spellCategory) const;
+		bool SpellHasCooldown(uint32 spellId, uint32 spellCategory, uint32 cooldownFlags) const;
 
 		/// Checks if the unit has a specific spell.
 		/// @param spellId The ID of the spell.
@@ -643,6 +707,14 @@ namespace mmo
 		/// @param cooldownTimeMs The cooldown time in milliseconds.
 		void SetSpellCategoryCooldown(uint32 spellCategory, GameTime cooldownTimeMs);
 
+		/// Sets the global spell cooldown shared by global-cooldown spells.
+		/// @param cooldownTimeMs The cooldown time in milliseconds.
+		void SetGlobalCooldown(GameTime cooldownTimeMs);
+
+		/// Gets the configured global cooldown duration in milliseconds (from combat settings).
+		/// @returns The global cooldown duration in milliseconds.
+		[[nodiscard]] GameTime GetGlobalCooldownDuration() const;
+
 		/// Casts a spell.
 		/// @param target The target map for the spell.
 		/// @param spell The spell entry to cast.
@@ -676,7 +748,25 @@ namespace mmo
 		/// @param school The damage school type.
 		/// @param flags The damage flags.
 		/// @param spell The spell entry used to deal the damage.
-		void SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry &spell);
+		/// @param blocked The amount of damage that was blocked (0 if not blocked).
+		void SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry &spell, uint32 blocked = 0);
+
+		/// Sends the AttackerStateUpdate packet (melee white damage) to all nearby subscribers.
+		/// @param victimGuid The GUID of the victim unit.
+		/// @param hitInfo Bitmask of HitInfo flags describing the attack outcome.
+		/// @param victimState The VictimState value for the attack.
+		/// @param totalDamage The total damage dealt after reductions.
+		/// @param school The damage school.
+		/// @param absorbedDamage The amount of damage absorbed.
+		/// @param resistedDamage The amount of damage resisted.
+		/// @param blockedDamage The amount of damage blocked.
+		void SendAttackerStateUpdate(uint64 victimGuid, uint32 hitInfo, uint32 victimState, uint32 totalDamage, uint32 school, uint32 absorbedDamage, uint32 resistedDamage, uint32 blockedDamage);
+
+		/// Logs environmental damage dealt to a unit.
+		/// @param targetGuid The GUID of the target unit.
+		/// @param amount The amount of damage dealt.
+		/// @param type The type of environmental damage.
+		void EnvironmentalDamageLog(uint64 targetGuid, uint32 amount, EnvironmentalDamageType type);
 
 		/// Kills the unit.
 		/// @param killer The unit that killed this unit.
@@ -731,6 +821,25 @@ namespace mmo
 		/// Builds an aura packet for network transmission.
 		/// @param writer The writer to write the packet to.
 		void BuildAuraPacket(io::Writer &writer) const;
+
+		/// Collects all auras that should be persisted across world instances. Only non-passive
+		/// auras that were not granted by equipment and have not yet expired are returned.
+		/// @returns A snapshot of the persistable auras.
+		std::vector<PersistentAuraData> GetPersistentAuras() const;
+
+		/// Collects all active spell cooldowns as remaining-millisecond snapshots. Cooldowns that
+		/// have already elapsed are skipped.
+		/// @returns A snapshot of the active spell cooldowns.
+		std::vector<PersistentCooldownData> GetPersistentCooldowns() const;
+
+		/// Re-applies a set of persisted auras (as produced by GetPersistentAuras). Auras whose
+		/// spell can no longer be resolved are skipped.
+		/// @param auras The persisted auras to restore.
+		void RestorePersistentAuras(const std::vector<PersistentAuraData>& auras);
+
+		/// Restores spell cooldowns from remaining-millisecond snapshots.
+		/// @param cooldowns The persisted cooldowns to restore.
+		void RestorePersistentCooldowns(const std::vector<PersistentCooldownData>& cooldowns);
 
 		/// Notifies that mana has been used.
 		void NotifyManaUsed();
@@ -813,6 +922,10 @@ namespace mmo
 		/// @param message The message to send.
 		void ChatYell(const String &message);
 
+		/// Sends a chat message of type "emote" from the unit.
+		/// @param message The message to send.
+		void ChatEmote(const String &message);
+
 		void NotifyRootChanged();
 
 		void NotifyStunChanged();
@@ -821,11 +934,22 @@ namespace mmo
 
 		void NotifyFearChanged();
 
+		void NotifyDisorientChanged();
+
 		/// Determines if a unit is rooted and should be able to move.
 		bool IsRooted() const
 		{
 			return (m_movementInfo.movementFlags & movement_flags::Rooted) != 0;
 		}
+
+		bool IsStunned() const { return (m_state & unit_state::Stunned) != 0; }
+		bool IsSleeping() const { return (m_state & unit_state::Sleeping) != 0; }
+		bool IsFeared() const { return (m_state & unit_state::Feared) != 0; }
+		bool IsDisoriented() const { return (m_state & unit_state::Disoriented) != 0; }
+
+		/// Returns true while the CCMovementController is actively driving
+		/// forced wander movement (feared or disoriented non-player unit).
+		bool IsUnderForcedMovement() const;
 
 		/// Called when a proc event occurs to check if any auras should proc
 		void TriggerProcEvent(SpellProcFlags eventFlags, GameUnitS *target = nullptr, uint32 damage = 0, uint32 procEx = 0, uint8 school = 0, bool isProc = false, uint64 familyFlags = 0);
@@ -923,6 +1047,7 @@ namespace mmo
 		/// @returns true if the unit has an offhand weapon, false otherwise.
 		virtual bool HasOffhandWeapon() const;
 
+	public:
 		/// Gets the maximum skill value for a given level.
 		/// @param level The level to check.
 		/// @returns The maximum skill value as an int32.
@@ -960,6 +1085,27 @@ public:
 		/// Returns the block chance in percent, ranging from 0 to 100.0f. If the unit can't block at all, this will always return 0.
 		float BlockChance() const;
 
+		/// Returns the flat amount of damage this unit blocks when it blocks an attack, before any
+		/// critical-block multiplier. Base implementation only accounts for equipped item block value;
+		/// GamePlayerS adds per-class attribute scaling on top.
+		virtual float GetBlockValue() const;
+
+		/// Returns the chance in percent to critically block an attack (block for an increased amount).
+		/// Returns 0 if the unit can't critically block.
+		virtual float CriticalBlockChance() const;
+
+		/// Rolls whether this unit blocks an incoming physical attack from the given attacker.
+		/// Only physical (Normal school) attacks coming from the front can be blocked.
+		/// @param attacker The attacking unit (used for facing checks).
+		/// @param school The damage school of the incoming attack. Only Normal can be blocked.
+		/// @param incomingDamage The damage about to be applied; the blocked amount is capped to it.
+		/// @returns A BlockResult describing whether and how much was blocked.
+		BlockResult RollMeleeBlock(const GameUnitS& attacker, SpellSchool school, uint32 incomingDamage) const;
+
+		/// Returns true if attacks from the given attacker can be blocked/parried based on facing
+		/// (i.e. the attacker is not within the configurable rear cone behind this unit).
+		bool CanBlockAttackFrom(const GameObjectS& attacker) const;
+
 		/// Returns true if the unit can block attacks.
 		bool CanBlock() const { return (m_combatCapabilities & combat_capabilities::CanBlock) != 0; }
 
@@ -983,6 +1129,19 @@ public:
 		///	@param gainedEffect Set this to true if you are sure the unit should can dodge attacks. This is just a performance shortcut,
 		///	so we don't iterate through spell effects if we don't need to. If this is set to false, spell effects will be checked.
 		void NotifyCanDodge(bool gainedEffect);
+
+		/// Adds or removes a flat percentage bonus to this unit's dodge chance, typically driven by the ModDodgeChance aura.
+		///	@param amount The dodge chance bonus in percent (e.g. 5.0f for +5%).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyDodgeChanceBonus(float amount, bool apply) { m_dodgeChanceBonus += apply ? amount : -amount; }
+
+		/// Returns true if the unit can critically block attacks (unlocked via a CriticalBlock spell effect).
+		bool CanCriticalBlock() const { return (m_combatCapabilities & combat_capabilities::CanCriticalBlock) != 0; }
+
+		/// Re-evaluates if the unit can critically block based on spell effects.
+		///	@param gainedEffect Set this to true if you are sure the unit gained the capability (performance shortcut).
+		///	If false, spell effects are checked to determine whether the capability should remain.
+		void NotifyCanCriticalBlock(bool gainedEffect);
 
 		/// Returns true if the unit has an active aura effect of the given type. Don't use this too often as it's iterating through all active auras,
 		///	which is not a constant complexity operation.
@@ -1012,6 +1171,15 @@ public:
 		/// Stops attacking the current victim.
 		void StopAttack();
 
+		/// Gets the auto-attack spell for the current weapon configuration.
+		/// Returns nullptr if no auto-attack spell is configured (legacy behavior).
+		/// Override in subclasses to provide class-specific auto-attack spells.
+		virtual const proto::SpellEntry* GetAutoAttackSpell() const { return nullptr; }
+
+		/// Gets the combat settings containing configurable combat formula parameters.
+		/// Uses the project's combat settings if available, otherwise returns defaults.
+		const proto::CombatSettings& GetCombatSettings() const;
+
 		/// Sets the target of the unit.
 		/// @param targetGuid The GUID of the target.
 		void SetTarget(uint64 targetGuid);
@@ -1037,6 +1205,24 @@ public:
 		/// Removes all attacking units from the list of attackers.
 		void RemoveAllAttackingUnits();
 
+		/// Gets the number of units currently attacking this unit.
+		/// @returns The number of attacking units.
+		size_t GetAttackerCount() const { return m_attackingUnits.size(); }
+
+		/// Executes a callback for each unit currently attacking this unit.
+		/// @param callback The callback to execute for each attacker.
+		template<typename Func>
+		void ForEachAttacker(Func callback) const
+		{
+			for (const auto* attacker : m_attackingUnits)
+			{
+				if (attacker)
+				{
+					callback(*attacker);
+				}
+			}
+		}
+
 		/// Gets the base speed for a specific movement type.
 		/// @param type The movement type.
 		/// @returns The base speed as a float.
@@ -1051,6 +1237,14 @@ public:
 		/// @param type The movement type.
 		/// @returns The current speed as a float.
 		float GetSpeed(const MovementType type) const;
+
+		/// @brief Returns the current server-controlled movement mode.
+		/// @return Walk or run mode.
+		[[nodiscard]] UnitMovementMode GetMovementMode() const;
+
+		/// @brief Sets the current server-controlled movement mode.
+		/// @param movementMode Walk or run mode.
+		void SetMovementMode(UnitMovementMode movementMode);
 
 		/// Called by spell auras to notify that a speed aura has been applied or misapplied.
 		/// If this unit is player controlled, a client notification is sent and the speed is
@@ -1142,11 +1336,13 @@ public:
 		/// @param powerType The type of power to regenerate.
 		virtual void RegeneratePower(PowerType powerType);
 
+	public:
 		/// Adds power to the unit.
 		/// @param powerType The type of power to add.
 		/// @param amount The amount of power to add.
 		virtual void AddPower(PowerType powerType, int32 amount);
 
+	protected:
 		/// Called when an attack swing event occurs.
 		/// @param attackSwingEvent The attack swing event.
 		void OnAttackSwingEvent(AttackSwingEvent attackSwingEvent) const;
@@ -1167,10 +1363,22 @@ public:
 		/// @returns The total multiplier as a float.
 		float GetTotalMultiplier(AuraType type) const;
 
+		/// Gets the incoming damage multiplier from active target-side auras for a specific attacker and damage class.
+		/// @param attacker The attacking unit causing the damage.
+		/// @param dmgClass The damage class of the incoming attack.
+		/// @returns A multiplicative factor where 1.10 means +10% damage taken.
+		float GetIncomingDamageTakenMultiplier(const GameUnitS* attacker, SpellDmgClass dmgClass) const;
+
 		/// Called when an attack swing occurs.
 		void OnAttackSwing();
 
 		void OnPvpCombatTimer();
+
+		/// Starts server-driven wander movement (fear / disorient) for non-player units.
+		void StartCCMovement();
+
+		/// Stops server-driven wander movement and resets the controller.
+		void StopCCMovement();
 
 		/// Sets the stand state of the unit.
 		/// @param standState The new stand state.
@@ -1189,7 +1397,11 @@ public:
 
 		void SetVisibility(UnitVisibility x);
 
-		virtual void UpdateVisibilityAndView();
+		/// Recomputes which subscribers gained or lost visibility of this unit and sends
+		/// the appropriate spawn / despawn packets.  @p prevVisibility is the visibility
+		/// state that was in effect before the change; pass the same as the current value
+		/// to force a full-broadcast (e.g. on first spawn — but prefer AddGameObject for that).
+		virtual void UpdateVisibilityAndView(UnitVisibility prevVisibility);
 
 	protected:
 		/// Prepares the field map for the unit.
@@ -1224,6 +1436,7 @@ public:
 		TimerQueue &m_timers;
 		Countdown m_despawnCountdown;
 		std::unique_ptr<UnitMover> m_mover;
+		std::unique_ptr<CCMovementController> m_ccMovementController;
 		Countdown m_attackSwingCountdown;
 		GameTime m_lastMainHand = 0, m_lastOffHand = 0;
 		Countdown m_regenCountdown;
@@ -1236,6 +1449,7 @@ public:
 
 		std::map<uint32, GameTime> m_spellCooldowns;
 		std::map<uint32, GameTime> m_spellCategoryCooldowns;
+		GameTime m_globalCooldownEnd = 0;
 
 		AttackingUnitSet m_attackingUnits;
 
@@ -1243,6 +1457,14 @@ public:
 		mutable Vector3 m_lastPosition;
 
 		stable_list<std::shared_ptr<AuraContainer>> m_auras;
+
+		// Snapshot of persistable auras captured in OnDespawn just before m_auras is cleared, so a
+		// save triggered by the despawn (logout/teleport) can still serialize them.
+		std::vector<PersistentAuraData> m_despawnAuraSnapshot;
+		// Maps base spell id → the previous target that had a SingleTargetPerCaster aura from our caster.
+		// Key: casterGuid*100000 + baseSpellId would be complex; instead keyed by (casterGuid ^ spellBaseId).
+		// Actually keyed by spellId → weak_ptr<GameUnitS> of previous target for SingleTargetPerCaster eviction.
+		std::unordered_map<uint32, std::weak_ptr<GameUnitS>> m_singleTargetAuras;
 
 		typedef std::array<float, unit_mod_type::End> UnitModTypeArray;
 		typedef std::array<UnitModTypeArray, unit_mods::End> UnitModArray;
@@ -1267,6 +1489,9 @@ public:
 
 		uint8 m_combatCapabilities = combat_capabilities::None;
 
+		/// Accumulated flat dodge chance bonus in percent from auras (ModDodgeChance).
+		float m_dodgeChanceBonus = 0.0f;
+
 		std::map<uint8, float> m_baseSpeeds;
 
 		uint32 m_regeneration = regeneration_flags::None;
@@ -1276,7 +1501,73 @@ public:
 		Countdown m_pvpCombatCountdown;
 		uint32 m_state = 0;
 
-		std::set<uint32> m_proficiencies;  ///< Set of proficiency IDs the character has
+		uint8 m_stunCount{0};
+		uint8 m_sleepCount{0};
+		uint8 m_fearCount{0};
+		uint8 m_disorientCount{0};
+
+		/// Reference counter per damage school. As long as a counter is greater than zero,
+		/// the unit is immune to damage of that school. Indexed by spell_school::Type.
+		uint8 m_schoolImmunity[spell_school::End]{};
+
+	public:
+		/// Adds a stack of damage immunity for the given damage school.
+		/// @param school The damage school (see spell_school::Type) to grant immunity to.
+		void AddSchoolImmunity(uint32 school)
+		{
+			if (school < spell_school::End && m_schoolImmunity[school] < 255) { ++m_schoolImmunity[school]; }
+		}
+
+		/// Removes a stack of damage immunity for the given damage school.
+		/// @param school The damage school (see spell_school::Type) to remove immunity from.
+		void RemoveSchoolImmunity(uint32 school)
+		{
+			if (school < spell_school::End && m_schoolImmunity[school] > 0) { --m_schoolImmunity[school]; }
+		}
+
+		/// Determines whether the unit is currently immune to damage of the given school.
+		/// @param school The damage school (see spell_school::Type) to test.
+		/// @returns true if the unit is immune to damage of that school.
+		bool IsImmuneToSchool(uint32 school) const
+		{
+			return school < spell_school::End && m_schoolImmunity[school] > 0;
+		}
+
+		void IncrementStunCount()
+		{
+			if (m_stunCount < 255) { ++m_stunCount; }
+		}
+		void DecrementStunCount()
+		{
+			if (m_stunCount > 0) { --m_stunCount; }
+		}
+		void IncrementSleepCount()
+		{
+			if (m_sleepCount < 255) { ++m_sleepCount; }
+		}
+		void DecrementSleepCount()
+		{
+			if (m_sleepCount > 0) { --m_sleepCount; }
+		}
+		void IncrementFearCount()
+		{
+			if (m_fearCount < 255) { ++m_fearCount; }
+		}
+		void DecrementFearCount()
+		{
+			if (m_fearCount > 0) { --m_fearCount; }
+		}
+		void IncrementDisorientCount()
+		{
+			if (m_disorientCount < 255) { ++m_disorientCount; }
+		}
+		void DecrementDisorientCount()
+		{
+			if (m_disorientCount > 0) { --m_disorientCount; }
+		}
+
+	protected:  ///< Set of proficiency IDs the character has
+		std::set<uint32> m_proficiencies;
 
 	private:
 		/// Serializes a GameUnitS object to a Writer for binary serialization.
@@ -1292,6 +1583,11 @@ public:
 		/// @param object The GameUnitS object to deserialize into.
 		/// @returns Reference to the Reader for chaining.
 		friend io::Reader &operator>>(io::Reader &r, GameUnitS &object);
+
+		/// Extra melee range tolerance applied when both the attacker and victim are moving
+		/// (equal-speed chase). Prevents the attacker from perpetually trailing just outside
+		/// auto-attack range when neither unit is gaining ground on the other.
+		static constexpr float MELEE_CHASE_RANGE_BONUS = 1.5f;
 	};
 
 	io::Writer &operator<<(io::Writer &w, GameUnitS const &object);

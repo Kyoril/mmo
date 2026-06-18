@@ -3,6 +3,7 @@
 #pragma once
 
 #include "realm_manager.h"
+#include "database.h"
 #include "base/non_copyable.h"
 #include "auth_protocol/auth_protocol.h"
 #include "auth_protocol/auth_connection.h"
@@ -11,6 +12,8 @@
 #include <memory>
 #include <functional>
 #include <map>
+#include <set>
+#include <vector>
 #include <cassert>
 
 #include "base/countdown.h"
@@ -46,7 +49,7 @@ namespace mmo
 		inline bool IsAuthentificated() const { return m_authenticated; }
 		/// Gets the name of the realm.
 		inline const std::string &GetRealmName() const { return m_realmName; }
-		/// 
+		/// Gets the realm id.
 		inline uint32 GetRealmId() const { return m_realmId; }
 		/// Realm address string.
 		inline const std::string& GetAddress() const { return m_address; }
@@ -56,7 +59,18 @@ namespace mmo
 		inline uint16 GetRealmListPort() const { return m_realmListPort; }
 
 	public:
+		/// Notifies this realm that an account has been banned.
 		void NotifyAccountBanned(uint64 accountId);
+
+		/// Reloads this realm's feature requirements from the database (asynchronously).
+		void ReloadRequirements();
+
+		/// Determines whether an account holding the given active feature ids is allowed to see this realm.
+		bool IsVisibleTo(const std::set<uint32>& accountFeatures) const;
+
+		/// Determines whether an account holding the given active feature ids is allowed to log in to this realm.
+		/// Logging in also requires all visibility features (you can't enter a realm you can't see).
+		bool CanLoginWith(const std::set<uint32>& accountFeatures) const;
 
 	public:
 		/// Registers a packet handler.
@@ -87,6 +101,7 @@ namespace mmo
 		uint32 m_realmId;						// Realm ID
 		uint32 m_authProtocol;
 		uint32 m_gameProtocol;
+		std::vector<RealmFeatureRequirement> m_requirements;	// Cached feature requirements for this realm (loaded after auth)
 		std::map<uint8, PacketHandler> m_packetHandlers;
 		std::mutex m_packetHandlerMutex;
 
@@ -124,8 +139,9 @@ namespace mmo
 		/// Send auth proof result to the realm server.
 		void SendAuthProof(auth::AuthResult result);
 		/// Send the auth session result back to the realm server.
-		void SendAuthSessionResult(uint64 requestId, auth::AuthResult result, uint64 accountId, uint8 gmLevel, BigNumber sessionKey);
+		void SendAuthSessionResult(uint64 requestId, auth::AuthResult result, uint64 accountId, uint8 gmLevel, BigNumber sessionKey, const std::vector<std::string>& features);
 
+		/// Schedules the next ping timeout check.
 		void QueueNextPingTimeoutCheck();
 
 	private:

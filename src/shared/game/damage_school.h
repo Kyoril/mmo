@@ -21,9 +21,17 @@ namespace mmo
         {
             None = 0,
 
-            Crit = 1,
+            Crit = 0x01,
 
-            Crushing,
+            Crushing = 0x02,
+
+            /// The target was immune to the damage. The amount is zero and clients should
+            /// display a localized "Immune" text instead of a damage number.
+            Immune = 0x04,
+
+            /// The attack was (partially) blocked. The blocked amount is reported separately;
+            /// clients show "X (Y blocked)" or a localized "Blocked" when fully absorbed.
+            Block = 0x08,
         };
     }
 
@@ -46,6 +54,29 @@ namespace mmo
     }
 
     typedef damage_type::Type DamageType;
+
+    /// @brief Enumerates environmental damage types.
+    namespace environmental_damage_type
+    {
+        enum Type : uint8
+        {
+            /// @brief Damage caused by falling from a height.
+            Fall = 0,
+
+            /// @brief Damage caused by drowning.
+            Drowning = 1,
+
+            /// @brief Damage caused by lava.
+            Lava = 2,
+
+            /// @brief Damage caused by fire.
+            Fire = 3,
+
+            Count_
+        };
+    }
+
+    typedef environmental_damage_type::Type EnvironmentalDamageType;
 
     namespace melee_attack_outcome
     {

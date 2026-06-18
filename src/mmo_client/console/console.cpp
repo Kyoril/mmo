@@ -4,6 +4,7 @@
 #include "console_commands.h"
 #include "console_var.h"
 #include "event_loop.h"
+#include "platform.h"
 #include "screen.h"
 
 #include "base/assign_on_exit.h"
@@ -11,12 +12,15 @@
 #include "frame_ui/frame_mgr.h"
 #include "frame_ui/geometry_buffer.h"
 #include "graphics/graphics_device.h"
+#include "graphics/global_shader_parameters.h"
 #include "log/default_log_levels.h"
 
 #include "assets/asset_registry.h"
 
 #include <algorithm>
 #include <mutex>
+#include <sstream>
+#include <iomanip>
 
 #include "loading_screen.h"
 #include "base/profiler.h"
@@ -59,6 +63,8 @@ namespace mmo
 	/// A geometry buffer which is populated by the console font's draw commands and then used to
 	/// actually draw the console text on screen.
 	static std::unique_ptr<GeometryBuffer> s_consoleTextGeom;
+	/// A separate geometry buffer for the performance overlay, so it doesn't conflict with console text.
+	static std::unique_ptr<GeometryBuffer> s_perfTextGeom;
 	/// A flag that indicates that the console text needs to be redrawn. Set on scrolling and text
 	/// change events currently.
 	static bool s_consoleTextDirty = true;
@@ -90,6 +96,8 @@ namespace mmo
 		ConsoleVar* s_gxVSyncCVar = nullptr;
 		ConsoleVar* s_gxApiCVar = nullptr;
 		ConsoleVar* s_gxPerfCVar = nullptr;
+		ConsoleVar* s_soundEnabledCVar = nullptr;
+		ConsoleVar* s_musicEnabledCVar = nullptr;
 
 		/// Helper struct for automatic gx cvar table.
 		struct GxCVarHelper
@@ -109,6 +117,8 @@ namespace mmo
 			{"gxVSync",			"Whether the application will run with vsync enabled.",	"1",		&s_gxVSyncCVar },
 
 			{ "perf", "Toggles whether performance counters are visible", "0", &s_gxPerfCVar },
+			{ "SoundEnabled", "Whether sound effects are enabled.", "1", &s_soundEnabledCVar },
+			{ "MusicEnabled", "Whether music is enabled.", "1", &s_musicEnabledCVar },
 
 			// TODO: Add more graphics cvars here that should be registered and unregistered automatically
 			// as well as being serialized when saving the graphics settings of the game.
@@ -122,17 +132,8 @@ namespace mmo
 		/// Registers the automatically managed gx cvars from the table above.
 		void RegisterGraphicsCVars()
 		{
-			// Register console variables from the table, we'll set the resolution dynamically after device creation
 			std::for_each(s_gxCVars.cbegin(), s_gxCVars.cend(), [](const GxCVarHelper& x) {
-				std::string actualDefaultValue = x.defaultValue;
-				
-				// For gxResolution, use fallback if empty - will be updated after device creation
-				if (x.name == "gxResolution" && actualDefaultValue.empty())
-				{
-					actualDefaultValue = "1920x1080";  // Fallback, will be updated later
-				}
-				
-				ConsoleVar* output = ConsoleVarMgr::RegisterConsoleVar(x.name, x.description, actualDefaultValue);
+				ConsoleVar* output = ConsoleVarMgr::RegisterConsoleVar(x.name, x.description, x.defaultValue);
 
 				if (x.outputVar != nullptr)
 				{
@@ -207,7 +208,8 @@ namespace mmo
 		RegisterCommand("quit", console_commands::ConsoleCommand_Quit, ConsoleCommandCategory::Default, "Shutdown the game client immediately.");
 		RegisterCommand("list", console_commands::ConsoleCommand_List, ConsoleCommandCategory::Default, "Shows all available console commands.");
 		RegisterCommand("clear", ConsoleCommand_Clear, ConsoleCommandCategory::Default, "Clears the console text.");
-		
+
+
 		ConsoleVarMgr::Initialize();
 		
 		s_dataPathCVar = ConsoleVarMgr::RegisterConsoleVar("dataPath", "The path of the client data directory.", (std::filesystem::current_path() / "Data").string());
@@ -235,6 +237,7 @@ namespace mmo
 				"Textures.hpak",
 				"Worlds.hpak",
 				"Sound.hpak",
+				"Particles.hpak",
 				localeArchive,
 				localeArchive + ".hpak",
 			});	
@@ -267,18 +270,21 @@ namespace mmo
 		{
 			api = GraphicsApi::OpenGL;
 		}
+		// On first launch the resolution cvar is empty because no config has been saved yet.
+		// In that case, default to the native desktop resolution in fullscreen.
+		if (s_gxResolutionCVar->GetStringValue().empty())
+		{
+			const auto [w, h] = Platform::GetPrimaryDisplayResolution();
+			s_gxResolutionCVar->Set(std::to_string(w) + "x" + std::to_string(h));
+			s_gxWindowedCVar->Set("0");
+			ILOG("First launch: defaulting to native display resolution " << w << "x" << h << " fullscreen");
+		}
+
 		GraphicsDeviceDesc desc;
 		ExtractResolution(s_gxResolutionCVar->GetStringValue(), desc.width, desc.height);
 		desc.windowed = s_gxWindowedCVar->GetBoolValue();
 		desc.vsync = s_gxVSyncCVar->GetBoolValue();
 
-		// Validate fullscreen resolution and adjust if necessary
-		if (!desc.windowed)
-		{
-			// We need to create a temporary graphics device to get monitor info
-			// For now, we'll do this validation after device creation
-		}
-		
 		switch (api)
 		{
 #if PLATFORM_WINDOWS
@@ -302,33 +308,11 @@ namespace mmo
 		auto& device = GraphicsDevice::Get();
 		device.GetAutoCreatedWindow()->SetTitle("MMORPG");
 
-		// Now that we have a graphics device, update the resolution if it wasn't set properly
-		if (s_gxResolutionCVar->GetStringValue() == "1920x1080" || s_gxResolutionCVar->GetStringValue().empty())
-		{
-			const std::string monitorRes = device.GetPrimaryMonitorResolution();
-			s_gxResolutionCVar->Set(monitorRes);
-			ILOG("Set default resolution to monitor resolution: " << monitorRes);
-		}
-		
-		// Validate fullscreen resolution now that we have a graphics device
-		if (!desc.windowed)
-		{
-			if (!device.ValidateFullscreenResolution(desc.width, desc.height))
-			{
-				// Use monitor resolution for fullscreen if validation fails
-				const std::string monitorRes = device.GetPrimaryMonitorResolution();
-				uint16 newWidth, newHeight;
-				ExtractResolution(monitorRes, newWidth, newHeight);
-				if (newWidth != desc.width || newHeight != desc.height)
-				{
-					ILOG("Adjusted fullscreen resolution from " << desc.width << "x" << desc.height << 
-						 " to monitor resolution: " << newWidth << "x" << newHeight);
-					s_gxResolutionCVar->Set(monitorRes);
-				}
-			}
-		}
-		
-		device.GetAutoCreatedWindow()->Closed.connect([]() 
+		// Load the project-wide global shader parameter registry so every material can reference
+		// the shared globals. A missing file simply leaves the registry empty.
+		GlobalShaderParameters::Get().LoadFromAsset(GlobalShaderParametersAssetPath);
+
+		device.GetAutoCreatedWindow()->Closed.connect([]()
 		{
 			EventLoop::Terminate(0);
 		});
@@ -360,6 +344,7 @@ namespace mmo
 		s_consoleFont = FontManager::Get().CreateOrRetrieve("Fonts/consola.ttf", 16.0f, 0.0f);
 		
 		s_consoleTextGeom = std::make_unique<GeometryBuffer>();
+		s_perfTextGeom = std::make_unique<GeometryBuffer>();
 		s_consoleTextDirty = true;
 		s_consoleLog.clear();
 		
@@ -417,6 +402,7 @@ namespace mmo
 		s_consoleLogConn.disconnect();
 		
 		s_consoleTextGeom.reset();
+		s_perfTextGeom.reset();
 		
 		s_consoleFont.reset();
 		
@@ -501,6 +487,16 @@ namespace mmo
 		const auto it = s_consoleCommands.find(command);
 		if (it == s_consoleCommands.end())
 		{
+			// No such command exists. Treat the input as a macro and try to run "<command>.cfg"
+			// instead. This allows defining reusable macros as cfg script files (e.g. typing
+			// "oakenshire" runs "oakenshire.cfg" which may contain a "worldport ..." command).
+			const std::string scriptFile = command + ".cfg";
+			if (AssetRegistry::OpenFile(scriptFile))
+			{
+				console_commands::ConsoleCommand_Run("run", scriptFile);
+				return;
+			}
+
 			ELOG("Unknown console command \"" << command << "\"");
 			return;
 		}
@@ -661,27 +657,131 @@ namespace mmo
 			return;
 		}
 
-		if (showPerf || s_consoleTextDirty)
-		{
-			s_consoleTextGeom->Reset();
-		}
-
+		// Rebuild the perf overlay geometry every frame since the data changes each frame
 		if (showPerf)
 		{
-			std::stringstream strm;
-			strm << "Batch count: " << gx.GetBatchCount() << "\n";
+			s_perfTextGeom->Reset();
 
-			auto& metrics = Profiler::GetInstance().GetMetrics();
-			for (auto& m : metrics)
+			auto& profiler = Profiler::GetInstance();
+			const auto& metrics = profiler.GetMetrics();
+
+			const float lineHeight = s_consoleFont->GetHeight();
+			const float xPadding = 8.0f;
+			float yOffset = 4.0f;
+
+			// Header: FPS and frame time
+			const double fps = profiler.GetAverageFPS();
+			const double frameTime = profiler.GetAverageFrameTimeMs();
+			const double currentFrameTime = profiler.GetFrameTimeMs();
+			const double cpuFrameTime = profiler.GetCpuFrameTimeMs();
+
+			// Color the FPS value based on performance
+			argb_t fpsColor;
+			if (fps >= 60.0)
 			{
-				strm << m.name << " " << std::setprecision(2) << m.totalTimeMs << " ms (" << m.callCount << " calls)\n";
+				fpsColor = Color(0.0f, 1.0f, 0.0f); // Green: 60+ fps
+			}
+			else if (fps >= 30.0)
+			{
+				fpsColor = Color(1.0f, 1.0f, 0.0f); // Yellow: 30-59 fps
+			}
+			else
+			{
+				fpsColor = Color(1.0f, 0.3f, 0.3f); // Red: below 30 fps
 			}
 
-			s_consoleFont->DrawText(strm.str(), Point(0.0f, 0.0f), *s_consoleTextGeom, 1.0f);
+			{
+				std::ostringstream strm;
+				strm << std::fixed << std::setprecision(1);
+				strm << "FPS: " << fps << "  Frame: " << frameTime << " ms (cur: " << currentFrameTime << " ms)";
+				s_consoleFont->DrawText(strm.str(), Point(xPadding, yOffset), *s_perfTextGeom, 1.0f, fpsColor);
+				yOffset += lineHeight;
+			}
+
+			// CPU work time vs real frame time. If CPU is much lower than the real frame time, the
+			// frame is GPU-bound (the CPU is idle waiting on Present/VSync).
+			{
+				const double gpuBound = currentFrameTime - cpuFrameTime;
+				std::ostringstream strm;
+				strm << std::fixed << std::setprecision(1);
+				strm << "CPU: " << cpuFrameTime << " ms   GPU-wait: " << (gpuBound > 0.0 ? gpuBound : 0.0) << " ms";
+				// Highlight in yellow when the GPU wait dominates the frame.
+				const bool gpuBoundDominant = gpuBound > cpuFrameTime;
+				s_consoleFont->DrawText(strm.str(), Point(xPadding, yOffset), *s_perfTextGeom, 1.0f,
+					gpuBoundDominant ? Color(1.0f, 1.0f, 0.0f) : Color(0.7f, 0.7f, 0.7f));
+				yOffset += lineHeight;
+			}
+
+			// Batch count
+			{
+				std::ostringstream strm;
+				strm << "Batches: " << gx.GetBatchCount();
+				s_consoleFont->DrawText(strm.str(), Point(xPadding, yOffset), *s_perfTextGeom, 1.0f, Color(0.7f, 0.7f, 0.7f));
+				yOffset += lineHeight;
+			}
+
+			// Separator
+			yOffset += 2.0f;
+			s_consoleFont->DrawText("----------------------------------------------", Point(xPadding, yOffset), *s_perfTextGeom, 1.0f, Color(0.4f, 0.4f, 0.4f));
+			yOffset += lineHeight;
+
+			// Column header
+			{
+				std::ostringstream strm;
+				strm << std::left << std::setw(30) << "Metric"
+					<< std::right << std::setw(10) << "Time(ms)"
+					<< std::setw(8) << "Avg"
+					<< std::setw(8) << "Calls";
+				s_consoleFont->DrawText(strm.str(), Point(xPadding, yOffset), *s_perfTextGeom, 1.0f, Color(0.8f, 0.8f, 0.8f));
+				yOffset += lineHeight;
+			}
+
+			// Target frame budget for bar visualization (16.67ms = 60fps)
+			constexpr double frameBudgetMs = 16.667;
+
+			// Metrics (already sorted by totalTimeMs descending from profiler)
+			for (const auto& m : metrics)
+			{
+				// Choose color based on time cost
+				argb_t metricColor;
+				if (m.totalTimeMs < 1.0)
+				{
+					metricColor = Color(0.0f, 1.0f, 0.0f);   // Green: < 1ms
+				}
+				else if (m.totalTimeMs < 4.0)
+				{
+					metricColor = Color(1.0f, 1.0f, 0.0f);   // Yellow: 1-4ms
+				}
+				else
+				{
+					metricColor = Color(1.0f, 0.3f, 0.3f);   // Red: >= 4ms
+				}
+
+				const double avgTime = m.GetAverageTimeMs();
+
+				// Build a simple bar: each '#' represents ~1ms of frame budget
+				const int barLength = static_cast<int>((m.totalTimeMs / frameBudgetMs) * 20.0);
+				const int clampedBar = std::min(barLength, 20);
+				std::string bar(clampedBar, '#');
+
+				// Format: MetricName              Time    Avg   Calls  |####|
+				std::ostringstream strm;
+				strm << std::fixed << std::setprecision(2);
+				strm << std::left << std::setw(30) << m.name
+					<< std::right << std::setw(8) << m.totalTimeMs
+					<< std::setw(8) << avgTime
+					<< std::setw(6) << m.callCount
+					<< "  |" << std::left << std::setw(20) << bar << "|";
+
+				s_consoleFont->DrawText(strm.str(), Point(xPadding, yOffset), *s_perfTextGeom, 1.0f, metricColor);
+				yOffset += lineHeight;
+			}
 		}
 
 		if (s_consoleTextDirty)
 		{
+			s_consoleTextGeom->Reset();
+
 			// Calculate start point
 			Point startPoint{ 0.0f, static_cast<float>(s_consoleWindowHeight) - s_consoleFont->GetHeight() };
 			
@@ -720,40 +820,51 @@ namespace mmo
 		auto vpWidth = 0, vpHeight = 0;
 		gx.GetViewport(nullptr, nullptr, &vpWidth, &vpHeight, nullptr, nullptr);
 
-		if (vpWidth != s_lastViewportWidth || vpHeight != s_lastViewportHeight)
+		if (s_consoleVisible)
 		{
-			s_lastViewportWidth = vpWidth;
-			s_lastViewportHeight = vpHeight;
+			if (vpWidth != s_lastViewportWidth || vpHeight != s_lastViewportHeight)
+			{
+				s_lastViewportWidth = vpWidth;
+				s_lastViewportHeight = vpHeight;
 
-			// Create the vertex buffer for the console background
-			const POS_COL_VERTEX vertices[] = {
-				{ { 0.0f, 0.0f, 0.0f }, 0xc0000000 },
-				{ { static_cast<float>(s_lastViewportWidth), 0.0f, 0.0f }, 0xc0000000 },
-				{ { static_cast<float>(s_lastViewportWidth), static_cast<float>(s_consoleWindowHeight), 0.0f }, 0xc0000000 },
-				{ { 0.0f, static_cast<float>(s_consoleWindowHeight), 0.0f }, 0xc0000000 }
-			};
+				// Create the vertex buffer for the console background
+				const POS_COL_VERTEX vertices[] = {
+					{ { 0.0f, 0.0f, 0.0f }, 0xc0000000 },
+					{ { static_cast<float>(s_lastViewportWidth), 0.0f, 0.0f }, 0xc0000000 },
+					{ { static_cast<float>(s_lastViewportWidth), static_cast<float>(s_consoleWindowHeight), 0.0f }, 0xc0000000 },
+					{ { 0.0f, static_cast<float>(s_consoleWindowHeight), 0.0f }, 0xc0000000 }
+				};
 
-			// Update vertex buffer data
-			CScopedGxBufferLock<POS_COL_VERTEX> lock { *s_consoleVertBuf, LockOptions::Discard };
-			*lock[0] = vertices[0];
-			*lock[1] = vertices[1];
-			*lock[2] = vertices[2];
-			*lock[3] = vertices[3];
+				// Update vertex buffer data
+				CScopedGxBufferLock<POS_COL_VERTEX> lock { *s_consoleVertBuf, LockOptions::Discard };
+				*lock[0] = vertices[0];
+				*lock[1] = vertices[1];
+				*lock[2] = vertices[2];
+				*lock[3] = vertices[3];
+			}
+
+			gx.SetClipRect(0, 0, s_lastViewportWidth, s_consoleWindowHeight);
+			gx.SetTransformMatrix(Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, vpWidth, vpHeight, 0.0f, 100.0f));
+
+			gx.SetVertexFormat(VertexFormat::PosColor);
+			gx.SetTopologyType(TopologyType::TriangleList);
+			gx.SetBlendMode(BlendMode::Alpha);
+
+			s_consoleVertBuf->Set(0);
+			s_consoleIndBuf->Set(0);
+			gx.DrawIndexed();
+
+			s_consoleTextGeom->Draw();
+
+			gx.ResetClipRect();
 		}
-		
-		gx.SetClipRect(0, 0, s_lastViewportWidth, s_consoleWindowHeight);
-		gx.SetTransformMatrix(Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, vpWidth, vpHeight, 0.0f, 100.0f));
-		
-		gx.SetVertexFormat(VertexFormat::PosColor);
-		gx.SetTopologyType(TopologyType::TriangleList);
-		gx.SetBlendMode(BlendMode::Alpha);
-		
-		s_consoleVertBuf->Set(0);
-		s_consoleIndBuf->Set(0);
-		gx.DrawIndexed();
-		
-		s_consoleTextGeom->Draw();
-		
-		gx.ResetClipRect();
+
+		// Draw perf overlay on top of everything (no clip, no background quad)
+		if (showPerf)
+		{
+			gx.SetTransformMatrix(Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, vpWidth, vpHeight, 0.0f, 100.0f));
+			gx.SetBlendMode(BlendMode::Alpha);
+			s_perfTextGeom->Draw();
+		}
 	}
 }

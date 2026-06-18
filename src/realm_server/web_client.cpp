@@ -6,14 +6,10 @@
 #include "motd_manager.h"
 #include "web_service.h"
 #include "base/clock.h"
-#include "http/http_incoming_request.h"
-#include "player_manager.h"
-#include "player.h"
 #include "log/default_log_levels.h"
 
 #include "nlohmann/json.hpp"
 
-// Add a namespace alias for convenience
 using json = nlohmann::json;
 
 namespace mmo
@@ -31,6 +27,35 @@ namespace mmo
 		: web::WebClient(webService, connection)
 		, m_service(webService)
 	{
+		using Type = net::http::IncomingRequest::Type;
+
+		RegisterRoute(Type::Get, "/uptime", [this](const net::http::IncomingRequest&, web::WebResponse& response)
+		{
+			const GameTime startTime = static_cast<WebService &>(getService()).GetStartTime();
+			json jsonResponse;
+			jsonResponse["uptime"] = gameTimeToSeconds<unsigned>(GetAsyncTimeMs() - startTime);
+			SendJsonResponse(response, jsonResponse);
+		});
+
+		RegisterRoute(Type::Get, "/motd", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			handleGetMotd(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/shutdown", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			handleShutdown(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/create-world", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			handleCreateWorld(req, response);
+		});
+
+		RegisterRoute(Type::Post, "/motd", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			handleSetMotd(req, response);
+		});
 	}
 
 	void WebClient::handleRequest(const net::http::IncomingRequest &request,
@@ -48,58 +73,7 @@ namespace mmo
 			return;
 		}
 
-		const auto &url = request.getPath();
-		switch(request.getType())
-		{
-			case net::http::IncomingRequest::Get:
-			{
-				if (url == "/uptime")
-				{
-					const GameTime startTime = static_cast<WebService &>(getService()).GetStartTime();
-
-					json jsonResponse;
-					jsonResponse["uptime"] = gameTimeToSeconds<unsigned>(GetAsyncTimeMs() - startTime);
-					SendJsonResponse(response, jsonResponse);
-				}
-				else if (url == "/motd")
-				{
-					handleGetMotd(request, response);
-				}
-				else
-				{
-					response.setStatus(net::http::OutgoingAnswer::NotFound);
-
-					const String message = "The command '" + url + "' does not exist";
-					response.finishWithContent("text/html", message.data(), message.size());
-				}
-				break;
-			}
-			case net::http::IncomingRequest::Post:
-			{
-				// Parse arguments
-				if (url == "/shutdown")
-				{
-					handleShutdown(request, response);
-				}
-				else if (url == "/create-world")
-				{
-					handleCreateWorld(request, response);
-				}
-				else if (url == "/motd")
-				{
-					handleSetMotd(request, response);
-				}
-				else
-				{
-					const String message = "The command '" + url + "' does not exist";
-					response.finishWithContent("text/html", message.data(), message.size());
-				}
-			}
-			default:
-			{
-				break;
-			}
-		}
+		DispatchRoute(request, response);
 	}
 
 	void WebClient::handleShutdown(const net::http::IncomingRequest& request, web::WebResponse& response) const
@@ -169,7 +143,7 @@ namespace mmo
 		const auto [s, v] = calculateSV(id, password);
 
 		// Execute
-		if (const auto result = m_service.GetDatabase().CreateWorkd(id, s.asHexStr(), v.asHexStr()))
+		if (const auto result = m_service.GetDatabase().CreateWorld(id, s.asHexStr(), v.asHexStr()))
 		{
 			if (*result == WorldCreationResult::WorldNameAlreadyInUse)
 			{

@@ -153,6 +153,11 @@ namespace mmo
 		const auto sync = [&ioService](Action action) { ioService.post(std::move(action)); };
 		AsyncDatabase asyncDatabase{ *database, async, sync };
 
+		// Narrow async wrappers — each subsystem gets only the interface it needs.
+		AsyncGuildDatabase  asyncGuildDb{ *database, async, sync };
+		AsyncFriendDatabase asyncFriendDb{ *database, async, sync };
+		AsyncMOTDDatabase   asyncMotdDb{ *database, async, sync };
+
 		IdGenerator<uint64> groupIdGenerator{ 1 };
 
 
@@ -161,7 +166,7 @@ namespace mmo
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		
 		// Create the MOTD manager
-		auto motdManager = std::make_unique<MOTDManager>(asyncDatabase);
+		auto motdManager = std::make_unique<MOTDManager>(asyncMotdDb);
 
 		PlayerManager playerManager{ config.maxPlayers, *motdManager };
 
@@ -176,7 +181,7 @@ namespace mmo
 			for (auto& groupId : *groupIds)
 			{
 				// Create a new group
-				auto group = std::make_shared<PlayerGroup>(groupId, playerManager, asyncDatabase, timerQueue);
+				auto group = std::make_shared<PlayerGroup>(groupId, playerManager, AsyncGroupDatabase{ *database, async, sync }, timerQueue);
 				group->Preload();
 
 				// Notify the generator about the new group id to avoid overlaps
@@ -233,11 +238,11 @@ namespace mmo
 		asio::io_context::work work{ ioService };
 
 		// Load all guilds
-		GuildMgr guildMgr{ asyncDatabase, playerManager };
+		GuildMgr guildMgr{ asyncGuildDb, playerManager };
 		guildMgr.LoadGuilds();
 
 		// Initialize friend manager
-		FriendMgr friendMgr{ asyncDatabase, playerManager };
+		FriendMgr friendMgr{ asyncFriendDb, playerManager };
 		friendMgr.LoadAllFriendships();
 
 		

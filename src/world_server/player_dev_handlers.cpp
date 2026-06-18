@@ -7,6 +7,7 @@
 #include "game_server/objects/game_creature_s.h"
 #include "game_server/objects/game_object_s.h"
 #include "game_server/objects/game_player_s.h"
+#include "game_server/world/world_instance.h"
 #include "proto_data/project.h"
 #include "game/loot.h"
 
@@ -99,7 +100,8 @@ namespace mmo
 			targetObject = m_character.get();
 		}
 
-		auto playerCharacter = reinterpret_cast<GamePlayerS*>(targetObject);
+		auto* playerCharacter = dynamic_cast<GamePlayerS*>(targetObject);
+		ASSERT(playerCharacter);
 		playerCharacter->AddSpell(spellId);
 	}
 #endif
@@ -130,8 +132,8 @@ namespace mmo
 			return;
 		}
 
-		// Stop movement immediately
-		GameUnitS* unit = reinterpret_cast<GameUnitS*>(object);
+		GameUnitS* unit = dynamic_cast<GameUnitS*>(object);
+		ASSERT(unit);
 		unit->GetMover().StopMovement();
 
 		// TODO
@@ -165,8 +167,8 @@ namespace mmo
 			return;
 		}
 
-		// Stop movement immediately
-		GameUnitS* unit = reinterpret_cast<GameUnitS*>(object);
+		GameUnitS* unit = dynamic_cast<GameUnitS*>(object);
+		ASSERT(unit);
 		unit->GetMover().StopMovement();
 
 		// TODO
@@ -364,6 +366,58 @@ namespace mmo
 		// TODO: Different movement types as well?
 		DLOG("Setting base movement speed of player " << m_characterData.name << " to " << speed);
 		m_character->SetBaseSpeed(movement_type::Run, speed);
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatCheckLineOfSight(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 targetGuid = 0;
+		if (!(contentReader >> io::read<uint64>(targetGuid)))
+		{
+			ELOG("Failed to read CheatCheckLineOfSight packet!");
+			return;
+		}
+
+		if (!m_worldInstance)
+		{
+			return;
+		}
+
+		const Vector3 from = m_character->GetPosition();
+		Vector3 to = from;
+		Vector3 hitPoint = from;
+
+		const GameObjectS* target = m_worldInstance->FindObjectByGuid(targetGuid);
+		if (!target)
+		{
+			ELOG("CheatCheckLineOfSight: target guid " << log_hex_digit(targetGuid) << " not found in world");
+			return;
+		}
+
+		to = target->GetPosition();
+		hitPoint = to;
+
+		bool hasLos = true;
+		MapData* mapData = m_worldInstance->GetMapData();
+		if (mapData)
+		{
+			hasLos = mapData->IsInLineOfSightEx(from, to, hitPoint);
+		}
+
+		DLOG("LOS check from " << m_characterData.name << " to guid " << log_hex_digit(targetGuid)
+			<< ": " << (hasLos ? "CLEAR" : "BLOCKED"));
+
+		SendPacket([&](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::DebugLineOfSightResult);
+			packet
+				<< io::write<uint8>(hasLos ? 1 : 0)
+				<< io::write<float>(from.x)     << io::write<float>(from.y)     << io::write<float>(from.z)
+				<< io::write<float>(to.x)       << io::write<float>(to.y)       << io::write<float>(to.z)
+				<< io::write<float>(hitPoint.x) << io::write<float>(hitPoint.y) << io::write<float>(hitPoint.z);
+			packet.Finish();
+		});
 	}
 #endif
 }

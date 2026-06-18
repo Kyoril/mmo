@@ -36,8 +36,5 @@ namespace mmo
 		/// @brief Lists all available commands in the console.
 		void ConsoleCommand_List(const std::string& cmd, const std::string& args);
 
-#ifdef MMO_WITH_DEV_COMMANDS
-		// TODO: Add console commands in here which are only available to developers
-#endif
 	}
 }

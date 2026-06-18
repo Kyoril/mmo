@@ -18,6 +18,7 @@
 #include "game_server/objects/game_player_s.h"
 #include "game_protocol/game_protocol.h"
 #include "game_server/world_server_inventory_repository.h"
+#include "group_manager.h"
 #include "log/default_log_levels.h"
 #include "proto_data/project.h"
 
@@ -25,7 +26,7 @@
 namespace mmo
 {
 	RealmConnector::RealmConnector(asio::io_service& io, TimerQueue& queue, const std::set<uint64>& defaultHostedMapIds, PlayerManager& playerManager, WorldInstanceManager& worldInstanceManager,
-		const proto::Project& project, ConditionMgr& conditionMgr)
+		const proto::Project& project, ConditionMgr& conditionMgr, GroupManager& groupManager)
 		: auth::Connector(std::make_unique<asio::ip::tcp::socket>(io), nullptr)
 		, m_ioService(io)
 		, m_timerQueue(queue)
@@ -34,6 +35,7 @@ namespace mmo
 		, m_willReconnect(false)
 		, m_project(project)
 		, m_conditionMgr(conditionMgr)
+		, m_groupManager(groupManager)
 	{
 		UpdateHostedMapList(defaultHostedMapIds);
 
@@ -484,6 +486,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 				RegisterPacketHandler(auth::realm_world_packet::TeleportRequest, *this, &RealmConnector::OnTeleportRequest);
 				RegisterPacketHandler(auth::realm_world_packet::PlayerGroupChanged, *this, &RealmConnector::OnPlayerGroupChanged);
 				RegisterPacketHandler(auth::realm_world_packet::PlayerGuildChanged, *this, &RealmConnector::OnPlayerGuildChanged);
+				RegisterPacketHandler(auth::realm_world_packet::PlayerGroupLootMethodChanged, *this, &RealmConnector::OnPlayerGroupLootMethodChanged);
 				RegisterPacketHandler(auth::realm_world_packet::InventoryOperationResult, *this, &RealmConnector::OnInventoryOperationResult);
 				
 				PropagateHostedMapIds();
@@ -514,22 +517,60 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 			ELOG("Failed to read PLAYER_CHARACTER_JOIN packet");
 			return PacketParseResult::Disconnect;
 		}
-		
+
+		// Read the account's active feature keys (entitlements).
+		std::vector<std::string> accountFeatures;
+		uint8 featureCount = 0;
+		if (!(packet >> io::read<uint8>(featureCount)))
+		{
+			ELOG("Failed to read PLAYER_CHARACTER_JOIN packet");
+			return PacketParseResult::Disconnect;
+		}
+		accountFeatures.reserve(featureCount);
+		for (uint8 i = 0; i < featureCount; ++i)
+		{
+			std::string key;
+			if (!(packet >> io::read_container<uint8>(key)))
+			{
+				ELOG("Failed to read PLAYER_CHARACTER_JOIN packet");
+				return PacketParseResult::Disconnect;
+			}
+			accountFeatures.push_back(std::move(key));
+		}
+
 		DLOG("Player character " << log_hex_digit(characterData.characterId) << " wants to join world...");
+
+		// Determine if this is a dungeon/instanced map
+		const proto::MapEntry* mapEntry = m_project.maps.getById(characterData.mapId);
+		const bool isDungeonMap = mapEntry && mapEntry->instancetype() != proto::MapEntry_MapInstanceType_GLOBAL;
 		
 		WorldInstance* instance = nullptr;
 		if (characterData.instanceId.is_nil())
 		{
-			instance = m_worldInstanceManager.GetInstanceByMap(characterData.mapId);
+			if (isDungeonMap)
+			{
+				// Dungeon maps with no instance id always get a new instance
+				DLOG("Creating new dungeon instance for map " << characterData.mapId);
+			}
+			else
+			{
+				// Global maps try to reuse existing instance
+				instance = m_worldInstanceManager.GetInstanceByMap(characterData.mapId);
+			}
 		}
 		else
 		{
 			instance = m_worldInstanceManager.GetInstanceById(characterData.instanceId);
 			if (!instance)
 			{
-				// TODO: Try to load instance id from instance storage
 				WLOG("Unable to find world instance by id " << characterData.instanceId);
-				instance = m_worldInstanceManager.GetInstanceByMap(characterData.mapId);
+
+				if (!isDungeonMap)
+				{
+					// For global maps, fall back to finding any instance by map
+					instance = m_worldInstanceManager.GetInstanceByMap(characterData.mapId);
+				}
+				// For dungeon maps, don't fall back - create a new instance below
 			}
 		}
 
@@ -582,15 +623,9 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		// Create the character object
 		auto characterObject = std::make_shared<GamePlayerS>(m_project, m_timerQueue);
 		characterObject->Initialize();
+		characterObject->SetName(characterData.name);
 		characterObject->SetConfiguration(characterData.configuration);
 		characterObject->Set(object_fields::Guid, characterData.characterId);
-
-		if (characterData.position.y < 0.0f)
-		{
-			WLOG("Player position height was too low, safeguard set it to 10");
-			characterData.position.y = 10.0f;
-		}
-
 		characterObject->Relocate(characterData.position, characterData.facing);
 
 		// Make character fall on login
@@ -612,11 +647,20 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 			characterObject->NotifyQuestRewarded(questId);
 		}
 
+		// Mark daily/weekly quests that are still on cooldown
+		for (const auto& [questId, resetTime] : characterData.repeatableQuestResets)
+		{
+			characterObject->NotifyRepeatableQuestReset(questId, resetTime);
+		}
+
 		// Set quest status data
 		for (const auto& questData : characterData.questStatus)
 		{
 			characterObject->SetQuestData(questData.first, questData.second);
 		}
+
+		// Re-arm fail countdowns for timed quests (and fail any that expired while offline)
+		characterObject->InitializeQuestTimers();
 
 		characterObject->SetBinding(characterData.bindMap, characterData.bindPosition, characterData.bindFacing);
 
@@ -656,13 +700,17 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 
 		// Create a new player object
 		auto player = std::make_shared<Player>(m_playerManager, *this, characterObject, characterData, m_project, *instance, m_conditionMgr);
+		player->SetAccountFeatures(std::move(accountFeatures));
+		player->SetFallDamageConfig(m_fallDamageMinHeight, m_fallDamageLethalHeight);
 		m_playerManager.AddPlayer(player);
 
 		// Set up inventory persistence (World Server)
 		auto inventoryRepo = std::make_shared<WorldServerInventoryRepository>(*this, characterData.characterId);
 		player->SetInventoryRepository(inventoryRepo);
 
-		// Enter the world using the character object
+		// Enter the world using the character object. Persisted auras/cooldowns are restored in
+		// Player::OnSpawned (triggered by AddGameObject) so they are part of the spawn packet and
+		// the client can be informed of active cooldowns.
 		instance->AddGameObject(*characterObject);
 
 		// For now just tell the realm server that we joined
@@ -858,7 +906,9 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 	PacketParseResult RealmConnector::OnPlayerGroupChanged(auth::IncomingPacket& packet)
 	{
 		uint64 characterId, groupId;
-		if (!(packet >> io::read<uint64>(characterId) >> io::read<uint64>(groupId)))
+		uint8 lootMethod = 0;
+		uint8 lootThreshold = 0;
+		if (!(packet >> io::read<uint64>(characterId) >> io::read<uint64>(groupId) >> io::read<uint8>(lootMethod) >> io::read<uint8>(lootThreshold)))
 		{
 			ELOG("Failed to read PLAYER_GROUP_CHANGED packet");
 			return PacketParseResult::Disconnect;
@@ -874,7 +924,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 			return PacketParseResult::Pass;
 		}
 
-		player->UpdateCharacterGroup(groupId);
+		player->UpdateCharacterGroup(groupId, lootMethod, lootThreshold);
 		return PacketParseResult::Pass;
 	}
 
@@ -898,6 +948,29 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		}
 
 		player->UpdateCharacterGuild(guildId);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnPlayerGroupLootMethodChanged(auth::IncomingPacket& packet)
+	{
+		uint64 characterId = 0;
+		uint8 lootMethod = 0;
+		uint64 lootMasterGuid = 0;
+		uint8 lootThreshold = 0;
+		if (!(packet >> io::read<uint64>(characterId) >> io::read<uint8>(lootMethod) >> io::read<uint64>(lootMasterGuid) >> io::read<uint8>(lootThreshold)))
+		{
+			ELOG("Failed to read PLAYER_GROUP_LOOT_METHOD_CHANGED packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		DLOG("Player " << log_hex_digit(characterId) << " loot method changed to " << static_cast<uint32>(lootMethod));
+
+		const std::shared_ptr<Player> player = m_playerManager.GetPlayerByCharacterGuid(characterId);
+		if (player)
+		{
+			player->UpdateCharacterGroupLootMethod(static_cast<LootMethod>(lootMethod), lootMasterGuid, lootThreshold);
+		}
+
 		return PacketParseResult::Pass;
 	}
 
@@ -997,5 +1070,11 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 	{
 		ELOG("Received a malformed packet");
 		QueueReconnect();
+	}
+
+	void RealmConnector::SetFallDamageConfig(float minHeight, float lethalHeight)
+	{
+		m_fallDamageMinHeight = minHeight;
+		m_fallDamageLethalHeight = lethalHeight;
 	}
 }

@@ -12,6 +12,7 @@
 #include "game/character_customization/customizable_avatar_definition.h"
 #include "game_server/inventory.h"
 #include "game_server/quest_status_data.h"
+#include "game_server/persistent_aura.h"
 
 namespace mmo
 {
@@ -74,6 +75,9 @@ namespace mmo
 		std::array<uint32, 5> attributePointsSpent;
 
 		std::vector<uint32> rewardedQuestIds;
+		/// Daily/weekly quests that have been rewarded, mapped to the unix timestamp (seconds) at
+		/// which they become available again.
+		std::map<uint32, GameTime> repeatableQuestResets;
 		std::map<uint32, QuestStatusData> questStatus;
 		std::map<uint32, uint8> talentRanks;
 
@@ -88,6 +92,11 @@ namespace mmo
 		bool isGameMaster = false;
 
 		uint32 timePlayed = 0;
+
+		/// Persisted non-passive, non-equipment auras to restore on the next world instance.
+		std::vector<PersistentAuraData> auras;
+		/// Persisted spell cooldowns (as remaining milliseconds at transfer time).
+		std::vector<PersistentCooldownData> cooldowns;
 	};
 
 	inline io::Reader& operator>>(io::Reader& reader, CharacterData& data)
@@ -95,6 +104,7 @@ namespace mmo
 		if (!(reader
 			>> io::read_packed_guid(data.characterId)
 			>> io::read<MapId>(data.mapId)
+			>> data.instanceId
 			>> io::read_container<uint8>(data.name)
 			>> io::read<float>(data.position.x)
 			>> io::read<float>(data.position.y)
@@ -164,6 +174,62 @@ namespace mmo
 			data.talentRanks[talentId] = rank;
 		}
 
+		uint16 numRepeatableResets;
+		if (!(reader >> io::read<uint16>(numRepeatableResets)))
+		{
+			return reader;
+		}
+
+		for (uint16 i = 0; i < numRepeatableResets; ++i)
+		{
+			uint32 questId;
+			GameTime resetTime;
+			if (!(reader >> io::read<uint32>(questId) >> io::read<uint64>(resetTime)))
+			{
+				return reader;
+			}
+
+			data.repeatableQuestResets[questId] = resetTime;
+		}
+
+		uint16 numAuras;
+		if (!(reader >> io::read<uint16>(numAuras)))
+		{
+			return reader;
+		}
+
+		data.auras.clear();
+		data.auras.reserve(numAuras);
+		for (uint16 i = 0; i < numAuras; ++i)
+		{
+			PersistentAuraData aura;
+			if (!(reader >> aura))
+			{
+				return reader;
+			}
+
+			data.auras.push_back(std::move(aura));
+		}
+
+		uint16 numCooldowns;
+		if (!(reader >> io::read<uint16>(numCooldowns)))
+		{
+			return reader;
+		}
+
+		data.cooldowns.clear();
+		data.cooldowns.reserve(numCooldowns);
+		for (uint16 i = 0; i < numCooldowns; ++i)
+		{
+			PersistentCooldownData cooldown;
+			if (!(reader >> cooldown))
+			{
+				return reader;
+			}
+
+			data.cooldowns.push_back(cooldown);
+		}
+
 		return reader;
 	}
 	
@@ -172,6 +238,7 @@ namespace mmo
 		writer
 			<< io::write_packed_guid(data.characterId)
 			<< io::write<MapId>(data.mapId)
+			<< data.instanceId
 			<< io::write_dynamic_range<uint8>(data.name)
 			<< io::write<float>(data.position.x)
 			<< io::write<float>(data.position.y)
@@ -214,6 +281,24 @@ namespace mmo
 		for (const auto& [talentId, rank] : data.talentRanks)
 		{
 			writer << io::write<uint32>(talentId) << io::write<uint8>(rank);
+		}
+
+		writer << io::write<uint16>(data.repeatableQuestResets.size());
+		for (const auto& [questId, resetTime] : data.repeatableQuestResets)
+		{
+			writer << io::write<uint32>(questId) << io::write<uint64>(resetTime);
+		}
+
+		writer << io::write<uint16>(data.auras.size());
+		for (const auto& aura : data.auras)
+		{
+			writer << aura;
+		}
+
+		writer << io::write<uint16>(data.cooldowns.size());
+		for (const auto& cooldown : data.cooldowns)
+		{
+			writer << cooldown;
 		}
 
 		return writer;

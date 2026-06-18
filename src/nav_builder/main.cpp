@@ -24,10 +24,10 @@ namespace mmo
 
 		// Create a new mesh builder instance. This class is thread safe!
 		auto builder = std::make_unique<MeshBuilder>(directoryPath, worldName);
-		ILOG("Building " << builder->GetTileCount() << " tiles for world " << worldName << " using " << concurrentThreads << " thrads...");
+		ILOG("Building " << builder->GetTileCount() << " tiles for world " << worldName << " using " << concurrentThreads << " threads...");
 
-		volatile bool success = true;
-		volatile std::atomic<uint32> finishedThreads = 0;
+		std::atomic<bool> success { true };
+		std::atomic<uint32> finishedThreads { 0 };
 
 		// Spawn worker threads
 		std::vector<std::thread> networkThreads{ concurrentThreads };

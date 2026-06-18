@@ -13,6 +13,13 @@ namespace mmo
 	class GameObjectC;
 	class RealmConnector;
 
+	/// @brief Returns the localization key for the "not enough power" spell cast
+	///        failure message that matches the given power type, so that the UI
+	///        shows the correct resource name (mana, rage, energy, ...).
+	/// @param powerType The power type value (see mmo::power_type::Type).
+	/// @return A localization key string usable with Localize().
+	const char* GetNoPowerErrorKey(int32 powerType);
+
 	/// This class allows for spell casting support.
 	class SpellCast final : public NonCopyable
 	{
@@ -36,6 +43,15 @@ namespace mmo
 
 		void OnSpellFailure(uint32 spellId);
 
+		/// @brief Called when the server confirms a channeled spell has started.
+		/// @param spell The spell being channeled.
+		/// @param duration The channel duration in milliseconds.
+		void OnChannelStart(const proto_client::SpellEntry& spell, GameTime duration);
+
+		/// @brief Called when the server sends a channel time update.
+		/// @param timeLeft The remaining channel time in milliseconds. 0 means channel ended.
+		void OnChannelUpdate(uint64 casterGuid, GameTime timeLeft);
+
 		bool SetSpellTargetMap(SpellTargetMap& targetMap, const proto_client::SpellEntry& spell);
 
 	public:
@@ -45,7 +61,15 @@ namespace mmo
 
 		bool IsCasting() const;
 
+		/// @brief Returns true if the player is currently channeling a spell.
+		bool IsChanneling() const;
+
 		uint32 GetCastingSpellId() const;
+
+		/// @brief Returns the spell ID of the spell currently being channeled, or 0.
+		uint32 GetChannelingSpellId() const;
+
+		[[nodiscard]] bool HasServerConfirmedCastStart(uint32 spellId) const;
 
 	private:
 		RealmConnector& m_connector;
@@ -55,5 +79,8 @@ namespace mmo
 		const proto_client::RangeManager& m_ranges;
 
 		uint32 m_spellCastId = 0;
+		bool m_serverConfirmedCastStart = false;
+
+		uint32 m_channelingSpellId = 0;
 	};
 }

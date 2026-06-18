@@ -6,6 +6,7 @@
 #include <imgui/misc/cpp/imgui_stdlib.h>
 #include <map>
 
+#include "asset_picker_widget.h"
 #include "assets/asset_registry.h"
 #include "editor_imgui_helpers.h"
 #include "game/aura.h"
@@ -14,7 +15,6 @@
 #include "game_server/spells/spell_cast.h"
 #include "graphics/texture_mgr.h"
 #include "log/default_log_levels.h"
-#include "editor_imgui_helpers.h"
 
 namespace mmo
 {
@@ -101,7 +101,9 @@ namespace mmo
 		{ "Apply Area Aura", "Buff/Debuff", "Applies aura in an area" },
 		{ "Interrupt Spell Cast", "Combat", "Interrupts spell casting" },
 		{ "Reset Talents", "Utility", "Resets talent points" },
-		{ "Proficiency", "Utility", "Grants weapon proficiency" }
+		{ "Proficiency", "Utility", "Grants weapon proficiency" },
+		{ "Trigger Spell", "Utility", "Casts another spell, optionally on a proc chance taken from this spell's Proc Chance" },
+		{ "Critical Block", "Combat", "Allows the unit to critically block (block for an increased amount)" }
 	};
 
 	static String s_spellEffectNames[] = {
@@ -157,7 +159,9 @@ namespace mmo
 		"Apply Area Aura",
 		"Interrupt Spell Cast",
 		"Reset Talents",
-		"Proficiency"
+		"Proficiency",
+		"Trigger Spell",
+		"Critical Block"
 	};
 
 	static_assert(std::size(s_spellEffectNames) == spell_effects::Count_, "Each spell effect must have a string representation!");
@@ -225,7 +229,14 @@ namespace mmo
 		"ModVisibility",
 		"ModResistancePct",
 
-		"ModStatPct"
+		"ModStatPct",
+
+		"ModSpellDamageDone",
+		"ModSpellDamageDonePct",
+
+		"ModDisorient",
+		"DamageImmunity",
+		"ModDodgeChance"
 	};
 
 	static_assert(std::size(s_auraTypeNames) == aura_type::Count_, "Each aura type must have a string representation!");
@@ -292,7 +303,8 @@ namespace mmo
 		"Object Target",
 		"Cone Enemy",
 		"Target Any",
-		"Instigator"
+		"Instigator",
+		"Target Secondary Enemy"
 	};
 
 	static_assert(std::size(s_effectTargets) == spell_effect_targets::Count_, "One string per effect target has to exist!");
@@ -328,8 +340,7 @@ namespace mmo
 	void SpellEditorWindow::DrawDetailsImpl(proto::SpellEntry& currentEntry)
 	{
 		// Top toolbar with actions
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.6f, 0.9f, 0.8f));
-		if (ImGui::Button("New Rank", ImVec2(120, 0)))
+		if (DrawPrimaryButton("New Rank", ImVec2(120, 0)))
 		{
 			if (!currentEntry.has_baseid() || currentEntry.baseid() == 0)
 			{
@@ -348,22 +359,18 @@ namespace mmo
 			copied->set_rank(currentEntry.rank() + 1);
 			copied->set_baseid(currentEntry.baseid());
 		}
-		ImGui::PopStyleColor();
-
 		ImGui::SameLine();
 		DrawHelpMarker("Create a new rank of this spell with incremented rank number");
 
 		ImGui::SameLine();
 
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
-		if (ImGui::Button("Duplicate Spell", ImVec2(140, 0)))
+		if (DrawPrimaryButton("Duplicate Spell", ImVec2(140, 0)))
 		{
 			proto::SpellEntry* copied = m_project.spells.add();
 			const uint32 newId = copied->id();
 			copied->CopyFrom(currentEntry);
 			copied->set_id(newId);
 		}
-		ImGui::PopStyleColor();
 
 		ImGui::SameLine();
 		DrawHelpMarker("Create a complete copy of this spell with a new ID");
@@ -425,8 +432,8 @@ namespace mmo
 #define SLIDER_UINT64_PROP(name, label, min, max) SLIDER_UNSIGNED_PROP(name, label, 64, min, max)
 
 
-		// Migration: Ensure spell has at least one attribute bitmap
-		if (currentEntry.attributes_size() < 1)
+		// Migration: Ensure spell has at least two attribute bitmaps (index 0 and 1).
+		while (currentEntry.attributes_size() < 2)
 		{
 			currentEntry.add_attributes(0);
 		}
@@ -632,6 +639,17 @@ namespace mmo
 			ImGui::SameLine();
 			DrawHelpMarker("Time before spell can be cast again");
 
+			ImGui::Spacing();
+			DrawSectionHeader("Cooldown Flags");
+
+			CHECKBOX_FLAG_PROP(cooldownflags, "Start Cooldown On Cast Start", spell_cooldown_flags::StartOnCastStart);
+			ImGui::SameLine();
+			DrawHelpMarker("If enabled, cooldown starts when casting starts and is rolled back when the cast fails or is interrupted.");
+
+			CHECKBOX_FLAG_PROP(cooldownflags, "No Global Cooldown", spell_cooldown_flags::NoGlobalCooldown);
+			ImGui::SameLine();
+			DrawHelpMarker("By default every spell triggers and respects the global cooldown (configurable in Combat Settings). Enable this to make the spell ignore the global cooldown entirely - it will neither trigger it nor be blocked by it. The spell's 'Cooldown' value is always its own individual cooldown.");
+
 			ImGui::SetNextItemWidth(150);
 			SLIDER_UINT32_PROP(casttime, "##CastTime", 0, 100000);
 			ImGui::SameLine();
@@ -707,12 +725,10 @@ namespace mmo
 
 			ImGui::SameLine();
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.6f, 0.7f, 0.8f));
-			if (ImGui::Button("Edit Ranges"))
+			if (DrawPrimaryButton("Edit Ranges"))
 			{
 				// TODO: Open popup
 			}
-			ImGui::PopStyleColor();
 
 			ImGui::SetNextItemWidth(150);
 			SLIDER_FLOAT_PROP(threat_multiplier, "##ThreatMultiplier", 0.0f, 100000.0f);
@@ -732,6 +748,119 @@ namespace mmo
 			CHECKBOX_FLAG_PROP(facing, "Caster Must be Behind Target", spell_facing_flags::BehindTarget);
 			ImGui::SameLine();
 			DrawHelpMarker("Spell requires caster behind target");
+
+			ImGui::PopStyleVar(2);
+			ImGui::Unindent();
+		}
+
+		if (ImGui::CollapsingHeader("Stacking", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::Indent();
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+
+			DrawSectionHeader("Stacking Rule");
+
+			static const char* stackingRuleItems[] = {
+				"Default",
+				"Unique Per Target",
+				"Unique Per Caster",
+				"Stackable Per Caster",
+				"Single Target Per Caster",
+				"Category Exclusive"
+			};
+			static const char* stackingRuleDescs[] = {
+				"Default: Uses the legacy OnlyOneStackTotal attribute flag to determine stacking. Same caster + same spell always overwrites; different casters stack unless the attribute is set.",
+				"Unique Per Target: Only one instance of this aura may exist on a target at a time, regardless of caster. Any caster applying it overwrites the existing one.",
+				"Unique Per Caster: Each caster may have at most one instance of this aura on any single target. A caster recasting on the same target overwrites their own aura; multiple casters stack independently.",
+				"Stackable Per Caster: Each caster maintains their own independent aura stack on the target. Multiple casters each add their own instance without interfering.",
+				"Single Target Per Caster: Each caster may only have this aura active on ONE target at a time. Casting on a new target removes it from the previous target. Use for crowd-control like Sleep or Polymorph.",
+				"Category Exclusive: Uses the Stacking Category field to group spells. Only one aura from the same category may be active on a target per caster. Useful when multiple spells (e.g. Sleep, Hibernate) should share a single-target limit."
+			};
+			int stackingRule = static_cast<int>(currentEntry.stacking_rule());
+			ImGui::SetNextItemWidth(250);
+			if (ImGui::Combo("##StackingRule", &stackingRule, stackingRuleItems, IM_ARRAYSIZE(stackingRuleItems)))
+			{
+				currentEntry.set_stacking_rule(static_cast<uint32>(stackingRule));
+			}
+			ImGui::SameLine();
+			ImGui::Text("Stacking Rule");
+			ImGui::SameLine();
+			DrawHelpMarker(stackingRuleDescs[stackingRule < IM_ARRAYSIZE(stackingRuleDescs) ? stackingRule : 0]);
+
+			ImGui::Spacing();
+			DrawSectionHeader("Stacking Category");
+
+			const bool hasStackingCategory = currentEntry.stacking_category_id() != 0;
+			const proto::AuraStackingCategoryEntry* currentStackingCategory = hasStackingCategory
+				? m_project.auraStackingCategories.getById(currentEntry.stacking_category_id())
+				: nullptr;
+			const String stackingCategoryPreview = currentStackingCategory ? currentStackingCategory->name() : "<None>";
+
+			ImGui::SetNextItemWidth(250);
+			if (ImGui::BeginCombo("##StackingCategory", stackingCategoryPreview.c_str(), ImGuiComboFlags_None))
+			{
+				ImGui::PushID(-1);
+				if (ImGui::Selectable("<None>", !hasStackingCategory))
+				{
+					currentEntry.set_stacking_category_id(0);
+				}
+				if (!hasStackingCategory)
+				{
+					ImGui::SetItemDefaultFocus();
+				}
+				ImGui::PopID();
+
+				for (const auto& cat : m_project.auraStackingCategories.getTemplates().entry())
+				{
+					ImGui::PushID(cat.id());
+					const bool item_selected = currentStackingCategory && currentStackingCategory->id() == cat.id();
+					const char* item_text = cat.name().c_str();
+					if (ImGui::Selectable(item_text, item_selected))
+					{
+						currentEntry.set_stacking_category_id(cat.id());
+					}
+					if (item_selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+			ImGui::SameLine();
+			ImGui::Text("StackingCategory");
+			ImGui::SameLine();
+			DrawHelpMarker("Aura stacking category used to group auras for stacking evaluation");
+
+			ImGui::Spacing();
+			DrawSectionHeader("Stack Options");
+
+			bool extendDuration = currentEntry.extend_duration();
+			if (ImGui::Checkbox("ExtendDuration", &extendDuration))
+			{
+				currentEntry.set_extend_duration(extendDuration);
+			}
+			ImGui::SameLine();
+			DrawHelpMarker("When a duplicate aura is applied, extend the existing duration instead of replacing");
+
+			ImGui::Spacing();
+
+			static const char* stackResetPolicyItems[] = {
+				"Reset on Expire",
+				"Keep on Expire"
+			};
+			int stackResetPolicy = static_cast<int>(currentEntry.stack_reset_policy());
+			ImGui::SetNextItemWidth(250);
+			if (ImGui::Combo("##StackResetPolicy", &stackResetPolicy, stackResetPolicyItems, IM_ARRAYSIZE(stackResetPolicyItems)))
+			{
+				currentEntry.set_stack_reset_policy(static_cast<uint32>(stackResetPolicy));
+			}
+			ImGui::SameLine();
+			ImGui::Text("StackResetPolicy");
+			ImGui::SameLine();
+			DrawHelpMarker("Determines what happens to stack count when the aura expires");
 
 			ImGui::PopStyleVar(2);
 			ImGui::Unindent();
@@ -941,12 +1070,10 @@ namespace mmo
 
 				ImGui::SameLine();
 
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.3f, 0.2f, 0.8f));
-				if (ImGui::Button("Reset Reagents", ImVec2(120, 0)))
+				if (DrawDangerButton("Reset Reagents", ImVec2(120, 0)))
 				{
 					currentEntry.clear_reagents();
 				}
-				ImGui::PopStyleColor();
 
 				ImGui::EndPopup();
 			}
@@ -987,16 +1114,13 @@ namespace mmo
 					}
 
 					ImGui::TableSetColumnIndex(2);
-					ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-					if (ImGui::Button("Remove", ImVec2(-1, 0)))
+					if (DrawDangerButton("Remove", ImVec2(-1, 0)))
 					{
 						currentEntry.mutable_reagents()->erase(currentEntry.mutable_reagents()->begin() + i);
 						// Break the loop to avoid invalidating the iterator
-						ImGui::PopStyleColor();
 						ImGui::PopID();
 						break;
 					}
-					ImGui::PopStyleColor();
 
 					ImGui::PopID();
 				}
@@ -1302,6 +1426,21 @@ namespace mmo
 				ImGui::TableNextColumn();
 				CHECKBOX_ATTR_PROP(1, "Is Talent", spell_attributes_b::Talent);
 
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(1, "Auto Repeat", spell_attributes_b::AutoRepeat);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(1, "Usable While Stunned", spell_attributes_b::UsableWhileStunned);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(1, "Usable While Feared", spell_attributes_b::UsableWhileFeared);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(1, "Usable While Sleeping", spell_attributes_b::UsableWhileSleeping);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(1, "Ignore Line of Sight", spell_attributes_b::IgnoreLineOfSight);
+
 				ImGui::EndTable();
 			}
 
@@ -1317,50 +1456,11 @@ namespace mmo
 			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
 
 			DrawSectionHeader("Spell Icon");
-
-			if (!currentEntry.icon().empty())
+			static const std::set<String> iconExtensions = { ".htex", ".blp" };
+			String iconPath = currentEntry.icon();
+			if (AssetPickerWidget::Draw("Icon", iconPath, iconExtensions, nullptr, nullptr, 64.0f))
 			{
-				if (!m_iconCache.contains(currentEntry.icon()))
-				{
-					m_iconCache[currentEntry.icon()] = TextureManager::Get().CreateOrRetrieve(currentEntry.icon());
-				}
-
-				if (const TexturePtr tex = m_iconCache[currentEntry.icon()])
-				{
-					ImGui::Image(tex->GetTextureObject(), ImVec2(64, 64));
-				}
-			}
-
-			if (ImGui::BeginCombo("Icon", currentEntry.icon().c_str(), ImGuiComboFlags_None))
-			{
-				for (int i = 0; i < m_textures.size(); i++)
-				{
-					ImGui::PushID(i);
-					const bool item_selected = m_textures[i] == currentEntry.icon();
-					const char* item_text = m_textures[i].c_str();
-					if (ImGui::Selectable(item_text, item_selected))
-					{
-						currentEntry.set_icon(item_text);
-					}
-					if (item_selected)
-					{
-						ImGui::SetItemDefaultFocus();
-					}
-					ImGui::PopID();
-				}
-
-				ImGui::EndCombo();
-			}
-
-			if (ImGui::BeginDragDropTarget())
-			{
-				// We only accept mesh file drops
-				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".htex"))
-				{
-					currentEntry.set_icon(*static_cast<String*>(payload->Data));
-				}
-
-				ImGui::EndDragDropTarget();
+				currentEntry.set_icon(iconPath);
 			}
 
 			ImGui::Spacing();
@@ -1409,12 +1509,10 @@ namespace mmo
 			if (currentEntry.has_visualization_id() && visualizationId > 0)
 			{
 				ImGui::SameLine();
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.3f, 0.2f, 0.8f));
-				if (ImGui::SmallButton("Clear"))
+				if (DrawDangerSmallButton("Clear"))
 				{
 					currentEntry.clear_visualization_id();
 				}
-				ImGui::PopStyleColor();
 			}
 
 			ImGui::PopStyleVar(2);
@@ -1532,24 +1630,19 @@ namespace mmo
 			ImGui::SameLine();
 			DrawHelpMarker(s_spellEffectInfo[currentEffect].description);
 			ImGui::SameLine();
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.6f, 0.7f, 0.8f));
-			if (ImGui::Button("Details", ImVec2(80, 0)))
+			if (DrawPrimaryButton("Details", ImVec2(80, 0)))
 			{
 				ImGui::OpenPopup("SpellEffectDetails");
 			}
-			ImGui::PopStyleColor();
 			ImGui::SameLine();
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));
-			if (ImGui::Button("Remove", ImVec2(80, 0)))
+			if (DrawDangerButton("Remove", ImVec2(80, 0)))
 			{
 				currentEntry.mutable_effects()->DeleteSubrange(effectIndex, 1);
-				ImGui::PopStyleColor();
 				effectIndex--;
 			}
 			else
 			{
-				ImGui::PopStyleColor();
 				DrawEffectDialog(currentEntry, *currentEntry.mutable_effects(effectIndex), effectIndex);
 			}
 				
@@ -1557,12 +1650,10 @@ namespace mmo
 			}
 
 			// Add button
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.3f, 0.8f));
-			if (ImGui::Button("+ Add Effect", ImVec2(-1, 0)))
+			if (DrawSuccessButton("+ Add Effect", ImVec2(-1, 0)))
 			{
 				currentEntry.add_effects()->set_index(currentEntry.effects_size() - 1);
 			}
-			ImGui::PopStyleColor();
 
 			ImGui::EndChildFrame();
 
@@ -1635,6 +1726,76 @@ namespace mmo
 			ImGui::Separator();
 			ImGui::Spacing();
 
+			// Conditional gating (data-driven). When set, the effect only applies
+			// if the condition holds for the chosen unit; otherwise it is skipped.
+			DrawSectionHeader("Conditional");
+			{
+				static const char* s_conditionTypes[] = {
+					"None",
+					"Target Has Aura From Caster",
+					"Target Missing Aura From Caster"
+				};
+				static const char* s_conditionTargets[] = {
+					"Primary Target",
+					"Caster"
+				};
+
+				int conditionType = static_cast<int>(effect.conditiontype());
+				if (conditionType < 0 || conditionType >= IM_ARRAYSIZE(s_conditionTypes))
+				{
+					conditionType = 0;
+				}
+				if (ImGui::Combo("Condition", &conditionType,
+					[](void*, int idx, const char** out_text)
+					{
+						if (idx < 0 || idx >= IM_ARRAYSIZE(s_conditionTypes))
+						{
+							return false;
+						}
+						*out_text = s_conditionTypes[idx];
+						return true;
+					}, nullptr, IM_ARRAYSIZE(s_conditionTypes)))
+				{
+					effect.set_conditiontype(static_cast<uint32>(conditionType));
+				}
+				ImGui::SameLine();
+				DrawHelpMarker("If set, this effect is only applied when the condition is satisfied. Otherwise it is skipped entirely.");
+
+				if (conditionType != 0)
+				{
+					int conditionTarget = static_cast<int>(effect.conditiontarget());
+					if (conditionTarget < 0 || conditionTarget >= IM_ARRAYSIZE(s_conditionTargets))
+					{
+						conditionTarget = 0;
+					}
+					if (ImGui::Combo("Condition Target", &conditionTarget,
+						[](void*, int idx, const char** out_text)
+						{
+							if (idx < 0 || idx >= IM_ARRAYSIZE(s_conditionTargets))
+							{
+								return false;
+							}
+							*out_text = s_conditionTargets[idx];
+							return true;
+						}, nullptr, IM_ARRAYSIZE(s_conditionTargets)))
+					{
+						effect.set_conditiontarget(static_cast<uint32>(conditionTarget));
+					}
+
+					int conditionValue = static_cast<int>(effect.conditionvalue());
+					if (ImGui::InputInt("Condition Aura Spell", &conditionValue))
+					{
+						effect.set_conditionvalue(static_cast<uint32>(std::max(0, conditionValue)));
+					}
+					ImGui::SameLine();
+					DrawHelpMarker("Spell id of the aura to look for on the condition target.");
+				}
+			}
+
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+
 			// Aura configuration
 			if (currentEffectType == spell_effects::ApplyAura ||
 				currentEffectType == spell_effects::ApplyAreaAura ||
@@ -1674,6 +1835,73 @@ namespace mmo
 					}
 				}
 				break;
+			case spell_effects::EnvironmentalDamage:
+				{
+					static const char* s_envDamageTypes[] = { "Fall", "Drowning", "Lava", "Fire" };
+					int envType = effect.miscvaluea();
+					if (envType < 0 || envType >= IM_ARRAYSIZE(s_envDamageTypes))
+					{
+						envType = 0;
+					}
+
+					if (ImGui::Combo("Damage Type", &envType,
+						[](void*, int idx, const char** out_text)
+						{
+							static const char* types[] = { "Fall", "Drowning", "Lava", "Fire" };
+							if (idx < 0 || idx >= IM_ARRAYSIZE(types))
+							{
+								return false;
+							}
+							*out_text = types[idx];
+							return true;
+						}, nullptr, IM_ARRAYSIZE(s_envDamageTypes)))
+					{
+						effect.set_miscvaluea(envType);
+					}
+
+					DrawHelpMarker("The type of environmental damage. Base Points represent the damage as a percentage of max HP.");
+					break;
+				}
+			case spell_effects::OpenLock:
+				{
+					const uint32 lockTypeId = effect.miscvaluea();
+
+					const auto* lockEntry = m_project.lockTypes.getById(lockTypeId);
+					const char* lockPreview = lockEntry != nullptr ? lockEntry->name().c_str() : "None";
+					if (ImGui::BeginCombo("Lock Type", lockPreview, ImGuiComboFlags_None))
+					{
+						ImGui::PushID(0);
+						const bool noneSelected = lockTypeId == 0;
+						if (ImGui::Selectable("None (0)", noneSelected))
+						{
+							effect.set_miscvaluea(0);
+						}
+						if (noneSelected)
+						{
+							ImGui::SetItemDefaultFocus();
+						}
+						ImGui::PopID();
+
+						for (int i = 0; i < m_project.lockTypes.count(); i++)
+						{
+							ImGui::PushID(i + 1);
+							const bool item_selected = m_project.lockTypes.getTemplates().entry(i).id() == lockTypeId;
+							const char* item_text = m_project.lockTypes.getTemplates().entry(i).name().c_str();
+							if (ImGui::Selectable(item_text, item_selected))
+							{
+								effect.set_miscvaluea(m_project.lockTypes.getTemplates().entry(i).id());
+							}
+							if (item_selected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+							ImGui::PopID();
+						}
+
+						ImGui::EndCombo();
+					}
+					break;
+				}
 			case spell_effects::Proficiency:
 				{
 					const uint32 proficiency = effect.miscvaluea();
@@ -1750,6 +1978,7 @@ namespace mmo
 			}
 
 			if (currentEffectType == spell_effects::LearnSpell ||
+				currentEffectType == spell_effects::TriggerSpell ||
 				(currentEffectType == spell_effects::ApplyAura &&
 				(effect.aura() == aura_type::PeriodicTriggerSpell ||
 					effect.aura() == aura_type::ProcTriggerSpell)))
@@ -1876,12 +2105,10 @@ namespace mmo
 			ImGui::Separator();
 			ImGui::Spacing();
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.6f, 0.9f, 0.8f));
-			if (ImGui::Button("Close", ImVec2(120, 0)))
+			if (DrawPrimaryButton("Close", ImVec2(120, 0)))
 			{
 				ImGui::CloseCurrentPopup();
 			}
-			ImGui::PopStyleColor();
 
 			ImGui::PopStyleVar(2);
 			ImGui::EndPopup();
@@ -1988,6 +2215,12 @@ namespace mmo
 			}
 		}
 		break;
+
+		case aura_type::DamageImmunity:
+			// The immunity school is derived from the spell's own damage school, so there is no
+			// additional per-effect configuration required here.
+			ImGui::TextWrapped("Grants the target immunity to damage of this spell's school (see the spell's Damage School setting). Immune damage is fully negated but still reported to clients as \"Immune\".");
+			break;
 		}
 	}
 }

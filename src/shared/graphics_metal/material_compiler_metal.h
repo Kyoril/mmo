@@ -79,11 +79,24 @@ namespace mmo
 		/// @copydoc MaterialCompiler::AddTransform
 		ExpressionIndex AddTransform(ExpressionIndex input, Space sourceSpace, Space targetSpace) override;
 
+		/// @copydoc MaterialCompiler::AddTime
+		ExpressionIndex AddTime() override;
+
+		/// @copydoc MaterialCompiler::AddRotator
+		ExpressionIndex AddRotator(ExpressionIndex coordinates, ExpressionIndex center, ExpressionIndex rotation) override;
+
+		/// @copydoc MaterialCompiler::AddFresnel
+		ExpressionIndex AddFresnel(ExpressionIndex exponent, ExpressionIndex baseReflectFraction, ExpressionIndex normal) override;
+
         ExpressionIndex AddTextureParameterSample(std::string_view name, std::string_view texture, ExpressionIndex coordinates, bool srgb, SamplerType type) override;
 
         ExpressionIndex AddScalarParameterExpression(std::string_view name, float defaultValue) override;
 
         ExpressionIndex AddVectorParameterExpression(std::string_view name, const Vector4& defaultValue) override;
+
+        ExpressionIndex AddGlobalScalarParameterExpression(std::string_view name) override;
+
+        ExpressionIndex AddGlobalVectorParameterExpression(std::string_view name) override;
 
 	protected:
 		/// @copydoc MaterialCompiler::GenerateVertexShaderCode

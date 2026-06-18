@@ -4,7 +4,11 @@
 
 #include "editors/editor_base.h"
 
+#include "math/vector3.h"
+
 #include <map>
+#include <optional>
+#include <utility>
 
 namespace mmo
 {
@@ -31,6 +35,9 @@ namespace mmo
 		/// @brief Adds creation items to a context menu.
 		void AddCreationContextMenuItems() override;
 
+		/// @copydoc EditorBase::SetPendingCameraTarget
+		void SetPendingCameraTarget(const Path& asset, const Vector3& worldLocation) override;
+
 		proto::Project& GetProject() const { return m_project; }
 	protected:
 		/// @copydoc EditorBase::DrawImpl
@@ -51,5 +58,9 @@ namespace mmo
 		std::map<Path, std::shared_ptr<EditorInstance>> m_instances;
 		bool m_showWorldNameDialog { false };
 		String m_worldName;
+
+		/// @brief A pending camera target (asset path + world location) applied to the next matching
+		///        instance that is opened. Set via SetPendingCameraTarget.
+		std::optional<std::pair<Path, Vector3>> m_pendingCameraTarget;
 	};
 }

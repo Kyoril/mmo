@@ -33,6 +33,7 @@ source_group(src FILES ${srcFiles})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 add_executable(graphics_test WIN32 MACOSX_BUNDLE ${srcFiles} ${osxSources} ${winSources})
+mmo_deploy_runtime_dependencies(graphics_test)
 
 IF(APPLE)
     SET_TARGET_PROPERTIES(graphics_test PROPERTIES MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/macos/Info-CMake.plist")

@@ -8,7 +8,9 @@
 #include "log/default_log_levels.h"
 #include "auth_protocol/auth_protocol.h"
 
+#include <algorithm>
 #include <functional>
+#include <ctime>
 
 #include "player.h"
 #include "player_manager.h"
@@ -406,19 +408,32 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	void World::Join(CharacterData characterData, JoinWorldCallback callback)
+	void World::Join(CharacterData characterData, const std::vector<std::string>& accountFeatures, JoinWorldCallback callback)
 	{
 		// TODO: What if we already have a waiting callback? Right now we just discard the old one
 		if (callback)
 		{
 			std::scoped_lock lock { m_joinCallbackMutex };
-			m_joinCallbacks.emplace(characterData.characterId, std::move(callback));	
+			m_joinCallbacks.emplace(characterData.characterId, std::move(callback));
 		}
-		
-		GetConnection().sendSinglePacket([characterData](auth::OutgoingPacket& outPacket)
+
+		GetConnection().sendSinglePacket([characterData, accountFeatures](auth::OutgoingPacket& outPacket)
 		{
 			outPacket.Start(auth::realm_world_packet::PlayerCharacterJoin);
 			outPacket << characterData;
+
+			// Append the account's active feature keys so world systems can query them.
+			outPacket << io::write<uint8>(static_cast<uint8>(std::min<size_t>(accountFeatures.size(), 0xFF)));
+			size_t written = 0;
+			for (const auto& feature : accountFeatures)
+			{
+				if (written++ >= 0xFF)
+				{
+					break;
+				}
+				outPacket << io::write_dynamic_range<uint8>(feature);
+			}
+
 			outPacket.Finish();
 		});
 	}
@@ -520,14 +535,16 @@ namespace mmo
 			});
 	}
 
-	void World::NotifyPlayerGroupChanged(uint64 characterId, uint64 groupId)
+	void World::NotifyPlayerGroupChanged(uint64 characterId, uint64 groupId, uint8 lootMethod, uint8 lootThreshold)
 	{
-		GetConnection().sendSinglePacket([characterId, groupId](auth::OutgoingPacket& outPacket)
+		GetConnection().sendSinglePacket([characterId, groupId, lootMethod, lootThreshold](auth::OutgoingPacket& outPacket)
 			{
 				outPacket.Start(auth::realm_world_packet::PlayerGroupChanged);
 				outPacket
 					<< io::write<uint64>(characterId)
-					<< io::write<uint64>(groupId);
+					<< io::write<uint64>(groupId)
+					<< io::write<uint8>(lootMethod)
+					<< io::write<uint8>(lootThreshold);
 				outPacket.Finish();
 			});
 	}
@@ -540,6 +557,20 @@ namespace mmo
 				outPacket
 					<< io::write<uint64>(characterId)
 					<< io::write<uint64>(guildId);
+				outPacket.Finish();
+			});
+	}
+
+	void World::NotifyPlayerGroupLootMethodChanged(const uint64 characterId, const uint8 lootMethod, const uint64 lootMasterGuid, const uint8 lootThreshold)
+	{
+		GetConnection().sendSinglePacket([characterId, lootMethod, lootMasterGuid, lootThreshold](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::realm_world_packet::PlayerGroupLootMethodChanged);
+				outPacket
+					<< io::write<uint64>(characterId)
+					<< io::write<uint8>(lootMethod)
+					<< io::write<uint64>(lootMasterGuid)
+					<< io::write<uint8>(lootThreshold);
 				outPacket.Finish();
 			});
 	}
@@ -599,8 +630,17 @@ namespace mmo
 
 		ILOG("World instance host terminated: " << instanceId.to_string());
 
-		std::scoped_lock lock { m_hostedInstanceIdMutex };
-		m_hostedInstanceIds.emplace_back(std::move(instanceId));
+		{
+			std::scoped_lock lock { m_hostedInstanceIdMutex };
+			const auto it = std::find(m_hostedInstanceIds.begin(), m_hostedInstanceIds.end(), instanceId);
+			if (it != m_hostedInstanceIds.end())
+			{
+				m_hostedInstanceIds.erase(it);
+			}
+		}
+
+		// Notify player manager to clear any dungeon bindings for this instance
+		m_playerManager.OnInstanceDestroyed(instanceId);
 
 		return PacketParseResult::Pass;
 	}
@@ -718,6 +758,33 @@ namespace mmo
 			player.GetTalents(),
 			timePlayed
 			);
+
+		// Persist auras (remaining-duration based) exactly as received.
+		m_database.asyncRequest([characterGuid](bool result)
+			{
+				if (!result)
+				{
+					WLOG("Failed to persist auras for character " << log_hex_digit(characterGuid));
+				}
+			}, &IDatabase::UpdateCharacterAuras, characterGuid, player.GetDeserializedAuras());
+
+		// Persist cooldowns using realtime: convert each remaining-millisecond snapshot into an
+		// absolute wall-clock end timestamp (seconds) so offline time continues to elapse.
+		const GameTime nowSeconds = static_cast<GameTime>(std::time(nullptr));
+		std::vector<std::pair<uint32, GameTime>> cooldownEnds;
+		cooldownEnds.reserve(player.GetDeserializedCooldowns().size());
+		for (const auto& cooldown : player.GetDeserializedCooldowns())
+		{
+			cooldownEnds.emplace_back(cooldown.spellId, nowSeconds + (cooldown.remainingMs + 999) / 1000);
+		}
+
+		m_database.asyncRequest([characterGuid](bool result)
+			{
+				if (!result)
+				{
+					WLOG("Failed to persist cooldowns for character " << log_hex_digit(characterGuid));
+				}
+			}, &IDatabase::UpdateCharacterCooldowns, characterGuid, std::move(cooldownEnds));
 
 		return PacketParseResult::Pass;
 	}

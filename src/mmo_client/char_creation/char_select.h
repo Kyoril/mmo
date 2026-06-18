@@ -4,10 +4,14 @@
 #include "game/character_view.h"
 #include "game/character_customization/customizable_avatar_definition.h"
 
+#include <unordered_map>
+
 struct lua_State;
 
 namespace mmo
 {
+	class Entity;
+	class TagPoint;
 	class Frame;
 	class ModelFrame;
 	class RealmConnector;
@@ -38,12 +42,25 @@ namespace mmo
 
 		int32 GetSelectedCharacter() const { return m_selectedCharacter; }
 
+		/// Returns true when the character at the given index has a disabled race or class.
+		[[nodiscard]] bool IsCharacterDisabled(int32 index) const;
+
 	public:
 		void Apply(const VisibilitySetPropertyGroup& group, const AvatarConfiguration& configuration) override;
 
 		void Apply(const MaterialOverridePropertyGroup& group, const AvatarConfiguration& configuration) override;
 
 		void Apply(const ScalarParameterPropertyGroup& group, const AvatarConfiguration& configuration) override;
+
+	private:
+		void ClearItemAttachments();
+
+	private:
+		struct ItemAttachment
+		{
+			Entity* entity{ nullptr };
+			TagPoint* attachment{ nullptr };
+		};
 
 	private:
 		const proto_client::Project& m_project;
@@ -53,5 +70,7 @@ namespace mmo
 		ModelFrame* m_modelFrame = nullptr;
 
 		int32 m_selectedCharacter = -1;
+
+		std::unordered_map<uint32, ItemAttachment> m_itemAttachments;
 	};
 }

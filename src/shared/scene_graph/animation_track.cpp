@@ -1,4 +1,3 @@
-
 #include "animation_track.h"
 
 #include <ranges>

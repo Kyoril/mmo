@@ -535,7 +535,19 @@ namespace mmo
 
 		virtual ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) = 0;
 
+		/// @brief Gets the expression index this node compiled into during the last graph compilation,
+		///	       or IndexNone if the node did not produce an expression. Used to map nodes to the
+		///		   numbered expressions (expr_N) of the generated shader code for debugging.
+		[[nodiscard]] ExpressionIndex GetCompiledExpressionId() const { return m_compiledExpressionId; }
+
 		[[nodiscard]] virtual std::span<PropertyBase*> GetProperties() { return {}; }
+
+		/// @brief Gets the properties that should be (de)serialized for this node. By default this is
+		///	       identical to GetProperties(). Nodes whose *visible* property set changes at runtime
+		///		   (for example depending on a flag) must override this to return a stable set, otherwise
+		///		   the serialized property count would change with the node's state and values would be
+		///		   read back into the wrong properties on load.
+		[[nodiscard]] virtual std::span<PropertyBase*> GetSerializedProperties() { return GetProperties(); }
 
 		virtual void NotifyCompilationStarted() { m_compiledExpressionId = IndexNone; }
 
@@ -565,6 +577,11 @@ namespace mmo
 
 		std::span<PropertyBase*> GetProperties() override;
 
+		// GetProperties() returns a reduced set when this is a user interface material, so the
+		// serialized set must stay stable (and complete) regardless of the m_userInterface flag,
+		// otherwise the property count - and therefore the loaded values - would depend on state.
+		std::span<PropertyBase*> GetSerializedProperties() override { return m_surfaceProperties; }
+
 		const MaterialPin& GetBaseColorPin() const { return m_baseColor; }
 		const MaterialPin& GetMetallicPin() const { return m_metallic; }
 		const MaterialPin& GetSpecularPin() const { return m_specular; }
@@ -582,8 +599,9 @@ namespace mmo
 		bool m_depthWrite { true };
 		bool m_lit { true };
 		bool m_translucent { false };
+		bool m_masked { false };
 		bool m_userInterface{ false };
-		
+
 		BoolProperty m_litProperty { "Lit", m_lit };
 		BoolProperty m_isTwoSidedProp { "Is Two Sided", m_isTwoSided };
 		BoolProperty m_receivesShadowProp { "Receives Shadows", m_receivesShadows };
@@ -592,9 +610,12 @@ namespace mmo
 		BoolProperty m_depthWriteProp { "Depth Write", m_depthWrite };
 		BoolProperty m_translucentProperty { "Translucent", m_translucent };
 		BoolProperty m_userInterfaceProp { "User Interface", m_userInterface };
+		BoolProperty m_maskedProperty { "Masked", m_masked };
 
-		PropertyBase* m_surfaceProperties[8] = { &m_litProperty, &m_isTwoSidedProp, &m_receivesShadowProp, &m_castShadowProp,
-			&m_depthTestProp, &m_depthWriteProp, &m_translucentProperty, &m_userInterfaceProp };
+		// Note: m_maskedProperty is intentionally kept last so that materials saved before the
+		// masked flag existed (which serialized 8 properties) still deserialize positionally.
+		PropertyBase* m_surfaceProperties[9] = { &m_litProperty, &m_isTwoSidedProp, &m_receivesShadowProp, &m_castShadowProp,
+			&m_depthTestProp, &m_depthWriteProp, &m_translucentProperty, &m_userInterfaceProp, &m_maskedProperty };
 		PropertyBase* m_userInterfaceProperties[1] = { &m_userInterfaceProp };
 
 	    MaterialPin m_baseColor = { this, "Base Color" };
@@ -1171,6 +1192,178 @@ namespace mmo
 		MaterialPin m_argb = { this, "ARGB" };
 
 		Pin* m_OutputPins[6] = { &m_rgb, &m_r, &m_g, &m_b, &m_a, &m_argb };
+	};
+
+	/// @brief A node which references a global scalar shader parameter (shared by all materials).
+	class GlobalScalarParameterNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(GlobalScalarParameterNode, "Global Scalar Parameter")
+
+		GlobalScalarParameterNode(MaterialGraph& material)
+			: GraphNode(material)
+		{}
+
+		std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		[[nodiscard]] std::string_view GetName() const override { return m_name; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		String m_name;
+		StringProperty m_nameProperty{ "Name", m_name };
+
+		PropertyBase* m_properties[1] = { &m_nameProperty };
+
+		MaterialPin m_Float = { this };
+
+		Pin* m_OutputPins[1] = { &m_Float };
+	};
+
+	/// @brief A node which references a global vector shader parameter (shared by all materials).
+	class GlobalVectorParameterNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(GlobalVectorParameterNode, "Global Vector Parameter")
+
+		GlobalVectorParameterNode(MaterialGraph& material)
+			: GraphNode(material)
+		{}
+
+		std::span<Pin*> GetOutputPins() override { return m_OutputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		[[nodiscard]] std::string_view GetName() const override { return m_name; }
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		String m_name;
+		StringProperty m_nameProperty{ "Name", m_name };
+
+		PropertyBase* m_properties[1] = { &m_nameProperty };
+
+		MaterialPin m_rgb = { this, "RGB" };
+		MaterialPin m_r = { this, "R" };
+		MaterialPin m_g = { this, "G" };
+		MaterialPin m_b = { this, "B" };
+		MaterialPin m_a = { this, "A" };
+		MaterialPin m_argb = { this, "ARGB" };
+
+		Pin* m_OutputPins[6] = { &m_rgb, &m_r, &m_g, &m_b, &m_a, &m_argb };
+	};
+
+	/// @brief A node which captures an input value under a named, colored "variable" so the same value
+	///	       can be referenced elsewhere in the graph through a NamedVariableGetNode, without a visible
+	///		   link. This is purely an authoring convenience to keep large graphs readable.
+	class NamedVariableSetNode final : public GraphNode
+	{
+	public:
+		MAT_NODE(NamedVariableSetNode, "Set Variable")
+
+		NamedVariableSetNode(MaterialGraph& material)
+			: GraphNode(material)
+			, m_variableName("Variable")
+			, m_color(0.16f, 0.63f, 0.93f, 1.0f)
+		{}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+
+		[[nodiscard]] uint32 GetColor() override
+		{
+			return IM_COL32(
+				static_cast<int>(m_color.GetRed() * 255.0f),
+				static_cast<int>(m_color.GetGreen() * 255.0f),
+				static_cast<int>(m_color.GetBlue() * 255.0f),
+				static_cast<int>(m_color.GetAlpha() * 255.0f));
+		}
+
+		[[nodiscard]] std::string_view GetName() const override
+		{
+			return m_variableName.empty() ? std::string_view("Set Variable") : std::string_view(m_variableName);
+		}
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+		/// @brief Gets the name this variable is published under.
+		[[nodiscard]] const String& GetVariableName() const { return m_variableName; }
+
+		/// @brief Gets the authoring color used for this variable's set and get nodes.
+		[[nodiscard]] const Color& GetVariableColor() const { return m_color; }
+
+	private:
+		String m_variableName;
+		Color m_color;
+
+		StringProperty m_nameProperty{ "Name", m_variableName };
+		ColorProperty m_colorProperty{ "Color", m_color };
+
+		PropertyBase* m_properties[2] = { &m_nameProperty, &m_colorProperty };
+
+		MaterialPin m_input = { this, "Value" };
+		Pin* m_inputPins[1] = { &m_input };
+	};
+
+	/// @brief A node which references a NamedVariableSetNode by name and outputs the value captured there,
+	///	       without a visible link. Inherits the referenced set node's authoring color so related nodes
+	///		   are visually grouped.
+	class NamedVariableGetNode final : public GraphNode
+	{
+	public:
+		MAT_NODE(NamedVariableGetNode, "Get Variable")
+
+		NamedVariableGetNode(MaterialGraph& material)
+			: GraphNode(material)
+		{}
+
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override;
+
+		[[nodiscard]] std::string_view GetName() const override
+		{
+			return m_variableName.empty() ? std::string_view("Get Variable") : std::string_view(m_variableName);
+		}
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+		/// @brief Gets the name of the variable this node reads from.
+		[[nodiscard]] const String& GetVariableName() const { return m_variableName; }
+
+		/// @brief Selects which variable this node reads from. Routed through the property so that
+		///	       value-changed notifications still fire.
+		void SetVariableName(const String& name) { m_nameProperty.SetValue(name); }
+
+	private:
+		/// @brief Finds the set node in the owning graph whose variable name matches this node, or nullptr.
+		[[nodiscard]] NamedVariableSetNode* FindDeclaration() const;
+
+	private:
+		String m_variableName;
+		StringProperty m_nameProperty{ "Variable", m_variableName };
+
+		PropertyBase* m_properties[1] = { &m_nameProperty };
+
+		MaterialPin m_output = { this };
+		Pin* m_outputPins[1] = { &m_output };
 	};
 
 	/// @brief A node which adds an expression addition expression.
@@ -2033,5 +2226,403 @@ namespace mmo
 		std::vector<Pin*> m_outputPins;
 
 		PropertyBase* m_properties[1] = { &m_materialFunctionPathProp };
+	};
+
+	/// @brief A node which provides the elapsed time in seconds since game start.
+	class TimeNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(TimeNode, "Time")
+
+		TimeNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+	private:
+		/// @brief The time output pin (float1).
+		MaterialPin m_output = { this, "Time" };
+
+		/// @brief List of output pins as an array.
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
+	/// @brief A node which rotates 2D texture coordinates around a center point.
+	class RotatorNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(RotatorNode, "Rotator")
+
+		RotatorNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		float m_centerX = 0.5f;
+		float m_centerY = 0.5f;
+		float m_rotation = 0.0f;
+
+		FloatProperty m_centerXProp { "Center X", m_centerX };
+		FloatProperty m_centerYProp { "Center Y", m_centerY };
+		FloatProperty m_rotationProp { "Rotation", m_rotation };
+
+		PropertyBase* m_properties[3] = { &m_centerXProp, &m_centerYProp, &m_rotationProp };
+
+		/// @brief The texture coordinate input pin (float2).
+		MaterialPin m_coordsInput = { this, "UVs" };
+
+		/// @brief The center of rotation input pin (float2), optional.
+		MaterialPin m_centerInput = { this, "Center" };
+
+		/// @brief The rotation angle input pin (float1), optional.
+		MaterialPin m_rotationInput = { this, "Rotation" };
+
+		/// @brief The rotated coordinate output pin (float2).
+		MaterialPin m_output = { this };
+
+		Pin* m_inputPins[3] = { &m_coordsInput, &m_centerInput, &m_rotationInput };
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
+	/// @brief A node which computes the Fresnel effect using the Schlick approximation.
+	class FresnelNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(FresnelNode, "Fresnel")
+
+		FresnelNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		float m_exponent = 5.0f;
+		float m_baseReflectFraction = 0.04f;
+
+		FloatProperty m_exponentProp { "Exponent", m_exponent };
+		FloatProperty m_baseReflectFractionProp { "Base Reflect Fraction", m_baseReflectFraction };
+
+		PropertyBase* m_properties[2] = { &m_exponentProp, &m_baseReflectFractionProp };
+
+		/// @brief Optional exponent input pin (float1).
+		MaterialPin m_exponentInput = { this, "Exponent" };
+
+		/// @brief Optional base reflect fraction input pin (float1).
+		MaterialPin m_baseReflectFractionInput = { this, "Base Reflect Fraction" };
+
+		/// @brief Optional normal input pin (float3). Defaults to vertex normal.
+		MaterialPin m_normalInput = { this, "Normal" };
+
+		/// @brief The Fresnel output pin (float1).
+		MaterialPin m_output = { this };
+
+		Pin* m_inputPins[3] = { &m_exponentInput, &m_baseReflectFractionInput, &m_normalInput };
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
+	/// @brief A node that scrolls UV coordinates over time, useful for animated water surfaces.
+	class PannerNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(PannerNode, "Panner")
+
+		PannerNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		float m_speedX = 0.1f;
+		float m_speedY = 0.0f;
+
+		FloatProperty m_speedXProp { "Speed X", m_speedX };
+		FloatProperty m_speedYProp { "Speed Y", m_speedY };
+
+		PropertyBase* m_properties[2] = { &m_speedXProp, &m_speedYProp };
+
+		/// @brief Optional UV coordinate input (float2). Falls back to uv0 if unconnected.
+		MaterialPin m_uvsInput = { this, "UVs" };
+
+		/// @brief Optional scalar speed multiplier (float1).
+		MaterialPin m_speedInput = { this, "Speed" };
+
+		/// @brief Optional time override (float1). Falls back to shader 'time' if unconnected.
+		MaterialPin m_timeInput = { this, "Time" };
+
+		/// @brief Scrolled UV output (float2).
+		MaterialPin m_output = { this };
+
+		Pin* m_inputPins[3] = { &m_uvsInput, &m_speedInput, &m_timeInput };
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
+	/// @brief A node that computes the reflection vector of the camera ray around a surface normal.
+	class ReflectionVectorNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(ReflectionVectorNode, "Reflection Vector")
+
+		ReflectionVectorNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+	private:
+		/// @brief Optional world-space normal input (float3). Falls back to vertex normal N if unconnected.
+		MaterialPin m_normalInput = { this, "Normal" };
+
+		/// @brief Reflected direction output (float3).
+		MaterialPin m_output = { this };
+
+		Pin* m_inputPins[1] = { &m_normalInput };
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
+	/// @brief A node that applies smooth Hermite interpolation between two edges.
+	class SmoothStepNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(SmoothStepNode, "SmoothStep")
+
+		SmoothStepNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		float m_edge0 = 0.0f;
+		float m_edge1 = 1.0f;
+
+		FloatProperty m_edge0Prop { "Edge 0 Default", m_edge0 };
+		FloatProperty m_edge1Prop { "Edge 1 Default", m_edge1 };
+
+		PropertyBase* m_properties[2] = { &m_edge0Prop, &m_edge1Prop };
+
+		/// @brief Optional lower edge input (float1). Falls back to property default.
+		MaterialPin m_edge0Input = { this, "Edge 0 (Min)" };
+
+		/// @brief Optional upper edge input (float1). Falls back to property default.
+		MaterialPin m_edge1Input = { this, "Edge 1 (Max)" };
+
+		/// @brief The value to interpolate (float1).
+		MaterialPin m_valueInput = { this, "Value" };
+
+		/// @brief Smoothly interpolated output, same type as Value input.
+		MaterialPin m_output = { this };
+
+		Pin* m_inputPins[3] = { &m_edge0Input, &m_edge1Input, &m_valueInput };
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
+	/// @brief A node that outputs the linear view-space depth of the current pixel (distance from camera).
+	class PixelDepthNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(PixelDepthNode, "Pixel Depth")
+
+		PixelDepthNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+	private:
+		/// @brief Depth output (float1, world units from camera).
+		MaterialPin m_output = { this, "Depth" };
+
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
+	/// @brief A node that samples the linear depth of the opaque scene at the current pixel.
+	/// @details Requires the engine to bind the G-buffer normal render target at texture register t15.
+	class SceneDepthNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(SceneDepthNode, "Scene Depth")
+
+		SceneDepthNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+	private:
+		/// @brief Scene depth output (float1, world units from camera).
+		MaterialPin m_output = { this, "Depth" };
+
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
+	/// @brief A node that outputs the screen-space pixel coordinates of the current pixel.
+	class ScreenPositionNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(ScreenPositionNode, "Screen Position")
+
+		ScreenPositionNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+	private:
+		/// @brief Screen-space pixel coordinates output (float2, in pixels).
+		MaterialPin m_output = { this };
+
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
+	/// @brief A node that saturates (clamps to [0,1]) the input expression.
+	class SaturateNode final : public GraphNode
+	{
+	public:
+		MAT_NODE(SaturateNode, "Saturate")
+
+		SaturateNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+	private:
+		MaterialPin m_input = { this };
+		MaterialPin m_output = { this };
+
+		Pin* m_inputPins[1] = { &m_input };
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
+	/// @brief A node that samples the lit opaque scene color behind the current pixel.
+	/// @details Requires the engine to bind the captured scene color at texture register t14.
+	///          The optional screen-space offset (in pixels) is used to create refraction.
+	class SceneColorNode final : public GraphNode
+	{
+	public:
+		static const uint32 Color;
+
+	public:
+		MAT_NODE(SceneColorNode, "Scene Color")
+
+		SceneColorNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+		}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return Color; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+	private:
+		/// @brief Optional screen-space offset in pixels (float2) for refraction. Falls back to no offset.
+		MaterialPin m_offsetInput = { this, "UV Offset (px)" };
+
+		/// @brief Sampled scene color output (float3, RGB).
+		MaterialPin m_output = { this, "Scene Color" };
+
+		Pin* m_inputPins[1] = { &m_offsetInput };
+		Pin* m_outputPins[1] = { &m_output };
 	};
 }

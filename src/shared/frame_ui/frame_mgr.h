@@ -14,6 +14,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <unordered_set>
 
 extern "C"
 {
@@ -23,8 +24,10 @@ extern "C"
 
 namespace mmo
 {
+	class ComboBox;
+
 	/// Handler for layout xml.
-	class FrameManager final 
+	class FrameManager final
 		: public NonCopyable
 	{
 	public:
@@ -130,6 +133,11 @@ namespace mmo
 		/// @return True if the event was consumed by the UI, false otherwise.
 		bool NotifyMouseUp(MouseButton button, const Point& position);
 
+		/// Notifies the FrameManager that the mouse wheel was scrolled.
+		/// @return True if the event was consumed by the UI (e.g. an open combo box popup
+		///         under the cursor scrolled), false otherwise.
+		bool NotifyMouseWheel(int32 delta);
+
 		/// Notifies the FrameManager that a key has been pressed.
 		void NotifyKeyDown(Key key);
 
@@ -138,6 +146,9 @@ namespace mmo
 
 		/// Notifies the FrameManager that a key has been released.
 		void NotifyKeyUp(Key key);
+
+		/// Determines whether a key is currently pressed.
+		bool IsKeyDown(Key key) const;
 
 		void NotifyScreenSizeChanged(float width, float height);
 
@@ -169,11 +180,22 @@ namespace mmo
 		/// Sets the frame that is currently capturing the input.
 		void SetCaptureWindow(FramePtr capture);
 
+		/// Called by ComboBox::Open() to register itself as the currently active combo.
+		/// FrameManager will intercept the next mouse-down outside the combo/popup and dismiss it.
+		void SetActiveComboBox(std::shared_ptr<ComboBox> combo);
+
+		/// Called by ComboBox::Close() to deregister. Pass `this` so a stale close from a
+		/// previously-active combo cannot accidentally clear a newer one.
+		void ClearActiveComboBox(const ComboBox* combo);
+
 		void FrameRegisterEvent(FramePtr frame, const std::string& eventName);
 
 		void FrameUnregisterEvent(FramePtr frame, const std::string& eventName);
 
 		static luabind::object GetGlobal(const std::string& name);
+
+		/// Returns the raw Lua state. Use sparingly — prefer RegisterGlobal / TriggerLuaEvent.
+		lua_State* GetLuaState() const { return m_luaState; }
 
 	public:
 		/// Registers a new factory for a certain frame type.
@@ -241,5 +263,11 @@ namespace mmo
 		Size m_cursorIconSize{ 32.0f, 32.0f };
 
 		GeometryBuffer m_cursorIconBuffer;
+
+		/// Set of currently pressed keys to support modifier-aware controls.
+		std::unordered_set<Key> m_pressedKeys;
+
+		/// The ComboBox that is currently open and waiting for an outside-click dismiss.
+		std::weak_ptr<ComboBox> m_activeComboBox;
 	};
 }

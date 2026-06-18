@@ -2,15 +2,26 @@
 
 #include "game_unit_s.h"
 
+#include "game_server/cc_movement_controller.h"
 #include "game_server/world/each_tile_in_sight.h"
 #include "game_server/objects/game_player_s.h"
 #include "base/utilities.h"
 #include "binary_io/vector_sink.h"
 #include "game/chat_type.h"
+#include "game/loot.h"
 #include "proto_data/project.h"
+#include "shared/proto_data/combat_settings.pb.h"
 
 namespace mmo
 {
+	namespace
+	{
+		float ApplyPctModifier(const float baseValue, const int32 pct)
+		{
+			return baseValue * ((100.0f + static_cast<float>(pct)) / 100.0f);
+		}
+	}
+
 	uint32 UnitStats::DeriveFromBaseWithFactor(const uint32 statValue, const uint32 baseValue, const uint32 factor)
 	{
 		// Check if just at minimum
@@ -51,6 +62,9 @@ namespace mmo
 	{
 		// Setup unit mover
 		m_mover = make_unique<UnitMover>(*this);
+
+		// Create CC movement controller (drives wander for feared/disoriented NPCs)
+		m_ccMovementController = std::make_unique<CCMovementController>(*this);
 
 		// Create spell caster
 		m_spellCast = std::make_unique<SpellCast>(m_timers, *this);
@@ -118,16 +132,30 @@ namespace mmo
 	{
 		GameObjectS::WriteObjectUpdateBlock(writer, creation);
 
-		// Speeds
+		// Speeds — if there is a pending forced speed change (ack not yet received),
+		// write the pending target speed so the object update does not overwrite the
+		// ForceMoveSetXxxSpeed the client already applied locally.
+		const auto getWriteSpeed = [this](MovementType type, MovementChangeType changeType) -> float
+		{
+			for (const auto& change : m_pendingMoveChanges)
+			{
+				if (change.changeType == changeType)
+				{
+					return change.speed;
+				}
+			}
+			return GetSpeed(type);
+		};
+
 		writer
-			<< io::write<float>(GetSpeed(movement_type::Walk))
-			<< io::write<float>(GetSpeed(movement_type::Run))
-			<< io::write<float>(GetSpeed(movement_type::Backwards))
-			<< io::write<float>(GetSpeed(movement_type::Swim))
-			<< io::write<float>(GetSpeed(movement_type::SwimBackwards))
-			<< io::write<float>(GetSpeed(movement_type::Flight))
-			<< io::write<float>(GetSpeed(movement_type::FlightBackwards))
-			<< io::write<float>(GetSpeed(movement_type::Turn));
+			<< io::write<float>(getWriteSpeed(movement_type::Walk,           MovementChangeType::SpeedChangeWalk))
+			<< io::write<float>(getWriteSpeed(movement_type::Run,            MovementChangeType::SpeedChangeRun))
+			<< io::write<float>(getWriteSpeed(movement_type::Backwards,      MovementChangeType::SpeedChangeRunBack))
+			<< io::write<float>(getWriteSpeed(movement_type::Swim,           MovementChangeType::SpeedChangeSwim))
+			<< io::write<float>(getWriteSpeed(movement_type::SwimBackwards,  MovementChangeType::SpeedChangeSwimBack))
+			<< io::write<float>(getWriteSpeed(movement_type::Flight,         MovementChangeType::SpeedChangeFlightSpeed))
+			<< io::write<float>(getWriteSpeed(movement_type::FlightBackwards,MovementChangeType::SpeedChangeFlightBackSpeed))
+			<< io::write<float>(getWriteSpeed(movement_type::Turn,           MovementChangeType::SpeedChangeTurnRate));
 	}
 
 	void GameUnitS::WriteValueUpdateBlock(io::Writer &writer, bool creation) const
@@ -153,6 +181,16 @@ namespace mmo
 	float GameUnitS::GetCalculatedModifierValue(const UnitMods mod) const
 	{
 		const float baseVal = GetModifierValue(mod, unit_mod_type::BaseValue);
+		const float basePct = GetModifierValue(mod, unit_mod_type::BasePct);
+		const float totalVal = GetModifierValue(mod, unit_mod_type::TotalValue);
+		const float totalPct = GetModifierValue(mod, unit_mod_type::TotalPct);
+
+		return (baseVal * basePct + totalVal) * totalPct;
+	}
+
+	float GameUnitS::CalculateModifiedValue(const UnitMods mod, const float baseValue) const
+	{
+		const float baseVal = GetModifierValue(mod, unit_mod_type::BaseValue) + baseValue;
 		const float basePct = GetModifierValue(mod, unit_mod_type::BasePct);
 		const float totalVal = GetModifierValue(mod, unit_mod_type::TotalValue);
 		const float totalPct = GetModifierValue(mod, unit_mod_type::TotalPct);
@@ -278,7 +316,9 @@ namespace mmo
 
 	float GameUnitS::GetInteractionDistance() const
 	{
-		return 5.0f;
+		// Keep interaction range in sync with the loot range so the client-side
+		// pre-checks (which use LootDistance) and the server-side validation agree.
+		return LootDistance;
 	}
 
 	void GameUnitS::RaiseTrigger(trigger_event::Type e, GameUnitS *triggeringUnit)
@@ -293,6 +333,10 @@ namespace mmo
 
 	void GameUnitS::OnDespawn()
 	{
+		// Capture persistable auras before clearing them: the despawn fires the despawned signal
+		// (via GameObjectS::OnDespawn) which is what triggers a character save, by which point the
+		// live aura list would otherwise already be empty.
+		m_despawnAuraSnapshot = GetPersistentAuras();
 		m_auras.clear();
 
 		GameObjectS::OnDespawn();
@@ -405,9 +449,15 @@ namespace mmo
 		return unit_mods::Mana;
 	}
 
-	auto GameUnitS::SpellHasCooldown(const uint32 spellId, uint32 spellCategory) const -> bool
+	auto GameUnitS::SpellHasCooldown(const uint32 spellId, uint32 spellCategory, const uint32 cooldownFlags) const -> bool
 	{
 		const auto now = GetAsyncTimeMs();
+
+		// Every spell respects the global cooldown unless it is explicitly flagged to ignore it.
+		if ((cooldownFlags & spell_cooldown_flags::NoGlobalCooldown) == 0 && m_globalCooldownEnd > now)
+		{
+			return true;
+		}
 
 		if (const auto it = m_spellCooldowns.find(spellId); it != m_spellCooldowns.end() && it->second > now)
 		{
@@ -545,6 +595,9 @@ namespace mmo
 			case spell_effects::Parry:
 				NotifyCanParry(false);
 				break;
+			case spell_effects::CriticalBlock:
+				NotifyCanCriticalBlock(false);
+				break;
 			}
 		}
 
@@ -594,6 +647,23 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::SetGlobalCooldown(const GameTime cooldownTimeMs)
+	{
+		if (cooldownTimeMs == 0)
+		{
+			m_globalCooldownEnd = 0;
+		}
+		else
+		{
+			m_globalCooldownEnd = GetAsyncTimeMs() + cooldownTimeMs;
+		}
+	}
+
+	GameTime GameUnitS::GetGlobalCooldownDuration() const
+	{
+		return GetCombatSettings().global_cooldown_ms();
+	}
+
 	SpellCastResult GameUnitS::CastSpell(const SpellTargetMap &target, const proto::SpellEntry &spell, const uint32 castTimeMs, bool isProc, uint64 itemGuid)
 	{
 		if (!isProc && itemGuid == 0 && !HasSpell(spell.id()))
@@ -602,32 +672,33 @@ namespace mmo
 			return spell_cast_result::FailedNotKnown;
 		}
 
-		const auto result = m_spellCast->StartCast(spell, target, castTimeMs, isProc, itemGuid);
-		if (result.first == spell_cast_result::CastOkay)
+		SpellCastResult r = m_spellCast->StartCast(spell, target, castTimeMs, isProc, itemGuid);
+		if (r == spell_cast_result::CastOkay)
 		{
 			startedCasting(spell);
 		}
 
-		// Reset auto attack timer if requested
-		if (result.first == spell_cast_result::CastOkay &&
-			m_attackSwingCountdown.IsRunning() &&
-			result.second)
+		if (r == spell_cast_result::CastOkay)
 		{
-			// Register for casts ended-event
 			if (castTimeMs > 0)
 			{
-				// Pause auto attack during spell cast
-				m_attackSwingCountdown.Cancel();
-				result.second->ended.connect(this, &GameUnitS::OnSpellCastEnded);
+				// Pause auto-attack while casting if it was running
+				if (m_attackSwingCountdown.IsRunning())
+				{
+					m_attackSwingCountdown.Cancel();
+				}
+				// Always connect ended signal so finishedCasting fires regardless of
+				// whether auto-attack was running (first-pull cast fix).
+				m_spellCast->ended.connect(this, &GameUnitS::OnSpellCastEnded);
 			}
-			else
+			else if (m_attackSwingCountdown.IsRunning())
 			{
-				// Cast already finished since it was an instant cast
+				// Instant cast: resume auto-attack
 				OnSpellCastEnded(true);
 			}
 		}
 
-		return result.first;
+		return r;
 	}
 
 	void GameUnitS::CancelCast(SpellInterruptFlags reason, GameTime interruptCooldown) const
@@ -642,6 +713,23 @@ namespace mmo
 		{
 			return 0;
 		}
+
+		// Check if the unit is immune to damage
+		if (Get<uint32>(object_fields::Flags) & unit_flags::Immune)
+		{
+			return 0;
+		}
+
+		// Check if the unit is immune to the damage school of this damage (e.g. granted by a
+		// DamageImmunity aura). Immune damage is fully negated - no health is lost, no threat is
+		// generated and no proc events are triggered. Callers are responsible for still sending the
+		// appropriate damage notification packet with an "immune" flag set.
+		if (IsImmuneToSchool(school))
+		{
+			return 0;
+		}
+
+		const uint32 prevHealthPct = static_cast<int32>(static_cast<float>(health) / static_cast<float>(GetMaxHealth()) * 100.0f);
 
 		if (IsPlayer() && instigator && instigator->IsPlayer())
 		{
@@ -670,7 +758,7 @@ namespace mmo
 
 		// Notify health dropped below
 		const uint32 healthPercent = static_cast<int32>(static_cast<float>(health) / static_cast<float>(GetMaxHealth()) * 100.0f);
-		RaiseTrigger(trigger_event::OnHealthDroppedBelow, {healthPercent}, instigator);
+		RaiseTrigger(trigger_event::OnHealthDroppedBelow, {healthPercent, prevHealthPct}, instigator);
 
 		// Generate rage when taking damage if rage is the power type
 		if (Get<uint32>(object_fields::PowerType) == power_type::Rage)
@@ -720,14 +808,49 @@ namespace mmo
 	}
 
 	void GameUnitS::SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags,
-								   const proto::SpellEntry &spell)
+								   const proto::SpellEntry &spell, uint32 blocked)
 	{
 		if (!m_netUnitWatcher)
 		{
 			return;
 		}
 
-		m_netUnitWatcher->OnSpellDamageLog(targetGuid, amount, school, flags, spell);
+		m_netUnitWatcher->OnSpellDamageLog(targetGuid, amount, school, flags, spell, blocked);
+	}
+
+	void GameUnitS::SendAttackerStateUpdate(uint64 victimGuid, uint32 hitInfo, uint32 victimState,
+		uint32 totalDamage, uint32 school, uint32 absorbedDamage, uint32 resistedDamage, uint32 blockedDamage)
+	{
+		std::vector<char> buffer;
+		io::VectorSink sink(buffer);
+		game::Protocol::OutgoingPacket packet(sink);
+		packet.Start(game::realm_client_packet::AttackerStateUpdate);
+		packet
+			<< io::write_packed_guid(GetGuid())
+			<< io::write_packed_guid(victimGuid)
+			<< io::write<uint32>(hitInfo)
+			<< io::write<uint32>(victimState)
+			<< io::write<uint32>(totalDamage)
+			<< io::write<uint32>(school)
+			<< io::write<uint32>(absorbedDamage)
+			<< io::write<uint32>(resistedDamage)
+			<< io::write<uint32>(blockedDamage);
+		packet.Finish();
+		ForEachSubscriberInSight(
+			[&packet, &buffer](TileSubscriber& subscriber)
+			{
+				subscriber.SendPacket(packet, buffer);
+			});
+	}
+
+	void GameUnitS::EnvironmentalDamageLog(uint64 targetGuid, uint32 amount, EnvironmentalDamageType type)
+	{
+		if (!m_netUnitWatcher)
+		{
+			return;
+		}
+
+		m_netUnitWatcher->OnEnvironmentalDamageLog(targetGuid, amount, type);
 	}
 
 	void GameUnitS::Kill(GameUnitS *killer)
@@ -755,11 +878,96 @@ namespace mmo
 	{
 		ASSERT(aura);
 
-		// Remove existing auras first
+		// SingleTargetPerCaster: evict this aura from the previous target before applying here
+		if (static_cast<SpellStackingRule>(aura->GetSpell().stacking_rule()) == SpellStackingRule::SingleTargetPerCaster)
+		{
+			GameUnitS* caster = aura->GetCaster();
+			if (caster)
+			{
+				const uint32 baseSpellId = aura->GetBaseSpellId();
+				auto mapIt = caster->m_singleTargetAuras.find(baseSpellId);
+				if (mapIt != caster->m_singleTargetAuras.end())
+				{
+					if (auto prevTarget = mapIt->second.lock())
+					{
+						// Remove the old aura from the previous target
+						prevTarget->RemoveAllAurasFromCaster(aura->GetCasterId(), aura->GetSpellId());
+					}
+				}
+				// Record this unit as the new target for this spell
+				caster->m_singleTargetAuras[baseSpellId] = std::static_pointer_cast<GameUnitS>(shared_from_this());
+			}
+		}
+
+		// CategoryExclusive: remove all auras from the same caster in the same stacking category
+		if (static_cast<SpellStackingRule>(aura->GetSpell().stacking_rule()) == SpellStackingRule::CategoryExclusive)
+		{
+			const uint32 categoryId = aura->GetStackingCategoryId();
+			const uint64 casterId   = aura->GetCasterId();
+			if (categoryId > 0)
+			{
+				for (auto it = m_auras.begin(); it != m_auras.end();)
+				{
+					auto& existing = *it;
+					if (existing->GetStackingCategoryId() == categoryId &&
+						existing->GetCasterId() == casterId)
+					{
+						it = m_auras.erase(it);
+					}
+					else
+					{
+						++it;
+					}
+				}
+			}
+		}
+
+		// UniquePerTarget with a stacking category: evict ALL auras (any caster) in the same category.
+		// This enforces mutual exclusivity across different spells that share a category.
+		if (static_cast<SpellStackingRule>(aura->GetSpell().stacking_rule()) == SpellStackingRule::UniquePerTarget)
+		{
+			const uint32 categoryId = aura->GetStackingCategoryId();
+			if (categoryId > 0)
+			{
+				for (auto it = m_auras.begin(); it != m_auras.end();)
+				{
+					auto& existing = *it;
+					if (existing->GetStackingCategoryId() == categoryId)
+					{
+						it = m_auras.erase(it);
+					}
+					else
+					{
+						++it;
+					}
+				}
+			}
+		}
+
+		// Remove existing auras that this aura should overwrite
 		for (auto it = m_auras.begin(); it != m_auras.end();)
 		{
-			if (auto &existingAura = *it; aura->ShouldOverwriteAura(*existingAura))
+			auto& existingAura = *it;
+			const auto result = aura->ShouldOverwriteAura(*existingAura);
+
+			switch (result)
 			{
+			case AuraApplicationResult::Extend:
+				// Refresh the existing aura in-place: extend duration and update stack count.
+				// Do NOT erase the existing aura. Do NOT emplace the incoming one.
+				existingAura->RefreshAura(aura->GetSpell());
+				return;  // Exit ApplyAura entirely — existing aura stays, incoming dropped.
+			case AuraApplicationResult::Replace:
+				// Same spell, same caster: refresh duration in place instead of
+				// remove + re-add. Avoids sending a restore-then-slow speed pair to
+				// the client which would briefly restore full movement speed.
+				if (aura->GetSpellId() == existingAura->GetSpellId() &&
+					aura->GetCasterId() == existingAura->GetCasterId())
+				{
+					existingAura->RefreshAura(aura->GetSpell());
+					return;
+				}
+				// Genuine replacement (higher rank / OnlyOneStackTotal across casters).
 				// Check if aura is same base spell but lower rank
 				if (aura->HasSameBaseSpellId(existingAura->GetSpell()) && aura->GetSpellRank() < existingAura->GetSpellRank())
 				{
@@ -771,10 +979,12 @@ namespace mmo
 				{
 					it = m_auras.erase(it);
 				}
-			}
-			else
-			{
+				break;
+
+			case AuraApplicationResult::Reject:
+			default:
 				++it;
+				break;
 			}
 		}
 
@@ -904,6 +1114,127 @@ namespace mmo
 		writer.Sink().Overwrite(countPos, reinterpret_cast<const char *>(&visibleAuraCount), sizeof(uint32));
 	}
 
+	std::vector<PersistentAuraData> GameUnitS::GetPersistentAuras() const
+	{
+		std::vector<PersistentAuraData> result;
+
+		for (const auto& aura : m_auras)
+		{
+			if (!aura)
+			{
+				continue;
+			}
+
+			const proto::SpellEntry& spell = aura->GetSpell();
+
+			// Only non-passive auras that are not granted by equipment are persisted.
+			if (spell.attributes(0) & spell_attributes::Passive)
+			{
+				continue;
+			}
+
+			if (aura->GetItemGuid() != 0)
+			{
+				continue;
+			}
+
+			// Skip auras that are about to expire (an expiring aura with no remaining time would
+			// otherwise be misinterpreted as a non-expiring aura on restore).
+			const GameTime remaining = aura->GetRemainingTime();
+			if (aura->DoesExpire() && remaining == 0)
+			{
+				continue;
+			}
+
+			PersistentAuraData data;
+			data.spellId = spell.id();
+			data.casterId = aura->GetCasterId();
+			data.remainingDuration = remaining;
+			data.stackCount = aura->GetStackCount();
+
+			for (const auto& effect : aura->GetAuraEffects())
+			{
+				PersistentAuraEffect effectData;
+				effectData.effectIndex = effect->GetEffect().index();
+				effectData.basePoints = effect->GetBasePoints();
+				data.effects.push_back(effectData);
+			}
+
+			result.push_back(std::move(data));
+		}
+
+		// If the live aura list has already been cleared (e.g. during despawn) but we captured a
+		// snapshot just before, fall back to that so a save can still persist the auras.
+		if (result.empty() && !m_despawnAuraSnapshot.empty())
+		{
+			return m_despawnAuraSnapshot;
+		}
+
+		return result;
+	}
+
+	std::vector<PersistentCooldownData> GameUnitS::GetPersistentCooldowns() const
+	{
+		std::vector<PersistentCooldownData> result;
+
+		const GameTime now = GetAsyncTimeMs();
+		for (const auto& [spellId, end] : m_spellCooldowns)
+		{
+			if (end <= now)
+			{
+				continue;
+			}
+
+			PersistentCooldownData data;
+			data.spellId = spellId;
+			data.remainingMs = end - now;
+			result.push_back(data);
+		}
+
+		return result;
+	}
+
+	void GameUnitS::RestorePersistentAuras(const std::vector<PersistentAuraData>& auras)
+	{
+		for (const auto& data : auras)
+		{
+			const proto::SpellEntry* spell = GetProject().spells.getById(data.spellId);
+			if (!spell)
+			{
+				WLOG("Unable to restore persisted aura: unknown spell " << data.spellId);
+				continue;
+			}
+
+			auto container = std::make_shared<AuraContainer>(*this, data.casterId, *spell, data.remainingDuration, 0);
+
+			for (const auto& effectData : data.effects)
+			{
+				if (effectData.effectIndex >= static_cast<uint32>(spell->effects_size()))
+				{
+					continue;
+				}
+
+				container->AddAuraEffect(spell->effects(effectData.effectIndex), effectData.basePoints);
+			}
+
+			container->SetStackCount(data.stackCount);
+			ApplyAura(std::move(container));
+		}
+	}
+
+	void GameUnitS::RestorePersistentCooldowns(const std::vector<PersistentCooldownData>& cooldowns)
+	{
+		for (const auto& data : cooldowns)
+		{
+			if (data.remainingMs == 0)
+			{
+				continue;
+			}
+
+			SetCooldown(data.spellId, data.remainingMs);
+		}
+	}
+
 	void GameUnitS::NotifyManaUsed()
 	{
 		m_lastManaUse = GetAsyncTimeMs();
@@ -916,17 +1247,19 @@ namespace mmo
 			return;
 		}
 
+		const auto& settings = GetCombatSettings();
+
 		// Reset swing timer for main hand weapon
 		const GameTime now = GetAsyncTimeMs();
 
-		// Reduce attack time to 300 ms if it's higher
+		// Reduce attack time to parry_haste_min_swing_ms if it's higher
 		const uint32 swingTime = Get<uint32>(object_fields::BaseAttackTime);
 
-		// This is the ideal time (we want to trigger the next attack swing in 0.3 seconds from now on)
-		const uint32 idealLastMainHand = now - swingTime + 300;
+		// This is the ideal time (we want to trigger the next attack swing in parry_haste_min_swing_ms from now on)
+		const uint32 idealLastMainHand = now - swingTime + settings.parry_haste_min_swing_ms();
 
 		// If last swing was even further in the past, we don't need to adjust anything. But if it was more recent, we adjust the timing so
-		// that the next attack swing will trigger in at least 0.3 seconds
+		// that the next attack swing will trigger in at least parry_haste_min_swing_ms
 		if (m_lastMainHand > idealLastMainHand)
 		{
 			m_lastMainHand = idealLastMainHand;
@@ -1076,6 +1409,11 @@ namespace mmo
 		DoLocalChatMessage(IsPlayer() ? ChatType::Yell : ChatType::UnitYell, message);
 	}
 
+	void GameUnitS::ChatEmote(const String& message)
+	{
+		DoLocalChatMessage(IsPlayer() ? ChatType::Emote : ChatType::UnitEmote, message);
+	}
+
 	void GameUnitS::NotifyRootChanged()
 	{
 		const bool wasRooted = IsRooted();
@@ -1108,8 +1446,15 @@ namespace mmo
 			}
 			else
 			{
-				// Immediately unrooted because not player controlled
-				m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				// Immediately unrooted because not player controlled.
+				// Only clear the Rooted flag if no other CC effect is also using it.
+				if (!IsStunned() && !IsSleeping() && !IsFeared() && !IsDisoriented())
+				{
+					m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				}
+				// Root lifted — resume CC wander if controller is still active
+				if (IsUnderForcedMovement())
+					m_ccMovementController->OnWanderTick();
 			}
 		}
 		else if (!wasRooted && isRooted)
@@ -1133,22 +1478,285 @@ namespace mmo
 			}
 			else
 			{
-				// Immediately rooted because not player controlled
+				// Immediately rooted because not player controlled.
 				m_movementInfo.movementFlags |= movement_flags::Rooted;
+				// If the current victim is already out of melee reach, clear the visual target
+				// now. UpdateVictim will restore it when a target steps into range or root expires.
+				if (const auto victim = m_victim.lock())
+				{
+					const float reach = GetMeleeReach() + victim->GetMeleeReach();
+					const float dist = (GetPosition() - victim->GetPosition()).GetLength();
+					if (dist > reach)
+					{
+						Set<uint64>(object_fields::TargetUnit, 0);
+					}
+				}
+				// Root applied — CC controller will pause via suppression check
 			}
 		}
 	}
 
 	void GameUnitS::NotifyStunChanged()
 	{
+		const bool wasStunned = IsStunned();
+		const bool isStunned = (m_stunCount > 0);
+		if (isStunned)
+			m_state |= unit_state::Stunned;
+		else
+			m_state &= ~unit_state::Stunned;
+
+		if (wasStunned && !isStunned)
+		{
+			if (m_netUnitWatcher)
+			{
+				const uint32 ackId = GenerateAckId();
+				PendingMovementChange change;
+				change.counter = ackId;
+				change.changeType = MovementChangeType::Stun;
+				change.apply = false;
+				change.timestamp = GetAsyncTimeMs();
+				PushPendingMovementChange(change);
+				m_netUnitWatcher->OnStunChanged(false, ackId);
+			}
+			else
+			{
+				// Only clear the Rooted movement flag if no other CC effect or root aura
+				// is still keeping this unit suppressed.  If a real root aura is active,
+				// removing the stun must not un-root the unit.
+				if (!IsSleeping() && !IsFeared() && !IsDisoriented() && !HasAuraEffect(aura_type::ModRoot))
+				{
+					m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				}
+				// Stun lifted — resume CC wander if controller is still active
+				if (IsUnderForcedMovement())
+					m_ccMovementController->OnWanderTick();
+			}
+		}
+		else if (!wasStunned && isStunned)
+		{
+			if (m_mover) m_mover->StopMovement();
+			if (m_netUnitWatcher)
+			{
+				const uint32 ackId = GenerateAckId();
+				PendingMovementChange change;
+				change.counter = ackId;
+				change.changeType = MovementChangeType::Stun;
+				change.apply = true;
+				change.timestamp = GetAsyncTimeMs();
+				PushPendingMovementChange(change);
+				m_netUnitWatcher->OnStunChanged(true, ackId);
+			}
+			else
+			{
+				m_movementInfo.movementFlags |= movement_flags::Rooted;
+				// Stun applied — clear target and let combat AI restore it on recovery.
+				SetTarget(0);
+				// CC controller will pause via OnWanderTick suppression check
+			}
+		}
 	}
 
 	void GameUnitS::NotifySleepChanged()
 	{
+		const bool wasSleeping = IsSleeping();
+		const bool isSleeping = (m_sleepCount > 0);
+		if (isSleeping)
+			m_state |= unit_state::Sleeping;
+		else
+			m_state &= ~unit_state::Sleeping;
+
+		if (wasSleeping && !isSleeping)
+		{
+			if (m_netUnitWatcher)
+			{
+				const uint32 ackId = GenerateAckId();
+				PendingMovementChange change;
+				change.counter = ackId;
+				change.changeType = MovementChangeType::Sleep;
+				change.apply = false;
+				change.timestamp = GetAsyncTimeMs();
+				PushPendingMovementChange(change);
+				m_netUnitWatcher->OnSleepChanged(false, ackId);
+			}
+			else
+			{
+				// Only clear the Rooted movement flag if no other CC effect or root aura
+				// is still keeping this unit suppressed.
+				if (!IsStunned() && !IsFeared() && !IsDisoriented() && !HasAuraEffect(aura_type::ModRoot))
+				{
+					m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				}
+				// Sleep lifted — resume CC wander if controller is still active
+				if (IsUnderForcedMovement())
+					m_ccMovementController->OnWanderTick();
+			}
+		}
+		else if (!wasSleeping && isSleeping)
+		{
+			if (m_mover) m_mover->StopMovement();
+			if (m_netUnitWatcher)
+			{
+				const uint32 ackId = GenerateAckId();
+				PendingMovementChange change;
+				change.counter = ackId;
+				change.changeType = MovementChangeType::Sleep;
+				change.apply = true;
+				change.timestamp = GetAsyncTimeMs();
+				PushPendingMovementChange(change);
+				m_netUnitWatcher->OnSleepChanged(true, ackId);
+			}
+			else
+			{
+				m_movementInfo.movementFlags |= movement_flags::Rooted;
+				// Sleep applied — clear target and let combat AI restore it on recovery.
+				SetTarget(0);
+				// CC controller will pause via suppression check
+			}
+		}
 	}
 
 	void GameUnitS::NotifyFearChanged()
 	{
+		const bool wasFeared = IsFeared();
+		const bool isFeared = (m_fearCount > 0);
+		if (isFeared)
+			m_state |= unit_state::Feared;
+		else
+			m_state &= ~unit_state::Feared;
+
+		if (wasFeared && !isFeared)
+		{
+			if (m_netUnitWatcher)
+			{
+				const uint32 ackId = GenerateAckId();
+				PendingMovementChange change;
+				change.counter = ackId;
+				change.changeType = MovementChangeType::Fear;
+				change.apply = false;
+				change.timestamp = GetAsyncTimeMs();
+				PushPendingMovementChange(change);
+				m_netUnitWatcher->OnFearChanged(false, ackId);
+			}
+			else
+			{
+				// Only clear the Rooted movement flag if no other CC or root aura still
+				// requires movement suppression.
+				if (!IsStunned() && !IsSleeping() && !IsDisoriented() && !HasAuraEffect(aura_type::ModRoot))
+				{
+					m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				}
+				// Fear removed — stop CC movement; re-start for disorient if still active
+				StopCCMovement();
+				if (IsDisoriented())
+					StartCCMovement();
+			}
+		}
+		else if (!wasFeared && isFeared)
+		{
+			if (m_mover) m_mover->StopMovement();
+			if (m_netUnitWatcher)
+			{
+				const uint32 ackId = GenerateAckId();
+				PendingMovementChange change;
+				change.counter = ackId;
+				change.changeType = MovementChangeType::Fear;
+				change.apply = true;
+				change.timestamp = GetAsyncTimeMs();
+				PushPendingMovementChange(change);
+				m_netUnitWatcher->OnFearChanged(true, ackId);
+			}
+			else
+			{
+				// NOTE: Do NOT set movement_flags::Rooted for fear. Feared NPCs wander
+				// randomly via CCMovementController — setting Rooted here would suppress
+				// the wander countdown immediately (IsRooted() is checked inside
+				// CCMovementController::Start/OnWanderTick).
+				// Clear the visual target so the unit no longer appears to be targeting anyone.
+				SetTarget(0);
+				// Fear applied — start CC movement (fear has higher priority)
+				StartCCMovement();
+			}
+		}
+	}
+
+	void GameUnitS::NotifyDisorientChanged()
+	{
+		const bool wasDisoriented = IsDisoriented();
+		const bool isDisoriented = (m_disorientCount > 0);
+		if (isDisoriented)
+			m_state |= unit_state::Disoriented;
+		else
+			m_state &= ~unit_state::Disoriented;
+
+		if (wasDisoriented && !isDisoriented)
+		{
+			if (m_netUnitWatcher)
+			{
+				const uint32 ackId = GenerateAckId();
+				PendingMovementChange change;
+				change.counter = ackId;
+				change.changeType = MovementChangeType::Disorient;
+				change.apply = false;
+				change.timestamp = GetAsyncTimeMs();
+				PushPendingMovementChange(change);
+				m_netUnitWatcher->OnDisorientChanged(false, ackId);
+			}
+			else
+			{
+				// Only clear the Rooted movement flag if no other CC or root aura still
+				// requires movement suppression.
+				if (!IsStunned() && !IsSleeping() && !IsFeared() && !HasAuraEffect(aura_type::ModRoot))
+				{
+					m_movementInfo.movementFlags &= ~movement_flags::Rooted;
+				}
+				// Disorient removed — stop CC movement; re-start for fear if still active
+				StopCCMovement();
+				if (IsFeared())
+					StartCCMovement();
+			}
+		}
+		else if (!wasDisoriented && isDisoriented)
+		{
+			if (m_mover) m_mover->StopMovement();
+			if (m_netUnitWatcher)
+			{
+				const uint32 ackId = GenerateAckId();
+				PendingMovementChange change;
+				change.counter = ackId;
+				change.changeType = MovementChangeType::Disorient;
+				change.apply = true;
+				change.timestamp = GetAsyncTimeMs();
+				PushPendingMovementChange(change);
+				m_netUnitWatcher->OnDisorientChanged(true, ackId);
+			}
+			else
+			{
+				// NOTE: Do NOT set movement_flags::Rooted for disorient. Disoriented NPCs
+				// wander via CCMovementController — Rooted flag would suppress the wander.
+				// Clear the visual target so the unit no longer appears to be targeting anyone.
+				SetTarget(0);
+				// Disorient applied — start CC movement only if not already active (fear takes priority)
+				if (!IsUnderForcedMovement())
+					StartCCMovement();
+			}
+		}
+	}
+
+	bool GameUnitS::IsUnderForcedMovement() const
+	{
+		return m_ccMovementController && m_ccMovementController->IsActive();
+	}
+
+	void GameUnitS::StartCCMovement()
+	{
+		if (m_ccMovementController)
+			m_ccMovementController->Start();
+	}
+
+	void GameUnitS::StopCCMovement()
+	{
+		if (m_ccMovementController)
+			m_ccMovementController->Stop();
 	}
 
 	bool GameUnitS::CanUseWeapon(WeaponAttack attackType)
@@ -1172,6 +1780,7 @@ namespace mmo
 			chatDistance = 300.0f;
 			break;
 		case ChatType::Emote:
+		case ChatType::UnitEmote:
 			chatDistance = 50.0f;
 			break;
 		default:
@@ -1307,15 +1916,15 @@ namespace mmo
 
 	float GameUnitS::DodgeChance() const
 	{
-		if (!CanDodge())
-			return 0.0f;
-
-		// Base dodge chance
-		float dodgeChance = 5.0f;
+		// Every unit can dodge melee attacks. The base chance is configurable via combat settings.
+		float dodgeChance = GetCombatSettings().base_dodge_chance();
 
 		// Add agility contribution - approximately 20 agility = 1% dodge
 		float agiContribution = GetCalculatedModifierValue(unit_mods::StatAgility) / 20.0f;
 		dodgeChance += agiContribution;
+
+		// Add flat dodge chance bonus from auras (ModDodgeChance), treated as percent.
+		dodgeChance += m_dodgeChanceBonus;
 
 		// Add dodge rating when equipment system is implemented
 		// TODO: Add equipment dodge rating
@@ -1347,6 +1956,75 @@ namespace mmo
 		// TODO: Apply block rating from shield when equipment system is implemented
 
 		return std::max(0.0f, std::min(blockChance, 100.0f));
+	}
+
+	float GameUnitS::GetBlockValue() const
+	{
+		// Base unit only accounts for item-sourced block value (e.g. shields). Players add
+		// per-class attribute scaling on top via the GamePlayerS override.
+		return std::max(0.0f, GetCalculatedModifierValue(unit_mods::BlockValue));
+	}
+
+	float GameUnitS::CriticalBlockChance() const
+	{
+		if (!CanCriticalBlock())
+		{
+			return 0.0f;
+		}
+
+		return std::max(0.0f, std::min(GetCombatSettings().base_critical_block_chance(), 100.0f));
+	}
+
+	bool GameUnitS::CanBlockAttackFrom(const GameObjectS& attacker) const
+	{
+		// Attacks landing inside the rear cone behind the defender cannot be blocked or parried.
+		const float rearConeDeg = std::max(0.0f, std::min(GetCombatSettings().defense_block_rear_cone_degrees(), 360.0f));
+		const float frontArcDeg = 360.0f - rearConeDeg;
+		constexpr float degToRad = 3.1415926535f / 180.0f;
+		return IsInArc(attacker.GetPosition(), Radian(frontArcDeg * degToRad));
+	}
+
+	BlockResult GameUnitS::RollMeleeBlock(const GameUnitS& attacker, const SpellSchool school, const uint32 incomingDamage) const
+	{
+		BlockResult result;
+
+		// Only physical attacks can be blocked.
+		if (school != spell_school::Normal || incomingDamage == 0)
+		{
+			return result;
+		}
+
+		if (!CanBlock())
+		{
+			return result;
+		}
+
+		// Can't block attacks coming from behind.
+		if (!CanBlockAttackFrom(attacker))
+		{
+			return result;
+		}
+
+		std::uniform_real_distribution<float> chanceDist(0.0f, 100.0f);
+		if (chanceDist(randomGenerator) >= BlockChance())
+		{
+			return result;  // failed the block chance roll
+		}
+
+		result.blocked = true;
+
+		float blockValue = GetBlockValue();
+
+		// Roll for a critical block (increased block amount).
+		if (CanCriticalBlock() && chanceDist(randomGenerator) < CriticalBlockChance())
+		{
+			result.critical = true;
+			blockValue *= GetCombatSettings().critical_block_multiplier();
+		}
+
+		const uint32 blockAmount = static_cast<uint32>(std::max(0.0f, blockValue));
+		result.blockedAmount = std::min(blockAmount, incomingDamage);
+		return result;
 	}
 
 	void GameUnitS::NotifyCanBlock(const bool gainedEffect)
@@ -1409,6 +2087,26 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::NotifyCanCriticalBlock(const bool gainedEffect)
+	{
+		// If true, we take a shortcut: We simply trust the caller that the effect was gained and apply it instead of iterating over each spell effect
+		if (gainedEffect)
+		{
+			m_combatCapabilities |= combat_capabilities::CanCriticalBlock;
+			return;
+		}
+
+		// Effect was removed: Check if there is still one effect left and if so, ensure the CanCriticalBlock flag is set. Otherwise ensure its removed.
+		if (HasSpellEffect(spell_effects::CriticalBlock))
+		{
+			m_combatCapabilities |= combat_capabilities::CanCriticalBlock;
+		}
+		else
+		{
+			m_combatCapabilities &= ~combat_capabilities::CanCriticalBlock;
+		}
+	}
+
 	float GameUnitS::GetUnitMissChance() const
 	{
 		// Base miss chance is 5%
@@ -1440,6 +2138,8 @@ namespace mmo
 
 	MeleeAttackOutcome GameUnitS::RollMeleeOutcomeAgainst(GameUnitS &victim, const WeaponAttack attackType) const
 	{
+		const auto& settings = GetCombatSettings();
+
 		// TODO: Add check for melee immunity
 
 		const int32 attackerMaxSkillValueForLevel = GetMaxSkillValueForLevel(GetLevel());
@@ -1499,9 +2199,8 @@ namespace mmo
 		// Check for glancing blow (only happens when attacking higher level targets)
 		if (GetLevel() <= victim.GetLevel())
 		{
-			// Glancing blow chance formula (approximation)
-			float glancingChance = 10.0f + (victim.GetLevel() - GetLevel()) * 5.0f;
-			glancingChance = std::min(glancingChance, 40.0f);
+			float glancingChance = settings.glancing_base_chance() + (victim.GetLevel() - GetLevel()) * settings.glancing_chance_per_level();
+			glancingChance = std::min(glancingChance, settings.glancing_max_chance());
 
 			chance += glancingChance;
 			if (roll < chance)
@@ -1519,12 +2218,11 @@ namespace mmo
 			return MeleeAttackOutcome::Crit;
 		}
 
-		// Check for crushing blow (only happens when attacking lower level targets)
-		if (GetLevel() >= victim.GetLevel() + 4)
+		// Check for crushing blow (only happens when attacker is significantly higher level)
+		if (GetLevel() >= victim.GetLevel() + static_cast<int32>(settings.crushing_level_threshold()))
 		{
-			// Crushing blow chance (approximation)
-			float crushingChance = 15.0f + (GetLevel() - victim.GetLevel() - 3) * 2.0f;
-			crushingChance = std::min(crushingChance, 25.0f);
+			float crushingChance = settings.crushing_base_chance() + (GetLevel() - victim.GetLevel() - 3) * settings.crushing_chance_per_level();
+			crushingChance = std::min(crushingChance, settings.crushing_max_chance());
 
 			chance += crushingChance;
 			if (roll < chance)
@@ -1632,6 +2330,11 @@ namespace mmo
 		// Notify all subscribers
 		ForEachSubscriberInSight([&packet, &buffer](TileSubscriber &subscriber)
 								 { subscriber.SendPacket(packet, buffer); });
+	}
+
+	const proto::CombatSettings& GameUnitS::GetCombatSettings() const
+	{
+		return m_project.combatSettings;
 	}
 
 	void GameUnitS::SetTarget(uint64 targetGuid)
@@ -1762,6 +2465,24 @@ namespace mmo
 	{
 		const float baseSpeed = GetBaseSpeed(type);
 		return baseSpeed * m_speedBonus[type];
+	}
+
+	UnitMovementMode GameUnitS::GetMovementMode() const
+	{
+		return GetUnitMovementModeFromFlags(m_movementInfo.movementFlags);
+	}
+
+	void GameUnitS::SetMovementMode(const UnitMovementMode movementMode)
+	{
+		MovementInfo movementInfo = GetMovementInfo();
+		if (GetUnitMovementModeFromFlags(movementInfo.movementFlags) == movementMode)
+		{
+			return;
+		}
+
+		SetUnitMovementModeOnFlags(movementInfo.movementFlags, movementMode);
+		movementInfo.timestamp = GetAsyncTimeMs();
+		ApplyMovementInfo(movementInfo);
 	}
 
 	void GameUnitS::NotifySpeedChanged(MovementType type, bool initial)
@@ -1919,6 +2640,8 @@ namespace mmo
 
 	uint32 GameUnitS::CalculateArmorReducedDamage(const uint32 attackerLevel, const uint32 damage) const
 	{
+		const auto& settings = GetCombatSettings();
+
 		float armor = static_cast<float>(Get<uint32>(object_fields::Armor));
 
 		// Apply armor penetration effects
@@ -1935,10 +2658,10 @@ namespace mmo
 			armor = 0.0f;
 		}
 
-		// Damage reduction = armor / (armor + 400 + 85 * attacker_level)
-		// Maximum damage reduction from armor is 75%
-		float armorFactor = armor / (armor + 400.0f + 85.0f * attackerLevel);
-		armorFactor = Clamp(armorFactor, 0.0f, 0.75f);
+		// Damage reduction = armor / (armor + armor_constant + armor_level_factor * attacker_level)
+		// Maximum damage reduction from armor is max_armor_reduction_pct
+		float armorFactor = armor / (armor + settings.armor_constant() + settings.armor_level_factor() * attackerLevel);
+		armorFactor = Clamp(armorFactor, 0.0f, settings.max_armor_reduction_pct());
 
 		// Apply the damage reduction
 		uint32 reducedDamage = damage - static_cast<uint32>(damage * armorFactor);
@@ -2065,19 +2788,35 @@ namespace mmo
 
 		killed(killer);
 
-		// For now, remove all auras
+		// Remove all auras on death, but keep passive auras (e.g. talents) active.
+		// Passive auras represent permanent modifiers like talent-based spell mods which
+		// must persist through death - otherwise the client (which mirrors spell mods via
+		// OnSpellModChanged) would lose them and tooltips would revert to base values, while
+		// the server would only restore them on the next passive spell activation (respawn).
+		std::vector<std::shared_ptr<AuraContainer>> aurasToRemove;
 		for (auto &aura : m_auras)
 		{
-			aura->SetApplied(false);
+			if (aura->GetSpell().attributes(0) & spell_attributes::Passive)
+			{
+				continue;
+			}
+
+			aurasToRemove.push_back(aura);
 		}
 
-		m_auras.clear();
+		for (auto &aura : aurasToRemove)
+		{
+			aura->SetApplied(false);
+			RemoveAura(aura);
+		}
 
 		RaiseTrigger(trigger_event::OnKilled, killer);
 	}
 
 	void GameUnitS::OnSpellCastEnded(bool succeeded)
 	{
+		finishedCasting(succeeded);
+
 		if (std::shared_ptr<GameUnitS> victim = m_victim.lock())
 		{
 			m_lastMainHand = m_lastOffHand = GetAsyncTimeMs();
@@ -2260,6 +2999,45 @@ namespace mmo
 		return multiplier;
 	}
 
+	float GameUnitS::GetIncomingDamageTakenMultiplier(const GameUnitS* attacker, const SpellDmgClass dmgClass) const
+	{
+		float multiplier = 1.0f;
+
+		for (const auto& aura : m_auras)
+		{
+			if (!aura || !aura->IsApplied())
+			{
+				continue;
+			}
+
+			const proto::SpellEntry& auraSpell = aura->GetSpell();
+			if (auraSpell.dmgclass() != spell_dmg_class::None && auraSpell.dmgclass() != dmgClass)
+			{
+				continue;
+			}
+
+			if (aura->IsHostileTargetAura())
+			{
+				if (!attacker || aura->GetCasterId() != attacker->GetGuid())
+				{
+					continue;
+				}
+			}
+
+			for (const auto& effect : aura->GetAuraEffects())
+			{
+				if (!effect || effect->GetType() != aura_type::ModDamageTakenPct)
+				{
+					continue;
+				}
+
+				multiplier = ApplyPctModifier(multiplier, effect->GetBasePoints());
+			}
+		}
+
+		return std::max(multiplier, 0.0f);
+	}
+
 	void GameUnitS::OnDespawnTimer()
 	{
 		if (m_worldInstance)
@@ -2284,8 +3062,10 @@ namespace mmo
 
 	void GameUnitS::OnAttackSwing()
 	{
-		// This value in milliseconds is used to retry auto attack in case of an error like out of range or wrong facing
-		constexpr GameTime attackSwingErrorDelay = 200;
+		const auto& settings = GetCombatSettings();
+
+		// Error delay from combat settings
+		const GameTime attackSwingErrorDelay = settings.attack_swing_error_delay_ms();
 
 		// Remember that we tried to swing just now
 		const GameTime now = GetAsyncTimeMs();
@@ -2326,9 +3106,15 @@ namespace mmo
 			m_victim.reset();
 			return;
 		}
-		// Get the distance - use combined melee reach of both attacker and target
+
+		// Get the distance - use combined melee reach of both attacker and target.
+		// When both units are moving simultaneously (equal-speed chase), widen the
+		// effective range by a small bonus so auto-attacks connect reliably instead
+		// of the attacker perpetually trailing just outside range.
 		const float attackRange = GetMeleeReach() + victim->GetMeleeReach();
-		if (victim->GetSquaredDistanceTo(GetPosition(), false) > (attackRange * attackRange))
+		const bool bothMoving = GetMover().IsMoving() && victim->GetMover().IsMoving();
+		const float effectiveRange = attackRange + (bothMoving ? MELEE_CHASE_RANGE_BONUS : 0.0f);
+		if (victim->GetSquaredDistanceTo(GetPosition(), false) > (effectiveRange * effectiveRange))
 		{
 			OnAttackSwingEvent(AttackSwingEvent::OutOfRange);
 			m_attackSwingCountdown.SetEnd(GetAsyncTimeMs() + attackSwingErrorDelay);
@@ -2343,12 +3129,36 @@ namespace mmo
 			return;
 		}
 
+		// Check if we have a configured auto-attack spell to use instead of the legacy hardcoded combat
+		const proto::SpellEntry* autoAttackSpell = GetAutoAttackSpell();
+		if (autoAttackSpell)
+		{
+			// Cast the auto-attack spell targeting the victim.
+			// The spell itself handles damage calculation, combat table, procs, etc.
+			SpellTargetMap targetMap;
+			targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+			targetMap.SetUnitTarget(victim->GetGuid());
+
+			// Auto-attack spells are always instant and treated as procs (no resource cost, no cooldown check)
+			CastSpell(targetMap, *autoAttackSpell, 0, true);
+
+			OnAttackSwingEvent(AttackSwingEvent::Success);
+			TriggerNextAutoAttack();
+			return;
+		}
+
+		// === Legacy hardcoded auto-attack logic (fallback when no auto-attack spell is configured) ===
+
 		// Calculate melee hit outcome
 		const MeleeAttackOutcome outcome = RollMeleeOutcomeAgainst(*victim, WeaponAttack::BaseAttack);
 
 		// Calculate damage between minimum and maximum damage
 		std::uniform_real_distribution distribution(Get<float>(object_fields::MinDamage), Get<float>(object_fields::MaxDamage) + 1.0f);
 		float rawDamage = distribution(randomGenerator);
+
+		// Apply damage mods
+		rawDamage = CalculateModifiedValue(unit_mods::Damage, rawDamage);
+
 		uint32 totalDamage = static_cast<uint32>(rawDamage);
 
 		uint32 hitInfo = HitInfo::NormalSwing;
@@ -2360,23 +3170,19 @@ namespace mmo
 		{
 		case MeleeAttackOutcome::Crit:
 			hitInfo |= hit_info::CriticalHit;
-			// crits are 2x damage before armor
-			totalDamage *= 2;
+			totalDamage = static_cast<uint32>(totalDamage * settings.melee_crit_multiplier());
 			break;
 
 		case MeleeAttackOutcome::Crushing:
 			hitInfo |= hit_info::Crushing;
-			// Crushing blows do 150% damage
-			totalDamage = static_cast<uint32>(totalDamage * 1.5f);
+			totalDamage = static_cast<uint32>(totalDamage * settings.crushing_damage_multiplier());
 			break;
 
 		case MeleeAttackOutcome::Glancing:
 			hitInfo |= hit_info::Glancing;
-			// Glancing blows do 70%-85% damage based on skill difference
 			{
 				const int32 skillDiff = victim->GetMaxSkillValueForLevel(victim->GetLevel()) - GetMaxSkillValueForLevel(GetLevel());
-				// Normalize to 30% reduction at maximum skill diff
-				float damageReduction = std::min(30.0f, static_cast<float>(skillDiff) * 0.6f);
+				float damageReduction = std::min(settings.glancing_max_reduction(), static_cast<float>(skillDiff) * settings.glancing_reduction_per_skill_diff());
 				float glancingMod = 1.0f - (damageReduction / 100.0f);
 				totalDamage = static_cast<uint32>(totalDamage * glancingMod);
 			}
@@ -2408,17 +3214,26 @@ namespace mmo
 			break;
 		}
 
-		// Check for block (in Classic, block applies after hit determination)
-		uint32 blockedDamage = 0;
-		if (hit && victim->CanBlock() && victim->IsFacingTowards(*this))
+		// If the victim is immune to physical damage, negate the swing entirely but still report it
+		// so the client can display an "Immune" floating combat text.
+		if (hit && victim->IsImmuneToSchool(spell_school::Normal))
 		{
-			std::uniform_real_distribution blockChanceDist(0.0f, 100.0f);
-			if (blockChanceDist(randomGenerator) < victim->BlockChance())
+			hitInfo |= hit_info::Immune;
+			victimState = victim_state::IsImmune;
+			hit = false;
+			totalDamage = 0;
+		}
+
+		// Check for block (block applies after hit determination, only against physical front attacks).
+		// The block value comes from equipped items + per-class attribute scaling and may be critically
+		// increased; it reduces the damage by a flat amount instead of fully absorbing it.
+		uint32 blockedDamage = 0;
+		if (hit)
+		{
+			const BlockResult block = victim->RollMeleeBlock(*this, spell_school::Normal, totalDamage);
+			if (block.blocked)
 			{
-				// Calculate block amount
-				// In Classic: base block value from shield + strength bonus
-				uint32 blockValue = 30; // Default block value, replace with actual shield block value
-				blockedDamage = std::min(blockValue, totalDamage);
+				blockedDamage = block.blockedAmount;
 				totalDamage -= blockedDamage;
 
 				hitInfo |= hit_info::Block;
@@ -2460,32 +3275,16 @@ namespace mmo
 		}
 
 		// Notify all subscribers
-		std::vector<char> buffer;
-		io::VectorSink sink(buffer);
-		game::Protocol::OutgoingPacket packet(sink);
-		packet.Start(game::realm_client_packet::AttackerStateUpdate);
-		packet
-			<< io::write_packed_guid(GetGuid())
-			<< io::write_packed_guid(victim->GetGuid())
-			<< io::write<uint32>(hitInfo)
-			<< io::write<uint32>(victimState)
-			<< io::write<uint32>(totalDamage)
-			<< io::write<uint32>(spell_school::Normal)
-			<< io::write<uint32>(absorbedDamage) // Absorbed damage
-			<< io::write<uint32>(0)				 // Resisted damage
-			<< io::write<uint32>(blockedDamage); // Blocked damage
-		packet.Finish();
-		ForEachSubscriberInSight(
-			[&packet, &buffer](TileSubscriber &subscriber)
-			{
-				subscriber.SendPacket(packet, buffer);
-			});
+		SendAttackerStateUpdate(victim->GetGuid(), hitInfo, victimState, totalDamage, spell_school::Normal, absorbedDamage, 0, blockedDamage);
 
-		// Generate rage based on damage done
+		// Generate rage based on damage done (using combat settings)
 		if (totalDamage > 0 && Get<uint32>(object_fields::PowerType) == power_type::Rage)
 		{
-			const float rageConversion = static_cast<float>((0.0091107836 * GetLevel() * GetLevel()) + 3.225598133 * GetLevel()) + 4.2652911f;
-			const float addRage = (static_cast<float>(totalDamage) / rageConversion) * 7.5f;
+			const float rageConversion = static_cast<float>(
+				(settings.rage_conversion_quadratic() * GetLevel() * GetLevel()) +
+				settings.rage_conversion_linear() * GetLevel()) +
+				settings.rage_conversion_constant();
+			const float addRage = (static_cast<float>(totalDamage) / rageConversion) * settings.rage_damage_factor();
 			AddPower(power_type::Rage, addRage);
 		}
 
@@ -2545,65 +3344,63 @@ namespace mmo
 			return; // No change
 		}
 
+		const UnitVisibility prev = m_visibility;
 		m_visibility = x;
 		if (m_worldInstance)
 		{
-			UpdateVisibilityAndView();
+			UpdateVisibilityAndView(prev);
 		}
 	}
 
-	void GameUnitS::UpdateVisibilityAndView()
+	void GameUnitS::UpdateVisibilityAndView(UnitVisibility prevVisibility)
 	{
-		// Get current world instance and verify it exists
 		auto *worldInstance = GetWorldInstance();
 		if (!worldInstance)
 		{
 			return;
 		}
 
-		// Signal visibility change to world instance
-		// This will force an update of which clients can see this unit
-		bool isVisible = (m_visibility == unit_visibility::On);
+		// Only notify subscribers whose visibility of this unit actually changed.
+		// Sending NotifyObjectsSpawned to a subscriber that already received a spawn
+		// packet (because prevVisibility was already On) would cause the client to crash
+		// with a duplicate entity assertion in Scene::CreateEntity.
+		std::vector<TileSubscriber *> toSpawn;
+		std::vector<TileSubscriber *> toDespawn;
 
-		// Build visibility list based on current visibility state
-		std::vector<TileSubscriber *> visibleTo;
-		std::vector<TileSubscriber *> notVisibleTo;
-		ForEachSubscriberInSight([this, &visibleTo, &notVisibleTo](TileSubscriber &subscriber)
-								 {
-			if (CanBeSeenBy(subscriber.GetGameUnit()))
+		ForEachSubscriberInSight([this, prevVisibility, &toSpawn, &toDespawn](TileSubscriber &subscriber)
+		{
+			if (&subscriber.GetGameUnit() == this)
 			{
-				// And prevent self respawn
-				if (&subscriber.GetGameUnit() != this)
-				{
-					visibleTo.push_back(&subscriber);
-				}
+				return;
 			}
-			else
+
+			// Determine whether this subscriber could see the unit before and after the change.
+			// CanBeSeenBy() uses the already-updated m_visibility, so we reconstruct the
+			// previous answer manually from prevVisibility.
+			const bool couldSeeBefore = (prevVisibility == unit_visibility::On) || subscriber.GetGameUnit().IsGameMaster();
+			const bool canSeeNow = CanBeSeenBy(subscriber.GetGameUnit());
+
+			if (canSeeNow && !couldSeeBefore)
 			{
-				notVisibleTo.push_back(&subscriber);
-			} });
+				toSpawn.push_back(&subscriber);
+			}
+			else if (!canSeeNow && couldSeeBefore)
+			{
+				toDespawn.push_back(&subscriber);
+			}
+		});
 
 		std::vector<GameObjectS *> objects{1, this};
 
-		// Find subscribers who previously saw this unit but shouldn't anymore
-		// and remove this unit from their visible objects
-		for (auto it = notVisibleTo.begin(); it != notVisibleTo.end(); ++it)
+		for (auto *subscriber : toDespawn)
 		{
-			// This subscriber should no longer see this unit
-			// Send despawn packet
-			TileSubscriber *subscriber = *it;
 			subscriber->NotifyObjectsDespawned(objects);
 		}
 
-		// Add this unit to new subscribers' visible objects
-		for (auto *subscriber : visibleTo)
+		for (auto *subscriber : toSpawn)
 		{
-			// Send spawn packet to new subscriber
-			std::vector<GameObjectS *> objects = {this};
 			subscriber->NotifyObjectsSpawned(objects);
 		}
-
-		// TODO: Stop attacking units from attacking
 	}
 
 	void GameUnitS::TriggerProcEvent(SpellProcFlags eventFlags, GameUnitS *target, uint32 damage, uint32 procEx, uint8 school, bool isProc, uint64 familyFlags)

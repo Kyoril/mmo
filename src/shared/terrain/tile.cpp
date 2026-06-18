@@ -17,7 +17,7 @@ namespace mmo
 {
 	namespace terrain
 	{
-		constexpr uint32 WireframeRenderGroupId = RenderQueueGroupId::Main + 1;
+		constexpr uint32 WireframeRenderGroupId = RenderQueueGroupId::TerrainGeometry + 1;
 
 		/// @brief Default maximum number of LOD index buffer combinations to cache per tile.
 		/// @details This value provides a good balance between memory usage and performance.
@@ -30,13 +30,16 @@ namespace mmo
 			: MovableObject(name), Renderable(), m_page(page), m_startX(startX), m_startZ(startZ)
 			, m_lodIndexCache(DefaultLodCacheSize)
 		{
-			SetRenderQueueGroup(WorldGeometry1);
+			SetRenderQueueGroup(TerrainGeometry);
 
 			SetCastShadows(false);
 
 			// Calculate tile coordinates based on outer vertex spacing
 			m_tileX = m_startX / (constants::OuterVerticesPerTileSide - 1);
 			m_tileY = m_startZ / (constants::OuterVerticesPerTileSide - 1);
+
+			// Pre-compute stagger offset for occlusion retest distribution
+			m_occlusionStaggerOffset = (static_cast<uint32>(m_tileX) + static_cast<uint32>(m_tileY) * constants::TilesPerPage) % OcclusionRetestInterval;
 
 			CreateVertexData(m_startX, m_startZ);
 			CreateIndexData(0, 0, 0, 0, 0);
@@ -174,14 +177,88 @@ namespace mmo
 
 		void Tile::PopulateRenderQueue(RenderQueue &queue)
 		{
-			if (HasRenderableGeometry())
+			if (!HasRenderableGeometry())
 			{
-				queue.AddRenderable(*this, m_renderQueueId);
+				return;
+			}
 
-				if (m_page.GetTerrain().IsWireframeVisible())
+			// Occlusion culling with hysteresis to prevent popping artefacts.
+			//
+			// The key insight: a single 0-pixel query result should NOT immediately
+			// hide a tile. Transient occlusion (camera jitter, depth ordering changes)
+			// can produce spurious 0-pixel frames. Instead we require several
+			// consecutive occluded frames before actually hiding the tile.
+			//
+			// During the "grace period" the tile keeps rendering and keeps issuing
+			// queries, so we get fresh data every frame and can detect when the
+			// transient occluder moves away without any visible pop.
+			//
+			// Additionally, tiles at LOD 0 (closest to the camera) are never culled
+			// because pops at close range are the most noticeable artefact.
+			if (m_page.GetTerrain().IsOcclusionCullingEnabled() && m_occlusionQuery)
+			{
+				// Never occlude tiles at the closest LOD – pops are too visible.
+				const bool closeRange = (m_currentLod == 0);
+
+				uint64 pixelCount = 0;
+				if (m_occlusionQuery->TryGetResult(pixelCount))
 				{
-					queue.AddRenderable(*this, WireframeRenderGroupId);
+					if (pixelCount > 0)
+					{
+						// Tile is visible – reset all occluded state immediately.
+						m_occlusionVisible = true;
+						m_consecutiveOccludedFrames = 0;
+						m_occlusionSkippedFrames = 0;
+					}
+					else
+					{
+						// Query returned 0 pixels but do not hide right away.
+						m_consecutiveOccludedFrames++;
+
+						if (m_consecutiveOccludedFrames >= OcclusionGraceFrames && !closeRange)
+						{
+							if (m_occlusionVisible)
+							{
+								// First transition: visible → confirmed occluded.
+								// Reset the skip counter so the retest cadence starts fresh
+								// from a clean state.
+								m_occlusionVisible = false;
+								m_occlusionSkippedFrames = 0;
+							}
+							// If the tile is already confirmed occluded (m_occlusionVisible is
+							// already false) we must NOT reset m_occlusionSkippedFrames here.
+							//
+							// Resetting it on every 0-pixel result disrupts the stagger-based
+							// retest cadence.  Because the reset is always followed immediately
+							// by "m_occlusionSkippedFrames++ → check % OcclusionRetestInterval",
+							// tiles whose stagger offset equals 1 would be retested EVERY frame
+							// (reset → 0++ → 1 == staggerOffset → retest each frame), and tiles
+							// with offset 2 would retest every 2 frames instead of 3.  This
+							// produces the "flicker every frame / does not recover" artifact.
+						}
+						// Otherwise: still in grace period, keep rendering & querying.
+					}
 				}
+
+				// If confirmed occluded, skip rendering most frames but periodically
+				// re-test to detect when the tile becomes visible again.
+				// Staggered retesting distributes the GPU cost across frames.
+				if (!m_occlusionVisible && !closeRange)
+				{
+					m_occlusionSkippedFrames++;
+
+					if ((m_occlusionSkippedFrames % OcclusionRetestInterval) != m_occlusionStaggerOffset)
+					{
+						return;
+					}
+				}
+			}
+
+			queue.AddRenderable(*this, m_renderQueueId);
+
+			if (m_page.GetTerrain().IsWireframeVisible())
+			{
+				queue.AddRenderable(*this, WireframeRenderGroupId);
 			}
 		}
 
@@ -206,13 +283,46 @@ namespace mmo
 					m_currentStitchKey = lodDisabledStitchKey;
 				}
 			}
-			
+
+			// Create occlusion query lazily on first use
+			if (m_page.GetTerrain().IsOcclusionCullingEnabled() && !m_occlusionQuery)
+			{
+				m_occlusionQuery = graphicsDevice.CreateOcclusionQuery();
+
+				// Compute stagger offset from tile position to distribute re-tests
+				m_occlusionStaggerOffset = (static_cast<uint32>(m_tileX) + static_cast<uint32>(m_tileY) * constants::TilesPerPage) % OcclusionRetestInterval;
+			}
+
+			// Begin occlusion query to wrap this tile's draw call
+			if (m_occlusionQuery && m_page.GetTerrain().IsOcclusionCullingEnabled())
+			{
+				m_occlusionQuery->Begin();
+			}
+
 			return Renderable::PreRender(scene, graphicsDevice, camera);
+		}
+
+		void Tile::PostRender(Scene& scene, GraphicsDevice& graphicsDevice, Camera& camera)
+		{
+			// End occlusion query after the draw call
+			if (m_occlusionQuery && m_page.GetTerrain().IsOcclusionCullingEnabled())
+			{
+				m_occlusionQuery->End();
+			}
+
+			Renderable::PostRender(scene, graphicsDevice, camera);
 		}
 
 		Terrain &Tile::GetTerrain() const
 		{
 			return m_page.GetTerrain();
+		}
+
+		void Tile::ResetOcclusionState()
+		{
+			m_occlusionVisible = true;
+			m_consecutiveOccludedFrames = 0;
+			m_occlusionSkippedFrames = 0;
 		}
 
 		void Tile::UpdateTerrain(size_t startx, size_t startz, size_t endx, size_t endz)
@@ -274,13 +384,11 @@ namespace mmo
 					const size_t globalX = m_startX + i;
 					const size_t globalZ = m_startZ + j;
 
-					// Sample height at the center position
-					// For now, we'll interpolate from the four surrounding outer vertices
-					const float h00 = m_page.GetHeightAt(globalX, globalZ);
-					const float h10 = m_page.GetHeightAt(globalX + 1, globalZ);
-					const float h01 = m_page.GetHeightAt(globalX, globalZ + 1);
-					const float h11 = m_page.GetHeightAt(globalX + 1, globalZ + 1);
-					const float height = (h00 + h10 + h01 + h11) * 0.25f;
+					// Read the stored inner vertex height from the page.
+					// The page-local inner index maps tile (m_tileX, m_tileY) × tile-local (i, j).
+					const size_t pageLocalInnerX = m_tileX * constants::InnerVerticesPerTileSide + i;
+					const size_t pageLocalInnerZ = m_tileY * constants::InnerVerticesPerTileSide + j;
+					const float height = m_page.GetInnerHeightAt(pageLocalInnerX, pageLocalInnerZ);
 
 					const float worldX = outerScale * (globalX + centerOffsetX);
 					const float worldZ = outerScale * (globalZ + centerOffsetZ);
@@ -440,13 +548,11 @@ namespace mmo
 					const size_t globalX = startX + i;
 					const size_t globalZ = startZ + j;
 
-					// Sample height at the center position
-					// For now, we'll interpolate from the four surrounding outer vertices
-					const float h00 = m_page.GetHeightAt(globalX, globalZ);
-					const float h10 = m_page.GetHeightAt(globalX + 1, globalZ);
-					const float h01 = m_page.GetHeightAt(globalX, globalZ + 1);
-					const float h11 = m_page.GetHeightAt(globalX + 1, globalZ + 1);
-					const float height = (h00 + h10 + h01 + h11) * 0.25f;
+					// Read the stored inner vertex height from the page.
+					// Page-local inner index maps tile (m_tileX, m_tileY) × tile-local (i, j).
+					const size_t pageLocalInnerX = m_tileX * constants::InnerVerticesPerTileSide + i;
+					const size_t pageLocalInnerZ = m_tileY * constants::InnerVerticesPerTileSide + j;
+					const float height = m_page.GetInnerHeightAt(pageLocalInnerX, pageLocalInnerZ);
 
 					const float worldX = outerScale * (globalX + centerOffsetX);
 					const float worldZ = outerScale * (globalZ + centerOffsetZ);

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+// Copyright (C) 2019 - 2026, Kyoril. All rights reserved.
 
 #pragma once
 
@@ -9,6 +9,19 @@
 namespace mmo
 {
 	class AssetRegistry;
+
+	/// @brief Enumerates the intended usage of a texture, which determines format selection during import.
+	enum class TextureUsage
+	{
+		/// Standard color texture (diffuse, albedo, UI, etc.)
+		Color,
+
+		/// Normal map texture (will be stored as two-channel RG for efficiency)
+		NormalMap,
+
+		/// Single-channel grayscale texture (heightmaps, alpha masks, roughness, etc.)
+		Grayscale,
+	};
 	
 	/// Enumerates available pixel formats for source files.
 	enum class ImageFormat
@@ -22,14 +35,21 @@ namespace mmo
 		/// DXT1/BC1 compressed data.
 		DXT1,
 		/// DXT5/BC3 compressed data.
-		DXT5
+		DXT5,
+		/// Single-channel 8-bit data.
+		R8,
+		/// Two-channel 8-bit data.
+		RG8,
 	};
 
 	/// @brief Implementation for importing textures from files.
 	class TextureImport final : public ImportBase
 	{
 	public:
+		/// @brief Constructs a new texture import handler.
 		explicit TextureImport();
+
+		/// @brief Default destructor.
 		~TextureImport() override = default;
 
 	public:
@@ -39,10 +59,11 @@ namespace mmo
 		/// @copydoc ImportBase::SupportsExtension
 		[[nodiscard]] bool SupportsExtension(const String& extension) const override;
 
-		/// Override this method if the importer needs to render some UI elements.
+		/// @brief Draws the import settings UI.
 		void Draw() override;
 
 	private:
+		/// @brief Performs the actual import for all queued files.
 		bool DoImportInternal();
 
 	private:
@@ -69,11 +90,19 @@ namespace mmo
 		/// @return true on success, false otherwise.
 		bool ReadTextureData(const Path& filename, int32& width, int32& height, int32& numChannels, std::vector<uint8>& rawData) const;
 
+		/// @brief Converts raw image data to the appropriate TextureData based on import settings.
+		/// @param rawData The raw RGBA pixel data from the source image.
+		/// @param width Image width.
+		/// @param height Image height.
+		/// @param numChannels Number of source channels.
+		/// @param data The output TextureData structure.
+		/// @return true on success, false otherwise.
 		bool ConvertData(const std::vector<uint8>& rawData, int32 width, int32 height, int32 numChannels, TextureData& data);
 
 		/// @brief Creates a texture assets using the given name and path.
 		/// @param name Name of the texture file without extension.
 		/// @param assetPath The asset path where the texture will be stored.
+		/// @param data The converted texture data to write.
 		/// @return true on success, false otherwise.
 		bool CreateTextureAsset(const Path& name, const Path& assetPath, TextureData& data) const;
 
@@ -82,5 +111,6 @@ namespace mmo
 		Path m_importAssetPath;
 		bool m_showImportFileDialog = false;
 		bool m_useCompression = false;
+		TextureUsage m_textureUsage = TextureUsage::Color;
 	};
 }

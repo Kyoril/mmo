@@ -14,7 +14,9 @@
 #include "game_server/world/world_instance_manager.h"
 #include "player_manager.h"
 #include "game_server/condition_mgr.h"
+#include "game_server/quest_reset.h"
 #include "trigger_handler.h"
+#include "lua_script_mgr.h"
 
 #include <fstream>
 #include <sstream>
@@ -29,6 +31,7 @@
 #include "game_server/world/universe.h"
 #include "proto_data/project.h"
 #include "assets/asset_registry.h"
+#include "group_manager.h"
 
 namespace mmo
 {
@@ -79,6 +82,15 @@ namespace mmo
 			return 1;
 		}
 
+		// Apply the global quest reset schedule (daily/weekly).
+		{
+			QuestResetConfig questResetConfig;
+			questResetConfig.dailyResetHour = config.dailyQuestResetHour;
+			questResetConfig.weeklyResetWeekday = config.weeklyQuestResetWeekday;
+			questResetConfig.weeklyResetHour = config.weeklyQuestResetHour;
+			SetQuestResetConfig(questResetConfig);
+		}
+
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// File log setup
 		/////////////////////////////////////////////////////////////////////////////////////////////////
@@ -116,10 +128,24 @@ namespace mmo
 		ConditionMgr conditionMgr{ project.conditions };
 
 		PlayerManager playerManager;
+		GroupManager groupManager;
 		TriggerHandler triggerHandler{ project, playerManager, timerQueue };
 
-		// Initialize asset registry
+		// Initialize asset registry with the nav mesh data folder.
 		AssetRegistry::Initialize(config.mapFolder, {});
+
+		// Optionally add the world asset folder (Worlds/, Meshes/, etc.) so the server
+		// can load collision geometry for line-of-sight checks.
+		if (!config.worldDataFolder.empty())
+		{
+			ILOG("Loading world asset data from: " << config.worldDataFolder);
+			AssetRegistry::AddArchivePackage(config.worldDataFolder);
+		}
+		else
+		{
+			WLOG("worldData folder not configured — server-side geometry LOS will be disabled. "
+				"Set folders.worldData in the world server config to enable it.");
+		}
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Database setup
@@ -138,6 +164,22 @@ namespace mmo
 		WorldInstanceManager worldInstanceManager{ ioService, universe, project, objectIdGenerator, triggerHandler, conditionMgr };
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
+		// Lua scripting setup
+		/////////////////////////////////////////////////////////////////////////////////////////////////
+
+		LuaScriptMgr luaScriptMgr;
+		luaScriptMgr.LoadScripts(config.scriptFolder);
+
+		// Inject script manager into newly created world instances
+		worldInstanceManager.instanceCreated += [&worldInstanceManager, &luaScriptMgr](const InstanceId id)
+		{
+			if (auto* instance = worldInstanceManager.GetInstanceById(id))
+			{
+				instance->SetScriptMgr(&luaScriptMgr);
+			}
+		};
+
+		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Game service setup
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -149,8 +191,10 @@ namespace mmo
 				std::ref(playerManager),
 				std::ref(worldInstanceManager),
 				project,
-				conditionMgr);
+				conditionMgr,
+				groupManager);
 		realmConnector->Login(config.realmServerAddress, config.realmServerPort, config.realmServerAuthName, config.realmServerPassword);
+		realmConnector->SetFallDamageConfig(config.fallDamageMinHeight, config.fallDamageLethalHeight);
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Create the web service

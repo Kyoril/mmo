@@ -50,6 +50,11 @@ namespace mmo
 
 		[[nodiscard]] SceneNode* GetRootNode() const { return m_controlledUnit ? m_controlledUnit->GetSceneNode() : nullptr; }
 
+		[[nodiscard]] GameObjectC* GetHoveredObject() const { return m_hoveredObject; }
+
+		[[nodiscard]] int32 GetMouseX() const { return m_x; }
+		[[nodiscard]] int32 GetMouseY() const { return m_y; }
+
 	private:
 		void SetupCamera();
 
@@ -84,6 +89,8 @@ namespace mmo
 
 		void StopJump() override;
 
+		void ToggleWalkMode() override;
+
 		void OnHoveredObjectChanged(GameObjectC* previousHoveredUnit);
 
 		void ProcessMovementEvent(const MovementEvent& movementEvent);
@@ -114,6 +121,12 @@ namespace mmo
 		scoped_connection_container m_cvarConnections;
 		scoped_connection m_moveCompleted;
 		GameTime m_nextSetFacing = 0;
+
+		/// Character dive pitch while swimming. Controlled only by right-mouse vertical drag,
+		/// clamped, and reset to zero when not swimming. Independent of the visual camera pitch.
+		Radian m_swimPitch { 0.0f };
+		/// True while the jump key is held; under water this drives an upward swim.
+		bool m_swimAscend { false };
 
 		Vector3 m_desiredCameraLocation;
 		Quaternion m_savedOrientation;

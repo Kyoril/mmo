@@ -7,7 +7,7 @@
 
 namespace mmo
 {
-	GuildMgr::GuildMgr(AsyncDatabase& asyncDatabase, PlayerManager& playerManager)
+	GuildMgr::GuildMgr(AsyncGuildDatabase& asyncDatabase, PlayerManager& playerManager)
 		: m_asyncDatabase(asyncDatabase)
 		, m_playerManager(playerManager)
 	{
@@ -39,7 +39,7 @@ namespace mmo
 				m_guildsLoaded = true;
 			};
 
-		m_asyncDatabase.asyncRequest(std::move(handler), & IDatabase::LoadGuilds);
+		m_asyncDatabase.asyncRequest(std::move(handler), &IGuildDatabase::LoadGuilds);
 	}
 
 	bool GuildMgr::CreateGuild(const String& name, uint64 leaderGuid, const std::vector<uint64>& initialMembers, std::function<void(Guild*)> callback)
@@ -94,7 +94,7 @@ namespace mmo
 		std::vector<GuildMember> members;
 		members.emplace_back(leaderGuid, 0, name, level, raceId, classId);
 
-		m_asyncDatabase.asyncRequest(std::move(handler), &IDatabase::CreateGuild, guildId, name, leaderGuid, defaultRanks, members);
+		m_asyncDatabase.asyncRequest(std::move(handler), &IGuildDatabase::CreateGuild, guildId, name, leaderGuid, defaultRanks, members);
 
 		return true;
 	}
@@ -140,7 +140,7 @@ namespace mmo
 				m_guildsById.erase(it);
 			};
 
-		m_asyncDatabase.asyncRequest(std::move(handler), &IDatabase::DisbandGuild, guildId);
+		m_asyncDatabase.asyncRequest(std::move(handler), &IGuildDatabase::DisbandGuild, guildId);
 		return true;
 	}
 
@@ -174,7 +174,10 @@ namespace mmo
 		{
 			guild->GetMembersRef().push_back(member);
 		}
-		
+
+		// Initialize MOTD from DB-loaded data
+		guild->SetMotd(info.motd);
+
 		m_guildsById[info.id] = std::move(guild);
 		m_guildIdsByName[info.name] = info.id;
 
@@ -285,7 +288,7 @@ namespace mmo
 			};
 
 		// Update the database
-		m_database.asyncRequest(std::move(handler), &IDatabase::AddGuildMember, m_id, playerGuid, rank);
+		m_database.asyncRequest(std::move(handler), &IGuildDatabase::AddGuildMember, m_id, playerGuid, rank);
 		return true;
 	}
 
@@ -325,7 +328,7 @@ namespace mmo
 			};
 
 		// Update the database
-		m_database.asyncRequest(std::move(handler), &IDatabase::RemoveGuildMember, m_id, playerGuid);
+		m_database.asyncRequest(std::move(handler), &IGuildDatabase::RemoveGuildMember, m_id, playerGuid);
 
 		return true;
 	}
@@ -370,7 +373,7 @@ namespace mmo
 			};
 
 		// Update the database
-		m_database.asyncRequest(std::move(handler), &IDatabase::SetGuildMemberRank, m_id, it->guid, newRankId);
+		m_database.asyncRequest(std::move(handler), &IGuildDatabase::SetGuildMemberRank, m_id, it->guid, newRankId);
 
 		return true;
 	}
@@ -415,7 +418,7 @@ namespace mmo
 			};
 
 		// Update the database
-		m_database.asyncRequest(std::move(handler), &IDatabase::SetGuildMemberRank, m_id, it->guid, newRankId);
+		m_database.asyncRequest(std::move(handler), &IGuildDatabase::SetGuildMemberRank, m_id, it->guid, newRankId);
 
 		return true;
 	}
@@ -424,7 +427,8 @@ namespace mmo
 	{
 		writer
 			<< io::write<uint32>(m_members.size())
-			<< io::write<uint32>(m_ranks.size());
+			<< io::write<uint32>(m_ranks.size())
+			<< io::write_dynamic_range<uint16>(m_motd);	// MOTD before ranks; client reads in same order
 
 		for (const auto& rank : m_ranks)
 		{
