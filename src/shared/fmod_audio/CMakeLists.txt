@@ -15,9 +15,10 @@ if (WIN32)
 	
 	# Copy FMOD DLL to binary directory for any target that links this library
 	add_custom_command(TARGET fmod_audio POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/bin/$<CONFIG>"
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different
 		"${CMAKE_SOURCE_DIR}/deps/fmod/lib/x64/fmod.dll"
-		"${CMAKE_SOURCE_DIR}/bin/$<CONFIG>/"
+		"${CMAKE_SOURCE_DIR}/bin/$<CONFIG>/fmod.dll"
 		COMMENT "Copying FMOD DLL for fmod_audio library"
 	)
 endif()
