@@ -16,6 +16,10 @@ namespace mmo
 	{
 		Hold = 0,
 		CastSpell,
+		/// Move toward a unit until it is within range for a follow-up action (heal or spell).
+		Approach,
+		/// Engage a hostile unit in melee (move into melee range and auto-attack).
+		MeleeAttack,
 	};
 
 	struct BotClericUnitSnapshot final
@@ -38,6 +42,9 @@ namespace mmo
 		bool spellbookReady { false };
 		bool cooldownsReady { false };
 		bool powerReady { false };
+		/// True when fighting inside a dungeon or raid instance. Drives a more conservative
+		/// healing mana reserve and disables the melee damage fallback.
+		bool inDungeon { false };
 		bool hasSelf { false };
 		BotClericUnitSnapshot self;
 		std::vector<BotClericUnitSnapshot> partyMembers;
@@ -58,6 +65,10 @@ namespace mmo
 		uint32 spellId { 0 };
 		uint64 castTargetGuid { 0 };
 		bool castOnSelf { false };
+		/// Target to move toward for Approach / MeleeAttack decisions.
+		uint64 moveTargetGuid { 0 };
+		/// Distance at which the bot should stop approaching the move target (yards).
+		float moveDesiredRange { 0.0f };
 	};
 
 	class BotClericController final

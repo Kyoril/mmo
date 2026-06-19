@@ -158,12 +158,32 @@ namespace mmo
 		CHECK(decision.reason == "injured_ally_out_of_awareness");
 	}
 
-	TEST_CASE("cleric controller conserves mana instead of casting filler when heal reserves are gone", "[bot-cleric][controller]")
+	TEST_CASE("cleric controller melees in the open world when mana is below the healing reserve", "[bot-cleric][controller]")
 	{
 		const BotClericCapabilities capabilities = MakeCapabilities();
 		BotClericDecisionInput input = MakeInput(capabilities);
 		input.self.activeAuraSpellIds.insert(capabilities.supportAura->spellId);
 		input.mana = capabilities.efficientHeal->powerCost - 1;
+		input.inDungeon = false;
+
+		BotClericUnitSnapshot tank = MakeUnit(200, BotCompanionRole::Tank, 0.95f, 12.0f);
+		tank.activeAuraSpellIds.insert(capabilities.supportBuff->spellId);
+		input.partyMembers.push_back(tank);
+
+		BotClericController controller;
+		const BotClericDecision decision = controller.Evaluate(input);
+		REQUIRE(decision.type == BotClericDecisionType::MeleeAttack);
+		CHECK(decision.reason == "melee_oom_fallback");
+		CHECK(decision.moveTargetGuid == input.hostileTargetGuid);
+	}
+
+	TEST_CASE("cleric controller conserves mana in a dungeon when below the healing reserve", "[bot-cleric][controller]")
+	{
+		const BotClericCapabilities capabilities = MakeCapabilities();
+		BotClericDecisionInput input = MakeInput(capabilities);
+		input.self.activeAuraSpellIds.insert(capabilities.supportAura->spellId);
+		input.mana = capabilities.efficientHeal->powerCost - 1;
+		input.inDungeon = true;
 
 		BotClericUnitSnapshot tank = MakeUnit(200, BotCompanionRole::Tank, 0.95f, 12.0f);
 		tank.activeAuraSpellIds.insert(capabilities.supportBuff->spellId);
@@ -175,7 +195,7 @@ namespace mmo
 		CHECK(decision.reason == "conserve_mana");
 	}
 
-	TEST_CASE("cleric controller uses damage filler only when support is up and healing pressure is low", "[bot-cleric][controller]")
+	TEST_CASE("cleric controller spends surplus mana on offensive filler in the open world", "[bot-cleric][controller]")
 	{
 		const BotClericCapabilities capabilities = MakeCapabilities();
 		BotClericDecisionInput input = MakeInput(capabilities);
@@ -188,9 +208,63 @@ namespace mmo
 		BotClericController controller;
 		const BotClericDecision decision = controller.Evaluate(input);
 		REQUIRE(decision.type == BotClericDecisionType::CastSpell);
-		CHECK(decision.reason == "safe_damage_filler");
+		CHECK(decision.reason == "offensive_filler");
 		CHECK(decision.spellId == capabilities.damageFiller->spellId);
 		CHECK(decision.castTargetGuid == input.hostileTargetGuid);
+	}
+
+	TEST_CASE("cleric controller keeps a larger reserve before DPSing in a dungeon", "[bot-cleric][controller]")
+	{
+		const BotClericCapabilities capabilities = MakeCapabilities();
+		BotClericDecisionInput input = MakeInput(capabilities);
+		input.self.activeAuraSpellIds.insert(capabilities.supportAura->spellId);
+		input.inDungeon = true;
+		// 50% of max mana sits below the 60% dungeon reserve, so the cleric should conserve.
+		input.mana = 50;
+
+		BotClericUnitSnapshot tank = MakeUnit(200, BotCompanionRole::Tank, 0.96f, 12.0f);
+		tank.activeAuraSpellIds.insert(capabilities.supportBuff->spellId);
+		input.partyMembers.push_back(tank);
+
+		BotClericController controller;
+		const BotClericDecision decision = controller.Evaluate(input);
+		REQUIRE(decision.type == BotClericDecisionType::Hold);
+		CHECK(decision.reason == "conserve_mana");
+	}
+
+	TEST_CASE("cleric controller approaches an out-of-range injured ally to heal", "[bot-cleric][controller]")
+	{
+		const BotClericCapabilities capabilities = MakeCapabilities();
+		BotClericDecisionInput input = MakeInput(capabilities);
+		input.self.activeAuraSpellIds.insert(capabilities.supportAura->spellId);
+		// Critically injured ally, but standing beyond the emergency heal's 30 yard range.
+		input.partyMembers.push_back(MakeUnit(200, BotCompanionRole::Tank, 0.10f, 40.0f));
+
+		BotClericController controller;
+		const BotClericDecision decision = controller.Evaluate(input);
+		REQUIRE(decision.type == BotClericDecisionType::Approach);
+		CHECK(decision.reason == "approach_ally_emergency");
+		CHECK(decision.moveTargetGuid == 200u);
+		CHECK(decision.moveDesiredRange < capabilities.emergencyHeal->maxRange);
+	}
+
+	TEST_CASE("cleric controller approaches an out-of-range hostile to resume DPS", "[bot-cleric][controller]")
+	{
+		const BotClericCapabilities capabilities = MakeCapabilities();
+		BotClericDecisionInput input = MakeInput(capabilities);
+		input.self.activeAuraSpellIds.insert(capabilities.supportAura->spellId);
+		// Hostile beyond the damage filler's 30 yard range, with plenty of surplus mana.
+		input.hostileTargetDistance = 50.0f;
+
+		BotClericUnitSnapshot tank = MakeUnit(200, BotCompanionRole::Tank, 0.96f, 12.0f);
+		tank.activeAuraSpellIds.insert(capabilities.supportBuff->spellId);
+		input.partyMembers.push_back(tank);
+
+		BotClericController controller;
+		const BotClericDecision decision = controller.Evaluate(input);
+		REQUIRE(decision.type == BotClericDecisionType::Approach);
+		CHECK(decision.reason == "approach_filler_range");
+		CHECK(decision.moveTargetGuid == input.hostileTargetGuid);
 	}
 
 	TEST_CASE("cleric controller rejects malformed duplicate party snapshots explicitly", "[bot-cleric][controller]")

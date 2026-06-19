@@ -10,6 +10,7 @@
 #include "game/group.h"
 #include "game_protocol/game_protocol.h"
 #include "log/default_log_levels.h"
+#include "proto_data/project.h"
 
 #include <algorithm>
 #include <cmath>
@@ -68,6 +69,33 @@ namespace
 	{
 		return failure == CompanionFollowPreconditionFailure::SelfUnavailable
 			|| failure == CompanionFollowPreconditionFailure::InvalidSelfPosition;
+	}
+
+	// Returns true when the bot is currently inside a dungeon or raid instance, which makes the
+	// cleric runtime stay heal-focused instead of spending mana on offensive casts or meleeing.
+	[[nodiscard]] bool IsDungeonInstance(const BotContext& context)
+	{
+		const BotNavService* navService = context.GetNavService();
+		if (!navService)
+		{
+			return false;
+		}
+
+		const proto::Project* project = navService->GetProject();
+		if (!project)
+		{
+			return false;
+		}
+
+		const proto::MapEntry* mapEntry = project->maps.getById(context.GetCurrentMapId());
+		if (!mapEntry)
+		{
+			return false;
+		}
+
+		const auto instanceType = mapEntry->instancetype();
+		return instanceType == proto::MapEntry_MapInstanceType_DUNGEON
+			|| instanceType == proto::MapEntry_MapInstanceType_RAID;
 	}
 
 	std::string JoinSpellIds(const std::unordered_set<uint32>& spellIds)
@@ -717,9 +745,18 @@ namespace mmo
 		ObserveWarriorCastFailure(context, output);
 		ObserveClericCastFailure(context, output);
 		ObserveMageCastFailure(context, output);
-		ApplyDecision(context, input, output);
+
+		// The cleric runtime can take over movement to position itself for healing, casting or
+		// melee. When it does, the follow-leader steering must be skipped so the two movement
+		// drivers do not fight over the bot's position within a single tick. For every other
+		// class the cleric runtime is a no-op and the follow movement runs as usual.
+		const bool clericDrivesMovement = ExecuteClericRuntime(context, input, output);
+		if (!clericDrivesMovement)
+		{
+			ApplyDecision(context, input, output);
+		}
+
 		ExecuteWarriorRuntime(context, input, output);
-		ExecuteClericRuntime(context, input, output);
 		ExecuteMageRuntime(context, input, output);
 		ExecuteAutoAttackRuntime(context, input, output);
 		UpdatePreviousCompanionState(output);
@@ -1029,6 +1066,79 @@ namespace mmo
 
 		StopMovement(context);
 		context.FaceUnit(targetGuid);
+	}
+
+	bool CompanionFollowAction::DriveCombatApproach(BotContext& context, const CompanionFollowControllerInput& input, const uint64 targetGuid, const float desiredRange)
+	{
+		const BotUnit* target = context.GetUnit(targetGuid);
+		if (!target)
+		{
+			StopMovement(context);
+			return false;
+		}
+
+		if (context.GetDistanceToUnit(targetGuid) <= desiredRange)
+		{
+			// Already in range - stop and let the caller act (cast, swing, etc.).
+			StopMovement(context);
+			return true;
+		}
+
+		// Combat positioning takes over from the follow steering, so drop any stale follow path.
+		m_path.points.clear();
+		m_state.hasLastRepathAnchorPosition = false;
+
+		MovementInfo movement = context.GetMovementInfo();
+		if (!m_state.isMoving && (movement.movementFlags & movement_flags::Falling))
+		{
+			context.SendLandedPacket();
+			movement = context.GetMovementInfo();
+		}
+
+		const Vector3 currentPosition = movement.position;
+		const Vector3 targetPosition = target->GetPosition();
+		Vector3 delta = targetPosition - currentPosition;
+		delta.y = 0.0f;
+		const float planarDistance = delta.GetLength();
+		if (planarDistance <= 0.001f)
+		{
+			StopMovement(context);
+			return true;
+		}
+
+		movement.facing = ComputeFacingTo(currentPosition, targetPosition, movement.facing);
+
+		if (!m_state.isMoving)
+		{
+			movement.movementFlags |= movement_flags::Forward;
+			movement.timestamp = input.now;
+			context.SendMovementUpdate(game::client_realm_packet::MoveStartForward, movement);
+			m_state.isMoving = true;
+			m_lastHeartbeat = input.now;
+			m_lastSimulationTime = input.now;
+			return false;
+		}
+
+		const GameTime elapsedMs = input.now >= m_lastSimulationTime ? input.now - m_lastSimulationTime : 0;
+		const float elapsedSeconds = static_cast<float>(elapsedMs) / 1000.0f;
+		if (elapsedMs > 0 && movement.IsChangingPosition())
+		{
+			const Vector3 direction = delta / planarDistance;
+			const float stepDistance = std::min(m_moveSpeed * elapsedSeconds, planarDistance);
+			movement.position = currentPosition + (direction * stepDistance);
+			movement.timestamp = input.now;
+			context.UpdateMovementInfo(movement);
+			m_lastSimulationTime = input.now;
+		}
+
+		if (input.now >= m_lastHeartbeat && input.now - m_lastHeartbeat >= kHeartbeatIntervalMs)
+		{
+			movement.timestamp = input.now;
+			context.SendMovementUpdate(game::client_realm_packet::MoveHeartBeat, movement);
+			m_lastHeartbeat = input.now;
+		}
+
+		return false;
 	}
 
 	std::string CompanionFollowAction::BuildDecisionDetails(BotContext& context, const CompanionFollowControllerInput& input, const CompanionFollowControllerOutput& output) const
@@ -1447,11 +1557,11 @@ namespace mmo
 			: FirstIssueOrFallback(m_clericCapabilities, "capabilities_unresolved");
 	}
 
-	void CompanionFollowAction::ExecuteClericRuntime(BotContext& context, const CompanionFollowControllerInput& input, const CompanionFollowControllerOutput& output)
+	bool CompanionFollowAction::ExecuteClericRuntime(BotContext& context, const CompanionFollowControllerInput& input, const CompanionFollowControllerOutput& output)
 	{
 		if (context.GetConfig().characterClass != kPriestClassId)
 		{
-			return;
+			return false;
 		}
 
 		if (IsRuntimeHardBlocked(input.preconditionFailure))
@@ -1461,7 +1571,7 @@ namespace mmo
 				<< " cleric_decision=skipped"
 				<< " cleric_reason=follow_runtime_blocked";
 			LogClericFailureOnce("follow_runtime_blocked", details.str());
-			return;
+			return false;
 		}
 
 		RefreshClericCapabilities(context);
@@ -1472,7 +1582,7 @@ namespace mmo
 				<< " cleric_decision=hold"
 				<< " capability_issue=" << m_clericCapabilityIssue;
 			LogClericFailureOnce("capabilities_unresolved", details.str());
-			return;
+			return false;
 		}
 
 		const BotUnit* self = context.GetSelf();
@@ -1483,7 +1593,7 @@ namespace mmo
 				<< " cleric_decision=hold"
 				<< " capability_issue=self_unavailable";
 			LogClericFailureOnce("self_unavailable", details.str());
-			return;
+			return false;
 		}
 
 		const BotUnit::CastState lastCastState = context.GetLastCastState();
@@ -1495,7 +1605,7 @@ namespace mmo
 				<< " runtime_issue=cast_in_flight"
 				<< " spell_id=" << lastCastState.spellId;
 			LogClericFailureOnce("cast_in_flight", details.str());
-			return;
+			return false;
 		}
 
 		if (lastCastState.status == BotUnit::CastState::Status::Failed
@@ -1510,7 +1620,7 @@ namespace mmo
 				<< " spell_id=" << lastCastState.spellId
 				<< " failure_code=" << static_cast<uint32>(lastCastState.failureReason);
 			LogClericFailureOnce("cast_failure_backoff", details.str());
-			return;
+			return false;
 		}
 
 		const std::vector<uint32> knownSpellIds = context.GetKnownSpellIds();
@@ -1527,7 +1637,7 @@ namespace mmo
 				<< " cleric_decision=hold"
 				<< " capability_issue=known_spells_incomplete";
 			LogClericFailureOnce("capabilities_unresolved", details.str());
-			return;
+			return false;
 		}
 
 		const ClericHostileTargetCandidate hostileTarget = SelectClericHostileTarget(context, output);
@@ -1552,6 +1662,7 @@ namespace mmo
 			&& !StartsWith(lastSpellIssue, "unlearned_spell_");
 		clericInput.cooldownsReady = !StartsWith(lastSpellIssue, "spell_cooldown_");
 		clericInput.powerReady = context.GetSelfPowerType() == knownCapabilities.powerType && context.GetSelfMaxPower() > 0;
+		clericInput.inDungeon = IsDungeonInstance(context);
 		clericInput.hasSelf = true;
 		clericInput.self.guid = self->GetGuid();
 		clericInput.self.role = BotCompanionRole::Healer;
@@ -1648,6 +1759,7 @@ namespace mmo
 			<< " mana=" << clericInput.mana
 			<< " max_mana=" << clericInput.maxMana
 			<< " party_members=" << clericInput.partyMembers.size()
+			<< " in_dungeon=" << (clericInput.inDungeon ? 1 : 0)
 			<< " cooldown_blocked=" << JoinSpellIds(clericInput.cooldownBlockedSpellIds);
 		if (!lastSpellIssue.empty())
 		{
@@ -1662,14 +1774,24 @@ namespace mmo
 			details << " support_buff_state=unavailable";
 		}
 
+		// The cleric only auto-attacks while deliberately meleeing. Any other decision means it
+		// should stop swinging and return to casting or positioning.
+		if (decision.type != BotClericDecisionType::MeleeAttack && context.IsAutoAttacking())
+		{
+			context.StopAutoAttack();
+			m_pendingAutoAttackTargetGuid = 0;
+			m_pendingAutoAttackRequestedAt = 0;
+		}
+
 		switch (decision.type)
 		{
 		case BotClericDecisionType::Hold:
 			LogClericFailureOnce(decision.reason, details.str());
-			return;
+			return false;
 
 		case BotClericDecisionType::CastSpell:
 		{
+			bool drivesMovement = false;
 			SpellTargetMap targetMap;
 			if (decision.castOnSelf)
 			{
@@ -1683,7 +1805,10 @@ namespace mmo
 				{
 					if (target->IsHostileTo(*self) || target->IsAttackableBy(*self))
 					{
+						// Stop and face the hostile target so the cast lands, and keep the
+						// follow steering from dragging us off the cast this tick.
 						PrepareUnitAction(context, decision.castTargetGuid);
+						drivesMovement = true;
 					}
 				}
 			}
@@ -1697,7 +1822,7 @@ namespace mmo
 					<< " cast_on_self=" << (decision.castOnSelf ? 1 : 0)
 					<< " runtime_issue=" << context.GetLastSpellStateIssue();
 				LogClericFailureOnce("cast_rejected", rejectedDetails.str());
-				return;
+				return drivesMovement;
 			}
 
 			std::ostringstream castDetails;
@@ -1706,9 +1831,45 @@ namespace mmo
 				<< " cast_target=" << decision.castTargetGuid
 				<< " cast_on_self=" << (decision.castOnSelf ? 1 : 0);
 			LogClericActionOnce(ToString(decision.type), decision.reason, castDetails.str());
-			return;
+			return drivesMovement;
+		}
+
+		case BotClericDecisionType::Approach:
+		{
+			const bool inRange = DriveCombatApproach(context, input, decision.moveTargetGuid, decision.moveDesiredRange);
+			std::ostringstream approachDetails;
+			approachDetails << details.str()
+				<< " move_target=" << decision.moveTargetGuid
+				<< " desired_range=" << decision.moveDesiredRange
+				<< " in_range=" << (inRange ? 1 : 0);
+			LogClericActionOnce(ToString(decision.type), decision.reason, approachDetails.str());
+			return true;
+		}
+
+		case BotClericDecisionType::MeleeAttack:
+		{
+			const bool inMeleeRange = DriveCombatApproach(context, input, decision.moveTargetGuid, decision.moveDesiredRange);
+			if (inMeleeRange)
+			{
+				context.FaceUnit(decision.moveTargetGuid);
+				if (!context.IsAutoAttacking() || context.GetAutoAttackTarget() != decision.moveTargetGuid)
+				{
+					context.StartAutoAttack(decision.moveTargetGuid);
+					m_pendingAutoAttackTargetGuid = decision.moveTargetGuid;
+					m_pendingAutoAttackRequestedAt = input.now;
+				}
+			}
+			std::ostringstream meleeDetails;
+			meleeDetails << details.str()
+				<< " move_target=" << decision.moveTargetGuid
+				<< " desired_range=" << decision.moveDesiredRange
+				<< " in_melee=" << (inMeleeRange ? 1 : 0);
+			LogClericActionOnce(ToString(decision.type), decision.reason, meleeDetails.str());
+			return true;
 		}
 		}
+
+		return false;
 	}
 
 	void CompanionFollowAction::ObserveClericCastFailure(BotContext& context, const CompanionFollowControllerOutput& output)

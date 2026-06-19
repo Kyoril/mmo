@@ -138,7 +138,13 @@ namespace mmo
 		void LogWarriorFailureOnce(std::string_view reason, const std::string& details);
 
 		void RefreshClericCapabilities(BotContext& context);
-		void ExecuteClericRuntime(BotContext& context, const CompanionFollowControllerInput& input, const CompanionFollowControllerOutput& output);
+		/// Executes the cleric combat runtime. Returns true when the runtime is actively driving
+		/// movement this tick (approaching or meleeing a target, or holding still to land a
+		/// hostile cast), in which case the caller must not run the follow-leader movement.
+		bool ExecuteClericRuntime(BotContext& context, const CompanionFollowControllerInput& input, const CompanionFollowControllerOutput& output);
+		/// Drives movement directly toward a unit until within the desired range, overriding the
+		/// follow-leader steering. Returns true once the bot is within the desired range.
+		bool DriveCombatApproach(BotContext& context, const CompanionFollowControllerInput& input, uint64 targetGuid, float desiredRange);
 		void ObserveClericCastFailure(BotContext& context, const CompanionFollowControllerOutput& output);
 		void LogClericActionOnce(std::string_view action, std::string_view reason, const std::string& details);
 		void LogClericFailureOnce(std::string_view reason, const std::string& details);

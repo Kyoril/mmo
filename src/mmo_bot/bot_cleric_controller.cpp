@@ -16,8 +16,9 @@ namespace
 	constexpr float kTankTriageThreshold = 0.70f;
 	constexpr float kAllyTriageThreshold = 0.55f;
 	constexpr float kSafePartyHealthThreshold = 0.85f;
-	constexpr float kSafeSelfHealthThreshold = 0.90f;
-	constexpr float kManaConservePercent = 0.20f;
+	constexpr float kMeleeEngageRange = 5.0f;
+	constexpr float kDungeonManaReservePercent = 0.60f;
+	constexpr uint32 kOpenWorldHealReserveCount = 2u;
 
 	[[nodiscard]] bool IsHealthPercentValid(const float value) noexcept
 	{
@@ -64,15 +65,6 @@ namespace
 		return spell->IsInRange(unit.distanceToSelf);
 	}
 
-	[[nodiscard]] bool CanCastAtHostile(const BotClericDecisionInput& input, const std::optional<BotClericResolvedSpell>& spell)
-	{
-		return spell.has_value()
-			&& HasValidHostileTarget(input)
-			&& !CooldownBlocked(input, spell)
-			&& CanAfford(input, spell)
-			&& spell->IsInRange(input.hostileTargetDistance);
-	}
-
 	[[nodiscard]] BotClericDecision Hold(std::string reason)
 	{
 		BotClericDecision decision;
@@ -109,6 +101,55 @@ namespace
 		decision.spellId = spell.spellId;
 		decision.castTargetGuid = input.hostileTargetGuid;
 		return decision;
+	}
+
+	[[nodiscard]] BotClericDecision Approach(const uint64 targetGuid, const float desiredRange, std::string reason)
+	{
+		BotClericDecision decision;
+		decision.type = BotClericDecisionType::Approach;
+		decision.reason = std::move(reason);
+		decision.moveTargetGuid = targetGuid;
+		decision.moveDesiredRange = desiredRange;
+		return decision;
+	}
+
+	[[nodiscard]] BotClericDecision MeleeAttack(const uint64 targetGuid, std::string reason)
+	{
+		BotClericDecision decision;
+		decision.type = BotClericDecisionType::MeleeAttack;
+		decision.reason = std::move(reason);
+		decision.moveTargetGuid = targetGuid;
+		decision.moveDesiredRange = kMeleeEngageRange;
+		return decision;
+	}
+
+	/// Computes the distance at which an approach toward a spell target should stop. We aim a
+	/// little inside the spell's maximum range so minor position drift does not immediately
+	/// push the target back out of range.
+	[[nodiscard]] float ApproachRangeFor(const std::optional<BotClericResolvedSpell>& spell)
+	{
+		if (spell.has_value() && spell->hasExplicitRange && spell->maxRange > 1.0f)
+		{
+			return spell->maxRange - 1.0f;
+		}
+		return kMeleeEngageRange;
+	}
+
+	/// Computes how much mana the cleric should keep in reserve for healing before it spends
+	/// any on offensive casts. Dungeons keep a large heal-focused reserve; in the open world we
+	/// only hold back enough for a couple of efficient heals and spend the surplus on damage.
+	[[nodiscard]] uint32 HealingReserveMana(const BotClericDecisionInput& input, const BotClericCapabilities& capabilities)
+	{
+		if (input.inDungeon)
+		{
+			return static_cast<uint32>(static_cast<float>(input.maxMana) * kDungeonManaReservePercent);
+		}
+
+		const uint32 healCost = capabilities.efficientHeal.has_value()
+			? capabilities.efficientHeal->powerCost
+			: (capabilities.emergencyHeal.has_value() ? capabilities.emergencyHeal->powerCost : 0u);
+		const uint32 reserve = healCost * kOpenWorldHealReserveCount;
+		return std::min(reserve, input.maxMana);
 	}
 
 	[[nodiscard]] std::vector<const BotClericUnitSnapshot*> CollectCandidateAllies(const BotClericDecisionInput& input, bool* foundOutOfAwarenessInjury = nullptr)
@@ -184,18 +225,6 @@ namespace
 		return false;
 	}
 
-	[[nodiscard]] uint32 ReserveManaCost(const BotClericCapabilities& capabilities) noexcept
-	{
-		if (capabilities.efficientHeal.has_value())
-		{
-			return capabilities.efficientHeal->powerCost;
-		}
-		if (capabilities.emergencyHeal.has_value())
-		{
-			return capabilities.emergencyHeal->powerCost;
-		}
-		return 0;
-	}
 }
 
 namespace mmo
@@ -282,7 +311,7 @@ namespace mmo
 			{
 				return Hold("ally_emergency_oom");
 			}
-			return Hold("ally_emergency_out_of_range");
+			return Approach(ally->guid, ApproachRangeFor(capabilities.emergencyHeal), "approach_ally_emergency");
 		}
 
 		for (const BotClericUnitSnapshot* ally : allies)
@@ -301,7 +330,7 @@ namespace mmo
 				{
 					return Hold("tank_triage_oom");
 				}
-				return Hold("tank_triage_out_of_range");
+				return Approach(ally->guid, ApproachRangeFor(capabilities.efficientHeal), "approach_tank_triage");
 			}
 		}
 
@@ -321,7 +350,7 @@ namespace mmo
 				{
 					return Hold("ally_triage_oom");
 				}
-				return Hold("ally_triage_out_of_range");
+				return Approach(ally->guid, ApproachRangeFor(capabilities.efficientHeal), "approach_ally_triage");
 			}
 		}
 
@@ -371,48 +400,38 @@ namespace mmo
 			break;
 		}
 
-		const float manaPercent = input.maxMana > 0 ? static_cast<float>(input.mana) / static_cast<float>(input.maxMana) : 0.0f;
-		if (manaPercent < kManaConservePercent || input.mana < ReserveManaCost(capabilities))
-		{
-			return Hold("conserve_mana");
-		}
-
-		const bool partyStable = std::all_of(allies.begin(), allies.end(), [](const BotClericUnitSnapshot* ally)
-		{
-			return ally->healthPercent >= kSafePartyHealthThreshold;
-		});
-		const bool stableForFiller = input.self.healthPercent >= kSafeSelfHealthThreshold && partyStable;
-		if (!stableForFiller)
-		{
-			if (foundOutOfAwarenessInjury)
-			{
-				return Hold("injured_ally_out_of_awareness");
-			}
-			return Hold("conservative_hold");
-		}
-
-		if (foundOutOfAwarenessInjury)
-		{
-			return Hold("injured_ally_out_of_awareness");
-		}
-
+		// No urgent healing or buff maintenance is required. Decide between offensive casting,
+		// a melee fallback, or conserving mana for healing - always keeping enough mana in
+		// reserve to react to incoming damage.
 		if (!HasValidHostileTarget(input))
 		{
 			return Hold("no_hostile_target");
 		}
-		if (CanCastAtHostile(input, capabilities.damageFiller))
+
+		const uint32 healingReserve = HealingReserveMana(input, capabilities);
+		const std::optional<BotClericResolvedSpell>& filler = capabilities.damageFiller;
+		const bool fillerReady = filler.has_value() && !CooldownBlocked(input, filler);
+		const bool fillerAffordableAboveReserve = filler.has_value()
+			&& input.mana >= filler->powerCost + healingReserve;
+
+		if (fillerReady && fillerAffordableAboveReserve)
 		{
-			return CastAtHostile(input, *capabilities.damageFiller, "safe_damage_filler");
+			if (filler->IsInRange(input.hostileTargetDistance))
+			{
+				return CastAtHostile(input, *filler, "offensive_filler");
+			}
+			return Approach(input.hostileTargetGuid, ApproachRangeFor(filler), "approach_filler_range");
 		}
-		if (CooldownBlocked(input, capabilities.damageFiller))
+
+		// Not enough mana above the healing reserve (or the filler is on cooldown). Outside
+		// dungeons we melee so the cleric still contributes and regenerates mana; inside
+		// dungeons we conserve and stay back, ready to heal.
+		if (!input.inDungeon)
 		{
-			return Hold("damage_filler_cooldown");
+			return MeleeAttack(input.hostileTargetGuid, "melee_oom_fallback");
 		}
-		if (!CanAfford(input, capabilities.damageFiller))
-		{
-			return Hold("damage_filler_oom");
-		}
-		return Hold("damage_filler_out_of_range");
+
+		return Hold("conserve_mana");
 	}
 
 	const char* ToString(const BotClericDecisionType type) noexcept
@@ -421,6 +440,10 @@ namespace mmo
 		{
 		case BotClericDecisionType::CastSpell:
 			return "cast_spell";
+		case BotClericDecisionType::Approach:
+			return "approach";
+		case BotClericDecisionType::MeleeAttack:
+			return "melee_attack";
 		case BotClericDecisionType::Hold:
 		default:
 			return "hold";
