@@ -609,6 +609,88 @@ namespace
 
 		return hostiles;
 	}
+
+	struct AutoAttackTargetCandidate final
+	{
+		const BotUnit* unit { nullptr };
+		const char* source { "none" };
+	};
+
+	// Selects a hostile target for classes that do not have a dedicated combat runtime.
+	// Priority order: keep the current auto-attack target, then assist the anchor/leader's
+	// target, then the bot's own selection, and finally any unit that is attacking us so the
+	// bot defends itself.
+	AutoAttackTargetCandidate SelectAutoAttackTarget(BotContext& context, const CompanionFollowControllerOutput& output)
+	{
+		const BotUnit* self = context.GetSelf();
+		if (!self)
+		{
+			return {};
+		}
+
+		auto isValidTarget = [&](const uint64 guid, const char* source) -> AutoAttackTargetCandidate
+		{
+			if (guid == 0)
+			{
+				return {};
+			}
+
+			const BotUnit* candidate = context.GetUnit(guid);
+			if (!candidate || !candidate->IsAlive())
+			{
+				return {};
+			}
+
+			if (!candidate->IsHostileTo(*self) && !candidate->IsAttackableBy(*self))
+			{
+				return {};
+			}
+
+			AutoAttackTargetCandidate result;
+			result.unit = candidate;
+			result.source = source;
+			return result;
+		};
+
+		if (context.IsAutoAttacking())
+		{
+			if (const AutoAttackTargetCandidate current = isValidTarget(context.GetAutoAttackTarget(), "auto_attack_target"); current.unit)
+			{
+				return current;
+			}
+		}
+
+		if (output.companion.hasAnchor)
+		{
+			if (const BotUnit* anchorUnit = context.GetUnit(output.companion.anchor.guid))
+			{
+				if (const AutoAttackTargetCandidate anchorTarget = isValidTarget(anchorUnit->GetTargetGuid(), "anchor_target"); anchorTarget.unit)
+				{
+					return anchorTarget;
+				}
+			}
+		}
+
+		if (const AutoAttackTargetCandidate selfTarget = isValidTarget(self->GetTargetGuid(), "self_target"); selfTarget.unit)
+		{
+			return selfTarget;
+		}
+
+		for (const BotUnit* unit : context.GetUnitsTargetingSelf())
+		{
+			if (!unit)
+			{
+				continue;
+			}
+
+			if (const AutoAttackTargetCandidate targetingSelf = isValidTarget(unit->GetGuid(), "targeting_self"); targetingSelf.unit)
+			{
+				return targetingSelf;
+			}
+		}
+
+		return {};
+	}
 }
 
 namespace mmo
@@ -639,6 +721,7 @@ namespace mmo
 		ExecuteWarriorRuntime(context, input, output);
 		ExecuteClericRuntime(context, input, output);
 		ExecuteMageRuntime(context, input, output);
+		ExecuteAutoAttackRuntime(context, input, output);
 		UpdatePreviousCompanionState(output);
 		return ActionResult::InProgress;
 	}
@@ -659,6 +742,7 @@ namespace mmo
 		m_lastClericFailureLogKey.clear();
 		m_lastMageActionLogKey.clear();
 		m_lastMageFailureLogKey.clear();
+		m_lastAutoAttackLogKey.clear();
 		m_pendingAutoAttackTargetGuid = 0;
 		m_pendingAutoAttackRequestedAt = 0;
 		m_lastObservedWarriorCastFailureAt = 0;
@@ -1973,5 +2057,101 @@ namespace mmo
 
 		m_lastMageFailureLogKey = key;
 		WLOG("mage failure=" << reason << ' ' << details);
+	}
+
+	void CompanionFollowAction::ExecuteAutoAttackRuntime(BotContext& context, const CompanionFollowControllerInput& input, const CompanionFollowControllerOutput& output)
+	{
+		const uint8 characterClass = context.GetConfig().characterClass;
+
+		// Classes that have a dedicated combat runtime drive their own attacks and casts.
+		// The generic auto-attack runtime only fills the gap for every other class so they
+		// at least assist the leader's target and defend themselves when attacked.
+		if (characterClass == kWarriorClassId || characterClass == kPriestClassId || characterClass == kMageClassId)
+		{
+			return;
+		}
+
+		if (IsRuntimeHardBlocked(input.preconditionFailure))
+		{
+			return;
+		}
+
+		const BotUnit* self = context.GetSelf();
+		if (!self || !self->IsAlive())
+		{
+			// We cannot fight without a living body; abandon any stale attack intent.
+			if (context.IsAutoAttacking())
+			{
+				context.StopAutoAttack();
+			}
+			m_pendingAutoAttackTargetGuid = 0;
+			m_pendingAutoAttackRequestedAt = 0;
+			return;
+		}
+
+		// Clear the pending marker once the server confirms the requested target.
+		if (m_pendingAutoAttackTargetGuid != 0
+			&& context.IsAutoAttacking()
+			&& context.GetAutoAttackTarget() == m_pendingAutoAttackTargetGuid)
+		{
+			m_pendingAutoAttackTargetGuid = 0;
+			m_pendingAutoAttackRequestedAt = 0;
+		}
+
+		const AutoAttackTargetCandidate target = SelectAutoAttackTarget(context, output);
+		if (!target.unit)
+		{
+			// Nothing worth attacking; stop swinging so we do not keep hitting a dead/gone unit.
+			if (context.IsAutoAttacking())
+			{
+				context.StopAutoAttack();
+				LogAutoAttackOnce("stop_no_target", BuildDecisionDetails(context, input, output));
+			}
+			m_pendingAutoAttackTargetGuid = 0;
+			m_pendingAutoAttackRequestedAt = 0;
+			return;
+		}
+
+		const uint64 targetGuid = target.unit->GetGuid();
+
+		// Already swinging at the right target - let the server-side swing timer run.
+		if (context.IsAutoAttacking() && context.GetAutoAttackTarget() == targetGuid)
+		{
+			return;
+		}
+
+		// Throttle repeated start requests for the same target while we wait for confirmation.
+		if (m_pendingAutoAttackTargetGuid == targetGuid
+			&& input.now >= m_pendingAutoAttackRequestedAt
+			&& input.now - m_pendingAutoAttackRequestedAt < kAutoAttackRetryDelayMs)
+		{
+			return;
+		}
+
+		context.FaceUnit(targetGuid);
+		context.StartAutoAttack(targetGuid);
+		m_pendingAutoAttackTargetGuid = targetGuid;
+		m_pendingAutoAttackRequestedAt = input.now;
+
+		std::ostringstream details;
+		details << BuildDecisionDetails(context, input, output)
+			<< " auto_attack_target=" << targetGuid
+			<< " target_source=" << target.source
+			<< " target_distance=" << context.GetDistanceToUnit(targetGuid);
+		LogAutoAttackOnce("start_auto_attack", details.str());
+	}
+
+	void CompanionFollowAction::LogAutoAttackOnce(std::string_view action, const std::string& details)
+	{
+		std::ostringstream keyBuilder;
+		keyBuilder << action << '|' << details;
+		const std::string key = keyBuilder.str();
+		if (m_lastAutoAttackLogKey == key)
+		{
+			return;
+		}
+
+		m_lastAutoAttackLogKey = key;
+		ILOG("companion_combat action=" << action << ' ' << details);
 	}
 }

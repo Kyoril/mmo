@@ -149,6 +149,9 @@ namespace mmo
 		void LogMageActionOnce(std::string_view action, std::string_view reason, const std::string& details);
 		void LogMageFailureOnce(std::string_view reason, const std::string& details);
 
+		void ExecuteAutoAttackRuntime(BotContext& context, const CompanionFollowControllerInput& input, const CompanionFollowControllerOutput& output);
+		void LogAutoAttackOnce(std::string_view action, const std::string& details);
+
 	private:
 		static constexpr GameTime kHeartbeatIntervalMs { 500 };
 
@@ -167,6 +170,7 @@ namespace mmo
 		std::string m_lastClericFailureLogKey;
 		std::string m_lastMageActionLogKey;
 		std::string m_lastMageFailureLogKey;
+		std::string m_lastAutoAttackLogKey;
 		BotWarriorController m_warriorController;
 		BotWarriorCapabilities m_warriorCapabilities;
 		std::string m_warriorCapabilityIssue;
