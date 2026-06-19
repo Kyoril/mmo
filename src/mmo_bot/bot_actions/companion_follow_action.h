@@ -124,6 +124,7 @@ namespace mmo
 		void RequestPath(BotContext& context, const CompanionFollowControllerInput& input, const CompanionFollowControllerOutput& output);
 		void AdvanceAlongPath(BotContext& context, const CompanionFollowControllerInput& input, const CompanionFollowControllerOutput& output);
 		void StopMovement(BotContext& context);
+		void PrepareUnitAction(BotContext& context, uint64 targetGuid);
 
 		[[nodiscard]] std::string BuildDecisionDetails(BotContext& context, const CompanionFollowControllerInput& input, const CompanionFollowControllerOutput& output) const;
 		void LogCompanionModeOnce(const CompanionFollowControllerOutput& output, const std::string& details);

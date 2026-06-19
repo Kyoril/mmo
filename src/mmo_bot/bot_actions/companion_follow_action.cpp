@@ -936,6 +936,17 @@ namespace mmo
 		m_lastSimulationTime = 0;
 	}
 
+	void CompanionFollowAction::PrepareUnitAction(BotContext& context, const uint64 targetGuid)
+	{
+		if (targetGuid == 0)
+		{
+			return;
+		}
+
+		StopMovement(context);
+		context.FaceUnit(targetGuid);
+	}
+
 	std::string CompanionFollowAction::BuildDecisionDetails(BotContext& context, const CompanionFollowControllerInput& input, const CompanionFollowControllerOutput& output) const
 	{
 		std::ostringstream details;
@@ -1208,6 +1219,7 @@ namespace mmo
 				return;
 			}
 
+			PrepareUnitAction(context, decision.autoAttackTargetGuid);
 			context.StartAutoAttack(decision.autoAttackTargetGuid);
 			m_pendingAutoAttackTargetGuid = decision.autoAttackTargetGuid;
 			m_pendingAutoAttackRequestedAt = input.now;
@@ -1225,6 +1237,7 @@ namespace mmo
 			{
 				targetMap.SetTargetMap(spell_cast_target_flags::Unit);
 				targetMap.SetUnitTarget(decision.castTargetGuid);
+				PrepareUnitAction(context, decision.castTargetGuid);
 			}
 
 			if (!context.CastSpell(decision.spellId, targetMap))
@@ -1244,6 +1257,15 @@ namespace mmo
 				<< " spell_id=" << decision.spellId
 				<< " cast_target=" << decision.castTargetGuid
 				<< " cast_on_self=" << (decision.castOnSelf ? 1 : 0);
+			if (decision.ensureAutoAttack && decision.autoAttackTargetGuid != 0
+				&& (!context.IsAutoAttacking() || context.GetAutoAttackTarget() != decision.autoAttackTargetGuid))
+			{
+				PrepareUnitAction(context, decision.autoAttackTargetGuid);
+				context.StartAutoAttack(decision.autoAttackTargetGuid);
+				m_pendingAutoAttackTargetGuid = decision.autoAttackTargetGuid;
+				m_pendingAutoAttackRequestedAt = input.now;
+				castDetails << " auto_attack_queued=1";
+			}
 			LogWarriorActionOnce(ToString(decision.type), decision.reason, castDetails.str());
 			return;
 		}
@@ -1573,6 +1595,13 @@ namespace mmo
 			{
 				targetMap.SetTargetMap(spell_cast_target_flags::Unit);
 				targetMap.SetUnitTarget(decision.castTargetGuid);
+				if (const BotUnit* target = context.GetUnit(decision.castTargetGuid))
+				{
+					if (target->IsHostileTo(*self) || target->IsAttackableBy(*self))
+					{
+						PrepareUnitAction(context, decision.castTargetGuid);
+					}
+				}
 			}
 
 			if (!context.CastSpell(decision.spellId, targetMap))
@@ -1856,6 +1885,7 @@ namespace mmo
 				}
 				targetMap.SetTargetMap(spell_cast_target_flags::Unit);
 				targetMap.SetUnitTarget(decision.castTargetGuid);
+				PrepareUnitAction(context, decision.castTargetGuid);
 			}
 
 			if (!context.CastSpell(decision.spellId, targetMap))

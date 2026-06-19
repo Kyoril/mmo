@@ -241,6 +241,13 @@ namespace mmo
 			{
 				REQUIRE(HandleRealmPacket(*connector, BuildSpellFailurePacket(kSelfGuid, spellId, result)) == PacketParseResult::Pass);
 			}
+
+			void MoveEnemy(const Vector3& position)
+			{
+				BotUnit* enemy = connector->GetObjectManager().GetUnitMutable(kEnemyGuid);
+				REQUIRE(enemy != nullptr);
+				enemy->SetMovementInfo(MakeMovementInfo(position));
+			}
 		};
 	}
 
@@ -269,10 +276,29 @@ namespace mmo
 		CHECK(logs.Contains("warrior failure=auto_attack_pending"));
 	}
 
+	TEST_CASE("warrior runtime faces the hostile before starting conservative auto attack", "[bot-warrior][runtime]")
+	{
+		WarriorRuntimeFixture fixture;
+		fixture.SeedCombatScene(3.0f, true, true, WarriorRuntimeFixture::kSelfGuid);
+		fixture.MoveEnemy(Vector3(0.0f, 0.0f, -3.0f));
+		fixture.context.UpdateMovementInfo(MakeMovementInfo(Vector3::Zero, 0.0f));
+
+		CompanionFollowAction action;
+		LogCapture logs;
+
+		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
+		INFO(logs.Dump());
+		CHECK(fixture.context.GetAutoAttackTarget() == WarriorRuntimeFixture::kEnemyGuid);
+		CHECK(fixture.context.GetMovementInfo().facing.GetValueRadians() == Approx(fixture.context.GetAngleTo(Vector3(0.0f, 0.0f, -3.0f)).GetValueRadians()).margin(0.001f));
+		CHECK(logs.Contains("warrior action=ensure_auto_attack"));
+	}
+
 	TEST_CASE("warrior runtime keeps contributing when map id is unresolved", "[bot-warrior][runtime]")
 	{
 		WarriorRuntimeFixture fixture;
 		fixture.SeedCombatScene(12.0f, false, true, WarriorRuntimeFixture::kLeaderGuid);
+		fixture.MoveEnemy(Vector3(0.0f, 0.0f, -12.0f));
+		fixture.context.UpdateMovementInfo(MakeMovementInfo(Vector3::Zero, 0.0f));
 		fixture.SeedKnownSpells({ fixture.capabilities.gapCloser->spellId });
 		fixture.context.SetCurrentMapId(0);
 
@@ -283,6 +309,7 @@ namespace mmo
 		INFO(logs.Dump());
 		CHECK(fixture.context.GetLastCastState().status == BotUnit::CastState::Status::Pending);
 		CHECK(fixture.context.GetLastCastState().spellId == fixture.capabilities.gapCloser->spellId);
+		CHECK(fixture.context.GetMovementInfo().facing.GetValueRadians() == Approx(fixture.context.GetAngleTo(Vector3(0.0f, 0.0f, -12.0f)).GetValueRadians()).margin(0.001f));
 		CHECK(logs.Contains("warrior action=cast_spell reason=charge_opener"));
 		CHECK_FALSE(logs.Contains("follow_reason=map_unresolved"));
 	}

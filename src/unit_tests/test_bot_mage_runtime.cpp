@@ -277,6 +277,13 @@ namespace mmo
 				}
 				SeedGroup({ { "mage", kSelfGuid }, { "leader", kLeaderGuid } }, kLeaderGuid);
 			}
+
+			void MoveEnemy(const Vector3& position)
+			{
+				BotUnit* enemy = connector->GetObjectManager().GetUnitMutable(kEnemyGuid);
+				REQUIRE(enemy != nullptr);
+				enemy->SetMovementInfo(MakeMovementInfo(position));
+			}
 		};
 	}
 
@@ -298,6 +305,25 @@ namespace mmo
 		CHECK(logs.Contains("spell_id=" + std::to_string(fixture.capabilities.primaryNuke->spellId)));
 		CHECK(logs.Contains("target_guid=" + std::to_string(MageRuntimeFixture::kEnemyGuid)));
 		CHECK(logs.Contains("target_source=anchor_target"));
+	}
+
+	TEST_CASE("mage runtime faces the hostile before sending a hostile spell cast", "[bot-mage][runtime]")
+	{
+		MageRuntimeFixture fixture;
+		fixture.SeedCombatScene(500, 100, 24.0f);
+		fixture.MoveEnemy(Vector3(0.0f, 0.0f, -24.0f));
+		fixture.context.UpdateMovementInfo(MakeMovementInfo(Vector3::Zero, 0.0f));
+		fixture.SeedKnownSpells(fixture.KnownSpellIdsForRuntime());
+
+		CompanionFollowAction action;
+		LogCapture logs;
+
+		REQUIRE(action.Execute(fixture.context) == ActionResult::InProgress);
+		INFO(logs.Dump());
+		CHECK(fixture.context.GetLastCastState().status == BotUnit::CastState::Status::Pending);
+		CHECK(fixture.context.GetLastCastState().spellId == fixture.capabilities.primaryNuke->spellId);
+		CHECK(fixture.context.GetMovementInfo().facing.GetValueRadians() == Approx(fixture.context.GetAngleTo(Vector3(0.0f, 0.0f, -24.0f)).GetValueRadians()).margin(0.001f));
+		CHECK(logs.Contains("mage action=cast_spell reason=primary_nuke"));
 	}
 
 	TEST_CASE("mage runtime keeps contributing when map id is unresolved", "[bot-mage][runtime]")
