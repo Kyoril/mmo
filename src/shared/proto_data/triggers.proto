@@ -28,6 +28,7 @@ enum TriggerFunction {
 	Mana = 3;
 	ManaPct = 4;
 	IsInCombat = 5;
+	EncounterState = 6;
 }
 
 enum TriggerConditionType {
@@ -57,6 +58,9 @@ message TriggerCondition {
 		TriggerFunction rightfunction = 10;
 		TriggerCondition rightcondition = 11;
 	}
+
+	repeated int64 leftfunctiondata = 12;
+	repeated int64 rightfunctiondata = 13;
 }
 
 message TriggerAction {
@@ -80,6 +84,7 @@ message TriggerEntry {
 	repeated TriggerAction actions = 5;
 	repeated TriggerEvent newevents = 6;
 	optional uint32 probability = 7 [default = 100];
+	optional TriggerCondition condition = 8;
 }
 
 message Triggers {

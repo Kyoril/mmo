@@ -14,6 +14,7 @@ message AreaTriggerEntry {
 	optional float box_z = 10;
 	optional float box_o = 11;
 	optional uint32 on_enter_trigger = 12;
+	optional uint32 on_exit_trigger = 13;
 }
 
 message AreaTriggers {

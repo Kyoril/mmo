@@ -53,6 +53,7 @@ message UnitSpawnEntry {
 	repeated UnitSpawnLocation locations = 16;
 
 	optional float health_percent = 17 [default = 1.0];
+	optional uint32 trigger_id = 18 [default = 0];
 }
 
 message ObjectSpawnEntry {
@@ -73,6 +74,11 @@ message ObjectSpawnEntry {
 	optional uint32 trigger_id = 12 [default = 0];    // 0 = use base ObjectEntry.triggers
 }
 
+message EncounterEntry {
+	required uint32 id   = 1;
+	required string name = 2;
+}
+
 message MapEntry {
 	required uint32 id = 1;
 	required string name = 2;
@@ -87,6 +93,8 @@ message MapEntry {
 	optional MapInstanceType instancetype = 4 [default = GLOBAL];
 	repeated UnitSpawnEntry unitspawns = 5;
 	repeated ObjectSpawnEntry objectspawns = 6;
+	repeated EncounterEntry encounters        = 7;
+	repeated uint32         instance_triggers = 8;
 }
 
 message Maps {

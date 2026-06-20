@@ -1115,6 +1115,16 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::SendAreaTriggerLeft(const uint32 triggerId)
+	{
+		sendSinglePacket([triggerId](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::AreaTriggerLeft);
+				packet << io::write<uint32>(triggerId);
+				packet.Finish();
+			});
+	}
+
 	void RealmConnector::InitiateTrade(const uint64 targetGuid)
 	{
 		sendSinglePacket([targetGuid](game::OutgoingPacket& packet)

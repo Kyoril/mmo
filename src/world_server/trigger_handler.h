@@ -1,6 +1,7 @@
 #pragma once
 
 #include "game_server/trigger_handler.h"
+#include "shared/proto_data/triggers.pb.h"
 
 #include <list>
 #include <memory>
@@ -181,6 +182,12 @@ namespace mmo
 		/// @param action The trigger action to handle.
 		/// @param context The context in which the action is executed.
 		void HandleTeleport(const proto::TriggerAction& action, TriggerContext& context);
+
+		void HandleSetEncounterState(const proto::TriggerAction& action, TriggerContext& context);
+
+		bool EvaluateCondition(const proto::TriggerCondition& condition, TriggerContext& context);
+
+		double EvaluateTriggerFunction(proto::TriggerFunction func, const google::protobuf::RepeatedField<google::protobuf::int64>& funcData, TriggerContext& context);
 
 	private:
 		/// Checks if the in-combat flag is set for a trigger entry.

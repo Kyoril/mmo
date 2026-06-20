@@ -74,7 +74,10 @@ namespace mmo
 		"Unit - On Emote",
 		"Unit - On Spell Cast",
 		"Object - On Gossip Menu Action",
-		"Object - On Quest Accepted"
+		"Object - On Quest Accepted",
+		"Instance - On All Players Dead",
+		"Instance - On Player Enter Instance",
+		"Instance - On Player Leave Instance"
 	};
 
 	static_assert(std::size(s_eventTypeNames) == trigger_event::Count_, "s_eventTypeNames size mismatch");
@@ -167,6 +170,15 @@ namespace mmo
 					case trigger_event::OnQuestAccept:
 						ImGui::Text("Player accepted quest %d", GetTriggerEventData(event, 0));
 						break;
+					case trigger_event::OnAllPlayersDead:
+						ImGui::Text("All players in instance are dead (wipe)");
+						break;
+					case trigger_event::OnPlayerEnterInstance:
+						ImGui::Text("A player entered the instance");
+						break;
+					case trigger_event::OnPlayerLeaveInstance:
+						ImGui::Text("A player left the instance");
+						break;
 					}
 				}
 
@@ -233,6 +245,13 @@ namespace mmo
 				}
 				ImGui::SameLine();
 				ImGui::Text("Quest ID");
+				break;
+			}
+			case trigger_event::OnAllPlayersDead:
+			case trigger_event::OnPlayerEnterInstance:
+			case trigger_event::OnPlayerLeaveInstance:
+			{
+				ImGui::TextDisabled("No additional parameters required for this event type.");
 				break;
 			}
 			case trigger_event::OnGossipAction:
@@ -330,7 +349,8 @@ namespace mmo
 				"SetRespawnState", "CastSpell", "Delay", "MoveTo", "SetCombatMovement",
 				"StopAutoAttack", "CancelCast", "SetStandState", "SetVirtualEquipmentSlot",
 				"SetPhase", "SetSpellCooldown", "QuestKillCredit", "QuestEventOrExploration",
-				"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player", "Emote"
+				"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player", "Emote",
+				"SetEncounterState"
 			};
 
 			// Select the trigger action type.
@@ -566,7 +586,7 @@ namespace mmo
 			}
 			case trigger_actions::MoveTo:
 			{
-				// Data: <X>, <Y>, <Z>
+				// Data: <X>, <Y>, <Z>, [<WAIT:0/1>]
 				float pos[3] = { 0.0f, 0.0f, 0.0f };
 				if (action.data_size() >= 3)
 				{
@@ -585,6 +605,16 @@ namespace mmo
 				}
 				ImGui::SameLine();
 				ImGui::Text("Position (X, Y, Z)");
+
+				bool waitFlag = (action.data_size() > 3) ? (action.data(3) != 0) : false;
+				if (ImGui::Checkbox("Wait for Arrival##MoveToWait", &waitFlag))
+				{
+					while (action.data_size() < 4)
+						action.add_data(0);
+					action.set_data(3, waitFlag ? 1 : 0);
+				}
+				ImGui::SameLine();
+				DrawHelpMarker("When enabled, the following actions are paused until this unit reaches the target position");
 				break;
 			}
 			case trigger_actions::Teleport:
@@ -892,6 +922,46 @@ namespace mmo
 				ImGui::Text("Text");
 				break;
 			}
+			case trigger_actions::SetEncounterState:
+			{
+				int slotId = (action.data_size() > 0) ? action.data(0) : 0;
+				ImGui::SetNextItemWidth(150);
+				if (ImGui::InputInt("##EncounterSlotId", &slotId))
+				{
+					if (action.data_size() > 0)
+						action.set_data(0, slotId);
+					else
+						action.add_data(slotId);
+				}
+				ImGui::SameLine();
+				ImGui::Text("Encounter Slot ID");
+
+				static const char* s_encounterStateNames[] = {
+					"Not Started (0)",
+					"In Progress (1)",
+					"Done (2)",
+					"Fail (3)"
+				};
+
+				int stateVal = (action.data_size() > 1) ? action.data(1) : 0;
+				if (stateVal < 0) stateVal = 0;
+				if (stateVal > 3) stateVal = 3;
+				ImGui::SetNextItemWidth(200);
+				if (ImGui::Combo("##EncounterState", &stateVal, s_encounterStateNames, 4))
+				{
+					if (action.data_size() > 1)
+						action.set_data(1, stateVal);
+					else
+					{
+						if (action.data_size() == 0)
+							action.add_data(0);
+						action.add_data(stateVal);
+					}
+				}
+				ImGui::SameLine();
+				ImGui::Text("New State");
+				break;
+			}
 			default:
 			{
 				ImGui::TextDisabled("Unknown action type.");
@@ -1064,6 +1134,186 @@ namespace mmo
 			CHECKBOX_FLAG_PROP(flags, "Only One Instance", trigger_flags::OnlyOneInstance);
 			ImGui::SameLine();
 			DrawHelpMarker("Only one instance of this trigger can run simultaneously");
+
+			ImGui::PopStyleVar(2);
+			ImGui::Unindent();
+		}
+
+		if (ImGui::CollapsingHeader("Condition (Optional Gate)"))
+		{
+			ImGui::Indent();
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+
+			DrawSectionHeader("Execution Condition");
+			ImGui::TextWrapped("If set, the trigger only executes when this condition passes. Leave type as 'None' to run unconditionally.");
+
+			ImGui::Spacing();
+
+			bool hasCondition = currentEntry.has_condition();
+			if (ImGui::Checkbox("Enable Condition##CondGate", &hasCondition))
+			{
+				if (hasCondition)
+				{
+					auto* cond = currentEntry.mutable_condition();
+					cond->set_operator_(proto::Equal);
+				}
+				else
+				{
+					currentEntry.clear_condition();
+				}
+			}
+
+			if (hasCondition)
+			{
+				auto* cond = currentEntry.mutable_condition();
+
+				ImGui::Spacing();
+				ImGui::Separator();
+				ImGui::Spacing();
+
+				static const char* s_operators[] = { "==", "!=", ">", ">=", "<", "<=" };
+				int opVal = cond->operator_();
+				ImGui::SetNextItemWidth(80);
+				if (ImGui::Combo("##CondOp", &opVal, s_operators, 6))
+				{
+					cond->set_operator_(static_cast<proto::TriggerComparisonOperator>(opVal));
+				}
+				ImGui::SameLine();
+				ImGui::Text("Operator");
+
+				ImGui::Spacing();
+
+				ImGui::Text("Left Value:");
+
+				static const char* s_condValueTypes[] = { "Integer", "Float", "Function" };
+
+				int leftType = 0;
+				if (cond->has_leftfloat())    leftType = 1;
+				if (cond->has_leftfunction()) leftType = 2;
+
+				ImGui::SetNextItemWidth(130);
+				if (ImGui::Combo("##LeftType", &leftType, s_condValueTypes, 3))
+				{
+					cond->clear_leftlong();
+					cond->clear_leftfloat();
+					cond->clear_leftfunction();
+					if (leftType == 0)      cond->set_leftlong(0);
+					else if (leftType == 1) cond->set_leftfloat(0.0f);
+					else if (leftType == 2) cond->set_leftfunction(proto::Phase);
+				}
+
+				ImGui::SameLine();
+				if (leftType == 0)
+				{
+					int64_t v = cond->has_leftlong() ? cond->leftlong() : 0;
+					ImGui::SetNextItemWidth(120);
+					if (ImGui::InputScalar("##LeftInt", ImGuiDataType_S64, &v))
+					{
+						cond->set_leftlong(v);
+					}
+				}
+				else if (leftType == 1)
+				{
+					float v = cond->has_leftfloat() ? cond->leftfloat() : 0.0f;
+					ImGui::SetNextItemWidth(120);
+					if (ImGui::InputFloat("##LeftFloat", &v))
+					{
+						cond->set_leftfloat(v);
+					}
+				}
+				else if (leftType == 2)
+				{
+					static const char* s_funcNames[] = {
+						"Phase", "Health", "HealthPct", "Mana", "ManaPct", "IsInCombat", "EncounterState"
+					};
+					int funcVal = cond->has_leftfunction() ? cond->leftfunction() : 0;
+					ImGui::SetNextItemWidth(160);
+					if (ImGui::Combo("##LeftFunc", &funcVal, s_funcNames, 7))
+					{
+						cond->set_leftfunction(static_cast<proto::TriggerFunction>(funcVal));
+					}
+
+					if (funcVal == proto::EncounterState)
+					{
+						ImGui::SameLine();
+						int64_t slotId = cond->leftfunctiondata_size() > 0 ? cond->leftfunctiondata(0) : 0;
+						ImGui::SetNextItemWidth(80);
+						if (ImGui::InputScalar("Slot##LeftSlot", ImGuiDataType_S64, &slotId))
+						{
+							if (cond->leftfunctiondata_size() > 0)
+								cond->set_leftfunctiondata(0, slotId);
+							else
+								cond->add_leftfunctiondata(slotId);
+						}
+					}
+				}
+
+				ImGui::Spacing();
+
+				ImGui::Text("Right Value:");
+
+				int rightType = 0;
+				if (cond->has_rightfloat())    rightType = 1;
+				if (cond->has_rightfunction()) rightType = 2;
+
+				ImGui::SetNextItemWidth(130);
+				if (ImGui::Combo("##RightType", &rightType, s_condValueTypes, 3))
+				{
+					cond->clear_rightlong();
+					cond->clear_rightfloat();
+					cond->clear_rightfunction();
+					if (rightType == 0)      cond->set_rightlong(0);
+					else if (rightType == 1) cond->set_rightfloat(0.0f);
+					else if (rightType == 2) cond->set_rightfunction(proto::Phase);
+				}
+
+				ImGui::SameLine();
+				if (rightType == 0)
+				{
+					int64_t v = cond->has_rightlong() ? cond->rightlong() : 0;
+					ImGui::SetNextItemWidth(120);
+					if (ImGui::InputScalar("##RightInt", ImGuiDataType_S64, &v))
+					{
+						cond->set_rightlong(v);
+					}
+				}
+				else if (rightType == 1)
+				{
+					float v = cond->has_rightfloat() ? cond->rightfloat() : 0.0f;
+					ImGui::SetNextItemWidth(120);
+					if (ImGui::InputFloat("##RightFloat", &v))
+					{
+						cond->set_rightfloat(v);
+					}
+				}
+				else if (rightType == 2)
+				{
+					static const char* s_funcNames[] = {
+						"Phase", "Health", "HealthPct", "Mana", "ManaPct", "IsInCombat", "EncounterState"
+					};
+					int funcVal = cond->has_rightfunction() ? cond->rightfunction() : 0;
+					ImGui::SetNextItemWidth(160);
+					if (ImGui::Combo("##RightFunc", &funcVal, s_funcNames, 7))
+					{
+						cond->set_rightfunction(static_cast<proto::TriggerFunction>(funcVal));
+					}
+
+					if (funcVal == proto::EncounterState)
+					{
+						ImGui::SameLine();
+						int64_t slotId = cond->rightfunctiondata_size() > 0 ? cond->rightfunctiondata(0) : 0;
+						ImGui::SetNextItemWidth(80);
+						if (ImGui::InputScalar("Slot##RightSlot", ImGuiDataType_S64, &slotId))
+						{
+							if (cond->rightfunctiondata_size() > 0)
+								cond->set_rightfunctiondata(0, slotId);
+							else
+								cond->add_rightfunctiondata(slotId);
+						}
+					}
+				}
+			}
 
 			ImGui::PopStyleVar(2);
 			ImGui::Unindent();

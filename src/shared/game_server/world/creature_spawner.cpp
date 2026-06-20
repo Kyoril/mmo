@@ -100,6 +100,11 @@ namespace mmo
 			ELOG("Unit spawn has invalid stand state value " << m_spawnEntry.standstate() << " - value is ignored");
 		}
 
+		if (m_spawnEntry.trigger_id() != 0)
+		{
+			spawned->SetSpawnTriggerOverride(m_spawnEntry.trigger_id());
+		}
+
 		// watch for destruction
 		spawned->destroy = [this]<typename TUnit>(TUnit&& destroyedUnit) { OnRemoval(std::forward<TUnit>(destroyedUnit)); };
 		m_world.AddGameObject(*spawned);

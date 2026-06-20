@@ -4533,13 +4533,20 @@ namespace mmo
 		// Check for area trigger overlaps
 		const Vector3 playerPosition = unit.GetSceneNode()->GetDerivedPosition();
 		std::vector<uint32> newlyEnteredTriggers;
-		m_areaTriggerManager.CheckForTriggerOverlap(playerPosition, newlyEnteredTriggers);
+		std::vector<uint32> newlyExitedTriggers;
+		m_areaTriggerManager.CheckForTriggerOverlap(playerPosition, newlyEnteredTriggers, newlyExitedTriggers);
 
 		// Send network packets for newly entered triggers
 		for (const uint32 triggerId : newlyEnteredTriggers)
 		{
 			m_realmConnector.SendAreaTriggerTriggered(triggerId);
 			DLOG("Player entered area trigger " << triggerId);
+		}
+
+		for (const uint32 triggerId : newlyExitedTriggers)
+		{
+			m_realmConnector.SendAreaTriggerLeft(triggerId);
+			DLOG("Player left area trigger " << triggerId);
 		}
 	}
 

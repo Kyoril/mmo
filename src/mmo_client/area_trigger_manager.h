@@ -40,7 +40,10 @@ namespace mmo
 		/// Checks for area trigger overlaps at the specified position.
 		/// @param position The player position to check.
 		/// @param outNewlyEnteredTriggers Output list of newly entered trigger IDs.
-		void CheckForTriggerOverlap(const Vector3& position, std::vector<uint32>& outNewlyEnteredTriggers);
+		/// @param outNewlyExitedTriggers Output list of newly exited trigger IDs.
+		void CheckForTriggerOverlap(const Vector3& position,
+			std::vector<uint32>& outNewlyEnteredTriggers,
+			std::vector<uint32>& outNewlyExitedTriggers);
 
 		/// Tests if a point is inside a specific area trigger.
 		/// @param trigger The area trigger to test against.

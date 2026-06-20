@@ -245,6 +245,8 @@ namespace mmo
 
 				AreaTriggerTriggered,
 
+				AreaTriggerLeft,
+
 				GroupLeave,
 				GroupDisband,
 
