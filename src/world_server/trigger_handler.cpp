@@ -145,10 +145,25 @@ namespace mmo
 
 						auto& mover = reinterpret_cast<GameUnitS*>(moveTarget)->GetMover();
 
-						mover.targetReached.connect([&entry, i, this, context, weakOwner]() mutable
+						// Shared flag: whichever signal fires first wins; prevents double-execution.
+						auto fired = std::make_shared<bool>(false);
+
+						mover.targetReached.connect([&entry, i, this, context, fired]() mutable
 							{
-								ExecuteTrigger(entry, context, i + 1, true);
 								current_connection().disconnect();
+								if (*fired)
+									return;
+								*fired = true;
+								ExecuteTrigger(entry, context, i + 1, true);
+							});
+
+						mover.movementStopped.connect([fired]()
+							{
+								current_connection().disconnect();
+								if (*fired)
+									return;
+								*fired = true;
+								// Movement interrupted — trigger chain is abandoned here.
 							});
 
 						mover.MoveTo(
