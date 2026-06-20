@@ -111,7 +111,6 @@ namespace mmo
 				MMO_HANDLE_TRIGGER_ACTION(SetSpawnState)
 				MMO_HANDLE_TRIGGER_ACTION(SetRespawnState)
 				MMO_HANDLE_TRIGGER_ACTION(CastSpell)
-				MMO_HANDLE_TRIGGER_ACTION(MoveTo)
 				MMO_HANDLE_TRIGGER_ACTION(SetCombatMovement)
 				MMO_HANDLE_TRIGGER_ACTION(StopAutoAttack)
 				MMO_HANDLE_TRIGGER_ACTION(CancelCast)
@@ -130,6 +129,47 @@ namespace mmo
 				MMO_HANDLE_TRIGGER_ACTION(SetEncounterState)
 
 #undef MMO_HANDLE_TRIGGER_ACTION
+
+			case trigger_actions::MoveTo:
+				{
+					const bool waitForArrival = (GetActionData(action, 3) != 0);
+
+					if (waitForArrival && i < entry.actions_size() - 1)
+					{
+						GameObjectS* moveTarget = GetActionTarget(action, context);
+						if (!moveTarget || !moveTarget->IsUnit())
+						{
+							ELOG("TRIGGER_ACTION_MOVE_TO (wait): No unit target");
+							break;
+						}
+
+						auto& mover = reinterpret_cast<GameUnitS*>(moveTarget)->GetMover();
+
+						mover.targetReached.connect([&entry, i, this, context, weakOwner]() mutable
+							{
+								ExecuteTrigger(entry, context, i + 1, true);
+								current_connection().disconnect();
+							});
+
+						mover.MoveTo(
+							Vector3(
+								static_cast<float>(GetActionData(action, 0)),
+								static_cast<float>(GetActionData(action, 1)),
+								static_cast<float>(GetActionData(action, 2))
+							),
+							0.0f
+						);
+
+						if (strongOwner)
+						{
+							strongOwner->NotifyTriggerEnded(entry.id());
+						}
+						return;
+					}
+
+					HandleMoveTo(action, context);
+					break;
+				}
 
 			case trigger_actions::Delay:
 				{
