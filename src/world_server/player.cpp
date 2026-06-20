@@ -1035,8 +1035,9 @@ namespace mmo
 		}
 
 		ASSERT(m_character);
-		TriggerContext ctx(m_character.get(), m_character.get());
-		m_triggerHandler.ExecuteTrigger(*triggerEntry, ctx);
+
+		DLOG("Triggering exit trigger [" << triggerEntry->id() << "] " << triggerEntry->name() << " due to area trigger " << trigger->id());
+		m_character->unitTrigger(*triggerEntry, *m_character, m_character.get());
 	}
 
 	void Player::OnSpawned(WorldInstance& instance)
