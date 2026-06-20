@@ -370,6 +370,114 @@ namespace mmo
 #endif
 
 #if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatMorph(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 displayId;
+		if (!(contentReader >> io::read<uint32>(displayId)))
+		{
+			ELOG("Failed to read CheatMorph packet!");
+			return;
+		}
+
+		uint64 targetGuid = m_character->Get<uint64>(object_fields::TargetUnit);
+		if (targetGuid == 0)
+		{
+			targetGuid = m_character->GetGuid();
+		}
+
+		GameObjectS* object = m_worldInstance->FindObjectByGuid(targetGuid);
+		if (!object)
+		{
+			ELOG("CheatMorph: target not found in world");
+			return;
+		}
+
+		GameUnitS* unit = dynamic_cast<GameUnitS*>(object);
+		if (!unit)
+		{
+			ELOG("CheatMorph: target is not a unit");
+			return;
+		}
+
+		DLOG("Morphing unit " << log_hex_digit(targetGuid) << " to display id " << displayId);
+		unit->Set<uint32>(object_fields::DisplayId, displayId);
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatKill(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 targetGuid = m_character->Get<uint64>(object_fields::TargetUnit);
+		if (targetGuid == 0)
+		{
+			targetGuid = m_character->GetGuid();
+		}
+
+		GameObjectS* object = m_worldInstance->FindObjectByGuid(targetGuid);
+		if (!object)
+		{
+			ELOG("CheatKill: target not found in world");
+			return;
+		}
+
+		GameUnitS* unit = dynamic_cast<GameUnitS*>(object);
+		if (!unit)
+		{
+			ELOG("CheatKill: target is not a unit");
+			return;
+		}
+
+		if (!unit->IsAlive())
+		{
+			ELOG("CheatKill: target is already dead");
+			return;
+		}
+
+		DLOG("GM kill on unit " << log_hex_digit(targetGuid));
+		unit->Kill(m_character.get());
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatRevive(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 targetGuid = m_character->Get<uint64>(object_fields::TargetUnit);
+		if (targetGuid == 0)
+		{
+			targetGuid = m_character->GetGuid();
+		}
+
+		GameObjectS* object = m_worldInstance->FindObjectByGuid(targetGuid);
+		if (!object)
+		{
+			ELOG("CheatRevive: target not found in world");
+			return;
+		}
+
+		GameUnitS* unit = dynamic_cast<GameUnitS*>(object);
+		if (!unit)
+		{
+			ELOG("CheatRevive: target is not a unit");
+			return;
+		}
+
+		if (unit->IsAlive())
+		{
+			ELOG("CheatRevive: target is not dead");
+			return;
+		}
+
+		DLOG("GM revive on unit " << log_hex_digit(targetGuid));
+		unit->Set<uint32>(object_fields::Health, unit->Get<uint32>(object_fields::MaxHealth));
+		if (unit->Get<uint32>(object_fields::MaxMana) > 1)
+		{
+			unit->Set<uint32>(object_fields::Mana, unit->Get<uint32>(object_fields::MaxMana));
+		}
+		unit->StartRegeneration();
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
 	void Player::OnCheatCheckLineOfSight(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		uint64 targetGuid = 0;

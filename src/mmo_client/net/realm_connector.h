@@ -269,6 +269,16 @@ namespace mmo
 
 		void SetSpeed(float speed);
 
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Changes the display model of the selected unit (or the player if nothing is targeted).
+		/// @param displayId The display model id to apply.
+		void Morph(uint32 displayId);
+
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Instantly kills the selected unit (or the player if nothing is targeted).
+		void KillTarget();
+
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Revives a dead unit at its current position without teleporting to a bind point.
+		void ReviveTarget();
+
 		/// Sends a packet to the server to cast a specific spell. The controlled character must know the spell. This method can not be used to
 		///	cast spells from items. Instead, use the UseItem method for this instead.
 		///	@param spellId The id of the spell to cast.

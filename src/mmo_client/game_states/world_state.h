@@ -422,6 +422,16 @@ namespace mmo
 		void Command_Summon(const std::string &cmd, const std::string &args) const;
 
 		void Command_Port(const std::string &cmd, const std::string &args) const;
+
+		void Command_Pos(const std::string &cmd, const std::string &args) const;
+
+		void Command_TargetInfo(const std::string &cmd, const std::string &args) const;
+
+		void Command_Morph(const std::string &cmd, const std::string &args) const;
+
+		void Command_Kill(const std::string &cmd, const std::string &args) const;
+
+		void Command_Revive(const std::string &cmd, const std::string &args) const;
 #endif
 
 	private:

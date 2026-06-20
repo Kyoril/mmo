@@ -283,6 +283,15 @@ namespace mmo
 			/// Sent by the client to request a server-side line of sight check against the current target. Dev/debug only.
 			CheatCheckLineOfSight, // GAME MASTER
 
+			/// Sent by the client to change the display model of the selected unit (or self). Dev/debug only.
+			CheatMorph, // GAME MASTER
+
+			/// Sent by the client to instantly kill the selected unit (or self). Dev/debug only.
+			CheatKill, // GAME MASTER
+
+			/// Sent by the client to instantly revive a dead unit at its current position. Dev/debug only.
+			CheatRevive, // GAME MASTER
+
 			/// Sent by the client when the local player starts swimming (enters deep enough water).
 			/// This is the only packet permitted to add the Swimming movement flag.
 			MoveStartSwim,

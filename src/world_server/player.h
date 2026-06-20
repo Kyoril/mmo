@@ -569,6 +569,24 @@ namespace mmo
 		/// Reads the target GUID, performs an LOS check against the world nav mesh,
 		/// and sends back a DebugLineOfSightResult packet.
 		void OnCheatCheckLineOfSight(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's request to change the display model of the selected unit or the player themselves.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnCheatMorph(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's request to instantly kill the selected unit (or the player if nothing is targeted).
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnCheatKill(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's request to revive a dead unit at its current position without teleporting to a bind point.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnCheatRevive(uint16 opCode, uint32 size, io::Reader& contentReader);
 #endif
 
 	private:

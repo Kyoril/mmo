@@ -1377,6 +1377,16 @@ namespace mmo
 								 { Command_Speed(cmd, args); }, ConsoleCommandCategory::Gm, "Sets your movement speed to the new value in meters per second.");
 		Console::RegisterCommand("checklos", [this](const std::string &cmd, const std::string &args)
 								 { Command_CheckLineOfSight(cmd, args); }, ConsoleCommandCategory::Gm, "Performs a server-side line of sight check from your position to the selected target and visualizes the result.");
+		Console::RegisterCommand("pos", [this](const std::string &cmd, const std::string &args)
+								 { Command_Pos(cmd, args); }, ConsoleCommandCategory::Gm, "Prints your current map ID, position (x, y, z) and facing angle to the console.");
+		Console::RegisterCommand("targetinfo", [this](const std::string &cmd, const std::string &args)
+								 { Command_TargetInfo(cmd, args); }, ConsoleCommandCategory::Gm, "Prints GUID, entry, level, health and position of the selected target.");
+		Console::RegisterCommand("morph", [this](const std::string &cmd, const std::string &args)
+								 { Command_Morph(cmd, args); }, ConsoleCommandCategory::Gm, "Changes the display model of the selected unit (or yourself) to the given display id.");
+		Console::RegisterCommand("kill", [this](const std::string &cmd, const std::string &args)
+								 { Command_Kill(cmd, args); }, ConsoleCommandCategory::Gm, "Instantly kills the selected target (or yourself if nothing is selected).");
+		Console::RegisterCommand("revive", [this](const std::string &cmd, const std::string &args)
+								 { Command_Revive(cmd, args); }, ConsoleCommandCategory::Gm, "Revives the selected dead unit at its current position (or yourself if nothing is selected).");
 #endif
 	}
 
@@ -1396,6 +1406,11 @@ namespace mmo
 		Console::UnregisterCommand("summon");
 		Console::UnregisterCommand("speed");
 		Console::UnregisterCommand("checklos");
+		Console::UnregisterCommand("pos");
+		Console::UnregisterCommand("targetinfo");
+		Console::UnregisterCommand("morph");
+		Console::UnregisterCommand("kill");
+		Console::UnregisterCommand("revive");
 #endif
 
 		m_tradeClient.Shutdown();
