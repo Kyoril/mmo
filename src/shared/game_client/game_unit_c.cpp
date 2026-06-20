@@ -2844,8 +2844,17 @@ namespace mmo
 		}
 		else
 		{
+			// SetMesh destroys all SubEntity objects, so any raw SubEntity* pointers in
+			// m_tintMaterialStates would become dangling. Clear the stale state first.
+			m_tintMaterialStates.clear();
 			// Just update the mesh
 			m_entity->SetMesh(MeshManager::Get().Load(meshFile));
+			// Re-create material instances for the new sub-entities if tints are still active.
+			if (!m_spellTints.empty())
+			{
+				EnsureMaterialInstances();
+				UpdateTintOnMaterials();
+			}
 		}
 
 		if (m_customizationDefinition)
