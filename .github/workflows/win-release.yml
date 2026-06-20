@@ -51,21 +51,21 @@ jobs:
       - name: Package artifacts
         shell: pwsh
         run: |
-          mkdir tools
-          mkdir tools/config
-          mkdir tools/Data
-          mkdir tools/Project
-          mkdir client
-          mkdir client/Config
-          mkdir client/Data
-          mkdir servers
-          mkdir servers\config
-          mkdir servers\updates
-          mkdir servers\updates\login
-          mkdir servers\updates\realm
-          mkdir servers\full_db
-          mkdir servers\full_db\login
-          mkdir servers\full_db\realm
+          New-Item -ItemType Directory -Force tools | Out-Null
+          New-Item -ItemType Directory -Force tools/config | Out-Null
+          New-Item -ItemType Directory -Force tools/Data | Out-Null
+          New-Item -ItemType Directory -Force tools/Project | Out-Null
+          New-Item -ItemType Directory -Force client | Out-Null
+          New-Item -ItemType Directory -Force client/Config | Out-Null
+          New-Item -ItemType Directory -Force client/Data | Out-Null
+          New-Item -ItemType Directory -Force servers | Out-Null
+          New-Item -ItemType Directory -Force servers\config | Out-Null
+          New-Item -ItemType Directory -Force servers\updates | Out-Null
+          New-Item -ItemType Directory -Force servers\updates\login | Out-Null
+          New-Item -ItemType Directory -Force servers\updates\realm | Out-Null
+          New-Item -ItemType Directory -Force servers\full_db | Out-Null
+          New-Item -ItemType Directory -Force servers\full_db\login | Out-Null
+          New-Item -ItemType Directory -Force servers\full_db\realm | Out-Null
 
           copy bin\Release\update_compiler.exe tools\
           copy bin\Release\hpak_tool.exe tools\
