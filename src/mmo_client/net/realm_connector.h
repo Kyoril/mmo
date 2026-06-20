@@ -472,6 +472,10 @@ namespace mmo
 		/// @param triggerId The id of the area trigger that was entered.
 		void SendAreaTriggerTriggered(uint32 triggerId);
 
+		/// Sends a packet to the server notifying it that the player has left an area trigger.
+		/// @param triggerId The id of the area trigger that was exited.
+		void SendAreaTriggerLeft(uint32 triggerId);
+
 		/// Sends a trade initiation request targeting the player with the given GUID.
 		void InitiateTrade(uint64 targetGuid);
 

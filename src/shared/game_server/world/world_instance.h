@@ -14,6 +14,7 @@
 #include "world_object_spawner.h"
 #include "base/id_generator.h"
 #include "shared/proto_data/maps.pb.h"
+#include "shared/proto_data/trigger_helper.h"
 
 #include "nav_mesh/map.h"
 
@@ -265,11 +266,21 @@ namespace mmo
 		/// @brief Broadcasts the current game time to all players in the world.
 		void BroadcastGameTime();
 
+		/// Sets the state of a named encounter slot for this instance.
+		void SetEncounterState(uint32 slotId, uint32 state);
+
+		/// Gets the current state of a named encounter slot.
+		uint32 GetEncounterState(uint32 slotId) const;
+
 	protected:
 
 		void UpdateObject(GameObjectS& object) const;
 
 		void OnObjectMoved(GameObjectS& object, const MovementInfo& oldMovementInfo) const;
+
+	private:
+		void FireInstanceTriggerEvent(trigger_event::Type eventType, GameUnitS* triggeringUnit);
+
 	private:
 		Universe& m_universe;
 		IdGenerator<uint64>& m_objectIdGenerator;
@@ -306,5 +317,11 @@ namespace mmo
 		const ConditionMgr& m_conditionMgr;
 
 		LuaScriptMgr* m_scriptMgr = nullptr;
+
+		/// Per-instance encounter slot states. Key = slot id, value = encounter_state::Type value.
+		std::unordered_map<uint32, uint32> m_encounterStates;
+
+		/// Number of players currently in this instance (tracked for wipe detection).
+		uint32 m_playerCount{ 0 };
 	};
 }

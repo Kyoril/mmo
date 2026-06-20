@@ -255,7 +255,22 @@ namespace mmo
 
 	void GameCreatureS::RaiseTrigger(trigger_event::Type e, GameUnitS* triggeringUnit)
 	{
-		for (const auto& triggerId : GetEntry().triggers())
+		auto getTriggerIds = [this]() -> std::vector<uint32>
+		{
+			if (m_spawnTriggerOverride != 0)
+			{
+				return { m_spawnTriggerOverride };
+			}
+
+			std::vector<uint32> ids;
+			for (const auto& id : GetEntry().triggers())
+			{
+				ids.push_back(id);
+			}
+			return ids;
+		};
+
+		for (const auto& triggerId : getTriggerIds())
 		{
 			if (const auto* triggerEntry = GetProject().triggers.getById(triggerId))
 			{
@@ -272,7 +287,22 @@ namespace mmo
 
 	void GameCreatureS::RaiseTrigger(trigger_event::Type e, const std::vector<uint32>& data, GameUnitS* triggeringUnit)
 	{
-		for (const auto& triggerId : GetEntry().triggers())
+		auto getTriggerIds = [this]() -> std::vector<uint32>
+		{
+			if (m_spawnTriggerOverride != 0)
+			{
+				return { m_spawnTriggerOverride };
+			}
+
+			std::vector<uint32> ids;
+			for (const auto& id : GetEntry().triggers())
+			{
+				ids.push_back(id);
+			}
+			return ids;
+		};
+
+		for (const auto& triggerId : getTriggerIds())
 		{
 			const auto* triggerEntry = GetProject().triggers.getById(triggerId);
 			if (!triggerEntry)

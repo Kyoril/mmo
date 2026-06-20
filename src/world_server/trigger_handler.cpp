@@ -72,6 +72,14 @@ namespace mmo
 				return;	 // Didn't pass probability check
 		}
 
+		if (entry.has_condition())
+		{
+			if (!EvaluateCondition(entry.condition(), context))
+			{
+				return;
+			}
+		}
+
 		// Notify trigger started
 		if (strongOwner)
 		{
@@ -119,6 +127,7 @@ namespace mmo
 				MMO_HANDLE_TRIGGER_ACTION(Despawn)
 				MMO_HANDLE_TRIGGER_ACTION(Teleport)
 				MMO_HANDLE_TRIGGER_ACTION(Emote)
+				MMO_HANDLE_TRIGGER_ACTION(SetEncounterState)
 
 #undef MMO_HANDLE_TRIGGER_ACTION
 
@@ -1033,5 +1042,160 @@ namespace mmo
 		}
 
 		return nullptr;
+	}
+
+	void TriggerHandler::HandleSetEncounterState(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		auto* world = GetWorldInstance(context.owner);
+		if (!world)
+		{
+			ELOG("TRIGGER_ACTION_SET_ENCOUNTER_STATE: No world instance");
+			return;
+		}
+
+		const uint32 slotId   = static_cast<uint32>(GetActionData(action, 0));
+		const uint32 newState = static_cast<uint32>(GetActionData(action, 1));
+
+		if (newState > encounter_state::Fail)
+		{
+			WLOG("TRIGGER_ACTION_SET_ENCOUNTER_STATE: Invalid state " << newState);
+			return;
+		}
+
+		world->SetEncounterState(slotId, newState);
+		DLOG("TRIGGER_ACTION_SET_ENCOUNTER_STATE: Slot " << slotId << " set to " << newState);
+	}
+
+	double TriggerHandler::EvaluateTriggerFunction(
+		proto::TriggerFunction func,
+		const google::protobuf::RepeatedField<google::protobuf::int64>& funcData,
+		TriggerContext& context)
+	{
+		GameObjectS* owner = context.owner;
+
+		switch (func)
+		{
+		case proto::Phase:
+			if (owner && owner->IsUnit())
+			{
+				const auto* creature = dynamic_cast<GameCreatureS*>(owner);
+				if (creature)
+				{
+					return 0.0;
+				}
+			}
+			return 0.0;
+
+		case proto::Health:
+			if (owner && owner->IsUnit())
+			{
+				return static_cast<double>(owner->AsUnit().GetHealth());
+			}
+			return 0.0;
+
+		case proto::HealthPct:
+			if (owner && owner->IsUnit())
+			{
+				const uint32 maxHp = owner->AsUnit().GetMaxHealth();
+				if (maxHp > 0)
+				{
+					return static_cast<double>(owner->AsUnit().GetHealth()) / static_cast<double>(maxHp) * 100.0;
+				}
+			}
+			return 0.0;
+
+		case proto::Mana:
+			if (owner && owner->IsUnit())
+			{
+				return static_cast<double>(owner->AsUnit().GetPower());
+			}
+			return 0.0;
+
+		case proto::ManaPct:
+			if (owner && owner->IsUnit())
+			{
+				const uint32 maxPower = owner->AsUnit().GetMaxPower();
+				if (maxPower > 0)
+				{
+					return static_cast<double>(owner->AsUnit().GetPower()) / static_cast<double>(maxPower) * 100.0;
+				}
+			}
+			return 0.0;
+
+		case proto::IsInCombat:
+			if (owner && owner->IsUnit())
+			{
+				return owner->AsUnit().IsInCombat() ? 1.0 : 0.0;
+			}
+			return 0.0;
+
+		case proto::EncounterState:
+		{
+			const uint32 slotId = funcData.size() > 0 ? static_cast<uint32>(funcData[0]) : 0;
+			auto* world = GetWorldInstance(owner);
+			if (!world)
+			{
+				return 0.0;
+			}
+			return static_cast<double>(world->GetEncounterState(slotId));
+		}
+
+		default:
+			WLOG("EvaluateTriggerFunction: Unknown function " << func);
+			return 0.0;
+		}
+	}
+
+	bool TriggerHandler::EvaluateCondition(const proto::TriggerCondition& condition, TriggerContext& context)
+	{
+		double leftVal  = 0.0;
+		double rightVal = 0.0;
+
+		if (condition.has_leftlong())
+		{
+			leftVal = static_cast<double>(condition.leftlong());
+		}
+		else if (condition.has_leftfloat())
+		{
+			leftVal = static_cast<double>(condition.leftfloat());
+		}
+		else if (condition.has_leftfunction())
+		{
+			leftVal = EvaluateTriggerFunction(condition.leftfunction(), condition.leftfunctiondata(), context);
+		}
+		else if (condition.has_leftcondition())
+		{
+			leftVal = EvaluateCondition(condition.leftcondition(), context) ? 1.0 : 0.0;
+		}
+
+		if (condition.has_rightlong())
+		{
+			rightVal = static_cast<double>(condition.rightlong());
+		}
+		else if (condition.has_rightfloat())
+		{
+			rightVal = static_cast<double>(condition.rightfloat());
+		}
+		else if (condition.has_rightfunction())
+		{
+			rightVal = EvaluateTriggerFunction(condition.rightfunction(), condition.rightfunctiondata(), context);
+		}
+		else if (condition.has_rightcondition())
+		{
+			rightVal = EvaluateCondition(condition.rightcondition(), context) ? 1.0 : 0.0;
+		}
+
+		switch (condition.operator_())
+		{
+		case proto::Equal:        return leftVal == rightVal;
+		case proto::NotEqual:     return leftVal != rightVal;
+		case proto::Greater:      return leftVal >  rightVal;
+		case proto::GreaterEqual: return leftVal >= rightVal;
+		case proto::Less:         return leftVal <  rightVal;
+		case proto::LessEqual:    return leftVal <= rightVal;
+		default:
+			WLOG("EvaluateCondition: Unknown operator");
+			return false;
+		}
 	}
 }

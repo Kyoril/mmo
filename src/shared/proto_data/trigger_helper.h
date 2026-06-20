@@ -82,6 +82,15 @@ namespace mmo
 			/// Executed when a specific quest was accepted.
 			/// Data: <QUEST ID>;
 			OnQuestAccept,
+			/// Executed when all players in the instance are dead (wipe).
+			/// Data: NONE
+			OnAllPlayersDead,
+			/// Executed when a player enters the instance (or map for non-instanced).
+			/// Data: NONE
+			OnPlayerEnterInstance,
+			/// Executed when a player leaves the instance (or map for non-instanced).
+			/// Data: NONE
+			OnPlayerLeaveInstance,
 
 			Invalid,
 			Count_ = Invalid
@@ -167,6 +176,10 @@ namespace mmo
 			/// Targets: UNIT; Data: <SOUND-ID>; Texts: <TEXT>;
 			Emote = 23,
 
+			/// Sets the state of a dungeon encounter slot.
+			/// Targets: None; Data: <ENCOUNTER-SLOT-ID>, <NEW-STATE:0-3>; Texts: NONE;
+			SetEncounterState = 24,
+
 			Invalid,
 			Count_ = Invalid
 		};
@@ -206,9 +219,20 @@ namespace mmo
 			CurrentTarget = 1,
 
 			TriggeringUnit = 2,
-			
+
 			Invalid,
 			Count_ = Invalid
+		};
+	}
+
+	namespace encounter_state
+	{
+		enum Type
+		{
+			NotStarted = 0,
+			InProgress = 1,
+			Done       = 2,
+			Fail       = 3,
 		};
 	}
 }

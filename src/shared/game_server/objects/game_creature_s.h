@@ -208,6 +208,13 @@ namespace mmo
 
 		const String& GetName() const override;
 
+		/// Sets a spawn-specific trigger override. When non-zero, only this trigger is used
+		/// instead of the creature template's triggers list.
+		void SetSpawnTriggerOverride(uint32 triggerId) { m_spawnTriggerOverride = triggerId; }
+
+		/// Gets the spawn-specific trigger override ID (0 = no override).
+		uint32 GetSpawnTriggerOverride() const { return m_spawnTriggerOverride; }
+
 	protected:
 		/// @brief Returns the auto-attack spell configured for this creature, if any.
 		/// @return Pointer to the auto-attack spell entry, or nullptr if not configured.
@@ -228,5 +235,7 @@ namespace mmo
 		LootRecipients m_lootRecipients;
 		float m_healthPercent = 1.0f;
 		bool m_combatMovementEnabled = true;
+		/// Per-spawn trigger override. 0 = no override, uses entry triggers.
+		uint32 m_spawnTriggerOverride{ 0 };
 	};
 }

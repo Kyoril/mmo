@@ -19,6 +19,7 @@
 #include "binary_io/vector_sink.h"
 #include "game_server/objects/game_object_s.h"
 #include "game_server/world/each_tile_in_region.h"
+#include "game_server/trigger_handler.h"
 #include "proto_data/project.h"
 
 namespace mmo
@@ -348,7 +349,13 @@ namespace mmo
 			m_triggerHandler.ExecuteTrigger(trigger, TriggerContext(&owner, triggeringUnit), 0);
 			});
 		}
+
+	if (added.GetTypeId() == ObjectTypeId::Player)
+	{
+		++m_playerCount;
+		FireInstanceTriggerEvent(trigger_event::OnPlayerEnterInstance, nullptr);
 	}
+}
 
 	void WorldInstance::RemoveGameObject(GameObjectS& remove)
 	{
@@ -423,6 +430,21 @@ namespace mmo
 		if (remove.destroy)
 		{
 			remove.destroy(remove);
+		}
+
+		if (remove.GetTypeId() == ObjectTypeId::Player)
+		{
+			if (m_playerCount > 0)
+			{
+				--m_playerCount;
+			}
+
+			FireInstanceTriggerEvent(trigger_event::OnPlayerLeaveInstance, nullptr);
+
+			if (m_playerCount == 0 && IsInstancedPvE())
+			{
+				FireInstanceTriggerEvent(trigger_event::OnAllPlayersDead, nullptr);
+			}
 		}
 	}
 
@@ -684,6 +706,44 @@ namespace mmo
 
 			// Add the object
 			newTile->GetGameObjects().add(&object);
+		}
+	}
+
+	void WorldInstance::SetEncounterState(uint32 slotId, uint32 state)
+	{
+		m_encounterStates[slotId] = state;
+	}
+
+	uint32 WorldInstance::GetEncounterState(uint32 slotId) const
+	{
+		const auto it = m_encounterStates.find(slotId);
+		return (it != m_encounterStates.end()) ? it->second : encounter_state::NotStarted;
+	}
+
+	void WorldInstance::FireInstanceTriggerEvent(trigger_event::Type eventType, GameUnitS* triggeringUnit)
+	{
+		if (!m_mapEntry)
+		{
+			return;
+		}
+
+		for (const uint32 triggerId : m_mapEntry->instance_triggers())
+		{
+			const auto* triggerEntry = m_project.triggers.getById(triggerId);
+			if (!triggerEntry)
+			{
+				continue;
+			}
+
+			for (const auto& triggerEvent : triggerEntry->newevents())
+			{
+				if (triggerEvent.type() == eventType)
+				{
+					TriggerContext ctx(nullptr, triggeringUnit);
+					m_triggerHandler.ExecuteTrigger(*triggerEntry, ctx);
+					break;
+				}
+			}
 		}
 	}
 }

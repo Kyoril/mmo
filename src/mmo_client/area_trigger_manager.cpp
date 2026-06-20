@@ -31,11 +31,14 @@ namespace mmo
 		m_activeTriggers.clear();
 	}
 
-	void AreaTriggerManager::CheckForTriggerOverlap(const Vector3& position, std::vector<uint32>& outNewlyEnteredTriggers)
+	void AreaTriggerManager::CheckForTriggerOverlap(
+		const Vector3& position,
+		std::vector<uint32>& outNewlyEnteredTriggers,
+		std::vector<uint32>& outNewlyExitedTriggers)
 	{
 		outNewlyEnteredTriggers.clear();
+		outNewlyExitedTriggers.clear();
 
-		// Check which triggers we're currently in
 		std::unordered_set<uint32> currentlyInTriggers;
 
 		for (const auto* trigger : m_triggers)
@@ -44,7 +47,6 @@ namespace mmo
 			{
 				currentlyInTriggers.insert(trigger->id());
 
-				// Check if this is a newly entered trigger
 				if (m_activeTriggers.find(trigger->id()) == m_activeTriggers.end())
 				{
 					outNewlyEnteredTriggers.push_back(trigger->id());
@@ -52,7 +54,14 @@ namespace mmo
 			}
 		}
 
-		// Update the active triggers set
+		for (const uint32 prevId : m_activeTriggers)
+		{
+			if (currentlyInTriggers.find(prevId) == currentlyInTriggers.end())
+			{
+				outNewlyExitedTriggers.push_back(prevId);
+			}
+		}
+
 		m_activeTriggers = std::move(currentlyInTriggers);
 	}
 

@@ -802,6 +802,10 @@ namespace mmo
 			OnAreaTriggerTriggered(opCode, buffer.size(), reader);
 			break;
 
+		case game::client_realm_packet::AreaTriggerLeft:
+			OnAreaTriggerLeft(opCode, buffer.size(), reader);
+			break;
+
 		case game::client_realm_packet::MoveStartForward:
 		case game::client_realm_packet::MoveStartBackward:
 		case game::client_realm_packet::MoveStop:
@@ -1000,6 +1004,39 @@ namespace mmo
 
 		DLOG("Triggering trigger [" << triggerEntry->id() << "] " << triggerEntry->name() << " due to area trigger " << trigger->id() << " due to overlap of player " << log_hex_digit(m_character->GetGuid()));
 		m_character->unitTrigger(*triggerEntry, *m_character, m_character.get());
+	}
+
+	void Player::OnAreaTriggerLeft(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 triggerId = 0;
+		if (!(contentReader >> io::read<uint32>(triggerId)))
+		{
+			ELOG("Failed to read AreaTriggerLeft packet!");
+			return;
+		}
+
+		const proto::AreaTriggerEntry* trigger = m_project.areaTriggers.getById(triggerId);
+		if (!trigger)
+		{
+			ELOG("Client sent area trigger left id " << triggerId << " which does not exist!");
+			return;
+		}
+
+		if (!trigger->has_on_exit_trigger() || trigger->on_exit_trigger() == 0)
+		{
+			return;
+		}
+
+		const proto::TriggerEntry* triggerEntry = m_project.triggers.getById(trigger->on_exit_trigger());
+		if (!triggerEntry)
+		{
+			ELOG("Area trigger " << triggerId << ": exit trigger " << trigger->on_exit_trigger() << " not found");
+			return;
+		}
+
+		ASSERT(m_character);
+		TriggerContext ctx(m_character.get(), m_character.get());
+		m_triggerHandler.ExecuteTrigger(*triggerEntry, ctx);
 	}
 
 	void Player::OnSpawned(WorldInstance& instance)
