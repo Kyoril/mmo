@@ -341,5 +341,107 @@ namespace mmo
 
 		m_realmConnector.CheckLineOfSight(targetGuid);
 	}
+
+	void WorldState::Command_Pos(const std::string &cmd, const std::string &args) const
+	{
+		const auto player = ObjectMgr::GetActivePlayer();
+		if (!player)
+		{
+			ELOG("pos: no active player");
+			return;
+		}
+
+		const Vector3& pos = player->GetPosition();
+		const float facingDeg = player->GetFacing().GetValueDegrees();
+		const uint32 mapId = player->GetMapId();
+		DLOG("Position: map=" << mapId
+			<< " x=" << pos.x
+			<< " y=" << pos.y
+			<< " z=" << pos.z
+			<< " facing=" << facingDeg);
+	}
+
+	void WorldState::Command_TargetInfo(const std::string &cmd, const std::string &args) const
+	{
+		const auto player = ObjectMgr::GetActivePlayer();
+		if (!player)
+		{
+			ELOG("targetinfo: no active player");
+			return;
+		}
+
+		const uint64 targetGuid = player->Get<uint64>(object_fields::TargetUnit);
+		if (targetGuid == 0)
+		{
+			ELOG("targetinfo: no target selected");
+			return;
+		}
+
+		const auto target = ObjectMgr::Get<GameObjectC>(targetGuid);
+		if (!target)
+		{
+			ELOG("targetinfo: target not found in object manager");
+			return;
+		}
+
+		const uint32 entry = target->Get<uint32>(object_fields::Entry);
+
+		std::ostringstream oss;
+		oss << "Target: guid=0x" << std::hex << targetGuid << std::dec
+			<< " entry=" << entry;
+
+		if (target->IsUnit())
+		{
+			const auto& unit = target->AsUnit();
+			const uint32 level = unit.Get<uint32>(object_fields::Level);
+			const uint32 health = unit.Get<uint32>(object_fields::Health);
+			const uint32 maxHealth = unit.Get<uint32>(object_fields::MaxHealth);
+			const Vector3& pos = unit.GetPosition();
+			oss << " level=" << level
+				<< " hp=" << health << "/" << maxHealth
+				<< " pos=(" << pos.x << ", " << pos.y << ", " << pos.z << ")"
+				<< " name=\"" << unit.GetName() << "\"";
+		}
+
+		if (target->GetTypeId() == ObjectTypeId::Player)
+		{
+			oss << " [PLAYER]";
+		}
+		else if (target->GetTypeId() == ObjectTypeId::Unit)
+		{
+			oss << " [CREATURE]";
+		}
+
+		DLOG(oss.str());
+	}
+
+	void WorldState::Command_Morph(const std::string &cmd, const std::string &args) const
+	{
+		const auto tokens = ParseCommandArgs(args);
+		if (tokens.empty())
+		{
+			ELOG("Usage: morph <displayId>");
+			return;
+		}
+
+		uint32 displayId = 0;
+		if (!ParseUInt(tokens[0], displayId))
+		{
+			ELOG("Invalid display id: " + tokens[0]);
+			return;
+		}
+
+		m_realmConnector.Morph(displayId);
+	}
+
+	void WorldState::Command_Kill(const std::string &cmd, const std::string &args) const
+	{
+		m_realmConnector.KillTarget();
+	}
+
+	void WorldState::Command_Revive(const std::string &cmd, const std::string &args) const
+	{
+		m_realmConnector.ReviveTarget();
+	}
 #endif
 }
