@@ -208,12 +208,12 @@ namespace mmo
 
 		const String& GetName() const override;
 
-		/// Sets a spawn-specific trigger override. When non-zero, only this trigger is used
-		/// instead of the creature template's triggers list.
-		void SetSpawnTriggerOverride(uint32 triggerId) { m_spawnTriggerOverride = triggerId; }
+		/// Sets the list of spawn-specific additional triggers. These are fired in addition
+		/// to any triggers defined on the creature template.
+		void SetSpawnAdditionalTriggers(std::vector<uint32> triggerIds) { m_spawnAdditionalTriggers = std::move(triggerIds); }
 
-		/// Gets the spawn-specific trigger override ID (0 = no override).
-		uint32 GetSpawnTriggerOverride() const { return m_spawnTriggerOverride; }
+		/// Gets the spawn-specific additional trigger IDs.
+		const std::vector<uint32>& GetSpawnAdditionalTriggers() const { return m_spawnAdditionalTriggers; }
 
 	protected:
 		/// @brief Returns the auto-attack spell configured for this creature, if any.
@@ -235,7 +235,7 @@ namespace mmo
 		LootRecipients m_lootRecipients;
 		float m_healthPercent = 1.0f;
 		bool m_combatMovementEnabled = true;
-		/// Per-spawn trigger override. 0 = no override, uses entry triggers.
-		uint32 m_spawnTriggerOverride{ 0 };
+		/// Per-spawn additional triggers — appended to the template's trigger list at runtime.
+		std::vector<uint32> m_spawnAdditionalTriggers;
 	};
 }

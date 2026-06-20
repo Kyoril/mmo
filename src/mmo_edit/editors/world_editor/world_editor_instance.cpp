@@ -2915,6 +2915,54 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 					m_spawnEditMode->RebuildWaypointVisualization();
 				}
 			}
+
+			ImGui::Separator();
+			ImGui::Text("Additional Spawn Triggers");
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("These triggers fire in addition to the triggers defined on the creature template.");
+			}
+
+			const int triggerCount = m_editor.GetProject().triggers.count();
+
+			// List current additional triggers with remove buttons
+			int removeIdx = -1;
+			for (int t = 0; t < selectable.GetEntry().additional_trigger_ids_size(); ++t)
+			{
+				const uint32 tid = selectable.GetEntry().additional_trigger_ids(t);
+				const auto* te = m_editor.GetProject().triggers.getById(tid);
+				ImGui::PushID(t);
+				ImGui::Text("%s", te ? te->name().c_str() : "(unknown)");
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Remove"))
+				{
+					removeIdx = t;
+				}
+				ImGui::PopID();
+			}
+			if (removeIdx >= 0)
+			{
+				selectable.GetEntry().mutable_additional_trigger_ids()->erase(
+					selectable.GetEntry().mutable_additional_trigger_ids()->begin() + removeIdx);
+			}
+
+			static int s_addSpawnTriggerIdx = 0;
+			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 50.0f);
+			ImGui::Combo("##AddSpawnTrigger2", &s_addSpawnTriggerIdx,
+				[](void* data, int idx, const char** out_text) -> bool
+				{
+					const auto* triggers = static_cast<proto::Triggers*>(data);
+					if (idx < 0 || idx >= triggers->entry_size()) { return false; }
+					*out_text = triggers->entry(idx).name().c_str();
+					return true;
+				},
+				&m_editor.GetProject().triggers.getTemplates(), triggerCount, -1);
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Add") && triggerCount > 0)
+			{
+				selectable.GetEntry().add_additional_trigger_ids(
+					m_editor.GetProject().triggers.getTemplates().entry(s_addSpawnTriggerIdx).id());
+			}
 		}
 	}
 

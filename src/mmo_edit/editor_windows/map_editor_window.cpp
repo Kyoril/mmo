@@ -383,47 +383,48 @@ namespace mmo
 				DrawHelpMarker("How the creature moves in the world");
 
 				ImGui::Spacing();
-				DrawSectionHeader("Trigger Override");
+				DrawSectionHeader("Additional Spawn Triggers");
+				ImGui::SameLine();
+				DrawHelpMarker("These triggers fire in addition to the triggers defined on the creature template");
 
-				// Build display list: index 0 = None, then one entry per trigger.
-				const int triggerCount = m_project.triggers.count();
-				int spawnTriggerComboIdx = 0; // 0 = None
-				if (spawn->trigger_id() != 0)
+				// List existing additional triggers with remove buttons
+				int removeIdx = -1;
+				for (int t = 0; t < spawn->additional_trigger_ids_size(); ++t)
 				{
-					for (int t = 0; t < triggerCount; ++t)
+					const uint32 tid = spawn->additional_trigger_ids(t);
+					const auto* te = m_project.triggers.getById(tid);
+					ImGui::PushID(t);
+					ImGui::Text("%s", te ? te->name().c_str() : "(unknown)");
+					ImGui::SameLine();
+					if (ImGui::SmallButton("Remove"))
 					{
-						if (m_project.triggers.getTemplates().entry(t).id() == spawn->trigger_id())
-						{
-							spawnTriggerComboIdx = t + 1;
-							break;
-						}
+						removeIdx = t;
 					}
+					ImGui::PopID();
+				}
+				if (removeIdx >= 0)
+				{
+					spawn->mutable_additional_trigger_ids()->erase(
+						spawn->mutable_additional_trigger_ids()->begin() + removeIdx);
 				}
 
-				ImGui::SetNextItemWidth(300);
-				if (ImGui::Combo("##SpawnTrigger", &spawnTriggerComboIdx,
+				const int triggerCount = m_project.triggers.count();
+				static int s_addTriggerIdx = 0;
+				ImGui::SetNextItemWidth(270);
+				ImGui::Combo("##AddSpawnTrigger", &s_addTriggerIdx,
 					[](void* data, int idx, const char** out_text) -> bool
 					{
-						if (idx == 0)
-						{
-							*out_text = "(None — use template triggers)";
-							return true;
-						}
 						const auto* triggers = static_cast<proto::Triggers*>(data);
-						*out_text = triggers->entry(idx - 1).name().c_str();
+						if (idx < 0 || idx >= triggers->entry_size()) { return false; }
+						*out_text = triggers->entry(idx).name().c_str();
 						return true;
 					},
-					&m_project.triggers.getTemplates(), triggerCount + 1, -1))
+					&m_project.triggers.getTemplates(), triggerCount, -1);
+				ImGui::SameLine();
+				if (ImGui::Button("Add") && triggerCount > 0)
 				{
-					if (spawnTriggerComboIdx == 0)
-						spawn->set_trigger_id(0);
-					else
-						spawn->set_trigger_id(m_project.triggers.getTemplates().entry(spawnTriggerComboIdx - 1).id());
+					spawn->add_additional_trigger_ids(m_project.triggers.getTemplates().entry(s_addTriggerIdx).id());
 				}
-				ImGui::SameLine();
-				ImGui::Text("Spawn Trigger Override");
-				ImGui::SameLine();
-				DrawHelpMarker("If set, only this trigger fires for this spawn instead of all triggers on the creature template");
 			}
 			else
 			{

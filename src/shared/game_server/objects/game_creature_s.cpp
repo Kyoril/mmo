@@ -257,13 +257,12 @@ namespace mmo
 	{
 		auto getTriggerIds = [this]() -> std::vector<uint32>
 		{
-			if (m_spawnTriggerOverride != 0)
-			{
-				return { m_spawnTriggerOverride };
-			}
-
 			std::vector<uint32> ids;
 			for (const auto& id : GetEntry().triggers())
+			{
+				ids.push_back(id);
+			}
+			for (const auto& id : m_spawnAdditionalTriggers)
 			{
 				ids.push_back(id);
 			}
@@ -289,13 +288,12 @@ namespace mmo
 	{
 		auto getTriggerIds = [this]() -> std::vector<uint32>
 		{
-			if (m_spawnTriggerOverride != 0)
-			{
-				return { m_spawnTriggerOverride };
-			}
-
 			std::vector<uint32> ids;
 			for (const auto& id : GetEntry().triggers())
+			{
+				ids.push_back(id);
+			}
+			for (const auto& id : m_spawnAdditionalTriggers)
 			{
 				ids.push_back(id);
 			}

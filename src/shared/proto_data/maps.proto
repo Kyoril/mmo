@@ -53,7 +53,7 @@ message UnitSpawnEntry {
 	repeated UnitSpawnLocation locations = 16;
 
 	optional float health_percent = 17 [default = 1.0];
-	optional uint32 trigger_id = 18 [default = 0];
+	repeated uint32 additional_trigger_ids = 18;
 }
 
 message ObjectSpawnEntry {

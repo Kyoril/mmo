@@ -100,9 +100,12 @@ namespace mmo
 			ELOG("Unit spawn has invalid stand state value " << m_spawnEntry.standstate() << " - value is ignored");
 		}
 
-		if (m_spawnEntry.trigger_id() != 0)
+		if (m_spawnEntry.additional_trigger_ids_size() > 0)
 		{
-			spawned->SetSpawnTriggerOverride(m_spawnEntry.trigger_id());
+			std::vector<uint32> additionalTriggers(
+				m_spawnEntry.additional_trigger_ids().begin(),
+				m_spawnEntry.additional_trigger_ids().end());
+			spawned->SetSpawnAdditionalTriggers(std::move(additionalTriggers));
 		}
 
 		// watch for destruction
@@ -143,6 +146,11 @@ namespace mmo
 
 	void CreatureSpawner::SetRespawnTimer()
 	{
+		if (!m_respawn)
+		{
+			return;
+		}
+
 		if (m_currentlySpawned >= m_spawnEntry.maxcount())
 		{
 			return;
@@ -170,21 +178,19 @@ namespace mmo
 
 	void CreatureSpawner::SetState(bool active)
 	{
-		if (m_active != active)
-		{
-			if (active && !m_currentlySpawned)
-			{
-				for (size_t i = 0; i < m_spawnEntry.maxcount(); ++i)
-				{
-					SpawnOne();
-				}
-			}
-			else
-			{
-				m_respawnCountdown.Cancel();
-			}
+		m_active = active;
 
-			m_active = active;
+		if (active && !m_currentlySpawned)
+		{
+			m_respawnCountdown.Cancel();
+			for (size_t i = 0; i < m_spawnEntry.maxcount(); ++i)
+			{
+				SpawnOne();
+			}
+		}
+		else if (!active)
+		{
+			m_respawnCountdown.Cancel();
 		}
 	}
 

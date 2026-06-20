@@ -35,8 +35,6 @@ namespace mmo
 		controlled.StopAttack();
 		controlled.SetTarget(0);
 
-		controlled.RaiseTrigger(trigger_event::OnKilled);
-
 		const proto::UnitEntry& entry = controlled.GetEntry();
 
 		GameTime despawnDelay = constants::OneSecond * 30;
