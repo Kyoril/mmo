@@ -381,6 +381,49 @@ namespace mmo
 				ImGui::Text("Movement Type");
 				ImGui::SameLine();
 				DrawHelpMarker("How the creature moves in the world");
+
+				ImGui::Spacing();
+				DrawSectionHeader("Trigger Override");
+
+				// Build display list: index 0 = None, then one entry per trigger.
+				const int triggerCount = m_project.triggers.count();
+				int spawnTriggerComboIdx = 0; // 0 = None
+				if (spawn->trigger_id() != 0)
+				{
+					for (int t = 0; t < triggerCount; ++t)
+					{
+						if (m_project.triggers.getTemplates().entry(t).id() == spawn->trigger_id())
+						{
+							spawnTriggerComboIdx = t + 1;
+							break;
+						}
+					}
+				}
+
+				ImGui::SetNextItemWidth(300);
+				if (ImGui::Combo("##SpawnTrigger", &spawnTriggerComboIdx,
+					[](void* data, int idx, const char** out_text) -> bool
+					{
+						if (idx == 0)
+						{
+							*out_text = "(None — use template triggers)";
+							return true;
+						}
+						const auto* triggers = static_cast<proto::Triggers*>(data);
+						*out_text = triggers->entry(idx - 1).name().c_str();
+						return true;
+					},
+					&m_project.triggers.getTemplates(), triggerCount + 1, -1))
+				{
+					if (spawnTriggerComboIdx == 0)
+						spawn->set_trigger_id(0);
+					else
+						spawn->set_trigger_id(m_project.triggers.getTemplates().entry(spawnTriggerComboIdx - 1).id());
+				}
+				ImGui::SameLine();
+				ImGui::Text("Spawn Trigger Override");
+				ImGui::SameLine();
+				DrawHelpMarker("If set, only this trigger fires for this spawn instead of all triggers on the creature template");
 			}
 			else
 			{
