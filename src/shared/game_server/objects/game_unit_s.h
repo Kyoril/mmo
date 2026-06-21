@@ -742,6 +742,15 @@ namespace mmo
 		/// @returns The actual amount of healing applied.
 		int32 Heal(uint32 amount, GameUnitS *instigator);
 
+		/// Distributes healing-generated threat to every NPC currently in combat with this unit.
+		/// When a healer restores health to a unit that is being attacked, the healer enters combat
+		/// and generates threat on each attacking creature (split evenly between them), so that
+		/// healing draws aggro just like dealing damage does. Cheap no-op when nobody is attacking
+		/// this unit, so it is safe to call after every heal.
+		/// @param healer The unit that performed the healing.
+		/// @param effectiveHealing The amount of health actually restored (over-heal excluded).
+		void GenerateHealingThreat(GameUnitS& healer, uint32 effectiveHealing);
+
 		/// Logs spell damage dealt by the unit.
 		/// @param targetGuid The GUID of the target unit.
 		/// @param amount The amount of damage dealt.

@@ -356,7 +356,11 @@ namespace mmo
 					}
 				}
 
-				unitTarget.Heal(healingAmount, &executer);
+				const int32 effectiveHealing = unitTarget.Heal(healingAmount, &executer);
+
+				// Healing a unit that is under attack generates threat on its attackers and pulls
+				// the healer into combat, just like dealing damage would.
+				unitTarget.GenerateHealingThreat(executer, static_cast<uint32>(std::max<int32>(0, effectiveHealing)));
 
 				uint32 procFlags = proc_ex_flags::NormalHit;
 				if (isCrit)
@@ -947,7 +951,10 @@ namespace mmo
 				basePoints = Clamp(basePoints, 1, 100);
 
 				const uint32 healAmount = static_cast<uint32>(floor(static_cast<float>(unitTarget.GetMaxHealth()) * (static_cast<float>(basePoints) / 100.0f)));
-				unitTarget.Heal(healAmount, &executer);
+				const int32 effectiveHealing = unitTarget.Heal(healAmount, &executer);
+
+				// Healing a unit under attack generates threat on its attackers and pulls the healer into combat.
+				unitTarget.GenerateHealingThreat(executer, static_cast<uint32>(std::max<int32>(0, effectiveHealing)));
 
 				// TODO: Heal log to show healing numbers at the clients
 			}

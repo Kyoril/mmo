@@ -555,8 +555,15 @@ namespace mmo
 			});
 
 		// Update health
-		m_container.GetOwner().Heal(heal, m_container.GetCaster());
-		
+		const int32 effectiveHealing = m_container.GetOwner().Heal(heal, m_container.GetCaster());
+
+		// Periodic healing of a unit under attack generates threat on its attackers and keeps the
+		// healer in combat, mirroring direct heals.
+		if (GameUnitS* caster = m_container.GetCaster())
+		{
+			m_container.GetOwner().GenerateHealingThreat(*caster, static_cast<uint32>(std::max<int32>(0, effectiveHealing)));
+		}
+
 		// Trigger proc events for periodic healing
 		if (m_container.GetCaster())
 		{

@@ -807,6 +807,40 @@ namespace mmo
 		return static_cast<int32>(amount);
 	}
 
+	void GameUnitS::GenerateHealingThreat(GameUnitS& healer, uint32 effectiveHealing)
+	{
+		// Over-heal and dead healers never generate threat.
+		if (effectiveHealing == 0 || !healer.IsAlive())
+		{
+			return;
+		}
+
+		// Fast path: nothing is attacking this unit, so there is no threat to distribute.
+		const size_t attackerCount = m_attackingUnits.size();
+		if (attackerCount == 0)
+		{
+			return;
+		}
+
+		// Healing threat mirrors the classic model: half the effective healing, split evenly
+		// across all enemies currently attacking the healed unit so that a single heal cannot
+		// rip aggro off every mob at once.
+		const float threatPerAttacker = (static_cast<float>(effectiveHealing) * 0.5f) / static_cast<float>(attackerCount);
+
+		ForEachAttacker([&healer, threatPerAttacker](const GameUnitS& attacker)
+		{
+			// Only creatures maintain a threat table; player attackers (PvP) ignore healing threat.
+			if (attacker.IsPlayer())
+			{
+				return;
+			}
+
+			// Routes through the creature combat state, which adds the healer to its threat list
+			// and pulls the healer into combat via AddAttackingUnit.
+			attacker.threatened(healer, threatPerAttacker);
+		});
+	}
+
 	void GameUnitS::SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags,
 								   const proto::SpellEntry &spell, uint32 blocked)
 	{
