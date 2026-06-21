@@ -369,6 +369,20 @@ namespace mmo
 			}
 
 			DrawLootTableAssignment(m_project, *currentEntry.mutable_unitlootentries());
+
+			// Simulate the combination of all loot tables assigned to this creature so their
+			// combined drop rarity can be inspected.
+			std::vector<const proto::LootEntry*> simEntries;
+			simEntries.reserve(currentEntry.unitlootentries_size());
+			for (int i = 0; i < currentEntry.unitlootentries_size(); ++i)
+			{
+				if (const auto* lootEntry = m_project.unitLoot.getById(currentEntry.unitlootentries(i)))
+				{
+					simEntries.push_back(lootEntry);
+				}
+			}
+
+			DrawLootSimulationUI(m_project, simEntries, m_lootSim, "Simulate Loot", "CreatureLootSimulationPopup");
 		}
 
 		static const char* s_noneEntryString = "<None>";

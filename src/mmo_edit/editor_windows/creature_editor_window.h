@@ -8,6 +8,7 @@
 #include "editor_window_base.h"
 
 #include "editor_host.h"
+#include "loot_simulation.h"
 #include "proto_data/project.h"
 
 namespace mmo
@@ -33,5 +34,6 @@ namespace mmo
 	private:
 		EditorHost& m_host;
 		proto::Project& m_project;
+		LootSimulationState m_lootSim;
 	};
 }

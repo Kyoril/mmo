@@ -35,6 +35,14 @@ namespace mmo
 			copied->set_id(newId);
 		}
 
+		ImGui::SameLine();
+
+		// Simulate just this loot table to inspect its drop rarity.
+		{
+			const std::vector<const proto::LootEntry*> simEntries{ &currentEntry };
+			DrawLootSimulationUI(m_project, simEntries, m_lootSim, "Simulate Loot", "UnitLootSimulationPopup");
+		}
+
 #define SLIDER_UNSIGNED_PROP(name, label, datasize, min, max) \
 	{ \
 		const char* format = "%d"; \
@@ -154,11 +162,20 @@ namespace mmo
 
 				ImGui::PushID(groupId);
 
+				bool removeGroup = false;
+
 				if (const auto section = ScopedEditorSection(("Group " + std::to_string(groupId)).c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 				{
 					if (ImGui::Button("Add Item"))
 					{
 						auto* definition = group.add_definitions();
+					}
+
+					ImGui::SameLine();
+
+					if (DrawDangerButton("Remove Group"))
+					{
+						removeGroup = true;
 					}
 
 					if (ImGui::BeginTable("groupItems", 7, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
@@ -301,6 +318,12 @@ namespace mmo
 				}
 
 				ImGui::PopID();
+
+				if (removeGroup)
+				{
+					currentEntry.mutable_groups()->erase(currentEntry.mutable_groups()->begin() + groupId);
+					groupId--;
+				}
 			}
 		}
 	}

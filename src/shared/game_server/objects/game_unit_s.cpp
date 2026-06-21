@@ -2260,8 +2260,11 @@ namespace mmo
 			return MeleeAttackOutcome::Miss;
 		}
 
-		// Check for dodge (only if target is facing attacker)
-		if (victim.IsFacingTowards(*this))
+		// A unit which is stunned or sleeping is incapacitated and can neither dodge nor parry incoming attacks.
+		const bool victimCanReact = !victim.IsStunned() && !victim.IsSleeping();
+
+		// Check for dodge (only if target is facing attacker and able to react)
+		if (victimCanReact && victim.IsFacingTowards(*this))
 		{
 			const float dodgeChance = victim.DodgeChance();
 			chance += dodgeChance;
@@ -2272,8 +2275,8 @@ namespace mmo
 			}
 		}
 
-		// Check for parry (only if target is facing attacker and has a weapon)
-		if (victim.IsFacingTowards(*this) && victim.CanParry())
+		// Check for parry (only if target is facing attacker, able to react and has a weapon)
+		if (victimCanReact && victim.IsFacingTowards(*this) && victim.CanParry())
 		{
 			const float parryChance = victim.ParryChance();
 			chance += parryChance;

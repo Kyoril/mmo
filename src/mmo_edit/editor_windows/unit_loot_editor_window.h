@@ -8,6 +8,7 @@
 
 #include "editor_host.h"
 #include "graphics/texture.h"
+#include "loot_simulation.h"
 #include "proto_data/project.h"
 
 namespace mmo
@@ -31,5 +32,6 @@ namespace mmo
 
 	private:
 		EditorHost& m_host;
+		LootSimulationState m_lootSim;
 	};
 }
