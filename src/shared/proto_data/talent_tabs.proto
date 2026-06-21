@@ -7,6 +7,9 @@ message TalentTabEntry {
     required uint32 class_id = 3;  // Class this tab belongs to
     optional string icon = 4;      // Path to the tab icon texture
     optional string background = 5; // Path to the background image for this talent tree
+    optional uint32 canvas_width = 6 [default = 1600];
+    optional uint32 canvas_height = 7 [default = 1200];
+    optional float initial_zoom = 8 [default = 1.0];
 }
 
 message TalentTabs {

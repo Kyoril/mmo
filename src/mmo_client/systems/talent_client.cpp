@@ -29,6 +29,23 @@ namespace mmo
 	{
 		LUABIND_MODULE(luaState,
 			luabind::scope(
+				luabind::class_<TalentTabInfo>("TalentTabInfo")
+				.def_readonly("id", &TalentTabInfo::id)
+				.def_readonly("name", &TalentTabInfo::name)
+				.def_readonly("icon", &TalentTabInfo::icon)
+				.def_readonly("background", &TalentTabInfo::background)
+				.def_readonly("canvasWidth", &TalentTabInfo::canvasWidth)
+				.def_readonly("canvasHeight", &TalentTabInfo::canvasHeight)
+				.def_readonly("initialZoom", &TalentTabInfo::initialZoom)
+			),
+			luabind::scope(
+				luabind::class_<TalentPrerequisiteInfo>("TalentPrerequisiteInfo")
+				.def_readonly("talentId", &TalentPrerequisiteInfo::talentId)
+				.def_readonly("requiredRank", &TalentPrerequisiteInfo::requiredRank)
+				.def_readonly("currentRank", &TalentPrerequisiteInfo::currentRank)
+				.def_readonly("met", &TalentPrerequisiteInfo::met)
+			),
+			luabind::scope(
 				luabind::class_<TalentInfo>("TalentInfo")
 				.def_readonly("id", &TalentInfo::id)
 				.def_readonly("name", &TalentInfo::name)
@@ -41,12 +58,32 @@ namespace mmo
 				.def_readonly("tabId", &TalentInfo::tabId)
 				.def_readonly("tier", &TalentInfo::tier)
 				.def_readonly("column", &TalentInfo::column)
+				.def_readonly("positionX", &TalentInfo::positionX)
+				.def_readonly("positionY", &TalentInfo::positionY)
+				.def_readonly("requiredPoints", &TalentInfo::requiredPoints)
+				.def_readonly("nodeScale", &TalentInfo::nodeScale)
+				.def_readonly("canLearn", &TalentInfo::canLearn)
 			),
 				
 			luabind::def_lambda("GetNumTalentTabs", [this]() { return GetNumTalentTabs(); }),
 			luabind::def_lambda("GetTalentTabName", [this](int32 index) { return GetTalentTabName(index); }),
+			luabind::def_lambda("GetTalentTabInfo", [this](int32 index) { return GetTalentTabInfo(index); }),
 			luabind::def_lambda("GetNumTalents", [this](int32 tabIndex) { return GetNumTalents(tabIndex); }),
 			luabind::def_lambda("GetTalentInfo", [this](int32 tabIndex, int32 talentIndex) { return GetTalentInfo(tabIndex, talentIndex); }),
+			luabind::def_lambda("GetNumTalentPrerequisites", [this](int32 tabIndex, int32 talentIndex)
+			{
+				const TalentInfo* talent = GetTalentInfo(tabIndex, talentIndex);
+				return talent ? static_cast<int32>(talent->prerequisites.size()) : 0;
+			}),
+			luabind::def_lambda("GetTalentPrerequisiteInfo", [this](int32 tabIndex, int32 talentIndex, int32 prerequisiteIndex) -> const TalentPrerequisiteInfo*
+			{
+				const TalentInfo* talent = GetTalentInfo(tabIndex, talentIndex);
+				if (!talent || prerequisiteIndex < 0 || prerequisiteIndex >= static_cast<int32>(talent->prerequisites.size()))
+				{
+					return nullptr;
+				}
+				return &talent->prerequisites[prerequisiteIndex];
+			}),
 			luabind::def_lambda("GetTalentPointsSpentInTab", [this](int32 tabIndex) { return GetTalentPointsSpentInTabByIndex(tabIndex); }),
 			luabind::def_lambda("LearnTalent", [this](int32 tabIndex, int32 talentIndex) { return LearnTalent(tabIndex, talentIndex); })
 		);
@@ -74,6 +111,7 @@ namespace mmo
 	{
 		m_talentsByTreeId.clear();
 		m_talentPointsSpentPerTab.clear();
+		m_tabs.clear();
 
 		std::shared_ptr<GamePlayerC> player = ObjectMgr::GetActivePlayer();
 		if (!player)
@@ -82,6 +120,25 @@ namespace mmo
 		}
 
 		const uint32 playerClass = player->Get<uint32>(object_fields::Class);
+		for (const proto_client::TalentTabEntry& tab : m_tabManager.getTemplates().entry())
+		{
+			if (tab.class_id() != playerClass)
+			{
+				continue;
+			}
+
+			m_tabs.push_back({
+				tab.id(),
+				tab.name(),
+				tab.icon(),
+				tab.background(),
+				tab.canvas_width(),
+				tab.canvas_height(),
+				tab.initial_zoom()
+			});
+			m_talentsByTreeId[tab.id()];
+			m_talentPointsSpentPerTab[tab.id()] = 0;
+		}
 
 		for (const proto_client::TalentEntry& talent : m_talentManager.getTemplates().entry())
 		{
@@ -106,6 +163,15 @@ namespace mmo
 			}
 
 			auto& entry = m_talentsByTreeId[talent.tab()];
+			const int32 positionX = talent.has_position_x()
+				? talent.position_x()
+				: 160 + static_cast<int32>(talent.column()) * 220;
+			const int32 positionY = talent.has_position_y()
+				? talent.position_y()
+				: 120 + static_cast<int32>(talent.row()) * 200;
+			const uint32 requiredPoints = talent.has_required_points()
+				? talent.required_points()
+				: talent.row() * 5;
 			entry.emplace_back(
 				talent.id(),
 				talent.tab(),
@@ -116,14 +182,18 @@ namespace mmo
 				nullptr,
 				0, // rank will be updated in UpdateTalentRanks
 				static_cast<uint32>(talent.ranks_size()),
+				positionX,
+				positionY,
+				requiredPoints,
+				talent.node_scale(),
 				spell->icon(),
 				spell->name()
 			);
 
-			// Initialize talent points spent counter for this tab
-			if (m_talentPointsSpentPerTab.find(talent.tab()) == m_talentPointsSpentPerTab.end())
+			TalentInfo& info = entry.back();
+			for (const auto& prerequisite : talent.prerequisites())
 			{
-				m_talentPointsSpentPerTab[talent.tab()] = 0;
+				info.prerequisites.push_back({ prerequisite.talent_id(), prerequisite.rank(), 0, false });
 			}
 		}
 
@@ -206,6 +276,34 @@ namespace mmo
 				m_talentPointsSpentPerTab[tabId] += currentRank;
 			}
 		}
+
+		const uint32 availablePoints = player->GetTalentPoints();
+		for (auto& [tabId, talents] : m_talentsByTreeId)
+		{
+			for (TalentInfo& talent : talents)
+			{
+				bool prerequisitesMet = true;
+				for (TalentPrerequisiteInfo& prerequisite : talent.prerequisites)
+				{
+					prerequisite.currentRank = 0;
+					for (const TalentInfo& candidate : talents)
+					{
+						if (candidate.id == prerequisite.talentId)
+						{
+							prerequisite.currentRank = static_cast<uint32>(candidate.rank);
+							break;
+						}
+					}
+					prerequisite.met = prerequisite.currentRank >= prerequisite.requiredRank;
+					prerequisitesMet = prerequisitesMet && prerequisite.met;
+				}
+
+				talent.canLearn = availablePoints > 0
+					&& static_cast<uint32>(talent.rank) < talent.maxRank
+					&& m_talentPointsSpentPerTab[tabId] >= talent.requiredPoints
+					&& prerequisitesMet;
+			}
+		}
 	}
 
 	uint32 TalentClient::GetTalentPointsSpentInTab(uint32 tabId) const
@@ -221,17 +319,12 @@ namespace mmo
 			return 0;
 		}
 
-		auto it = m_talentsByTreeId.begin();
-		std::advance(it, tabIndex);
-
-		// Now we have the actual tab ID
-		uint32 tabId = it->first;
-		return GetTalentPointsSpentInTab(tabId);
+		return GetTalentPointsSpentInTab(m_tabs[tabIndex].id);
 	}
 
 	int32 TalentClient::GetNumTalentTabs() const
 	{
-		return m_talentsByTreeId.size();
+		return static_cast<int32>(m_tabs.size());
 	}
 
 	const char* TalentClient::GetTalentTabName(const int32 index)
@@ -241,25 +334,12 @@ namespace mmo
 			return nullptr;
 		}
 
-		auto it = m_talentsByTreeId.begin();
-		if (it == m_talentsByTreeId.end())
-		{
-			return nullptr;
-		}
+		return m_tabs[index].name.c_str();
+	}
 
-		std::advance(it, index);
-		if (it == m_talentsByTreeId.end())
-		{
-			return nullptr;
-		}
-
-		const proto_client::TalentTabEntry* tab = m_tabManager.getById(it->first);
-		if (!tab)
-		{
-			return nullptr;
-		}
-
-		return tab->name().c_str();
+	const TalentTabInfo* TalentClient::GetTalentTabInfo(const int32 index)
+	{
+		return index >= 0 && index < static_cast<int32>(m_tabs.size()) ? &m_tabs[index] : nullptr;
 	}
 
 	int32 TalentClient::GetNumTalents(const int32 tabIndex)
@@ -269,10 +349,8 @@ namespace mmo
 			return 0;
 		}
 
-		auto it = m_talentsByTreeId.begin();
-		std::advance(it, tabIndex);
-
-		return static_cast<int32>(it->second.size());
+		const auto it = m_talentsByTreeId.find(m_tabs[tabIndex].id);
+		return it == m_talentsByTreeId.end() ? 0 : static_cast<int32>(it->second.size());
 	}
 
 	const TalentInfo* TalentClient::GetTalentInfo(const int32 tabIndex, const int32 talentIndex)
@@ -282,8 +360,11 @@ namespace mmo
 			return nullptr;
 		}
 
-		auto it = m_talentsByTreeId.begin();
-		std::advance(it, tabIndex);
+		const auto it = m_talentsByTreeId.find(m_tabs[tabIndex].id);
+		if (it == m_talentsByTreeId.end())
+		{
+			return nullptr;
+		}
 
 		if (talentIndex < 0 || talentIndex >= static_cast<int32>(it->second.size()))
 		{
@@ -305,6 +386,11 @@ namespace mmo
 		if (static_cast<uint32>(info->rank) >= info->maxRank)
 		{
 			WLOG("Unable to learn talent: Max rank already reached");
+			return false;
+		}
+		if (!info->canLearn)
+		{
+			WLOG("Unable to learn talent: Requirements are not met");
 			return false;
 		}
 

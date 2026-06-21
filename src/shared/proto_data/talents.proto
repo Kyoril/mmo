@@ -1,12 +1,22 @@
 syntax = "proto2";
 package mmo.proto;
 
+message TalentPrerequisite {
+	required uint32 talent_id = 1;
+	optional uint32 rank = 2 [default = 1];
+}
+
 message TalentEntry {
 	required uint32 id = 1;
 	required uint32 tab = 2;
-	required uint32 row = 3;
-	required uint32 column = 4;
+	required uint32 row = 3;       // Legacy tier, used as a fallback unlock cost.
+	required uint32 column = 4;    // Legacy grid column, retained for old project data.
 	repeated uint32 ranks = 5;	// Spell-IDs
+	optional sint32 position_x = 6;
+	optional sint32 position_y = 7;
+	repeated TalentPrerequisite prerequisites = 8;
+	optional uint32 required_points = 9;
+	optional float node_scale = 10 [default = 1.0];
 }
 
 message Talents {

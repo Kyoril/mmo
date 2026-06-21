@@ -227,9 +227,13 @@ namespace mmo
 		/// like having enough talent points available to spend.
 		///
 		/// @param talentId Id of the talent to learn.
-		/// @param rank Rank to learn.
+		/// @param rank Rank to learn. May jump directly to a higher rank (e.g. when restoring saved
+		///        talents); the talent point cost scales accordingly.
+		/// @param enforceRequirements When true (gameplay), prerequisites and required-points-in-tab
+		///        gates are validated. When false (restoring already-valid saved data on login), those
+		///        gameplay gates are skipped while existence, rank validity and point budget still apply.
 		/// @return true if the talent was learned, false otherwise.
-		bool LearnTalent(uint32 talentId, uint32 rank);
+		bool LearnTalent(uint32 talentId, uint32 rank, bool enforceRequirements = true);
 
 		/// Determines if a rank of specific talent has been learned. If rank is 0 it basically checks if
 		/// the given talent is learned at all.

@@ -71,6 +71,10 @@ namespace mmo
 		other.m_onDrag = m_onDrag;
 
 		other.m_onDrop = m_onDrop;
+		other.m_onMouseDown = m_onMouseDown;
+		other.m_onMouseUp = m_onMouseUp;
+		other.m_onMouseMove = m_onMouseMove;
+		other.m_onMouseWheel = m_onMouseWheel;
 		other.m_id = m_id;
 		other.m_focusable = m_focusable;
 		other.m_clickable = m_clickable;
@@ -1718,6 +1722,18 @@ namespace mmo
 
 		// Simply raise the signal
 		MouseUp(MouseEventArgs(buttons, position.x, position.y));
+		if (m_onMouseUp.is_valid())
+		{
+			try
+			{
+				m_onMouseUp(this, static_cast<int32>(button));
+				consumed = true;
+			}
+			catch (const luabind::error& e)
+			{
+				ELOG("Error calling OnMouseUp: " << e.what());
+			}
+		}
 
 		if (m_isDragging)
 		{
@@ -1741,6 +1757,18 @@ namespace mmo
 
 	void Frame::OnMouseMoved(const Point& position, const Point& delta)
 	{
+		if (m_onMouseMove.is_valid())
+		{
+			try
+			{
+				m_onMouseMove(this, position.x, position.y, delta.x, delta.y);
+			}
+			catch (const luabind::error& e)
+			{
+				ELOG("Error calling OnMouseMove: " << e.what());
+			}
+		}
+
 		if (m_isDragging || !IsDragEnabled() || m_dragButton == None)
 		{
 			return;
@@ -1752,5 +1780,24 @@ namespace mmo
 			m_isDragging = true;
 			OnDrag(m_dragButton, m_dragStartPosition);
 		}
+	}
+
+	bool Frame::OnMouseWheel(const int32 delta)
+	{
+		if (!m_onMouseWheel.is_valid())
+		{
+			return false;
+		}
+
+		try
+		{
+			m_onMouseWheel(this, delta);
+			return true;
+		}
+		catch (const luabind::error& e)
+		{
+			ELOG("Error calling OnMouseWheel: " << e.what());
+		}
+		return false;
 	}
 }

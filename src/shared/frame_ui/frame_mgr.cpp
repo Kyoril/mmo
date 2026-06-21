@@ -6,6 +6,7 @@
 #include "button.h"
 #include "textfield.h"
 #include "default_renderer.h"
+#include "line_frame.h"
 #include "button_renderer.h"
 #include "textfield_renderer.h"
 
@@ -459,6 +460,10 @@ namespace mmo
 					.def("SetOnLeaveHandler", &Frame::SetOnLeave)
 					.def("SetOnDragHandler", &Frame::SetOnDrag)
 					.def("SetOnDropHandler", &Frame::SetOnDrop)
+					.def("SetOnMouseDownHandler", &Frame::SetOnMouseDown)
+					.def("SetOnMouseUpHandler", &Frame::SetOnMouseUp)
+					.def("SetOnMouseMoveHandler", &Frame::SetOnMouseMove)
+					.def("SetOnMouseWheelHandler", &Frame::SetOnMouseWheel)
 					.def("SetOpacity", &Frame::SetOpacity)
 					.def("GetOpacity", &Frame::GetOpacity)
 					.def("BringToFront", &Frame::BringToFront)
@@ -593,6 +598,7 @@ namespace mmo
 
 		// Register frame factories
 		s_frameMgr->RegisterFrameFactory("Frame", [](const std::string& name) -> FramePtr { return std::make_shared<Frame>("Frame", name); });
+		s_frameMgr->RegisterFrameFactory(LineFrame::Type, [](const std::string& name) -> FramePtr { return std::make_shared<LineFrame>(LineFrame::Type, name); });
 		s_frameMgr->RegisterFrameFactory("Button", [](const std::string& name) -> FramePtr { return std::make_shared<Button>(Button::Type, name); });
 		s_frameMgr->RegisterFrameFactory("Thumb", [](const std::string& name) -> FramePtr { return std::make_shared<Thumb>("Thumb", name); });
 		s_frameMgr->RegisterFrameFactory("ScrollBar", [](const std::string& name) -> FramePtr { return std::make_shared<ScrollBar>("ScrollBar", name); });
@@ -822,20 +828,38 @@ namespace mmo
 		const Point delta = position - m_mousePos;
 		m_mousePos = position;
 
-		// If there is a picked frame, trigger the mouse moved event for it
-		if (m_mouseDownFrames[MouseButton::Left])
+		// Notify every frame that currently has a mouse button held down, even when the cursor has moved
+		// off it. This lets a frame implement click-drag interactions (e.g. canvas panning) with any
+		// mouse button, not just the left one.
+		for (const auto& [button, downFrame] : m_mouseDownFrames)
 		{
-			m_mouseDownFrames[MouseButton::Left]->OnMouseMoved(m_mousePos, delta);
+			if (downFrame)
+			{
+				downFrame->OnMouseMoved(m_mousePos, delta);
+			}
 		}
 
 		// Find the frame at the lowest level for the given point
 		FramePtr hoverFrame = m_topFrame->GetChildFrameAt(position, false);
 
-		// Trigger mouse moved events
+		// Trigger mouse moved events, skipping any frame already notified above as a pressed frame.
 		Frame* frame = hoverFrame.get();
 		while (frame)
 		{
-			frame->OnMouseMoved(m_mousePos, delta);
+			bool alreadyNotified = false;
+			for (const auto& [button, downFrame] : m_mouseDownFrames)
+			{
+				if (downFrame.get() == frame)
+				{
+					alreadyNotified = true;
+					break;
+				}
+			}
+
+			if (!alreadyNotified)
+			{
+				frame->OnMouseMoved(m_mousePos, delta);
+			}
 			frame = frame->GetParent();
 		}
 

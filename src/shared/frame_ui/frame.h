@@ -391,7 +391,7 @@ namespace mmo
 		/// is hovered. The event bubbles up the parent chain until a frame consumes it.
 		/// @param delta Number of wheel notches; positive = wheel up, negative = wheel down.
 		/// @return True if the event was consumed, false to let it bubble up to the parent.
-		virtual bool OnMouseWheel(int32 delta) { return false; }
+		virtual bool OnMouseWheel(int32 delta);
 
 		///
 		virtual void OnKeyDown(Key key) {}
@@ -446,6 +446,12 @@ namespace mmo
 		void SetOnClick(const luabind::object& func);
 
 		void SetOnMouseDown(const luabind::object& func) { m_onMouseDown = func; }
+
+		void SetOnMouseUp(const luabind::object& func) { m_onMouseUp = func; }
+
+		void SetOnMouseMove(const luabind::object& func) { m_onMouseMove = func; }
+
+		void SetOnMouseWheel(const luabind::object& func) { m_onMouseWheel = func; }
 
 		void SetClickable(const bool clickable) { m_clickable = clickable; }
 
@@ -654,6 +660,9 @@ namespace mmo
 		luabind::object m_onClick;
 
 		luabind::object m_onMouseDown;
+		luabind::object m_onMouseUp;
+		luabind::object m_onMouseMove;
+		luabind::object m_onMouseWheel;
 
 		int32 m_id = 0;
 

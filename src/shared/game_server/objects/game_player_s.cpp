@@ -141,9 +141,11 @@ namespace mmo
 				break;
 			}
 
-			// Reduce cost for log and learn the respective rank
+			// Reduce cost for log and learn the respective rank. We restore directly at the saved rank and
+			// skip gameplay gates (prerequisites / points-spent-in-tab) since the saved data was valid when
+			// stored and the restore order does not necessarily respect prerequisite chains.
 			talentPoints -= talentPointCost;
-			LearnTalent(talentId, rank);
+			LearnTalent(talentId, rank, false);
 		}
 
 		if (resetTalents)
@@ -1603,7 +1605,7 @@ namespace mmo
 		}
 	}
 
-	bool GamePlayerS::LearnTalent(uint32 talentId, uint32 rank)
+	bool GamePlayerS::LearnTalent(uint32 talentId, uint32 rank, bool enforceRequirements)
 	{
 		const auto *talentEntry = m_project.talents.getById(talentId);
 		if (!talentEntry)
@@ -1636,6 +1638,19 @@ namespace mmo
 			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " rank " << rank << " but it is already at max rank!");
 			return false; // Already at max rank
 		}
+		// The rank must reference a valid spell index and must move the talent forward. We deliberately
+		// allow jumping straight to a higher rank (the point cost below scales with the difference), which
+		// is required when restoring saved talents on login (they are applied directly at their final rank).
+		if (rank >= static_cast<uint32>(talentEntry->ranks_size()))
+		{
+			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " at invalid rank " << rank);
+			return false;
+		}
+		if (static_cast<int32>(rank) <= currentRank)
+		{
+			ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " at rank " << rank << " which is not higher than the current rank " << currentRank);
+			return false;
+		}
 
 		// Always need at least one talent point for higher ranks
 		const uint32 talentPointCost = hasTalent ? (rank - static_cast<uint32>(currentRank)) : rank + 1;
@@ -1648,12 +1663,35 @@ namespace mmo
 			return false; // Not enough points
 		}
 
-		// Check prerequisites (if any)
-
-		// Check tier requirements - each tier requires 5 points spent in the tab
-		if (talentEntry->row() > 0) // Tier 0 has no requirements
+		// Prerequisite and required-points gates are gameplay rules. When restoring already-validated saved
+		// talents on login we skip them (the order in which saved talents are applied is not guaranteed to
+		// respect prerequisites, and the data was valid when it was saved).
+		if (enforceRequirements)
 		{
-			uint32 requiredPointsInTab = talentEntry->row() * 5;
+			for (const auto& prerequisite : talentEntry->prerequisites())
+			{
+				const auto* prerequisiteTalent = m_project.talents.getById(prerequisite.talent_id());
+				if (!prerequisiteTalent || prerequisiteTalent->tab() != talentEntry->tab())
+				{
+					ELOG("Talent " << talentId << " has invalid prerequisite " << prerequisite.talent_id());
+					return false;
+				}
+
+				const auto learned = m_talents.find(prerequisite.talent_id());
+				const uint32 learnedRank = learned == m_talents.end() ? 0 : learned->second + 1;
+				if (learnedRank < prerequisite.rank())
+				{
+					ELOG("Player '" << log_hex_digit(GetGuid()) << "' has not met prerequisite " << prerequisite.talent_id() << " for talent " << talentId);
+					return false;
+				}
+			}
+		}
+
+		const uint32 requiredPointsInTab = talentEntry->has_required_points()
+			? talentEntry->required_points()
+			: talentEntry->row() * 5;
+		if (enforceRequirements && requiredPointsInTab > 0)
+		{
 			uint32 pointsSpentInTab = 0;
 
 			// Count points spent in this talent tab
@@ -1668,7 +1706,7 @@ namespace mmo
 
 			if (pointsSpentInTab < requiredPointsInTab)
 			{
-				ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " at tier " << talentEntry->row() << " but only has " << pointsSpentInTab << " points spent in tab (required: " << requiredPointsInTab << ")!");
+				ELOG("Player '" << log_hex_digit(GetGuid()) << "' tried to learn talent " << talentId << " but only has " << pointsSpentInTab << " points spent in tab (required: " << requiredPointsInTab << ")!");
 				return false;
 			}
 		}

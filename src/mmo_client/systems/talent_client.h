@@ -4,14 +4,33 @@
 #include "base/typedefs.h"
 #include "client_data/project.h"
 
-#include <array>
 #include <unordered_map>
+#include <vector>
 
 struct lua_State;
 
 namespace mmo
 {
 	class RealmConnector;
+
+	struct TalentTabInfo
+	{
+		uint32 id = 0;
+		String name;
+		String icon;
+		String background;
+		uint32 canvasWidth = 1600;
+		uint32 canvasHeight = 1200;
+		float initialZoom = 1.0f;
+	};
+
+	struct TalentPrerequisiteInfo
+	{
+		uint32 talentId = 0;
+		uint32 requiredRank = 1;
+		uint32 currentRank = 0;
+		bool met = false;
+	};
 
 	struct TalentInfo
 	{
@@ -24,13 +43,21 @@ namespace mmo
 		const proto_client::SpellEntry* nextRankSpell = nullptr;
 		int32 rank = -1;
 		uint32 maxRank = 0;
+		int32 positionX = 0;
+		int32 positionY = 0;
+		uint32 requiredPoints = 0;
+		float nodeScale = 1.0f;
+		bool canLearn = false;
 		String icon;
 		String name;
+		std::vector<TalentPrerequisiteInfo> prerequisites;
 		TalentInfo(uint32 id, uint32 tabId, uint32 tier, uint32 column, uint32 spellId, 
 				   const proto_client::SpellEntry* spell, const proto_client::SpellEntry* nextRankSpell,
-				   int32 rank, uint32 maxRank, const String& icon, const String& name)
+				   int32 rank, uint32 maxRank, int32 positionX, int32 positionY, uint32 requiredPoints,
+				   float nodeScale, const String& icon, const String& name)
 			: id(id), tabId(tabId), tier(tier), column(column), spellId(spellId)
 			, spell(spell), nextRankSpell(nextRankSpell), rank(rank), maxRank(maxRank)
+			, positionX(positionX), positionY(positionY), requiredPoints(requiredPoints), nodeScale(nodeScale)
 			, icon(icon), name(name)
 		{
 		}
@@ -72,6 +99,7 @@ namespace mmo
 		int32 GetNumTalentTabs() const;
 
 		const char* GetTalentTabName(int32 index);
+		const TalentTabInfo* GetTalentTabInfo(int32 index);
 		int32 GetNumTalents(int32 tabIndex);
 
 		const TalentInfo* GetTalentInfo(int32 tabIndex, int32 talentIndex);
@@ -83,6 +111,7 @@ namespace mmo
 		const proto_client::SpellManager& m_spellManager;
 		std::unordered_map<uint32, std::vector<TalentInfo>> m_talentsByTreeId;
 		std::unordered_map<uint32, uint32> m_talentPointsSpentPerTab;
+		std::vector<TalentTabInfo> m_tabs;
 		RealmConnector& m_realmConnector;
 	};
 }
