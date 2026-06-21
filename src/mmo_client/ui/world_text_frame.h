@@ -8,13 +8,20 @@ namespace mmo
 {
 	class Camera;
 
+	/// Controls how a world text frame enters, moves, and expires.
+	enum class WorldTextAnimation
+	{
+		Normal,
+		Critical
+	};
+
 	/// Frame for rendering the actual 3d game world.
 	class WorldTextFrame final
 		: public Frame
 	{
 	public:
-		/// Default constructor.
-		explicit WorldTextFrame(Camera& camera, const Vector3& position, float duration);
+		/// Creates floating text at a position in the game world.
+		explicit WorldTextFrame(Camera& camera, const Vector3& position, float duration, const Color& color = Color::White, WorldTextAnimation animation = WorldTextAnimation::Normal);
 
 	public:
 
@@ -31,6 +38,8 @@ namespace mmo
 	protected:
 		void OnTextChanged() override;
 
+		void PopulateGeometryBuffer() override;
+
 	private:
 		Camera* m_camera;
 
@@ -41,5 +50,17 @@ namespace mmo
 		float m_lifetime;
 
 		Point m_offset;
+
+		Color m_textColor;
+
+		WorldTextAnimation m_animation;
+
+		float m_textScale;
+
+		float m_baseTextWidth;
+
+		float m_baseTextHeight;
+
+		float m_horizontalDirection;
 	};
 }

@@ -37,7 +37,6 @@
 #include "base/erase_by_move.h"
 #include "base/profiler.h"
 #include "base/timer_queue.h"
-#include "frame_ui/text_component.h"
 #include "frame_ui/localizer.h"
 #include "game/aura.h"
 #include "game/auto_attack.h"
@@ -361,8 +360,10 @@ namespace mmo
 		SetupPacketHandler();
 
 		// TODO: Remove me. We abuse this here for preloading the font
-		WorldTextFrame frame(m_playerController->GetCamera(), Vector3::Zero, 0.0f);
-		frame.GetFont()->GetTextWidth("1");
+		WorldTextFrame normalTextFrame(m_playerController->GetCamera(), Vector3::Zero, 0.0f);
+		normalTextFrame.GetFont()->GetTextWidth("1");
+		WorldTextFrame criticalTextFrame(m_playerController->GetCamera(), Vector3::Zero, 0.0f, Color::White, WorldTextAnimation::Critical);
+		criticalTextFrame.GetFont()->GetTextWidth("1");
 
 		// Ensure fog is enabled
 		m_scene->SetFogEnabled(true);
@@ -880,15 +881,28 @@ namespace mmo
 
 		for (auto& frame : m_chatBubbleFrames)
 		{
-			frame->Update(deltaSeconds);
+			frame->Animate(deltaSeconds);
 		}
+
+		const size_t chatBubblesBefore = m_chatBubbleFrames.size();
 		m_chatBubbleFrames.erase(
 			std::remove_if(m_chatBubbleFrames.begin(), m_chatBubbleFrames.end(),
-				[this](const std::unique_ptr<ChatBubbleFrame>& frame)
+				[this](const std::shared_ptr<ChatBubbleFrame>& frame)
 				{
 					return frame->IsExpired() || !AreChatBubblesEnabled(frame->GetChatType());
 				}),
 			m_chatBubbleFrames.end());
+
+		// If any bubbles were removed, rebuild the layer's children so the removed frames are
+		// released (Frame has no single-child removal). This only happens when a bubble expires.
+		if (m_chatBubbleFrames.size() != chatBubblesBefore && m_chatBubbleLayer)
+		{
+			m_chatBubbleLayer->RemoveAllChildren();
+			for (const auto& frame : m_chatBubbleFrames)
+			{
+				m_chatBubbleLayer->AddChild(frame);
+			}
+		}
 	}
 
 	bool WorldState::OnMouseWheel(const int32 delta)
@@ -907,10 +921,8 @@ namespace mmo
 			textFrame->Render();
 		}
 
-		for (const auto& chatBubble : m_chatBubbleFrames)
-		{
-			chatBubble->Render();
-		}
+		// Chat bubbles are NOT drawn here: they live in the frame tree under the WorldFrame
+		// (see m_chatBubbleLayer) so they render above the 3D world but beneath the rest of the UI.
 
 		PROFILE_END_FRAME();
 	}
@@ -3049,11 +3061,15 @@ namespace mmo
 				// Partial block: show remaining damage and how much was blocked, e.g. "14 (5 blocked)".
 				const String blockedText = std::to_string(amount) + " (" + std::to_string(blocked) + " " +
 					Localize(FrameManager::Get().GetLocalization(), "COMBAT_BLOCKED_SUFFIX") + ")";
-				AddWorldTextFrame(target->GetPosition(), blockedText, Color(1.0f, 1.0f, 0.0f, 1.0f), 2.0f);
+				const bool isCritical = (flags & damage_flags::Crit) != 0;
+				AddWorldTextFrame(target->GetPosition(), blockedText, Color(1.0f, 1.0f, 0.0f, 1.0f), isCritical ? 4.0f : 2.0f,
+					isCritical ? WorldTextAnimation::Critical : WorldTextAnimation::Normal);
 			}
 			else
 			{
-				AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color(1.0f, 1.0f, 0.0f, 1.0f), 2.0f);
+				const bool isCritical = (flags & damage_flags::Crit) != 0;
+				AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color(1.0f, 1.0f, 0.0f, 1.0f), isCritical ? 4.0f : 2.0f,
+					isCritical ? WorldTextAnimation::Critical : WorldTextAnimation::Normal);
 			}
 		}
 
@@ -3088,7 +3104,9 @@ namespace mmo
 		std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid);
 		if (target)
 		{
-			AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color::White, (flags & damage_flags::Crit) != 0 ? 4.0f : 2.0f);
+			const bool isCritical = (flags & damage_flags::Crit) != 0;
+			AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color::White, isCritical ? 4.0f : 2.0f,
+				isCritical ? WorldTextAnimation::Critical : WorldTextAnimation::Normal);
 		}
 
 		if (amount > 0)
@@ -3177,7 +3195,9 @@ namespace mmo
 					damageText = std::to_string(totalDamage);
 				}
 
-				AddWorldTextFrame(attacked->GetPosition(), damageText, ObjectMgr::GetActivePlayerGuid() == attackedGuid ? Color(1.0f, 0.0f, 0.0f) : Color::White, (hitInfo & hit_info::CriticalHit) != 0 ? 4.0f : 2.0f);
+				const bool isCritical = (hitInfo & hit_info::CriticalHit) != 0;
+				AddWorldTextFrame(attacked->GetPosition(), damageText, ObjectMgr::GetActivePlayerGuid() == attackedGuid ? Color(1.0f, 0.0f, 0.0f) : Color::White,
+					isCritical ? 4.0f : 2.0f, isCritical ? WorldTextAnimation::Critical : WorldTextAnimation::Normal);
 			}
 		}
 
@@ -3804,7 +3824,8 @@ namespace mmo
 			std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid);
 			if (target)
 			{
-				AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color(0.0f, 1.0f, 0.0f, 1.0f), 2.0f);
+				AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color(0.0f, 1.0f, 0.0f, 1.0f), crit ? 4.0f : 2.0f,
+					crit ? WorldTextAnimation::Critical : WorldTextAnimation::Normal);
 			}
 		}
 
@@ -4225,32 +4246,10 @@ namespace mmo
 			packet.Finish(); });
 	}
 
-	void WorldState::AddWorldTextFrame(const Vector3 &position, const String &text, const Color &color, float duration)
+	void WorldState::AddWorldTextFrame(const Vector3 &position, const String &text, const Color &color, const float duration, const WorldTextAnimation animation)
 	{
-		auto textFrame = std::make_unique<WorldTextFrame>(m_playerController->GetCamera(), position, duration);
+		auto textFrame = std::make_unique<WorldTextFrame>(m_playerController->GetCamera(), position, duration, color, animation);
 		textFrame->SetText(text);
-
-		// UI styling for rendering
-		{
-			// TODO: Instead of doing this here hardcoded, lets find a way to make this data driven
-			// The reason why this UI element is rendered here manually is because it needs to know of 3d coordinates and convert
-			// them into viewspace, which is not possible with the current UI system via xml/lua serialization alone. Also, I don't
-			// really want to add exposure of 3d coordinates to the UI script system to reduce the possibility of abuse.
-			auto textComponent = std::make_unique<TextComponent>(*textFrame);
-			textComponent->SetColor(color);
-
-			ImagerySection section("Text");
-			section.AddComponent(std::move(textComponent));
-
-			FrameLayer layer;
-			layer.AddSection(*textFrame->AddImagerySection(section));
-
-			StateImagery normalState("Enabled");
-			normalState.AddLayer(layer);
-
-			textFrame->AddStateImagery(normalState);
-			textFrame->SetRenderer("DefaultRenderer");
-		}
 
 		m_worldTextFrames.push_back(std::move(textFrame));
 	}
@@ -4284,17 +4283,65 @@ namespace mmo
 			return;
 		}
 
+		// Replace any existing bubble for the same speaker so only the latest message shows.
 		m_chatBubbleFrames.erase(
 			std::remove_if(m_chatBubbleFrames.begin(), m_chatBubbleFrames.end(),
-				[speakerGuid](const std::unique_ptr<ChatBubbleFrame>& frame)
+				[speakerGuid](const std::shared_ptr<ChatBubbleFrame>& frame)
 				{
 					return frame->GetSpeakerGuid() == speakerGuid;
 				}),
 			m_chatBubbleFrames.end());
 
+		// Make sure the container that renders bubbles below the UI exists.
+		EnsureChatBubbleLayer();
+
 		const float duration = std::clamp(4.0f + static_cast<float>(text.size()) * 0.04f, 5.0f, 10.0f);
-		m_chatBubbleFrames.push_back(std::make_unique<ChatBubbleFrame>(
-			m_playerController->GetCamera(), speakerGuid, chatType, text, duration));
+
+		const std::string bubbleName = "ChatBubble_" + std::to_string(++m_chatBubbleCounter);
+		m_chatBubbleFrames.push_back(std::make_shared<ChatBubbleFrame>(
+			bubbleName, m_playerController->GetCamera(), speakerGuid, chatType, text, duration));
+
+		// Rebuild the layer's children from the bubble list so replaced bubbles are released
+		// and the new one is attached (Frame has no single-child removal).
+		if (m_chatBubbleLayer)
+		{
+			m_chatBubbleLayer->RemoveAllChildren();
+			for (const auto& frame : m_chatBubbleFrames)
+			{
+				m_chatBubbleLayer->AddChild(frame);
+			}
+		}
+
+		// Position the new bubble right away so it doesn't flash at the screen origin for a frame.
+		m_chatBubbleFrames.back()->Animate(0.0f);
+	}
+
+	void WorldState::EnsureChatBubbleLayer()
+	{
+		if (m_chatBubbleLayer)
+		{
+			return;
+		}
+
+		const FramePtr worldFrame = FrameManager::Get().Find("WorldFrame");
+		if (!worldFrame)
+		{
+			return;
+		}
+
+		// Created directly (not registered with the FrameManager) so it is owned by the
+		// WorldFrame and torn down together with the world UI on every world reload.
+		m_chatBubbleLayer = std::make_shared<Frame>("Frame", "ChatBubbleLayer");
+		m_chatBubbleLayer->SetClickable(false);
+		m_chatBubbleLayer->SetEnabled(false);
+
+		worldFrame->AddChild(m_chatBubbleLayer);
+
+		// Fill the world frame so bubble screen positions map 1:1 into this container.
+		m_chatBubbleLayer->SetAnchor(anchor_point::Left, anchor_point::Left, nullptr);
+		m_chatBubbleLayer->SetAnchor(anchor_point::Top, anchor_point::Top, nullptr);
+		m_chatBubbleLayer->SetAnchor(anchor_point::Right, anchor_point::Right, nullptr);
+		m_chatBubbleLayer->SetAnchor(anchor_point::Bottom, anchor_point::Bottom, nullptr);
 	}
 
 	void WorldState::OnPageAvailabilityChanged(const PageNeighborhood &page, bool isAvailable)

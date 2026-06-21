@@ -458,10 +458,14 @@ namespace mmo
 
 	private:
 		/// Adds a floating world text UI element with a duration to the world.
-		void AddWorldTextFrame(const Vector3 &position, const String &text, const Color &color, float duration);
+		void AddWorldTextFrame(const Vector3 &position, const String &text, const Color &color, float duration, WorldTextAnimation animation = WorldTextAnimation::Normal);
 
 		/// Adds a speech bubble which follows the speaking unit.
 		void AddChatBubble(ObjectGuid speakerGuid, ChatType chatType, const String& text);
+
+		/// Lazily creates the chat bubble container frame under the WorldFrame so bubbles
+		/// render above the 3D world but beneath the rest of the UI.
+		void EnsureChatBubbleLayer();
 
 		/// Returns whether bubbles for the supplied chat type are currently enabled.
 		[[nodiscard]] bool AreChatBubblesEnabled(ChatType chatType) const;
@@ -526,7 +530,14 @@ namespace mmo
 
 		std::vector<std::unique_ptr<WorldTextFrame>> m_worldTextFrames;
 
-		std::vector<std::unique_ptr<ChatBubbleFrame>> m_chatBubbleFrames;
+		std::vector<std::shared_ptr<ChatBubbleFrame>> m_chatBubbleFrames;
+
+		/// Container frame parented under the WorldFrame so chat bubbles render above the
+		/// 3D world but beneath the rest of the UI.
+		FramePtr m_chatBubbleLayer;
+
+		/// Monotonic counter used to give every chat bubble (and its tail) a unique frame name.
+		uint32 m_chatBubbleCounter = 0;
 
 		std::unique_ptr<asio::io_service::work> m_work;
 		asio::io_service m_workQueue;
