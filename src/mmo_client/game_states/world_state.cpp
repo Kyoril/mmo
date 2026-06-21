@@ -236,6 +236,7 @@ namespace mmo
 	}
 
 	IInputControl *WorldState::s_inputControl = nullptr;
+	PlayerController *WorldState::s_playerController = nullptr;
 
 	WorldState::WorldState(GameStateMgr &gameStateManager, RealmConnector &realmConnector, const proto_client::Project &project, TimerQueue &timers, LootClient &lootClient, VendorClient &vendorClient,
 						   ActionBar &actionBar, SpellCast &spellCast, CooldownManager &cooldownManager, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, PartyInfo &partyInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, ICacheProvider &cache, Discord &discord,
@@ -436,6 +437,7 @@ namespace mmo
 		RemoveGameplayCommands();
 
 		s_inputControl = nullptr;
+		s_playerController = nullptr;
 		m_playerController.reset();
 		m_worldGrid.reset();
 		m_debugAxis.reset();
@@ -989,6 +991,7 @@ namespace mmo
 
 		m_playerController = std::make_unique<PlayerController>(*m_scene, m_realmConnector, m_lootClient, m_vendorClient, m_trainerClient, m_spellCast);
 		s_inputControl = m_playerController.get();
+		s_playerController = m_playerController.get();
 
 		// Create the world grid in the scene. The world grid component will handle the rest for us
 		m_worldGrid = std::make_unique<WorldGrid>(*m_scene, "WorldGrid");

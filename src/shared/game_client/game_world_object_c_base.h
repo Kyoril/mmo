@@ -47,6 +47,9 @@ namespace mmo
 
 		void Deserialize(io::Reader& reader, bool complete) override;
 
+		/// @copydoc GameObjectC::GetName
+		const String& GetName() const override;
+
 		virtual void NotifyObjectData(const	ObjectInfo& data);
 
 		const ObjectInfo* GetEntry() const { return m_entry; }

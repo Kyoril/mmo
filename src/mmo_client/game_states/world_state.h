@@ -621,11 +621,18 @@ namespace mmo
 
 	private:
 		static IInputControl *s_inputControl;
+		static PlayerController *s_playerController;
 
 	public:
 		static IInputControl *GetInputControl()
 		{
 			return s_inputControl;
+		}
+
+		/// Returns the player controller that is active while the world state is entered, or nullptr otherwise.
+		static PlayerController *GetPlayerController()
+		{
+			return s_playerController;
 		}
 
 		void GetPlayerName(uint64 guid, std::weak_ptr<GamePlayerC> player) override;

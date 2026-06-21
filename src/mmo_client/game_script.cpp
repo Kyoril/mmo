@@ -45,6 +45,10 @@
 #include "game_client/unit_handle.h"
 #include "game/game_time_component.h"
 #include "graphics/graphics_device.h"
+#include "frame_ui/frame_mgr.h"
+#include "player_controller.h"
+#include "scene_graph/camera.h"
+#include "scene_graph/entity.h"
 #include "luabind/luabind.hpp"
 #include "luabind/iterator_policy.hpp"
 #include "luabind/out_value_policy.hpp"
@@ -149,6 +153,101 @@ namespace mmo
 			}
 
 			return nullptr;
+		}
+
+		/// Returns the world object the player is currently hovering, or nullptr if the hovered
+		/// object is not a world object (e.g. a unit) or nothing is hovered.
+		GameObjectC* Script_GetHoveredWorldObject()
+		{
+			const auto* controller = WorldState::GetPlayerController();
+			if (!controller)
+			{
+				return nullptr;
+			}
+
+			GameObjectC* hovered = controller->GetHoveredObject();
+			if (!hovered || !hovered->IsWorldObject())
+			{
+				return nullptr;
+			}
+
+			return hovered;
+		}
+
+		/// Returns true if the player is currently hovering an interactable world object.
+		bool Script_IsMouseoverWorldObject()
+		{
+			return Script_GetHoveredWorldObject() != nullptr;
+		}
+
+		/// Returns the name of the currently hovered world object, or nullptr if none is hovered.
+		const char* Script_GetMouseoverWorldObjectName()
+		{
+			if (const GameObjectC* hovered = Script_GetHoveredWorldObject())
+			{
+				return hovered->GetName().c_str();
+			}
+
+			return nullptr;
+		}
+
+		/// Computes the on-screen position (in logical UI coordinates) of the currently hovered
+		/// world object's top. Returns true if the object is visible on screen and the out values
+		/// are valid, false otherwise.
+		bool Script_GetMouseoverWorldObjectScreenPosition(float& out_x, float& out_y)
+		{
+			out_x = 0.0f;
+			out_y = 0.0f;
+
+			const GameObjectC* hovered = Script_GetHoveredWorldObject();
+			if (!hovered)
+			{
+				return false;
+			}
+
+			const auto* controller = WorldState::GetPlayerController();
+			if (!controller)
+			{
+				return false;
+			}
+
+			const Camera& camera = controller->GetCamera();
+
+			// Use the top of the object's bounding box so the tooltip sits above it instead of
+			// overlapping the mesh, matching how chat bubbles are anchored to the speaker.
+			Vector3 worldPosition = hovered->GetPosition();
+			if (const Entity* entity = hovered->GetEntity())
+			{
+				const AABB& bounds = entity->GetWorldBoundingBox(true);
+				if (!bounds.IsNull())
+				{
+					worldPosition.y = bounds.max.y;
+				}
+			}
+
+			// Reject objects behind the camera.
+			const Vector3 cameraToObject = worldPosition - camera.GetDerivedPosition();
+			if (cameraToObject.Dot(camera.GetDerivedDirection()) <= 0.0f)
+			{
+				return false;
+			}
+
+			float normalizedX = 0.0f;
+			float normalizedY = 0.0f;
+			camera.GetNormalizedScreenPosition(worldPosition, normalizedX, normalizedY);
+			if (normalizedX < 0.0f || normalizedX > 1.0f || normalizedY < 0.0f || normalizedY > 1.0f)
+			{
+				return false;
+			}
+
+			int32 viewportWidth = 0;
+			int32 viewportHeight = 0;
+			GraphicsDevice::Get().GetViewport(nullptr, nullptr, &viewportWidth, &viewportHeight);
+
+			const float inverseUiScale = 1.0f / FrameManager::Get().GetUIScale().y;
+			out_x = normalizedX * static_cast<float>(viewportWidth) * inverseUiScale;
+			out_y = normalizedY * static_cast<float>(viewportHeight) * inverseUiScale;
+			return true;
 		}
 
 		const proto_client::SpellEntry *Script_GetSpell(uint32 index)
@@ -1232,6 +1331,9 @@ namespace mmo
 					   luabind::def("IsShiftKeyDown", Platform::IsShiftKeyDown),
 
 					   luabind::def("UnitExists", &Script_UnitExists),
+					   luabind::def("IsMouseoverWorldObject", &Script_IsMouseoverWorldObject),
+					   luabind::def("GetMouseoverWorldObjectName", &Script_GetMouseoverWorldObjectName),
+					   luabind::def("GetMouseoverWorldObjectScreenPosition", &Script_GetMouseoverWorldObjectScreenPosition, luabind::joined<luabind::pure_out_value<1>, luabind::pure_out_value<2>>()),
 					   luabind::def("UnitAttributeCost", &Script_UnitAttributeCost),
 					   luabind::def("UnitStat", &Script_UnitStat, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 					   luabind::def("UnitArmor", &Script_UnitArmor, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>>()),

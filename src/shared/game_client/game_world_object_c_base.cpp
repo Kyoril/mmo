@@ -29,6 +29,16 @@ namespace mmo
 		m_fieldMap.Initialize(object_fields::WorldObjectFieldCount);
 	}
 
+	const String& GameWorldObjectC::GetName() const
+	{
+		if (m_entry && !m_entry->name.empty())
+		{
+			return m_entry->name;
+		}
+
+		return GameObjectC::GetName();
+	}
+
 	void GameWorldObjectC::Deserialize(io::Reader& reader, bool complete)
 	{
 		uint32 updateFlags = 0;
