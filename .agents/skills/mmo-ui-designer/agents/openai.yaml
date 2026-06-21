@@ -1,0 +1,4 @@
+interface:
+  display_name: "MMO UI Designer"
+  short_description: "Design and validate native XML/Lua game UI"
+  default_prompt: "Use $mmo-ui-designer to inspect and improve a native XML, Lua, and HTEX game interface."
