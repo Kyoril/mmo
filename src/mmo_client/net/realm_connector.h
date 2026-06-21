@@ -288,6 +288,10 @@ namespace mmo
 		/// Sends a packet to the server to request revival of the controlled character. On success, the player will probably be teleported by the server.
 		void SendReviveRequest();
 
+		/// Sends the player's response to a revive offer made by another player's revive spell.
+		/// @param accept True to accept the revival (teleport + restore health), false to decline.
+		void SendReviveResponse(bool accept);
+
 		/// Sends a movement speed change acknowledgement packet to the server. This has to be done for movement speed changes to take effect and for the
 		///	server to not kick us for speed hacking. All parameters must match the servers notification from before, otherwise we will be kicked as well.
 		///	Each acknowledgement has a unique id, as well as a server-side timeout.

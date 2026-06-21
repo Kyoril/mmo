@@ -657,6 +657,15 @@ namespace mmo
 
 		void OnProficiencyChanged(uint32 proficiencyId, bool added) override;
 
+		void OnReviveOffer(uint64 casterGuid, uint32 spellId, uint32 reviveHealth, uint32 mapId, const Vector3& position, const Radian& facing) override;
+
+	private:
+		/// Handles the ReviveResponse packet sent by the client in reply to a revive offer.
+		void OnReviveResponse(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Clears any pending revive offer and cancels its expiry timer.
+		void ClearPendingRevive();
+
 	private:
 		PlayerManager& m_manager;
 		RealmConnector& m_connector;
@@ -721,6 +730,19 @@ namespace mmo
 
 		// Periodic trade distance check (fires every 2 s while trading)
 		Countdown m_tradeDistanceCheckTimer;
+
+		/// @brief Pending revive offer state — set when another player casts a revive spell on
+		/// this (dead) player. Cleared on accept, decline, expiry, or when the body is released.
+		bool m_hasPendingRevive{ false };
+		uint64 m_pendingReviveCaster{ 0 };
+		uint32 m_pendingReviveSpellId{ 0 };
+		uint32 m_pendingReviveHealth{ 0 };
+		uint32 m_pendingReviveMap{ 0 };
+		Vector3 m_pendingRevivePosition;
+		Radian m_pendingReviveFacing;
+
+		/// @brief Expiry timer for a pending revive offer (auto-declines after a timeout).
+		Countdown m_pendingReviveTimeout;
 
 		/// @brief Tracks anti-cheat violations (position drift and speed hacks) for kick logic.
 		AntiCheatTracker m_antiCheatTracker;

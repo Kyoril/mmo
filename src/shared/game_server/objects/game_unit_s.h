@@ -333,6 +333,17 @@ namespace mmo
 		/// @param proficiencyId The proficiency ID that changed.
 		/// @param added True if the proficiency was added, false if removed.
 		virtual void OnProficiencyChanged(uint32 proficiencyId, bool added) = 0;
+
+		/// Called when another unit casts a revive spell on this (dead) unit, offering to bring
+		/// it back to life. The watcher is expected to prompt the player and, on acceptance,
+		/// teleport it to the cast location and restore the given amount of health.
+		/// @param casterGuid GUID of the unit that cast the revive spell.
+		/// @param spellId The revive spell's id.
+		/// @param reviveHealth Absolute amount of health to restore on acceptance.
+		/// @param mapId Map the revive was cast on (the teleport destination map).
+		/// @param position World position the revive was cast at (the teleport destination).
+		/// @param facing Facing to apply on revival.
+		virtual void OnReviveOffer(uint64 casterGuid, uint32 spellId, uint32 reviveHealth, uint32 mapId, const Vector3& position, const Radian& facing) = 0;
 	};
 
 	/// Enumerates possible movement changes which need to be acknowledged by the client.
@@ -545,6 +556,9 @@ namespace mmo
 		/// Sets the network unit watcher for this unit.
 		/// @param watcher Pointer to the network unit watcher.
 		void SetNetUnitWatcher(NetUnitWatcherS *watcher) { m_netUnitWatcher = watcher; }
+
+		/// Gets the network watcher of this unit (the owning client connection), or nullptr if none.
+		NetUnitWatcherS *GetNetUnitWatcher() const { return m_netUnitWatcher; }
 
 		/// Gets the current position of the unit.
 		/// @returns The position vector of the unit.

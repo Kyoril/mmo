@@ -314,6 +314,10 @@ namespace mmo
 				/// Sent by the client to leave a chat channel by its global id.
 				ChannelLeave,
 
+				/// Sent by a dead player in response to a ReviveRequest prompt, accepting or
+				/// declining a revival offered by another player's revive spell.
+				ReviveResponse,
+
 				/// Counter constant
 				Count_,
 			};
@@ -590,6 +594,11 @@ namespace mmo
 				/// join request fails. Payload: uint8 notifyType (see channel_notify), uint32 id,
 				/// dynamic<uint8> name.
 				ChannelNotify,
+
+				/// Sent to a dead client when another player casts a revive spell on it, prompting
+				/// the player to accept or decline the revival. Payload: packed uint64 casterGuid,
+				/// uint32 spellId.
+				ReviveRequest,
 
 				/// Counter constant
 				Count_,

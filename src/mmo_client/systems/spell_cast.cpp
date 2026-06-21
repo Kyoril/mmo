@@ -370,6 +370,16 @@ namespace mmo
 				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_TARGET_NOT_DEAD");
 				return;
 			}
+
+			// "Can Only Target Players" spells must not be cast on NPCs. Block the attempt
+			// client-side so we don't bother the server (which validates this as well).
+			if (spell->attributes_size() >= 2 &&
+				(spell->attributes(1) & spell_attributes_b::CanOnlyTargetPlayers) != 0 &&
+				targetUnit && targetUnit->GetTypeId() != ObjectTypeId::Player)
+			{
+				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_BAD_TARGETS");
+				return;
+			}
 		}
 
 		if (requirements & spell_target_requirements::ObjectTarget)

@@ -64,7 +64,7 @@ namespace mmo
 		{ "Portal", "Movement", "Opens a portal" },
 		{ "Quest Complete", "Utility", "Marks quest as complete" },
 		{ "Weapon Damage + (noschool)", "Damage", "Weapon damage without school" },
-		{ "Resurrect", "Healing", "Brings target back to life" },
+		{ "Revive", "Healing", "Revives a dead player target with an absolute amount of health (base points)" },
 		{ "Extra Attacks", "Combat", "Grants additional attacks" },
 		{ "Dodge", "Combat", "Forces target to dodge" },
 		{ "Evade", "Combat", "Makes target evade attacks" },
@@ -103,7 +103,8 @@ namespace mmo
 		{ "Reset Talents", "Utility", "Resets talent points" },
 		{ "Proficiency", "Utility", "Grants weapon proficiency" },
 		{ "Trigger Spell", "Utility", "Casts another spell, optionally on a proc chance taken from this spell's Proc Chance" },
-		{ "Critical Block", "Combat", "Allows the unit to critically block (block for an increased amount)" }
+		{ "Critical Block", "Combat", "Allows the unit to critically block (block for an increased amount)" },
+		{ "Revive %", "Healing", "Revives a dead player target with a percentage of their max health (base points)" }
 	};
 
 	static String s_spellEffectNames[] = {
@@ -122,7 +123,7 @@ namespace mmo
 		"Portal",
 		"Quest Complete",
 		"Weapon Damage + (noschool)",
-		"Resurrect",
+		"Revive",
 		"Extra Attacks",
 		"Dodge",
 		"Evade",
@@ -161,7 +162,8 @@ namespace mmo
 		"Reset Talents",
 		"Proficiency",
 		"Trigger Spell",
-		"Critical Block"
+		"Critical Block",
+		"Revive %"
 	};
 
 	static_assert(std::size(s_spellEffectNames) == spell_effects::Count_, "Each spell effect must have a string representation!");
@@ -1440,6 +1442,9 @@ namespace mmo
 
 				ImGui::TableNextColumn();
 				CHECKBOX_ATTR_PROP(1, "Ignore Line of Sight", spell_attributes_b::IgnoreLineOfSight);
+
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(1, "Can Only Target Players", spell_attributes_b::CanOnlyTargetPlayers);
 
 				ImGui::EndTable();
 			}

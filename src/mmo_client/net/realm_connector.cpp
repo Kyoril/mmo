@@ -563,6 +563,15 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::SendReviveResponse(bool accept)
+	{
+		sendSinglePacket([accept](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::ReviveResponse);
+			packet << io::write<uint8>(accept ? 1 : 0);
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::SendMovementSpeedAck(MovementType type, uint32 ackId, float speed, const MovementInfo& movementInfo)
 	{
 		sendSinglePacket([type, ackId, speed, &movementInfo](game::OutgoingPacket& packet) {

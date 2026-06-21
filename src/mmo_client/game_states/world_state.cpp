@@ -46,6 +46,7 @@
 #include "game_client/game_player_c.h"
 #include "game/spell_target_map.h"
 #include "game_client/game_item_c.h"
+#include "ui/chat_bubble_frame.h"
 #include "ui/world_text_frame.h"
 #include "game/quest.h"
 #include "game_client/game_bag_c.h"
@@ -128,6 +129,10 @@ namespace mmo
 
 		static ConsoleVar *s_terrainLodEnabledVar = nullptr;
 		static ConsoleVar *s_terrainOcclusionCullingVar = nullptr;
+
+		static ConsoleVar *s_chatBubblesSayVar = nullptr;
+		static ConsoleVar *s_chatBubblesYellVar = nullptr;
+		static ConsoleVar *s_chatBubblesPartyVar = nullptr;
 
 		String MapMouseButton(const MouseButton button)
 		{
@@ -872,6 +877,18 @@ namespace mmo
 			std::remove_if(m_worldTextFrames.begin(), m_worldTextFrames.end(),
 				[](const std::unique_ptr<WorldTextFrame> &frame) { return frame->IsExpired(); }),
 			m_worldTextFrames.end());
+
+		for (auto& frame : m_chatBubbleFrames)
+		{
+			frame->Update(deltaSeconds);
+		}
+		m_chatBubbleFrames.erase(
+			std::remove_if(m_chatBubbleFrames.begin(), m_chatBubbleFrames.end(),
+				[this](const std::unique_ptr<ChatBubbleFrame>& frame)
+				{
+					return frame->IsExpired() || !AreChatBubblesEnabled(frame->GetChatType());
+				}),
+			m_chatBubbleFrames.end());
 	}
 
 	bool WorldState::OnMouseWheel(const int32 delta)
@@ -888,6 +905,11 @@ namespace mmo
 		for (const auto &textFrame : m_worldTextFrames)
 		{
 			textFrame->Render();
+		}
+
+		for (const auto& chatBubble : m_chatBubbleFrames)
+		{
+			chatBubble->Render();
 		}
 
 		PROFILE_END_FRAME();
@@ -1315,6 +1337,7 @@ namespace mmo
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PartyCommandResult, *this, &WorldState::OnPartyCommandResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupInvite, *this, &WorldState::OnGroupInvite);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ReviveRequest, *this, &WorldState::OnReviveRequest);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GroupDecline, *this, &WorldState::OnGroupDecline);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PartyPing, *this, &WorldState::OnPartyPing);
 
@@ -1490,6 +1513,10 @@ namespace mmo
 		s_foliageDensityVar = ConsoleVarMgr::RegisterConsoleVar("FoliageDensity", "Foliage density multiplier (0.1 to 1.0). Lower values improve performance.", "1.0");
 		m_cvarChangedSignals += s_foliageDensityVar->Changed.connect(this, &WorldState::OnFoliageDensityChanged);
 
+		s_chatBubblesSayVar = ConsoleVarMgr::RegisterConsoleVar("ChatBubblesSay", "Show chat bubbles for player and NPC say messages.", "1");
+		s_chatBubblesYellVar = ConsoleVarMgr::RegisterConsoleVar("ChatBubblesYell", "Show chat bubbles for player and NPC yell messages.", "1");
+		s_chatBubblesPartyVar = ConsoleVarMgr::RegisterConsoleVar("ChatBubblesParty", "Show chat bubbles for party messages from visible party members.", "1");
+
 		Console::RegisterCommand(command_names::s_reload, [this](const std::string &, const std::string &)
 								 { ReloadUI(); }, ConsoleCommandCategory::Debug, "Reloads the user interface.");
 
@@ -1562,6 +1589,9 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("ViewDistance");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageEnabled");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageDensity");
+		ConsoleVarMgr::UnregisterConsoleVar("ChatBubblesSay");
+		ConsoleVarMgr::UnregisterConsoleVar("ChatBubblesYell");
+		ConsoleVarMgr::UnregisterConsoleVar("ChatBubblesParty");
 
 		m_cvarChangedSignals.disconnect();
 
@@ -2029,6 +2059,11 @@ namespace mmo
 				return PacketParseResult::Disconnect;
 			}
 
+			if (type == ChatType::UnitSay || type == ChatType::UnitYell)
+			{
+				AddChatBubble(characterGuid, type, message);
+			}
+
 			String chatMessageType;
 			switch (type)
 			{
@@ -2066,6 +2101,11 @@ namespace mmo
 				{
 					return PacketParseResult::Disconnect;
 				}
+			}
+
+			if (type == ChatType::Say || type == ChatType::Yell || type == ChatType::Group)
+			{
+				AddChatBubble(characterGuid, type, message);
 			}
 
 			m_cache.GetNameCache().Get(characterGuid, [this, type, message, flags, channelId](uint64, const String &name)
@@ -3582,6 +3622,29 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult WorldState::OnReviveRequest(game::IncomingPacket &packet)
+	{
+		uint64 casterGuid;
+		uint32 spellId;
+		if (!(packet >> io::read_packed_guid(casterGuid) >> io::read<uint32>(spellId)))
+		{
+			ELOG("Failed to read ReviveRequest packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Resolve the caster's name from the nearby unit, if known.
+		String casterName;
+		if (const std::shared_ptr<GameUnitC> casterUnit = ObjectMgr::Get<GameUnitC>(casterGuid))
+		{
+			casterName = casterUnit->GetName();
+		}
+
+		// Prompt the (dead) player to accept or decline the revival.
+		FrameManager::Get().TriggerLuaEvent("REVIVE_REQUEST", casterName);
+
+		return PacketParseResult::Pass;
+	}
+
 	PacketParseResult WorldState::OnGroupDecline(game::IncomingPacket &packet)
 	{
 		String inviterName;
@@ -4190,6 +4253,48 @@ namespace mmo
 		}
 
 		m_worldTextFrames.push_back(std::move(textFrame));
+	}
+
+	bool WorldState::AreChatBubblesEnabled(const ChatType chatType) const
+	{
+		switch (chatType)
+		{
+		case ChatType::Say:
+		case ChatType::UnitSay:
+			return s_chatBubblesSayVar && s_chatBubblesSayVar->GetBoolValue();
+		case ChatType::Yell:
+		case ChatType::UnitYell:
+			return s_chatBubblesYellVar && s_chatBubblesYellVar->GetBoolValue();
+		case ChatType::Group:
+			return s_chatBubblesPartyVar && s_chatBubblesPartyVar->GetBoolValue();
+		default:
+			return false;
+		}
+	}
+
+	void WorldState::AddChatBubble(const ObjectGuid speakerGuid, const ChatType chatType, const String& text)
+	{
+		if (speakerGuid == 0 || text.empty() || !AreChatBubblesEnabled(chatType))
+		{
+			return;
+		}
+
+		if (!ObjectMgr::Get<GameUnitC>(speakerGuid))
+		{
+			return;
+		}
+
+		m_chatBubbleFrames.erase(
+			std::remove_if(m_chatBubbleFrames.begin(), m_chatBubbleFrames.end(),
+				[speakerGuid](const std::unique_ptr<ChatBubbleFrame>& frame)
+				{
+					return frame->GetSpeakerGuid() == speakerGuid;
+				}),
+			m_chatBubbleFrames.end());
+
+		const float duration = std::clamp(4.0f + static_cast<float>(text.size()) * 0.04f, 5.0f, 10.0f);
+		m_chatBubbleFrames.push_back(std::make_unique<ChatBubbleFrame>(
+			m_playerController->GetCamera(), speakerGuid, chatType, text, duration));
 	}
 
 	void WorldState::OnPageAvailabilityChanged(const PageNeighborhood &page, bool isAvailable)

@@ -97,8 +97,11 @@ namespace mmo
 		void HandleLearnSpell(SpellEffectContext& ctx);
 		void HandleScriptEffect(SpellEffectContext& ctx);
 		void HandleDispelMechanic(SpellEffectContext& ctx);
-		void HandleResurrect(SpellEffectContext& ctx);
-		void HandleResurrectNew(SpellEffectContext& ctx);
+		/// Prompts dead player targets to be revived, restoring an absolute amount of health
+		/// (base points) at the cast location once they accept.
+		void HandleRevive(SpellEffectContext& ctx);
+		/// Like HandleRevive, but base points are treated as a percentage of the target's max health.
+		void HandleRevivePct(SpellEffectContext& ctx);
 		void HandleKnockBack(SpellEffectContext& ctx);
 		void HandleSkill(SpellEffectContext& ctx);
 		void HandleTransDoor(SpellEffectContext& ctx);

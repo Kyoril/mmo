@@ -38,6 +38,7 @@ namespace mmo
 		, m_timeSyncTimer(instance.GetUniverse().GetTimers())
 		, m_inventoryAutoSaveTimer(instance.GetUniverse().GetTimers())
 		, m_tradeDistanceCheckTimer(instance.GetUniverse().GetTimers())
+		, m_pendingReviveTimeout(instance.GetUniverse().GetTimers())
 	{
 		m_character->SetNetUnitWatcher(this);
 		m_character->SetPlayerWatcher(this);
@@ -136,6 +137,12 @@ namespace mmo
 
 				// Reschedule for next check
 				m_tradeDistanceCheckTimer.SetEnd(GetAsyncTimeMs() + constants::OneSecond * 2);
+			});
+
+		// A pending revive offer expires automatically if the player neither accepts nor declines.
+		m_pendingReviveTimeout.ended.connect([this]()
+			{
+				ClearPendingRevive();
 			});
 
 		// Setup inventory auto-save timer
@@ -704,6 +711,10 @@ namespace mmo
 
 		case game::client_realm_packet::ReviveRequest:
 			OnReviveRequest(opCode, buffer.size(), reader);
+			break;
+
+		case game::client_realm_packet::ReviveResponse:
+			OnReviveResponse(opCode, buffer.size(), reader);
 			break;
 
 		case game::client_realm_packet::AutoEquipItem:
@@ -2304,6 +2315,9 @@ namespace mmo
 			return;
 		}
 
+		// Releasing the body discards any pending revive offer from another player.
+		ClearPendingRevive();
+
 		// For now, we simply reset the player health back to the maximum health value.
 		// We will need to teleport the player back to it's binding point once teleportation is supported!
 		m_character->Set<uint32>(object_fields::Health, m_character->Get<uint32>(object_fields::MaxHealth) / 2);
@@ -2315,6 +2329,84 @@ namespace mmo
 		m_character->StartRegeneration();
 
 		m_character->Teleport(m_character->GetBindMap(), m_character->GetBindPosition(), m_character->GetBindFacing());
+	}
+
+	void Player::OnReviveOffer(uint64 casterGuid, uint32 spellId, uint32 reviveHealth, uint32 mapId, const Vector3& position, const Radian& facing)
+	{
+		// Should never happen (the caster's spell validation rejects living targets), but never trust input.
+		if (!m_character || m_character->IsAlive())
+		{
+			return;
+		}
+
+		// A new offer simply overrides any previous pending one.
+		m_pendingReviveCaster = casterGuid;
+		m_pendingReviveSpellId = spellId;
+		m_pendingReviveHealth = reviveHealth;
+		m_pendingReviveMap = mapId;
+		m_pendingRevivePosition = position;
+		m_pendingReviveFacing = facing;
+		m_hasPendingRevive = true;
+
+		// (Re)start the expiry timer.
+		m_pendingReviveTimeout.SetEnd(GetAsyncTimeMs() + constants::OneSecond * 60);
+
+		// Prompt the client to accept or decline the revival.
+		SendPacket([casterGuid, spellId](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::ReviveRequest);
+				packet
+					<< io::write_packed_guid(casterGuid)
+					<< io::write<uint32>(spellId);
+				packet.Finish();
+			});
+	}
+
+	void Player::OnReviveResponse(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint8 accept = 0;
+		if (!(contentReader >> io::read<uint8>(accept)))
+		{
+			ELOG("Failed to read ReviveResponse packet!");
+			return;
+		}
+
+		// No offer pending (it may have expired or been cancelled): ignore.
+		if (!m_hasPendingRevive)
+		{
+			return;
+		}
+
+		// Snapshot and clear the pending state before acting on it.
+		const uint32 reviveHealth = m_pendingReviveHealth;
+		const uint32 reviveMap = m_pendingReviveMap;
+		const Vector3 revivePosition = m_pendingRevivePosition;
+		const Radian reviveFacing = m_pendingReviveFacing;
+		ClearPendingRevive();
+
+		// Declined, or the player somehow became alive again in the meantime: do nothing.
+		if (accept == 0 || !m_character || m_character->IsAlive())
+		{
+			return;
+		}
+
+		// Bring the player back to life at the location the revive spell was cast.
+		const uint32 maxHealth = m_character->Get<uint32>(object_fields::MaxHealth);
+		m_character->Set<uint32>(object_fields::Health, std::min(reviveHealth, maxHealth));
+
+		m_character->StartRegeneration();
+
+		m_character->Teleport(reviveMap, revivePosition, reviveFacing);
+	}
+
+	void Player::ClearPendingRevive()
+	{
+		m_hasPendingRevive = false;
+		m_pendingReviveCaster = 0;
+		m_pendingReviveSpellId = 0;
+		m_pendingReviveHealth = 0;
+		m_pendingReviveMap = 0;
+		m_pendingReviveTimeout.Cancel();
 	}
 
 	void Player::OnRandomRoll(uint16 opCode, uint32 size, io::Reader& contentReader)

@@ -52,6 +52,7 @@ namespace
 		void OnLevelUp(uint32, int32, int32, int32, int32, int32, int32, int32, int32, int32) override {}
 		void OnSpellModChanged(SpellModType /*type*/, uint8 /*effectIndex*/, SpellModOp /*op*/, int32 /*value*/) override {}
 		void OnProficiencyChanged(uint32 /*id*/, bool /*added*/) override {}
+		void OnReviveOffer(uint64, uint32, uint32, uint32, const Vector3&, const Radian&) override {}
 	};
 
 	// -----------------------------------------------------------------------

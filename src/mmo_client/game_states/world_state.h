@@ -35,6 +35,7 @@
 #include "paging/page_pov_partitioner.h"
 #include "paging/world_page_loader.h"
 #include "ui/binding.h"
+#include "ui/chat_bubble_frame.h"
 #include "ui/world_text_frame.h"
 
 #include "game_client/net_client.h"
@@ -358,6 +359,9 @@ namespace mmo
 
 		PacketParseResult OnGroupInvite(game::IncomingPacket &packet);
 
+		/// Handles a revive offer from another player (server -> client). Prompts the dead player.
+		PacketParseResult OnReviveRequest(game::IncomingPacket &packet);
+
 		PacketParseResult OnGroupDecline(game::IncomingPacket &packet);
 
 		PacketParseResult OnPartyCommandResult(game::IncomingPacket &packet);
@@ -456,6 +460,12 @@ namespace mmo
 		/// Adds a floating world text UI element with a duration to the world.
 		void AddWorldTextFrame(const Vector3 &position, const String &text, const Color &color, float duration);
 
+		/// Adds a speech bubble which follows the speaking unit.
+		void AddChatBubble(ObjectGuid speakerGuid, ChatType chatType, const String& text);
+
+		/// Returns whether bubbles for the supplied chat type are currently enabled.
+		[[nodiscard]] bool AreChatBubblesEnabled(ChatType chatType) const;
+
 		void OnPageAvailabilityChanged(const PageNeighborhood &page, bool isAvailable) override;
 
 		PagePosition GetPagePositionFromCamera() const;
@@ -515,6 +525,8 @@ namespace mmo
 		Bindings m_bindings;
 
 		std::vector<std::unique_ptr<WorldTextFrame>> m_worldTextFrames;
+
+		std::vector<std::unique_ptr<ChatBubbleFrame>> m_chatBubbleFrames;
 
 		std::unique_ptr<asio::io_service::work> m_work;
 		asio::io_service m_workQueue;

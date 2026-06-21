@@ -409,6 +409,10 @@ namespace mmo
 			/// Spell can be cast regardless of line of sight between caster and target.
 			/// When absent, all unit-targeted spells require an unobstructed LOS.
 			IgnoreLineOfSight = 1 << 7,
+
+			/// Spell may only be cast on player characters (never on NPCs / creatures).
+			/// The client uses this to block the cast attempt early; the server still validates.
+			CanOnlyTargetPlayers = 1 << 8,
 		};
 	}
 
@@ -674,7 +678,9 @@ namespace mmo
 			Portal                  = 12,
 			QuestComplete           = 13,
 			WeaponDamageNoSchool    = 14,
-			Resurrect               = 15,
+			/// Revives a dead player target, restoring an absolute amount of health (base points).
+			/// The target is prompted to accept and, if accepted, is teleported to the cast location.
+			Revive                  = 15,
 			AddExtraAttacks         = 16,
 			Dodge                   = 17,
 			Evade                   = 18,
@@ -714,6 +720,8 @@ namespace mmo
 			Proficiency             = 52,
 			TriggerSpell            = 53,
 			CriticalBlock           = 54,
+			/// Like Revive, but restores a percentage of the target's maximum health (base points = percent).
+			RevivePct               = 55,
 
 			// Add new spell effect types HERE (append only — never insert above an existing entry).
 

@@ -14,6 +14,8 @@
 #include "proto_data/project.h"
 #include "world/universe.h"
 
+#include <algorithm>
+
 namespace mmo
 {
 	namespace SpellEffects
@@ -795,9 +797,89 @@ namespace mmo
 
 		void HandleDispelMechanic(SpellEffectContext& /*ctx*/) {}
 
-		void HandleResurrect(SpellEffectContext& /*ctx*/) {}
+		namespace
+		{
+			/// Shared implementation for the Revive / RevivePct effects. Prompts every dead player
+			/// target to accept a revival; on acceptance (handled by the owning connection) the
+			/// target is teleported to the cast location and restored to @p computeHealth health.
+			/// @param usePercent When true, base points are a percentage of the target's max health.
+			void HandleReviveInternal(SpellEffectContext& ctx, bool usePercent)
+			{
+				if (ctx.effectTargets.empty())
+				{
+					return;
+				}
 
-		void HandleResurrectNew(SpellEffectContext& /*ctx*/) {}
+				SpellCastContext& castContext = ctx.castContext;
+				GameUnitS& executer = castContext.GetExecutor();
+
+				// Capture the location the spell was cast at — this is where accepted targets are teleported to.
+				const WorldInstance* world = castContext.GetWorldInstance();
+				if (!world)
+				{
+					return;
+				}
+
+				const uint32 mapId = world->GetMapId();
+				const Vector3 castPosition = executer.GetPosition();
+				const Radian castFacing = executer.GetFacing();
+				const uint32 spellId = castContext.GetSpell().id();
+				const uint64 casterGuid = executer.GetGuid();
+
+				for (auto* targetObject : ctx.effectTargets)
+				{
+					if (!targetObject->IsUnit())
+					{
+						continue;
+					}
+
+					GameUnitS& unitTarget = targetObject->AsUnit();
+
+					// Revival is player-only and only valid while the target is dead. NPCs and living
+					// units are silently skipped here (the cast-level validation already rejects the
+					// common single-target cases; this guards multi-target / AoE revival).
+					if (!unitTarget.IsPlayer() || unitTarget.IsAlive())
+					{
+						continue;
+					}
+
+					NetUnitWatcherS* watcher = unitTarget.GetNetUnitWatcher();
+					if (!watcher)
+					{
+						continue;
+					}
+
+					// Resolve the absolute amount of health to restore on acceptance.
+					uint32 reviveHealth;
+					if (usePercent)
+					{
+						const uint32 maxHealth = unitTarget.Get<uint32>(object_fields::MaxHealth);
+						const int32 pct = std::clamp<int32>(ctx.basePoints, 0, 100);
+						reviveHealth = static_cast<uint32>(static_cast<uint64>(maxHealth) * pct / 100);
+					}
+					else
+					{
+						reviveHealth = static_cast<uint32>(std::max<int32>(0, ctx.basePoints));
+					}
+
+					// Always restore at least 1 health so the target does not arrive dead again.
+					reviveHealth = std::max<uint32>(1, reviveHealth);
+
+					ctx.markAffectedTarget(*targetObject);
+					watcher->OnReviveOffer(casterGuid, spellId, reviveHealth, mapId, castPosition, castFacing);
+				}
+			}
+		}
+
+		void HandleRevive(SpellEffectContext& ctx)
+		{
+			HandleReviveInternal(ctx, false);
+		}
+
+		void HandleRevivePct(SpellEffectContext& ctx)
+		{
+			HandleReviveInternal(ctx, true);
+		}
 
 		void HandleKnockBack(SpellEffectContext& /*ctx*/) {}
 

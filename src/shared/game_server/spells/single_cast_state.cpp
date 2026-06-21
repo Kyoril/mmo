@@ -482,6 +482,26 @@ namespace mmo
 			return false;
 		}
 
+		// Spells flagged "Can Only Target Players" must never affect NPCs / creatures.
+		// The client blocks the attempt early, but we re-validate here — never trust the client.
+		if (unitTarget && m_spell.attributes_size() >= 2 &&
+			(m_spell.attributes(1) & spell_attributes_b::CanOnlyTargetPlayers) != 0 &&
+			!unitTarget->IsPlayer())
+		{
+			SendEndCast(spell_cast_result::FailedBadTargets);
+			return false;
+		}
+
+		// Revive spells can only be cast on a dead target. Reject living targets both at cast
+		// start and at cast finish (this method runs in both paths) before any cost is consumed.
+		// (FailedBadTargets -> "Invalid target."; FailedTargetNotDead's text means the opposite.)
+		if (unitTarget && unitTarget->IsAlive() &&
+			(SpellHasEffect(m_spell, spell_effects::Revive) || SpellHasEffect(m_spell, spell_effects::RevivePct)))
+		{
+			SendEndCast(spell_cast_result::FailedBadTargets);
+			return false;
+		}
+
 		if (unitTarget && m_spell.has_rangetype())
 		{
 			const proto::RangeType* rangeType = unitTarget->GetProject().ranges.getById(m_spell.rangetype());
@@ -887,7 +907,8 @@ namespace mmo
 			{se::Summon,                 SpellEffects::HandleSummon},
 			{se::SummonPet,              SpellEffects::HandleSummonPet},
 			{se::LearnSpell,             SpellEffects::HandleLearnSpell},
-			{se::Resurrect,              SpellEffects::HandleResurrect},
+			{se::Revive,                 SpellEffects::HandleRevive},
+			{se::RevivePct,              SpellEffects::HandleRevivePct},
 			{se::ApplyAura,              SpellEffects::HandleApplyAura},
 			{se::ApplyAreaAura,          SpellEffects::HandleApplyAura},
 			{se::PersistentAreaAura,     SpellEffects::HandlePersistentAreaAura},

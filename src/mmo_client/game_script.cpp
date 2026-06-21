@@ -1479,6 +1479,12 @@ namespace mmo
 					   luabind::def<std::function<void()>>("ReviveMe", [this]()
 														   { m_realmConnector.SendReviveRequest(); }),
 
+					   luabind::def<std::function<void()>>("AcceptRevive", [this]()
+														   { m_realmConnector.SendReviveResponse(true); }),
+
+					   luabind::def<std::function<void()>>("DeclineRevive", [this]()
+														   { m_realmConnector.SendReviveResponse(false); }),
+
 					   luabind::def<std::function<void(const char *)>>("PlaySound", [this](const char *sound)
 																	   { PlaySound(sound); }),
 
