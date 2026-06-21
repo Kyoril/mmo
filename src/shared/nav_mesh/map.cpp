@@ -3,7 +3,6 @@
 
 #include <DetourCommon.h>
 #include <random>
-#include <recastnavigation/DetourCrowd/Include/DetourPathCorridor.h>
 
 #include "tile.h"
 
@@ -251,117 +250,6 @@ namespace mmo::nav
 	}
 
 
-	namespace
-	{
-		inline bool InRange(const float* v1, const float* v2, const float r, const float h)
-		{
-			const float dx = v2[0] - v1[0];
-			const float dy = v2[1] - v1[1];
-			const float dz = v2[2] - v1[2];
-			return (dx * dx + dz * dz) < r * r && fabsf(dy) < h;
-		}
-
-		int FixupShortcuts(dtPolyRef* path, int npath, const dtNavMeshQuery* navQuery)
-		{
-			if (npath < 3)
-				return npath;
-
-			// Get connected polygons
-			static const int maxNeis = 16;
-			dtPolyRef neis[maxNeis];
-			int nneis = 0;
-
-			const dtMeshTile* tile = 0;
-			const dtPoly* poly = 0;
-			if (dtStatusFailed(navQuery->getAttachedNavMesh()->getTileAndPolyByRef(path[0], &tile, &poly)))
-				return npath;
-
-			for (unsigned int k = poly->firstLink; k != DT_NULL_LINK; k = tile->links[k].next)
-			{
-				const dtLink* link = &tile->links[k];
-				if (link->ref != 0)
-				{
-					if (nneis < maxNeis)
-						neis[nneis++] = link->ref;
-				}
-			}
-
-			// If any of the neighbour polygons is within the next few polygons
-			// in the path, short cut to that polygon directly.
-			static const int maxLookAhead = 6;
-			int cut = 0;
-			for (int i = dtMin(maxLookAhead, npath) - 1; i > 1 && cut == 0; i--) {
-				for (int j = 0; j < nneis; j++)
-				{
-					if (path[i] == neis[j]) {
-						cut = i;
-						break;
-					}
-				}
-			}
-			if (cut > 1)
-			{
-				int offset = cut - 1;
-				npath -= offset;
-				for (int i = 1; i < npath; i++)
-					path[i] = path[i + offset];
-			}
-
-			return npath;
-		}
-
-		bool GetSteerTarget(const dtNavMeshQuery* navQuery, const float* startPos, const float* endPos,
-			const float minTargetDist,
-			const dtPolyRef* path, const int pathSize,
-			float* steerPos, unsigned char& steerPosFlag, dtPolyRef& steerPosRef,
-			float* outPoints = 0, int* outPointCount = 0)
-		{
-			// Find steer target.
-			static const int MAX_STEER_POINTS = 10;
-			float steerPath[MAX_STEER_POINTS * 3];
-			unsigned char steerPathFlags[MAX_STEER_POINTS];
-			dtPolyRef steerPathPolys[MAX_STEER_POINTS];
-			int nsteerPath = 0;
-			navQuery->findStraightPath(startPos, endPos, path, pathSize,
-				steerPath, steerPathFlags, steerPathPolys, &nsteerPath, MAX_STEER_POINTS);
-			if (!nsteerPath)
-				return false;
-
-			if (outPoints && outPointCount)
-			{
-				*outPointCount = nsteerPath;
-				for (int i = 0; i < nsteerPath; ++i)
-					dtVcopy(&outPoints[i * 3], &steerPath[i * 3]);
-			}
-
-
-			// Find vertex far enough to steer to.
-			int ns = 0;
-			while (ns < nsteerPath)
-			{
-				// Stop at Off-Mesh link or when point is further than slop away.
-				if ((steerPathFlags[ns] & DT_STRAIGHTPATH_OFFMESH_CONNECTION) ||
-					!InRange(&steerPath[ns * 3], startPos, minTargetDist, 1000.0f))
-					break;
-				ns++;
-			}
-			// Failed to find good point to steer to.
-			if (ns >= nsteerPath)
-				return false;
-
-			dtVcopy(steerPos, &steerPath[ns * 3]);
-
-			float h;
-			if (dtStatusSucceed(navQuery->getPolyHeight(steerPosRef, steerPos, &h)))
-				steerPos[1] = h;
-
-			steerPosFlag = steerPathFlags[ns];
-			steerPosRef = steerPathPolys[ns];
-
-			return true;
-		}
-	}
-
 	bool Map::FindPath(const Vector3& start, const Vector3& end, std::vector<Vector3>& output, bool allowPartial) const
 	{
 		constexpr float extents[] = { 5.f, 3.5f, 5.f };
@@ -400,153 +288,101 @@ namespace mmo::nav
 			return true;
 		}
 
+		// Clamp the requested start/end onto the nav mesh so the corridor and the funnel use
+		// positions that actually lie on a polygon.
+		float startNearest[3], endNearest[3];
+		m_navQuery.closestPointOnPoly(startPolyRef, recastStart, startNearest, nullptr);
+		m_navQuery.closestPointOnPoly(endPolyRef, recastEnd, endNearest, nullptr);
+
 		dtPolyRef polys[MaxPathPolys];
-		int m_npolys = 0;
+		int npolys = 0;
 
-		float smoothPath[MaxSmoothPathPoints * 3];
-
-		if (!dtStatusSucceed(m_navQuery.findPath(startPolyRef, endPolyRef, recastStart, recastEnd, &m_queryFilter, polys, &m_npolys, MaxPathPolys)))
+		if (!dtStatusSucceed(m_navQuery.findPath(startPolyRef, endPolyRef, startNearest, endNearest, &m_queryFilter, polys, &npolys, MaxPathPolys)) || npolys == 0)
 		{
 			return false;
 		}
 
-		int smoothPathPoints = 0;
-		if (m_npolys)
+		// If the corridor does not actually end on the requested polygon, the destination could
+		// not be reached. For a partial path we clamp the target to the closest point on the last
+		// reachable polygon; otherwise we report failure.
+		float targetPos[3];
+		dtVcopy(targetPos, endNearest);
+		if (polys[npolys - 1] != endPolyRef)
 		{
-			// Iterate over the path to find smooth path on the detail mesh surface.
-			int npolys = m_npolys;
-
-			float iterPos[3], targetPos[3];
-			m_navQuery.closestPointOnPoly(startPolyRef, recastStart, iterPos, nullptr);
-			m_navQuery.closestPointOnPoly(polys[npolys - 1], recastEnd, targetPos, nullptr);
-
-			static constexpr float STEP_SIZE = 3.0f; // Smaller step in tight spaces
-			static constexpr float SLOP = 0.5f;     // Relax the slop to avoid frequent redirects
-
-			dtVcopy(&smoothPath[smoothPathPoints * 3], iterPos);
-			smoothPathPoints++;
-
-			// Move towards target a small advancement at a time until target reached or
-			// when ran out of memory to store the path.
-			while (npolys && smoothPathPoints < MaxSmoothPathPoints)
+			if (!allowPartial)
 			{
-				// Find location to steer towards.
-				float steerPos[3];
-				unsigned char steerPosFlag;
-				dtPolyRef steerPosRef;
+				return false;
+			}
 
-				if (!GetSteerTarget(&m_navQuery, iterPos, targetPos, SLOP,
-					polys, npolys, steerPos, steerPosFlag, steerPosRef))
+			m_navQuery.closestPointOnPoly(polys[npolys - 1], endNearest, targetPos, nullptr);
+		}
+
+		// String-pull the polygon corridor into a straight-line waypoint list (the funnel
+		// algorithm). This yields the optimal corner-to-corner route instead of a path that
+		// slides along polygon/obstacle edges, which is what made units veer towards nearby
+		// trees and fences before continuing on.
+		float straightPath[MaxPathPolys * 3];
+		unsigned char straightPathFlags[MaxPathPolys];
+		dtPolyRef straightPathPolys[MaxPathPolys];
+		int straightPathCount = 0;
+
+		if (!dtStatusSucceed(m_navQuery.findStraightPath(startNearest, targetPos, polys, npolys,
+			straightPath, straightPathFlags, straightPathPolys, &straightPathCount, MaxPathPolys, 0)) || straightPathCount < 1)
+		{
+			return false;
+		}
+
+		// Snap a position onto the nav-mesh surface so densified waypoints follow terrain height
+		// instead of cutting straight through hills between distant corners.
+		auto sampleHeight = [this](const Vector3& point) -> Vector3
+		{
+			float pos[3] = { point.x, point.y, point.z };
+			constexpr float sampleExtents[] = { 2.f, 4.f, 2.f };
+
+			dtPolyRef ref;
+			float nearest[3];
+			if (dtStatusSucceed(m_navQuery.findNearestPoly(pos, sampleExtents, &m_queryFilter, &ref, nearest)) && ref)
+			{
+				float height;
+				if (dtStatusSucceed(m_navQuery.getPolyHeight(ref, nearest, &height)))
 				{
-					break;
-				}
-
-				bool endOfPath = (steerPosFlag & DT_STRAIGHTPATH_END) ? true : false;
-				bool offMeshConnection = (steerPosFlag & DT_STRAIGHTPATH_OFFMESH_CONNECTION) ? true : false;
-
-				// Find movement delta.
-				float delta[3], len;
-				dtVsub(delta, steerPos, iterPos);
-				len = dtMathSqrtf(dtVdot(delta, delta));
-				// If the steer target is end of path or off-mesh link, do not move past the location.
-				if ((endOfPath || offMeshConnection) && len < STEP_SIZE)
-				{
-					len = 1;
-				}
-				else
-				{
-					len = STEP_SIZE / len;
-				}
-				float moveTgt[3];
-				dtVmad(moveTgt, iterPos, delta, len);
-
-				// Move
-				float result[3];
-				dtPolyRef visited[16];
-				int nvisited = 0;
-				m_navQuery.moveAlongSurface(polys[0], iterPos, moveTgt, &m_queryFilter, result, visited, &nvisited, 16);
-
-				npolys = dtMergeCorridorStartMoved(polys, npolys, MaxPathPolys, visited, nvisited);
-				//npolys = FixupShortcuts(polys, npolys, &m_navQuery);
-
-				float h = 0;
-				m_navQuery.getPolyHeight(polys[0], result, &h);
-				result[1] = h;
-				dtVcopy(iterPos, result);
-
-				// Handle end of path and off-mesh links when close enough.
-				if (endOfPath && InRange(iterPos, steerPos, SLOP, 1.0f))
-				{
-					// Reached end of path.
-					dtVcopy(iterPos, targetPos);
-					if (smoothPathPoints < MaxSmoothPathPoints)
-					{
-						dtVcopy(&smoothPath[smoothPathPoints * 3], iterPos);
-						smoothPathPoints++;
-					}
-					break;
-				}
-
-				if (offMeshConnection && InRange(iterPos, steerPos, SLOP, 1.0f))
-				{
-					// Reached off-mesh connection.
-					float startPos[3], endPos[3];
-
-					// Advance the path up to and over the off-mesh connection.
-					dtPolyRef prevRef = 0, polyRef = polys[0];
-					int npos = 0;
-					while (npos < npolys && polyRef != steerPosRef)
-					{
-						prevRef = polyRef;
-						polyRef = polys[npos];
-						npos++;
-					}
-					for (int i = npos; i < npolys; ++i)
-					{
-						polys[i - npos] = polys[i];
-					}
-					npolys -= npos;
-
-					// Handle the connection.
-					dtStatus status = m_navMesh.getOffMeshConnectionPolyEndPoints(prevRef, polyRef, startPos, endPos);
-					if (dtStatusSucceed(status))
-					{
-						if (smoothPathPoints < MaxSmoothPathPoints)
-						{
-							dtVcopy(&smoothPath[smoothPathPoints * 3], startPos);
-							smoothPathPoints++;
-							// Hack to make the dotted path not visible during off-mesh connection.
-							if (smoothPathPoints & 1)
-							{
-								dtVcopy(&smoothPath[smoothPathPoints * 3], startPos);
-								smoothPathPoints++;
-							}
-						}
-						// Move position at the other side of the off-mesh link.
-						dtVcopy(iterPos, endPos);
-						float eh = 0.0f;
-						m_navQuery.getPolyHeight(polys[0], iterPos, &eh);
-						iterPos[1] = eh;
-					}
-				}
-
-				// Store results.
-				if (smoothPathPoints < MaxSmoothPathPoints)
-				{
-					dtVcopy(&smoothPath[smoothPathPoints * 3], iterPos);
-					smoothPathPoints++;
+					return Vector3(point.x, height, point.z);
 				}
 			}
-		}
-		else
-		{
-			return false;
-		}
 
-		output.resize(smoothPathPoints);
-		for (auto i = 0; i < smoothPathPoints; ++i)
+			return point;
+		};
+
+		// Subdivide long straight segments so the unit hugs the ground over uneven terrain.
+		// The inserted points lie exactly on the straight funnel line, so this does not
+		// reintroduce any detours - it only corrects height.
+		constexpr float kStepSize = 3.0f;
+
+		output.clear();
+		output.reserve(static_cast<size_t>(straightPathCount) * 2);
+
+		Vector3 previous(straightPath[0], straightPath[1], straightPath[2]);
+		output.push_back(sampleHeight(previous));
+
+		for (int i = 1; i < straightPathCount; ++i)
 		{
-			output[i] = Vector3(smoothPath[i * 3], smoothPath[i * 3 + 1], smoothPath[i * 3 + 2]);
+			const Vector3 corner(straightPath[i * 3], straightPath[i * 3 + 1], straightPath[i * 3 + 2]);
+
+			const Vector3 segment = corner - previous;
+			const float segmentLength = segment.GetLength();
+
+			if (segmentLength > kStepSize)
+			{
+				const int steps = static_cast<int>(segmentLength / kStepSize);
+				for (int s = 1; s < steps; ++s)
+				{
+					const Vector3 interpolated = previous + segment * (static_cast<float>(s) * kStepSize / segmentLength);
+					output.push_back(sampleHeight(interpolated));
+				}
+			}
+
+			output.push_back(sampleHeight(corner));
+			previous = corner;
 		}
 
 		return true;

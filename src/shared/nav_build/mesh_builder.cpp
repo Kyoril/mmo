@@ -1,6 +1,7 @@
 
 #include "mesh_builder.h"
 
+#include <cmath>
 #include <unordered_set>
 
 #include "DetourNavMeshBuilder.h"
@@ -23,11 +24,12 @@ namespace mmo
 
         static constexpr float CellHeight = 0.25f;
         static constexpr float WalkableHeight = 1.6f; // agent height in world units (units)
-        static constexpr float WalkableRadius = 0.3f; // narrowest allowable hallway in world units (units)
+        static constexpr float WalkableRadius = 0.5f; // agent radius in world units; the nav mesh keeps this much clearance from obstacles
         static constexpr float WalkableSlope = 75.f; // maximum walkable slope, in degrees
         static constexpr float WalkableClimb = 0.5f; // maximum 'step' height for which slope is ignored (units)
         static constexpr float DetailSampleDistance = 2.0f; // heightfield detail mesh sample distance (units)
         static constexpr float DetailSampleMaxError = 0.6f; // maximum distance detail mesh surface should deviate from heightfield (units)
+        static constexpr float EdgeMaxLen = 12.0f; // maximum contour edge length in world units before it is subdivided
 
 		// NOTE: If Recast warns "Walk towards polygon center failed to reach
 		// center", try lowering this value
@@ -40,9 +42,12 @@ namespace mmo
         static constexpr float TileSize = terrain::constants::TileSize;
         static constexpr float CellSize = TileSize / TileVoxelSize;
 
-        static constexpr int VoxelWalkableRadius = static_cast<int>(WalkableRadius / CellSize);
-        static constexpr int VoxelWalkableHeight = static_cast<int>(WalkableHeight / CellHeight);
+        // Round (rather than truncate) so a sub-voxel fraction is not silently dropped, which
+        // would otherwise reduce the effective agent radius to almost nothing.
+        static constexpr int VoxelWalkableRadius = static_cast<int>(WalkableRadius / CellSize + 0.5f);
+        static constexpr int VoxelWalkableHeight = static_cast<int>(WalkableHeight / CellHeight + 0.5f);
         static constexpr int VoxelWalkableClimb = static_cast<int>(WalkableClimb / CellHeight);
+        static constexpr int VoxelEdgeMaxLen = static_cast<int>(EdgeMaxLen / CellSize);
     }
 
 	namespace
@@ -106,13 +111,19 @@ namespace mmo
             config.walkableClimb = settings::VoxelWalkableClimb;
             config.walkableHeight = settings::VoxelWalkableHeight;
             config.walkableRadius = settings::VoxelWalkableRadius;
-            config.maxEdgeLen = config.walkableRadius * 4;
+            // Tie the maximum edge length to a sensible world distance instead of the agent
+            // radius. The old value (walkableRadius * 4 ≈ 1 unit) over-tessellated contours into
+            // many tiny polygons, producing jagged, vertex-heavy paths.
+            config.maxEdgeLen = settings::VoxelEdgeMaxLen;
             config.maxSimplificationError = settings::MaxSimplificationError;
             config.minRegionArea = settings::MinRegionSize;
             config.mergeRegionArea = settings::MergeRegionSize;
             config.maxVertsPerPoly = settings::VerticesPerPolygon;
             config.tileSize = settings::TileVoxelSize;
-            config.borderSize = config.walkableRadius + 1;
+            // Recast recommends walkableRadius + 3 so that obstacles just outside the tile are
+            // taken into account when eroding. A border that is too small leaves seams between
+            // neighbouring tiles, which show up as small gaps the path has to detour around.
+            config.borderSize = config.walkableRadius + 3;
             config.width = config.tileSize + config.borderSize * 2;
             config.height = config.tileSize + config.borderSize * 2;
             config.detailSampleDist = settings::DetailSampleDistance;
@@ -158,14 +169,21 @@ namespace mmo
                 recastVertices.push_back(v.z);
             }
 
+            // Cosine of the maximum walkable slope. A triangle counts as walkable when the angle
+            // between its face normal and the vertical axis is at or below this angle.
+            const float walkableCosThreshold = std::cos(slope * (3.14159265358979323846f / 180.0f));
+
             for (size_t i = 0; i < indices.size(); i += 3)
             {
                 const Vector3& a = vertices[indices[i + 0]];
                 const Vector3& b = vertices[indices[i + 1]];
                 const Vector3& c = vertices[indices[i + 2]];
 
+                const Vector3 normal = (b - a).Cross(c - a);
+                const float normalLengthSq = normal.GetSquaredLength();
+
                 // This is the critical degenerate triangle filter
-                if ((b - a).Cross(c - a).GetSquaredLength() < 1e-5f)
+                if (normalLengthSq < 1e-5f)
                 {
                     continue;  // Skip flat/invalid triangle
                 }
@@ -173,15 +191,25 @@ namespace mmo
                 cleanedIndices.push_back(indices[i + 0]);
                 cleanedIndices.push_back(indices[i + 1]);
                 cleanedIndices.push_back(indices[i + 2]);
-                cleanedAreas.push_back(areaFlags);
+
+                // Slope test. We use the absolute value of the vertical normal component so the
+                // result does not depend on triangle winding order - terrain fans wind the opposite
+                // way from imported model geometry, and the previous rcClearUnwalkableTriangles call
+                // (which assumes an upward-facing normal) rejected all terrain as a result. Steep
+                // triangles get the null area so the near-vertical sides of trees, fences and walls
+                // do not become walkable nav mesh.
+                const float verticalCos = std::fabs(normal.y) / std::sqrt(normalLengthSq);
+                cleanedAreas.push_back(verticalCos >= walkableCosThreshold ? areaFlags : static_cast<uint8>(0));
             }
 
             if (cleanedIndices.empty())
                 return true;  // No valid triangles
 
+            const int triangleCount = static_cast<int>(cleanedIndices.size() / 3);
+
             return rcRasterizeTriangles(
                 &ctx, recastVertices.data(), static_cast<int>(vertices.size()), cleanedIndices.data(),
-                cleanedAreas.data(), static_cast<int>(cleanedIndices.size() / 3), heightField, -1);
+                cleanedAreas.data(), triangleCount, heightField, -1);
         }
 
         bool SerializeMeshTile(rcContext& ctx, const rcConfig& config, int tileX, int tileY, rcHeightfield& solid, io::Writer& out)
@@ -189,9 +217,21 @@ namespace mmo
             // initialize compact height field
             SmartCompactHeightFieldPtr chf(rcAllocCompactHeightfield(), rcFreeCompactHeightfield);
 
+            // The third argument is the walkable climb (max step height), NOT an unbounded value.
+            // Passing INT_MAX connected vertically stacked spans regardless of height difference,
+            // so the nav mesh treated obstacle tops (tree canopies, fence rails, roofs) as reachable
+            // from the ground. Use the configured climb so only real steps are traversable.
             if (!rcBuildCompactHeightfield(&ctx, config.walkableHeight,
-                (std::numeric_limits<int>::max)(), solid,
+                config.walkableClimb, solid,
                 *chf))
+            {
+                return false;
+            }
+
+            // Erode the walkable area by the agent radius. Without this the nav mesh extends right up
+            // to obstacle edges (no clearance), which makes paths hug trees/fences. This is what
+            // actually applies config.walkableRadius to the resulting polygons.
+            if (!rcErodeWalkableArea(&ctx, config.walkableRadius, *chf))
             {
                 return false;
             }
