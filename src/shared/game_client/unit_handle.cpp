@@ -132,6 +132,16 @@ namespace mmo
 		return nullptr;
 	}
 
+	const char* UnitHandle::GetGuildName() const
+	{
+		if (!CheckNonNull() || !Get()->IsPlayer())
+		{
+			return nullptr;
+		}
+
+		return Get()->AsPlayer().GetGuildName().c_str();
+	}
+
 	int32 UnitHandle::GetPower(const int32 powerType) const
 	{
 		if (!CheckNonNull()) return 0;

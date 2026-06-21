@@ -93,9 +93,35 @@ namespace mmo
 		case GameWorldObjectType::Chest:
 			{
 				// Guard against stub chests with no configured loot entry.
-				// Use per-spawn override if set, otherwise fall back to base ObjectEntry.objectlootentry.
-				const uint32 lootEntryId = (m_lootEntryOverride != 0) ? m_lootEntryOverride : m_entry.objectlootentry();
-				if (lootEntryId == 0)
+				// Use the per-spawn override if set, otherwise fall back to the base ObjectEntry's loot
+				// tables. Loot tables act as reusable modules and multiple can be assigned to an object.
+				// For backwards compatibility, an object that still uses the legacy single
+				// 'objectlootentry' field is treated as having a single loot table.
+				std::vector<const proto::LootEntry*> lootEntries;
+				if (m_lootEntryOverride != 0)
+				{
+					if (const auto* loot = m_project.unitLoot.getById(m_lootEntryOverride))
+					{
+						lootEntries.push_back(loot);
+					}
+				}
+				else if (m_entry.objectlootentries_size() > 0)
+				{
+					lootEntries.reserve(m_entry.objectlootentries_size());
+					for (int i = 0; i < m_entry.objectlootentries_size(); ++i)
+					{
+						if (const auto* loot = m_project.unitLoot.getById(m_entry.objectlootentries(i)))
+						{
+							lootEntries.push_back(loot);
+						}
+					}
+				}
+				else if (const auto* legacyLoot = m_project.unitLoot.getById(m_entry.objectlootentry()))
+				{
+					lootEntries.push_back(legacyLoot);
+				}
+
+				if (lootEntries.empty())
 				{
 					DLOG("Chest has no loot entry configured - no loot window opened");
 					return;
@@ -106,12 +132,9 @@ namespace mmo
 					ASSERT(m_worldInstance);
 
 					const auto weakPlayer = std::weak_ptr(std::dynamic_pointer_cast<GamePlayerS>(player.shared_from_this()));
-					const auto* lootEntry = m_project.unitLoot.getById(lootEntryId);
 					m_loot = std::make_shared<LootInstance>(
 						m_project.items, m_worldInstance->GetConditionMgr(), GetGuid(),
-						lootEntry,
-						lootEntry ? lootEntry->minmoney() : 0,
-						lootEntry ? lootEntry->maxmoney() : 0,
+						lootEntries,
 						std::vector{ weakPlayer });
 
 					// TODO: wire trigger_id — fire a specific trigger on chest open when trigger_id != 0

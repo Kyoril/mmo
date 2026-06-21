@@ -135,6 +135,22 @@ namespace mmo
 			LootMethod lootMethod = loot_method::FreeForAll,
 			uint64 lootMasterGuid = 0);
 
+		/// Initializes a new instance of the loot instance from multiple loot entries (modular loot tables).
+		/// Each entry is rolled independently and the generated items are combined. The gold of every entry
+		/// is rolled and summed up.
+		/// @param items The item manager used to look up item templates.
+		/// @param conditionMgr The condition manager used to evaluate quest item conditions.
+		/// @param lootGuid The unique GUID of the loot source object.
+		/// @param entries The loot entry templates defining possible drops. Null entries are ignored.
+		/// @param lootRecipients The list of eligible loot recipients.
+		/// @param lootMethod The loot distribution method to enforce. Defaults to FreeForAll.
+		/// @param lootMasterGuid The GUID of the loot master (only meaningful for MasterLoot). Defaults to 0.
+		explicit LootInstance(const proto::ItemManager& items, const ConditionMgr& conditionMgr, uint64 lootGuid,
+			const std::vector<const proto::LootEntry*>& entries,
+			const std::vector<std::weak_ptr<GamePlayerS>>& lootRecipients,
+			LootMethod lootMethod = loot_method::FreeForAll,
+			uint64 lootMasterGuid = 0);
+
 	public:
 		/// Returns the id of this loot instance.
 		[[nodiscard]] uint64 GetLootGuid() const { return m_lootGuid; }
@@ -228,6 +244,11 @@ namespace mmo
 	private:
 
 		void AddLootItem(const proto::LootDefinition& def);
+
+		/// Rolls a single loot entry's groups and adds the resulting items to this instance.
+		/// @param entry The loot entry to roll.
+		/// @param lootRecipients The eligible loot recipients (used to evaluate item conditions).
+		void GenerateItemsFromEntry(const proto::LootEntry& entry, const std::vector<std::weak_ptr<GamePlayerS>>& lootRecipients);
 
 		[[nodiscard]] uint8 GetSlotType(uint8 slot, uint64 receiver) const;
 

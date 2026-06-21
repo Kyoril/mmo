@@ -964,6 +964,7 @@ namespace mmo
 							   .def("GetMaxPower", &UnitHandle::GetMaxPower)
 							   .def("GetLevel", &UnitHandle::GetLevel)
 							   .def("GetClass", &UnitHandle::GetClass)
+							   .def("GetGuildName", &UnitHandle::GetGuildName)
 							   .def("GetAuraCount", &UnitHandle::GetAuraCount)
 							   .def("GetAura", &UnitHandle::GetAura)
 							   .def("GetName", &UnitHandle::GetName)

@@ -122,6 +122,11 @@ namespace mmo
 		/// Stack of added frames.
 		std::stack<FramePtr> m_frames;
 
+		/// Nesting depth of a frame subtree that failed to be created and is being skipped.
+		/// Keeps ElementFrameStart/ElementFrameEnd balanced so a failed frame doesn't
+		/// underflow the frame stack.
+		int32 m_skippedFrameDepth = 0;
+
 		std::vector<std::function<void()>> m_scriptFunctions;
 
 		/// Whether an area tag has been opened.

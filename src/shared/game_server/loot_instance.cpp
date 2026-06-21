@@ -37,75 +37,119 @@ namespace mmo
 		
 		if (entry)
 		{
-			for (int i = 0; i < entry->groups_size(); ++i)
-			{
-				const auto& group = entry->groups(i);
-
-				std::uniform_real_distribution<float> lootDistribution(0.0f, 100.0f);
-				float groupRoll = lootDistribution(randomGenerator);
-
-				std::vector<const proto::LootDefinition*> equalChanced;
-				std::vector<const proto::LootDefinition*> nonEqualChanced;
-				for (int i = 0; i < group.definitions_size(); ++i)
-				{
-					const auto& def = group.definitions(i);
-
-					// Is quest item?
-					if (def.condition() != 0)
-					{
-						bool skipItem = true;
-						for (const auto& weakPlayer : lootRecipients)
-						{
-							if (auto strongPlayer = weakPlayer.lock())
-							{
-								if (m_conditionMgr.PlayerMeetsCondition(*strongPlayer, def.condition()))
-								{
-									// At least one player meets the condition - do not skip the item
-									skipItem = false;
-									break;
-								}
-							}
-						}
-
-						// Skip this item if no eligible player meets the condition at all
-						if (skipItem)
-						{
-							continue;
-						}
-					}
-
-					if (def.dropchance() == 0.0f)
-					{
-						equalChanced.push_back(&def);
-						continue;
-					}
-
-					if (def.dropchance() > 0.0f &&
-						def.dropchance() >= groupRoll)
-					{
-						nonEqualChanced.push_back(&def);
-					}
-				}
-
-				if (nonEqualChanced.empty() && !equalChanced.empty())
-				{
-					std::uniform_int_distribution<uint32> equalDistribution(0, equalChanced.size() - 1);
-					uint32 index = equalDistribution(randomGenerator);
-					AddLootItem(*equalChanced[index]);
-				}
-				else if (!nonEqualChanced.empty())
-				{
-					std::uniform_int_distribution<uint32> nonEqualDistribution(0, nonEqualChanced.size() - 1);
-					uint32 index = nonEqualDistribution(randomGenerator);
-					AddLootItem(*nonEqualChanced[index]);
-				}
-			}
+			GenerateItemsFromEntry(*entry, lootRecipients);
 		}
 
 		// Generate gold
 		std::uniform_int_distribution goldDistribution(minGold, maxGold);
 		m_gold = goldDistribution(randomGenerator);
 
+	}
+
+	LootInstance::LootInstance(const proto::ItemManager& items, const ConditionMgr& conditionMgr, const uint64 lootGuid,
+		const std::vector<const proto::LootEntry*>& entries,
+		const std::vector<std::weak_ptr<GamePlayerS>>& lootRecipients,
+		const LootMethod lootMethod, const uint64 lootMasterGuid)
+		: m_itemManager(items)
+		, m_conditionMgr(conditionMgr)
+		, m_lootGuid(lootGuid)
+		, m_gold(0)
+		, m_lootMethod(lootMethod)
+		, m_lootMasterGuid(lootMasterGuid)
+	{
+		m_recipients.reserve(lootRecipients.size());
+		for (const auto& character : lootRecipients)
+		{
+			if (const auto strongChar = character.lock())
+			{
+				m_recipients.push_back(strongChar->GetGuid());
+			}
+		}
+
+		// Roll each assigned loot table independently and combine the results, summing up the gold
+		// contributed by every loot table.
+		uint32 totalGold = 0;
+		for (const auto* entry : entries)
+		{
+			if (!entry)
+			{
+				continue;
+			}
+
+			GenerateItemsFromEntry(*entry, lootRecipients);
+
+			std::uniform_int_distribution<uint32> goldDistribution(entry->minmoney(), entry->maxmoney());
+			totalGold += goldDistribution(randomGenerator);
+		}
+
+		m_gold = totalGold;
+	}
+
+	void LootInstance::GenerateItemsFromEntry(const proto::LootEntry& entry, const std::vector<std::weak_ptr<GamePlayerS>>& lootRecipients)
+	{
+		for (int i = 0; i < entry.groups_size(); ++i)
+		{
+			const auto& group = entry.groups(i);
+
+			std::uniform_real_distribution<float> lootDistribution(0.0f, 100.0f);
+			float groupRoll = lootDistribution(randomGenerator);
+
+			std::vector<const proto::LootDefinition*> equalChanced;
+			std::vector<const proto::LootDefinition*> nonEqualChanced;
+			for (int i = 0; i < group.definitions_size(); ++i)
+			{
+				const auto& def = group.definitions(i);
+
+				// Is quest item?
+				if (def.condition() != 0)
+				{
+					bool skipItem = true;
+					for (const auto& weakPlayer : lootRecipients)
+					{
+						if (auto strongPlayer = weakPlayer.lock())
+						{
+							if (m_conditionMgr.PlayerMeetsCondition(*strongPlayer, def.condition()))
+							{
+								// At least one player meets the condition - do not skip the item
+								skipItem = false;
+								break;
+							}
+						}
+					}
+
+					// Skip this item if no eligible player meets the condition at all
+					if (skipItem)
+					{
+						continue;
+					}
+				}
+
+				if (def.dropchance() == 0.0f)
+				{
+					equalChanced.push_back(&def);
+					continue;
+				}
+
+				if (def.dropchance() > 0.0f &&
+					def.dropchance() >= groupRoll)
+				{
+					nonEqualChanced.push_back(&def);
+				}
+			}
+
+			if (nonEqualChanced.empty() && !equalChanced.empty())
+			{
+				std::uniform_int_distribution<uint32> equalDistribution(0, equalChanced.size() - 1);
+				uint32 index = equalDistribution(randomGenerator);
+				AddLootItem(*equalChanced[index]);
+			}
+			else if (!nonEqualChanced.empty())
+			{
+				std::uniform_int_distribution<uint32> nonEqualDistribution(0, nonEqualChanced.size() - 1);
+				uint32 index = nonEqualDistribution(randomGenerator);
+				AddLootItem(*nonEqualChanced[index]);
+			}
+		}
 	}
 
 	bool LootInstance::IsEmpty() const

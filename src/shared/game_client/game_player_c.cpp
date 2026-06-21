@@ -254,6 +254,12 @@ namespace mmo
 		RefreshUnitName();
 	}
 
+	const String& GamePlayerC::GetGuildName() const
+	{
+		static const String s_emptyGuildName;
+		return m_guild ? m_guild->name : s_emptyGuildName;
+	}
+
 	const proto_client::ClassEntry* GamePlayerC::GetClass() const
 	{
 		const uint32 classId = Get<uint32>(object_fields::Class); // Ensure

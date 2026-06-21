@@ -52,6 +52,10 @@ namespace mmo
 
 		void NotifyGuildInfo(const GuildInfo* guild);
 
+		/// Gets the name of the player's guild.
+		/// @return The guild name, or an empty string if the player has no known guild.
+		[[nodiscard]] const String& GetGuildName() const;
+
 		uint32 GetAvailableAttributePoints() const override
 		{
 			return Get<uint32>(object_fields::AvailableAttributePoints);

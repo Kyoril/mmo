@@ -185,9 +185,28 @@ namespace mmo
 						(static_cast<float>(character.second->GetLevel()) / static_cast<float>(sumLevel)));
 			}
 
-			const auto* lootEntry = controlled.GetProject().unitLoot.getById(entry.unitlootentry());
+			// Resolve the loot tables assigned to this creature. Loot tables act as reusable modules and
+			// multiple can be assigned to a single creature. For backwards compatibility, a creature that
+			// still uses the legacy single 'unitlootentry' field is treated as having a single loot table.
+			const auto& unitLoot = controlled.GetProject().unitLoot;
+			std::vector<const proto::LootEntry*> lootEntries;
+			if (entry.unitlootentries_size() > 0)
+			{
+				lootEntries.reserve(entry.unitlootentries_size());
+				for (int i = 0; i < entry.unitlootentries_size(); ++i)
+				{
+					if (const auto* loot = unitLoot.getById(entry.unitlootentries(i)))
+					{
+						lootEntries.push_back(loot);
+					}
+				}
+			}
+			else if (const auto* legacyLoot = unitLoot.getById(entry.unitlootentry()))
+			{
+				lootEntries.push_back(legacyLoot);
+			}
 
-			if (lootEntry)
+			if (!lootEntries.empty())
 			{
 				// Generate loot
 				std::vector<std::weak_ptr<GamePlayerS>> weakRecipients;
@@ -221,9 +240,7 @@ namespace mmo
 					controlled.GetProject().items,
 					controlled.GetWorldInstance()->GetConditionMgr(),
 					controlled.GetGuid(),
-					lootEntry,
-					lootEntry->minmoney(),
-					lootEntry->maxmoney(),
+					lootEntries,
 					weakRecipients,
 					groupLootMethod,
 					lootMasterGuid);

@@ -101,6 +101,11 @@ message UnitEntry {
 
 	// Auto-attack spell for this creature (if configured, melee auto-attack uses the spell system)
 	optional uint32 auto_attack_spell = 84;
+
+	// Loot tables assigned to this creature. Each referenced LootEntry is rolled independently and
+	// the results are combined, allowing loot tables to be used as reusable modules across many units.
+	// The legacy single 'unitlootentry' field (46) is migrated into this list automatically.
+	repeated uint32 unitlootentries = 85;
 }
 
 message Units {

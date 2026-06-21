@@ -273,3 +273,57 @@ TEST_CASE("LootInstance strategy-aware slot visibility", "[loot_instance]")
 		REQUIRE(loot.CanLootItem(0, guidB) == true);
 	}
 }
+
+TEST_CASE("LootInstance combines multiple loot tables", "[loot_instance]")
+{
+	asio::io_service ioService;
+	TimerQueue timerQueue(ioService);
+	proto::Project project;
+
+	auto* itemEntry = project.items.add(1);
+	itemEntry->set_id(1);
+	itemEntry->set_maxstack(20);
+
+	ConditionMgr conditionMgr(project.conditions);
+
+	std::vector<std::weak_ptr<GamePlayerS>> recipients;
+
+	SECTION("LOOT-10: Items from every assigned loot table are generated")
+	{
+		// Two modular loot tables: one with two guaranteed items, one with three.
+		proto::LootEntry tableA = MakeLootEntry(2);
+		proto::LootEntry tableB = MakeLootEntry(3);
+
+		const std::vector<const proto::LootEntry*> entries{ &tableA, &tableB };
+		LootInstance loot(project.items, conditionMgr, 42ULL, entries, recipients);
+
+		// All five guaranteed items (2 + 3) should be present.
+		REQUIRE(loot.GetItemCount() == 5);
+	}
+
+	SECTION("LOOT-11: Gold of every assigned loot table is summed up")
+	{
+		proto::LootEntry tableA = MakeLootEntry(0);
+		tableA.set_minmoney(100);
+		tableA.set_maxmoney(100);
+
+		proto::LootEntry tableB = MakeLootEntry(0);
+		tableB.set_minmoney(50);
+		tableB.set_maxmoney(50);
+
+		const std::vector<const proto::LootEntry*> entries{ &tableA, &tableB };
+		LootInstance loot(project.items, conditionMgr, 42ULL, entries, recipients);
+
+		REQUIRE(loot.GetGold() == 150);
+	}
+
+	SECTION("LOOT-12: Null loot table entries are ignored")
+	{
+		proto::LootEntry tableA = MakeLootEntry(1);
+
+		const std::vector<const proto::LootEntry*> entries{ nullptr, &tableA, nullptr };
+		LootInstance loot(project.items, conditionMgr, 42ULL, entries, recipients);
+
+		REQUIRE(loot.GetItemCount() == 1);
+	}
+}

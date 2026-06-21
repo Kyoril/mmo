@@ -69,6 +69,11 @@ namespace mmo
         /// @return Pointer to friend info, or nullptr if index is out of range.
         const FriendInfo *GetFriendInfo(int32 index) const;
 
+		/// Checks whether a player name belongs to a friend.
+		/// @param name The player name to look up.
+		/// @return True if the player is in the friend list.
+		[[nodiscard]] bool IsFriend(const String& name) const;
+
         /// Gets the name of the player who sent a pending friend invite.
         /// @return The inviter's name, or empty string if no pending invite.
         const String &GetPendingInviter() const { return m_pendingInviter; }

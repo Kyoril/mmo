@@ -2,6 +2,7 @@
 
 #include "creature_editor_window.h"
 #include "editor_imgui_helpers.h"
+#include "loot_assignment_widget.h"
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
@@ -356,38 +357,18 @@ namespace mmo
 				ImGui::EndTable();
 			}
 
-			static const char* s_unitLootNone = "<None>";
-
-			uint32 lootEntry = currentEntry.unitlootentry();
-
-			const auto* unitLootEntry = m_project.unitLoot.getById(lootEntry);
-			if (ImGui::BeginCombo("Unit Loot Entry", unitLootEntry != nullptr ? unitLootEntry->name().c_str() : s_unitLootNone, ImGuiComboFlags_None))
+			// Migrate the legacy single loot table assignment into the new loot table list so existing
+			// creatures keep their loot as a one-element list.
+			if (currentEntry.unitlootentries_size() == 0 && currentEntry.has_unitlootentry())
 			{
-				ImGui::PushID(-1);
-				if (ImGui::Selectable(s_unitLootNone, unitLootEntry == nullptr))
+				if (m_project.unitLoot.getById(currentEntry.unitlootentry()) != nullptr)
 				{
-					currentEntry.set_unitlootentry(-1);
+					currentEntry.add_unitlootentries(currentEntry.unitlootentry());
 				}
-				ImGui::PopID();
-
-				for (int i = 0; i < m_project.unitLoot.count(); i++)
-				{
-					ImGui::PushID(i);
-					const bool item_selected = m_project.unitLoot.getTemplates().entry(i).id() == lootEntry;
-					const char* item_text = m_project.unitLoot.getTemplates().entry(i).name().c_str();
-					if (ImGui::Selectable(item_text, item_selected))
-					{
-						currentEntry.set_unitlootentry(m_project.unitLoot.getTemplates().entry(i).id());
-					}
-					if (item_selected)
-					{
-						ImGui::SetItemDefaultFocus();
-					}
-					ImGui::PopID();
-				}
-
-				ImGui::EndCombo();
+				currentEntry.clear_unitlootentry();
 			}
+
+			DrawLootTableAssignment(m_project, *currentEntry.mutable_unitlootentries());
 		}
 
 		static const char* s_noneEntryString = "<None>";

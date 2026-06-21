@@ -2,6 +2,7 @@
 
 #include "object_editor_window.h"
 #include "editor_imgui_helpers.h"
+#include "loot_assignment_widget.h"
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
@@ -110,38 +111,18 @@ namespace mmo
 				ImGui::EndCombo();
 			}
 
-			static const char* s_objectLootEntry = "<None>";
-
-			uint32 lootEntryId = currentEntry.objectlootentry();
-
-			const auto* lootEntry = m_project.unitLoot.getById(lootEntryId);
-			if (ImGui::BeginCombo("Object Loot Entry", lootEntry != nullptr ? lootEntry->name().c_str() : s_objectLootEntry, ImGuiComboFlags_None))
+			// Migrate the legacy single loot table assignment into the new loot table list so existing
+			// objects keep their loot as a one-element list.
+			if (currentEntry.objectlootentries_size() == 0 && currentEntry.has_objectlootentry())
 			{
-				ImGui::PushID(-1);
-				if (ImGui::Selectable(s_objectLootEntry, lootEntry == nullptr))
+				if (m_project.unitLoot.getById(currentEntry.objectlootentry()) != nullptr)
 				{
-					currentEntry.set_objectlootentry(-1);
+					currentEntry.add_objectlootentries(currentEntry.objectlootentry());
 				}
-				ImGui::PopID();
-
-				for (int i = 0; i < m_project.unitLoot.count(); i++)
-				{
-					ImGui::PushID(i);
-					const bool item_selected = m_project.unitLoot.getTemplates().entry(i).id() == lootEntryId;
-					const char* item_text = m_project.unitLoot.getTemplates().entry(i).name().c_str();
-					if (ImGui::Selectable(item_text, item_selected))
-					{
-						currentEntry.set_objectlootentry(m_project.unitLoot.getTemplates().entry(i).id());
-					}
-					if (item_selected)
-					{
-						ImGui::SetItemDefaultFocus();
-					}
-					ImGui::PopID();
-				}
-
-				ImGui::EndCombo();
+				currentEntry.clear_objectlootentry();
 			}
+
+			DrawLootTableAssignment(m_project, *currentEntry.mutable_objectlootentries());
 		}
 
 		static const char* s_noneEntryString = "<None>";

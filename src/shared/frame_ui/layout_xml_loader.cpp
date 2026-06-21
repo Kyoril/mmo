@@ -512,9 +512,18 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementFrameStart(const XmlAttributes & attributes)
 	{
+		// If we are already inside a frame that we failed to create, simply track the
+		// nesting depth so the matching ElementFrameEnd calls stay balanced.
+		if (m_skippedFrameDepth > 0)
+		{
+			++m_skippedFrameDepth;
+			return;
+		}
+
 		if (m_hasAreaTag || m_scriptTag)
 		{
 			ELOG("Unexpected Frame element in file " << m_filename);
+			m_skippedFrameDepth = 1;
 			return;
 		}
 
@@ -556,6 +565,11 @@ namespace mmo
 		if (!frame)
 		{
 			ELOG("Failed to create Frame named '" << name << "' of type '" << type << "' in file " << m_filename);
+
+			// Frame creation failed (e.g. a frame with this name already exists, as frame
+			// names are global). Track the skipped subtree so the matching ElementFrameEnd
+			// calls don't underflow the frame stack and trigger an assertion.
+			m_skippedFrameDepth = 1;
 			return;
 		}
 
@@ -580,7 +594,7 @@ namespace mmo
 			parentFrame = FrameManager::Get().Find(parent);
 			if (parentFrame == nullptr)
 			{
-				ELOG("Unable to find parant frame by name " << parent << " - failed to set parent of frame " << name << " in file " << m_filename);
+				ELOG("Unable to find parent frame by name " << parent << " - failed to set parent of frame " << name << " in file " << m_filename);
 			}
 		}
 		else
@@ -614,6 +628,14 @@ namespace mmo
 
 	void LayoutXmlLoader::ElementFrameEnd()
 	{
+		// If this end tag belongs to a frame we failed to create (or skipped), just unwind
+		// the tracked nesting depth instead of popping the stack.
+		if (m_skippedFrameDepth > 0)
+		{
+			--m_skippedFrameDepth;
+			return;
+		}
+
 		// Remove the last processes frame from the stack and ensure that
 		// there is one
 		ASSERT(!m_frames.empty());

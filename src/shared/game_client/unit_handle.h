@@ -59,6 +59,11 @@ namespace mmo
 		[[nodiscard]] virtual int32 GetMaxHealth() const;
 		[[nodiscard]] virtual int32 GetLevel() const;
 		[[nodiscard]] virtual const char* GetClass() const;
+
+		/// Gets the unit's guild name when the unit is a player.
+		/// @return The guild name, an empty string for a guildless player, or nullptr for a non-player.
+		[[nodiscard]] virtual const char* GetGuildName() const;
+
 		[[nodiscard]] virtual int32 GetPower(int32 powerType) const;
 		[[nodiscard]] virtual int32 GetMaxPower(int32 powerType) const;
 		[[nodiscard]] virtual uint32 GetAuraCount() const;

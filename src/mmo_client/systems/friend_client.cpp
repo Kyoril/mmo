@@ -6,6 +6,8 @@
 #include "log/default_log_levels.h"
 #include "luabind_lambda.h"
 
+#include <algorithm>
+
 namespace mmo
 {
     FriendClient::FriendClient(RealmConnector &connector, const proto_client::RaceManager &races, const proto_client::ClassManager &classes)
@@ -54,6 +56,8 @@ namespace mmo
                                            { return GetNumFriends(); }),
                        luabind::def_lambda("GetFriendInfo", [this](int32 index)
                                            { return GetFriendInfo(index); }),
+					   luabind::def_lambda("IsFriend", [this](const String& name)
+										   { return IsFriend(name); }),
                        luabind::def_lambda("GetPendingInviter", [this]()
                                            { return GetPendingInviter().c_str(); }));
 #ifdef __INTELLISENSE__
@@ -129,6 +133,14 @@ packet.Finish(); });
 
         return &m_friends[index];
     }
+
+	bool FriendClient::IsFriend(const String& name) const
+	{
+		return std::any_of(m_friends.begin(), m_friends.end(), [&name](const FriendInfo& friendInfo)
+		{
+			return friendInfo.name == name;
+		});
+	}
 
     PacketParseResult FriendClient::OnFriendInvite(game::IncomingPacket &packet)
     {

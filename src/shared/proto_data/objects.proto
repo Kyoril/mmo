@@ -21,6 +21,11 @@ message ObjectEntry {
 	repeated uint32 triggers = 15;
 	repeated uint32 variables = 16;
 	optional uint32 requiredquest = 19 [default = 0];
+
+	// Loot tables assigned to this object. Each referenced LootEntry is rolled independently and the
+	// results are combined, allowing loot tables to be used as reusable modules across many objects.
+	// The legacy single 'objectlootentry' field (14) is migrated into this list automatically.
+	repeated uint32 objectlootentries = 20;
 }
 
 message Objects {
