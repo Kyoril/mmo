@@ -4,8 +4,9 @@
 
 namespace mmo
 {
-	TriggerContext::TriggerContext(GameObjectS* owner_, GameUnitS* triggering)
+	TriggerContext::TriggerContext(GameObjectS* owner_, GameUnitS* triggering, WorldInstance* world_)
 		: owner(owner_)
+		, world(world_ ? world_ : (owner_ ? owner_->GetWorldInstance() : nullptr))
 		, spellHitId(0)
 	{
 		if (triggering)

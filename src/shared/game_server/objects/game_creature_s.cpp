@@ -57,6 +57,9 @@ namespace mmo
 
 		// Setup AI
 		m_ai = make_unique<CreatureAI>(*this, CreatureAI::Home(m_movementInfo.position, m_movementInfo.facing.GetValueRadians()));
+
+		// Start repeating OnTimer triggers once this creature is actually spawned into a world instance.
+		m_onSpawned = spawned.connect([this](WorldInstance&) { StartPeriodicTriggers(); });
 	}
 
 	void GameCreatureS::Relocate(const Vector3& position, const Radian& facing)
@@ -380,6 +383,113 @@ namespace mmo
 		}
 	}
 
+	void GameCreatureS::OnDespawn()
+	{
+		// Stop all repeating timers before the base despawn logic runs.
+		StopPeriodicTriggers();
+
+		GameUnitS::OnDespawn();
+	}
+
+	void GameCreatureS::StartPeriodicTriggers()
+	{
+		StopPeriodicTriggers();
+
+		// Collect the same set of trigger ids that RaiseTrigger considers (template + per-spawn).
+		std::vector<uint32> triggerIds;
+		for (const auto& id : GetEntry().triggers())
+		{
+			triggerIds.push_back(id);
+		}
+		for (const auto& id : m_spawnAdditionalTriggers)
+		{
+			triggerIds.push_back(id);
+		}
+
+		for (const uint32 triggerId : triggerIds)
+		{
+			const auto* entry = GetProject().triggers.getById(triggerId);
+			if (!entry)
+			{
+				continue;
+			}
+
+			// Only triggers that listen to OnTimer get a repeating timer.
+			bool hasTimerEvent = false;
+			for (const auto& triggerEvent : entry->newevents())
+			{
+				if (triggerEvent.type() == trigger_event::OnTimer)
+				{
+					hasTimerEvent = true;
+					break;
+				}
+			}
+
+			if (!hasTimerEvent)
+			{
+				continue;
+			}
+
+			auto countdown = std::make_unique<Countdown>(GetTimers());
+			Countdown* countdownPtr = countdown.get();
+			const proto::TriggerEntry* entryPtr = entry;
+
+			countdown->ended.connect([this, countdownPtr, entryPtr]()
+				{
+					// Combat-only timers do nothing while out of combat, but keep ticking so they
+					// resume immediately once combat starts again.
+					const bool combatOnly = (entryPtr->flags() & trigger_flags::OnlyInCombat) != 0;
+					if (!combatOnly || IsInCombat())
+					{
+						unitTrigger(std::cref(*entryPtr), std::ref(*this), this);
+					}
+
+					// Reschedule the next firing.
+					SchedulePeriodicTrigger(*countdownPtr, *entryPtr);
+				});
+
+			SchedulePeriodicTrigger(*countdownPtr, *entry);
+			m_periodicTimers.push_back(std::move(countdown));
+		}
+	}
+
+	void GameCreatureS::StopPeriodicTriggers()
+	{
+		m_periodicTimers.clear();
+	}
+
+	void GameCreatureS::SchedulePeriodicTrigger(Countdown& countdown, const proto::TriggerEntry& entry)
+	{
+		// Read the interval (and optional randomized maximum) from the OnTimer event.
+		uint32 minInterval = 0;
+		uint32 maxInterval = 0;
+		for (const auto& triggerEvent : entry.newevents())
+		{
+			if (triggerEvent.type() == trigger_event::OnTimer)
+			{
+				minInterval = triggerEvent.data_size() > 0 ? triggerEvent.data(0) : 0;
+				maxInterval = triggerEvent.data_size() > 1 ? triggerEvent.data(1) : 0;
+				break;
+			}
+		}
+
+		if (minInterval == 0)
+		{
+			// Invalid interval — don't reschedule to avoid a busy loop.
+			WLOG("OnTimer trigger " << entry.id() << " has no/zero interval and will not fire");
+			return;
+		}
+
+		uint32 interval = minInterval;
+		if (maxInterval > minInterval)
+		{
+			std::uniform_int_distribution<uint32> dist(minInterval, maxInterval);
+			interval = dist(randomGenerator);
+		}
+
+		countdown.SetEnd(GetAsyncTimeMs() + interval);
+	}
+
 	void GameCreatureS::AddCombatParticipant(const GameUnitS& unit)
 	{
 		m_combatParticipantGuids.insert(unit.GetGuid());
@@ -681,6 +791,74 @@ namespace mmo
 		}
 
 		script->SetPhase(phase);
+		return true;
+	}
+
+	uint32 GameCreatureS::GetCombatPhase() const
+	{
+		if (!m_ai)
+		{
+			return 0;
+		}
+
+		auto* combatState = dynamic_cast<CreatureAICombatState*>(m_ai->GetCurrentState());
+		if (!combatState)
+		{
+			return 0;
+		}
+
+		auto* script = combatState->GetScript();
+		return script ? script->GetPhase() : 0;
+	}
+
+	bool GameCreatureS::ModifyThreat(GameUnitS& target, float amount)
+	{
+		if (!m_ai)
+		{
+			return false;
+		}
+
+		auto* combatState = dynamic_cast<CreatureAICombatState*>(m_ai->GetCurrentState());
+		if (!combatState)
+		{
+			return false;
+		}
+
+		combatState->AddThreatFromScript(target, amount);
+		return true;
+	}
+
+	bool GameCreatureS::ResetThreat()
+	{
+		if (!m_ai)
+		{
+			return false;
+		}
+
+		auto* combatState = dynamic_cast<CreatureAICombatState*>(m_ai->GetCurrentState());
+		if (!combatState)
+		{
+			return false;
+		}
+
+		combatState->ResetAllThreatFromScript();
+		return true;
+	}
+
+	bool GameCreatureS::Taunt(GameUnitS& target)
+	{
+		if (!m_ai)
+		{
+			return false;
+		}
+
+		auto* combatState = dynamic_cast<CreatureAICombatState*>(m_ai->GetCurrentState());
+		if (!combatState)
+		{
+			return false;
+		}
+
+		combatState->TauntFromScript(target);
 		return true;
 	}
 }

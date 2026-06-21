@@ -231,6 +231,13 @@ namespace mmo
 		void ResetAllThreatFromScript();
 
 		/**
+		 * @brief Forces the given target to the top of the threat table (taunt) and makes it the
+		 *        current victim.
+		 * @param target The unit to taunt onto.
+		 */
+		void TauntFromScript(GameUnitS& target);
+
+		/**
 		 * @brief Gets the active combat script, if any.
 		 * @return Pointer to the combat script, or nullptr.
 		 */

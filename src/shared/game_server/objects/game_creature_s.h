@@ -183,6 +183,25 @@ namespace mmo
 		/// @return True if the phase was set successfully, false if the creature has no combat script.
 		bool SetCombatPhase(uint32 phase);
 
+		/// @brief Gets the creature's current AI combat phase from the active combat script.
+		/// @return The current phase number, or 0 if the creature has no active combat script.
+		uint32 GetCombatPhase() const;
+
+		/// @brief Modifies the threat a unit has generated on this creature (requires active combat).
+		/// @param target The unit whose threat is modified.
+		/// @param amount The signed threat amount to add (may be negative).
+		/// @return True if applied, false if the creature is not currently in combat.
+		bool ModifyThreat(GameUnitS& target, float amount);
+
+		/// @brief Wipes this creature's entire threat table (requires active combat).
+		/// @return True if applied, false if the creature is not currently in combat.
+		bool ResetThreat();
+
+		/// @brief Forces the given target to the top of this creature's threat table (taunt).
+		/// @param target The unit to taunt onto.
+		/// @return True if applied, false if the creature is not currently in combat.
+		bool Taunt(GameUnitS& target);
+
 		void RefreshStats() override;
 
 		/// Executes a callback function for every valid combat participant.
@@ -215,6 +234,8 @@ namespace mmo
 		/// Gets the spawn-specific additional trigger IDs.
 		const std::vector<uint32>& GetSpawnAdditionalTriggers() const { return m_spawnAdditionalTriggers; }
 
+		void OnDespawn() override;
+
 	protected:
 		/// @brief Returns the auto-attack spell configured for this creature, if any.
 		/// @return Pointer to the auto-attack spell entry, or nullptr if not configured.
@@ -224,6 +245,18 @@ namespace mmo
 
 		/// Calculates and applies stats using the new stat-based system
 		void CalculateStatBasedStats();
+
+		/// (Re)builds and starts the repeating OnTimer trigger timers from this creature's triggers
+		/// (template triggers plus per-spawn additional triggers). Called when the creature spawns.
+		void StartPeriodicTriggers();
+
+		/// Stops and clears all repeating OnTimer trigger timers.
+		void StopPeriodicTriggers();
+
+		/// (Re)schedules the next firing of a periodic trigger timer based on its OnTimer interval data.
+		/// @param countdown The countdown to schedule.
+		/// @param entry The trigger entry whose OnTimer event defines the interval.
+		void SchedulePeriodicTrigger(Countdown& countdown, const proto::TriggerEntry& entry);
 
 		std::unique_ptr<CreatureAI> m_ai;
 		const proto::UnitEntry& m_originalEntry;
@@ -237,5 +270,8 @@ namespace mmo
 		bool m_combatMovementEnabled = true;
 		/// Per-spawn additional triggers — appended to the template's trigger list at runtime.
 		std::vector<uint32> m_spawnAdditionalTriggers;
+		/// Active repeating OnTimer trigger timers. Owned by the creature so they are cancelled
+		/// automatically when the creature is destroyed.
+		std::vector<std::unique_ptr<Countdown>> m_periodicTimers;
 	};
 }

@@ -5,6 +5,8 @@
 
 #include <list>
 #include <memory>
+#include <vector>
+#include <functional>
 
 namespace mmo
 {
@@ -52,6 +54,13 @@ namespace mmo
 		/// @param owner The game object to retrieve the world instance for.
 		/// @return A pointer to the world instance, or nullptr if none exists.
 		WorldInstance* GetWorldInstance(GameObjectS* owner) const;
+
+		/// Retrieves the world instance for a trigger context. Prefers the explicit world set on the
+		/// context (which is available even for ownerless instance-global triggers) and falls back to
+		/// the owner's world instance.
+		/// @param context The trigger context to resolve the world instance for.
+		/// @return A pointer to the world instance, or nullptr if none exists.
+		WorldInstance* GetWorldInstance(TriggerContext& context) const;
 
 		/// Retrieves the target of a trigger action.
 		/// @param action The trigger action to retrieve the target from.
@@ -184,6 +193,42 @@ namespace mmo
 		void HandleTeleport(const proto::TriggerAction& action, TriggerContext& context);
 
 		void HandleSetEncounterState(const proto::TriggerAction& action, TriggerContext& context);
+
+		/// Handles summoning a new creature into the world instance.
+		void HandleSummonCreature(const proto::TriggerAction& action, TriggerContext& context);
+
+		/// Handles forcing a creature's threat towards a target to the top of its threat table.
+		void HandleTaunt(const proto::TriggerAction& action, TriggerContext& context);
+
+		/// Handles modifying the threat a unit has generated on the owning creature.
+		void HandleModifyThreat(const proto::TriggerAction& action, TriggerContext& context);
+
+		/// Handles wiping the entire threat table of a creature.
+		void HandleResetThreat(const proto::TriggerAction& action, TriggerContext& context);
+
+		/// Handles applying the auras of a spell directly to a target.
+		void HandleApplyAura(const proto::TriggerAction& action, TriggerContext& context);
+
+		/// Handles removing all auras of a spell from a target.
+		void HandleRemoveAura(const proto::TriggerAction& action, TriggerContext& context);
+
+		/// Handles setting an instance-scoped variable.
+		void HandleSetInstanceVariable(const proto::TriggerAction& action, TriggerContext& context);
+
+		/// Handles broadcasting a message to all players in the instance.
+		void HandleBroadcastMessage(const proto::TriggerAction& action, TriggerContext& context);
+
+		/// Collects all alive players currently in the given world instance.
+		/// @param world The world instance to enumerate. May be nullptr.
+		/// @return Vector of alive player units (possibly empty).
+		std::vector<GameUnitS*> GetPlayersInWorld(WorldInstance* world) const;
+
+		/// Invokes a callback for each target an action resolves to. For most targets this is a single
+		/// object; for the AllPlayers target it is every player in the instance.
+		/// @param action The action whose target should be resolved.
+		/// @param context The trigger context.
+		/// @param callback Callable receiving a `GameObjectS&` for each resolved target.
+		void ForEachActionTarget(const proto::TriggerAction& action, TriggerContext& context, const std::function<void(GameObjectS&)>& callback);
 
 		bool EvaluateCondition(const proto::TriggerCondition& condition, TriggerContext& context);
 

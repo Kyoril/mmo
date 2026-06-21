@@ -152,6 +152,69 @@ namespace mmo
 			ImGui::SameLine();
 			DrawHelpMarker("Type of map instance (Global, Dungeon, Raid, etc.)");
 
+				ImGui::Spacing();
+				ImGui::Spacing();
+				DrawSectionHeader("Instance Triggers");
+				ImGui::SameLine();
+				DrawHelpMarker("Triggers owned by the map instance itself (not attached to any unit or object). "
+					"These respond to instance-wide events such as On Player Enter/Leave, On All Players Dead and On Instance Timer.");
+
+				// List existing instance triggers with remove buttons
+				int removeInstanceTriggerIdx = -1;
+				for (int t = 0; t < currentEntry.instance_triggers_size(); ++t)
+				{
+					const uint32 tid = currentEntry.instance_triggers(t);
+					const auto* te = m_project.triggers.getById(tid);
+					ImGui::PushID(t);
+					ImGui::Bullet();
+					ImGui::SameLine();
+					ImGui::Text("%s", te ? te->name().c_str() : "(unknown)");
+					ImGui::SameLine();
+					if (ImGui::SmallButton("Remove"))
+					{
+						removeInstanceTriggerIdx = t;
+					}
+					ImGui::PopID();
+				}
+				if (removeInstanceTriggerIdx >= 0)
+				{
+					currentEntry.mutable_instance_triggers()->erase(
+						currentEntry.mutable_instance_triggers()->begin() + removeInstanceTriggerIdx);
+				}
+
+				const int instanceTriggerCount = m_project.triggers.count();
+				static int s_addInstanceTriggerIdx = 0;
+				ImGui::SetNextItemWidth(270);
+				ImGui::Combo("##AddInstanceTrigger", &s_addInstanceTriggerIdx,
+					[](void* data, int idx, const char** out_text) -> bool
+					{
+						const auto* triggers = static_cast<proto::Triggers*>(data);
+						if (idx < 0 || idx >= triggers->entry_size()) { return false; }
+						*out_text = triggers->entry(idx).name().c_str();
+						return true;
+					},
+					&m_project.triggers.getTemplates(), instanceTriggerCount, -1);
+				ImGui::SameLine();
+				if (ImGui::Button("Add##InstanceTrigger") && instanceTriggerCount > 0)
+				{
+					const uint32 newTriggerId = m_project.triggers.getTemplates().entry(s_addInstanceTriggerIdx).id();
+
+					// Avoid duplicate entries
+					bool exists = false;
+					for (int t = 0; t < currentEntry.instance_triggers_size(); ++t)
+					{
+						if (currentEntry.instance_triggers(t) == newTriggerId)
+						{
+							exists = true;
+							break;
+						}
+					}
+					if (!exists)
+					{
+						currentEntry.add_instance_triggers(newTriggerId);
+					}
+				}
+
 			ImGui::PopStyleVar(2);
 			ImGui::Unindent();
 		}

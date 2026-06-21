@@ -10,6 +10,10 @@
 #include "proto_data/project.h"
 #include "shared/proto_data/triggers.pb.h"
 #include "proto_data/trigger_helper.h"
+#include "player_manager.h"
+#include "player.h"
+
+#include <limits>
 
 namespace mmo
 {
@@ -127,6 +131,14 @@ namespace mmo
 				MMO_HANDLE_TRIGGER_ACTION(Teleport)
 				MMO_HANDLE_TRIGGER_ACTION(Emote)
 				MMO_HANDLE_TRIGGER_ACTION(SetEncounterState)
+				MMO_HANDLE_TRIGGER_ACTION(SummonCreature)
+				MMO_HANDLE_TRIGGER_ACTION(Taunt)
+				MMO_HANDLE_TRIGGER_ACTION(ModifyThreat)
+				MMO_HANDLE_TRIGGER_ACTION(ResetThreat)
+				MMO_HANDLE_TRIGGER_ACTION(ApplyAura)
+				MMO_HANDLE_TRIGGER_ACTION(RemoveAura)
+				MMO_HANDLE_TRIGGER_ACTION(SetInstanceVariable)
+				MMO_HANDLE_TRIGGER_ACTION(BroadcastMessage)
 
 #undef MMO_HANDLE_TRIGGER_ACTION
 
@@ -358,7 +370,7 @@ namespace mmo
 
 	void TriggerHandler::HandleSetWorldObjectState(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		auto* world = GetWorldInstance(context.owner);
+		auto* world = GetWorldInstance(context);
 		if (!world)
 		{
 			ELOG("TRIGGER_ACTION_SET_WORLD_OBJECT_STATE: No world instance");
@@ -389,7 +401,7 @@ namespace mmo
 
 	void TriggerHandler::HandleSetSpawnState(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		auto world = GetWorldInstance(context.owner);
+		auto world = GetWorldInstance(context);
 		if (!world)
 		{
 			return;
@@ -430,7 +442,7 @@ namespace mmo
 
 	void TriggerHandler::HandleSetRespawnState(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		auto world = GetWorldInstance(context.owner);
+		auto world = GetWorldInstance(context);
 		if (!world)
 		{
 			return;
@@ -1042,6 +1054,24 @@ namespace mmo
 		return world;
 	}
 
+	WorldInstance* TriggerHandler::GetWorldInstance(TriggerContext& context) const
+	{
+		// Prefer the explicit world instance from the context. This is set even when there is no
+		// owner (e.g. for map-instance-global triggers), allowing named target/spawner resolution.
+		WorldInstance* world = context.world;
+		if (!world && context.owner)
+		{
+			world = context.owner->GetWorldInstance();
+		}
+
+		if (!world)
+		{
+			ELOG("Could not get world instance - action will be ignored.");
+		}
+
+		return world;
+	}
+
 	bool TriggerHandler::PlaySoundEntry(uint32 sound, GameObjectS* source)
 	{
 		if (sound)
@@ -1064,7 +1094,7 @@ namespace mmo
 			return (context.owner && context.owner->IsUnit() ? context.owner->AsUnit().GetVictim() : nullptr);
 		case trigger_action_target::NamedWorldObject:
 		{
-			auto* world = GetWorldInstance(context.owner);
+			auto* world = GetWorldInstance(context);
 			if (!world) return nullptr;
 
 			// Need to provide a name
@@ -1078,7 +1108,7 @@ namespace mmo
 		}
 		case trigger_action_target::NamedCreature:
 		{
-			auto* world = GetWorldInstance(context.owner);
+			auto* world = GetWorldInstance(context);
 			if (!world) return nullptr;
 
 			// Need to provide a name
@@ -1091,6 +1121,61 @@ namespace mmo
 			// Return the first spawned game object
 			return (spawner->GetCreatures().empty() ? nullptr : reinterpret_cast<GameObjectS*>(spawner->GetCreatures()[0].get()));
 		}
+		case trigger_action_target::RandomUnit:
+		{
+			auto* world = GetWorldInstance(context);
+			if (!world) return nullptr;
+
+			// Collect all alive units in the instance and pick one at random.
+			std::vector<GameUnitS*> units;
+			world->ForEachObject([&units](GameObjectS& obj)
+				{
+					if (obj.IsUnit() && obj.AsUnit().IsAlive())
+					{
+						units.push_back(&obj.AsUnit());
+					}
+					return true;
+				});
+
+			if (units.empty()) return nullptr;
+			std::uniform_int_distribution<size_t> dist(0, units.size() - 1);
+			return units[dist(randomGenerator)];
+		}
+		case trigger_action_target::RandomPlayer:
+		{
+			auto players = GetPlayersInWorld(GetWorldInstance(context));
+			if (players.empty()) return nullptr;
+			std::uniform_int_distribution<size_t> dist(0, players.size() - 1);
+			return players[dist(randomGenerator)];
+		}
+		case trigger_action_target::NearestPlayer:
+		{
+			auto players = GetPlayersInWorld(GetWorldInstance(context));
+			if (players.empty() || !context.owner) return nullptr;
+
+			const Vector3 origin = context.owner->GetPosition();
+			GameUnitS* nearest = nullptr;
+			float nearestSqr = std::numeric_limits<float>::max();
+			for (auto* player : players)
+			{
+				const float distSqr = (player->GetPosition() - origin).GetSquaredLength();
+				if (distSqr < nearestSqr)
+				{
+					nearestSqr = distSqr;
+					nearest = player;
+				}
+			}
+			return nearest;
+		}
+		case trigger_action_target::HighestThreat:
+			// The current victim of the owning creature is its highest threat target (tank).
+			return (context.owner && context.owner->IsUnit() ? context.owner->AsUnit().GetVictim() : nullptr);
+		case trigger_action_target::AllPlayers:
+		{
+			// Single-target callers get the first player; multi-target callers use ForEachActionTarget.
+			auto players = GetPlayersInWorld(GetWorldInstance(context));
+			return players.empty() ? nullptr : players[0];
+		}
 		default:
 			WLOG("Unhandled action target " << action.target());
 			break;
@@ -1099,9 +1184,46 @@ namespace mmo
 		return nullptr;
 	}
 
+	std::vector<GameUnitS*> TriggerHandler::GetPlayersInWorld(WorldInstance* world) const
+	{
+		std::vector<GameUnitS*> players;
+		if (!world)
+		{
+			return players;
+		}
+
+		world->ForEachObject([&players](GameObjectS& obj)
+			{
+				if (obj.IsPlayer() && obj.AsUnit().IsAlive())
+				{
+					players.push_back(&obj.AsUnit());
+				}
+				return true;
+			});
+
+		return players;
+	}
+
+	void TriggerHandler::ForEachActionTarget(const proto::TriggerAction& action, TriggerContext& context, const std::function<void(GameObjectS&)>& callback)
+	{
+		if (action.target() == trigger_action_target::AllPlayers)
+		{
+			for (auto* player : GetPlayersInWorld(GetWorldInstance(context)))
+			{
+				callback(*player);
+			}
+			return;
+		}
+
+		if (GameObjectS* target = GetActionTarget(action, context))
+		{
+			callback(*target);
+		}
+	}
+
 	void TriggerHandler::HandleSetEncounterState(const proto::TriggerAction& action, TriggerContext& context)
 	{
-		auto* world = GetWorldInstance(context.owner);
+		auto* world = GetWorldInstance(context);
 		if (!world)
 		{
 			ELOG("TRIGGER_ACTION_SET_ENCOUNTER_STATE: No world instance");
@@ -1121,6 +1243,291 @@ namespace mmo
 		DLOG("TRIGGER_ACTION_SET_ENCOUNTER_STATE: Slot " << slotId << " set to " << newState);
 	}
 
+	void TriggerHandler::HandleSummonCreature(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		WorldInstance* world = GetWorldInstance(context);
+		if (!world)
+		{
+			ELOG("TRIGGER_ACTION_SUMMON_CREATURE: No world instance");
+			return;
+		}
+
+		const uint32 entryId = static_cast<uint32>(GetActionData(action, 0));
+		const auto* unitEntry = m_project.units.getById(entryId);
+		if (!unitEntry)
+		{
+			ELOG("TRIGGER_ACTION_SUMMON_CREATURE: Unknown creature entry " << entryId);
+			return;
+		}
+
+		// Determine spawn position: explicit coordinates (data 1..3) or the position of the resolved
+		// target / owner.
+		Vector3 position;
+		if (action.data_size() >= 4)
+		{
+			position = Vector3(
+				static_cast<float>(GetActionData(action, 1)),
+				static_cast<float>(GetActionData(action, 2)),
+				static_cast<float>(GetActionData(action, 3)));
+		}
+		else
+		{
+			GameObjectS* origin = (action.target() != trigger_action_target::None) ? GetActionTarget(action, context) : nullptr;
+			if (!origin)
+			{
+				origin = context.owner;
+			}
+
+			if (!origin)
+			{
+				ELOG("TRIGGER_ACTION_SUMMON_CREATURE: No spawn position (no explicit coords, no owner/target)");
+				return;
+			}
+			position = origin->GetPosition();
+		}
+
+		const uint32 despawnMs = static_cast<uint32>(GetActionData(action, 4));
+		const bool attackNearest = (GetActionData(action, 5) != 0);
+
+		// Owner (for OnSummonedUnitDied) and triggering unit (potential aggro target) captured weakly.
+		std::weak_ptr<GameObjectS> weakOwner;
+		if (context.owner)
+		{
+			weakOwner = context.owner->shared_from_this();
+		}
+		std::weak_ptr<GameUnitS> weakTriggering = context.triggeringUnit;
+
+		// World mutations must not happen during the world update tick — defer to the next tick.
+		world->GetUniverse().Post([this, world, unitEntry, position, despawnMs, attackNearest, weakOwner, weakTriggering]()
+			{
+				auto summon = world->CreateTemporaryCreature(*unitEntry, position, 0.0f, 0.0f);
+				if (!summon)
+				{
+					return;
+				}
+				summon->ClearFieldChanges();
+
+				GameCreatureS* summonPtr = summon.get();
+
+				// Raise OnSummonedUnitDied on the owner (or as an instance event) when the summon dies.
+				summon->killed.connect([world, weakOwner, summonPtr](GameUnitS* /*killer*/)
+					{
+						if (const auto owner = weakOwner.lock())
+						{
+							if (owner->IsUnit())
+							{
+								owner->AsUnit().RaiseTrigger(trigger_event::OnSummonedUnitDied, summonPtr);
+								return;
+							}
+						}
+
+						// Ownerless (instance) summon — raise the event on the instance instead.
+						world->RaiseInstanceTrigger(trigger_event::OnSummonedUnitDied, summonPtr);
+					});
+
+				world->AddGameObject(*summon);
+
+				if (despawnMs > 0)
+				{
+					summon->TriggerDespawnTimer(despawnMs);
+				}
+
+				// Make the summon hostile to a target so it joins the fight immediately.
+				GameUnitS* aggroTarget = nullptr;
+				if (const auto triggering = weakTriggering.lock())
+				{
+					aggroTarget = triggering.get();
+				}
+				else if (attackNearest)
+				{
+					auto players = GetPlayersInWorld(world);
+					float nearestSqr = std::numeric_limits<float>::max();
+					for (auto* player : players)
+					{
+						const float distSqr = (player->GetPosition() - position).GetSquaredLength();
+						if (distSqr < nearestSqr)
+						{
+							nearestSqr = distSqr;
+							aggroTarget = player;
+						}
+					}
+				}
+
+				if (aggroTarget && aggroTarget->IsAlive())
+				{
+					// Generating threat causes the AI to enter combat with the target.
+					summon->threatened(*aggroTarget, 1.0f);
+				}
+			});
+	}
+
+	void TriggerHandler::HandleTaunt(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		// The creature to taunt is the action target (defaults to owner).
+		GameObjectS* creatureObj = (action.target() != trigger_action_target::None) ? GetActionTarget(action, context) : context.owner;
+		if (!creatureObj)
+		{
+			creatureObj = context.owner;
+		}
+
+		auto* creature = dynamic_cast<GameCreatureS*>(creatureObj);
+		if (!creature)
+		{
+			WLOG("TRIGGER_ACTION_TAUNT: Target is not a creature - action ignored");
+			return;
+		}
+
+		// The taunter is the triggering unit by default.
+		GameUnitS* taunter = context.triggeringUnit.lock().get();
+		if (!taunter)
+		{
+			WLOG("TRIGGER_ACTION_TAUNT: No triggering unit to taunt with - action ignored");
+			return;
+		}
+
+		if (!creature->Taunt(*taunter))
+		{
+			WLOG("TRIGGER_ACTION_TAUNT: Creature is not in combat - action ignored");
+		}
+	}
+
+	void TriggerHandler::HandleModifyThreat(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		// The creature whose threat table is modified is the owner.
+		auto* creature = dynamic_cast<GameCreatureS*>(context.owner);
+		if (!creature)
+		{
+			WLOG("TRIGGER_ACTION_MODIFY_THREAT: Owner is not a creature - action ignored");
+			return;
+		}
+
+		GameObjectS* targetObj = GetActionTarget(action, context);
+		if (!targetObj || !targetObj->IsUnit())
+		{
+			WLOG("TRIGGER_ACTION_MODIFY_THREAT: Needs a unit target - action ignored");
+			return;
+		}
+
+		const float amount = static_cast<float>(GetActionData(action, 0));
+		if (!creature->ModifyThreat(targetObj->AsUnit(), amount))
+		{
+			WLOG("TRIGGER_ACTION_MODIFY_THREAT: Creature is not in combat - action ignored");
+		}
+	}
+
+	void TriggerHandler::HandleResetThreat(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		// The creature whose threat is reset is the action target (defaults to owner).
+		GameObjectS* creatureObj = (action.target() != trigger_action_target::None) ? GetActionTarget(action, context) : context.owner;
+		if (!creatureObj)
+		{
+			creatureObj = context.owner;
+		}
+
+		auto* creature = dynamic_cast<GameCreatureS*>(creatureObj);
+		if (!creature)
+		{
+			WLOG("TRIGGER_ACTION_RESET_THREAT: Target is not a creature - action ignored");
+			return;
+		}
+
+		if (!creature->ResetThreat())
+		{
+			WLOG("TRIGGER_ACTION_RESET_THREAT: Creature is not in combat - action ignored");
+		}
+	}
+
+	void TriggerHandler::HandleApplyAura(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		const auto* spell = m_project.spells.getById(GetActionData(action, 0));
+		if (!spell)
+		{
+			ELOG("TRIGGER_ACTION_APPLY_AURA: Invalid spell id");
+			return;
+		}
+
+		// The caster is the owning unit if any; otherwise the aura is applied as a self-cast.
+		GameUnitS* caster = (context.owner && context.owner->IsUnit()) ? &context.owner->AsUnit() : nullptr;
+
+		ForEachActionTarget(action, context, [spell, caster](GameObjectS& obj)
+			{
+				if (!obj.IsUnit())
+				{
+					return;
+				}
+
+				GameUnitS& unit = obj.AsUnit();
+				GameUnitS* effectiveCaster = caster ? caster : &unit;
+
+				SpellTargetMap targetMap;
+				targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+				targetMap.SetUnitTarget(unit.GetGuid());
+
+				// Instant, cost-free application (no cast time, treated like a proc).
+				effectiveCaster->CastSpell(targetMap, *spell, 0, true);
+			});
+	}
+
+	void TriggerHandler::HandleRemoveAura(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		const uint32 spellId = static_cast<uint32>(GetActionData(action, 0));
+		if (spellId == 0)
+		{
+			WLOG("TRIGGER_ACTION_REMOVE_AURA: Needs a valid spell id - action ignored");
+			return;
+		}
+
+		ForEachActionTarget(action, context, [spellId](GameObjectS& obj)
+			{
+				if (obj.IsUnit())
+				{
+					obj.AsUnit().RemoveAuraBySpellId(spellId);
+				}
+			});
+	}
+
+	void TriggerHandler::HandleSetInstanceVariable(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		WorldInstance* world = GetWorldInstance(context);
+		if (!world)
+		{
+			ELOG("TRIGGER_ACTION_SET_INSTANCE_VARIABLE: No world instance");
+			return;
+		}
+
+		const uint32 key = static_cast<uint32>(GetActionData(action, 0));
+		const int64 value = static_cast<int64>(GetActionData(action, 1));
+		world->SetInstanceVariable(key, value);
+		DLOG("TRIGGER_ACTION_SET_INSTANCE_VARIABLE: Variable " << key << " = " << value);
+	}
+
+	void TriggerHandler::HandleBroadcastMessage(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		WorldInstance* world = GetWorldInstance(context);
+		if (!world)
+		{
+			ELOG("TRIGGER_ACTION_BROADCAST_MESSAGE: No world instance");
+			return;
+		}
+
+		const String& message = GetActionText(action, 0);
+		if (message.empty() || message == "<INVALID_TEXT>")
+		{
+			WLOG("TRIGGER_ACTION_BROADCAST_MESSAGE: No message text - action ignored");
+			return;
+		}
+
+		// Deliver the message to every player currently in the instance via their network session.
+		for (auto* player : GetPlayersInWorld(world))
+		{
+			const auto connection = m_playerManager.GetPlayerByCharacterGuid(player->GetGuid());
+			if (connection)
+			{
+				connection->LocalChatMessage(ChatType::System, message);
+			}
+		}
+	}
+
 	double TriggerHandler::EvaluateTriggerFunction(
 		proto::TriggerFunction func,
 		const google::protobuf::RepeatedField<google::protobuf::int64>& funcData,
@@ -1131,12 +1538,11 @@ namespace mmo
 		switch (func)
 		{
 		case proto::Phase:
-			if (owner && owner->IsUnit())
+			if (owner)
 			{
-				const auto* creature = dynamic_cast<GameCreatureS*>(owner);
-				if (creature)
+				if (const auto* creature = dynamic_cast<GameCreatureS*>(owner))
 				{
-					return 0.0;
+					return static_cast<double>(creature->GetCombatPhase());
 				}
 			}
 			return 0.0;
@@ -1187,12 +1593,73 @@ namespace mmo
 		case proto::EncounterState:
 		{
 			const uint32 slotId = funcData.size() > 0 ? static_cast<uint32>(funcData[0]) : 0;
-			auto* world = GetWorldInstance(owner);
+			auto* world = GetWorldInstance(context);
 			if (!world)
 			{
 				return 0.0;
 			}
 			return static_cast<double>(world->GetEncounterState(slotId));
+		}
+
+		case proto::PlayerCount:
+		{
+			auto* world = GetWorldInstance(context);
+			return world ? static_cast<double>(world->GetPlayerCount()) : 0.0;
+		}
+
+		case proto::TargetHealthPct:
+			if (owner && owner->IsUnit())
+			{
+				if (GameUnitS* victim = owner->AsUnit().GetVictim())
+				{
+					const uint32 maxHp = victim->GetMaxHealth();
+					if (maxHp > 0)
+					{
+						return static_cast<double>(victim->GetHealth()) / static_cast<double>(maxHp) * 100.0;
+					}
+				}
+			}
+			return 0.0;
+
+		case proto::HasAura:
+		{
+			const uint32 spellId = funcData.size() > 0 ? static_cast<uint32>(funcData[0]) : 0;
+			if (spellId != 0 && owner && owner->IsUnit())
+			{
+				return owner->AsUnit().HasAuraSpell(spellId) ? 1.0 : 0.0;
+			}
+			return 0.0;
+		}
+
+		case proto::RandomValue:
+		{
+			// FunctionData: [max] (default 100) or [min, max]. Inclusive.
+			int64 minValue = 0;
+			int64 maxValue = 100;
+			if (funcData.size() >= 2)
+			{
+				minValue = funcData[0];
+				maxValue = funcData[1];
+			}
+			else if (funcData.size() == 1)
+			{
+				maxValue = funcData[0];
+			}
+
+			if (maxValue < minValue)
+			{
+				std::swap(minValue, maxValue);
+			}
+
+			std::uniform_int_distribution<int64> dist(minValue, maxValue);
+			return static_cast<double>(dist(randomGenerator));
+		}
+
+		case proto::InstanceVariable:
+		{
+			const uint32 key = funcData.size() > 0 ? static_cast<uint32>(funcData[0]) : 0;
+			auto* world = GetWorldInstance(context);
+			return world ? static_cast<double>(world->GetInstanceVariable(key)) : 0.0;
 		}
 
 		default:

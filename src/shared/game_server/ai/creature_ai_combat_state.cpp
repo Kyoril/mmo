@@ -1661,4 +1661,17 @@ namespace mmo
 			pair.second.amount = 0.0f;
 		}
 	}
+
+	void CreatureAICombatState::TauntFromScript(GameUnitS& target)
+	{
+		// Determine the current highest threat so we can place the taunter just above it.
+		GameUnitS* top = GetTopThreatener();
+		const float topThreat = top ? GetThreat(*top) : 0.0f;
+
+		// Make sure the target is on the threat list, then push it above the current top.
+		SetThreat(target, topThreat + std::max(1.0f, topThreat * 0.1f));
+
+		// Immediately re-evaluate the victim so the taunt takes effect right away.
+		UpdateVictim();
+	}
 }

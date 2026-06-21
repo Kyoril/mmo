@@ -353,6 +353,13 @@ namespace mmo
 	if (added.GetTypeId() == ObjectTypeId::Player)
 	{
 		++m_playerCount;
+
+		// Start instance-wide periodic timers once the first player is present.
+		if (m_playerCount == 1)
+		{
+			StartInstanceTimers();
+		}
+
 		FireInstanceTriggerEvent(trigger_event::OnPlayerEnterInstance, nullptr);
 	}
 }
@@ -441,9 +448,15 @@ namespace mmo
 
 			FireInstanceTriggerEvent(trigger_event::OnPlayerLeaveInstance, nullptr);
 
-			if (m_playerCount == 0 && IsInstancedPvE())
+			if (m_playerCount == 0)
 			{
-				FireInstanceTriggerEvent(trigger_event::OnAllPlayersDead, nullptr);
+				// No players left — stop instance-wide periodic timers.
+				StopInstanceTimers();
+
+				if (IsInstancedPvE())
+				{
+					FireInstanceTriggerEvent(trigger_event::OnAllPlayersDead, nullptr);
+				}
 			}
 		}
 	}
@@ -711,7 +724,27 @@ namespace mmo
 
 	void WorldInstance::SetEncounterState(uint32 slotId, uint32 state)
 	{
+		const auto it = m_encounterStates.find(slotId);
+		const bool changed = (it == m_encounterStates.end()) || (it->second != state);
+
 		m_encounterStates[slotId] = state;
+
+		if (changed)
+		{
+			// Notify instance triggers that listen for encounter state changes.
+			FireInstanceTriggerEvent(trigger_event::OnEncounterStateChanged, nullptr, { slotId, state });
+		}
+	}
+
+	int64 WorldInstance::GetInstanceVariable(uint32 key) const
+	{
+		const auto it = m_instanceVariables.find(key);
+		return (it != m_instanceVariables.end()) ? it->second : 0;
+	}
+
+	void WorldInstance::SetInstanceVariable(uint32 key, int64 value)
+	{
+		m_instanceVariables[key] = value;
 	}
 
 	uint32 WorldInstance::GetEncounterState(uint32 slotId) const
@@ -721,6 +754,11 @@ namespace mmo
 	}
 
 	void WorldInstance::FireInstanceTriggerEvent(trigger_event::Type eventType, GameUnitS* triggeringUnit)
+	{
+		FireInstanceTriggerEvent(eventType, triggeringUnit, {});
+	}
+
+	void WorldInstance::FireInstanceTriggerEvent(trigger_event::Type eventType, GameUnitS* triggeringUnit, const std::vector<uint32>& eventData)
 	{
 		if (!m_mapEntry)
 		{
@@ -737,13 +775,123 @@ namespace mmo
 
 			for (const auto& triggerEvent : triggerEntry->newevents())
 			{
-				if (triggerEvent.type() == eventType)
+				if (triggerEvent.type() != eventType)
 				{
-					TriggerContext ctx(nullptr, triggeringUnit);
-					m_triggerHandler.ExecuteTrigger(*triggerEntry, ctx);
+					continue;
+				}
+
+				// For events with filter data (e.g. OnEncounterStateChanged), only fire when the
+				// event's configured data matches the supplied data. A zero/absent filter matches all.
+				bool dataMatches = true;
+				for (int i = 0; i < triggerEvent.data_size(); ++i)
+				{
+					const uint32 filter = triggerEvent.data(i);
+					if (filter == 0)
+					{
+						continue; // Wildcard for this slot
+					}
+
+					if (i >= static_cast<int>(eventData.size()) || eventData[i] != filter)
+					{
+						dataMatches = false;
+						break;
+					}
+				}
+
+				if (!dataMatches)
+				{
+					continue;
+				}
+
+				TriggerContext ctx(nullptr, triggeringUnit, this);
+				m_triggerHandler.ExecuteTrigger(*triggerEntry, ctx);
+				break;
+			}
+		}
+	}
+
+	void WorldInstance::StartInstanceTimers()
+	{
+		StopInstanceTimers();
+
+		if (!m_mapEntry)
+		{
+			return;
+		}
+
+		for (const uint32 triggerId : m_mapEntry->instance_triggers())
+		{
+			const auto* triggerEntry = m_project.triggers.getById(triggerId);
+			if (!triggerEntry)
+			{
+				continue;
+			}
+
+			bool hasTimerEvent = false;
+			for (const auto& triggerEvent : triggerEntry->newevents())
+			{
+				if (triggerEvent.type() == trigger_event::OnTimer)
+				{
+					hasTimerEvent = true;
 					break;
 				}
 			}
+
+			if (!hasTimerEvent)
+			{
+				continue;
+			}
+
+			auto countdown = std::make_unique<Countdown>(m_universe.GetTimers());
+			Countdown* countdownPtr = countdown.get();
+			const proto::TriggerEntry* entryPtr = triggerEntry;
+
+			countdown->ended.connect([this, countdownPtr, entryPtr]()
+				{
+					TriggerContext ctx(nullptr, nullptr, this);
+					m_triggerHandler.ExecuteTrigger(*entryPtr, ctx);
+
+					// Reschedule for the next interval.
+					ScheduleInstanceTimer(*countdownPtr, *entryPtr);
+				});
+
+			ScheduleInstanceTimer(*countdownPtr, *triggerEntry);
+			m_instanceTimers.push_back(std::move(countdown));
 		}
+	}
+
+	void WorldInstance::StopInstanceTimers()
+	{
+		m_instanceTimers.clear();
+	}
+
+	void WorldInstance::ScheduleInstanceTimer(Countdown& countdown, const proto::TriggerEntry& entry)
+	{
+		uint32 minInterval = 0;
+		uint32 maxInterval = 0;
+		for (const auto& triggerEvent : entry.newevents())
+		{
+			if (triggerEvent.type() == trigger_event::OnTimer)
+			{
+				minInterval = triggerEvent.data_size() > 0 ? triggerEvent.data(0) : 0;
+				maxInterval = triggerEvent.data_size() > 1 ? triggerEvent.data(1) : 0;
+				break;
+			}
+		}
+
+		if (minInterval == 0)
+		{
+			WLOG("Instance OnTimer trigger " << entry.id() << " has no/zero interval and will not fire");
+			return;
+		}
+
+		uint32 interval = minInterval;
+		if (maxInterval > minInterval)
+		{
+			std::uniform_int_distribution<uint32> dist(minInterval, maxInterval);
+			interval = dist(randomGenerator);
+		}
+
+		countdown.SetEnd(GetAsyncTimeMs() + interval);
 	}
 }

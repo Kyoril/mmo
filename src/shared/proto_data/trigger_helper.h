@@ -91,6 +91,17 @@ namespace mmo
 			/// Executed when a player leaves the instance (or map for non-instanced).
 			/// Data: NONE
 			OnPlayerLeaveInstance,
+			/// Executed periodically on a fixed interval. For unit-owned triggers the timer runs while the
+			/// owner is spawned (or, if the OnlyInCombat flag is set, only between aggro and reset). For
+			/// instance-owned triggers the timer runs as long as the instance has at least one player.
+			/// Data: <INTERVAL-MS>[,<INTERVAL-MAX-MS>]; If a max is given the interval is randomized in [min,max].
+			OnTimer,
+			/// Executed when a creature that was summoned by this owner (via SummonCreature) dies.
+			/// Data: NONE; The triggering unit is the summoned creature that died.
+			OnSummonedUnitDied,
+			/// Executed when an encounter slot of the instance changes state.
+			/// Data: [<ENCOUNTER-SLOT-ID>],[<NEW-STATE:0-3>]; When given, only fires for that slot/state.
+			OnEncounterStateChanged,
 
 			Invalid,
 			Count_ = Invalid
@@ -180,6 +191,39 @@ namespace mmo
 			/// Targets: None; Data: <ENCOUNTER-SLOT-ID>, <NEW-STATE:0-3>; Texts: NONE;
 			SetEncounterState = 24,
 
+			/// Summons a new creature into the world instance. The summoned creature is owned by the
+			/// trigger owner so that its death can raise OnSummonedUnitDied on the owner.
+			/// Targets: UNIT (origin, optional - defaults to owner); Data: <CREATURE-ENTRY>, [<X>, <Y>, <Z>], [<DESPAWN-MS>], [<ATTACK-NEAREST:0/1>]; Texts: NONE;
+			SummonCreature = 25,
+
+			/// Forces a creature's threat towards the given target to the top of its threat table (taunt).
+			/// Targets: UNIT (the creature to taunt); Data: NONE (uses triggering unit as the taunter unless a victim target is set); Texts: NONE;
+			Taunt = 26,
+
+			/// Modifies the threat the target unit has generated on the owning creature.
+			/// Targets: UNIT (threatener); Data: <AMOUNT> (signed, may be negative); Texts: NONE;
+			ModifyThreat = 27,
+
+			/// Resets (wipes) the entire threat table of the target creature.
+			/// Targets: UNIT (the creature whose threat is reset); Data: NONE; Texts: NONE;
+			ResetThreat = 28,
+
+			/// Applies the auras of a spell directly to the target (no cast time, no line of sight check).
+			/// Targets: UNIT; Data: <SPELL-ID>; Texts: NONE;
+			ApplyAura = 29,
+
+			/// Removes all auras of a spell from the target.
+			/// Targets: UNIT; Data: <SPELL-ID>; Texts: NONE;
+			RemoveAura = 30,
+
+			/// Sets an instance-scoped variable (counter) owned by the world instance.
+			/// Targets: NONE; Data: <VARIABLE-KEY>, <VALUE>; Texts: NONE;
+			SetInstanceVariable = 31,
+
+			/// Broadcasts a system/raid-warning style message to all players in the instance.
+			/// Targets: NONE; Data: [<MESSAGE-TYPE:0=system,1=raid-warning>]; Texts: <MESSAGE>;
+			BroadcastMessage = 32,
+
 			Invalid,
 			Count_ = Invalid
 		};
@@ -203,6 +247,15 @@ namespace mmo
 			NamedCreature = 5,
 			/// Unit which raised this trigger by causing an event.
 			TriggeringUnit = 6,
+			/// A random player currently in the world instance.
+			RandomPlayer = 7,
+			/// The player nearest to the trigger owner.
+			NearestPlayer = 8,
+			/// The unit with the highest threat on the owning creature (current tank).
+			HighestThreat = 9,
+			/// All players currently in the world instance. Actions that support multiple targets are
+			/// applied to each player; actions that do not are applied to the first resolved player.
+			AllPlayers = 10,
 
 			Invalid,
 			Count_ = Invalid

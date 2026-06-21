@@ -29,6 +29,16 @@ enum TriggerFunction {
 	ManaPct = 4;
 	IsInCombat = 5;
 	EncounterState = 6;
+	// Number of players currently in the world instance. FunctionData: NONE.
+	PlayerCount = 7;
+	// Health percentage (0-100) of the owning unit's current victim. FunctionData: NONE.
+	TargetHealthPct = 8;
+	// Whether the owning unit has an aura of the given spell. FunctionData: <SPELL-ID>. Returns 1 or 0.
+	HasAura = 9;
+	// A random integer value. FunctionData: [<MAX>] (default 100) or [<MIN>,<MAX>]. Inclusive.
+	RandomValue = 10;
+	// Value of an instance-scoped variable. FunctionData: <VARIABLE-KEY>. Returns 0 if unset.
+	InstanceVariable = 11;
 }
 
 enum TriggerConditionType {

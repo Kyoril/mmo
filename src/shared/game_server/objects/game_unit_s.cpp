@@ -1092,6 +1092,19 @@ namespace mmo
 		return false;
 	}
 
+	bool GameUnitS::HasAuraSpell(uint32 spellId) const
+	{
+		for (auto it = m_auras.begin(); it != m_auras.end(); ++it)
+		{
+			if ((*it)->GetSpellId() == spellId)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	void GameUnitS::BuildAuraPacket(io::Writer &writer) const
 	{
 		writer << io::write_packed_guid(GetGuid());

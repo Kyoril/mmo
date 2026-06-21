@@ -77,7 +77,10 @@ namespace mmo
 		"Object - On Quest Accepted",
 		"Instance - On All Players Dead",
 		"Instance - On Player Enter Instance",
-		"Instance - On Player Leave Instance"
+		"Instance - On Player Leave Instance",
+		"Unit/Instance - On Timer (periodic)",
+		"Unit - On Summoned Unit Died",
+		"Instance - On Encounter State Changed"
 	};
 
 	static_assert(std::size(s_eventTypeNames) == trigger_event::Count_, "s_eventTypeNames size mismatch");
@@ -178,6 +181,22 @@ namespace mmo
 						break;
 					case trigger_event::OnPlayerLeaveInstance:
 						ImGui::Text("A player left the instance");
+						break;
+					case trigger_event::OnTimer:
+						if (GetTriggerEventData(event, 1) > 0)
+						{
+							ImGui::Text("Every %d-%d ms (periodic)", GetTriggerEventData(event, 0), GetTriggerEventData(event, 1));
+						}
+						else
+						{
+							ImGui::Text("Every %d ms (periodic)", GetTriggerEventData(event, 0));
+						}
+						break;
+					case trigger_event::OnSummonedUnitDied:
+						ImGui::Text("A creature summoned by the owner died");
+						break;
+					case trigger_event::OnEncounterStateChanged:
+						ImGui::Text("Encounter state changed (slot %d, state %d; 0 = any)", GetTriggerEventData(event, 0), GetTriggerEventData(event, 1));
 						break;
 					}
 				}
@@ -316,6 +335,75 @@ namespace mmo
 				ImGui::Text("Emote ID");
 				break;
 			}
+				case trigger_event::OnTimer:
+				{
+					// Data: <INTERVAL-MS>[, <INTERVAL-MAX-MS>]
+					int intervalMin = (event.data_size() > 0) ? event.data(0) : 0;
+					ImGui::SetNextItemWidth(150);
+					if (ImGui::InputInt("##TimerIntervalMin", &intervalMin))
+					{
+						if (intervalMin < 0) intervalMin = 0;
+						if (event.data_size() > 0)
+							event.set_data(0, intervalMin);
+						else
+							event.add_data(intervalMin);
+					}
+					ImGui::SameLine();
+					ImGui::Text("Interval (ms)");
+
+					int intervalMax = (event.data_size() > 1) ? event.data(1) : 0;
+					ImGui::SetNextItemWidth(150);
+					if (ImGui::InputInt("##TimerIntervalMax", &intervalMax))
+					{
+						if (intervalMax < 0) intervalMax = 0;
+						if (event.data_size() > 1)
+							event.set_data(1, intervalMax);
+						else
+						{
+							if (event.data_size() == 0)
+								event.add_data(0);
+							event.add_data(intervalMax);
+						}
+					}
+					ImGui::SameLine();
+					ImGui::Text("Max Interval (ms, 0 = fixed)");
+					ImGui::TextDisabled("Set the trigger's 'Only In Combat' flag to only fire this timer during combat.");
+					break;
+				}
+				case trigger_event::OnEncounterStateChanged:
+				{
+					// Data: [<SLOT-ID>], [<STATE>] - 0 acts as a wildcard.
+					int slotId = (event.data_size() > 0) ? event.data(0) : 0;
+					ImGui::SetNextItemWidth(150);
+					if (ImGui::InputInt("##EncStateChangedSlot", &slotId))
+					{
+						if (slotId < 0) slotId = 0;
+						if (event.data_size() > 0)
+							event.set_data(0, slotId);
+						else
+							event.add_data(slotId);
+					}
+					ImGui::SameLine();
+					ImGui::Text("Encounter Slot (0 = any)");
+
+					int stateVal = (event.data_size() > 1) ? event.data(1) : 0;
+					ImGui::SetNextItemWidth(150);
+					if (ImGui::InputInt("##EncStateChangedState", &stateVal))
+					{
+						if (stateVal < 0) stateVal = 0;
+						if (event.data_size() > 1)
+							event.set_data(1, stateVal);
+						else
+						{
+							if (event.data_size() == 0)
+								event.add_data(0);
+							event.add_data(stateVal);
+						}
+					}
+					ImGui::SameLine();
+					ImGui::Text("State (0 = any, 1=InProgress, 2=Done, 3=Fail)");
+					break;
+				}
 			default:
 			{
 				// For all other event types, no parameters are required.
@@ -337,6 +425,29 @@ namespace mmo
 			ImGui::PopStyleVar();
 		}
 
+		// Sets action.data[index] = value, growing the repeated field with zeros as needed.
+		void SetActionDataValue(proto::TriggerAction& action, int index, int value)
+		{
+			while (action.data_size() <= index)
+			{
+				action.add_data(0);
+			}
+			action.set_data(index, value);
+		}
+
+		// Draws an InputInt control bound to action.data[index].
+		void DrawActionDataInt(proto::TriggerAction& action, int index, const char* id, const char* label, float width = 150.0f)
+		{
+			int value = (action.data_size() > index) ? action.data(index) : 0;
+			ImGui::SetNextItemWidth(width);
+			if (ImGui::InputInt(id, &value))
+			{
+				SetActionDataValue(action, index, value);
+			}
+			ImGui::SameLine();
+			ImGui::Text("%s", label);
+		}
+
 		// Draws a single trigger action in the editor.
 		// Assumes that 'action' is a mutable reference from your proto TriggerAction message.
 		void DrawTriggerAction(proto::TriggerAction& action, int actionIndex, proto::TriggerEntry& currentEntry)
@@ -350,7 +461,8 @@ namespace mmo
 				"StopAutoAttack", "CancelCast", "SetStandState", "SetVirtualEquipmentSlot",
 				"SetPhase", "SetSpellCooldown", "QuestKillCredit", "QuestEventOrExploration",
 				"SetVariable", "Dismount", "SetMount", "Despawn", "Teleport Player", "Emote",
-				"SetEncounterState"
+				"SetEncounterState", "SummonCreature", "Taunt", "ModifyThreat", "ResetThreat",
+				"ApplyAura", "RemoveAura", "SetInstanceVariable", "BroadcastMessage"
 			};
 
 			// Select the trigger action type.
@@ -390,7 +502,11 @@ namespace mmo
 				"Random unit",
 				"Named World Object",
 				"Named Creature",
-				"Triggering Unit"
+				"Triggering Unit",
+				"Random Player",
+				"Nearest Player",
+				"Highest Threat (Tank)",
+				"All Players"
 			};
 
 			static_assert(std::size(s_actionTargetStrings) == trigger_action_target::Count_, "s_actionTargetStrings size mismatch");
@@ -962,7 +1078,80 @@ namespace mmo
 				ImGui::Text("New State");
 				break;
 			}
-			default:
+							case trigger_actions::SummonCreature:
+				{
+					// Data: <CREATURE-ENTRY>, [<X>,<Y>,<Z>], [<DESPAWN-MS>], [<ATTACK-NEAREST:0/1>]
+					DrawActionDataInt(action, 0, "##SummonEntry", "Creature Entry");
+					ImGui::TextDisabled("Leave X/Y/Z at 0 to spawn at the owner/target position.");
+					DrawActionDataInt(action, 1, "##SummonX", "X");
+					DrawActionDataInt(action, 2, "##SummonY", "Y");
+					DrawActionDataInt(action, 3, "##SummonZ", "Z");
+					DrawActionDataInt(action, 4, "##SummonDespawn", "Despawn after (ms, 0 = never)");
+
+					bool attackNearest = (action.data_size() > 5) ? (action.data(5) != 0) : false;
+					if (ImGui::Checkbox("Attack nearest player##SummonAttack", &attackNearest))
+					{
+						SetActionDataValue(action, 5, attackNearest ? 1 : 0);
+					}
+					break;
+				}
+				case trigger_actions::Taunt:
+				{
+					ImGui::TextDisabled("Forces the target creature's threat onto the triggering unit. Target = the creature to taunt (defaults to owner).");
+					break;
+				}
+				case trigger_actions::ModifyThreat:
+				{
+					// Data: <AMOUNT> (signed)
+					DrawActionDataInt(action, 0, "##ThreatAmount", "Threat Amount (may be negative)");
+					ImGui::TextDisabled("Modifies threat the target has on the owning creature.");
+					break;
+				}
+				case trigger_actions::ResetThreat:
+				{
+					ImGui::TextDisabled("Wipes the entire threat table of the target creature (defaults to owner).");
+					break;
+				}
+				case trigger_actions::ApplyAura:
+				case trigger_actions::RemoveAura:
+				{
+					// Data: <SPELL-ID>
+					DrawActionDataInt(action, 0, "##AuraSpellId", "Spell ID");
+					if (currentActionType == trigger_actions::ApplyAura)
+					{
+						ImGui::TextDisabled("Instantly applies the spell's auras to the target (no cast time/cost).");
+					}
+					else
+					{
+						ImGui::TextDisabled("Removes all auras of this spell from the target.");
+					}
+					break;
+				}
+				case trigger_actions::SetInstanceVariable:
+				{
+					// Data: <KEY>, <VALUE>
+					DrawActionDataInt(action, 0, "##InstanceVarKey", "Variable Key");
+					DrawActionDataInt(action, 1, "##InstanceVarValue", "Value");
+					ImGui::TextDisabled("Stores a counter on the world instance (readable via the InstanceVariable condition).");
+					break;
+				}
+				case trigger_actions::BroadcastMessage:
+				{
+					// Texts: <MESSAGE>
+					std::string text = (action.texts_size() > 0) ? action.texts(0) : "";
+					ImGui::SetNextItemWidth(-1);
+					if (ImGui::InputText("##BroadcastText", &text))
+					{
+						if (action.texts_size() > 0)
+							action.set_texts(0, text);
+						else
+							action.add_texts(text);
+					}
+					ImGui::SameLine();
+					ImGui::Text("Message");
+					ImGui::TextDisabled("Sent as a system message to every player in the instance.");
+					break;
+				}default:
 			{
 				ImGui::TextDisabled("Unknown action type.");
 				break;
@@ -1225,26 +1414,34 @@ namespace mmo
 				else if (leftType == 2)
 				{
 					static const char* s_funcNames[] = {
-						"Phase", "Health", "HealthPct", "Mana", "ManaPct", "IsInCombat", "EncounterState"
+						"Phase", "Health", "HealthPct", "Mana", "ManaPct", "IsInCombat", "EncounterState",
+						"PlayerCount", "TargetHealthPct", "HasAura", "RandomValue", "InstanceVariable"
 					};
+					constexpr int s_funcNameCount = 12;
 					int funcVal = cond->has_leftfunction() ? cond->leftfunction() : 0;
 					ImGui::SetNextItemWidth(160);
-					if (ImGui::Combo("##LeftFunc", &funcVal, s_funcNames, 7))
+					if (ImGui::Combo("##LeftFunc", &funcVal, s_funcNames, s_funcNameCount))
 					{
 						cond->set_leftfunction(static_cast<proto::TriggerFunction>(funcVal));
 					}
 
-					if (funcVal == proto::EncounterState)
+					// Functions that take a data argument expose an extra input.
+					if (funcVal == proto::EncounterState || funcVal == proto::HasAura ||
+						funcVal == proto::InstanceVariable || funcVal == proto::RandomValue)
 					{
 						ImGui::SameLine();
-						int64_t slotId = cond->leftfunctiondata_size() > 0 ? cond->leftfunctiondata(0) : 0;
+						const char* dataLabel =
+							(funcVal == proto::EncounterState) ? "Slot##LeftFuncData" :
+							(funcVal == proto::HasAura) ? "Spell##LeftFuncData" :
+							(funcVal == proto::InstanceVariable) ? "Key##LeftFuncData" : "Max##LeftFuncData";
+						int64_t funcData = cond->leftfunctiondata_size() > 0 ? cond->leftfunctiondata(0) : 0;
 						ImGui::SetNextItemWidth(80);
-						if (ImGui::InputScalar("Slot##LeftSlot", ImGuiDataType_S64, &slotId))
+						if (ImGui::InputScalar(dataLabel, ImGuiDataType_S64, &funcData))
 						{
 							if (cond->leftfunctiondata_size() > 0)
-								cond->set_leftfunctiondata(0, slotId);
+								cond->set_leftfunctiondata(0, funcData);
 							else
-								cond->add_leftfunctiondata(slotId);
+								cond->add_leftfunctiondata(funcData);
 						}
 					}
 				}
@@ -1290,21 +1487,29 @@ namespace mmo
 				else if (rightType == 2)
 				{
 					static const char* s_funcNames[] = {
-						"Phase", "Health", "HealthPct", "Mana", "ManaPct", "IsInCombat", "EncounterState"
+						"Phase", "Health", "HealthPct", "Mana", "ManaPct", "IsInCombat", "EncounterState",
+						"PlayerCount", "TargetHealthPct", "HasAura", "RandomValue", "InstanceVariable"
 					};
+					constexpr int s_funcNameCount = 12;
 					int funcVal = cond->has_rightfunction() ? cond->rightfunction() : 0;
 					ImGui::SetNextItemWidth(160);
-					if (ImGui::Combo("##RightFunc", &funcVal, s_funcNames, 7))
+					if (ImGui::Combo("##RightFunc", &funcVal, s_funcNames, s_funcNameCount))
 					{
 						cond->set_rightfunction(static_cast<proto::TriggerFunction>(funcVal));
 					}
 
-					if (funcVal == proto::EncounterState)
+					// Functions that take a data argument expose an extra input.
+					if (funcVal == proto::EncounterState || funcVal == proto::HasAura ||
+						funcVal == proto::InstanceVariable || funcVal == proto::RandomValue)
 					{
 						ImGui::SameLine();
+						const char* dataLabel =
+							(funcVal == proto::EncounterState) ? "Slot##RightFuncData" :
+							(funcVal == proto::HasAura) ? "Spell##RightFuncData" :
+							(funcVal == proto::InstanceVariable) ? "Key##RightFuncData" : "Max##RightFuncData";
 						int64_t slotId = cond->rightfunctiondata_size() > 0 ? cond->rightfunctiondata(0) : 0;
 						ImGui::SetNextItemWidth(80);
-						if (ImGui::InputScalar("Slot##RightSlot", ImGuiDataType_S64, &slotId))
+						if (ImGui::InputScalar(dataLabel, ImGuiDataType_S64, &slotId))
 						{
 							if (cond->rightfunctiondata_size() > 0)
 								cond->set_rightfunctiondata(0, slotId);

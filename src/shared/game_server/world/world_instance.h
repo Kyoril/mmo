@@ -5,6 +5,8 @@
 #include <map>
 #include <unordered_set>
 #include <unordered_map>
+#include <vector>
+#include <memory>
 
 #include "creature_spawner.h"
 #include "unit_finder.h"
@@ -13,6 +15,7 @@
 #include "visibility_grid.h"
 #include "world_object_spawner.h"
 #include "base/id_generator.h"
+#include "base/countdown.h"
 #include "shared/proto_data/maps.pb.h"
 #include "shared/proto_data/trigger_helper.h"
 
@@ -23,6 +26,11 @@ namespace mmo
 	class ConditionMgr;
 	class ITriggerHandler;
 	class LuaScriptMgr;
+
+	namespace proto
+	{
+		class TriggerEntry;
+	}
 }
 
 namespace mmo
@@ -272,6 +280,29 @@ namespace mmo
 		/// Gets the current state of a named encounter slot.
 		uint32 GetEncounterState(uint32 slotId) const;
 
+		/// Sets an instance-scoped variable (counter) for this world instance.
+		/// @param key The variable key.
+		/// @param value The new value.
+		void SetInstanceVariable(uint32 key, int64 value);
+
+		/// Gets the value of an instance-scoped variable, or 0 if it was never set.
+		/// @param key The variable key.
+		/// @return The variable value, or 0 if unset.
+		int64 GetInstanceVariable(uint32 key) const;
+
+		/// @brief Gets the number of players currently in this instance.
+		uint32 GetPlayerCount() const { return m_playerCount; }
+
+		/// Raises an instance-owned (map-global) trigger event. Used for events that originate outside
+		/// of the standard player enter/leave flow, such as a summoned creature death for an
+		/// ownerless instance trigger.
+		/// @param eventType The event type to raise.
+		/// @param triggeringUnit The unit that raised the event, or nullptr.
+		void RaiseInstanceTrigger(trigger_event::Type eventType, GameUnitS* triggeringUnit)
+		{
+			FireInstanceTriggerEvent(eventType, triggeringUnit);
+		}
+
 	protected:
 
 		void UpdateObject(GameObjectS& object) const;
@@ -280,6 +311,21 @@ namespace mmo
 
 	private:
 		void FireInstanceTriggerEvent(trigger_event::Type eventType, GameUnitS* triggeringUnit);
+
+		/// Fires a specific instance trigger only if it listens for the given event (with optional data match).
+		/// @param eventType The event type to match.
+		/// @param triggeringUnit The unit that raised the event, or nullptr.
+		/// @param eventData Optional data values to match against the event's data (e.g. encounter slot/state).
+		void FireInstanceTriggerEvent(trigger_event::Type eventType, GameUnitS* triggeringUnit, const std::vector<uint32>& eventData);
+
+		/// (Re)builds and starts the repeating OnTimer timers for instance-owned (map) triggers.
+		void StartInstanceTimers();
+
+		/// Stops and clears all instance-owned OnTimer timers.
+		void StopInstanceTimers();
+
+		/// (Re)schedules the next firing of an instance OnTimer timer based on its interval data.
+		void ScheduleInstanceTimer(Countdown& countdown, const proto::TriggerEntry& entry);
 
 	private:
 		Universe& m_universe;
@@ -320,6 +366,12 @@ namespace mmo
 
 		/// Per-instance encounter slot states. Key = slot id, value = encounter_state::Type value.
 		std::unordered_map<uint32, uint32> m_encounterStates;
+
+		/// Per-instance script variables/counters owned by the world instance. Key = variable key.
+		std::unordered_map<uint32, int64> m_instanceVariables;
+
+		/// Active repeating OnTimer timers for instance-owned (map) triggers.
+		std::vector<std::unique_ptr<Countdown>> m_instanceTimers;
 
 		/// Number of players currently in this instance (tracked for wipe detection).
 		uint32 m_playerCount{ 0 };

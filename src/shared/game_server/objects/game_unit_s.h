@@ -818,6 +818,11 @@ namespace mmo
 		/// @returns true if the unit has the aura, false otherwise.
 		bool HasAuraSpellFromCaster(uint32 spellId, uint64 casterId);
 
+		/// Checks if the unit has any aura of the given spell, regardless of caster.
+		/// @param spellId The ID of the spell.
+		/// @returns true if the unit has an aura of that spell, false otherwise.
+		bool HasAuraSpell(uint32 spellId) const;
+
 		/// Builds an aura packet for network transmission.
 		/// @param writer The writer to write the packet to.
 		void BuildAuraPacket(io::Writer &writer) const;
