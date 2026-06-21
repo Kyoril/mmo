@@ -36,6 +36,10 @@ namespace mmo
 		virtual void OnUserStartsMoving() = 0;
 
 		virtual void FinishChanneling() = 0;
+
+		/// @returns The spell that is currently being cast or channeled by this state,
+		///          or nullptr if no spell is active (NoCastState).
+		virtual const proto::SpellEntry* GetSpell() const = 0;
 	};
 
 	void CastSpell(
@@ -70,6 +74,9 @@ namespace mmo
 		void SetState(const std::shared_ptr<CastState>& castState);
 
 		void FinishChanneling();
+
+		/// @returns The spell currently being cast or channeled, or nullptr if idle.
+		const proto::SpellEntry* GetSpell() const { return m_castState->GetSpell(); }
 
 		int32 CalculatePowerCost(const proto::SpellEntry& spell) const;
 

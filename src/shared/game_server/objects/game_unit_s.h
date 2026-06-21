@@ -743,6 +743,12 @@ namespace mmo
 		/// @param interruptCooldown The cooldown time for the interruption (optional).
 		void CancelCast(SpellInterruptFlags reason, GameTime interruptCooldown = 0) const;
 
+		/// Interrupts the current spell cast or channel if the unit is in a crowd control
+		/// state (stun, sleep, fear) that prevents the active spell from being used. Spells
+		/// flagged usable while in the respective state are not interrupted. Has no effect
+		/// when nothing is being cast.
+		void InterruptCastDueToControlEffect() const;
+
 		/// Deals damage to the unit.
 		/// @param damage The amount of damage to deal.
 		/// @param school The damage school type.

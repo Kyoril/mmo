@@ -25,5 +25,7 @@ namespace mmo
 		void OnUserStartsMoving() override;
 
 		void FinishChanneling() override;
+
+		const proto::SpellEntry* GetSpell() const override { return nullptr; }
 	};
 }

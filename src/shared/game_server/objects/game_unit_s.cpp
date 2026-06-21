@@ -706,6 +706,35 @@ namespace mmo
 		m_spellCast->StopCast(reason, interruptCooldown);
 	}
 
+	void GameUnitS::InterruptCastDueToControlEffect() const
+	{
+		const proto::SpellEntry* spell = m_spellCast->GetSpell();
+		if (!spell)
+		{
+			// Nothing is being cast or channeled.
+			return;
+		}
+
+		// Spells may be flagged usable while in a given crowd control state. Such spells
+		// must keep casting even when the matching control effect is applied. This mirrors
+		// the checks performed in SingleCastState::Validate() when a cast is started.
+		const bool usableWhileStunned = spell->attributes_size() >= 2 &&
+			(spell->attributes(1) & spell_attributes_b::UsableWhileStunned) != 0;
+		const bool usableWhileSleeping = spell->attributes_size() >= 2 &&
+			(spell->attributes(1) & spell_attributes_b::UsableWhileSleeping) != 0;
+		const bool usableWhileFeared = spell->attributes_size() >= 2 &&
+			(spell->attributes(1) & spell_attributes_b::UsableWhileFeared) != 0;
+
+		if ((IsStunned() && !usableWhileStunned) ||
+			(IsSleeping() && !usableWhileSleeping) ||
+			(IsFeared() && !usableWhileFeared))
+		{
+			// Force the interrupt regardless of the spell's interruptflags - a crowd control
+			// effect always interrupts a cast that is not explicitly allowed during it.
+			m_spellCast->StopCast(spell_interrupt_flags::Any);
+		}
+	}
+
 	uint32 GameUnitS::Damage(uint32 damage, uint32 school, GameUnitS *instigator, DamageType damageType)
 	{
 		uint32 health = Get<uint32>(object_fields::Health);
@@ -1581,6 +1610,10 @@ namespace mmo
 		}
 		else if (!wasStunned && isStunned)
 		{
+			// A stun interrupts any spell the unit is currently casting or channeling
+			// unless that spell is explicitly usable while stunned.
+			InterruptCastDueToControlEffect();
+
 			if (m_mover) m_mover->StopMovement();
 			if (m_netUnitWatcher)
 			{
@@ -1640,6 +1673,10 @@ namespace mmo
 		}
 		else if (!wasSleeping && isSleeping)
 		{
+			// Falling asleep interrupts any spell the unit is currently casting or channeling
+			// unless that spell is explicitly usable while sleeping.
+			InterruptCastDueToControlEffect();
+
 			if (m_mover) m_mover->StopMovement();
 			if (m_netUnitWatcher)
 			{
@@ -1700,6 +1737,10 @@ namespace mmo
 		}
 		else if (!wasFeared && isFeared)
 		{
+			// Fear interrupts any spell the unit is currently casting or channeling
+			// unless that spell is explicitly usable while feared.
+			InterruptCastDueToControlEffect();
+
 			if (m_mover) m_mover->StopMovement();
 			if (m_netUnitWatcher)
 			{

@@ -21,20 +21,8 @@ def validate_array(item, name, errors):
     return value
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("path")
-    parser.add_argument("--project-root", default="F:\\mmo")
-    args = parser.parse_args()
-
-    path = Path(args.path)
+def validate_document(doc, project_root) -> list[str]:
     errors = []
-    try:
-        doc = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"ERROR: {exc}")
-        return 1
-
     if not isinstance(doc, dict):
         error(errors, "root must be an object")
         item = {}
@@ -104,7 +92,20 @@ def main():
     validate_array(item, "name_loc", errors)
     validate_array(item, "description_loc", errors)
 
-    data_dir = Path(args.project_root) / "data" / "editor" / "data"
+    display_doc = doc.get("item_display")
+    if display_doc is not None:
+        if not isinstance(display_doc, dict):
+            error(errors, "item_display must be an object when provided")
+        else:
+            if not isinstance(display_doc.get("name"), str) or not display_doc.get("name", "").strip():
+                error(errors, "item_display.name must be a non-empty string")
+            if "icon" in display_doc and not isinstance(display_doc["icon"], str):
+                error(errors, "item_display.icon must be a string when provided")
+            variants = display_doc.get("variants", [])
+            if not isinstance(variants, list):
+                error(errors, "item_display.variants must be an array when provided")
+
+    data_dir = Path(project_root) / "data" / "editor" / "data"
     try:
         class_ids = {entry["id"] for entry in load_classes(data_dir)}
         subclass_keys = {(entry["itemclass"], entry["id"]) for entry in load_subclasses(data_dir)}
@@ -126,6 +127,23 @@ def main():
     except (OSError, ValueError) as exc:
         error(errors, f"could not inspect project catalogs: {exc}")
 
+    return errors
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("path")
+    parser.add_argument("--project-root", default="F:\\mmo")
+    args = parser.parse_args()
+
+    path = Path(args.path)
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"ERROR: {exc}")
+        return 1
+
+    errors = validate_document(doc, args.project_root)
     if errors:
         for message in errors:
             print(f"ERROR: {message}")

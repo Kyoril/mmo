@@ -55,6 +55,8 @@ namespace mmo
 
 		void FinishChanneling() override;
 
+		const proto::SpellEntry* GetSpell() const override { return &m_spell; }
+
 	private:
 		bool Validate();
 		bool ValidatePlayerRequirements();
