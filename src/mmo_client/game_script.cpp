@@ -261,6 +261,34 @@ namespace mmo
 			return player->GetVisibleSpell(index);
 		}
 
+		bool Script_IsSpellAbility(const proto_client::SpellEntry* spell)
+		{
+			if (!spell || spell->attributes_size() == 0)
+			{
+				return false;
+			}
+
+			return (spell->attributes(0) & spell_attributes::Ability) != 0;
+		}
+
+		bool Script_IsSpellSkill(const proto_client::SpellEntry* spell)
+		{
+			if (!spell)
+			{
+				return false;
+			}
+
+			for (int i = 0; i < spell->effects_size(); ++i)
+			{
+				if (spell->effects(i).type() == spell_effects::Proficiency)
+				{
+					return true;
+				}
+			}
+
+			return false;
+		}
+
 		bool Script_UnitExists(const std::string &unitName)
 		{
 			if (auto unit = Script_GetUnitByName(unitName))
@@ -1142,7 +1170,9 @@ namespace mmo
 							   .def_readonly("powertype", &proto_client::SpellEntry::powertype)
 							   .def_readonly("level", &proto_client::SpellEntry::spelllevel)
 							   .def_readonly("casttime", &proto_client::SpellEntry::casttime)
-							   .def_readonly("icon", &proto_client::SpellEntry::icon)),
+							   .def_readonly("icon", &proto_client::SpellEntry::icon)
+							   .def("IsAbility", &Script_IsSpellAbility)
+							   .def("IsSkill", &Script_IsSpellSkill)),
 
 					   luabind::def("Quit", &Script_Quit),
 					   luabind::def<std::function<void()>>("Logout", [this]()
@@ -1347,6 +1377,8 @@ namespace mmo
 					   luabind::def("GetSpell", &Script_GetSpell),
 					   luabind::def<std::function<void(int32)>>("CastSpell", [this](int32 spellIndex)
 																{ if (const auto* spell = Script_GetSpell(spellIndex)) m_spellCast.CastSpell(spell->id()); }),
+					   luabind::def<std::function<void(uint32)>>("CastSpellById", [this](uint32 spellId)
+																{ m_spellCast.CastSpell(spellId); }),
 					   luabind::def<std::function<bool()>>("SpellStopCasting", [this]() -> bool
 														   { return m_spellCast.CancelCast(); }),
 
