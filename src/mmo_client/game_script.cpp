@@ -41,6 +41,7 @@
 #include "game_client/game_item_c.h"
 #include "game_client/object_mgr.h"
 #include "game_client/game_player_c.h"
+#include "game_client/game_world_object_c_base.h"
 #include "game_client/item_handle.h"
 #include "game_client/unit_handle.h"
 #include "game/game_time_component.h"
@@ -167,6 +168,14 @@ namespace mmo
 
 			GameObjectC* hovered = controller->GetHoveredObject();
 			if (!hovered || !hovered->IsWorldObject())
+			{
+				return nullptr;
+			}
+
+			// Only treat the object as hovered (for tooltip purposes) when it is flagged as
+			// interactable for the local player. Non-interactable world objects must not show a tooltip.
+			const auto* worldObject = static_cast<const GameWorldObjectC*>(hovered);
+			if (!worldObject->IsInteractable())
 			{
 				return nullptr;
 			}

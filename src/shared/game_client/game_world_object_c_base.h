@@ -59,6 +59,13 @@ namespace mmo
 		/// @return true if the object is usable, false otherwise.
 		bool IsUsable(const GamePlayerC& player) const override;
 
+		/// @brief Checks if this object is currently flagged as interactable for the local player.
+		/// @return true if the Interactable dynamic flag is set, false otherwise.
+		bool IsInteractable() const
+		{
+			return (Get<uint32>(object_fields::DynamicObjectFlags) & dynamic_world_object_flags::Interactable) != 0;
+		}
+
 	protected:
 		virtual void SetupSceneObjects();
 
