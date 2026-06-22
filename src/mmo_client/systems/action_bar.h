@@ -5,6 +5,8 @@
 #include "client_data/project.h"
 #include "game/action_button.h"
 
+#include <set>
+
 namespace mmo
 {
 	class SpellCast;
@@ -56,11 +58,19 @@ namespace mmo
 
 		void ActionButtonChanged(int32 slot) const;
 
+		/// Ensures the item data for the given item entry is loaded. If it is not yet cached,
+		/// an async query is sent to the realm and the action bar is refreshed once the data arrives.
+		void EnsureItemData(uint16 itemId);
+
+		/// Requests item data for all item-type action buttons that are not yet cached.
+		void EnsureItemDataForAllButtons();
+
 	private:
 		RealmConnector& m_connector;
 		const proto_client::SpellManager& m_spells;
 		DBItemCache& m_items;
 		ActionButtons m_actionButtons;
 		SpellCast& m_spellCast;
+		std::set<uint16> m_pendingItemRequests;
 	};
 }

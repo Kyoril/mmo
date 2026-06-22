@@ -255,16 +255,31 @@ namespace mmo
 					{
 						m_actionButtons[slot].type = action_button_type::Item;
 						m_actionButtons[slot].action = static_cast<uint16>(item->GetEntry()->id);
+						EnsureItemData(m_actionButtons[slot].action);
 						ActionButtonChanged(slot);
 					}
 				}
 			}
 			break;
 		case CursorItemType::Spell:
-			// Assign spell
-			m_actionButtons[slot].type = action_button_type::Spell;
-			m_actionButtons[slot].action = static_cast<uint16>(g_cursor.GetCursorItem());
-			ActionButtonChanged(slot);
+			{
+				const uint32 spellId = g_cursor.GetCursorItem();
+
+				// Passive abilities can never be triggered manually, so they must not be placed
+				// on the action bar. Reject the placement and inform the player.
+				const auto* spell = m_spells.getById(spellId);
+				if (spell != nullptr && (spell->attributes(0) & spell_attributes::Passive) != 0)
+				{
+					FrameManager::Get().TriggerLuaEvent("UI_ERROR_MESSAGE", "ACTION_BAR_PASSIVE_SPELL_ERROR");
+					g_cursor.Clear();
+					return;
+				}
+
+				// Assign spell
+				m_actionButtons[slot].type = action_button_type::Spell;
+				m_actionButtons[slot].action = static_cast<uint16>(spellId);
+				ActionButtonChanged(slot);
+			}
 			break;
 		}
 
@@ -282,6 +297,10 @@ namespace mmo
 			return;
 		}
 
+		// Action buttons loaded from the realm may reference items whose data isn't cached yet
+		// (e.g. on fresh login). Request the missing item data so the icons appear once it arrives.
+		EnsureItemDataForAllButtons();
+
 		FrameManager::Get().TriggerLuaEvent("ACTION_BAR_CHANGED");
 	}
 
@@ -290,6 +309,12 @@ namespace mmo
 		ASSERT(IsValidSlot(slot));
 
 		m_actionButtons[slot] = button;
+
+		if (button.type == action_button_type::Item)
+		{
+			EnsureItemData(button.action);
+		}
+
 		ActionButtonChanged(slot);
 	}
 
@@ -310,5 +335,43 @@ namespace mmo
 	{
 		ASSERT(IsValidSlot(slot));
 		m_connector.SetActionBarButton(slot, m_actionButtons[slot]);
+	}
+
+	void ActionBar::EnsureItemData(const uint16 itemId)
+	{
+		if (itemId == 0)
+		{
+			return;
+		}
+
+		// Already cached, nothing to do.
+		if (m_items.IsCached(itemId))
+		{
+			return;
+		}
+
+		// Avoid registering a duplicate callback for an item we already requested.
+		if (!m_pendingItemRequests.insert(itemId).second)
+		{
+			return;
+		}
+
+		// Request the item data and refresh the action bar once the async response arrives.
+		m_items.Get(itemId, [this, itemId](uint64, const ItemInfo&)
+		{
+			m_pendingItemRequests.erase(itemId);
+			FrameManager::Get().TriggerLuaEvent("ACTION_BAR_CHANGED");
+		});
+	}
+
+	void ActionBar::EnsureItemDataForAllButtons()
+	{
+		for (const ActionButton& button : m_actionButtons)
+		{
+			if (button.type == action_button_type::Item)
+			{
+				EnsureItemData(button.action);
+			}
+		}
 	}
 }

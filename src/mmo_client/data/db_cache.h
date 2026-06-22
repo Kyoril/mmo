@@ -68,6 +68,11 @@ namespace mmo
 			return nullptr;
 		}
 
+		[[nodiscard]] bool IsCached(uint64 guid) const
+		{
+			return m_cache.find(guid) != m_cache.end();
+		}
+
 		void NotifyObjectResponse(uint64 guid, const T& object)
 		{
 			m_cache[guid] = object;

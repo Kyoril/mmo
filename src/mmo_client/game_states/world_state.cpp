@@ -1788,6 +1788,14 @@ namespace mmo
 
 				ObjectMgr::AddObject(object);
 
+				// Check if this was a newly created item for the active player. AddObject already
+				// updated the cached item count, but the UI still needs to be told to refresh.
+				if ((object->GetTypeId() == ObjectTypeId::Item || object->GetTypeId() == ObjectTypeId::Container) &&
+					object->Get<uint64>(object_fields::ItemOwner) == ObjectMgr::GetActivePlayerGuid())
+				{
+					hasItemUpdates = true;
+				}
+
 				// Ensure we update the quest status of quest givers
 				if (object->GetTypeId() == ObjectTypeId::Unit)
 				{
@@ -2489,6 +2497,9 @@ namespace mmo
 			// Update talent information for unlearned spell
 			m_talentClient.OnSpellUnlearned(spellId);
 
+			// Refresh the action bar so any button holding the now-unlearned spell is updated
+			// (greyed out / made unusable) to reflect that the player no longer knows it.
+			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELLS_CHANGED");
 			FrameManager::Get().TriggerLuaEvent("PLAYER_TALENT_UPDATE");
 		}
 

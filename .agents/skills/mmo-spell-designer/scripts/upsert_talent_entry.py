@@ -28,7 +28,15 @@ def main() -> int:
         metavar="TALENT_ID:RANK",
         help="Required talent and one-based rank; may be specified more than once",
     )
+    parser.add_argument(
+        "--clear-prerequisites",
+        action="store_true",
+        help="Remove all prerequisites from the talent",
+    )
     args = parser.parse_args()
+
+    if args.clear_prerequisites and args.prerequisite:
+        raise SystemExit("--clear-prerequisites cannot be combined with --prerequisite")
 
     project_root = find_project_root(args.project_root)
     modules = load_modules(project_root)
@@ -105,7 +113,9 @@ def main() -> int:
             raise SystemExit("--node-scale must be greater than zero")
         talent.node_scale = args.node_scale
 
-    if prerequisites:
+    if args.clear_prerequisites:
+        del talent.prerequisites[:]
+    elif prerequisites:
         del talent.prerequisites[:]
         for prerequisite_talent_id, prerequisite_rank in prerequisites:
             prerequisite = talent.prerequisites.add()

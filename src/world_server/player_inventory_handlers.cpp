@@ -663,11 +663,15 @@ namespace mmo
 			SpellCastResult result = m_character->CastSpell(targetMap, *spellEntry, time, false, itemGuid);
 			if (result != spell_cast_result::CastOkay)
 			{
-				SendPacket([itemGuid, &result, &spell](game::OutgoingPacket &packet)
+				// The client identifies a spell failure by the caster guid (it only displays the
+				// error if the caster is the active player). Send the casting player's guid here
+				// rather than the item guid, otherwise the failure is silently dropped client-side.
+				const uint64 casterGuid = m_character->GetGuid();
+				SendPacket([casterGuid, &result, &spell](game::OutgoingPacket &packet)
 						   {
 						packet.Start(game::realm_client_packet::SpellFailure);
 						packet
-							<< io::write_packed_guid(itemGuid)
+							<< io::write_packed_guid(casterGuid)
 							<< io::write<uint32>(spell.spell())
 							<< io::write<GameTime>(GetAsyncTimeMs())
 							<< io::write<uint8>(result);
