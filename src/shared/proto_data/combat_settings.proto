@@ -80,6 +80,12 @@ message CombatSettings {
 	// to ignore it (spell_cooldown_flags::NoGlobalCooldown). Procs/triggered spells never
 	// trigger or respect the global cooldown.
 	optional uint32 global_cooldown_ms = 28 [default = 1500];
+
+	// === Dual Wield ===
+	// Damage multiplier applied to off-hand weapon auto-attacks when dual wielding.
+	// 1.0 = full off-hand damage, 0.5 = half. Only affects the off-hand swing; the
+	// main-hand swing is unaffected. Off-hand swings run on their own attack timer.
+	optional float offhand_damage_multiplier = 29 [default = 0.5];
 }
 
 // Wrapper for loading

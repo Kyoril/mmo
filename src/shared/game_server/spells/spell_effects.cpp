@@ -1116,34 +1116,54 @@ namespace mmo
 
 			auto& executer = ctx.castContext.GetExecutor();
 			const proto::SpellEntry& spell = ctx.castContext.GetSpell();
-			const float minDamage = executer.Get<float>(object_fields::MinDamage);
-			const float maxDamage = executer.Get<float>(object_fields::MaxDamage);
 			const uint32 casterLevel = executer.Get<uint32>(object_fields::Level);
 			const int32_t bonus = ctx.basePoints;
 			const auto& combatSettings = executer.GetCombatSettings();
 
+			// Auto-attack spells (AutoRepeat) use the full melee combat table and send
+			// AttackerStateUpdate (white damage text) instead of SpellDamageLog (yellow).
+			const bool isAutoAttack = (spell.attributes(1) & spell_attributes_b::AutoRepeat) != 0;
+
+			// Determine the swinging hand. Auto-attacks may be driven by the off-hand swing timer,
+			// in which case the weapon damage range is sourced from the off-hand weapon and reduced
+			// by the configurable off-hand damage multiplier.
+			const WeaponAttack swingHand = isAutoAttack ? executer.GetCurrentAutoAttackType() : weapon_attack::BaseAttack;
+			const bool isOffhandSwing = (swingHand == weapon_attack::OffhandAttack);
+
+			// Source the weapon damage range. Auto-attacks use the swinging hand's weapon; regular
+			// weapon-damage abilities keep using the main-hand MinDamage/MaxDamage object fields.
+			float minDamage, maxDamage;
+			if (isAutoAttack)
+			{
+				executer.GetAutoAttackDamageRange(swingHand, minDamage, maxDamage);
+			}
+			else
+			{
+				minDamage = executer.Get<float>(object_fields::MinDamage);
+				maxDamage = executer.Get<float>(object_fields::MaxDamage);
+			}
+
+			const float offhandMultiplier = isOffhandSwing ? combatSettings.offhand_damage_multiplier() : 1.0f;
+
 			// Rolls the base weapon damage for this swing. When the effect base points are a
 			// percentage (WeaponPercentDamage) the rolled weapon damage is scaled by that
 			// percentage; otherwise the base points are added as a flat bonus (WeaponDamage).
+			// Off-hand swings additionally scale the rolled weapon damage by the off-hand multiplier.
 			auto rollBaseWeaponDamage = [&]() -> uint32
 			{
 				if (basePointsArePct)
 				{
 					std::uniform_real_distribution<float> distribution(minDamage, maxDamage + 1.0f);
-					return static_cast<uint32>(distribution(randomGenerator) * (static_cast<float>(bonus) / 100.0f));
+					return static_cast<uint32>(distribution(randomGenerator) * (static_cast<float>(bonus) / 100.0f) * offhandMultiplier);
 				}
 
 				std::uniform_real_distribution<float> distribution(minDamage + bonus, maxDamage + bonus + 1.0f);
-				return static_cast<uint32>(distribution(randomGenerator));
+				return static_cast<uint32>(distribution(randomGenerator) * offhandMultiplier);
 			};
-
-			// Auto-attack spells (AutoRepeat) use the full melee combat table and send
-			// AttackerStateUpdate (white damage text) instead of SpellDamageLog (yellow).
-			const bool isAutoAttack = (spell.attributes(1) & spell_attributes_b::AutoRepeat) != 0;
 			if (isAutoAttack)
 			{
-				// Roll the full melee combat table
-				const MeleeAttackOutcome outcome = executer.RollMeleeOutcomeAgainst(unitTarget, weapon_attack::BaseAttack);
+				// Roll the full melee combat table for the swinging hand
+				const MeleeAttackOutcome outcome = executer.RollMeleeOutcomeAgainst(unitTarget, swingHand);
 
 				// Calculate base weapon damage
 				uint32 totalDamage = rollBaseWeaponDamage();
@@ -1151,7 +1171,8 @@ namespace mmo
 				// Apply damage mod
 				totalDamage = executer.CalculateModifiedValue(unit_mods::Damage, totalDamage);
 
-				uint32 hitInfo = hit_info::NormalSwing;
+				// LeftSwing flags the swing as an off-hand attack so the client can react accordingly.
+				uint32 hitInfo = isOffhandSwing ? hit_info::LeftSwing : hit_info::NormalSwing;
 				uint32 victimState = victim_state::Normal;
 				bool hit = true;
 
@@ -1305,7 +1326,12 @@ namespace mmo
 						procEx |= proc_ex_flags::Block;
 					}
 
-					executer.TriggerProcEvent(spell_proc_flags::DoneMeleeAutoAttack, &unitTarget, totalDamage, procEx, school, false);
+					// Flag off-hand swings so procs that care about the swinging hand can react.
+					const SpellProcFlags attackerProcFlags = isOffhandSwing
+						? static_cast<SpellProcFlags>(spell_proc_flags::DoneMeleeAutoAttack | spell_proc_flags::DoneOffhandAttack)
+						: spell_proc_flags::DoneMeleeAutoAttack;
+
+					executer.TriggerProcEvent(attackerProcFlags, &unitTarget, totalDamage, procEx, school, false);
 					unitTarget.TriggerProcEvent(spell_proc_flags::TakenMeleeAutoAttack, &executer, totalDamage, procEx, school, false);
 				}
 			}

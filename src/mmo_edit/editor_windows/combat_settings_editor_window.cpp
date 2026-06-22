@@ -302,6 +302,20 @@ namespace mmo
 			}
 		}
 
+		// === Dual Wield ===
+		if (const auto section = ScopedEditorSection("Dual Wield", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::TextDisabled("Damage scaling for off-hand auto-attacks while dual wielding two weapons.");
+			ImGui::TextDisabled("The off-hand swing runs on its own attack timer (the off-hand weapon's speed).");
+			ImGui::Spacing();
+
+			float offhandDamageMultiplier = settings.offhand_damage_multiplier();
+			if (DrawFloatSetting("Off-Hand Damage Multiplier", offhandDamageMultiplier, defaults.offhand_damage_multiplier()))
+			{
+				settings.set_offhand_damage_multiplier(offhandDamageMultiplier);
+			}
+		}
+
 		// === Spell Weapon Damage ===
 		if (const auto section = ScopedEditorSection("Spell Weapon Damage", ImGuiTreeNodeFlags_DefaultOpen))
 		{

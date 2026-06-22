@@ -58,7 +58,7 @@ namespace mmo
 	}
 
 	GameUnitS::GameUnitS(const proto::Project &project, TimerQueue &timers)
-		: GameObjectS(project), m_timers(timers), m_despawnCountdown(timers), m_attackSwingCountdown(timers), m_regenCountdown(timers), m_pvpCombatCountdown(timers)
+		: GameObjectS(project), m_timers(timers), m_despawnCountdown(timers), m_attackSwingCountdown(timers), m_offhandSwingCountdown(timers), m_regenCountdown(timers), m_pvpCombatCountdown(timers)
 	{
 		// Setup unit mover
 		m_mover = make_unique<UnitMover>(*this);
@@ -72,6 +72,7 @@ namespace mmo
 		m_regenCountdown.ended.connect(this, &GameUnitS::OnRegeneration);
 		m_despawnCountdown.ended.connect(this, &GameUnitS::OnDespawnTimer);
 		m_attackSwingCountdown.ended.connect(this, &GameUnitS::OnAttackSwing);
+		m_offhandSwingCountdown.ended.connect(this, &GameUnitS::OnOffhandAttackSwing);
 		m_pvpCombatCountdown.ended.connect(this, &GameUnitS::OnPvpCombatTimer);
 	}
 
@@ -2420,6 +2421,7 @@ namespace mmo
 	void GameUnitS::StopAttack()
 	{
 		m_attackSwingCountdown.Cancel();
+		m_offhandSwingCountdown.Cancel();
 		SetVictim(nullptr);
 
 		// No longer attacking
@@ -3153,22 +3155,110 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::GetAutoAttackDamageRange(WeaponAttack /*attackType*/, float& outMin, float& outMax) const
+	{
+		// Base units only have a single weapon damage range (main hand). Players override this
+		// to source the off-hand weapon's damage when resolving an off-hand swing.
+		outMin = Get<float>(object_fields::MinDamage);
+		outMax = Get<float>(object_fields::MaxDamage);
+	}
+
+	uint32 GameUnitS::GetAutoAttackTime(WeaponAttack /*attackType*/) const
+	{
+		// Base units swing both hands on the same speed. Players override this to use the
+		// off-hand weapon's own delay.
+		return Get<uint32>(object_fields::BaseAttackTime);
+	}
+
+	bool GameUnitS::ShouldDualWield() const
+	{
+		return CanDualWield() && HasOffhandWeapon();
+	}
+
+	void GameUnitS::RefreshOffhandSwingTimer()
+	{
+		if (!ShouldDualWield())
+		{
+			m_offhandSwingCountdown.Cancel();
+			return;
+		}
+
+		// Already running - leave its current phase untouched.
+		if (m_offhandSwingCountdown.IsRunning())
+		{
+			return;
+		}
+
+		// Seed the off-hand phase so the first swing lands roughly half an off-hand swing-time
+		// from now. This keeps the two hands out of phase even when both weapons share the exact
+		// same attack speed, so they never swing on the same tick.
+		const GameTime now = GetAsyncTimeMs();
+		const uint32 offhandTime = GetAutoAttackTime(weapon_attack::OffhandAttack);
+		m_lastOffHand = now - offhandTime + (offhandTime / 2);
+		TriggerNextOffhandAttack();
+	}
+
 	void GameUnitS::TriggerNextAutoAttack()
 	{
 		const GameTime now = GetAsyncTimeMs();
 		GameTime nextAttackSwing = now;
 
-		const GameTime mainHandCooldown = m_lastMainHand + Get<uint32>(object_fields::BaseAttackTime);
+		const GameTime mainHandCooldown = m_lastMainHand + GetAutoAttackTime(weapon_attack::BaseAttack);
 		if (mainHandCooldown > nextAttackSwing)
 		{
 			nextAttackSwing = mainHandCooldown;
 		}
 
 		m_attackSwingCountdown.SetEnd(nextAttackSwing);
+
+		// Keep the off-hand swing timer in sync with the current dual-wield state (handles
+		// weapons being equipped/unequipped mid-combat).
+		RefreshOffhandSwingTimer();
+	}
+
+	void GameUnitS::TriggerNextOffhandAttack()
+	{
+		const GameTime now = GetAsyncTimeMs();
+		GameTime nextAttackSwing = now;
+
+		const GameTime offHandCooldown = m_lastOffHand + GetAutoAttackTime(weapon_attack::OffhandAttack);
+		if (offHandCooldown > nextAttackSwing)
+		{
+			nextAttackSwing = offHandCooldown;
+		}
+
+		m_offhandSwingCountdown.SetEnd(nextAttackSwing);
 	}
 
 	void GameUnitS::OnAttackSwing()
 	{
+		ExecuteAutoAttackSwing(weapon_attack::BaseAttack);
+	}
+
+	void GameUnitS::OnOffhandAttackSwing()
+	{
+		// Guard against stale timers: if dual wield was lost (weapon unequipped, capability
+		// removed) since the timer was scheduled, just stop swinging the off-hand.
+		if (!ShouldDualWield())
+		{
+			m_offhandSwingCountdown.Cancel();
+			return;
+		}
+
+		ExecuteAutoAttackSwing(weapon_attack::OffhandAttack);
+	}
+
+	void GameUnitS::ExecuteAutoAttackSwing(const WeaponAttack attackType)
+	{
+		const bool isOffhand = (attackType == weapon_attack::OffhandAttack);
+
+		// Resolve which swing timer and last-swing timestamp this hand uses.
+		Countdown& swingCountdown = isOffhand ? m_offhandSwingCountdown : m_attackSwingCountdown;
+		GameTime& lastSwing = isOffhand ? m_lastOffHand : m_lastMainHand;
+
+		// Remember which hand we're resolving so spell effects can source the correct weapon.
+		m_currentAutoAttackType = attackType;
+
 		const auto& settings = GetCombatSettings();
 
 		// Error delay from combat settings
@@ -3176,7 +3266,7 @@ namespace mmo
 
 		// Remember that we tried to swing just now
 		const GameTime now = GetAsyncTimeMs();
-		m_lastMainHand = now;
+		lastSwing = now;
 
 		if (!IsAlive())
 		{
@@ -3208,9 +3298,13 @@ namespace mmo
 		// Victim must be alive in order to attack
 		if (!victim->IsAlive())
 		{
-			// We just send the error message and won't trigger another auto attack this time, as it would be pointless anyway
-			OnAttackSwingEvent(AttackSwingEvent::TargetDead);
-			m_victim.reset();
+			// The main-hand swing drives the client-facing swing-error UI; the off-hand stays silent
+			// to avoid duplicate error messages.
+			if (!isOffhand)
+			{
+				OnAttackSwingEvent(AttackSwingEvent::TargetDead);
+				m_victim.reset();
+			}
 			return;
 		}
 
@@ -3223,21 +3317,27 @@ namespace mmo
 		const float effectiveRange = attackRange + (bothMoving ? MELEE_CHASE_RANGE_BONUS : 0.0f);
 		if (victim->GetSquaredDistanceTo(GetPosition(), false) > (effectiveRange * effectiveRange))
 		{
-			OnAttackSwingEvent(AttackSwingEvent::OutOfRange);
-			m_attackSwingCountdown.SetEnd(GetAsyncTimeMs() + attackSwingErrorDelay);
+			if (!isOffhand)
+			{
+				OnAttackSwingEvent(AttackSwingEvent::OutOfRange);
+			}
+			swingCountdown.SetEnd(GetAsyncTimeMs() + attackSwingErrorDelay);
 			return;
 		}
 
 		// Target must be in front of us
 		if (!IsFacingTowards(*victim))
 		{
-			OnAttackSwingEvent(AttackSwingEvent::WrongFacing);
-			m_attackSwingCountdown.SetEnd(GetAsyncTimeMs() + attackSwingErrorDelay);
+			if (!isOffhand)
+			{
+				OnAttackSwingEvent(AttackSwingEvent::WrongFacing);
+			}
+			swingCountdown.SetEnd(GetAsyncTimeMs() + attackSwingErrorDelay);
 			return;
 		}
 
 		// Check if we have a configured auto-attack spell to use instead of the legacy hardcoded combat
-		const proto::SpellEntry* autoAttackSpell = GetAutoAttackSpell();
+		const proto::SpellEntry* autoAttackSpell = GetAutoAttackSpell(attackType);
 		if (autoAttackSpell)
 		{
 			// Cast the auto-attack spell targeting the victim.
@@ -3249,26 +3349,46 @@ namespace mmo
 			// Auto-attack spells are always instant and treated as procs (no resource cost, no cooldown check)
 			CastSpell(targetMap, *autoAttackSpell, 0, true);
 
-			OnAttackSwingEvent(AttackSwingEvent::Success);
-			TriggerNextAutoAttack();
+			if (!isOffhand)
+			{
+				OnAttackSwingEvent(AttackSwingEvent::Success);
+			}
+
+			if (isOffhand)
+			{
+				TriggerNextOffhandAttack();
+			}
+			else
+			{
+				TriggerNextAutoAttack();
+			}
 			return;
 		}
 
 		// === Legacy hardcoded auto-attack logic (fallback when no auto-attack spell is configured) ===
 
 		// Calculate melee hit outcome
-		const MeleeAttackOutcome outcome = RollMeleeOutcomeAgainst(*victim, WeaponAttack::BaseAttack);
+		const MeleeAttackOutcome outcome = RollMeleeOutcomeAgainst(*victim, attackType);
 
-		// Calculate damage between minimum and maximum damage
-		std::uniform_real_distribution distribution(Get<float>(object_fields::MinDamage), Get<float>(object_fields::MaxDamage) + 1.0f);
+		// Calculate damage between minimum and maximum damage for the swinging hand.
+		float weaponMinDamage = 0.0f, weaponMaxDamage = 0.0f;
+		GetAutoAttackDamageRange(attackType, weaponMinDamage, weaponMaxDamage);
+		std::uniform_real_distribution distribution(weaponMinDamage, weaponMaxDamage + 1.0f);
 		float rawDamage = distribution(randomGenerator);
+
+		// Off-hand swings deal reduced damage (configurable combat setting).
+		if (isOffhand)
+		{
+			rawDamage *= settings.offhand_damage_multiplier();
+		}
 
 		// Apply damage mods
 		rawDamage = CalculateModifiedValue(unit_mods::Damage, rawDamage);
 
 		uint32 totalDamage = static_cast<uint32>(rawDamage);
 
-		uint32 hitInfo = HitInfo::NormalSwing;
+		// LeftSwing flags the swing as an off-hand attack so the client can react accordingly.
+		uint32 hitInfo = isOffhand ? hit_info::LeftSwing : HitInfo::NormalSwing;
 		uint32 victimState = VictimState::Normal;
 
 		bool hit = true;
@@ -3395,9 +3515,22 @@ namespace mmo
 			AddPower(power_type::Rage, addRage);
 		}
 
-		// In case of success, we also want to trigger an event to potentially reset error states from previous attempts
-		OnAttackSwingEvent(AttackSwingEvent::Success);
-		TriggerNextAutoAttack();
+		// In case of success, we also want to trigger an event to potentially reset error states from
+		// previous attempts. Only the main-hand drives the client-facing swing-error UI.
+		if (!isOffhand)
+		{
+			OnAttackSwingEvent(AttackSwingEvent::Success);
+		}
+
+		// Reschedule the swing timer for the hand that just swung.
+		if (isOffhand)
+		{
+			TriggerNextOffhandAttack();
+		}
+		else
+		{
+			TriggerNextAutoAttack();
+		}
 
 		// Trigger proc events
 		if (hit)
@@ -3427,8 +3560,13 @@ namespace mmo
 				procEx |= proc_ex_flags::Block;
 			}
 
+			// Flag off-hand swings so procs that care about the swinging hand can react.
+			const SpellProcFlags attackerProcFlags = isOffhand
+				? static_cast<SpellProcFlags>(spell_proc_flags::DoneMeleeAutoAttack | spell_proc_flags::DoneOffhandAttack)
+				: spell_proc_flags::DoneMeleeAutoAttack;
+
 			// Trigger attacker procs
-			TriggerProcEvent(spell_proc_flags::DoneMeleeAutoAttack, victim.get(), totalDamage, procEx, spell_school::Normal, false);
+			TriggerProcEvent(attackerProcFlags, victim.get(), totalDamage, procEx, spell_school::Normal, false);
 
 			// Trigger victim procs
 			victim->TriggerProcEvent(spell_proc_flags::TakenMeleeAutoAttack, this, totalDamage, procEx, spell_school::Normal, false);

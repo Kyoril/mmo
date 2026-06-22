@@ -1446,14 +1446,87 @@ namespace mmo
 		return GameUnitS::GetUnitMissChance();
 	}
 
-	const proto::SpellEntry* GamePlayerS::GetAutoAttackSpell() const
+	const proto::SpellEntry* GamePlayerS::GetAutoAttackSpell(WeaponAttack attackType) const
 	{
-		if (m_classEntry && m_classEntry->has_mainhand_auto_attack_spell())
+		if (!m_classEntry)
+		{
+			return nullptr;
+		}
+
+		if (attackType == weapon_attack::OffhandAttack)
+		{
+			// Prefer a dedicated off-hand auto-attack spell, otherwise reuse the main-hand spell.
+			// The off-hand weapon's damage and the off-hand damage multiplier are applied by the
+			// weapon-damage effect based on the current swing hand.
+			if (m_classEntry->has_offhand_auto_attack_spell() && m_classEntry->offhand_auto_attack_spell() != 0)
+			{
+				return m_project.spells.getById(m_classEntry->offhand_auto_attack_spell());
+			}
+		}
+
+		if (m_classEntry->has_mainhand_auto_attack_spell() && m_classEntry->mainhand_auto_attack_spell() != 0)
 		{
 			return m_project.spells.getById(m_classEntry->mainhand_auto_attack_spell());
 		}
 
 		return nullptr;
+	}
+
+	void GamePlayerS::GetAutoAttackDamageRange(WeaponAttack attackType, float& outMin, float& outMax) const
+	{
+		if (attackType != weapon_attack::OffhandAttack)
+		{
+			GameUnitS::GetAutoAttackDamageRange(attackType, outMin, outMax);
+			return;
+		}
+
+		// Off-hand: source the damage range from the equipped off-hand weapon and add attack-power
+		// scaling, mirroring UpdateDamage() but using the off-hand weapon's own swing time. The
+		// configurable off-hand damage multiplier is applied by the caller, not here.
+		float minDamage = 1.0f;
+		float maxDamage = 2.0f;
+		uint32 attackSpeed = 2000;
+
+		std::shared_ptr<GameItemS> offHandWeapon = m_inventory.GetWeaponByAttackType(weapon_attack::OffhandAttack, true, true);
+		if (offHandWeapon != nullptr)
+		{
+			if (offHandWeapon->GetEntry().has_damage())
+			{
+				minDamage = offHandWeapon->GetEntry().damage().mindmg();
+				maxDamage = offHandWeapon->GetEntry().damage().maxdmg();
+			}
+
+			attackSpeed = offHandWeapon->GetEntry().delay();
+			if (attackSpeed == 0)
+			{
+				attackSpeed = 2000;
+			}
+		}
+
+		const float attackPower = Get<float>(object_fields::AttackPower);
+		const float attackTime = static_cast<float>(attackSpeed) / 1000.0f;
+		const float baseValue = attackPower / 14.0f * attackTime;
+
+		outMin = baseValue + minDamage;
+		outMax = baseValue + maxDamage;
+	}
+
+	uint32 GamePlayerS::GetAutoAttackTime(WeaponAttack attackType) const
+	{
+		if (attackType == weapon_attack::OffhandAttack)
+		{
+			std::shared_ptr<GameItemS> offHandWeapon = m_inventory.GetWeaponByAttackType(weapon_attack::OffhandAttack, true, true);
+			if (offHandWeapon != nullptr)
+			{
+				const uint32 delay = offHandWeapon->GetEntry().delay();
+				if (delay > 0)
+				{
+					return delay;
+				}
+			}
+		}
+
+		return GameUnitS::GetAutoAttackTime(attackType);
 	}
 
 	bool GamePlayerS::HasOffhandWeapon() const

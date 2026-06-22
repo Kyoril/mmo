@@ -1210,10 +1210,27 @@ public:
 		/// Stops attacking the current victim.
 		void StopAttack();
 
-		/// Gets the auto-attack spell for the current weapon configuration.
+		/// Gets the auto-attack spell for the given weapon hand.
 		/// Returns nullptr if no auto-attack spell is configured (legacy behavior).
 		/// Override in subclasses to provide class-specific auto-attack spells.
-		virtual const proto::SpellEntry* GetAutoAttackSpell() const { return nullptr; }
+		/// @param attackType Which weapon hand the swing originates from.
+		virtual const proto::SpellEntry* GetAutoAttackSpell(WeaponAttack attackType) const { return nullptr; }
+
+		/// Returns the weapon hand whose auto-attack swing is currently being resolved.
+		/// Spell effects (e.g. weapon damage) use this to source the correct weapon's values.
+		WeaponAttack GetCurrentAutoAttackType() const noexcept { return m_currentAutoAttackType; }
+
+		/// Gets the raw (pre-multiplier) weapon damage range used by auto-attacks for the given hand.
+		/// Base implementation returns the main-hand MinDamage/MaxDamage object fields for every hand.
+		/// @param attackType Which weapon hand to source damage from.
+		/// @param outMin Receives the minimum weapon damage.
+		/// @param outMax Receives the maximum weapon damage.
+		virtual void GetAutoAttackDamageRange(WeaponAttack attackType, float& outMin, float& outMax) const;
+
+		/// Gets the swing time (in milliseconds) for the given weapon hand.
+		/// Base implementation returns the BaseAttackTime object field for every hand.
+		/// @param attackType Which weapon hand to source the swing time from.
+		virtual uint32 GetAutoAttackTime(WeaponAttack attackType) const;
 
 		/// Gets the combat settings containing configurable combat formula parameters.
 		/// Uses the project's combat settings if available, otherwise returns defaults.
@@ -1408,8 +1425,11 @@ public:
 		/// @returns A multiplicative factor where 1.10 means +10% damage taken.
 		float GetIncomingDamageTakenMultiplier(const GameUnitS* attacker, SpellDmgClass dmgClass) const;
 
-		/// Called when an attack swing occurs.
+		/// Called when the main-hand attack swing timer expires.
 		void OnAttackSwing();
+
+		/// Called when the off-hand attack swing timer expires (dual wield only).
+		void OnOffhandAttackSwing();
 
 		void OnPvpCombatTimer();
 
@@ -1453,8 +1473,26 @@ public:
 		/// Called when the despawn timer expires.
 		void OnDespawnTimer();
 
-		/// Triggers the next auto attack.
+		/// Triggers the next main-hand auto attack swing.
 		void TriggerNextAutoAttack();
+
+		/// Triggers the next off-hand auto attack swing (dual wield only).
+		void TriggerNextOffhandAttack();
+
+		/// Shared auto-attack swing resolution for a given weapon hand. Performs range/facing
+		/// checks, rolls the combat outcome (or casts the configured auto-attack spell) and
+		/// reschedules the corresponding swing timer.
+		/// @param attackType Which weapon hand performs the swing.
+		void ExecuteAutoAttackSwing(WeaponAttack attackType);
+
+		/// Returns true if this unit should currently perform off-hand auto-attack swings
+		/// (dual wield unlocked and a usable off-hand weapon equipped).
+		bool ShouldDualWield() const;
+
+		/// Starts, stops or (re)seeds the off-hand swing timer based on the current dual-wield
+		/// state. When starting, the first off-hand swing is phase-offset by half the off-hand
+		/// swing time so main- and off-hand never fire on the exact same tick.
+		void RefreshOffhandSwingTimer();
 
 	public:
 		/// Gets the timer queue for the unit.
@@ -1477,7 +1515,10 @@ public:
 		std::unique_ptr<UnitMover> m_mover;
 		std::unique_ptr<CCMovementController> m_ccMovementController;
 		Countdown m_attackSwingCountdown;
+		Countdown m_offhandSwingCountdown;
 		GameTime m_lastMainHand = 0, m_lastOffHand = 0;
+		/// Weapon hand whose auto-attack swing is currently being resolved (used by spell effects).
+		WeaponAttack m_currentAutoAttackType = weapon_attack::BaseAttack;
 		Countdown m_regenCountdown;
 		GameTime m_lastManaUse = 0;
 

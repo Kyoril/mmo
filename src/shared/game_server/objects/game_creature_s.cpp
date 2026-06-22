@@ -761,7 +761,7 @@ namespace mmo
 		return m_entry ? m_entry->name() : m_originalEntry.name();
 	}
 
-	const proto::SpellEntry* GameCreatureS::GetAutoAttackSpell() const
+	const proto::SpellEntry* GameCreatureS::GetAutoAttackSpell(WeaponAttack /*attackType*/) const
 	{
 		if (m_entry && m_entry->has_auto_attack_spell())
 		{

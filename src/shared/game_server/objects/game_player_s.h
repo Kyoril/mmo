@@ -272,9 +272,16 @@ namespace mmo
 		const std::vector<PersistentCooldownData>& GetDeserializedCooldowns() const { return m_deserializedCooldowns; }
 
 	protected:
-		/// @brief Returns the auto-attack spell configured for this player's class, if any.
+		/// @brief Returns the auto-attack spell configured for this player's class and weapon hand, if any.
+		/// @param attackType Which weapon hand the swing originates from.
 		/// @return Pointer to the auto-attack spell entry, or nullptr if not configured.
-		const proto::SpellEntry* GetAutoAttackSpell() const override;
+		const proto::SpellEntry* GetAutoAttackSpell(WeaponAttack attackType) const override;
+
+		/// @brief Sources the weapon damage range from the equipped weapon for the given hand.
+		void GetAutoAttackDamageRange(WeaponAttack attackType, float& outMin, float& outMax) const override;
+
+		/// @brief Returns the equipped weapon's swing time for the given hand.
+		uint32 GetAutoAttackTime(WeaponAttack attackType) const override;
 
 		float GetUnitMissChance() const override;
 

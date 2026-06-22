@@ -238,8 +238,10 @@ namespace mmo
 
 	protected:
 		/// @brief Returns the auto-attack spell configured for this creature, if any.
+		/// Creatures use a single auto-attack spell regardless of weapon hand.
+		/// @param attackType Which weapon hand the swing originates from (unused for creatures).
 		/// @return Pointer to the auto-attack spell entry, or nullptr if not configured.
-		const proto::SpellEntry* GetAutoAttackSpell() const override;
+		const proto::SpellEntry* GetAutoAttackSpell(WeaponAttack attackType) const override;
 
 	private:
 
