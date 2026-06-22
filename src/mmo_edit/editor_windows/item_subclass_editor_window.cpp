@@ -144,6 +144,34 @@ namespace mmo
 			}
 			ImGui::TextDisabled("Combat-ready (attack idle) stance held while in combat (e.g. \"SwordReady\"). Empty = unarmed ready.");
 		}
+
+		if (const auto section = ScopedEditorSection("Off-Hand Attack Animations", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::TextDisabled("Skeleton animation states used for off-hand (dual wield) auto attacks.\nOne is chosen at random per off-hand swing. Empty = falls back to the main-hand list, then unarmed.");
+
+			int removeOffhandIndex = -1;
+			for (int i = 0; i < currentEntry.offhand_attackanimation_size(); ++i)
+			{
+				ImGui::PushID(1000 + i);
+				ImGui::InputText("##offhandanimname", currentEntry.mutable_offhand_attackanimation(i));
+				ImGui::SameLine();
+				if (ImGui::Button("Remove"))
+				{
+					removeOffhandIndex = i;
+				}
+				ImGui::PopID();
+			}
+
+			if (removeOffhandIndex >= 0)
+			{
+				currentEntry.mutable_offhand_attackanimation()->DeleteSubrange(removeOffhandIndex, 1);
+			}
+
+			if (ImGui::Button("Add Off-Hand Attack Animation"))
+			{
+				currentEntry.add_offhand_attackanimation();
+			}
+		}
 	}
 
 	void ItemSubclassEditorWindow::OnNewEntry(proto::TemplateManager<proto::ItemSubclasses, proto::ItemSubclassEntry>::EntryType& entry)

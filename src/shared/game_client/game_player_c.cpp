@@ -131,6 +131,19 @@ namespace mmo
 				SetWeaponAttackAnimations(attackAnimations);
 				SetWeaponReadyAnimation(readyAnimation);
 			}
+
+			// If this item occupies the off-hand slot, derive the dedicated off-hand auto attack
+			// animations from its weapon subclass (used for dual-wield off-hand swings).
+			const uint32 offHandEntry = Get<uint32>(object_fields::VisibleItem1_0 + player_equipment_slots::Offhand * kVisFields);
+			if (offHandEntry == static_cast<uint32>(data.id))
+			{
+				std::vector<String> offhandAttackAnimations;
+				if (const auto* subclass = m_project.itemSubclasses.getById(data.itemSubclass))
+				{
+					offhandAttackAnimations.assign(subclass->offhand_attackanimation().begin(), subclass->offhand_attackanimation().end());
+				}
+				SetOffhandWeaponAttackAnimations(offhandAttackAnimations);
+			}
 		}
 
 		const auto* displayData = m_project.itemDisplays.getById(data.displayId);
@@ -449,9 +462,10 @@ namespace mmo
 		// their item data arrives, so a later flag flip is detected correctly.
 		m_weaponsDrawn = IsWeaponDrawn();
 
-		// Reset to unarmed; the main-hand weapon (if any) re-applies its attack and ready
-		// animations once its item data arrives via NotifyItemData.
+		// Reset to unarmed; the main-hand and off-hand weapons (if any) re-apply their attack and
+		// ready animations once their item data arrives via NotifyItemData.
 		SetWeaponAttackAnimations({});
+		SetOffhandWeaponAttackAnimations({});
 		SetWeaponReadyAnimation(String());
 
 		m_configuration.Apply(*this, *m_customizationDefinition);

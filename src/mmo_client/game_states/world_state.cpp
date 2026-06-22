@@ -3149,7 +3149,10 @@ namespace mmo
 		std::shared_ptr<GameUnitC> attacker = ObjectMgr::Get<GameUnitC>(attackerGuid);
 		if (attacker)
 		{
-			attacker->NotifyAttackSwingEvent();
+			// LeftSwing marks an off-hand (dual wield) swing so the dedicated off-hand attack
+			// animation is played instead of the main-hand one.
+			const bool offhandSwing = (hitInfo & hit_info::LeftSwing) != 0;
+			attacker->NotifyAttackSwingEvent(offhandSwing);
 		}
 
 		std::shared_ptr<GameUnitC> attacked = ObjectMgr::Get<GameUnitC>(attackedGuid);

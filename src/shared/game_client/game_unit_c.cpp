@@ -2594,17 +2594,31 @@ namespace mmo
 		RefreshMovementAnimation();
 	}
 
-	void GameUnitC::NotifyAttackSwingEvent()
+	void GameUnitC::NotifyAttackSwingEvent(const bool offhand)
 	{
-		// Collect the weapon attack states that are still valid for the current mesh.
-		std::vector<AnimationState*> candidates;
-		candidates.reserve(m_weaponAttackStates.size());
-		for (AnimationState* state : m_weaponAttackStates)
+		// Helper: collect the animation states from a list that are still valid for the current mesh.
+		auto collectValid = [this](const std::vector<AnimationState*>& states, std::vector<AnimationState*>& out)
 		{
-			if (IsValidAnimState(state))
+			out.reserve(states.size());
+			for (AnimationState* state : states)
 			{
-				candidates.push_back(state);
+				if (IsValidAnimState(state))
+				{
+					out.push_back(state);
+				}
 			}
+		};
+
+		// Collect the weapon attack states that are still valid for the current mesh. Off-hand swings
+		// use the dedicated off-hand list, falling back to the main-hand list when none are available.
+		std::vector<AnimationState*> candidates;
+		if (offhand)
+		{
+			collectValid(m_offhandWeaponAttackStates, candidates);
+		}
+		if (candidates.empty())
+		{
+			collectValid(m_weaponAttackStates, candidates);
 		}
 
 		// Fall back to the unarmed attack animation when no weapon animation is available.
@@ -2646,6 +2660,28 @@ namespace mmo
 			AnimationState* state = m_entity->GetAnimationState(animName);
 			state->SetLoop(false);
 			m_weaponAttackStates.push_back(state);
+		}
+	}
+
+	void GameUnitC::SetOffhandWeaponAttackAnimations(const std::vector<String>& animNames)
+	{
+		m_offhandWeaponAttackStates.clear();
+
+		if (!m_entity)
+		{
+			return;
+		}
+
+		for (const String& animName : animNames)
+		{
+			if (animName.empty() || !m_entity->HasAnimationState(animName))
+			{
+				continue;
+			}
+
+			AnimationState* state = m_entity->GetAnimationState(animName);
+			state->SetLoop(false);
+			m_offhandWeaponAttackStates.push_back(state);
 		}
 	}
 

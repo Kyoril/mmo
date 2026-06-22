@@ -530,15 +530,25 @@ namespace mmo
 		/// @brief Force an update of movement-based animations (e.g., after canceling spell animations)
 		void RefreshMovementAnimation();
 
-		void NotifyAttackSwingEvent();
+		/// @brief Plays an auto-attack swing animation.
+		///	@param offhand When true, an off-hand (dual wield) swing animation is chosen. Falls back to
+		///	the main-hand list and then the unarmed attack when no off-hand animations are available.
+		void NotifyAttackSwingEvent(bool offhand = false);
 
 		void NotifyHitEvent();
 
-		/// @brief Sets the animation states used for auto attacks based on the equipped weapon.
+		/// @brief Sets the animation states used for main-hand auto attacks based on the equipped weapon.
 		///	@param animNames Names of the skeleton animation states to choose from. One is picked at
 		///	random per swing. Names not present on the current mesh are ignored; when none remain,
 		///	auto attacks fall back to the unarmed attack animation.
 		void SetWeaponAttackAnimations(const std::vector<String>& animNames);
+
+		/// @brief Sets the animation states used for off-hand (dual wield) auto attacks based on the
+		///	equipped off-hand weapon.
+		///	@param animNames Names of the skeleton animation states to choose from. One is picked at
+		///	random per off-hand swing. Names not present on the current mesh are ignored; when none
+		///	remain, off-hand swings fall back to the main-hand attack animations, then the unarmed attack.
+		void SetOffhandWeaponAttackAnimations(const std::vector<String>& animNames);
 
 		/// @brief Sets the combat-ready (attack idle) stance based on the equipped weapon.
 		///	@param animName Name of the skeleton animation state to hold while in combat. When empty
@@ -738,6 +748,7 @@ namespace mmo
 		AnimationState *m_deathState{nullptr};
 		AnimationState *m_unarmedAttackState{nullptr};
 		std::vector<AnimationState*> m_weaponAttackStates;
+		std::vector<AnimationState*> m_offhandWeaponAttackStates;
 		AnimationState *m_castReleaseState{nullptr};
 		AnimationState *m_castingState{nullptr};
 		AnimationState *m_damageHitState{nullptr};

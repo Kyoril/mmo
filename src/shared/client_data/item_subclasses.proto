@@ -16,6 +16,10 @@ message ItemSubclassEntry {
 	// in combat with a weapon of this subclass (e.g. "SwordReady"). Empty falls back to the
 	// unarmed ready animation.
 	optional string readyanimation = 6;
+	// Names of the skeleton animation states played for off-hand (dual wield) auto attacks with a
+	// weapon of this subclass (e.g. "SwordAttackOffhand01"). One is chosen at random per off-hand
+	// swing. Empty falls back to the main-hand attackanimation list, then the unarmed attack.
+	repeated string offhand_attackanimation = 7;
 }
 
 message ItemSubclasses {
