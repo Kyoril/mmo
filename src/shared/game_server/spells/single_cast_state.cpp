@@ -249,8 +249,14 @@ namespace mmo
 			return;
 		}
 
-		// Check whether the spell can be interrupted by this action
+		// Check whether the spell can be interrupted by this action.
+		// "Any" always interrupts. Interrupt effects (kick / counterspell) interrupt
+		// every cast in progress regardless of the victim spell's interrupt flags - it
+		// must work against any spell casting unit, not just those that opted in.
+		// All other passive reasons (movement, auto attack, damage) only interrupt the
+		// cast if the spell explicitly opted in via its interrupt flags.
 		if (reason != spell_interrupt_flags::Any &&
+			reason != spell_interrupt_flags::Interrupt &&
 			(m_spell.interruptflags() & reason) == 0)
 		{
 			return;

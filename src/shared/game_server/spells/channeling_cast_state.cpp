@@ -51,6 +51,18 @@ namespace mmo
 
 	void ChannelingCastState::StopCast(SpellInterruptFlags reason, const GameTime interruptCooldown)
 	{
+		if (m_hasFinished)
+		{
+			return;
+		}
+
+		// Apply the interrupt lockout cooldown to the channeled spell so it cannot be
+		// recast immediately after being interrupted (mirrors SingleCastState::StopCast).
+		if (interruptCooldown > 0)
+		{
+			m_cast.GetExecuter().SetCooldown(m_spell.id(), interruptCooldown);
+		}
+
 		EndChanneling(false);
 	}
 

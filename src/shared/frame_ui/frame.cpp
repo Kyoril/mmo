@@ -1286,7 +1286,7 @@ namespace mmo
 
 	void Frame::OnMouseEnter()
 	{
-		if (m_onEnter.is_valid())
+		if (m_onEnter.is_valid() && luabind::type(m_onEnter) == LUA_TFUNCTION)
 		{
 			try
 			{
@@ -1301,7 +1301,7 @@ namespace mmo
 
 	void Frame::OnMouseLeave()
 	{
-		if (m_onLeave.is_valid())
+		if (m_onLeave.is_valid() && luabind::type(m_onLeave) == LUA_TFUNCTION)
 		{
 			try
 			{
