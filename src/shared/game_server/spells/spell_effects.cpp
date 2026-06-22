@@ -1001,6 +1001,27 @@ namespace mmo
 			}
 		}
 
+		void HandleDualWield(SpellEffectContext& ctx)
+		{
+			if (ctx.effectTargets.empty())
+			{
+				ELOG("Failed to cast spell effect: Unable to resolve effect targets");
+				return;
+			}
+
+			for (auto* targetObject : ctx.effectTargets)
+			{
+				if (!targetObject->IsUnit())
+				{
+					continue;
+				}
+
+				ctx.markAffectedTarget(*targetObject);
+				auto& unitTarget = targetObject->AsUnit();
+				unitTarget.NotifyCanDualWield(true);
+			}
+		}
+
 		void HandleHealPct(SpellEffectContext& ctx)
 		{
 			if (ctx.effectTargets.empty())

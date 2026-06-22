@@ -72,6 +72,12 @@ namespace mmo
 		return Get()->GetStackCount();
 	}
 
+	uint64 AuraHandle::GetCasterId() const
+	{
+		if (!CheckNonNull()) return 0;
+		return Get()->GetCasterId();
+	}
+
 	bool AuraHandle::CheckNonNull() const
 	{
 		if (Get())

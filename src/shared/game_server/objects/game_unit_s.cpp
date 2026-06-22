@@ -598,6 +598,9 @@ namespace mmo
 			case spell_effects::CriticalBlock:
 				NotifyCanCriticalBlock(false);
 				break;
+			case spell_effects::DualWield:
+				NotifyCanDualWield(false);
+				break;
 			}
 		}
 
@@ -2193,6 +2196,19 @@ namespace mmo
 		{
 			m_combatCapabilities &= ~combat_capabilities::CanCriticalBlock;
 		}
+	}
+
+	void GameUnitS::NotifyCanDualWield(const bool gainedEffect)
+	{
+		// If true, we take a shortcut: We simply trust the caller that the effect was gained and apply it instead of iterating over each spell effect
+		if (gainedEffect)
+		{
+			m_canDualWield = true;
+			return;
+		}
+
+		// Effect was removed: Re-evaluate based on whether any DualWield spell effect remains.
+		m_canDualWield = HasSpellEffect(spell_effects::DualWield);
 	}
 
 	float GameUnitS::GetUnitMissChance() const

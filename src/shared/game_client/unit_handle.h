@@ -42,6 +42,9 @@ namespace mmo
 
 		[[nodiscard]] uint8 GetStackCount() const;
 
+		/// Gets the GUID of the unit that cast the spell creating this aura.
+		[[nodiscard]] uint64 GetCasterId() const;
+
 	private:
 		[[nodiscard]] bool CheckNonNull() const;
 	};

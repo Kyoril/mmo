@@ -1177,6 +1177,11 @@ public:
 		///	If false, spell effects are checked to determine whether the capability should remain.
 		void NotifyCanCriticalBlock(bool gainedEffect);
 
+		/// Re-evaluates if the unit can dual wield weapons based on spell effects.
+		///	@param gainedEffect Set this to true if you are sure the unit gained the capability (performance shortcut).
+		///	If false, spell effects are checked to determine whether the capability should remain.
+		void NotifyCanDualWield(bool gainedEffect);
+
 		/// Returns true if the unit has an active aura effect of the given type. Don't use this too often as it's iterating through all active auras,
 		///	which is not a constant complexity operation.
 		bool HasAuraEffect(AuraType type) const;

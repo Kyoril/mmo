@@ -3436,6 +3436,14 @@ namespace mmo
 			FrameManager::Get().TriggerLuaEvent("PLAYER_AURA_UPDATE");
 		}
 
+		// Notify unit-scoped frames (e.g. the target frame) when the aura set of the
+		// currently selected target changes, so debuffs update immediately instead of
+		// only when health/power happen to change.
+		if (unit->GetGuid() == ObjectMgr::GetSelectedObjectGuid())
+		{
+			FrameManager::Get().TriggerLuaEvent("UNIT_AURA_UPDATED", "target");
+		}
+
 		return PacketParseResult::Pass;
 	}
 

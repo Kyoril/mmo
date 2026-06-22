@@ -919,6 +919,7 @@ namespace mmo
 			{se::Block,                  SpellEffects::HandleBlock},
 			{se::CriticalBlock,          SpellEffects::HandleCriticalBlock},
 			{se::Dodge,                  SpellEffects::HandleDodge},
+			{se::DualWield,              SpellEffects::HandleDualWield},
 			{se::HealPct,                SpellEffects::HandleHealPct},
 			{se::AddExtraAttacks,        SpellEffects::HandleAddExtraAttacks},
 			{se::Charge,                 SpellEffects::HandleCharge},
