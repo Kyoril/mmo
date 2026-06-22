@@ -107,6 +107,12 @@ namespace mmo
 		FrameManager::Get().TriggerLuaEvent("PLAYER_TALENT_UPDATE");
 	}
 
+	void TalentClient::OnTalentPointsChanged()
+	{
+		UpdateTalentRanks();
+		FrameManager::Get().TriggerLuaEvent("PLAYER_TALENT_UPDATE");
+	}
+
 	void TalentClient::RebuildTalentTrees()
 	{
 		m_talentsByTreeId.clear();

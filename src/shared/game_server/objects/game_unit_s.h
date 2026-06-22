@@ -735,8 +735,10 @@ namespace mmo
 		/// @param castTimeMs The cast time in milliseconds.
 		/// @param isProc Whether the spell is a proc.
 		/// @param itemGuid The GUID of the item used to cast the spell (optional).
+		/// @param ignoreKnownSpellCheck If true, skips the check whether the unit actually knows the spell.
+		///        This is meant for server-authoritative casts (e.g. triggers) where no client packet is involved.
 		/// @returns The result of the spell cast.
-		SpellCastResult CastSpell(const SpellTargetMap &target, const proto::SpellEntry &spell, uint32 castTimeMs, bool isProc = false, uint64 itemGuid = 0);
+		SpellCastResult CastSpell(const SpellTargetMap &target, const proto::SpellEntry &spell, uint32 castTimeMs, bool isProc = false, uint64 itemGuid = 0, bool ignoreKnownSpellCheck = false);
 
 		/// Cancels the current spell cast.
 		/// @param reason The reason for the interruption.

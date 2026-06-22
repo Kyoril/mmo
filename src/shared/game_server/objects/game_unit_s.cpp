@@ -668,9 +668,9 @@ namespace mmo
 		return GetCombatSettings().global_cooldown_ms();
 	}
 
-	SpellCastResult GameUnitS::CastSpell(const SpellTargetMap &target, const proto::SpellEntry &spell, const uint32 castTimeMs, bool isProc, uint64 itemGuid)
+	SpellCastResult GameUnitS::CastSpell(const SpellTargetMap &target, const proto::SpellEntry &spell, const uint32 castTimeMs, bool isProc, uint64 itemGuid, bool ignoreKnownSpellCheck)
 	{
-		if (!isProc && itemGuid == 0 && !HasSpell(spell.id()))
+		if (!isProc && itemGuid == 0 && !ignoreKnownSpellCheck && !HasSpell(spell.id()))
 		{
 			WLOG("Unit does not know spell " << spell.id());
 			return spell_cast_result::FailedNotKnown;

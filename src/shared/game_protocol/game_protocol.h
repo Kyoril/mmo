@@ -258,55 +258,55 @@ namespace mmo
 				/// Sent by the client to place a ping at their current world position, broadcast to party.
 				PartyPing,
 
-			/// Sent by the client to initiate a trade with the current target.
-			TradeInitiate,
+				/// Sent by the client to initiate a trade with the current target.
+				TradeInitiate,
 
-			/// Sent by the client to cancel the active trade session.
-			TradeCancelRequest,
+				/// Sent by the client to cancel the active trade session.
+				TradeCancelRequest,
 
-			/// Sent by the client to add an inventory item to a trade slot.
-			TradeAddItem,
+				/// Sent by the client to add an inventory item to a trade slot.
+				TradeAddItem,
 
-			/// Sent by the client to remove an item from a trade slot.
-			TradeRemoveItem,
+				/// Sent by the client to remove an item from a trade slot.
+				TradeRemoveItem,
 
-			/// Sent by the client to set the money amount offered in the trade.
-			TradeSetMoney,
+				/// Sent by the client to set the money amount offered in the trade.
+				TradeSetMoney,
 
-			/// Sent by the client to accept the current trade terms.
-			TradeAccept,
+				/// Sent by the client to accept the current trade terms.
+				TradeAccept,
 
-			/// Sent by the target player to accept a trade invitation.
-			TradeInviteAccept,
+				/// Sent by the target player to accept a trade invitation.
+				TradeInviteAccept,
 
-			/// Sent by the target player to decline a trade invitation.
-			TradeInviteDecline,
+				/// Sent by the target player to decline a trade invitation.
+				TradeInviteDecline,
 
-			/// Sent by the client to request a server-side line of sight check against the current target. Dev/debug only.
-			CheatCheckLineOfSight, // GAME MASTER
+				/// Sent by the client to request a server-side line of sight check against the current target. Dev/debug only.
+				CheatCheckLineOfSight, // GAME MASTER
 
-			/// Sent by the client to change the display model of the selected unit (or self). Dev/debug only.
-			CheatMorph, // GAME MASTER
+				/// Sent by the client to change the display model of the selected unit (or self). Dev/debug only.
+				CheatMorph, // GAME MASTER
 
-			/// Sent by the client to instantly kill the selected unit (or self). Dev/debug only.
-			CheatKill, // GAME MASTER
+				/// Sent by the client to instantly kill the selected unit (or self). Dev/debug only.
+				CheatKill, // GAME MASTER
 
-			/// Sent by the client to instantly revive a dead unit at its current position. Dev/debug only.
-			CheatRevive, // GAME MASTER
+				/// Sent by the client to instantly revive a dead unit at its current position. Dev/debug only.
+				CheatRevive, // GAME MASTER
 
-			/// Sent by the client when the local player starts swimming (enters deep enough water).
-			/// This is the only packet permitted to add the Swimming movement flag.
-			MoveStartSwim,
+				/// Sent by the client when the local player starts swimming (enters deep enough water).
+				/// This is the only packet permitted to add the Swimming movement flag.
+				MoveStartSwim,
 
-			/// Sent by the client when the local player stops swimming (leaves the water).
-			/// This is the only packet permitted to remove the Swimming movement flag.
-			MoveStopSwim,
+				/// Sent by the client when the local player stops swimming (leaves the water).
+				/// This is the only packet permitted to remove the Swimming movement flag.
+				MoveStopSwim,
 
-			/// Sent by the client when the player switches to walk mode (adds WalkMode flag).
-			MoveStartWalk,
+				/// Sent by the client when the player switches to walk mode (adds WalkMode flag).
+				MoveStartWalk,
 
-			/// Sent by the client when the player switches to run mode (removes WalkMode flag).
-			MoveStopWalk,
+				/// Sent by the client when the player switches to run mode (removes WalkMode flag).
+				MoveStopWalk,
 
 				/// Sent by the client to join a chat channel by name.
 				ChannelJoin,
@@ -469,7 +469,7 @@ namespace mmo
 
 				SpellEnergizeLog,
 				MoveEnded,
-				
+
 				QuestAccepted,
 				QuestAbandoned,
 
@@ -551,39 +551,39 @@ namespace mmo
 				/// Broadcast ping from a party member (sender guid, x, z world position).
 				PartyPing,
 
-			/// Sent to the target player when someone requests a trade.
-			TradeInvite,
+				/// Sent to the target player when someone requests a trade.
+				TradeInvite,
 
-			/// Sent to the initiating player with the result of the trade request.
-			TradeRequestResult,
+				/// Sent to the initiating player with the result of the trade request.
+				TradeRequestResult,
 
-			/// Sent to both players when a trade session is successfully opened.
-			TradeSessionOpened,
+				/// Sent to both players when a trade session is successfully opened.
+				TradeSessionOpened,
 
-			/// Sent to both players when a trade session ends for any reason.
-			TradeSessionClosed,
+				/// Sent to both players when a trade session ends for any reason.
+				TradeSessionClosed,
 
-			/// Sent to a player when the other player's trade offer changes.
-			TradeUpdate,
+				/// Sent to a player when the other player's trade offer changes.
+				TradeUpdate,
 
-			/// Sent to both players when the acceptance state changes.
-			TradeAcceptUpdate,
+				/// Sent to both players when the acceptance state changes.
+				TradeAcceptUpdate,
 
-			/// Sent to the client with the result of a CheatCheckLineOfSight request.
-			/// Contains: uint8 hasLos, 3×float from, 3×float to, 3×float hitPoint
-			DebugLineOfSightResult,
+				/// Sent to the client with the result of a CheatCheckLineOfSight request.
+				/// Contains: uint8 hasLos, 3×float from, 3×float to, 3×float hitPoint
+				DebugLineOfSightResult,
 
-			/// [PROXY] A unit started swimming.
-			MoveStartSwim,
+				/// [PROXY] A unit started swimming.
+				MoveStartSwim,
 
-			/// [PROXY] A unit stopped swimming.
-			MoveStopSwim,
+				/// [PROXY] A unit stopped swimming.
+				MoveStopSwim,
 
-			/// [PROXY] A unit switched to walk mode.
-			MoveStartWalk,
+				/// [PROXY] A unit switched to walk mode.
+				MoveStartWalk,
 
-			/// [PROXY] A unit switched to run mode.
-			MoveStopWalk,
+				/// [PROXY] A unit switched to run mode.
+				MoveStopWalk,
 
 				/// Sent to the client with the full list of chat channels it is currently a member
 				/// of (e.g. on login). Payload: uint8 count, then per channel: uint32 id,
@@ -600,8 +600,26 @@ namespace mmo
 				/// uint32 spellId.
 				ReviveRequest,
 
+				/// Sent to the client when the character's talent points or attribute points have
+				/// been reset (e.g. due to a ResetTalents / ResetAttributePoints spell effect), so
+				/// the client can show a localized system chat notification. Payload: uint8 type
+				/// (see character_points_reset_type).
+				CharacterPointsReset,
+
 				/// Counter constant
 				Count_,
+			};
+		}
+
+		/// Identifies which kind of character points were reset in a CharacterPointsReset packet.
+		namespace character_points_reset_type
+		{
+			enum Type
+			{
+				/// The character's spent talent points were refunded.
+				Talents = 0,
+				/// The character's spent attribute points were refunded.
+				Attributes = 1,
 			};
 		}
 

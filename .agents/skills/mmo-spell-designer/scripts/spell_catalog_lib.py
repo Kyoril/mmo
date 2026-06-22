@@ -431,6 +431,9 @@ def summarize_talent_tab(tab) -> dict:
         "class_id": tab.class_id,
         "icon": getattr(tab, "icon", ""),
         "background": getattr(tab, "background", ""),
+        "canvas_width": tab.canvas_width,
+        "canvas_height": tab.canvas_height,
+        "initial_zoom": tab.initial_zoom,
     }
 
 
@@ -449,6 +452,22 @@ def summarize_talent(talent, catalogs: dict[str, object], indexes: dict[str, dic
     tab = indexes["talent_tabs"].get(talent.tab)
     class_entry = indexes["classes"].get(tab.class_id) if tab else None
 
+    prerequisites = []
+    for prerequisite in talent.prerequisites:
+        prerequisite_talent = indexes["talents"].get(prerequisite.talent_id)
+        prerequisite_spell = (
+            indexes["spells"].get(prerequisite_talent.ranks[0])
+            if prerequisite_talent and prerequisite_talent.ranks
+            else None
+        )
+        prerequisites.append(
+            {
+                "talent_id": prerequisite.talent_id,
+                "talent_name": prerequisite_spell.name if prerequisite_spell else None,
+                "rank": prerequisite.rank,
+            }
+        )
+
     return {
         "id": talent.id,
         "tab": talent.tab,
@@ -457,6 +476,11 @@ def summarize_talent(talent, catalogs: dict[str, object], indexes: dict[str, dic
         "class_name": class_entry.name if class_entry else None,
         "row": talent.row,
         "column": talent.column,
+        "position_x": talent.position_x if talent.HasField("position_x") else None,
+        "position_y": talent.position_y if talent.HasField("position_y") else None,
+        "required_points": talent.required_points if talent.HasField("required_points") else talent.row * 5,
+        "node_scale": talent.node_scale,
+        "prerequisites": prerequisites,
         "rank_count": len(talent.ranks),
         "ranks": rank_spells,
     }

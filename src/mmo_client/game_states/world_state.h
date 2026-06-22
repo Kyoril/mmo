@@ -163,6 +163,8 @@ namespace mmo
 
 		void OnPlayerAttributePointsChanged(uint64 monitoredGuid);
 
+		void OnPlayerTalentPointsChanged(uint64 monitoredGuid);
+
 		void OnPlayerStatsChanged(uint64 monitoredGuid);
 
 		void OnDisplayIdChanged(uint64 monitoredGuid);
@@ -342,6 +344,8 @@ namespace mmo
 		PacketParseResult OnMoveTeleport(game::IncomingPacket &packet);
 
 		PacketParseResult OnLevelUp(game::IncomingPacket &packet);
+
+		PacketParseResult OnCharacterPointsReset(game::IncomingPacket &packet);
 
 		PacketParseResult OnAuraUpdate(game::IncomingPacket &packet);
 

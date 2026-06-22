@@ -542,7 +542,8 @@ namespace mmo
 			targetMap.SetUnitTarget(target->GetGuid());
 		}
 		
-		reinterpret_cast<GameUnitS*>(caster)->CastSpell(std::move(targetMap), *spell, spell->casttime());
+		// Triggers are server-authoritative, so bypass the "unit knows spell" check.
+		reinterpret_cast<GameUnitS*>(caster)->CastSpell(std::move(targetMap), *spell, spell->casttime(), false, 0, true);
 	}
 
 	void TriggerHandler::HandleMoveTo(const proto::TriggerAction& action, TriggerContext& context)

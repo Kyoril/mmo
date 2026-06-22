@@ -85,6 +85,12 @@ namespace mmo
 		/// This will update talent ranks for any talents that use this spell.
 		void OnSpellUnlearned(uint32 spellId);
 
+		/// Notifies the talent client that the player's available talent point count changed.
+		/// This recomputes which talents can currently be learned and refreshes the UI. The
+		/// talent point field arrives in a separate update from the learned-spell packet, so
+		/// this ensures the UI reflects the correct remaining points without reopening it.
+		void OnTalentPointsChanged();
+
 	private:
 		void RebuildTalentTrees();
 

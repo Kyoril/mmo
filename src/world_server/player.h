@@ -595,6 +595,12 @@ namespace mmo
 
 		void OnSpellUnlearned(GameUnitS& unit, const proto::SpellEntry& spellEntry);
 
+		/// Notifies the client that the character's talent points have been reset.
+		void OnTalentsReset();
+
+		/// Notifies the client that the character's attribute points have been reset.
+		void OnAttributePointsReset();
+
 		void HandleVendorGossip(const proto::VendorEntry& vendor, const GameCreatureS& vendorUnit);
 
 		void SendVendorInventory(const proto::VendorEntry& vendor, const GameCreatureS& vendorUnit);

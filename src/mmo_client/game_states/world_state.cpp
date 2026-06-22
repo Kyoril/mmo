@@ -637,6 +637,12 @@ namespace mmo
 		FrameManager::Get().TriggerLuaEvent("PLAYER_ATTRIBUTES_CHANGED");
 	}
 
+	void WorldState::OnPlayerTalentPointsChanged(uint64 monitoredGuid)
+	{
+		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
+		m_talentClient.OnTalentPointsChanged();
+	}
+
 	void WorldState::OnPlayerStatsChanged(uint64 monitoredGuid)
 	{
 		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
@@ -1340,6 +1346,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LevelUp, *this, &WorldState::OnLevelUp);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CharacterPointsReset, *this, &WorldState::OnCharacterPointsReset);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AuraUpdate, *this, &WorldState::OnAuraUpdate);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PeriodicAuraLog, *this, &WorldState::OnPeriodicAuraLog);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ActionButtons, *this, &WorldState::OnActionButtons);
@@ -1809,6 +1816,7 @@ namespace mmo
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Mana, 7, *this, &WorldState::OnPlayerPowerChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Health, 2, *this, &WorldState::OnPlayerHealthChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::AvailableAttributePoints, 1, *this, &WorldState::OnPlayerAttributePointsChanged);
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::TalentPoints, 1, *this, &WorldState::OnPlayerTalentPointsChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::DisplayId, 1, *this, &WorldState::OnDisplayIdChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Flags, 1, *this, &WorldState::OnCombatModeChanged);
 
@@ -3408,6 +3416,36 @@ namespace mmo
 		}
 
 		FrameManager::Get().TriggerLuaEvent("PLAYER_LEVEL_UP", newLevel, healthDiff, manaDiff, staminaDiff, strengthDiff, agilityDiff, intDiff, spiritDiff, talentPoints, attributePoints);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnCharacterPointsReset(game::IncomingPacket &packet)
+	{
+		uint8 resetType;
+		if (!(packet >> io::read<uint8>(resetType)))
+		{
+			ELOG("Failed to read CharacterPointsReset packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Translate the reset notification into a localized system chat message.
+		const char* localizationKey = nullptr;
+		switch (resetType)
+		{
+		case game::character_points_reset_type::Talents:
+			localizationKey = "TALENTS_RESET_NOTIFICATION";
+			break;
+		case game::character_points_reset_type::Attributes:
+			localizationKey = "ATTRIBUTE_POINTS_RESET_NOTIFICATION";
+			break;
+		default:
+			WLOG("Received CharacterPointsReset packet with unknown reset type " << static_cast<uint16>(resetType));
+			return PacketParseResult::Pass;
+		}
+
+		FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SYSTEM",
+			Localize(FrameManager::Get().GetLocalization(), localizationKey));
 
 		return PacketParseResult::Pass;
 	}

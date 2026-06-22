@@ -59,6 +59,11 @@ namespace mmo
 		signal<void(GameUnitS &, const proto::SpellEntry &)> spellLearned;
 		signal<void(GameUnitS &, const proto::SpellEntry &)> spellUnlearned;
 
+		/// Fired when the character's spent talent points have been refunded (talents reset).
+		signal<void()> talentsReset;
+		/// Fired when the character's spent attribute points have been refunded.
+		signal<void()> attributePointsReset;
+
 	public:
 		GamePlayerS(const proto::Project &project, TimerQueue &timerQueue);
 

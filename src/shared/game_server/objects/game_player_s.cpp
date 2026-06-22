@@ -373,6 +373,8 @@ namespace mmo
 		m_attributePointEnhancements.fill(0);
 		m_attributePointsSpent.fill(0);
 		RefreshStats();
+
+		attributePointsReset();
 	}
 
 	void GamePlayerS::ResetTalents()
@@ -392,6 +394,8 @@ namespace mmo
 		// Clear talent data
 		m_talents.clear();
 		RefreshStats();
+
+		talentsReset();
 	}
 
 	uint8 GamePlayerS::CalculateAttributeCost(const uint32 pointsSpent)

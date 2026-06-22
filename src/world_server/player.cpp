@@ -58,6 +58,10 @@ namespace mmo
 			m_character->spellLearned.connect(*this, &Player::OnSpellLearned),
 			m_character->spellUnlearned.connect(*this, &Player::OnSpellUnlearned),
 
+			// Talent / attribute reset signals
+			m_character->talentsReset.connect(*this, &Player::OnTalentsReset),
+			m_character->attributePointsReset.connect(*this, &Player::OnAttributePointsReset),
+
 			// Inventory signals
 			inventory.itemInstanceCreated.connect(this, &Player::OnItemCreated),
 			inventory.itemInstanceUpdated.connect(this, &Player::OnItemUpdated),
@@ -2780,6 +2784,38 @@ namespace mmo
 		{
 			packet.Start(game::realm_client_packet::UnlearnedSpell);
 			packet << io::write<uint32>(spellEntry.id());
+			packet.Finish();
+		});
+	}
+
+	void Player::OnTalentsReset()
+	{
+		// Don't notify if we are not spawned yet (e.g. talents auto-reset during login)
+		if (!m_spawned)
+		{
+			return;
+		}
+
+		SendPacket([](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::CharacterPointsReset);
+			packet << io::write<uint8>(game::character_points_reset_type::Talents);
+			packet.Finish();
+		});
+	}
+
+	void Player::OnAttributePointsReset()
+	{
+		// Don't notify if we are not spawned yet
+		if (!m_spawned)
+		{
+			return;
+		}
+
+		SendPacket([](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::CharacterPointsReset);
+			packet << io::write<uint8>(game::character_points_reset_type::Attributes);
 			packet.Finish();
 		});
 	}
