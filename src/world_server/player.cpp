@@ -62,6 +62,9 @@ namespace mmo
 			m_character->talentsReset.connect(*this, &Player::OnTalentsReset),
 			m_character->attributePointsReset.connect(*this, &Player::OnAttributePointsReset),
 
+			// Class switch signal
+			m_character->classChanged.connect(*this, &Player::OnClassChanged),
+
 			// Inventory signals
 			inventory.itemInstanceCreated.connect(this, &Player::OnItemCreated),
 			inventory.itemInstanceUpdated.connect(this, &Player::OnItemUpdated),
@@ -1099,23 +1102,7 @@ namespace mmo
 		}
 
 		// Send initial spells
-		SendPacket([&](game::OutgoingPacket& packet)
-		{
-			packet.Start(game::realm_client_packet::InitialSpells);
-
-			const auto& spells = m_character->GetSpells();
-			packet << io::write<uint16>(spells.size());
-			for (const auto* spell : spells)
-			{
-				if (!spell)
-				{
-					continue;
-				}
-
-				packet << io::write<uint32>(spell->id());
-			}
-			packet.Finish();
-		}, false);
+		SendInitialSpells();
 
 		// Inform the client about any active spell cooldowns (restored above) so the action bar
 		// shows the remaining cooldown right after spawning.
@@ -2769,6 +2756,13 @@ namespace mmo
 			return;
 		}
 
+		// During a class switch many spells are learned/unlearned at once; suppress the per-spell
+		// notifications and send a single consolidated spellbook refresh once the switch completes.
+		if (m_character->IsClassSwitchInProgress())
+		{
+			return;
+		}
+
 		SendPacket([&spellEntry](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::realm_client_packet::LearnedSpell);
@@ -2785,6 +2779,12 @@ namespace mmo
 			return;
 		}
 
+		// Suppressed during a class switch (see OnSpellLearned).
+		if (m_character->IsClassSwitchInProgress())
+		{
+			return;
+		}
+
 		SendPacket([&spellEntry](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::realm_client_packet::UnlearnedSpell);
@@ -2793,10 +2793,54 @@ namespace mmo
 		});
 	}
 
+	void Player::SendInitialSpells()
+	{
+		// Sends the active spellbook (current class + persistent spells) to the client, replacing
+		// whatever it had. Used on spawn and after a class switch.
+		SendPacket([&](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::InitialSpells);
+
+			const auto& spells = m_character->GetSpells();
+			packet << io::write<uint16>(spells.size());
+			for (const auto* spell : spells)
+			{
+				if (!spell)
+				{
+					continue;
+				}
+
+				packet << io::write<uint32>(spell->id());
+			}
+			packet.Finish();
+		}, false);
+	}
+
+	void Player::OnClassChanged()
+	{
+		if (!m_spawned)
+		{
+			return;
+		}
+
+		// Re-send the full active spellbook so the client drops the previous class's abilities and
+		// shows only the new class's. The per-spell learn/unlearn packets were suppressed during the
+		// switch. The client rebuilds its talent trees and prints a notification when it observes the
+		// replicated Class field change.
+		SendInitialSpells();
+	}
+
 	void Player::OnTalentsReset()
 	{
 		// Don't notify if we are not spawned yet (e.g. talents auto-reset during login)
 		if (!m_spawned)
+		{
+			return;
+		}
+
+		// Suppressed during a class switch: the talents are cleared as part of the switch and the
+		// client rebuilds its talent trees from the class change, so no "talents reset" message.
+		if (m_character->IsClassSwitchInProgress())
 		{
 			return;
 		}

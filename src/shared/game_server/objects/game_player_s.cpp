@@ -2584,6 +2584,10 @@ namespace mmo
 			return false;
 		}
 
+		// Suppress per-spell learn/unlearn and talent-reset client notifications during the rebuild;
+		// a single consolidated spellbook refresh is sent afterwards (see classChanged below).
+		m_classSwitchInProgress = true;
+
 		// 1. Persist the current active class's live state (talents + attribute spending) before we
 		// tear it down, so returning to it later restores everything.
 		SyncActiveClassData();
@@ -2624,6 +2628,12 @@ namespace mmo
 		RefreshStats();
 		Set<uint32>(object_fields::Health, GetMaxHealth());
 		Set<uint32>(object_fields::Mana, Get<uint32>(object_fields::MaxMana));
+
+		m_classSwitchInProgress = false;
+
+		// Notify listeners (e.g. the world Player) so they can send a single consolidated spellbook
+		// refresh to the client now that the switch is complete.
+		classChanged();
 
 		DLOG("Player " << log_hex_digit(GetGuid()) << " switched to class " << newClassId);
 		return true;

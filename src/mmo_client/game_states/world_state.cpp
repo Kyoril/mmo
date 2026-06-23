@@ -643,6 +643,37 @@ namespace mmo
 		m_talentClient.OnTalentPointsChanged();
 	}
 
+	void WorldState::OnPlayerClassChanged(uint64 monitoredGuid)
+	{
+		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
+
+		// Rebuild the talent trees for the new class (the Class field is now current, so this is
+		// ordering-safe relative to the server's spellbook refresh).
+		m_talentClient.NotifyCharacterClassChanged();
+
+		// Show a localized system chat notification naming the new class.
+		const std::shared_ptr<GamePlayerC> player = ObjectMgr::GetActivePlayer();
+		if (!player)
+		{
+			return;
+		}
+
+		const proto_client::ClassEntry* classEntry = player->GetClass();
+		const String className = classEntry ? classEntry->name() : String();
+
+		String message = Localize(FrameManager::Get().GetLocalization(), "CLASS_CHANGED_NOTIFICATION");
+		if (const size_t placeholder = message.find("%s"); placeholder != String::npos)
+		{
+			message.replace(placeholder, 2, className);
+		}
+		else
+		{
+			message += className;
+		}
+
+		FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SYSTEM", message);
+	}
+
 	void WorldState::OnPlayerStatsChanged(uint64 monitoredGuid)
 	{
 		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
@@ -1825,6 +1856,7 @@ namespace mmo
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Health, 2, *this, &WorldState::OnPlayerHealthChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::AvailableAttributePoints, 1, *this, &WorldState::OnPlayerAttributePointsChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::TalentPoints, 1, *this, &WorldState::OnPlayerTalentPointsChanged);
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::Class, 1, *this, &WorldState::OnPlayerClassChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::DisplayId, 1, *this, &WorldState::OnDisplayIdChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Flags, 1, *this, &WorldState::OnCombatModeChanged);
 

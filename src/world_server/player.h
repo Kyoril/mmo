@@ -601,6 +601,12 @@ namespace mmo
 		/// Notifies the client that the character's attribute points have been reset.
 		void OnAttributePointsReset();
 
+		/// Sends the active spellbook (current class + persistent spells) to the client.
+		void SendInitialSpells();
+
+		/// Called after the active class was switched: re-sends the active spellbook to the client.
+		void OnClassChanged();
+
 		void HandleVendorGossip(const proto::VendorEntry& vendor, const GameCreatureS& vendorUnit);
 
 		void SendVendorInventory(const proto::VendorEntry& vendor, const GameCreatureS& vendorUnit);

@@ -62,6 +62,8 @@ namespace mmo
 
 		/// Fired when the character's spent talent points have been refunded (talents reset).
 		signal<void()> talentsReset;
+		/// Fired after the player's active class has been switched (ChangeClass succeeded).
+		signal<void()> classChanged;
 		/// Fired when the character's spent attribute points have been refunded.
 		signal<void()> attributePointsReset;
 
@@ -96,6 +98,10 @@ namespace mmo
 		/// unknown / not allowed for the character's race.
 		/// @return true on a successful switch.
 		bool ChangeClass(uint32 classId);
+
+		/// Returns true while a class switch is being applied. Used to suppress the per-spell learn/
+		/// unlearn and talent-reset notifications that would otherwise spam the client during a switch.
+		[[nodiscard]] bool IsClassSwitchInProgress() const { return m_classSwitchInProgress; }
 
 		void SetRace(const proto::RaceEntry &raceEntry);
 
@@ -442,6 +448,9 @@ namespace mmo
 		/// (m_spells) is the subset usable by the active class; this set is the persistence authority
 		/// so spells of inactive classes are preserved (and re-activated when switching back).
 		std::set<uint32> m_knownSpellIds;
+		/// True while ChangeClass is rebuilding the character, so client-bound per-spell notifications
+		/// are suppressed (a single refresh is sent afterwards instead).
+		bool m_classSwitchInProgress = false;
 		const proto::RaceEntry *m_raceEntry;
 		std::array<uint32, 5> m_attributePointEnhancements;
 		std::array<uint32, 5> m_attributePointsSpent;

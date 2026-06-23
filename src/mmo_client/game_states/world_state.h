@@ -165,6 +165,10 @@ namespace mmo
 
 		void OnPlayerTalentPointsChanged(uint64 monitoredGuid);
 
+		/// Reacts to the controlled player's active class changing (mid-game class switch): rebuilds
+		/// the talent trees and shows a localized system chat notification naming the new class.
+		void OnPlayerClassChanged(uint64 monitoredGuid);
+
 		void OnPlayerStatsChanged(uint64 monitoredGuid);
 
 		void OnDisplayIdChanged(uint64 monitoredGuid);
