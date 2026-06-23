@@ -2828,20 +2828,21 @@ namespace mmo
 		// active class itself is replicated through object_fields::Class; this packet carries the
 		// rest of the list so the UI can show all known classes. Used on spawn and after a switch.
 		const std::vector<CharacterClassData> knownClasses = m_character->GetKnownClasses();
-		const proto::Project& project = m_project;
-		SendPacket([&knownClasses, &project](game::OutgoingPacket& packet)
+		const uint32 activeClassId = m_character->Get<uint32>(object_fields::Class);
+		GamePlayerS& character = *m_character;
+		SendPacket([&knownClasses, activeClassId, &character](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::realm_client_packet::KnownClasses);
+			// The active class id is carried in the packet (not just inferred from object_fields::Class)
+			// so the client's class list refreshes consistently from a single message, regardless of
+			// when the replicated Class field update arrives.
+			packet << io::write<uint32>(activeClassId);
 			packet << io::write<uint8>(static_cast<uint8>(knownClasses.size()));
 			for (const auto& classData : knownClasses)
 			{
 				// The class-change spell lets the client switch to this class on demand (clicking the
-				// class in the character window). 0 if the class has none configured.
-				uint32 changeSpellId = 0;
-				if (const proto::ClassEntry* classEntry = project.classes.getById(classData.classId))
-				{
-					changeSpellId = classEntry->class_change_spell();
-				}
+				// class in the character window). 0 if none can be resolved.
+				const uint32 changeSpellId = character.GetClassChangeSpellId(classData.classId);
 
 				packet
 					<< io::write<uint32>(classData.classId)

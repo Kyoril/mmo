@@ -274,6 +274,14 @@ namespace mmo
 		/// new class's bar (sending it to the client). No-op if the class is unchanged.
 		void SwitchActionBarClass(uint32 newClassId);
 
+		/// Builds the default action bar for a class from its ability spells (non-passive, non-hidden,
+		/// learnable at or below the character's current level), mirroring character creation.
+		[[nodiscard]] ActionButtons BuildDefaultActionButtons(uint32 classId) const;
+
+		/// Persists a default action bar for a freshly-acquired class so switching to it later loads a
+		/// populated bar instead of an empty one.
+		void SeedDefaultActionButtons(uint32 classId);
+
 		typedef std::function<void(bool succeeded, uint32 mapId, Vector3 position, Radian facing)> CharacterLocationAsyncCallback;
 
 		void FetchCharacterLocationAsync(CharacterLocationAsyncCallback &&callback);

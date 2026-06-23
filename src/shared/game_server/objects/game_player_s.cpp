@@ -2337,6 +2337,40 @@ namespace mmo
 		}
 	}
 
+	uint32 GamePlayerS::GetClassChangeSpellId(const uint32 classId) const
+	{
+		// Prefer the class's explicitly configured class-change spell.
+		if (const proto::ClassEntry* classEntry = m_project.classes.getById(classId))
+		{
+			if (classEntry->class_change_spell() != 0)
+			{
+				return classEntry->class_change_spell();
+			}
+		}
+
+		// Fallback: any spell the character knows that carries a ChangeClass effect targeting this
+		// class. This is the spell the player actually cast / would cast to become the class, so it is
+		// reliable even when the class data has no explicit class_change_spell set.
+		for (const uint32 spellId : m_knownSpellIds)
+		{
+			const proto::SpellEntry* spell = m_project.spells.getById(spellId);
+			if (!spell)
+			{
+				continue;
+			}
+
+			for (const auto& effect : spell->effects())
+			{
+				if (effect.type() == spell_effects::ChangeClass && static_cast<uint32>(effect.miscvaluea()) == classId)
+				{
+					return spell->id();
+				}
+			}
+		}
+
+		return 0;
+	}
+
 	std::vector<CharacterClassData> GamePlayerS::GetKnownClasses() const
 	{
 		std::vector<CharacterClassData> snapshot = m_knownClasses;

@@ -2363,8 +2363,9 @@ namespace mmo
 
 	PacketParseResult WorldState::OnKnownClasses(game::IncomingPacket &packet)
 	{
+		uint32 activeClassId = 0;
 		uint8 count = 0;
-		if (!(packet >> io::read<uint8>(count)))
+		if (!(packet >> io::read<uint32>(activeClassId) >> io::read<uint8>(count)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -2386,6 +2387,7 @@ namespace mmo
 		if (const auto player = std::dynamic_pointer_cast<GamePlayerC>(controlledUnit))
 		{
 			player->SetKnownClasses(std::move(knownClasses));
+			player->SetActiveKnownClassId(activeClassId);
 		}
 
 		FrameManager::Get().TriggerLuaEvent("PLAYER_KNOWN_CLASSES_CHANGED");

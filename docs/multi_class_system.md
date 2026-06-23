@@ -147,8 +147,8 @@ migrations: `20260623_1_multi_class.sql`, `20260623_2_per_class_action_bars.sql`
    the active-class subset; `ActivateKnownSpellsForCurrentClass` rebuilds the live book on switch.
    Spells of inactive classes are preserved (no longer dropped on login) but hidden from the spellbook
    and uncastable. Save persists `GetKnownSpellIds()`; the set is serialized in `GamePlayerS`.
-5. **Client/UI** *(done)* — the world node sends a `KnownClasses` packet (per class: id, class
-   level, class-change spell id) on spawn and after every switch (alongside the active-class
+5. **Client/UI** *(done)* — the world node sends a `KnownClasses` packet (active class id, then per
+   class: id, class level, class-change spell id) on spawn and after every switch (alongside the active-class
    `object_fields::Class` and the refreshed spellbook). The client caches it on `GamePlayerC`
    (`SetKnownClasses` / `GetKnownClasses` / `GetKnownClassEntry`) and exposes it to Lua via
    `UnitHandle` (`GetKnownClassCount`, `GetKnownClassName`, `GetKnownClassLevel`,
@@ -178,7 +178,10 @@ migrations: `20260623_1_multi_class.sql`, `20260623_2_per_class_action_bars.sql`
   new one when the active class changes. The change is detected in `NotifyCharacterUpdate`; the world
   node now calls `SaveCharacterData()` from `OnClassChanged` so the realm swaps promptly instead of
   waiting for the next level-up/logout save. `CreateCharacter` seeds the initial bar under the
-  initial class.
+  initial class. When a class first becomes known, `NotifyCharacterUpdate` seeds its bar via
+  `SeedDefaultActionButtons` / `BuildDefaultActionButtons` (the class's non-passive ability spells, up
+  to the character level) — the same rule character creation uses — so a freshly-acquired class
+  switches into a populated bar instead of an empty one.
 - **`RaceEntry.allowedClasses`** *(done)* — explicit `repeated uint32 allowedClasses` on `RaceEntry`
   (with an editor checkbox list). `IsClassAllowedForRace` and character-creation legality prefer this
   list when non-empty and fall back to inferring from the initial-data maps (`initialSpells` /

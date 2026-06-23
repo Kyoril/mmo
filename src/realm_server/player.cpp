@@ -2618,7 +2618,27 @@ namespace mmo
 		// spending) from the character object so class switches made on the world node are persisted.
 		const uint32 newActiveClassId = character.Get<uint32>(object_fields::Class);
 		m_characterData->classId = newActiveClassId;
+
+		// Capture the previously-known classes so newly-acquired ones can be detected below.
+		std::set<uint32> previousClassIds;
+		for (const auto& classData : m_characterData->knownClasses)
+		{
+			previousClassIds.insert(classData.classId);
+		}
+
 		m_characterData->knownClasses = character.GetKnownClasses();
+
+		// Seed a default action bar for every class that just became known (its class-change spell was
+		// learned, or it was switched into for the first time), mirroring character creation. This is
+		// queued before SwitchActionBarClass so, when we are switching into the new class, its load
+		// picks up the seeded layout. No-op for classes that were already known.
+		for (const auto& classData : m_characterData->knownClasses)
+		{
+			if (previousClassIds.count(classData.classId) == 0)
+			{
+				SeedDefaultActionButtons(classData.classId);
+			}
+		}
 
 		// A class switch made on the world node swaps the active class's action bar: persist the
 		// previous class's bar and load (and send to the client) the new class's bar.
@@ -3745,6 +3765,67 @@ namespace mmo
 		m_database.asyncRequest(std::move(handler), &IDatabase::GetActionButtons, m_characterData->characterId, newClassId);
 	}
 
+	ActionButtons Player::BuildDefaultActionButtons(const uint32 classId) const
+	{
+		ActionButtons buttons{};
+
+		const proto::ClassEntry* classEntry = m_project.classes.getById(classId);
+		if (!classEntry)
+		{
+			return buttons;
+		}
+
+		const uint32 level = m_characterData ? m_characterData->level : 1;
+
+		uint8 slot = 0;
+		for (const auto& classSpell : classEntry->spells())
+		{
+			if (slot >= MaxActionButtons)
+			{
+				break;
+			}
+
+			// Only spells the character actually has at this level (matches GrantClassSpells).
+			if (classSpell.level() > level)
+			{
+				continue;
+			}
+
+			const proto::SpellEntry* spellEntry = m_project.spells.getById(classSpell.spell());
+			if (!spellEntry || spellEntry->attributes_size() == 0)
+			{
+				continue;
+			}
+
+			// Place each non-passive, non-hidden ability on the bar (same rule as character creation).
+			const uint32 attributes = spellEntry->attributes(0);
+			if ((attributes & spell_attributes::Passive) != 0 ||
+				(attributes & spell_attributes::HiddenClientSide) != 0 ||
+				(attributes & spell_attributes::Ability) == 0)
+			{
+				continue;
+			}
+
+			buttons[slot++] = ActionButton{ static_cast<uint16>(classSpell.spell()), action_button_type::Spell };
+		}
+
+		return buttons;
+	}
+
+	void Player::SeedDefaultActionButtons(const uint32 classId)
+	{
+		if (!m_characterData)
+		{
+			return;
+		}
+
+		// Persist the default bar for this class. If we are switching into it right now, the
+		// subsequent SwitchActionBarClass load (queued after this write on the DB thread) picks up the
+		// seeded layout and sends it to the client.
+		const ActionButtons defaults = BuildDefaultActionButtons(classId);
+		m_database.asyncRequest([](bool) {}, &IDatabase::SetCharacterActionButtons, m_characterData->characterId, classId, defaults);
+	}
+
 	void Player::FetchCharacterLocationAsync(CharacterLocationAsyncCallback &&callback)
 	{
 		// Check if we are currently connected to a world node
@@ -4548,9 +4629,13 @@ namespace mmo
 
 			const uint64 groupId = characterData->groupId;
 
-			// If the group is live in memory, use the group object so members get notified.
+			// If the group is live in memory AND fully loaded, use the group object so
+			// members get notified. A group can be present in ms_groupsById while its
+			// data is still being loaded asynchronously (Preload/CreateFromDatabase), in
+			// which case m_leaderGUID is still 0 and the group operations would assert.
+			// In that case we fall through to the DB-based path below.
 			auto groupIt = PlayerGroup::ms_groupsById.find(groupId);
-			if (groupIt != PlayerGroup::ms_groupsById.end())
+			if (groupIt != PlayerGroup::ms_groupsById.end() && groupIt->second->IsLoaded())
 			{
 				std::shared_ptr<PlayerGroup> group = groupIt->second;
 				if (group->GetLeader() == charGuid)

@@ -187,14 +187,16 @@ namespace mmo
 			return false;
 		}
 
-		const auto& knownClasses = Get()->AsPlayer().GetKnownClasses();
+		const auto& player = Get()->AsPlayer();
+		const auto& knownClasses = player.GetKnownClasses();
 		if (index >= knownClasses.size())
 		{
 			return false;
 		}
 
-		const auto* activeClass = Get()->AsPlayer().GetClass();
-		return activeClass != nullptr && activeClass->id() == knownClasses[index].classId;
+		// Compare against the active class id carried in the KnownClasses packet (kept consistent with
+		// the list) rather than the replicated Class field, which may update at a different time.
+		return player.GetActiveKnownClassId() == knownClasses[index].classId;
 	}
 
 	uint32 UnitHandle::GetKnownClassChangeSpell(const uint32 index) const

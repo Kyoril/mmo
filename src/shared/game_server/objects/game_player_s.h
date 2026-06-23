@@ -95,6 +95,11 @@ namespace mmo
 		/// Returns the class level of the currently active class (defaults to 1).
 		[[nodiscard]] uint32 GetActiveClassLevel() const;
 
+		/// Resolves the spell that switches the active class to the given class. Prefers the class's
+		/// configured `class_change_spell`; falls back to any known spell carrying a ChangeClass effect
+		/// that targets this class. Returns 0 if none is found.
+		[[nodiscard]] uint32 GetClassChangeSpellId(uint32 classId) const;
+
 		/// Switches the active class to the given class. If the class is not yet known it is added at
 		/// class level 1 (subject to race legality). Swaps the class-bound spellbook, talents and the
 		/// attribute-spending profile, then refreshes stats. Fails while in combat or if the class is

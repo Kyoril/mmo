@@ -87,6 +87,14 @@ namespace mmo
 		/// Returns the cached set of classes this character has learned, with their per-class levels.
 		[[nodiscard]] const std::vector<KnownClassInfo>& GetKnownClasses() const { return m_knownClasses; }
 
+		/// Sets the active class id reported alongside the known-class list. Cached separately from the
+		/// replicated Class field so the class list refreshes consistently from the KnownClasses packet
+		/// regardless of field-update timing.
+		void SetActiveKnownClassId(uint32 classId) { m_activeKnownClassId = classId; }
+
+		/// Returns the active class id reported by the last KnownClasses packet (0 if unknown).
+		[[nodiscard]] uint32 GetActiveKnownClassId() const { return m_activeKnownClassId; }
+
 		/// Resolves the class definition for a known-class list entry, or nullptr if the index is out
 		/// of range or the class id is unknown to the client project.
 		[[nodiscard]] const proto_client::ClassEntry* GetKnownClassEntry(size_t index) const;
@@ -142,6 +150,9 @@ namespace mmo
 		/// Cached set of classes this character has learned (with their per-class levels), replicated
 		/// from the server via the KnownClasses packet.
 		std::vector<KnownClassInfo> m_knownClasses;
+
+		/// Active class id reported by the last KnownClasses packet (0 if none received yet).
+		uint32 m_activeKnownClassId{ 0 };
 
 		struct ItemAttachment
 		{
