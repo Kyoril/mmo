@@ -178,6 +178,15 @@ namespace mmo
 
 		void InitializeTalents(const std::map<uint32, uint8> &talentRanks);
 
+		/// Sets the full set of spells this character has learned across all classes. Only spells usable
+		/// by the active race/class are activated (added to the live, castable spellbook); the rest are
+		/// remembered so they are preserved and re-activated when switching back to their class. Talent
+		/// spells are excluded (they are restored from talent data).
+		void SetKnownSpells(const std::vector<uint32>& spellIds);
+
+		/// Returns every spell the character has learned across all classes (the persistence set).
+		[[nodiscard]] const std::set<uint32>& GetKnownSpellIds() const { return m_knownSpellIds; }
+
 	public:
 		/// Gets the current status of a given quest by its id.
 		/// @returns Quest status.
@@ -385,13 +394,17 @@ namespace mmo
 		/// the character-creation screen uses: the race must have class-specific initial data).
 		[[nodiscard]] bool IsClassAllowedForRace(const proto::ClassEntry& classEntry) const;
 
+		/// Returns true if the given spell is usable by the character's active race and class.
+		[[nodiscard]] bool IsSpellActiveForCurrentClass(const proto::SpellEntry& spell) const;
+
+		/// Rebuilds the live spellbook for the active class: deactivates class-bound spells the current
+		/// class can't use and activates known spells it can. Persistent spells (no class mask) are kept.
+		void ActivateKnownSpellsForCurrentClass();
+
 	protected:
 		void OnKilled(GameUnitS *killer) override;
 
-		void OnSpellLearned(const proto::SpellEntry &spell) override
-		{
-			spellLearned(*this, spell);
-		}
+		void OnSpellLearned(const proto::SpellEntry &spell) override;
 
 		void OnSpellUnlearned(const proto::SpellEntry &spell) override
 		{
@@ -425,6 +438,10 @@ namespace mmo
 		/// All classes this character has learned (one is active at a time; the active id is the
 		/// replicated Class field). Holds each class's level, attribute spending and talent ranks.
 		std::vector<CharacterClassData> m_knownClasses;
+		/// Every non-talent spell the character has learned across all classes. The live spellbook
+		/// (m_spells) is the subset usable by the active class; this set is the persistence authority
+		/// so spells of inactive classes are preserved (and re-activated when switching back).
+		std::set<uint32> m_knownSpellIds;
 		const proto::RaceEntry *m_raceEntry;
 		std::array<uint32, 5> m_attributePointEnhancements;
 		std::array<uint32, 5> m_attributePointsSpent;

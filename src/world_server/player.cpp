@@ -103,7 +103,9 @@ namespace mmo
 			});
 
 
-		m_character->SetInitialSpells(m_characterData.spellIds);
+		// Load the full known-spell set (across all classes). Only spells usable by the active class are
+		// activated; the rest are preserved so switching back to their class restores them.
+		m_character->SetKnownSpells(m_characterData.spellIds);
 
 		// Setup time sync timer
 		m_timeSyncTimer.ended.connect([this]()

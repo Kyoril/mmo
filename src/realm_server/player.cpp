@@ -626,6 +626,17 @@ namespace mmo
 			}
 		}
 
+		// Grant the initial class's class-change spell so the player can switch back to this class
+		// after switching away. Additional classes are unlocked in-game by learning their spells.
+		if (classInstance->has_class_change_spell() && classInstance->class_change_spell() != 0)
+		{
+			const uint32 classChangeSpell = classInstance->class_change_spell();
+			if (std::find(spellIds.begin(), spellIds.end(), classChangeSpell) == spellIds.end())
+			{
+				spellIds.push_back(classChangeSpell);
+			}
+		}
+
 		// Each spell which isn't a passive should (for now) be placed on the action bar
 		DLOG("Creating new character named '" << characterName << "' for account 0x" << std::hex << m_accountId << " (Race: " << raceEntry->id() << "; Class: " << classInstance->id() << "; Gender: " << (uint16)gender << ")...");
 		m_database.asyncRequest(std::move(handler), &IDatabase::CreateCharacter, characterName, this->m_accountId, map, level, hp, gender, race, characterClass, position, rotation,

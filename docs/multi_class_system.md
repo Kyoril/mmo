@@ -62,11 +62,14 @@ Spells fall into two categories:
 - **Class-bound** — class spells (`ClassEntry.spells`) and talent-granted spells. Only usable while
   their owning class is active.
 
-A spell's owning class is **derived at runtime** (is it in some `ClassEntry.spells` list, or in a
-talent tree of a class?) rather than stored as a tag, so no spell-table migration is needed and
-existing data (racials etc.) is classified correctly. The active runtime spellbook is rebuilt on
-login and on every class switch as: `persistent ∪ (active class's class spells up to its class level)
-∪ (active class's talent-granted spells)`.
+A spell's owning class is **derived at runtime from its `classmask`** (a spell with no class mask is
+persistent; otherwise it belongs to the masked class(es)), rather than stored as a tag, so no
+spell-table migration is needed and existing data (racials etc.) is classified correctly.
+`GamePlayerS::m_knownSpellIds` holds every learned spell across all classes (the persistence set,
+talent spells excluded); the live `m_spells` is the subset usable by the active class (plus persistent
+spells). On login (`SetKnownSpells`) and on every class switch (`ActivateKnownSpellsForCurrentClass`
++ `GrantClassSpells` + `InitializeTalents`) the live book is rebuilt; inactive classes' spells are
+kept (preserved across logout) but hidden and uncastable.
 
 > Per-class **action bar** layouts are a likely follow-up but are **out of scope** for this pass.
 
@@ -135,7 +138,13 @@ migration: `data/realm/updates/20260623_1_multi_class.sql`.
    (miscvaluea = target class id) is wired into the dispatch table. `GamePlayerS` serialization +
    enter-world (`SetKnownClasses`) + realm `NotifyCharacterUpdate` now carry the full known-class set
    and active class id. Live client sync via existing spellLearned/Unlearned/talentsReset signals.
-4. **Character creation** — grant initial class + its class-change spell, seed `character_classes`.
+4. **Character creation + spellbook persistence** *(done)* — creation grants the initial class's
+   `class_change_spell`. `GamePlayerS` now keeps `m_knownSpellIds` (the full learned set across all
+   classes, talent spells excluded) as the persistence authority, separate from the live/castable
+   `m_spells` (active class + persistent spells only). `SetKnownSpells` loads all and activates only
+   the active-class subset; `ActivateKnownSpellsForCurrentClass` rebuilds the live book on switch.
+   Spells of inactive classes are preserved (no longer dropped on login) but hidden from the spellbook
+   and uncastable. Save persists `GetKnownSpellIds()`; the set is serialized in `GamePlayerS`.
 5. **Client/UI** — replicate known classes + levels, character-window list.
 
 ## Open items / deferred

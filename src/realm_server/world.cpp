@@ -703,21 +703,10 @@ namespace mmo
 		DLOG("Received character data for character " << log_hex_digit(characterGuid) << ", persisting character data...");
 		DLOG("Time played: " << timePlayed << " seconds");
 
-		std::vector<uint32> spellIds;
-		spellIds.reserve(player.GetSpells().size());
-		for (const auto& spell : player.GetSpells())
-		{
-			// Don't save unknown spells
-			if (!spell) continue;
-
-			// Don't save talent spells
-			if (spell->attributes_size() > 0 && spell->attributes(1) & spell_attributes_b::Talent)
-			{
-				continue;
-			}
-
-			spellIds.push_back(spell->id());
-		}
+		// Persist the full known-spell set (across all classes, talent spells already excluded). This
+		// preserves spells of inactive classes that are not part of the live (active) spellbook.
+		const auto& knownSpells = player.GetKnownSpellIds();
+		std::vector<uint32> spellIds(knownSpells.begin(), knownSpells.end());
 
 		Player* playerConnection = m_playerManager.GetPlayerByCharacterGuid(characterGuid);
 		if (playerConnection)

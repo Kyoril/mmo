@@ -11,6 +11,7 @@
 #include "base/utilities.h"
 #include "proto_data/project.h"
 #include "game/item.h"
+#include "game/spell.h"
 
 namespace mmo
 {
@@ -2394,6 +2395,109 @@ namespace mmo
 		}
 	}
 
+	namespace
+	{
+		/// Talent spells are restored from per-class talent data rather than the persistent known-spell
+		/// set, so they are excluded from the latter.
+		bool IsTalentSpell(const proto::SpellEntry& spell)
+		{
+			return spell.attributes_size() > 1 && (spell.attributes(1) & spell_attributes_b::Talent) != 0;
+		}
+	}
+
+	void GamePlayerS::OnSpellLearned(const proto::SpellEntry& spell)
+	{
+		// Record every learned non-talent spell so it survives logout and class switches.
+		if (!IsTalentSpell(spell))
+		{
+			m_knownSpellIds.insert(spell.id());
+		}
+
+		spellLearned(*this, spell);
+	}
+
+	bool GamePlayerS::IsSpellActiveForCurrentClass(const proto::SpellEntry& spell) const
+	{
+		if (m_raceEntry && spell.racemask() != 0 && !(spell.racemask() & (1 << (m_raceEntry->id() - 1))))
+		{
+			return false;
+		}
+
+		if (m_classEntry && spell.classmask() != 0 && !(spell.classmask() & (1 << (m_classEntry->id() - 1))))
+		{
+			return false;
+		}
+
+		return true;
+	}
+
+	void GamePlayerS::SetKnownSpells(const std::vector<uint32>& spellIds)
+	{
+		m_spells.clear();
+		m_knownSpellIds.clear();
+
+		for (const uint32 spellId : spellIds)
+		{
+			const auto* spell = m_project.spells.getById(spellId);
+			if (!spell)
+			{
+				WLOG("Unknown spell " << spellId << " in known spell list for player " << log_hex_digit(GetGuid()));
+				continue;
+			}
+
+			// Talent spells are restored separately from talent data.
+			if (IsTalentSpell(*spell))
+			{
+				continue;
+			}
+
+			// Remember the spell across all classes, but only activate it (make it castable / visible
+			// in the spellbook) if the current race/class can use it.
+			m_knownSpellIds.insert(spellId);
+			if (IsSpellActiveForCurrentClass(*spell))
+			{
+				m_spells.insert(spell);
+			}
+		}
+	}
+
+	void GamePlayerS::ActivateKnownSpellsForCurrentClass()
+	{
+		// Deactivate class-bound spells the current class can't use (keeps persistent spells).
+		std::vector<uint32> toRemove;
+		for (const auto* spell : m_spells)
+		{
+			if (!spell)
+			{
+				continue;
+			}
+
+			if (spell->classmask() != 0 && !IsSpellActiveForCurrentClass(*spell))
+			{
+				toRemove.push_back(spell->id());
+			}
+		}
+		for (const uint32 spellId : toRemove)
+		{
+			RemoveSpell(spellId);
+		}
+
+		// Activate known spells the current class can use that aren't active yet.
+		for (const uint32 spellId : m_knownSpellIds)
+		{
+			const auto* spell = m_project.spells.getById(spellId);
+			if (!spell || m_spells.contains(spell))
+			{
+				continue;
+			}
+
+			if (IsSpellActiveForCurrentClass(*spell))
+			{
+				AddSpell(spellId);
+			}
+		}
+	}
+
 	void GamePlayerS::ApplyAttributeSpending(const std::array<uint32, 5>& enhancements)
 	{
 		// Start from a clean slate and re-derive the available points before replaying allocations so
@@ -2433,10 +2537,7 @@ namespace mmo
 
 	bool GamePlayerS::ChangeClass(const uint32 newClassId)
 	{
-		if (newClassId == 0)
-		{
-			return false;
-		}
+		DLOG("Player " << log_hex_digit(GetGuid()) << " is attempting to change class to " << newClassId);
 
 		const proto::ClassEntry* newClass = m_project.classes.getById(newClassId);
 		if (!newClass)
@@ -2454,6 +2555,7 @@ namespace mmo
 		// Already the active class?
 		if (m_classEntry && m_classEntry->id() == newClassId)
 		{
+			WLOG("ChangeClass failed: player is already in class " << newClassId);
 			return false;
 		}
 
@@ -2486,15 +2588,9 @@ namespace mmo
 		// tear it down, so returning to it later restores everything.
 		SyncActiveClassData();
 
-		// 2. Remove the old class's class-bound spells and talents. Persistent spells (racials,
-		// class-change spells, professions) are not part of ClassEntry.spells and stay learned.
-		if (m_classEntry)
-		{
-			for (const auto& classSpell : m_classEntry->spells())
-			{
-				RemoveSpell(classSpell.spell());
-			}
-		}
+		// 2. Clear the old class's talents (talent spells are restored from the new class's data). The
+		// old class's other spells are deactivated below once the new class is active; they remain in
+		// the known-spell set so they are preserved and re-activated when switching back.
 		ResetTalents();
 
 		// 3. Ensure the target class exists in the known set (level 1 if newly acquired).
@@ -2518,7 +2614,9 @@ namespace mmo
 		// 5. Apply the target class's attribute-spending profile.
 		ApplyAttributeSpending(newData.attributePointsSpent);
 
-		// 6. Grant the class's spells and restore its talents.
+		// 6. Rebuild the spellbook for the new class: deactivate the previous class's spells, re-activate
+		// any previously-learned spells of the new class, grant its default class spells, restore talents.
+		ActivateKnownSpellsForCurrentClass();
 		GrantClassSpells();
 		InitializeTalents(newData.talentRanks);
 
@@ -2608,6 +2706,13 @@ namespace mmo
 			w << io::write<uint32>(spell->id());
 		}
 
+		// Write the full known-spell set (preserves spells of inactive classes).
+		w << io::write<uint32>(static_cast<uint32>(object.m_knownSpellIds.size()));
+		for (const uint32 spellId : object.m_knownSpellIds)
+		{
+			w << io::write<uint32>(spellId);
+		}
+
 		// Write talent data
 		w << io::write<uint32>(object.m_talents.size());
 		for (const auto &[talentId, rank] : object.m_talents)
@@ -2663,6 +2768,17 @@ namespace mmo
 			{
 				object.m_spells.emplace(spell);
 			}
+		}
+
+		// Read the full known-spell set.
+		uint32 knownSpellCount = 0;
+		r >> io::read<uint32>(knownSpellCount);
+		object.m_knownSpellIds.clear();
+		for (uint32 i = 0; i < knownSpellCount; ++i)
+		{
+			uint32 spellId = 0;
+			r >> io::read<uint32>(spellId);
+			object.m_knownSpellIds.insert(spellId);
 		}
 
 		// Read talent data
