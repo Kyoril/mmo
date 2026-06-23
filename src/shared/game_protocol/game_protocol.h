@@ -606,6 +606,12 @@ namespace mmo
 				/// (see character_points_reset_type).
 				CharacterPointsReset,
 
+				/// Sent to the client with the full set of classes the character has learned and
+				/// their per-class levels (e.g. on spawn and after a class switch), so the UI can show
+				/// the multi-class list. Payload: uint8 count, then per class: uint32 classId,
+				/// uint8 classLevel. The currently active class is the one in object_fields::Class.
+				KnownClasses,
+
 				/// Counter constant
 				Count_,
 			};

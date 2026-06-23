@@ -138,6 +138,65 @@ namespace mmo
 		return nullptr;
 	}
 
+	uint32 UnitHandle::GetKnownClassCount() const
+	{
+		if (!CheckNonNull() || !Get()->IsPlayer())
+		{
+			return 0;
+		}
+
+		return static_cast<uint32>(Get()->AsPlayer().GetKnownClasses().size());
+	}
+
+	const char* UnitHandle::GetKnownClassName(const uint32 index) const
+	{
+		if (!CheckNonNull() || !Get()->IsPlayer())
+		{
+			return nullptr;
+		}
+
+		const auto* classEntry = Get()->AsPlayer().GetKnownClassEntry(index);
+		if (!classEntry)
+		{
+			return nullptr;
+		}
+
+		return classEntry->name().c_str();
+	}
+
+	int32 UnitHandle::GetKnownClassLevel(const uint32 index) const
+	{
+		if (!CheckNonNull() || !Get()->IsPlayer())
+		{
+			return 0;
+		}
+
+		const auto& knownClasses = Get()->AsPlayer().GetKnownClasses();
+		if (index >= knownClasses.size())
+		{
+			return 0;
+		}
+
+		return knownClasses[index].classLevel;
+	}
+
+	bool UnitHandle::IsKnownClassActive(const uint32 index) const
+	{
+		if (!CheckNonNull() || !Get()->IsPlayer())
+		{
+			return false;
+		}
+
+		const auto& knownClasses = Get()->AsPlayer().GetKnownClasses();
+		if (index >= knownClasses.size())
+		{
+			return false;
+		}
+
+		const auto* activeClass = Get()->AsPlayer().GetClass();
+		return activeClass != nullptr && activeClass->id() == knownClasses[index].classId;
+	}
+
 	const char* UnitHandle::GetGuildName() const
 	{
 		if (!CheckNonNull() || !Get()->IsPlayer())

@@ -307,6 +307,8 @@ namespace mmo
 
 		PacketParseResult OnInitialSpells(game::IncomingPacket &packet);
 
+		PacketParseResult OnKnownClasses(game::IncomingPacket &packet);
+
 		PacketParseResult OnCreatureMove(game::IncomingPacket &packet);
 
 		PacketParseResult OnSpellLearnedOrUnlearned(game::IncomingPacket &packet);

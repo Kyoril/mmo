@@ -2527,9 +2527,25 @@ namespace mmo
 			return true;
 		}
 
-		// Mirror the data used at character creation: the race must provide class-specific initial
-		// data (spells, items or action buttons) for this class to be a legal race/class combination.
 		const uint32 classId = classEntry.id();
+
+		// Prefer the explicit allowed-classes list when the race defines one.
+		if (m_raceEntry->allowedclasses_size() > 0)
+		{
+			for (const uint32 allowedClassId : m_raceEntry->allowedclasses())
+			{
+				if (allowedClassId == classId)
+				{
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		// Fallback for races without an explicit list: mirror the data used at character creation -
+		// the race must provide class-specific initial data (spells, items or action buttons) for
+		// this class to be a legal race/class combination.
 		return m_raceEntry->initialspells().count(classId) > 0
 			|| m_raceEntry->initialitems().count(classId) > 0
 			|| m_raceEntry->initialactionbuttons().count(classId) > 0;

@@ -266,6 +266,14 @@ namespace mmo
 
 		void OnActionButtons(const ActionButtons &actionButtons);
 
+		/// Persists the live action bar (if it has unsaved changes) under the class it currently
+		/// belongs to. Used before swapping classes and when leaving the world.
+		void SaveActionButtonsIfPending();
+
+		/// Reacts to the active class changing: saves the previous class's action bar and loads the
+		/// new class's bar (sending it to the client). No-op if the class is unchanged.
+		void SwitchActionBarClass(uint32 newClassId);
+
 		typedef std::function<void(bool succeeded, uint32 mapId, Vector3 position, Radian facing)> CharacterLocationAsyncCallback;
 
 		void FetchCharacterLocationAsync(CharacterLocationAsyncCallback &&callback);
@@ -411,6 +419,10 @@ namespace mmo
 		std::vector<std::string> m_accountFeatures; // Active account feature keys (entitlements) granted to the account
 		ActionButtons m_actionButtons;
 		bool m_pendingButtons = false;
+		/// The class id that the currently-loaded `m_actionButtons` belong to. Action bars are stored
+		/// per known class (multi-class system); this tracks which class's bar is live so it is saved
+		/// back under the right class and swapped when the active class changes.
+		uint32 m_actionButtonClassId = 0;
 		InstanceId m_instanceId{};
 		uint32 m_transferMap = 0;
 		Vector3 m_transferPosition{};

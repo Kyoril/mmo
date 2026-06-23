@@ -106,13 +106,15 @@ talentRanks  (talentId -> rank, scoped to this class)
 
 New table `character_classes` (one row per class a character has known), and `character_talents`
 gains a `class` column so talent ranks are scoped per class. `characters.class` keeps meaning the
-active class. `characters.attr_0..attr_4` remain for now (still read by pre-Phase-3 code) and are
-copied into the initial class row by the migration; they will be dropped in a later cleanup migration
-once persistence is fully switched over to `character_classes`.
+active class. The legacy `characters.attr_0..attr_4` columns were copied into the initial class row by
+the first migration and have since been dropped (`20260623_3_drop_legacy_attr_columns.sql`) now that
+per-class attribute spending lives entirely in `character_classes`. `character_actions` gains a
+`class` column so each known class keeps its own action bar layout.
 
 The realm bootstraps from the `data/realm/updates/*.sql` migrations only (the
-`realm_db_schema_full.sql` snapshot is not referenced by the server), so the DB change is a single new
-migration: `data/realm/updates/20260623_1_multi_class.sql`.
+`realm_db_schema_full.sql` snapshot is not referenced by the server), so the DB changes are new
+migrations: `20260623_1_multi_class.sql`, `20260623_2_per_class_action_bars.sql` and
+`20260623_3_drop_legacy_attr_columns.sql`.
 
 ## Realm ↔ World transfer
 
@@ -145,12 +147,33 @@ migration: `data/realm/updates/20260623_1_multi_class.sql`.
    the active-class subset; `ActivateKnownSpellsForCurrentClass` rebuilds the live book on switch.
    Spells of inactive classes are preserved (no longer dropped on login) but hidden from the spellbook
    and uncastable. Save persists `GetKnownSpellIds()`; the set is serialized in `GamePlayerS`.
-5. **Client/UI** — replicate known classes + levels, character-window list.
+5. **Client/UI** *(done)* — the world node sends a `KnownClasses` packet (per class: id + class
+   level) on spawn and after every switch (alongside the active-class `object_fields::Class` and the
+   refreshed spellbook). The client caches it on `GamePlayerC` (`SetKnownClasses` /
+   `GetKnownClasses` / `GetKnownClassEntry`) and exposes it to Lua via `UnitHandle`
+   (`GetKnownClassCount`, `GetKnownClassName`, `GetKnownClassLevel`, `IsKnownClassActive`). A
+   `PLAYER_KNOWN_CLASSES_CHANGED` event fires on update; the character window shows a "Classes"
+   section listing each known class with its level and an `[Active]` marker.
 
 ## Open items / deferred
 
-- Class XP and a mechanism to raise class level (currently frozen at 1).
-- Per-class action bar layouts.
-- Dropping the now-redundant `characters.attr_0..attr_4` columns after Phase 3.
-- Possibly an explicit `RaceEntry.allowedClasses` list instead of inferring legality from the race's
-  initial-data maps.
+- Class XP and a mechanism to raise class level (currently frozen at 1). **Still deferred** — the
+  class-leveling concept itself is not yet designed.
+
+### Done since the initial plan
+
+- **Per-class action bar layouts** *(done)* — `character_actions` gains a `class` column
+  (`20260623_2_per_class_action_bars.sql`), so each known class keeps its own bar. The realm
+  `Player` tracks which class the live `m_actionButtons` belong to (`m_actionButtonClassId`), loads
+  the active class's bar on login, and `SwitchActionBarClass` saves the old bar and loads/sends the
+  new one when the active class changes. The change is detected in `NotifyCharacterUpdate`; the world
+  node now calls `SaveCharacterData()` from `OnClassChanged` so the realm swaps promptly instead of
+  waiting for the next level-up/logout save. `CreateCharacter` seeds the initial bar under the
+  initial class.
+- **`RaceEntry.allowedClasses`** *(done)* — explicit `repeated uint32 allowedClasses` on `RaceEntry`
+  (with an editor checkbox list). `IsClassAllowedForRace` and character-creation legality prefer this
+  list when non-empty and fall back to inferring from the initial-data maps (`initialSpells` /
+  `initialItems` / `initialActionButtons`) when it is empty, so existing data keeps working.
+- **Dropped `characters.attr_0..attr_4`** *(done)* — the realm no longer reads or writes these legacy
+  character-wide columns (per-class spending lives in `character_classes`); they are dropped by
+  `20260623_3_drop_legacy_attr_columns.sql`.

@@ -1332,6 +1332,8 @@ namespace mmo
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::InitialSpells, *this, &WorldState::OnInitialSpells);
 
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::KnownClasses, *this, &WorldState::OnKnownClasses);
+
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CreatureMove, *this, &WorldState::OnCreatureMove);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LearnedSpell, *this, &WorldState::OnSpellLearnedOrUnlearned);
@@ -2355,6 +2357,38 @@ namespace mmo
 		m_talentClient.NotifyCharacterClassChanged();
 
 		FrameManager::Get().TriggerLuaEvent("PLAYER_SPELLS_CHANGED");
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnKnownClasses(game::IncomingPacket &packet)
+	{
+		uint8 count = 0;
+		if (!(packet >> io::read<uint8>(count)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		std::vector<GamePlayerC::KnownClassInfo> knownClasses;
+		knownClasses.reserve(count);
+		for (uint8 i = 0; i < count; ++i)
+		{
+			GamePlayerC::KnownClassInfo info;
+			if (!(packet >> io::read<uint32>(info.classId) >> io::read<uint8>(info.classLevel)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			knownClasses.push_back(info);
+		}
+
+		const auto controlledUnit = m_playerController->GetControlledUnit();
+		if (const auto player = std::dynamic_pointer_cast<GamePlayerC>(controlledUnit))
+		{
+			player->SetKnownClasses(std::move(knownClasses));
+		}
+
+		FrameManager::Get().TriggerLuaEvent("PLAYER_KNOWN_CLASSES_CHANGED");
 
 		return PacketParseResult::Pass;
 	}

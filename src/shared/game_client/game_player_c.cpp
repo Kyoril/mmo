@@ -279,6 +279,16 @@ namespace mmo
 		return m_project.classes.getById(classId);
 	}
 
+	const proto_client::ClassEntry* GamePlayerC::GetKnownClassEntry(const size_t index) const
+	{
+		if (index >= m_knownClasses.size())
+		{
+			return nullptr;
+		}
+
+		return m_project.classes.getById(m_knownClasses[index].classId);
+	}
+
 	void GamePlayerC::SetupSceneObjects()
 	{
 		GameUnitC::SetupSceneObjects();

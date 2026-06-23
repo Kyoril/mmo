@@ -362,6 +362,48 @@ namespace mmo
 				ImGui::EndTable();
 			}
 		}
+
+		if (const auto section = ScopedEditorSection("Allowed Classes", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			DrawSectionHeader("Class Availability");
+			ImGui::TextDisabled("Classes this race may be (character creation and class change). If none are checked, legality falls back to whichever classes have initial items / spells / action buttons defined above.");
+			ImGui::Spacing();
+
+			auto* allowedClasses = currentEntry.mutable_allowedclasses();
+			for (int classIndex = 0; classIndex < m_project.classes.count(); ++classIndex)
+			{
+				const auto& classEntry = m_project.classes.getTemplates().entry(classIndex);
+				const uint32 classId = classEntry.id();
+
+				// Locate this class in the repeated allowed-classes field.
+				int foundIndex = -1;
+				for (int i = 0; i < allowedClasses->size(); ++i)
+				{
+					if (allowedClasses->Get(i) == classId)
+					{
+						foundIndex = i;
+						break;
+					}
+				}
+
+				ImGui::PushID(static_cast<int>(classId));
+				bool checked = (foundIndex != -1);
+				if (ImGui::Checkbox(classEntry.name().c_str(), &checked))
+				{
+					if (checked && foundIndex == -1)
+					{
+						allowedClasses->Add(classId);
+					}
+					else if (!checked && foundIndex != -1)
+					{
+						// Order is irrelevant: swap the entry to the end and drop the last element.
+						allowedClasses->SwapElements(foundIndex, allowedClasses->size() - 1);
+						allowedClasses->RemoveLast();
+					}
+				}
+				ImGui::PopID();
+			}
+		}
 	}
 
 	void RaceEditorWindow::OnNewEntry(proto::TemplateManager<proto::Races, proto::RaceEntry>::EntryType& entry)

@@ -197,11 +197,12 @@ namespace mmo
 		/// to the wall-clock end timestamp (unix seconds) at which the cooldown elapses.
 		virtual void UpdateCharacterCooldowns(uint64 characterId, const std::vector<std::pair<uint32, GameTime>>& cooldownEnds) = 0;
 
-		/// Loads the action buttons for a character.
-		virtual std::optional<ActionButtons> GetActionButtons(uint64 characterId) = 0;
+		/// Loads the action buttons for a character's given class (multi-class system: each known
+		/// class keeps its own action bar layout).
+		virtual std::optional<ActionButtons> GetActionButtons(uint64 characterId, uint32 classId) = 0;
 
-		/// Persists action buttons for a character.
-		virtual void SetCharacterActionButtons(DatabaseId characterId, ActionButtons buttons) = 0;
+		/// Persists the action buttons for a character's given class.
+		virtual void SetCharacterActionButtons(DatabaseId characterId, uint32 classId, ActionButtons buttons) = 0;
 
 		/// Records a learned spell for a character.
 		virtual void LearnSpell(DatabaseId characterId, uint32 spellId) = 0;

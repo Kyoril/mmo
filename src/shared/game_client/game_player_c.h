@@ -68,6 +68,26 @@ namespace mmo
 
 		const proto_client::ClassEntry* GetClass() const;
 
+		/// One entry of the character's known-class list, replicated from the server (see the
+		/// KnownClasses packet). The active class is the one in object_fields::Class.
+		struct KnownClassInfo
+		{
+			uint32 classId = 0;
+			uint8 classLevel = 1;
+		};
+
+		/// Replaces the locally-cached set of known classes (and their per-class levels). Called when
+		/// a KnownClasses packet arrives. Does not modify the active class (that is replicated via the
+		/// Class field).
+		void SetKnownClasses(std::vector<KnownClassInfo> knownClasses) { m_knownClasses = std::move(knownClasses); }
+
+		/// Returns the cached set of classes this character has learned, with their per-class levels.
+		[[nodiscard]] const std::vector<KnownClassInfo>& GetKnownClasses() const { return m_knownClasses; }
+
+		/// Resolves the class definition for a known-class list entry, or nullptr if the index is out
+		/// of range or the class id is unknown to the client project.
+		[[nodiscard]] const proto_client::ClassEntry* GetKnownClassEntry(size_t index) const;
+
 	protected:
 		virtual void SetupSceneObjects() override;
 
@@ -115,6 +135,10 @@ namespace mmo
 
 		const GuildInfo* m_guild{ nullptr };
 		IAudio* m_audio{ nullptr };
+
+		/// Cached set of classes this character has learned (with their per-class levels), replicated
+		/// from the server via the KnownClasses packet.
+		std::vector<KnownClassInfo> m_knownClasses;
 
 		struct ItemAttachment
 		{

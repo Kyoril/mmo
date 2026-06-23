@@ -510,10 +510,10 @@ namespace mmo
 			if (!actionButtons.empty())
 			{
 				std::ostringstream actionString;
-				actionString << "INSERT INTO character_actions (`character_id`, `button`, `action`, `type`) VALUES ";
+				actionString << "INSERT INTO character_actions (`character_id`, `class`, `button`, `action`, `type`) VALUES ";
 				for (const auto& actionBarBinding : actionButtons)
 				{
-					actionString << "(" << characterId << ", " << static_cast<uint16>(actionBarBinding.first) << ", " << actionBarBinding.second.action << ", " << static_cast<uint16>(actionBarBinding.second.type) << "),";
+					actionString << "(" << characterId << ", " << characterClass << ", " << static_cast<uint16>(actionBarBinding.first) << ", " << actionBarBinding.second.action << ", " << static_cast<uint16>(actionBarBinding.second.type) << "),";
 				}
 				actionString.seekp(-1, std::ios_base::end);
 				actionString << ";";
@@ -535,7 +535,7 @@ namespace mmo
 	{
 		const GameTime startTime = GetAsyncTimeMs();
 
-		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy, timePlayed, money, bind_map, bind_x, bind_y, bind_z, bind_o, attr_0, attr_1, attr_2, attr_3, attr_4, last_group FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
+		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy, timePlayed, money, bind_map, bind_x, bind_y, bind_z, bind_o, last_group FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
 		if (select.Success())
 		{
 			if (const mysql::Row row(select); row)
@@ -579,16 +579,6 @@ namespace mmo
 				row.GetField(index++, result.bindPosition.z);
 				float bindFacing = 0.0f;
 				row.GetField(index++, bindFacing);
-
-				// Load legacy (character-wide) attribute points spent. These columns are retained only
-				// as a fallback to seed the active class when no per-class row exists yet; per-class
-				// attribute spending now lives in `character_classes`.
-				std::array<uint32, 5> legacyAttr{};
-				row.GetField(index++, legacyAttr[0]);
-				row.GetField(index++, legacyAttr[1]);
-				row.GetField(index++, legacyAttr[2]);
-				row.GetField(index++, legacyAttr[3]);
-				row.GetField(index++, legacyAttr[4]);
 
 				row.GetField(index++, result.groupId);
 
@@ -763,14 +753,13 @@ namespace mmo
 				}
 
 				// Defensive fallback: ensure the active class always exists (e.g. legacy characters or
-				// freshly created ones whose class row predates the multi-class system). Seed it from
-				// the legacy character-wide attribute spending.
+				// freshly created ones whose class row is somehow missing). Attribute spending starts
+				// empty; per-class attribute spending lives in `character_classes`.
 				if (result.knownClasses.empty())
 				{
 					CharacterClassData classData;
 					classData.classId = result.classId;
 					classData.classLevel = 1;
-					classData.attributePointsSpent = legacyAttr;
 					result.knownClasses.push_back(std::move(classData));
 				}
 
@@ -1015,18 +1004,6 @@ namespace mmo
 	{
 		mysql::Transaction transaction(m_connection);
 
-		// The legacy character-wide attribute columns are kept coherent with the active class so they
-		// remain a valid fallback until they are dropped after the runtime fully uses character_classes.
-		std::array<uint32, 5> activeAttr{};
-		for (const auto& classData : knownClasses)
-		{
-			if (classData.classId == activeClassId)
-			{
-				activeAttr = classData.attributePointsSpent;
-				break;
-			}
-		}
-
 		if (!m_connection.Execute(std::string("UPDATE characters SET ")
 			+ "map = '" + std::to_string(map) + "'"
 			+ ", level = '" + std::to_string(level) + "'"
@@ -1047,11 +1024,6 @@ namespace mmo
 			+ ", bind_y = " + std::to_string(bindPosition.y)
 			+ ", bind_z = " + std::to_string(bindPosition.z)
 			+ ", bind_o = " + std::to_string(bindFacing.GetValueRadians())
-			+ ", attr_0 = " + std::to_string(activeAttr[0])
-			+ ", attr_1 = " + std::to_string(activeAttr[1])
-			+ ", attr_2 = " + std::to_string(activeAttr[2])
-			+ ", attr_3 = " + std::to_string(activeAttr[3])
-			+ ", attr_4 = " + std::to_string(activeAttr[4])
 			+ " WHERE id = '" + std::to_string(characterId) + "' LIMIT 1"))
 		{
 			PrintDatabaseError();
@@ -1287,11 +1259,11 @@ namespace mmo
 		transaction.Commit();
 	}
 
-	std::optional<ActionButtons> MySQLDatabase::GetActionButtons(uint64 characterId)
+	std::optional<ActionButtons> MySQLDatabase::GetActionButtons(uint64 characterId, uint32 classId)
 	{
 		mysql::Select select(m_connection,
-			std::format("SELECT `button`, `action`, `type` FROM `character_actions` WHERE `character_id`={0} LIMIT {1}"
-				, characterId, MaxActionButtons));
+			std::format("SELECT `button`, `action`, `type` FROM `character_actions` WHERE `character_id`={0} AND `class`={1} LIMIT {2}"
+				, characterId, classId, MaxActionButtons));
 		if (select.Success())
 		{
 			ActionButtons buttons;
@@ -1318,14 +1290,14 @@ namespace mmo
 		return {};
 	}
 
-	void MySQLDatabase::SetCharacterActionButtons(DatabaseId characterId, ActionButtons buttons)
+	void MySQLDatabase::SetCharacterActionButtons(DatabaseId characterId, uint32 classId, ActionButtons buttons)
 	{
 		// Start transaction
 		mysql::Transaction transaction(m_connection);
 		{
 			if (!m_connection.Execute(std::format(
-				"DELETE FROM `character_actions` WHERE `character_id`={0}"
-				, characterId)))
+				"DELETE FROM `character_actions` WHERE `character_id`={0} AND `class`={1}"
+				, characterId, classId)))
 			{
 				throw mysql::Exception(m_connection.GetErrorMessage());
 			}
@@ -1333,7 +1305,7 @@ namespace mmo
 			if (!buttons.empty())
 			{
 				std::ostringstream fmtStrm;
-				fmtStrm << "INSERT INTO `character_actions` (`character_id`, `button`, `action`, `type`) VALUES ";
+				fmtStrm << "INSERT INTO `character_actions` (`character_id`, `class`, `button`, `action`, `type`) VALUES ";
 
 				// Add actions
 				bool isFirstEntry = true;
@@ -1353,7 +1325,7 @@ namespace mmo
 						fmtStrm << ",";
 					}
 
-					fmtStrm << "(" << characterId << "," << static_cast<uint32>(buttonIndex - 1) << "," << button.action << "," << static_cast<uint32>(button.type) << ")";
+					fmtStrm << "(" << characterId << "," << classId << "," << static_cast<uint32>(buttonIndex - 1) << "," << button.action << "," << static_cast<uint32>(button.type) << ")";
 				}
 
 				// Now, set all actions

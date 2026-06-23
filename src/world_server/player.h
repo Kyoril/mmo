@@ -604,6 +604,10 @@ namespace mmo
 		/// Sends the active spellbook (current class + persistent spells) to the client.
 		void SendInitialSpells();
 
+		/// Sends the full set of known classes and their per-class levels to the client (used on
+		/// spawn and after a class switch) so the UI can show the multi-class list.
+		void SendKnownClasses();
+
 		/// Called after the active class was switched: re-sends the active spellbook to the client.
 		void OnClassChanged();
 

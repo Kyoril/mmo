@@ -63,12 +63,8 @@ namespace mmo
 
 	void Player::Destroy()
 	{
-		// Save action bar
-		if (m_pendingButtons)
-		{
-			m_database.asyncRequest([](bool) {}, &IDatabase::SetCharacterActionButtons, m_characterData->characterId, m_actionButtons);
-			m_pendingButtons = false;
-		}
+		// Save action bar (under the class it currently belongs to)
+		SaveActionButtonsIfPending();
 
 		// Decline group invite if any
 		if (m_inviterGuid != 0)
@@ -406,6 +402,33 @@ namespace mmo
 					outPacket << io::write<uint8>(game::char_create_result::Disabled);
 					outPacket.Finish(); });
 			return PacketParseResult::Pass;
+		}
+
+		// Enforce explicit race/class legality (multi-class system). Races that define an
+		// allowedClasses list reject any class outside it; races without a list keep the legacy
+		// behaviour (legality inferred from class-specific initial data, validated client-side).
+		if (raceEntry->allowedclasses_size() > 0)
+		{
+			bool classAllowedForRace = false;
+			for (const uint32 allowedClassId : raceEntry->allowedclasses())
+			{
+				if (allowedClassId == classInstance->id())
+				{
+					classAllowedForRace = true;
+					break;
+				}
+			}
+
+			if (!classAllowedForRace)
+			{
+				WLOG("Character creation rejected: class " << log_hex_digit(characterClass) << " is not allowed for race " << log_hex_digit(race));
+				GetConnection().sendSinglePacket([](game::OutgoingPacket &outPacket)
+												 {
+						outPacket.Start(game::realm_client_packet::CharCreateResponse);
+						outPacket << io::write<uint8>(game::char_create_result::Error);
+						outPacket.Finish(); });
+				return PacketParseResult::Pass;
+			}
 		}
 
 		// Get model
@@ -2593,8 +2616,13 @@ namespace mmo
 
 		// Sync the active class id and the full per-class data set (levels, talents, attribute
 		// spending) from the character object so class switches made on the world node are persisted.
-		m_characterData->classId = character.Get<uint32>(object_fields::Class);
+		const uint32 newActiveClassId = character.Get<uint32>(object_fields::Class);
+		m_characterData->classId = newActiveClassId;
 		m_characterData->knownClasses = character.GetKnownClasses();
+
+		// A class switch made on the world node swaps the active class's action bar: persist the
+		// previous class's bar and load (and send to the client) the new class's bar.
+		SwitchActionBarClass(newActiveClassId);
 
 		m_characterData->spellIds.clear();
 		for (const auto &spell : character.GetSpells())
@@ -3111,16 +3139,19 @@ namespace mmo
 			}
 		}
 
+		// Action bars are stored per known class; load the bar for the character's active class.
+		m_actionButtonClassId = m_characterData->classId;
+
 		std::weak_ptr weakThis = shared_from_this();
 		auto handler = [weakThis](const std::optional<ActionButtons> &actionButtons)
 		{
 			if (const auto strongThis = weakThis.lock())
 			{
-				strongThis->OnActionButtons(*actionButtons);
+				strongThis->OnActionButtons(actionButtons.value_or(ActionButtons{}));
 			}
 		};
 
-		m_database.asyncRequest(std::move(handler), &IDatabase::GetActionButtons, m_characterData->characterId);
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetActionButtons, m_characterData->characterId, m_actionButtonClassId);
 	}
 
 	void Player::OnWorldChanged(const std::shared_ptr<World> &world, const InstanceId instanceId)
@@ -3184,12 +3215,8 @@ namespace mmo
 		m_worldDestroyed.disconnect();
 		m_world.reset();
 
-		// Save action bar
-		if (m_characterData && m_pendingButtons)
-		{
-			m_database.asyncRequest([](bool) {}, &IDatabase::SetCharacterActionButtons, m_characterData->characterId, m_actionButtons);
-			m_pendingButtons = false;
-		}
+		// Save action bar (under the class it currently belongs to)
+		SaveActionButtonsIfPending();
 
 		switch (reason)
 		{
@@ -3359,12 +3386,8 @@ namespace mmo
 		m_world.reset();
 		NotifyWorldNodeChanged(nullptr);
 
-		// Save action bar before clearing character data
-		if (m_characterData && m_pendingButtons)
-		{
-			m_database.asyncRequest([](bool) {}, &IDatabase::SetCharacterActionButtons, m_characterData->characterId, m_actionButtons);
-			m_pendingButtons = false;
-		}
+		// Save action bar before clearing character data (under the class it currently belongs to)
+		SaveActionButtonsIfPending();
 
 		// Notify group that the player has disconnected from the world
 		if (m_group && m_characterData)
@@ -3685,6 +3708,41 @@ namespace mmo
 				packet.Start(game::realm_client_packet::ActionButtons);
 				packet << io::write_range(actionButtons);
 				packet.Finish(); });
+	}
+
+	void Player::SaveActionButtonsIfPending()
+	{
+		if (m_characterData && m_pendingButtons)
+		{
+			m_database.asyncRequest([](bool) {}, &IDatabase::SetCharacterActionButtons, m_characterData->characterId, m_actionButtonClassId, m_actionButtons);
+			m_pendingButtons = false;
+		}
+	}
+
+	void Player::SwitchActionBarClass(const uint32 newClassId)
+	{
+		if (!m_characterData || newClassId == m_actionButtonClassId)
+		{
+			return;
+		}
+
+		// Persist the outgoing class's bar before swapping, then forget it locally so the new class's
+		// bar is not accidentally written under the old class id if the load fails.
+		SaveActionButtonsIfPending();
+
+		m_actionButtonClassId = newClassId;
+		m_actionButtons = ActionButtons{};
+
+		std::weak_ptr weakThis = shared_from_this();
+		auto handler = [weakThis](const std::optional<ActionButtons> &actionButtons)
+		{
+			if (const auto strongThis = weakThis.lock())
+			{
+				strongThis->OnActionButtons(actionButtons.value_or(ActionButtons{}));
+			}
+		};
+
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetActionButtons, m_characterData->characterId, newClassId);
 	}
 
 	void Player::FetchCharacterLocationAsync(CharacterLocationAsyncCallback &&callback)

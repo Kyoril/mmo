@@ -1104,6 +1104,9 @@ namespace mmo
 		// Send initial spells
 		SendInitialSpells();
 
+		// Send the set of known classes (with their per-class levels) for the multi-class UI.
+		SendKnownClasses();
+
 		// Inform the client about any active spell cooldowns (restored above) so the action bar
 		// shows the remaining cooldown right after spawning.
 		const std::vector<PersistentCooldownData> activeCooldowns = m_character->GetPersistentCooldowns();
@@ -2816,6 +2819,26 @@ namespace mmo
 		}, false);
 	}
 
+	void Player::SendKnownClasses()
+	{
+		// Sends the full set of classes the character has learned plus their per-class levels. The
+		// active class itself is replicated through object_fields::Class; this packet carries the
+		// rest of the list so the UI can show all known classes. Used on spawn and after a switch.
+		const std::vector<CharacterClassData> knownClasses = m_character->GetKnownClasses();
+		SendPacket([&knownClasses](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::KnownClasses);
+			packet << io::write<uint8>(static_cast<uint8>(knownClasses.size()));
+			for (const auto& classData : knownClasses)
+			{
+				packet
+					<< io::write<uint32>(classData.classId)
+					<< io::write<uint8>(classData.classLevel);
+			}
+			packet.Finish();
+		}, false);
+	}
+
 	void Player::OnClassChanged()
 	{
 		if (!m_spawned)
@@ -2828,6 +2851,15 @@ namespace mmo
 		// switch. The client rebuilds its talent trees and prints a notification when it observes the
 		// replicated Class field change.
 		SendInitialSpells();
+
+		// The known-class set may have gained a new entry (and class levels can differ), so refresh
+		// the client's multi-class list as well.
+		SendKnownClasses();
+
+		// Push the updated character state (notably the new active class id) to the realm now so it
+		// can swap the per-class action bar promptly instead of waiting for the next level-up/logout
+		// save. The realm detects the class change in NotifyCharacterUpdate.
+		SaveCharacterData();
 	}
 
 	void Player::OnTalentsReset()

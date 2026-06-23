@@ -63,6 +63,18 @@ namespace mmo
 		[[nodiscard]] virtual int32 GetLevel() const;
 		[[nodiscard]] virtual const char* GetClass() const;
 
+		/// Number of classes the player has learned (multi-class system). 0 for non-players.
+		[[nodiscard]] virtual uint32 GetKnownClassCount() const;
+
+		/// Localized/display name of the known class at the given index, or nullptr if out of range.
+		[[nodiscard]] virtual const char* GetKnownClassName(uint32 index) const;
+
+		/// Per-class level of the known class at the given index, or 0 if out of range.
+		[[nodiscard]] virtual int32 GetKnownClassLevel(uint32 index) const;
+
+		/// True if the known class at the given index is the character's currently active class.
+		[[nodiscard]] virtual bool IsKnownClassActive(uint32 index) const;
+
 		/// Gets the unit's guild name when the unit is a player.
 		/// @return The guild name, an empty string for a guildless player, or nullptr for a non-player.
 		[[nodiscard]] virtual const char* GetGuildName() const;

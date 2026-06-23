@@ -67,11 +67,11 @@ namespace mmo
 		void UpdateCharacterCooldowns(uint64 characterId, const std::vector<std::pair<uint32, GameTime>>& cooldownEnds) override;
 
 		/// @copydoc IDatabase::GetActionButtons
-		std::optional<ActionButtons> GetActionButtons(uint64 characterId) override;
+		std::optional<ActionButtons> GetActionButtons(uint64 characterId, uint32 classId) override;
 
 		// Note: Copy of ActionButtons is intended here
 		/// @copydoc IDatabase::SetCharacterActionButtons
-		void SetCharacterActionButtons(DatabaseId characterId, ActionButtons buttons) override;
+		void SetCharacterActionButtons(DatabaseId characterId, uint32 classId, ActionButtons buttons) override;
 
 		/// @copydoc IDatabase::LearnSpell
 		void LearnSpell(DatabaseId characterId, uint32 spellId) override;

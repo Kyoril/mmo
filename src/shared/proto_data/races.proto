@@ -45,6 +45,10 @@ message RaceEntry {
 	required float startposz = 16;
 	required float startrotation = 17;
 	optional bool disabled = 18;
+	// Explicit list of class ids this race is allowed to be (character creation and class-change
+	// legality, multi-class system). When empty, legality falls back to inferring from the presence
+	// of class-specific initial data (initialSpells / initialItems / initialActionButtons).
+	repeated uint32 allowedClasses = 19;
 }
 
 message Races {
