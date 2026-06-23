@@ -16,12 +16,73 @@
 
 namespace mmo
 {
+	/// Per-class state for one class a character has learned. A character can know several classes
+	/// (one active at a time); each carries its own class level, (reserved) class xp, attribute-point
+	/// spending profile and talent ranks. See docs/multi_class_system.md.
+	struct CharacterClassData
+	{
+		uint32 classId = 0;
+		uint8 classLevel = 1;
+		uint32 classXp = 0;
+		std::array<uint32, 5> attributePointsSpent{};
+		std::map<uint32, uint8> talentRanks;
+	};
+
+	inline io::Writer& operator<<(io::Writer& writer, const CharacterClassData& data)
+	{
+		writer
+			<< io::write<uint32>(data.classId)
+			<< io::write<uint8>(data.classLevel)
+			<< io::write<uint32>(data.classXp)
+			<< io::write_range(data.attributePointsSpent);
+
+		writer << io::write<uint8>(data.talentRanks.size());
+		for (const auto& [talentId, rank] : data.talentRanks)
+		{
+			writer << io::write<uint32>(talentId) << io::write<uint8>(rank);
+		}
+
+		return writer;
+	}
+
+	inline io::Reader& operator>>(io::Reader& reader, CharacterClassData& data)
+	{
+		if (!(reader
+			>> io::read<uint32>(data.classId)
+			>> io::read<uint8>(data.classLevel)
+			>> io::read<uint32>(data.classXp)
+			>> io::read_range(data.attributePointsSpent)))
+		{
+			return reader;
+		}
+
+		uint8 numTalents = 0;
+		if (!(reader >> io::read<uint8>(numTalents)))
+		{
+			return reader;
+		}
+
+		data.talentRanks.clear();
+		for (uint8 i = 0; i < numTalents; ++i)
+		{
+			uint32 talentId = 0;
+			uint8 rank = 0;
+			if (!(reader >> io::read<uint32>(talentId) >> io::read<uint8>(rank)))
+			{
+				return reader;
+			}
+
+			data.talentRanks[talentId] = rank;
+		}
+
+		return reader;
+	}
+
 	struct CharacterData
 	{
 		explicit CharacterData()
 			: CharacterData(0, "", 0, InstanceId(), Vector3::Zero, Radian(0.0f), {}, 0, 0, 0, 1, 0, 20, 0, 0, 0, 0, Vector3::Zero, Radian(0.0f))
 		{
-			attributePointsSpent.fill(0);
 		}
 
 		explicit CharacterData(const ObjectId characterId, String name, const MapId mapId, const InstanceId& instanceId, const Vector3& position, const Radian& facing, const std::vector<uint32>& spellIds,
@@ -46,7 +107,6 @@ namespace mmo
 			, bindPosition(bindPosition)
 			, bindFacing(bindFacing)
 		{
-			attributePointsSpent.fill(0);
 		}
 
 		ObjectId characterId;
@@ -72,14 +132,15 @@ namespace mmo
 		uint32 money;
 		std::vector<uint32> spellIds;
 		std::vector<ItemData> items;
-		std::array<uint32, 5> attributePointsSpent;
+		/// All classes this character has learned. Exactly one is active at a time (its id is in
+		/// `classId`). In the current (transitional) phase a character knows only its single class.
+		std::vector<CharacterClassData> knownClasses;
 
 		std::vector<uint32> rewardedQuestIds;
 		/// Daily/weekly quests that have been rewarded, mapped to the unix timestamp (seconds) at
 		/// which they become available again.
 		std::map<uint32, GameTime> repeatableQuestResets;
 		std::map<uint32, QuestStatusData> questStatus;
-		std::map<uint32, uint8> talentRanks;
 
 		uint32 bindMap;
 		Vector3 bindPosition;
@@ -97,6 +158,38 @@ namespace mmo
 		std::vector<PersistentAuraData> auras;
 		/// Persisted spell cooldowns (as remaining milliseconds at transfer time).
 		std::vector<PersistentCooldownData> cooldowns;
+
+		/// Returns the per-class data for the currently active class, or nullptr if it is missing.
+		const CharacterClassData* GetActiveClass() const
+		{
+			for (const auto& classData : knownClasses)
+			{
+				if (classData.classId == classId)
+				{
+					return &classData;
+				}
+			}
+
+			return nullptr;
+		}
+
+		/// Returns the per-class data for the active class, creating a level-1 entry if none exists.
+		CharacterClassData& GetOrCreateActiveClass()
+		{
+			for (auto& classData : knownClasses)
+			{
+				if (classData.classId == classId)
+				{
+					return classData;
+				}
+			}
+
+			CharacterClassData classData;
+			classData.classId = classId;
+			classData.classLevel = 1;
+			knownClasses.push_back(classData);
+			return knownClasses.back();
+		}
 	};
 
 	inline io::Reader& operator>>(io::Reader& reader, CharacterData& data)
@@ -127,7 +220,6 @@ namespace mmo
 			>> io::read<float>(data.bindPosition.y)
 			>> io::read<float>(data.bindPosition.z)
 			>> data.bindFacing
-			>> io::read_range(data.attributePointsSpent)
 			>> io::read_container<uint16>(data.rewardedQuestIds)
 			>> io::read<uint64>(data.groupId)
 			>> io::read<uint64>(data.guildId)
@@ -156,22 +248,23 @@ namespace mmo
 			data.questStatus[questId] = questData;
 		}
 
-		uint8 numTalents;
-		if (!(reader >> io::read<uint8>(numTalents)))
+		uint8 numClasses = 0;
+		if (!(reader >> io::read<uint8>(numClasses)))
 		{
 			return reader;
 		}
 
-		for (uint8 i = 0; i < numTalents; ++i)
+		data.knownClasses.clear();
+		data.knownClasses.reserve(numClasses);
+		for (uint8 i = 0; i < numClasses; ++i)
 		{
-			uint32 talentId;
-			uint8 rank;
-			if (!(reader >> io::read<uint32>(talentId) >> io::read<uint8>(rank)))
+			CharacterClassData classData;
+			if (!(reader >> classData))
 			{
 				return reader;
 			}
 
-			data.talentRanks[talentId] = rank;
+			data.knownClasses.push_back(std::move(classData));
 		}
 
 		uint16 numRepeatableResets;
@@ -261,7 +354,6 @@ namespace mmo
 			<< io::write<float>(data.bindPosition.y)
 			<< io::write<float>(data.bindPosition.z)
 			<< data.bindFacing
-			<< io::write_range(data.attributePointsSpent)
 			<< io::write_dynamic_range<uint16>(data.rewardedQuestIds)
 			<< io::write<uint64>(data.groupId)
 			<< io::write<uint64>(data.guildId)
@@ -277,10 +369,10 @@ namespace mmo
 				<< questData;
 		}
 
-		writer << io::write<uint8>(data.talentRanks.size());
-		for (const auto& [talentId, rank] : data.talentRanks)
+		writer << io::write<uint8>(data.knownClasses.size());
+		for (const auto& classData : data.knownClasses)
 		{
-			writer << io::write<uint32>(talentId) << io::write<uint8>(rank);
+			writer << classData;
 		}
 
 		writer << io::write<uint16>(data.repeatableQuestResets.size());

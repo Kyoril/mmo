@@ -119,9 +119,13 @@ migration: `data/realm/updates/20260623_1_multi_class.sql`.
 
 ## Implementation phases
 
-1. **Data spine** *(this phase)* — proto `ClassEntry.class_change_spell`, `ChangeClass` effect enum +
+1. **Data spine** *(done)* — proto `ClassEntry.class_change_spell`, `ChangeClass` effect enum +
    editor name, realm DB migration (`character_classes`, `character_talents.class`).
-2. **Transfer** — `CharacterData` / `CharacterClassData`, realm load/save.
+2. **Transfer** *(done)* — `CharacterClassData` + `CharacterData.knownClasses` (replacing the flat
+   `talentRanks`/`attributePointsSpent`) with serialization; realm DB load/save of `character_classes`
+   and class-scoped `character_talents`; `CreateCharacter` seeds the initial class row. The active
+   class is resolved via `CharacterData::GetActiveClass()` / `GetOrCreateActiveClass()`. GamePlayerS
+   stays single-active-class until Phase 3, so in this phase every character knows exactly one class.
 3. **World runtime** — `GamePlayerS` multi-class state, `HandleChangeClass`, per-class talent points &
    attribute spending, runtime spellbook rebuild, level/maxlevel guards.
 4. **Character creation** — grant initial class + its class-change spell, seed `character_classes`.

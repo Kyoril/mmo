@@ -2580,10 +2580,11 @@ namespace mmo
 		m_characterData->maxEnergy = character.Get<uint32>(object_fields::MaxEnergy);
 		m_characterData->money = character.Get<uint32>(object_fields::Money);
 
-		// Keep attribute point distribution in sync for world transfers
-		for (uint32 i = 0; i < m_characterData->attributePointsSpent.size(); ++i)
+		// Keep the active class's attribute distribution and talents in sync for world transfers.
+		CharacterClassData& activeClass = m_characterData->GetOrCreateActiveClass();
+		for (uint32 i = 0; i < activeClass.attributePointsSpent.size(); ++i)
 		{
-			m_characterData->attributePointsSpent[i] = character.GetAttributePointsByAttribute(i);
+			activeClass.attributePointsSpent[i] = character.GetAttributePointsByAttribute(i);
 		}
 
 		m_characterData->spellIds.clear();
@@ -2607,10 +2608,10 @@ namespace mmo
 		m_characterData->items = character.GetInventory().GetItemData();
 
 		// Sync learned talents so the next world node restores the correct ranks
-		m_characterData->talentRanks.clear();
+		activeClass.talentRanks.clear();
 		for (const auto& [talentId, rank] : character.GetTalents())
 		{
-			m_characterData->talentRanks[talentId] = static_cast<uint8>(rank);
+			activeClass.talentRanks[talentId] = static_cast<uint8>(rank);
 		}
 		m_characterData->isGameMaster = (m_gmLevel > 0);
 

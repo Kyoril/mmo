@@ -703,12 +703,6 @@ namespace mmo
 		DLOG("Received character data for character " << log_hex_digit(characterGuid) << ", persisting character data...");
 		DLOG("Time played: " << timePlayed << " seconds");
 
-		std::array<uint32, 5> attributePoints;
-		for (uint32 i = 0; i < attributePoints.size(); ++i)
-		{
-			attributePoints[i] = player.GetAttributePointsByAttribute(i);
-		}
-
 		std::vector<uint32> spellIds;
 		spellIds.reserve(player.GetSpells().size());
 		for (const auto& spell : player.GetSpells())
@@ -725,9 +719,36 @@ namespace mmo
 			spellIds.push_back(spell->id());
 		}
 
-		if (Player* playerConnection = m_playerManager.GetPlayerByCharacterGuid(characterGuid))
+		Player* playerConnection = m_playerManager.GetPlayerByCharacterGuid(characterGuid);
+		if (playerConnection)
 		{
 			playerConnection->NotifyCharacterUpdate(mapId, instanceId, player);
+		}
+
+		// Build the per-class data set to persist. NotifyCharacterUpdate (above) has merged the live
+		// talents / attribute spending into the active class entry, so the connection's known classes
+		// are authoritative. If there is no connection, fall back to a single active-class entry
+		// reconstructed from the transferred player object.
+		const uint32 activeClassId = player.Get<uint32>(object_fields::Class);
+		std::vector<CharacterClassData> knownClasses;
+		if (playerConnection && playerConnection->HasCharacterGuid())
+		{
+			knownClasses = playerConnection->GetCharacterData().knownClasses;
+		}
+		if (knownClasses.empty())
+		{
+			CharacterClassData activeClass;
+			activeClass.classId = activeClassId;
+			activeClass.classLevel = 1;
+			for (uint32 i = 0; i < activeClass.attributePointsSpent.size(); ++i)
+			{
+				activeClass.attributePointsSpent[i] = player.GetAttributePointsByAttribute(i);
+			}
+			for (const auto& [talentId, rank] : player.GetTalents())
+			{
+				activeClass.talentRanks[talentId] = static_cast<uint8>(rank);
+			}
+			knownClasses.push_back(std::move(activeClass));
 		}
 
 		// RequestHandler
@@ -753,9 +774,9 @@ namespace mmo
 			player.GetBindMap(),
 			player.GetBindPosition(),
 			player.GetBindFacing(),
-			attributePoints,
 			spellIds,
-			player.GetTalents(),
+			knownClasses,
+			activeClassId,
 			timePlayed
 			);
 

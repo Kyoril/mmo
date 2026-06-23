@@ -1091,7 +1091,10 @@ namespace mmo
 			SpawnTileObjects(tile);
 		});
 
-		m_character->InitializeTalents(m_characterData.talentRanks);
+		if (const CharacterClassData* activeClass = m_characterData.GetActiveClass())
+		{
+			m_character->InitializeTalents(activeClass->talentRanks);
+		}
 
 		// Send initial spells
 		SendPacket([&](game::OutgoingPacket& packet)

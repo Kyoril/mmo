@@ -665,21 +665,24 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		characterObject->SetBinding(characterData.bindMap, characterData.bindPosition, characterData.bindFacing);
 
 		bool pointsReset = false;
-		for (uint32 i = 0; i < 5; ++i)
+		if (const CharacterClassData* activeClass = characterData.GetActiveClass())
 		{
-			for (uint32 j = 0; j < characterData.attributePointsSpent[i]; ++j)
+			for (uint32 i = 0; i < 5; ++i)
 			{
-				if (!characterObject->AddAttributePoint(i))
+				for (uint32 j = 0; j < activeClass->attributePointsSpent[i]; ++j)
 				{
-					WLOG("Points have been reset due to inconsistencies with points spent vs points available!");
-					pointsReset = true;
+					if (!characterObject->AddAttributePoint(i))
+					{
+						WLOG("Points have been reset due to inconsistencies with points spent vs points available!");
+						pointsReset = true;
+						break;
+					}
+				}
+
+				if (pointsReset)
+				{
 					break;
 				}
-			}
-
-			if (pointsReset)
-			{
-				break;
 			}
 		}
 
