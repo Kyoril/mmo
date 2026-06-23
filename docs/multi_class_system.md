@@ -92,6 +92,12 @@ the spellbook, and refreshes stats.
 
 ## Data model
 
+> **Class ids are 0-based.** In the shipped data Mage = 0, Warrior = 1, Cleric = 2, Acolyte = 3,
+> Scout = 4. **Class id 0 is a valid class**, so never treat a `0` class id (or a `ChangeClass`
+> effect's `miscvaluea` of 0) as "no class" — guard on `classes.getById(id) != nullptr` or on
+> `m_classEntry` instead. (Several early guards using `== 0` were fixed because they silently dropped
+> Mage from registration / per-class persistence.)
+
 Per known class, persisted on the realm:
 
 ```

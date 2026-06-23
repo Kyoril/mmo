@@ -2318,12 +2318,14 @@ namespace mmo
 
 	void GamePlayerS::SyncActiveClassData()
 	{
-		const uint32 activeId = Get<uint32>(object_fields::Class);
-		if (activeId == 0)
+		// No active class yet — nothing to sync. Note class id 0 is a valid class (Mage), so guard on
+		// whether a class is actually set rather than on the id being zero.
+		if (!m_classEntry)
 		{
 			return;
 		}
 
+		const uint32 activeId = m_classEntry->id();
 		CharacterClassData& data = GetOrCreateKnownClass(activeId);
 		for (uint32 i = 0; i < 5; ++i)
 		{
@@ -2386,7 +2388,9 @@ namespace mmo
 			}
 		}
 
-		if (!active && activeId != 0)
+		// Ensure the active class is represented, even if it is not yet in m_knownClasses. Class id 0
+		// is a valid class (Mage), so validate against the class table rather than a non-zero id.
+		if (!active && m_project.classes.getById(activeId) != nullptr)
 		{
 			CharacterClassData classData;
 			classData.classId = activeId;
@@ -2457,8 +2461,9 @@ namespace mmo
 				continue;
 			}
 
+			// Note: class id 0 is a valid class (Mage), so only skip when the id is not a real class.
 			const uint32 classId = static_cast<uint32>(effect.miscvaluea());
-			if (classId == 0 || m_project.classes.getById(classId) == nullptr)
+			if (m_project.classes.getById(classId) == nullptr)
 			{
 				continue;
 			}
