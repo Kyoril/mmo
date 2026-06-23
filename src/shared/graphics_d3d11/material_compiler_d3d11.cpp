@@ -1241,6 +1241,7 @@ namespace mmo
 			if (type != PixelShaderType::GBuffer)
 			{
 				m_pixelShaderStream << "\tbaseColor = pow(baseColor, 2.2);\n";
+				m_pixelShaderStream << "\temissiveColor = pow(emissiveColor, 2.2);\n";
 			}
 
 			m_pixelShaderStream
@@ -1532,7 +1533,7 @@ namespace mmo
 		std::replace(copy.begin(), copy.end(), ' ', '_');
 
 		std::ostringstream outputStream;
-		outputStream << "v" << name;
+		outputStream << "v" << copy;
 		outputStream.flush();
 
 		return AddExpression(outputStream.str(), ExpressionType::Float_4);
