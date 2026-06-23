@@ -75,6 +75,10 @@ namespace mmo
 		/// True if the known class at the given index is the character's currently active class.
 		[[nodiscard]] virtual bool IsKnownClassActive(uint32 index) const;
 
+		/// The class-change spell id for the known class at the given index (0 if none / out of
+		/// range). Casting it switches the active class to that class.
+		[[nodiscard]] virtual uint32 GetKnownClassChangeSpell(uint32 index) const;
+
 		/// Gets the unit's guild name when the unit is a player.
 		/// @return The guild name, an empty string for a guildless player, or nullptr for a non-player.
 		[[nodiscard]] virtual const char* GetGuildName() const;

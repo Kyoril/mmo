@@ -64,6 +64,9 @@ namespace mmo
 		signal<void()> talentsReset;
 		/// Fired after the player's active class has been switched (ChangeClass succeeded).
 		signal<void()> classChanged;
+		/// Fired when the set of known classes changes without an active-class switch — e.g. learning a
+		/// class-change spell registers that class at level 1. Used to refresh the client's class list.
+		signal<void()> knownClassesChanged;
 		/// Fired when the character's spent attribute points have been refunded.
 		signal<void()> attributePointsReset;
 

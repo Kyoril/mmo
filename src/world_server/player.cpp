@@ -65,6 +65,9 @@ namespace mmo
 			// Class switch signal
 			m_character->classChanged.connect(*this, &Player::OnClassChanged),
 
+			// Known-class set changed (e.g. a class-change spell was learned)
+			m_character->knownClassesChanged.connect(*this, &Player::OnKnownClassesChanged),
+
 			// Inventory signals
 			inventory.itemInstanceCreated.connect(this, &Player::OnItemCreated),
 			inventory.itemInstanceUpdated.connect(this, &Player::OnItemUpdated),
@@ -2825,18 +2828,41 @@ namespace mmo
 		// active class itself is replicated through object_fields::Class; this packet carries the
 		// rest of the list so the UI can show all known classes. Used on spawn and after a switch.
 		const std::vector<CharacterClassData> knownClasses = m_character->GetKnownClasses();
-		SendPacket([&knownClasses](game::OutgoingPacket& packet)
+		const proto::Project& project = m_project;
+		SendPacket([&knownClasses, &project](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::realm_client_packet::KnownClasses);
 			packet << io::write<uint8>(static_cast<uint8>(knownClasses.size()));
 			for (const auto& classData : knownClasses)
 			{
+				// The class-change spell lets the client switch to this class on demand (clicking the
+				// class in the character window). 0 if the class has none configured.
+				uint32 changeSpellId = 0;
+				if (const proto::ClassEntry* classEntry = project.classes.getById(classData.classId))
+				{
+					changeSpellId = classEntry->class_change_spell();
+				}
+
 				packet
 					<< io::write<uint32>(classData.classId)
-					<< io::write<uint8>(classData.classLevel);
+					<< io::write<uint8>(classData.classLevel)
+					<< io::write<uint32>(changeSpellId);
 			}
 			packet.Finish();
 		}, false);
+	}
+
+	void Player::OnKnownClassesChanged()
+	{
+		if (!m_spawned)
+		{
+			return;
+		}
+
+		// A new class became known (its class-change spell was learned). Refresh the client's list and
+		// persist the new known-class set so the class survives logout even if never activated.
+		SendKnownClasses();
+		SaveCharacterData();
 	}
 
 	void Player::OnClassChanged()

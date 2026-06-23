@@ -147,13 +147,22 @@ migrations: `20260623_1_multi_class.sql`, `20260623_2_per_class_action_bars.sql`
    the active-class subset; `ActivateKnownSpellsForCurrentClass` rebuilds the live book on switch.
    Spells of inactive classes are preserved (no longer dropped on login) but hidden from the spellbook
    and uncastable. Save persists `GetKnownSpellIds()`; the set is serialized in `GamePlayerS`.
-5. **Client/UI** *(done)* — the world node sends a `KnownClasses` packet (per class: id + class
-   level) on spawn and after every switch (alongside the active-class `object_fields::Class` and the
-   refreshed spellbook). The client caches it on `GamePlayerC` (`SetKnownClasses` /
-   `GetKnownClasses` / `GetKnownClassEntry`) and exposes it to Lua via `UnitHandle`
-   (`GetKnownClassCount`, `GetKnownClassName`, `GetKnownClassLevel`, `IsKnownClassActive`). A
-   `PLAYER_KNOWN_CLASSES_CHANGED` event fires on update; the character window shows a "Classes"
-   section listing each known class with its level and an `[Active]` marker.
+5. **Client/UI** *(done)* — the world node sends a `KnownClasses` packet (per class: id, class
+   level, class-change spell id) on spawn and after every switch (alongside the active-class
+   `object_fields::Class` and the refreshed spellbook). The client caches it on `GamePlayerC`
+   (`SetKnownClasses` / `GetKnownClasses` / `GetKnownClassEntry`) and exposes it to Lua via
+   `UnitHandle` (`GetKnownClassCount`, `GetKnownClassName`, `GetKnownClassLevel`,
+   `IsKnownClassActive`, `GetKnownClassChangeSpell`). A `PLAYER_KNOWN_CLASSES_CHANGED` event fires on
+   update; the character window shows a "Classes" section listing each known class with its level,
+   highlighting the active one. Each non-active row is a button that casts that class's class-change
+   spell to switch to it. The spellbook refreshes on the `PLAYER_SPELLS_CHANGED` event so a class
+   switch updates the visible spells immediately.
+
+   A class is registered (and replicated) the moment its **class-change spell is learned**, not only
+   when first switched to: `GamePlayerS::OnSpellLearned` detects the `ChangeClass` effect, adds the
+   class at level 1, and fires `knownClassesChanged` (→ world `Player::OnKnownClassesChanged` →
+   `SendKnownClasses` + persist), so a freshly-trained class appears in the list right away even
+   before activation.
 
 ## Open items / deferred
 

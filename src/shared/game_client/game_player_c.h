@@ -74,6 +74,9 @@ namespace mmo
 		{
 			uint32 classId = 0;
 			uint8 classLevel = 1;
+			/// The class-change spell that switches the active class to this one (0 if none). Cast it
+			/// to become this class.
+			uint32 changeSpellId = 0;
 		};
 
 		/// Replaces the locally-cached set of known classes (and their per-class levels). Called when

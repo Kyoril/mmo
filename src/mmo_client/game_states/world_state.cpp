@@ -2374,7 +2374,7 @@ namespace mmo
 		for (uint8 i = 0; i < count; ++i)
 		{
 			GamePlayerC::KnownClassInfo info;
-			if (!(packet >> io::read<uint32>(info.classId) >> io::read<uint8>(info.classLevel)))
+			if (!(packet >> io::read<uint32>(info.classId) >> io::read<uint8>(info.classLevel) >> io::read<uint32>(info.changeSpellId)))
 			{
 				return PacketParseResult::Disconnect;
 			}

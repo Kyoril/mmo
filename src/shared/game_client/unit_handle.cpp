@@ -197,6 +197,22 @@ namespace mmo
 		return activeClass != nullptr && activeClass->id() == knownClasses[index].classId;
 	}
 
+	uint32 UnitHandle::GetKnownClassChangeSpell(const uint32 index) const
+	{
+		if (!CheckNonNull() || !Get()->IsPlayer())
+		{
+			return 0;
+		}
+
+		const auto& knownClasses = Get()->AsPlayer().GetKnownClasses();
+		if (index >= knownClasses.size())
+		{
+			return 0;
+		}
+
+		return knownClasses[index].changeSpellId;
+	}
+
 	const char* UnitHandle::GetGuildName() const
 	{
 		if (!CheckNonNull() || !Get()->IsPlayer())

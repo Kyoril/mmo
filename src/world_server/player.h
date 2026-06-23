@@ -611,6 +611,10 @@ namespace mmo
 		/// Called after the active class was switched: re-sends the active spellbook to the client.
 		void OnClassChanged();
 
+		/// Called when the set of known classes changed without an active-class switch (e.g. a
+		/// class-change spell was learned): refreshes the client's class list and persists.
+		void OnKnownClassesChanged();
+
 		void HandleVendorGossip(const proto::VendorEntry& vendor, const GameCreatureS& vendorUnit);
 
 		void SendVendorInventory(const proto::VendorEntry& vendor, const GameCreatureS& vendorUnit);

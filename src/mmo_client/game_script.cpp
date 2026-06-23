@@ -1104,6 +1104,7 @@ namespace mmo
 							   .def("GetKnownClassName", &UnitHandle::GetKnownClassName)
 							   .def("GetKnownClassLevel", &UnitHandle::GetKnownClassLevel)
 							   .def("IsKnownClassActive", &UnitHandle::IsKnownClassActive)
+						   .def("GetKnownClassChangeSpell", &UnitHandle::GetKnownClassChangeSpell)
 							   .def("GetGuildName", &UnitHandle::GetGuildName)
 							   .def("GetAuraCount", &UnitHandle::GetAuraCount)
 							   .def("GetAura", &UnitHandle::GetAura)

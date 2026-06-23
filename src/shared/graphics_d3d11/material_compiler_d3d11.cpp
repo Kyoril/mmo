@@ -1240,8 +1240,10 @@ namespace mmo
 		{
 			if (type != PixelShaderType::GBuffer)
 			{
-				m_pixelShaderStream << "\tbaseColor = pow(baseColor, 2.2);\n";
-				m_pixelShaderStream << "\temissiveColor = pow(emissiveColor, 2.2);\n";
+				if (m_lit)
+				{
+					//m_pixelShaderStream << "\tbaseColor = pow(baseColor, 2.2);\n";
+				}
 			}
 
 			m_pixelShaderStream

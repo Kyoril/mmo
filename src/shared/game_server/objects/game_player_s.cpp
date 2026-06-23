@@ -2413,6 +2413,39 @@ namespace mmo
 			m_knownSpellIds.insert(spell.id());
 		}
 
+		// Learning a class-change spell unlocks the ability to be that class: register it at class
+		// level 1 right away (without switching to it) so it shows up in the known-class list. The
+		// active class itself is acquired the moment its class-change spell is cast (see ChangeClass).
+		for (const auto& effect : spell.effects())
+		{
+			if (effect.type() != spell_effects::ChangeClass)
+			{
+				continue;
+			}
+
+			const uint32 classId = static_cast<uint32>(effect.miscvaluea());
+			if (classId == 0 || m_project.classes.getById(classId) == nullptr)
+			{
+				continue;
+			}
+
+			bool alreadyKnown = false;
+			for (const auto& classData : m_knownClasses)
+			{
+				if (classData.classId == classId)
+				{
+					alreadyKnown = true;
+					break;
+				}
+			}
+
+			if (!alreadyKnown)
+			{
+				GetOrCreateKnownClass(classId);
+				knownClassesChanged();
+			}
+		}
+
 		spellLearned(*this, spell);
 	}
 
