@@ -1963,6 +1963,35 @@ namespace mmo
 					}
 					break;
 				}
+			case spell_effects::ChangeClass:
+				{
+					const uint32 classId = effect.miscvaluea();
+
+					const auto* classEntry = m_project.classes.getById(classId);
+					if (ImGui::BeginCombo("Target Class", classEntry != nullptr ? classEntry->name().c_str() : "None", ImGuiComboFlags_None))
+					{
+						for (int i = 0; i < m_project.classes.count(); i++)
+						{
+							ImGui::PushID(i);
+							const auto& classTemplate = m_project.classes.getTemplates().entry(i);
+							const bool item_selected = classTemplate.id() == classId;
+							if (ImGui::Selectable(classTemplate.name().c_str(), item_selected))
+							{
+								effect.set_miscvaluea(static_cast<int32>(classTemplate.id()));
+							}
+							if (item_selected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+							ImGui::PopID();
+						}
+
+						ImGui::EndCombo();
+					}
+
+					DrawHelpMarker("The class the caster switches to. Added at class level 1 if not yet known.");
+					break;
+				}
 			case spell_effects::Energize:
 			case spell_effects::ApplyAura:
 			case spell_effects::ApplyAreaAura:

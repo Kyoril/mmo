@@ -737,6 +737,10 @@ namespace mmo
 		}
 		if (knownClasses.empty())
 		{
+			knownClasses = player.GetKnownClasses();
+		}
+		if (knownClasses.empty())
+		{
 			CharacterClassData activeClass;
 			activeClass.classId = activeClassId;
 			activeClass.classLevel = 1;

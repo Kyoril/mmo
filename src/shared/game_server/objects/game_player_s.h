@@ -9,6 +9,7 @@
 
 #include "game_unit_s.h"
 #include "game_server/inventory.h"
+#include "game_server/character_data.h"
 #include "game_server/quest_status_data.h"
 #include "game/quest.h"
 #include "game/group.h"
@@ -76,6 +77,25 @@ namespace mmo
 		void SetPlayerWatcher(NetPlayerWatcher *watcher);
 
 		void SetClass(const proto::ClassEntry &classEntry);
+
+		/// Replaces the full set of classes this character has learned. Each entry carries its own
+		/// class level, attribute-point spending profile and talent ranks. Must be called before the
+		/// active class is applied so per-class data (e.g. talent point budget) resolves correctly.
+		void SetKnownClasses(const std::vector<CharacterClassData>& knownClasses) { m_knownClasses = knownClasses; }
+
+		/// Returns a snapshot of all known classes. The active class entry is refreshed from the live
+		/// talents and attribute spending so the result is safe to persist / transfer.
+		[[nodiscard]] std::vector<CharacterClassData> GetKnownClasses() const;
+
+		/// Returns the class level of the currently active class (defaults to 1).
+		[[nodiscard]] uint32 GetActiveClassLevel() const;
+
+		/// Switches the active class to the given class. If the class is not yet known it is added at
+		/// class level 1 (subject to race legality). Swaps the class-bound spellbook, talents and the
+		/// attribute-spending profile, then refreshes stats. Fails while in combat or if the class is
+		/// unknown / not allowed for the character's race.
+		/// @return true on a successful switch.
+		bool ChangeClass(uint32 classId);
 
 		void SetRace(const proto::RaceEntry &raceEntry);
 
@@ -315,6 +335,13 @@ namespace mmo
 
 		void UpdateTalentPoints();
 
+		/// Recomputes the total attribute points available at the current character level for the
+		/// active class. Character-level driven (character-wide total).
+		void UpdateTotalAttributePoints();
+
+		/// Recomputes the total talent points available for the active class from its class level.
+		void UpdateTotalTalentPoints();
+
 		uint32 GetAttributePointsByAttribute(const uint32 attribute) const
 		{
 			ASSERT(attribute < 5);
@@ -341,6 +368,22 @@ namespace mmo
 		void UpdateStat(int32 stat);
 
 		void RecalculateTotalAttributePointsConsumed(const uint32 attribute);
+
+		/// Grants all of the active class's spells whose required level is met by the character level.
+		void GrantClassSpells();
+
+		/// Applies an attribute-point spending profile by replaying point allocations from a clean slate.
+		void ApplyAttributeSpending(const std::array<uint32, 5>& enhancements);
+
+		/// Writes the live talents and attribute spending back into the active class's known-class entry.
+		void SyncActiveClassData();
+
+		/// Returns the known-class entry for the given class, creating a level-1 entry if it is new.
+		CharacterClassData& GetOrCreateKnownClass(uint32 classId);
+
+		/// Returns true if the character's race is permitted to be the given class (mirrors the data
+		/// the character-creation screen uses: the race must have class-specific initial data).
+		[[nodiscard]] bool IsClassAllowedForRace(const proto::ClassEntry& classEntry) const;
 
 	protected:
 		void OnKilled(GameUnitS *killer) override;
@@ -379,6 +422,9 @@ namespace mmo
 		String m_name;
 		Inventory m_inventory;
 		const proto::ClassEntry *m_classEntry;
+		/// All classes this character has learned (one is active at a time; the active id is the
+		/// replicated Class field). Holds each class's level, attribute spending and talent ranks.
+		std::vector<CharacterClassData> m_knownClasses;
 		const proto::RaceEntry *m_raceEntry;
 		std::array<uint32, 5> m_attributePointEnhancements;
 		std::array<uint32, 5> m_attributePointsSpent;

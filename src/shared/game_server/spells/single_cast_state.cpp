@@ -931,6 +931,7 @@ namespace mmo
 			{se::Charge,                 SpellEffects::HandleCharge},
 			{se::InterruptSpellCast,     SpellEffects::HandleInterruptSpellCast},
 			{se::ResetTalents,           SpellEffects::HandleResetTalents},
+			{se::ChangeClass,            SpellEffects::HandleChangeClass},
 			{se::Proficiency,            SpellEffects::HandleProficiency},
 			{se::TriggerSpell,           SpellEffects::HandleTriggerSpell},
 		};

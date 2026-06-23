@@ -633,6 +633,10 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		info.movementFlags |= movement_flags::Falling;
 		characterObject->ApplyMovementInfo(info);
 
+		// Load all known classes before applying the active class so per-class budgets (e.g. talent
+		// points derived from class level) resolve correctly.
+		characterObject->SetKnownClasses(characterData.knownClasses);
+
 		characterObject->SetClass(*classEntry);
 		characterObject->SetRace(*raceEntry);
 		characterObject->SetGender(characterData.gender);

@@ -126,8 +126,15 @@ migration: `data/realm/updates/20260623_1_multi_class.sql`.
    and class-scoped `character_talents`; `CreateCharacter` seeds the initial class row. The active
    class is resolved via `CharacterData::GetActiveClass()` / `GetOrCreateActiveClass()`. GamePlayerS
    stays single-active-class until Phase 3, so in this phase every character knows exactly one class.
-3. **World runtime** — `GamePlayerS` multi-class state, `HandleChangeClass`, per-class talent points &
-   attribute spending, runtime spellbook rebuild, level/maxlevel guards.
+3. **World runtime** *(done)* — `GamePlayerS` holds `m_knownClasses`; `ChangeClass(classId)` swaps the
+   active class (combat + race-legality gating, adds at class level 1 if new), rebuilds the class-bound
+   spellbook (removes old class + talent spells, grants new), swaps the attribute-spending profile,
+   restores per-class talents, and clamps level to the new class's max. Talent points now derive from
+   class level via `UpdateTotalTalentPoints`; attribute total stays character-level via
+   `UpdateTotalAttributePoints` (both recomputed in `RefreshStats`). `HandleChangeClass` spell effect
+   (miscvaluea = target class id) is wired into the dispatch table. `GamePlayerS` serialization +
+   enter-world (`SetKnownClasses`) + realm `NotifyCharacterUpdate` now carry the full known-class set
+   and active class id. Live client sync via existing spellLearned/Unlearned/talentsReset signals.
 4. **Character creation** — grant initial class + its class-change spell, seed `character_classes`.
 5. **Client/UI** — replicate known classes + levels, character-window list.
 

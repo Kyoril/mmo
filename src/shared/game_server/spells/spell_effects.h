@@ -114,6 +114,9 @@ namespace mmo
 		void HandleHealPct(SpellEffectContext& ctx);
 		void HandleAddExtraAttacks(SpellEffectContext& ctx);
 		void HandleResetTalents(SpellEffectContext& ctx);
+		/// Switches the target player's active class to the class id in miscvaluea (added at class
+		/// level 1 if not yet known). Subject to combat and race-legality checks.
+		void HandleChangeClass(SpellEffectContext& ctx);
 
 		/// Internal helper: applies weapon damage in a given school.
 		/// Corresponds to SingleCastState::InternalSpellEffectWeaponDamage.

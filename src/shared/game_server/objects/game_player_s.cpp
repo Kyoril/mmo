@@ -1942,6 +1942,11 @@ namespace mmo
 		ASSERT(level > 0);
 		ASSERT(level <= m_classEntry->levelbasevalues_size());
 
+		// Recompute the point budgets: attribute total from character level (character-wide), talent
+		// total from the active class's class level.
+		UpdateTotalAttributePoints();
+		UpdateTotalTalentPoints();
+
 		// Adjust stats
 		UpdateAttributePoints();
 		UpdateTalentPoints();
@@ -2035,21 +2040,8 @@ namespace mmo
 		// Exceed max level?
 		newLevel = std::min(newLevel, Get<uint32>(object_fields::MaxLevel));
 
-		// Calculate total attribute points available at level
-		m_totalAvailablePointsAtLevel = 0;
-		for (uint32 i = 0; i < newLevel; ++i)
-		{
-			m_totalAvailablePointsAtLevel += m_classEntry->levelbasevalues(i).attributepoints();
-		}
-
-		// Calculate total talent points available at level
-		m_totalTalentPointsAtLevel = 0;
-		for (uint32 i = 0; i < newLevel; ++i)
-		{
-			m_totalTalentPointsAtLevel += m_classEntry->levelbasevalues(i).talentpoints();
-		}
-
-		// Adjust stats
+		// Adjust stats. GameUnitS::SetLevel updates the Level field and calls RefreshStats, which
+		// recomputes the attribute/talent point budgets via UpdateTotalAttributePoints/TalentPoints.
 		GameUnitS::SetLevel(newLevel);
 
 		// Update next level xp
@@ -2258,6 +2250,287 @@ namespace mmo
 		Set<uint32>(object_fields::TalentPoints, availableTalentPoints - spentPoints);
 	}
 
+	void GamePlayerS::UpdateTotalAttributePoints()
+	{
+		m_totalAvailablePointsAtLevel = 0;
+		if (!m_classEntry)
+		{
+			return;
+		}
+
+		// Character-wide total: derived from the character level (clamped to the class's defined levels).
+		const uint32 level = Get<uint32>(object_fields::Level);
+		const uint32 cap = std::min<uint32>(level, static_cast<uint32>(m_classEntry->levelbasevalues_size()));
+		for (uint32 i = 0; i < cap; ++i)
+		{
+			m_totalAvailablePointsAtLevel += m_classEntry->levelbasevalues(i).attributepoints();
+		}
+	}
+
+	void GamePlayerS::UpdateTotalTalentPoints()
+	{
+		m_totalTalentPointsAtLevel = 0;
+		if (!m_classEntry)
+		{
+			return;
+		}
+
+		// Per-class total: derived from the active class's class level (frozen at 1 for now).
+		const uint32 classLevel = GetActiveClassLevel();
+		const uint32 cap = std::min<uint32>(classLevel, static_cast<uint32>(m_classEntry->levelbasevalues_size()));
+		for (uint32 i = 0; i < cap; ++i)
+		{
+			m_totalTalentPointsAtLevel += m_classEntry->levelbasevalues(i).talentpoints();
+		}
+	}
+
+	uint32 GamePlayerS::GetActiveClassLevel() const
+	{
+		const uint32 activeId = Get<uint32>(object_fields::Class);
+		for (const auto& classData : m_knownClasses)
+		{
+			if (classData.classId == activeId)
+			{
+				return classData.classLevel == 0 ? 1 : classData.classLevel;
+			}
+		}
+
+		return 1;
+	}
+
+	CharacterClassData& GamePlayerS::GetOrCreateKnownClass(const uint32 classId)
+	{
+		for (auto& classData : m_knownClasses)
+		{
+			if (classData.classId == classId)
+			{
+				return classData;
+			}
+		}
+
+		CharacterClassData classData;
+		classData.classId = classId;
+		classData.classLevel = 1;
+		m_knownClasses.push_back(classData);
+		return m_knownClasses.back();
+	}
+
+	void GamePlayerS::SyncActiveClassData()
+	{
+		const uint32 activeId = Get<uint32>(object_fields::Class);
+		if (activeId == 0)
+		{
+			return;
+		}
+
+		CharacterClassData& data = GetOrCreateKnownClass(activeId);
+		for (uint32 i = 0; i < 5; ++i)
+		{
+			data.attributePointsSpent[i] = m_attributePointEnhancements[i];
+		}
+
+		data.talentRanks.clear();
+		for (const auto& [talentId, rank] : m_talents)
+		{
+			data.talentRanks[talentId] = static_cast<uint8>(rank);
+		}
+	}
+
+	std::vector<CharacterClassData> GamePlayerS::GetKnownClasses() const
+	{
+		std::vector<CharacterClassData> snapshot = m_knownClasses;
+
+		const uint32 activeId = Get<uint32>(object_fields::Class);
+		CharacterClassData* active = nullptr;
+		for (auto& classData : snapshot)
+		{
+			if (classData.classId == activeId)
+			{
+				active = &classData;
+				break;
+			}
+		}
+
+		if (!active && activeId != 0)
+		{
+			CharacterClassData classData;
+			classData.classId = activeId;
+			classData.classLevel = GetActiveClassLevel();
+			snapshot.push_back(classData);
+			active = &snapshot.back();
+		}
+
+		if (active)
+		{
+			for (uint32 i = 0; i < 5; ++i)
+			{
+				active->attributePointsSpent[i] = m_attributePointEnhancements[i];
+			}
+
+			active->talentRanks.clear();
+			for (const auto& [talentId, rank] : m_talents)
+			{
+				active->talentRanks[talentId] = static_cast<uint8>(rank);
+			}
+		}
+
+		return snapshot;
+	}
+
+	void GamePlayerS::GrantClassSpells()
+	{
+		if (!m_classEntry)
+		{
+			return;
+		}
+
+		const uint32 level = Get<uint32>(object_fields::Level);
+		for (const auto& classSpell : m_classEntry->spells())
+		{
+			if (classSpell.level() <= level)
+			{
+				AddSpell(classSpell.spell());
+			}
+		}
+	}
+
+	void GamePlayerS::ApplyAttributeSpending(const std::array<uint32, 5>& enhancements)
+	{
+		// Start from a clean slate and re-derive the available points before replaying allocations so
+		// each AddAttributePoint validates against the correct, up-to-date budget.
+		m_attributePointEnhancements.fill(0);
+		m_attributePointsSpent.fill(0);
+		RefreshStats();
+
+		for (uint32 attribute = 0; attribute < 5; ++attribute)
+		{
+			for (uint32 j = 0; j < enhancements[attribute]; ++j)
+			{
+				if (!AddAttributePoint(attribute))
+				{
+					WLOG("Could not fully apply attribute spending while switching class (attribute " << attribute << ")");
+					break;
+				}
+			}
+		}
+	}
+
+	bool GamePlayerS::IsClassAllowedForRace(const proto::ClassEntry& classEntry) const
+	{
+		// Without race data we cannot evaluate the restriction, so do not block.
+		if (!m_raceEntry)
+		{
+			return true;
+		}
+
+		// Mirror the data used at character creation: the race must provide class-specific initial
+		// data (spells, items or action buttons) for this class to be a legal race/class combination.
+		const uint32 classId = classEntry.id();
+		return m_raceEntry->initialspells().count(classId) > 0
+			|| m_raceEntry->initialitems().count(classId) > 0
+			|| m_raceEntry->initialactionbuttons().count(classId) > 0;
+	}
+
+	bool GamePlayerS::ChangeClass(const uint32 newClassId)
+	{
+		if (newClassId == 0)
+		{
+			return false;
+		}
+
+		const proto::ClassEntry* newClass = m_project.classes.getById(newClassId);
+		if (!newClass)
+		{
+			WLOG("ChangeClass failed: unknown class id " << newClassId);
+			return false;
+		}
+
+		if (newClass->levelbasevalues_size() == 0)
+		{
+			WLOG("ChangeClass failed: class " << newClassId << " has no level base values configured");
+			return false;
+		}
+
+		// Already the active class?
+		if (m_classEntry && m_classEntry->id() == newClassId)
+		{
+			return false;
+		}
+
+		// Cannot switch class while in combat.
+		if (IsInCombat())
+		{
+			WLOG("ChangeClass refused: player is in combat");
+			return false;
+		}
+
+		// Determine whether the class is already known. Known classes can always be switched to; only
+		// acquiring a brand new class is gated by race legality.
+		bool isKnown = false;
+		for (const auto& classData : m_knownClasses)
+		{
+			if (classData.classId == newClassId)
+			{
+				isKnown = true;
+				break;
+			}
+		}
+
+		if (!isKnown && !IsClassAllowedForRace(*newClass))
+		{
+			WLOG("ChangeClass refused: race may not become class " << newClassId);
+			return false;
+		}
+
+		// 1. Persist the current active class's live state (talents + attribute spending) before we
+		// tear it down, so returning to it later restores everything.
+		SyncActiveClassData();
+
+		// 2. Remove the old class's class-bound spells and talents. Persistent spells (racials,
+		// class-change spells, professions) are not part of ClassEntry.spells and stay learned.
+		if (m_classEntry)
+		{
+			for (const auto& classSpell : m_classEntry->spells())
+			{
+				RemoveSpell(classSpell.spell());
+			}
+		}
+		ResetTalents();
+
+		// 3. Ensure the target class exists in the known set (level 1 if newly acquired).
+		CharacterClassData& newData = GetOrCreateKnownClass(newClassId);
+
+		// 4. Switch the active class identity.
+		m_classEntry = newClass;
+		Set<int32>(object_fields::Class, static_cast<int32>(newClass->id()));
+		Set<int32>(object_fields::PowerType, newClass->powertype());
+		Set<int32>(object_fields::MaxLevel, newClass->levelbasevalues_size());
+
+		// Guard against a class that defines fewer levels than the current character level.
+		const uint32 charLevel = Get<uint32>(object_fields::Level);
+		const uint32 maxLevel = static_cast<uint32>(newClass->levelbasevalues_size());
+		if (maxLevel > 0 && charLevel > maxLevel)
+		{
+			WLOG("ChangeClass: clamping character level " << charLevel << " to new class max level " << maxLevel);
+			Set<int32>(object_fields::Level, static_cast<int32>(maxLevel));
+		}
+
+		// 5. Apply the target class's attribute-spending profile.
+		ApplyAttributeSpending(newData.attributePointsSpent);
+
+		// 6. Grant the class's spells and restore its talents.
+		GrantClassSpells();
+		InitializeTalents(newData.talentRanks);
+
+		// 7. Refresh stats and top up resources after the power-type / stat change.
+		RefreshStats();
+		Set<uint32>(object_fields::Health, GetMaxHealth());
+		Set<uint32>(object_fields::Mana, Get<uint32>(object_fields::MaxMana));
+
+		DLOG("Player " << log_hex_digit(GetGuid()) << " switched to class " << newClassId);
+		return true;
+	}
+
 	const String &GamePlayerS::GetName() const
 	{
 		return m_name;
@@ -2343,6 +2616,14 @@ namespace mmo
 			w << io::write<uint8>(rank);
 		}
 
+		// Write all known classes (active entry reflects the live talents / attribute spending).
+		const std::vector<CharacterClassData> knownClasses = object.GetKnownClasses();
+		w << io::write<uint8>(static_cast<uint8>(knownClasses.size()));
+		for (const auto& classData : knownClasses)
+		{
+			w << classData;
+		}
+
 		// Write persistable auras (non-passive, non-equipment) as remaining-duration snapshots.
 		const std::vector<PersistentAuraData> persistentAuras = object.GetPersistentAuras();
 		w << io::write<uint16>(static_cast<uint16>(persistentAuras.size()));
@@ -2396,6 +2677,18 @@ namespace mmo
 			r >> io::read<uint8>(rank);
 
 			object.m_talents[talentId] = rank;
+		}
+
+		// Read all known classes.
+		uint8 classCount = 0;
+		r >> io::read<uint8>(classCount);
+		object.m_knownClasses.clear();
+		object.m_knownClasses.reserve(classCount);
+		for (uint8 i = 0; i < classCount; ++i)
+		{
+			CharacterClassData classData;
+			r >> classData;
+			object.m_knownClasses.push_back(std::move(classData));
 		}
 
 		// Read persisted auras into a transient snapshot (the realm server forwards/persists these

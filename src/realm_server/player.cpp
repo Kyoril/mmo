@@ -2580,12 +2580,10 @@ namespace mmo
 		m_characterData->maxEnergy = character.Get<uint32>(object_fields::MaxEnergy);
 		m_characterData->money = character.Get<uint32>(object_fields::Money);
 
-		// Keep the active class's attribute distribution and talents in sync for world transfers.
-		CharacterClassData& activeClass = m_characterData->GetOrCreateActiveClass();
-		for (uint32 i = 0; i < activeClass.attributePointsSpent.size(); ++i)
-		{
-			activeClass.attributePointsSpent[i] = character.GetAttributePointsByAttribute(i);
-		}
+		// Sync the active class id and the full per-class data set (levels, talents, attribute
+		// spending) from the character object so class switches made on the world node are persisted.
+		m_characterData->classId = character.Get<uint32>(object_fields::Class);
+		m_characterData->knownClasses = character.GetKnownClasses();
 
 		m_characterData->spellIds.clear();
 		for (const auto &spell : character.GetSpells())
@@ -2607,12 +2605,6 @@ namespace mmo
 		// Cache current inventory snapshot for the next world node (items are also persisted separately)
 		m_characterData->items = character.GetInventory().GetItemData();
 
-		// Sync learned talents so the next world node restores the correct ranks
-		activeClass.talentRanks.clear();
-		for (const auto& [talentId, rank] : character.GetTalents())
-		{
-			activeClass.talentRanks[talentId] = static_cast<uint8>(rank);
-		}
 		m_characterData->isGameMaster = (m_gmLevel > 0);
 
 		// Carry persisted auras and cooldowns so a subsequent world-node transfer restores them.

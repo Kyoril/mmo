@@ -1108,6 +1108,36 @@ namespace mmo
 			}
 		}
 
+		void HandleChangeClass(SpellEffectContext& ctx)
+		{
+			if (ctx.effectTargets.empty())
+			{
+				WLOG("ChangeClass: unable to resolve effect target");
+				return;
+			}
+
+			const uint32 targetClassId = static_cast<uint32>(ctx.effect.miscvaluea());
+
+			for (auto* targetObject : ctx.effectTargets)
+			{
+				if (!targetObject->IsUnit())
+				{
+					continue;
+				}
+
+				ctx.markAffectedTarget(*targetObject);
+
+				if (targetObject->IsPlayer())
+				{
+					targetObject->AsPlayer().ChangeClass(targetClassId);
+				}
+				else
+				{
+					WLOG("ChangeClass target is not a player character!");
+				}
+			}
+		}
+
 		// Applies a single weapon-damage roll against one unit target. Caster-side
 		// values are recomputed per target so each victim gets an independent roll.
 		static void ApplyWeaponDamageSingleTarget(SpellEffectContext& ctx, SpellSchool school, bool basePointsArePct, GameUnitS& unitTarget)
