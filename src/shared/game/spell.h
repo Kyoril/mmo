@@ -722,6 +722,9 @@ namespace mmo
 			CriticalBlock           = 54,
 			/// Like Revive, but restores a percentage of the target's maximum health (base points = percent).
 			RevivePct               = 55,
+			/// Switches the caster's active class to the class identified by miscvaluea.
+			/// If the class is not yet known, it is added at class level 1. Subject to race legality.
+			ChangeClass             = 56,
 
 			// Add new spell effect types HERE (append only — never insert above an existing entry).
 

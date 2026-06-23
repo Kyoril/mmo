@@ -123,6 +123,47 @@ namespace mmo
 
 				ImGui::EndCombo();
 			}
+
+			ImGui::Spacing();
+
+			// Class-change spell: cast to switch the active class to this one (granted to a character
+			// on creation if this is their initial class). 0 means no class-change spell yet.
+			{
+				static const char* s_classChangeNone = "<None>";
+
+				const uint32 currentSpellId = currentEntry.class_change_spell();
+				const auto* spellEntry = currentSpellId != 0 ? m_project.spells.getById(currentSpellId) : nullptr;
+				if (ImGui::BeginCombo("Class Change Spell", spellEntry != nullptr ? spellEntry->name().c_str() : s_classChangeNone, ImGuiComboFlags_None))
+				{
+					if (ImGui::Selectable(s_classChangeNone, currentSpellId == 0))
+					{
+						currentEntry.clear_class_change_spell();
+					}
+					if (currentSpellId == 0)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+
+					for (int i = 0; i < m_project.spells.count(); i++)
+					{
+						ImGui::PushID(i);
+						const auto& spell = m_project.spells.getTemplates().entry(i);
+						const bool item_selected = spell.id() == currentSpellId;
+						if (ImGui::Selectable(spell.name().c_str(), item_selected))
+						{
+							currentEntry.set_class_change_spell(spell.id());
+						}
+						if (item_selected)
+						{
+							ImGui::SetItemDefaultFocus();
+						}
+						ImGui::PopID();
+					}
+
+					ImGui::EndCombo();
+				}
+				ImGui::TextDisabled("Cast to switch to this class. Granted automatically as the initial class on character creation.");
+			}
 		}
 
 		if (const auto section = ScopedEditorSection("Base Values", ImGuiTreeNodeFlags_None))

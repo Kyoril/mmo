@@ -104,7 +104,8 @@ namespace mmo
 		{ "Proficiency", "Utility", "Grants weapon proficiency" },
 		{ "Trigger Spell", "Utility", "Casts another spell, optionally on a proc chance taken from this spell's Proc Chance" },
 		{ "Critical Block", "Combat", "Allows the unit to critically block (block for an increased amount)" },
-		{ "Revive %", "Healing", "Revives a dead player target with a percentage of their max health (base points)" }
+		{ "Revive %", "Healing", "Revives a dead player target with a percentage of their max health (base points)" },
+		{ "Change Class", "Utility", "Switches the caster's active class to the class given by Misc Value A (adds it at class level 1 if not yet known)" }
 	};
 
 	static String s_spellEffectNames[] = {
@@ -163,7 +164,8 @@ namespace mmo
 		"Proficiency",
 		"Trigger Spell",
 		"Critical Block",
-		"Revive %"
+		"Revive %",
+		"Change Class"
 	};
 
 	static_assert(std::size(s_spellEffectNames) == spell_effects::Count_, "Each spell effect must have a string representation!");

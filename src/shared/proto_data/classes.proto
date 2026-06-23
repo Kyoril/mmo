@@ -92,6 +92,11 @@ message ClassEntry {
 	// Primary attribute sources contributing to the unit's critical block chance (in percent).
 	// Each source adds (statValue * factor) to the critical block chance.
 	repeated AttackPowerStatSource critblockchancestatsources = 25;
+
+	// Spell that grants/activates this class via the ChangeClass spell effect. Granted to a
+	// character on creation if this is their initial class. 0 means the class has no associated
+	// class-change spell yet.
+	optional uint32 class_change_spell = 26;
 }
 
 message Classes {
