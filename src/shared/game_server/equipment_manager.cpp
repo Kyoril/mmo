@@ -76,6 +76,11 @@ namespace mmo
 			{
 				m_context.HandleItemSetEffect(oldItem->GetEntry().itemset(), false);
 			}
+
+			// The replaced item is leaving its equipment slot; drop any disabled marker so it is not
+			// rendered as unusable while sitting in a bag and so a later re-equip starts from a clean
+			// state (the revalidation pass re-flags it if the active class still cannot use it).
+			oldItem->RemoveFlag<uint32>(object_fields::ItemFlags, item_flags::Disabled);
 		}
 
 		// Apply new item effects
@@ -117,6 +122,11 @@ namespace mmo
 		{
 			m_context.HandleItemSetEffect(item->GetEntry().itemset(), false);
 		}
+
+		// The item is leaving its equipment slot; drop any disabled marker so it is not rendered as
+		// unusable in a bag and a later re-equip starts clean (the revalidation pass re-flags it if the
+		// active class still cannot use it).
+		item->RemoveFlag<uint32>(object_fields::ItemFlags, item_flags::Disabled);
 
 		// Clear visual (entry 0, creator 0)
 		m_context.UpdateEquipmentVisual(equipSlot, 0, 0);

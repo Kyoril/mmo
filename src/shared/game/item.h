@@ -331,6 +331,12 @@ namespace mmo
 
 			/// Item can only be equipped once (weapons / rings)
 			UniqueEquipped = 0x00001000,
+
+			/// Runtime-only flag: the item is equipped but currently unusable by the active class
+			/// (lost weapon/armor proficiency or dual-wield on a class switch). It contributes no
+			/// stats and shows no visual, and the client renders it as disabled. This is never a
+			/// static entry flag and is stripped on load so it is recomputed from the live class.
+			Disabled = 0x40000000,
 		};
 	}
 

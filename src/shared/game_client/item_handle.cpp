@@ -334,6 +334,15 @@ namespace mmo
 		return (Get()->Get<uint32>(object_fields::ItemFlags) & item_flags::Bound) != 0;
 	}
 
+	bool ItemHandle::IsUsable() const
+	{
+		if (!CheckNonNull()) return true;
+		// The server sets item_flags::Disabled on an equipped item the active class can no longer use
+		// (lost weapon/armor proficiency or dual-wield after a class switch). Such items are inert and
+		// should be rendered as unusable by the UI.
+		return (Get()->Get<uint32>(object_fields::ItemFlags) & item_flags::Disabled) == 0;
+	}
+
 	bool ItemHandle::CheckNonNull() const
 	{
 		if (Get())

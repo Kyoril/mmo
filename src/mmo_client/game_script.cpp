@@ -1173,6 +1173,7 @@ namespace mmo
 							   .def("GetStatValue", &ItemHandle::GetStatValue)
 							   .def("GetBonding", &ItemHandle::GetBonding)
 							   .def("IsBound", &ItemHandle::IsBound)
+							   .def("IsUsable", &ItemHandle::IsUsable)
 							   .def("GetRequiredLevel", &ItemHandle::GetRequiredLevel)),
 
 						   luabind::scope(

@@ -136,6 +136,23 @@ namespace mmo
 			const GameItemS* itemA,
 			const GameItemS* itemB) const;
 
+		/**
+		 * @brief Checks whether an already-equipped item is currently usable by the player.
+		 *
+		 * Unlike the equip-time validators this evaluates only the requirements that can change while
+		 * the item stays equipped - required level, weapon/armor proficiency, and (for an off-hand
+		 * non-shield/holdable weapon) dual-wield capability. It deliberately ignores slot-shape and
+		 * two-handed placement rules, which never change for an item that is already in its slot. Used
+		 * by the equipment revalidation pass after a class switch to decide whether to disable gear.
+		 *
+		 * @param entry The equipped item's proto data.
+		 * @param slot The equipment slot the item occupies.
+		 * @return true if the item should remain active, false if it must be disabled.
+		 */
+		[[nodiscard]] bool IsEquippedItemUsable(
+			const proto::ItemEntry& entry,
+			InventorySlot slot) const;
+
 	private:
 		const IPlayerValidatorContext& m_player;
 		const proto::Project& m_project;

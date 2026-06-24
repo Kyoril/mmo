@@ -1,0 +1,107 @@
+<?xml version="1.0" ?>
+<!--
+  Idiomatic minimal layout. Copy the shape, not the values.
+  Header matches the existing layouts; the schemaLocation path is cosmetic.
+  Demonstrates: top-level frame parented to GameParent, properties-before-area,
+  anchors, a BorderComponent background + TextComponent caption, a CheckboxRenderer
+  button with full Normal/Hovered/Pushed + *Checked state families, and inline scripts.
+-->
+<UiLayout xmlns="http://www.w3schools.com/Ui" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.w3schools.com/Ui.xsd file:///F:/mmo/data/client/Interface/Ui.xsd">
+    <Script file="ReferenceSkeleton.lua" />
+
+    <!-- Top-level panel -->
+    <Frame name="ReferencePanel" type="Frame" parent="GameParent">
+        <!-- Properties FIRST, before Area / Visual / Scripts -->
+        <Property name="Visible" value="False" />
+
+        <Area>
+            <Anchor point="H_CENTER" />
+            <Anchor point="V_CENTER" />
+            <Size><AbsDimension x="320" y="200" /></Size>
+        </Area>
+
+        <Visual>
+            <ImagerySection name="Background">
+                <BorderComponent texture="Interface/fg4_borders_01_33.htex" borderSize="5" />
+            </ImagerySection>
+            <ImagerySection name="Caption">
+                <!-- color data-bound to a frame property: SetProperty("CaptionColor","FFFFCC00") -->
+                <TextComponent color="$CaptionColor" horzAlign="CENTER" vertAlign="TOP" />
+            </ImagerySection>
+
+            <!-- DefaultRenderer draws Enabled / Disabled -->
+            <StateImagery name="Enabled">
+                <Layer>
+                    <Section section="Background" />
+                    <Section section="Caption" />
+                </Layer>
+            </StateImagery>
+            <StateImagery name="Disabled">
+                <Layer>
+                    <Section section="Background" />
+                </Layer>
+            </StateImagery>
+        </Visual>
+
+        <Scripts>
+            <OnLoad>return function(this) ReferencePanel_OnLoad(this) end</OnLoad>
+        </Scripts>
+
+        <!-- A selectable tab/toggle: CheckboxRenderer + Checkable, full state families -->
+        <Frame name="ReferenceTab" type="Button" renderer="CheckboxRenderer">
+            <Property name="Checkable" value="true" />
+            <Property name="Text" value="REFERENCE_TAB_LABEL" />
+
+            <Area>
+                <Anchor point="TOP" offset="8" />
+                <Anchor point="H_CENTER" />
+                <Size><AbsDimension x="120" y="28" /></Size>
+            </Area>
+
+            <Visual>
+                <ImagerySection name="TabCaption">
+                    <TextComponent color="FFFFFFFF" horzAlign="CENTER" vertAlign="CENTER" />
+                </ImagerySection>
+                <ImagerySection name="TabNormal">
+                    <ImageComponent texture="Interface/GameUI/ChatButton_Up.htex" />
+                </ImagerySection>
+                <ImagerySection name="TabHovered">
+                    <ImageComponent texture="Interface/GameUI/ChatButton_Hovered.htex" />
+                </ImagerySection>
+                <ImagerySection name="TabPushed">
+                    <ImageComponent texture="Interface/GameUI/ChatButton_Down.htex" />
+                </ImagerySection>
+
+                <StateImagery name="Normal">
+                    <Layer><Section section="TabNormal" /><Section section="TabCaption" /></Layer>
+                </StateImagery>
+                <StateImagery name="Hovered">
+                    <Layer><Section section="TabHovered" /><Section section="TabCaption" /></Layer>
+                </StateImagery>
+                <StateImagery name="Pushed">
+                    <Layer><Section section="TabPushed" /><Section section="TabCaption" /></Layer>
+                </StateImagery>
+                <StateImagery name="Disabled">
+                    <Layer><Section section="TabNormal" /></Layer>
+                </StateImagery>
+                <!-- Checked family: required for the selected look (ButtonRenderer cannot do this) -->
+                <StateImagery name="NormalChecked">
+                    <Layer><Section section="TabPushed" /><Section section="TabCaption" /></Layer>
+                </StateImagery>
+                <StateImagery name="HoveredChecked">
+                    <Layer><Section section="TabPushed" /><Section section="TabCaption" /></Layer>
+                </StateImagery>
+                <StateImagery name="PushedChecked">
+                    <Layer><Section section="TabPushed" /><Section section="TabCaption" /></Layer>
+                </StateImagery>
+                <StateImagery name="DisabledChecked">
+                    <Layer><Section section="TabPushed" /></Layer>
+                </StateImagery>
+            </Visual>
+
+            <Scripts>
+                <OnClick>return function(this) ReferenceTab_OnClick(this) end</OnClick>
+            </Scripts>
+        </Frame>
+    </Frame>
+</UiLayout>

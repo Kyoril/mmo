@@ -177,6 +177,39 @@ namespace mmo
 		return InventoryResult<void>::Success();
 	}
 
+	bool ItemValidator::IsEquippedItemUsable(
+		const proto::ItemEntry& entry,
+		InventorySlot slot) const
+	{
+		// Required level can be exceeded if the character level was clamped down by a class switch.
+		if (entry.requiredlevel() > 0 && entry.requiredlevel() > m_player.GetLevel())
+		{
+			return false;
+		}
+
+		// Weapon/armor proficiency: the core class-balance gate. A class switch can revoke the
+		// proficiency that allowed this item to be equipped.
+		if (!HasRequiredProficiency(entry))
+		{
+			return false;
+		}
+
+		// Off-hand weapons require dual-wield, which a class switch can also revoke. Shields and
+		// holdables are exempt (they never needed dual-wield to be equipped).
+		if (slot.IsEquipment() && slot.GetSlot() == player_equipment_slots::Offhand)
+		{
+			const auto invType = entry.inventorytype();
+			if (invType != inventory_type::Shield &&
+				invType != inventory_type::Holdable &&
+				!m_player.CanDualWield())
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	bool ItemValidator::HasRequiredProficiency(const proto::ItemEntry& entry) const
 	{
 		uint32 requiredProficiencyId = 0;

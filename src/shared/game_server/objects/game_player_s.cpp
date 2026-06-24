@@ -2441,6 +2441,22 @@ namespace mmo
 		{
 			return spell.attributes_size() > 1 && (spell.attributes(1) & spell_attributes_b::Talent) != 0;
 		}
+
+		/// A proficiency spell grants the ability to use a weapon/armor subclass via a Proficiency
+		/// effect. These spells typically carry no class mask (so the generic spellbook logic would
+		/// treat them as persistent), yet they are class-bound: a proficiency must only be active while
+		/// a class that actually grants it is the active class. They are identified purely by effect.
+		bool IsProficiencySpell(const proto::SpellEntry& spell)
+		{
+			for (const auto& effect : spell.effects())
+			{
+				if (effect.type() == spell_effects::Proficiency)
+				{
+					return true;
+				}
+			}
+			return false;
+		}
 	}
 
 	void GamePlayerS::OnSpellLearned(const proto::SpellEntry& spell)
@@ -2488,6 +2504,24 @@ namespace mmo
 		spellLearned(*this, spell);
 	}
 
+	bool GamePlayerS::IsSpellGrantedByActiveClass(const proto::SpellEntry& spell) const
+	{
+		if (!m_classEntry)
+		{
+			return false;
+		}
+
+		for (const auto& classSpell : m_classEntry->spells())
+		{
+			if (classSpell.spell() == spell.id())
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	bool GamePlayerS::IsSpellActiveForCurrentClass(const proto::SpellEntry& spell) const
 	{
 		if (m_raceEntry && spell.racemask() != 0 && !(spell.racemask() & (1 << (m_raceEntry->id() - 1))))
@@ -2496,6 +2530,15 @@ namespace mmo
 		}
 
 		if (m_classEntry && spell.classmask() != 0 && !(spell.classmask() & (1 << (m_classEntry->id() - 1))))
+		{
+			return false;
+		}
+
+		// Proficiency spells carry no class mask but are class-bound: they are only active while a class
+		// that grants them (lists them in its ClassEntry.spells) is the active class. Without this they
+		// would be treated as persistent and keep granting their proficiency after switching to a class
+		// that should not have it (e.g. a Cleric retaining a Warrior's plate/shield proficiency).
+		if (IsProficiencySpell(spell) && !IsSpellGrantedByActiveClass(spell))
 		{
 			return false;
 		}
@@ -2535,7 +2578,10 @@ namespace mmo
 
 	void GamePlayerS::ActivateKnownSpellsForCurrentClass()
 	{
-		// Deactivate class-bound spells the current class can't use (keeps persistent spells).
+		// Deactivate class-bound spells the current class can't use (keeps persistent spells). Proficiency
+		// spells are class-bound despite having no class mask, so they are considered here too - otherwise
+		// a previous class's proficiency spell would linger in the spellbook and keep granting its
+		// proficiency.
 		std::vector<uint32> toRemove;
 		for (const auto* spell : m_spells)
 		{
@@ -2544,7 +2590,8 @@ namespace mmo
 				continue;
 			}
 
-			if (spell->classmask() != 0 && !IsSpellActiveForCurrentClass(*spell))
+			const bool classBound = spell->classmask() != 0 || IsProficiencySpell(*spell);
+			if (classBound && !IsSpellActiveForCurrentClass(*spell))
 			{
 				toRemove.push_back(spell->id());
 			}
@@ -2567,6 +2614,49 @@ namespace mmo
 			{
 				AddSpell(spellId);
 			}
+		}
+	}
+
+	void GamePlayerS::RefreshProficiencies()
+	{
+		// Build the proficiency set the currently-active passive spells grant. Proficiency spells are
+		// ordinary passive spells (in a class's spell list or a race's initial spells) that carry a
+		// Proficiency effect; deactivating a class's spells on a class switch must therefore drop the
+		// proficiencies they granted, which the per-spell removal path does not do on its own.
+		std::set<uint32> desired;
+		for (const auto* spell : m_spells)
+		{
+			if (!spell || !(spell->attributes(0) & spell_attributes::Passive))
+			{
+				continue;
+			}
+
+			for (const auto& effect : spell->effects())
+			{
+				if (effect.type() == spell_effects::Proficiency && effect.miscvaluea() > 0)
+				{
+					desired.insert(static_cast<uint32>(effect.miscvaluea()));
+				}
+			}
+		}
+
+		// Apply only the difference so we emit the minimum number of client notifications.
+		std::vector<uint32> toRemove;
+		for (const uint32 proficiencyId : GetProficiencies())
+		{
+			if (!desired.contains(proficiencyId))
+			{
+				toRemove.push_back(proficiencyId);
+			}
+		}
+		for (const uint32 proficiencyId : toRemove)
+		{
+			RemoveProficiency(proficiencyId);
+		}
+
+		for (const uint32 proficiencyId : desired)
+		{
+			AddProficiency(proficiencyId);
 		}
 	}
 
@@ -2706,13 +2796,28 @@ namespace mmo
 		// 5. Apply the target class's attribute-spending profile.
 		ApplyAttributeSpending(newData.attributePointsSpent);
 
-		// 6. Rebuild the spellbook for the new class: deactivate the previous class's spells, re-activate
+		// 6. Strip every equipped item's stat contribution while the OLD class's proficiencies are still
+		// in effect (no new proficiency has been granted yet). ApplyItemStats only removes what it would
+		// have applied, so this cleanly zeroes the item contribution without touching items the old class
+		// could not use anyway. It must run before the spellbook rebuild grants the new class's
+		// proficiency passives.
+		m_inventory.ApplyAllEquippedItemStats(false);
+
+		// 7. Rebuild the spellbook for the new class: deactivate the previous class's spells, re-activate
 		// any previously-learned spells of the new class, grant its default class spells, restore talents.
 		ActivateKnownSpellsForCurrentClass();
 		GrantClassSpells();
 		InitializeTalents(newData.talentRanks);
 
-		// 7. Refresh stats and top up resources after the power-type / stat change.
+		// 8. Recompute proficiencies from the now-active spell set (drops the old class's proficiencies,
+		// adds the new class's), then re-apply equipped item stats: the proficiency guard in
+		// ApplyItemStats lets only items the new class can use contribute again. Finally flag/hide any
+		// equipped item the new class can no longer use so the client renders it as disabled.
+		RefreshProficiencies();
+		m_inventory.ApplyAllEquippedItemStats(true);
+		m_inventory.RevalidateEquippedItems();
+
+		// 9. Refresh stats and top up resources after the power-type / stat change.
 		RefreshStats();
 		Set<uint32>(object_fields::Health, GetMaxHealth());
 		Set<uint32>(object_fields::Mana, Get<uint32>(object_fields::MaxMana));

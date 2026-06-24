@@ -70,6 +70,18 @@ Add or remove spell ranks on an existing talent entry without rebuilding the who
 python .agents/skills/mmo-spell-designer/scripts/edit_talent_ranks.py --project-root F:\mmo --talent-id 900 --add-rank-spell-id 170
 python .agents/skills/mmo-spell-designer/scripts/edit_talent_ranks.py --project-root F:\mmo --talent-id 900 --remove-rank-spell-id 169
 ```
+
+Create and import a new spell icon from generated PNG art:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .agents/skills/mmo-item-designer/scripts/normalize_item_icon.ps1 `
+  -InputPath C:\Users\RobinKlimonow\.codex\generated_images\<session>\<image>.png `
+  -OutputPath F:\mmo\generated\spells\my_spell_icon.png
+
+python .agents/skills/mmo-spell-designer/scripts/import_spell_icon.py `
+  F:\mmo\generated\spells\my_spell_icon.png `
+  F:\mmo\data\client\Interface\Icons\Spells\My_Spell_Icon.htex
+```
 </quick_start>
 
 <context>
@@ -88,12 +100,14 @@ python .agents/skills/mmo-spell-designer/scripts/edit_talent_ranks.py --project-
 6. If the spell is class-granted, add or update the class spell grant with `scripts/grant_class_spell.py`.
 7. If the spell should be trainer-taught, inspect `trainers.data` and update the target trainer with `scripts/upsert_trainer_spell.py` or `scripts/remove_trainer_spell.py`.
 8. If the spell is talent-granted, inspect `talents.data` / `talent_tabs.data` and add or update the talent with `scripts/upsert_talent_entry.py` or adjust ranks with `scripts/edit_talent_ranks.py`.
-9. After applying, inspect the resulting spell again and verify the critical references, effect wiring, trainer teachability, and talent placement if applicable.
+9. When a spell needs a brand-new icon, generate square source art with `image_gen`, normalize it to `128x128`, and import it into `data/client/Interface/Icons/Spells/` with `scripts/import_spell_icon.py`. Prefer fully opaque icons unless transparency is intentionally part of the design.
+10. After applying, inspect the resulting spell again and verify the critical references, effect wiring, icon path, trainer teachability, and talent placement if applicable.
 </process>
 
 <validation>
 - Never invent referenced IDs. Confirm them from live project data.
 - Validate every draft before applying it.
+- For new icon work, the final shipped spell icon must come from `image_gen` output normalized to `128x128`, not from copied project art or a placeholder.
 - For trainer work, verify trainer ID, class linkage, cost, level gates, and optional skill requirements from live data before writing.
 - For talent work, verify the talent tab, row, column, and every rank spell ID from live data before writing.
 - When a spell uses `ApplyAura` or `ApplyAreaAura`, verify the aura type, targets, duration, amplitude, proc fields, and removal conditions together.
@@ -134,6 +148,7 @@ This skill is being used correctly when:
 - The agent inspected live spell data before proposing IDs or masks.
 - Spell drafts use the real `SpellEntry` field names and valid references.
 - Validation passes before any apply step.
+- New spell icons are normalized to `128x128`, imported as `.htex`, and assigned via the spell's `icon` field using an asset-root-relative path.
 - Trainer and talent changes are anchored to the real `trainers.data`, `talents.data`, and `talent_tabs.data` entries instead of guessed IDs.
 - Passive, item-driven, aura, periodic, and proc semantics were checked against the runtime behavior in this repository.
 - The resulting spell can be iterated as data without touching C++ code unless the requested effect is genuinely unsupported by the current runtime handlers.

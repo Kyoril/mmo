@@ -829,6 +829,66 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 		return totalCost;
 	}
 
+	void Inventory::ApplyAllEquippedItemStats(bool apply)
+	{
+		for (uint8 subslot = player_equipment_slots::Start; subslot < player_equipment_slots::End; ++subslot)
+		{
+			const InventorySlot slot = InventorySlot::FromRelative(player_inventory_slots::Bag_0, subslot);
+			auto item = GetItemAtSlot(slot.GetAbsolute());
+			if (!item)
+			{
+				continue;
+			}
+
+			// ApplyItemStats itself gates on the owner's current proficiency (and item durability), so
+			// removing while the old proficiencies hold and re-applying after they have been pruned to
+			// the new class is enough to leave only the new class's usable items contributing stats.
+			m_owner.ApplyItemStats(*item, apply);
+		}
+	}
+
+	void Inventory::RevalidateEquippedItems()
+	{
+		ItemValidator& validator = GetValidator();
+
+		for (uint8 subslot = player_equipment_slots::Start; subslot < player_equipment_slots::End; ++subslot)
+		{
+			const InventorySlot slot = InventorySlot::FromRelative(player_inventory_slots::Bag_0, subslot);
+			auto item = GetItemAtSlot(slot.GetAbsolute());
+			if (!item)
+			{
+				continue;
+			}
+
+			const proto::ItemEntry& entry = item->GetEntry();
+			const bool usable = validator.IsEquippedItemUsable(entry, slot);
+			const bool currentlyDisabled = (item->Get<uint32>(object_fields::ItemFlags) & item_flags::Disabled) != 0;
+
+			// Stat contribution is handled separately (the proficiency guard in ApplyItemStats keeps
+			// disabled items from contributing); this pass only manages the visual, item-set effect and
+			// the replicated Disabled flag the client uses to render the item as unusable.
+			if (!usable && !currentlyDisabled)
+			{
+				// The active class can no longer use this item: hide its visual (so the 3D model and
+				// display id no longer show it), drop any set effect, and flag it as disabled. The item
+				// stays in its slot but is inert.
+				HandleItemSetEffects(item, false);
+				UpdateEquipmentVisual(subslot, 0, 0);
+				item->AddFlag<uint32>(object_fields::ItemFlags, item_flags::Disabled);
+				itemInstanceUpdated(item, slot.GetAbsolute());
+			}
+			else if (usable && currentlyDisabled)
+			{
+				// The active class can use this item again: restore its visual and set effect and clear
+				// the disabled flag.
+				HandleItemSetEffects(item, true);
+				UpdateEquipmentVisual(subslot, entry.id(), item->Get<uint64>(object_fields::Creator));
+				item->RemoveFlag<uint32>(object_fields::ItemFlags, item_flags::Disabled);
+				itemInstanceUpdated(item, slot.GetAbsolute());
+			}
+		}
+	}
+
 	void Inventory::AddRealmData(const ItemData &data)
 	{
 		m_realmData.push_back(data);
@@ -881,6 +941,10 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 				// Restore persisted flags (includes the Bound flag for BoP and previously-equipped BoE items).
 				// Re-derive BindWhenPickedUp in case the DB row predates the flags column.
 				uint32 restoredFlags = data.flags;
+				// The Disabled flag is runtime-only: equipped items are always loaded in their usable
+				// (stats-applied) state and re-evaluated against the live class on spawn, so never
+				// restore a stale Disabled bit from persistence.
+				restoredFlags &= ~static_cast<uint32>(item_flags::Disabled);
 				if (entry->bonding() == item_binding::BindWhenPickedUp)
 				{
 					restoredFlags |= item_flags::Bound;

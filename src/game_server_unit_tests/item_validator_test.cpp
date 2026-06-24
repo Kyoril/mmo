@@ -877,3 +877,82 @@ TEST_CASE("ItemValidator - Edge cases", "[item_validator]")
 		REQUIRE(result.IsSuccess());
 	}
 }
+
+TEST_CASE("ItemValidator - IsEquippedItemUsable", "[item_validator]")
+{
+	proto::Project project;
+	project.itemClasses.add(mock_item_class::Armor);
+	project.itemClasses.add(mock_item_class::Weapon);
+	project.proficiencies.add(mock_prof::OneHandSword);
+	project.proficiencies.add(mock_prof::Plate);
+
+	auto addSubclass = [&](uint32 itemClass, uint32 subclassId, uint32 profId)
+	{
+		auto* sc = project.itemSubclasses.add(itemClass * 100 + subclassId);
+		if (sc)
+		{
+			sc->set_itemclass(itemClass);
+			sc->set_id(subclassId);
+			if (profId > 0)
+			{
+				sc->set_requiredproficiency(profId);
+			}
+		}
+	};
+
+	addSubclass(mock_item_class::Weapon, mock_item_subclass_weapon::OneHandedSword, mock_prof::OneHandSword);
+	addSubclass(mock_item_class::Armor, mock_item_subclass_armor::Plate, mock_prof::Plate);
+
+	MockPlayerValidatorContext player;
+	player.SetLevel(10);
+	ItemValidator validator(player, project);
+
+	const InventorySlot chestSlot = InventorySlot::FromRelative(player_inventory_slots::Bag_0, player_equipment_slots::Chest);
+	const InventorySlot offhandSlot = InventorySlot::FromRelative(player_inventory_slots::Bag_0, player_equipment_slots::Offhand);
+
+	SECTION("Item is usable while its proficiency is held and unusable once revoked")
+	{
+		auto plateChest = ItemEntryBuilder()
+			.WithClass(mock_item_class::Armor)
+			.WithSubclass(mock_item_subclass_armor::Plate)
+			.WithInventoryType(inventory_type::Chest)
+			.Build();
+
+		// No plate proficiency yet: a class switch that revokes it disables the item.
+		REQUIRE_FALSE(validator.IsEquippedItemUsable(plateChest, chestSlot));
+
+		// Granting the proficiency makes it usable again.
+		player.AddProficiency(mock_prof::Plate);
+		REQUIRE(validator.IsEquippedItemUsable(plateChest, chestSlot));
+	}
+
+	SECTION("Level requirement is still enforced for equipped items")
+	{
+		player.AddProficiency(mock_prof::Plate);
+		auto highLevelChest = ItemEntryBuilder()
+			.WithClass(mock_item_class::Armor)
+			.WithSubclass(mock_item_subclass_armor::Plate)
+			.WithInventoryType(inventory_type::Chest)
+			.WithRequiredLevel(20)
+			.Build();
+
+		REQUIRE_FALSE(validator.IsEquippedItemUsable(highLevelChest, chestSlot));
+	}
+
+	SECTION("Off-hand weapon requires dual-wield capability")
+	{
+		player.AddProficiency(mock_prof::OneHandSword);
+		auto offhandSword = ItemEntryBuilder()
+			.WithClass(mock_item_class::Weapon)
+			.WithSubclass(mock_item_subclass_weapon::OneHandedSword)
+			.WithInventoryType(inventory_type::Weapon)
+			.Build();
+
+		// Same item is usable in the main hand but not the off-hand without dual-wield.
+		REQUIRE(validator.IsEquippedItemUsable(offhandSword, InventorySlot::FromRelative(player_inventory_slots::Bag_0, player_equipment_slots::Mainhand)));
+		REQUIRE_FALSE(validator.IsEquippedItemUsable(offhandSword, offhandSlot));
+
+		player.SetCanDualWield(true);
+		REQUIRE(validator.IsEquippedItemUsable(offhandSword, offhandSlot));
+	}
+}

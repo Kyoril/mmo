@@ -1147,6 +1147,13 @@ namespace mmo
 		{
 			NotifyObjectsSpawned(objects);
 		}
+
+		// Passive spells (and thus weapon/armor proficiencies) were cast above and the inventory now
+		// exists, so we can finally tell whether each equipped item is usable by the active class. An
+		// item equipped under a different class and kept across a logout may no longer be usable; flag
+		// and hide it so it renders as disabled. Its stat contribution was already filtered out by the
+		// proficiency guard in ApplyItemStats during construction.
+		m_character->GetInventory().RevalidateEquippedItems();
 		
 		// Once again update health and power values after constructing inventory
 		m_character->Set<uint32>(object_fields::Health, Clamp(m_characterData.hp, 0u, m_character->Get<uint32>(object_fields::MaxHealth)));

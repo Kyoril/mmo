@@ -68,6 +68,8 @@ SPELL_EFFECT_NAMES = {
     52: "Proficiency",
     53: "TriggerSpell",
     54: "CriticalBlock",
+    55: "RevivePct",
+    56: "ChangeClass",
 }
 
 AURA_TYPE_NAMES = {

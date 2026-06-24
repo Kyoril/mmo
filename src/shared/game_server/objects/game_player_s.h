@@ -411,9 +411,19 @@ namespace mmo
 		/// Returns true if the given spell is usable by the character's active race and class.
 		[[nodiscard]] bool IsSpellActiveForCurrentClass(const proto::SpellEntry& spell) const;
 
+		/// Returns true if the active class's ClassEntry.spells lists this spell. Used to determine the
+		/// owning class of proficiency spells, which are class-bound despite carrying no class mask.
+		[[nodiscard]] bool IsSpellGrantedByActiveClass(const proto::SpellEntry& spell) const;
+
 		/// Rebuilds the live spellbook for the active class: deactivates class-bound spells the current
 		/// class can't use and activates known spells it can. Persistent spells (no class mask) are kept.
 		void ActivateKnownSpellsForCurrentClass();
+
+		/// Recomputes the active proficiency set from the currently-active passive spells that carry a
+		/// Proficiency effect. The active-spell set is the single source of truth, so proficiencies
+		/// granted by a now-deactivated class's spells are dropped and the current class's are added.
+		/// Only the difference against the existing set is applied so client notifications are minimal.
+		void RefreshProficiencies();
 
 	protected:
 		void OnKilled(GameUnitS *killer) override;

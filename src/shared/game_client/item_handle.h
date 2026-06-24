@@ -83,6 +83,11 @@ namespace mmo
 		/// Returns true if this item instance is currently bound to a player.
 		[[nodiscard]] bool IsBound() const;
 
+		/// Returns true if the item is currently usable. Equipped items the active class can no longer
+		/// use (revoked weapon/armor proficiency or dual-wield) are flagged disabled by the server and
+		/// return false so the UI can render them as unusable.
+		[[nodiscard]] bool IsUsable() const;
+
 	private:
 		[[nodiscard]] bool CheckNonNull() const;
 

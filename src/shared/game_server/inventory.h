@@ -196,6 +196,20 @@ namespace mmo
 		/// @returns Repair cost that couldn't be consumed, so if this is greater than 0, there was an error.
 		uint32 RepairItem(uint16 absoluteSlot);
 
+		/// Applies or removes the stat contribution of every equipped item. ApplyItemStats gates on the
+		/// owner's current proficiency, so a class switch removes all item stats while the old class's
+		/// proficiencies still hold and re-applies them after they are pruned to the new class; only the
+		/// items the new class can use end up contributing. Does not touch visuals or the Disabled flag.
+		void ApplyAllEquippedItemStats(bool apply);
+
+		/// Re-evaluates every equipped item against the owner's current usability (proficiency, level,
+		/// dual-wield) and toggles its disabled state to match. Items that became unusable have their
+		/// visual and item-set effects removed and are flagged item_flags::Disabled; items that became
+		/// usable again have those restored. Stat contribution is handled by ApplyAllEquippedItemStats /
+		/// the proficiency guard in GamePlayerS::ApplyItemStats, not here. Idempotent - safe to call
+		/// after a class switch or on spawn once passive spells (and thus proficiencies) are active.
+		void RevalidateEquippedItems();
+
 	public:
 		/// Adds a new realm data entry to the inventory. Note that this method should only be called
 		/// on the realm, when the inventory is loaded from the database.

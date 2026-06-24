@@ -195,3 +195,27 @@ migrations: `20260623_1_multi_class.sql`, `20260623_2_per_class_action_bars.sql`
 - **Dropped `characters.attr_0..attr_4`** *(done)* — the realm no longer reads or writes these legacy
   character-wide columns (per-class spending lives in `character_classes`); they are dropped by
   `20260623_3_drop_legacy_attr_columns.sql`.
+- **Proficiency spells & disabled gear on class switch** *(done)* — weapon/armor proficiencies are
+  granted by passive spells carrying a `Proficiency` effect (`spell_effects::Proficiency`,
+  `miscvaluea` = proficiency id) that live in a class's `ClassEntry.spells`. They are identified by
+  that effect rather than tagged in proto data. The leak had two causes: (a) these spells carry **no
+  class mask**, so the spellbook logic treated them as *persistent* and never deactivated them on a
+  switch (they stayed castable, kept showing in the spellbook, and kept granting their proficiency);
+  and (b) `GameUnitS::RemoveSpell` does not drop proficiencies. The fix treats a proficiency spell as
+  **class-bound to whichever class lists it in `ClassEntry.spells`**: `IsSpellActiveForCurrentClass`
+  returns false for a proficiency spell the active class does not grant (`IsSpellGrantedByActiveClass`),
+  and `ActivateKnownSpellsForCurrentClass` deactivates such spells on a switch even though they have no
+  class mask. `GamePlayerS::RefreshProficiencies()` then recomputes the active proficiency set from the
+  remaining active passive spells after every switch (and the spawn path), so only the active class's
+  (plus persistent) proficiency spells contribute. `ChangeClass` strips all
+  equipped item stats while the old proficiencies still hold, prunes proficiencies to the new class,
+  then re-applies — the existing proficiency guard in `GamePlayerS::ApplyItemStats` lets only the new
+  class's usable items contribute. Equipped items the new class can no longer use (revoked proficiency,
+  or dual-wield for an off-hand weapon — see `ItemValidator::IsEquippedItemUsable`) are kept in their
+  slot but disabled by `Inventory::RevalidateEquippedItems()`: the runtime `item_flags::Disabled` flag
+  is set (replicated, stripped on load so it is recomputed), the visual/display id is cleared, and the
+  item set effect is removed. Switching back re-enables them automatically; the flag is also cleared
+  when an item leaves its equipment slot (`EquipmentManager`). The client exposes `ItemHandle:IsUsable()`
+  to Lua: the character window tints disabled equipped icons red, adds a tooltip line
+  (`ITEM_DISABLED_WRONG_CLASS`) and shows an aggregate `CharacterEquipmentWarning`
+  (`CHARACTER_EQUIPMENT_DISABLED_WARNING`) when any slot is disabled.
