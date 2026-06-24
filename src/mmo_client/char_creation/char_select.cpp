@@ -44,11 +44,6 @@ namespace mmo
 	{
 		m_selectedCharacter = index;
 
-		if (index < 0 || index >= GetNumCharacters())
-		{
-			return;
-		}
-
 		if (!m_modelFrame)
 		{
 			return;
@@ -56,6 +51,14 @@ namespace mmo
 
 		// Detach and destroy any item entities attached from the previous selection
 		ClearItemAttachments();
+
+		if (index < 0 || index >= GetNumCharacters())
+		{
+			// No valid character selected (e.g. all characters were deleted) - clear the
+			// previously rendered model so the character selection screen stays empty.
+			m_modelFrame->SetModelFile("");
+			return;
+		}
 
 		// Force entity recreation even when switching between same-race characters,
 		// so sub-entity visibility and material overrides are always reset to defaults
