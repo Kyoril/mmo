@@ -44,6 +44,11 @@ namespace mmo
 		void HandleRemoveRealmFeatureRequirement(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 		void HandleGetRealmFeatureRequirements(const net::http::IncomingRequest& request, web::WebResponse& response) const;
 
+		// Dashboard statistics endpoints.
+		void HandleGetStatsSummary(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void HandleGetStatsTimeSeries(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+		void HandleGetStatsRecentActivity(const net::http::IncomingRequest& request, web::WebResponse& response) const;
+
 	private:
 		IDatabase& m_database;
 		RealmManager& m_realmManager;

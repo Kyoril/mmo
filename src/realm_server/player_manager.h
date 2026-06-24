@@ -40,6 +40,9 @@ namespace mmo
 		/// Determines whether the player capacity limit has been reached.
 		bool HasPlayerCapacityBeenReached();
 
+		/// Gets the number of players currently connected to this realm.
+		size_t GetPlayerCount() const;
+
 		/// Adds a new player instance to the manager.
 		void AddPlayer(std::shared_ptr<Player> added);
 

@@ -57,6 +57,8 @@ namespace mmo
 		inline const std::string& GetRealmListAddress() const { return m_realmListAddress; }
 		/// Gets the realm list port.
 		inline uint16 GetRealmListPort() const { return m_realmListPort; }
+		/// Gets the number of players currently connected to this realm, as last reported via ping.
+		inline uint32 GetPlayerCount() const { return m_playerCount; }
 
 	public:
 		/// Notifies this realm that an account has been banned.
@@ -119,6 +121,7 @@ namespace mmo
 		bool m_authenticated;
 
 		GameTime m_lastPing = 0;
+		uint32 m_playerCount = 0;				// Players connected to this realm, reported via ping
 
 		/// Number of bytes used to store m_s.
 		static constexpr int ByteCountS = 32;

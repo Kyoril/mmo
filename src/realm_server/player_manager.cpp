@@ -47,6 +47,12 @@ namespace mmo
 		return m_players.size() >= m_playerCapacity;
 	}
 
+	size_t PlayerManager::GetPlayerCount() const
+	{
+		std::scoped_lock playerLock{ m_playerMutex };
+		return m_players.size();
+	}
+
 	void PlayerManager::AddPlayer(std::shared_ptr<Player> added)
 	{
 		std::scoped_lock playerLock{ m_playerMutex };

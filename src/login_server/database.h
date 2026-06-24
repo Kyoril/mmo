@@ -128,6 +128,48 @@ namespace mmo
 		bool requireLogin = false;
 	};
 
+	/// Time range selector for dashboard statistics queries.
+	enum class StatsRange : uint8
+	{
+		/// Last 24 hours, bucketed per hour.
+		Day,
+		/// Last 7 days, bucketed per day.
+		Week,
+		/// Last 30 days, bucketed per day.
+		Month
+	};
+
+	/// A single (sparse) bucket of a statistics time series. Buckets with no data are simply
+	/// not returned; the consumer is responsible for zero-filling the gaps.
+	struct StatsBucket
+	{
+		/// Bucket key as formatted by the database, e.g. "2026-06-24 14:00" (hourly) or
+		/// "2026-06-24" (daily). Always uses the database server's local time.
+		std::string key;
+		/// Aggregated value for the bucket (login/registration count, or peak player count).
+		uint64 value = 0;
+	};
+
+	/// Headline counters for the dashboard info boxes that can be answered from the login database.
+	struct StatsSummary
+	{
+		/// Total number of registered game accounts.
+		uint64 totalAccounts = 0;
+		/// Number of accounts with an active (non-expired) ban.
+		uint64 bannedAccounts = 0;
+	};
+
+	/// A single recent-activity feed entry.
+	struct RecentActivityEntry
+	{
+		/// Event type, e.g. "login" or "register".
+		std::string type;
+		/// Human readable detail, typically the account name.
+		std::string detail;
+		/// Event timestamp formatted as ISO8601.
+		std::string timestamp;
+	};
+
 	/// All data needed to validate and finish a client auth session on a realm.
 	struct AccountAuthData
 	{
@@ -269,6 +311,29 @@ namespace mmo
 		/// account's active feature keys.
 		/// @param accountName Name of the account.
 		virtual std::optional<AccountAuthData> GetAccountAuthData(std::string accountName) = 0;
+
+		/// Returns headline counters (account and active-ban totals) for the admin dashboard.
+		virtual StatsSummary GetStatsSummary() = 0;
+
+		/// Returns the number of successful logins over time, bucketed per the given range.
+		virtual std::vector<StatsBucket> GetLoginTimeSeries(StatsRange range) = 0;
+
+		/// Returns the number of new account registrations over time, bucketed per the given range.
+		virtual std::vector<StatsBucket> GetRegistrationTimeSeries(StatsRange range) = 0;
+
+		/// Returns the peak concurrent player count over time, bucketed per the given range.
+		/// @param realmId If set, only samples for that realm are considered; otherwise the totals
+		///        across all realms (summed per sample instant) are used.
+		virtual std::vector<StatsBucket> GetPlayerCountTimeSeries(StatsRange range, std::optional<uint32> realmId) = 0;
+
+		/// Returns the most recent login and registration events for the activity feed.
+		/// @param limit Maximum number of entries to return.
+		virtual std::vector<RecentActivityEntry> GetRecentActivity(uint32 limit) = 0;
+
+		/// Appends a concurrent-player-count sample for a realm at the current time.
+		/// @param realmId The realm the sample belongs to.
+		/// @param playerCount The number of players connected to that realm.
+		virtual void AddPlayerCountSample(uint32 realmId, uint32 playerCount) = 0;
 	};
 
 	/// Async database wrapper for the login server.

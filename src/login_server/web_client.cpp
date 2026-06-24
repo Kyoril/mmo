@@ -130,6 +130,22 @@ namespace mmo
 		{
 			m_handlers.HandleGetRealmFeatureRequirements(req, response);
 		});
+
+		// Dashboard statistics endpoints.
+		RegisterRoute(Type::Get, "/stats/summary", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleGetStatsSummary(req, response);
+		});
+
+		RegisterRoute(Type::Get, "/stats/timeseries", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleGetStatsTimeSeries(req, response);
+		});
+
+		RegisterRoute(Type::Get, "/stats/recent-activity", [this](const net::http::IncomingRequest& req, web::WebResponse& response)
+		{
+			m_handlers.HandleGetStatsRecentActivity(req, response);
+		});
 	}
 
 	void WebClient::handleRequest(const net::http::IncomingRequest &request,

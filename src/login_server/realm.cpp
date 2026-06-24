@@ -602,6 +602,14 @@ namespace mmo
 	{
 		m_lastPing = GetAsyncTimeMs();
 
+		// Newer realm servers append their current connected player count to the ping. Tolerate
+		// older realms (or a body-less ping) by simply keeping the previous value on read failure.
+		uint32 playerCount = 0;
+		if (packet >> io::read<uint32>(playerCount))
+		{
+			m_playerCount = playerCount;
+		}
+
 		return PacketParseResult::Pass;
 	}
 }

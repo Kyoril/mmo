@@ -3490,6 +3490,13 @@ namespace mmo
 				victim->threatened(*this, totalDamage);
 			}
 		}
+		else
+		{
+			// Even a swing that dealt no damage (miss, dodge, parry, immune, fully blocked)
+			// must still engage the target in combat. Generate zero threat so the victim is
+			// added to its threat list and enters combat just like a connecting swing would.
+			victim->threatened(*this, 0.0f);
+		}
 
 		// Trigger defense events
 		if (outcome == melee_attack_outcome::Parry)

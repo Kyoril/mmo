@@ -91,6 +91,40 @@ namespace mmo
 			return !value.empty() && std::all_of(value.begin(), value.end(), [](unsigned char c) { return std::isdigit(c) != 0; });
 		}
 
+		/// Parses a dashboard range string ("day"/"week"/"month") into a StatsRange, defaulting to week.
+		StatsRange parseStatsRange(const std::string& value)
+		{
+			if (value == "day")
+			{
+				return StatsRange::Day;
+			}
+			if (value == "month")
+			{
+				return StatsRange::Month;
+			}
+			return StatsRange::Week;
+		}
+
+		/// Returns the bucket granularity label matching a range, for the JSON response.
+		const char* statsGranularity(StatsRange range)
+		{
+			return range == StatsRange::Day ? "hour" : "day";
+		}
+
+		/// Serializes a sparse list of statistics buckets to a JSON array of {key, value} objects.
+		json statsBucketsToJson(const std::vector<StatsBucket>& buckets)
+		{
+			json array = json::array();
+			for (const auto& bucket : buckets)
+			{
+				json entry;
+				entry["key"] = bucket.key;
+				entry["value"] = bucket.value;
+				array.push_back(std::move(entry));
+			}
+			return array;
+		}
+
 		/// Resolves a feature reference (a name or a numeric id) to a feature id.
 		std::optional<uint32> resolveFeatureId(IDatabase& db, const std::string& reference)
 		{
@@ -1231,6 +1265,144 @@ namespace mmo
 			jsonResponse["status"] = "SUCCESS";
 			jsonResponse["realm_id"] = *realmId;
 			jsonResponse["requirements"] = std::move(jsonRequirements);
+			SendJsonResponse(response, jsonResponse);
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			SendJsonResponse(response, jsonResponse);
+		}
+	}
+
+	void LoginHttpHandlers::HandleGetStatsSummary(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		(void)request;
+
+		json jsonResponse;
+
+		try
+		{
+			const auto summary = m_database.GetStatsSummary();
+
+			// Online players and realm online state come from live realm connections, not the DB.
+			uint64 onlinePlayers = 0;
+			uint32 realmsTotal = 0;
+			uint32 realmsOnline = 0;
+			m_realmManager.ForEachRealm([&](const Realm& realm)
+			{
+				++realmsTotal;
+				if (realm.IsAuthentificated())
+				{
+					++realmsOnline;
+					onlinePlayers += realm.GetPlayerCount();
+				}
+			});
+
+			jsonResponse["status"] = "SUCCESS";
+			jsonResponse["total_accounts"] = summary.totalAccounts;
+			jsonResponse["banned_accounts"] = summary.bannedAccounts;
+			jsonResponse["online_players"] = onlinePlayers;
+			jsonResponse["realms_total"] = realmsTotal;
+			jsonResponse["realms_online"] = realmsOnline;
+			SendJsonResponse(response, jsonResponse);
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			SendJsonResponse(response, jsonResponse);
+		}
+	}
+
+	void LoginHttpHandlers::HandleGetStatsTimeSeries(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPathArguments();
+
+		auto getArg = [&](const char* key, const std::string& fallback = "") -> std::string
+		{
+			auto it = arguments.find(key);
+			return it != arguments.end() ? it->second : fallback;
+		};
+
+		const std::string metric = getArg("metric");
+		const StatsRange range = parseStatsRange(getArg("range", "week"));
+
+		json jsonResponse;
+
+		try
+		{
+			std::vector<StatsBucket> buckets;
+			if (metric == "logins")
+			{
+				buckets = m_database.GetLoginTimeSeries(range);
+			}
+			else if (metric == "registrations")
+			{
+				buckets = m_database.GetRegistrationTimeSeries(range);
+			}
+			else if (metric == "players")
+			{
+				std::optional<uint32> realmId;
+				const std::string realmArg = getArg("realm");
+				if (isAllDigits(realmArg))
+				{
+					realmId = static_cast<uint32>(std::strtoul(realmArg.c_str(), nullptr, 10));
+				}
+				buckets = m_database.GetPlayerCountTimeSeries(range, realmId);
+			}
+			else
+			{
+				response.setStatus(net::http::OutgoingAnswer::BadRequest);
+				jsonResponse["status"] = "INVALID_PARAMETER";
+				jsonResponse["message"] = "Parameter 'metric' must be one of 'logins', 'registrations', 'players'";
+				SendJsonResponse(response, jsonResponse);
+				return;
+			}
+
+			jsonResponse["status"] = "SUCCESS";
+			jsonResponse["metric"] = metric;
+			jsonResponse["granularity"] = statsGranularity(range);
+			jsonResponse["buckets"] = statsBucketsToJson(buckets);
+			SendJsonResponse(response, jsonResponse);
+		}
+		catch (...)
+		{
+			response.setStatus(net::http::OutgoingAnswer::InternalServerError);
+			jsonResponse["status"] = "INTERNAL_SERVER_ERROR";
+			SendJsonResponse(response, jsonResponse);
+		}
+	}
+
+	void LoginHttpHandlers::HandleGetStatsRecentActivity(const net::http::IncomingRequest& request, web::WebResponse& response) const
+	{
+		const auto& arguments = request.getPathArguments();
+		const auto limitIt = arguments.find("limit");
+
+		uint32 limit = 20;
+		if (limitIt != arguments.end() && isAllDigits(limitIt->second))
+		{
+			limit = std::clamp<uint32>(static_cast<uint32>(std::strtoul(limitIt->second.c_str(), nullptr, 10)), 1, 100);
+		}
+
+		json jsonResponse;
+
+		try
+		{
+			const auto events = m_database.GetRecentActivity(limit);
+
+			json jsonEvents = json::array();
+			for (const auto& event : events)
+			{
+				json entry;
+				entry["type"] = event.type;
+				entry["detail"] = event.detail;
+				entry["timestamp"] = event.timestamp;
+				jsonEvents.push_back(std::move(entry));
+			}
+
+			jsonResponse["status"] = "SUCCESS";
+			jsonResponse["events"] = std::move(jsonEvents);
 			SendJsonResponse(response, jsonResponse);
 		}
 		catch (...)

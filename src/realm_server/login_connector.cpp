@@ -22,10 +22,13 @@ namespace mmo
 		, m_pingCountdown(queue)
 	{
 		m_pingConnection = m_pingCountdown.ended.connect([this]() {
-			// Send a ping packet to the server
-			sendSinglePacket([](auth::OutgoingPacket& packet)
+			// Send a ping packet to the server, including the current connected player count so the
+			// login server can track concurrency for the admin dashboard.
+			const uint32 playerCount = static_cast<uint32>(m_playerManager.GetPlayerCount());
+			sendSinglePacket([playerCount](auth::OutgoingPacket& packet)
 				{
 					packet.Start(auth::realm_login_packet::Ping);
+					packet << io::write<uint32>(playerCount);
 					packet.Finish();
 				});
 			// Queue next ping

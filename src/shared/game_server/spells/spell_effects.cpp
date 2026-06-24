@@ -1305,6 +1305,13 @@ namespace mmo
 						unitTarget.threatened(executer, static_cast<float>(totalDamage));
 					}
 				}
+				else
+				{
+					// A swing that dealt no damage (miss, dodge, parry, immune, fully blocked)
+					// must still engage the target in combat. Generate zero threat so the victim
+					// is added to its threat list and enters combat.
+					unitTarget.threatened(executer, 0.0f);
+				}
 
 				// Trigger defense events
 				if (outcome == melee_attack_outcome::Parry)

@@ -815,6 +815,188 @@ namespace mmo
 		return data;
 	}
 
+	namespace
+	{
+		/// SQL comparison suffix limiting a datetime column to the given range window.
+		/// Appended after the column name, e.g. "`timestamp`" + StatsRangeWindow(range).
+		const char* StatsRangeWindow(StatsRange range)
+		{
+			switch (range)
+			{
+			case StatsRange::Day:   return " >= NOW() - INTERVAL 24 HOUR";
+			case StatsRange::Week:  return " >= NOW() - INTERVAL 7 DAY";
+			case StatsRange::Month: return " >= NOW() - INTERVAL 30 DAY";
+			}
+			return " >= NOW() - INTERVAL 7 DAY";
+		}
+
+		/// MySQL DATE_FORMAT pattern used to bucket a range: hourly for a day, daily otherwise.
+		const char* StatsRangeBucketFormat(StatsRange range)
+		{
+			return range == StatsRange::Day ? "%Y-%m-%d %H:00" : "%Y-%m-%d";
+		}
+
+		/// Reads a two-column (key, value) result set into a list of StatsBucket entries.
+		std::vector<StatsBucket> ReadBuckets(mysql::Select& select)
+		{
+			std::vector<StatsBucket> buckets;
+			mysql::Row row(select);
+			while (row)
+			{
+				StatsBucket bucket;
+				bucket.key = row.GetField(0) ? row.GetField(0) : "";
+				bucket.value = row.GetField(1) ? std::strtoull(row.GetField(1), nullptr, 10) : 0;
+				buckets.push_back(std::move(bucket));
+				row = mysql::Row(select);
+			}
+			return buckets;
+		}
+	}
+
+	StatsSummary MySQLDatabase::GetStatsSummary()
+	{
+		StatsSummary summary;
+
+		mysql::Select select(m_connection,
+			"SELECT "
+			"(SELECT COUNT(*) FROM `account`), "
+			"(SELECT COUNT(*) FROM `account` WHERE banned <> 0 AND (ban_expiration IS NULL OR ban_expiration > NOW()))");
+		if (!select.Success())
+		{
+			PrintDatabaseError();
+			return summary;
+		}
+
+		mysql::Row row(select);
+		if (row)
+		{
+			summary.totalAccounts = row.GetField(0) ? std::strtoull(row.GetField(0), nullptr, 10) : 0;
+			summary.bannedAccounts = row.GetField(1) ? std::strtoull(row.GetField(1), nullptr, 10) : 0;
+		}
+
+		return summary;
+	}
+
+	std::vector<StatsBucket> MySQLDatabase::GetLoginTimeSeries(StatsRange range)
+	{
+		const std::string sql =
+			std::string("SELECT DATE_FORMAT(`timestamp`,'") + StatsRangeBucketFormat(range) + "') AS bucket, COUNT(*) "
+			"FROM `account_login` "
+			"WHERE succeeded = 1 AND `timestamp`" + StatsRangeWindow(range) + " "
+			"GROUP BY bucket ORDER BY bucket";
+
+		mysql::Select select(m_connection, sql);
+		if (!select.Success())
+		{
+			PrintDatabaseError();
+			return {};
+		}
+
+		return ReadBuckets(select);
+	}
+
+	std::vector<StatsBucket> MySQLDatabase::GetRegistrationTimeSeries(StatsRange range)
+	{
+		const std::string sql =
+			std::string("SELECT DATE_FORMAT(`created_at`,'") + StatsRangeBucketFormat(range) + "') AS bucket, COUNT(*) "
+			"FROM `account` "
+			"WHERE `created_at`" + StatsRangeWindow(range) + " "
+			"GROUP BY bucket ORDER BY bucket";
+
+		mysql::Select select(m_connection, sql);
+		if (!select.Success())
+		{
+			PrintDatabaseError();
+			return {};
+		}
+
+		return ReadBuckets(select);
+	}
+
+	std::vector<StatsBucket> MySQLDatabase::GetPlayerCountTimeSeries(StatsRange range, std::optional<uint32> realmId)
+	{
+		// Each sampling pass writes one row per realm sharing the same NOW() timestamp. For a global
+		// series we first sum the realms per sample instant, then take the peak (max) per bucket so
+		// short-lived peaks between samples are preserved rather than averaged away. For a single
+		// realm we skip the summation step.
+		const std::string bucketFmt = StatsRangeBucketFormat(range);
+		const std::string window = StatsRangeWindow(range);
+
+		std::string sql;
+		if (realmId)
+		{
+			sql =
+				"SELECT DATE_FORMAT(`timestamp`,'" + bucketFmt + "') AS bucket, MAX(player_count) "
+				"FROM `player_count_sample` "
+				"WHERE `timestamp`" + window + " AND realm_id = " + std::to_string(*realmId) + " "
+				"GROUP BY bucket ORDER BY bucket";
+		}
+		else
+		{
+			sql =
+				"SELECT DATE_FORMAT(`timestamp`,'" + bucketFmt + "') AS bucket, MAX(total) FROM ("
+				"  SELECT `timestamp`, SUM(player_count) AS total "
+				"  FROM `player_count_sample` "
+				"  WHERE `timestamp`" + window + " "
+				"  GROUP BY `timestamp`"
+				") AS per_instant "
+				"GROUP BY DATE_FORMAT(`timestamp`,'" + bucketFmt + "') ORDER BY bucket";
+		}
+
+		mysql::Select select(m_connection, sql);
+		if (!select.Success())
+		{
+			PrintDatabaseError();
+			return {};
+		}
+
+		return ReadBuckets(select);
+	}
+
+	std::vector<RecentActivityEntry> MySQLDatabase::GetRecentActivity(uint32 limit)
+	{
+		std::vector<RecentActivityEntry> entries;
+
+		const std::string sql =
+			"SELECT type, detail, DATE_FORMAT(ts,'%Y-%m-%dT%H:%i:%sZ') FROM ("
+			"  SELECT 'login' AS type, a.username AS detail, al.`timestamp` AS ts "
+			"  FROM `account_login` al JOIN `account` a ON a.id = al.account_id "
+			"  WHERE al.succeeded = 1 "
+			"  UNION ALL "
+			"  SELECT 'register' AS type, username AS detail, created_at AS ts "
+			"  FROM `account` "
+			") AS feed ORDER BY ts DESC LIMIT " + std::to_string(limit);
+
+		mysql::Select select(m_connection, sql);
+		if (!select.Success())
+		{
+			PrintDatabaseError();
+			return entries;
+		}
+
+		mysql::Row row(select);
+		while (row)
+		{
+			RecentActivityEntry entry;
+			entry.type = row.GetField(0) ? row.GetField(0) : "";
+			entry.detail = row.GetField(1) ? row.GetField(1) : "";
+			entry.timestamp = row.GetField(2) ? row.GetField(2) : "";
+			entries.push_back(std::move(entry));
+			row = mysql::Row(select);
+		}
+
+		return entries;
+	}
+
+	void MySQLDatabase::AddPlayerCountSample(uint32 realmId, uint32 playerCount)
+	{
+		if (!m_connection.Execute("INSERT INTO `player_count_sample` (realm_id, `timestamp`, player_count) VALUES ("
+			+ std::to_string(realmId) + ", NOW(), " + std::to_string(playerCount) + ")"))
+		{
+			PrintDatabaseError();
+		}
+	}
+
 	void MySQLDatabase::PrintDatabaseError()
 	{
 		ELOG("Login database error: " << m_connection.GetErrorMessage());

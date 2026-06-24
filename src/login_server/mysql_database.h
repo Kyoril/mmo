@@ -78,6 +78,12 @@ namespace mmo
 		std::vector<RealmFeatureRequirement> GetRealmFeatureRequirements(uint32 realmId) override;
 		std::optional<uint32> GetRealmIdByName(const std::string& name) override;
 		std::optional<AccountAuthData> GetAccountAuthData(std::string accountName) override;
+		StatsSummary GetStatsSummary() override;
+		std::vector<StatsBucket> GetLoginTimeSeries(StatsRange range) override;
+		std::vector<StatsBucket> GetRegistrationTimeSeries(StatsRange range) override;
+		std::vector<StatsBucket> GetPlayerCountTimeSeries(StatsRange range, std::optional<uint32> realmId) override;
+		std::vector<RecentActivityEntry> GetRecentActivity(uint32 limit) override;
+		void AddPlayerCountSample(uint32 realmId, uint32 playerCount) override;
 
 	private:
 		/// Logs the last database error to the default logger.

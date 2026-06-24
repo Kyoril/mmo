@@ -18,6 +18,8 @@
 #include "auth_protocol/auth_protocol.h"
 #include "auth_protocol/auth_server.h"
 #include "base/constants.h"
+#include "base/clock.h"
+#include "base/countdown.h"
 
 #include <fstream>
 #include <sstream>
@@ -239,6 +241,36 @@ namespace mmo
 			*database
 			);
 		
+
+		/////////////////////////////////////////////////////////////////////////////////////////////////
+		// Periodic concurrent-player-count sampler
+		/////////////////////////////////////////////////////////////////////////////////////////////////
+
+		// Once per minute, snapshot the player count reported by each authenticated realm into the
+		// database. The login server keeps only the latest count per realm in memory (updated via
+		// ping); this timer turns those live values into the historical series the dashboard charts.
+		Countdown playerCountSampleCountdown(timerQueue);
+		scoped_connection playerCountSampleConnection;
+		playerCountSampleConnection = playerCountSampleCountdown.ended.connect([&realmManager, &asyncDatabase, &playerCountSampleCountdown]()
+		{
+			std::vector<std::pair<uint32, uint32>> samples;
+			realmManager.ForEachRealm([&samples](const Realm& realm)
+			{
+				if (realm.IsAuthentificated())
+				{
+					samples.emplace_back(realm.GetRealmId(), realm.GetPlayerCount());
+				}
+			});
+
+			for (const auto& [realmId, count] : samples)
+			{
+				asyncDatabase.asyncRequest([](bool) {}, &IDatabase::AddPlayerCountSample, realmId, count);
+			}
+
+			// Reschedule for the next minute.
+			playerCountSampleCountdown.SetEnd(GetAsyncTimeMs() + constants::OneMinute);
+		});
+		playerCountSampleCountdown.SetEnd(GetAsyncTimeMs() + constants::OneMinute);
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 		// Launch worker threads

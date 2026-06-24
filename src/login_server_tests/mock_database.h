@@ -40,6 +40,12 @@ struct MockDatabase : IDatabase {
     std::vector<RealmFeatureRequirement> GetRealmFeatureRequirements(uint32) override { return {}; }
     std::optional<uint32> GetRealmIdByName(const std::string&) override { return std::nullopt; }
     std::optional<AccountAuthData> GetAccountAuthData(std::string) override { return std::nullopt; }
+    StatsSummary GetStatsSummary() override { return {}; }
+    std::vector<StatsBucket> GetLoginTimeSeries(StatsRange) override { return {}; }
+    std::vector<StatsBucket> GetRegistrationTimeSeries(StatsRange) override { return {}; }
+    std::vector<StatsBucket> GetPlayerCountTimeSeries(StatsRange, std::optional<uint32>) override { return {}; }
+    std::vector<RecentActivityEntry> GetRecentActivity(uint32) override { return {}; }
+    void AddPlayerCountSample(uint32, uint32) override {}
 };
 
 } // namespace mmo
