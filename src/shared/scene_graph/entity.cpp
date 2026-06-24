@@ -29,6 +29,15 @@ namespace mmo
 		Initialize();
 	}
 
+	Entity::~Entity()
+	{
+		// Detach any objects still attached to our bones so they don't try to
+		// reference this (now dying) entity from their own destructors. Without
+		// this, an object attached to a bone (e.g. a Light) keeps a dangling
+		// TagPoint/Entity pointer and crashes in ~MovableObject() if it outlives us.
+		DetachAllObjectsImpl();
+	}
+
 	void Entity::ResetSubEntities()
 	{
 		if (!m_mesh)

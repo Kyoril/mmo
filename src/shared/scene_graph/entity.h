@@ -28,7 +28,7 @@ namespace mmo
 
 		Entity(const String& name, MeshPtr mesh);
 
-		virtual ~Entity() override = default;
+		virtual ~Entity() override;
 
 	public:
 		void ResetSubEntities();

@@ -257,7 +257,8 @@ namespace mmo
 		// Check if we are currently casting a spell
 		if (IsCasting())
 		{
-			// TODO: Add support for delayed spell casting
+			WLOG("Ignoring spell " << spellId << " because spell " << m_spellCastId << " is already being cast");
+			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_SPELL_IN_PROGRESS");
 			return;
 		}
 
@@ -270,6 +271,7 @@ namespace mmo
 		// Check if spell is known
 		if (!unit->HasSpell(spellId))
 		{
+			WLOG("Active player does not know requested spell " << spellId);
 			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_NOT_KNOWN");
 			return;
 		}
