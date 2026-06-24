@@ -115,22 +115,23 @@ namespace mmo
 		// Database setup
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
+		const auto async = [&dbService](Action action) { dbService.post(std::move(action)); };
+		const auto sync = [&ioService](Action action) { ioService.post(std::move(action)); };
+
 		auto database = std::make_unique<MySQLDatabase>(mysql::DatabaseInfo{
-			config.mysqlHost, 
+			config.mysqlHost,
 			config.mysqlPort,
-			config.mysqlUser, 
-			config.mysqlPassword, 
+			config.mysqlUser,
+			config.mysqlPassword,
 			config.mysqlDatabase,
 			config.mysqlUpdatePath
-		}, timerQueue);
+		}, timerQueue, async);
 		if (!database->Load())
 		{
 			ELOG("Could not load the database");
 			return 1;
 		}
 
-		const auto async = [&dbService](Action action) { dbService.post(std::move(action)); };
-		const auto sync = [&ioService](Action action) { ioService.post(std::move(action)); };
 		AsyncDatabase asyncDatabase{ *database, async, sync };
 
 		ILOG("Database loaded successfully");

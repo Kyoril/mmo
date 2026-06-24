@@ -328,7 +328,6 @@ namespace mmo
 			assert(size <= m_receiving.size());
 			if (size == 0)
 			{
-				WLOG("Disconnected - no data received");
 				disconnected();
 				return;
 			}

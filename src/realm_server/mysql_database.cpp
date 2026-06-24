@@ -32,6 +32,7 @@ namespace mmo
 	{
 		m_pingConnection = m_pingCountdown.ended += [this]()
 			{
+				std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
 				if (!m_connection.KeepAlive())
 				{
 					ELOG("MySQL Connection PING failed");
@@ -138,6 +139,8 @@ namespace mmo
 
 	std::optional<std::vector<CharacterView>> MySQLDatabase::GetCharacterViewsByAccountId(uint64 accountId)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Select select(m_connection, "SELECT `id`, `name`, `level`, `map`, `zone`, `race`, `class`, `gender`, `flags` FROM `characters` WHERE `account_id`=" + std::to_string(accountId));
 		if (select.Success())
 		{
@@ -249,6 +252,8 @@ namespace mmo
 
 	std::optional<WorldAuthData> MySQLDatabase::GetWorldAuthData(const std::string name)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Select select(m_connection, "SELECT id,name,s,v FROM world WHERE name = '" + m_connection.EscapeString(name) + "' LIMIT 1");
 		if (select.Success())
 		{
@@ -275,6 +280,8 @@ namespace mmo
 
 	void MySQLDatabase::WorldLogin(const uint64 worldId, const std::string& sessionKey, const std::string& ip, const std::string& build)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (!m_connection.Execute("UPDATE world SET k = '"
 			+ m_connection.EscapeString(sessionKey)
 			+ "', last_login = NOW(), last_ip = '"
@@ -290,6 +297,8 @@ namespace mmo
 
 	std::optional<std::vector<GuildData>> MySQLDatabase::LoadGuilds()
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		std::vector<GuildData> result;
 
 		mysql::Select select(m_connection, "SELECT `id`, `name`, `leader`, COALESCE(`motd`, '') FROM `guilds`");
@@ -372,6 +381,8 @@ namespace mmo
 
 	void MySQLDatabase::DeleteCharacter(const uint64 characterGuid)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		// We do not delete a character for real, we just mark it as deleted. In order to free the character name, we also replace it with a random unique id value
 		// so that there are no conflicts in the database when trying to delete a character.
 		const String query = "UPDATE `characters` SET `deleted_account` = `account_id`, `account_id` = NULL, `deleted_name` = `name`, `name` = HEX(UUID_SHORT()), `deleted_at` = NOW() WHERE `id` = " + std::to_string(characterGuid) + " AND `account_id` IS NOT NULL LIMIT 1;";
@@ -384,6 +395,8 @@ namespace mmo
 
 	std::optional<CharCreateResult> MySQLDatabase::CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, uint32 characterClass, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy, std::map<uint8, ActionButton> actionButtons, const AvatarConfiguration& configuration, const std::vector<ItemData>& items)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		// We check if the character name is already in use by another account. Character names are tied to accounts even after the account deleted that character
 		const String escapedName = m_connection.EscapeString(characterName);
 		mysql::Select select(m_connection, "SELECT 1 FROM `characters` WHERE `name` = '" + escapedName + "' OR (`deleted_name` = '" + escapedName + "' AND `deleted_account` != '" + std::to_string(accountId) + "') LIMIT 1");
@@ -533,6 +546,8 @@ namespace mmo
 
 	std::optional<CharacterData> MySQLDatabase::CharacterEnterWorld(const uint64 characterId, const uint64 accountId)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		const GameTime startTime = GetAsyncTimeMs();
 
 		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy, timePlayed, money, bind_map, bind_x, bind_y, bind_z, bind_o, last_group FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
@@ -968,6 +983,8 @@ namespace mmo
 
 	std::optional<WorldCreationResult> MySQLDatabase::CreateWorld(const String& name, const String& s, const String& v)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (!m_connection.Execute("INSERT INTO world (name, s, v) VALUES ('"
 			+ m_connection.EscapeString(name) + "', '"
 			+ m_connection.EscapeString(s) + "', '"
@@ -989,6 +1006,8 @@ namespace mmo
 
 	void MySQLDatabase::ChatMessage(const uint64 characterId, const uint16 type, const String message)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (!m_connection.Execute("INSERT INTO character_chat (`character`, `type`, `message`, `timestamp`) VALUES ("
 			+ std::to_string(characterId) + ", "
 			+ std::to_string(type) + ", '"
@@ -1002,6 +1021,8 @@ namespace mmo
 	void MySQLDatabase::UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position, const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money,
 		uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing, const std::vector<uint32>& spellIds, const std::vector<CharacterClassData>& knownClasses, uint32 activeClassId, uint32 timePlayed)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Transaction transaction(m_connection);
 
 		if (!m_connection.Execute(std::string("UPDATE characters SET ")
@@ -1150,6 +1171,8 @@ namespace mmo
 
 	void MySQLDatabase::UpdateCharacterAuras(uint64 characterId, const std::vector<PersistentAuraData>& auras)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Transaction transaction(m_connection);
 
 		// Replace the full aura set for this character. Deleting the header rows cascades to
@@ -1224,6 +1247,8 @@ namespace mmo
 
 	void MySQLDatabase::UpdateCharacterCooldowns(uint64 characterId, const std::vector<std::pair<uint32, GameTime>>& cooldownEnds)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Transaction transaction(m_connection);
 
 		// Replace the full cooldown set for this character.
@@ -1261,6 +1286,8 @@ namespace mmo
 
 	std::optional<ActionButtons> MySQLDatabase::GetActionButtons(uint64 characterId, uint32 classId)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Select select(m_connection,
 			std::format("SELECT `button`, `action`, `type` FROM `character_actions` WHERE `character_id`={0} AND `class`={1} LIMIT {2}"
 				, characterId, classId, MaxActionButtons));
@@ -1292,6 +1319,8 @@ namespace mmo
 
 	void MySQLDatabase::SetCharacterActionButtons(DatabaseId characterId, uint32 classId, ActionButtons buttons)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		// Start transaction
 		mysql::Transaction transaction(m_connection);
 		{
@@ -1341,6 +1370,8 @@ namespace mmo
 
 	void MySQLDatabase::LearnSpell(DatabaseId characterId, uint32 spellId)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (!m_connection.Execute(std::format(
 			"INSERT IGNORE INTO `character_spells` VALUES ({0}, {1});"
 			, characterId
@@ -1353,6 +1384,8 @@ namespace mmo
 
 	void MySQLDatabase::SetQuestData(DatabaseId characterId, uint32 questId, const QuestStatusData& data)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		// Was the quest abandoned?
 		String query;
 		if (data.status == quest_status::Available)
@@ -1389,6 +1422,8 @@ namespace mmo
 
 	std::optional<CharacterLocationData> MySQLDatabase::GetCharacterLocationDataByName(String characterName)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Select select(m_connection, std::format("SELECT id, map, x, y, z, o FROM characters WHERE name = '{0}' LIMIT 1",
 			m_connection.EscapeString(characterName)));
 		if (select.Success())
@@ -1422,6 +1457,8 @@ namespace mmo
 
 	std::optional<DatabaseId> MySQLDatabase::GetCharacterIdByName(String characterName)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Select select(m_connection, std::format("SELECT id FROM characters WHERE name = '{0}' LIMIT 1",
 			m_connection.EscapeString(characterName)));
 		if (select.Success())
@@ -1446,6 +1483,8 @@ namespace mmo
 
 	void MySQLDatabase::TeleportCharacterByName(String characterName, uint32 map, Vector3 position, Radian orientation)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (!m_connection.Execute(std::format(
 			"UPDATE `characters` SET map = '{0}', x = '{1}', y = '{2}', z = '{3}', o = '{4}' WHERE name = '{5}' LIMIT 1"
 			, map
@@ -1463,6 +1502,8 @@ namespace mmo
 
 	void MySQLDatabase::CreateGroup(uint64 id, uint64 leaderGuid, uint8 lootMethod, uint8 lootThreshold)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		try
 		{
 			mysql::Transaction transaction(m_connection);
@@ -1510,6 +1551,8 @@ namespace mmo
 
 	void MySQLDatabase::SetGroupLootMethod(uint64 groupId, uint8 lootMethod, uint64 lootMaster, uint8 lootThreshold)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (!m_connection.Execute(std::format(
 			"UPDATE `group` SET `loot_method` = '{0}', `loot_master` = {1}, `loot_treshold` = '{2}' WHERE `id` = '{3}' LIMIT 1"
 			, lootMethod
@@ -1524,6 +1567,8 @@ namespace mmo
 
 	void MySQLDatabase::SetGroupLeader(uint64 groupId, uint64 leaderGuid)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (!m_connection.Execute(std::format(
 			"UPDATE `group` SET `leader` = '{0}' WHERE `id` = '{1}' LIMIT 1"
 			, leaderGuid
@@ -1537,6 +1582,8 @@ namespace mmo
 
 	void MySQLDatabase::AddGroupMember(uint64 groupId, uint64 memberGuid)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		try
 		{
 			mysql::Transaction transaction(m_connection);
@@ -1572,6 +1619,8 @@ namespace mmo
 
 	void MySQLDatabase::RemoveGroupMember(uint64 groupId, uint64 memberGuid)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		try
 		{
 			mysql::Transaction transaction(m_connection);
@@ -1606,6 +1655,8 @@ namespace mmo
 
 	void MySQLDatabase::DisbandGroup(uint64 groupId)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		try
 		{
 			mysql::Transaction transaction(m_connection);
@@ -1639,6 +1690,8 @@ namespace mmo
 
 	std::optional<std::vector<uint64>> MySQLDatabase::ListGroups()
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Select select(m_connection, "SELECT `id` FROM `group`");
 		if (select.Success())
 		{
@@ -1663,6 +1716,8 @@ namespace mmo
 
 	std::optional<GroupData> MySQLDatabase::LoadGroup(uint64 groupId)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		// Load group data
 		mysql::Select groupSelect(m_connection, std::format(
 			"SELECT `leader`, `name`, `loot_method`, `loot_treshold`, `loot_master` FROM `group` g LEFT JOIN `characters` c ON `c`.`id` = `g`.`leader` WHERE `g`.`id` = '{0}' LIMIT 1"
@@ -1719,6 +1774,8 @@ namespace mmo
 
 	std::optional<String> MySQLDatabase::GetCharacterNameById(uint64 characterId)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Select select(m_connection, std::format("SELECT `name` FROM `characters` WHERE `id` = '{0}' LIMIT 1", characterId));
 		if (select.Success())
 		{
@@ -1744,6 +1801,8 @@ namespace mmo
 
 	void MySQLDatabase::CreateGuild(uint64 id, String name, uint64 leaderGuid, const std::vector<GuildRank>& ranks, const std::vector<GuildMember>& member)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		try
 		{
 			mysql::Transaction transaction(m_connection);
@@ -1802,6 +1861,8 @@ namespace mmo
 
 	void MySQLDatabase::AddGuildMember(uint64 guildId, uint64 memberGuid, uint32 rank)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (!m_connection.Execute(std::format(
 			"INSERT INTO `guild_members` (`guild_id`, `guid`, `rank`) VALUES ('{0}', '{1}', '{2}')"
 			, guildId
@@ -1816,6 +1877,8 @@ namespace mmo
 
 	void MySQLDatabase::RemoveGuildMember(uint64 guildId, uint64 memberGuid)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (!m_connection.Execute(std::format(
 					"DELETE FROM `guild_members` WHERE `guild_id` = '{0}' AND `guid` = '{1}' LIMIT 1"
 					, guildId
@@ -1829,6 +1892,8 @@ namespace mmo
 
 	void MySQLDatabase::DisbandGuild(uint64 guildId)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (!m_connection.Execute(std::format(
 			"DELETE FROM `guilds` WHERE `id` = '{0}' LIMIT 1"
 			, guildId
@@ -1841,6 +1906,8 @@ namespace mmo
 
 	void MySQLDatabase::SetGuildMemberRank(uint64 guildId, uint64 memberGuid, uint32 rank)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (!m_connection.Execute(std::format(
 			"UPDATE `guild_members` SET `rank` = '{0}' WHERE `guild_id` = '{1}' AND `guid` = '{2}'"
 			, rank
@@ -1855,6 +1922,8 @@ namespace mmo
 
 	void MySQLDatabase::SetGuildMotd(const uint64 guildId, const String& motd)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		const auto escaped = m_connection.EscapeString(motd);
 		if (!m_connection.Execute(
 			"UPDATE `guilds` SET `motd` = '" + escaped + "' WHERE `id` = '" +
@@ -1867,6 +1936,8 @@ namespace mmo
 
 	void MySQLDatabase::AddFriend(uint64 characterId, uint64 friendId)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		try
 		{
 			mysql::Transaction transaction(m_connection);
@@ -1894,6 +1965,8 @@ namespace mmo
 
 	void MySQLDatabase::RemoveFriend(uint64 characterId, uint64 friendId)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		try
 		{
 			mysql::Transaction transaction(m_connection);
@@ -1920,6 +1993,8 @@ namespace mmo
 
 	std::optional<std::vector<FriendData>> MySQLDatabase::LoadFriendList(uint64 characterId)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		std::vector<FriendData> result;
 
 		// One-sided friendship: only load friends where characterId is the owner
@@ -1960,6 +2035,8 @@ namespace mmo
 
 	std::vector<uint64> MySQLDatabase::GetCharactersWithFriend(uint64 characterId)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		std::vector<uint64> result;
 
 		// Find all characters who have added characterId as a friend
@@ -1990,6 +2067,8 @@ namespace mmo
 
 	bool MySQLDatabase::AreFriends(uint64 characterId, uint64 friendId)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		// One-sided friendship: check if characterId has friendId in their list
 		mysql::Select select(m_connection, std::format(
 			"SELECT 1 FROM `friend_list` WHERE `character_id` = '{0}' AND `friend_id` = '{1}' LIMIT 1"
@@ -2012,6 +2091,8 @@ namespace mmo
 
 	std::optional<std::vector<CharacterChannelState>> MySQLDatabase::LoadCharacterChannelStates(uint64 characterId)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		std::vector<CharacterChannelState> result;
 
 		mysql::Select select(m_connection, std::format(
@@ -2046,6 +2127,8 @@ namespace mmo
 
 	void MySQLDatabase::SetCharacterChannelState(uint64 characterId, uint32 channelId, uint8 status)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		try
 		{
 			mysql::Transaction transaction(m_connection);
@@ -2074,6 +2157,8 @@ namespace mmo
 
 	std::optional<String> MySQLDatabase::GetMessageOfTheDay()
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Select select(m_connection, "SELECT `message` FROM `realm_motd` WHERE `id` = 1 LIMIT 1");
 		if (select.Success())
 		{
@@ -2096,6 +2181,8 @@ namespace mmo
 
 	void MySQLDatabase::SetMessageOfTheDay(const std::string& motd)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (!m_connection.Execute("UPDATE `realm_motd` SET `message` = '" + m_connection.EscapeString(motd) + "' WHERE id = 1 LIMIT 1"))
 		{
 			PrintDatabaseError();
@@ -2105,6 +2192,8 @@ namespace mmo
 
 	void MySQLDatabase::SaveInventoryItems(uint64 characterId, const std::vector<ItemData>& items)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		try
 		{
 			mysql::Transaction transaction(m_connection);
@@ -2187,6 +2276,8 @@ namespace mmo
 
 	void MySQLDatabase::DeleteInventoryItems(uint64 characterId, const std::vector<uint16>& slots)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (slots.empty())
 		{
 			return;

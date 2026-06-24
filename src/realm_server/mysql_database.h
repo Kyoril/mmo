@@ -6,6 +6,8 @@
 #include "mysql_wrapper/mysql_connection.h"
 #include "base/countdown.h"
 
+#include <mutex>
+
 
 namespace mmo
 {
@@ -177,5 +179,10 @@ namespace mmo
 		TimerQueue& m_timerQueue;
 		Countdown m_pingCountdown;
 		scoped_connection m_pingConnection;
+		/// Serializes every access to the single MySQL connection. The connection is shared between
+		/// the database worker thread (async requests) and the IO threads (synchronous web-API
+		/// handlers, e.g. CreateWorld), and a MYSQL handle must never be touched from two threads at
+		/// once. Recursive in case a locked method calls another locked method.
+		mutable std::recursive_mutex m_databaseMutex;
 	};
 }

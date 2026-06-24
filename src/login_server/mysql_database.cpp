@@ -12,17 +12,25 @@
 
 namespace mmo
 {
-	MySQLDatabase::MySQLDatabase(mysql::DatabaseInfo connectionInfo, TimerQueue& timerQueue)
+	MySQLDatabase::MySQLDatabase(mysql::DatabaseInfo connectionInfo, TimerQueue& timerQueue, WorkerDispatcher dbWorker)
 		: m_connectionInfo(std::move(connectionInfo))
 		, m_timerQueue(timerQueue)
+		, m_dbWorker(std::move(dbWorker))
 		, m_pingCountdown(timerQueue)
 	{
 		m_pingConnection = m_pingCountdown.ended += [this]()
 			{
-				if (!m_connection.KeepAlive())
-				{
-					ELOG("MySQL ping failed: " << m_connection.GetErrorMessage());
-				}
+				// The ping timer fires on the IO thread, but the MySQL connection is otherwise only
+				// ever touched on the database worker thread. Run the keep-alive there too so the two
+				// never race (which would surface as "Lost connection to MySQL server during query").
+				m_dbWorker([this]()
+					{
+						std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+						if (!m_connection.KeepAlive())
+						{
+							ELOG("MySQL ping failed: " << m_connection.GetErrorMessage());
+						}
+					});
 
 				SetNextPingTimer();
 			};
@@ -128,6 +136,8 @@ namespace mmo
 
 	std::optional<AccountData> MySQLDatabase::GetAccountDataByName(std::string name)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Select select(m_connection, "SELECT id,username,s,v,"
 			"CASE "
 			"WHEN banned = 1 AND (ban_expiration IS NULL) THEN 2 "
@@ -161,6 +171,8 @@ namespace mmo
 
 	std::optional<RealmAuthData> MySQLDatabase::GetRealmAuthData(std::string name)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Select select(m_connection, "SELECT id,name,s,v,address,port FROM realm WHERE name = '" + m_connection.EscapeString(name) + "' LIMIT 1");
 		if (select.Success())
 		{
@@ -189,6 +201,8 @@ namespace mmo
 
 	std::optional<std::tuple<uint64, std::string, uint8>> MySQLDatabase::GetAccountSessionKey(std::string accountName)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Select select(m_connection, "SELECT id, k, gm_level FROM account WHERE username = '" + m_connection.EscapeString(accountName) + "' LIMIT 1");
 		if (select.Success())
 		{
@@ -212,6 +226,8 @@ namespace mmo
 
 	void MySQLDatabase::PlayerLogin(const uint64 accountId, const std::string& sessionKey, const std::string& ip)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Transaction transaction(m_connection);
 
 		if (!m_connection.Execute("UPDATE account SET k = '"
@@ -236,6 +252,8 @@ namespace mmo
 
 	void MySQLDatabase::PlayerLoginFailed(const uint64 accountId, const std::string& ip)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (!m_connection.Execute("INSERT INTO account_login (account_id, timestamp, ip_address, succeeded) VALUES (" + 
 			std::to_string(accountId) + ", NOW(), '" + ip + "', 0)"))
 		{
@@ -246,6 +264,8 @@ namespace mmo
 
 	void MySQLDatabase::RealmLogin(const uint32 realmId, const std::string & sessionKey, const std::string & ip, const std::string & build)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (!m_connection.Execute("UPDATE realm SET k = '"
 			+ m_connection.EscapeString(sessionKey)
 			+ "', last_login = NOW(), last_ip = '"
@@ -262,6 +282,8 @@ namespace mmo
 	std::optional<AccountCreationResult> MySQLDatabase::AccountCreate(const std::string& id, const std::string& s,
 		const std::string& v)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (!m_connection.Execute("INSERT INTO account (username, s, v) VALUES ('"
 			+ m_connection.EscapeString(id) + "', '" 
 			+ m_connection.EscapeString(s) + "', '" 
@@ -283,6 +305,8 @@ namespace mmo
 
 	std::optional<RealmCreationResult> MySQLDatabase::RealmCreate(const std::string& name, const std::string& address, uint16 port, const std::string& s, const std::string& v)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (!m_connection.Execute("INSERT INTO realm (name, address, port, s, v) VALUES ('"
 			+ m_connection.EscapeString(name) + "', '" 
 			+ m_connection.EscapeString(address) + "', '" 
@@ -307,6 +331,8 @@ namespace mmo
 
 	void MySQLDatabase::BanAccountByName(const std::string& accountName, const std::string& expiration, const std::string& reason)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Transaction transaction(m_connection);
 
 		std::ostringstream query;
@@ -339,6 +365,8 @@ namespace mmo
 
 	void MySQLDatabase::UnbanAccountByName(const std::string& accountName, const std::string& reason)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Transaction transaction(m_connection);
 
 		if (!m_connection.Execute("UPDATE `account` SET `banned` = 0, `ban_expiration` = NULL WHERE `username` = '" + m_connection.EscapeString(accountName) + "' LIMIT 1"))
@@ -360,6 +388,8 @@ namespace mmo
 
 	bool MySQLDatabase::SetAccountGMLevel(std::string accountName, uint8 gmLevel)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		try
 		{
 			// The correct way to execute a query is to use m_connection.Execute() directly
@@ -384,6 +414,8 @@ namespace mmo
 
 	AccountListResult MySQLDatabase::GetAccountList(const AccountListParams& params)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		AccountListResult result;
 
 		// Whitelist sort columns to prevent SQL injection via the sort parameter.
@@ -492,6 +524,8 @@ namespace mmo
 
 	std::vector<RealmListEntry> MySQLDatabase::GetRealmList()
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		std::vector<RealmListEntry> realms;
 
 		mysql::Select select(m_connection,
@@ -528,6 +562,8 @@ namespace mmo
 
 	std::vector<FeatureDefinition> MySQLDatabase::GetFeatures()
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		std::vector<FeatureDefinition> features;
 
 		mysql::Select select(m_connection,
@@ -557,6 +593,8 @@ namespace mmo
 
 	std::optional<uint32> MySQLDatabase::CreateFeature(const std::string& name, const std::string& description)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		const std::string descValue = description.empty() ? "NULL" : "'" + m_connection.EscapeString(description) + "'";
 
 		if (!m_connection.Execute("INSERT INTO `feature` (name, description) VALUES ('"
@@ -578,6 +616,8 @@ namespace mmo
 
 	bool MySQLDatabase::DeleteFeature(uint32 featureId)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (!m_connection.Execute("DELETE FROM `feature` WHERE id = " + std::to_string(featureId) + " LIMIT 1"))
 		{
 			PrintDatabaseError();
@@ -589,6 +629,8 @@ namespace mmo
 
 	std::optional<uint32> MySQLDatabase::GetFeatureIdByName(const std::string& name)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Select select(m_connection, "SELECT id FROM `feature` WHERE name = '" + m_connection.EscapeString(name) + "' LIMIT 1");
 		if (select.Success())
 		{
@@ -608,6 +650,8 @@ namespace mmo
 
 	std::optional<uint64> MySQLDatabase::GetAccountIdByName(const std::string& name)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Select select(m_connection, "SELECT id FROM `account` WHERE username = '" + m_connection.EscapeString(name) + "' LIMIT 1");
 		if (select.Success())
 		{
@@ -627,6 +671,8 @@ namespace mmo
 
 	bool MySQLDatabase::GrantFeature(uint32 featureId, const std::vector<uint64>& accountIds, const std::string& expiration)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (accountIds.empty())
 		{
 			return true;
@@ -657,6 +703,8 @@ namespace mmo
 
 	bool MySQLDatabase::RevokeFeature(uint32 featureId, const std::vector<uint64>& accountIds)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (accountIds.empty())
 		{
 			return true;
@@ -685,6 +733,8 @@ namespace mmo
 
 	std::vector<AccountFeature> MySQLDatabase::GetActiveAccountFeatures(uint64 accountId)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		std::vector<AccountFeature> features;
 
 		mysql::Select select(m_connection,
@@ -716,6 +766,8 @@ namespace mmo
 
 	bool MySQLDatabase::SetRealmFeatureRequirement(uint32 realmId, uint32 featureId, bool requireVisibility, bool requireLogin)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		std::ostringstream query;
 		query << "INSERT INTO `realm_feature_requirement` (realm_id, feature_id, require_visibility, require_login) VALUES ("
 			<< realmId << ", " << featureId << ", " << (requireVisibility ? 1 : 0) << ", " << (requireLogin ? 1 : 0) << ") "
@@ -732,6 +784,8 @@ namespace mmo
 
 	bool MySQLDatabase::RemoveRealmFeatureRequirement(uint32 realmId, uint32 featureId)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (!m_connection.Execute("DELETE FROM `realm_feature_requirement` WHERE realm_id = "
 			+ std::to_string(realmId) + " AND feature_id = " + std::to_string(featureId) + " LIMIT 1"))
 		{
@@ -744,6 +798,8 @@ namespace mmo
 
 	std::vector<RealmFeatureRequirement> MySQLDatabase::GetRealmFeatureRequirements(uint32 realmId)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		std::vector<RealmFeatureRequirement> requirements;
 
 		mysql::Select select(m_connection,
@@ -775,6 +831,8 @@ namespace mmo
 
 	std::optional<uint32> MySQLDatabase::GetRealmIdByName(const std::string& name)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Select select(m_connection, "SELECT id FROM `realm` WHERE name = '" + m_connection.EscapeString(name) + "' LIMIT 1");
 		if (select.Success())
 		{
@@ -794,6 +852,8 @@ namespace mmo
 
 	std::optional<AccountAuthData> MySQLDatabase::GetAccountAuthData(std::string accountName)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		mysql::Select select(m_connection, "SELECT id, k, gm_level FROM account WHERE username = '" + m_connection.EscapeString(accountName) + "' LIMIT 1");
 		if (!select.Success())
 		{
@@ -855,6 +915,8 @@ namespace mmo
 
 	StatsSummary MySQLDatabase::GetStatsSummary()
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		StatsSummary summary;
 
 		mysql::Select select(m_connection,
@@ -879,6 +941,8 @@ namespace mmo
 
 	std::vector<StatsBucket> MySQLDatabase::GetLoginTimeSeries(StatsRange range)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		const std::string sql =
 			std::string("SELECT DATE_FORMAT(`timestamp`,'") + StatsRangeBucketFormat(range) + "') AS bucket, COUNT(*) "
 			"FROM `account_login` "
@@ -897,6 +961,8 @@ namespace mmo
 
 	std::vector<StatsBucket> MySQLDatabase::GetRegistrationTimeSeries(StatsRange range)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		const std::string sql =
 			std::string("SELECT DATE_FORMAT(`created_at`,'") + StatsRangeBucketFormat(range) + "') AS bucket, COUNT(*) "
 			"FROM `account` "
@@ -915,6 +981,8 @@ namespace mmo
 
 	std::vector<StatsBucket> MySQLDatabase::GetPlayerCountTimeSeries(StatsRange range, std::optional<uint32> realmId)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		// Each sampling pass writes one row per realm sharing the same NOW() timestamp. For a global
 		// series we first sum the realms per sample instant, then take the peak (max) per bucket so
 		// short-lived peaks between samples are preserved rather than averaged away. For a single
@@ -955,6 +1023,8 @@ namespace mmo
 
 	std::vector<RecentActivityEntry> MySQLDatabase::GetRecentActivity(uint32 limit)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		std::vector<RecentActivityEntry> entries;
 
 		const std::string sql =
@@ -990,6 +1060,8 @@ namespace mmo
 
 	void MySQLDatabase::AddPlayerCountSample(uint32 realmId, uint32 playerCount)
 	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
 		if (!m_connection.Execute("INSERT INTO `player_count_sample` (realm_id, `timestamp`, player_count) VALUES ("
 			+ std::to_string(realmId) + ", NOW(), " + std::to_string(playerCount) + ")"))
 		{

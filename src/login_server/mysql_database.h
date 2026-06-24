@@ -6,6 +6,8 @@
 #include "base/countdown.h"
 #include "mysql_wrapper/mysql_connection.h"
 
+#include <mutex>
+
 namespace mmo
 {
 	/// MySQL implementation of the login server database system.
@@ -13,8 +15,14 @@ namespace mmo
 		: public IDatabase
 	{
 	public:
+		/// Dispatches a piece of work onto the database worker thread.
+		typedef std::function<void(std::function<void()>)> WorkerDispatcher;
+
 		/// Creates a MySQL database instance.
-		explicit MySQLDatabase(mysql::DatabaseInfo connectionInfo, TimerQueue& timerQueue);
+		/// @param dbWorker Dispatcher that posts work onto the database worker thread. The keep-alive
+		///        ping is routed through this so that every access to the MySQL connection happens on
+		///        a single thread (the timer that triggers the ping fires on the IO thread).
+		explicit MySQLDatabase(mysql::DatabaseInfo connectionInfo, TimerQueue& timerQueue, WorkerDispatcher dbWorker);
 		~MySQLDatabase() override = default;
 
 		/// Tries to establish a connection to the MySQL server.
@@ -93,7 +101,13 @@ namespace mmo
 		mysql::DatabaseInfo m_connectionInfo;
 		mysql::Connection m_connection;
 		TimerQueue& m_timerQueue;
+		WorkerDispatcher m_dbWorker;
 		Countdown m_pingCountdown;
 		scoped_connection m_pingConnection;
+		/// Serializes every access to the single MySQL connection. The connection is shared between
+		/// the database worker thread (async requests) and the IO threads (synchronous web-API
+		/// handlers), and a MYSQL handle must never be touched from two threads at once. Recursive
+		/// because some methods (e.g. GetAccountAuthData) call other locked methods.
+		mutable std::recursive_mutex m_databaseMutex;
 	};
 }
