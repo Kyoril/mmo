@@ -73,18 +73,21 @@ namespace mmo
 		struct KnownClassInfo
 		{
 			uint32 classId = 0;
+			bool isKnown = false;
 			uint8 classLevel = 1;
+			uint8 maxClassLevel = 1;
+			uint32 classXp = 0;
+			uint32 xpToNextLevel = 0;
 			/// The class-change spell that switches the active class to this one (0 if none). Cast it
 			/// to become this class.
 			uint32 changeSpellId = 0;
 		};
 
-		/// Replaces the locally-cached set of known classes (and their per-class levels). Called when
-		/// a KnownClasses packet arrives. Does not modify the active class (that is replicated via the
-		/// Class field).
+		/// Replaces the locally-cached class overview. It contains every configured class so the UI can
+		/// show locked entries, plus progression and switch data for classes the character knows.
 		void SetKnownClasses(std::vector<KnownClassInfo> knownClasses) { m_knownClasses = std::move(knownClasses); }
 
-		/// Returns the cached set of classes this character has learned, with their per-class levels.
+		/// Returns the cached class overview. Check KnownClassInfo::isKnown before offering interaction.
 		[[nodiscard]] const std::vector<KnownClassInfo>& GetKnownClasses() const { return m_knownClasses; }
 
 		/// Sets the active class id reported alongside the known-class list. Cached separately from the
@@ -147,8 +150,8 @@ namespace mmo
 		const GuildInfo* m_guild{ nullptr };
 		IAudio* m_audio{ nullptr };
 
-		/// Cached set of classes this character has learned (with their per-class levels), replicated
-		/// from the server via the KnownClasses packet.
+		/// Cached class overview, including locked classes and progression data for unlocked classes,
+		/// replicated from the server via the KnownClasses packet.
 		std::vector<KnownClassInfo> m_knownClasses;
 
 		/// Active class id reported by the last KnownClasses packet (0 if none received yet).

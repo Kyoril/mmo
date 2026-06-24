@@ -23,6 +23,7 @@
 #include "binary_io/writer.h"
 #include "group_manager.h"
 
+#include <algorithm>
 #include <zlib.h>
 
 namespace mmo
@@ -2831,29 +2832,45 @@ namespace mmo
 
 	void Player::SendKnownClasses()
 	{
-		// Sends the full set of classes the character has learned plus their per-class levels. The
-		// active class itself is replicated through object_fields::Class; this packet carries the
-		// rest of the list so the UI can show all known classes. Used on spawn and after a switch.
+		// Send every configured class so the client can render a complete overview. Progression and
+		// switch data is populated only for classes the character has unlocked.
 		const std::vector<CharacterClassData> knownClasses = m_character->GetKnownClasses();
 		const uint32 activeClassId = m_character->Get<uint32>(object_fields::Class);
 		GamePlayerS& character = *m_character;
-		SendPacket([&knownClasses, activeClassId, &character](game::OutgoingPacket& packet)
+		const auto& classes = m_project.classes.getTemplates().entry();
+		SendPacket([&knownClasses, activeClassId, &character, &classes](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::realm_client_packet::KnownClasses);
 			// The active class id is carried in the packet (not just inferred from object_fields::Class)
 			// so the client's class list refreshes consistently from a single message, regardless of
 			// when the replicated Class field update arrives.
 			packet << io::write<uint32>(activeClassId);
-			packet << io::write<uint8>(static_cast<uint8>(knownClasses.size()));
-			for (const auto& classData : knownClasses)
+			packet << io::write<uint8>(static_cast<uint8>(classes.size()));
+			for (const auto& classEntry : classes)
 			{
-				// The class-change spell lets the client switch to this class on demand (clicking the
-				// class in the character window). 0 if none can be resolved.
-				const uint32 changeSpellId = character.GetClassChangeSpellId(classData.classId);
+				const auto knownIt = std::find_if(knownClasses.begin(), knownClasses.end(), [&classEntry](const CharacterClassData& classData)
+				{
+					return classData.classId == classEntry.id();
+				});
+				const bool isKnown = knownIt != knownClasses.end();
+				const uint8 classLevel = isKnown ? std::max<uint8>(1, knownIt->classLevel) : 0;
+				const uint8 maxClassLevel = static_cast<uint8>(std::clamp<int>(classEntry.levelbasevalues_size(), 1, 255));
+				const uint32 classXp = isKnown ? knownIt->classXp : 0;
+				uint32 xpToNextLevel = 0;
+				if (isKnown && classLevel < maxClassLevel && classEntry.xptonextlevel_size() > 0)
+				{
+					const int xpIndex = std::min<int>(classLevel - 1, classEntry.xptonextlevel_size() - 1);
+					xpToNextLevel = classEntry.xptonextlevel(xpIndex);
+				}
+				const uint32 changeSpellId = isKnown ? character.GetClassChangeSpellId(classEntry.id()) : 0;
 
 				packet
-					<< io::write<uint32>(classData.classId)
-					<< io::write<uint8>(classData.classLevel)
+					<< io::write<uint32>(classEntry.id())
+					<< io::write<uint8>(isKnown ? 1 : 0)
+					<< io::write<uint8>(classLevel)
+					<< io::write<uint8>(maxClassLevel)
+					<< io::write<uint32>(classXp)
+					<< io::write<uint32>(xpToNextLevel)
 					<< io::write<uint32>(changeSpellId);
 			}
 			packet.Finish();

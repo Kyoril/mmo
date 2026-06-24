@@ -153,16 +153,18 @@ migrations: `20260623_1_multi_class.sql`, `20260623_2_per_class_action_bars.sql`
    the active-class subset; `ActivateKnownSpellsForCurrentClass` rebuilds the live book on switch.
    Spells of inactive classes are preserved (no longer dropped on login) but hidden from the spellbook
    and uncastable. Save persists `GetKnownSpellIds()`; the set is serialized in `GamePlayerS`.
-5. **Client/UI** *(done)* — the world node sends a `KnownClasses` packet (active class id, then per
-   class: id, class level, class-change spell id) on spawn and after every switch (alongside the active-class
+5. **Client/UI** *(done)* — the world node sends a `KnownClasses` packet (active class id, then every
+   configured class with unlocked state, class level/max level, reserved class XP/next-rank XP, and
+   class-change spell id) on spawn and after every switch (alongside the active-class
    `object_fields::Class` and the refreshed spellbook). The client caches it on `GamePlayerC`
    (`SetKnownClasses` / `GetKnownClasses` / `GetKnownClassEntry`) and exposes it to Lua via
    `UnitHandle` (`GetKnownClassCount`, `GetKnownClassName`, `GetKnownClassLevel`,
-   `IsKnownClassActive`, `GetKnownClassChangeSpell`). A `PLAYER_KNOWN_CLASSES_CHANGED` event fires on
-   update; the character window shows a "Classes" section listing each known class with its level,
-   highlighting the active one. Each non-active row is a button that casts that class's class-change
-   spell to switch to it. The spellbook refreshes on the `PLAYER_SPELLS_CHANGED` event so a class
-   switch updates the visible spells immediately.
+   `IsKnownClassActive`, `GetKnownClassChangeSpell`, and progression accessors). A
+   `PLAYER_KNOWN_CLASSES_CHANGED` event fires on update; the character window has separate Attributes
+   and Classes tabs. The Classes tab shows configured classes, disables locked entries, marks the
+   active class, and shows rank and class-XP progress. Each unlocked non-active row casts that class's
+   class-change spell to switch to it. Class-change spells remain persistent regardless of class mask,
+   and the spellbook refreshes on `PLAYER_SPELLS_CHANGED` after a switch.
 
    A class is registered (and replicated) the moment its **class-change spell is learned**, not only
    when first switched to: `GamePlayerS::OnSpellLearned` detects the `ChangeClass` effect, adds the

@@ -180,6 +180,50 @@ namespace mmo
 		return knownClasses[index].classLevel;
 	}
 
+	int32 UnitHandle::GetKnownClassMaxLevel(const uint32 index) const
+	{
+		if (!CheckNonNull() || !Get()->IsPlayer())
+		{
+			return 0;
+		}
+
+		const auto& knownClasses = Get()->AsPlayer().GetKnownClasses();
+		return index < knownClasses.size() ? knownClasses[index].maxClassLevel : 0;
+	}
+
+	uint32 UnitHandle::GetKnownClassXp(const uint32 index) const
+	{
+		if (!CheckNonNull() || !Get()->IsPlayer())
+		{
+			return 0;
+		}
+
+		const auto& knownClasses = Get()->AsPlayer().GetKnownClasses();
+		return index < knownClasses.size() ? knownClasses[index].classXp : 0;
+	}
+
+	uint32 UnitHandle::GetKnownClassXpToNextLevel(const uint32 index) const
+	{
+		if (!CheckNonNull() || !Get()->IsPlayer())
+		{
+			return 0;
+		}
+
+		const auto& knownClasses = Get()->AsPlayer().GetKnownClasses();
+		return index < knownClasses.size() ? knownClasses[index].xpToNextLevel : 0;
+	}
+
+	bool UnitHandle::IsKnownClassUnlocked(const uint32 index) const
+	{
+		if (!CheckNonNull() || !Get()->IsPlayer())
+		{
+			return false;
+		}
+
+		const auto& knownClasses = Get()->AsPlayer().GetKnownClasses();
+		return index < knownClasses.size() && knownClasses[index].isKnown;
+	}
+
 	bool UnitHandle::IsKnownClassActive(const uint32 index) const
 	{
 		if (!CheckNonNull() || !Get()->IsPlayer())

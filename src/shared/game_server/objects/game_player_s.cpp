@@ -2457,6 +2457,21 @@ namespace mmo
 			}
 			return false;
 		}
+
+		/// Class-change spells are persistent navigation abilities. They must remain active even when
+		/// their class mask points at the class they switch to; otherwise neither the UI nor the server
+		/// considers the spell castable while another class is active.
+		bool IsClassChangeSpell(const proto::SpellEntry& spell)
+		{
+			for (const auto& effect : spell.effects())
+			{
+				if (effect.type() == spell_effects::ChangeClass)
+				{
+					return true;
+				}
+			}
+			return false;
+		}
 	}
 
 	void GamePlayerS::OnSpellLearned(const proto::SpellEntry& spell)
@@ -2524,6 +2539,11 @@ namespace mmo
 
 	bool GamePlayerS::IsSpellActiveForCurrentClass(const proto::SpellEntry& spell) const
 	{
+		if (IsClassChangeSpell(spell))
+		{
+			return true;
+		}
+
 		if (m_raceEntry && spell.racemask() != 0 && !(spell.racemask() & (1 << (m_raceEntry->id() - 1))))
 		{
 			return false;
@@ -2590,7 +2610,7 @@ namespace mmo
 				continue;
 			}
 
-			const bool classBound = spell->classmask() != 0 || IsProficiencySpell(*spell);
+			const bool classBound = !IsClassChangeSpell(*spell) && (spell->classmask() != 0 || IsProficiencySpell(*spell));
 			if (classBound && !IsSpellActiveForCurrentClass(*spell))
 			{
 				toRemove.push_back(spell->id());

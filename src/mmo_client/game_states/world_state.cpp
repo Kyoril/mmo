@@ -2375,10 +2375,19 @@ namespace mmo
 		for (uint8 i = 0; i < count; ++i)
 		{
 			GamePlayerC::KnownClassInfo info;
-			if (!(packet >> io::read<uint32>(info.classId) >> io::read<uint8>(info.classLevel) >> io::read<uint32>(info.changeSpellId)))
+			uint8 isKnown = 0;
+			if (!(packet
+				>> io::read<uint32>(info.classId)
+				>> io::read<uint8>(isKnown)
+				>> io::read<uint8>(info.classLevel)
+				>> io::read<uint8>(info.maxClassLevel)
+				>> io::read<uint32>(info.classXp)
+				>> io::read<uint32>(info.xpToNextLevel)
+				>> io::read<uint32>(info.changeSpellId)))
 			{
 				return PacketParseResult::Disconnect;
 			}
+			info.isKnown = isKnown != 0;
 
 			knownClasses.push_back(info);
 		}

@@ -63,7 +63,7 @@ namespace mmo
 		[[nodiscard]] virtual int32 GetLevel() const;
 		[[nodiscard]] virtual const char* GetClass() const;
 
-		/// Number of classes the player has learned (multi-class system). 0 for non-players.
+		/// Number of configured classes in the player's class overview. 0 for non-players.
 		[[nodiscard]] virtual uint32 GetKnownClassCount() const;
 
 		/// Localized/display name of the known class at the given index, or nullptr if out of range.
@@ -71,6 +71,18 @@ namespace mmo
 
 		/// Per-class level of the known class at the given index, or 0 if out of range.
 		[[nodiscard]] virtual int32 GetKnownClassLevel(uint32 index) const;
+
+		/// Maximum configured rank of the class at the given index, or 0 if out of range.
+		[[nodiscard]] virtual int32 GetKnownClassMaxLevel(uint32 index) const;
+
+		/// Current class experience of the class at the given index, or 0 if unavailable.
+		[[nodiscard]] virtual uint32 GetKnownClassXp(uint32 index) const;
+
+		/// Experience required for the class's next rank, or 0 at the cap / if unavailable.
+		[[nodiscard]] virtual uint32 GetKnownClassXpToNextLevel(uint32 index) const;
+
+		/// True if the character has unlocked the class at the given index.
+		[[nodiscard]] virtual bool IsKnownClassUnlocked(uint32 index) const;
 
 		/// True if the known class at the given index is the character's currently active class.
 		[[nodiscard]] virtual bool IsKnownClassActive(uint32 index) const;
