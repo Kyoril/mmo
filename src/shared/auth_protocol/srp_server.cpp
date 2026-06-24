@@ -80,23 +80,37 @@ namespace mmo
 		BigNumber t3{ h.data(), h.size() };
 
 		// Compute expected M1 = H(t3 | H(account) | s | A | B | K)
+		//
+		// IMPORTANT: the session key K must be hashed as the full, fixed-size 40-byte
+		// interleaved key (vK). Routing it through a BigNumber (K.asByteArray()) would
+		// strip leading zero bytes whenever the high byte happens to be 0x00 (~1/256 of
+		// logins, since K is derived from random ephemerals). The client always hashes the
+		// full 40 bytes, so a stripped K here yields a divergent M1 and a spurious
+		// "wrong password" failure. Same reasoning applies to the M2 computation below.
 		HashGeneratorSha1 sha;
 		Sha1_Add_BigNumbers(sha, { t3 });
 		const auto t4 = sha1(reinterpret_cast<const char*>(accountName.data()), accountName.size());
 		sha.update(reinterpret_cast<const char*>(t4.data()), t4.size());
-		Sha1_Add_BigNumbers(sha, { m_s, A, m_B, K });
+		Sha1_Add_BigNumbers(sha, { m_s, A, m_B });
+		sha.update(reinterpret_cast<const char*>(vK.data()), vK.size());
 		hash = sha.finalize();
 
-		// Compare server-computed M1 against the value received from the client.
-		const BigNumber M1{ hash.data(), hash.size() };
-		const auto sArr = M1.asByteArray(20);
-		if (!std::equal(sArr.begin(), sArr.end(), rec_M1.begin()))
+		// Compare the raw 20-byte M1 digest against the value received from the client.
+		// Comparing the raw digest (rather than a BigNumber round-trip) keeps any leading
+		// zero bytes of the hash intact.
+		if (!std::equal(hash.begin(), hash.end(), rec_M1.begin()))
 		{
 			return std::nullopt;
 		}
 
 		// M2 = H(A | M1 | K)  — sent back to the client for mutual authentication.
-		const SHA1Hash m2 = Sha1_BigNumbers({ A, M1, K });
+		// M1 is fed as its raw 20-byte digest and K as the full 40-byte key, matching the
+		// client and avoiding the same leading-zero stripping issue described above.
+		HashGeneratorSha1 m2gen;
+		Sha1_Add_BigNumbers(m2gen, { A });
+		m2gen.update(reinterpret_cast<const char*>(hash.data()), hash.size());
+		m2gen.update(reinterpret_cast<const char*>(vK.data()), vK.size());
+		const SHA1Hash m2 = m2gen.finalize();
 
 		return SrpResult{ std::move(K), m2 };
 	}

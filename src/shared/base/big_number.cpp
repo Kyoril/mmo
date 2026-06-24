@@ -118,17 +118,18 @@ namespace mmo
 		const int numBytes = getNumBytes();
 		const int len = (minSize >= numBytes) ? minSize : numBytes;
 
-		// Reserver enough memory
-		std::vector<uint8> ret;
-		ret.resize(len);
+		// Allocate (and zero-initialise) the full output buffer.
+		std::vector<uint8> ret(len, 0);
 
-		// Clear array if needed
-		if (len > numBytes)
-		{
-			std::fill(ret.begin(), ret.end(), 0);
-		}
+		// Write the big-endian representation RIGHT-aligned into the buffer, so any
+		// padding bytes occupy the most-significant (leading) positions. Writing it
+		// left-aligned would, after the reverse below, push the zero padding into the
+		// least-significant bytes and corrupt the value (multiplying it by 256^pad).
+		// This matters for fixed-size SRP6 payloads (A, B, N, s, S, M1, session key),
+		// where ~1/256 of values have a leading zero byte.
+		BN_bn2bin(m_bn, ret.data() + (len - numBytes));
 
-		BN_bn2bin(m_bn, ret.data());
+		// Convert from big-endian to the little-endian byte order used throughout.
 		std::reverse(ret.begin(), ret.end());
 
 		return ret;

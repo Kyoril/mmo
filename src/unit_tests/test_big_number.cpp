@@ -183,26 +183,33 @@ TEST_CASE("BigNumber asByteArray respects minimum size", "[big_number]")
     
     std::vector<uint8> bytes = bn.asByteArray(4); // Request minimum 4 bytes
     REQUIRE(bytes.size() == 4);
-    
-    // The implementation appears to zero-pad the array differently than expected
-    // Let's just verify that the array contains the correct value somewhere
-    bool containsValue = false;
-    for (size_t i = 0; i < bytes.size(); ++i) {
-        if (bytes[i] == 0x12) {
-            containsValue = true;
-            break;
-        }
-    }
-    REQUIRE(containsValue);
-    
-    // And verify that the rest are zeros
-    int nonZeroCount = 0;
-    for (size_t i = 0; i < bytes.size(); ++i) {
-        if (bytes[i] != 0) {
-            nonZeroCount++;
-        }
-    }
-    REQUIRE(nonZeroCount == 1);
+
+    // Output is little-endian, so the value byte must sit in the least-significant
+    // position and the padding must occupy the most-significant (trailing) bytes.
+    // A previous bug placed the value in the most-significant position instead,
+    // corrupting fixed-size SRP6 payloads whenever a value had a leading zero byte.
+    REQUIRE(bytes[0] == 0x12);
+    REQUIRE(bytes[1] == 0x00);
+    REQUIRE(bytes[2] == 0x00);
+    REQUIRE(bytes[3] == 0x00);
+}
+
+TEST_CASE("BigNumber asByteArray round-trips with leading zero bytes", "[big_number]")
+{
+    // A 2-byte value whose most-significant byte is zero when padded to 4 bytes.
+    BigNumber bn(0x00AB);
+
+    const std::vector<uint8> bytes = bn.asByteArray(4);
+    REQUIRE(bytes.size() == 4);
+    REQUIRE(bytes[0] == 0xAB);
+    REQUIRE(bytes[1] == 0x00);
+    REQUIRE(bytes[2] == 0x00);
+    REQUIRE(bytes[3] == 0x00);
+
+    // Reconstructing from the fixed-size little-endian array must preserve the value.
+    BigNumber rebuilt;
+    rebuilt.setBinary(bytes.data(), bytes.size());
+    REQUIRE(rebuilt == bn);
 }
 
 TEST_CASE("Sha1_BigNumbers creates correct hash", "[big_number]")
