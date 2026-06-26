@@ -57,6 +57,8 @@ namespace mmo
 		void ShowCreatureEditor();
 		void HandleToolBar();
 
+		void ExportToClient();
+
 		/// Initialize ImGui.
 		void InitImGui();
 

@@ -14,6 +14,7 @@
 #include "database.h"
 #include "editor_windows/asset_window.h"
 #include "proto_data/project.h"
+#include "simple_file_format/sff_write.h"
 
 #ifdef _WIN32
 #	include <windowsx.h>
@@ -274,6 +275,13 @@ namespace mmo
 		}
 
 		ImGui::SameLine();
+
+		if (ImGui::Button("Export to Client", ImVec2(0, 37)))
+		{
+			ExportToClient();
+		}
+
+		ImGui::SameLine();
 		ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
 		ImGui::SameLine();
 
@@ -293,6 +301,103 @@ namespace mmo
 		}
 
 		ImGui::End();
+	}
+
+	void MainWindow::ExportToClient()
+	{
+		if (m_config.clientDataPath.empty())
+		{
+			ELOG("Client data export path is not configured. Set 'clientDataPath' in the editor config file.");
+			return;
+		}
+
+		namespace fs = std::filesystem;
+
+		std::error_code ec;
+		fs::create_directories(m_config.clientDataPath, ec);
+		if (ec)
+		{
+			ELOG("Failed to create client data directory '" << m_config.clientDataPath << "': " << ec.message());
+			return;
+		}
+
+		ILOG("Exporting client data to '" << m_config.clientDataPath << "'...");
+
+		// Managers that exist in both server proto_data and client_data.
+		// Server-only fields are unknown to the client proto schema and will be silently
+		// ignored by the client's protobuf parser at load time.
+		static const char* const sharedManagers[] = {
+			"spells",
+			"ranges",
+			"maps",
+			"zones",
+			"spell_categories",
+			"model_data",
+			"races",
+			"classes",
+			"factions",
+			"faction_templates",
+			"item_displays",
+			"object_displays",
+			"animations",
+			"talents",
+			"talent_tabs",
+			"spell_visualizations",
+			"area_triggers",
+			"proficiencies",
+			"item_classes",
+			"item_subclasses",
+			"chat_channels",
+		};
+
+		const fs::path srcDir = m_config.projectPath;
+		const fs::path dstDir = m_config.clientDataPath;
+
+		// Copy .data files and record which ones succeeded
+		std::vector<const char*> exported;
+		for (const char* name : sharedManagers)
+		{
+			const std::string fileName = std::string(name) + ".data";
+			const fs::path src = srcDir / fileName;
+			const fs::path dst = dstDir / fileName;
+
+			if (!fs::exists(src))
+			{
+				WLOG("Client export: '" << src.string() << "' not found - skipping");
+				continue;
+			}
+
+			fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+			if (ec)
+			{
+				WLOG("Client export: failed to copy '" << name << "': " << ec.message());
+				continue;
+			}
+
+			exported.push_back(name);
+		}
+
+		// Write project.txt manifest for the client output directory
+		const std::string projectFilePath = (dstDir / "project.txt").string();
+		std::ofstream projectFile(projectFilePath);
+		if (!projectFile)
+		{
+			ELOG("Client export: could not write project.txt at '" << projectFilePath << "'");
+			return;
+		}
+
+		sff::write::File<char> sffFile(projectFile, sff::write::MultiLine);
+		sffFile.addKey("version", 1);
+		sffFile.writer.newLine();
+
+		for (const char* name : exported)
+		{
+			sff::write::Table<char> table(sffFile, name, sff::write::Comma);
+			table.addKey("file", std::string(name) + ".data");
+			table.Finish();
+		}
+
+		ILOG("Client data export complete: " << exported.size() << " manager(s) copied to '" << m_config.clientDataPath << "'.");
 	}
 
 	void MainWindow::RenderImGui()

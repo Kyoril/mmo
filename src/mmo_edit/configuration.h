@@ -23,6 +23,9 @@ namespace mmo
 		/// @brief Path to the editor project.
 		String projectPath;
 
+		/// @brief Path to export cooked client data to.
+		String clientDataPath;
+
 		/// @brief Default character asset used by Item Display preview.
 		String itemDisplayPreviewCharacter;
 

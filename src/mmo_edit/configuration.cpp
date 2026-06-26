@@ -19,6 +19,7 @@ namespace mmo
 	Configuration::Configuration()
 		: assetRegistryPath("Data")
 		, projectPath("Project")
+		, clientDataPath("ClientData")
 		, itemDisplayPreviewCharacter("")
 		, mysqlHost("127.0.0.1")
 		, mysqlPort(mmo::constants::DefaultMySQLPort)
@@ -81,6 +82,7 @@ namespace mmo
 			{
 				assetRegistryPath = dataTable->getString("assetRegistryPath", assetRegistryPath);
 				projectPath = dataTable->getString("projectPath", projectPath);
+				clientDataPath = dataTable->getString("clientDataPath", clientDataPath);
 				itemDisplayPreviewCharacter = dataTable->getString("itemDisplayPreviewCharacter", itemDisplayPreviewCharacter);
 			}
 
@@ -137,6 +139,7 @@ namespace mmo
 			sff::write::Table<Char> dataTable(global, "data", sff::write::MultiLine);
 			dataTable.addKey("assetRegistryPath", assetRegistryPath);
 			dataTable.addKey("projectPath", projectPath);
+			dataTable.addKey("clientDataPath", clientDataPath);
 			dataTable.addKey("itemDisplayPreviewCharacter", itemDisplayPreviewCharacter);
 			dataTable.Finish();
 		}
