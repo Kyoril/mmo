@@ -95,6 +95,7 @@ namespace mmo
 		/// @brief Draws the data-driven terrain foliage authoring section in the details panel.
 		void DrawFoliageSection();
 		void DrawVariableSelector(NamedVariableGetNode* node);
+		void DrawSamplerTypeEditor(PropertyBase* prop);
 		void DrawPropertyEditor(PropertyBase* prop);
 		
 		// Layout management
@@ -127,7 +128,7 @@ namespace mmo
 		std::unique_ptr<MaterialGraph> m_graph;
 		ax::NodeEditor::EditorContext* m_context { nullptr };
 		bool m_initDockLayout { true };
-		ImGuiTextFilter m_assetFilter;
+		bool m_focusGraphPanel { false };
 
 		// Generated HLSL captured from the last compilation, for the shader code debug viewer.
 		// Vertex variants are indexed by VertexShaderType, pixel variants by PixelShaderType.

@@ -943,35 +943,59 @@ namespace mmo
 	{
 		if (ImGui::Begin(panelId.c_str(), nullptr))
 		{
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
+			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
+
 			DrawPropertyTable();
+
+			ImGui::Spacing();
 
 			// Terrain foliage authoring is only relevant for materials (not material functions).
 			if (m_material && GetAssetPath().extension() != ".hmf")
 			{
 				DrawFoliageSection();
 			}
+
+			ImGui::PopStyleVar(2);
 		}
 		ImGui::End();
 	}
 
 	void MaterialEditorInstance::DrawPropertyTable()
 	{
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
-		if (ImGui::BeginTable("split", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable))
+		ed::NodeId selectedNodeId;
+		const bool hasSelection = ed::GetSelectedNodes(&selectedNodeId, 1) > 0;
+		GraphNode* node = hasSelection ? m_graph->FindNode(selectedNodeId.Get()) : nullptr;
+
+		const String headerLabel = node
+			? (String("Node Properties - ") + String(node->GetName().empty() ? node->GetTypeInfo().displayName : node->GetName()))
+			: "Node Properties";
+
+		if (ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			ed::NodeId selectedNode;
-			if (ed::GetSelectedNodes(&selectedNode, 1) > 0)
+			ImGui::Indent();
+
+			if (!node)
 			{
-				auto* node = m_graph->FindNode(selectedNode.Get());
-				if (node)
+				ImGui::TextDisabled("Select a node in the graph to edit its properties.");
+			}
+			else if (node->GetProperties().empty())
+			{
+				ImGui::TextDisabled("This node has no editable properties.");
+			}
+			else
+			{
+				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+				if (ImGui::BeginTable("split", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable))
 				{
 					DrawNodeProperties(node);
+					ImGui::EndTable();
 				}
+				ImGui::PopStyleVar();
 			}
-			
-			ImGui::EndTable();
+
+			ImGui::Unindent();
 		}
-		ImGui::PopStyleVar();
 	}
 
 	void MaterialEditorInstance::DrawFoliageSection()
@@ -1049,6 +1073,23 @@ namespace mmo
 		}
 	}
 
+	void MaterialEditorInstance::DrawSamplerTypeEditor(PropertyBase* prop)
+	{
+		static const char* s_samplerNames[] = { "Color", "Normal Map" };
+
+		const auto* intValue = prop->GetValueAs<int32>();
+		if (!intValue)
+		{
+			return;
+		}
+
+		int current = std::clamp(*intValue, 0, static_cast<int>(IM_ARRAYSIZE(s_samplerNames)) - 1);
+		if (ImGui::Combo("##samplerType", &current, s_samplerNames, IM_ARRAYSIZE(s_samplerNames)))
+		{
+			prop->SetValue(current);
+		}
+	}
+
 	void MaterialEditorInstance::DrawNodeProperties(GraphNode* node)
 	{
 		// The "Get Variable" node selects its source from the set of variables currently declared in the
@@ -1058,6 +1099,10 @@ namespace mmo
 			DrawVariableSelector(static_cast<NamedVariableGetNode*>(node));
 			return;
 		}
+
+		const bool isTextureNode =
+			node->GetTypeInfo().id == TextureNode::GetStaticTypeInfo().id ||
+			node->GetTypeInfo().id == TextureParameterNode::GetStaticTypeInfo().id;
 
 		for (auto* prop : node->GetProperties())
 		{
@@ -1070,7 +1115,14 @@ namespace mmo
 			ImGui::TableSetColumnIndex(1);
 			ImGui::SetNextItemWidth(-FLT_MIN);
 
-			DrawPropertyEditor(prop);
+			if (isTextureNode && prop->GetName() == "Sampler Type")
+			{
+				DrawSamplerTypeEditor(prop);
+			}
+			else
+			{
+				DrawPropertyEditor(prop);
+			}
 		}
 	}
 
@@ -1172,53 +1224,24 @@ namespace mmo
 		}
 		else if (const auto* pathValue = prop->GetValueAs<AssetPathValue>())
 		{
-			if (ImGui::BeginCombo(prop->GetName().data(), !pathValue->GetPath().empty() ? pathValue->GetPath().data() : "(None)", ImGuiComboFlags_HeightLargest))
+			String currentPath(pathValue->GetPath());
+			const std::set<String> exts = { String(pathValue->GetFilter()) };
+			const String hiddenLabel = String("##") + prop->GetName().data();
+			if (AssetPickerWidget::Draw(hiddenLabel.c_str(), currentPath, exts, &m_editor.GetPreviewManager(), nullptr, 64.0f, [this](const std::string& path) { m_host.NavigateToAsset(path); }))
 			{
-				if (!ImGui::IsAnyItemActive() && !ImGui::IsMouseClicked(0))
-				{
-					ImGui::SetKeyboardFocusHere(0);
-				}
-				m_assetFilter.Draw("##asset_filter");
-
-				if (ImGui::BeginChild("##asset_scroll_area", ImVec2(0, 400)))
-				{
-					const auto files = AssetRegistry::ListFiles();
-					for (auto& file : files)
-					{
-						if (!pathValue->GetFilter().empty())
-						{
-							if (!file.ends_with(pathValue->GetFilter()))
-								continue;
-						}
-
-						if (m_assetFilter.IsActive())
-						{
-							if (!m_assetFilter.PassFilter(file.c_str()))
-							{
-								continue;
-							}
-						}
-						
-						ImGui::PushID(file.c_str());
-						if (ImGui::Selectable(Path(file).filename().string().c_str()))
-						{
-							prop->SetValue(AssetPathValue(file, pathValue->GetFilter()));
-
-							m_assetFilter.Clear();
-							ImGui::CloseCurrentPopup();
-						}
-						ImGui::PopID();
-					}
-				}
-				ImGui::EndChild();
-				
-				ImGui::EndCombo();
+				prop->SetValue(AssetPathValue(currentPath, pathValue->GetFilter()));
 			}
 		}
 	}
 
 	void MaterialEditorInstance::DrawGraphPanel(const String& panelId)
 	{
+		if (m_focusGraphPanel)
+		{
+			ImGui::SetWindowFocus(panelId.c_str());
+			m_focusGraphPanel = false;
+		}
+
 		if(ImGui::Begin(panelId.c_str()))
 		{
 			ed::Begin(GetAssetPath().string().c_str(), ImVec2(0.0, 0.0f));
@@ -1326,15 +1349,14 @@ namespace mmo
 			auto sideId = ImGui::DockBuilderSplitNode(mainId, ImGuiDir_Left, 400.0f / ImGui::GetMainViewport()->Size.x, nullptr, &mainId);
 			auto sideTopId = ImGui::DockBuilderSplitNode(sideId, ImGuiDir_Up, 400.0f / ImGui::GetMainViewport()->Size.y, nullptr, &sideId);
 
-			ImGui::DockBuilderDockWindow(graphId.c_str(), mainId);
-
-			// Dock the shader code viewer as a tab alongside the graph so it has plenty of room.
 			ImGui::DockBuilderDockWindow(shaderCodeId.c_str(), mainId);
+			ImGui::DockBuilderDockWindow(graphId.c_str(), mainId);
 
 			ImGui::DockBuilderDockWindow(previewId.c_str(), sideTopId);
 			ImGui::DockBuilderDockWindow(detailsId.c_str(), sideId);
 
 			m_initDockLayout = false;
+			m_focusGraphPanel = true;
 		}
 
 		ImGui::DockBuilderFinish(dockspaceId);
