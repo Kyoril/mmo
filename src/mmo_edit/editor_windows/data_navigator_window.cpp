@@ -37,6 +37,12 @@
 #include "trainer_editor_window.h"
 #include "vendor_editor_window.h"
 #include "combat_settings_editor_window.h"
+#include "animation_editor_window.h"
+#include "condition_editor_window.h"
+#include "variable_editor_window.h"
+#include "spell_visualization_editor_window.h"
+#include "trigger_editor_window.h"
+#include "talent_editor_window.h"
 
 namespace mmo
 {
@@ -251,6 +257,20 @@ namespace mmo
             [this]() { OpenEditorWindow(std::type_index(typeid(LockTypeEditorWindow))); },
             static_cast<int>(m_project.lockTypes.count())
         });
+
+        gameplayCategory.editors.push_back({
+            std::type_index(typeid(TriggerEditorWindow)),
+            "Triggers",
+            [this]() { OpenEditorWindow(std::type_index(typeid(TriggerEditorWindow))); },
+            static_cast<int>(m_project.triggers.count())
+        });
+
+        gameplayCategory.editors.push_back({
+            std::type_index(typeid(ConditionEditorWindow)),
+            "Conditions",
+            [this]() { OpenEditorWindow(std::type_index(typeid(ConditionEditorWindow))); },
+            static_cast<int>(m_project.conditions.count())
+        });
         
         // Add editors to the character category
         characterCategory.editors.push_back({
@@ -288,6 +308,13 @@ namespace mmo
         });
         
         characterCategory.editors.push_back({
+            std::type_index(typeid(TalentEditorWindow)),
+            "Talents",
+            [this]() { OpenEditorWindow(std::type_index(typeid(TalentEditorWindow))); },
+            static_cast<int>(m_project.talentTabs.count())
+        });
+
+        characterCategory.editors.push_back({
             std::type_index(typeid(FactionEditorWindow)),
             "Factions",
             [this]() { OpenEditorWindow(std::type_index(typeid(FactionEditorWindow))); },
@@ -302,6 +329,20 @@ namespace mmo
         });
         
         // Add editors to the visuals category
+        visualsCategory.editors.push_back({
+            std::type_index(typeid(AnimationEditorWindow)),
+            "Animations",
+            [this]() { OpenEditorWindow(std::type_index(typeid(AnimationEditorWindow))); },
+            static_cast<int>(m_project.animations.count())
+        });
+
+        visualsCategory.editors.push_back({
+            std::type_index(typeid(SpellVisualizationEditorWindow)),
+            "Spell Visualizations",
+            [this]() { OpenEditorWindow(std::type_index(typeid(SpellVisualizationEditorWindow))); },
+            static_cast<int>(m_project.spellVisualizations.count())
+        });
+
         visualsCategory.editors.push_back({
             std::type_index(typeid(ModelEditorWindow)),
             "Models",
@@ -379,6 +420,13 @@ namespace mmo
             "Combat Settings",
             [this]() { OpenEditorWindow(std::type_index(typeid(CombatSettingsEditorWindow))); },
             0
+        });
+
+        miscCategory.editors.push_back({
+            std::type_index(typeid(VariableEditorWindow)),
+            "Variables",
+            [this]() { OpenEditorWindow(std::type_index(typeid(VariableEditorWindow))); },
+            static_cast<int>(m_project.variables.count())
         });
 
         miscCategory.editors.push_back({
