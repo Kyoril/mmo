@@ -57,6 +57,9 @@ namespace mmo
 		void ShowCreatureEditor();
 		void HandleToolBar();
 
+		/// Draws a welcome / getting-started panel over the empty central dock node.
+		void HandleWelcomeScreen(unsigned int dockspaceId);
+
 		void ExportToClient();
 
 		/// Initialize ImGui.
@@ -141,6 +144,8 @@ namespace mmo
 		std::vector<String> m_uninitializedEditorInstances;
 		EditorInstance* m_activeEditorInstance { nullptr };
 		ImFont* m_defaultFont { nullptr };
+		ImFont* m_headerFont { nullptr };
+		ImFont* m_titleFont { nullptr };
 
 		proto::Project& m_project;
 	};

@@ -5,9 +5,12 @@
 #include <imgui.h>
 #include <cctype>
 #include <algorithm>
+#include <unordered_map>
 
 #include "base/macros.h"
 #include "editor_host.h"
+#include "icon_font.h"
+#include "editor_fonts.h"
 
 // Include all editor window headers for type information
 #include "spell_editor_window.h"
@@ -46,6 +49,43 @@
 
 namespace mmo
 {
+    namespace
+    {
+        /// @brief Maps a category name to a representative icon glyph.
+        const char* IconForCategory(const String& name)
+        {
+            if (name == "Gameplay")      return ICON_FA_BOLT;
+            if (name == "Characters")    return ICON_FA_USERS;
+            if (name == "Visuals")       return ICON_FA_PICTURE_O;
+            if (name == "World")         return ICON_FA_GLOBE;
+            if (name == "Miscellaneous") return ICON_FA_LIST;
+            return ICON_FA_FOLDER;
+        }
+
+        /// @brief Maps an editor entry's display name to an icon glyph.
+        const char* IconForEditor(const String& name)
+        {
+            static const std::unordered_map<String, const char*> icons = {
+                { "Spells", ICON_FA_MAGIC }, { "Quests", ICON_FA_TROPHY }, { "Items", ICON_FA_SHIELD },
+                { "Item Classes", ICON_FA_TAGS }, { "Item Subclasses", ICON_FA_TAG },
+                { "Spell Range Types", ICON_FA_CROSSHAIRS }, { "Aura Stacking Categories", ICON_FA_LIST_UL },
+                { "Lock Types", ICON_FA_LOCK }, { "Triggers", ICON_FA_BOLT }, { "Conditions", ICON_FA_CHECK_SQUARE_O },
+                { "Creatures", ICON_FA_PAW }, { "Classes", ICON_FA_SHIELD }, { "Unit Classes", ICON_FA_USER },
+                { "Races", ICON_FA_VENUS_MARS }, { "Proficiencies", ICON_FA_BRIEFCASE }, { "Talents", ICON_FA_STAR },
+                { "Factions", ICON_FA_USERS }, { "Faction Templates", ICON_FA_USERS },
+                { "Animations", ICON_FA_FILM }, { "Spell Visualizations", ICON_FA_MAGIC }, { "Models", ICON_FA_CUBE },
+                { "Item Displays", ICON_FA_CUBE }, { "Object Displays", ICON_FA_CUBES },
+                { "Maps", ICON_FA_MAP }, { "Objects", ICON_FA_CUBES }, { "Zones", ICON_FA_MAP_SIGNS },
+                { "Unit Loot", ICON_FA_GIFT }, { "Trainers", ICON_FA_GRADUATION_CAP }, { "Vendors", ICON_FA_SHOPPING_CART },
+                { "Gossip", ICON_FA_COMMENT }, { "Combat Settings", ICON_FA_COGS }, { "Variables", ICON_FA_CODE },
+                { "Chat Channels", ICON_FA_COMMENTS },
+            };
+
+            const auto it = icons.find(name);
+            return it != icons.end() ? it->second : ICON_FA_FILE_O;
+        }
+    }
+
     DataNavigatorWindow::DataNavigatorWindow(const String& name, proto::Project& project, EditorHost& host)
         : EditorWindowBase(name)
         , m_project(project)
@@ -53,6 +93,7 @@ namespace mmo
     {
         m_hasToolbarButton = true;
         m_toolbarButtonText = "Data Navigator";
+        m_toolbarButtonIcon = ICON_FA_DATABASE;
         
         // Initialize the categories and editors list
         InitializeCategories();
@@ -62,17 +103,30 @@ namespace mmo
     {
         if (ImGui::Begin(m_name.c_str(), &m_visible))
         {
-            // Draw a search filter at the top
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+            // Draw a search filter at the top, padded a touch for breathing room.
+            ImGui::Spacing();
             static char searchBuffer[256] = "";
             ImGui::SetNextItemWidth(-1);
-            ImGui::InputTextWithHint("##search", "Search...", searchBuffer, IM_ARRAYSIZE(searchBuffer));
-            
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 6.0f));
+            ImGui::InputTextWithHint("##search", ICON_FA_SEARCH "  Search...", searchBuffer, IM_ARRAYSIZE(searchBuffer));
+            ImGui::PopStyleVar();
+            ImGui::Spacing();
+            ImGui::Spacing();
+
             const String searchText = searchBuffer;
             const bool hasSearchFilter = !searchText.empty();
-            
+
             // Calculate if we need to show the category name based on filtering
             bool showCategoryHeader = !hasSearchFilter;
-            
+
+            const ImU32 countColor = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+            const ImU32 iconColor = ImGui::GetColorU32(ImVec4(0.337f, 0.624f, 0.824f, 1.0f));
+
+            // Slightly roomier rows for a less cramped, more navigable list.
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 3.0f));
+
             // Draw the categories and their editors
             for (auto& category : m_categories)
             {
@@ -107,8 +161,20 @@ namespace mmo
                 // Draw the category header if we're not searching
                 if (showCategoryHeader)
                 {
-                    ImGuiTreeNodeFlags categoryFlags = ImGuiTreeNodeFlags_DefaultOpen;
-                    category.isOpen = ImGui::CollapsingHeader(category.name.c_str(), categoryFlags);
+                    ImGuiTreeNodeFlags categoryFlags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
+                    const String headerLabel = String(IconForCategory(category.name)) + "   " + category.name;
+
+                    if (ImFont* headerFont = GetEditorHeaderFont())
+                    {
+                        ImGui::PushFont(headerFont);
+                    }
+                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6.0f, 6.0f));
+                    category.isOpen = ImGui::CollapsingHeader(headerLabel.c_str(), categoryFlags);
+                    ImGui::PopStyleVar();
+                    if (GetEditorHeaderFont())
+                    {
+                        ImGui::PopFont();
+                    }
                 }
                 
                 // If the category is open or we're filtering, draw its editors
@@ -138,18 +204,18 @@ namespace mmo
                         {
                             ImGui::Indent();
                         }
-                        
+
                         String idStr = editor.displayName;
                         ImGui::PushID(idStr.c_str());
-                        
-                        // Display the editor entry with its item count
-                        String displayText = editor.displayName;
-                        if (editor.count > 0)
-                        {
-                            displayText += " (" + std::to_string(editor.count) + ")";
-                        }
-                        
-                        if (ImGui::Selectable(displayText.c_str()))
+
+                        // Capture the row geometry before drawing so we can overlay the icon and a
+                        // right-aligned, dimmed item count on top of the selectable.
+                        const float rowWidth = ImGui::GetContentRegionAvail().x;
+                        const ImVec2 rowMin = ImGui::GetCursorScreenPos();
+
+                        // Leading spaces reserve room for the icon we paint manually.
+                        const String label = "      " + editor.displayName;
+                        if (ImGui::Selectable(label.c_str()))
                         {
                             // Call the callback to open this editor
                             if (editor.openCallback)
@@ -157,20 +223,39 @@ namespace mmo
                                 editor.openCallback();
                             }
                         }
-                        
+
+                        // Paint the per-entry icon in the editor accent color.
+                        drawList->AddText(ImVec2(rowMin.x + 2.0f, rowMin.y), iconColor, IconForEditor(editor.displayName));
+
+                        // Right-aligned, dimmed item count.
+                        if (editor.count > 0)
+                        {
+                            const String countText = std::to_string(editor.count);
+                            const float countWidth = ImGui::CalcTextSize(countText.c_str()).x;
+                            drawList->AddText(ImVec2(rowMin.x + rowWidth - countWidth - 2.0f, rowMin.y), countColor, countText.c_str());
+                        }
+
                         ImGui::PopID();
-                        
+
                         // Remove indentation
                         if (showCategoryHeader)
                         {
                             ImGui::Unindent();
                         }
                     }
+
+                    // A little breathing room between categories.
+                    if (showCategoryHeader)
+                    {
+                        ImGui::Spacing();
+                    }
                 }
             }
+
+            ImGui::PopStyleVar(); // ItemSpacing
         }
         ImGui::End();
-        
+
         return false;
     }
 

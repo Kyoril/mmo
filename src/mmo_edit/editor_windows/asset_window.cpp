@@ -6,6 +6,8 @@
 #include <fstream>
 #include <algorithm>
 
+#include "editor_fonts.h"
+#include "icon_font.h"
 #include "assets/asset_registry.h"
 #include "graphics/texture.h"
 #include "graphics/texture_mgr.h"
@@ -621,7 +623,18 @@ namespace mmo
 					favFlags |= ImGuiTreeNodeFlags_Selected;
 				}
 
-				ImGui::TreeNodeEx("★ Favorites", favFlags);
+				static const String favoritesLabel = String(ICON_FA_STAR) + " Favorites";
+
+				if (ImFont* headerFont = GetEditorHeaderFont())
+				{
+					ImGui::PushFont(headerFont);
+				}
+				ImGui::TreeNodeEx(favoritesLabel.c_str(), favFlags);
+				if (GetEditorHeaderFont())
+				{
+					ImGui::PopFont();
+				}
+
 				if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
 				{
 					m_showingFavorites = true;

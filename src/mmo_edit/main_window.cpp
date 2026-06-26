@@ -5,6 +5,8 @@
 #include <imgui_internal.h>
 
 #include "configuration.h"
+#include "icon_font.h"
+#include "editor_fonts.h"
 #include "assets/asset_registry.h"
 #include "base/macros.h"
 #include "base/utilities.h"
@@ -258,12 +260,50 @@ namespace mmo
 			| ImGuiWindowFlags_NoSavedSettings
 			;
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
-		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImGui::GetStyleColorVec4(ImGuiCol_MenuBarBg));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 0.0f));
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.082f, 0.082f, 0.082f, 1.0f));
 		ImGui::Begin("TOOLBAR", nullptr, window_flags);
-		ImGui::PopStyleVar();
+		ImGui::PopStyleVar(2);
 		ImGui::PopStyleColor();
 
-		if (ImGui::Button("Save All", ImVec2(0, 37)))
+		// Uniform toolbar button metrics so the bar reads as a single, deliberate strip.
+		const float toolbarHeight = ImGui::GetWindowSize().y;
+		const float buttonHeight = 34.0f;
+
+		// Vertically center the row of buttons within the toolbar.
+		ImGui::SetCursorPosY((toolbarHeight - buttonHeight) * 0.5f);
+
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12.0f, 0.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, ImGui::GetStyle().ItemSpacing.y));
+
+		// Helper that draws a consistent icon + label toolbar button.
+		auto toolbarButton = [&](const char* icon, const char* label, const char* tooltip) -> bool
+		{
+			const String text = String(icon) + "  " + label;
+			const bool pressed = ImGui::Button(text.c_str(), ImVec2(0.0f, buttonHeight));
+			if (tooltip && ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("%s", tooltip);
+			}
+			ImGui::SameLine();
+			return pressed;
+		};
+
+		auto toolbarSeparator = [&]()
+		{
+			ImGui::SetCursorPosY((toolbarHeight - buttonHeight) * 0.5f + 4.0f);
+			ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
+			ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+			ImGui::PopStyleColor();
+			ImGui::SameLine();
+			ImGui::SetCursorPosY((toolbarHeight - buttonHeight) * 0.5f);
+		};
+
+		// Accent the primary "Save All" action so the most common action stands out.
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.337f, 0.624f, 0.824f, 0.250f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.337f, 0.624f, 0.824f, 0.500f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.337f, 0.624f, 0.824f, 0.750f));
+		if (toolbarButton(ICON_FA_FLOPPY_O, "Save All", "Save the project and all open editors"))
 		{
 			m_project.save(m_config.projectPath);
 
@@ -273,17 +313,14 @@ namespace mmo
 				editor->Save();
 			}
 		}
+		ImGui::PopStyleColor(3);
 
-		ImGui::SameLine();
-
-		if (ImGui::Button("Export to Client", ImVec2(0, 37)))
+		if (toolbarButton(ICON_FA_UPLOAD, "Export to Client", "Export shared game data to the client data folder"))
 		{
 			ExportToClient();
 		}
 
-		ImGui::SameLine();
-		ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-		ImGui::SameLine();
+		toolbarSeparator();
 
 		for(auto& window : m_editorWindows)
 		{
@@ -292,7 +329,12 @@ namespace mmo
 				continue;
 			}
 
-			if (ImGui::Button(window->GetToolbarButtonText().c_str(), ImVec2(0, 37)))
+			const String& icon = window->GetToolbarButtonIcon();
+			const String label = icon.empty()
+				? window->GetToolbarButtonText()
+				: icon + "  " + window->GetToolbarButtonText();
+
+			if (ImGui::Button(label.c_str(), ImVec2(0.0f, buttonHeight)))
 			{
 				window->Open();
 			}
@@ -300,7 +342,111 @@ namespace mmo
 			ImGui::SameLine();
 		}
 
+		ImGui::PopStyleVar(2);
+
 		ImGui::End();
+	}
+
+	void MainWindow::HandleWelcomeScreen(unsigned int dockspaceId)
+	{
+		// Only show the welcome panel when the central document area has no editor docked into it.
+		ImGuiDockNode* centralNode = ImGui::DockBuilderGetCentralNode(dockspaceId);
+		if (!centralNode || !centralNode->IsEmpty())
+		{
+			return;
+		}
+
+		ImGui::SetNextWindowPos(centralNode->Pos);
+		ImGui::SetNextWindowSize(centralNode->Size);
+
+		ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoDocking
+			| ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus
+			| ImGuiWindowFlags_NoNavFocus;
+
+		// While the user is dragging a window (i.e. trying to dock it), make the welcome overlay
+		// transparent to input so the central dock node behind it remains a valid drop target.
+		// Otherwise the overlay would be the hovered window and, being non-dockable, would suppress
+		// the central docking preview.
+		if (ImGui::GetCurrentContext()->MovingWindow != nullptr)
+		{
+			flags |= ImGuiWindowFlags_NoInputs;
+		}
+
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.085f, 0.085f, 0.090f, 1.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+		if (ImGui::Begin("##WelcomeScreen", nullptr, flags))
+		{
+			const ImVec2 region = ImGui::GetContentRegionAvail();
+
+			// Roughly vertically center the hero block.
+			const float blockHeight = 240.0f;
+			ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (region.y - blockHeight) * 0.5f);
+
+			const ImU32 accent = ImGui::GetColorU32(ImVec4(0.337f, 0.624f, 0.824f, 1.0f));
+			const ImU32 dim = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+
+			// Helper: draw a line of text horizontally centered in the window.
+			auto centeredText = [&](const char* text, ImFont* font, ImU32 color)
+			{
+				if (font) ImGui::PushFont(font);
+				const float textWidth = ImGui::CalcTextSize(text).x;
+				ImGui::SetCursorPosX((region.x - textWidth) * 0.5f);
+				ImGui::PushStyleColor(ImGuiCol_Text, color);
+				ImGui::TextUnformatted(text);
+				ImGui::PopStyleColor();
+				if (font) ImGui::PopFont();
+			};
+
+			centeredText(ICON_FA_CUBES, GetEditorTitleFont(), accent);
+			ImGui::Spacing();
+			centeredText("MMO Edit", GetEditorTitleFont(), ImGui::GetColorU32(ImGuiCol_Text));
+			ImGui::Spacing();
+			centeredText("Select an asset from the Data Navigator to begin editing.", nullptr, dim);
+
+			ImGui::Spacing();
+			ImGui::Spacing();
+			ImGui::Spacing();
+
+			// Centered row of quick-action buttons.
+			const ImVec2 buttonSize(190.0f, 40.0f);
+			const float spacing = ImGui::GetStyle().ItemSpacing.x;
+			const float totalWidth = buttonSize.x * 3.0f + spacing * 2.0f;
+			ImGui::SetCursorPosX((region.x - totalWidth) * 0.5f);
+
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 0.0f));
+
+			if (ImGui::Button(ICON_FA_DATABASE "  Data Navigator", buttonSize))
+			{
+				for (const auto& window : m_editorWindows)
+				{
+					if (window->HasToolbarButton())
+					{
+						window->Open();
+					}
+				}
+			}
+			ImGui::SameLine();
+
+			if (ImGui::Button(ICON_FA_FLOPPY_O "  Save All", buttonSize))
+			{
+				m_project.save(m_config.projectPath);
+				for (auto& editor : m_editors)
+				{
+					editor->Save();
+				}
+			}
+			ImGui::SameLine();
+
+			if (ImGui::Button(ICON_FA_UPLOAD "  Export to Client", buttonSize))
+			{
+				ExportToClient();
+			}
+
+			ImGui::PopStyleVar();
+		}
+		ImGui::End();
+		ImGui::PopStyleVar();
+		ImGui::PopStyleColor();
 	}
 
 	void MainWindow::ExportToClient()
@@ -465,6 +611,9 @@ namespace mmo
 				importer->Draw();
 			}
 
+			// Show a friendly welcome panel whenever the central document area is empty.
+			HandleWelcomeScreen(dockspace_id);
+
 			const ImGuiID dockSpaceId = ImGui::GetID("MyDockSpace");
 			std::erase_if(m_uninitializedEditorInstances, [dockSpaceId](const String& name)
 			{
@@ -509,6 +658,13 @@ namespace mmo
 		auto topId = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Up, 400.0f / ImGui::GetMainViewport()->Size.y, nullptr, &dockMainId);
 		auto leftId = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Left, 200.0f / ImGui::GetMainViewport()->Size.y, nullptr, &dockMainId);
 		auto rightId = ImGui::DockBuilderSplitNode(dockMainId, ImGuiDir_Right, 200.0f / ImGui::GetMainViewport()->Size.y, nullptr, &dockMainId);
+
+		// Flag the remaining middle node as the central (document) node so opened editor instances
+		// dock into it and the welcome screen can detect when it is empty.
+		if (ImGuiDockNode* centralNode = ImGui::DockBuilderGetNode(dockMainId))
+		{
+			centralNode->SetLocalFlags(centralNode->LocalFlags | ImGuiDockNodeFlags_CentralNode);
+		}
 
 		for(const auto& window : m_editorWindows)
 		{
@@ -697,23 +853,36 @@ namespace mmo
 		colors[ImGuiCol_NavWindowingDimBg]      = ImVec4(0.000f, 0.000f, 0.000f, 0.586f);
 		colors[ImGuiCol_ModalWindowDimBg]       = ImVec4(0.000f, 0.000f, 0.000f, 0.586f);
 
+		// A subtle lighter border gives panels gentle definition without looking boxy.
+		colors[ImGuiCol_Border]                 = ImVec4(0.220f, 0.220f, 0.235f, 0.500f);
+		colors[ImGuiCol_Separator]              = ImVec4(0.220f, 0.220f, 0.235f, 0.500f);
+
 		// Style adjustments for a more professional appearance
 		style->ChildRounding = 4.0f;
 		style->FrameBorderSize = 1.0f;
-		style->FrameRounding = 2.0f;
-		style->GrabMinSize = 7.0f;
-		style->PopupRounding = 2.0f;
+		style->FrameRounding = 3.0f;
+		style->GrabMinSize = 8.0f;
+		style->GrabRounding = 3.0f;
+		style->PopupRounding = 3.0f;
+		style->PopupBorderSize = 1.0f;
 		style->ScrollbarRounding = 12.0f;
 		style->ScrollbarSize = 13.0f;
 		style->TabBorderSize = 0.0f;
 		style->TabRounding = 4.0f;
 		style->WindowRounding = 4.0f;
 		style->WindowBorderSize = 1.0f;
-		
-		// Spacing adjustments for a cleaner look
-		style->ItemSpacing = ImVec2(8.0f, 4.0f);
-		style->FramePadding = ImVec2(8.0f, 3.0f);
-		style->WindowPadding = ImVec2(8.0f, 8.0f);
+
+		// Hide the per-window collapse arrow for a cleaner, Unreal-like docked look.
+		style->WindowMenuButtonPosition = ImGuiDir_None;
+
+		// Spacing adjustments for a cleaner, slightly roomier look
+		style->ItemSpacing = ImVec2(8.0f, 6.0f);
+		style->ItemInnerSpacing = ImVec2(6.0f, 6.0f);
+		style->FramePadding = ImVec2(9.0f, 5.0f);
+		style->CellPadding = ImVec2(6.0f, 4.0f);
+		style->IndentSpacing = 18.0f;
+		style->WindowPadding = ImVec2(10.0f, 10.0f);
+		style->WindowTitleAlign = ImVec2(0.0f, 0.5f);
 	}
 
 	void MainWindow::InitImGui()
@@ -731,10 +900,35 @@ namespace mmo
 		// Setup Dear ImGui style
 		ImGui::StyleColorsDark();
 
-		// Init
-		const auto fontPath = Path(m_config.assetRegistryPath) / "Editor" / "Roboto-Regular.ttf";
-		m_defaultFont = io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(), 16, nullptr, io.Fonts->GetGlyphRangesDefault());
-		
+		// Load the editor fonts. We build three sizes of Roboto (body, header, title) and merge the
+		// FontAwesome icon glyphs into each of them so icons can be embedded inline in any UI text.
+		const auto editorDir = Path(m_config.assetRegistryPath) / "Editor";
+		const auto fontPath = editorDir / "Roboto-Regular.ttf";
+		const auto iconFontPath = editorDir / "FontAwesome.ttf";
+
+		// The glyph range must outlive font atlas building, so keep it static.
+		static const ImWchar s_iconRange[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+
+		ImFontConfig iconConfig;
+		iconConfig.MergeMode = true;
+		iconConfig.PixelSnapH = true;
+		// Pull the icons in a touch so they sit nicely on the text baseline.
+		iconConfig.GlyphOffset = ImVec2(0.0f, 1.0f);
+
+		auto loadFontWithIcons = [&](float size, float iconSize) -> ImFont*
+		{
+			ImFont* font = io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(), size, nullptr, io.Fonts->GetGlyphRangesDefault());
+			iconConfig.GlyphMinAdvanceX = iconSize; // keep icons roughly monospaced for alignment
+			io.Fonts->AddFontFromFileTTF(iconFontPath.string().c_str(), iconSize, &iconConfig, s_iconRange);
+			return font;
+		};
+
+		m_defaultFont = loadFontWithIcons(16.0f, 14.0f);
+		m_headerFont  = loadFontWithIcons(18.0f, 16.0f);
+		m_titleFont   = loadFontWithIcons(26.0f, 22.0f);
+
+		SetEditorFonts(m_defaultFont, m_headerFont, m_titleFont);
+
 		// When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
 		ImGuiStyle& style = ImGui::GetStyle();
 		if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
@@ -756,8 +950,7 @@ namespace mmo
         
 #endif
         
-		// Load fonts
-		io.Fonts->AddFontDefault();
+		// Build the font atlas (Roboto + merged FontAwesome icons in three sizes).
 		io.Fonts->Build();
 
 		// Dockspace flags

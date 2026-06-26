@@ -51,6 +51,10 @@ namespace mmo
 
 		virtual const String& GetToolbarButtonText() const { return m_toolbarButtonText; }
 
+		/// @brief Optional icon (e.g. an ICON_FA_* glyph) shown before the toolbar button text.
+		///	@return The icon glyph string, or an empty string for no icon.
+		virtual const String& GetToolbarButtonIcon() const { return m_toolbarButtonIcon; }
+
 		/// @brief Determines whether the window is dockable.
 		/// @return True if the window is dockable, false otherwise.
 		[[nodiscard]] virtual bool IsDockable() const { return false; }
@@ -71,5 +75,6 @@ namespace mmo
 		bool m_visible { true };
 		bool m_hasToolbarButton{ false };
 		String m_toolbarButtonText;
+		String m_toolbarButtonIcon;
 	};
 }
