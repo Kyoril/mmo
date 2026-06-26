@@ -36,6 +36,9 @@ namespace mmo
 		/// Draws the viewport window.
 		bool Draw() override;
 
+		/// Navigates to and selects the given asset path in the browser.
+		void NavigateToAsset(const std::string& assetPath);
+
 	public:
 		bool IsDockable() const override { return true; }
 
@@ -122,6 +125,9 @@ namespace mmo
 
 		/// @brief Flat list of favorited asset paths, persisted to editor_favorites.json.
 		std::vector<std::string> m_favorites;
+
+		/// @brief Asset path to scroll to and highlight on the next Draw call. Cleared after use.
+		std::string m_highlightedAssetPath;
 
 		/// @brief True when the Favorites view is active in the right panel.
 		bool m_showingFavorites { false };

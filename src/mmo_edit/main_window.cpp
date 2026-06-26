@@ -915,4 +915,16 @@ namespace mmo
 	void MainWindow::InvalidateAssetPreview(const String& asset)
 	{
 	}
+
+	void MainWindow::NavigateToAsset(const std::string& assetPath)
+	{
+		for (auto& window : m_editorWindows)
+		{
+			if (auto* assetWindow = dynamic_cast<AssetWindow*>(window.get()))
+			{
+				assetWindow->NavigateToAsset(assetPath);
+				return;
+			}
+		}
+	}
 }

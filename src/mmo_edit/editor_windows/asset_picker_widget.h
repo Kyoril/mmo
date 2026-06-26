@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <set>
+#include <functional>
 
 #include "base/typedefs.h"
 
@@ -32,6 +33,7 @@ namespace mmo
 		/// \param previewManager Preview provider manager for showing asset previews (optional).
 		/// \param audioSystem Audio system for previewing sound files (optional).
 		/// \param previewSize Size of the preview image in pixels (default 64x64).
+		/// \param onNavigateCallback Callback invoked when user clicks the navigate button (optional).
 		/// \return True if the asset path was changed.
 		static bool Draw(
 			const char* label,
@@ -39,7 +41,8 @@ namespace mmo
 			const std::set<String>& extensions,
 			PreviewProviderManager* previewManager = nullptr,
 			IAudio* audioSystem = nullptr,
-			float previewSize = 64.0f);
+			float previewSize = 64.0f,
+			std::function<void(const std::string&)> onNavigateCallback = nullptr);
 
 	private:
 		/// \brief Get list of assets matching the extensions.

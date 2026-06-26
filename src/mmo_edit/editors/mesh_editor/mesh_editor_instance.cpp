@@ -782,7 +782,7 @@ namespace mmo
 								materialPath = m_entity->GetSubEntity(i)->GetMaterial()->GetName();
 							}
 
-							if (AssetPickerWidget::Draw("##material", materialPath, s_materialExtensions, &m_previewManager, nullptr, 64.0f))
+							if (AssetPickerWidget::Draw("##material", materialPath, s_materialExtensions, &m_previewManager, nullptr, 64.0f, [this](const std::string& path) { m_host.NavigateToAsset(path); }))
 							{
 								if (!materialPath.empty())
 								{
@@ -1537,6 +1537,39 @@ namespace mmo
 			if (ImGui::IsItemClicked(ImGuiMouseButton_Middle))
 			{
 				m_middleButtonPressed = true;
+			}
+
+
+			// Overlay: vertex and triangle statistics in the top-left of the viewport
+			if (m_entity && m_entity->GetMesh())
+			{
+				const Mesh& mesh = *m_entity->GetMesh();
+				uint32 totalVertices = 0;
+				uint32 totalTriangles = 0;
+
+				// Shared vertices (used by submeshes with useSharedVertices == true)
+				const uint32 sharedVerts = mesh.sharedVertexData ? mesh.sharedVertexData->vertexCount : 0;
+
+				for (uint16 i = 0; i < mesh.GetSubMeshCount(); ++i)
+				{
+					const SubMesh& sub = mesh.GetSubMesh(i);
+					totalVertices += sub.useSharedVertices ? sharedVerts : (sub.vertexData ? sub.vertexData->vertexCount : 0);
+					totalTriangles += sub.indexData ? static_cast<uint32>(sub.indexData->indexCount / 3) : 0;
+				}
+
+				// Draw a semi-transparent background and text overlay
+				const ImVec2 imageMin = ImGui::GetItemRectMin();
+				const ImVec2 padding(6.0f, 4.0f);
+				char statsText[64];
+				snprintf(statsText, sizeof(statsText), "Verts: %u  Tris: %u", totalVertices, totalTriangles);
+
+				const ImVec2 textSize = ImGui::CalcTextSize(statsText);
+				const ImVec2 bgMin = ImVec2(imageMin.x + 6.0f, imageMin.y + 6.0f);
+				const ImVec2 bgMax = ImVec2(bgMin.x + textSize.x + padding.x * 2.0f, bgMin.y + textSize.y + padding.y * 2.0f);
+
+				ImDrawList* drawList = ImGui::GetWindowDrawList();
+				drawList->AddRectFilled(bgMin, bgMax, IM_COL32(0, 0, 0, 140), 3.0f);
+				drawList->AddText(ImVec2(bgMin.x + padding.x, bgMin.y + padding.y), IM_COL32(255, 255, 255, 220), statsText);
 			}
 
 		}

@@ -42,7 +42,8 @@ namespace mmo
 		const std::set<String>& extensions,
 		PreviewProviderManager* previewManager,
 		IAudio* audioSystem,
-		float previewSize)
+		float previewSize,
+		std::function<void(const std::string&)> onNavigateCallback)
 	{
 		bool changed = false;
 		
@@ -110,6 +111,15 @@ namespace mmo
 			s_lastExtensions = extensions;
 		}
 
+		// When a navigate callback is provided, reserve space for a small button next to the combo
+		const float navButtonWidth = onNavigateCallback
+			? (ImGui::CalcTextSize(">>").x + ImGui::GetStyle().FramePadding.x * 2.0f)
+			: 0.0f;
+		if (onNavigateCallback)
+		{
+			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - navButtonWidth - ImGui::GetStyle().ItemSpacing.x);
+		}
+
 		// Combo box for asset selection
 		if (ImGui::BeginCombo(label, currentAssetPath.empty() ? "None" : currentAssetPath.c_str(), ImGuiComboFlags_HeightLarge))
 		{
@@ -140,7 +150,7 @@ namespace mmo
 				{
 					std::string lowerAsset = assetPath;
 					std::transform(lowerAsset.begin(), lowerAsset.end(), lowerAsset.begin(), ::tolower);
-					
+
 					if (lowerAsset.find(lowerSearch) == std::string::npos)
 					{
 						continue;
@@ -162,6 +172,22 @@ namespace mmo
 			ImGui::EndChild();
 
 			ImGui::EndCombo();
+		}
+
+		// Navigate button — always rendered when a callback is provided so the layout is stable
+		if (onNavigateCallback)
+		{
+			ImGui::SameLine();
+			ImGui::BeginDisabled(currentAssetPath.empty());
+			if (ImGui::Button(">>", ImVec2(navButtonWidth, 0)))
+			{
+				onNavigateCallback(currentAssetPath);
+			}
+			ImGui::EndDisabled();
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Navigate to this asset in the Asset Browser");
+			}
 		}
 
 		// Drag & drop support

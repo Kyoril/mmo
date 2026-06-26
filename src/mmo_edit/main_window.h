@@ -119,6 +119,8 @@ namespace mmo
 
 		void InvalidateAssetPreview(const String& asset) override;
 
+		void NavigateToAsset(const std::string& assetPath) override;
+
 	private:
 		Configuration& m_config;
 #ifdef _WIN32

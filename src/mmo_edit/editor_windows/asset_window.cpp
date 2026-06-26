@@ -16,6 +16,43 @@ namespace mmo
 {
 	static constexpr const char* FavoritesFileName = "editor_favorites.json";
 
+	void AssetWindow::NavigateToAsset(const std::string& assetPath)
+	{
+		if (assetPath.empty())
+		{
+			return;
+		}
+
+		m_showingFavorites = false;
+		m_highlightedAssetPath = assetPath;
+
+		// Navigate to the parent folder, not the file itself
+		const size_t lastSlash = assetPath.find_last_of('/');
+		const std::string parentPath = (lastSlash != std::string::npos) ? assetPath.substr(0, lastSlash) : "";
+
+		if (parentPath.empty())
+		{
+			m_selectedEntry = nullptr;
+			m_host.SetCurrentPath("");
+			return;
+		}
+
+		for (const auto& [name, entry] : m_assets)
+		{
+			if (entry.fullPath == parentPath)
+			{
+				m_selectedEntry = &entry;
+				m_host.SetCurrentPath(entry.fullPath);
+				return;
+			}
+
+			if (SearchEntryByPath(entry, parentPath))
+			{
+				return;
+			}
+		}
+	}
+
 	void AssetWindow::RebuildAssetList()
 	{
 		// Store the current path before rebuilding
@@ -748,7 +785,18 @@ namespace mmo
 										imTexture = previewProvider->GetAssetPreview(entry.fullPath);
 									}
 
-									if (ImGui::ImageButton(imTexture, ImVec2(128, 128), ImVec2(0, 0), ImVec2(1, 1), 1, ImVec4(0, 0, 0, 0)))
+									const bool isHighlighted = (entry.fullPath == m_highlightedAssetPath);
+									if (isHighlighted)
+									{
+										ImGui::SetScrollHereY();
+										m_highlightedAssetPath.clear();
+									}
+
+									const ImVec4 borderColor = isHighlighted
+										? ImVec4(1.0f, 0.8f, 0.0f, 1.0f)
+										: ImVec4(0, 0, 0, 0);
+
+									if (ImGui::ImageButton(imTexture, ImVec2(128, 128), ImVec2(0, 0), ImVec2(1, 1), 1, borderColor))
 									{
 										m_host.OpenAsset(entry.fullPath);
 									}
