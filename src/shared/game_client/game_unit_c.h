@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <map>
 #include <queue>
 #include <set>
@@ -517,7 +518,14 @@ namespace mmo
 
 		void SetTargetAnimState(AnimationState *newTargetState);
 
-		void PlayOneShotAnimation(AnimationState *animState);
+		/// @brief Plays a one-shot animation.
+		/// @param animState The animation state to play.
+		/// @param suppressIfBusy When true and another one-shot is still in its first half, the
+		///        new animation is silently dropped. Use for off-hand swings which are cosmetically
+		///        redundant when the main-hand animation is still fresh.
+		///        When false (default) the new animation is queued to play immediately after the
+		///        current one finishes (if still in its first half), replacing any prior pending.
+		void PlayOneShotAnimation(AnimationState *animState, bool suppressIfBusy = false);
 
 		void SetLockedLoopAnimation(AnimationState* state);
 
@@ -536,6 +544,11 @@ namespace mmo
 		void NotifyAttackSwingEvent(bool offhand = false);
 
 		void NotifyHitEvent();
+
+		/// @brief Queues a callback to run when the current attack animation reaches its SwingHit
+		///        notify, or at the end of the animation if no such notify exists.
+		///        If no one-shot is currently playing the callback fires immediately.
+		void QueueSwingHitCallback(std::function<void()> callback);
 
 		/// @brief Sets the animation states used for main-hand auto attacks based on the equipped weapon.
 		///	@param animNames Names of the skeleton animation states to choose from. One is picked at
@@ -652,6 +665,9 @@ namespace mmo
 		}
 
 	private:
+		/// Drains m_pendingSwingHitCallbacks and invokes each one.
+		void FlushSwingHitCallbacks();
+
 		/// Plays the landing animation when transitioning from falling to ground
 		void PlayLandAnimation();
 
@@ -767,7 +783,12 @@ namespace mmo
 		AnimationState *m_targetState = nullptr;
 		AnimationState *m_currentState = nullptr;
 		AnimationState *m_oneShotState = nullptr;
+		/// One-shot queued to play as soon as the current one-shot finishes (max 1 slot).
+		AnimationState *m_pendingOneShotState = nullptr;
 		AnimationState *m_lockedLoopAnimState{nullptr};
+
+		/// Callbacks deferred until the current attack animation's SwingHit notify (or its end).
+		std::vector<std::function<void()>> m_pendingSwingHitCallbacks;
 
 		SceneNode *m_questGiverNode = nullptr;
 		Entity *m_questGiverEntity = nullptr;

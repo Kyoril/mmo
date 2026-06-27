@@ -51,6 +51,8 @@ namespace mmo
 			return std::make_unique<PlaySoundNotify>();
 		case AnimationNotifyType::SpellGo:
 			return std::make_unique<SpellGoNotify>();
+		case AnimationNotifyType::SwingHit:
+			return std::make_unique<SwingHitNotify>();
 		default:
 			return nullptr;
 		}

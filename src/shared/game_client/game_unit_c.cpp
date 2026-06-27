@@ -642,9 +642,10 @@ namespace mmo
 	{
 		// Defensive: clear any pointers that have become stale due to a mesh swap
 		// that was not routed through OnDisplayIdChanged (race window, early-return, etc.)
-		if (!IsValidAnimState(m_currentState)) { m_currentState = nullptr; }
-		if (!IsValidAnimState(m_targetState))  { m_targetState  = nullptr; }
-		if (!IsValidAnimState(m_oneShotState)) { m_oneShotState = nullptr; }
+		if (!IsValidAnimState(m_currentState))      { m_currentState      = nullptr; }
+		if (!IsValidAnimState(m_targetState))       { m_targetState       = nullptr; }
+		if (!IsValidAnimState(m_oneShotState))      { m_oneShotState      = nullptr; }
+		if (!IsValidAnimState(m_pendingOneShotState)) { m_pendingOneShotState = nullptr; }
 
 		// Handle one-shot animations
 		if (m_oneShotState)
@@ -724,6 +725,17 @@ namespace mmo
 				m_oneShotState->SetEnabled(false);
 				m_oneShotState->SetWeight(0.0f);
 				m_oneShotState = nullptr;
+
+				// Flush any SwingHit callbacks that never got a notify (animation had none).
+				FlushSwingHitCallbacks();
+
+				// Start the queued one-shot now that the slot is free.
+				if (m_pendingOneShotState && IsValidAnimState(m_pendingOneShotState))
+				{
+					AnimationState* pending = m_pendingOneShotState;
+					m_pendingOneShotState = nullptr;
+					PlayOneShotAnimation(pending);
+				}
 			}
 		}
 	}
@@ -1187,6 +1199,12 @@ namespace mmo
 				{
 					if (const auto self = weakSelf.lock())
 					{
+						// Flush deferred damage display at the weapon-connects frame.
+						if (notify.GetType() == AnimationNotifyType::SwingHit)
+						{
+							self->FlushSwingHitCallbacks();
+						}
+
 						// Broadcast through our signal
 						self->animationNotifyTriggered(*self, notify, animName, state);
 					}
@@ -2552,7 +2570,7 @@ namespace mmo
 		}
 	}
 
-	void GameUnitC::PlayOneShotAnimation(AnimationState *animState)
+	void GameUnitC::PlayOneShotAnimation(AnimationState* animState, const bool suppressIfBusy)
 	{
 		if (!animState || !IsValidAnimState(animState))
 		{
@@ -2565,11 +2583,37 @@ namespace mmo
 			return;
 		}
 
-		// One-shot animations evict the locked loop
-		m_lockedLoopAnimState = nullptr;
-
-		if (m_oneShotState != nullptr && IsValidAnimState(m_oneShotState))
+		// If a one-shot is currently playing and is still in its first half, decide how to handle
+		// the new request based on the caller's intent rather than always hard-cutting.
+		if (m_oneShotState && IsValidAnimState(m_oneShotState) && !m_oneShotState->HasEnded())
 		{
+			const float length = m_oneShotState->GetLength();
+			const float progress = length > 0.f ? m_oneShotState->GetTimePosition() / length : 1.f;
+
+			if (progress < 0.5f)
+			{
+				if (suppressIfBusy)
+				{
+					// Off-hand swings: drop silently — the main-hand animation is still fresh.
+					return;
+				}
+
+				// Non-off-hand (instant abilities, etc.): queue as pending. Replaces any prior
+				// pending entry so the queue never grows beyond one slot.
+				m_pendingOneShotState = animState;
+				m_pendingOneShotState->SetTimePosition(0.f);
+				return;
+			}
+		}
+
+		// One-shot animations evict the locked loop and any stale pending entry.
+		m_lockedLoopAnimState = nullptr;
+		m_pendingOneShotState = nullptr;
+
+		if (m_oneShotState && IsValidAnimState(m_oneShotState))
+		{
+			// Flush pending hit callbacks before evicting — the old animation's hit point passed.
+			FlushSwingHitCallbacks();
 			m_oneShotState->SetEnabled(false);
 			m_oneShotState->SetWeight(0.0f);
 		}
@@ -2581,6 +2625,32 @@ namespace mmo
 		m_oneShotState->SetTimePosition(0.0f);
 	}
 
+	void GameUnitC::FlushSwingHitCallbacks()
+	{
+		if (m_pendingSwingHitCallbacks.empty())
+		{
+			return;
+		}
+
+		std::vector<std::function<void()>> callbacks;
+		std::swap(callbacks, m_pendingSwingHitCallbacks);
+		for (auto& cb : callbacks)
+		{
+			cb();
+		}
+	}
+
+	void GameUnitC::QueueSwingHitCallback(std::function<void()> callback)
+	{
+		if (!m_oneShotState || !IsValidAnimState(m_oneShotState) || m_oneShotState->HasEnded())
+		{
+			callback();
+			return;
+		}
+
+		m_pendingSwingHitCallbacks.push_back(std::move(callback));
+	}
+
 	void GameUnitC::CancelOneShotAnimation()
 	{
 		if (m_oneShotState != nullptr && IsValidAnimState(m_oneShotState))
@@ -2589,6 +2659,8 @@ namespace mmo
 			m_oneShotState->SetWeight(0.0f);
 		}
 		m_oneShotState = nullptr;
+		m_pendingOneShotState = nullptr;
+		FlushSwingHitCallbacks();
 
 		// Refresh movement animation to ensure proper state
 		RefreshMovementAnimation();
@@ -2624,7 +2696,7 @@ namespace mmo
 		// Fall back to the unarmed attack animation when no weapon animation is available.
 		if (candidates.empty())
 		{
-			PlayOneShotAnimation(m_unarmedAttackState);
+			PlayOneShotAnimation(m_unarmedAttackState, offhand);
 			return;
 		}
 
@@ -2638,7 +2710,9 @@ namespace mmo
 			attackState = candidates[dis(gen)];
 		}
 
-		PlayOneShotAnimation(attackState);
+		// Off-hand swings are suppressed when the main-hand animation is still fresh to avoid
+		// the jarring visual of hard-cutting a recently-started clip.
+		PlayOneShotAnimation(attackState, offhand);
 	}
 
 	void GameUnitC::SetWeaponAttackAnimations(const std::vector<String>& animNames)
@@ -2806,6 +2880,8 @@ namespace mmo
 		m_targetState = nullptr;
 		m_currentState = nullptr;
 		m_oneShotState = nullptr;
+		m_pendingOneShotState = nullptr;
+		m_pendingSwingHitCallbacks.clear();
 		m_lockedLoopAnimState = nullptr;
 		m_jumpStartState = nullptr;
 		m_fallingState = nullptr;

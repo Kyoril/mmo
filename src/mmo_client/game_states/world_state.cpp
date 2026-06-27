@@ -3270,56 +3270,94 @@ namespace mmo
 		if (attacked)
 		{
 			attacked->NotifyHitEvent();
+		}
 
-			if (ObjectMgr::GetActivePlayerGuid() == attackerGuid || ObjectMgr::GetActivePlayerGuid() == attackedGuid)
+		// Build the damage display callback. The floating text and Lua events are deferred to the
+		// attacker's SwingHit animation notify so numbers appear when the weapon visually connects.
+		// If the attacker has no current attack animation (or no SwingHit notify), the callback
+		// fires immediately as a fallback.
+		const bool isActivePlayerInvolved = ObjectMgr::GetActivePlayerGuid() == attackerGuid
+			|| ObjectMgr::GetActivePlayerGuid() == attackedGuid;
+
+		if (attacked && isActivePlayerInvolved)
+		{
+			// Determine display text now (all captured by value into the lambda).
+			String damageText;
+			// Check the specific victim states (dodge/parry/block) before the generic Miss flag:
+			// the server sets hit_info::Miss for dodges and parries too (as a "no damage landed"
+			// marker), so checking Miss first would mask them as "MISSED".
+			if ((hitInfo & hit_info::Immune) || victimState == victim_state::IsImmune)
 			{
-				String damageText;
-				// Check the specific victim states (dodge/parry/block) before the generic Miss flag:
-				// the server sets hit_info::Miss for dodges and parries too (as a "no damage landed"
-				// marker), so checking Miss first would mask them as "MISSED".
-				if ((hitInfo & hit_info::Immune) || victimState == victim_state::IsImmune)
+				damageText = Localize(FrameManager::Get().GetLocalization(), "COMBAT_IMMUNE");
+			}
+			else if (victimState == victim_state::Dodge)
+			{
+				damageText = "DODGED";
+			}
+			else if (victimState == victim_state::Parry)
+			{
+				damageText = "PARRIED";
+			}
+			else if (victimState == victim_state::Blocks)
+			{
+				if (totalDamage == 0)
 				{
-					damageText = Localize(FrameManager::Get().GetLocalization(), "COMBAT_IMMUNE");
-				}
-				else if (victimState == victim_state::Dodge)
-				{
-					damageText = "DODGED";
-				}
-				else if (victimState == victim_state::Parry)
-				{
-					damageText = "PARRIED";
-				}
-				else if (victimState == victim_state::Blocks)
-				{
-					if (totalDamage == 0)
-					{
-						// The block fully absorbed the hit.
-						damageText = Localize(FrameManager::Get().GetLocalization(), "COMBAT_BLOCKED");
-					}
-					else
-					{
-						// Partial block: show remaining damage and how much was blocked, e.g. "14 (5 blocked)".
-						damageText = std::to_string(totalDamage) + " (" + std::to_string(blockedDamage) + " " +
-							Localize(FrameManager::Get().GetLocalization(), "COMBAT_BLOCKED_SUFFIX") + ")";
-					}
-				}
-				else if (hitInfo & hit_info::Miss)
-				{
-					damageText = "MISSED"; // Localize
+					damageText = Localize(FrameManager::Get().GetLocalization(), "COMBAT_BLOCKED");
 				}
 				else
 				{
-					damageText = std::to_string(totalDamage);
+					damageText = std::to_string(totalDamage) + " (" + std::to_string(blockedDamage) + " " +
+						Localize(FrameManager::Get().GetLocalization(), "COMBAT_BLOCKED_SUFFIX") + ")";
 				}
+			}
+			else if (hitInfo & hit_info::Miss)
+			{
+				damageText = "MISSED"; // Localize
+			}
+			else
+			{
+				damageText = std::to_string(totalDamage);
+			}
 
-				const bool isCritical = (hitInfo & hit_info::CriticalHit) != 0;
-				AddWorldTextFrame(attacked->GetPosition(), damageText, ObjectMgr::GetActivePlayerGuid() == attackedGuid ? Color(1.0f, 0.0f, 0.0f) : Color::White,
+			const bool isCritical = (hitInfo & hit_info::CriticalHit) != 0;
+			const bool attackerIsPlayer = ObjectMgr::GetActivePlayerGuid() == attackerGuid;
+			const Vector3 targetPos = attacked->GetPosition();
+			const Color textColor = attackerIsPlayer ? Color::White : Color(1.0f, 0.0f, 0.0f);
+
+			auto displayCallback = [this, targetPos, damageText, isCritical, textColor,
+				attackerGuid, attackedGuid, totalDamage,
+				attackerName = attacker ? attacker->GetName() : String(),
+				attackedName = attacked->GetName(),
+				attackerIsPlayer]()
+			{
+				AddWorldTextFrame(targetPos, damageText, textColor,
 					isCritical ? 4.0f : 2.0f, isCritical ? WorldTextAnimation::Critical : WorldTextAnimation::Normal);
+
+				if (totalDamage > 0 && attackerIsPlayer)
+				{
+					FrameManager::Get().TriggerLuaEvent("DAMAGE_DONE",
+						attackerGuid,
+						attackerName,
+						attackedGuid,
+						attackedName,
+						totalDamage,
+						"MELEE");
+				}
+			};
+
+			if (attacker)
+			{
+				attacker->QueueSwingHitCallback(std::move(displayCallback));
+			}
+			else
+			{
+				displayCallback();
 			}
 		}
-
-		if (totalDamage > 0 && ObjectMgr::GetActivePlayerGuid() == attackerGuid && attacker)
+		else if (totalDamage > 0 && ObjectMgr::GetActivePlayerGuid() == attackerGuid && attacker)
 		{
+			// Attacker is the local player but the attacked unit isn't in the client's range —
+			// still fire the Lua event (no world text since there's no position to attach to).
 			FrameManager::Get().TriggerLuaEvent("DAMAGE_DONE",
 				attackerGuid,
 				attacker->GetName(),

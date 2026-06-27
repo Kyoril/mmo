@@ -23,6 +23,7 @@ namespace mmo
 		Footstep = 0,
 		PlaySound = 1,
 		SpellGo = 2,
+		SwingHit = 3,
 		// Add new types here as needed
 	};
 
@@ -188,6 +189,40 @@ namespace mmo
 		[[nodiscard]] std::unique_ptr<AnimationNotify> Clone() const override
 		{
 			auto clone = std::make_unique<SpellGoNotify>();
+			clone->m_time = m_time;
+			clone->m_name = m_name;
+			return clone;
+		}
+	};
+
+	/// Swing hit notification - marks the frame at which a melee weapon connects with the target.
+	/// Used to synchronize damage number display with the visual impact point.
+	class SwingHitNotify final : public AnimationNotify
+	{
+	public:
+		SwingHitNotify() = default;
+
+		[[nodiscard]] AnimationNotifyType GetType() const override
+		{
+			return AnimationNotifyType::SwingHit;
+		}
+
+		void Serialize(io::Writer& writer) const override {}
+		void Deserialize(io::Reader& reader) override {}
+
+		[[nodiscard]] String GetDisplayName() const override
+		{
+			return m_name.empty() ? "SwingHit" : m_name;
+		}
+
+		[[nodiscard]] String GetTypeName() const override
+		{
+			return "SwingHit";
+		}
+
+		[[nodiscard]] std::unique_ptr<AnimationNotify> Clone() const override
+		{
+			auto clone = std::make_unique<SwingHitNotify>();
 			clone->m_time = m_time;
 			clone->m_name = m_name;
 			return clone;
