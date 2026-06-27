@@ -26,6 +26,11 @@ namespace mmo
 		s_currentWorldFrame = std::static_pointer_cast<WorldFrame>(shared_from_this());
 	}
 
+	void WorldFrame::ClearCurrentWorldFrame()
+	{
+		s_currentWorldFrame.reset();
+	}
+
 	WorldFrame* WorldFrame::GetWorldFrame()
 	{
 		if (auto worldFrame = s_currentWorldFrame.lock())

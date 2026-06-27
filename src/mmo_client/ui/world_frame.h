@@ -20,6 +20,8 @@ namespace mmo
 
 		void SetAsCurrentWorldFrame();
 
+		static void ClearCurrentWorldFrame();
+
 		static WorldFrame* GetWorldFrame();
 	};
 }

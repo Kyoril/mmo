@@ -446,8 +446,12 @@ namespace mmo
 		m_inputConnections.disconnect();
 		m_realmConnections.disconnect();
 
+		m_chatBubbleFrames.clear();
+		m_chatBubbleLayer.reset();
+
 		// Reset the logo frame ui
 		FrameManager::Get().ResetTopFrame();
+		WorldFrame::ClearCurrentWorldFrame();
 
 		// Remove world renderer
 		FrameManager::Get().RemoveFrameRenderer("WorldRenderer");
@@ -476,6 +480,17 @@ namespace mmo
 
 	void WorldState::ReloadUI()
 	{
+		// Release chat bubbles before tearing down the frame tree so their shared_ptrs don't
+		// keep the old WorldFrame alive past ResetTopFrame, which would trip the assert in
+		// SetAsCurrentWorldFrame when the new WorldFrame is registered.
+		m_chatBubbleFrames.clear();
+		m_chatBubbleLayer.reset();
+
+		// Explicitly clear the current world frame weak reference before destroying the old
+		// frame tree.  If anything outside FrameManager still holds the old WorldFrame alive,
+		// the weak_ptr expiry is not guaranteed to happen before LoadUIFile creates a new one.
+		WorldFrame::ClearCurrentWorldFrame();
+
 		// Reset the logo frame ui
 		FrameManager::Get().ResetTopFrame();
 
