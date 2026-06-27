@@ -60,6 +60,20 @@ namespace mmo
 		/// Draws a welcome / getting-started panel over the empty central dock node.
 		void HandleWelcomeScreen(unsigned int dockspaceId);
 
+		/// Parses one line of the persisted panel-collapse settings (format "PanelName=0|1").
+		void ReadPanelCollapseSetting(const char* line);
+
+		/// Writes the persisted panel-collapse settings into the ImGui ini buffer.
+		void WritePanelCollapseSettings(struct ImGuiTextBuffer* buffer);
+
+		/// Draws the edge rails that host collapsed side panels.
+		/// @param origin Screen-space top-left of the dockable content region.
+		/// @param avail Size of the dockable content region (before rail insets).
+		/// @param leftWidth Reserved width of the left rail (0 if none).
+		/// @param rightWidth Reserved width of the right rail (0 if none).
+		/// @param bottomHeight Reserved height of the bottom rail (0 if none).
+		void HandleCollapsibleRails(const ImVec2& origin, const ImVec2& avail, float leftWidth, float rightWidth, float bottomHeight);
+
 		void ExportToClient();
 
 		/// Initialize ImGui.
@@ -143,6 +157,7 @@ namespace mmo
 		Path m_selectedPath;
 		std::vector<String> m_uninitializedEditorInstances;
 		EditorInstance* m_activeEditorInstance { nullptr };
+		EditorWindowBase* m_flyoutPanel { nullptr };
 		ImFont* m_defaultFont { nullptr };
 		ImFont* m_headerFont { nullptr };
 		ImFont* m_titleFont { nullptr };

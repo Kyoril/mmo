@@ -94,6 +94,8 @@ namespace mmo
         m_hasToolbarButton = true;
         m_toolbarButtonText = "Data Navigator";
         m_toolbarButtonIcon = ICON_FA_DATABASE;
+        m_panelIcon = ICON_FA_DATABASE;
+        m_collapsed = true; // collapsed into its edge rail by default (overridden by saved layout)
         
         // Initialize the categories and editors list
         InitializeCategories();

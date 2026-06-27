@@ -3,8 +3,8 @@
 	url = https://github.com/chriskohlhoff/asio
 [submodule "deps/imgui"]
 	path = deps/imgui
-	url = https://github.com/ocornut/imgui
-	branch = docking
+	url = https://github.com/Kyoril/imgui
+	branch = mmo-custom-patches
 [submodule "data/client"]
 	path = data/client
 	url = https://github.com/Kyoril/mmo-data

@@ -41,7 +41,33 @@ namespace mmo
 
 	static bool s_showCreatureEditor = false;
 	static bool s_showSpellEditor = false;
-	
+
+	namespace
+	{
+		// Draws text rotated 90 degrees counter-clockwise (reading bottom-to-top). 'topLeft' is the
+		// top-left corner of the resulting vertical column, which is (text height) wide and
+		// (text width) tall. Used for labels on the vertical collapse rails.
+		void AddTextVertical(ImDrawList* drawList, const ImVec2& topLeft, ImU32 color, const char* text)
+		{
+			const ImVec2 textSize = ImGui::CalcTextSize(text);
+
+			// Draw the glyphs horizontally anchored at topLeft (within the window's clip rect, which
+			// spans the full width, so they are not culled), then rotate the generated vertices 90
+			// degrees CCW about topLeft so the label reads bottom-to-top in a vertical column.
+			const int vtxStart = drawList->VtxBuffer.Size;
+			drawList->AddText(topLeft, color, text);
+			const int vtxEnd = drawList->VtxBuffer.Size;
+			for (int i = vtxStart; i < vtxEnd; ++i)
+			{
+				ImDrawVert& v = drawList->VtxBuffer[i];
+				const float relX = v.pos.x - topLeft.x; // [0, textSize.x]
+				const float relY = v.pos.y - topLeft.y; // [0, textSize.y]
+				v.pos.x = topLeft.x + relY;
+				v.pos.y = topLeft.y + (textSize.x - relX);
+			}
+		}
+	}
+
 	MainWindow::MainWindow(Configuration& config, proto::Project& project)
 		: m_config(config)
 #if _WIN32
@@ -165,21 +191,55 @@ namespace mmo
 	void MainWindow::HandleEditorWindow(EditorWindowBase& window)
 	{
 		bool visible = window.IsVisible();
-		if (visible)
+		if (!visible)
 		{
-			ImGuiWindowFlags flags = ImGuiWindowFlags_None;
-
-			if (!window.IsResizable()) flags |= ImGuiWindowFlags_NoResize;
-			if (!window.IsDockable()) flags |= ImGuiWindowFlags_NoDocking;
-
-			if (ImGui::Begin(window.GetName().c_str(), &visible, flags))
-			{
-				window.Draw();
-			}
-			ImGui::End();
-
-			window.SetVisible(visible);
+			return;
 		}
+
+		// Collapsed tool panels are not drawn here; they live on an edge rail instead.
+		if (window.IsCollapsible() && window.IsCollapsed())
+		{
+			return;
+		}
+
+		ImGuiWindowFlags flags = ImGuiWindowFlags_None;
+
+		if (!window.IsResizable()) flags |= ImGuiWindowFlags_NoResize;
+		if (!window.IsDockable()) flags |= ImGuiWindowFlags_NoDocking;
+
+		// When a panel was just expanded from the rail, send it back to the dock node it came from.
+		if (window.IsCollapsible() && window.ConsumeRestoreDock() && window.GetLastDockId() != 0)
+		{
+			ImGui::SetNextWindowDockID(window.GetLastDockId(), ImGuiCond_Always);
+		}
+
+		if (ImGui::Begin(window.GetName().c_str(), &visible, flags))
+		{
+			if (window.IsCollapsible())
+			{
+				// Show the collapse button in this window's dock tab bar (next to the close button)
+				// and react to clicks. The button itself lives in ImGui's docking code.
+				ImGui::SetWindowDockCollapseButtonEnabled(true);
+
+				if (ImGui::IsWindowDockCollapseRequested())
+				{
+					window.SetCollapsed(true);
+					ImGui::MarkIniSettingsDirty();
+				}
+
+				// Remember where we are docked so we can restore it after a collapse round-trip.
+				const ImGuiID dockId = ImGui::GetWindowDockID();
+				if (dockId != 0)
+				{
+					window.SetLastDockId(dockId);
+				}
+			}
+
+			window.Draw();
+		}
+		ImGui::End();
+
+		window.SetVisible(visible);
 	}
 
 	void MainWindow::HandleMainMenu()
@@ -449,6 +509,241 @@ namespace mmo
 		ImGui::PopStyleColor();
 	}
 
+	void MainWindow::ReadPanelCollapseSetting(const char* line)
+	{
+		// Format: "Panel Name=0|1" (panel names may contain spaces, so split on the last '=').
+		const String text = line;
+		const auto eq = text.rfind('=');
+		if (eq == String::npos)
+		{
+			return;
+		}
+
+		const String name = text.substr(0, eq);
+		const bool collapsed = (eq + 1 < text.size()) && text[eq + 1] == '1';
+
+		for (const auto& window : m_editorWindows)
+		{
+			if (window->IsCollapsible() && window->GetName() == name)
+			{
+				window->SetCollapsed(collapsed);
+				break;
+			}
+		}
+	}
+
+	void MainWindow::WritePanelCollapseSettings(ImGuiTextBuffer* buffer)
+	{
+		buffer->append("[EditorPanels][State]\n");
+		for (const auto& window : m_editorWindows)
+		{
+			if (window->IsCollapsible())
+			{
+				buffer->appendf("%s=%d\n", window->GetName().c_str(), window->IsCollapsed() ? 1 : 0);
+			}
+		}
+		buffer->append("\n");
+	}
+
+	void MainWindow::HandleCollapsibleRails(const ImVec2& origin, const ImVec2& avail, float leftWidth, float rightWidth, float bottomHeight)
+	{
+		const float bodyHeight = avail.y - bottomHeight;
+
+		// The rails are drawn directly into the current (dockspace) window's gutters that we reserved
+		// by insetting the dock space. Rendering inline (rather than as separate windows) keeps them
+		// reliably on top of the empty dock background and avoids viewport/z-order issues.
+		ImDrawList* dl = ImGui::GetWindowDrawList();
+		const ImU32 railBg = ImGui::GetColorU32(ImVec4(0.140f, 0.140f, 0.150f, 1.0f));
+		const ImU32 iconCol = ImGui::GetColorU32(ImVec4(0.337f, 0.624f, 0.824f, 1.0f));
+
+		// The panel whose rail button is hovered this frame (drives the hover flyout below).
+		EditorWindowBase* hoveredRailPanel = nullptr;
+		bool expandedThisFrame = false;
+
+		// Draws a vertical rail button (icon on top, name rotated 90 degrees below). Returns true on click.
+		auto verticalRailButton = [&](EditorWindowBase& window, float railWidth) -> bool
+		{
+			const String icon = window.GetPanelIcon().empty() ? String(ICON_FA_BARS) : window.GetPanelIcon();
+			const ImVec2 nameSize = ImGui::CalcTextSize(window.GetName().c_str());
+			const ImVec2 iconSize = ImGui::CalcTextSize(icon.c_str());
+			const float iconH = ImGui::GetTextLineHeight();
+			const float btnW = railWidth - 8.0f;
+			const float btnH = 6.0f + iconH + 8.0f + nameSize.x + 8.0f;
+
+			const ImVec2 p0 = ImGui::GetCursorScreenPos();
+			const bool clicked = ImGui::Button((String("##rail_") + window.GetName()).c_str(), ImVec2(btnW, btnH));
+			const bool hovered = ImGui::IsItemHovered();
+			if (hovered)
+			{
+				hoveredRailPanel = &window;
+			}
+
+			const ImU32 textCol = ImGui::GetColorU32(hovered ? ImGuiCol_Text : ImGuiCol_TextDisabled);
+
+			// Icon centered near the top of the button.
+			dl->AddText(ImVec2(p0.x + (btnW - iconSize.x) * 0.5f, p0.y + 6.0f), iconCol, icon.c_str());
+
+			// Panel name rendered vertically (rotated) below the icon.
+			const float colTop = p0.y + 6.0f + iconH + 8.0f;
+			const float colX = p0.x + (btnW - nameSize.y) * 0.5f;
+			AddTextVertical(dl, ImVec2(colX, colTop), textCol, window.GetName().c_str());
+
+			return clicked;
+		};
+
+		// Renders a vertical rail at the given x. Toggles panel state on click.
+		auto drawVerticalRail = [&](float railX, float railWidth, DockDirection edge)
+		{
+			dl->AddRectFilled(ImVec2(railX, origin.y), ImVec2(railX + railWidth, origin.y + bodyHeight), railBg);
+
+			float y = origin.y + 6.0f;
+			for (const auto& window : m_editorWindows)
+			{
+				if (!window->IsVisible() || !window->IsCollapsible() || !window->IsCollapsed()) continue;
+				if (window->GetDefaultDockDirection() != edge) continue;
+
+				ImGui::SetCursorScreenPos(ImVec2(railX + 4.0f, y));
+				if (verticalRailButton(*window, railWidth))
+				{
+					window->SetCollapsed(false);
+					ImGui::MarkIniSettingsDirty();
+					expandedThisFrame = true;
+				}
+				y = ImGui::GetItemRectMax().y + 6.0f;
+			}
+		};
+
+		if (leftWidth > 0.0f)
+		{
+			drawVerticalRail(origin.x, leftWidth, DockDirection::Left);
+		}
+
+		if (rightWidth > 0.0f)
+		{
+			drawVerticalRail(origin.x + avail.x - rightWidth, rightWidth, DockDirection::Right);
+		}
+
+		// Bottom rail (horizontal icon + label buttons).
+		if (bottomHeight > 0.0f)
+		{
+			const float railY = origin.y + avail.y - bottomHeight;
+			dl->AddRectFilled(ImVec2(origin.x, railY), ImVec2(origin.x + avail.x, railY + bottomHeight), railBg);
+
+			float x = origin.x + 6.0f;
+			for (const auto& window : m_editorWindows)
+			{
+				if (!window->IsVisible() || !window->IsCollapsible() || !window->IsCollapsed()) continue;
+
+				const DockDirection dir = window->GetDefaultDockDirection();
+				if (dir == DockDirection::Left || dir == DockDirection::Right) continue;
+
+				ImGui::SetCursorScreenPos(ImVec2(x, railY + 6.0f));
+				const String icon = window->GetPanelIcon().empty() ? String(ICON_FA_BARS) : window->GetPanelIcon();
+				const String label = icon + "  " + window->GetName() + "##rail_" + window->GetName();
+				if (ImGui::Button(label.c_str(), ImVec2(0.0f, bottomHeight - 12.0f)))
+				{
+					window->SetCollapsed(false);
+					ImGui::MarkIniSettingsDirty();
+					expandedThisFrame = true;
+				}
+				if (ImGui::IsItemHovered())
+				{
+					hoveredRailPanel = window.get();
+				}
+				x = ImGui::GetItemRectMax().x + 6.0f;
+			}
+		}
+
+		// Hover flyout: while a rail button (or the flyout itself) is hovered, render the collapsed
+		// panel's content in a temporary floating window next to the rail. Clicking the rail button
+		// pins it (expands permanently); moving the mouse away dismisses the flyout.
+		if (expandedThisFrame)
+		{
+			m_flyoutPanel = nullptr;
+		}
+		else
+		{
+			if (hoveredRailPanel)
+			{
+				m_flyoutPanel = hoveredRailPanel;
+			}
+
+			if (m_flyoutPanel && m_flyoutPanel->IsVisible() && m_flyoutPanel->IsCollapsed())
+			{
+				const DockDirection edge = m_flyoutPanel->GetDefaultDockDirection();
+				const float defaultSize = m_flyoutPanel->GetDefaultDockSize();
+
+				ImVec2 flyoutPos, flyoutSize;
+				if (edge == DockDirection::Left)
+				{
+					flyoutSize = ImVec2(ImMin(defaultSize, avail.x * 0.5f), bodyHeight);
+					flyoutPos = ImVec2(origin.x + leftWidth, origin.y);
+				}
+				else if (edge == DockDirection::Right)
+				{
+					flyoutSize = ImVec2(ImMin(defaultSize, avail.x * 0.5f), bodyHeight);
+					flyoutPos = ImVec2(origin.x + avail.x - rightWidth - flyoutSize.x, origin.y);
+				}
+				else
+				{
+					flyoutSize = ImVec2(avail.x, ImMin(defaultSize, avail.y * 0.6f));
+					flyoutPos = ImVec2(origin.x, origin.y + avail.y - bottomHeight - flyoutSize.y);
+				}
+
+				ImGui::SetNextWindowPos(flyoutPos);
+				ImGui::SetNextWindowSize(flyoutSize);
+				ImGui::SetNextWindowDockID(0, ImGuiCond_Always); // keep the flyout floating, never docked
+				ImGui::SetNextWindowViewport(ImGui::GetMainViewport()->ID);
+
+				// Provide the host window ourselves and then let the panel render its content. Some
+				// panels (e.g. Log) draw their content directly and rely on the caller's Begin/End,
+				// while others (Data Navigator, Asset Browser) Begin their own window; wrapping the
+				// call in Begin/End mirrors HandleEditorWindow and works for both styles.
+				ImGuiWindowFlags flyoutFlags = ImGuiWindowFlags_NoSavedSettings;
+				if (!m_flyoutPanel->IsResizable())
+				{
+					flyoutFlags |= ImGuiWindowFlags_NoResize;
+				}
+				if (ImGui::Begin(m_flyoutPanel->GetName().c_str(), nullptr, flyoutFlags))
+				{
+					m_flyoutPanel->Draw();
+				}
+				ImGui::End();
+
+				// Keep the flyout open while the mouse is over the flyout OR anywhere over the rail strip
+				// it belongs to. The strip and flyout are contiguous, so this leaves no dead zone (such
+				// as the rail's padding) where the popup would flicker out as the cursor crosses over.
+				ImVec2 railMin, railMax;
+				if (edge == DockDirection::Left)
+				{
+					railMin = ImVec2(origin.x, origin.y);
+					railMax = ImVec2(origin.x + leftWidth, origin.y + bodyHeight);
+				}
+				else if (edge == DockDirection::Right)
+				{
+					railMin = ImVec2(origin.x + avail.x - rightWidth, origin.y);
+					railMax = ImVec2(origin.x + avail.x, origin.y + bodyHeight);
+				}
+				else
+				{
+					railMin = ImVec2(origin.x, origin.y + avail.y - bottomHeight);
+					railMax = ImVec2(origin.x + avail.x, origin.y + avail.y);
+				}
+
+				const bool overFlyout = ImGui::IsMouseHoveringRect(flyoutPos, ImVec2(flyoutPos.x + flyoutSize.x, flyoutPos.y + flyoutSize.y), false);
+				const bool overRail = ImGui::IsMouseHoveringRect(railMin, railMax, false);
+				if (!overFlyout && !overRail)
+				{
+					m_flyoutPanel = nullptr;
+				}
+			}
+			else
+			{
+				m_flyoutPanel = nullptr;
+			}
+		}
+	}
+
 	void MainWindow::ExportToClient()
 	{
 		if (m_config.clientDataPath.empty())
@@ -584,8 +879,36 @@ namespace mmo
 		ImGui::PopStyleVar(3);
 		{
 			const auto dockspace_id = ImGui::GetID("MyDockSpace");
-			ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), m_dockSpaceFlags);
-			
+
+			// Determine which edges currently host collapsed panels so we can reserve a thin rail
+			// for them and inset the dock space accordingly.
+			constexpr float railThickness = 34.0f;
+			bool hasLeft = false, hasRight = false, hasBottom = false;
+			for (const auto& window : m_editorWindows)
+			{
+				if (!window->IsVisible() || !window->IsCollapsible() || !window->IsCollapsed())
+				{
+					continue;
+				}
+
+				switch (window->GetDefaultDockDirection())
+				{
+				case DockDirection::Left:  hasLeft = true; break;
+				case DockDirection::Right: hasRight = true; break;
+				default:                   hasBottom = true; break;
+				}
+			}
+
+			const float leftRail = hasLeft ? railThickness : 0.0f;
+			const float rightRail = hasRight ? railThickness : 0.0f;
+			const float bottomRail = hasBottom ? railThickness : 0.0f;
+
+			// Inset the dock space so docked content never sits underneath a rail.
+			const ImVec2 contentOrigin = ImGui::GetCursorScreenPos();
+			const ImVec2 contentAvail = ImGui::GetContentRegionAvail();
+			ImGui::SetCursorScreenPos(ImVec2(contentOrigin.x + leftRail, contentOrigin.y));
+			ImGui::DockSpace(dockspace_id, ImVec2(contentAvail.x - leftRail - rightRail, contentAvail.y - bottomRail), m_dockSpaceFlags);
+
 			// The main menu
 			HandleMainMenu();
 
@@ -614,10 +937,23 @@ namespace mmo
 			// Show a friendly welcome panel whenever the central document area is empty.
 			HandleWelcomeScreen(dockspace_id);
 
+			// Draw the rails that host any collapsed panels (in the gutters we reserved above).
+			HandleCollapsibleRails(contentOrigin, contentAvail, leftRail, rightRail, bottomRail);
+
 			const ImGuiID dockSpaceId = ImGui::GetID("MyDockSpace");
-			std::erase_if(m_uninitializedEditorInstances, [dockSpaceId](const String& name)
+
+			// Dock newly opened editor instances (documents) into the central node so they fill the
+			// main document area. Docking into the root split node would leave them floating now that
+			// the layout has an explicit central node.
+			ImGuiID documentNode = dockSpaceId;
+			if (ImGuiDockNode* central = ImGui::DockBuilderGetCentralNode(dockSpaceId))
 			{
-				ImGui::DockBuilderDockWindow(name.c_str(), dockSpaceId);
+				documentNode = central->ID;
+			}
+
+			std::erase_if(m_uninitializedEditorInstances, [documentNode](const String& name)
+			{
+				ImGui::DockBuilderDockWindow(name.c_str(), documentNode);
 				return true;
 			});
 			ImGui::DockBuilderFinish(dockSpaceId);
@@ -896,6 +1232,26 @@ namespace mmo
 		io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;         // Enable Multi-Viewport / Platform Windows
 		io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleFonts;     // FIXME-DPI: THIS CURRENTLY DOESN'T WORK AS EXPECTED. DON'T USE IN USER APP!
 		io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleViewports; // FIXME-DPI
+
+		// Register a settings handler so collapsed-panel state is persisted in imgui.ini alongside
+		// the dock layout. Must be registered before the first NewFrame (which loads the ini).
+		ImGuiSettingsHandler panelHandler;
+		panelHandler.TypeName = "EditorPanels";
+		panelHandler.TypeHash = ImHashStr("EditorPanels");
+		panelHandler.UserData = this;
+		panelHandler.ReadOpenFn = [](ImGuiContext*, ImGuiSettingsHandler*, const char* /*name*/) -> void*
+		{
+			return (void*)1; // single "State" section; non-null marks it open
+		};
+		panelHandler.ReadLineFn = [](ImGuiContext*, ImGuiSettingsHandler* handler, void* /*entry*/, const char* line)
+		{
+			static_cast<MainWindow*>(handler->UserData)->ReadPanelCollapseSetting(line);
+		};
+		panelHandler.WriteAllFn = [](ImGuiContext*, ImGuiSettingsHandler* handler, ImGuiTextBuffer* buf)
+		{
+			static_cast<MainWindow*>(handler->UserData)->WritePanelCollapseSettings(buf);
+		};
+		ImGui::GetCurrentContext()->SettingsHandlers.push_back(panelHandler);
 
 		// Setup Dear ImGui style
 		ImGui::StyleColorsDark();

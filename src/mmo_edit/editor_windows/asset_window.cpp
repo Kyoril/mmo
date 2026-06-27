@@ -164,6 +164,9 @@ namespace mmo
 		, m_previewProviderManager(previewProviderManager)
 		, m_host(host)
 	{
+		m_panelIcon = ICON_FA_FOLDER_OPEN;
+		m_collapsed = true; // collapsed into its edge rail by default (overridden by saved layout)
+
 		m_host.assetImported.connect([&](const Path& p)
 		{
 			std::string currentPath = m_selectedEntry ? m_selectedEntry->fullPath : "";

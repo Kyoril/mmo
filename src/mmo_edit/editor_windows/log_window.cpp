@@ -5,12 +5,16 @@
 #include <imgui_internal.h>
 
 #include "log/default_log.h"
+#include "icon_font.h"
 
 namespace mmo
 {
 	LogWindow::LogWindow()
 		: EditorWindowBase("Log")
 	{
+		m_panelIcon = ICON_FA_TERMINAL;
+		m_collapsed = true; // collapsed into its edge rail by default (overridden by saved layout)
+
 		m_logConnection = mmo::g_DefaultLog.signal().connect([this](const mmo::LogEntry & entry) {
 			std::scoped_lock lock{ m_logWindowMutex };
 			m_logEntries.push_back(entry);

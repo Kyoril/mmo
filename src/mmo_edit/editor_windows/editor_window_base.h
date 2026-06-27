@@ -70,11 +70,47 @@ namespace mmo
 		/// @brief Gets the default dock size of the window.
 		[[nodiscard]] virtual float GetDefaultDockSize() const { return 400.0f; }
 
+		/// @brief Whether this panel supports being collapsed into an edge rail.
+		///	Defaults to dockable tool panels (e.g. Data Navigator, Log, Asset Browser).
+		[[nodiscard]] virtual bool IsCollapsible() const { return IsDockable(); }
+
+		/// @brief Whether the panel is currently collapsed into its edge rail.
+		[[nodiscard]] bool IsCollapsed() const { return m_collapsed; }
+
+		/// @brief Collapses or expands the panel. Expanding requests a dock-location restore.
+		void SetCollapsed(bool value)
+		{
+			if (m_collapsed && !value)
+			{
+				m_restoreDock = true;
+			}
+			m_collapsed = value;
+		}
+
+		/// @brief Icon glyph (e.g. an ICON_FA_* value) shown for this panel on its edge rail.
+		[[nodiscard]] const String& GetPanelIcon() const { return m_panelIcon; }
+
+		/// @brief Remembers the dock node the panel last lived in, so it can be restored on expand.
+		[[nodiscard]] unsigned int GetLastDockId() const { return m_lastDockId; }
+		void SetLastDockId(unsigned int id) { m_lastDockId = id; }
+
+		/// @brief Returns true once after expanding, signalling that the dock location should be restored.
+		bool ConsumeRestoreDock()
+		{
+			const bool restore = m_restoreDock;
+			m_restoreDock = false;
+			return restore;
+		}
+
 	protected:
 		String m_name;
 		bool m_visible { true };
 		bool m_hasToolbarButton{ false };
 		String m_toolbarButtonText;
 		String m_toolbarButtonIcon;
+		String m_panelIcon;
+		bool m_collapsed { false };
+		bool m_restoreDock { false };
+		unsigned int m_lastDockId { 0 };
 	};
 }
