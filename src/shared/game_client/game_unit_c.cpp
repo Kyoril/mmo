@@ -2570,17 +2570,17 @@ namespace mmo
 		}
 	}
 
-	void GameUnitC::PlayOneShotAnimation(AnimationState* animState, const bool suppressIfBusy)
+	bool GameUnitC::PlayOneShotAnimation(AnimationState* animState, const bool suppressIfBusy)
 	{
 		if (!animState || !IsValidAnimState(animState))
 		{
-			return;
+			return false;
 		}
 
 		if (animState->IsLoop())
 		{
 			WLOG("One shot animation has loop flag set to true, not playing!");
-			return;
+			return false;
 		}
 
 		// If a one-shot is currently playing and is still in its first half, decide how to handle
@@ -2595,14 +2595,14 @@ namespace mmo
 				if (suppressIfBusy)
 				{
 					// Off-hand swings: drop silently — the main-hand animation is still fresh.
-					return;
+					return false;
 				}
 
 				// Non-off-hand (instant abilities, etc.): queue as pending. Replaces any prior
 				// pending entry so the queue never grows beyond one slot.
 				m_pendingOneShotState = animState;
 				m_pendingOneShotState->SetTimePosition(0.f);
-				return;
+				return false;
 			}
 		}
 
@@ -2623,6 +2623,7 @@ namespace mmo
 		m_oneShotState->SetEnabled(true);
 		m_oneShotState->SetWeight(1.0f);
 		m_oneShotState->SetTimePosition(0.0f);
+		return true;
 	}
 
 	void GameUnitC::FlushSwingHitCallbacks()
@@ -2666,7 +2667,7 @@ namespace mmo
 		RefreshMovementAnimation();
 	}
 
-	void GameUnitC::NotifyAttackSwingEvent(const bool offhand)
+	bool GameUnitC::NotifyAttackSwingEvent(const bool offhand)
 	{
 		// Helper: collect the animation states from a list that are still valid for the current mesh.
 		auto collectValid = [this](const std::vector<AnimationState*>& states, std::vector<AnimationState*>& out)
@@ -2696,8 +2697,7 @@ namespace mmo
 		// Fall back to the unarmed attack animation when no weapon animation is available.
 		if (candidates.empty())
 		{
-			PlayOneShotAnimation(m_unarmedAttackState, offhand);
-			return;
+			return PlayOneShotAnimation(m_unarmedAttackState, offhand);
 		}
 
 		// Pick one of the weapon attack animations at random.
@@ -2712,7 +2712,7 @@ namespace mmo
 
 		// Off-hand swings are suppressed when the main-hand animation is still fresh to avoid
 		// the jarring visual of hard-cutting a recently-started clip.
-		PlayOneShotAnimation(attackState, offhand);
+		return PlayOneShotAnimation(attackState, offhand);
 	}
 
 	void GameUnitC::SetWeaponAttackAnimations(const std::vector<String>& animNames)

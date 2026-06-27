@@ -525,7 +525,9 @@ namespace mmo
 		///        redundant when the main-hand animation is still fresh.
 		///        When false (default) the new animation is queued to play immediately after the
 		///        current one finishes (if still in its first half), replacing any prior pending.
-		void PlayOneShotAnimation(AnimationState *animState, bool suppressIfBusy = false);
+		/// @return True if a new one-shot animation was actually started (including eviction of a
+		///         past-halfway animation). False if the request was suppressed or queued as pending.
+		bool PlayOneShotAnimation(AnimationState *animState, bool suppressIfBusy = false);
 
 		void SetLockedLoopAnimation(AnimationState* state);
 
@@ -541,7 +543,8 @@ namespace mmo
 		/// @brief Plays an auto-attack swing animation.
 		///	@param offhand When true, an off-hand (dual wield) swing animation is chosen. Falls back to
 		///	the main-hand list and then the unarmed attack when no off-hand animations are available.
-		void NotifyAttackSwingEvent(bool offhand = false);
+		/// @return True if a new animation was actually started, false if suppressed or deferred.
+		bool NotifyAttackSwingEvent(bool offhand = false);
 
 		void NotifyHitEvent();
 

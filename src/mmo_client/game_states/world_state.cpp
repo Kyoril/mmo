@@ -3258,12 +3258,13 @@ namespace mmo
 		}
 
 		std::shared_ptr<GameUnitC> attacker = ObjectMgr::Get<GameUnitC>(attackerGuid);
+		const bool offhandSwing = (hitInfo & hit_info::LeftSwing) != 0;
+		bool attackAnimationStarted = false;
 		if (attacker)
 		{
 			// LeftSwing marks an off-hand (dual wield) swing so the dedicated off-hand attack
 			// animation is played instead of the main-hand one.
-			const bool offhandSwing = (hitInfo & hit_info::LeftSwing) != 0;
-			attacker->NotifyAttackSwingEvent(offhandSwing);
+			attackAnimationStarted = attacker->NotifyAttackSwingEvent(offhandSwing);
 		}
 
 		std::shared_ptr<GameUnitC> attacked = ObjectMgr::Get<GameUnitC>(attackedGuid);
@@ -3345,7 +3346,10 @@ namespace mmo
 				}
 			};
 
-			if (attacker)
+			// Only defer to SwingHit notify when a new attack animation was actually started.
+			// If the animation was suppressed (e.g. off-hand while main-hand is fresh) there is
+			// nothing visual to sync to, so fire immediately.
+			if (attacker && attackAnimationStarted)
 			{
 				attacker->QueueSwingHitCallback(std::move(displayCallback));
 			}
