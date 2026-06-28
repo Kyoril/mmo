@@ -951,12 +951,23 @@ namespace mmo
 				documentNode = central->ID;
 			}
 
-			std::erase_if(m_uninitializedEditorInstances, [documentNode](const String& name)
+			// Only dock an instance once its ImGui window has actually been created by
+			// editor->Draw() this frame. If the asset was opened from the welcome screen
+			// or any other path that runs *after* editor->Draw() (so ImGui::Begin hasn't
+			// been called for it yet), FindWindowByName returns null and we keep the entry
+			// to retry next frame — otherwise the window would float permanently because
+			// ImGuiWindowFlags_NoSavedSettings prevents the settings-based fallback.
+			bool anyDocked = false;
+			std::erase_if(m_uninitializedEditorInstances, [documentNode, &anyDocked](const String& name)
 			{
+				if (ImGui::FindWindowByName(name.c_str()) == nullptr)
+					return false;
 				ImGui::DockBuilderDockWindow(name.c_str(), documentNode);
+				anyDocked = true;
 				return true;
 			});
-			ImGui::DockBuilderFinish(dockSpaceId);
+			if (anyDocked)
+				ImGui::DockBuilderFinish(dockSpaceId);
 
 			// Initialize the layout
 			if (m_applyDefaultLayout)
