@@ -61,7 +61,8 @@ namespace mmo
 			SaturateNode::GetStaticTypeInfo(),
 			SceneColorNode::GetStaticTypeInfo(),
 			NamedVariableSetNode::GetStaticTypeInfo(),
-			NamedVariableGetNode::GetStaticTypeInfo()
+			NamedVariableGetNode::GetStaticTypeInfo(),
+			TransformVectorNode::GetStaticTypeInfo()
 		})
 	{
 		RebuildTypes();

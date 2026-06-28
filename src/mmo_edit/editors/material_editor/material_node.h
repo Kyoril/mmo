@@ -262,6 +262,11 @@ namespace mmo
 			m_value = value; OnValueChanged();
 		}
 
+		/// @brief Returns the selectable options for enum properties.
+		/// @param outOptions Receives (int32 value, display name) pairs.
+		/// @return true if this property has enum options; false for non-enum properties.
+		virtual bool GetEnumOptions(std::vector<std::pair<int32, std::string_view>>& outOptions) const { return false; }
+
 	protected:
 		std::string m_name;
 		ValueType m_value;
@@ -451,6 +456,17 @@ namespace mmo
 		String GetCurrentDisplayName() const
 		{
 			return GetDisplayName(m_enumRef);
+		}
+
+		bool GetEnumOptions(std::vector<std::pair<int32, std::string_view>>& outOptions) const override
+		{
+			outOptions.clear();
+			outOptions.reserve(m_options.size());
+			for (const auto& option : m_options)
+			{
+				outOptions.emplace_back(static_cast<int32>(option.value), std::string_view(option.displayName));
+			}
+			return true;
 		}
 
 		io::Writer& Serialize(io::Writer& writer) override
@@ -2589,6 +2605,102 @@ namespace mmo
 		MaterialPin m_output = { this };
 
 		Pin* m_inputPins[1] = { &m_input };
+		Pin* m_outputPins[1] = { &m_output };
+	};
+
+	/// @brief A node that transforms a vector from one coordinate space into another.
+	class TransformVectorNode final : public GraphNode
+	{
+	public:
+		MAT_NODE(TransformVectorNode, "Transform Vector")
+
+		// Local enum with default (int) underlying type so EnumProperty<> works correctly.
+		// Space : uint8 cannot be used with EnumProperty because Property<int32> stores a
+		// reinterpret_cast<int32&> reference, which reads/writes 4 bytes from a 1-byte field.
+		enum VectorTransformSpace
+		{
+			VTS_Local   = 0,
+			VTS_World   = 1,
+			VTS_View    = 2,
+			VTS_Tangent = 4,
+		};
+
+		TransformVectorNode(MaterialGraph& material)
+			: GraphNode(material)
+		{
+			m_sourceChanged = m_sourceSpaceProp.OnValueChanged.connect([this] { UpdateName(); });
+			m_targetChanged = m_targetSpaceProp.OnValueChanged.connect([this] { UpdateName(); });
+			UpdateName();
+		}
+
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
+		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
+
+		[[nodiscard]] uint32 GetColor() override { return ConstFloatNode::Color; }
+		[[nodiscard]] std::string_view GetName() const override { return m_name; }
+
+		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
+
+		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+	private:
+		static std::string_view SpaceToString(VectorTransformSpace space)
+		{
+			switch (space)
+			{
+			case VTS_Tangent: return "Tangent Space";
+			case VTS_World:   return "World Space";
+			case VTS_View:    return "View Space";
+			case VTS_Local:   return "Local Space";
+			default:          return "Unknown";
+			}
+		}
+
+		static Space ToCompilerSpace(VectorTransformSpace space)
+		{
+			switch (space)
+			{
+			case VTS_Tangent: return Space::Tangent;
+			case VTS_World:   return Space::World;
+			case VTS_View:    return Space::View;
+			case VTS_Local:   return Space::Local;
+			default:          return Space::World;
+			}
+		}
+
+		void UpdateName()
+		{
+			m_name = std::string(SpaceToString(m_sourceSpace)) + " to " + std::string(SpaceToString(m_targetSpace));
+		}
+
+	private:
+		String m_name;
+		scoped_connection m_sourceChanged;
+		scoped_connection m_targetChanged;
+
+		VectorTransformSpace m_sourceSpace { VTS_Tangent };
+		VectorTransformSpace m_targetSpace { VTS_World };
+
+		EnumProperty<VectorTransformSpace> m_sourceSpaceProp { "Source Space", m_sourceSpace, {
+			{ VTS_Tangent, "Tangent Space" },
+			{ VTS_World,   "World Space"   },
+			{ VTS_View,    "View Space"    },
+			{ VTS_Local,   "Local Space"   }
+		}};
+
+		EnumProperty<VectorTransformSpace> m_targetSpaceProp { "Target Space", m_targetSpace, {
+			{ VTS_Tangent, "Tangent Space" },
+			{ VTS_World,   "World Space"   },
+			{ VTS_View,    "View Space"    },
+			{ VTS_Local,   "Local Space"   }
+		}};
+
+		PropertyBase* m_properties[2] = { &m_sourceSpaceProp, &m_targetSpaceProp };
+
+		MaterialPin m_input  = { this, "Vector" };
+		MaterialPin m_output = { this };
+
+		Pin* m_inputPins[1]  = { &m_input };
 		Pin* m_outputPins[1] = { &m_output };
 	};
 

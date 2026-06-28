@@ -1196,10 +1196,47 @@ namespace mmo
 		}
 		else if (const auto* intValue = prop->GetValueAs<int32>())
 		{
-			int32 value = *intValue;
-			if (ImGui::InputInt(prop->GetName().data(), &value, 1, 100, ImGuiInputTextFlags_CharsDecimal | ImGuiInputTextFlags_CharsNoBlank))
+			std::vector<std::pair<int32, std::string_view>> enumOptions;
+			if (prop->GetEnumOptions(enumOptions))
 			{
-				prop->SetValue(value);
+				const int32 currentValue = *intValue;
+				const char* preview = "Unknown";
+				int currentIndex = -1;
+				for (int i = 0; i < static_cast<int>(enumOptions.size()); ++i)
+				{
+					if (enumOptions[i].first == currentValue)
+					{
+						preview = enumOptions[i].second.data();
+						currentIndex = i;
+						break;
+					}
+				}
+
+				const String comboId = String("##enum_") + prop->GetName().data();
+				if (ImGui::BeginCombo(comboId.c_str(), preview))
+				{
+					for (int i = 0; i < static_cast<int>(enumOptions.size()); ++i)
+					{
+						const bool selected = (i == currentIndex);
+						if (ImGui::Selectable(enumOptions[i].second.data(), selected))
+						{
+							prop->SetValue(enumOptions[i].first);
+						}
+						if (selected)
+						{
+							ImGui::SetItemDefaultFocus();
+						}
+					}
+					ImGui::EndCombo();
+				}
+			}
+			else
+			{
+				int32 value = *intValue;
+				if (ImGui::InputInt(prop->GetName().data(), &value, 1, 100, ImGuiInputTextFlags_CharsDecimal | ImGuiInputTextFlags_CharsNoBlank))
+				{
+					prop->SetValue(value);
+				}
 			}
 		}
 		else if (const auto* strValue = prop->GetValueAs<String>())

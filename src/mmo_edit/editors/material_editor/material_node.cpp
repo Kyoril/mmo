@@ -2237,6 +2237,30 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
+	ExpressionIndex TransformVectorNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
+	{
+		if (m_compiledExpressionId == IndexNone)
+		{
+			ExpressionIndex inputExpression = IndexNone;
+			if (m_input.IsLinked())
+			{
+				inputExpression = m_input.GetLink()->GetNode()->Compile(compiler, m_input.GetLink());
+			}
+
+			if (m_sourceSpace == m_targetSpace)
+			{
+				WLOG("TransformVectorNode: source and target space are identical — node is a no-op.");
+				m_compiledExpressionId = inputExpression;
+			}
+			else
+			{
+				m_compiledExpressionId = compiler.AddTransform(inputExpression, ToCompilerSpace(m_sourceSpace), ToCompilerSpace(m_targetSpace));
+			}
+		}
+
+		return m_compiledExpressionId;
+	}
+
 	ImColor GetIconColor(const PinType type)
 	{
 	    switch (type)
