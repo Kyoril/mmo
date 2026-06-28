@@ -94,6 +94,11 @@ namespace mmo
 		[[nodiscard]] unsigned int GetLastDockId() const { return m_lastDockId; }
 		void SetLastDockId(unsigned int id) { m_lastDockId = id; }
 
+		/// @brief User-adjusted size of the hover flyout along its resizable axis (width for
+		///	side-docked panels, height for top/bottom-docked panels). 0 means "use the default".
+		[[nodiscard]] float GetFlyoutSize() const { return m_flyoutSize; }
+		void SetFlyoutSize(float value) { m_flyoutSize = value; }
+
 		/// @brief Returns true once after expanding, signalling that the dock location should be restored.
 		bool ConsumeRestoreDock()
 		{
@@ -112,5 +117,6 @@ namespace mmo
 		bool m_collapsed { false };
 		bool m_restoreDock { false };
 		unsigned int m_lastDockId { 0 };
+		float m_flyoutSize { 0.0f };
 	};
 }

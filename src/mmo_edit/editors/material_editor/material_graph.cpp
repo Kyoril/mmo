@@ -2,6 +2,8 @@
 
 #include "material_graph.h"
 
+#include <algorithm>
+
 #include "base/chunk_writer.h"
 #include "base/macros.h"
 #include "binary_io/reader.h"
@@ -82,6 +84,29 @@ namespace mmo
 			return reader;
 		}
 
+		// Register the post-load action before the node loop so it runs even if
+		// some nodes fail to deserialize. The generator high-water check ensures
+		// that any extra IDs assigned during deserialization (e.g. pin reassignment)
+		// don't get reused on the next save/load cycle.
+		context.AddPostLoadAction([this, rootNodeId, nextNodeId]()
+		{
+			if (rootNodeId != 0xffffffff)
+			{
+				m_rootNode = FindNode(rootNodeId);
+				if (!m_rootNode)
+				{
+					ELOG("Unable to find root node with id " << rootNodeId << "!");
+					return false;
+				}
+			}
+
+			const uint32 highestId = std::max(nextNodeId, m_idGenerator.GetCurrentId() > 0 ? m_idGenerator.GetCurrentId() - 1 : nextNodeId);
+			m_idGenerator.Reset();
+			m_idGenerator.NotifyId(highestId);
+
+			return true;
+		});
+
 		for (uint32 i = 0; i < nodeCount; ++i)
 		{
 			uint32 nodeTypeId;
@@ -104,24 +129,6 @@ namespace mmo
 				return reader;
 			}
 		}
-
-		context.AddPostLoadAction([this, rootNodeId, nextNodeId]()
-		{
-			if (rootNodeId != 0xffffffff)
-			{
-				m_rootNode = FindNode(rootNodeId);
-				if (!m_rootNode)
-				{
-					ELOG("Unable to find old root node!");
-					return false;
-				}
-			}
-			
-			m_idGenerator.Reset();
-			m_idGenerator.NotifyId(nextNodeId);
-
-			return true;
-		});
 
 		return reader;
 	}

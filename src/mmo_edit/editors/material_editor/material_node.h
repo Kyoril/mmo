@@ -124,6 +124,8 @@ namespace mmo
 
 		[[nodiscard]] uint32 GetId() const { return m_id; }
 
+		void SetId(uint32 id) { m_id = id; }
+
 	    [[nodiscard]] std::string_view GetName() const { return m_name; }
 
 		void SetName(const String& name) { m_name = name; }

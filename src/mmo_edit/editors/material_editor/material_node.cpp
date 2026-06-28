@@ -2,6 +2,8 @@
 
 #include "material_node.h"
 
+#include <unordered_set>
+
 #include "imgui_node_editor.h"
 #include "imgui_node_editor_internal.h"
 #include "material_function_manager.h"
@@ -428,9 +430,20 @@ namespace mmo
 			DLOG("No editor context given, node state won't be restored");
 		}
 
-		for (uint32 i = 0; i < GetInputPins().size() && i < numInputPins; ++i)
+		const uint32 actualInputCount = static_cast<uint32>(GetInputPins().size());
+		for (uint32 i = 0; i < actualInputCount && i < numInputPins; ++i)
 		{
 			if (!(GetInputPins()[i]->Deserialize(reader, context)))
+			{
+				return reader;
+			}
+		}
+
+		// Skip saved pins that no longer exist (numSaved > numActual)
+		for (uint32 i = actualInputCount; i < numInputPins; ++i)
+		{
+			uint32 dummy;
+			if (!(reader >> io::read<uint32>(dummy) >> io::read<uint32>(dummy)))
 			{
 				return reader;
 			}
@@ -440,20 +453,64 @@ namespace mmo
 		{
 			return reader;
 		}
-		
-		for (uint32 i = 0; i < GetOutputPins().size() && i < numOutputPins; ++i)
+
+		const uint32 actualOutputCount = static_cast<uint32>(GetOutputPins().size());
+		for (uint32 i = 0; i < actualOutputCount && i < numOutputPins; ++i)
 		{
 			if (!(GetOutputPins()[i]->Deserialize(reader, context)))
 			{
 				return reader;
 			}
 		}
-		
+
+		// Skip saved pins that no longer exist (numSaved > numActual)
+		for (uint32 i = actualOutputCount; i < numOutputPins; ++i)
+		{
+			uint32 dummy;
+			if (!(reader >> io::read<uint32>(dummy) >> io::read<uint32>(dummy)))
+			{
+				return reader;
+			}
+		}
+
+		// Collect all saved pin IDs so we can detect temp-ID conflicts on extra actual pins.
+		// This happens when a function gains new pins after a file was saved: the new pins get
+		// temp IDs that can collide with saved IDs of other pins on the same node.
+		{
+			std::unordered_set<uint32> savedIds;
+			for (uint32 i = 0; i < actualInputCount && i < numInputPins; ++i)
+			{
+				savedIds.insert(GetInputPins()[i]->GetId());
+			}
+			for (uint32 i = 0; i < actualOutputCount && i < numOutputPins; ++i)
+			{
+				savedIds.insert(GetOutputPins()[i]->GetId());
+			}
+
+			for (uint32 i = numInputPins; i < actualInputCount; ++i)
+			{
+				auto* pin = GetInputPins()[i];
+				if (savedIds.count(pin->GetId()))
+				{
+					pin->SetId(m_material->GenerateId());
+				}
+			}
+
+			for (uint32 i = numOutputPins; i < actualOutputCount; ++i)
+			{
+				auto* pin = GetOutputPins()[i];
+				if (savedIds.count(pin->GetId()))
+				{
+					pin->SetId(m_material->GenerateId());
+				}
+			}
+		}
+
 		if (!(reader >> io::read<uint8>(numProperties)))
 		{
 			return reader;
 		}
-		
+
 		const auto serializedProperties = GetSerializedProperties();
 		for (uint32 i = 0; i < serializedProperties.size() && i < numProperties; ++i)
 		{

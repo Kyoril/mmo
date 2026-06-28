@@ -196,6 +196,10 @@ namespace mmo
 	    /// @return A new unique pin id to use.
 	    uint32 MakePinId(Pin* pin);
 
+	    /// @brief Generates a new unique id without registering any object.
+	    /// @return A new unique id.
+	    uint32 GenerateId() { return m_idGenerator.GenerateId(); }
+
 	    /// @brief Determines whether the given pin has any link.
 	    /// @param pin The pin for which the request is done.
 	    /// @return true if the pin has any link.

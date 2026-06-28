@@ -158,6 +158,7 @@ namespace mmo
 		std::vector<String> m_uninitializedEditorInstances;
 		EditorInstance* m_activeEditorInstance { nullptr };
 		EditorWindowBase* m_flyoutPanel { nullptr };
+		bool m_flyoutResizeActive { false };
 		ImFont* m_defaultFont { nullptr };
 		ImFont* m_headerFont { nullptr };
 		ImFont* m_titleFont { nullptr };

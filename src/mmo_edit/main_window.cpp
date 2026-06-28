@@ -668,25 +668,40 @@ namespace mmo
 				m_flyoutPanel = hoveredRailPanel;
 			}
 
+			bool flyoutResizing = false;
 			if (m_flyoutPanel && m_flyoutPanel->IsVisible() && m_flyoutPanel->IsCollapsed())
 			{
 				const DockDirection edge = m_flyoutPanel->GetDefaultDockDirection();
 				const float defaultSize = m_flyoutPanel->GetDefaultDockSize();
 
+				// The flyout grows only along the axis pointing away from its rail (width for side
+				// panels, height for top/bottom panels); the other axis spans the rail. We track that
+				// variable extent on the panel so a user resize sticks across frames and sessions.
+				const bool sideDocked = (edge == DockDirection::Left || edge == DockDirection::Right);
+				float varSize = m_flyoutPanel->GetFlyoutSize();
+				if (varSize <= 0.0f)
+				{
+					varSize = defaultSize;
+				}
+
+				const float minSize = sideDocked ? 120.0f : 100.0f;
+				const float maxSize = sideDocked ? avail.x * 0.8f : avail.y * 0.85f;
+				varSize = ImClamp(varSize, minSize, maxSize);
+
 				ImVec2 flyoutPos, flyoutSize;
 				if (edge == DockDirection::Left)
 				{
-					flyoutSize = ImVec2(ImMin(defaultSize, avail.x * 0.5f), bodyHeight);
+					flyoutSize = ImVec2(varSize, bodyHeight);
 					flyoutPos = ImVec2(origin.x + leftWidth, origin.y);
 				}
 				else if (edge == DockDirection::Right)
 				{
-					flyoutSize = ImVec2(ImMin(defaultSize, avail.x * 0.5f), bodyHeight);
+					flyoutSize = ImVec2(varSize, bodyHeight);
 					flyoutPos = ImVec2(origin.x + avail.x - rightWidth - flyoutSize.x, origin.y);
 				}
 				else
 				{
-					flyoutSize = ImVec2(avail.x, ImMin(defaultSize, avail.y * 0.6f));
+					flyoutSize = ImVec2(avail.x, varSize);
 					flyoutPos = ImVec2(origin.x, origin.y + avail.y - bottomHeight - flyoutSize.y);
 				}
 
@@ -699,16 +714,91 @@ namespace mmo
 				// panels (e.g. Log) draw their content directly and rely on the caller's Begin/End,
 				// while others (Data Navigator, Asset Browser) Begin their own window; wrapping the
 				// call in Begin/End mirrors HandleEditorWindow and works for both styles.
-				ImGuiWindowFlags flyoutFlags = ImGuiWindowFlags_NoSavedSettings;
-				if (!m_flyoutPanel->IsResizable())
-				{
-					flyoutFlags |= ImGuiWindowFlags_NoResize;
-				}
+				//
+				// We pin the position and size ourselves every frame and disable ImGui's built-in
+				// window resize, then provide our own grip on the single edge that faces the central
+				// area. This keeps the popup from offering resize on edges that make no sense (the
+				// rail-facing edges) and stops ImGui's resize from being clobbered by our pinning.
+				ImGuiWindowFlags flyoutFlags = ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
 				if (ImGui::Begin(m_flyoutPanel->GetName().c_str(), nullptr, flyoutFlags))
 				{
 					m_flyoutPanel->Draw();
 				}
 				ImGui::End();
+
+				// Resize grip on the single edge that faces the central area (right edge for a left
+				// rail, left edge for a right rail, top edge otherwise). Handled manually with mouse
+				// hit-testing rather than a window/InvisibleButton: an InvisibleButton inside the
+				// flyout would be clipped by its title bar, and a separate overlay window draws its
+				// own border and fights the flyout for z-order. The highlight is drawn on the
+				// foreground draw list so it always sits above the flyout. The rail-facing edges
+				// intentionally offer no resize.
+				if (m_flyoutPanel->IsResizable())
+				{
+					const float thickness = 6.0f;
+					ImVec2 gripMin, gripMax;
+					ImGuiMouseCursor gripCursor;
+					if (edge == DockDirection::Left)
+					{
+						gripMin = ImVec2(flyoutPos.x + flyoutSize.x - thickness, flyoutPos.y);
+						gripMax = ImVec2(flyoutPos.x + flyoutSize.x, flyoutPos.y + flyoutSize.y);
+						gripCursor = ImGuiMouseCursor_ResizeEW;
+					}
+					else if (edge == DockDirection::Right)
+					{
+						gripMin = ImVec2(flyoutPos.x, flyoutPos.y);
+						gripMax = ImVec2(flyoutPos.x + thickness, flyoutPos.y + flyoutSize.y);
+						gripCursor = ImGuiMouseCursor_ResizeEW;
+					}
+					else
+					{
+						gripMin = ImVec2(flyoutPos.x, flyoutPos.y);
+						gripMax = ImVec2(flyoutPos.x + flyoutSize.x, flyoutPos.y + thickness);
+						gripCursor = ImGuiMouseCursor_ResizeNS;
+					}
+
+					const bool gripHovered = ImGui::IsMouseHoveringRect(gripMin, gripMax, false);
+					if (gripHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+					{
+						m_flyoutResizeActive = true;
+					}
+					if (m_flyoutResizeActive && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+					{
+						m_flyoutResizeActive = false;
+					}
+
+					if (gripHovered || m_flyoutResizeActive)
+					{
+						ImGui::SetMouseCursor(gripCursor);
+						const ImU32 col = ImGui::GetColorU32(m_flyoutResizeActive ? ImGuiCol_SeparatorActive : ImGuiCol_SeparatorHovered);
+						ImGui::GetForegroundDrawList()->AddRectFilled(gripMin, gripMax, col);
+					}
+
+					if (m_flyoutResizeActive)
+					{
+						const ImVec2 delta = ImGui::GetIO().MouseDelta;
+						float newSize = varSize;
+						if (edge == DockDirection::Left)
+						{
+							newSize += delta.x;
+						}
+						else if (edge == DockDirection::Right)
+						{
+							newSize -= delta.x;
+						}
+						else
+						{
+							newSize -= delta.y; // bottom-docked flyout grows upward
+						}
+
+						m_flyoutPanel->SetFlyoutSize(ImClamp(newSize, minSize, maxSize));
+						flyoutResizing = true;
+					}
+				}
+				else
+				{
+					m_flyoutResizeActive = false;
+				}
 
 				// Keep the flyout open while the mouse is over the flyout OR anywhere over the rail strip
 				// it belongs to. The strip and flyout are contiguous, so this leaves no dead zone (such
@@ -732,7 +822,9 @@ namespace mmo
 
 				const bool overFlyout = ImGui::IsMouseHoveringRect(flyoutPos, ImVec2(flyoutPos.x + flyoutSize.x, flyoutPos.y + flyoutSize.y), false);
 				const bool overRail = ImGui::IsMouseHoveringRect(railMin, railMax, false);
-				if (!overFlyout && !overRail)
+				// Don't dismiss while the user is dragging the resize grip; the cursor may travel past
+				// the flyout/rail rects during the drag and would otherwise snap the popup shut.
+				if (!overFlyout && !overRail && !flyoutResizing)
 				{
 					m_flyoutPanel = nullptr;
 				}
@@ -1017,23 +1109,34 @@ namespace mmo
 		{
 			if (!window->IsDockable()) continue;
 
+			ImGuiID targetNode = dockMainId;
 			switch(window->GetDefaultDockDirection())
 			{
 			case DockDirection::Bottom:
-				ImGui::DockBuilderDockWindow(window->GetName().c_str(), bottomId);
+				targetNode = bottomId;
 				break;
 			case DockDirection::Left:
-				ImGui::DockBuilderDockWindow(window->GetName().c_str(), leftId);
+				targetNode = leftId;
 				break;
 			case DockDirection::Right:
-				ImGui::DockBuilderDockWindow(window->GetName().c_str(), rightId);
+				targetNode = rightId;
 				break;
 			case DockDirection::Top:
-				ImGui::DockBuilderDockWindow(window->GetName().c_str(), topId);
+				targetNode = topId;
 				break;
 			default:
-				ImGui::DockBuilderDockWindow(window->GetName().c_str(), dockMainId);
+				targetNode = dockMainId;
 				break;
+			}
+
+			ImGui::DockBuilderDockWindow(window->GetName().c_str(), targetNode);
+
+			// Record the default dock node so a panel that starts collapsed (and is therefore
+			// never drawn to capture its live dock id) can still be restored to the correct
+			// dock location on its first expand instead of popping out as a floating window.
+			if (window->IsCollapsible())
+			{
+				window->SetLastDockId(targetNode);
 			}
 		}
 		
