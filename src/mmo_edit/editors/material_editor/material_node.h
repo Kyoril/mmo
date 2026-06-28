@@ -674,7 +674,7 @@ namespace mmo
 			m_paramTypeChanged.disconnect();
 		}
 
-		std::span<Pin*> GetInputPins() override { return {}; }
+		std::span<Pin*> GetInputPins() override { return m_inputPins; }
 		std::span<Pin*> GetOutputPins() override { return m_outputPins; }
 
 		[[nodiscard]] uint32 GetColor() override { return Color; }
@@ -684,6 +684,12 @@ namespace mmo
 		ExpressionIndex Compile(MaterialCompiler& compiler, const Pin* outputPin) override;
 
 		std::span<PropertyBase*> GetProperties() override { return m_properties; }
+
+		// The default value is serialized as four float components so that older materials (which only
+		// wrote a single "Default Value" float) still deserialize positionally. The extra Y/Z/W
+		// components are appended at the end of the serialized property list and default to 0 when not
+		// present in the file.
+		std::span<PropertyBase*> GetSerializedProperties() override { return m_serializedProperties; }
 
 		void UpdatePinNames()
 		{
@@ -701,9 +707,58 @@ namespace mmo
 		
 		/// @brief Gets the parameter type
 		[[nodiscard]] MaterialFunctionParamType GetParameterType() const { return m_paramType; }
-		
-		/// @brief Gets the default value for this parameter
+
+		/// @brief Gets the default value for this parameter (X / first component).
 		[[nodiscard]] float GetDefaultValue() const { return m_defaultValue; }
+
+		/// @brief Gets the number of editable default value components for the current parameter type.
+		///        Float -> 1, Float2 -> 2, Float3 -> 3, Float4 -> 4, Texture -> 0 (no scalar default).
+		[[nodiscard]] int32 GetDefaultValueComponentCount() const
+		{
+			switch (m_paramType)
+			{
+			case MaterialFunctionParamType::Float:   return 1;
+			case MaterialFunctionParamType::Float2:  return 2;
+			case MaterialFunctionParamType::Float3:  return 3;
+			case MaterialFunctionParamType::Float4:  return 4;
+			default:                                 return 0;
+			}
+		}
+
+		/// @brief Reads a single default value component (0..3).
+		[[nodiscard]] float GetDefaultValueComponent(const int32 index) const
+		{
+			switch (index)
+			{
+			case 0:  return m_defaultValue;
+			case 1:  return m_defaultValueY;
+			case 2:  return m_defaultValueZ;
+			case 3:  return m_defaultValueW;
+			default: return 0.0f;
+			}
+		}
+
+		/// @brief Writes a single default value component (0..3) through the backing property so the
+		///        serialized cache stays in sync.
+		void SetDefaultValueComponent(const int32 index, const float value)
+		{
+			switch (index)
+			{
+			case 0:  m_defaultValueProp.SetValue(value); break;
+			case 1:  m_defaultValueYProp.SetValue(value); break;
+			case 2:  m_defaultValueZProp.SetValue(value); break;
+			case 3:  m_defaultValueWProp.SetValue(value); break;
+			default: break;
+			}
+		}
+
+		/// @brief Gets the optional default value input pin. When the caller of the material function
+		///        does not provide a value for this input, the expression connected to this pin (if any)
+		///        is used as the value instead of the scalar default value.
+		[[nodiscard]] const Pin* GetDefaultValuePin() const { return &m_defaultInput; }
+
+		/// @brief Builds the expression for the scalar default value, sized to the parameter type.
+		ExpressionIndex CompileDefaultValueExpression(MaterialCompiler& compiler) const;
 
 		io::Reader& Deserialize(io::Reader& reader, IMaterialGraphLoadContext& context) override;
 
@@ -716,9 +771,14 @@ namespace mmo
 		String m_description;
 		int32 m_sortPriority;
 		MaterialFunctionParamType m_paramType;
+		// m_defaultValue is the X component and keeps its original serialization position. Y/Z/W are
+		// appended afterwards so older single-float materials still load correctly.
 		float m_defaultValue;
+		float m_defaultValueY { 0.0f };
+		float m_defaultValueZ { 0.0f };
+		float m_defaultValueW { 0.0f };
 		ExpressionIndex m_userExpression = IndexNone;
-		
+
 		StringProperty m_nameProp{ "Name", m_name };
 		StringProperty m_descriptionProp{ "Description", m_description };
 		IntProperty m_sortPriorityProp{ "Sort Priority", m_sortPriority };
@@ -730,19 +790,40 @@ namespace mmo
 			{ MaterialFunctionParamType::Texture, "Texture" }
 		}};
 		FloatProperty m_defaultValueProp{ "Default Value", m_defaultValue };
-		
+		FloatProperty m_defaultValueYProp{ "Default Value Y", m_defaultValueY };
+		FloatProperty m_defaultValueZProp{ "Default Value Z", m_defaultValueZ };
+		FloatProperty m_defaultValueWProp{ "Default Value W", m_defaultValueW };
+
 		scoped_connection m_nameChanged;
 		scoped_connection m_paramTypeChanged;
 
 		MaterialPin m_output = { this, m_name };
 		Pin* m_outputPins[1] = { &m_output };
-		
-		PropertyBase* m_properties[5] = { 
-			&m_nameProp, 
-			&m_descriptionProp, 
+
+		// Optional default value input. Connecting an expression here provides the fallback value used
+		// when the function's caller leaves the corresponding input unconnected.
+		MaterialPin m_defaultInput = { this, "Default" };
+		Pin* m_inputPins[1] = { &m_defaultInput };
+
+		// Properties shown in the editor's property panel. The default value is rendered with a
+		// type-aware widget (1-4 components), so it is intentionally not part of this list.
+		PropertyBase* m_properties[4] = {
+			&m_nameProp,
+			&m_descriptionProp,
+			&m_sortPriorityProp,
+			&m_paramTypeProp
+		};
+
+		// Properties written to / read from disk. Append-only for backward compatibility.
+		PropertyBase* m_serializedProperties[8] = {
+			&m_nameProp,
+			&m_descriptionProp,
 			&m_sortPriorityProp,
 			&m_paramTypeProp,
-			&m_defaultValueProp 
+			&m_defaultValueProp,
+			&m_defaultValueYProp,
+			&m_defaultValueZProp,
+			&m_defaultValueWProp
 		};
 	};
 

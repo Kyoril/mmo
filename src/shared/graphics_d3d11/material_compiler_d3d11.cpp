@@ -554,29 +554,68 @@ namespace mmo
 			return IndexNone;
 		}
 
-		auto outputType = ExpressionType::Float_3;
+		const auto outputType = ExpressionType::Float_3;
 
-		std::ostringstream outputStream;
-		if (sourceSpace == Space::World)
+		// Transforming a vector into the same space is a no-op; just reuse the input expression.
+		if (sourceSpace == targetSpace)
 		{
-			if (targetSpace == Space::Tangent)
-			{
-				outputStream << "mul(TBN, expr_" << input << ")";
-			}
-			else
-			{
-				WLOG("Transform between given two spaces not yet supported!");
-				return IndexNone;
-			}
+			return input;
 		}
-		else
+
+		// We only support direction-vector transforms between the spaces exposed by the editor's
+		// Transform Vector node (Local, World, View, Tangent). All transforms are expressed by first
+		// bringing the vector into world space and then into the target space, which keeps the matrix
+		// usage consistent and lets us cover every combination with the matrices available in the
+		// pixel shader (matWorld, matView, matInvView) plus the per-pixel TBN basis.
+		//
+		// The engine uses the row-vector convention (v' = mul(v, M)) everywhere except for the
+		// world->tangent projection, which uses mul(TBN, v) so that each component becomes a dot
+		// product against the tangent basis. World<->Local and World<->Tangent assume an orthonormal
+		// basis (no non-uniform scale), which is the same limitation as the existing normal handling.
+
+		// Builds the HLSL expression that brings 'inner' from the given space into world space.
+		const auto toWorld = [](Space space, const std::string& inner) -> std::string
 		{
-			WLOG("Transform between given two spaces not yet supported!");
+			switch (space)
+			{
+			case Space::World:   return inner;
+			case Space::Local:   return "mul(" + inner + ", (float3x3)matWorld)";
+			case Space::View:    return "mul(" + inner + ", (float3x3)matInvView)";
+			case Space::Tangent: return "mul(" + inner + ", TBN)";
+			default:             return std::string();
+			}
+		};
+
+		// Builds the HLSL expression that brings 'inner' (already in world space) into the given space.
+		const auto fromWorld = [](Space space, const std::string& inner) -> std::string
+		{
+			switch (space)
+			{
+			case Space::World:   return inner;
+			// matWorld is assumed orthonormal, so its inverse equals its transpose; mul(M, v) applies
+			// the transpose under the row-vector convention used elsewhere.
+			case Space::Local:   return "mul((float3x3)matWorld, " + inner + ")";
+			case Space::View:    return "mul(" + inner + ", (float3x3)matView)";
+			case Space::Tangent: return "mul(TBN, " + inner + ")";
+			default:             return std::string();
+			}
+		};
+
+		const std::string worldExpr = toWorld(sourceSpace, "expr_" + std::to_string(input));
+		if (worldExpr.empty())
+		{
+			WLOG("Transform from given source space not yet supported!");
 			return IndexNone;
 		}
-		outputStream.flush();
 
-		return AddExpression(outputStream.str(), outputType);
+		const std::string result = fromWorld(targetSpace, worldExpr);
+		if (result.empty())
+		{
+			WLOG("Transform to given target space not yet supported!");
+			return IndexNone;
+		}
+
+		return AddExpression(result, outputType);
 	}
 
 	ExpressionIndex MaterialCompilerD3D11::AddTime()

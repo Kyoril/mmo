@@ -901,6 +901,33 @@ namespace mmo
 			m_compiledExpressionId = compiler.AddExpression(strm.str(), ExpressionType::Float_4);
 		}
 
+		// The ARGB pin (and the implicit default when no specific pin is requested) yields the whole
+		// float4. Every other pin masks the value down to the referenced channels, so downstream nodes
+		// receive a float3/float1 instead of the raw float4 (which would otherwise fail to compile).
+		if (outputPin && outputPin != &m_argb)
+		{
+			if (outputPin == &m_a)
+			{
+				return compiler.AddMask(m_compiledExpressionId, false, false, false, true);
+			}
+			if (outputPin == &m_r)
+			{
+				return compiler.AddMask(m_compiledExpressionId, true, false, false, false);
+			}
+			if (outputPin == &m_g)
+			{
+				return compiler.AddMask(m_compiledExpressionId, false, true, false, false);
+			}
+			if (outputPin == &m_b)
+			{
+				return compiler.AddMask(m_compiledExpressionId, false, false, true, false);
+			}
+			if (outputPin == &m_rgb)
+			{
+				return compiler.AddMask(m_compiledExpressionId, true, true, true, false);
+			}
+		}
+
 		return m_compiledExpressionId;
 	}
 
@@ -1714,6 +1741,33 @@ namespace mmo
 		return m_userExpression;
 	}
 
+	ExpressionIndex MaterialFunctionInputNode::CompileDefaultValueExpression(MaterialCompiler& compiler) const
+	{
+		std::ostringstream strm;
+		switch (m_paramType)
+		{
+		case MaterialFunctionParamType::Float2:
+			strm << "float2(" << m_defaultValue << ", " << m_defaultValueY << ")";
+			return compiler.AddExpression(strm.str(), ExpressionType::Float_2);
+
+		case MaterialFunctionParamType::Float3:
+			strm << "float3(" << m_defaultValue << ", " << m_defaultValueY << ", " << m_defaultValueZ << ")";
+			return compiler.AddExpression(strm.str(), ExpressionType::Float_3);
+
+		case MaterialFunctionParamType::Float4:
+			strm << "float4(" << m_defaultValue << ", " << m_defaultValueY << ", " << m_defaultValueZ << ", " << m_defaultValueW << ")";
+			return compiler.AddExpression(strm.str(), ExpressionType::Float_4);
+
+		case MaterialFunctionParamType::Float:
+		case MaterialFunctionParamType::Texture:
+		default:
+			// Texture inputs have no meaningful scalar default; fall back to a single float so the
+			// expression stays valid (matching the previous behaviour for unconnected inputs).
+			strm << m_defaultValue;
+			return compiler.AddExpression(strm.str(), ExpressionType::Float_1);
+		}
+	}
+
 	io::Reader& MaterialFunctionInputNode::Deserialize(io::Reader& reader, IMaterialGraphLoadContext& context)
 	{
 		GraphNode::Deserialize(reader, context);
@@ -1837,29 +1891,9 @@ namespace mmo
 		// Create a map of input node IDs to expression indices
 		std::map<uint32, ExpressionIndex> inputExpressionMap;
 
-		// Compile all input connections and map them to input nodes
-		for (size_t i = 0; i < m_inputPins.size() && i < inputNodes.size(); ++i)
-		{
-			ExpressionIndex inputExpr = IndexNone;
-
-			// If the input is connected, use the connected node's output
-			if (m_inputPins[i]->IsLinked())
-			{
-				const Pin* linkedPin = m_inputPins[i]->GetLink();
-				GraphNode* linkedNode = linkedPin->GetNode();
-				inputExpr = linkedNode->Compile(compiler, linkedPin);
-			}
-			else
-			{
-				// Otherwise use the default value from the input node
-				float defaultValue = inputNodes[i]->GetDefaultValue();
-				inputExpr = compiler.AddExpression(std::to_string(defaultValue), ExpressionType::Float_1);
-			}
-
-			inputNodes[i]->SetExpressionId(inputExpr);
-		}
-
-		// Set up a node compiler wrapper that uses our input expressions
+		// Set up a node compiler wrapper that uses our input expressions. It is created before the
+		// input binding loop so that a function input's default value pin can be evaluated within the
+		// function graph (the connected expression may reference other function-graph nodes).
 		class FunctionNodeCompiler
 		{
 		public:
@@ -1908,6 +1942,39 @@ namespace mmo
 		};
 
 		FunctionNodeCompiler functionCompiler(compiler, inputExpressionMap);
+
+		// Compile all input connections and map them to input nodes
+		for (size_t i = 0; i < m_inputPins.size() && i < inputNodes.size(); ++i)
+		{
+			ExpressionIndex inputExpr = IndexNone;
+
+			// If the caller connected this input, use the connected node's output.
+			if (m_inputPins[i]->IsLinked())
+			{
+				const Pin* linkedPin = m_inputPins[i]->GetLink();
+				GraphNode* linkedNode = linkedPin->GetNode();
+				inputExpr = linkedNode->Compile(compiler, linkedPin);
+			}
+			else
+			{
+				// The caller left this input unconnected. If the input node has an expression wired to
+				// its optional default value pin, evaluate that within the function graph; otherwise
+				// fall back to the scalar default value sized to the parameter type.
+				const Pin* defaultPin = inputNodes[i]->GetDefaultValuePin();
+				if (defaultPin && defaultPin->IsLinked())
+				{
+					const Pin* defaultLinkedPin = defaultPin->GetLink();
+					GraphNode* defaultLinkedNode = defaultLinkedPin->GetNode();
+					inputExpr = functionCompiler.CompileNode(defaultLinkedNode, defaultLinkedPin);
+				}
+				else
+				{
+					inputExpr = inputNodes[i]->CompileDefaultValueExpression(compiler);
+				}
+			}
+
+			inputNodes[i]->SetExpressionId(inputExpr);
+		}
 
 		// Find the matching output node for our output pin
 		MaterialFunctionOutputNode* outputNode = nullptr;

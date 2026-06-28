@@ -27,6 +27,7 @@ namespace mmo
 	class MaterialGraph;
 	class GraphNode;
 	class NamedVariableGetNode;
+	class MaterialFunctionInputNode;
 	class Pin;
 	class MaterialCompiler;
 
@@ -95,6 +96,7 @@ namespace mmo
 		/// @brief Draws the data-driven terrain foliage authoring section in the details panel.
 		void DrawFoliageSection();
 		void DrawVariableSelector(NamedVariableGetNode* node);
+		void DrawFunctionInputDefaultValue(MaterialFunctionInputNode* node);
 		void DrawSamplerTypeEditor(PropertyBase* prop);
 		void DrawPropertyEditor(PropertyBase* prop);
 		

@@ -1124,6 +1124,57 @@ namespace mmo
 				DrawPropertyEditor(prop);
 			}
 		}
+
+		// The function input node's default value spans 1-4 components depending on the selected
+		// parameter type, so it is rendered with a dedicated type-aware widget here rather than as a
+		// plain float property in the loop above.
+		if (node->GetTypeInfo().id == MaterialFunctionInputNode::GetStaticTypeInfo().id)
+		{
+			DrawFunctionInputDefaultValue(static_cast<MaterialFunctionInputNode*>(node));
+		}
+	}
+
+	void MaterialEditorInstance::DrawFunctionInputDefaultValue(MaterialFunctionInputNode* node)
+	{
+		const int32 componentCount = node->GetDefaultValueComponentCount();
+		if (componentCount <= 0)
+		{
+			// Texture inputs have no scalar default value to edit.
+			return;
+		}
+
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::AlignTextToFramePadding();
+		const ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_Bullet;
+		ImGui::TreeNodeEx("Field", flags, "Default Value");
+
+		ImGui::TableSetColumnIndex(1);
+		ImGui::SetNextItemWidth(-FLT_MIN);
+
+		float values[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		for (int32 i = 0; i < componentCount; ++i)
+		{
+			values[i] = node->GetDefaultValueComponent(i);
+		}
+
+		bool changed = false;
+		switch (componentCount)
+		{
+		case 1:  changed = ImGui::InputFloat("##defaultValue", &values[0], 0.1f, 100.0f); break;
+		case 2:  changed = ImGui::InputFloat2("##defaultValue", values); break;
+		case 3:  changed = ImGui::InputFloat3("##defaultValue", values); break;
+		case 4:  changed = ImGui::InputFloat4("##defaultValue", values); break;
+		default: break;
+		}
+
+		if (changed)
+		{
+			for (int32 i = 0; i < componentCount; ++i)
+			{
+				node->SetDefaultValueComponent(i, values[i]);
+			}
+		}
 	}
 
 	void MaterialEditorInstance::DrawVariableSelector(NamedVariableGetNode* node)

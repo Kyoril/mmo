@@ -1243,10 +1243,20 @@ namespace mmo
 				{
 					Vector3 currentPoint = ray.GetPoint(res.second) - m_relativeWidgetPos;
 					currentPoint = currentPoint - m_rotationAxis * m_rotationAxis.Dot(currentPoint);
+
+					// Guard against a degenerate projection (ray nearly parallel to the
+					// rotation axis) which would normalize into a NaN/zero vector.
+					if (currentPoint.GetSquaredLength() < std::numeric_limits<float>::epsilon())
+					{
+						return;
+					}
 					currentPoint.Normalize();
 
-					// Calculate the angle between the initial and current points
-					float angle = acos(m_initialPoint.Dot(currentPoint));
+					// Calculate the angle between the initial and current points.
+					// Clamp the dot product because rounding can push it slightly
+					// outside [-1, 1], which would make acos() return NaN and corrupt
+					// the object's orientation.
+					float angle = acos(Clamp(m_initialPoint.Dot(currentPoint), -1.0f, 1.0f));
 
 					// Determine the direction of rotation
 					Vector3 cross = m_initialPoint.Cross(currentPoint);
