@@ -61,6 +61,7 @@ namespace mmo
 	class QuestClient;
 	class ActionBar;
 	class VendorClient;
+	class BankClient;
 	class TimerQueue;
 
 	namespace game
@@ -123,7 +124,8 @@ namespace mmo
 			Minimap &minimap,
 			InventoryClient &inventoryClient,
 			TradeClient &tradeClient,
-			ChannelClient &channelClient);
+			ChannelClient &channelClient,
+			BankClient &bankClient);
 
 	public:
 		/// @brief The default name of the world state
@@ -558,6 +560,7 @@ namespace mmo
 		std::unique_ptr<PagePOVPartitioner> m_memoryPointOfView;
 		LootClient &m_lootClient;
 		VendorClient &m_vendorClient;
+		BankClient &m_bankClient;
 
 		std::unique_ptr<RaySceneQuery> m_rayQuery;
 

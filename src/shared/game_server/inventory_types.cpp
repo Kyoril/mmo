@@ -48,6 +48,26 @@ namespace mmo
 		       (GetSlot() < player_inventory_slots::End);
 	}
 
+	bool InventorySlot::IsBankItem() const noexcept
+	{
+		return (GetBag() == player_inventory_slots::Bag_0) &&
+		       (GetSlot() >= player_bank_item_slots::Start) &&
+		       (GetSlot() < player_bank_item_slots::End);
+	}
+
+	bool InventorySlot::IsBankBag() const noexcept
+	{
+		return (GetBag() == player_inventory_slots::Bag_0) &&
+		       (GetSlot() >= player_bank_bag_slots::Start) &&
+		       (GetSlot() < player_bank_bag_slots::End);
+	}
+
+	bool InventorySlot::IsBankBagContent() const noexcept
+	{
+		return (GetBag() >= player_bank_bag_slots::Start) &&
+		       (GetBag() < player_bank_bag_slots::End);
+	}
+
 	bool InventorySlot::IsBuyBack() const noexcept
 	{
 		return (GetSlot() >= player_buy_back_slots::Start) && 

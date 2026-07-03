@@ -764,6 +764,7 @@ namespace mmo
 			player.Get<uint32>(object_fields::Rage), 
 			player.Get<uint32>(object_fields::Energy),
 			player.Get<uint32>(object_fields::Money),
+			player.Get<uint32>(object_fields::BankBagSlotCount),
 			player.GetBindMap(),
 			player.GetBindPosition(),
 			player.GetBindFacing(),

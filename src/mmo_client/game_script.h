@@ -123,6 +123,8 @@ namespace mmo
 
 		int32 GetContainerNumSlots(int32 container) const;
 
+		int32 GetBankBagNumSlots(int32 container) const;
+
 		void BuyVendorItem(uint32 slot, uint8 count) const;
 
 		void AddAttributePoint(uint32 attribute) const;

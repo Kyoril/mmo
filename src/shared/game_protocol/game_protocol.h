@@ -318,6 +318,12 @@ namespace mmo
 				/// declining a revival offered by another player's revive spell.
 				ReviveResponse,
 
+				/// Sent by the client to open the bank window at a banker npc. Payload: uint64 bankerGuid.
+				BankerActivate,
+
+				/// Sent by the client to purchase the next bank bag slot. Payload: uint64 bankerGuid.
+				BuyBankBagSlot,
+
 				/// Counter constant
 				Count_,
 			};
@@ -611,6 +617,13 @@ namespace mmo
 				/// the multi-class list. Payload: uint8 count, then per class: uint32 classId,
 				/// uint8 classLevel. The currently active class is the one in object_fields::Class.
 				KnownClasses,
+
+				/// Sent to the client to make it show the bank window. Payload: uint64 bankerGuid.
+				ShowBank,
+
+				/// Sent to the client as response to a bank bag slot purchase attempt. Payload:
+				/// uint8 result (see buy_bank_bag_slot_result), uint8 new bank bag slot count.
+				BuyBankBagSlotResult,
 
 				/// Counter constant
 				Count_,

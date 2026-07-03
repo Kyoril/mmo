@@ -12,6 +12,7 @@
 #include "systems/channel_client.h"
 #include "systems/friend_client.h"
 #include "systems/guild_client.h"
+#include "systems/bank_client.h"
 #include "systems/inventory_client.h"
 #include "systems/loot_client.h"
 #include "systems/party_info.h"

@@ -5,6 +5,7 @@
 #include "realm_connector.h"
 #include "vector_sink.h"
 #include "game_server/character_data.h"
+#include "game/bank.h"
 #include "game/chat_type.h"
 #include "game/vendor.h"
 #include "game_server/objects/game_object_s.h"
@@ -451,6 +452,18 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnListInventory(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// Handles the client's request to open the bank window at a banker npc.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnBankerActivate(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's request to purchase the next bank bag slot.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnBuyBankBagSlot(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 		/// Handles the client's request to use a world object (door, chest, etc.).
 		/// Validates distance and object state, then calls GameWorldObjectS::Use().
 		///	@param opCode The op code of the packet.
@@ -625,6 +638,21 @@ namespace mmo
 
 		void SendTrainerList(const proto::TrainerEntry& trainer, const GameCreatureS& trainerUnit);
 
+		/// Validates the banker interaction and on success remembers the npc as active banker and shows the bank to the client.
+		void HandleBankerGossip(const GameCreatureS& bankerUnit);
+
+		void SendShowBank(uint64 bankerGuid);
+
+		void SendBuyBankBagSlotResult(buy_bank_bag_slot_result::Type result);
+
+		/// @brief Returns true if the player currently has access to his bank through a nearby, alive banker npc.
+		[[nodiscard]] bool IsBankAccessible() const;
+
+		/// @brief Ensures an inventory operation touching the given slots is allowed to access bank slots.
+		///	Sends an inventory error to the client if bank slots are involved but no banker is nearby.
+		/// @returns false if the operation has to be aborted.
+		bool CheckBankSlotAccess(uint16 srcAbsolute, uint16 dstAbsolute);
+
 		/// Gets the total time played for the current character in seconds
 		uint32 GetTimePlayed() const;
 		
@@ -752,6 +780,10 @@ namespace mmo
 		Countdown m_tradeDistanceCheckTimer;
 
 		/// @brief Pending revive offer state — set when another player casts a revive spell on
+		/// Guid of the banker npc the player is currently interacting with, or 0 if none.
+		/// Bank slot operations re-validate distance and state against this npc.
+		uint64 m_activeBankerGuid{ 0 };
+
 		/// this (dead) player. Cleared on accept, decline, expiry, or when the body is released.
 		bool m_hasPendingRevive{ false };
 		uint64 m_pendingReviveCaster{ 0 };

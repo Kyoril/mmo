@@ -129,12 +129,12 @@ namespace mmo
 	{
 		const InventorySlot invSlot = InventorySlot::FromAbsolute(slot);
 		
-		if (invSlot.IsInventory() || invSlot.IsEquipment() || invSlot.IsBagPack())
+		if (invSlot.IsInventory() || invSlot.IsEquipment() || invSlot.IsBagPack() || invSlot.IsBankItem() || invSlot.IsBankBag())
 		{
 			m_owner.Invalidate(object_fields::InvSlotHead + ((slot & 0xFF) * 2));
 			m_owner.Invalidate(object_fields::InvSlotHead + ((slot & 0xFF) * 2) + 1);
 		}
-		else if (invSlot.IsBag())
+		else if (invSlot.IsBag() || invSlot.IsBankBagContent())
 		{
 			auto bag = GetBagAtSlot(slot);
 			if (bag)
@@ -569,7 +569,7 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 		return inventory_change_failure::Okay;
 	}
 
-	if (invSlot.IsBag())
+	if (invSlot.IsBag() || invSlot.IsBankBagContent())
 	{
 		// Validate bag
 		auto bag = GetBagAtSlot(slot);
@@ -623,6 +623,30 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 			{
 				return inventory_change_failure::CanOnlyDoWithEmptyBags;
 			}
+		}
+
+		return inventory_change_failure::Okay;
+	}
+
+	if (invSlot.IsBankItem())
+	{
+		// Bank item slots accept any item, including unequipped bags
+		return inventory_change_failure::Okay;
+	}
+
+	if (invSlot.IsBankBag())
+	{
+		if (entry.inventorytype() != inventory_type::Bag &&
+			entry.inventorytype() != inventory_type::Quiver)
+		{
+			return inventory_change_failure::NotABag;
+		}
+
+		// Bank bag slots have to be purchased one by one before they can be used
+		const uint8 slotIndex = invSlot.GetSlot() - player_bank_bag_slots::Start;
+		if (slotIndex >= m_owner.GetBankBagSlotCount())
+		{
+			return inventory_change_failure::MustPurchaseThatBagSlot;
 		}
 
 		return inventory_change_failure::Okay;
@@ -991,7 +1015,9 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 							item->AddFlag<uint32>(object_fields::ItemFlags, item_flags::Bound);
 						}
 					}
-					else if (InventorySlot::FromAbsolute(data.slot).IsInventory())
+					else if (InventorySlot::FromAbsolute(data.slot).IsInventory() ||
+							 InventorySlot::FromAbsolute(data.slot).IsBankItem() ||
+							 InventorySlot::FromAbsolute(data.slot).IsBankBag())
 					{
 						m_owner.Set<uint64>(object_fields::InvSlotHead + (subslot * 2), item->GetGuid());
 					}
@@ -1009,7 +1035,8 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 						}
 					}
 				}
-				else if (InventorySlot::FromAbsolute(data.slot).IsBag())
+				else if (InventorySlot::FromAbsolute(data.slot).IsBag() ||
+						 InventorySlot::FromAbsolute(data.slot).IsBankBagContent())
 				{
 					bagItems[data.slot] = item;
 				}
@@ -1427,12 +1454,12 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 	{
 		const InventorySlot invSlot = InventorySlot::FromAbsolute(slot);
 		
-		if (invSlot.IsEquipment() || invSlot.IsInventory() || invSlot.IsBagPack())
+		if (invSlot.IsEquipment() || invSlot.IsInventory() || invSlot.IsBagPack() || invSlot.IsBankItem() || invSlot.IsBankBag())
 		{
 			m_owner.Set<uint64>(object_fields::InvSlotHead + (slot & 0xFF) * 2, item ? item->GetGuid() : 0);
 			UpdateItemContained(item, m_owner.GetGuid(), slot);
 		}
-		else if (invSlot.IsBag())
+		else if (invSlot.IsBag() || invSlot.IsBankBagContent())
 		{
 			auto bag = GetBagAtSlot(slot);
 			if (bag)

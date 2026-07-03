@@ -27,6 +27,7 @@ namespace
 			, m_isAlive(true)
 			, m_isInCombat(false)
 			, m_canDualWield(false)
+			, m_bankBagSlotCount(0)
 		{
 		}
 
@@ -82,11 +83,22 @@ namespace
 			return m_canDualWield;
 		}
 
+		void SetBankBagSlotCount(const uint8 count)
+		{
+			m_bankBagSlotCount = count;
+		}
+
+		[[nodiscard]] uint8 GetBankBagSlotCount() const noexcept override
+		{
+			return m_bankBagSlotCount;
+		}
+
 	private:
 		uint32 m_level;
 		bool m_isAlive;
 		bool m_isInCombat;
 		bool m_canDualWield;
+		uint8 m_bankBagSlotCount;
 		std::set<uint32> m_proficiencies;
 	};
 
@@ -824,6 +836,107 @@ TEST_CASE("ItemValidator - ValidateSlotPlacement for bags", "[item_validator]")
 			.Build();
 
 		REQUIRE(validator.ValidateSlotPlacement(slot, bag).IsSuccess());
+	}
+}
+
+TEST_CASE("ItemValidator - ValidateSlotPlacement for bank slots", "[item_validator]")
+{
+	proto::Project project;
+	MockPlayerValidatorContext player;
+	ItemValidator validator(player, project);
+
+	SECTION("Accepts any item in bank item slots")
+	{
+		auto slot = InventorySlot::FromRelative(
+			player_inventory_slots::Bag_0,
+			player_bank_item_slots::Start
+		);
+
+		auto weapon = ItemEntryBuilder()
+			.WithClass(mock_item_class::Weapon)
+			.Build();
+
+		REQUIRE(validator.ValidateSlotPlacement(slot, weapon).IsSuccess());
+
+		// Bags may be stored in bank item slots like any other item
+		auto bag = ItemEntryBuilder()
+			.WithClass(mock_item_class::Container)
+			.WithInventoryType(inventory_type::Bag)
+			.Build();
+
+		REQUIRE(validator.ValidateSlotPlacement(slot, bag).IsSuccess());
+	}
+
+	SECTION("Rejects non-bags in bank bag slots")
+	{
+		player.SetBankBagSlotCount(7);
+
+		auto slot = InventorySlot::FromRelative(
+			player_inventory_slots::Bag_0,
+			player_bank_bag_slots::Start
+		);
+
+		auto entry = ItemEntryBuilder()
+			.WithClass(mock_item_class::Weapon)
+			.WithInventoryType(inventory_type::Weapon)
+			.Build();
+
+		auto result = validator.ValidateSlotPlacement(slot, entry);
+		REQUIRE(result.IsFailure());
+		REQUIRE(result.GetError() == inventory_change_failure::NotABag);
+	}
+
+	SECTION("Accepts bags in purchased bank bag slots")
+	{
+		player.SetBankBagSlotCount(1);
+
+		auto slot = InventorySlot::FromRelative(
+			player_inventory_slots::Bag_0,
+			player_bank_bag_slots::Start
+		);
+
+		auto entry = ItemEntryBuilder()
+			.WithClass(mock_item_class::Container)
+			.WithInventoryType(inventory_type::Bag)
+			.Build();
+
+		REQUIRE(validator.ValidateSlotPlacement(slot, entry).IsSuccess());
+	}
+
+	SECTION("Rejects bags in unpurchased bank bag slots")
+	{
+		player.SetBankBagSlotCount(1);
+
+		auto slot = InventorySlot::FromRelative(
+			player_inventory_slots::Bag_0,
+			player_bank_bag_slots::Start + 1
+		);
+
+		auto entry = ItemEntryBuilder()
+			.WithClass(mock_item_class::Container)
+			.WithInventoryType(inventory_type::Bag)
+			.Build();
+
+		auto result = validator.ValidateSlotPlacement(slot, entry);
+		REQUIRE(result.IsFailure());
+		REQUIRE(result.GetError() == inventory_change_failure::MustPurchaseThatBagSlot);
+	}
+
+	SECTION("Rejects bags in bank bag slots when none are purchased")
+	{
+		auto slot = InventorySlot::FromRelative(
+			player_inventory_slots::Bag_0,
+			player_bank_bag_slots::Start
+		);
+
+		auto entry = ItemEntryBuilder()
+			.WithClass(mock_item_class::Container)
+			.WithInventoryType(inventory_type::Bag)
+			.Build();
+
+		auto result = validator.ValidateSlotPlacement(slot, entry);
+		REQUIRE(result.IsFailure());
+		REQUIRE(result.GetError() == inventory_change_failure::MustPurchaseThatBagSlot);
 	}
 }
 

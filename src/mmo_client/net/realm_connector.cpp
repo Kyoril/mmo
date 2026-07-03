@@ -798,6 +798,26 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::BankerActivate(uint64 targetGuid)
+	{
+		sendSinglePacket([targetGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::BankerActivate);
+			packet
+				<< io::write<uint64>(targetGuid);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::BuyBankBagSlot(uint64 bankerGuid)
+	{
+		sendSinglePacket([bankerGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::BuyBankBagSlot);
+			packet
+				<< io::write<uint64>(bankerGuid);
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::SellItem(uint64 vendorGuid, uint64 itemGuid)
 	{
 		sendSinglePacket([vendorGuid, itemGuid](game::OutgoingPacket& packet) {

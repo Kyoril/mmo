@@ -19,6 +19,7 @@
 #include "frame_ui/button.h"
 #include "mmo_client/systems/spell_cast.h"
 #include "mmo_client/systems/vendor_client.h"
+#include "mmo_client/systems/bank_client.h"
 #include "frame_ui/frame_mgr.h"
 #include "game/loot.h"
 #include "game_client/object_mgr.h"
@@ -41,11 +42,12 @@ namespace mmo
 
 	extern Cursor g_cursor;
 
-	PlayerController::PlayerController(Scene& scene, RealmConnector& connector, LootClient& lootClient, VendorClient& vendorClient, TrainerClient& trainerClient, SpellCast& spellCast)
+	PlayerController::PlayerController(Scene& scene, RealmConnector& connector, LootClient& lootClient, VendorClient& vendorClient, TrainerClient& trainerClient, SpellCast& spellCast, BankClient& bankClient)
 		: m_scene(scene)
 		, m_lootClient(lootClient)
 		, m_vendorClient(vendorClient)
 		, m_trainerClient(trainerClient)
+		, m_bankClient(bankClient)
 		, m_connector(connector)
 		, m_spellCast(spellCast)
 	{
@@ -751,6 +753,14 @@ namespace mmo
 					m_trainerClient.CloseTrainer();
 				}
 			}
+			else if (m_bankClient.HasBank())
+			{
+				const auto bankerObject = ObjectMgr::Get<GameObjectC>(m_bankClient.GetBankerGuid());
+				if (bankerObject && !m_controlledUnit->IsWithinRange(*bankerObject, LootDistance))
+				{
+					m_bankClient.CloseBank();
+				}
+			}
 		}
 
 		// If FrameUI has no window which captures the mouse
@@ -930,6 +940,9 @@ namespace mmo
 									break;
 								case npc_flags::Vendor:
 									m_connector.ListInventory(m_hoveredObject->GetGuid());
+									break;
+								case npc_flags::Banker:
+									m_connector.BankerActivate(m_hoveredObject->GetGuid());
 									break;
 								default:
 									// No specific npc flag set, so ask for the gossip dialog

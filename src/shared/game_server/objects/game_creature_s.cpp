@@ -101,7 +101,7 @@ namespace mmo
 		}
 
 		// Use base npc flags from entry
-		uint32 npcFlags = npc_flags::None;
+		uint32 npcFlags = m_entry->npcflags();
 		if (m_entry->trainerentry())
 		{
 			npcFlags |= npc_flags::Trainer;

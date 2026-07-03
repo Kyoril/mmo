@@ -32,6 +32,7 @@
 #include "game_common/projectile_target.h"
 #include "systems/trainer_client.h"
 #include "systems/vendor_client.h"
+#include "systems/bank_client.h"
 #include "world_deserializer.h"
 #include "scene_graph/instanced_foliage.h"
 #include "base/erase_by_move.h"
@@ -240,7 +241,7 @@ namespace mmo
 
 	WorldState::WorldState(GameStateMgr &gameStateManager, RealmConnector &realmConnector, const proto_client::Project &project, TimerQueue &timers, LootClient &lootClient, VendorClient &vendorClient,
 						   ActionBar &actionBar, SpellCast &spellCast, CooldownManager &cooldownManager, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, PartyInfo &partyInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, ICacheProvider &cache, Discord &discord,
-						   GameTimeComponent &gameTime, TalentClient &talentClient, Minimap &minimap, InventoryClient &inventoryClient, TradeClient &tradeClient, ChannelClient &channelClient)
+						   GameTimeComponent &gameTime, TalentClient &talentClient, Minimap &minimap, InventoryClient &inventoryClient, TradeClient &tradeClient, ChannelClient &channelClient, BankClient &bankClient)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
 		, m_audio(audio)
@@ -250,6 +251,7 @@ namespace mmo
 		, m_timers(timers)
 		, m_lootClient(lootClient)
 		, m_vendorClient(vendorClient)
+		, m_bankClient(bankClient)
 		, m_actionBar(actionBar)
 		, m_spellCast(spellCast)
 		, m_cooldownManager(cooldownManager)
@@ -1041,7 +1043,7 @@ namespace mmo
 		m_rayQuery->SetQueryMask(1);
 		m_rayQuery->SetDebugHitTestResults(true);
 
-		m_playerController = std::make_unique<PlayerController>(*m_scene, m_realmConnector, m_lootClient, m_vendorClient, m_trainerClient, m_spellCast);
+		m_playerController = std::make_unique<PlayerController>(*m_scene, m_realmConnector, m_lootClient, m_vendorClient, m_trainerClient, m_spellCast, m_bankClient);
 		s_inputControl = m_playerController.get();
 		s_playerController = m_playerController.get();
 
@@ -1434,6 +1436,7 @@ namespace mmo
 
 		m_lootClient.Initialize();
 		m_vendorClient.Initialize();
+		m_bankClient.Initialize();
 		m_trainerClient.Initialize();
 		m_questClient.Initialize();
 		m_partyInfo.Initialize();
@@ -1516,6 +1519,7 @@ namespace mmo
 		m_trainerClient.Shutdown();
 		m_lootClient.Shutdown();
 		m_vendorClient.Shutdown();
+		m_bankClient.Shutdown();
 
 		m_worldPacketHandlers.Clear();
 		m_worldChangeHandlers.Clear();

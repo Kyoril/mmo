@@ -21,6 +21,9 @@ namespace mmo
 			/// Raises a trigger event.
 			Trigger,
 
+			/// Shows the bank window.
+			Banker,
+
 			Count_
 		};
 	}

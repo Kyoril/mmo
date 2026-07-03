@@ -789,6 +789,12 @@ namespace mmo
 		case game::client_realm_packet::ListInventory:
 			OnListInventory(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::BankerActivate:
+			OnBankerActivate(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::BuyBankBagSlot:
+			OnBuyBankBagSlot(opCode, buffer.size(), reader);
+			break;
 		case game::client_realm_packet::QuestGiverHello:
 			OnQuestGiverHello(opCode, buffer.size(), reader);
 			break;

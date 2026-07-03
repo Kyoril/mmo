@@ -108,6 +108,24 @@ namespace mmo
 		bool IsBagBar() const noexcept;
 
 		/**
+		 * @brief Checks if this slot is a bank item slot.
+		 * @return true if slot is in bank item range (slots 39-66 of bag 0).
+		 */
+		bool IsBankItem() const noexcept;
+
+		/**
+		 * @brief Checks if this slot is a bank bag slot (where bank bags are equipped).
+		 * @return true if slot can hold a bank bag container (slots 67-73 of bag 0).
+		 */
+		bool IsBankBag() const noexcept;
+
+		/**
+		 * @brief Checks if this slot is inside a bag placed in a bank bag slot.
+		 * @return true if slot is inside a bank bag container (bags 67-73).
+		 */
+		bool IsBankBagContent() const noexcept;
+
+		/**
 		 * @brief Checks if this slot is a buyback slot.
 		 * @return true if slot is in buyback range (slots 74-85).
 		 */

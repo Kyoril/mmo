@@ -154,6 +154,9 @@ namespace mmo
 
 		uint32 timePlayed = 0;
 
+		/// Number of purchased bank bag slots.
+		uint8 bankBagSlotCount = 0;
+
 		/// Persisted non-passive, non-equipment auras to restore on the next world instance.
 		std::vector<PersistentAuraData> auras;
 		/// Persisted spell cooldowns (as remaining milliseconds at transfer time).
@@ -225,7 +228,8 @@ namespace mmo
 			>> io::read<uint64>(data.guildId)
 			>> data.configuration
 			>> io::read<uint8>(data.isGameMaster)
-			>> io::read<uint32>(data.timePlayed)))
+			>> io::read<uint32>(data.timePlayed)
+			>> io::read<uint8>(data.bankBagSlotCount)))
 		{
 			return reader;
 		}
@@ -359,7 +363,8 @@ namespace mmo
 			<< io::write<uint64>(data.guildId)
 			<< data.configuration
 			<< io::write<uint8>(data.isGameMaster)
-			<< io::write<uint32>(data.timePlayed);
+			<< io::write<uint32>(data.timePlayed)
+			<< io::write<uint8>(data.bankBagSlotCount);
 
 		writer << io::write<uint16>(data.questStatus.size());
 		for (auto const& [questId, questData] : data.questStatus)

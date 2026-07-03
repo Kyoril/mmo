@@ -188,6 +188,13 @@ namespace mmo
 			const proto::ItemEntry& entry) const;
 
 		/**
+		 * @brief Validates bank bag slot (where bank bags are equipped).
+		 */
+		InventoryResult<void> ValidateBankBagSlot(
+			InventorySlot slot,
+			const proto::ItemEntry& entry) const;
+
+		/**
 		 * @brief Checks two-handed weapon restrictions.
 		 */
 		InventoryResult<void> ValidateTwoHandedWeapon(

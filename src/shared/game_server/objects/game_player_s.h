@@ -131,6 +131,12 @@ namespace mmo
 
 		const Inventory &GetInventory() const { return m_inventory; }
 
+		/// Gets the number of purchased bank bag slots.
+		uint8 GetBankBagSlotCount() const noexcept override
+		{
+			return static_cast<uint8>(Get<uint32>(object_fields::BankBagSlotCount));
+		}
+
 		const proto::ClassEntry *GetClassEntry() const { return m_classEntry; }
 
 		const proto::RaceEntry *GetRaceEntry() const { return m_raceEntry; }

@@ -64,6 +64,19 @@ namespace mmo
 		 */
 		virtual bool CanDualWield() const noexcept = 0;
 
+		/**
+		 * @brief Gets the number of bank bag slots the player has purchased.
+		 *
+		 * Defaults to 0 so that only contexts which support bank access
+		 * (players) need to override this.
+		 *
+		 * @return Number of usable bank bag slots (0 to player_bank_bag_slots::Count_).
+		 */
+		virtual uint8 GetBankBagSlotCount() const noexcept
+		{
+			return 0;
+		}
+
 	protected:
 		// Protected non-virtual destructor to prevent deletion through interface pointer
 		// while allowing derived classes to be deleted normally

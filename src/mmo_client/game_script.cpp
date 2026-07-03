@@ -400,16 +400,19 @@ namespace mmo
 					itemGuid = unit->Get<uint64>(object_fields::InvSlotHead + slotFieldOffset);
 				}
 				else if ((static_cast<uint16>(slotId) >> 8) == player_inventory_slots::Bag_0 &&
-						 (slotId & 0xFF) >= player_inventory_slots::Start &&
-						 (slotId & 0xFF) < player_inventory_slots::End)
+						 (slotId & 0xFF) >= player_bank_item_slots::Start &&
+						 (slotId & 0xFF) < player_bank_bag_slots::End)
 				{
+					// Bank item and bank bag slots share the contiguous player item field range
 					const uint8 slotFieldOffset = static_cast<uint8>(slotId & 0xFF) * 2;
 					itemGuid = unit->Get<uint64>(object_fields::InvSlotHead + slotFieldOffset);
 				}
-				else if (static_cast<uint16>(slotId) >> 8 >= player_inventory_slots::Start &&
-						 static_cast<uint16>(slotId) >> 8 < player_inventory_slots::End)
+				else if ((static_cast<uint16>(slotId) >> 8 >= player_inventory_slots::Start &&
+						  static_cast<uint16>(slotId) >> 8 < player_inventory_slots::End) ||
+						 (static_cast<uint16>(slotId) >> 8 >= player_bank_bag_slots::Start &&
+						  static_cast<uint16>(slotId) >> 8 < player_bank_bag_slots::End))
 				{
-					// Bag slots, get bag item first
+					// Bag slots (equipped bags and bank bags), get bag item first
 					const uint8 slotFieldOffset = (static_cast<uint16>(slotId) >> 8) * 2;
 					itemGuid = unit->Get<uint64>(object_fields::InvSlotHead + slotFieldOffset);
 
@@ -1569,6 +1572,8 @@ namespace mmo
 																 { return this->AddAttributePoint(attributeId); }),
 					   luabind::def<std::function<uint32(int32)>>("GetContainerNumSlots", [this](int32 slot)
 																  { return this->GetContainerNumSlots(slot); }),
+					   luabind::def<std::function<uint32(int32)>>("GetBankBagNumSlots", [this](int32 slot)
+																  { return this->GetBankBagNumSlots(slot); }),
 					   luabind::def<std::function<void(uint32)>>("PickupContainerItem", [this](uint32 slot)
 																 { this->PickupContainerItem(slot); }),
 
@@ -2242,6 +2247,30 @@ namespace mmo
 		}
 
 		std::shared_ptr<GameBagC> bag = std::dynamic_pointer_cast<GameBagC>(item);
+		if (!bag)
+		{
+			return 0;
+		}
+
+		return bag->Get<uint32>(object_fields::NumSlots);
+	}
+
+	int32 GameScript::GetBankBagNumSlots(int32 container) const
+	{
+		if (container < 0 || container >= player_bank_bag_slots::End - player_bank_bag_slots::Start)
+		{
+			return 0;
+		}
+
+		// Check if the container is a bag
+		const uint16 slotId = (static_cast<uint16>(player_inventory_slots::Bag_0) << 8) | static_cast<uint16>(container + player_bank_bag_slots::Start);
+		const std::shared_ptr<GameItemC> item = GetItemFromSlot("player", slotId);
+		if (!item)
+		{
+			return 0;
+		}
+
+		const std::shared_ptr<GameBagC> bag = std::dynamic_pointer_cast<GameBagC>(item);
 		if (!bag)
 		{
 			return 0;

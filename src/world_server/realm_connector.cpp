@@ -643,6 +643,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		characterObject->SetLevel(characterData.level);
 		characterObject->Set<uint32>(object_fields::Xp, characterData.xp);
 		characterObject->Set<uint32>(object_fields::Money, characterData.money);
+		characterObject->Set<uint32>(object_fields::BankBagSlotCount, characterData.bankBagSlotCount);
 		characterObject->Set<uint64>(object_fields::Guild, characterData.guildId);
 
 		// Mark rewarded quests

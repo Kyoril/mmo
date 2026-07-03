@@ -355,6 +355,14 @@ namespace mmo
 		///	@param targetGuid The guid of the npc.
 		void ListInventory(uint64 targetGuid);
 
+		/// Sends the packet to open the bank window at a banker npc.
+		///	@param targetGuid The guid of the banker npc.
+		void BankerActivate(uint64 targetGuid);
+
+		/// Sends a packet to the server indicating that the player wants to purchase the next bank bag slot.
+		///	@param bankerGuid The guid of the banker npc the player is interacting with.
+		void BuyBankBagSlot(uint64 bankerGuid);
+
 		/// Sends a packet to the server indiciating that the player wants to sell an item to a specific vendor. The vendor must be the current vendor, initiated by
 		///	either the ListInventory or GossipHello packet.
 		///	@param vendorGuid The guid of the vendor npc.

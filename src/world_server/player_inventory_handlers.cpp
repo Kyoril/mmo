@@ -192,6 +192,12 @@ namespace mmo
 			SendInventoryError(inventory_change_failure::ItemLocked);
 			return;
 		}
+
+		if (!CheckBankSlotAccess(absSrcSlot.GetAbsolute(), absSrcSlot.GetAbsolute()))
+		{
+			return;
+		}
+
 		auto item = inv.GetItemAtSlot(absSrcSlot.GetAbsolute());
 		if (!item)
 		{
@@ -346,6 +352,11 @@ namespace mmo
 			return;
 		}
 
+		if (!CheckBankSlotAccess(srcAbsolute, dstAbsolute))
+		{
+			return;
+		}
+
 		const InventoryCommandFactory& factory = m_character->GetInventory().GetCommandFactory();
 
 		const std::unique_ptr<IInventoryCommand> command = factory.CreateSwapItems(
@@ -377,6 +388,11 @@ namespace mmo
 			return;
 		}
 
+		if (!CheckBankSlotAccess(srcAbsolute, dstAbsolute))
+		{
+			return;
+		}
+
 		const InventoryCommandFactory& factory = m_character->GetInventory().GetCommandFactory();
 		const auto command = factory.CreateSwapItems(
 			InventorySlot::FromRelative(player_inventory_slots::Bag_0, srcSlot),
@@ -403,6 +419,12 @@ namespace mmo
 		if (IsInventorySlotTradeLocked(srcAbsolute))
 		{
 			SendInventoryError(inventory_change_failure::ItemLocked);
+			return;
+		}
+
+		const uint16 dstAbsolute = InventorySlot::FromRelative(dstBag, dstSlot).GetAbsolute();
+		if (!CheckBankSlotAccess(srcAbsolute, dstAbsolute))
+		{
 			return;
 		}
 

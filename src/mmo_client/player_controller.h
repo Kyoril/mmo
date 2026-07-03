@@ -14,6 +14,7 @@ namespace mmo
 	class VendorClient;
 	class LootClient;
 	class TrainerClient;
+	class BankClient;
 	class Scene;
 	class SceneNode;
 	class Camera;
@@ -25,7 +26,7 @@ namespace mmo
 	class PlayerController final : public IInputControl
 	{
 	public:
-		PlayerController(Scene& scene, RealmConnector& connector, LootClient& lootClient, VendorClient& vendorClient, TrainerClient& trainerClient, SpellCast& spellCast);
+		PlayerController(Scene& scene, RealmConnector& connector, LootClient& lootClient, VendorClient& vendorClient, TrainerClient& trainerClient, SpellCast& spellCast, BankClient& bankClient);
 
 		~PlayerController() override;
 
@@ -100,6 +101,7 @@ namespace mmo
 		LootClient& m_lootClient;
 		VendorClient& m_vendorClient;
 		TrainerClient& m_trainerClient;
+		BankClient& m_bankClient;
 		std::unique_ptr<RaySceneQuery> m_selectionSceneQuery;
 		RealmConnector& m_connector;
 		SpellCast& m_spellCast;

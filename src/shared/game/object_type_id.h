@@ -72,6 +72,9 @@ namespace mmo
 
 			/// This npc is an inn keeper and offers inn services such as setting the bind location to return to.
 			InnKeeper = 0x00000080,
+
+			/// This npc is a banker and offers access to the players bank.
+			Banker = 0x00000100,
 		};
 	}
 
@@ -325,8 +328,11 @@ namespace mmo
 			// Questlog
 			QuestLogSlot_1 = BuybackTimestamp_1 + 12,
 
+			/// @brief 32 bit number of purchased bank bag slots
+			BankBagSlotCount = QuestLogSlot_1 + (sizeof(QuestField) / sizeof(uint32)) * MaxQuestLogSize,
+
 			// Field count
-			PlayerFieldCount = QuestLogSlot_1 + (sizeof(QuestField) / sizeof(uint32)) * MaxQuestLogSize + 1,
+			PlayerFieldCount = BankBagSlotCount + 1,
 		};
 
 		enum ItemFields

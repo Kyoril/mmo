@@ -20,6 +20,7 @@ namespace mmo
 	class IAudio;
 	class LootClient;
 	class VendorClient;
+	class BankClient;
 	class TrainerClient;
 	class InventoryClient;
 	class ClientCache;
@@ -78,6 +79,7 @@ namespace mmo
 		std::unique_ptr<IAudio> audio;
 		std::unique_ptr<LootClient> lootClient;
 		std::unique_ptr<VendorClient> vendorClient;
+		std::unique_ptr<BankClient> bankClient;
 		std::unique_ptr<TrainerClient> trainerClient;
 		std::unique_ptr<InventoryClient> inventoryClient;
 		std::unique_ptr<ClientCache> clientCache;

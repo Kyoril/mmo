@@ -93,6 +93,66 @@ TEST_CASE("InventorySlot - Slot type detection", "[inventory][types]")
 		REQUIRE_FALSE(mainInvSlot.IsBag());
 	}
 
+	SECTION("IsBankItem detects bank item slots correctly")
+	{
+		// Bank item slots are bag 0xFF (255), slots 39-66
+		const auto bankSlot1 = InventorySlot::FromRelative(player_inventory_slots::Bag_0, player_bank_item_slots::Start);
+		REQUIRE(bankSlot1.IsBankItem());
+
+		const auto bankSlot2 = InventorySlot::FromRelative(player_inventory_slots::Bag_0, player_bank_item_slots::End - 1);
+		REQUIRE(bankSlot2.IsBankItem());
+
+		// Adjacent ranges are not bank item slots
+		const auto packSlot = InventorySlot::FromRelative(player_inventory_slots::Bag_0, player_inventory_pack_slots::End - 1);
+		REQUIRE_FALSE(packSlot.IsBankItem());
+
+		const auto bankBagSlot = InventorySlot::FromRelative(player_inventory_slots::Bag_0, player_bank_bag_slots::Start);
+		REQUIRE_FALSE(bankBagSlot.IsBankItem());
+
+		// Same slot index inside an equipped bag is not a bank slot
+		const auto equippedBagSlot = InventorySlot::FromRelative(player_inventory_slots::Start, player_bank_item_slots::Start);
+		REQUIRE_FALSE(equippedBagSlot.IsBankItem());
+	}
+
+	SECTION("IsBankBag detects bank bag slots correctly")
+	{
+		// Bank bag slots are bag 0xFF (255), slots 67-73
+		const auto bankBagSlot1 = InventorySlot::FromRelative(player_inventory_slots::Bag_0, player_bank_bag_slots::Start);
+		REQUIRE(bankBagSlot1.IsBankBag());
+
+		const auto bankBagSlot2 = InventorySlot::FromRelative(player_inventory_slots::Bag_0, player_bank_bag_slots::End - 1);
+		REQUIRE(bankBagSlot2.IsBankBag());
+
+		// Adjacent ranges are not bank bag slots
+		const auto bankItemSlot = InventorySlot::FromRelative(player_inventory_slots::Bag_0, player_bank_item_slots::End - 1);
+		REQUIRE_FALSE(bankItemSlot.IsBankBag());
+
+		const auto buybackSlot = InventorySlot::FromRelative(player_inventory_slots::Bag_0, player_buy_back_slots::Start);
+		REQUIRE_FALSE(buybackSlot.IsBankBag());
+
+		// Same slot index inside an equipped bag is not a bank bag slot
+		const auto equippedBagSlot = InventorySlot::FromRelative(player_inventory_slots::Start, player_bank_bag_slots::Start);
+		REQUIRE_FALSE(equippedBagSlot.IsBankBag());
+	}
+
+	SECTION("IsBankBagContent detects slots inside bank bags correctly")
+	{
+		// Bank bag content slots use the bank bag slot index (67-73) as bag id
+		const auto firstBagSlot = InventorySlot::FromRelative(player_bank_bag_slots::Start, 0);
+		REQUIRE(firstBagSlot.IsBankBagContent());
+
+		const auto lastBagSlot = InventorySlot::FromRelative(player_bank_bag_slots::End - 1, 15);
+		REQUIRE(lastBagSlot.IsBankBagContent());
+
+		// Equipped bags (19-22) are not bank bags
+		const auto equippedBagSlot = InventorySlot::FromRelative(player_inventory_slots::Start, 0);
+		REQUIRE_FALSE(equippedBagSlot.IsBankBagContent());
+
+		// Bank bag slots themselves (bag 0xFF) are not bank bag content
+		const auto bankBagSlot = InventorySlot::FromRelative(player_inventory_slots::Bag_0, player_bank_bag_slots::Start);
+		REQUIRE_FALSE(bankBagSlot.IsBankBagContent());
+	}
+
 	SECTION("IsBuyBack detects buyback slots correctly")
 	{
 		// Buyback slots are 74-85

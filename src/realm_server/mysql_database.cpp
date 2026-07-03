@@ -550,7 +550,7 @@ namespace mmo
 
 		const GameTime startTime = GetAsyncTimeMs();
 
-		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy, timePlayed, money, bind_map, bind_x, bind_y, bind_z, bind_o, last_group FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
+		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy, timePlayed, money, bank_bag_slots, bind_map, bind_x, bind_y, bind_z, bind_o, last_group FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
 		if (select.Success())
 		{
 			if (const mysql::Row row(select); row)
@@ -586,6 +586,7 @@ namespace mmo
 				row.GetField(index++, result.energy);
 				row.GetField(index++, result.timePlayed);
 				row.GetField(index++, result.money);
+				row.GetField<uint8, uint16>(index++, result.bankBagSlotCount);
 
 				// Load bind position and rotation
 				row.GetField(index++, result.bindMap);
@@ -1018,7 +1019,7 @@ namespace mmo
 		}
 	}
 	
-	void MySQLDatabase::UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position, const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money,
+	void MySQLDatabase::UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position, const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money, uint32 bankBagSlots,
 		uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing, const std::vector<uint32>& spellIds, const std::vector<CharacterClassData>& knownClasses, uint32 activeClassId, uint32 timePlayed)
 	{
 		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
@@ -1040,6 +1041,7 @@ namespace mmo
 			+ ", energy = " + std::to_string(energy)
 			+ ", timePlayed = " + std::to_string(timePlayed)
 			+ ", money = " + std::to_string(money)
+			+ ", bank_bag_slots = " + std::to_string(bankBagSlots)
 			+ ", bind_map = " + std::to_string(bindMap)
 			+ ", bind_x = " + std::to_string(bindPosition.x)
 			+ ", bind_y = " + std::to_string(bindPosition.y)

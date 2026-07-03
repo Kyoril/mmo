@@ -466,6 +466,8 @@ namespace mmo
 
 			CHECKBOX_FLAG_PROP(npcflags, "Inn Keeper", npc_flags::InnKeeper);
 
+			CHECKBOX_FLAG_PROP(npcflags, "Banker", npc_flags::Banker);
+
 			// Add a list of gossip menus with an add button and remove button (to remove the selected menu from the list). Also make the menu items reorderable using drag and drop.
 			RenderGossipMenus(m_project.gossipMenus, currentEntry);
 		}

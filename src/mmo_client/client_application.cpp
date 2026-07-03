@@ -34,6 +34,7 @@
 #include "systems/trade_client.h"
 #include "systems/trainer_client.h"
 #include "systems/vendor_client.h"
+#include "systems/bank_client.h"
 #include "ui/minimap.h"
 #include "frame_ui/frame_mgr.h"
 
@@ -192,6 +193,7 @@ namespace mmo
 		context.charSelect = std::make_unique<CharSelect>(*context.project, realmConnector);
 		context.lootClient = std::make_unique<LootClient>(realmConnector, context.clientCache->GetItemCache());
 		context.vendorClient = std::make_unique<VendorClient>(realmConnector, context.clientCache->GetItemCache());
+		context.bankClient = std::make_unique<BankClient>(realmConnector);
 		context.trainerClient = std::make_unique<TrainerClient>(realmConnector, context.project->spells);
 		context.inventoryClient = std::make_unique<InventoryClient>(realmConnector);
 		context.uiRuntime->LoadLocalization();
@@ -216,11 +218,12 @@ namespace mmo
 
 		const auto worldState = std::make_shared<WorldState>(gameStateMgr, realmConnector, *context.project, *context.timerQueue, *context.lootClient, *context.vendorClient,
 			*context.actionBar, *context.spellCast, *context.cooldownManager, *context.trainerClient, *context.questClient, *context.audio, *context.partyInfo, *context.charSelect, *context.guildClient, *context.friendClient, *context.clientCache, *context.discord, *context.gameTime, *context.talentClient,
-			*context.minimap, *context.inventoryClient, *context.tradeClient, *context.channelClient);
+			*context.minimap, *context.inventoryClient, *context.tradeClient, *context.channelClient, *context.bankClient);
 		gameStateMgr.AddGameState(worldState);
 
 		context.gameScript = std::make_unique<GameScript>(loginConnector, realmConnector, *context.lootClient, *context.vendorClient, loginState, *context.project, *context.actionBar, *context.spellCast, *context.cooldownManager, *context.trainerClient, *context.questClient, *context.audio, *context.partyInfo, *context.charCreateInfo, *context.charSelect, *context.guildClient, *context.friendClient, *context.gameTime, *context.talentClient, *context.clientCache, *context.tradeClient, *context.channelClient);
 		context.minimap->RegisterScriptFunctions(&context.gameScript->GetLuaState());
+		context.bankClient->RegisterScriptFunctions(&context.gameScript->GetLuaState());
 	}
 
 	/// @copydoc ClientApplication::InitializeUiAndEnterState
@@ -259,6 +262,7 @@ namespace mmo
 	{
 		if (context.lootClient) context.lootClient->Shutdown();
 		if (context.vendorClient) context.vendorClient->Shutdown();
+		if (context.bankClient) context.bankClient->Shutdown();
 		if (context.trainerClient) context.trainerClient->Shutdown();
 		if (context.inventoryClient) context.inventoryClient->Shutdown();
 		if (context.questClient) context.questClient->Shutdown();
@@ -267,6 +271,7 @@ namespace mmo
 		if (context.friendClient) context.friendClient->Shutdown();
 
 		context.vendorClient.reset();
+		context.bankClient.reset();
 		context.lootClient.reset();
 		context.trainerClient.reset();
 		context.inventoryClient.reset();

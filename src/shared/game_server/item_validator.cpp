@@ -60,7 +60,7 @@ namespace mmo
 			return ValidateBagPackSlot(slot, entry);
 		}
 
-		if (slot.IsBag())
+		if (slot.IsBag() || slot.IsBankBagContent())
 		{
 			return ValidateBagSlot(slot, entry);
 		}
@@ -69,6 +69,17 @@ namespace mmo
 		{
 			// Inventory slots accept any non-bag items
 			return InventoryResult<void>::Success();
+		}
+
+		if (slot.IsBankItem())
+		{
+			// Bank item slots accept any item, including unequipped bags
+			return InventoryResult<void>::Success();
+		}
+
+		if (slot.IsBankBag())
+		{
+			return ValidateBankBagSlot(slot, entry);
 		}
 
 		// Unknown slot type
@@ -417,6 +428,27 @@ namespace mmo
 		// Only one quiver can be equipped at a time
 		// This requires knowledge of other equipped bags
 		// Will be validated by the caller with access to full inventory state
+
+		return InventoryResult<void>::Success();
+	}
+
+	InventoryResult<void> ItemValidator::ValidateBankBagSlot(
+		InventorySlot slot,
+		const proto::ItemEntry& entry) const
+	{
+		// Only bags and quivers can go in bank bag slots
+		if (entry.inventorytype() != inventory_type::Bag &&
+			entry.inventorytype() != inventory_type::Quiver)
+		{
+			return InventoryResult<void>::Failure(inventory_change_failure::NotABag);
+		}
+
+		// Bank bag slots have to be purchased one by one before they can be used
+		const uint8 slotIndex = slot.GetSlot() - player_bank_bag_slots::Start;
+		if (slotIndex >= m_player.GetBankBagSlotCount())
+		{
+			return InventoryResult<void>::Failure(inventory_change_failure::MustPurchaseThatBagSlot);
+		}
 
 		return InventoryResult<void>::Success();
 	}

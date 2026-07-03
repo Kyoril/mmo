@@ -11,6 +11,7 @@
 #include "game_server/objects/game_bag_s.h"
 #include "game_server/objects/game_world_object_s.h"
 #include "proto_data/project.h"
+#include "game/bank.h"
 #include "game/loot.h"
 #include "game/vendor.h"
 #include "game_server/condition_mgr.h"
@@ -582,6 +583,150 @@ namespace mmo
 		HandleVendorGossip(*vendor, *unit);
 	}
 
+	void Player::OnBankerActivate(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 bankerGuid;
+		if (!(contentReader >> io::read<uint64>(bankerGuid)))
+		{
+			ELOG("Failed to read BankerActivate packet!");
+			return;
+		}
+
+		const GameCreatureS* unit = m_character->GetWorldInstance()->FindByGuid<GameCreatureS>(bankerGuid);
+		if (!unit)
+		{
+			return;
+		}
+
+		if ((unit->Get<uint32>(object_fields::NpcFlags) & npc_flags::Banker) == 0)
+		{
+			WLOG("Npc " << log_hex_digit(bankerGuid) << " (" << unit->GetEntry().name() << ") is not a banker");
+			return;
+		}
+
+		HandleBankerGossip(*unit);
+	}
+
+	void Player::HandleBankerGossip(const GameCreatureS& bankerUnit)
+	{
+		constexpr float interactionDistance = 5.0f;
+
+		if (!bankerUnit.IsAlive() ||
+			bankerUnit.UnitIsEnemy(*m_character) ||
+			!m_character->IsAlive() ||
+			m_character->GetSquaredDistanceTo(bankerUnit.GetPosition(), true) > interactionDistance * interactionDistance)
+		{
+			return;
+		}
+
+		m_activeBankerGuid = bankerUnit.GetGuid();
+		SendShowBank(bankerUnit.GetGuid());
+	}
+
+	bool Player::IsBankAccessible() const
+	{
+		constexpr float interactionDistance = 5.0f;
+
+		if (m_activeBankerGuid == 0 || !m_character->GetWorldInstance())
+		{
+			return false;
+		}
+
+		const GameCreatureS* banker = m_character->GetWorldInstance()->FindByGuid<GameCreatureS>(m_activeBankerGuid);
+		if (!banker || !banker->IsAlive() || banker->UnitIsEnemy(*m_character) || !m_character->IsAlive())
+		{
+			return false;
+		}
+
+		return m_character->GetSquaredDistanceTo(banker->GetPosition(), true) <= interactionDistance * interactionDistance;
+	}
+
+	bool Player::CheckBankSlotAccess(const uint16 srcAbsolute, const uint16 dstAbsolute)
+	{
+		const InventorySlot srcSlot = InventorySlot::FromAbsolute(srcAbsolute);
+		const InventorySlot dstSlot = InventorySlot::FromAbsolute(dstAbsolute);
+
+		const bool touchesBank =
+			srcSlot.IsBankItem() || srcSlot.IsBankBag() || srcSlot.IsBankBagContent() ||
+			dstSlot.IsBankItem() || dstSlot.IsBankBag() || dstSlot.IsBankBagContent();
+		if (!touchesBank)
+		{
+			return true;
+		}
+
+		if (!IsBankAccessible())
+		{
+			// Terminate the bank session: the banker died, despawned, turned hostile or
+			// someone moved out of range. A locally modified UI can keep the bank frame
+			// open, so every bank slot operation has to be rejected from here on.
+			m_activeBankerGuid = 0;
+
+			SendInventoryError(inventory_change_failure::TooFarAwayFromBank);
+			return false;
+		}
+
+		return true;
+	}
+
+	void Player::OnBuyBankBagSlot(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 bankerGuid;
+		if (!(contentReader >> io::read<uint64>(bankerGuid)))
+		{
+			ELOG("Failed to read BuyBankBagSlot packet!");
+			return;
+		}
+
+		if (bankerGuid != m_activeBankerGuid || !IsBankAccessible())
+		{
+			m_activeBankerGuid = 0;
+
+			SendBuyBankBagSlotResult(buy_bank_bag_slot_result::FailedNotBanker);
+			return;
+		}
+
+		const uint8 slotCount = m_character->GetBankBagSlotCount();
+		const uint32 price = GetBankBagSlotPrice(slotCount);
+		if (price == 0)
+		{
+			SendBuyBankBagSlotResult(buy_bank_bag_slot_result::FailedTooMany);
+			return;
+		}
+
+		const uint32 money = m_character->Get<uint32>(object_fields::Money);
+		if (money < price)
+		{
+			SendBuyBankBagSlotResult(buy_bank_bag_slot_result::FailedInsufficientFunds);
+			return;
+		}
+
+		m_character->Set<uint32>(object_fields::Money, money - price);
+		m_character->Set<uint32>(object_fields::BankBagSlotCount, slotCount + 1);
+		SendBuyBankBagSlotResult(buy_bank_bag_slot_result::Ok);
+	}
+
+	void Player::SendShowBank(const uint64 bankerGuid)
+	{
+		SendPacket([bankerGuid](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::ShowBank);
+				packet << io::write<uint64>(bankerGuid);
+				packet.Finish();
+			});
+	}
+
+	void Player::SendBuyBankBagSlotResult(const buy_bank_bag_slot_result::Type result)
+	{
+		SendPacket([result, this](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::BuyBankBagSlotResult);
+				packet
+					<< io::write<uint8>(result)
+					<< io::write<uint8>(m_character->GetBankBagSlotCount());
+				packet.Finish();
+			});
+	}
+
 	void Player::OnSellItem(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		uint64 vendorGuid, itemGuid;
@@ -876,6 +1021,11 @@ namespace mmo
 
 		case gossip_actions::Trigger:
 			unit.RaiseTrigger(trigger_event::OnGossipAction, { menuId, action.id() }, m_character.get());
+			CloseGossip();
+			break;
+
+		case gossip_actions::Banker:
+			HandleBankerGossip(unit);
 			CloseGossip();
 			break;
 		}
