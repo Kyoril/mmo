@@ -168,6 +168,10 @@ namespace mmo
 			}
 			break;
 
+		case GameWorldObjectType::Mailbox:
+			player.NotifyMailboxUsed(GetGuid());
+			break;
+
 		default:
 			WLOG("Player tried to use world object with unhandled type " << static_cast<uint32>(GetType()));
 			break;

@@ -73,6 +73,9 @@ namespace mmo
 			case GameWorldObjectType::Door:
 				m_typeData = std::make_unique<GameWorldObjectC_Type_Door>();
 				break;
+			case GameWorldObjectType::Mailbox:
+				m_typeData = std::make_unique<GameWorldObjectC_Type_Mailbox>();
+				break;
 			default:
 				ASSERT(false);
 				break;

@@ -818,6 +818,70 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::MailListRequest()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::MailListRequest);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::SendMail(const String& recipient, const String& subject, const String& body, uint32 money, const std::vector<uint16>& itemSlots)
+	{
+		sendSinglePacket([&recipient, &subject, &body, money, &itemSlots](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::SendMail);
+			packet
+				<< io::write_dynamic_range<uint8>(recipient)
+				<< io::write_dynamic_range<uint8>(subject)
+				<< io::write_dynamic_range<uint16>(body)
+				<< io::write<uint32>(money)
+				<< io::write<uint8>(itemSlots.size());
+			for (const uint16 slot : itemSlots)
+			{
+				packet << io::write<uint16>(slot);
+			}
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::MailTakeMoney(uint64 mailId)
+	{
+		sendSinglePacket([mailId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::MailTakeMoney);
+			packet << io::write<uint64>(mailId);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::MailTakeItem(uint64 mailId, uint64 attachmentId)
+	{
+		sendSinglePacket([mailId, attachmentId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::MailTakeItem);
+			packet
+				<< io::write<uint64>(mailId)
+				<< io::write<uint64>(attachmentId);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::MailDelete(uint64 mailId)
+	{
+		sendSinglePacket([mailId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::MailDelete);
+			packet << io::write<uint64>(mailId);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::MailMarkRead(uint64 mailId)
+	{
+		sendSinglePacket([mailId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::MailMarkRead);
+			packet << io::write<uint64>(mailId);
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::SellItem(uint64 vendorGuid, uint64 itemGuid)
 	{
 		sendSinglePacket([vendorGuid, itemGuid](game::OutgoingPacket& packet) {

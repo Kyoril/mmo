@@ -222,6 +222,18 @@ namespace mmo
 		/// Handles an incoming packet to delete inventory items.
 		/// @param packet The packet data.
 		PacketParseResult OnDeleteInventoryItems(auth::IncomingPacket& packet);
+
+		/// Handles an incoming mail draft whose money and items were escrowed on the world node.
+		PacketParseResult OnMailDraft(auth::IncomingPacket& packet);
+
+		/// Handles an incoming request to take the money out of a mail.
+		PacketParseResult OnMailTakeMoney(auth::IncomingPacket& packet);
+
+		/// Handles an incoming request to take an item attachment out of a mail.
+		PacketParseResult OnMailTakeItem(auth::IncomingPacket& packet);
+
+		/// Handles an incoming request to re-attach an item to a mail after failed delivery.
+		PacketParseResult OnMailRestoreItem(auth::IncomingPacket& packet);
 	};
 
 }

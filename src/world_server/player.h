@@ -7,6 +7,7 @@
 #include "game_server/character_data.h"
 #include "game/bank.h"
 #include "game/chat_type.h"
+#include "game/mail.h"
 #include "game/vendor.h"
 #include "game_server/objects/game_object_s.h"
 #include "game_server/objects/game_player_s.h"
@@ -464,6 +465,39 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnBuyBankBagSlot(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		// Mail handlers, implemented in player_mail_handlers.cpp
+
+		/// Handles the client's request to send a mail. Escrows money and items before the
+		/// draft is forwarded to the realm for persistence.
+		void OnSendMail(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's request to take the money attached to a mail.
+		void OnMailTakeMoney(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's request to take an item attached to a mail.
+		void OnMailTakeItem(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+	public:
+		/// Called with the realm's response to a mail draft. Refunds the escrow on failure.
+		void OnMailDraftResult(uint8 result);
+
+		/// Called with the realm's response to a take money request.
+		void OnMailTakeMoneyResult(uint64 mailId, uint8 result, uint32 money);
+
+		/// Called with the realm's response to a take item request.
+		void OnMailTakeItemResult(uint64 mailId, uint8 result, const MailAttachment& attachment);
+
+	private:
+
+		void SendShowMailbox(uint64 mailboxGuid);
+
+		void SendMailSendResult(uint8 result);
+
+		void SendMailTakeResult(uint8 result);
+
+		/// @brief Returns true if the player currently has access to a mailbox world object nearby.
+		[[nodiscard]] bool IsMailboxAccessible() const;
+
 		/// Handles the client's request to use a world object (door, chest, etc.).
 		/// Validates distance and object state, then calls GameWorldObjectS::Use().
 		///	@param opCode The op code of the packet.
@@ -693,6 +727,8 @@ namespace mmo
 
 		void OnObjectLoot() override;
 
+		void OnMailboxUsed(uint64 mailboxGuid) override;
+
 		void OnRootChanged(bool applied, uint32 ackId) override;
 
 		void OnStunChanged(bool applied, uint32 ackId) override;
@@ -783,6 +819,19 @@ namespace mmo
 		/// Guid of the banker npc the player is currently interacting with, or 0 if none.
 		/// Bank slot operations re-validate distance and state against this npc.
 		uint64 m_activeBankerGuid{ 0 };
+
+		/// Guid of the mailbox world object the player is currently interacting with, or 0 if none.
+		/// Mail operations re-validate distance against this object.
+		uint64 m_activeMailboxGuid{ 0 };
+
+		/// Money and items escrowed for a mail draft that is awaiting the realm's response.
+		struct PendingMail
+		{
+			bool active = false;
+			uint32 escrowedMoney = 0;
+			std::vector<MailAttachment> attachments;
+		};
+		PendingMail m_pendingMail;
 
 		/// this (dead) player. Cleared on accept, decline, expiry, or when the body is released.
 		bool m_hasPendingRevive{ false };

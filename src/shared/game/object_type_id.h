@@ -13,6 +13,9 @@ namespace mmo
 
 			Door,
 
+			/// Using this object opens the players mailbox.
+			Mailbox,
+
 			// TODO: Add additional types here
 
 			Count_,

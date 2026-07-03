@@ -2157,6 +2157,395 @@ namespace mmo
 		}
 	}
 
+	MailCreationResult MySQLDatabase::CreateMail(const MailDraft& draft)
+	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
+		MailCreationResult creationResult;
+
+		// Resolve the recipient by name
+		const auto recipientId = GetCharacterIdByName(draft.recipientName);
+		if (!recipientId)
+		{
+			creationResult.result = mail_result::RecipientNotFound;
+			return creationResult;
+		}
+
+		try
+		{
+			mysql::Transaction transaction(m_connection);
+
+			const uint64 now = static_cast<uint64>(::time(nullptr));
+			if (!m_connection.Execute(std::format(
+				"INSERT INTO `mail` (`sender`, `sender_name`, `recipient`, `subject`, `body`, `money`, `cod`, `sent_at`, `expires_at`, `read_flag`) "
+				"VALUES ({0}, '{1}', {2}, '{3}', '{4}', {5}, 0, {6}, {7}, 0)"
+				, draft.senderGuid
+				, m_connection.EscapeString(draft.senderName)
+				, *recipientId
+				, m_connection.EscapeString(draft.subject)
+				, m_connection.EscapeString(draft.body)
+				, draft.money
+				, now
+				, now + mail::ExpirySeconds
+			)))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			const uint64 mailId = m_connection.GetLastInsertId();
+
+			if (!draft.attachments.empty())
+			{
+				std::ostringstream strm;
+				strm << "INSERT INTO `mail_items` (`mail_id`, `entry`, `count`, `durability`, `creator`, `flags`) VALUES ";
+				bool isFirstItem = true;
+				for (const auto& attachment : draft.attachments)
+				{
+					if (!isFirstItem) strm << ",";
+					else
+					{
+						isFirstItem = false;
+					}
+
+					strm << "(" << mailId << "," << attachment.entry << "," << static_cast<uint32>(attachment.stackCount)
+						 << "," << attachment.durability << "," << attachment.creator << "," << attachment.flags << ")";
+				}
+				strm << ";";
+
+				if (!m_connection.Execute(strm.str()))
+				{
+					PrintDatabaseError();
+					throw mysql::Exception(m_connection.GetErrorMessage());
+				}
+			}
+
+			transaction.Commit();
+
+			creationResult.result = mail_result::Ok;
+			creationResult.mailId = mailId;
+			creationResult.recipientId = *recipientId;
+			return creationResult;
+		}
+		catch (const mysql::Exception& e)
+		{
+			ELOG("Could not create mail: " << e.what());
+			creationResult.result = mail_result::InternalError;
+			return creationResult;
+		}
+	}
+
+	std::optional<std::vector<MailInfo>> MySQLDatabase::GetMailList(uint64 characterId)
+	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
+		// Purge expired mail of this character first (attachments cascade)
+		const uint64 now = static_cast<uint64>(::time(nullptr));
+		if (!m_connection.Execute(std::format(
+			"DELETE FROM `mail` WHERE `recipient` = {0} AND `expires_at` <= {1}"
+			, characterId
+			, now
+		)))
+		{
+			PrintDatabaseError();
+			return {};
+		}
+
+		std::vector<MailInfo> result;
+
+		{
+			mysql::Select select(m_connection, std::format(
+				"SELECT `id`, `sender_name`, `subject`, `body`, `money`, `cod`, `sent_at`, `expires_at`, `read_flag` "
+				"FROM `mail` WHERE `recipient` = {0} ORDER BY `sent_at` DESC"
+				, characterId));
+			if (!select.Success())
+			{
+				PrintDatabaseError();
+				return {};
+			}
+
+			mysql::Row row(select);
+			while (row)
+			{
+				MailInfo mail;
+				uint16 readFlag = 0;
+
+				uint32 index = 0;
+				row.GetField(index++, mail.mailId);
+				row.GetField(index++, mail.senderName);
+				row.GetField(index++, mail.subject);
+				row.GetField(index++, mail.body);
+				row.GetField(index++, mail.money);
+				row.GetField(index++, mail.codAmount);
+				row.GetField(index++, mail.sentAt);
+				row.GetField(index++, mail.expiresAt);
+				row.GetField(index++, readFlag);
+				mail.read = readFlag != 0;
+
+				result.push_back(std::move(mail));
+				row = mysql::Row::Next(select);
+			}
+		}
+
+		for (auto& mail : result)
+		{
+			mysql::Select itemSelect(m_connection, std::format(
+				"SELECT `id`, `entry`, `count`, `durability`, `creator`, `flags` FROM `mail_items` WHERE `mail_id` = {0} ORDER BY `id`"
+				, mail.mailId));
+			if (!itemSelect.Success())
+			{
+				PrintDatabaseError();
+				return {};
+			}
+
+			mysql::Row itemRow(itemSelect);
+			while (itemRow)
+			{
+				MailAttachment attachment;
+				uint16 stackCount = 1;
+
+				uint32 index = 0;
+				itemRow.GetField(index++, attachment.id);
+				itemRow.GetField(index++, attachment.entry);
+				itemRow.GetField(index++, stackCount);
+				itemRow.GetField(index++, attachment.durability);
+				itemRow.GetField(index++, attachment.creator);
+				itemRow.GetField(index++, attachment.flags);
+				attachment.stackCount = static_cast<uint8>(stackCount);
+
+				mail.attachments.push_back(attachment);
+				itemRow = mysql::Row::Next(itemSelect);
+			}
+		}
+
+		return result;
+	}
+
+	std::optional<uint32> MySQLDatabase::GetUnreadMailCount(uint64 characterId)
+	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
+		const uint64 now = static_cast<uint64>(::time(nullptr));
+		mysql::Select select(m_connection, std::format(
+			"SELECT COUNT(*) FROM `mail` WHERE `recipient` = {0} AND `read_flag` = 0 AND `expires_at` > {1}"
+			, characterId
+			, now));
+		if (!select.Success())
+		{
+			PrintDatabaseError();
+			return {};
+		}
+
+		if (const mysql::Row row(select); row)
+		{
+			uint32 count = 0;
+			row.GetField(0, count);
+			return count;
+		}
+
+		return 0;
+	}
+
+	std::optional<uint32> MySQLDatabase::TakeMailMoney(uint64 characterId, uint64 mailId)
+	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
+		try
+		{
+			mysql::Transaction transaction(m_connection);
+
+			uint32 money = 0;
+			{
+				mysql::Select select(m_connection, std::format(
+					"SELECT `money` FROM `mail` WHERE `id` = {0} AND `recipient` = {1} FOR UPDATE"
+					, mailId
+					, characterId));
+				if (!select.Success())
+				{
+					PrintDatabaseError();
+					throw mysql::Exception(m_connection.GetErrorMessage());
+				}
+
+				const mysql::Row row(select);
+				if (!row)
+				{
+					return 0;
+				}
+
+				row.GetField(0, money);
+			}
+
+			if (money > 0)
+			{
+				if (!m_connection.Execute(std::format(
+					"UPDATE `mail` SET `money` = 0 WHERE `id` = {0} AND `recipient` = {1}"
+					, mailId
+					, characterId)))
+				{
+					PrintDatabaseError();
+					throw mysql::Exception(m_connection.GetErrorMessage());
+				}
+			}
+
+			transaction.Commit();
+			return money;
+		}
+		catch (const mysql::Exception& e)
+		{
+			ELOG("Could not take mail money: " << e.what());
+			return {};
+		}
+	}
+
+	std::optional<MailAttachment> MySQLDatabase::TakeMailItem(uint64 characterId, uint64 mailId, uint64 attachmentId)
+	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
+		try
+		{
+			mysql::Transaction transaction(m_connection);
+
+			MailAttachment attachment;
+			{
+				// Join against the mail table to ensure the attachment belongs to a mail of this character
+				mysql::Select select(m_connection, std::format(
+					"SELECT i.`id`, i.`entry`, i.`count`, i.`durability`, i.`creator`, i.`flags` FROM `mail_items` i "
+					"INNER JOIN `mail` m ON m.`id` = i.`mail_id` "
+					"WHERE i.`id` = {0} AND i.`mail_id` = {1} AND m.`recipient` = {2} FOR UPDATE"
+					, attachmentId
+					, mailId
+					, characterId));
+				if (!select.Success())
+				{
+					PrintDatabaseError();
+					throw mysql::Exception(m_connection.GetErrorMessage());
+				}
+
+				const mysql::Row row(select);
+				if (!row)
+				{
+					return {};
+				}
+
+				uint16 stackCount = 1;
+				uint32 index = 0;
+				row.GetField(index++, attachment.id);
+				row.GetField(index++, attachment.entry);
+				row.GetField(index++, stackCount);
+				row.GetField(index++, attachment.durability);
+				row.GetField(index++, attachment.creator);
+				row.GetField(index++, attachment.flags);
+				attachment.stackCount = static_cast<uint8>(stackCount);
+			}
+
+			if (!m_connection.Execute(std::format(
+				"DELETE FROM `mail_items` WHERE `id` = {0}"
+				, attachmentId)))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			transaction.Commit();
+			return attachment;
+		}
+		catch (const mysql::Exception& e)
+		{
+			ELOG("Could not take mail item: " << e.what());
+			return {};
+		}
+	}
+
+	void MySQLDatabase::RestoreMailItem(uint64 mailId, const MailAttachment& attachment)
+	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
+		if (!m_connection.Execute(std::format(
+			"INSERT INTO `mail_items` (`mail_id`, `entry`, `count`, `durability`, `creator`, `flags`) "
+			"VALUES ({0}, {1}, {2}, {3}, {4}, {5})"
+			, mailId
+			, attachment.entry
+			, static_cast<uint32>(attachment.stackCount)
+			, attachment.durability
+			, attachment.creator
+			, attachment.flags)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Could not restore mail item!");
+		}
+	}
+
+	bool MySQLDatabase::DeleteMail(uint64 characterId, uint64 mailId)
+	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
+		try
+		{
+			mysql::Transaction transaction(m_connection);
+
+			// Only mails without money and attachments may be deleted
+			{
+				mysql::Select select(m_connection, std::format(
+					"SELECT m.`money`, COUNT(i.`id`) FROM `mail` m "
+					"LEFT JOIN `mail_items` i ON i.`mail_id` = m.`id` "
+					"WHERE m.`id` = {0} AND m.`recipient` = {1} GROUP BY m.`id`, m.`money` FOR UPDATE"
+					, mailId
+					, characterId));
+				if (!select.Success())
+				{
+					PrintDatabaseError();
+					throw mysql::Exception(m_connection.GetErrorMessage());
+				}
+
+				const mysql::Row row(select);
+				if (!row)
+				{
+					return false;
+				}
+
+				uint32 money = 0;
+				uint32 attachmentCount = 0;
+				row.GetField(0, money);
+				row.GetField(1, attachmentCount);
+				if (money > 0 || attachmentCount > 0)
+				{
+					return false;
+				}
+			}
+
+			if (!m_connection.Execute(std::format(
+				"DELETE FROM `mail` WHERE `id` = {0} AND `recipient` = {1}"
+				, mailId
+				, characterId)))
+			{
+				PrintDatabaseError();
+				throw mysql::Exception(m_connection.GetErrorMessage());
+			}
+
+			transaction.Commit();
+			return true;
+		}
+		catch (const mysql::Exception& e)
+		{
+			ELOG("Could not delete mail: " << e.what());
+			return false;
+		}
+	}
+
+	void MySQLDatabase::MarkMailRead(uint64 characterId, uint64 mailId)
+	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
+		if (!m_connection.Execute(std::format(
+			"UPDATE `mail` SET `read_flag` = 1 WHERE `id` = {0} AND `recipient` = {1}"
+			, mailId
+			, characterId)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Could not mark mail as read!");
+		}
+	}
+
 	std::optional<String> MySQLDatabase::GetMessageOfTheDay()
 	{
 		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);

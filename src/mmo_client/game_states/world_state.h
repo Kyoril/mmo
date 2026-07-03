@@ -62,6 +62,7 @@ namespace mmo
 	class ActionBar;
 	class VendorClient;
 	class BankClient;
+	class MailClient;
 	class TimerQueue;
 
 	namespace game
@@ -125,7 +126,8 @@ namespace mmo
 			InventoryClient &inventoryClient,
 			TradeClient &tradeClient,
 			ChannelClient &channelClient,
-			BankClient &bankClient);
+			BankClient &bankClient,
+			MailClient &mailClient);
 
 	public:
 		/// @brief The default name of the world state
@@ -561,6 +563,7 @@ namespace mmo
 		LootClient &m_lootClient;
 		VendorClient &m_vendorClient;
 		BankClient &m_bankClient;
+		MailClient &m_mailClient;
 
 		std::unique_ptr<RaySceneQuery> m_rayQuery;
 

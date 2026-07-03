@@ -46,4 +46,14 @@ namespace mmo
 			return false;
 		}
 	};
+
+	/// @brief Mailbox-type world objects (usable to open the players mailbox).
+	class GameWorldObjectC_Type_Mailbox : public GameWorldObjectC_Type_Base
+	{
+	public:
+		bool CanUse() const override
+		{
+			return true;
+		}
+	};
 }

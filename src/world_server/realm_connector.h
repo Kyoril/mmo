@@ -6,6 +6,7 @@
 #include "base/big_number.h"
 #include "base/sha1.h"
 #include "game/game.h"
+#include "game/mail.h"
 
 #include "asio/io_service.hpp"
 
@@ -99,6 +100,18 @@ namespace mmo
 		/// @param slots Vector of absolute slot indices to delete.
 		void SendDeleteInventoryItems(uint64 characterGuid, uint32 operationId, const std::vector<uint16>& slots);
 
+		/// Sends a mail draft (escrowed money and items) to the realm for persistence.
+		void SendMailDraft(const MailDraft& draft);
+
+		/// Asks the realm to take the money out of a mail.
+		void SendMailTakeMoney(uint64 characterGuid, uint64 mailId);
+
+		/// Asks the realm to take an item attachment out of a mail.
+		void SendMailTakeItem(uint64 characterGuid, uint64 mailId, uint64 attachmentId);
+
+		/// Asks the realm to re-attach an item to a mail after a failed delivery.
+		void SendMailRestoreItem(uint64 mailId, const MailAttachment& attachment);
+
 		/// @brief Sets the fall damage configuration values.
 		/// @param minHeight Minimum fall distance in meters before fall damage starts.
 		/// @param lethalHeight Fall distance in meters at which fall damage becomes lethal.
@@ -145,6 +158,15 @@ namespace mmo
 
 		/// Handles a loot method change notification from the realm server.
 		PacketParseResult OnPlayerGroupLootMethodChanged(auth::IncomingPacket& packet);
+
+		/// Handles the realm's response to a mail draft.
+		PacketParseResult OnMailDraftResult(auth::IncomingPacket& packet);
+
+		/// Handles the realm's response to a mail take money request.
+		PacketParseResult OnMailTakeMoneyResult(auth::IncomingPacket& packet);
+
+		/// Handles the realm's response to a mail take item request.
+		PacketParseResult OnMailTakeItemResult(auth::IncomingPacket& packet);
 
 		/// Handles the result of an inventory operation (save/delete).
 		/// @param packet Incoming packet containing operation result.

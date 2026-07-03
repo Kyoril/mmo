@@ -2211,6 +2211,97 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult Player::OnMailListRequest(game::IncomingPacket &packet)
+	{
+		std::weak_ptr weakThis{ shared_from_this() };
+		auto handler = [weakThis](std::optional<std::vector<MailInfo>> result)
+		{
+			if (auto strongThis = weakThis.lock())
+			{
+				strongThis->SendMailList(result.value_or(std::vector<MailInfo>{}));
+			}
+		};
+
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetMailList, GetCharacterGuid());
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnMailDelete(game::IncomingPacket &packet)
+	{
+		uint64 mailId;
+		if (!(packet >> io::read<uint64>(mailId)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		std::weak_ptr weakThis{ shared_from_this() };
+		auto handler = [weakThis](bool)
+		{
+			// Refresh the client's mail list regardless of the outcome so it stays in sync
+			if (const auto strongThis = weakThis.lock())
+			{
+				auto listHandler = [weakThis](std::optional<std::vector<MailInfo>> result)
+				{
+					if (auto strongInner = weakThis.lock())
+					{
+						strongInner->SendMailList(result.value_or(std::vector<MailInfo>{}));
+					}
+				};
+
+				strongThis->m_database.asyncRequest(std::move(listHandler), &IDatabase::GetMailList, strongThis->GetCharacterGuid());
+			}
+		};
+
+		m_database.asyncRequest(std::move(handler), &IDatabase::DeleteMail, GetCharacterGuid(), mailId);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult Player::OnMailMarkRead(game::IncomingPacket &packet)
+	{
+		uint64 mailId;
+		if (!(packet >> io::read<uint64>(mailId)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		m_database.asyncRequest([](bool) {}, &IDatabase::MarkMailRead, GetCharacterGuid(), mailId);
+		return PacketParseResult::Pass;
+	}
+
+	void Player::SendMailList(std::vector<MailInfo> mails)
+	{
+		SendPacket([&mails](game::OutgoingPacket &packet)
+		{
+			packet.Start(game::realm_client_packet::MailList);
+			packet << io::write<uint16>(mails.size());
+			for (const auto &mail : mails)
+			{
+				packet << mail;
+			}
+			packet.Finish();
+		});
+	}
+
+	void Player::SendMailNotify()
+	{
+		std::weak_ptr weakThis{ shared_from_this() };
+		auto handler = [weakThis](std::optional<uint32> unreadCount)
+		{
+			if (auto strongThis = weakThis.lock())
+			{
+				const uint32 count = unreadCount.value_or(0);
+				strongThis->SendPacket([count](game::OutgoingPacket &packet)
+				{
+					packet.Start(game::realm_client_packet::MailNotify);
+					packet << io::write<uint32>(count);
+					packet.Finish();
+				});
+			}
+		};
+
+		m_database.asyncRequest(std::move(handler), &IDatabase::GetUnreadMailCount, GetCharacterGuid());
+	}
+
 #ifdef MMO_WITH_DEV_COMMANDS
 	PacketParseResult Player::OnCheatTeleportToPlayer(game::IncomingPacket &packet)
 	{
@@ -2979,6 +3070,14 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::FriendDecline, *this, &Player::OnFriendDecline);
 			RegisterPacketHandler(game::client_realm_packet::FriendRemove, *this, &Player::OnFriendRemove);
 			RegisterPacketHandler(game::client_realm_packet::FriendListRequest, *this, &Player::OnFriendListRequest);
+
+			// Mail packet handlers (list/read/delete are realm-side, send/take go to the world node for escrow)
+			RegisterPacketHandler(game::client_realm_packet::MailListRequest, *this, &Player::OnMailListRequest);
+			RegisterPacketHandler(game::client_realm_packet::MailDelete, *this, &Player::OnMailDelete);
+			RegisterPacketHandler(game::client_realm_packet::MailMarkRead, *this, &Player::OnMailMarkRead);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::SendMail, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MailTakeMoney, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::MailTakeItem, *this, &Player::OnProxyPacket);
 
 #if MMO_WITH_DEV_COMMANDS
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatLearnSpell, *this, &Player::OnProxyPacket);

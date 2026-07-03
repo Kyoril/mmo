@@ -72,6 +72,10 @@ namespace mmo
 			spawned->SetLootEntryOverride(m_lootEntryOverride);
 		}
 
+		// Initialization is done: clear the field change marks so the first real field change
+		// after spawn doesn't broadcast the init fields (like the constant ObjectTypeId) as changes
+		spawned->ClearFieldChanges();
+
 		// watch for destruction
 		spawned->destroy = std::bind(&WorldObjectSpawner::OnRemoval, this, std::placeholders::_1);
 		m_world.AddGameObject(*spawned);

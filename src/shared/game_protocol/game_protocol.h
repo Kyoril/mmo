@@ -324,6 +324,25 @@ namespace mmo
 				/// Sent by the client to purchase the next bank bag slot. Payload: uint64 bankerGuid.
 				BuyBankBagSlot,
 
+				/// Sent by the client to request the mail list. Handled directly by the realm.
+				MailListRequest,
+
+				/// Sent by the client to delete an empty mail. Handled directly by the realm. Payload: uint64 mailId.
+				MailDelete,
+
+				/// Sent by the client to flag a mail as read. Handled directly by the realm. Payload: uint64 mailId.
+				MailMarkRead,
+
+				/// Sent by the client to send a mail at a mailbox. Handled by the world node (escrow).
+				/// Payload: string recipient, string subject, string body, uint32 money, uint8 slotCount, uint16 itemSlots[].
+				SendMail,
+
+				/// Sent by the client to take the money attached to a mail. Handled by the world node. Payload: uint64 mailId.
+				MailTakeMoney,
+
+				/// Sent by the client to take an item attached to a mail. Handled by the world node. Payload: uint64 mailId, uint64 attachmentId.
+				MailTakeItem,
+
 				/// Counter constant
 				Count_,
 			};
@@ -624,6 +643,21 @@ namespace mmo
 				/// Sent to the client as response to a bank bag slot purchase attempt. Payload:
 				/// uint8 result (see buy_bank_bag_slot_result), uint8 new bank bag slot count.
 				BuyBankBagSlotResult,
+
+				/// Sent to the client to make it show the mailbox window. Payload: uint64 mailboxGuid.
+				ShowMailbox,
+
+				/// Sent to the client with the full mail list. Payload: uint16 count, MailInfo[].
+				MailList,
+
+				/// Sent to the client as response to a SendMail request. Payload: uint8 result (see mail_result).
+				MailSendResult,
+
+				/// Sent to the client as response to a take money/item request. Payload: uint8 result (see mail_result).
+				MailTakeResult,
+
+				/// Sent to the client when the number of unread mails changes. Payload: uint32 unreadCount.
+				MailNotify,
 
 				/// Counter constant
 				Count_,

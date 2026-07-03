@@ -299,6 +299,10 @@ namespace mmo
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::PlayerGroupUpdate, *strongThis, &World::OnPlayerGroupUpdate);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::SaveInventoryItems, *strongThis, &World::OnSaveInventoryItems);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::DeleteInventoryItems, *strongThis, &World::OnDeleteInventoryItems);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::MailDraft, *strongThis, &World::OnMailDraft);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::MailTakeMoney, *strongThis, &World::OnMailTakeMoney);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::MailTakeItem, *strongThis, &World::OnMailTakeItem);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::MailRestoreItem, *strongThis, &World::OnMailRestoreItem);
 
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
@@ -982,6 +986,130 @@ namespace mmo
 		// Call database to save items asynchronously
 		// CRITICAL: Pass items by value (copy) to ensure they persist through async operation
 		m_database.asyncRequest(std::move(sendResult), &IDatabase::SaveInventoryItems, characterGuid, items);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult World::OnMailDraft(auth::IncomingPacket& packet)
+	{
+		MailDraft draft;
+		if (!(packet >> draft))
+		{
+			ELOG("Failed to parse MailDraft packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		auto sendResult = [this, senderGuid = draft.senderGuid](MailCreationResult result)
+		{
+			// Notify the recipient about the new mail if they are online
+			if (result.result == mail_result::Ok)
+			{
+				if (Player* recipient = m_playerManager.GetPlayerByCharacterGuid(result.recipientId))
+				{
+					recipient->SendMailNotify();
+				}
+			}
+
+			GetConnection().sendSinglePacket([senderGuid, &result](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::realm_world_packet::MailDraftResult);
+				outPacket
+					<< io::write<uint64>(senderGuid)
+					<< io::write<uint8>(result.result);
+				outPacket.Finish();
+			});
+		};
+
+		m_database.asyncRequest(std::move(sendResult), &IDatabase::CreateMail, draft);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult World::OnMailTakeMoney(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		uint64 mailId = 0;
+		if (!(packet >> io::read<uint64>(characterGuid) >> io::read<uint64>(mailId)))
+		{
+			ELOG("Failed to parse MailTakeMoney packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		auto sendResult = [this, characterGuid, mailId](std::optional<uint32> money)
+		{
+			uint8 result = mail_result::Ok;
+			if (!money)
+			{
+				result = mail_result::InternalError;
+			}
+			else if (*money == 0)
+			{
+				result = mail_result::MailNotFound;
+			}
+
+			GetConnection().sendSinglePacket([characterGuid, mailId, result, amount = money.value_or(0)](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::realm_world_packet::MailTakeMoneyResult);
+				outPacket
+					<< io::write<uint64>(characterGuid)
+					<< io::write<uint64>(mailId)
+					<< io::write<uint8>(result)
+					<< io::write<uint32>(amount);
+				outPacket.Finish();
+			});
+		};
+
+		m_database.asyncRequest(std::move(sendResult), &IDatabase::TakeMailMoney, characterGuid, mailId);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult World::OnMailTakeItem(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		uint64 mailId = 0;
+		uint64 attachmentId = 0;
+		if (!(packet >> io::read<uint64>(characterGuid) >> io::read<uint64>(mailId) >> io::read<uint64>(attachmentId)))
+		{
+			ELOG("Failed to parse MailTakeItem packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		auto sendResult = [this, characterGuid, mailId](std::optional<MailAttachment> attachment)
+		{
+			const uint8 result = attachment ? mail_result::Ok : mail_result::MailNotFound;
+
+			GetConnection().sendSinglePacket([characterGuid, mailId, result, attachment = attachment.value_or(MailAttachment{})](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::realm_world_packet::MailTakeItemResult);
+				outPacket
+					<< io::write<uint64>(characterGuid)
+					<< io::write<uint64>(mailId)
+					<< io::write<uint8>(result)
+					<< attachment;
+				outPacket.Finish();
+			});
+		};
+
+		m_database.asyncRequest(std::move(sendResult), &IDatabase::TakeMailItem, characterGuid, mailId, attachmentId);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult World::OnMailRestoreItem(auth::IncomingPacket& packet)
+	{
+		uint64 mailId = 0;
+		MailAttachment attachment;
+		if (!(packet >> io::read<uint64>(mailId) >> attachment))
+		{
+			ELOG("Failed to parse MailRestoreItem packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		m_database.asyncRequest([mailId](bool success)
+		{
+			if (!success)
+			{
+				ELOG("Failed to restore mail item attachment for mail " << mailId << " - the item is lost!");
+			}
+		}, &IDatabase::RestoreMailItem, mailId, attachment);
 
 		return PacketParseResult::Pass;
 	}

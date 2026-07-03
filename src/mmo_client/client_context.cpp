@@ -14,6 +14,7 @@
 #include "systems/guild_client.h"
 #include "systems/bank_client.h"
 #include "systems/inventory_client.h"
+#include "systems/mail_client.h"
 #include "systems/loot_client.h"
 #include "systems/party_info.h"
 #include "systems/quest_client.h"

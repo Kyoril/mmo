@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "game/action_button.h"
+#include "game/mail.h"
 #include "game_server/character_data.h"
 #include "math/angle.h"
 
@@ -315,6 +316,40 @@ namespace mmo
 		virtual void SetCharacterChannelState(uint64 characterId, uint32 channelId, uint8 status) = 0;
 	};
 
+	/// Mail storage operations. Money and item attachments stay stored with the mail
+	/// until the recipient takes them, so no character resources are modified here.
+	struct IMailDatabase
+	{
+		virtual ~IMailDatabase() = default;
+
+		/// Persists a new mail addressed to a character by name.
+		virtual MailCreationResult CreateMail(const MailDraft& draft) = 0;
+
+		/// Loads all mails of a character, deleting expired ones first.
+		virtual std::optional<std::vector<MailInfo>> GetMailList(uint64 characterId) = 0;
+
+		/// Gets the number of unread mails of a character.
+		virtual std::optional<uint32> GetUnreadMailCount(uint64 characterId) = 0;
+
+		/// Atomically removes the money from a mail and returns the removed amount.
+		/// @returns Empty optional on error, 0 if the mail didn't exist or had no money.
+		virtual std::optional<uint32> TakeMailMoney(uint64 characterId, uint64 mailId) = 0;
+
+		/// Atomically removes the given attachment from a mail and returns its data.
+		/// @returns Empty optional if the attachment doesn't exist or on error.
+		virtual std::optional<MailAttachment> TakeMailItem(uint64 characterId, uint64 mailId, uint64 attachmentId) = 0;
+
+		/// Re-attaches an item to a mail after a failed delivery (recipient inventory full).
+		virtual void RestoreMailItem(uint64 mailId, const MailAttachment& attachment) = 0;
+
+		/// Deletes a mail if it carries no more money or attachments.
+		/// @returns true if the mail was deleted.
+		virtual bool DeleteMail(uint64 characterId, uint64 mailId) = 0;
+
+		/// Flags a mail as read.
+		virtual void MarkMailRead(uint64 characterId, uint64 mailId) = 0;
+	};
+
 	// -------------------------------------------------------------------------
 	// Composite interface — still used by MySQLDatabase and legacy call sites
 	// that depend on a single database reference.
@@ -332,6 +367,7 @@ namespace mmo
 		, public IMOTDDatabase
 		, public IChatDatabase
 		, public IChatChannelDatabase
+		, public IMailDatabase
 	{
 		virtual ~IDatabase() override;
 	};

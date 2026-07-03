@@ -50,6 +50,12 @@ namespace mmo
 		virtual void OnItemAdded(uint16 slot, uint16 amount, bool wasLooted, bool wasCreated) = 0;
 
 		virtual void OnObjectLoot() = 0;
+
+		/// Called when the player used a mailbox world object. Implementations should start a
+		/// mailbox interaction session and make the client show the mail window.
+		virtual void OnMailboxUsed(uint64 mailboxGuid)
+		{
+		}
 	};
 
 	/// @brief Represents a playable character in the game world.
@@ -135,6 +141,15 @@ namespace mmo
 		uint8 GetBankBagSlotCount() const noexcept override
 		{
 			return static_cast<uint8>(Get<uint32>(object_fields::BankBagSlotCount));
+		}
+
+		/// Notifies the network layer that the player used a mailbox world object.
+		void NotifyMailboxUsed(const uint64 mailboxGuid) const
+		{
+			if (m_netPlayerWatcher)
+			{
+				m_netPlayerWatcher->OnMailboxUsed(mailboxGuid);
+			}
 		}
 
 		const proto::ClassEntry *GetClassEntry() const { return m_classEntry; }

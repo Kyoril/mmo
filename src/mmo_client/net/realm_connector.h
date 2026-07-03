@@ -363,6 +363,24 @@ namespace mmo
 		///	@param bankerGuid The guid of the banker npc the player is interacting with.
 		void BuyBankBagSlot(uint64 bankerGuid);
 
+		/// Requests the mail list from the realm.
+		void MailListRequest();
+
+		/// Sends a new mail. The world node escrows attached money and items.
+		void SendMail(const String& recipient, const String& subject, const String& body, uint32 money, const std::vector<uint16>& itemSlots);
+
+		/// Takes the money attached to a mail.
+		void MailTakeMoney(uint64 mailId);
+
+		/// Takes an item attached to a mail.
+		void MailTakeItem(uint64 mailId, uint64 attachmentId);
+
+		/// Deletes an empty mail.
+		void MailDelete(uint64 mailId);
+
+		/// Flags a mail as read.
+		void MailMarkRead(uint64 mailId);
+
 		/// Sends a packet to the server indiciating that the player wants to sell an item to a specific vendor. The vendor must be the current vendor, initiated by
 		///	either the ListInventory or GossipHello packet.
 		///	@param vendorGuid The guid of the vendor npc.

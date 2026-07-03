@@ -168,6 +168,30 @@ namespace mmo
 		/// @copydoc IDatabase::SetCharacterChannelState
 		void SetCharacterChannelState(uint64 characterId, uint32 channelId, uint8 status) override;
 
+		/// @copydoc IDatabase::CreateMail
+		MailCreationResult CreateMail(const MailDraft& draft) override;
+
+		/// @copydoc IDatabase::GetMailList
+		std::optional<std::vector<MailInfo>> GetMailList(uint64 characterId) override;
+
+		/// @copydoc IDatabase::GetUnreadMailCount
+		std::optional<uint32> GetUnreadMailCount(uint64 characterId) override;
+
+		/// @copydoc IDatabase::TakeMailMoney
+		std::optional<uint32> TakeMailMoney(uint64 characterId, uint64 mailId) override;
+
+		/// @copydoc IDatabase::TakeMailItem
+		std::optional<MailAttachment> TakeMailItem(uint64 characterId, uint64 mailId, uint64 attachmentId) override;
+
+		/// @copydoc IDatabase::RestoreMailItem
+		void RestoreMailItem(uint64 mailId, const MailAttachment& attachment) override;
+
+		/// @copydoc IDatabase::DeleteMail
+		bool DeleteMail(uint64 characterId, uint64 mailId) override;
+
+		/// @copydoc IDatabase::MarkMailRead
+		void MarkMailRead(uint64 characterId, uint64 mailId) override;
+
 	private:
 		/// Logs the last database error to the default logger.
 		void PrintDatabaseError();

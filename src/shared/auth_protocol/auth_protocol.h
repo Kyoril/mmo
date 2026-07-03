@@ -141,6 +141,15 @@ namespace mmo
 
 				/// Sent as response to inventory operation requests (save/delete).
 				InventoryOperationResult,
+
+				/// Sent as response to a MailDraft request. Payload: uint64 characterGuid, uint8 result (mail_result).
+				MailDraftResult,
+
+				/// Sent as response to a MailTakeMoney request. Payload: uint64 characterGuid, uint64 mailId, uint8 result, uint32 money.
+				MailTakeMoneyResult,
+
+				/// Sent as response to a MailTakeItem request. Payload: uint64 characterGuid, uint64 mailId, uint8 result, MailAttachment.
+				MailTakeItemResult,
 			};
 		}
 
@@ -187,6 +196,19 @@ namespace mmo
 
 				/// Delete specific inventory items by slot.
 				DeleteInventoryItems,
+
+				/// Sent to persist a new mail whose money and items were escrowed on the world node.
+				/// Payload: MailDraft.
+				MailDraft,
+
+				/// Sent to take the money out of a mail. Payload: uint64 characterGuid, uint64 mailId.
+				MailTakeMoney,
+
+				/// Sent to take an item attachment out of a mail. Payload: uint64 characterGuid, uint64 mailId, uint64 attachmentId.
+				MailTakeItem,
+
+				/// Sent to re-attach an item to a mail after a failed delivery. Payload: uint64 mailId, MailAttachment.
+				MailRestoreItem,
 			};
 		}
 

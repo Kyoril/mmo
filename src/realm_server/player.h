@@ -20,6 +20,7 @@
 
 #include "login_connector.h"
 #include "game/action_button.h"
+#include "game/mail.h"
 #include "game_server/character_data.h"
 #include "game/character_view.h"
 #include "game/group.h"
@@ -186,6 +187,12 @@ namespace mmo
 
 		/// Sends the complete friend list to the client.
 		void SendFriendListUpdate();
+
+		/// Sends the complete mail list to the client.
+		void SendMailList(std::vector<MailInfo> mails);
+
+		/// Sends the current unread mail count to the client (new-mail notification).
+		void SendMailNotify();
 
 		/// Notifies the client about a character update from a world node.
 		void NotifyCharacterUpdate(uint32 mapId, InstanceId instanceId, const GamePlayerS &character);
@@ -537,6 +544,11 @@ namespace mmo
 		PacketParseResult OnFriendDecline(game::IncomingPacket &packet);
 		PacketParseResult OnFriendRemove(game::IncomingPacket &packet);
 		PacketParseResult OnFriendListRequest(game::IncomingPacket &packet);
+
+		// Mail packet handlers
+		PacketParseResult OnMailListRequest(game::IncomingPacket &packet);
+		PacketParseResult OnMailDelete(game::IncomingPacket &packet);
+		PacketParseResult OnMailMarkRead(game::IncomingPacket &packet);
 
 		// Chat channel packet handlers
 		PacketParseResult OnChannelJoin(game::IncomingPacket &packet);

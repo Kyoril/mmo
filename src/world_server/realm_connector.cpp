@@ -488,6 +488,9 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 				RegisterPacketHandler(auth::realm_world_packet::PlayerGuildChanged, *this, &RealmConnector::OnPlayerGuildChanged);
 				RegisterPacketHandler(auth::realm_world_packet::PlayerGroupLootMethodChanged, *this, &RealmConnector::OnPlayerGroupLootMethodChanged);
 				RegisterPacketHandler(auth::realm_world_packet::InventoryOperationResult, *this, &RealmConnector::OnInventoryOperationResult);
+				RegisterPacketHandler(auth::realm_world_packet::MailDraftResult, *this, &RealmConnector::OnMailDraftResult);
+				RegisterPacketHandler(auth::realm_world_packet::MailTakeMoneyResult, *this, &RealmConnector::OnMailTakeMoneyResult);
+				RegisterPacketHandler(auth::realm_world_packet::MailTakeItemResult, *this, &RealmConnector::OnMailTakeItemResult);
 				
 				PropagateHostedMapIds();
 			}
@@ -933,6 +936,111 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		}
 
 		player->UpdateCharacterGroup(groupId, lootMethod, lootThreshold);
+		return PacketParseResult::Pass;
+	}
+
+	void RealmConnector::SendMailDraft(const MailDraft& draft)
+	{
+		sendSinglePacket([&draft](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::world_realm_packet::MailDraft);
+				outPacket << draft;
+				outPacket.Finish();
+			});
+	}
+
+	void RealmConnector::SendMailTakeMoney(uint64 characterGuid, uint64 mailId)
+	{
+		sendSinglePacket([characterGuid, mailId](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::world_realm_packet::MailTakeMoney);
+				outPacket
+					<< io::write<uint64>(characterGuid)
+					<< io::write<uint64>(mailId);
+				outPacket.Finish();
+			});
+	}
+
+	void RealmConnector::SendMailTakeItem(uint64 characterGuid, uint64 mailId, uint64 attachmentId)
+	{
+		sendSinglePacket([characterGuid, mailId, attachmentId](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::world_realm_packet::MailTakeItem);
+				outPacket
+					<< io::write<uint64>(characterGuid)
+					<< io::write<uint64>(mailId)
+					<< io::write<uint64>(attachmentId);
+				outPacket.Finish();
+			});
+	}
+
+	void RealmConnector::SendMailRestoreItem(uint64 mailId, const MailAttachment& attachment)
+	{
+		sendSinglePacket([mailId, &attachment](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::world_realm_packet::MailRestoreItem);
+				outPacket
+					<< io::write<uint64>(mailId)
+					<< attachment;
+				outPacket.Finish();
+			});
+	}
+
+	PacketParseResult RealmConnector::OnMailDraftResult(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		uint8 result = 0;
+		if (!(packet >> io::read<uint64>(characterGuid) >> io::read<uint8>(result)))
+		{
+			ELOG("Failed to read MAIL_DRAFT_RESULT packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (const std::shared_ptr<Player> player = m_playerManager.GetPlayerByCharacterGuid(characterGuid))
+		{
+			player->OnMailDraftResult(result);
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnMailTakeMoneyResult(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		uint64 mailId = 0;
+		uint8 result = 0;
+		uint32 money = 0;
+		if (!(packet >> io::read<uint64>(characterGuid) >> io::read<uint64>(mailId) >> io::read<uint8>(result) >> io::read<uint32>(money)))
+		{
+			ELOG("Failed to read MAIL_TAKE_MONEY_RESULT packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (const std::shared_ptr<Player> player = m_playerManager.GetPlayerByCharacterGuid(characterGuid))
+		{
+			player->OnMailTakeMoneyResult(mailId, result, money);
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnMailTakeItemResult(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		uint64 mailId = 0;
+		uint8 result = 0;
+		MailAttachment attachment;
+		if (!(packet >> io::read<uint64>(characterGuid) >> io::read<uint64>(mailId) >> io::read<uint8>(result) >> attachment))
+		{
+			ELOG("Failed to read MAIL_TAKE_ITEM_RESULT packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		if (const std::shared_ptr<Player> player = m_playerManager.GetPlayerByCharacterGuid(characterGuid))
+		{
+			player->OnMailTakeItemResult(mailId, result, attachment);
+		}
+
 		return PacketParseResult::Pass;
 	}
 
