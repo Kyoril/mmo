@@ -75,6 +75,9 @@ namespace mmo
 		/// @param currentEntry The current visualization.
 		void DrawQuickActions(proto::SpellVisualization& currentEntry);
 
+		/// @brief Draw the modal dialog for naming a kit template before saving it.
+		void DrawKitTemplateNameDialog();
+
 		/// @brief Initialize a new entry with default values.
 		void OnNewEntry(proto::TemplateManager<proto::SpellVisualizations, proto::SpellVisualization>::EntryType& entry) override;
 
@@ -108,5 +111,17 @@ namespace mmo
 
 		/// @brief Preview projectile speed (units per second).
 		float m_previewProjectileSpeed{ 15.0f };
+
+		/// @brief Id of the spell driving the preview (0 = manual preview settings).
+		uint32 m_previewSpellId{ 0 };
+
+		/// @brief Whether the kit template name dialog should be opened this frame.
+		bool m_showKitTemplateDialog{ false };
+
+		/// @brief Name entered in the kit template dialog.
+		String m_kitTemplateName;
+
+		/// @brief Copy of the kit that is about to be saved as a template.
+		proto::SpellKit m_kitTemplateSource;
 	};
 }

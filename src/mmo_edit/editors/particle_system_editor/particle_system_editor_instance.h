@@ -71,6 +71,11 @@ namespace mmo
 		void RebuildCurveEditors();
 		EmitterParameters MakeTemplate(int templateId, const char* name) const;
 
+		// Preset library helpers
+		void DrawPresetNameDialog();
+		void AddEmittersFromPreset(const String& presetPath);
+		void ExportBuiltInTemplatesToLibrary();
+
 		[[nodiscard]] EmitterParameters* SelectedEmitter();
 
 	private:
@@ -86,6 +91,8 @@ namespace mmo
 		ParticleSystem* m_system { nullptr };
 		std::unique_ptr<AxisDisplay> m_axisDisplay;
 		std::unique_ptr<WorldGrid> m_worldGrid;
+
+		bool m_hovering = false;
 
 		int16 m_lastMouseX { 0 }, m_lastMouseY { 0 };
 		bool m_leftButtonPressed { false };
@@ -116,5 +123,11 @@ namespace mmo
 		std::unique_ptr<ColorCurveImGuiEditor> m_colorEditor;
 		std::unique_ptr<FloatCurveImGuiEditor> m_sizeEditor;
 		int m_curveBoundEmitter { -1 };
+
+		// Preset save dialog state
+		bool m_showPresetNameDialog { false };
+		String m_presetName;
+		bool m_presetSaveWholeSystem { false };
+		int m_presetSaveEmitterIndex { -1 };
 	};
 }

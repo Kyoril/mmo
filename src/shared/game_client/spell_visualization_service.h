@@ -209,6 +209,23 @@ namespace mmo
         /// \brief Active lights with fade state.
         mutable std::vector<FadingLight> m_fadingLights;
 
+        /// \brief A kit scheduled to fire after its delay_ms elapsed.
+        ///
+        /// The actor is stored by guid and re-resolved when the kit fires so a
+        /// despawned actor simply drops the pending kit instead of crashing.
+        struct PendingKit
+        {
+            proto_client::SpellKit kit;
+            uint64 actorGuid{ 0 };
+            uint32 spellId{ 0 };
+            uint32 visualizationId{ 0 };
+            bool instantEvent{ false };
+            float remainingSeconds{ 0.0f };
+        };
+
+        /// \brief Kits waiting for their delay to elapse; drained in Update().
+        mutable std::vector<PendingKit> m_pendingKits;
+
         /// \brief Counter for generating unique effect names.
         mutable uint32 m_effectCounter{ 0 };
     };

@@ -48,11 +48,69 @@ namespace mmo
 		return minV + n * range;
 	}
 
+	bool FloatCurveImGuiEditor::DrawPresetButton()
+	{
+		bool applied = false;
+
+		if (ImGui::SmallButton("Presets"))
+		{
+			ImGui::OpenPopup("FloatCurvePresets");
+		}
+
+		if (ImGui::BeginPopup("FloatCurvePresets"))
+		{
+			const auto applyPreset = [this, &applied](std::vector<FloatKey> keys)
+			{
+				m_curve = FloatCurve(std::move(keys));
+				m_draggedKey = -1;
+				applied = true;
+			};
+
+			if (ImGui::MenuItem("Constant 1"))
+			{
+				applyPreset({ FloatKey(0.0f, 1.0f), FloatKey(1.0f, 1.0f) });
+			}
+			if (ImGui::MenuItem("Fade In"))
+			{
+				applyPreset({ FloatKey(0.0f, 0.0f), FloatKey(1.0f, 1.0f) });
+			}
+			if (ImGui::MenuItem("Fade Out"))
+			{
+				applyPreset({ FloatKey(0.0f, 1.0f), FloatKey(1.0f, 0.0f) });
+			}
+			if (ImGui::MenuItem("Fade In + Out"))
+			{
+				applyPreset({ FloatKey(0.0f, 0.0f), FloatKey(0.3f, 1.0f), FloatKey(0.7f, 1.0f), FloatKey(1.0f, 0.0f) });
+			}
+			if (ImGui::MenuItem("Grow"))
+			{
+				applyPreset({ FloatKey(0.0f, 0.2f), FloatKey(1.0f, 1.0f) });
+			}
+			if (ImGui::MenuItem("Shrink"))
+			{
+				applyPreset({ FloatKey(0.0f, 1.0f), FloatKey(1.0f, 0.2f) });
+			}
+			if (ImGui::MenuItem("Pulse"))
+			{
+				applyPreset({ FloatKey(0.0f, 0.6f), FloatKey(0.25f, 1.0f), FloatKey(0.5f, 0.6f), FloatKey(0.75f, 1.0f), FloatKey(1.0f, 0.6f) });
+			}
+
+			ImGui::EndPopup();
+		}
+
+		return applied;
+	}
+
 	bool FloatCurveImGuiEditor::Draw(float width, float height)
 	{
 		bool modified = false;
 
 		ImGui::PushID(m_label.c_str());
+
+		if (m_presetsEnabled)
+		{
+			modified |= DrawPresetButton();
+		}
 
 		const ImVec2 avail = ImGui::GetContentRegionAvail();
 		const ImVec2 canvasSize(width > 0.0f ? width : avail.x, height);

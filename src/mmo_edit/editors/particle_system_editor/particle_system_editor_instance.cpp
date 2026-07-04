@@ -128,7 +128,9 @@ namespace mmo
 		m_colorEditor = std::make_unique<ColorCurveImGuiEditor>("ColorOverLife", e->colorOverLifetime);
 		m_colorEditor->SetShowAlpha(true);
 		m_colorEditor->SetShowColorPreview(true);
+		m_colorEditor->SetPresetsEnabled(true);
 		m_sizeEditor = std::make_unique<FloatCurveImGuiEditor>("SizeOverLife", e->sizeOverLife);
+		m_sizeEditor->SetPresetsEnabled(true);
 		m_curveBoundEmitter = m_selectedEmitter;
 	}
 
@@ -336,7 +338,8 @@ namespace mmo
 			ImGui::Image(m_viewportRT->GetTextureObject(), availableSpace);
 			ImGui::SetItemUsingMouseWheel();
 
-			if (ImGui::IsItemHovered())
+			m_hovering = ImGui::IsItemHovered();
+			if (m_hovering)
 			{
 				m_cameraNode->Translate(Vector3::UnitZ * ImGui::GetIO().MouseWheel * 0.5f, TransformSpace::Local);
 			}
@@ -406,6 +409,18 @@ namespace mmo
 					{
 						Save();
 					}
+					ImGui::Separator();
+					if (ImGui::MenuItem("Save System as Preset..."))
+					{
+						m_presetName.clear();
+						m_presetSaveWholeSystem = true;
+						m_presetSaveEmitterIndex = -1;
+						m_showPresetNameDialog = true;
+					}
+					if (ImGui::MenuItem("Export Built-in Templates to Library"))
+					{
+						ExportBuiltInTemplatesToLibrary();
+					}
 					ImGui::EndMenu();
 				}
 				ImGui::EndMenuBar();
@@ -433,6 +448,33 @@ namespace mmo
 					if (ImGui::MenuItem(s_templateNames[t]))
 					{
 						m_systemParams.emitters.push_back(MakeTemplate(t, s_templateNames[t]));
+						m_selectedEmitter = static_cast<int>(m_systemParams.emitters.size()) - 1;
+						RebuildCurveEditors();
+						MarkDirty();
+					}
+				}
+
+				ImGui::Separator();
+				ImGui::TextDisabled("User Presets");
+				const auto& presets = m_editor.GetPresetLibrary().ListPresets();
+				if (presets.empty())
+				{
+					ImGui::TextDisabled("(none saved yet)");
+				}
+				for (const auto& preset : presets)
+				{
+					if (ImGui::MenuItem(preset.name.c_str()))
+					{
+						AddEmittersFromPreset(preset.path);
+					}
+				}
+
+				if (m_editor.GetEmitterClipboard())
+				{
+					ImGui::Separator();
+					if (ImGui::MenuItem("Paste Emitter"))
+					{
+						m_systemParams.emitters.push_back(*m_editor.GetEmitterClipboard());
 						m_selectedEmitter = static_cast<int>(m_systemParams.emitters.size()) - 1;
 						RebuildCurveEditors();
 						MarkDirty();
@@ -483,8 +525,38 @@ namespace mmo
 					RebuildCurveEditors();
 				}
 
+				if (ImGui::BeginPopupContextItem("EmitterContextMenu"))
+				{
+					if (ImGui::MenuItem("Copy"))
+					{
+						m_editor.CopyEmitterToClipboard(e);
+					}
+
+					ImGui::BeginDisabled(!m_editor.GetEmitterClipboard());
+					if (ImGui::MenuItem("Paste After"))
+					{
+						m_systemParams.emitters.insert(m_systemParams.emitters.begin() + i + 1, *m_editor.GetEmitterClipboard());
+						m_selectedEmitter = i + 1;
+						RebuildCurveEditors();
+						MarkDirty();
+					}
+					ImGui::EndDisabled();
+
+					ImGui::Separator();
+					if (ImGui::MenuItem("Save as Preset..."))
+					{
+						m_presetName = e.name;
+						m_presetSaveWholeSystem = false;
+						m_presetSaveEmitterIndex = i;
+						m_showPresetNameDialog = true;
+					}
+					ImGui::EndPopup();
+				}
+
 				ImGui::PopID();
 			}
+
+			DrawPresetNameDialog();
 		}
 		ImGui::End();
 	}
@@ -1044,6 +1116,95 @@ namespace mmo
 		return e;
 	}
 
+	void ParticleSystemEditorInstance::DrawPresetNameDialog()
+	{
+		if (m_showPresetNameDialog)
+		{
+			ImGui::OpenPopup("Save Particle Preset");
+			m_showPresetNameDialog = false;
+		}
+
+		if (ImGui::BeginPopupModal("Save Particle Preset", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::Text("Enter a name for the preset:");
+			ImGui::InputText("##presetName", &m_presetName);
+
+			const String sanitized = ParticlePresetLibrary::SanitizeName(m_presetName);
+			const bool nameValid = !sanitized.empty();
+			const bool exists = nameValid && m_editor.GetPresetLibrary().PresetExists(sanitized);
+			if (exists)
+			{
+				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "A preset with this name already exists and will be overwritten.");
+			}
+
+			ImGui::BeginDisabled(!nameValid);
+			if (ImGui::Button(exists ? "Overwrite" : "Save"))
+			{
+				ParticleSystemParameters presetParams;
+				if (m_presetSaveWholeSystem)
+				{
+					presetParams = m_systemParams;
+				}
+				else if (m_presetSaveEmitterIndex >= 0 && m_presetSaveEmitterIndex < static_cast<int>(m_systemParams.emitters.size()))
+				{
+					presetParams.emitters.push_back(m_systemParams.emitters[m_presetSaveEmitterIndex]);
+				}
+
+				if (!presetParams.emitters.empty())
+				{
+					m_editor.GetPresetLibrary().SavePreset(sanitized, presetParams);
+				}
+
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndDisabled();
+
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel"))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+		}
+	}
+
+	void ParticleSystemEditorInstance::AddEmittersFromPreset(const String& presetPath)
+	{
+		ParticleSystemParameters preset;
+		if (!m_editor.GetPresetLibrary().LoadPreset(presetPath, preset))
+		{
+			return;
+		}
+
+		if (preset.emitters.empty())
+		{
+			WLOG("Particle preset " << presetPath << " contains no emitters.");
+			return;
+		}
+
+		for (auto& emitter : preset.emitters)
+		{
+			m_systemParams.emitters.push_back(std::move(emitter));
+		}
+
+		m_selectedEmitter = static_cast<int>(m_systemParams.emitters.size()) - 1;
+		RebuildCurveEditors();
+		MarkDirty();
+	}
+
+	void ParticleSystemEditorInstance::ExportBuiltInTemplatesToLibrary()
+	{
+		for (int t = 0; t < Tpl_Count; ++t)
+		{
+			ParticleSystemParameters params;
+			params.emitters.push_back(MakeTemplate(t, s_templateNames[t]));
+			m_editor.GetPresetLibrary().SavePreset(s_templateNames[t], params);
+		}
+
+		ILOG("Exported " << static_cast<int>(Tpl_Count) << " built-in templates to the particle preset library.");
+	}
+
 	void ParticleSystemEditorInstance::OnMouseButtonDown(uint32 button, uint16 x, uint16 y)
 	{
 		if (button == 0) m_leftButtonPressed = true;
@@ -1065,24 +1226,28 @@ namespace mmo
 		const int16 deltaX = x - m_lastMouseX;
 		const int16 deltaY = y - m_lastMouseY;
 
-		if (m_leftButtonPressed && m_cameraAnchor)
+		if (m_hovering)
 		{
-			m_cameraAnchor->Yaw(Degree(-deltaX * 0.5f), TransformSpace::World);
-			m_cameraAnchor->Pitch(Degree(deltaY * 0.5f), TransformSpace::Local);
-		}
+			if (m_leftButtonPressed && m_cameraAnchor)
+			{
+				m_cameraAnchor->Yaw(Degree(-deltaX * 0.5f), TransformSpace::World);
+				m_cameraAnchor->Pitch(Degree(deltaY * 0.5f), TransformSpace::Local);
+			}
 
-		if (m_rightButtonPressed && m_cameraAnchor)
-		{
-			const Vector3 panOffset = m_cameraNode->GetOrientation() * Vector3(-deltaX * 0.01f, deltaY * 0.01f, 0.0f);
-			m_cameraAnchor->Translate(panOffset);
-		}
+			if (m_rightButtonPressed && m_cameraAnchor)
+			{
+				const Vector3 panOffset = m_cameraNode->GetOrientation() * Vector3(-deltaX * 0.01f, deltaY * 0.01f, 0.0f);
+				m_cameraAnchor->Translate(panOffset);
+			}
 
-		if (m_middleButtonPressed && m_cameraNode)
-		{
-			const Vector3 currentPos = m_cameraNode->GetPosition();
-			const float zoomFactor = 1.0f + (deltaY * 0.01f);
-			m_cameraNode->SetPosition(currentPos * zoomFactor);
+			if (m_middleButtonPressed && m_cameraNode)
+			{
+				const Vector3 currentPos = m_cameraNode->GetPosition();
+				const float zoomFactor = 1.0f + (deltaY * 0.01f);
+				m_cameraNode->SetPosition(currentPos * zoomFactor);
+			}
 		}
+		
 
 		m_lastMouseX = x;
 		m_lastMouseY = y;

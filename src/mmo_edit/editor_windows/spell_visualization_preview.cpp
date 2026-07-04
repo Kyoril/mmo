@@ -130,6 +130,9 @@ namespace mmo
 		// Update animations
 		UpdateAnimations(deltaTime);
 
+		// Fire delayed kits whose delay elapsed
+		UpdatePendingKits(deltaTime);
+
 		// Update sound fades
 		UpdateSoundFades(deltaTime);
 
@@ -923,6 +926,17 @@ namespace mmo
 		m_projectileSpeed = speed;
 	}
 
+	float SpellVisualizationPreview::GetCasterAnimationDuration(const String& animName) const
+	{
+		if (!m_casterEntity || animName.empty() || !m_casterEntity->HasAnimationState(animName))
+		{
+			return -1.0f;
+		}
+
+		const AnimationState* animState = m_casterEntity->GetAnimationState(animName);
+		return animState ? animState->GetLength() : -1.0f;
+	}
+
 	void SpellVisualizationPreview::OnProjectileImpact(IProjectileTarget* target)
 	{
 		// Spawn impact particles if configured (check all projectile entries)
@@ -1219,6 +1233,9 @@ namespace mmo
 
 	void SpellVisualizationPreview::CleanupSpellEffects()
 	{
+		// Drop delayed kits that have not fired yet
+		m_pendingKits.clear();
+
 		StopAllSounds();
 
 		// Remove tints from all entities
@@ -1312,6 +1329,9 @@ namespace mmo
 
 		if (!isOverlayEvent)
 		{
+			// Drop delayed kits from the previous event that have not fired yet
+			m_pendingKits.clear();
+
 			// Remove tints from previous event
 			RemoveTintFromEntity(m_casterEntity);
 			RemoveTintFromEntity(m_targetEntity);
@@ -1384,92 +1404,126 @@ namespace mmo
 
 		for (const auto& kit : kitList.kits())
 		{
-			// Determine target entity and node based on scope
-			Entity* targetEntity = nullptr;
-			SceneNode* targetNode = nullptr;
-
-			switch (kit.scope())
+			// Kits with a delay are queued and fired from Update() once their delay
+			// elapsed - mirrors the behavior of SpellVisualizationService in-game.
+			if (kit.delay_ms() > 0)
 			{
-			case proto::CASTER:
-				targetEntity = m_casterEntity;
-				targetNode = m_casterNode;
-				break;
-			case proto::TARGET:
-			case proto::PROJECTILE_IMPACT:
-				targetEntity = m_targetEntity;
-				targetNode = m_targetNode;
-				break;
-			default:
-				break;
+				PendingPreviewKit pending;
+				pending.kit = kit;
+				pending.instantEvent = instantEvent;
+				pending.remainingSeconds = kit.delay_ms() / 1000.0f;
+				m_pendingKits.push_back(std::move(pending));
+				continue;
 			}
 
-			// Apply animation
-			if (kit.has_animation_name() && !kit.animation_name().empty())
-			{
-				AnimationState** animStatePtr = nullptr;
+			ApplySingleKit(kit, instantEvent);
+		}
+	}
 
-				if (kit.scope() == proto::CASTER)
+	void SpellVisualizationPreview::ApplySingleKit(const proto::SpellKit& kit, bool instantEvent)
+	{
+		// Determine target entity and node based on scope
+		Entity* targetEntity = nullptr;
+		SceneNode* targetNode = nullptr;
+
+		switch (kit.scope())
+		{
+		case proto::CASTER:
+			targetEntity = m_casterEntity;
+			targetNode = m_casterNode;
+			break;
+		case proto::TARGET:
+		case proto::PROJECTILE_IMPACT:
+			targetEntity = m_targetEntity;
+			targetNode = m_targetNode;
+			break;
+		default:
+			break;
+		}
+
+		// Apply animation
+		if (kit.has_animation_name() && !kit.animation_name().empty())
+		{
+			AnimationState** animStatePtr = nullptr;
+
+			if (kit.scope() == proto::CASTER)
+			{
+				animStatePtr = &m_casterAnimState;
+			}
+			else
+			{
+				animStatePtr = &m_targetAnimState;
+			}
+
+			if (targetEntity && animStatePtr && targetEntity->HasAnimationState(kit.animation_name()))
+			{
+				// Disable current animation state first
+				if (*animStatePtr)
 				{
-					animStatePtr = &m_casterAnimState;
-				}
-				else
-				{
-					animStatePtr = &m_targetAnimState;
+					(*animStatePtr)->SetEnabled(false);
 				}
 
-				if (targetEntity && animStatePtr && targetEntity->HasAnimationState(kit.animation_name()))
-				{
-					// Disable current animation state first
-					if (*animStatePtr)
-					{
-						(*animStatePtr)->SetEnabled(false);
-					}
-
-					*animStatePtr = targetEntity->GetAnimationState(kit.animation_name());
-					(*animStatePtr)->SetEnabled(true);
-					(*animStatePtr)->SetLoop(kit.has_loop() && kit.loop());
-					(*animStatePtr)->SetTimePosition(0.0f);
-				}
+				*animStatePtr = targetEntity->GetAnimationState(kit.animation_name());
+				(*animStatePtr)->SetEnabled(true);
+				(*animStatePtr)->SetLoop(kit.has_loop() && kit.loop());
+				(*animStatePtr)->SetTimePosition(0.0f);
 			}
+		}
 
-			// Play sounds
-			for (const auto& sound : kit.sounds())
+		// Play sounds
+		for (const auto& sound : kit.sounds())
+		{
+			if (!sound.empty())
 			{
-				if (!sound.empty())
-				{
-					PlaySound(sound);
-				}
+				PlaySound(sound);
+			}
+		}
+
+		// Spawn particles
+		if (kit.particles_size() > 0 && targetEntity && targetNode)
+		{
+			SpawnKitParticles(kit, targetEntity, targetNode);
+		}
+
+		// Spawn point light
+		if (kit.has_light() && targetEntity && targetNode)
+		{
+			SpawnKitLight(kit, targetEntity, targetNode, instantEvent);
+		}
+
+		// Spawn ribbon trail
+		if (kit.has_ribbon_trail() && targetEntity && targetNode)
+		{
+			SpawnKitRibbonTrail(kit, targetEntity, targetNode);
+		}
+
+		// Apply tint
+		if (kit.has_tint() && targetEntity)
+		{
+			const auto& tintProto = kit.tint();
+			const Vector4 tintColor(
+				tintProto.has_r() ? tintProto.r() : 0.0f,
+				tintProto.has_g() ? tintProto.g() : 0.0f,
+				tintProto.has_b() ? tintProto.b() : 0.0f,
+				tintProto.has_a() ? tintProto.a() : 1.0f);
+			ApplyTintToEntity(targetEntity, tintColor);
+		}
+	}
+
+	void SpellVisualizationPreview::UpdatePendingKits(float deltaTime)
+	{
+		for (auto it = m_pendingKits.begin(); it != m_pendingKits.end(); )
+		{
+			it->remainingSeconds -= deltaTime;
+			if (it->remainingSeconds > 0.0f)
+			{
+				++it;
+				continue;
 			}
 
-			// Spawn particles
-			if (kit.particles_size() > 0 && targetEntity && targetNode)
-			{
-				SpawnKitParticles(kit, targetEntity, targetNode);
-			}
-
-			// Spawn point light
-			if (kit.has_light() && targetEntity && targetNode)
-			{
-				SpawnKitLight(kit, targetEntity, targetNode, instantEvent);
-			}
-
-			// Spawn ribbon trail
-			if (kit.has_ribbon_trail() && targetEntity && targetNode)
-			{
-				SpawnKitRibbonTrail(kit, targetEntity, targetNode);
-			}
-
-			// Apply tint
-			if (kit.has_tint() && targetEntity)
-			{
-				const auto& tintProto = kit.tint();
-				const Vector4 tintColor(
-					tintProto.has_r() ? tintProto.r() : 0.0f,
-					tintProto.has_g() ? tintProto.g() : 0.0f,
-					tintProto.has_b() ? tintProto.b() : 0.0f,
-					tintProto.has_a() ? tintProto.a() : 1.0f);
-				ApplyTintToEntity(targetEntity, tintColor);
-			}
+			const PendingPreviewKit pending = std::move(*it);
+			it = m_pendingKits.erase(it);
+			ApplySingleKit(pending.kit, pending.instantEvent);
 		}
 	}
 

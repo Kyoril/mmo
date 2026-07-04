@@ -29,6 +29,9 @@ namespace mmo
 		/// @brief Sets the visible value range on the Y axis. If max <= min the range auto-fits.
 		void SetValueRange(float minValue, float maxValue) { m_minValue = minValue; m_maxValue = maxValue; }
 
+		/// @brief Enables a small preset dropdown above the canvas (fade in/out, pulse, ...).
+		void SetPresetsEnabled(bool enabled) { m_presetsEnabled = enabled; }
+
 	private:
 		float TimeToX(float time, const ImVec2& pos, const ImVec2& size) const;
 		float ValueToY(float value, const ImVec2& pos, const ImVec2& size, float minV, float maxV) const;
@@ -36,10 +39,15 @@ namespace mmo
 		float YToValue(float y, const ImVec2& pos, const ImVec2& size, float minV, float maxV) const;
 
 	private:
+		/// @brief Draws the preset dropdown button. Returns true if a preset was applied.
+		bool DrawPresetButton();
+
+	private:
 		std::string m_label;
 		FloatCurve& m_curve;
 		int m_draggedKey { -1 };
 		float m_minValue { 0.0f };
 		float m_maxValue { 0.0f };  ///< <= m_minValue means auto-fit
+		bool m_presetsEnabled { false };
 	};
 }

@@ -47,6 +47,12 @@ namespace mmo
         bool GetShowAlpha() const { return m_showAlpha; }
         
         /**
+         * @brief Enables a small preset dropdown in the toolbar (flame, smoke, frost, ...).
+         * @param enabled True to show the preset dropdown.
+         */
+        void SetPresetsEnabled(bool enabled) { m_presetsEnabled = enabled; }
+
+        /**
          * @brief Sets whether the tangent handles should be visible
          * @param showTangents True to show tangent handles, false to hide them
          */
@@ -164,6 +170,12 @@ namespace mmo
         float GetValueSnap() const { return m_valueSnapIncrement; }
         
     private:
+        /**
+         * @brief Renders the preset dropdown button in the toolbar
+         * @return True if a preset was applied to the curve
+         */
+        bool DrawPresetButton();
+
         /**
          * @brief Renders the color curve in the editor
          * @param drawList ImGui draw list to render to
@@ -391,6 +403,7 @@ namespace mmo
         bool m_showHorizontalGrid;   ///< Whether to show horizontal grid lines
         bool m_showVerticalGrid;     ///< Whether to show vertical grid lines
         bool m_showColorPreview;     ///< Whether to show the color preview strip
+        bool m_presetsEnabled{ false }; ///< Whether the preset dropdown is shown in the toolbar
         
         float m_curveThickness;      ///< Thickness of curve lines
         float m_timeSnapIncrement;   ///< Snap increment for time values (0 = no snapping)

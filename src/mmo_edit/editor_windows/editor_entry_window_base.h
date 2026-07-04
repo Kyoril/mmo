@@ -42,6 +42,35 @@ namespace mmo
 
 		virtual const String &EntryDisplayName(const T2 &entry) { return entry.name(); }
 
+		/// @brief Whether the window offers a Duplicate button for the selected entry.
+		virtual bool SupportsDuplicate() const { return true; }
+
+		/// @brief Duplicates the currently selected entry (deep copy with a new unique id) and selects the copy.
+		void DuplicateSelectedEntry()
+		{
+			if (m_currentItem < 0 || m_currentItem >= static_cast<int>(m_manager.count()))
+			{
+				return;
+			}
+
+			// Copy the source entry by value first: adding a new entry may reallocate
+			// the underlying repeated field and invalidate references into it.
+			const T2 source = m_manager.getTemplates().entry().at(m_currentItem);
+
+			auto *entry = m_manager.add();
+			if (!entry)
+			{
+				return;
+			}
+
+			const uint32 newId = entry->id();
+			entry->CopyFrom(source);
+			entry->set_id(newId);
+			entry->set_name(entry->name() + " (Copy)");
+
+			m_currentItem = m_manager.count() - 1;
+		}
+
 	protected:
 		proto::Project &m_project;
 		proto::TemplateManager<T1, T2> &m_manager;
@@ -82,6 +111,16 @@ namespace mmo
 				m_currentItem = m_manager.count() - 1;
 				}
 				ImGui::PopStyleColor();
+
+				if (SupportsDuplicate())
+				{
+					ImGui::BeginDisabled(m_currentItem == -1 || m_currentItem >= static_cast<int>(m_manager.count()));
+					if (ImGui::Button("Duplicate Selected", ImVec2(-1, 0)))
+					{
+						DuplicateSelectedEntry();
+					}
+					ImGui::EndDisabled();
+				}
 
 				ImGui::BeginDisabled(m_currentItem == -1 || m_currentItem >= static_cast<int>(m_manager.count()));
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 0.8f));

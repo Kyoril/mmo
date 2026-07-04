@@ -50,7 +50,76 @@ namespace mmo
         m_viewMinY = -0.05f;
         m_viewMaxY = 1.05f;
         m_zoomLevel = 1.0f;
-    }    bool ColorCurveImGuiEditor::Draw(float width, float height)
+    }
+
+    bool ColorCurveImGuiEditor::DrawPresetButton()
+    {
+        bool applied = false;
+
+        if (ImGui::SmallButton("Presets"))
+        {
+            ImGui::OpenPopup("ColorCurvePresets");
+        }
+
+        if (ImGui::BeginPopup("ColorCurvePresets"))
+        {
+            const auto applyPreset = [this, &applied](std::vector<ColorKey> keys)
+            {
+                m_colorCurve = ColorCurve(std::move(keys));
+                m_selectedKeyIndex = static_cast<size_t>(-1);
+                m_hoveredKeyIndex = static_cast<size_t>(-1);
+                applied = true;
+            };
+
+            if (ImGui::MenuItem("Flame"))
+            {
+                applyPreset({
+                    ColorKey(0.0f, Vector4(1.0f, 0.95f, 0.5f, 1.0f)),
+                    ColorKey(0.5f, Vector4(1.0f, 0.45f, 0.1f, 0.8f)),
+                    ColorKey(1.0f, Vector4(0.4f, 0.05f, 0.0f, 0.0f)) });
+            }
+            if (ImGui::MenuItem("Smoke"))
+            {
+                applyPreset({
+                    ColorKey(0.0f, Vector4(0.5f, 0.5f, 0.5f, 0.0f)),
+                    ColorKey(0.2f, Vector4(0.4f, 0.4f, 0.4f, 0.6f)),
+                    ColorKey(1.0f, Vector4(0.2f, 0.2f, 0.2f, 0.0f)) });
+            }
+            if (ImGui::MenuItem("Frost"))
+            {
+                applyPreset({
+                    ColorKey(0.0f, Vector4(0.6f, 0.85f, 1.0f, 1.0f)),
+                    ColorKey(0.5f, Vector4(0.3f, 0.6f, 1.0f, 0.8f)),
+                    ColorKey(1.0f, Vector4(0.7f, 0.9f, 1.0f, 0.0f)) });
+            }
+            if (ImGui::MenuItem("Holy"))
+            {
+                applyPreset({
+                    ColorKey(0.0f, Vector4(1.0f, 0.95f, 0.6f, 0.0f)),
+                    ColorKey(0.25f, Vector4(1.0f, 0.95f, 0.7f, 1.0f)),
+                    ColorKey(1.0f, Vector4(1.0f, 1.0f, 0.9f, 0.0f)) });
+            }
+            if (ImGui::MenuItem("Poison"))
+            {
+                applyPreset({
+                    ColorKey(0.0f, Vector4(0.5f, 1.0f, 0.3f, 1.0f)),
+                    ColorKey(0.5f, Vector4(0.25f, 0.7f, 0.1f, 0.8f)),
+                    ColorKey(1.0f, Vector4(0.1f, 0.3f, 0.0f, 0.0f)) });
+            }
+            if (ImGui::MenuItem("White Fade"))
+            {
+                applyPreset({
+                    ColorKey(0.0f, Vector4(1.0f, 1.0f, 1.0f, 1.0f)),
+                    ColorKey(1.0f, Vector4(1.0f, 1.0f, 1.0f, 0.0f)) });
+            }
+
+            ImGui::EndPopup();
+        }
+
+        return applied;
+    }
+
+    bool ColorCurveImGuiEditor::Draw(float width, float height)
     {
         ImVec2 availSize = ImGui::GetContentRegionAvail();
         if (width <= 0.0f)
@@ -84,16 +153,21 @@ namespace mmo
         bool modified = false;
         
         ImGui::PushID(m_label.c_str());
-        
+
         // Create the frame for the curve editor
         ImGui::BeginGroup();
-        
+
         // Add zoom/pan toolbar
         if (ImGui::Button("Reset View"))
         {
             ResetView();
         }
         ImGui::SameLine();
+        if (m_presetsEnabled)
+        {
+            modified |= DrawPresetButton();
+            ImGui::SameLine();
+        }
         ImGui::Text("Zoom: %.1fx", m_zoomLevel);        ImGui::SameLine();
         ImGui::TextDisabled("(Middle-click and drag to pan, scroll wheel to zoom)");
           // Reserve space for time labels above and value labels on the left of the canvas

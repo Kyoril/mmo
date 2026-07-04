@@ -17,6 +17,7 @@
 #include "graphics/material_instance.h"
 
 #include "game_common/projectile_target.h"
+#include "proto_data/project.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -131,6 +132,17 @@ namespace mmo
 		/// @param speed Speed in units per second.
 		void SetProjectileSpeed(float speed);
 
+		/// @brief Sets the cast duration used by the full cast sequence.
+		/// @param seconds Cast time in seconds.
+		void SetCastDuration(const float seconds) { m_castDuration = std::max(0.0f, seconds); }
+
+		/// @brief Returns the cast duration currently used by the full cast sequence.
+		[[nodiscard]] float GetCastDuration() const { return m_castDuration; }
+
+		/// @brief Returns the length of a caster animation in seconds, or a negative value if unknown.
+		/// @param animName Name of the animation on the caster entity.
+		[[nodiscard]] float GetCasterAnimationDuration(const String& animName) const;
+
 	private:
 		/// @brief Creates the floor plane mesh.
 		void CreateFloorPlane();
@@ -164,6 +176,15 @@ namespace mmo
 		/// @param visualization The source visualization.
 		/// @param eventValue The event enum value.
 		void ApplyEventKits(proto::SpellVisualization* visualization, uint32 eventValue);
+
+		/// @brief Applies a single kit immediately (animation, sounds, particles, light, ribbon, tint).
+		/// @param kit The kit to apply.
+		/// @param instantEvent Whether the kit belongs to an instant (one-shot) event.
+		void ApplySingleKit(const proto::SpellKit& kit, bool instantEvent);
+
+		/// @brief Advances delayed kits and fires those whose delay elapsed.
+		/// @param deltaTime Time since last update in seconds.
+		void UpdatePendingKits(float deltaTime);
 
 		/// @brief Plays a sound file with fade-in.
 		/// @param soundPath Path to the sound file.
@@ -332,6 +353,17 @@ namespace mmo
 
 		/// @brief True when an aura sequence is active (AuraIdle is looping).
 		bool m_auraActive{ false };
+
+		/// @brief A kit scheduled to fire after its delay_ms elapsed (mirrors the in-game behavior).
+		struct PendingPreviewKit
+		{
+			proto::SpellKit kit;
+			bool instantEvent{ false };
+			float remainingSeconds{ 0.0f };
+		};
+
+		/// @brief Kits waiting for their delay to elapse; drained in Update().
+		std::vector<PendingPreviewKit> m_pendingKits;
 
 		// Sound channel with fade state
 		struct FadingChannel

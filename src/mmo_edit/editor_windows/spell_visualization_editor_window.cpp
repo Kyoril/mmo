@@ -8,11 +8,201 @@
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include "editor_imgui_helpers.h"
+#include "assets/asset_registry.h"
 #include "log/default_log_levels.h"
 #include "preview_providers/preview_provider_manager.h"
 
+#include <algorithm>
+
 namespace mmo
 {
+	namespace
+	{
+		// Editor-wide kit clipboard, shared across all entries and events.
+		proto::SpellKit s_kitClipboard;
+		bool s_hasKitClipboard = false;
+
+		const String s_kitTemplateFolder = "Editor/SpellKitTemplates/";
+		const String s_kitTemplateExtension = ".spellkit";
+
+		String sanitizeKitTemplateName(const String &name)
+		{
+			String result;
+			result.reserve(name.size());
+			for (const char c : name)
+			{
+				if (std::isalnum(static_cast<unsigned char>(c)) || c == ' ' || c == '_' || c == '-' || c == '(' || c == ')')
+				{
+					result.push_back(c);
+				}
+			}
+
+			const auto begin = result.find_first_not_of(' ');
+			if (begin == String::npos)
+			{
+				return {};
+			}
+			const auto end = result.find_last_not_of(' ');
+			return result.substr(begin, end - begin + 1);
+		}
+
+		struct KitTemplateInfo
+		{
+			String name;
+			String path;
+		};
+
+		std::vector<KitTemplateInfo> listKitTemplates()
+		{
+			std::vector<KitTemplateInfo> templates;
+			for (const std::string &file : AssetRegistry::ListFiles(s_kitTemplateFolder, s_kitTemplateExtension))
+			{
+				KitTemplateInfo info;
+				info.path = file;
+
+				String name = file;
+				if (name.starts_with(s_kitTemplateFolder))
+				{
+					name = name.substr(s_kitTemplateFolder.size());
+				}
+				if (name.ends_with(s_kitTemplateExtension))
+				{
+					name = name.substr(0, name.size() - s_kitTemplateExtension.size());
+				}
+				info.name = name;
+
+				templates.push_back(std::move(info));
+			}
+
+			std::sort(templates.begin(), templates.end(), [](const KitTemplateInfo &a, const KitTemplateInfo &b)
+			{
+				return a.name < b.name;
+			});
+			return templates;
+		}
+
+		bool saveKitTemplate(const String &name, const proto::SpellKit &kit)
+		{
+			const String fileName = sanitizeKitTemplateName(name);
+			if (fileName.empty())
+			{
+				ELOG("Cannot save spell kit template: invalid name '" << name << "'");
+				return false;
+			}
+
+			const String path = s_kitTemplateFolder + fileName + s_kitTemplateExtension;
+			const auto file = AssetRegistry::CreateNewFile(path);
+			if (!file)
+			{
+				ELOG("Failed to create spell kit template file " << path);
+				return false;
+			}
+
+			if (!kit.SerializeToOstream(file.get()))
+			{
+				ELOG("Failed to serialize spell kit template to " << path);
+				return false;
+			}
+
+			file->flush();
+			ILOG("Saved spell kit template to " << path);
+			return true;
+		}
+
+		bool loadKitTemplate(const String &path, proto::SpellKit &out)
+		{
+			const auto file = AssetRegistry::OpenFile(path);
+			if (!file)
+			{
+				ELOG("Failed to open spell kit template file " << path);
+				return false;
+			}
+
+			if (!out.ParseFromIstream(file.get()))
+			{
+				ELOG("Failed to parse spell kit template from " << path);
+				return false;
+			}
+
+			return true;
+		}
+
+		void createStarterKitTemplates()
+		{
+			// Warm glow on the casting hand while channeling.
+			{
+				proto::SpellKit kit;
+				kit.set_scope(proto::CASTER);
+				kit.set_attach_bone("hand_right");
+				kit.set_loop(true);
+				auto *light = kit.mutable_light();
+				light->set_r(1.0f);
+				light->set_g(0.85f);
+				light->set_b(0.55f);
+				light->set_intensity(2.0f);
+				light->set_range(5.0f);
+				light->set_fade_in_time(0.2f);
+				light->set_fade_out_time(0.3f);
+				saveKitTemplate("Hand Glow (Cast Loop)", kit);
+			}
+
+			// Short bright flash on the target at impact.
+			{
+				proto::SpellKit kit;
+				kit.set_scope(proto::TARGET);
+				kit.set_duration_ms(500);
+				auto *light = kit.mutable_light();
+				light->set_r(1.0f);
+				light->set_g(0.7f);
+				light->set_b(0.3f);
+				light->set_intensity(3.0f);
+				light->set_range(8.0f);
+				light->set_fade_in_time(0.05f);
+				light->set_fade_out_time(0.4f);
+				saveKitTemplate("Impact Flash", kit);
+			}
+
+			// Soft looping shimmer while an aura is active.
+			{
+				proto::SpellKit kit;
+				kit.set_scope(proto::TARGET);
+				kit.set_loop(true);
+				auto *tint = kit.mutable_tint();
+				tint->set_r(0.4f);
+				tint->set_g(0.6f);
+				tint->set_b(1.0f);
+				tint->set_a(0.5f);
+				auto *light = kit.mutable_light();
+				light->set_r(0.4f);
+				light->set_g(0.6f);
+				light->set_b(1.0f);
+				light->set_intensity(1.0f);
+				light->set_range(4.0f);
+				light->set_fade_in_time(0.4f);
+				light->set_fade_out_time(0.6f);
+				saveKitTemplate("Aura Shimmer", kit);
+			}
+
+			// Gentle green glow on the healed target.
+			{
+				proto::SpellKit kit;
+				kit.set_scope(proto::TARGET);
+				kit.set_duration_ms(1000);
+				auto *light = kit.mutable_light();
+				light->set_r(0.5f);
+				light->set_g(1.0f);
+				light->set_b(0.6f);
+				light->set_intensity(2.0f);
+				light->set_range(6.0f);
+				light->set_fade_in_time(0.15f);
+				light->set_fade_out_time(0.5f);
+				saveKitTemplate("Heal Glow", kit);
+			}
+
+			ILOG("Created starter spell kit templates in " << s_kitTemplateFolder);
+		}
+	}
+
 	// Event names matching proto::SpellVisualEvent enum
 	static const char *s_eventNames[] = {
 		"Start Cast",
@@ -104,6 +294,13 @@ namespace mmo
 					OnNewEntry(*entry);
 					m_currentItem = m_manager.count() - 1;
 				}
+
+				ImGui::BeginDisabled(m_currentItem == -1);
+				if (ImGui::Button("Duplicate Selected", ImVec2(-1, 0)))
+				{
+					DuplicateSelectedEntry();
+				}
+				ImGui::EndDisabled();
 
 				ImGui::BeginDisabled(m_currentItem == -1);
 				if (DrawDangerButton("Remove Selected", ImVec2(-1, 0)))
@@ -214,10 +411,51 @@ namespace mmo
 				}
 				ImGui::EndChild();
 			}
+
+			DrawKitTemplateNameDialog();
 		}
 		ImGui::End();
 
 		return false;
+	}
+
+	void SpellVisualizationEditorWindow::DrawKitTemplateNameDialog()
+	{
+		if (m_showKitTemplateDialog)
+		{
+			ImGui::OpenPopup("Save Kit Template");
+			m_showKitTemplateDialog = false;
+		}
+
+		if (ImGui::BeginPopupModal("Save Kit Template", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::Text("Enter a name for the kit template:");
+			ImGui::InputText("##kitTemplateName", &m_kitTemplateName);
+
+			const String sanitized = sanitizeKitTemplateName(m_kitTemplateName);
+			const bool nameValid = !sanitized.empty();
+			const bool exists = nameValid && AssetRegistry::HasFile(s_kitTemplateFolder + sanitized + s_kitTemplateExtension);
+			if (exists)
+			{
+				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "A template with this name already exists and will be overwritten.");
+			}
+
+			ImGui::BeginDisabled(!nameValid);
+			if (ImGui::Button(exists ? "Overwrite" : "Save"))
+			{
+				saveKitTemplate(sanitized, m_kitTemplateSource);
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndDisabled();
+
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel"))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+		}
 	}
 
 	void SpellVisualizationEditorWindow::DrawQuickActions(proto::SpellVisualization& currentEntry)
@@ -234,9 +472,88 @@ namespace mmo
 			return;
 		}
 
+		// Spell-driven preview: pick a spell that references this visualization to
+		// drive cast time and projectile speed from real spell data.
+		if (currentEntry)
+		{
+			// Collect all spells referencing this visualization
+			std::vector<const proto::SpellEntry*> linkedSpells;
+			for (const auto& spell : m_project.spells.getTemplates().entry())
+			{
+				if (spell.has_visualization_id() && spell.visualization_id() == currentEntry->id())
+				{
+					linkedSpells.push_back(&spell);
+				}
+			}
+
+			if (linkedSpells.empty())
+			{
+				ImGui::TextDisabled("Preview as Spell: no spells reference this visualization yet.");
+				m_previewSpellId = 0;
+			}
+			else
+			{
+				// Resolve the current selection (may have been unlinked meanwhile)
+				const proto::SpellEntry* selectedSpell = nullptr;
+				for (const auto* spell : linkedSpells)
+				{
+					if (spell->id() == m_previewSpellId)
+					{
+						selectedSpell = spell;
+						break;
+					}
+				}
+				if (!selectedSpell)
+				{
+					m_previewSpellId = 0;
+				}
+
+				ImGui::SetNextItemWidth(220.0f);
+				const String comboLabel = selectedSpell
+					? std::to_string(selectedSpell->id()) + ": " + selectedSpell->name()
+					: "Manual (use preview settings)";
+				if (ImGui::BeginCombo("Preview as Spell", comboLabel.c_str()))
+				{
+					if (ImGui::Selectable("Manual (use preview settings)", m_previewSpellId == 0))
+					{
+						m_previewSpellId = 0;
+					}
+					for (const auto* spell : linkedSpells)
+					{
+						char spellLabel[256];
+						snprintf(spellLabel, sizeof(spellLabel), "%u: %s", spell->id(), spell->name().c_str());
+						if (ImGui::Selectable(spellLabel, spell->id() == m_previewSpellId))
+						{
+							m_previewSpellId = spell->id();
+						}
+					}
+					ImGui::EndCombo();
+				}
+
+				// While a spell drives the preview, keep cast time and projectile speed in sync
+				// with the spell data so edits in the spell editor are picked up immediately.
+				if (selectedSpell)
+				{
+					const float castSeconds = selectedSpell->casttime() / 1000.0f;
+					m_preview->SetCastDuration(castSeconds);
+					m_preview->SetProjectileSpeed(selectedSpell->speed() > 0.0f ? selectedSpell->speed() : m_previewProjectileSpeed);
+
+					ImGui::SameLine();
+					if (castSeconds <= 0.0f)
+					{
+						ImGui::TextDisabled("(instant, speed %.1f)", selectedSpell->speed());
+					}
+					else
+					{
+						ImGui::TextDisabled("(%.1fs cast, speed %.1f)", castSeconds, selectedSpell->speed());
+					}
+				}
+			}
+		}
+
 		// Preview toolbar
 		m_preview->DrawToolbar(currentEntry);
-		
+
 		ImGui::Separator();
 
 		// 3D viewport fills remaining space
@@ -357,6 +674,44 @@ namespace mmo
 				}
 			}
 
+			ImGui::SameLine();
+			ImGui::BeginDisabled(!s_hasKitClipboard);
+			if (ImGui::Button("Paste Kit"))
+			{
+				kitsMap[eventValue].add_kits()->CopyFrom(s_kitClipboard);
+			}
+			ImGui::EndDisabled();
+
+			ImGui::SameLine();
+			if (ImGui::Button("From Template"))
+			{
+				ImGui::OpenPopup("KitTemplatePopup");
+			}
+			if (ImGui::BeginPopup("KitTemplatePopup"))
+			{
+				const auto templates = listKitTemplates();
+				if (templates.empty())
+				{
+					ImGui::TextDisabled("(no templates yet)");
+					if (ImGui::MenuItem("Create Starter Templates"))
+					{
+						createStarterKitTemplates();
+					}
+				}
+				for (const auto &tpl : templates)
+				{
+					if (ImGui::MenuItem(tpl.name.c_str()))
+					{
+						proto::SpellKit kit;
+						if (loadKitTemplate(tpl.path, kit))
+						{
+							kitsMap[eventValue].add_kits()->CopyFrom(kit);
+						}
+					}
+				}
+				ImGui::EndPopup();
+			}
+
 			// Draw existing kits (re-fetch the list after potential add)
 			if (kitsMap.find(eventValue) != kitsMap.end())
 			{
@@ -451,6 +806,40 @@ namespace mmo
 			if (ImGui::InputInt("Duration (ms)", &duration))
 			{
 				kit.set_duration_ms(duration);
+			}
+
+			// Show the actual animation length so the duration doesn't have to be guessed
+			if (m_preview && !animName.empty())
+			{
+				const float animSeconds = m_preview->GetCasterAnimationDuration(animName);
+				if (animSeconds >= 0.0f)
+				{
+					const int animMs = static_cast<int>(animSeconds * 1000.0f);
+					ImGui::SameLine();
+					ImGui::TextDisabled("anim: %d ms", animMs);
+					ImGui::SameLine();
+					if (ImGui::SmallButton("Set from anim"))
+					{
+						kit.set_duration_ms(animMs);
+					}
+				}
+				else
+				{
+					ImGui::SameLine();
+					ImGui::TextDisabled("(anim not found on caster)");
+				}
+			}
+
+			// Delay
+			int delay = kit.has_delay_ms() ? kit.delay_ms() : 0;
+			if (ImGui::InputInt("Delay (ms)", &delay))
+			{
+				kit.set_delay_ms(std::max(0, delay));
+			}
+			ImGui::SameLine();
+			if (ImGui::SmallButton("?##delay"))
+			{
+				ImGui::SetTooltip("Delay before this kit fires after its event was triggered.\nUse to stagger multiple kits within the same event (e.g., flash, then smoke).");
 			}
 
 			// --- Sounds ---
@@ -766,8 +1155,21 @@ namespace mmo
 				ImGui::TreePop();
 			}
 
-			// Remove kit button
+			// Kit actions
 			ImGui::Spacing();
+			if (ImGui::Button("Copy Kit"))
+			{
+				s_kitClipboard.CopyFrom(kit);
+				s_hasKitClipboard = true;
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Save as Template..."))
+			{
+				m_kitTemplateSource.CopyFrom(kit);
+				m_kitTemplateName.clear();
+				m_showKitTemplateDialog = true;
+			}
+			ImGui::SameLine();
 			if (ImGui::Button("Remove This Kit"))
 			{
 				shouldRemove = true;

@@ -117,7 +117,8 @@ message ProjectileVisual
 	optional float spawn_offset_up = 19 [default = 0.0];
 }
 
-// A visualization kit containing sounds, animation, particles, lights, and optional tint
+// A visualization kit containing sounds, animation, particles, lights, and optional tint.
+// NOTE: Keep this message in sync with src/shared/proto_data/spell_visualizations.proto!
 message SpellKit
 {
 	repeated string sounds = 1;
@@ -141,6 +142,10 @@ message SpellKit
 
 	// Mesh to spawn at position/bone (e.g., a glow orb mesh)
 	optional string mesh_name = 11;
+
+	// Delay in milliseconds before this kit fires after its event was triggered.
+	// Allows staggering multiple kits within the same event.
+	optional uint32 delay_ms = 12 [default = 0];
 }
 
 // List of kits for a specific event

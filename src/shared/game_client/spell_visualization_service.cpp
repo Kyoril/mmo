@@ -155,10 +155,26 @@ namespace mmo
             const proto_client::KitScope scope = kit.has_scope() ? kit.scope() : proto_client::CASTER;
             auto applyToList = [&](GameUnitC* unit)
             {
-                if(unit)
+                if (!unit)
                 {
-                    ApplyKitToActor(*vis, kit, *unit, spell.id(), isInstantEvent);
+                    return;
                 }
+
+                // Kits with a delay are queued and fired from Update() once their delay elapsed.
+                if (kit.delay_ms() > 0)
+                {
+                    PendingKit pending;
+                    pending.kit = kit;
+                    pending.actorGuid = unit->GetGuid();
+                    pending.spellId = spell.id();
+                    pending.visualizationId = vis->id();
+                    pending.instantEvent = isInstantEvent;
+                    pending.remainingSeconds = kit.delay_ms() / 1000.0f;
+                    m_pendingKits.push_back(std::move(pending));
+                    return;
+                }
+
+                ApplyKitToActor(*vis, kit, *unit, spell.id(), isInstantEvent);
             };
 
             if (scope == proto_client::CASTER)
@@ -390,6 +406,32 @@ namespace mmo
 
     void SpellVisualizationService::Update(float deltaTime)
     {
+        // Fire delayed kits whose delay elapsed. Runs before the audio early-out
+        // because delayed kits must work without an audio player as well.
+        for (auto it = m_pendingKits.begin(); it != m_pendingKits.end(); )
+        {
+            it->remainingSeconds -= deltaTime;
+            if (it->remainingSeconds > 0.0f)
+            {
+                ++it;
+                continue;
+            }
+
+            if (m_project)
+            {
+                if (const auto* vis = m_project->spellVisualizations.getById(it->visualizationId))
+                {
+                    // Re-resolve the actor by guid; it may have despawned during the delay.
+                    if (const auto actor = ObjectMgr::Get<GameUnitC>(it->actorGuid))
+                    {
+                        ApplyKitToActor(*vis, it->kit, *actor, it->spellId, it->instantEvent);
+                    }
+                }
+            }
+
+            it = m_pendingKits.erase(it);
+        }
+
         if (!m_audioPlayer)
         {
             return;
@@ -914,6 +956,12 @@ namespace mmo
 
     void SpellVisualizationService::CleanupEffectsForActor(uint64 actorGuid, uint32 spellId)
     {
+        // Drop any not-yet-fired delayed kits for this actor and spell
+        std::erase_if(m_pendingKits, [actorGuid, spellId](const PendingKit& pending)
+        {
+            return pending.actorGuid == actorGuid && pending.spellId == spellId;
+        });
+
         for (auto it = m_activeEffects.begin(); it != m_activeEffects.end(); )
         {
             if (it->actorGuid == actorGuid && it->spellId == spellId)
