@@ -36,6 +36,7 @@
 #include "paging/world_page_loader.h"
 #include "ui/binding.h"
 #include "ui/chat_bubble_frame.h"
+#include "ui/nameplate_manager.h"
 #include "ui/world_text_frame.h"
 
 #include "game_client/net_client.h"
@@ -552,6 +553,9 @@ namespace mmo
 
 		/// Monotonic counter used to give every chat bubble (and its tail) a unique frame name.
 		uint32 m_chatBubbleCounter = 0;
+
+		/// Manages the unit nameplates shown above nearby units in the 3D world.
+		NameplateManager m_nameplateManager;
 
 		std::unique_ptr<asio::io_service::work> m_work;
 		asio::io_service m_workQueue;
