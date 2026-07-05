@@ -28,7 +28,8 @@ target_link_libraries(unit_tests
 	hpak_v1_0
 	math
 	game
-	game_server)
+	game_server
+	terrain_io)
 
 if (WIN32)
 	target_link_libraries(unit_tests graphics_d3d11)

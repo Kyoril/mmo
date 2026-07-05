@@ -16,6 +16,8 @@
 #include "log/default_log_levels.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/mesh_manager.h"
+#include "terrain_io/page_chunks.h"
+#include "terrain_io/page_io.h"
 
 namespace mmo
 {
@@ -23,20 +25,19 @@ namespace mmo
 	{
 		namespace constants
 		{
-			static const ChunkMagic VersionChunk = MakeChunkMagic('REVM');
-			static const ChunkMagic MaterialChunk = MakeChunkMagic('TMCM');
-			static const ChunkMagic VertexChunk = MakeChunkMagic('TVCM');
-			static const ChunkMagic NormalChunk = MakeChunkMagic('MNCM');
-			static const ChunkMagic LayerChunk = MakeChunkMagic('YLCM');
-			static const ChunkMagic AreaChunk = MakeChunkMagic('RACM');
-			static const ChunkMagic VertexShadingChunk = MakeChunkMagic('SVCM');
-			// New v2 chunks to persist inner-grid data for editor precision
-			static const ChunkMagic InnerVertexChunk = MakeChunkMagic('IVCM');
-			static const ChunkMagic InnerNormalChunk = MakeChunkMagic('INCM');
-			static const ChunkMagic InnerVertexShadingChunk = MakeChunkMagic('ISCM');
-			static const ChunkMagic HoleChunk = MakeChunkMagic('LOHM');
-			static const ChunkMagic WaterChunk = MakeChunkMagic('WCLM');     // legacy v1
-			static const ChunkMagic WaterQuadChunk = MakeChunkMagic('QWCM'); // current v2
+			using terrain_io::VersionChunk;
+			using terrain_io::MaterialChunk;
+			using terrain_io::VertexChunk;
+			using terrain_io::NormalChunk;
+			using terrain_io::LayerChunk;
+			using terrain_io::AreaChunk;
+			using terrain_io::VertexShadingChunk;
+			using terrain_io::InnerVertexChunk;
+			using terrain_io::InnerNormalChunk;
+			using terrain_io::InnerVertexShadingChunk;
+			using terrain_io::HoleChunk;
+			using terrain_io::WaterChunk;
+			using terrain_io::WaterQuadChunk;
 		}
 
 		namespace
@@ -793,162 +794,45 @@ namespace mmo
 			io::StreamSink sink(*file);
 			io::Writer writer(sink);
 
-			uint32 version = 0x02;
-
-			// File version chunk
+			// Serialization works on plain data, so resolve material references to their
+			// asset names and widen the zone ids to their on-disk type first.
+			std::vector<String> materialNames;
+			materialNames.reserve(m_materials.size());
+			for (const auto &material : m_materials)
 			{
-				ChunkWriter versionChunkWriter{constants::VersionChunk, writer};
-				writer << io::write<uint32>(version);
-				versionChunkWriter.Finish();
+				materialNames.push_back(material ? String(material->GetName()) : String());
 			}
 
-			// Materials
+			std::vector<uint32> zones(m_tileZones.begin(), m_tileZones.end());
+
+			terrain_io::PageDataView view;
+			view.heightmap = m_heightmap.data();
+			view.innerHeightmap = m_innerHeightmap.data();
+			view.normals = m_normals.data();
+			view.innerNormals = m_innerNormals.data();
+			view.materialNames = materialNames.data();
+			view.materialCount = materialNames.size();
+			view.layers = m_layers.data();
+			view.colors = m_colors.data();
+			view.innerColors = m_innerColors.data();
+			view.holes = m_holeMap.data();
+			view.zones = zones.data();
+			view.waterQuadMasks = m_waterQuadMasks.data();
+			view.waterTypes = m_waterTypes.data();
+			view.waterVertexHeights = m_waterVertexHeights.data();
+			view.waterMaterialName = &m_waterMaterialName;
+
+			if (!terrain_io::SavePage(writer, view))
 			{
-				ChunkWriter materialChunkWriter{constants::MaterialChunk, writer};
-				writer << io::write<uint16>(m_materials.size());
-				for (auto &material : m_materials)
-				{
-					if (material)
-					{
-						writer << io::write_dynamic_range<uint16>(material->GetName());
-					}
-					else
-					{
-						writer << io::write<uint16>(0);
-					}
-				}
-				materialChunkWriter.Finish();
-			}
-
-			// Heightmap (outer grid)
-			{
-				ChunkWriter heightmapChunk{constants::VertexChunk, writer};
-				writer << io::write_range(m_heightmap);
-				heightmapChunk.Finish();
-			}
-
-			// Inner heightmap (v2)
-			{
-				ChunkWriter innerHeightChunk{constants::InnerVertexChunk, writer};
-				writer << io::write_range(m_innerHeightmap);
-				innerHeightChunk.Finish();
-			}
-
-			// (Encoded) Normals (outer grid)
-			{
-				ChunkWriter normalChunk{constants::NormalChunk, writer};
-				for (const auto &normal : m_normals)
-				{
-					writer.WritePOD(normal);
-				}
-				normalChunk.Finish();
-			}
-
-			// Inner (encoded) normals (v2)
-			{
-				ChunkWriter innerNormalChunk{constants::InnerNormalChunk, writer};
-				for (const auto &normal : m_innerNormals)
-				{
-					writer.WritePOD(normal);
-				}
-				innerNormalChunk.Finish();
-			}
-
-			// Layers
-			{
-				ChunkWriter layerChunk{constants::LayerChunk, writer};
-				writer << io::write_range(m_layers);
-				layerChunk.Finish();
-			}
-
-			// Vertex shading (outer grid)
-			{
-				ChunkWriter colorsChunk{constants::VertexShadingChunk, writer};
-				writer << io::write_range(m_colors);
-				colorsChunk.Finish();
-			}
-
-			// Inner vertex shading (v2)
-			{
-				ChunkWriter innerColorsChunk{constants::InnerVertexShadingChunk, writer};
-				writer << io::write_range(m_innerColors);
-				innerColorsChunk.Finish();
-			}
-
-			// Hole data (only save tiles with holes)
-			{
-				// Count tiles with holes
-				std::vector<std::pair<uint16, uint64>> tilesWithHoles;
-				for (uint16 i = 0; i < m_holeMap.size(); ++i)
-				{
-					if (m_holeMap[i] != 0)
-					{
-						tilesWithHoles.emplace_back(i, m_holeMap[i]);
-					}
-				}
-
-				// Only write chunk if there are any holes
-				if (!tilesWithHoles.empty())
-				{
-					ChunkWriter holeChunk{constants::HoleChunk, writer};
-					writer << io::write<uint16>(static_cast<uint16>(tilesWithHoles.size()));
-
-					for (const auto &tilePair : tilesWithHoles)
-					{
-						writer << io::write<uint16>(tilePair.first);
-						writer << io::write<uint64>(tilePair.second);
-					}
-
-					holeChunk.Finish();
-				}
-			}
-
-			// Water quad data — new format: sparse quad masks + shared vertex heights
-			{
-				std::vector<uint16> waterTileIndices;
-				for (uint16 i = 0; i < static_cast<uint16>(m_waterQuadMasks.size()); ++i)
-				{
-					if (m_waterQuadMasks[i] != 0)
-					{
-						waterTileIndices.push_back(i);
-					}
-				}
-
-				if (!waterTileIndices.empty() || !m_waterMaterialName.empty())
-				{
-					ChunkWriter waterChunkWriter{constants::WaterQuadChunk, writer};
-					writer << io::write<uint16>(static_cast<uint16>(waterTileIndices.size()));
-					for (const uint16 idx : waterTileIndices)
-					{
-						writer << io::write<uint16>(idx)
-						       << io::write<uint8>(m_waterTypes[idx])
-						       << io::write<uint64>(m_waterQuadMasks[idx]);
-					}
-					// Write all page-level water vertex heights (129x129)
-					for (const float h : m_waterVertexHeights)
-					{
-						writer << io::write<float>(h);
-					}
-					writer << io::write_dynamic_range<uint16>(m_waterMaterialName);
-					waterChunkWriter.Finish();
-				}
-			}
-
-			// Zones
-			{
-				ChunkWriter areaChunk{constants::AreaChunk, writer};
-				for (const auto &zone : m_tileZones)
-				{
-					writer << io::write<uint32>(zone);
-				}
-				areaChunk.Finish();
+				ELOG("Failed to save changed tile " << m_x << "x" << m_z << "!");
+				return false;
 			}
 
 			sink.Flush();
 			file.reset();
 
 			m_changed = false;
-			return false;
+			return true;
 		}
 
 		bool Page::ReadMCMTChunk(io::Reader &reader, uint32 header, uint32 size)
