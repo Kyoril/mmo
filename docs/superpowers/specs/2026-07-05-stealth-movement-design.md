@@ -1,7 +1,7 @@
 # Stealth Movement — Design
 
 Date: 2026-07-05
-Status: Approved
+Status: Implemented
 
 ## Goal
 
@@ -93,6 +93,20 @@ New state in `src/shared/game_server/ai/`.
 - Stealthed units the client *can* see (party members, own character): rendered
   translucent if the material-tint infrastructure supports alpha cheaply; otherwise
   rendered normally (follow-up).
+
+## Authoring the stealth spell (data, no code)
+
+In the spell editor, create a spell with:
+
+- Effect: `ApplyAura` with aura type `ModStealth`.
+- Aura interrupt flags: `Damage | HitBySpell | Attack | Cast` so stealth breaks when the
+  unit takes damage, attacks or casts (all handled by the existing aura interrupt system).
+- Optional second effect: `ApplyAura` with `ModDecreaseSpeed` (e.g. base points -30) for
+  the classic stealth movement slow.
+
+Per-creature alert sounds are set in the creature editor ("Stealth Alert Sound" in the
+Scripting section); the client falls back to `Sound/Creature/StealthAlert.wav` when empty
+(place a sound file there or configure sounds per creature).
 
 ## Testing
 
