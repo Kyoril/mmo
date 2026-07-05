@@ -135,6 +135,14 @@ namespace mmo
 		static ConsoleVar *s_chatBubblesYellVar = nullptr;
 		static ConsoleVar *s_chatBubblesPartyVar = nullptr;
 
+		static ConsoleVar *s_nameplateEnemyNpcsVar = nullptr;
+		static ConsoleVar *s_nameplateEnemyPlayersVar = nullptr;
+		static ConsoleVar *s_nameplateFriendlyNpcsVar = nullptr;
+		static ConsoleVar *s_nameplateFriendlyPlayersVar = nullptr;
+		static ConsoleVar *s_nameplateEnemyPetsVar = nullptr;
+		static ConsoleVar *s_nameplateFriendlyPetsVar = nullptr;
+		static ConsoleVar *s_nameplateDistanceVar = nullptr;
+
 		String MapMouseButton(const MouseButton button)
 		{
 			if ((button & MouseButton::Left) == MouseButton::Left)
@@ -452,6 +460,7 @@ namespace mmo
 
 		m_chatBubbleFrames.clear();
 		m_chatBubbleLayer.reset();
+		m_nameplateManager.Clear();
 
 		// Reset the logo frame ui
 		FrameManager::Get().ResetTopFrame();
@@ -484,11 +493,12 @@ namespace mmo
 
 	void WorldState::ReloadUI()
 	{
-		// Release chat bubbles before tearing down the frame tree so their shared_ptrs don't
-		// keep the old WorldFrame alive past ResetTopFrame, which would trip the assert in
-		// SetAsCurrentWorldFrame when the new WorldFrame is registered.
+		// Release chat bubbles and nameplates before tearing down the frame tree so their
+		// shared_ptrs don't keep the old WorldFrame alive past ResetTopFrame, which would
+		// trip the assert in SetAsCurrentWorldFrame when the new WorldFrame is registered.
 		m_chatBubbleFrames.clear();
 		m_chatBubbleLayer.reset();
+		m_nameplateManager.Clear();
 
 		// Explicitly clear the current world frame weak reference before destroying the old
 		// frame tree.  If anything outside FrameManager still holds the old WorldFrame alive,
@@ -960,6 +970,11 @@ namespace mmo
 			{
 				m_chatBubbleLayer->AddChild(frame);
 			}
+		}
+
+		if (m_playerController)
+		{
+			m_nameplateManager.Update(deltaSeconds, m_playerController->GetCamera());
 		}
 	}
 
@@ -1598,6 +1613,14 @@ namespace mmo
 		s_chatBubblesYellVar = ConsoleVarMgr::RegisterConsoleVar("ChatBubblesYell", "Show chat bubbles for player and NPC yell messages.", "1");
 		s_chatBubblesPartyVar = ConsoleVarMgr::RegisterConsoleVar("ChatBubblesParty", "Show chat bubbles for party messages from visible party members.", "1");
 
+		s_nameplateEnemyNpcsVar = ConsoleVarMgr::RegisterConsoleVar("NameplateShowEnemyNpcs", "Show nameplates for hostile and neutral NPCs.", "1");
+		s_nameplateEnemyPlayersVar = ConsoleVarMgr::RegisterConsoleVar("NameplateShowEnemyPlayers", "Show nameplates for enemy players.", "1");
+		s_nameplateFriendlyNpcsVar = ConsoleVarMgr::RegisterConsoleVar("NameplateShowFriendlyNpcs", "Show nameplates for friendly NPCs.", "0");
+		s_nameplateFriendlyPlayersVar = ConsoleVarMgr::RegisterConsoleVar("NameplateShowFriendlyPlayers", "Show nameplates for friendly players.", "0");
+		s_nameplateEnemyPetsVar = ConsoleVarMgr::RegisterConsoleVar("NameplateShowEnemyPets", "Show nameplates for enemy pets.", "0");
+		s_nameplateFriendlyPetsVar = ConsoleVarMgr::RegisterConsoleVar("NameplateShowFriendlyPets", "Show nameplates for friendly pets.", "0");
+		s_nameplateDistanceVar = ConsoleVarMgr::RegisterConsoleVar("NameplateDistance", "Maximum distance (world units) at which unit nameplates are shown.", "40");
+
 		Console::RegisterCommand(command_names::s_reload, [this](const std::string &, const std::string &)
 								 { ReloadUI(); }, ConsoleCommandCategory::Debug, "Reloads the user interface.");
 
@@ -1673,6 +1696,13 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("ChatBubblesSay");
 		ConsoleVarMgr::UnregisterConsoleVar("ChatBubblesYell");
 		ConsoleVarMgr::UnregisterConsoleVar("ChatBubblesParty");
+		ConsoleVarMgr::UnregisterConsoleVar("NameplateShowEnemyNpcs");
+		ConsoleVarMgr::UnregisterConsoleVar("NameplateShowEnemyPlayers");
+		ConsoleVarMgr::UnregisterConsoleVar("NameplateShowFriendlyNpcs");
+		ConsoleVarMgr::UnregisterConsoleVar("NameplateShowFriendlyPlayers");
+		ConsoleVarMgr::UnregisterConsoleVar("NameplateShowEnemyPets");
+		ConsoleVarMgr::UnregisterConsoleVar("NameplateShowFriendlyPets");
+		ConsoleVarMgr::UnregisterConsoleVar("NameplateDistance");
 
 		m_cvarChangedSignals.disconnect();
 
