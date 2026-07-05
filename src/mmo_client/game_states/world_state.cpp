@@ -1374,6 +1374,9 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::NonSpellDamageLog, *this, &WorldState::OnNonSpellDamageLog);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::EnvironmentalDamageLog, *this, &WorldState::OnLogEnvironmentalDamage);
 
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::UnitVisibilityList, *this, &WorldState::OnUnitVisibilityList);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::StealthDetected, *this, &WorldState::OnStealthDetected);
+
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CreatureQueryResult, *this, &WorldState::OnCreatureQueryResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ItemQueryResult, *this, &WorldState::OnItemQueryResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ObjectQueryResult, *this, &WorldState::OnObjectQueryResult);
@@ -2090,6 +2093,109 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult WorldState::OnUnitVisibilityList(game::IncomingPacket &packet)
+	{
+		uint16 visibleCount;
+		if (!(packet >> io::read<uint16>(visibleCount)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		for (uint16 i = 0; i < visibleCount; ++i)
+		{
+			uint64 guid;
+			if (!(packet >> io::read_packed_guid(guid)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			if (const auto unit = ObjectMgr::Get<GameUnitC>(guid))
+			{
+				unit->SetStealthHidden(false);
+			}
+			else
+			{
+				WLOG("UnitVisibilityList: unknown unit " << log_hex_digit(guid) << " marked visible");
+			}
+		}
+
+		uint16 invisibleCount;
+		if (!(packet >> io::read<uint16>(invisibleCount)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		for (uint16 i = 0; i < invisibleCount; ++i)
+		{
+			uint64 guid;
+			if (!(packet >> io::read_packed_guid(guid)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+
+			if (const auto unit = ObjectMgr::Get<GameUnitC>(guid))
+			{
+				// A unit we can no longer see should not stay targeted
+				if (guid == ObjectMgr::GetSelectedObjectGuid())
+				{
+					ObjectMgr::GetActivePlayer()->SetTargetUnit(nullptr);
+				}
+
+				unit->SetStealthHidden(true);
+			}
+			else
+			{
+				WLOG("UnitVisibilityList: unknown unit " << log_hex_digit(guid) << " marked invisible");
+			}
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnStealthDetected(game::IncomingPacket &packet)
+	{
+		uint64 detectorGuid;
+		if (!(packet >> io::read_packed_guid(detectorGuid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		const auto detector = ObjectMgr::Get<GameUnitC>(detectorGuid);
+		if (!detector)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		const uint64 entryId = detector->Get<uint32>(object_fields::Entry);
+		const Vector3 position = detector->GetPosition();
+
+		// Resolve the per-creature alert sound from the creature cache. If the entry is
+		// already cached the callback runs synchronously, otherwise once the query result
+		// arrives from the server.
+		m_cache.GetCreatureCache().Get(entryId, [this, position](uint64, const CreatureInfo &info)
+		{
+			PlayStealthAlertSound(info.stealthAlertSound, position);
+		});
+
+		return PacketParseResult::Pass;
+	}
+
+	void WorldState::PlayStealthAlertSound(const String &soundFile, const Vector3 &position)
+	{
+		static const String s_defaultAlertSound = "Sound/Creature/StealthAlert.wav";
+		const String &file = soundFile.empty() ? s_defaultAlertSound : soundFile;
+
+		if (const SoundIndex sound = m_audio.CreateSound(file, SoundType::Sound3D); sound != InvalidSound)
+		{
+			ChannelIndex channel = InvalidChannel;
+			m_audio.PlaySound(sound, &channel);
+			if (channel != InvalidChannel)
+			{
+				m_audio.Set3DPosition(channel, position);
+			}
+		}
+	}
+
 	PacketParseResult WorldState::OnMovement(game::IncomingPacket &packet)
 	{
 		uint64 characterGuid;
@@ -2287,7 +2393,7 @@ namespace mmo
 		}
 
 		CreatureInfo entry{id};
-		if (!(packet >> io::read_string(entry.name) >> io::read_string(entry.subname)))
+		if (!(packet >> io::read_string(entry.name) >> io::read_string(entry.subname) >> io::read_string(entry.stealthAlertSound)))
 		{
 			ELOG("Creature query for id " << log_hex_digit(id) << " failed");
 			return PacketParseResult::Pass;

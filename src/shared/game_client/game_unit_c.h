@@ -166,6 +166,15 @@ namespace mmo
 		void SetQuestGiverStatus(QuestgiverStatus status);
 		QuestgiverStatus GetQuestGiverStatus() const { return m_questGiverStatus; }
 
+		/// @brief Hides or shows the unit's visuals without destroying the object. Used for
+		/// units that are stealthed and currently undetected: the object stays in memory so
+		/// the server doesn't have to resend spawn packets when visibility flips.
+		/// @param hidden True to hide the unit's visuals, false to show them again.
+		void SetStealthHidden(bool hidden);
+
+		/// @brief Returns whether the unit's visuals are currently hidden due to stealth.
+		[[nodiscard]] bool IsStealthHidden() const noexcept { return m_stealthHidden; }
+
 		bool IsBeingMoved() const { return !m_movementPath.empty() && !m_pathCompleted; }
 
 		const proto_client::ModelDataEntry *GetDisplayModel() const;
@@ -796,6 +805,9 @@ namespace mmo
 		SceneNode *m_questGiverNode = nullptr;
 		Entity *m_questGiverEntity = nullptr;
 		QuestgiverStatus m_questGiverStatus = questgiver_status::None;
+
+		/// @brief Whether the unit's visuals are currently hidden due to stealth.
+		bool m_stealthHidden = false;
 
 		AvatarConfiguration m_configuration;
 
