@@ -280,7 +280,21 @@ namespace mmo
 				UpdateObject(*object);
 			}
 		}
-		
+
+		// Periodically re-evaluate the per-observer visibility of stealthed units, since it
+		// depends on observer position and facing which change with movement.
+		constexpr GameTime stealthRefreshInterval = 300;
+		if (update.GetTimestamp() >= m_nextStealthRefresh)
+		{
+			const std::vector<GameUnitS*> stealthedUnits(m_stealthedUnits.begin(), m_stealthedUnits.end());
+			for (auto* stealthedUnit : stealthedUnits)
+			{
+				stealthedUnit->UpdateVisibilityAndView();
+			}
+
+			m_nextStealthRefresh = update.GetTimestamp() + stealthRefreshInterval;
+		}
+
 		m_updating = false;
 		m_objectUpdates = m_queuedObjectUpdates;
 		m_queuedObjectUpdates.clear();
@@ -338,6 +352,13 @@ namespace mmo
 	if (const auto addedUnit = dynamic_cast<GameUnitS*>(&added))
 	{
 		m_unitFinder->AddUnit(*addedUnit);
+
+		// Track units which enter the world already stealthed so the periodic stealth
+		// visibility refresh includes them.
+		if (addedUnit->GetVisibility() == unit_visibility::GroupStealth)
+		{
+			m_stealthedUnits.insert(addedUnit);
+		}
 	}
 
 	// Activate passive spells AFTER spawn notifications have been sent
@@ -371,6 +392,7 @@ namespace mmo
 		if (const auto removedUnit = dynamic_cast<GameUnitS*>(&remove))
 		{
 			m_unitFinder->RemoveUnit(*removedUnit);
+			m_stealthedUnits.erase(removedUnit);
 		}
 
 		const auto it = m_objectsByGuid.find(remove.GetGuid());
@@ -421,10 +443,13 @@ namespace mmo
 							std::vector objects{ &remove };
 							for (auto* subscriber : tile.GetWatchers())
 							{
-								// Only despawn if we were visible before
-								if (remove.IsUnit() && !remove.AsUnit().CanBeSeenBy(subscriber->GetGameUnit()))
+								// Only despawn if the client was actually told about this object.
+								// Checking IsObjectKnown instead of CanBeSeenBy ensures that
+								// units which are known but currently hidden (stealth) still get
+								// properly destroyed at the client.
+								if (!subscriber->IsObjectKnown(remove.GetGuid()))
 								{
-									continue; // Skip subscribers that cannot see this unit
+									continue;
 								}
 
 								subscriber->NotifyObjectsDespawned(objects);
@@ -458,6 +483,18 @@ namespace mmo
 					FireInstanceTriggerEvent(trigger_event::OnAllPlayersDead, nullptr);
 				}
 			}
+		}
+	}
+
+	void WorldInstance::NotifyStealthStateChanged(GameUnitS& unit, const bool stealthed)
+	{
+		if (stealthed)
+		{
+			m_stealthedUnits.insert(&unit);
+		}
+		else
+		{
+			m_stealthedUnits.erase(&unit);
 		}
 	}
 
@@ -616,9 +653,10 @@ namespace mmo
 			{
 				auto& character = subscriber.GetGameUnit();
 
-				if (object.IsUnit() && !object.AsUnit().CanBeSeenBy(character))
+				if (object.IsUnit() &&
+					(!object.AsUnit().CanBeSeenBy(character) || subscriber.IsObjectHiddenForClient(object.GetGuid())))
 				{
-					return; // Skip subscribers that cannot see this unit
+					return; // Skip subscribers that cannot see this unit right now
 				}
 
 				subscriber.NotifyObjectsUpdated(objects);

@@ -659,6 +659,15 @@ namespace mmo
 				/// Sent to the client when the number of unread mails changes. Payload: uint32 unreadCount.
 				MailNotify,
 
+				/// Sent to the client when units it already knows change stealth visibility, so the
+				/// client can hide/show them without despawning. Payload: uint16 visibleCount,
+				/// packed guid[visibleCount], uint16 invisibleCount, packed guid[invisibleCount].
+				UnitVisibilityList,
+
+				/// Sent to a stealthed client when a hostile creature has spotted it and entered
+				/// its alert state. Payload: packed uint64 detectorGuid.
+				StealthDetected,
+
 				/// Counter constant
 				Count_,
 			};

@@ -570,6 +570,7 @@ namespace mmo
 		for (const auto* object : objects)
 		{
 			m_spawnedGuids.erase(object->GetGuid());
+			m_hiddenGuids.erase(object->GetGuid());
 		}
 
 		const uint64 currentTarget = m_character->Get<uint64>(object_fields::TargetUnit);
@@ -596,6 +597,84 @@ namespace mmo
 			}
 			outPacket.Finish();
 		});
+	}
+
+	void Player::NotifyUnitVisibilityChanged(GameUnitS& unit, const bool visible)
+	{
+		const uint64 guid = unit.GetGuid();
+
+		if (!IsObjectKnown(guid))
+		{
+			// The client doesn't know this unit yet: a unit that just became visible is
+			// spawned normally, an unknown invisible unit stays unknown.
+			if (visible)
+			{
+				const std::vector<GameObjectS*> objects{ &unit };
+				NotifyObjectsSpawned(objects);
+			}
+			return;
+		}
+
+		if (visible)
+		{
+			if (m_hiddenGuids.erase(guid) > 0)
+			{
+				SendPacket([guid](game::OutgoingPacket& outPacket)
+				{
+					outPacket.Start(game::realm_client_packet::UnitVisibilityList);
+					outPacket
+						<< io::write<uint16>(1)
+						<< io::write_packed_guid(guid)
+						<< io::write<uint16>(0);
+					outPacket.Finish();
+				});
+
+				// Resync the unit's position, since the client received no movement packets
+				// while the unit was hidden. Player-controlled units get a heartbeat-style
+				// movement packet with the current movement info ...
+				if (HasReceivedTimeSyncResponse())
+				{
+					MovementInfo info = unit.GetMovementInfo();
+					info.timestamp = ServerToClientTime(info.timestamp);
+
+					std::vector<char> buffer;
+					io::VectorSink sink{ buffer };
+					game::OutgoingPacket movementPacket{ sink };
+					movementPacket.Start(game::realm_client_packet::MoveHeartBeat);
+					movementPacket << io::write<uint64>(guid) << info;
+					movementPacket.Finish();
+					SendPacket(movementPacket, buffer);
+				}
+
+				// ... while server-controlled units (creatures) resend their active spline.
+				unit.GetMover().SendMovementPackets(*this);
+			}
+			return;
+		}
+
+		// Unit became invisible for this client
+		if (unit.GetVisibility() == unit_visibility::GroupStealth)
+		{
+			// Stealth: keep the unit in client memory, just hide it.
+			if (m_hiddenGuids.insert(guid).second)
+			{
+				SendPacket([guid](game::OutgoingPacket& outPacket)
+				{
+					outPacket.Start(game::realm_client_packet::UnitVisibilityList);
+					outPacket
+						<< io::write<uint16>(0)
+						<< io::write<uint16>(1)
+						<< io::write_packed_guid(guid);
+					outPacket.Finish();
+				});
+			}
+		}
+		else
+		{
+			// True invisibility keeps its original despawn semantics.
+			const std::vector<GameObjectS*> objects{ &unit };
+			NotifyObjectsDespawned(objects);
+		}
 	}
 
 	void Player::SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer, bool flush)
@@ -744,6 +823,10 @@ namespace mmo
 			break;
 		case game::client_realm_packet::GossipHello:
 			OnGossipHello(opCode, buffer.size(), reader);
+			break;
+
+		case game::client_realm_packet::UseObject:
+			OnUseObject(opCode, buffer.size(), reader);
 			break;
 
 		case game::client_realm_packet::Loot:
@@ -1282,6 +1365,7 @@ namespace mmo
 				for (const uint64 guid : toDestroy)
 				{
 					m_spawnedGuids.erase(guid);
+					m_hiddenGuids.erase(guid);
 				}
 			});
 
@@ -2185,6 +2269,12 @@ namespace mmo
 
 				// Watcher not synched yet, skip it
 				if (!watcher->HasReceivedTimeSyncResponse())
+				{
+					continue;
+				}
+
+				// Never leak movement of units the watcher's client currently can't see (stealth)
+				if (watcher->IsObjectHiddenForClient(characterGuid))
 				{
 					continue;
 				}
@@ -3558,6 +3648,16 @@ namespace mmo
 				packet
 					<< io::write<uint32>(proficiencyId)
 					<< io::write<uint8>(added ? 1 : 0);
+				packet.Finish();
+			});
+	}
+
+	void Player::OnStealthDetected(const uint64 detectorGuid)
+	{
+		SendPacket([detectorGuid](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::StealthDetected);
+				packet << io::write_packed_guid(detectorGuid);
 				packet.Finish();
 			});
 	}

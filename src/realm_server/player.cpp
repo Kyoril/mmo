@@ -3041,6 +3041,7 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TimePlayedRequest, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TimeSyncResponse, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::AreaTriggerTriggered, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::UseObject, *this, &Player::OnProxyPacket);
 
 			// Trade packet handlers (proxied to world node)
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TradeInitiate, *this, &Player::OnProxyPacket);
@@ -3582,7 +3583,8 @@ namespace mmo
 					<< io::write_packed_guid(unit->id())
 					<< io::write<uint8>(true)
 					<< io::write_range(unit->name()) << io::write<uint8>(0)
-					<< io::write_range(unit->subname()) << io::write<uint8>(0);
+					<< io::write_range(unit->subname()) << io::write<uint8>(0)
+					<< io::write_range(unit->stealth_alert_sound()) << io::write<uint8>(0);
 				packet.Finish(); });
 	}
 

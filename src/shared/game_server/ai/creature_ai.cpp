@@ -3,6 +3,7 @@
 #include "creature_ai.h"
 #include "creature_ai_prepare_state.h"
 #include "creature_ai_idle_state.h"
+#include "creature_ai_alert_state.h"
 #include "creature_ai_combat_state.h"
 #include "creature_ai_reset_state.h"
 #include "creature_ai_death_state.h"
@@ -117,6 +118,19 @@ namespace mmo
 	void CreatureAI::EnterCombat(GameUnitS& victim)
 	{
 		auto state = std::make_shared<CreatureAICombatState>(*this, victim);
+		SetState(std::move(state));
+	}
+
+	void CreatureAI::EnterAlert(GameUnitS& target)
+	{
+		// Don't restart the alert when we are already alerted (would reset the timer and
+		// re-trigger the client notification every scan interval).
+		if (dynamic_cast<CreatureAIAlertState*>(m_state.get()) != nullptr)
+		{
+			return;
+		}
+
+		auto state = std::make_shared<CreatureAIAlertState>(*this, target);
 		SetState(std::move(state));
 	}
 

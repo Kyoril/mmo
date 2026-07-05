@@ -353,6 +353,11 @@ namespace mmo
 		/// @param added True if the proficiency was added, false if removed.
 		virtual void OnProficiencyChanged(uint32 proficiencyId, bool added) = 0;
 
+		/// Called when a hostile creature has spotted this (stealthed) unit and entered its
+		/// alert state, so the client can play a warning sound.
+		/// @param detectorGuid The GUID of the creature that spotted the unit.
+		virtual void OnStealthDetected(uint64 detectorGuid) {}
+
 		/// Called when another unit casts a revive spell on this (dead) unit, offering to bring
 		/// it back to life. The watcher is expected to prompt the player and, on acceptance,
 		/// teleport it to the cast location and restore the given amount of health.
@@ -1483,11 +1488,12 @@ public:
 
 		void SetVisibility(UnitVisibility x);
 
-		/// Recomputes which subscribers gained or lost visibility of this unit and sends
-		/// the appropriate spawn / despawn packets.  @p prevVisibility is the visibility
-		/// state that was in effect before the change; pass the same as the current value
-		/// to force a full-broadcast (e.g. on first spawn — but prefer AddGameObject for that).
-		virtual void UpdateVisibilityAndView(UnitVisibility prevVisibility);
+		/// Re-evaluates the per-observer visibility of this unit for every subscriber in
+		/// sight and reports the result to each subscriber. The subscriber tracks what its
+		/// client actually knows (spawned / hidden) and decides whether to spawn, despawn,
+		/// hide or show the unit. Called on visibility state changes and periodically for
+		/// stealthed units (whose visibility depends on observer position and facing).
+		virtual void UpdateVisibilityAndView();
 
 	protected:
 		/// Prepares the field map for the unit.

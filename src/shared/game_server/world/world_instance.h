@@ -187,6 +187,10 @@ namespace mmo
 
 		UnitFinder& GetUnitFinder() { return *m_unitFinder; }
 
+		/// Keeps track of units entering or leaving stealth so their per-observer
+		/// visibility can be re-evaluated periodically in Update.
+		void NotifyStealthStateChanged(GameUnitS& unit, bool stealthed);
+
 		GameObjectS* FindObjectByGuid(uint64 guid);
 
 		///
@@ -340,6 +344,11 @@ namespace mmo
 		volatile bool m_updating { false };
 		std::unordered_set<GameObjectS*> m_objectUpdates;
 		std::unordered_set<GameObjectS*> m_queuedObjectUpdates;
+		/// Units currently in GroupStealth visibility whose per-observer visibility has to
+		/// be re-evaluated periodically (observers and the stealthed unit move around).
+		std::unordered_set<GameUnitS*> m_stealthedUnits;
+		/// Timestamp of the next periodic stealth visibility refresh.
+		GameTime m_nextStealthRefresh = 0;
 		std::unique_ptr<VisibilityGrid> m_visibilityGrid;
 		std::unique_ptr<UnitFinder> m_unitFinder;
 		GameTimeComponent m_gameTime;
