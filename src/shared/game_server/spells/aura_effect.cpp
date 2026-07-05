@@ -72,6 +72,7 @@ namespace mmo
 			{ AuraType::ModFear,               [](AuraEffect& self, bool apply){ self.HandleModFear(apply); } },
 			{ AuraType::ModDisorient,          [](AuraEffect& self, bool apply){ self.HandleModDisorient(apply); } },
 			{ AuraType::ModVisibility,         [](AuraEffect& self, bool apply){ self.HandleModVisibility(apply); } },
+			{ AuraType::ModStealth,            [](AuraEffect& self, bool apply){ self.HandleModStealth(apply); } },
 			{ AuraType::DamageImmunity,        [](AuraEffect& self, bool apply){ self.HandleDamageImmunity(apply); } },
 			{ AuraType::ModDodgeChance,        [](AuraEffect& self, bool apply){ self.HandleModDodgeChance(apply); } },
 			{ AuraType::PeriodicTriggerSpell,  [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
@@ -414,6 +415,25 @@ namespace mmo
 	}
 
 	void AuraEffect::HandleModVisibility(bool apply) const
+	{
+		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
+			m_container.GetOwner().shared_from_this());
+		if (!owner || !owner->GetWorldInstance())
+		{
+			return;
+		}
+
+		std::weak_ptr weakOwner = owner;
+		owner->GetWorldInstance()->GetUniverse().Post([weakOwner]()
+			{
+				if (const auto owner = weakOwner.lock())
+				{
+					owner->NotifyVisibilityChanged();
+				}
+			});
+	}
+
+	void AuraEffect::HandleModStealth(bool apply) const
 	{
 		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
 			m_container.GetOwner().shared_from_this());

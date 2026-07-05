@@ -104,6 +104,25 @@ namespace mmo
 
 	typedef unit_visibility::Type UnitVisibility;
 
+	/// Tuning constants for stealth detection (unit_visibility::GroupStealth).
+	namespace stealth
+	{
+		/// Detection distance in meters when observer and stealthed unit have equal level.
+		static constexpr float BaseDetectionRange = 10.0f;
+
+		/// Added per level the observer is above the stealthed unit.
+		static constexpr float RangePerLevelAbove = 1.0f;
+
+		/// Subtracted per level the observer is below the stealthed unit.
+		static constexpr float RangePerLevelBelow = 1.5f;
+
+		/// Lower bound of the detection distance in meters.
+		static constexpr float MinDetectionRange = 1.5f;
+
+		/// Upper bound of the detection distance in meters.
+		static constexpr float MaxDetectionRange = 25.0f;
+	}
+
 	namespace unit_mods
 	{
 		enum Type
@@ -661,6 +680,12 @@ namespace mmo
 		virtual bool IsGameMaster() const { return false; }
 
 		bool CanBeSeenBy(const GameUnitS &other) const;
+
+		/// Determines whether this unit is able to detect the given stealthed unit right now,
+		/// based on the front cone and the level difference. Does not include group or GM checks.
+		/// @param stealthed The stealthed unit to check detection against.
+		/// @returns true if this unit currently detects the stealthed unit.
+		bool CanDetectStealthedUnit(const GameUnitS &stealthed) const;
 
 	public:
 		/// Gets the power type associated with a unit modifier.

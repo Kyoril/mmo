@@ -133,6 +133,11 @@ namespace mmo
 			/// are treated as a flat percentage (e.g. base points 5 = +5% dodge chance).
 			ModDodgeChance        = 36,
 
+			/// Puts the unit into stealth. Visibility to other units is evaluated per
+			/// observer (level difference + front cone); party members always see the unit.
+			/// This is a separate system from ModVisibility (true invisibility).
+			ModStealth            = 37,
+
 			// Add new aura types HERE (append only — never insert above an existing entry).
 
 			Count_,

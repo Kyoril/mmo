@@ -392,10 +392,63 @@ namespace mmo
 		{
 		case unit_visibility::On:
 			return true;
+
+		case unit_visibility::GroupStealth:
+			{
+				if (other.IsGameMaster())
+				{
+					return true;
+				}
+
+				// Party members can always see stealthed group mates
+				const auto* stealthedPlayer = dynamic_cast<const GamePlayerS*>(this);
+				const auto* observingPlayer = dynamic_cast<const GamePlayerS*>(&other);
+				if (stealthedPlayer && observingPlayer &&
+					stealthedPlayer->GetGroupId() != 0 &&
+					stealthedPlayer->GetGroupId() == observingPlayer->GetGroupId())
+				{
+					return true;
+				}
+
+				return other.CanDetectStealthedUnit(*this);
+			}
+
 		// TODO: Handle other values here except the default
 		default:
 			return other.IsGameMaster();
 		}
+	}
+
+	bool GameUnitS::CanDetectStealthedUnit(const GameUnitS &stealthed) const
+	{
+		// Dead units don't detect anything
+		if (!IsAlive())
+		{
+			return false;
+		}
+
+		// A stealthed unit outside of the observer's front cone can never be seen
+		if (!IsFacingTowards(stealthed))
+		{
+			return false;
+		}
+
+		const int32 observerLevel = Get<int32>(object_fields::Level);
+		const int32 stealthLevel = stealthed.Get<int32>(object_fields::Level);
+
+		float detectionRange = stealth::BaseDetectionRange;
+		if (observerLevel > stealthLevel)
+		{
+			detectionRange += static_cast<float>(observerLevel - stealthLevel) * stealth::RangePerLevelAbove;
+		}
+		else if (observerLevel < stealthLevel)
+		{
+			detectionRange -= static_cast<float>(stealthLevel - observerLevel) * stealth::RangePerLevelBelow;
+		}
+
+		detectionRange = Clamp<float>(detectionRange, stealth::MinDetectionRange, stealth::MaxDetectionRange);
+
+		return GetSquaredDistanceTo(stealthed.GetPosition(), true) <= detectionRange * detectionRange;
 	}
 
 	PowerType GameUnitS::GetPowerTypeByUnitMod(UnitMods mod)
@@ -1436,15 +1489,23 @@ namespace mmo
 
 	void GameUnitS::NotifyVisibilityChanged()
 	{
-		// Determine if we should be visible or not
+		// Invisibility (ModVisibility) has priority over everything else and keeps its
+		// original semantics: the unit is fully invisible except to game masters.
+		if (HasAuraEffect(aura_type::ModVisibility))
+		{
+			SetVisibility(unit_visibility::Off);
+			return;
+		}
 
-		// By default we should be visible if we don't have a visibility modification aura active
-		bool shouldBeVisible = !HasAuraEffect(aura_type::ModVisibility);
-
-		// TODO: Maybe add other conditions here
+		// Stealth: visibility is evaluated per observer in CanBeSeenBy.
+		if (HasAuraEffect(aura_type::ModStealth))
+		{
+			SetVisibility(unit_visibility::GroupStealth);
+			return;
+		}
 
 		// Apply visibility change (this method is idempotent and does nothing if the value is already set)
-		SetVisibility(shouldBeVisible ? unit_visibility::On : unit_visibility::Off);
+		SetVisibility(unit_visibility::On);
 	}
 
 	int32 GameUnitS::GetTotalSpellMods(const SpellModType type, const SpellModOp op, const uint32 spellId) const

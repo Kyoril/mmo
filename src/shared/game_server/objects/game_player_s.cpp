@@ -2859,9 +2859,7 @@ namespace mmo
 
 	bool GamePlayerS::IsGameMaster() const
 	{
-		// TODO: Implement a proper check for game master status
-
-		return false;
+		return m_isGameMaster;
 	}
 
 	void GamePlayerS::SetIsGameMaster(bool isGameMaster)

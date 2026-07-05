@@ -111,6 +111,8 @@ namespace mmo
 
 		void HandleModVisibility(bool apply) const;
 
+		void HandleModStealth(bool apply) const;
+
 		void HandleDamageImmunity(bool apply) const;
 
 		void HandleModDodgeChance(bool apply) const;
