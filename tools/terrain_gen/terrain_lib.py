@@ -39,9 +39,13 @@ def units_per_pixel(shape: tuple[int, int], pages_x: int) -> float:
 # ---------------------------------------------------------------------------
 
 def _value_noise_octave(shape: tuple[int, int], cells: int, rng: np.random.Generator) -> np.ndarray:
-    """Smooth value noise in [-1, 1] with roughly `cells` features per image side."""
-    cells = max(2, int(cells))
-    coarse = rng.uniform(-1.0, 1.0, size=(cells + 1, cells + 1)).astype(np.float32)
+    """Smooth value noise in [-1, 1] with roughly `cells` features across the image width.
+
+    Cell counts are derived per axis so features stay isotropic on non-square zones.
+    """
+    cells_x = max(2, int(cells))
+    cells_z = max(2, int(round(cells * shape[0] / max(shape[1], 1))))
+    coarse = rng.uniform(-1.0, 1.0, size=(cells_z + 1, cells_x + 1)).astype(np.float32)
     img = Image.fromarray(coarse, mode="F").resize((shape[1], shape[0]), Image.BICUBIC)
     return np.asarray(img, dtype=np.float32)
 
@@ -189,19 +193,22 @@ def blob_mask(shape: tuple[int, int], circles: list[tuple[float, float, float]],
               wobble_uv: float = 0.02, seed: int = 0) -> np.ndarray:
     """Organic region mask in [0, 1] from a smooth union of circles (metaball style).
 
-    circles: list of (u, v, radius) in normalized zone coordinates. Overlapping
-    circles fuse smoothly (smooth-min with strength smooth_k_uv), the boundary is
-    softened over edge_uv and perturbed by noise (wobble_uv) so nothing reads as a
-    geometric primitive. This is the building block for mountain masses, valley
-    pockets, lakes and terraces — irregular painterly shapes, not rectangles.
+    circles: list of (u, v, radius) in normalized zone coordinates; positions run 0..1
+    per axis, while radii/edges are fractions of the ZONE HEIGHT (v extent) — on
+    non-square zones distances are aspect-corrected so circles stay circular.
+    Overlapping circles fuse smoothly (smooth-min with strength smooth_k_uv), the
+    boundary is softened over edge_uv and perturbed by noise (wobble_uv) so nothing
+    reads as a geometric primitive. This is the building block for mountain masses,
+    valley pockets, lakes and terraces — irregular painterly shapes, not rectangles.
     """
     h, w = shape
+    aspect = (w - 1) / max(h - 1, 1)
     cols, rows = np.meshgrid(np.linspace(0, 1, w, dtype=np.float32), np.linspace(0, 1, h, dtype=np.float32))
 
     k = max(smooth_k_uv, 1e-4)
     d = np.full(shape, 1e9, dtype=np.float32)
     for (cu, cv, r) in circles:
-        di = np.sqrt((cols - cu) ** 2 + (rows - cv) ** 2) - r
+        di = np.sqrt(((cols - cu) * aspect) ** 2 + (rows - cv) ** 2) - r
         # polynomial smooth-min keeps fused boundaries round
         hmix = np.clip(0.5 + 0.5 * (di - d) / k, 0.0, 1.0)
         d = di * (1 - hmix) + d * hmix - k * hmix * (1 - hmix)
@@ -239,6 +246,142 @@ def flow_ridges(shape: tuple[int, int], guide_mask: np.ndarray, spacing_px: floa
         weight_sum += weight
 
     return (result / weight_sum).astype(np.float32)
+
+
+def load_relief_sample(name: str = "ref_mountain_relief") -> tuple[np.ndarray, float]:
+    """Load a relief detail sample (extracted from real reference terrain) in world units.
+
+    Returns (relief array float32 [h, w] in units, units_per_pixel of the sample).
+    """
+    data_dir = Path(__file__).parent / "data"
+    meta = json.loads((data_dir / f"{name}.json").read_text(encoding="utf-8"))
+    img = np.asarray(Image.open(data_dir / f"{name}.png"), dtype=np.float32)
+    relief = (img - 32768.0) / 32767.0 * meta["unitsAtFullScale"]
+    return relief.astype(np.float32), float(meta["unitsPerPixel"])
+
+
+def tile_sample(sample: np.ndarray, shape: tuple[int, int], seed: int = 0) -> np.ndarray:
+    """Cover `shape` with a sample using mirror tiling, a seed-based offset and a
+    seed-based rotation (0/90/180/270 + optional mirror) so repeats don't align."""
+    rng = np.random.default_rng(seed)
+    s = np.rot90(sample, k=int(rng.integers(0, 4)))
+    if rng.random() < 0.5:
+        s = s[:, ::-1]
+    sh, sw = s.shape
+    oz, ox = int(rng.integers(0, sh)), int(rng.integers(0, sw))
+    rows = (np.arange(shape[0]) + oz)
+    cols = (np.arange(shape[1]) + ox)
+    # mirror (reflect) indexing avoids seams at tile borders
+    period_r, period_c = 2 * sh - 2, 2 * sw - 2
+    rr = rows % period_r
+    rr = np.where(rr >= sh, period_r - rr, rr)
+    cc = cols % period_c
+    cc = np.where(cc >= sw, period_c - cc, cc)
+    return s[np.ix_(rr, cc)].astype(np.float32)
+
+
+def synth_from_sample(sample: np.ndarray, shape: tuple[int, int], patch_px: int = 56,
+                      seed: int = 0, min_std_frac: float = 0.6) -> np.ndarray:
+    """Texture-synthesize a field of `shape` from a relief sample by quilting random
+    rotated/flipped patches with 50% overlap and cosine feathering.
+
+    Only patches whose local variance is at least min_std_frac of the sample's overall
+    std are used, so smooth valley areas of the sample don't produce dead flat spots.
+    Avoids the kaleidoscope artifacts of mirror tiling entirely.
+    """
+    rng = np.random.default_rng(seed)
+    sh, sw = sample.shape
+    patch_px = int(min(patch_px, sh - 1, sw - 1))
+    half = patch_px // 2
+
+    # Candidate patch origins with enough detail
+    global_std = float(sample.std())
+    candidates = []
+    for r in range(0, sh - patch_px, max(4, half // 4)):
+        for c in range(0, sw - patch_px, max(4, half // 4)):
+            if sample[r:r+patch_px, c:c+patch_px].std() >= min_std_frac * global_std:
+                candidates.append((r, c))
+    if not candidates:
+        candidates = [(0, 0)]
+
+    window = np.outer(np.hanning(patch_px), np.hanning(patch_px)).astype(np.float32) + 1e-4
+    out = np.zeros(shape, dtype=np.float32)
+    weight = np.zeros(shape, dtype=np.float32)
+
+    for z0 in range(-half, shape[0], half):
+        for x0 in range(-half, shape[1], half):
+            r, c = candidates[int(rng.integers(0, len(candidates)))]
+            patch = sample[r:r+patch_px, c:c+patch_px]
+            patch = np.rot90(patch, k=int(rng.integers(0, 4)))
+            if rng.random() < 0.5:
+                patch = patch[:, ::-1]
+
+            pz0, px0 = max(0, z0), max(0, x0)
+            pz1, px1 = min(shape[0], z0 + patch_px), min(shape[1], x0 + patch_px)
+            sz0, sx0 = pz0 - z0, px0 - x0
+            sz1, sx1 = sz0 + (pz1 - pz0), sx0 + (px1 - px0)
+            out[pz0:pz1, px0:px1] += patch[sz0:sz1, sx0:sx1] * window[sz0:sz1, sx0:sx1]
+            weight[pz0:pz1, px0:px1] += window[sz0:sz1, sx0:sx1]
+
+    return (out / weight).astype(np.float32)
+
+
+def mountain_mass_ref(shape: tuple[int, int], circles: list[tuple[float, float, float]],
+                      crest_height: float, relief_gain: float = 1.0, edge_uv: float = 0.09,
+                      seed: int = 0, sample: np.ndarray = None) -> np.ndarray:
+    """Mountain mass whose shape detail is borrowed from real reference terrain.
+
+    The blob layout decides WHERE the mass is; the reference relief sample decides
+    WHAT the flanks and crests look like (compound dome clusters, grass saddles,
+    knobby feet). This replaces the smooth `mask^p * height` ramp that reads as a
+    flat artificial mountain front in-engine.
+    """
+    if sample is None:
+        sample, _ = load_relief_sample()
+    mask = blob_mask(shape, circles, edge_uv=edge_uv, smooth_k_uv=edge_uv, seed=seed)
+    relief = synth_from_sample(sample, shape, patch_px=56, seed=seed + 50)
+
+    profile = mask ** 1.3
+    # The borrowed relief MODULATES the profile (multiplicative) so the mass stays
+    # sealed: saddles dip to ~(1-variation) of the crest, dome clusters rise above it.
+    # A weaker additive term roughens the flanks and feet so the boundary is knobby
+    # instead of a perfect falloff skirt.
+    variation = np.clip(relief_gain * 0.7, 0.0, 0.85)
+    sigma = float(relief.std()) + 1e-6
+    rel_norm = np.clip(relief / (2.0 * sigma), -1.2, 1.2)
+    height = profile * crest_height * (1.0 + variation * rel_norm)
+    foot_gate = smoothstep(mask / 0.30) * (1.0 - profile * 0.6)
+    relief_capped = np.clip(relief, -2.0 * sigma, 2.0 * sigma)
+    height += relief_capped * 0.3 * relief_gain * foot_gate
+    return np.maximum(height, np.minimum(0.0, relief_capped * 0.1)).astype(np.float32)
+
+
+def scatter_knolls(field: np.ndarray, region_mask: np.ndarray, count: int,
+                   radius_px: tuple[float, float], height: tuple[float, float],
+                   seed: int = 0) -> np.ndarray:
+    """Sprinkle rocky knolls (steep-sided dome bumps) where region_mask is high —
+    foothill outcrops and freestanding rock mounds like the reference's plains."""
+    rng = np.random.default_rng(seed)
+    h, w = field.shape
+    prob = np.clip(region_mask.astype(np.float64).ravel(), 0, None)
+    if prob.sum() <= 0:
+        return field
+    prob /= prob.sum()
+    picks = rng.choice(h * w, size=count, replace=False, p=prob)
+
+    result = field.copy()
+    for pick in picks:
+        cz, cx = divmod(int(pick), w)
+        r = float(rng.uniform(*radius_px))
+        peak = float(rng.uniform(*height))
+        z0, z1 = max(0, int(cz - 2 * r)), min(h, int(cz + 2 * r) + 1)
+        x0, x1 = max(0, int(cx - 2 * r)), min(w, int(cx + 2 * r) + 1)
+        zz, xx = np.meshgrid(np.arange(z0, z1), np.arange(x0, x1), indexing="ij")
+        d = np.sqrt((zz - cz) ** 2 + (xx - cx) ** 2) / max(r, 1e-3)
+        # slightly irregular outline
+        d = d + (_hash_noise(xx * 0.7, zz * 0.7, seed) - 0.5) * 0.35
+        result[z0:z1, x0:x1] += peak * (1.0 - smoothstep(d)) ** 1.5
+    return result.astype(np.float32)
 
 
 def mountain_mass(shape: tuple[int, int], circles: list[tuple[float, float, float]],
@@ -385,23 +528,62 @@ def dist_to_polyline(shape: tuple[int, int], polyline_uv: np.ndarray) -> tuple[n
     return best_dist.reshape(shape).astype(np.float32), best_arc.reshape(shape).astype(np.float32)
 
 
+def meander_path(shape: tuple[int, int], polyline_uv, meander_px: float,
+                 wavelength_px: float = 100.0, seed: int = 0) -> np.ndarray:
+    """Resample a control polyline and push it sideways with smooth noise so it
+    wanders naturally instead of running straight between control points."""
+    path = catmull_rom(polyline_uv) if not isinstance(polyline_uv, np.ndarray) else polyline_uv
+    h, w = shape
+    px = path * np.array([w - 1, h - 1], dtype=np.float32)
+
+    tangent = np.gradient(px, axis=0)
+    seg_len = np.sqrt((tangent ** 2).sum(axis=1)) + 1e-6
+    normal = np.stack([-tangent[:, 1] / seg_len, tangent[:, 0] / seg_len], axis=1)
+
+    arc = np.concatenate([[0], np.cumsum(seg_len[1:])])
+    coord = arc / max(wavelength_px, 1e-3)
+    offset = (2.0 * noise_at(coord, np.full_like(coord, 3.7), seed=seed, octaves=2) - 1.0) * meander_px
+    # pin the endpoints so entries/exits stay where the layout wants them
+    fade = smoothstep(np.minimum(arc, arc[-1] - arc) / (0.12 * arc[-1] + 1e-6))
+    px = px + normal * (offset * fade)[:, None]
+    return (px / np.array([w - 1, h - 1], dtype=np.float32)).astype(np.float32)
+
+
 def carve_channel(field: np.ndarray, polyline_uv, width_px: float, depth: float,
-                  bank_px: float = None, bed_level: float = None) -> np.ndarray:
+                  bank_px: float = None, bed_level: float = None,
+                  meander_px: float = 0.0, meander_wavelength_px: float = 100.0,
+                  width_noise: float = 0.0, bank_ragged_px: float = 0.0,
+                  seed: int = 0) -> np.ndarray:
     """Carve a river channel along a smooth path.
 
     The bed is lowered by `depth` below the (path-smoothed) surrounding terrain,
     or down to the absolute `bed_level` if given. Banks blend over `bank_px`.
+    meander_px adds natural wandering to the path, width_noise (0..~0.5) varies the
+    channel width along its course, bank_ragged_px roughens the shoreline — without
+    these the channel reads as a perfectly lined canal.
     """
+    width_base = float(width_px)
     if bank_px is None:
-        bank_px = width_px * 1.5
-    path = catmull_rom(polyline_uv) if not isinstance(polyline_uv, np.ndarray) else polyline_uv
+        bank_px = width_base * 1.5
+    if meander_px > 0:
+        path = meander_path(field.shape, polyline_uv, meander_px, meander_wavelength_px, seed=seed)
+    else:
+        path = catmull_rom(polyline_uv) if not isinstance(polyline_uv, np.ndarray) else polyline_uv
     dist, arc = dist_to_polyline(field.shape, path)
+
+    if bank_ragged_px > 0:
+        h, w = field.shape
+        cols, rows = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
+        dist = dist + (2.0 * noise_at(cols / 5.0, rows / 5.0, seed=seed + 3, octaves=2) - 1.0) * bank_ragged_px
+
+    if width_noise > 0:
+        width_px = width_px * (1.0 + width_noise * (2.0 * noise_at(arc * 8.0, np.full_like(arc, 1.3), seed=seed + 7, octaves=2) - 1.0))
 
     # Sample terrain height along the path and smooth it so the bed flows downhill
     # gently instead of copying every bump of the surrounding terrain.
     samples = 256
     arc_bins = np.clip((arc * (samples - 1)).astype(np.int32), 0, samples - 1)
-    near = dist < max(width_px, bank_px)
+    near = dist < max(width_base, float(bank_px))
     path_height = np.zeros(samples, dtype=np.float32)
     fallback = float(field.mean())
     for i in range(samples):
@@ -453,12 +635,16 @@ def flatten_along(field: np.ndarray, polyline_uv, width_px: float, blend_px: flo
 
 def stamp_plateau(field: np.ndarray, center_uv: tuple[float, float], radius_uv: float,
                   level: float = None, blend_uv: float = None) -> np.ndarray:
-    """Flatten a circular area (town/camp site) to `level` (default: current center height)."""
+    """Flatten a circular area (town/camp site) to `level` (default: current center height).
+
+    radius_uv/blend_uv are fractions of the zone height (aspect-corrected on
+    non-square zones, matching blob_mask conventions)."""
     h, w = field.shape
+    aspect = (w - 1) / max(h - 1, 1)
     if blend_uv is None:
         blend_uv = radius_uv * 0.75
     cols, rows = np.meshgrid(np.linspace(0, 1, w, dtype=np.float32), np.linspace(0, 1, h, dtype=np.float32))
-    dist = np.sqrt((cols - center_uv[0]) ** 2 + (rows - center_uv[1]) ** 2)
+    dist = np.sqrt(((cols - center_uv[0]) * aspect) ** 2 + (rows - center_uv[1]) ** 2)
     if level is None:
         level = float(field[int(center_uv[1] * (h - 1)), int(center_uv[0] * (w - 1))])
     t = 1.0 - smoothstep((dist - radius_uv) / max(blend_uv, 1e-6))
