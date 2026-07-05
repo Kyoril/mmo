@@ -2,6 +2,7 @@
 
 #include "player.h"
 
+#include "game/loot.h"
 #include "game/mail.h"
 #include "game_server/objects/game_bag_s.h"
 #include "game_server/objects/game_player_s.h"
@@ -18,7 +19,8 @@ namespace mmo
 
 	bool Player::IsMailboxAccessible() const
 	{
-		constexpr float interactionDistance = 5.0f;
+		// Must match the range used to open the mailbox (client right-click and OnUseObject)
+		constexpr float interactionDistance = LootDistance;
 
 		if (m_activeMailboxGuid == 0 || !m_character->GetWorldInstance())
 		{

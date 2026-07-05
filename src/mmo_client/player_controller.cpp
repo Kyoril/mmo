@@ -962,14 +962,29 @@ namespace mmo
 					else if (m_hoveredObject->IsWorldObject() && m_hoveredObject->IsUsable(m_controlledUnit->AsPlayer()))
 					{
 						GameWorldObjectC* worldObject = static_cast<GameWorldObjectC*>(m_hoveredObject);
-						const proto_client::SpellEntry* openSpell = m_controlledUnit->GetOpenSpell(worldObject);
-						if (openSpell)
+						if (worldObject->GetType() == game_world_object_type::Mailbox)
 						{
-							m_spellCast.CastSpell(openSpell->id(), m_hoveredObject);
+							// Mailboxes are service objects like npc interactions: no open spell cast involved
+							if (m_controlledUnit->IsWithinRange(*m_hoveredObject, LootDistance))
+							{
+								m_connector.UseObject(m_hoveredObject->GetGuid());
+							}
+							else
+							{
+								FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "ERR_TOO_FAR_AWAY_TO_LOOT");
+							}
 						}
 						else
 						{
-							FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "LOCKED");
+							const proto_client::SpellEntry* openSpell = m_controlledUnit->GetOpenSpell(worldObject);
+							if (openSpell)
+							{
+								m_spellCast.CastSpell(openSpell->id(), m_hoveredObject);
+							}
+							else
+							{
+								FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "LOCKED");
+							}
 						}
 					}
 				}

@@ -1141,4 +1141,45 @@ namespace mmo
 
 		return nullptr;
 	}
+
+	void Player::OnUseObject(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		// Read the object guid from the packet
+		uint64 objectGuid;
+		if (!(contentReader >> io::read<uint64>(objectGuid)))
+		{
+			ELOG("Failed to read UseObject packet - malformed packet");
+			return;
+		}
+
+		// World instance must exist
+		ASSERT(m_worldInstance);
+
+		// Find the world object in the current instance
+		GameWorldObjectS* worldObject = m_worldInstance->FindByGuid<GameWorldObjectS>(objectGuid);
+		if (!worldObject)
+		{
+			WLOG("UseObject: world object not found for guid " << log_hex_digit(objectGuid));
+			return;
+		}
+
+		// Only service objects like mailboxes may be used directly without a spell cast;
+		// everything else has to go through the OpenLock spell path so lock checks can't be skipped
+		if (worldObject->GetType() != GameWorldObjectType::Mailbox)
+		{
+			WLOG("UseObject: object " << log_hex_digit(objectGuid) << " is not directly usable");
+			return;
+		}
+
+		ASSERT(m_character);
+		if (m_character->GetSquaredDistanceTo(worldObject->GetPosition(), true) >= LootDistance * LootDistance)
+		{
+			WLOG("UseObject: object " << log_hex_digit(objectGuid) << " is too far away");
+			return;
+		}
+
+		// Delegate to the world object; Use() performs IsUsable() check internally
+		// (checks Disabled flag, RequiresQuest flag, and active quest status)
+		worldObject->Use(*m_character);
+	}
 }
