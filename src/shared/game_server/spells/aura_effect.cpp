@@ -316,6 +316,16 @@ namespace mmo
 			return;
 		}
 
+		// During login aura restore the notification must run synchronously so the resulting
+		// movement flag is baked into the spawn packet and the immediate-apply (no ack) path is
+		// taken while IsRestoringAuras() is still true. In normal play it is deferred to avoid
+		// re-entrancy during aura application.
+		if (owner->IsRestoringAuras())
+		{
+			owner->NotifyRootChanged();
+			return;
+		}
+
 		std::weak_ptr weakOwner = owner;
 		owner->GetWorldInstance()->GetUniverse().Post([weakOwner]()
 			{
@@ -337,6 +347,13 @@ namespace mmo
 
 		if (apply) owner->IncrementStunCount();
 		else        owner->DecrementStunCount();
+
+		// See HandleModRoot: restore must notify synchronously so the flag reaches the spawn packet.
+		if (owner->IsRestoringAuras())
+		{
+			owner->NotifyStunChanged();
+			return;
+		}
 
 		std::weak_ptr weakOwner = owner;
 		owner->GetWorldInstance()->GetUniverse().Post([weakOwner]()
@@ -360,6 +377,13 @@ namespace mmo
 		if (apply) owner->IncrementFearCount();
 		else        owner->DecrementFearCount();
 
+		// See HandleModRoot: restore must notify synchronously so the flag reaches the spawn packet.
+		if (owner->IsRestoringAuras())
+		{
+			owner->NotifyFearChanged();
+			return;
+		}
+
 		std::weak_ptr weakOwner = owner;
 		owner->GetWorldInstance()->GetUniverse().Post([weakOwner]()
 			{
@@ -382,6 +406,13 @@ namespace mmo
 		if (apply) owner->IncrementSleepCount();
 		else        owner->DecrementSleepCount();
 
+		// See HandleModRoot: restore must notify synchronously so the flag reaches the spawn packet.
+		if (owner->IsRestoringAuras())
+		{
+			owner->NotifySleepChanged();
+			return;
+		}
+
 		std::weak_ptr weakOwner = owner;
 		owner->GetWorldInstance()->GetUniverse().Post([weakOwner]()
 			{
@@ -403,6 +434,13 @@ namespace mmo
 
 		if (apply) owner->IncrementDisorientCount();
 		else        owner->DecrementDisorientCount();
+
+		// See HandleModRoot: restore must notify synchronously so the flag reaches the spawn packet.
+		if (owner->IsRestoringAuras())
+		{
+			owner->NotifyDisorientChanged();
+			return;
+		}
 
 		std::weak_ptr weakOwner = owner;
 		owner->GetWorldInstance()->GetUniverse().Post([weakOwner]()

@@ -3,6 +3,10 @@
 
 #include "game_server/objects/game_unit_s.h"
 #include "game_server/objects/game_player_s.h"
+#include "game_server/spells/aura_container.h"
+#include "game_server/persistent_aura.h"
+#include "game/aura.h"
+#include "game/movement_type.h"
 #include "base/timer_queue.h"
 #include "shared/proto_data/project.h"
 #include "shared/proto_data/spells.pb.h"
@@ -328,6 +332,97 @@ SCENARIO("CCMovement - Player unit with watcher never gets IsUnderForcedMovement
 			{
 				CHECK(u.IsDisoriented());
 				CHECK_FALSE(u.IsUnderForcedMovement());
+			}
+		}
+	}
+}
+
+// ===========================================================================
+// Login aura restore — a movement-changing aura must apply immediately without
+// queuing a client ack (which the client can't satisfy before it has spawned,
+// and which would otherwise trip the ack-timeout anti-cheat kick).
+// ===========================================================================
+namespace
+{
+	// Registers a spell with a single ModDecreaseSpeed effect (like the slow built
+	// into the stealth aura) so it can be restored via RestorePersistentAuras.
+	proto::SpellEntry* AddSlowSpell(proto::Project& project, uint32 spellId)
+	{
+		auto* spell = project.spells.add(spellId);
+		if (!spell)
+		{
+			return nullptr;
+		}
+		spell->set_id(spellId);
+		spell->add_attributes(0);
+		spell->add_attributes(0);
+		auto* effect = spell->add_effects();
+		effect->set_index(0);
+		effect->set_aura(static_cast<uint32>(aura_type::ModDecreaseSpeed));
+		return spell;
+	}
+}
+
+SCENARIO("CCMovement - Restoring a slow aura at login applies speed immediately without an ack", "[cc_movement][restore]")
+{
+	GIVEN("a player unit (net watcher attached) and a persisted 30% slow aura")
+	{
+		CCMovementPlayerFixture f;
+		auto& u = *f.unit;
+
+		constexpr uint32 slowSpellId = 9001;
+		REQUIRE(AddSlowSpell(f.project, slowSpellId) != nullptr);
+
+		const float baseRunSpeed = u.GetSpeed(movement_type::Run);
+		REQUIRE(baseRunSpeed > 0.0f);
+		REQUIRE_FALSE(u.HasPendingMovementChange());
+
+		PersistentAuraData data;
+		data.spellId = slowSpellId;
+		data.casterId = 0;
+		data.remainingDuration = 0; // non-expiring
+		data.stackCount = 1;
+		data.effects.push_back(PersistentAuraEffect{ /*effectIndex=*/0, /*basePoints=*/-30 });
+
+		WHEN("the aura is restored at login")
+		{
+			u.RestorePersistentAuras({ data });
+
+			THEN("the reduced speed is effective immediately")
+			{
+				CHECK(u.GetSpeed(movement_type::Run) < baseRunSpeed);
+			}
+
+			THEN("no pending client ack is queued (so the anti-cheat won't kick on the first move)")
+			{
+				CHECK_FALSE(u.HasPendingMovementChange());
+			}
+		}
+	}
+}
+
+SCENARIO("CCMovement - Applying a slow aura during normal play still queues a client ack", "[cc_movement][restore]")
+{
+	GIVEN("a player unit (net watcher attached) and a 30% slow spell")
+	{
+		CCMovementPlayerFixture f;
+		auto& u = *f.unit;
+
+		constexpr uint32 slowSpellId = 9002;
+		auto* spell = AddSlowSpell(f.project, slowSpellId);
+		REQUIRE(spell != nullptr);
+
+		REQUIRE_FALSE(u.HasPendingMovementChange());
+
+		WHEN("the aura is applied through the normal (non-restore) path")
+		{
+			auto container = std::make_shared<AuraContainer>(u, /*casterId=*/0, *spell, /*duration=*/0, /*itemGuid=*/0);
+			container->AddAuraEffect(spell->effects(0), -30);
+			u.ApplyAura(std::move(container));
+
+			THEN("a client ack is expected before the speed change is finalized")
+			{
+				CHECK(u.HasPendingMovementChange());
 			}
 		}
 	}

@@ -1610,7 +1610,7 @@ namespace mmo
 			// Stop unit movement immediately
 			m_mover->StopMovement();
 
-			if (m_netUnitWatcher)
+			if (m_netUnitWatcher && !m_restoringAuras)
 			{
 				const uint32 ackId = GenerateAckId();
 
@@ -1623,6 +1623,14 @@ namespace mmo
 				PushPendingMovementChange(change);
 
 				m_netUnitWatcher->OnRootChanged(true, ackId);
+			}
+			else if (m_netUnitWatcher)
+			{
+				// Player under a persisted root at login: bake the Rooted movement flag into the
+				// server-side movement info so it is carried by the spawn packet. No client ack is
+				// expected here (the client can't ack for a unit it hasn't spawned yet, which would
+				// trip the ack-timeout anti-cheat kick).
+				m_movementInfo.movementFlags |= movement_flags::Rooted;
 			}
 			else
 			{
@@ -1687,7 +1695,7 @@ namespace mmo
 			InterruptCastDueToControlEffect();
 
 			if (m_mover) m_mover->StopMovement();
-			if (m_netUnitWatcher)
+			if (m_netUnitWatcher && !m_restoringAuras)
 			{
 				const uint32 ackId = GenerateAckId();
 				PendingMovementChange change;
@@ -1697,6 +1705,12 @@ namespace mmo
 				change.timestamp = GetAsyncTimeMs();
 				PushPendingMovementChange(change);
 				m_netUnitWatcher->OnStunChanged(true, ackId);
+			}
+			else if (m_netUnitWatcher)
+			{
+				// Player under a persisted stun at login: bake the Rooted movement flag into the
+				// spawn packet directly instead of expecting an un-ackable client ack.
+				m_movementInfo.movementFlags |= movement_flags::Rooted;
 			}
 			else
 			{
@@ -1750,7 +1764,7 @@ namespace mmo
 			InterruptCastDueToControlEffect();
 
 			if (m_mover) m_mover->StopMovement();
-			if (m_netUnitWatcher)
+			if (m_netUnitWatcher && !m_restoringAuras)
 			{
 				const uint32 ackId = GenerateAckId();
 				PendingMovementChange change;
@@ -1760,6 +1774,12 @@ namespace mmo
 				change.timestamp = GetAsyncTimeMs();
 				PushPendingMovementChange(change);
 				m_netUnitWatcher->OnSleepChanged(true, ackId);
+			}
+			else if (m_netUnitWatcher)
+			{
+				// Player under a persisted sleep at login: bake the Rooted movement flag into the
+				// spawn packet directly instead of expecting an un-ackable client ack.
+				m_movementInfo.movementFlags |= movement_flags::Rooted;
 			}
 			else
 			{
@@ -1814,7 +1834,7 @@ namespace mmo
 			InterruptCastDueToControlEffect();
 
 			if (m_mover) m_mover->StopMovement();
-			if (m_netUnitWatcher)
+			if (m_netUnitWatcher && !m_restoringAuras)
 			{
 				const uint32 ackId = GenerateAckId();
 				PendingMovementChange change;
@@ -1824,6 +1844,15 @@ namespace mmo
 				change.timestamp = GetAsyncTimeMs();
 				PushPendingMovementChange(change);
 				m_netUnitWatcher->OnFearChanged(true, ackId);
+			}
+			else if (m_netUnitWatcher)
+			{
+				// Player under a persisted fear at login. Unlike a feared NPC (which is driven by
+				// the server-side CC wander and is NOT rooted), a feared player carries the Rooted
+				// movement flag client-side — the fear ack path requires it, and the client drives
+				// its own feared movement. Bake that flag into the spawn packet and skip both the
+				// un-ackable ack round-trip and the NPC-only CC wander controller.
+				m_movementInfo.movementFlags |= movement_flags::Rooted;
 			}
 			else
 			{
@@ -1878,7 +1907,7 @@ namespace mmo
 		else if (!wasDisoriented && isDisoriented)
 		{
 			if (m_mover) m_mover->StopMovement();
-			if (m_netUnitWatcher)
+			if (m_netUnitWatcher && !m_restoringAuras)
 			{
 				const uint32 ackId = GenerateAckId();
 				PendingMovementChange change;
@@ -1888,6 +1917,14 @@ namespace mmo
 				change.timestamp = GetAsyncTimeMs();
 				PushPendingMovementChange(change);
 				m_netUnitWatcher->OnDisorientChanged(true, ackId);
+			}
+			else if (m_netUnitWatcher)
+			{
+				// Player under a persisted disorient at login. As with fear, a disoriented player
+				// carries the Rooted movement flag client-side (the disorient ack path requires it)
+				// while the client drives its own movement. Bake the flag into the spawn packet and
+				// skip both the un-ackable ack round-trip and the NPC-only CC wander controller.
+				m_movementInfo.movementFlags |= movement_flags::Rooted;
 			}
 			else
 			{

@@ -903,6 +903,12 @@ namespace mmo
 		/// @param auras The persisted auras to restore.
 		void RestorePersistentAuras(const std::vector<PersistentAuraData>& auras);
 
+		/// @returns True while RestorePersistentAuras is re-applying persisted auras at login.
+		/// Movement-affecting aura handlers use this to apply their change immediately (baked into
+		/// the spawn packet) instead of going through the client-ack round-trip, which the client
+		/// cannot satisfy before it has spawned the unit.
+		[[nodiscard]] bool IsRestoringAuras() const { return m_restoringAuras; }
+
 		/// Restores spell cooldowns from remaining-millisecond snapshots.
 		/// @param cooldowns The persisted cooldowns to restore.
 		void RestorePersistentCooldowns(const std::vector<PersistentCooldownData>& cooldowns);
