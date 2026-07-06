@@ -298,6 +298,18 @@ namespace mmo
 
 		PacketParseResult OnDestroyObjects(game::IncomingPacket &packet);
 
+		/// Handles the UnitVisibilityList packet: shows or hides units the client already
+		/// knows without destroying them (stealth visibility toggling).
+		PacketParseResult OnUnitVisibilityList(game::IncomingPacket &packet);
+
+		/// Handles the StealthDetected packet: a hostile creature has spotted the player
+		/// while stealthed - play its alert sound.
+		PacketParseResult OnStealthDetected(game::IncomingPacket &packet);
+
+		/// Plays a stealth alert sound (or the default sound when the file name is empty)
+		/// as a 3D sound at the given world position.
+		void PlayStealthAlertSound(const String &soundFile, const Vector3 &position);
+
 		PacketParseResult OnMovement(game::IncomingPacket &packet);
 
 		PacketParseResult OnChatMessage(game::IncomingPacket &packet);

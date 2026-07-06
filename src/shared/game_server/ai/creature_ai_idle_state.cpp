@@ -12,6 +12,7 @@ namespace mmo
 	CreatureAIIdleState::CreatureAIIdleState(CreatureAI& ai)
 		: CreatureAIState(ai)
 		, m_waitCountdown(ai.GetControlled().GetTimers())
+		, m_stealthScanCountdown(ai.GetControlled().GetTimers())
 	{
 	}
 
@@ -60,6 +61,28 @@ namespace mmo
 				// TODO: Check if we are hostile against target unit. For now we will only attack player characters
 				if (controlled.UnitIsEnemy(unit))
 				{
+					// Stealthed enemies use the stealth detection rules (already applied by the
+					// CanBeSeenBy check above) and route into the alert state instead of
+					// engaging combat instantly.
+					if (unit.GetVisibility() == unit_visibility::GroupStealth)
+					{
+						if (MapData* mapData = GetAI().GetControlled().GetWorldInstance()->GetMapData())
+						{
+							if (!mapData->IsInLineOfSight(controlled.GetPosition(), unit.GetPosition()))
+							{
+								return true;
+							}
+						}
+
+						auto strongUnit = std::static_pointer_cast<GameUnitS>(unit.shared_from_this());
+						auto strongThis = shared_from_this();
+						GetAI().GetControlled().GetWorldInstance()->GetUniverse().Post([strongUnit, strongThis]()
+							{
+								strongThis->GetAI().EnterAlert(*strongUnit);
+							});
+						return true;
+					}
+
 					const int32 ourLevel = controlled.Get<int32>(object_fields::Level);
 					const int32 otherLevel = unit.Get<int32>(object_fields::Level);
 					const int32 diff = ::abs(ourLevel - otherLevel);
@@ -161,6 +184,12 @@ namespace mmo
 		OnCreatureMovementChanged();
 
 		m_unitWatcher->Start();
+
+		// Periodic stealth scan: catches stationary stealthed units the unit watcher
+		// (which only fires on unit movement) would miss, e.g. when the creature patrols
+		// past a stealthed player standing still.
+		m_connections += m_stealthScanCountdown.ended.connect(*this, &CreatureAIIdleState::OnStealthScan);
+		m_stealthScanCountdown.SetEnd(GetAsyncTimeMs() + StealthScanInterval);
 	}
 
 	void CreatureAIIdleState::OnLeave()
@@ -168,6 +197,7 @@ namespace mmo
 		ASSERT(m_unitWatcher);
 		m_unitWatcher.reset();
 
+		m_stealthScanCountdown.Cancel();
 		m_waitCountdown.Cancel();
 		m_connections.disconnect();
 
@@ -273,6 +303,57 @@ namespace mmo
 	void CreatureAIIdleState::OnWaitCountdownExpired()
 	{
 		AdvanceIdleMovement();
+	}
+
+	void CreatureAIIdleState::OnStealthScan()
+	{
+		auto& controlled = GetControlled();
+
+		if (controlled.IsAlive() && controlled.GetWorldInstance())
+		{
+			const auto& location = controlled.GetPosition();
+
+			controlled.GetWorldInstance()->GetUnitFinder().FindUnits(
+				Circle(location.x, location.z, stealth::MaxDetectionRange),
+				[this, &controlled](GameUnitS& unit) -> bool
+				{
+					if (&unit == &controlled || !unit.IsAlive())
+					{
+						return true;
+					}
+
+					// Only interested in stealthed hostile units the creature currently detects
+					if (unit.GetVisibility() != unit_visibility::GroupStealth)
+					{
+						return true;
+					}
+
+					if (!controlled.UnitIsEnemy(unit) || !unit.CanBeSeenBy(controlled))
+					{
+						return true;
+					}
+
+					if (MapData* mapData = controlled.GetWorldInstance()->GetMapData())
+					{
+						if (!mapData->IsInLineOfSight(controlled.GetPosition(), unit.GetPosition()))
+						{
+							return true;
+						}
+					}
+
+					auto strongUnit = std::static_pointer_cast<GameUnitS>(unit.shared_from_this());
+					auto strongThis = shared_from_this();
+					controlled.GetWorldInstance()->GetUniverse().Post([strongUnit, strongThis]()
+						{
+							strongThis->GetAI().EnterAlert(*strongUnit);
+						});
+
+					// Stop scanning - one alert target is enough
+					return false;
+				});
+		}
+
+		m_stealthScanCountdown.SetEnd(GetAsyncTimeMs() + StealthScanInterval);
 	}
 
 	void CreatureAIIdleState::OnTargetReached()

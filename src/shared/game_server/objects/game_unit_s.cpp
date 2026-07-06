@@ -392,10 +392,63 @@ namespace mmo
 		{
 		case unit_visibility::On:
 			return true;
+
+		case unit_visibility::GroupStealth:
+			{
+				if (other.IsGameMaster())
+				{
+					return true;
+				}
+
+				// Party members can always see stealthed group mates
+				const auto* stealthedPlayer = dynamic_cast<const GamePlayerS*>(this);
+				const auto* observingPlayer = dynamic_cast<const GamePlayerS*>(&other);
+				if (stealthedPlayer && observingPlayer &&
+					stealthedPlayer->GetGroupId() != 0 &&
+					stealthedPlayer->GetGroupId() == observingPlayer->GetGroupId())
+				{
+					return true;
+				}
+
+				return other.CanDetectStealthedUnit(*this);
+			}
+
 		// TODO: Handle other values here except the default
 		default:
 			return other.IsGameMaster();
 		}
+	}
+
+	bool GameUnitS::CanDetectStealthedUnit(const GameUnitS &stealthed) const
+	{
+		// Dead units don't detect anything
+		if (!IsAlive())
+		{
+			return false;
+		}
+
+		// A stealthed unit outside of the observer's front cone can never be seen
+		if (!IsFacingTowards(stealthed))
+		{
+			return false;
+		}
+
+		const int32 observerLevel = Get<int32>(object_fields::Level);
+		const int32 stealthLevel = stealthed.Get<int32>(object_fields::Level);
+
+		float detectionRange = stealth::BaseDetectionRange;
+		if (observerLevel > stealthLevel)
+		{
+			detectionRange += static_cast<float>(observerLevel - stealthLevel) * stealth::RangePerLevelAbove;
+		}
+		else if (observerLevel < stealthLevel)
+		{
+			detectionRange -= static_cast<float>(stealthLevel - observerLevel) * stealth::RangePerLevelBelow;
+		}
+
+		detectionRange = Clamp<float>(detectionRange, stealth::MinDetectionRange, stealth::MaxDetectionRange);
+
+		return GetSquaredDistanceTo(stealthed.GetPosition(), true) <= detectionRange * detectionRange;
 	}
 
 	PowerType GameUnitS::GetPowerTypeByUnitMod(UnitMods mod)
@@ -1436,15 +1489,23 @@ namespace mmo
 
 	void GameUnitS::NotifyVisibilityChanged()
 	{
-		// Determine if we should be visible or not
+		// Invisibility (ModVisibility) has priority over everything else and keeps its
+		// original semantics: the unit is fully invisible except to game masters.
+		if (HasAuraEffect(aura_type::ModVisibility))
+		{
+			SetVisibility(unit_visibility::Off);
+			return;
+		}
 
-		// By default we should be visible if we don't have a visibility modification aura active
-		bool shouldBeVisible = !HasAuraEffect(aura_type::ModVisibility);
-
-		// TODO: Maybe add other conditions here
+		// Stealth: visibility is evaluated per observer in CanBeSeenBy.
+		if (HasAuraEffect(aura_type::ModStealth))
+		{
+			SetVisibility(unit_visibility::GroupStealth);
+			return;
+		}
 
 		// Apply visibility change (this method is idempotent and does nothing if the value is already set)
-		SetVisibility(shouldBeVisible ? unit_visibility::On : unit_visibility::Off);
+		SetVisibility(unit_visibility::On);
 	}
 
 	int32 GameUnitS::GetTotalSpellMods(const SpellModType type, const SpellModOp op, const uint32 spellId) const
@@ -3596,15 +3657,24 @@ namespace mmo
 			return; // No change
 		}
 
-		const UnitVisibility prev = m_visibility;
+		const bool wasStealth = (m_visibility == unit_visibility::GroupStealth);
 		m_visibility = x;
+
 		if (m_worldInstance)
 		{
-			UpdateVisibilityAndView(prev);
+			// Keep the world instance's stealth registry up to date so stealthed units get
+			// their per-observer visibility re-evaluated periodically.
+			const bool isStealth = (m_visibility == unit_visibility::GroupStealth);
+			if (wasStealth != isStealth)
+			{
+				m_worldInstance->NotifyStealthStateChanged(*this, isStealth);
+			}
+
+			UpdateVisibilityAndView();
 		}
 	}
 
-	void GameUnitS::UpdateVisibilityAndView(UnitVisibility prevVisibility)
+	void GameUnitS::UpdateVisibilityAndView()
 	{
 		auto *worldInstance = GetWorldInstance();
 		if (!worldInstance)
@@ -3612,47 +3682,18 @@ namespace mmo
 			return;
 		}
 
-		// Only notify subscribers whose visibility of this unit actually changed.
-		// Sending NotifyObjectsSpawned to a subscriber that already received a spawn
-		// packet (because prevVisibility was already On) would cause the client to crash
-		// with a duplicate entity assertion in Scene::CreateEntity.
-		std::vector<TileSubscriber *> toSpawn;
-		std::vector<TileSubscriber *> toDespawn;
-
-		ForEachSubscriberInSight([this, prevVisibility, &toSpawn, &toDespawn](TileSubscriber &subscriber)
+		// Each subscriber tracks what its client actually knows (spawned / hidden), so the
+		// edge detection lives there - this method just reports the current answer for
+		// every subscriber in sight.
+		ForEachSubscriberInSight([this](TileSubscriber &subscriber)
 		{
 			if (&subscriber.GetGameUnit() == this)
 			{
 				return;
 			}
 
-			// Determine whether this subscriber could see the unit before and after the change.
-			// CanBeSeenBy() uses the already-updated m_visibility, so we reconstruct the
-			// previous answer manually from prevVisibility.
-			const bool couldSeeBefore = (prevVisibility == unit_visibility::On) || subscriber.GetGameUnit().IsGameMaster();
-			const bool canSeeNow = CanBeSeenBy(subscriber.GetGameUnit());
-
-			if (canSeeNow && !couldSeeBefore)
-			{
-				toSpawn.push_back(&subscriber);
-			}
-			else if (!canSeeNow && couldSeeBefore)
-			{
-				toDespawn.push_back(&subscriber);
-			}
+			subscriber.NotifyUnitVisibilityChanged(*this, CanBeSeenBy(subscriber.GetGameUnit()));
 		});
-
-		std::vector<GameObjectS *> objects{1, this};
-
-		for (auto *subscriber : toDespawn)
-		{
-			subscriber->NotifyObjectsDespawned(objects);
-		}
-
-		for (auto *subscriber : toSpawn)
-		{
-			subscriber->NotifyObjectsSpawned(objects);
-		}
 	}
 
 	void GameUnitS::TriggerProcEvent(SpellProcFlags eventFlags, GameUnitS *target, uint32 damage, uint32 procEx, uint8 school, bool isProc, uint64 familyFlags)

@@ -18,6 +18,10 @@ namespace mmo
 	class CreatureAIIdleState : public CreatureAIState
 	{
 	public:
+		/// Interval between periodic scans for stealthed hostile units (milliseconds).
+		static constexpr GameTime StealthScanInterval = 500;
+
+	public:
 		/// Initializes a new instance of the CreatureAIIdleState class.
 		/// @param ai The ai class instance this state belongs to.
 		explicit CreatureAIIdleState(CreatureAI& ai);
@@ -60,9 +64,16 @@ namespace mmo
 
 		void MoveToRandomPointInRange();
 
+		/// @brief Periodically scans for stealthed hostile units in detection range. The unit
+		/// watcher only fires on unit movement, so a creature walking past a stationary
+		/// stealthed unit would never trigger it without this scan.
+		void OnStealthScan();
+
 	private:
 
 		Countdown m_waitCountdown;
+
+		Countdown m_stealthScanCountdown;
 
 		scoped_connection_container m_connections;
 

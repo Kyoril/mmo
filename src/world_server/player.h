@@ -110,6 +110,12 @@ namespace mmo
 		/// @copydoc TileSubscriber::IsObjectKnown
 		bool IsObjectKnown(uint64 guid) const override { return m_spawnedGuids.contains(guid); }
 
+		/// @copydoc TileSubscriber::NotifyUnitVisibilityChanged
+		void NotifyUnitVisibilityChanged(GameUnitS& unit, bool visible) override;
+
+		/// @copydoc TileSubscriber::IsObjectHiddenForClient
+		bool IsObjectHiddenForClient(uint64 guid) const override { return m_hiddenGuids.contains(guid); }
+
 		/// Handles a proxy packet received from the realm server.
 		void HandleProxyPacket(game::client_realm_packet::Type opCode, std::vector<uint8>& buffer);
 
@@ -498,9 +504,13 @@ namespace mmo
 		/// @brief Returns true if the player currently has access to a mailbox world object nearby.
 		[[nodiscard]] bool IsMailboxAccessible() const;
 
-		/// Handles the client's request to use a world object (door, chest, etc.).
-		/// Validates distance and object state, then calls GameWorldObjectS::Use().
+		/// Handles the client's request to directly use a world object (currently mailboxes only).
+		/// Validates object type and distance, then calls GameWorldObjectS::Use().
 		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnUseObject(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 		/// Handles the client's request to ask for an npc's quest dialog. This is expected to be sent when the npc is just a quest giver / quest acceptor and nothing more.
 		///	@param opCode The op code of the packet.
 		///	@param size The size of the packet content in bytes, excluding the packet header.
@@ -741,6 +751,9 @@ namespace mmo
 
 		void OnProficiencyChanged(uint32 proficiencyId, bool added) override;
 
+		/// @copydoc NetUnitWatcherS::OnStealthDetected
+		void OnStealthDetected(uint64 detectorGuid) override;
+
 		void OnReviveOffer(uint64 casterGuid, uint32 spellId, uint32 reviveHealth, uint32 mapId, const Vector3& position, const Radian& facing) override;
 
 	private:
@@ -857,6 +870,12 @@ namespace mmo
 		/// @brief Tracks the GUIDs of all objects currently spawned at this client.
 		/// Used to ASSERT that no object is spawned twice without an intermediate despawn.
 		std::unordered_set<uint64> m_spawnedGuids;
+
+		/// @brief GUIDs of units the client knows (spawned) but which are currently hidden
+		/// from it due to stealth. Kept in client memory and toggled via UnitVisibilityList
+		/// packets instead of spawn/despawn to avoid packet churn while stealth visibility
+		/// flips during movement.
+		std::unordered_set<uint64> m_hiddenGuids;
 
 	public:
 		/// @brief Sends a time sync request to the client with incremented index.

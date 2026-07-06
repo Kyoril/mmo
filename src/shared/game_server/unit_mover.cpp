@@ -283,6 +283,12 @@ namespace mmo
 				tile,
 				[&packet, &buffer, &moved](TileSubscriber& subscriber)
 				{
+					// Never leak movement of units the subscriber's client currently can't see (stealth)
+					if (subscriber.IsObjectHiddenForClient(moved.GetGuid()))
+					{
+						return;
+					}
+
 					subscriber.SendPacket(packet, buffer);
 				});
 		}
@@ -455,6 +461,12 @@ namespace mmo
 				tile,
 				[&packet, &buffer, &moved](TileSubscriber& subscriber)
 				{
+					// Never leak movement of units the subscriber's client currently can't see (stealth)
+					if (subscriber.IsObjectHiddenForClient(moved.GetGuid()))
+					{
+						return;
+					}
+
 					subscriber.SendPacket(packet, buffer);
 				});
 		}
@@ -518,6 +530,12 @@ namespace mmo
 				tile,
 				[&packet, &buffer, &moved](TileSubscriber& subscriber)
 				{
+					// Never leak movement of units the subscriber's client currently can't see (stealth)
+					if (subscriber.IsObjectHiddenForClient(moved.GetGuid()))
+					{
+						return;
+					}
+
 					subscriber.SendPacket(packet, buffer);
 				});
 		}

@@ -35,5 +35,14 @@ namespace mmo
 		/// packet for the given object GUID and has not yet received a destroy packet.
 		/// Used to guard against sending spurious spawn or despawn packets.
 		virtual bool IsObjectKnown(uint64 guid) const { return false; }
+
+		/// Called when the per-observer visibility of a unit may have changed (e.g. stealth).
+		/// The subscriber decides based on its own client state whether to spawn the unit,
+		/// hide/show it via a UnitVisibilityList packet, despawn it or do nothing.
+		virtual void NotifyUnitVisibilityChanged(GameUnitS& unit, bool visible) {}
+
+		/// Returns true if the given object is known to the client but currently hidden
+		/// from it (stealth). Hidden objects must not receive movement or field updates.
+		virtual bool IsObjectHiddenForClient(uint64 guid) const { return false; }
 	};
 }

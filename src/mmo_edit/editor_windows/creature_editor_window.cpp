@@ -1091,6 +1091,13 @@ namespace mmo
 				ImGui::SetTooltip("Name of the combat script to use (e.g. 'training_dummy', 'example_dungeon_boss').\nLeave empty for default AI behavior.");
 			}
 
+			// Stealth alert sound field
+			ImGui::InputText("Stealth Alert Sound", currentEntry.mutable_stealth_alert_sound());
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Sound file played at the client when this creature detects a stealthed player\n(e.g. 'Sound/Creature/Wolf/WolfAlert.wav'). Leave empty for the default alert sound.");
+			}
+
 			ImGui::Separator();
 
 			// Display existing triggers in a table

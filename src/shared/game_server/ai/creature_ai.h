@@ -108,6 +108,11 @@ namespace mmo
 		/// Enters the combat state. This is usually called from the creatures idle state.
 		void EnterCombat(GameUnitS& victim);
 
+		/// Enters the alert state after detecting a stealthed hostile unit. The creature
+		/// stops, faces the unit and decides after a short duration whether to engage.
+		/// Does nothing if the creature is already alerted.
+		void EnterAlert(GameUnitS& target);
+
 		/// Makes the creature reset, leaving the combat state, reviving itself and run back
 		/// to it's home position.
 		void Reset();

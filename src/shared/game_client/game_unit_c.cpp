@@ -952,6 +952,23 @@ namespace mmo
 		m_fieldMap.Initialize(object_fields::UnitFieldCount);
 	}
 
+	void GameUnitC::SetStealthHidden(const bool hidden)
+	{
+		if (m_stealthHidden == hidden)
+		{
+			return;
+		}
+
+		m_stealthHidden = hidden;
+
+		// Hide the whole node hierarchy (entity, name plate, quest giver icon, attachments)
+		// but keep the object alive and in memory.
+		if (m_sceneNode)
+		{
+			m_sceneNode->SetVisible(!hidden, true);
+		}
+	}
+
 	void GameUnitC::SetQuestGiverStatus(const QuestgiverStatus status)
 	{
 		m_questGiverStatus = status;

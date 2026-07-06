@@ -104,6 +104,25 @@ namespace mmo
 
 	typedef unit_visibility::Type UnitVisibility;
 
+	/// Tuning constants for stealth detection (unit_visibility::GroupStealth).
+	namespace stealth
+	{
+		/// Detection distance in meters when observer and stealthed unit have equal level.
+		static constexpr float BaseDetectionRange = 10.0f;
+
+		/// Added per level the observer is above the stealthed unit.
+		static constexpr float RangePerLevelAbove = 1.0f;
+
+		/// Subtracted per level the observer is below the stealthed unit.
+		static constexpr float RangePerLevelBelow = 1.5f;
+
+		/// Lower bound of the detection distance in meters.
+		static constexpr float MinDetectionRange = 1.5f;
+
+		/// Upper bound of the detection distance in meters.
+		static constexpr float MaxDetectionRange = 25.0f;
+	}
+
 	namespace unit_mods
 	{
 		enum Type
@@ -333,6 +352,11 @@ namespace mmo
 		/// @param proficiencyId The proficiency ID that changed.
 		/// @param added True if the proficiency was added, false if removed.
 		virtual void OnProficiencyChanged(uint32 proficiencyId, bool added) = 0;
+
+		/// Called when a hostile creature has spotted this (stealthed) unit and entered its
+		/// alert state, so the client can play a warning sound.
+		/// @param detectorGuid The GUID of the creature that spotted the unit.
+		virtual void OnStealthDetected(uint64 detectorGuid) {}
 
 		/// Called when another unit casts a revive spell on this (dead) unit, offering to bring
 		/// it back to life. The watcher is expected to prompt the player and, on acceptance,
@@ -661,6 +685,12 @@ namespace mmo
 		virtual bool IsGameMaster() const { return false; }
 
 		bool CanBeSeenBy(const GameUnitS &other) const;
+
+		/// Determines whether this unit is able to detect the given stealthed unit right now,
+		/// based on the front cone and the level difference. Does not include group or GM checks.
+		/// @param stealthed The stealthed unit to check detection against.
+		/// @returns true if this unit currently detects the stealthed unit.
+		bool CanDetectStealthedUnit(const GameUnitS &stealthed) const;
 
 	public:
 		/// Gets the power type associated with a unit modifier.
@@ -1458,11 +1488,12 @@ public:
 
 		void SetVisibility(UnitVisibility x);
 
-		/// Recomputes which subscribers gained or lost visibility of this unit and sends
-		/// the appropriate spawn / despawn packets.  @p prevVisibility is the visibility
-		/// state that was in effect before the change; pass the same as the current value
-		/// to force a full-broadcast (e.g. on first spawn — but prefer AddGameObject for that).
-		virtual void UpdateVisibilityAndView(UnitVisibility prevVisibility);
+		/// Re-evaluates the per-observer visibility of this unit for every subscriber in
+		/// sight and reports the result to each subscriber. The subscriber tracks what its
+		/// client actually knows (spawned / hidden) and decides whether to spawn, despawn,
+		/// hide or show the unit. Called on visibility state changes and periodically for
+		/// stealthed units (whose visibility depends on observer position and facing).
+		virtual void UpdateVisibilityAndView();
 
 	protected:
 		/// Prepares the field map for the unit.
