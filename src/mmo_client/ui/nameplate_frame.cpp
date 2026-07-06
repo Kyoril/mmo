@@ -29,6 +29,9 @@ namespace mmo
 		constexpr float NameplateHighlightBorder = 4.0f;
 		// Opacity used for plates of units which are not the current target.
 		constexpr float NameplateUnselectedOpacity = 0.85f;
+		// Opacity of the highlight outline while the plate is only hovered (the selected
+		// plate shows it fully opaque).
+		constexpr float NameplateHoverHighlightOpacity = 0.4f;
 
 		const std::string NameplateTemplateName("NameplateTemplate");
 		const std::string NameplateNameTemplateName("NameplateNameTemplate");
@@ -40,6 +43,51 @@ namespace mmo
 		constexpr argb_t NeutralBarColor = 0xFFE8B923;			// yellow
 		constexpr argb_t FriendlyNpcBarColor = 0xFF3FBF3F;		// green
 		constexpr argb_t FriendlyPlayerBarColor = 0xFF3F6FD9;	// blue
+
+		/// Removes the last UTF-8 code point from a string (multi-byte aware, so
+		/// truncation never leaves a broken byte sequence behind).
+		void PopUtf8Char(String& text)
+		{
+			while (!text.empty())
+			{
+				const auto byte = static_cast<unsigned char>(text.back());
+				text.pop_back();
+
+				// Stop once the removed byte was a lead byte (not a continuation byte).
+				if ((byte & 0xC0) != 0x80)
+				{
+					break;
+				}
+			}
+		}
+
+		/// Truncates a name with an ellipsis so it fits a single line of the given width.
+		/// The text component word-wraps unconditionally, and a wrapped name would spill
+		/// over the health bar below it.
+		String FitNameToWidth(const String& name, const FontPtr& font, const float maxWidth)
+		{
+			if (!font || maxWidth <= 0.0f)
+			{
+				return name;
+			}
+
+			// Measure with the same scale the text component renders (and wraps) with.
+			const float textScale = FrameManager::Get().GetUIScale().y;
+			if (font->GetTextWidth(name, textScale) <= maxWidth)
+			{
+				return name;
+			}
+
+			static const String ellipsis = "...";
+
+			String truncated = name;
+			while (!truncated.empty() && font->GetTextWidth(truncated + ellipsis, textScale) > maxWidth)
+			{
+				PopUtf8Char(truncated);
+			}
+
+			return truncated + ellipsis;
+		}
 
 		/// Formats an ARGB color as the 8-digit hex string expected by frame properties.
 		std::string ToHexColor(const argb_t argb)
@@ -73,10 +121,11 @@ namespace mmo
 		}
 	}
 
-	NameplateFrame::NameplateFrame(const String& name, Camera& camera, const ObjectGuid unitGuid)
+	NameplateFrame::NameplateFrame(const String& name, Camera& camera, const ObjectGuid unitGuid, InteractHandler interactHandler)
 		: Frame("Nameplate", name)
 		, m_camera(&camera)
 		, m_unitGuid(unitGuid)
+		, m_interactHandler(std::move(interactHandler))
 	{
 		ApplyTemplate();
 		CreateChildren();
@@ -114,19 +163,23 @@ namespace mmo
 
 		// The children are created directly (not via FrameManager) so they are owned solely
 		// by this plate and destroyed together with it, instead of leaking into the global
-		// frame registry (same pattern as the chat bubble tail).
+		// frame registry (same pattern as the chat bubble tail). They are also disabled so
+		// hover tracking lands on this plate frame itself instead of a child.
 		m_highlight = std::make_shared<Frame>("Frame", GetName() + "_Highlight");
 		highlightTemplate->Copy(*m_highlight);
 		m_highlight->SetClickable(false);
+		m_highlight->SetEnabled(false);
 		m_highlight->SetVisible(false);
 
 		m_healthBar = std::make_shared<ProgressBar>("ProgressBar", GetName() + "_Health");
 		healthBarTemplate->Copy(*m_healthBar);
 		m_healthBar->SetClickable(false);
+		m_healthBar->SetEnabled(false);
 
 		m_nameText = std::make_shared<Frame>("Frame", GetName() + "_Name");
 		nameTemplate->Copy(*m_nameText);
 		m_nameText->SetClickable(false);
+		m_nameText->SetEnabled(false);
 
 		// Highlight first so it renders behind the health bar and reads as an outline.
 		AddChild(m_highlight);
@@ -151,9 +204,14 @@ namespace mmo
 
 	void NameplateFrame::UpdateContent(GameUnitC& unit)
 	{
-		if (m_nameText && m_nameText->GetText() != unit.GetName())
+		if (m_nameText && m_lastUnitName != unit.GetName())
 		{
-			m_nameText->SetText(unit.GetName());
+			m_lastUnitName = unit.GetName();
+
+			// Truncate to a single line: the plate width is the wrap constraint, minus a
+			// small margin so the text doesn't touch the plate edges.
+			const float maxNameWidth = (GetWidth() > 0.0f ? GetWidth() : 240.0f) - 8.0f;
+			m_nameText->SetText(FitNameToWidth(m_lastUnitName, m_nameText->GetFont(), maxNameWidth));
 		}
 
 		if (m_healthBar)
@@ -173,17 +231,17 @@ namespace mmo
 		}
 
 		// Make the selected unit's plate stand out: full opacity plus a highlight outline.
+		// Hovered plates get a subtle preview of the same treatment (full opacity, faint
+		// outline) so they respond to the mouse.
 		const bool selected = ObjectMgr::GetSelectedObjectGuid() == m_unitGuid;
-		if (selected != m_selected)
+		const bool hovered = IsHovered();
+		if (m_highlight)
 		{
-			m_selected = selected;
-			if (m_highlight)
-			{
-				m_highlight->SetVisible(selected);
-			}
+			m_highlight->SetVisible(selected || hovered);
+			m_highlight->SetOpacity(selected ? 1.0f : NameplateHoverHighlightOpacity);
 		}
 
-		SetOpacity(selected ? 1.0f : NameplateUnselectedOpacity);
+		SetOpacity(selected || hovered ? 1.0f : NameplateUnselectedOpacity);
 	}
 
 	void NameplateFrame::Animate(float)
@@ -267,6 +325,17 @@ namespace mmo
 	bool NameplateFrame::OnMouseUp(const MouseButton button, const int32 buttons, const Point& position)
 	{
 		Frame::OnMouseUp(button, buttons, position);
+
+		// Right-clicking a plate acts like right-clicking the unit itself (attack living
+		// enemies, talk to friendly NPCs). Like a button click, this only triggers if the
+		// button is released while still over the plate.
+		if (button == MouseButton::Right && m_interactHandler && IsHovered())
+		{
+			if (const auto unit = ObjectMgr::Get<GameUnitC>(m_unitGuid))
+			{
+				m_interactHandler(*unit);
+			}
+		}
 
 		abort_emission();
 		return true;

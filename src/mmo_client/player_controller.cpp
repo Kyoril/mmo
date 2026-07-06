@@ -13,6 +13,7 @@
 #include "scene_graph/scene_node.h"
 #include "mmo_client/systems/loot_client.h"
 #include "mmo_client/systems/trainer_client.h"
+#include "mmo_client/ui/nameplate_frame.h"
 #include "game_client/movement_event.h"
 
 #include "platform.h"
@@ -765,7 +766,17 @@ namespace mmo
 
 		// If FrameUI has no window which captures the mouse
 		const auto hoverFrame = FrameManager::Get().GetHoveredFrame();
-		if (!hoverFrame || !(hoverFrame->IsEnabled() && hoverFrame->GetType() == Button::Type))
+
+		// Hovering a nameplate counts as hovering the unit it belongs to: it drives the same
+		// cursor, tooltip and interaction logic as hovering the unit's model, even where the
+		// plate doesn't overlap the model.
+		if (const auto nameplate = std::dynamic_pointer_cast<NameplateFrame>(hoverFrame))
+		{
+			GameObjectC* previousObject = m_hoveredObject;
+			m_hoveredObject = ObjectMgr::Get<GameUnitC>(nameplate->GetUnitGuid()).get();
+			OnHoveredObjectChanged(previousObject);
+		}
+		else if (!hoverFrame || !(hoverFrame->IsEnabled() && hoverFrame->GetType() == Button::Type))
 		{
 			// Fire unit raycast
 			m_selectionSceneQuery->ClearResult();
@@ -779,21 +790,21 @@ namespace mmo
 			GameObjectC* newHoveredObject = nullptr;
 
 			// When several objects sit under the cursor (e.g. corpses stacked after a pull),
-			// the closest hit is not always the most useful one to hover. Apply a priority so
-			// players can always grab their loot without waiting for corpses to despawn:
-			// lootable objects win over living units, which in turn win over dead/empty ones.
-			// Within the same priority tier the closest hit wins (the result is already sorted
-			// by distance, so the first match in a tier is the nearest).
+			// the closest hit is not always the most useful one to hover. Apply a priority:
+			// living units win over lootable corpses so attacking stays responsive during
+			// combat, and lootables still win over dead/empty leftovers. Within the same
+			// priority tier the closest hit wins (the result is already sorted by distance,
+			// so the first match in a tier is the nearest).
 			const auto& hitResult = m_selectionSceneQuery->GetLastResult();
 
 			const auto hoverPriority = [](const GameObjectC& object) -> int
 			{
-				if (object.CanBeLooted())
+				if (object.IsUnit() && object.AsUnit().IsAlive())
 				{
 					return 3;
 				}
 
-				if (object.IsUnit() && object.AsUnit().IsAlive())
+				if (object.CanBeLooted())
 				{
 					return 2;
 				}
@@ -822,7 +833,7 @@ namespace mmo
 					bestPriority = priority;
 					newHoveredObject = candidate;
 
-					// Highest tier reached — no farther candidate can beat a lootable hit.
+					// Highest tier reached — no farther candidate can beat a living unit hit.
 					if (bestPriority >= 3)
 					{
 						break;
@@ -908,85 +919,7 @@ namespace mmo
 
 				if (button == MouseButton_Right)
 				{
-					if (m_hoveredObject->CanBeLooted())
-					{
-						if (m_controlledUnit->IsWithinRange(*m_hoveredObject, LootDistance))
-						{
-							// Open the loot dialog if we are close enough
-							m_lootClient.LootObject(*m_hoveredObject);
-						}
-						else
-						{
-							FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "ERR_TOO_FAR_AWAY_TO_LOOT");
-						}
-					}
-					else if (m_hoveredObject->IsUnit())
-					{
-						GameUnitC& unit = m_hoveredObject->AsUnit();
-						if (unit.IsAlive())
-						{
-							if (m_controlledUnit->IsFriendlyTo(unit) && m_controlledUnit->IsWithinRange(*m_hoveredObject, LootDistance))
-							{
-								const uint32 npcFlags = m_hoveredObject->Get<uint32>(object_fields::NpcFlags);
-
-								// Check for explicit flags so we can ask the server for a specific action
-								switch (npcFlags)
-								{
-								case npc_flags::QuestGiver:
-									m_connector.QuestGiverHello(m_hoveredObject->GetGuid());
-									break;
-								case npc_flags::Trainer:
-									m_connector.TrainerMenu(m_hoveredObject->GetGuid());
-									break;
-								case npc_flags::Vendor:
-									m_connector.ListInventory(m_hoveredObject->GetGuid());
-									break;
-								case npc_flags::Banker:
-									m_connector.BankerActivate(m_hoveredObject->GetGuid());
-									break;
-								default:
-									// No specific npc flag set, so ask for the gossip dialog
-									if (npcFlags != 0)
-									{
-										m_connector.GossipHello(m_hoveredObject->GetGuid());
-									}
-									break;
-								}
-							}
-							else
-							{
-								m_controlledUnit->Attack(unit);
-							}
-						}
-					}
-					else if (m_hoveredObject->IsWorldObject() && m_hoveredObject->IsUsable(m_controlledUnit->AsPlayer()))
-					{
-						GameWorldObjectC* worldObject = static_cast<GameWorldObjectC*>(m_hoveredObject);
-						if (worldObject->GetType() == game_world_object_type::Mailbox)
-						{
-							// Mailboxes are service objects like npc interactions: no open spell cast involved
-							if (m_controlledUnit->IsWithinRange(*m_hoveredObject, LootDistance))
-							{
-								m_connector.UseObject(m_hoveredObject->GetGuid());
-							}
-							else
-							{
-								FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "ERR_TOO_FAR_AWAY_TO_LOOT");
-							}
-						}
-						else
-						{
-							const proto_client::SpellEntry* openSpell = m_controlledUnit->GetOpenSpell(worldObject);
-							if (openSpell)
-							{
-								m_spellCast.CastSpell(openSpell->id(), m_hoveredObject);
-							}
-							else
-							{
-								FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "LOCKED");
-							}
-						}
-					}
+					InteractWithObject(*m_hoveredObject);
 				}
 			}
 			else
@@ -998,10 +931,106 @@ namespace mmo
 			}
 		}
 
-		if ((button == MouseButton_Left || button == MouseButton_Right) && 
+		if ((button == MouseButton_Left || button == MouseButton_Right) &&
 			(m_controlFlags & (ControlFlags::MoveAndTurnPlayer)) == 0)
 		{
 			Platform::ReleaseMouseCapture();
+		}
+	}
+
+	void PlayerController::InteractWithObject(GameObjectC& object)
+	{
+		if (!m_controlledUnit)
+		{
+			return;
+		}
+
+		// Living units take priority over everything else (including looting) so attacking
+		// stays responsive during combat when corpses overlap living enemies.
+		if (object.IsUnit())
+		{
+			GameUnitC& unit = object.AsUnit();
+			if (unit.IsAlive())
+			{
+				if (m_controlledUnit->IsFriendlyTo(unit) && m_controlledUnit->IsWithinRange(object, LootDistance))
+				{
+					const uint32 npcFlags = object.Get<uint32>(object_fields::NpcFlags);
+
+					// Check for explicit flags so we can ask the server for a specific action
+					switch (npcFlags)
+					{
+					case npc_flags::QuestGiver:
+						m_connector.QuestGiverHello(object.GetGuid());
+						break;
+					case npc_flags::Trainer:
+						m_connector.TrainerMenu(object.GetGuid());
+						break;
+					case npc_flags::Vendor:
+						m_connector.ListInventory(object.GetGuid());
+						break;
+					case npc_flags::Banker:
+						m_connector.BankerActivate(object.GetGuid());
+						break;
+					default:
+						// No specific npc flag set, so ask for the gossip dialog
+						if (npcFlags != 0)
+						{
+							m_connector.GossipHello(object.GetGuid());
+						}
+						break;
+					}
+				}
+				else
+				{
+					m_controlledUnit->Attack(unit);
+				}
+
+				return;
+			}
+		}
+
+		if (object.CanBeLooted())
+		{
+			if (m_controlledUnit->IsWithinRange(object, LootDistance))
+			{
+				// Open the loot dialog if we are close enough
+				m_lootClient.LootObject(object);
+			}
+			else
+			{
+				FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "ERR_TOO_FAR_AWAY_TO_LOOT");
+			}
+
+			return;
+		}
+
+		if (object.IsWorldObject() && object.IsUsable(m_controlledUnit->AsPlayer()))
+		{
+			GameWorldObjectC* worldObject = static_cast<GameWorldObjectC*>(&object);
+			if (worldObject->GetType() == game_world_object_type::Mailbox)
+			{
+				// Mailboxes are service objects like npc interactions: no open spell cast involved
+				if (m_controlledUnit->IsWithinRange(object, LootDistance))
+				{
+					m_connector.UseObject(object.GetGuid());
+				}
+				else
+				{
+					FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "ERR_TOO_FAR_AWAY_TO_LOOT");
+				}
+			}
+			else
+			{
+				const proto_client::SpellEntry* openSpell = m_controlledUnit->GetOpenSpell(worldObject);
+				if (openSpell)
+				{
+					m_spellCast.CastSpell(openSpell->id(), &object);
+				}
+				else
+				{
+					FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "LOCKED");
+				}
+			}
 		}
 	}
 

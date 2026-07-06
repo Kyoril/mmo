@@ -6,6 +6,7 @@
 #include "base/typedefs.h"
 #include "frame_ui/frame.h"
 
+#include <functional>
 #include <map>
 #include <memory>
 
@@ -25,6 +26,14 @@ namespace mmo
 	class NameplateManager final : public NonCopyable
 	{
 	public:
+		/// Callback invoked when a plate is right-clicked, mirroring a right-click on the
+		/// unit itself. Passed on to every created plate frame.
+		using InteractHandler = std::function<void(GameUnitC&)>;
+
+	public:
+		/// Sets the handler invoked when a nameplate is right-clicked.
+		void SetInteractHandler(InteractHandler handler) { m_interactHandler = std::move(handler); }
+
 		/// Per-frame update driven by WorldState::OnIdle.
 		void Update(float elapsed, Camera& camera);
 
@@ -66,5 +75,8 @@ namespace mmo
 
 		/// Counter used to give every created plate frame a unique name.
 		uint32 m_nameplateCounter = 0;
+
+		/// Handler passed to every created plate frame for right-click interactions.
+		InteractHandler m_interactHandler;
 	};
 }

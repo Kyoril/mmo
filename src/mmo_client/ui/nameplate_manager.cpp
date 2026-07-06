@@ -77,7 +77,7 @@ namespace mmo
 			}
 
 			const std::string plateName = "Nameplate_" + std::to_string(++m_nameplateCounter);
-			m_nameplates[guid] = std::make_shared<NameplateFrame>(plateName, camera, guid);
+			m_nameplates[guid] = std::make_shared<NameplateFrame>(plateName, camera, guid, m_interactHandler);
 			changed = true;
 		});
 
@@ -106,6 +106,13 @@ namespace mmo
 			const auto plateIt = m_nameplates.find(selected->GetGuid());
 			const bool plateVisible = plateIt != m_nameplates.end() && plateIt->second->IsVisible();
 			selected->SetUnitNameVisible(!plateVisible);
+
+			// Keep the selected plate above overlapping plates. Applied every frame since
+			// the layer rebuild above re-adds the children in map (guid) order.
+			if (plateVisible)
+			{
+				plateIt->second->BringToFront();
+			}
 		}
 	}
 

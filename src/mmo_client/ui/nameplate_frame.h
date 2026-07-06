@@ -5,6 +5,8 @@
 #include "base/typedefs.h"
 #include "frame_ui/frame.h"
 
+#include <functional>
+
 namespace mmo
 {
 	class Camera;
@@ -22,9 +24,13 @@ namespace mmo
 	class NameplateFrame final : public Frame
 	{
 	public:
+		/// Callback invoked when the plate is right-clicked, mirroring a right-click on
+		/// the unit itself (attack / talk / trade).
+		using InteractHandler = std::function<void(GameUnitC&)>;
+
 		/// Creates a nameplate which follows the specified unit until the manager removes it.
 		/// @param name Unique frame name (also used to name the child frames).
-		NameplateFrame(const String& name, Camera& camera, ObjectGuid unitGuid);
+		NameplateFrame(const String& name, Camera& camera, ObjectGuid unitGuid, InteractHandler interactHandler);
 
 		/// Gets the GUID of the unit this nameplate follows.
 		[[nodiscard]] ObjectGuid GetUnitGuid() const { return m_unitGuid; }
@@ -42,7 +48,8 @@ namespace mmo
 		/// not bleed through into camera control (mirrors the Button behavior).
 		bool OnMouseDown(MouseButton button, int32 buttons, const Point& position) override;
 
-		/// Consumes the matching mouse up event.
+		/// Performs the unit right-click interaction (if the release still happens over the
+		/// plate) and consumes the event.
 		bool OnMouseUp(MouseButton button, int32 buttons, const Point& position) override;
 
 	private:
@@ -58,6 +65,7 @@ namespace mmo
 	private:
 		Camera* m_camera = nullptr;
 		ObjectGuid m_unitGuid = 0;
+		InteractHandler m_interactHandler;
 
 		/// White backing frame slightly larger than the health bar - visible only while
 		/// the unit is selected, so it reads as an outline around the bar.
@@ -67,8 +75,10 @@ namespace mmo
 		/// The unit name text above the health bar.
 		FramePtr m_nameText;
 
-		/// Cached selection state so the highlight is only toggled on changes.
-		bool m_selected = false;
+		/// The unit name the plate currently displays (before truncation), so the
+		/// truncated display text is only recomputed when the name actually changes.
+		String m_lastUnitName;
+
 		/// Cached bar color so the color property is only written on changes.
 		argb_t m_barColor = 0;
 	};

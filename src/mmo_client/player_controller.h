@@ -53,6 +53,11 @@ namespace mmo
 
 		[[nodiscard]] GameObjectC* GetHoveredObject() const { return m_hoveredObject; }
 
+		/// Performs the default right-click interaction with a game object: attack living
+		/// enemies, talk to / trade with friendly NPCs, loot corpses, use world objects.
+		/// Shared by the world right-click and the nameplate right-click.
+		void InteractWithObject(GameObjectC& object);
+
 		[[nodiscard]] int32 GetMouseX() const { return m_x; }
 		[[nodiscard]] int32 GetMouseY() const { return m_y; }
 

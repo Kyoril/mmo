@@ -280,6 +280,15 @@ namespace mmo
 	{
 		// TODO: Do we want to put these asset references in some sort of config setting or something?
 		ObjectMgr::SetUnitNameFontSettings(FontManager::Get().CreateOrRetrieve("Fonts/FRIZQT__.TTF", 24.0f, 1.0f), MaterialManager::Get().Load("Models/UnitNameFont.hmat"));
+
+		// Right-clicking a nameplate behaves exactly like right-clicking the unit in the world.
+		m_nameplateManager.SetInteractHandler([this](GameUnitC& unit)
+		{
+			if (m_playerController)
+			{
+				m_playerController->InteractWithObject(unit);
+			}
+		});
 	}
 
 	void WorldState::OnEnter()
