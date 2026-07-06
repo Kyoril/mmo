@@ -806,6 +806,11 @@ The following bindings are exposed by the FrameUI system (`src/shared/frame_ui/f
 **Returns:** boolean - True if the action button is a spell, false otherwise  
 **Description:** Checks if the action button at the specified slot is a spell.
 
+### IsActionButtonActive
+**Parameters:** `slot` (number) - The action bar slot index  
+**Returns:** boolean - True if the action button's spell is currently active, false otherwise  
+**Description:** Checks whether the action button's spell is a "Disabled While Active" spell (e.g. Stealth) whose aura is currently active on the player. Such buttons are rendered with an active glow, and re-activating them cancels the aura instead of casting again.
+
 ### GetActionButtonSpell
 **Parameters:** `slot` (number) - The action bar slot index  
 **Returns:** Spell - The spell entry, or nil if not found  

@@ -37,6 +37,11 @@ namespace mmo
 
 		[[nodiscard]] bool IsActionButtonSpell(int32 slot) const;
 
+		/// Determines whether the action button's spell is currently "active": the spell has the
+		/// "Disabled While Active" attribute and the player currently has its aura. Such buttons are
+		/// rendered as active (highlighted) and re-activating them cancels the aura.
+		[[nodiscard]] bool IsActionButtonActive(int32 slot) const;
+
 		[[nodiscard]] bool IsActionButtonItem(int32 slot) const;
 
 		[[nodiscard]] const proto_client::SpellEntry* GetActionButtonSpell(int32 slot) const;

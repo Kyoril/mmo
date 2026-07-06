@@ -652,6 +652,10 @@ namespace mmo
 
 		void OnSpellUnlearned(GameUnitS& unit, const proto::SpellEntry& spellEntry);
 
+		/// Notifies the client that a deferred spell cooldown has started (e.g. after a
+		/// "Disabled While Active" spell's aura faded), so the action bar shows the cooldown.
+		void OnSpellCooldownStarted(uint32 spellId, GameTime cooldownMs);
+
 		/// Notifies the client that the character's talent points have been reset.
 		void OnTalentsReset();
 

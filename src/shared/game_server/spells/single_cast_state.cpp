@@ -95,8 +95,10 @@ namespace mmo
 			{
 				startCooldownMs = static_cast<uint32>(CalculateFinalCooldown());
 			}
-			else
+			else if ((m_spell.attributes(0) & spell_attributes::DisabledWhileActive) == 0)
 			{
+				// "Disabled While Active" spells preview no cooldown at cast start - their cooldown
+				// only starts once the resulting aura fades (sent later via a SpellCooldown packet).
 				const GameTime finalCd = CalculateFinalCooldown();
 				if (finalCd > 0)
 				{
@@ -830,9 +832,15 @@ namespace mmo
 
 	void SingleCastState::ApplyAllEffects()
 	{
+		// "Disabled While Active" spells (e.g. Stealth) do not start their cooldown when cast - the
+		// cooldown only begins once the aura they place on the caster fades (handled in
+		// AuraContainer::SetApplied / GameUnitS::StartDeferredSpellCooldown). Skip the normal cooldown
+		// here for such spells; a fallback below still applies it immediately if no aura was gained.
+		const bool disabledWhileActive = (m_spell.attributes(0) & spell_attributes::DisabledWhileActive) != 0;
+
 		// Add spell cooldown if any - unless it was already started at cast start.
 		const GameTime finalCD = CalculateFinalCooldown();
-		if (finalCD && !m_cooldownStartedOnCastStart)
+		if (finalCD && !m_cooldownStartedOnCastStart && !disabledWhileActive)
 		{
 			ApplyCooldown(finalCD, m_spell.categorycooldown());
 		}
@@ -872,6 +880,19 @@ namespace mmo
 
 		// Clear auras
 		m_targetAuraContainers.clear();
+
+		// Fallback for "Disabled While Active" spells: if the caster did not actually gain the
+		// spell's aura (for example it was resisted, or the spell applies no self-aura), there is
+		// nothing to defer the cooldown to. Apply the cooldown immediately so the spell is not left
+		// permanently off cooldown. The normal-path cooldown was intentionally skipped above.
+		if (disabledWhileActive && finalCD && !m_cooldownStartedOnCastStart)
+		{
+			GameUnitS& executer = m_cast.GetExecuter();
+			if (!executer.HasAuraSpellFromCaster(m_spell.id(), executer.GetGuid()))
+			{
+				executer.StartDeferredSpellCooldown(m_spell);
+			}
+		}
 
 		{
 			auto callbacks = std::move(m_postEffectCallbacks);
@@ -1081,8 +1102,11 @@ namespace mmo
 				targetMap.SetUnitTarget(executer.GetGuid());
 			}
 
-			// Cooldown has already been started at cast start for flagged spells.
-			const GameTime cooldownMs = m_cooldownStartedOnCastStart ? 0 : CalculateFinalCooldown();
+			// Cooldown has already been started at cast start for flagged spells. "Disabled While
+			// Active" spells report no cooldown here as well: their cooldown only begins once the
+			// aura fades and is then sent to the client via a dedicated SpellCooldown packet.
+			const bool disabledWhileActive = (m_spell.attributes(0) & spell_attributes::DisabledWhileActive) != 0;
+			const GameTime cooldownMs = (m_cooldownStartedOnCastStart || disabledWhileActive) ? 0 : CalculateFinalCooldown();
 
 			// For cast-time spells the global cooldown was already sent via SpellStart; only
 			// instant casts (no SpellStart) need to communicate it here.

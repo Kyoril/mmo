@@ -94,6 +94,13 @@ namespace mmo
 				return false;
 			}
 
+			// A "Disabled While Active" spell whose aura is currently active stays usable regardless
+			// of power/cost, because re-activating it only cancels the aura (which costs nothing).
+			if ((spell->attributes(0) & spell_attributes::DisabledWhileActive) != 0 && player->HasAura(spell->id()))
+			{
+				return true;
+			}
+
 			if (spell->powertype() != player->GetPowerType())
 			{
 				return false;
@@ -119,6 +126,29 @@ namespace mmo
 		}
 
 		return GetActionButton(slot).type == action_button_type::Spell;
+	}
+
+	bool ActionBar::IsActionButtonActive(const int32 slot) const
+	{
+		const auto* spell = GetActionButtonSpell(slot);
+		if (!spell)
+		{
+			return false;
+		}
+
+		// Only "Disabled While Active" spells can be in the active/toggled state.
+		if ((spell->attributes(0) & spell_attributes::DisabledWhileActive) == 0)
+		{
+			return false;
+		}
+
+		const auto player = ObjectMgr::GetActivePlayer();
+		if (!player)
+		{
+			return false;
+		}
+
+		return player->HasAura(spell->id());
 	}
 
 	bool ActionBar::IsActionButtonItem(const int32 slot) const

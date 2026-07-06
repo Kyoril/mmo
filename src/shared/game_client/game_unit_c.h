@@ -433,6 +433,11 @@ namespace mmo
 
 		GameAuraC *GetAura(uint32 index) const;
 
+		/// @brief Checks whether this unit currently has an (unexpired) aura from a given spell.
+		/// @param spellId Id of the spell whose aura to look for.
+		/// @return True if a matching, non-expired aura is present.
+		bool HasAura(uint32 spellId) const;
+
 		/// @brief Returns whether the unit is currently alive.
 		bool IsAlive() const { return GetHealth() > 0; }
 

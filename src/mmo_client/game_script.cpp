@@ -1467,6 +1467,8 @@ namespace mmo
 																{ return this->m_actionBar.IsActionButtonItem(slot); }),
 					   luabind::def<std::function<bool(int32)>>("IsActionButtonSpell", [this](int32 slot)
 																{ return this->m_actionBar.IsActionButtonSpell(slot); }),
+					   luabind::def<std::function<bool(int32)>>("IsActionButtonActive", [this](int32 slot)
+																{ return this->m_actionBar.IsActionButtonActive(slot); }),
 					   luabind::def<std::function<const proto_client::SpellEntry *(int32)>>("GetActionButtonSpell", [this](int32 slot)
 																							{ return this->m_actionBar.GetActionButtonSpell(slot); }),
 					   luabind::def<std::function<const ItemInfo *(int32)>>("GetActionButtonItem", [this](int32 slot)

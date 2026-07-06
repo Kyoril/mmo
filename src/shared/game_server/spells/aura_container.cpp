@@ -180,6 +180,24 @@ namespace mmo
 			{
 				m_procRegistered = false;
 			}
+
+			// "Disabled While Active" spells (e.g. Stealth) defer their cooldown: it does not begin
+			// when the spell is cast, but only once the aura the spell placed on the caster fades -
+			// whether that happens through expiry, an interrupt, a dispel or the player re-activating
+			// the button to cancel it. Trigger the deferred cooldown now for the self-cast aura. The
+			// world-instance check restricts this to genuine in-world removals (skipping teardown /
+			// logout, where the owner is being destroyed).
+			if (m_owner.GetWorldInstance() &&
+				(m_spell.attributes(0) & spell_attributes::DisabledWhileActive) != 0)
+			{
+				if (GameUnitS* caster = GetCaster())
+				{
+					if (caster->GetGuid() == m_owner.GetGuid())
+					{
+						caster->StartDeferredSpellCooldown(m_spell);
+					}
+				}
+			}
 		}
 
 		for(const auto& aura : m_auras)

@@ -2385,6 +2385,20 @@ namespace mmo
 		return nullptr;
 	}
 
+	bool GameUnitC::HasAura(uint32 spellId) const
+	{
+		for (const auto& aura : m_auras)
+		{
+			const auto* spell = aura->GetSpell();
+			if (spell && spell->id() == spellId && !aura->IsExpired())
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	void GameUnitC::SetTargetUnit(const std::shared_ptr<GameUnitC> &targetUnit)
 	{
 		if (m_targetUnit.expired() && !targetUnit)

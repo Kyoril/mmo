@@ -293,6 +293,15 @@ namespace mmo
 			return;
 		}
 
+		// "Disabled While Active" spells (e.g. Stealth) behave like a toggle. If the player already
+		// has the spell's aura active, re-activating the button cancels the aura instead of casting
+		// again. Cancelling the aura is what triggers the spell's (deferred) cooldown on the server.
+		if ((spell->attributes(0) & spell_attributes::DisabledWhileActive) != 0 && unit->HasAura(spellId))
+		{
+			m_connector.CancelAura(spellId);
+			return;
+		}
+
 		SpellTargetMap targetMap{};
 
 		// Power check — apply spell cost modifiers from server-communicated spell mods

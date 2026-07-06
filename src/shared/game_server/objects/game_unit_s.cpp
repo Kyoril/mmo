@@ -718,6 +718,39 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::StartDeferredSpellCooldown(const proto::SpellEntry& spell)
+	{
+		// Determine the base cooldown: prefer the spell's own cooldown, fall back to its category cooldown.
+		GameTime finalCD = spell.cooldown();
+		if (finalCD == 0)
+		{
+			finalCD = spell.categorycooldown();
+		}
+
+		if (finalCD == 0)
+		{
+			// Spell has no cooldown at all - nothing to defer.
+			return;
+		}
+
+		// Apply spell-mod adjustments (e.g. talents that reduce cooldowns), mirroring the normal
+		// cast-time cooldown calculation.
+		ApplySpellMod(spell_mod_op::Cooldown, spell.id(), finalCD);
+		if (finalCD == 0)
+		{
+			return;
+		}
+
+		SetCooldown(spell.id(), finalCD);
+		if (spell.categorycooldown() > 0)
+		{
+			SetSpellCategoryCooldown(spell.category(), spell.categorycooldown());
+		}
+
+		// Let the owning client know so the action bar can start showing the cooldown sweep now.
+		spellCooldownStarted(spell.id(), finalCD);
+	}
+
 	void GameUnitS::SetSpellCategoryCooldown(const uint32 spellCategory, const GameTime cooldownTimeMs)
 	{
 		if (cooldownTimeMs == 0)

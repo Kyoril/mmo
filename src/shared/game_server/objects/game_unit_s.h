@@ -543,6 +543,12 @@ namespace mmo
 		/// Signal fired when this unit completes a melee attack.
 		/// @param victim The unit that was attacked.
 		signal<void(GameUnitS &)> meleeAttackDone;
+		/// Signal fired when a deferred spell cooldown begins for this unit (used by
+		/// "Disabled While Active" spells whose cooldown only starts once their aura fades).
+		/// The owning client is notified so the action bar can start the cooldown sweep.
+		/// @param spellId Id of the spell whose cooldown just started.
+		/// @param cooldownMs Cooldown duration in milliseconds.
+		signal<void(uint32, GameTime)> spellCooldownStarted;
 
 	public:
 		/// Constructs a new unit object.
@@ -745,6 +751,14 @@ namespace mmo
 		/// @param spellId The ID of the spell.
 		/// @param cooldownTimeMs The cooldown time in milliseconds.
 		void SetCooldown(uint32 spellId, GameTime cooldownTimeMs);
+
+		/// Starts a spell's cooldown *after the fact* (deferred cooldown) and notifies observers via
+		/// the spellCooldownStarted signal so the owning client is told about it. This is used by
+		/// "Disabled While Active" spells whose cooldown must not begin when the spell is cast, but
+		/// only once the aura the spell applied has faded (e.g. Stealth). Does nothing if the spell
+		/// has no cooldown.
+		/// @param spell The spell whose (mod-adjusted) cooldown should now begin.
+		void StartDeferredSpellCooldown(const proto::SpellEntry& spell);
 
 		/// Sets the cooldown for a spell category.
 		/// @param spellCategory The category of the spell.

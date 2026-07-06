@@ -58,6 +58,7 @@ namespace mmo
 			// Spell signals
 			m_character->spellLearned.connect(*this, &Player::OnSpellLearned),
 			m_character->spellUnlearned.connect(*this, &Player::OnSpellUnlearned),
+			m_character->spellCooldownStarted.connect(*this, &Player::OnSpellCooldownStarted),
 
 			// Talent / attribute reset signals
 			m_character->talentsReset.connect(*this, &Player::OnTalentsReset),
@@ -2886,6 +2887,27 @@ namespace mmo
 		{
 			packet.Start(game::realm_client_packet::LearnedSpell);
 			packet << io::write<uint32>(spellEntry.id());
+			packet.Finish();
+		});
+	}
+
+	void Player::OnSpellCooldownStarted(uint32 spellId, GameTime cooldownMs)
+	{
+		// Don't notify if we are not spawned yet.
+		if (!m_spawned)
+		{
+			return;
+		}
+
+		// Inform the client that a (deferred) cooldown just started for this spell so the action bar
+		// can display the cooldown sweep. Reuses the same packet used to restore cooldowns on spawn.
+		SendPacket([spellId, cooldownMs](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::SpellCooldown);
+			packet << io::write<uint16>(1);
+			packet
+				<< io::write<uint32>(spellId)
+				<< io::write<uint32>(static_cast<uint32>(cooldownMs));
 			packet.Finish();
 		});
 	}
