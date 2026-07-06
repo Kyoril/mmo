@@ -61,6 +61,11 @@ namespace mmo
 		[[nodiscard]] int32 GetMouseX() const { return m_x; }
 		[[nodiscard]] int32 GetMouseY() const { return m_y; }
 
+		/// @brief Adds camera shake "trauma". Trauma decays over time and drives a screen shake
+		/// whose magnitude scales with trauma squared, so light hits stay subtle. Clamped to [0,1].
+		/// @param amount Trauma to add (roughly 0.15 for a light hit, up to ~0.6 for a heavy/critical hit).
+		void AddTrauma(float amount);
+
 	private:
 		void SetupCamera();
 
@@ -83,6 +88,10 @@ namespace mmo
 		void OnMovementCompleted(GameUnitC& unit, const MovementInfo& movementInfo);
 
 		void HandleCameraCollision();
+
+		/// @brief Decays camera shake trauma and applies the resulting screen-shake offset to the
+		/// camera node on top of its collision-resolved position. Called once per frame.
+		void UpdateCameraShake(float deltaSeconds);
 
 		void SetOrbitModeEnabled(bool enable);
 
@@ -125,6 +134,9 @@ namespace mmo
 		uint32 m_mouseDownTime = 0;
 		int32 m_x = 0, m_y = 0;
 		GameObjectC* m_hoveredObject = nullptr;
+		/// GUID of the unit currently showing the hover ring, resolved through ObjectMgr so a
+		/// despawned unit is handled safely (no dangling pointer). 0 when nothing is highlighted.
+		ObjectGuid m_hoverRingGuid = 0;
 		scoped_connection_container m_cvarConnections;
 		scoped_connection m_moveCompleted;
 		GameTime m_nextSetFacing = 0;
@@ -137,5 +149,10 @@ namespace mmo
 
 		Vector3 m_desiredCameraLocation;
 		Quaternion m_savedOrientation;
+
+		/// @brief Current camera-shake trauma in [0,1]; decays to zero over ~0.4s.
+		float m_cameraTrauma { 0.0f };
+		/// @brief Time accumulator driving the shake noise while trauma is active.
+		float m_cameraShakeTime { 0.0f };
 	};
 }

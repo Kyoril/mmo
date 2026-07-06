@@ -154,6 +154,15 @@ namespace mmo
 
 		void OnTargetSelectionChanged(uint64 monitoredGuid);
 
+		/// @brief Applies combat camera shake for a damage event: a magnitude scaled by the
+		/// fraction of max health lost when the local player is the victim, plus a short punchy
+		/// kick when the local player lands a critical hit on someone else.
+		/// @param victimGuid GUID of the unit that took the damage.
+		/// @param attackerGuid GUID of the unit that dealt the damage.
+		/// @param amount Damage amount applied.
+		/// @param isCritical True if the hit was a critical strike.
+		void TriggerCombatCameraShake(ObjectGuid victimGuid, ObjectGuid attackerGuid, uint32 amount, bool isCritical);
+
 		void OnMoneyChanged(uint64 monitoredGuid);
 
 		void OnExperiencePointsChanged(uint64 monitoredGuid);
@@ -530,6 +539,10 @@ namespace mmo
 
 		scoped_connection_container m_playerObservers;
 		scoped_connection_container m_targetObservers;
+
+		/// @brief GUID of the unit currently showing the target selection ring, so it can be
+		/// cleared when the selection changes. 0 when nothing is highlighted.
+		ObjectGuid m_selectionRingTargetGuid{0};
 
 		const proto_client::Project &m_project;
 

@@ -63,6 +63,12 @@ namespace mmo
 		{
 			DestroyCapsuleDebugVisualization();
 		}
+
+		if (m_selectionRing)
+		{
+			m_scene.DestroyManualRenderObject(*m_selectionRing);
+			m_selectionRing = nullptr;
+		}
 	}
 
 	void GameUnitC::QueueMovementEvent(MovementEventType eventType, GameTime timestamp,
@@ -3563,6 +3569,114 @@ namespace mmo
 		m_scene.DestroyManualRenderObject(*m_capsuleDebugObject);
 		m_capsuleDebugObject = nullptr;
 	}
+
+	void GameUnitC::SetSelectionHighlight(const bool isTarget)
+	{
+		if (m_isSelectionTarget == isTarget)
+		{
+			return;
+		}
+
+		m_isSelectionTarget = isTarget;
+		RefreshSelectionRing();
+	}
+
+	void GameUnitC::SetHoverHighlight(const bool isHovered)
+	{
+		if (m_isSelectionHovered == isHovered)
+		{
+			return;
+		}
+
+		m_isSelectionHovered = isHovered;
+		RefreshSelectionRing();
+	}
+
+	void GameUnitC::RefreshSelectionRing()
+	{
+		if (!m_sceneNode)
+		{
+			return;
+		}
+
+		// The target ring takes precedence over the hover ring when a unit is both.
+		const int8 desiredStyle = m_isSelectionTarget ? 1 : (m_isSelectionHovered ? 0 : -1);
+		if (desiredStyle == m_selectionRingStyle)
+		{
+			return;
+		}
+		m_selectionRingStyle = desiredStyle;
+
+		// Rebuild from scratch: tear down any existing ring first.
+		if (m_selectionRing)
+		{
+			m_scene.DestroyManualRenderObject(*m_selectionRing);
+			m_selectionRing = nullptr;
+		}
+
+		if (desiredStyle < 0)
+		{
+			return;
+		}
+
+		// Reaction-based color matching the nameplate scheme: friendly green, hostile red,
+		// otherwise neutral yellow.
+		Color ringColor(0.95f, 0.85f, 0.15f, 1.0f);
+		if (IsFriendly())
+		{
+			ringColor = Color(0.15f, 0.9f, 0.2f, 1.0f);
+		}
+		else if (IsHostile())
+		{
+			ringColor = Color(0.95f, 0.15f, 0.15f, 1.0f);
+		}
+
+		// Footprint radius from the collision capsule, clamped so tiny colliders still get a
+		// visible ring. Lifted slightly above the ground to avoid z-fighting with terrain.
+		const float colliderRadius = GetCollider().GetRadius();
+		const float baseRadius = colliderRadius < 0.3f ? 0.3f : colliderRadius;
+		constexpr float groundOffset = 0.12f;
+		constexpr int segments = 32;
+
+		static uint64 s_counter = 0;
+		m_selectionRing = m_scene.CreateManualRenderObject("UnitSelRing_" + std::to_string(s_counter++));
+		m_selectionRing->SetCastShadows(false);
+		m_selectionRing->SetQueryFlags(0);
+
+		{
+			auto lineOp = m_selectionRing->AddLineListOperation(MaterialManager::Get().Load("Models/Engine/ColorDebug.hmat"));
+
+			const float angleStep = (2.0f * Pi) / static_cast<float>(segments);
+			auto appendCircle = [&](const float radius, const Color& color)
+			{
+				for (int i = 0; i < segments; ++i)
+				{
+					const float a1 = i * angleStep;
+					const float a2 = ((i + 1) % segments) * angleStep;
+					const Vector3 p1(std::cos(a1) * radius, groundOffset, std::sin(a1) * radius);
+					const Vector3 p2(std::cos(a2) * radius, groundOffset, std::sin(a2) * radius);
+					lineOp->AddLine(p1, p2).SetColor(color.GetABGR());
+				}
+			};
+
+			if (desiredStyle == 1)
+			{
+				// Target: bold, reaction-colored double ring.
+				appendCircle(baseRadius * 1.15f, ringColor);
+				appendCircle(baseRadius * 1.32f, ringColor);
+			}
+			else
+			{
+				// Hover: single, dimmed ring.
+				const Color dim(ringColor.GetRed() * 0.55f, ringColor.GetGreen() * 0.55f, ringColor.GetBlue() * 0.55f, 1.0f);
+				appendCircle(baseRadius * 1.22f, dim);
+			}
+		}
+
+		m_sceneNode->AttachObject(*m_selectionRing);
+		m_selectionRing->SetVisible(true);
+	}
+
 	void GameUnitC::SetUnitNameVisible(const bool show)
 	{
 		m_questOffset = GetDefaultQuestGiverOffset();

@@ -49,6 +49,7 @@
 #include "game_client/game_item_c.h"
 #include "ui/chat_bubble_frame.h"
 #include "ui/world_text_frame.h"
+#include "ui/combat_vignette.h"
 #include "game/quest.h"
 #include "game_client/game_bag_c.h"
 #include "terrain/page.h"
@@ -295,6 +296,8 @@ namespace mmo
 	{
 		LoadingScreen::Show();
 
+		CombatVignette::Init();
+
 		ObjectMgr::Initialize(m_project, m_partyInfo);
 
 		// Initialize spell visualization service with direct audio access
@@ -418,6 +421,8 @@ namespace mmo
 
 	void WorldState::OnLeave()
 	{
+		CombatVignette::Destroy();
+
 		m_worldPingVisualizer.reset();
 		m_debugPathVisualizer.reset();
 		m_foliage.reset();
@@ -622,7 +627,69 @@ namespace mmo
 	{
 		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
 
-		// DLOG("Target changed to " << log_hex_digit(ObjectMgr::GetActivePlayer()->Get<uint64>(object_fields::TargetUnit)));
+		const ObjectGuid newTargetGuid = ObjectMgr::GetActivePlayer()->Get<uint64>(object_fields::TargetUnit);
+		if (newTargetGuid == m_selectionRingTargetGuid)
+		{
+			return;
+		}
+
+		// Clear the ring on the previous target (if it still exists).
+		if (m_selectionRingTargetGuid != 0)
+		{
+			if (const auto previousTarget = ObjectMgr::Get<GameUnitC>(m_selectionRingTargetGuid))
+			{
+				previousTarget->SetSelectionHighlight(false);
+			}
+		}
+
+		// Show the ring on the new target.
+		m_selectionRingTargetGuid = newTargetGuid;
+		if (newTargetGuid != 0)
+		{
+			if (const auto newTarget = ObjectMgr::Get<GameUnitC>(newTargetGuid))
+			{
+				newTarget->SetSelectionHighlight(true);
+			}
+		}
+	}
+
+	void WorldState::TriggerCombatCameraShake(const ObjectGuid victimGuid, const ObjectGuid attackerGuid, const uint32 amount, const bool isCritical)
+	{
+		if (!m_playerController || amount == 0)
+		{
+			return;
+		}
+
+		const ObjectGuid playerGuid = ObjectMgr::GetActivePlayerGuid();
+
+		// Local player took the hit: shake scaled by the fraction of max health lost, so a big
+		// hit rattles the screen while chip damage barely registers.
+		if (victimGuid == playerGuid)
+		{
+			if (const auto player = ObjectMgr::GetActivePlayer())
+			{
+				const float maxHealth = static_cast<float>(player->GetMaxHealth());
+				if (maxHealth > 0.0f)
+				{
+					const float fraction = static_cast<float>(amount) / maxHealth;
+					// A hit for ~25% of max health lands around 0.5 trauma; clamp so a single
+					// large hit can't fully saturate and repeated hits still stack sensibly.
+					float trauma = 0.15f + fraction * 1.4f;
+					if (trauma > 0.7f)
+					{
+						trauma = 0.7f;
+					}
+					m_playerController->AddTrauma(trauma);
+				}
+			}
+			return;
+		}
+
+		// Local player landed a critical hit on someone else: a short, punchy kick.
+		if (isCritical && attackerGuid == playerGuid)
+		{
+			m_playerController->AddTrauma(0.28f);
+		}
 	}
 
 	void WorldState::OnMoneyChanged(uint64 monitoredGuid)
@@ -662,6 +729,24 @@ namespace mmo
 		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
 
 		FrameManager::Get().TriggerLuaEvent("PLAYER_HEALTH_CHANGED");
+
+		// Drive the low-health combat vignette. It stays hidden until health drops below the
+		// threshold, then ramps toward full intensity as the player approaches death.
+		if (const auto controlled = m_playerController->GetControlledUnit())
+		{
+			const float maxHealth = static_cast<float>(controlled->GetMaxHealth());
+			float danger = 0.0f;
+			if (maxHealth > 0.0f)
+			{
+				constexpr float threshold = 0.35f;
+				const float fraction = static_cast<float>(controlled->GetHealth()) / maxHealth;
+				if (fraction < threshold)
+				{
+					danger = (threshold - fraction) / threshold;
+				}
+			}
+			CombatVignette::SetDangerFactor(danger);
+		}
 
 		if (m_playerController->GetControlledUnit()->GetHealth() <= 0)
 		{
@@ -3354,6 +3439,8 @@ namespace mmo
 			}
 		}
 
+		TriggerCombatCameraShake(targetGuid, ObjectMgr::GetActivePlayerGuid(), amount, (flags & damage_flags::Crit) != 0);
+
 		return PacketParseResult::Pass;
 	}
 
@@ -3395,6 +3482,8 @@ namespace mmo
 		{
 			m_playerController->GetControlledUnit()->NotifyAttackSwingEvent();
 		}
+
+		TriggerCombatCameraShake(targetGuid, ObjectMgr::GetActivePlayerGuid(), amount, (flags & damage_flags::Crit) != 0);
 
 		return PacketParseResult::Pass;
 	}
@@ -3487,6 +3576,9 @@ namespace mmo
 				AddWorldTextFrame(targetPos, damageText, textColor,
 					isCritical ? 4.0f : 2.0f, isCritical ? WorldTextAnimation::Critical : WorldTextAnimation::Normal);
 
+				// Sync the camera shake with the moment the swing visually connects.
+				TriggerCombatCameraShake(attackedGuid, attackerGuid, totalDamage, isCritical);
+
 				if (totalDamage > 0 && attackerIsPlayer)
 				{
 					FrameManager::Get().TriggerLuaEvent("DAMAGE_DONE",
@@ -3545,6 +3637,9 @@ namespace mmo
 			// Environmental damage is displayed in red-orange to distinguish from regular damage
 			AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color(1.0f, 0.5f, 0.0f, 1.0f), 2.0f);
 		}
+
+		// Environmental damage has no attacker; only the victim (the local player) shakes.
+		TriggerCombatCameraShake(targetGuid, 0, amount, false);
 
 		return PacketParseResult::Pass;
 	}

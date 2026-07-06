@@ -41,6 +41,8 @@ namespace mmo
 
 	static ConsoleVar* s_logMovementCVar = nullptr;
 
+	static ConsoleVar* s_cameraShakeIntensityCVar = nullptr;
+
 	extern Cursor g_cursor;
 
 	PlayerController::PlayerController(Scene& scene, RealmConnector& connector, LootClient& lootClient, VendorClient& vendorClient, TrainerClient& trainerClient, SpellCast& spellCast, BankClient& bankClient)
@@ -66,6 +68,9 @@ namespace mmo
 
 			s_logMovementCVar = ConsoleVarMgr::RegisterConsoleVar("LogMovement",
 				"Set to 1 to write detailed movement events to Logs/Movement.log. 0 disables.", "0");
+
+			s_cameraShakeIntensityCVar = ConsoleVarMgr::RegisterConsoleVar("CameraShakeIntensity",
+				"Scales combat camera shake. 1 is default, 0 disables it.", "1");
 		}
 
 		m_cvarConnections += {
@@ -421,6 +426,58 @@ namespace mmo
 		m_cameraNode->SetPosition(m_desiredCameraLocation);
 	}
 
+	void PlayerController::AddTrauma(const float amount)
+	{
+		if (amount <= 0.0f)
+		{
+			return;
+		}
+
+		m_cameraTrauma = std::min(1.0f, m_cameraTrauma + amount);
+	}
+
+	void PlayerController::UpdateCameraShake(const float deltaSeconds)
+	{
+		if (m_cameraTrauma <= 0.0f)
+		{
+			return;
+		}
+
+		// Decay trauma toward zero (~0.4s to settle from full).
+		m_cameraTrauma = std::max(0.0f, m_cameraTrauma - deltaSeconds * 2.5f);
+		m_cameraShakeTime += deltaSeconds;
+
+		// No shake in first person (zoom 0), or when disabled via cvar. HandleCameraCollision
+		// already left the camera at its base position, so nothing to restore here.
+		const float zoom = s_cameraZoomCVar->GetFloatValue();
+		const float intensity = s_cameraShakeIntensityCVar ? s_cameraShakeIntensityCVar->GetFloatValue() : 1.0f;
+		if (zoom <= 0.0f || intensity <= 0.0f)
+		{
+			return;
+		}
+
+		// Magnitude scales with trauma^2 so weak hits are subtle and strong hits punchy.
+		const float shake = m_cameraTrauma * m_cameraTrauma;
+		if (shake <= 0.0f)
+		{
+			// Just settled this frame: make sure the un-shaken position is restored.
+			m_cameraNode->SetPosition(m_desiredCameraLocation);
+			return;
+		}
+
+		constexpr float maxTranslate = 0.25f; // world units of offset at full trauma
+
+		// Summed sines at incommensurate frequencies give smooth, non-repeating motion.
+		const float t = m_cameraShakeTime;
+		const float offsetX = (std::sin(t * 43.0f) + 0.5f * std::sin(t * 71.0f)) * shake * maxTranslate * intensity;
+		const float offsetY = (std::sin(t * 37.0f + 1.7f) + 0.5f * std::sin(t * 61.0f)) * shake * maxTranslate * intensity;
+
+		// Offset within the camera's local view plane so it reads as screen shake, layered on
+		// top of the collision-resolved base position computed in HandleCameraCollision.
+		const Vector3 shakeOffset = m_cameraNode->GetOrientation() * Vector3(offsetX, offsetY, 0.0f);
+		m_cameraNode->SetPosition(m_desiredCameraLocation + shakeOffset);
+	}
+
 	void PlayerController::SetOrbitModeEnabled(bool enable)
 	{
 		// Already enabled / disabled? Then do nothing
@@ -595,6 +652,32 @@ namespace mmo
 
 		if (m_hoveredObject != previousHoveredUnit)
 		{
+			// Update the ground hover ring. Track it by GUID and resolve through ObjectMgr so a
+			// unit that despawned while hovered resolves to null instead of a dangling pointer
+			// (its ring is already torn down by its own destructor). The unit itself suppresses
+			// the hover ring while it is the current selection target.
+			const ObjectGuid newHoverGuid = (m_hoveredObject && m_hoveredObject->IsUnit()) ? m_hoveredObject->GetGuid() : 0;
+			if (newHoverGuid != m_hoverRingGuid)
+			{
+				if (m_hoverRingGuid != 0)
+				{
+					if (const auto previousHovered = ObjectMgr::Get<GameUnitC>(m_hoverRingGuid))
+					{
+						previousHovered->SetHoverHighlight(false);
+					}
+				}
+
+				m_hoverRingGuid = newHoverGuid;
+
+				if (newHoverGuid != 0)
+				{
+					if (const auto currentHovered = ObjectMgr::Get<GameUnitC>(newHoverGuid))
+					{
+						currentHovered->SetHoverHighlight(true);
+					}
+				}
+			}
+
 			ObjectMgr::SetHoveredObject(m_hoveredObject ? m_hoveredObject->GetGuid() : 0);
 			FrameManager::Get().TriggerLuaEvent("HOVERED_OBJECT_CHANGED");
 		}
@@ -670,6 +753,9 @@ namespace mmo
 		}
 
 		HandleCameraCollision();
+
+		// Layer combat camera shake on top of the collision-resolved camera position.
+		UpdateCameraShake(deltaSeconds);
 
 		int32 w, h;
 		GraphicsDevice::Get().GetViewport(nullptr, nullptr, &w, &h);

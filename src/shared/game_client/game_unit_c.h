@@ -217,6 +217,35 @@ namespace mmo
 		/// @param show True to show, false to hide.
 		void SetCollisionVisibility(bool show);
 
+	public:
+		/// @brief Marks this unit as the player's current selection target, drawing a bold
+		/// reaction-colored ground ring beneath it. The ring follows the unit automatically.
+		/// @param isTarget True if this unit is the current selection target.
+		void SetSelectionHighlight(bool isTarget);
+
+		/// @brief Marks this unit as hovered, drawing a subtle ground ring. The hover ring is
+		/// suppressed while the unit is also the current selection target.
+		/// @param isHovered True if the mouse is currently hovering this unit.
+		void SetHoverHighlight(bool isHovered);
+
+	protected:
+		/// @brief Rebuilds or removes the ground selection/hover ring to match the current
+		/// target/hover state. Cheap no-op when the effective ring style is unchanged.
+		void RefreshSelectionRing();
+
+		/// @brief Manual render object for the ground selection/hover ring.
+		ManualRenderObject *m_selectionRing{nullptr};
+
+		/// @brief Currently built ring style, used to avoid rebuilding identical geometry.
+		/// -1 = none, 0 = hover, 1 = target.
+		int8 m_selectionRingStyle{-1};
+
+		/// @brief True while this unit is the player's current selection target.
+		bool m_isSelectionTarget{false};
+
+		/// @brief True while the mouse is hovering this unit.
+		bool m_isSelectionHovered{false};
+
 	protected:
 		/// @brief Manual render object for capsule visualization
 		ManualRenderObject *m_capsuleDebugObject{nullptr};
