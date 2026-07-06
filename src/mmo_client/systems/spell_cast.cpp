@@ -103,15 +103,9 @@ namespace mmo
 
 	void SpellCast::OnSpellStart(const proto_client::SpellEntry& spell, GameTime castTime)
 	{
-		// Visualization: start cast
-		SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::StartCast, spell, ObjectMgr::GetActivePlayer().get(), {});
-
-		// If there's a cast time, trigger CASTING event for looped visuals
-		if (castTime > 0)
-		{
-			SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Casting, spell, ObjectMgr::GetActivePlayer().get(), {});
-		}
-
+		// Note: the StartCast/Casting visualizations are applied caster-agnostically in
+		// WorldState::OnSpellStart (for every caster, including the active player). They must NOT be
+		// applied again here or the animation/effects would be triggered twice for the player.
 		m_spellCastId = spell.id();
 		m_serverConfirmedCastStart = true;
 		FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_START", &spell, castTime);
@@ -121,23 +115,18 @@ namespace mmo
 	{
 		// For channeled spells, SpellGo is received at the start of channeling.
 		// Don't clear the cast state since the channel is still active.
+		//
+		// Note: the CastSucceeded visualization is applied caster-agnostically in
+		// WorldState::OnSpellGo (for every caster, including the active player), so it must NOT be
+		// applied again here - doing so would play the cast release animation twice for the player.
 		if (IsChanneling() && m_channelingSpellId == spellId)
 		{
-			if (const auto* spell = m_spells.getById(spellId))
-			{
-				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::CastSucceeded, *spell, ObjectMgr::GetActivePlayer().get(), {});
-			}
 			return;
 		}
 
 		if (GetCastingSpellId() != spellId)
 		{
 			return;
-		}
-
-		if (const auto* spell = m_spells.getById(spellId))
-		{
-			SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::CastSucceeded, *spell, ObjectMgr::GetActivePlayer().get(), {});
 		}
 
 		FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", true);
@@ -147,14 +136,13 @@ namespace mmo
 
 	void SpellCast::OnSpellFailure(uint32 spellId)
 	{
+		// Note: the CancelCast visualization is applied caster-agnostically in
+		// WorldState::OnSpellFailure (for every caster, including the active player), so it must NOT
+		// be applied again here or the cancel effects would be triggered twice for the player.
+
 		// If the channeled spell fails, clear the channel state as well
 		if (IsChanneling() && m_channelingSpellId == spellId)
 		{
-			if (const auto* spell = m_spells.getById(spellId))
-			{
-				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::CancelCast, *spell, ObjectMgr::GetActivePlayer().get(), {});
-			}
-
 			m_channelingSpellId = 0;
 			m_spellCastId = 0;
 			m_serverConfirmedCastStart = false;
@@ -167,25 +155,15 @@ namespace mmo
 			return;
 		}
 
-		if (const auto* spell = m_spells.getById(spellId))
-		{
-			SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::CancelCast, *spell, ObjectMgr::GetActivePlayer().get(), {});
-		}
-
 		m_spellCastId = 0;
 		m_serverConfirmedCastStart = false;
 	}
 
 	void SpellCast::OnChannelStart(const proto_client::SpellEntry& spell, GameTime duration)
 	{
-		// Visualization: start cast for channeled spell
-		SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::StartCast, spell, ObjectMgr::GetActivePlayer().get(), {});
-
-		if (duration > 0)
-		{
-			SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Casting, spell, ObjectMgr::GetActivePlayer().get(), {});
-		}
-
+		// Note: the StartCast/Casting visualizations are applied caster-agnostically in
+		// WorldState::OnChannelStart (for every caster, including the active player). They must NOT be
+		// applied again here or the animation/effects would be triggered twice for the player.
 		m_spellCastId = spell.id();
 		m_channelingSpellId = spell.id();
 		m_serverConfirmedCastStart = true;

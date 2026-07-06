@@ -888,6 +888,15 @@ namespace mmo
 		///	so the spell does not remove the aura it just granted itself.
 		void RemoveAurasByInterrupt(uint32 interruptFlags, uint32 excludeSpellId = 0);
 
+		/// Removes the caster's auras that are interrupted by deliberately casting a spell (e.g. Stealth).
+		/// This must be invoked at the moment the spell "goes off" (SpellGo) and before its effects are
+		/// applied, so that any concealment aura (Stealth) is gone before damage lands and the victim
+		/// enters combat - otherwise the victim would briefly still be unable to see the attacker.
+		/// Spells flagged NotBreakCastInterruptAuras are exempt, and the aura granted by the very spell
+		/// being cast is never removed (an instant self-buff carrying the Cast flag would remove itself).
+		/// @param spell The spell that is going off.
+		void RemoveCastInterruptAuras(const proto::SpellEntry& spell);
+
 		/// Removes an aura from the unit by spell ID if it was cast by the specified caster.
 		/// Only removes positive (non-negative) auras.
 		/// @param spellId The ID of the spell.

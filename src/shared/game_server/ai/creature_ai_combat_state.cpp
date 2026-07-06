@@ -81,7 +81,16 @@ namespace mmo
 	{
 		CreatureAIState::OnEnter();
 		GetControlled().SetMovementMode(unit_movement_mode::Run);
-		
+
+		// Cancel any residual idle movement (patrol / random-wander path) that was still
+		// in progress when combat began. Combat movement is driven entirely by ChaseTarget /
+		// MoveToOptimalRange, so a leftover idle path is stale. This matters most when the
+		// attacked unit is already within melee range: ChaseTarget then early-returns without
+		// issuing a move, so without this stop the server never sends a CreatureMove(stop)
+		// packet and the client keeps interpolating the creature along its old patrol path —
+		// it visibly walks away while already in combat. StopMovement no-ops when not moving.
+		GetControlled().GetMover().StopMovement();
+
 		// Initialize state
 		m_stuckCounter = 0;
 		m_movementState.Reset();

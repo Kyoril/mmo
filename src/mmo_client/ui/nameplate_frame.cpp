@@ -100,13 +100,11 @@ namespace mmo
 		/// Returns the health bar color for a unit based on its reaction towards the player.
 		argb_t GetBarColorForUnit(const GameUnitC& unit)
 		{
-			const auto player = ObjectMgr::GetActivePlayer();
-			if (!player)
-			{
-				return HostileBarColor;
-			}
-
-			const bool friendly = player->IsFriendlyTo(unit);
+			// Evaluate the reaction from the unit's perspective towards the active
+			// player (IsFriendly / IsHostile are player-relative). This matches the
+			// 3D name text coloring and keeps neutral units (e.g. Young Forest Boar,
+			// which the player can attack but that does not attack back) yellow.
+			const bool friendly = unit.IsFriendly();
 			if (unit.IsPlayer())
 			{
 				return friendly ? FriendlyPlayerBarColor : HostileBarColor;
@@ -117,7 +115,7 @@ namespace mmo
 				return FriendlyNpcBarColor;
 			}
 
-			return player->IsHostileTo(unit) ? HostileBarColor : NeutralBarColor;
+			return unit.IsHostile() ? HostileBarColor : NeutralBarColor;
 		}
 	}
 

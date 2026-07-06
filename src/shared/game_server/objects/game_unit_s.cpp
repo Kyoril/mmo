@@ -793,18 +793,11 @@ namespace mmo
 		{
 			startedCasting(spell);
 
-			// Deliberately casting a spell interrupts auras flagged to break on casting.
-			// Procs (e.g. the auto-attack spell) are not deliberate casts and must not trigger this.
-			// Spells flagged NotBreakCastInterruptAuras (e.g. a Sprint buff) are exempt so they can be
-			// cast without breaking any of the caster's Cast-interrupt auras (Stealth and the like).
-			// Exclude the spell being cast so an instant self-buff carrying the Cast interrupt flag
-			// (e.g. Stealth) does not remove the aura it just applied to itself.
-			const bool notBreakCastAuras = spell.attributes_size() >= 2 &&
-				(spell.attributes(1) & spell_attributes_b::NotBreakCastInterruptAuras) != 0;
-			if (!isProc && !notBreakCastAuras)
-			{
-				RemoveAurasByInterrupt(spell_aura_interrupt_flags::Cast, spell.id());
-			}
+			// NOTE: Cast-interrupt auras (e.g. Stealth) are intentionally NOT removed here. For instant
+			// spells StartCast() runs the whole cast synchronously - SpellGo and effect application
+			// included - so removing them at this point would happen AFTER the effects have already
+			// landed. The removal is instead performed at the SpellGo moment (before effects) inside
+			// the cast state via RemoveCastInterruptAuras(). See that method for details.
 		}
 
 		if (r == spell_cast_result::CastOkay)
@@ -1278,6 +1271,34 @@ namespace mmo
 			aura->SetApplied(false);
 			RemoveAura(aura);
 		}
+
+		// Removing a concealment aura (Stealth / Invisibility) normally recomputes visibility
+		// asynchronously (HandleModStealth posts NotifyVisibilityChanged to the next tick to avoid
+		// reentrancy during aura application). An interrupt, however, is immediately followed on the
+		// same frame by the very action that broke it - the auto-attack swing or the spell's effects,
+		// which deal damage and drag the victim into combat. If visibility were still stale at that
+		// point the victim would enter combat unable to see the (still "stealthed") attacker and
+		// instantly reset. Recompute synchronously here so CanBeSeenBy() is correct before damage lands.
+		if (!aurasToRemove.empty())
+		{
+			NotifyVisibilityChanged();
+		}
+	}
+
+	void GameUnitS::RemoveCastInterruptAuras(const proto::SpellEntry& spell)
+	{
+		// Spells flagged NotBreakCastInterruptAuras (e.g. a Sprint buff) are exempt so they can be
+		// cast without breaking any of the caster's Cast-interrupt auras (Stealth and the like).
+		const bool notBreakCastAuras = spell.attributes_size() >= 2 &&
+			(spell.attributes(1) & spell_attributes_b::NotBreakCastInterruptAuras) != 0;
+		if (notBreakCastAuras)
+		{
+			return;
+		}
+
+		// Exclude the spell being cast so an instant self-buff carrying the Cast interrupt flag
+		// (e.g. Stealth) does not remove the aura it just applied to itself.
+		RemoveAurasByInterrupt(spell_aura_interrupt_flags::Cast, spell.id());
 	}
 
 	bool GameUnitS::RemoveAuraBySpellId(const uint32 spellId, const uint64 casterId)

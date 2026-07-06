@@ -200,6 +200,14 @@ namespace mmo
 						});
 				}
 
+				// The channel has gone off (SpellGo sent). Break any Cast-interrupt auras (e.g. Stealth)
+				// now, before the channel's effects are applied, so the victim can already see the caster
+				// when it enters combat. Procs are not deliberate casts and must not trigger this.
+				if (!m_isProc)
+				{
+					m_cast.GetExecuter().RemoveCastInterruptAuras(m_spell);
+				}
+
 				ApplyAllEffects();
 				m_cast.GetExecuter().RaiseTrigger(trigger_event::OnSpellCast, { m_spell.id() }, &m_cast.GetExecuter());
 
@@ -1125,6 +1133,17 @@ namespace mmo
 						<< io::write<uint32>(globalCooldownMs);
 					out_packet.Finish();
 				});
+
+			// The spell has gone off (SpellGo sent). Break any Cast-interrupt auras (e.g. Stealth) now,
+			// before the spell's effects are applied by the caller, so the victim can already see the
+			// caster when the effects land and it enters combat. Without this, an instant opener cast
+			// from Stealth would deal its damage while still concealed - the victim would enter combat,
+			// fail to see the attacker, and immediately reset. Procs (e.g. the auto-attack spell) are
+			// not deliberate casts and must not trigger this; they rely on the Attack interrupt flag.
+			if (!m_isProc)
+			{
+				executer.RemoveCastInterruptAuras(m_spell);
+			}
 		}
 		else
 		{
