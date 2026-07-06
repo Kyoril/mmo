@@ -866,6 +866,14 @@ namespace mmo
 		/// @param aura The aura container to remove.
 		void RemoveAura(const std::shared_ptr<AuraContainer> &aura);
 
+		/// Removes all auras whose aura interrupt flags match any of the given flags.
+		/// Used to implement interrupt behaviors like "removed when attacking" or "removed when casting".
+		/// @param interruptFlags One or more SpellAuraInterruptFlags to test against each aura's interrupt flags.
+		/// @param excludeSpellId If non-zero, auras applied by this spell are never removed. Used when the
+		///	interrupt is caused by a spell that also applies an aura with a matching flag (e.g. casting Stealth),
+		///	so the spell does not remove the aura it just granted itself.
+		void RemoveAurasByInterrupt(uint32 interruptFlags, uint32 excludeSpellId = 0);
+
 		/// Removes an aura from the unit by spell ID if it was cast by the specified caster.
 		/// Only removes positive (non-negative) auras.
 		/// @param spellId The ID of the spell.
@@ -1479,7 +1487,17 @@ public:
 
 		/// Sets the stand state of the unit.
 		/// @param standState The new stand state.
-		void SetStandState(const unit_stand_state::Type standState) { Set<uint32>(object_fields::StandState, standState); }
+		void SetStandState(const unit_stand_state::Type standState)
+		{
+			const unit_stand_state::Type previous = GetStandState();
+			Set<uint32>(object_fields::StandState, standState);
+
+			// Standing up interrupts auras flagged to break when the unit is no longer seated.
+			if (previous != unit_stand_state::Stand && standState == unit_stand_state::Stand)
+			{
+				RemoveAurasByInterrupt(spell_aura_interrupt_flags::NotSeated);
+			}
+		}
 
 		/// Gets the stand state of the unit.
 		/// @returns The stand state as a unit_stand_state::Type enum.

@@ -911,6 +911,9 @@ namespace mmo
 			return;
 		}
 
+		// Talking to an NPC interrupts auras flagged to break on talking (gossip interaction).
+		m_character->RemoveAurasByInterrupt(spell_aura_interrupt_flags::Talk);
+
 		// Lets search for npc's gossip menu entries and check conditions
 		const proto::GossipMenuEntry* gossipMenuToSend = nullptr;
 		for (const auto gossip : unit->GetEntry().gossip_menus())

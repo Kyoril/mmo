@@ -2,6 +2,7 @@
 
 #include "player.h"
 
+#include "base/utilities.h"
 #include "game/loot.h"
 #include "game/mail.h"
 #include "game_server/objects/game_bag_s.h"

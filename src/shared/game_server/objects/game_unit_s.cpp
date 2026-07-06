@@ -367,6 +367,10 @@ namespace mmo
 
 	void GameUnitS::ApplyMovementInfo(const MovementInfo &info)
 	{
+		// m_movementInfo still holds the previous snapshot until GameObjectS::ApplyMovementInfo
+		// below overwrites it, so we can use it to detect state transitions.
+		const bool wasSwimming = m_movementInfo.IsSwimming();
+
 		if (info.IsChangingPosition())
 		{
 			for (const auto &aura : m_auras)
@@ -375,6 +379,28 @@ namespace mmo
 			}
 
 			m_spellCast->StopCast(spell_interrupt_flags::Movement);
+		}
+
+		// Turning interrupts auras flagged to break on turning (consistent with the flag-based
+		// Move handling above).
+		if (info.IsTurning())
+		{
+			RemoveAurasByInterrupt(spell_aura_interrupt_flags::Turning);
+		}
+
+		// Handle swimming state transitions (entering / leaving water).
+		if (const bool isSwimming = info.IsSwimming(); wasSwimming != isSwimming)
+		{
+			if (isSwimming)
+			{
+				// Just started swimming (entered water).
+				RemoveAurasByInterrupt(spell_aura_interrupt_flags::NotAboveWater);
+			}
+			else
+			{
+				// Just stopped swimming (left water).
+				RemoveAurasByInterrupt(spell_aura_interrupt_flags::NotUnderWater);
+			}
 		}
 
 		GameObjectS::ApplyMovementInfo(info);
@@ -733,6 +759,19 @@ namespace mmo
 		if (r == spell_cast_result::CastOkay)
 		{
 			startedCasting(spell);
+
+			// Deliberately casting a spell interrupts auras flagged to break on casting.
+			// Procs (e.g. the auto-attack spell) are not deliberate casts and must not trigger this.
+			// Spells flagged NotBreakCastInterruptAuras (e.g. a Sprint buff) are exempt so they can be
+			// cast without breaking any of the caster's Cast-interrupt auras (Stealth and the like).
+			// Exclude the spell being cast so an instant self-buff carrying the Cast interrupt flag
+			// (e.g. Stealth) does not remove the aura it just applied to itself.
+			const bool notBreakCastAuras = spell.attributes_size() >= 2 &&
+				(spell.attributes(1) & spell_attributes_b::NotBreakCastInterruptAuras) != 0;
+			if (!isProc && !notBreakCastAuras)
+			{
+				RemoveAurasByInterrupt(spell_aura_interrupt_flags::Cast, spell.id());
+			}
 		}
 
 		if (r == spell_cast_result::CastOkay)
@@ -1175,6 +1214,39 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::RemoveAurasByInterrupt(const uint32 interruptFlags, const uint32 excludeSpellId)
+	{
+		if (interruptFlags == 0)
+		{
+			return;
+		}
+
+		// Collect matching auras first so that removing them (which mutates m_auras) does
+		// not invalidate the iterator we are looping over.
+		std::vector<std::shared_ptr<AuraContainer>> aurasToRemove;
+		for (const auto& aura : m_auras)
+		{
+			// Never remove an aura applied by the very spell that triggered this interrupt.
+			// Otherwise an instant self-buff (e.g. Stealth flagged with the Cast interrupt) would
+			// remove the aura it just granted itself as part of the same cast.
+			if (excludeSpellId != 0 && aura->GetSpellId() == excludeSpellId)
+			{
+				continue;
+			}
+
+			if (aura->GetSpell().aurainterruptflags() & interruptFlags)
+			{
+				aurasToRemove.push_back(aura);
+			}
+		}
+
+		for (const auto& aura : aurasToRemove)
+		{
+			aura->SetApplied(false);
+			RemoveAura(aura);
+		}
+	}
+
 	bool GameUnitS::RemoveAuraBySpellId(const uint32 spellId, const uint64 casterId)
 	{
 		ASSERT(spellId != 0);
@@ -1607,6 +1679,12 @@ namespace mmo
 		}
 		else if (!wasRooted && isRooted)
 		{
+			// Entering a crowd-control state interrupts auras flagged to break on crowd control.
+			if (!m_restoringAuras)
+			{
+				RemoveAurasByInterrupt(spell_aura_interrupt_flags::CrowdControl);
+			}
+
 			// Stop unit movement immediately
 			m_mover->StopMovement();
 
@@ -1690,6 +1768,12 @@ namespace mmo
 		}
 		else if (!wasStunned && isStunned)
 		{
+			// Entering a crowd-control state interrupts auras flagged to break on crowd control.
+			if (!m_restoringAuras)
+			{
+				RemoveAurasByInterrupt(spell_aura_interrupt_flags::CrowdControl);
+			}
+
 			// A stun interrupts any spell the unit is currently casting or channeling
 			// unless that spell is explicitly usable while stunned.
 			InterruptCastDueToControlEffect();
@@ -1759,6 +1843,12 @@ namespace mmo
 		}
 		else if (!wasSleeping && isSleeping)
 		{
+			// Entering a crowd-control state interrupts auras flagged to break on crowd control.
+			if (!m_restoringAuras)
+			{
+				RemoveAurasByInterrupt(spell_aura_interrupt_flags::CrowdControl);
+			}
+
 			// Falling asleep interrupts any spell the unit is currently casting or channeling
 			// unless that spell is explicitly usable while sleeping.
 			InterruptCastDueToControlEffect();
@@ -1829,6 +1919,12 @@ namespace mmo
 		}
 		else if (!wasFeared && isFeared)
 		{
+			// Entering a crowd-control state interrupts auras flagged to break on crowd control.
+			if (!m_restoringAuras)
+			{
+				RemoveAurasByInterrupt(spell_aura_interrupt_flags::CrowdControl);
+			}
+
 			// Fear interrupts any spell the unit is currently casting or channeling
 			// unless that spell is explicitly usable while feared.
 			InterruptCastDueToControlEffect();
@@ -1906,6 +2002,12 @@ namespace mmo
 		}
 		else if (!wasDisoriented && isDisoriented)
 		{
+			// Entering a crowd-control state interrupts auras flagged to break on crowd control.
+			if (!m_restoringAuras)
+			{
+				RemoveAurasByInterrupt(spell_aura_interrupt_flags::CrowdControl);
+			}
+
 			if (m_mover) m_mover->StopMovement();
 			if (m_netUnitWatcher && !m_restoringAuras)
 			{
@@ -2593,11 +2695,25 @@ namespace mmo
 	{
 		if (inCombat)
 		{
+			// Detect the transition into combat so interrupt auras only fire when actually entering
+			// combat, not on every refresh while already in combat.
+			const bool wasInCombat = IsInCombat();
+
 			AddFlag<uint32>(object_fields::Flags, unit_flags::InCombat);
 			if (pvp)
 			{
 				// 6 seconds pvp combat duration
 				m_pvpCombatCountdown.SetEnd(GetAsyncTimeMs() + (constants::OneSecond * 6));
+			}
+
+			if (!wasInCombat)
+			{
+				RemoveAurasByInterrupt(spell_aura_interrupt_flags::EnterCombat);
+
+				if (pvp)
+				{
+					RemoveAurasByInterrupt(spell_aura_interrupt_flags::EnterPvPCombat);
+				}
 			}
 		}
 		else
@@ -3443,6 +3559,10 @@ namespace mmo
 			swingCountdown.SetEnd(GetAsyncTimeMs() + attackSwingErrorDelay);
 			return;
 		}
+
+		// The swing has passed all pre-conditions (alive, in range, facing) and is going to
+		// connect. Remove any auras that are interrupted by attacking (e.g. "removed when attacking").
+		RemoveAurasByInterrupt(spell_aura_interrupt_flags::Attack);
 
 		// Check if we have a configured auto-attack spell to use instead of the legacy hardcoded combat
 		const proto::SpellEntry* autoAttackSpell = GetAutoAttackSpell(attackType);

@@ -413,6 +413,12 @@ namespace mmo
 			/// Spell may only be cast on player characters (never on NPCs / creatures).
 			/// The client uses this to block the cast attempt early; the server still validates.
 			CanOnlyTargetPlayers = 1 << 8,
+
+			/// Casting this spell does not trigger the "Casting Spell" aura interrupt on the caster,
+			/// so it will not remove ANY of the caster's auras flagged to break on casting (not just
+			/// Stealth). Use for utility spells that should be castable without breaking such auras
+			/// (e.g. a Sprint buff cast while stealthed).
+			NotBreakCastInterruptAuras = 1 << 9,
 		};
 	}
 

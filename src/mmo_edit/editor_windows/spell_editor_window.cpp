@@ -1449,6 +1449,15 @@ namespace mmo
 				ImGui::TableNextColumn();
 				CHECKBOX_ATTR_PROP(1, "Can Only Target Players", spell_attributes_b::CanOnlyTargetPlayers);
 
+				ImGui::TableNextColumn();
+				CHECKBOX_ATTR_PROP(1, "Doesn't Break Auras On Cast", spell_attributes_b::NotBreakCastInterruptAuras);
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::SetTooltip("Casting this spell will not remove any of the caster's auras that are\n"
+						"flagged with the 'Casting Spell' aura interrupt (e.g. Stealth). Use for utility\n"
+						"spells like Sprint that should be usable without breaking such auras.");
+				}
+
 				ImGui::EndTable();
 			}
 
