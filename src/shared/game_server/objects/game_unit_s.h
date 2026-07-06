@@ -1574,6 +1574,11 @@ public:
 		// Snapshot of persistable auras captured in OnDespawn just before m_auras is cleared, so a
 		// save triggered by the despawn (logout/teleport) can still serialize them.
 		std::vector<PersistentAuraData> m_despawnAuraSnapshot;
+		// True while RestorePersistentAuras is re-applying persisted auras at login. Restore runs
+		// before the spawn packet is built, so movement changes must be applied immediately instead
+		// of going through the client-ack round-trip — the client can't ack packets for a unit it
+		// hasn't spawned yet and would be kicked by the ack-timeout anti-cheat check.
+		bool m_restoringAuras = false;
 		// Maps base spell id → the previous target that had a SingleTargetPerCaster aura from our caster.
 		// Key: casterGuid*100000 + baseSpellId would be complex; instead keyed by (casterGuid ^ spellBaseId).
 		// Actually keyed by spellId → weak_ptr<GameUnitS> of previous target for SingleTargetPerCaster eviction.

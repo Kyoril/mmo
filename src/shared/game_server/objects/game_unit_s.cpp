@@ -1329,6 +1329,11 @@ namespace mmo
 
 	void GameUnitS::RestorePersistentAuras(const std::vector<PersistentAuraData>& auras)
 	{
+		// Movement changes caused by restored auras must bypass the client-ack round-trip:
+		// restore happens before the spawn packet is sent, so the correct speeds are already
+		// part of the initial object creation packet and there is nothing for the client to ack.
+		m_restoringAuras = true;
+
 		for (const auto& data : auras)
 		{
 			const proto::SpellEntry* spell = GetProject().spells.getById(data.spellId);
@@ -1353,6 +1358,8 @@ namespace mmo
 			container->SetStackCount(data.stackCount);
 			ApplyAura(std::move(container));
 		}
+
+		m_restoringAuras = false;
 	}
 
 	void GameUnitS::RestorePersistentCooldowns(const std::vector<PersistentCooldownData>& cooldowns)
@@ -2740,7 +2747,10 @@ namespace mmo
 			// to send an ack packet before we finally apply the speed change. If there is no
 			// watcher, we simply apply the speed change as this is most likely a creature which isn't
 			// controlled by a player (however, mind-controlled creatures will have a m_netWatcher).
-			if (m_netUnitWatcher != nullptr && !initial)
+			// While restoring persisted auras at login the ack path must be skipped as well: the
+			// client hasn't received its spawn packet yet and can never ack, which would trip the
+			// ack-timeout anti-cheat kick. The restored speed is part of the spawn packet instead.
+			if (m_netUnitWatcher != nullptr && !initial && !m_restoringAuras)
 			{
 				const uint32 ackId = GenerateAckId();
 				const float absSpeed = GetBaseSpeed(type) * speed;
