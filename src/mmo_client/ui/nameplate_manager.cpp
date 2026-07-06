@@ -96,6 +96,17 @@ namespace mmo
 		{
 			plate->Animate(elapsed);
 		}
+
+		// The floating 3D name text of the selected unit is redundant while its nameplate
+		// is on screen: show either the plate or the name text, never both. This runs every
+		// frame because plate visibility changes dynamically (distance, filters, off-screen),
+		// and ObjectMgr re-shows the name text on every selection change.
+		if (const auto selected = ObjectMgr::GetSelectedObject())
+		{
+			const auto plateIt = m_nameplates.find(selected->GetGuid());
+			const bool plateVisible = plateIt != m_nameplates.end() && plateIt->second->IsVisible();
+			selected->SetUnitNameVisible(!plateVisible);
+		}
 	}
 
 	void NameplateManager::Clear()
