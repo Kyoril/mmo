@@ -1,6 +1,7 @@
 #include "animation_state.h"
 #include "animation.h"
 
+#include <algorithm>
 #include <cmath>
 #include <ranges>
 
@@ -72,14 +73,28 @@ namespace mmo
 		// Trigger animation notifies if we have an animation
 		if (m_animation && m_enabled)
 		{
+			// Check each notify to see if we crossed its time
+			const auto& notifies = m_animation->GetNotifies();
+
 			// If we looped, clear triggered notifies
 			if (hasLooped)
 			{
 				m_triggeredNotifies.clear();
 			}
-
-			// Check each notify to see if we crossed its time
-			const auto& notifies = m_animation->GetNotifies();
+			else if (m_timePos < oldTimePos)
+			{
+				// Backward jump without looping - typically a one-shot animation restarted from the
+				// beginning (the same AnimationState object is reused for every attack swing). Any
+				// notify now ahead of the current position must become eligible to fire again on the
+				// next forward pass, otherwise it would only ever trigger on the very first play-through.
+				m_triggeredNotifies.erase(
+					std::remove_if(m_triggeredNotifies.begin(), m_triggeredNotifies.end(),
+						[&notifies, this](const size_t idx)
+						{
+							return idx >= notifies.size() || notifies[idx]->GetTime() > m_timePos;
+						}),
+					m_triggeredNotifies.end());
+			}
 			for (size_t i = 0; i < notifies.size(); ++i)
 			{
 				const auto& notify = notifies[i];
