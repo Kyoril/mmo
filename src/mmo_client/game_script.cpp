@@ -1,6 +1,8 @@
 ﻿// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "game_script.h"
+#include "base/localization.h"
+#include "client_locale.h"
 #include "console/console.h"
 #include "net/login_connector.h"
 #include "ui/binding.h"
@@ -891,6 +893,13 @@ namespace mmo
 			return strm.str();
 		}
 
+		/// Returns the spell's name localized to the client's locale (English fallback). Used as the
+		/// Lua "Spell.name" property so all UI reads the translated name.
+		std::string Script_GetSpellName(const proto_client::SpellEntry& spell)
+		{
+			return GetLocalizedString(spell.name(), spell.name_loc(), GetClientLocale());
+		}
+
 		std::string Script_GetSpellAuraText(const proto_client::SpellEntry *spell)
 		{
 			if (spell == nullptr)
@@ -898,7 +907,7 @@ namespace mmo
 				return "<NULL>";
 			}
 
-			return FormatSpellText(spell->auratext(), spell);
+			return FormatSpellText(GetLocalizedString(spell->auratext(), spell->auratext_loc(), GetClientLocale()), spell);
 		}
 
 		std::string Script_GetSpellDescription(const proto_client::SpellEntry *spell)
@@ -908,7 +917,7 @@ namespace mmo
 				return "<NULL>";
 			}
 
-			return FormatSpellText(spell->description(), spell);
+			return FormatSpellText(GetLocalizedString(spell->description(), spell->description_loc(), GetClientLocale()), spell);
 		}
 
 		bool Script_IsPassiveSpell(const proto_client::SpellEntry *spell)
@@ -984,7 +993,7 @@ namespace mmo
 
 		ASSERT(trainerSpells[slot].spell);
 		outSpellId = trainerSpells[slot].spell->id();
-		outName = trainerSpells[slot].spell->name();
+		outName = GetLocalizedString(trainerSpells[slot].spell->name(), trainerSpells[slot].spell->name_loc(), GetClientLocale());
 		outIcon = trainerSpells[slot].spell->icon();
 		outPrice = trainerSpells[slot].cost;
 		outKnown = trainerSpells[slot].isKnown;
@@ -1186,7 +1195,7 @@ namespace mmo
 						   luabind::scope(
 							   luabind::class_<proto_client::SpellEntry>("Spell")
 							   .def_readonly("id", &proto_client::SpellEntry::id)
-							   .def_readonly("name", &proto_client::SpellEntry::name)
+							   .property("name", &Script_GetSpellName)
 							   .def_readonly("rank", &proto_client::SpellEntry::rank)
 							   .def_readonly("cost", &proto_client::SpellEntry::cost)
 							   .def_readonly("cooldown", &proto_client::SpellEntry::cooldown)

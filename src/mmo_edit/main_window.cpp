@@ -17,6 +17,8 @@
 #include "editor_windows/asset_window.h"
 #include "proto_data/project.h"
 #include "simple_file_format/sff_write.h"
+#include "localization_io.h"
+#include "file_dialog/file_dialog.h"
 
 #ifdef _WIN32
 #	include <windowsx.h>
@@ -273,13 +275,97 @@ namespace mmo
 
 				if (!m_editorWindows.empty())
 				{
-					ImGui::Separator();	
+					ImGui::Separator();
 				}
-				
+
 				ImGui::EndMenu();
 			}
 
+			HandleLocalizationMenu();
+
 			ImGui::EndMenuBar();
+		}
+	}
+
+	void MainWindow::HandleLocalizationMenu()
+	{
+		// State for the result popup shown after an export/import completes.
+		static bool openResultPopup = false;
+		static bool resultFailed = false;
+		static std::string resultMessage;
+
+		if (ImGui::BeginMenu("Localization"))
+		{
+			if (ImGui::MenuItem("Export Translations..."))
+			{
+				const std::vector<FileDialogFilter> filters = { FileDialogFilter("Translation JSON", "*.json") };
+				if (const std::optional<String> path = FileDialog::ShowSave("Export Translations", filters, "translations", "json"))
+				{
+					String error;
+					size_t entryCount = 0;
+					if (ExportTranslations(m_project, *path, error, entryCount))
+					{
+						resultFailed = false;
+						resultMessage = "Exported " + std::to_string(entryCount) + " translatable strings to:\n" + *path;
+						ILOG("Exported " << entryCount << " translatable strings to " << *path);
+					}
+					else
+					{
+						resultFailed = true;
+						resultMessage = "Export failed:\n" + error;
+						ELOG("Translation export failed: " << error);
+					}
+					openResultPopup = true;
+				}
+			}
+
+			if (ImGui::MenuItem("Import Translations..."))
+			{
+				const std::vector<FileDialogFilter> filters = { FileDialogFilter("Translation JSON", "*.json") };
+				if (const std::optional<String> path = FileDialog::ShowOpen("Import Translations", filters))
+				{
+					String error;
+					size_t appliedCount = 0;
+					if (ImportTranslations(m_project, *path, error, appliedCount))
+					{
+						// Persist the applied translations to the project on disk immediately.
+						m_project.save(m_config.projectPath);
+
+						resultFailed = false;
+						resultMessage = "Imported and applied " + std::to_string(appliedCount) + " translations.\nProject saved.";
+						ILOG("Imported " << appliedCount << " translations from " << *path << " and saved the project.");
+					}
+					else
+					{
+						resultFailed = true;
+						resultMessage = "Import failed:\n" + error;
+						ELOG("Translation import failed: " << error);
+					}
+					openResultPopup = true;
+				}
+			}
+
+			ImGui::EndMenu();
+		}
+
+		if (openResultPopup)
+		{
+			ImGui::OpenPopup("LocalizationPopup");
+			openResultPopup = false;
+		}
+
+		if (ImGui::BeginPopupModal("LocalizationPopup", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::TextColored(resultFailed ? ImVec4(1.0f, 0.4f, 0.4f, 1.0f) : ImVec4(0.4f, 1.0f, 0.4f, 1.0f),
+				"%s", resultFailed ? "Error" : "Success");
+			ImGui::Separator();
+			ImGui::TextUnformatted(resultMessage.c_str());
+			ImGui::Separator();
+			if (ImGui::Button("OK", ImVec2(120, 0)))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndPopup();
 		}
 	}
 	

@@ -1609,9 +1609,9 @@ namespace mmo
 				packet
 					<< io::write<uint64>(questgiverGuid)
 					<< io::write<uint32>(quest.id())
-					<< io::write_dynamic_range<uint8>(quest.name())
-					<< io::write_dynamic_range<uint16>(quest.detailstext())
-					<< io::write_dynamic_range<uint16>(quest.objectivestext())
+					<< io::write_dynamic_range<uint8>(GetLocalizedString(quest.name(), quest.name_loc(), GetLocale()))
+					<< io::write_dynamic_range<uint16>(GetLocalizedString(quest.detailstext(), quest.detailstext_loc(), GetLocale()))
+					<< io::write_dynamic_range<uint16>(GetLocalizedString(quest.objectivestext(), quest.objectivestext_loc(), GetLocale()))
 					<< io::write<uint32>(quest.suggestedplayers());
 
 				if (quest.flags() & quest_flags::HiddenRewards)
@@ -1664,8 +1664,8 @@ namespace mmo
 				packet
 					<< io::write<uint64>(questgiverGuid)
 					<< io::write<uint32>(quest.id())
-					<< io::write_dynamic_range<uint8>(quest.name())
-					<< io::write_dynamic_range<uint16>(quest.offerrewardtext());
+					<< io::write_dynamic_range<uint8>(GetLocalizedString(quest.name(), quest.name_loc(), GetLocale()))
+					<< io::write_dynamic_range<uint16>(GetLocalizedString(quest.offerrewardtext(), quest.offerrewardtext_loc(), GetLocale()));
 
 				packet
 					<< io::write<uint32>(quest.rewarditemschoice_size());
@@ -1710,7 +1710,7 @@ namespace mmo
 				packet
 					<< io::write<uint64>(npc.GetGuid())
 					<< io::write<uint32>(menu.id())
-					<< io::write_dynamic_range<uint16>(menu.text())
+					<< io::write_dynamic_range<uint16>(GetLocalizedString(menu.text(), menu.text_loc(), GetLocale()))
 					<< io::write<uint8>(menu.show_quests());
 
 				if (menu.show_quests())
@@ -1737,7 +1737,7 @@ namespace mmo
 					packet
 						<< io::write<uint32>(action.id())
 						<< io::write<uint8>(action.action_type())
-						<< io::write_dynamic_range<uint8>(action.text());
+						<< io::write_dynamic_range<uint8>(GetLocalizedString(action.text(), action.text_loc(), GetLocale()));
 				}
 
 				packet.Sink().Overwrite(actionCountPosition, reinterpret_cast<const char*>(&actionCount), sizeof(uint16));
@@ -1745,13 +1745,13 @@ namespace mmo
 			});
 	}
 
-	void WriteQuestMenuEntry(const proto::QuestEntry& quest, QuestgiverStatus status, io::Writer& writer)
+	void WriteQuestMenuEntry(const proto::QuestEntry& quest, QuestgiverStatus status, const LocaleIndex locale, io::Writer& writer)
 	{
 		writer
 			<< io::write<uint32>(quest.id())
 			<< io::write<uint32>(status)
 			<< io::write<int32>(quest.questlevel())
-			<< io::write_dynamic_range<uint8>(quest.name());
+			<< io::write_dynamic_range<uint8>(GetLocalizedString(quest.name(), quest.name_loc(), locale));
 	}
 
 	void Player::SerializeQuestList(const GameCreatureS& unit, io::Writer& writer)
@@ -1767,7 +1767,7 @@ namespace mmo
 			{
 				if (const auto* quest = m_project.quests.getById(questId))
 				{
-					WriteQuestMenuEntry(*quest, questStatus == quest_status::Incomplete ? questgiver_status::Incomplete : questgiver_status::Reward, writer);
+					WriteQuestMenuEntry(*quest, questStatus == quest_status::Incomplete ? questgiver_status::Incomplete : questgiver_status::Reward, GetLocale(), writer);
 					questCount++;
 				}
 			}
@@ -1779,7 +1779,7 @@ namespace mmo
 			{
 				if (const auto* quest = m_project.quests.getById(questId))
 				{
-					WriteQuestMenuEntry(*quest, questgiver_status::Available, writer);
+					WriteQuestMenuEntry(*quest, questgiver_status::Available, GetLocale(), writer);
 					questCount++;
 				}
 			}

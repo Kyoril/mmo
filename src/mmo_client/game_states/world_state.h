@@ -163,6 +163,10 @@ namespace mmo
 		/// @param isCritical True if the hit was a critical strike.
 		void TriggerCombatCameraShake(ObjectGuid victimGuid, ObjectGuid attackerGuid, uint32 amount, bool isCritical);
 
+		/// Recomputes the low-health combat vignette intensity from the controlled player's current
+		/// health, honoring the CombatVignette gameplay option.
+		void UpdateCombatVignette();
+
 		void OnMoneyChanged(uint64 monitoredGuid);
 
 		void OnExperiencePointsChanged(uint64 monitoredGuid);
@@ -220,6 +224,8 @@ namespace mmo
 		void OnShadowTemporalChanged(ConsoleVar &var, const std::string &oldValue);
 
 		void OnDepthPrepassChanged(ConsoleVar &var, const std::string &oldValue);
+
+		void OnCombatVignetteChanged(ConsoleVar &var, const std::string &oldValue);
 
 		void OnFoliageEnabledChanged(ConsoleVar &var, const std::string &oldValue);
 

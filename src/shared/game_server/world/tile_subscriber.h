@@ -4,6 +4,8 @@
 
 #include "game_protocol/game_protocol.h"
 
+#include "base/localization.h"
+
 namespace mmo
 {
 	class GameUnitS;
@@ -16,6 +18,11 @@ namespace mmo
 
 	public:
 		virtual GameUnitS& GetGameUnit() const = 0;
+
+		/// Returns the client locale of the player behind this subscriber. Used to serve
+		/// localized broadcast text (e.g. creature Say/Yell/Emote). Non-player subscribers
+		/// and subscribers without a known locale default to the authoritative enUS base.
+		virtual LocaleIndex GetLocale() const { return LocaleIndex::enUS; }
 
 		virtual void NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects) = 0;
 

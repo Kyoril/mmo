@@ -6,8 +6,12 @@
 #include "game_server/world/each_tile_in_sight.h"
 #include "game_server/objects/game_player_s.h"
 #include "base/utilities.h"
+#include "base/localization.h"
 #include "binary_io/vector_sink.h"
 #include "game/chat_type.h"
+
+#include <map>
+#include <memory>
 #include "game/loot.h"
 #include "proto_data/project.h"
 #include "shared/proto_data/combat_settings.pb.h"
@@ -1673,19 +1677,19 @@ namespace mmo
 		return total;
 	}
 
-	void GameUnitS::ChatSay(const String &message)
+	void GameUnitS::ChatSay(const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText)
 	{
-		DoLocalChatMessage(IsPlayer() ? ChatType::Say : ChatType::UnitSay, message);
+		DoLocalChatMessage(IsPlayer() ? ChatType::Say : ChatType::UnitSay, message, localizedText);
 	}
 
-	void GameUnitS::ChatYell(const String &message)
+	void GameUnitS::ChatYell(const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText)
 	{
-		DoLocalChatMessage(IsPlayer() ? ChatType::Yell : ChatType::UnitYell, message);
+		DoLocalChatMessage(IsPlayer() ? ChatType::Yell : ChatType::UnitYell, message, localizedText);
 	}
 
-	void GameUnitS::ChatEmote(const String& message)
+	void GameUnitS::ChatEmote(const String& message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText)
 	{
-		DoLocalChatMessage(IsPlayer() ? ChatType::Emote : ChatType::UnitEmote, message);
+		DoLocalChatMessage(IsPlayer() ? ChatType::Emote : ChatType::UnitEmote, message, localizedText);
 	}
 
 	void GameUnitS::NotifyRootChanged()
@@ -2118,7 +2122,7 @@ namespace mmo
 		return true;
 	}
 
-	void GameUnitS::DoLocalChatMessage(ChatType type, const String &message)
+	void GameUnitS::DoLocalChatMessage(ChatType type, const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText)
 	{
 		auto position = GetPosition();
 		float chatDistance = 0.0f;
@@ -2143,28 +2147,55 @@ namespace mmo
 		// TODO: Flags
 		constexpr uint8 flags = 0;
 
-		std::vector<char> buffer;
-		io::VectorSink sink{buffer};
-		game::OutgoingPacket outPacket(sink);
-		outPacket.Start(game::realm_client_packet::ChatMessage);
-		outPacket
-			<< io::write_packed_guid(GetGuid())
-			<< io::write<uint8>(type)
-			<< io::write_range(message)
-			<< io::write<uint8>(0)
-			<< io::write<uint8>(flags);
+		const bool isUnitChat = (type == ChatType::UnitSay || type == ChatType::UnitYell || type == ChatType::UnitEmote);
 
-		// Add speaker name for unit chat events
-		if (type == ChatType::UnitSay || type == ChatType::UnitYell || type == ChatType::UnitEmote)
+		// Serializes one chat packet for an already-localized message. The buffer and packet are
+		// bundled so their addresses stay stable (the packet's sink references the buffer).
+		struct ChatPacket
 		{
-			outPacket << io::write_dynamic_range<uint8>(GetName());
+			std::vector<char> buffer;
+			io::VectorSink<char> sink;
+			game::OutgoingPacket packet;
+
+			ChatPacket() : sink(buffer), packet(sink) {}
+		};
+
+		const auto buildPacket = [this, type, flags, isUnitChat](const String& text) -> std::unique_ptr<ChatPacket>
+		{
+			auto result = std::make_unique<ChatPacket>();
+			result->packet.Start(game::realm_client_packet::ChatMessage);
+			result->packet
+				<< io::write_packed_guid(GetGuid())
+				<< io::write<uint8>(type)
+				<< io::write_range(text)
+				<< io::write<uint8>(0)
+				<< io::write<uint8>(flags);
+
+			// Add speaker name for unit chat events
+			if (isUnitChat)
+			{
+				result->packet << io::write_dynamic_range<uint8>(GetName());
+			}
+
+			result->packet.Finish();
+			return result;
+		};
+
+		// When no per-locale overrides are provided (e.g. player chat) fall back to a single shared
+		// packet that is broadcast to every recipient - the common, cheap path.
+		const bool localize = (localizedText != nullptr && !localizedText->empty());
+
+		std::unique_ptr<ChatPacket> shared;
+		if (!localize)
+		{
+			shared = buildPacket(message);
 		}
 
-		outPacket.Finish();
+		// Lazily built, one packet per distinct recipient locale.
+		std::map<LocaleIndex, std::unique_ptr<ChatPacket>> byLocale;
 
-		// Spawn tile objects
 		ForEachSubscriberInSight(
-			[&position, chatDistance, &outPacket, &buffer](TileSubscriber &subscriber)
+			[&](TileSubscriber &subscriber)
 			{
 				auto &unit = subscriber.GetGameUnit();
 				const float distanceSquared = (unit.GetPosition() - position).GetSquaredLength();
@@ -2173,7 +2204,19 @@ namespace mmo
 					return;
 				}
 
-				subscriber.SendPacket(outPacket, buffer);
+				ChatPacket* packet = shared.get();
+				if (localize)
+				{
+					const LocaleIndex locale = subscriber.GetLocale();
+					auto& entry = byLocale[locale];
+					if (!entry)
+					{
+						entry = buildPacket(GetLocalizedString(message, *localizedText, locale));
+					}
+					packet = entry.get();
+				}
+
+				subscriber.SendPacket(packet->packet, packet->buffer);
 			});
 	}
 

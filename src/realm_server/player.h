@@ -5,6 +5,7 @@
 #include "player_manager.h"
 
 #include "base/non_copyable.h"
+#include "base/localization.h"
 #include "game_protocol/game_protocol.h"
 #include "game_protocol/game_connection.h"
 #include "base/big_number.h"
@@ -422,6 +423,7 @@ namespace mmo
 		std::string m_address;	   // IP address in string format
 		std::string m_accountName; // Account name in uppercase letters
 		uint32 m_build;			   // Build version: 0.0.0.XXXXX
+		LocaleIndex m_locale = LocaleIndex::enUS; // Client locale, used to serve localized game data
 		std::map<uint16, PacketHandler> m_packetHandlers;
 		std::mutex m_packetHandlerMutex;
 		uint32 m_seed; // Random generated seed used for packet header encryption

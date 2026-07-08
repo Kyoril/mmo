@@ -1,6 +1,8 @@
 syntax = "proto2";
 package mmo.proto_client;
 
+import "localization.proto";
+
 message ZoneEntry {
 	required uint32 id = 1;
 	required string name = 2;
@@ -10,6 +12,7 @@ message ZoneEntry {
 	optional uint32 flags = 6;
 	optional uint32 owning_faction = 7;
 	optional int32 level = 8;
+	repeated LocalizedString name_loc = 200;
 }
 
 message Zones {

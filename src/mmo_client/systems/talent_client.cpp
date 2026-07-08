@@ -1,5 +1,7 @@
 #include "talent_client.h"
 
+#include "base/localization.h"
+#include "client_locale.h"
 #include "luabind_lambda.h"
 #include "game_client/object_mgr.h"
 #include "net/realm_connector.h"
@@ -193,7 +195,7 @@ namespace mmo
 				requiredPoints,
 				talent.node_scale(),
 				spell->icon(),
-				spell->name()
+				GetLocalizedString(spell->name(), spell->name_loc(), GetClientLocale())
 			);
 
 			TalentInfo& info = entry.back();
@@ -260,7 +262,7 @@ namespace mmo
 						if (talentInfo.spell)
 						{
 							talentInfo.icon = talentInfo.spell->icon();
-							talentInfo.name = talentInfo.spell->name();
+							talentInfo.name = GetLocalizedString(talentInfo.spell->name(), talentInfo.spell->name_loc(), GetClientLocale());
 						}
 					}
 				}

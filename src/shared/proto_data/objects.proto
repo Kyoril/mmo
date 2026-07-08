@@ -1,12 +1,15 @@
 syntax = "proto2";
 package mmo.proto;
 
+import "localization.proto";
+
 message ObjectEntry {
 	required uint32 id = 1;
 	required string name = 2;
 	optional string caption = 3;
-	repeated string name_loc = 17;
-	repeated string caption_loc = 18;
+	reserved 17, 18;	// legacy positional 'repeated string' name_loc/caption_loc (unused)
+	repeated LocalizedString name_loc = 200;
+	repeated LocalizedString caption_loc = 201;
 	optional uint32 mingold = 4;
 	optional uint32 maxgold = 5;
 	required uint32 type = 6;

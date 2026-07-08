@@ -412,7 +412,7 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	void World::Join(CharacterData characterData, const std::vector<std::string>& accountFeatures, JoinWorldCallback callback)
+	void World::Join(CharacterData characterData, const std::vector<std::string>& accountFeatures, const LocaleIndex locale, JoinWorldCallback callback)
 	{
 		// TODO: What if we already have a waiting callback? Right now we just discard the old one
 		if (callback)
@@ -421,7 +421,7 @@ namespace mmo
 			m_joinCallbacks.emplace(characterData.characterId, std::move(callback));
 		}
 
-		GetConnection().sendSinglePacket([characterData, accountFeatures](auth::OutgoingPacket& outPacket)
+		GetConnection().sendSinglePacket([characterData, accountFeatures, locale](auth::OutgoingPacket& outPacket)
 		{
 			outPacket.Start(auth::realm_world_packet::PlayerCharacterJoin);
 			outPacket << characterData;
@@ -437,6 +437,9 @@ namespace mmo
 				}
 				outPacket << io::write_dynamic_range<uint8>(feature);
 			}
+
+			// Append the client locale so the world can serve localized gossip / quest-giver text.
+			outPacket << io::write<uint32>(static_cast<uint32>(locale));
 
 			outPacket.Finish();
 		});

@@ -225,11 +225,16 @@ namespace mmo
 		ClearPacketHandler(game::client_realm_packet::AuthSession);
 
 		// Read packet data
-		if (!(packet >> io::read<uint32>(m_build) >> io::read_container<uint8>(m_accountName) >> io::read<uint32>(m_clientSeed) >> io::read_range(m_clientHash)))
+		uint32 localeFourCC = 0;
+		if (!(packet >> io::read<uint32>(m_build) >> io::read_container<uint8>(m_accountName) >> io::read<uint32>(m_clientSeed) >> io::read_range(m_clientHash) >> io::read<uint32>(localeFourCC)))
 		{
 			ELOG("Could not read LogonChallenge packet from a game client");
 			return PacketParseResult::Disconnect;
 		}
+
+		// Remember the client's locale so game-data queries can be served in the correct language.
+		m_locale = LocaleIndexFromFourCC(localeFourCC);
+		DLOG("Client locale: " << LocaleCode(m_locale));
 
 		// Verify the client build immediately for validity
 		if (m_build != mmo::Revision)
@@ -1171,7 +1176,7 @@ namespace mmo
 
 		std::weak_ptr weakThis = shared_from_this();
 		std::weak_ptr weakWorld = world;
-		world->Join(*m_characterData, m_accountFeatures, [weakThis, weakWorld](const InstanceId instanceId, const bool success)
+		world->Join(*m_characterData, m_accountFeatures, m_locale, [weakThis, weakWorld](const InstanceId instanceId, const bool success)
 					{
 				const auto strongThis = weakThis.lock();
 				if (!strongThis)
@@ -3476,7 +3481,7 @@ namespace mmo
 		// Send join request
 		std::weak_ptr weakThis = shared_from_this();
 		std::weak_ptr weakWorld = world;
-		world->Join(*m_characterData, m_accountFeatures, [weakThis, weakWorld](const InstanceId instanceId, const bool success)
+		world->Join(*m_characterData, m_accountFeatures, m_locale, [weakThis, weakWorld](const InstanceId instanceId, const bool success)
 					{
 			const auto strongThis = weakThis.lock();
 			if (!strongThis)
@@ -3576,14 +3581,14 @@ namespace mmo
 			return;
 		}
 
-		m_connection->sendSinglePacket([unit](game::OutgoingPacket &packet)
+		m_connection->sendSinglePacket([unit, locale = m_locale](game::OutgoingPacket &packet)
 									   {
 				packet.Start(game::realm_client_packet::CreatureQueryResult);
 				packet
 					<< io::write_packed_guid(unit->id())
 					<< io::write<uint8>(true)
-					<< io::write_range(unit->name()) << io::write<uint8>(0)
-					<< io::write_range(unit->subname()) << io::write<uint8>(0)
+					<< io::write_range(GetLocalizedString(unit->name(), unit->name_loc(), locale)) << io::write<uint8>(0)
+					<< io::write_range(GetLocalizedString(unit->subname(), unit->subname_loc(), locale)) << io::write<uint8>(0)
 					<< io::write_range(unit->stealth_alert_sound()) << io::write<uint8>(0);
 				packet.Finish(); });
 	}
@@ -3606,12 +3611,12 @@ namespace mmo
 			return;
 		}
 
-		// Map quest info
+		// Map quest info (localized to the requesting client's locale, English fallback)
 		QuestInfo quest;
 		quest.id = questEntry->id();
-		quest.title = questEntry->name();
-		quest.description = questEntry->detailstext();
-		quest.summary = questEntry->objectivestext();
+		quest.title = GetLocalizedString(questEntry->name(), questEntry->name_loc(), m_locale);
+		quest.description = GetLocalizedString(questEntry->detailstext(), questEntry->detailstext_loc(), m_locale);
+		quest.summary = GetLocalizedString(questEntry->objectivestext(), questEntry->objectivestext_loc(), m_locale);
 
 		quest.questLevel = questEntry->questlevel();
 		quest.rewardMoney = questEntry->rewardmoney();
@@ -3667,10 +3672,10 @@ namespace mmo
 			return;
 		}
 
-		// Map item entry
+		// Map item entry (localized to the requesting client's locale, English fallback)
 		ItemInfo info;
-		info.name = itemEntry->name();
-		info.description = itemEntry->description();
+		info.name = GetLocalizedString(itemEntry->name(), itemEntry->name_loc(), m_locale);
+		info.description = GetLocalizedString(itemEntry->description(), itemEntry->description_loc(), m_locale);
 		info.id = entry;
 		info.itemClass = itemEntry->itemclass();
 		info.itemSubclass = itemEntry->subclass();
@@ -3806,7 +3811,7 @@ namespace mmo
 		info.id = entry;
 		info.type = object->type();
 		info.displayId = object->displayid();
-		info.name = object->name();
+		info.name = GetLocalizedString(object->name(), object->name_loc(), m_locale);
 		for (int32 i = 0; i < 16; ++i)
 		{
 			info.data[i] = object->data_size() <= i ? 0 : object->data(i);

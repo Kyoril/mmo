@@ -5,6 +5,7 @@
 #include "game/movement_info.h"
 
 #include "base/constants.h"
+#include "base/localization.h"
 #include "base/random.h"
 #include "base/sha1.h"
 #include "console/console_var.h"
@@ -81,12 +82,19 @@ namespace mmo
 
 		// We have been challenged, respond with an answer
 		sendSinglePacket([this, &hash](game::OutgoingPacket& packet) {
+			// Resolve the client locale from the "locale" console variable so the realm
+			// (and, via the realm, the world) serves game data in the correct language.
+			const auto* localeCVar = ConsoleVarMgr::FindConsoleVar("locale");
+			const LocaleIndex clientLocale = localeCVar ?
+				LocaleIndexFromString(localeCVar->GetStringValue()) : LocaleIndex::enUS;
+
 			packet.Start(game::client_realm_packet::AuthSession);
 			packet
 				<< io::write<uint32>(mmo::Revision)
 				<< io::write_dynamic_range<uint8>(this->m_account)
 				<< io::write<uint32>(m_clientSeed)
-				<< io::write_range(hash);
+				<< io::write_range(hash)
+				<< io::write<uint32>(LocaleFourCC(clientLocale));	// Locale (from "locale" CVar)
 			packet.Finish();
 		});
 

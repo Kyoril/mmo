@@ -105,11 +105,11 @@ namespace mmo
 		DLOG("Player " << m_characterData.name << " accepted quest " << questId << " from quest giver object " << log_hex_digit(questGiverGuid));
 		
 		// Notify client that quest was accepted
-		SendPacket([questId, quest](game::OutgoingPacket& packet)
+		SendPacket([questId, quest, locale = GetLocale()](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::realm_client_packet::QuestAccepted);
 			packet
-				<< io::write_dynamic_range<uint8>(quest->name())
+				<< io::write_dynamic_range<uint8>(GetLocalizedString(quest->name(), quest->name_loc(), locale))
 				<< io::write<uint32>(questId);
 			packet.Finish();
 		});
@@ -150,11 +150,11 @@ namespace mmo
 		}
 
 		// Notify client that quest was abandoned
-		SendPacket([questId, quest](game::OutgoingPacket& packet)
+		SendPacket([questId, quest, locale = GetLocale()](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::realm_client_packet::QuestAbandoned);
 			packet
-				<< io::write_dynamic_range<uint8>(quest->name())
+				<< io::write_dynamic_range<uint8>(GetLocalizedString(quest->name(), quest->name_loc(), locale))
 				<< io::write<uint32>(questId);
 			packet.Finish();
 		});
@@ -414,8 +414,8 @@ namespace mmo
 					packet
 						<< io::write<uint64>(questGiverGuid)
 						<< io::write<uint32>(quest->id())
-						<< io::write_dynamic_range<uint8>(quest->name())
-						<< io::write_dynamic_range<uint16>(quest->requestitemstext());
+						<< io::write_dynamic_range<uint8>(GetLocalizedString(quest->name(), quest->name_loc(), GetLocale()))
+						<< io::write_dynamic_range<uint16>(GetLocalizedString(quest->requestitemstext(), quest->requestitemstext_loc(), GetLocale()));
 
 					const size_t itemCountPos = packet.Sink().Position();
 					uint16 itemCount = 0;

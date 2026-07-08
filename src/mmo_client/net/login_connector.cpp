@@ -5,6 +5,7 @@
 #include "version.h"
 
 #include "base/constants.h"
+#include "base/localization.h"
 #include "game_protocol/game_protocol.h"
 #include "log/default_log_levels.h"
 
@@ -33,6 +34,12 @@ namespace mmo
 			// Register for default packet handlers
 			RegisterPacketHandler(auth::login_client_packet::LogonChallenge, *this, &LoginConnector::OnLogonChallenge);
 
+			// Resolve the client locale from the "locale" console variable so the server
+			// knows which language to serve. Falls back to enUS for unknown/unset values.
+			const auto* localeCVar = ConsoleVarMgr::FindConsoleVar("locale");
+			const LocaleIndex clientLocale = localeCVar ?
+				LocaleIndexFromString(localeCVar->GetStringValue()) : LocaleIndex::enUS;
+
 			// Send the auth packet
 			sendSinglePacket([&](auth::OutgoingPacket &packet)
 			{
@@ -48,7 +55,7 @@ namespace mmo
 					<< io::write<uint16>(mmo::Revision)
 					<< io::write<uint32>(auth::ProtocolVersion)
 					<< io::write<uint32>(game::ProtocolVersion)
-					<< io::write<uint32>(0x64654445)	// Locale: deDE
+					<< io::write<uint32>(LocaleFourCC(clientLocale))	// Locale (from "locale" CVar)
 					<< io::write_dynamic_range<uint8>(m_accountName);
 
 				// Finish packet and send it

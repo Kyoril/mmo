@@ -2,6 +2,8 @@
 
 #include "world_state.h"
 #include "client.h"
+#include "client_locale.h"
+#include "base/localization.h"
 #include "systems/loot_client.h"
 #include "systems/spell_cast.h"
 #include "systems/trade_client.h"
@@ -143,6 +145,9 @@ namespace mmo
 		static ConsoleVar *s_nameplateEnemyPetsVar = nullptr;
 		static ConsoleVar *s_nameplateFriendlyPetsVar = nullptr;
 		static ConsoleVar *s_nameplateDistanceVar = nullptr;
+
+		static ConsoleVar *s_combatCameraShakeVar = nullptr;
+		static ConsoleVar *s_combatVignetteVar = nullptr;
 
 		String MapMouseButton(const MouseButton button)
 		{
@@ -663,9 +668,15 @@ namespace mmo
 		const ObjectGuid playerGuid = ObjectMgr::GetActivePlayerGuid();
 
 		// Local player took the hit: shake scaled by the fraction of max health lost, so a big
-		// hit rattles the screen while chip damage barely registers.
+		// hit rattles the screen while chip damage barely registers. Gated behind an opt-in cvar
+		// (off by default) because incoming-damage screen shake can cause discomfort.
 		if (victimGuid == playerGuid)
 		{
+			if (!s_combatCameraShakeVar || !s_combatCameraShakeVar->GetBoolValue())
+			{
+				return;
+			}
+
 			if (const auto player = ObjectMgr::GetActivePlayer())
 			{
 				const float maxHealth = static_cast<float>(player->GetMaxHealth());
@@ -732,26 +743,49 @@ namespace mmo
 
 		// Drive the low-health combat vignette. It stays hidden until health drops below the
 		// threshold, then ramps toward full intensity as the player approaches death.
-		if (const auto controlled = m_playerController->GetControlledUnit())
-		{
-			const float maxHealth = static_cast<float>(controlled->GetMaxHealth());
-			float danger = 0.0f;
-			if (maxHealth > 0.0f)
-			{
-				constexpr float threshold = 0.35f;
-				const float fraction = static_cast<float>(controlled->GetHealth()) / maxHealth;
-				if (fraction < threshold)
-				{
-					danger = (threshold - fraction) / threshold;
-				}
-			}
-			CombatVignette::SetDangerFactor(danger);
-		}
+		UpdateCombatVignette();
 
 		if (m_playerController->GetControlledUnit()->GetHealth() <= 0)
 		{
 			FrameManager::Get().TriggerLuaEvent("PLAYER_DEAD");
 		}
+	}
+
+	void WorldState::UpdateCombatVignette()
+	{
+		// The vignette is a gameplay option (enabled by default). When disabled, keep it hidden
+		// regardless of health.
+		if (!s_combatVignetteVar || !s_combatVignetteVar->GetBoolValue())
+		{
+			CombatVignette::SetDangerFactor(0.0f);
+			return;
+		}
+
+		const auto controlled = m_playerController ? m_playerController->GetControlledUnit() : nullptr;
+		if (!controlled)
+		{
+			return;
+		}
+
+		const float maxHealth = static_cast<float>(controlled->GetMaxHealth());
+		float danger = 0.0f;
+		if (maxHealth > 0.0f)
+		{
+			constexpr float threshold = 0.35f;
+			const float fraction = static_cast<float>(controlled->GetHealth()) / maxHealth;
+			if (fraction < threshold)
+			{
+				danger = (threshold - fraction) / threshold;
+			}
+		}
+		CombatVignette::SetDangerFactor(danger);
+	}
+
+	void WorldState::OnCombatVignetteChanged(ConsoleVar& var, const std::string& oldValue)
+	{
+		// Re-evaluate immediately so toggling the option in the menu shows/hides the vignette
+		// without waiting for the next health change.
+		UpdateCombatVignette();
 	}
 
 	void WorldState::OnPlayerAttributePointsChanged(uint64 monitoredGuid)
@@ -1715,6 +1749,18 @@ namespace mmo
 		s_nameplateFriendlyPetsVar = ConsoleVarMgr::RegisterConsoleVar("NameplateShowFriendlyPets", "Show nameplates for friendly pets.", "0");
 		s_nameplateDistanceVar = ConsoleVarMgr::RegisterConsoleVar("NameplateDistance", "Maximum distance (world units) at which unit nameplates are shown.", "40");
 
+		// Camera shake on incoming damage is opt-in: screen shake can cause discomfort for some
+		// players, so it defaults to off.
+		s_combatCameraShakeVar = ConsoleVarMgr::RegisterConsoleVar("CombatCameraShake", "Shake the camera when the player takes damage. 1 enables, 0 disables (default).", "0");
+
+		// Low-health red vignette; on by default as a helpful "in danger" read.
+		s_combatVignetteVar = ConsoleVarMgr::RegisterConsoleVar("CombatVignette", "Show a red screen-edge vignette when the player is at low health. 1 enables (default), 0 disables.", "1");
+		m_cvarChangedSignals += s_combatVignetteVar->Changed.connect(this, &WorldState::OnCombatVignetteChanged);
+
+		// Fast loot: when opening a loot window, automatically loot every available slot. Off by
+		// default. Read from Lua (LootFrame). Holding Shift while opening inverts this per-loot.
+		ConsoleVarMgr::RegisterConsoleVar("FastLoot", "Automatically loot all items when opening a loot window. Hold Shift while looting to invert. 1 enables, 0 disables (default).", "0");
+
 		Console::RegisterCommand(command_names::s_reload, [this](const std::string &, const std::string &)
 								 { ReloadUI(); }, ConsoleCommandCategory::Debug, "Reloads the user interface.");
 
@@ -1797,6 +1843,9 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("NameplateShowEnemyPets");
 		ConsoleVarMgr::UnregisterConsoleVar("NameplateShowFriendlyPets");
 		ConsoleVarMgr::UnregisterConsoleVar("NameplateDistance");
+		ConsoleVarMgr::UnregisterConsoleVar("CombatCameraShake");
+		ConsoleVarMgr::UnregisterConsoleVar("CombatVignette");
+		ConsoleVarMgr::UnregisterConsoleVar("FastLoot");
 
 		m_cvarChangedSignals.disconnect();
 
@@ -2817,7 +2866,7 @@ namespace mmo
 			// Update talent information
 			m_talentClient.OnSpellLearned(spellId);
 
-			FrameManager::Get().TriggerLuaEvent("SPELL_LEARNED", spell->name());
+			FrameManager::Get().TriggerLuaEvent("SPELL_LEARNED", GetLocalizedString(spell->name(), spell->name_loc(), GetClientLocale()));
 			FrameManager::Get().TriggerLuaEvent("PLAYER_TALENT_UPDATE");
 		}
 		else
@@ -3360,7 +3409,7 @@ namespace mmo
 		String spellName = "Unknown";
 		if (const auto *spell = m_project.spells.getById(spellId))
 		{
-			spellName = spell->name();
+			spellName = GetLocalizedString(spell->name(), spell->name_loc(), GetClientLocale());
 			if (spell->rank() > 0)
 			{
 				spellName += " (Rank " + std::to_string(spell->rank()) + ")";

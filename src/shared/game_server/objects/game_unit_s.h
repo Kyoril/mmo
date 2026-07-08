@@ -1018,16 +1018,20 @@ namespace mmo
 		}
 
 		/// Sends a chat message of type "say" from the unit.
-		/// @param message The message to send.
-		void ChatSay(const String &message);
+		/// @param message The base (English) message to send.
+		/// @param localizedText Optional per-locale overrides for @p message. When provided, each
+		///        nearby player receives the message resolved for their own client locale.
+		void ChatSay(const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText = nullptr);
 
 		/// Sends a chat message of type "yell" from the unit.
-		/// @param message The message to send.
-		void ChatYell(const String &message);
+		/// @param message The base (English) message to send.
+		/// @param localizedText Optional per-locale overrides for @p message (see ChatSay).
+		void ChatYell(const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText = nullptr);
 
 		/// Sends a chat message of type "emote" from the unit.
-		/// @param message The message to send.
-		void ChatEmote(const String &message);
+		/// @param message The base (English) message to send.
+		/// @param localizedText Optional per-locale overrides for @p message (see ChatSay).
+		void ChatEmote(const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText = nullptr);
 
 		void NotifyRootChanged();
 
@@ -1123,10 +1127,13 @@ namespace mmo
 		bool CanUseWeapon(WeaponAttack attackType);
 
 	protected:
-		/// Sends a local chat message from the unit.
+		/// Sends a local chat message from the unit to all nearby subscribers.
 		/// @param type The type of chat message.
-		/// @param message The message to send.
-		virtual void DoLocalChatMessage(ChatType type, const String &message);
+		/// @param message The base (English) message to send.
+		/// @param localizedText Optional per-locale overrides for @p message. When non-null and
+		///        non-empty, the packet is built per recipient locale; otherwise a single shared
+		///        packet is broadcast to everyone.
+		virtual void DoLocalChatMessage(ChatType type, const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText = nullptr);
 
 	private:
 		/// Sets the current victim of the unit.

@@ -5,6 +5,7 @@
 #include "world_manager.h"
 
 #include "base/non_copyable.h"
+#include "base/localization.h"
 #include "auth_protocol/auth_protocol.h"
 #include "auth_protocol/auth_connection.h"
 #include "base/big_number.h"
@@ -72,7 +73,7 @@ namespace mmo
 		const String& GetWorldName() const { return m_worldName; }
 
 		/// Requests a character to join this world node.
-		void Join(CharacterData characterData, const std::vector<std::string>& accountFeatures, JoinWorldCallback callback);
+		void Join(CharacterData characterData, const std::vector<std::string>& accountFeatures, LocaleIndex locale, JoinWorldCallback callback);
 
 		/// Requests a character to leave this world node.
 		void Leave(ObjectGuid characterGuid, auth::WorldLeftReason reason);

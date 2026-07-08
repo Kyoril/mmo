@@ -296,7 +296,7 @@ namespace mmo
 		}
 
 		auto triggeringUnit = context.triggeringUnit.lock();
-		target->AsUnit().ChatSay(GetActionText(action, 0));
+		target->AsUnit().ChatSay(GetActionText(action, 0), &action.texts_loc());
 
 		// Eventually play sound file
 		if (action.data_size() > 0)
@@ -328,7 +328,7 @@ namespace mmo
 		}
 
 		auto triggeringUnit = context.triggeringUnit.lock();
-		target->AsUnit().ChatYell(GetActionText(action, 0));
+		target->AsUnit().ChatYell(GetActionText(action, 0), &action.texts_loc());
 
 		// Eventually play sound file
 		if (action.data_size() > 0)
@@ -359,7 +359,7 @@ namespace mmo
 			return;
 		}
 
-		target->AsUnit().ChatEmote(GetActionText(action, 0));
+		target->AsUnit().ChatEmote(GetActionText(action, 0), &action.texts_loc());
 
 		// Eventually play sound file
 		if (action.data_size() > 0)
@@ -1518,13 +1518,14 @@ namespace mmo
 			return;
 		}
 
-		// Deliver the message to every player currently in the instance via their network session.
+		// Deliver the message to every player currently in the instance via their network session,
+		// resolved into each recipient's own client locale.
 		for (auto* player : GetPlayersInWorld(world))
 		{
 			const auto connection = m_playerManager.GetPlayerByCharacterGuid(player->GetGuid());
 			if (connection)
 			{
-				connection->LocalChatMessage(ChatType::System, message);
+				connection->LocalChatMessage(ChatType::System, GetLocalizedString(message, action.texts_loc(), connection->GetLocale()));
 			}
 		}
 	}

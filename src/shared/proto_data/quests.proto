@@ -1,6 +1,8 @@
 syntax = "proto2";
 package mmo.proto;
 
+import "localization.proto";
+
 message QuestItemReward {
 	required uint32 itemid = 1;
 	optional uint32 count = 2 [default = 1];
@@ -30,25 +32,27 @@ message QuestRequirement {
 	// An optional text which is displayed for advanced objectives like "Discover the cave"
 	optional string text = 10;
 	// Localization
-	repeated string text_loc = 11;
+	reserved 11;	// legacy positional 'repeated string' text_loc (unused)
+	repeated LocalizedString text_loc = 200;
 }
 
 message QuestEntry {
+	reserved 44, 45, 46, 47, 48, 49;	// legacy positional 'repeated string' *_loc fields (unused)
 	required uint32 id = 1;
 	required string name = 2;
-	repeated string name_loc = 44;
+	repeated LocalizedString name_loc = 200;
 	optional uint32 minlevel = 4 [default = 1];
 	optional int32 questlevel = 5;
 	optional string detailstext = 6;
-	repeated string detailstext_loc = 45;
+	repeated LocalizedString detailstext_loc = 201;
 	optional string objectivestext = 7;
-	repeated string objectivestext_loc = 46;
+	repeated LocalizedString objectivestext_loc = 202;
 	optional string offerrewardtext = 8;
-	repeated string offerrewardtext_loc = 47;
+	repeated LocalizedString offerrewardtext_loc = 203;
 	optional string requestitemstext = 9;
-	repeated string requestitemstext_loc = 48;
+	repeated LocalizedString requestitemstext_loc = 204;
 	optional string endtext = 10;
-	repeated string endtext_loc = 49;
+	repeated LocalizedString endtext_loc = 205;
 	// Only one of these can be chosen.
 	repeated QuestItemReward rewarditemschoice = 11;
 	// All of these items will be rewarded.

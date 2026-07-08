@@ -16,6 +16,7 @@
 #include "game_protocol/game_protocol.h"
 #include "base/countdown.h"
 #include "base/clock.h"
+#include "base/localization.h"
 #include "anti_cheat_tracker.h"
 #include "trade_session.h"
 
@@ -87,6 +88,12 @@ namespace mmo
 		{
 			return std::find(m_accountFeatures.begin(), m_accountFeatures.end(), key) != m_accountFeatures.end();
 		}
+
+		/// Sets the client locale, used to serve localized game data (gossip / quest-giver text).
+		void SetLocale(const LocaleIndex locale) { m_locale = locale; }
+
+		/// Gets the client locale used to serve localized game data.
+		[[nodiscard]] LocaleIndex GetLocale() const override { return m_locale; }
 
 		/// Notifies the client about updated objects.
 		void NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects) override;
@@ -774,6 +781,7 @@ namespace mmo
 		WorldInstance* m_worldInstance { nullptr };
 		CharacterData m_characterData;
 		std::vector<std::string> m_accountFeatures;	// Active account feature keys (entitlements) granted to the account
+		LocaleIndex m_locale = LocaleIndex::enUS;	// Client locale, used to serve localized game data
 		scoped_connection_container m_characterConnections;
 		const proto::Project& m_project;
 		AttackSwingEvent m_lastAttackSwingEvent{ attack_swing_event::Unknown };

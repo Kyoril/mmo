@@ -1,6 +1,8 @@
 syntax = "proto2";
 package mmo.proto;
 
+import "localization.proto";
+
 message UnitSpellEntry {
 	required uint32 spellid = 1;
 	optional uint32 priority = 2 [default = 100];
@@ -19,8 +21,9 @@ message UnitEntry {
 	required uint32 id = 1;
 	required string name = 2;
 	optional string subname = 3;
-	repeated string name_loc = 57;
-	repeated string subname_loc = 58;
+	reserved 57, 58;	// legacy positional 'repeated string' name_loc/subname_loc (unused)
+	repeated LocalizedString name_loc = 200;
+	repeated LocalizedString subname_loc = 201;
 	required uint32 minlevel = 4;
 	required uint32 maxlevel = 5;
 	required uint32 factionTemplate = 6;

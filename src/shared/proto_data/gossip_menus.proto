@@ -1,12 +1,15 @@
 syntax = "proto2";
 package mmo.proto;
 
+import "localization.proto";
+
 message GossipMenuOption {
 	required uint32 id = 1;
 	required string text = 2;
 	required uint32 action_type = 3;
 	optional uint32 action_param = 4;
 	optional uint32 conditionId = 5; // If non-zero, we check it
+	repeated LocalizedString text_loc = 200;
 }
 
 message GossipMenuEntry {
@@ -16,6 +19,7 @@ message GossipMenuEntry {
 	optional bool show_quests = 4 [default = false];
 	repeated GossipMenuOption options = 5;
 	optional uint32 conditionId = 6; // If non-zero, we check it
+	repeated LocalizedString text_loc = 200;
 }
 
 message GossipMenus {

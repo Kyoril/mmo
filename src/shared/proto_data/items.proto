@@ -1,6 +1,8 @@
 syntax = "proto2";
 package mmo.proto;
 
+import "localization.proto";
+
 message ItemStats {
 	required uint32 type = 1;
 	required int32 value = 2;
@@ -31,8 +33,9 @@ message ItemEntry {
 	required uint32 id = 1;
 	required string name = 2;
 	optional string description = 3;
-	repeated string name_loc = 66;
-	repeated string description_loc = 67;
+	reserved 66, 67;	// legacy positional 'repeated string' name_loc/description_loc (unused)
+	repeated LocalizedString name_loc = 200;
+	repeated LocalizedString description_loc = 201;
 	optional uint32 itemclass = 4;
 	optional uint32 subclass = 5;
 	optional uint32 displayid = 6;

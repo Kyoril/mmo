@@ -1,0 +1,10 @@
+syntax = "proto2";
+package mmo.proto;
+
+// A single per-locale override for a localized game-data string.
+// The base (English) string always lives in the owning message's plain field;
+// these entries are additive overrides keyed by LocaleIndex (see base/localization.h).
+message LocalizedString {
+	optional uint32 locale = 1;	// LocaleIndex value (enUS=0 is never stored here)
+	optional string value = 2;	// Translated text for that locale
+}

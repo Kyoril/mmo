@@ -1,6 +1,8 @@
 syntax = "proto2";
 package mmo.proto;
 
+import "localization.proto";
+
 message RangeType {
 	required uint32 id = 1;
 	required float range = 2;
@@ -125,6 +127,10 @@ message SpellEntry {
 	optional string description = 65;
 	optional string icon = 66;
 	optional string auratext = 67;
+
+	repeated LocalizedString name_loc = 200;
+	repeated LocalizedString description_loc = 201;
+	repeated LocalizedString auratext_loc = 202;
 
 	optional float threat_multiplier = 68 [default = 1.0];
 	

@@ -378,20 +378,22 @@ namespace mmo
 			}
 			item["sockets"] = std::move(sockets);
 
-			// Localized strings
-			json nameLoc = json::array();
-			for (int i = 0; i < entry.name_loc_size(); ++i)
+			// Localized strings (array of { locale, value } objects; locale is a LocaleIndex value)
+			const auto localizedToJson = [](const google::protobuf::RepeatedPtrField<proto::LocalizedString>& locArray)
 			{
-				nameLoc.push_back(entry.name_loc(i));
-			}
-			item["name_loc"] = std::move(nameLoc);
+				json result = json::array();
+				for (const auto& loc : locArray)
+				{
+					json entryJson = json::object();
+					entryJson["locale"] = loc.locale();
+					entryJson["value"] = loc.value();
+					result.push_back(std::move(entryJson));
+				}
+				return result;
+			};
 
-			json descriptionLoc = json::array();
-			for (int i = 0; i < entry.description_loc_size(); ++i)
-			{
-				descriptionLoc.push_back(entry.description_loc(i));
-			}
-			item["description_loc"] = std::move(descriptionLoc);
+			item["name_loc"] = localizedToJson(entry.name_loc());
+			item["description_loc"] = localizedToJson(entry.description_loc());
 
 			json doc = json::object();
 			doc["format"] = s_itemJsonFormat;
@@ -648,42 +650,45 @@ namespace mmo
 				}
 			}
 
-			// Localized strings
-			if (item.contains("name_loc") && !item["name_loc"].is_null())
+			// Localized strings (array of { locale, value } objects; locale is a LocaleIndex value)
+			const auto jsonToLocalized = [&outError](const json& array, const char* fieldName,
+				google::protobuf::RepeatedPtrField<proto::LocalizedString>* locArray) -> bool
 			{
-				if (!item["name_loc"].is_array())
+				if (!array.is_array())
 				{
-					outError = "'name_loc' must be an array of strings.";
+					outError = std::string("'") + fieldName + "' must be an array of { locale, value } objects.";
 					return false;
 				}
 
-				for (const json &value : item["name_loc"])
+				for (const json& value : array)
 				{
-					if (!value.is_string())
+					if (!value.is_object() || !value.contains("locale") || !value.contains("value"))
 					{
-						outError = "'name_loc' must only contain strings.";
+						outError = std::string("'") + fieldName + "' entries must be { locale, value } objects.";
 						return false;
 					}
-					temp.add_name_loc(value.get<std::string>());
+
+					proto::LocalizedString* loc = locArray->Add();
+					loc->set_locale(value["locale"].get<uint32>());
+					loc->set_value(value["value"].get<std::string>());
+				}
+
+				return true;
+			};
+
+			if (item.contains("name_loc") && !item["name_loc"].is_null())
+			{
+				if (!jsonToLocalized(item["name_loc"], "name_loc", temp.mutable_name_loc()))
+				{
+					return false;
 				}
 			}
 
 			if (item.contains("description_loc") && !item["description_loc"].is_null())
 			{
-				if (!item["description_loc"].is_array())
+				if (!jsonToLocalized(item["description_loc"], "description_loc", temp.mutable_description_loc()))
 				{
-					outError = "'description_loc' must be an array of strings.";
 					return false;
-				}
-
-				for (const json &value : item["description_loc"])
-				{
-					if (!value.is_string())
-					{
-						outError = "'description_loc' must only contain strings.";
-						return false;
-					}
-					temp.add_description_loc(value.get<std::string>());
 				}
 			}
 

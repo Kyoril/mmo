@@ -541,6 +541,15 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 			accountFeatures.push_back(std::move(key));
 		}
 
+		// Read the client locale so localized game data (gossip / quest-giver text) is served correctly.
+		uint32 localeValue = 0;
+		if (!(packet >> io::read<uint32>(localeValue)))
+		{
+			ELOG("Failed to read PLAYER_CHARACTER_JOIN packet");
+			return PacketParseResult::Disconnect;
+		}
+		const LocaleIndex playerLocale = LocaleIndexFromValue(localeValue);
+
 		DLOG("Player character " << log_hex_digit(characterData.characterId) << " wants to join world...");
 
 		// Determine if this is a dungeon/instanced map
@@ -712,6 +721,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		// Create a new player object
 		auto player = std::make_shared<Player>(m_playerManager, *this, characterObject, characterData, m_project, *instance, m_conditionMgr);
 		player->SetAccountFeatures(std::move(accountFeatures));
+		player->SetLocale(playerLocale);
 		player->SetFallDamageConfig(m_fallDamageMinHeight, m_fallDamageLethalHeight);
 		m_playerManager.AddPlayer(player);
 

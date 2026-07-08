@@ -1,6 +1,8 @@
 syntax = "proto2";
 package mmo.proto;
 
+import "localization.proto";
+
 message TriggerCategoryEntry {
 	required uint32 id = 1;
 	required string name = 2;
@@ -79,6 +81,12 @@ message TriggerAction {
 	optional string targetname = 3;
 	repeated string texts = 4;
 	repeated int32 data = 5;
+
+	// Per-locale overrides for the primary user-facing text (texts[0]), used by the
+	// Say / Yell / Emote actions. The base English text stays in texts[0]; these are
+	// additive overrides keyed by LocaleIndex (see base/localization.h). Server-only:
+	// triggers are never shipped to the client, so no client_data mirror is required.
+	repeated LocalizedString texts_loc = 200;
 }
 
 message TriggerEvent {

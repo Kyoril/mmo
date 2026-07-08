@@ -54,6 +54,7 @@ namespace mmo
 		void HandleEditorWindow(EditorWindowBase& window);
 
 		void HandleMainMenu();
+		void HandleLocalizationMenu();
 		void ShowCreatureEditor();
 		void HandleToolBar();
 
