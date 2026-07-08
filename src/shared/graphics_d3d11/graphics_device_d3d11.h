@@ -295,6 +295,12 @@ namespace mmo
 		std::unordered_map<VertexDeclaration*, bool> m_blendIndicesCache;
 
 		ID3D11InputLayout* m_lastInputLayout{ nullptr };
+
+		/// Last raw D3D buffer bound to the reserved global-shader-parameter slot. The global param
+		/// buffer only changes when a global changes, so we skip the per-draw PSSetConstantBuffers when
+		/// the same buffer is already bound. Invalidated in RestoreState like the other state caches.
+		ID3D11Buffer* m_lastBoundGlobalParamBuffer{ nullptr };
+
 		uint64 m_batchCount = 0;
 		uint64 m_lastFrameBatchCount = 0;
 	};

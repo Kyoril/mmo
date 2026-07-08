@@ -278,15 +278,15 @@ namespace mmo
 		}
 	}
 
-	std::vector<Scene::VisibleLightInfo> OctreeScene::GatherVisibleLights(const Camera& camera, uint32 maxLights)
+	void OctreeScene::GatherVisibleLights(const Camera& camera, uint32 maxLights, std::vector<VisibleLightInfo>& visibleLights)
 	{
 		// Reset statistics
 		m_lightRenderStats = LightRenderStats{};
-		
+
 		const auto& lights = GetLightMap();
 		m_lightRenderStats.totalLightsInScene = static_cast<uint32>(lights.size());
 
-		std::vector<VisibleLightInfo> visibleLights;
+		visibleLights.clear();
 		visibleLights.reserve(lights.size());
 
 		const Vector3 cameraPosition = camera.GetDerivedPosition();
@@ -386,8 +386,6 @@ namespace mmo
 		}
 
 		m_lightRenderStats.lightsRendered = static_cast<uint32>(visibleLights.size());
-
-		return visibleLights;
 	}
 
 	void OctreeScene::FindVisibleObjects(Camera& camera, VisibleObjectsBoundsInfo& visibleObjectBounds, bool onlyShadowCasters)

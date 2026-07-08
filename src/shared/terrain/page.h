@@ -298,6 +298,13 @@ namespace mmo
 			bool m_unloadRequested = false;
 			bool m_innerHeightmapFromFile = false; ///< True if inner heights were loaded from the IVCM chunk (not derived).
 			AABB m_boundingBox;
+
+			/// @brief Linear cursor into the tile grid used by Load() to create one tile per call.
+			/// @details Load() creates a single tile per invocation (spreading the cost across frames);
+			///          the cursor lets each call resume where the previous one stopped instead of
+			///          rescanning the whole grid from the start (which was O(TilesPerPage^2) per page).
+			///          Reset whenever the tile grid is (re)created.
+			uint32 m_loadCursor = 0;
 		};
 	}
 }

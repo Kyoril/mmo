@@ -546,8 +546,17 @@ namespace mmo
 		/// @brief Gathers all visible lights for rendering with frustum culling and priority sorting.
 		/// @param camera The camera to use for frustum culling.
 		/// @param maxLights Maximum number of lights to return (0 = no limit).
-		/// @return Vector of visible lights sorted by priority.
-		virtual std::vector<VisibleLightInfo> GatherVisibleLights(const Camera& camera, uint32 maxLights = 0);
+		/// @param out Reused output buffer, cleared and filled with the visible lights. Passing a
+		///            persistent buffer avoids a per-frame heap allocation on the render hot path.
+		virtual void GatherVisibleLights(const Camera& camera, uint32 maxLights, std::vector<VisibleLightInfo>& out);
+
+		/// @brief Convenience overload that allocates and returns the visible light list.
+		std::vector<VisibleLightInfo> GatherVisibleLights(const Camera& camera, uint32 maxLights = 0)
+		{
+			std::vector<VisibleLightInfo> out;
+			GatherVisibleLights(camera, maxLights, out);
+			return out;
+		}
 
 		/// @brief Gets the light render statistics from the last GatherVisibleLights call.
 		/// @return Reference to the light render statistics.

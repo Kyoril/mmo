@@ -440,13 +440,13 @@ namespace mmo
 		return lights;
 	}
 
-	std::vector<Scene::VisibleLightInfo> Scene::GatherVisibleLights(const Camera& camera, uint32 maxLights)
+	void Scene::GatherVisibleLights(const Camera& camera, uint32 maxLights, std::vector<VisibleLightInfo>& visibleLights)
 	{
 		// Reset statistics
 		m_lightRenderStats = LightRenderStats{};
 		m_lightRenderStats.totalLightsInScene = static_cast<uint32>(m_lights.size());
 
-		std::vector<VisibleLightInfo> visibleLights;
+		visibleLights.clear();
 		visibleLights.reserve(m_lights.size());
 
 		const Vector3 cameraPosition = camera.GetDerivedPosition();
@@ -540,8 +540,6 @@ namespace mmo
 		}
 
 		m_lightRenderStats.lightsRendered = static_cast<uint32>(visibleLights.size());
-
-		return visibleLights;
 	}
 
 	float Scene::CalculateLightPriority(const Light& light, const Vector3& cameraPosition) const

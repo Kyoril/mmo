@@ -668,6 +668,9 @@ namespace mmo
 			m_textureSlots[i] = nullptr;
 		}
 
+		// Force the global-param constant buffer to be re-bound on the first draw of this render bracket.
+		m_lastBoundGlobalParamBuffer = nullptr;
+
 		// Unbind shaders explicitly (cheaper than ClearState)
 		m_immContext->VSSetShader(nullptr, nullptr, 0);
 		m_immContext->PSSetShader(nullptr, nullptr, 0);
@@ -979,6 +982,10 @@ namespace mmo
 		{
 			m_textureSlots[i] = nullptr;
 		}
+
+		// The reserved global-param constant-buffer slot may have been disturbed while state was
+		// captured, so force a re-bind on the next draw.
+		m_lastBoundGlobalParamBuffer = nullptr;
 	}
 
 	void GraphicsDeviceD3D11::SetTransformMatrix(const TransformType type, Matrix4 const & matrix)
@@ -1155,16 +1162,29 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::SetTextureAddressMode(const TextureAddressMode modeU, const TextureAddressMode modeV, const TextureAddressMode modeW)
 	{
+		// Early-out when nothing changes. TextureD3D11::Bind calls this on every texture bind, so without
+		// the guard every bind re-dirties the sampler state and forces a hash recompute on the next Draw.
+		if (m_texAddressMode[0] == modeU && m_texAddressMode[1] == modeV && m_texAddressMode[2] == modeW)
+		{
+			return;
+		}
+
 		GraphicsDevice::SetTextureAddressMode(modeU, modeV, modeW);
-		
+
 		m_samplerDesc.AddressU = D3D11TextureAddressMode(modeU);
 		m_samplerDesc.AddressV = D3D11TextureAddressMode(modeV);
 		m_samplerDesc.AddressW = D3D11TextureAddressMode(modeW);
 		m_samplerDescChanged = true;
 	}
-	
+
 	void GraphicsDeviceD3D11::SetTextureFilter(const TextureFilter filter)
 	{
+		// Early-out when unchanged (called on every texture bind via TextureD3D11::Bind).
+		if (m_texFilter == filter)
+		{
+			return;
+		}
+
 		GraphicsDevice::SetTextureFilter(filter);
 
 		m_samplerDesc.Filter = D3D11TextureFilter(filter);
@@ -1173,6 +1193,11 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::SetDepthEnabled(const bool enable)
 	{
+		if (m_depthEnabled == enable)
+		{
+			return;
+		}
+
 		GraphicsDevice::SetDepthEnabled(enable);
 
 		m_depthStencilDesc.DepthEnable = enable ? TRUE : FALSE;
@@ -1181,6 +1206,11 @@ namespace mmo
 
 	void GraphicsDeviceD3D11::SetDepthWriteEnabled(const bool enable)
 	{
+		if (m_depthWrite == enable)
+		{
+			return;
+		}
+
 		GraphicsDevice::SetDepthWriteEnabled(enable);
 
 		m_depthStencilDesc.DepthWriteMask = enable ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
@@ -1343,12 +1373,19 @@ namespace mmo
 		}
 
 		// Bind the shared global shader parameter buffer to its fixed reserved register. This makes
-		// global shader variables available to every material. Binding it to a slot a shader doesn't
-		// declare is harmless, and we re-bind per operation so it survives state changes by other
-		// systems. The buffer itself is only rebuilt/re-uploaded when a global changes (see GetBuffer).
+		// global shader variables available to every material. The buffer itself is only rebuilt/
+		// re-uploaded when a global changes (see GetBuffer), and a D3D11 constant-buffer binding
+		// persists across draws, so we only re-issue the bind when the buffer actually changes. The
+		// cache is invalidated in RestoreState (like the texture-slot cache) so it survives external
+		// state changes by other systems.
 		if (const ConstantBufferPtr globalParamBuffer = GlobalShaderParameters::Get().GetBuffer(*this))
 		{
-			globalParamBuffer->BindToStage(ShaderType::PixelShader, kGlobalShaderParametersPsSlot);
+			ID3D11Buffer* const rawGlobalBuffer = static_cast<ConstantBufferD3D11*>(globalParamBuffer.get())->GetBuffer();
+			if (rawGlobalBuffer != m_lastBoundGlobalParamBuffer)
+			{
+				globalParamBuffer->BindToStage(ShaderType::PixelShader, kGlobalShaderParametersPsSlot);
+				m_lastBoundGlobalParamBuffer = rawGlobalBuffer;
+			}
 		}
 
 		// Only update material parameter buffers when the material changed

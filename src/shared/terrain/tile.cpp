@@ -1266,6 +1266,15 @@ namespace mmo
 				return;
 			}
 
+			// A stationary camera cannot change any tile's LOD, so when the camera has not moved and
+			// no neighbour has flagged us dirty we can skip everything, including the matrix-AABB
+			// distance computation in GetSquaredViewDepth.
+			const Vector3 cameraPos = camera.GetDerivedPosition();
+			if (m_lodInitialized && !m_lodDirty && cameraPos == m_lastLodCameraPos)
+			{
+				return;
+			}
+
 			float distSq = GetSquaredViewDepth(camera);
 
 			// Use larger distances to keep higher detail active longer, reducing pop-in
@@ -1295,105 +1304,90 @@ namespace mmo
 				newLod = 1;
 			}
 
+			// Fast path: our LOD bucket is unchanged and no neighbour has flagged us dirty, so the
+			// current stitch configuration is still correct. Skip the neighbour queries and the stitch
+			// rebuild. Neighbours notify us via MarkLodDirty() when they change LOD, so this stays
+			// correct while eliminating the per-frame neighbour lookups for the common (stable) case.
+			if (m_lodInitialized && !m_lodDirty && newLod == m_currentLod)
+			{
+				m_lastLodCameraPos = cameraPos;
+				return;
+			}
+
+			const uint32 previousLod = m_currentLod;
+
 			// Store our new LOD immediately so that neighbors querying us get the current frame's value
 			m_currentLod = newLod;
-
-			// Get neighbor tile LODs for edge stitching
-			// Initialize to LOD 0 (highest detail) for non-existent neighbors to prevent cracks at boundaries
-			uint32 northLod = 0;
-			uint32 eastLod = 0;
-			uint32 southLod = 0;
-			uint32 westLod = 0;
 
 			// Get terrain reference for cross-page lookups
 			Terrain& terrain = m_page.GetTerrain();
 			const uint32 pageX = m_page.GetX();
 			const uint32 pageY = m_page.GetY();
 
-			// Query neighbor tiles - check both within-page and cross-page boundaries
+			// Resolve neighbour tiles once (within-page and cross-page). The pointers are reused both to
+			// read neighbour LODs for edge stitching and to flag neighbours dirty when our LOD changes.
+			Tile* northTile = nullptr;
+			Tile* eastTile = nullptr;
+			Tile* southTile = nullptr;
+			Tile* westTile = nullptr;
+
 			if (m_tileY > 0)
 			{
-				// North neighbor is within the same page
-				if (Tile* northTile = m_page.GetTile(static_cast<uint32>(m_tileX), static_cast<uint32>(m_tileY - 1)))
-				{
-					northLod = northTile->GetCurrentLOD();
-				}
+				northTile = m_page.GetTile(static_cast<uint32>(m_tileX), static_cast<uint32>(m_tileY - 1));
 			}
 			else if (pageY > 0)
 			{
 				// North neighbor is on the page to the north (pageY - 1), tile at bottom edge (TilesPerPage - 1)
 				if (Page* northPage = terrain.GetPage(pageX, pageY - 1))
 				{
-					if (Tile* northTile = northPage->GetTile(static_cast<uint32>(m_tileX), constants::TilesPerPage - 1))
-					{
-						northLod = northTile->GetCurrentLOD();
-					}
+					northTile = northPage->GetTile(static_cast<uint32>(m_tileX), constants::TilesPerPage - 1);
 				}
 			}
-			// else: northLod remains 0 (highest detail) for boundary edge
 
 			if (m_tileX < constants::TilesPerPage - 1)
 			{
-				// East neighbor is within the same page
-				if (Tile* eastTile = m_page.GetTile(static_cast<uint32>(m_tileX + 1), static_cast<uint32>(m_tileY)))
-				{
-					eastLod = eastTile->GetCurrentLOD();
-				}
+				eastTile = m_page.GetTile(static_cast<uint32>(m_tileX + 1), static_cast<uint32>(m_tileY));
 			}
 			else
 			{
 				// East neighbor is on the page to the east (pageX + 1), tile at left edge (0)
 				if (Page* eastPage = terrain.GetPage(pageX + 1, pageY))
 				{
-					if (Tile* eastTile = eastPage->GetTile(0, static_cast<uint32>(m_tileY)))
-					{
-						eastLod = eastTile->GetCurrentLOD();
-					}
+					eastTile = eastPage->GetTile(0, static_cast<uint32>(m_tileY));
 				}
 			}
-			// else: eastLod remains 0 (highest detail) for boundary edge
 
 			if (m_tileY < constants::TilesPerPage - 1)
 			{
-				// South neighbor is within the same page
-				if (Tile* southTile = m_page.GetTile(static_cast<uint32>(m_tileX), static_cast<uint32>(m_tileY + 1)))
-				{
-					southLod = southTile->GetCurrentLOD();
-				}
+				southTile = m_page.GetTile(static_cast<uint32>(m_tileX), static_cast<uint32>(m_tileY + 1));
 			}
 			else
 			{
 				// South neighbor is on the page to the south (pageY + 1), tile at top edge (0)
 				if (Page* southPage = terrain.GetPage(pageX, pageY + 1))
 				{
-					if (Tile* southTile = southPage->GetTile(static_cast<uint32>(m_tileX), 0))
-					{
-						southLod = southTile->GetCurrentLOD();
-					}
+					southTile = southPage->GetTile(static_cast<uint32>(m_tileX), 0);
 				}
 			}
-			// else: southLod remains 0 (highest detail) for boundary edge
 
 			if (m_tileX > 0)
 			{
-				// West neighbor is within the same page
-				if (Tile* westTile = m_page.GetTile(static_cast<uint32>(m_tileX - 1), static_cast<uint32>(m_tileY)))
-				{
-					westLod = westTile->GetCurrentLOD();
-				}
+				westTile = m_page.GetTile(static_cast<uint32>(m_tileX - 1), static_cast<uint32>(m_tileY));
 			}
 			else if (pageX > 0)
 			{
 				// West neighbor is on the page to the west (pageX - 1), tile at right edge (TilesPerPage - 1)
 				if (Page* westPage = terrain.GetPage(pageX - 1, pageY))
 				{
-					if (Tile* westTile = westPage->GetTile(constants::TilesPerPage - 1, static_cast<uint32>(m_tileY)))
-					{
-						westLod = westTile->GetCurrentLOD();
-					}
+					westTile = westPage->GetTile(constants::TilesPerPage - 1, static_cast<uint32>(m_tileY));
 				}
 			}
-			// else: westLod remains 0 (highest detail) for boundary edge
+
+			// LOD 0 (highest detail) for non-existent neighbors prevents cracks at world boundaries.
+			const uint32 northLod = northTile ? northTile->GetCurrentLOD() : 0;
+			const uint32 eastLod = eastTile ? eastTile->GetCurrentLOD() : 0;
+			const uint32 southLod = southTile ? southTile->GetCurrentLOD() : 0;
+			const uint32 westLod = westTile ? westTile->GetCurrentLOD() : 0;
 
 			// Calculate the stitch key for the current LOD configuration
 			const uint32 stitchKey = newLod | (northLod << 4) | (eastLod << 8) | (southLod << 12) | (westLod << 16);
@@ -1411,6 +1405,20 @@ namespace mmo
 					m_currentStitchKey = stitchKey;
 				}
 			}
+
+			// When our own LOD changed, neighbours that stitch against us must re-evaluate their edges
+			// on their next update — flag them so they leave their fast path.
+			if (newLod != previousLod)
+			{
+				if (northTile) { northTile->MarkLodDirty(); }
+				if (eastTile) { eastTile->MarkLodDirty(); }
+				if (southTile) { southTile->MarkLodDirty(); }
+				if (westTile) { westTile->MarkLodDirty(); }
+			}
+
+			m_lodDirty = false;
+			m_lodInitialized = true;
+			m_lastLodCameraPos = cameraPos;
 		}
 
 		uint32 Tile::GetCurrentLOD() const

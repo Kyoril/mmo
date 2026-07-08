@@ -240,47 +240,56 @@ namespace mmo
 			if (m_Tiles.empty())
 			{
 				m_Tiles = TileGrid(constants::TilesPerPage, constants::TilesPerPage);
+				m_loadCursor = 0;
+
+				// Initialise the page bounding box to the full horizontal page extent so that each
+				// tile created below can be combined into it incrementally (instead of recombining the
+				// whole grid on every Load step).
+				const Vector3 baseOffset = Vector3(
+					static_cast<float>(static_cast<double>(m_x - 32) * constants::PageSize),
+					0.0f,
+					static_cast<float>(static_cast<double>(m_z - 32) * constants::PageSize));
+				m_boundingBox = AABB(baseOffset, baseOffset + Vector3(constants::PageSize, 0.0f, constants::PageSize));
 			}
 
-			bool allTilesLoaded = true;
-			bool loadedNewTile = false;
+			constexpr uint32 tileCount = constants::TilesPerPage * constants::TilesPerPage;
 
-			// Ensure we call load as many times as needed
-			for (unsigned int i = 0; i < constants::TilesPerPage; i++)
+			// Create at most one tile per call (spreading the cost across frames), resuming from the
+			// cursor so we never rescan already-loaded tiles.
+			while (m_loadCursor < tileCount)
 			{
-				for (unsigned int j = 0; j < constants::TilesPerPage; j++)
+				const unsigned int i = m_loadCursor / constants::TilesPerPage;
+				const unsigned int j = m_loadCursor % constants::TilesPerPage;
+				auto &tile = m_Tiles(i, j);
+
+				// Tile already loaded (e.g. a partially pre-populated grid)? Advance past it.
+				if (tile)
 				{
-					String tileName = pageBaseName + "_Tile_" + std::to_string(i) + "_" + std::to_string(j);
-					auto &tile = m_Tiles(i, j);
-
-					// Tile already loaded?
-					if (tile)
-					{
-						continue;
-					}
-
-					tile = std::make_unique<Tile>(tileName, *this, i * (constants::OuterVerticesPerTileSide - 1), j * (constants::OuterVerticesPerTileSide - 1));
-
-					// Setup tile material assignment
-					if (const int tileIndex = i + j * constants::TilesPerPage; tileIndex < m_materials.size())
-					{
-						tile->SetMaterial(m_materials[tileIndex]);
-					}
-
-					// Ensure tile respects selection query
-					tile->SetQueryFlags(m_terrain.GetTileSceneQueryFlags());
-					m_pageNode->AttachObject(*tile);
-
-					allTilesLoaded = false;
-					loadedNewTile = true;
-					break;
+					++m_loadCursor;
+					continue;
 				}
 
-				if (loadedNewTile)
+				String tileName = pageBaseName + "_Tile_" + std::to_string(i) + "_" + std::to_string(j);
+				tile = std::make_unique<Tile>(tileName, *this, i * (constants::OuterVerticesPerTileSide - 1), j * (constants::OuterVerticesPerTileSide - 1));
+
+				// Setup tile material assignment
+				if (const int tileIndex = i + j * constants::TilesPerPage; tileIndex < m_materials.size())
 				{
-					break;
+					tile->SetMaterial(m_materials[tileIndex]);
 				}
+
+				// Ensure tile respects selection query
+				tile->SetQueryFlags(m_terrain.GetTileSceneQueryFlags());
+				m_pageNode->AttachObject(*tile);
+
+				// Grow the page bounding box by the new tile instead of recombining the whole grid.
+				m_boundingBox.Combine(tile->GetWorldBoundingBox(true));
+
+				++m_loadCursor;
+				break;
 			}
+
+			const bool allTilesLoaded = (m_loadCursor >= tileCount);
 
 			if (allTilesLoaded)
 			{
@@ -307,9 +316,12 @@ namespace mmo
 				}
 
 				RebuildWaterMesh();
+
+				// Canonical bounding-box recompute once the page is fully loaded. During loading the
+				// box is grown incrementally per tile (above), so no per-step full recombine is needed.
+				UpdateBoundingBox();
 			}
 
-			UpdateBoundingBox();
 			return m_loaded;
 		}
 

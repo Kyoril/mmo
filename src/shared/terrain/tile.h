@@ -142,6 +142,11 @@ namespace mmo
 			/// @return The current LOD level (0 = highest detail, 3 = lowest detail)
 			[[nodiscard]] uint32 GetCurrentLOD() const;
 
+			/// @brief Flags this tile to re-evaluate its LOD/edge-stitching on the next UpdateLOD.
+			/// @details Called by a neighbouring tile when that neighbour changes LOD, so tiles whose
+			///          own LOD is stable can otherwise skip the per-frame neighbour queries.
+			void MarkLodDirty() { m_lodDirty = true; }
+
 			/// @brief Gets the collidable interface for this tile.
 			/// @return Pointer to the collidable interface.
 			ICollidable* GetCollidable() override { return this; }
@@ -230,6 +235,18 @@ namespace mmo
 			LRUCache<uint32, IndexData> m_lodIndexCache;
 			uint32 m_currentLod = 0;
 			uint32 m_currentStitchKey = 0;
+
+			/// @brief True when UpdateLOD must do a full re-evaluation (own distance bucket may have
+			///        changed, or a neighbour changed LOD and called MarkLodDirty). Starts true so the
+			///        first update always runs.
+			bool m_lodDirty = true;
+
+			/// @brief Whether UpdateLOD has run at least once (guards the stationary-camera early-out).
+			bool m_lodInitialized = false;
+
+			/// @brief Camera position used the last time UpdateLOD ran. A stationary camera cannot
+			///        change any tile's LOD, so an unchanged position lets us skip the work entirely.
+			Vector3 m_lastLodCameraPos;
 
 			/// @brief GPU occlusion query for this tile. Created lazily on first render.
 			OcclusionQueryPtr m_occlusionQuery;

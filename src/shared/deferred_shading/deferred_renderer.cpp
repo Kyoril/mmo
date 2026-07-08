@@ -22,20 +22,6 @@
 
 namespace mmo
 {
-    // Light structure that matches the one in the shader (StructuredBuffer element)
-    struct alignas(16) ShaderLight
-    {
-        Vector3 position;
-        float range;
-        Vector3 color;
-        float intensity;
-        Vector3 direction;
-        float spotAngle;
-        uint32 type;  // 0 = Point, 1 = Directional, 2 = Spot
-        int32 shadowMap;
-        Vector2 padding;
-    };
-
 	struct alignas(16) ShadowBuffer
     {
         // Cascade view-projection matrices
@@ -526,16 +512,19 @@ namespace mmo
 
     void DeferredRenderer::FindLights(Scene& scene, Camera& camera)
     {
+        PROFILE_SCOPE("FindLights");
+
         m_shadowCastingDirectionalLight = nullptr;
 
-        // Use the scene's efficient light gathering with frustum culling and priority sorting
-        const auto visibleLights = scene.GatherVisibleLights(camera, MAX_LIGHTS);
+        // Use the scene's efficient light gathering with frustum culling and priority sorting. The
+        // fill overload writes into a reused member so no vector is allocated (or copied) per frame.
+        scene.GatherVisibleLights(camera, MAX_LIGHTS, m_visibleLights);
 
-        // Convert visible lights to shader format
-        std::vector<ShaderLight> shaderLights;
-        shaderLights.reserve(visibleLights.size());
+        // Convert visible lights to shader format, reusing m_shaderLights so its capacity persists.
+        m_shaderLights.clear();
+        m_shaderLights.reserve(m_visibleLights.size());
 
-        for (const auto& visibleLight : visibleLights)
+        for (const auto& visibleLight : m_visibleLights)
         {
             ShaderLight shaderLight;
             shaderLight.position = visibleLight.position;
@@ -566,19 +555,19 @@ namespace mmo
                 break;
             }
 
-            shaderLights.push_back(shaderLight);
+            m_shaderLights.push_back(shaderLight);
         }
 
         // Update the light metadata constant buffer
         LightMetadata metadata;
         metadata.ambientColor = scene.GetAmbientColor();
-        metadata.lightCount = static_cast<uint32>(shaderLights.size());
+        metadata.lightCount = static_cast<uint32>(m_shaderLights.size());
         m_lightMetadataBuffer->Update(&metadata);
 
         // Update the structured buffer with light data
-        if (!shaderLights.empty())
+        if (!m_shaderLights.empty())
         {
-            m_lightStructuredBuffer->Update(shaderLights.data(), shaderLights.size());
+            m_lightStructuredBuffer->Update(m_shaderLights.data(), m_shaderLights.size());
         }
 
         // Register the shadow-casting directional light as the scene's primary light so that

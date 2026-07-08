@@ -11,6 +11,7 @@
 #include "graphics/structured_buffer.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/light.h"
+#include "math/vector2.h"
 
 #include <array>
 #include <vector>
@@ -294,6 +295,26 @@ namespace mmo
         ///        all cascades (see RenderCascadedShadowMaps). Kept as a member so its capacity is
         ///        retained between frames instead of reallocating every frame.
         std::vector<MovableObject*> m_shadowCasterCache;
+
+        /// @brief GPU light record mirroring the shader's StructuredBuffer element. Reused across
+        ///        frames via m_shaderLights to avoid a per-frame heap allocation.
+        struct alignas(16) ShaderLight
+        {
+            Vector3 position;
+            float range;
+            Vector3 color;
+            float intensity;
+            Vector3 direction;
+            float spotAngle;
+            uint32 type;  // 0 = Point, 1 = Directional, 2 = Spot
+            int32 shadowMap;
+            Vector2 padding;
+        };
+
+        /// @brief Reused scratch buffers for light gathering (see FindLights). Kept as members so their
+        ///        capacity is retained between frames instead of allocating (and copying) every frame.
+        std::vector<Scene::VisibleLightInfo> m_visibleLights;
+        std::vector<ShaderLight> m_shaderLights;
 
 #ifdef _WIN32
         // --- Per-pass GPU timing (only active while the profiler/perf overlay is enabled) ---

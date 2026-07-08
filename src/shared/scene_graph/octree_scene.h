@@ -152,8 +152,11 @@ namespace mmo
 		/// @brief Gathers visible lights using cached frustum planes for efficiency.
 		/// @param camera The camera to use for frustum culling.
 		/// @param maxLights Maximum number of lights to return (0 = no limit).
-		/// @return Vector of visible lights sorted by priority.
-		std::vector<VisibleLightInfo> GatherVisibleLights(const Camera& camera, uint32 maxLights = 0) override;
+		/// @param out Reused output buffer, cleared and filled with the visible lights.
+		void GatherVisibleLights(const Camera& camera, uint32 maxLights, std::vector<VisibleLightInfo>& out) override;
+
+		// Keep the base by-value convenience overload visible (the override above would otherwise hide it).
+		using Scene::GatherVisibleLights;
 
 		void GatherShadowCasters(const AABB& worldRegion, std::vector<MovableObject*>& outCasters) override;
 
