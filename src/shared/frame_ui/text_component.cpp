@@ -5,6 +5,7 @@
 #include "frame.h"
 #include "font_mgr.h"
 #include "hyperlink.h"
+#include "utf8_utils.h"
 
 #include "base/utilities.h"
 
@@ -227,38 +228,56 @@ namespace mmo
 		{
 			const FontPtr font = m_frame->GetFont();
 
-			// Iterate through each line, character per character
-			auto lineIt = m_lineCache.begin();
+			// Iterate through each line, codepoint per codepoint
 			for (auto lineIt = m_lineCache.begin(); lineIt != m_lineCache.end();)
 			{
 				auto line = *lineIt;
 
-				// Check if we needed to wrap and where the last word 
+				// Check if we needed to wrap and where the last word
 				bool wrapped = false;
 				size_t lastWordIndex = 0;
 
 				// Check if we need to split the line based on wrapping
 				float offset = area.left;
-				for (size_t i = 0; i < line.length(); ++i)
+				for (size_t byteIndex = 0; byteIndex < line.length();)
 				{
-					// Grab line character at the given position
-					const char c = line[i];
-					if (c == ' ')
+					// Decode the next UTF-8 codepoint. Multi-byte characters (like german
+					// umlauts) must be measured as one glyph, not one glyph per byte,
+					// otherwise the wrap points disagree with Font::GetLineCount and the
+					// text overflows its frame.
+					const size_t charStart = byteIndex;
+					const uint32 codepoint = utf8::next_codepoint(line, byteIndex);
+					if (codepoint == 0)
 					{
-						lastWordIndex = i;
+						// Undecodable byte: next_codepoint already advanced past it
+						continue;
 					}
 
-					const auto* glyph = font->GetGlyphData(c);
+					if (codepoint == ' ')
+					{
+						lastWordIndex = charStart;
+					}
+
+					const auto* glyph = font->GetGlyphData(codepoint);
 					if (glyph)
 					{
 						offset += glyph->GetAdvance(textScale);
 						if (offset > area.right)
 						{
-							offset = area.left;
+							// Split at the last space. If the line has no space so far,
+							// break mid-word before the current character, but keep at
+							// least one character on the line to guarantee progress.
+							size_t splitIndex = lastWordIndex;
+							size_t restIndex = lastWordIndex + 1;
+							if (lastWordIndex == 0)
+							{
+								splitIndex = (charStart > 0) ? charStart : byteIndex;
+								restIndex = splitIndex;
+							}
 
-							lineIt = m_lineCache.insert(lineIt, line.substr(0, lastWordIndex));
+							lineIt = m_lineCache.insert(lineIt, line.substr(0, splitIndex));
 							lineIt = m_lineCache.erase(lineIt + 1);
-							lineIt = m_lineCache.insert(lineIt, line.substr(lastWordIndex + 1));
+							lineIt = m_lineCache.insert(lineIt, line.substr(restIndex));
 							wrapped = true;
 
 							break;

@@ -46,6 +46,15 @@ namespace mmo
 					material.SetType(MaterialType::Opaque);
 				}
 			}
+			else if (m_translucent)
+			{
+				// Unlit translucent (e.g. glowing particle sprites): the unlit shading is already baked
+				// into the generated shaders (m_lit == false skips all lighting code), but the material
+				// TYPE must remain Translucent so IsTranslucent() still routes it into the transparent
+				// render queue with alpha blending. Using MaterialType::Unlit here would silently turn
+				// these materials opaque.
+				material.SetType(MaterialType::Translucent);
+			}
 			else
 			{
 				material.SetType(MaterialType::Unlit);

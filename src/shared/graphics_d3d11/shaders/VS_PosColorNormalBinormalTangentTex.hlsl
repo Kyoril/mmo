@@ -7,14 +7,7 @@
 #define WITH_TEX 1
 #include "VS_InOut.hlsli"
 
-cbuffer Matrices
-{
-	column_major matrix matWorld;
-	column_major matrix matView;
-	column_major matrix matProj;
-    column_major matrix matInvView;
-    column_major matrix matInvProj;
-};
+#include "Matrices.hlsli"
 
 VertexOut main(VertexIn input)
 {

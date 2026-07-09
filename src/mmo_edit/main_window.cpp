@@ -283,6 +283,17 @@ namespace mmo
 
 			HandleLocalizationMenu();
 
+			// Tools menu: editors can contribute maintenance actions (e.g. bulk material rebuild).
+			if (ImGui::BeginMenu("Tools"))
+			{
+				for (const auto& editor : m_editors)
+				{
+					editor->AddToolMenuItems();
+				}
+
+				ImGui::EndMenu();
+			}
+
 			ImGui::EndMenuBar();
 		}
 	}

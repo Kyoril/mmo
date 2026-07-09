@@ -268,6 +268,9 @@ namespace mmo
 
 		void SendGossipMenu(const GameCreatureS& npc, const proto::GossipMenuEntry& menu);
 
+		/// Sends the quest giver quest list (greeting text plus offered and rewardable quests) of the given unit to the client.
+		void SendQuestGiverQuestList(const GameCreatureS& unit);
+
 		void SerializeQuestList(const GameCreatureS& unit, io::Writer& writer);
 
 	public:

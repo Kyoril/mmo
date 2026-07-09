@@ -19,6 +19,10 @@ namespace mmo
 	class PixelShaderD3D11;
 	D3D11_MAP MapLockOptionsToD3D11(LockOptions options);
 
+	/// Reserved constant-buffer register for the per-view matrix block (view/proj + inverses), bound
+	/// on both shader stages. b13 holds the global shader parameters, b0 the per-object world matrix.
+	constexpr uint32 kPerViewMatrixBufferSlot = 12;
+
 	/// This is the d3d11 implementation of the graphics device class.
 	class GraphicsDeviceD3D11 final
 		: public GraphicsDevice
@@ -136,6 +140,15 @@ namespace mmo
 
 		uint64 GetBatchCount() const override { return m_lastFrameBatchCount; }
 
+		/// @brief Latches the draw-call counter for the finished frame and restarts counting.
+		/// @details Called once per frame by the render window right before Present. Reset() must not
+		///          latch this because it can run multiple times per frame (world pass, UI pass, ...).
+		void LatchFrameBatchCount()
+		{
+			m_lastFrameBatchCount = m_batchCount;
+			m_batchCount = 0;
+		}
+
 		std::string GetPrimaryMonitorResolution() const override;
 
 		bool ValidateFullscreenResolution(uint16 width, uint16 height) const override;
@@ -200,7 +213,26 @@ namespace mmo
 		
 		ID3D11SamplerState* GetCurrentSamplerState();
 
-		void UpdateMatrixBuffer();
+		/// @brief Uploads the per-object constant buffer (world matrix, register b0).
+		void UpdateObjectMatrixBuffer();
+
+		/// @brief Uploads the per-view constant buffer (view/proj + inverses, register b12).
+		void UpdateViewMatrixBuffer();
+
+		/// @brief Flushes whichever of the two matrix constant buffers is dirty before a draw.
+		void FlushMatrixBuffers()
+		{
+			if (m_worldMatrixDirty)
+			{
+				m_worldMatrixDirty = false;
+				UpdateObjectMatrixBuffer();
+			}
+			if (m_viewMatrixDirty)
+			{
+				m_viewMatrixDirty = false;
+				UpdateViewMatrixBuffer();
+			}
+		}
 
 		// Structure to identify a unique vertex declaration + shader combination
 		struct InputLayoutCacheKey
@@ -236,8 +268,11 @@ namespace mmo
 		/// Sampler states.
 		std::map<size_t, ComPtr<ID3D11SamplerState>> m_samplerStates;
 		std::map<size_t, ComPtr<ID3D11DepthStencilState>> m_depthStencilStates;
-		/// Constant buffer for vertex shader which contains the matrices.
-		ComPtr<ID3D11Buffer> m_matrixBuffer;
+		/// Per-object constant buffer (world matrix only), bound at register b0. Re-uploaded per object.
+		ComPtr<ID3D11Buffer> m_objectMatrixBuffer;
+		/// Per-view constant buffer (view/proj + inverses), bound at register b12. Only re-uploaded when
+		/// the camera or projection changes (per pass), not per object.
+		ComPtr<ID3D11Buffer> m_viewMatrixBuffer;
 		/// Input layouts.
 		std::map<VertexFormat, ComPtr<ID3D11InputLayout>> InputLayouts;
 		std::map<VertexFormat, ShaderPtr> VertexShaders;
@@ -247,7 +282,8 @@ namespace mmo
 		D3D_FEATURE_LEVEL m_featureLevel = D3D_FEATURE_LEVEL_11_0;
 		/// Whether the device supports GSync displays.
 		bool m_tearingSupport = false;
-		bool m_matrixDirty = false;
+		bool m_worldMatrixDirty = false;
+		bool m_viewMatrixDirty = false;
 		uint32 m_indexCount = 0;
 		FLOAT m_clearColorFloat[4] = {};
 		bool m_vsync = true;

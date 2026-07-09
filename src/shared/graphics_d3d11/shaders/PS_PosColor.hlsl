@@ -3,14 +3,7 @@
 #define WITH_COLOR 1
 #include "VS_InOut.hlsli"
 
-cbuffer Matrices : register(b0)
-{
-    column_major matrix matWorld;
-    column_major matrix matView;
-    column_major matrix matProj;
-    column_major matrix matInvView;
-    column_major matrix matInvProj;
-};
+#include "Matrices.hlsli"
 
 float4 main(VertexOut input) : SV_Target
 {

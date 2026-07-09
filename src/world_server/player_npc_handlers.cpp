@@ -45,13 +45,18 @@ namespace mmo
 			return;
 		}
 
+		SendQuestGiverQuestList(*unit);
+	}
+
+	void Player::SendQuestGiverQuestList(const GameCreatureS& unit)
+	{
 		// Send the quest list to the client
 		std::vector<char> buffer;
 		io::VectorSink sink(buffer);
 		typename game::Protocol::OutgoingPacket packet(sink);
 		packet.Start(game::realm_client_packet::QuestGiverQuestList);
-		packet << io::write<uint64>(questGiverGuid) << io::write_dynamic_range<uint16>(unit->GetEntry().greeting_text());	// TODO: 512 cap
-		SerializeQuestList(*unit, packet);
+		packet << io::write<uint64>(unit.GetGuid()) << io::write_dynamic_range<uint16>(GetLocalizedString(unit.GetEntry().greeting_text(), unit.GetEntry().greeting_text_loc(), GetLocale()));	// TODO: 512 cap
+		SerializeQuestList(unit, packet);
 		packet.Finish();
 
 		// Send proxy packet
@@ -333,7 +338,7 @@ namespace mmo
 			io::VectorSink sink(buffer);
 			typename game::Protocol::OutgoingPacket listPacket(sink);
 			listPacket.Start(game::realm_client_packet::QuestGiverQuestList);
-			listPacket << io::write<uint64>(questGiverGuid) << io::write_dynamic_range<uint16>(questGiver->GetEntry().greeting_text());
+			listPacket << io::write<uint64>(questGiverGuid) << io::write_dynamic_range<uint16>(GetLocalizedString(questGiver->GetEntry().greeting_text(), questGiver->GetEntry().greeting_text_loc(), GetLocale()));
 			SerializeQuestList(*questGiver, listPacket);
 			listPacket.Finish();
 
@@ -973,6 +978,21 @@ namespace mmo
 			else if (trainer && !vendor)
 			{
 				HandleTrainerGossip(*trainer, *unit);
+			}
+			else
+			{
+				// Fallback: the client routed the interaction through GossipHello due to the npc flags, but there
+				// is no gossip menu to show. If the npc has quests to offer or turn in for this player right now,
+				// behave like OnQuestGiverHello would so the interaction doesn't silently do nothing.
+				const QuestgiverStatus questGiverStatus = unit->GetQuestGiverStatus(*m_character);
+				if (questGiverStatus == questgiver_status::Available ||
+					questGiverStatus == questgiver_status::Incomplete ||
+					questGiverStatus == questgiver_status::Reward)
+				{
+					ELOG("Npc " << unitEntry.id() << " (" << unitEntry.name() << ") has no gossip menu assigned but its npc flags made the client "
+						<< "use the gossip route for interaction: falling back to quest giver quest list. Assign a proper gossip menu to this npc!");
+					SendQuestGiverQuestList(*unit);
+				}
 			}
 		}
 	}

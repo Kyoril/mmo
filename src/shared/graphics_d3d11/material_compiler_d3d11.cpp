@@ -792,10 +792,16 @@ namespace mmo
 
 		size_t bufferRegister = 1;
 
+		// Split matrix layout: per-object world matrix at b0 (re-uploaded per draw), per-view
+		// matrices at b12 (only re-uploaded when the camera changes). Keep the register assignments
+		// in sync with GraphicsDeviceD3D11 (kPerViewMatrixBufferSlot).
 		m_pixelShaderStream
-			<< "cbuffer Matrices : register(b0)\n"
+			<< "cbuffer ObjectMatrices : register(b0)\n"
 			<< "{\n"
 			<< "\tcolumn_major matrix matWorld;\n"
+			<< "};\n\n"
+			<< "cbuffer ViewMatrices : register(b12)\n"
+			<< "{\n"
 			<< "\tcolumn_major matrix matView;\n"
 			<< "\tcolumn_major matrix matProj;\n"
 			<< "\tcolumn_major matrix matInvView;\n"
@@ -1416,27 +1422,41 @@ namespace mmo
 				// opaque scene behind them instead of standing out as un-fogged patches.
 				if (!m_lit)
 				{
-					// Unlit materials have no lighting term; their colour is base + emissive.
-					// baseColor was linearised above (pow 2.2), so it shares the lit path's
-					// space and can go through the same fog + tone mapping below.
+					// Unlit materials (glowing particles, FX sprites …) reproduce the legacy unlit
+					// forward output exactly: color = pow(baseColor, 2.2). The gamma boost deepens
+					// saturation (authored FX colours read as intended), and the Emissive pin is
+					// deliberately NOT added here — legacy unlit forward shaders ignored it, and FX
+					// graphs commonly wire the same value into BaseColor AND Emissive (for the
+					// deferred unlit path), which would double the colour and wash saturated tints
+					// out towards white. Emissive still contributes in the G-Buffer unlit path.
+					// No ACES/tonemap either: unlit colours are display-referred as authored.
+					// Distance fog is applied in display space, with the fog colour pushed through
+					// the same ACES + gamma response the deferred scene uses so fully fogged unlit
+					// objects converge to the same horizon colour.
 					m_pixelShaderStream
-						<< "\tfloat3 color = baseColor + emissiveColor;\n";
+						<< "\tfloat3 color = pow(baseColor, 2.2);\n"
+						<< "\tfloat fogDistance = length(input.worldPos - cameraPos);\n"
+						<< "\tfloat fogFactor = saturate((fogDistance - fogStart) / (fogEnd - fogStart));\n"
+						<< "\tfloat3 displayFogColor = pow(ACESFilm(fogColor), (1.0f/2.2f).xxx);\n"
+						<< "\tcolor = lerp(color, displayFogColor, fogFactor);\n";
 				}
+				else
+				{
+					// Distance fog in linear HDR space, *before* tone mapping + gamma — identical to
+					// the deferred lighting pass (PS_DeferredLighting). Applying fog here rather than
+					// after gamma makes forward fog converge to the same horizon colour as the
+					// deferred scene, so translucent objects integrate seamlessly into the fog.
+					m_pixelShaderStream
+						<< "\tfloat fogDistance = length(input.worldPos - cameraPos);\n"
+						<< "\tfloat fogFactor = saturate((fogDistance - fogStart) / (fogEnd - fogStart));\n"
+						<< "\tcolor = lerp(color, fogColor, fogFactor);\n";
 
-				// Distance fog in linear HDR space, *before* tone mapping + gamma — identical to
-				// the deferred lighting pass (PS_DeferredLighting). Applying fog here rather than
-				// after gamma makes forward fog converge to the same horizon colour as the
-				// deferred scene, so translucent objects integrate seamlessly into the fog.
-				m_pixelShaderStream
-					<< "\tfloat fogDistance = length(input.worldPos - cameraPos);\n"
-					<< "\tfloat fogFactor = saturate((fogDistance - fogStart) / (fogEnd - fogStart));\n"
-					<< "\tcolor = lerp(color, fogColor, fogFactor);\n";
-
-				// ACES Film tone mapping + gamma — identical to the deferred lighting pass so
-				// forward objects share the exact same response curve as the deferred scene.
-				m_pixelShaderStream
-					<< "\tcolor = ACESFilm(color);\n"
-					<< "\tcolor = pow(color, (1.0f/2.2f).xxx);\n";
+					// ACES Film tone mapping + gamma — identical to the deferred lighting pass so
+					// forward objects share the exact same response curve as the deferred scene.
+					m_pixelShaderStream
+						<< "\tcolor = ACESFilm(color);\n"
+						<< "\tcolor = pow(color, (1.0f/2.2f).xxx);\n";
+				}
 
 				m_pixelShaderStream
 					<< "\toutputColor = float4(color, opacity);\n";
@@ -1706,21 +1726,28 @@ namespace mmo
 			break;
 		}
 
-		// Matrix constant buffer
+		// Matrix constant buffers: per-object world matrix at b0 (re-uploaded per draw), per-view
+		// matrices at b12 (only re-uploaded when the camera changes). Keep the register assignments
+		// in sync with GraphicsDeviceD3D11 (kPerViewMatrixBufferSlot).
 		vertexShaderStream
-			<< "cbuffer Matrices\n"
+			<< "cbuffer ObjectMatrices : register(b0)\n"
 			<< "{\n"
 			<< "\tcolumn_major matrix matWorld;\n"
+			<< "};\n\n"
+			<< "cbuffer ViewMatrices : register(b12)\n"
+			<< "{\n"
 			<< "\tcolumn_major matrix matView;\n"
 			<< "\tcolumn_major matrix matProj;\n"
 			<< "\tcolumn_major matrix matInvView;\n"
-			<< "\tcolumn_major matrix InverseProjection;\n"
+			<< "\tcolumn_major matrix matInvProj;\n"
 			<< "};\n\n";
 
 		if (numBones > 0)
 		{
+			// Bone matrices are bound via RenderOperation::vertexConstantBuffers starting at slot 1
+			// (see GraphicsDeviceD3D11::Render), so declare the register explicitly.
 			vertexShaderStream
-				<< "cbuffer Bones\n"
+				<< "cbuffer Bones : register(b1)\n"
 				<< "{\n"
 				<< "\tcolumn_major matrix matBone[" << numBones << "];\n"	// TODO: Dual quaternion support
 				<< "};\n\n";

@@ -16,15 +16,7 @@ struct VS_OUTPUT
     float2 TexCoord : TEXCOORD0;
 };
 
-// Constant buffer for matrices
-cbuffer MatrixBuffer : register(b0)
-{
-    column_major matrix World;
-    column_major matrix View;
-    column_major matrix Projection;
-    column_major matrix InverseView;
-    column_major matrix InverseProjection;
-};
+// Note: this pass renders a pre-transformed fullscreen quad, so no matrix constants are needed.
 
 VS_OUTPUT main(VS_INPUT input)
 {

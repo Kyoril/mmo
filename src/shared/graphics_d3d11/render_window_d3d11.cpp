@@ -148,6 +148,9 @@ namespace mmo
 		ID3D11DeviceContext& d3dCtx = m_device;
 		d3dCtx.OMSetRenderTargets(0, nullptr, nullptr);
 
+		// Latch the per-frame draw-call counter at the true frame boundary (see GetBatchCount).
+		m_device.LatchFrameBatchCount();
+
 		const UINT presentFlags = m_device.HasTearingSupport() && !m_device.IsVSyncEnabled() && !dxgiIsFullscreenState ? DXGI_PRESENT_ALLOW_TEARING : 0;
 		m_swapChain->Present(m_device.IsVSyncEnabled() ? 1 : 0, presentFlags);
 

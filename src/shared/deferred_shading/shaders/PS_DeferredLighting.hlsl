@@ -50,9 +50,10 @@ static const float2 POISSON_DISK[16] = {
 };
 
 
-cbuffer Matrices : register(b0)
+// Per-view matrices (b12). Must match the layout uploaded by GraphicsDeviceD3D11 (see
+// kPerViewMatrixBufferSlot); the per-object world matrix at b0 is not needed in this pass.
+cbuffer ViewMatrices : register(b12)
 {
-    column_major matrix matWorld;
     column_major matrix matView;
     column_major matrix matProj;
     column_major matrix matInvView;

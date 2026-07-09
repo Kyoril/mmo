@@ -146,6 +146,7 @@ namespace mmo
 			const auto& e = units.entry(i);
 			ExportField(entries, "unit", e.id(), 0, "name", e.name(), e.name_loc());
 			ExportField(entries, "unit", e.id(), 0, "subname", e.subname(), e.subname_loc());
+			ExportField(entries, "unit", e.id(), 0, "greeting_text", e.greeting_text(), e.greeting_text_loc());
 		}
 
 		// Objects
@@ -317,6 +318,7 @@ namespace mmo
 				{
 					if (field == "name") { loc = e->mutable_name_loc(); }
 					else if (field == "subname") { loc = e->mutable_subname_loc(); }
+					else if (field == "greeting_text") { loc = e->mutable_greeting_text_loc(); }
 				}
 			}
 			else if (type == "object")

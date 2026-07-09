@@ -56,6 +56,9 @@ namespace mmo
 
 		virtual void AddAssetActions(const String& asset) { };
 
+		/// @brief Allows the editor to add entries to the main window's "Tools" menu.
+		virtual void AddToolMenuItems() { };
+
 		/// @brief Informs the editor that the next asset opened at the given path should position its
 		///        camera / view at the given world location. Editors that don't support this can ignore it.
 		/// @param asset The asset path that the target applies to.

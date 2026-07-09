@@ -295,15 +295,16 @@ namespace mmo
 		D3D11_BUFFER_DESC cbd;
 		ZeroMemory(&cbd, sizeof(cbd));
 		cbd.Usage = D3D11_USAGE_DYNAMIC;
-		cbd.ByteWidth = sizeof(Matrix4) * 5;
 		cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 		cbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
-		D3D11_SUBRESOURCE_DATA sd;
-		ZeroMemory(&sd, sizeof(sd));
-		sd.pSysMem = &m_transform;
+		// Per-object buffer: world matrix only (b0). Re-uploaded per object, so keep it minimal.
+		cbd.ByteWidth = sizeof(Matrix4);
+		VERIFY(SUCCEEDED(m_device->CreateBuffer(&cbd, nullptr, &m_objectMatrixBuffer)));
 
-		VERIFY(SUCCEEDED(m_device->CreateBuffer(&cbd, nullptr, &m_matrixBuffer)));
+		// Per-view buffer: view/proj + inverses (b12). Only re-uploaded when the camera changes.
+		cbd.ByteWidth = sizeof(Matrix4) * 4;
+		VERIFY(SUCCEEDED(m_device->CreateBuffer(&cbd, nullptr, &m_viewMatrixBuffer)));
 	}
 
 	void GraphicsDeviceD3D11::InitRasterizerState()
@@ -469,16 +470,33 @@ namespace mmo
 		return result;
 	}
 
-	void GraphicsDeviceD3D11::UpdateMatrixBuffer()
+	void GraphicsDeviceD3D11::UpdateObjectMatrixBuffer()
 	{
 		D3D11_MAPPED_SUBRESOURCE mappedResource;
-		const HRESULT hr = m_immContext->Map(m_matrixBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+		const HRESULT hr = m_immContext->Map(m_objectMatrixBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
 		if (SUCCEEDED(hr))
 		{
-			memcpy(mappedResource.pData, m_transform, sizeof(m_transform));
-			memcpy(static_cast<uint8*>(mappedResource.pData) + sizeof(m_transform), &m_inverseView, sizeof(m_inverseView));
-			memcpy(static_cast<uint8*>(mappedResource.pData) + sizeof(m_transform) + sizeof(m_inverseView), &m_inverseProj, sizeof(m_inverseProj));
-			m_immContext->Unmap(m_matrixBuffer.Get(), 0);
+			memcpy(mappedResource.pData, &m_transform[World], sizeof(Matrix4));
+			m_immContext->Unmap(m_objectMatrixBuffer.Get(), 0);
+		}
+		else
+		{
+			ASSERT(false);
+		}
+	}
+
+	void GraphicsDeviceD3D11::UpdateViewMatrixBuffer()
+	{
+		D3D11_MAPPED_SUBRESOURCE mappedResource;
+		const HRESULT hr = m_immContext->Map(m_viewMatrixBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+		if (SUCCEEDED(hr))
+		{
+			uint8* dest = static_cast<uint8*>(mappedResource.pData);
+			memcpy(dest, &m_transform[View], sizeof(Matrix4));
+			memcpy(dest + sizeof(Matrix4), &m_transform[Projection], sizeof(Matrix4));
+			memcpy(dest + sizeof(Matrix4) * 2, &m_inverseView, sizeof(Matrix4));
+			memcpy(dest + sizeof(Matrix4) * 3, &m_inverseProj, sizeof(Matrix4));
+			m_immContext->Unmap(m_viewMatrixBuffer.Get(), 0);
 
 #if MMO_GPU_DEBUG
 			// Double check here
@@ -562,7 +580,8 @@ namespace mmo
 		PixelShaders.clear();
 		m_renderTarget.reset();
 
-		m_matrixBuffer.Reset();
+		m_objectMatrixBuffer.Reset();
+		m_viewMatrixBuffer.Reset();
 		m_rasterizerStates.clear();
 		m_samplerStates.clear();
 		m_depthStencilStates.clear();
@@ -646,11 +665,13 @@ namespace mmo
 		m_currentPixelShader = nullptr;
 		m_lastBoundMaterial = nullptr;
 
-		m_lastFrameBatchCount = m_batchCount;
-		m_batchCount = 0;
+		// Note: the frame batch count is deliberately NOT latched here. Reset() can run multiple times
+		// per frame (world pass, UI pass, ...), which would zero the counter mid-frame and make the
+		// perf overlay report 0. The latch happens once per frame in LatchFrameBatchCount(), called
+		// from the render window right before Present.
 
-		// Update the constant buffer
-		if (m_matrixDirty)
+		// Update the constant buffers
+		if (m_worldMatrixDirty || m_viewMatrixDirty)
 		{
 			// Reset transforms
 			m_transform[0] = Matrix4::Identity;
@@ -658,8 +679,10 @@ namespace mmo
 			m_transform[2] = Matrix4::Identity;
 			m_inverseView = m_transform[1].InverseAffine();
 			m_inverseProj = m_transform[2].Inverse();
-			UpdateMatrixBuffer();
-			m_matrixDirty = false;
+			UpdateObjectMatrixBuffer();
+			UpdateViewMatrixBuffer();
+			m_worldMatrixDirty = false;
+			m_viewMatrixDirty = false;
 		}
 
 		// Reset bound texture slots
@@ -675,10 +698,14 @@ namespace mmo
 		m_immContext->VSSetShader(nullptr, nullptr, 0);
 		m_immContext->PSSetShader(nullptr, nullptr, 0);
 
-		// Set the constant buffers
-		ID3D11Buffer* Buffers[] = { m_matrixBuffer.Get() };
-		m_immContext->VSSetConstantBuffers(0, 1, Buffers);
-		m_immContext->PSSetConstantBuffers(0, 1, Buffers);
+		// Set the constant buffers: per-object world matrix at b0, per-view matrices at b12.
+		ID3D11Buffer* objectBuffers[] = { m_objectMatrixBuffer.Get() };
+		m_immContext->VSSetConstantBuffers(0, 1, objectBuffers);
+		m_immContext->PSSetConstantBuffers(0, 1, objectBuffers);
+
+		ID3D11Buffer* viewBuffers[] = { m_viewMatrixBuffer.Get() };
+		m_immContext->VSSetConstantBuffers(kPerViewMatrixBufferSlot, 1, viewBuffers);
+		m_immContext->PSSetConstantBuffers(kPerViewMatrixBufferSlot, 1, viewBuffers);
 
 		// Default blend state
 		m_immContext->OMSetBlendState(m_opaqueBlendState.Get(), nullptr, 0xffffffff);
@@ -820,13 +847,8 @@ namespace mmo
 		UpdateDepthStencilState();
 		UpdateSamplerState();
 
-		if (m_matrixDirty)
-		{
-			// Update the constant buffer
-			m_matrixDirty = false;
-			UpdateMatrixBuffer();
-		}
-		
+		FlushMatrixBuffers();
+
 		// Execute draw command
 		m_immContext->Draw(vertexCount, start);
 		m_batchCount++;
@@ -838,13 +860,8 @@ namespace mmo
 		UpdateDepthStencilState();
 		UpdateSamplerState();
 		
-		if (m_matrixDirty)
-		{
-			// Update the constant buffer
-			m_matrixDirty = false;
-			UpdateMatrixBuffer();
-		}
-		
+		FlushMatrixBuffers();
+
 		// Execute draw command
 		m_immContext->DrawIndexed(endIndex == 0 ? m_indexCount - startIndex : endIndex - startIndex, startIndex, 0);
 		m_batchCount++;
@@ -856,11 +873,7 @@ namespace mmo
 		UpdateDepthStencilState();
 		UpdateSamplerState();
 
-		if (m_matrixDirty)
-		{
-			m_matrixDirty = false;
-			UpdateMatrixBuffer();
-		}
+		FlushMatrixBuffers();
 
 		// Execute instanced draw command
 		m_immContext->DrawIndexedInstanced(indexCount, instanceCount, startIndex, baseVertex, startInstance);
@@ -975,7 +988,8 @@ namespace mmo
 
 		m_samplerDescChanged = true;
 		m_lastInputLayout = nullptr;
-		m_matrixDirty = true;
+		m_worldMatrixDirty = true;
+		m_viewMatrixDirty = true;
 
 		// Invalidate texture slot cache
 		for (size_t i = 0; i < std::size(m_textureSlots); ++i)
@@ -1001,21 +1015,26 @@ namespace mmo
 		if (type == View)
 		{
 			m_inverseView = m_transform[View].InverseAffine();
+			m_viewMatrixDirty = true;
 #if MMO_GPU_DEBUG
 			// First check on set (fail early)
-			ASSERT(Matrix4::Identity.IsNearlyEqual(m_inverseView * m_transform[View]));			
+			ASSERT(Matrix4::Identity.IsNearlyEqual(m_inverseView * m_transform[View]));
 #endif
 		}
 		else if (type == Projection)
 		{
 			m_inverseProj = m_transform[Projection].Inverse();
+			m_viewMatrixDirty = true;
 #if MMO_GPU_DEBUG
 			// First check on set (fail early)
 			//ASSERT(Matrix4::Identity.IsNearlyEqual(m_inverseProj * m_transform[Projection]));
 #endif
 		}
-
-		m_matrixDirty = true;
+		else
+		{
+			// Per-object world matrix: only the small b0 buffer needs a re-upload.
+			m_worldMatrixDirty = true;
+		}
 	}
 
 	TexturePtr GraphicsDeviceD3D11::CreateTexture(uint16 width, uint16 height, BufferUsage usage)
