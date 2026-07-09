@@ -9,6 +9,7 @@
 
 #include <unordered_map>
 #include <array>
+#include <atomic>
 
 #include "base/chunk_reader.h"
 #include "base/chunk_writer.h"
@@ -42,7 +43,29 @@ namespace mmo
 			~Page();
 
 		public:
+			/// @brief Synchronously prepares the page (parse + finalize). Equivalent to
+			///        BeginPrepare() + PrepareParse() + FinalizePrepare() and kept for callers that
+			///        do not stream (editor, tools).
 			bool Prepare();
+
+			/// @brief Starts a preparation cycle (main thread). Clears a pending unload cancellation
+			///        and claims the preparing state.
+			/// @return true if preparation was started by this call — the caller must then run
+			///         PrepareParse() (any thread) followed by FinalizePrepare() (main thread).
+			///         false if the page is already prepared or a preparation is in flight.
+			bool BeginPrepare();
+
+			/// @brief Reads and parses the page file. Thread-safe part of preparation: no scene,
+			///        material or GPU objects are touched (material references are collected by name
+			///        and resolved in FinalizePrepare). May run on a background thread.
+			bool PrepareParse();
+
+			/// @brief Completes preparation on the main thread: resolves the parsed material names
+			///        through the MaterialManager and marks the page as prepared.
+			bool FinalizePrepare();
+
+			/// @brief Aborts an in-flight preparation after PrepareParse() failed.
+			void AbortPrepare();
 
 			bool Load();
 
@@ -292,8 +315,19 @@ namespace mmo
 
 			int32 m_x;
 			int32 m_z;
-			bool m_preparing;
-			bool m_prepared;
+			// Preparation state. Atomic because PrepareParse may run on a background streaming
+			// thread while the main thread polls IsPrepared/IsPreparing (e.g. Destroy checks
+			// IsPreparing to avoid tearing down a page mid-parse).
+			std::atomic<bool> m_preparing;
+			std::atomic<bool> m_prepared;
+
+			/// @brief Material names parsed from the page file, resolved into m_materials on the
+			///        main thread in FinalizePrepare (MaterialManager is not thread-safe).
+			std::vector<String> m_pendingMaterialNames;
+
+			/// @brief Whether the page file contained a material chunk (m_pendingMaterialNames then
+			///        replaces the material array during FinalizePrepare).
+			bool m_materialChunkParsed = false;
 			bool m_loaded;
 			bool m_changed{false};
 			bool m_unloadRequested = false;

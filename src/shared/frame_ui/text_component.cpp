@@ -193,11 +193,28 @@ namespace mmo
 
 	void TextComponent::CacheText(const Rect& area)
 	{
-		// Remove line cache
-		m_lineCache.clear();
-
 		// Gets the text that should be displayed for this frame.
 		const std::string& text = m_frame->GetVisualText();
+
+		// Skip the (comparatively expensive) markup parse + wrapping rebuild when none of its
+		// inputs changed. Render() calls this on every redraw, and most redraws are triggered by
+		// something other than the text itself (hover states, animations, child invalidations).
+		const FontPtr font = m_frame->GetFont();
+		const float textScale = FrameManager::Get().GetUIScale().y;
+		const argb_t colorArgb = m_color.GetARGB();
+
+		if (m_cacheValid &&
+			area == m_cachedArea &&
+			colorArgb == m_cachedColorArgb &&
+			font.get() == m_cachedFont &&
+			textScale == m_cachedScale &&
+			text == m_cachedTextValue)
+		{
+			return;
+		}
+
+		// Remove line cache
+		m_lineCache.clear();
 
 		// Parse the text for hyperlinks and color formatting
 		m_parsedText = ParseTextMarkup(text, m_color);
@@ -218,6 +235,14 @@ namespace mmo
 
 		// Apply wrapping to each line and eventually split the lines into even more lines by doing so
 		ApplyWrapping(area);
+
+		// Remember the inputs this cache was built from.
+		m_cachedTextValue = text;
+		m_cachedArea = area;
+		m_cachedColorArgb = colorArgb;
+		m_cachedFont = font.get();
+		m_cachedScale = textScale;
+		m_cacheValid = true;
 	}
 
 	void TextComponent::ApplyWrapping(const Rect& area)

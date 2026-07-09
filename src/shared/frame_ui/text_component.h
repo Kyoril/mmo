@@ -130,5 +130,15 @@ namespace mmo
 		scoped_connection m_vertAlignPropertyConnection;
 
 		scoped_connection m_colorPropertyConnection;
+
+		// Cache-key state for CacheText: parsing the markup and rebuilding the wrapped line cache
+		// is comparatively expensive and Render() runs it on every redraw, so the rebuild is skipped
+		// while none of its inputs (text, area, color, font, UI scale) have changed.
+		std::string m_cachedTextValue;
+		Rect m_cachedArea;
+		argb_t m_cachedColorArgb = 0;
+		const Font* m_cachedFont = nullptr;
+		float m_cachedScale = 0.0f;
+		bool m_cacheValid = false;
 	};
 }

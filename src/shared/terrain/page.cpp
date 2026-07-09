@@ -90,7 +90,23 @@ namespace mmo
 
 		bool Page::Prepare()
 		{
-			// A fresh load has been requested for this page (Prepare is always called from the
+			if (!BeginPrepare())
+			{
+				return true;
+			}
+
+			if (!PrepareParse())
+			{
+				AbortPrepare();
+				return false;
+			}
+
+			return FinalizePrepare();
+		}
+
+		bool Page::BeginPrepare()
+		{
+			// A fresh load has been requested for this page (preparation always starts from the
 			// "page became available" path before the EnsurePageIsLoaded streaming loop starts).
 			// Clear any leftover unload cancellation from a previous streaming cycle that was
 			// aborted mid-load. Without this, the very first Load() of the new cycle would consume
@@ -101,10 +117,24 @@ namespace mmo
 
 			if (IsPrepared() || IsPreparing())
 			{
-				return true;
+				return false;
 			}
 
 			m_preparing = true;
+			return true;
+		}
+
+		void Page::AbortPrepare()
+		{
+			m_preparing = false;
+		}
+
+		bool Page::PrepareParse()
+		{
+			ASSERT(m_preparing);
+
+			m_pendingMaterialNames.clear();
+			m_materialChunkParsed = false;
 
 			// Page stores only outer vertices (shared between tiles)
 			// Inner vertices are derived by tiles during rendering
@@ -147,7 +177,6 @@ namespace mmo
 				if (!Read(reader))
 				{
 					ELOG("Failed to read page file '" << pageFileName << "'!");
-					m_preparing = false;
 					return false;
 				}
 
@@ -200,6 +229,37 @@ namespace mmo
 
 				WLOG("Terrain page file '" << pageFileName << "' is missing, page will be initialized as blank tile");
 				m_changed = true;
+			}
+
+			return true;
+		}
+
+		bool Page::FinalizePrepare()
+		{
+			ASSERT(m_preparing);
+
+			// Resolve the material names collected during parsing. This must happen on the main
+			// thread: MaterialManager::Load deserializes materials and creates GPU shader objects.
+			// Pages without a material chunk keep the default-initialized material array.
+			if (m_materialChunkParsed)
+			{
+				m_materials.clear();
+				m_materials.reserve(m_pendingMaterialNames.size());
+				for (const String& materialName : m_pendingMaterialNames)
+				{
+					if (materialName.empty())
+					{
+						m_materials.push_back(nullptr);
+					}
+					else
+					{
+						// The MaterialManager caches by name, so repeated loads are cheap.
+						m_materials.push_back(MaterialManager::Get().Load(materialName));
+					}
+				}
+
+				m_pendingMaterialNames.clear();
+				m_materialChunkParsed = false;
 			}
 
 			m_prepared = true;
@@ -958,8 +1018,11 @@ namespace mmo
 				return false;
 			}
 
-			m_materials.clear();
-			m_materials.reserve(numMaterials);
+			// Only collect the material names here: this chunk may be parsed on a background
+			// streaming thread, and the MaterialManager is not thread-safe (material loading
+			// creates GPU shader objects). Names are resolved in FinalizePrepare on the main thread.
+			m_pendingMaterialNames.clear();
+			m_pendingMaterialNames.reserve(numMaterials);
 
 			for (uint16 i = 0; i < numMaterials; ++i)
 			{
@@ -970,16 +1033,10 @@ namespace mmo
 					return false;
 				}
 
-				if (materialName.empty())
-				{
-					m_materials.push_back(nullptr);
-				}
-				else
-				{
-					// Don't worry: MaterialManager has a cache system, so loading the same material multiple times is not a problem!
-					m_materials.push_back(MaterialManager::Get().Load(materialName));
-				}
+				m_pendingMaterialNames.push_back(std::move(materialName));
 			}
+
+			m_materialChunkParsed = true;
 
 			return reader;
 		}

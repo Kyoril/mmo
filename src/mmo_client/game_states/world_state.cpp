@@ -9,6 +9,7 @@
 #include "systems/trade_client.h"
 
 #include <cstring>
+#include <thread>
 
 #include "event_loop.h"
 #include "game_state_mgr.h"
@@ -1920,7 +1921,35 @@ namespace mmo
 				terrain::Page* terrainPage = m_worldInstance->GetTerrain()->GetPage(page.x(), page.y());
 				if (terrainPage)
 				{
-					if (terrainPage->Prepare())
+					// This runs behind the loading screen and must finish synchronously. The page
+					// availability event may already have kicked an asynchronous preparation onto
+					// the streaming thread, whose FinalizePrepare is queued on m_dispatcher — so we
+					// cannot just spin on Load() (it requires the page to be prepared and the
+					// dispatcher would never be pumped: deadlock). Instead, either prepare the page
+					// synchronously ourselves, or pump the dispatcher until the in-flight async
+					// preparation completes.
+					while (!terrainPage->IsPrepared())
+					{
+						if (terrainPage->BeginPrepare())
+						{
+							// No async preparation in flight — do it synchronously.
+							if (!terrainPage->PrepareParse())
+							{
+								terrainPage->AbortPrepare();
+								break;
+							}
+
+							terrainPage->FinalizePrepare();
+							break;
+						}
+
+						// An async preparation is in flight: pump the dispatcher so its queued
+						// FinalizePrepare can run, and give the worker thread time to finish.
+						m_dispatcher.poll_one();
+						std::this_thread::yield();
+					}
+
+					if (terrainPage->IsPrepared())
 					{
 						while (!terrainPage->Load());
 					}
@@ -4862,11 +4891,40 @@ namespace mmo
 
 			if (isAvailable)
 			{
-				page->Prepare();
-				EnsurePageIsLoaded(pos);
+				if (page->BeginPrepare())
+				{
+					// Parse the page file on the streaming thread — the disk read + chunk parsing
+					// used to run synchronously here and hitched the main thread on every
+					// page-boundary crossing. Only material resolution and tile creation (spread
+					// over frames by EnsurePageIsLoaded) remain on the main thread.
+					m_workQueue.post([this, pos, page]()
+					{
+						const bool parsed = page->PrepareParse();
 
-				// Register data-driven foliage from this page's tile materials now that it is loaded.
-				RegisterPageFoliage(pos.x(), pos.y());
+						m_dispatcher.post([this, pos, page, parsed]()
+						{
+							if (!parsed)
+							{
+								page->AbortPrepare();
+								return;
+							}
+
+							page->FinalizePrepare();
+							EnsurePageIsLoaded(pos);
+
+							// Register data-driven foliage from this page's tile materials now
+							// that they are resolved.
+							RegisterPageFoliage(pos.x(), pos.y());
+						});
+					});
+				}
+				else if (page->IsPrepared())
+				{
+					// Already prepared from an earlier visit — go straight to (re)loading tiles.
+					EnsurePageIsLoaded(pos);
+					RegisterPageFoliage(pos.x(), pos.y());
+				}
+				// else: a preparation is already in flight; its completion continues the chain.
 			}
 			else
 			{
