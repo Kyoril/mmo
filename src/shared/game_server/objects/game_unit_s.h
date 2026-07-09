@@ -1590,6 +1590,13 @@ public:
 		/// @returns A reference to the unit mover.
 		UnitMover &GetMover() const { return *m_mover; }
 
+		/// Returns whether this unit is currently in motion. AI-controlled creatures/pets
+		/// report movement through their mover (path-following), while player characters
+		/// report movement through raw movement flags instead (they never populate their
+		/// own mover for ordinary movement) - so both are checked to cover either case.
+		/// @returns True if the unit is moving right now.
+		bool IsMoving() const { return GetMover().IsMoving() || GetMovementInfo().IsMoving(); }
+
 		/// Generates the next client ack ID for the unit.
 		/// @returns The next client ack ID as a uint32.
 		inline uint32 GenerateAckId() { return m_ackGenerator.GenerateId(); }

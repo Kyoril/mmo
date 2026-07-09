@@ -332,6 +332,9 @@ namespace mmo
 		/// @brief Gets the movement info.
 		[[nodiscard]] MovementInfo GetMovementInfo() { return m_movementInfo; }
 
+		/// @brief Gets the movement info (const overload for read-only access, e.g. AI prediction).
+		[[nodiscard]] const MovementInfo& GetMovementInfo() const { return m_movementInfo; }
+
 		Vector3 GetPredictedPosition();
 
 		virtual void ApplyMovementInfo(const MovementInfo& info);

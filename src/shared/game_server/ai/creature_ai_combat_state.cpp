@@ -564,29 +564,65 @@ namespace mmo
 
 	Vector3 CreatureAICombatState::PredictTargetPosition(const GameUnitS& target) const
 	{
-		Vector3 predictedPosition = target.GetPosition();
-		
-		// If target is moving, predict where they'll be
+		const Vector3 currentPos = target.GetPosition();
+
+		// AI-controlled targets (creatures/pets following a path) report movement through
+		// their mover, so we can predict straight toward their known destination.
 		const auto& targetMover = target.GetMover();
 		if (targetMover.IsMoving())
 		{
-			const Vector3 currentPos = target.GetPosition();
 			const Vector3 targetDestination = targetMover.GetTarget();
 			const Vector3 direction = (targetDestination - currentPos).NormalizedCopy();
-			
+
 			// Predict 1-2 seconds ahead based on target's movement speed
 			const float targetSpeed = target.GetSpeed(movement_type::Run);
 			const float predictionTime = 1.5f; // seconds
 			const float maxPredictionDistance = targetSpeed * predictionTime;
-			
+
 			// Don't predict beyond their actual destination
 			const float distanceToDestination = (targetDestination - currentPos).GetLength();
 			const float actualPredictionDistance = std::min(maxPredictionDistance, distanceToDestination);
-			
-			predictedPosition = currentPos + direction * actualPredictionDistance;
+
+			return currentPos + direction * actualPredictionDistance;
 		}
-		
-		return predictedPosition;
+
+		// Player characters never populate their own mover for ordinary movement - they
+		// report motion through raw movement flags instead. Derive a direction from those
+		// flags plus current facing (mirroring the client's own movement model) so a
+		// fleeing player is actually predicted instead of always resolving to their last
+		// known (already stale by the time we act on it) position.
+		const MovementInfo& info = target.GetMovementInfo();
+		if (!info.IsMoving())
+		{
+			return currentPos;
+		}
+
+		const Vector3 forward = target.GetForwardVector();
+		const Vector3 right(-forward.z, 0.0f, forward.x);
+
+		Vector3 dir = Vector3::Zero;
+		if (info.movementFlags & movement_flags::Forward)     dir += forward;
+		if (info.movementFlags & movement_flags::Backward)    dir -= forward;
+		if (info.movementFlags & movement_flags::StrafeLeft)  dir -= right;
+		if (info.movementFlags & movement_flags::StrafeRight) dir += right;
+
+		const float dirLength = dir.GetLength();
+		if (dirLength <= 0.001f)
+		{
+			return currentPos;
+		}
+		dir /= dirLength;
+
+		// Pure backpedal (no forward key) uses the slower backwards speed; anything with a
+		// forward component, including diagonals, uses run speed.
+		const bool pureBackward = (info.movementFlags & movement_flags::Backward) != 0
+			&& (info.movementFlags & movement_flags::Forward) == 0;
+		const float targetSpeed = pureBackward
+			? target.GetSpeed(movement_type::Backwards)
+			: target.GetSpeed(movement_type::Run);
+
+		constexpr float predictionTime = 1.5f; // seconds
+		return currentPos + dir * (targetSpeed * predictionTime);
 	}
 
 	bool CreatureAICombatState::ChaseTarget(GameUnitS& target)
@@ -878,7 +914,7 @@ namespace mmo
 
 		// Use shorter intervals when target is moving to improve responsiveness
 		uint32 actionInterval = ACTION_INTERVAL_MS;
-		if (victim->GetMover().IsMoving())
+		if (victim->IsMoving())
 		{
 			actionInterval = ACTION_INTERVAL_MS / 2; // 250ms instead of 500ms for moving targets
 		}

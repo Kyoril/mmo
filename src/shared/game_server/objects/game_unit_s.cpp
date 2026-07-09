@@ -3634,7 +3634,7 @@ namespace mmo
 		// effective range by a small bonus so auto-attacks connect reliably instead
 		// of the attacker perpetually trailing just outside range.
 		const float attackRange = GetMeleeReach() + victim->GetMeleeReach();
-		const bool bothMoving = GetMover().IsMoving() && victim->GetMover().IsMoving();
+		const bool bothMoving = IsMoving() && victim->IsMoving();
 		const float effectiveRange = attackRange + (bothMoving ? MELEE_CHASE_RANGE_BONUS : 0.0f);
 		if (victim->GetSquaredDistanceTo(GetPosition(), false) > (effectiveRange * effectiveRange))
 		{
