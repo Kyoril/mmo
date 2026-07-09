@@ -69,6 +69,9 @@ namespace mmo
 
 		/// Active account feature keys (entitlements) granted to the logged in account.
 		std::vector<std::string> m_accountFeatures;
+
+		/// Set while a pending connection attempt should be discarded once it resolves (user cancelled).
+		bool m_cancelled = false;
 	public:
 		/// Initializes a new instance of the TestConnector class.
 		/// @param io The io service to be used in order to create the internal socket.
@@ -125,6 +128,11 @@ namespace mmo
 		/// @param password The password to login with.
 		/// @param ioService The io service used to connect.
 		void Connect(const std::string& username, const std::string& password);
+
+		/// Aborts a pending connection attempt started by Connect(). Any resolve/connect that was
+		/// already in flight will still complete internally but its result is discarded silently
+		/// (no AuthenticationResult signal is fired).
+		void CancelConnect();
 
 		/// Sends a realm list request to the login server.
 		void SendRealmListRequest();

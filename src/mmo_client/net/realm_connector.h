@@ -53,6 +53,9 @@ namespace mmo
 		uint32 m_clientSeed;
 		uint32 m_realmId;
 
+		/// Set while a pending connection attempt should be discarded once it resolves (user cancelled).
+		bool m_cancelled = false;
+
 	public:
 		/// Initializes a new instance of the RealmConnector class.
 		/// @param io The io service to be used in order to create the internal socket.
@@ -198,6 +201,10 @@ namespace mmo
 		/// @param realmName The realm's display name.
 		/// @param sessionKey The session key.
 		void Connect(const std::string& realmAddress, uint16 realmPort, const std::string& accountName, const std::string& realmName, BigNumber sessionKey);
+
+		/// Aborts a pending connection attempt started by Connect() or ConnectToRealm(). Any resolve/connect
+		/// that was already in flight will still complete internally but its result is discarded silently.
+		void CancelConnect();
 
 		/// Sends a packet to the realm server requesting an up-to-date character list.
 		void RequestCharacterList();

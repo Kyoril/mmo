@@ -29,6 +29,20 @@ namespace mmo
 
 	bool LoginConnector::connectionEstablished(bool success)
 	{
+		if (m_cancelled)
+		{
+			m_cancelled = false;
+
+			// The connection attempt was cancelled before it resolved. Discard the result silently
+			// and close the socket if it did connect after all.
+			if (success)
+			{
+				close();
+			}
+
+			return false;
+		}
+
 		if (success)
 		{
 			// Register for default packet handlers
@@ -379,6 +393,7 @@ namespace mmo
 	{
 		ClearPacketHandlers();
 
+		m_cancelled = false;
 		m_realms.clear();
 		m_accountFeatures.clear();
 
@@ -399,7 +414,13 @@ namespace mmo
 		// Connect to the server at localhost
 		connect(s_realmlistCVar->GetStringValue(), constants::DefaultLoginPlayerPort, *this, m_ioService);
 	}
-	
+
+	void LoginConnector::CancelConnect()
+	{
+		m_cancelled = true;
+		close();
+	}
+
 	void LoginConnector::SendRealmListRequest()
 	{
 		sendSinglePacket([](auth::OutgoingPacket& outPacket)

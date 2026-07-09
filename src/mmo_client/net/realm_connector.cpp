@@ -263,6 +263,20 @@ namespace mmo
 	
 	bool RealmConnector::connectionEstablished(bool success)
 	{
+		if (m_cancelled)
+		{
+			m_cancelled = false;
+
+			// The connection attempt was cancelled before it resolved. Discard the result silently
+			// and close the socket if it did connect after all.
+			if (success)
+			{
+				close();
+			}
+
+			return false;
+		}
+
 		if (success)
 		{
 			// Reset server seed
@@ -317,7 +331,7 @@ namespace mmo
 		m_realmPort = data.port;
 		m_realmName = data.name;
 
-		
+		m_cancelled = false;
 
 		// Connect to the server
 		connect(m_realmAddress, m_realmPort, *this, m_ioService);
@@ -331,8 +345,16 @@ namespace mmo
 		m_account = accountName;
 		m_sessionKey = sessionKey;
 
+		m_cancelled = false;
+
 		// Connect to the server
 		connect(m_realmAddress, m_realmPort, *this, m_ioService);
+	}
+
+	void RealmConnector::CancelConnect()
+	{
+		m_cancelled = true;
+		close();
 	}
 
 	void RealmConnector::RequestCharacterList()

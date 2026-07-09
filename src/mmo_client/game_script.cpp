@@ -1024,7 +1024,8 @@ namespace mmo
 					   luabind::scope(
 						   luabind::class_<LoginConnector>("LoginConnector")
 							   .def("GetRealms", &LoginConnector::GetRealms, luabind::return_stl_iterator())
-							   .def("IsConnected", &LoginConnector::IsConnected)),
+							   .def("IsConnected", &LoginConnector::IsConnected)
+							   .def("CancelConnect", &LoginConnector::CancelConnect)),
 
 					   luabind::scope(
 						   luabind::class_<proto_client::Project>("Project")
@@ -1072,7 +1073,8 @@ namespace mmo
 							   .def("ConnectToRealm", &RealmConnector::ConnectToRealm)
 							   .def("IsConnected", &RealmConnector::IsConnected)
 							   .def("GetRealmName", &RealmConnector::GetRealmName)
-							   .def("DeleteCharacter", &RealmConnector::DeleteCharacter)),
+							   .def("DeleteCharacter", &RealmConnector::DeleteCharacter)
+							   .def("CancelConnect", &RealmConnector::CancelConnect)),
 
 					   luabind::scope(
 						   luabind::class_<ItemInfo>("Item")
