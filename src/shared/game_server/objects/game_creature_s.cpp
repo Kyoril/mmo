@@ -134,6 +134,10 @@ namespace mmo
 		Set<float>(object_fields::Scale, m_entry->scale());
 		Set<uint32>(object_fields::DisplayId, m_entry->malemodel());	// TODO: gender roll
 		Set<uint32>(object_fields::FactionTemplate, m_entry->factiontemplate());
+
+		// Creatures get their own base run speed (independent of the player default) so
+		// they can reliably catch up to a fleeing player.
+		SetBaseSpeed(movement_type::Run, m_entry->runspeed());
 		
 		// For legacy system, set power type to mana
 		if (!m_entry->usestatbasedsystem())

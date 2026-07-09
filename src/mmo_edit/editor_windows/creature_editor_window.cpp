@@ -647,6 +647,11 @@ namespace mmo
 			}
 		}
 
+		if (const auto section = ScopedEditorSection("Movement", ImGuiTreeNodeFlags_None))
+		{
+			SLIDER_FLOAT_PROP(runspeed, "Run Speed", 0.1f, 50.0f);
+		}
+
 		bool useStatSystem = currentEntry.usestatbasedsystem();
 
 		if (const auto section = ScopedEditorSection("Level & Stats", ImGuiTreeNodeFlags_None))

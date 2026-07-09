@@ -305,6 +305,16 @@ namespace mmo
 		// Per-view buffer: view/proj + inverses (b12). Only re-uploaded when the camera changes.
 		cbd.ByteWidth = sizeof(Matrix4) * 4;
 		VERIFY(SUCCEEDED(m_device->CreateBuffer(&cbd, nullptr, &m_viewMatrixBuffer)));
+
+		// The buffers above are created with no initial data, so their GPU-side contents are
+		// undefined until the first real upload. m_transform was just seeded with identity above,
+		// but SetTransformMatrix() only re-uploads a buffer when the requested value differs from
+		// that cache - since everything already matches identity, that first upload would otherwise
+		// never happen and the buffers would stay uninitialized until something unrelated (e.g. a
+		// 3D model with a non-identity world matrix) coincidentally forced a real change. Write them
+		// for real now so they can never be read while still uninitialized.
+		UpdateObjectMatrixBuffer();
+		UpdateViewMatrixBuffer();
 	}
 
 	void GraphicsDeviceD3D11::InitRasterizerState()

@@ -685,37 +685,41 @@ namespace mmo
 		auto& queue = GetRenderQueue();
 		queue.Clear();
 
-		for (MovableObject* caster : casters)
 		{
-			// Mirror RenderQueue::ProcessVisibleObject's per-camera state (LOD / rendering-disabled)
-			// so shadow visibility matches the previous per-cascade Scene::Render path exactly.
-			caster->SetCurrentCamera(cascadeCamera);
+			PROFILE_SCOPE("ShadowCasters: queue build");
 
-			if (!caster->IsVisible() || !caster->IsCastingShadows())
+			for (MovableObject* caster : casters)
 			{
-				continue;
-			}
+				// Mirror RenderQueue::ProcessVisibleObject's per-camera state (LOD / rendering-disabled)
+				// so shadow visibility matches the previous per-cascade Scene::Render path exactly.
+				caster->SetCurrentCamera(cascadeCamera);
 
-			const AABB& worldBounds = caster->GetWorldBoundingBox(true);
-
-			// Sub-texel small-object culling: a caster smaller than the cascade's world texel size
-			// produces a shadow under one shadow-map texel, i.e. invisible. Skipping it is free.
-			if (minCasterWorldRadius > 0.0f)
-			{
-				const Vector3 extents = worldBounds.GetExtents();
-				const float worldRadius = std::max(extents.x, std::max(extents.y, extents.z));
-				if (worldRadius < minCasterWorldRadius)
+				if (!caster->IsVisible() || !caster->IsCastingShadows())
 				{
 					continue;
 				}
-			}
 
-			if (!cascadeCamera.IsVisible(worldBounds))
-			{
-				continue;
-			}
+				const AABB& worldBounds = caster->GetWorldBoundingBox(true);
 
-			caster->PopulateRenderQueue(queue);
+				// Sub-texel small-object culling: a caster smaller than the cascade's world texel size
+				// produces a shadow under one shadow-map texel, i.e. invisible. Skipping it is free.
+				if (minCasterWorldRadius > 0.0f)
+				{
+					const Vector3 extents = worldBounds.GetExtents();
+					const float worldRadius = std::max(extents.x, std::max(extents.y, extents.z));
+					if (worldRadius < minCasterWorldRadius)
+					{
+						continue;
+					}
+				}
+
+				if (!cascadeCamera.IsVisible(worldBounds))
+				{
+					continue;
+				}
+
+				caster->PopulateRenderQueue(queue);
+			}
 		}
 
 		// Shadow passes write depth with the cascade camera; match the state Scene::Render sets for a

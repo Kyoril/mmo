@@ -674,7 +674,10 @@ namespace mmo
             }
         }
 
-        scene.GatherShadowCasters(gatherRegion, m_shadowCasterCache);
+        {
+            PROFILE_SCOPE("GatherShadowCasters");
+            scene.GatherShadowCasters(gatherRegion, m_shadowCasterCache);
+        }
 
         // Setup depth bias
         m_device.SetDepthBias(m_depthBias);

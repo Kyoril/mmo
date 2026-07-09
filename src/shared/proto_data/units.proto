@@ -38,7 +38,7 @@ message UnitEntry {
 	optional uint32 extraflags = 17;
 	optional uint32 creaturetypeflags = 18;
 	optional float walkspeed = 19 [default = 1.0];
-	optional float runspeed = 20 [default = 1.0];
+	optional float runspeed = 20 [default = 7.5];	// Absolute run speed in units/sec (player default is 7.0)
 	optional uint32 unitclass = 21;
 	optional uint32 rank = 22;
 	optional uint32 minlevelhealth = 23 [default = 1];
