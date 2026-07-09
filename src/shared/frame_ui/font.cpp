@@ -755,6 +755,7 @@ namespace mmo
 		Point glyphPos(startPos);
 
 		std::size_t lastWordIndex = 0;
+		std::size_t lineStartIndex = 0;
 
 		argb_t dummyColour = 0; // colour not required for counting
 
@@ -765,7 +766,9 @@ namespace mmo
 
 			std::size_t iterations = 1;
 			uint32 codepoint;
-			
+
+			const std::size_t charStart = byteIndex;
+
 			// Handle special ASCII control characters
 			if (text[byteIndex] == '\t')
 			{
@@ -783,6 +786,7 @@ namespace mmo
 			else if (text[byteIndex] == '\n')
 			{
 				lastWordIndex = byteIndex + 1;
+				lineStartIndex = byteIndex + 1;
 				glyphPos.x = startPos.x;
 				++lineCount;
 				byteIndex++;
@@ -791,11 +795,10 @@ namespace mmo
 			else
 			{
 				// Process UTF-8 character
-				size_t startPos = byteIndex;
 				codepoint = utf8::next_codepoint(text, byteIndex);
-				
+
 				// If we couldn't decode a valid codepoint, skip this byte
-				if (codepoint == 0 && startPos < byteIndex)
+				if (codepoint == 0 && charStart < byteIndex)
 				{
 					continue;
 				}
@@ -811,7 +814,27 @@ namespace mmo
 					++lineCount;
 
 					if (wordWrap)
-						byteIndex = lastWordIndex; // restart from last breakable point
+					{
+						if (lastWordIndex > lineStartIndex)
+						{
+							// Restart from the last breakable point of this line
+							byteIndex = lastWordIndex;
+							lineStartIndex = lastWordIndex;
+						}
+						else if (charStart > lineStartIndex)
+						{
+							// Unbreakable word wider than the area: fall back to a
+							// character-level break before the current codepoint
+							byteIndex = charStart;
+							lineStartIndex = charStart;
+						}
+						else
+						{
+							// Single codepoint wider than the area: keep it on this
+							// line so byteIndex always moves forward
+							lineStartIndex = byteIndex;
+						}
+					}
 				}
 			}
 		}

@@ -846,7 +846,7 @@ namespace mmo
 		return nullptr;
 	}
 
-	void Frame::Render()
+	void Frame::Render(const Rect* inheritedClipRect)
 	{
 		// If this frame is hidden, we don't have anything to do
 		if (!IsVisible())
@@ -872,6 +872,11 @@ namespace mmo
 		// Draw self
 		DrawSelf();
 
+		// Clip rect applied to clipped children: this frame's rect intersected with any clip rect
+		// inherited from ancestors, so nested clipped frames can never draw outside an ancestor's clip area
+		Rect childClipRect;
+		bool childClipRectComputed = false;
+
 		// Whether a clip rect has been set by this function call to avoid calling ResetClipRect on
 		// the graphics library more often than needed
 		bool hasClipRectSet = false;
@@ -881,26 +886,58 @@ namespace mmo
 		{
 			if (child->IsClippedByParent())
 			{
-				hasClipRectSet = true;
+				if (!childClipRectComputed)
+				{
+					childClipRect = GetAbsoluteFrameRect();
+					if (inheritedClipRect)
+					{
+						childClipRect = childClipRect.GetIntersection(*inheritedClipRect);
+					}
+					childClipRectComputed = true;
+				}
 
-				// Set clip rect
-				const Rect clipRect = GetAbsoluteFrameRect();
-				gx.SetClipRect(clipRect.left, clipRect.top, clipRect.right - clipRect.left, clipRect.bottom - clipRect.top);
+				if (!hasClipRectSet)
+				{
+					gx.SetClipRect(childClipRect.left, childClipRect.top, childClipRect.right - childClipRect.left, childClipRect.bottom - childClipRect.top);
+					hasClipRectSet = true;
+				}
+
+				// Render child frame (children of the child inherit the combined clip rect)
+				child->Render(&childClipRect);
 			}
-			else if (hasClipRectSet)
+			else
 			{
-				// Reset clip rect
-				gx.ResetClipRect();
-				hasClipRectSet = false;
-			}
+				if (hasClipRectSet)
+				{
+					// Restore the inherited clip rect (or clear clipping if there is none)
+					if (inheritedClipRect)
+					{
+						gx.SetClipRect(inheritedClipRect->left, inheritedClipRect->top, inheritedClipRect->right - inheritedClipRect->left, inheritedClipRect->bottom - inheritedClipRect->top);
+					}
+					else
+					{
+						gx.ResetClipRect();
+					}
 
-			// Render child frame
-			child->Render();
+					hasClipRectSet = false;
+				}
+
+				// Render child frame
+				child->Render(inheritedClipRect);
+			}
 		}
 
 		if (hasClipRectSet)
 		{
-			gx.ResetClipRect();
+			// Restore the inherited clip rect (or clear clipping if there is none)
+			if (inheritedClipRect)
+			{
+				gx.SetClipRect(inheritedClipRect->left, inheritedClipRect->top, inheritedClipRect->right - inheritedClipRect->left, inheritedClipRect->bottom - inheritedClipRect->top);
+			}
+			else
+			{
+				gx.ResetClipRect();
+			}
 		}
 	}
 

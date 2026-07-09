@@ -350,7 +350,8 @@ namespace mmo
 		inline const std::string& GetName() const { return m_name; }
 
 		/// Renders the frame and it's child frames if it needs to be rendered.
-		void Render();
+		/// @param inheritedClipRect Clip rect inherited from an ancestor frame, or nullptr if no ancestor clips this frame.
+		void Render(const Rect* inheritedClipRect = nullptr);
 
 		/// Updates animation logic of the frame and it's component (like the frame renderer if there is any). 
 		/// Should be called once per frame.
