@@ -182,6 +182,13 @@ namespace mmo
 				return;
 			}
 
+			// When a merged TerrainBatch renders this tile's geometry, the tile itself stays in the
+			// scene for queries/collision but must not issue its own draw call.
+			if (m_excludedFromRendering)
+			{
+				return;
+			}
+
 			// Occlusion culling with hysteresis to prevent popping artefacts.
 			//
 			// The key insight: a single 0-pixel query result should NOT immediately
@@ -465,48 +472,18 @@ namespace mmo
 			m_coverageTexture->UpdateFromMemory(buffer.data(), buffer.size() * 4);
 		}
 
-		void Tile::CreateVertexData(size_t startX, size_t startZ)
+		void Tile::FillTileVertices(const Page& page, const size_t tileX, const size_t tileY, const float uvScale, const float uBias, const float vBias, TileVertex* dest, float& outMinHeight, float& outMaxHeight)
 		{
-			m_vertexData = std::make_unique<VertexData>();
-			m_vertexData->vertexStart = 0;
-			m_vertexData->vertexCount = constants::VerticesPerTile; // 145 vertices (81 outer + 64 inner)
-
-			VertexDeclaration *decl = m_vertexData->vertexDeclaration;
-			VertexBufferBinding *bind = m_vertexData->vertexBufferBinding;
-
-			uint32 offset = 0;
-			offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Position).GetSize();
-			offset += decl->AddElement(0, offset, VertexElementType::ColorArgb, VertexElementSemantic::Diffuse).GetSize();
-			offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Normal).GetSize();
-			offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Binormal).GetSize();
-			offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Tangent).GetSize();
-			offset += decl->AddElement(0, offset, VertexElementType::Float2, VertexElementSemantic::TextureCoordinate).GetSize();
-
-			float minHeight = m_page.GetHeightAt(0, 0);
-			float maxHeight = minHeight;
+			const size_t startX = tileX * (constants::OuterVerticesPerTileSide - 1);
+			const size_t startZ = tileY * (constants::OuterVerticesPerTileSide - 1);
 
 			// Scale for outer vertices (9x9 grid)
 			constexpr float outerScale = static_cast<float>(constants::TileSize / static_cast<double>(constants::OuterVerticesPerTileSide - 1));
-			// Scale for inner vertices (positioned between outer vertices)
-			constexpr float innerScale = outerScale;
 
-			struct VertexStruct
-			{
-				Vector3 position;
-				uint32 color;
-				Vector3 normal;
-				Vector3 binormal;
-				Vector3 tangent;
-				float u, v;
-			};
+			float minHeight = page.GetHeightAt(startX, startZ);
+			float maxHeight = minHeight;
 
-			std::vector<VertexStruct> vertices(m_vertexData->vertexCount);
-			VertexStruct *vert = vertices.data();
-
-			const float minX = outerScale * startX;
-			const float minZ = outerScale * startZ;
-			const float maxX = outerScale * (startX + constants::OuterVerticesPerTileSide - 1);
-			const float maxZ = outerScale * (startZ + constants::OuterVerticesPerTileSide - 1);
+			TileVertex* vert = dest;
 
 			// First, create all outer vertices (9x9 = 81 vertices)
 			for (size_t j = 0; j < constants::OuterVerticesPerTileSide; ++j)
@@ -516,18 +493,18 @@ namespace mmo
 					const size_t globalX = startX + i;
 					const size_t globalZ = startZ + j;
 
-					const float height = m_page.GetHeightAt(globalX, globalZ);
+					const float height = page.GetHeightAt(globalX, globalZ);
 					vert->position = Vector3(outerScale * globalX, height, outerScale * globalZ);
-					vert->normal = m_page.GetNormalAt(globalX, globalZ);
+					vert->normal = page.GetNormalAt(globalX, globalZ);
 
 					// Calculate tangent and binormal
 					const Vector3 arbitrary = std::abs(vert->normal.y) < 0.99f ? Vector3(0, 1, 0) : Vector3(1, 0, 0);
 					vert->tangent = (arbitrary - vert->normal * vert->normal.Dot(arbitrary)).NormalizedCopy();
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
-					vert->color = Color(m_page.GetColorAt(globalX, globalZ)).GetABGR();
-					vert->u = static_cast<float>(j) / static_cast<float>(constants::OuterVerticesPerTileSide - 1);
-					vert->v = static_cast<float>(i) / static_cast<float>(constants::OuterVerticesPerTileSide - 1);
+					vert->color = Color(page.GetColorAt(globalX, globalZ)).GetABGR();
+					vert->u = (static_cast<float>(j) / static_cast<float>(constants::OuterVerticesPerTileSide - 1)) * uvScale + uBias;
+					vert->v = (static_cast<float>(i) / static_cast<float>(constants::OuterVerticesPerTileSide - 1)) * uvScale + vBias;
 
 					minHeight = std::min(height, minHeight);
 					maxHeight = std::max(height, maxHeight);
@@ -549,10 +526,10 @@ namespace mmo
 					const size_t globalZ = startZ + j;
 
 					// Read the stored inner vertex height from the page.
-					// Page-local inner index maps tile (m_tileX, m_tileY) × tile-local (i, j).
-					const size_t pageLocalInnerX = m_tileX * constants::InnerVerticesPerTileSide + i;
-					const size_t pageLocalInnerZ = m_tileY * constants::InnerVerticesPerTileSide + j;
-					const float height = m_page.GetInnerHeightAt(pageLocalInnerX, pageLocalInnerZ);
+					// Page-local inner index maps tile (tileX, tileY) × tile-local (i, j).
+					const size_t pageLocalInnerX = tileX * constants::InnerVerticesPerTileSide + i;
+					const size_t pageLocalInnerZ = tileY * constants::InnerVerticesPerTileSide + j;
+					const float height = page.GetInnerHeightAt(pageLocalInnerX, pageLocalInnerZ);
 
 					const float worldX = outerScale * (globalX + centerOffsetX);
 					const float worldZ = outerScale * (globalZ + centerOffsetZ);
@@ -560,10 +537,10 @@ namespace mmo
 					vert->position = Vector3(worldX, height, worldZ);
 
 					// Calculate normal by interpolating surrounding outer vertex normals
-					const Vector3 n00 = m_page.GetNormalAt(globalX, globalZ);
-					const Vector3 n10 = m_page.GetNormalAt(globalX + 1, globalZ);
-					const Vector3 n01 = m_page.GetNormalAt(globalX, globalZ + 1);
-					const Vector3 n11 = m_page.GetNormalAt(globalX + 1, globalZ + 1);
+					const Vector3 n00 = page.GetNormalAt(globalX, globalZ);
+					const Vector3 n10 = page.GetNormalAt(globalX + 1, globalZ);
+					const Vector3 n01 = page.GetNormalAt(globalX, globalZ + 1);
+					const Vector3 n11 = page.GetNormalAt(globalX + 1, globalZ + 1);
 					vert->normal = ((n00 + n10 + n01 + n11) * 0.25f).NormalizedCopy();
 
 					// Calculate tangent and binormal
@@ -572,16 +549,16 @@ namespace mmo
 					vert->binormal = vert->normal.Cross(vert->tangent).NormalizedCopy();
 
 					// Interpolate color from surrounding vertices
-					const uint32 c00 = m_page.GetColorAt(globalX, globalZ);
-					const uint32 c10 = m_page.GetColorAt(globalX + 1, globalZ);
-					const uint32 c01 = m_page.GetColorAt(globalX, globalZ + 1);
-					const uint32 c11 = m_page.GetColorAt(globalX + 1, globalZ + 1);
+					const uint32 c00 = page.GetColorAt(globalX, globalZ);
+					const uint32 c10 = page.GetColorAt(globalX + 1, globalZ);
+					const uint32 c01 = page.GetColorAt(globalX, globalZ + 1);
+					const uint32 c11 = page.GetColorAt(globalX + 1, globalZ + 1);
 					const Color col00(c00), col10(c10), col01(c01), col11(c11);
 					const Color avgColor = (col00 + col10 + col01 + col11) * 0.25f;
 					vert->color = avgColor.GetABGR();
 
-					vert->u = (static_cast<float>(j) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide);
-					vert->v = (static_cast<float>(i) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide);
+					vert->u = ((static_cast<float>(j) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide)) * uvScale + uBias;
+					vert->v = ((static_cast<float>(i) + 0.5f) / static_cast<float>(constants::InnerVerticesPerTileSide)) * uvScale + vBias;
 
 					minHeight = std::min(height, minHeight);
 					maxHeight = std::max(height, maxHeight);
@@ -589,6 +566,42 @@ namespace mmo
 					vert++;
 				}
 			}
+
+			outMinHeight = minHeight;
+			outMaxHeight = maxHeight;
+		}
+
+		void Tile::CreateVertexData(size_t startX, size_t startZ)
+		{
+			m_vertexData = std::make_unique<VertexData>();
+			m_vertexData->vertexStart = 0;
+			m_vertexData->vertexCount = constants::VerticesPerTile; // 145 vertices (81 outer + 64 inner)
+			// (Vertex generation itself lives in FillTileVertices so merged terrain batches can reuse it.)
+
+			VertexDeclaration *decl = m_vertexData->vertexDeclaration;
+			VertexBufferBinding *bind = m_vertexData->vertexBufferBinding;
+
+			uint32 offset = 0;
+			offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Position).GetSize();
+			offset += decl->AddElement(0, offset, VertexElementType::ColorArgb, VertexElementSemantic::Diffuse).GetSize();
+			offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Normal).GetSize();
+			offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Binormal).GetSize();
+			offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Tangent).GetSize();
+			offset += decl->AddElement(0, offset, VertexElementType::Float2, VertexElementSemantic::TextureCoordinate).GetSize();
+
+			float minHeight = 0.0f;
+			float maxHeight = 0.0f;
+
+			// Scale for outer vertices (9x9 grid)
+			constexpr float outerScale = static_cast<float>(constants::TileSize / static_cast<double>(constants::OuterVerticesPerTileSide - 1));
+
+			std::vector<TileVertex> vertices(m_vertexData->vertexCount);
+			FillTileVertices(m_page, m_tileX, m_tileY, 1.0f, 0.0f, 0.0f, vertices.data(), minHeight, maxHeight);
+
+			const float minX = outerScale * startX;
+			const float minZ = outerScale * startZ;
+			const float maxX = outerScale * (startX + constants::OuterVerticesPerTileSide - 1);
+			const float maxZ = outerScale * (startZ + constants::OuterVerticesPerTileSide - 1);
 
 			m_mainBuffer = GraphicsDevice::Get().CreateVertexBuffer(m_vertexData->vertexCount, decl->GetVertexSize(0), BufferUsage::DynamicWriteOnly, vertices.data());
 			bind->SetBinding(0, m_mainBuffer);
@@ -607,13 +620,13 @@ namespace mmo
 			m_boundingRadius = (m_bounds.max - m_center).GetLength();
 		}
 
-		uint16 Tile::GetOuterVertexIndex(size_t x, size_t y) const
+		uint16 Tile::GetOuterVertexIndex(size_t x, size_t y)
 		{
 			ASSERT(x < constants::OuterVerticesPerTileSide && y < constants::OuterVerticesPerTileSide);
 			return static_cast<uint16>(x + y * constants::OuterVerticesPerTileSide);
 		}
 
-		uint16 Tile::GetInnerVertexIndex(size_t x, size_t y) const
+		uint16 Tile::GetInnerVertexIndex(size_t x, size_t y)
 		{
 			ASSERT(x < constants::InnerVerticesPerTileSide && y < constants::InnerVerticesPerTileSide);
 			// Inner vertices start after all outer vertices
@@ -651,6 +664,47 @@ namespace mmo
 
 			// Get the hole map for this tile
 			const uint64 holeMap = m_page.GetTileHoleMap(m_tileX, m_tileY);
+
+			GenerateTileIndices(lod, northLod, eastLod, southLod, westLod, holeMap, indices);
+
+			// If no indices were generated, mark tile as non-renderable and skip buffer creation
+			if (indices.empty())
+			{
+				m_lodIndexCache.Put(stitchKey, nullptr);
+				if (lod == 0)
+				{
+					m_hasRenderableGeometry = false;
+				}
+			}
+			else
+			{
+				auto indexData = std::make_unique<IndexData>();
+				indexData->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(
+					static_cast<uint32>(indices.size()),
+					IndexBufferSize::Index_16,
+					BufferUsage::StaticWriteOnly,
+					indices.data());
+				indexData->indexCount = static_cast<uint32>(indices.size());
+				indexData->indexStart = 0;
+
+				m_lodIndexCache.Put(stitchKey, std::move(indexData));
+
+				if (lod == 0)
+				{
+					m_hasRenderableGeometry = true;
+				}
+			}
+
+			m_currentStitchKey = stitchKey;
+		}
+
+		void Tile::GenerateTileIndices(const uint32 lod, const uint32 northLod, const uint32 eastLod, const uint32 southLod, const uint32 westLod, const uint64 holeMap, std::vector<uint16>& indices)
+		{
+			ASSERT(lod < 4);
+			ASSERT(northLod < 4);
+			ASSERT(eastLod < 4);
+			ASSERT(southLod < 4);
+			ASSERT(westLod < 4);
 
 			// For LOD >= 1, use step-based LOD on the outer vertex grid only
 			// LOD 0 = diamond pattern with inner vertices
@@ -823,36 +877,6 @@ namespace mmo
 
 			// Generate edge stitching triangles for edges with coarser neighbors
 			GenerateEdgeStitching(indices, lod, northLod, eastLod, southLod, westLod);
-			
-			// If no indices were generated, mark tile as non-renderable and skip buffer creation
-			if (indices.empty())
-			{
-				m_lodIndexCache.Put(stitchKey, nullptr);
-				if (lod == 0)
-				{
-					m_hasRenderableGeometry = false;
-				}
-			}
-			else
-			{
-				auto indexData = std::make_unique<IndexData>();
-				indexData->indexBuffer = GraphicsDevice::Get().CreateIndexBuffer(
-					static_cast<uint32>(indices.size()),
-					IndexBufferSize::Index_16,
-					BufferUsage::StaticWriteOnly,
-					indices.data());
-				indexData->indexCount = static_cast<uint32>(indices.size());
-				indexData->indexStart = 0;
-
-				m_lodIndexCache.Put(stitchKey, std::move(indexData));
-
-				if (lod == 0)
-				{
-					m_hasRenderableGeometry = true;
-				}
-			}
-
-			m_currentStitchKey = stitchKey;
 		}
 
 		void Tile::GenerateEdgeStitching(std::vector<uint16>& indices, uint32 lod, uint32 northLod, uint32 eastLod, uint32 southLod, uint32 westLod)
@@ -1395,8 +1419,14 @@ namespace mmo
 			// Only regenerate if the LOD or stitching configuration changed
 			if (stitchKey != m_currentStitchKey)
 			{
+				if (m_excludedFromRendering)
+				{
+					// A merged TerrainBatch renders this tile's geometry and reads the stitch key
+					// directly; no per-tile GPU index buffer is needed.
+					m_currentStitchKey = stitchKey;
+				}
 				// Check if we already have this configuration cached
-				if (!m_lodIndexCache.Contains(stitchKey))
+				else if (!m_lodIndexCache.Contains(stitchKey))
 				{
 					CreateIndexData(newLod, northLod, eastLod, southLod, westLod);
 				}

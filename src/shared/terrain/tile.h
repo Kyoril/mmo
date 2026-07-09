@@ -24,6 +24,19 @@ namespace mmo
 		class Terrain;
 		class Page;
 
+		/// @brief CPU-side layout of a single terrain vertex. Shared between the per-tile
+		///        vertex buffers and the merged TerrainBatch vertex buffers, and must match
+		///        the vertex declaration built in Tile::CreateVertexData.
+		struct TileVertex
+		{
+			Vector3 position;
+			uint32 color;
+			Vector3 normal;
+			Vector3 binormal;
+			Vector3 tangent;
+			float u, v;
+		};
+
 		class Tile final
 			: public MovableObject
 			, public Renderable
@@ -155,6 +168,37 @@ namespace mmo
 			/// @return Pointer to the collidable interface.
 			const ICollidable* GetCollidable() const override { return this; }
 
+			/// @brief Returns the current LOD + neighbor-stitching key (see m_lodIndexCache docs for
+			///        the encoding). Used by TerrainBatch to detect when a member tile's index data
+			///        needs to be re-concatenated.
+			[[nodiscard]] uint32 GetCurrentStitchKey() const { return m_currentStitchKey; }
+
+			/// @brief Excludes this tile from render-queue population without affecting scene
+			///        queries, collision or LOD state. Used when the tile's geometry is rendered
+			///        by a merged TerrainBatch instead of individually.
+			void SetExcludedFromRendering(const bool excluded) { m_excludedFromRendering = excluded; }
+
+			/// @brief Generates the triangle list for a tile at the given LOD / neighbor-stitching
+			///        configuration. Pure function of its inputs so it can be shared between the
+			///        per-tile index buffers and the merged TerrainBatch index buffer.
+			/// @param lod The LOD level for the tile (0-3).
+			/// @param northLod/eastLod/southLod/westLod Neighbor LOD levels for edge stitching.
+			/// @param holeMap Bitmask of inner cells that are terrain holes.
+			/// @param outIndices Receives the generated indices (appended).
+			static void GenerateTileIndices(uint32 lod, uint32 northLod, uint32 eastLod, uint32 southLod, uint32 westLod, uint64 holeMap, std::vector<uint16>& outIndices);
+
+			/// @brief Fills a caller-provided array with the tile's 145 vertices, applying an affine
+			///        transform to the tile-local UVs (u' = u * uvScale + uBias). Shared between the
+			///        per-tile vertex buffer (scale 1, bias 0) and merged TerrainBatch buffers
+			///        (which remap UVs into the batch-local splat-map space).
+			/// @param page The page to read heights/normals/colors from.
+			/// @param tileX/tileY Tile coordinates within the page.
+			/// @param uvScale Scale applied to the tile-local UV.
+			/// @param uBias/vBias Bias applied to the tile-local UV after scaling.
+			/// @param dest Destination array of at least constants::VerticesPerTile entries.
+			/// @param outMinHeight/outMaxHeight Receive the height extents of the filled vertices.
+			static void FillTileVertices(const Page& page, size_t tileX, size_t tileY, float uvScale, float uBias, float vBias, TileVertex* dest, float& outMinHeight, float& outMaxHeight);
+
 		private:
 			/// @brief Creates the vertex data for this tile.
 			/// @param startX The starting X coordinate within the page.
@@ -176,20 +220,20 @@ namespace mmo
 			/// @param eastLod East neighbor's LOD level
 			/// @param southLod South neighbor's LOD level
 			/// @param westLod West neighbor's LOD level
-			void GenerateEdgeStitching(std::vector<uint16>& indices, uint32 lod, uint32 northLod, uint32 eastLod, uint32 southLod, uint32 westLod);
+			static void GenerateEdgeStitching(std::vector<uint16>& indices, uint32 lod, uint32 northLod, uint32 eastLod, uint32 southLod, uint32 westLod);
 
 			// Helper methods for new vertex layout (outer + inner vertices)
 			/// @brief Gets the vertex index for an outer vertex at grid position (x, y)
 			/// @param x X coordinate in outer vertex grid (0-8)
 			/// @param y Y coordinate in outer vertex grid (0-8)
 			/// @return Vertex buffer index for the outer vertex
-			uint16 GetOuterVertexIndex(size_t x, size_t y) const;
+			static uint16 GetOuterVertexIndex(size_t x, size_t y);
 
 			/// @brief Gets the vertex index for an inner vertex at grid position (x, y)
 			/// @param x X coordinate in inner vertex grid (0-7)
 			/// @param y Y coordinate in inner vertex grid (0-7)
 			/// @return Vertex buffer index for the inner vertex
-			uint16 GetInnerVertexIndex(size_t x, size_t y) const;
+			static uint16 GetInnerVertexIndex(size_t x, size_t y);
 
 			/// @brief Determines if a grid cell is on the outer edge of the tile
 			/// @param x X coordinate in the grid
@@ -247,6 +291,10 @@ namespace mmo
 			/// @brief Camera position used the last time UpdateLOD ran. A stationary camera cannot
 			///        change any tile's LOD, so an unchanged position lets us skip the work entirely.
 			Vector3 m_lastLodCameraPos;
+
+			/// @brief When true the tile does not populate the render queue (its geometry is drawn
+			///        by a merged TerrainBatch instead). Scene queries and collision are unaffected.
+			bool m_excludedFromRendering = false;
 
 			/// @brief GPU occlusion query for this tile. Created lazily on first render.
 			OcclusionQueryPtr m_occlusionQuery;

@@ -26,6 +26,7 @@ namespace mmo
 	{
 		class Terrain;
 		class Tile;
+		class TerrainBatch;
 
 		class CoverageMap;
 
@@ -305,6 +306,16 @@ namespace mmo
 			///          rescanning the whole grid from the start (which was O(TilesPerPage^2) per page).
 			///          Reset whenever the tile grid is (re)created.
 			uint32 m_loadCursor = 0;
+
+			/// @brief Merged quarter-page render batches (only populated when the terrain has batch
+			///        rendering enabled). Built once all tiles finished loading; the member tiles are
+			///        excluded from individual rendering while these exist.
+			std::vector<std::unique_ptr<TerrainBatch>> m_batches;
+
+		private:
+			/// @brief Builds the merged quarter-page render batches (see TerrainBatch) and excludes
+			///        the member tiles from individual rendering.
+			void CreateTerrainBatches();
 		};
 	}
 }

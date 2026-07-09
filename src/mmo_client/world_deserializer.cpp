@@ -6,6 +6,7 @@
 
 #include "assets/asset_registry.h"
 #include "base/chunk_writer.h"
+#include "console/console_var.h"
 #include "game_common/world_entity_loader.h"
 #include "game_common/world_foliage.h"
 #include "game_states/login_state.h"
@@ -604,6 +605,13 @@ namespace mmo
 			m_world.m_terrain = std::make_unique<terrain::Terrain>(m_world.m_scene, nullptr, 64, 64);
 			m_world.m_terrain->SetBaseFileName(m_world.m_name + "/Terrain");
 			m_world.m_terrain->SetTileSceneQueryFlags(1 << 6);
+
+			// Merged quarter-page terrain rendering (draw-call batching). Client-only: the world
+			// editor keeps the per-tile path so terrain editing works unchanged.
+			if (const ConsoleVar* batchVar = ConsoleVarMgr::RegisterConsoleVar("gxTerrainBatching", "Whether terrain is rendered in merged quarter-page batches instead of one draw call per tile. Takes effect when terrain pages (re)load.", "1"))
+			{
+				m_world.m_terrain->SetBatchRenderingEnabled(batchVar->GetBoolValue());
+			}
 		}
 
 		// Read terrain default material

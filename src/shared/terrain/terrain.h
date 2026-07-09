@@ -231,6 +231,15 @@ namespace mmo
 			/// @brief Checks if GPU occlusion culling is enabled for terrain tiles.
 			/// @return True if occlusion culling is enabled, false otherwise.
 			bool IsOcclusionCullingEnabled() const { return m_occlusionCullingEnabled; }
+
+			/// @brief Enables or disables merged batch rendering (quarter-page draw calls instead of
+			///        per-tile draw calls). Must be set before pages are loaded; loaded pages build
+			///        their batches when all tiles finish loading. Default off (the world editor
+			///        keeps the per-tile path so terrain editing works unchanged).
+			void SetBatchRenderingEnabled(const bool enabled) { m_batchRenderingEnabled = enabled; }
+
+			/// @brief Whether merged batch rendering is enabled.
+			bool IsBatchRenderingEnabled() const { return m_batchRenderingEnabled; }
 			
 			/// @brief Sets the visibility of debug LOD information.
 			/// @param visible True to show debug LOD information, false to hide it.
@@ -722,6 +731,7 @@ namespace mmo
 			int32 m_lastZ;
 			uint32 m_tileSceneQueryFlags = 0;
 			bool m_lodEnabled { true };
+			bool m_batchRenderingEnabled { false };
 			bool m_debugLod { false };
 			MaterialPtr m_defaultMaterial;
 			bool m_showWireframe = false;

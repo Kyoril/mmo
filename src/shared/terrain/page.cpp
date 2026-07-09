@@ -9,7 +9,9 @@
 #include <sstream>
 
 #include "tile.h"
+#include "terrain_batch.h"
 #include "assets/asset_registry.h"
+#include "graphics/texture_mgr.h"
 #include "base/chunk_writer.h"
 #include "base/utilities.h"
 #include "binary_io/stream_sink.h"
@@ -320,9 +322,101 @@ namespace mmo
 				// Canonical bounding-box recompute once the page is fully loaded. During loading the
 				// box is grown incrementally per tile (above), so no per-step full recombine is needed.
 				UpdateBoundingBox();
+
+				// Merge the tiles into quarter-page render batches when batch rendering is enabled
+				// (client). The tiles stay alive for collision/picking but stop rendering themselves.
+				if (m_terrain.IsBatchRenderingEnabled())
+				{
+					CreateTerrainBatches();
+				}
 			}
 
 			return m_loaded;
+		}
+
+		void Page::CreateTerrainBatches()
+		{
+			ASSERT(m_loaded);
+			ASSERT(m_batches.empty());
+
+			constexpr uint32 tilesPerBatch = TerrainBatch::TilesPerBatchSide;
+			constexpr uint32 batchPixels = TerrainBatch::PixelsPerBatchSide;
+
+			const String pageBaseName = "PageBatch_" + std::to_string(m_x) + "_" + std::to_string(m_z);
+
+			for (uint32 quadY = 0; quadY < 2; ++quadY)
+			{
+				for (uint32 quadX = 0; quadX < 2; ++quadX)
+				{
+					// Build the quadrant-wide coverage/splat texture from the page layer data. This
+					// replaces the member tiles' individual coverage textures for rendering purposes
+					// and mirrors their pixel-window layout (adjacent windows share a border pixel).
+					const String quadName = pageBaseName + "_" + std::to_string(quadX) + "_" + std::to_string(quadY);
+
+					std::vector<uint32> buffer(batchPixels * batchPixels);
+
+					const size_t pixelStartX = static_cast<size_t>(quadX) * tilesPerBatch * (constants::PixelsPerTile - 1);
+					const size_t pixelStartY = static_cast<size_t>(quadY) * tilesPerBatch * (constants::PixelsPerTile - 1);
+
+					for (size_t x = 0; x < batchPixels; ++x)
+					{
+						for (size_t y = 0; y < batchPixels; ++y)
+						{
+							buffer[y + x * batchPixels] = GetLayersAt(pixelStartX + x, pixelStartY + y);
+						}
+					}
+
+					TexturePtr coverage = TextureManager::Get().CreateManual(quadName + "_Coverage", batchPixels, batchPixels, R8G8B8A8, BufferUsage::StaticWriteOnly);
+					ASSERT(coverage);
+					coverage->LoadRaw(buffer.data(), batchPixels * batchPixels * 4);
+					coverage->SetTextureAddressMode(TextureAddressMode::Clamp);
+					coverage->SetFilter(TextureFilter::Anisotropic);
+
+					// Group the quadrant's tiles by base material — one batch (draw call) per group.
+					std::vector<std::pair<MaterialPtr, std::vector<Tile*>>> groups;
+					for (uint32 ty = 0; ty < tilesPerBatch; ++ty)
+					{
+						for (uint32 tx = 0; tx < tilesPerBatch; ++tx)
+						{
+							Tile* tile = GetTile(quadX * tilesPerBatch + tx, quadY * tilesPerBatch + ty);
+							ASSERT(tile);
+
+							MaterialPtr baseMaterial = tile->GetBaseMaterial();
+
+							auto groupIt = std::find_if(groups.begin(), groups.end(), [&baseMaterial](const auto& group)
+								{
+									return group.first == baseMaterial;
+								});
+							if (groupIt == groups.end())
+							{
+								groupIt = groups.emplace(groups.end(), baseMaterial, std::vector<Tile*>{});
+							}
+
+							groupIt->second.push_back(tile);
+						}
+					}
+
+					uint32 groupIndex = 0;
+					for (auto& [material, tiles] : groups)
+					{
+						auto batch = std::make_unique<TerrainBatch>(
+							quadName + "_" + std::to_string(groupIndex++),
+							*this, quadX, quadY, material, coverage, tiles);
+
+						// Batches render only — scene queries (picking, collision) keep going
+						// through the individual tiles.
+						batch->SetQueryFlags(0);
+						m_pageNode->AttachObject(*batch);
+
+						for (Tile* tile : tiles)
+						{
+							tile->SetExcludedFromRendering(true);
+						}
+
+						m_batches.push_back(std::move(batch));
+					}
+				}
+			}
 		}
 
 		void Page::Unload()
@@ -331,6 +425,13 @@ namespace mmo
 			{
 				m_unloadRequested = true;
 			}
+
+			// Destroy the merged render batches before the tiles they reference.
+			for (const auto& batch : m_batches)
+			{
+				batch->DetachFromParent();
+			}
+			m_batches.clear();
 
 			for (const auto &tile : m_Tiles)
 			{
