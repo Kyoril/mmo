@@ -6,6 +6,8 @@
 #include "binary_io/reader.h"
 #include "version.h"
 
+#include "mmo_client/client_locale.h"
+
 #include <functional>
 #include <unordered_map>
 
@@ -89,9 +91,12 @@ namespace mmo
 
 		void Serialize(io::Writer& writer)
 		{
-			// Read file format header
+			// Write file format header
 			constexpr uint32 header = 'CDBC';
-			writer << io::write<uint32>(header) << io::write<uint32>(Revision);
+			writer
+				<< io::write<uint32>(header)
+				<< io::write<uint32>(Revision)
+				<< io::write<uint32>(static_cast<uint32>(GetClientLocale()));
 
 			writer << io::write<uint32>(m_cache.size());
 			for (auto& [id, object] : m_cache)
@@ -119,6 +124,20 @@ namespace mmo
 
 			// If cache is incompatible with our version, refuse to load it
 			if (build != Revision)
+			{
+				return false;
+			}
+
+			// Read the locale index the cache was written with
+			uint32 locale = 0;
+			if (!(reader >> io::read<uint32>(locale)))
+			{
+				return false;
+			}
+
+			// If the cache was written in a different locale, refuse to load it so the
+			// client pulls fresh game data in its current locale from the server
+			if (locale != static_cast<uint32>(GetClientLocale()))
 			{
 				return false;
 			}
