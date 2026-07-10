@@ -215,6 +215,7 @@ namespace mmo
 			>> m_locale
 			>> io::read_container<uint8>(m_accountName)))
 		{
+			WLOG("Client " << m_address << " sent a malformed logon challenge packet");
 			return PacketParseResult::Disconnect;
 		}
 
@@ -331,6 +332,8 @@ namespace mmo
 			>> io::read_range(rec_M1.begin(), rec_M1.end())
 			))
 		{
+			WLOG("Account " << m_accountName << " sent a malformed logon proof packet (expected "
+				<< rec_A.size() + rec_M1.size() << " payload bytes, got " << packet.GetSize() << ")");
 			return PacketParseResult::Disconnect;
 		}
 

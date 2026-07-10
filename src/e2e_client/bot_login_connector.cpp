@@ -88,8 +88,16 @@ namespace mmo
 
 	void BotLoginConnector::DoSRP6ACalculation()
 	{
-		// Generate a
-		m_a.setRand(19 * 8);
+		// Generate a. Deliberately re-roll until the public ephemeral A = g^a mod N has a
+		// leading zero byte in its 32-byte form (~1/256 of random values). This makes every
+		// e2e login a regression test for the fixed-size SRP payload encoding: an unpadded
+		// A (asByteArray() without a minimum size) would shorten the proof packet and make
+		// the login server silently drop the connection.
+		do
+		{
+			m_a.setRand(19 * 8);
+			m_A = constants::srp::g.modExp(m_a, constants::srp::N);
+		} while (m_A.getNumBytes() >= 32);
 		ASSERT(m_a.asUInt32() > 0);
 
 		// Hash generator
@@ -103,9 +111,6 @@ namespace mmo
 
 		// Calculate v
 		m_v = constants::srp::g.modExp(m_x, constants::srp::N);
-
-		// Calculate A
-		m_A = constants::srp::g.modExp(m_a, constants::srp::N);
 
 		// Calculate u
 		SHA1Hash uHash = Sha1_BigNumbers({ m_A, m_B });
@@ -207,11 +212,6 @@ namespace mmo
 			packet >> io::read_range(s);
 			m_s.setBinary(s.data(), s.size());
 
-			// Read unknown number
-			std::array<uint8, 16> unk;
-			packet >> io::read_range(unk);
-			m_unk.setBinary(unk.data(), unk.size());
-
 			// Do SRP6 calculations
 			DoSRP6ACalculation();
 
@@ -222,8 +222,11 @@ namespace mmo
 			sendSinglePacket([&](auth::OutgoingPacket& packet)
 			{
 				packet.Start(auth::client_login_packet::LogonProof);
+				// A must be sent as a fixed 32-byte value. asByteArray() without a minimum
+				// size strips leading zero bytes (~1/256 logins), which would shorten the
+				// payload and misalign the server's fixed-size read of A and M1.
 				packet
-					<< io::write_range(m_A.asByteArray())
+					<< io::write_range(m_A.asByteArray(32))
 					<< io::write_range(M1hash);
 				packet.Finish();
 			});

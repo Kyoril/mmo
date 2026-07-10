@@ -331,8 +331,11 @@ namespace mmo
 						const std::vector<uint8> N_ = constants::srp::N.asByteArray(32);
 						outPacket << io::write_range(N_.begin(), N_.end());
 
-						// Write s
-						const std::vector<uint8> s_ = strongThis->m_s.asByteArray();
+						// Write s as a fixed 32-byte value. The realm reads the salt into a
+						// fixed 32-byte buffer, so a variable-length salt (asByteArray()
+						// strips leading zero bytes) would break authentication for any
+						// realm whose salt happens to have a high zero byte.
+						const std::vector<uint8> s_ = strongThis->m_s.asByteArray(32);
 						outPacket << io::write_range(s_.begin(), s_.end());
 					}
 

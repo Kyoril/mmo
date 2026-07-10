@@ -36,7 +36,6 @@ namespace mmo
 		// Server srp6 numbers
 		BigNumber m_B;
 		BigNumber m_s;
-		BigNumber m_unk;
 
 		// Client srp6 numbers
 		BigNumber m_a;

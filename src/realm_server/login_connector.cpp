@@ -309,7 +309,10 @@ namespace mmo
 			{
 				// Proof packet contains only A and M1 hash value
 				packet.Start(auth::realm_login_packet::LogonProof);
-				packet << io::write_range(m_A.asByteArray());
+				// A must be sent as a fixed 32-byte value. asByteArray() without a minimum
+				// size strips leading zero bytes (~1/256 logins), which would shorten the
+				// payload and misalign the login server's fixed-size read of A and M1.
+				packet << io::write_range(m_A.asByteArray(32));
 				packet << io::write_range(M1hash);
 				packet.Finish();
 			});

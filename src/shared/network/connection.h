@@ -413,6 +413,30 @@ namespace mmo
 				}
 			} while (nextPacket);
 
+			// A handler may have requested a disconnect (PacketParseResult::Disconnect or
+			// close()) for the last parsed packet, which leaves the loop without passing the
+			// check at its top. Honor it now instead of waiting for more incoming data, so
+			// the peer sees a closed connection instead of a silently hanging one.
+			if (m_isClosedOnParsing)
+			{
+				m_isClosedOnParsing = false;
+
+				// If a response (e.g. an error result) is still being flushed, defer the
+				// close to the send completion handler so the peer receives it first.
+				if (!m_sending.empty() || !m_sendBuffer.empty())
+				{
+					m_isClosedOnSend = true;
+					flush();
+					return;
+				}
+
+				disconnected();
+
+				m_received.clear();
+
+				return;
+			}
+
 			if (parsedUntil)
 			{
 				assert(parsedUntil <= m_received.size());
