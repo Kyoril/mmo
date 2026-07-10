@@ -253,7 +253,11 @@ namespace mmo
 			return;
 		}
 
-		// We do have an item, place it at the action button slot
+		// We do have an item, place it at the action button slot. Remember what was in the
+		// slot before, so an occupied slot swaps its action onto the cursor instead of losing it.
+		const ActionButton previous = m_actionButtons[slot];
+		bool placed = false;
+
 		switch (g_cursor.GetItemType())
 		{
 		case CursorItemType::Item:
@@ -287,6 +291,7 @@ namespace mmo
 						m_actionButtons[slot].action = static_cast<uint16>(item->GetEntry()->id);
 						EnsureItemData(m_actionButtons[slot].action);
 						ActionButtonChanged(slot);
+						placed = true;
 					}
 				}
 			}
@@ -309,12 +314,40 @@ namespace mmo
 				m_actionButtons[slot].type = action_button_type::Spell;
 				m_actionButtons[slot].action = static_cast<uint16>(spellId);
 				ActionButtonChanged(slot);
+				placed = true;
 			}
 			break;
 		}
 
-		// Clear the cursor item
-		g_cursor.Clear();
+		// If the slot was occupied by a different action, pick that action up so the player can
+		// keep rearranging. Dropping the same action back onto its slot just clears the cursor.
+		bool pickedUpPrevious = false;
+		if (placed && previous.type != action_button_type::None &&
+			(previous.type != m_actionButtons[slot].type || previous.action != m_actionButtons[slot].action))
+		{
+			switch (previous.type)
+			{
+			case action_button_type::Spell:
+				g_cursor.SetSpell(previous.action);
+				pickedUpPrevious = true;
+				break;
+			case action_button_type::Item:
+				uint8 bag, bagSlot;
+				uint64 guid;
+				if (ObjectMgr::FindItem(previous.action, bag, bagSlot, guid))
+				{
+					g_cursor.SetItem((static_cast<uint16>(bag) << 8) | bagSlot);
+					pickedUpPrevious = true;
+				}
+				break;
+			}
+		}
+
+		if (!pickedUpPrevious)
+		{
+			// Clear the cursor item
+			g_cursor.Clear();
+		}
 
 		// Raise UI event
 		FrameManager::Get().TriggerLuaEvent("ACTION_BAR_CHANGED");

@@ -427,6 +427,7 @@ namespace mmo
 					.def("SetEnabled", &Frame::SetEnabled)
 					.def("Enable", &Frame::Enable)
 					.def("Disable", &Frame::Disable)
+					.def("IsEnabled", &Frame::IsEnabled)
 					.def("RegisterEvent", &Frame::RegisterEvent)
 					.def("GetName", &Frame::GetName)
 					.def("IsHovered", &Frame::IsHovered)
