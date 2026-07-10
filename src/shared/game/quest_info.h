@@ -38,6 +38,8 @@ namespace mmo
 		String description;
 		uint32 questLevel;
 		uint32 rewardXp;
+		/// Class XP granted to the active class on turn-in (designer value, unscaled). 0 = none.
+		uint32 rewardClassXp = 0;
 		uint32 rewardMoney;
 		uint32 rewardSpellId;
 		/// Class mask (1 << (classId - 1), 0 = no restriction) of classes this quest is intended

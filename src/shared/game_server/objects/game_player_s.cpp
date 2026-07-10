@@ -7,6 +7,7 @@
 
 #include "game_item_s.h"
 #include "quest_status_data.h"
+#include "game_server/quest_class_xp.h"
 #include "game_server/quest_reset.h"
 #include "base/utilities.h"
 #include "proto_data/project.h"
@@ -966,12 +967,15 @@ namespace mmo
 			RewardExperience(rewardXp);
 		}
 
-		// Explicit class XP reward for the active class, unscaled by level difference. Note that the
-		// regular rewardxp deliberately does NOT feed class XP (a quest could be completed as one
-		// class and banked for another); only this designer-set value does.
-		if (entry->rewardclassxp() > 0)
+		// Explicit class XP reward for the active class, scaled by the class level at turn-in
+		// relative to the quest's intended level: an under-leveled class is rewarded as if the
+		// quest had been designed for its own level, so banking high-level quests cannot
+		// power-level a fresh class. Note that the regular rewardxp deliberately does NOT feed
+		// class XP (a quest could be completed as one class and banked for another); only this
+		// designer-set value does.
+		if (entry->rewardclassxp() > 0 && m_classEntry)
 		{
-			RewardClassExperience(entry->rewardclassxp());
+			RewardClassExperience(ScaleQuestClassXp(entry->rewardclassxp(), GetActiveClassLevel(), entry->questlevel(), *m_classEntry));
 		}
 
 		uint32 money = entry->rewardmoney();

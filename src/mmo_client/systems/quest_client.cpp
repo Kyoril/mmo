@@ -62,8 +62,17 @@ namespace mmo
 				.def_readonly("id", &QuestInfo::id)
 				.def_readonly("title", &QuestInfo::title)
 				.def_readonly("rewardMoney", &QuestInfo::rewardMoney)
+				.def_readonly("rewardXp", &QuestInfo::rewardXp)
+				.def_readonly("rewardClassXp", &QuestInfo::rewardClassXp)
+				.def_readonly("rewardSpellId", &QuestInfo::rewardSpellId)
 				.def_readonly("requiredClasses", &QuestInfo::requiredClasses)
 				.def_readonly("flags", &QuestInfo::flags)
+			),
+
+			luabind::scope(
+				luabind::class_<QuestRewardItem>("QuestRewardItem")
+				.def_readonly("itemId", &QuestRewardItem::itemId)
+				.def_readonly("count", &QuestRewardItem::count)
 			),
 
 			luabind::scope(
@@ -96,6 +105,7 @@ namespace mmo
 				.def_readonly("offerReward", &QuestDetails::questOfferRewardText)
 				.def_readonly("requestItems", &QuestDetails::questRequestItemsText)
 				.def_readonly("rewardedXp", &QuestDetails::rewardXp)
+				.def_readonly("rewardedClassXp", &QuestDetails::rewardClassXp)
 				.def_readonly("rewardedMoney", &QuestDetails::rewardMoney)
 				.def_readonly("rewardedSpell", &QuestDetails::rewardSpell)
 			),
@@ -142,7 +152,12 @@ namespace mmo
 			luabind::def_lambda("GetQuestRewardItemCount", [this]() -> uint32 { return static_cast<uint32>(m_questDetails.rewardItems.size()); }),
 			luabind::def_lambda("GetQuestRewardItem", [this](uint32 index) -> const QuestRewardItemDisplay* { if (index >= m_questDetails.rewardItems.size()) { return nullptr; } return &m_questDetails.rewardItems[index]; }),
 			luabind::def_lambda("GetQuestRewardChoiceItemCount", [this]() -> uint32 { return static_cast<uint32>(m_questDetails.rewardItemsChoice.size()); }),
-			luabind::def_lambda("GetQuestRewardChoiceItem", [this](uint32 index) -> const QuestRewardItemDisplay* { if (index >= m_questDetails.rewardItemsChoice.size()) { return nullptr; } return &m_questDetails.rewardItemsChoice[index]; })
+			luabind::def_lambda("GetQuestRewardChoiceItem", [this](uint32 index) -> const QuestRewardItemDisplay* { if (index >= m_questDetails.rewardItemsChoice.size()) { return nullptr; } return &m_questDetails.rewardItemsChoice[index]; }),
+			luabind::def_lambda("GetQuestInfoRewardItemCount", [](const QuestInfo* quest) -> uint32 { if (!quest) { return 0; } return static_cast<uint32>(quest->rewardItems.size()); }),
+			luabind::def_lambda("GetQuestInfoRewardItem", [](const QuestInfo* quest, uint32 index) -> const QuestRewardItem* { if (!quest || index >= quest->rewardItems.size()) { return nullptr; } return &quest->rewardItems[index]; }),
+			luabind::def_lambda("GetQuestInfoChoiceItemCount", [](const QuestInfo* quest) -> uint32 { if (!quest) { return 0; } return static_cast<uint32>(quest->optionalItems.size()); }),
+			luabind::def_lambda("GetQuestInfoChoiceItem", [](const QuestInfo* quest, uint32 index) -> const QuestRewardItem* { if (!quest || index >= quest->optionalItems.size()) { return nullptr; } return &quest->optionalItems[index]; }),
+			luabind::def_lambda("GetQuestInfoRewardSpell", [this](const QuestInfo* quest) -> const proto_client::SpellEntry* { if (!quest || quest->rewardSpellId == 0) { return nullptr; } return m_spells.getById(quest->rewardSpellId); })
 		);
 	}
 
@@ -527,6 +542,24 @@ namespace mmo
 		m_connector.ExecuteGossipAction(m_questGiverGuid, m_gossipMenu, m_gossipActions[index].id);
 	}
 
+	void QuestClient::RequestRewardItemInfo(const uint32 itemId, const char* uiEvent)
+	{
+		if (itemId == 0 || m_itemCache.IsCached(itemId))
+		{
+			return;
+		}
+
+		const uint32 questId = m_questDetails.questId;
+		m_itemCache.Get(itemId, [this, questId, uiEvent](uint64, const ItemInfo&)
+		{
+			// Only refresh if the dialog still shows the same quest.
+			if (m_questDetails.questId == questId)
+			{
+				FrameManager::Get().TriggerLuaEvent(uiEvent);
+			}
+		});
+	}
+
 	bool QuestClient::HasQuestInQuestLog(uint32 questId)
 	{
 		// Check if we know that quest
@@ -754,10 +787,7 @@ namespace mmo
 
 			m_questDetails.rewardItemsChoice.push_back({ itemId, count, displayId });
 
-			if (itemId != 0)
-			{
-				m_itemCache.Get(itemId);
-			}
+			RequestRewardItemInfo(itemId, "QUEST_DETAIL");
 		}
 
 		if (!(packet >> io::read<uint32>(rewardItemsCount)))
@@ -777,14 +807,11 @@ namespace mmo
 
 			m_questDetails.rewardItems.push_back({ itemId, count, displayId });
 
-			if (itemId != 0)
-			{
-				m_itemCache.Get(itemId);
-			}
+			RequestRewardItemInfo(itemId, "QUEST_DETAIL");
 		}
 
 		uint32 rewardSpellId = 0;
-		if (!(packet >> io::read<uint32>(m_questDetails.rewardMoney) >> io::read<uint32>(m_questDetails.rewardXp) >> io::read<uint32>(rewardSpellId)))
+		if (!(packet >> io::read<uint32>(m_questDetails.rewardMoney) >> io::read<uint32>(m_questDetails.rewardXp) >> io::read<uint32>(rewardSpellId) >> io::read<uint32>(m_questDetails.rewardClassXp)))
 		{
 			ELOG("Failed to read QuestGiverQuestDetails packet");
 			return PacketParseResult::Disconnect;
@@ -873,10 +900,7 @@ namespace mmo
 
 			m_questDetails.rewardItemsChoice.push_back({ itemId, count, displayId });
 
-			if (itemId != 0)
-			{
-				m_itemCache.Get(itemId);
-			}
+			RequestRewardItemInfo(itemId, "QUEST_OFFER_REWARDS");
 		}
 
 		// Read reward items
@@ -898,15 +922,12 @@ namespace mmo
 
 			m_questDetails.rewardItems.push_back({ itemId, count, displayId });
 
-			if (itemId != 0)
-			{
-				m_itemCache.Get(itemId);
-			}
+			RequestRewardItemInfo(itemId, "QUEST_OFFER_REWARDS");
 		}
 
 		// Read reward money, XP, and spell
 		uint32 rewardSpellId = 0;
-		if (!(packet >> io::read<uint32>(m_questDetails.rewardMoney) >> io::read<uint32>(m_questDetails.rewardXp) >> io::read<uint32>(rewardSpellId)))
+		if (!(packet >> io::read<uint32>(m_questDetails.rewardMoney) >> io::read<uint32>(m_questDetails.rewardXp) >> io::read<uint32>(rewardSpellId) >> io::read<uint32>(m_questDetails.rewardClassXp)))
 		{
 			ELOG("Failed to read QuestGiverOfferReward packet");
 			return PacketParseResult::Disconnect;
@@ -1089,11 +1110,24 @@ namespace mmo
 		}
 		for (auto& item : entry.rewardItems)
 		{
-			m_itemCache.Get(item.itemId);
+			if (!m_itemCache.IsCached(item.itemId))
+			{
+				// Refresh the quest log UI once the item data arrives so reward names resolve.
+				m_itemCache.Get(item.itemId, [](uint64, const ItemInfo&)
+				{
+					FrameManager::Get().TriggerLuaEvent("QUEST_LOG_UPDATE");
+				});
+			}
 		}
 		for (auto& item : entry.optionalItems)
 		{
-			m_itemCache.Get(item.itemId);
+			if (!m_itemCache.IsCached(item.itemId))
+			{
+				m_itemCache.Get(item.itemId, [](uint64, const ItemInfo&)
+				{
+					FrameManager::Get().TriggerLuaEvent("QUEST_LOG_UPDATE");
+				});
+			}
 		}
 
 		// Ensure creatures are known

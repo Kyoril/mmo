@@ -48,6 +48,7 @@ namespace mmo
 		String questOfferRewardText;
 		uint32 suggestedPlayerCount = 0;
 		uint32 rewardXp = 0;
+		uint32 rewardClassXp = 0;
 		uint32 rewardMoney = 0;
 		const proto_client::SpellEntry* rewardSpell = nullptr;
 		std::vector<QuestRewardItemDisplay> rewardItemsChoice;
@@ -61,6 +62,7 @@ namespace mmo
 			questObjectives.clear();
 			suggestedPlayerCount = 0;
 			rewardXp = 0;
+			rewardClassXp = 0;
 			rewardMoney = 0;
 			rewardSpell = nullptr;
 			rewardItemsChoice.clear();
@@ -161,6 +163,10 @@ namespace mmo
 		bool HasQuestInQuestLog(uint32 questId);
 
 		bool ReadQuestList(io::Reader& reader);
+
+		/// Requests item data for a quest reward item and re-fires the given UI event once the
+		/// data arrives asynchronously, so an open quest dialog can fill in the item name.
+		void RequestRewardItemInfo(uint32 itemId, const char* uiEvent);
 
 	private:
 		PacketParseResult OnGossipMenu(game::IncomingPacket& packet);

@@ -1651,6 +1651,7 @@ namespace mmo
 
 				packet << io::write<uint32>(quest.rewardxp());
 				packet << io::write<uint32>(quest.rewardspell());
+				packet << io::write<uint32>(quest.rewardclassxp());
 				packet.Finish();
 			});
 	}
@@ -1696,7 +1697,8 @@ namespace mmo
 
 				packet
 					<< io::write<uint32>(quest.rewardxp())
-					<< io::write<uint32>(quest.rewardspell());
+					<< io::write<uint32>(quest.rewardspell())
+					<< io::write<uint32>(quest.rewardclassxp());
 				packet.Finish();
 			});
 	}

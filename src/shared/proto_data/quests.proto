@@ -94,8 +94,10 @@ message QuestEntry {
 	optional uint32 rewardxp = 53;
 	optional string internalname = 54;
 	optional uint32 maxlevel = 55 [default = 0];
-	// Class XP granted to the ACTIVE class on turn-in, in addition to rewardxp. Unscaled
-	// (no level-difference factor is applied). 0 = no class XP reward.
+	// Class XP granted to the ACTIVE class on turn-in, in addition to rewardxp. Scaled by the
+	// class level at turn-in relative to questlevel (see ScaleQuestClassXp): an under-leveled
+	// class is rewarded as if the quest targeted its own level, an over-leveled class steps
+	// down like character quest XP. 0 = no class XP reward.
 	optional uint32 rewardclassxp = 56;
 	// If set, this quest is part of a class-unlock chain for the given (0-based) class id and is
 	// only offered while the player has NOT yet unlocked that class. Check presence via

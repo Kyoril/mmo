@@ -2762,12 +2762,31 @@ namespace mmo
 
 		FrameManager::Get().TriggerLuaEvent("PLAYER_KNOWN_CLASSES_CHANGED");
 
+		const proto_client::ClassEntry* classEntry = m_project.classes.getById(classId);
+		const String className = classEntry ? classEntry->name() : String();
+
+		if (xpGained > 0)
+		{
+			// Show floating text like the character-XP one, in the orange tone of the class XP bars.
+			if (const std::shared_ptr<GamePlayerC> target = ObjectMgr::GetActivePlayer())
+			{
+				String text = Localize(FrameManager::Get().GetLocalization(), "CLASS_XP_GAINED_FLOATING");
+				if (const size_t amountPlaceholder = text.find("%d"); amountPlaceholder != String::npos)
+				{
+					text.replace(amountPlaceholder, 2, std::to_string(xpGained));
+				}
+				if (const size_t namePlaceholder = text.find("%s"); namePlaceholder != String::npos)
+				{
+					text.replace(namePlaceholder, 2, className);
+				}
+
+				AddWorldTextFrame(target->GetPosition(), text, Color(1.0f, 0.6f, 0.21f, 1.0f), 2.0f);
+			}
+		}
+
 		if (leveledUp != 0)
 		{
 			// Show a localized system chat notification naming the class and its new level.
-			const proto_client::ClassEntry* classEntry = m_project.classes.getById(classId);
-			const String className = classEntry ? classEntry->name() : String();
-
 			String message = Localize(FrameManager::Get().GetLocalization(), "CLASS_LEVEL_UP_NOTIFICATION");
 			if (const size_t namePlaceholder = message.find("%s"); namePlaceholder != String::npos)
 			{

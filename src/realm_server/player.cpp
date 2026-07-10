@@ -3621,6 +3621,8 @@ namespace mmo
 		quest.questLevel = questEntry->questlevel();
 		quest.rewardMoney = questEntry->rewardmoney();
 		quest.rewardXp = questEntry->rewardxp();
+		quest.rewardClassXp = questEntry->rewardclassxp();
+		quest.rewardSpellId = questEntry->rewardspell();
 		quest.requiredClasses = questEntry->requiredclasses();
 		quest.flags = questEntry->flags();
 
