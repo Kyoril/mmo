@@ -491,6 +491,13 @@ namespace mmo
 			return quest_status::Unavailable;
 		}
 
+		// Class-unlock chains are only offered while the target class is still locked. This also
+		// hides them from characters that started as that class (the initial class is always known).
+		if (entry->has_unlocksclass() && IsClassKnown(entry->unlocksclass()))
+		{
+			return quest_status::Unavailable;
+		}
+
 		// Quest chain checks
 		if (entry->prevquestid())
 		{
@@ -2402,6 +2409,19 @@ namespace mmo
 		}
 
 		return 1;
+	}
+
+	bool GamePlayerS::IsClassKnown(const uint32 classId) const
+	{
+		for (const auto& classData : m_knownClasses)
+		{
+			if (classData.classId == classId)
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	CharacterClassData& GamePlayerS::GetOrCreateKnownClass(const uint32 classId)

@@ -284,6 +284,11 @@ namespace mmo
 				ImGui::SameLine();
 				DrawHelpMarker("Repeatable once per week (resets at the configured weekly reset time)");
 
+				ImGui::TableNextColumn();
+				CHECKBOX_FLAG_PROP(flags, "Class Unlock", quest_flags::ClassUnlock);
+				ImGui::SameLine();
+				DrawHelpMarker("Marks this quest as part of a feature-unlock chain so the client renders it distinctly. Combine with the 'Unlocks Class' setting under Classes & Races to gate the offer.");
+
 				ImGui::EndTable();
 			}
 
@@ -459,6 +464,46 @@ namespace mmo
 
 				ImGui::EndTable();
 			}
+
+			ImGui::Spacing();
+			ImGui::Spacing();
+			DrawSectionHeader("Class Unlock Gating");
+
+			// Class ids are 0-based (Mage = 0), so field presence is what marks a quest as an
+			// unlock quest - never the value itself.
+			const proto::ClassEntry* unlockClassEntry = currentEntry.has_unlocksclass() ? m_project.classes.getById(currentEntry.unlocksclass()) : nullptr;
+			ImGui::SetNextItemWidth(300);
+			if (ImGui::BeginCombo("##UnlocksClass", unlockClassEntry != nullptr ? unlockClassEntry->name().c_str() : "(None)", ImGuiComboFlags_None))
+			{
+				ImGui::PushID(-1);
+				if (ImGui::Selectable("(None)", !currentEntry.has_unlocksclass()))
+				{
+					currentEntry.clear_unlocksclass();
+				}
+				ImGui::PopID();
+
+				for (int i = 0; i < m_project.classes.count(); i++)
+				{
+					ImGui::PushID(i);
+					const auto& classTemplate = m_project.classes.getTemplates().entry(i);
+					const bool selected = currentEntry.has_unlocksclass() && classTemplate.id() == currentEntry.unlocksclass();
+					if (ImGui::Selectable(classTemplate.name().c_str(), selected))
+					{
+						currentEntry.set_unlocksclass(classTemplate.id());
+					}
+					if (selected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+			ImGui::SameLine();
+			ImGui::Text("Unlocks Class");
+			ImGui::SameLine();
+			DrawHelpMarker("If set, this quest is only offered while the player has NOT yet unlocked the selected class. Set it on every quest of a class-unlock chain, and give the final quest the class-change spell as its reward spell.");
 
 			ImGui::PopStyleVar(2);
 			ImGui::Unindent();

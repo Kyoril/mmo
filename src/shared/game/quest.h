@@ -73,6 +73,12 @@ namespace mmo
 			/// This quest can be repeated without any time restriction (immediately available again
 			/// after being rewarded). Daily and Weekly imply repeatability as well.
 			Repeatable = 0x0200,
+
+			/// This quest is part of a chain that unlocks a gameplay feature (e.g. a new class).
+			/// Purely cosmetic on the server side: the client uses it to render these quests
+			/// distinctly (quest log, questgiver icons). The actual offer gating is driven by
+			/// QuestEntry.unlocksclass.
+			ClassUnlock = 0x0400,
 		};
 	}
 

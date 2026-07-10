@@ -107,6 +107,10 @@ namespace mmo
 		/// Returns the class level of the currently active class (defaults to 1).
 		[[nodiscard]] uint32 GetActiveClassLevel() const;
 
+		/// Returns true if the character has unlocked the given class (the active class is always
+		/// known). Class ids are 0-based, so do not treat 0 as "no class".
+		[[nodiscard]] bool IsClassKnown(uint32 classId) const;
+
 		/// Resolves the spell that switches the active class to the given class. Prefers the class's
 		/// configured `class_change_spell`; falls back to any known spell carrying a ChangeClass effect
 		/// that targets this class. Returns 0 if none is found.

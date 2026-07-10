@@ -97,6 +97,11 @@ message QuestEntry {
 	// Class XP granted to the ACTIVE class on turn-in, in addition to rewardxp. Unscaled
 	// (no level-difference factor is applied). 0 = no class XP reward.
 	optional uint32 rewardclassxp = 56;
+	// If set, this quest is part of a class-unlock chain for the given (0-based) class id and is
+	// only offered while the player has NOT yet unlocked that class. Check presence via
+	// has_unlocksclass() - class id 0 (Mage) is a valid value. The final quest of such a chain
+	// should carry the class's class-change spell as rewardspell to perform the actual unlock.
+	optional uint32 unlocksclass = 57;
 }
 
 message Quests {

@@ -19,7 +19,8 @@ namespace mmo
 			<< io::write<uint32>(itemInfo.rewardXp)
 			<< io::write<uint32>(itemInfo.rewardMoney)
 			<< io::write<uint32>(itemInfo.rewardSpellId)
-			<< io::write<uint32>(itemInfo.requiredClasses);
+			<< io::write<uint32>(itemInfo.requiredClasses)
+			<< io::write<uint32>(itemInfo.flags);
 
 		writer << io::write<uint8>(itemInfo.requiredItems.size());
 		for (const auto& requiredItem : itemInfo.requiredItems)
@@ -68,7 +69,8 @@ namespace mmo
 			>> io::read<uint32>(outItemInfo.rewardXp)
 			>> io::read<uint32>(outItemInfo.rewardMoney)
 			>> io::read<uint32>(outItemInfo.rewardSpellId)
-			>> io::read<uint32>(outItemInfo.requiredClasses);
+			>> io::read<uint32>(outItemInfo.requiredClasses)
+			>> io::read<uint32>(outItemInfo.flags);
 
 		uint8 num = 0;
 		reader >> io::read<uint8>(num);

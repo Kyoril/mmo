@@ -63,6 +63,7 @@ namespace mmo
 				.def_readonly("title", &QuestInfo::title)
 				.def_readonly("rewardMoney", &QuestInfo::rewardMoney)
 				.def_readonly("requiredClasses", &QuestInfo::requiredClasses)
+				.def_readonly("flags", &QuestInfo::flags)
 			),
 
 			luabind::scope(
@@ -113,6 +114,10 @@ namespace mmo
 					}
 
 					return IsQuestClassAllowed(quest->requiredClasses, player->Get<uint32>(object_fields::Class));
+				}),
+			luabind::def_lambda("IsClassUnlockQuest", [](const QuestInfo* quest) -> bool
+				{
+					return quest && (quest->flags & quest_flags::ClassUnlock) != 0;
 				}),
 			luabind::def_lambda("GetGreetingText", [this]() { return GetGreetingText(); }),
 			luabind::def_lambda("GetNumAvailableQuests", [this]() { return GetNumAvailableQuests(); }),

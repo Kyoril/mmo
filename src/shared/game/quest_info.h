@@ -44,6 +44,9 @@ namespace mmo
 		/// for. Used by the client to render log quests as disabled while a non-matching class is
 		/// active (see IsQuestClassAllowed in game/quest.h).
 		uint32 requiredClasses = 0;
+		/// Quest flags bitmask (see quest_flags in game/quest.h). Lets the client render special
+		/// quests (e.g. quest_flags::ClassUnlock feature-unlock chains) distinctly.
+		uint32 flags = 0;
 		std::vector<QuestRequiredItem> requiredItems;
 		std::vector<QuestRequiredCreature> requiredCreatures;
 		std::vector<QuestRewardItem> rewardItems;
