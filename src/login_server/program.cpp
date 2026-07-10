@@ -58,7 +58,7 @@ namespace mmo
 		}
 	}
 
-	int32 Program::run()
+	int32 Program::run(const std::string& configFileName)
 	{
 		// This is the main ioService object
 		asio::io_service ioService;
@@ -76,7 +76,7 @@ namespace mmo
 		/////////////////////////////////////////////////////////////////////////////////////////////////
 
 		Configuration config;
-		if (!config.load("config/login_server.cfg"))
+		if (!config.load(configFileName))
 		{
 			return 1;
 		}
@@ -146,11 +146,11 @@ namespace mmo
 		std::unique_ptr<auth::Server> realmServer;
 		try
 		{
-			realmServer.reset(new auth::Server(std::ref(ioService), constants::DefaultLoginRealmPort, std::bind(&auth::Connection::create, std::ref(ioService), nullptr)));
+			realmServer.reset(new auth::Server(std::ref(ioService), config.realmPort, std::bind(&auth::Connection::create, std::ref(ioService), nullptr)));
 		}
 		catch (const BindFailedException &)
 		{
-			ELOG("Could not bind on tcp port " << constants::DefaultLoginRealmPort << "! Maybe there is another server instance running on this port?");
+			ELOG("Could not bind on tcp port " << config.realmPort << "! Maybe there is another server instance running on this port?");
 			return 1;
 		}
 
@@ -192,11 +192,11 @@ namespace mmo
 		std::unique_ptr<auth::Server> playerServer;
 		try
 		{
-			playerServer.reset(new mmo::auth::Server(std::ref(ioService), constants::DefaultLoginPlayerPort, std::bind(&mmo::auth::Connection::create, std::ref(ioService), nullptr)));
+			playerServer.reset(new mmo::auth::Server(std::ref(ioService), config.playerPort, std::bind(&mmo::auth::Connection::create, std::ref(ioService), nullptr)));
 		}
 		catch (const mmo::BindFailedException &)
 		{
-			ELOG("Could not bind on tcp port " << constants::DefaultLoginPlayerPort << "! Maybe there is another server instance running on this port?");
+			ELOG("Could not bind on tcp port " << config.playerPort << "! Maybe there is another server instance running on this port?");
 			return 1;
 		}
 		

@@ -4,6 +4,7 @@
 #include "base/service.h"
 #include "log/default_log_levels.h"
 #include "log/log_std_stream.h"
+#include "cxxopts/cxxopts.hpp"
 
 #include "program.h"
 
@@ -12,27 +13,43 @@
 #include <cstring>
 
 /// Procedural entry point of the application.
-int main(int argc, const char* argv[])
+int main(int argc, char* argv[])
 {
 	// Whether the server application should be started as service
 	bool runAsService = false;
 
+	// The config file name for the server to use
+	std::string configFileName = "config/login_server.cfg";
+
+	// Prepare command line options
+	cxxopts::Options options("MMO Login Server", "Login server for the mmo project.");
+	options.allow_unrecognised_options().add_options()
+#ifdef __linux__
+		("s,service", "Run this application as a service")
+#endif
+		("c,config", "Config file name", cxxopts::value<std::string>()->default_value(configFileName))
+		;
+
+	// Parse command line options
+	auto results = options.parse(argc, argv);
+
+	// Try to find the name of the config file name in the command line string
+	try
+	{
+		configFileName = results["config"].as<std::string>();
+	}
+	catch(const std::exception& e)
+	{
+		WLOG(e.what());
+	}
+
 	// On linux, we can run the process daemonized. Since we intend windows machines to run as standalone
 	// applications instead, we don't support services on windows os.
 #ifdef __linux__
-	// Parse command line arguments for service parameter
-	for (int i = 0; i < argc; ++i)
+	if (results.count("s") > 0)
 	{
-		if (::strcmp(argv[i], "-s") == 0 ||
-			::strcmp(argv[i], "--service") == 0)
-		{
-			runAsService = true;
-			break;
-		}
-	}
+		runAsService = true;
 
-	if (runAsService)
-	{
 		if (mmo::createService() == mmo::CreateServiceResult::IsObsoleteProcess)
 		{
 			std::cout << "Login service is now running." << '\n';
@@ -42,14 +59,14 @@ int main(int argc, const char* argv[])
 #endif
 
 	// Open stdout log output
-	auto options = mmo::g_DefaultConsoleLogOptions;
-	options.alwaysFlush = true;
+	auto logOptions = mmo::g_DefaultConsoleLogOptions;
+	logOptions.alwaysFlush = true;
 
 	// Add cout to the list of log output streams
 	std::mutex coutLogMutex;
-	mmo::g_DefaultLog.signal().connect([&coutLogMutex, &options](const mmo::LogEntry & entry) {
+	mmo::g_DefaultLog.signal().connect([&coutLogMutex, &logOptions](const mmo::LogEntry & entry) {
 		std::scoped_lock lock{ coutLogMutex };
-		mmo::printLogEntry(std::cout, entry, options);
+		mmo::printLogEntry(std::cout, entry, logOptions);
 	});
 
 	// Notify about the start of the login server application
@@ -61,6 +78,8 @@ int main(int argc, const char* argv[])
 	{
 		ILOG("Starting the login server application...");
 	}
+
+	ILOG("Using config file " << configFileName << "...");
 
 	// Notify in case of debug builds
 #ifdef _DEBUG
@@ -76,7 +95,7 @@ int main(int argc, const char* argv[])
 
 		// Create the global application instance and run it
 		mmo::Program program;
-		result = program.run();
+		result = program.run(configFileName);
 	} while (result == 0 && mmo::Program::ShouldRestart);
 
 	// Check for errors
