@@ -94,6 +94,35 @@ namespace mmo
 			return g_runtime->session->GetContext().GetSelf();
 		}
 
+		bool isSelfGuid(const uint64 guid)
+		{
+			const BotUnit* selfUnit = self();
+			return selfUnit && selfUnit->GetGuid() == guid;
+		}
+
+		/// Resolves a unit's position. The server never echoes our own movement back to
+		/// us (the client is authoritative for its own position), so the self unit's
+		/// object-manager position goes stale as soon as we move - use the context's
+		/// simulated movement state for self instead.
+		bool resolvePosition(const std::string& guidStr, Vector3& outPosition)
+		{
+			const uint64 guid = guidFromString(guidStr);
+			if (isSelfGuid(guid))
+			{
+				outPosition = g_runtime->session->GetContext().GetPosition();
+				return true;
+			}
+
+			const BotUnit* unit = g_runtime->session->GetContext().GetUnit(guid);
+			if (!unit)
+			{
+				return false;
+			}
+
+			outPosition = unit->GetPosition();
+			return true;
+		}
+
 		bool isObjectTruthy(const luabind::object& value)
 		{
 			const int type = luabind::type(value);
@@ -233,31 +262,31 @@ namespace mmo
 
 		float luaGetPosX(const std::string& guid)
 		{
-			const BotUnit* unit = findUnit(guid);
-			return unit ? unit->GetPosition().x : 0.0f;
+			Vector3 position;
+			return resolvePosition(guid, position) ? position.x : 0.0f;
 		}
 
 		float luaGetPosY(const std::string& guid)
 		{
-			const BotUnit* unit = findUnit(guid);
-			return unit ? unit->GetPosition().y : 0.0f;
+			Vector3 position;
+			return resolvePosition(guid, position) ? position.y : 0.0f;
 		}
 
 		float luaGetPosZ(const std::string& guid)
 		{
-			const BotUnit* unit = findUnit(guid);
-			return unit ? unit->GetPosition().z : 0.0f;
+			Vector3 position;
+			return resolvePosition(guid, position) ? position.z : 0.0f;
 		}
 
 		float luaGetDistance(const std::string& guidA, const std::string& guidB)
 		{
-			const BotUnit* unitA = findUnit(guidA);
-			const BotUnit* unitB = findUnit(guidB);
-			if (!unitA || !unitB)
+			Vector3 positionA;
+			Vector3 positionB;
+			if (!resolvePosition(guidA, positionA) || !resolvePosition(guidB, positionB))
 			{
 				return -1.0f;
 			}
-			return unitA->GetDistanceTo(*unitB);
+			return (positionB - positionA).GetLength();
 		}
 
 		bool luaHasAura(const std::string& guid, const uint32 spellId)

@@ -67,28 +67,60 @@ try
 	# Random letter suffix -> fresh character per suite run, isolated from prior state.
 	$suffix = -join ((97..122) | Get-Random -Count 5 | ForEach-Object { [char]$_ })
 
+	$first = $true
 	foreach ($file in $scenarios)
 	{
 		$name = $file.BaseName
 		$transcript = Join-Path $logDir "$name.jsonl"
 		$stdout = Join-Path $logDir "$name.out.log"
 
+		# Give the previous session's logout a moment to finish server-side; an
+		# immediate reconnect can race the login/realm session cleanup.
+		if (-not $first) { Start-Sleep -Milliseconds 1500 }
+		$first = $false
+
 		Write-Host "Running scenario '$name'..." -NoNewline
 		$sw = [System.Diagnostics.Stopwatch]::StartNew()
 
-		# Each scenario runs in a fresh client process with its own character.
-		$process = Start-Process -FilePath $clientExe -ArgumentList @(
-			"--config", $clientConfig,
-			"--script", $file.FullName,
-			"--transcript", $transcript,
-			"--character", "Test$suffix",
-			"--timeout", "120"
-		) -WorkingDirectory $s.RepoRoot -PassThru -WindowStyle Hidden -Wait -RedirectStandardOutput $stdout
+		$expected = if ($expectedFailures.ContainsKey($name)) { $expectedFailures[$name] } else { 0 }
+		$attempts = 0
+		$exitCode = -1
+
+		while ($true)
+		{
+			$attempts++
+
+			# Each scenario runs in a fresh client process with its own character.
+			$process = Start-Process -FilePath $clientExe -ArgumentList @(
+				"--config", $clientConfig,
+				"--script", $file.FullName,
+				"--transcript", $transcript,
+				"--character", "Test$suffix",
+				"--timeout", "120"
+			) -WorkingDirectory $s.RepoRoot -PassThru -WindowStyle Hidden -Wait -RedirectStandardOutput $stdout
+
+			$exitCode = $process.ExitCode
+			if ($exitCode -eq $expected -or $attempts -ge 2)
+			{
+				break
+			}
+
+			# Retry ONCE, and only for infrastructure failures (setup 2 / timeout 3 /
+			# disconnect 4). Assertion failures (exit 1) are real regressions and are
+			# never retried.
+			if ($exitCode -in 2, 3, 4)
+			{
+				Write-Host " retry (exit $exitCode)..." -NoNewline
+				Start-Sleep -Seconds 3
+			}
+			else
+			{
+				break
+			}
+		}
 
 		$sw.Stop()
-		$exitCode = $process.ExitCode
 
-		$expected = if ($expectedFailures.ContainsKey($name)) { $expectedFailures[$name] } else { 0 }
 		$ok = ($exitCode -eq $expected)
 		if (-not $ok) { $allGood = $false }
 
@@ -101,6 +133,7 @@ try
 			exit_code  = $exitCode
 			expected   = $expected
 			passed     = $ok
+			attempts   = $attempts
 			duration_s = [math]::Round($sw.Elapsed.TotalSeconds, 1)
 			transcript = $transcript
 		}

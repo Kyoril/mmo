@@ -85,9 +85,18 @@ GM commands (server must run with dev commands; the test account has GM level 3)
 - Character names are 3–12 letters, no digits (realm-side validation).
 - The default test character is a Mage (mana), so it can cast most spells after
   `GM.LearnSpell`. Useful ids on the current dev data: Fireball = spell 4,
-  Training Dummy = creature 40, Chunk of Boar Meat = item 1.
+  Frost Armor (instant self-buff with aura) = spell 6, Training Dummy = creature 40,
+  Chunk of Boar Meat = item 1.
+- The server never echoes your own movement back, so `GetPosX/Y/Z(Me())` and
+  `GetDistance` resolve the self position from the client's simulated movement state
+  (kept honest by server-side movement validation).
 - Scenarios expected to fail (negative controls) are registered in `$expectedFailures`
   inside `tools/e2e/e2e_run.ps1`.
+- The runner retries a scenario **once** on infrastructure failures (exit 2/3/4 —
+  connect, timeout, disconnect) because a reconnect within ~1s of the previous
+  session can race server-side session cleanup. Assertion failures (exit 1) are
+  never retried. Retries show up in the console output and as `attempts` in
+  `summary.json`.
 
 ## Reading results (for agents)
 
