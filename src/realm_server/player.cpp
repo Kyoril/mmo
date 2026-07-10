@@ -3621,6 +3621,7 @@ namespace mmo
 		quest.questLevel = questEntry->questlevel();
 		quest.rewardMoney = questEntry->rewardmoney();
 		quest.rewardXp = questEntry->rewardxp();
+		quest.requiredClasses = questEntry->requiredclasses();
 
 		for (const auto &requirement : questEntry->requirements())
 		{

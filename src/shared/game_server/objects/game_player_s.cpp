@@ -481,13 +481,12 @@ namespace mmo
 		ASSERT(m_classEntry);
 
 		const uint32 charRaceBit = 1 << (m_raceEntry->id() - 1);
-		const uint32 charClassBit = 1 << (m_classEntry->id() - 1);
 		if (entry->requiredraces() && (entry->requiredraces() & charRaceBit) == 0)
 		{
 			return quest_status::Unavailable;
 		}
 
-		if (entry->requiredclasses() && (entry->requiredclasses() & charClassBit) == 0)
+		if (!IsQuestClassAllowed(*entry))
 		{
 			return quest_status::Unavailable;
 		}
@@ -513,6 +512,12 @@ namespace mmo
 		}
 
 		return quest_status::Available;
+	}
+
+	bool GamePlayerS::IsQuestClassAllowed(const proto::QuestEntry& entry) const
+	{
+		ASSERT(m_classEntry);
+		return mmo::IsQuestClassAllowed(entry.requiredclasses(), m_classEntry->id());
 	}
 
 	bool GamePlayerS::IsQuestObjectRequirementMet(const uint32 questId, const uint32 objectEntryId) const
@@ -830,6 +835,13 @@ namespace mmo
 			return false;
 		}
 
+		// A class-gated quest can only be turned in while a matching class is active. The quest
+		// stays in the log (frozen) until the player switches back.
+		if (!IsQuestClassAllowed(*entry))
+		{
+			return false;
+		}
+
 		// Gather all rewarded items
 		std::map<const proto::ItemEntry *, uint16> rewardedItems;
 		{
@@ -945,6 +957,14 @@ namespace mmo
 		if (rewardXp > 0)
 		{
 			RewardExperience(rewardXp);
+		}
+
+		// Explicit class XP reward for the active class, unscaled by level difference. Note that the
+		// regular rewardxp deliberately does NOT feed class XP (a quest could be completed as one
+		// class and banked for another); only this designer-set value does.
+		if (entry->rewardclassxp() > 0)
+		{
+			RewardClassExperience(entry->rewardclassxp());
 		}
 
 		uint32 money = entry->rewardmoney();
@@ -1072,6 +1092,12 @@ namespace mmo
 			// Find quest
 			const auto *quest = GetProject().quests.getById(field.questId);
 			if (!quest)
+			{
+				continue;
+			}
+
+			// Class-gated quests are frozen while a non-matching class is active: no progress.
+			if (!IsQuestClassAllowed(*quest))
 			{
 				continue;
 			}
@@ -1235,6 +1261,12 @@ namespace mmo
 				continue;
 			}
 
+			// Class-gated quests are frozen while a non-matching class is active: no progress.
+			if (!IsQuestClassAllowed(*quest))
+			{
+				continue;
+			}
+
 			// If this is set to true, all requirements of this quest will be reevaluated, which costs
 			// some time. So this variable is only updated, if a quest requirement status changed between
 			// Completed and Uncomplete to save performance.
@@ -1392,6 +1424,12 @@ namespace mmo
 
 			const auto *quest = GetProject().quests.getById(field.questId);
 			if (!quest)
+			{
+				continue;
+			}
+
+			// Class-gated quests are frozen while a non-matching class is active: no progress.
+			if (!IsQuestClassAllowed(*quest))
 			{
 				continue;
 			}
@@ -1933,6 +1971,60 @@ namespace mmo
 		}
 	}
 
+	void GamePlayerS::RewardClassExperience(const uint32 xp)
+	{
+		if (xp == 0 || !m_classEntry)
+		{
+			return;
+		}
+
+		// Without a class-level curve the class does not level: don't even accumulate XP so the
+		// legacy frozen-at-1 behavior stays fully intact for unconfigured classes.
+		if (m_classEntry->classlevels_size() == 0)
+		{
+			return;
+		}
+
+		const uint32 maxClassLevel = std::min<uint32>(m_classEntry->classlevels_size(), 255);
+
+		CharacterClassData& classData = GetOrCreateKnownClass(m_classEntry->id());
+		if (classData.classLevel >= maxClassLevel)
+		{
+			return;
+		}
+
+		classData.classXp += xp;
+
+		bool leveledUp = false;
+		while (classData.classLevel < maxClassLevel &&
+			classData.classXp >= m_classEntry->classlevels(classData.classLevel - 1).xptonextlevel())
+		{
+			classData.classXp -= m_classEntry->classlevels(classData.classLevel - 1).xptonextlevel();
+			classData.classLevel++;
+			leveledUp = true;
+		}
+
+		// At the class cap there is no next level to progress towards: clear the remainder so the
+		// client renders a clean capped state instead of a partially filled bar.
+		if (classData.classLevel >= maxClassLevel)
+		{
+			classData.classXp = 0;
+		}
+
+		if (leveledUp)
+		{
+			// Recomputes the talent point budget from the new class level (UpdateTotalTalentPoints).
+			RefreshStats();
+		}
+
+		if (m_netPlayerWatcher)
+		{
+			const uint32 xpToNextLevel = classData.classLevel < maxClassLevel ?
+				m_classEntry->classlevels(classData.classLevel - 1).xptonextlevel() : 0;
+			m_netPlayerWatcher->OnClassXpGained(m_classEntry->id(), xp, classData.classLevel, classData.classXp, xpToNextLevel, leveledUp);
+		}
+	}
+
 	void GamePlayerS::RefreshStats()
 	{
 		ASSERT(m_classEntry);
@@ -2276,12 +2368,25 @@ namespace mmo
 			return;
 		}
 
-		// Per-class total: derived from the active class's class level (frozen at 1 for now).
+		// Per-class total: derived from the active class's class level.
 		const uint32 classLevel = GetActiveClassLevel();
-		const uint32 cap = std::min<uint32>(classLevel, static_cast<uint32>(m_classEntry->levelbasevalues_size()));
-		for (uint32 i = 0; i < cap; ++i)
+		if (m_classEntry->classlevels_size() > 0)
 		{
-			m_totalTalentPointsAtLevel += m_classEntry->levelbasevalues(i).talentpoints();
+			const uint32 cap = std::min<uint32>(classLevel, static_cast<uint32>(m_classEntry->classlevels_size()));
+			for (uint32 i = 0; i < cap; ++i)
+			{
+				m_totalTalentPointsAtLevel += m_classEntry->classlevels(i).talentpoints();
+			}
+		}
+		else
+		{
+			// Legacy fallback: no class-level curve configured — talent points from the character
+			// level base values (class level is frozen at 1 in this case).
+			const uint32 cap = std::min<uint32>(classLevel, static_cast<uint32>(m_classEntry->levelbasevalues_size()));
+			for (uint32 i = 0; i < cap; ++i)
+			{
+				m_totalTalentPointsAtLevel += m_classEntry->levelbasevalues(i).talentpoints();
+			}
 		}
 	}
 

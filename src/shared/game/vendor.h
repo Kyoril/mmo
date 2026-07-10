@@ -24,7 +24,10 @@ namespace mmo
 		{
 			FailedLevelTooLow,
 
-			FailedNotEnoughMoney
+			FailedNotEnoughMoney,
+
+			/// The trainer is a class trainer for a different class than the player's active class.
+			FailedWrongClass
 		};
 	}
 }

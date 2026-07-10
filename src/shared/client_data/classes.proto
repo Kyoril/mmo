@@ -68,8 +68,12 @@ message ClassEntry {
 	repeated AttackPowerStatSource armorStatSources = 16;
 
 	repeated HealthStatSource healthStatSources = 18;
-	
+
 	repeated ManaStatSource manaStatSources = 19;
+
+	// NOTE: field 27 is used by the server-side schema (proto_data/classes.proto: classlevels).
+	// Do not reuse it here for a different field; class-level progression reaches the client via
+	// the KnownClasses packet instead of ClientDB.
 }
 
 message Classes {

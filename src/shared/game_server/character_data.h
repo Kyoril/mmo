@@ -17,8 +17,8 @@
 namespace mmo
 {
 	/// Per-class state for one class a character has learned. A character can know several classes
-	/// (one active at a time); each carries its own class level, (reserved) class xp, attribute-point
-	/// spending profile and talent ranks. See docs/multi_class_system.md.
+	/// (one active at a time); each carries its own class level, class xp (progress towards the next
+	/// class level), attribute-point spending profile and talent ranks. See docs/multi_class_system.md.
 	struct CharacterClassData
 	{
 		uint32 classId = 0;

@@ -40,6 +40,10 @@ namespace mmo
 		uint32 rewardXp;
 		uint32 rewardMoney;
 		uint32 rewardSpellId;
+		/// Class mask (1 << (classId - 1), 0 = no restriction) of classes this quest is intended
+		/// for. Used by the client to render log quests as disabled while a non-matching class is
+		/// active (see IsQuestClassAllowed in game/quest.h).
+		uint32 requiredClasses = 0;
 		std::vector<QuestRequiredItem> requiredItems;
 		std::vector<QuestRequiredCreature> requiredCreatures;
 		std::vector<QuestRewardItem> rewardItems;

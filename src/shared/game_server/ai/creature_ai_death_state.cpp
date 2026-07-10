@@ -134,36 +134,58 @@ namespace mmo
 				0.0f;
 
 			// Base XP for equal level
-			uint32 xp = Interpolate(controlled.GetEntry().minlevelxp(), controlled.GetEntry().maxlevelxp(), t);
-			if (!maxLevelCharacter)
-			{
-				xp = 0;
-			}
-			else
-			{
-				if (controlled.GetLevel() > maxLevelCharacter->GetLevel())
-				{
-					float levelDiff = controlled.GetLevel() - maxLevelCharacter->GetLevel();
-					levelDiff = std::min<float>(levelDiff, 4);
+			const uint32 baseXp = Interpolate(controlled.GetEntry().minlevelxp(), controlled.GetEntry().maxlevelxp(), t);
 
-					const float factor = 1.0f + 0.05f * levelDiff;
-					xp *= factor;
-				}
-				else if(controlled.GetLevel() < maxLevelCharacter->GetLevel())
+			// Scales the base XP by the level difference between the creature and the given level:
+			// small bonus for higher-level creatures, shrinking towards zero for creatures below the
+			// given level until the cutoff ("grey") level is reached.
+			const auto scaleXpByLevelDiff = [&controlled](const uint32 base, const uint32 level) -> uint32
+			{
+				float xp = static_cast<float>(base);
+				if (controlled.GetLevel() > level)
 				{
-					const uint32 cutoffLevel = xp::GetExpCutoffLevel(maxLevelCharacter->GetLevel());
+					float levelDiff = controlled.GetLevel() - level;
+					levelDiff = std::min<float>(levelDiff, 4);
+					xp *= 1.0f + 0.05f * levelDiff;
+				}
+				else if (controlled.GetLevel() < level)
+				{
+					const uint32 cutoffLevel = xp::GetExpCutoffLevel(level);
 					if (controlled.GetLevel() > cutoffLevel)
 					{
-						const float zd = static_cast<float>(xp::GetZeroDifference(maxLevelCharacter->GetLevel()));
-						const float factor = 1.0f - static_cast<float>(maxLevelCharacter->GetLevel() - controlled.GetLevel()) / zd;
-						xp *= factor;
+						const float zd = static_cast<float>(xp::GetZeroDifference(level));
+						xp *= 1.0f - static_cast<float>(level - controlled.GetLevel()) / zd;
 					}
 					else
 					{
-						xp = 0;
+						xp = 0.0f;
 					}
 				}
+
+				return static_cast<uint32>(xp);
+			};
+
+			const uint32 xp = maxLevelCharacter ? scaleXpByLevelDiff(baseXp, maxLevelCharacter->GetLevel()) : 0;
+
+			// Class XP mirrors the character XP formula with CLASS levels substituted everywhere:
+			// scaling against the highest eligible class level in the group, the grey cutoff against
+			// each recipient's own class level, and the group split by class-level share. This way a
+			// low-level class still earns meaningful class XP from creatures the character itself has
+			// outgrown, while creatures below the class's own grey level grant none.
+			uint32 sumClassLevel = 0;
+			uint32 maxEligibleClassLevel = 0;
+			for (const auto& character : lootRecipients)
+			{
+				const uint32 classLevel = character.second->GetActiveClassLevel();
+				sumClassLevel += classLevel;
+
+				if (controlled.GetLevel() > xp::GetExpCutoffLevel(classLevel) && classLevel > maxEligibleClassLevel)
+				{
+					maxEligibleClassLevel = classLevel;
+				}
 			}
+
+			const uint32 classXp = maxEligibleClassLevel > 0 ? scaleXpByLevelDiff(baseXp, maxEligibleClassLevel) : 0;
 
 			// Group xp modifier
 			const float groupModifier = xp::GetGroupXpRate(lootRecipients.size(), false);
@@ -174,15 +196,26 @@ namespace mmo
 					continue;
 				}
 
+				// Character XP (skipped when the creature is grey to this character's level).
 				const uint32 cutoffLevel = xp::GetExpCutoffLevel(character.second->GetLevel());
-				if (controlled.GetLevel() <= cutoffLevel)
+				if (controlled.GetLevel() > cutoffLevel)
 				{
-					continue;
+					character.second->RewardExperience(static_cast<uint32>(
+						xp * groupModifier *
+							(static_cast<float>(character.second->GetLevel()) / static_cast<float>(sumLevel))));
 				}
 
-				character.second->RewardExperience(
-					xp * groupModifier *
-						(static_cast<float>(character.second->GetLevel()) / static_cast<float>(sumLevel)));
+				// Class XP for the active class, gated by the CLASS level's grey cutoff instead of
+				// the character's. Deliberately independent of the character XP gate above: a capped
+				// or over-leveled character still levels its class on class-appropriate creatures
+				// (RewardClassExperience handles the class-level cap itself).
+				const uint32 classLevel = character.second->GetActiveClassLevel();
+				if (classXp > 0 && sumClassLevel > 0 && controlled.GetLevel() > xp::GetExpCutoffLevel(classLevel))
+				{
+					character.second->RewardClassExperience(static_cast<uint32>(
+						classXp * groupModifier *
+							(static_cast<float>(classLevel) / static_cast<float>(sumClassLevel))));
+				}
 			}
 
 			// Resolve the loot tables assigned to this creature. Loot tables act as reusable modules and

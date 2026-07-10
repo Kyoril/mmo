@@ -56,6 +56,12 @@ namespace mmo
 		virtual void OnMailboxUsed(uint64 mailboxGuid)
 		{
 		}
+
+		/// Called when the character gained class XP for the active class. xpToNextLevel is 0 when
+		/// the class has reached its class max level.
+		virtual void OnClassXpGained(uint32 classId, uint32 xpGained, uint8 classLevel, uint32 classXp, uint32 xpToNextLevel, bool leveledUp)
+		{
+		}
 	};
 
 	/// @brief Represents a playable character in the game world.
@@ -227,6 +233,11 @@ namespace mmo
 		/// @returns Quest status.
 		QuestStatus GetQuestStatus(uint32 quest) const;
 
+		/// Returns true if the quest's required-classes mask permits the currently ACTIVE class.
+		/// Quests already in the log stay there when the player switches to a non-matching class,
+		/// but are frozen: no objective progress and no turn-in until a matching class is active.
+		[[nodiscard]] bool IsQuestClassAllowed(const proto::QuestEntry& entry) const;
+
 		/// Returns true if the player has already met all object-use requirements for the given
 		/// object entry in the given quest. Used by GameWorldObjectS::IsUsable to hide the
 		/// interact cursor once the player no longer needs to use this particular object.
@@ -358,6 +369,11 @@ namespace mmo
 
 	public:
 		void RewardExperience(const uint32 xp);
+
+		/// Grants class XP to the ACTIVE class and levels it up against the class's classlevels
+		/// curve. No-ops when the class has no curve configured (class level stays frozen at 1) or
+		/// the class already reached its class max level. Independent of the character level cap.
+		void RewardClassExperience(uint32 xp);
 
 		void RefreshStats() override;
 

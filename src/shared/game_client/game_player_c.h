@@ -90,6 +90,36 @@ namespace mmo
 		/// Returns the cached class overview. Check KnownClassInfo::isKnown before offering interaction.
 		[[nodiscard]] const std::vector<KnownClassInfo>& GetKnownClasses() const { return m_knownClasses; }
 
+		/// Updates the cached progression values of a single known class in place (class XP gain
+		/// without a full KnownClasses refresh). Does nothing if the class is not in the cache.
+		void UpdateKnownClassProgress(const uint32 classId, const uint8 classLevel, const uint32 classXp, const uint32 xpToNextLevel)
+		{
+			for (auto& info : m_knownClasses)
+			{
+				if (info.classId == classId)
+				{
+					info.classLevel = classLevel;
+					info.classXp = classXp;
+					info.xpToNextLevel = xpToNextLevel;
+					break;
+				}
+			}
+		}
+
+		/// Returns the class level of the currently active class (defaults to 1).
+		[[nodiscard]] uint32 GetActiveClassLevel() const
+		{
+			for (const auto& info : m_knownClasses)
+			{
+				if (info.classId == m_activeKnownClassId)
+				{
+					return info.classLevel == 0 ? 1 : info.classLevel;
+				}
+			}
+
+			return 1;
+		}
+
 		/// Sets the active class id reported alongside the known-class list. Cached separately from the
 		/// replicated Class field so the class list refreshes consistently from the KnownClasses packet
 		/// regardless of field-update timing.

@@ -567,7 +567,7 @@ namespace mmo
 				}
 
 				// 1) Check hovered object (unit or game object)
-				GameObjectC* hovered = m_playerController->GetHoveredObject();
+				const auto hovered = m_playerController->GetHoveredObject();
 				if (hovered && hovered->IsUnit())
 				{
 					m_realmConnector.SendPartyPingUnit(hovered->GetGuid());
@@ -830,6 +830,10 @@ namespace mmo
 		}
 
 		FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SYSTEM", message);
+
+		// The class-availability of logged quests changed with the active class: refresh the quest
+		// log UI so class-gated quests are rendered as disabled/enabled accordingly.
+		FrameManager::Get().TriggerLuaEvent("QUEST_LOG_UPDATE");
 	}
 
 	void WorldState::OnPlayerStatsChanged(uint64 monitoredGuid)
@@ -1496,6 +1500,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::InitialSpells, *this, &WorldState::OnInitialSpells);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::KnownClasses, *this, &WorldState::OnKnownClasses);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ClassXpUpdate, *this, &WorldState::OnClassXpUpdate);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CreatureMove, *this, &WorldState::OnCreatureMove);
 
@@ -2731,6 +2736,50 @@ namespace mmo
 		}
 
 		FrameManager::Get().TriggerLuaEvent("PLAYER_KNOWN_CLASSES_CHANGED");
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnClassXpUpdate(game::IncomingPacket &packet)
+	{
+		uint32 classId = 0, xpGained = 0, classXp = 0, xpToNextLevel = 0;
+		uint8 classLevel = 0, leveledUp = 0;
+		if (!(packet
+			>> io::read<uint32>(classId)
+			>> io::read<uint32>(xpGained)
+			>> io::read<uint8>(classLevel)
+			>> io::read<uint32>(classXp)
+			>> io::read<uint32>(xpToNextLevel)
+			>> io::read<uint8>(leveledUp)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (const auto player = std::dynamic_pointer_cast<GamePlayerC>(m_playerController->GetControlledUnit()))
+		{
+			player->UpdateKnownClassProgress(classId, classLevel, classXp, xpToNextLevel);
+		}
+
+		FrameManager::Get().TriggerLuaEvent("PLAYER_KNOWN_CLASSES_CHANGED");
+
+		if (leveledUp != 0)
+		{
+			// Show a localized system chat notification naming the class and its new level.
+			const proto_client::ClassEntry* classEntry = m_project.classes.getById(classId);
+			const String className = classEntry ? classEntry->name() : String();
+
+			String message = Localize(FrameManager::Get().GetLocalization(), "CLASS_LEVEL_UP_NOTIFICATION");
+			if (const size_t namePlaceholder = message.find("%s"); namePlaceholder != String::npos)
+			{
+				message.replace(namePlaceholder, 2, className);
+			}
+			if (const size_t levelPlaceholder = message.find("%d"); levelPlaceholder != String::npos)
+			{
+				message.replace(levelPlaceholder, 2, std::to_string(classLevel));
+			}
+
+			FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SYSTEM", message);
+		}
 
 		return PacketParseResult::Pass;
 	}

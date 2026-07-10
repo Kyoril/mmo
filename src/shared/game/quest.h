@@ -132,6 +132,16 @@ namespace mmo
 
 	typedef quest_status::Type QuestStatus;
 
+	/// Returns true if the given quest class mask permits the given (0-based) class id. A mask of 0
+	/// means "no class restriction".
+	/// NOTE: the bit convention is 1 << (classId - 1), matching the editor and all existing checks.
+	/// Class ids are 0-based, so class id 0 (Mage) wraps to bit 31; the explicit `& 31` makes that
+	/// wrap portable. Do not change the convention here without migrating all authored quest data.
+	inline bool IsQuestClassAllowed(const uint32 requiredClasses, const uint32 classId)
+	{
+		return requiredClasses == 0 || (requiredClasses & (1u << ((classId - 1) & 31))) != 0;
+	}
+
 	constexpr uint32 MaxQuestLogSize = 20;
 
 	struct QuestField

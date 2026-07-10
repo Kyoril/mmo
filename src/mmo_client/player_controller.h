@@ -51,7 +51,10 @@ namespace mmo
 
 		[[nodiscard]] SceneNode* GetRootNode() const { return m_controlledUnit ? m_controlledUnit->GetSceneNode() : nullptr; }
 
-		[[nodiscard]] GameObjectC* GetHoveredObject() const { return m_hoveredObject; }
+		/// @brief Gets the object currently hovered by the mouse. Resolved through the object
+		///        manager on every call, so an object that despawned while hovered yields
+		///        nullptr instead of a dangling pointer.
+		[[nodiscard]] std::shared_ptr<GameObjectC> GetHoveredObject() const;
 
 		/// Performs the default right-click interaction with a game object: attack living
 		/// enemies, talk to / trade with friendly NPCs, loot corpses, use world objects.
@@ -106,7 +109,7 @@ namespace mmo
 
 		void ToggleWalkMode() override;
 
-		void OnHoveredObjectChanged(GameObjectC* previousHoveredUnit);
+		void OnHoveredObjectChanged(ObjectGuid previousHoveredObjectGuid);
 
 		void ProcessMovementEvent(const MovementEvent& movementEvent);
 
@@ -133,7 +136,10 @@ namespace mmo
 		uint32 m_controlFlags { ControlFlags::None };
 		uint32 m_mouseDownTime = 0;
 		int32 m_x = 0, m_y = 0;
-		GameObjectC* m_hoveredObject = nullptr;
+		/// GUID of the object currently hovered by the mouse, resolved through ObjectMgr on
+		/// access so an object that despawns while hovered is handled safely (no dangling
+		/// pointer). 0 when nothing is hovered.
+		ObjectGuid m_hoveredObjectGuid = 0;
 		/// GUID of the unit currently showing the hover ring, resolved through ObjectMgr so a
 		/// despawned unit is handled safely (no dangling pointer). 0 when nothing is highlighted.
 		ObjectGuid m_hoverRingGuid = 0;

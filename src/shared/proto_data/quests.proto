@@ -94,6 +94,9 @@ message QuestEntry {
 	optional uint32 rewardxp = 53;
 	optional string internalname = 54;
 	optional uint32 maxlevel = 55 [default = 0];
+	// Class XP granted to the ACTIVE class on turn-in, in addition to rewardxp. Unscaled
+	// (no level-difference factor is applied). 0 = no class XP reward.
+	optional uint32 rewardclassxp = 56;
 }
 
 message Quests {

@@ -69,8 +69,10 @@ namespace mmo
 		const std::shared_ptr<GamePlayerC>& player = ObjectMgr::GetActivePlayer();
 		ASSERT(player);
 
-		// Check level
-		if (player->GetLevel() < m_trainerSpells[index].requiredLevel)
+		// Check level: class trainers gate by the active class's class level, other trainer types
+		// by the character level (mirrors the authoritative server check).
+		const uint32 effectiveLevel = IsClassTrainer() ? player->GetActiveClassLevel() : player->GetLevel();
+		if (effectiveLevel < m_trainerSpells[index].requiredLevel)
 		{
 			FrameManager::Get().TriggerLuaEvent("TRAINER_BUY_ERROR", 0);
 			return;
@@ -106,7 +108,8 @@ namespace mmo
 		uint64 trainerGuid;
 		uint16 spellCount;
 		String trainerTitle;
-		if (!(packet >> io::read<uint64>(trainerGuid) >> io::read<uint16>(spellCount) >> io::read_container<uint8>(trainerTitle)))
+		uint8 trainerType = 0;
+		if (!(packet >> io::read<uint64>(trainerGuid) >> io::read<uint16>(spellCount) >> io::read_container<uint8>(trainerTitle) >> io::read<uint8>(trainerType)))
 		{
 			ELOG("Failed to read trainer list packet!");
 			return PacketParseResult::Disconnect;
@@ -114,6 +117,7 @@ namespace mmo
 
 		m_trainerGuid = trainerGuid;
 		m_trainerTitle = std::move(trainerTitle);
+		m_trainerType = trainerType;
 		m_trainerSpells.clear();
 
 		if (spellCount == 0)
@@ -175,6 +179,10 @@ namespace mmo
 
 		case trainer_result::FailedNotEnoughMoney:
 			FrameManager::Get().TriggerLuaEvent("TRAINER_BUY_ERROR", 1);
+			break;
+
+		case trainer_result::FailedWrongClass:
+			FrameManager::Get().TriggerLuaEvent("TRAINER_BUY_ERROR", 2);
 			break;
 
 		default:

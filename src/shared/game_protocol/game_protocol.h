@@ -668,6 +668,11 @@ namespace mmo
 				/// its alert state. Payload: packed uint64 detectorGuid.
 				StealthDetected,
 
+				/// Sent to the client when the character gains class XP for the active class.
+				/// Payload: uint32 classId, uint32 xpGained, uint8 classLevel, uint32 classXp,
+				/// uint32 xpToNextLevel (0 = class max level reached), uint8 leveledUp.
+				ClassXpUpdate,
+
 				/// Counter constant
 				Count_,
 			};

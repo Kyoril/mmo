@@ -168,7 +168,7 @@ namespace mmo
 				return nullptr;
 			}
 
-			GameObjectC* hovered = controller->GetHoveredObject();
+			const auto hovered = controller->GetHoveredObject();
 			if (!hovered || !hovered->IsWorldObject())
 			{
 				return nullptr;
@@ -176,13 +176,15 @@ namespace mmo
 
 			// Only treat the object as hovered (for tooltip purposes) when it is flagged as
 			// interactable for the local player. Non-interactable world objects must not show a tooltip.
-			const auto* worldObject = static_cast<const GameWorldObjectC*>(hovered);
+			const auto* worldObject = static_cast<const GameWorldObjectC*>(hovered.get());
 			if (!worldObject->IsInteractable())
 			{
 				return nullptr;
 			}
 
-			return hovered;
+			// The raw pointer stays valid for the duration of the script call: ObjectMgr owns
+			// the object and despawns are only processed between frames.
+			return hovered.get();
 		}
 
 		/// Returns true if the player is currently hovering an interactable world object.
@@ -1123,6 +1125,7 @@ namespace mmo
 							   .def("IsKnownClassUnlocked", &UnitHandle::IsKnownClassUnlocked)
 							   .def("IsKnownClassActive", &UnitHandle::IsKnownClassActive)
 							   .def("GetKnownClassChangeSpell", &UnitHandle::GetKnownClassChangeSpell)
+						   .def("GetActiveClassLevel", &UnitHandle::GetActiveClassLevel)
 							   .def("GetGuildName", &UnitHandle::GetGuildName)
 							   .def("GetAuraCount", &UnitHandle::GetAuraCount)
 							   .def("GetAura", &UnitHandle::GetAura)
@@ -1575,6 +1578,17 @@ namespace mmo
 														   { this->m_trainerClient.CloseTrainer(); }),
 					   luabind::def<std::function<String()>>("GetTrainerTitle", [this]()
 														   { return this->m_trainerClient.GetTrainerTitle(); }),
+					   luabind::def<std::function<bool()>>("IsTrainerClassTrainer", [this]()
+														   { return this->m_trainerClient.IsClassTrainer(); }),
+					   luabind::def<std::function<int32(int32)>>("GetTrainerSpellReqLevel", [this](int32 slot) -> int32
+														   {
+															   const auto& trainerSpells = this->m_trainerClient.GetTrainerSpells();
+															   if (slot < 0 || slot >= static_cast<int32>(trainerSpells.size()))
+															   {
+																   return 0;
+															   }
+															   return static_cast<int32>(trainerSpells[slot].requiredLevel);
+														   }),
 
 					   luabind::def<std::function<const char *(const ItemInfo *, int32)>>("GetItemSpellTriggerType", [this](const ItemInfo *item, int32 index)
 																						  { return this->GetItemSpellTriggerType(item, index); }),

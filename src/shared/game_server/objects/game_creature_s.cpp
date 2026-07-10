@@ -213,6 +213,13 @@ namespace mmo
 
 		for (const auto& quest : GetEntry().end_quests())
 		{
+			// Class-gated quests are frozen while a non-matching class is active: don't show a
+			// turn-in/progress icon for them.
+			if (const proto::QuestEntry* entry = GetProject().quests.getById(quest); entry && !player.IsQuestClassAllowed(*entry))
+			{
+				continue;
+			}
+
 			if (const QuestStatus questStatus = player.GetQuestStatus(quest); questStatus == quest_status::Complete)
 			{
 				return questgiver_status::Reward;

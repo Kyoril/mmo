@@ -746,6 +746,11 @@ namespace mmo
 			DrawHelpMarker("Automatically calculate XP based on quest level and difficulty");
 
 			ImGui::SetNextItemWidth(150);
+			SLIDER_UINT32_PROP(rewardclassxp, "Class Experience Points", 0, std::numeric_limits<int32>::max());
+			ImGui::SameLine();
+			DrawHelpMarker("Class XP granted to the player's ACTIVE class on turn-in, in addition to the regular experience points. Unscaled by level difference.");
+
+			ImGui::SetNextItemWidth(150);
 			SLIDER_UINT32_PROP(rewardmoney, "Money Reward", 0, std::numeric_limits<int32>::max());
 			ImGui::SameLine();
 			DrawHelpMarker("Copper coins rewarded");

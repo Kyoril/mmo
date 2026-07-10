@@ -25,7 +25,7 @@ A character is no longer permanently bound to the single class chosen at creatio
 | Concept | Scope | Drives |
 |---|---|---|
 | **Character level** | character-wide | base stats, HP/mana, attribute-point **total**, XP/leveling (cap 10) |
-| **Class level** | per known class | that class's talent-point **pool** (cap 20+). Frozen at 1 for now. |
+| **Class level** | per known class | that class's talent-point **pool**. Leveled via **class XP** against `ClassEntry.classlevels` (own cap, may exceed the character cap). |
 | **Talent points / ranks** | per known class | active class's talents apply; others are dormant |
 | **Attribute total** | character-wide | how many attribute points exist to spend at the current character level |
 | **Attribute spending** | per known class | how those points are allocated for the active class |
@@ -37,11 +37,9 @@ Talent points derive from **class level**, not character level. A freshly-acquir
 class level 1 and therefore has a near-empty talent pool (the "0 warrior points" case), independent of
 how high the character level is.
 
-**Transitional note:** there is currently no mechanism to raise a class level — all class levels stay
-at 1 until class-leveling is designed. Consequently, when this feature ships, existing characters keep
-their character level but their (single) class drops to class level 1, so their talent points and
-talents effectively reset. This is acceptable during internal development; we deliberately skip a
-talent-preserving migration because the class-leveling concept itself is not yet designed.
+With class leveling (phase 6), the talent-point pool is the sum of
+`ClassEntry.classlevels[0..classLevel-1].talentpoints`. A class **without** a `classlevels` curve
+falls back to the legacy pool derived from `levelbasevalues` and stays frozen at class level 1.
 
 ### Attribute points
 
@@ -102,8 +100,8 @@ Per known class, persisted on the realm:
 
 ```
 classId
-classLevel   (uint8, default 1, frozen at 1 for now)
-classXp      (uint32, reserved, 0 for now)
+classLevel   (uint8, default 1; raised by class XP against ClassEntry.classlevels)
+classXp      (uint32, XP towards the next class level; 0 at the class cap)
 attributePointsSpent[5]
 talentRanks  (talentId -> rank, scoped to this class)
 ```
@@ -172,10 +170,46 @@ migrations: `20260623_1_multi_class.sql`, `20260623_2_per_class_action_bars.sql`
    `SendKnownClasses` + persist), so a freshly-trained class appears in the list right away even
    before activation.
 
+6. **Class XP & class leveling** *(done)* — killing creatures rewards the ACTIVE class with class XP
+   computed by the same formula as character XP but with **class levels substituted everywhere**
+   (hooked in `CreatureAIDeathState`): the level-difference scaling uses the highest eligible class
+   level among the recipients, the grey cutoff uses each recipient's own class level, and the group
+   split weighs by class-level share. A level-5 character with a level-2 class killing a level-1
+   creature therefore gets near-full class XP even though its character XP is heavily reduced — and
+   conversely, creatures below the *class's* grey level grant no class XP even if the character
+   still gets some. Class XP keeps flowing when the character level is capped
+   (`RewardClassExperience` is independent of the character cap). Regular quest `rewardxp`
+   deliberately does **not** feed class XP (a completed quest could otherwise be banked and turned
+   in as a different class); quests instead carry an explicit `rewardclassxp` field granted unscaled
+   on turn-in. The per-class curve lives in `ClassEntry.classlevels` (repeated
+   `ClassLevelEntry { xptonextlevel, talentpoints }`, editable in the class editor): the class max
+   level is the entry count (clamped to 255, may exceed the character cap), and the talent-point
+   pool is summed from it (`UpdateTotalTalentPoints`; classes without a curve keep the legacy
+   `levelbasevalues` pool and stay frozen at class level 1, accruing no XP). XP gains are pushed via
+   the lightweight `ClassXpUpdate` packet (updates the Classes tab via
+   `PLAYER_KNOWN_CLASSES_CHANGED`, chat notification on level-up); a level-up additionally resends
+   `KnownClasses` and persists via `SaveCharacterData` (per-kill XP is covered by the regular save
+   points: logout, character level-up, class switch).
+
+   **Quest gating by ACTIVE class:** `requiredclasses` is enforced against the active class at
+   offer, accept, and (newly) turn-in (`RewardQuest`/`OnQuestGiverCompleteQuest`). Quests already in
+   the log are **frozen** while a non-matching class is active: no kill/item/spell-cast objective
+   credit, no questgiver icon or menu entry, no turn-in. The client renders frozen log/tracker
+   entries greyed with a "(Wrong Class)" annotation (`QuestInfo.requiredClasses` +
+   `IsQuestAllowedForClass` in Lua, refreshed via `QUEST_LOG_UPDATE` on every class switch).
+
+   **Trainer gating:** class trainers (`TrainerEntry.type == CLASS_TRAINER`) now enforce their
+   `classid` (only the matching active class is served — list and buy; note class id 0 = Mage, so
+   the check uses `has_classid()`), and their per-spell `reqlevel` is checked against the player's
+   **class level** instead of the character level (other trainer types keep character-level
+   semantics). The `TrainerList` packet carries the trainer type so the client mirrors the check
+   (`GetTrainerSpellReqLevel`/`IsTrainerClassTrainer`/`UnitHandle:GetActiveClassLevel`), and a new
+   `FailedWrongClass` buy error is surfaced via the error frame.
+
 ## Open items / deferred
 
-- Class XP and a mechanism to raise class level (currently frozen at 1). **Still deferred** — the
-  class-leveling concept itself is not yet designed.
+- Per-class action bars, class-change spells, proficiency handling etc. are done (see below); no
+  known open items remain from the original plan.
 
 ### Done since the initial plan
 

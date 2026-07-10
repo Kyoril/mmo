@@ -116,7 +116,54 @@ namespace mmo
 					ImGui::EndDisabled();
 				}
 
+				if (ImGui::TableNextColumn())
+				{
+					ImGui::InputText("Title", currentEntry.mutable_title());
+				}
+
 				ImGui::EndTable();
+			}
+
+			static const char* s_trainerTypeNames[] = { "Class Trainer", "Mount Trainer", "Skill Trainer", "Pet Trainer" };
+			int trainerType = static_cast<int>(currentEntry.type());
+			if (ImGui::Combo("Type", &trainerType, s_trainerTypeNames, IM_ARRAYSIZE(s_trainerTypeNames)))
+			{
+				currentEntry.set_type(static_cast<proto::TrainerEntry_TrainerType>(trainerType));
+			}
+
+			if (currentEntry.type() == proto::TrainerEntry_TrainerType_CLASS_TRAINER)
+			{
+				// Note: class id 0 is a valid class (Mage), so "any class" is expressed by clearing
+				// the field rather than storing 0.
+				static const char* s_anyClass = "<Any Class>";
+				const proto::ClassEntry* classEntry = currentEntry.has_classid() ? m_project.classes.getById(currentEntry.classid()) : nullptr;
+				if (ImGui::BeginCombo("Class", currentEntry.has_classid() ? (classEntry != nullptr ? classEntry->name().c_str() : "<Unknown>") : s_anyClass, ImGuiComboFlags_None))
+				{
+					if (ImGui::Selectable(s_anyClass, !currentEntry.has_classid()))
+					{
+						currentEntry.clear_classid();
+					}
+
+					for (int i = 0; i < m_project.classes.count(); i++)
+					{
+						ImGui::PushID(i);
+						const auto& entry = m_project.classes.getTemplates().entry(i);
+						const bool selected = currentEntry.has_classid() && entry.id() == currentEntry.classid();
+						if (ImGui::Selectable(entry.name().c_str(), selected))
+						{
+							currentEntry.set_classid(entry.id());
+						}
+						if (selected)
+						{
+							ImGui::SetItemDefaultFocus();
+						}
+						ImGui::PopID();
+					}
+
+					ImGui::EndCombo();
+				}
+
+				ImGui::TextDisabled("Class trainers only serve players whose active class matches, and 'Min Level' is checked against the player's CLASS level.");
 			}
 		}
 

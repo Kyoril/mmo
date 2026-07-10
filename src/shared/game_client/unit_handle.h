@@ -91,6 +91,10 @@ namespace mmo
 		/// range). Casting it switches the active class to that class.
 		[[nodiscard]] virtual uint32 GetKnownClassChangeSpell(uint32 index) const;
 
+		/// Class level of the unit's currently ACTIVE class (defaults to 1 for players, 0 for
+		/// non-player units).
+		[[nodiscard]] virtual int32 GetActiveClassLevel() const;
+
 		/// Gets the unit's guild name when the unit is a player.
 		/// @return The guild name, an empty string for a guildless player, or nullptr for a non-player.
 		[[nodiscard]] virtual const char* GetGuildName() const;

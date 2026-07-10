@@ -18,7 +18,8 @@ namespace mmo
 			<< io::write<uint32>(itemInfo.questLevel)
 			<< io::write<uint32>(itemInfo.rewardXp)
 			<< io::write<uint32>(itemInfo.rewardMoney)
-			<< io::write<uint32>(itemInfo.rewardSpellId);
+			<< io::write<uint32>(itemInfo.rewardSpellId)
+			<< io::write<uint32>(itemInfo.requiredClasses);
 
 		writer << io::write<uint8>(itemInfo.requiredItems.size());
 		for (const auto& requiredItem : itemInfo.requiredItems)
@@ -66,7 +67,8 @@ namespace mmo
 			>> io::read<uint32>(outItemInfo.questLevel)
 			>> io::read<uint32>(outItemInfo.rewardXp)
 			>> io::read<uint32>(outItemInfo.rewardMoney)
-			>> io::read<uint32>(outItemInfo.rewardSpellId);
+			>> io::read<uint32>(outItemInfo.rewardSpellId)
+			>> io::read<uint32>(outItemInfo.requiredClasses);
 
 		uint8 num = 0;
 		reader >> io::read<uint8>(num);

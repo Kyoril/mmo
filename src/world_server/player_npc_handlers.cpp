@@ -409,6 +409,13 @@ namespace mmo
 			return;
 		}
 
+		// Class-gated quests are frozen while a non-matching class is active: neither the
+		// request-items dialog nor the reward dialog may open.
+		if (!m_character->IsQuestClassAllowed(*quest))
+		{
+			return;
+		}
+
 		// Check the quest status
 		const QuestStatus questStatus = m_character->GetQuestStatus(questId);
 		if (questStatus != quest_status::Complete)
@@ -492,6 +499,13 @@ namespace mmo
 			return;
 		}
 
+		// A class trainer only sells to players whose active class matches its class.
+		if (!IsTrainerClassAllowed(*trainerEntry))
+		{
+			SendTrainerBuyError(trainerGuid, trainer_result::FailedWrongClass);
+			return;
+		}
+
 		for (const auto& trainerSpellEntry : trainerEntry->spells())
 		{
 			if (trainerSpellEntry.spell() == spellId)
@@ -503,7 +517,11 @@ namespace mmo
 					return;
 				}
 
-				if (m_character->GetLevel() < trainerSpellEntry.reqlevel())
+				// Class trainers gate their spells by the player's CLASS level (so a fresh class
+				// has to be leveled up first); other trainer types keep using the character level.
+				const bool useClassLevel = trainerEntry->type() == proto::TrainerEntry_TrainerType_CLASS_TRAINER;
+				const uint32 effectiveLevel = useClassLevel ? m_character->GetActiveClassLevel() : m_character->GetLevel();
+				if (effectiveLevel < trainerSpellEntry.reqlevel())
 				{
 					SendTrainerBuyError(trainerGuid, trainer_result::FailedLevelTooLow);
 					return;

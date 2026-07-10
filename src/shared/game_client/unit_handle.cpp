@@ -243,6 +243,16 @@ namespace mmo
 		return player.GetActiveKnownClassId() == knownClasses[index].classId;
 	}
 
+	int32 UnitHandle::GetActiveClassLevel() const
+	{
+		if (!CheckNonNull() || !Get()->IsPlayer())
+		{
+			return 0;
+		}
+
+		return static_cast<int32>(Get()->AsPlayer().GetActiveClassLevel());
+	}
+
 	uint32 UnitHandle::GetKnownClassChangeSpell(const uint32 index) const
 	{
 		if (!CheckNonNull() || !Get()->IsPlayer())

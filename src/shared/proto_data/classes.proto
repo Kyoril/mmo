@@ -18,6 +18,17 @@ message ClassSpell {
 	required uint32 spell = 2;
 }
 
+// Per-class-level progression data for CLASS leveling (independent of levelbasevalues /
+// xpToNextLevel, which drive CHARACTER leveling). Entry i (0-based) describes class level i+1:
+// xptonextlevel is the class XP required to advance from class level i+1 to i+2 (the last
+// entry's value is unused), talentpoints is the number of talent points granted AT class
+// level i+1. The class max level is classlevels_size(); an empty list means the class does
+// not level (class level stays frozen at 1, legacy behavior).
+message ClassLevelEntry {
+	required uint32 xptonextlevel = 1;
+	optional uint32 talentpoints = 2 [default = 0];
+}
+
 message AttackPowerStatSource {
 	required uint32 statId = 1;
 	required float factor = 2;
@@ -97,6 +108,11 @@ message ClassEntry {
 	// character on creation if this is their initial class. 0 means the class has no associated
 	// class-change spell yet.
 	optional uint32 class_change_spell = 26;
+
+	// Class-level progression curve (see ClassLevelEntry). NOTE: field numbers of ClassEntry are
+	// shared with the client subset schema in src/shared/client_data/classes.proto — keep them in
+	// sync when adding fields.
+	repeated ClassLevelEntry classlevels = 27;
 }
 
 message Classes {

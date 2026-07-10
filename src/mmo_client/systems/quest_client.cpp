@@ -1,6 +1,7 @@
 #include "quest_client.h"
 
 #include "frame_ui/frame_mgr.h"
+#include "game/quest.h"
 #include "game/quest_info.h"
 #include "game_client/game_player_c.h"
 #include "game_client/object_mgr.h"
@@ -61,6 +62,7 @@ namespace mmo
 				.def_readonly("id", &QuestInfo::id)
 				.def_readonly("title", &QuestInfo::title)
 				.def_readonly("rewardMoney", &QuestInfo::rewardMoney)
+				.def_readonly("requiredClasses", &QuestInfo::requiredClasses)
 			),
 
 			luabind::scope(
@@ -97,6 +99,21 @@ namespace mmo
 				.def_readonly("rewardedSpell", &QuestDetails::rewardSpell)
 			),
 
+			luabind::def_lambda("IsQuestAllowedForClass", [](const QuestInfo* quest) -> bool
+				{
+					if (!quest)
+					{
+						return true;
+					}
+
+					const std::shared_ptr<GamePlayerC> player = ObjectMgr::GetActivePlayer();
+					if (!player)
+					{
+						return true;
+					}
+
+					return IsQuestClassAllowed(quest->requiredClasses, player->Get<uint32>(object_fields::Class));
+				}),
 			luabind::def_lambda("GetGreetingText", [this]() { return GetGreetingText(); }),
 			luabind::def_lambda("GetNumAvailableQuests", [this]() { return GetNumAvailableQuests(); }),
 			luabind::def_lambda("GetAvailableQuest", [this](uint32 index) { return GetAvailableQuest(index); }),

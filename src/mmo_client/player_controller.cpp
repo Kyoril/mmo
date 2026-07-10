@@ -598,22 +598,33 @@ namespace mmo
 		m_controlledUnit->ToggleWalkMode();
 	}
 
-	void PlayerController::OnHoveredObjectChanged(GameObjectC* previousHoveredUnit)
+	std::shared_ptr<GameObjectC> PlayerController::GetHoveredObject() const
 	{
-		if (m_hoveredObject)
+		if (m_hoveredObjectGuid == 0)
 		{
-			if(m_hoveredObject->CanBeLooted())
+			return nullptr;
+		}
+
+		return ObjectMgr::Get<GameObjectC>(m_hoveredObjectGuid);
+	}
+
+	void PlayerController::OnHoveredObjectChanged(const ObjectGuid previousHoveredObjectGuid)
+	{
+		const auto hoveredObject = GetHoveredObject();
+		if (hoveredObject)
+		{
+			if(hoveredObject->CanBeLooted())
 			{
 				g_cursor.SetCursorType(CursorType::Loot);
 			}
 			else
 			{
-				if (m_hoveredObject->IsUnit())
+				if (hoveredObject->IsUnit())
 				{
-					GameUnitC& unit = m_hoveredObject->AsUnit();
+					GameUnitC& unit = hoveredObject->AsUnit();
 					if (unit.IsAlive())
 					{
-						if (m_hoveredObject->Get<uint32>(object_fields::NpcFlags) != 0)
+						if (hoveredObject->Get<uint32>(object_fields::NpcFlags) != 0)
 						{
 							g_cursor.SetCursorType(CursorType::Gossip);
 						}
@@ -627,10 +638,10 @@ namespace mmo
 						g_cursor.SetCursorType(CursorType::Pointer);
 					}
 				}
-				else if (m_hoveredObject->IsWorldObject())
+				else if (hoveredObject->IsWorldObject())
 				{
 					// Check if object is usable by the player
-					if (m_hoveredObject->IsUsable(m_controlledUnit->AsPlayer()))
+					if (hoveredObject->IsUsable(m_controlledUnit->AsPlayer()))
 					{
 						g_cursor.SetCursorType(CursorType::Interact);
 					}
@@ -639,7 +650,7 @@ namespace mmo
 						g_cursor.SetCursorType(CursorType::Pointer);
 					}
 				}
-				else 
+				else
 				{
 					g_cursor.SetCursorType(CursorType::Pointer);
 				}
@@ -650,13 +661,13 @@ namespace mmo
 			g_cursor.SetCursorType(CursorType::Pointer);
 		}
 
-		if (m_hoveredObject != previousHoveredUnit)
+		if (m_hoveredObjectGuid != previousHoveredObjectGuid)
 		{
 			// Update the ground hover ring. Track it by GUID and resolve through ObjectMgr so a
 			// unit that despawned while hovered resolves to null instead of a dangling pointer
 			// (its ring is already torn down by its own destructor). The unit itself suppresses
 			// the hover ring while it is the current selection target.
-			const ObjectGuid newHoverGuid = (m_hoveredObject && m_hoveredObject->IsUnit()) ? m_hoveredObject->GetGuid() : 0;
+			const ObjectGuid newHoverGuid = (hoveredObject && hoveredObject->IsUnit()) ? hoveredObject->GetGuid() : 0;
 			if (newHoverGuid != m_hoverRingGuid)
 			{
 				if (m_hoverRingGuid != 0)
@@ -678,7 +689,7 @@ namespace mmo
 				}
 			}
 
-			ObjectMgr::SetHoveredObject(m_hoveredObject ? m_hoveredObject->GetGuid() : 0);
+			ObjectMgr::SetHoveredObject(hoveredObject ? hoveredObject->GetGuid() : 0);
 			FrameManager::Get().TriggerLuaEvent("HOVERED_OBJECT_CHANGED");
 		}
 	}
@@ -858,9 +869,10 @@ namespace mmo
 		// plate doesn't overlap the model.
 		if (const auto nameplate = std::dynamic_pointer_cast<NameplateFrame>(hoverFrame))
 		{
-			GameObjectC* previousObject = m_hoveredObject;
-			m_hoveredObject = ObjectMgr::Get<GameUnitC>(nameplate->GetUnitGuid()).get();
-			OnHoveredObjectChanged(previousObject);
+			const ObjectGuid previousHoveredObjectGuid = m_hoveredObjectGuid;
+			const auto hoveredUnit = ObjectMgr::Get<GameUnitC>(nameplate->GetUnitGuid());
+			m_hoveredObjectGuid = hoveredUnit ? hoveredUnit->GetGuid() : 0;
+			OnHoveredObjectChanged(previousHoveredObjectGuid);
 		}
 		else if (!hoverFrame || !(hoverFrame->IsEnabled() && hoverFrame->GetType() == Button::Type))
 		{
@@ -927,9 +939,9 @@ namespace mmo
 				}
 			}
 
-			GameObjectC* previousObject = m_hoveredObject;
-			m_hoveredObject = newHoveredObject;
-			OnHoveredObjectChanged(previousObject);
+			const ObjectGuid previousHoveredObjectGuid = m_hoveredObjectGuid;
+			m_hoveredObjectGuid = newHoveredObject ? newHoveredObject->GetGuid() : 0;
+			OnHoveredObjectChanged(previousHoveredObjectGuid);
 		}
 	}
 
@@ -996,16 +1008,16 @@ namespace mmo
 		{
 			const uint64 previousSelectedUnit = m_controlledUnit->Get<uint64>(object_fields::TargetUnit);
 
-			if (m_hoveredObject)
+			if (const auto hoveredObject = GetHoveredObject())
 			{
-				if (m_hoveredObject->GetGuid() != previousSelectedUnit)
+				if (hoveredObject->GetGuid() != previousSelectedUnit)
 				{
-					m_controlledUnit->SetTargetUnit(ObjectMgr::Get<GameUnitC>(m_hoveredObject->GetGuid()));
+					m_controlledUnit->SetTargetUnit(ObjectMgr::Get<GameUnitC>(hoveredObject->GetGuid()));
 				}
 
 				if (button == MouseButton_Right)
 				{
-					InteractWithObject(*m_hoveredObject);
+					InteractWithObject(*hoveredObject);
 				}
 			}
 			else

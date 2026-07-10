@@ -505,6 +505,74 @@ namespace mmo
 			}
 		}
 
+		if (const auto section = ScopedEditorSection("Class Level Progression", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::TextWrapped("Class-level curve for CLASS leveling, independent of the character level tables above. The class max level equals the number of entries; an empty list freezes the class at class level 1.");
+
+			if (currentEntry.classlevels_size() > 0)
+			{
+				ImGui::PlotLines("Class XP to next level", [](void* data, int idx) -> float
+					{
+						EntryType* entry = (EntryType*)data;
+						return static_cast<float>(entry->classlevels(idx).xptonextlevel());
+					}, &currentEntry, currentEntry.classlevels_size(), 0, 0, FLT_MAX, FLT_MAX, ImVec2(0, 200));
+			}
+
+			if (DrawSuccessButton("Add Level", ImVec2(-1, 0)))
+			{
+				auto* classLevel = currentEntry.add_classlevels();
+				if (const auto count = currentEntry.classlevels_size(); count == 1)
+				{
+					classLevel->set_xptonextlevel(400);
+				}
+				else
+				{
+					classLevel->set_xptonextlevel(currentEntry.classlevels(count - 2).xptonextlevel() * 2);
+				}
+				classLevel->set_talentpoints(1);
+			}
+
+			if (ImGui::BeginTable("classLevelsTable", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+			{
+				ImGui::TableSetupColumn("Class Level", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("XP to next level", ImGuiTableColumnFlags_None);
+				ImGui::TableSetupColumn("Talent Points", ImGuiTableColumnFlags_None);
+				ImGui::TableHeadersRow();
+
+				int value = 0;
+
+				for (int index = 0; index < currentEntry.classlevels_size(); ++index)
+				{
+					ImGui::PushID(index);
+
+					ImGui::TableNextRow();
+
+					ImGui::TableNextColumn();
+					ImGui::Text("%d", index + 1);
+
+					ImGui::TableNextColumn();
+					value = currentEntry.classlevels(index).xptonextlevel();
+					if (ImGui::InputInt("##classxp", &value)) currentEntry.mutable_classlevels(index)->set_xptonextlevel(value);
+
+					ImGui::TableNextColumn();
+					value = currentEntry.classlevels(index).talentpoints();
+					if (ImGui::InputInt("##classtp", &value)) currentEntry.mutable_classlevels(index)->set_talentpoints(value);
+
+					ImGui::SameLine();
+
+					if (DrawDangerButton("Remove"))
+					{
+						currentEntry.mutable_classlevels()->erase(currentEntry.mutable_classlevels()->begin() + index);
+						index--;
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndTable();
+			}
+		}
+
 		static String s_statNames[] = {
 			"Stamina",
 			"Strength",

@@ -692,6 +692,10 @@ namespace mmo
 
 		void SendVendorInventoryError(uint64 vendorGuid, vendor_result::Type result);
 
+		/// Returns true if the player's active class may use this trainer. Class trainers with a
+		/// configured class id only serve that class; all other trainers serve everyone.
+		bool IsTrainerClassAllowed(const proto::TrainerEntry& trainer) const;
+
 		void HandleTrainerGossip(const proto::TrainerEntry& trainer, const GameCreatureS& trainerUnit);
 
 		void SendTrainerList(const proto::TrainerEntry& trainer, const GameCreatureS& trainerUnit);
@@ -752,6 +756,11 @@ namespace mmo
 		void OnObjectLoot() override;
 
 		void OnMailboxUsed(uint64 mailboxGuid) override;
+
+		/// Sends a lightweight ClassXpUpdate packet. On a class level-up additionally refreshes the
+		/// full known-class list and persists the character (kills are too frequent to save on
+		/// every XP gain; between level-ups class XP is covered by the regular save points).
+		void OnClassXpGained(uint32 classId, uint32 xpGained, uint8 classLevel, uint32 classXp, uint32 xpToNextLevel, bool leveledUp) override;
 
 		void OnRootChanged(bool applied, uint32 ackId) override;
 

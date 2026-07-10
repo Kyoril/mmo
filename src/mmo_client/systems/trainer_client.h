@@ -45,6 +45,13 @@ namespace mmo
 		/// @return The trainer title, or empty string if not set.
 		[[nodiscard]] const String& GetTrainerTitle() const { return m_trainerTitle; }
 
+		/// @brief Returns the trainer type (see proto TrainerEntry::TrainerType; 0 = class trainer).
+		[[nodiscard]] uint8 GetTrainerType() const { return m_trainerType; }
+
+		/// @brief Returns true if the current trainer is a class trainer. Class trainers gate their
+		/// spells by the player's CLASS level instead of the character level.
+		[[nodiscard]] bool IsClassTrainer() const { return m_trainerType == 0; }
+
 		void BuySpell(uint32 index) const;
 
 		void OnSpellLearned(uint32 spellId);
@@ -64,5 +71,6 @@ namespace mmo
 		std::vector<TrainerSpellEntry> m_trainerSpells;
 		uint64 m_trainerGuid = 0;
 		String m_trainerTitle;
+		uint8 m_trainerType = 0;
 	};
 }

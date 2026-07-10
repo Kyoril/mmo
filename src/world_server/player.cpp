@@ -1767,6 +1767,13 @@ namespace mmo
 			{
 				if (const auto* quest = m_project.quests.getById(questId))
 				{
+					// Class-gated quests are frozen while a non-matching class is active: don't
+					// offer their progress/turn-in menu entries.
+					if (!m_character->IsQuestClassAllowed(*quest))
+					{
+						continue;
+					}
+
 					WriteQuestMenuEntry(*quest, questStatus == quest_status::Incomplete ? questgiver_status::Incomplete : questgiver_status::Reward, GetLocale(), writer);
 					questCount++;
 				}
@@ -2981,13 +2988,18 @@ namespace mmo
 				});
 				const bool isKnown = knownIt != knownClasses.end();
 				const uint8 classLevel = isKnown ? std::max<uint8>(1, knownIt->classLevel) : 0;
-				const uint8 maxClassLevel = static_cast<uint8>(std::clamp<int>(classEntry.levelbasevalues_size(), 1, 255));
+				// Class max level derives from the class-level curve. A class without a curve does
+				// not level: report the current class level as the max so the client renders a
+				// capped state instead of fake progress.
+				const bool hasCurve = classEntry.classlevels_size() > 0;
+				const uint8 maxClassLevel = hasCurve
+					? static_cast<uint8>(std::clamp<int>(classEntry.classlevels_size(), 1, 255))
+					: std::max<uint8>(1, classLevel);
 				const uint32 classXp = isKnown ? knownIt->classXp : 0;
 				uint32 xpToNextLevel = 0;
-				if (isKnown && classLevel < maxClassLevel && classEntry.xptonextlevel_size() > 0)
+				if (isKnown && hasCurve && classLevel < maxClassLevel)
 				{
-					const int xpIndex = std::min<int>(classLevel - 1, classEntry.xptonextlevel_size() - 1);
-					xpToNextLevel = classEntry.xptonextlevel(xpIndex);
+					xpToNextLevel = classEntry.classlevels(classLevel - 1).xptonextlevel();
 				}
 				const uint32 changeSpellId = isKnown ? character.GetClassChangeSpellId(classEntry.id()) : 0;
 
@@ -3002,6 +3014,35 @@ namespace mmo
 			}
 			packet.Finish();
 		}, false);
+	}
+
+	void Player::OnClassXpGained(const uint32 classId, const uint32 xpGained, const uint8 classLevel, const uint32 classXp, const uint32 xpToNextLevel, const bool leveledUp)
+	{
+		if (!m_spawned)
+		{
+			return;
+		}
+
+		SendPacket([classId, xpGained, classLevel, classXp, xpToNextLevel, leveledUp](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::ClassXpUpdate);
+			packet
+				<< io::write<uint32>(classId)
+				<< io::write<uint32>(xpGained)
+				<< io::write<uint8>(classLevel)
+				<< io::write<uint32>(classXp)
+				<< io::write<uint32>(xpToNextLevel)
+				<< io::write<uint8>(leveledUp ? 1 : 0);
+			packet.Finish();
+		}, false);
+
+		if (leveledUp)
+		{
+			// The max/derived values shown in the class list changed with the level: refresh the
+			// full list and persist so the new class level survives a crash.
+			SendKnownClasses();
+			SaveCharacterData();
+		}
 	}
 
 	void Player::OnKnownClassesChanged()
@@ -3156,6 +3197,23 @@ namespace mmo
 			});
 	}
 
+	bool Player::IsTrainerClassAllowed(const proto::TrainerEntry& trainer) const
+	{
+		if (trainer.type() != proto::TrainerEntry_TrainerType_CLASS_TRAINER)
+		{
+			return true;
+		}
+
+		// Note: class id 0 is a valid class (Mage), so "no class configured" must be checked via
+		// has_classid() instead of comparing the id against 0.
+		if (!trainer.has_classid())
+		{
+			return true;
+		}
+
+		return trainer.classid() == m_character->Get<uint32>(object_fields::Class);
+	}
+
 	void Player::HandleTrainerGossip(const proto::TrainerEntry& trainer, const GameCreatureS& trainerUnit)
 	{
 		constexpr float interactionDistance = 5.0f;
@@ -3180,7 +3238,12 @@ namespace mmo
 		{
 			return;
 		}
-		
+		// A class trainer only serves players whose active class matches its class.
+		if (!IsTrainerClassAllowed(trainer))
+		{
+			return;
+		}
+
 		SendTrainerList(trainer, trainerUnit);
 	}
 
@@ -3192,7 +3255,8 @@ namespace mmo
 				packet
 					<< io::write<uint64>(trainerUnit.GetGuid())
 					<< io::write<uint16>(trainer.spells_size())
-					<< io::write_dynamic_range<uint8>(trainer.title());
+					<< io::write_dynamic_range<uint8>(trainer.title())
+					<< io::write<uint8>(static_cast<uint8>(trainer.type()));
 
 				uint32 index = 0;
 				for (const auto& trainerSpellEntry : trainer.spells())
