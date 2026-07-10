@@ -78,6 +78,21 @@ Binaries go to `bin/`, libraries to `lib/`.
 ./bin/login_server_tests           # login server tests
 ```
 
+### End-to-End Gameplay Tests (Windows)
+
+The E2E harness verifies gameplay changes against a real, isolated server stack with a
+headless Lua-scripted client — see [e2e/README.md](e2e/README.md) for the scenario API.
+
+```powershell
+$env:MMO_E2E_MYSQL_PASSWORD = "<mysql password>"
+cmake --build build -t e2e_client login_server realm_server world_server --config Debug
+powershell -File tools/e2e/e2e_run.ps1        # up -> all scenarios -> down; exit 0 = green
+```
+
+Scenarios live in `e2e/scenarios/*.lua`; results (JSONL transcripts + `summary.json`)
+land in `e2e/runtime/logs/`. The test stack uses its own ports and throwaway databases,
+so it coexists with a running dev stack. Requires `MMO_WITH_DEV_COMMANDS=ON`.
+
 ## Architecture
 
 ### Server Tiers
