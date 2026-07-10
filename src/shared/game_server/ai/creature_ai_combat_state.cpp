@@ -566,63 +566,88 @@ namespace mmo
 	{
 		const Vector3 currentPos = target.GetPosition();
 
-		// AI-controlled targets (creatures/pets following a path) report movement through
-		// their mover, so we can predict straight toward their known destination.
+		// Determine the target's current horizontal movement direction and speed, plus an
+		// optional cap on how far ahead we may extrapolate (AI targets stop at their mover
+		// destination; players have no known destination).
+		Vector3 direction;
+		float targetSpeed = 0.0f;
+		float maxLeadDistance = std::numeric_limits<float>::max();
+
 		const auto& targetMover = target.GetMover();
 		if (targetMover.IsMoving())
 		{
+			// AI-controlled targets (creatures/pets following a path) report movement through
+			// their mover, so we know exactly where they are headed.
 			const Vector3 targetDestination = targetMover.GetTarget();
-			const Vector3 direction = (targetDestination - currentPos).NormalizedCopy();
+			const Vector3 toDestination = targetDestination - currentPos;
+			maxLeadDistance = toDestination.GetLength();
+			if (maxLeadDistance <= 0.001f)
+			{
+				return currentPos;
+			}
 
-			// Predict 1-2 seconds ahead based on target's movement speed
-			const float targetSpeed = target.GetSpeed(movement_type::Run);
-			const float predictionTime = 1.5f; // seconds
-			const float maxPredictionDistance = targetSpeed * predictionTime;
+			direction = toDestination / maxLeadDistance;
+			targetSpeed = target.GetSpeed(movement_type::Run);
+		}
+		else
+		{
+			// Player characters never populate their own mover for ordinary movement - they
+			// report motion through raw movement flags instead. Derive a direction from those
+			// flags plus current facing (mirroring the client's own movement model) so a
+			// fleeing player is actually predicted instead of always resolving to their last
+			// known (already stale by the time we act on it) position.
+			const MovementInfo& info = target.GetMovementInfo();
+			if (!info.IsMoving())
+			{
+				return currentPos;
+			}
 
-			// Don't predict beyond their actual destination
-			const float distanceToDestination = (targetDestination - currentPos).GetLength();
-			const float actualPredictionDistance = std::min(maxPredictionDistance, distanceToDestination);
+			const Vector3 forward = target.GetForwardVector();
+			const Vector3 right(-forward.z, 0.0f, forward.x);
 
-			return currentPos + direction * actualPredictionDistance;
+			Vector3 dir = Vector3::Zero;
+			if (info.movementFlags & movement_flags::Forward)     dir += forward;
+			if (info.movementFlags & movement_flags::Backward)    dir -= forward;
+			if (info.movementFlags & movement_flags::StrafeLeft)  dir -= right;
+			if (info.movementFlags & movement_flags::StrafeRight) dir += right;
+
+			const float dirLength = dir.GetLength();
+			if (dirLength <= 0.001f)
+			{
+				return currentPos;
+			}
+			direction = dir / dirLength;
+
+			// Pure backpedal (no forward key) uses the slower backwards speed; anything with a
+			// forward component, including diagonals, uses run speed.
+			const bool pureBackward = (info.movementFlags & movement_flags::Backward) != 0
+				&& (info.movementFlags & movement_flags::Forward) == 0;
+			targetSpeed = pureBackward
+				? target.GetSpeed(movement_type::Backwards)
+				: target.GetSpeed(movement_type::Run);
 		}
 
-		// Player characters never populate their own mover for ordinary movement - they
-		// report motion through raw movement flags instead. Derive a direction from those
-		// flags plus current facing (mirroring the client's own movement model) so a
-		// fleeing player is actually predicted instead of always resolving to their last
-		// known (already stale by the time we act on it) position.
-		const MovementInfo& info = target.GetMovementInfo();
-		if (!info.IsMoving())
+		// Only lead a target that is actually getting away from us. If the target is closing
+		// in (e.g. a melee player charging at us), extrapolating puts the predicted position
+		// at or behind our own location, which made creatures stand around waiting - or even
+		// back away from - an approaching player. Chasing their real position is both correct
+		// and feels aggressive.
+		Vector3 toChaser = GetControlled().GetPosition() - currentPos;
+		toChaser.y = 0.0f;
+		if (direction.Dot(toChaser) > 0.0f)
 		{
 			return currentPos;
 		}
 
-		const Vector3 forward = target.GetForwardVector();
-		const Vector3 right(-forward.z, 0.0f, forward.x);
+		// Scale the lead by how long we actually need to close the gap: a distant runner is
+		// led up to the full window, while a target just outside melee reach is barely led at
+		// all (a fixed 1.5s lead overshoots wildly at close range).
+		constexpr float maxPredictionTime = 1.5f; // seconds
+		const float chaserSpeed = std::max(GetControlled().GetSpeed(movement_type::Run), 0.001f);
+		const float predictionTime = std::min(toChaser.GetLength() / chaserSpeed, maxPredictionTime);
 
-		Vector3 dir = Vector3::Zero;
-		if (info.movementFlags & movement_flags::Forward)     dir += forward;
-		if (info.movementFlags & movement_flags::Backward)    dir -= forward;
-		if (info.movementFlags & movement_flags::StrafeLeft)  dir -= right;
-		if (info.movementFlags & movement_flags::StrafeRight) dir += right;
-
-		const float dirLength = dir.GetLength();
-		if (dirLength <= 0.001f)
-		{
-			return currentPos;
-		}
-		dir /= dirLength;
-
-		// Pure backpedal (no forward key) uses the slower backwards speed; anything with a
-		// forward component, including diagonals, uses run speed.
-		const bool pureBackward = (info.movementFlags & movement_flags::Backward) != 0
-			&& (info.movementFlags & movement_flags::Forward) == 0;
-		const float targetSpeed = pureBackward
-			? target.GetSpeed(movement_type::Backwards)
-			: target.GetSpeed(movement_type::Run);
-
-		constexpr float predictionTime = 1.5f; // seconds
-		return currentPos + dir * (targetSpeed * predictionTime);
+		const float leadDistance = std::min(targetSpeed * predictionTime, maxLeadDistance);
+		return currentPos + direction * leadDistance;
 	}
 
 	bool CreatureAICombatState::ChaseTarget(GameUnitS& target)
