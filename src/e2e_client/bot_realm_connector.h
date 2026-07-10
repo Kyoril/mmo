@@ -257,6 +257,40 @@ namespace mmo
 		/// Exposed to keep packet-level unit tests deterministic.
 		void PrimeWorldSessionForTesting(uint64 selectedGuid = 0);
 
+		// ============================================================
+		// Target Selection & GM Commands (server built with MMO_WITH_DEV_COMMANDS)
+		// ============================================================
+
+		/// Sets the selected target object of the controlled player (0 to deselect).
+		void SetSelection(uint64 guid);
+
+		/// GAME MASTER only. Spawns a temporary monster near the player.
+		void CheatCreateMonster(uint32 entry);
+
+		/// GAME MASTER only. Destroys the monster with the given guid.
+		void CheatDestroyMonster(uint64 guid);
+
+		/// GAME MASTER only. Learns the given spell.
+		void CheatLearnSpell(uint32 spellId);
+
+		/// GAME MASTER only. Increases the player level by the given amount.
+		void CheatLevelUp(uint8 levels);
+
+		/// GAME MASTER only. Gives money (in copper) to the player.
+		void CheatGiveMoney(uint32 amount);
+
+		/// GAME MASTER only. Adds an item to the player inventory.
+		void CheatAddItem(uint32 itemId, uint8 count);
+
+		/// GAME MASTER only. Teleports the player to the given map position.
+		void CheatWorldPort(uint32 mapId, const Vector3& position, float facing);
+
+		/// GAME MASTER only. Changes the player movement speed.
+		void CheatSpeed(float speed);
+
+		/// GAME MASTER only. Instantly kills the selected unit.
+		void CheatKill();
+
 	private:
 		void RegisterWorldPacketHandlers();
 		BotUnit* GetSelfMutable();

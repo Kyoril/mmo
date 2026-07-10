@@ -654,6 +654,13 @@ namespace mmo
 		{
 			m_movementInfo = movementInfo;
 			SendMoveTeleportAck(ackId, m_movementInfo);
+
+			// Keep the self unit's cached position in sync so distance/position
+			// queries reflect the teleport immediately.
+			if (BotUnit* selfUnit = m_objectManager.GetSelfMutable())
+			{
+				selfUnit->SetMovementInfo(m_movementInfo);
+			}
 		}
 
 		return PacketParseResult::Pass;
@@ -1153,6 +1160,10 @@ namespace mmo
 			{
 				UnitDespawned(guid);
 			}
+			else
+			{
+				m_objectManager.RemoveItem(guid);
+			}
 		}
 
 		return PacketParseResult::Pass;
@@ -1295,6 +1306,18 @@ namespace mmo
 			}
 		}
 
+		// Track item and container objects so scenarios can assert on inventory contents.
+		if (typeId == ObjectTypeId::Item || typeId == ObjectTypeId::Container)
+		{
+			BotItemState item;
+			item.guid = guid;
+			item.entry = fieldMap.GetFieldValue<uint32>(object_fields::Entry);
+			item.stackCount = fieldMap.GetFieldValue<uint32>(object_fields::StackCount);
+			item.ownerGuid = fieldMap.GetFieldValue<uint64>(object_fields::ItemOwner);
+			m_objectManager.AddOrUpdateItem(item);
+			return true;
+		}
+
 		// Only store units and players
 		if (typeId != ObjectTypeId::Unit && typeId != ObjectTypeId::Player)
 		{
@@ -1377,6 +1400,13 @@ namespace mmo
 				maxPower = fieldMap.GetFieldValue<uint32>(maxPowerField);
 			}
 			unit.SetPower(powerType, power, maxPower);
+		}
+
+		// Money is a player-only field used by scenario assertions.
+		if (typeId == ObjectTypeId::Player &&
+			(creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Money)))
+		{
+			unit.SetMoney(fieldMap.GetFieldValue<uint32>(object_fields::Money));
 		}
 
 		// Set position/movement - this should always be present for creation
@@ -1843,5 +1873,98 @@ namespace mmo
 		DamageReceived(targetGuid, amount, flags);
 
 		return PacketParseResult::Pass;
+	}
+
+	void BotRealmConnector::SetSelection(const uint64 guid)
+	{
+		sendSinglePacket([guid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::SetSelection);
+			packet << io::write<uint64>(guid);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatCreateMonster(const uint32 entry)
+	{
+		sendSinglePacket([entry](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatCreateMonster);
+			packet << io::write<uint32>(entry);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatDestroyMonster(const uint64 guid)
+	{
+		sendSinglePacket([guid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatDestroyMonster);
+			packet << io::write<uint64>(guid);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatLearnSpell(const uint32 spellId)
+	{
+		sendSinglePacket([spellId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatLearnSpell);
+			packet << io::write<uint32>(spellId);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatLevelUp(const uint8 levels)
+	{
+		sendSinglePacket([levels](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatLevelUp);
+			packet << io::write<uint8>(levels);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatGiveMoney(const uint32 amount)
+	{
+		sendSinglePacket([amount](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatGiveMoney);
+			packet << io::write<uint32>(amount);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatAddItem(const uint32 itemId, const uint8 count)
+	{
+		sendSinglePacket([itemId, count](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatAddItem);
+			packet << io::write<uint32>(itemId) << io::write<uint8>(count);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatWorldPort(const uint32 mapId, const Vector3& position, const float facing)
+	{
+		sendSinglePacket([mapId, &position, facing](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatWorldPort);
+			packet << io::write<uint32>(mapId)
+				<< io::write<float>(position.x)
+				<< io::write<float>(position.y)
+				<< io::write<float>(position.z)
+				<< io::write<float>(facing);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatSpeed(const float speed)
+	{
+		sendSinglePacket([speed](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatSpeed);
+			packet << io::write<float>(speed);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatKill()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatKill);
+			packet.Finish();
+			});
 	}
 }

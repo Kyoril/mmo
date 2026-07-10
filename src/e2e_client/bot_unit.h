@@ -308,6 +308,12 @@ namespace mmo
 		/// @brief Sets the maximum health.
 		void SetMaxHealth(uint32 maxHealth) { m_maxHealth = maxHealth; }
 
+		/// @brief Sets the money amount (players only).
+		void SetMoney(uint32 money) { m_money = money; }
+
+		/// @brief Gets the money amount in copper (players only).
+		uint32 GetMoney() const { return m_money; }
+
 		/// @brief Sets the active power snapshot.
 		void SetPower(PowerType powerType, uint32 power, uint32 maxPower);
 
@@ -375,6 +381,7 @@ namespace mmo
 		// Stats & State
 		uint32 m_level = 1;
 		uint32 m_health = 0;
+		uint32 m_money = 0;
 		uint32 m_maxHealth = 0;
 		PowerType m_powerType = power_type::Invalid_;
 		uint32 m_power = 0;

@@ -469,4 +469,52 @@ namespace mmo
 		return result;
 	}
 
+	void BotObjectManager::AddOrUpdateItem(const BotItemState& item)
+	{
+		auto it = m_items.find(item.guid);
+		if (it == m_items.end())
+		{
+			m_items[item.guid] = item;
+			return;
+		}
+
+		// Merge: field updates only carry changed fields, so zero values mean "unchanged".
+		if (item.entry != 0)
+		{
+			it->second.entry = item.entry;
+		}
+		if (item.stackCount != 0)
+		{
+			it->second.stackCount = item.stackCount;
+		}
+		if (item.ownerGuid != 0)
+		{
+			it->second.ownerGuid = item.ownerGuid;
+		}
+	}
+
+	bool BotObjectManager::RemoveItem(const uint64 guid)
+	{
+		return m_items.erase(guid) > 0;
+	}
+
+	const BotItemState* BotObjectManager::GetItem(const uint64 guid) const
+	{
+		const auto it = m_items.find(guid);
+		return (it != m_items.end()) ? &it->second : nullptr;
+	}
+
+	uint32 BotObjectManager::GetItemCountByEntry(const uint32 entry) const
+	{
+		uint32 count = 0;
+		for (const auto& [guid, item] : m_items)
+		{
+			if (item.entry == entry)
+			{
+				count += (item.stackCount > 0) ? item.stackCount : 1;
+			}
+		}
+		return count;
+	}
+
 }

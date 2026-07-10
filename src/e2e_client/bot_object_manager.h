@@ -11,8 +11,17 @@
 
 namespace mmo
 {
+	/// @brief Lightweight state of an item or container object known to the bot.
+	struct BotItemState final
+	{
+		uint64 guid { 0 };
+		uint32 entry { 0 };
+		uint32 stackCount { 0 };
+		uint64 ownerGuid { 0 };
+	};
+
 	/// @brief Manages all known units in the bot's awareness.
-	/// 
+	///
 	/// This class acts as the central registry for all units (players and creatures)
 	/// that the bot knows about through UpdateObject packets from the server.
 	/// It provides query methods for finding units by various criteria and emits
@@ -225,6 +234,30 @@ namespace mmo
 		std::vector<const BotUnit*> GetUnitsTargetingSelf(float maxRange = 0.0f) const;
 
 		// ============================================================
+		// Item Tracking
+		// ============================================================
+
+		/// @brief Adds a new item or merges an update into an existing one.
+		/// @param item The item state to add or update. Zero-valued fields of an
+		///        update are ignored so partial field updates don't wipe known data.
+		void AddOrUpdateItem(const BotItemState& item);
+
+		/// @brief Removes an item by GUID.
+		/// @param guid The GUID of the item to remove.
+		/// @return True if the item was found and removed.
+		bool RemoveItem(uint64 guid);
+
+		/// @brief Gets an item by GUID.
+		/// @param guid The GUID to look up.
+		/// @return Pointer to the item state, or nullptr if not found.
+		const BotItemState* GetItem(uint64 guid) const;
+
+		/// @brief Sums the stack counts of all known items with the given entry id.
+		/// @param entry The item entry id.
+		/// @return The total number of items of that entry the bot knows about.
+		uint32 GetItemCountByEntry(uint32 entry) const;
+
+		// ============================================================
 		// Iteration
 		// ============================================================
 
@@ -273,6 +306,9 @@ namespace mmo
 	private:
 		/// @brief Map of GUIDs to units.
 		std::unordered_map<uint64, BotUnit> m_units;
+
+		/// @brief Map of GUIDs to known item/container objects.
+		std::unordered_map<uint64, BotItemState> m_items;
 
 		/// @brief The GUID of the bot's own character.
 		uint64 m_selfGuid = 0;

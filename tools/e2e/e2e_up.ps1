@@ -298,7 +298,7 @@ Wait-LogContains -PathGlob (Join-Path $runtime "world\logs\*.log") -Pattern "Suc
 	characterName   = "Smoke"  # letters only, 3-12 chars (realm-side validation)
 	createCharacter = $true
 	race            = 0
-	class           = 1
+	class           = 0        # Mage - has mana, so scenarios can cast spells
 	gender          = 0
 } | ConvertTo-Json | Set-Content -Path (Join-Path $runtime "e2e_client.json") -Encoding UTF8
 

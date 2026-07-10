@@ -15,6 +15,8 @@ target_link_libraries(e2e_client
 	proto_data
 	nav_mesh
 	zlibstatic
+	lua
+	luabind
 	${OPENSSL_LIBRARIES}
 )
 
