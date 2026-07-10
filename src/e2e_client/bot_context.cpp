@@ -1,0 +1,829 @@
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+
+#include "bot_context.h"
+#include "bot_realm_connector.h"
+#include "bot_object_manager.h"
+#include "bot_movement_math.h"
+#include "bot_unit.h"
+
+#include "base/clock.h"
+#include "log/default_log_levels.h"
+
+#include <cmath>
+
+namespace mmo
+{
+	BotContext::BotContext(
+		std::shared_ptr<BotRealmConnector> realmConnector,
+		const BotConfig& config,
+		std::shared_ptr<BotNavService> navService)
+		: m_realmConnector(std::move(realmConnector))
+		, m_navService(std::move(navService))
+		, m_config(config)
+	{
+	}
+
+	uint64 BotContext::GetSelectedCharacterGuid() const
+	{
+		if (!m_realmConnector)
+		{
+			return 0;
+		}
+
+		return m_realmConnector->GetSelectedGuid();
+	}
+
+	const MovementInfo& BotContext::GetMovementInfo() const
+	{
+		// Return our cached movement info which is kept up-to-date after sending movement packets
+		// The realm connector's movement info is only updated by server (teleports, speed changes)
+		// and would be stale for client-initiated movement
+		return m_cachedMovementInfo;
+	}
+
+	void BotContext::SetCurrentMapId(const uint32 mapId)
+	{
+		m_currentMapId = mapId;
+		m_hasCurrentMapId = mapId != 0;
+	}
+
+	void BotContext::UpdateCurrentMapIdFromWorldSync(const uint32 mapId)
+	{
+		if (mapId != 0)
+		{
+			SetCurrentMapId(mapId);
+			return;
+		}
+
+		if (m_hasCurrentMapId && m_currentMapId != 0)
+		{
+			return;
+		}
+
+		m_currentMapId = 0;
+		m_hasCurrentMapId = false;
+	}
+
+	void BotContext::SendChatMessage(const std::string& message, ChatType chatType, const std::string& target)
+	{
+		if (!m_realmConnector)
+		{
+			WLOG("Cannot send chat message: No realm connector available");
+			return;
+		}
+
+		m_realmConnector->SendChatMessage(message, chatType, target);
+	}
+
+	void BotContext::SendMovementUpdate(uint16 opCode, const MovementInfo& info)
+	{
+		if (!m_realmConnector)
+		{
+			WLOG("Cannot send movement update: No realm connector available");
+			return;
+		}
+
+		const uint64 guid = GetSelectedCharacterGuid();
+		if (guid == 0)
+		{
+			WLOG("Cannot send movement update: No character selected");
+			return;
+		}
+
+		m_realmConnector->SendMovementUpdate(guid, opCode, info);
+		m_cachedMovementInfo = info;
+		m_hasAuthoritativeMovementInfo = true;
+	}
+
+	void BotContext::UpdateMovementInfo(const MovementInfo& info)
+	{
+		m_cachedMovementInfo = info;
+		m_hasAuthoritativeMovementInfo = true;
+	}
+
+	void BotContext::SendLandedPacket()
+	{
+		// Get current movement info and remove the FALLING flag
+		MovementInfo landedMovement = GetMovementInfo();
+		landedMovement.movementFlags &= ~movement_flags::Falling;
+		landedMovement.timestamp = GetServerTime();
+
+		// Send MoveFallLand packet
+		SendMovementUpdate(game::client_realm_packet::MoveFallLand, landedMovement);
+		UpdateMovementInfo(landedMovement);
+	}
+
+	GameTime BotContext::GetServerTime() const
+	{
+		return GetAsyncTimeMs();
+	}
+
+	void BotContext::SetState(const std::string& key, const std::string& value)
+	{
+		m_customState[key] = value;
+	}
+
+	std::string BotContext::GetState(const std::string& key, const std::string& defaultValue) const
+	{
+		const auto it = m_customState.find(key);
+		if (it != m_customState.end())
+		{
+			return it->second;
+		}
+
+		return defaultValue;
+	}
+
+	bool BotContext::HasState(const std::string& key) const
+	{
+		return m_customState.find(key) != m_customState.end();
+	}
+
+	void BotContext::ClearState(const std::string& key)
+	{
+		m_customState.erase(key);
+	}
+
+	void BotContext::AcceptPartyInvitation()
+	{
+		if (!m_realmConnector)
+		{
+			WLOG("Cannot accept party invitation: No realm connector available");
+			return;
+		}
+
+		m_realmConnector->AcceptPartyInvitation();
+	}
+
+	void BotContext::DeclinePartyInvitation()
+	{
+		if (!m_realmConnector)
+		{
+			WLOG("Cannot decline party invitation: No realm connector available");
+			return;
+		}
+
+		m_realmConnector->DeclinePartyInvitation();
+	}
+
+	// ============================================================
+	// Party Information Methods
+	// ============================================================
+
+	bool BotContext::IsInParty() const
+	{
+		if (!m_realmConnector)
+		{
+			return false;
+		}
+
+		return m_realmConnector->IsInParty();
+	}
+
+	uint32 BotContext::GetPartyMemberCount() const
+	{
+		if (!m_realmConnector)
+		{
+			return 0;
+		}
+
+		return m_realmConnector->GetPartyMemberCount();
+	}
+
+	uint64 BotContext::GetPartyLeaderGuid() const
+	{
+		if (!m_realmConnector)
+		{
+			return 0;
+		}
+
+		return m_realmConnector->GetPartyLeaderGuid();
+	}
+
+	bool BotContext::IsPartyLeader() const
+	{
+		if (!m_realmConnector)
+		{
+			return false;
+		}
+
+		return m_realmConnector->IsPartyLeader();
+	}
+
+	uint64 BotContext::GetPartyMemberGuid(uint32 index) const
+	{
+		if (!m_realmConnector)
+		{
+			return 0;
+		}
+
+		const auto* member = m_realmConnector->GetPartyMember(index);
+		return member ? member->guid : 0;
+	}
+
+	std::string BotContext::GetPartyMemberName(uint32 index) const
+	{
+		if (!m_realmConnector)
+		{
+			return "";
+		}
+
+		const auto* member = m_realmConnector->GetPartyMember(index);
+		return member ? member->name : "";
+	}
+
+	std::vector<uint64> BotContext::GetPartyMemberGuids() const
+	{
+		if (!m_realmConnector)
+		{
+			return {};
+		}
+
+		return m_realmConnector->GetPartyMemberGuids();
+	}
+
+	// ============================================================
+	// Party Action Methods
+	// ============================================================
+
+	void BotContext::LeaveParty()
+	{
+		if (!m_realmConnector)
+		{
+			WLOG("Cannot leave party: No realm connector available");
+			return;
+		}
+
+		m_realmConnector->LeaveParty();
+	}
+
+	void BotContext::KickFromParty(const std::string& playerName)
+	{
+		if (!m_realmConnector)
+		{
+			WLOG("Cannot kick from party: No realm connector available");
+			return;
+		}
+
+		m_realmConnector->KickFromParty(playerName);
+	}
+
+	void BotContext::InviteToParty(const std::string& playerName)
+	{
+		if (!m_realmConnector)
+		{
+			WLOG("Cannot invite to party: No realm connector available");
+			return;
+		}
+
+		m_realmConnector->InviteToParty(playerName);
+	}
+
+	// ============================================================
+	// Unit Awareness Methods
+	// ============================================================
+
+	BotObjectManager& BotContext::GetObjectManager()
+	{
+		return m_realmConnector->GetObjectManager();
+	}
+
+	const BotObjectManager& BotContext::GetObjectManager() const
+	{
+		return m_realmConnector->GetObjectManager();
+	}
+
+	const BotUnit* BotContext::GetSelf() const
+	{
+		if (!m_realmConnector)
+		{
+			return nullptr;
+		}
+
+		return m_realmConnector->GetObjectManager().GetSelf();
+	}
+
+	Vector3 BotContext::GetPosition() const
+	{
+		if (m_hasAuthoritativeMovementInfo)
+		{
+			return m_cachedMovementInfo.position;
+		}
+
+		const BotUnit* self = GetSelf();
+		if (self)
+		{
+			return self->GetPosition();
+		}
+
+		return m_cachedMovementInfo.position;
+	}
+
+	std::vector<const BotUnit*> BotContext::GetNearbyUnits(float radius) const
+	{
+		if (!m_realmConnector)
+		{
+			return {};
+		}
+
+		return m_realmConnector->GetObjectManager().GetNearbyUnits(GetPosition(), radius);
+	}
+
+	std::vector<const BotUnit*> BotContext::GetNearbyPlayers(float radius) const
+	{
+		if (!m_realmConnector)
+		{
+			return {};
+		}
+
+		return m_realmConnector->GetObjectManager().GetNearbyPlayers(GetPosition(), radius);
+	}
+
+	std::vector<const BotUnit*> BotContext::GetNearbyCreatures(float radius) const
+	{
+		if (!m_realmConnector)
+		{
+			return {};
+		}
+
+		return m_realmConnector->GetObjectManager().GetNearbyCreatures(GetPosition(), radius);
+	}
+
+	const BotUnit* BotContext::GetNearestHostile(float maxRange) const
+	{
+		if (!m_realmConnector)
+		{
+			return nullptr;
+		}
+
+		const auto& objectManager = m_realmConnector->GetObjectManager();
+		const BotUnit* self = objectManager.GetSelf();
+		if (!self)
+		{
+			return nullptr;
+		}
+
+		const Vector3 selfPosition = GetPosition();
+		const float maxRangeSquared = maxRange * maxRange;
+		return objectManager.GetNearestUnit(selfPosition, [self, selfPosition, maxRangeSquared](const BotUnit& unit)
+			{
+				if (unit.GetGuid() == self->GetGuid() || !unit.IsAlive())
+				{
+					return false;
+				}
+
+				if (unit.GetDistanceToSquared(selfPosition) > maxRangeSquared)
+				{
+					return false;
+				}
+
+				return unit.IsHostileTo(*self);
+			});
+	}
+
+	const BotUnit* BotContext::GetNearestAttackable(float maxRange) const
+	{
+		if (!m_realmConnector)
+		{
+			return nullptr;
+		}
+
+		const auto& objectManager = m_realmConnector->GetObjectManager();
+		const BotUnit* self = objectManager.GetSelf();
+		if (!self)
+		{
+			return nullptr;
+		}
+
+		const Vector3 selfPosition = GetPosition();
+		const float maxRangeSquared = maxRange * maxRange;
+		return objectManager.GetNearestUnit(selfPosition, [self, selfPosition, maxRangeSquared](const BotUnit& unit)
+			{
+				if (unit.GetGuid() == self->GetGuid() || !unit.IsAlive())
+				{
+					return false;
+				}
+
+				if (unit.GetDistanceToSquared(selfPosition) > maxRangeSquared)
+				{
+					return false;
+				}
+
+				return unit.IsAttackableBy(*self);
+			});
+	}
+
+	const BotUnit* BotContext::GetNearestFriendly(float maxRange) const
+	{
+		if (!m_realmConnector)
+		{
+			return nullptr;
+		}
+
+		const auto& objectManager = m_realmConnector->GetObjectManager();
+		const BotUnit* self = objectManager.GetSelf();
+		if (!self)
+		{
+			return nullptr;
+		}
+
+		const Vector3 selfPosition = GetPosition();
+		const float maxRangeSquared = maxRange * maxRange;
+		return objectManager.GetNearestUnit(selfPosition, [self, selfPosition, maxRangeSquared](const BotUnit& unit)
+			{
+				if (unit.GetGuid() == self->GetGuid() || !unit.IsAlive())
+				{
+					return false;
+				}
+
+				if (unit.GetDistanceToSquared(selfPosition) > maxRangeSquared)
+				{
+					return false;
+				}
+
+				return unit.IsFriendlyTo(*self);
+			});
+	}
+
+	const BotUnit* BotContext::GetNearestFriendlyPlayer(float maxRange) const
+	{
+		if (!m_realmConnector)
+		{
+			return nullptr;
+		}
+
+		const auto& objectManager = m_realmConnector->GetObjectManager();
+		const BotUnit* self = objectManager.GetSelf();
+		if (!self)
+		{
+			return nullptr;
+		}
+
+		const Vector3 selfPosition = GetPosition();
+		const float maxRangeSquared = maxRange * maxRange;
+		return objectManager.GetNearestUnit(selfPosition, [self, selfPosition, maxRangeSquared](const BotUnit& unit)
+			{
+				if (unit.GetGuid() == self->GetGuid() || !unit.IsPlayer() || !unit.IsAlive())
+				{
+					return false;
+				}
+
+				if (unit.GetDistanceToSquared(selfPosition) > maxRangeSquared)
+				{
+					return false;
+				}
+
+				return unit.IsFriendlyTo(*self);
+			});
+	}
+
+	std::vector<const BotUnit*> BotContext::GetHostilesInRange(float maxRange) const
+	{
+		if (!m_realmConnector)
+		{
+			return {};
+		}
+
+		const auto& objectManager = m_realmConnector->GetObjectManager();
+		const BotUnit* self = objectManager.GetSelf();
+		if (!self)
+		{
+			return {};
+		}
+
+		const Vector3 selfPosition = GetPosition();
+		const float maxRangeSquared = maxRange * maxRange;
+		std::vector<const BotUnit*> result;
+		objectManager.ForEachUnit([&](const BotUnit& unit)
+			{
+				if (unit.GetGuid() == self->GetGuid() || !unit.IsAlive())
+				{
+					return;
+				}
+
+				if (unit.GetDistanceToSquared(selfPosition) > maxRangeSquared)
+				{
+					return;
+				}
+
+				if (unit.IsHostileTo(*self))
+				{
+					result.push_back(&unit);
+				}
+			});
+		return result;
+	}
+
+	std::vector<const BotUnit*> BotContext::GetFriendlyPlayersInRange(float maxRange) const
+	{
+		if (!m_realmConnector)
+		{
+			return {};
+		}
+
+		const auto& objectManager = m_realmConnector->GetObjectManager();
+		const BotUnit* self = objectManager.GetSelf();
+		if (!self)
+		{
+			return {};
+		}
+
+		const Vector3 selfPosition = GetPosition();
+		const float maxRangeSquared = maxRange * maxRange;
+		std::vector<const BotUnit*> result;
+		objectManager.ForEachUnit([&](const BotUnit& unit)
+			{
+				if (unit.GetGuid() == self->GetGuid() || !unit.IsPlayer() || !unit.IsAlive())
+				{
+					return;
+				}
+
+				if (unit.GetDistanceToSquared(selfPosition) > maxRangeSquared)
+				{
+					return;
+				}
+
+				if (unit.IsFriendlyTo(*self))
+				{
+					result.push_back(&unit);
+				}
+			});
+		return result;
+	}
+
+	std::vector<const BotUnit*> BotContext::GetUnitsTargetingSelf(float maxRange) const
+	{
+		if (!m_realmConnector)
+		{
+			return {};
+		}
+
+		return m_realmConnector->GetObjectManager().GetUnitsTargetingSelf(maxRange);
+	}
+
+	const BotUnit* BotContext::GetUnit(uint64 guid) const
+	{
+		if (!m_realmConnector)
+		{
+			return nullptr;
+		}
+
+		return m_realmConnector->GetObjectManager().GetUnit(guid);
+	}
+
+	bool BotContext::HasUnit(uint64 guid) const
+	{
+		if (!m_realmConnector)
+		{
+			return false;
+		}
+
+		return m_realmConnector->GetObjectManager().HasUnit(guid);
+	}
+
+	size_t BotContext::GetUnitCount() const
+	{
+		if (!m_realmConnector)
+		{
+			return 0;
+		}
+
+		return m_realmConnector->GetObjectManager().GetUnitCount();
+	}
+
+	void BotContext::ForEachUnit(const std::function<void(const BotUnit&)>& callback) const
+	{
+		if (!m_realmConnector)
+		{
+			return;
+		}
+
+		m_realmConnector->GetObjectManager().ForEachUnit(callback);
+	}
+
+	// ============================================================
+	// Combat Runtime State Methods
+	// ============================================================
+
+	PowerType BotContext::GetSelfPowerType() const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->GetPowerType() : power_type::Invalid_;
+	}
+
+	uint32 BotContext::GetSelfPower() const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->GetPower() : 0;
+	}
+
+	uint32 BotContext::GetSelfMaxPower() const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->GetMaxPower() : 0;
+	}
+
+	float BotContext::GetSelfPowerPercent() const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->GetPowerPercent() : 0.0f;
+	}
+
+	bool BotContext::HasKnownSpell(uint32 spellId) const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->KnowsSpell(spellId) : false;
+	}
+
+	std::vector<uint32> BotContext::GetKnownSpellIds() const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->GetKnownSpellIds() : std::vector<uint32>{};
+	}
+
+	bool BotContext::HasVisibleAura(uint32 spellId) const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->HasAura(spellId) : false;
+	}
+
+	std::vector<BotUnit::AuraState> BotContext::GetVisibleAuras() const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->GetVisibleAuras() : std::vector<BotUnit::AuraState>{};
+	}
+
+	bool BotContext::IsSpellOnCooldown(uint32 spellId) const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->IsSpellOnCooldown(spellId, GetServerTime()) : false;
+	}
+
+	GameTime BotContext::GetSpellCooldownRemaining(uint32 spellId) const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->GetSpellCooldownRemaining(spellId, GetServerTime()) : 0;
+	}
+
+	std::vector<BotUnit::CooldownState> BotContext::GetActiveSpellCooldowns() const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->GetActiveCooldowns(GetServerTime()) : std::vector<BotUnit::CooldownState>{};
+	}
+
+	BotUnit::CastState BotContext::GetLastCastState() const
+	{
+		const BotUnit* self = GetSelf();
+		return self ? self->GetLastCastState() : BotUnit::CastState{};
+	}
+
+	std::string BotContext::GetLastSpellStateIssue() const
+	{
+		if (!m_realmConnector)
+		{
+			return "";
+		}
+
+		return m_realmConnector->GetLastSpellStateIssue();
+	}
+
+	bool BotContext::CastSpell(uint32 spellId, const SpellTargetMap& targetMap)
+	{
+		if (!m_realmConnector)
+		{
+			WLOG("Cannot cast spell: No realm connector available");
+			return false;
+		}
+
+		return m_realmConnector->SendCastSpell(spellId, targetMap);
+	}
+
+	// ============================================================
+	// Combat Methods
+	// ============================================================
+
+	void BotContext::StartAutoAttack(uint64 targetGuid)
+	{
+		if (!m_realmConnector)
+		{
+			WLOG("Cannot start attack: No realm connector available");
+			return;
+		}
+
+		m_realmConnector->SendAttackStart(targetGuid);
+	}
+
+	void BotContext::StopAutoAttack()
+	{
+		if (!m_realmConnector)
+		{
+			WLOG("Cannot stop attack: No realm connector available");
+			return;
+		}
+
+		m_realmConnector->SendAttackStop();
+	}
+
+	bool BotContext::IsAutoAttacking() const
+	{
+		if (!m_realmConnector)
+		{
+			return false;
+		}
+
+		return m_realmConnector->IsAutoAttacking();
+	}
+
+	uint64 BotContext::GetAutoAttackTarget() const
+	{
+		if (!m_realmConnector)
+		{
+			return 0;
+		}
+
+		return m_realmConnector->GetAutoAttackTarget();
+	}
+
+	// ============================================================
+	// Movement Methods
+	// ============================================================
+
+	void BotContext::StartMovingForward()
+	{
+		if (!m_realmConnector)
+		{
+			return;
+		}
+
+		MovementInfo info = GetMovementInfo();
+		info.movementFlags |= movement_flags::Forward;
+		info.timestamp = GetServerTime();
+		SendMovementUpdate(game::client_realm_packet::MoveStartForward, info);
+	}
+
+	void BotContext::StopMoving()
+	{
+		if (!m_realmConnector)
+		{
+			return;
+		}
+
+		MovementInfo info = GetMovementInfo();
+		info.movementFlags &= ~movement_flags::Moving;
+		info.timestamp = GetServerTime();
+		SendMovementUpdate(game::client_realm_packet::MoveStop, info);
+	}
+
+	bool BotContext::IsMoving() const
+	{
+		const MovementInfo& info = GetMovementInfo();
+		return (info.movementFlags & movement_flags::Moving) != 0;
+	}
+
+	void BotContext::FacePosition(const Vector3& targetPosition)
+	{
+		if (!m_realmConnector)
+		{
+			return;
+		}
+
+		MovementInfo info = GetMovementInfo();
+		info.facing = ComputeFacingTo(m_cachedMovementInfo.position, targetPosition, info.facing);
+		info.timestamp = GetServerTime();
+		SendMovementUpdate(game::client_realm_packet::MoveSetFacing, info);
+	}
+
+	void BotContext::FaceUnit(uint64 targetGuid)
+	{
+		const BotUnit* target = GetUnit(targetGuid);
+		if (target)
+		{
+			FacePosition(target->GetPosition());
+		}
+	}
+
+	float BotContext::GetDistanceTo(const Vector3& position) const
+	{
+		// Use cached movement info position (our simulated position)
+		// instead of the BotUnit position (last server update)
+		const Vector3 myPos = m_cachedMovementInfo.position;
+		const Vector3 diff = position - myPos;
+		return std::sqrt(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z);
+	}
+
+	float BotContext::GetDistanceToUnit(uint64 guid) const
+	{
+		const BotUnit* target = GetUnit(guid);
+		if (!target)
+		{
+			return 99999.0f;
+		}
+
+		return GetDistanceTo(target->GetPosition());
+	}
+
+	Radian BotContext::GetAngleTo(const Vector3& targetPosition) const
+	{
+		return ComputeFacingTo(m_cachedMovementInfo.position, targetPosition, m_cachedMovementInfo.facing);
+	}
+}

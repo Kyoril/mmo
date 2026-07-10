@@ -41,6 +41,7 @@ if (MMO_BUILD_TESTS)
 	add_subdirectory(game_server_unit_tests)
 	add_subdirectory(login_server_tests)
 	add_subdirectory(realm_server_tests)
+	add_subdirectory(e2e_client)
 
 	if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
 		add_subdirectory(movement_tests)
