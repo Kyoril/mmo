@@ -1,18 +1,20 @@
 -- Regression: death pipeline — GM kill, death state replication to clients.
 --
--- Uses: Training Dummy (entry 40).
+-- Uses: Guard (entry 4) — deliberately a creature WITHOUT a combat script,
+-- so nothing can interfere with the death (training dummies restore their
+-- health when killed while in combat; see training_dummy_immortality.lua).
 
-local TRAINING_DUMMY = 40
+local GUARD = 4
 
-local dummy = GM.CreateMonster(TRAINING_DUMMY)
-Assert(IsAlive(dummy), "dummy should spawn alive")
+local guard = GM.CreateMonster(GUARD)
+Assert(IsAlive(guard), "guard should spawn alive")
 
-TargetUnit(dummy)
+TargetUnit(guard)
 GM.KillTarget()
 
-Assert(WaitUntil(function() return not IsAlive(dummy) end, 10000, "dummy dies"),
-	"dummy should be dead after GM.KillTarget (health " .. tostring(GetHealth(dummy)) .. ")")
+Assert(WaitUntil(function() return not IsAlive(guard) end, 10000, "guard dies"),
+	"guard should be dead after GM.KillTarget (health " .. tostring(GetHealth(guard)) .. ")")
 
-Log("Kill verified: dummy health is " .. GetHealth(dummy))
+Log("Kill verified: guard health is " .. GetHealth(guard))
 
-GM.DestroyMonster(dummy)
+GM.DestroyMonster(guard)
