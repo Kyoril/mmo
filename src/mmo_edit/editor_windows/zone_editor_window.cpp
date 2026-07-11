@@ -209,6 +209,9 @@ namespace mmo
 
 			DrawSoundEntryCombo("Ambience", currentEntry.ambience_sound(), m_ambienceSoundFilter,
 				[&currentEntry](const uint32 id) { currentEntry.set_ambience_sound(id); });
+
+			CHECKBOX_BOOL_PROP(inherit_parent_audio, "Inherit parent zone audio");
+			ImGui::TextDisabled("When enabled, unset music/ambience fall back along the parent zone chain. Disable to force silence in this zone.");
 		}
 	}
 

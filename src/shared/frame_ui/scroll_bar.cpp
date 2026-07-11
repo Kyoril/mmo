@@ -23,6 +23,10 @@ namespace mmo
 		{
 			otherScrollBar->m_orientation = m_orientation;
 			otherScrollBar->m_onValueChanged = m_onValueChanged;
+
+			// Frames created through Clone never receive OnLoad, so the copied child
+			// frames have to be wired up here (Frame::Copy above already copied them).
+			otherScrollBar->SetupChildFrames();
 		}
 	}
 
@@ -30,17 +34,21 @@ namespace mmo
 	{
 		Frame::OnLoad();
 
-		// Setup child frames
+		SetupChildFrames();
+	}
+
+	void ScrollBar::SetupChildFrames()
+	{
 		m_upFrame = dynamic_cast<Button*>(GetChild(0));
 		if (m_upFrame)
 		{
-			m_upFrame->Clicked.connect(this, &ScrollBar::OnUpButtonClicked);
+			m_onUpButtonClicked = m_upFrame->Clicked.connect(this, &ScrollBar::OnUpButtonClicked);
 		}
 
 		m_downFrame = dynamic_cast<Button*>(GetChild(1));
 		if (m_downFrame)
 		{
-			m_downFrame->Clicked.connect(this, &ScrollBar::OnDownButtonClicked);
+			m_onDownButtonClicked = m_downFrame->Clicked.connect(this, &ScrollBar::OnDownButtonClicked);
 		}
 
 		m_thumbFrame = dynamic_cast<Thumb*>(GetChild(2));
@@ -254,50 +262,46 @@ namespace mmo
 		else
 		{
 			// Get button positions and sizes
-			float leftButtonLeft = 0.0f;
 			float leftButtonRight = 0.0f;
 			float rightButtonLeft = 0.0f;
-			float rightButtonRight = 0.0f;
-			
+
 			if (m_upFrame)
 			{
-				leftButtonLeft = m_upFrame->GetX();
-				leftButtonRight = leftButtonLeft + m_upFrame->GetWidth();
+				leftButtonRight = m_upFrame->GetAbsoluteFrameRect().right;
 			}
 			else
 			{
-				leftButtonLeft = newArea.left;
 				leftButtonRight = newArea.left;
 			}
-			
+
 			if (m_downFrame)
 			{
-				rightButtonLeft = m_downFrame->GetX();
-				rightButtonRight = rightButtonLeft + m_downFrame->GetWidth();
+				rightButtonLeft = m_downFrame->GetAbsoluteFrameRect().left;
 			}
 			else
 			{
 				rightButtonLeft = newArea.right;
-				rightButtonRight = newArea.right;
 			}
-			
+
+			const float invScaleX = 1.0f / FrameManager::Get().GetUIScale().x;
+
 			// Calculate the available space for the thumb
 			float minPos = leftButtonRight;
 			float maxPos = rightButtonLeft;
-			
+
 			// Ensure min is less than max with enough space for the thumb
-			if (maxPos - minPos < thumb->GetWidth() + 1.0f)
+			if ((maxPos - minPos) * invScaleX < thumb->GetWidth() + 1.0f)
 			{
 				// Not enough space, adjust to minimum required
 				float midPoint = (minPos + maxPos) / 2.0f;
 				float halfThumbWidth = thumb->GetWidth() / 2.0f + 0.5f;
-				
+
 				minPos = midPoint - halfThumbWidth;
 				maxPos = midPoint + halfThumbWidth;
 			}
-			
+
 			// Set horizontal range excluding button areas
-			thumb->SetHorizontalRange(minPos, maxPos);
+			thumb->SetHorizontalRange((minPos - newArea.left) * invScaleX, (maxPos - newArea.left) * invScaleX);
 			thumb->SetHorizontalMovement(true);
 			thumb->SetVerticalMovement(false);
 		}
@@ -325,11 +329,13 @@ namespace mmo
 		normalizedValue = Clamp(normalizedValue, 0.0f, 1.0f);
 
 		Point position = thumb->GetPosition();
-		position.x = (m_upFrame ? m_upFrame->GetAbsoluteFrameRect().left - GetAbsoluteFrameRect().left : 0.0f) * (1.0f / FrameManager::Get().GetUIScale().x);
-		
+
 		// Handle vertical scrollbar
 		if (m_orientation == ScrollBarOrientation::Vertical)
 		{
+			// Align the thumb horizontally with the up button
+			position.x = (m_upFrame ? m_upFrame->GetAbsoluteFrameRect().left - GetAbsoluteFrameRect().left : 0.0f) * (1.0f / FrameManager::Get().GetUIScale().x);
+
 			// Calculate available space for thumb movement
 			float availableSpace = thumb->GetVerticalMax() - thumb->GetVerticalMin() - thumb->GetHeight();
 			if (availableSpace <= 0.0f)
@@ -356,6 +362,9 @@ namespace mmo
 		// Handle horizontal scrollbar
 		else
 		{
+			// Align the thumb vertically with the left button
+			position.y = (m_upFrame ? m_upFrame->GetAbsoluteFrameRect().top - GetAbsoluteFrameRect().top : 0.0f) * (1.0f / FrameManager::Get().GetUIScale().y);
+
 			// Calculate available space for thumb movement
 			float availableSpace = thumb->GetHorizontalMax() - thumb->GetHorizontalMin() - thumb->GetWidth();
 			if (availableSpace <= 0.0f)

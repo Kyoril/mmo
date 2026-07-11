@@ -71,6 +71,11 @@ namespace mmo
 		void OnStepPropertyChanged(const Property& property);
 
 	private:
+		/// Wires up the child button and thumb frames. Called from OnLoad for frames created
+		/// by the layout loader and from Copy for frames created at runtime through Clone,
+		/// which never receive an OnLoad call.
+		void SetupChildFrames();
+
 		void OnThumbPositionChanged(Thumb& thumb);
 
 		void OnUpButtonClicked();
@@ -91,6 +96,8 @@ namespace mmo
 		Thumb* m_thumbFrame = nullptr;
 
 		scoped_connection m_onThumbPositionChanged;
+		scoped_connection m_onUpButtonClicked;
+		scoped_connection m_onDownButtonClicked;
 
 		luabind::object m_onValueChanged{};
 	};
