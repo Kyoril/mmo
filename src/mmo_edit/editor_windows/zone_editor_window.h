@@ -26,9 +26,6 @@ namespace mmo
 	private:
 		void DrawDetailsImpl(proto::ZoneEntry& currentEntry) override;
 
-		/// Draws a filtered combo box to pick a sound entry (0 = inherit/none).
-		void DrawSoundEntryCombo(const char* label, uint32 currentSoundId, ImGuiTextFilter& filter, const std::function<void(uint32)>& setter);
-
 	public:
 		bool IsDockable() const override { return true; }
 

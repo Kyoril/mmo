@@ -2,6 +2,7 @@
 
 #include "zone_editor_window.h"
 #include "editor_imgui_helpers.h"
+#include "sound_entry_combo.h"
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
@@ -204,65 +205,15 @@ namespace mmo
 
 		if (const auto section = ScopedEditorSection("Audio", ImGuiTreeNodeFlags_None))
 		{
-			DrawSoundEntryCombo("Music", currentEntry.music_sound(), m_musicSoundFilter,
-				[&currentEntry](const uint32 id) { currentEntry.set_music_sound(id); });
+			DrawSoundEntryCombo(m_project.sounds, "Music", currentEntry.music_sound(), m_musicSoundFilter,
+				[&currentEntry](const uint32 id) { currentEntry.set_music_sound(id); }, "(Inherit / None)");
 
-			DrawSoundEntryCombo("Ambience", currentEntry.ambience_sound(), m_ambienceSoundFilter,
-				[&currentEntry](const uint32 id) { currentEntry.set_ambience_sound(id); });
+			DrawSoundEntryCombo(m_project.sounds, "Ambience", currentEntry.ambience_sound(), m_ambienceSoundFilter,
+				[&currentEntry](const uint32 id) { currentEntry.set_ambience_sound(id); }, "(Inherit / None)");
 
 			CHECKBOX_BOOL_PROP(inherit_parent_audio, "Inherit parent zone audio");
 			ImGui::TextDisabled("When enabled, unset music/ambience fall back along the parent zone chain. Disable to force silence in this zone.");
 		}
 	}
 
-	void ZoneEditorWindow::DrawSoundEntryCombo(const char* label, const uint32 currentSoundId, ImGuiTextFilter& filter, const std::function<void(uint32)>& setter)
-	{
-		const proto::SoundEntry* currentSound = nullptr;
-		if (currentSoundId != 0)
-		{
-			currentSound = m_project.sounds.getById(currentSoundId);
-		}
-
-		if (ImGui::BeginCombo(label, currentSound ? currentSound->name().c_str() : "(Inherit / None)", ImGuiComboFlags_HeightLargest))
-		{
-			if (!ImGui::IsAnyItemActive() && !ImGui::IsMouseClicked(0))
-			{
-				ImGui::SetKeyboardFocusHere(0);
-			}
-
-			filter.Draw("##sound_filter", -1.0f);
-
-			if (ImGui::Selectable("(Inherit / None)"))
-			{
-				setter(0);
-				filter.Clear();
-				ImGui::CloseCurrentPopup();
-			}
-
-			if (ImGui::BeginChild("##sound_scroll_area", ImVec2(0, 400)))
-			{
-				for (const auto& sound : m_project.sounds.getTemplates().entry())
-				{
-					// Skipped due to filter
-					if (filter.IsActive() && !filter.PassFilter(sound.name().c_str()))
-					{
-						continue;
-					}
-
-					ImGui::PushID(sound.id());
-					if (ImGui::Selectable(sound.name().c_str()))
-					{
-						setter(sound.id());
-
-						filter.Clear();
-						ImGui::CloseCurrentPopup();
-					}
-					ImGui::PopID();
-				}
-			}
-			ImGui::EndChild();
-
-			ImGui::EndCombo();
-		}
-	}
 }

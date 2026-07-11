@@ -4,6 +4,8 @@
 
 #include "base/non_copyable.h"
 
+#include <imgui.h>
+
 #include "editor_entry_window_base.h"
 
 #include "editor_host.h"
@@ -47,5 +49,8 @@ namespace mmo
 		std::unique_ptr<ModelPreview> m_preview;
 
 		std::shared_ptr<CustomizableAvatarDefinition> m_definition;
+
+		ImGuiTextFilter m_gossipSoundFilter;
+		ImGuiTextFilter m_gossipPissedSoundFilter;
 	};
 }

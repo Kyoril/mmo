@@ -2,6 +2,7 @@
 
 #include "model_editor_window.h"
 #include "editor_imgui_helpers.h"
+#include "sound_entry_combo.h"
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
@@ -711,6 +712,17 @@ namespace mmo
 
 				}
 			}
+		}
+
+		if (const auto section = ScopedEditorSection("Audio", ImGuiTreeNodeFlags_None))
+		{
+			DrawSoundEntryCombo(m_project.sounds, "Gossip Sound", currentEntry.gossip_sound_id(), m_gossipSoundFilter,
+				[&currentEntry](const uint32 id) { currentEntry.set_gossip_sound_id(id); });
+			ImGui::TextDisabled("Voice line played when the player clicks / interacts with a friendly unit using this model.");
+
+			DrawSoundEntryCombo(m_project.sounds, "Gossip Pissed Sound", currentEntry.gossip_pissed_sound_id(), m_gossipPissedSoundFilter,
+				[&currentEntry](const uint32 id) { currentEntry.set_gossip_pissed_sound_id(id); });
+			ImGui::TextDisabled("Annoyed voice line played after repeatedly clicking the same unit. Falls back to the normal gossip sound when unset.");
 		}
 	}
 
