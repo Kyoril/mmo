@@ -45,7 +45,9 @@ namespace mmo
 		CastErrorVoice() = default;
 
 		/// @brief Resolves the SoundEntry id configured for the given cast result value.
-		[[nodiscard]] uint32 ResolveSoundId(uint32 castResult) const;
+		/// For no-power errors, a voice line specific to the missing power type
+		/// (power_type value, Invalid_ = unknown) takes precedence over the generic one.
+		[[nodiscard]] uint32 ResolveSoundId(uint32 castResult, int32 powerType) const;
 
 	private:
 		SoundEntryPlayer* m_player = nullptr;

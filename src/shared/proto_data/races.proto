@@ -32,6 +32,12 @@ message VoiceLineSet {
 	// Maps a spell cast result value (see spell_cast_result in game/spell.h) to the
 	// SoundEntry id of the voice line played when a cast fails with that result.
 	map<uint32, uint32> cast_error_sounds = 1;
+
+	// Maps a power type value (see power_type in game/spell.h: Mana=0, Rage=1,
+	// Energy=2, Health=3) to the SoundEntry id of the voice line played when a cast
+	// fails due to missing power of that type. Falls back to the generic
+	// FailedNoPower entry in cast_error_sounds when the power type is not mapped.
+	map<uint32, uint32> no_power_sounds = 2;
 }
 
 // NOTE: Keep the shared fields of this message in sync with src/shared/client_data/races.proto!

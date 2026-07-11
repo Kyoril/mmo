@@ -418,11 +418,24 @@ namespace mmo
 				const char* label;
 			};
 
+			struct NoPowerVoiceLine
+			{
+				uint32 powerType;
+				const char* label;
+			};
+
 			// Values must match spell_cast_result in game/spell.h.
 			static const CastErrorVoiceLine s_castErrorVoiceLines[] = {
 				{ spell_cast_result::FailedOutOfRange, "Out of Range" },
-				{ spell_cast_result::FailedNoPower, "Not Enough Power" },
+				{ spell_cast_result::FailedNoPower, "Not Enough Power (Generic Fallback)" },
 				{ spell_cast_result::FailedNotReady, "Not Ready (Cooldown)" },
+			};
+
+			// Values must match power_type in game/spell.h.
+			static const NoPowerVoiceLine s_noPowerVoiceLines[] = {
+				{ power_type::Mana, "No Mana" },
+				{ power_type::Rage, "No Rage" },
+				{ power_type::Energy, "No Energy" },
 			};
 
 			const auto drawGenderVoiceLines = [this](const char* genderLabel, proto::VoiceLineSet* voiceSet)
@@ -431,19 +444,20 @@ namespace mmo
 				ImGui::Separator();
 				ImGui::TextUnformatted(genderLabel);
 
-				auto* soundsByError = voiceSet->mutable_cast_error_sounds();
-				for (const auto& voiceLine : s_castErrorVoiceLines)
+				// Draws one voice line combo backed by one key of a proto uint32->uint32
+				// map; picking "(None)" erases the key so unset entries stay absent.
+				const auto drawVoiceLineCombo = [this](const char* label, auto* soundsByKey, const uint32 key)
 				{
-					ImGui::PushID(static_cast<int>(voiceLine.castResult));
+					ImGui::PushID(label);
 
 					uint32 currentSoundId = 0;
-					if (const auto it = soundsByError->find(voiceLine.castResult); it != soundsByError->end())
+					if (const auto it = soundsByKey->find(key); it != soundsByKey->end())
 					{
 						currentSoundId = it->second;
 					}
 
 					const proto::SoundEntry* currentSound = (currentSoundId != 0) ? m_project.sounds.getById(currentSoundId) : nullptr;
-					if (ImGui::BeginCombo(voiceLine.label, currentSound ? currentSound->name().c_str() : "(None)", ImGuiComboFlags_HeightLargest))
+					if (ImGui::BeginCombo(label, currentSound ? currentSound->name().c_str() : "(None)", ImGuiComboFlags_HeightLargest))
 					{
 						if (!ImGui::IsAnyItemActive() && !ImGui::IsMouseClicked(0))
 						{
@@ -454,7 +468,7 @@ namespace mmo
 
 						if (ImGui::Selectable("(None)"))
 						{
-							soundsByError->erase(voiceLine.castResult);
+							soundsByKey->erase(key);
 							m_voiceSoundFilter.Clear();
 							ImGui::CloseCurrentPopup();
 						}
@@ -471,7 +485,7 @@ namespace mmo
 								ImGui::PushID(sound.id());
 								if (ImGui::Selectable(sound.name().c_str()))
 								{
-									(*soundsByError)[voiceLine.castResult] = sound.id();
+									(*soundsByKey)[key] = sound.id();
 
 									m_voiceSoundFilter.Clear();
 									ImGui::CloseCurrentPopup();
@@ -485,6 +499,18 @@ namespace mmo
 					}
 
 					ImGui::PopID();
+				};
+
+				for (const auto& voiceLine : s_castErrorVoiceLines)
+				{
+					drawVoiceLineCombo(voiceLine.label, voiceSet->mutable_cast_error_sounds(), voiceLine.castResult);
+				}
+
+				ImGui::Spacing();
+				ImGui::TextDisabled("Power type specific no-power lines take precedence over the generic fallback above.");
+				for (const auto& voiceLine : s_noPowerVoiceLines)
+				{
+					drawVoiceLineCombo(voiceLine.label, voiceSet->mutable_no_power_sounds(), voiceLine.powerType);
 				}
 
 				ImGui::PopID();
