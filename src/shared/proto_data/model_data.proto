@@ -1,12 +1,24 @@
 syntax = "proto2";
 package mmo.proto;
 
+// NOTE: Keep this file in sync with src/shared/client_data/model_data.proto!
+// The client reads the exported binary data with the mirrored proto_client schema,
+// so every field number in here has to match the mirror exactly.
+
 message ModelDataEntry {
 	required uint32 id = 1;
 	required string name = 2;
 	optional uint32 flags = 3;
 	required string filename = 4;
 	map<uint32, uint32> customizationProperties = 5;
+
+	// SoundEntry id played when the player clicks / interacts with a friendly unit
+	// using this display model. 0 = no gossip sound (default).
+	optional uint32 gossip_sound_id = 6 [default = 0];
+
+	// SoundEntry id played instead of gossip_sound_id after the player has pestered
+	// the same unit repeatedly. 0 = keep playing the normal gossip sound (default).
+	optional uint32 gossip_pissed_sound_id = 7 [default = 0];
 }
 
 message ModelDatas {
