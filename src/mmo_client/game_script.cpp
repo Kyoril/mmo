@@ -721,10 +721,12 @@ namespace mmo
 
 		std::string FormatSpellText(const std::string &text, const proto_client::SpellEntry *spell)
 		{
+			// The active player can be null here: a spell tooltip can fire from an action button
+			// hover while the world is still loading (e.g. re-entering the world right after a
+			// logout), before the player object has spawned. Fall back to level 0 in that case,
+			// which CalculateEffectBasePoints clamps to the spell's base level.
 			const std::shared_ptr<GameUnitC> player = ObjectMgr::GetActivePlayer();
-			ASSERT(player);
-
-			const int32 level = player->GetLevel();
+			const int32 level = player ? player->GetLevel() : 0;
 
 			std::ostringstream strm;
 			int min = 0, max = 0, effectIndex = 0;
