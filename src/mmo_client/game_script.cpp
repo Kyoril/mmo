@@ -726,7 +726,7 @@ namespace mmo
 			// logout), before the player object has spawned. Fall back to level 0 in that case,
 			// which CalculateEffectBasePoints clamps to the spell's base level.
 			const std::shared_ptr<GameUnitC> player = ObjectMgr::GetActivePlayer();
-			const int32 level = player ? player->GetLevel() : 0;
+			const int32 level = player ? player->GetLevel() : 1;
 
 			std::ostringstream strm;
 			int min = 0, max = 0, effectIndex = 0;
