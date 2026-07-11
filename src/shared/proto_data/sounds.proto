@@ -24,7 +24,8 @@ message SoundEntry
 	required uint32 id = 1;
 	required string name = 2;
 
-	// One or more sound files; a random one is picked on each playback.
+	// One or more sound files. Playback picks shuffle-bag style: every file plays once
+	// in random order before any repeats, and never the same file twice in a row.
 	repeated string files = 3;
 
 	optional SoundEntryCategory category = 4 [default = SOUND_EFFECTS];

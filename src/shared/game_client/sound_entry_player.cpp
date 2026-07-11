@@ -4,6 +4,8 @@
 
 #include "log/default_log_levels.h"
 
+#include <algorithm>
+#include <numeric>
 #include <random>
 
 namespace mmo
@@ -139,7 +141,7 @@ namespace mmo
 		return static_cast<SoundCategory>(value);
 	}
 
-	SoundIndex SoundEntryPlayer::LoadRandomFile(const proto_client::SoundEntry& entry) const
+	SoundIndex SoundEntryPlayer::LoadRandomFile(const proto_client::SoundEntry& entry)
 	{
 		if (entry.files_size() == 0)
 		{
@@ -150,8 +152,7 @@ namespace mmo
 		int fileIndex = 0;
 		if (entry.files_size() > 1)
 		{
-			std::uniform_int_distribution<int> dis(0, entry.files_size() - 1);
-			fileIndex = dis(GetRandomGenerator());
+			fileIndex = NextShuffledFileIndex(entry);
 		}
 
 		const String& file = entry.files(fileIndex);
@@ -164,6 +165,33 @@ namespace mmo
 		}
 
 		return sound;
+	}
+
+	int SoundEntryPlayer::NextShuffledFileIndex(const proto_client::SoundEntry& entry)
+	{
+		ShuffleState& state = m_shuffleStates[entry.id()];
+
+		// (Re)build the bag when the round is exhausted (also covers a changed file count,
+		// e.g. after a data reload, since order is resized to match).
+		if (state.next >= state.order.size() || state.order.size() != static_cast<size_t>(entry.files_size()))
+		{
+			state.order.resize(entry.files_size());
+			std::iota(state.order.begin(), state.order.end(), 0);
+			std::shuffle(state.order.begin(), state.order.end(), GetRandomGenerator());
+
+			// A new round must not start with the file that just ended the previous one,
+			// so no file ever plays twice in a row.
+			if (state.order.size() > 1 && state.order.front() == state.lastPlayed)
+			{
+				std::uniform_int_distribution<size_t> dis(1, state.order.size() - 1);
+				std::swap(state.order.front(), state.order[dis(GetRandomGenerator())]);
+			}
+
+			state.next = 0;
+		}
+
+		state.lastPlayed = state.order[state.next++];
+		return state.lastPlayed;
 	}
 
 	void SoundEntryPlayer::ApplyChannelSettings(const ChannelIndex channel, const proto_client::SoundEntry& entry) const

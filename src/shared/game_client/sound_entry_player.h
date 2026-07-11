@@ -9,6 +9,7 @@
 #include "shared/audio/audio.h"
 #include "client_data/project.h"
 
+#include <unordered_map>
 #include <vector>
 
 namespace mmo
@@ -54,15 +55,34 @@ namespace mmo
 		/// @brief Resolves the audio category from the entry category value.
 		static SoundCategory GetCategoryFromEntry(const proto_client::SoundEntry& entry);
 
-		/// @brief Loads a randomly picked file of the entry, or InvalidSound.
-		SoundIndex LoadRandomFile(const proto_client::SoundEntry& entry) const;
+		/// @brief Loads a randomly picked file of the entry, or InvalidSound. Multi-file
+		/// entries are picked shuffle-bag style (see NextShuffledFileIndex).
+		SoundIndex LoadRandomFile(const proto_client::SoundEntry& entry);
+
+		/// @brief Picks the next file index of a multi-file entry. Every file plays exactly
+		/// once (in random order) before the bag reshuffles, and a new round never starts
+		/// with the file that just played, so playback never repeats a file back-to-back.
+		int NextShuffledFileIndex(const proto_client::SoundEntry& entry);
 
 		/// @brief Applies volume and random pitch settings to a playing channel.
 		void ApplyChannelSettings(ChannelIndex channel, const proto_client::SoundEntry& entry) const;
 
 	private:
+		/// @brief Shuffle-bag state of one multi-file sound entry.
+		struct ShuffleState
+		{
+			/// Randomized file indices of the current round.
+			std::vector<int> order;
+			/// Next position in order to play.
+			size_t next = 0;
+			/// File index played most recently (-1 = none yet).
+			int lastPlayed = -1;
+		};
+
+	private:
 		IAudio& m_audio;
 		const proto_client::SoundManager& m_sounds;
+		std::unordered_map<uint32, ShuffleState> m_shuffleStates;
 	};
 
 	/// @brief Manages a long-running looped sound slot (zone music, zone ambience) which
