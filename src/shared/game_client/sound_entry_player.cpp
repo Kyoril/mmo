@@ -97,6 +97,24 @@ namespace mmo
 		return m_audio.GetSoundLength(sound);
 	}
 
+	float SoundEntryPlayer::GetEntryVolume(const uint32 soundId) const
+	{
+		const proto_client::SoundEntry* entry = m_sounds.getById(soundId);
+		return entry ? entry->volume() : 1.0f;
+	}
+
+	float SoundEntryPlayer::GetEntryFadeInSeconds(const uint32 soundId) const
+	{
+		const proto_client::SoundEntry* entry = m_sounds.getById(soundId);
+		return entry ? entry->fade_in_ms() / 1000.0f : 0.0f;
+	}
+
+	float SoundEntryPlayer::GetEntryFadeOutSeconds(const uint32 soundId) const
+	{
+		const proto_client::SoundEntry* entry = m_sounds.getById(soundId);
+		return entry ? entry->fade_out_ms() / 1000.0f : 0.0f;
+	}
+
 	SoundType SoundEntryPlayer::GetSoundTypeFromEntry(const proto_client::SoundEntry& entry)
 	{
 		if (entry.is_3d())
@@ -175,10 +193,9 @@ namespace mmo
 	}
 
 
-	CrossfadingSoundLoop::CrossfadingSoundLoop(SoundEntryPlayer& player, IAudio& audio, const float fadeSpeed)
+	CrossfadingSoundLoop::CrossfadingSoundLoop(SoundEntryPlayer& player, IAudio& audio)
 		: m_player(player)
 		, m_audio(audio)
-		, m_fadeSpeed(fadeSpeed)
 	{
 	}
 
@@ -189,120 +206,149 @@ namespace mmo
 
 	void CrossfadingSoundLoop::SetSound(const uint32 soundId)
 	{
-		// Already playing or fading towards this entry?
-		if (soundId == m_currentSoundId && m_state != State::FadingOut)
+		// Already the active (playing / fading-in) sound: nothing to do.
+		if (soundId == m_activeSoundId)
 		{
 			return;
 		}
 
-		// Re-requesting the entry that is currently fading out: fade it back in.
-		if (soundId == m_currentSoundId && m_state == State::FadingOut)
+		// Fade out whatever is currently active.
+		RetireActiveSound();
+
+		// A request for "no sound" just leaves the fade-outs running.
+		if (soundId == 0)
 		{
-			m_pendingSoundId = 0;
-			m_state = State::FadingIn;
 			return;
 		}
 
-		m_pendingSoundId = soundId;
-
-		if (m_channel != InvalidChannel)
+		// Avoid the same track playing twice out of phase: if this sound is still fading
+		// out from a previous transition, stop that copy before starting a fresh one.
+		for (auto it = m_fadingOut.begin(); it != m_fadingOut.end();)
 		{
-			m_state = State::FadingOut;
+			if (it->soundId == soundId)
+			{
+				m_audio.StopSound(&it->channel);
+				it = m_fadingOut.erase(it);
+			}
+			else
+			{
+				++it;
+			}
+		}
+
+		// Start the new sound and fade it in from silence.
+		m_activeChannel = m_player.PlayEntry(soundId);
+		if (m_activeChannel == InvalidChannel)
+		{
+			m_activeSoundId = 0;
+			return;
+		}
+
+		m_activeSoundId = soundId;
+		m_activeBaseVolume = m_player.GetEntryVolume(soundId);
+
+		const float fadeInSeconds = m_player.GetEntryFadeInSeconds(soundId);
+		if (fadeInSeconds > 0.0f)
+		{
+			m_activeFade = 0.0f;
+			m_activeFadeInPerSec = 1.0f / fadeInSeconds;
+			if (IChannelInstance* instance = m_audio.GetChannelInstance(m_activeChannel))
+			{
+				instance->SetVolume(0.0f);
+			}
 		}
 		else
 		{
-			StartPendingSound();
+			// Instant: PlayEntry already applied the base volume.
+			m_activeFade = 1.0f;
+			m_activeFadeInPerSec = 0.0f;
 		}
 	}
 
 	void CrossfadingSoundLoop::Update(const float deltaSeconds)
 	{
-		if (m_state == State::Idle || m_channel == InvalidChannel)
+		// Advance the active fade-in.
+		if (m_activeChannel != InvalidChannel && m_activeFadeInPerSec > 0.0f && m_activeFade < 1.0f)
 		{
-			return;
+			m_activeFade += m_activeFadeInPerSec * deltaSeconds;
+			if (m_activeFade >= 1.0f)
+			{
+				m_activeFade = 1.0f;
+				m_activeFadeInPerSec = 0.0f;
+			}
+
+			if (IChannelInstance* instance = m_audio.GetChannelInstance(m_activeChannel))
+			{
+				instance->SetVolume(m_activeFade * m_activeBaseVolume);
+			}
 		}
 
-		IChannelInstance* instance = m_audio.GetChannelInstance(m_channel);
-
-		if (m_state == State::FadingOut)
+		// Advance every fade-out, dropping the ones that reached silence.
+		for (auto it = m_fadingOut.begin(); it != m_fadingOut.end();)
 		{
-			m_fade -= m_fadeSpeed * deltaSeconds;
-			if (m_fade <= 0.0f)
+			it->fade -= it->fadeOutPerSec * deltaSeconds;
+			if (it->fade <= 0.0f)
 			{
-				m_audio.StopSound(&m_channel);
-				m_currentSoundId = 0;
-				m_fade = 0.0f;
-				m_state = State::Idle;
-
-				StartPendingSound();
-				return;
+				m_audio.StopSound(&it->channel);
+				it = m_fadingOut.erase(it);
+				continue;
 			}
 
-			if (instance)
+			if (IChannelInstance* instance = m_audio.GetChannelInstance(it->channel))
 			{
-				instance->SetVolume(m_fade * m_baseVolume);
+				instance->SetVolume(it->fade * it->baseVolume);
 			}
-		}
-		else if (m_state == State::FadingIn)
-		{
-			m_fade += m_fadeSpeed * deltaSeconds;
-			if (m_fade >= 1.0f)
-			{
-				m_fade = 1.0f;
-				m_state = State::Idle;
-			}
-
-			if (instance)
-			{
-				instance->SetVolume(m_fade * m_baseVolume);
-			}
+			++it;
 		}
 	}
 
 	void CrossfadingSoundLoop::Stop()
 	{
-		if (m_channel != InvalidChannel)
+		if (m_activeChannel != InvalidChannel)
 		{
-			m_audio.StopSound(&m_channel);
+			m_audio.StopSound(&m_activeChannel);
 		}
+		m_activeChannel = InvalidChannel;
+		m_activeSoundId = 0;
+		m_activeFade = 0.0f;
+		m_activeFadeInPerSec = 0.0f;
 
-		m_currentSoundId = 0;
-		m_pendingSoundId = 0;
-		m_fade = 0.0f;
-		m_state = State::Idle;
+		for (auto& fading : m_fadingOut)
+		{
+			m_audio.StopSound(&fading.channel);
+		}
+		m_fadingOut.clear();
 	}
 
-	void CrossfadingSoundLoop::StartPendingSound()
+	void CrossfadingSoundLoop::RetireActiveSound()
 	{
-		if (m_pendingSoundId == 0)
+		if (m_activeChannel == InvalidChannel)
 		{
+			m_activeSoundId = 0;
 			return;
 		}
 
-		const uint32 soundId = m_pendingSoundId;
-		m_pendingSoundId = 0;
-
-		m_channel = m_player.PlayEntry(soundId);
-		if (m_channel == InvalidChannel)
+		const float fadeOutSeconds = m_player.GetEntryFadeOutSeconds(m_activeSoundId);
+		if (fadeOutSeconds <= 0.0f)
 		{
-			return;
-		}
-
-		m_currentSoundId = soundId;
-
-		// PlayEntry applied the entry's base volume to the channel; remember it as the fade
-		// target and restart playback silently.
-		if (IChannelInstance* instance = m_audio.GetChannelInstance(m_channel))
-		{
-			m_baseVolume = instance->GetVolume();
-			instance->SetVolume(0.0f);
+			// Instant stop.
+			m_audio.StopSound(&m_activeChannel);
 		}
 		else
 		{
-			m_baseVolume = 1.0f;
+			FadingChannel fading;
+			fading.channel = m_activeChannel;
+			fading.soundId = m_activeSoundId;
+			fading.baseVolume = m_activeBaseVolume;
+			// Continue fading from the volume the sound had actually reached so far.
+			fading.fade = m_activeFade;
+			fading.fadeOutPerSec = 1.0f / fadeOutSeconds;
+			m_fadingOut.push_back(fading);
 		}
 
-		m_fade = 0.0f;
-		m_state = State::FadingIn;
+		m_activeChannel = InvalidChannel;
+		m_activeSoundId = 0;
+		m_activeFade = 0.0f;
+		m_activeFadeInPerSec = 0.0f;
 	}
 }

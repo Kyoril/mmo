@@ -48,6 +48,13 @@ message SoundEntry
 	// further away from the listener than max_distance are not played at all.
 	optional float min_distance = 11 [default = 1.0];
 	optional float max_distance = 12 [default = 30.0];
+
+	// Fade durations in milliseconds for looped slots that crossfade (e.g. zone music
+	// and ambience). fade_in_ms controls how long this sound takes to reach full volume
+	// when it starts; fade_out_ms how long it takes to fade to silence when replaced.
+	// 0 = instant.
+	optional uint32 fade_in_ms = 13 [default = 0];
+	optional uint32 fade_out_ms = 14 [default = 0];
 }
 
 message Sounds

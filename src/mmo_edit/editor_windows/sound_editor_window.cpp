@@ -11,6 +11,8 @@
 #include "log/default_log_levels.h"
 #include "shared/audio/audio.h"
 
+#include <algorithm>
+
 namespace mmo
 {
 	namespace
@@ -95,6 +97,22 @@ namespace mmo
 			if (ImGui::SliderFloat("Volume", &volume, 0.0f, 1.0f, "%.2f"))
 			{
 				currentEntry.set_volume(volume);
+			}
+
+			if (currentEntry.looped())
+			{
+				int fadeInMs = static_cast<int>(currentEntry.fade_in_ms());
+				if (ImGui::InputInt("Fade In (ms)", &fadeInMs, 100, 500))
+				{
+					currentEntry.set_fade_in_ms(static_cast<uint32>(std::max(0, fadeInMs)));
+				}
+
+				int fadeOutMs = static_cast<int>(currentEntry.fade_out_ms());
+				if (ImGui::InputInt("Fade Out (ms)", &fadeOutMs, 100, 500))
+				{
+					currentEntry.set_fade_out_ms(static_cast<uint32>(std::max(0, fadeOutMs)));
+				}
+				ImGui::TextDisabled("Crossfade durations used when this looped sound is used as zone music/ambience (0 = instant).");
 			}
 
 			float pitchRange[2] = { currentEntry.pitch_min(), currentEntry.pitch_max() };
