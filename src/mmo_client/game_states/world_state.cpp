@@ -68,6 +68,7 @@
 
 #include "shared/audio/audio.h"
 #include "systems/cast_error_voice.h"
+#include "systems/unit_gossip_voice.h"
 #include "systems/party_info.h"
 #include "shared/game_client/spell_visualization_service.h"
 #include "console/console_var.h"
@@ -439,6 +440,8 @@ namespace mmo
 
 		m_zoneMusic.Stop();
 		m_zoneAmbience.Stop();
+
+		UnitGossipVoice::Get().Reset();
 
 		// Force a zone (and thus music/ambience) resolve on the next world enter.
 		m_lastZoneId = UINT32_MAX;
