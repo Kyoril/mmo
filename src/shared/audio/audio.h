@@ -19,6 +19,29 @@ namespace mmo
 		SoundLooped2D,
 	};
 
+	/// Enumerates sound categories which can be individually adjusted in volume or muted
+	/// entirely by the player. Keep the numeric values aligned with the SoundEntryCategory
+	/// enum in proto_data/sounds.proto.
+	enum class SoundCategory : uint8
+	{
+		/// Combat, footsteps, spells and other world sound effects. This is the default category.
+		SoundEffects = 0,
+
+		/// Background music.
+		Music,
+
+		/// Looping zone ambience.
+		Ambience,
+
+		/// UI interaction sounds.
+		Interface,
+
+		/// Voice lines (npc greetings, player cast error lines, quest narration).
+		Voice,
+
+		Count_
+	};
+
 	typedef int32 SoundIndex;
 	typedef int32 ChannelIndex;
 
@@ -65,7 +88,12 @@ namespace mmo
 		virtual SoundIndex CreateLoopedSound(const String& fileName) = 0;
 		virtual SoundIndex CreateLoopedStream(const String &fileName) = 0;
 		virtual SoundIndex CreateSound(const String& fileName, SoundType type) = 0;
-		virtual void PlaySound(SoundIndex sound, ChannelIndex *channelIndex, float priority = 1.0f) = 0;
+		virtual void PlaySound(SoundIndex sound, ChannelIndex *channelIndex, float priority = 1.0f, SoundCategory category = SoundCategory::SoundEffects) = 0;
+		/// Plays a 3D sound at the given world position, applying position and min/max distance
+		/// before the sound becomes audible. Non-looped 3D sounds whose position is further away
+		/// from the listener than maxDistance are not started at all and *channelIndex is set to
+		/// InvalidChannel.
+		virtual void PlaySound3D(SoundIndex sound, ChannelIndex *channelIndex, const Vector3& position, float minDistance, float maxDistance, float priority = 1.0f, SoundCategory category = SoundCategory::SoundEffects) = 0;
 		virtual void StopSound(ChannelIndex *channelIndex) = 0;
 		virtual void StopAllSounds() = 0;
 		virtual SoundIndex FindSound(const String& fileName, SoundType type) = 0;
@@ -74,5 +102,14 @@ namespace mmo
 		virtual float GetSoundLength(SoundIndex sound) = 0;
 		virtual ISoundInstance* GetSoundInstance(SoundIndex sound) = 0;
 		virtual IChannelInstance* GetChannelInstance(ChannelIndex channel) = 0;
+
+		/// Sets the master volume applied on top of all category volumes. Range [0, 1].
+		virtual void SetMasterVolume(float volume) = 0;
+		/// Mutes or unmutes all sound output without touching any volume values.
+		virtual void SetMasterMuted(bool muted) = 0;
+		/// Sets the volume of a single sound category. Range [0, 1].
+		virtual void SetCategoryVolume(SoundCategory category, float volume) = 0;
+		/// Mutes or unmutes a single sound category without touching any volume values.
+		virtual void SetCategoryMuted(SoundCategory category, bool muted) = 0;
 	};
 }

@@ -3,6 +3,7 @@ package mmo.proto;
 
 import "localization.proto";
 
+// NOTE: Keep this message in sync with src/shared/client_data/zones.proto!
 message ZoneEntry {
 	required uint32 id = 1;
 	required string name = 2;
@@ -12,6 +13,13 @@ message ZoneEntry {
 	optional uint32 flags = 6;
 	optional uint32 owning_faction = 7;
 	optional int32 level = 8;
+	// SoundEntry id of the background music of this zone (0 = inherit from parent zone).
+	optional uint32 music_sound = 9;
+	// SoundEntry id of the looping ambience of this zone (0 = inherit from parent zone).
+	optional uint32 ambience_sound = 10;
+	// Whether unset music/ambience fall back to the parent zone chain. Disable to force
+	// explicit silence in this zone even though a parent has audio assigned.
+	optional bool inherit_parent_audio = 11 [default = true];
 	repeated LocalizedString name_loc = 200;
 }
 

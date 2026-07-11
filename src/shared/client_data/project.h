@@ -29,6 +29,7 @@
 #include "shared/client_data/proto_client/item_classes.pb.h"
 #include "shared/client_data/proto_client/item_subclasses.pb.h"
 #include "shared/client_data/proto_client/chat_channels.pb.h"
+#include "shared/client_data/proto_client/sounds.pb.h"
 
 namespace mmo
 {
@@ -55,6 +56,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto_client::ItemClasses, mmo::proto_client::ItemClassEntry> ItemClassManager;
 		typedef TemplateManager<mmo::proto_client::ItemSubclasses, mmo::proto_client::ItemSubclassEntry> ItemSubclassManager;
 		typedef TemplateManager<mmo::proto_client::ChatChannels, mmo::proto_client::ChatChannelEntry> ChatChannelManager;
+		typedef TemplateManager<mmo::proto_client::Sounds, mmo::proto_client::SoundEntry> SoundManager;
 
 		/// This class contains contains all the static game data like item templates.
 		class Project final
@@ -91,6 +93,7 @@ namespace mmo
 			ItemClassManager itemClasses;
 			ItemSubclassManager itemSubclasses;
 			ChatChannelManager chatChannels;
+			SoundManager sounds;
 
 		private:
 
@@ -155,6 +158,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("item_classes", itemClasses));
 				managers.push_back(ManagerEntry("item_subclasses", itemSubclasses));
 				managers.push_back(ManagerEntry("chat_channels", chatChannels, true));
+				managers.push_back(ManagerEntry("sounds", sounds, true));
 
 				if (!ClientProjectLoader::load(
 				            directory,
@@ -205,6 +209,7 @@ namespace mmo
 				managers.emplace_back("item_classes", "item_classes", itemClasses);
 				managers.emplace_back("item_subclasses", "item_subclasses", itemSubclasses);
 				managers.emplace_back("chat_channels", "chat_channels", chatChannels);
+				managers.emplace_back("sounds", "sounds", sounds);
 
 				if (!ClientProjectSaver::save(realmDataPath, managers))
 				{

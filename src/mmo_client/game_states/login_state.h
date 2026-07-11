@@ -20,6 +20,7 @@ namespace mmo
 	class LoginConnector;
 	class RealmConnector;
 	class Discord;
+	class SoundEntryPlayer;
 
 	/// Reason for returning to the login/character-select screen.
 	enum class LoginReturnReason
@@ -38,7 +39,7 @@ namespace mmo
 		: public GameState
 	{
 	public:
-		explicit LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector, RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio, Discord& discord);
+		explicit LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector, RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio, SoundEntryPlayer& soundEntryPlayer, Discord& discord);
 
 	public:
 		/// The default name of the login state
@@ -93,6 +94,7 @@ namespace mmo
 		scoped_connection_container m_loginConnections;
 		TimerQueue& m_timers;
 		IAudio& m_audio;
+		SoundEntryPlayer& m_soundEntryPlayer;
 		Discord& m_discord;
 
 		SoundIndex m_musicSound = InvalidSound;

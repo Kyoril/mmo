@@ -26,6 +26,8 @@
 #include "ui/minimap.h"
 #include "base/timer_queue.h"
 #include "shared/audio/audio.h"
+#include "audio_settings.h"
+#include "game_client/sound_entry_player.h"
 #include "client_data/project.h"
 #include "game/game_time_component.h"
 

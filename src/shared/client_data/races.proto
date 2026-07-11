@@ -1,6 +1,15 @@
 syntax = "proto2";
 package mmo.proto_client;
 
+// Voice lines of one gender of a race.
+// NOTE: Keep this message in sync with src/shared/proto_data/races.proto!
+message VoiceLineSet {
+	// Maps a spell cast result value (see spell_cast_result in game/spell.h) to the
+	// SoundEntry id of the voice line played when a cast fails with that result.
+	map<uint32, uint32> cast_error_sounds = 1;
+}
+
+// NOTE: Keep the shared fields of this message in sync with src/shared/proto_data/races.proto!
 message RaceEntry {
 	required uint32 id = 1;
 	required string name = 2;
@@ -8,6 +17,8 @@ message RaceEntry {
 	required uint32 malemodel = 4;
 	required uint32 femalemodel = 5;
 	required uint32 baselanguage = 6;
+	optional VoiceLineSet male_voice = 20;
+	optional VoiceLineSet female_voice = 21;
 }
 
 message Races {

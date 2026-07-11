@@ -40,6 +40,7 @@
 #include "ui/world_text_frame.h"
 
 #include "game_client/net_client.h"
+#include "game_client/sound_entry_player.h"
 #include "debug_path_visualizer.h"
 #include "scene_graph/foliage.h"
 
@@ -115,6 +116,7 @@ namespace mmo
 			TrainerClient &trainerClient,
 			QuestClient &questClient,
 			IAudio &audio,
+			SoundEntryPlayer &soundEntryPlayer,
 			PartyInfo &partyInfo,
 			CharSelect &charSelect,
 			GuildClient &guildClient,
@@ -320,6 +322,8 @@ namespace mmo
 		/// Handles the StealthDetected packet: a hostile creature has spotted the player
 		/// while stealthed - play its alert sound.
 		PacketParseResult OnStealthDetected(game::IncomingPacket &packet);
+
+		PacketParseResult OnPlaySoundById(game::IncomingPacket &packet);
 
 		/// Plays a stealth alert sound (or the default sound when the file name is empty)
 		/// as a 3D sound at the given world position.
@@ -614,11 +618,11 @@ namespace mmo
 		QuestClient &m_questClient;
 		PartyInfo &m_partyInfo;
 
-		SoundIndex m_backgroundMusicSound{InvalidSound};
-		ChannelIndex m_backgroundMusicChannel{InvalidChannel};
-
-		SoundIndex m_ambienceSound{InvalidSound};
-		ChannelIndex m_ambienceChannel{InvalidChannel};
+		SoundEntryPlayer &m_soundEntryPlayer;
+		/// Crossfading zone background music slot, driven by ZoneEntry::music_sound.
+		CrossfadingSoundLoop m_zoneMusic;
+		/// Crossfading zone ambience slot, driven by ZoneEntry::ambience_sound.
+		CrossfadingSoundLoop m_zoneAmbience;
 
 		CharSelect &m_charSelect;
 		GuildClient &m_guildClient;

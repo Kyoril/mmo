@@ -178,6 +178,18 @@ namespace mmo
 
 	FMODAudio::~FMODAudio()
 	{
+		for (auto*& group : m_categoryGroups)
+		{
+			if (group)
+			{
+				group->release();
+				group = nullptr;
+			}
+		}
+
+		// The master channel group is owned by the FMOD system and must not be released manually.
+		m_masterGroup = nullptr;
+
 		if (m_system)
 		{
 			m_system->release();
@@ -216,6 +228,44 @@ namespace mmo
 
 			ELOG("FMOD (" << result << "): " << FMOD_ErrorString(result));
 			return;
+		}
+
+		// Set up one channel group per sound category, all routed through the master group,
+		// so category and master volume / mute can be adjusted independently at runtime.
+		result = m_system->getMasterChannelGroup(&m_masterGroup);
+		if (result != FMOD_OK)
+		{
+			m_masterGroup = nullptr;
+			ELOG("FMOD (" << result << "): " << FMOD_ErrorString(result));
+		}
+
+		static const char* const s_categoryGroupNames[static_cast<size_t>(SoundCategory::Count_)] = {
+			"SoundEffects", "Music", "Ambience", "Interface", "Voice"
+		};
+
+		for (size_t i = 0; i < static_cast<size_t>(SoundCategory::Count_); ++i)
+		{
+			result = m_system->createChannelGroup(s_categoryGroupNames[i], &m_categoryGroups[i]);
+			if (result != FMOD_OK)
+			{
+				m_categoryGroups[i] = nullptr;
+				ELOG("FMOD (" << result << "): " << FMOD_ErrorString(result));
+				continue;
+			}
+
+			if (m_masterGroup)
+			{
+				m_masterGroup->addGroup(m_categoryGroups[i]);
+			}
+
+			m_categoryGroups[i]->setVolume(m_categoryVolumes[i]);
+			m_categoryGroups[i]->setMute(m_categoryMuted[i]);
+		}
+
+		if (m_masterGroup)
+		{
+			m_masterGroup->setVolume(m_masterVolume);
+			m_masterGroup->setMute(m_masterMuted);
 		}
 	}
 
@@ -388,7 +438,17 @@ namespace mmo
 		return m_nextSoundInstanceIndex;
 	}
 
-	void FMODAudio::PlaySound(SoundIndex sound, ChannelIndex* channelIndex, float priority)
+	void FMODAudio::PlaySound(SoundIndex sound, ChannelIndex* channelIndex, float priority, SoundCategory category)
+	{
+		PlaySoundInternal(sound, channelIndex, priority, category, nullptr, 0.0f, 0.0f);
+	}
+
+	void FMODAudio::PlaySound3D(SoundIndex sound, ChannelIndex* channelIndex, const Vector3& position, float minDistance, float maxDistance, float priority, SoundCategory category)
+	{
+		PlaySoundInternal(sound, channelIndex, priority, category, &position, minDistance, maxDistance);
+	}
+
+	void FMODAudio::PlaySoundInternal(SoundIndex sound, ChannelIndex* channelIndex, float priority, SoundCategory category, const Vector3* position, float minDistance, float maxDistance)
 	{
 		if (sound == InvalidSound)
 		{
@@ -405,6 +465,20 @@ namespace mmo
 			{
 				pair.second.lastUsedTime = m_currentTime;
 				break;
+			}
+		}
+
+		ASSERT((sound >= 0) && (static_cast<size_t>(sound) < m_soundInstanceVector.size()));
+		FMODSoundInstance& instance = m_soundInstanceVector[sound];
+
+		// Distance cull: don't even start non-looped 3D one-shots that the listener could
+		// never hear - they would only waste a channel while being silent.
+		if (position && instance.GetType() == SoundType::Sound3D)
+		{
+			if (m_prevListenerPosition.GetSquaredDistanceTo(*position) > maxDistance * maxDistance)
+			{
+				if (channelIndex) *channelIndex = InvalidChannel;
+				return;
 			}
 		}
 
@@ -437,10 +511,7 @@ namespace mmo
 		}
 
 		FMOD::Channel* channel;
-		assert((sound > 0) && (static_cast<size_t>(sound) < m_soundInstanceVector.size()));
-
-		FMODSoundInstance& instance = m_soundInstanceVector[sound];
-		FMOD_RESULT result = m_system->playSound(instance.GetFMODSound(), nullptr, true, &channel);
+		FMOD_RESULT result = m_system->playSound(instance.GetFMODSound(), m_categoryGroups[static_cast<size_t>(category)], true, &channel);
 		if (result != FMOD_OK)
 		{
 			ELOG("Could not play sound (" << result << "): " << FMOD_ErrorString(result));
@@ -456,8 +527,19 @@ namespace mmo
 		{
 			channel->setMode(FMOD_3D | FMOD_3D_LINEARSQUAREROLLOFF);
 			channel->set3DLevel(1.0f);
+
+			// Apply spatial attributes while still paused so the sound never plays a single
+			// frame with wrong position or attenuation settings.
+			if (position)
+			{
+				const FMOD_VECTOR fmodPos = { position->x, position->y, position->z };
+				const FMOD_VECTOR fmodVel = { 0.0f, 0.0f, 0.0f };
+				channel->set3DAttributes(&fmodPos, &fmodVel);
+				channel->set3DMinMaxDistance(minDistance, maxDistance);
+			}
 		}
-			channel->setPaused(false);
+
+		channel->setPaused(false);
 
 		// Store the sound index with the channel for proper tracking
 		int channelIndex32;
@@ -601,7 +683,7 @@ namespace mmo
 			return 0.0f;
 		}
 
-		ASSERT((sound > 0) && (static_cast<size_t>(sound) < m_soundInstanceVector.size()));
+		ASSERT((sound >= 0) && (static_cast<size_t>(sound) < m_soundInstanceVector.size()));
 
 		unsigned int   soundLength;   // length in milliseconds
 		FMOD_RESULT    result;
@@ -639,9 +721,53 @@ namespace mmo
 			return 0;
 		}
 
-		assert((channel > 0) && (channel < MaximumSoundChannels));
+		assert((channel >= 0) && (channel < MaximumSoundChannels));
 
 		return &m_channelArray[channel];
+	}
+
+	void FMODAudio::SetMasterVolume(float volume)
+	{
+		m_masterVolume = volume;
+
+		if (m_masterGroup)
+		{
+			m_masterGroup->setVolume(volume);
+		}
+	}
+
+	void FMODAudio::SetMasterMuted(bool muted)
+	{
+		m_masterMuted = muted;
+
+		if (m_masterGroup)
+		{
+			m_masterGroup->setMute(muted);
+		}
+	}
+
+	void FMODAudio::SetCategoryVolume(SoundCategory category, float volume)
+	{
+		ASSERT(category < SoundCategory::Count_);
+
+		m_categoryVolumes[static_cast<size_t>(category)] = volume;
+
+		if (FMOD::ChannelGroup* group = m_categoryGroups[static_cast<size_t>(category)])
+		{
+			group->setVolume(volume);
+		}
+	}
+
+	void FMODAudio::SetCategoryMuted(SoundCategory category, bool muted)
+	{
+		ASSERT(category < SoundCategory::Count_);
+
+		m_categoryMuted[static_cast<size_t>(category)] = muted;
+
+		if (FMOD::ChannelGroup* group = m_categoryGroups[static_cast<size_t>(category)])
+		{
+			group->setMute(muted);
+		}
 	}
 
 	void FMODAudio::IncrementNextSoundInstanceIndex()

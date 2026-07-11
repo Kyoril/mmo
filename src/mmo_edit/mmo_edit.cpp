@@ -52,6 +52,7 @@
 #include "editor_windows/vendor_editor_window.h"
 #include "editor_windows/quest_editor_window.h"
 #include "editor_windows/zone_editor_window.h"
+#include "editor_windows/sound_editor_window.h"
 #include "editor_windows/gossip_editor_window.h"
 #include "editor_windows/item_display_editor_window.h"
 #include "editor_windows/object_display_editor_window.h"
@@ -184,6 +185,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::TrainerEditorWindow>("Trainer Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::VendorEditorWindow>("Vendor Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ZoneEditorWindow>("Zone Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::SoundEditorWindow>("Sound Editor", project, mainWindow, editorAudio.get()));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::GossipEditorWindow>("Gossip Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ConditionEditorWindow>("Condition Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::VariableEditorWindow>("Variable Editor", project, mainWindow));

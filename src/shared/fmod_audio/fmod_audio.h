@@ -121,7 +121,9 @@ namespace mmo
 
 		SoundIndex CreateSound(const String &fileName, SoundType type) override;
 
-		void PlaySound(SoundIndex sound, ChannelIndex *channelIndex, float priority = 1.0f) override;
+		void PlaySound(SoundIndex sound, ChannelIndex *channelIndex, float priority = 1.0f, SoundCategory category = SoundCategory::SoundEffects) override;
+
+		void PlaySound3D(SoundIndex sound, ChannelIndex *channelIndex, const Vector3& position, float minDistance, float maxDistance, float priority = 1.0f, SoundCategory category = SoundCategory::SoundEffects) override;
 
 		void StopSound(ChannelIndex *channelIndex) override;
 
@@ -139,6 +141,14 @@ namespace mmo
 
 		IChannelInstance *GetChannelInstance(ChannelIndex channel) override;
 
+		void SetMasterVolume(float volume) override;
+
+		void SetMasterMuted(bool muted) override;
+
+		void SetCategoryVolume(SoundCategory category, float volume) override;
+
+		void SetCategoryMuted(SoundCategory category, bool muted) override;
+
 	private:
 
 		typedef std::deque<FMODSoundInstance> SoundInstanceVector;
@@ -150,7 +160,17 @@ namespace mmo
 		SoundInstanceVector m_soundInstanceVector;
 		FMODChannelInstance m_channelArray[MaximumSoundChannels];
 
+		FMOD::ChannelGroup *m_masterGroup = nullptr;
+		FMOD::ChannelGroup *m_categoryGroups[static_cast<size_t>(SoundCategory::Count_)] = {};
+
+		float m_masterVolume = 1.0f;
+		bool m_masterMuted = false;
+		float m_categoryVolumes[static_cast<size_t>(SoundCategory::Count_)] = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
+		bool m_categoryMuted[static_cast<size_t>(SoundCategory::Count_)] = {};
+
 		void IncrementNextSoundInstanceIndex();
+
+		void PlaySoundInternal(SoundIndex sound, ChannelIndex *channelIndex, float priority, SoundCategory category, const Vector3* position, float minDistance, float maxDistance);
 
 		static FMOD_RESULT F_CALLBACK FMODFileOpenCallback(const char *name, unsigned int *filesize, void **handle, void *userdata);
 		static FMOD_RESULT F_CALLBACK FMODFileCloseCallback(void *handle, void *userdata);

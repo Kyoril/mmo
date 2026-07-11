@@ -26,6 +26,15 @@ message InitialItems {
 	repeated uint32 items = 1;
 }
 
+// Voice lines of one gender of a race.
+// NOTE: Keep this message in sync with src/shared/client_data/races.proto!
+message VoiceLineSet {
+	// Maps a spell cast result value (see spell_cast_result in game/spell.h) to the
+	// SoundEntry id of the voice line played when a cast fails with that result.
+	map<uint32, uint32> cast_error_sounds = 1;
+}
+
+// NOTE: Keep the shared fields of this message in sync with src/shared/client_data/races.proto!
 message RaceEntry {
 	required uint32 id = 1;
 	required string name = 2;
@@ -49,6 +58,8 @@ message RaceEntry {
 	// legality, multi-class system). When empty, legality falls back to inferring from the presence
 	// of class-specific initial data (initialSpells / initialItems / initialActionButtons).
 	repeated uint32 allowedClasses = 19;
+	optional VoiceLineSet male_voice = 20;
+	optional VoiceLineSet female_voice = 21;
 }
 
 message Races {

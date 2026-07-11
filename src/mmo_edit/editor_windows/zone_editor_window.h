@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include "base/non_copyable.h"
 
 #include "editor_entry_window_base.h"
@@ -24,6 +26,9 @@ namespace mmo
 	private:
 		void DrawDetailsImpl(proto::ZoneEntry& currentEntry) override;
 
+		/// Draws a filtered combo box to pick a sound entry (0 = inherit/none).
+		void DrawSoundEntryCombo(const char* label, uint32 currentSoundId, ImGuiTextFilter& filter, const std::function<void(uint32)>& setter);
+
 	public:
 		bool IsDockable() const override { return true; }
 
@@ -33,5 +38,7 @@ namespace mmo
 		EditorHost& m_host;
 		ImGuiTextFilter m_parentZoneFilter;
 		ImGuiTextFilter m_owningFactionFilter;
+		ImGuiTextFilter m_musicSoundFilter;
+		ImGuiTextFilter m_ambienceSoundFilter;
 	};
 }

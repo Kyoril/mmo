@@ -35,6 +35,7 @@
 #include "map_editor_window.h"
 #include "object_editor_window.h"
 #include "zone_editor_window.h"
+#include "sound_editor_window.h"
 #include "lock_type_editor_window.h"
 #include "unit_loot_editor_window.h"
 #include "trainer_editor_window.h"
@@ -474,6 +475,13 @@ namespace mmo
         });
         
         // Add editors to the misc category
+        miscCategory.editors.push_back({
+            std::type_index(typeid(SoundEditorWindow)),
+            "Sounds",
+            [this]() { OpenEditorWindow(std::type_index(typeid(SoundEditorWindow))); },
+            static_cast<int>(m_project.sounds.count())
+        });
+
         miscCategory.editors.push_back({
             std::type_index(typeid(UnitLootEditorWindow)),
             "Unit Loot",

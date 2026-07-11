@@ -8,6 +8,7 @@
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
+#include "game/spell.h"
 #include "log/default_log_levels.h"
 #include "math/constants.h"
 
@@ -403,6 +404,94 @@ namespace mmo
 				}
 				ImGui::PopID();
 			}
+		}
+
+		if (const auto section = ScopedEditorSection("Voice Lines", ImGuiTreeNodeFlags_None))
+		{
+			DrawSectionHeader("Cast Error Voice Lines");
+			ImGui::TextDisabled("Voice lines (SoundEntry references) played when a spell cast of a character of this race fails. Unset entries stay silent.");
+			ImGui::Spacing();
+
+			struct CastErrorVoiceLine
+			{
+				uint32 castResult;
+				const char* label;
+			};
+
+			// Values must match spell_cast_result in game/spell.h.
+			static const CastErrorVoiceLine s_castErrorVoiceLines[] = {
+				{ spell_cast_result::FailedOutOfRange, "Out of Range" },
+				{ spell_cast_result::FailedNoPower, "Not Enough Power" },
+				{ spell_cast_result::FailedNotReady, "Not Ready (Cooldown)" },
+			};
+
+			const auto drawGenderVoiceLines = [this](const char* genderLabel, proto::VoiceLineSet* voiceSet)
+			{
+				ImGui::PushID(genderLabel);
+				ImGui::Separator();
+				ImGui::TextUnformatted(genderLabel);
+
+				auto* soundsByError = voiceSet->mutable_cast_error_sounds();
+				for (const auto& voiceLine : s_castErrorVoiceLines)
+				{
+					ImGui::PushID(static_cast<int>(voiceLine.castResult));
+
+					uint32 currentSoundId = 0;
+					if (const auto it = soundsByError->find(voiceLine.castResult); it != soundsByError->end())
+					{
+						currentSoundId = it->second;
+					}
+
+					const proto::SoundEntry* currentSound = (currentSoundId != 0) ? m_project.sounds.getById(currentSoundId) : nullptr;
+					if (ImGui::BeginCombo(voiceLine.label, currentSound ? currentSound->name().c_str() : "(None)", ImGuiComboFlags_HeightLargest))
+					{
+						if (!ImGui::IsAnyItemActive() && !ImGui::IsMouseClicked(0))
+						{
+							ImGui::SetKeyboardFocusHere(0);
+						}
+
+						m_voiceSoundFilter.Draw("##voice_sound_filter", -1.0f);
+
+						if (ImGui::Selectable("(None)"))
+						{
+							soundsByError->erase(voiceLine.castResult);
+							m_voiceSoundFilter.Clear();
+							ImGui::CloseCurrentPopup();
+						}
+
+						if (ImGui::BeginChild("##voice_sound_scroll_area", ImVec2(0, 400)))
+						{
+							for (const auto& sound : m_project.sounds.getTemplates().entry())
+							{
+								if (m_voiceSoundFilter.IsActive() && !m_voiceSoundFilter.PassFilter(sound.name().c_str()))
+								{
+									continue;
+								}
+
+								ImGui::PushID(sound.id());
+								if (ImGui::Selectable(sound.name().c_str()))
+								{
+									(*soundsByError)[voiceLine.castResult] = sound.id();
+
+									m_voiceSoundFilter.Clear();
+									ImGui::CloseCurrentPopup();
+								}
+								ImGui::PopID();
+							}
+						}
+						ImGui::EndChild();
+
+						ImGui::EndCombo();
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::PopID();
+			};
+
+			drawGenderVoiceLines("Male", currentEntry.mutable_male_voice());
+			drawGenderVoiceLines("Female", currentEntry.mutable_female_voice());
 		}
 	}
 

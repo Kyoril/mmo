@@ -9,6 +9,7 @@
 #include "world_state.h"
 #include "console/console.h"
 #include "console/console_var.h"
+#include "game_client/sound_entry_player.h"
 #include "net/login_connector.h"
 #include "net/realm_connector.h"
 
@@ -45,12 +46,13 @@ namespace mmo
 	}
 
 	LoginState::LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector,
-		RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio, Discord& discord)
+		RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio, SoundEntryPlayer& soundEntryPlayer, Discord& discord)
 		: GameState(gameStateManager)
 		, m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
 		, m_timers(timers)
 		, m_audio(audio)
+		, m_soundEntryPlayer(soundEntryPlayer)
 		, m_discord(discord)
 	{
 	}
@@ -115,9 +117,23 @@ namespace mmo
 		// Reset reason so subsequent re-entries default to no error.
 		s_returnReason = LoginReturnReason::NormalLogout;
 
-		// Play background music
-		m_musicSound = m_audio.CreateLoopedStream("Sound/Music/Genesis.ogg");
-		m_audio.PlaySound(m_musicSound, &m_musicChannel);
+		// Play background music: a SoundEntry id can be configured through the LoginMusicSound
+		// cvar; if unset or unresolvable, fall back to the built-in default so the login screen
+		// is never silent.
+		m_musicChannel = InvalidChannel;
+		if (const ConsoleVar* loginMusicVar = ConsoleVarMgr::FindConsoleVar("LoginMusicSound"))
+		{
+			if (const uint32 soundId = static_cast<uint32>(loginMusicVar->GetIntValue()); soundId != 0)
+			{
+				m_musicChannel = m_soundEntryPlayer.PlayEntry(soundId);
+			}
+		}
+
+		if (m_musicChannel == InvalidChannel)
+		{
+			m_musicSound = m_audio.CreateLoopedStream("Sound/Music/Genesis.ogg");
+			m_audio.PlaySound(m_musicSound, &m_musicChannel, 1.0f, SoundCategory::Music);
+		}
 
 		// Ensure the loading screen is hidden
 		LoadingScreen::Hide();

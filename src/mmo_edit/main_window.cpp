@@ -978,6 +978,7 @@ namespace mmo
 			"item_classes",
 			"item_subclasses",
 			"chat_channels",
+			"sounds",
 		};
 
 		const fs::path srcDir = m_config.projectPath;

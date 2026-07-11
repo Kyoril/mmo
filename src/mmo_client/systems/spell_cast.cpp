@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "spell_cast.h"
+#include "cast_error_voice.h"
 #include "shared/game_client/spell_visualization_service.h"
 
 #include "frame_ui/frame_mgr.h"
@@ -12,6 +13,17 @@
 
 namespace mmo
 {
+	namespace
+	{
+		/// Reports a client-side pre-validation cast error to the UI and plays a matching
+		/// race/gender voice line, if one is configured.
+		void NotifyCastFailed(const char* errorKey)
+		{
+			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", errorKey);
+			CastErrorVoice::Get().OnCastError(errorKey);
+		}
+	}
+
 	const char* GetNoPowerErrorKey(int32 powerType)
 	{
 		switch (powerType)
@@ -236,7 +248,7 @@ namespace mmo
 		if (IsCasting())
 		{
 			WLOG("Ignoring spell " << spellId << " because spell " << m_spellCastId << " is already being cast");
-			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_SPELL_IN_PROGRESS");
+			NotifyCastFailed("SPELL_CAST_FAILED_SPELL_IN_PROGRESS");
 			return;
 		}
 
@@ -250,7 +262,7 @@ namespace mmo
 		if (!unit->HasSpell(spellId))
 		{
 			WLOG("Active player does not know requested spell " << spellId);
-			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_NOT_KNOWN");
+			NotifyCastFailed("SPELL_CAST_FAILED_NOT_KNOWN");
 			return;
 		}
 
@@ -295,7 +307,7 @@ namespace mmo
 
 			if (spell->powertype() != unit->GetPowerType() || effectiveCost > unit->GetPower(unit->GetPowerType()))
 			{
-				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", GetNoPowerErrorKey(spell->powertype()));
+				NotifyCastFailed(GetNoPowerErrorKey(spell->powertype()));
 				return;
 			}
 		}
@@ -316,7 +328,7 @@ namespace mmo
 				else
 				{
 					// TODO: Instead of printing an error here we should trigger a selection mode where the user has to click on a target unit instead
-					FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_BAD_TARGETS");
+					NotifyCastFailed("SPELL_CAST_FAILED_BAD_TARGETS");
 					return;
 				}
 			}
@@ -329,7 +341,7 @@ namespace mmo
 
 			if ((requirements & spell_target_requirements::FriendlyUnitTarget) == 0 && (requirements & spell_target_requirements::HostileUnitTarget) != 0 && unit->IsFriendlyTo(*targetUnit))
 			{
-				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_TARGET_FRIENDLY");
+				NotifyCastFailed("SPELL_CAST_FAILED_TARGET_FRIENDLY");
 				return;
 			}
 
@@ -346,7 +358,7 @@ namespace mmo
 					const float distanceSquared = unit->GetPosition().GetSquaredDistanceTo(targetUnit->GetPosition());
 					if (distanceSquared > range->range() * range->range())
 					{
-						FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_OUT_OF_RANGE");
+						NotifyCastFailed("SPELL_CAST_FAILED_OUT_OF_RANGE");
 						return;
 					}
 				}
@@ -356,7 +368,7 @@ namespace mmo
 			if ((spell->attributes(0) & spell_attributes::CanTargetDead) == 0 &&
 				(targetUnit && !targetUnit->IsAlive()))
 			{
-				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_TARGET_NOT_DEAD");
+				NotifyCastFailed("SPELL_CAST_FAILED_TARGET_NOT_DEAD");
 				return;
 			}
 
@@ -366,7 +378,7 @@ namespace mmo
 				(spell->attributes(1) & spell_attributes_b::CanOnlyTargetPlayers) != 0 &&
 				targetUnit && targetUnit->GetTypeId() != ObjectTypeId::Player)
 			{
-				FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_BAD_TARGETS");
+				NotifyCastFailed("SPELL_CAST_FAILED_BAD_TARGETS");
 				return;
 			}
 		}
@@ -384,7 +396,7 @@ namespace mmo
 						const float distanceSquared = unit->GetPosition().GetSquaredDistanceTo(explicitTarget->GetPosition());
 						if (distanceSquared > range->range() * range->range())
 						{
-							FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", "SPELL_CAST_FAILED_OUT_OF_RANGE");
+							NotifyCastFailed("SPELL_CAST_FAILED_OUT_OF_RANGE");
 							return;
 						}
 					}

@@ -582,22 +582,16 @@ namespace mmo
 
 		if (soundIndex != InvalidSound)
 		{
-			// Play the sound at the player's position
+			// Play the sound at the player's position; footsteps further away than the max
+			// distance are culled entirely so distant units don't produce audible noise.
 			ChannelIndex channelIndex = InvalidChannel;
-			m_audio->PlaySound(soundIndex, &channelIndex, 0.8f);
+			m_audio->PlaySound3D(soundIndex, &channelIndex, GetPosition(), 1.0f, 12.0f, 0.8f);
 			IChannelInstance* channel = m_audio->GetChannelInstance(channelIndex);
 			if (channel)
 			{
 				std::uniform_real_distribution pitchDistribution(0.7f, 1.3f);
 				channel->SetPitch(pitchDistribution(gen));
 				channel->SetVolume(0.35f);
-			}
-
-			// Set 3D position for the sound
-			if (channelIndex != InvalidChannel)
-			{
-				m_audio->Set3DPosition(channelIndex, GetPosition());
-				m_audio->Set3DMinMaxDistance(channelIndex, 1.0f, 20.0f);
 			}
 		}
 	}

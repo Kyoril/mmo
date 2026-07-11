@@ -96,17 +96,25 @@ namespace mmo
 		return m_nextSoundInstanceIndex;
 	}
 
-	void NullAudio::PlaySound(SoundIndex sound, ChannelIndex* channelIndex, float priority)
+	void NullAudio::PlaySound(SoundIndex sound, ChannelIndex* channelIndex, float priority, SoundCategory category)
 	{
 		if (sound == InvalidSound)
 		{
 			return;
 		}
-        
+
         if (channelIndex)
         {
             *channelIndex = -1;
         }
+	}
+
+	void NullAudio::PlaySound3D(SoundIndex sound, ChannelIndex* channelIndex, const Vector3& position, float minDistance, float maxDistance, float priority, SoundCategory category)
+	{
+		if (channelIndex)
+		{
+			*channelIndex = InvalidChannel;
+		}
 	}
 
 	void NullAudio::StopSound(ChannelIndex* channelIndex)
@@ -174,9 +182,25 @@ namespace mmo
 			return 0;
 		}
 
-		assert((channel > 0) && (channel < 8));
+		assert((channel >= 0) && (channel < 8));
 
 		return &m_channelArray[channel];
+	}
+
+	void NullAudio::SetMasterVolume(float volume)
+	{
+	}
+
+	void NullAudio::SetMasterMuted(bool muted)
+	{
+	}
+
+	void NullAudio::SetCategoryVolume(SoundCategory category, float volume)
+	{
+	}
+
+	void NullAudio::SetCategoryMuted(SoundCategory category, bool muted)
+	{
 	}
 
 	void NullAudio::IncrementNextSoundInstanceIndex()

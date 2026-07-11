@@ -116,12 +116,7 @@ namespace mmo
 
 				if (soundIdx != InvalidSound)
 				{
-					m_audio->PlaySound(soundIdx, &m_soundChannel);
-					if (m_soundChannel != InvalidChannel)
-					{
-						m_audio->Set3DPosition(m_soundChannel, startPosition);
-						m_audio->Set3DMinMaxDistance(m_soundChannel, 5.0f, 30.0f);
-					}
+					m_audio->PlaySound3D(soundIdx, &m_soundChannel, startPosition, 5.0f, 30.0f);
 				}
 			}
 

@@ -47,6 +47,10 @@
 #include "null_audio/null_audio.h"
 #endif
 
+#include "audio_settings.h"
+#include "game_client/sound_entry_player.h"
+#include "systems/cast_error_voice.h"
+
 namespace mmo
 {
 	extern Cursor g_cursor;
@@ -142,6 +146,7 @@ namespace mmo
 		context.audio = std::make_unique<NullAudio>();
 #endif
 		context.audio->Create();
+		context.audioSettings = std::make_unique<AudioSettings>(*context.audio);
 
 		context.timerConnection = EventLoop::Idle.connect([](float, const GameTime&)
 			{
@@ -172,6 +177,9 @@ namespace mmo
 			ELOG("Failed to load project files!");
 			return false;
 		}
+
+		context.soundEntryPlayer = std::make_unique<SoundEntryPlayer>(*context.audio, context.project->sounds);
+		CastErrorVoice::Get().Initialize(context.soundEntryPlayer.get(), &context.project->races);
 
 		context.clientCache = std::make_unique<ClientCache>(realmConnector);
 		if (!context.clientCache->Load())
@@ -215,11 +223,11 @@ namespace mmo
 	void ClientApplication::InitializeStatesAndScripts(ClientContext& context, LoginConnector& loginConnector, RealmConnector& realmConnector)
 	{
 		GameStateMgr& gameStateMgr = GameStateMgr::Get();
-		const auto loginState = std::make_shared<LoginState>(gameStateMgr, loginConnector, realmConnector, *context.timerQueue, *context.audio, *context.discord);
+		const auto loginState = std::make_shared<LoginState>(gameStateMgr, loginConnector, realmConnector, *context.timerQueue, *context.audio, *context.soundEntryPlayer, *context.discord);
 		gameStateMgr.AddGameState(loginState);
 
 		const auto worldState = std::make_shared<WorldState>(gameStateMgr, realmConnector, *context.project, *context.timerQueue, *context.lootClient, *context.vendorClient,
-			*context.actionBar, *context.spellCast, *context.cooldownManager, *context.trainerClient, *context.questClient, *context.audio, *context.partyInfo, *context.charSelect, *context.guildClient, *context.friendClient, *context.clientCache, *context.discord, *context.gameTime, *context.talentClient,
+			*context.actionBar, *context.spellCast, *context.cooldownManager, *context.trainerClient, *context.questClient, *context.audio, *context.soundEntryPlayer, *context.partyInfo, *context.charSelect, *context.guildClient, *context.friendClient, *context.clientCache, *context.discord, *context.gameTime, *context.talentClient,
 			*context.minimap, *context.inventoryClient, *context.tradeClient, *context.channelClient, *context.bankClient, *context.mailClient);
 		gameStateMgr.AddGameState(worldState);
 

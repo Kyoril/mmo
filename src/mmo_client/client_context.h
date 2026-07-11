@@ -18,6 +18,8 @@ namespace mmo
 	class Minimap;
 	class TimerQueue;
 	class IAudio;
+	class AudioSettings;
+	class SoundEntryPlayer;
 	class LootClient;
 	class VendorClient;
 	class BankClient;
@@ -78,6 +80,9 @@ namespace mmo
 		/// @brief Timer queue tied to the client main loop.
 		std::unique_ptr<TimerQueue> timerQueue;
 		std::unique_ptr<IAudio> audio;
+		/// @brief Sound cvar owner which applies volume/mute settings to the audio system.
+		/// Must be destroyed before audio.
+		std::unique_ptr<AudioSettings> audioSettings;
 		std::unique_ptr<LootClient> lootClient;
 		std::unique_ptr<VendorClient> vendorClient;
 		std::unique_ptr<BankClient> bankClient;
@@ -100,6 +105,8 @@ namespace mmo
 		std::unique_ptr<Discord> discord;
 		/// @brief Loaded client project data (DB/content metadata).
 		std::unique_ptr<proto_client::Project> project;
+		/// @brief Plays SoundEntry data records by id. Created after the project data was loaded.
+		std::unique_ptr<SoundEntryPlayer> soundEntryPlayer;
 		/// @brief Shared game-time state for scripts and world systems.
 		std::unique_ptr<GameTimeComponent> gameTime;
 	};

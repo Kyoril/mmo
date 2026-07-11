@@ -673,6 +673,10 @@ namespace mmo
 				/// uint32 xpToNextLevel (0 = class max level reached), uint8 leveledUp.
 				ClassXpUpdate,
 
+				/// Sent to the client to play a SoundEntry (ClientDB sounds) by id.
+				/// Payload: uint32 soundId, uint8 hasPosition, [3 x float position if hasPosition = 1].
+				PlaySoundById,
+
 				/// Counter constant
 				Count_,
 			};

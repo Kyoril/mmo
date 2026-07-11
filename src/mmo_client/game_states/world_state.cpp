@@ -67,6 +67,7 @@
 #include "game/guild_info.h"
 
 #include "shared/audio/audio.h"
+#include "systems/cast_error_voice.h"
 #include "systems/party_info.h"
 #include "shared/game_client/spell_visualization_service.h"
 #include "console/console_var.h"
@@ -256,11 +257,14 @@ namespace mmo
 	PlayerController *WorldState::s_playerController = nullptr;
 
 	WorldState::WorldState(GameStateMgr &gameStateManager, RealmConnector &realmConnector, const proto_client::Project &project, TimerQueue &timers, LootClient &lootClient, VendorClient &vendorClient,
-						   ActionBar &actionBar, SpellCast &spellCast, CooldownManager &cooldownManager, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, PartyInfo &partyInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, ICacheProvider &cache, Discord &discord,
+						   ActionBar &actionBar, SpellCast &spellCast, CooldownManager &cooldownManager, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, SoundEntryPlayer &soundEntryPlayer, PartyInfo &partyInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, ICacheProvider &cache, Discord &discord,
 						   GameTimeComponent &gameTime, TalentClient &talentClient, Minimap &minimap, InventoryClient &inventoryClient, TradeClient &tradeClient, ChannelClient &channelClient, BankClient &bankClient, MailClient &mailClient)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
 		, m_audio(audio)
+		, m_soundEntryPlayer(soundEntryPlayer)
+		, m_zoneMusic(soundEntryPlayer, audio)
+		, m_zoneAmbience(soundEntryPlayer, audio)
 		, m_gameTime(gameTime)
 		, m_cache(cache)
 		, m_project(project)
@@ -402,13 +406,8 @@ namespace mmo
 		m_worldRootNode = m_scene->GetRootSceneNode().CreateChildSceneNode();
 		LoadMap();
 
-		// Play background music
-		m_backgroundMusicSound = m_audio.CreateLoopedStream("Sound/Music/Gethsemane.ogg");
-		m_audio.PlaySound(m_backgroundMusicSound, &m_backgroundMusicChannel);
-
-		// Play ambience
-		m_ambienceSound = m_audio.CreateSound("Sound/Ambience/ZoneAmbience/ForestNormalDay.wav", SoundType::SoundLooped2D);
-		m_audio.PlaySound(m_ambienceSound, &m_ambienceChannel);
+		// Zone background music and ambience are data driven: they start as soon as the first
+		// zone is resolved in CheckForZoneUpdate (see ZoneEntry::music_sound / ambience_sound).
 
 		// Initialize rich presence
 		const mmo::CharacterView *character = m_charSelect.GetCharacterView(m_charSelect.GetSelectedCharacter());
@@ -422,6 +421,9 @@ namespace mmo
 				character->GetLevel(),
 				classEntry ? classEntry->name() : "UNKNOWN",
 				race ? race->name() : "UNKNOWN");
+
+			// Cast error voice lines are selected by the active character's race and gender.
+			CastErrorVoice::Get().SetCharacter(character->GetRaceId(), character->GetGender());
 		}
 	}
 
@@ -435,14 +437,11 @@ namespace mmo
 		m_foliageRegistry.clear();
 		m_pageFoliageKeys.clear();
 
-		auto stopAudio = [this](SoundIndex &sound, ChannelIndex &channel)
-		{
-			m_audio.StopSound(&channel);
-			channel = InvalidChannel;
-			sound = InvalidSound;
-		};
-		stopAudio(m_backgroundMusicSound, m_backgroundMusicChannel);
-		stopAudio(m_ambienceSound, m_ambienceChannel);
+		m_zoneMusic.Stop();
+		m_zoneAmbience.Stop();
+
+		// Force a zone (and thus music/ambience) resolve on the next world enter.
+		m_lastZoneId = UINT32_MAX;
 
 		m_rayQuery.reset();
 
@@ -953,6 +952,10 @@ namespace mmo
 			m_audio.Update(m_playerController->GetControlledUnit()->GetPosition(), deltaSeconds);
 		}
 
+		// Advance zone music / ambience crossfades
+		m_zoneMusic.Update(deltaSeconds);
+		m_zoneAmbience.Update(deltaSeconds);
+
 		// Only update when world loading is ready
 		if (m_worldLoaded && m_timeSyncResponseSent)
 		{
@@ -1153,6 +1156,9 @@ namespace mmo
 		{
 			m_lastZoneId = zoneId;
 
+			uint32 musicSoundId = 0;
+			uint32 ambienceSoundId = 0;
+
 			const proto_client::ZoneEntry *zone = m_project.zones.getById(m_lastZoneId);
 			if (zone)
 			{
@@ -1169,11 +1175,41 @@ namespace mmo
 					s_zoneName = zone->name();
 					s_subZoneName.clear();
 				}
+
+				// Resolve zone audio: an unset sound (0) falls back along the parent zone chain
+				// unless a zone in between explicitly opts out via inherit_parent_audio = false.
+				const auto resolveZoneSound = [this](const proto_client::ZoneEntry *zone, const auto &getSoundId) -> uint32
+				{
+					// Depth guard against parent zone cycles in broken data.
+					for (int depth = 0; zone && depth < 8; ++depth)
+					{
+						if (const uint32 soundId = getSoundId(*zone); soundId != 0)
+						{
+							return soundId;
+						}
+
+						if (!zone->inherit_parent_audio() || zone->parentzone() == 0)
+						{
+							return 0;
+						}
+
+						zone = m_project.zones.getById(zone->parentzone());
+					}
+
+					return 0;
+				};
+
+				musicSoundId = resolveZoneSound(zone, [](const proto_client::ZoneEntry &z) { return z.music_sound(); });
+				ambienceSoundId = resolveZoneSound(zone, [](const proto_client::ZoneEntry &z) { return z.ambience_sound(); });
 			}
 			else
 			{
 				s_zoneName = "Unknown";
 			}
+
+			// Crossfade zone music / ambience if the effective sounds changed.
+			m_zoneMusic.SetSound(musicSoundId);
+			m_zoneAmbience.SetSound(ambienceSoundId);
 
 			m_discord.NotifyZoneChanged(s_subZoneName.empty() ? s_zoneName : s_zoneName + " - " + s_subZoneName);
 			FrameManager::Get().TriggerLuaEvent("ZONE_CHANGED");
@@ -1525,6 +1561,7 @@ namespace mmo
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::UnitVisibilityList, *this, &WorldState::OnUnitVisibilityList);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::StealthDetected, *this, &WorldState::OnStealthDetected);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PlaySoundById, *this, &WorldState::OnPlaySoundById);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CreatureQueryResult, *this, &WorldState::OnCreatureQueryResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ItemQueryResult, *this, &WorldState::OnItemQueryResult);
@@ -2387,6 +2424,38 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult WorldState::OnPlaySoundById(game::IncomingPacket &packet)
+	{
+		uint32 soundId;
+		uint8 hasPosition;
+		if (!(packet >> io::read<uint32>(soundId) >> io::read<uint8>(hasPosition)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		Vector3 position;
+		if (hasPosition != 0)
+		{
+			if (!(packet >> io::read<float>(position.x) >> io::read<float>(position.y) >> io::read<float>(position.z)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		// Unknown sound ids are a data problem (e.g. outdated client data), never a protocol
+		// error - SoundEntryPlayer logs a warning and we simply stay silent.
+		if (hasPosition != 0)
+		{
+			m_soundEntryPlayer.PlayEntry(soundId, position);
+		}
+		else
+		{
+			m_soundEntryPlayer.PlayEntry(soundId);
+		}
+
+		return PacketParseResult::Pass;
+	}
+
 	void WorldState::PlayStealthAlertSound(const String &soundFile, const Vector3 &position)
 	{
 		static const String s_defaultAlertSound = "Sound/Creature/StealthAlert.wav";
@@ -2395,11 +2464,7 @@ namespace mmo
 		if (const SoundIndex sound = m_audio.CreateSound(file, SoundType::Sound3D); sound != InvalidSound)
 		{
 			ChannelIndex channel = InvalidChannel;
-			m_audio.PlaySound(sound, &channel);
-			if (channel != InvalidChannel)
-			{
-				m_audio.Set3DPosition(channel, position);
-			}
+			m_audio.PlaySound3D(sound, &channel, position, 5.0f, 35.0f);
 		}
 	}
 
@@ -3357,6 +3422,7 @@ namespace mmo
 			}
 			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FINISH", false);
 			FrameManager::Get().TriggerLuaEvent("PLAYER_SPELL_CAST_FAILED", errorMessage);
+			CastErrorVoice::Get().OnCastError(errorMessage);
 		}
 
 		return PacketParseResult::Pass;

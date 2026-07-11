@@ -777,6 +777,12 @@ namespace mmo
 		/// @copydoc NetUnitWatcherS::OnStealthDetected
 		void OnStealthDetected(uint64 detectorGuid) override;
 
+		/// Makes the client play a SoundEntry (ClientDB sounds) as a global 2D sound.
+		void SendPlaySound(uint32 soundId);
+
+		/// Makes the client play a SoundEntry (ClientDB sounds) at a world position.
+		void SendPlaySound(uint32 soundId, const Vector3& position);
+
 		void OnReviveOffer(uint64 casterGuid, uint32 spellId, uint32 reviveHealth, uint32 mapId, const Vector3& position, const Radian& facing) override;
 
 	private:

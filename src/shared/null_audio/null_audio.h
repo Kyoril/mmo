@@ -88,7 +88,9 @@ namespace mmo
 
 		SoundIndex CreateSound(const String &fileName, SoundType type) override;
 
-		void PlaySound(SoundIndex sound, ChannelIndex *channelIndex, float priority = 1.0f) override;
+		void PlaySound(SoundIndex sound, ChannelIndex *channelIndex, float priority = 1.0f, SoundCategory category = SoundCategory::SoundEffects) override;
+
+		void PlaySound3D(SoundIndex sound, ChannelIndex *channelIndex, const Vector3& position, float minDistance, float maxDistance, float priority = 1.0f, SoundCategory category = SoundCategory::SoundEffects) override;
 
 		void StopSound(ChannelIndex *channelIndex) override;
 
@@ -105,6 +107,14 @@ namespace mmo
 		ISoundInstance *GetSoundInstance(SoundIndex sound) override;
 
 		IChannelInstance *GetChannelInstance(ChannelIndex channel) override;
+
+		void SetMasterVolume(float volume) override;
+
+		void SetMasterMuted(bool muted) override;
+
+		void SetCategoryVolume(SoundCategory category, float volume) override;
+
+		void SetCategoryMuted(SoundCategory category, bool muted) override;
 
 	private:
 

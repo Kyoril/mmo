@@ -20,8 +20,10 @@
 #include "systems/cooldown_manager.h"
 #include "char_creation/char_create_info.h"
 #include "char_creation/char_select.h"
+#include "client_context.h"
 #include "cursor.h"
 #include "event_loop.h"
+#include "game_client/sound_entry_player.h"
 #include "loading_screen.h"
 #include "systems/guild_client.h"
 #include "systems/friend_client.h"
@@ -1677,6 +1679,9 @@ namespace mmo
 					   luabind::def<std::function<void(const char *)>>("PlaySound", [this](const char *sound)
 																	   { PlaySound(sound); }),
 
+					   luabind::def<std::function<void(uint32)>>("PlaySoundEntry", [](uint32 soundId)
+																 { if (const auto& player = GetClientContext().soundEntryPlayer) { player->PlayEntry(soundId); } }),
+
 					   luabind::def<std::function<void(int32, int32)>>("RandomRoll", [this](int32 min, int32 max)
 																	   { m_realmConnector.RandomRoll(min, max); }),
 					   luabind::def<std::function<int32()>>("GetPartyLeaderIndex", [this]()
@@ -2365,7 +2370,7 @@ namespace mmo
 		if (const SoundIndex index = m_audio.CreateSound(sound, SoundType::Sound2D); index != InvalidSound)
 		{
 			ChannelIndex channel = InvalidChannel;
-			m_audio.PlaySound(index, &channel);
+			m_audio.PlaySound(index, &channel, 1.0f, SoundCategory::Interface);
 		}
 	}
 

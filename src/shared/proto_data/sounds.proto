@@ -1,0 +1,56 @@
+syntax = "proto2";
+package mmo.proto;
+
+// NOTE: Keep this file in sync with src/shared/client_data/sounds.proto!
+// The client reads the exported binary data with the mirrored proto_client schema,
+// so every field number in here has to match the mirror exactly.
+
+// Playback category of a sound entry. Determines which volume/mute settings apply.
+// NOTE: Keep the numeric values aligned with the mmo::SoundCategory enum in
+// src/shared/audio/audio.h!
+enum SoundEntryCategory
+{
+	SOUND_EFFECTS = 0;
+	MUSIC = 1;
+	AMBIENCE = 2;
+	INTERFACE = 3;
+	VOICE = 4;
+}
+
+// A referencable sound definition. Zones, races and server-triggered sounds
+// reference sounds by entry id instead of hardcoding file paths.
+message SoundEntry
+{
+	required uint32 id = 1;
+	required string name = 2;
+
+	// One or more sound files; a random one is picked on each playback.
+	repeated string files = 3;
+
+	optional SoundEntryCategory category = 4 [default = SOUND_EFFECTS];
+
+	// Whether the sound is positional (3D) or global (2D).
+	optional bool is_3d = 5 [default = false];
+
+	optional bool looped = 6 [default = false];
+
+	// Whether the sound should be streamed (recommended for music / large files).
+	optional bool stream = 7 [default = false];
+
+	// Base playback volume in [0, 1].
+	optional float volume = 8 [default = 1.0];
+
+	// Random pitch range applied per playback (1.0 / 1.0 = no pitch variation).
+	optional float pitch_min = 9 [default = 1.0];
+	optional float pitch_max = 10 [default = 1.0];
+
+	// 3D attenuation distances (only used when is_3d is set). Non-looped 3D sounds
+	// further away from the listener than max_distance are not played at all.
+	optional float min_distance = 11 [default = 1.0];
+	optional float max_distance = 12 [default = 30.0];
+}
+
+message Sounds
+{
+	repeated SoundEntry entry = 1;
+}

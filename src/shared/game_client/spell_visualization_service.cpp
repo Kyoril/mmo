@@ -226,7 +226,7 @@ namespace mmo
                     if (soundIdx != InvalidSound)
                     {
                         ChannelIndex channel = InvalidChannel;
-                        m_audioPlayer->PlaySound(soundIdx, &channel);
+                        m_audioPlayer->PlaySound3D(soundIdx, &channel, actorPosition, 10.0f, 50.0f);
                         if (channel != InvalidChannel)
                         {
                             // Start at zero volume for fade-in
@@ -234,13 +234,7 @@ namespace mmo
                             {
                                 channelInstance->SetVolume(0.0f);
                             }
-                            
-                            // Set 3D position for the sound
-                            m_audioPlayer->Set3DPosition(channel, actorPosition);
-                            
-                            // Set reasonable attenuation distance (10 units min, 50 units max)
-                            m_audioPlayer->Set3DMinMaxDistance(channel, 10.0f, 50.0f);
-                            
+
                             LoopedSoundHandle loopHandle;
                             loopHandle.audioHandle = channel;
                             loopHandle.spellId = vis.id();
@@ -263,7 +257,7 @@ namespace mmo
                     if (soundIdx != InvalidSound)
                     {
                         ChannelIndex channel = InvalidChannel;
-                        m_audioPlayer->PlaySound(soundIdx, &channel);
+                        m_audioPlayer->PlaySound3D(soundIdx, &channel, actorPosition, 5.0f, 30.0f);
                         if (channel != InvalidChannel)
                         {
                             // Start at zero volume for fade-in
@@ -271,13 +265,7 @@ namespace mmo
                             {
                                 channelInstance->SetVolume(0.0f);
                             }
-                            
-                            // Set 3D position for the sound
-                            m_audioPlayer->Set3DPosition(channel, actorPosition);
-                            
-                            // Set reasonable attenuation distance (5 units min, 30 units max)
-                            m_audioPlayer->Set3DMinMaxDistance(channel, 5.0f, 30.0f);
-                            
+
                             // Track for fade-in
                             FadingSound fadingSound;
                             fadingSound.channel = channel;
