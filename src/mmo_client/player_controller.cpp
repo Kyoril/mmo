@@ -21,6 +21,7 @@
 #include "mmo_client/systems/spell_cast.h"
 #include "mmo_client/systems/vendor_client.h"
 #include "mmo_client/systems/bank_client.h"
+#include "mmo_client/systems/unit_gossip_voice.h"
 #include "frame_ui/frame_mgr.h"
 #include "game/loot.h"
 #include "game_client/object_mgr.h"
@@ -1013,6 +1014,18 @@ namespace mmo
 				if (hoveredObject->GetGuid() != previousSelectedUnit)
 				{
 					m_controlledUnit->SetTargetUnit(ObjectMgr::Get<GameUnitC>(hoveredObject->GetGuid()));
+				}
+
+				// Friendly NPCs greet the player when clicked - both selection (left) and
+				// interaction (right) clicks count, exactly once per click. Player characters
+				// never gossip, even when their race model has gossip sounds assigned.
+				if (hoveredObject->IsUnit() && !hoveredObject->IsPlayer())
+				{
+					GameUnitC& unit = hoveredObject->AsUnit();
+					if (unit.IsAlive() && m_controlledUnit->IsFriendlyTo(unit))
+					{
+						UnitGossipVoice::Get().OnUnitClicked(unit);
+					}
 				}
 
 				if (button == MouseButton_Right)
