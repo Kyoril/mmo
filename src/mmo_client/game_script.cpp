@@ -257,9 +257,11 @@ namespace mmo
 			int32 viewportHeight = 0;
 			GraphicsDevice::Get().GetViewport(nullptr, nullptr, &viewportWidth, &viewportHeight);
 
-			const float inverseUiScale = 1.0f / FrameManager::Get().GetUIScale().y;
-			out_x = normalizedX * static_cast<float>(viewportWidth) * inverseUiScale;
-			out_y = normalizedY * static_cast<float>(viewportHeight) * inverseUiScale;
+			// Anchor offsets are scaled per axis at layout time (x by uiScale.x,
+			// y by uiScale.y), so convert each axis with its own scale.
+			const Point uiScale = FrameManager::Get().GetUIScale();
+			out_x = normalizedX * static_cast<float>(viewportWidth) / uiScale.x;
+			out_y = normalizedY * static_cast<float>(viewportHeight) / uiScale.y;
 			return true;
 		}
 

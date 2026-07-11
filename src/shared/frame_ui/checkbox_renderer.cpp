@@ -11,25 +11,35 @@ namespace mmo
 {
 	CheckboxRenderer::CheckboxRenderer(const std::string & name)
 		: FrameRenderer(name)
-		, m_pushed(false)
 	{
 	}
 	void CheckboxRenderer::Render(optional<Color> colorOverride, optional<Rect> clipper)
 	{
 		std::string activeState = "Disabled";
-		if (m_frame->IsEnabled())
+		if (m_frame->IsEnabled(false))
 		{
-			if (m_pushed)
+			activeState = "Normal";
+
+			// Derive the visual state from the button state (like ButtonRenderer does), so
+			// that hover/pushed visuals can also be driven from Lua via SetButtonState —
+			// e.g. list rows forwarding hover from their non-clickable text children.
+			if (m_button)
 			{
-				activeState = "Pushed";
+				switch (m_button->GetButtonState())
+				{
+				case ButtonState::Pushed:
+					activeState = "Pushed";
+					break;
+				case ButtonState::Hovered:
+					activeState = "Hovered";
+					break;
+				default:
+					break;
+				}
 			}
 			else if (m_frame->IsHovered())
 			{
 				activeState = "Hovered";
-			}
-			else
-			{
-				activeState = "Normal";
 			}
 		}
 
@@ -44,11 +54,11 @@ namespace mmo
 		{
 			if (m_button && m_button->IsChecked())
 			{
-				imagery = m_frame->GetStateImageryByName("Normal");
+				imagery = m_frame->GetStateImageryByName("NormalChecked");
 			}
 			else
 			{
-				imagery = m_frame->GetStateImageryByName("NormalChecked");
+				imagery = m_frame->GetStateImageryByName("Normal");
 			}
 		}
 
@@ -60,34 +70,13 @@ namespace mmo
 
 	void CheckboxRenderer::NotifyFrameAttached()
 	{
-		m_frameConnections.disconnect();
-		m_pushed = false;
-
 		ASSERT(m_frame);
-		
+
 		m_button = dynamic_cast<Button*>(m_frame);
-
-		m_frameConnections += m_frame->MouseDown.connect([this](const MouseEventArgs& args) {
-			if (args.IsButtonPressed(MouseButton::Left))
-			{
-				this->m_pushed = true;
-				this->m_frame->Invalidate();
-			}
-		});
-
-		m_frameConnections += m_frame->MouseUp.connect([this](const MouseEventArgs& args) {
-			if (!args.IsButtonPressed(MouseButton::Left))
-			{
-				this->m_pushed = false;
-				this->m_frame->Invalidate();
-			}
-		});
 	}
 
 	void CheckboxRenderer::NotifyFrameDetached()
 	{
-		m_frameConnections.disconnect();
-		m_pushed = false;
 		m_button = nullptr;
 	}
 }

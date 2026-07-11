@@ -4,8 +4,6 @@
 
 #include "frame_renderer.h"
 
-#include "base/signal.h"
-
 
 namespace mmo
 {
@@ -33,11 +31,5 @@ namespace mmo
 
 	private:
 		Button* m_button{ nullptr };
-
-		/// Whether the frame is currently pushed.
-		bool m_pushed;
-
-		/// Frame signal connections.
-		scoped_connection_container m_frameConnections;
 	};
 }

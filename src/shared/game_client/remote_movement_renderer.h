@@ -57,11 +57,12 @@ namespace mmo
 		/// @param deltaTime Frame delta in seconds.
 		/// @param runSpeed Run/strafe speed in m/s.
 		/// @param backwardsSpeed Backwards movement speed in m/s.
+		/// @param walkSpeed Walk speed in m/s (used instead of runSpeed while the WalkMode flag is set).
 		/// @param turnSpeed Turn rate in rad/s.
 		/// @param outState The visual state to apply to the scene node.
 		/// @return True if initialized (at least one authoritative update received).
-		bool Sample(float deltaTime, float runSpeed, float backwardsSpeed, float turnSpeed,
-		            RemoteMovementState& outState);
+		bool Sample(float deltaTime, float runSpeed, float backwardsSpeed, float walkSpeed,
+		            float turnSpeed, RemoteMovementState& outState);
 
 		/// @brief Returns true if at least one authoritative update has been received.
 		[[nodiscard]] bool IsInitialized() const { return m_initialized; }
@@ -73,9 +74,18 @@ namespace mmo
 		/// Dead reckoning target is unaffected; only the scene-node tracking position changes.
 		void SetRenderedPos(const Vector3& pos) { m_scenePos = pos; }
 
-		/// @brief Overrides the scene-node Y after ground snap (e.g. terrain following).
-		/// Dead reckoning target Y is unaffected.
-		void SetRenderedY(const float y) { m_scenePos.y = y; }
+		/// @brief Overrides the Y coordinate after ground snap (e.g. terrain following).
+		/// Syncs both the scene-node tracking position and the dead-reckoning target:
+		/// while grounded, the ground snap owns the Y axis. If the target kept the
+		/// stale packet Y, the correction loop would pull the node off the ground
+		/// every frame and the snap would push it back — a permanent millimetre
+		/// sawtooth that makes standing remote players visibly vibrate.
+		/// The next authoritative update overwrites the target Y again anyway.
+		void SetRenderedY(const float y)
+		{
+			m_scenePos.y = y;
+			m_renderedPos.y = y;
+		}
 
 		/// @brief Resets all state (e.g. on despawn/teleport).
 		void Reset();
@@ -83,7 +93,8 @@ namespace mmo
 	private:
 		/// @brief Computes the velocity vector for a given movement state.
 		Vector3 ComputeVelocity(const Vector3& forward, const Vector3& right,
-		                        uint32 flags, float runSpeed, float backwardsSpeed) const;
+		                        uint32 flags, float runSpeed, float backwardsSpeed,
+		                        float walkSpeed) const;
 
 		/// @brief Simulates one step of jump/fall physics.
 		void StepFallArc(float deltaTime);

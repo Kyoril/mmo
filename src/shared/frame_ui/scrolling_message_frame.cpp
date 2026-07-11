@@ -125,7 +125,7 @@ namespace mmo
 			return;
 		}
 
-		const float textScale = FrameManager::Get().GetUIScale().y;
+		const float textScale = FrameManager::Get().GetTextScale();
 
 		// Get the frame rectangle
 		Rect frameRect = GetAbsoluteFrameRect();
@@ -153,7 +153,7 @@ namespace mmo
 
 	int ScrollingMessageFrame::RenderLine(const LineInfo& line, Rect& frameRect)
 	{
-		const float textScale = FrameManager::Get().GetUIScale().y;
+		const float textScale = FrameManager::Get().GetTextScale();
 		const float lineHeight = GetFont()->GetHeight(textScale);
 
 		// Store the render position for this line
@@ -193,14 +193,22 @@ namespace mmo
 
 	void ScrollingMessageFrame::OnMessagesChanged()
 	{
-		m_lineCache.clear();
-
-		const float textScale = FrameManager::Get().GetUIScale().y;
+		const float textScale = FrameManager::Get().GetTextScale();
 
 		if (const FontPtr font = GetFont())
 		{
+			// Resolve the frame rect before clearing the cache: a pending relayout runs
+			// OnAreaChanged from inside this call, which rebuilds the cache recursively.
+			// Clearing afterwards keeps this (outer) rebuild from appending duplicates.
 			const Rect  contentRect = GetAbsoluteFrameRect();
 			const Point position = contentRect.GetPosition();
+
+			m_lineCache.clear();
+
+			// Remember the inputs the line cache is built from, so OnAreaChanged can
+			// detect when a resize made the cached wrapping stale.
+			m_lastWrapSize = Size(contentRect.GetWidth(), contentRect.GetHeight());
+			m_lastWrapTextScale = textScale;
 
 			m_visibleLineCount = contentRect.GetHeight() / font->GetHeight(textScale);
 
@@ -378,11 +386,36 @@ namespace mmo
 		}
 		else
 		{
+			m_lineCache.clear();
 			m_linePosition = 0;
 			m_visibleLineCount = 0;
 		}
 
 		Invalidate(false);
+	}
+
+	void ScrollingMessageFrame::OnAreaChanged(const Rect& newArea)
+	{
+		Frame::OnAreaChanged(newArea);
+
+		// Rebuild the wrapped line cache if the frame dimensions or the text scale no
+		// longer match what the cache was built for (e.g. after a window resize).
+		const float textScale = FrameManager::Get().GetTextScale();
+		const Size newSize(newArea.GetWidth(), newArea.GetHeight());
+		if (newSize == m_lastWrapSize && textScale == m_lastWrapTextScale)
+		{
+			return;
+		}
+
+		// Keep the view pinned to the newest messages if it was there before the resize.
+		const bool wasAtBottom = IsAtBottom();
+
+		OnMessagesChanged();
+
+		if (wasAtBottom)
+		{
+			ScrollToBottom();
+		}
 	}
 
 	bool ScrollingMessageFrame::OnMouseWheel(const int32 delta)
@@ -421,7 +454,7 @@ namespace mmo
 		Point relativePos = position - frameRect.GetPosition();
 
 		// Check if any hyperlink was clicked
-		const float textScale = FrameManager::Get().GetUIScale().y;
+		const float textScale = FrameManager::Get().GetTextScale();
 		const float lineHeight = GetFont() ? GetFont()->GetHeight(textScale) : 16.0f;
 		
 		for (int i = m_linePosition; i < static_cast<int>(m_lineCache.size()) && i < m_linePosition + m_visibleLineCount; ++i)

@@ -325,7 +325,7 @@ namespace mmo
 		normalizedValue = Clamp(normalizedValue, 0.0f, 1.0f);
 
 		Point position = thumb->GetPosition();
-		position.x = (m_upFrame ? m_upFrame->GetAbsoluteFrameRect().left - GetAbsoluteFrameRect().left : 0.0f) * (1.0f / FrameManager::Get().GetUIScale().y);
+		position.x = (m_upFrame ? m_upFrame->GetAbsoluteFrameRect().left - GetAbsoluteFrameRect().left : 0.0f) * (1.0f / FrameManager::Get().GetUIScale().x);
 		
 		// Handle vertical scrollbar
 		if (m_orientation == ScrollBarOrientation::Vertical)

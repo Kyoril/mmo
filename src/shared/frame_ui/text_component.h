@@ -78,6 +78,13 @@ namespace mmo
 		/// Sets the global text color.
 		void SetColor(const Color& color);
 
+		/// Gets whether text is word-wrapped to the component area.
+		inline bool IsWordWrapEnabled() const { return m_wordWrap; }
+
+		/// Enables or disables word wrapping. With wrapping disabled the text stays on a
+		/// single line per explicit '\n' and may overflow the component area horizontally.
+		void SetWordWrap(bool wordWrap);
+
 		/// Determines the number of lines.
 		inline uint32 GetLineCount() const { return m_lineCache.size(); }
 
@@ -111,8 +118,10 @@ namespace mmo
 		Color m_color = Color(0xffffffff);
 		/// 
 		HorizontalAlignment m_horzAlignment = HorizontalAlignment::Left;
-		/// 
+		///
 		VerticalAlignment m_vertAlignment = VerticalAlignment::Top;
+		/// Whether lines are wrapped at the component area's right edge.
+		bool m_wordWrap = true;
 		/// A cache for text lines with wrapping applied.
 		std::vector<std::string> m_lineCache;
 

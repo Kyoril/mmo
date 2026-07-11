@@ -655,7 +655,7 @@ namespace mmo
 
 		const Rect rect = GetAbsoluteFrameRect();
 		const float width = rect.GetWidth();
-		const float scale = FrameManager::Get().GetUIScale().y;
+		const float scale = FrameManager::Get().GetTextScale();
 
 		// Computing the line count walks every glyph of the text, so cache the result.
 		// The height only depends on the text, the resolved font, the wrap width and the

@@ -200,7 +200,7 @@ namespace mmo
 			return -1;
 		}
 
-		const float textScale = FrameManager::Get().GetUIScale().y;
+		const float textScale = FrameManager::Get().GetTextScale();
 
 		// Update parsed text
 		UpdateParsedText();
@@ -318,7 +318,7 @@ namespace mmo
 
 	float TextField::GetCursorOffset() const
 	{
-		const float textScale = FrameManager::Get().GetUIScale().y;
+		const float textScale = FrameManager::Get().GetTextScale();
 
 		if (m_cursor <= 0)
 		{
@@ -845,7 +845,7 @@ namespace mmo
 
 	void TextField::EnsureCursorVisible()
 	{
-		const float cursorPixelPos = GetCaretPixelOffset(FrameManager::Get().GetUIScale().y);
+		const float cursorPixelPos = GetCaretPixelOffset(FrameManager::Get().GetTextScale());
 		const float visibleWidth = GetVisibleTextWidth();
 		
 		// If cursor is to the left of visible area

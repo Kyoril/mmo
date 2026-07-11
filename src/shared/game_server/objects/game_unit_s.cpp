@@ -1473,7 +1473,14 @@ namespace mmo
 				continue;
 			}
 
-			auto container = std::make_shared<AuraContainer>(*this, data.casterId, *spell, data.remainingDuration, 0);
+			// The container must keep the spell's full base duration (RefreshAura extends by and
+			// caps at it on re-cast); only the first application is shortened to the persisted
+			// remaining time.
+			auto container = std::make_shared<AuraContainer>(*this, data.casterId, *spell, spell->duration(), 0);
+			if (data.remainingDuration > 0)
+			{
+				container->SetInitialRemainingTime(data.remainingDuration);
+			}
 
 			for (const auto& effectData : data.effects)
 			{

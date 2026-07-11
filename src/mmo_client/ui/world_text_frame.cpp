@@ -86,7 +86,10 @@ namespace mmo
 			return;
 		}
 
-		const float inverseUiScale = 1.0f / FrameManager::Get().GetUIScale().y;
+		// Frame layout scales UI-space positions per axis (x by uiScale.x, y by
+		// uiScale.y), so each axis needs its own scale here - otherwise the text
+		// drifts horizontally at non-native window aspect ratios.
+		const Point uiScale = FrameManager::Get().GetUIScale();
 
 		int32 width, height;
 		GraphicsDevice::Get().GetViewport(nullptr, nullptr, &width, &height);
@@ -159,8 +162,8 @@ namespace mmo
 			m_position.x += horizontalMovement;
 			m_position.y -= verticalMovement;
 
-			m_position.x *= inverseUiScale;
-			m_position.y *= inverseUiScale;
+			m_position.x /= uiScale.x;
+			m_position.y /= uiScale.y;
 
 			Invalidate();
 		}
@@ -175,7 +178,7 @@ namespace mmo
 			return;
 		}
 
-		const float uiScale = FrameManager::Get().GetUIScale().y;
+		const float uiScale = FrameManager::Get().GetTextScale();
 		const Rect frameRect = GetAbsoluteFrameRect();
 		const Point textPosition = frameRect.GetPosition();
 		const float opacity = GetOpacity(true);

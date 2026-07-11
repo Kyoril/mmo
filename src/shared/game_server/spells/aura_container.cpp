@@ -159,7 +159,10 @@ namespace mmo
 						};
 				}
 
-				m_expiration = GetAsyncTimeMs() + m_duration;
+				const GameTime initialDuration = (m_initialRemainingTime > 0) ? m_initialRemainingTime : m_duration;
+				m_initialRemainingTime = 0;
+
+				m_expiration = GetAsyncTimeMs() + initialDuration;
 				m_expirationCountdown.SetEnd(m_expiration);
 			}
 		}

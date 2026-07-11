@@ -187,9 +187,12 @@ namespace mmo
 		int32 viewportHeight = 0;
 		GraphicsDevice::Get().GetViewport(nullptr, nullptr, &viewportWidth, &viewportHeight);
 
-		const float inverseUiScale = 1.0f / FrameManager::Get().GetUIScale().y;
-		const float logicalWidth = static_cast<float>(viewportWidth) * inverseUiScale;
-		const float logicalHeight = static_cast<float>(viewportHeight) * inverseUiScale;
+		// Frame layout scales UI-space positions per axis (x by uiScale.x, y by
+		// uiScale.y), so each axis needs its own scale here - otherwise bubbles drift
+		// horizontally whenever the window aspect ratio differs from the native one.
+		const Point uiScale = FrameManager::Get().GetUIScale();
+		const float logicalWidth = static_cast<float>(viewportWidth) / uiScale.x;
+		const float logicalHeight = static_cast<float>(viewportHeight) / uiScale.y;
 		Point position(
 			normalizedX * logicalWidth - GetWidth() * 0.5f,
 			normalizedY * logicalHeight - GetHeight() - BubbleScreenMargin - BubbleTailHeight);

@@ -51,6 +51,10 @@ namespace mmo
 		/// Scrolls the message list when the mouse wheel is used over the frame.
 		virtual bool OnMouseWheel(int32 delta) override;
 
+		/// Rebuilds the wrapped line cache when the frame is resized, since line wrapping
+		/// and the visible line count depend on the frame dimensions and text scale.
+		virtual void OnAreaChanged(const Rect& newArea) override;
+
 	private:
 		void PopulateGeometryBuffer() override;
 
@@ -73,5 +77,9 @@ namespace mmo
 		std::vector<LineInfo> m_lineCache;
 		int m_linePosition = 0;
 		int m_visibleLineCount = 0;
+		/// The frame size the line cache was last wrapped for.
+		Size m_lastWrapSize { -1.0f, -1.0f };
+		/// The text scale the line cache was last wrapped for.
+		float m_lastWrapTextScale = -1.0f;
 	};
 }

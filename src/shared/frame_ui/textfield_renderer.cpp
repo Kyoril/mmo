@@ -61,7 +61,7 @@ namespace mmo
 
 		// TODO: Draw the text field selection background
 
-		const float textScale = FrameManager::Get().GetUIScale().y;
+		const float textScale = FrameManager::Get().GetTextScale();
 
 		// Get the text field
 		const auto* textField = dynamic_cast<TextField*>(m_frame);

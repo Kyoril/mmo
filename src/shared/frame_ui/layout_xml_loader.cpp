@@ -103,6 +103,7 @@ namespace mmo
 	static const std::string TextComponentColorAttribute("color");
 	static const std::string TextComponentHorzAlignAttribute("horzAlign");
 	static const std::string TextComponentVertAlignAttribute("vertAlign");
+	static const std::string TextComponentWrapAttribute("wrap");
 	static const std::string ImageComponentElement("ImageComponent");
 	static const std::string ImageComponentTextureAttribute("texture");
 	static const std::string ImageComponentTilingAttribute("tiling");
@@ -977,6 +978,7 @@ namespace mmo
 
 		// Setup component and add it to the current section
 		auto component = std::make_unique<TextComponent>(*m_frames.top());
+		component->SetWordWrap(attributes.GetValueAsBool(TextComponentWrapAttribute, true));
 
 		if (horzAlignAttr.starts_with('$'))
 		{

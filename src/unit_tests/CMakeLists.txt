@@ -10,6 +10,7 @@ add_exe(unit_tests)
 # graphics_d3d11) but has no render dependencies, so add it directly for the headless build.
 target_sources(unit_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../shared/game_client/remote_movement_queue.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../shared/game_client/remote_movement_renderer.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../shared/graphics/float_curve.cpp
 )
 

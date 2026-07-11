@@ -167,6 +167,11 @@ namespace mmo
 		/// Overrides the current stack count (used when restoring a persisted aura). Clamped to >= 1.
 		void SetStackCount(uint32 stackCount) { m_stackCount = (stackCount < 1) ? 1 : stackCount; }
 
+		/// Makes the first application expire after the given remaining time instead of the full
+		/// base duration (used when restoring a persisted aura). The base duration is untouched,
+		/// so a later re-cast still refreshes the aura to its full duration.
+		void SetInitialRemainingTime(GameTime remaining) { m_initialRemainingTime = remaining; }
+
 		/// Gets the remaining duration of the aura in milliseconds. Returns 0 for auras that do
 		/// not expire as well as for auras whose duration has already elapsed.
 		GameTime GetRemainingTime() const;
@@ -219,6 +224,9 @@ namespace mmo
 		GameTime m_duration = 0;
 
 		GameTime m_expiration = 0;
+
+		// One-shot override for the first application's remaining time (persisted aura restore).
+		GameTime m_initialRemainingTime = 0;
 
 		Countdown m_expirationCountdown;
 

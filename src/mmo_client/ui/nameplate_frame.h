@@ -79,7 +79,19 @@ namespace mmo
 		/// truncated display text is only recomputed when the name actually changes.
 		String m_lastUnitName;
 
+		/// The ui scale the display name was last fitted with, so the truncation is
+		/// redone when the ui scale (and with it the rendered text width) changes.
+		float m_lastNameFitScale = 0.0f;
+
+		/// The text scale the display name was last fitted with. Tracked separately from
+		/// the ui scale because glyphs scale uniformly (FrameManager::GetTextScale) while
+		/// the plate width scales with the horizontal ui scale.
+		float m_lastNameFitTextScale = 0.0f;
+
 		/// Cached bar color so the color property is only written on changes.
 		argb_t m_barColor = 0;
+
+		/// Cached name text color so the color property is only written on changes.
+		argb_t m_nameColor = 0;
 	};
 }

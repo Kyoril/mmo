@@ -87,8 +87,8 @@ namespace mmo
 	}
 
 	bool RemoteMovementRenderer::Sample(const float deltaTime, const float runSpeed,
-	                                    const float backwardsSpeed, const float turnSpeed,
-	                                    RemoteMovementState& outState)
+	                                    const float backwardsSpeed, const float walkSpeed,
+	                                    const float turnSpeed, RemoteMovementState& outState)
 	{
 		if (!m_initialized)
 		{
@@ -116,7 +116,7 @@ namespace mmo
 
 		if (isFalling)
 		{
-			const Vector3 lateral = ComputeVelocity(forward, right, m_authFlags, runSpeed, backwardsSpeed);
+			const Vector3 lateral = ComputeVelocity(forward, right, m_authFlags, runSpeed, backwardsSpeed, walkSpeed);
 			desiredDelta.x = lateral.x * deltaTime;
 			desiredDelta.z = lateral.z * deltaTime;
 			StepFallArc(deltaTime);
@@ -125,7 +125,7 @@ namespace mmo
 		}
 		else
 		{
-			desiredDelta = ComputeVelocity(forward, right, m_authFlags, runSpeed, backwardsSpeed) * deltaTime;
+			desiredDelta = ComputeVelocity(forward, right, m_authFlags, runSpeed, backwardsSpeed, walkSpeed) * deltaTime;
 			m_renderedPos += desiredDelta;
 		}
 
@@ -166,7 +166,7 @@ namespace mmo
 		outState.facing        = m_renderedFacing;
 		outState.movementFlags = m_authFlags;
 		outState.isFalling     = isFalling;
-		outState.velocity      = isFalling ? m_fallVelocity : ComputeVelocity(forward, right, m_authFlags, runSpeed, backwardsSpeed);
+		outState.velocity      = isFalling ? m_fallVelocity : ComputeVelocity(forward, right, m_authFlags, runSpeed, backwardsSpeed, walkSpeed);
 
 		return true;
 	}
@@ -181,7 +181,7 @@ namespace mmo
 
 	Vector3 RemoteMovementRenderer::ComputeVelocity(const Vector3& forward, const Vector3& right,
 	                                                  const uint32 flags, const float runSpeed,
-	                                                  const float backwardsSpeed) const
+	                                                  const float backwardsSpeed, const float walkSpeed) const
 	{
 		Vector3 dir = Vector3::Zero;
 		if (flags & movement_flags::Forward)     dir += forward;
@@ -201,10 +201,15 @@ namespace mmo
 		}
 
 		// Pure backward (no forward key): use the slower backwards speed.
-		// Forward-only, strafe-only, or diagonal: use run speed.
+		// Forward-only, strafe-only, or diagonal: use run speed, or walk speed
+		// while walk mode is active. This mirrors the local player's input code,
+		// which applies movement_type::Backwards regardless of walk mode —
+		// extrapolating a walking player at run speed makes the prediction race
+		// ahead and forces a pull-back correction on every heartbeat.
+		const float lateralSpeed = (flags & movement_flags::WalkMode) ? walkSpeed : runSpeed;
 		const float speed = ((flags & movement_flags::Backward) && !(flags & movement_flags::Forward))
 			? backwardsSpeed
-			: runSpeed;
+			: lateralSpeed;
 
 		return dir * speed;
 	}

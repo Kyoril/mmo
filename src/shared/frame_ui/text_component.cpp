@@ -42,6 +42,7 @@ namespace mmo
 		copy->SetHorizontalAlignment(m_horzAlignment);
 		copy->SetVerticalAlignment(m_vertAlignment);
 		copy->SetColor(m_color);
+		copy->SetWordWrap(m_wordWrap);
 		copy->SetHorzAlignmentPropertyName(m_horzAlignPropertyName);
 		copy->SetVertAlignmentPropertyName(m_vertAlignPropertyName);
 		copy->SetColorPropertyName(m_colorPropertyName);
@@ -61,6 +62,15 @@ namespace mmo
 	void TextComponent::SetColor(const Color & color)
 	{
 		m_color = color;
+	}
+
+	void TextComponent::SetWordWrap(const bool wordWrap)
+	{
+		if (m_wordWrap != wordWrap)
+		{
+			m_wordWrap = wordWrap;
+			m_cacheValid = false;
+		}
 	}
 
 	void TextComponent::SetHorzAlignmentPropertyName(std::string propertyName)
@@ -200,7 +210,7 @@ namespace mmo
 		// inputs changed. Render() calls this on every redraw, and most redraws are triggered by
 		// something other than the text itself (hover states, animations, child invalidations).
 		const FontPtr font = m_frame->GetFont();
-		const float textScale = FrameManager::Get().GetUIScale().y;
+		const float textScale = FrameManager::Get().GetTextScale();
 		const argb_t colorArgb = m_color.GetARGB();
 
 		if (m_cacheValid &&
@@ -247,8 +257,13 @@ namespace mmo
 
 	void TextComponent::ApplyWrapping(const Rect& area)
 	{
-		const float textScale = FrameManager::Get().GetUIScale().y;
-		
+		if (!m_wordWrap)
+		{
+			return;
+		}
+
+		const float textScale = FrameManager::Get().GetTextScale();
+
 		if (area.GetWidth() > 0.0f && !m_lineCache.empty())
 		{
 			const FontPtr font = m_frame->GetFont();
@@ -321,7 +336,7 @@ namespace mmo
 
 	void TextComponent::Render(const Rect& area, const Color& color)
 	{
-		const float textScale = FrameManager::Get().GetUIScale().y;
+		const float textScale = FrameManager::Get().GetTextScale();
 
 		// Grab a font pointer
 		FontPtr font = m_frame->GetFont();

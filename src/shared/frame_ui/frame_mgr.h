@@ -65,6 +65,13 @@ namespace mmo
 
 		Size GetUIScaleSize() const { return Size(m_uiScale.x, m_uiScale.y); }
 
+		/// Uniform scale used for text measurement and rendering. Glyphs are never stretched
+		/// per-axis, so text has to use the smaller of the two axis scales: horizontal layout
+		/// scales with the x scale, and if text were scaled by the (larger) y scale on windows
+		/// narrower than the native 16:9 aspect ratio, it would overflow or wrap inside frames
+		/// that are sized to hold it.
+		float GetTextScale() const { return m_uiScale.x < m_uiScale.y ? m_uiScale.x : m_uiScale.y; }
+
 	public:
 		/// Loads files based on a given input stream with file contents.
 		void LoadUIFile(const std::string& filename);

@@ -853,6 +853,7 @@ namespace mmo
 			deltaTime,
 			GetSpeed(movement_type::Run),
 			GetSpeed(movement_type::Backwards),
+			GetSpeed(movement_type::Walk),
 			GetSpeed(movement_type::Turn),
 			state))
 		{

@@ -38,11 +38,20 @@ namespace mmo
 		const std::string NameplateHealthBarTemplateName("NameplateHealthBarTemplate");
 		const std::string NameplateHighlightTemplateName("NameplateHighlightTemplate");
 
-		// Plater-inspired reaction colors for the health bar fill.
-		constexpr argb_t HostileBarColor = 0xFFD23A3A;			// red
-		constexpr argb_t NeutralBarColor = 0xFFE8B923;			// yellow
-		constexpr argb_t FriendlyNpcBarColor = 0xFF3FBF3F;		// green
-		constexpr argb_t FriendlyPlayerBarColor = 0xFF3F6FD9;	// blue
+		/// Bar fill and name text color for one reaction. The name colors are lightened
+		/// variants of the bar colors so the text (with its 1px font shadow) stays
+		/// readable against dark world backdrops.
+		struct ReactionColors
+		{
+			argb_t bar;
+			argb_t name;
+		};
+
+		// Plater-inspired reaction colors.
+		constexpr ReactionColors HostileColors{ 0xFFD23A3A, 0xFFFF6B6B };		// red
+		constexpr ReactionColors NeutralColors{ 0xFFE8B923, 0xFFFFD24F };		// yellow
+		constexpr ReactionColors FriendlyNpcColors{ 0xFF3FBF3F, 0xFF6BE86B };	// green
+		constexpr ReactionColors FriendlyPlayerColors{ 0xFF3F6FD9, 0xFF7FA9FF };	// blue
 
 		/// Removes the last UTF-8 code point from a string (multi-byte aware, so
 		/// truncation never leaves a broken byte sequence behind).
@@ -72,7 +81,7 @@ namespace mmo
 			}
 
 			// Measure with the same scale the text component renders (and wraps) with.
-			const float textScale = FrameManager::Get().GetUIScale().y;
+			const float textScale = FrameManager::Get().GetTextScale();
 			if (font->GetTextWidth(name, textScale) <= maxWidth)
 			{
 				return name;
@@ -97,8 +106,8 @@ namespace mmo
 			return stream.str();
 		}
 
-		/// Returns the health bar color for a unit based on its reaction towards the player.
-		argb_t GetBarColorForUnit(const GameUnitC& unit)
+		/// Returns the bar and name colors for a unit based on its reaction towards the player.
+		const ReactionColors& GetColorsForUnit(const GameUnitC& unit)
 		{
 			// Evaluate the reaction from the unit's perspective towards the active
 			// player (IsFriendly / IsHostile are player-relative). This matches the
@@ -107,15 +116,15 @@ namespace mmo
 			const bool friendly = unit.IsFriendly();
 			if (unit.IsPlayer())
 			{
-				return friendly ? FriendlyPlayerBarColor : HostileBarColor;
+				return friendly ? FriendlyPlayerColors : HostileColors;
 			}
 
 			if (friendly)
 			{
-				return FriendlyNpcBarColor;
+				return FriendlyNpcColors;
 			}
 
-			return unit.IsHostile() ? HostileBarColor : NeutralBarColor;
+			return unit.IsHostile() ? HostileColors : NeutralColors;
 		}
 	}
 
@@ -202,14 +211,30 @@ namespace mmo
 
 	void NameplateFrame::UpdateContent(GameUnitC& unit)
 	{
-		if (m_nameText && m_lastUnitName != unit.GetName())
+		const ReactionColors& colors = GetColorsForUnit(unit);
+
+		const float uiScaleX = FrameManager::Get().GetUIScale().x;
+		const float textScale = FrameManager::Get().GetTextScale();
+		if (m_nameText && (m_lastUnitName != unit.GetName() || uiScaleX != m_lastNameFitScale || textScale != m_lastNameFitTextScale))
 		{
 			m_lastUnitName = unit.GetName();
+			m_lastNameFitScale = uiScaleX;
+			m_lastNameFitTextScale = textScale;
 
-			// Truncate to a single line: the plate width is the wrap constraint, minus a
-			// small margin so the text doesn't touch the plate edges.
-			const float maxNameWidth = (GetWidth() > 0.0f ? GetWidth() : 240.0f) - 8.0f;
+			// Truncate to a single line, minus a small margin so the text doesn't touch
+			// the plate edges. FitNameToWidth measures in screen pixels (like the text
+			// renderer), while GetWidth is in ui units - hence the scale factor.
+			const float maxNameWidth = ((GetWidth() > 0.0f ? GetWidth() : 240.0f) - 8.0f) * uiScaleX;
 			m_nameText->SetText(FitNameToWidth(m_lastUnitName, m_nameText->GetFont(), maxNameWidth));
+		}
+
+		if (m_nameText && colors.name != m_nameColor)
+		{
+			m_nameColor = colors.name;
+			if (Property* textColor = m_nameText->GetProperty("TextColor"))
+			{
+				textColor->Set(ToHexColor(colors.name));
+			}
 		}
 
 		if (m_healthBar)
@@ -217,13 +242,12 @@ namespace mmo
 			const uint32 maxHealth = std::max<uint32>(1, unit.GetMaxHealth());
 			m_healthBar->SetProgress(static_cast<float>(unit.GetHealth()) / static_cast<float>(maxHealth));
 
-			const argb_t barColor = GetBarColorForUnit(unit);
-			if (barColor != m_barColor)
+			if (colors.bar != m_barColor)
 			{
-				m_barColor = barColor;
+				m_barColor = colors.bar;
 				if (Property* progressColor = m_healthBar->GetProperty("ProgressColor"))
 				{
-					progressColor->Set(ToHexColor(barColor));
+					progressColor->Set(ToHexColor(colors.bar));
 				}
 			}
 		}
@@ -283,9 +307,12 @@ namespace mmo
 		int32 viewportHeight = 0;
 		GraphicsDevice::Get().GetViewport(nullptr, nullptr, &viewportWidth, &viewportHeight);
 
-		const float inverseUiScale = 1.0f / FrameManager::Get().GetUIScale().y;
-		const float logicalWidth = static_cast<float>(viewportWidth) * inverseUiScale;
-		const float logicalHeight = static_cast<float>(viewportHeight) * inverseUiScale;
+		// Frame layout scales UI-space positions per axis (x by uiScale.x, y by
+		// uiScale.y), so each axis needs its own scale here - otherwise plates drift
+		// horizontally whenever the window aspect ratio differs from the native one.
+		const Point uiScale = FrameManager::Get().GetUIScale();
+		const float logicalWidth = static_cast<float>(viewportWidth) / uiScale.x;
+		const float logicalHeight = static_cast<float>(viewportHeight) / uiScale.y;
 
 		// Centered horizontally over the head; hanging just above it. Unlike chat bubbles,
 		// plates are not clamped to the screen edges - a plate whose anchor moves off
