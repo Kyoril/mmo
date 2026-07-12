@@ -176,6 +176,15 @@ namespace mmo
 		/// @details For a base material this is its own list; for an instance it is the instance's
 		///          override list if set, otherwise the parent's effective list.
 		[[nodiscard]] virtual const std::vector<MaterialFoliageEntry>& GetFoliageEntries() const = 0;
+
+		/// @brief Gets the surface type id of this material (0 = unset). Surface types are
+		///        proto data entries driving per-surface behavior such as footstep sounds.
+		[[nodiscard]] virtual uint32 GetSurfaceTypeId() const { return 0; }
+
+		/// @brief Gets the surface type id of a terrain splatting layer (0 = fall back to
+		///        the base surface type). Only meaningful for terrain splatting materials.
+		/// @param layer The splat layer index (0-3).
+		[[nodiscard]] virtual uint32 GetLayerSurfaceTypeId(uint8 layer) const { return 0; }
 	};
 
 	/// @brief This class represents a material which describes how geometry in the scene
@@ -343,6 +352,25 @@ namespace mmo
 		/// @brief Removes all terrain foliage entries.
 		void ClearFoliageEntries() { m_foliage.clear(); }
 
+	public:
+		/// @copydoc MaterialInterface::GetSurfaceTypeId
+		[[nodiscard]] uint32 GetSurfaceTypeId() const override { return m_surfaceTypeId; }
+
+		/// @brief Sets the surface type id of this material (0 = unset).
+		void SetSurfaceTypeId(const uint32 id) { m_surfaceTypeId = id; }
+
+		/// @copydoc MaterialInterface::GetLayerSurfaceTypeId
+		[[nodiscard]] uint32 GetLayerSurfaceTypeId(const uint8 layer) const override { return layer < m_layerSurfaceTypeIds.size() ? m_layerSurfaceTypeIds[layer] : 0; }
+
+		/// @brief Sets the surface type id of a terrain splatting layer (0 = fall back to base).
+		void SetLayerSurfaceTypeId(const uint8 layer, const uint32 id)
+		{
+			if (layer < m_layerSurfaceTypeIds.size())
+			{
+				m_layerSurfaceTypeIds[layer] = id;
+			}
+		}
+
 	private:
 		String m_name;
 		bool m_twoSided { false };
@@ -380,6 +408,11 @@ namespace mmo
 
 		/// Data-driven terrain foliage definitions (serialized via the MFOL chunk, v0.6+).
 		std::vector<MaterialFoliageEntry> m_foliage;
+
+		/// Surface type of this material and per-splat-layer surface types for terrain
+		/// splatting materials (serialized via the MSRF chunk, v0.7+).
+		uint32 m_surfaceTypeId = 0;
+		std::array<uint32, 4> m_layerSurfaceTypeIds{};
 	};
 
 	typedef std::shared_ptr<MaterialInterface> MaterialPtr;

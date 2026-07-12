@@ -35,6 +35,10 @@ namespace mmo
 			/// Version 0.6: adds an optional MFOL chunk carrying data-driven terrain
 			/// foliage entries (mesh + per-layer scatter settings).
 			Version_0_6 = 0x0600,
+
+			/// Version 0.7: adds an optional MSRF chunk carrying the material's surface type
+			/// id and four per-splat-layer surface type ids.
+			Version_0_7 = 0x0700,
 		};
 	}
 
@@ -104,6 +108,9 @@ namespace mmo
 
 		/// @brief Reads the v0.6 terrain foliage chunk (MFOL).
 		bool ReadMaterialFoliageChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		/// @brief Reads the v0.7 surface type chunk (MSRF).
+		bool ReadMaterialSurfaceTypeChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 	private:
 		Material& m_material;

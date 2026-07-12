@@ -20,6 +20,7 @@ namespace mmo
 	static const ChunkMagic MaterialVectorParamChunk = MakeChunkMagic('RAPV');
 	static const ChunkMagic MaterialTextureParamChunk = MakeChunkMagic('RAPT');
 	static const ChunkMagic MaterialFoliageChunk = MakeChunkMagic('LOFM');
+	static const ChunkMagic MaterialSurfaceTypeChunk = MakeChunkMagic('FRSM');
 	
 	MaterialInstanceDeserializer::MaterialInstanceDeserializer(MaterialInstance& materialInstance)
 		: ChunkReader(true)
@@ -49,6 +50,11 @@ namespace mmo
 				if (version >= material_instance_version::Version_0_2)
 				{
 					AddChunkHandler(*MaterialFoliageChunk, false, *this, &MaterialInstanceDeserializer::ReadMaterialFoliageChunk);
+				}
+
+				if (version >= material_instance_version::Version_0_3)
+				{
+					AddChunkHandler(*MaterialSurfaceTypeChunk, false, *this, &MaterialInstanceDeserializer::ReadMaterialSurfaceTypeChunk);
 				}
 			}
 			else
@@ -241,11 +247,38 @@ namespace mmo
 		return reader;
 	}
 
+	bool MaterialInstanceDeserializer::ReadMaterialSurfaceTypeChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		uint32 surfaceTypeId = 0;
+		reader >> io::read<uint32>(surfaceTypeId);
+		m_materialInstance.SetOwnSurfaceTypeId(surfaceTypeId);
+
+		for (uint8 layer = 0; layer < 4; ++layer)
+		{
+			uint32 layerSurfaceTypeId = 0;
+			reader >> io::read<uint32>(layerSurfaceTypeId);
+			m_materialInstance.SetOwnLayerSurfaceTypeId(layer, layerSurfaceTypeId);
+		}
+
+		// Presence of this chunk means the instance overrides the parent's surface types.
+		m_materialInstance.SetOverrideSurfaceTypes(true);
+		return reader;
+	}
+
 	void MaterialInstanceSerializer::Export(const MaterialInstance& materialInstance, io::Writer& writer, MaterialInstanceVersion version)
 	{
-		version = materialInstance.IsOverridingFoliage()
-			? material_instance_version::Version_0_2
-			: material_instance_version::Version_0_1;
+		if (materialInstance.IsOverridingSurfaceTypes())
+		{
+			version = material_instance_version::Version_0_3;
+		}
+		else if (materialInstance.IsOverridingFoliage())
+		{
+			version = material_instance_version::Version_0_2;
+		}
+		else
+		{
+			version = material_instance_version::Version_0_1;
+		}
 		
 		// File version chunk
 		{
@@ -358,6 +391,20 @@ namespace mmo
 			}
 
 			foliageChunkWriter.Finish();
+		}
+
+		// Instance surface type override (v0.3+). Written only when this instance overrides
+		// surface types; presence of the chunk re-enables the override at load time.
+		if (materialInstance.IsOverridingSurfaceTypes())
+		{
+			ChunkWriter surfaceTypeChunkWriter{ MaterialSurfaceTypeChunk, writer };
+			writer << io::write<uint32>(materialInstance.GetOwnSurfaceTypeId());
+			for (uint8 layer = 0; layer < 4; ++layer)
+			{
+				writer << io::write<uint32>(materialInstance.GetOwnLayerSurfaceTypeId(layer));
+			}
+
+			surfaceTypeChunkWriter.Finish();
 		}
 	}
 }

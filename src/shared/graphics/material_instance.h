@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <array>
 #include <map>
 
 #include "base/typedefs.h"
@@ -159,6 +160,55 @@ namespace mmo
 		/// @brief Enables or disables foliage override for this instance.
 		void SetOverrideFoliage(const bool value) { m_overrideFoliage = value; }
 
+	public:
+		/// @brief Gets the effective base surface type: the instance's override when overriding,
+		///        otherwise the parent material's surface type.
+		[[nodiscard]] uint32 GetSurfaceTypeId() const override
+		{
+			if (m_overrideSurfaceTypes)
+			{
+				return m_surfaceTypeId;
+			}
+
+			return m_parent ? m_parent->GetSurfaceTypeId() : 0;
+		}
+
+		/// @brief Gets the effective layer surface type: the instance's override when overriding,
+		///        otherwise the parent material's layer surface type.
+		[[nodiscard]] uint32 GetLayerSurfaceTypeId(const uint8 layer) const override
+		{
+			if (m_overrideSurfaceTypes)
+			{
+				return layer < m_layerSurfaceTypeIds.size() ? m_layerSurfaceTypeIds[layer] : 0;
+			}
+
+			return m_parent ? m_parent->GetLayerSurfaceTypeId(layer) : 0;
+		}
+
+		/// @brief Whether this instance overrides the parent material's surface types.
+		[[nodiscard]] bool IsOverridingSurfaceTypes() const { return m_overrideSurfaceTypes; }
+
+		/// @brief Sets whether this instance overrides the parent material's surface types.
+		void SetOverrideSurfaceTypes(const bool value) { m_overrideSurfaceTypes = value; }
+
+		/// @brief Gets the instance-level base surface type id (only used when overriding).
+		[[nodiscard]] uint32 GetOwnSurfaceTypeId() const { return m_surfaceTypeId; }
+
+		/// @brief Sets the instance-level base surface type id.
+		void SetOwnSurfaceTypeId(const uint32 id) { m_surfaceTypeId = id; }
+
+		/// @brief Gets an instance-level layer surface type id (only used when overriding).
+		[[nodiscard]] uint32 GetOwnLayerSurfaceTypeId(const uint8 layer) const { return layer < m_layerSurfaceTypeIds.size() ? m_layerSurfaceTypeIds[layer] : 0; }
+
+		/// @brief Sets an instance-level layer surface type id.
+		void SetOwnLayerSurfaceTypeId(const uint8 layer, const uint32 id)
+		{
+			if (layer < m_layerSurfaceTypeIds.size())
+			{
+				m_layerSurfaceTypeIds[layer] = id;
+			}
+		}
+
 	private:
 		String m_name;
 		MaterialPtr m_parent;
@@ -180,6 +230,12 @@ namespace mmo
 		/// parent material's foliage entries apply.
 		std::vector<MaterialFoliageEntry> m_foliage;
 		bool m_overrideFoliage = false;
+
+		/// Instance-level surface type override. Only used when m_overrideSurfaceTypes is true;
+		/// otherwise the parent material's surface types apply.
+		uint32 m_surfaceTypeId = 0;
+		std::array<uint32, 4> m_layerSurfaceTypeIds{};
+		bool m_overrideSurfaceTypes = false;
 
 		bool m_bufferLayoutDirty[3]{ true, true, true };
 		bool m_bufferDataDirty[3]{ true, true, true };

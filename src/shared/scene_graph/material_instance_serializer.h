@@ -28,6 +28,10 @@ namespace mmo
 			/// Version 0.2: adds an optional MFOL chunk carrying an instance-level terrain foliage
 			/// override (replaces the parent material's foliage when present).
 			Version_0_2 = 0x0200,
+
+			/// Version 0.3: adds an optional MSRF chunk carrying an instance-level surface
+			/// type override (base id + four layer ids).
+			Version_0_3 = 0x0300,
 		};
 	}
 
@@ -66,6 +70,9 @@ namespace mmo
 
 		/// @brief Reads the v0.2 instance foliage override chunk (MFOL).
 		bool ReadMaterialFoliageChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		/// @brief Reads the v0.3 instance surface type override chunk (MSRF).
+		bool ReadMaterialSurfaceTypeChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 	private:
 		MaterialInstance& m_materialInstance;

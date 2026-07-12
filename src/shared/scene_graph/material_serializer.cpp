@@ -20,6 +20,7 @@ namespace mmo
 	static const ChunkMagic MaterialVectorParamChunk = MakeChunkMagic('RAPV');
 	static const ChunkMagic MaterialTextureParamChunk = MakeChunkMagic('RAPT');
 	static const ChunkMagic MaterialFoliageChunk = MakeChunkMagic('LOFM');
+	static const ChunkMagic MaterialSurfaceTypeChunk = MakeChunkMagic('FRSM');
 
 	MaterialDeserializer::MaterialDeserializer(Material& material)
 		: ChunkReader(true)
@@ -73,6 +74,11 @@ namespace mmo
 				if (version >= material_version::Version_0_6)
 				{
 					AddChunkHandler(*MaterialFoliageChunk, false, *this, &MaterialDeserializer::ReadMaterialFoliageChunk);
+				}
+
+				if (version >= material_version::Version_0_7)
+				{
+					AddChunkHandler(*MaterialSurfaceTypeChunk, false, *this, &MaterialDeserializer::ReadMaterialSurfaceTypeChunk);
 				}
 			}
 			else
@@ -569,9 +575,25 @@ namespace mmo
 		return reader;
 	}
 
+	bool MaterialDeserializer::ReadMaterialSurfaceTypeChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		uint32 surfaceTypeId = 0;
+		reader >> io::read<uint32>(surfaceTypeId);
+		m_material.SetSurfaceTypeId(surfaceTypeId);
+
+		for (uint8 layer = 0; layer < 4; ++layer)
+		{
+			uint32 layerSurfaceTypeId = 0;
+			reader >> io::read<uint32>(layerSurfaceTypeId);
+			m_material.SetLayerSurfaceTypeId(layer, layerSurfaceTypeId);
+		}
+
+		return reader;
+	}
+
 	void MaterialSerializer::Export(const Material& material, io::Writer& writer, MaterialVersion version)
 	{
-		version = material_version::Version_0_6;
+		version = material_version::Version_0_7;
 
 		// File version chunk
 		{
@@ -765,6 +787,25 @@ namespace mmo
 			}
 
 			foliageChunkWriter.Finish();
+		}
+
+		// Surface type chunk (v0.7+). Only written when any surface type is assigned.
+		bool hasSurfaceTypes = material.GetSurfaceTypeId() != 0;
+		for (uint8 layer = 0; layer < 4 && !hasSurfaceTypes; ++layer)
+		{
+			hasSurfaceTypes = material.GetLayerSurfaceTypeId(layer) != 0;
+		}
+
+		if (hasSurfaceTypes)
+		{
+			ChunkWriter surfaceTypeChunkWriter { MaterialSurfaceTypeChunk, writer };
+			writer << io::write<uint32>(material.GetSurfaceTypeId());
+			for (uint8 layer = 0; layer < 4; ++layer)
+			{
+				writer << io::write<uint32>(material.GetLayerSurfaceTypeId(layer));
+			}
+
+			surfaceTypeChunkWriter.Finish();
 		}
 	}
 }
