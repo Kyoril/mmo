@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "animation_notify.h"
+#include "skeleton_serializer.h"
 
 #include "binary_io/reader.h"
 #include "binary_io/writer.h"
@@ -13,7 +14,7 @@ namespace mmo
 		// Base data (time, name) is serialized by the container
 	}
 
-	void FootstepNotify::Deserialize(io::Reader& reader)
+	void FootstepNotify::Deserialize(io::Reader& reader, uint32 version)
 	{
 		// Footstep notify has no additional data beyond base class
 		// Base data (time, name) is deserialized by the container
@@ -21,12 +22,20 @@ namespace mmo
 
 	void PlaySoundNotify::Serialize(io::Writer& writer) const
 	{
-		writer << io::write_dynamic_range<uint16>(m_soundPath);
+		writer
+			<< io::write_dynamic_range<uint16>(m_soundPath)
+			<< io::write<uint32>(m_soundEntryId);
 	}
 
-	void PlaySoundNotify::Deserialize(io::Reader& reader)
+	void PlaySoundNotify::Deserialize(io::Reader& reader, const uint32 version)
 	{
 		reader >> io::read_container<uint16>(m_soundPath);
+
+		// The SoundEntry reference was added with skeleton file version 0.4
+		if (version >= skeleton_version::Version_0_4)
+		{
+			reader >> io::read<uint32>(m_soundEntryId);
+		}
 	}
 
 	void SpellGoNotify::Serialize(io::Writer& writer) const
@@ -35,7 +44,7 @@ namespace mmo
 		// Base data (time, name) is serialized by the container
 	}
 
-	void SpellGoNotify::Deserialize(io::Reader& reader)
+	void SpellGoNotify::Deserialize(io::Reader& reader, uint32 version)
 	{
 		// SpellGo notify has no additional data beyond base class
 		// Base data (time, name) is deserialized by the container
@@ -58,13 +67,13 @@ namespace mmo
 		}
 	}
 
-	std::unique_ptr<AnimationNotify> AnimationNotifyFactory::Deserialize(io::Reader& reader)
+	std::unique_ptr<AnimationNotify> AnimationNotifyFactory::Deserialize(io::Reader& reader, const uint32 version)
 	{
 		AnimationNotifyType type;
 		float time;
 		String name;
 
-		if (!(reader 
+		if (!(reader
 			>> io::read<uint8>(type)
 			>> io::read<float>(time)
 			>> io::read_container<uint16>(name)))
@@ -77,7 +86,7 @@ namespace mmo
 		{
 			notify->SetTime(time);
 			notify->SetName(name);
-			notify->Deserialize(reader);
+			notify->Deserialize(reader, version);
 		}
 
 		return notify;

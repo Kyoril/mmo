@@ -129,7 +129,7 @@ namespace mmo
 
 		if (const auto section = ScopedEditorSection("Appearance", ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			static const std::set<String> meshExtensions = { ".hmsh" };
+			static const auto& meshExtensions = asset_extensions::Meshes;
 			String filename = currentEntry.filename();
 			if (AssetPickerWidget::Draw("Mesh", filename, meshExtensions, nullptr, nullptr, 48.0f))
 			{

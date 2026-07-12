@@ -7,9 +7,11 @@
 
 namespace mmo
 {
-	MeshEditor::MeshEditor(EditorHost& host, PreviewProviderManager& previewManager)
+	MeshEditor::MeshEditor(EditorHost& host, PreviewProviderManager& previewManager, proto::Project& project, IAudio* audio)
 		: EditorBase(host)
 		, m_previewManager(previewManager)
+		, m_project(project)
+		, m_audio(audio)
 	{
 	}
 

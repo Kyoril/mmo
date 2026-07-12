@@ -7,6 +7,7 @@
 #include <imgui_internal.h>
 
 #include "editor_host.h"
+#include "editor_windows/asset_picker_widget.h"
 #include "world_editor.h"
 #include "paging/world_page_loader.h"
 #include "assets/asset_registry.h"
@@ -2559,8 +2560,6 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 	void WorldEditorInstance::Visit(SelectedMapEntity &selectable)
 	{
-		static const char *s_noMaterialPreview = "<None>";
-
 		MapEntity &mapEntity = selectable.GetEntity();
 		
 		ImGui::Text("Unique Id: %llu", mapEntity.GetUniqueId());
@@ -2579,27 +2578,15 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			if (ImGui::CollapsingHeader("Mesh"))
 			{
 				const MeshPtr mesh = entity->GetMesh();
-				const String meshName = mesh->GetName().data();
+				String meshName = mesh->GetName().data();
 
-				const String filename = Path(meshName).filename().string();
-
-				if (ImGui::BeginCombo("Mesh", filename.c_str()))
+				if (AssetPickerWidget::Draw("Mesh", meshName, asset_extensions::Meshes))
 				{
-					// TODO: Draw available mesh files from asset registry
-
-					ImGui::EndCombo();
-				}
-
-				if (ImGui::BeginDragDropTarget())
-				{
-					// We only accept mesh file drops
-					if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmsh"))
+					if (!meshName.empty())
 					{
-						entity->SetMesh(MeshManager::Get().Load(*static_cast<String *>(payload->Data)));
+						entity->SetMesh(MeshManager::Get().Load(meshName));
 						mapEntity.MarkModified();
 					}
-
-					ImGui::EndDragDropTarget();
 				}
 			}
 
@@ -2621,15 +2608,7 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 						material = submesh.GetMaterial();
 					}
 
-					// Build preview string
-					const char *previewString = s_noMaterialPreview;
-					if (material)
-					{
-						previewString = material->GetName().data();
-					}
-
-					const String materialName = sub->GetMaterial()->GetName().data();
-					const String filename = Path(materialName).filename().string();
+					String materialName = sub->GetMaterial()->GetName().data();
 
 					bool isOverridden = material != submesh.GetMaterial();
 
@@ -2643,27 +2622,18 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 					ImGui::SameLine();
 
-					if (ImGui::BeginCombo("Material", filename.c_str()))
+					if (AssetPickerWidget::Draw("Material", materialName, asset_extensions::Materials))
 					{
-						ImGui::EndCombo();
-					}
-
-					if (ImGui::BeginDragDropTarget())
-					{
-						// We only accept mesh file drops
-						if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmat"))
+						if (!materialName.empty())
 						{
-							sub->SetMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
-							mapEntity.MarkModified();
+							sub->SetMaterial(MaterialManager::Get().Load(materialName));
 						}
-
-						if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmi"))
+						else
 						{
-							sub->SetMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
-							mapEntity.MarkModified();
+							// Clearing the material resets the override back to the submesh default
+							sub->SetMaterial(submesh.GetMaterial());
 						}
-
-						ImGui::EndDragDropTarget();
+						mapEntity.MarkModified();
 					}
 
 					ImGui::PopID();
@@ -2676,42 +2646,25 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 	{
 		if (ImGui::CollapsingHeader("Tile"))
 		{
-			static const char *s_noMaterialPreview = "<None>";
-
 			terrain::Tile &tile = selectable.GetTile();
 
 			ImGui::Text("Tile Grid: %d x %d", tile.GetX(), tile.GetY());
 			ImGui::Text("Page Grid: %d x %d", tile.GetPage().GetX(), tile.GetPage().GetY());
 
-			// Get material
-			MaterialPtr material = tile.GetMaterial();
-
-			// Build preview string
-			const char *previewString = s_noMaterialPreview;
-			if (material)
+			// The tile material is wrapped in a per-tile MaterialInstance, so show the base material
+			String materialName;
+			if (const MaterialPtr baseMaterial = tile.GetBaseMaterial())
 			{
-				previewString = material->GetName().data();
+				materialName = baseMaterial->GetName();
 			}
 
-			if (ImGui::BeginCombo("Material", previewString))
+			if (AssetPickerWidget::Draw("Material", materialName, asset_extensions::Materials))
 			{
-				ImGui::EndCombo();
-			}
-
-			if (ImGui::BeginDragDropTarget())
-			{
-				// We only accept mesh file drops
-				if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmat"))
+				// SetMaterial ignores null, so clearing the selection intentionally does nothing
+				if (!materialName.empty())
 				{
-					tile.SetMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
+					tile.SetMaterial(MaterialManager::Get().Load(materialName));
 				}
-
-				if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmi"))
-				{
-					tile.SetMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
-				}
-
-				ImGui::EndDragDropTarget();
 			}
 
 			if (ImGui::Button("Set For Page"))

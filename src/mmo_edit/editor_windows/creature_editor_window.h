@@ -13,12 +13,14 @@
 
 namespace mmo
 {
+	class IAudio;
+
 	class CreatureEditorWindow final
 		: public EditorEntryWindowBase<proto::Units, proto::UnitEntry>
 		, public NonCopyable
 	{
 	public:
-		explicit CreatureEditorWindow(const String& name, proto::Project& project, EditorHost& host);
+		explicit CreatureEditorWindow(const String& name, proto::Project& project, EditorHost& host, IAudio* audio = nullptr);
 		~CreatureEditorWindow() override = default;
 
 	private:
@@ -34,6 +36,7 @@ namespace mmo
 	private:
 		EditorHost& m_host;
 		proto::Project& m_project;
+		IAudio* m_audio;
 		LootSimulationState m_lootSim;
 	};
 }

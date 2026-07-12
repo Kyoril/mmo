@@ -22,7 +22,7 @@ namespace mmo
 	{
 		if (version == skeleton_version::Latest)
 		{
-			version = skeleton_version::Version_0_3;
+			version = skeleton_version::Version_0_4;
 		}
 
 		// Main chunk
@@ -381,7 +381,7 @@ namespace mmo
 			{
 				for (uint16 i = 0; i < numNotifies; ++i)
 				{
-					auto notify = AnimationNotifyFactory::Deserialize(reader);
+					auto notify = AnimationNotifyFactory::Deserialize(reader, m_version);
 					if (notify)
 					{
 						anim.AddNotify(std::move(notify));

@@ -7,6 +7,7 @@
 
 #include "character_editor.h"
 #include "editor_host.h"
+#include "editor_windows/asset_picker_widget.h"
 #include "stream_sink.h"
 #include "assets/asset_registry.h"
 #include "log/default_log_levels.h"
@@ -423,7 +424,7 @@ namespace mmo
 
 	void CharacterEditorInstance::DrawVisibleSubEntityList(std::vector<std::string>& visibleSubEntities)
 	{
-		// Let’s show each sub-entity in a list
+		// Letï¿½s show each sub-entity in a list
 		int removeIndex = -1;
 
 		for (int j = 0; j < (int)visibleSubEntities.size(); ++j)
@@ -532,27 +533,7 @@ namespace mmo
 			}
 
 			// We can let user rename the material reference
-			char matBuf[128];
-			std::snprintf(matBuf, sizeof(matBuf), "%s", matRef.c_str());
-			if (ImGui::InputText("Material", matBuf, IM_ARRAYSIZE(matBuf)))
-			{
-				matRef = matBuf;
-			}
-
-			if (ImGui::BeginDragDropTarget())
-			{
-				// We only accept mesh file drops
-				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmat"))
-				{
-					matRef = *static_cast<String*>(payload->Data);
-				}
-				else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmi"))
-				{
-					matRef = *static_cast<String*>(payload->Data);
-				}
-
-				ImGui::EndDragDropTarget();
-			}
+			AssetPickerWidget::Draw("Material", matRef, asset_extensions::Materials);
 
 			// Optionally let user rename the sub-entity key too,
 			// but be careful about re-inserting. This can be tricky with a map.

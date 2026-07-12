@@ -180,7 +180,7 @@ namespace mmo
 			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
 
 			DrawSectionHeader("Preview Source");
-			static const std::set<String> charExtensions = { ".char" };
+			static const auto& charExtensions = asset_extensions::CharacterDefinitions;
 			String previewCharacter = m_characterAssetPath;
 			if (AssetPickerWidget::Draw("Character (.char)", previewCharacter, charExtensions, &previewManager, nullptr, 0.0f))
 			{
@@ -192,7 +192,7 @@ namespace mmo
 			ImGui::SameLine();
 			DrawHelpMarker("Default preview character used by this editor. Saved to editor config.");
 
-			static const std::set<String> meshExtensions = { ".hmsh" };
+			static const auto& meshExtensions = asset_extensions::Meshes;
 			String meshOverride = m_meshOverridePath;
 			if (AssetPickerWidget::Draw("Preview Mesh Override", meshOverride, meshExtensions, &previewManager, nullptr, 32.0f))
 			{
@@ -710,7 +710,7 @@ namespace mmo
 				ImGui::EndTable();
 			}
 			DrawSectionHeader("Icon");
-			static const std::set<String> iconExtensions = { ".htex", ".blp" };
+			static const auto& iconExtensions = asset_extensions::Textures;
 			String icon = currentEntry.icon();
 			if (AssetPickerWidget::Draw("Icon", icon, iconExtensions, &m_previewManager, nullptr, 64.0f)) currentEntry.set_icon(icon);
 			ImGui::PopStyleVar(2);
@@ -789,7 +789,7 @@ namespace mmo
 							{
 								if (std::string(keyBuf) != it->first && keyBuf[0] != '\0') { (*overrides)[keyBuf] = it->second; removeKey = it->first; }
 							}
-							static const std::set<String> materialExtensions = { ".hmat", ".hmi" };
+							static const auto& materialExtensions = asset_extensions::Materials;
 							std::string material = it->second;
 							if (AssetPickerWidget::Draw("Material", material, materialExtensions, &m_previewManager, nullptr, 32.0f)) it->second = material;
 							if (ImGui::SmallButton("Remove Override")) removeKey = it->first;
@@ -798,14 +798,14 @@ namespace mmo
 						static char newSubEntity[256] = "";
 						ImGui::InputText("New SubEntity", newSubEntity, sizeof(newSubEntity));
 						static std::string newMaterial;
-						static const std::set<String> materialExtensions = { ".hmat", ".hmi" };
+						static const auto& materialExtensions = asset_extensions::Materials;
 						AssetPickerWidget::Draw("New Material", newMaterial, materialExtensions, &m_previewManager, nullptr, 32.0f);
 						if (ImGui::Button("Add Override") && newSubEntity[0] != '\0') { (*overrides)[newSubEntity] = newMaterial; newSubEntity[0] = '\0'; newMaterial.clear(); }
 						if (!removeKey.empty()) overrides->erase(removeKey);
 					}
 
 					DrawSectionHeader("Attachment");
-					static const std::set<String> meshExtensions = { ".hmsh" };
+					static const auto& meshExtensions = asset_extensions::Meshes;
 					std::string attachedMesh = variant->mesh();
 					if (AssetPickerWidget::Draw("Attached Mesh", attachedMesh, meshExtensions, &m_previewManager, nullptr, 48.0f)) variant->set_mesh(attachedMesh);
 					if (variant->has_mesh() && !variant->mesh().empty())

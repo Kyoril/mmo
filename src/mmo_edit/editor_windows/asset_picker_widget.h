@@ -14,6 +14,32 @@ namespace mmo
 	class PreviewProviderManager;
 	class IAudio;
 
+	/// \brief Common file-extension sets for asset picker fields.
+	///
+	/// Prefer these over declaring per-call-site extension sets so that all pickers
+	/// for the same kind of asset stay in sync.
+	namespace asset_extensions
+	{
+		/// Sound files playable by the audio system.
+		inline const std::set<String> Sounds = { ".wav", ".WAV", ".ogg", ".mp3" };
+		/// Materials and material instances.
+		inline const std::set<String> Materials = { ".hmat", ".hmi" };
+		/// Base materials only (no material instances).
+		inline const std::set<String> BaseMaterials = { ".hmat" };
+		/// Static meshes.
+		inline const std::set<String> Meshes = { ".hmsh" };
+		/// Textures (icons etc.).
+		inline const std::set<String> Textures = { ".htex", ".blp" };
+		/// Particle systems.
+		inline const std::set<String> Particles = { ".hpar" };
+		/// World model objects.
+		inline const std::set<String> WorldModels = { ".hwmo" };
+		/// Customizable character definitions.
+		inline const std::set<String> CharacterDefinitions = { ".char" };
+		/// Unit model files (static meshes or character definitions).
+		inline const std::set<String> ModelFiles = { ".hmsh", ".char" };
+	}
+
 	/// \brief Reusable ImGui widget for picking assets from the asset registry.
 	///
 	/// Features:

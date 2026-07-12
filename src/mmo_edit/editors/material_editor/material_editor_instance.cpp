@@ -1000,7 +1000,7 @@ namespace mmo
 
 	void MaterialEditorInstance::DrawFoliageSection()
 	{
-		static const std::set<String> s_meshExtensions = { ".hmsh" };
+		static const auto& s_meshExtensions = asset_extensions::Meshes;
 		if (!ImGui::CollapsingHeader("Terrain Foliage"))
 		{
 			return;

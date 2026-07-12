@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "creature_editor_window.h"
+#include "asset_picker_widget.h"
 #include "editor_imgui_helpers.h"
 #include "loot_assignment_widget.h"
 
@@ -21,10 +22,11 @@ namespace ImGui
 
 namespace mmo
 {
-	CreatureEditorWindow::CreatureEditorWindow(const String& name, proto::Project& project, EditorHost& host)
+	CreatureEditorWindow::CreatureEditorWindow(const String& name, proto::Project& project, EditorHost& host, IAudio* audio)
 		: EditorEntryWindowBase(project, project.units, name)
 		, m_host(host)
 		, m_project(project)
+		, m_audio(audio)
 	{
 		EditorWindowBase::SetVisible(false);
 
@@ -1097,10 +1099,14 @@ namespace mmo
 			}
 
 			// Stealth alert sound field
-			ImGui::InputText("Stealth Alert Sound", currentEntry.mutable_stealth_alert_sound());
+			String stealthAlertSound = currentEntry.stealth_alert_sound();
+			if (AssetPickerWidget::Draw("Stealth Alert Sound", stealthAlertSound, asset_extensions::Sounds, nullptr, m_audio))
+			{
+				currentEntry.set_stealth_alert_sound(stealthAlertSound);
+			}
 			if (ImGui::IsItemHovered())
 			{
-				ImGui::SetTooltip("Sound file played at the client when this creature detects a stealthed player\n(e.g. 'Sound/Creature/Wolf/WolfAlert.wav'). Leave empty for the default alert sound.");
+				ImGui::SetTooltip("Sound file played at the client when this creature detects a stealthed player.\nLeave empty for the default alert sound.");
 			}
 
 			ImGui::Separator();

@@ -11,7 +11,9 @@
 #include "stream_sink.h"
 #include "assets/asset_registry.h"
 #include "editor_windows/asset_picker_widget.h"
+#include "editor_windows/sound_entry_combo.h"
 #include "log/default_log_levels.h"
+#include "shared/audio/audio.h"
 #include "scene_graph/animation.h"
 #include "scene_graph/animation_notify.h"
 #include "scene_graph/animation_state.h"
@@ -709,7 +711,7 @@ namespace mmo
 					ImGui::TextDisabled("Submeshes: %d", m_entity->GetNumSubEntities());
 					ImGui::Spacing();
 
-					static const std::set<String> s_materialExtensions = { ".hmat", ".hmi" };
+					static const auto& s_materialExtensions = asset_extensions::Materials;
 
 					for (int32 i = 0; i < m_entity->GetNumSubEntities(); ++i)
 					{
@@ -1298,10 +1300,44 @@ namespace mmo
 									if (notify->GetType() == AnimationNotifyType::PlaySound)
 									{
 										PlaySoundNotify* soundNotify = static_cast<PlaySoundNotify*>(notify);
-										String soundPath = soundNotify->GetSoundPath();
-										if (ImGui::InputText("Sound Path", &soundPath))
+
+										static ImGuiTextFilter s_soundEntryFilter;
+										DrawSoundEntryCombo(m_editor.GetProject().sounds, "Sound", soundNotify->GetSoundEntryId(), s_soundEntryFilter,
+											[soundNotify](const uint32 soundId)
+											{
+												soundNotify->SetSoundEntryId(soundId);
+											});
+
+										if (IAudio* audio = m_editor.GetAudio(); audio && soundNotify->GetSoundEntryId() != 0)
 										{
-											soundNotify->SetSoundPath(soundPath);
+											ImGui::SameLine();
+											if (ImGui::Button("Preview"))
+											{
+												if (const auto* entry = m_editor.GetProject().sounds.getById(soundNotify->GetSoundEntryId()); entry && entry->files_size() > 0)
+												{
+													SoundIndex soundIdx = audio->FindSound(entry->files(0), SoundType::Sound2D);
+													if (soundIdx == InvalidSound)
+													{
+														soundIdx = audio->CreateSound(entry->files(0), SoundType::Sound2D);
+													}
+													if (soundIdx != InvalidSound)
+													{
+														ChannelIndex channel = InvalidChannel;
+														audio->PlaySound(soundIdx, &channel);
+													}
+												}
+											}
+										}
+
+										// Data authored before SoundEntry support referenced a raw sound file
+										if (!soundNotify->GetSoundPath().empty())
+										{
+											ImGui::TextDisabled("Legacy sound file: %s", soundNotify->GetSoundPath().c_str());
+											ImGui::SameLine();
+											if (ImGui::SmallButton("Clear##legacySound"))
+											{
+												soundNotify->SetSoundPath("");
+											}
 										}
 									}
 

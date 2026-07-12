@@ -48,6 +48,7 @@
 #endif
 
 #include "audio_settings.h"
+#include "game_client/game_unit_c.h"
 #include "game_client/sound_entry_player.h"
 #include "systems/cast_error_voice.h"
 #include "systems/unit_gossip_voice.h"
@@ -182,6 +183,7 @@ namespace mmo
 		context.soundEntryPlayer = std::make_unique<SoundEntryPlayer>(*context.audio, context.project->sounds);
 		CastErrorVoice::Get().Initialize(context.soundEntryPlayer.get(), &context.project->races);
 		UnitGossipVoice::Get().Initialize(context.soundEntryPlayer.get(), &context.project->models);
+		GameUnitC::SetSoundEntryPlayer(context.soundEntryPlayer.get());
 
 		context.clientCache = std::make_unique<ClientCache>(realmConnector);
 		if (!context.clientCache->Load())

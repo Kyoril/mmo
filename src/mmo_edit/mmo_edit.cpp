@@ -236,7 +236,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::SpellVisualizationEditorWindow>("Spell Visualization Editor", project, mainWindow, previewProviderManager, editorAudio.get()));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::QuestEditorWindow>("Quest Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::MapEditorWindow>("Map Editor", project, mainWindow));
-	mainWindow.AddEditorWindow(std::make_unique<mmo::CreatureEditorWindow>("Creature Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::CreatureEditorWindow>("Creature Editor", project, mainWindow, editorAudio.get()));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ObjectEditorWindow>("Object Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::FactionEditorWindow>("Faction Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::FactionTemplateEditorWindow>("Faction Template Editor", project, mainWindow));	mainWindow.AddEditorWindow(std::make_unique<mmo::ClassEditorWindow>("Class Editor", project, mainWindow));
@@ -288,7 +288,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddImport(std::make_unique<mmo::FbxImport>(mainWindow));
 
 	mainWindow.AddEditor(std::make_unique<mmo::TextureEditor>(mainWindow));
-	mainWindow.AddEditor(std::make_unique<mmo::MeshEditor>(mainWindow, previewProviderManager));
+	mainWindow.AddEditor(std::make_unique<mmo::MeshEditor>(mainWindow, previewProviderManager, project, editorAudio.get()));
 	mainWindow.AddEditor(std::make_unique<mmo::CharacterEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::MaterialEditor>(mainWindow, previewProviderManager));	mainWindow.AddEditor(std::make_unique<mmo::MaterialInstanceEditor>(mainWindow, previewProviderManager));
 	mainWindow.AddEditor(std::make_unique<mmo::WorldEditor>(mainWindow, project));

@@ -3,6 +3,7 @@
 #include "asset_picker_widget.h"
 
 #include <algorithm>
+#include <map>
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
@@ -116,16 +117,17 @@ namespace mmo
 			ImGui::SameLine();
 		}
 
-		// Get filtered asset list
-		static std::vector<String> s_filteredAssets;
-		static std::set<String> s_lastExtensions;
-		
-		// Rebuild list if extensions changed
-		if (s_lastExtensions != extensions)
+		// Get filtered asset list, cached per extension set so multiple pickers with different
+		// extension sets can draw in the same frame without rebuilding each other's lists
+		static std::map<std::set<String>, std::vector<String>> s_filteredAssetCache;
+
+		auto cacheIt = s_filteredAssetCache.find(extensions);
+		if (cacheIt == s_filteredAssetCache.end())
 		{
-			s_filteredAssets = GetFilteredAssets(extensions);
-			s_lastExtensions = extensions;
+			cacheIt = s_filteredAssetCache.emplace(extensions, GetFilteredAssets(extensions)).first;
 		}
+
+		const std::vector<String>& filteredAssets = cacheIt->second;
 
 		// When a navigate callback is provided, reserve space for a small button next to the combo
 		const float navButtonWidth = onNavigateCallback
@@ -159,7 +161,7 @@ namespace mmo
 
 			// Draw filtered list
 			ImGui::BeginChild("AssetList", ImVec2(0, 300), false);
-			for (const auto& assetPath : s_filteredAssets)
+			for (const auto& assetPath : filteredAssets)
 			{
 				// Apply search filter
 				if (!lowerSearch.empty())

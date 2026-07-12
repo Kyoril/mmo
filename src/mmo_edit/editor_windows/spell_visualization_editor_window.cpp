@@ -599,7 +599,7 @@ namespace mmo
 
 		// Icon path
 		std::string icon = currentEntry.icon();
-		static const std::set<String> iconExtensions = {".htex", ".blp"};
+		static const auto& iconExtensions = asset_extensions::Textures;
 		if (AssetPickerWidget::Draw("Icon", icon, iconExtensions, &m_previewManager, nullptr, 64.0f))
 		{
 			currentEntry.set_icon(icon);
@@ -851,7 +851,7 @@ namespace mmo
 					kit.add_sounds("Sound/Spells/NewSound.wav");
 				}
 
-				static const std::set<String> soundExtensions = {".wav", ".ogg", ".mp3"};
+				static const auto& soundExtensions = asset_extensions::Sounds;
 				std::vector<int> soundsToRemove;
 
 				for (int i = 0; i < kit.sounds_size(); ++i)
@@ -897,7 +897,7 @@ namespace mmo
 					ImGui::SetTooltip("Particle systems to spawn for this kit.\nIf Attach Bone is set, particles are attached to that bone via TagPoints.");
 				}
 
-				static const std::set<String> particleExtensions = {".hpar"};
+				static const auto& particleExtensions = asset_extensions::Particles;
 				std::vector<int> particlesToRemove;
 
 				for (int i = 0; i < kit.particles_size(); ++i)
@@ -934,7 +934,7 @@ namespace mmo
 			if (ImGui::TreeNode("Mesh"))
 			{
 				std::string meshName = kit.has_mesh_name() ? kit.mesh_name() : "";
-				static const std::set<String> meshExtensions = {".hmsh"};
+				static const auto& meshExtensions = asset_extensions::Meshes;
 				if (AssetPickerWidget::Draw("Mesh", meshName, meshExtensions, &m_previewManager, nullptr, 64.0f))
 				{
 					kit.set_mesh_name(meshName);
@@ -1054,7 +1054,7 @@ namespace mmo
 
 					// Material
 					std::string ribbonMaterial = ribbon->has_material_name() ? ribbon->material_name() : "";
-					static const std::set<String> materialExtensions = {".hmat"};
+					static const auto& materialExtensions = asset_extensions::BaseMaterials;
 					if (AssetPickerWidget::Draw("Material", ribbonMaterial, materialExtensions, nullptr, nullptr, 0.0f))
 					{
 						ribbon->set_material_name(ribbonMaterial);
@@ -1325,7 +1325,7 @@ namespace mmo
 
 			// Mesh name
 			std::string meshName = projectile.has_mesh_name() ? projectile.mesh_name() : "";
-			static const std::set<String> meshExtensions = {".hmsh"};
+			static const auto& meshExtensions = asset_extensions::Meshes;
 			if (AssetPickerWidget::Draw("Mesh", meshName, meshExtensions, &m_previewManager, nullptr, 64.0f))
 			{
 				projectile.set_mesh_name(meshName);
@@ -1338,7 +1338,7 @@ namespace mmo
 
 			// Material name
 			std::string materialName = projectile.has_material_name() ? projectile.material_name() : "";
-			static const std::set<String> materialExtensions = {".hmat"};
+			static const auto& materialExtensions = asset_extensions::BaseMaterials;
 			if (AssetPickerWidget::Draw("Material", materialName, materialExtensions, nullptr, nullptr, 0.0f))
 			{
 				projectile.set_material_name(materialName);
@@ -1346,7 +1346,7 @@ namespace mmo
 
 			// Trail particle
 			std::string trailParticle = projectile.has_trail_particle() ? projectile.trail_particle() : "";
-			static const std::set<String> particleExtensions = {".hpar"};
+			static const auto& particleExtensions = asset_extensions::Particles;
 			if (AssetPickerWidget::Draw("Trail Particle", trailParticle, particleExtensions, &m_previewManager, nullptr, 64.0f))
 			{
 				projectile.set_trail_particle(trailParticle);
@@ -1503,7 +1503,7 @@ namespace mmo
 
 				// Material
 				std::string ribbonMaterial = ribbon->has_material_name() ? ribbon->material_name() : "";
-				static const std::set<String> ribbonMatExtensions = {".hmat"};
+				static const auto& ribbonMatExtensions = asset_extensions::BaseMaterials;
 				if (AssetPickerWidget::Draw("Material", ribbonMaterial, ribbonMatExtensions, nullptr, nullptr, 0.0f))
 				{
 					ribbon->set_material_name(ribbonMaterial);
@@ -1588,7 +1588,7 @@ namespace mmo
 					projectile.add_sounds("Sound/Spells/Projectile.wav");
 				}
 
-				static const std::set<String> soundExtensions = {".wav", ".ogg", ".mp3"};
+				static const auto& soundExtensions = asset_extensions::Sounds;
 				std::vector<int> soundsToRemove;
 
 				for (int i = 0; i < projectile.sounds_size(); ++i)
@@ -1623,7 +1623,7 @@ namespace mmo
 
 			// Impact particle (asset picker instead of plain text input)
 			std::string impactParticle = projectile.has_impact_particle() ? projectile.impact_particle() : "";
-			static const std::set<String> impactParticleExtensions = {".hpar"};
+			static const auto& impactParticleExtensions = asset_extensions::Particles;
 			if (AssetPickerWidget::Draw("Impact Particle", impactParticle, impactParticleExtensions, &m_previewManager, nullptr, 64.0f))
 			{
 				projectile.set_impact_particle(impactParticle);

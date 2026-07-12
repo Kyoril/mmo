@@ -622,7 +622,7 @@ namespace mmo
 			CHECKBOX_FLAG_PROP(flags, "Customizable", model_data_flags::IsCustomizable);
 			CHECKBOX_FLAG_PROP(flags, "Is Player Character", model_data_flags::IsPlayerCharacter);
 
-			static const std::set<String> modelExtensions = { ".hmsh", ".char" };
+			static const auto& modelExtensions = asset_extensions::ModelFiles;
 			String modelFile = currentEntry.filename();
 			if (AssetPickerWidget::Draw("File", modelFile, modelExtensions, nullptr, nullptr, 48.0f))
 			{

@@ -704,15 +704,6 @@ namespace mmo
 
 		m_hasToolbarButton = false;
 		m_toolbarButtonText = "Items";
-
-		std::vector<std::string> files = AssetRegistry::ListFiles();
-		for (const auto &filename : files)
-		{
-			if (filename.ends_with(".htex") && filename.starts_with("Interface/Icon"))
-			{
-				m_textures.push_back(filename);
-			}
-		}
 	}
 
 	void ItemEditorWindow::OnNewEntry(EntryType &entry)

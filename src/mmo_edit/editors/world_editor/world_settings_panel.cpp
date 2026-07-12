@@ -5,6 +5,7 @@
 #include <imgui.h>
 
 #include "edit_modes/world_edit_mode.h"
+#include "editor_windows/asset_picker_widget.h"
 #include "terrain/terrain.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/scene.h"
@@ -47,17 +48,18 @@ namespace mmo
 
                 ImGui::BeginDisabled(!m_hasTerrain);
 
-                static const char *s_noMaterialPreview = "<None>";
-
-                const char *previewString = s_noMaterialPreview;
+                String defaultMaterialName;
                 if (m_terrain.GetDefaultMaterial())
                 {
-                    previewString = m_terrain.GetDefaultMaterial()->GetName().data();
+                    defaultMaterialName = m_terrain.GetDefaultMaterial()->GetName();
                 }
 
-                if (ImGui::BeginCombo("Terrain Default Material", previewString))
+                if (AssetPickerWidget::Draw("Terrain Default Material", defaultMaterialName, asset_extensions::Materials))
                 {
-                    ImGui::EndCombo();
+                    if (!defaultMaterialName.empty())
+                    {
+                        m_terrain.SetDefaultMaterial(MaterialManager::Get().Load(defaultMaterialName));
+                    }
                 }
 
                 bool wireframe = m_terrain.IsWireframeVisible();
@@ -121,25 +123,6 @@ namespace mmo
                 {
                     m_terrain.GetScene().SetFogRange(fogValues[0], fogValues[1]);
 				}
-
-                if (m_hasTerrain)
-                {
-                    if (ImGui::BeginDragDropTarget())
-                    {
-                        // We only accept material file drops
-                        if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmat"))
-                        {
-                            m_terrain.SetDefaultMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
-                        }
-
-                        if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload(".hmi"))
-                        {
-                            m_terrain.SetDefaultMaterial(MaterialManager::Get().Load(*static_cast<String *>(payload->Data)));
-                        }
-
-                        ImGui::EndDragDropTarget();
-                    }
-                }
 
                 ImGui::EndDisabled();
             }

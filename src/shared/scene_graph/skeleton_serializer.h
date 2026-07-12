@@ -19,6 +19,8 @@ namespace mmo
 			Version_0_1 = 0x0100,
 			Version_0_2 = 0x0200,
 			Version_0_3 = 0x0300,
+			/// PlaySound animation notifies reference a SoundEntry id in addition to the legacy sound file path.
+			Version_0_4 = 0x0400,
 		};
 	}
 

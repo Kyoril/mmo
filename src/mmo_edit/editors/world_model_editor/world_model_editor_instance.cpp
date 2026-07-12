@@ -15,6 +15,7 @@
 #include <imgui_internal.h>
 
 #include "editor_host.h"
+#include "editor_windows/asset_picker_widget.h"
 #include "world_model_editor.h"
 #include "assets/asset_registry.h"
 #include "editors/material_editor/node_editor/node_layout.h"
@@ -4169,7 +4170,12 @@ namespace mmo
 		{
 			ImGui::Text("Mesh Path:");
 			ImGui::SetNextItemWidth(350);
-			ImGui::InputText("##addMeshPath", m_addMeshRefPath, sizeof(m_addMeshRefPath));
+			String meshRefPath = m_addMeshRefPath;
+			if (AssetPickerWidget::Draw("##addMeshPath", meshRefPath, asset_extensions::Meshes))
+			{
+				std::strncpy(m_addMeshRefPath, meshRefPath.c_str(), sizeof(m_addMeshRefPath) - 1);
+				m_addMeshRefPath[sizeof(m_addMeshRefPath) - 1] = '\0';
+			}
 
 			ImGui::Spacing();
 
@@ -4177,17 +4183,6 @@ namespace mmo
 			ImGui::SetNextItemWidth(350);
 			ImGui::InputText("##addMeshName", m_addMeshRefName, sizeof(m_addMeshRefName));
 			ImGui::TextDisabled("Leave empty to auto-generate from mesh filename");
-
-			// Drag-drop target
-			if (ImGui::BeginDragDropTarget())
-			{
-				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_PATH"))
-				{
-					std::string path(static_cast<const char*>(payload->Data), payload->DataSize - 1);
-					std::strncpy(m_addMeshRefPath, path.c_str(), sizeof(m_addMeshRefPath) - 1);
-				}
-				ImGui::EndDragDropTarget();
-			}
 
 			ImGui::Spacing();
 			ImGui::Separator();
@@ -4491,7 +4486,12 @@ namespace mmo
 		{
 			ImGui::Text("WMO Path:");
 			ImGui::SetNextItemWidth(350);
-			ImGui::InputText("##addWmoPath", m_addChildWMOPath, sizeof(m_addChildWMOPath));
+			String childWmoPath = m_addChildWMOPath;
+			if (AssetPickerWidget::Draw("##addWmoPath", childWmoPath, asset_extensions::WorldModels))
+			{
+				std::strncpy(m_addChildWMOPath, childWmoPath.c_str(), sizeof(m_addChildWMOPath) - 1);
+				m_addChildWMOPath[sizeof(m_addChildWMOPath) - 1] = '\0';
+			}
 
 			ImGui::Spacing();
 
@@ -4499,17 +4499,6 @@ namespace mmo
 			ImGui::SetNextItemWidth(350);
 			ImGui::InputText("##addWmoName", m_addChildWMOName, sizeof(m_addChildWMOName));
 			ImGui::TextDisabled("Leave empty to auto-generate from WMO filename");
-
-			// Drag-drop target
-			if (ImGui::BeginDragDropTarget())
-			{
-				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_PATH"))
-				{
-					std::string path(static_cast<const char*>(payload->Data), payload->DataSize - 1);
-					std::strncpy(m_addChildWMOPath, path.c_str(), sizeof(m_addChildWMOPath) - 1);
-				}
-				ImGui::EndDragDropTarget();
-			}
 
 			ImGui::Spacing();
 			ImGui::Separator();

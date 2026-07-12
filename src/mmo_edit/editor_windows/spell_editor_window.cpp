@@ -1473,7 +1473,7 @@ namespace mmo
 			ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
 
 			DrawSectionHeader("Spell Icon");
-			static const std::set<String> iconExtensions = { ".htex", ".blp" };
+			static const auto& iconExtensions = asset_extensions::Textures;
 			String iconPath = currentEntry.icon();
 			if (AssetPickerWidget::Draw("Icon", iconPath, iconExtensions, nullptr, nullptr, 64.0f))
 			{

@@ -9,6 +9,7 @@
 
 #include "particle_system_editor.h"
 #include "editor_host.h"
+#include "editor_windows/asset_picker_widget.h"
 #include "assets/asset_registry.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/camera.h"
@@ -794,27 +795,10 @@ namespace mmo
 	void ParticleSystemEditorInstance::DrawMaterialPicker(EmitterParameters& e)
 	{
 		ImGui::Text("Material");
-		if (ImGui::InputText("##materialName", &e.materialName))
+		if (AssetPickerWidget::Draw("##materialName", e.materialName, asset_extensions::Materials))
 		{
 			MarkDirty();
 		}
-
-		// Accept a material dropped from the asset browser.
-		if (ImGui::BeginDragDropTarget())
-		{
-			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmat"))
-			{
-				e.materialName = *static_cast<String*>(payload->Data);
-				MarkDirty();
-			}
-			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmi"))
-			{
-				e.materialName = *static_cast<String*>(payload->Data);
-				MarkDirty();
-			}
-			ImGui::EndDragDropTarget();
-		}
-		ImGui::TextDisabled("Drag a .hmat / .hmi here from the Asset Browser");
 
 		if (ImGui::Button("Additive"))
 		{
@@ -838,30 +822,9 @@ namespace mmo
 	void ParticleSystemEditorInstance::DrawMeshPicker(EmitterParameters& e)
 	{
 		ImGui::Text("Mesh");
-		if (ImGui::InputText("##meshName", &e.meshName))
+		if (AssetPickerWidget::Draw("##meshName", e.meshName, asset_extensions::Meshes))
 		{
 			MarkDirty();
-		}
-
-		// Accept a mesh dropped from the asset browser.
-		if (ImGui::BeginDragDropTarget())
-		{
-			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(".hmsh"))
-			{
-				e.meshName = *static_cast<String*>(payload->Data);
-				MarkDirty();
-			}
-			ImGui::EndDragDropTarget();
-		}
-		ImGui::TextDisabled("Drag a .hmsh here from the Asset Browser");
-
-		if (!e.meshName.empty())
-		{
-			if (ImGui::Button("Clear Mesh"))
-			{
-				e.meshName.clear();
-				MarkDirty();
-			}
 		}
 
 		ImGui::Separator();

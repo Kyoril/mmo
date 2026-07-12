@@ -40,6 +40,7 @@ namespace mmo
 	class GameItemC;
 	class GameUnitC;
 	class GamePlayerC;
+	class SoundEntryPlayer;
 
 	/// @brief Base class for a unit in the game client. A unit is a living object in the game world which can be interacted with,
 	///	       participate in combat and more. All player characters are also units.
@@ -58,6 +59,9 @@ namespace mmo
 
 		/// @brief Destroys the instance of the GameUnitC class.
 		virtual ~GameUnitC() override;
+
+		/// @brief Sets the sound entry player used to play PlaySound animation notifies on all units (nullptr disables them).
+		static void SetSoundEntryPlayer(SoundEntryPlayer* player);
 
 	public:
 		virtual ObjectTypeId GetTypeId() const override
@@ -909,6 +913,9 @@ namespace mmo
 
 		/// @brief Connections to animation notify signals.
 		scoped_connection_container m_animNotifyConnections;
+
+		/// @brief Sound entry player used to play PlaySound animation notifies (injected by the client, may be null).
+		static SoundEntryPlayer* s_soundEntryPlayer;
 
 		ParticleSystem* m_sparkEmitter = nullptr;
 		SceneNode* m_sparkEmitterNode = nullptr;

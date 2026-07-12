@@ -40,7 +40,6 @@ namespace mmo
 
 	private:
 		EditorHost& m_host;
-		std::vector<String> m_textures;
 		std::map<std::string, TexturePtr> m_iconCache;
 
 		/// Message shown in the import/export result popup.

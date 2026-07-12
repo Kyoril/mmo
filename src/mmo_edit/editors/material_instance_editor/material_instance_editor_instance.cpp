@@ -25,7 +25,7 @@
 
 namespace mmo
 {
-	const std::set<String> MaterialInstanceEditorInstance::s_parentMaterialExtensions = { ".hmat" };
+	const std::set<String> MaterialInstanceEditorInstance::s_parentMaterialExtensions = asset_extensions::BaseMaterials;
 	const std::set<String> MaterialInstanceEditorInstance::s_textureExtensions = { ".htex" };
     void MaterialInstanceEditorInstance::RenderMaterialPreview()
     {
@@ -545,7 +545,7 @@ namespace mmo
 
 	void MaterialInstanceEditorInstance::DrawFoliageSection()
 	{
-		static const std::set<String> s_meshExtensions = { ".hmsh" };
+		static const auto& s_meshExtensions = asset_extensions::Meshes;
 		static const char* s_layerNames[] = { "Layer 1", "Layer 2", "Layer 3", "Layer 4" };
 
 		if (!ImGui::CollapsingHeader("Terrain Foliage"))

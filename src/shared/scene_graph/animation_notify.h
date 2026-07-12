@@ -36,11 +36,12 @@ namespace mmo
 		/// Get the type of this notification
 		[[nodiscard]] virtual AnimationNotifyType GetType() const = 0;
 
-		/// Serialize notification data to writer
+		/// Serialize notification data to writer (always writes the latest format)
 		virtual void Serialize(io::Writer& writer) const = 0;
 
 		/// Deserialize notification data from reader
-		virtual void Deserialize(io::Reader& reader) = 0;
+		/// @param version The skeleton file version the data was written with (see skeleton_version::Type)
+		virtual void Deserialize(io::Reader& reader, uint32 version) = 0;
 
 		/// Get a display name for the notification
 		[[nodiscard]] virtual String GetDisplayName() const = 0;
@@ -92,7 +93,7 @@ namespace mmo
 		}
 
 		void Serialize(io::Writer& writer) const override;
-		void Deserialize(io::Reader& reader) override;
+		void Deserialize(io::Reader& reader, uint32 version) override;
 
 		[[nodiscard]] String GetDisplayName() const override
 		{
@@ -125,7 +126,7 @@ namespace mmo
 		}
 
 		void Serialize(io::Writer& writer) const override;
-		void Deserialize(io::Reader& reader) override;
+		void Deserialize(io::Reader& reader, uint32 version) override;
 
 		[[nodiscard]] String GetDisplayName() const override
 		{
@@ -143,23 +144,39 @@ namespace mmo
 			clone->m_time = m_time;
 			clone->m_name = m_name;
 			clone->m_soundPath = m_soundPath;
+			clone->m_soundEntryId = m_soundEntryId;
 			return clone;
 		}
 
-		/// Get the sound asset path
+		/// Get the referenced SoundEntry id (0 = none)
+		[[nodiscard]] uint32 GetSoundEntryId() const
+		{
+			return m_soundEntryId;
+		}
+
+		/// Set the referenced SoundEntry id (0 = none)
+		void SetSoundEntryId(const uint32 soundEntryId)
+		{
+			m_soundEntryId = soundEntryId;
+		}
+
+		/// Get the legacy raw sound file path (only present in data authored before SoundEntry support)
 		[[nodiscard]] const String& GetSoundPath() const
 		{
 			return m_soundPath;
 		}
 
-		/// Set the sound asset path
+		/// Set the legacy raw sound file path
 		void SetSoundPath(const String& path)
 		{
 			m_soundPath = path;
 		}
 
 	private:
+		/// Legacy raw sound file path; superseded by m_soundEntryId but kept so old data still round-trips
 		String m_soundPath;
+		/// Id of the SoundEntry to play (0 = none); preferred over the raw path since entries carry playback settings
+		uint32 m_soundEntryId = 0;
 	};
 
 	/// Spell go notification - triggers spell release events (projectile spawn, effects, etc.)
@@ -174,7 +191,7 @@ namespace mmo
 		}
 
 		void Serialize(io::Writer& writer) const override;
-		void Deserialize(io::Reader& reader) override;
+		void Deserialize(io::Reader& reader, uint32 version) override;
 
 		[[nodiscard]] String GetDisplayName() const override
 		{
@@ -208,7 +225,7 @@ namespace mmo
 		}
 
 		void Serialize(io::Writer& writer) const override {}
-		void Deserialize(io::Reader& reader) override {}
+		void Deserialize(io::Reader& reader, uint32 version) override {}
 
 		[[nodiscard]] String GetDisplayName() const override
 		{
@@ -237,6 +254,7 @@ namespace mmo
 		static std::unique_ptr<AnimationNotify> Create(AnimationNotifyType type);
 
 		/// Deserialize a notification from reader
-		static std::unique_ptr<AnimationNotify> Deserialize(io::Reader& reader);
+		/// @param version The skeleton file version the data was written with (see skeleton_version::Type)
+		static std::unique_ptr<AnimationNotify> Deserialize(io::Reader& reader, uint32 version);
 	};
 }

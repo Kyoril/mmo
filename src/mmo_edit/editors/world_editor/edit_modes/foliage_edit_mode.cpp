@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "editor_windows/asset_picker_widget.h"
 #include "game_common/world_entity_loader.h"
 #include "math/angle.h"
 #include "math/quaternion.h"
@@ -423,8 +424,13 @@ namespace mmo
 
 		ImGui::Separator();
 
-		ImGui::InputText("Mesh", m_meshPath, sizeof(m_meshPath));
-		ImGui::TextDisabled("Drag a .hmsh from the Asset Browser onto the viewport to set the brush mesh.");
+		String brushMeshPath = m_meshPath;
+		if (AssetPickerWidget::Draw("Mesh", brushMeshPath, asset_extensions::Meshes))
+		{
+			std::strncpy(m_meshPath, brushMeshPath.c_str(), sizeof(m_meshPath) - 1);
+			m_meshPath[sizeof(m_meshPath) - 1] = '\0';
+		}
+		ImGui::TextDisabled("Pick a .hmsh or drag one from the Asset Browser (also works onto the viewport).");
 
 		ImGui::Checkbox("Has collision", &m_collides);
 		ImGui::TextDisabled("Newly placed instances block movement and the camera. Disable for purely decorative, walkable foliage.");

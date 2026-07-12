@@ -1,6 +1,7 @@
 #include "game_unit_c.h"
 #include "game_aura_c.h"
 #include "game_world_object_c_base.h"
+#include "sound_entry_player.h"
 #include "spell_visualization_service.h"
 #include "movement_log.h"
 
@@ -47,6 +48,13 @@
 
 namespace mmo
 {
+	SoundEntryPlayer* GameUnitC::s_soundEntryPlayer = nullptr;
+
+	void GameUnitC::SetSoundEntryPlayer(SoundEntryPlayer* player)
+	{
+		s_soundEntryPlayer = player;
+	}
+
 	GameUnitC::GameUnitC(Scene &scene, NetClient &netDriver, const proto_client::Project &project, uint32 map) : GameObjectC(scene, project, map), m_netDriver(netDriver), m_unitSpeed{0.0f}, m_creatureInfo()
 	{
 		m_unitMovement = std::make_unique<UnitMovement>(*this);
@@ -1227,6 +1235,17 @@ namespace mmo
 						if (notify.GetType() == AnimationNotifyType::SwingHit)
 						{
 							self->FlushSwingHitCallbacks();
+						}
+
+						// Play SoundEntry-based sound notifies at the unit's position. Like footsteps,
+						// skip barely-blended animations so fading transitions don't spam sounds.
+						if (notify.GetType() == AnimationNotifyType::PlaySound && state.GetWeight() >= 0.35f && s_soundEntryPlayer)
+						{
+							const auto& soundNotify = static_cast<const PlaySoundNotify&>(notify);
+							if (soundNotify.GetSoundEntryId() != 0)
+							{
+								s_soundEntryPlayer->PlayEntry(soundNotify.GetSoundEntryId(), self->GetPosition());
+							}
 						}
 
 						// Broadcast through our signal

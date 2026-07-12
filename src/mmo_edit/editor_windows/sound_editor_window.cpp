@@ -25,7 +25,7 @@ namespace mmo
 			"Voice"
 		};
 
-		const std::set<String> s_soundFileExtensions = { ".wav", ".WAV", ".ogg", ".mp3" };
+		const auto& s_soundFileExtensions = asset_extensions::Sounds;
 	}
 
 	SoundEditorWindow::SoundEditorWindow(const String& name, proto::Project& project, EditorHost& host, IAudio* audio)
