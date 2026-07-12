@@ -143,6 +143,9 @@ namespace mmo
 
 		bool TestRayCollision(const Ray& ray, CollisionResult& result) const override;
 
+		/// @copydoc ICollidable::GetSurfaceTypeAt
+		[[nodiscard]] uint32 GetSurfaceTypeAt(const CollisionResult& hit) const override;
+
 	private:
 		ConstantBufferPtr m_boneMatrixBuffer;
 		

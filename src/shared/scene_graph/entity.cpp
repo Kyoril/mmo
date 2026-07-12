@@ -562,6 +562,7 @@ namespace mmo
 		float closestDistance = std::numeric_limits<float>::max();
 		Vector3 closestContactPoint;
 		Vector3 closestContactNormal;
+		int32 closestFaceIndex = -1;
 
 		const auto& nodes = collisionTree.GetNodes();
 		const auto& vertices = collisionTree.GetVertices();
@@ -617,6 +618,7 @@ namespace mmo
 					if (hitTriangle && hitDistance < closestDistance)
 					{
 						closestDistance = hitDistance;
+						closestFaceIndex = static_cast<int32>(faceIndex);
 
 						// Calculate hit point in local space
 						Vector3 localHitPoint = localRay.origin + localRay.GetDirection() * hitDistance;
@@ -653,8 +655,40 @@ namespace mmo
 			result.contactPoint = closestContactPoint;
 			result.contactNormal = closestContactNormal;
 			result.penetrationDepth = closestDistance; // Distance along ray to hit point
+			result.faceIndex = closestFaceIndex;
 		}
 
 		return foundCollision;
+	}
+
+	uint32 Entity::GetSurfaceTypeAt(const CollisionResult& hit) const
+	{
+		if (!m_mesh)
+		{
+			return 0;
+		}
+
+		// Map the hit face to its source submesh. Legacy collision trees have no mapping;
+		// fall back to the first submesh so single-material meshes still resolve correctly.
+		uint16 subMeshIndex = 0;
+		const auto& faceSubMeshes = m_mesh->GetCollisionTree().GetFaceSubMeshes();
+		if (hit.faceIndex >= 0 && static_cast<size_t>(hit.faceIndex) < faceSubMeshes.size())
+		{
+			subMeshIndex = faceSubMeshes[hit.faceIndex];
+		}
+
+		if (subMeshIndex >= GetNumSubEntities())
+		{
+			subMeshIndex = 0;
+		}
+
+		const SubEntity* subEntity = GetSubEntity(subMeshIndex);
+		if (!subEntity)
+		{
+			return 0;
+		}
+
+		const MaterialPtr material = subEntity->GetMaterial();
+		return material ? material->GetSurfaceTypeId() : 0;
 	}
 }

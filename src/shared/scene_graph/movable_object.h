@@ -29,6 +29,7 @@ namespace mmo
 		Vector3 a, b, c;				/// Vertices of the triangle (if applicable)
 		float penetrationDepth = 0.0f;///< How deep the capsule penetrates
 		float distance;
+		int32 faceIndex = -1;         ///< Index of the hit face in the collidable's collision tree (-1 = unknown)
 	};
 
 	/// @brief Interface for objects that can perform collision tests
@@ -49,6 +50,11 @@ namespace mmo
 		/// @brief Check if this object supports collision testing
 		/// @return True if collision testing is available
 		virtual bool IsCollidable() const = 0;
+
+		/// @brief Resolves the surface type id at a collision hit on this object.
+		/// @param hit A collision result produced by this object's collision tests.
+		/// @return The surface type id, or 0 if unknown.
+		virtual uint32 GetSurfaceTypeAt(const CollisionResult& hit) const { return 0; }
 	};
 
 	/// Base class of an object in a scene which is movable, so it has a node which it is attached to.
