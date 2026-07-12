@@ -14,8 +14,23 @@ target_sources(unit_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../shared/graphics/float_curve.cpp
 )
 
-target_link_libraries(unit_tests 
-	base 
+# CrossfadingSoundLoop tests exercise sound_entry_player.cpp, which needs the
+# client_data protobuf library — only available when the client or editor is built.
+# On headless server-only builds the test file is excluded from compilation.
+if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
+	target_sources(unit_tests PRIVATE
+		${CMAKE_CURRENT_SOURCE_DIR}/../shared/game_client/sound_entry_player.cpp
+	)
+	target_link_libraries(unit_tests client_data)
+else()
+	set_source_files_properties(
+		${CMAKE_CURRENT_SOURCE_DIR}/test_crossfading_sound_loop.cpp
+		PROPERTIES HEADER_FILE_ONLY TRUE
+	)
+endif()
+
+target_link_libraries(unit_tests
+	base
 	base64 
 	log 
 	simple_file_format_hdrs 

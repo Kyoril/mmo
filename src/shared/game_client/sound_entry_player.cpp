@@ -249,19 +249,40 @@ namespace mmo
 			return;
 		}
 
-		// Avoid the same track playing twice out of phase: if this sound is still fading
-		// out from a previous transition, stop that copy before starting a fresh one.
-		for (auto it = m_fadingOut.begin(); it != m_fadingOut.end();)
+		// If this sound is still fading out from a previous transition (e.g. rapid
+		// back-and-forth zone changes), reclaim that copy instead of restarting the
+		// track: it becomes the active sound again and fades back in from the volume
+		// it currently has, keeping the transition smooth and the playback position.
+		for (auto it = m_fadingOut.begin(); it != m_fadingOut.end(); ++it)
 		{
-			if (it->soundId == soundId)
+			if (it->soundId != soundId)
 			{
-				m_audio.StopSound(&it->channel);
-				it = m_fadingOut.erase(it);
+				continue;
+			}
+
+			m_activeChannel = it->channel;
+			m_activeSoundId = it->soundId;
+			m_activeBaseVolume = it->baseVolume;
+			m_activeFade = it->fade;
+			m_fadingOut.erase(it);
+
+			const float reclaimFadeInSeconds = m_player.GetEntryFadeInSeconds(soundId);
+			if (reclaimFadeInSeconds > 0.0f)
+			{
+				m_activeFadeInPerSec = 1.0f / reclaimFadeInSeconds;
 			}
 			else
 			{
-				++it;
+				// Instant fade-in: jump straight back to full volume.
+				m_activeFade = 1.0f;
+				m_activeFadeInPerSec = 0.0f;
+				if (IChannelInstance* instance = m_audio.GetChannelInstance(m_activeChannel))
+				{
+					instance->SetVolume(m_activeBaseVolume);
+				}
 			}
+
+			return;
 		}
 
 		// Start the new sound and fade it in from silence.

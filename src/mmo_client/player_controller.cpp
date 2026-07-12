@@ -512,7 +512,8 @@ namespace mmo
 		{
 			m_controlFlags |= flag;
 
-			if ((flag & ControlFlags::MovePlayer) != 0)
+			// Only forward/backward movement cancels auto run; strafing is allowed while auto running
+			if ((flag & (ControlFlags::MoveForwardKey | ControlFlags::MoveBackwardKey)) != 0)
 			{
 				m_controlFlags &= ~ControlFlags::Autorun;
 			}

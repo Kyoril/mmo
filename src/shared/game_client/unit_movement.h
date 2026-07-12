@@ -6,6 +6,7 @@
 
 #include <vector>
 #include <functional>
+#include <optional>
 
 namespace mmo
 {
@@ -474,8 +475,15 @@ namespace mmo
 		/// This is used for remote units following server paths where the server's navmesh height
 		/// may not match the client's detailed collision geometry.
 		/// @param maxCorrectionDistance Maximum distance to search for ground (default 5.0 units)
+		/// @param referenceHeight Optional authoritative height the search band must also cover.
+		///        Without it the downward ray starts just above the unit's current position — if
+		///        the unit slipped below a raised floor (buildings stand on bases with terrain
+		///        running underneath), the floor top is above the ray start and the search keeps
+		///        snapping the unit to the terrain below it. Anchoring the band to also cover the
+		///        server-authoritative height guarantees the true walkable surface is inside the
+		///        searched range so the highest-hit selection can recover the unit onto it.
 		/// @return True if ground was found and position was corrected, false otherwise
-		bool CorrectGroundHeight(float maxCorrectionDistance = 5.0f);
+		bool CorrectGroundHeight(float maxCorrectionDistance = 5.0f, std::optional<float> referenceHeight = std::nullopt);
 
 	public:
 		/// @brief Calculates velocity based on input parameters and applies friction

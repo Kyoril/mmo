@@ -70,6 +70,12 @@ namespace mmo
 		/// @brief Returns the current dead-reckoned position (before correction offset).
 		[[nodiscard]] const Vector3& GetRenderedPos() const { return m_renderedPos; }
 
+		/// @brief Returns the Y of the last full authoritative position update.
+		/// Unlike the dead-reckoning target, this is never overwritten by ground-snap
+		/// feedback (SetRenderedY), so it is a safe anchor for the ground-height
+		/// search: the true walkable surface is always near this height.
+		[[nodiscard]] float GetAuthoritativeY() const { return m_authPos.y; }
+
 		/// @brief Overrides the scene-node position after external ground/collision correction.
 		/// Dead reckoning target is unaffected; only the scene-node tracking position changes.
 		void SetRenderedPos(const Vector3& pos) { m_scenePos = pos; }

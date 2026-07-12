@@ -217,6 +217,64 @@ TEST_CASE("RemoteMovementRenderer: walking backwards still uses backwards speed"
 }
 
 // ---------------------------------------------------------------------------
+// Buildings sit on raised bases: the walkable floor is above the terrain, and
+// the terrain continues *underneath* it. If a remote player's node ends up
+// below the floor (e.g. the ground snap followed the outside terrain through
+// the wall), the ground-height search must still find the floor near the
+// authoritative height and recover — instead of re-snapping to the terrain
+// under the floor every frame and stomping the authoritative Y via
+// SetRenderedY, which permanently captures the player inside the floor.
+// ---------------------------------------------------------------------------
+TEST_CASE("RemoteMovementRenderer: unit below a raised floor recovers to the authoritative floor height", "[remote_movement_renderer][ground_snap]")
+{
+	RemoteMovementRenderer renderer;
+
+	const float terrainY = 10.0f;  // terrain running underneath the building
+	const float floorY   = 12.0f;  // walkable floor top, 2m above the terrain
+
+	// The unit was last snapped to the terrain (it slipped under the floor).
+	renderer.OnAuthoritativeUpdate(MakeStandingSnapshot(Vector3(0.0f, terrainY, 0.0f)), false);
+
+	const float dt = 1.0f / 60.0f;
+	float nodeY = terrainY;
+
+	// Four simulated seconds of the per-frame flow in GameUnitC::UpdateRemoteMovement,
+	// with authoritative heartbeats at the (correct) floor height every 500 ms.
+	for (int frame = 0; frame < 240; ++frame)
+	{
+		if (frame % 30 == 0)
+		{
+			renderer.OnAuthoritativeUpdate(MakeStandingSnapshot(Vector3(0.0f, floorY, 0.0f)), false);
+		}
+
+		RemoteMovementState state;
+		REQUIRE(renderer.Sample(dt, kRunSpeed, kBackSpeed, kWalkSpeed, 3.14f, state));
+		nodeY = state.position.y;
+
+		// Mirror of UnitMovement::CorrectGroundHeight as called from
+		// UpdateRemoteMovement: the downward ray starts one meter above the
+		// search band (current node Y and authoritative Y) and snaps to the
+		// highest walkable hit. The floor is only found if the ray starts
+		// above the floor top; otherwise the hit is the terrain below.
+		const float searchTopY = std::max(nodeY, renderer.GetAuthoritativeY()) + 1.0f;
+		const float groundY = (searchTopY >= floorY) ? floorY : terrainY;
+
+		constexpr float groundOffset = 0.02f;
+		const float snappedY = groundY + groundOffset;
+		if (std::abs(nodeY - snappedY) >= 0.01f)
+		{
+			nodeY = snappedY;
+		}
+
+		renderer.SetRenderedY(nodeY);
+	}
+
+	// The unit must stand ON the floor the server says it is standing on,
+	// not walk around inside it at terrain height.
+	CHECK(nodeY == Approx(floorY).margin(0.05f));
+}
+
+// ---------------------------------------------------------------------------
 // Without the WalkMode flag, forward movement keeps using run speed.
 // ---------------------------------------------------------------------------
 TEST_CASE("RemoteMovementRenderer: running player is dead-reckoned at run speed", "[remote_movement_renderer][walk_mode]")

@@ -315,12 +315,24 @@ namespace mmo
 		SafeMoveNode(delta, rot, true, &hit);
 
 		// SafeMoveNode reports success even when it stopped at a blocking hit, so check
-		// the hit result itself. Slide the remaining fraction of the move along the wall
-		// so the character moves parallel to the surface rather than stopping dead —
-		// same behaviour as the local player against the same geometry.
+		// the hit result itself.
 		if (hit.IsValidBlockingHit())
 		{
-			SlideAlongSurface(delta, 1.0f - hit.Time, hit.Normal, hit, false);
+			const float remainingFraction = 1.0f - hit.Time;
+
+			// Stairs: mirror the local player's MoveAlongFloor and try to step over the
+			// barrier first. Without this the capsule jams against every riser and only
+			// advances because the smooth correction drags it through the step, which
+			// reads as stuttering on staircases while the real player climbs fluidly.
+			if (CanStepUp(hit) && StepUp(GetGravityDirection(), delta * remainingFraction, hit, nullptr))
+			{
+				return;
+			}
+
+			// Slide the remaining fraction of the move along the wall so the character
+			// moves parallel to the surface rather than stopping dead — same behaviour
+			// as the local player against the same geometry.
+			SlideAlongSurface(delta, remainingFraction, hit.Normal, hit, false);
 		}
 	}
 
@@ -3366,26 +3378,34 @@ namespace mmo
 		}
 	}
 
-	bool UnitMovement::CorrectGroundHeight(const float maxCorrectionDistance)
+	bool UnitMovement::CorrectGroundHeight(const float maxCorrectionDistance, const std::optional<float> referenceHeight)
 	{
 		const Vector3 currentPosition = GetUpdatedNode().GetPosition();
 		Scene& scene = GetUpdatedNode().GetScene();
 
-		// Create a ray going straight down from current position
-		// Start slightly above current position to handle cases where we're already on or in the ground
-		const Vector3 rayStart = currentPosition + Vector3(0.0f, 1.0f, 0.0f);
-		const Vector3 rayEnd = currentPosition - Vector3(0.0f, maxCorrectionDistance + 1.0f, 0.0f);
+		// The search band covers the current height and, if provided, the reference
+		// (server-authoritative) height. Anchoring only at the current position fails
+		// when the unit slipped below a raised floor: the floor top sits above the ray
+		// start, so the search only ever finds the terrain underneath and keeps the
+		// unit trapped there.
+		const float bandTopY = referenceHeight ? (std::max)(currentPosition.y, *referenceHeight) : currentPosition.y;
+		const float bandBottomY = referenceHeight ? (std::min)(currentPosition.y, *referenceHeight) : currentPosition.y;
+
+		// Create a ray going straight down through the search band
+		// Start slightly above the band to handle cases where we're already on or in the ground
+		const Vector3 rayStart(currentPosition.x, bandTopY + 1.0f, currentPosition.z);
+		const Vector3 rayEnd(currentPosition.x, bandBottomY - maxCorrectionDistance - 1.0f, currentPosition.z);
 		const Ray ray(rayStart, rayEnd);
 
 		// Query the scene for collidable objects in the sweep path
 		const AABB sweepBounds(
 			Vector3(
 				currentPosition.x - 0.5f,
-				currentPosition.y - maxCorrectionDistance - 1.0f,
+				bandBottomY - maxCorrectionDistance - 1.0f,
 				currentPosition.z - 0.5f),
 			Vector3(
 				currentPosition.x + 0.5f,
-				currentPosition.y + 2.0f,
+				bandTopY + 2.0f,
 				currentPosition.z + 0.5f));
 
 		const auto query = scene.CreateAABBQuery(sweepBounds);
@@ -3399,7 +3419,7 @@ namespace mmo
 
 		const auto& queryResult = query->GetLastResult();
 		
-		float closestHitY = currentPosition.y - maxCorrectionDistance - 1.0f;
+		float closestHitY = bandBottomY - maxCorrectionDistance - 1.0f;
 		bool foundGround = false;
 
 		for (const auto& movable : queryResult)

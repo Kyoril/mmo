@@ -929,7 +929,11 @@ namespace mmo
 			// Feed the corrected Y back into the renderer so dead reckoning
 			// continues from the snapped height — otherwise it overwrites the
 			// correction next frame with the original below-ground Y.
-			if (m_unitMovement->CorrectGroundHeight())
+			// The authoritative Y anchors the ground search: since SetRenderedY
+			// overwrites the dead-reckoning target, a snap onto the wrong surface
+			// (terrain running underneath a raised building floor) would otherwise
+			// re-capture the unit below the floor every frame with no way back up.
+			if (m_unitMovement->CorrectGroundHeight(5.0f, m_remoteMovementRenderer.GetAuthoritativeY()))
 			{
 				m_remoteMovementRenderer.SetRenderedY(GetSceneNode()->GetDerivedPosition().y);
 			}

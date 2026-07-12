@@ -103,6 +103,8 @@ namespace mmo
 
 	public:
 		/// @brief Requests the given sound entry to play in this slot (0 = fade out to silence).
+		/// If the entry is still fading out from an earlier transition, that copy is faded
+		/// back in without restarting playback, so rapid back-and-forth changes stay smooth.
 		void SetSound(uint32 soundId);
 
 		/// @brief Advances the running fades, if any.

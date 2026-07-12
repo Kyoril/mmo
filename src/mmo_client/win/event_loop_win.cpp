@@ -6,10 +6,18 @@
 #include <Windows.h>
 #include <windowsx.h>
 
+#include <unordered_set>
+
 
 namespace mmo
 {
 	static int s_captureCount = 0;
+
+	// Virtual keys for which KeyDown was fired. Windows doesn't deliver a WM_KEYUP to
+	// this queue when the release happens while another window has focus (Alt+Tab,
+	// Win+key, task switch) — reconciling this set against the physical key state each
+	// frame lets us synthesize the missed release instead of leaving the key stuck down.
+	static std::unordered_set<int32> s_reportedKeysDown;
 
 	// Win32 mouse capture reference-counting — tracks button presses so that mouse
 	// events keep arriving even when the cursor leaves the window during a drag.
@@ -47,6 +55,7 @@ namespace mmo
 				{
 					const bool wasKeyPreviouslyDown = (msg.lParam & (1 << 30)) != 0;
 					const int32 virtualKey = static_cast<int32>(msg.wParam);
+					s_reportedKeysDown.insert(virtualKey);
 					KeyDown(virtualKey, wasKeyPreviouslyDown);
 					break;
 				}
@@ -54,8 +63,15 @@ namespace mmo
 				KeyChar(static_cast<uint16>(msg.wParam));
 				break;
 			case WM_KEYUP:
-				KeyUp(static_cast<int32>(msg.wParam));
-				break;
+			// Releasing a key while Alt is held arrives as WM_SYSKEYUP — without this
+			// case a Ctrl release during an Alt combo would leave Ctrl stuck down.
+			case WM_SYSKEYUP:
+				{
+					const int32 virtualKey = static_cast<int32>(msg.wParam);
+					s_reportedKeysDown.erase(virtualKey);
+					KeyUp(virtualKey);
+					break;
+				}
 			case WM_LBUTTONDOWN:
 				IncreaseCapture(msg.hwnd);
 				MouseDown(MouseButton_Left, GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
@@ -90,6 +106,24 @@ namespace mmo
 
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
+		}
+
+		// Self-heal stuck keys: if the OS no longer reports a tracked key as held, its
+		// release never reached this queue — synthesize the missed KeyUp now. In the
+		// rare race where the real WM_KEYUP is still in flight, consumers see a second
+		// KeyUp, which is harmless (state removal is idempotent).
+		for (auto it = s_reportedKeysDown.begin(); it != s_reportedKeysDown.end();)
+		{
+			if ((::GetAsyncKeyState(*it) & 0x8000) == 0)
+			{
+				const int32 virtualKey = *it;
+				it = s_reportedKeysDown.erase(it);
+				KeyUp(virtualKey);
+			}
+			else
+			{
+				++it;
+			}
 		}
 
 		return true;
