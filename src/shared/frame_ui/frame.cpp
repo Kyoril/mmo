@@ -378,6 +378,15 @@ namespace mmo
 		}
 		else if (!m_visible)
 		{
+			// A hidden frame must not keep the keyboard capture, otherwise key events (like enter)
+			// would still be routed to it while it is invisible. This also applies when an ancestor
+			// of the capturing frame is hidden.
+			const auto captureFrame = FrameManager::Get().GetCaptureFrame();
+			if (captureFrame && (captureFrame.get() == this || captureFrame->IsChildOf(*this)))
+			{
+				FrameManager::Get().SetCaptureWindow(nullptr);
+			}
+
 			// We were visible locally before, see if parent was visible as well (not just locally) which means we were actually visible and are now no longer visible
 			if (m_parent && m_parent->IsVisible(false))
 			{
@@ -741,8 +750,10 @@ namespace mmo
 
 	void Frame::CaptureInput()
 	{
-		// Only allow input capture if the frame is in the enabled state and focusable is enabled
-		if (m_enabled && m_focusable)
+		// Only allow input capture if the frame is in the enabled state, focusable is enabled and
+		// the frame is effectively visible (including all of its ancestors) — an invisible frame
+		// must never receive keyboard input.
+		if (m_enabled && m_focusable && IsVisible(false))
 		{
 			FrameManager::Get().SetCaptureWindow(shared_from_this());
 		}
