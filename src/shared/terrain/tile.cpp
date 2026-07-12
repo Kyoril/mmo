@@ -1764,5 +1764,34 @@ namespace mmo
 
 			return hasCollision;
 		}
+
+		uint32 Tile::GetSurfaceTypeAt(const CollisionResult& hit) const
+		{
+			const MaterialPtr material = GetMaterial();
+			if (!material)
+			{
+				return 0;
+			}
+
+			// The tile renders with one splatting material; pick the surface type of the
+			// dominant splat layer at the hit position. All-zero coverage resolves to
+			// layer 0, which is the base layer.
+			const Terrain& terrain = GetTerrain();
+
+			uint8 dominantLayer = 0;
+			float dominantValue = -1.0f;
+			for (uint8 layer = 0; layer < 4; ++layer)
+			{
+				const float value = terrain.GetLayerValueAt(hit.contactPoint.x, hit.contactPoint.z, layer);
+				if (value > dominantValue)
+				{
+					dominantValue = value;
+					dominantLayer = layer;
+				}
+			}
+
+			const uint32 layerSurfaceType = material->GetLayerSurfaceTypeId(dominantLayer);
+			return layerSurfaceType != 0 ? layerSurfaceType : material->GetSurfaceTypeId();
+		}
 	}
 }

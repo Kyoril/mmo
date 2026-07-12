@@ -348,6 +348,10 @@ namespace mmo
 			/// @return True if a collision was detected, false otherwise.
 			bool TestRayCollision(const Ray& ray, CollisionResult& result) const override;
 
+			/// @brief Resolves the surface type of the dominant splat layer at the hit point.
+			/// @copydoc ICollidable::GetSurfaceTypeAt
+			[[nodiscard]] uint32 GetSurfaceTypeAt(const CollisionResult& hit) const override;
+
 			/// @brief Sets the maximum number of LOD index buffer combinations to cache per tile.
 			/// @param maxCacheSize The maximum number of cached index buffer configurations.
 			///                     A larger value reduces index buffer regeneration at the cost
