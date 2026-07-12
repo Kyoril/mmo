@@ -1475,6 +1475,7 @@ namespace mmo
 				{
 					std::vector<Vector3> vertices;
 					std::vector<uint32> indices;
+					std::vector<uint16> faceSubMeshes;
 
 					for (uint16 i = 0; i < m_mesh->GetSubMeshCount(); ++i)
 					{
@@ -1490,11 +1491,18 @@ namespace mmo
 						indices.reserve(indices.size() + sub.indexData->indexCount);
 
 						ReadVertexDataPositions(*sub.vertexData, vertices);
+
+						const size_t indexCountBefore = indices.size();
 						ReadIndexData(*sub.indexData, vertexOffset, indices);
+
+						// Remember the source submesh of every gathered face so surface
+						// types can be resolved from the hit submesh's material.
+						const size_t facesAdded = (indices.size() - indexCountBefore) / 3;
+						faceSubMeshes.insert(faceSubMeshes.end(), facesAdded, i);
 					}
 
 					m_mesh->GetCollisionTree().Clear();
-					m_mesh->GetCollisionTree().Build(vertices, indices);
+					m_mesh->GetCollisionTree().Build(vertices, indices, faceSubMeshes);
 				}
 			}
 
