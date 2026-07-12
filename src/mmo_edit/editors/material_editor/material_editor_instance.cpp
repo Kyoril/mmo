@@ -1082,6 +1082,10 @@ namespace mmo
 			return;
 		}
 
+		// Scope the widget ids: the combo below is labeled "Surface Type" as well, which
+		// would otherwise collide with the CollapsingHeader id and swallow its clicks.
+		ImGui::PushID("SurfaceTypeSection");
+
 		ImGui::TextWrapped("Physical surface category of this material, used to pick footstep sounds. "
 			"For terrain splatting materials, assign one surface type per splat layer instead.");
 
@@ -1105,6 +1109,8 @@ namespace mmo
 					m_material->SetLayerSurfaceTypeId(layer, id);
 				});
 		}
+
+		ImGui::PopID();
 	}
 
 	void MaterialEditorInstance::DrawSamplerTypeEditor(PropertyBase* prop)

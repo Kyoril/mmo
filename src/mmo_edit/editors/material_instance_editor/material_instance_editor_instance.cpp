@@ -402,6 +402,10 @@ namespace mmo
 
 		if (ImGui::CollapsingHeader("Surface Type"))
 		{
+			// Scope the widget ids: the combo below is labeled "Surface Type" as well, which
+			// would otherwise collide with the CollapsingHeader id and swallow its clicks.
+			ImGui::PushID("SurfaceTypeSection");
+
 			ImGui::Indent();
 
 			bool overrideSurfaceTypes = m_material->IsOverridingSurfaceTypes();
@@ -440,6 +444,8 @@ namespace mmo
 			ImGui::EndDisabled();
 
 			ImGui::Unindent();
+
+			ImGui::PopID();
 		}
 	}
 
