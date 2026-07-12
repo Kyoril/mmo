@@ -30,6 +30,7 @@
 #include "shared/client_data/proto_client/item_subclasses.pb.h"
 #include "shared/client_data/proto_client/chat_channels.pb.h"
 #include "shared/client_data/proto_client/sounds.pb.h"
+#include "shared/client_data/proto_client/surface_types.pb.h"
 
 namespace mmo
 {
@@ -57,6 +58,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto_client::ItemSubclasses, mmo::proto_client::ItemSubclassEntry> ItemSubclassManager;
 		typedef TemplateManager<mmo::proto_client::ChatChannels, mmo::proto_client::ChatChannelEntry> ChatChannelManager;
 		typedef TemplateManager<mmo::proto_client::Sounds, mmo::proto_client::SoundEntry> SoundManager;
+		typedef TemplateManager<mmo::proto_client::SurfaceTypes, mmo::proto_client::SurfaceType> SurfaceTypeManager;
 
 		/// This class contains contains all the static game data like item templates.
 		class Project final
@@ -94,6 +96,9 @@ namespace mmo
 			ItemSubclassManager itemSubclasses;
 			ChatChannelManager chatChannels;
 			SoundManager sounds;
+
+			/// Physical surface categories resolved from materials (footstep sounds etc.).
+			SurfaceTypeManager surfaceTypes;
 
 		private:
 
@@ -159,6 +164,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("item_subclasses", itemSubclasses));
 				managers.push_back(ManagerEntry("chat_channels", chatChannels, true));
 				managers.push_back(ManagerEntry("sounds", sounds, true));
+				managers.push_back(ManagerEntry("surface_types", surfaceTypes, true));
 
 				if (!ClientProjectLoader::load(
 				            directory,
@@ -210,6 +216,7 @@ namespace mmo
 				managers.emplace_back("item_subclasses", "item_subclasses", itemSubclasses);
 				managers.emplace_back("chat_channels", "chat_channels", chatChannels);
 				managers.emplace_back("sounds", "sounds", sounds);
+				managers.emplace_back("surface_types", "surface_types", surfaceTypes);
 
 				if (!ClientProjectSaver::save(realmDataPath, managers))
 				{

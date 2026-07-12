@@ -1,0 +1,23 @@
+syntax = "proto2";
+package mmo.proto;
+
+// NOTE: Keep this file in sync with src/shared/client_data/surface_types.proto!
+// The client reads the exported binary data with the mirrored proto_client schema,
+// so every field number in here has to match the mirror exactly.
+
+// A physical surface category resolved from materials (base surface type) and
+// terrain splatting layers. Consumers hang per-surface data off these entries;
+// currently that is the footstep sound.
+message SurfaceType
+{
+	required uint32 id = 1;
+	required string name = 2;
+
+	// SoundEntry id played for footsteps on this surface (0 = none).
+	optional uint32 footstep_sound = 3;
+}
+
+message SurfaceTypes
+{
+	repeated SurfaceType entry = 1;
+}

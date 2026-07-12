@@ -55,6 +55,7 @@
 #include "shared/proto_data/lock_type.pb.h"
 #include "shared/proto_data/chat_channels.pb.h"
 #include "shared/proto_data/sounds.pb.h"
+#include "shared/proto_data/surface_types.pb.h"
 
 namespace mmo
 {
@@ -108,6 +109,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::LockTypes, mmo::proto::LockTypeEntry> LockTypeManager;
 		typedef TemplateManager<mmo::proto::ChatChannels, mmo::proto::ChatChannelEntry> ChatChannelManager;
 		typedef TemplateManager<mmo::proto::Sounds, mmo::proto::SoundEntry> SoundManager;
+		typedef TemplateManager<mmo::proto::SurfaceTypes, mmo::proto::SurfaceType> SurfaceTypeManager;
 
 		/// Gets the combat settings with all configurable combat formula parameters.
 		/// If no combat_settings file was loaded, defaults from the proto definition are used.
@@ -184,6 +186,9 @@ namespace mmo
 
 			/// Referencable sound definitions (music, ambience, voice lines, effects).
 			SoundManager sounds;
+
+			/// Physical surface categories resolved from materials (footstep sounds etc.).
+			SurfaceTypeManager surfaceTypes;
 
 			/// Combat settings containing all configurable combat formula parameters.
 			CombatSettings combatSettings;
@@ -278,6 +283,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("lock_types", lockTypes));
 				managers.push_back(ManagerEntry("chat_channels", chatChannels, true));
 				managers.push_back(ManagerEntry("sounds", sounds, true));
+				managers.push_back(ManagerEntry("surface_types", surfaceTypes, true));
 
 				virtual_dir::FileSystemReader virtualDirectory(realmDataPath);
 				if (!RealmProjectLoader::load(
@@ -362,6 +368,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("lock_types", "lock_types", lockTypes));
 				managers.push_back(ManagerEntry("chat_channels", "chat_channels", chatChannels));
 				managers.push_back(ManagerEntry("sounds", "sounds", sounds));
+				managers.push_back(ManagerEntry("surface_types", "surface_types", surfaceTypes));
 
 				if (!RealmProjectSaver::save(realmDataPath, managers))
 				{
