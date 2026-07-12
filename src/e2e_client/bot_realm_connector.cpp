@@ -283,6 +283,16 @@ namespace mmo
 			});
 	}
 
+	void BotRealmConnector::SendMoveChargeAck(uint32 ackId, const MovementInfo& movementInfo, float speed)
+	{
+		sendSinglePacket([ackId, &movementInfo, speed](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::client_realm_packet::MoveChargeAck);
+				packet << io::write<uint32>(ackId) << movementInfo << io::write<float>(speed);
+				packet.Finish();
+			});
+	}
+
 	bool BotRealmConnector::SendCastSpell(const uint32 spellId, const SpellTargetMap& targetMap, const bool autoFlush)
 	{
 		if (spellId == 0)
@@ -381,6 +391,7 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::NewWorld, *this, &BotRealmConnector::OnNewWorld);
 		RegisterPacketHandler(game::realm_client_packet::CharCreateResponse, *this, &BotRealmConnector::OnCharCreateResponse);
 		RegisterPacketHandler(game::realm_client_packet::MoveTeleportAck, *this, &BotRealmConnector::OnMoveTeleport);
+		RegisterPacketHandler(game::realm_client_packet::MoveCharge, *this, &BotRealmConnector::OnMoveCharge);
 		RegisterPacketHandler(game::realm_client_packet::ForceMoveSetWalkSpeed, *this, &BotRealmConnector::OnForceMovementSpeedChange);
 		RegisterPacketHandler(game::realm_client_packet::ForceMoveSetRunSpeed, *this, &BotRealmConnector::OnForceMovementSpeedChange);
 		RegisterPacketHandler(game::realm_client_packet::ForceMoveSetRunBackSpeed, *this, &BotRealmConnector::OnForceMovementSpeedChange);
@@ -662,6 +673,24 @@ namespace mmo
 				selfUnit->SetMovementInfo(m_movementInfo);
 			}
 		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnMoveCharge(game::IncomingPacket& packet)
+	{
+		uint32 ackId;
+		float speed;
+		if (!(packet >> io::read<uint32>(ackId) >> io::read<float>(speed)))
+		{
+			ELOG("Failed to read move charge packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		// Stop local movement (the server takes over) and acknowledge so the charge starts.
+		m_movementInfo.movementFlags &= ~(movement_flags::Moving | movement_flags::Strafing |
+			movement_flags::Turning | movement_flags::PositionChanging);
+		SendMoveChargeAck(ackId, m_movementInfo, speed);
 
 		return PacketParseResult::Pass;
 	}

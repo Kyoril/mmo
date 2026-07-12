@@ -343,6 +343,10 @@ namespace mmo
 				/// Sent by the client to take an item attached to a mail. Handled by the world node. Payload: uint64 mailId, uint64 attachmentId.
 				MailTakeItem,
 
+				/// Sent by the client to acknowledge a MoveCharge packet. After this ack the server
+				/// starts the actual charge movement. Payload: uint32 ackId, MovementInfo, float speed.
+				MoveChargeAck,
+
 				/// Counter constant
 				Count_,
 			};
@@ -676,6 +680,12 @@ namespace mmo
 				/// Sent to the client to play a SoundEntry (ClientDB sounds) by id.
 				/// Payload: uint32 soundId, uint8 hasPosition, [3 x float position if hasPosition = 1].
 				PlaySoundById,
+
+				/// Sent to the controlled client before the server starts moving the character
+				/// with a charge effect. The client has to stop sending movement packets and
+				/// acknowledge with MoveChargeAck; only then does the server start the movement.
+				/// Payload: uint32 ackId, float speed.
+				MoveCharge,
 
 				/// Counter constant
 				Count_,

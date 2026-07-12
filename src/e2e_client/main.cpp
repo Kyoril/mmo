@@ -71,6 +71,7 @@ int main(int argc, char** argv)
 		("c,config", "Path to e2e client config JSON (written by tools/e2e/e2e_up.ps1)",
 			cxxopts::value<std::string>()->default_value("e2e/runtime/e2e_client.json"))
 		("character", "Character name override", cxxopts::value<std::string>())
+			("class", "Character class id override used when creating the character", cxxopts::value<uint32>())
 		("s,script", "Path to a Lua scenario script to execute", cxxopts::value<std::string>())
 		("transcript", "Path of the JSONL transcript to write for a scenario run", cxxopts::value<std::string>()->default_value(""))
 		("t,timeout", "Scenario watchdog timeout in seconds", cxxopts::value<uint32>()->default_value("120"))
@@ -81,6 +82,7 @@ int main(int argc, char** argv)
 
 	std::string configPath;
 	std::string characterOverride;
+	int32 classOverride = -1;
 	std::string scriptPath;
 	std::string transcriptPath;
 	bool smokeMode = false;
@@ -106,6 +108,10 @@ int main(int argc, char** argv)
 		if (results.count("character") > 0)
 		{
 			characterOverride = results["character"].as<std::string>();
+		}
+		if (results.count("class") > 0)
+		{
+			classOverride = static_cast<int32>(results["class"].as<uint32>());
 		}
 		if (results.count("script") > 0)
 		{
@@ -150,6 +156,11 @@ int main(int argc, char** argv)
 	if (!characterOverride.empty())
 	{
 		config.characterName = characterOverride;
+	}
+
+	if (classOverride >= 0)
+	{
+		config.characterClass = static_cast<uint8>(classOverride);
 	}
 
 	E2eSession session(std::move(config));

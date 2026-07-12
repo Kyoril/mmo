@@ -171,6 +171,9 @@ namespace mmo
 
 		void SendMoveTeleportAck(uint32 ackId, const MovementInfo& movementInfo);
 
+		/// Acknowledges a MoveCharge packet so the server can start the charge movement.
+		void SendMoveChargeAck(uint32 ackId, const MovementInfo& movementInfo, float speed);
+
 		const std::vector<CharacterView>& GetCharacterViews() const { return m_characterViews; }
 
 		const MovementInfo& GetMovementInfo() const { return m_movementInfo; }
@@ -317,6 +320,10 @@ namespace mmo
 		PacketParseResult OnCharCreateResponse(game::IncomingPacket& packet);
 
 		PacketParseResult OnMoveTeleport(game::IncomingPacket& packet);
+
+		/// Handles the MoveCharge packet: acknowledges immediately so the server starts the
+		/// charge movement (the bot does not simulate the path; the server moves the character).
+		PacketParseResult OnMoveCharge(game::IncomingPacket& packet);
 
 		PacketParseResult OnForceMovementSpeedChange(game::IncomingPacket& packet);
 

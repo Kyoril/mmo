@@ -86,18 +86,32 @@ try
 		$attempts = 0
 		$exitCode = -1
 
+		# Scenarios can request a specific character class via a header directive, e.g.
+		# "-- e2e-class: 1" (warrior). Each class gets its own character (names must be
+		# letters only, so the class id is encoded as a letter suffix).
+		$classDirective = Select-String -Path $file.FullName -Pattern '^--\s*e2e-class:\s*(\d+)' |
+			Select-Object -First 1
+		$characterName = "Test$suffix"
+		$classArgs = @()
+		if ($classDirective)
+		{
+			$classId = [int]$classDirective.Matches[0].Groups[1].Value
+			$classArgs = @("--class", "$classId")
+			$characterName = "Test$suffix" + [char](97 + $classId)
+		}
+
 		while ($true)
 		{
 			$attempts++
 
 			# Each scenario runs in a fresh client process with its own character.
-			$process = Start-Process -FilePath $clientExe -ArgumentList @(
+			$process = Start-Process -FilePath $clientExe -ArgumentList (@(
 				"--config", $clientConfig,
 				"--script", $file.FullName,
 				"--transcript", $transcript,
-				"--character", "Test$suffix",
+				"--character", $characterName,
 				"--timeout", "120"
-			) -WorkingDirectory $s.RepoRoot -PassThru -WindowStyle Hidden -Wait -RedirectStandardOutput $stdout
+			) + $classArgs) -WorkingDirectory $s.RepoRoot -PassThru -WindowStyle Hidden -Wait -RedirectStandardOutput $stdout
 
 			$exitCode = $process.ExitCode
 			if ($exitCode -eq $expected -or $attempts -ge 2)

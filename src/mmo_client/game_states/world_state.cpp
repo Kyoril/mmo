@@ -1619,6 +1619,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSleep, *this, &WorldState::OnMoveSleep);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveFear, *this, &WorldState::OnMoveFear);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveDisorient, *this, &WorldState::OnMoveDisorient);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveCharge, *this, &WorldState::OnMoveCharge);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &WorldState::OnGameTimeInfo);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetProficiency, *this, &WorldState::OnSetProficiency);
 
@@ -4685,6 +4686,32 @@ namespace mmo
 		player->ApplyMovementInfo(info);
 
 		m_realmConnector.SendMoveDisorientAck(ackId, info);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnMoveCharge(game::IncomingPacket &packet)
+	{
+		uint32 ackId;
+		float speed;
+		if (!(packet >> io::read<uint32>(ackId) >> io::read<float>(speed)))
+		{
+			ELOG("Failed to read MoveCharge packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		auto player = ObjectMgr::GetActivePlayer();
+		ASSERT(player);
+
+		// Release all held input control bits so no stop packets are generated afterwards,
+		// then hand movement control over to the server: this stops local movement without
+		// sending packets and suppresses all further movement packets until the movement
+		// path finishes (or a timeout hits, in case the path never arrives).
+		m_playerController->StopAllMovement();
+		player->SetServerControlledMovement(true);
+
+		// Acknowledge the charge with the cleaned movement state; the server adopts this
+		// state and only then starts moving the character.
+		m_realmConnector.SendMoveChargeAck(ackId, player->GetMovementInfo(), speed);
 		return PacketParseResult::Pass;
 	}
 

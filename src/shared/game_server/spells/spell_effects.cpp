@@ -717,12 +717,14 @@ namespace mmo
 				ctx.markAffectedTarget(*targetObject);
 				auto& unitTarget = targetObject->AsUnit();
 
-				auto& mover = executer.GetMover();
-
 				const Radian orientation = unitTarget.GetAngle(executer);
 
 				const Vector3 target = unitTarget.GetMover().GetCurrentLocation().GetRelativePosition(orientation.GetValueRadians(), executer.GetMeleeReach() * 0.5f);
-				mover.MoveTo(target, 35.0f, executer.GetMeleeReach() * 0.8f);
+
+				// For player controlled units this notifies the client first and only starts
+				// the movement once the client acknowledged the charge; AI units start moving
+				// immediately.
+				executer.StartCharge(target, 35.0f, executer.GetMeleeReach() * 0.8f);
 			}
 		}
 

@@ -257,6 +257,34 @@ namespace mmo
 		m_pendingMoveChanges.emplace_back(change);
 	}
 
+	void GameUnitS::StartCharge(const Vector3 &target, const float speed, const float acceptanceRadius)
+	{
+		if (m_netUnitWatcher)
+		{
+			// Player controlled: notify the client first and wait for the ack before starting
+			// the actual movement, so the client stops sending movement packets in time.
+			const uint32 ackId = GenerateAckId();
+
+			PendingMovementChange change;
+			change.counter = ackId;
+			change.changeType = MovementChangeType::Charge;
+			change.timestamp = GetAsyncTimeMs();
+			change.chargeInfo.x = target.x;
+			change.chargeInfo.y = target.y;
+			change.chargeInfo.z = target.z;
+			change.chargeInfo.speed = speed;
+			change.chargeInfo.acceptanceRadius = acceptanceRadius;
+			PushPendingMovementChange(change);
+
+			m_netUnitWatcher->OnPendingCharge(speed, ackId);
+		}
+		else
+		{
+			// AI controlled units charge immediately.
+			GetMover().MoveTo(target, speed, acceptanceRadius);
+		}
+	}
+
 	bool GameUnitS::HasTimedOutPendingMovementChange() const
 	{
 		/// A flat timeout tolerance value in milliseconds. If an expected client ack hasn't been received

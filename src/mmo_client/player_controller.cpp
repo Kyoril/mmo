@@ -562,8 +562,9 @@ namespace mmo
 			return;
 		}
 
-		// Can't jump when dead or rooted
-		if (!m_controlledUnit->IsAlive() || m_controlledUnit->IsRooted())
+		// Can't jump when dead, rooted or while the server controls our movement (charge)
+		if (!m_controlledUnit->IsAlive() || m_controlledUnit->IsRooted() ||
+			m_controlledUnit->IsMovementControlledByServer())
 		{
 			return;
 		}
@@ -774,7 +775,10 @@ namespace mmo
 		GraphicsDevice::Get().GetViewport(nullptr, nullptr, &w, &h);
 		m_defaultCamera->InvalidateView();
 
-		if (!m_controlledUnit->IsBeingMoved())
+		// No local movement input while a movement path is active or the server announced
+		// taking movement control (charge): between the announcement and the arrival of the
+		// movement path, no movement packets may be sent either.
+		if (!m_controlledUnit->IsBeingMoved() && !m_controlledUnit->IsMovementControlledByServer())
 		{
 			MovePlayer();
 			StrafePlayer();
@@ -1201,7 +1205,9 @@ namespace mmo
 			}
 		}
 
-		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0 && m_controlledUnit->IsAlive() && !m_controlledUnit->IsBeingMoved() && std::abs(deltaX) > 0)
+		if ((m_controlFlags & ControlFlags::TurnPlayer) != 0 && m_controlledUnit->IsAlive() &&
+			!m_controlledUnit->IsBeingMoved() && !m_controlledUnit->IsMovementControlledByServer() &&
+			std::abs(deltaX) > 0)
 		{
 			const Radian facing = (m_controlledUnit->GetSceneNode()->GetOrientation() * m_cameraAnchorNode->GetOrientation()).GetYaw();
 			m_controlledUnit->GetSceneNode()->SetOrientation(Quaternion(facing, Vector3::UnitY));

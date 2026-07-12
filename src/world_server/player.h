@@ -772,6 +772,9 @@ namespace mmo
 
 		void OnDisorientChanged(bool applied, uint32 ackId) override;
 
+		/// @copydoc NetUnitWatcherS::OnPendingCharge
+		void OnPendingCharge(float speed, uint32 ackId) override;
+
 		void OnProficiencyChanged(uint32 proficiencyId, bool added) override;
 
 		/// @copydoc NetUnitWatcherS::OnStealthDetected

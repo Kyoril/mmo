@@ -294,7 +294,10 @@ namespace mmo
 				break;
 			}
 
-			if (ObjectMgr::GetActivePlayerGuid() == GetGuid())
+			// While the server controls our movement (charge), queued movement events are
+			// discarded instead of sent: the server rejects them anyway and the charge ack
+			// already carried our latest movement state.
+			if (ObjectMgr::GetActivePlayerGuid() == GetGuid() && !m_serverControlledMovement)
 			{
 				m_netDriver.OnMoveEvent(*this, moveEvent);
 			}
@@ -308,6 +311,15 @@ namespace mmo
 		if (IsControlledByLocalPlayer())
 		{
 			UpdateMovementInfo();
+
+			// Failsafe: if the server announced taking movement control (charge) but the
+			// movement path never arrived (e.g. no path could be found on the server),
+			// release control after a short timeout so the player doesn't get stuck.
+			if (m_serverControlledMovement && !IsFollowingPath() &&
+				now > m_serverControlStartTime + 2000)
+			{
+				SetServerControlledMovement(false);
+			}
 
 			// Safety net: a locked sync position is only meaningful while the character is
 			// actually standing still — it exists to absorb sub-tolerance physics settling
@@ -323,7 +335,8 @@ namespace mmo
 			// While swimming, send heartbeats even when no position-changing flag is set: the
 			// surface cap can move the player vertically without a Forward/Strafe/etc. flag, so the
 			// periodic heartbeat keeps the server in sync with the client's depth.
-			if ((m_movementInfo.IsChangingPosition() || m_movementInfo.IsSwimming()) && now > m_lastHeartbeat + 500)
+			if (!m_serverControlledMovement &&
+				(m_movementInfo.IsChangingPosition() || m_movementInfo.IsSwimming()) && now > m_lastHeartbeat + 500)
 			{
 				// Heartbeat sends the current authoritative position to the server.
 				// Since the server baseline is now updated, any stale position lock
@@ -346,8 +359,13 @@ namespace mmo
 		{
 			UpdateRemoteMovement(deltaTime);
 		}
-		else
+		else if (!IsFollowingPath())
 		{
+			// While following a server movement path, movement flags must not feed the physics
+			// simulation: path movement positions the node directly, and physics input on top
+			// of it makes the character overshoot waypoints and oscillate (visible as a fast,
+			// endless yaw spin at the destination).
+
 			// Based on current movement info, update movement states
 			const float lateralSpeed = IsWalkModeEnabled() ? GetSpeed(movement_type::Walk) : GetSpeed(movement_type::Run);
 			if (m_movementInfo.movementFlags & movement_flags::Forward)
@@ -1388,6 +1406,33 @@ namespace mmo
 		}
 	}
 
+	void GameUnitC::SetServerControlledMovement(const bool controlled)
+	{
+		if (m_serverControlledMovement == controlled)
+		{
+			// Refresh the failsafe timer if control is re-asserted (e.g. a second charge
+			// starting while the first one is still active).
+			if (controlled)
+			{
+				m_serverControlStartTime = GetAsyncTimeMs();
+			}
+
+			return;
+		}
+
+		m_serverControlledMovement = controlled;
+		m_serverControlStartTime = GetAsyncTimeMs();
+
+		if (controlled)
+		{
+			// Stop all local movement immediately without sending any packets: the server
+			// takes over movement control and the ack packet carries the cleaned state.
+			m_movementInfo.movementFlags &= ~(movement_flags::Moving | movement_flags::Strafing |
+				movement_flags::Turning | movement_flags::PositionChanging);
+			m_positionLocked = false;
+		}
+	}
+
 	void GameUnitC::StartMove(const bool forward)
 	{
 		if (forward)
@@ -1524,6 +1569,13 @@ namespace mmo
 
 	void GameUnitC::ToggleWalkMode()
 	{
+		// While the server controls our movement, the walk mode packet would be suppressed;
+		// toggling the flag locally anyway would desync it from the server's state.
+		if (m_serverControlledMovement)
+		{
+			return;
+		}
+
 		const bool nowWalking = (m_movementInfo.movementFlags & movement_flags::WalkMode) == 0;
 
 		if (nowWalking)
@@ -1848,25 +1900,68 @@ namespace mmo
 			m_pathMoveSpeed = m_pathTotalLength / (static_cast<float>(moveTime) / 1000.0f);
 		}
 
-		// For remote units, we don't use movement flags for physics - we use direct positioning
-		// For local units, we might still want movement flags for network sync
-		if (!IsControlledByLocalPlayer())
+		// All units use time-based direct positioning while following a path - including the
+		// locally controlled player (charge). Clear ALL movement flags so the physics input
+		// system doesn't fight the direct positioning (which caused the character to overshoot
+		// waypoints and spin around its yaw axis), and so no heartbeats are triggered.
+		m_movementInfo.movementFlags &= ~movement_flags::PositionChanging;
+		m_movementInfo.movementFlags &= ~movement_flags::Forward;
+		m_movementInfo.movementFlags &= ~movement_flags::Backward;
+		m_movementInfo.movementFlags &= ~movement_flags::StrafeLeft;
+		m_movementInfo.movementFlags &= ~movement_flags::StrafeRight;
+		m_movementInfo.movementFlags &= ~movement_flags::TurnLeft;
+		m_movementInfo.movementFlags &= ~movement_flags::TurnRight;
+	}
+
+	void GameUnitC::CompleteMovementPath(const bool reachedDestination)
+	{
+		// Apply target rotation if specified (but don't teleport to exact position)
+		if (reachedDestination && m_targetRotation.has_value())
 		{
-			// Remote units use time-based direct positioning
-			// Clear ALL movement flags to avoid physics interference and debug spam
-			m_movementInfo.movementFlags &= ~movement_flags::PositionChanging;
-			m_movementInfo.movementFlags &= ~movement_flags::Forward;
-			m_movementInfo.movementFlags &= ~movement_flags::Backward;
-			m_movementInfo.movementFlags &= ~movement_flags::StrafeLeft;
-			m_movementInfo.movementFlags &= ~movement_flags::StrafeRight;
-			m_movementInfo.movementFlags &= ~movement_flags::TurnLeft;
-			m_movementInfo.movementFlags &= ~movement_flags::TurnRight;
+			SetFacing(m_targetRotation.value());
 		}
-		else
+
+		// Clear movement flags to stop animations
+		m_movementInfo.movementFlags &= ~movement_flags::Forward;
+		m_movementInfo.movementFlags &= ~movement_flags::Backward;
+		m_movementInfo.movementFlags &= ~movement_flags::StrafeLeft;
+		m_movementInfo.movementFlags &= ~movement_flags::StrafeRight;
+		m_movementInfo.movementFlags &= ~movement_flags::PositionChanging;
+
+		// Set idle animation for all units when path completes, but don't override
+		// a locked spell cast animation (e.g. path completes just as casting begins)
+		if (m_lockedLoopAnimState)
 		{
-			// Local units could use movement flags for physics, but for now use direct positioning too
-			m_movementInfo.movementFlags |= movement_flags::Forward;
-			m_movementInfo.movementFlags |= movement_flags::PositionChanging;
+			SetTargetAnimState(m_lockedLoopAnimState);
+		}
+		else if (m_idleAnimState)
+		{
+			SetTargetAnimState(m_idleAnimState);
+		}
+
+		// Complete the path
+		m_pathCompleted = true;
+		m_movementPath.clear();
+		m_pathSegmentLengths.clear();
+		m_currentPathIndex = 0;
+
+		// Reset gravity variables
+		m_pathVerticalVelocity = 0.0f;
+		m_pathOnGround = true;
+
+		// Hand movement control back to the local player if the server had taken it (charge)
+		if (IsControlledByLocalPlayer() && m_serverControlledMovement)
+		{
+			SetServerControlledMovement(false);
+
+			// Notify the server that we finished the movement path. Only done when the
+			// destination was actually reached: if the path was cut short (e.g. by a stop
+			// packet after an interrupt), the accompanying ack packet already resyncs the
+			// position and a MoveEnded would fail the server's destination check.
+			if (reachedDestination)
+			{
+				movementEnded(*this, m_movementInfo);
+			}
 		}
 	}
 
@@ -1882,25 +1977,7 @@ namespace mmo
 		// so UpdateMovementBasedAnimation can run and animations reset properly.
 		if (m_pathTotalLength <= 0.0f)
 		{
-			m_movementInfo.movementFlags &= ~movement_flags::Forward;
-			m_movementInfo.movementFlags &= ~movement_flags::Backward;
-			m_movementInfo.movementFlags &= ~movement_flags::StrafeLeft;
-			m_movementInfo.movementFlags &= ~movement_flags::StrafeRight;
-			m_movementInfo.movementFlags &= ~movement_flags::PositionChanging;
-
-			if (m_lockedLoopAnimState)
-			{
-				SetTargetAnimState(m_lockedLoopAnimState);
-			}
-			else if (m_idleAnimState)
-			{
-				SetTargetAnimState(m_idleAnimState);
-			}
-
-			m_pathCompleted = true;
-			m_movementPath.clear();
-			m_pathSegmentLengths.clear();
-			m_currentPathIndex = 0;
+			CompleteMovementPath(false);
 			return;
 		}
 
@@ -1912,50 +1989,45 @@ namespace mmo
 		const float pathMoveSpeed = m_pathMoveSpeed > 0.0f ? m_pathMoveSpeed : GetSpeed(movement_type::Run);
 		const float targetDistance = pathMoveSpeed * elapsedTime;
 
-		// Check if we're close enough to the final destination (ONLY distance-based completion)
+		// Check if we're close enough to the final destination. Only the horizontal (XZ)
+		// distance is considered: the destination height comes from the server's nav mesh,
+		// which can legitimately differ from the client's detailed ground geometry by a few
+		// units. Including that difference here could prevent the path from ever completing,
+		// leaving movement flags and server control stuck until relog.
 		const Vector3 currentPosition = m_sceneNode->GetDerivedPosition();
 		const Vector3 finalDestination = m_movementPath.back();
-		const float distanceToFinalDestination = (finalDestination - currentPosition).GetLength();
+		const float horizontalDistanceToDestination =
+			::sqrtf((finalDestination.x - currentPosition.x) * (finalDestination.x - currentPosition.x) +
+				(finalDestination.z - currentPosition.z) * (finalDestination.z - currentPosition.z));
 
 		constexpr float arrivalThreshold = 1.0f; // Distance-based completion only
 
+		// The vertical tolerance mirrors the server's nav-mesh-vs-ground tolerance (3.1). It
+		// prevents premature completion on stacked geometry (e.g. a path ending directly above
+		// on a staircase) while still completing despite legitimate nav mesh height error.
+		constexpr float arrivalHeightTolerance = 3.5f;
+		const bool nearDestination =
+			horizontalDistanceToDestination <= arrivalThreshold &&
+			::fabsf(finalDestination.y - currentPosition.y) <= arrivalHeightTolerance;
+
+		// Failsafe: if we overshot the expected path length by a large margin without getting
+		// close to the destination (e.g. blocked by client-side collision), snap to the
+		// destination and finish. A path must never remain active forever.
+		const bool forceComplete = targetDistance > m_pathTotalLength + 5.0f;
+
 		// Complete path ONLY when we're actually close to destination (no time-based teleportation)
-		if (distanceToFinalDestination <= arrivalThreshold)
+		if (nearDestination || forceComplete)
 		{
-			// Apply target rotation if specified (but don't teleport to exact position)
-			if (m_targetRotation.has_value())
+			// Snap horizontally onto the exact destination so that our reported end position
+			// matches the server's expected movement target (the height is kept and follows
+			// the client's ground geometry).
+			m_sceneNode->SetPosition(Vector3(finalDestination.x, currentPosition.y, finalDestination.z));
+			if (m_unitMovement)
 			{
-				SetFacing(m_targetRotation.value());
+				m_unitMovement->CorrectGroundHeight();
 			}
 
-			// Clear movement flags to stop animations
-			m_movementInfo.movementFlags &= ~movement_flags::Forward;
-			m_movementInfo.movementFlags &= ~movement_flags::Backward;
-			m_movementInfo.movementFlags &= ~movement_flags::StrafeLeft;
-			m_movementInfo.movementFlags &= ~movement_flags::StrafeRight;
-			m_movementInfo.movementFlags &= ~movement_flags::PositionChanging;
-
-			// Set idle animation for all units when path completes, but don't override
-			// a locked spell cast animation (e.g. path completes just as casting begins)
-			if (m_lockedLoopAnimState)
-			{
-				SetTargetAnimState(m_lockedLoopAnimState);
-			}
-			else if (m_idleAnimState)
-			{
-				SetTargetAnimState(m_idleAnimState);
-			}
-
-			// Complete the path
-			m_pathCompleted = true;
-			m_movementPath.clear();
-			m_pathSegmentLengths.clear();
-			m_currentPathIndex = 0;
-
-			// Reset gravity variables
-			m_pathVerticalVelocity = 0.0f;
-			m_pathOnGround = true;
-
+			CompleteMovementPath(true);
 			return;
 		}
 
@@ -2050,9 +2122,16 @@ namespace mmo
 			if (nextWaypointIndex < m_movementPath.size())
 			{
 				const Vector3 nextWaypoint = m_movementPath[nextWaypointIndex];
-				const Vector3 facingDirection = nextWaypoint - currentPos;
 
-				if (facingDirection.GetLength() > 0.01f)
+				// The yaw is computed from the horizontal (XZ) components only, so the guard
+				// has to check the horizontal distance as well: a mostly vertical offset (nav
+				// mesh height vs. client ground height) would otherwise pass the check and
+				// produce erratic facing values from near-zero horizontal deltas.
+				const float horizontalDistance =
+					::sqrtf((nextWaypoint.x - currentPos.x) * (nextWaypoint.x - currentPos.x) +
+						(nextWaypoint.z - currentPos.z) * (nextWaypoint.z - currentPos.z));
+
+				if (horizontalDistance > 0.05f)
 				{
 					const Radian targetYaw = GetAngle(currentPos.x, currentPos.z, nextWaypoint.x, nextWaypoint.z);
 					SetFacing(targetYaw);

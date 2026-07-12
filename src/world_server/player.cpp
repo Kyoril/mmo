@@ -965,6 +965,7 @@ namespace mmo
 		case game::client_realm_packet::MoveSleepAck:
 		case game::client_realm_packet::MoveFearAck:
 		case game::client_realm_packet::MoveDisorientAck:
+		case game::client_realm_packet::MoveChargeAck:
 			OnClientAck(opCode, buffer.size(), reader);
 			break;
 
@@ -1883,9 +1884,15 @@ namespace mmo
 		// Should the character currently be moved automatically?
 		if (m_character->GetMover().IsMoving())
 		{
-			// Just ignore this movement op code for now
-			WLOG("Player is currently moving, ignoring move packet");
-			return;
+			// MoveEnded is the exception: the client reports that it finished the
+			// server-controlled movement path (it may finish slightly before the server's
+			// own movement timer). It is validated against the mover target below.
+			if (opCode != game::client_realm_packet::MoveEnded)
+			{
+				// Just ignore this movement op code for now
+				WLOG("Player is currently moving, ignoring move packet");
+				return;
+			}
 		}
 
 		// Did the client try to sneak in a FALLING flag without sending a jump packet?
@@ -2140,6 +2147,18 @@ namespace mmo
 				ELOG("Player ended movement but target position was different from expected location: Received " << info.position << ", expected " << m_character->GetMover().GetTarget());
 				return;
 			}
+
+			// The client reached the movement destination, potentially slightly before the
+			// server's own movement timer: hand movement control back to the client now.
+			if (m_character->GetMover().IsMoving())
+			{
+				m_character->GetMover().StopMovement();
+			}
+
+			// The automated movement possibly ran at a custom (higher) speed: reset the
+			// speed-check baseline so the first regular packet after it isn't compared
+			// against a stale pre-movement position.
+			m_lastPositionPacketTimestamp = 0;
 		}
 		else if (!prevMovementInfo.IsChangingPosition() && opCode != game::realm_client_packet::MoveSplineDone)
 		{
@@ -2798,6 +2817,32 @@ namespace mmo
 				}
 			}
 			break;
+		case game::client_realm_packet::MoveChargeAck:
+			{
+				if (change.changeType != MovementChangeType::Charge)
+				{
+					WLOG("Received wrong ack op-code for expected ack!");
+					Kick();
+					return;
+				}
+
+				// Read the echoed charge speed and validate it against the pending change.
+				float ackedSpeed = 0.0f;
+				if (!(contentReader >> io::read<float>(ackedSpeed)))
+				{
+					WLOG("Incomplete charge ack packet data received!");
+					Kick();
+					return;
+				}
+
+				if (std::fabs(ackedSpeed - change.chargeInfo.speed) > FLT_EPSILON)
+				{
+					ELOG("Incorrect speed value received in charge ack");
+					Kick();
+					return;
+				}
+			}
+			break;
 		case game::client_realm_packet::MoveTeleportAck:
 			if (change.changeType != MovementChangeType::Teleport)
 			{
@@ -2854,6 +2899,24 @@ namespace mmo
 			// transition were sent at the old speed; comparing them against the new
 			// (possibly lower) cap would cause false positive violations.
 			m_lastPositionPacketTimestamp = 0;
+			break;
+		case game::client_realm_packet::MoveChargeAck:
+			{
+				// The client has acknowledged the charge and stopped sending movement packets:
+				// now the server can safely take over movement control and start the charge.
+				const Vector3 target(change.chargeInfo.x, change.chargeInfo.y, change.chargeInfo.z);
+				if (!m_character->GetMover().MoveTo(target, change.chargeInfo.speed, change.chargeInfo.acceptanceRadius))
+				{
+					// No path could be found - the client releases control on its own after a
+					// short timeout since no movement path will arrive.
+					WLOG("Failed to start charge movement towards " << target << " for player " << m_character->GetName());
+				}
+
+				// The charge moves the character at a much higher speed than usual; reset the
+				// speed-check baseline so the first packet after the charge isn't compared
+				// against a pre-charge position.
+				m_lastPositionPacketTimestamp = 0;
+			}
 			break;
 		}
 	}
@@ -3722,6 +3785,18 @@ namespace mmo
 				packet
 					<< io::write<uint32>(ackId)
 					<< io::write<uint8>(applied);
+				packet.Finish();
+			});
+	}
+
+	void Player::OnPendingCharge(const float speed, const uint32 ackId)
+	{
+		SendPacket([speed, ackId](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::MoveCharge);
+				packet
+					<< io::write<uint32>(ackId)
+					<< io::write<float>(speed);
 				packet.Finish();
 			});
 	}

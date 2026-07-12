@@ -344,6 +344,10 @@ namespace mmo
 
 		virtual void OnDisorientChanged(bool applied, uint32 ackId) = 0;
 
+		/// Called when the server wants to start a charge movement on a player controlled
+		/// character. The client has to acknowledge before the movement is started.
+		virtual void OnPendingCharge(float speed, uint32 ackId) = 0;
+
 		virtual void OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff, int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints) = 0;
 
 		virtual void OnSpellModChanged(SpellModType type, uint8 effectIndex, SpellModOp op, int32 value) = 0;
@@ -416,7 +420,10 @@ namespace mmo
 		/// Character is feared or no longer feared.
 		Fear,
 		/// Character is disoriented or no longer disoriented.
-		Disorient
+		Disorient,
+
+		/// Character is about to be moved by the server due to a charge effect.
+		Charge
 	};
 
 	/// Bundles informations which are only used for knock back acks.
@@ -436,6 +443,20 @@ namespace mmo
 		float y = 0.0f;
 		float z = 0.0f;
 		float o = 0.0f;
+	};
+
+	/// Bundles information about a pending charge movement which is applied once the
+	/// client has acknowledged the charge (see MovementChangeType::Charge).
+	struct ChargeInfo
+	{
+		/// Charge destination.
+		float x = 0.0f;
+		float y = 0.0f;
+		float z = 0.0f;
+		/// Movement speed of the charge in units per second.
+		float speed = 0.0f;
+		/// Acceptance radius around the destination.
+		float acceptanceRadius = 0.0f;
 	};
 
 	/// Contains infos about a pending movement change which first needs to
@@ -464,6 +485,8 @@ namespace mmo
 			KnockBackInfo knockBackInfo;
 
 			TeleportInfo teleportInfo;
+
+			ChargeInfo chargeInfo;
 		};
 
 		PendingMovementChange();
@@ -1589,6 +1612,15 @@ public:
 		/// Gets the unit mover for the unit.
 		/// @returns A reference to the unit mover.
 		UnitMover &GetMover() const { return *m_mover; }
+
+		/// Starts a charge movement towards the given target location. For player controlled
+		/// units, the client is notified first and the actual movement only starts once the
+		/// client has acknowledged the charge (so it stops sending movement packets in time).
+		/// For AI controlled units the movement starts immediately.
+		/// @param target The charge destination.
+		/// @param speed The charge movement speed in units per second.
+		/// @param acceptanceRadius Radius around the destination in which movement is considered complete.
+		void StartCharge(const Vector3 &target, float speed, float acceptanceRadius);
 
 		/// Returns whether this unit is currently in motion. AI-controlled creatures/pets
 		/// report movement through their mover (path-following), while player characters

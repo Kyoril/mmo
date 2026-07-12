@@ -32,6 +32,7 @@ namespace
 		void OnSleepChanged(bool, uint32) override {}
 		void OnFearChanged(bool, uint32) override {}
 		void OnDisorientChanged(bool, uint32) override {}
+		void OnPendingCharge(float, uint32) override {}
 		void OnTeleport(uint32, const Vector3&, const Radian&) override {}
 		void OnAttackSwingEvent(AttackSwingEvent) override {}
 		void OnXpLog(uint32) override {}

@@ -432,6 +432,11 @@ namespace mmo
 		PacketParseResult OnMoveFear(game::IncomingPacket &packet);
 		PacketParseResult OnMoveDisorient(game::IncomingPacket &packet);
 
+		/// @brief Handles the MoveCharge packet: the server announces that it is about to move
+		/// the character along a charge path. Stops local movement, suppresses further movement
+		/// packets and acknowledges so the server can start the movement.
+		PacketParseResult OnMoveCharge(game::IncomingPacket &packet);
+
 		/// @brief Handles the GameTimeInfo packet.
 		/// @param packet The incoming packet.
 		/// @return The packet parse result.

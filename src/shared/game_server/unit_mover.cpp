@@ -509,6 +509,11 @@ namespace mmo
 		m_moveReached.Cancel();
 		m_moveUpdated.Cancel();
 
+		// The stop location is the new movement target: a controlled client finishing its
+		// (interrupted) movement path reports this position in its MoveEnded packet, which
+		// is validated against the mover target.
+		m_target = currentLoc;
+
 		// Update with grid notification
 		auto& moved = GetMoved();
 		moved.Relocate(currentLoc, Radian(o));

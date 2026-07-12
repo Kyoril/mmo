@@ -40,6 +40,7 @@ namespace mmo
 		case game::client_realm_packet::MoveEnded: return "MOVE_ENDED";
 		case game::client_realm_packet::MoveStartWalk: return "MOVE_START_WALK";
 		case game::client_realm_packet::MoveStopWalk: return "MOVE_STOP_WALK";
+		case game::client_realm_packet::MoveChargeAck: return "MOVE_CHARGE_ACK";
 		default: return "UNKNOWN";
 		}
 	}
@@ -672,6 +673,15 @@ namespace mmo
 		sendSinglePacket([ackId, &movementInfo](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::MoveDisorientAck);
 			packet << io::write<uint32>(ackId) << movementInfo;
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::SendMoveChargeAck(uint32 ackId, const MovementInfo& movementInfo, float speed)
+	{
+		sendSinglePacket([ackId, &movementInfo, speed](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::MoveChargeAck);
+			packet << io::write<uint32>(ackId) << movementInfo << io::write<float>(speed);
 			packet.Finish();
 			});
 	}

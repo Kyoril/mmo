@@ -295,6 +295,16 @@ namespace mmo
 		bool IsPositionLocked() const { return m_positionLocked; }
 
 	public:
+		/// @brief Puts the unit under (or releases it from) server controlled movement, e.g. while
+		/// a charge effect moves the character along a server defined path. While active, the unit
+		/// stops sending movement packets and ignores local movement input. Enabling this clears
+		/// all active movement flags without sending packets (the ack packet carries the state).
+		void SetServerControlledMovement(bool controlled);
+
+		/// @brief Returns true while the unit's movement is controlled by the server (e.g. charge).
+		bool IsMovementControlledByServer() const { return m_serverControlledMovement; }
+
+	public:
 		/// @brief Starts moving the unit forward or backward.
 		void StartMove(bool forward);
 
@@ -724,6 +734,14 @@ namespace mmo
 		/// Updates path-based movement towards the next waypoint
 		void UpdatePathMovement(const float deltaTime);
 
+		/// Completes the current movement path: clears path state and movement flags, resets
+		/// the animation state, and hands movement control back to the local player if it was
+		/// server controlled (notifying the server through the movementEnded signal when the
+		/// destination was actually reached).
+		/// @param reachedDestination True if the unit arrived at the path destination, false
+		/// if the path ended for another reason (e.g. a stop packet interrupted it).
+		void CompleteMovementPath(bool reachedDestination);
+
 		/// Returns true if the unit is currently following a movement path
 		bool IsFollowingPath() const { return !m_movementPath.empty() && !m_pathCompleted; }
 
@@ -751,6 +769,13 @@ namespace mmo
 		std::optional<Radian> m_targetRotation;
 		bool m_pathCompleted = false;
 		GameTime m_pathStartTime = 0;			 // When the path movement started
+
+		/// Whether movement is currently controlled by the server (charge effect). While set,
+		/// no movement packets are sent and local movement input is suppressed.
+		bool m_serverControlledMovement = false;
+		/// When server controlled movement began; used as a failsafe to release control if the
+		/// expected movement path never arrives.
+		GameTime m_serverControlStartTime = 0;
 		float m_pathTotalLength = 0.0f;			 // Total length of all path segments
 		float m_pathMoveSpeed = 0.0f;			 // Movement speed derived from server path duration
 		std::vector<float> m_pathSegmentLengths; // Length of each segment for time calculation

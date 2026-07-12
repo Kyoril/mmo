@@ -41,6 +41,7 @@ namespace
 		{ applied ? ++disoApply : ++disoRemove; }
 
 		// Pure virtuals from NetUnitWatcherS we don't need — stub them out.
+		void OnPendingCharge(float /*speed*/, uint32 /*ackId*/) override {}
 		void OnTeleport(uint32 /*mapId*/, const Vector3& /*pos*/, const Radian& /*facing*/) override {}
 		void OnAttackSwingEvent(AttackSwingEvent /*error*/) override {}
 		void OnXpLog(uint32 /*amount*/) override {}

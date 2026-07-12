@@ -316,6 +316,10 @@ namespace mmo
 		void SendMoveFearAck(uint32 ackId, const MovementInfo& movementInfo);
 		void SendMoveDisorientAck(uint32 ackId, const MovementInfo& movementInfo);
 
+		/// Acknowledges a MoveCharge packet. The echoed speed is validated by the server
+		/// against the pending charge before the actual movement starts.
+		void SendMoveChargeAck(uint32 ackId, const MovementInfo& movementInfo, float speed);
+
 		void AutoStoreLootItem(uint8 lootSlot);
 
 		/// Sends a SetLootMethod packet to the realm server to change the group's loot method.
