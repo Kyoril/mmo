@@ -16,6 +16,7 @@ namespace mmo
 
 	struct GuildInfo;
 	class IAudio;
+	class SoundEntryPlayer;
 }
 
 namespace mmo
@@ -23,9 +24,10 @@ namespace mmo
 	class GamePlayerC : public GameUnitC
 	{
 	public:
-		explicit GamePlayerC(Scene& scene, NetClient& netDriver, const proto_client::Project& project, uint32 map, IAudio* audio)
+		explicit GamePlayerC(Scene& scene, NetClient& netDriver, const proto_client::Project& project, uint32 map, IAudio* audio, SoundEntryPlayer* soundEntryPlayer)
 			: GameUnitC(scene, netDriver, project, map)
 			, m_audio(audio)
+			, m_soundEntryPlayer(soundEntryPlayer)
 		{
 		}
 
@@ -168,6 +170,10 @@ namespace mmo
 		/// Handle footstep notification trigger
 		void OnFootstep(const class AnimationNotify& notify);
 
+		/// @brief Legacy fallback footstep playback (hardcoded ground WAVs) used while
+		///        surface types / footstep sound entries are not authored yet.
+		void PlayLegacyFootstepSound();
+
 	private:
 
 
@@ -179,6 +185,7 @@ namespace mmo
 
 		const GuildInfo* m_guild{ nullptr };
 		IAudio* m_audio{ nullptr };
+		SoundEntryPlayer* m_soundEntryPlayer{ nullptr };
 
 		/// Cached class overview, including locked classes and progression data for unlocked classes,
 		/// replicated from the server via the KnownClasses packet.

@@ -1,7 +1,9 @@
 #include "game_player_c.h"
 
+#include "floor_surface_query.h"
 #include "net_client.h"
 #include "object_mgr.h"
+#include "sound_entry_player.h"
 #include "client_data/project.h"
 #include "game/guild_info.h"
 #include "game/spell.h"
@@ -549,6 +551,31 @@ namespace mmo
 	}
 
 	void GamePlayerC::OnFootstep(const AnimationNotify& notify)
+	{
+		// Resolve the surface type of the floor under the player and play its assigned
+		// footstep sound entry. Anything unresolved falls back to the legacy sounds so
+		// footsteps keep working while content is not authored yet.
+		uint32 footstepSoundId = 0;
+
+		const uint32 surfaceTypeId = ResolveFloorSurfaceType(m_scene, GetPosition(), m_entity);
+		if (surfaceTypeId != 0)
+		{
+			if (const auto* surfaceType = m_project.surfaceTypes.getById(surfaceTypeId))
+			{
+				footstepSoundId = surfaceType->footstep_sound();
+			}
+		}
+
+		if (footstepSoundId != 0 && m_soundEntryPlayer)
+		{
+			m_soundEntryPlayer->PlayEntry(footstepSoundId, GetPosition());
+			return;
+		}
+
+		PlayLegacyFootstepSound();
+	}
+
+	void GamePlayerC::PlayLegacyFootstepSound()
 	{
 		if (!m_audio)
 		{
