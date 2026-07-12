@@ -7,6 +7,7 @@
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include "assets/asset_registry.h"
+#include "locale_asset_utils.h"
 #include "preview_providers/preview_provider_manager.h"
 #include "shared/audio/audio.h"
 
@@ -24,14 +25,21 @@ namespace mmo
 			{
 				if (file.ends_with(ext))
 				{
-					result.push_back(file);
+					// Locale files appear twice in the editor's registry: once under their on-disk
+					// "Locales/Locale_<code>/" path and once under their locale-relative path (via the
+					// mounted locale archive). Only the latter resolves in hpak release builds, so
+					// offer only that form.
+					String path = file;
+					NormalizeLocaleAssetPath(path);
+					result.push_back(std::move(path));
 					break;
 				}
 			}
 		}
 
-		// Sort alphabetically for easier browsing
+		// Sort alphabetically for easier browsing and remove locale duplicates
 		std::sort(result.begin(), result.end());
+		result.erase(std::unique(result.begin(), result.end()), result.end());
 
 		return result;
 	}
@@ -46,8 +54,16 @@ namespace mmo
 		std::function<void(const std::string&)> onNavigateCallback)
 	{
 		bool changed = false;
-		
+
 		ImGui::PushID(label);
+
+		// Older data may still reference locale assets by their on-disk "Locales/Locale_<code>/"
+		// path, which doesn't resolve in hpak release builds (the client mounts the locale archive
+		// as an asset root). Migrate such paths to their locale-relative form on the fly.
+		if (NormalizeLocaleAssetPath(currentAssetPath))
+		{
+			changed = true;
+		}
 
 		// Check if we're dealing with audio files
 		const bool isAudio = extensions.count(".wav") || extensions.count(".ogg") || extensions.count(".mp3");
@@ -199,6 +215,7 @@ namespace mmo
 				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(ext.c_str()))
 				{
 					currentAssetPath = *static_cast<String*>(payload->Data);
+					NormalizeLocaleAssetPath(currentAssetPath);
 					changed = true;
 					break;
 				}

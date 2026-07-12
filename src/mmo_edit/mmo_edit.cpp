@@ -67,6 +67,8 @@
 #include "import/texture_import.h"
 #include "import/fbx_import.h"
 
+#include "locale_asset_utils.h"
+
 #include "editors/mesh_editor/mesh_editor.h"
 #include "editors/character_editor/character_editor.h"
 #include "editors/material_editor/material_editor.h"
@@ -97,6 +99,70 @@ namespace mmo
 		manager.AddPreviewProvider(std::make_unique<mmo::XmlPreviewProvider>());
 		manager.AddPreviewProvider(std::make_unique<mmo::TocPreviewProvider>());
 		manager.AddPreviewProvider(std::make_unique<mmo::AudioPreviewProvider>());
+	}
+
+	/// Migrates locale asset references stored with their on-disk "Locales/Locale_<code>/" path
+	/// to the locale-relative form, which is the only form that resolves in hpak release builds
+	/// (the client mounts the active locale archive as an asset root). Changes are picked up by
+	/// the next project save.
+	void NormalizeLocaleAssetReferences(proto::Project& project)
+	{
+		size_t fixedCount = 0;
+
+		for (auto& sound : *project.sounds.getTemplates().mutable_entry())
+		{
+			for (auto& file : *sound.mutable_files())
+			{
+				if (NormalizeLocaleAssetPath(file))
+				{
+					++fixedCount;
+				}
+			}
+		}
+
+		for (auto& visualization : *project.spellVisualizations.getTemplates().mutable_entry())
+		{
+			for (auto& kitsByEvent : *visualization.mutable_kits_by_event())
+			{
+				for (auto& kit : *kitsByEvent.second.mutable_kits())
+				{
+					for (auto& soundFile : *kit.mutable_sounds())
+					{
+						if (NormalizeLocaleAssetPath(soundFile))
+						{
+							++fixedCount;
+						}
+					}
+				}
+			}
+
+			if (visualization.has_projectile())
+			{
+				for (auto& soundFile : *visualization.mutable_projectile()->mutable_sounds())
+				{
+					if (NormalizeLocaleAssetPath(soundFile))
+					{
+						++fixedCount;
+					}
+				}
+			}
+
+			for (auto& projectile : *visualization.mutable_projectiles())
+			{
+				for (auto& soundFile : *projectile.mutable_sounds())
+				{
+					if (NormalizeLocaleAssetPath(soundFile))
+					{
+						++fixedCount;
+					}
+				}
+			}
+		}
+
+		if (fixedCount > 0)
+		{
+			ILOG("Migrated " << fixedCount << " locale-based asset path(s) to their locale-relative form");
+		}
 	}
 }
 
@@ -139,6 +205,9 @@ int main(int argc, char* arg[])
 		ELOG("Failed to load project!");
 		return 1;
 	}
+
+	// Fix up any locale asset references still stored with their on-disk "Locales/..." path
+	mmo::NormalizeLocaleAssetReferences(project);
 
 	// Initialize the main window instance
 	mmo::MainWindow mainWindow { config, project };

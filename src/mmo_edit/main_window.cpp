@@ -17,6 +17,7 @@
 #include "editor_windows/asset_window.h"
 #include "proto_data/project.h"
 #include "simple_file_format/sff_write.h"
+#include "locale_asset_utils.h"
 #include "localization_io.h"
 #include "file_dialog/file_dialog.h"
 
@@ -101,6 +102,11 @@ namespace mmo
 			mmo::AssetRegistry::Initialize(config.assetRegistryPath, {});
 
 			AssetRegistry::AddArchivePackage(std::filesystem::path(config.projectPath).parent_path() / "nav");
+
+			// Mount each locale folder as its own asset root, mirroring the game client. Locale
+			// assets are addressed by their locale-relative path (e.g. "Voice/Foo.mp3") there,
+			// which is the only form that resolves in hpak release builds.
+			MountLocaleAssetArchives(config.assetRegistryPath);
 
 			// Load the project-wide global shader parameter registry (missing file = empty registry).
 			GlobalShaderParameters::Get().LoadFromAsset(GlobalShaderParametersAssetPath);
