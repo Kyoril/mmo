@@ -75,10 +75,16 @@ namespace mmo
 
 		void Clear();
 
-		/// 
+		///
 		/// @param verts
 		/// @param indices
 		void Build(const std::vector<Vertex>& verts, const std::vector<Index>& indices);
+
+		/// Builds the tree and records, for every face, the submesh index it came from.
+		/// @param verts Vertices to build.
+		/// @param indices Indices to build (3 per face).
+		/// @param faceSubMeshes One submesh index per face (indices.size() / 3 entries).
+		void Build(const std::vector<Vertex>& verts, const std::vector<Index>& indices, const std::vector<uint16>& faceSubMeshes);
 
 		/// 
 		/// @param ray 
@@ -93,6 +99,11 @@ namespace mmo
 		const std::vector<Node>& GetNodes() const { return m_nodes; }
 		const std::vector<Vertex>& GetVertices() const { return m_vertices; }
 		const std::vector<Index>& GetIndices() const { return m_indices; }
+
+		/// Per-face submesh indices aligned with the tree's face order (the faceIndex
+		/// reported by IntersectRay indexes into this). Empty for trees built without
+		/// submesh data or loaded from legacy files.
+		const std::vector<uint16>& GetFaceSubMeshes() const { return m_faceSubMeshes; }
 
 		bool IsEmpty() const { return m_nodes.empty() && m_vertices.empty() && m_indices.empty(); }
 
@@ -160,6 +171,7 @@ namespace mmo
 		std::vector<Node> m_nodes{};
 		std::vector<Vertex> m_vertices{};
 		std::vector<Index> m_indices{};
+		std::vector<uint16> m_faceSubMeshes{};
 		std::vector<AABB> m_faceBounds{};
 		std::vector<uint32> m_faceIndices{};
 	};

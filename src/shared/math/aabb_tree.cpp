@@ -49,11 +49,19 @@ namespace mmo
 	{
 		m_vertices.clear();
 		m_indices.clear();
+		m_faceSubMeshes.clear();
 		m_faceBounds.clear();
 		m_faceIndices.clear();
 
 		m_freeNode = 1;
 		m_nodes.clear();
+	}
+
+	void AABBTree::Build(const std::vector<Vertex>& verts, const std::vector<Index>& indices, const std::vector<uint16>& faceSubMeshes)
+	{
+		ASSERT(faceSubMeshes.size() == indices.size() / 3);
+		m_faceSubMeshes = faceSubMeshes;
+		Build(verts, indices);
 	}
 
 	void AABBTree::Build(const std::vector<Vertex>& verts, const std::vector<Index>& indices)
@@ -65,6 +73,13 @@ namespace mmo
 		m_faceIndices.clear();
 
 		size_t numFaces = indices.size() / 3;
+
+		// Discard a stale face-submesh mapping from a previous build (the 3-argument
+		// Build overload assigns it right before delegating here).
+		if (m_faceSubMeshes.size() != numFaces)
+		{
+			m_faceSubMeshes.clear();
+		}
 
 		m_faceBounds.reserve(numFaces);
 		m_faceIndices.reserve(numFaces);
@@ -90,6 +105,19 @@ namespace mmo
 			sortedIndices[i * 3 + 0] = m_indices[index + 0];
 			sortedIndices[i * 3 + 1] = m_indices[index + 1];
 			sortedIndices[i * 3 + 2] = m_indices[index + 2];
+		}
+
+		// Apply the same permutation to the face-submesh mapping so it stays aligned
+		// with the reordered faces.
+		if (!m_faceSubMeshes.empty())
+		{
+			std::vector<uint16> sortedSubMeshes(numFaces);
+			for (size_t i = 0; i < numFaces; ++i)
+			{
+				sortedSubMeshes[i] = m_faceSubMeshes[m_faceIndices[i]];
+			}
+
+			m_faceSubMeshes.swap(sortedSubMeshes);
 		}
 
 		m_indices.swap(sortedIndices);
@@ -384,7 +412,7 @@ namespace mmo
 
 	io::Writer& operator<<(io::Writer& w, AABBTree const& tree)
 	{
-		const uint32 magic = 'BVH1';
+		const uint32 magic = 'BVH2';
 		w << io::write<uint32>(magic);
 
 		// Write vertices
@@ -392,6 +420,9 @@ namespace mmo
 
 		// Write indices
 		w << io::write_dynamic_range<uint32>(tree.m_indices);
+
+		// Write per-face submesh indices (BVH2+; may be empty)
+		w << io::write_dynamic_range<uint32>(tree.m_faceSubMeshes);
 
 		// Write nodes
 		w << io::write<uint32>(tree.m_nodes.size());
@@ -428,7 +459,7 @@ namespace mmo
 		// Map magic
 		uint32 magic;
 		r >> io::read<uint32>(magic);
-		if (magic != static_cast<uint32>('BVH1'))
+		if (magic != static_cast<uint32>('BVH1') && magic != static_cast<uint32>('BVH2'))
 		{
 			r.setFailure();
 			return r;
@@ -439,6 +470,13 @@ namespace mmo
 
 		// Read indices
 		r >> io::read_container<uint32>(tree.m_indices);
+
+		// Per-face submesh indices (BVH2+ only; legacy trees have no mapping)
+		tree.m_faceSubMeshes.clear();
+		if (magic == static_cast<uint32>('BVH2'))
+		{
+			r >> io::read_container<uint32>(tree.m_faceSubMeshes);
+		}
 
 		// Read nodes
 		uint32 nodeCount = 0;
