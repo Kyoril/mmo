@@ -24,6 +24,7 @@
 #include "assets/asset_registry.h"
 #include "base/chunk_writer.h"
 #include "editor_windows/asset_picker_widget.h"
+#include "editor_windows/surface_type_combo.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/material_serializer.h"
 #include "scene_graph/material_manager.h"
@@ -954,6 +955,7 @@ namespace mmo
 			if (m_material && GetAssetPath().extension() != ".hmf")
 			{
 				DrawFoliageSection();
+				DrawSurfaceTypeSection();
 			}
 
 			ImGui::PopStyleVar(2);
@@ -1070,6 +1072,38 @@ namespace mmo
 		if (ImGui::Button("Add Foliage Entry"))
 		{
 			entries.emplace_back();
+		}
+	}
+
+	void MaterialEditorInstance::DrawSurfaceTypeSection()
+	{
+		if (!ImGui::CollapsingHeader("Surface Type"))
+		{
+			return;
+		}
+
+		ImGui::TextWrapped("Physical surface category of this material, used to pick footstep sounds. "
+			"For terrain splatting materials, assign one surface type per splat layer instead.");
+
+		const proto::SurfaceTypeManager& surfaceTypes = m_editor.GetProject().surfaceTypes;
+
+		DrawSurfaceTypeCombo(surfaceTypes, "Surface Type", m_material->GetSurfaceTypeId(), m_surfaceTypeFilter,
+			[this](const uint32 id)
+			{
+				m_material->SetSurfaceTypeId(id);
+			});
+
+		ImGui::Separator();
+		ImGui::TextDisabled("Layer Surface Types (terrain splatting)");
+
+		static const char* s_surfaceLayerNames[] = { "Layer 1", "Layer 2", "Layer 3", "Layer 4" };
+		for (uint8 layer = 0; layer < 4; ++layer)
+		{
+			DrawSurfaceTypeCombo(surfaceTypes, s_surfaceLayerNames[layer], m_material->GetLayerSurfaceTypeId(layer), m_layerSurfaceTypeFilters[layer],
+				[this, layer](const uint32 id)
+				{
+					m_material->SetLayerSurfaceTypeId(layer, id);
+				});
 		}
 	}
 

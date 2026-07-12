@@ -16,6 +16,7 @@
 #include "assets/asset_registry.h"
 #include "base/chunk_writer.h"
 #include "editor_windows/asset_picker_widget.h"
+#include "editor_windows/surface_type_combo.h"
 #include "log/default_log_levels.h"
 #include "preview_providers/preview_provider_manager.h"
 #include "scene_graph/material_instance_serializer.h"
@@ -395,6 +396,48 @@ namespace mmo
 			{
 				ImGui::SetTooltip("Render this material with binary (masked) alpha instead of the parent material's type");
 			}
+
+			ImGui::Unindent();
+		}
+
+		if (ImGui::CollapsingHeader("Surface Type"))
+		{
+			ImGui::Indent();
+
+			bool overrideSurfaceTypes = m_material->IsOverridingSurfaceTypes();
+			if (ImGui::Checkbox("Override Surface Types", &overrideSurfaceTypes))
+			{
+				m_material->SetOverrideSurfaceTypes(overrideSurfaceTypes);
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Override the parent material's surface types with instance-level values");
+			}
+
+			ImGui::BeginDisabled(!overrideSurfaceTypes);
+
+			const proto::SurfaceTypeManager& surfaceTypes = m_editor.GetProject().surfaceTypes;
+
+			DrawSurfaceTypeCombo(surfaceTypes, "Surface Type", m_material->GetOwnSurfaceTypeId(), m_surfaceTypeFilter,
+				[this](const uint32 id)
+				{
+					m_material->SetOwnSurfaceTypeId(id);
+				});
+
+			ImGui::Separator();
+			ImGui::TextDisabled("Layer Surface Types (terrain splatting)");
+
+			static const char* s_surfaceLayerNames[] = { "Layer 1", "Layer 2", "Layer 3", "Layer 4" };
+			for (uint8 layer = 0; layer < 4; ++layer)
+			{
+				DrawSurfaceTypeCombo(surfaceTypes, s_surfaceLayerNames[layer], m_material->GetOwnLayerSurfaceTypeId(layer), m_layerSurfaceTypeFilters[layer],
+					[this, layer](const uint32 id)
+					{
+						m_material->SetOwnLayerSurfaceTypeId(layer, id);
+					});
+			}
+
+			ImGui::EndDisabled();
 
 			ImGui::Unindent();
 		}

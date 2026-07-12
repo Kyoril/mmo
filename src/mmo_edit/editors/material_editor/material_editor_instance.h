@@ -95,6 +95,9 @@ namespace mmo
 
 		/// @brief Draws the data-driven terrain foliage authoring section in the details panel.
 		void DrawFoliageSection();
+
+		/// @brief Draws the surface type authoring section in the details panel.
+		void DrawSurfaceTypeSection();
 		void DrawVariableSelector(NamedVariableGetNode* node);
 		void DrawFunctionInputDefaultValue(MaterialFunctionInputNode* node);
 		void DrawSamplerTypeEditor(PropertyBase* prop);
@@ -128,6 +131,8 @@ namespace mmo
 		CreateNodeDialog m_createDialog;
 		std::shared_ptr<Material> m_material;
 		std::unique_ptr<MaterialGraph> m_graph;
+		ImGuiTextFilter m_surfaceTypeFilter;
+		ImGuiTextFilter m_layerSurfaceTypeFilters[4];
 		ax::NodeEditor::EditorContext* m_context { nullptr };
 		bool m_initDockLayout { true };
 		bool m_focusGraphPanel { false };

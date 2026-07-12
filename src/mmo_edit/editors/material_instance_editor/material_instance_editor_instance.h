@@ -96,6 +96,8 @@ namespace mmo
 		std::shared_ptr<MaterialInstance> m_material;
 		bool m_initDockLayout { true };
 		ImGuiTextFilter m_assetFilter;
+		ImGuiTextFilter m_surfaceTypeFilter;
+		ImGuiTextFilter m_layerSurfaceTypeFilters[4];
 
 		SceneNode* m_lightNode { nullptr };
 		Light* m_light { nullptr };

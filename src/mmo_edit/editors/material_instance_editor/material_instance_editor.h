@@ -5,6 +5,7 @@
 #include <map>
 
 #include "editors/editor_base.h"
+#include "proto_data/project.h"
 
 namespace mmo
 {
@@ -16,9 +17,12 @@ namespace mmo
 	public:
 		/// @brief Default constructor.
 		/// @param host Host which provides support for stuff editors might require.
-		explicit MaterialInstanceEditor(EditorHost& host, PreviewProviderManager& previewManager)
+		/// @param previewManager Manager providing asset preview support.
+		/// @param project The proto data project (surface type list etc.).
+		explicit MaterialInstanceEditor(EditorHost& host, PreviewProviderManager& previewManager, proto::Project& project)
 			: EditorBase(host)
 			, m_previewManager(previewManager)
+			, m_project(project)
 		{
 		}
 
@@ -35,6 +39,9 @@ namespace mmo
 		void AddAssetActions(const String& asset) override;
 
 		PreviewProviderManager& GetPreviewManager() const { return m_previewManager; }
+
+		/// @brief Gets the proto data project (surface type list etc.).
+		[[nodiscard]] proto::Project& GetProject() const { return m_project; }
 
 	protected:
 		/// @copydoc EditorBase::DrawImpl
@@ -55,6 +62,7 @@ namespace mmo
 
 	private:
 		PreviewProviderManager& m_previewManager;
+		proto::Project& m_project;
 		std::map<Path, std::shared_ptr<EditorInstance>> m_instances;
 		bool m_showMaterialNameDialog { false };
 		bool m_showMaterialFunctionNameDialog { false };
