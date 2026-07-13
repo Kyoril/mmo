@@ -1,6 +1,6 @@
 
 # Add shared graphics library
-add_lib(game_client)
+add_lib_recurse(game_client)
 target_link_libraries(game_client game game_common client_data frame_ui)
 
 if (APPLE)

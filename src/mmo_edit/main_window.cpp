@@ -976,6 +976,7 @@ namespace mmo
 			"item_displays",
 			"object_displays",
 			"animations",
+			"animation_profiles",
 			"talents",
 			"talent_tabs",
 			"spell_visualizations",

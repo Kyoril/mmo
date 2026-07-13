@@ -21,6 +21,7 @@
 #include "shared/client_data/proto_client/item_display.pb.h"
 #include "shared/client_data/proto_client/object_display.pb.h"
 #include "shared/client_data/proto_client/animations.pb.h"
+#include "shared/client_data/proto_client/animation_profiles.pb.h"
 #include "shared/client_data/proto_client/talents.pb.h"
 #include "shared/client_data/proto_client/talent_tabs.pb.h"
 #include "shared/client_data/proto_client/spell_visualizations.pb.h"
@@ -50,6 +51,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto_client::ItemDisplayData, mmo::proto_client::ItemDisplayEntry> ItemDisplayManager;
 		typedef TemplateManager<mmo::proto_client::ObjectDisplayData, mmo::proto_client::ObjectDisplayEntry> ObjectDisplayManager;
 		typedef TemplateManager<mmo::proto_client::Animations, mmo::proto_client::AnimationEntry> AnimationManager;
+		typedef TemplateManager<mmo::proto_client::AnimationProfiles, mmo::proto_client::AnimationProfileEntry> AnimationProfileManager;
 		typedef TemplateManager<mmo::proto_client::Talents, mmo::proto_client::TalentEntry> TalentManager;
 		typedef TemplateManager<mmo::proto_client::TalentTabs, mmo::proto_client::TalentTabEntry> TalentTabManager;
 		typedef TemplateManager<mmo::proto_client::SpellVisualizations, mmo::proto_client::SpellVisualization> SpellVisualizationManager;
@@ -89,6 +91,9 @@ namespace mmo
 			ItemDisplayManager itemDisplays;
 			ObjectDisplayManager objectDisplays;
 			AnimationManager animations;
+
+			/// Animation profiles binding logical animation slots to skeleton clips per model.
+			AnimationProfileManager animationProfiles;
 			TalentManager talents;
 			TalentTabManager talentTabs;
 			SpellVisualizationManager spellVisualizations;
@@ -160,6 +165,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("item_displays", itemDisplays));
 				managers.push_back(ManagerEntry("object_displays", objectDisplays));
 				managers.push_back(ManagerEntry("animations", animations));
+				managers.push_back(ManagerEntry("animation_profiles", animationProfiles, true));
 				managers.push_back(ManagerEntry("talents", talents));
 				managers.push_back(ManagerEntry("talent_tabs", talentTabs));
 				managers.push_back(ManagerEntry("spell_visualizations", spellVisualizations));
@@ -213,6 +219,7 @@ namespace mmo
 				managers.emplace_back("item_displays", "item_displays", itemDisplays);
 				managers.emplace_back("object_displays", "object_displays", objectDisplays);
 				managers.emplace_back("animations", "animations", animations);
+				managers.emplace_back("animation_profiles", "animation_profiles", animationProfiles);
 				managers.emplace_back("talents", "talents", talents);
 				managers.emplace_back("talent_tabs", "talent_tabs", talentTabs);
 				managers.emplace_back("spell_visualizations", "spell_visualizations", spellVisualizations);

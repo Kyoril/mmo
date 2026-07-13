@@ -19,6 +19,10 @@ message ModelDataEntry {
 	// SoundEntry id played instead of gossip_sound_id after the player has pestered
 	// the same unit repeatedly. 0 = keep playing the normal gossip sound (default).
 	optional uint32 gossip_pissed_sound_id = 7 [default = 0];
+
+	// AnimationProfileEntry id driving the model's animation slot bindings.
+	// 0 = use the built-in default clip names (Idle, Run, Swim, ...).
+	optional uint32 animation_profile = 8 [default = 0];
 }
 
 message ModelDatas {

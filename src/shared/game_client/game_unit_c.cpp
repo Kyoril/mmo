@@ -4,6 +4,7 @@
 #include "sound_entry_player.h"
 #include "spell_visualization_service.h"
 #include "movement_log.h"
+#include "animation/animation_controller.h"
 
 #include <sstream>
 
@@ -21,6 +22,7 @@
 #include "base/clock.h"
 #include "client_data/project.h"
 #include "frame_ui/font_mgr.h"
+#include "game/aura.h"
 #include "game/emote_defs.h"
 #include "game/spell.h"
 #include "game/character_customization/avatar_definition_mgr.h"
@@ -62,6 +64,7 @@ namespace mmo
 	GameUnitC::GameUnitC(Scene &scene, NetClient &netDriver, const proto_client::Project &project, uint32 map) : GameObjectC(scene, project, map), m_netDriver(netDriver), m_unitSpeed{0.0f}, m_creatureInfo()
 	{
 		m_unitMovement = std::make_unique<UnitMovement>(*this);
+		m_animationController = std::make_unique<AnimationController>(m_entity, project);
 	}
 
 	GameUnitC::~GameUnitC()
@@ -268,10 +271,10 @@ namespace mmo
 
 		if (!complete && m_fieldMap.IsFieldMarkedAsChanged(object_fields::IdlePoseEmote))
 		{
-			// Invalidate the cached special idle so it is re-resolved, and restart the idle timer
-			// so the new pose eases in after the regular delay.
-			m_specialIdleState = nullptr;
-			m_idleSeconds = 0.0f;
+			// Rebind the special idle clip and restart the idle timer so the new pose eases
+			// in after the regular delay.
+			UpdateSpecialIdleClip();
+			m_animationController->ResetIdleTimer();
 		}
 
 		m_fieldMap.MarkAllAsUnchanged();
@@ -429,7 +432,7 @@ namespace mmo
 			UpdateNormalMovement(deltaTime);
 		}
 
-		UpdateAnimationStates(deltaTime, isDead);
+		UpdateAnimation(deltaTime, isDead);
 
 		// For remote players, the queue handles position updates directly -
 		// UnitMovement::Tick is not needed for them. But we must consume the
@@ -494,12 +497,6 @@ namespace mmo
 			m_unitMovement->CorrectGroundHeight();
 		}
 
-		// Update animation state based on movement
-		// Skip normal animation system if following a path (path system handles animations manually)
-		if (m_movementPath.empty() || m_pathCompleted)
-		{
-			UpdateMovementBasedAnimation(deltaTime);
-		}
 	}
 
 	void GameUnitC::UpdateTargetTracking() const
@@ -522,19 +519,22 @@ namespace mmo
 		}
 	}
 
-	void GameUnitC::UpdateMovementBasedAnimation(const float deltaTime)
+	void GameUnitC::UpdateAnimation(const float deltaTime, const bool isDead)
 	{
+		if (!m_animationController)
+		{
+			return;
+		}
+
 		// Local prediction: starting to move while in a locked pose (sitting/sleeping)
 		// immediately releases the pose animation - the server confirms by resetting the
 		// replicated stand state when it receives the movement packet.
-		if (m_lockedLoopAnimState != nullptr && m_lockedLoopAnimState == m_poseAnimState &&
-			IsControlledByLocalPlayer())
+		if (m_animationController->IsPoseLockActive() && IsControlledByLocalPlayer())
 		{
 			const Vector3 horizontalInput = m_inputVector * Vector3(1.0f, 0.0f, 1.0f);
 			if (horizontalInput.GetLength() > 0.1f)
 			{
-				m_lockedLoopAnimState = nullptr;
-				m_poseAnimState = nullptr;
+				m_animationController->ClearPoseLoop();
 
 				// Movement cancelled the pose - forget it so the server's stand-state confirm
 				// (which may arrive after the player already stopped) never plays the exit clip.
@@ -543,386 +543,30 @@ namespace mmo
 			}
 		}
 
-		// A pose enter/exit transition must never mask movement: fast-forward it as soon as
-		// the unit starts moving (remote stand-state and movement packets can interleave so a
-		// movement start lands mid-transition). The one-shot machinery then blends it out.
-		if (m_poseTransitionState != nullptr && m_oneShotState == m_poseTransitionState &&
-			!m_oneShotState->HasEnded() &&
-			(m_movementInfo.IsChangingPosition() ||
-				(m_inputVector * Vector3(1.0f, 0.0f, 1.0f)).GetLength() > 0.1f))
+		// Death forgets the active pose so a later stand-state confirm never plays an exit clip.
+		if (isDead && m_poseStandState != unit_stand_state::Stand)
 		{
-			m_oneShotState->SetTimePosition(m_oneShotState->GetLength());
-		}
-
-		// If a looped spell animation is locked, skip movement animation override
-		if (m_lockedLoopAnimState != nullptr)
-		{
-			m_idleSeconds = 0.0f;
-			return;
-		}
-
-		if (!m_unitMovement)
-		{
-			return;
-		}
-
-		// Swimming animations take priority over the ground/idle and jump/fall logic below.
-		// Distinguish active swimming (horizontal stroke) from treading water. Holding jump to
-		// ascend without any horizontal input still counts as idle, so it stays in swim-idle.
-		if (m_movementInfo.IsSwimming())
-		{
-			const bool horizontallyMoving = (m_movementInfo.movementFlags &
-				(movement_flags::Forward | movement_flags::Backward |
-				 movement_flags::StrafeLeft | movement_flags::StrafeRight)) != 0;
-
-			AnimationState* swimAnim;
-			if (horizontallyMoving)
-			{
-				const uint32 mf = m_movementInfo.movementFlags;
-				const bool fwd = (mf & movement_flags::Forward) != 0;
-				const bool back = (mf & movement_flags::Backward) != 0;
-				const bool left = (mf & movement_flags::StrafeLeft) != 0;
-				const bool right = (mf & movement_flags::StrafeRight) != 0;
-
-				// Pick a directional swim stroke. Forward/backward take priority over pure strafing;
-				// each directional stroke is optional and falls back to the generic Swim below.
-				AnimationState* directional = nullptr;
-				if (back && !fwd)
-				{
-					directional = m_swimBackwardState;
-				}
-				else if (!fwd && !back && left && !right)
-				{
-					directional = m_swimLeftState;
-				}
-				else if (!fwd && !back && right && !left)
-				{
-					directional = m_swimRightState;
-				}
-
-				// Fall back: directional stroke -> generic swim -> swim-idle -> run.
-				swimAnim = directional ? directional
-					: (m_swimState ? m_swimState : (m_swimIdleState ? m_swimIdleState : m_runAnimState));
-			}
-			else
-			{
-				// Treading water / ascending in place: swim-idle, falling back to swim, then idle.
-				swimAnim = m_swimIdleState ? m_swimIdleState : (m_swimState ? m_swimState : m_idleAnimState);
-			}
-
-			if (swimAnim)
-			{
-				SetTargetAnimState(swimAnim);
-			}
-			m_idleSeconds = 0.0f;
-			return;
-		}
-
-		// Handle jumping animations first
-		if (m_unitMovement->IsFalling() && std::abs(m_unitMovement->GetVelocity().y) > 0.05f)
-		{
-			// If the jumping velocity is positive, we're in the jump up phase
-			if (m_unitMovement->GetVelocity().y > 0.0f)
-			{
-				// If we have a jump start animation, use it. Otherwise, use falling
-				if (m_jumpStartState && !m_jumpStartState->HasEnded())
-				{
-					SetTargetAnimState(m_jumpStartState);
-				}
-				else if (m_fallingState)
-				{
-					SetTargetAnimState(m_fallingState);
-				}
-			}
-			// If velocity is negative, we're falling
-			else if (m_fallingState)
-			{
-				SetTargetAnimState(m_fallingState);
-			}
-			m_idleSeconds = 0.0f;
-			return;
-		}
-
-		const float inputVector2DSize = (m_inputVector * Vector3(1.0f, 0.0f, 1.0f)).Normalize();
-
-		// Regular movement animations
-		if (m_unitMovement->IsMovingOnGround() && inputVector2DSize > 0.1f)
-		{
-			const uint32 mf = m_movementInfo.movementFlags;
-			const bool movingForward  = (mf & movement_flags::Forward) != 0;
-			const bool movingBackward = (mf & movement_flags::Backward) != 0 && !movingForward;
-			const bool strafeLeft     = (mf & movement_flags::StrafeLeft) != 0;
-			const bool strafeRight    = (mf & movement_flags::StrafeRight) != 0;
-
-			AnimationState* movementAnim;
-			if (m_walkAnimState && IsWalkModeEnabled())
-			{
-				if (movingForward && strafeLeft && !strafeRight)
-				{
-					movementAnim = m_walkForwardLeftState ? m_walkForwardLeftState : m_walkAnimState;
-				}
-				else if (movingForward && strafeRight && !strafeLeft)
-				{
-					movementAnim = m_walkForwardRightState ? m_walkForwardRightState : m_walkAnimState;
-				}
-				else if (strafeLeft && !strafeRight && !movingForward && !movingBackward)
-				{
-					movementAnim = m_walkLeftState ? m_walkLeftState : m_walkAnimState;
-				}
-				else if (strafeRight && !strafeLeft && !movingForward && !movingBackward)
-				{
-					movementAnim = m_walkRightState ? m_walkRightState : m_walkAnimState;
-				}
-				else
-				{
-					movementAnim = m_walkAnimState;
-				}
-			}
-			else if (movingBackward && m_runBackAnimState)
-			{
-				movementAnim = m_runBackAnimState;
-			}
-			else if (movingForward && strafeLeft && !strafeRight)
-			{
-				movementAnim = m_runForwardLeftState ? m_runForwardLeftState : m_runAnimState;
-			}
-			else if (movingForward && strafeRight && !strafeLeft)
-			{
-				movementAnim = m_runForwardRightState ? m_runForwardRightState : m_runAnimState;
-			}
-			else if (strafeLeft && !strafeRight && !movingForward && !movingBackward)
-			{
-				movementAnim = m_runLeftState ? m_runLeftState : m_runAnimState;
-			}
-			else if (strafeRight && !strafeLeft && !movingForward && !movingBackward)
-			{
-				movementAnim = m_runRightState ? m_runRightState : m_runAnimState;
-			}
-			else
-			{
-				movementAnim = m_runAnimState;
-			}
-
-			SetTargetAnimState(movementAnim);
-			m_idleSeconds = 0.0f;
-		}
-		else
-		{
-			const bool isAttacking = IsWeaponDrawn();
-			AnimationState *idleAnim = m_idleAnimState;
-			if (isAttacking)
-			{
-				// Prefer the weapon-specific ready stance when one is set and valid for the current
-				// mesh; otherwise fall back to the unarmed ready animation.
-				idleAnim = IsValidAnimState(m_weaponReadyState) ? m_weaponReadyState : m_readyAnimState;
-				m_idleSeconds = 0.0f;
-			}
-			else
-			{
-				// After standing still for a while, ease into the unit's selected special idle
-				// pose (if one is selected and its clip exists on the current mesh).
-				constexpr float specialIdleDelaySeconds = 10.0f;
-
-				m_idleSeconds += deltaTime;
-				if (m_idleSeconds >= specialIdleDelaySeconds && m_oneShotState == nullptr)
-				{
-					if (!IsValidAnimState(m_specialIdleState))
-					{
-						m_specialIdleState = ResolveEmoteAnimation(Get<uint32>(object_fields::IdlePoseEmote));
-						if (m_specialIdleState)
-						{
-							m_specialIdleState->SetLoop(true);
-						}
-					}
-
-					if (m_specialIdleState)
-					{
-						idleAnim = m_specialIdleState;
-					}
-				}
-			}
-
-			SetTargetAnimState(idleAnim);
-		}
-	}
-
-	void GameUnitC::RefreshMovementAnimation()
-	{
-		// Force refresh of movement-based animation state
-		// This is useful after canceling spell animations to return to idle/run state
-		UpdateMovementBasedAnimation();
-	}
-
-	void GameUnitC::UpdateAnimationStates(const float deltaTime, const bool isDead)
-	{
-		// Defensive: clear any pointers that have become stale due to a mesh swap
-		// that was not routed through OnDisplayIdChanged (race window, early-return, etc.)
-		if (!IsValidAnimState(m_currentState))      { m_currentState      = nullptr; }
-		if (!IsValidAnimState(m_targetState))       { m_targetState       = nullptr; }
-		if (!IsValidAnimState(m_oneShotState))      { m_oneShotState      = nullptr; }
-		if (!IsValidAnimState(m_pendingOneShotState)) { m_pendingOneShotState = nullptr; }
-		if (!IsValidAnimState(m_poseAnimState))     { m_poseAnimState     = nullptr; }
-		if (!IsValidAnimState(m_poseTransitionState)) { m_poseTransitionState = nullptr; }
-		if (!IsValidAnimState(m_moodAnimState))     { m_moodAnimState     = nullptr; }
-		if (!IsValidAnimState(m_specialIdleState))  { m_specialIdleState  = nullptr; }
-
-		// Handle one-shot animations
-		if (m_oneShotState)
-		{
-			UpdateOneShotAnimation(deltaTime);
-		}
-
-		// Control animation state visibility based on one-shot state
-		if (m_currentState != nullptr)
-		{
-			m_currentState->SetEnabled(m_oneShotState == nullptr || m_oneShotState->HasEnded());
-		}
-		if (m_targetState != nullptr)
-		{
-			m_targetState->SetEnabled(m_oneShotState == nullptr || m_oneShotState->HasEnded());
-		}
-
-		// Always force dead state
-		if (isDead)
-		{
-			if (m_oneShotState && m_oneShotState->IsEnabled())
-			{
-				m_oneShotState->SetTimePosition(m_oneShotState->GetLength());
-			}
-
-			// Death clears any locked loop animation and pending pose transition
-			m_lockedLoopAnimState = nullptr;
-			m_poseAnimState = nullptr;
-			m_poseTransitionState = nullptr;
 			m_activePoseEmoteId = 0;
 			m_poseStandState = unit_stand_state::Stand;
-
-			// Use the dedicated swimming death animation when dying in water; fall back to the
-			// regular death animation for meshes without one (or when not swimming).
-			AnimationState* deathAnim = (m_movementInfo.IsSwimming() && m_swimDeathState)
-				? m_swimDeathState : m_deathState;
-			SetTargetAnimState(deathAnim);
 		}
 
-		// Handle animation transitions
-		UpdateAnimationTransitions(deltaTime);
+		AnimationContext ctx;
+		ctx.deltaTime = deltaTime;
+		ctx.movementFlags = m_movementInfo.movementFlags;
+		const float inputVector2DSize = (m_inputVector * Vector3(1.0f, 0.0f, 1.0f)).GetLength();
+		ctx.moving = m_unitMovement && m_unitMovement->IsMovingOnGround() && inputVector2DSize > 0.1f;
+		ctx.pathMoving = IsFollowingPath();
+		ctx.airborne = m_unitMovement && m_unitMovement->IsFalling() &&
+			std::abs(m_unitMovement->GetVelocity().y) > 0.05f;
+		ctx.verticalVelocity = m_unitMovement ? m_unitMovement->GetVelocity().y : 0.0f;
+		ctx.swimming = m_movementInfo.IsSwimming();
+		ctx.walkMode = IsWalkModeEnabled();
+		ctx.weaponDrawn = IsWeaponDrawn();
+		ctx.weaponClass = m_weaponClass;
+		ctx.stealthed = HasStealthAura();
+		ctx.dead = isDead;
 
-		// Update animation time positions
-		AdvanceAnimationTimes(deltaTime);
-	}
-
-	void GameUnitC::UpdateOneShotAnimation(const float deltaTime)
-	{
-		// Hide regular animations while one-shot is playing
-		if (m_currentState)
-			m_currentState->SetWeight(0.0f);
-		if (m_targetState)
-			m_targetState->SetWeight(0.0f);
-
-		// Handle transition back after one-shot animation has ended
-		if (m_oneShotState->HasEnded())
-		{
-			// Transition back to current state
-			m_oneShotState->SetWeight(m_oneShotState->GetWeight() - deltaTime * 4.0f);
-			if (m_targetState)
-			{
-				m_targetState->SetWeight(1.0f - m_oneShotState->GetWeight());
-			}
-			else if (m_currentState)
-			{
-				m_currentState->SetWeight(1.0f - m_oneShotState->GetWeight());
-			}
-
-			// Once transition is complete, disable one-shot animation
-			if (m_oneShotState->GetWeight() <= 0.0f)
-			{
-				if (m_targetState)
-				{
-					m_targetState->SetWeight(1.0f);
-				}
-				else if (m_currentState)
-				{
-					m_currentState->SetWeight(1.0f);
-				}
-
-				m_oneShotState->SetEnabled(false);
-				m_oneShotState->SetWeight(0.0f);
-				m_oneShotState = nullptr;
-
-				// Flush any SwingHit callbacks that never got a notify (animation had none).
-				FlushSwingHitCallbacks();
-
-				// Start the queued one-shot now that the slot is free.
-				if (m_pendingOneShotState && IsValidAnimState(m_pendingOneShotState))
-				{
-					AnimationState* pending = m_pendingOneShotState;
-					m_pendingOneShotState = nullptr;
-					PlayOneShotAnimation(pending);
-				}
-			}
-		}
-	}
-
-	void GameUnitC::UpdateAnimationTransitions(const float deltaTime)
-	{
-		// Skip transitions if one-shot animation is playing
-		if (m_oneShotState)
-		{
-			return;
-		}
-
-		// Handle transition to target state
-		if (m_targetState != m_currentState)
-		{
-			// If we have a target but no current state, just set target as current
-			if (m_targetState && !m_currentState)
-			{
-				m_currentState = m_targetState;
-				m_targetState = nullptr;
-
-				m_currentState->SetWeight(1.0f);
-				m_currentState->SetEnabled(true);
-			}
-		}
-
-		// Handle crossfade between current and target states
-		if (m_currentState && m_targetState)
-		{
-			m_targetState->SetWeight(m_targetState->GetWeight() + deltaTime * 4.0f);
-			m_currentState->SetWeight(1.0f - m_targetState->GetWeight());
-
-			// Once transition is complete, make target the new current state
-			if (m_targetState->GetWeight() >= 1.0f)
-			{
-				m_currentState->SetWeight(0.0f);
-				m_currentState->SetEnabled(false);
-
-				m_currentState = m_targetState;
-				m_targetState = nullptr;
-			}
-		}
-	}
-
-	void GameUnitC::AdvanceAnimationTimes(const float deltaTime) const
-	{
-		// Update animation states
-		if (m_currentState && m_currentState->IsEnabled())
-		{
-			m_currentState->AddTime(deltaTime);
-		}
-		if (m_targetState && m_targetState->IsEnabled())
-		{
-			m_targetState->AddTime(deltaTime);
-		}
-		if (m_oneShotState && m_oneShotState->IsEnabled())
-		{
-			m_oneShotState->AddTime(deltaTime);
-		}
-		// The mood face layer runs independently of the locomotion layers.
-		if (m_moodAnimState && m_moodAnimState->IsEnabled())
-		{
-			m_moodAnimState->AddTime(deltaTime);
-		}
+		m_animationController->Update(ctx);
 	}
 
 	void GameUnitC::ApplyMovementInfo(const MovementInfo &movementInfo)
@@ -1352,7 +996,7 @@ namespace mmo
 						// Flush deferred damage display at the weapon-connects frame.
 						if (notify.GetType() == AnimationNotifyType::SwingHit)
 						{
-							self->FlushSwingHitCallbacks();
+							self->m_animationController->NotifyActionHit();
 						}
 
 						// Play SoundEntry-based sound notifies at the unit's position. Like footsteps,
@@ -2024,16 +1668,8 @@ namespace mmo
 		m_movementInfo.movementFlags &= ~movement_flags::StrafeRight;
 		m_movementInfo.movementFlags &= ~movement_flags::PositionChanging;
 
-		// Set idle animation for all units when path completes, but don't override
-		// a locked spell cast animation (e.g. path completes just as casting begins)
-		if (m_lockedLoopAnimState)
-		{
-			SetTargetAnimState(m_lockedLoopAnimState);
-		}
-		else if (m_idleAnimState)
-		{
-			SetTargetAnimState(m_idleAnimState);
-		}
+		// The animation controller picks up the cleared movement flags on its next update
+		// and blends back to idle (or keeps a locked spell cast animation) automatically.
 
 		// Complete the path
 		m_pathCompleted = true;
@@ -2178,18 +1814,8 @@ namespace mmo
 				m_unitMovement->CorrectGroundHeight();
 			}
 
-			// Set run animation for all units following paths
-			AnimationState* movementAnim = m_runAnimState;
-			if (m_walkAnimState && IsWalkModeEnabled())
-			{
-				movementAnim = m_walkAnimState;
-			}
-
-			// Don't override a locked spell animation with the run animation
-			if (movementAnim && !m_lockedLoopAnimState)
-			{
-				SetTargetAnimState(movementAnim);
-			}
+			// The animation controller drives the run/walk animation from the path-moving
+			// state in its per-frame update.
 		}
 
 		// Update facing direction towards movement direction
@@ -2748,62 +2374,9 @@ namespace mmo
 		return m_creatureInfo.name;
 	}
 
-	void GameUnitC::SetTargetAnimState(AnimationState *newTargetState)
-	{
-		// Discard any cached pointers that belong to a previous AnimationStateSet so
-		// we never call methods on freed memory after a mesh (model) swap.
-		if (!IsValidAnimState(m_currentState)) { m_currentState = nullptr; }
-		if (!IsValidAnimState(m_targetState))  { m_targetState  = nullptr; }
-
-		// If the requested state is itself stale or invalid, treat it as nullptr.
-		if (newTargetState && !IsValidAnimState(newTargetState))
-		{
-			newTargetState = nullptr;
-		}
-
-		if (m_targetState == newTargetState)
-		{
-			// Nothing to do here, we are already there
-			return;
-		}
-
-		if (m_currentState == newTargetState)
-		{
-			// Cancel any ongoing transition
-			if (m_targetState)
-			{
-				m_targetState->SetWeight(0.0f);
-				m_targetState->SetEnabled(false);
-				m_targetState = nullptr;
-			}
-
-			// Ensure current state's weight is 1.0f
-			m_currentState->SetWeight(1.0f);
-			return;
-		}
-
-		// Reset any existing target state
-		if (m_targetState)
-		{
-			m_targetState->SetWeight(0.0f);
-			m_targetState->SetEnabled(false);
-		}
-
-		m_targetState = newTargetState;
-		if (m_targetState)
-		{
-			m_targetState->SetWeight(m_currentState ? (1.0f - m_currentState->GetWeight()) : 0.0f);
-			m_targetState->SetEnabled(true);
-		}
-	}
-
 	void GameUnitC::SetLockedLoopAnimation(AnimationState* state)
 	{
-		m_lockedLoopAnimState = state;
-		if (state != nullptr)
-		{
-			SetTargetAnimState(state);
-		}
+		m_animationController->SetSpellLoopAnimation(state);
 	}
 
 	AnimationState* GameUnitC::ResolveEmoteAnimation(const uint32 emoteId) const
@@ -2912,7 +2485,7 @@ namespace mmo
 
 	void GameUnitC::RefreshPoseAnimation(const bool withTransition)
 	{
-		m_idleSeconds = 0.0f;
+		m_animationController->ResetIdleTimer();
 
 		const unit_stand_state::Type standState = GetStandState();
 		if (standState == unit_stand_state::Sit || standState == unit_stand_state::Sleep ||
@@ -2945,10 +2518,9 @@ namespace mmo
 
 				poseState->SetLoop(true);
 				poseState->SetPlayRate(1.0f);
-				m_poseAnimState = poseState;
 				m_activePoseEmoteId = entry ? entry->id() : 0;
 				m_poseStandState = standState;
-				SetLockedLoopAnimation(poseState);
+				m_animationController->SetPoseLoop(*poseState);
 
 				if (withTransition && enteringNewPose && entry && IsAlive())
 				{
@@ -2956,10 +2528,7 @@ namespace mmo
 					{
 						startState->SetLoop(false);
 						startState->SetPlayRate(1.0f);
-						if (PlayOneShotAnimation(startState))
-						{
-							m_poseTransitionState = startState;
-						}
+						m_animationController->PlayPoseTransition(startState);
 					}
 				}
 				return;
@@ -2969,20 +2538,11 @@ namespace mmo
 		// Standing (or no usable pose clip): release the pose lock. Only the pose lock is
 		// cleared here - a looping spell-cast animation set through the same locked-loop slot
 		// must survive stand-state changes.
-		if (m_poseAnimState != nullptr)
-		{
-			if (m_lockedLoopAnimState == m_poseAnimState)
-			{
-				m_lockedLoopAnimState = nullptr;
-				RefreshMovementAnimation();
-			}
-
-			m_poseAnimState = nullptr;
-		}
+		m_animationController->ClearPoseLoop();
 
 		// A voluntary stand-up (still stationary) plays the pose's exit transition clip.
 		// Movement cancels skip it so controls stay responsive; a transition that movement
-		// catches mid-play is fast-forwarded in UpdateMovementBasedAnimation.
+		// catches mid-play is fast-forwarded by the animation controller.
 		if (withTransition && m_poseStandState != unit_stand_state::Stand &&
 			m_activePoseEmoteId != 0 && !m_movementInfo.IsChangingPosition() && IsAlive())
 		{
@@ -2992,10 +2552,7 @@ namespace mmo
 				{
 					endState->SetLoop(false);
 					endState->SetPlayRate(1.0f);
-					if (PlayOneShotAnimation(endState))
-					{
-						m_poseTransitionState = endState;
-					}
+					m_animationController->PlayPoseTransition(endState);
 				}
 			}
 		}
@@ -3006,278 +2563,56 @@ namespace mmo
 
 	void GameUnitC::RefreshMoodAnimation()
 	{
-		// Disable the previous mood layer (if any).
-		if (m_moodAnimState != nullptr && IsValidAnimState(m_moodAnimState))
-		{
-			m_moodAnimState->SetEnabled(false);
-			m_moodAnimState->SetWeight(0.0f);
-			m_moodAnimState->DestroyBlendMask();
-		}
-		m_moodAnimState = nullptr;
-
-		AnimationState* state = ResolveEmoteAnimation(Get<uint32>(object_fields::MoodEmote));
-		if (!state || !m_entity)
-		{
-			return;
-		}
-
-		const std::shared_ptr<SkeletonInstance> skeleton = m_entity->GetSkeleton();
-		if (!skeleton)
-		{
-			return;
-		}
-
-		// Restrict the mood clip to face bones (name convention: "face_" prefix, case-insensitive)
-		// so it can layer over whatever the body is doing. Without any face bones the mood is a
-		// silent no-op.
-		const uint16 boneCount = skeleton->GetNumBones();
-		state->CreateBlendMask(boneCount, 0.0f);
-
-		bool anyFaceBone = false;
-		for (uint16 i = 0; i < boneCount; ++i)
-		{
-			const Bone* bone = skeleton->GetBone(i);
-			if (!bone)
-			{
-				continue;
-			}
-
-			const String& name = bone->GetName();
-			constexpr const char* facePrefix = "face_";
-			constexpr size_t facePrefixLen = 5;
-			if (name.size() >= facePrefixLen &&
-				std::equal(name.begin(), name.begin() + facePrefixLen, facePrefix,
-					[](const char a, const char b) { return std::tolower(static_cast<unsigned char>(a)) == b; }))
-			{
-				state->SetBlendMaskEntry(bone->GetHandle(), 1.0f);
-				anyFaceBone = true;
-			}
-		}
-
-		if (!anyFaceBone)
-		{
-			state->DestroyBlendMask();
-			return;
-		}
-
-		state->SetLoop(true);
-		state->SetPlayRate(1.0f);
-		state->SetTimePosition(0.0f);
-		state->SetWeight(1.0f);
-		state->SetEnabled(true);
-		m_moodAnimState = state;
+		// The face overlay layer masks the clip to "face_" bones and layers it over
+		// whatever the body is doing (nullptr clears the layer).
+		m_animationController->SetMoodClip(ResolveEmoteAnimation(Get<uint32>(object_fields::MoodEmote)));
 	}
 
 	bool GameUnitC::PlayOneShotAnimation(AnimationState* animState, const bool suppressIfBusy)
 	{
-		if (!animState || !IsValidAnimState(animState))
-		{
-			return false;
-		}
-
-		if (animState->IsLoop())
-		{
-			WLOG("One shot animation has loop flag set to true, not playing!");
-			return false;
-		}
-
-		// If a one-shot is currently playing and is still in its first half, decide how to handle
-		// the new request based on the caller's intent rather than always hard-cutting.
-		if (m_oneShotState && IsValidAnimState(m_oneShotState) && !m_oneShotState->HasEnded())
-		{
-			const float length = m_oneShotState->GetLength();
-			const float progress = length > 0.f ? m_oneShotState->GetTimePosition() / length : 1.f;
-
-			if (progress < 0.5f)
-			{
-				if (suppressIfBusy)
-				{
-					// Off-hand swings: drop silently — the main-hand animation is still fresh.
-					return false;
-				}
-
-				// Non-off-hand (instant abilities, etc.): queue as pending. Replaces any prior
-				// pending entry so the queue never grows beyond one slot.
-				m_pendingOneShotState = animState;
-				m_pendingOneShotState->SetTimePosition(0.f);
-				return false;
-			}
-		}
-
-		// One-shot animations evict a locked spell loop and any stale pending entry. The pose
-		// lock survives: pose enter/exit transitions (and one-shots that fire while posing,
-		// like damage flinches) play in front of the pose loop and must blend back into it.
-		if (m_lockedLoopAnimState != m_poseAnimState)
-		{
-			m_lockedLoopAnimState = nullptr;
-		}
-		m_pendingOneShotState = nullptr;
-
-		if (m_oneShotState && IsValidAnimState(m_oneShotState))
-		{
-			// Flush pending hit callbacks before evicting — the old animation's hit point passed.
-			FlushSwingHitCallbacks();
-			m_oneShotState->SetEnabled(false);
-			m_oneShotState->SetWeight(0.0f);
-		}
-		m_oneShotState = nullptr;
-
-		m_oneShotState = animState;
-		m_oneShotState->SetEnabled(true);
-		m_oneShotState->SetWeight(1.0f);
-		m_oneShotState->SetTimePosition(0.0f);
-		return true;
+		return m_animationController->PlayAction(animState, suppressIfBusy);
 	}
 
-	void GameUnitC::FlushSwingHitCallbacks()
+	bool GameUnitC::IsPlayingOneShotAnimation() const
 	{
-		if (m_pendingSwingHitCallbacks.empty())
-		{
-			return;
-		}
-
-		std::vector<std::function<void()>> callbacks;
-		std::swap(callbacks, m_pendingSwingHitCallbacks);
-		for (auto& cb : callbacks)
-		{
-			cb();
-		}
+		return m_animationController->IsActionPlaying();
 	}
 
 	void GameUnitC::QueueSwingHitCallback(std::function<void()> callback)
 	{
-		if (!m_oneShotState || !IsValidAnimState(m_oneShotState) || m_oneShotState->HasEnded())
-		{
-			callback();
-			return;
-		}
-
-		m_pendingSwingHitCallbacks.push_back(std::move(callback));
+		m_animationController->QueueActionHitCallback(std::move(callback));
 	}
 
 	void GameUnitC::CancelOneShotAnimation()
 	{
-		if (m_oneShotState != nullptr && IsValidAnimState(m_oneShotState))
-		{
-			m_oneShotState->SetEnabled(false);
-			m_oneShotState->SetWeight(0.0f);
-		}
-		m_oneShotState = nullptr;
-		m_pendingOneShotState = nullptr;
-		FlushSwingHitCallbacks();
-
-		// Refresh movement animation to ensure proper state
-		RefreshMovementAnimation();
+		m_animationController->CancelAction();
 	}
 
 	bool GameUnitC::NotifyAttackSwingEvent(const bool offhand)
 	{
-		// Helper: collect the animation states from a list that are still valid for the current mesh.
-		auto collectValid = [this](const std::vector<AnimationState*>& states, std::vector<AnimationState*>& out)
-		{
-			out.reserve(states.size());
-			for (AnimationState* state : states)
-			{
-				if (IsValidAnimState(state))
-				{
-					out.push_back(state);
-				}
-			}
-		};
-
-		// Collect the weapon attack states that are still valid for the current mesh. Off-hand swings
-		// use the dedicated off-hand list, falling back to the main-hand list when none are available.
-		std::vector<AnimationState*> candidates;
-		if (offhand)
-		{
-			collectValid(m_offhandWeaponAttackStates, candidates);
-		}
-		if (candidates.empty())
-		{
-			collectValid(m_weaponAttackStates, candidates);
-		}
-
-		// Fall back to the unarmed attack animation when no weapon animation is available.
-		if (candidates.empty())
-		{
-			return PlayOneShotAnimation(m_unarmedAttackState, offhand);
-		}
-
-		// Pick one of the weapon attack animations at random.
-		AnimationState* attackState = candidates.front();
-		if (candidates.size() > 1)
-		{
-			static std::random_device rd;
-			static std::mt19937 gen(rd());
-			std::uniform_int_distribution<size_t> dis(0, candidates.size() - 1);
-			attackState = candidates[dis(gen)];
-		}
-
 		// Off-hand swings are suppressed when the main-hand animation is still fresh to avoid
 		// the jarring visual of hard-cutting a recently-started clip.
-		return PlayOneShotAnimation(attackState, offhand);
+		return m_animationController->PlayAttackSwing(offhand);
 	}
 
 	void GameUnitC::SetWeaponAttackAnimations(const std::vector<String>& animNames)
 	{
-		m_weaponAttackStates.clear();
-
-		if (!m_entity)
-		{
-			return;
-		}
-
-		for (const String& animName : animNames)
-		{
-			if (animName.empty() || !m_entity->HasAnimationState(animName))
-			{
-				continue;
-			}
-
-			AnimationState* state = m_entity->GetAnimationState(animName);
-			state->SetLoop(false);
-			m_weaponAttackStates.push_back(state);
-		}
+		m_animationController->SetAttackClips(animNames);
 	}
 
 	void GameUnitC::SetOffhandWeaponAttackAnimations(const std::vector<String>& animNames)
 	{
-		m_offhandWeaponAttackStates.clear();
-
-		if (!m_entity)
-		{
-			return;
-		}
-
-		for (const String& animName : animNames)
-		{
-			if (animName.empty() || !m_entity->HasAnimationState(animName))
-			{
-				continue;
-			}
-
-			AnimationState* state = m_entity->GetAnimationState(animName);
-			state->SetLoop(false);
-			m_offhandWeaponAttackStates.push_back(state);
-		}
+		m_animationController->SetOffhandAttackClips(animNames);
 	}
 
 	void GameUnitC::SetWeaponReadyAnimation(const String& animName)
 	{
-		m_weaponReadyState = nullptr;
-
-		if (animName.empty() || !m_entity || !m_entity->HasAnimationState(animName))
-		{
-			return;
-		}
-
-		m_weaponReadyState = m_entity->GetAnimationState(animName);
-		m_weaponReadyState->SetLoop(true);
+		m_animationController->SetCombatReadyClip(animName);
 	}
 
 	void GameUnitC::NotifyHitEvent()
 	{
-		PlayOneShotAnimation(m_damageHitState);
+		m_animationController->PlayHit();
 	}
 
 	void GameUnitC::AddProficiency(const uint32 proficiencyId)
@@ -3358,58 +2693,45 @@ namespace mmo
 							{ return factionId == other.GetFaction()->id(); }) != m_factionTemplate->enemies().end();
 	}
 
-	void GameUnitC::ClearAnimationStates()
+	bool GameUnitC::HasStealthAura() const
 	{
-		m_idleAnimState = nullptr;
-		m_walkAnimState = nullptr;
-		m_walkLeftState = nullptr;
-		m_walkRightState = nullptr;
-		m_walkForwardLeftState = nullptr;
-		m_walkForwardRightState = nullptr;
-		m_runAnimState = nullptr;
-		m_runBackAnimState = nullptr;
-		m_runLeftState = nullptr;
-		m_runRightState = nullptr;
-		m_runForwardLeftState = nullptr;
-		m_runForwardRightState = nullptr;
-		m_readyAnimState = nullptr;
-		m_weaponReadyState = nullptr;
-		m_castingState = nullptr;
-		m_castReleaseState = nullptr;
-		m_unarmedAttackState = nullptr;
-		m_weaponAttackStates.clear();
-		m_deathState = nullptr;
-		m_damageHitState = nullptr;
-		m_targetState = nullptr;
-		m_currentState = nullptr;
-		m_oneShotState = nullptr;
-		m_pendingOneShotState = nullptr;
-		m_pendingSwingHitCallbacks.clear();
-		m_lockedLoopAnimState = nullptr;
-		m_poseAnimState = nullptr;
-		m_poseTransitionState = nullptr;
-		m_moodAnimState = nullptr;
-		m_specialIdleState = nullptr;
-		m_jumpStartState = nullptr;
-		m_fallingState = nullptr;
-		m_landState = nullptr;
-		m_swimState = nullptr;
-		m_swimIdleState = nullptr;
-		m_swimDeathState = nullptr;
-		m_swimBackwardState = nullptr;
-		m_swimLeftState = nullptr;
-		m_swimRightState = nullptr;
-	}
-
-	bool GameUnitC::IsValidAnimState(AnimationState* state) const
-	{
-		if (!state || !m_entity)
+		for (const auto& aura : m_auras)
 		{
-			return false;
+			if (!aura || aura->IsExpired())
+			{
+				continue;
+			}
+
+			const proto_client::SpellEntry* spell = aura->GetSpell();
+			if (!spell)
+			{
+				continue;
+			}
+
+			for (const auto& effect : spell->effects())
+			{
+				if (effect.aura() == aura_type::ModStealth)
+				{
+					return true;
+				}
+			}
 		}
 
-		const AnimationStateSet* currentSet = m_entity->GetAllAnimationStates();
-		return currentSet != nullptr && state->GetParent() == currentSet;
+		return false;
+	}
+
+	void GameUnitC::UpdateSpecialIdleClip()
+	{
+		String clipName;
+		if (const uint32 emoteId = Get<uint32>(object_fields::IdlePoseEmote); emoteId != 0)
+		{
+			if (const proto_client::EmoteEntry* emote = m_project.emotes.getById(emoteId))
+			{
+				clipName = emote->animation();
+			}
+		}
+
+		m_animationController->SetSpecialIdleClip(clipName);
 	}
 
 	void GameUnitC::OnDisplayIdChanged()
@@ -3417,9 +2739,9 @@ namespace mmo
 		const uint32 displayId = Get<uint32>(object_fields::DisplayId);
 		const proto_client::ModelDataEntry *modelEntry = ObjectMgr::GetModelData(displayId);
 
-		// Always clear animation state pointers first so no stale pointer survives
-		// a mesh change, even when there is no valid model entry and we return early.
-		ClearAnimationStates();
+		// Always drop animation clip pointers first so no stale pointer survives a mesh
+		// change, even when there is no valid model entry and we return early.
+		m_animationController->NotifyMeshChanged();
 		m_customizationDefinition = nullptr;
 
 		if (m_entity)
@@ -3481,178 +2803,15 @@ namespace mmo
 			m_configuration.Apply(*this, *m_customizationDefinition);
 		}
 
-		// Initialize animation states from new mesh
-		if (m_entity->HasAnimationState("Idle"))
-		{
-			m_idleAnimState = m_entity->GetAnimationState("Idle");
-		}
-
-		if (m_entity->HasAnimationState("Walk"))
-		{
-			m_walkAnimState = m_entity->GetAnimationState("Walk");
-		}
-
-		if (m_entity->HasAnimationState("WalkLeft"))
-		{
-			m_walkLeftState = m_entity->GetAnimationState("WalkLeft");
-			m_walkLeftState->SetLoop(true);
-		}
-
-		if (m_entity->HasAnimationState("WalkRight"))
-		{
-			m_walkRightState = m_entity->GetAnimationState("WalkRight");
-			m_walkRightState->SetLoop(true);
-		}
-
-		if (m_entity->HasAnimationState("WalkForwardLeft"))
-		{
-			m_walkForwardLeftState = m_entity->GetAnimationState("WalkForwardLeft");
-			m_walkForwardLeftState->SetLoop(true);
-		}
-
-		if (m_entity->HasAnimationState("WalkForwardRight"))
-		{
-			m_walkForwardRightState = m_entity->GetAnimationState("WalkForwardRight");
-			m_walkForwardRightState->SetLoop(true);
-		}
-
-		if (m_entity->HasAnimationState("Run"))
-		{
-			m_runAnimState = m_entity->GetAnimationState("Run");
-		}
-
-		if (m_entity->HasAnimationState("RunBack"))
-		{
-			m_runBackAnimState = m_entity->GetAnimationState("RunBack");
-		}
-
-		if (m_entity->HasAnimationState("RunLeft"))
-		{
-			m_runLeftState = m_entity->GetAnimationState("RunLeft");
-			m_runLeftState->SetLoop(true);
-		}
-
-		if (m_entity->HasAnimationState("RunRight"))
-		{
-			m_runRightState = m_entity->GetAnimationState("RunRight");
-			m_runRightState->SetLoop(true);
-		}
-
-		if (m_entity->HasAnimationState("RunForwardLeft"))
-		{
-			m_runForwardLeftState = m_entity->GetAnimationState("RunForwardLeft");
-			m_runForwardLeftState->SetLoop(true);
-		}
-
-		if (m_entity->HasAnimationState("RunForwardRight"))
-		{
-			m_runForwardRightState = m_entity->GetAnimationState("RunForwardRight");
-			m_runForwardRightState->SetLoop(true);
-		}
-
-		if (m_entity->HasAnimationState("UnarmedReady"))
-		{
-			m_readyAnimState = m_entity->GetAnimationState("UnarmedReady");
-		}
-
-		if (!m_readyAnimState)
-		{
-			m_readyAnimState = m_idleAnimState;
-		}
-
-		if (m_entity->HasAnimationState("CastLoop"))
-		{
-			m_castingState = m_entity->GetAnimationState("CastLoop");
-		}
-
-		if (m_entity->HasAnimationState("CastRelease"))
-		{
-			m_castReleaseState = m_entity->GetAnimationState("CastRelease");
-			m_castReleaseState->SetLoop(false);
-			m_castReleaseState->SetPlayRate(2.0f);
-		}
-
-		if (m_entity->HasAnimationState("UnarmedAttack01"))
-		{
-			m_unarmedAttackState = m_entity->GetAnimationState("UnarmedAttack01");
-			m_unarmedAttackState->SetLoop(false);
-		}
-
-		if (m_entity->HasAnimationState("Death"))
-		{
-			m_deathState = m_entity->GetAnimationState("Death");
-			m_deathState->SetLoop(false);
-			m_deathState->SetTimePosition(0.0f);
-		}
-
-		if (m_entity->HasAnimationState("Hit"))
-		{
-			m_damageHitState = m_entity->GetAnimationState("Hit");
-			m_damageHitState->SetLoop(false);
-			m_damageHitState->SetTimePosition(0.0f);
-		}
-
-		// Initialize jump animation states
-		if (m_entity->HasAnimationState("JumpStart"))
-		{
-			m_jumpStartState = m_entity->GetAnimationState("JumpStart");
-			m_jumpStartState->SetLoop(false);
-		}
-
-		if (m_entity->HasAnimationState("Falling"))
-		{
-			m_fallingState = m_entity->GetAnimationState("Falling");
-			m_fallingState->SetLoop(true);
-		}
-
-		if (m_entity->HasAnimationState("Land"))
-		{
-			m_landState = m_entity->GetAnimationState("Land");
-			m_landState->SetLoop(false);
-		}
+		// Bind the model's animation profile (0 = built-in default clip names) and
+		// re-resolve all animation clip bindings against the new mesh.
+		m_animationController->SetProfileId(modelEntry->animation_profile());
+		m_animationController->NotifyMeshChanged();
+		UpdateSpecialIdleClip();
 
 		if (m_entity)
 		{
 			m_nameComponentNode->SetPosition(Vector3::UnitY * (m_entity->GetBoundingRadius()));
-		}
-
-		// Swim animation states. These are optional: meshes without them fall back to the
-		// regular run / idle / death animations (handled where the states are used).
-		if (m_entity->HasAnimationState("Swim"))
-		{
-			m_swimState = m_entity->GetAnimationState("Swim");
-			m_swimState->SetLoop(true);
-		}
-
-		if (m_entity->HasAnimationState("SwimIdle"))
-		{
-			m_swimIdleState = m_entity->GetAnimationState("SwimIdle");
-			m_swimIdleState->SetLoop(true);
-		}
-
-		if (m_entity->HasAnimationState("SwimDeath"))
-		{
-			m_swimDeathState = m_entity->GetAnimationState("SwimDeath");
-			m_swimDeathState->SetLoop(false);
-			m_swimDeathState->SetTimePosition(0.0f);
-		}
-
-		if (m_entity->HasAnimationState("SwimBackward"))
-		{
-			m_swimBackwardState = m_entity->GetAnimationState("SwimBackward");
-			m_swimBackwardState->SetLoop(true);
-		}
-
-		if (m_entity->HasAnimationState("SwimLeft"))
-		{
-			m_swimLeftState = m_entity->GetAnimationState("SwimLeft");
-			m_swimLeftState->SetLoop(true);
-		}
-
-		if (m_entity->HasAnimationState("SwimRight"))
-		{
-			m_swimRightState = m_entity->GetAnimationState("SwimRight");
-			m_swimRightState->SetLoop(true);
 		}
 
 		// Connect to animation notify signals for all animations
@@ -4197,7 +3356,8 @@ namespace mmo
 
 	void GameUnitC::OnLanded()
 	{
-		PlayLandAnimation();
+		// Play the landing animation and re-arm the jump start clip.
+		m_animationController->OnLanded();
 
 		m_movementInfo.position = m_sceneNode->GetDerivedPosition();
 		m_movementInfo.facing = GetSceneNode()->GetOrientation().GetYaw();
@@ -4288,23 +3448,6 @@ namespace mmo
 		{
 			m_swimMeshPitch = 0.0f;
 			m_entityOffsetNode->SetOrientation(baseOffset);
-		}
-	}
-
-	void GameUnitC::PlayLandAnimation()
-	{
-		// Play landing animation if available
-		if (m_landState)
-		{
-			// Reset animation state to beginning
-			m_landState->SetTimePosition(0.0f);
-			PlayOneShotAnimation(m_landState);
-		}
-
-		// Also ensure jump start state is reset
-		if (m_jumpStartState)
-		{
-			m_jumpStartState->SetTimePosition(0.0f);
 		}
 	}
 

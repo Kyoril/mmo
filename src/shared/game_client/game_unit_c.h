@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <map>
+#include <memory>
 #include <queue>
 #include <set>
 #include <vector>
@@ -18,9 +19,11 @@
 #include "unit_movement.h"
 #include "movement_event.h"
 #include "remote_movement_renderer.h"
+#include "animation/animation_context.h"
 
 namespace mmo
 {
+	class AnimationController;
 	class AnimationNotify;
 	class AnimationState;
 	class GameWorldObjectC;
@@ -130,28 +133,14 @@ namespace mmo
 		/// @brief Makes NPCs face their targets
 		void UpdateTargetTracking() const;
 
-		/// @brief Updates animation based on movement state.
-		/// @param deltaTime Frame time used to accumulate the special-idle timer; pass 0 when
-		///        forcing a refresh outside the regular update loop.
-		void UpdateMovementBasedAnimation(float deltaTime = 0.0f);
-
 		/// @brief Returns the current walk/run mode replicated from the server.
 		[[nodiscard]] UnitMovementMode GetMovementMode() const { return GetUnitMovementModeFromFlags(m_movementInfo.movementFlags); }
 
 		/// @brief Returns true if walk mode is currently enabled.
 		[[nodiscard]] bool IsWalkModeEnabled() const { return GetMovementMode() == unit_movement_mode::Walk; }
 
-		/// @brief Updates animation states (transitions, blending, etc.)
-		void UpdateAnimationStates(const float deltaTime, const bool isDead);
-
-		/// @brief Updates one-shot animations
-		void UpdateOneShotAnimation(const float deltaTime);
-
-		/// @brief Handles transitions between animation states
-		void UpdateAnimationTransitions(const float deltaTime);
-
-		/// @brief Updates animation timing
-		void AdvanceAnimationTimes(const float deltaTime) const;
+		/// @brief Builds the per-frame animation input snapshot and runs the animation controller.
+		void UpdateAnimation(float deltaTime, bool isDead);
 
 		virtual void ApplyMovementInfo(const MovementInfo &movementInfo);
 
@@ -576,8 +565,6 @@ namespace mmo
 
 		const String &GetName() const override;
 
-		void SetTargetAnimState(AnimationState *newTargetState);
-
 		/// @brief Plays a one-shot animation.
 		/// @param animState The animation state to play.
 		/// @param suppressIfBusy When true and another one-shot is still in its first half, the
@@ -595,10 +582,7 @@ namespace mmo
 		void CancelOneShotAnimation();
 
 		/// @brief Returns true if a one-shot animation is currently playing.
-		bool IsPlayingOneShotAnimation() const { return m_oneShotState != nullptr && m_oneShotState->GetWeight() > 0.0f; }
-
-		/// @brief Force an update of movement-based animations (e.g., after canceling spell animations)
-		void RefreshMovementAnimation();
+		bool IsPlayingOneShotAnimation() const;
 
 		/// @brief Plays a one-shot animated emote on this unit (e.g. /wave). Resolves the emote's
 		///	animation clip from the client emote catalog; silently does nothing when the clip is
@@ -721,12 +705,13 @@ namespace mmo
 	protected:
 		virtual void OnDisplayIdChanged();
 
-		/// Null every AnimationState* member so no stale pointer survives a mesh swap.
-		void ClearAnimationStates();
+		/// @brief Returns true when the unit currently has an unexpired stealth aura
+		/// (an aura with the ModStealth effect). Drives the stealth animation override set.
+		[[nodiscard]] bool HasStealthAura() const;
 
-		/// Returns true only when @p state still belongs to the current entity's
-		/// AnimationStateSet (i.e. the pointer is not dangling after a mesh change).
-		[[nodiscard]] bool IsValidAnimState(AnimationState* state) const;
+		/// @brief Pushes the special idle clip name resolved from the IdlePoseEmote field
+		/// into the animation controller.
+		void UpdateSpecialIdleClip();
 
 		/// Resolves the animation state of an emote entry on the current mesh. Returns nullptr
 		/// when the emote is unknown, has no animation or the clip is missing on the mesh.
@@ -763,12 +748,6 @@ namespace mmo
 		}
 
 	private:
-		/// Drains m_pendingSwingHitCallbacks and invokes each one.
-		void FlushSwingHitCallbacks();
-
-		/// Plays the landing animation when transitioning from falling to ground
-		void PlayLandAnimation();
-
 		/// Updates path-based movement towards the next waypoint
 		void UpdatePathMovement(const float deltaTime);
 
@@ -859,66 +838,18 @@ namespace mmo
 		std::set<uint32> m_proficiencies;  ///< Set of proficiency IDs the unit has
 
 	protected:
-		// Animation stuff
-		AnimationState *m_idleAnimState{nullptr};
-		AnimationState *m_walkAnimState{nullptr};
-		AnimationState *m_walkLeftState{nullptr};
-		AnimationState *m_walkRightState{nullptr};
-		AnimationState *m_walkForwardLeftState{nullptr};
-		AnimationState *m_walkForwardRightState{nullptr};
-		AnimationState *m_readyAnimState{nullptr};
-		AnimationState *m_weaponReadyState{nullptr};
-		AnimationState *m_runAnimState{nullptr};
-		AnimationState *m_runBackAnimState{nullptr};
-		AnimationState *m_runLeftState{nullptr};
-		AnimationState *m_runRightState{nullptr};
-		AnimationState *m_runForwardLeftState{nullptr};
-		AnimationState *m_runForwardRightState{nullptr};
-		AnimationState *m_deathState{nullptr};
-		AnimationState *m_unarmedAttackState{nullptr};
-		std::vector<AnimationState*> m_weaponAttackStates;
-		std::vector<AnimationState*> m_offhandWeaponAttackStates;
-		AnimationState *m_castReleaseState{nullptr};
-		AnimationState *m_castingState{nullptr};
-		AnimationState *m_damageHitState{nullptr};
-		// Jump animation states
-		AnimationState *m_jumpStartState{nullptr};
-		AnimationState *m_fallingState{nullptr};
-		AnimationState *m_landState{nullptr};
-		// Swim animation states (optional per mesh; fall back to run/idle/death when absent)
-		AnimationState *m_swimState{nullptr};
-		AnimationState *m_swimIdleState{nullptr};
-		AnimationState *m_swimDeathState{nullptr};
-		AnimationState *m_swimBackwardState{nullptr};
-		AnimationState *m_swimLeftState{nullptr};
-		AnimationState *m_swimRightState{nullptr};
+		/// @brief Layered animation controller owning all animation state selection and weights.
+		std::unique_ptr<AnimationController> m_animationController;
 
-		AnimationState *m_targetState = nullptr;
-		AnimationState *m_currentState = nullptr;
-		AnimationState *m_oneShotState = nullptr;
-		/// One-shot queued to play as soon as the current one-shot finishes (max 1 slot).
-		AnimationState *m_pendingOneShotState = nullptr;
-		AnimationState *m_lockedLoopAnimState{nullptr};
-		/// The locked loop set by RefreshPoseAnimation (sit/sleep pose). Tracked separately so
-		/// standing up only clears the pose lock, never a looping spell-cast animation.
-		AnimationState *m_poseAnimState{nullptr};
-		/// The pose enter/exit clip currently playing through the one-shot slot. Tracked so
-		/// movement can fast-forward it without touching attack or emote one-shots.
-		AnimationState *m_poseTransitionState{nullptr};
+		/// @brief Weapon category of the equipped main-hand item, fed into the animation
+		/// controller to select weapon-specific combat idle override sets.
+		anim_weapon_class::Type m_weaponClass{anim_weapon_class::Unarmed};
+
 		/// Emote entry the active pose animation came from; its end clip plays on stand-up.
 		uint32 m_activePoseEmoteId{0};
 		/// Stand state the active pose was entered with (Stand = not posing). Distinguishes
 		/// entering a new pose (plays the start clip) from variant swaps within the same pose.
 		unit_stand_state::Type m_poseStandState{unit_stand_state::Stand};
-		/// Face pose layer driven by the MoodEmote field, blended onto face bones only.
-		AnimationState *m_moodAnimState{nullptr};
-		/// Cached special idle pose resolved from the IdlePoseEmote field (nullptr = default idle).
-		AnimationState *m_specialIdleState{nullptr};
-		/// Seconds the unit has been standing still; drives the special idle transition.
-		float m_idleSeconds{0.0f};
-
-		/// Callbacks deferred until the current attack animation's SwingHit notify (or its end).
-		std::vector<std::function<void()>> m_pendingSwingHitCallbacks;
 
 		SceneNode *m_questGiverNode = nullptr;
 		Entity *m_questGiverEntity = nullptr;

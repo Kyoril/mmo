@@ -47,6 +47,7 @@
 #include "shared/proto_data/object_display.pb.h"
 #include "shared/proto_data/conditions.pb.h"
 #include "shared/proto_data/animations.pb.h"
+#include "shared/proto_data/animation_profiles.pb.h"
 #include "shared/proto_data/spell_visualizations.pb.h"
 #include "shared/proto_data/proficiencies.pb.h"
 #include "shared/proto_data/item_classes.pb.h"
@@ -102,6 +103,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::ObjectDisplayData, mmo::proto::ObjectDisplayEntry> ObjectDisplayManager;
 		typedef TemplateManager<mmo::proto::Conditions, mmo::proto::Condition> ConditionManager;
 		typedef TemplateManager<mmo::proto::Animations, mmo::proto::AnimationEntry> AnimationManager;
+		typedef TemplateManager<mmo::proto::AnimationProfiles, mmo::proto::AnimationProfileEntry> AnimationProfileManager;
 		typedef TemplateManager<mmo::proto::SpellVisualizations, mmo::proto::SpellVisualization> SpellVisualizationManager;
 		typedef TemplateManager<mmo::proto::Proficiencies, mmo::proto::ProficiencyEntry> ProficiencyManager;
 		typedef TemplateManager<mmo::proto::ItemClasses, mmo::proto::ItemClassEntry> ItemClassManager;
@@ -173,6 +175,9 @@ namespace mmo
 			ObjectDisplayManager objectDisplays;
 			ConditionManager conditions;
 			AnimationManager animations;
+
+			/// Animation profiles binding logical animation slots to skeleton clips per model.
+			AnimationProfileManager animationProfiles;
 			SpellVisualizationManager spellVisualizations;
 			ProficiencyManager proficiencies;
 			ItemClassManager itemClasses;
@@ -276,6 +281,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("object_displays", objectDisplays));
 				managers.push_back(ManagerEntry("conditions", conditions));
 				managers.push_back(ManagerEntry("animations", animations));
+				managers.push_back(ManagerEntry("animation_profiles", animationProfiles, true));
 				managers.push_back(ManagerEntry("spell_visualizations", spellVisualizations));
 				managers.push_back(ManagerEntry("proficiencies", proficiencies));
 				managers.push_back(ManagerEntry("item_classes", itemClasses));
@@ -361,6 +367,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("object_displays", "object_displays", objectDisplays));
 				managers.push_back(ManagerEntry("conditions", "conditions", conditions));
 				managers.push_back(ManagerEntry("animations", "animations", animations));
+				managers.push_back(ManagerEntry("animation_profiles", "animation_profiles", animationProfiles));
 				managers.push_back(ManagerEntry("spell_visualizations", "spell_visualizations", spellVisualizations));
 				managers.push_back(ManagerEntry("proficiencies", "proficiencies", proficiencies));
 				managers.push_back(ManagerEntry("item_classes", "item_classes", itemClasses));

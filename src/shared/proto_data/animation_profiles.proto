@@ -1,0 +1,98 @@
+syntax = "proto2";
+package mmo.proto;
+
+// NOTE: Keep this file in sync with src/shared/client_data/animation_profiles.proto!
+// The client reads the exported binary data with the mirrored proto_client schema,
+// so every field number in here has to match the mirror exactly.
+
+// Logical animation slots. The client's animation controller decides WHICH slot
+// should play based on the unit's state (movement flags, combat, death, ...);
+// a profile decides which skeleton clip is bound to each slot.
+enum AnimationSlot {
+	ANIM_SLOT_IDLE = 0;
+	ANIM_SLOT_COMBAT_IDLE = 1;
+	ANIM_SLOT_MOVE_FORWARD = 2;
+	ANIM_SLOT_MOVE_BACKWARD = 3;
+	ANIM_SLOT_MOVE_LEFT = 4;
+	ANIM_SLOT_MOVE_RIGHT = 5;
+	ANIM_SLOT_MOVE_FORWARD_LEFT = 6;
+	ANIM_SLOT_MOVE_FORWARD_RIGHT = 7;
+	ANIM_SLOT_MOVE_BACKWARD_LEFT = 8;
+	ANIM_SLOT_MOVE_BACKWARD_RIGHT = 9;
+	ANIM_SLOT_JUMP_START = 10;
+	ANIM_SLOT_FALL = 11;
+	ANIM_SLOT_LAND = 12;
+	ANIM_SLOT_DEATH = 13;
+	ANIM_SLOT_HIT = 14;
+	ANIM_SLOT_ATTACK = 15;
+	ANIM_SLOT_SPECIAL_IDLE = 16;
+}
+
+// Conditions that activate an override clip set. When several overrides are active
+// at once, the engine resolves them in a fixed priority order:
+// STEALTH > SWIM > COMBAT_2H/1H/UNARMED > COMBAT > WALK (specific beats generic).
+enum AnimationCondition {
+	ANIM_COND_WALK = 0;
+	ANIM_COND_SWIM = 1;
+	ANIM_COND_STEALTH = 2;
+	ANIM_COND_COMBAT = 3;
+	ANIM_COND_COMBAT_UNARMED = 4;
+	ANIM_COND_COMBAT_1H = 5;
+	ANIM_COND_COMBAT_2H = 6;
+}
+
+// Binds one logical slot to a named skeleton animation clip.
+message AnimationSlotBinding {
+	// AnimationSlot value.
+	required uint32 slot = 1;
+	// Skeleton animation clip name (must exist on the model's skeleton).
+	required string clip = 2;
+	optional float play_rate = 3 [default = 1.0];
+}
+
+// One directional movement clip sample for the movement blend space.
+message DirectionalClip {
+	// Direction in degrees relative to the unit: 0 = forward, 90 = right,
+	// 180 = backward, 270 = left.
+	required float angle = 1;
+	required string clip = 2;
+}
+
+// Directional movement blend space: the controller blends the two samples
+// adjacent to the current movement direction.
+message MovementBlendSpace {
+	repeated DirectionalClip clips = 1;
+	// Adjacent samples farther apart than this angle (degrees) are not blended;
+	// the nearest sample plays alone instead (e.g. Run at 0 and RunBack at 180).
+	optional float max_blend_angle = 2 [default = 100.0];
+}
+
+// A (possibly partial) set of slot bindings. Unbound slots fall through to the
+// next lower-priority set during resolution.
+message AnimationClipSet {
+	repeated AnimationSlotBinding bindings = 1;
+	// When present, replaces the discrete MOVE_* slots with a directional blend space.
+	optional MovementBlendSpace movement = 2;
+}
+
+// A clip set that only applies while a condition is active (swimming, stealthed, ...).
+message AnimationSetOverride {
+	// AnimationCondition value.
+	required uint32 condition = 1;
+	required AnimationClipSet clips = 2;
+}
+
+// A reusable animation profile referenced by model data entries. Models without a
+// profile fall back to the built-in default clip names (Idle, Run, Swim, ...).
+message AnimationProfileEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	optional AnimationClipSet base = 3;
+	repeated AnimationSetOverride overrides = 4;
+	// Crossfade duration in seconds used for locomotion transitions.
+	optional float fade_duration = 5 [default = 0.25];
+}
+
+message AnimationProfiles {
+	repeated AnimationProfileEntry entry = 1;
+}

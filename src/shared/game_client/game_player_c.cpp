@@ -6,6 +6,7 @@
 #include "sound_entry_player.h"
 #include "client_data/project.h"
 #include "game/emote_defs.h"
+#include "game/item.h"
 #include "game/guild_info.h"
 #include "game/spell.h"
 #include "log/default_log_levels.h"
@@ -133,6 +134,11 @@ namespace mmo
 				}
 				SetWeaponAttackAnimations(attackAnimations);
 				SetWeaponReadyAnimation(readyAnimation);
+
+				// Classify the main-hand weapon so the animation controller can pick
+				// weapon-specific combat idle override sets from the animation profile.
+				m_weaponClass = data.inventoryType == inventory_type::TwoHandedWeapon
+					? anim_weapon_class::TwoHanded : anim_weapon_class::OneHanded;
 			}
 
 			// If this item occupies the off-hand slot, derive the dedicated off-hand auto attack
@@ -491,6 +497,7 @@ namespace mmo
 		SetWeaponAttackAnimations({});
 		SetOffhandWeaponAttackAnimations({});
 		SetWeaponReadyAnimation(String());
+		m_weaponClass = anim_weapon_class::Unarmed;
 
 		m_configuration.Apply(*this, *m_customizationDefinition);
 
