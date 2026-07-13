@@ -77,9 +77,17 @@ namespace mmo
 
 		void SetRotateSnapSize(float snapSize) { m_rotationSnapAngle = Degree(snapSize); }
 
+		void SetScaleSnapSize(float snapSize) { m_scaleSnapStep = snapSize; }
+
 		void SetCopyMode(bool copyMode);
 
 		TransformMode GetTransformMode() const { return m_mode; }
+
+		/// Switches the widget between local and world space orientation.
+		void SetUseLocalTransform(bool local);
+
+		/// Returns true if the widget is oriented in the selection's local space, false for world space.
+		[[nodiscard]] bool IsUsingLocalTransform() const { return m_isLocal; }
 
 	private:
 		void UpdateTanslationAxisLines();
@@ -156,11 +164,8 @@ namespace mmo
 		static const float OuterRadius;
 		static const float InnerRadius;
 		static const String CircleMeshName;
+		static const String CircleFillMeshName;
 		static const String FullCircleMeshName;
-
-		// Scale
-		static const String ScaleAxisPlaneName;
-		static const String ScaleContentPlaneName;
 
 	private:
 		TransformMode m_mode { TransformMode::Translate };
@@ -179,7 +184,7 @@ namespace mmo
 		Scene &m_scene;
 		Camera &m_camera;
 		bool m_active { false };
-		Vector<size_t, 2> m_lastMouse = Vector<size_t, 2>{ 0, 0 };
+		Vector<float, 2> m_lastMouse = Vector<float, 2>{ 0.0f, 0.0f };
 		Vector3 m_lastIntersection{};
 		Vector3 m_translation{};
 		Quaternion m_rotation{};
@@ -192,6 +197,9 @@ namespace mmo
 		Radian m_rotationSnapAngle{ Degree(15.0f) };
 
 		float m_scale{1.0f};
+		float m_scaleSnapStep{ 1.0f };
+		float m_totalScaleFactor{ 1.0f };     // Unsnapped scale factor accumulated since the drag started
+		float m_previousSnappedFactor{ 1.0f };// Last snapped scale factor that was applied
 		bool m_keyDown { false};
 		bool m_resetMouse{false};
 		bool m_copyMode{false};
@@ -221,19 +229,22 @@ namespace mmo
 		Entity *m_xCircle{nullptr};
 		Entity *m_yCircle{nullptr};
 		Entity *m_zCircle{nullptr};
+		Entity *m_xCircleFill{nullptr};
+		Entity *m_yCircleFill{nullptr};
+		Entity *m_zCircleFill{nullptr};
+		SceneNode *m_fullCircleNode{nullptr};
 		Entity *m_fullCircleEntity{nullptr};
 		SceneNode *m_rotationCenter{nullptr};
 		MeshPtr m_circleMesh{ nullptr };
+		MeshPtr m_circleFillMesh{ nullptr };
 		MeshPtr m_fullCircleMesh{ nullptr };
 
 		// Scale-Mode variables
 		ManualRenderObject *m_scaleAxisLines{nullptr};
-		SceneNode *m_scaleXZPlaneNode{nullptr};
-		SceneNode *m_scaleXYPlaneNode{nullptr};
-		SceneNode *m_scaleYZPlaneNode{nullptr};
-		SceneNode *m_scaleContentPlaneNode{nullptr};
-		MeshPtr m_scaleAxisPlanes{ nullptr };
-		MeshPtr m_scaleCenterPlanes{ nullptr };
+		ManualRenderObject *m_scaleCenterFill{nullptr};
+		ManualRenderObject *m_scaleXYFill{nullptr};
+		ManualRenderObject *m_scaleXZFill{nullptr};
+		ManualRenderObject *m_scaleYZFill{nullptr};
 
 		MaterialPtr m_axisMaterial{ nullptr };
 		MaterialPtr m_axisHighlightMaterial{ nullptr };

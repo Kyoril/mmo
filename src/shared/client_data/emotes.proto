@@ -14,6 +14,8 @@ message EmoteEntry {
 	repeated string aliases = 11;
 	optional uint32 variantorder = 12;
 	optional string icon = 13;
+	optional string animationstart = 14;
+	optional string animationend = 15;
 }
 
 message Emotes {

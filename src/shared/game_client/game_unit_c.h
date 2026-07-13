@@ -31,6 +31,7 @@ namespace mmo
 
 	namespace proto_client
 	{
+		class EmoteEntry;
 		class ModelDataEntry;
 		class FactionEntry;
 		class FactionTemplateEntry;
@@ -608,7 +609,10 @@ namespace mmo
 		/// @brief Applies the looping pose animation matching the replicated stand state (sit,
 		///	sleep, ...) using the unit's selected pose variant, or returns to movement-based
 		///	animation when standing. Called when StandState or a pose-variant field changes.
-		void RefreshPoseAnimation();
+		/// @param withTransition When true, entering a pose plays the emote's start clip and a
+		///	voluntary stand-up (while stationary) plays its end clip. Pass false when re-applying
+		///	the pose on spawn or after a mesh swap, where the unit must snap into the loop.
+		void RefreshPoseAnimation(bool withTransition = true);
 
 		/// @brief Applies (or clears) the face pose layered animation from the replicated
 		///	MoodEmote field. The mood clip only drives bones whose names start with "face_";
@@ -727,10 +731,16 @@ namespace mmo
 		/// when the emote is unknown, has no animation or the clip is missing on the mesh.
 		[[nodiscard]] AnimationState* ResolveEmoteAnimation(uint32 emoteId) const;
 
-		/// Resolves the looping pose animation for a stand state: the selected pose variant's
-		/// clip if set and available, otherwise the conventional default clip ("Sit", "Sleep",
-		/// "Kneel"). Returns nullptr when nothing is available on the current mesh.
-		[[nodiscard]] AnimationState* ResolvePoseAnimation(unit_stand_state::Type standState) const;
+		/// Resolves the emote entry that drives the pose animation for a stand state: the
+		/// selected pose variant if set and its loop clip exists on the current mesh, otherwise
+		/// the Pose catalog entry matching the stand state. Returns nullptr when neither
+		/// resolves (callers fall back to the conventional clip names "Sit"/"Sleep"/"Kneel").
+		[[nodiscard]] const proto_client::EmoteEntry* ResolvePoseEmoteEntry(unit_stand_state::Type standState) const;
+
+		/// Resolves an emote's pose transition clip (enter clip when @p exit is false, exit
+		/// clip when true) on the current mesh. Returns nullptr when the emote declares no
+		/// such clip or the mesh does not have it.
+		[[nodiscard]] AnimationState* ResolvePoseTransitionClip(const proto_client::EmoteEntry& entry, bool exit) const;
 
 		void UpdateCollider();
 
@@ -891,6 +901,14 @@ namespace mmo
 		/// The locked loop set by RefreshPoseAnimation (sit/sleep pose). Tracked separately so
 		/// standing up only clears the pose lock, never a looping spell-cast animation.
 		AnimationState *m_poseAnimState{nullptr};
+		/// The pose enter/exit clip currently playing through the one-shot slot. Tracked so
+		/// movement can fast-forward it without touching attack or emote one-shots.
+		AnimationState *m_poseTransitionState{nullptr};
+		/// Emote entry the active pose animation came from; its end clip plays on stand-up.
+		uint32 m_activePoseEmoteId{0};
+		/// Stand state the active pose was entered with (Stand = not posing). Distinguishes
+		/// entering a new pose (plays the start clip) from variant swaps within the same pose.
+		unit_stand_state::Type m_poseStandState{unit_stand_state::Stand};
 		/// Face pose layer driven by the MoodEmote field, blended onto face bones only.
 		AnimationState *m_moodAnimState{nullptr};
 		/// Cached special idle pose resolved from the IdlePoseEmote field (nullptr = default idle).

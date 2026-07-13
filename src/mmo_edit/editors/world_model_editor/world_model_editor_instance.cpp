@@ -378,6 +378,14 @@ namespace mmo
 		{
 			m_transformWidget->SetTransformMode(TransformMode::Rotate);
 		}
+		if (ImGui::IsKeyPressed(ImGuiKey_3, false))
+		{
+			m_transformWidget->SetTransformMode(TransformMode::Scale);
+		}
+		if (ImGui::IsKeyPressed(ImGuiKey_4, false))
+		{
+			m_transformWidget->SetUseLocalTransform(!m_transformWidget->IsUsingLocalTransform());
+		}
 
 		// Hierarchy panel (unified groups, meshes, lights, portals)
 		if (ImGui::Begin(hierarchyId.c_str()))
@@ -1191,6 +1199,7 @@ namespace mmo
 							{
 								m_currentTranslateSnapSize = i;
 								m_transformWidget->SetTranslateSnapSize(m_translateSnapSizes[m_currentTranslateSnapSize]);
+								m_transformWidget->SetScaleSnapSize(m_translateSnapSizes[m_currentTranslateSnapSize]);
 							}
 							if (isSelected)
 							{
@@ -1216,6 +1225,20 @@ namespace mmo
 
 					ImGui::EndCombo();
 				}
+				ImGui::SameLine();
+			}
+
+			ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+			ImGui::SameLine();
+
+			// Coordinate system toggle (local / world space)
+			if (ImGui::Button(m_transformWidget->IsUsingLocalTransform() ? "Local" : "World"))
+			{
+				m_transformWidget->SetUseLocalTransform(!m_transformWidget->IsUsingLocalTransform());
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Toggle between local and world space transformation (Shortcut: 4)");
 			}
 		}
 		ImGui::End();

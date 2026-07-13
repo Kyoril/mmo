@@ -32,9 +32,8 @@ namespace mmo
 	constexpr float TransformWidget::OuterRadius = 1.0f;
 	constexpr float TransformWidget::InnerRadius = 0.8f;
 	const String TransformWidget::CircleMeshName = "Editor/RotationCircle";
+	const String TransformWidget::CircleFillMeshName = "Editor/RotationCircleFill";
 	const String TransformWidget::FullCircleMeshName = "Editor/FullRotationCircle";
-	const String TransformWidget::ScaleAxisPlaneName = "Editor/ScaleAxisPlane";
-	const String TransformWidget::ScaleContentPlaneName = "Editor/ScaleContentPlane";
 
 	TransformWidget::TransformWidget(Selection& selection, Scene& scene, Camera& camera)
 		: m_selection(selection)
@@ -89,7 +88,18 @@ namespace mmo
 		if (m_xArrow) m_scene.DestroyEntity(*m_xArrow);
 		if (m_yArrow) m_scene.DestroyEntity(*m_yArrow);
 		if (m_zArrow) m_scene.DestroyEntity(*m_zArrow);
+		if (m_xCircle) m_scene.DestroyEntity(*m_xCircle);
+		if (m_yCircle) m_scene.DestroyEntity(*m_yCircle);
+		if (m_zCircle) m_scene.DestroyEntity(*m_zCircle);
+		if (m_xCircleFill) m_scene.DestroyEntity(*m_xCircleFill);
+		if (m_yCircleFill) m_scene.DestroyEntity(*m_yCircleFill);
+		if (m_zCircleFill) m_scene.DestroyEntity(*m_zCircleFill);
 		if (m_fullCircleEntity) m_scene.DestroyEntity(*m_fullCircleEntity);
+		if (m_scaleAxisLines) m_scene.DestroyManualRenderObject(*m_scaleAxisLines);
+		if (m_scaleCenterFill) m_scene.DestroyManualRenderObject(*m_scaleCenterFill);
+		if (m_scaleXYFill) m_scene.DestroyManualRenderObject(*m_scaleXYFill);
+		if (m_scaleXZFill) m_scene.DestroyManualRenderObject(*m_scaleXZFill);
+		if (m_scaleYZFill) m_scene.DestroyManualRenderObject(*m_scaleYZFill);
 		m_scene.DestroyCamera(*m_dummyCamera);
 		if (m_widgetNode)
 		{
@@ -145,25 +155,33 @@ namespace mmo
 
 			case TransformMode::Scale:
 			{
-				m_camDir = m_camera.GetDerivedPosition() - m_widgetNode->GetPosition();
-				m_camDir = m_widgetNode->GetOrientation().Inverse() * m_camDir;
+				// While dragging, the scale node accumulates a visual stretch in ApplyScale
+				// which must not be overwritten by the camera-facing flip.
+				if (!m_active)
+				{
+					m_camDir = m_camera.GetDerivedPosition() - m_widgetNode->GetPosition();
+					m_camDir = m_widgetNode->GetOrientation().Inverse() * m_camDir;
 
-				Vector3 scale(1.0f, 1.0f, 1.0f);
-				if (m_camDir.y < 0.0f)
-				{
-					scale.y = -1.0f;
-				}
-				if (m_camDir.x < 0.0f)
-				{
-					scale.x = -1.0f;
-				}
-				if (m_camDir.z < 0.0f)
-				{
-					scale.z = -1.0f;
-				}
+					Vector3 scale(1.0f, 1.0f, 1.0f);
+					if (m_camDir.y < 0.0f)
+					{
+						scale.y = -1.0f;
+					}
+					if (m_camDir.x < 0.0f)
+					{
+						scale.x = -1.0f;
+					}
+					if (m_camDir.z < 0.0f)
+					{
+						scale.z = -1.0f;
+					}
 
-				m_scaleNode->SetScale(scale);
+					m_scaleNode->SetScale(scale);
+				}
 			} break;
+
+			default:
+				break;
 		}
 		
 		// Don't update the looks of the widget if nothing is selected or the user is flying around
@@ -255,17 +273,23 @@ namespace mmo
 
 				case TransformMode::Rotate:
 					{
-						// Determine the rotation axis
+						// Determine the rotation axis and orient the full-circle indicator so
+						//	that it lies in the plane of the grabbed rotation ring.
 						switch (m_selectedAxis)
 						{
 						case axis_id::X:
 							m_rotationAxis = m_widgetNode->GetOrientation() * Vector3::UnitX;
+							m_fullCircleNode->SetOrientation(Quaternion(Degree(-90.0f), Vector3::UnitY));
 							break;
 						case axis_id::Y:
 							m_rotationAxis = m_widgetNode->GetOrientation() * Vector3::UnitY;
+							m_fullCircleNode->SetOrientation(Quaternion(Degree(90.0f), Vector3::UnitX));
 							break;
 						case axis_id::Z:
 							m_rotationAxis = m_widgetNode->GetOrientation() * Vector3::UnitZ;
+							m_fullCircleNode->SetOrientation(Quaternion::Identity);
+							break;
+						default:
 							break;
 						}
 
@@ -291,7 +315,10 @@ namespace mmo
 					break;
 
 				case TransformMode::Scale:
-					//TODO
+					// Scaling works with relative mouse movement deltas (m_lastMouse is
+					//	already tracked), so only the snapping state needs to be reset.
+					m_totalScaleFactor = 1.0f;
+					m_previousSnappedFactor = 1.0f;
 					break;
 				}
 			}
@@ -325,6 +352,34 @@ namespace mmo
 	void TransformWidget::SetCopyMode(bool copyMode)
 	{
 		m_copyMode = copyMode;
+	}
+
+	void TransformWidget::SetUseLocalTransform(const bool local)
+	{
+		if (m_isLocal == local)
+		{
+			return;
+		}
+
+		// Don't switch the coordinate system in the middle of a drag, since the active
+		//	transform is based on the widget orientation captured on mouse press.
+		if (m_active)
+		{
+			return;
+		}
+
+		m_isLocal = local;
+
+		if (m_isLocal && !m_selection.IsEmpty())
+		{
+			m_widgetNode->SetOrientation(m_selection.GetSelectedObjects().back()->GetOrientation());
+		}
+		else
+		{
+			m_widgetNode->SetOrientation(Quaternion::Identity);
+		}
+
+		coordinateSystemChanged();
 	}
 
 	void TransformWidget::UpdateTanslationAxisLines()
@@ -450,140 +505,108 @@ namespace mmo
 		m_rotationNode->SetVisible(false);
 
 		const size_t numSteps = 12;
-		const Color fillColor(1.0f, 1.0f, 1.0f, 0.3f);
+		const uint32 arcColor = Color(1.0f, 0.0f, 0.0f, 1.0f);
+		const uint32 fillColor = Color(1.0f, 1.0f, 1.0f, 0.3f);
+		const float quarterAngle = Pi / 2.0f;
+		const float quarterStep = quarterAngle / static_cast<float>(numSteps);
 
-		// Create circle mesh
-		if (!m_circleMesh)
+		// Create quarter circle outline mesh (outer and inner arc). The mesh is registered
+		//	globally, so reuse it if another widget instance already created it.
+		if (m_circleMesh = MeshManager::Get().Find(CircleMeshName); !m_circleMesh)
 		{
-			ManualRenderObject* circles = m_scene.CreateManualRenderObject("__CircleMesh__");
-			const float endAngle = Pi / 2.0f;
+			ManualRenderObject* circles = m_scene.CreateManualRenderObject(m_widgetNode->GetName() + "_CircleMesh");
 
-			// Outer circle
+			for (const float radius : { OuterRadius, InnerRadius })
 			{
 				auto linesOp = circles->AddLineListOperation(m_axisMaterial);
-				float angle = 0.0f;
-				for (; angle < endAngle; angle += endAngle / numSteps)
+				for (size_t i = 0; i < numSteps; ++i)
 				{
+					const float angle = quarterStep * static_cast<float>(i);
+					const float nextAngle = quarterStep * static_cast<float>(i + 1);
 					linesOp->AddLine(
-						Vector3(OuterRadius * ::cosf(angle),
-							OuterRadius * ::sinf(angle),
-							0.0f),
-						Vector3(OuterRadius * ::cosf(angle + endAngle / numSteps),
-							OuterRadius * ::sinf(angle + endAngle / numSteps),
-							0.0f)
-					).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
+						Vector3(radius * ::cosf(angle), radius * ::sinf(angle), 0.0f),
+						Vector3(radius * ::cosf(nextAngle), radius * ::sinf(nextAngle), 0.0f)
+					).SetColor(arcColor);
 				}
-
-				linesOp->AddLine(
-					Vector3(OuterRadius * ::cosf(angle),
-						OuterRadius * ::sinf(angle),
-						0.0f),
-					Vector3(0.0f,
-						OuterRadius,
-						0.0f)
-				).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
 			}
-			
-			// Inner circle
-			{
-				auto linesOp = circles->AddLineListOperation(m_axisMaterial);
-				float angle = 0.0f;
-				for (; angle < endAngle; angle += endAngle / numSteps)
-				{
-					linesOp->AddLine(
-						Vector3(InnerRadius * ::cosf(angle),
-							InnerRadius * ::sinf(angle),
-							0.0f),
-						Vector3(InnerRadius * ::cosf(angle + endAngle / numSteps),
-							InnerRadius * ::sinf(angle + endAngle / numSteps),
-							0.0f)
-					).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
-				}
-
-				linesOp->AddLine(
-					Vector3(InnerRadius * ::cosf(angle),
-						InnerRadius * ::sinf(angle),
-						0.0f),
-					Vector3(0.0f,
-						InnerRadius,
-						0.0f)
-				).SetColor(Color(1.0f, 0.0f, 0.0f, 1.0f));
-			}
-
-			// Fill circle
-#if 0
-			circles->begin("Editor/AxisX", Ogre::RenderOperation::OT_TRIANGLE_STRIP);
-			for (float angle = 0.0f; angle < endAngle; angle += endAngle / numSteps)
-			{
-				circles->position(OuterRadius * Ogre::Math::Cos(angle), OuterRadius * Ogre::Math::Sin(angle), 0.0f);
-				circles->colour(fillColor);
-				circles->position(InnerRadius * Ogre::Math::Cos(angle), InnerRadius * Ogre::Math::Sin(angle), 0.0f);
-				circles->colour(fillColor);
-			}
-			circles->position(0.0f, OuterRadius, 0.0f);
-			circles->colour(fillColor);
-			circles->position(0.0f, InnerRadius, 0.0f);
-			circles->colour(fillColor);
-			circles->end();
-#endif
 
 			m_circleMesh = circles->ConvertToMesh(CircleMeshName);
 			m_scene.DestroyManualRenderObject(*circles);
 		}
 
-#if 0
-		if (!Ogre::MeshManager::getSingleton().resourceExists(FullCircleMeshName))
+		// Create quarter ring fill mesh (translucent highlight between inner and outer arc)
+		if (m_circleFillMesh = MeshManager::Get().Find(CircleFillMeshName); !m_circleFillMesh)
 		{
-			Ogre::ManualObject* fullCircle = m_sceneMgr.createManualObject();
-			const float endAngle2 = 2.0f * Ogre::Math::PI;
+			ManualRenderObject* fill = m_scene.CreateManualRenderObject(m_widgetNode->GetName() + "_CircleFillMesh");
 
-			// Outer circle
-			fullCircle->begin("Editor/AxisX", Ogre::RenderOperation::OT_LINE_STRIP);
-			for (float angle = 0.0f; angle < endAngle2; angle += endAngle2 / numSteps)
+			// Scoped so that the operation ref destructor runs Finish() and creates the
+			//	vertex buffer before the object is converted into a mesh.
 			{
-				fullCircle->position(
-					OuterRadius * Ogre::Math::Cos(angle),
-					OuterRadius * Ogre::Math::Sin(angle),
-					0.0f);
-			}
-			fullCircle->position(0.0f, OuterRadius, 0.0f);
-			fullCircle->end();
+				const auto fillOp = fill->AddTriangleListOperation(m_axisPlaneMaterial);
+				for (size_t i = 0; i < numSteps; ++i)
+				{
+					const float angle = quarterStep * static_cast<float>(i);
+					const float nextAngle = quarterStep * static_cast<float>(i + 1);
 
-			// Inner circle
-			fullCircle->begin("Editor/AxisX", Ogre::RenderOperation::OT_LINE_STRIP);
-			for (float angle = 0.0f; angle < endAngle2; angle += endAngle2 / numSteps)
-			{
-				fullCircle->position(
-					InnerRadius * Ogre::Math::Cos(angle),
-					InnerRadius * Ogre::Math::Sin(angle),
-					0.0f);
-			}
-			fullCircle->position(0.0f, InnerRadius, 0.0f);
-			fullCircle->end();
+					const Vector3 outerA(OuterRadius * ::cosf(angle), OuterRadius * ::sinf(angle), 0.0f);
+					const Vector3 innerA(InnerRadius * ::cosf(angle), InnerRadius * ::sinf(angle), 0.0f);
+					const Vector3 outerB(OuterRadius * ::cosf(nextAngle), OuterRadius * ::sinf(nextAngle), 0.0f);
+					const Vector3 innerB(InnerRadius * ::cosf(nextAngle), InnerRadius * ::sinf(nextAngle), 0.0f);
 
-			// Fill circle
-			fullCircle->begin("Editor/AxisX", Ogre::RenderOperation::OT_TRIANGLE_STRIP);
-			for (float angle = 0.0f; angle < endAngle2; angle += endAngle2 / numSteps)
-			{
-				fullCircle->position(OuterRadius * Ogre::Math::Cos(angle), OuterRadius * Ogre::Math::Sin(angle), 0.0f);
-				fullCircle->colour(fillColor);
-				fullCircle->position(InnerRadius * Ogre::Math::Cos(angle), InnerRadius * Ogre::Math::Sin(angle), 0.0f);
-				fullCircle->colour(fillColor);
+					fillOp->AddTriangle(outerA, innerA, outerB).SetColor(fillColor);
+					fillOp->AddTriangle(innerA, innerB, outerB).SetColor(fillColor);
+				}
 			}
-			fullCircle->position(0.0f, OuterRadius, 0.0f);
-			fullCircle->colour(fillColor);
-			fullCircle->position(0.0f, InnerRadius, 0.0f);
-			fullCircle->colour(fillColor);
-			fullCircle->end();
 
-			m_fullCircleMesh = fullCircle->convertToMesh(FullCircleMeshName);
-			m_sceneMgr.destroyManualObject(fullCircle);
+			m_circleFillMesh = fill->ConvertToMesh(CircleFillMeshName);
+			m_scene.DestroyManualRenderObject(*fill);
 		}
-		else
+
+		// Create full circle indicator mesh (outline plus ring fill), which is displayed
+		//	for the grabbed axis while the user is actively rotating.
+		if (m_fullCircleMesh = MeshManager::Get().Find(FullCircleMeshName); !m_fullCircleMesh)
 		{
-			m_fullCircleMesh = Ogre::MeshManager::getSingleton().getByName(FullCircleMeshName);
+			ManualRenderObject* fullCircle = m_scene.CreateManualRenderObject(m_widgetNode->GetName() + "_FullCircleMesh");
+
+			const size_t fullSteps = numSteps * 4;
+			const float fullStep = 2.0f * Pi / static_cast<float>(fullSteps);
+
+			for (const float radius : { OuterRadius, InnerRadius })
+			{
+				auto linesOp = fullCircle->AddLineListOperation(m_axisHighlightMaterial);
+				for (size_t i = 0; i < fullSteps; ++i)
+				{
+					const float angle = fullStep * static_cast<float>(i);
+					const float nextAngle = fullStep * static_cast<float>(i + 1);
+					linesOp->AddLine(
+						Vector3(radius * ::cosf(angle), radius * ::sinf(angle), 0.0f),
+						Vector3(radius * ::cosf(nextAngle), radius * ::sinf(nextAngle), 0.0f)
+					).SetColor(arcColor);
+				}
+			}
+
+			// Scoped so that the operation ref destructor runs Finish() and creates the
+			//	vertex buffer before the object is converted into a mesh.
+			{
+				const auto fillOp = fullCircle->AddTriangleListOperation(m_axisPlaneMaterial);
+				for (size_t i = 0; i < fullSteps; ++i)
+				{
+					const float angle = fullStep * static_cast<float>(i);
+					const float nextAngle = fullStep * static_cast<float>(i + 1);
+
+					const Vector3 outerA(OuterRadius * ::cosf(angle), OuterRadius * ::sinf(angle), 0.0f);
+					const Vector3 innerA(InnerRadius * ::cosf(angle), InnerRadius * ::sinf(angle), 0.0f);
+					const Vector3 outerB(OuterRadius * ::cosf(nextAngle), OuterRadius * ::sinf(nextAngle), 0.0f);
+					const Vector3 innerB(InnerRadius * ::cosf(nextAngle), InnerRadius * ::sinf(nextAngle), 0.0f);
+
+					fillOp->AddTriangle(outerA, innerA, outerB).SetColor(fillColor);
+					fillOp->AddTriangle(innerA, innerB, outerB).SetColor(fillColor);
+				}
+			}
+
+			m_fullCircleMesh = fullCircle->ConvertToMesh(FullCircleMeshName);
+			m_scene.DestroyManualRenderObject(*fullCircle);
 		}
-#endif
 
 		// Create circle entities and attach to scene
 		m_zRotNode = m_rotationNode->CreateChildSceneNode();
@@ -591,12 +614,6 @@ namespace mmo
 		m_xRotNode->Yaw(Degree(-90.0f), TransformSpace::Local);
 		m_yRotNode = m_rotationNode->CreateChildSceneNode();
 		m_yRotNode->Pitch(Degree(90.0f), TransformSpace::Local);
-
-		/*
-		m_fullCircleEntity = m_scene.CreateEntity("FullCircleEntity", m_circleMesh);
-		m_fullCircleEntity->SetQueryFlags(0);
-		m_fullCircleEntity->SetRenderQueueGroup(Overlay - 1);
-		*/
 
 		m_xCircle = m_scene.CreateEntity("XCircle", m_circleMesh);
 		m_xCircle->SetCastShadows(false);
@@ -619,10 +636,189 @@ namespace mmo
 		m_xRotNode->AttachObject(*m_xCircle);
 		m_yRotNode->AttachObject(*m_yCircle);
 		m_zRotNode->AttachObject(*m_zCircle);
+
+		// Create ring fill entities which highlight the hovered rotation ring. The fill
+		//	material comes from the mesh (translucent axis plane highlight), so no material
+		//	override is applied here.
+		m_xCircleFill = m_scene.CreateEntity("XCircleFill", m_circleFillMesh);
+		m_xCircleFill->SetCastShadows(false);
+		m_xCircleFill->SetQueryFlags(0);
+		m_xCircleFill->SetRenderQueueGroup(Overlay - 1);
+		m_xCircleFill->SetVisible(false);
+
+		m_yCircleFill = m_scene.CreateEntity("YCircleFill", m_circleFillMesh);
+		m_yCircleFill->SetCastShadows(false);
+		m_yCircleFill->SetQueryFlags(0);
+		m_yCircleFill->SetRenderQueueGroup(Overlay - 1);
+		m_yCircleFill->SetVisible(false);
+
+		m_zCircleFill = m_scene.CreateEntity("ZCircleFill", m_circleFillMesh);
+		m_zCircleFill->SetCastShadows(false);
+		m_zCircleFill->SetQueryFlags(0);
+		m_zCircleFill->SetRenderQueueGroup(Overlay - 1);
+		m_zCircleFill->SetVisible(false);
+
+		m_xRotNode->AttachObject(*m_xCircleFill);
+		m_yRotNode->AttachObject(*m_yCircleFill);
+		m_zRotNode->AttachObject(*m_zCircleFill);
+
+		// Create the full circle indicator entity
+		m_fullCircleNode = m_rotationNode->CreateChildSceneNode();
+		m_fullCircleEntity = m_scene.CreateEntity("FullCircle", m_fullCircleMesh);
+		m_fullCircleEntity->SetCastShadows(false);
+		m_fullCircleEntity->SetQueryFlags(0);
+		m_fullCircleEntity->SetRenderQueueGroup(Overlay - 1);
+		m_fullCircleNode->AttachObject(*m_fullCircleEntity);
+		m_fullCircleNode->SetVisible(false);
 	}
 
 	void TransformWidget::SetupScale()
 	{
+		const uint32 xColor = Color(1.0f, 0.0f, 0.0f, 1.0f);
+		const uint32 yColor = Color(0.0f, 1.0f, 0.0f, 1.0f);
+		const uint32 zColor = Color(0.0f, 0.0f, 1.0f, 1.0f);
+		const uint32 fillColor = Color(1.0f, 1.0f, 0.0f, 0.6f);
+
+		// The geometry mirrors the pick regions in ScaleMouseMoved: axis lines up to
+		//	LineLength, an inner triangle at SquareLength (uniform scale) and an outer
+		//	triangle at 0.75 * LineLength which together bound the two-axis bands.
+		const Vector3 innerX(SquareLength, 0.0f, 0.0f);
+		const Vector3 innerY(0.0f, SquareLength, 0.0f);
+		const Vector3 innerZ(0.0f, 0.0f, SquareLength);
+		const Vector3 outerX(LineLength * 0.75f, 0.0f, 0.0f);
+		const Vector3 outerY(0.0f, LineLength * 0.75f, 0.0f);
+		const Vector3 outerZ(0.0f, 0.0f, LineLength * 0.75f);
+		const Vector3 tipX(LineLength, 0.0f, 0.0f);
+		const Vector3 tipY(0.0f, LineLength, 0.0f);
+		const Vector3 tipZ(0.0f, 0.0f, LineLength);
+
+		m_scaleNode = m_widgetNode->CreateChildSceneNode();
+
+		m_scaleAxisLines = m_scene.CreateManualRenderObject(m_widgetNode->GetName() + "_ScaleAxisLines");
+		m_scaleAxisLines->SetCastShadows(false);
+		m_scaleAxisLines->SetRenderQueueGroupAndPriority(Overlay, 1000);
+		m_scaleAxisLines->SetQueryFlags(0);
+
+		// Operations 0 - 2: axis lines
+		{
+			const auto lineOp = m_scaleAxisLines->AddLineListOperation(m_axisMaterial);
+			lineOp->AddLine(Vector3::Zero, tipX).SetColor(xColor);
+		}
+		{
+			const auto lineOp = m_scaleAxisLines->AddLineListOperation(m_axisMaterial);
+			lineOp->AddLine(Vector3::Zero, tipY).SetColor(yColor);
+		}
+		{
+			const auto lineOp = m_scaleAxisLines->AddLineListOperation(m_axisMaterial);
+			lineOp->AddLine(Vector3::Zero, tipZ).SetColor(zColor);
+		}
+
+		// Operations 3 - 5: inner and outer band edges between each pair of axes,
+		//	with a color gradient between the two axis colors.
+		{
+			const auto lineOp = m_scaleAxisLines->AddLineListOperation(m_axisMaterial);
+			auto& inner = lineOp->AddLine(innerX, innerY);
+			inner.SetStartColor(xColor);
+			inner.SetEndColor(yColor);
+			auto& outer = lineOp->AddLine(outerX, outerY);
+			outer.SetStartColor(xColor);
+			outer.SetEndColor(yColor);
+		}
+		{
+			const auto lineOp = m_scaleAxisLines->AddLineListOperation(m_axisMaterial);
+			auto& inner = lineOp->AddLine(innerX, innerZ);
+			inner.SetStartColor(xColor);
+			inner.SetEndColor(zColor);
+			auto& outer = lineOp->AddLine(outerX, outerZ);
+			outer.SetStartColor(xColor);
+			outer.SetEndColor(zColor);
+		}
+		{
+			const auto lineOp = m_scaleAxisLines->AddLineListOperation(m_axisMaterial);
+			auto& inner = lineOp->AddLine(innerY, innerZ);
+			inner.SetStartColor(yColor);
+			inner.SetEndColor(zColor);
+			auto& outer = lineOp->AddLine(outerY, outerZ);
+			outer.SetStartColor(yColor);
+			outer.SetEndColor(zColor);
+		}
+
+		// Operations 6 - 8: diamond shaped tips at the end of each axis line. Each quad is
+		//	added with both windings because the scale node is mirrored towards the camera
+		//	with negative scale values, which would otherwise cull the tips.
+		const float tipSize = 0.07f;
+		const auto addTipQuad = [](const ManualRenderOperationRef<ManualTriangleListOperation>& op,
+			const Vector3& center, const Vector3& axisA, const Vector3& axisB, const uint32 color)
+		{
+			const Vector3 a = center - axisA;
+			const Vector3 b = center + axisB;
+			const Vector3 c = center + axisA;
+			const Vector3 d = center - axisB;
+			op->AddTriangle(a, b, c).SetColor(color);
+			op->AddTriangle(a, c, d).SetColor(color);
+			op->AddTriangle(c, b, a).SetColor(color);
+			op->AddTriangle(d, c, a).SetColor(color);
+		};
+		{
+			const auto tipOp = m_scaleAxisLines->AddTriangleListOperation(m_axisMaterial);
+			addTipQuad(tipOp, tipX, Vector3(tipSize, 0.0f, 0.0f), Vector3(0.0f, tipSize, 0.0f), xColor);
+			addTipQuad(tipOp, tipX, Vector3(tipSize, 0.0f, 0.0f), Vector3(0.0f, 0.0f, tipSize), xColor);
+		}
+		{
+			const auto tipOp = m_scaleAxisLines->AddTriangleListOperation(m_axisMaterial);
+			addTipQuad(tipOp, tipY, Vector3(0.0f, tipSize, 0.0f), Vector3(tipSize, 0.0f, 0.0f), yColor);
+			addTipQuad(tipOp, tipY, Vector3(0.0f, tipSize, 0.0f), Vector3(0.0f, 0.0f, tipSize), yColor);
+		}
+		{
+			const auto tipOp = m_scaleAxisLines->AddTriangleListOperation(m_axisMaterial);
+			addTipQuad(tipOp, tipZ, Vector3(0.0f, 0.0f, tipSize), Vector3(tipSize, 0.0f, 0.0f), zColor);
+			addTipQuad(tipOp, tipZ, Vector3(0.0f, 0.0f, tipSize), Vector3(0.0f, tipSize, 0.0f), zColor);
+		}
+
+		m_scaleNode->AttachObject(*m_scaleAxisLines);
+
+		// Translucent hover fills for the uniform scale triangle and the two-axis bands
+		const auto setupFill = [this](ManualRenderObject* fill)
+		{
+			fill->SetCastShadows(false);
+			fill->SetRenderQueueGroupAndPriority(Overlay, 1000);
+			fill->SetQueryFlags(0);
+			fill->SetVisible(false);
+			m_scaleNode->AttachObject(*fill);
+		};
+
+		m_scaleCenterFill = m_scene.CreateManualRenderObject(m_widgetNode->GetName() + "_ScaleCenterFill");
+		{
+			const auto fillOp = m_scaleCenterFill->AddTriangleListOperation(m_axisPlaneMaterial);
+			fillOp->AddTriangle(innerX, innerY, innerZ).SetColor(fillColor);
+		}
+		setupFill(m_scaleCenterFill);
+
+		m_scaleXYFill = m_scene.CreateManualRenderObject(m_widgetNode->GetName() + "_ScaleXYFill");
+		{
+			const auto fillOp = m_scaleXYFill->AddTriangleListOperation(m_axisPlaneMaterial);
+			fillOp->AddTriangle(innerX, outerX, outerY).SetColor(fillColor);
+			fillOp->AddTriangle(innerX, outerY, innerY).SetColor(fillColor);
+		}
+		setupFill(m_scaleXYFill);
+
+		m_scaleXZFill = m_scene.CreateManualRenderObject(m_widgetNode->GetName() + "_ScaleXZFill");
+		{
+			const auto fillOp = m_scaleXZFill->AddTriangleListOperation(m_axisPlaneMaterial);
+			fillOp->AddTriangle(innerX, outerX, outerZ).SetColor(fillColor);
+			fillOp->AddTriangle(innerX, outerZ, innerZ).SetColor(fillColor);
+		}
+		setupFill(m_scaleXZFill);
+
+		m_scaleYZFill = m_scene.CreateManualRenderObject(m_widgetNode->GetName() + "_ScaleYZFill");
+		{
+			const auto fillOp = m_scaleYZFill->AddTriangleListOperation(m_axisPlaneMaterial);
+			fillOp->AddTriangle(innerY, outerY, outerZ).SetColor(fillColor);
+			fillOp->AddTriangle(innerY, outerZ, innerZ).SetColor(fillColor);
+		}
+		setupFill(m_scaleYZFill);
+
+		m_scaleNode->SetVisible(false);
 	}
 
 	void TransformWidget::UpdateTranslation()
@@ -663,36 +859,47 @@ namespace mmo
 
 	void TransformWidget::UpdateRotation()
 	{
-		if ((m_selectedAxis & axis_id::X))
-		{
-			m_xCircle->SetMaterial(m_axisHighlightMaterial);
-		}
-		else
-		{
-			m_xCircle->SetMaterial(m_xAxisMaterial);
-		}
+		const bool xSelected = (m_selectedAxis & axis_id::X) != 0;
+		const bool ySelected = (m_selectedAxis & axis_id::Y) != 0;
+		const bool zSelected = (m_selectedAxis & axis_id::Z) != 0;
 
-		if ((m_selectedAxis & axis_id::Y))
-		{
-			m_yCircle->SetMaterial(m_axisHighlightMaterial);
-		}
-		else
-		{
-			m_yCircle->SetMaterial(m_yAxisMaterial);
-		}
+		m_xCircle->SetMaterial(xSelected ? m_axisHighlightMaterial : m_xAxisMaterial);
+		m_yCircle->SetMaterial(ySelected ? m_axisHighlightMaterial : m_yAxisMaterial);
+		m_zCircle->SetMaterial(zSelected ? m_axisHighlightMaterial : m_zAxisMaterial);
 
-		if ((m_selectedAxis & axis_id::Z))
-		{
-			m_zCircle->SetMaterial(m_axisHighlightMaterial);
-		}
-		else
-		{
-			m_zCircle->SetMaterial(m_zAxisMaterial);
-		}
+		// While hovering, fill the hovered ring. While actively rotating, the full circle
+		//	indicator is shown for the grabbed axis instead.
+		m_xCircleFill->SetVisible(xSelected && !m_active);
+		m_yCircleFill->SetVisible(ySelected && !m_active);
+		m_zCircleFill->SetVisible(zSelected && !m_active);
+
+		m_fullCircleNode->SetVisible(m_active && m_selectedAxis != axis_id::None);
 	}
 
 	void TransformWidget::UpdateScale()
 	{
+		const bool xSelected = (m_selectedAxis & axis_id::X) != 0;
+		const bool ySelected = (m_selectedAxis & axis_id::Y) != 0;
+		const bool zSelected = (m_selectedAxis & axis_id::Z) != 0;
+
+		// Axis lines (operations 0 - 2) and axis tips (operations 6 - 8)
+		m_scaleAxisLines->SetMaterial(0, xSelected ? m_axisHighlightMaterial : m_axisMaterial);
+		m_scaleAxisLines->SetMaterial(1, ySelected ? m_axisHighlightMaterial : m_axisMaterial);
+		m_scaleAxisLines->SetMaterial(2, zSelected ? m_axisHighlightMaterial : m_axisMaterial);
+		m_scaleAxisLines->SetMaterial(6, xSelected ? m_axisHighlightMaterial : m_axisMaterial);
+		m_scaleAxisLines->SetMaterial(7, ySelected ? m_axisHighlightMaterial : m_axisMaterial);
+		m_scaleAxisLines->SetMaterial(8, zSelected ? m_axisHighlightMaterial : m_axisMaterial);
+
+		// Band edges (operations 3 - 5)
+		m_scaleAxisLines->SetMaterial(3, m_selectedAxis == axis_id::XY ? m_axisHighlightMaterial : m_axisMaterial);
+		m_scaleAxisLines->SetMaterial(4, m_selectedAxis == axis_id::XZ ? m_axisHighlightMaterial : m_axisMaterial);
+		m_scaleAxisLines->SetMaterial(5, m_selectedAxis == axis_id::YZ ? m_axisHighlightMaterial : m_axisMaterial);
+
+		// Translucent hover fills
+		m_scaleCenterFill->SetVisible(m_selectedAxis == axis_id::All);
+		m_scaleXYFill->SetVisible(m_selectedAxis == axis_id::XY);
+		m_scaleXZFill->SetVisible(m_selectedAxis == axis_id::XZ);
+		m_scaleYZFill->SetVisible(m_selectedAxis == axis_id::YZ);
 	}
 
 	void TransformWidget::ChangeMode()
@@ -705,7 +912,7 @@ namespace mmo
 		{
 			m_translationNode->SetVisible(false);
 			m_rotationNode->SetVisible(false);
-			//m_scaleNode->SetVisible(false);
+			m_scaleNode->SetVisible(false);
 			return;
 		}
 
@@ -719,22 +926,30 @@ namespace mmo
 				m_xzPlaneNode->SetVisible(false);
 				m_yzPlaneNode->SetVisible(false);
 				m_rotationNode->SetVisible(false);
-				//m_scaleNode->SetVisible(false);
+				m_scaleNode->SetVisible(false);
 				break;
 
 			case TransformMode::Rotate:
 				m_translationNode->SetVisible(false);
 				m_rotationNode->SetVisible(true);
-				//m_scaleNode->SetVisible(false);
+				// The cascading show above also displayed the hover fills and the full
+				//	circle indicator, which are only shown on demand.
+				m_xCircleFill->SetVisible(false);
+				m_yCircleFill->SetVisible(false);
+				m_zCircleFill->SetVisible(false);
+				m_fullCircleNode->SetVisible(false);
+				m_scaleNode->SetVisible(false);
 				break;
 
 			case TransformMode::Scale:
-				//m_scaleNode->SetVisible(true);
-				//m_scaleXYPlaneNode->SetVisible(false);
-				//m_scaleXZPlaneNode->SetVisible(false);
-				//m_scaleYZPlaneNode->SetVisible(false);
 				m_translationNode->SetVisible(false);
 				m_rotationNode->SetVisible(false);
+				m_scaleNode->SetVisible(true);
+				// Hover fills are only shown on demand
+				m_scaleCenterFill->SetVisible(false);
+				m_scaleXYFill->SetVisible(false);
+				m_scaleXZFill->SetVisible(false);
+				m_scaleYZFill->SetVisible(false);
 				break;
 			}
 		}
@@ -809,12 +1024,19 @@ namespace mmo
 
 	void TransformWidget::ApplyScale(const Vector3& dir)
 	{
+		// Scaling is multiplicative, so keep the factors strictly positive to prevent
+		//	a fast mouse movement from flipping or collapsing the selection.
+		const Vector3 factor(
+			std::max(dir.x, 0.01f),
+			std::max(dir.y, 0.01f),
+			std::max(dir.z, 0.01f));
+
 		for (auto& selected : m_selection.GetSelectedObjects())
 		{
-			selected->Scale(Vector3(dir.x, dir.y, dir.z));
+			selected->Scale(factor);
 		}
 
-		m_scaleNode->Scale(dir);
+		m_scaleNode->Scale(factor);
 	}
 
 	void TransformWidget::FinishScale()
@@ -1341,7 +1563,7 @@ namespace mmo
 					}
 				}
 			}
-			if ((res = ray.Intersects(GetTranslatePlane(axis_id::Y))).first)
+			if ((res = ray.Intersects(GetScalePlane(axis_id::Y))).first)
 			{
 				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
 				dir = m_widgetNode->GetOrientation().Inverse() * dir;
@@ -1358,7 +1580,7 @@ namespace mmo
 					}
 				}
 			}
-			if ((res = ray.Intersects(GetTranslatePlane(axis_id::Z))).first)
+			if ((res = ray.Intersects(GetScalePlane(axis_id::Z))).first)
 			{
 				Vector3 dir = ray.GetPoint(res.second) - m_relativeWidgetPos;
 				dir = m_widgetNode->GetOrientation().Inverse() * dir;
@@ -1377,20 +1599,50 @@ namespace mmo
 		}
 		else
 		{
-			// Translate
+			// Scale the selection based on the vertical mouse movement: dragging upwards
+			//	grows the selection, dragging downwards shrinks it. Mouse coordinates are
+			//	normalized viewport coordinates, so a drag across the full viewport height
+			//	roughly scales by a factor of e^2.
 			if (!m_selection.IsEmpty())
 			{
-				const Vector3 distance(1.0f, 1.0f, 1.0f);
+				const Vector3 base(1.0f, 1.0f, 1.0f);
 
 				const Vector3 direction(
 					((m_selectedAxis & axis_id::X) ? 1.0f : 0.0f),
 					((m_selectedAxis & axis_id::Y) ? 1.0f : 0.0f),
 					((m_selectedAxis & axis_id::Z) ? 1.0f : 0.0f));
 
-				Vector<float, 2> mouse(x - m_lastMouse[0], y - m_lastMouse[1]);
+				const Vector<float, 2> mouse(x - m_lastMouse[0], y - m_lastMouse[1]);
+				const float rawFactor = std::max(1.0f + (-mouse[1] * 2.0f), 0.01f);
 
-				Vector3 scale = distance + ((direction * (-mouse[1] * 0.008f)));
-				ApplyScale(scale);
+				if (m_snap)
+				{
+					// Accumulate the unsnapped factor since the drag started and snap it
+					//	to the lattice 1 +/- k * step, mirroring how translation snaps the
+					//	accumulated offset instead of each mouse move.
+					m_totalScaleFactor *= rawFactor;
+
+					const float snappedDelta = std::round((m_totalScaleFactor - 1.0f) / m_scaleSnapStep) * m_scaleSnapStep;
+					float snappedFactor = 1.0f + snappedDelta;
+
+					// Clamp to the smallest positive snap point so the selection can not
+					//	collapse to zero or flip to negative scale.
+					while (snappedFactor <= 0.0f)
+					{
+						snappedFactor += m_scaleSnapStep;
+					}
+
+					if (::fabs(snappedFactor - m_previousSnappedFactor) > std::numeric_limits<float>::epsilon())
+					{
+						const float applyFactor = snappedFactor / m_previousSnappedFactor;
+						ApplyScale(base + (direction * (applyFactor - 1.0f)));
+						m_previousSnappedFactor = snappedFactor;
+					}
+				}
+				else
+				{
+					ApplyScale(base + (direction * (rawFactor - 1.0f)));
+				}
 			}
 		}
 	}

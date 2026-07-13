@@ -28,6 +28,12 @@ message EmoteEntry {
 	// Icon texture path shown in the emote list and on action bar buttons (e.g.
 	// "Interface/Icons/Spells/S_Attack.htex"). Empty = generic fallback icon.
 	optional string icon = 13;
+	// Pose/PoseVariant only: clip played once when entering the pose (e.g. "SleepStart"
+	// = lay down). Empty = blend straight into the loop.
+	optional string animationstart = 14;
+	// Pose/PoseVariant only: clip played once on a voluntary stand-up (e.g. "SleepEnd").
+	// Skipped when the pose is cancelled by movement. Empty = blend straight to idle.
+	optional string animationend = 15;
 
 	repeated LocalizedString textnotarget_loc = 200;
 	repeated LocalizedString texttarget_loc = 201;

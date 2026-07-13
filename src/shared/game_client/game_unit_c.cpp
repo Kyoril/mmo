@@ -21,6 +21,7 @@
 #include "base/clock.h"
 #include "client_data/project.h"
 #include "frame_ui/font_mgr.h"
+#include "game/emote_defs.h"
 #include "game/spell.h"
 #include "game/character_customization/avatar_definition_mgr.h"
 #include "log/default_log_levels.h"
@@ -534,7 +535,23 @@ namespace mmo
 			{
 				m_lockedLoopAnimState = nullptr;
 				m_poseAnimState = nullptr;
+
+				// Movement cancelled the pose - forget it so the server's stand-state confirm
+				// (which may arrive after the player already stopped) never plays the exit clip.
+				m_activePoseEmoteId = 0;
+				m_poseStandState = unit_stand_state::Stand;
 			}
+		}
+
+		// A pose enter/exit transition must never mask movement: fast-forward it as soon as
+		// the unit starts moving (remote stand-state and movement packets can interleave so a
+		// movement start lands mid-transition). The one-shot machinery then blends it out.
+		if (m_poseTransitionState != nullptr && m_oneShotState == m_poseTransitionState &&
+			!m_oneShotState->HasEnded() &&
+			(m_movementInfo.IsChangingPosition() ||
+				(m_inputVector * Vector3(1.0f, 0.0f, 1.0f)).GetLength() > 0.1f))
+		{
+			m_oneShotState->SetTimePosition(m_oneShotState->GetLength());
 		}
 
 		// If a looped spell animation is locked, skip movement animation override
@@ -745,6 +762,7 @@ namespace mmo
 		if (!IsValidAnimState(m_oneShotState))      { m_oneShotState      = nullptr; }
 		if (!IsValidAnimState(m_pendingOneShotState)) { m_pendingOneShotState = nullptr; }
 		if (!IsValidAnimState(m_poseAnimState))     { m_poseAnimState     = nullptr; }
+		if (!IsValidAnimState(m_poseTransitionState)) { m_poseTransitionState = nullptr; }
 		if (!IsValidAnimState(m_moodAnimState))     { m_moodAnimState     = nullptr; }
 		if (!IsValidAnimState(m_specialIdleState))  { m_specialIdleState  = nullptr; }
 
@@ -772,9 +790,12 @@ namespace mmo
 				m_oneShotState->SetTimePosition(m_oneShotState->GetLength());
 			}
 
-			// Death clears any locked loop animation
+			// Death clears any locked loop animation and pending pose transition
 			m_lockedLoopAnimState = nullptr;
 			m_poseAnimState = nullptr;
+			m_poseTransitionState = nullptr;
+			m_activePoseEmoteId = 0;
+			m_poseStandState = unit_stand_state::Stand;
 
 			// Use the dedicated swimming death animation when dying in water; fall back to the
 			// regular death animation for meshes without one (or when not swimming).
@@ -2806,28 +2827,24 @@ namespace mmo
 		return m_entity->GetAnimationState(emote->animation());
 	}
 
-	AnimationState* GameUnitC::ResolvePoseAnimation(const unit_stand_state::Type standState) const
+	const proto_client::EmoteEntry* GameUnitC::ResolvePoseEmoteEntry(const unit_stand_state::Type standState) const
 	{
 		if (!m_entity)
 		{
 			return nullptr;
 		}
 
-		// Prefer the selected pose variant's clip when one is set and available on this mesh.
+		// Prefer the selected pose variant when one is set and its clip exists on this mesh.
 		uint32 variantField = 0;
-		const char* defaultClip = nullptr;
 		switch (standState)
 		{
 		case unit_stand_state::Sit:
 			variantField = object_fields::SitPoseEmote;
-			defaultClip = "Sit";
 			break;
 		case unit_stand_state::Sleep:
 			variantField = object_fields::SleepPoseEmote;
-			defaultClip = "Sleep";
 			break;
 		case unit_stand_state::Kneel:
-			defaultClip = "Kneel";
 			break;
 		default:
 			return nullptr;
@@ -2835,19 +2852,39 @@ namespace mmo
 
 		if (variantField != 0)
 		{
-			if (AnimationState* variantState = ResolveEmoteAnimation(Get<uint32>(variantField)))
+			if (const uint32 variantId = Get<uint32>(variantField); variantId != 0)
 			{
-				return variantState;
+				const proto_client::EmoteEntry* variant = m_project.emotes.getById(variantId);
+				if (variant && !variant->animation().empty() && m_entity->HasAnimationState(variant->animation()))
+				{
+					return variant;
+				}
 			}
 		}
 
-		// Fall back to the conventional default clip name for this stand state.
-		if (defaultClip && m_entity->HasAnimationState(defaultClip))
+		// Fall back to the Pose catalog entry for this stand state - it carries the default
+		// loop clip plus the optional enter/exit transition clips.
+		for (const auto& entry : m_project.emotes.getTemplates().entry())
 		{
-			return m_entity->GetAnimationState(defaultClip);
+			if (entry.emotetype() == emote_type::Pose && entry.standstate() == static_cast<uint32>(standState) &&
+				!entry.animation().empty() && m_entity->HasAnimationState(entry.animation()))
+			{
+				return &entry;
+			}
 		}
 
 		return nullptr;
+	}
+
+	AnimationState* GameUnitC::ResolvePoseTransitionClip(const proto_client::EmoteEntry& entry, const bool exit) const
+	{
+		const std::string& clipName = exit ? entry.animationend() : entry.animationstart();
+		if (clipName.empty() || !m_entity || !m_entity->HasAnimationState(clipName))
+		{
+			return nullptr;
+		}
+
+		return m_entity->GetAnimationState(clipName);
 	}
 
 	void GameUnitC::PlayEmote(const uint32 emoteId)
@@ -2863,7 +2900,7 @@ namespace mmo
 		PlayOneShotAnimation(state);
 	}
 
-	void GameUnitC::RefreshPoseAnimation()
+	void GameUnitC::RefreshPoseAnimation(const bool withTransition)
 	{
 		m_idleSeconds = 0.0f;
 
@@ -2871,12 +2908,50 @@ namespace mmo
 		if (standState == unit_stand_state::Sit || standState == unit_stand_state::Sleep ||
 			standState == unit_stand_state::Kneel)
 		{
-			if (AnimationState* poseState = ResolvePoseAnimation(standState))
+			const proto_client::EmoteEntry* entry = ResolvePoseEmoteEntry(standState);
+
+			AnimationState* poseState = nullptr;
+			if (entry)
 			{
+				poseState = m_entity->GetAnimationState(entry->animation());
+			}
+			else if (m_entity)
+			{
+				// Last-resort convention clip for catalogs without a matching Pose entry.
+				// Loop only - transition clips require an emote entry.
+				const char* defaultClip = standState == unit_stand_state::Sit ? "Sit"
+					: (standState == unit_stand_state::Sleep ? "Sleep" : "Kneel");
+				if (m_entity->HasAnimationState(defaultClip))
+				{
+					poseState = m_entity->GetAnimationState(defaultClip);
+				}
+			}
+
+			if (poseState)
+			{
+				// A stand-state change means entering the pose; the same stand state means a
+				// /pose variant swap, which snaps to the new loop without a transition.
+				const bool enteringNewPose = m_poseStandState != standState;
+
 				poseState->SetLoop(true);
 				poseState->SetPlayRate(1.0f);
 				m_poseAnimState = poseState;
+				m_activePoseEmoteId = entry ? entry->id() : 0;
+				m_poseStandState = standState;
 				SetLockedLoopAnimation(poseState);
+
+				if (withTransition && enteringNewPose && entry && IsAlive())
+				{
+					if (AnimationState* startState = ResolvePoseTransitionClip(*entry, false))
+					{
+						startState->SetLoop(false);
+						startState->SetPlayRate(1.0f);
+						if (PlayOneShotAnimation(startState))
+						{
+							m_poseTransitionState = startState;
+						}
+					}
+				}
 				return;
 			}
 		}
@@ -2894,6 +2969,29 @@ namespace mmo
 
 			m_poseAnimState = nullptr;
 		}
+
+		// A voluntary stand-up (still stationary) plays the pose's exit transition clip.
+		// Movement cancels skip it so controls stay responsive; a transition that movement
+		// catches mid-play is fast-forwarded in UpdateMovementBasedAnimation.
+		if (withTransition && m_poseStandState != unit_stand_state::Stand &&
+			m_activePoseEmoteId != 0 && !m_movementInfo.IsChangingPosition() && IsAlive())
+		{
+			if (const proto_client::EmoteEntry* entry = m_project.emotes.getById(m_activePoseEmoteId))
+			{
+				if (AnimationState* endState = ResolvePoseTransitionClip(*entry, true))
+				{
+					endState->SetLoop(false);
+					endState->SetPlayRate(1.0f);
+					if (PlayOneShotAnimation(endState))
+					{
+						m_poseTransitionState = endState;
+					}
+				}
+			}
+		}
+
+		m_activePoseEmoteId = 0;
+		m_poseStandState = unit_stand_state::Stand;
 	}
 
 	void GameUnitC::RefreshMoodAnimation()
@@ -3274,6 +3372,7 @@ namespace mmo
 		m_pendingSwingHitCallbacks.clear();
 		m_lockedLoopAnimState = nullptr;
 		m_poseAnimState = nullptr;
+		m_poseTransitionState = nullptr;
 		m_moodAnimState = nullptr;
 		m_specialIdleState = nullptr;
 		m_jumpStartState = nullptr;
@@ -3545,8 +3644,9 @@ namespace mmo
 		ConnectAnimationNotifySignals();
 
 		// Re-apply the replicated pose and mood on the new mesh (also runs on initial spawn;
-		// both are no-ops when the unit is standing with a neutral mood).
-		RefreshPoseAnimation();
+		// both are no-ops when the unit is standing with a neutral mood). No transition clips:
+		// a unit that is already posing must snap straight into the loop.
+		RefreshPoseAnimation(false);
 		RefreshMoodAnimation();
 
 		OnScaleChanged();

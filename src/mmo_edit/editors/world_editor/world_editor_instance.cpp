@@ -556,6 +556,14 @@ namespace mmo
 		{
 			m_transformWidget->SetTransformMode(TransformMode::Rotate);
 		}
+		if (ImGui::IsKeyPressed(ImGuiKey_3, false))
+		{
+			m_transformWidget->SetTransformMode(TransformMode::Scale);
+		}
+		if (ImGui::IsKeyPressed(ImGuiKey_4, false))
+		{
+			m_transformWidget->SetUseLocalTransform(!m_transformWidget->IsUsingLocalTransform());
+		}
 
 		// Hotkeys to change active edit mode
 		if (ImGui::IsKeyDown(ImGuiKey_F1))

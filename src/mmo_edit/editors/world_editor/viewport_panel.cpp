@@ -192,6 +192,27 @@ namespace mmo
         ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
         ImGui::SameLine();
 
+        // Coordinate system toggle (local / world space)
+        if (ImGui::Button(m_transformWidget.IsUsingLocalTransform() ? "Local" : "World"))
+        {
+            m_transformWidget.SetUseLocalTransform(!m_transformWidget.IsUsingLocalTransform());
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::BeginTooltip();
+            ImGui::Text("Toggle between local and world space transformation.");
+            ImGui::Text("Keyboard Shortcut:");
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+            ImGui::SameLine();
+            ImGui::Text("4");
+            ImGui::PopStyleColor();
+            ImGui::EndTooltip();
+        }
+        ImGui::SameLine();
+
+        ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+        ImGui::SameLine();
+
         if (ImGui::Button("Generate Minimaps"))
         {
             if (m_generateMinimapsCallback)
@@ -242,6 +263,7 @@ namespace mmo
                     {
                         m_gridSnapSettings.SetCurrentTranslateIndex(i);
                         m_transformWidget.SetTranslateSnapSize(m_gridSnapSettings.GetCurrentTranslateSnap());
+                        m_transformWidget.SetScaleSnapSize(m_gridSnapSettings.GetCurrentTranslateSnap());
                     }
                     if (isSelected)
                     {
@@ -313,12 +335,11 @@ namespace mmo
         ImGui::PopStyleColor(2);
         ImGui::SameLine(0, 0);
 
-        ImGui::BeginDisabled(true);
         ImGui::PushStyleColor(ImGuiCol_Button, m_transformWidget.GetTransformMode() == TransformMode::Scale ? ButtonSelected : ButtonNormal);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ButtonHovered);
         if (ImGui::ImageButton(s_scaleIcon ? s_scaleIcon->GetTextureObject() : nullptr, ImVec2(16.0f, 16.0f)))
         {
-            // m_transformWidget.SetTransformMode(TransformMode::Scale);
+            m_transformWidget.SetTransformMode(TransformMode::Scale);
         }
         if (ImGui::IsItemHovered())
         {
@@ -332,7 +353,6 @@ namespace mmo
             ImGui::EndTooltip();
         }
         ImGui::PopStyleColor(2);
-        ImGui::EndDisabled();
     }
 
     void ViewportPanel::HandleViewportDragDrop(WorldEditMode *currentEditMode)

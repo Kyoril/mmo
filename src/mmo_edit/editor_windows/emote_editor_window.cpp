@@ -104,6 +104,11 @@ namespace mmo
 
 		if (const auto section = ScopedEditorSection("Animation", ImGuiTreeNodeFlags_DefaultOpen))
 		{
+			// Scope the widget ids: the input below is labeled "Animation" as well, which
+			// would otherwise collide with the CollapsingHeader id (asserts in ButtonBehavior
+			// once the text field holds the active id).
+			ImGui::PushID("AnimationSection");
+
 			std::string animation = currentEntry.has_animation() ? currentEntry.animation() : "";
 			if (ImGui::InputText("Animation", &animation))
 			{
@@ -115,6 +120,36 @@ namespace mmo
 			const uint32 type = currentEntry.emotetype();
 			if (type == emote_type::Pose || type == emote_type::PoseVariant)
 			{
+				std::string animationStart = currentEntry.has_animationstart() ? currentEntry.animationstart() : "";
+				if (ImGui::InputText("Start Animation", &animationStart))
+				{
+					if (animationStart.empty())
+					{
+						currentEntry.clear_animationstart();
+					}
+					else
+					{
+						currentEntry.set_animationstart(animationStart);
+					}
+				}
+				ImGui::SameLine();
+				DrawHelpMarker("Clip played once when entering the pose (e.g. \"SleepStart\" = lay down). Empty = blend straight into the looping animation.");
+
+				std::string animationEnd = currentEntry.has_animationend() ? currentEntry.animationend() : "";
+				if (ImGui::InputText("End Animation", &animationEnd))
+				{
+					if (animationEnd.empty())
+					{
+						currentEntry.clear_animationend();
+					}
+					else
+					{
+						currentEntry.set_animationend(animationEnd);
+					}
+				}
+				ImGui::SameLine();
+				DrawHelpMarker("Clip played once on a voluntary stand-up (e.g. \"SleepEnd\"). Skipped when the pose is cancelled by movement. Empty = blend straight to idle.");
+
 				int standState = static_cast<int>(currentEntry.standstate());
 				if (ImGui::Combo("Stand State", &standState, s_poseStandStateNames, static_cast<int>(std::size(s_poseStandStateNames))))
 				{
@@ -136,6 +171,8 @@ namespace mmo
 				ImGui::SameLine();
 				DrawHelpMarker("Sort key used when /pose cycles through the variants of the same stand-state context.");
 			}
+
+			ImGui::PopID();
 		}
 
 		if (const auto section = ScopedEditorSection("Chat Commands", ImGuiTreeNodeFlags_DefaultOpen))
