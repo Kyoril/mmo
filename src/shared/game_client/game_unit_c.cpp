@@ -1706,7 +1706,7 @@ namespace mmo
 
 		// Zero-length path means "stop here" (e.g. a CreatureMove stop packet whose
 		// destination is exactly the client's current position). Complete immediately
-		// so UpdateMovementBasedAnimation can run and animations reset properly.
+		// so the animation controller can run and animations reset properly.
 		if (m_pathTotalLength <= 0.0f)
 		{
 			CompleteMovementPath(false);

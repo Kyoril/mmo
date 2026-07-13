@@ -375,12 +375,14 @@ namespace mmo
 			m_bindings[proto_client::ANIM_SLOT_JUMP_START] = m_bindings[proto_client::ANIM_SLOT_FALL];
 		}
 
-		// One-shot clips must start from the beginning when they play next.
-		if (AnimationState* death = m_bindings[proto_client::ANIM_SLOT_DEATH])
+		// One-shot clips must start from the beginning when they play next. Skip clips that
+		// are currently playing - the table also rebuilds on condition changes (weapon drawn,
+		// swim, ...) and must not restart an active death or flinch animation.
+		if (AnimationState* death = m_bindings[proto_client::ANIM_SLOT_DEATH]; death && !death->IsEnabled())
 		{
 			death->SetTimePosition(0.0f);
 		}
-		if (AnimationState* hit = m_bindings[proto_client::ANIM_SLOT_HIT])
+		if (AnimationState* hit = m_bindings[proto_client::ANIM_SLOT_HIT]; hit && !hit->IsEnabled())
 		{
 			hit->SetTimePosition(0.0f);
 		}
