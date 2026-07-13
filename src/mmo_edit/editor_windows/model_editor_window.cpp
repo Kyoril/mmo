@@ -714,6 +714,39 @@ namespace mmo
 			}
 		}
 
+		if (const auto section = ScopedEditorSection("Animation", ImGuiTreeNodeFlags_None))
+		{
+			const auto* currentProfile = currentEntry.animation_profile() != 0
+				? m_project.animationProfiles.getById(currentEntry.animation_profile()) : nullptr;
+			const String preview = currentProfile ? currentProfile->name()
+				: (currentEntry.animation_profile() != 0 ? "(missing profile)" : "(Default clip names)");
+
+			if (ImGui::BeginCombo("Animation Profile", preview.c_str()))
+			{
+				if (ImGui::Selectable("(Default clip names)", currentEntry.animation_profile() == 0))
+				{
+					currentEntry.set_animation_profile(0);
+				}
+
+				for (const auto& profile : m_project.animationProfiles.getTemplates().entry())
+				{
+					ImGui::PushID(static_cast<int>(profile.id()));
+					if (ImGui::Selectable(profile.name().c_str(), currentEntry.animation_profile() == profile.id()))
+					{
+						currentEntry.set_animation_profile(profile.id());
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+			ImGui::SameLine();
+			DrawHelpMarker(
+				"Animation profile binding logical animation slots (idle, movement, death, ...) to\n"
+				"skeleton clip names, including condition override sets (swim, stealth, combat).\n"
+				"Models without a profile use the built-in default clip names (Idle, Run, Swim, ...).");
+		}
+
 		if (const auto section = ScopedEditorSection("Audio", ImGuiTreeNodeFlags_None))
 		{
 			DrawSoundEntryCombo(m_project.sounds, "Gossip Sound", currentEntry.gossip_sound_id(), m_gossipSoundFilter,

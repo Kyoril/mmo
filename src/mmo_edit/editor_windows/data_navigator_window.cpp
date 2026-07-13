@@ -43,6 +43,7 @@
 #include "vendor_editor_window.h"
 #include "combat_settings_editor_window.h"
 #include "animation_editor_window.h"
+#include "animation_profile_editor_window.h"
 #include "condition_editor_window.h"
 #include "variable_editor_window.h"
 #include "spell_visualization_editor_window.h"
@@ -423,6 +424,13 @@ namespace mmo
             "Animations",
             [this]() { OpenEditorWindow(std::type_index(typeid(AnimationEditorWindow))); },
             static_cast<int>(m_project.animations.count())
+        });
+
+        visualsCategory.editors.push_back({
+            std::type_index(typeid(AnimationProfileEditorWindow)),
+            "Animation Profiles",
+            [this]() { OpenEditorWindow(std::type_index(typeid(AnimationProfileEditorWindow))); },
+            static_cast<int>(m_project.animationProfiles.count())
         });
 
         visualsCategory.editors.push_back({
