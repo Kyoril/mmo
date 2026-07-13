@@ -3094,8 +3094,13 @@ namespace mmo
 			}
 		}
 
-		// One-shot animations evict the locked loop and any stale pending entry.
-		m_lockedLoopAnimState = nullptr;
+		// One-shot animations evict a locked spell loop and any stale pending entry. The pose
+		// lock survives: pose enter/exit transitions (and one-shots that fire while posing,
+		// like damage flinches) play in front of the pose loop and must blend back into it.
+		if (m_lockedLoopAnimState != m_poseAnimState)
+		{
+			m_lockedLoopAnimState = nullptr;
+		}
 		m_pendingOneShotState = nullptr;
 
 		if (m_oneShotState && IsValidAnimState(m_oneShotState))
