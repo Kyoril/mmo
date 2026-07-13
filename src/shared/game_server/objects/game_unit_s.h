@@ -296,6 +296,7 @@ namespace mmo
 	namespace proto
 	{
 		class CombatSettings;
+		class EmoteEntry;
 		class FactionTemplateEntry;
 		class SpellEntry;
 	}
@@ -1055,6 +1056,19 @@ namespace mmo
 		/// @param message The base (English) message to send.
 		/// @param localizedText Optional per-locale overrides for @p message (see ChatSay).
 		void ChatEmote(const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText = nullptr);
+
+		/// Broadcasts the chat line of an animated emote ("Bob waves at you.") to nearby players.
+		/// Selects the self/target/no-target template from the emote entry, localizes it per
+		/// recipient locale and substitutes %s (source name) and %t (target name). Emotes without
+		/// any chat template are silent (animation only).
+		/// @param emote The emote entry that was performed.
+		/// @param target Optional emote target (may be this unit or nullptr).
+		void TextEmote(const proto::EmoteEntry &emote, const GameUnitS *target);
+
+		/// Broadcasts a one-shot animated emote of this unit to all subscribers in sight
+		/// (including the performing player itself).
+		/// @param emoteId Id of the emote entry to play.
+		void NotifyEmote(uint32 emoteId);
 
 		void NotifyRootChanged();
 

@@ -755,6 +755,7 @@ namespace mmo
 			}
 			break;
 		case game::client_realm_packet::CheatLearnSpell:
+		case game::client_realm_packet::CheatLearnEmote:
 		case game::client_realm_packet::CheatRecharge:
 		case game::client_realm_packet::CheatCreateMonster:
 		case game::client_realm_packet::CheatDestroyMonster:
@@ -3052,6 +3053,8 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TimeSyncResponse, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::AreaTriggerTriggered, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::UseObject, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::Emote, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CyclePose, *this, &Player::OnProxyPacket);
 
 			// Trade packet handlers (proxied to world node)
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TradeInitiate, *this, &Player::OnProxyPacket);
@@ -3092,6 +3095,7 @@ namespace mmo
 
 #if MMO_WITH_DEV_COMMANDS
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatLearnSpell, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatLearnEmote, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatRecharge, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatFaceMe, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatFollowMe, *this, &Player::OnProxyPacket);
@@ -3628,6 +3632,7 @@ namespace mmo
 		quest.rewardXp = questEntry->rewardxp();
 		quest.rewardClassXp = questEntry->rewardclassxp();
 		quest.rewardSpellId = questEntry->rewardspell();
+		quest.rewardEmoteId = questEntry->rewardemote();
 		quest.requiredClasses = questEntry->requiredclasses();
 		quest.flags = questEntry->flags();
 

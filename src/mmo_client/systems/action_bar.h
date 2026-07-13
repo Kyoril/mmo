@@ -19,6 +19,7 @@ namespace mmo
 	namespace proto_client
 	{
 		class SpellEntry;
+		class EmoteEntry;
 	}
 
 	class RealmConnector;
@@ -27,7 +28,7 @@ namespace mmo
 	class ActionBar final : public NonCopyable
 	{
 	public:
-		explicit ActionBar(RealmConnector& realmConnector, const proto_client::SpellManager& spells, DBItemCache& items, SpellCast& spellCast);
+		explicit ActionBar(RealmConnector& realmConnector, const proto_client::SpellManager& spells, const proto_client::EmoteManager& emotes, DBItemCache& items, SpellCast& spellCast);
 		~ActionBar() override = default;
 
 	public:
@@ -44,9 +45,13 @@ namespace mmo
 
 		[[nodiscard]] bool IsActionButtonItem(int32 slot) const;
 
+		[[nodiscard]] bool IsActionButtonEmote(int32 slot) const;
+
 		[[nodiscard]] const proto_client::SpellEntry* GetActionButtonSpell(int32 slot) const;
 
 		[[nodiscard]] const ItemInfo* GetActionButtonItem(int32 slot) const;
+
+		[[nodiscard]] const proto_client::EmoteEntry* GetActionButtonEmote(int32 slot) const;
 
 		void UseActionButton(int32 slot);
 
@@ -73,6 +78,7 @@ namespace mmo
 	private:
 		RealmConnector& m_connector;
 		const proto_client::SpellManager& m_spells;
+		const proto_client::EmoteManager& m_emotes;
 		DBItemCache& m_items;
 		ActionButtons m_actionButtons;
 		SpellCast& m_spellCast;

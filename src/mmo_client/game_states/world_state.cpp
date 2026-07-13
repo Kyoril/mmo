@@ -1537,6 +1537,9 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::NameQueryResult, *this, &WorldState::OnNameQueryResult);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::InitialSpells, *this, &WorldState::OnInitialSpells);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::InitialEmotes, *this, &WorldState::OnInitialEmotes);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::EmoteLearned, *this, &WorldState::OnEmoteLearned);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::Emote, *this, &WorldState::OnEmote);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::KnownClasses, *this, &WorldState::OnKnownClasses);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ClassXpUpdate, *this, &WorldState::OnClassXpUpdate);
@@ -1649,6 +1652,8 @@ namespace mmo
 								 { Command_DestroyMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Destroys a spawned monster from a specific guid.");
 		Console::RegisterCommand("learnspell", [this](const std::string &cmd, const std::string &args)
 								 { Command_LearnSpell(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected player learn a given spell.");
+		Console::RegisterCommand("learnemote", [this](const std::string &cmd, const std::string &args)
+								 { Command_LearnEmote(cmd, args); }, ConsoleCommandCategory::Gm, "Unlocks a given emote for the selected player.");
 		Console::RegisterCommand("followme", [this](const std::string &cmd, const std::string &args)
 								 { Command_FollowMe(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected creature follow you.");
 		Console::RegisterCommand("faceme", [this](const std::string &cmd, const std::string &args)
@@ -1688,6 +1693,7 @@ namespace mmo
 		Console::UnregisterCommand("createmonster");
 		Console::UnregisterCommand("destroymonster");
 		Console::UnregisterCommand("learnspell");
+		Console::UnregisterCommand("learnemote");
 		Console::UnregisterCommand("followme");
 		Console::UnregisterCommand("faceme");
 		Console::UnregisterCommand("level");
@@ -2562,6 +2568,13 @@ namespace mmo
 				return PacketParseResult::Pass;
 			}
 
+			// Animated-emote chat lines arrive fully composed by the server ("Bob waves at you.").
+			if (type == ChatType::TextEmote)
+			{
+				FrameManager::Get().TriggerLuaEvent("CHAT_MSG_TEXT_EMOTE", message);
+				return PacketParseResult::Pass;
+			}
+
 			// Channel messages carry the global channel id so the client can resolve the local
 			// channel number and name for display.
 			uint32 channelId = 0;
@@ -2762,6 +2775,68 @@ namespace mmo
 		m_talentClient.NotifyCharacterClassChanged();
 
 		FrameManager::Get().TriggerLuaEvent("PLAYER_SPELLS_CHANGED");
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnInitialEmotes(game::IncomingPacket &packet)
+	{
+		std::vector<uint32> emoteIds;
+		if (!(packet >> io::read_container<uint16>(emoteIds)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		const auto controlledUnit = m_playerController->GetControlledUnit();
+		if (const auto player = std::dynamic_pointer_cast<GamePlayerC>(controlledUnit))
+		{
+			player->SetKnownEmotes(emoteIds);
+		}
+
+		FrameManager::Get().TriggerLuaEvent("EMOTES_CHANGED");
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnEmoteLearned(game::IncomingPacket &packet)
+	{
+		uint32 emoteId = 0;
+		if (!(packet >> io::read<uint32>(emoteId)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		const auto controlledUnit = m_playerController->GetControlledUnit();
+		if (const auto player = std::dynamic_pointer_cast<GamePlayerC>(controlledUnit))
+		{
+			player->AddKnownEmote(emoteId);
+		}
+
+		// Per-emote notification (e.g. the chat frame prints a clickable emote link) ...
+		if (const auto* emote = m_project.emotes.getById(emoteId))
+		{
+			FrameManager::Get().TriggerLuaEvent("EMOTE_LEARNED", emoteId, emote->name());
+		}
+
+		// ... and the generic refresh for windows displaying the whole known set.
+		FrameManager::Get().TriggerLuaEvent("EMOTES_CHANGED");
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnEmote(game::IncomingPacket &packet)
+	{
+		uint64 sourceGuid = 0;
+		uint32 emoteId = 0;
+		if (!(packet >> io::read_packed_guid(sourceGuid) >> io::read<uint32>(emoteId)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (const std::shared_ptr<GameUnitC> sourceUnit = ObjectMgr::Get<GameUnitC>(sourceGuid))
+		{
+			sourceUnit->PlayEmote(emoteId);
+		}
 
 		return PacketParseResult::Pass;
 	}

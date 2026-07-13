@@ -986,6 +986,7 @@ namespace mmo
 			"chat_channels",
 			"sounds",
 			"surface_types",
+			"emotes",
 		};
 
 		const fs::path srcDir = m_config.projectPath;

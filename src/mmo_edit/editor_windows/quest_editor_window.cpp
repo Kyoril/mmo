@@ -800,6 +800,39 @@ namespace mmo
 			ImGui::SameLine();
 			DrawHelpMarker("Copper coins rewarded");
 
+			// Reward emote (unlocked on turn-in)
+			{
+				const auto* rewardEmote = m_project.emotes.getById(currentEntry.rewardemote());
+				ImGui::SetNextItemWidth(300);
+				if (ImGui::BeginCombo("Reward Emote", rewardEmote != nullptr ? rewardEmote->name().c_str() : "None", ImGuiComboFlags_None))
+				{
+					if (ImGui::Selectable("None", currentEntry.rewardemote() == 0))
+					{
+						currentEntry.clear_rewardemote();
+					}
+
+					for (int i = 0; i < m_project.emotes.count(); ++i)
+					{
+						ImGui::PushID(i);
+						const auto& emote = m_project.emotes.getTemplates().entry(i);
+						const bool isSelected = emote.id() == currentEntry.rewardemote();
+						if (ImGui::Selectable(emote.name().c_str(), isSelected))
+						{
+							currentEntry.set_rewardemote(emote.id());
+						}
+						if (isSelected)
+						{
+							ImGui::SetItemDefaultFocus();
+						}
+						ImGui::PopID();
+					}
+
+					ImGui::EndCombo();
+				}
+				ImGui::SameLine();
+				DrawHelpMarker("Emote that is unlocked for the character when this quest is rewarded.");
+			}
+
 			ImGui::Spacing();
 			ImGui::Spacing();
 			DrawSectionHeader("Item Rewards");

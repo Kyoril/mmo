@@ -176,6 +176,14 @@ namespace mmo
 		UpdateCursorIcon();
 	}
 
+	void Cursor::SetEmote(uint32 emote)
+	{
+		m_type = CursorItemType::Emote;
+		m_itemSlot = emote;
+
+		UpdateCursorIcon();
+	}
+
 	uint32 Cursor::GetCursorItem() const
 	{
 		return m_itemSlot;
@@ -282,6 +290,17 @@ namespace mmo
 				{
 					iconPath = itemIcon;
 				}
+			}
+		}
+		else if (m_type == CursorItemType::Emote && m_project)
+		{
+			// Resolve emote icon (falls back to the generic emote icon when none is authored)
+			iconPath = "Interface/Icons/fg4_iconsFlat_dialogue.htex";
+
+			const auto* emote = m_project->emotes.getById(m_itemSlot);
+			if (emote && !emote->icon().empty())
+			{
+				iconPath = emote->icon();
 			}
 		}
 

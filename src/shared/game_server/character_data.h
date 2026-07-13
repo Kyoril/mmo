@@ -162,6 +162,17 @@ namespace mmo
 		/// Persisted spell cooldowns (as remaining milliseconds at transfer time).
 		std::vector<PersistentCooldownData> cooldowns;
 
+		/// Unlocked (non-default) emote ids.
+		std::vector<uint32> emoteIds;
+		/// Active mood emote id (0 = neutral).
+		uint32 moodEmote = 0;
+		/// Selected special-idle pose variant emote id (0 = default pose).
+		uint32 idlePoseEmote = 0;
+		/// Selected sitting pose variant emote id (0 = default pose).
+		uint32 sitPoseEmote = 0;
+		/// Selected sleeping pose variant emote id (0 = default pose).
+		uint32 sleepPoseEmote = 0;
+
 		/// Returns the per-class data for the currently active class, or nullptr if it is missing.
 		const CharacterClassData* GetActiveClass() const
 		{
@@ -327,6 +338,16 @@ namespace mmo
 			data.cooldowns.push_back(cooldown);
 		}
 
+		if (!(reader
+			>> io::read_container<uint16>(data.emoteIds)
+			>> io::read<uint32>(data.moodEmote)
+			>> io::read<uint32>(data.idlePoseEmote)
+			>> io::read<uint32>(data.sitPoseEmote)
+			>> io::read<uint32>(data.sleepPoseEmote)))
+		{
+			return reader;
+		}
+
 		return reader;
 	}
 	
@@ -397,6 +418,13 @@ namespace mmo
 		{
 			writer << cooldown;
 		}
+
+		writer
+			<< io::write_dynamic_range<uint16>(data.emoteIds)
+			<< io::write<uint32>(data.moodEmote)
+			<< io::write<uint32>(data.idlePoseEmote)
+			<< io::write<uint32>(data.sitPoseEmote)
+			<< io::write<uint32>(data.sleepPoseEmote);
 
 		return writer;
 	}

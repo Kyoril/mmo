@@ -211,14 +211,14 @@ namespace mmo
 		context.trainerClient = std::make_unique<TrainerClient>(realmConnector, context.project->spells);
 		context.inventoryClient = std::make_unique<InventoryClient>(realmConnector);
 		context.uiRuntime->LoadLocalization();
-		context.questClient = std::make_unique<QuestClient>(realmConnector, context.clientCache->GetQuestCache(), context.project->spells, context.clientCache->GetItemCache(), context.clientCache->GetCreatureCache(), context.uiRuntime->GetLocalization());
+		context.questClient = std::make_unique<QuestClient>(realmConnector, context.clientCache->GetQuestCache(), context.project->spells, context.project->emotes, context.clientCache->GetItemCache(), context.clientCache->GetCreatureCache(), context.uiRuntime->GetLocalization());
 		context.partyInfo = std::make_unique<PartyInfo>(realmConnector, context.clientCache->GetNameCache());
 		context.guildClient = std::make_unique<GuildClient>(realmConnector, context.clientCache->GetGuildCache(), context.project->races, context.project->classes);
 		context.friendClient = std::make_unique<FriendClient>(realmConnector, context.project->races, context.project->classes);
 		context.channelClient = std::make_unique<ChannelClient>(realmConnector);
 		context.spellCast = std::make_unique<SpellCast>(realmConnector, context.project->spells, context.project->ranges);
 		context.cooldownManager = std::make_unique<CooldownManager>(context.project->spells);
-		context.actionBar = std::make_unique<ActionBar>(realmConnector, context.project->spells, context.clientCache->GetItemCache(), *context.spellCast);
+		context.actionBar = std::make_unique<ActionBar>(realmConnector, context.project->spells, context.project->emotes, context.clientCache->GetItemCache(), *context.spellCast);
 		context.talentClient = std::make_unique<TalentClient>(context.project->talentTabs, context.project->talents, context.project->spells, realmConnector);
 		context.tradeClient = std::make_unique<TradeClient>(realmConnector);
 	}

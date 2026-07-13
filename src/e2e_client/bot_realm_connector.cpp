@@ -1406,6 +1406,26 @@ namespace mmo
 		{
 			unit.SetTargetGuid(fieldMap.GetFieldValue<uint64>(object_fields::TargetUnit));
 		}
+		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::StandState))
+		{
+			unit.SetStandState(fieldMap.GetFieldValue<uint32>(object_fields::StandState));
+		}
+		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::MoodEmote))
+		{
+			unit.SetMoodEmote(fieldMap.GetFieldValue<uint32>(object_fields::MoodEmote));
+		}
+		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::IdlePoseEmote))
+		{
+			unit.SetIdlePoseEmote(fieldMap.GetFieldValue<uint32>(object_fields::IdlePoseEmote));
+		}
+		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::SitPoseEmote))
+		{
+			unit.SetSitPoseEmote(fieldMap.GetFieldValue<uint32>(object_fields::SitPoseEmote));
+		}
+		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::SleepPoseEmote))
+		{
+			unit.SetSleepPoseEmote(fieldMap.GetFieldValue<uint32>(object_fields::SleepPoseEmote));
+		}
 
 		PowerType powerType = unit.GetPowerType();
 		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::PowerType))
@@ -1936,6 +1956,32 @@ namespace mmo
 		sendSinglePacket([spellId](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CheatLearnSpell);
 			packet << io::write<uint32>(spellId);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatLearnEmote(const uint32 emoteId)
+	{
+		sendSinglePacket([emoteId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatLearnEmote);
+			packet << io::write<uint32>(emoteId);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::SendEmote(const uint32 emoteId, const uint64 targetGuid)
+	{
+		sendSinglePacket([emoteId, targetGuid](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::Emote);
+			packet << io::write<uint32>(emoteId) << io::write<uint64>(targetGuid);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::SendCyclePose()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CyclePose);
 			packet.Finish();
 			});
 	}

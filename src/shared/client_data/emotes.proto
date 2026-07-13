@@ -1,0 +1,21 @@
+syntax = "proto2";
+package mmo.proto_client;
+
+// Client-side view of the emote catalog. Field numbers must match
+// src/shared/proto_data/emotes.proto; server-only fields (chat texts) are omitted
+// and silently ignored by the protobuf parser at load time.
+message EmoteEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	optional uint32 flags = 4;
+	optional uint32 emotetype = 5;
+	optional string animation = 6;
+	optional uint32 standstate = 7;
+	repeated string aliases = 11;
+	optional uint32 variantorder = 12;
+	optional string icon = 13;
+}
+
+message Emotes {
+	repeated EmoteEntry entry = 1;
+}

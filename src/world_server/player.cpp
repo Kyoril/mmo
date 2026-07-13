@@ -14,6 +14,8 @@
 #include "game/spell_target_map.h"
 #include "game_server/objects/game_bag_s.h"
 #include "proto_data/project.h"
+#include "game/emote_defs.h"
+#include "game_server/emote_utils.h"
 #include "game/loot.h"
 #include "game/vendor.h"
 #include "game_server/world/universe.h"
@@ -59,6 +61,9 @@ namespace mmo
 			m_character->spellLearned.connect(*this, &Player::OnSpellLearned),
 			m_character->spellUnlearned.connect(*this, &Player::OnSpellUnlearned),
 			m_character->spellCooldownStarted.connect(*this, &Player::OnSpellCooldownStarted),
+
+			// Emote unlock signal
+			m_character->emoteLearned.connect(*this, &Player::OnEmoteLearned),
 
 			// Talent / attribute reset signals
 			m_character->talentsReset.connect(*this, &Player::OnTalentsReset),
@@ -114,6 +119,12 @@ namespace mmo
 		// Load the full known-spell set (across all classes). Only spells usable by the active class are
 		// activated; the rest are preserved so switching back to their class restores them.
 		m_character->SetKnownSpells(m_characterData.spellIds);
+
+		// Load the unlocked emote set, then materialize any always-granted (default-known)
+		// emotes the character does not know yet - existing characters pick up emotes that
+		// were flagged as always-granted after their creation as if they had always known them.
+		m_character->SetKnownEmotes(m_characterData.emoteIds);
+		m_character->GrantDefaultEmotes();
 
 		// Setup time sync timer
 		m_timeSyncTimer.ended.connect([this]()
@@ -739,6 +750,12 @@ namespace mmo
 		case game::client_realm_packet::RandomRoll:
 			OnRandomRoll(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::Emote:
+			OnEmote(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CyclePose:
+			OnCyclePose(opCode, buffer.size(), reader);
+			break;
 
 #if MMO_WITH_DEV_COMMANDS
 		case game::client_realm_packet::CheatCreateMonster:
@@ -755,6 +772,9 @@ namespace mmo
 			break;
 		case game::client_realm_packet::CheatLearnSpell:
 			OnCheatLearnSpell(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatLearnEmote:
+			OnCheatLearnEmote(opCode, buffer.size(), reader);
 			break;
 		case game::client_realm_packet::CheatLevelUp:
 			OnCheatLevelUp(opCode, buffer.size(), reader);
@@ -996,6 +1016,197 @@ namespace mmo
 		}
 	}
 
+	void Player::OnEmote(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 emoteId;
+		uint64 targetGuid;
+		if (!(contentReader >> io::read<uint32>(emoteId) >> io::read<uint64>(targetGuid)))
+		{
+			ELOG("Failed to read emote packet");
+			return;
+		}
+
+		const proto::EmoteEntry* emote = m_project.emotes.getById(emoteId);
+		if (!emote)
+		{
+			WLOG("Player tried to perform unknown emote " << emoteId);
+			return;
+		}
+
+		if (!m_character->KnowsEmote(emoteId))
+		{
+			WLOG("Player tried to perform emote " << emoteId << " without knowing it");
+			return;
+		}
+
+		if (!m_character->IsAlive())
+		{
+			return;
+		}
+
+		// Resolve the optional emote target (used for the chat line only).
+		const GameUnitS* target = nullptr;
+		if (targetGuid == m_character->GetGuid())
+		{
+			target = m_character.get();
+		}
+		else if (targetGuid != 0)
+		{
+			const GameObjectS* targetObject = m_worldInstance->FindObjectByGuid(targetGuid);
+			if (targetObject != nullptr &&
+				(targetObject->GetTypeId() == ObjectTypeId::Unit || targetObject->GetTypeId() == ObjectTypeId::Player))
+			{
+				target = static_cast<const GameUnitS*>(targetObject);
+			}
+		}
+
+		switch (emote->emotetype())
+		{
+		case emote_type::OneShot:
+			m_character->NotifyEmote(emoteId);
+			m_character->TextEmote(*emote, target);
+			break;
+
+		case emote_type::Pose:
+		{
+			const auto standState = static_cast<unit_stand_state::Type>(emote->standstate());
+			if (standState == unit_stand_state::Stand || standState == unit_stand_state::Dead ||
+				standState >= unit_stand_state::Count_)
+			{
+				WLOG("Pose emote " << emoteId << " has invalid stand state " << emote->standstate());
+				return;
+			}
+
+			// Performing the same pose emote again stands the character back up (toggle).
+			if (m_character->GetStandState() == standState)
+			{
+				m_character->SetStandState(unit_stand_state::Stand);
+			}
+			else
+			{
+				m_character->SetStandState(standState);
+				m_character->TextEmote(*emote, target);
+			}
+			break;
+		}
+
+		case emote_type::Mood:
+			// Performing the active mood again clears it (toggle back to neutral).
+			if (m_character->Get<uint32>(object_fields::MoodEmote) == emoteId)
+			{
+				m_character->Set<uint32>(object_fields::MoodEmote, 0);
+			}
+			else
+			{
+				m_character->Set<uint32>(object_fields::MoodEmote, emoteId);
+				m_character->TextEmote(*emote, target);
+			}
+			break;
+
+		default:
+			// Pose variants are only selectable through CyclePose.
+			WLOG("Player tried to directly perform non-performable emote " << emoteId);
+			break;
+		}
+	}
+
+	void Player::OnCyclePose(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		if (!m_character->IsAlive())
+		{
+			return;
+		}
+
+		// Map the current stand state to its pose-selection context field.
+		uint32 contextField;
+		switch (m_character->GetStandState())
+		{
+		case unit_stand_state::Stand:
+			contextField = object_fields::IdlePoseEmote;
+			break;
+		case unit_stand_state::Sit:
+			contextField = object_fields::SitPoseEmote;
+			break;
+		case unit_stand_state::Sleep:
+			contextField = object_fields::SleepPoseEmote;
+			break;
+		default:
+			// No pose variants for this stand state.
+			return;
+		}
+
+		const uint32 contextStandState =
+			(contextField == object_fields::IdlePoseEmote) ? unit_stand_state::Stand :
+			(contextField == object_fields::SitPoseEmote) ? unit_stand_state::Sit : unit_stand_state::Sleep;
+
+		// Collect the known pose variants for this context, ordered by variant order (then id
+		// for a stable order). Variant id 0 always exists implicitly: the default pose.
+		std::vector<std::pair<uint32, uint32>> variants;	// (variantorder, emoteId)
+		for (const auto& entry : m_project.emotes.getTemplates().entry())
+		{
+			if (entry.emotetype() != emote_type::PoseVariant)
+			{
+				continue;
+			}
+
+			if (entry.standstate() != contextStandState)
+			{
+				continue;
+			}
+
+			if (!m_character->KnowsEmote(entry.id()))
+			{
+				continue;
+			}
+
+			variants.emplace_back(entry.variantorder(), entry.id());
+		}
+
+		if (variants.empty())
+		{
+			// Nothing to cycle through besides the default pose.
+			return;
+		}
+
+		std::sort(variants.begin(), variants.end());
+
+		const uint32 current = m_character->Get<uint32>(contextField);
+		m_character->Set<uint32>(contextField, SelectNextPoseVariant(variants, current));
+	}
+
+	void Player::OnEmoteLearned(const uint32 emoteId)
+	{
+		if (!m_spawned)
+		{
+			return;
+		}
+
+		SendPacket([emoteId](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::EmoteLearned);
+			packet << io::write<uint32>(emoteId);
+			packet.Finish();
+		});
+	}
+
+	void Player::SendInitialEmotes()
+	{
+		// Sends all unlocked emote ids to the client (default-known emotes are materialized
+		// into the set at login, so they are included here).
+		SendPacket([&](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::InitialEmotes);
+
+			const auto& emotes = m_character->GetKnownEmoteIds();
+			packet << io::write<uint16>(static_cast<uint16>(emotes.size()));
+			for (const uint32 emoteId : emotes)
+			{
+				packet << io::write<uint32>(emoteId);
+			}
+			packet.Finish();
+		}, false);
+	}
+
 	void Player::LocalChatMessage(ChatType type, const std::string& message)
 	{
 		switch (type)
@@ -1207,6 +1418,9 @@ namespace mmo
 
 		// Send initial spells
 		SendInitialSpells();
+
+		// Send the unlocked emote set
+		SendInitialEmotes();
 
 		// Send the set of known classes (with their per-class levels) for the multi-class UI.
 		SendKnownClasses();
@@ -1653,6 +1867,7 @@ namespace mmo
 				packet << io::write<uint32>(quest.rewardxp());
 				packet << io::write<uint32>(quest.rewardspell());
 				packet << io::write<uint32>(quest.rewardclassxp());
+				packet << io::write<uint32>(quest.rewardemote());
 				packet.Finish();
 			});
 	}
@@ -1699,7 +1914,8 @@ namespace mmo
 				packet
 					<< io::write<uint32>(quest.rewardxp())
 					<< io::write<uint32>(quest.rewardspell())
-					<< io::write<uint32>(quest.rewardclassxp());
+					<< io::write<uint32>(quest.rewardclassxp())
+					<< io::write<uint32>(quest.rewardemote());
 				packet.Finish();
 			});
 	}
@@ -2110,6 +2326,25 @@ namespace mmo
 			return;
 		}
 
+		// Starting to move, jumping or entering water while seated/sleeping stands the character
+		// up (movement is client-authoritative, so the movement packet is the authoritative signal).
+		if (m_character->IsAlive() && m_character->GetStandState() != unit_stand_state::Stand)
+		{
+			switch (opCode)
+			{
+			case game::client_realm_packet::MoveStartForward:
+			case game::client_realm_packet::MoveStartBackward:
+			case game::client_realm_packet::MoveStartStrafeLeft:
+			case game::client_realm_packet::MoveStartStrafeRight:
+			case game::client_realm_packet::MoveJump:
+			case game::client_realm_packet::MoveStartSwim:
+				m_character->SetStandState(unit_stand_state::Stand);
+				break;
+			default:
+				break;
+			}
+		}
+
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
 
 		// Translate client-side movement op codes into server side movement op codes for the receiving clients
@@ -2352,6 +2587,12 @@ namespace mmo
 		// Get the cast time of this spell
 		int64 castTime = spell->casttime();
 		const uint64 casterId = m_character->GetGuid();
+
+		// Casting a spell stands the character up.
+		if (m_character->IsAlive() && m_character->GetStandState() != unit_stand_state::Stand)
+		{
+			m_character->SetStandState(unit_stand_state::Stand);
+		}
 
 		// Spell cast logic
 		auto result = m_character->CastSpell(targetMap, *spell, castTime);

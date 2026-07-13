@@ -3,6 +3,7 @@
 #include "game_unit_s.h"
 
 #include "game_server/cc_movement_controller.h"
+#include "game_server/emote_utils.h"
 #include "game_server/world/each_tile_in_sight.h"
 #include "game_server/objects/game_player_s.h"
 #include "base/utilities.h"
@@ -1725,6 +1726,87 @@ namespace mmo
 	void GameUnitS::ChatEmote(const String& message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText)
 	{
 		DoLocalChatMessage(IsPlayer() ? ChatType::Emote : ChatType::UnitEmote, message, localizedText);
+	}
+
+	void GameUnitS::TextEmote(const proto::EmoteEntry& emote, const GameUnitS* target)
+	{
+		const bool isSelf = (target == this);
+		const bool hasTarget = (target != nullptr && !isSelf);
+
+		// Emotes without any chat template are animation-only.
+		if (ComposeEmoteText(emote, LocaleIndex::enUS, GetName(), "", hasTarget, isSelf).empty())
+		{
+			return;
+		}
+
+		const auto position = GetPosition();
+		constexpr float chatDistance = 50.0f;
+
+		struct ChatPacket
+		{
+			std::vector<char> buffer;
+			io::VectorSink<char> sink;
+			game::OutgoingPacket packet;
+
+			ChatPacket() : sink(buffer), packet(sink) {}
+		};
+
+		const String targetName = (target != nullptr) ? target->GetName() : "";
+		const auto buildPacket = [this, &emote, &targetName, hasTarget, isSelf](const LocaleIndex locale) -> std::unique_ptr<ChatPacket>
+		{
+			const String text = ComposeEmoteText(emote, locale, GetName(), targetName, hasTarget, isSelf);
+
+			auto result = std::make_unique<ChatPacket>();
+			result->packet.Start(game::realm_client_packet::ChatMessage);
+			result->packet
+				<< io::write_packed_guid(GetGuid())
+				<< io::write<uint8>(ChatType::TextEmote)
+				<< io::write_range(text)
+				<< io::write<uint8>(0)
+				<< io::write<uint8>(0);
+			result->packet.Finish();
+			return result;
+		};
+
+		// Lazily built, one packet per distinct recipient locale.
+		std::map<LocaleIndex, std::unique_ptr<ChatPacket>> byLocale;
+
+		ForEachSubscriberInSight(
+			[&](TileSubscriber& subscriber)
+			{
+				auto& unit = subscriber.GetGameUnit();
+				const float distanceSquared = (unit.GetPosition() - position).GetSquaredLength();
+				if (distanceSquared > chatDistance * chatDistance)
+				{
+					return;
+				}
+
+				auto& entry = byLocale[subscriber.GetLocale()];
+				if (!entry)
+				{
+					entry = buildPacket(subscriber.GetLocale());
+				}
+
+				subscriber.SendPacket(entry->packet, entry->buffer);
+			});
+	}
+
+	void GameUnitS::NotifyEmote(const uint32 emoteId)
+	{
+		std::vector<char> buffer;
+		io::VectorSink sink(buffer);
+		game::OutgoingPacket packet(sink);
+		packet.Start(game::realm_client_packet::Emote);
+		packet
+			<< io::write_packed_guid(GetGuid())
+			<< io::write<uint32>(emoteId);
+		packet.Finish();
+
+		ForEachSubscriberInSight(
+			[&packet, &buffer](TileSubscriber& subscriber)
+			{
+				subscriber.SendPacket(packet, buffer);
+			});
 	}
 
 	void GameUnitS::NotifyRootChanged()

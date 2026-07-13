@@ -550,7 +550,7 @@ namespace mmo
 
 		const GameTime startTime = GetAsyncTimeMs();
 
-		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy, timePlayed, money, bank_bag_slots, bind_map, bind_x, bind_y, bind_z, bind_o, last_group FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
+		mysql::Select select(m_connection, "SELECT name, level, map, instance, x, y, z, o, gender, race, class, xp, hp, mana, rage, energy, timePlayed, money, bank_bag_slots, bind_map, bind_x, bind_y, bind_z, bind_o, last_group, mood_emote, idle_pose, sit_pose, sleep_pose FROM characters WHERE id = " + std::to_string(characterId) + " AND account_id = " + std::to_string(accountId) + " LIMIT 1");
 		if (select.Success())
 		{
 			if (const mysql::Row row(select); row)
@@ -598,6 +598,12 @@ namespace mmo
 
 				row.GetField(index++, result.groupId);
 
+				// Load mood and per-context pose selections
+				row.GetField(index++, result.moodEmote);
+				row.GetField(index++, result.idlePoseEmote);
+				row.GetField(index++, result.sitPoseEmote);
+				row.GetField(index++, result.sleepPoseEmote);
+
 				result.instanceId = InstanceId::from_string(instanceId).value_or(InstanceId());
 				result.facing = Radian(facing);
 				result.bindFacing = Radian(bindFacing);
@@ -618,6 +624,24 @@ namespace mmo
 				{
 					PrintDatabaseError();
 					throw mysql::Exception("Could not load character spells");
+				}
+
+				// Load unlocked emote ids
+				if (mysql::Select emoteSelect(m_connection, "SELECT emote FROM character_emotes WHERE `character` = " + std::to_string(characterId)); emoteSelect.Success())
+				{
+					mysql::Row emoteRow(emoteSelect);
+					while (emoteRow)
+					{
+						uint32 emoteId = 0;
+						emoteRow.GetField(0, emoteId);
+						result.emoteIds.push_back(emoteId);
+						emoteRow = mysql::Row::Next(emoteSelect);
+					}
+				}
+				else
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not load character emotes");
 				}
 
 				// Load item data
@@ -1020,7 +1044,8 @@ namespace mmo
 	}
 	
 	void MySQLDatabase::UpdateCharacter(uint64 characterId, uint32 map, const Vector3& position, const Radian& orientation, uint32 level, uint32 xp, uint32 hp, uint32 mana, uint32 rage, uint32 energy, uint32 money, uint32 bankBagSlots,
-		uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing, const std::vector<uint32>& spellIds, const std::vector<CharacterClassData>& knownClasses, uint32 activeClassId, uint32 timePlayed)
+		uint32 bindMap, const Vector3& bindPosition, const Radian& bindFacing, const std::vector<uint32>& spellIds, const std::vector<CharacterClassData>& knownClasses, uint32 activeClassId, uint32 timePlayed,
+		const std::vector<uint32>& emoteIds, uint32 moodEmote, uint32 idlePoseEmote, uint32 sitPoseEmote, uint32 sleepPoseEmote)
 	{
 		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
 
@@ -1047,6 +1072,10 @@ namespace mmo
 			+ ", bind_y = " + std::to_string(bindPosition.y)
 			+ ", bind_z = " + std::to_string(bindPosition.z)
 			+ ", bind_o = " + std::to_string(bindFacing.GetValueRadians())
+			+ ", mood_emote = " + std::to_string(moodEmote)
+			+ ", idle_pose = " + std::to_string(idlePoseEmote)
+			+ ", sit_pose = " + std::to_string(sitPoseEmote)
+			+ ", sleep_pose = " + std::to_string(sleepPoseEmote)
 			+ " WHERE id = '" + std::to_string(characterId) + "' LIMIT 1"))
 		{
 			PrintDatabaseError();
@@ -1089,6 +1118,42 @@ namespace mmo
 				// There was an error
 				PrintDatabaseError();
 				throw mysql::Exception("Could not update character spell data!");
+			}
+		}
+
+		// Save unlocked emotes
+		if (!m_connection.Execute(std::format(
+			"DELETE FROM `character_emotes` WHERE `character`={0};"
+			, characterId					// 0
+		)))
+		{
+			// There was an error
+			PrintDatabaseError();
+			throw mysql::Exception("Could not delete character emote data!");
+		}
+
+		if (!emoteIds.empty())
+		{
+			std::ostringstream strm;
+			strm << "INSERT INTO `character_emotes` (`character`, `emote`) VALUES ";
+			bool isFirstItem = true;
+			for (const auto& emoteId : emoteIds)
+			{
+				if (!isFirstItem) strm << ",";
+				else
+				{
+					isFirstItem = false;
+				}
+
+				strm << "(" << characterId << "," << emoteId << ")";
+			}
+			strm << ";";
+
+			if (!m_connection.Execute(strm.str()))
+			{
+				// There was an error
+				PrintDatabaseError();
+				throw mysql::Exception("Could not update character emote data!");
 			}
 		}
 

@@ -43,7 +43,10 @@ namespace mmo
 			Spell = 1,
 
 			///
-			Item = 2
+			Item = 2,
+
+			/// Performs an animated emote (the action is the emote entry id).
+			Emote = 3
 		};
 	}
 

@@ -276,6 +276,15 @@ namespace mmo
 		/// GAME MASTER only. Learns the given spell.
 		void CheatLearnSpell(uint32 spellId);
 
+		/// GAME MASTER only. Unlocks the given emote.
+		void CheatLearnEmote(uint32 emoteId);
+
+		/// Performs an animated emote (one-shot, pose or mood).
+		void SendEmote(uint32 emoteId, uint64 targetGuid);
+
+		/// Cycles the pose variant of the current stand-state context (/pose).
+		void SendCyclePose();
+
 		/// GAME MASTER only. Increases the player level by the given amount.
 		void CheatLevelUp(uint8 levels);
 

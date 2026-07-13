@@ -104,6 +104,8 @@ message QuestEntry {
 	// has_unlocksclass() - class id 0 (Mage) is a valid value. The final quest of such a chain
 	// should carry the class's class-change spell as rewardspell to perform the actual unlock.
 	optional uint32 unlocksclass = 57;
+	// Emote entry id unlocked when this quest is rewarded. 0 = no emote reward.
+	optional uint32 rewardemote = 58;
 }
 
 message Quests {

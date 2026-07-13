@@ -661,6 +661,13 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		characterObject->Set<uint32>(object_fields::BankBagSlotCount, characterData.bankBagSlotCount);
 		characterObject->Set<uint64>(object_fields::Guild, characterData.guildId);
 
+		// Restore the persisted mood and per-context pose selections (the stand state itself
+		// intentionally resets to Stand on spawn - only the selections are remembered).
+		characterObject->Set<uint32>(object_fields::MoodEmote, characterData.moodEmote);
+		characterObject->Set<uint32>(object_fields::IdlePoseEmote, characterData.idlePoseEmote);
+		characterObject->Set<uint32>(object_fields::SitPoseEmote, characterData.sitPoseEmote);
+		characterObject->Set<uint32>(object_fields::SleepPoseEmote, characterData.sleepPoseEmote);
+
 		// Mark rewarded quests
 		for (const uint32& questId : characterData.rewardedQuestIds)
 		{

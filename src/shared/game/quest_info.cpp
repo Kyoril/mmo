@@ -20,6 +20,7 @@ namespace mmo
 			<< io::write<uint32>(itemInfo.rewardClassXp)
 			<< io::write<uint32>(itemInfo.rewardMoney)
 			<< io::write<uint32>(itemInfo.rewardSpellId)
+			<< io::write<uint32>(itemInfo.rewardEmoteId)
 			<< io::write<uint32>(itemInfo.requiredClasses)
 			<< io::write<uint32>(itemInfo.flags);
 
@@ -71,6 +72,7 @@ namespace mmo
 			>> io::read<uint32>(outItemInfo.rewardClassXp)
 			>> io::read<uint32>(outItemInfo.rewardMoney)
 			>> io::read<uint32>(outItemInfo.rewardSpellId)
+			>> io::read<uint32>(outItemInfo.rewardEmoteId)
 			>> io::read<uint32>(outItemInfo.requiredClasses)
 			>> io::read<uint32>(outItemInfo.flags);
 

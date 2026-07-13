@@ -323,6 +323,63 @@ namespace mmo
 			return selfUnit ? static_cast<int32>(selfUnit->GetMoney()) : -1;
 		}
 
+		int32 luaGetStandState(const std::string& guid)
+		{
+			const BotUnit* unit = findUnit(guid);
+			return unit ? static_cast<int32>(unit->GetStandState()) : -1;
+		}
+
+		int32 luaGetMoodEmote(const std::string& guid)
+		{
+			const BotUnit* unit = findUnit(guid);
+			return unit ? static_cast<int32>(unit->GetMoodEmote()) : -1;
+		}
+
+		int32 luaGetIdlePoseEmote(const std::string& guid)
+		{
+			const BotUnit* unit = findUnit(guid);
+			return unit ? static_cast<int32>(unit->GetIdlePoseEmote()) : -1;
+		}
+
+		int32 luaGetSitPoseEmote(const std::string& guid)
+		{
+			const BotUnit* unit = findUnit(guid);
+			return unit ? static_cast<int32>(unit->GetSitPoseEmote()) : -1;
+		}
+
+		int32 luaGetSleepPoseEmote(const std::string& guid)
+		{
+			const BotUnit* unit = findUnit(guid);
+			return unit ? static_cast<int32>(unit->GetSleepPoseEmote()) : -1;
+		}
+
+		void luaDoEmote(const uint32 emoteId)
+		{
+			g_runtime->session->GetRealm().SendEmote(emoteId, g_runtime->selectedTarget);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("DoEmote", { { "emote_id", emoteId } });
+			}
+		}
+
+		void luaCyclePose()
+		{
+			g_runtime->session->GetRealm().SendCyclePose();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("CyclePose");
+			}
+		}
+
+		void luaGmLearnEmote(const uint32 emoteId)
+		{
+			g_runtime->session->GetRealm().CheatLearnEmote(emoteId);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.LearnEmote", { { "emote_id", emoteId } });
+			}
+		}
+
 		std::string luaLastCastResult()
 		{
 			const BotUnit::CastState state = g_runtime->session->GetContext().GetLastCastState();
@@ -663,6 +720,11 @@ namespace mmo
 				luabind::def_lambda("HasSpell", &luaHasSpell),
 				luabind::def_lambda("GetItemCount", &luaGetItemCount),
 				luabind::def_lambda("GetMoney", &luaGetMoney),
+				luabind::def_lambda("GetStandState", &luaGetStandState),
+				luabind::def_lambda("GetMoodEmote", &luaGetMoodEmote),
+				luabind::def_lambda("GetIdlePoseEmote", &luaGetIdlePoseEmote),
+				luabind::def_lambda("GetSitPoseEmote", &luaGetSitPoseEmote),
+				luabind::def_lambda("GetSleepPoseEmote", &luaGetSleepPoseEmote),
 				luabind::def_lambda("LastCastResult", &luaLastCastResult),
 				luabind::def_lambda("FindUnitByEntryImpl", &luaFindUnitByEntry),
 				luabind::def_lambda("FindUnitByNameImpl", &luaFindUnitByName),
@@ -676,10 +738,13 @@ namespace mmo
 				luabind::def_lambda("StopAttack", &luaStopAttack),
 				luabind::def_lambda("MoveToImpl", &luaMoveTo),
 				luabind::def_lambda("SendChat", &luaSendChat),
+				luabind::def_lambda("DoEmote", &luaDoEmote),
+				luabind::def_lambda("CyclePose", &luaCyclePose),
 
 				// GM commands (grouped into the GM table by the prelude)
 				luabind::def_lambda("GM_AddItem", &luaGmAddItem),
 				luabind::def_lambda("GM_LearnSpell", &luaGmLearnSpell),
+				luabind::def_lambda("GM_LearnEmote", &luaGmLearnEmote),
 				luabind::def_lambda("GM_LevelUp", &luaGmLevelUp),
 				luabind::def_lambda("GM_GiveMoney", &luaGmGiveMoney),
 				luabind::def_lambda("GM_CreateMonster", &luaGmCreateMonster),
@@ -716,6 +781,7 @@ namespace mmo
 			GM = {
 				AddItem = GM_AddItem,
 				LearnSpell = GM_LearnSpell,
+				LearnEmote = GM_LearnEmote,
 				LevelUp = GM_LevelUp,
 				GiveMoney = GM_GiveMoney,
 				CreateMonster = GM_CreateMonster,

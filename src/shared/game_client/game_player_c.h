@@ -134,6 +134,18 @@ namespace mmo
 		/// of range or the class id is unknown to the client project.
 		[[nodiscard]] const proto_client::ClassEntry* GetKnownClassEntry(size_t index) const;
 
+		/// Replaces the set of unlocked (non-default) emote ids (from the InitialEmotes packet).
+		void SetKnownEmotes(const std::vector<uint32>& emoteIds) { m_knownEmoteIds.clear(); m_knownEmoteIds.insert(emoteIds.begin(), emoteIds.end()); }
+
+		/// Adds a newly unlocked emote id (from the EmoteLearned packet).
+		void AddKnownEmote(const uint32 emoteId) { m_knownEmoteIds.insert(emoteId); }
+
+		/// Returns true if this player can use the given emote (default-known or unlocked).
+		[[nodiscard]] bool KnowsEmote(uint32 emoteId) const;
+
+		/// Returns the unlocked (non-default) emote ids.
+		[[nodiscard]] const std::set<uint32>& GetKnownEmoteIds() const { return m_knownEmoteIds; }
+
 	protected:
 		virtual void SetupSceneObjects() override;
 
@@ -193,6 +205,9 @@ namespace mmo
 
 		/// Active class id reported by the last KnownClasses packet (0 if none received yet).
 		uint32 m_activeKnownClassId{ 0 };
+
+		/// Unlocked (non-default) emote ids, replicated via InitialEmotes / EmoteLearned.
+		std::set<uint32> m_knownEmoteIds;
 
 		struct ItemAttachment
 		{

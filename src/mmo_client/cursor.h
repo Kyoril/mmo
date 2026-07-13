@@ -19,7 +19,9 @@ namespace mmo
 
 		Item,
 
-		Spell
+		Spell,
+
+		Emote
 	};
 
 	enum class CursorType
@@ -72,6 +74,11 @@ namespace mmo
 		/// The cursor will display the spell's icon, or a default icon if resolution fails.
 		/// @param spell The spell ID to display.
 		void SetSpell(uint32 spell);
+
+		/// Sets an emote to be displayed on the cursor by resolving the emote ID.
+		/// The cursor will display the emote's icon, or a default icon if it has none.
+		/// @param emote The emote ID to display.
+		void SetEmote(uint32 emote);
 
 		/// Gets the currently selected cursor item slot or spell ID.
 		/// @return The item slot or spell ID, or -1 if none is set.

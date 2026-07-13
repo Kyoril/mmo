@@ -200,6 +200,16 @@ namespace mmo
 			ExportField(entries, "zone", e.id(), 0, "name", e.name(), e.name_loc());
 		}
 
+		// Emotes (chat line templates)
+		const auto& emotes = project.emotes.getTemplates();
+		for (int i = 0; i < emotes.entry_size(); ++i)
+		{
+			const auto& e = emotes.entry(i);
+			ExportField(entries, "emote", e.id(), 0, "textnotarget", e.textnotarget(), e.textnotarget_loc());
+			ExportField(entries, "emote", e.id(), 0, "texttarget", e.texttarget(), e.texttarget_loc());
+			ExportField(entries, "emote", e.id(), 0, "textself", e.textself(), e.textself_loc());
+		}
+
 		// Triggers (per-action Say / Yell / Emote text). 'sub' is the 1-based action index.
 		const auto& triggers = project.triggers.getTemplates();
 		for (int i = 0; i < triggers.entry_size(); ++i)
@@ -379,6 +389,15 @@ namespace mmo
 				if (auto* e = project.zones.getById(id))
 				{
 					if (field == "name") { loc = e->mutable_name_loc(); }
+				}
+			}
+			else if (type == "emote")
+			{
+				if (auto* e = project.emotes.getById(id))
+				{
+					if (field == "textnotarget") { loc = e->mutable_textnotarget_loc(); }
+					else if (field == "texttarget") { loc = e->mutable_texttarget_loc(); }
+					else if (field == "textself") { loc = e->mutable_textself_loc(); }
 				}
 			}
 			else if (type == "trigger")

@@ -137,6 +137,13 @@ namespace mmo
 
 		void SendChatMessage(const char* message, const char* type, const char* target = nullptr) const;
 
+		/// Performs an animated emote, using the current selection as emote target.
+		void DoEmote(uint32 emoteId) const;
+
+		/// Resolves a slash command (with or without leading '/') to an emote id via the emote
+		/// catalog's alias lists. Returns 0 when no emote matches.
+		uint32 GetEmoteFromCommand(const char* command) const;
+
 		void TargetNearestEnemy();
 
 		void OnLogout();

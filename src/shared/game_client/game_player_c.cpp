@@ -5,6 +5,7 @@
 #include "object_mgr.h"
 #include "sound_entry_player.h"
 #include "client_data/project.h"
+#include "game/emote_defs.h"
 #include "game/guild_info.h"
 #include "game/spell.h"
 #include "log/default_log_levels.h"
@@ -289,6 +290,22 @@ namespace mmo
 		}
 
 		return m_project.classes.getById(m_knownClasses[index].classId);
+	}
+
+	bool GamePlayerC::KnowsEmote(const uint32 emoteId) const
+	{
+		const proto_client::EmoteEntry* emote = m_project.emotes.getById(emoteId);
+		if (!emote)
+		{
+			return false;
+		}
+
+		if ((emote->flags() & emote_flags::DefaultKnown) != 0)
+		{
+			return true;
+		}
+
+		return m_knownEmoteIds.contains(emoteId);
 	}
 
 	void GamePlayerC::SetupSceneObjects()

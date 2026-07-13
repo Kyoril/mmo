@@ -47,5 +47,8 @@ namespace mmo
 
 		/// @brief A system-generated message displayed in the chat window (e.g., error feedback).
 		System,
+
+		/// @brief A server-composed animated emote chat line ("Bob waves at you."). Executed on world node.
+		TextEmote,
 	};
 }

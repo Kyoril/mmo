@@ -11,10 +11,31 @@
 
 namespace mmo
 {
-	QuestClient::QuestClient(RealmConnector& connector, DBQuestCache& questCache, const proto_client::SpellManager& spells, DBItemCache& itemCache, DBCreatureCache& creatureCache, const Localization& localization)
+	namespace
+	{
+		/// Builds a Lua table ({ id, name, command, icon }) for an emote entry, matching the
+		/// table shape of the emote bindings in game_script.cpp. Returns nil for nullptr.
+		luabind::object MakeEmoteObject(lua_State* luaState, const proto_client::EmoteEntry* emote)
+		{
+			if (!emote)
+			{
+				return luabind::object();
+			}
+
+			luabind::object result = luabind::newtable(luaState);
+			result["id"] = emote->id();
+			result["name"] = emote->name();
+			result["command"] = emote->aliases_size() > 0 ? emote->aliases(0) : "";
+			result["icon"] = emote->icon();
+			return result;
+		}
+	}
+
+	QuestClient::QuestClient(RealmConnector& connector, DBQuestCache& questCache, const proto_client::SpellManager& spells, const proto_client::EmoteManager& emotes, DBItemCache& itemCache, DBCreatureCache& creatureCache, const Localization& localization)
 		: m_connector(connector)
 		, m_questCache(questCache)
 		, m_spells(spells)
+		, m_emotes(emotes)
 		, m_itemCache(itemCache)
 		, m_creatureCache(creatureCache)
 		, m_localization(localization)
@@ -65,6 +86,7 @@ namespace mmo
 				.def_readonly("rewardXp", &QuestInfo::rewardXp)
 				.def_readonly("rewardClassXp", &QuestInfo::rewardClassXp)
 				.def_readonly("rewardSpellId", &QuestInfo::rewardSpellId)
+				.def_readonly("rewardEmoteId", &QuestInfo::rewardEmoteId)
 				.def_readonly("requiredClasses", &QuestInfo::requiredClasses)
 				.def_readonly("flags", &QuestInfo::flags)
 			),
@@ -157,7 +179,20 @@ namespace mmo
 			luabind::def_lambda("GetQuestInfoRewardItem", [](const QuestInfo* quest, uint32 index) -> const QuestRewardItem* { if (!quest || index >= quest->rewardItems.size()) { return nullptr; } return &quest->rewardItems[index]; }),
 			luabind::def_lambda("GetQuestInfoChoiceItemCount", [](const QuestInfo* quest) -> uint32 { if (!quest) { return 0; } return static_cast<uint32>(quest->optionalItems.size()); }),
 			luabind::def_lambda("GetQuestInfoChoiceItem", [](const QuestInfo* quest, uint32 index) -> const QuestRewardItem* { if (!quest || index >= quest->optionalItems.size()) { return nullptr; } return &quest->optionalItems[index]; }),
-			luabind::def_lambda("GetQuestInfoRewardSpell", [this](const QuestInfo* quest) -> const proto_client::SpellEntry* { if (!quest || quest->rewardSpellId == 0) { return nullptr; } return m_spells.getById(quest->rewardSpellId); })
+			luabind::def_lambda("GetQuestInfoRewardSpell", [this](const QuestInfo* quest) -> const proto_client::SpellEntry* { if (!quest || quest->rewardSpellId == 0) { return nullptr; } return m_spells.getById(quest->rewardSpellId); }),
+			luabind::def_lambda("GetQuestRewardEmote", [this, luaState]() -> luabind::object
+				{
+					return MakeEmoteObject(luaState, m_questDetails.rewardEmote);
+				}),
+			luabind::def_lambda("GetQuestInfoRewardEmote", [this, luaState](const QuestInfo* quest) -> luabind::object
+				{
+					if (!quest || quest->rewardEmoteId == 0)
+					{
+						return luabind::object();
+					}
+
+					return MakeEmoteObject(luaState, m_emotes.getById(quest->rewardEmoteId));
+				})
 		);
 	}
 
@@ -810,15 +845,16 @@ namespace mmo
 			RequestRewardItemInfo(itemId, "QUEST_DETAIL");
 		}
 
-		uint32 rewardSpellId = 0;
-		if (!(packet >> io::read<uint32>(m_questDetails.rewardMoney) >> io::read<uint32>(m_questDetails.rewardXp) >> io::read<uint32>(rewardSpellId) >> io::read<uint32>(m_questDetails.rewardClassXp)))
+		uint32 rewardSpellId = 0, rewardEmoteId = 0;
+		if (!(packet >> io::read<uint32>(m_questDetails.rewardMoney) >> io::read<uint32>(m_questDetails.rewardXp) >> io::read<uint32>(rewardSpellId) >> io::read<uint32>(m_questDetails.rewardClassXp) >> io::read<uint32>(rewardEmoteId)))
 		{
 			ELOG("Failed to read QuestGiverQuestDetails packet");
 			return PacketParseResult::Disconnect;
 		}
 
-		// Resolve reward spell
+		// Resolve reward spell and emote
 		m_questDetails.rewardSpell = (rewardSpellId != 0) ? m_spells.getById(rewardSpellId) : nullptr;
+		m_questDetails.rewardEmote = (rewardEmoteId != 0) ? m_emotes.getById(rewardEmoteId) : nullptr;
 
 		// Ensure we have the quest in the cache
 		m_questCache.Get(m_questDetails.questId);
@@ -925,15 +961,16 @@ namespace mmo
 			RequestRewardItemInfo(itemId, "QUEST_OFFER_REWARDS");
 		}
 
-		// Read reward money, XP, and spell
-		uint32 rewardSpellId = 0;
-		if (!(packet >> io::read<uint32>(m_questDetails.rewardMoney) >> io::read<uint32>(m_questDetails.rewardXp) >> io::read<uint32>(rewardSpellId) >> io::read<uint32>(m_questDetails.rewardClassXp)))
+		// Read reward money, XP, spell and emote
+		uint32 rewardSpellId = 0, rewardEmoteId = 0;
+		if (!(packet >> io::read<uint32>(m_questDetails.rewardMoney) >> io::read<uint32>(m_questDetails.rewardXp) >> io::read<uint32>(rewardSpellId) >> io::read<uint32>(m_questDetails.rewardClassXp) >> io::read<uint32>(rewardEmoteId)))
 		{
 			ELOG("Failed to read QuestGiverOfferReward packet");
 			return PacketParseResult::Disconnect;
 		}
 
 		m_questDetails.rewardSpell = (rewardSpellId != 0) ? m_spells.getById(rewardSpellId) : nullptr;
+		m_questDetails.rewardEmote = (rewardEmoteId != 0) ? m_emotes.getById(rewardEmoteId) : nullptr;
 
 		// Ensure we have the quest in the cache
 		m_questCache.Get(m_questDetails.questId);

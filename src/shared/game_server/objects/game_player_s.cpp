@@ -11,6 +11,7 @@
 #include "game_server/quest_reset.h"
 #include "base/utilities.h"
 #include "proto_data/project.h"
+#include "game/emote_defs.h"
 #include "game/item.h"
 #include "game/spell.h"
 
@@ -998,6 +999,12 @@ namespace mmo
 		if (entry->rewardspell() != 0)
 		{
 			AddSpell(entry->rewardspell());
+		}
+
+		// Unlock reward emote
+		if (entry->rewardemote() != 0)
+		{
+			AddEmote(entry->rewardemote());
 		}
 
 		// Cast reward spell on player (if specified separately from learned spell)
@@ -2725,6 +2732,71 @@ namespace mmo
 		}
 	}
 
+	bool GamePlayerS::AddEmote(const uint32 emoteId)
+	{
+		if (m_project.emotes.getById(emoteId) == nullptr)
+		{
+			WLOG("Tried to unlock unknown emote " << emoteId << " for player " << log_hex_digit(GetGuid()));
+			return false;
+		}
+
+		if (!m_knownEmoteIds.insert(emoteId).second)
+		{
+			return false;
+		}
+
+		emoteLearned(emoteId);
+		return true;
+	}
+
+	void GamePlayerS::GrantDefaultEmotes()
+	{
+		// Materialize every always-granted (default-known) emote into the character's persisted
+		// emote set, as if it had always been learned. This keeps characters created before an
+		// emote was added (or before the emote system existed) up to date on their next login.
+		for (const auto& emote : m_project.emotes.getTemplates().entry())
+		{
+			if ((emote.flags() & emote_flags::DefaultKnown) == 0)
+			{
+				continue;
+			}
+
+			AddEmote(emote.id());
+		}
+	}
+
+	void GamePlayerS::SetKnownEmotes(const std::vector<uint32>& emoteIds)
+	{
+		m_knownEmoteIds.clear();
+
+		for (const uint32 emoteId : emoteIds)
+		{
+			if (m_project.emotes.getById(emoteId) == nullptr)
+			{
+				WLOG("Unknown emote " << emoteId << " in known emote list for player " << log_hex_digit(GetGuid()));
+				continue;
+			}
+
+			m_knownEmoteIds.insert(emoteId);
+		}
+	}
+
+	bool GamePlayerS::KnowsEmote(const uint32 emoteId) const
+	{
+		const auto* emote = m_project.emotes.getById(emoteId);
+		if (!emote)
+		{
+			return false;
+		}
+
+		if ((emote->flags() & emote_flags::DefaultKnown) != 0)
+		{
+			return true;
+		}
+
+		return m_knownEmoteIds.contains(emoteId);
+	}
+
 	void GamePlayerS::ActivateKnownSpellsForCurrentClass()
 	{
 		// Deactivate class-bound spells the current class can't use (keeps persistent spells). Proficiency
@@ -3095,6 +3167,13 @@ namespace mmo
 			w << cooldown;
 		}
 
+		// Write the unlocked (non-default) emote set.
+		w << io::write<uint16>(static_cast<uint16>(object.m_knownEmoteIds.size()));
+		for (const uint32 emoteId : object.m_knownEmoteIds)
+		{
+			w << io::write<uint32>(emoteId);
+		}
+
 		return w;
 	}
 
@@ -3180,6 +3259,17 @@ namespace mmo
 			PersistentCooldownData cooldown;
 			r >> cooldown;
 			object.m_deserializedCooldowns.push_back(cooldown);
+		}
+
+		// Read the unlocked (non-default) emote set.
+		uint16 emoteCount = 0;
+		r >> io::read<uint16>(emoteCount);
+		object.m_knownEmoteIds.clear();
+		for (uint16 i = 0; i < emoteCount; ++i)
+		{
+			uint32 emoteId = 0;
+			r >> io::read<uint32>(emoteId);
+			object.m_knownEmoteIds.insert(emoteId);
 		}
 
 		for (uint32 i = 0; i < 5; ++i)

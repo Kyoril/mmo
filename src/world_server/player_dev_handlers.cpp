@@ -107,6 +107,48 @@ namespace mmo
 #endif
 
 #if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatLearnEmote(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 emoteId;
+		if (!(contentReader >> io::read<uint32>(emoteId)))
+		{
+			ELOG("Missing emote id to learn an emote");
+			return;
+		}
+
+		// Find emote with entry
+		const auto* emote = m_project.emotes.getById(emoteId);
+		if (!emote)
+		{
+			ELOG("Unable to learn emote: Unknown emote " << emoteId);
+			return;
+		}
+
+		DLOG("Learning emote " << emoteId << " (" << emote->name() << ")");
+
+		// Learn the emote for the targeted player character (or ourself if no player is targeted)
+		uint64 targetGuid = m_character->Get<uint64>(object_fields::TargetUnit);
+		if (targetGuid == 0)
+		{
+			targetGuid = m_character->GetGuid();
+		}
+
+		GameObjectS* targetObject = m_worldInstance->FindObjectByGuid(targetGuid);
+		if (!targetObject || targetObject->GetTypeId() != ObjectTypeId::Player)
+		{
+			targetObject = m_character.get();
+		}
+
+		auto* playerCharacter = dynamic_cast<GamePlayerS*>(targetObject);
+		ASSERT(playerCharacter);
+		if (!playerCharacter->AddEmote(emoteId))
+		{
+			ELOG("Failed to learn emote " << emoteId);
+		}
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
 	void Player::OnCheatFollowMe(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
 		uint64 guid;

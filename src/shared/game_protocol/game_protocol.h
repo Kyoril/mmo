@@ -68,7 +68,7 @@ namespace mmo
 
 		constexpr uint32 MAX_FRIENDS = 50;
 
-		constexpr uint32 ProtocolVersion = 0x00000005;
+		constexpr uint32 ProtocolVersion = 0x00000006;
 
 		////////////////////////////////////////////////////////////////////////////////
 		// BEGIN: Client <-> Realm section
@@ -346,6 +346,15 @@ namespace mmo
 				/// Sent by the client to acknowledge a MoveCharge packet. After this ack the server
 				/// starts the actual charge movement. Payload: uint32 ackId, MovementInfo, float speed.
 				MoveChargeAck,
+
+				/// Sent by the client to perform an animated emote. Payload: uint32 emoteId, uint64 targetGuid (0 = none).
+				Emote,
+
+				/// Sent by the client to cycle the pose variant of the current stand-state context (/pose). No payload.
+				CyclePose,
+
+				/// Dev command: learn an emote for testing. Payload: uint32 emoteId. Requires MMO_WITH_DEV_COMMANDS.
+				CheatLearnEmote,
 
 				/// Counter constant
 				Count_,
@@ -686,6 +695,17 @@ namespace mmo
 				/// acknowledge with MoveChargeAck; only then does the server start the movement.
 				/// Payload: uint32 ackId, float speed.
 				MoveCharge,
+
+				/// Sent to nearby clients when a unit performs a one-shot animated emote.
+				/// Payload: packed uint64 sourceGuid, uint32 emoteId.
+				Emote,
+
+				/// Sent to the client after spawn with all unlocked (non-default) emote ids.
+				/// Payload: uint16 count, uint32 emoteId[count].
+				InitialEmotes,
+
+				/// Sent to the client when it unlocks a new emote. Payload: uint32 emoteId.
+				EmoteLearned,
 
 				/// Counter constant
 				Count_,

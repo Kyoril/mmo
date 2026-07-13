@@ -105,7 +105,8 @@ namespace mmo
 		{ "Trigger Spell", "Utility", "Casts another spell, optionally on a proc chance taken from this spell's Proc Chance" },
 		{ "Critical Block", "Combat", "Allows the unit to critically block (block for an increased amount)" },
 		{ "Revive %", "Healing", "Revives a dead player target with a percentage of their max health (base points)" },
-		{ "Change Class", "Utility", "Switches the caster's active class to the class given by Misc Value A (adds it at class level 1 if not yet known)" }
+		{ "Change Class", "Utility", "Switches the caster's active class to the class given by Misc Value A (adds it at class level 1 if not yet known)" },
+		{ "Teach Emote", "Utility", "Unlocks the emote given by Misc Value A for the player target (used by emote scroll items)" }
 	};
 
 	static String s_spellEffectNames[] = {
@@ -165,7 +166,8 @@ namespace mmo
 		"Trigger Spell",
 		"Critical Block",
 		"Revive %",
-		"Change Class"
+		"Change Class",
+		"Teach Emote"
 	};
 
 	static_assert(std::size(s_spellEffectNames) == spell_effects::Count_, "Each spell effect must have a string representation!");
@@ -2000,6 +2002,35 @@ namespace mmo
 					}
 
 					DrawHelpMarker("The class the caster switches to. Added at class level 1 if not yet known.");
+					break;
+				}
+			case spell_effects::TeachEmote:
+				{
+					const uint32 emoteId = effect.miscvaluea();
+
+					const auto* emoteEntry = m_project.emotes.getById(emoteId);
+					if (ImGui::BeginCombo("Emote", emoteEntry != nullptr ? emoteEntry->name().c_str() : "None", ImGuiComboFlags_None))
+					{
+						for (int i = 0; i < m_project.emotes.count(); i++)
+						{
+							ImGui::PushID(i);
+							const auto& emoteTemplate = m_project.emotes.getTemplates().entry(i);
+							const bool item_selected = emoteTemplate.id() == emoteId;
+							if (ImGui::Selectable(emoteTemplate.name().c_str(), item_selected))
+							{
+								effect.set_miscvaluea(static_cast<int32>(emoteTemplate.id()));
+							}
+							if (item_selected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+							ImGui::PopID();
+						}
+
+						ImGui::EndCombo();
+					}
+
+					DrawHelpMarker("The emote unlocked for the player target when this effect is applied.");
 					break;
 				}
 			case spell_effects::Energize:

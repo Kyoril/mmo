@@ -12,6 +12,8 @@
 #include "game_states/login_state.h"
 #include "console/console_var.h"
 
+#include <algorithm>
+#include <cctype>
 #include <string>
 #include <functional>
 #include <utility>
@@ -58,6 +60,7 @@
 #include "luabind/iterator_policy.hpp"
 #include "luabind/out_value_policy.hpp"
 #include "shared/client_data/proto_client/spells.pb.h"
+#include "client_data/project.h"
 
 namespace luabind
 {
@@ -1476,6 +1479,10 @@ namespace mmo
 					   luabind::def<std::function<void(uint32)>>("PickupSpell", [this](uint32 spell)
 																 { g_cursor.SetSpell(spell); }),
 
+					   // Emote list
+					   luabind::def<std::function<void(uint32)>>("PickupEmote", [this](uint32 emote)
+																 { g_cursor.SetEmote(emote); }),
+
 					   // ActionBar
 					   luabind::def<std::function<void(int32)>>("UseActionButton", [this](int32 slot)
 																{ this->m_actionBar.UseActionButton(slot); }),
@@ -1493,6 +1500,23 @@ namespace mmo
 																							{ return this->m_actionBar.GetActionButtonSpell(slot); }),
 					   luabind::def<std::function<const ItemInfo *(int32)>>("GetActionButtonItem", [this](int32 slot)
 																			{ return this->m_actionBar.GetActionButtonItem(slot); }),
+					   luabind::def<std::function<bool(int32)>>("IsActionButtonEmote", [this](int32 slot)
+																{ return this->m_actionBar.IsActionButtonEmote(slot); }),
+					   luabind::def<std::function<luabind::object(int32)>>("GetActionButtonEmote", [this](int32 slot) -> luabind::object
+						   {
+							   const auto* emote = this->m_actionBar.GetActionButtonEmote(slot);
+							   if (!emote)
+							   {
+								   return luabind::object();
+							   }
+
+							   luabind::object result = luabind::newtable(m_luaState.get());
+							   result["id"] = emote->id();
+							   result["name"] = emote->name();
+							   result["command"] = emote->aliases_size() > 0 ? emote->aliases(0) : "";
+							   result["icon"] = emote->icon();
+							   return result;
+						   }),
 
 					   // Cooldowns
 					   luabind::def<std::function<float(uint32)>>("GetSpellCooldownProgress", [this](uint32 spellId)
@@ -1746,6 +1770,66 @@ namespace mmo
 					   luabind::def<std::function<void(const char *, const char *, const char *)>>("SendChatMessage", [this](const char *message, const char *type, const char *target)
 																								   { SendChatMessage(message, type, target); }),
 
+					   luabind::def<std::function<void(uint32)>>("DoEmote", [this](const uint32 emoteId)
+																 { DoEmote(emoteId); }),
+					   luabind::def<std::function<void()>>("CyclePose", [this]()
+														   { m_realmConnector.SendCyclePose(); }),
+					   luabind::def<std::function<uint32(const char *)>>("GetEmoteFromCommand", [this](const char *command) -> uint32
+																		 { return GetEmoteFromCommand(command); }),
+					   luabind::def<std::function<bool(uint32)>>("HasEmote", [](const uint32 emoteId) -> bool
+						   {
+							   const auto player = ObjectMgr::GetActivePlayer();
+							   return player && player->KnowsEmote(emoteId);
+						   }),
+					   luabind::def<std::function<int32()>>("GetNumEmotes", [this]() -> int32
+						   {
+							   const auto player = ObjectMgr::GetActivePlayer();
+							   if (!player)
+							   {
+								   return 0;
+							   }
+
+							   int32 count = 0;
+							   for (const auto &entry : m_project.emotes.getTemplates().entry())
+							   {
+								   if (player->KnowsEmote(entry.id()))
+								   {
+									   ++count;
+								   }
+							   }
+							   return count;
+						   }),
+					   luabind::def<std::function<luabind::object(int32)>>("GetEmoteInfo", [this](const int32 index) -> luabind::object
+						   {
+							   const auto player = ObjectMgr::GetActivePlayer();
+							   if (!player)
+							   {
+								   return luabind::object();
+							   }
+
+							   // 1-based index over the player's known emotes in catalog order.
+							   int32 count = 0;
+							   for (const auto &entry : m_project.emotes.getTemplates().entry())
+							   {
+								   if (!player->KnowsEmote(entry.id()))
+								   {
+									   continue;
+								   }
+
+								   if (++count == index)
+								   {
+									   luabind::object result = luabind::newtable(m_luaState.get());
+									   result["id"] = entry.id();
+									   result["name"] = entry.name();
+									   result["command"] = entry.aliases_size() > 0 ? entry.aliases(0) : "";
+									   result["icon"] = entry.icon();
+									   return result;
+								   }
+							   }
+
+							   return luabind::object();
+						   }),
+
 					   luabind::def<std::function<void()>>("AcceptGroup", [this]()
 														   { m_realmConnector.AcceptGroup(); }),
 					   luabind::def<std::function<void()>>("DeclineGroup", [this]()
@@ -1793,6 +1877,65 @@ namespace mmo
 
 		// Functions now registered
 		m_globalFunctionsRegistered = true;
+	}
+
+	void GameScript::DoEmote(const uint32 emoteId) const
+	{
+		const auto player = ObjectMgr::GetActivePlayer();
+		if (!player)
+		{
+			return;
+		}
+
+		// The current selection (if any) is the emote target, used for the chat line only.
+		uint64 targetGuid = 0;
+		if (const auto target = ObjectMgr::GetSelectedObject())
+		{
+			targetGuid = target->GetGuid();
+		}
+
+		m_realmConnector.SendEmote(emoteId, targetGuid);
+	}
+
+	uint32 GameScript::GetEmoteFromCommand(const char *command) const
+	{
+		if (!command || !*command)
+		{
+			return 0;
+		}
+
+		// Strip a leading slash so both "/wave" and "wave" resolve.
+		String token = command;
+		if (!token.empty() && token[0] == '/')
+		{
+			token.erase(token.begin());
+		}
+
+		std::transform(token.begin(), token.end(), token.begin(),
+			[](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+		if (token.empty())
+		{
+			return 0;
+		}
+
+		for (const auto &entry : m_project.emotes.getTemplates().entry())
+		{
+			for (const auto &alias : entry.aliases())
+			{
+				if (alias.size() != token.size())
+				{
+					continue;
+				}
+
+				if (std::equal(alias.begin(), alias.end(), token.begin(),
+					[](const char a, const char b) { return std::tolower(static_cast<unsigned char>(a)) == b; }))
+				{
+					return entry.id();
+				}
+			}
+		}
+
+		return 0;
 	}
 
 	void GameScript::SendChatMessage(const char *message, const char *type, const char *target) const

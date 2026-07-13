@@ -129,8 +129,10 @@ namespace mmo
 		/// @brief Makes NPCs face their targets
 		void UpdateTargetTracking() const;
 
-		/// @brief Updates animation based on movement state
-		void UpdateMovementBasedAnimation();
+		/// @brief Updates animation based on movement state.
+		/// @param deltaTime Frame time used to accumulate the special-idle timer; pass 0 when
+		///        forcing a refresh outside the regular update loop.
+		void UpdateMovementBasedAnimation(float deltaTime = 0.0f);
 
 		/// @brief Returns the current walk/run mode replicated from the server.
 		[[nodiscard]] UnitMovementMode GetMovementMode() const { return GetUnitMovementModeFromFlags(m_movementInfo.movementFlags); }
@@ -597,6 +599,22 @@ namespace mmo
 		/// @brief Force an update of movement-based animations (e.g., after canceling spell animations)
 		void RefreshMovementAnimation();
 
+		/// @brief Plays a one-shot animated emote on this unit (e.g. /wave). Resolves the emote's
+		///	animation clip from the client emote catalog; silently does nothing when the clip is
+		///	missing on the current mesh.
+		/// @param emoteId Id of the emote entry to play.
+		void PlayEmote(uint32 emoteId);
+
+		/// @brief Applies the looping pose animation matching the replicated stand state (sit,
+		///	sleep, ...) using the unit's selected pose variant, or returns to movement-based
+		///	animation when standing. Called when StandState or a pose-variant field changes.
+		void RefreshPoseAnimation();
+
+		/// @brief Applies (or clears) the face pose layered animation from the replicated
+		///	MoodEmote field. The mood clip only drives bones whose names start with "face_";
+		///	it silently no-ops when the clip or face bones are missing.
+		void RefreshMoodAnimation();
+
 		/// @brief Plays an auto-attack swing animation.
 		///	@param offhand When true, an off-hand (dual wield) swing animation is chosen. Falls back to
 		///	the main-hand list and then the unarmed attack when no off-hand animations are available.
@@ -704,6 +722,15 @@ namespace mmo
 		/// Returns true only when @p state still belongs to the current entity's
 		/// AnimationStateSet (i.e. the pointer is not dangling after a mesh change).
 		[[nodiscard]] bool IsValidAnimState(AnimationState* state) const;
+
+		/// Resolves the animation state of an emote entry on the current mesh. Returns nullptr
+		/// when the emote is unknown, has no animation or the clip is missing on the mesh.
+		[[nodiscard]] AnimationState* ResolveEmoteAnimation(uint32 emoteId) const;
+
+		/// Resolves the looping pose animation for a stand state: the selected pose variant's
+		/// clip if set and available, otherwise the conventional default clip ("Sit", "Sleep",
+		/// "Kneel"). Returns nullptr when nothing is available on the current mesh.
+		[[nodiscard]] AnimationState* ResolvePoseAnimation(unit_stand_state::Type standState) const;
 
 		void UpdateCollider();
 
@@ -861,6 +888,15 @@ namespace mmo
 		/// One-shot queued to play as soon as the current one-shot finishes (max 1 slot).
 		AnimationState *m_pendingOneShotState = nullptr;
 		AnimationState *m_lockedLoopAnimState{nullptr};
+		/// The locked loop set by RefreshPoseAnimation (sit/sleep pose). Tracked separately so
+		/// standing up only clears the pose lock, never a looping spell-cast animation.
+		AnimationState *m_poseAnimState{nullptr};
+		/// Face pose layer driven by the MoodEmote field, blended onto face bones only.
+		AnimationState *m_moodAnimState{nullptr};
+		/// Cached special idle pose resolved from the IdlePoseEmote field (nullptr = default idle).
+		AnimationState *m_specialIdleState{nullptr};
+		/// Seconds the unit has been standing still; drives the special idle transition.
+		float m_idleSeconds{0.0f};
 
 		/// Callbacks deferred until the current attack animation's SwingHit notify (or its end).
 		std::vector<std::function<void()>> m_pendingSwingHitCallbacks;

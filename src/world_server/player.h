@@ -558,6 +558,19 @@ namespace mmo
 
 		void OnRandomRoll(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// Handles the client's request to perform an animated emote (one-shot, pose or mood).
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnEmote(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's request to cycle the pose variant of its current stand-state
+		/// context (/pose): idle, sitting and sleeping each remember their own selection.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnCyclePose(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 		void OnGossipAction(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		void OnLearnTalent(uint16 opCode, uint32 size, io::Reader& contentReader);
@@ -598,6 +611,13 @@ namespace mmo
 		///	@param size The size of the packet content in bytes, excluding the packet header.
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnCheatLearnSpell(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's request to teach an emote to the selected player or himself. The emote
+		///	will also be persisted in the database and will be available after a restart of the server.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnCheatLearnEmote(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		/// Handles the client's request to make a unit follow the player. This will make the unit follow the player until the creature dies or the player logs out, or the unit enters combat.
 		///	@param opCode The op code of the packet.
@@ -674,6 +694,12 @@ namespace mmo
 
 		/// Sends the active spellbook (current class + persistent spells) to the client.
 		void SendInitialSpells();
+
+		/// Notifies the client about a newly unlocked emote.
+		void OnEmoteLearned(uint32 emoteId);
+
+		/// Sends the unlocked emote ids to the client (used on spawn).
+		void SendInitialEmotes();
 
 		/// Sends the full set of known classes and their per-class levels to the client (used on
 		/// spawn and after a class switch) so the UI can show the multi-class list.

@@ -1220,7 +1220,14 @@ namespace mmo
 	{
 		if (m_onTabPressed.is_valid())
 		{
-			m_onTabPressed(this);
+			try 
+			{
+				m_onTabPressed(this);
+			}
+			catch (const luabind::error& e)
+			{
+				ELOG("Error calling " << m_name << ":OnTabPressed: " << e.what());
+			}
 			abort_emission();
 		}
 	}
@@ -1229,7 +1236,14 @@ namespace mmo
 	{
 		if (m_onEnterPressed.is_valid())
 		{
-			m_onEnterPressed(this);
+			try
+			{
+				m_onEnterPressed(this);
+			}
+			catch (const luabind::error& e)
+			{
+				ELOG("Error calling " << m_name << ":OnEnterPressed: " << e.what());
+			}
 			abort_emission();
 		}
 	}
@@ -1238,7 +1252,14 @@ namespace mmo
 	{
 		if (m_onSpacePressed.is_valid())
 		{
-			m_onSpacePressed(this);
+			try 
+			{
+				m_onSpacePressed(this);
+			}
+			catch (const luabind::error& e)
+			{
+				ELOG("Error calling " << m_name << ":OnSpacePressed: " << e.what());
+			}
 			abort_emission();
 		}
 	}
@@ -1247,7 +1268,14 @@ namespace mmo
 	{
 		if (m_onEscapePressed.is_valid())
 		{
-			m_onEscapePressed(this);
+			try
+			{
+				m_onEscapePressed(this);
+			}
+			catch (const luabind::error& e)
+			{
+				ELOG("Error calling " << m_name << ":OnEscapePressed: " << e.what());
+			}
 			abort_emission();
 		}
 	}

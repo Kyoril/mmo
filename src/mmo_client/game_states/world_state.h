@@ -343,6 +343,15 @@ namespace mmo
 
 		PacketParseResult OnInitialSpells(game::IncomingPacket &packet);
 
+		/// Handles the list of unlocked (non-default) emote ids sent after spawn.
+		PacketParseResult OnInitialEmotes(game::IncomingPacket &packet);
+
+		/// Handles the notification about a single newly unlocked emote.
+		PacketParseResult OnEmoteLearned(game::IncomingPacket &packet);
+
+		/// Handles a one-shot animated emote performed by a nearby unit.
+		PacketParseResult OnEmote(game::IncomingPacket &packet);
+
 		PacketParseResult OnKnownClasses(game::IncomingPacket &packet);
 
 		PacketParseResult OnClassXpUpdate(game::IncomingPacket &packet);
@@ -457,6 +466,8 @@ namespace mmo
 		void Command_CheckLineOfSight(const std::string &cmd, const std::string &args) const;
 
 		void Command_LearnSpell(const std::string &cmd, const std::string &args) const;
+
+		void Command_LearnEmote(const std::string &cmd, const std::string &args) const;
 
 		void Command_CreateMonster(const std::string &cmd, const std::string &args) const;
 

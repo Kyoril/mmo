@@ -254,7 +254,19 @@ namespace mmo
 			/// @brief 32 bit virtual equipment display id for slot 2.
 			VirtualItem2,
 
-			UnitFieldCount = VirtualItem2 + 1,
+			/// @brief 32 bit emote entry id of the active mood (face pose), 0 = none.
+			MoodEmote,
+
+			/// @brief 32 bit emote entry id of the selected special idle pose variant, 0 = default.
+			IdlePoseEmote,
+
+			/// @brief 32 bit emote entry id of the selected sitting pose variant, 0 = default.
+			SitPoseEmote,
+
+			/// @brief 32 bit emote entry id of the selected sleeping pose variant, 0 = default.
+			SleepPoseEmote,
+
+			UnitFieldCount = SleepPoseEmote + 1,
 		};
 
 #define VISIBLE_ITEM_FIELDS(index, offset) \

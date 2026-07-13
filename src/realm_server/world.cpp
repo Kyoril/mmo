@@ -718,6 +718,10 @@ namespace mmo
 		const auto& knownSpells = player.GetKnownSpellIds();
 		std::vector<uint32> spellIds(knownSpells.begin(), knownSpells.end());
 
+		// Persist the unlocked (non-default) emote set.
+		const auto& knownEmotes = player.GetKnownEmoteIds();
+		std::vector<uint32> emoteIds(knownEmotes.begin(), knownEmotes.end());
+
 		Player* playerConnection = m_playerManager.GetPlayerByCharacterGuid(characterGuid);
 		if (playerConnection)
 		{
@@ -781,7 +785,12 @@ namespace mmo
 			spellIds,
 			knownClasses,
 			activeClassId,
-			timePlayed
+			timePlayed,
+			emoteIds,
+			player.Get<uint32>(object_fields::MoodEmote),
+			player.Get<uint32>(object_fields::IdlePoseEmote),
+			player.Get<uint32>(object_fields::SitPoseEmote),
+			player.Get<uint32>(object_fields::SleepPoseEmote)
 			);
 
 		// Persist auras (remaining-duration based) exactly as received.

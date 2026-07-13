@@ -187,6 +187,21 @@ namespace mmo
 		/// @return The target GUID, or 0 if no target.
 		uint64 GetTargetGuid() const { return m_targetGuid; }
 
+		/// @brief Gets the replicated stand state (unit_stand_state::Type).
+		uint32 GetStandState() const { return m_standState; }
+
+		/// @brief Gets the active mood emote id (0 = neutral).
+		uint32 GetMoodEmote() const { return m_moodEmote; }
+
+		/// @brief Gets the selected special idle pose variant emote id (0 = default).
+		uint32 GetIdlePoseEmote() const { return m_idlePoseEmote; }
+
+		/// @brief Gets the selected sitting pose variant emote id (0 = default).
+		uint32 GetSitPoseEmote() const { return m_sitPoseEmote; }
+
+		/// @brief Gets the selected sleeping pose variant emote id (0 = default).
+		uint32 GetSleepPoseEmote() const { return m_sleepPoseEmote; }
+
 		// ============================================================
 		// Spellbook & Combat Runtime State
 		// ============================================================
@@ -332,6 +347,21 @@ namespace mmo
 		/// @brief Sets the target GUID.
 		void SetTargetGuid(uint64 targetGuid) { m_targetGuid = targetGuid; }
 
+		/// @brief Sets the replicated stand state.
+		void SetStandState(uint32 standState) { m_standState = standState; }
+
+		/// @brief Sets the active mood emote id.
+		void SetMoodEmote(uint32 emoteId) { m_moodEmote = emoteId; }
+
+		/// @brief Sets the selected special idle pose variant emote id.
+		void SetIdlePoseEmote(uint32 emoteId) { m_idlePoseEmote = emoteId; }
+
+		/// @brief Sets the selected sitting pose variant emote id.
+		void SetSitPoseEmote(uint32 emoteId) { m_sitPoseEmote = emoteId; }
+
+		/// @brief Sets the selected sleeping pose variant emote id.
+		void SetSleepPoseEmote(uint32 emoteId) { m_sleepPoseEmote = emoteId; }
+
 		/// @brief Replaces the known spellbook state.
 		void SetKnownSpells(const std::vector<uint32>& spellIds);
 
@@ -391,6 +421,11 @@ namespace mmo
 		uint32 m_unitFlags = 0;
 		uint32 m_npcFlags = 0;
 		uint64 m_targetGuid = 0;
+		uint32 m_standState = 0;
+		uint32 m_moodEmote = 0;
+		uint32 m_idlePoseEmote = 0;
+		uint32 m_sitPoseEmote = 0;
+		uint32 m_sleepPoseEmote = 0;
 
 		// Spellbook & combat runtime state
 		std::unordered_set<uint32> m_knownSpells;

@@ -8,6 +8,7 @@
 #include <sstream>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <random>
 #include <set>
@@ -33,6 +34,8 @@
 #include "scene_graph/sub_entity.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/skeleton.h"
+#include "scene_graph/skeleton_instance.h"
+#include "scene_graph/bone.h"
 #include "scene_graph/animation.h"
 #include "scene_graph/particle_emitter.h"
 #include "scene_graph/particle_emitter_serializer.h"
@@ -248,6 +251,26 @@ namespace mmo
 		if (!complete && m_fieldMap.IsFieldMarkedAsChanged(object_fields::Flags))
 		{
 			UpdateSparkEmitter(CanBeLooted());
+		}
+
+		if (!complete && (m_fieldMap.IsFieldMarkedAsChanged(object_fields::StandState) ||
+			m_fieldMap.IsFieldMarkedAsChanged(object_fields::SitPoseEmote) ||
+			m_fieldMap.IsFieldMarkedAsChanged(object_fields::SleepPoseEmote)))
+		{
+			RefreshPoseAnimation();
+		}
+
+		if (!complete && m_fieldMap.IsFieldMarkedAsChanged(object_fields::MoodEmote))
+		{
+			RefreshMoodAnimation();
+		}
+
+		if (!complete && m_fieldMap.IsFieldMarkedAsChanged(object_fields::IdlePoseEmote))
+		{
+			// Invalidate the cached special idle so it is re-resolved, and restart the idle timer
+			// so the new pose eases in after the regular delay.
+			m_specialIdleState = nullptr;
+			m_idleSeconds = 0.0f;
 		}
 
 		m_fieldMap.MarkAllAsUnchanged();
@@ -474,7 +497,7 @@ namespace mmo
 		// Skip normal animation system if following a path (path system handles animations manually)
 		if (m_movementPath.empty() || m_pathCompleted)
 		{
-			UpdateMovementBasedAnimation();
+			UpdateMovementBasedAnimation(deltaTime);
 		}
 	}
 
@@ -498,11 +521,26 @@ namespace mmo
 		}
 	}
 
-	void GameUnitC::UpdateMovementBasedAnimation()
+	void GameUnitC::UpdateMovementBasedAnimation(const float deltaTime)
 	{
+		// Local prediction: starting to move while in a locked pose (sitting/sleeping)
+		// immediately releases the pose animation - the server confirms by resetting the
+		// replicated stand state when it receives the movement packet.
+		if (m_lockedLoopAnimState != nullptr && m_lockedLoopAnimState == m_poseAnimState &&
+			IsControlledByLocalPlayer())
+		{
+			const Vector3 horizontalInput = m_inputVector * Vector3(1.0f, 0.0f, 1.0f);
+			if (horizontalInput.GetLength() > 0.1f)
+			{
+				m_lockedLoopAnimState = nullptr;
+				m_poseAnimState = nullptr;
+			}
+		}
+
 		// If a looped spell animation is locked, skip movement animation override
 		if (m_lockedLoopAnimState != nullptr)
 		{
+			m_idleSeconds = 0.0f;
 			return;
 		}
 
@@ -559,6 +597,7 @@ namespace mmo
 			{
 				SetTargetAnimState(swimAnim);
 			}
+			m_idleSeconds = 0.0f;
 			return;
 		}
 
@@ -583,6 +622,7 @@ namespace mmo
 			{
 				SetTargetAnimState(m_fallingState);
 			}
+			m_idleSeconds = 0.0f;
 			return;
 		}
 
@@ -647,6 +687,7 @@ namespace mmo
 			}
 
 			SetTargetAnimState(movementAnim);
+			m_idleSeconds = 0.0f;
 		}
 		else
 		{
@@ -657,6 +698,31 @@ namespace mmo
 				// Prefer the weapon-specific ready stance when one is set and valid for the current
 				// mesh; otherwise fall back to the unarmed ready animation.
 				idleAnim = IsValidAnimState(m_weaponReadyState) ? m_weaponReadyState : m_readyAnimState;
+				m_idleSeconds = 0.0f;
+			}
+			else
+			{
+				// After standing still for a while, ease into the unit's selected special idle
+				// pose (if one is selected and its clip exists on the current mesh).
+				constexpr float specialIdleDelaySeconds = 10.0f;
+
+				m_idleSeconds += deltaTime;
+				if (m_idleSeconds >= specialIdleDelaySeconds && m_oneShotState == nullptr)
+				{
+					if (!IsValidAnimState(m_specialIdleState))
+					{
+						m_specialIdleState = ResolveEmoteAnimation(Get<uint32>(object_fields::IdlePoseEmote));
+						if (m_specialIdleState)
+						{
+							m_specialIdleState->SetLoop(true);
+						}
+					}
+
+					if (m_specialIdleState)
+					{
+						idleAnim = m_specialIdleState;
+					}
+				}
 			}
 
 			SetTargetAnimState(idleAnim);
@@ -678,6 +744,9 @@ namespace mmo
 		if (!IsValidAnimState(m_targetState))       { m_targetState       = nullptr; }
 		if (!IsValidAnimState(m_oneShotState))      { m_oneShotState      = nullptr; }
 		if (!IsValidAnimState(m_pendingOneShotState)) { m_pendingOneShotState = nullptr; }
+		if (!IsValidAnimState(m_poseAnimState))     { m_poseAnimState     = nullptr; }
+		if (!IsValidAnimState(m_moodAnimState))     { m_moodAnimState     = nullptr; }
+		if (!IsValidAnimState(m_specialIdleState))  { m_specialIdleState  = nullptr; }
 
 		// Handle one-shot animations
 		if (m_oneShotState)
@@ -705,6 +774,7 @@ namespace mmo
 
 			// Death clears any locked loop animation
 			m_lockedLoopAnimState = nullptr;
+			m_poseAnimState = nullptr;
 
 			// Use the dedicated swimming death animation when dying in water; fall back to the
 			// regular death animation for meshes without one (or when not swimming).
@@ -826,6 +896,11 @@ namespace mmo
 		if (m_oneShotState && m_oneShotState->IsEnabled())
 		{
 			m_oneShotState->AddTime(deltaTime);
+		}
+		// The mood face layer runs independently of the locomotion layers.
+		if (m_moodAnimState && m_moodAnimState->IsEnabled())
+		{
+			m_moodAnimState->AddTime(deltaTime);
 		}
 	}
 
@@ -2710,6 +2785,181 @@ namespace mmo
 		}
 	}
 
+	AnimationState* GameUnitC::ResolveEmoteAnimation(const uint32 emoteId) const
+	{
+		if (emoteId == 0 || !m_entity)
+		{
+			return nullptr;
+		}
+
+		const proto_client::EmoteEntry* emote = m_project.emotes.getById(emoteId);
+		if (!emote || emote->animation().empty())
+		{
+			return nullptr;
+		}
+
+		if (!m_entity->HasAnimationState(emote->animation()))
+		{
+			return nullptr;
+		}
+
+		return m_entity->GetAnimationState(emote->animation());
+	}
+
+	AnimationState* GameUnitC::ResolvePoseAnimation(const unit_stand_state::Type standState) const
+	{
+		if (!m_entity)
+		{
+			return nullptr;
+		}
+
+		// Prefer the selected pose variant's clip when one is set and available on this mesh.
+		uint32 variantField = 0;
+		const char* defaultClip = nullptr;
+		switch (standState)
+		{
+		case unit_stand_state::Sit:
+			variantField = object_fields::SitPoseEmote;
+			defaultClip = "Sit";
+			break;
+		case unit_stand_state::Sleep:
+			variantField = object_fields::SleepPoseEmote;
+			defaultClip = "Sleep";
+			break;
+		case unit_stand_state::Kneel:
+			defaultClip = "Kneel";
+			break;
+		default:
+			return nullptr;
+		}
+
+		if (variantField != 0)
+		{
+			if (AnimationState* variantState = ResolveEmoteAnimation(Get<uint32>(variantField)))
+			{
+				return variantState;
+			}
+		}
+
+		// Fall back to the conventional default clip name for this stand state.
+		if (defaultClip && m_entity->HasAnimationState(defaultClip))
+		{
+			return m_entity->GetAnimationState(defaultClip);
+		}
+
+		return nullptr;
+	}
+
+	void GameUnitC::PlayEmote(const uint32 emoteId)
+	{
+		AnimationState* state = ResolveEmoteAnimation(emoteId);
+		if (!state)
+		{
+			return;
+		}
+
+		state->SetLoop(false);
+		state->SetPlayRate(1.0f);
+		PlayOneShotAnimation(state);
+	}
+
+	void GameUnitC::RefreshPoseAnimation()
+	{
+		m_idleSeconds = 0.0f;
+
+		const unit_stand_state::Type standState = GetStandState();
+		if (standState == unit_stand_state::Sit || standState == unit_stand_state::Sleep ||
+			standState == unit_stand_state::Kneel)
+		{
+			if (AnimationState* poseState = ResolvePoseAnimation(standState))
+			{
+				poseState->SetLoop(true);
+				poseState->SetPlayRate(1.0f);
+				m_poseAnimState = poseState;
+				SetLockedLoopAnimation(poseState);
+				return;
+			}
+		}
+
+		// Standing (or no usable pose clip): release the pose lock. Only the pose lock is
+		// cleared here - a looping spell-cast animation set through the same locked-loop slot
+		// must survive stand-state changes.
+		if (m_poseAnimState != nullptr)
+		{
+			if (m_lockedLoopAnimState == m_poseAnimState)
+			{
+				m_lockedLoopAnimState = nullptr;
+				RefreshMovementAnimation();
+			}
+
+			m_poseAnimState = nullptr;
+		}
+	}
+
+	void GameUnitC::RefreshMoodAnimation()
+	{
+		// Disable the previous mood layer (if any).
+		if (m_moodAnimState != nullptr && IsValidAnimState(m_moodAnimState))
+		{
+			m_moodAnimState->SetEnabled(false);
+			m_moodAnimState->SetWeight(0.0f);
+			m_moodAnimState->DestroyBlendMask();
+		}
+		m_moodAnimState = nullptr;
+
+		AnimationState* state = ResolveEmoteAnimation(Get<uint32>(object_fields::MoodEmote));
+		if (!state || !m_entity)
+		{
+			return;
+		}
+
+		const std::shared_ptr<SkeletonInstance> skeleton = m_entity->GetSkeleton();
+		if (!skeleton)
+		{
+			return;
+		}
+
+		// Restrict the mood clip to face bones (name convention: "face_" prefix, case-insensitive)
+		// so it can layer over whatever the body is doing. Without any face bones the mood is a
+		// silent no-op.
+		const uint16 boneCount = skeleton->GetNumBones();
+		state->CreateBlendMask(boneCount, 0.0f);
+
+		bool anyFaceBone = false;
+		for (uint16 i = 0; i < boneCount; ++i)
+		{
+			const Bone* bone = skeleton->GetBone(i);
+			if (!bone)
+			{
+				continue;
+			}
+
+			const String& name = bone->GetName();
+			constexpr const char* facePrefix = "face_";
+			constexpr size_t facePrefixLen = 5;
+			if (name.size() >= facePrefixLen &&
+				std::equal(name.begin(), name.begin() + facePrefixLen, facePrefix,
+					[](const char a, const char b) { return std::tolower(static_cast<unsigned char>(a)) == b; }))
+			{
+				state->SetBlendMaskEntry(bone->GetHandle(), 1.0f);
+				anyFaceBone = true;
+			}
+		}
+
+		if (!anyFaceBone)
+		{
+			state->DestroyBlendMask();
+			return;
+		}
+
+		state->SetLoop(true);
+		state->SetPlayRate(1.0f);
+		state->SetTimePosition(0.0f);
+		state->SetWeight(1.0f);
+		state->SetEnabled(true);
+		m_moodAnimState = state;
+	}
+
 	bool GameUnitC::PlayOneShotAnimation(AnimationState* animState, const bool suppressIfBusy)
 	{
 		if (!animState || !IsValidAnimState(animState))
@@ -3023,6 +3273,9 @@ namespace mmo
 		m_pendingOneShotState = nullptr;
 		m_pendingSwingHitCallbacks.clear();
 		m_lockedLoopAnimState = nullptr;
+		m_poseAnimState = nullptr;
+		m_moodAnimState = nullptr;
+		m_specialIdleState = nullptr;
 		m_jumpStartState = nullptr;
 		m_fallingState = nullptr;
 		m_landState = nullptr;
@@ -3290,6 +3543,11 @@ namespace mmo
 
 		// Connect to animation notify signals for all animations
 		ConnectAnimationNotifySignals();
+
+		// Re-apply the replicated pose and mood on the new mesh (also runs on initial spawn;
+		// both are no-ops when the unit is standing with a neutral mood).
+		RefreshPoseAnimation();
+		RefreshMoodAnimation();
 
 		OnScaleChanged();
 	}

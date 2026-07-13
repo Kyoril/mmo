@@ -1,10 +1,37 @@
 syntax = "proto2";
 package mmo.proto;
 
+import "localization.proto";
+
 message EmoteEntry {
 	required uint32 id = 1;
 	required string name = 2;
-	required uint32 textid = 3;
+	// Deprecated: emote texts now live in textnotarget/texttarget/textself below.
+	optional uint32 textid = 3;
+	// Bitmask, see emote_flags in src/shared/game/emote_defs.h (bit 0 = known by default).
+	optional uint32 flags = 4;
+	// See emote_type in src/shared/game/emote_defs.h (0 OneShot, 1 Pose, 2 Mood, 3 PoseVariant).
+	optional uint32 emotetype = 5;
+	// Skeleton animation clip name to play (e.g. "Wave", "SitLoop", "FaceHappy").
+	optional string animation = 6;
+	// unit_stand_state::Type. For Pose emotes: the stand state to enter.
+	// For PoseVariant emotes: the stand-state context this variant belongs to (Stand = special idle).
+	optional uint32 standstate = 7;
+	// Chat line templates. %s = source name, %t = target name. Base enUS strings.
+	optional string textnotarget = 8;
+	optional string texttarget = 9;
+	optional string textself = 10;
+	// Slash command aliases without the leading '/' (e.g. "wave", "hello").
+	repeated string aliases = 11;
+	// Sort key for cycling pose variants of the same stand-state context.
+	optional uint32 variantorder = 12;
+	// Icon texture path shown in the emote list and on action bar buttons (e.g.
+	// "Interface/Icons/Spells/S_Attack.htex"). Empty = generic fallback icon.
+	optional string icon = 13;
+
+	repeated LocalizedString textnotarget_loc = 200;
+	repeated LocalizedString texttarget_loc = 201;
+	repeated LocalizedString textself_loc = 202;
 }
 
 message Emotes {

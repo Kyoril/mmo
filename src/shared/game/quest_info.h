@@ -42,6 +42,8 @@ namespace mmo
 		uint32 rewardClassXp = 0;
 		uint32 rewardMoney;
 		uint32 rewardSpellId;
+		/// Emote entry id unlocked on turn-in. 0 = none.
+		uint32 rewardEmoteId = 0;
 		/// Class mask (1 << (classId - 1), 0 = no restriction) of classes this quest is intended
 		/// for. Used by the client to render log quests as disabled while a non-matching class is
 		/// active (see IsQuestClassAllowed in game/quest.h).

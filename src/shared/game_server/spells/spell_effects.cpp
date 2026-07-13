@@ -795,6 +795,40 @@ namespace mmo
 			}
 		}
 
+		void HandleTeachEmote(SpellEffectContext& ctx)
+		{
+			const uint32 emoteId = ctx.effect.miscvaluea();
+			if (!emoteId)
+			{
+				ELOG("No emote id to teach set for spell id " << ctx.castContext.GetSpell().id());
+				return;
+			}
+
+			// Look for emote
+			if (ctx.castContext.GetExecutor().GetProject().emotes.getById(emoteId) == nullptr)
+			{
+				ELOG("Unknown emote id to teach set for spell id " << ctx.castContext.GetSpell().id() << ": " << emoteId);
+				return;
+			}
+
+			if (ctx.effectTargets.empty())
+			{
+				ELOG("Failed to cast spell effect: Unable to resolve effect targets");
+				return;
+			}
+
+			for (auto* targetObject : ctx.effectTargets)
+			{
+				if (targetObject->GetTypeId() != ObjectTypeId::Player)
+				{
+					continue;
+				}
+
+				ctx.markAffectedTarget(*targetObject);
+				static_cast<GamePlayerS&>(targetObject->AsUnit()).AddEmote(emoteId);
+			}
+		}
+
 		void HandleScriptEffect(SpellEffectContext& /*ctx*/) {}
 
 		void HandleDispelMechanic(SpellEffectContext& /*ctx*/) {}

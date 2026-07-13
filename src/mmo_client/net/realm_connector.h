@@ -258,6 +258,18 @@ namespace mmo
 		///	@param spellId The id of the spell to learn.
 		void LearnSpell(uint32 spellId);
 
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Unlocks a specific emote for the selected player (or the controlled player if no player is selected).
+		///	@param emoteId The id of the emote to unlock.
+		void LearnEmote(uint32 emoteId);
+
+		/// Requests to perform an animated emote.
+		///	@param emoteId The id of the emote entry to perform.
+		///	@param targetGuid Optional target unit guid used for the emote chat line (0 = no target).
+		void SendEmote(uint32 emoteId, uint64 targetGuid);
+
+		/// Requests to cycle the pose variant of the current stand-state context (/pose).
+		void SendCyclePose();
+
 		/// FROM CONSOLE COMMAND: GAME MASTER only. Increases the level of the selected player (or the controlled player if no player is selected) by a specific amount.
 		///	@param level The amount of levels to increase the player by.
 		void LevelUp(uint8 level);

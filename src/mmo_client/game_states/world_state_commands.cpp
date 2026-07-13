@@ -79,6 +79,25 @@ namespace mmo
 		m_realmConnector.LearnSpell(entry);
 	}
 
+	void WorldState::Command_LearnEmote(const std::string &cmd, const std::string &args) const
+	{
+		const auto tokens = ParseCommandArgs(args);
+		if (tokens.size() != 1)
+		{
+			ELOG("Usage: learnemote <entry>");
+			return;
+		}
+
+		uint32 entry = 0;
+		if (!ParseUInt(tokens[0], entry))
+		{
+			ELOG("Invalid entry id: " + tokens[0]);
+			return;
+		}
+
+		m_realmConnector.LearnEmote(entry);
+	}
+
 	void WorldState::Command_CreateMonster(const std::string &cmd, const std::string &args) const
 	{
 		const auto tokens = ParseCommandArgs(args);

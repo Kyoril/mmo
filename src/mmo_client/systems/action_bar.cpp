@@ -13,9 +13,10 @@ namespace mmo
 {
 	extern Cursor g_cursor;
 
-	ActionBar::ActionBar(RealmConnector& realmConnector, const proto_client::SpellManager& spells, DBItemCache& items, SpellCast& spellCast)
+	ActionBar::ActionBar(RealmConnector& realmConnector, const proto_client::SpellManager& spells, const proto_client::EmoteManager& emotes, DBItemCache& items, SpellCast& spellCast)
 		: m_connector(realmConnector)
 		, m_spells(spells)
+		, m_emotes(emotes)
 		, m_items(items)
 		, m_spellCast(spellCast)
 	{
@@ -113,6 +114,12 @@ namespace mmo
 
 			return true;
 		}
+
+		case action_button_type::Emote:
+		{
+			const auto player = ObjectMgr::GetActivePlayer();
+			return player && player->KnowsEmote(actionButton.action);
+		}
 		}
 
 		return false;
@@ -161,6 +168,16 @@ namespace mmo
 		return GetActionButton(slot).type == action_button_type::Item;
 	}
 
+	bool ActionBar::IsActionButtonEmote(const int32 slot) const
+	{
+		if (!IsValidSlot(slot))
+		{
+			return false;
+		}
+
+		return GetActionButton(slot).type == action_button_type::Emote;
+	}
+
 	const proto_client::SpellEntry* ActionBar::GetActionButtonSpell(const int32 slot) const
 	{
 		if (!IsActionButtonSpell(slot))
@@ -179,6 +196,16 @@ namespace mmo
 		}
 
 		return m_items.Get(GetActionButton(slot).action);
+	}
+
+	const proto_client::EmoteEntry* ActionBar::GetActionButtonEmote(const int32 slot) const
+	{
+		if (!IsActionButtonEmote(slot))
+		{
+			return nullptr;
+		}
+
+		return m_emotes.getById(GetActionButton(slot).action);
 	}
 
 	void ActionBar::UseActionButton(const int32 slot)
@@ -202,6 +229,17 @@ namespace mmo
 
 				SpellTargetMap targetMap;
 				m_connector.UseItem(bag, slot, guid, targetMap);
+			}
+			else if (button.type == action_button_type::Emote)
+			{
+				// Perform the emote, using the current selection as emote target (chat line only).
+				uint64 targetGuid = 0;
+				if (const auto target = ObjectMgr::GetSelectedObject())
+				{
+					targetGuid = target->GetGuid();
+				}
+
+				m_connector.SendEmote(button.action, targetGuid);
 			}
 		}
 		else
@@ -235,6 +273,9 @@ namespace mmo
 			{
 			case action_button_type::Spell:
 				g_cursor.SetSpell(m_actionButtons[slot].action);
+				break;
+			case action_button_type::Emote:
+				g_cursor.SetEmote(m_actionButtons[slot].action);
 				break;
 			case action_button_type::Item:
 				uint8 bag, bagSlot;
@@ -317,6 +358,15 @@ namespace mmo
 				placed = true;
 			}
 			break;
+		case CursorItemType::Emote:
+			{
+				// Assign emote
+				m_actionButtons[slot].type = action_button_type::Emote;
+				m_actionButtons[slot].action = static_cast<uint16>(g_cursor.GetCursorItem());
+				ActionButtonChanged(slot);
+				placed = true;
+			}
+			break;
 		}
 
 		// If the slot was occupied by a different action, pick that action up so the player can
@@ -329,6 +379,10 @@ namespace mmo
 			{
 			case action_button_type::Spell:
 				g_cursor.SetSpell(previous.action);
+				pickedUpPrevious = true;
+				break;
+			case action_button_type::Emote:
+				g_cursor.SetEmote(previous.action);
 				pickedUpPrevious = true;
 				break;
 			case action_button_type::Item:

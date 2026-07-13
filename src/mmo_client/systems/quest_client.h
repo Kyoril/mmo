@@ -20,6 +20,7 @@ namespace mmo
 	namespace proto_client
 	{
 		class SpellEntry;
+		class EmoteEntry;
 	}
 
 	struct QuestListEntry
@@ -51,6 +52,7 @@ namespace mmo
 		uint32 rewardClassXp = 0;
 		uint32 rewardMoney = 0;
 		const proto_client::SpellEntry* rewardSpell = nullptr;
+		const proto_client::EmoteEntry* rewardEmote = nullptr;
 		std::vector<QuestRewardItemDisplay> rewardItemsChoice;
 		std::vector<QuestRewardItemDisplay> rewardItems;
 
@@ -65,6 +67,7 @@ namespace mmo
 			rewardClassXp = 0;
 			rewardMoney = 0;
 			rewardSpell = nullptr;
+			rewardEmote = nullptr;
 			rewardItemsChoice.clear();
 			rewardItems.clear();
 		}
@@ -96,7 +99,7 @@ namespace mmo
 	class QuestClient final : public NonCopyable
 	{
 	public:
-		QuestClient(RealmConnector& connector, DBQuestCache& questCache, const proto_client::SpellManager& spells, DBItemCache& itemCache, DBCreatureCache& creatureCache, const Localization& localization);
+		QuestClient(RealmConnector& connector, DBQuestCache& questCache, const proto_client::SpellManager& spells, const proto_client::EmoteManager& emotes, DBItemCache& itemCache, DBCreatureCache& creatureCache, const Localization& localization);
 		~QuestClient() override = default;
 
 	public:
@@ -198,6 +201,7 @@ namespace mmo
 		RealmConnector::PacketHandlerHandleContainer m_packetHandlers;
 		DBQuestCache& m_questCache;
 		const proto_client::SpellManager& m_spells;
+		const proto_client::EmoteManager& m_emotes;
 		DBItemCache& m_itemCache;
 		DBCreatureCache& m_creatureCache;
 		const Localization& m_localization;

@@ -72,6 +72,9 @@ namespace mmo
 		signal<void(GameUnitS &, const proto::SpellEntry &)> spellLearned;
 		signal<void(GameUnitS &, const proto::SpellEntry &)> spellUnlearned;
 
+		/// Fired when the character unlocks a new emote (not fired for default-known emotes).
+		signal<void(uint32)> emoteLearned;
+
 		/// Fired when the character's spent talent points have been refunded (talents reset).
 		signal<void()> talentsReset;
 		/// Fired after the player's active class has been switched (ChangeClass succeeded).
@@ -231,6 +234,27 @@ namespace mmo
 
 		/// Returns every spell the character has learned across all classes (the persistence set).
 		[[nodiscard]] const std::set<uint32>& GetKnownSpellIds() const { return m_knownSpellIds; }
+
+		/// Unlocks an emote for this character. Returns true if the emote was newly unlocked
+		/// (unknown emote ids and already unlocked emotes return false).
+		bool AddEmote(uint32 emoteId);
+
+		/// Removes a previously unlocked emote from this character.
+		void RemoveEmote(uint32 emoteId) { m_knownEmoteIds.erase(emoteId); }
+
+		/// Replaces the set of unlocked emotes. Used when loading the character.
+		void SetKnownEmotes(const std::vector<uint32>& emoteIds);
+
+		/// Unlocks every default-known emote this character does not know yet, as if it had
+		/// always been learned. Called on login so existing characters pick up emotes that
+		/// were flagged as always-granted after their creation.
+		void GrantDefaultEmotes();
+
+		/// Returns the set of unlocked emote ids (the persistence set).
+		[[nodiscard]] const std::set<uint32>& GetKnownEmoteIds() const { return m_knownEmoteIds; }
+
+		/// Returns true if the character can use the given emote (default-known or unlocked).
+		[[nodiscard]] bool KnowsEmote(uint32 emoteId) const;
 
 	public:
 		/// Gets the current status of a given quest by its id.
@@ -507,6 +531,9 @@ namespace mmo
 		/// (m_spells) is the subset usable by the active class; this set is the persistence authority
 		/// so spells of inactive classes are preserved (and re-activated when switching back).
 		std::set<uint32> m_knownSpellIds;
+		/// Every emote the character has unlocked, including default-known emotes (which are
+		/// materialized into this set on login via GrantDefaultEmotes).
+		std::set<uint32> m_knownEmoteIds;
 		/// True while ChangeClass is rebuilding the character, so client-bound per-spell notifications
 		/// are suppressed (a single refresh is sent afterwards instead).
 		bool m_classSwitchInProgress = false;
