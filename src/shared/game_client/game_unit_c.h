@@ -602,7 +602,8 @@ namespace mmo
 
 		/// @brief Plays a one-shot animated emote on this unit (e.g. /wave). Resolves the emote's
 		///	animation clip from the client emote catalog; silently does nothing when the clip is
-		///	missing on the current mesh.
+		///	missing on the current mesh or while a pose stand state (sit, sleep, kneel) owns the
+		///	body animation - the emote's chat line is unaffected either way.
 		/// @param emoteId Id of the emote entry to play.
 		void PlayEmote(uint32 emoteId);
 

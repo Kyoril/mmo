@@ -2889,6 +2889,16 @@ namespace mmo
 
 	void GameUnitC::PlayEmote(const uint32 emoteId)
 	{
+		// Pose stand states (sit, sleep, kneel) own the body animation: a one-shot emote
+		// would tear the pose loop apart and snap back right after, which looks broken.
+		// The emote's chat line arrives as a separate chat packet and still fires.
+		const unit_stand_state::Type standState = GetStandState();
+		if (standState == unit_stand_state::Sit || standState == unit_stand_state::Sleep ||
+			standState == unit_stand_state::Kneel)
+		{
+			return;
+		}
+
 		AnimationState* state = ResolveEmoteAnimation(emoteId);
 		if (!state)
 		{
