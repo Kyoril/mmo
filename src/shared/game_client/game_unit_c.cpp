@@ -1732,7 +1732,13 @@ namespace mmo
 			::sqrtf((finalDestination.x - currentPosition.x) * (finalDestination.x - currentPosition.x) +
 				(finalDestination.z - currentPosition.z) * (finalDestination.z - currentPosition.z));
 
-		constexpr float arrivalThreshold = 1.0f; // Distance-based completion only
+		// Keep this radius small: on completion the unit is snapped onto the exact
+		// destination, so anything larger than roughly one frame of travel shows up as a
+		// visible teleport. The speed-based interpolation below always lands the node
+		// exactly on the destination on its own (positions are set directly, nothing can
+		// block the horizontal approach), so a tight radius does not endanger completion —
+		// the unit simply glides the remaining distance at movement speed first.
+		constexpr float arrivalThreshold = 0.15f; // Distance-based completion only
 
 		// The vertical tolerance mirrors the server's nav-mesh-vs-ground tolerance (3.1). It
 		// prevents premature completion on stacked geometry (e.g. a path ending directly above
