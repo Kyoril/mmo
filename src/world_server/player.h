@@ -571,6 +571,11 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnCyclePose(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// Cycles the pose variant of the character's current stand-state context (idle,
+		/// sitting or sleeping). Shared by the /pose packet handler and the CyclePose emote.
+		/// Assumes the character is alive.
+		void CycleCurrentPose();
+
 		void OnGossipAction(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		void OnLearnTalent(uint16 opCode, uint32 size, io::Reader& contentReader);

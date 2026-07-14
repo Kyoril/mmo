@@ -1103,6 +1103,12 @@ namespace mmo
 			}
 			break;
 
+		case emote_type::CyclePose:
+			// Exposes the /pose command as a catalog entry: cycle the current stand state's
+			// pose variant instead of playing a one-shot animation. Silent, like /pose.
+			CycleCurrentPose();
+			break;
+
 		default:
 			// Pose variants are only selectable through CyclePose.
 			WLOG("Player tried to directly perform non-performable emote " << emoteId);
@@ -1117,6 +1123,11 @@ namespace mmo
 			return;
 		}
 
+		CycleCurrentPose();
+	}
+
+	void Player::CycleCurrentPose()
+	{
 		// Map the current stand state to its pose-selection context field.
 		uint32 contextField;
 		switch (m_character->GetStandState())

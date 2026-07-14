@@ -356,15 +356,17 @@ namespace mmo
 			Color c = color;
 			c *= m_color;
 
-			// Handle rendering based on whether we have hyperlinks
-			if (!m_parsedText.hyperlinks.empty())
+			// Route through the color/hyperlink-aware path when the text carries inline markup.
+			// RenderTraditional draws the stripped plain text and ignores colorChanges, so inline
+			// |cAARRGGBB..|r color codes only take effect here (hyperlinks or standalone color runs).
+			if (!m_parsedText.hyperlinks.empty() || !m_parsedText.colorChanges.empty())
 			{
-				// We have hyperlinks - use hyperlink-aware rendering but still respect alignment
+				// Has hyperlinks and/or inline color runs - use the markup-aware renderer.
 				RenderWithHyperlinks(frameRect, c, textScale);
 			}
 			else
 			{
-				// No hyperlinks - use traditional rendering with full alignment support
+				// Plain text - use traditional rendering with full alignment and word-wrap support.
 				RenderTraditional(frameRect, c, textScale);
 			}
 		}

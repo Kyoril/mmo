@@ -23,6 +23,11 @@ namespace mmo
 			/// sleep pose). Cycled via /pose, never triggered directly.
 			PoseVariant = 3,
 
+			/// Performing it cycles the pose variant of the current stand state, exactly like
+			/// the /pose command. Exposes the /pose behaviour as a catalog entry so it shows up
+			/// in the emote list and can be bound to an action bar button.
+			CyclePose = 4,
+
 			Count_
 		};
 	}

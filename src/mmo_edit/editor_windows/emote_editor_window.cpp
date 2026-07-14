@@ -19,7 +19,8 @@ namespace mmo
 			"One Shot",
 			"Pose",
 			"Mood",
-			"Pose Variant"
+			"Pose Variant",
+			"Cycle Pose"
 		};
 		static_assert(std::size(s_emoteTypeNames) == emote_type::Count_, "Emote type name table out of sync");
 
@@ -76,7 +77,8 @@ namespace mmo
 				"One Shot: plays the animation once (e.g. /wave).\n"
 				"Pose: enters a persistent stand state with a looping animation (e.g. /sit).\n"
 				"Mood: persistent face pose layered over the body animation (e.g. /happy).\n"
-				"Pose Variant: a selectable animation for a stand-state context, cycled with /pose.");
+				"Pose Variant: a selectable animation for a stand-state context, cycled with /pose.\n"
+				"Cycle Pose: performing it cycles the current stand state's pose variant, just like /pose.");
 
 			std::string icon = currentEntry.has_icon() ? currentEntry.icon() : "";
 			if (AssetPickerWidget::Draw("Icon", icon, asset_extensions::Textures, &m_previewManager, nullptr, 64.0f))

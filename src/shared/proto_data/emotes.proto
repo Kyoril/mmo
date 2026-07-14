@@ -10,7 +10,7 @@ message EmoteEntry {
 	optional uint32 textid = 3;
 	// Bitmask, see emote_flags in src/shared/game/emote_defs.h (bit 0 = known by default).
 	optional uint32 flags = 4;
-	// See emote_type in src/shared/game/emote_defs.h (0 OneShot, 1 Pose, 2 Mood, 3 PoseVariant).
+	// See emote_type in src/shared/game/emote_defs.h (0 OneShot, 1 Pose, 2 Mood, 3 PoseVariant, 4 CyclePose).
 	optional uint32 emotetype = 5;
 	// Skeleton animation clip name to play (e.g. "Wave", "SitLoop", "FaceHappy").
 	optional string animation = 6;
