@@ -21,12 +21,8 @@ int main(int argc, char *argv[])
 #include <Windows.h>
 #include <commctrl.h>
 #include "winnls.h"
-#include "objbase.h"
-#include "objidl.h"
-#include "shlguid.h"
 #include "resource.h"
 #include <ShlObj.h>
-#include "shobjidl.h"
 
 #include <iostream>
 #include <fstream>
@@ -65,6 +61,14 @@ int main(int argc, char *argv[])
 
 #define MMO_LAUNCHER_VERSION 1
 
+#define MMO_STRINGIFY_IMPL(x) #x
+#define MMO_STRINGIFY(x) MMO_STRINGIFY_IMPL(x)
+
+/// Posted by the update thread once a launcher self-update has been applied and the
+/// replacement process has been spawned. Handled on the UI thread, which is the only
+/// thread allowed to close the dialog.
+#define WM_APP_SELF_UPDATE_FINISHED (WM_APP + 1)
+
 namespace
 {
 	const std::string UpdateSourceUrl =
@@ -78,14 +82,13 @@ namespace
 	bool doRetryRemovePreviousExecutable = false;
 	HWND dialogHandle = NULL;
 	std::uintmax_t updateSize = 0;
-	volatile std::atomic<std::uintmax_t> updated = 0;
-	std::uintmax_t lastUpdateStatus = 0; 
+	std::atomic<std::uintmax_t> updated = 0;
 
 	void ShowVersionInfoDialog()
 	{
 		const std::string caption = "MMORPG Launcher";
 		const std::string body =
-		    "Version: 1\n"
+		    "Version: " MMO_STRINGIFY(MMO_LAUNCHER_VERSION) "\n"
 		    "Build date: " __DATE__ " " __TIME__ "\n"
 #ifndef NDEBUG
 		    "Debug configuration\n"
@@ -142,18 +145,20 @@ namespace mmo
 				statusStream << "Updating...";
 				SetDlgItemTextA(dialogHandle, IDC_STATUS_LABEL, statusStream.str().c_str());
 
-				const auto loadedMB = static_cast<float>(loaded) / 1024.0f / 1024.0f;
-				const auto sizeMB = static_cast<float>(size) / 1024.0f / 1024.0f;
-
-				// Progress bar
-				int percent = static_cast<int>(static_cast<float>(updated) / static_cast<float>(updateSize) * 100.0f);
-				SendMessageA(GetDlgItem(dialogHandle, IDC_PROGRESS_BAR), PBM_SETPOS, percent, 0);
+				// updateSize is only known once prepareUpdate has returned, but
+				// prepareUpdate drives this same handler while it works. Until then
+				// there is no total to measure against, so leave the bar alone
+				// rather than dividing by zero.
+				if (updateSize > 0)
+				{
+					const int percent = static_cast<int>(
+						static_cast<float>(updated) / static_cast<float>(updateSize) * 100.0f);
+					SendMessageA(GetDlgItem(dialogHandle, IDC_PROGRESS_BAR), PBM_SETPOS, percent, 0);
+				}
 
 				// Log file process
 				if (loaded >= size)
 				{
-					// Reset counter
-					lastUpdateStatus = 0;
 					ILOG("Successfully loaded file " << name << " (Size: " << size << " bytes)");
 				}
 			}
@@ -183,7 +188,9 @@ namespace mmo
 
 #pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
-static volatile bool g_shouldQuit = false;
+// Written by the UI thread, read by every update worker thread. `volatile` is not
+// a memory barrier and does not make this safe; std::atomic does.
+static std::atomic<bool> g_shouldQuit = false;
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd)
 {
@@ -204,7 +211,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 		if (results.count("version"))
 		{
+			// --version reports the version and exits; it must not fall through
+			// and start a full update run.
 			ShowVersionInfoDialog();
+			return 0;
 		}
 
 		if (results.count("no-self-update"))
@@ -250,9 +260,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		// Show the dialog
 		DialogBoxA(hInstance, MAKEINTRESOURCE(IDD_DIALOG1), NULL, MainDlgProc);
 
-		// Wait for the update thread to terminate
+		// Wait for the update thread to terminate. It is only started from
+		// WM_INITDIALOG, so closing the window early can leave it unstarted --
+		// joining a non-joinable thread calls std::terminate.
 		g_shouldQuit = true;
-		updatingThread.join();
+		if (updatingThread.joinable())
+		{
+			updatingThread.join();
+		}
 	}
 	catch (const cxxopts::OptionException& ex)
 	{
@@ -262,74 +277,40 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	return 0;
 }
 
-// Code from MSDN
-HRESULT CreateLink(LPCSTR lpszPathObj, LPCSTR lpszPathLink, LPCSTR lpszDesc, LPCSTR lpszWorkingDir)
-{
-	if (FAILED(CoInitialize(NULL)))
-	{
-		MessageBoxA(NULL, "Failed to initialize!", "Error", MB_ICONERROR | MB_OK);
-		return 1;
-	}
-
-	// Get a pointer to the IShellLink interface. It is assumed that CoInitialize
-	// has already been called.
-	IShellLink *psl;
-	HRESULT hres = CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID *)&psl);
-	if (SUCCEEDED(hres))
-	{
-		// Set the path to the shortcut target and add the description.
-		psl->SetPath(lpszPathObj);
-		psl->SetDescription(lpszDesc);
-		psl->SetWorkingDirectory(lpszWorkingDir);
-
-		// Query IShellLink for the IPersistFile interface, used for saving the
-		// shortcut in persistent storage.
-		IPersistFile *ppf = nullptr;
-		hres = psl->QueryInterface(IID_IPersistFile, (LPVOID *)&ppf);
-
-		if (SUCCEEDED(hres))
-		{
-			std::array<WCHAR, MAX_PATH> wsz;
-
-			// Ensure that the string is Unicode.
-			MultiByteToWideChar(CP_ACP, 0, lpszPathLink, -1, wsz.data(), wsz.size());
-
-			// Add code here to check return value from MultiByteWideChar
-			// for success.
-
-			// Save the link by calling IPersistFile::Save.
-			hres = ppf->Save(wsz.data(), TRUE);
-			ppf->Release();
-		}
-		psl->Release();
-	}
-	return hres;
-}
-
 namespace mmo
 {
-	void createDesktopShortcut()
+	/// Starts the game client and reports whether the process was actually created.
+	bool launchGameClient()
 	{
-#if _MSC_VER
-		std::array<CHAR, MAX_PATH> buffer = {{}};
-		SHGetFolderPathA(0, CSIDL_DESKTOPDIRECTORY, 0, SHGFP_TYPE_CURRENT, buffer.data());
-		std::filesystem::path desktopPath = buffer.data();
-		desktopPath /= "MMORPG.lnk";
+		// The command line must be writable for CreateProcessW.
+		std::array<wchar_t, MAX_PATH> commandLine = { L"mmo_client.exe -uptodate" };
 
-		const std::filesystem::path workingDir = std::filesystem::current_path();
+		STARTUPINFOW startupInfo = {};
+		startupInfo.cb = sizeof(startupInfo);
 
-		// Create desktop link
-		if (FAILED(CreateLink((workingDir / "Launcher.exe").string().c_str(),
-				                desktopPath.string().c_str(),
-				                "Play MMORPG",
-				                workingDir.string().c_str())))
+		PROCESS_INFORMATION processInfo = {};
+
+		if (!CreateProcessW(
+			nullptr,
+			commandLine.data(),
+			nullptr,
+			nullptr,
+			FALSE,
+			0,
+			nullptr,
+			nullptr,
+			&startupInfo,
+			&processInfo))
 		{
-			// TODO: Could not create desktop link
+			ELOG("Failed to start the game client (error " << GetLastError() << ")");
+			return false;
 		}
-#endif
+
+		CloseHandle(processInfo.hThread);
+		CloseHandle(processInfo.hProcess);
+		return true;
 	}
 
-	//Warum gibt die Funktion etwas zur�ck?
 	bool performUpdateThread()
 	{
 		ILOG("Connecting to the update server...");
@@ -406,8 +387,11 @@ namespace mmo
 
 				if (selfUpdate.perform)
 				{
+					// No owner window: this runs on the update thread, and owning a
+					// window created on another thread is what MessageBox documents
+					// as a deadlock risk.
 					MessageBoxA(
-					    dialogHandle,
+					    nullptr,
 					    "A new launcher version is available! The launcher will be restarted...",
 					    "New launcher version available",
 					    MB_OK | MB_ICONINFORMATION);
@@ -419,7 +403,10 @@ namespace mmo
 					    0
 					);
 
-					EndDialog(dialogHandle, 0);
+					// perform() has already spawned the replacement launcher, so this
+					// instance just has to close. EndDialog is only valid on the
+					// thread that created the dialog, so ask that thread to do it.
+					PostMessageA(dialogHandle, WM_APP_SELF_UPDATE_FINISHED, 0, 0);
 					return true;
 				}
 			}
@@ -428,8 +415,14 @@ namespace mmo
 				asio::io_service dispatcher;
 				for (const auto & step : preparedUpdate.steps)
 				{
+					// Capture the address of the vector element, not the loop
+					// reference variable: `step` itself dies at the end of each
+					// iteration, while the posted handler runs later on one of the
+					// worker threads. Capturing it by reference is a dangling
+					// reference that only appears to work because the compiler
+					// folds it to the element address.
 					dispatcher.post(
-					    [&]()
+					    [&dispatcher, &updateParameters, &selfExecutablePath, stepPtr = &step]()
 					{
 						std::string errorMessage;
 						try
@@ -439,7 +432,7 @@ namespace mmo
 								try
 								{
 									if (std::filesystem::equivalent(
-									            step.destinationPath,
+									            stepPtr->destinationPath,
 									            selfExecutablePath
 									        ))
 									{
@@ -452,7 +445,7 @@ namespace mmo
 								}
 							}
 
-							while (!g_shouldQuit && step.step(updateParameters)) {
+							while (!g_shouldQuit && stepPtr->step(updateParameters)) {
 								;
 							}
 
@@ -490,8 +483,6 @@ namespace mmo
 				    threads.begin(),
 				    threads.end(),
 				    std::bind(&std::thread::join, std::placeholders::_1));
-
-				dispatcher.run();
 			}
 
 			if (g_shouldQuit)
@@ -571,27 +562,27 @@ INT_PTR CALLBACK MainDlgProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam)
 		EndDialog(hDlg, 0);
 		return TRUE;
 
+	case WM_APP_SELF_UPDATE_FINISHED:
+		EndDialog(hDlg, 0);
+		return TRUE;
+
 	case WM_COMMAND:
 		{
 			switch (LOWORD(wParam))
 			{
-			case IDC_CLOSE:
-				{
-					EndDialog(hDlg, 0);
-					return TRUE;
-				}
-
 			case IDC_PLAY:
 				{
-					// Start the client (TODO?)
-					WinExec("./mmo_client.exe -uptodate", SW_SHOWDEFAULT);
-					EndDialog(hDlg, 0);
-					return FALSE;
-				}
+					if (!mmo::launchGameClient())
+					{
+						MessageBoxA(
+							hDlg,
+							"Failed to start the game client.",
+							"Error",
+							MB_OK | MB_ICONERROR);
+						return FALSE;
+					}
 
-			case IDC_CREATE_SHORTCUT:
-				{
-					mmo::createDesktopShortcut();
+					EndDialog(hDlg, 0);
 					return FALSE;
 				}
 			}

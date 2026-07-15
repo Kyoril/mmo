@@ -6,16 +6,21 @@ IF(APPLE)
     SET(EXTRA_LIBS ${COCOA_LIBRARY})
 ENDIF(APPLE)
 
-file(GLOB codeFiles
-    "*.h"
-    "*.cpp"
-    "*.m"
-    "*.mm"
+# Source files are listed explicitly rather than globbed: a glob does not re-run
+# when files are added, and the previous top-level-only glob would have silently
+# missed anything in a subdirectory.
+set(codeFiles
+    main.cpp
+    resource.h
 )
 
 IF(APPLE)
-    FILE(GLOB appleSource "./osx/*.h" "./osx/*.m" "./osx/*.mm" "./osx/*.cpp" "osx/Logo_OSX.png")
-    LIST(APPEND codeFiles ${appleSource})
+    LIST(APPEND codeFiles
+        osx/AppDelegate.h
+        osx/AppDelegate.mm
+        osx/main_osx.mm
+        osx/Logo_OSX.png
+    )
 
     # these are the OS X Interface Builder Files
     SET (Launcher_XIBS
@@ -83,11 +88,18 @@ ENDIF(APPLE)
 
 target_link_libraries(launcher updater base log)
 target_link_libraries(launcher ${OPENSSL_LIBRARIES} ${EXTRA_LIBS})
+
+# freetype rasterizes the launcher's text into its own software canvas. It
+# exports its include directories as PUBLIC, so linking it is sufficient.
+target_link_libraries(launcher freetype)
+
 set_target_properties(launcher PROPERTIES OUTPUT_NAME Launcher)
 
 set_property(TARGET launcher PROPERTY FOLDER "client")
 
 if (WIN32)
-    # Client is dpi aware
+    # Client is dpi aware. NOTE: this property only emits PerMonitor *v1*; the
+    # launcher additionally opts in to PerMonitorV2 at runtime via
+    # SetProcessDpiAwarenessContext, since CMake has no value for v2.
     set_property(TARGET launcher PROPERTY VS_DPI_AWARE "PerMonitor")
 endif()
