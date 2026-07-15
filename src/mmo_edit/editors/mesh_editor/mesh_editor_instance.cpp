@@ -1513,6 +1513,23 @@ namespace mmo
 				const AABBTree& tree = m_mesh->GetCollisionTree();
 				ImGui::Text("Nodes: %zu", tree.GetNodes().size());
 
+				const uint16 subMeshCount = m_mesh->GetSubMeshCount();
+
+				if (ImGui::Button("Select All"))
+				{
+					for (uint16 i = 0; i < subMeshCount; ++i)
+					{
+						m_includedSubMeshes.insert(i);
+					}
+				}
+
+				ImGui::SameLine();
+
+				if (ImGui::Button("Deselect All"))
+				{
+					m_includedSubMeshes.clear();
+				}
+
 				for (uint16 i = 0; i < m_mesh->GetSubMeshCount(); ++i)
 				{
 					ImGui::PushID(i);
