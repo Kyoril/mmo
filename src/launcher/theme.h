@@ -95,14 +95,13 @@ namespace mmo
 		constexpr Color BottomScrimFrom = FromArgb(0x00000000);
 		constexpr Color BottomScrimTo = FromArgb(0xEB080604);
 
-		/// Shown before the splash is available, and behind it if decoding ever fails.
+		/// Fills the frame's opening under the splash, so a failed decode shows a dark
+		/// panel rather than a hole straight through to the desktop.
 		constexpr Color WindowBackground = FromArgb(0xFF17110B);
 
-		/// The frame art keeps a band of intentional negative space around its outer
-		/// edge, with only the corner and edge ornaments breaking out into it. Left as
-		/// is, the splash would show through that band and read as art leaking around
-		/// the border, so the band is matted with this first and the frame drawn over it.
-		constexpr Color BorderMatte = FromArgb(0xFF0A0806);
+		/// Everything outside the frame art's silhouette. The window is layered, so this
+		/// is a real hole: the desktop shows through it.
+		constexpr Color Transparent = Color{ 0, 0, 0, 0 };
 
 		// --- fonts -------------------------------------------------------------
 		/// Logical pixel heights; scaled by DPI when the faces are built.

@@ -84,6 +84,16 @@ namespace mmo
 		}
 	}
 
+	void Canvas::CopyFrom(const Bitmap& src)
+	{
+		ASSERT(src.GetWidth() == m_width && src.GetHeight() == m_height);
+
+		for (int32 y = 0; y < m_height; ++y)
+		{
+			std::copy(src.GetRow(y), src.GetRow(y) + m_width, GetPixel(0, y));
+		}
+	}
+
 	void Canvas::FillRect(const Rect& r, const Color color)
 	{
 		if (color.a == 0)

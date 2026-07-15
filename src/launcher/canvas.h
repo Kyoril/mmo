@@ -53,6 +53,14 @@ namespace mmo
 		/// Overwrites without blending. For the opaque base fill.
 		void Clear(Color color);
 
+		/// Replaces the whole surface with `src`, which must match the canvas size.
+		///
+		/// Unlike Blit this overwrites rather than blends. The per-frame background
+		/// restore needs that: the background carries transparent pixels now, and
+		/// source-over would let each frame accumulate on top of the last instead of
+		/// replacing it.
+		void CopyFrom(const Bitmap& src);
+
 		/// Source-over blend of a premultiplied color.
 		void FillRect(const Rect& r, Color color);
 

@@ -26,15 +26,6 @@ namespace mmo
 
 		constexpr UINT WM_APP_SELF_UPDATE_FINISHED = WM_APP + 1;
 
-		/// DWMWA_WINDOW_CORNER_PREFERENCE and DWMWCP_DONOTROUND. Spelled out rather than
-		/// including dwmapi.h so the launcher does not hard link dwmapi.lib for a
-		/// cosmetic call that does nothing before Windows 11.
-		///
-		/// Rounding is explicitly disabled: the ornate frame art draws its own corners,
-		/// and letting DWM round the window would clip them off.
-		constexpr DWORD DwmWindowCornerPreference = 33;
-		constexpr DWORD DwmCornerPreferenceDoNotRound = 1;
-
 		/// Opts the process into PerMonitorV2.
 		///
 		/// The CMake VS_DPI_AWARE property can only emit PerMonitor v1, which does not
@@ -97,9 +88,9 @@ namespace mmo
 
 		WNDCLASSEXW windowClass = {};
 		windowClass.cbSize = sizeof(windowClass);
-		// CS_DROPSHADOW gives the borderless window a system shadow, which is most of
-		// what a layered window would have been used for.
-		windowClass.style = CS_HREDRAW | CS_VREDRAW | CS_DROPSHADOW;
+		// No CS_DROPSHADOW: the system ignores it for layered windows, whose shape is
+		// defined by their alpha rather than by a rectangle it could cast a shadow from.
+		windowClass.style = CS_HREDRAW | CS_VREDRAW;
 		windowClass.lpfnWndProc = &LauncherWindow::WindowProcThunk;
 		windowClass.hInstance = instance;
 		// IDC_ARROW expands to the ANSI MAKEINTRESOURCE form because UNICODE is not
@@ -119,8 +110,13 @@ namespace mmo
 		// clicking the taskbar button will not restore the window.
 		const DWORD style = WS_POPUP | WS_MINIMIZEBOX | WS_SYSMENU | WS_CLIPCHILDREN;
 
+		// WS_EX_LAYERED gives the window real per-pixel alpha, so the frame art's
+		// ornamental silhouette shows the desktop through its corners and the gaps
+		// between its edge tabs instead of sitting on a dark plate. It is also why the
+		// window is presented with UpdateLayeredWindow rather than painted: the two are
+		// alternative presentation paths, not complementary ones.
 		m_handle = CreateWindowExW(
-			WS_EX_APPWINDOW,
+			WS_EX_APPWINDOW | WS_EX_LAYERED,
 			WindowClassName,
 			WindowTitle,
 			style,
@@ -160,34 +156,14 @@ namespace mmo
 
 		SetWindowPos(m_handle, nullptr, x, y, m_surfaceWidth, m_surfaceHeight, SWP_NOZORDER);
 
-		ApplyCornerPreference();
-
 		SetTimer(m_handle, RenderTimerId, RenderTimerIntervalMs, nullptr);
 
+		// A layered window shows nothing until its first UpdateLayeredWindow, so the
+		// first frame has to exist before it is shown or it flashes empty.
+		RenderAndPresent();
+
 		ShowWindow(m_handle, SW_SHOW);
-		UpdateWindow(m_handle);
 		return true;
-	}
-
-	void LauncherWindow::ApplyCornerPreference() const
-	{
-		using DwmSetWindowAttributeFn = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
-
-		const HMODULE dwmapi = LoadLibraryW(L"dwmapi.dll");
-		if (!dwmapi)
-		{
-			return;
-		}
-
-		const auto setAttribute = reinterpret_cast<DwmSetWindowAttributeFn>(
-			reinterpret_cast<void*>(GetProcAddress(dwmapi, "DwmSetWindowAttribute")));
-		if (setAttribute)
-		{
-			const DWORD preference = DwmCornerPreferenceDoNotRound;
-			setAttribute(m_handle, DwmWindowCornerPreference, &preference, sizeof(preference));
-		}
-
-		FreeLibrary(dwmapi);
 	}
 
 	bool LauncherWindow::CreateSurface()
@@ -314,20 +290,39 @@ namespace mmo
 		MessageBoxA(m_handle, body.c_str(), title.c_str(), MB_OK | MB_ICONERROR);
 	}
 
-	void LauncherWindow::OnPaint()
+	void LauncherWindow::RenderAndPresent()
 	{
-		PAINTSTRUCT paint;
-		const HDC dc = BeginPaint(m_handle, &paint);
-
-		if (m_surface)
+		if (!m_surface)
 		{
-			Canvas canvas(m_surface, m_surfaceWidth, m_surfaceHeight, m_surfaceWidth);
-			m_view.Render(canvas);
-
-			BitBlt(dc, 0, 0, m_surfaceWidth, m_surfaceHeight, m_memoryDc, 0, 0, SRCCOPY);
+			return;
 		}
 
-		EndPaint(m_handle, &paint);
+		Canvas canvas(m_surface, m_surfaceWidth, m_surfaceHeight, m_surfaceWidth);
+		m_view.Render(canvas);
+
+		const HDC screenDc = GetDC(nullptr);
+
+		SIZE size{ m_surfaceWidth, m_surfaceHeight };
+		POINT source{ 0, 0 };
+
+		// AC_SRC_ALPHA means the source is premultiplied BGRA, which is exactly what the
+		// compositor already produces, so the surface goes to the screen with no
+		// conversion. SourceConstantAlpha stays at 255: the per-pixel alpha does all the
+		// shaping on its own.
+		BLENDFUNCTION blend = {};
+		blend.BlendOp = AC_SRC_OVER;
+		blend.SourceConstantAlpha = 255;
+		blend.AlphaFormat = AC_SRC_ALPHA;
+
+		// A null destination point leaves the window where it is, which matters because
+		// this also runs mid-drag.
+		if (!UpdateLayeredWindow(m_handle, screenDc, nullptr, &size,
+			m_memoryDc, &source, 0, &blend, ULW_ALPHA))
+		{
+			ELOG("UpdateLayeredWindow failed (error " << GetLastError() << ")");
+		}
+
+		ReleaseDC(nullptr, screenDc);
 	}
 
 	void LauncherWindow::OnTimer()
@@ -338,10 +333,12 @@ namespace mmo
 			m_view.ApplySnapshot(snapshot);
 		}
 
+		// A layered window is presented by pushing the surface, not by invalidating and
+		// waiting for a paint, so the frame is composited here when something moved.
 		const float delta = static_cast<float>(RenderTimerIntervalMs) / 1000.0f;
 		if (m_view.Tick(delta) || m_view.IsDirty())
 		{
-			InvalidateRect(m_handle, nullptr, FALSE);
+			RenderAndPresent();
 		}
 	}
 
@@ -363,7 +360,7 @@ namespace mmo
 			suggested.bottom - suggested.top,
 			SWP_NOZORDER | SWP_NOACTIVATE);
 
-		InvalidateRect(m_handle, nullptr, FALSE);
+		RenderAndPresent();
 	}
 
 	LRESULT CALLBACK LauncherWindow::WindowProcThunk(const HWND handle, const UINT message,
@@ -395,12 +392,16 @@ namespace mmo
 	{
 		switch (message)
 		{
+		// Nothing is painted through WM_PAINT: a layered window's content comes from
+		// UpdateLayeredWindow instead, so the paint just has to be validated.
 		case WM_PAINT:
-			OnPaint();
+		{
+			PAINTSTRUCT paint;
+			BeginPaint(m_handle, &paint);
+			EndPaint(m_handle, &paint);
 			return 0;
+		}
 
-		// The whole window is painted from the DIB every frame, so letting the system
-		// erase it first would only cost a flash of background.
 		case WM_ERASEBKGND:
 			return 1;
 

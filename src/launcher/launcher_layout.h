@@ -22,26 +22,18 @@ namespace mmo::layout
 	/// How far the frame art reaches in from each edge. Content is inset by this.
 	constexpr int32 FrameThickness = 48;
 
-	/// The frame band is matted dark before the art is drawn over it.
-	///
-	/// The art is only solid across the inner part of its band: the outer part is
-	/// ornamental tabs with transparent gaps between them, and the top rail is not
-	/// fully opaque until roughly 32px in. Without a matte, those gaps show the splash
-	/// and read as art leaking around the border. Matting the full band rather than
-	/// just the outer margin costs nothing, since the art is drawn over it and covers
-	/// the matte everywhere it is opaque.
-	constexpr int32 BorderMatteThickness = FrameThickness;
-
-	/// The frame's inner opening. Everything below lives inside it.
+	/// The frame's inner opening. Everything below lives inside it, and the splash is
+	/// clipped to it: outside the frame art's silhouette the window is a real hole
+	/// through to the desktop, so anything drawn out there would fill it back in.
 	constexpr Rect Content{
 		FrameThickness, FrameThickness,
 		WindowWidth - FrameThickness, WindowHeight - FrameThickness
 	};
 
 	// --- splash ---------------------------------------------------------------
-	/// The splash is drawn full bleed and cover-fitted, so swapping in art of a
-	/// different aspect ratio is a content change and not a layout change. The frame
-	/// is drawn over its edges.
+	/// The splash is cover-fitted to the window and clipped to the frame's opening, so
+	/// swapping in art of a different aspect ratio is a content change and not a layout
+	/// change.
 	constexpr Rect Splash{ 0, 0, WindowWidth, WindowHeight };
 
 	/// Crop anchor when the art is wider or taller than the window. Biased above

@@ -57,16 +57,19 @@ namespace mmo
 		bool CreateSurface();
 		void DestroySurface();
 
-		void OnPaint();
+		/// Composites a frame and pushes it to the screen.
+		///
+		/// A layered window is not painted: its content is supplied wholesale by
+		/// UpdateLayeredWindow, so there is no WM_PAINT or partial repaint. That is the
+		/// cost of per-pixel alpha, and it is affordable here because the background is
+		/// cached and the surface is small.
+		void RenderAndPresent();
+
 		void OnTimer();
 		void OnDpiChanged(uint32 dpi, const RECT& suggested);
 
 		/// Converts a physical client point into the view's logical coordinate space.
 		Point ToLogical(POINT physical) const;
-
-		/// Tells DWM not to round the window corners, so the frame art's own corners are
-		/// not clipped. A no-op before Windows 11.
-		void ApplyCornerPreference() const;
 
 		LauncherModel& m_model;
 		UpdateWorker& m_worker;

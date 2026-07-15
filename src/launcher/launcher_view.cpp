@@ -239,6 +239,17 @@ namespace mmo
 		m_background = Bitmap(surfaceWidth, surfaceHeight);
 
 		Canvas canvas(m_background.GetPixels(), surfaceWidth, surfaceHeight, surfaceWidth);
+
+		// The window is layered, so anything left untouched is a hole through to the
+		// desktop. That is what lets the frame's ornamental silhouette read against
+		// whatever is behind the launcher instead of against a dark plate.
+		canvas.Clear(theme::Transparent);
+
+		// Everything inside the frame's opening is opaque; the frame art itself covers
+		// the band around it. Clipping here is what keeps the corners and the gaps
+		// between the edge ornaments transparent.
+		canvas.PushClip(Scale(layout::Content));
+
 		canvas.Clear(theme::WindowBackground);
 
 		// Splash, cropped around the focal anchor.
@@ -266,27 +277,18 @@ namespace mmo
 				Scale(layout::BottomPanel), Color{ 255, 255, 255, 255 }, theme::PanelBottom.tileEdges);
 		}
 
+		canvas.PopClip();
+
 		DrawWindowFrame(canvas);
 	}
 
 	void LauncherView::DrawWindowFrame(Canvas& canvas)
 	{
-		const Rect frame = Scale(layout::WindowFrame);
-		const int32 matte = Scale(layout::BorderMatteThickness);
-
-		// Matte the frame band before the art goes on top. The art's outer band is
-		// ornamental tabs with transparent gaps between them, so without this the
-		// splash shows through the gaps and reads as art leaking around the border.
-		canvas.FillRect(Rect{ frame.left, frame.top, frame.right, frame.top + matte }, theme::BorderMatte);
-		canvas.FillRect(Rect{ frame.left, frame.bottom - matte, frame.right, frame.bottom }, theme::BorderMatte);
-		canvas.FillRect(Rect{ frame.left, frame.top, frame.left + matte, frame.bottom }, theme::BorderMatte);
-		canvas.FillRect(Rect{ frame.right - matte, frame.top, frame.right, frame.bottom }, theme::BorderMatte);
-
 		if (const Bitmap* border = GetAsset(theme::WindowBorder.resourceId))
 		{
-			canvas.DrawNineSlice(*border, Scale(theme::WindowBorder.insets), frame,
-				Color{ 255, 255, 255, 255 }, theme::WindowBorder.tileEdges,
-				NineSliceFill::FrameOnly);
+			canvas.DrawNineSlice(*border, Scale(theme::WindowBorder.insets),
+				Scale(layout::WindowFrame), Color{ 255, 255, 255, 255 },
+				theme::WindowBorder.tileEdges, NineSliceFill::FrameOnly);
 		}
 	}
 
@@ -565,11 +567,13 @@ namespace mmo
 	void LauncherView::Render(Canvas& canvas)
 	{
 		// Everything static was composited once; each frame starts from that copy.
+		// CopyFrom rather than Blit: the background is partly transparent, and blending
+		// it over the previous frame would accumulate instead of replacing.
 		if (m_background.IsValid()
 			&& m_background.GetWidth() == canvas.GetWidth()
 			&& m_background.GetHeight() == canvas.GetHeight())
 		{
-			canvas.Blit(m_background, m_background.GetBounds(), canvas.GetBounds(), BlitFilter::Nearest);
+			canvas.CopyFrom(m_background);
 		}
 		else
 		{
