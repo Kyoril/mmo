@@ -7,7 +7,7 @@
 // as an infinitely thick heightfield and over-darkens behind thin geometry — each slice keeps a
 // 32-bit mask whose bits are angular sectors. A sample sets only the sectors it actually blocks,
 // bounded by an assumed occluder Thickness, so light correctly passes behind railings and
-// foliage. Occlusion is then popcount(mask) / 32.
+// foliage. Slice occlusion is then countbits(mask & validMask) / countbits(validMask).
 
 static const float PI = 3.14159265359f;
 
@@ -64,22 +64,48 @@ float InterleavedGradientNoise(float2 pixelCoord)
 }
 
 // Returns a mask of the sectors covered by the angular range [minAngle, maxAngle], where both
-// angles are in [0, PI] measured from the view direction within the slice plane.
+// angles are SIGNED, in [-PI/2, +PI/2], measured from the view direction within the slice plane
+// and signed by the slice tangent (see sliceTangent in main).
+//
+// The signed parametrization is load-bearing, and an unsigned [0, PI] one (as produced by a bare
+// acos) is silently, badly wrong here — do not "simplify" it back:
+//   * acos discards which side of the view direction a sample sits on, so an occluder at +0.8 and
+//     one at -0.8 collapse onto the same bit. A one-sided occluder (the base of a wall, the side
+//     of a rock — exactly what this pass exists to darken) then occludes both sides, ~2x too dark.
+//   * validMask is derived from the projected normal's angle, which is inherently signed. Mixing
+//     an unsigned sample parametrization with a signed valid range makes a flat, empty, tilted
+//     plane self-occlude: coplanar samples land strictly inside validMask instead of on its edge,
+//     and bare ground reads AO ~0.85 instead of 1.0 — a grey wash that breathes with the camera.
+// With this mapping, the hemisphere above the surface is exactly [n - PI/2, n + PI/2] and a
+// coplanar sample's horizon lands exactly on the validMask boundary, contributing nothing.
 uint SectorMask(float minAngle, float maxAngle)
 {
-    float startF = saturate(minAngle / PI);
-    float endF = saturate(maxAngle / PI);
+    // Map the signed range [-PI/2, +PI/2] onto the sector fraction [0, 1]; the view direction
+    // therefore sits at the centre of the mask (fraction 0.5, bit 16).
+    float startF = saturate((minAngle + PI * 0.5f) / PI);
+    float endF = saturate((maxAngle + PI * 0.5f) / PI);
 
-    uint startBit = (uint) floor(startF * 32.0f);
-    uint bitCount = (uint) ceil((endF - startF) * 32.0f);
+    // Quantize both edges to the NEAREST sector boundary (i.e. a sector counts when its centre is
+    // covered), rather than floor-ing the start and ceil-ing the count. Both of those round
+    // OUTWARD, which inflates every range by up to two sectors and, worse, makes two ranges that
+    // share a boundary each claim the boundary sector. A coplanar sample's horizon lands exactly
+    // on the validMask edge, so that double-claim put a spurious bit inside validMask and left
+    // flat ground at AO ~0.96 instead of 1.0. Round-to-nearest tiles adjacent ranges exactly and
+    // is unbiased; sub-sector-width occluders are then handled by Thickness, not by rounding.
+    uint startBit = (uint) floor(startF * 32.0f + 0.5f);
+    uint endBit = (uint) floor(endF * 32.0f + 0.5f);
 
-    if (bitCount == 0u)
+    if (endBit <= startBit)
     {
         return 0u;
     }
 
+    uint bitCount = endBit - startBit;
+
     // HLSL shifts are taken mod 32, so both operands must be guarded explicitly: a shift of 32
-    // would wrap to a shift of 0 and silently produce the wrong mask.
+    // would wrap to a shift of 0 and silently produce the wrong mask. startBit == 32 cannot reach
+    // here (it would force endBit <= startBit and hit the early-out above), and the bitCount >= 32
+    // ternary is what keeps the 1u << 32 case from wrapping to 1u << 0.
     startBit = min(startBit, 31u);
     bitCount = min(bitCount, 32u);
 
@@ -101,14 +127,28 @@ float4 main(PS_INPUT input) : SV_TARGET
 
     float3 viewPos = ReconstructViewPos(input.TexCoord, depth);
     float3 worldNormal = normalize(normalData.rgb * 2.0f - 1.0f);
-    float3 viewNormal = normalize(mul((float3x3) matView, worldNormal));
+
+    // This engine is row-vector: the vector goes FIRST. MakeViewMatrix writes translation into the
+    // last column and row-major C++ storage read back through `column_major` transposes it, so
+    // mul(matView, v) would apply the view->world rotation to a world normal — geometrically
+    // meaningless, and it fails silently because the result is still unit length. See the proven
+    // mul(float4(viewPos, 1.0), matInvView) in PS_DeferredLighting.hlsl.
+    float3 viewNormal = normalize(mul(worldNormal, (float3x3) matView));
     float3 viewDir = normalize(-viewPos);
 
     // Project the world-space radius into a screen-space (UV) radius at this depth.
-    // matProj[0][0] scales view-space X into NDC X, and NDC spans 2 units across the screen,
-    // hence the 0.5 to land in UV space.
-    float projScale = matProj[0][0];
-    float screenRadius = (Radius * projScale * 0.5f) / max(depth, 0.0001f);
+    //
+    // Per-axis, and from view Z rather than radial depth, because both matter:
+    //   * MakeProjectionMatrix sets [0][0] = h/aspect and [1][1] = h, so P11 = P00 * aspect.
+    //     sliceDir is a unit vector in UV space, so its y component must be scaled by P11; using
+    //     P00 for both axes reaches only ~56% as far vertically as horizontally at 16:9.
+    //   * The projection identity is uv_offset = r * P * 0.5 / |viewPos.z|. `depth` here is
+    //     length(viewPos), which at the screen corners (fovY 45, 16:9) is ~1.31x |z| — so a
+    //     radial-depth divide is correct only at the screen centre and ~24% short at the edges.
+    // NOTE: this changes the radius projection only. Position reconstruction must keep using
+    // radial depth (viewRay * depth) so this pass cannot drift out of alignment with lighting.
+    float viewZ = max(abs(viewPos.z), 0.0001f);
+    float2 screenRadius = float2(Radius * matProj[0][0], Radius * matProj[1][1]) * 0.5f / viewZ;
 
     // Clamp so a near-camera pixel cannot march across the whole screen, which would both
     // destroy the cache and undersample badly.
@@ -127,7 +167,13 @@ float4 main(PS_INPUT input) : SV_TARGET
 
         // The slice plane contains the view direction and the slice's screen-space direction
         // lifted into view space. This is the standard GTAO-family approximation.
-        float3 sliceDir3 = float3(sliceDir, 0.0f);
+        //
+        // The y flip is required: UV space is y-down (ReconstructViewPos does 1.0 - uv.y * 2.0)
+        // while view space is y-up. Feeding the raw UV-space sliceDir into the view-space plane
+        // construction builds, for sin(phi) != 0, the MIRRORED plane — so the normal-oriented
+        // weighting would be computed for a slice other than the one actually being marched.
+        // We keep marching with the unflipped, UV-space sliceDir below.
+        float3 sliceDir3 = float3(sliceDir.x, -sliceDir.y, 0.0f);
         float3 planeNormal = cross(sliceDir3, viewDir);
         float planeNormalLen = length(planeNormal);
 
@@ -137,6 +183,12 @@ float4 main(PS_INPUT input) : SV_TARGET
         }
 
         planeNormal /= planeNormalLen;
+
+        // An explicit in-plane tangent, perpendicular to viewDir, gives every in-plane direction a
+        // robust sign: theta = atan2(dot(d, sliceTangent), dot(d, viewDir)) is signed directly,
+        // with viewDir at theta = 0. This replaces the fragile acos + cross-sign construction and
+        // is what lets the sample angles and the valid range share one parametrization.
+        float3 sliceTangent = normalize(cross(planeNormal, viewDir));
 
         // Project the surface normal into the slice plane.
         float3 projNormal = viewNormal - planeNormal * dot(viewNormal, planeNormal);
@@ -150,14 +202,18 @@ float4 main(PS_INPUT input) : SV_TARGET
         projNormal /= projNormalLen;
 
         // Signed angle of the projected normal relative to the view direction, within the plane.
-        float nAngle = acos(clamp(dot(projNormal, viewDir), -1.0f, 1.0f));
-        float nSign = (dot(cross(viewDir, projNormal), planeNormal) < 0.0f) ? -1.0f : 1.0f;
-        nAngle *= nSign;
+        float nAngle = atan2(dot(projNormal, sliceTangent), dot(projNormal, viewDir));
 
         // Only the hemisphere in front of the surface can occlude it. Sectors outside
         // [n - PI/2, n + PI/2] lie behind the surface and must not count — this is the
-        // normal-oriented weighting, done by masking rather than a per-sector cosine.
-        uint validMask = SectorMask(max(nAngle - PI * 0.5f, 0.0f), min(nAngle + PI * 0.5f, PI));
+        // normal-oriented weighting, done by masking rather than a per-sector cosine. The range is
+        // intersected with the representable range [-PI/2, +PI/2].
+        //
+        // Unlike the old unsigned [0, PI] version this is never empty for a surface facing the
+        // camera, so slices are no longer silently dropped by the validCount == 0 early-out for
+        // nAngle near -PI/2 while their mirror at +PI/2 stays fully weighted — that asymmetry
+        // biased the subset of slices that validSlices averaged over.
+        uint validMask = SectorMask(max(nAngle - PI * 0.5f, -PI * 0.5f), min(nAngle + PI * 0.5f, PI * 0.5f));
         uint validCount = countbits(validMask);
 
         if (validCount == 0u)
@@ -175,8 +231,10 @@ float4 main(PS_INPUT input) : SV_TARGET
             [loop]
             for (uint step = 0u; step < StepCount; ++step)
             {
-                // Jittered, linearly increasing march distance.
-                float t = (float(step) + 1.0f + noise) / float(StepCount);
+                // Jittered, linearly increasing march distance. t stays within [0, 1] so the march
+                // never overshoots screenRadius; the dist < 0.0001f guard below rejects the
+                // degenerate self-sample when step 0 lands on the shading point at noise ~0.
+                float t = (float(step) + noise) / float(StepCount);
                 float2 sampleUv = input.TexCoord + dir * t * screenRadius;
 
                 if (any(sampleUv < 0.0f) || any(sampleUv > 1.0f))
@@ -208,8 +266,18 @@ float4 main(PS_INPUT input) : SV_TARGET
                 // technique, and what stops a thin railing occluding like a solid wall.
                 float3 backDir = normalize(delta - viewDir * Thickness);
 
-                float angFront = acos(clamp(dot(frontDir, viewDir), -1.0f, 1.0f));
-                float angBack = acos(clamp(dot(backDir, viewDir), -1.0f, 1.0f));
+                // Signed, in the same parametrization as nAngle and validMask, so which side of
+                // the view direction the occluder is on is preserved. `side` now genuinely
+                // separates the two march directions instead of only choosing sampleUv.
+                float angFront = atan2(dot(frontDir, sliceTangent), dot(frontDir, viewDir));
+                float angBack = atan2(dot(backDir, sliceTangent), dot(backDir, viewDir));
+
+                // A sample can sit behind the shading point relative to the view (|theta| > PI/2).
+                // Clamp into the representable range rather than letting the fraction saturate at a
+                // wrapped angle: clamping parks it on the mask boundary, where it contributes
+                // nothing, which is the correct limit.
+                angFront = clamp(angFront, -PI * 0.5f, PI * 0.5f);
+                angBack = clamp(angBack, -PI * 0.5f, PI * 0.5f);
 
                 bitmask |= SectorMask(min(angFront, angBack), max(angFront, angBack));
             }
