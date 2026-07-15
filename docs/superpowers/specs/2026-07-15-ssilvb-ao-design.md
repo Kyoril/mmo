@@ -108,13 +108,20 @@ Per pixel:
      - Compute the **front** angle it subtends from `viewPos`.
      - Compute the **back** angle from the front point pushed away by `thickness`.
      - Map that `[front, back]` angular range to sector indices and OR them into the mask.
-   - Slice occlusion = `countbits(mask) / 32`, weighted by the projected normal's cosine.
+   - Slice occlusion = `countbits(mask & validMask) / countbits(validMask)`, where `validMask` is
+     the normal-oriented hemisphere derived from the projected normal's angle (sectors outside it
+     are excluded from both the numerator and the denominator, not down-weighted).
 3. `AO = 1 - (sum of slice occlusion) / N`, then apply `intensity`.
 
 The `thickness` parameter is the whole point of the technique: it is what stops a thin railing
-from occluding as though it were a solid wall. The per-sector cosine weighting is the fiddliest
-part of the math and the most likely place for a first-pass bug — it is where to look first if
-the AO reads too dark or too flat.
+from occluding as though it were a solid wall. What shipped is **uniform sector weighting with
+normal-oriented masking**, not cosine-weighted occlusion: every sector inside `validMask` counts
+equally once claimed, rather than being scaled by its angle from the normal. This is a defensible
+simplification (several public SSILVB implementations do the same) and was reviewed and accepted,
+but it has a known trade-off — it over-counts grazing occluders and under-counts occluders along
+the normal, so a floor point under a flat overhang and one beside a vertical wall darken by more
+similar amounts than physically correct. If the AO ever reads flat, this is the first thing to
+revisit.
 
 **GI-readiness:** the radiance gather would hook in at step 2 where a sample *newly* claims
 sectors, weighting fetched color by the newly-claimed sector count. The loop is written so this
