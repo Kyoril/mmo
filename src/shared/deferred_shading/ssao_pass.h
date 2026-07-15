@@ -90,6 +90,10 @@ namespace mmo
 
 		ConstantBufferPtr m_ssaoBuffer;
 
+		/// @brief Holds the blur direction for the separable blur (b3). Updated between the
+		///        horizontal and vertical passes.
+		ConstantBufferPtr m_ssaoBlurBuffer;
+
 		ShaderPtr m_ssaoPs;
 
 		ShaderPtr m_ssaoBlurPs;

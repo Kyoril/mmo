@@ -49,6 +49,15 @@ namespace mmo
 			float padding0;
 			float padding1;
 		};
+
+		/// @brief Mirrors the SsaoBlurBuffer cbuffer in PS_SsaoBlur.hlsl (b3).
+		struct alignas(16) SsaoBlurConstants
+		{
+			float directionX;
+			float directionY;
+			float padding0;
+			float padding1;
+		};
 	}
 
 	SsaoPass::SsaoPass(GraphicsDevice& device, uint32 width, uint32 height)
@@ -58,6 +67,9 @@ namespace mmo
 	{
 		m_ssaoBuffer = m_device.CreateConstantBuffer(sizeof(SsaoConstants), nullptr);
 		ASSERT(m_ssaoBuffer);
+
+		m_ssaoBlurBuffer = m_device.CreateConstantBuffer(sizeof(SsaoBlurConstants), nullptr);
+		ASSERT(m_ssaoBlurBuffer);
 
 		m_ssaoPs = m_device.CreateShader(ShaderType::PixelShader, MMO_SSAO_PS_BYTECODE, MMO_SSAO_PS_SIZE);
 		m_ssaoBlurPs = m_device.CreateShader(ShaderType::PixelShader, MMO_SSAO_BLUR_PS_BYTECODE, MMO_SSAO_BLUR_PS_SIZE);
@@ -187,6 +199,42 @@ namespace mmo
 		m_device.Draw(6, 0);
 
 		// Release the normal target SRV so it cannot collide with render target bindings later.
+		m_device.BindTexture(nullptr, ShaderType::PixelShader, 1);
+
+		// --- Separable bilateral blur ---------------------------------------------------
+		// Resolves the position-keyed noise pattern. Horizontal into m_blurRT, then vertical
+		// back into m_aoRT so GetResult() always names the finished term.
+		m_ssaoBlurPs->Set();
+		m_ssaoBlurBuffer->BindToStage(ShaderType::PixelShader, 3);
+
+		// Horizontal: m_aoRT -> m_blurRT.
+		SsaoBlurConstants blurConstants{};
+		blurConstants.directionX = 1.0f;
+		blurConstants.directionY = 0.0f;
+		m_ssaoBlurBuffer->Update(&blurConstants);
+
+		m_blurRT->Activate();
+		m_blurRT->Clear(ClearFlags::Color);
+		m_device.SetViewport(0, 0, static_cast<int32>(m_targetWidth), static_cast<int32>(m_targetHeight), 0.0f, 1.0f);
+		m_device.BindTexture(m_aoRT, ShaderType::PixelShader, 0);
+		gbufferNormalRT.Bind(ShaderType::PixelShader, 1);
+		m_device.Draw(6, 0);
+		m_device.BindTexture(nullptr, ShaderType::PixelShader, 0);
+
+		// Vertical: m_blurRT -> m_aoRT.
+		blurConstants.directionX = 0.0f;
+		blurConstants.directionY = 1.0f;
+		m_ssaoBlurBuffer->Update(&blurConstants);
+
+		m_aoRT->Activate();
+		m_aoRT->Clear(ClearFlags::Color);
+		m_device.SetViewport(0, 0, static_cast<int32>(m_targetWidth), static_cast<int32>(m_targetHeight), 0.0f, 1.0f);
+		m_device.BindTexture(m_blurRT, ShaderType::PixelShader, 0);
+		gbufferNormalRT.Bind(ShaderType::PixelShader, 1);
+		m_device.Draw(6, 0);
+
+		// Release SRVs so they cannot collide with render target bindings next frame.
+		m_device.BindTexture(nullptr, ShaderType::PixelShader, 0);
 		m_device.BindTexture(nullptr, ShaderType::PixelShader, 1);
 	}
 }
