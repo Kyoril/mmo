@@ -1900,6 +1900,11 @@ namespace mmo
 		OnShadowBiasChanged(*s_depthBiasVar, "");
 		OnFoliageEnabledChanged(*s_foliageEnabledVar, "");
 		OnFoliageDensityChanged(*s_foliageDensityVar, "");
+		OnSsaoEnabledChanged(*s_ssaoVar, "");
+		OnSsaoQualityChanged(*s_ssaoQualityVar, "");
+		OnSsaoHalfResChanged(*s_ssaoHalfResVar, "");
+		OnSsaoParametersChanged(*s_ssaoRadiusVar, "");
+		OnSsaoDebugChanged(*s_ssaoDebugVar, "");
 	}
 
 	void WorldState::RemoveGameplayCommands()
@@ -1914,6 +1919,13 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("ShadowTemporal");
 		ConsoleVarMgr::UnregisterConsoleVar("gxRenderScale");
 		ConsoleVarMgr::UnregisterConsoleVar("gxDepthPrepass");
+		ConsoleVarMgr::UnregisterConsoleVar("gxSsao");
+		ConsoleVarMgr::UnregisterConsoleVar("gxSsaoQuality");
+		ConsoleVarMgr::UnregisterConsoleVar("gxSsaoHalfRes");
+		ConsoleVarMgr::UnregisterConsoleVar("gxSsaoRadius");
+		ConsoleVarMgr::UnregisterConsoleVar("gxSsaoIntensity");
+		ConsoleVarMgr::UnregisterConsoleVar("gxSsaoThickness");
+		ConsoleVarMgr::UnregisterConsoleVar("gxSsaoDebug");
 		ConsoleVarMgr::UnregisterConsoleVar("ViewDistance");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageEnabled");
 		ConsoleVarMgr::UnregisterConsoleVar("FoliageDensity");
