@@ -148,6 +148,33 @@ namespace mmo
         /// @brief Returns whether the opaque depth pre-pass is enabled.
         [[nodiscard]] bool IsDepthPrepassEnabled() const { return m_depthPrepassEnabled; }
 
+        /// @brief Enables or disables screen-space ambient occlusion.
+        /// @remark When disabled the pass holds no render targets and yields a 1x1 white
+        ///         texture, so the lighting pass needs no permutation.
+        void SetSsaoEnabled(bool enabled) { m_ssaoPass->GetSettings().enabled = enabled; }
+
+        /// @brief Returns whether screen-space ambient occlusion is enabled.
+        [[nodiscard]] bool IsSsaoEnabled() const { return m_ssaoPass->GetSettings().enabled; }
+
+        /// @brief Applies a coarse SSAO quality preset.
+        /// @param level 0 = Low, 1 = Medium, 2 = High. Out-of-range values clamp.
+        void SetSsaoQuality(int level) { m_ssaoPass->GetSettings().ApplyQualityLevel(level); }
+
+        /// @brief Renders AO at half the G-Buffer resolution and upsamples it.
+        void SetSsaoHalfResolution(bool enabled) { m_ssaoPass->GetSettings().halfResolution = enabled; }
+
+        /// @brief Sets the AO sampling radius in world units (metres).
+        void SetSsaoRadius(float radius) { m_ssaoPass->GetSettings().SetRadius(radius); }
+
+        /// @brief Sets the AO strength multiplier.
+        void SetSsaoIntensity(float intensity) { m_ssaoPass->GetSettings().SetIntensity(intensity); }
+
+        /// @brief Sets the assumed occluder thickness in world units (metres).
+        void SetSsaoThickness(float thickness) { m_ssaoPass->GetSettings().SetThickness(thickness); }
+
+        /// @brief Enables or disables raw AO debug visualization.
+        void SetSsaoDebugVisualization(bool enabled) { m_ssaoPass->GetSettings().debugVisualization = enabled; }
+
         /// @brief Gets the light rendering statistics from the last frame.
         /// @return Reference to the light render statistics.
         const Scene::LightRenderStats& GetLightRenderStats() const { return m_lastLightStats; }
@@ -324,9 +351,10 @@ namespace mmo
 
 #ifdef _WIN32
         // --- Per-pass GPU timing (only active while the profiler/perf overlay is enabled) ---
-        // Timestamp points: 0 = start, 1 = after shadows, 2 = after G-Buffer, 3 = after lighting,
-        // 4 = after the forward/translucent pass (end). Differences give per-pass GPU time.
-        static constexpr uint32 GpuTimerPointCount = 5;
+        // Timestamp points: 0 = start, 1 = after shadows, 2 = after G-Buffer, 3 = after SSAO,
+        // 4 = after lighting, 5 = after the forward/translucent pass (end). Differences give
+        // per-pass GPU time.
+        static constexpr uint32 GpuTimerPointCount = 6;
         // Deep ring so we read results back several frames late and never stall the GPU, and so
         // that all timestamps in a frame have comfortably resolved before we poll them.
         static constexpr uint32 GpuTimerFrameCount = 6;

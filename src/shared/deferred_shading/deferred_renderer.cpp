@@ -268,9 +268,10 @@ namespace mmo
                 // emitted independently so partial data still shows even if some timestamps lag.
                 emit("GPU: Shadows", 0, 1);
                 emit("GPU: GBuffer", 1, 2);
-                emit("GPU: Lighting", 2, 3);
-                emit("GPU: Forward", 3, 4);
-                emit("GPU: Total (passes)", 0, 4);
+                emit("GPU: SSAO", 2, 3);
+                emit("GPU: Lighting", 3, 4);
+                emit("GPU: Forward", 4, 5);
+                emit("GPU: Total (passes)", 0, 5);
             }
         }
 
@@ -341,11 +342,15 @@ namespace mmo
         // depth) and produces the AO term sampled by the lighting pass at t4.
         m_ssaoPass->Render(camera, m_gBuffer.GetNormalRT(), *m_quadBuffer, *m_deferredLightVs);
 
+#ifdef _WIN32
+        if (m_gpuTimingActiveThisFrame) { GpuTimerMark(3); } // after SSAO
+#endif
+
         // Render the lighting pass
         RenderLightingPass(scene, camera);
 
 #ifdef _WIN32
-        if (m_gpuTimingActiveThisFrame) { GpuTimerMark(3); } // after lighting
+        if (m_gpuTimingActiveThisFrame) { GpuTimerMark(4); } // after lighting
 #endif
 
         // Forward transparency pass: render objects in the Transparent queue group and above
@@ -401,7 +406,7 @@ namespace mmo
 #ifdef _WIN32
         if (m_gpuTimingActiveThisFrame)
         {
-            GpuTimerMark(4); // after forward/translucent pass (end of GPU frame work)
+            GpuTimerMark(5); // after forward/translucent pass (end of GPU frame work)
             GpuTimerEndAndCollect();
         }
 #endif
