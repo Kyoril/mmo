@@ -12,6 +12,35 @@ ENDIF(APPLE)
 set(codeFiles
     main.cpp
     resource.h
+
+    # Portable graphics core
+    color.h
+    geometry.h
+    bitmap.h
+    bitmap.cpp
+    canvas.h
+    canvas.cpp
+    stb_impl.cpp
+    text_renderer.h
+    text_renderer.cpp
+
+    # Portable resource access
+    resource_data.h
+)
+
+IF(WIN32)
+    LIST(APPEND codeFiles
+        platform/win32/resource_data_win32.cpp
+    )
+ENDIF(WIN32)
+
+# Everything embedded into the executable by launcher.rc. Neither CMake nor MSBuild
+# parses .rc includes, so without an explicit OBJECT_DEPENDS below, editing an asset
+# would not relink and the stale copy would silently keep shipping.
+set(launcherAssets
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/splash.png
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/font_display.ttf
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/font_body.ttf
 )
 
 IF(APPLE)
@@ -33,6 +62,8 @@ IF(APPLE)
 add_executable(launcher MACOSX_BUNDLE ${codeFiles})
 ELSE()
 add_executable(launcher WIN32 launcher.rc ${codeFiles})
+set_source_files_properties(launcher.rc PROPERTIES OBJECT_DEPENDS "${launcherAssets}")
+source_group("res" FILES ${launcherAssets})
 ENDIF()
 mmo_deploy_runtime_dependencies(launcher)
 
@@ -85,6 +116,10 @@ IF(APPLE)
     ENDFOREACH()
 ENDIF(APPLE)
 
+
+# Sources in platform/ subdirectories include the launcher's own portable headers by
+# plain name, so the launcher root has to be on the include path.
+target_include_directories(launcher PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(launcher updater base log)
 target_link_libraries(launcher ${OPENSSL_LIBRARIES} ${EXTRA_LIBS})

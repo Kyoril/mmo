@@ -128,6 +128,20 @@ IDB_BITMAP1             BITMAP                  "Logo.bmp"
 
 /////////////////////////////////////////////////////////////////////////////
 //
+// Embedded assets. Paths are relative to this .rc file.
+//
+// This list is the manifest of what ships inside the executable. Keep it in sync
+// with resource.h, resource_names.h and the launcherAssets list in CMakeLists.txt.
+//
+
+IDR_PNG_SPLASH          RCDATA                  "res/splash.png"
+
+IDR_TTF_DISPLAY         RCDATA                  "res/font_display.ttf"
+IDR_TTF_BODY            RCDATA                  "res/font_body.ttf"
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
 // AFX_DIALOG_LAYOUT
 //
 

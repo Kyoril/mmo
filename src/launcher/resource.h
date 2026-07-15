@@ -16,6 +16,22 @@
 #define IDC_IMAGE                       1008
 #define IDC_STATIC                      -1
 
+// Resource identifiers for the reworked launcher UI. Ranges are reserved by type so
+// that an id alone identifies its kind, both for the Win32 RCDATA lookup and for the
+// macOS bundle name table in resource_names.h.
+//
+// NOTE: adding an entry here requires a matching line in launcher.rc, a matching
+// entry in resource_names.h, and a matching path in the launcherAssets list in
+// CMakeLists.txt. Nothing parses .rc includes, so that list is what makes touching an
+// asset actually relink.
+
+// --- Embedded images (RCDATA, PNG): 300-399 ---------------------------------
+#define IDR_PNG_SPLASH                  300
+
+// --- Embedded fonts (RCDATA, TTF): 400-499 ----------------------------------
+#define IDR_TTF_DISPLAY                 400
+#define IDR_TTF_BODY                    401
+
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED

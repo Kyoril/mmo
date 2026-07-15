@@ -59,6 +59,11 @@ int main(int argc, char *argv[])
 
 #include "base/win_utility.h"
 
+#include "bitmap.h"
+#include "canvas.h"
+#include "resource_data.h"
+#include "text_renderer.h"
+
 #define MMO_LAUNCHER_VERSION 1
 
 #define MMO_STRINGIFY_IMPL(x) #x
@@ -103,6 +108,37 @@ namespace
 		);
 	}
 	
+	/// Verifies that every embedded asset can be found and decoded.
+	///
+	/// This runs on startup in debug builds so that a mismatch between resource.h and
+	/// launcher.rc, or a stale .rc dependency, surfaces immediately instead of as a
+	/// blank rectangle somewhere in the UI much later.
+	void VerifyEmbeddedAssets()
+	{
+		const mmo::ResourceBlob splash = mmo::LoadResourceBlob(IDR_PNG_SPLASH);
+		ASSERT(splash.IsValid() && "Embedded splash resource is missing");
+
+		mmo::Bitmap bitmap;
+		VERIFY(mmo::Bitmap::DecodePng(splash, bitmap) && "Embedded splash failed to decode");
+		ASSERT(bitmap.IsValid());
+
+		const mmo::ResourceBlob displayFont = mmo::LoadResourceBlob(IDR_TTF_DISPLAY);
+		ASSERT(displayFont.IsValid() && "Embedded display font is missing");
+
+		const mmo::ResourceBlob bodyFont = mmo::LoadResourceBlob(IDR_TTF_BODY);
+		ASSERT(bodyFont.IsValid() && "Embedded body font is missing");
+
+		mmo::FontFace face;
+		VERIFY(face.Initialize(displayFont, 26) && "Embedded display font failed to load");
+		ASSERT(face.GetGlyph('A') != nullptr && "Display font produced no glyph for 'A'");
+
+		// DecodePng asserts the premultiplication invariant per pixel already; this
+		// just records that the pipeline produced a plausible image.
+		DLOG("Embedded assets verified (splash " << bitmap.GetWidth() << "x" << bitmap.GetHeight()
+			<< " from " << splash.size << " bytes, display font " << displayFont.size
+			<< " bytes, body font " << bodyFont.size << " bytes)");
+	}
+
 	void RemovePreviousExecutable()
 	{
 		try
@@ -256,6 +292,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 					options));
 			}
 		}
+
+#ifndef NDEBUG
+		VerifyEmbeddedAssets();
+#endif
 
 		// Show the dialog
 		DialogBoxA(hInstance, MAKEINTRESOURCE(IDD_DIALOG1), NULL, MainDlgProc);
