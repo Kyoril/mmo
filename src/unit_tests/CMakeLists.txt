@@ -14,6 +14,11 @@ target_sources(unit_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../shared/graphics/float_curve.cpp
 )
 
+# SsaoSettings is a header-only, dependency-free settings struct living in the
+# deferred_shading library. The library itself pulls render dependencies that break the
+# headless unit_tests build, so only its include path is added — no link.
+target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../shared)
+
 # CrossfadingSoundLoop tests exercise sound_entry_player.cpp, which needs the
 # client_data protobuf library — only available when the client or editor is built.
 # On headless server-only builds the test file is excluded from compilation.
