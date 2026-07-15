@@ -10,8 +10,8 @@ ENDIF(APPLE)
 # when files are added, and the previous top-level-only glob would have silently
 # missed anything in a subdirectory.
 set(codeFiles
-    main.cpp
     resource.h
+    resource_names.h
 
     # Portable graphics core
     color.h
@@ -26,10 +26,25 @@ set(codeFiles
 
     # Portable resource access
     resource_data.h
+
+    # Portable UI
+    platform_host.h
+    theme.h
+    widget.h
+    launcher_layout.h
+    launcher_model.h
+    launcher_model.cpp
+    launcher_view.h
+    launcher_view.cpp
+    update_worker.h
+    update_worker.cpp
 )
 
 IF(WIN32)
     LIST(APPEND codeFiles
+        platform/win32/main_win32.cpp
+        platform/win32/launcher_window.h
+        platform/win32/launcher_window.cpp
         platform/win32/resource_data_win32.cpp
     )
 ENDIF(WIN32)
@@ -39,12 +54,23 @@ ENDIF(WIN32)
 # would not relink and the stale copy would silently keep shipping.
 set(launcherAssets
     ${CMAKE_CURRENT_SOURCE_DIR}/res/splash.png
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/panel_bottom.png
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/button_up.png
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/button_over.png
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/button_down.png
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/button_disabled.png
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/progress_track.png
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/progress_fill.png
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/icon_close.png
+    ${CMAKE_CURRENT_SOURCE_DIR}/res/icon_minimize.png
     ${CMAKE_CURRENT_SOURCE_DIR}/res/font_display.ttf
     ${CMAKE_CURRENT_SOURCE_DIR}/res/font_body.ttf
 )
 
 IF(APPLE)
+    # macOS still runs the original Cocoa nib UI; see platform/osx/main_osx_shim.cpp.
     LIST(APPEND codeFiles
+        platform/osx/main_osx_shim.cpp
         osx/AppDelegate.h
         osx/AppDelegate.mm
         osx/main_osx.mm
