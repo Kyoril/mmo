@@ -174,10 +174,25 @@ null-check each, log, call the setter). The `gx` prefix follows the newer conven
 | `gxSsao` | `1` | master enable |
 | `gxSsaoQuality` | `2` | 0 = 2 slices / 4 steps, 1 = 3 / 8, 2 = 4 / 12 |
 | `gxSsaoHalfRes` | `1` | AO at half resolution + bilateral upsample |
-| `gxSsaoRadius` | `1.5` | sample radius, world units |
+| `gxSsaoRadius` | `0.75` | sample radius, world units (metres) |
 | `gxSsaoIntensity` | `1.0` | strength multiplier |
-| `gxSsaoThickness` | `0.25` | occluder thickness heuristic |
+| `gxSsaoThickness` | `0.25` | occluder thickness heuristic, metres |
 | `gxSsaoDebug` | `0` | visualize raw AO (precedent: cascade debug viz) |
+
+**World scale: 1 unit = 1 metre; an average player is ~1.7 units tall.** Both distance
+defaults follow from that, and the reasoning matters if they are ever retuned:
+
+- **`gxSsaoRadius` = 0.75 m.** The binding constraint is sample density, not visual reach.
+  With only 4-12 steps per slice and no temporal accumulation, a radius projecting to a large
+  screen footprint spreads those samples thin and produces banding that the bilateral blur can
+  only smear. 0.75 m catches doorframes, rock bases and tree trunks at typical third-person
+  camera distance while keeping the march compact. Raising this materially should come with
+  raising the step count.
+- **`gxSsaoThickness` = 0.25 m.** This cuts both ways: too small and solid geometry stops
+  occluding, so light leaks through walls; too large and the heightfield over-darkening the
+  technique exists to fix comes back. A player torso is ~0.25 m deep and walls are thicker, so
+  0.25 m sits on the right side of both failure modes while a ~5 cm railing still does not
+  occlude like a wall.
 
 `gxRenderScale` needs no special handling: the AO targets size off the G-Buffer, which already
 reflects render scale.
