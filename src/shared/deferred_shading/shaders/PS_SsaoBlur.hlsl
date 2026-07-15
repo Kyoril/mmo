@@ -81,7 +81,13 @@ float4 main(PS_INPUT input) : SV_TARGET
         // depth precision per pixel. 0.05 = 5cm at 1m, and 1 unit = 1 metre.
         float depthDelta = abs(sampleDepth - centerDepth);
         float depthTolerance = 0.05f * centerDepth;
-        float depthWeight = (depthDelta < depthTolerance) ? 1.0f : 0.0f;
+
+        // Fade the weight out between half and full tolerance rather than stepping it. A binary
+        // cutoff makes taps flip in and out of the sum discretely as the kernel slides across a
+        // curved or grazing surface, which bands the very term this pass exists to smooth. Beyond
+        // the tolerance the weight still reaches exactly zero, so AO is rejected completely across
+        // a silhouette -- that hard rejection is what stops bleeding and must be preserved.
+        float depthWeight = 1.0f - smoothstep(depthTolerance * 0.5f, depthTolerance, depthDelta);
 
         float weight = spatialWeight * depthWeight;
 
