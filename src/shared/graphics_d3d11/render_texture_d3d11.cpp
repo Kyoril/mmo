@@ -142,6 +142,9 @@ namespace mmo
 			case PixelFormat::R32G32B32A32:
 				dxgiColorFormat = DXGI_FORMAT_R32G32B32A32_FLOAT;
 				break;
+			case PixelFormat::R8:
+				dxgiColorFormat = DXGI_FORMAT_R8_UNORM;
+				break;
 			case D32F:
 				dxgiColorFormat = DXGI_FORMAT_D32_FLOAT;
 				break;
