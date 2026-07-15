@@ -90,8 +90,17 @@ uint SectorMask(float minAngle, float maxAngle)
     // OUTWARD, which inflates every range by up to two sectors and, worse, makes two ranges that
     // share a boundary each claim the boundary sector. A coplanar sample's horizon lands exactly
     // on the validMask edge, so that double-claim put a spurious bit inside validMask and left
-    // flat ground at AO ~0.96 instead of 1.0. Round-to-nearest tiles adjacent ranges exactly and
-    // is unbiased; sub-sector-width occluders are then handled by Thickness, not by rounding.
+    // flat ground at AO ~0.96 instead of 1.0. Round-to-nearest tiles adjacent ranges exactly.
+    //
+    // This also makes quantization an UNBIASED DITHERED ESTIMATOR rather than a source of bias:
+    // an occluder narrower than one sector sets that sector's bit with probability proportional to
+    // its angular width, because phi is jittered per-pixel by `noise`, which randomizes the sector
+    // grid relative to the geometry independently per pixel. The bilateral blur pass then recovers
+    // the mean over neighbouring pixels. (Thickness is not what rescues this: it only bounds the
+    // BACK angle of a sample's range, setting no floor on a range's width, so it cannot save an
+    // occluder narrower than a sector — do not reintroduce outward rounding on that reasoning.)
+    // What round-to-nearest does NOT touch is the technique's real guarantee: occlusion stays
+    // bounded to [angFront, angBack] rather than extending to the horizon.
     uint startBit = (uint) floor(startF * 32.0f + 0.5f);
     uint endBit = (uint) floor(endF * 32.0f + 0.5f);
 
@@ -151,8 +160,17 @@ float4 main(PS_INPUT input) : SV_TARGET
     float2 screenRadius = float2(Radius * matProj[0][0], Radius * matProj[1][1]) * 0.5f / viewZ;
 
     // Clamp so a near-camera pixel cannot march across the whole screen, which would both
-    // destroy the cache and undersample badly.
-    screenRadius = min(screenRadius, 0.15f);
+    // destroy the cache and undersample badly. The clamp must scale both axes UNIFORMLY rather
+    // than per-axis: the march below only stays inside the slice plane built from sliceDir3 while
+    // screenRadius.x / matProj[0][0] == screenRadius.y / matProj[1][1] holds (matProj[1][1] =
+    // matProj[0][0] * aspect, so y is always larger and would clamp first). A per-axis min breaks
+    // that identity for any depth where only one axis is clamped, shearing the march direction out
+    // of the slice plane that planeNormal/sliceTangent/validMask were built for — by design, not a
+    // corner case: at defaults this asymmetric-clamp band covers most of a third-person camera's
+    // near ground and props. Scaling uniformly preserves the ellipse's aspect and keeps the march
+    // exactly in-plane.
+    float maxR = max(screenRadius.x, screenRadius.y);
+    screenRadius *= min(1.0f, 0.15f / maxR);
 
     float noise = InterleavedGradientNoise(input.Position.xy);
 
@@ -231,10 +249,14 @@ float4 main(PS_INPUT input) : SV_TARGET
             [loop]
             for (uint step = 0u; step < StepCount; ++step)
             {
-                // Jittered, linearly increasing march distance. t stays within [0, 1] so the march
-                // never overshoots screenRadius; the dist < 0.0001f guard below rejects the
-                // degenerate self-sample when step 0 lands on the shading point at noise ~0.
-                float t = (float(step) + noise) / float(StepCount);
+                // Jittered, linearly increasing march distance. The +0.5 offset keeps step 0 from
+                // landing on (or right next to) the shading point itself when noise is near 0 —
+                // without it that tap is wasted (rejected by the dist < 0.0001f guard below) and
+                // t never reaches 1.0, so the outermost screenRadius sample is never taken. With
+                // noise in [0,1) this spans roughly (0.5/StepCount, 1.5), jittering across the
+                // full radius; the world-space dist > Radius reject below discards the slight
+                // overshoot past the true radius, so it is harmless.
+                float t = (float(step) + 0.5f + noise) / float(StepCount);
                 float2 sampleUv = input.TexCoord + dir * t * screenRadius;
 
                 if (any(sampleUv < 0.0f) || any(sampleUv > 1.0f))
