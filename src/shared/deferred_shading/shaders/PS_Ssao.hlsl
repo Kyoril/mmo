@@ -34,6 +34,8 @@ cbuffer ViewMatrices : register(b12)
 
 cbuffer SsaoBuffer : register(b2)
 {
+    // ScreenSize: reserved for layout only. This pass marches entirely in UV space and never
+    // reads ScreenSize (only InvScreenSize is used below).
     float2 ScreenSize;
     float2 InvScreenSize;
     float Radius;
@@ -41,7 +43,11 @@ cbuffer SsaoBuffer : register(b2)
     float Thickness;
     uint SliceCount;
     uint StepCount;
-    uint DebugMode;
+    // _SsaoPadding0: reserved purely to preserve the b2 layout (was "DebugMode"; unread here).
+    // Real debug visualization is routed through ShadowBuffer.SsaoDebugMode (b3) instead,
+    // consumed by PS_DeferredLighting.hlsl, because the lighting pass can't see this cbuffer.
+    // Do not repurpose this field for debug output.
+    uint _SsaoPadding0;
     float2 SsaoPadding;
 };
 

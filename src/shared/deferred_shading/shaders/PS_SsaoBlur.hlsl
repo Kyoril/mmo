@@ -24,6 +24,7 @@ SamplerState PointSampler : register(s0);
 
 cbuffer SsaoBuffer : register(b2)
 {
+    // ScreenSize: reserved for layout only. This pass only reads InvScreenSize below.
     float2 ScreenSize;
     float2 InvScreenSize;
     float Radius;
@@ -31,7 +32,10 @@ cbuffer SsaoBuffer : register(b2)
     float Thickness;
     uint SliceCount;
     uint StepCount;
-    uint DebugMode;
+    // _SsaoPadding0: reserved purely to preserve the b2 layout (was "DebugMode"; unread here).
+    // Real debug visualization is routed through ShadowBuffer.SsaoDebugMode (b3 in the lighting
+    // shader) instead, consumed by PS_DeferredLighting.hlsl. Do not repurpose this field.
+    uint _SsaoPadding0;
     float2 SsaoPadding;
 };
 

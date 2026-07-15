@@ -3,8 +3,6 @@
 #include "ssao_pass.h"
 
 #include "scene_graph/camera.h"
-#include "graphics/texture_mgr.h"
-#include "log/default_log_levels.h"
 
 // --- Shader bytecode seam ---------------------------------------------------------------
 // The only backend-bound fact in this file: which compiled blob to hand CreateShader. The
@@ -34,6 +32,9 @@ namespace mmo
 		/// @brief Mirrors the SsaoBuffer cbuffer in PS_Ssao.hlsl / PS_SsaoBlur.hlsl (b2).
 		struct alignas(16) SsaoConstants
 		{
+			// screenWidth/screenHeight: reserved for layout only. PS_Ssao.hlsl marches entirely
+			// in UV space and never reads ScreenSize; PS_SsaoBlur.hlsl only reads InvScreenSize.
+			// Kept assigned below anyway since it's harmless and self-documenting.
 			float screenWidth;
 			float screenHeight;
 			float invScreenWidth;
@@ -45,7 +46,11 @@ namespace mmo
 			uint32 sliceCount;
 
 			uint32 stepCount;
-			uint32 debugMode;
+			// _padding0: reserved purely to preserve the b2 layout (was "debugMode"; read by
+			// neither shader). Real debug visualization is routed through
+			// ShadowBuffer.SsaoDebugMode (b3), consumed by PS_DeferredLighting.hlsl, because the
+			// lighting pass can't see this cbuffer. Do not repurpose this field for debug output.
+			uint32 _padding0;
 			float padding0;
 			float padding1;
 		};
@@ -73,6 +78,8 @@ namespace mmo
 
 		m_ssaoPs = m_device.CreateShader(ShaderType::PixelShader, MMO_SSAO_PS_BYTECODE, MMO_SSAO_PS_SIZE);
 		m_ssaoBlurPs = m_device.CreateShader(ShaderType::PixelShader, MMO_SSAO_BLUR_PS_BYTECODE, MMO_SSAO_BLUR_PS_SIZE);
+		ASSERT(m_ssaoPs);
+		ASSERT(m_ssaoBlurPs);
 
 		// A 1x1 opaque white texture stands in for the AO term while SSAO is disabled, so the
 		// lighting shader always has something to sample. CreateTexture takes no pixel data —
@@ -164,7 +171,9 @@ namespace mmo
 		constants.thickness = m_settings.thickness;
 		constants.sliceCount = m_settings.sliceCount;
 		constants.stepCount = m_settings.stepCount;
-		constants.debugMode = m_settings.debugVisualization ? 1u : 0u;
+		// _padding0 (formerly debugMode) is intentionally left unset — it is unread padding.
+		// Real debug visualization goes through ShadowBuffer.SsaoDebugMode instead; see the
+		// SsaoConstants field comment above.
 		m_ssaoBuffer->Update(&constants);
 
 		// The shader reads matView / matProj / InverseProjection from b12, which the device
